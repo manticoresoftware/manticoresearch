@@ -176,6 +176,12 @@
 /* ICU library support */
 #cmakedefine USE_ICU ${USE_ICU}
 
+/* columnar library support */
+#cmakedefine USE_COLUMNAR ${USE_COLUMNAR}
+
+/* default path to columnar shared library */
+#cmakedefine COLUMNAR_PATH "${COLUMNAR_PATH}"
+
 /* define to use Alexandresku's loki small obj allocator for movable attrs */
 #cmakedefine USE_SMALLALLOC ${USE_SMALLALLOC}
 

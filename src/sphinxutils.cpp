@@ -786,6 +786,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "killlist_target",		0, nullptr },
 	{ "read_buffer_docs",		0, nullptr },
 	{ "read_buffer_hits",		0, nullptr },
+	{ "read_buffer_columnar",	0, nullptr },
 	{ "read_unhinted",			0, nullptr },
 	{ "access_plain_attrs",		0, nullptr },
 	{ "access_blob_attrs",		0, nullptr },
@@ -796,6 +797,15 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "docstore_block_size",	0, nullptr },
 	{ "docstore_compression",	0, nullptr },
 	{ "docstore_compression_level",	0, nullptr },
+#if USE_COLUMNAR
+	{ "columnar_attrs",			0, nullptr },
+	{ "columnar_strings_no_hash", 0, nullptr },
+	{ "columnar_compression_uint32", 0, nullptr },
+	{ "columnar_compression_int64", 0, nullptr },
+	{ "columnar_subblock",		0, nullptr },
+	{ "columnar_subblock_mva",	0, nullptr },
+	{ "columnar_minmax_leaf",	0, nullptr },
+#endif
 	{ nullptr,					0, nullptr }
 };
 
@@ -847,6 +857,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "read_buffer",			KEY_DEPRECATED, "read_buffer_docs or read_buffer_hits" },
 	{ "read_buffer_docs",		0, NULL },
 	{ "read_buffer_hits",		0, NULL },
+	{ "read_buffer_columnar",	0, NULL },
 	{ "read_unhinted",			0, NULL },
 	{ "max_batch_queries",		0, NULL },
 	{ "subtree_docs_cache",		0, NULL },

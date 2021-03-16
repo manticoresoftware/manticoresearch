@@ -94,15 +94,15 @@ CREATE TABLE test_table
 </db_insert>
 
 <sphqueries>
-<sphinxql>select remove_repeats((select * from dist1), gid, 0, 10)</sphinxql>
-<sphinxql>select remove_repeats((select * from dist1), iid, 0, 10)</sphinxql>
+<sphinxql>select remove_repeats((select * from dist1 order by id asc), gid, 0, 10)</sphinxql>
+<sphinxql>select remove_repeats((select * from dist1 order by id asc), iid, 0, 10)</sphinxql>
 <sphinxql>select * from dist1 where match('one|three|four|five') order by id asc</sphinxql>
 <sphinxql>select remove_repeats((select * from dist1 where match('one|three|four|five') order by id asc), iid, 0, 10)</sphinxql>
 <sphinxql>select remove_repeats((select * from dist1 where match('one|three|four|five') order by id asc), iid, 0, 2)</sphinxql>
 <sphinxql>select remove_repeats((select * from dist2 where match('one|three|four|five') order by id asc), iid, 0, 10)</sphinxql>
 <sphinxql>select remove_repeats((select * from dist2 where match('one|three|four|five') order by id asc), iid, 0, 2)</sphinxql>
-<sphinxql>select * from (select *, weight() w from dist2 where match('test') order by id asc) order by w desc</sphinxql>
-<sphinxql>select remove_repeats((select * from (select *, weight() w from dist2 where match('test') order by id asc) order by w desc), iid, 0, 2)</sphinxql>
+<sphinxql>select * from (select *, weight() w from dist2 where match('test') order by id asc) order by w desc, id asc</sphinxql>
+<sphinxql>select remove_repeats((select * from (select *, weight() w from dist2 where match('test') order by id asc) order by w desc, id asc), iid, 0, 2)</sphinxql>
 
 <!-- incorrect kill list handling (duplicates in result set) test -->
 <sphinxql>REPLACE INTO rt_killlist VALUES (1, 'asdf', 11)</sphinxql>

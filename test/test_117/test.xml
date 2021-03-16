@@ -141,7 +141,7 @@ mysql_query ( "REPLACE INTO rt0 VALUES ( 1, 'submarine', 'submarine', 11, 11 )",
 $queries = array ( "match('submarine')", "id=1" );
 for ( $i=0; $i<count ( $queries ); $i++ )
 {
-	$results = array_merge ( $results, $query ( "select * from rt0 where $queries[$i]", $sock, $i ) );
+	$results = array_merge ( $results, $query ( "select * from rt0 where $queries[$i] order by weight() desc, id asc", $sock, $i ) );
 }
 
 // regression

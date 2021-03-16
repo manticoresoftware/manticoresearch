@@ -549,6 +549,22 @@ inline double sqr ( double v ) { return v*v;}
 /// float argument squared
 inline float fsqr ( float v ) { return v*v; }
 
+#ifndef FORCE_INLINE
+#  ifdef _MSC_VER
+#    define FORCE_INLINE __forceinline
+#  else
+#    if defined (__cplusplus) || defined (__STDC_VERSION__) && __STDC_VERSION__ >= 199901L   /* C99 */
+#      ifdef __GNUC__
+#        define FORCE_INLINE inline __attribute__((always_inline))
+#      else
+#        define FORCE_INLINE inline
+#      endif
+#    else
+#      define FORCE_INLINE
+#    endif
+#  endif
+#endif
+
 //////////////////////////////////////////////////////////////////////////
 // RANDOM NUMBERS GENERATOR
 //////////////////////////////////////////////////////////////////////////
@@ -1908,10 +1924,22 @@ public:
 	/// copy + move
 	// if provided lvalue, it will be copied into rhs via copy ctr, then swapped to *this
 	// if provided rvalue, it will just pass to SwapData immediately.
-	Vector_T &operator= ( Vector_T<T> rhs ) noexcept
+	Vector_T & operator = ( Vector_T<T> rhs ) noexcept
 	{
 		SwapData ( rhs );
 		return *this;
+	}
+
+	bool operator == ( const Vector_T<T> & rhs ) noexcept
+	{
+		if ( m_iCount!=rhs.m_iCount )
+			return false;
+
+		for ( int i = 0; i < m_iCount; i++ )
+			if ( m_pData[i]!=rhs.m_pData[i] )
+				return false;
+
+		return true;
 	}
 
 	/// memmove N elements from raw pointer to the end
@@ -2926,8 +2954,9 @@ inline void Swap ( CSphString & v1, CSphString & v2 )
 	v1.Swap ( v2 );
 }
 
-// commonly used vector of strings
+// commonly used vectors
 using StrVec_t = CSphVector<CSphString>;
+using IntVec_t = CSphVector<int>;
 
 // vector of byte vectors
 using BlobVec_t = CSphVector<CSphVector<BYTE> >;
@@ -5681,11 +5710,13 @@ public:
  * Use m_dLogger.Print() either as direct call, either as 'evaluate expression' in debugger.
  */
 
-#define LOC_ADD LocMessages_c    m_dLogger
-#define LOC_SWAP( RHS ) m_dLogger.Swap(RHS.m_dLogger)
-#define LOC_MSG m_dLogger.GetLoc()
+#define LOC_ADD LocMessages_c    m_tLogger
+#define LOC_SWAP( RHS ) m_tLogger.Swap(RHS.m_tLogger)
+#define LOC_MSG m_tLogger.GetLoc()
 #define LOC( Level, Component ) \
     if_const (LOG_LEVEL_##Level) \
         LOC_MSG << LOG_COMPONENT_##Component
+
+using ByteBlob_t = std::pair<const BYTE *, int>;
 
 #endif // _sphinxstd_

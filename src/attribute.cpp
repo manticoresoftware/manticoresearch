@@ -177,6 +177,8 @@ BlobRowBuilder_File_c::BlobRowBuilder_File_c ( const ISphSchema & tSchema, SphOf
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tCol = tSchema.GetAttr(i);
+		if ( !sphIsBlobAttr(tCol) )
+			continue;
 
 		AttributePacker_i * pPacker = nullptr;
 		switch ( tCol.m_eAttrType )
@@ -277,10 +279,7 @@ SphOffset_t BlobRowBuilder_File_c::Flush ( const BYTE * pOldRow )
 bool BlobRowBuilder_File_c::Done ( CSphString & sError )
 {
 	SphOffset_t tTotalSize = m_tWriter.GetPos();
-	// FIXME!!! made single function from this mess as order matters here
-	m_tWriter.Flush(); // store collected data as SeekTo might got rid of buffer collected so far
-	m_tWriter.SeekTo ( 0 ); 
-	m_tWriter.PutOffset ( tTotalSize );
+	SeekAndPutOffset ( m_tWriter, 0, tTotalSize );
 	m_tWriter.SeekTo ( tTotalSize + m_tSpaceForUpdates, true );
 	m_tWriter.CloseFile();
 
@@ -416,7 +415,7 @@ BlobRowBuilder_MemUpdate_c::BlobRowBuilder_MemUpdate_c ( const ISphSchema & tSch
 	{
 		const CSphColumnInfo & tCol = tSchema.GetAttr(i);
 
-		if ( !dAttrsUpdated.BitGet(i) && sphIsBlobAttr ( tCol.m_eAttrType ) )
+		if ( !dAttrsUpdated.BitGet(i) && sphIsBlobAttr(tCol) )
 		{
 			m_dAttrs.Add ( new AttributePacker_c );
 			continue;
@@ -793,9 +792,9 @@ bool sphCheckBlobRow ( int64_t iOff, DebugCheckReader_i & tBlobs, const CSphSche
 	CSphVector<ESphAttr> dBlobAttrs;
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
 	{
-		ESphAttr eAttr = tSchema.GetAttr(i).m_eAttrType;
-		if ( sphIsBlobAttr(eAttr) )
-			dBlobAttrs.Add(eAttr);
+		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
+		if ( sphIsBlobAttr(tAttr) )
+			dBlobAttrs.Add ( tAttr.m_eAttrType );
 	}
 
 	int64_t iBlobsElemCount = tBlobs.GetLengthBytes();
@@ -908,7 +907,8 @@ const char * sphGetDocidName()
 	return g_sDocidName.cstr();
 }
 
-const CSphString &	sphGetDocidStr()
+
+const CSphString & sphGetDocidStr()
 {
 	return g_sDocidName;
 }
@@ -920,6 +920,21 @@ bool sphIsBlobAttr ( ESphAttr eAttr )
 }
 
 
+bool sphIsBlobAttr ( const CSphColumnInfo & tAttr )
+{
+	if ( tAttr.IsColumnar() )
+		return false;
+
+	return sphIsBlobAttr ( tAttr.m_eAttrType );
+}
+
+
+bool IsMvaAttr ( ESphAttr eAttr )
+{
+	return eAttr==SPH_ATTR_UINT32SET || eAttr==SPH_ATTR_INT64SET || eAttr==SPH_ATTR_UINT32SET_PTR || eAttr==SPH_ATTR_INT64SET_PTR;
+}
+
+
 //////////////////////////////////////////////////////////////////////////
 // data ptr attributes
 
@@ -928,14 +943,14 @@ int sphCalcPackedLength ( int iLengthBytes )
 	return sphCalcZippedLen(iLengthBytes) + iLengthBytes;
 }
 
-BYTE *				sphPackedBlob ( ByteBlob_t dBlob )
+BYTE * sphPackedBlob ( ByteBlob_t dBlob )
 {
 	if ( !dBlob.first ) return nullptr;
 	return const_cast<BYTE*>(dBlob.first-sphCalcZippedLen (dBlob.second));
 }
 
 
-// allocate buf and pack blob dBlob into it, return pointer to buf
+// allocate buf and pack blob tBlob into it, return pointer to buf
 BYTE * sphPackPtrAttr ( ByteBlob_t dBlob )
 {
 	if ( !dBlob.second )
@@ -1056,4 +1071,9 @@ void sphPackedMVA2Str ( const BYTE * pMVA, bool b64bit, StringBuilder_c & dStr )
 {
 	auto dMVA = sphUnpackPtrAttr ( pMVA );
 	sphMVA2Str( dMVA, b64bit, dStr );
+}
+
+bool IsNotRealAttribute ( const CSphColumnInfo & tColumn )
+{
+	return tColumn.m_uFieldFlags & CSphColumnInfo::FIELD_STORED;
 }

@@ -29,7 +29,7 @@ class RtAccum_t;
 class RtIndex_i : public CSphIndex
 {
 public:
-	explicit RtIndex_i ( const char * sIndexName, const char * sFileName ) : CSphIndex ( sIndexName, sFileName ) {}
+	RtIndex_i ( const char * sIndexName, const char * sFileName ) : CSphIndex ( sIndexName, sFileName ) {}
 
 	/// get internal schema (to use for Add calls)
 	virtual const CSphSchema & GetInternalSchema () const { return m_tSchema; }
@@ -37,8 +37,7 @@ public:
 
 	/// insert/update document in current txn
 	/// fails in case of two open txns to different indexes
-	virtual bool AddDocument ( const VecTraits_T<VecTraits_T<const char >> &dFields, CSphMatch & tDoc,
-		bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr, const VecTraits_T<int64_t> & dMvas,
+	virtual bool AddDocument ( const VecTraits_T<VecTraits_T<const char>> & dFields, CSphMatch & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr, const VecTraits_T<int64_t> & dMvas,
 		CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt ) = 0;
 
 	/// delete document in current txn
@@ -63,7 +62,7 @@ public:
 	virtual bool ForceDiskChunk () = 0;
 
 	/// attach a disk chunk to current index
-	virtual bool AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) = 0;
+	virtual bool AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, StrVec_t & dWarnings, CSphString & sError ) = 0;
 
 	/// truncate index (that is, kill all data)
 	virtual bool Truncate ( CSphString & sError ) = 0;

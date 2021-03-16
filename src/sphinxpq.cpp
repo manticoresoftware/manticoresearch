@@ -11,6 +11,7 @@
 //
 
 #include "sphinxpq.h"
+#include "sphinxsort.h"
 #include "fileutils.h"
 #include "icu.h"
 #include "accumulator.h"
@@ -82,7 +83,7 @@ public:
 	StoredQuery_i * CreateQuery ( PercolateQueryArgs_t & tArgs, CSphString & sError ) final
 		EXCLUDES ( m_tLockHash, m_tLock );
 
-	bool Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder ) override;
+	bool Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings ) override;
 	void Dealloc () override {}
 	void Preread () override {}
 	void PostSetup() override EXCLUDES ( m_tLockHash, m_tLock );
@@ -100,8 +101,8 @@ public:
 	void ForceRamFlush ( const char* szReason ) EXCLUDES ( m_tLock ) final;
 	bool IsFlushNeed() const override;
 	bool ForceDiskChunk () override;
-	bool AttachDiskIndex ( CSphIndex * , bool, bool &, CSphString & ) override { return true; }
-	void Optimize (int,int,int,const char*) override {}
+	bool AttachDiskIndex ( CSphIndex * , bool, bool &, StrVec_t &, CSphString & ) override { return true; }
+	void Optimize ( int, int, int, const char * ) override {}
 	bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError ) const override;
 
 	bool Reconfigure ( CSphReconfigureSetup & tSetup ) override EXCLUDES ( m_tLockHash, m_tLock );
@@ -1932,17 +1933,24 @@ bool PercolateIndex_c::Commit ( int * pDeleted, RtAccum_t * pAccExt )
 	return true;
 }
 
-struct PqMatchProcessor_t : ISphMatchProcessor, ISphNoncopyable
-{
-	const CSphQueryContext &m_tCtx;
-	int m_iTag;
 
-	PqMatchProcessor_t ( int iTag, const CSphQueryContext &tCtx )
-		: m_tCtx ( tCtx )
-		, m_iTag ( iTag )
+class PqMatchProcessor_c : public MatchProcessor_i, ISphNoncopyable
+{
+public:
+	PqMatchProcessor_c ( int iTag, const CSphQueryContext & tCtx )
+		: m_iTag ( iTag )
+		, m_tCtx ( tCtx )
 	{}
 
-	void Process ( CSphMatch * pMatch ) final
+	bool ProcessInRowIdOrder() const final				{ return false; }
+	void Process ( CSphMatch * pMatch ) final			{ ProcessMatch(pMatch); }
+	void Process ( VecTraits_T<CSphMatch *> & dMatches ){ dMatches.for_each ( [this]( CSphMatch * pMatch ){ ProcessMatch(pMatch); } ); }
+
+private:
+	int							m_iTag;
+	const CSphQueryContext &	m_tCtx;
+
+	inline void ProcessMatch ( CSphMatch * pMatch )
 	{
 		// fixme! tag is signed int,
 		// for distr. tags from remotes set with | 0x80000000,
@@ -1958,8 +1966,8 @@ struct PqMatchProcessor_t : ISphMatchProcessor, ISphNoncopyable
 	}
 };
 
-bool PercolateIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQuery,
-		const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs &tArgs ) const
+
+bool PercolateIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const
 {
 	assert ( tArgs.m_iTag>=0 );
 	auto & tMeta = *tResult.m_pMeta;
@@ -1988,8 +1996,12 @@ bool PercolateIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery & 
 
 	// setup calculations and result schema
 	CSphQueryContext tCtx ( tQuery );
-	if ( !tCtx.SetupCalc ( tMeta, tMaxSorterSchema, m_tMatchSchema, nullptr, dSorterSchemas ) )
-		return false;
+
+#if USE_COLUMNAR
+	if ( !tCtx.SetupCalc ( tMeta, tMaxSorterSchema, m_tMatchSchema, nullptr, nullptr, dSorterSchemas ) ) return false;
+#else
+	if ( !tCtx.SetupCalc ( tMeta, tMaxSorterSchema, m_tMatchSchema, nullptr, dSorterSchemas ) ) return false;
+#endif
 
 	// setup filters
 	CreateFilterContext_t tFlx;
@@ -2103,7 +2115,7 @@ bool PercolateIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery & 
 	// do final expression calculations
 	if ( tCtx.m_dCalcFinal.GetLength () )
 	{
-		PqMatchProcessor_t tFinal ( tArgs.m_iTag, tCtx );
+		PqMatchProcessor_c tFinal ( tArgs.m_iTag, tCtx );
 		dSorters.Apply ( [&tFinal] ( ISphMatchSorter * p ) { p->Finalize ( tFinal, false ); } );
 	}
 
@@ -2249,7 +2261,7 @@ void PercolateIndex_c::PostSetup ()
 	PostSetupUnl();
 }
 
-bool PercolateIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder )
+bool PercolateIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings )
 {
 	CSphString sLock;
 	sLock.SetSprintf ( "%s.lock", m_sFilename.cstr() );
@@ -2332,7 +2344,6 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilename
 	}
 
 	// recreate tokenizer
-	StrVec_t dWarnings;
 	m_pTokenizer = ISphTokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, pFilenameBuilder, dWarnings, m_sLastError );
 	if ( !m_pTokenizer )
 		return false;

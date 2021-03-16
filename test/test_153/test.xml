@@ -301,27 +301,27 @@ index dist_large6
 <!--First, test that aggregate works on distributed on example o Sum -->
 <query index="dist_no" select="gr,sum(tag) as t" groupattr="gr"/>
 <query index="dist0" select="gr,sum(tag) as t" groupattr="gr"/>
-<query index="dist1" select="gr,sum(tag) as t" groupattr="gr"/>
-<query index="dist2" select="gr,sum(tag) as t" groupattr="gr"/>
+<query index="dist1" select="gr,sum(tag) as t" groupattr="gr" sortmode="extended" sortby="id asc"/>
+<query index="dist2" select="gr,sum(tag) as t" groupattr="gr" sortmode="extended" sortby="id asc"/>
 <query index="dist3" select="gr,sum(tag) as t" groupattr="gr"/>
-<query index="dist4" select="gr,sum(tag) as t" groupattr="gr"/>
+<query index="dist4" select="gr,sum(tag) as t" groupattr="gr" sortmode="extended" sortby="id asc"/>
 <query index="dist5" select="gr,sum(tag) AS t" groupattr="gr"/>
 
 <!-- Test the schema transmitting to agent - t is in select, but groupattr and groupsort (gr) is not-->
 
 <query index="dist0" select="tag+1 AS t,tag,gr" groupattr="tag" groupsort="gr desc"/>
-<query index="dist4" select="tag+1 as t,tag,gr" groupattr="tag" groupsort="gr desc"/>
-<query index="dist4" select="tag,gr" groupattr="tag" groupsort="gr desc" />
+<query index="dist4" select="tag+1 as t,tag,gr" groupattr="tag" groupsort="gr desc" sortmode="extended" sortby="id asc"/>
+<query index="dist4" select="tag,gr" groupattr="tag" groupsort="gr desc" sortmode="extended" sortby="id asc"/>
 
 <!-- commented out, because different results in id64 returned - bigind vs int which causes fault -->
 <query index="dist4" select="@id as idd" groupsort="gr desc" /> 
-<query index="dist4" select="@id as idd" groupattr="tag" groupsort="gr desc" />
+<query index="dist4" select="@id as idd" groupattr="tag" groupsort="gr desc" sortmode="extended" sortby="id asc" />
 
 <query index="dist0">test</query>
 <query index="dist5">test</query>
 
 <!-- groupsort is not in the schema -->
-<query index="dist52" select="tag+1 as t,gr" groupattr="t" groupsort="gr asc"/>
+<query index="dist52" select="tag+1 as t,gr" groupattr="t" groupsort="gr asc" sortmode="extended" sortby="id asc"/>
 <query index="dist50" select="tag+1 as t,gr" groupsort="gr asc"/> -->
 
 <!-- Now test the dist contains different schemas -->
@@ -350,10 +350,10 @@ index dist_large6
  
 <sphinxql>select * from dist_no</sphinxql>
 <sphinxql>select * from dist0</sphinxql>
-<sphinxql>select * from dist1</sphinxql>
-<sphinxql>select * from dist2</sphinxql>
+<sphinxql>select * from dist1 order by id asc</sphinxql>
+<sphinxql>select * from dist2 order by id asc</sphinxql>
 <sphinxql>select * from dist3</sphinxql>
-<sphinxql>select * from dist4</sphinxql>
+<sphinxql>select * from dist4 order by id asc</sphinxql>
 <sphinxql>select * from dist5</sphinxql>
 
 <!-- Check the aggretage on differend kind of dist indexes -->
@@ -365,11 +365,11 @@ index dist_large6
 <sphinxql>select gr, sum(tag) as t from dist3 group by gr</sphinxql> 
 
 
- <sphinxql>select tag,gr from dist4 group by tag order by gr asc</sphinxql> 
+<sphinxql>select tag,gr from dist4 group by tag order by gr asc</sphinxql> 
 
 
- <sphinxql>select gr, sum(tag) as t from dist4 group by gr</sphinxql> 
- <sphinxql>select gr, sum(tag) as t from dist5 group by gr</sphinxql>
+<sphinxql>select gr, sum(tag) as t from dist4 group by gr</sphinxql> 
+<sphinxql>select gr, sum(tag) as t from dist5 group by gr</sphinxql>
 
 <!-- Group by (gr) is not in the schema - check if it work or not -->
  
@@ -469,10 +469,10 @@ index dist_large6
 <sphinxql>SELECT *, weight() as w FROM proxy_loc2, dist_w1, dist_w2  WHERE MATCH ('the | box') ORDER BY id asc OPTION index_weights=(proxy_loc2=1, dist_w1=10, dist_w2=100), ranker=wordcount</sphinxql>
 <sphinxql>SELECT *, weight() as w FROM dist_w2, dist_w1, proxy_loc2  WHERE MATCH ('the | box') ORDER BY id asc OPTION index_weights=(proxy_loc2=1, dist_w1=10, dist_w2=100), ranker=wordcount</sphinxql>
 <!-- regression weight as expression at distributed -->
-<sphinxql>select id, weight() * 11 as w from dist50</sphinxql>
+<sphinxql>select id, weight() * 11 as w from dist50 order by id asc</sphinxql>
 <sphinxql>SHOW META</sphinxql>
 <!-- regression quotation at distributed -->
-<sphinxql>select `id`, `tag` t, `gr` from dist50</sphinxql>
+<sphinxql>select `id`, `tag` t, `gr` from dist50 order by id asc</sphinxql>
 
 </sphqueries>
 

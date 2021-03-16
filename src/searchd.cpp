@@ -18,6 +18,7 @@
 #include "sphinxpq.h"
 #include "sphinxint.h"
 #include "sphinxquery.h"
+#include "sphinxsort.h"
 #include "sphinxjson.h"
 #include "sphinxjsonquery.h"
 #include "sphinxplugin.h"
@@ -178,6 +179,9 @@ int						g_iAgentRetryDelayMs = MAX_RETRY_DELAY/2;	// global (default) values. M
 bool					g_bHostnameLookup = false;
 CSphString				g_sMySQLVersion = szMANTICORE_VERSION;
 CSphString				g_sDbName = "Manticore";
+
+CSphString				g_sBanner;
+CSphString				g_sStatusVersion = szMANTICORE_VERSION;
 
 // for CLang thread-safety analysis
 ThreadRole MainThread; // functions which called only from main thread
@@ -745,6 +749,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	sphShutdownWordforms ();
 	sph::ShutdownGlobalIDFs ();
 	sphAotShutdown ();
+	ShutdownColumnar();
 
 	for ( auto& dListener : g_dListeners )
 		if ( dListener.m_iSock>=0 )
@@ -762,7 +767,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 		::unlink ( g_sPidFile.cstr() );
 
 	hazard::Shutdown ();
-	sphInfo ( "shutdown daemon version '%s' ...", szMANTICORE_VERSION );
+	sphInfo ( "shutdown daemon version '%s' ...", g_sStatusVersion.cstr() );
 	sphInfo ( "shutdown complete" );
 
 	Threads::Done ( g_iLogFile );
@@ -1508,7 +1513,7 @@ private:
 /// values are communicated over network between searchds and APIs and MUST NOT CHANGE
 enum
 {
-	QFLAG_REVERSE_SCAN			= 1UL << 0,
+	QFLAG_REVERSE_SCAN			= 1UL << 0,		// deprecated
 	QFLAG_SORT_KBUFFER			= 1UL << 1,
 	QFLAG_MAX_PREDICTED_TIME	= 1UL << 2,
 	QFLAG_SIMPLIFY				= 1UL << 3,
@@ -1541,7 +1546,6 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	// starting with command version 1.27, flags go first
 	// reason being, i might add flags that affect *any* of the subsequent data (eg. qflag_pack_ints)
 	DWORD uFlags = 0;
-	uFlags |= QFLAG_REVERSE_SCAN * q.m_bReverseScan;
 	uFlags |= QFLAG_SORT_KBUFFER * q.m_bSortKbuffer;
 	uFlags |= QFLAG_MAX_PREDICTED_TIME * ( q.m_iMaxPredictedMsec > 0 );
 	uFlags |= QFLAG_SIMPLIFY * q.m_bSimplify;
@@ -2294,6 +2298,24 @@ static bool ParseSearchFilter ( CSphFilterSettings & tFilter, InputBuffer_c & tR
 }
 
 
+static void AddDocids ( CSphVector<CSphQueryItem> & dItems )
+{
+	if ( !dItems.GetLength() )
+		return;
+
+	bool bHaveDocID = false;
+	for ( const auto & i : dItems )
+		bHaveDocID |= i.m_sAlias==sphGetDocidName() || i.m_sExpr=="*";
+
+	if ( !bHaveDocID )
+	{
+		CSphQueryItem tId;
+		tId.m_sExpr = tId.m_sAlias = sphGetDocidName();
+		dItems.Insert ( 0, tId );
+	}
+}
+
+
 bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery & tQuery, WORD uVer, WORD uMasterVer )
 {
 	// daemon-level defaults
@@ -2434,7 +2456,6 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	if ( uVer>=0x11B )
 	{
 		// parse simple flags
-		tQuery.m_bReverseScan = !!( uFlags & QFLAG_REVERSE_SCAN );
 		tQuery.m_bSortKbuffer = !!( uFlags & QFLAG_SORT_KBUFFER );
 		tQuery.m_bSimplify = !!( uFlags & QFLAG_SIMPLIFY );
 		tQuery.m_bPlainIDF = !!( uFlags & QFLAG_PLAIN_IDF );
@@ -2541,19 +2562,8 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 
 	// queries coming from API may not request docids
 	// but we still need docids when sending result sets
-	if ( tQuery.m_dItems.GetLength() )
-	{
-		bool bHaveDocID = false;
-		for ( const auto & i : tQuery.m_dItems )
-			bHaveDocID |= i.m_sExpr==sphGetDocidName() || i.m_sExpr=="*";
-
-		if ( !bHaveDocID )
-		{
-			CSphQueryItem tId;
-			tId.m_sExpr = sphGetDocidName();
-			tQuery.m_dItems.Insert ( 0, tId );
-		}
-	}
+	AddDocids ( tQuery.m_dItems );
+	AddDocids ( tQuery.m_dRefItems );
 
 	if ( tReq.GetError() )
 	{
@@ -3833,30 +3843,31 @@ class MatchIterator_c
 	}
 
 public:
-	OneResultset_t&			m_dResult;
+	OneResultset_t&			m_tResult;
 	DocID_t					m_tDocID;
 	int						m_iIdx;		// ordering index (each step gives matches in sorted by Docid order)
 
-	explicit MatchIterator_c ( OneResultset_t& dResult )
-		: m_dResult ( dResult )
+	explicit MatchIterator_c ( OneResultset_t & tResult )
+		: m_tResult ( tResult )
 	{
-		auto& dMatches = dResult.m_dMatches;
+		auto& dMatches = tResult.m_dMatches;
 		m_iLimit = dMatches.GetLength();
 
 		if ( MaybeUseWordOrder ( dMatches ) )
-			m_fnOrder = [pData = (WORD *) m_dResult.m_dMatches.end ()] ( int i ) { return pData[i]; };
+			m_fnOrder = [pData = (WORD *) m_tResult.m_dMatches.end ()] ( int i ) { return pData[i]; };
 		else if ( MaybeUseDwordOrder ( dMatches ) )
-			m_fnOrder = [pData = (DWORD *) m_dResult.m_dMatches.end ()] ( int i ) { return pData[i]; };
+			m_fnOrder = [pData = (DWORD *) m_tResult.m_dMatches.end ()] ( int i ) { return pData[i]; };
 		else
 		{
 			UseTags ( dMatches );
-			m_fnOrder = [this] ( int i ) { return m_dResult.m_dMatches[m_iRawIdx].m_iTag; };
-		};
-
+			m_fnOrder = [this] ( int i ) { return m_tResult.m_dMatches[m_iRawIdx].m_iTag; };
+		}
 
 		m_iRawIdx = 0;
 		m_iIdx = m_fnOrder(0);
-		m_tDocID = sphGetDocID ( m_dResult.m_dMatches[m_iIdx].m_pDynamic );
+
+		assert ( m_tResult.m_tSchema.GetAttr ( sphGetDocidName() ) );
+		m_tDocID = sphGetDocID ( m_tResult.m_dMatches[m_iIdx].m_pDynamic );
 	}
 
 	~MatchIterator_c()
@@ -3869,7 +3880,7 @@ public:
 		int iDirtyMatches = m_iLimit>0x10000 ? m_iLimit * sizeof ( DWORD ) : m_iLimit * sizeof ( WORD );
 		iDirtyMatches = ( iDirtyMatches+sizeof ( CSphMatch )-1 ) / sizeof ( CSphMatch );
 		for ( int i = 0; i<iDirtyMatches; ++i )
-			( m_dResult.m_dMatches.end ()+i )->CleanGarbage();
+			( m_tResult.m_dMatches.end ()+i )->CleanGarbage();
 	}
 
 	inline bool Step()
@@ -3878,7 +3889,7 @@ public:
 		if ( m_iRawIdx>=m_iLimit )
 			return false;
 		m_iIdx = m_fnOrder ( m_iRawIdx );
-		m_tDocID = sphGetDocID ( m_dResult.m_dMatches[m_iIdx].m_pDynamic );
+		m_tDocID = sphGetDocID ( m_tResult.m_dMatches[m_iIdx].m_pDynamic );
 		return true;
 	}
 
@@ -3891,7 +3902,7 @@ public:
 //		if ( !a->m_dResult.m_bTag && b->m_dResult.m_bTag )
 //			return true;
 
-		return a->m_dResult.m_iTag>b->m_dResult.m_iTag;
+		return a->m_tResult.m_iTag>b->m_tResult.m_iTag;
 	}
 };
 
@@ -3907,11 +3918,11 @@ int KillPlainDupes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, const VecTr
 	dIterators.Reserve_static ( dResults.GetLength () );
 	CSphQueue<MatchIterator_c *, MatchIterator_c> qMatches ( dResults.GetLength () );
 
-	for ( auto& dResult : dResults )
-		if ( !dResult.m_dMatches.IsEmpty() )
+	for ( auto & tResult : dResults )
+		if ( !tResult.m_dMatches.IsEmpty() )
 		{
-			dIterators.Emplace_back ( dResult );
-			qMatches.Push ( &dIterators.Last () );
+			dIterators.Emplace_back(tResult);
+			qMatches.Push ( &dIterators.Last() );
 		}
 
 	DocID_t tPrevDocID = DOCID_MIN;
@@ -3921,9 +3932,9 @@ int KillPlainDupes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, const VecTr
 		DocID_t tDocID = pMin->m_tDocID;
 		if ( tDocID!=tPrevDocID ) // by default, simply remove dupes (select first by tag)
 		{
-			CSphMatch & tMatch = pMin->m_dResult.m_dMatches[pMin->m_iIdx];
+			CSphMatch & tMatch = pMin->m_tResult.m_dMatches[pMin->m_iIdx];
 			auto iTag = tMatch.m_iTag;	// as we may use tag for ordering
-			tMatch.m_iTag = pMin->m_dResult.m_iTag; // that will link us back to docstore
+			tMatch.m_iTag = pMin->m_tResult.m_iTag; // that will link us back to docstore
 			pSorter->Push ( tMatch );
 			tMatch.m_iTag = iTag;	// restore tag
 			tPrevDocID = tDocID;
@@ -4051,24 +4062,6 @@ struct GenericMatchSort_fn : public CSphMatchComparatorState
 					continue;
 				return ( ( m_uAttrDesc>>i ) & 1 ) ^ ( a->m_tRowID < b->m_tRowID );
 
-			case SPH_KEYPART_DOCID_S:
-			{
-				register DocID_t aa = sphGetDocID ( a->m_pStatic );
-				register DocID_t bb = sphGetDocID ( b->m_pStatic );
-				if ( aa==bb )
-					continue;
-				return ( ( m_uAttrDesc>>i ) & 1 ) ^ ( aa < bb );
-			}
-
-			case SPH_KEYPART_DOCID_D:
-			{
-				register DocID_t aa = sphGetDocID ( a->m_pDynamic );
-				register DocID_t bb = sphGetDocID ( b->m_pDynamic );
-				if ( aa==bb )
-					continue;
-				return ( ( m_uAttrDesc>>i ) & 1 ) ^ ( aa < bb );
-			}
-
 			case SPH_KEYPART_WEIGHT:
 				if ( a->m_iWeight==b->m_iWeight )
 					continue;
@@ -4099,7 +4092,8 @@ struct GenericMatchSort_fn : public CSphMatchComparatorState
 				break;
 			}
 		}
-		return false;
+
+		return a->m_tRowID<b->m_tRowID;
 	}
 };
 
@@ -4267,9 +4261,9 @@ void ProcessSinglePostlimit ( OneResultset_t & tRes, VecTraits_T<const CSphColum
 	for ( const auto & pCol : dPostlimit )
 		SetupPostlimitExprs ( tRes.Docstore (), pCol, sQuery, iSessionUID );
 
-	for ( auto & dMatch : dMatches )
+	for ( auto & tMatch : dMatches )
 		for ( const auto & pCol : dPostlimit )
-			EvalPostlimitExprs ( dMatch, pCol );
+			EvalPostlimitExprs ( tMatch, pCol );
 }
 
 void ProcessLocalPostlimit ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bMaster )
@@ -4749,8 +4743,9 @@ bool ApplyOuterOrder ( AggrResult_t & tRes, const CSphQuery & tQuery )
 	// reorder (aka outer order)
 	ESphSortFunc eFunc;
 	GenericMatchSort_fn tReorder;
+	CSphVector<ExtraSortExpr_t> dExtraExprs;
 
-	ESortClauseParseResult eRes = sphParseSortClause ( &tQuery, tQuery.m_sOuterOrderBy.cstr(), tRes.m_tSchema, eFunc, tReorder, true, tRes.m_sError );
+	ESortClauseParseResult eRes = sphParseSortClause ( tQuery, tQuery.m_sOuterOrderBy.cstr(), tRes.m_tSchema, eFunc, tReorder, dExtraExprs, true, tRes.m_sError );
 	if ( eRes==SORT_CLAUSE_RANDOM )
 		tRes.m_sError = "order by rand() not supported in outer select";
 
@@ -5033,6 +5028,8 @@ protected:
 	QueryType_e						m_eQueryType {QUERY_API}; ///< queries from sphinxql require special handling
 	const QueryParser_i *			m_pQueryParser;	///< parser used for queries in this handler. e.g. plain or json-style
 
+	bool							m_bNeedDocIDs = false;	///< do we need docids returned from local searches (remotes return them anyway)?
+
 	// FIXME!!! breaks for dist threads with SNIPPETS expressions for queries to multiple indexes
 	mutable ExprHook_c				m_tHook;
 
@@ -5062,24 +5059,15 @@ private:
 	bool							BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_t & dRemotes, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent ); // fixme!
 	void							CalcTimeStats ( int64_t tmCpu, int64_t tmSubset, const CSphVector<DistrServedByAgent_t> & dDistrServedByAgent );
 	void							CalcPerIndexStats ( const CSphVector<DistrServedByAgent_t> & dDistrServedByAgent ) const;
-	void							CalcGlobalStats ( int64_t tmCpu, int64_t tmSubset, int64_t tmLocal, const CSphIOStats & tIO,
-			const VecRefPtrsAgentConn_t & dRemotes ) const;
-	int								CreateSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter*> & dSorters,
-			VecTraits_T<CSphString> & dErrors, StrVec_t* pExtra, SphQueueRes_t & tQueueRes, ISphExprHook* pHook ) const;
-	int								CreateSingleSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter*> & dSorters,
-			VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes, ISphExprHook* pHook ) const;
-	int								CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter*> & dSorters,
-			VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook ) const;
+	void							CalcGlobalStats ( int64_t tmCpu, int64_t tmSubset, int64_t tmLocal, const CSphIOStats & tIO, const VecRefPtrsAgentConn_t & dRemotes ) const;
+	int								CreateSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter*> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook ) const;
+	int								CreateSingleSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter*> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook ) const;
+	int								CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter*> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook ) const;
 
 	SphQueueSettings_t				MakeQueueSettings ( const CSphIndex * pIndex, int iMaxMatches, ISphExprHook * pHook ) const;
-
-	const ServedDesc_t * CheckIndexSuitable ( const char* szLocal, const char* szParent,
-		VecTraits_T<SearchFailuresLog_c> & dNFailuresSet ) const;
-
-	bool CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt, SphQueueRes_t* pQueueRes,
-		VecTraits_T<SearchFailuresLog_c> & dFlr, StrVec_t * pExtra, const ServedDesc_t * pServed,
-		const char * szLocal, const char * szParent, ISphExprHook * pHook );
-
+	const ServedDesc_t *			CheckIndexSuitable ( const char * szLocal, const char * szParent, VecTraits_T<SearchFailuresLog_c> & dNFailuresSet ) const;
+	bool							CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt, SphQueueRes_t * pQueueRes, VecTraits_T<SearchFailuresLog_c> & dFlr, StrVec_t * pExtra, const ServedDesc_t * pServed,
+										const char * szLocal, const char * szParent, ISphExprHook * pHook );
 };
 
 PubSearchHandler_c::PubSearchHandler_c ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster )
@@ -5388,13 +5376,13 @@ SphQueueSettings_t SearchHandler_c::MakeQueueSettings ( const CSphIndex * pIndex
 	tQueueSettings.m_pCollection = m_pDelDocs;
 	tQueueSettings.m_pHook = pHook;
 	tQueueSettings.m_iMaxMatches = GetMaxMatches ( iMaxMatches, pIndex );
+	tQueueSettings.m_bNeedDocids = m_bNeedDocIDs;	// need docids to merge results from indexes
 	return tQueueSettings;
 }
 
 
-int SearchHandler_c::CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex,
-		VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra,
-		SphQueueRes_t & tQueueRes, ISphExprHook * pHook ) const
+int SearchHandler_c::CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes,
+	ISphExprHook * pHook ) const
 {
 	int iValidSorters = 0;
 
@@ -5414,8 +5402,8 @@ int SearchHandler_c::CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex,
 	return iValidSorters;
 }
 
-int SearchHandler_c::CreateSingleSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter *> & dSorters,
-		VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook ) const
+
+int SearchHandler_c::CreateSingleSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook ) const
 {
 	int iValidSorters = 0;
 	tQueueRes.m_bAlowMulti = false;
@@ -5437,8 +5425,8 @@ int SearchHandler_c::CreateSingleSorters ( const CSphIndex * pIndex, VecTraits_T
 	return iValidSorters;
 }
 
-int SearchHandler_c::CreateSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter *> & dSorters
-		, VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook ) const
+
+int SearchHandler_c::CreateSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t* pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook ) const
 {
 	if ( m_bMultiQueue || m_bFacetQueue )
 		return CreateMultiQueryOrFacetSorters ( pIndex, dSorters, dErrors, pExtra, tQueueRes, pHook );
@@ -5557,8 +5545,7 @@ struct LocalSearchClone_t
 	}
 };
 
-const ServedDesc_t * SearchHandler_c::CheckIndexSuitable ( const char* szLocal, const char* szParent,
-		VecTraits_T<SearchFailuresLog_c> & dNFailuresSet ) const
+const ServedDesc_t * SearchHandler_c::CheckIndexSuitable ( const char * szLocal, const char* szParent, VecTraits_T<SearchFailuresLog_c> & dNFailuresSet ) const
 {
 	const auto * pServed = m_dLocked.Get ( szLocal );
 	if ( !pServed )
@@ -5580,9 +5567,9 @@ const ServedDesc_t * SearchHandler_c::CheckIndexSuitable ( const char* szLocal, 
 	return pServed;
 }
 
-bool SearchHandler_c::CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt, SphQueueRes_t * pQueueRes,
-		VecTraits_T<SearchFailuresLog_c> & dFlr, StrVec_t * pExtra, const ServedDesc_t * pServed, const char * szLocal,
-		const char * szParent, ISphExprHook * pHook )
+
+bool SearchHandler_c::CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt, SphQueueRes_t * pQueueRes, VecTraits_T<SearchFailuresLog_c> & dFlr, StrVec_t * pExtra, const ServedDesc_t * pServed,
+	const char * szLocal, const char * szParent, ISphExprHook * pHook )
 {
 	auto iQueries = dSrt.GetLength();
 	#if PARANOID
@@ -5591,9 +5578,8 @@ bool SearchHandler_c::CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt
 	#endif
 
 	CSphFixedVector<CSphString> dErrors ( iQueries );
-
 	int iValidSorters = CreateSorters ( pServed->m_pIndex, dSrt, dErrors, pExtra, *pQueueRes, pHook );
-	if ( iValidSorters<dSrt.GetLength () )
+	if ( iValidSorters<dSrt.GetLength() )
 	{
 		ARRAY_FOREACH ( i, dErrors )
 		{
@@ -6668,6 +6654,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	{
 		SetupLocalDF();
 		SwitchProfile ( m_pProfile, SPH_QSTATE_LOCAL_SEARCH );
+		m_bNeedDocIDs = m_dLocal.GetLength()+dRemotes.GetLength()>1;
 		tmLocal = -sphMicroTimer();
 		tmCpu -= sphTaskCpuTimer ();
 		RunLocalSearches();
@@ -7212,9 +7199,11 @@ public:
 			case SPH_ATTR_TOKENCOUNT:
 				CSphMatch::SetAttr ( tLoc, ToInt(tVal) );
 				break;
+
 			case SPH_ATTR_BIGINT:
 				CSphMatch::SetAttr ( tLoc, ToBigInt(tVal) );
 				break;
+
 			case SPH_ATTR_FLOAT:
 				if ( tVal.m_iType==SqlInsert_t::QUOTED_STRING )
 					SetAttrFloat ( tLoc, (float)strtod ( tVal.m_sVal.cstr(), NULL ) ); // FIXME? report conversion error?
@@ -7223,13 +7212,17 @@ public:
 				else if ( tVal.m_iType==SqlInsert_t::CONST_FLOAT )
 					SetAttrFloat ( tLoc, tVal.m_fVal );
 				break;
-			case SPH_ATTR_STRING:
+
 			case SPH_ATTR_STRINGPTR:
+				CSphMatch::SetAttr ( tLoc, 0 );
+				break;
+
+			case SPH_ATTR_STRING:
 			case SPH_ATTR_UINT32SET:
 			case SPH_ATTR_INT64SET:
 			case SPH_ATTR_JSON:
-				CSphMatch::SetAttr ( tLoc, 0 );
 				break;
+
 			default:
 				return false;
 		};
@@ -8365,8 +8358,8 @@ void BuildStatus ( VectorLike & dStatus )
 	dStatus.MatchTupletf ( "uptime", "%u", (DWORD) time ( nullptr )-g_tStats.m_uStarted );
 	dStatus.MatchTupletf ( "connections", "%l", g_tStats.m_iConnections.load ( std::memory_order_relaxed ) );
 	dStatus.MatchTupletf ( "maxed_out", "%l", g_tStats.m_iMaxedOut.load ( std::memory_order_relaxed ) );
-	dStatus.MatchTuplet ( "version" , szMANTICORE_VERSION );
-	dStatus.MatchTuplet ( "mysql_version", g_sMySQLVersion.cstr () );
+	dStatus.MatchTuplet ( "version" , g_sStatusVersion.cstr() );
+	dStatus.MatchTuplet ( "mysql_version", g_sMySQLVersion.cstr() );
 
 	for ( auto i=0; i<SEARCHD_COMMAND_TOTAL; ++i)
 		dStatus.MatchTupletf ( szCommand ( i ), "%l", g_tStats.m_iCommandCount[i].load ( std::memory_order_relaxed ) );
@@ -11102,45 +11095,61 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 	tOut.Eof();
 }
 
-void DescribeLocalSchema ( VectorLike& dOut, const CSphSchema& tSchema, bool bIsTemplate )
+
+static void AddFieldDesc ( VectorLike & dOut, const CSphColumnInfo & tField )
+{
+	if ( !dOut.MatchAdd ( tField.m_sName.cstr() ) )
+		return;
+
+	dOut.Add ( "text" );
+	StringBuilder_c sProperties ( " " );
+	DWORD uFlags = tField.m_uFieldFlags;
+	if ( uFlags & CSphColumnInfo::FIELD_INDEXED )
+		sProperties << "indexed";
+
+	if ( uFlags & CSphColumnInfo::FIELD_STORED )
+		sProperties << "stored";
+	dOut.Add ( sProperties.cstr () );
+}
+
+
+static void AddAttributeDesc ( VectorLike & dOut, const CSphColumnInfo & tAttr )
+{
+	if ( sphIsInternalAttr ( tAttr ) )
+		return;
+
+	if ( dOut.MatchAdd ( tAttr.m_sName.cstr() ) )
+	{
+		if ( tAttr.m_eAttrType==SPH_ATTR_INTEGER && tAttr.m_tLocator.m_iBitCount!=ROWITEM_BITS && tAttr.m_tLocator.m_iBitCount>0 )
+		{
+			StringBuilder_c sName;
+			sName.Sprintf ( "%s:%d", sphTypeName ( tAttr.m_eAttrType ), tAttr.m_tLocator.m_iBitCount );
+			dOut.Add ( sName.cstr() );
+		} else
+			dOut.Add ( sphTypeName ( tAttr.m_eAttrType ) );
+
+		dOut.Add ( tAttr.IsColumnar() ? "columnar" : "" );
+	}
+}
+
+
+void DescribeLocalSchema ( VectorLike & dOut, const CSphSchema & tSchema, bool bIsTemplate )
 {
 	// result set header packet
 	dOut.SetColNames ( { "Field", "Type", "Properties" } );
 
 	// id comes before fields
 	if ( !bIsTemplate )
-		dOut.MatchTuplet ( "id", "bigint" );
+	{
+		assert ( tSchema.GetAttr(0).m_sName==sphGetDocidName() );
+		AddAttributeDesc ( dOut, tSchema.GetAttr(0) );
+	}
 
 	for ( int i = 0; i<tSchema.GetFieldsCount (); ++i )
-		if ( dOut.MatchAdd ( tSchema.GetFieldName ( i ) ) )
-		{
-			dOut.Add ( "text" );
-			StringBuilder_c sProperties ( " " );
-			DWORD uFlags = tSchema.GetField ( i ).m_uFieldFlags;
-			if ( uFlags & CSphColumnInfo::FIELD_INDEXED )
-				sProperties << "indexed";
-
-			if ( uFlags & CSphColumnInfo::FIELD_STORED )
-				sProperties << "stored";
-			dOut.Add ( sProperties.cstr () );
-		}
+		AddFieldDesc ( dOut, tSchema.GetField(i) );
 
 	for ( int i = 1; i<tSchema.GetAttrsCount (); ++i )
-	{
-		const CSphColumnInfo & tCol = tSchema.GetAttr ( i );
-		if ( sphIsInternalAttr ( tCol ) )
-			continue;
-
-		dOut.MatchTupletFn ( tCol.m_sName.cstr (), [&tCol] {
-			if ( tCol.m_eAttrType==SPH_ATTR_INTEGER && tCol.m_tLocator.m_iBitCount!=ROWITEM_BITS )
-			{
-				StringBuilder_c sName;
-				sName.Sprintf ( "%s:%d", sphTypeName ( tCol.m_eAttrType ), tCol.m_tLocator.m_iBitCount );
-				return CSphString ( sName );
-			} else
-				return CSphString ( sphTypeName ( tCol.m_eAttrType ) );
-		} );
-	}
+		AddAttributeDesc ( dOut, tSchema.GetAttr(i) );
 }
 
 
@@ -12754,14 +12763,15 @@ struct SessionVars_t
 	int				m_iDistThreads = 0;
 	CSphVector<int64_t> m_dLastIds;
 
-	bool bProfile () const { return m_eProfile!=Profile_e::NONE; };
+	bool IsProfile () const { return m_eProfile!=Profile_e::NONE; };
 };
 
 // fwd
 void HandleMysqlShowProfile ( RowBuffer_i & tOut, const QueryProfile_c & p, bool bMoreResultsFollow );
+
 static void HandleMysqlShowPlan ( RowBuffer_i & tOut, const QueryProfile_c & p, bool bMoreResultsFollow, bool bDot );
 
-bool bDot ( const SqlStmt_t & tStmt, const SessionVars_t & tVars )
+bool IsDot ( const SqlStmt_t & tStmt, const SessionVars_t & tVars )
 {
 	if ( tStmt.m_sThreadFormat=="dot" )
 		return true;
@@ -12819,7 +12829,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 
 	// use first meta for faceted search
 	bool bUseFirstMeta = ( tHandler.m_dQueries.GetLength()>1 && !tHandler.m_dQueries[0].m_bFacet && tHandler.m_dQueries[1].m_bFacet );
-	if ( tVars.bProfile() )
+	if ( tVars.IsProfile() )
 		tHandler.SetProfile ( &tProfile );
 
 	// do search
@@ -12864,7 +12874,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 			AggrResult_t & tRes = tHandler.m_dAggrResults[iSelect++];
 			if ( !sWarning.IsEmpty() )
 				tRes.m_sWarning = sWarning;
-			SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow, false, nullptr, ( tVars.bProfile() ? &tProfile : nullptr ) );
+			SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow, false, nullptr, ( tVars.IsProfile() ? &tProfile : nullptr ) );
 			// mysql server breaks send on error
 			bBreak = !tRes.m_iSuccesses;
 			break;
@@ -12886,7 +12896,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 			HandleMysqlShowProfile ( dRows, tProfile, bMoreResultsFollow );
 			break;
 		case STMT_SHOW_PLAN:
-			HandleMysqlShowPlan ( dRows, tProfile, bMoreResultsFollow, ::bDot ( dStmt[i], tVars ) );
+			HandleMysqlShowPlan ( dRows, tProfile, bMoreResultsFollow, ::IsDot ( dStmt[i], tVars ) );
 		default:
 			break;
 		}
@@ -13153,7 +13163,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 }
 
 
-void HandleMysqlAttach ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
+void HandleMysqlAttach ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
 	const CSphString & sFrom = tStmt.m_sIndex;
 	const CSphString & sTo = tStmt.m_sStringParam;
@@ -13198,7 +13208,8 @@ void HandleMysqlAttach ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	auto * pRtTo = ( RtIndex_i * ) pTo->m_pIndex;
 
 	bool bFatal = false;
-	if ( !pRtTo->AttachDiskIndex ( pFrom->m_pIndex, bTruncate, bFatal, sError ) )
+	StrVec_t dWarnings;
+	if ( !pRtTo->AttachDiskIndex ( pFrom->m_pIndex, bTruncate, bFatal, dWarnings, sError ) )
 	{
 		if ( bFatal )
 			g_pLocalIndexes->Delete(sFrom);
@@ -13206,6 +13217,8 @@ void HandleMysqlAttach ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
 		return;
 	}
+
+	sWarning = ConcatWarnings(dWarnings);
 
 	// after a successfull Attach() RT index owns it
 	pFrom->m_pIndex = nullptr;
@@ -13838,12 +13851,14 @@ void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 // STMT_SELECT_SYSVAR: SELECT @@sysvar1 [ as alias] [@@sysvarN [ as alias]] [limit M]
 void HandleMysqlSelectSysvar ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, const SessionVars_t & tVars )
 {
-	const struct SysVar_t
+	struct SysVar_t
 	{
 		const MysqlColumnType_e m_eType;
 		const char * m_sName;
 		std::function<CSphString ( void )> m_fnValue;
-	} dSysvars[] =
+	};
+	
+	const SysVar_t dSysvars[] =
 	{	{ MYSQL_COL_STRING,	nullptr, [] {return "";}}, // stub
 		{ MYSQL_COL_LONG,	"@@session.auto_increment_increment",	[] {return "1";}},
 		{ MYSQL_COL_STRING,	"@@character_set_client", [] {return "utf8";}},
@@ -13859,10 +13874,12 @@ void HandleMysqlSelectSysvar ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, cons
 			}},
 	};
 
-	auto fnVar = [&dSysvars] ( const CSphString & sVar )->const SysVar_t& {
-		for ( const auto& dVar : dSysvars )
-			if ( sVar==dVar.m_sName )
-				return dVar;
+	auto fnVar = [&dSysvars] ( const CSphString & sVar )->const SysVar_t &
+	{
+		for ( const auto & tVar : dSysvars )
+			if ( sVar==tVar.m_sName )
+				return tVar;
+
 		return dSysvars[0];
 	};
 
@@ -13873,8 +13890,8 @@ void HandleMysqlSelectSysvar ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, cons
 	tOut.HeadEnd ();
 
 	// fill values
-	for ( const auto & dItem : tStmt.m_tQuery.m_dItems )
-		tOut.PutString ( fnVar ( dItem.m_sExpr ).m_fnValue().cstr() );
+	for ( const auto & tItem : tStmt.m_tQuery.m_dItems )
+		tOut.PutString ( fnVar ( tItem.m_sExpr ).m_fnValue().cstr() );
 
 	// finalize
 	tOut.Commit ();
@@ -15095,14 +15112,14 @@ void HandleMysqlImportTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphS
 	}
 
 	bool bPQ = false;
-	if ( !CopyIndexFiles ( tStmt.m_sIndex, tStmt.m_sStringParam, bPQ, sError ) )
+	StrVec_t dWarnings;
+	if ( !CopyIndexFiles ( tStmt.m_sIndex, tStmt.m_sStringParam, bPQ, dWarnings, sError ) )
 	{
 		sError.SetSprintf ( "unable to import index '%s': %s", tStmt.m_sIndex.cstr(), sError.cstr() );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
-	StrVec_t dWarnings;
 	if ( !AddExistingIndexInt ( tStmt.m_sIndex, bPQ ? IndexType_e::PERCOLATE : IndexType_e::RT, dWarnings, sError ) )
 	{
 		sError.SetSprintf ( "unable to import index '%s': %s", tStmt.m_sIndex.cstr(), sError.cstr() );
@@ -15163,9 +15180,9 @@ private:
 	bool				m_bFederatedUser = false;
 	CSphString			m_sFederatedQuery;
 
-	bool bDot ( const SqlStmt_t & tStmt ) const
+	bool IsDot ( const SqlStmt_t & tStmt ) const
 	{
-		return ::bDot ( tStmt, m_tVars );
+		return ::IsDot ( tStmt, m_tVars );
 	}
 
 public:
@@ -15200,7 +15217,7 @@ public:
 		}
 
 		// parse SQL query
-		if ( m_tVars.bProfile() )
+		if ( m_tVars.IsProfile() )
 			m_tProfile.Switch ( SPH_QSTATE_SQL_PARSE );
 
 		m_sError = "";
@@ -15208,7 +15225,7 @@ public:
 		CSphVector<SqlStmt_t> dStmt;
 		bool bParsedOK = sphParseSqlQuery ( sQuery.first, sQuery.second, dStmt, m_sError, m_tVars.m_eCollation );
 
-		if ( m_tVars.bProfile() )
+		if ( m_tVars.IsProfile() )
 			m_tProfile.Switch ( SPH_QSTATE_UNKNOWN );
 
 		SqlStmt_e eStmt = STMT_PARSE_ERROR;
@@ -15268,7 +15285,7 @@ public:
 				dStmt.Begin()->m_pTableFunc = nullptr;
 				tHandler.m_pStmt = pStmt;
 
-				if ( m_tVars.bProfile() )
+				if ( m_tVars.IsProfile() )
 					tHandler.SetProfile ( &m_tProfile );
 				if ( m_bFederatedUser )
 					tHandler.SetFederatedUser();
@@ -15278,7 +15295,7 @@ public:
 					// query just completed ok; reset out error message
 					m_sError = "";
 					AggrResult_t & tLast = tHandler.m_dAggrResults.Last();
-					SendMysqlSelectResult ( tOut, tLast, false, m_bFederatedUser, &m_sFederatedQuery, ( m_tVars.bProfile() ? &m_tProfile : nullptr ) );
+					SendMysqlSelectResult ( tOut, tLast, false, m_bFederatedUser, &m_sFederatedQuery, ( m_tVars.IsProfile() ? &m_tProfile : nullptr ) );
 				}
 
 				// save meta for SHOW META (profile is saved elsewhere)
@@ -15507,7 +15524,8 @@ public:
 			return true;
 
 		case STMT_ATTACH_INDEX:
-			HandleMysqlAttach ( tOut, *pStmt );
+			m_tLastMeta.m_sWarning = "";
+			HandleMysqlAttach ( tOut, *pStmt, m_tLastMeta.m_sWarning );
 			return true;
 
 		case STMT_FLUSH_RTINDEX:
@@ -15563,7 +15581,7 @@ public:
 			return true;
 
 		case STMT_SHOW_PLAN:
-			HandleMysqlShowPlan ( tOut, m_tLastProfile, false, bDot ( *pStmt ));
+			HandleMysqlShowPlan ( tOut, m_tLastProfile, false, IsDot ( *pStmt ));
 			return false; // do not profile this call, keep last query profile
 
 		case STMT_SELECT_DUAL:
@@ -15673,7 +15691,7 @@ public:
 			return true;
 
 		case STMT_EXPLAIN:
-			HandleMysqlExplain ( tOut, *pStmt, bDot ( *pStmt ) );
+			HandleMysqlExplain ( tOut, *pStmt, IsDot ( *pStmt ) );
 			return true;
 
 		case STMT_IMPORT_TABLE:
@@ -15736,7 +15754,7 @@ QueryProfile_c * SphinxqlSessionPublic::StartProfiling ( ESphQueryState eState )
 {
 	assert ( m_pImpl );
 	QueryProfile_c * pProfile = nullptr;
-	if ( m_pImpl->m_tVars.bProfile() ) // the current statement might change it
+	if ( m_pImpl->m_tVars.IsProfile() ) // the current statement might change it
 	{
 		pProfile = &m_pImpl->m_tProfile;
 		pProfile->Start ( eState );
@@ -16036,7 +16054,7 @@ RotateFrom_e CheckIndexHeaderRotate ( const ServedDesc_t & tServed )
 }
 
 /// returns true if any version of the index (old or new one) has been preread
-bool RotateIndexGreedy (ServedDesc_t &tWlockedIndex, const char * szIndex, CSphString & sError )
+bool RotateIndexGreedy ( ServedDesc_t & tWlockedIndex, const char * szIndex, CSphString & sError )
 {
 	sphLogDebug ( "RotateIndexGreedy for '%s' invoked", szIndex );
 	IndexFiles_c dFiles ( tWlockedIndex.m_sIndexPath, szIndex );
@@ -16100,7 +16118,8 @@ bool RotateIndexGreedy (ServedDesc_t &tWlockedIndex, const char * szIndex, CSphS
 	DictRefPtr_c		pDictionary { tWlockedIndex.m_pIndex->LeakDictionary () };
 
 //	bool bRolledBack = false;
-	bool bPreallocSuccess = tWlockedIndex.m_pIndex->Prealloc ( g_bStripPath, nullptr );
+	StrVec_t dWarnings;
+	bool bPreallocSuccess = tWlockedIndex.m_pIndex->Prealloc ( g_bStripPath, nullptr, dWarnings );
 	if ( !bPreallocSuccess )
 	{
 		if ( tWlockedIndex.m_bOnlyNew )
@@ -16116,11 +16135,14 @@ bool RotateIndexGreedy (ServedDesc_t &tWlockedIndex, const char * szIndex, CSphS
 			sphFatal ( "%s", dFiles.FatalMsg ( "rotating" ).cstr () );
 
 		sphLogDebug ( "RotateIndexGreedy: has recovered. Prealloc it." );
-		bPreallocSuccess = tWlockedIndex.m_pIndex->Prealloc ( g_bStripPath, nullptr );
+		bPreallocSuccess = tWlockedIndex.m_pIndex->Prealloc ( g_bStripPath, nullptr, dWarnings );
 		if ( !bPreallocSuccess )
 			sError.SetSprintf ( "rotating index '%s': .new preload failed; ROLLBACK FAILED; INDEX UNUSABLE", szIndex );
 //		bRolledBack = true;
 	}
+
+	for ( const auto & i : dWarnings )
+		sphWarning ( "rotating index '%s': %s", szIndex, i.cstr() );
 
 	if ( !tWlockedIndex.m_pIndex->GetLastWarning().IsEmpty() )
 		sphWarning ( "rotating index '%s': %s", szIndex, tWlockedIndex.m_pIndex->GetLastWarning().cstr() );
@@ -16214,7 +16236,7 @@ void CheckLeaks () REQUIRES ( MainThread )
 bool PreallocNewIndex ( ServedDesc_t & tIdx, const CSphConfigSection * pConfig, const char * szIndexName, StrVec_t & dWarnings, CSphString & sError )
 {
 	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( CreateFilenameBuilder(szIndexName) );
-	if ( !tIdx.m_pIndex->Prealloc ( g_bStripPath, pFilenameBuilder.Ptr() ) )
+	if ( !tIdx.m_pIndex->Prealloc ( g_bStripPath, pFilenameBuilder.Ptr(), dWarnings ) )
 	{
 		sError.SetSprintf ( "prealloc: %s", tIdx.m_pIndex->GetLastError().cstr() );
 		return false;
@@ -16772,7 +16794,7 @@ static bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSe
 		tSettings.m_iMinInfixLen = 2;
 	}
 
-	tSchema.SetupStoredFields ( tSettings.m_dStoredFields, tSettings.m_dStoredOnlyFields );
+	tSchema.SetupFlags ( tSettings );
 
 	return true;
 }
@@ -17726,7 +17748,7 @@ void ServiceInstall ( int argc, char ** argv )
 	}
 
 	CSphString sDesc;
-	sDesc.SetSprintf ( "%s-%s", g_sServiceName, szMANTICORE_VERSION );
+	sDesc.SetSprintf ( "%s-%s", g_sServiceName, g_sStatusVersion.cstr() );
 
 	SERVICE_DESCRIPTION tDesc;
 	tDesc.lpDescription = (LPSTR) sDesc.cstr();
@@ -18442,7 +18464,8 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 			sphWarning ( "server_id out of range 0 - 127, clamped to %d", g_iServerID );
 		}
 	}
-	g_sMySQLVersion = hSearchd.GetStr ( "mysql_version_string", szMANTICORE_VERSION );
+
+	g_sMySQLVersion = hSearchd.GetStr ( "mysql_version_string", g_sMySQLVersion.cstr() );
 
 	AllowOnlyNot ( hSearchd.GetInt ( "not_terms_only_allowed", 0 )!=0 );
 	ConfigureDaemonLog ( hSearchd.GetStr ( "query_log_commands" ) );
@@ -18901,6 +18924,20 @@ void StopOrStopWaitAnother ( CSphVariant * v, bool bWait ) REQUIRES ( MainThread
 }
 } // static namespace
 
+
+static void InitBanner()
+{
+	const char * szColumnarVer = GetColumnarVersionStr();
+	CSphString sColumnar = "";
+	if ( szColumnarVer )
+		sColumnar.SetSprintf ( " (columnar %s)", szColumnarVer );
+
+	g_sBanner.SetSprintf ( "%s%s%s",  szMANTICORE_NAME, sColumnar.cstr(), szMANTICORE_BANNER_TEXT );
+	g_sMySQLVersion.SetSprintf ( "%s%s", szMANTICORE_NAME, sColumnar.cstr() );
+	g_sStatusVersion.SetSprintf ( "%s%s", szMANTICORE_VERSION, sColumnar.cstr() );
+}
+
+
 int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 {
 	ScopedRole_c thMain (MainThread);
@@ -18943,12 +18980,19 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 	tzset();
 
-	if ( !g_bService )
-		fprintf ( stdout, "%s", szMANTICORE_BANNER );
+	CSphString sError;
+	// initialize it before other code to fetch version string for banner
+	if ( !InitColumnar ( sError ) )
+		sphWarning ( "Error initializing columnar storage: %s", sError.cstr() );
 
-	const char* sEndian = sphCheckEndian();
-	if ( sEndian )
-		sphDie ( "%s", sEndian );
+	InitBanner();
+
+	if ( !g_bService )
+		fprintf ( stdout, "%s",  g_sBanner.cstr() );
+
+	const char * szEndian = sphCheckEndian();
+	if ( szEndian )
+		sphDie ( "%s", szEndian );
 
 	//////////////////////
 	// parse command line
@@ -19100,7 +19144,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 	const CSphConfigSection & hSearchdpre = hConf["searchd"]["searchd"];
 
-	CSphString sError;
 	if ( !sphInitCharsetAliasTable ( sError ) )
 		sphFatal ( "failed to init charset alias table: %s", sError.cstr() );
 
@@ -19250,7 +19293,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	// since that moment any 'fatal' will assume calling 'shutdown' function.
 	sphSetDieCallback ( DieOrFatalWithShutdownCb );
 
-	sphInfo( "starting daemon version '%s' ...", szMANTICORE_VERSION );
+	sphInfo( "starting daemon version '%s' ...", g_sStatusVersion.cstr() );
 
 	////////////////////
 	// network startup

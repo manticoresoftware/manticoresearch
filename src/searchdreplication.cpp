@@ -12,7 +12,7 @@
 #include "sphinx.h"
 #include "sphinxstd.h"
 #include "sphinxutils.h"
-#include "sphinxint.h"
+#include "memio.h"
 #include "sphinxpq.h"
 #include "searchdreplication.h"
 #include "accumulator.h"

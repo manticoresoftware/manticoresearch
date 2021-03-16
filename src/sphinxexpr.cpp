@@ -183,6 +183,215 @@ public:
 	void FixupLocator ( const ISphSchema * /*pOldSchema*/, const ISphSchema * /*pNewSchema*/ ) override {}
 };
 
+#if USE_COLUMNAR
+class Expr_GetColumnar_Traits_c : public ISphExpr
+{
+public:
+				Expr_GetColumnar_Traits_c ( const CSphString & sName, int iLocator );
+				Expr_GetColumnar_Traits_c ( const Expr_GetColumnar_Traits_c & rhs );
+
+	void		FixupLocator ( const ISphSchema * /*pOldSchema*/, const ISphSchema * /*pNewSchema*/ ) final {}
+	void		Command ( ESphExprCommand eCmd, void * pArg ) final;
+	bool		IsColumnar() const final { return true; }
+
+protected:
+	CSphString	m_sName;
+	int			m_iLocator = -1;
+	CSphScopedPtr<columnar::Iterator_i> m_pIterator {nullptr};
+
+	uint64_t CalcHash ( const char * szTag, const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
+	{
+		EXPR_CLASS_NAME_NOCHECK(szTag);
+		CALC_STR_HASH(m_sName, m_sName.Length());
+		return CALC_DEP_HASHES();
+	}
+};
+
+
+Expr_GetColumnar_Traits_c::Expr_GetColumnar_Traits_c ( const CSphString & sName, int iLocator )
+	: m_sName ( sName )
+	, m_iLocator ( iLocator )
+{}
+
+
+Expr_GetColumnar_Traits_c::Expr_GetColumnar_Traits_c ( const Expr_GetColumnar_Traits_c & rhs )
+	: m_sName ( rhs.m_sName )
+	, m_iLocator ( rhs.m_iLocator )
+{}
+
+
+void Expr_GetColumnar_Traits_c::Command ( ESphExprCommand eCmd, void * pArg )
+{
+	switch ( eCmd )
+	{
+		case SPH_EXPR_SET_COLUMNAR:
+		{
+			if ( m_pIterator )
+				break;
+
+			auto pColumnar = (const columnar::Columnar_i*)pArg;
+			if ( pColumnar )
+			{
+				std::string sError; // FIXME! report errors
+				m_pIterator = pColumnar->CreateIterator ( m_sName.cstr(), columnar::IteratorHints_t(), sError );
+			}
+		}
+		break;
+
+	case SPH_EXPR_GET_COLUMNAR_COL:
+		*(int*)pArg = m_iLocator;
+		break;
+
+	default:
+		break;
+	}
+}
+
+
+class Expr_GetColumnarInt_c : public Expr_GetColumnar_Traits_c
+{
+	using Expr_GetColumnar_Traits_c::Expr_GetColumnar_Traits_c;
+
+public:
+	float		Eval ( const CSphMatch & tMatch ) const override		{ return (float)FetchValue(tMatch); }
+	int			IntEval ( const CSphMatch & tMatch ) const override		{ return FetchValue(tMatch); }
+	int64_t		Int64Eval ( const CSphMatch & tMatch ) const override	{ return FetchValue(tMatch); }
+	uint64_t	GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final;
+	ISphExpr *	Clone() const final { return new Expr_GetColumnarInt_c ( m_sName, m_iLocator ); }
+
+protected:
+	inline SphAttr_t FetchValue ( const CSphMatch & tMatch ) const;
+};
+
+
+uint64_t Expr_GetColumnarInt_c::GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
+{
+	EXPR_CLASS_NAME("Expr_GetColumnarInt_c");
+	return CALC_PARENT_HASH();
+}
+
+
+SphAttr_t Expr_GetColumnarInt_c::FetchValue ( const CSphMatch & tMatch ) const
+{
+	if ( m_pIterator.Ptr() && m_pIterator->AdvanceTo ( tMatch.m_tRowID ) == tMatch.m_tRowID )
+		return m_pIterator->Get();
+
+	return 0;
+}
+
+
+class Expr_GetColumnarFloat_c : public Expr_GetColumnarInt_c
+{
+	using Expr_GetColumnarInt_c::Expr_GetColumnarInt_c;
+
+public:
+	float		Eval ( const CSphMatch & tMatch ) const final		{ return sphDW2F(FetchValue(tMatch)); }
+	int			IntEval ( const CSphMatch & tMatch ) const final	{ return (int)sphDW2F(FetchValue(tMatch)); }
+	int64_t		Int64Eval ( const CSphMatch & tMatch ) const final	{ return (int64_t)sphDW2F(FetchValue(tMatch)); }
+};
+
+
+class Expr_GetColumnarString_c : public Expr_GetColumnar_Traits_c
+{
+	using Expr_GetColumnar_Traits_c::Expr_GetColumnar_Traits_c;
+
+public:
+	float		Eval ( const CSphMatch & ) const final { assert ( 0 ); return 0; }
+	int			StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const final;
+	const BYTE * StringEvalPacked ( const CSphMatch & tMatch ) const final;
+	int			StringLenEval ( const CSphMatch & tMatch ) const final;
+	uint64_t	GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final;
+	ISphExpr *	Clone() const final { return new Expr_GetColumnarInt_c ( m_sName, m_iLocator ); }
+};
+
+
+int Expr_GetColumnarString_c::StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const
+{
+	if ( m_pIterator.Ptr() && m_pIterator->AdvanceTo ( tMatch.m_tRowID ) == tMatch.m_tRowID )
+		return m_pIterator->Get ( *ppStr, false );
+
+	return 0;
+}
+
+
+const BYTE * Expr_GetColumnarString_c::StringEvalPacked ( const CSphMatch & tMatch ) const
+{
+	if ( m_pIterator.Ptr() && m_pIterator->AdvanceTo ( tMatch.m_tRowID ) == tMatch.m_tRowID )
+	{
+		const BYTE * pResult = nullptr;
+		m_pIterator->Get ( pResult, true );
+		return pResult;
+	}
+
+	return nullptr;
+}
+
+
+int Expr_GetColumnarString_c::StringLenEval ( const CSphMatch & tMatch ) const
+{
+	if ( m_pIterator.Ptr() && m_pIterator->AdvanceTo ( tMatch.m_tRowID ) == tMatch.m_tRowID )
+		return m_pIterator->GetLength();
+
+	return -1;
+}
+
+
+uint64_t Expr_GetColumnarString_c::GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
+{
+	EXPR_CLASS_NAME("Expr_GetColumnarString_c");
+	return CALC_PARENT_HASH();
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+class Expr_GetColumnarMva_c : public Expr_GetColumnar_Traits_c
+{
+	using Expr_GetColumnar_Traits_c::Expr_GetColumnar_Traits_c;
+
+public:
+	float		Eval ( const CSphMatch & ) const final { assert ( 0 ); return 0; }
+	int64_t		Int64Eval ( const CSphMatch & tMatch ) const final;
+	ByteBlob_t	MvaEval ( const CSphMatch & tMatch ) const final;
+	uint64_t	GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final;
+	ISphExpr *	Clone() const final { return new Expr_GetColumnarInt_c ( m_sName, m_iLocator ); }
+};
+
+
+int64_t Expr_GetColumnarMva_c::Int64Eval ( const CSphMatch & tMatch ) const
+{
+	if ( m_pIterator.Ptr() && m_pIterator->AdvanceTo ( tMatch.m_tRowID ) == tMatch.m_tRowID )
+	{
+		const BYTE * pResult = nullptr;
+		m_pIterator->Get ( pResult, true );
+		return (int64_t)pResult;
+	}
+
+	return 0;
+}
+
+
+ByteBlob_t Expr_GetColumnarMva_c::MvaEval ( const CSphMatch & tMatch ) const
+{
+	if ( m_pIterator.Ptr() && m_pIterator->AdvanceTo ( tMatch.m_tRowID ) == tMatch.m_tRowID )
+	{
+		const BYTE * pResult = nullptr;
+		int iBytes = m_pIterator->Get ( pResult, false );
+		return {pResult, iBytes};
+	}
+
+	return {nullptr, 0};
+}
+
+
+uint64_t Expr_GetColumnarMva_c::GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
+{
+	EXPR_CLASS_NAME("Expr_GetColumnarMva_c");
+	return CALC_PARENT_HASH();
+}
+
+#endif // USE_COLUMNAR
+
+//////////////////////////////////////////////////////////////////////////
 
 class Expr_GetInt_c : public Expr_WithLocator_c
 {
@@ -1461,6 +1670,9 @@ public:
 
 	bool IsDataPtrAttr() const final
 	{
+		if ( m_eArg==SPH_ATTR_STRINGPTR )
+			return m_pFirst->IsDataPtrAttr();
+
 		return true;
 	}
 
@@ -3895,6 +4107,7 @@ protected:
 	int						AddNodeString ( int64_t iValue );
 	int						AddNodeAttr ( int iTokenType, uint64_t uAttrLocator );
 	int						AddNodeField ( int iTokenType, uint64_t uAttrLocator );
+	int						AddNodeColumnar ( int iTokenType, uint64_t uAttrLocator );
 	int						AddNodeWeight ();
 	int						AddNodeOp ( int iOp, int iLeft, int iRight );
 	int						AddNodeFunc0 ( int iFunc );
@@ -3939,6 +4152,7 @@ public:
 	ESphEvalStage			m_eEvalStage { SPH_EVAL_FINAL };
 	ESphCollation			m_eCollation;
 	DWORD					m_uStoredField = CSphColumnInfo::FIELD_NONE;
+	bool					m_bNeedDocIds = false;
 
 private:
 	int						GetToken ( YYSTYPE * lvalp );
@@ -3966,6 +4180,10 @@ private:
 	void					CanonizePass ( int iNode );
 	void					ConstantFoldPass ( int iNode );
 	void					VariousOptimizationsPass ( int iNode );
+	void					MultiNEPass ( int iNode );
+	bool					MultiNEMatch ( const ExprNode_t * pLeft, const ExprNode_t * pRight, ExprNode_t & tRes, CSphVector<int64_t> & dValues );
+	bool					TransformNENE ( ExprNode_t * pRoot, ExprNode_t * pLeft, ExprNode_t * pRight );
+	bool					TransformInNE ( ExprNode_t * pRoot, ExprNode_t * pLeft, ExprNode_t * pRight );
 	void					Dump ( int iNode );
 
 	ISphExpr *				CreateTree ( int iNode );
@@ -4073,6 +4291,25 @@ int ExprParser_t::ErrLex ( const char * sTemplate, ... )
 	return -1;
 }
 
+static int ConvertToColumnarType ( ESphAttr eAttr )
+{
+	switch ( eAttr )
+	{
+	case SPH_ATTR_INTEGER:		return TOK_COLUMNAR_INT;
+	case SPH_ATTR_TIMESTAMP:	return TOK_COLUMNAR_TIMESTAMP;
+	case SPH_ATTR_FLOAT:		return TOK_COLUMNAR_FLOAT;
+	case SPH_ATTR_BIGINT:		return TOK_COLUMNAR_BIGINT;
+	case SPH_ATTR_BOOL:			return TOK_COLUMNAR_BOOL;
+	case SPH_ATTR_STRING:		return TOK_COLUMNAR_STRING;
+	case SPH_ATTR_UINT32SET:	return TOK_COLUMNAR_UINT32SET;
+	case SPH_ATTR_INT64SET:		return TOK_COLUMNAR_INT64SET;
+	default:
+		assert ( 0 && "Unknown columnar type" );
+		return -1;
+	}
+}
+
+
 int ExprParser_t::ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp )
 {
 	// check attribute type and width
@@ -4088,6 +4325,12 @@ int ExprParser_t::ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp )
 				lvalp->iAttrLocator = i;
 				return TOK_FIELD;
 			}
+	}
+
+	if ( tCol.IsColumnar() )
+	{
+		lvalp->iAttrLocator = iAttr;
+		return ConvertToColumnarType ( tCol.m_eAttrType );
 	}
 
 	int iRes = -1;
@@ -4613,6 +4856,146 @@ void ExprParser_t::VariousOptimizationsPass ( int iNode )
 	}
 }
 
+
+static bool IsSupportedNEType ( int iType )
+{
+	return iType==TOK_COLUMNAR_INT || iType==TOK_COLUMNAR_BIGINT || iType==TOK_COLUMNAR_BOOL || iType==TOK_ATTR_INT;
+}
+
+
+static bool CheckAndSwap ( ExprNode_t * & pLeft, ExprNode_t * & pRight )
+{
+	if ( IsSupportedNEType ( pRight->m_iToken ) && pLeft->m_iToken==TOK_CONST_INT )
+		Swap ( pLeft, pRight );
+
+	return IsSupportedNEType ( pLeft->m_iToken ) && pRight->m_iToken==TOK_CONST_INT;
+}
+
+
+bool ExprParser_t::MultiNEMatch ( const ExprNode_t * pLeft, const ExprNode_t * pRight, ExprNode_t & tRes, CSphVector<int64_t> & dValues )
+{
+	assert ( pLeft->m_iLeft!=-1 && pLeft->m_iRight!=-1 );
+	assert ( pRight->m_iLeft!=-1 && pRight->m_iRight!=-1 );
+
+	ExprNode_t * pLeft0 = &m_dNodes [ pLeft->m_iLeft ];
+	ExprNode_t * pLeft1 = &m_dNodes [ pLeft->m_iRight ];
+	ExprNode_t * pRight0 = &m_dNodes [ pRight->m_iLeft ];
+	ExprNode_t * pRight1 = &m_dNodes [ pRight->m_iRight ];
+
+	if ( !CheckAndSwap ( pLeft0, pLeft1 ) )
+		return false;
+
+	if ( !CheckAndSwap ( pRight0, pRight1 ) )
+		return false;
+
+	if ( pRight0->m_iLocator!=pLeft0->m_iLocator || pRight0->m_iToken!=pLeft0->m_iToken )
+		return false;
+
+	tRes = *pLeft0;
+
+	dValues.Add ( pLeft1->m_iConst );
+	dValues.Add ( pRight1->m_iConst );
+	
+	return true;
+}
+
+
+bool ExprParser_t::TransformNENE ( ExprNode_t * pRoot, ExprNode_t * pLeft, ExprNode_t * pRight )
+{
+	assert ( pRoot && pLeft && pRight );
+	assert ( pRoot->m_iToken==TOK_AND && pLeft->m_iToken==TOK_NE && pRight->m_iToken==TOK_NE );
+
+	ExprNode_t tRes;
+	CSphVector<int64_t> dValues;
+	if ( MultiNEMatch ( pLeft, pRight, tRes, dValues ) )
+	{
+		pRoot->m_iToken = TOK_NOT;
+		pRoot->m_iRight = -1;
+
+		pLeft->m_iToken = TOK_FUNC;
+		pLeft->m_iFunc = FUNC_IN;
+
+		ExprNode_t * pLeft0 = &m_dNodes [ pLeft->m_iLeft ];
+		ExprNode_t * pLeft1 = &m_dNodes [ pLeft->m_iRight ];
+
+		pLeft0->m_iToken	= tRes.m_iToken;
+		pLeft0->m_iLocator	= tRes.m_iLocator;
+		pLeft0->m_tLocator	= tRes.m_tLocator;
+
+		pLeft1->m_iToken = TOK_CONST_LIST;
+		pLeft1->m_pConsts = new ConstList_c();
+		for ( auto i : dValues )
+			pLeft1->m_pConsts->Add(i);
+
+		return true;
+	}
+
+	return false;
+}
+
+
+bool ExprParser_t::TransformInNE ( ExprNode_t * pRoot, ExprNode_t * pLeft, ExprNode_t * pRight )
+{
+	assert ( pRoot && pLeft && pRight );
+	assert ( pRoot->m_iToken==TOK_AND && ( ( pLeft->m_iToken==TOK_NOT && pRight->m_iToken==TOK_NE ) || ( pLeft->m_iToken==TOK_NE && pRight->m_iToken==TOK_NOT ) ) );
+
+	ExprNode_t * pNotNode = pLeft->m_iToken==TOK_NOT ? pLeft : pRight;
+	ExprNode_t * pNENode = pLeft->m_iToken==TOK_NE ? pLeft : pRight;
+
+	assert ( pNotNode->m_iLeft!=-1 && pNotNode->m_iRight==-1 );
+	ExprNode_t * pInNode = &m_dNodes [ pNotNode->m_iLeft ];
+
+	bool bCond = pInNode->m_iToken==TOK_FUNC && pInNode->m_iFunc==FUNC_IN;
+	assert ( pInNode->m_iLeft!=-1 && pNotNode->m_iRight==-1 );
+	ExprNode_t * pIn0 = &m_dNodes [ pInNode->m_iLeft ];
+	ExprNode_t * pIn1 = &m_dNodes [ pInNode->m_iRight ];
+	bCond &= IsSupportedNEType ( pIn0->m_iToken ) && pIn1->m_iToken==TOK_CONST_LIST;
+	bCond &= pIn1->m_pConsts->m_eRetType==SPH_ATTR_INTEGER || pIn1->m_pConsts->m_eRetType==SPH_ATTR_BIGINT;
+
+	ExprNode_t * pNE0 = &m_dNodes [ pNENode->m_iLeft ];
+	ExprNode_t * pNE1 = &m_dNodes [ pNENode->m_iRight ];
+	bCond &= CheckAndSwap ( pNE0, pNE1 );
+	bCond &= pNE0->m_iToken == pIn0->m_iToken && pNE0->m_iLocator==pIn0->m_iLocator;
+
+	if ( bCond )
+	{
+		pIn1->m_pConsts->Add ( pNE1->m_iConst );
+		*pRoot = *pNotNode;
+		return true;
+	}
+
+	return false;
+}
+
+// transform "var<>1 AND var<>2 AND var<>3" into "not var in (1,2,3)"
+void ExprParser_t::MultiNEPass ( int iNode )
+{
+	if ( iNode<0 )
+		return;
+
+	MultiNEPass ( m_dNodes [ iNode ].m_iLeft );
+	MultiNEPass ( m_dNodes [ iNode ].m_iRight );
+
+	ExprNode_t * pRoot = &m_dNodes[iNode];
+	if ( pRoot->m_iLeft==-1 || pRoot->m_iRight==-1 )
+		return;
+
+	ExprNode_t * pLeft = &m_dNodes [ pRoot->m_iLeft ];
+	ExprNode_t * pRight = &m_dNodes [ pRoot->m_iRight ];
+
+	if ( pRoot->m_iToken==TOK_AND && pLeft->m_iToken==TOK_NE && pRight->m_iToken==TOK_NE )
+	{
+		if ( TransformNENE ( pRoot, pLeft, pRight ) )
+			return;
+	}
+
+	if ( pRoot->m_iToken==TOK_AND && ( ( pLeft->m_iToken==TOK_NOT && pRight->m_iToken==TOK_NE ) || ( pLeft->m_iToken==TOK_NE && pRight->m_iToken==TOK_NOT ) ) )
+	{
+		if ( TransformInNE ( pRoot, pLeft, pRight ) )
+			return;
+	}
+}
+
 /// optimize subtree
 void ExprParser_t::Optimize ( int iNode )
 {
@@ -4620,6 +5003,7 @@ void ExprParser_t::Optimize ( int iNode )
 	CanonizePass ( iNode );
 	ConstantFoldPass ( iNode );
 	VariousOptimizationsPass ( iNode );
+	MultiNEPass ( iNode );
 }
 
 
@@ -5884,6 +6268,8 @@ ISphExpr * ExprParser_t::CreateFieldNode ( int iField )
 {
 	m_eEvalStage = SPH_EVAL_POSTLIMIT;
 	m_uStoredField = CSphColumnInfo::FIELD_STORED;
+	m_bNeedDocIds = true;
+
 	const CSphColumnInfo & tField = m_pSchema->GetField(iField);
 	if ( !(tField.m_uFieldFlags & CSphColumnInfo::FIELD_STORED) )
 	{
@@ -5971,6 +6357,22 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case TOK_ATTR_MVA64:
 		case TOK_ATTR_MVA32:	return new Expr_GetMva_c ( tNode.m_tLocator, tNode.m_iLocator );
 		case TOK_ATTR_FACTORS:	return new Expr_GetFactorsAttr_c ( tNode.m_tLocator, tNode.m_iLocator );
+
+#if USE_COLUMNAR
+		case TOK_COLUMNAR_INT:
+		case TOK_COLUMNAR_TIMESTAMP:
+		case TOK_COLUMNAR_BIGINT:
+		case TOK_COLUMNAR_BOOL:
+									return new Expr_GetColumnarInt_c ( m_pSchema->GetAttr(tNode.m_iLocator).m_sName, tNode.m_iLocator );
+
+		case TOK_COLUMNAR_FLOAT:	return new Expr_GetColumnarFloat_c ( m_pSchema->GetAttr(tNode.m_iLocator).m_sName, tNode.m_iLocator );
+		case TOK_COLUMNAR_STRING:	return new Expr_GetColumnarString_c ( m_pSchema->GetAttr(tNode.m_iLocator).m_sName, tNode.m_iLocator );
+
+		case TOK_COLUMNAR_UINT32SET:
+		case TOK_COLUMNAR_INT64SET:
+								return new Expr_GetColumnarMva_c ( m_pSchema->GetAttr(tNode.m_iLocator).m_sName, tNode.m_iLocator );
+#endif
+
 		case TOK_FIELD:			return CreateFieldNode ( tNode.m_iLocator );
 
 		case TOK_CONST_FLOAT:	return new Expr_GetConst_c ( tNode.m_fConst );
@@ -6211,8 +6613,8 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 			}
 
 		case TOK_UDF:			return CreateUdfNode ( tNode.m_iFunc, pLeft );
-		case TOK_HOOK_IDENT:	return m_pHook->CreateNode ( tNode.m_iFunc, NULL, NULL, m_sCreateError );
-		case TOK_HOOK_FUNC:		return m_pHook->CreateNode ( tNode.m_iFunc, pLeft, &m_eEvalStage, m_sCreateError );
+		case TOK_HOOK_IDENT:	return m_pHook->CreateNode ( tNode.m_iFunc, nullptr, nullptr, nullptr, m_sCreateError );
+		case TOK_HOOK_FUNC:		return m_pHook->CreateNode ( tNode.m_iFunc, pLeft, &m_eEvalStage, &m_bNeedDocIds, m_sCreateError );
 
 		case TOK_MAP_ARG:
 			// tricky bit
@@ -6517,7 +6919,7 @@ private:
 //////////////////////////////////////////////////////////////////////////
 
 /// IN() evaluator, arbitrary scalar expression vs. constant values
-template < typename T >
+template < typename T, bool BINARY >
 class Expr_In_c : public Expr_ArgVsConstSet_c<T>
 {
 public:
@@ -6525,14 +6927,24 @@ public:
 	Expr_In_c ( ISphExpr * pArg, ConstList_c * pConsts ) :
 		Expr_ArgVsConstSet_c<T> ( pArg, pConsts, false )
 	{
-		this->m_dValues.Sort();
+		this->m_dValues.Uniq();
 	}
 
 	/// evaluate arg, check if the value is within set
 	int IntEval ( const CSphMatch & tMatch ) const final
 	{
 		T val = this->ExprEval ( this->m_pArg, tMatch ); // 'this' fixes gcc braindamage
-		return this->m_dValues.BinarySearch ( val )!=nullptr;
+
+		if_const ( BINARY )
+			return this->m_dValues.BinarySearch ( val )!=nullptr;
+		else
+		{
+			for ( auto i : this->m_dValues )
+				if ( i==val )
+					return 1;
+
+			return 0;
+		}
 	}
 
 	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
@@ -6802,6 +7214,72 @@ private:
 	{}
 };
 
+// aggregate functions evaluator for columnar MVAs
+template <typename T>
+class Expr_ColumnarMVAAggr_T : public Expr_NoLocator_c
+{
+public:
+	Expr_ColumnarMVAAggr_T ( ISphExpr * pExpr, ESphAggrFunc eFunc )
+		: m_pExpr ( pExpr )
+		, m_eFunc ( eFunc )
+	{
+		SafeAddRef(m_pExpr);
+	}
+
+	int64_t Int64Eval ( const CSphMatch & tMatch ) const final
+	{
+		if ( !m_pExpr )
+			return 0;
+
+		ByteBlob_t tMva = m_pExpr->MvaEval(tMatch);
+		if ( !tMva.second )
+			return 0;
+
+		int nValues = tMva.second / sizeof(T);
+
+		const T * L = (const T *)tMva.first;
+		const T * R = L+nValues-1;
+
+		switch ( m_eFunc )
+		{
+			case SPH_AGGR_MIN:	return *L;
+			case SPH_AGGR_MAX:	return *R;
+			default:			return 0;
+		}
+	}
+
+	float	Eval ( const CSphMatch & tMatch ) const final { return (float)Int64Eval ( tMatch ); }
+	int		IntEval ( const CSphMatch & tMatch ) const final { return (int)Int64Eval ( tMatch ); }
+
+	void Command ( ESphExprCommand eCmd, void * pArg ) final
+	{
+		if ( m_pExpr )
+			m_pExpr->Command ( eCmd, pArg );
+	}
+
+	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
+	{
+		EXPR_CLASS_NAME("Expr_ColumnarMVAAggr_T");
+		CALC_POD_HASH(m_eFunc);
+		CALC_CHILD_HASH(m_pExpr);
+		return CALC_DEP_HASHES();
+	}
+
+	ISphExpr * Clone() const final
+	{
+		return new Expr_ColumnarMVAAggr_T ( *this );
+	}
+
+protected:
+	CSphRefcountedPtr<ISphExpr> m_pExpr;
+	ESphAggrFunc	m_eFunc {SPH_AGGR_NONE};
+
+private:
+	Expr_ColumnarMVAAggr_T ( const Expr_ColumnarMVAAggr_T & rhs )
+		: m_pExpr ( SafeClone ( rhs.m_pExpr ) )
+		, m_eFunc ( rhs.m_eFunc )
+	{}
+};
 
 /// IN() evaluator, JSON array vs. constant values
 class Expr_JsonFieldIn_c : public Expr_ArgVsConstSet_c<int64_t>
@@ -7787,11 +8265,27 @@ ISphExpr * ExprParser_t::CreateInNode ( int iNode )
 				default:
 				{
 					CSphRefcountedPtr<ISphExpr> pArg ( CreateTree ( m_dNodes[iNode].m_iLeft ) );
+					int iConsts = tRight.m_pConsts->m_eRetType==SPH_ATTR_INTEGER ? tRight.m_pConsts->m_dInts.GetLength() : tRight.m_pConsts->m_dFloats.GetLength();
+					bool bBinary = iConsts>128;
 					switch ( WidestType ( tLeft.m_eRetType, tRight.m_pConsts->m_eRetType ) )
 					{
-						case SPH_ATTR_INTEGER:	return new Expr_In_c<int> ( pArg, tRight.m_pConsts ); break;
-						case SPH_ATTR_BIGINT:	return new Expr_In_c<int64_t> ( pArg, tRight.m_pConsts ); break;
-						default:				return new Expr_In_c<float> ( pArg, tRight.m_pConsts ); break;
+						case SPH_ATTR_INTEGER:
+							if ( bBinary )
+								return new Expr_In_c<int,true> ( pArg, tRight.m_pConsts );
+							else
+								return new Expr_In_c<int,false> ( pArg, tRight.m_pConsts );
+
+						case SPH_ATTR_BIGINT:
+							if ( bBinary )
+								return new Expr_In_c<int64_t,true> ( pArg, tRight.m_pConsts );
+							else
+								return new Expr_In_c<int64_t,false> ( pArg, tRight.m_pConsts );
+
+						default:
+							if ( bBinary )
+								return new Expr_In_c<float,true> ( pArg, tRight.m_pConsts );
+							else
+								return new Expr_In_c<float,false> ( pArg, tRight.m_pConsts );
 					}
 				}
 			}
@@ -8001,9 +8495,11 @@ ISphExpr * ExprParser_t::CreateAggregateNode ( const ExprNode_t & tNode, ESphAgg
 	const ExprNode_t & tLeft = m_dNodes [ tNode.m_iLeft ];
 	switch ( tLeft.m_iToken )
 	{
-		case TOK_ATTR_JSON:		return new Expr_JsonFieldAggr_c ( pLeft, eFunc );
-		case TOK_ATTR_MVA32:	return new Expr_MVAAggr_c<DWORD> ( tLeft.m_tLocator, tLeft.m_iLocator, eFunc );
-		case TOK_ATTR_MVA64:	return new Expr_MVAAggr_c<int64_t> ( tLeft.m_tLocator, tLeft.m_iLocator, eFunc );
+		case TOK_ATTR_JSON:			return new Expr_JsonFieldAggr_c ( pLeft, eFunc );
+		case TOK_ATTR_MVA32:		return new Expr_MVAAggr_c<DWORD> ( tLeft.m_tLocator, tLeft.m_iLocator, eFunc );
+		case TOK_ATTR_MVA64:		return new Expr_MVAAggr_c<int64_t> ( tLeft.m_tLocator, tLeft.m_iLocator, eFunc );
+		case TOK_COLUMNAR_UINT32SET:return new Expr_ColumnarMVAAggr_T<DWORD> ( pLeft, eFunc );
+		case TOK_COLUMNAR_INT64SET:	return new Expr_ColumnarMVAAggr_T<int64_t> ( pLeft, eFunc );
 		default:				return nullptr;
 	}
 }
@@ -8231,6 +8727,34 @@ int ExprParser_t::AddNodeAttr ( int iTokenType, uint64_t uAttrLocator )
 	}
 	return m_dNodes.GetLength()-1;
 }
+
+
+int ExprParser_t::AddNodeColumnar ( int iTokenType, uint64_t uAttrLocator )
+{
+	ExprNode_t & tNode = m_dNodes.Add();
+	tNode.m_iToken = iTokenType;
+	tNode.m_iLocator = uAttrLocator;
+
+	switch ( iTokenType )
+	{
+	case TOK_COLUMNAR_INT:
+	case TOK_COLUMNAR_TIMESTAMP:
+	case TOK_COLUMNAR_BOOL:
+			tNode.m_eRetType = SPH_ATTR_INTEGER;
+			break;
+
+	case TOK_COLUMNAR_FLOAT:		tNode.m_eRetType = SPH_ATTR_FLOAT; break;
+	case TOK_COLUMNAR_BIGINT:		tNode.m_eRetType = SPH_ATTR_BIGINT; break;
+	case TOK_COLUMNAR_STRING:		tNode.m_eRetType = SPH_ATTR_STRINGPTR; break;
+	case TOK_COLUMNAR_UINT32SET:	tNode.m_eRetType = SPH_ATTR_UINT32SET_PTR; break;
+	case TOK_COLUMNAR_INT64SET:		tNode.m_eRetType = SPH_ATTR_INT64SET_PTR; break;
+	default:
+		assert ( 0 && "Unsupported columnar type" );
+		break;
+	}
+	return m_dNodes.GetLength()-1;
+}
+
 
 
 int ExprParser_t::AddNodeField ( int iTokenType, uint64_t uAttrLocator )
@@ -9269,8 +9793,8 @@ struct ExprNodeHeight_t
 	ExprNodeHeight_t() = default;
 };
 
-ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
-	ESphAttr * pAttrType, bool * pUsesWeight, CSphString & sError )
+
+ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight, CSphString & sError )
 {
 	const char* szExpr = sExpr;
 
@@ -9282,7 +9806,7 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 	m_sCreateError = "";
 
 	// setup lexer
-	m_sExpr = { szExpr, strlen (szExpr) };
+	m_sExpr = { szExpr, (int)strlen (szExpr) };
 	m_pSchema = &tSchema;
 
 	// setup constant functions
@@ -9435,6 +9959,9 @@ ISphExpr * sphExprParse ( const char * sExpr, const ISphSchema & tSchema, CSphSt
 		*tArgs.m_pPackedFactorsFlags = tParser.m_uPackedFactorFlags;
 	if ( tArgs.m_pStoredField )
 		*tArgs.m_pStoredField = tParser.m_uStoredField;
+	if ( tArgs.m_pNeedDocIds )
+		*tArgs.m_pNeedDocIds = tParser.m_bNeedDocIds;
+
 	return pRes;
 }
 
@@ -9443,3 +9970,24 @@ ISphExpr * sphJsonFieldConv ( ISphExpr * pExpr )
 {
 	return new Expr_JsonFieldConv_c ( pExpr );
 }
+
+#if USE_COLUMNAR
+
+ISphExpr * CreateGetColumnarStrExpr ( const CSphString & sName, int iLocator )
+{
+	return new Expr_GetColumnarString_c ( sName, iLocator );
+}
+
+
+ISphExpr * CreateGetColumnarIntExpr ( const CSphString & sName, int iLocator )
+{
+	return new Expr_GetColumnarInt_c ( sName, iLocator );
+}
+
+
+ISphExpr * CreateGetColumnarFloatExpr ( const CSphString & sName, int iLocator )
+{
+	return new Expr_GetColumnarFloat_c ( sName, iLocator );
+}
+
+#endif // USE_COLUMNAR

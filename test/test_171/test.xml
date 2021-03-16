@@ -344,8 +344,8 @@ index dist_facet1
 <!-- Select weight() :on differend kind of dist indexes -->
 <sphinxql>select id idd, weight() cnt from dist_no group by gr</sphinxql>
 <sphinxql>select id idd, weight() cnt from dist0 group by gr</sphinxql>
-<sphinxql>select id idd, weight() cnt from dist1 group by gr</sphinxql>
-<sphinxql>select id idd, weight() cnt from dist2 group by gr</sphinxql>
+<sphinxql>select id idd, weight() cnt from dist1 group by gr within group order by id asc</sphinxql>
+<sphinxql>select id idd, weight() cnt from dist2 group by gr within group order by id asc order by id asc</sphinxql>
 <sphinxql>select id idd, weight() cnt from dist3 group by gr</sphinxql> 
 
 <!-- Select count(distinct) on differend kind of dist indexes -->
@@ -448,7 +448,7 @@ index dist_facet1
 <sphinxql>select @id idd from dist3 group by count(*)</sphinxql>
 
 <!-- regression select only count ( distinct attr1 ) but group by attr2 from distributed -->
-<sphinxql>select id, count (distinct tag) tg from dist2 group by gr</sphinxql>
+<sphinxql>select id, count (distinct tag) tg from dist2 group by gr within group order by id asc order by id asc</sphinxql>
 <sphinxql>select id, count (distinct tag) tg from idx1, idx2 group by gr</sphinxql>
 
 <!-- regression select only count ( distinct attr1 ) + group by attr1 -->
@@ -527,7 +527,7 @@ index dist_facet1
 
 <!-- regression prohibit HAVING on regular\pool'ed attribute -->
 <sphinxql>SELECT id, COUNT(*) cc, GROUPBY() gg FROM dist_j GROUP BY j.j1 HAVING j.j1 IN ( 1,2 )</sphinxql>
-<sphinxql>SELECT id, COUNT(*) cc, GROUPBY() gg FROM dist_j GROUP BY j.j1 HAVING gg IN ( 1,2 )</sphinxql>
+<sphinxql>SELECT id, COUNT(*) cc, GROUPBY() gg FROM dist_j GROUP BY j.j1 within group order by id asc HAVING gg IN ( 1,2 )</sphinxql>
 
 <!-- limit and offset different forms -->
 <sphinxql>SELECT id, tag FROM idx_keys limit 3</sphinxql>

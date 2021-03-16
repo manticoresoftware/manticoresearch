@@ -51,20 +51,20 @@ index rt
 <sphinxql>
 	REPLACE INTO rt ( id, text ) VALUES ( 5, 'test me' ),( 15, 'test framework' );
 	flush ramchunk rt;
-	select id, weight() as w from rt where match ('test');
-	select id, weight() as w from rt where match ('best');
+	select id, weight() as w from rt where match ('test') order by weight() desc, id asc;
+	select id, weight() as w from rt where match ('best') order by weight() desc, id asc;
 </sphinxql>
 
 <!-- remove 3rd disk chunk by values -->
 <sphinxql>
 	DELETE FROM rt WHERE id=5;
-	select id, weight() as w from rt where match ('test');
-	select id, weight() as w from rt where match ('best');
+	select id, weight() as w from rt where match ('test') order by weight() desc, id asc;
+	select id, weight() as w from rt where match ('best') order by weight() desc, id asc;
 	optimize index rt option sync=1, cutoff=3;
 	select count(*) chunks, sum(disk_bytes) bytes from rt.status;
 	DELETE FROM rt WHERE id=15;
-	select id, weight() as w from rt where match ('test');
-	select id, weight() as w from rt where match ('best');
+	select id, weight() as w from rt where match ('test') order by weight() desc, id asc;
+	select id, weight() as w from rt where match ('best') order by weight() desc, id asc;
 	optimize index rt option sync=1, cutoff=3;
 	select count(*) chunks, sum(disk_bytes) bytes from rt.status;
 </sphinxql>
@@ -72,11 +72,11 @@ index rt
 <!-- remove couple of previous values and compare result after optimize -->
 <sphinxql>
 	DELETE FROM rt WHERE id in (3,13);
-	select id, weight() as w from rt where match ('test');
-	select id, weight() as w from rt where match ('best');
+	select id, weight() as w from rt where match ('test') order by weight() desc, id asc;
+	select id, weight() as w from rt where match ('best') order by weight() desc, id asc;
 	optimize index rt option sync=1, cutoff=2;
-	select id, weight() as w from rt where match ('test');
-	select id, weight() as w from rt where match ('best');
+	select id, weight() as w from rt where match ('test') order by weight() desc, id asc;
+	select id, weight() as w from rt where match ('best') order by weight() desc, id asc;
 </sphinxql>
 
 <!-- only disk chunk -->
@@ -84,8 +84,8 @@ index rt
 	select count(*) chunks, sum(disk_bytes) bytes from rt.status;
 	optimize index rt option sync=1, cutoff=1;
 	select count(*) chunks, sum(disk_bytes) bytes from rt.status;
-	select id, weight() as w from rt where match ('test');
-	select id, weight() as w from rt where match ('best');
+	select id, weight() as w from rt where match ('test') order by weight() desc, id asc;
+	select id, weight() as w from rt where match ('best') order by weight() desc, id asc;
 </sphinxql>
 </sphqueries>
 </test>

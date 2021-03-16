@@ -18,6 +18,7 @@
 #include "attribute.h"
 #include "sphinxsearch.h"
 #include "secondaryindex.h"
+#include "histogram.h"
 #include "sphinxstem.h"
 #include "sphinxpq.h"
 #include "accumulator.h"
@@ -968,7 +969,7 @@ private:
 	OpenHash_T<RowID_t, SphDocID_t, HashFunc_Int64_t> m_hDoc2Row;
 	OpenHash_T<DoclistOffsets_t, SphOffset_t, HashFunc_Int64_t> m_hDoclist;
 
-	bool WriteLookup ( Index_t & tIndex, const AttrIndexBuilder_c & tMinMax, CSphString & sError );
+	bool WriteLookup ( Index_t & tIndex, CSphString & sError );
 	bool WriteAttributes ( Index_t & tIndex, CSphString & sError );
 	void WriteCheckpoints ( const Index_t & tIndex, CSphWriter & tWriterDict );
 	bool WriteKillList ( const Index_t & tIndex, bool bIgnoreKlist, CSphString & sError );
@@ -991,7 +992,7 @@ struct CmpDocidLookup_fn
 	}
 };
 
-bool ConverterPlain_t::WriteLookup ( Index_t & tIndex, const AttrIndexBuilder_c & tMinMax, CSphString & sError )
+bool ConverterPlain_t::WriteLookup ( Index_t & tIndex, CSphString & sError )
 {
 	CSphString sSPA = tIndex.GetFilename(SPH_EXT_SPA);
 	CSphAutofile tSPA ( sSPA.cstr(), SPH_O_READ, sError );
@@ -1000,11 +1001,6 @@ bool ConverterPlain_t::WriteLookup ( Index_t & tIndex, const AttrIndexBuilder_c 
 
 	CSphReader tSPAReader;
 	tSPAReader.SetFile(tSPA);
-
-	const CSphTightVector<CSphRowitem> & dMinMaxRows = tMinMax.GetCollected();
-	int iStride = m_tSchema.GetRowSize();
-	const CSphRowitem * pMinRow = dMinMaxRows.Begin()+dMinMaxRows.GetLength()-iStride*2;
-	const CSphRowitem * pMaxRow = pMinRow+iStride;
 
 	HistogramContainer_c tHistogramContainer;
 	CSphVector<Histogram_i *> dHistograms;
@@ -1018,10 +1014,10 @@ bool ConverterPlain_t::WriteLookup ( Index_t & tIndex, const AttrIndexBuilder_c 
 			Verify ( tHistogramContainer.Add ( pHistogram ) );
 			dHistograms.Add ( pHistogram );
 			dPOD.Add ( tAttr );
-			pHistogram->Setup ( sphGetRowAttr ( pMinRow, tAttr.m_tLocator ), sphGetRowAttr ( pMaxRow, tAttr.m_tLocator ) );
 		}
 	}
 
+	int iStride = m_tSchema.GetRowSize();
 	CSphVector<CSphRowitem> dRow ( iStride );
 	CSphRowitem * pRow = dRow.Begin();
 
@@ -1121,7 +1117,7 @@ bool ConverterPlain_t::WriteAttributes ( Index_t & tIndex, CSphString & sError )
 	tIndex.m_iTotalDocuments = tNextRowID;
 	m_tDocinfoIndex = ( dMinMaxRows.GetLength() / m_tSchema.GetRowSize() / 2 ) - 1;
 
-	if ( !WriteLookup ( tIndex, tMinMaxBuilder, sError ) )
+	if ( !WriteLookup ( tIndex, sError ) )
 		return false;
 
 	return true;

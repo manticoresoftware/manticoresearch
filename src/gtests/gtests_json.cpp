@@ -425,12 +425,12 @@ TEST_F ( TJson, bson_ScientificDouble )
 {
 	auto tst = Bsons ( R"([1e-5, 1e5, -1e-5, -1e5, 6.022e+3, 1.4738223E-1])" );
 
-	ASSERT_FLOAT_EQ ( tst[0].Double (), 0.00001 );
-	ASSERT_FLOAT_EQ ( tst[1].Double (), 100000.0 );
-	ASSERT_FLOAT_EQ ( tst[2].Double (), -0.00001 );
-	ASSERT_FLOAT_EQ ( tst[3].Double (), -100000.0 );
-	ASSERT_FLOAT_EQ ( tst[4].Double (), 6022.0 );
-	ASSERT_FLOAT_EQ ( tst[5].Double (), 0.14738223 );
+	ASSERT_DOUBLE_EQ ( tst[0].Double (), 0.00001 );
+	ASSERT_DOUBLE_EQ ( tst[1].Double (), 100000.0 );
+	ASSERT_DOUBLE_EQ ( tst[2].Double (), -0.00001 );
+	ASSERT_DOUBLE_EQ ( tst[3].Double (), -100000.0 );
+	ASSERT_DOUBLE_EQ ( tst[4].Double (), 6022.0 );
+	ASSERT_DOUBLE_EQ ( tst[5].Double (), 0.14738223 );
 }
 
 // test bson::String

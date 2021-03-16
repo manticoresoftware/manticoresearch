@@ -619,6 +619,31 @@ void CSphIndexSettings::ParseStoredFields ( const CSphConfigSection & hIndex )
 }
 
 
+#if USE_COLUMNAR
+void CSphIndexSettings::ParseColumnarSettings ( const CSphConfigSection & hIndex )
+{
+	{
+		CSphString sAttrs = hIndex.GetStr ( "columnar_attrs" );
+		sAttrs.ToLower();
+		sphSplit ( m_dColumnarAttrs, sAttrs.cstr() );
+		m_dColumnarAttrs.Uniq();
+	}
+
+	{
+		CSphString sAttrs = hIndex.GetStr ( "columnar_strings_no_hash" );
+		sAttrs.ToLower();
+		sphSplit ( m_dColumnarStringsNoHash, sAttrs.cstr() );
+		m_dColumnarStringsNoHash.Uniq();
+	}
+
+	m_sCompressionUINT32 = hIndex.GetStr ( "columnar_compression_uint32", m_sCompressionUINT32.c_str() ).cstr();
+	m_sCompressionUINT64 = hIndex.GetStr ( "columnar_compression_int64", m_sCompressionUINT64.c_str() ).cstr();
+	m_iSubblockSize = hIndex.GetInt ( "columnar_subblock", 128 );
+	m_iSubblockSizeMva = hIndex.GetInt ( "columnar_subblock_mva", 128 );
+	m_iMinMaxLeafSize = hIndex.GetInt ( "columnar_minmax_leaf", 128 );
+}
+#endif
+
 bool CSphIndexSettings::ParseDocstoreSettings ( const CSphConfigSection & hIndex, CSphString & sWarning, CSphString & sError )
 {
 	m_uBlockSize = hIndex.GetSize ( "docstore_block_size", DEFAULT_DOCSTORE_BLOCK );
@@ -680,6 +705,10 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 	sphSplit ( m_dInfixFields, sFields.cstr() );
 
 	ParseStoredFields(hIndex);
+
+#if USE_COLUMNAR
+	ParseColumnarSettings(hIndex);
+#endif
 
 	if ( RawMinPrefixLen()==0 && m_dPrefixFields.GetLength()!=0 )
 	{
@@ -883,10 +912,10 @@ void FileAccessSettings_t::Format ( SettingsFormatter_c & tOut, FilenameBuilder_
 	tOut.Add ( "read_buffer_docs",		m_iReadBufferDocList,		m_iReadBufferDocList!=tDefault.m_iReadBufferDocList );
 	tOut.Add ( "read_buffer_hits",		m_iReadBufferHitList,		m_iReadBufferHitList!=tDefault.m_iReadBufferHitList );
 
-	tOut.Add ( "access_doclists",		FileAccessName(m_eDoclist),	m_eDoclist!=tDefault.m_eDoclist );
-	tOut.Add ( "access_hitlists",		FileAccessName(m_eHitlist),	m_eHitlist!=tDefault.m_eHitlist );
-	tOut.Add ( "access_plain_attrs",	FileAccessName(m_eAttr) ,	m_eAttr!=tDefault.m_eAttr );
-	tOut.Add ( "access_blob_attrs",		FileAccessName(m_eBlob) ,	m_eBlob!=tDefault.m_eBlob );
+	tOut.Add ( "access_doclists",		FileAccessName(m_eDoclist),		m_eDoclist!=tDefault.m_eDoclist );
+	tOut.Add ( "access_hitlists",		FileAccessName(m_eHitlist),		m_eHitlist!=tDefault.m_eHitlist );
+	tOut.Add ( "access_plain_attrs",	FileAccessName(m_eAttr) ,		m_eAttr!=tDefault.m_eAttr );
+	tOut.Add ( "access_blob_attrs",		FileAccessName(m_eBlob) ,		m_eBlob!=tDefault.m_eBlob );
 }
 
 //////////////////////////////////////////////////////////////////////////

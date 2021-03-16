@@ -14,20 +14,7 @@
 #include "sphinxint.h"
 #include "sphinxutils.h"
 #include "sphinxplugin.h"
-
-#if !USE_WINDOWS
-#include <unistd.h>
-#include <sys/time.h>
-#if HAVE_DLOPEN
-#include <dlfcn.h>
-#endif // HAVE_DLOPEN
-#endif // !USE_WINDOWS
-
-#if !USE_WINDOWS
-#ifndef HAVE_DLERROR
-#define dlerror() ""
-#endif // HAVE_DLERROR
-#endif // !USE_WINDOWS
+#include "libutils.h"
 
 //////////////////////////////////////////////////////////////////////////
 // TYPES
@@ -95,41 +82,6 @@ static CSphOrderedHash<PluginDesc_c*, PluginKey_t, PluginKey_t, 256>	g_hPlugins;
 
 //////////////////////////////////////////////////////////////////////////
 // PLUGIN MANAGER
-//////////////////////////////////////////////////////////////////////////
-
-#if USE_WINDOWS
-#undef HAVE_DLOPEN
-#define HAVE_DLOPEN		1
-#define RTLD_LAZY		0
-#define RTLD_LOCAL		0
-
-void * dlsym ( void * lib, const char * name )
-{
-	return GetProcAddress ( (HMODULE)lib, name );
-}
-
-void * dlopen ( const char * libname, int )
-{
-	return LoadLibraryEx ( libname, NULL, 0 );
-}
-
-int dlclose ( void * lib )
-{
-	return FreeLibrary ( (HMODULE)lib )
-		? 0
-		: GetLastError();
-}
-
-const char * dlerror()
-{
-	static char sError[256];
-	DWORD uError = GetLastError();
-	FormatMessage ( FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL,
-		uError, LANG_SYSTEM_DEFAULT, (LPTSTR)sError, sizeof(sError), NULL );
-	return sError;
-}
-#endif // USE_WINDOWS
-
 //////////////////////////////////////////////////////////////////////////
 
 PluginLib_c::PluginLib_c ( void * pHandle, const char * sName )

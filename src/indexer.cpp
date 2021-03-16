@@ -1617,10 +1617,17 @@ bool SendRotate ( const CSphConfig & hConf, bool bForce )
 	return true;
 }
 
-static void ShowVersion ()
+
+static void ShowVersion()
 {
-	fprintf ( stdout, "%s", szMANTICORE_BANNER );
+	const char * szColumnarVer = GetColumnarVersionStr();
+	CSphString sColumnar = "";
+	if ( szColumnarVer )
+		sColumnar.SetSprintf ( " (columnar %s)", szColumnarVer );
+
+	fprintf ( stdout, "%s%s%s",  szMANTICORE_NAME, sColumnar.cstr(), szMANTICORE_BANNER_TEXT );
 }
+
 
 static void ShowHelp ()
 {
@@ -1808,6 +1815,10 @@ int main ( int argc, char ** argv )
 			break;
 	}
 
+	CSphString sError;
+	if ( !InitColumnar ( sError ) )
+		sphWarning ( "Error initializing columnar storage: %s", sError.cstr() );
+
 	if ( !g_bQuiet )
 		ShowVersion();
 
@@ -1846,7 +1857,6 @@ int main ( int argc, char ** argv )
 	// load config
 	///////////////
 
-	CSphString sError;
 	if ( !sphInitCharsetAliasTable ( sError ) )
 		sphDie ( "failed to init charset alias table: %s", sError.cstr() );
 
@@ -1998,6 +2008,7 @@ int main ( int argc, char ** argv )
 	}
 
 	sphShutdownWordforms ();
+	ShutdownColumnar();
 
 	if ( !g_bQuiet )
 	{

@@ -117,9 +117,9 @@ index rt
 <num_agents>2</num_agents>
 
 <sphqueries>
-<sphinxql>SELECT * FROM dist</sphinxql>
+<sphinxql>SELECT * FROM dist order by id asc</sphinxql>
 <sphinxql>UPDATE dist SET group_id=123 WHERE id=11</sphinxql>
-<sphinxql>SELECT * FROM dist</sphinxql>
+<sphinxql>SELECT * FROM dist order by id asc</sphinxql>
 
 <!-- regression crash on update of RT index that matches documents from different disk chunks-->
 <sphinxql>INSERT INTO rt (id, gid, title) VALUES (1001, 11, 'x10010 x10011 x10012 x10013 x10014 x10015 x10016 x10017 x10018 x10019 x100110 x100111 x100112 x100113 x100114 x100115 x100116 x100117 x100118 x100119 x100120 x100121 x100122 x100123 x100124 x100125 x100126 x100127 x100128 x100129 ')</sphinxql>
@@ -136,7 +136,7 @@ index rt
 
 <sphinxql>UPDATE i1, i2 SET gid=333 WHERE id IN ( 2, 102 )</sphinxql>
 <sphinxql>UPDATE i1, rt SET gid=333 WHERE id IN ( 3, 1003, 1333 )</sphinxql>
-<sphinxql>SELECT * FROM i1, i2, rt WHERE id IN ( 1,2,3,4, 101,102,103,104, 1001,1002,1003,1004, 1331,1332,1333,1334, 2001, 2002, 2003, 2004 )</sphinxql>
+<sphinxql>SELECT * FROM i1, i2, rt WHERE id IN ( 1,2,3,4, 101,102,103,104, 1001,1002,1003,1004, 1331,1332,1333,1334, 2001, 2002, 2003, 2004 ) order by id asc</sphinxql>
 
 <sphinxql>INSERT INTO rt (id, gid, title) VALUES (2001, 11, 'x20010 x20011 x20012 x20013 x20014 x20015 x20016 x20017 x20018 x20019 x200110 x200111 x200112 x200113 x200114 x200115 x200116 x200117 x200118 x200119 x200120 x200121 x200122 x200123 x200124 x200125 x200126 x200127 x200128 x200129 ')</sphinxql>
 <sphinxql>INSERT INTO rt (id, gid, title) VALUES (2002, 11, 'x20020 x20021 x20022 x20023 x20024 x20025 x20026 x20027 x20028 x20029 x200210 x200211 x200212 x200213 x200214 x200215 x200216 x200217 x200218 x200219 x200220 x200221 x200222 x200223 x200224 x200225 x200226 x200227 x200228 x200229 ')</sphinxql>
@@ -144,11 +144,11 @@ index rt
 <sphinxql>INSERT INTO rt (id, gid, title) VALUES (2004, 11, 'x20040 x20041 x20042 x20043 x20044 x20045 x20046 x20047 x20048 x20049 x200410 x200411 x200412 x200413 x200414 x200415 x200416 x200417 x200418 x200419 x200420 x200421 x200422 x200423 x200424 x200425 x200426 x200427 x200428 x200429 ')</sphinxql>
 
 <sphinxql>UPDATE rt SET gid=444 WHERE id IN ( 3, 1003, 1333, 2003 )</sphinxql>
-<sphinxql>SELECT * FROM i1, i2, rt WHERE id IN ( 1,2,3,4, 101,102,103,104, 1001,1002,1003,1004, 1331,1332,1333,1334, 2001, 2002, 2003, 2004 )</sphinxql>
+<sphinxql>SELECT * FROM i1, i2, rt WHERE id IN ( 1,2,3,4, 101,102,103,104, 1001,1002,1003,1004, 1331,1332,1333,1334, 2001, 2002, 2003, 2004 ) order by id asc</sphinxql>
 
 <!-- regression @uservars at agents only -->
 <sphinxql>SET GLOBAL @var1 = (3,4,12,13)</sphinxql>
-<sphinxql>SELECT * FROM dist</sphinxql>
+<sphinxql>SELECT * FROM dist order by id asc</sphinxql>
 <sphinxql>SELECT * FROM dist WHERE id in @var1</sphinxql>
 
 <sphinxql>RECONNECT</sphinxql>
@@ -169,7 +169,7 @@ index rt
 <sphinxql>SELECT * FROM dist2 WHERE id in @var2</sphinxql>
 <sphinxql>SELECT * FROM block1 WHERE id in @var3</sphinxql>
 <sphinxql>SET INDEX dist GLOBAL @var3 = (1,4,11,12)</sphinxql>
-<sphinxql>SELECT * FROM dist WHERE id in @var3</sphinxql>
+<sphinxql>SELECT * FROM dist WHERE id in @var3 order by id asc</sphinxql>
 <sphinxql>SELECT * FROM block1 WHERE id in @var3</sphinxql>
 </sphqueries>
 

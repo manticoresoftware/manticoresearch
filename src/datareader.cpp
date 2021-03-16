@@ -60,6 +60,11 @@ public:
 		m_pPointer = m_pBase + iPos;
 	}
 
+	void		GetBytes ( BYTE * pData, int iSize ) final;
+
+	int			GetBytesZerocopy ( const BYTE *& pData, int iMax ) final;
+	DWORD		GetDword() final;
+	SphOffset_t	GetOffset() final;
 	DWORD		UnzipInt () final;
 	uint64_t	UnzipOffset () final;
 
@@ -100,6 +105,51 @@ private:
 };
 
 
+void ThinMMapReader_c::GetBytes ( BYTE * pData, int iSize )
+{
+	auto iPos = m_pPointer - m_pBase;
+	if ( iPos>=0 && iPos+iSize<=m_iSize )
+	{
+		memcpy ( pData, m_pPointer, iSize );
+		m_pPointer += iSize;
+		return;
+	}
+
+	sphWarning ( "INTERNAL: out-of-range in ThinMMapReader_c: trying to read %d bytes from '%s' at " INT64_FMT ", from mmap of " INT64_FMT ", query most probably would FAIL; report the fact to dev!",
+		iSize, ( m_szFileName ? m_szFileName : "" ), int64_t(iPos), int64_t(m_iSize) );
+}
+
+
+int ThinMMapReader_c::GetBytesZerocopy ( const BYTE *& pData, int iMax )
+{
+	if ( m_pPointer+iMax > m_pBase+m_iSize )
+	{
+		pData = m_pPointer;
+		return 0;
+	}
+
+	pData = m_pPointer;
+	m_pPointer += iMax;
+	return iMax;
+}
+
+
+DWORD ThinMMapReader_c::GetDword()
+{
+	DWORD tRes;
+	GetBytes ( (BYTE*)&tRes, sizeof(tRes) );
+	return tRes;
+}
+
+
+SphOffset_t	ThinMMapReader_c::GetOffset()
+{
+	SphOffset_t tRes;
+	GetBytes ( (BYTE*)&tRes, sizeof(tRes) );
+	return tRes;
+}
+
+
 DWORD ThinMMapReader_c::UnzipInt()
 {
 	SPH_VARINT_DECODE ( DWORD, GetByte() );
@@ -118,30 +168,16 @@ class DirectFileReader_c final : public FileBlockReader_c, protected FileReader_
 	friend class DirectFactory_c;
 
 public:
-	SphOffset_t GetPos () const final
-	{
-		return FileReader_c::GetPos();
-	}
-
-	void SeekTo ( SphOffset_t iPos, int iSizeHint ) final
-	{
-		FileReader_c::SeekTo ( iPos, iSizeHint );
-	}
-
-	DWORD UnzipInt() final
-	{
-		return FileReader_c::UnzipInt();
-	}
-
-	uint64_t UnzipOffset() final
-	{
-		return FileReader_c::UnzipOffset();
-	}
-
-	void Reset() final
-	{
-		FileReader_c::Reset();
-	}
+	void		SeekTo ( SphOffset_t iPos, int iSizeHint ) final		{ FileReader_c::SeekTo ( iPos, iSizeHint ); }
+	void		GetBytes ( BYTE * pData, int iSize ) final				{ FileReader_c::GetBytes ( pData, iSize ); }
+	int 		GetBytesZerocopy ( const BYTE *& pData, int iMax ) final { return FileReader_c::GetBytesZerocopy ( &pData, iMax ); }
+	SphOffset_t GetPos () const final	{ return FileReader_c::GetPos(); }
+	BYTE		GetByte() final			{ return FileReader_c::GetByte(); }
+	DWORD		GetDword () final		{ return FileReader_c::GetDword(); }
+	SphOffset_t	GetOffset() final		{ return FileReader_c::GetOffset(); }
+	DWORD		UnzipInt() final		{ return FileReader_c::UnzipInt(); }
+	uint64_t	UnzipOffset() final		{ return FileReader_c::UnzipOffset(); }
+	void		Reset() final			{ FileReader_c::Reset(); }
 
 protected:
 	explicit DirectFileReader_c ( BYTE * pBuf, int iSize, const char * szFileName )
@@ -205,7 +241,7 @@ public:
 		return pFileReader;
 	}
 
-	void SetProfile ( QueryProfile_c* pProfile ) final
+	void SetProfile ( QueryProfile_c * pProfile ) final
 	{
 		m_dReader.m_pProfile = pProfile;
 	}
@@ -291,7 +327,8 @@ DataReaderFactory_c * NewProxyReader ( const CSphString & sFile, CSphString & sE
 	else
 		pReader = new MMapFactory_c ( sFile, sError, eAccess );
 
-	if ( !pReader->IsValid ())
-		SafeRelease ( pReader )
-		return pReader;
+	if ( !pReader->IsValid() )
+		SafeRelease(pReader);
+
+	return pReader;
 }

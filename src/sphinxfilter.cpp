@@ -11,10 +11,13 @@
 //
 
 #include "sphinxfilter.h"
+#include "columnarfilter.h"
 #include "sphinxint.h"
 #include "sphinxjson.h"
 #include "attribute.h"
-#include "secondaryindex.h"
+#include "histogram.h"
+
+#include <boost/icl/interval.hpp>
 
 #if USE_WINDOWS
 #pragma warning(disable:4250) // inheritance via dominance is our intent
@@ -56,8 +59,8 @@ struct IFilter_Values : virtual ISphFilter
 		return m_pValues[iIndex];
 	}
 
-	bool EvalValues ( SphAttr_t uValue ) const;
-	bool EvalBlockValues ( SphAttr_t uBlockMin, SphAttr_t uBlockMax ) const;
+	inline bool EvalValues ( SphAttr_t uValue ) const;
+	inline bool EvalBlockValues ( SphAttr_t uBlockMin, SphAttr_t uBlockMax ) const;
 };
 
 
@@ -97,48 +100,6 @@ bool IFilter_Values::EvalBlockValues ( SphAttr_t uBlockMin, SphAttr_t uBlockMax 
 }
 
 
-template<bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT = false, bool OPEN_RIGHT = false, typename T = SphAttr_t>
-bool EvalRange ( T tValue, T tMin, T tMax )
-{
-	if_const ( OPEN_LEFT )
-		return HAS_EQUAL_MAX ? ( tValue<=tMax ) : ( tValue<tMax );
-
-	if_const ( OPEN_RIGHT )
-		return  HAS_EQUAL_MIN ? ( tValue>=tMin ) : ( tValue>tMin );
-
-	auto bMinOk = HAS_EQUAL_MIN ? ( tValue>=tMin ) : ( tValue>tMin );
-	auto bMaxOk = HAS_EQUAL_MAX ? ( tValue<=tMax ) : ( tValue<tMax );
-
-	return bMinOk && bMaxOk;
-}
-
-
-template<bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT = false, bool OPEN_RIGHT = false, typename T = SphAttr_t>
-bool EvalBlockRangeAny ( T tMin1, T tMax1, T tMin2, T tMax2 )
-{
-	if_const ( OPEN_LEFT )
-		return HAS_EQUAL_MAX ? ( tMin1<=tMax2 ) : ( tMin1<tMax2 );
-
-	if_const ( OPEN_RIGHT )
-		return HAS_EQUAL_MIN ? ( tMax1>=tMin2 ) : ( tMax1>tMin2 );
-
-	auto bMinOk = HAS_EQUAL_MIN ? ( tMin1<=tMax2 ) : ( tMin1<tMax2 );
-	auto bMaxOk = HAS_EQUAL_MAX ? ( tMax1>=tMin2 ) : ( tMax1>tMin2 );
-
-	return bMinOk && bMaxOk;
-}
-
-
-template<bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, typename T = SphAttr_t>
-bool EvalBlockRangeAll ( T tMin1, T tMax1, T tMin2, T tMax2 )
-{
-	auto bMinOk = HAS_EQUAL_MIN ? ( tMin1>=tMin2 ) : ( tMin1>tMin2 );
-	auto bMaxOk = HAS_EQUAL_MAX ? ( tMax1<=tMax2 ) : ( tMax1<tMax2 );
-
-	return bMinOk && bMaxOk;
-}
-
-
 /// range
 struct IFilter_Range: virtual ISphFilter
 {
@@ -158,6 +119,9 @@ struct IFilter_Range: virtual ISphFilter
 // attr
 
 class Filter_Values : public IFilter_Attr, public IFilter_Values
+#if USE_COLUMNAR
+	, public ColumnarFilterTraits_c
+#endif
 {
 public:
 	bool Eval ( const CSphMatch & tMatch ) const final
@@ -175,10 +139,23 @@ public:
 
 		return EvalBlockValues ( uBlockMin, uBlockMax );
 	}
+
+#if USE_COLUMNAR
+	bool Test ( const columnar::MinMaxVec_t & dMinMax ) const final
+	{
+		if ( m_iColumnarCol<0 )
+			return true;
+
+		return EvalBlockValues ( dMinMax[m_iColumnarCol].first, dMinMax[m_iColumnarCol].second );
+	}
+#endif
 };
 
 
 class Filter_SingleValue : public IFilter_Attr
+#if USE_COLUMNAR
+	, public ColumnarFilterTraits_c
+#endif
 {
 public:
 #ifndef NDEBUG
@@ -206,6 +183,21 @@ public:
 		SphAttr_t uBlockMax = sphGetRowAttr ( pMaxDocinfo, m_tLocator );
 		return ( uBlockMin<=m_RefValue && m_RefValue<=uBlockMax );
 	}
+
+#if USE_COLUMNAR
+	bool Test ( const columnar::MinMaxVec_t & dMinMax ) const final
+	{
+		if ( m_iColumnarCol<0 )
+			return true;
+
+		return ( dMinMax[m_iColumnarCol].first<=m_RefValue && m_RefValue<=dMinMax[m_iColumnarCol].second );
+	}
+
+	void SetColumnarCol ( int iColumnarCol ) final
+	{
+		ColumnarFilterTraits_c::SetColumnarCol(iColumnarCol);
+	}
+#endif
 
 protected:
 	SphAttr_t m_RefValue;
@@ -238,6 +230,9 @@ private:
 
 template < bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT >
 struct Filter_Range : public IFilter_Attr, public IFilter_Range
+#if USE_COLUMNAR
+	, public ColumnarFilterTraits_c
+#endif
 {
 	bool Eval ( const CSphMatch & tMatch ) const final
 	{
@@ -255,6 +250,21 @@ struct Filter_Range : public IFilter_Attr, public IFilter_Range
 		// not-reject
 		return EvalBlockRangeAny<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT> ( uBlockMin, uBlockMax, m_iMinValue, m_iMaxValue );
 	}
+
+#if USE_COLUMNAR
+	bool Test ( const columnar::MinMaxVec_t & dMinMax ) const final
+	{
+		if ( m_iColumnarCol<0 )
+			return true;
+
+		return EvalBlockRangeAny<HAS_EQUAL_MIN,HAS_EQUAL_MAX> ( dMinMax[m_iColumnarCol].first, dMinMax[m_iColumnarCol].second, m_iMinValue, m_iMaxValue );
+	}
+
+	void SetColumnarCol ( int iColumnarCol ) final
+	{
+		ColumnarFilterTraits_c::SetColumnarCol(iColumnarCol);
+	}
+#endif
 };
 
 // float
@@ -309,52 +319,6 @@ struct Filter_WeightRange: public IFilter_Range
 
 //////////////////////////////////////////////////////////////////////////
 // MVA
-//////////////////////////////////////////////////////////////////////////
-
-template <typename T, bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX>
-static bool MvaEval_RangeAny ( const T * pMva, int nValues, SphAttr_t m_iMinValue, SphAttr_t m_iMaxValue )
-{
-	if ( !pMva )
-		return false;
-
-	const T * pEnd = pMva+nValues;
-	const T * L = pMva;
-	const T * R = pEnd - 1;
-
-	while ( L<=R )
-	{
-		const T * pVal = L + (R - L) / 2;
-		T iMva = sphUnalignedRead ( *pVal );
-
-		if ( m_iMinValue>iMva )
-			L = pVal + 1;
-		else if ( m_iMinValue<iMva )
-			R = pVal - 1;
-		else
-			return ( HAS_EQUAL_MIN || pVal+1<pEnd );
-	}
-	if ( L==pEnd )
-		return false;
-
-	T iMvaL = sphUnalignedRead ( *L );
-	if_const ( HAS_EQUAL_MAX )
-		return iMvaL<=m_iMaxValue;
-	else
-		return iMvaL<m_iMaxValue;
-}
-
-
-template <typename T, bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX>
-static bool MvaEval_RangeAll ( const T * pMva, int nValues, SphAttr_t m_iMinValue, SphAttr_t m_iMaxValue )
-{
-	if ( !pMva )
-		return false;
-
-	const T * L = pMva;
-	const T * R = pMva+nValues-1;
-	return EvalBlockRangeAll<HAS_EQUAL_MIN,HAS_EQUAL_MAX> ( *L, *R, (T)m_iMinValue, (T)m_iMaxValue );
-}
-
 //////////////////////////////////////////////////////////////////////////
 
 class Filter_MVA_c: public virtual IFilter_Attr
@@ -619,6 +583,13 @@ struct Filter_And2 final : public ISphFilter
 		return m_pArg1->EvalBlock ( pMin, pMax ) && m_pArg2->EvalBlock ( pMin, pMax );
 	}
 
+#if USE_COLUMNAR
+	bool Test ( const columnar::MinMaxVec_t & dMinMax ) const final
+	{
+		return m_pArg1->Test(dMinMax) && m_pArg2->Test(dMinMax);
+	}
+#endif
+
 	ISphFilter * Join ( ISphFilter * pFilter ) final
 	{
 		m_pArg2 = new Filter_And2 ( m_pArg2, pFilter );
@@ -661,6 +632,13 @@ struct Filter_And3 final : public ISphFilter
 	{
 		return m_pArg1->EvalBlock ( pMin, pMax ) && m_pArg2->EvalBlock ( pMin, pMax ) && m_pArg3->EvalBlock ( pMin, pMax );
 	}
+
+#if USE_COLUMNAR
+	bool Test ( const columnar::MinMaxVec_t & dMinMax ) const final
+	{
+		return m_pArg1->Test(dMinMax) && m_pArg2->Test(dMinMax) && m_pArg3->Test(dMinMax);
+	}
+#endif
 
 	ISphFilter * Join ( ISphFilter * pFilter ) final
 	{
@@ -707,6 +685,17 @@ struct Filter_And final : public ISphFilter
 				return false;
 		return true;
 	}
+
+#if USE_COLUMNAR
+	bool Test ( const columnar::MinMaxVec_t & dMinMax ) const final
+	{
+		for ( auto pFilter : m_dFilters )
+			if ( !pFilter->Test(dMinMax) )
+				return false;
+
+		return true;
+	}
+#endif
 
 	ISphFilter * Join ( ISphFilter * pFilter ) final
 	{
@@ -766,6 +755,13 @@ struct Filter_Or final : public ISphFilter
 	{
 		return ( m_pLeft->EvalBlock ( pMinDocinfo, pMaxDocinfo ) || m_pRight->EvalBlock ( pMinDocinfo, pMaxDocinfo ) );
 	}
+
+#if USE_COLUMNAR
+	bool Test ( const columnar::MinMaxVec_t & dMinMax ) const final
+	{
+		return ( m_pLeft->Test(dMinMax) || m_pRight->Test(dMinMax) );
+	}
+#endif
 
 	void SetBlobStorage ( const BYTE * pBlobPool ) final
 	{
@@ -831,20 +827,26 @@ ISphFilter * ISphFilter::Join ( ISphFilter * pFilter )
 
 /// helper functions
 
-static inline ISphFilter * ReportError ( CSphString & sError, const char * sMessage, ESphFilter eFilterType )
+CSphString FilterType2Str ( ESphFilter eFilterType )
 {
 	CSphString sFilterName;
 	switch ( eFilterType )
 	{
-		case SPH_FILTER_VALUES:			sFilterName = "intvalues"; break;
-		case SPH_FILTER_RANGE:			sFilterName = "intrange"; break;
-		case SPH_FILTER_FLOATRANGE:		sFilterName = "floatrange"; break;
-		case SPH_FILTER_STRING:			sFilterName = "string"; break;
-		case SPH_FILTER_NULL:			sFilterName = "null"; break;
-		default:						sFilterName.SetSprintf ( "(filter-type-%d)", eFilterType ); break;
+	case SPH_FILTER_VALUES:			sFilterName = "intvalues"; break;
+	case SPH_FILTER_RANGE:			sFilterName = "intrange"; break;
+	case SPH_FILTER_FLOATRANGE:		sFilterName = "floatrange"; break;
+	case SPH_FILTER_STRING:			sFilterName = "string"; break;
+	case SPH_FILTER_NULL:			sFilterName = "null"; break;
+	default:						sFilterName.SetSprintf ( "(filter-type-%d)", eFilterType ); break;
 	}
 
-	sError.SetSprintf ( sMessage, sFilterName.cstr() );
+	return sFilterName;
+}
+
+
+static inline ISphFilter * ReportError ( CSphString & sError, const char * sMessage, ESphFilter eFilterType )
+{
+	sError.SetSprintf ( sMessage, FilterType2Str(eFilterType).cstr() );
 	return nullptr;
 }
 
@@ -952,12 +954,9 @@ static ISphFilter * CreateSpecialFilter ( const CSphString & sName, const CSphFi
 }
 
 
-static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, ESphFilter eFilterType,
-	ESphAttr eAttrType, const CSphAttrLocator & tLoc, ESphCollation eCollation,
-	CSphString & sError, CSphString & sWarning )
+static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, ESphFilter eFilterType,ESphAttr eAttrType, const CSphAttrLocator & tLoc, ESphCollation eCollation, CSphString & sError, CSphString & sWarning )
 {
-	// MVA
-	if ( eAttrType==SPH_ATTR_UINT32SET || eAttrType==SPH_ATTR_INT64SET || eAttrType==SPH_ATTR_UINT32SET_PTR || eAttrType==SPH_ATTR_INT64SET_PTR )
+	if ( IsMvaAttr(eAttrType) )
 	{
 		if (!( eFilterType==SPH_FILTER_VALUES || eFilterType==SPH_FILTER_RANGE ))
 			return ReportError ( sError, "unsupported filter type '%s' on MVA column", eFilterType );
@@ -1051,6 +1050,16 @@ public:
 			m_pExpr->Command ( SPH_EXPR_SET_BLOB_POOL, (void*)pBlobPool );
 	}
 
+#if USE_COLUMNAR
+	void SetColumnar ( const columnar::Columnar_i * pColumnar ) final
+	{
+		if ( !m_pExpr )
+			return;
+
+		m_pExpr->Command ( SPH_EXPR_SET_COLUMNAR, (void*)pColumnar );
+	}
+#endif
+
 protected:
 	const BYTE *				m_pBlobPool {nullptr};
 	CSphRefcountedPtr<ISphExpr>	m_pExpr;
@@ -1083,24 +1092,51 @@ public:
 
 template < bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX >
 class ExprFilterRange_c : public ExprFilter_c<IFilter_Range>
+#if USE_COLUMNAR
+	, public ColumnarFilterTraits_c
+#endif
 {
 public:
 	explicit ExprFilterRange_c ( ISphExpr * pExpr )
 		: ExprFilter_c<IFilter_Range> ( pExpr )
+#if USE_COLUMNAR
+		, ColumnarFilterTraits_c(pExpr)
+#endif
 	{}
 
 	bool Eval ( const CSphMatch & tMatch ) const final
 	{
 		return EvalRange<HAS_EQUAL_MIN, HAS_EQUAL_MAX> ( m_pExpr->Int64Eval(tMatch), m_iMinValue, m_iMaxValue );
 	}
+
+#if USE_COLUMNAR
+	bool Test ( const columnar::MinMaxVec_t & dMinMax ) const final
+	{
+		if ( m_iColumnarCol<0 )
+			return true;
+
+		return EvalBlockRangeAny<HAS_EQUAL_MIN,HAS_EQUAL_MAX> ( dMinMax[m_iColumnarCol].first, dMinMax[m_iColumnarCol].second, m_iMinValue, m_iMaxValue );
+	}
+
+	void SetColumnarCol ( int iColumnarCol ) final
+	{
+		ColumnarFilterTraits_c::SetColumnarCol(iColumnarCol);
+	}
+#endif
 };
 
 
 class ExprFilterValues_c : public ExprFilter_c<IFilter_Values>
+#if USE_COLUMNAR
+	, public ColumnarFilterTraits_c
+#endif
 {
 public:
 	explicit ExprFilterValues_c ( ISphExpr * pExpr )
 		: ExprFilter_c<IFilter_Values> ( pExpr )
+#if USE_COLUMNAR
+		, ColumnarFilterTraits_c(pExpr)
+#endif
 	{}
 
 	bool Eval ( const CSphMatch & tMatch ) const final
@@ -1108,6 +1144,21 @@ public:
 		assert ( this->m_pExpr );
 		return EvalValues ( m_pExpr->Int64Eval ( tMatch ) );
 	}
+
+#if USE_COLUMNAR
+	bool Test ( const std::vector<std::pair<SphAttr_t,SphAttr_t>> & dMinMax ) const final
+	{
+		if ( m_iColumnarCol<0 )
+			return true;
+
+		return EvalBlockValues ( dMinMax[m_iColumnarCol].first, dMinMax[m_iColumnarCol].second );
+	}
+
+	void SetColumnarCol ( int iColumnarCol ) final
+	{
+		ColumnarFilterTraits_c::SetColumnarCol(iColumnarCol);
+	}
+#endif
 };
 
 
@@ -1138,8 +1189,14 @@ public:
 
 	bool Eval ( const CSphMatch & tMatch ) const final
 	{
+		// attribute storages can fetch string length without reading the string itself
+		int iLen = m_pExpr->StringLenEval ( tMatch );
+		// StringLenEval returns -1 if not supported by expression
+		if ( iLen!=-1 && m_iValLength!=iLen )
+			return false;
+
 		const BYTE * pVal = nullptr;
-		int iLen = m_pExpr->StringEval ( tMatch, &pVal );
+		iLen = m_pExpr->StringEval ( tMatch, &pVal );
 		bool bEq = m_fnStrCmp ( {pVal, iLen}, {(const BYTE *) m_sVal.cstr (), m_iValLength}, false )==0;
 		return ( m_bEq==bEq );
 	}
@@ -1230,7 +1287,7 @@ public:
 
 
 
-static ISphFilter * CreateFilterExpr ( ISphExpr * _pExpr, const CSphFilterSettings & tSettings, CSphString & sError, ESphCollation eCollation, ESphAttr eAttrType )
+static ISphFilter * CreateFilterExpr ( ISphExpr * _pExpr, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, CSphString & sError, ESphCollation eCollation, ESphAttr eAttrType )
 {
 	CSphRefcountedPtr<ISphExpr> pExpr { _pExpr };
 	SafeAddRef ( _pExpr );
@@ -1238,12 +1295,12 @@ static ISphFilter * CreateFilterExpr ( ISphExpr * _pExpr, const CSphFilterSettin
 	// auto-convert all JSON types except SPH_FILTER_NULL, it needs more info
 	bool bAutoConvert = false;
 	bool bJsonExpr = false;
-	if ( pExpr && tSettings.m_eType!=SPH_FILTER_NULL )
+	if ( pExpr && tFixedSettings.m_eType!=SPH_FILTER_NULL )
 		bJsonExpr = pExpr->IsJson ( bAutoConvert );
 	if ( bJsonExpr && !bAutoConvert )
 		pExpr = sphJsonFieldConv ( pExpr );
 
-	switch ( tSettings.m_eType )
+	switch ( tFixedSettings.m_eType )
 	{
 		case SPH_FILTER_VALUES:			return new ExprFilterValues_c ( pExpr );
 		case SPH_FILTER_FLOATRANGE:		CREATE_EXPR_RANGE_FILTER ( ExprFilterFloatRange_c, pExpr, tSettings.m_bHasEqualMin, tSettings.m_bHasEqualMax );
@@ -1269,158 +1326,554 @@ static ISphFilter * CreateFilterExpr ( ISphExpr * _pExpr, const CSphFilterSettin
 }
 
 
-//////////////////////////////////////////////////////////////////////////
-// PUBLIC FACING INTERFACE
-//////////////////////////////////////////////////////////////////////////
-
-static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const CSphString & sAttrName, const ISphSchema & tSchema, const BYTE * pBlobPool,
-	CSphString & sError, CSphString & sWarning, bool bHaving, ESphCollation eCollation )
+static ISphFilter * TryToCreateExpressionFilter ( CSphRefcountedPtr<ISphExpr> & pExpr, const CSphString & sAttrName, const ISphSchema & tSchema, const CSphFilterSettings & tSettings,
+	const CommonFilterSettings_t & tFixedSettings, ExprParseArgs_t & tExprArgs, CSphString & sError )
 {
-	ISphFilter * pFilter = nullptr;
-	const CSphColumnInfo * pAttr = nullptr;
-
-	// try to create a filter on a special attribute
-	if ( sAttrName.Begins("@") && !bHaving && ( sAttrName=="@groupby" || sAttrName=="@count" || sAttrName=="@distinct" ) )
+	pExpr = sphExprParse ( sAttrName.cstr(), tSchema, sError, tExprArgs );
+	if ( pExpr )
+		return CreateFilterExpr ( pExpr, tSettings, tFixedSettings, sError, tExprArgs.m_eCollation, *tExprArgs.m_pAttrType );
+	else
 	{
-		sError.SetSprintf ( "unsupported filter column '%s'", sAttrName.cstr() );
+		sError.SetSprintf ( "no such filter attribute '%s'", sAttrName.cstr() );
 		return nullptr;
 	}
+}
 
-	if ( sAttrName.Begins("@") )
-	{
-		pFilter = CreateSpecialFilter ( sAttrName, tSettings, sError );
-		if ( !pFilter && !sError.IsEmpty() )
-			return nullptr;
-	}
 
-	// try to lookup a regular attribute
-	ESphFilter eType = tSettings.m_eType;
-	float fMin = tSettings.m_fMinValue;
-	float fMax = tSettings.m_fMaxValue;
-
-	ESphAttr eAttrType = SPH_ATTR_NONE;
-	CSphRefcountedPtr<ISphExpr> pExpr;
-
+static void SetFilterLocator ( ISphFilter * pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName )
+{
 	if ( !pFilter )
-	{
-		const int iAttr = ( tSettings.m_eType!=SPH_FILTER_EXPRESSION ? tSchema.GetAttrIndex ( sAttrName.cstr() ) : -1 );
-		if ( iAttr<0 || tSettings.m_eType==SPH_FILTER_EXPRESSION )
-		{
-			ExprParseArgs_t tExprArgs;
-			tExprArgs.m_pAttrType = &eAttrType;
-			tExprArgs.m_eCollation = eCollation;
+		return;
 
-			// try expression
-			pExpr = sphExprParse ( sAttrName.cstr(), tSchema, sError, tExprArgs );
-			if ( pExpr )
-			{
-				pFilter = CreateFilterExpr ( pExpr, tSettings, sError, eCollation, eAttrType );
+	assert ( tCtx.m_pSchema );
+	const ISphSchema & tSchema = *tCtx.m_pSchema;
 
-			} else
-			{
-				sError.SetSprintf ( "no such filter attribute '%s'", sAttrName.cstr() );
-				return nullptr;
-			}
+	int iAttr = ( tSettings.m_eType!=SPH_FILTER_EXPRESSION ? tSchema.GetAttrIndex ( sAttrName.cstr() ) : -1 );
+	if ( iAttr==-1 )
+		return;
 
-		} else
-		{
-			pAttr = &tSchema.GetAttr(iAttr);
-			if ( !bHaving && pAttr->m_eAggrFunc!=SPH_AGGR_NONE )
-			{
-				sError.SetSprintf ( "unsupported filter '%s' on aggregate column", sAttrName.cstr() );
-				return nullptr;
-			}
+	const CSphColumnInfo & tAttr = tSchema.GetAttr(iAttr);
 
-			if ( IsNotRealAttribute ( *pAttr ) )
-			{
-				sError.SetSprintf ( "unsupported column '%s' (stored field, NOT attribute)", sAttrName.cstr ());
-				return nullptr;
-			}
+	pFilter->SetLocator ( tAttr.m_tLocator );
 
-			if ( pAttr->m_eAttrType==SPH_ATTR_JSON || pAttr->m_eAttrType==SPH_ATTR_JSON_FIELD )
-			{
-				pExpr = pAttr->m_pExpr;
-				eAttrType = pAttr->m_eAttrType;
-				if ( pAttr->m_eAttrType==SPH_ATTR_JSON && !pExpr && tSettings.m_eType!=SPH_FILTER_NULL )
-				{
-					ExprParseArgs_t tExprArgs;
-					tExprArgs.m_pAttrType = &eAttrType;
-					tExprArgs.m_eCollation = eCollation;
-					pExpr = sphExprParse ( sAttrName.cstr(), tSchema, sError, tExprArgs );
-				}
-				pFilter = CreateFilterExpr ( pExpr, tSettings, sError, eCollation, pAttr->m_eAttrType );
-
-			} else
-			{
-				// fixup "fltcol=intval" conditions
-				if ( pAttr->m_eAttrType==SPH_ATTR_FLOAT && tSettings.m_eType==SPH_FILTER_VALUES && tSettings.GetNumValues()==1 )
-				{
-					eType = SPH_FILTER_FLOATRANGE;
-					fMin = fMax = (float)tSettings.GetValue(0);
-				}
-
-				pFilter = CreateFilter ( tSettings, eType, pAttr->m_eAttrType, pAttr->m_tLocator, eCollation, sError, sWarning );
-			}
-		}
-	}
-
-	// fill filter's properties
-	if ( pFilter )
-	{
-		if ( pAttr )
-			pFilter->SetLocator ( pAttr->m_tLocator );
-
-		pFilter->SetBlobStorage ( pBlobPool );
-
-		pFilter->SetRange ( tSettings.m_iMinValue, tSettings.m_iMaxValue );
-		if ( eType==SPH_FILTER_FLOATRANGE )
-			pFilter->SetRangeFloat ( fMin, fMax );
-		else
-			pFilter->SetRangeFloat ( (float)tSettings.m_iMinValue, (float)tSettings.m_iMaxValue );
-
-		pFilter->SetRefString ( tSettings.m_dStrings.Begin(), tSettings.m_dStrings.GetLength() );
-		if ( tSettings.GetNumValues() > 0 )
-		{
-			pFilter->SetValues ( tSettings.GetValueArray(), tSettings.GetNumValues() );
-#ifndef NDEBUG
-			// check that the values are actually sorted
-			const SphAttr_t * pValues = tSettings.GetValueArray();
-			int iValues = tSettings.GetNumValues ();
-			for ( int i=1; i<iValues; ++i )
-				assert ( pValues[i]>=pValues[i-1] );
+#if USE_COLUMNAR
+	// check if we're creating a filter over a column that fetches a columnar expression
+	// if that's true, we can use a block filter with values taken from columnar storage
+	if ( tAttr.IsColumnarExpr() )
+		pFilter->SetColumnarCol ( tSchema.GetAttrIndex ( tAttr.m_sName.cstr() ) );
 #endif
-		}
-
-		if ( tSettings.m_bExclude )
-			pFilter = new Filter_Not ( pFilter );
+}
 
 
-		// filter for json || json.field needs to check that key exists
-		if ( ( eAttrType==SPH_ATTR_JSON || eAttrType==SPH_ATTR_JSON_FIELD ) && tSettings.m_eType!=SPH_FILTER_NULL && pFilter && pExpr )
-		{
-			ISphFilter * pNotNull = new ExprFilterNull_c ( pExpr, false, true );
-			pNotNull->SetBlobStorage ( pBlobPool );
+static void SetFilterSettings ( ISphFilter * pFilter, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, const CreateFilterContext_t & tCtx )
+{
+	if ( !pFilter )
+		return;
 
-			pFilter = new Filter_And2 ( pFilter, pNotNull );
-		}
+	pFilter->SetBlobStorage ( tCtx.m_pBlobPool );
+#if USE_COLUMNAR
+	pFilter->SetColumnar ( tCtx.m_pColumnar );
+#endif
+
+	pFilter->SetRange ( tSettings.m_iMinValue, tSettings.m_iMaxValue );
+	if ( tFixedSettings.m_eType==SPH_FILTER_FLOATRANGE )
+		pFilter->SetRangeFloat ( (float)tFixedSettings.m_fMinValue, (float)tFixedSettings.m_fMaxValue );
+
+	pFilter->SetRefString ( tSettings.m_dStrings.Begin(), tSettings.m_dStrings.GetLength() );
+	if ( tSettings.GetNumValues() > 0 )
+	{
+		pFilter->SetValues ( tSettings.GetValueArray(), tSettings.GetNumValues() );
+#ifndef NDEBUG
+		// check that the values are actually sorted
+		const SphAttr_t * pValues = tSettings.GetValueArray();
+		int iValues = tSettings.GetNumValues ();
+		for ( int i=1; i<iValues; ++i )
+			assert ( pValues[i]>=pValues[i-1] );
+#endif
+	}
+}
+
+
+static ISphFilter * TryToCreateExcludeFilter ( ISphFilter * pFilter, const CSphFilterSettings & tSettings )
+{
+	if ( !pFilter )
+		return nullptr;
+
+	if ( tSettings.m_bExclude )
+		return new Filter_Not(pFilter);
+
+	return pFilter;
+}
+
+
+static ISphFilter * TryToCreateJsonNullFilter ( ISphFilter * pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, ESphAttr eAttrType, ISphExpr * pExpr )
+{
+	if ( !pFilter || !pExpr )
+		return pFilter;
+
+	// filter for json || json.field needs to check that key exists
+	if ( ( eAttrType==SPH_ATTR_JSON || eAttrType==SPH_ATTR_JSON_FIELD ) && tSettings.m_eType!=SPH_FILTER_NULL )
+	{
+		ISphFilter * pNotNull = new ExprFilterNull_c ( pExpr, false, true );
+		pNotNull->SetBlobStorage ( tCtx.m_pBlobPool );
+
+		return new Filter_And2 ( pFilter, pNotNull );
 	}
 
 	return pFilter;
 }
 
 
-ISphFilter * sphCreateFilter ( const CSphFilterSettings &tSettings, const CreateFilterContext_t &tCtx, CSphString &sError, CSphString &sWarning )
+static bool TryToCreateSpecialFilter ( ISphFilter * & pFilter, const CSphFilterSettings & tSettings, bool bHaving, const CSphString & sAttrName, CSphString & sError )
 {
-	return CreateFilter ( tSettings, tSettings.m_sAttrName, *tCtx.m_pSchema, tCtx.m_pBlobPool,
-		sError, sWarning, false, tCtx.m_eCollation);
+	assert ( !pFilter );
+
+	// try to create a filter on a special attribute
+	if ( sAttrName.Begins("@") && !bHaving && ( sAttrName=="@groupby" || sAttrName=="@count" || sAttrName=="@distinct" ) )
+	{
+		sError.SetSprintf ( "unsupported filter column '%s'", sAttrName.cstr() );
+		return false;
+	}
+
+	if ( sAttrName.Begins("@") )
+	{
+		pFilter = CreateSpecialFilter ( sAttrName, tSettings, sError );
+		if ( !pFilter && !sError.IsEmpty() )
+			return false;
+	}
+
+	return true;
 }
 
-ISphFilter * sphCreateAggrFilter ( const CSphFilterSettings * pSettings, const CSphString & sAttrName,
-		const ISphSchema & tSchema, CSphString & sError )
+
+static bool CanSpawnColumnarFilter ( int iAttr, const ISphSchema & tSchema )
+{
+	if ( iAttr<0 )
+		return false;
+
+	const CSphColumnInfo & tCol = tSchema.GetAttr(iAttr);
+	if ( tCol.IsColumnar() )
+		return true;
+
+	// spawn special filter even if we have an expression in the column
+	// because the filter is (usually) faster
+	if ( tCol.IsColumnarExpr() && tCol.m_eStage>SPH_EVAL_PREFILTER )
+		return true;
+
+	return false;
+}
+
+
+static ISphFilter * TryToCreateExpressionFilter ( ISphFilter * pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName,
+	const CommonFilterSettings_t & tFixedSettings, ESphAttr & eAttrType, CSphRefcountedPtr<ISphExpr> & pExpr, CSphString & sError, CSphString & sWarning )
+{
+	if ( pFilter )
+		return pFilter;
+
+	assert ( tCtx.m_pSchema );
+	const ISphSchema & tSchema = *tCtx.m_pSchema;
+
+	int iAttr = ( tFixedSettings.m_eType!=SPH_FILTER_EXPRESSION ? tSchema.GetAttrIndex ( sAttrName.cstr() ) : -1 );
+	bool bColumnar = CanSpawnColumnarFilter ( iAttr, tSchema );
+
+	if ( iAttr>=0 && !bColumnar )
+		return nullptr;
+
+#if USE_COLUMNAR
+	pFilter = TryToCreateColumnarFilter ( iAttr, tSchema, tSettings, tFixedSettings, tCtx.m_eCollation, sError, sWarning );
+	if ( !pFilter )
+#endif
+	{
+		ExprParseArgs_t tExprArgs;
+		tExprArgs.m_pAttrType = &eAttrType;
+		tExprArgs.m_eCollation = tCtx.m_eCollation;
+		pFilter = TryToCreateExpressionFilter ( pExpr, sAttrName, tSchema, tSettings, tFixedSettings, tExprArgs, sError );
+	}
+
+	return pFilter;
+}
+
+
+static ISphFilter * TryToCreatePlainAttrFilter ( ISphFilter * pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, bool bHaving, const CSphString & sAttrName,
+	CommonFilterSettings_t & tFixedSettings, ESphAttr & eAttrType, CSphRefcountedPtr<ISphExpr> & pExpr, CSphString & sError, CSphString & sWarning )
+{
+	if ( pFilter )
+		return pFilter;
+
+	assert ( tCtx.m_pSchema );
+	const ISphSchema & tSchema = *tCtx.m_pSchema;
+
+	int iAttr = ( tSettings.m_eType!=SPH_FILTER_EXPRESSION ? tSchema.GetAttrIndex ( sAttrName.cstr() ) : -1 );
+	bool bColumnar = iAttr>=0 && tSchema.GetAttr(iAttr).IsColumnar();
+
+	if ( iAttr<0 || bColumnar )
+		return nullptr;
+
+	const CSphColumnInfo & tAttr =  tSchema.GetAttr(iAttr);
+	if ( !bHaving && tAttr.m_eAggrFunc!=SPH_AGGR_NONE )
+	{
+		sError.SetSprintf ( "unsupported filter '%s' on aggregate column", sAttrName.cstr() );
+		return nullptr;
+	}
+
+	if ( IsNotRealAttribute(tAttr) )
+	{
+		sError.SetSprintf ( "unsupported column '%s' (stored field, NOT attribute)", sAttrName.cstr ());
+		return nullptr;
+	}
+
+	if ( tAttr.m_eAttrType==SPH_ATTR_JSON || tAttr.m_eAttrType==SPH_ATTR_JSON_FIELD )
+	{
+		pExpr = tAttr.m_pExpr;
+		eAttrType = tAttr.m_eAttrType;
+		if ( tAttr.m_eAttrType==SPH_ATTR_JSON && !pExpr && tSettings.m_eType!=SPH_FILTER_NULL )
+		{
+			ExprParseArgs_t tExprArgs;
+			tExprArgs.m_pAttrType = &eAttrType;
+			tExprArgs.m_eCollation = tCtx.m_eCollation;
+			pExpr = sphExprParse ( sAttrName.cstr(), tSchema, sError, tExprArgs );
+		}
+		pFilter = CreateFilterExpr ( pExpr, tSettings, tFixedSettings, sError, tCtx.m_eCollation, tAttr.m_eAttrType );
+
+	}
+	else
+		pFilter = CreateFilter ( tSettings, tFixedSettings.m_eType, tAttr.m_eAttrType, tAttr.m_tLocator, tCtx.m_eCollation, sError, sWarning );
+
+	return pFilter;
+}
+
+
+static void FixupFilterSettings ( const CSphFilterSettings & tSettings, CommonFilterSettings_t & tFixedSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName )
+{
+	assert ( tCtx.m_pSchema );
+	const ISphSchema & tSchema = *tCtx.m_pSchema;
+
+	int iAttr = ( tSettings.m_eType!=SPH_FILTER_EXPRESSION ? tSchema.GetAttrIndex ( sAttrName.cstr() ) : -1 );
+	if ( iAttr<0 )
+		return;
+
+	const CSphColumnInfo & tAttr =  tSchema.GetAttr(iAttr);
+	FixupFilterSettings ( tSettings, tAttr.m_eAttrType, tFixedSettings );
+}
+
+void FixupFilterSettings ( const CSphFilterSettings & tSettings, ESphAttr eAttrType, CommonFilterSettings_t & tFixedSettings )
+{
+	// fixup "fltcol=intval" conditions
+	if ( eAttrType!=SPH_ATTR_FLOAT )
+		return;
+
+	if ( tSettings.m_eType==SPH_FILTER_VALUES && tSettings.GetNumValues()==1 )
+	{
+		tFixedSettings.m_eType = SPH_FILTER_FLOATRANGE;
+		tFixedSettings.m_fMinValue = tFixedSettings.m_fMaxValue = (float)tSettings.GetValue(0);
+	}
+
+	if ( tSettings.m_eType==SPH_FILTER_RANGE )
+	{
+		tFixedSettings.m_eType = SPH_FILTER_FLOATRANGE;
+		tFixedSettings.m_fMinValue = (float)tSettings.m_iMinValue;
+		tFixedSettings.m_fMaxValue = (float)tSettings.m_iMaxValue;
+	}
+}
+
+
+static bool ValuesIntersect ( const CSphVector<SphAttr_t> & dLeft, const CSphVector<SphAttr_t> & dRight )
+{
+	const CSphVector<SphAttr_t> & dL = dLeft.GetLength() < dRight.GetLength() ? dLeft : dRight;
+	const CSphVector<SphAttr_t> & dR = dLeft.GetLength() < dRight.GetLength() ? dRight : dLeft;
+
+	for ( auto & i : dL )
+		if ( dR.BinarySearch(i) )
+			return true;
+
+	return false;
+}
+
+
+using namespace boost::icl;
+
+static interval<int64_t>::type ConstructInterval ( const CSphFilterSettings & tFilter )
+{
+	assert ( !tFilter.m_bExclude );
+	
+	int64_t iMin = tFilter.m_iMinValue;
+	int64_t iMax = tFilter.m_iMaxValue;
+	bool bHasEqualMin = tFilter.m_bHasEqualMin;
+	bool bHasEqualMax = tFilter.m_bHasEqualMax;
+
+	if ( tFilter.m_bOpenLeft )
+	{
+		iMin = INT64_MIN;
+		bHasEqualMin = true;
+	}
+
+	if ( tFilter.m_bOpenRight )
+	{
+		iMax = INT64_MAX;
+		bHasEqualMax = true;
+	}
+
+	if ( bHasEqualMin && bHasEqualMax )	return interval<int64_t>::closed ( iMin, iMax );
+	if ( bHasEqualMin )					return interval<int64_t>::right_open ( iMin, iMax );
+	if ( bHasEqualMax )					return interval<int64_t>::left_open ( iMin, iMax );
+
+	return interval<int64_t>::open ( iMin, iMax );
+}
+
+
+static void DeconstructInterval ( CSphFilterSettings & tFilter, const interval<int64_t>::type & tInterval )
+{
+	tFilter.m_iMinValue = tInterval.lower();
+	tFilter.m_iMaxValue = tInterval.upper();
+	tFilter.m_bHasEqualMin = tInterval.bounds() == interval_bounds::closed() || tInterval.bounds() == interval_bounds::right_open();
+	tFilter.m_bHasEqualMax = tInterval.bounds() == interval_bounds::closed() || tInterval.bounds() == interval_bounds::left_open();
+	tFilter.m_bOpenLeft = tInterval.lower()==INT64_MIN && tFilter.m_bHasEqualMin;
+	tFilter.m_bOpenRight = tInterval.lower()==INT64_MAX && tFilter.m_bHasEqualMax;
+}
+
+
+static bool CalcRangeMerge ( CSphFilterSettings & tLeft, const CSphFilterSettings & tRight )
+{
+	auto tInterval1 = ConstructInterval(tLeft);
+	auto tInterval2 = ConstructInterval(tRight);
+
+	auto tResult = tInterval1 & tInterval2;
+	if ( boost::icl::is_empty(tResult) )
+		return false;
+
+	DeconstructInterval ( tLeft, tResult );
+	return true;
+}
+
+
+static bool AllInRange ( const CSphVector<int64_t> & dValues, const CSphFilterSettings & tFilter )
+{
+	int iIndex = 0;
+	iIndex += 2*( tFilter.m_bHasEqualMin ? 1 : 0 ) + ( tFilter.m_bHasEqualMax ? 1 : 0 );
+
+	switch ( iIndex )
+	{
+	case 0:	return MvaEval_RangeAll<int64_t,false,false> ( dValues.Begin(), dValues.GetLength(), tFilter.m_iMinValue, tFilter.m_iMaxValue );
+	case 1:	return MvaEval_RangeAll<int64_t,false,true>  ( dValues.Begin(), dValues.GetLength(), tFilter.m_iMinValue, tFilter.m_iMaxValue );
+	case 2:	return MvaEval_RangeAll<int64_t,true,false>  ( dValues.Begin(), dValues.GetLength(), tFilter.m_iMinValue, tFilter.m_iMaxValue );
+	case 3:	return MvaEval_RangeAll<int64_t,true,true>   ( dValues.Begin(), dValues.GetLength(), tFilter.m_iMinValue, tFilter.m_iMaxValue );
+	default:
+		assert(0);
+		return false;
+	}
+}
+
+
+static bool AllOutsideRange ( const CSphVector<int64_t> & dValues, const CSphFilterSettings & tFilter )
+{
+	int iIndex = 0;
+	iIndex += 2*( tFilter.m_bHasEqualMin ? 1 : 0 ) + ( tFilter.m_bHasEqualMax ? 1 : 0 );
+
+	switch ( iIndex )
+	{
+	case 0:	return !MvaEval_RangeAny<int64_t,false,false> ( dValues.Begin(), dValues.GetLength(), tFilter.m_iMinValue, tFilter.m_iMaxValue );
+	case 1:	return !MvaEval_RangeAny<int64_t,false,true>  ( dValues.Begin(), dValues.GetLength(), tFilter.m_iMinValue, tFilter.m_iMaxValue );
+	case 2:	return !MvaEval_RangeAny<int64_t,true,false>  ( dValues.Begin(), dValues.GetLength(), tFilter.m_iMinValue, tFilter.m_iMaxValue );
+	case 3:	return !MvaEval_RangeAny<int64_t,true,true>   ( dValues.Begin(), dValues.GetLength(), tFilter.m_iMinValue, tFilter.m_iMaxValue );
+	default:
+		assert(0);
+		return false;
+	}
+}
+
+
+static bool MergeFilters ( CSphFilterSettings & tLeft, const CSphFilterSettings & tRight, bool & bRemoveLeft, bool & bRejectIndex )
+{
+	bRemoveLeft = false;
+	bRejectIndex = false;
+
+	if ( tLeft.m_eType==SPH_FILTER_VALUES )
+	{
+		if ( tRight.m_eType==SPH_FILTER_VALUES )
+		{
+			if ( tLeft.m_bExclude==tRight.m_bExclude )
+			{
+				SphAttr_t * pValues = tLeft.m_dValues.AddN ( tRight.m_dValues.GetLength() );
+				memcpy ( pValues, tRight.m_dValues.Begin(), tRight.m_dValues.GetLength()*sizeof ( tRight.m_dValues[0] ) );
+				tLeft.m_dValues.Uniq();
+				return true;
+			}
+			else
+			{
+				if ( ValuesIntersect ( tLeft.m_dValues, tRight.m_dValues ) )
+				{
+					bRejectIndex = true;
+					return true;
+				}
+
+				if ( tLeft.m_bExclude ) // current is "not equals", new is "equals"
+					bRemoveLeft = true;
+
+				return true;
+			}
+		}
+
+		if ( tRight.m_eType==SPH_FILTER_RANGE )
+		{
+			// we have "values", new filter is "range"
+			if ( !tLeft.m_bExclude && !tRight.m_bExclude )
+			{
+				if ( AllOutsideRange ( tLeft.m_dValues, tRight ) )
+				{
+					bRejectIndex = true;
+					return true;
+				}
+
+				if ( AllInRange ( tLeft.m_dValues, tRight ) )
+					return true;
+			}
+		}
+	}
+
+	if ( tLeft.m_eType==SPH_FILTER_RANGE )
+	{
+		if ( tRight.m_eType==SPH_FILTER_RANGE )
+		{
+			if ( !tLeft.m_bExclude && !tRight.m_bExclude )
+			{
+				if ( !CalcRangeMerge ( tLeft, tRight ) )
+					bRejectIndex = true;
+
+				return true;
+			}
+		}
+
+		if ( tRight.m_eType==SPH_FILTER_VALUES )
+		{
+			// we have "range", new filter is "values"
+			if ( !tLeft.m_bExclude && !tRight.m_bExclude )
+			{
+				if ( AllOutsideRange ( tRight.m_dValues, tLeft ) )
+				{
+					bRejectIndex = true;
+					return true;
+				}
+
+				if ( AllInRange ( tRight.m_dValues, tLeft ) )
+				{
+					bRemoveLeft = true;
+					return true;
+				}
+			}
+		}
+	}
+
+	return false;
+}
+
+
+void OptimizeFilters ( CSphVector<CSphFilterSettings> & dFilters )
+{
+	bool bRejectIndex = false;
+
+	SmallStringHash_T<int> hAttrNames;
+	for ( auto & i : dFilters )
+	{
+		int * pFound = hAttrNames ( i.m_sAttrName );
+		if ( pFound )
+			(*pFound)++;
+		else
+			hAttrNames.Add ( 1, i.m_sAttrName );
+	}
+
+	for ( auto & i : hAttrNames )
+	{
+		if ( i.second<2 )
+			continue;
+
+		bool bOk = true;
+		for ( const auto & tFilter : dFilters )
+			if ( tFilter.m_sAttrName==i.first && ( tFilter.m_eType!=SPH_FILTER_VALUES && tFilter.m_eType!=SPH_FILTER_RANGE ) )
+			{
+				bOk = false;
+				break;
+			}
+
+		if ( !bOk )
+			continue;
+
+		int iLeft = -1;
+		ARRAY_FOREACH ( iFilter, dFilters )
+		{
+			auto & tFilter = dFilters[iFilter];
+			if ( tFilter.m_sAttrName!=i.first )
+				continue;
+
+			if ( iLeft==-1 )
+			{
+				iLeft = iFilter;
+				continue;
+			}
+
+			bool bRemoveLeft = false;
+			if ( MergeFilters ( dFilters[iLeft], tFilter, bRemoveLeft, bRejectIndex ) )
+			{
+				dFilters.RemoveFast ( bRemoveLeft ? iLeft : iFilter );
+				iLeft = -1;
+				iFilter = 0;
+			}
+		}
+	}
+
+	if ( bRejectIndex )
+	{
+		// create a fake filter that will fail index early reject
+		CSphFilterSettings tFake;
+		tFake.m_sAttrName = sphGetDocidName();
+		tFake.m_eType = SPH_FILTER_VALUES;
+		tFake.m_dValues.Add(-1);
+
+		dFilters.Resize(0);
+		dFilters.Add(tFake);
+	}
+}
+
+
+static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const CSphString & sAttrName, const CreateFilterContext_t & tCtx, bool bHaving, CSphString & sError, CSphString & sWarning )
+{
+	ISphFilter * pFilter = nullptr;
+
+	if ( !TryToCreateSpecialFilter ( pFilter, tSettings, bHaving, sAttrName, sError ) )
+		return nullptr;
+
+	CommonFilterSettings_t tFixedSettings = (CommonFilterSettings_t)tSettings;
+	ESphAttr eAttrType = SPH_ATTR_NONE;
+	CSphRefcountedPtr<ISphExpr> pExpr;
+
+	FixupFilterSettings ( tSettings, tFixedSettings, tCtx, sAttrName );
+
+	pFilter = TryToCreateExpressionFilter ( pFilter, tSettings, tCtx, sAttrName, tFixedSettings, eAttrType, pExpr, sError, sWarning );
+	pFilter = TryToCreatePlainAttrFilter ( pFilter, tSettings, tCtx, bHaving, sAttrName, tFixedSettings, eAttrType, pExpr, sError, sWarning );
+
+	SetFilterLocator ( pFilter, tSettings, tCtx, sAttrName );
+	SetFilterSettings ( pFilter, tSettings, tFixedSettings, tCtx );
+
+	pFilter = TryToCreateExcludeFilter ( pFilter, tSettings );
+	pFilter = TryToCreateJsonNullFilter ( pFilter, tSettings, tCtx, eAttrType, pExpr );
+
+	return pFilter;
+}
+
+
+ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, CSphString & sError, CSphString & sWarning )
+{
+	return CreateFilter ( tSettings, tSettings.m_sAttrName, tCtx, false, sError, sWarning );
+}
+
+ISphFilter * sphCreateAggrFilter ( const CSphFilterSettings * pSettings, const CSphString & sAttrName, const ISphSchema & tSchema, CSphString & sError )
 {
 	assert ( pSettings );
 	CSphString sWarning;
-	ISphFilter * pRes = CreateFilter ( *pSettings, sAttrName, tSchema, NULL, sError, sWarning, true, SPH_COLLATION_DEFAULT );
+	CreateFilterContext_t tCtx;
+	tCtx.m_pSchema = &tSchema;
+	tCtx.m_eCollation = SPH_COLLATION_DEFAULT;
+
+	ISphFilter * pRes = CreateFilter ( *pSettings, sAttrName, tCtx, true, sError, sWarning );
 	assert ( sWarning.IsEmpty() );
 	return pRes;
 }
@@ -1524,23 +1977,6 @@ static bool CreateFilterTree ( CreateFilterContext_t & tCtx, CSphString & sError
 		tCtx.m_pFilter = pFilter;
 
 	return true;
-}
-
-
-static int64_t EstimateFilterSelectivity ( const CSphFilterSettings & tSettings, const HistogramContainer_c * pHistogramContainer )
-{
-	if ( !pHistogramContainer )
-		return INT64_MAX;
-
-	Histogram_i * pHistogram = pHistogramContainer->Get ( tSettings.m_sAttrName );
-	if ( !pHistogram || pHistogram->IsOutdated() )
-		return INT64_MAX;
-
-	int64_t iEstimate = INT64_MAX;
-	if ( !pHistogram->EstimateRsetSize ( tSettings, iEstimate ) )
-		return INT64_MAX;
-
-	return iEstimate;
 }
 
 

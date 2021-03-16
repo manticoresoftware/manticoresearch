@@ -21,6 +21,11 @@ class FileBlockReader_i : public ISphRefcountedMT
 public:
 	virtual SphOffset_t	GetPos() const = 0;
 	virtual void		SeekTo ( SphOffset_t iPos, int iSizeHint ) = 0;
+	virtual void		GetBytes ( BYTE * pData, int iSize ) = 0;
+	virtual int			GetBytesZerocopy ( const BYTE *& pData, int iMax ) = 0;
+	virtual BYTE		GetByte() = 0;
+	virtual DWORD		GetDword() = 0;
+	virtual SphOffset_t	GetOffset() = 0;
 	virtual DWORD		UnzipInt() = 0;
 	virtual uint64_t	UnzipOffset() = 0;
 	virtual RowID_t		UnzipRowid() = 0;
@@ -30,6 +35,7 @@ public:
 
 
 using FileBlockReaderPtr_c = CSphRefcountedPtr<FileBlockReader_i>;
+class QueryProfile_c;
 
 // producer of readers from file or filemap
 class DataReaderFactory_c : public ISphRefcountedMT
@@ -38,7 +44,8 @@ public:
 	enum Kind_e
 	{
 		DOCS,
-		HITS
+		HITS,
+		COLUMNAR
 	};
 
 	bool						IsValid () const { return m_bValid; }

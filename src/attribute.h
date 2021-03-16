@@ -52,12 +52,12 @@ void				sphSetBlobRowOffset ( CSphRowitem * pDocinfo, int64_t iOffset );
 // fetches a attribute data and its length from the pool
 const BYTE *		sphGetBlobAttr ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool, int & iLengthBytes );
 
-ByteBlob_t sphGetBlobAttr ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool );
+ByteBlob_t			sphGetBlobAttr ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool );
 
 // same as above, but works with docinfo
 const BYTE *		sphGetBlobAttr ( const CSphRowitem * pDocinfo, const CSphAttrLocator & tLocator, const BYTE * pBlobPool, int & iLengthBytes );
 
-ByteBlob_t sphGetBlobAttr ( const CSphRowitem * pDocinfo, const CSphAttrLocator & tLocator, const BYTE * pBlobPool );
+ByteBlob_t			sphGetBlobAttr ( const CSphRowitem * pDocinfo, const CSphAttrLocator & tLocator, const BYTE * pBlobPool );
 
 // returns blob attribute length
 int					sphGetBlobAttrLen ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool );
@@ -86,6 +86,11 @@ const CSphString &	sphGetDocidStr();
 
 // returns true if this is a blob attr type
 bool				sphIsBlobAttr ( ESphAttr eAttr );
+
+// returns true if this is a blob attr type; returns false for columnar attrs
+bool				sphIsBlobAttr ( const CSphColumnInfo & tAttr );
+
+bool				IsMvaAttr ( ESphAttr eAttr );
 
 //////////////////////////////////////////////////////////////////////////
 // data ptr attributes
@@ -129,6 +134,10 @@ bool	sphIsInternalAttr ( const CSphString & sAttrName );
 bool	sphIsInternalAttr ( const CSphColumnInfo & tCol );
 void	sphMVA2Str ( ByteBlob_t dMVA, bool b64bit, StringBuilder_c & dStr );
 void	sphPackedMVA2Str ( const BYTE * pMVA, bool b64bit, StringBuilder_c & dStr );
+
+/// check if tColumn is actually stored field (so, can't be used in filters/expressions)
+bool	IsNotRealAttribute ( const CSphColumnInfo & tColumn );
+
 
 inline DocID_t sphGetDocID ( const CSphRowitem * pData )
 {

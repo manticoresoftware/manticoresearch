@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>columnar vs MVA</name>
+
+<requires>
+<columnar/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table
+
+	sql_attr_multi    = uint cat1 from field
+	sql_attr_multi    = uint cat2 from field
+	sql_attr_multi    = uint cat3 from field
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+}
+
+index test_col
+{
+	source 			= test
+	path			= <data_path/>/test_col
+
+	columnar_attrs 	= cat1,cat2,cat3
+}
+</config>
+
+<db_create>
+CREATE TABLE `test_table` (
+  `id` int(11),
+  `title` varchar(255),
+  `cat1` varchar(255),
+  `cat2` varchar(255),
+  `cat3` varchar(255)
+);
+</db_create>
+
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+
+<db_insert>insert into test_table (id,title,cat1,cat2,cat3) values
+(1,'One',   '(1,2,3)', '(10,20)' ,'100,101,102'),
+(2,'Two',   '(1,2,3)', '(20,30)' ,'101,102,103'),
+(3,'Three', '(1,2,3)', '(30,40)' ,'102,103,104'),
+(4,'Four',  '(1,2,3)', '(40,50)' ,'103,104,105'),
+(5,'Five',  '(1,2,3)', '(50,60)' ,'104,105,106'),
+(6,'Six',   '(1,2,3)', '(70,80)' ,'105,106,107'),
+(7,'Seven', '(1,2,3)', '(80,90)' ,'106,107,108'),
+(8,'Eight', '(1,2,3)','(90,100)' ,'107,108,109')
+</db_insert>
+
+<metaindex name='META:all'>
+<index>test</index>
+<index>test_col</index>
+</metaindex>
+
+<sphqueries>
+<sphinxql>desc META:all</sphinxql>
+
+<sphinxql>select * from META:all</sphinxql>
+<sphinxql>select cat1,cat2,cat3 from META:all</sphinxql>
+
+<sphinxql>select * from META:all where any(cat1)=2</sphinxql>
+<sphinxql>select * from META:all where any(cat1)=5</sphinxql>
+<sphinxql>select * from META:all where all(cat1) in (1,2,3)</sphinxql>
+<sphinxql>select * from META:all where all(cat1) in (1,2)</sphinxql>
+<sphinxql>select * from META:all where any(cat3)&lt;=101</sphinxql>
+<sphinxql>select * from META:all where any(cat2)>=100</sphinxql>
+
+<sphinxql>select least(cat1),least(cat2),least(cat3) from META:all</sphinxql>
+<sphinxql>select greatest(cat1),greatest(cat2),greatest(cat3) from META:all</sphinxql>
+
+</sphqueries>
+
+</test>

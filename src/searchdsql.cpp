@@ -596,11 +596,8 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 		break;
 
 	case Option_e::REVERSE_SCAN: //} else if ( sOpt=="reverse_scan" )
-		if ( !CheckInteger ( sOpt, sVal ) )
-			return false;
-
-		m_pQuery->m_bReverseScan = ( tValue.m_iValue!=0 );
-		break;
+		*m_pParseError = "reverse_scan is deprecated";
+		return false;
 
 	case Option_e::IGNORE_NONEXISTENT_COLUMNS: //} else if ( sOpt=="ignore_nonexistent_columns" )
 		if ( !CheckInteger ( sOpt, sVal ) )
@@ -1466,9 +1463,14 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 		}
 
 		iFilterCount = tParser.m_dFiltersPerStmt[iStmt];
+
 		// all queries have only plain AND filters - no need for filter tree
 		if ( iFilterCount && tParser.m_bGotFilterOr )
 			CreateFilterTree ( tParser.m_dFilterTree, iFilterStart, iFilterCount, tQuery );
+		else
+			OptimizeFilters ( tQuery.m_dFilters );
+
+
 		iFilterStart = iFilterCount;
 
 		// fixup hints

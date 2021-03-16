@@ -10,7 +10,8 @@
 
 #include "docstore.h"
 
-#include "sphinxint.h"
+#include "fileio.h"
+#include "memio.h"
 #include "fileutils.h"
 #include "attribute.h"
 #include "indexcheck.h"

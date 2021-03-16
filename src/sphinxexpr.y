@@ -38,6 +38,14 @@
 %token <sIdent>			TOK_IDENT
 %token <iAttrLocator>	TOK_ATTR_JSON
 %token <iAttrLocator>	TOK_FIELD
+%token <iAttrLocator>	TOK_COLUMNAR_INT
+%token <iAttrLocator>	TOK_COLUMNAR_TIMESTAMP
+%token <iAttrLocator>	TOK_COLUMNAR_BIGINT
+%token <iAttrLocator>	TOK_COLUMNAR_BOOL
+%token <iAttrLocator>	TOK_COLUMNAR_FLOAT
+%token <iAttrLocator>	TOK_COLUMNAR_STRING
+%token <iAttrLocator>	TOK_COLUMNAR_UINT32SET
+%token <iAttrLocator>	TOK_COLUMNAR_INT64SET
 
 
 %token	TOK_ATWEIGHT
@@ -102,6 +110,14 @@ attr:
 	| TOK_ATTR_JSON					{ $$ = pParser->AddNodeAttr ( TOK_ATTR_JSON, $1 ); }
 	| TOK_ATTR_MVA32				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_MVA32, $1 ); }
 	| TOK_ATTR_MVA64				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_MVA64, $1 ); }
+	| TOK_COLUMNAR_INT 				{ $$ = pParser->AddNodeColumnar ( TOK_COLUMNAR_INT, $1 ); }
+	| TOK_COLUMNAR_TIMESTAMP		{ $$ = pParser->AddNodeColumnar ( TOK_COLUMNAR_TIMESTAMP, $1 ); }
+	| TOK_COLUMNAR_BIGINT 			{ $$ = pParser->AddNodeColumnar ( TOK_COLUMNAR_BIGINT, $1 ); }
+	| TOK_COLUMNAR_BOOL				{ $$ = pParser->AddNodeColumnar ( TOK_COLUMNAR_BOOL, $1 ); }
+	| TOK_COLUMNAR_FLOAT			{ $$ = pParser->AddNodeColumnar ( TOK_COLUMNAR_FLOAT, $1 ); }
+	| TOK_COLUMNAR_STRING 			{ $$ = pParser->AddNodeColumnar ( TOK_COLUMNAR_STRING, $1 ); }
+	| TOK_COLUMNAR_UINT32SET 		{ $$ = pParser->AddNodeColumnar ( TOK_COLUMNAR_UINT32SET, $1 ); }
+	| TOK_COLUMNAR_INT64SET 		{ $$ = pParser->AddNodeColumnar ( TOK_COLUMNAR_INT64SET, $1 ); }
 	| TOK_FIELD						{ $$ = pParser->AddNodeField ( TOK_FIELD, $1 ); }
 	| '`' attr '`'					{ $$ = $2; }
 	;

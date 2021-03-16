@@ -123,7 +123,7 @@ index mva_mixed
 
 <query mode="extended2" index="test" groupattr="time" groupfunc="year" groupdistinct="tag"></query>
 <query mode="extended2" index="test2" groupattr="time" groupfunc="year" groupdistinct="tAG"></query>
-<query mode="extended2" index="test,test2" groupattr="time" groupfunc="year" groupdistinct="tag"></query>
+<query mode="extended2" index="test,test2" groupattr="time" groupfunc="year" groupdistinct="tag" sortmode="extended" sortby="id asc"></query>
 
 <query mode="extended2" index="mini1,mini2" groupattr="time" groupfunc="year" groupdistinct="tag"></query>
 

@@ -909,11 +909,15 @@ void ApplyKilllists ( CSphConfig & hConf )
 				continue;
 			}
 
-			if ( !pIndex->Prealloc ( false, nullptr ) )
+			StrVec_t dWarnings;
+			if ( !pIndex->Prealloc ( false, nullptr, dWarnings ) )
 			{
 				fprintf ( stdout, "WARNING: unable to prealloc index %s: %s\n", tIndex.m_sName.cstr(), sError.cstr() );
 				continue;
 			}
+
+			for ( const auto & i : dWarnings )
+				fprintf ( stdout, "WARNING: index %s: %s\n", tIndex.m_sName.cstr(), i.cstr() );
 
 			tIndex.m_nDocs = pIndex->GetStats().m_iTotalDocuments;
 		}
@@ -1179,8 +1183,12 @@ static CSphIndex * CreateIndex ( CSphConfig & hConf, const CSphString & sIndex, 
 static void PreallocIndex ( const CSphString & sIndex, bool bStripPath, CSphIndex * pIndex )
 {
 	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( CreateFilenameBuilder ( sIndex.cstr() ) );
-	if ( !pIndex->Prealloc ( bStripPath, pFilenameBuilder.Ptr() ) )
+	StrVec_t dWarnings;
+	if ( !pIndex->Prealloc ( bStripPath, pFilenameBuilder.Ptr(), dWarnings ) )
 		sphDie ( "index '%s': prealloc failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
+
+	for ( const auto & i : dWarnings )
+		fprintf ( stdout, "WARNING: index %s: %s\n", sIndex.cstr(), i.cstr() );
 }
 
 int main ( int argc, char ** argv )
@@ -1526,9 +1534,12 @@ int main ( int argc, char ** argv )
 				if ( !pIndex )
 					sphDie ( "index '%s': failed to create (%s)", sIndex.cstr(), sError.cstr() );
 
-				CSphString sWarn;
-				if ( !pIndex->Prealloc ( bStripPath, nullptr ) )
+				StrVec_t dWarnings;
+				if ( !pIndex->Prealloc ( bStripPath, nullptr, dWarnings ) )
 					sphDie ( "index '%s': prealloc failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
+
+				for ( const auto & i : dWarnings )
+					fprintf ( stdout, "WARNING: index %s: %s\n", sIndex.cstr(), i.cstr() );
 
 				pIndex->Preread();
 			} else

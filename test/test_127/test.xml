@@ -115,7 +115,7 @@ index rt
 <sphinxql>insert into rt (id, id1, title) values (36, 36, 'test text all')</sphinxql>
 <sphinxql>insert into rt (id, id1, title) values (136, 136, 'test text all')</sphinxql>
 <sphinxql>commit</sphinxql>
-<sphinxql>select * from rt</sphinxql>
+<sphinxql>select * from rt order by id asc</sphinxql>
 </sphqueries>
 
 </test>

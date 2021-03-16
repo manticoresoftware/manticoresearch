@@ -4,14 +4,14 @@ plain1 | local
 plain2 | local
 plain3 | local
 4 rows";i:2;s:58:"
+10 | 2
 1 | 1
 2 | 1
+11 | 2
 3 | 1
+12 | 2
 4 | 1
 5 | 1
-10 | 2
-11 | 2
-12 | 2
 8 rows";i:3;s:15:"plain2 disabled";i:4;s:61:"
 dist_hung | distributed
 plain1 | local
@@ -22,12 +22,12 @@ plain1 | local
 plain2 | local
 plain3 | local
 4 rows";i:7;s:58:"
+10 | 2
 1 | 1
 2 | 1
+11 | 2
 3 | 1
+12 | 2
 4 | 1
 5 | 1
-10 | 2
-11 | 2
-12 | 2
 8 rows";}}}

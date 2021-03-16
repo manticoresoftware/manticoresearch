@@ -207,6 +207,7 @@ if ( !$g_guesscached ) {
 	GuessODBC();
 	GuessReplication();
 	GuessSSL();
+	GuessColumnar();
 	if ( !$force_guess )
 		CacheGuesses();
 }

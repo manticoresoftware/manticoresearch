@@ -10,6 +10,7 @@
 
 #include "secondaryindex.h"
 
+#include "histogram.h"
 #include "sphinxint.h"
 #include "killlist.h"
 #include "attribute.h"
@@ -21,506 +22,33 @@ static bool HaveIndex ( const CSphString & sAttr )
 }
 
 //////////////////////////////////////////////////////////////////////////
-template <typename T>
-inline T ConvertType ( SphAttr_t tValue )
+
+bool ReturnIteratorResult ( RowID_t * pRowID, RowID_t * pRowIdStart, RowIdBlock_t & dRowIdBlock )
 {
-	return (T)tValue;
-}
-
-template <>
-inline float ConvertType<float>( SphAttr_t tValue )
-{
-	return sphDW2F(tValue);
-}
-
-
-template <typename T>
-class Histogram_T : public Histogram_i
-{
-public:
-	Histogram_T ( const CSphString & sAttrName )
-		: m_sAttrName ( sAttrName )
-	{}
-
-	void Setup ( SphAttr_t tMinValue, SphAttr_t tMaxValue ) override
-	{
-		assert ( TYPE==HISTOGRAM_UINT32 || TYPE==HISTOGRAM_INT64 );
-
-		m_tMinValue = (T)tMinValue;
-		m_tMaxValue = (T)tMaxValue;
-
-		int iNumBuckets;
-		if ( double(m_tMaxValue)-m_tMinValue+1.0 >= (double)MAX_BUCKETS )
-		{
-			iNumBuckets = MAX_BUCKETS;
-			m_tBucketSize = T( ceil ( ( (double)m_tMaxValue-m_tMinValue) / iNumBuckets ) );
-		}
-		else
-		{
-			iNumBuckets = int(m_tMaxValue-m_tMinValue+1);
-			m_tBucketSize = T(1);
-		}
-
-		m_dBuckets.Reset ( iNumBuckets+2 );
-		for ( auto & i : m_dBuckets )
-			i = T(0);
-
-		m_bInitialized = true;
-	}
-
-	void Insert ( SphAttr_t tValue ) override
-	{
-		assert ( m_bInitialized );
-		m_dBuckets[GetBucketFor ( ConvertType<T>(tValue) )]++;
-		m_uValues++;
-	}
-
-	void Delete ( SphAttr_t tValue ) override
-	{
-		assert ( m_bInitialized );
-		int iBucket = GetBucketFor ( ConvertType<T>(tValue) );
-		assert ( m_dBuckets[iBucket]>0 && m_uValues>0 );
-		m_dBuckets[iBucket]--;
-		m_uValues--;
-	}
-
-	bool EstimateRsetSize ( const CSphFilterSettings & tFilter, int64_t & iEstimate ) const override
-	{
-		iEstimate = GetNumValues();
-
-		switch ( tFilter.m_eType )
-		{
-		case SPH_FILTER_VALUES:
-			assert ( TYPE==HISTOGRAM_UINT32 || TYPE==HISTOGRAM_INT64 );
-
-			if ( tFilter.m_bExclude )
-				return false;
-
-			iEstimate = EstimateValues ( tFilter.GetValueArray(), tFilter.GetNumValues() );
-			return true;
-
-		case SPH_FILTER_RANGE:
-			assert ( TYPE==HISTOGRAM_UINT32 || TYPE==HISTOGRAM_INT64 );
-			iEstimate = EstimateRangeFilter ( tFilter.m_bExclude, tFilter.m_bHasEqualMin, tFilter.m_bHasEqualMax, tFilter.m_bOpenLeft, tFilter.m_bOpenRight, (T)tFilter.m_iMinValue, (T)tFilter.m_iMaxValue );
-			return true;
-
-		case SPH_FILTER_FLOATRANGE:
-			assert ( TYPE==HISTOGRAM_FLOAT );
-			iEstimate = EstimateRangeFilter ( tFilter.m_bExclude, tFilter.m_bHasEqualMin, tFilter.m_bHasEqualMax, tFilter.m_bOpenLeft, tFilter.m_bOpenRight, tFilter.m_fMinValue, tFilter.m_fMaxValue );
-			return true;
-
-		default:
-			break;
-		}
-
+	if ( pRowID==pRowIdStart )
 		return false;
-	}
 
-	DWORD GetNumValues() const override
-	{
-		assert ( m_bInitialized );
-		return m_uValues;
-	}
+	dRowIdBlock = RowIdBlock_t(pRowIdStart, pRowID-pRowIdStart);
+	return true;
+}
 
-	bool IsOutdated() const override
-	{
-		assert ( m_bInitialized );
-		const float MAX_OUT_OF_RANGE = 0.3f;
-		return float ( m_dBuckets[0] + m_dBuckets.Last() ) / float ( m_uValues ) >= MAX_OUT_OF_RANGE;
-	}
+//////////////////////////////////////////////////////////////////////////
 
-	HistogramType_e GetType() const override
-	{
-		return TYPE;
-	}
-
-	const CSphString & GetAttrName() const override
-	{
-		return m_sAttrName;
-	}
-
-	bool Save ( CSphWriter & tWriter ) const override
-	{
-		assert ( m_bInitialized );
-		tWriter.PutDword ( VERSION );
-		tWriter.PutBytes ( &m_tMinValue, sizeof(T) );
-		tWriter.PutBytes ( &m_tMaxValue, sizeof(T) );
-		tWriter.PutBytes ( &m_tBucketSize, sizeof(T) );
-		tWriter.PutDword ( m_uValues );
-		tWriter.PutDword ( m_dBuckets.GetLength() );
-		tWriter.PutBytes ( m_dBuckets.Begin(), m_dBuckets.GetLength()*sizeof(m_dBuckets[0]) );
-
-		return !tWriter.IsError();
-	}
-
-	bool Load ( CSphReader & tReader, CSphString & sError ) override
-	{
-		m_bInitialized = false;
-
-		DWORD uVersion = tReader.GetDword();
-		if ( uVersion > VERSION )
-			return false;
-
-		tReader.GetBytes ( &m_tMinValue, sizeof(T) );
-		tReader.GetBytes ( &m_tMaxValue, sizeof(T) );
-		tReader.GetBytes ( &m_tBucketSize, sizeof(T) );
-		m_uValues = tReader.GetDword();
-		int iBuckets = tReader.GetDword();
-		m_dBuckets.Reset(iBuckets);
-		tReader.GetBytes ( m_dBuckets.Begin(), m_dBuckets.GetLength()*sizeof(m_dBuckets[0]) );
-		m_bInitialized = true;
-
-		if ( tReader.GetErrorFlag() )
-		{
-			sError = tReader.GetErrorMessage();
-			return false;
-		}
-
-		return true;
-	}
-
-private:
-	static const int				MAX_BUCKETS {1024};
-	static const DWORD				VERSION {1};
-	static const HistogramType_e	TYPE;
-	static const T					MIN_BY_TYPE;
-	static const T					MAX_BY_TYPE;
-
-
-	CSphString				m_sAttrName;
-	bool					m_bInitialized {false};
-	T						m_tMinValue {0};
-	T						m_tMaxValue {0};
-	T						m_tBucketSize {0};
-	DWORD					m_uValues {0};
-	CSphFixedVector<DWORD>	m_dBuckets {0};
-
-
-	inline int GetBucketFor ( const T & tValue ) const
-	{
-		if ( tValue<m_tMinValue )
-			return 0;
-
-		if ( tValue>m_tMaxValue )
-			return m_dBuckets.GetLength()-1;
-
-		return 1 + int ( ((double)tValue-m_tMinValue) / m_tBucketSize );
-	}
-
-	DWORD EstimateInterval ( T tMin, T tMax, bool bHasEqualMin, bool bHasEqualMax, bool bOpenLeft, bool bOpenRight ) const
-	{
-		assert ( TYPE==HISTOGRAM_UINT32 || TYPE==HISTOGRAM_INT64 );
-		assert ( m_bInitialized );
-
-		if ( !bOpenLeft && !bHasEqualMin && tMin < MAX_BY_TYPE )
-			tMin++;
-
-		if ( !bOpenRight && !bHasEqualMax && tMax > MIN_BY_TYPE )
-			tMax--;
-		
-		int iMinBucket = bOpenLeft ? 0 : GetBucketFor ( tMin );
-		int iMaxBucket = bOpenRight ? m_dBuckets.GetLength()-1 : GetBucketFor ( tMax );
-
-		DWORD uTotal = 0;
-		for ( int i=iMinBucket; i<=iMaxBucket; i++ )
-			uTotal += m_dBuckets[i];
-
-		return uTotal;
-	}
-
-	DWORD EstimateValues ( const SphAttr_t * pValues, int nValues ) const
-	{
-		assert ( m_bInitialized );
-		DWORD uTotal = 0;
-		int iPrevBucket = INT_MIN;
-		for ( int i = 0; i < nValues; i++ )
-		{
-			int iBucket = GetBucketFor ( ConvertType<T>(pValues[i]) );
-			if ( iBucket!=iPrevBucket )
-			{
-				uTotal += m_dBuckets[iBucket];
-				iPrevBucket = iBucket;
-			}
-		}
-
-		return uTotal;
-	}
-
-	DWORD EstimateRangeFilter ( bool bExclude, bool bHasEqualMin, bool bHasEqualMax, bool bOpenLeft, bool bOpenRight, T tMinValue, T tMaxValue ) const
-	{
-		if ( !bExclude )
-			return EstimateInterval ( tMinValue, tMaxValue, bHasEqualMin, bHasEqualMax, bOpenLeft, bOpenRight );
-
-		assert ( !bOpenLeft || !bOpenRight );
-
-		DWORD uEstimate = 0;
-		if ( bOpenRight )
-			uEstimate = EstimateInterval ( (T)0, tMinValue, false, !bHasEqualMin, true, false );
-		else if ( bOpenLeft )
-			uEstimate = EstimateInterval ( tMaxValue, (T)0, !bHasEqualMax, false, false, true );
-		else
-		{
-			uEstimate = EstimateInterval ( (T)0, tMinValue, false, !bHasEqualMin, true, false );
-			uEstimate += EstimateInterval ( tMaxValue, (T)0, !bHasEqualMax, false, false, true );
-		}
-
-		return uEstimate;
-	}
+class SecondaryIndexIterator_c : public RowidIterator_i
+{
+protected:
+	static const int MAX_COLLECTED = 128;
+	CSphFixedVector<RowID_t> m_dCollected {MAX_COLLECTED};
 };
 
-template<> const HistogramType_e Histogram_T<DWORD>::TYPE = HISTOGRAM_UINT32;
-template<> const DWORD Histogram_T<DWORD>::MIN_BY_TYPE = 0;
-template<> const DWORD Histogram_T<DWORD>::MAX_BY_TYPE = UINT32_MAX;
 
-template<> const HistogramType_e Histogram_T<int64_t>::TYPE = HISTOGRAM_INT64;
-template<> const int64_t Histogram_T<int64_t>::MIN_BY_TYPE = 0;
-template<> const int64_t Histogram_T<int64_t>::MAX_BY_TYPE = INT64_MAX;
-
-template<> const HistogramType_e Histogram_T<float>::TYPE = HISTOGRAM_FLOAT;
-template<> const float Histogram_T<float>::MIN_BY_TYPE = FLT_MIN;
-template<> const float Histogram_T<float>::MAX_BY_TYPE = FLT_MAX;
-
-
-template<>
-void Histogram_T<float>::Setup ( SphAttr_t tMinValue, SphAttr_t tMaxValue )
-{
-	assert ( TYPE==HISTOGRAM_FLOAT );
-
-	m_tMinValue = ConvertType<float>(tMinValue);
-	m_tMaxValue = ConvertType<float>(tMaxValue);
-
-	int iNumBuckets;
-	if ( m_tMaxValue==m_tMinValue )
-	{
-		iNumBuckets = 1;
-		m_tBucketSize = 1.0f;
-	}
-	else
-	{
-		iNumBuckets = MAX_BUCKETS;
-		m_tBucketSize = ( m_tMaxValue-m_tMinValue )/iNumBuckets;
-	}
-
-	m_dBuckets.Reset ( iNumBuckets+2 );
-	for ( auto & i : m_dBuckets )
-		i = 0;
-
-	m_bInitialized = true;
-}
-
-
-template<>
-DWORD Histogram_T<float>::EstimateInterval ( float tMin, float tMax, bool bHasEqualMin, bool bHasEqualMax, bool bOpenLeft, bool bOpenRight ) const
-{
-	assert ( TYPE==HISTOGRAM_FLOAT );
-	assert ( m_bInitialized );
-
-	int iMinBucket = bOpenLeft ? 0 : GetBucketFor(tMin);
-	int iMaxBucket = bOpenRight ? m_dBuckets.GetLength()-1 : GetBucketFor(tMax);
-
-	DWORD uTotal = 0;
-	for ( int i=iMinBucket; i<=iMaxBucket; i++ )
-		uTotal += m_dBuckets[i];
-
-	return uTotal;
-}
-
-
-//////////////////////////////////////////////////////////////////////////
-
-static bool CanCreateHistogram ( const CSphString sAttrName, ESphAttr eAttrType )
-{
-	if ( sphIsInternalAttr ( sAttrName ) )
-		return false;
-
-	return eAttrType==SPH_ATTR_INTEGER || eAttrType==SPH_ATTR_BIGINT || eAttrType==SPH_ATTR_BOOL || eAttrType==SPH_ATTR_FLOAT || eAttrType==SPH_ATTR_TIMESTAMP;
-}
-
-
-static Histogram_i * CreateHistogram ( const CSphString & sAttr, HistogramType_e eType )
-{
-	switch ( eType )
-	{
-	case HISTOGRAM_UINT32:
-		return new Histogram_T<DWORD> ( sAttr );
-
-	case HISTOGRAM_INT64:
-		return new Histogram_T<int64_t> ( sAttr );
-
-	case HISTOGRAM_FLOAT:
-		return new Histogram_T<float> ( sAttr );
-
-	default:
-		return nullptr;
-	}
-}
-
-
-Histogram_i * CreateHistogram ( const CSphString & sAttr, ESphAttr eAttrType )
-{
-	if ( !CanCreateHistogram ( sAttr, eAttrType ) )
-		return nullptr;
-
-	HistogramType_e eType = HISTOGRAM_NONE;
-
-	switch ( eAttrType )
-	{
-	case SPH_ATTR_INTEGER:
-	case SPH_ATTR_TIMESTAMP:
-	case SPH_ATTR_BOOL:
-		eType = HISTOGRAM_UINT32;
-		break;
-
-	case SPH_ATTR_BIGINT:
-		eType = HISTOGRAM_INT64;
-		break;
-
-	case SPH_ATTR_FLOAT:
-		eType = HISTOGRAM_FLOAT;
-		break;
-
-	default:
-		break;
-	}
-
-	return CreateHistogram ( sAttr, eType );
-}
-
-//////////////////////////////////////////////////////////////////////////
-
-HistogramContainer_c::~HistogramContainer_c()
-{
-	Reset();
-}
-
-
-void HistogramContainer_c::Reset()
-{
-	m_dHistogramHash.IterateStart();
-	while ( m_dHistogramHash.IterateNext() )
-		SafeDelete ( m_dHistogramHash.IterateGet() );
-
-	m_dHistogramHash.Reset();
-}
-
-
-bool HistogramContainer_c::Save ( const CSphString & sFile, CSphString & sError )
-{
-	CSphWriter tWriter;
-	if ( !tWriter.OpenFile ( sFile, sError ) )
-		return false;
-
-	tWriter.PutDword ( m_dHistogramHash.GetLength() );
-
-	m_dHistogramHash.IterateStart();
-	while ( m_dHistogramHash.IterateNext() )
-	{
-		Histogram_i * pHistogram = m_dHistogramHash.IterateGet();
-		assert ( pHistogram );
-		tWriter.PutString ( pHistogram->GetAttrName() );
-		tWriter.PutDword ( pHistogram->GetType() );
-
-		if ( !pHistogram->Save ( tWriter ) )
-		{
-			sError.SetSprintf ( "error saving histograms to %s", sFile.cstr() );
-			return false;
-		}
-	}
-
-	tWriter.CloseFile();
-	if ( tWriter.IsError() )
-	{
-		sError.SetSprintf ( "error saving histograms to %s", sFile.cstr() );
-		return false;
-	}
-
-	return true;
-}
-
-
-bool HistogramContainer_c::Load ( const CSphString & sFile, CSphString & sError )
-{
-	Reset();
-
-	CSphAutoreader tReader;
-	if ( !tReader.Open ( sFile, sError ) )
-		return false;
-
-	int nHistograms = tReader.GetDword();
-	for ( int i = 0; i < nHistograms; i++ )
-	{
-		CSphString sAttr = tReader.GetString();
-		HistogramType_e eType = (HistogramType_e)tReader.GetDword();
-		Histogram_i * pHistogram = CreateHistogram ( sAttr, eType );
-		if ( !pHistogram )
-		{
-			sError.SetSprintf ( "error loading histograms from %s", sFile.cstr() );
-			return false;
-		}
-
-		if ( !pHistogram->Load ( tReader, sError ) )
-			return false;
-
-		if ( !m_dHistogramHash.Add ( pHistogram, sAttr ) )
-		{
-			sError.SetSprintf ( "duplicate histograms found in %s", sFile.cstr() );
-			return false;
-		}
-	}
-
-	if ( tReader.GetErrorFlag() )
-	{
-		sError = tReader.GetErrorMessage();
-		return false;
-	}
-
-	return true;
-}
-
-
-bool HistogramContainer_c::Add ( Histogram_i * pHistogram )
-{
-	assert ( pHistogram );
-	return m_dHistogramHash.Add ( pHistogram, pHistogram->GetAttrName() );
-}
-
-
-void HistogramContainer_c::Remove ( const CSphString & sAttr )
-{
-	Histogram_i * pHistogram = Get(sAttr);
-	if ( !pHistogram )
-		return;
-
-	SafeDelete ( pHistogram );
-	m_dHistogramHash.Delete(sAttr);
-}
-
-
-Histogram_i * HistogramContainer_c::Get ( const CSphString & sAttr ) const
-{
-	Histogram_i ** ppHistogram = m_dHistogramHash(sAttr);
-	return ppHistogram ? *ppHistogram : nullptr;
-}
-
-
-DWORD HistogramContainer_c::GetNumValues() const
-{
-	// all histograms should have the same amount of values
-	m_dHistogramHash.IterateStart();
-	if ( !m_dHistogramHash.IterateNext() )
-		return 0;
-
-	return m_dHistogramHash.IterateGet()->GetNumValues();
-}
-
-//////////////////////////////////////////////////////////////////////////
-
-class RowidIterator_LookupValues_c : public RowidIterator_i
+class RowidIterator_LookupValues_c : public SecondaryIndexIterator_c
 {
 public:
 						RowidIterator_LookupValues_c ( const SphAttr_t * pValues, int nValues, const BYTE * pDocidLookup );
 
-	RowID_t				GetNextRowID() override;
+	bool				HintRowID ( RowID_t tRowID ) override;
+	bool				GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock ) override;
 	int64_t				GetNumProcessed() const override;
 
 private:
@@ -547,34 +75,43 @@ RowidIterator_LookupValues_c::RowidIterator_LookupValues_c ( const SphAttr_t * p
 }
 
 
-RowID_t RowidIterator_LookupValues_c::GetNextRowID()
+bool RowidIterator_LookupValues_c::HintRowID ( RowID_t tRowID )
 {
-	while ( m_bHaveFilterDocs && m_bHaveLookupDocs )
+	// can't rewind lookup reader
+	return true;
+}
+
+
+bool RowidIterator_LookupValues_c::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
+{
+	RowID_t * pRowIdStart = m_dCollected.Begin();
+	RowID_t * pRowIdMax = pRowIdStart + m_dCollected.GetLength()-1;
+	RowID_t * pRowID = pRowIdStart;
+
+	while ( m_bHaveFilterDocs && m_bHaveLookupDocs && ( pRowID < pRowIdMax ) )
 	{
 		if ( m_tFilterDocID < m_tLookupDocID )
 		{
 			m_tFilterReader.HintDocID ( m_tLookupDocID );
 			m_bHaveFilterDocs = m_tFilterReader.ReadDocID ( m_tFilterDocID );
-			m_iProcessed++;
 		}
 		else if ( m_tFilterDocID > m_tLookupDocID )
 		{
 			m_tLookupReader.HintDocID ( m_tFilterDocID );
 			m_bHaveLookupDocs = m_tLookupReader.Read ( m_tLookupDocID, m_tLookupRowID );
-			m_iProcessed++;
 		}
 		else
 		{
 			// lookup reader can have duplicates; filter reader can't have duplicates
 			// advance only the lookup reader
-			RowID_t tMatchedRowID = m_tLookupRowID;
+			*pRowID++ = m_tLookupRowID;
 			m_bHaveLookupDocs = m_tLookupReader.Read ( m_tLookupDocID, m_tLookupRowID );
-			m_iProcessed++;
-			return tMatchedRowID;
 		}
+
+		m_iProcessed++;
 	}
 
-	return INVALID_ROWID;
+	return ReturnIteratorResult ( pRowID, pRowIdStart, dRowIdBlock );
 }
 
 
@@ -586,12 +123,13 @@ int64_t	RowidIterator_LookupValues_c::GetNumProcessed() const
 //////////////////////////////////////////////////////////////////////////
 
 template <bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT>
-class RowidIterator_LookupRange_T : public RowidIterator_i
+class RowidIterator_LookupRange_T : public SecondaryIndexIterator_c
 {
 public:
 						RowidIterator_LookupRange_T ( DocID_t tMinValue, DocID_t tMaxValue, const BYTE * pDocidLookup );
 
-	RowID_t				GetNextRowID() override;
+	bool				HintRowID ( RowID_t tRowID ) override;
+	bool				GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock ) override;
 	int64_t				GetNumProcessed() const override;
 
 protected:
@@ -612,14 +150,24 @@ RowidIterator_LookupRange_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT>::R
 		m_tLookupReader.HintDocID ( tMinValue );
 }
 
+template <bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT>
+bool RowidIterator_LookupRange_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT>::HintRowID ( RowID_t tRowID )
+{
+	// can't rewind lookup reader
+	return true;
+}
 
 template <bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT>
-RowID_t RowidIterator_LookupRange_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT>::GetNextRowID()
+bool RowidIterator_LookupRange_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
 {
 	DocID_t tLookupDocID = 0;
 	RowID_t tLookupRowID = INVALID_ROWID;
 
-	while ( m_tLookupReader.Read ( tLookupDocID, tLookupRowID ) )
+	RowID_t * pRowIdStart = m_dCollected.Begin();
+	RowID_t * pRowIdMax = pRowIdStart + m_dCollected.GetLength()-1;
+	RowID_t * pRowID = pRowIdStart;
+
+	while ( pRowID<pRowIdMax && m_tLookupReader.Read ( tLookupDocID, tLookupRowID ) )
 	{
 		m_iProcessed++;
 
@@ -627,12 +175,12 @@ RowID_t RowidIterator_LookupRange_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_R
 			continue;
 
 		if ( !OPEN_RIGHT && ( tLookupDocID > m_tMaxValue || ( !HAS_EQUAL_MAX && tLookupDocID==m_tMaxValue ) ) )
-			return INVALID_ROWID;
+			return ReturnIteratorResult ( pRowID, pRowIdStart, dRowIdBlock );
 
-		return tLookupRowID;
+		*pRowID++ = tLookupRowID;
 	}
 
-	return INVALID_ROWID;
+	return ReturnIteratorResult ( pRowID, pRowIdStart, dRowIdBlock );
 }
 
 
@@ -648,13 +196,15 @@ int64_t RowidIterator_LookupRange_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_R
 template <bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT>
 class RowidIterator_LookupRangeExclude_T : public RowidIterator_LookupRange_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT>
 {
-public:
-						RowidIterator_LookupRangeExclude_T ( DocID_t tMinValue, DocID_t tMaxValue, const BYTE * pDocidLookup );
+	using BASE = RowidIterator_LookupRange_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT>;
 
-	RowID_t				GetNextRowID() override;
+public:
+			RowidIterator_LookupRangeExclude_T ( DocID_t tMinValue, DocID_t tMaxValue, const BYTE * pDocidLookup );
+
+	bool	GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock ) override;
 
 private:
-	bool				m_bLeft {true};
+	bool	m_bLeft {true};
 };
 
 
@@ -670,22 +220,26 @@ RowidIterator_LookupRangeExclude_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RI
 
 
 template <bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT>
-RowID_t RowidIterator_LookupRangeExclude_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT>::GetNextRowID()
+bool RowidIterator_LookupRangeExclude_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
 {
 	if_const ( OPEN_LEFT && OPEN_RIGHT )
-		return INVALID_ROWID;
+		return false;
 
 	DocID_t tLookupDocID = 0;
 	RowID_t tLookupRowID = INVALID_ROWID;
 
-	while ( this->m_tLookupReader.Read ( tLookupDocID, tLookupRowID ) )
+	RowID_t * pRowIdStart = BASE::m_dCollected.Begin();
+	RowID_t * pRowIdMax = pRowIdStart + BASE::m_dCollected.GetLength()-1;
+	RowID_t * pRowID = pRowIdStart;
+
+	while ( pRowID<pRowIdMax && BASE::m_tLookupReader.Read ( tLookupDocID, tLookupRowID ) )
 	{
-		this->m_iProcessed++;
+		BASE::m_iProcessed++;
 
 		if ( m_bLeft )
 		{
 			// use everything ending with m_tMinValue
-			if ( tLookupDocID > this->m_tMinValue || ( HAS_EQUAL_MIN && tLookupDocID==this->m_tMinValue ) )
+			if ( tLookupDocID > BASE::m_tMinValue || ( HAS_EQUAL_MIN && tLookupDocID==BASE::m_tMinValue ) )
 			{
 				// switch to right interval
 				if_const ( !OPEN_LEFT && !OPEN_RIGHT )
@@ -695,111 +249,256 @@ RowID_t RowidIterator_LookupRangeExclude_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT
 					continue;
 				}
 
-				return INVALID_ROWID;
+				return ReturnIteratorResult ( pRowID, pRowIdStart, dRowIdBlock );
 			}
 		}
 		else
 		{
 			// use everything starting from m_tMaxValue
-			if ( tLookupDocID < this->m_tMaxValue || ( HAS_EQUAL_MAX && tLookupDocID==this->m_tMaxValue ) )
+			if ( tLookupDocID < BASE::m_tMaxValue || ( HAS_EQUAL_MAX && tLookupDocID==BASE::m_tMaxValue ) )
 				continue;
 		}
 
-		return tLookupRowID;
+		*pRowID++ = tLookupRowID;
 	}
 
-	return INVALID_ROWID;
+	return ReturnIteratorResult ( pRowID, pRowIdStart, dRowIdBlock );
 }
 
 //////////////////////////////////////////////////////////////////////////
 
-class RowidIterator_Intersect_c : public RowidIterator_i
+template <typename T>
+class RowidIterator_Intersect_T : public SecondaryIndexIterator_c
 {
 public:
-				RowidIterator_Intersect_c ( const CSphVector<RowidIterator_i*> & dIterators );
-				~RowidIterator_Intersect_c() override;
+				RowidIterator_Intersect_T ( T ** ppIterators, int iNumIterators );
+				~RowidIterator_Intersect_T() override;
 
-	RowID_t		GetNextRowID() override;
+	bool		HintRowID ( RowID_t tRowID ) override;
+	bool		GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock ) override;
 	int64_t		GetNumProcessed() const override;
 
 private:
-	const CSphVector<RowidIterator_i*>	m_dIterators;
-	const CSphVector<RowID_t>			m_dMinRowID;
-	int									m_iMaxIndex	{0};
+	struct IteratorState_t
+	{
+		T *					m_pIterator = nullptr;
+		RowID_t				m_tMinRowID = INVALID_ROWID;
 
-	void		AdvanceIterators();
+		const RowID_t *		m_pRowID = nullptr;
+		const RowID_t *		m_pRowIDMax = nullptr;
+
+		FORCE_INLINE bool	RewindTo  ( RowID_t tRowID );
+		FORCE_INLINE bool	WarmupDocs();
+		FORCE_INLINE bool	WarmupDocs ( RowID_t tRowID );
+	};
+
+	CSphFixedVector<IteratorState_t>	m_dIterators {0};
+
+	FORCE_INLINE bool	AdvanceIterators();
+	FORCE_INLINE bool	Advance ( int iIterator, RowID_t tRowID );
 };
 
-
-RowidIterator_Intersect_c::RowidIterator_Intersect_c ( const CSphVector<RowidIterator_i*> & dIterators )
-	: m_dIterators		( dIterators )
-	, m_dMinRowID		( dIterators.GetLength() )
+template <typename T>
+bool RowidIterator_Intersect_T<T>::IteratorState_t::WarmupDocs()
 {
-	AdvanceIterators();
+	assert(m_pIterator);
+
+	RowIdBlock_t dRowIdBlock;
+	if ( !m_pIterator->GetNextRowIdBlock(dRowIdBlock) )
+	{
+		m_pRowID = m_pRowIDMax = nullptr;
+		return false;
+	}
+
+	m_pRowID = dRowIdBlock.Begin();
+	m_pRowIDMax = m_pRowID+dRowIdBlock.GetLength();
+
+	return true;
 }
 
+#if USE_COLUMNAR
+template <>
+bool RowidIterator_Intersect_T<columnar::BlockIterator_i>::IteratorState_t::WarmupDocs()
+{
+	assert(m_pIterator);
 
-RowidIterator_Intersect_c::~RowidIterator_Intersect_c()
+	columnar::Span_T<uint32_t> dRowIdBlock;
+	if ( !m_pIterator->GetNextRowIdBlock(dRowIdBlock) )
+	{
+		m_pRowID = m_pRowIDMax = nullptr;
+		return false;
+	}
+
+	m_pRowID = (const RowID_t *)dRowIdBlock.begin();
+	m_pRowIDMax = (const RowID_t *)dRowIdBlock.end();
+
+	return true;
+}
+#endif
+
+template <typename T>
+bool RowidIterator_Intersect_T<T>::IteratorState_t::WarmupDocs ( RowID_t tRowID )
+{
+	if ( !m_pIterator->HintRowID(tRowID) )
+		return false;
+
+	return WarmupDocs();
+}
+
+template <typename T>
+bool RowidIterator_Intersect_T<T>::IteratorState_t::RewindTo ( RowID_t tRowID )
+{
+	if ( m_pRowID>=m_pRowIDMax || tRowID>*(m_pRowIDMax-1) )
+	{
+		if ( !WarmupDocs(tRowID) )
+			return false;
+	}
+
+	const RowID_t * pRowID = m_pRowID;
+
+	while ( true )
+	{
+		while ( pRowID < m_pRowIDMax && *pRowID < tRowID )
+			pRowID++;
+
+		if ( pRowID<m_pRowIDMax )
+			break;
+
+		if ( !WarmupDocs() )
+			return false;
+
+		pRowID = m_pRowID;
+	}
+
+	m_pRowID = pRowID;
+
+	return true;
+}
+
+template<typename T>
+RowidIterator_Intersect_T<T>::RowidIterator_Intersect_T ( T ** ppIterators, int iNumIterators )
+	: m_dIterators(iNumIterators)
+{
+	ARRAY_FOREACH ( i, m_dIterators )
+	{
+		auto & tIterator = m_dIterators[i];
+		tIterator.m_pIterator = ppIterators[i];
+	}
+
+	m_dIterators[0].WarmupDocs();
+}
+
+template<typename T>
+RowidIterator_Intersect_T<T>::~RowidIterator_Intersect_T()
 {
 	for ( auto & i : m_dIterators )
-		SafeDelete(i);
+		SafeDelete ( i.m_pIterator );
 }
 
-
-RowID_t RowidIterator_Intersect_c::GetNextRowID()
+template<typename T>
+bool RowidIterator_Intersect_T<T>::HintRowID ( RowID_t tRowID )
 {
-	if ( m_dMinRowID[m_iMaxIndex]==INVALID_ROWID )
-		return INVALID_ROWID;
-
-	int iNewMaxIndex = m_iMaxIndex;
-
-	do
-	{
-		m_iMaxIndex = iNewMaxIndex;
-
-		ARRAY_FOREACH ( i, m_dIterators )
-			if ( i!=m_iMaxIndex )
-			{
-				while ( m_dMinRowID[i]<m_dMinRowID[m_iMaxIndex] && m_dMinRowID[i]!=INVALID_ROWID )
-					m_dMinRowID[i] = m_dIterators[i]->GetNextRowID();
-
-				if ( m_dMinRowID[i]==INVALID_ROWID )
-					return INVALID_ROWID;
-
-				if ( m_dMinRowID[i] > m_dMinRowID[iNewMaxIndex] )
-					iNewMaxIndex = i;
-			}
-	}
-	while ( iNewMaxIndex!=m_iMaxIndex );
-
-	RowID_t tRowID = m_dMinRowID[m_iMaxIndex];
-	AdvanceIterators();
-
-	return tRowID;
+	return m_dIterators[0].RewindTo(tRowID);
 }
 
+template<typename T>
+bool RowidIterator_Intersect_T<T>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
+{
+	RowID_t * pRowIdStart = m_dCollected.Begin();
+	RowID_t * pRowIdMax = pRowIdStart + m_dCollected.GetLength()-1;
+	RowID_t * pRowID = pRowIdStart;
 
-int64_t RowidIterator_Intersect_c::GetNumProcessed() const
+	IteratorState_t & tFirst = m_dIterators[0];
+
+	// we assume that iterators are sorted from most selective to least selective
+	while ( pRowID<pRowIdMax )
+	{
+		if ( !tFirst.m_pRowID )
+			break;
+
+		if ( !AdvanceIterators() )
+		{
+			tFirst.m_pRowID = nullptr;
+			break;
+		}
+
+		*pRowID++ = *tFirst.m_pRowID;
+
+		tFirst.m_pRowID++;
+		if ( tFirst.m_pRowID>=tFirst.m_pRowIDMax && !tFirst.WarmupDocs() )
+		{
+			tFirst.m_pRowID = nullptr;
+			break;
+		}
+	}
+
+	return ReturnIteratorResult ( pRowID, pRowIdStart, dRowIdBlock );
+}
+
+template<typename T>
+bool RowidIterator_Intersect_T<T>::AdvanceIterators()
+{
+	IteratorState_t & tFirst = m_dIterators[0];
+	RowID_t tMaxRowID = *tFirst.m_pRowID;
+	for ( int i=1; i < m_dIterators.GetLength(); i++ )
+	{
+		auto & tState = m_dIterators[i];
+		if ( !tState.m_pRowID && !tState.WarmupDocs(tMaxRowID) )
+			return false;
+
+		if ( *tState.m_pRowID==tMaxRowID )
+			continue;
+
+		if ( !tState.RewindTo(tMaxRowID) )
+			return false;
+
+		if ( *tState.m_pRowID>tMaxRowID )
+		{
+			if ( !tFirst.RewindTo ( *tState.m_pRowID ) )
+				return false;
+
+			tMaxRowID = *tFirst.m_pRowID;
+			i = 0;
+		}
+	}
+
+	return true;
+}
+
+template<typename T>
+int64_t RowidIterator_Intersect_T<T>::GetNumProcessed() const
 {
 	int64_t iTotal = 0;
 	for ( auto i : m_dIterators )
-		iTotal += i->GetNumProcessed();
+		iTotal += i.m_pIterator->GetNumProcessed();
 
 	return iTotal;
 }
 
-
-void RowidIterator_Intersect_c::AdvanceIterators()
+#if USE_COLUMNAR
+class RowidIterator_Wrapper_c : public RowidIterator_i
 {
-	m_iMaxIndex = 0;
+public:
+			RowidIterator_Wrapper_c ( columnar::BlockIterator_i * pIterator ) : m_pIterator ( pIterator ) {}
 
-	ARRAY_FOREACH ( i, m_dIterators )
-	{
-		m_dMinRowID[i] = m_dIterators[i]->GetNextRowID();
-		if ( m_dMinRowID[i] > m_dMinRowID[m_iMaxIndex] )
-			m_iMaxIndex = i;
-	}
+	bool	HintRowID ( RowID_t tRowID ) { return m_pIterator->HintRowID(tRowID); }
+	bool	GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock );
+	int64_t	GetNumProcessed() const { return m_pIterator->GetNumProcessed(); }
+
+private:
+	CSphScopedPtr<columnar::BlockIterator_i> m_pIterator;
+};
+
+bool RowidIterator_Wrapper_c::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
+{
+	columnar::Span_T<uint32_t> dSpan;
+	if ( !m_pIterator->GetNextRowIdBlock(dSpan) )
+		return false;
+
+	dRowIdBlock = { (RowID_t *)dSpan.begin(), (int64_t)dSpan.size() };
+	return true;
 }
+#endif
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -1047,8 +746,11 @@ void SelectIterators ( const CSphVector<CSphFilterSettings> & dFilters, const CS
 }
 
 
-RowidIterator_i * CreateFilteredIterator ( const CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphFilterSettings> & dModifiedFilters, const CSphVector<FilterTreeItem_t> & dFilterTree, const CSphVector<IndexHint_t> & dHints, const HistogramContainer_c & tHistograms, const BYTE * pDocidLookup )
+RowidIterator_i * CreateFilteredIterator ( const CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphFilterSettings> & dModifiedFilters, bool & bFiltersChanged, const CSphVector<FilterTreeItem_t> & dFilterTree,
+	const CSphVector<IndexHint_t> & dHints, const HistogramContainer_c & tHistograms, const BYTE * pDocidLookup )
 {
+	bFiltersChanged = false;
+
 	// no iterators with OR queries
 	if ( dFilterTree.GetLength() )
 		return nullptr;
@@ -1064,6 +766,9 @@ RowidIterator_i * CreateFilteredIterator ( const CSphVector<CSphFilterSettings> 
 			dIterators.Add ( pIterator );
 	}
 
+	if ( !dIterators.GetLength() )
+		return nullptr;
+
 	dEnabledIndexes.Sort ( bind ( &SecondaryIndexInfo_t::m_iFilterId ) );
 	ARRAY_FOREACH ( i, dFilters )
 	{
@@ -1071,14 +776,33 @@ RowidIterator_i * CreateFilteredIterator ( const CSphVector<CSphFilterSettings> 
 			dModifiedFilters.Add ( dFilters[i] );
 	}
 
-	int nIterators = dIterators.GetLength();
-	if ( nIterators==1 )
-		return dIterators[0];
-	else if ( nIterators>1 )
-		return new RowidIterator_Intersect_c ( dIterators );
+	bFiltersChanged = dFilters.GetLength()!=dModifiedFilters.GetLength();
 
-	return nullptr;	
+	if ( dIterators.GetLength()==1 )
+		return dIterators[0];
+
+	return new RowidIterator_Intersect_T<RowidIterator_i> ( dIterators.Begin(), dIterators.GetLength() );
 }
+
+
+RowidIterator_i * CreateIteratorIntersect ( CSphVector<RowidIterator_i*> & dIterators )
+{
+	return new RowidIterator_Intersect_T<RowidIterator_i> ( dIterators.Begin(), dIterators.GetLength() );
+}
+
+#if USE_COLUMNAR
+RowidIterator_i * CreateIteratorWrapper ( columnar::BlockIterator_i * pIterator )
+{
+	return new RowidIterator_Wrapper_c(pIterator);
+}
+
+
+RowidIterator_i * CreateIteratorIntersect ( std::vector<columnar::BlockIterator_i *> & dIterators )
+{
+	return new RowidIterator_Intersect_T<columnar::BlockIterator_i> ( &dIterators[0], (int)dIterators.size() );
+}
+#endif
+
 
 //////////////////////////////////////////////////////////////////////////
 

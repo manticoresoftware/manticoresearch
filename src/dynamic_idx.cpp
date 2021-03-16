@@ -11,6 +11,7 @@
 //
 
 #include "dynamic_idx.h"
+#include "sphinxsort.h"
 
 class Feeder_c : public RowBuffer_i
 {
@@ -503,7 +504,7 @@ public:
 	int					Kill ( DocID_t tDocID ) override { return 0; }
 	int					Build ( const CSphVector<CSphSource*> & , int , int ) override { return 0; }
 	bool				Merge ( CSphIndex * , const VecTraits_T<CSphFilterSettings> &, bool ) override { return false; }
-	bool				Prealloc ( bool, FilenameBuilder_i * ) final { return false; }
+	bool				Prealloc ( bool, FilenameBuilder_i *, StrVec_t & ) final { return false; }
 	void				Dealloc () final {}
 	void				Preread () final {}
 	void				SetBase ( const char * ) final {}
@@ -586,17 +587,23 @@ bool GenericTableIndex_c::MultiQueryEx ( int iQueries, const CSphQuery * pQuerie
 	return bResult;
 }
 
-struct DynMatchProcessor_t : ISphMatchProcessor, ISphNoncopyable
+class DynMatchProcessor_c : public MatchProcessor_i, ISphNoncopyable
 {
-	const CSphQueryContext &m_tCtx;
-	int m_iTag;
-
-	DynMatchProcessor_t ( int iTag, const CSphQueryContext &tCtx )
-		: m_tCtx ( tCtx )
-		, m_iTag ( iTag )
+public:
+	DynMatchProcessor_c ( int iTag, const CSphQueryContext &tCtx )
+		: m_iTag ( iTag )
+		, m_tCtx ( tCtx )
 	{}
 
-	void Process ( CSphMatch * pMatch ) final
+	void Process ( CSphMatch * pMatch ) final			{ ProcessMatch(pMatch); }
+	bool ProcessInRowIdOrder() const final				{ return false;	}
+	void Process ( VecTraits_T<CSphMatch *> & dMatches ){ dMatches.for_each ( [this]( CSphMatch * pMatch ){ ProcessMatch(pMatch); } ); }
+
+private:
+	int							m_iTag;
+	const CSphQueryContext &	m_tCtx;
+
+	inline void ProcessMatch ( CSphMatch * pMatch )
 	{
 		if ( pMatch->m_iTag>=0 )
 			return;
@@ -636,8 +643,12 @@ bool GenericTableIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery
 
 	// setup calculations and result schema
 	CSphQueryContext tCtx ( tQuery );
-	if ( !tCtx.SetupCalc ( tMeta, tMaxSorterSchema, m_tSchema, nullptr, dSorterSchemas ) )
-		return false;
+
+#if USE_COLUMNAR
+	if ( !tCtx.SetupCalc ( tMeta, tMaxSorterSchema, m_tSchema, nullptr, nullptr, dSorterSchemas ) ) return false;
+#else
+	if ( !tCtx.SetupCalc ( tMeta, tMaxSorterSchema, m_tSchema, nullptr, dSorterSchemas ) ) return false;
+#endif
 
 	// setup filters
 	CreateFilterContext_t tFlx;
@@ -714,7 +725,7 @@ bool GenericTableIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery
 	// do final expression calculations
 	if ( tCtx.m_dCalcFinal.GetLength () )
 	{
-		DynMatchProcessor_t tFinal ( tArgs.m_iTag, tCtx );
+		DynMatchProcessor_c tFinal ( tArgs.m_iTag, tCtx );
 		dSorters.Apply ( [&tFinal] ( ISphMatchSorter * p ) { p->Finalize ( tFinal, false ); } );
 	}
 

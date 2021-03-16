@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>columnar attributes vs docids</name>
+
+<requires>
+<columnar/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table
+
+	sql_attr_uint     = price
+	sql_attr_bigint   = brand_id
+	sql_attr_string   = brand_name
+	sql_field_string  = property
+}
+
+index test
+{
+	source 			= test
+	path			= <data_path/>/test_col
+
+	columnar_attrs 	= id, price, brand_id, brand_name, property
+	stored_fields	= title
+}
+</config>
+
+<db_create>
+CREATE TABLE `test_table` (
+  `id` int(11),
+  `price` int(11),
+  `brand_id` int(11),
+  `title` varchar(255),
+  `brand_name` varchar(255),
+  `property` varchar(255)
+);
+</db_create>
+
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+
+<db_insert>insert into test_table (id,price,brand_id,title,brand_name,property) values
+(1001,529,9,'Product Five Two','Brand Nine','Four'),
+(1002,173,10,'Product Five Seven','Brand Ten','Four'),
+(1003,121,1,'Product Seven Nine','Brand One','Five'),
+(1004,474,7,'Product Ten Three','Brand Seven','Nine'),
+(1005,20,7,'Product Ten Four','Brand Seven','Seven'),
+(1006,100,3,'Product One Three','Brand Three','Seven'),
+(1007,724,9,'Product Four Eight','Brand Nine','Five'),
+(1008,13,3,'Product Seven One','Brand Three','Eight'),
+(1009,54,2,'Product Ten Seven','Brand Two','Eight'),
+(1010,986,6,'Product Six Ten','Brand Six','Eight'),
+(1011,100,10,'Product One Ten','Brand Ten','Four'),
+(1012,69,10,'Product Five Seven','Brand Ten','Two'),
+(1013,365,4,'Product Two Nine','Brand Four','Ten'),
+(1014,455,1,'Product Two Eight','Brand One','Nine'),
+(1015,718,4,'Product Nine Two','Brand Four','Eight'),
+(1016,758,9,'Product Eight Ten','Brand Nine','Seven'),
+(1017,493,4,'Product Nine Six','Brand Four','Five'),
+(1018,413,3,'Product Eight Five','Brand Three','Four'),
+(1019,78,4,'Product Six Five','Brand Four','Two'),
+(1020,169,4,'Product Seven Six','Brand Four','Eight')
+</db_insert>
+
+<sphqueries>
+<sphinxql>desc test</sphinxql>
+
+<sphinxql>select * from test</sphinxql>
+<sphinxql>select * from test where id=1003</sphinxql>
+<sphinxql>select title from test where match('seven')</sphinxql>
+</sphqueries>
+
+</test>

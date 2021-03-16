@@ -18,6 +18,7 @@
 #define _searchdaemon_
 
 #include "searchdconfig.h"
+#include "memio.h"
 
 /////////////////////////////////////////////////////////////////////////////
 // MACHINE-DEPENDENT STUFF
@@ -1280,7 +1281,7 @@ public:
 	bool IsAutoCommit () const;
 	bool IsInTrans() const;
 
-	QueryProfile_c* StartProfiling ( ESphQueryState );
+	QueryProfile_c * StartProfiling ( ESphQueryState );
 	void SaveLastProfile();
 
 	// manage backend's timeout and variables

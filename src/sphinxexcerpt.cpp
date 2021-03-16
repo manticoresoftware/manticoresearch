@@ -16,12 +16,14 @@
 #include "sphinxquery.h"
 #include "fileutils.h"
 #include "sphinxstem.h"
+#include "coroutine.h"
+#include "memio.h"
 
 #include "snippetfunctor.h"
 #include "snippetindex.h"
 #include "snippetstream.h"
 #include "snippetpassage.h"
-#include "coroutine.h"
+
 
 #include <math.h>
 

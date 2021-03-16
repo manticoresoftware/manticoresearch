@@ -203,7 +203,7 @@ You have gone away'));]]></db_insert>
 <sphinxql><![CDATA[insert into rt values ( 311, '<zoneA>I like this.</zoneA> Sweet of &#4; this.', 4 )]]></sphinxql>
 
 <sphinxql> select * from rt where match (' one SENTENCE two' ) </sphinxql>
-<sphinxql> select * from rt where match (' one SENTENCE two three' ) </sphinxql>
+<sphinxql> select * from rt where match (' one SENTENCE two three' ) order by weight() desc, id asc</sphinxql>
 <sphinxql> select * from rt where match (' one SENTENCE two SENTENCE three' ) </sphinxql>
 <sphinxql> select * from rt where match (' "one two" SENTENCE three' ) </sphinxql>
 <sphinxql> select * from rt where match (' zam SENTENCE ram' ) </sphinxql>
@@ -220,11 +220,11 @@ You have gone away'));]]></db_insert>
 <sphinxql> select * from rt where match (' ZONE:zoneC kings and ships' ) </sphinxql>
 <sphinxql> select * from rt where match (' ZONE:(zoneA,zoneB) sweet disagree' ) </sphinxql>
 <sphinxql> select * from rt where match (' "Who am I" ' ) </sphinxql>
-<sphinxql> select * from rt where match (' "of this" ' ) </sphinxql>
+<sphinxql> select * from rt where match (' "of this" ' ) order by weight() desc, id asc</sphinxql>
 <sphinxql> select * from rt where match (' ZONE:zoneA "like this" ' ) </sphinxql>
 
 <!-- regression for hit sorting in SENTENCE -->
-<sphinxql> select * from rt where match (' one SENTENCE one' ) </sphinxql>
+<sphinxql> select * from rt where match (' one SENTENCE one' ) order by weight() desc, id asc</sphinxql>
 
 </sphqueries>
 

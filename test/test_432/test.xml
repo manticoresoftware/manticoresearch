@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>columnar attributes vs xmlpipe</name>
+
+<requires>
+<columnar/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source src1
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data1.xml
+}
+
+index test
+{
+	source			= src1
+	path			= <data_path/>/test
+	columnar_attrs 	= title, gid
+}
+
+</config>
+
+<sphqueries>
+
+<sphinxql>desc test</sphinxql>
+<sphinxql>select * from test order by id asc</sphinxql>
+
+</sphqueries>
+
+</test>

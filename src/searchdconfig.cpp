@@ -848,11 +848,11 @@ bool CopyExternalIndexFiles ( const StrVec_t & dFiles, const CSphString & sDestP
 }
 
 
-static CSphIndex * TryToPreallocRt ( const CSphString & sIndex, const CSphString & sNewIndexPath, CSphString & sError )
+static CSphIndex * TryToPreallocRt ( const CSphString & sIndex, const CSphString & sNewIndexPath, StrVec_t & dWarnings, CSphString & sError )
 {
 	CSphSchema tSchemaStub;
 	CSphScopedPtr<RtIndex_i> pRT ( sphCreateIndexRT ( tSchemaStub, sIndex.cstr(), 32*1024*1024, sNewIndexPath.cstr(), true ) );
-	if ( !pRT->Prealloc ( false, nullptr ) )
+	if ( !pRT->Prealloc ( false, nullptr, dWarnings ) )
 	{
 		sError.SetSprintf ( "failed to prealloc: %s", pRT->GetLastError().cstr() );
 		return nullptr;
@@ -862,11 +862,11 @@ static CSphIndex * TryToPreallocRt ( const CSphString & sIndex, const CSphString
 }
 
 
-static CSphIndex * TryToPreallocPq ( const CSphString & sIndex, const CSphString & sNewIndexPath, CSphString & sError )
+static CSphIndex * TryToPreallocPq ( const CSphString & sIndex, const CSphString & sNewIndexPath, StrVec_t & dWarnings, CSphString & sError )
 {
 	CSphSchema tSchemaStub;
 	CSphScopedPtr<PercolateIndex_i> pPQ ( CreateIndexPercolate ( tSchemaStub, sIndex.cstr(), sNewIndexPath.cstr() ) );
-	if ( !pPQ->Prealloc ( false, nullptr ) )
+	if ( !pPQ->Prealloc ( false, nullptr, dWarnings ) )
 	{
 		sError.SetSprintf ( "failed to prealloc: %s", pPQ->GetLastError().cstr() );
 		return nullptr;
@@ -879,15 +879,15 @@ static CSphIndex * TryToPreallocPq ( const CSphString & sIndex, const CSphString
 }
 
 
-static bool CopyExternalFiles ( const CSphString & sIndex, const CSphString & sNewIndexPath, StrVec_t & dCopied, bool & bPQ, CSphString & sError )
+static bool CopyExternalFiles ( const CSphString & sIndex, const CSphString & sNewIndexPath, StrVec_t & dCopied, bool & bPQ, StrVec_t & dWarnings, CSphString & sError )
 {
 	bPQ = false;
 
 	CSphString sRtError, sPqError;
-	CSphScopedPtr<CSphIndex> pIndex ( TryToPreallocRt ( sIndex, sNewIndexPath, sRtError ) );
+	CSphScopedPtr<CSphIndex> pIndex ( TryToPreallocRt ( sIndex, sNewIndexPath, dWarnings, sRtError ) );
 	if ( !pIndex )
 	{
-		pIndex = TryToPreallocPq ( sIndex, sNewIndexPath, sPqError );
+		pIndex = TryToPreallocPq ( sIndex, sNewIndexPath, dWarnings, sPqError );
 		if ( !pIndex )
 		{
 			sError = sRtError;
@@ -935,7 +935,7 @@ private:
 
 
 
-bool CopyIndexFiles ( const CSphString & sIndex, const CSphString & sPathToIndex, bool & bPQ, CSphString & sError )
+bool CopyIndexFiles ( const CSphString & sIndex, const CSphString & sPathToIndex, bool & bPQ, StrVec_t & dWarnings, CSphString & sError )
 {
 	CSphString sPath, sNewIndexPath;
 	if ( !PrepareDirForNewIndex ( sPath, sNewIndexPath, sIndex, sError ) )
@@ -975,7 +975,7 @@ bool CopyIndexFiles ( const CSphString & sIndex, const CSphString & sPathToIndex
 		dCopied.Add(sDest);
 	}
 
-	if ( !CopyExternalFiles ( sIndex, sNewIndexPath, dCopied, bPQ, sError ) )
+	if ( !CopyExternalFiles ( sIndex, sNewIndexPath, dCopied, bPQ, dWarnings, sError ) )
 		return false;
 
 	tCleanup.Ok();

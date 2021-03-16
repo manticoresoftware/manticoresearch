@@ -85,18 +85,18 @@ INSERT INTO `test_table` VALUES
 <sphinxql>insert into rt (id, idd1, body) values ( 16, 11, 'a dog' )</sphinxql>
 
 <sphinxql>select * from plain</sphinxql>
-<sphinxql>select * from rt</sphinxql>
-<sphinxql>select * from both</sphinxql>
+<sphinxql>select * from rt order by id asc</sphinxql>
+<sphinxql>select * from both order by id asc</sphinxql>
 <sphinxql>select * from both where match ('a')</sphinxql>
-<sphinxql>select * from both where match ('bird')</sphinxql>
-<sphinxql>select * from both where idd1=11</sphinxql>
-<sphinxql>select * from both where idd1!=11</sphinxql>
-<sphinxql>select * from both where match ('bird') and idd1!=11</sphinxql>
-<sphinxql>select * from both where idd1!=10</sphinxql>
+<sphinxql>select * from both where match ('bird') order by weight() desc, id asc</sphinxql>
+<sphinxql>select * from both where idd1=11 order by id asc</sphinxql>
+<sphinxql>select * from both where idd1!=11 order by id asc</sphinxql>
+<sphinxql>select * from both where match ('bird') and idd1!=11 order by weight() desc, id asc</sphinxql>
+<sphinxql>select * from both where idd1!=10 order by id asc</sphinxql>
 
 <!-- regression stopwords missed on disk chunk save (either regular or forced) -->
 <sphinxql>flush ramchunk rt</sphinxql>
-<sphinxql>select * from rt where match ('a bird')</sphinxql>
+<sphinxql>select * from rt where match ('a bird') order by weight() desc, id asc</sphinxql>
 <sphinxql>call keywords ('a bird', 'rt', 1)</sphinxql>
 </sphqueries>
 

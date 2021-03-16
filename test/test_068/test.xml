@@ -228,7 +228,7 @@ index idx_large
 <query index="csv2">another</query>
 <query index="csv2">my</query>
 <!-- regression tail hits from ext-conditional node -->
-<query index="idx51" mode="extended2">^go | go$</query>
+<query index="idx51" mode="extended2" sortmode="extended" sortby="@weight desc, id asc">^go | go$</query>
 <!-- document end (^Z) at data source  -->
 <query index="tsv_spec" mode="extended2">"test one"</query>
 <query index="csv_spec" mode="extended2">"test one"</query>

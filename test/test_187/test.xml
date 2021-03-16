@@ -264,7 +264,7 @@ INSERT INTO test_table VALUES
 <!-- regression attach to existed RT index -->
 <sphinxql>INSERT INTO rt1 ( id, gid, title, body ) VALUES ( 1, 22, 'dust me', 'well' ), ( 5, 22, 'dure me', 'thee off' ), ( 6, 22, 'dub me', 'thee well' )</sphinxql>
 <sphinxql>ATTACH INDEX a1 TO RTINDEX rt1</sphinxql>
-<sphinxql>SELECT * FROM rt1</sphinxql>
+<sphinxql>SELECT * FROM rt1 order by id asc</sphinxql>
 <sphinxql>SELECT * FROM rt1 WHERE MATCH('well')</sphinxql>
 <sphinxql>SELECT * FROM rt1 WHERE MATCH('me | thee')</sphinxql>
 

@@ -80,7 +80,13 @@ enum ESphExprCommand
 	SPH_EXPR_SET_EXTRA_DATA,
 	SPH_EXPR_GET_DEPENDENT_COLS, ///< used to determine proper evaluating stage
 	SPH_EXPR_GET_UDF,
-	SPH_EXPR_SET_ITERATOR,		///< set link between JsonIn expr and iterator
+
+#if USE_COLUMNAR
+	SPH_EXPR_SET_COLUMNAR,
+	SPH_EXPR_GET_COLUMNAR_COL,
+#endif 
+
+	SPH_EXPR_SET_ITERATOR		///< set link between JsonIn expr and iterator
 };
 
 /// expression evaluator
@@ -107,6 +113,9 @@ public:
 	/// Evaluate string as a packed data ptr attr. By default it re-packs StringEval result, but can be overridden
 	virtual const BYTE * StringEvalPacked ( const CSphMatch & tMatch ) const;
 
+	/// return string len without calculating/fetching the string (if supported)
+	virtual int StringLenEval ( const CSphMatch & tMatch ) const { return -1; }
+
 	/// evaluate MVA attr
 	virtual ByteBlob_t MvaEval ( const CSphMatch & ) const { assert( 0 ); return {nullptr, 0}; }
 
@@ -120,8 +129,10 @@ public:
 	/// FIXME? replace with a single GetType() call?
 	virtual bool IsArglist () const { return false; }
 
+	/// was this expression spawned in place of a columnar attr?
+	virtual bool IsColumnar() const { return false; }
+
 	/// check for stringptr subtype
-	/// FIXME? replace with a single GetType() call?
 	virtual bool IsDataPtrAttr () const { return false; }
 
 	/// get Nth arg of an arglist
@@ -214,7 +225,7 @@ struct ISphExprHook
 	/// create node by OID
 	/// pEvalStage is an optional out-parameter
 	/// hook may fill it, but that is *not* required
-	virtual ISphExpr * CreateNode ( int iID, ISphExpr * pLeft, ESphEvalStage * pEvalStage, CSphString & sError ) = 0;
+	virtual ISphExpr * CreateNode ( int iID, ISphExpr * pLeft, ESphEvalStage * pEvalStage, bool * pNeedDocIds, CSphString & sError ) = 0;
 
 	/// get identifier return type by OID
 	virtual ESphAttr GetIdentType ( int iID ) const = 0;
@@ -306,11 +317,18 @@ struct ExprParseArgs_t
 	DWORD *				m_pPackedFactorsFlags = nullptr;
 	ESphEvalStage *		m_pEvalStage = nullptr;
 	DWORD *				m_pStoredField = nullptr;
+	bool *				m_pNeedDocIds = nullptr;
 };
 
 ISphExpr * sphExprParse ( const char * sExpr, const ISphSchema & tSchema, CSphString & sError, ExprParseArgs_t & tArgs );
 
 ISphExpr * sphJsonFieldConv ( ISphExpr * pExpr );
+
+#if USE_COLUMNAR
+ISphExpr * CreateGetColumnarIntExpr ( const CSphString & sName, int iLocator );
+ISphExpr * CreateGetColumnarFloatExpr ( const CSphString & sName, int iLocator );
+ISphExpr * CreateGetColumnarStrExpr ( const CSphString & sName, int iLocator );
+#endif
 
 void SetExprNodeStackItemSize ( int iSize );
 

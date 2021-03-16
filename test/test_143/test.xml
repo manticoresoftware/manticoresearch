@@ -222,17 +222,17 @@ INSERT INTO `test_table` VALUES
 <sphinxql>select id, SNIPPET('something', snip2) from snip2</sphinxql>
 
 <!-- regression SNIPPET expression from distributed index -->
-<sphinxql>select *, SNIPPET('body as las void', 'las') from dist3</sphinxql>
-<sphinxql>select *, SNIPPET(body, 'las') from dist3</sphinxql>
+<sphinxql>select *, SNIPPET('body as las void', 'las') from dist3 order by id asc</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'las') from dist3 order by id asc</sphinxql>
 <sphinxql>select *, SNIPPET('body as las void', 'las') from dist2</sphinxql>
 <sphinxql>select *, SNIPPET(body, 'las') from dist2</sphinxql>
-<sphinxql>select *, SNIPPET('body as las void', 'las') from dist1</sphinxql>
-<sphinxql>select *, SNIPPET(body, 'las') from dist1</sphinxql>
+<sphinxql>select *, SNIPPET('body as las void', 'las') from dist1 order by id asc</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'las') from dist1 order by id asc</sphinxql>
 <sphinxql>select *, SNIPPET(body, 'cas') from dist2</sphinxql>
-<sphinxql>select *, SNIPPET(body, 'cas') from dist1</sphinxql>
-<sphinxql>select *, SNIPPET(body, 'las') from dist11</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'cas') from dist1 order by id asc</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'las') from dist11 order by id asc</sphinxql>
 <sphinxql>select *, SNIPPET(body, 'las') from dist12</sphinxql>
-<sphinxql>select *, SNIPPET(body, 'las') from dist13</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'las') from dist13 order by id asc</sphinxql>
 <sphinxql>select id, body, SNIPPET(body, '','allow_empty=1', 'query_mode=1') from snip2</sphinxql>
 <sphinxql>select id, body, SNIPPET(body, '','allow_empty=0', 'query_mode=1') from snip2</sphinxql>
 
@@ -256,13 +256,13 @@ INSERT INTO `test_table` VALUES
 <sphinxql>CALL SNIPPETS('17 64 15 dou true 1 12 11 11 11 11', 'test_milti', '"time3 for"', 1 AS query_mode, 25 as limit )</sphinxql>
 <sphinxql>CALL SNIPPETS('17 64 15 dou true 1 12 11 11 11 11', 'test_milti', '"time3 for"', 1 AS query_mode, 0 as limit )</sphinxql>
 
-<sphinxql>select *, SNIPPET(body, 'las') from dist_all1</sphinxql>
-<sphinxql>select *, SNIPPET(body, 'las') from dist_all1 limit 1,2</sphinxql>
-<sphinxql>select *, SNIPPET(body, 'las') from dist_all1 limit 0,2</sphinxql>
-<sphinxql>select *, SNIPPET(body, 'las') from dist_all2 limit 0,20</sphinxql>
-<sphinxql>select *, SNIPPET(body, 'las') from dist_all2 limit 10,20</sphinxql>
-<sphinxql>select *, SNIPPET(body, 'las') from dist_all2 limit 20,20</sphinxql>
-<sphinxql>select *, SNIPPET(body, 'las') from dist_all2 limit 20,2</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'las') from dist_all1 order by id asc</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'las') from dist_all1 order by id asc limit 1,2</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'las') from dist_all1 order by id asc limit 0,2</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'las') from dist_all2 order by id asc limit 0,20</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'las') from dist_all2 order by id asc limit 10,20</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'las') from dist_all2 order by id asc limit 20,20</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'las') from dist_all2 order by id asc limit 20,2</sphinxql>
 
 </sphqueries>
 

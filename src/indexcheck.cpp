@@ -183,7 +183,7 @@ void DebugCheckHelper_c::DebugCheck_Attributes ( DebugCheckReader_i & tAttrs, De
 			tReporter.Fail ( "schema has blob attrs, but blob file is empty" );
 
 		for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
-			if ( sphIsBlobAttr(  tSchema.GetAttr(i).m_eAttrType ) )
+			if ( sphIsBlobAttr ( tSchema.GetAttr(i) ) )
 				nBlobAttrs++;
 	} else
 	{

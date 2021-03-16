@@ -307,6 +307,8 @@ else ( WIN32 )
 			add_definitions ( "-DNDEBUG" )
 		endif ()
 
+		set ( CFLAGS "${CFLAGS} -msse4.1" )
+
 		option ( STATIC_BINARY "Produce statically linked ELF" OFF)
 		if ( STATIC_BINARY )
 			set ( CFLAGS "${CFLAGS} -static")
@@ -596,6 +598,15 @@ if ( WITH_ICU )
 	endif()
 endif ( WITH_ICU )
 
+# Check for Columnar build
+message ( STATUS "Option WITH_COLUMNAR ${WITH_COLUMNAR}" )
+option ( WITH_COLUMNAR "compile with Columnar library support" ON )
+if ( WITH_COLUMNAR )
+	include ( GetColumnar )
+	if (HAVE_COLUMNAR)
+		set ( USE_COLUMNAR 1 )
+	endif ()
+endif ( WITH_COLUMNAR )
 
 find_package(Valgrind)
 

@@ -950,8 +950,10 @@ sphinx_bool sphinx_set_query_flags ( sphinx_client * client, const char * flag_n
 
 	if ( strcmp ( flag_name, "reverse_scan")==0 )
 	{
-		set_bit ( &client->query_flags, 0, enabled );
-	} else if ( strcmp ( flag_name, "sort_method_kbuffer")==0 )
+		set_error ( client, "reverse_scan is deprecated" );
+		return SPH_FALSE;
+	}
+	else if ( strcmp ( flag_name, "sort_method_kbuffer")==0 )
 	{
 			set_bit ( &client->query_flags, 1, enabled );
 	} else if ( strcmp ( flag_name, "max_predicted_time")==0 )

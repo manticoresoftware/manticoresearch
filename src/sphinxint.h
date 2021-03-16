@@ -21,6 +21,7 @@
 #include "sphinxudf.h"
 #include "sphinxjsonquery.h"
 #include "sphinxutils.h"
+#include "fileio.h"
 
 #include <float.h>
 
@@ -42,7 +43,7 @@ inline const char * strerrorm ( int errnum )
 //////////////////////////////////////////////////////////////////////////
 
 const DWORD		INDEX_MAGIC_HEADER			= 0x58485053;		///< my magic 'SPHX' header
-const DWORD		INDEX_FORMAT_VERSION		= 60;				///< my format version
+const DWORD		INDEX_FORMAT_VERSION		= 61;				///< my format version
 
 const char		MAGIC_SYNONYM_WHITESPACE	= 1;				// used internally in tokenizer only
 const char		MAGIC_CODE_SENTENCE			= 2;				// emitted from tokenizer on sentence boundary
@@ -82,112 +83,6 @@ extern bool g_bJsonKeynamesToLowercase;
 // INTERNAL HELPER FUNCTIONS, CLASSES, ETC
 //////////////////////////////////////////////////////////////////////////
 
-#define SPH_QUERY_STATES \
-	SPH_QUERY_STATE ( UNKNOWN,		"unknown" ) \
-	SPH_QUERY_STATE ( NET_READ,		"net_read" ) \
-	SPH_QUERY_STATE ( IO,			"io" ) \
-	SPH_QUERY_STATE ( DIST_CONNECT,	"dist_connect" ) \
-	SPH_QUERY_STATE ( LOCAL_DF,		"local_df" ) \
-	SPH_QUERY_STATE ( LOCAL_SEARCH,	"local_search" ) \
-	SPH_QUERY_STATE ( SQL_PARSE,	"sql_parse" ) \
-	SPH_QUERY_STATE ( FULLSCAN,		"fullscan" ) \
-	SPH_QUERY_STATE ( DICT_SETUP,	"dict_setup" ) \
-	SPH_QUERY_STATE ( PARSE,		"parse" ) \
-	SPH_QUERY_STATE ( TRANSFORMS,	"transforms" ) \
-	SPH_QUERY_STATE ( INIT,			"init" ) \
-	SPH_QUERY_STATE ( INIT_SEGMENT,	"init_segment" ) \
-	SPH_QUERY_STATE ( OPEN,			"open" ) \
-	SPH_QUERY_STATE ( READ_DOCS,	"read_docs" ) \
-	SPH_QUERY_STATE ( READ_HITS,	"read_hits" ) \
-	SPH_QUERY_STATE ( GET_DOCS,		"get_docs" ) \
-	SPH_QUERY_STATE ( GET_HITS,		"get_hits" ) \
-	SPH_QUERY_STATE ( FILTER,		"filter" ) \
-	SPH_QUERY_STATE ( RANK,			"rank" ) \
-	SPH_QUERY_STATE ( QCACHE_UP,	"qcache_update" ) \
-	SPH_QUERY_STATE ( QCACHE_FINAL,	"qcache_final" ) \
-	SPH_QUERY_STATE ( SORT,			"sort" ) \
-	SPH_QUERY_STATE ( FINALIZE,		"finalize" ) \
-	SPH_QUERY_STATE ( DYNAMIC,		"clone_attrs" ) \
-	SPH_QUERY_STATE ( DIST_WAIT,	"dist_wait" ) \
-	SPH_QUERY_STATE ( AGGREGATE,	"aggregate" ) \
-	SPH_QUERY_STATE ( NET_WRITE,	"net_write" ) \
-	SPH_QUERY_STATE ( EVAL_POST,	"eval_post" ) \
-	SPH_QUERY_STATE ( EVAL_GETFIELD,"eval_getfield" ) \
-	SPH_QUERY_STATE ( SNIPPET,		"eval_snippet" ) \
-	SPH_QUERY_STATE ( EVAL_UDF,		"eval_udf" ) \
-	SPH_QUERY_STATE ( TABLE_FUNC,	"table_func" )
-
-
-/// possible query states, used for profiling
-enum ESphQueryState
-{
-	SPH_QSTATE_INFINUM = -1,
-
-#define SPH_QUERY_STATE(_name,_desc) SPH_QSTATE_##_name,
-	SPH_QUERY_STATES
-#undef SPH_QUERY_STATE
-
-	SPH_QSTATE_TOTAL
-};
-STATIC_ASSERT ( SPH_QSTATE_UNKNOWN==0, BAD_QUERY_STATE_ENUM_BASE );
-
-/// search query profile
-class QueryProfile_c
-{
-public:
-	ESphQueryState	m_eState;							///< current state
-	int64_t			m_tmStamp;							///< timestamp when we entered the current state
-
-	int				m_dSwitches [ SPH_QSTATE_TOTAL+1 ];	///< number of switches to given state
-	int64_t			m_tmTotal [ SPH_QSTATE_TOTAL+1 ];	///< total time spent per state
-	CSphVector<BYTE>	m_dPlan; 						///< bson with plan
-
-	/// create empty and stopped profile
-	QueryProfile_c ()
-	{
-		Start ( SPH_QSTATE_TOTAL );
-	}
-
-	/// switch to a new query state, and record a timestamp
-	/// returns previous state, to simplify Push/Pop like scenarios
-	ESphQueryState Switch ( ESphQueryState eNew )
-	{
-		int64_t tmNow = sphMicroTimer();
-		ESphQueryState eOld = m_eState;
-		++m_dSwitches [ eOld ];
-		m_tmTotal [ eOld ] += tmNow - m_tmStamp;
-		m_eState = eNew;
-		m_tmStamp = tmNow;
-		return eOld;
-	}
-
-	/// reset everything and start profiling from a given state
-	void Start ( ESphQueryState eNew )
-	{
-		memset ( m_dSwitches, 0, sizeof(m_dSwitches) );
-		memset ( m_tmTotal, 0, sizeof(m_tmTotal) );
-		m_eState = eNew;
-		m_tmStamp = sphMicroTimer();
-	}
-
-	void AddMetric ( const QueryProfile_c& tData )
-	{
-		// fixme! m.b. invent a way to display data from different profilers with kind of multiplier?
-		for ( int i = 0; i<SPH_QSTATE_TOTAL; ++i )
-		{
-			m_dSwitches[i] += tData.m_dSwitches[i];
-			m_tmTotal[i] += tData.m_tmTotal[i];
-		}
-	}
-
-	/// stop profiling
-	void Stop()
-	{
-		Switch ( SPH_QSTATE_TOTAL );
-	}
-	void			BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const StrVec_t & dZones );
-};
-
 // shorter names for more compact bson
 #define SZ_TYPE				"a"
 #define SZ_VIRTUALLY_PLAIN	"b"
@@ -205,403 +100,6 @@ public:
 #define SZ_BOOST			"n"
 #define SZ_ZONES            "o"
 #define SZ_ZONESPANS        "p"
-
-// acquire common pattern 'check, then switch if not null'
-inline void SwitchProfile ( QueryProfile_c* pProfile, ESphQueryState eState )
-{
-	if ( pProfile )
-		pProfile->Switch ( eState );
-}
-
-
-class CSphScopedProfile
-{
-private:
-	QueryProfile_c *	m_pProfile;
-	ESphQueryState		m_eOldState;
-
-public:
-	explicit CSphScopedProfile ( QueryProfile_c * pProfile, ESphQueryState eNewState )
-	{
-		m_pProfile = pProfile;
-		m_eOldState = SPH_QSTATE_UNKNOWN;
-		if ( m_pProfile )
-			m_eOldState = m_pProfile->Switch ( eNewState );
-	}
-
-	~CSphScopedProfile()
-	{
-		if ( m_pProfile )
-			m_pProfile->Switch ( m_eOldState );
-	}
-};
-
-
-/// file writer with write buffering and int encoder
-class CSphWriter : ISphNoncopyable
-{
-public:
-	virtual			~CSphWriter ();
-
-	void			SetBufferSize ( int iBufferSize );	///< tune write cache size; must be called before OpenFile() or SetFile()
-
-	bool			OpenFile ( const CSphString & sName, CSphString & sError );
-	void			SetFile ( CSphAutofile & tAuto, SphOffset_t * pSharedOffset, CSphString & sError );
-	void			CloseFile ( bool bTruncate = false );	///< note: calls Flush(), ie. IsError() might get true after this call
-	void			UnlinkFile (); /// some shit happened (outside) and the file is no more actual.
-
-	void			PutByte ( BYTE uValue );
-	void			PutBytes ( const void * pData, int64_t iSize );
-	void			PutWord ( WORD uValue ) { PutBytes ( &uValue, sizeof(WORD) ); }
-	void			PutDword ( DWORD uValue ) { PutBytes ( &uValue, sizeof(DWORD) ); }
-	void			PutOffset ( SphOffset_t uValue ) { PutBytes ( &uValue, sizeof(SphOffset_t) ); }
-	void			PutString ( const char * szString );
-	void			PutString ( const CSphString & sString );
-	void			Tag ( const char * sTag );
-
-	void			SeekTo ( SphOffset_t iPos, bool bTruncate = false );
-
-	void			ZipInt ( DWORD uValue );
-	void			ZipOffset ( uint64_t uValue );
-
-	bool			IsError () const	{ return m_bError; }
-	SphOffset_t		GetPos () const		{ return m_iPos; }
-
-	virtual void	Flush ();
-
-protected:
-	CSphString		m_sName;
-	SphOffset_t		m_iPos = -1;
-	SphOffset_t		m_iDiskPos = 0;
-
-	int				m_iFD = -1;
-	int				m_iPoolUsed = 0;
-	BYTE *			m_pBuffer = nullptr;
-	BYTE *			m_pPool = nullptr;
-	bool			m_bOwnFile = false;
-	SphOffset_t	*	m_pSharedOffset = nullptr;
-	int				m_iBufferSize = 262144;
-
-	bool			m_bError = false;
-	CSphString *	m_pError = nullptr;
-
-private:
-	void			UpdatePoolUsed();
-};
-
-
-/// file which closes automatically when going out of scope
-class CSphAutofile : ISphNoncopyable
-{
-protected:
-	int			m_iFD = -1;					///< my file descriptor
-	CSphString	m_sFilename;				///< my file name
-	bool		m_bTemporary = false;		///< whether to unlink this file on Close()
-	bool		m_bWouldTemporary = false;	///< backup of the m_bTemporary
-
-	CSphIndexProgress *	m_pStat = nullptr;
-
-public:
-					CSphAutofile () = default;
-					CSphAutofile ( const CSphString & sName, int iMode, CSphString & sError, bool bTemp=false );
-					~CSphAutofile ();
-
-	int				Open ( const CSphString & sName, int iMode, CSphString & sError, bool bTemp=false );
-	void			Close ();
-	void			SetTemporary(); ///< would be set if a shit happened and the file is not actual.
-	int				GetFD () const { return m_iFD; }
-	const char *	GetFilename () const;
-	SphOffset_t		GetSize ( SphOffset_t iMinSize, bool bCheckSizeT, CSphString & sError );
-	SphOffset_t		GetSize ();
-
-	bool			Read ( void * pBuf, int64_t iCount, CSphString & sError );
-	void			SetProgressCallback ( CSphIndexProgress * pStat );
-};
-
-
-/// file reader with read buffering and int decoder
-class CSphReader
-{
-public:
-	QueryProfile_c *	m_pProfile = nullptr;
-	ESphQueryState		m_eProfileState { SPH_QSTATE_IO };
-
-public:
-	CSphReader ( BYTE * pBuf=NULL, int iSize=0 );
-	virtual		~CSphReader ();
-
-	void		SetBuffers ( int iReadBuffer, int iReadUnhinted );
-	void		SetFile ( int iFD, const char * sFilename );
-	void		SetFile ( const CSphAutofile & tFile );
-	void		Reset ();
-	void		SeekTo ( SphOffset_t iPos, int iSizeHint );
-
-	void		SkipBytes ( int iCount );
-	SphOffset_t	GetPos () const { return m_iPos+m_iBuffPos; }
-
-	void		GetBytes ( void * pData, int iSize );
-	int			GetBytesZerocopy ( const BYTE ** ppData, int64_t iMax ); ///< zerocopy method; returns actual length present in buffer (upto iMax)
-
-	int			GetByte ();
-	DWORD		GetDword ();
-	SphOffset_t	GetOffset ();
-	CSphString	GetString ();
-	int			GetLine ( char * sBuffer, int iMaxLen );
-	bool		Tag ( const char * sTag );
-
-	DWORD		UnzipInt ();
-	uint64_t	UnzipOffset ();
-
-	bool					GetErrorFlag () const		{ return m_bError; }
-	const CSphString &		GetErrorMessage () const	{ return m_sError; }
-	const CSphString &		GetFilename() const			{ return m_sFilename; }
-	int						GetBufferSize() const		{ return m_iBufSize; }
-	void					ResetError();
-
-	RowID_t		UnzipRowid ()	{ return UnzipInt(); }
-	SphWordID_t	UnzipWordid ()	{ return UnzipOffset(); }
-
-	CSphReader &	operator = ( const CSphReader & rhs );
-
-protected:
-	int			m_iFD = -1;
-	CSphString m_sFilename;
-	int			m_iBuffUsed = 0;	///< how many bytes in buffer are valid
-
-	SphOffset_t	m_iPos = 0;			///< position in the file from witch m_pBuff starts
-	BYTE *		m_pBuff;            ///< the buffer
-	int			m_iBuffPos = 0;		///< position in the buffer. (so pos in file is m_iPos + m_iBuffPos)
-
-
-private:
-	int			m_iSizeHint = 0;	///< how much do we expect to read (>=m_iReadUnhinted)
-
-	int			m_iBufSize;
-	bool		m_bBufOwned = false;
-	int			m_iReadUnhinted;	///< how much to read if no hint provided.
-
-	bool		m_bError = false;
-	CSphString	m_sError;
-
-
-protected:
-	virtual void		UpdateCache ();
-};
-
-/// file reader
-class FileReader_c: public CSphReader
-{
-public:
-	explicit FileReader_c ( BYTE* pBuf = nullptr, int iSize = 0 )
-		: CSphReader ( pBuf, iSize )
-	{}
-
-	SphOffset_t GetFilesize () const;
-
-	// added for DebugCheck()
-	int GetFD () const { return m_iFD; }
-};
-
-/// scoped file reader
-class CSphAutoreader : public FileReader_c
-{
-public:
-	CSphAutoreader ( BYTE * pBuf=nullptr, int iSize=0 ) : FileReader_c ( pBuf, iSize ) {}
-	~CSphAutoreader () override { Close(); }
-
-	bool		Open ( const CSphString & sFilename, CSphString & sError );
-	void		Close ();
-};
-
-class MemoryReader_c
-{
-public:
-	MemoryReader_c ( const BYTE * pData, int iLen )
-		: m_pData ( pData )
-		, m_iLen ( iLen )
-		, m_pCur ( pData )
-	{}
-
-	explicit MemoryReader_c ( ByteBlob_t dData )
-		: m_pData ( dData.first )
-		, m_iLen ( dData.second )
-		, m_pCur ( dData.first ) {}
-
-	int GetPos()
-	{
-		return ( m_pCur - m_pData );
-	}
-
-	void SetPos ( int iOff )
-	{
-		assert ( iOff>=0 && iOff<=m_iLen );
-		m_pCur = m_pData + iOff;
-	}
-
-	uint64_t UnzipOffset();
-	DWORD UnzipInt();
-
-	CSphString GetString()
-	{
-		CSphString sRes;
-		DWORD iLen = GetDword();
-		if ( iLen )
-		{
-			sRes.Reserve ( iLen );
-			GetBytes ( (BYTE *)sRes.cstr(), iLen );
-		}
-
-		return sRes;
-	}
-
-	DWORD GetDword()
-	{
-		DWORD uRes = 0;
-		GetBytes ( &uRes, sizeof(uRes) );
-		return uRes;
-	}
-
-	WORD GetWord()
-	{
-		WORD uRes = 0;
-		GetBytes ( &uRes, sizeof(uRes) );
-		return uRes;
-	}
-
-	void GetBytes ( void * pData, int iLen )
-	{
-		if ( !iLen )
-			return;
-
-		assert ( m_pCur );
-		assert ( m_pCur<m_pData+m_iLen );
-		assert ( m_pCur+iLen<=m_pData+m_iLen );
-		memcpy ( pData, m_pCur, iLen );
-		m_pCur += iLen;
-	}
-
-	BYTE GetByte()
-	{
-		BYTE uVal = 0;
-		GetBytes ( &uVal, sizeof(uVal) );
-		return uVal;
-	}
-
-	uint64_t GetUint64()
-	{
-		uint64_t uVal;
-		GetBytes ( &uVal, sizeof(uVal) );
-		return uVal;
-	}
-
-	const BYTE * Begin() const
-	{
-		return m_pData;
-	}
-
-	int GetLength() const
-	{
-		return m_iLen;
-	}
-
-protected:
-	const BYTE *	m_pData = nullptr;
-	const int		m_iLen = 0;
-	const BYTE *	m_pCur = nullptr;
-};
-
-class MemoryWriter_c
-{
-public:
-	MemoryWriter_c ( CSphVector<BYTE> & dBuf )
-		: m_dBuf ( dBuf )
-	{}
-
-	int GetPos()
-	{
-		return m_dBuf.GetLength();
-	}
-
-	void ZipOffset ( uint64_t uVal );
-	void ZipInt ( DWORD uVal );
-
-	void PutString ( const CSphString & sVal )
-	{
-		int iLen = sVal.Length();
-		PutDword ( iLen );
-		if ( iLen )
-			PutBytes ( (const BYTE *)sVal.cstr(), iLen );
-	}
-
-	void PutString ( const char * sVal )
-	{
-		int iLen = 0;
-		if ( sVal )
-			iLen = (int) strlen ( sVal );
-		PutDword ( iLen );
-		if ( iLen )
-			PutBytes ( (const BYTE *)sVal, iLen );
-	}
-
-	void PutDword ( DWORD uVal )
-	{
-		PutBytes ( (BYTE *)&uVal, sizeof(uVal) );
-	}
-
-	void PutWord ( WORD uVal )
-	{
-		PutBytes ( (BYTE *)&uVal, sizeof(uVal) );
-	}
-
-	void PutBytes ( const void * pData, int iLen )
-	{
-		if ( !iLen )
-			return;
-
-		BYTE * pCur = m_dBuf.AddN ( iLen );
-		memcpy ( pCur, pData, iLen );
-	}
-
-	void PutByte ( BYTE uVal )
-	{
-		m_dBuf.Add ( uVal );
-	}
-
-	void PutUint64 ( uint64_t uVal )
-	{
-		PutBytes ( (BYTE *)&uVal, sizeof(uVal) );
-	}
-
-protected:
-	CSphVector<BYTE> & m_dBuf;
-};
-
-// fixme: get rid of this
-class MemoryReader2_c : public MemoryReader_c
-{
-public:
-	MemoryReader2_c ( const BYTE * pData, int iLen )
-		: MemoryReader_c ( pData, iLen )
-	{}
-
-	uint64_t UnzipInt() { return sphUnzipInt(m_pCur); }
-	uint64_t UnzipOffset() { return sphUnzipOffset(m_pCur); }
-};
-
-// fixme: get rid of this
-class MemoryWriter2_c : public MemoryWriter_c
-{
-public:
-	MemoryWriter2_c ( CSphVector<BYTE> & dBuf )
-		: MemoryWriter_c ( dBuf )
-	{}
-
-	void ZipOffset ( uint64_t uVal ) { sphZipValue ( [this] ( BYTE b ) { PutByte ( b ); }, uVal ); }
-	void ZipInt ( DWORD uVal ) { sphZipValue ( [this] ( BYTE b ) { PutByte ( b ); }, uVal ); }
-};
-
-
-//////////////////////////////////////////////////////////////////////////
 
 /// generic COM-like uids
 enum ExtraData_e
@@ -681,6 +179,9 @@ public:
 	CSphVector<CalcItem_t>		m_dCalcSort;			///< items to compute for sorting/grouping
 	CSphVector<CalcItem_t>		m_dCalcFinal;			///< items to compute when finalizing result set
 
+	IntVec_t					m_dCalcFilterPtrAttrs;	///< items to free after computing filter stage
+	IntVec_t					m_dCalcSortPtrAttrs;	///< items to free after computing sort stage
+
 	const void *							m_pIndexData = nullptr;	///< backend specific data
 	QueryProfile_c *						m_pProfile = nullptr;
 	const SmallStringHash_T<int64_t> *		m_pLocalDocs = nullptr;
@@ -690,15 +191,23 @@ public:
 
 public:
 	explicit CSphQueryContext ( const CSphQuery & q );
-	~CSphQueryContext ();
+			~CSphQueryContext ();
 
 	void	BindWeights ( const CSphQuery & tQuery, const CSphSchema & tSchema, CSphString & sWarning );
+
+#if USE_COLUMNAR
+	bool	SetupCalc ( CSphQueryResultMeta & tMeta, const ISphSchema & tInSchema, const CSphSchema & tSchema, const BYTE * pBlobPool, const columnar::Columnar_i * pColumnar,
+				const CSphVector<const ISphSchema *> & dInSchemas );
+#else
 	bool	SetupCalc ( CSphQueryResultMeta & tMeta, const ISphSchema & tInSchema, const CSphSchema & tSchema, const BYTE * pBlobPool, const CSphVector<const ISphSchema *> & dInSchemas );
+#endif
+
 	bool	CreateFilters ( CreateFilterContext_t &tCtx, CSphString &sError, CSphString &sWarning );
 
 	void	CalcFilter ( CSphMatch & tMatch ) const;
 	void	CalcSort ( CSphMatch & tMatch ) const;
 	void	CalcFinal ( CSphMatch & tMatch ) const;
+	void	CalcItem ( CSphMatch & tMatch, const CalcItem_t & tCalc ) const;
 
 	void	FreeDataFilter ( CSphMatch & tMatch ) const;
 	void	FreeDataSort ( CSphMatch & tMatch ) const;
@@ -706,11 +215,19 @@ public:
 	// note that RT index bind pools at segment searching, not at time it setups context
 	void	ExprCommand ( ESphExprCommand eCmd, void * pArg );
 	void	SetBlobPool ( const BYTE * pBlobPool );
+
+#if USE_COLUMNAR
+	void	SetColumnar ( const columnar::Columnar_i * pColumnar );
+#endif
+
 	void	SetupExtraData ( ISphRanker * pRanker, ISphMatchSorter * pSorter );
 	void	ResetFilters();
 
 private:
 	CSphVector<UservarIntSet_c>		m_dUserVals;
+
+	void	AddToFilterCalc ( const CalcItem_t & tCalc );
+	void	AddToSortCalc ( const CalcItem_t & tCalc );
 };
 
 
@@ -812,51 +329,6 @@ inline std::pair<DWORD,DWORD> MVA_BE ( const DWORD * pMva )
 	return {pMva[0], pMva[1]};
 #endif
 }
-
-template < typename T >
-bool MvaEval_Any ( const VecTraits_T<const T> & dMvas, const VecTraits_T<const SphAttr_t>& dFilters )
-{
-	if ( dMvas.IsEmpty () || dFilters.IsEmpty ())
-		return false;
-
-	const T * L = dMvas.begin();
-
-	for ( const auto& dFilter : dFilters )
-	{
-		const T * R = &dMvas.Last ();
-		while ( L<=R )
-		{
-			const T * pVal = L + (R - L) / 2;
-			T iValue = sphUnalignedRead ( *pVal );
-			if ( dFilter > iValue )
-				L = pVal + 1;
-			else if ( dFilter < iValue )
-				R = pVal - 1;
-			else
-				return true;
-		}
-	}
-
-	return false;
-}
-
-
-template < typename T >
-bool MvaEval_All ( const VecTraits_T<const T>& dMvas, const VecTraits_T<const SphAttr_t>& dFilters )
-{
-	if ( dMvas.IsEmpty() || dFilters.IsEmpty() )
-		return false;
-
-	for ( const T& dMva : dMvas )
-	{
-		const SphAttr_t iCheck = sphUnalignedRead ( dMva );
-		if ( !dFilters.BinarySearch ( iCheck ) )
-			return false;
-	}
-
-	return true;
-}
-
 
 // FIXME!!! for over INT_MAX attributes
 /// attr min-max builder
@@ -1662,12 +1134,8 @@ public:
 
 const BYTE *	SkipQuoted ( const BYTE * p );
 
-int 			GetStringRemapCount ( const ISphSchema & tDstSchema, const ISphSchema & tSrcSchema );
-bool			IsSortStringInternal ( const CSphString& sColumnName );
 /// make string lowercase but keep case of JSON.field
 void			sphColumnToLowercase ( char * sVal );
-bool			IsSortJsonInternal ( const CSphString& sColumnName );
-CSphString		SortJsonInternalSet ( const CSphString& sColumnName );
 
 // returns 0: query can't be run at all (even hardlimit stack will be exceeded), sError is set.
 // returns -1: query might be run on current frame
@@ -1719,6 +1187,11 @@ enum ESphExt
 	SPH_EXT_SPH,
 	SPH_EXT_SPA,
 	SPH_EXT_SPB,
+
+#if USE_COLUMNAR
+	SPH_EXT_SPC,
+#endif
+
 	SPH_EXT_SPI,
 	SPH_EXT_SPD,
 	SPH_EXT_SPP,
@@ -2397,6 +1870,18 @@ struct SchemaItemVariant_t
 	ESphAttr m_eType = SPH_ATTR_NONE;
 	CSphAttrLocator m_tLoc;
 };
+
+template <typename T>
+inline T ConvertType ( SphAttr_t tValue )
+{
+	return (T)tValue;
+}
+
+template <>
+inline float ConvertType<float>( SphAttr_t tValue )
+{
+	return sphDW2F(tValue);
+}
 
 using SchemaItemHash_c = OpenHash_T<SchemaItemVariant_t, uint64_t, HashFunc_Int64_t>;
 

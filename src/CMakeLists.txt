@@ -11,7 +11,7 @@ set ( LIBSPHINX_SRCS sphinx.cpp sphinxexcerpt.cpp
 		sphinxquery.cpp sphinxsoundex.cpp sphinxmetaphone.cpp
 		sphinxstemen.cpp sphinxstemru.cpp sphinxstemru.inl sphinxstemcz.cpp
 		sphinxstemar.cpp sphinxutils.cpp sphinxstd.cpp
-		sphinxsort.cpp sphinxexpr.cpp sphinxfilter.cpp
+		sphinxsort.cpp sortsetup.cpp sphinxexpr.cpp sphinxfilter.cpp
 		sphinxsearch.cpp sphinxrt.cpp sphinxjson.cpp
 		sphinxaot.cpp sphinxplugin.cpp sphinxudf.c
 		sphinxqcache.cpp sphinxjsonquery.cpp jsonqueryfilter.cpp
@@ -20,7 +20,11 @@ set ( LIBSPHINX_SRCS sphinx.cpp sphinxexcerpt.cpp
 		searchdexpr.cpp snippetfunctor.cpp snippetindex.cpp snippetstream.cpp
 		snippetpassage.cpp threadutils.cpp sphinxversion.cpp indexcheck.cpp
 		datareader.cpp indexformat.cpp indexsettings.cpp fileutils.cpp coroutine.cpp
-		threads_detached.cpp hazard_pointer.cpp task_info.cpp mini_timer.cpp collation.cpp fnv64.cpp dynamic_idx.cpp )
+		threads_detached.cpp hazard_pointer.cpp task_info.cpp mini_timer.cpp
+		fileio.cpp memio.cpp queryprofile.cpp columnarfilter.cpp columnargrouper.cpp
+		columnarlib.cpp collation.cpp fnv64.cpp histogram.cpp
+		threads_detached.cpp hazard_pointer.cpp task_info.cpp mini_timer.cpp
+		dynamic_idx.cpp libutils.cpp )
 set ( INDEXER_SRCS indexer.cpp )
 set ( INDEXTOOL_SRCS indextool.cpp )
 set ( SEARCHD_SRCS_TESTABLE searchdha.cpp http/http_parser.c searchdhttp.cpp
@@ -50,7 +54,9 @@ file ( GLOB HEADERS "sphinx*.h" )
 list ( APPEND HEADERS lz4/lz4.h lz4/lz4hc.h )
 list ( APPEND HEADERS http/http_parser.h )
 list ( APPEND HEADERS secondaryindex.h searchnode.h killlist.h attribute.h accumulator.h global_idf.h optional.h
-		event.h coroutine.h threadutils.h hazard_pointer.h task_info.h mini_timer.h collation.h fnv64.h dynamic_idx.h)
+		event.h coroutine.h threadutils.h hazard_pointer.h task_info.h mini_timer.h collation.h fnv64.h histogram.h
+		sortsetup.h dynamic_idx.h indexsettings.h columnarlib.h )
+list ( APPEND HEADERS fileio.h memio.h queryprofile.h columnarfilter.h columnargrouper.h fileutils.h libutils.h )
 file ( GLOB SEARCHD_H "searchd*.h" "task*.h" )
 list ( APPEND SEARCHD_H net_action_accept.h netreceive_api.h netreceive_http.h
 		netreceive_ql.h netstate_api.h networking_daemon.h optional.h query_status.h compressed_mysql.h sphinxql_debug.h)

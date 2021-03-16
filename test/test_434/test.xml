@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>columnar vs bitfields, timestamps, bools, floats</name>
+
+<requires>
+<columnar/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test1
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query_pre 		= set time_zone='+0:00'
+	sql_query			= select id, content, status, category, kind, kind/100 as flt, kind as flt1, UNIX_TIMESTAMP(timestamp) as date, class, price, code, surface from test_table
+	sql_attr_bool		= status
+	sql_attr_float		= flt
+	sql_attr_float		= flt1
+	sql_attr_uint		= category:2
+	sql_attr_uint		= kind:8
+	sql_attr_timestamp	= date
+}
+
+index test
+{
+	source				= test1
+	path				= <data_path/>/test1
+	columnar_attrs 		= id, status, category, kind, date, flt, flt1
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	content VARCHAR(255) NOT NULL,
+	status INTEGER NOT NULL,
+	category INTEGER NOT NULL,
+	kind INTEGER NOT NULL,
+	timestamp DATE NOT NULL,
+	class INTEGER NOT NULL,
+	price INTEGER NOT NULL,
+	code INTEGER NOT NULL,
+	surface INTEGER NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+<db_insert>
+INSERT INTO test_table VALUES
+( 100, 'This planet has or rather had a problem', 1, 0, 13, '2001-07-04', 14, 15, 16, 17 ),
+( 101, 'which was this: most of the people on it were unhappy for pretty much of the time.', 0, 1, 23, '2002-07-04', 24, 25, 26, 27 ),
+( 102, 'Many solutions were suggested for this problem', 1, 2, 33, '2003-07-04', 34, 35, 36, 37 ),
+( 103, 'but most of these were largely concerned with the movements of small green pieces of paper', 0, 0, 43, '2004-07-04', 44, 45, 46, 47 )
+</db_insert>
+
+<sphqueries>
+<sphinxql>desc test</sphinxql>
+<sphinxql>select count(*) from test</sphinxql>
+<sphinxql>select year(date) from test</sphinxql>
+<sphinxql>select id, category from test</sphinxql>
+<sphinxql>select id from test where status=0</sphinxql>
+<sphinxql>select id from test where status=1</sphinxql>
+<sphinxql>select id from test where status in (0,1)</sphinxql>
+<sphinxql>select id from test where status not in (1)</sphinxql>
+<sphinxql>select * from test</sphinxql>
+<sphinxql>select status from test</sphinxql>
+<sphinxql>select flt from test where flt>0.3</sphinxql>
+<sphinxql>select flt from test where flt&lt;0.3</sphinxql>
+<sphinxql>select flt1 from test where flt1=23</sphinxql>
+<sphinxql>select flt1 from test where flt1=23.0</sphinxql>
+<sphinxql>select flt1 from test where flt1>23</sphinxql>
+<sphinxql>select flt1 from test where flt1>23.0</sphinxql>
+<sphinxql>select count(*) from test where flt1>23.0</sphinxql>
+
+<!-- regression histogram estimate wrong type of filter -->
+<sphinxql>select flt from test where flt&gt;0 and flt&lt;0.01</sphinxql>
+
+<sphinxql>select id from test order by flt asc</sphinxql>
+<sphinxql>select id,flt from test order by flt asc</sphinxql>
+<sphinxql>select id from test order by flt desc</sphinxql>
+<sphinxql>select id,flt from test order by flt desc</sphinxql>
+
+</sphqueries>
+
+</test>

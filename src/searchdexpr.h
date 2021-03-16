@@ -25,7 +25,7 @@ class ExprHook_c : public ISphExprHook
 public:
 	int			IsKnownIdent ( const char * ) const final	{ return -1; }
 	int			IsKnownFunc ( const char * sFunc ) const final;
-	ISphExpr *	CreateNode ( int iID, ISphExpr * pLeft, ESphEvalStage * pEvalStage, CSphString & sError ) final;
+	ISphExpr *	CreateNode ( int iID, ISphExpr * pLeft, ESphEvalStage * pEvalStage, bool * pNeedDocIds, CSphString & sError ) final;
 	ESphAttr	GetIdentType ( int ) const final;
 	ESphAttr	GetReturnType ( int iID, const CSphVector<ESphAttr> & dArgs, bool, CSphString & sError ) const final;
 	void		CheckEnter ( int ) final {}

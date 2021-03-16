@@ -326,7 +326,7 @@ INSERT INTO `test_table` VALUES
 <sphinxql>select * from dist1 order by str2 desc, idd1 asc</sphinxql>
 <sphinxql>select * from dist2 order by str1 asc</sphinxql>
 <sphinxql>select * from dist2 order by str1 desc</sphinxql>
-<sphinxql>select * from dist3 order by str1 asc</sphinxql>
+<sphinxql>select * from dist3 order by str1 asc, id asc</sphinxql>
 <sphinxql>select * from dist3 order by str1 desc, idd1 desc</sphinxql>
 
 <!-- here is going new feature seamless conversion of result set attributes ( bool -> float ) | ( bool -> uint -> bigint ) -->
@@ -348,14 +348,14 @@ INSERT INTO `test_table` VALUES
 <sphinxql>select * from u_uint, u_float</sphinxql>
 <sphinxql>select * from u_bigint, u_float</sphinxql>
 <!-- test of exist function -->
-<sphinxql>select * from u_dist_aa</sphinxql>
-<sphinxql>select *, exist ( ' aTTr2', 11 ) as cnd from u_dist_aa where cnd=11</sphinxql>
-<sphinxql>select *, exist ( ' Attr1', 1 ) as cnd from u_dist_aa where cnd=1</sphinxql>
+<sphinxql>select * from u_dist_aa order by id asc</sphinxql>
+<sphinxql>select *, exist ( ' aTTr2', 11 ) as cnd from u_dist_aa where cnd=11 order by id asc</sphinxql>
+<sphinxql>select *, exist ( ' Attr1', 1 ) as cnd from u_dist_aa where cnd=1 order by id asc</sphinxql>
 <!-- regression schema attributes with alias -->
-<sphinxql>select tag, idd1, idd1 * 2 as rr from dist2</sphinxql>
-<sphinxql>select tag, idd1 as r0, r0 * 2 as rr from dist2</sphinxql>
+<sphinxql>select tag, idd1, idd1 * 2 as rr from dist2 order by id asc</sphinxql>
+<sphinxql>select tag, idd1 as r0, r0 * 2 as rr from dist2 order by id asc</sphinxql>
 <!-- alias as shema attribute -->
-<sphinxql>select tag, idd1 as str1, str1 as str2 from dist2</sphinxql>
+<sphinxql>select tag, idd1 as str1, str1 as str2 from dist2 order by id asc</sphinxql>
 <!-- checking attribute aliases -->
 <sphinxql>select str1 as str11 from main</sphinxql>
 

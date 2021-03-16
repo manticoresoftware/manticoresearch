@@ -42,7 +42,7 @@ index batchtest
 <queries>
 <sphinxql>
 	replace into rt (id, gid, body) values ( 1, 10, 'the' ), (2, 20, 'good'), (1, 11, 'a'), (3, 30, 'dog');
-	select * from rt;
+	select * from rt order by id asc;
 	select * from rt where match ('a');
 	select * from rt where match ('the');
 
@@ -52,12 +52,12 @@ index batchtest
 	select * from rt where match ('the');
 
 	replace into rt (id, gid, body) values (2, 20, 'good'), (3, 30, 'dog'), ( 1, 10, 'the' ), (1, 11, 'a');
-	select * from rt;
+	select * from rt order by id asc;
 	select * from rt where match ('a');
 	select * from rt where match ('the');
 
 	replace into rt (id, gid, body) values ( 1, 10, 'the' ), (2, 20, 'good'), (1, 11, 'b'), (3, 30, 'dog'), (1, 12, 'a');
-	select * from rt;
+	select * from rt order by id asc;
 	select * from rt where match ('a');
 	select * from rt where match ('the | b');
 
@@ -67,12 +67,12 @@ index batchtest
 	select * from rt where match ('the | b');
 
 	replace into rt (id, gid, body) values (2, 20, 'good'), (3, 30, 'dog'), ( 1, 10, 'the' ), (1, 11, 'b'), (1, 12, 'a');
-	select * from rt;
+	select * from rt order by id asc;
 	select * from rt where match ('a');
 	select * from rt where match ('the | b');
 
 	replace into rt (id, gid, body) values ( 1, 10, 'the' ), (1, 11, 'a'), (2, 20, 'good'), (3, 30, 'dog'), (2, 21, 'nice'), (2, 22, 'well'), (4, 40, 'as'), (3, 31, 'cat'), (3, 32, 'bird');
-	select * from rt;
+	select * from rt order by id asc;
 	select * from rt where match ('a');
 	select * from rt where match ('the');
 	select * from rt where match ('well');
@@ -84,7 +84,7 @@ index batchtest
 	REPLACE INTO batchtest (id, names, namea) VALUES (1, 'name1', 'name1'), (2, 'name2', 'name2'), (1, 'name3', 'name3');
 	describe batchtest;
 	REPLACE INTO batchtest (id, names, namea) VALUES (1, 'name1', 'name1'), (2, 'name2', 'name2'), (1, 'name3', 'name3');
-	SELECT * FROM batchtest;
+	SELECT * FROM batchtest order by id asc;
 	SELECT * FROM batchtest WHERE MATCH('name1');
 	SELECT * FROM batchtest WHERE MATCH('name2');
 	SELECT * FROM batchtest WHERE MATCH('name3');

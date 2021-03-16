@@ -17,6 +17,7 @@
 #include "sphinxutils.h"
 #include "fileutils.h"
 #include "sphinxexpr.h"
+#include "columnarlib.h"
 
 typedef uint64_t SphWordID_t;
 STATIC_SIZE_ASSERT ( SphWordID_t, 8 );
@@ -169,6 +170,9 @@ public:
 	StrVec_t m_dStoredFields;		///< list of stored fields
 	StrVec_t m_dStoredOnlyFields;	///< list of "fields" that are stored but not indexed
 
+	StrVec_t m_dColumnarAttrs;			///< list of attributes to place in columnar store
+	StrVec_t m_dColumnarStringsNoHash;	///< list of columnar string attributes that don't need pregenerated hashes
+
 	ESphWordpart GetWordpart ( const char * sField, bool bWordDict );
 	int GetMinPrefixLen ( bool bWordDict ) const;
 	void SetMinPrefixLen ( int iMinPrefixLen );
@@ -232,6 +236,9 @@ enum ESphBigram
 
 
 class CSphIndexSettings : public CSphSourceSettings, public DocstoreSettings_t
+#if USE_COLUMNAR
+	, public columnar::Settings_t
+#endif
 {
 public:
 	ESphHitFormat	m_eHitFormat = SPH_HIT_FORMAT_PLAIN;
@@ -261,6 +268,11 @@ public:
 
 private:
 	void			ParseStoredFields ( const CSphConfigSection & hIndex );
+
+#if USE_COLUMNAR
+	void			ParseColumnarSettings ( const CSphConfigSection & hIndex );
+#endif
+
 	bool			ParseDocstoreSettings ( const CSphConfigSection & hIndex, CSphString & sWarning, CSphString & sError );
 };
 

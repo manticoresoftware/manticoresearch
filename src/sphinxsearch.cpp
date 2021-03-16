@@ -2925,7 +2925,7 @@ public:
 		return -1;
 	}
 
-	ISphExpr * CreateNode ( int iID, ISphExpr * _pLeft, ESphEvalStage *, CSphString & ) final
+	ISphExpr * CreateNode ( int iID, ISphExpr * _pLeft, ESphEvalStage *, bool *, CSphString & ) final
 	{
 		SafeAddRef ( _pLeft );
 		CSphRefcountedPtr<ISphExpr> pLeft ( _pLeft );
@@ -3179,8 +3179,7 @@ public:
 
 /// initialize ranker state
 template < bool NEED_PACKEDFACTORS, bool HANDLE_DUPES >
-bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Init ( int iFields, const int * pWeights, ExtRanker_T<true> * pRanker, CSphString & sError,
-																	DWORD uFactorFlags )
+bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Init ( int iFields, const int * pWeights, ExtRanker_T<true> * pRanker, CSphString & sError,	DWORD uFactorFlags )
 {
 	m_iFields = iFields;
 	m_pWeights = pWeights;

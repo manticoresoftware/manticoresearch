@@ -74,7 +74,7 @@ index test
 	select * from test.2;
 	select * from test.3;
 
-	select * from test
+	select * from test order by id asc;
 
 </SPHinxQL>
 </SPHQueries>

@@ -714,10 +714,13 @@ int ExprHook_c::IsKnownFunc ( const char * sFunc ) const
 }
 
 
-ISphExpr * ExprHook_c::CreateNode ( int iID, ISphExpr * pLeft, ESphEvalStage * pEvalStage, CSphString & sError )
+ISphExpr * ExprHook_c::CreateNode ( int iID, ISphExpr * pLeft, ESphEvalStage * pEvalStage, bool * pNeedDocIds, CSphString & sError )
 {
 	if ( pEvalStage )
 		*pEvalStage = SPH_EVAL_POSTLIMIT;
+
+	if ( pNeedDocIds )
+		*pNeedDocIds = true;
 
 	ISphExpr * pRes = nullptr;
 

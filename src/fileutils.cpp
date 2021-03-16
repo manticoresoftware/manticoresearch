@@ -506,7 +506,7 @@ bool MkDir ( const char * szDir )
 }
 
 
-bool CopyFile ( const CSphString & sSource, const CSphString & sDest, CSphString & sError )
+bool CopyFile ( const CSphString & sSource, const CSphString & sDest, CSphString & sError, int iMode )
 {
 	const int BUFFER_SIZE = 1048576;
 	CSphFixedVector<BYTE> dBuffer(BUFFER_SIZE);
@@ -517,7 +517,7 @@ bool CopyFile ( const CSphString & sSource, const CSphString & sDest, CSphString
 		return false;
 
 	CSphAutofile tDest;
-	int iDstFD = tDest.Open ( sDest, SPH_O_NEW, sError );
+	int iDstFD = tDest.Open ( sDest, iMode, sError );
 	if ( iDstFD<0 )
 		return false;
 
@@ -706,4 +706,16 @@ const char * GetExtension ( const CSphString & sFullPath )
 		return nullptr;
 
 	return pDot+1;
+}
+
+
+void SeekAndPutOffset ( CSphWriter & tWriter, SphOffset_t tOffset, SphOffset_t tValue )
+{
+	SphOffset_t tTotalSize = tWriter.GetPos();
+
+	// order matters here
+	tWriter.Flush(); // store collected data as SeekTo may get rid of buffer collected so far
+	tWriter.SeekTo(tOffset); 
+	tWriter.PutOffset(tValue);
+	tWriter.SeekTo(tTotalSize);
 }

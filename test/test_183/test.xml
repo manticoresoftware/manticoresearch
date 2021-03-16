@@ -291,7 +291,7 @@ values (124,222,
 <sphinxql>select * from rt40 where match('kw37')</sphinxql>
 <sphinxql>select * from rt40 where match('@field37 kw37')</sphinxql>
 
-<sphinxql>select * from rt40 where match('@field39 badger') limit 40</sphinxql>
+<sphinxql>select * from rt40 where match('@field39 badger') order by weight() desc, id asc limit 40</sphinxql>
 <sphinxql>show meta</sphinxql>
 
 <!--regression sort \ group by on expr at column over 255 -->

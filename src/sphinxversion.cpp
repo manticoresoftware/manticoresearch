@@ -38,14 +38,16 @@
 
 #define PRODUCT_VERSION          VERNUMBERS " " SPH_GIT_COMMIT_ID "@" GIT_TIMESTAMP_ID " " BANNER_TAG
 #define PRODUCT_NAME			"Manticore " PRODUCT_VERSION
-#define PRODUCT_BANNER            PRODUCT_NAME "\nCopyright (c) 2001-2016, Andrew Aksyonoff\n" \
+#define PRODUCT_BANNER_TEXT		"\nCopyright (c) 2001-2016, Andrew Aksyonoff\n" \
 	"Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)\n" \
 	"Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)\n\n"
 
+#define PRODUCT_BANNER            PRODUCT_NAME PRODUCT_BANNER_TEXT
 
 const char * szMANTICORE_VERSION = PRODUCT_VERSION;
 const char * szMANTICORE_NAME = PRODUCT_NAME;
 const char * szMANTICORE_BANNER = PRODUCT_BANNER;
+const char * szMANTICORE_BANNER_TEXT = PRODUCT_BANNER_TEXT;
 const char * szGIT_COMMIT_ID = SPH_GIT_COMMIT_ID;
 const char * szGIT_BRANCH_ID = GIT_BRANCH_ID;
 const char * szGDB_SOURCE_DIR = GDB_SOURCE_DIR;

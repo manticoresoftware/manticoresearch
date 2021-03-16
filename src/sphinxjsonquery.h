@@ -16,6 +16,7 @@
 
 class QueryParser_i;
 class StmtErrorReporter_i;
+class QueryProfile_c;
 struct cJSON;
 struct XQNode_t;
 struct SqlStmt_t;

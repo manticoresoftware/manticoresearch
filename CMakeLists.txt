@@ -693,7 +693,7 @@ set ( CMAKE_PROJECT_HOMEPAGE_URL "https://manticoresearch.com" )
 set ( CPACK_PACKAGE_NAME "${PACKAGE_NAME}" )
 set ( CPACK_PACKAGE_VENDOR "${COMPANY_NAME}" )
 set ( CPACK_RESOURCE_FILE_LICENSE "${MANTICORE_BINARY_DIR}/COPYING.txt" )
-set ( CPACK_PACKAGE_DESCRIPTION_SUMMARY "Manticore full-text search server")
+set ( CPACK_PACKAGE_DESCRIPTION_SUMMARY "Manticore Search - database for search")
 
 # meta
 set ( CPACK_COMPONENT_META_GROUP "main" )

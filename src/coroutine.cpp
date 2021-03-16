@@ -328,9 +328,9 @@ public:
 
 	// from CoCo -> all parallel tasks (snippets, local searches, pq, disk chunks). Schedule into secondary queue.
 	// May refer to parent's task info as read-only. For changes has dedicated mini info, also can create and use it's own local.
-	static void StartOther ( Handler fnHandler, Scheduler_i * pScheduler, size_t iStack, Waiter_t tWait )
+	static void StartOther ( Handler fnHandler, Scheduler_i * pScheduler, size_t iStack, Waiter_t tWait, bool bVip )
 	{
-		( new CoroWorker_c ( myinfo::OwnMini ( std::move ( fnHandler ) ), pScheduler, std::move ( tWait ), iStack ) )->Schedule ( false );
+		( new CoroWorker_c ( myinfo::OwnMini ( std::move ( fnHandler ) ), pScheduler, std::move ( tWait ), iStack ) )->Schedule ( bVip );
 	}
 
 	// invoked from CallCoroutine -> ReplicationStart on daemon startup. Schedule into primary queue.
@@ -382,15 +382,15 @@ public:
 			ScheduleContinuation();
 	}
 
-	void Done()
+	void Done ( bool bVip=false)
 	{
 		if (( m_tState.SetFlags ( CoroState_t::Entered_e | CoroState_t::Done_e ) & CoroState_t::Entered_e )==0 )
-			Schedule ();
+			Schedule ( bVip );
 	}
 
-	void Reschedule()
+	void Reschedule ( bool bVip=false)
 	{
-		Done();
+		Done ( bVip );
 		Yield_();
 		m_tState.ResetFlags ( CoroState_t::Done_e );
 	}
@@ -489,14 +489,14 @@ void CoGo ( Handler fnHandler, Scheduler_i * pScheduler )
 }
 
 // start secondary subtasks (parallell search, pq processing, etc)
-void CoCo ( Handler fnHandler, Waiter_t tSignaller )
+void CoCo ( Handler fnHandler, Waiter_t tSignaller, bool bVip )
 {
 	auto pScheduler = CoCurrentScheduler ();
 	if ( !pScheduler )
 		pScheduler = GlobalWorkPool ();
 
 	assert ( pScheduler );
-	CoroWorker_c::StartOther ( std::move ( fnHandler ), pScheduler, 0, std::move ( tSignaller ) );
+	CoroWorker_c::StartOther ( std::move ( fnHandler ), pScheduler, 0, std::move ( tSignaller ), bVip );
 }
 
 // resize stack and continue as fast as possible (continuation task in same thread, or post to vip queue)
@@ -650,7 +650,7 @@ int Threads::NThreads ( Scheduler_i * pScheduler )
 	return pScheduler->WorkingThreads ();
 }
 
-void Threads::CoExecuteN ( int iConcurrency, Threads::Handler&& fnWorker )
+void Threads::CoExecuteN ( int iConcurrency, bool bVip, Threads::Handler&& fnWorker )
 {
 	if ( iConcurrency==1 )
 	{
@@ -664,15 +664,16 @@ void Threads::CoExecuteN ( int iConcurrency, Threads::Handler&& fnWorker )
 
 	auto dWaiter = DefferedRestarter ();
 	for ( int i = 1; i<iConcurrency; ++i )
-		CoCo ( Threads::WithCopiedCrashQuery ( fnWorker ), dWaiter );
+		CoCo ( Threads::WithCopiedCrashQuery ( fnWorker ), dWaiter, bVip );
 	myinfo::OwnMini ( fnWorker ) ();
 	WaitForDeffered ( std::move ( dWaiter ));
 }
 
 int Threads::CoThrottler_c::tmThrotleTimeQuantumMs = Threads::tmDefaultThrotleTimeQuantumMs;
 
-Threads::CoThrottler_c::CoThrottler_c ( int tmThrottlePeriodMs )
+Threads::CoThrottler_c::CoThrottler_c ( int tmThrottlePeriodMs, bool bNoYeld )
 	: m_tmThrottlePeriodMs ( tmThrottlePeriodMs )
+	, m_bNoYeld ( bNoYeld )
 {
 	if ( tmThrottlePeriodMs<0 )
 		m_tmThrottlePeriodMs = tmThrotleTimeQuantumMs;
@@ -683,25 +684,25 @@ Threads::CoThrottler_c::CoThrottler_c ( int tmThrottlePeriodMs )
 
 bool Threads::CoThrottler_c::MaybeThrottle ()
 {
-	if ( !m_tmThrottlePeriodMs || !sph::TimeExceeded ( m_tmNextThrottleTimestamp ) )
+	if ( !m_tmThrottlePeriodMs || !sph::TimeExceeded ( m_tmNextThrottleTimestamp ) || m_bNoYeld )
 		return false;
 
 	m_tmNextThrottleTimestamp = m_dTimerGuard.MiniTimerEngage ( m_tmThrottlePeriodMs );
 	auto iOldThread = MyThd ().m_iThreadID;
-	CoWorker ()->Reschedule ();
+	CoWorker ()->Reschedule ( m_bNoYeld );
 	m_bSameThread = ( iOldThread==MyThd ().m_iThreadID );
 	return true;
 }
 
 bool Threads::CoThrottler_c::ThrottleAndKeepCrashQuery ()
 {
-	if ( !m_tmThrottlePeriodMs || !sph::TimeExceeded ( m_tmNextThrottleTimestamp ) )
+	if ( !m_tmThrottlePeriodMs || !sph::TimeExceeded ( m_tmNextThrottleTimestamp ) || m_bNoYeld )
 		return false;
 
 	m_tmNextThrottleTimestamp = m_dTimerGuard.MiniTimerEngage ( m_tmThrottlePeriodMs );
 	CrashQueryKeeper_c _;
 	auto iOldThread = MyThd ().m_iThreadID;
-	CoWorker ()->Reschedule ();
+	CoWorker ()->Reschedule ( m_bNoYeld );
 	m_bSameThread = ( iOldThread==MyThd ().m_iThreadID );
 	return true;
 }
@@ -855,7 +856,7 @@ bool Threads::CoroRWLock_c::ReadLock ()
  * 2. reschedule until we have only 1 reader ('pending' and 'wlocked' bits ignored)
  * 3. append 'wlock' bit. Finally on acquire wlock bit is set, pending is inherited, others zero.
  */
-bool Threads::CoroRWLock_c::UpgradeLock ()
+bool Threads::CoroRWLock_c::UpgradeLock ( bool bVip )
 {
 	assert ( IsInsideCoroutine () );
 	// prohibit further readers; from setting pending bit they may only release but no more acquire.
@@ -867,7 +868,7 @@ bool Threads::CoroRWLock_c::UpgradeLock ()
 
 	do {
 		if ( ( uMyState & uxFC )>ux04 ) // check all except pending bit
-			CoWorker ()->Reschedule ();// works like spin-lock, but that is ok for now
+			CoWorker ()->Reschedule ( bVip );// works like spin-lock, but that is ok for now
 		uMyState = ux04 + ( uMyState & ux01 );
 	} while ( !m_uLock.compare_exchange_weak ( uMyState, uTargetState, std::memory_order_acq_rel ) );
 	return true;

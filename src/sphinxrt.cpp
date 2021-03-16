@@ -6017,7 +6017,7 @@ struct DiskChunkSearcherCloneCtx_t
 
 void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tResult, const CSphMultiQueryArgs & tArgs, SphChunkGuard_t & tGuard, VecTraits_T<ISphMatchSorter *> & dSorters,
 		QueryProfile_c * pProfiler, bool bGotLocalDF, const SmallStringHash_T<int64_t> * pLocalDocs, int64_t iTotalDocs, const char * szIndexName, VecTraits_T<const BYTE*> & dDiskBlobPools,
-		int64_t tmMaxTimer )
+		int64_t tmMaxTimer, bool bVip )
 {
 	if ( tGuard.m_dDiskChunks.IsEmpty() )
 		return;
@@ -6043,14 +6043,14 @@ void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tResult, 
 
 	std::atomic<bool> bInterrupt {false};
 	std::atomic<int32_t> iCurChunk { iJobs-1 };
-	CoExecuteN ( dCtx.Concurrency ( iJobs ), [&]
+	CoExecuteN ( dCtx.Concurrency ( iJobs ), bVip, [&]
 	{
 		auto iChunk = iCurChunk.fetch_sub ( 1, std::memory_order_acq_rel );
 		if ( iChunk<0 || bInterrupt )
 			return; // already nothing to do, early finish.
 
 		auto tCtx = dCtx.CloneNewContext ();
-		Threads::CoThrottler_c tThrottler ( myinfo::ThrottlingPeriodMS () );
+		Threads::CoThrottler_c tThrottler ( myinfo::ThrottlingPeriodMS (), bVip );
 		int iTick=1; // num of times coro rescheduled by throttler
 		while ( !bInterrupt ) // some earlier job met error; abort.
 		{
@@ -6539,7 +6539,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	CSphVector<const BYTE *> dDiskBlobPools ( tGuard.m_dDiskChunks.GetLength() );
 
 	if ( !tGuard.m_dDiskChunks.IsEmpty() )
-		QueryDiskChunks ( tQuery, tMeta, tArgs, tGuard, dSorters, pProfiler, bGotLocalDF, pLocalDocs, iTotalDocs, m_sIndexName.cstr(), dDiskBlobPools, tmMaxTimer );
+		QueryDiskChunks ( tQuery, tMeta, tArgs, tGuard, dSorters, pProfiler, bGotLocalDF, pLocalDocs, iTotalDocs, m_sIndexName.cstr(), dDiskBlobPools, tmMaxTimer, tArgs.m_bNoYeld );
 
 	////////////////////
 	// search RAM chunk

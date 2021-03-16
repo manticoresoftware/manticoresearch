@@ -1258,9 +1258,9 @@ void ServedIndex_c::Unlock() const
 	Release();
 }
 
-void ServedIndex_c::UpgradeLock () const
+void ServedIndex_c::UpgradeLock ( bool bVip ) const
 {
-	if ( m_tLock.UpgradeLock () )
+	if ( m_tLock.UpgradeLock ( bVip ) )
 		sphLogDebugvv( "Lock %p upgraded to w-lock", this );
 	else
 	{

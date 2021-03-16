@@ -187,7 +187,7 @@ public:
 	bool CommitTOI ( ServedDesc_t * pDesc, CSphString & sError );
 
 	// update with Total Order Isolation
-	bool Update ( CSphString & sError );
+	bool Update ( bool bCluster, CSphString & sError );
 
 private:
 	RtAccum_t & m_tAcc;
@@ -1090,18 +1090,20 @@ static bool CheckResult ( wsrep_status_t tRes, const wsrep_trx_meta_t & tMeta, c
 	return false;
 }
 
+static std::atomic<int64_t> g_iConnID { 1 };
+
 // replicate serialized data into cluster and call commit monitor along
-static bool Replicate ( int iKeysCount, const wsrep_key_t * pKeys, const wsrep_buf_t & tQueries, wsrep_t * pProvider, CommitMonitor_c & tMonitor, CSphString & sError )
+static bool Replicate ( int iKeysCount, const wsrep_key_t * pKeys, const wsrep_buf_t & tQueries, wsrep_t * pProvider, CommitMonitor_c & tMonitor, bool bUpdate, CSphString & sError )
 {
 	assert ( pProvider );
 
-	int iConnId = GetOsThreadId();
+	int64_t iConnId = g_iConnID.fetch_add ( 1, std::memory_order_relaxed );
 
 	wsrep_trx_meta_t tLogMeta;
 	tLogMeta.gtid = WSREP_GTID_UNDEFINED;
 
 	wsrep_ws_handle_t tHnd;
-	tHnd.trx_id = UINT64_MAX;
+	tHnd.trx_id = iConnId;
 	tHnd.opaque = nullptr;
 
 	wsrep_status_t tRes = pProvider->append_key ( pProvider, &tHnd, pKeys, iKeysCount, WSREP_KEY_EXCLUSIVE, false );
@@ -1133,10 +1135,15 @@ static bool Replicate ( int iKeysCount, const wsrep_key_t * pKeys, const wsrep_b
 
 		// in case only commit failed
 		// need to abort running transaction prior to rollback
-		if ( bOk && !tMonitor.Commit( sError ) )
+		if ( bOk )
 		{
-			pProvider->abort_pre_commit ( pProvider, WSREP_SEQNO_UNDEFINED, tHnd.trx_id );
-			bOk = false;
+			if ( !bUpdate )
+				bOk = tMonitor.Commit( sError );
+			else
+				bOk = tMonitor.Update( true, sError );
+
+			if ( !bOk )
+				pProvider->abort_pre_commit ( pProvider, WSREP_SEQNO_UNDEFINED, tHnd.trx_id );
 		}
 
 		if ( bOk )
@@ -1162,11 +1169,11 @@ static bool Replicate ( int iKeysCount, const wsrep_key_t * pKeys, const wsrep_b
 }
 
 // replicate serialized data into cluster in TotalOrderIsolation mode and call commit monitor along
-static bool ReplicateTOI ( int iKeysCount, const wsrep_key_t * pKeys, const wsrep_buf_t & tQueries, wsrep_t * pProvider, CommitMonitor_c & tMonitor, bool bUpdate, ServedDesc_t * pDesc, CSphString & sError )
+static bool ReplicateTOI ( int iKeysCount, const wsrep_key_t * pKeys, const wsrep_buf_t & tQueries, wsrep_t * pProvider, CommitMonitor_c & tMonitor, ServedDesc_t * pDesc, CSphString & sError )
 {
 	assert ( pProvider );
 
-	int iConnId = GetOsThreadId();
+	int64_t iConnId = g_iConnID.fetch_add ( 1, std::memory_order_relaxed );
 
 	wsrep_trx_meta_t tLogMeta;
 	tLogMeta.gtid = WSREP_GTID_UNDEFINED;
@@ -1178,12 +1185,7 @@ static bool ReplicateTOI ( int iKeysCount, const wsrep_key_t * pKeys, const wsre
 
 	// FXIME!!! can not fail TOI transaction
 	if ( bOk )
-	{
-		if ( bUpdate )
-			tMonitor.Update ( sError );
-		else
-			tMonitor.CommitTOI ( pDesc, sError );
-	}
+		tMonitor.CommitTOI ( pDesc, sError );
 
 	if ( bOk )
 	{
@@ -1656,7 +1658,7 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 		int iUpd = -1;
 		CSphString sWarning;
 		CommitMonitor_c tCommit ( tAcc, &sWarning, &iUpd );
-		bool bOk = tCommit.Update ( sError );
+		bool bOk = tCommit.Update ( true, sError );
 		if ( !bOk )
 			sphWarning ( "%s", sError.cstr() );
 		if ( !sWarning.IsEmpty() )
@@ -1724,7 +1726,7 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 	if ( !IsClusterCommand ( tAcc ) )
 	{
 		if ( IsUpdateCommand ( tAcc ) )
-			return tMonitor.Update ( sError );
+			return tMonitor.Update ( false, sError );
 		else
 			return tMonitor.Commit ( sError );
 	}
@@ -1839,7 +1841,6 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 		{
 			assert ( tCmd.m_pUpdateAPI );
 			const CSphAttrUpdate * pUpd = tCmd.m_pUpdateAPI;
-			bTOI = true;
 			bUpdate = true;
 
 			uQueryHash = sphFNV64 ( pUpd->m_dDocids.Begin(), (int) pUpd->m_dDocids.GetLengthBytes(), uQueryHash );
@@ -1855,7 +1856,6 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 			assert ( tCmd.m_pUpdateAPI );
 			assert ( tCmd.m_pUpdateCond );
 			const CSphAttrUpdate * pUpd = tCmd.m_pUpdateAPI;
-			bTOI = true;
 			bUpdate = true;
 
 			uQueryHash = sphFNV64 ( pUpd->m_dDocids.Begin(), (int) pUpd->m_dDocids.GetLengthBytes(), uQueryHash );
@@ -1902,9 +1902,9 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 	tQueries.len = dBufQueries.GetLength();
 
 	if ( !bTOI )
-		return Replicate ( iKeysCount, dKeys.Begin(), tQueries, (*ppCluster)->m_pProvider, tMonitor, sError );
+		return Replicate ( iKeysCount, dKeys.Begin(), tQueries, (*ppCluster)->m_pProvider, tMonitor, bUpdate, sError );
 	else
-		return ReplicateTOI ( iKeysCount, dKeys.Begin(), tQueries, (*ppCluster)->m_pProvider, tMonitor, bUpdate, pDesc, sError );
+		return ReplicateTOI ( iKeysCount, dKeys.Begin(), tQueries, (*ppCluster)->m_pProvider, tMonitor, pDesc, sError );
 }
 
 bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError )
@@ -2061,7 +2061,7 @@ static bool UpdateAPI ( AttrUpdateArgs& tUpd, int & iUpdate )
 	return ( iUpdate>=0 );
 }
 
-bool CommitMonitor_c::Update ( CSphString & sError )
+bool CommitMonitor_c::Update ( bool bCluster, CSphString & sError )
 {
 	if ( m_tAcc.m_dCmd.IsEmpty() )
 	{
@@ -2089,15 +2089,17 @@ bool CommitMonitor_c::Update ( CSphString & sError )
 	tUpd.m_pQuery = tCmd.m_pUpdateCond;
 	tUpd.m_pIndexName = &tCmd.m_sIndex;
 	tUpd.m_bJson = ( tCmd.m_eCommand==ReplicationCommand_e::UPDATE_JSON );
+	// can not reshedule into common quque for replication - could be dead-lock with incoming clients into the same index
+	tUpd.m_bNoYeld = bCluster;
 	ServedDescRPtr_c tDesc ( pServed );
 	tUpd.m_pDesc = tDesc.Ptr ();
 
 	// that might be called when blob updates necessary, however we don't need to call it actually more than once
 	bool bWlocked = false;
-	tUpd.m_fnLocker = [&bWlocked, &tDesc] {
+	tUpd.m_fnLocker = [&bWlocked, &tDesc, bCluster] {
 		if (!bWlocked)
 		{
-			tDesc.UpgradeLock();
+			tDesc.UpgradeLock ( bCluster );
 			bWlocked = true;
 		}
 	};

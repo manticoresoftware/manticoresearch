@@ -2,11 +2,11 @@
 
 ### SQL commands
 ##### Schema management
-* [CREATE TABLE %5BIF NOT EXISTS%5D](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#General-syntax-of-CREATE-TABLE) - Creates new table
+* [CREATE TABLE IF NOT EXISTS](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#General-syntax-of-CREATE-TABLE) - Creates new table
 * [CREATE TABLE LIKE](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Creating-a-real-time-index-online-via-CREATE-TABLE) - Creates table using another one as a template
 * [DESCRIBE](Listing_indexes.md#DESCRIBE) - Prints out table's field list and their types
 * [ALTER TABLE](Updating_index_schema.md) - Changes table schema / settings
-* [DROP TABLE %5BIF EXISTS%5D](Deleting_an_index.md#Deleting-an-index) - Deletes table [if it exists]
+* [DROP TABLE IF EXISTS](Deleting_an_index.md#Deleting-an-index) - Deletes table [if it exists]
 * [SHOW TABLES](Listing_indexes.md#SHOW-TABLES) - Shows tables list
 * [SHOW CREATE TABLE](Listing_indexes.md#SHOW-CREATE-TABLE) - Shows SQL command how to create the table
 * [SHOW INDEX STATUS](Profiling_and_monitoring/Index_settings_and_status/SHOW_INDEX_STATUS.md) - Shows information about current table status
@@ -268,6 +268,9 @@
 
 ##### Date and time
 * [NOW()](Functions/Date_and_time_functions.md#NOW%28%29) - Returns current timestamp as an INTEGER
+* [CURTIME()](Functions/Date_and_time_functions.md#CURTIME%28%29) - Returns current time in local timezone
+* [UTC_TIME()](Functions/Date_and_time_functions.md#UTC_TIME%28%29) - Returns current time in UTC timezone
+* [UTC_TIMESTAMP()](Functions/Date_and_time_functions.md#UTC_TIMESTAMP%28%29) - Returns current date/time in UTC timezone
 * [SECOND()](Functions/Date_and_time_functions.md#SECOND%28%29) - Returns integer second from the timestamp argument
 * [MINUTE()](Functions/Date_and_time_functions.md#MINUTE%28%29) - Returns integer minute from the timestamp argument
 * [HOUR()](Functions/Date_and_time_functions.md#HOUR%28%29) - Returns integer hour from the timestamp argument
@@ -276,6 +279,7 @@
 * [YEAR()](Functions/Date_and_time_functions.md#YEAR%28%29) - Returns integer year from the timestamp argument
 * [YEARMONTH()](Functions/Date_and_time_functions.md#YEARMONTH%28%29) - Returns integer year and month code from the timestamp argument
 * [YEARMONTHDAY()](Functions/Date_and_time_functions.md#YEARMONTHDAY%28%29) - Returns integer year, month and day code from the timestamp argument
+* [TIMEDIFF()](Functions/Date_and_time_functions.md#TIMEDIFF%28%29) - Returns difference between the timstamps
 
 ##### Geo-spatial
 * [GEODIST()](Functions/Geo_spatial_functions.md#GEODIST%28%29) - Computes geosphere distance between two given points

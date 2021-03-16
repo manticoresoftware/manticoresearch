@@ -88,7 +88,7 @@
 * [/pq/idx/doc/N?refresh=1](Adding_documents_to_an_index/Adding_rules_to_a_percolate_index.md#Replacing-rules-in-a-PQ-index) - Replaces a PQ rule in a percolate index
 * [/delete](Deleting_documents.md) - Deletes a document in an index
 * [/bulk](Updating_documents/UPDATE.md#Bulk-updates) - Perform several insert, update or delete operations in a single call
-* [/search](Quick_start_guide.md#Connect-via-JSON-over-HTTP) - Performs search
+* [/search](Searching/Full_text_matching/Basic_usage.md#http) - Performs search
 * [/pq/idx/search](Searching/Percolate_query.md) - Performs reverse search in a percolate index
 
 ### Common things

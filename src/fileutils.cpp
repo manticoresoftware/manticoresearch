@@ -709,6 +709,34 @@ const char * GetExtension ( const CSphString & sFullPath )
 }
 
 
+CSphString GetExecutablePath()
+{
+#if USE_WINDOWS
+	HMODULE hModule = GetModuleHandle(NULL);
+	CHAR szPath[MAX_PATH];
+	GetModuleFileName ( hModule, szPath, MAX_PATH );
+	return szPath;
+#else
+	char szPath[PATH_MAX];
+	ssize_t tLen;
+
+	tLen = ::readlink ( "/proc/self/exe", szPath, sizeof(szPath)-1 );
+	if ( tLen!=-1 )
+		return CSphString ( szPath, tLen );
+
+	tLen = ::readlink ( "/proc/curproc/file", szPath, sizeof(szPath)-1 );
+	if ( tLen!=-1 )
+		return CSphString ( szPath, tLen );
+
+	tLen = ::readlink ( "/proc/self/path/a.out", szPath, sizeof(szPath)-1 );
+	if ( tLen!=-1 )
+		return CSphString ( szPath, tLen );
+
+	return "";
+#endif
+}
+
+
 void SeekAndPutOffset ( CSphWriter & tWriter, SphOffset_t tOffset, SphOffset_t tValue )
 {
 	SphOffset_t tTotalSize = tWriter.GetPos();

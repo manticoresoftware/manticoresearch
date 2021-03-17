@@ -620,8 +620,14 @@ void CSphIndexSettings::ParseStoredFields ( const CSphConfigSection & hIndex )
 
 
 #if USE_COLUMNAR
-void CSphIndexSettings::ParseColumnarSettings ( const CSphConfigSection & hIndex )
+bool CSphIndexSettings::ParseColumnarSettings ( const CSphConfigSection & hIndex, CSphString & sError )
 {
+	if ( hIndex.Exists("columnar_attrs") && !IsColumnarLibLoaded() )
+	{
+		sError = "columnar library not loaded";
+		return false;
+	}
+
 	{
 		CSphString sAttrs = hIndex.GetStr ( "columnar_attrs" );
 		sAttrs.ToLower();
@@ -641,6 +647,8 @@ void CSphIndexSettings::ParseColumnarSettings ( const CSphConfigSection & hIndex
 	m_iSubblockSize = hIndex.GetInt ( "columnar_subblock", 128 );
 	m_iSubblockSizeMva = hIndex.GetInt ( "columnar_subblock_mva", 128 );
 	m_iMinMaxLeafSize = hIndex.GetInt ( "columnar_minmax_leaf", 128 );
+
+	return true;
 }
 #endif
 
@@ -707,7 +715,8 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 	ParseStoredFields(hIndex);
 
 #if USE_COLUMNAR
-	ParseColumnarSettings(hIndex);
+	if ( !ParseColumnarSettings ( hIndex, sError ) )
+		return false;
 #endif
 
 	if ( RawMinPrefixLen()==0 && m_dPrefixFields.GetLength()!=0 )

@@ -49,7 +49,7 @@ static columnar::AttrType_e ToColumnarType ( ESphAttr eAttrType, int iBitCount )
 
 columnar::Columnar_i * CreateColumnarStorageReader ( const CSphString & sFile, DWORD uNumDocs, CSphString & sError )
 {
-	if ( !g_pColumnarLib )
+	if ( !IsColumnarLibLoaded() )
 	{
 		sError = "columnar library not loaded";
 		return nullptr;
@@ -67,7 +67,7 @@ columnar::Columnar_i * CreateColumnarStorageReader ( const CSphString & sFile, D
 
 columnar::Builder_i * CreateColumnarBuilder ( const ISphSchema & tSchema, const columnar::Settings_t & tSettings, const CSphString & sFilename, CSphString & sError )
 {
-	if ( !g_pColumnarLib )
+	if ( !IsColumnarLibLoaded() )
 	{
 		sError = "columnar library not loaded";
 		return nullptr;
@@ -145,17 +145,29 @@ private:
 
 #endif // USE_COLUMNAR
 
-
 bool InitColumnar ( CSphString & sError )
 {
-#if USE_COLUMNAR
-	CSphString sLibfile;
+	assert ( !g_pColumnarLib );
 
-#ifndef COLUMNAR_PATH
-	sError = "COLUMNAR_DEST not set";
-	return false;
+#if USE_COLUMNAR
+
+#if USE_WINDOWS
+	CSphString sLibfile = "columnar.dll";
 #else
-	sLibfile = COLUMNAR_PATH;
+	CSphString sLibfile = "libcolumnar.so";
+#endif
+
+#ifdef DEBUG_COLUMNAR_PATH
+	sLibfile = DEBUG_COLUMNAR_PATH;
+#else
+	#if !USE_WINDOWS
+	CSphString sPath = GetPathOnly ( GetExecutablePath() );
+	{
+		sPath.SetSprintf ( "%s%s", sPath.cstr(), sLibfile.cstr() );
+		if ( sphFileExists ( sPath.cstr() ) )
+			sLibfile = sPath;
+	}
+	#endif
 #endif
 
 	ScopedHandle_c tHandle ( dlopen ( sLibfile.cstr(), RTLD_LAZY | RTLD_LOCAL ) );
@@ -163,7 +175,7 @@ bool InitColumnar ( CSphString & sError )
 	{
 		const char * szDlError = dlerror();
 		sError.SetSprintf ( "dlopen() failed: %s", szDlError ? szDlError : "(null)" );
-		return false;
+		return true;		// if dlopen fails, don't report an error
 	}
 
 	sphLogDebug ( "dlopen(%s)=%p", sLibfile.cstr(), tHandle.Get() );
@@ -205,7 +217,7 @@ void ShutdownColumnar()
 const char * GetColumnarVersionStr()
 {
 #if USE_COLUMNAR
-	if ( !g_pColumnarLib )
+	if ( !IsColumnarLibLoaded() )
 		return nullptr;
 
 	assert ( g_fnVersionStr );
@@ -213,4 +225,10 @@ const char * GetColumnarVersionStr()
 #else
 	return nullptr;
 #endif
+}
+
+
+bool IsColumnarLibLoaded()
+{
+	return !!g_pColumnarLib;
 }

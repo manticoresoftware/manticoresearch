@@ -270,7 +270,7 @@ private:
 	void			ParseStoredFields ( const CSphConfigSection & hIndex );
 
 #if USE_COLUMNAR
-	void			ParseColumnarSettings ( const CSphConfigSection & hIndex );
+	bool			ParseColumnarSettings ( const CSphConfigSection & hIndex, CSphString & sError );
 #endif
 
 	bool			ParseDocstoreSettings ( const CSphConfigSection & hIndex, CSphString & sWarning, CSphString & sError );

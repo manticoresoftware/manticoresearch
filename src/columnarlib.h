@@ -28,5 +28,6 @@ columnar::Builder_i *	CreateColumnarBuilder ( const ISphSchema & tSchema, const 
 bool			InitColumnar ( CSphString & sError );
 void			ShutdownColumnar();
 const char *	GetColumnarVersionStr();
+bool			IsColumnarLibLoaded();
 
 #endif // _columnarlib_

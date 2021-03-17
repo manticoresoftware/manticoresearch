@@ -49,12 +49,6 @@ function(columnar_install)
 	endif()
 endfunction()
 
-if ( NOT DEFINED COLUMNAR_DEST )
-	message ( STATUS "COLUMNAR_DEST not set; not using columnar" )
-	set ( HAVE_COLUMNAR 0 )
-	return()
-endif()
-
 get_buildd(COLUMNAR_BUILD ${COLUMNARNAME})
 
 # first check 'lazy' case - build from previous run
@@ -97,13 +91,13 @@ if (NOT EXISTS "${COLUMNAR_SRC}/CMakeLists.txt")
 endif ()
 
 if (EXISTS "${COLUMNAR_SRC}/CMakeLists.txt")
-	if ( DEFINED COLUMNAR_DEST )
+	if ( DEFINED DEBUG_COLUMNAR_DEST )
 		if ( MSVC )
-			set ( COLUMNAR_PATH "${COLUMNAR_DEST}/columnar.dll" )
+			set ( DEBUG_COLUMNAR_PATH "${COLUMNAR_DEST}/columnar.dll" )
 		else ()
-			set ( COLUMNAR_PATH "${COLUMNAR_DEST}/libcolumnar.so" )
+			set ( DEBUG_COLUMNAR_PATH "${COLUMNAR_DEST}/libcolumnar.so" )
 		endif ()
-		message ( STATUS "COLUMNAR_PATH is set to ${COLUMNAR_PATH}" )
+		message ( STATUS "DEBUG_COLUMNAR_PATH is set to ${DEBUG_COLUMNAR_PATH}" )
 	endif ()
 
 	set(COLUMNAR_LIBDIR "${COLUMNAR_BUILD}")

@@ -18987,13 +18987,14 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 	CSphString sError;
 	// initialize it before other code to fetch version string for banner
-	if ( !InitColumnar ( sError ) )
-		sphWarning ( "Error initializing columnar storage: %s", sError.cstr() );
-
+	bool bColumnarError = !InitColumnar ( sError );
 	InitBanner();
 
 	if ( !g_bService )
 		fprintf ( stdout, "%s",  g_sBanner.cstr() );
+
+	if ( bColumnarError )
+		sphWarning ( "Error initializing columnar storage: %s", sError.cstr() );
 
 	const char * szEndian = sphCheckEndian();
 	if ( szEndian )

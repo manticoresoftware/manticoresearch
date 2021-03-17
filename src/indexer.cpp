@@ -1816,11 +1816,13 @@ int main ( int argc, char ** argv )
 	}
 
 	CSphString sError;
-	if ( !InitColumnar ( sError ) )
-		sphWarning ( "Error initializing columnar storage: %s", sError.cstr() );
+	bool bColumnarError = !InitColumnar ( sError );
 
 	if ( !g_bQuiet )
 		ShowVersion();
+
+	if ( bColumnarError )
+		sphWarning ( "Error initializing columnar storage: %s", sError.cstr() );
 
 	const char* sEndian = sphCheckEndian();
 	if ( sEndian )

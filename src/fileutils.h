@@ -131,6 +131,7 @@ bool			RenameWithRollback ( const StrVec_t & dSrc, const StrVec_t & dDst, CSphSt
 bool			CheckPath ( const CSphString & sPath, bool bCheckWrite, CSphString & sError, const char * sCheckFileName="tmp" );
 
 bool			IsPathAbsolute ( const CSphString & sPath );
+CSphString		GetExecutablePath();
 
 CSphString &	StripPath ( CSphString & sPath );
 CSphString		GetPathOnly ( const CSphString & sFullPath );

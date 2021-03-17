@@ -923,6 +923,13 @@ bool PercolateQwordSetup_c::QwordSetup ( ISphQword * pQword ) const
 	if ( !iWordLen )
 		return false;
 
+	// fix for the case '=*term' that should count as infix
+	if ( iWordLen>1 && sWord[0]==MAGIC_WORD_HEAD_NONSTEMMED && sWord[1]=='*' )
+	{
+		sWord++;
+		iWordLen--;
+	}
+
 	SubstringInfo_t tSubInfo;
 	CSphVector<Slice_t> dDictLoc;
 	PERCOLATE eCmp = PERCOLATE::EXACT;

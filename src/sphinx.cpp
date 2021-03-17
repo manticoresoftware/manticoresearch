@@ -14993,6 +14993,10 @@ bool sphHasExpandableWildcards ( const char * sWord )
 
 bool sphExpandGetWords ( const char * sWord, const ExpansionContext_t & tCtx, ISphWordlist::Args_t & tWordlist )
 {
+	// fix for the case '=*term' that should count as infix
+	if ( sWord[0]=='=' && sWord[1]=='*' )
+		sWord++;
+
 	if ( !sphIsWild ( *sWord ) || tCtx.m_iMinInfixLen==0 )
 	{
 		// do prefix expansion

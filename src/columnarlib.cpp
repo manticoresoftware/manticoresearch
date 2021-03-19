@@ -152,9 +152,9 @@ bool InitColumnar ( CSphString & sError )
 #if USE_COLUMNAR
 
 #if USE_WINDOWS
-	CSphString sLibfile = "columnar.dll";
+	CSphString sLibfile = "lib_manticore_columnar.dll";
 #else
-	CSphString sLibfile = "libcolumnar.so";
+	CSphString sLibfile = "lib_manticore_columnar.so";
 #endif
 
 #ifdef DEBUG_COLUMNAR_PATH

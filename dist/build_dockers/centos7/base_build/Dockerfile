@@ -15,6 +15,10 @@ RUN yum install -y \
         systemd-units \
         python-devel \
         wget \
+        centos-release-scl \
+&& yum-config-manager --enable rhel-server-rhscl-7-rpms \
+&& yum install -y devtoolset-8 \
+&& scl enable devtoolset-8 bash \
 && yum clean all \
 && rm -rf /var/cache/yum \
 && mkdir /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789

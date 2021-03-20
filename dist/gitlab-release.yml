@@ -165,6 +165,9 @@ rhel7:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /rhel7/
   variables:
     REPO_DIST_VER: "7"
+  script:
+    - bash -c 'source /opt/rh/devtoolset-8/enable; cmake -DPACK=1 -DBUILD_TAG=$RELEASE_TAG .'
+    - bash -c 'source /opt/rh/devtoolset-8/enable; make -j4 package'
   image: registry.gitlab.com/manticoresearch/dev/centos7_cmake:317
 
 rhelsplit7:

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>RT replaying binlog with string update</name>
+
+<requires>
+<watchdog/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+    <searchd_settings/>
+	binlog_path = data
+}
+
+index rt1
+{
+	type	= rt
+	path	= <data_path/>/kw
+	
+	rt_field = content
+	rt_attr_uint = idd
+    rt_attr_string	= title
+	
+	dict = keywords
+}
+
+</config>
+
+<sphqueries>
+
+<!--  regression: binlog crashes on replayng commit with update of string attribute -->
+<sphinxql>
+INSERT INTO rt1 (id, content, idd, title) VALUES (100, 'test stuff', 111, 'data 100');
+SELECT * FROM rt1;
+
+UPDATE rt1 SET title='data 2' WHERE id=100;
+SELECT * FROM rt1;
+</sphinxql>
+<sphinxql system="kill-daemon"/>
+<sphinxql system="start-agent"/>
+<sphinxql>
+SELECT * FROM rt1;
+</sphinxql>
+</sphqueries>
+
+</test>

@@ -791,7 +791,7 @@ private:
 		~BlopStartEnd_t();
 	};
 
-	static const DWORD		BINLOG_VERSION = 9;
+	static const DWORD		BINLOG_VERSION = 10;
 
 	static const DWORD		BINLOG_HEADER_MAGIC = 0x4c425053;	/// magic 'SPBL' header that marks binlog file
 	static const DWORD		BLOP_MAGIC = 0x214e5854;			/// magic 'TXN!' header that marks binlog entry
@@ -8854,6 +8854,7 @@ void RtBinlog_c::BinlogUpdateAttributes ( int64_t * pTID, const char * szIndexNa
 	SaveVector ( m_tWriter, tUpd.m_dPool );
 	SaveVector ( m_tWriter, tUpd.m_dDocids );
 	SaveVector ( m_tWriter, tUpd.m_dRowOffset );
+	SaveVector ( m_tWriter, tUpd.m_dBlobs );
 }
 
 
@@ -9668,6 +9669,7 @@ bool RtBinlog_c::ReplayUpdateAttributes ( int iBinlog, BinlogReader_c & tReader 
 		|| !LoadVector ( tReader, tUpd.m_dPool )
 		|| !LoadVector ( tReader, tUpd.m_dDocids )
 		|| !LoadVector ( tReader, tUpd.m_dRowOffset )
+		|| !LoadVector ( tReader, tUpd.m_dBlobs )
 		|| !tReader.CheckCrc ( "update", tIndex.m_sName.cstr(), iTID, iTxnPos ) )
 	{
 		return false;

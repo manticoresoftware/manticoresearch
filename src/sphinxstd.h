@@ -4761,11 +4761,11 @@ template < typename T, typename DELETER, typename REFCOUNTED = ISphRefcountedMT 
 class SharedPtr_T
 {
 	using PTR = T*;
-	template <typename RefCountedT>
-	struct SharedState_T : public RefCountedT
+	template <typename DELL, bool STATEFUL_DELETER = std::is_member_function_pointer<decltype ( &DELL::Delete )>::value>
+	struct SharedState_T : public REFCOUNTED
 	{
 		PTR m_pPtr = nullptr;
-		DELETER m_fnDelete;
+		DELL m_fnDelete;
 
 		SharedState_T() = default;
 
@@ -4781,7 +4781,19 @@ class SharedPtr_T
 		}
 	};
 
-	using SharedState_t = SharedState_T<REFCOUNTED>;
+	template <typename DELL>
+	struct SharedState_T<DELL, false> : public REFCOUNTED
+	{
+		PTR m_pPtr = nullptr;
+		SharedState_T() = default;
+		~SharedState_T()
+		{
+			DELL::Delete((void*)m_pPtr);
+			m_pPtr = nullptr;
+		}
+	};
+
+	using SharedState_t = SharedState_T<DELETER>;
 	using StatePtr = CSphRefcountedPtr<SharedState_t>;
 
 	StatePtr m_tState;
@@ -4831,7 +4843,7 @@ public:
 	/// assignment of a raw pointer
 	SharedPtr_T & operator = ( PTR pPtr )
 	{
-		m_tState = new SharedState_t;
+		m_tState = new SharedState_t();
 		m_tState->m_pPtr = pPtr;
 		return *this;
 	}

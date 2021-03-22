@@ -2887,3 +2887,17 @@ TEST ( functions, field_mask )
 	ASSERT_TRUE ( foo.Test ( 223 ) );
 
 }
+
+class foo
+{
+public:
+	void bar() {};
+	static void bar_static() {}
+};
+
+TEST ( functions, static_trait )
+{
+	ASSERT_TRUE ( std::is_member_function_pointer<decltype ( &foo::bar )>::value );
+	ASSERT_FALSE ( std::is_member_function_pointer<decltype ( &foo::bar_static )>::value );
+}
+

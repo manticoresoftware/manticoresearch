@@ -40,7 +40,7 @@ UPDATE rt1 SET title='data 2' WHERE id=100;
 SELECT * FROM rt1;
 </sphinxql>
 <sphinxql system="kill-daemon"/>
-<sphinxql system="start-agent"/>
+<sphinxql system="start-agent-no-warnings"/>
 <sphinxql>
 SELECT * FROM rt1;
 </sphinxql>

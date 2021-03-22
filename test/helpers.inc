@@ -2221,13 +2221,19 @@ class SphinxConfig
                     close_and_null_conn($connection);
                     KillSearchd($daemon["config"], $daemon["pid"], 'KILL', false);
                     break;
+                case 'start-agent-no-warnings':
                 case 'start-agent':
                     $start = StartSearchd($daemon["config"], $daemon["error"], $daemon["pid"], $error,
                         $daemon["watchdog"], $daemon["address"], $daemon["port"]);
                     if ($start == 0 || $start == 2)
+                    {
+                        if ( $system_cmd==='start-agent-no-warnings' )
+                            $start = 0;
                         $status .= "; start=ok" . ', return code=' . $start;
-                    else
+                    } else
+                    {
                         $status .= "; start=failed, return code=" . $start . ", error=" . $error;
+                    }
 
                     close_and_null_conn($connection);
                     $old_agent = -1;

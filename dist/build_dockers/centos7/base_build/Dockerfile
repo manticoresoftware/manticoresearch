@@ -22,6 +22,7 @@ RUN yum install -y \
 && yum clean all \
 && rm -rf /var/cache/yum \
 && mkdir /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789
+ENV PATH /opt/rh/devtoolset-8/root/usr/bin/:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 RUN cd / && wget https://dl.min.io/client/mc/release/linux-amd64/mc \
     && chmod +x mc && mv mc /usr/local/bin/

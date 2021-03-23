@@ -9368,9 +9368,9 @@ static void SendAPIPercolateReply ( ISphOutputBuffer & tOut, const CPqResult & t
 			DWORD uDescFlags = 0;
 			if ( !tDesc.m_sQuery.IsEmpty ())
 				uDescFlags |=1;
-			if ( !tDesc.m_sQuery.IsEmpty () )
+			if ( !tDesc.m_sTags.IsEmpty () )
 				uDescFlags |= 2;
-			if ( !tDesc.m_sQuery.IsEmpty () )
+			if ( !tDesc.m_sFilters.IsEmpty () )
 				uDescFlags |= 4;
 			if ( tDesc.m_bQL )
 				uDescFlags |= 8;

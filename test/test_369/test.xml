@@ -66,6 +66,21 @@ index pq_d2
 }
 
 
+index pq_loc3
+{
+	type = percolate
+	path			= <data_path/>/pq_loc3
+	rt_field 		= title
+	rt_attr_uint = gid
+}
+
+index pq_d3
+{
+	type = distributed
+	agent = <my_address/>:pq_loc3
+}
+
+
 </config>
 
 <metaindex name='META:multi'>
@@ -143,6 +158,11 @@ index pq_d2
 
 <!-- crash on query distributed PQ with empty doc -->
 <sphinxql>CALL PQ ('META:multi', '', 0 as docs, 0 as verbose, 0 as docs_json, 0 as query, 'sharded' as mode)</sphinxql>
+
+<!-- regression no filter and tags from distributed index for empty query -->
+<sphinxql>INSERT INTO pq_loc3 (id, query, filters, tags) VALUES ( 1, '', 'gid >= 10', 'loc3 dist' )</sphinxql>
+<sphinxql>CALL PQ ('pq_loc3', ('{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as query)</sphinxql>
+<sphinxql>CALL PQ ('pq_d3', ('{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as query)</sphinxql>
 
 </sphqueries>
 

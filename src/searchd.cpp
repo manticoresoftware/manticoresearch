@@ -18996,6 +18996,9 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	if ( bColumnarError )
 		sphWarning ( "Error initializing columnar storage: %s", sError.cstr() );
 
+	if ( !sError.IsEmpty() )
+		sError = "";
+
 	const char * szEndian = sphCheckEndian();
 	if ( szEndian )
 		sphDie ( "%s", szEndian );

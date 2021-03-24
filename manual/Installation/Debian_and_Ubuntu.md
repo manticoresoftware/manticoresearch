@@ -3,12 +3,10 @@
 Supported releases:
 
 * Debian
-  * 8.0 (Jessie)
   * 9.0 (Stretch)
   * 10.0 (Buster)
 
 * Ubuntu
-  * 14.04 LTS (Trusty)
   * 16.04 LTS (Xenial)
   * 18.04 LTS (Bionic)
   * 20.04 LTS (Focal)

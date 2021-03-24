@@ -28,7 +28,7 @@ To provide more programmatic way to manage your data and schemas Manticore provi
 You can create / update / delete indexes online as well as providing schemas in a configuration file.
 
 #### Power of C++
-Being written fully in C++ Manticore Search starts fast and doesn't take much RAM. Low-level optimizations give good performance.
+Being written fully in C++, Manticore Search starts fast and doesn't take much RAM. Low-level optimizations give good performance.
 
 #### Real-time inserts
 After a new document is added or updated it can be read immediately.

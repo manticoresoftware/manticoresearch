@@ -2,13 +2,8 @@
 
 Supported releases:
 
-* CentOS 6 and RHEL 6
 * CentOS 7 and RHEL 7
 * CentOS 8 and RHEL 8
-
-Supported platforms:
-* x86
-* x86_64
 
 The easiest way to install Manticore in RedHat/Centos is by using our YUM repository:
 

@@ -152,7 +152,7 @@
     * [Special suffixes](Server_settings/Special_suffixes.md)
     * [Scripted configuration](Server_settings/Scripted_configuration.md)
     * [Comments](Server_settings/Comments.md)
-    * [Inheritance of index and source declarations](Server_settings/Inheritance_of_index_and source_declarations.md)
+    * [Inheritance of index and source declarations](Server_settings/Inheritance_of_index_and_source_declarations.md)
     * [Setting variables online](Server_settings/Setting_variables_online.md)
 * [▪️ Extensions]
     * [SphinxSE](Extensions/SphinxSE.md) 

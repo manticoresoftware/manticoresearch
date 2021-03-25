@@ -113,16 +113,16 @@ Read [the full instruction for the docker image](https://dockr.ly/33biV0U) for m
 
 ### YUM repo for RHEL/Centos
 ```
-yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
-yum install manticore
+sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
+sudo yum install manticore
 ```
 
 ### APT repo for Ubuntu/Debian
 ```
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-dpkg -i manticore-repo.noarch.deb
-apt update
-apt install manticore
+sudo dpkg -i manticore-repo.noarch.deb
+sudo apt update
+sudo apt install manticore
 ```
 
 ### Homebrew on MacOS

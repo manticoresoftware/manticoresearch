@@ -18748,20 +18748,36 @@ int MockStackExpr ( VecTraits_T<BYTE> dStack, const char * sExpr )
 	return  Max ( iStartStack55, iStartStackAA );
 }
 
+static const CSphString g_sMockExpr = "(4*attr_a+2*(attr_b-1)+3)*10";
+
+static void GetMockExpr ( StringBuilder_c & sExpr, int iCount )
+{
+	sExpr.Clear();
+	for (int i=0; i<iCount; ++i)
+		sExpr << "(";
+
+	sExpr << g_sMockExpr;
+
+	for (int i=0; i<iCount; ++i)
+		sExpr << "*(10+1))";
+}
+
 void DetermineNodeItemStackSize ()
 {
 	CSphFixedVector<BYTE> dMockStack {DEFAULT_CORO_STACK_SIZE};
 	StringBuilder_c sExpr;
-	sExpr << "(4*attr_a+2*(attr_b-1)+3)*10";
+	GetMockExpr ( sExpr, 0 );
 
 	auto iStartStack = MockStackExpr ( dMockStack, sExpr.cstr () );
 	int iDelta = 0;
 
 	// Find edge of stack where expr length became visible
 	// (we need quite big expr in order to touch deepest of the stack)
+	int iHeight = 0;
 	while ( !iDelta )
 	{
-		sExpr << "*10";
+		iHeight++;
+		GetMockExpr ( sExpr, iHeight );
 		auto iCurStack = MockStackExpr ( dMockStack, sExpr.cstr () );
 		iDelta = iCurStack - iStartStack;
 	}
@@ -18769,13 +18785,13 @@ void DetermineNodeItemStackSize ()
 	iStartStack += iDelta;
 	iDelta = 0;
 
-	// add +50 frames and average stack from them (1-st already added, so add 49)
-	for (int i=0; i<49; ++i)
-		sExpr << "*10";
+	const int iNodesCount = 5;
+	// add iNodesCount frames and average stack from them (1-st already added, so add iNodesCount-1)
+	GetMockExpr ( sExpr, iHeight + iNodesCount - 1 );
 
 	auto iCurStack = MockStackExpr ( dMockStack, sExpr.cstr () );
 	iDelta = iCurStack-iStartStack;
-	iDelta /=50;
+	iDelta /=iNodesCount;
 	iDelta = (iDelta+15)&~15;
 
 	sphLogDebug ( "expression stack delta %d", iDelta );

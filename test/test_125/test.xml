@@ -12,7 +12,7 @@ indexer
 searchd
 {
 	<searchd_settings/>
-	thread_stack = 1024K
+	thread_stack = 1200K
 }
 
 source test

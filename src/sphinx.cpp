@@ -14214,7 +14214,7 @@ void CSphIndex_VLN::Preread()
 	PrereadMapping ( m_sIndexName.cstr(), "attributes", IsMlock ( m_tFiles.m_eAttr ), IsOndisk ( m_tFiles.m_eAttr ), m_tAttr );
 	PrereadMapping ( m_sIndexName.cstr(), "blobs", IsMlock ( m_tFiles.m_eBlob ), IsOndisk ( m_tFiles.m_eBlob ), m_tBlobAttrs );
 	PrereadMapping ( m_sIndexName.cstr(), "skip-list", IsMlock ( m_tFiles.m_eAttr ), false, m_tSkiplists );
-	PrereadMapping ( m_sIndexName.cstr(), "dictionary", IsMlock ( m_tFiles.m_eAttr ), false, m_tWordlist.m_tBuf );
+//	PrereadMapping ( m_sIndexName.cstr(), "dictionary", IsMlock ( m_tFiles.m_eAttr ), false, m_tWordlist.m_tBuf );
 	PrereadMapping ( m_sIndexName.cstr(), "docid-lookup", IsMlock ( m_tFiles.m_eAttr ), false, m_tDocidLookup );
 	m_tDeadRowMap.Preread ( m_sIndexName.cstr(), "kill-list", IsMlock ( m_tFiles.m_eAttr ) );
 

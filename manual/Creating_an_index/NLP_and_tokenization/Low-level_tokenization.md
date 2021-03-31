@@ -387,7 +387,7 @@ index products {
 
 ```ini
 blend_mode = option [, option [, ...]]
-option = trim_none | trim_head | trim_tail | trim_both | skip_pure
+option = trim_none | trim_head | trim_tail | trim_both | trim_all | skip_pure
 ```
 
 <!-- example blend_mode -->
@@ -403,6 +403,7 @@ Options specify token indexing variants. If multiple options are specified, mult
 * `trim_head` - Trim heading blended characters, and index the resulting token
 * `trim_tail` - Trim trailing blended characters, and index the resulting token
 * `trim_both` - Trim both heading and trailing blended characters, and index the resulting token
+* `trim_all` - Trim heading, trailing and middle blended characters, and index the resulting token
 * `skip_pure` - Do not index the token if it's purely blended, that is, consists of blended characters only
 
 Returning to the `@dude!` example above, setting `blend_mode = trim_head, trim_tail` will result in two tokens being indexed, `@dude` and `dude!`. In this particular example, `trim_both` would have no effect, because trimming both blended characters results in `dude` which is already indexed as a regular keyword. Indexing `@U.S.A.` with `trim_both` (and assuming that dot is blended two) would result in `U.S.A` being indexed. Last but not least, `skip_pure` enables you to fully ignore sequences of blended characters only. For example, `one @@@ two` would be indexed exactly as `one two`, and match that as a phrase. That is not the case by default because a fully blended token gets indexed and offsets the second keyword position.

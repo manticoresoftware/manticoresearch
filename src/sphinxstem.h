@@ -50,7 +50,7 @@ void	stem_dmetaphone ( BYTE * pWord );
 void	sphAotSetCacheSize ( int iCacheSize );
 
 // simple order aot languages
-enum AOT_LANGS {AOT_BEGIN=0, AOT_RU=AOT_BEGIN, AOT_EN, AOT_DE, AOT_LENGTH};
+enum AOT_LANGS {AOT_BEGIN=0, AOT_RU=AOT_BEGIN, AOT_EN, AOT_DE, AOT_UK, AOT_LENGTH};
 
 // aot lemmatize names
 extern const char* AOT_LANGUAGES [AOT_LENGTH];
@@ -89,5 +89,23 @@ ISphTokenizer *		sphAotCreateFilter ( ISphTokenizer * pTokenizer, CSphDict * pDi
 
 /// free lemmatizers on shutdown
 void	sphAotShutdown ();
+
+class LemmatizerTrait_i
+{
+public:
+	LemmatizerTrait_i() = default;
+	virtual ~LemmatizerTrait_i() {}
+	virtual BYTE * GetToken ( const BYTE * pWord, int & iExtra ) = 0;
+	virtual BYTE * GetExtraToken() = 0;
+};
+
+/// lemmatize (or guess a normal form) a Ukrainian word in UTF-8 encoding, return a single "best" lemma
+void	sphAotLemmatizeUk ( BYTE * pWord, LemmatizerTrait_i * pLemmatizer );
+
+// functions below by design used in search time
+/// lemmatize (or guess a normal form) return all lemmas
+void	sphAotLemmatizeUk ( StrVec_t & dLemmas, const BYTE * pWord, LemmatizerTrait_i * pLemmatizer );
+
+LemmatizerTrait_i * CreateLemmatizer ( int iLang );
 
 #endif // _sphinxstem_

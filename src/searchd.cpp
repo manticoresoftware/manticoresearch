@@ -18764,7 +18764,7 @@ static void GetMockExpr ( StringBuilder_c & sExpr, int iCount )
 
 void DetermineNodeItemStackSize ()
 {
-	CSphFixedVector<BYTE> dMockStack {DEFAULT_CORO_STACK_SIZE};
+	CSphFixedVector<BYTE> dMockStack { (int)GetDefaultCoroStackSize() };
 	StringBuilder_c sExpr;
 	GetMockExpr ( sExpr, 0 );
 

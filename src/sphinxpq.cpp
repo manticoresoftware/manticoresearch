@@ -1782,8 +1782,7 @@ StoredQuery_i * PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, co
 	}
 
 	// this should be after keyword expansion
-	if ( m_tSettings.m_uAotFilterMask )
-		TransformAotFilter ( tParsed->m_pRoot, pDict->GetWordforms(), m_tSettings );
+	TransformAotFilter ( tParsed->m_pRoot, pDict->GetWordforms(), m_tSettings );
 
 	if ( m_tSettings.GetMinPrefixLen ( bWordDict )>0 || m_tSettings.m_iMinInfixLen>0 )
 		tParsed->m_pRoot = FixExpanded ( tParsed->m_pRoot, m_tSettings.GetMinPrefixLen ( bWordDict ), m_tSettings.m_iMinInfixLen, ( pDict->HasMorphology () || m_tSettings.m_bIndexExactWords ) );

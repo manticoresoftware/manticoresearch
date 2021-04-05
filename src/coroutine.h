@@ -17,7 +17,7 @@
 
 namespace Threads {
 
-static const size_t DEFAULT_CORO_STACK_SIZE = 1024 * 128; // stack size - 128K
+size_t GetDefaultCoroStackSize();
 
 // helper to align stack suze
 size_t AlignStackSize ( size_t iSize );

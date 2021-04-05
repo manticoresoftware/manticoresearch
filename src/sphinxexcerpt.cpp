@@ -1446,8 +1446,7 @@ bool SnippetBuilder_c::Impl_c::SetQuery ( const CSphString & sQuery, bool bIgnor
 	if ( m_pState->m_pExtQuery->m_dZones.GetLength () )
 		m_pState->m_eExtQuerySPZ |= SPH_SPZ_ZONE;
 
-	if ( tIndexSettings.m_uAotFilterMask )
-		TransformAotFilter ( m_pState->m_pExtQuery->m_pRoot, m_pDict->GetWordforms(), tIndexSettings );
+	TransformAotFilter ( m_pState->m_pExtQuery->m_pRoot, m_pDict->GetWordforms(), tIndexSettings );
 
 	bool bSetupSPZ = m_pState->m_pQuerySettings->m_ePassageSPZ!=SPH_SPZ_NONE
 			|| m_pState->m_eExtQuerySPZ!=SPH_SPZ_NONE

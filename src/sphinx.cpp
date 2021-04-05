@@ -15262,7 +15262,7 @@ static void TransformBigrams ( XQNode_t * pNode, const CSphIndexSettings & tSett
 /// create a node from a set of lemmas
 /// WARNING, tKeyword might or might not be pointing to pNode->m_dWords[0]
 /// Called from the daemon side (searchd) in time of query
-static void TransformAotFilterKeyword ( XQNode_t * pNode, const XQKeyword_t & tKeyword, const CSphWordforms * pWordforms, const CSphIndexSettings & tSettings )
+static void TransformAotFilterKeyword ( XQNode_t * pNode, LemmatizerTrait_i * pLemmatizer, const XQKeyword_t & tKeyword, const CSphWordforms * pWordforms, const CSphIndexSettings & tSettings )
 {
 	assert ( pNode->m_dWords.GetLength()<=1 );
 	assert ( pNode->m_dChildren.GetLength()==0 );
@@ -15295,6 +15295,8 @@ static void TransformAotFilterKeyword ( XQNode_t * pNode, const XQKeyword_t & tK
 				sphAotLemmatizeRu ( dLemmas, (BYTE*)tKeyword.m_sWord.cstr() );
 			else if ( i==AOT_DE )
 				sphAotLemmatizeDe ( dLemmas, (BYTE*)tKeyword.m_sWord.cstr() );
+			else if ( i==AOT_UK )
+				sphAotLemmatizeUk ( dLemmas, (BYTE*)tKeyword.m_sWord.cstr(), pLemmatizer );
 			else
 				sphAotLemmatize ( dLemmas, (BYTE*)tKeyword.m_sWord.cstr(), i );
 		}
@@ -15359,13 +15361,13 @@ static void TransformAotFilterKeyword ( XQNode_t * pNode, const XQKeyword_t & tK
 /// used in lemmatize_ru_all morphology processing mode that can generate multiple guesses
 /// in other modes, there is always exactly one morph guess, and the dictionary handles it
 /// Called from the daemon side (searchd)
-void TransformAotFilter ( XQNode_t * pNode, const CSphWordforms * pWordforms, const CSphIndexSettings & tSettings )
+void TransformAotFilter ( XQNode_t * pNode, LemmatizerTrait_i * pLemmatizer, const CSphWordforms * pWordforms, const CSphIndexSettings & tSettings )
 {
 	if ( !pNode )
 		return;
 	// case one, regular operator (and empty nodes)
 	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		TransformAotFilter ( pNode->m_dChildren[i], pWordforms, tSettings );
+		TransformAotFilter ( pNode->m_dChildren[i], pLemmatizer, pWordforms, tSettings );
 	if ( pNode->m_dChildren.GetLength() || pNode->m_dWords.GetLength()==0 )
 		return;
 
@@ -15382,7 +15384,7 @@ void TransformAotFilter ( XQNode_t * pNode, const CSphWordforms * pWordforms, co
 			pNew->m_pParent = pNode;
 			pNew->m_iAtomPos = pNode->m_dWords[i].m_iAtomPos;
 			pNode->m_dChildren.Add ( pNew );
-			TransformAotFilterKeyword ( pNew, pNode->m_dWords[i], pWordforms, tSettings );
+			TransformAotFilterKeyword ( pNew, pLemmatizer, pNode->m_dWords[i], pWordforms, tSettings );
 		}
 
 		pNode->m_dWords.Reset();
@@ -15392,9 +15394,18 @@ void TransformAotFilter ( XQNode_t * pNode, const CSphWordforms * pWordforms, co
 
 	// case three, plain old single keyword
 	assert ( pNode->m_dWords.GetLength()==1 );
-	TransformAotFilterKeyword ( pNode, pNode->m_dWords[0], pWordforms, tSettings );
+	TransformAotFilterKeyword ( pNode, pLemmatizer, pNode->m_dWords[0], pWordforms, tSettings );
 }
 
+void TransformAotFilter ( XQNode_t * pNode, const CSphWordforms * pWordforms, const CSphIndexSettings & tSettings )
+{
+	if ( !tSettings.m_uAotFilterMask )
+		return;
+
+	int iAotLang = ( tSettings.m_uAotFilterMask & ( 1<<AOT_UK ) ) ? AOT_UK : AOT_LENGTH;
+	CSphScopedPtr<LemmatizerTrait_i> tLemmatizer ( CreateLemmatizer ( iAotLang ) );
+	TransformAotFilter ( pNode, tLemmatizer.Ptr(), pWordforms, tSettings );
+}
 
 void sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, bool bHasBooleanOptimization, const ISphKeywordsStat * pKeywords )
 {
@@ -15487,8 +15498,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	}
 
 	// this should be after keyword expansion
-	if ( m_tSettings.m_uAotFilterMask )
-		TransformAotFilter ( tParsed.m_pRoot, pDict->GetWordforms(), m_tSettings );
+	TransformAotFilter ( tParsed.m_pRoot, pDict->GetWordforms(), m_tSettings );
 
 	// expanding prefix in word dictionary case
 	CSphScopedPayload tPayloads;
@@ -15585,8 +15595,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 			}
 
 			// this should be after keyword expansion
-			if ( m_tSettings.m_uAotFilterMask )
-				TransformAotFilter ( dXQ[i].m_pRoot, pDict->GetWordforms(), m_tSettings );
+			TransformAotFilter ( dXQ[i].m_pRoot, pDict->GetWordforms(), m_tSettings );
 
 			// expanding prefix in word dictionary case
 			XQNode_t * pPrefixed = ExpandPrefix ( dXQ[i].m_pRoot, tMeta, &tPayloads, pQueries[i].m_uDebugFlags );
@@ -16585,8 +16594,7 @@ Bson_t Explain ( ExplainQueryArgs_t & tArgs )
 	}
 
 	// this should be after keyword expansion
-	if ( tArgs.m_pSettings->m_uAotFilterMask )
-		TransformAotFilter ( tParsed.m_pRoot, tArgs.m_pDict->GetWordforms(), *tArgs.m_pSettings );
+	TransformAotFilter ( tParsed.m_pRoot, tArgs.m_pDict->GetWordforms(), *tArgs.m_pSettings );
 
 	//// expanding prefix in word dictionary case
 	if ( tArgs.m_bExpandPrefix )
@@ -16759,10 +16767,12 @@ enum
 	SPH_MORPH_AOTLEMMER_RU_UTF8 = SPH_MORPH_AOTLEMMER_BASE,
 	SPH_MORPH_AOTLEMMER_EN,
 	SPH_MORPH_AOTLEMMER_DE_UTF8,
+	SPH_MORPH_AOTLEMMER_UK,
 	SPH_MORPH_AOTLEMMER_BASE_ALL,
 	SPH_MORPH_AOTLEMMER_RU_ALL = SPH_MORPH_AOTLEMMER_BASE_ALL,
 	SPH_MORPH_AOTLEMMER_EN_ALL,
 	SPH_MORPH_AOTLEMMER_DE_ALL,
+	SPH_MORPH_AOTLEMMER_UK_ALL,
 	SPH_MORPH_LIBSTEMMER_FIRST,
 	SPH_MORPH_LIBSTEMMER_LAST = SPH_MORPH_LIBSTEMMER_FIRST + 64
 };
@@ -16814,6 +16824,7 @@ protected:
 	CSphVector < sb_stemmer * >	m_dStemmers;
 	StrVec_t			m_dDescStemmers;
 #endif
+	CSphScopedPtr<LemmatizerTrait_i> m_tLemmatizer { nullptr };
 
 	int					m_iStopwords;	///< stopwords count
 	SphWordID_t *		m_pStopwords;	///< stopwords ID list
@@ -17144,12 +17155,17 @@ int CSphTemplateDictTraits::InitMorph ( const char * szMorph, int iLength, CSphS
 			if ( !sphAotInit ( sDictFile, sMessage, j ) )
 				return ST_ERROR;
 
+			if ( j==AOT_UK && !m_tLemmatizer.Ptr() )
+				m_tLemmatizer = CreateLemmatizer ( j );
+
 			// add manually instead of AddMorph(), because we need to update that fingerprint
 			int iMorph = j + SPH_MORPH_AOTLEMMER_BASE;
 			if ( j==AOT_RU )
 				iMorph = SPH_MORPH_AOTLEMMER_RU_UTF8;
 			else if ( j==AOT_DE )
 				iMorph = SPH_MORPH_AOTLEMMER_DE_UTF8;
+			else if ( j==AOT_UK )
+				iMorph = SPH_MORPH_AOTLEMMER_UK;
 
 			if ( !m_dMorph.Contains ( iMorph ) )
 			{
@@ -17185,6 +17201,9 @@ int CSphTemplateDictTraits::InitMorph ( const char * szMorph, int iLength, CSphS
 			sDictFile.SetSprintf ( "%s/%s.pak", g_sLemmatizerBase.cstr(), AOT_LANGUAGES[j] );
 			if ( !sphAotInit ( sDictFile, sMessage, j ) )
 				return ST_ERROR;
+
+			if ( j==AOT_UK && !m_tLemmatizer.Ptr() )
+				m_tLemmatizer = CreateLemmatizer ( j );
 
 			return AddMorph ( SPH_MORPH_AOTLEMMER_BASE_ALL+j );
 		}
@@ -17336,6 +17355,8 @@ CSphDict * CSphTemplateDictTraits::CloneBase ( CSphTemplateDictTraits * pDict ) 
 		assert ( pDict->m_dStemmers.Last() );
 	}
 #endif
+	if ( m_tLemmatizer.Ptr() )
+		pDict->m_tLemmatizer = CreateLemmatizer ( AOT_UK );
 
 	return pDict;
 }
@@ -17343,9 +17364,9 @@ CSphDict * CSphTemplateDictTraits::CloneBase ( CSphTemplateDictTraits * pDict ) 
 bool CSphTemplateDictTraits::HasState() const
 {
 #if !USE_LIBSTEMMER
-	return false;
+	return ( m_tLemmatizer.Ptr() );
 #else
-	return ( m_dDescStemmers.GetLength()>0 );
+	return ( m_dDescStemmers.GetLength()>0 || m_tLemmatizer.Ptr() );
 #endif
 }
 
@@ -18267,9 +18288,14 @@ bool CSphTemplateDictTraits::StemById ( BYTE * pWord, int iStemmer ) const
 		sphAotLemmatizeDeUTF8 ( pWord );
 		break;
 
+	case SPH_MORPH_AOTLEMMER_UK:
+		sphAotLemmatizeUk ( pWord, m_tLemmatizer.Ptr() );
+		break;
+
 	case SPH_MORPH_AOTLEMMER_RU_ALL:
 	case SPH_MORPH_AOTLEMMER_EN_ALL:
 	case SPH_MORPH_AOTLEMMER_DE_ALL:
+	case SPH_MORPH_AOTLEMMER_UK_ALL:
 		// do the real work somewhere else
 		// this is mostly for warning suppressing and making some features like
 		// index_exact_words=1 vs expand_keywords=1 work

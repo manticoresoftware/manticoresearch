@@ -18,6 +18,8 @@
 #include "fileutils.h"
 #include "sphinxutils.h"
 #include "sphinxstem.h"
+#include "sphinxplugin.h"
+#include "coroutine.h"
 
 //////////////////////////////////////////////////////////////////////////
 // LEMMATIZER
@@ -660,7 +662,7 @@ bool CLemmatizer::LoadPak ( CSphReader & rd )
 // SPHINX MORPHOLOGY INTERFACE
 //////////////////////////////////////////////////////////////////////////
 
-const char* AOT_LANGUAGES[AOT_LENGTH] = {"ru", "en", "de" };
+const char* AOT_LANGUAGES[AOT_LENGTH] = {"ru", "en", "de", "uk" };
 
 static CLemmatizer *	g_pLemmatizers[AOT_LENGTH] = {0};
 static CSphNamedInt		g_tDictinfos[AOT_LENGTH];
@@ -670,10 +672,15 @@ void sphAotSetCacheSize ( int iCacheSize )
 	g_iCacheSize = Max ( iCacheSize, 0 );
 }
 
+static bool LoadLemmatizerUk ( CSphString & sError );
+
 bool AotInit ( const CSphString & sDictFile, CSphString & sError, int iLang )
 {
 	if ( g_pLemmatizers[iLang] )
 		return true;
+
+	if ( iLang==AOT_UK )
+		return LoadLemmatizerUk ( sError );
 
 	CSphAutofile rdFile;
 	if ( rdFile.Open ( sDictFile, SPH_O_READ, sError )<0 )
@@ -1418,6 +1425,8 @@ const CSphNamedInt & sphAotDictinfo ( int iLang )
 
 //////////////////////////////////////////////////////////////////////////
 
+#define MAX_EXTRA_TOKENS 12
+
 /// token filter for AOT morphology indexing
 /// AOT may return multiple (!) morphological hypotheses for a single token
 /// we return such additional hypotheses as blended tokens
@@ -1428,7 +1437,7 @@ protected:
 	BYTE		m_sForm[MAX_KEYWORD_BYTES];
 	int			m_iFormLen = 0;						///< in bytes, but in windows-1251 that is characters, too
 	bool		m_bFound = false;					///< found or predicted?
-	DWORD		m_FindResults[12];					///< max results is like 6
+	DWORD		m_FindResults[MAX_EXTRA_TOKENS];					///< max results is like 6
 	int			m_iCurrent = -1;					///< index in m_FindResults that was just returned, -1 means no blending
 	BYTE		m_sToken[MAX_KEYWORD_BYTES];		///< to hold generated lemmas
 	BYTE		m_sOrigToken[MAX_KEYWORD_BYTES];	///< to hold original token
@@ -1747,6 +1756,29 @@ public:
 	}
 };
 
+class LemmatizerUk_c : public LemmatizerTrait_i
+{
+	void * m_pUserdata = nullptr;
+	CSphRefcountedPtr<PluginTokenFilter_c> m_tPlugin;
+
+public:
+	LemmatizerUk_c();
+	virtual ~LemmatizerUk_c() override;
+
+	BYTE * GetToken ( const BYTE * pWord, int & iExtra ) override;
+	BYTE * GetExtraToken() override;
+};
+
+class TokenizerUk_c : public CSphAotTokenizerTmpl
+{
+	LemmatizerUk_c m_tLemmatizer;
+	int m_iExtraCount = 0;
+
+public:
+	TokenizerUk_c ( ISphTokenizer * pTok, CSphDict * pDict, bool bIndexExact );
+	ISphTokenizer * Clone ( ESphTokenizerClone eMode ) const final;
+	BYTE * GetToken() final;
+};
 
 ISphTokenizer * sphAotCreateFilter ( ISphTokenizer * pTokenizer, CSphDict * pDict, bool bIndexExact, DWORD uLangMask )
 {
@@ -1756,10 +1788,17 @@ ISphTokenizer * sphAotCreateFilter ( ISphTokenizer * pTokenizer, CSphDict * pDic
 	{
 		if ( uLangMask & (1UL<<i) )
 		{
-			if ( i==AOT_RU )
+			switch ( i )
+			{
+			case AOT_RU:
 				pDerivedTokenizer = new CSphAotTokenizerRu ( pTokenizer, pDict, bIndexExact );
-			else
+				break;
+			case AOT_UK:
+				pDerivedTokenizer = new TokenizerUk_c ( pTokenizer, pDict, bIndexExact );
+				break;
+			default:
 				pDerivedTokenizer = new CSphAotTokenizer ( pTokenizer, pDict, bIndexExact, i );
+			}
 			pTokenizer = pDerivedTokenizer;
 		}
 	}
@@ -1771,4 +1810,244 @@ void sphAotShutdown ()
 {
 	for ( auto& pLemmantizer : g_pLemmatizers )
 		SafeDelete ( pLemmantizer );
+}
+
+#if USE_WINDOWS
+static CSphString g_sLemmatizerUkLib = "lemmatize_uk.dll";
+#else
+static CSphString g_sLemmatizerUkLib = "lemmatize_uk.so";
+#endif
+static CSphString g_sLemmatizerFnName = "luk";
+static const int g_iLemmatizerUkStackSize = 1024 * 256; // 256k needed for python init
+
+bool LoadLemmatizerUk ( CSphString & sError )
+{
+	assert ( !g_pLemmatizers[AOT_UK] );
+
+	if ( !sphPluginExists ( PLUGIN_INDEX_TOKEN_FILTER, g_sLemmatizerFnName.cstr() ) )
+	{
+		bool bLoaded = false;
+		// indexer does not have couroutunes
+		if ( Threads::IsInsideCoroutine() )
+		{
+			bLoaded = Threads::CoContinueBool ( g_iLemmatizerUkStackSize, [&sError]
+			{
+				return sphPluginCreate ( g_sLemmatizerUkLib.cstr(), PLUGIN_INDEX_TOKEN_FILTER, g_sLemmatizerFnName.cstr(), SPH_ATTR_NONE, sError );
+			});
+		} else
+		{
+			bLoaded = sphPluginCreate ( g_sLemmatizerUkLib.cstr(), PLUGIN_INDEX_TOKEN_FILTER, g_sLemmatizerFnName.cstr(), SPH_ATTR_NONE, sError );
+		}
+
+		if ( !bLoaded )
+			return false;
+	}
+
+	g_pLemmatizers[AOT_UK] = new CLemmatizer ( false );
+	g_pLemmatizers[AOT_UK]->m_iLang = AOT_UK;
+	g_tDictinfos[AOT_UK] = { g_sLemmatizerFnName, (int)sphCRC32 ( g_sLemmatizerFnName.cstr() ) };
+
+	return true;
+}
+
+LemmatizerUk_c::LemmatizerUk_c ()
+{
+	m_tPlugin = (PluginTokenFilter_c *) sphPluginGet ( PLUGIN_INDEX_TOKEN_FILTER, g_sLemmatizerFnName.cstr() );
+	if ( !m_tPlugin )
+		return;
+
+	CSphVector<const char*> dFields;
+	m_tPlugin->m_fnInit ( &m_pUserdata, dFields.GetLength(), dFields.Begin(), nullptr, nullptr );
+}
+
+LemmatizerUk_c::~LemmatizerUk_c()
+{
+	if ( m_tPlugin->m_fnDeinit )
+		m_tPlugin->m_fnDeinit ( m_pUserdata );
+}
+
+BYTE * LemmatizerUk_c::GetToken ( const BYTE * pWord, int & iExtra )
+{
+	if ( !m_tPlugin )
+		return (BYTE *)pWord;
+
+	int iPosDelta = 0;
+	return (BYTE*)m_tPlugin->m_fnPushToken ( m_pUserdata, (char*)pWord, &iExtra, &iPosDelta );
+}
+
+BYTE * LemmatizerUk_c::GetExtraToken()
+{
+	if ( !m_tPlugin )
+		return nullptr;
+
+	int iPosDelta = 0;
+	return (BYTE*)m_tPlugin->m_fnGetExtraToken ( m_pUserdata, &iPosDelta );
+}
+
+static bool SkipNonUkToken ( const BYTE * pWord )
+{
+	// pass-through 1-char "words"
+	if ( pWord[1]=='\0' )
+		return true;
+
+	int iCodepoints = 0;
+	int iCode = 0;
+
+	while ( ( iCode = sphUTF8Decode ( pWord ) )>0 )
+	{
+		// pass-through words with non ukrainian chars
+		if ( iCode<0x400 || iCode>0x4ff )
+			return true;
+
+		// pass-through words with numbers
+		if ( sphIsInteger ( iCode ) )
+			return true;
+
+		iCodepoints++;
+	}
+
+	// pass-through 1-char "words"
+	return ( iCodepoints<2 );
+}
+
+void sphAotLemmatizeUk ( BYTE * pWord, LemmatizerTrait_i * pLemmatizer )
+{
+	if ( !pLemmatizer )
+		return;
+
+	if ( SkipNonUkToken ( pWord ) )
+		return;
+
+	int iExtraCount = 0;
+	const BYTE * pDst = pLemmatizer->GetToken ( pWord, iExtraCount );
+	strcpy ( (char*)pWord, (char*)pDst ); // NOLINT
+}
+
+void sphAotLemmatizeUk ( StrVec_t & dLemmas, const BYTE * pWord, LemmatizerTrait_i * pLemmatizer )
+{
+	if ( !pLemmatizer )
+		return;
+
+	if ( SkipNonUkToken ( pWord ) )
+		return;
+
+	int iExtraCount = 0;
+	dLemmas.Add ( (const char *)pLemmatizer->GetToken ( pWord, iExtraCount ) );
+
+	iExtraCount = Min ( iExtraCount, MAX_EXTRA_TOKENS );
+	for ( int i=0; i<iExtraCount; i++ )
+		dLemmas.Add (  (const char *)pLemmatizer->GetExtraToken () );
+
+	dLemmas.Uniq();
+}
+
+LemmatizerTrait_i * CreateLemmatizer ( int iLang )
+{
+	if ( iLang!=AOT_UK )
+		return nullptr;
+
+	return new LemmatizerUk_c();
+}
+
+TokenizerUk_c::TokenizerUk_c ( ISphTokenizer * pTok, CSphDict * pDict, bool bIndexExact )
+	: CSphAotTokenizerTmpl ( pTok, pDict, bIndexExact, AOT_UK )
+{
+}
+
+ISphTokenizer * TokenizerUk_c::Clone ( ESphTokenizerClone eMode ) const
+{
+	// this token filter must NOT be created as escaped
+	// it must only be used during indexing time, NEVER in searching time
+	assert ( eMode==SPH_CLONE_INDEX );
+	auto * pClone = new TokenizerUk_c ( TokenizerRefPtr_c ( m_pTokenizer->Clone ( eMode ) ), NULL, m_bIndexExact );
+	if ( m_pWordforms )
+		pClone->m_pWordforms = m_pWordforms;
+	return pClone;
+}
+
+BYTE * TokenizerUk_c::GetToken()
+{
+		m_eTokenMorph = SPH_TOKEN_MORPH_RAW;
+
+		// any pending lemmas left?
+		if ( m_iCurrent>=0 )
+		{
+			++m_iCurrent;
+			assert ( m_FindResults[m_iCurrent]!=AOT_NOFORM );
+
+			// return original token
+			if ( m_FindResults[m_iCurrent]==AOT_ORIGFORM )
+			{
+				assert ( m_FindResults[m_iCurrent+1]==AOT_NOFORM );
+				strncpy ( (char*)m_sToken, (char*)m_sOrigToken, sizeof(m_sToken) );
+				m_sToken[sizeof ( m_sToken ) - 1] = '\0';
+				m_iCurrent = -1;
+				m_eTokenMorph = SPH_TOKEN_MORPH_ORIGINAL;
+				return m_sToken;
+			}
+
+			// generate that extra lemma
+			BYTE * pToken = m_tLemmatizer.GetExtraToken();
+
+			// is this the last one? gotta tag it non-blended
+			if ( m_FindResults [ m_iCurrent+1 ]==AOT_NOFORM )
+				m_iCurrent = -1;
+
+			if ( m_pWordforms && m_pWordforms->m_bHavePostMorphNF )
+				m_pWordforms->ToNormalForm ( pToken, false, false );
+
+			m_eTokenMorph = SPH_TOKEN_MORPH_GUESS;
+			return pToken;
+		}
+
+		// ok, time to work on a next word
+		assert ( m_iCurrent<0 );
+		BYTE * pToken = Base::GetToken();
+		m_eTokenMorph = m_pTokenizer->GetTokenMorph();
+		if ( !pToken )
+			return nullptr;
+
+		// pass-through blended parts
+		if ( m_pTokenizer->TokenIsBlended() )
+			return pToken;
+
+		// pass-through matched wordforms
+		if ( m_pWordforms && m_pWordforms->ToNormalForm ( pToken, true, false ) )
+			return pToken;
+
+		if ( SkipNonUkToken ( pToken ) )
+			return pToken;
+
+		// lemmatize
+		int iExtra = 0;
+		pToken = m_tLemmatizer.GetToken ( pToken, iExtra );
+		
+		// FIXME!!! implement token pass throu
+		m_FindResults[0] = 0;
+		int iLastEmpty = 1;
+		int iTokensEnd = Min ( iLastEmpty+iExtra, MAX_EXTRA_TOKENS-1 );
+		for ( ; iLastEmpty<iTokensEnd; iLastEmpty++ )
+			m_FindResults[iLastEmpty] = 0;
+		m_FindResults[iLastEmpty] = AOT_NOFORM;
+
+		// schedule original form for return, if needed, will be last token
+		if ( m_bIndexExact )
+		{
+			iLastEmpty = Min ( iLastEmpty, MAX_EXTRA_TOKENS-2 );
+			m_FindResults[iLastEmpty] = AOT_ORIGFORM;
+			m_FindResults[iLastEmpty+1] = AOT_NOFORM;
+			strncpy ( (char*)m_sOrigToken, (char*)pToken, sizeof(m_sOrigToken) );
+			m_sOrigToken[sizeof ( m_sOrigToken ) - 1] = '\0';
+		}
+
+		// schedule lemmas 2+ for return
+		if ( m_FindResults[1]!=AOT_NOFORM )
+			m_iCurrent = 0;
+
+		// suddenly, post-morphology wordforms
+		if ( m_pWordforms && m_pWordforms->m_bHavePostMorphNF )
+			m_pWordforms->ToNormalForm ( pToken, false, false );
+
+		m_eTokenMorph = SPH_TOKEN_MORPH_GUESS;
+		return pToken;
 }

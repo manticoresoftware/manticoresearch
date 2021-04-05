@@ -1051,7 +1051,7 @@ protected:
 
 private:
 	static const DWORD			META_HEADER_MAGIC	= 0x54525053;	///< my magic 'SPRT' header
-	static const DWORD			META_VERSION		= 17;			///< current version fixme! Also change version in indextool.cpp, and support the changes!
+	static const DWORD			META_VERSION		= 18;			///< current version fixme! Also change version in indextool.cpp, and support the changes!
 
 	int							m_iStride;
 	uint64_t					m_uSchemaHash = 0;
@@ -6162,8 +6162,7 @@ static int PrepareFTSearch ( const RtIndex_c * pThis, bool bIsStarDict, bool bKe
 	}
 
 	// this should be after keyword expansion
-	if ( tSettings.m_uAotFilterMask )
-		TransformAotFilter ( tParsed.m_pRoot, pDict->GetWordforms (), tSettings );
+	TransformAotFilter ( tParsed.m_pRoot, pDict->GetWordforms (), tSettings );
 
 	// expanding prefix in word dictionary case
 	if ( bKeywordDict && bIsStarDict )

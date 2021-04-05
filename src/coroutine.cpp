@@ -43,6 +43,14 @@ size_t AlignStackSize ( size_t iSize )
 	return ( iSize+STACK_ALIGN-1 ) & ~( STACK_ALIGN-1 );
 }
 
+// stack size - 128K
+static const size_t DEFAULT_CORO_STACK_SIZE = 1024 * 128;
+
+size_t GetDefaultCoroStackSize()
+{
+	return DEFAULT_CORO_STACK_SIZE;
+}
+
 //////////////////////////////////////////////////////////////
 /// Coroutine - uses boost::context to switch between jobs
 using namespace boost::context::detail;
@@ -766,7 +774,8 @@ void Threads::CoroEvent_c::WaitEvent()
 
 bool Threads::IsInsideCoroutine ()
 {
-	return CoWorker ()!=nullptr;
+	// need safe function to call without coroutunes setup like in indexer
+	return ( CoroWorker_c::CurrentWorker()!=nullptr );
 }
 
 /*

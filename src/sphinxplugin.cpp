@@ -254,6 +254,42 @@ void PluginLog ( const char * szMsg, int iLen )
 		sphWarning ( "PLUGIN: %.*s", (int) iLen, szMsg );
 }
 
+static bool PluginOnLoadLibrary ( const PluginLib_c * pLib, CSphString & sError )
+{
+	// library already loaded - no need to call plugin_load function
+	if ( g_hPluginLibs ( pLib->GetName() ) )
+		return true;
+
+	auto fnPluginLoad = (PluginLoad_fn) dlsym ( pLib->GetHandle(), "plugin_load" );
+	if ( fnPluginLoad )
+	{
+		char sErrBuf [ SPH_UDF_ERROR_LEN ] = { 0 };
+		if ( fnPluginLoad ( sErrBuf )!=0 )
+		{
+			sError = sErrBuf;
+			return false;
+		}
+	}
+
+	return true;
+}
+
+static bool PluginOnUnloadLibrary ( const PluginLib_c * pLib, CSphString & sError )
+{
+	auto fnPluginUnload = (PluginLoad_fn) dlsym ( pLib->GetHandle(), "plugin_unload" );
+	if ( fnPluginUnload )
+	{
+		char sErrBuf [ SPH_UDF_ERROR_LEN ] = { 0 };
+		if ( fnPluginUnload ( sErrBuf )!=0 )
+		{
+			sError = sErrBuf;
+			return false;
+		}
+	}
+
+	return true;
+}
+
 static PluginLib_c * LoadPluginLibrary ( const char * sLibName, CSphString & sError, bool bLinuxReload=false )
 {
 
@@ -384,6 +420,11 @@ bool sphPluginCreate ( const char * szLib, PluginType_e eType, const char * sNam
 			return false;
 	}
 	assert ( pLib->GetHandle() );
+	if ( !PluginOnLoadLibrary ( pLib, sError ) )
+	{
+		pLib->Release();
+		return false;
+	}
 
 	PluginDesc_c * pPlugin = nullptr;
 	const SymbolDesc_t * pSym = nullptr;
@@ -447,13 +488,15 @@ bool sphPluginDrop ( PluginType_e eType, const char * sName, CSphString & sError
 	Verify ( g_hPlugins.Delete(tKey) );
 	pPlugin->Release();
 
+	bool bUnloaded = true;
 	if ( --pLib->m_iHashedPlugins==0 )
 	{
+		bUnloaded = PluginOnUnloadLibrary ( pLib, sError );
 		g_hPluginLibs.Delete ( pLib->GetName() );
 		pLib->Release();
 	}
 
-	return true;
+	return bUnloaded;
 #endif // HAVE_DLOPEN
 }
 
@@ -546,8 +589,17 @@ bool sphPluginReload ( const char * sName, CSphString & sError )
 	}
 	assert ( pOldLib->m_iHashedPlugins==dPlugins.GetLength() );
 	pOldLib->m_iHashedPlugins = 0;
+	PluginOnUnloadLibrary ( pOldLib, sError );
 	Verify ( g_hPluginLibs.Delete ( pOldLib->GetName() ) );
 	SafeRelease ( pOldLib );
+
+	if ( !PluginOnLoadLibrary ( pNewLib, sError ) )
+	{
+		ARRAY_FOREACH ( i, dNewPlugins )
+			dNewPlugins[i]->Release();
+
+		return false;
+	}
 
 	// register new references
 	g_hPluginLibs.Add ( pNewLib, pNewLib->GetName() );

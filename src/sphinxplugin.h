@@ -25,6 +25,8 @@ extern "C"
 typedef void			(*PluginLogCb_fn) ( void (*) ( const char *, int ));
 typedef int				(*PluginVer_fn)		();
 typedef void			(*PluginReinit_fn)	();
+typedef int				(*PluginLoad_fn)	( char * error );
+typedef int				(*PluginUnload_fn)	( char * error );
 
 typedef int				(*UdfInit_fn)		( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, char * error );
 typedef void			(*UdfDeinit_fn)		( SPH_UDF_INIT * init );

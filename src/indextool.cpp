@@ -544,7 +544,7 @@ bool MergeIDF ( const CSphString & sFilename, const StrVec_t & dFiles, CSphStrin
 
 //////////////////////////////////////////////////////////////////////////
 static const DWORD META_HEADER_MAGIC = 0x54525053;    ///< my magic 'SPRT' header
-static const DWORD META_VERSION = 17;
+static const DWORD META_VERSION = 18;
 
 const char * AttrType2Str ( ESphAttr eAttrType )
 {
@@ -577,20 +577,35 @@ const char * AttrType2Str ( ESphAttr eAttrType )
 	return "SPH_ATTR_NONE";
 }
 
-static void InfoMetaSchemaColumn ( CSphReader &rdInfo,  DWORD uVersion )
+static void InfoMetaSchemaColumn ( CSphReader & rdInfo, DWORD uVersion )
 {
 	CSphString sName = rdInfo.GetString ();
 	fprintf ( stdout, "%s", sName.cstr());
 	fprintf ( stdout, " %s", AttrType2Str ((ESphAttr)rdInfo.GetDword ()) );
 
-	if ( uVersion<57 ) // m_uVersion for searching
-	{
-		fprintf ( stdout, " (rowitem %d)", rdInfo.GetDword () );
-		fprintf ( stdout, " %d/", rdInfo.GetDword () );
-		fprintf ( stdout, "%d", rdInfo.GetDword () );
-	}
+	rdInfo.GetDword (); // ignore rowitem
+	fprintf ( stdout, " offset %d/", rdInfo.GetDword () );
+	fprintf ( stdout, "count %d", rdInfo.GetDword () );
 	fprintf ( stdout, " payload %d", rdInfo.GetByte () );
+
+	if ( uVersion>=61 )
+		fprintf ( stdout, " attr flags %d", rdInfo.GetDword() );
 }
+
+
+static void InfoMetaSchemaField ( CSphReader & rdInfo, DWORD uVersion )
+{
+	if ( uVersion>=57  )
+	{
+		CSphString sName = rdInfo.GetString();
+		fprintf ( stdout, "%s", sName.cstr() );
+		fprintf ( stdout, " field flags %d", rdInfo.GetDword() );
+		fprintf ( stdout, " payload %d", rdInfo.GetByte () );
+	}
+	else
+		InfoMetaSchemaColumn ( rdInfo, uVersion );
+}
+
 
 void InfoMetaSchema ( CSphReader &rdMeta, DWORD uVersion )
 {
@@ -601,7 +616,7 @@ void InfoMetaSchema ( CSphReader &rdMeta, DWORD uVersion )
 	for ( int i = 0; i<iNumFields; ++i )
 	{
 		fprintf ( stdout, "\n%02d. ", i + 1 );
-		InfoMetaSchemaColumn ( rdMeta, uVersion );
+		InfoMetaSchemaField ( rdMeta, uVersion );
 	}
 
 	int iNumAttrs = rdMeta.GetDword ();
@@ -609,7 +624,7 @@ void InfoMetaSchema ( CSphReader &rdMeta, DWORD uVersion )
 	for ( int i = 0; i<iNumAttrs; i++ )
 	{
 		fprintf ( stdout, "\n%02d. ", i + 1 );
-		InfoMetaSchemaColumn ( rdMeta, 0 );
+		InfoMetaSchemaColumn ( rdMeta, uVersion );
 	}
 }
 

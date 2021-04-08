@@ -34,7 +34,8 @@ set ( SEARCHD_SRCS_TESTABLE searchdha.cpp http/http_parser.c searchdhttp.cpp
 		searchdaemon.cpp searchdssl.cpp searchdfields.cpp searchdconfig.cpp
 		searchdsql.cpp searchdddl.cpp networking_daemon.cpp
 		netstate_api.cpp net_action_accept.cpp netreceive_api.cpp
-		netreceive_http.cpp netreceive_ql.cpp query_status.cpp compressed_mysql.cpp sphinxql_debug.cpp)
+		netreceive_http.cpp netreceive_ql.cpp query_status.cpp compressed_mysql.cpp
+		sphinxql_debug.cpp stackmock.cpp )
 set ( SEARCHD_SRCS searchd.cpp ${SEARCHD_SRCS_TESTABLE} )
 set ( SPELLDUMP_SRCS spelldump.cpp )
 set ( TESTS_SRCS tests.cpp )
@@ -57,9 +58,10 @@ list ( APPEND HEADERS secondaryindex.h searchnode.h killlist.h attribute.h accum
 		event.h coroutine.h threadutils.h hazard_pointer.h task_info.h mini_timer.h collation.h fnv64.h histogram.h
 		sortsetup.h dynamic_idx.h indexsettings.h columnarlib.h )
 list ( APPEND HEADERS fileio.h memio.h queryprofile.h columnarfilter.h columnargrouper.h fileutils.h libutils.h )
-file ( GLOB SEARCHD_H "searchd*.h" "task*.h" )
+file ( GLOB SEARCHD_H "searchd*.h" "task*.h" "stackmock.h" )
 list ( APPEND SEARCHD_H net_action_accept.h netreceive_api.h netreceive_http.h
-		netreceive_ql.h netstate_api.h networking_daemon.h optional.h query_status.h compressed_mysql.h sphinxql_debug.h)
+		netreceive_ql.h netstate_api.h networking_daemon.h optional.h query_status.h compressed_mysql.h
+		sphinxql_debug.h stackmock.h )
 
 if ( USE_GALERA )
 	add_subdirectory ( replication )

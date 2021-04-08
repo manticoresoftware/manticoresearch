@@ -133,6 +133,23 @@ else
 	$results[] = "total found ".mysql_num_rows ($res);
 
 
+// regression of not enough cache for filter tree
+srand(1);
+$num_filters = 3000;
+$filters = array();
+for ($i = 0; $i < $num_filters; $i++)
+    $filters[] = 'idd = '. rand(0, 1000000);
+
+$query = "SELECT * FROM test WHERE ". implode(' OR ', $filters);
+$results[] = $query;
+$res = mysql_query ( $query, $sock );
+if ($res===true)
+	$results[] = "total affected ".mysql_affected_rows($sock);
+else if ($res===false)
+	$results[] = "error ".@mysql_errno($sock);
+else
+	$results[] = "total found ".mysql_num_rows ($res);
+
 	
 ]]></custom_test>
 

@@ -111,6 +111,8 @@ void OptimizeFilters ( CSphVector<CSphFilterSettings> & dFilters );
 
 CSphString FilterType2Str ( ESphFilter eFilterType );
 
+void SetFilterStackItemSize ( int iSize );
+
 // fwd
 class PercolateFilter_i
 {

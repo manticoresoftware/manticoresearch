@@ -16,6 +16,8 @@
 #include "sphinxjson.h"
 #include "attribute.h"
 #include "histogram.h"
+#include "coroutine.h"
+#include "stackmock.h"
 
 #include <boost/icl/interval.hpp>
 
@@ -2007,6 +2009,13 @@ static ISphFilter * ReorderAndCombine ( CSphVector<FilterInfo_t> & dFilters )
 	return pCombinedFilter;
 }
 
+static int g_iFilterStackSize = 200;
+
+void SetFilterStackItemSize ( int iSize )
+{
+	if ( iSize>g_iFilterStackSize )
+		g_iFilterStackSize = iSize;
+}
 
 bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphString & sWarning )
 {
@@ -2014,7 +2023,16 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 		return true;
 
 	if ( tCtx.m_pFilterTree && tCtx.m_pFilterTree->GetLength() )
-		return CreateFilterTree ( tCtx, sError, sWarning );
+	{
+		const int TREE_SIZE_THRESH = 200;
+		int iStackNeeded = -1;
+		if ( !EvalStackForTree ( *tCtx.m_pFilterTree, tCtx.m_pFilterTree->GetLength()-1, g_iFilterStackSize, TREE_SIZE_THRESH, iStackNeeded, "filters", sError ) )
+			return false;
+
+		bool bOk = false;
+		Threads::CoContinue ( iStackNeeded, [&] { bOk = CreateFilterTree ( tCtx, sError, sWarning ); } );
+		return bOk;
+	}
 
 	assert ( tCtx.m_pSchema );
 	CSphVector<FilterInfo_t> dFilters, dWeightFilters;
@@ -2196,33 +2214,73 @@ void FormatFilterQL ( const CSphFilterSettings & f, StringBuilder_c & tBuf, int 
 	}
 }
 
-static CSphString LogFilterTreeItem ( int iItem, const CSphVector<FilterTreeItem_t> & dTree, const CSphVector<CSphFilterSettings> & dFilters, int iCompactIN )
+
+static void FormatTreeItem ( StringBuilder_c & tBuf, const FilterTreeItem_t & tItem, const CSphVector<CSphFilterSettings> & dFilters, int iCompactIN )
 {
-	const FilterTreeItem_t & tItem = dTree[iItem];
 	if ( tItem.m_iFilterItem!=-1 )
-	{
-		StringBuilder_c tBuf;
 		FormatFilterQL ( dFilters[tItem.m_iFilterItem], tBuf, iCompactIN );
-		return tBuf.cstr();// + iOff;
-	}
+	else
+		tBuf << ( tItem.m_bOr ? " OR " : " AND " );
+}
 
-	assert ( tItem.m_iLeft!=-1 && tItem.m_iRight!=-1 );
-	CSphString sLeft = LogFilterTreeItem ( tItem.m_iLeft, dTree, dFilters, iCompactIN );
-	CSphString sRight = LogFilterTreeItem ( tItem.m_iRight, dTree, dFilters, iCompactIN );
 
-	bool bLeftPts = ( dTree[tItem.m_iLeft].m_iFilterItem==-1 && dTree[tItem.m_iLeft].m_bOr!=tItem.m_bOr );
-	bool bRightPts = ( dTree[tItem.m_iRight].m_iFilterItem==-1 && dTree[tItem.m_iRight].m_bOr!=tItem.m_bOr );
+static CSphString LogFilterTree ( int iStartItem, const CSphVector<FilterTreeItem_t> & dTree, const CSphVector<CSphFilterSettings> & dFilters, int iCompactIN )
+{
+	struct LogTreeNode_t
+	{
+		int m_iNode;
+		int m_iLeftCount;
+		int m_iRightCount;
+	};
 
+	CSphVector<LogTreeNode_t> dNodes;
 	StringBuilder_c tBuf;
-	if ( bLeftPts ) tBuf << "(" << sLeft << ")"; else tBuf << sLeft;
-	tBuf << ( tItem.m_bOr ? " OR " : " AND " );
-	if ( bRightPts ) tBuf << "(" << sRight << ")"; else tBuf << sRight;
+	dNodes.Reserve ( dTree.GetLength() );
+	LogTreeNode_t tCurNode = { iStartItem, 0, 0 };
+	while ( tCurNode.m_iNode!=-1 || dNodes.GetLength() )
+	{
+		if ( tCurNode.m_iNode!=-1 )
+		{
+			dNodes.Add(tCurNode);
+
+			bool bTop = tCurNode.m_iNode==iStartItem;
+			tCurNode.m_iNode = dTree[tCurNode.m_iNode].m_iLeft;
+			if ( !bTop )
+				tCurNode.m_iLeftCount++;
+			tCurNode.m_iRightCount = 0;
+		}
+		else
+		{
+			tCurNode = dNodes.Pop();
+			const FilterTreeItem_t & tItem = dTree[tCurNode.m_iNode];
+
+			if ( tItem.m_iLeft==-1 )
+			{
+				for ( int i = 0; i < tCurNode.m_iLeftCount; i++ )
+					tBuf << "(";
+			}
+
+			FormatTreeItem ( tBuf, tItem, dFilters, iCompactIN );
+
+			if ( tItem.m_iRight==-1 )
+			{
+				for ( int i = 0; i < tCurNode.m_iRightCount; i++ )
+					tBuf << ")";
+			}
+
+			bool bTop = tCurNode.m_iNode==iStartItem;
+			tCurNode.m_iNode = tItem.m_iRight;
+			tCurNode.m_iLeftCount = 0;
+			if ( !bTop )
+				tCurNode.m_iRightCount++;
+		}
+	}
 
 	return tBuf.cstr();
 }
 
-void FormatFiltersQL ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree,
-	StringBuilder_c & tBuf, int iCompactIN )
+
+void FormatFiltersQL ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree, StringBuilder_c & tBuf, int iCompactIN )
 {
 	if ( dFilterTree.IsEmpty() )
 	{
@@ -2231,7 +2289,7 @@ void FormatFiltersQL ( const CSphVector<CSphFilterSettings> & dFilters, const CS
 			FormatFilterQL ( dFilter, tBuf, iCompactIN );
 	}
 	else
-		tBuf << LogFilterTreeItem ( dFilterTree.GetLength() - 1, dFilterTree, dFilters, iCompactIN );
+		tBuf << LogFilterTree ( dFilterTree.GetLength() - 1, dFilterTree, dFilters, iCompactIN );
 }
 
 

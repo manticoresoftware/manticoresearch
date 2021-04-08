@@ -38,6 +38,7 @@
 #include "networking_daemon.h"
 #include "query_status.h"
 #include "sphinxql_debug.h"
+#include "stackmock.h"
 
 // services
 #include "taskping.h"
@@ -18680,124 +18681,6 @@ static void SetUidShort ( bool bTestMode )
 	UidShortSetup ( iServerId, (int)uStartedSec );
 }
 
-int CalcUsedStackEdge ( VecTraits_T<BYTE> dStack, BYTE uFiller )
-{
-	ARRAY_CONSTFOREACH ( i, dStack ) {
-		if ( dStack[i]!=uFiller )
-			return dStack.GetLength ()-i;
-	}
-
-	return dStack.GetLength ();
-}
-
-int CalcUsedStackBytes ( VecTraits_T<BYTE> dStack, BYTE uFiller )
-{
-	int iRes=0;
-	dStack.Apply ( [&] ( BYTE uData ) { iRes += ( uData!=uFiller ) ? 1 : 0; } );
-	return iRes;
-}
-
-void MockInitMem ( VecTraits_T<BYTE> dStack, BYTE uFiller )
-{
-	::memset ( dStack.begin (), uFiller, dStack.GetLengthBytes () );
-}
-
-void MockParseExpr ( VecTraits_T<BYTE> dStack, const char * sExpr )
-{
-	struct
-	{
-		ExprParseArgs_t m_tArgs;
-		CSphString m_sError;
-		CSphSchema m_tSchema;
-		const char * m_sExpr;
-		bool m_bSuccess;
-	} tParams;
-
-	CSphColumnInfo tAttr;
-	tAttr.m_eAttrType = SPH_ATTR_INTEGER;
-	tAttr.m_sName = "attr_a";
-	tParams.m_tSchema.AddAttr ( tAttr, false );
-	tAttr.m_sName = "attr_b";
-	tParams.m_tSchema.AddAttr ( tAttr, false );
-	tParams.m_sExpr = sExpr;
-
-	Threads::MockCallCoroutine ( dStack, [&tParams]
-	{
-		ISphExpr * pExprBase = sphExprParse ( tParams.m_sExpr, tParams.m_tSchema, tParams.m_sError, tParams.m_tArgs );
-		tParams.m_bSuccess = !!pExprBase;
-		SafeRelease ( pExprBase );
-	});
-
-	if ( !tParams.m_bSuccess || !tParams.m_sError.IsEmpty () )
-		sphWarning ( "stack check expression error: %s", tParams.m_sError.cstr () );
-}
-
-int MockMeasureStack ( VecTraits_T<BYTE> dStack, const char * sExpr, BYTE uPattern )
-{
-	MockInitMem ( dStack, uPattern );
-	MockParseExpr ( dStack, sExpr );
-	auto iUsedStack = CalcUsedStackBytes ( dStack, uPattern );
-	auto iUsedStackEdge = CalcUsedStackEdge ( dStack, uPattern );
-	return ( Max ( iUsedStack, iUsedStackEdge )+3 ) & ~3;
-}
-
-int MockStackExpr ( VecTraits_T<BYTE> dStack, const char * sExpr )
-{
-	auto iStartStack55 = MockMeasureStack ( dStack, sExpr, 0xDE );
-	auto iStartStackAA = MockMeasureStack ( dStack, sExpr, 0xAD );
-	return  Max ( iStartStack55, iStartStackAA );
-}
-
-static const CSphString g_sMockExpr = "(4*attr_a+2*(attr_b-1)+3)*10";
-
-static void GetMockExpr ( StringBuilder_c & sExpr, int iCount )
-{
-	sExpr.Clear();
-	for (int i=0; i<iCount; ++i)
-		sExpr << "(";
-
-	sExpr << g_sMockExpr;
-
-	for (int i=0; i<iCount; ++i)
-		sExpr << "*(10+1))";
-}
-
-void DetermineNodeItemStackSize ()
-{
-	CSphFixedVector<BYTE> dMockStack { (int)GetDefaultCoroStackSize() };
-	StringBuilder_c sExpr;
-	GetMockExpr ( sExpr, 0 );
-
-	auto iStartStack = MockStackExpr ( dMockStack, sExpr.cstr () );
-	int iDelta = 0;
-
-	// Find edge of stack where expr length became visible
-	// (we need quite big expr in order to touch deepest of the stack)
-	int iHeight = 0;
-	while ( !iDelta )
-	{
-		iHeight++;
-		GetMockExpr ( sExpr, iHeight );
-		auto iCurStack = MockStackExpr ( dMockStack, sExpr.cstr () );
-		iDelta = iCurStack - iStartStack;
-	}
-
-	iStartStack += iDelta;
-	iDelta = 0;
-
-	const int iNodesCount = 5;
-	// add iNodesCount frames and average stack from them (1-st already added, so add iNodesCount-1)
-	GetMockExpr ( sExpr, iHeight + iNodesCount - 1 );
-
-	auto iCurStack = MockStackExpr ( dMockStack, sExpr.cstr () );
-	iDelta = iCurStack-iStartStack;
-	iDelta /=iNodesCount;
-	iDelta = (iDelta+15)&~15;
-
-	sphLogDebug ( "expression stack delta %d", iDelta );
-	SetExprNodeStackItemSize ( iDelta );
-}
-
 namespace { // static
 
 // implement '--stop' and '--stopwait' (connect and stop another instance by pid file from config)
@@ -19389,7 +19272,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	// startup
 	///////////
 
-	DetermineNodeItemStackSize ();
+	DetermineNodeItemStackSize();
+	DetermineFilterItemStackSize();
 	ModifyDaemonPaths ( hSearchd );
 	sphRTInit ( hSearchd, bTestMode, hConf("common") ? hConf["common"]("common") : nullptr );
 

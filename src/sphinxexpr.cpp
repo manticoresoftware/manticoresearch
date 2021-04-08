@@ -20,6 +20,7 @@
 #include "sphinxjson.h"
 #include "docstore.h"
 #include "coroutine.h"
+#include "stackmock.h"
 #include "task_info.h"
 #include <time.h>
 #include <math.h>
@@ -9780,19 +9781,6 @@ void SetExprNodeStackItemSize ( int iSize )
 		SPH_EXPRNODE_STACK_SIZE = iSize;
 }
 
-struct ExprNodeHeight_t
-{
-	int m_iNode = 0;
-	int m_iHeight = 0;
-
-	ExprNodeHeight_t ( int iNode, int iHeght )
-		: m_iNode ( iNode )
-		, m_iHeight ( iHeght )
-	{}
-
-	ExprNodeHeight_t() = default;
-};
-
 
 ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight, CSphString & sError )
 {
@@ -9850,38 +9838,10 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 	// Check expression stack to fit for mutual recursive function calls.
 	// This check is an approximation, because different compilers with
 	// different settings produce code which requires different stack size.
+	const int TREE_SIZE_THRESH = 100;
 	int iStackNeeded = -1;
-	int64_t iExprStack = sphGetStackUsed() + m_dNodes.GetLength() * SPH_EXPRNODE_STACK_SIZE;
-	int64_t iCurStackSize = sphMyStackSize();
-	if ( m_dNodes.GetLength()>100 || iExprStack>iCurStackSize )
-	{
-		CSphVector<ExprNodeHeight_t> dNodes;
-		dNodes.Reserve ( m_dNodes.GetLength()/2 );
-		int iMaxHeight = 1;
-		dNodes.Add ( ExprNodeHeight_t ( m_iParsed, 1 ) );
-		while ( dNodes.GetLength() )
-		{
-			const ExprNodeHeight_t & tParent = dNodes.Pop();
-			const ExprNode_t & tExpr = m_dNodes[tParent.m_iNode];
-			iMaxHeight = Max ( iMaxHeight, tParent.m_iHeight );
-			if ( tExpr.m_iRight>=0 )
-				dNodes.Add ( ExprNodeHeight_t ( tExpr.m_iRight, tParent.m_iHeight+1 ) );
-			if ( tExpr.m_iLeft>=0 )
-				dNodes.Add ( ExprNodeHeight_t ( tExpr.m_iLeft, tParent.m_iHeight+1 ) );
-		}
-
-		iExprStack = sphGetStackUsed() + iMaxHeight*SPH_EXPRNODE_STACK_SIZE;
-
-		if ( iExprStack>g_iMaxCoroStackSize )
-		{
-			sError.SetSprintf ( "query too complex, not enough stack (thread_stack=%dK or higher required)",
-				(int)( ( iExprStack + 1024 - ( iExprStack%1024 ) ) / 1024 ) );
-			return nullptr;
-		}
-
-		if ( iCurStackSize<=iExprStack )
-			iStackNeeded = iExprStack + 32*1024;
-	}
+	if ( !EvalStackForTree ( m_dNodes, m_iParsed, SPH_EXPRNODE_STACK_SIZE, TREE_SIZE_THRESH, iStackNeeded, "expressions", sError ) )
+		return nullptr;
 
 	ISphExpr * pExpr = nullptr;
 

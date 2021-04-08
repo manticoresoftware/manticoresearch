@@ -8,7 +8,7 @@ The first case is useful when you need to regenerated a real-time index complete
 
 In the second you normally want to add a large bulk of new data to a real-time index and again creating a plain index with that data is easier than populating the existing real-time index.
 
-##### General syntax
+##### Attaching index - general syntax
 The `ATTACH` statement allows to convert a plain index to be attached to an existing real-time index.
 
 ```sql

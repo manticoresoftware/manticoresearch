@@ -802,7 +802,7 @@ Variable: transformed_tree
 <!-- Example Explain_query_dot -->
 `EXPLAIN QUERY ... option format=dot` allows displaying the execution tree of a provided full-text query in hierarchical format suitable for visualization by existing tools, for example https://dreampuf.github.io/GraphvizOnline :
 
-![EXPLAIN QUERY graphviz example](../../graphviz.png)
+![EXPLAIN QUERY graphviz example](graphviz.png)
 
 <!-- intro -->
 ##### SQL:

@@ -344,7 +344,7 @@ CSphString sphNormalizePath( const CSphString & sOrigPath )
 	while ( szPath<szEnd )
 	{
 		const char * szSlash = szEnd;
-		for ( const char * p = szPath; szPath < szEnd; p++ )
+		for ( const char * p = szPath; p < szEnd; p++ )
 			if ( IsSlash(*p) )
 			{
 				szSlash = p;

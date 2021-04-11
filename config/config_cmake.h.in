@@ -180,7 +180,7 @@
 #cmakedefine USE_COLUMNAR ${USE_COLUMNAR}
 
 /* default path to columnar shared library */
-#cmakedefine COLUMNAR_PATH "${COLUMNAR_PATH}"
+#cmakedefine DEBUG_COLUMNAR_PATH "${DEBUG_COLUMNAR_PATH}"
 
 /* define to use Alexandresku's loki small obj allocator for movable attrs */
 #cmakedefine USE_SMALLALLOC ${USE_SMALLALLOC}

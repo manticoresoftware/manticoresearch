@@ -327,59 +327,70 @@ void sphDoneIOStats()
 }
 
 
-CSphString sphNormalizePath( const CSphString& sOrigPath )
+static bool IsSlash ( char c )
+{
+	return c=='/' || c=='\\';
+}
+
+
+CSphString sphNormalizePath( const CSphString & sOrigPath )
 {
 	CSphVector<Str_t> dChunks;
-	const char* sBegin = sOrigPath.scstr();
-	const char* sEnd = sBegin + sOrigPath.Length();
-	const char* sPath = sBegin;
+	const char * szBegin = sOrigPath.scstr();
+	const char * szEnd = szBegin + sOrigPath.Length();
+	const char * szPath = szBegin;
 	int iLevel = 0;
 
-	while ( sPath<sEnd )
+	while ( szPath<szEnd )
 	{
-		const char* sSlash = ( char* ) memchr( sPath, '/', sEnd - sPath );
-		if ( !sSlash )
-			sSlash = sEnd;
+		const char * szSlash = szEnd;
+		for ( const char * p = szPath; szPath < szEnd; p++ )
+			if ( IsSlash(*p) )
+			{
+				szSlash = p;
+				break;
+			}
 
-		auto iChunkLen = sSlash - sPath;
+		auto iChunkLen = szSlash - szPath;
 
 		switch ( iChunkLen )
 		{
 		case 0: // empty chunk skipped
-			++sPath;
+			++szPath;
 			continue;
 		case 1: // simple dot chunk skipped
-			if ( *sPath=='.' )
+			if ( *szPath=='.' )
 			{
-				sPath += 2;
+				szPath += 2;
 				continue;
 			}
 			break;
 		case 2: // double dot abandons chunks, then decrease level
-			if ( sPath[0]=='.' && sPath[1]=='.' )
+			if ( szPath[0]=='.' && szPath[1]=='.' )
 			{
 				if ( dChunks.IsEmpty())
 					--iLevel;
 				else
 					dChunks.Pop();
-				sPath += 3;
+				szPath += 3;
 				continue;
 			}
 		default: break;
 		}
-		dChunks.Add( { sPath, iChunkLen } );
-		sPath = sSlash + 1;
+
+		dChunks.Add( { szPath, iChunkLen } );
+		szPath = szSlash + 1;
 	}
 
 	StringBuilder_c sResult( "/" );
-	if ( *sBegin=='/' )
+	if ( *szBegin=='/' )
 		sResult.AppendRawChunk ( {"/", 1} );
 	else
 		while ( iLevel++<0 )
 			sResult << "..";
 
-	for ( const auto& dChunk: dChunks )
-		sResult.AppendChunk ( dChunk );
+	for ( const auto & dChunk : dChunks )
+		sResult.AppendChunk(dChunk);
 
 	return sResult.cstr();
 }
@@ -628,12 +639,6 @@ bool CheckPath ( const CSphString & sPath, bool bCheckWrite, CSphString & sError
 	}
 
 	return true;
-}
-
-
-static bool IsSlash ( char c )
-{
-	return c=='/' || c=='\\';
 }
 
 

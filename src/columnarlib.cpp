@@ -145,6 +145,25 @@ private:
 
 #endif // USE_COLUMNAR
 
+static CSphString TryDifferentPaths ( const CSphString & sLibfile )
+{
+	CSphString sPathToExe = GetPathOnly ( GetExecutablePath() );
+	CSphString sPath;
+	sPath.SetSprintf ( "%s%s", sPathToExe.cstr(), sLibfile.cstr() );
+	if ( sphFileExists ( sPath.cstr() ) )
+		return sPath;
+
+#if USE_WINDOWS || defined ( __APPLE__ )
+	sPath.SetSprintf ( "%s/../lib/%s", sPathToExe.cstr(), sLibfile.cstr() );
+	sPath = sphNormalizePath(sPath);
+	if ( sphFileExists ( sPath.cstr() ) )
+		return sPath;
+#endif
+
+	return sLibfile;
+}
+
+
 bool InitColumnar ( CSphString & sError )
 {
 	assert ( !g_pColumnarLib );
@@ -160,14 +179,7 @@ bool InitColumnar ( CSphString & sError )
 #ifdef DEBUG_COLUMNAR_PATH
 	sLibfile = DEBUG_COLUMNAR_PATH;
 #else
-	#if !USE_WINDOWS
-	CSphString sPath = GetPathOnly ( GetExecutablePath() );
-	{
-		sPath.SetSprintf ( "%s%s", sPath.cstr(), sLibfile.cstr() );
-		if ( sphFileExists ( sPath.cstr() ) )
-			sLibfile = sPath;
-	}
-	#endif
+	sLibfile = TryDifferentPaths(sLibfile);
 #endif
 
 	ScopedHandle_c tHandle ( dlopen ( sLibfile.cstr(), RTLD_LAZY | RTLD_LOCAL ) );

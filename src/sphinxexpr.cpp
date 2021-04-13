@@ -4163,11 +4163,11 @@ private:
 	int						ProcessAtRawToken (  const char * sBegin, int iLen, YYSTYPE * lvalp );
 	int						ErrLex ( const char * sTemplate, ...); // issue lexer error
 
-	void					GatherArgTypes ( int iNode, CSphVector<int> & dTypes );
-	void					GatherArgNodes ( int iNode, CSphVector<int> & dNodes );
+	CSphVector<int>			GatherArgTypes ( int iNode );
+	CSphVector<int>			GatherArgNodes ( int iNode );
 	void					GatherArgRetTypes ( int iNode, CSphVector<ESphAttr> & dTypes );
-	template < typename T >
-	void					GatherArgT ( int iNode, T & FUNCTOR );
+	template < typename FN >
+	void					GatherArgFN ( int iNode, FN && fnFunctor );
 
 	bool					CheckForConstSet ( int iArgsNode, int iSkip );
 	int						ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp );
@@ -4205,6 +4205,7 @@ private:
 	void					FixupIterators ( int iNode, const char * sKey, SphAttr_t * pAttr );
 
 	bool					GetError () const { return !( m_sLexerError.IsEmpty() && m_sParserError.IsEmpty() && m_sCreateError.IsEmpty() ); }
+	bool					GetCreateError () const { return !m_sCreateError.IsEmpty(); }
 
 	ISphExpr *				Create ( bool * pUsesWeight, CSphString & sError );
 };
@@ -6006,8 +6007,7 @@ ISphExpr * ExprParser_t::CreateContainsNode ( const ExprNode_t & tNode )
 
 	// create evaluator
 	// gotta handle an optimized constant poly case
-	CSphVector<int> dPolyArgs;
-	GatherArgNodes ( m_dNodes[iPoly].m_iLeft, dPolyArgs );
+	CSphVector<int> dPolyArgs = GatherArgNodes ( m_dNodes[iPoly].m_iLeft );
 
 	CSphRefcountedPtr<ISphExpr> pLat { ConvertExprJson ( CreateTree ( iLat ) ) };
 	CSphRefcountedPtr<ISphExpr> pLon { ConvertExprJson ( CreateTree ( iLon ) ) };
@@ -6285,7 +6285,7 @@ ISphExpr * ExprParser_t::CreateFieldNode ( int iField )
 /// fold nodes subtree into opcodes
 ISphExpr * ExprParser_t::CreateTree ( int iNode )
 {
-	if ( iNode<0 || GetError() )
+	if ( iNode<0 || GetCreateError() )
 		return nullptr;
 
 	const ExprNode_t & tNode = m_dNodes[iNode];
@@ -6330,7 +6330,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 	CSphRefcountedPtr<ISphExpr> pLeft ( bSkipLeft ? nullptr : CreateTree ( tNode.m_iLeft ) );
 	CSphRefcountedPtr<ISphExpr> pRight ( bSkipRight ? nullptr : CreateTree ( tNode.m_iRight ) );
 
-	if ( GetError() )
+	if ( GetCreateError() )
 		return nullptr;
 
 #define LOC_SPAWN_POLY(_classname) \
@@ -6545,9 +6545,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 					{
 						m_uPackedFactorFlags |= SPH_FACTOR_ENABLE;
 
-						CSphVector<int> dBM25FArgs;
-						GatherArgNodes ( tNode.m_iLeft, dBM25FArgs );
-
+						CSphVector<int> dBM25FArgs = GatherArgNodes ( tNode.m_iLeft );
 						const ExprNode_t & tLeft = m_dNodes [ dBM25FArgs[0] ];
 						const ExprNode_t & tRight = m_dNodes [ dBM25FArgs[1] ];
 						float fK1 = tLeft.m_fConst;
@@ -8074,62 +8072,27 @@ bool sphGeoDistanceUnit ( const char * szUnit, float & fCoeff )
 }
 
 
-struct GatherArgTypes_t : ISphNoncopyable
+CSphVector<int> ExprParser_t::GatherArgTypes ( int iNode )
 {
-	CSphVector<int> & m_dTypes;
-	explicit GatherArgTypes_t ( CSphVector<int> & dTypes )
-		: m_dTypes ( dTypes )
-	{}
-	void Collect ( int , const ExprNode_t & tNode )
-	{
-		m_dTypes.Add ( tNode.m_iToken );
-	}
-};
-
-void ExprParser_t::GatherArgTypes ( int iNode, CSphVector<int> & dTypes )
-{
-	GatherArgTypes_t tCollector ( dTypes );
-	GatherArgT ( iNode, tCollector );
+	CSphVector<int> dTypes;
+	GatherArgFN ( iNode, [this, &dTypes] ( int i ) { dTypes.Add ( m_dNodes[i].m_iToken ); } );
+	return dTypes;
 }
 
-struct GatherArgNodes_t : ISphNoncopyable
+CSphVector<int> ExprParser_t::GatherArgNodes ( int iNode )
 {
-	CSphVector<int> & m_dNodes;
-	explicit GatherArgNodes_t ( CSphVector<int> & dNodes )
-		: m_dNodes ( dNodes )
-	{}
-	void Collect ( int iNode, const ExprNode_t & )
-	{
-		m_dNodes.Add ( iNode );
-	}
-};
-
-void ExprParser_t::GatherArgNodes ( int iNode, CSphVector<int> & dNodes )
-{
-	GatherArgNodes_t tCollector ( dNodes );
-	GatherArgT ( iNode, tCollector );
+	CSphVector<int> dNodes;
+	GatherArgFN ( iNode, [&dNodes] ( int i ) { dNodes.Add ( i ); } );
+	return dNodes;
 }
-
-struct GatherArgReturnTypes_t : ISphNoncopyable
-{
-	CSphVector<ESphAttr> & m_dTypes;
-	explicit GatherArgReturnTypes_t ( CSphVector<ESphAttr> & dTypes )
-		: m_dTypes ( dTypes )
-	{}
-	void Collect ( int , const ExprNode_t & tNode )
-	{
-		m_dTypes.Add ( tNode.m_eRetType );
-	}
-};
 
 void ExprParser_t::GatherArgRetTypes ( int iNode, CSphVector<ESphAttr> & dTypes )
 {
-	GatherArgReturnTypes_t tCollector ( dTypes );
-	GatherArgT ( iNode, tCollector );
+	GatherArgFN ( iNode, [this, &dTypes] ( int i ) { dTypes.Add ( m_dNodes[i].m_eRetType ); } );
 }
 
-template < typename T >
-void ExprParser_t::GatherArgT ( int iNode, T & FUNCTOR )
+template < typename FN >
+void ExprParser_t::GatherArgFN ( int iNode, FN && fnFunctor )
 {
 	if ( iNode<0 )
 		return;
@@ -8141,13 +8104,12 @@ void ExprParser_t::GatherArgT ( int iNode, T & FUNCTOR )
 	tInitial.m_iLeft = tNode.m_iLeft;
 	tInitial.m_iRight = tNode.m_iRight;
 
-	while ( m_dGatherStack.GetLength()>0 )
+	while ( !m_dGatherStack.IsEmpty() )
 	{
 		StackNode_t & tCur = m_dGatherStack.Last();
-		const ExprNode_t & tCurExprNode = m_dNodes[tCur.m_iNode];
-		if ( tCurExprNode.m_iToken!=',' )
+		if ( m_dNodes[tCur.m_iNode].m_iToken!=',' )
 		{
-			FUNCTOR.Collect ( tCur.m_iNode, tCurExprNode );
+			fnFunctor ( tCur.m_iNode );
 			m_dGatherStack.Pop();
 			continue;
 		}
@@ -8159,14 +8121,10 @@ void ExprParser_t::GatherArgT ( int iNode, T & FUNCTOR )
 
 		int iChild = -1;
 		if ( tCur.m_iLeft>=0 )
-		{
-			iChild = tCur.m_iLeft;
-			tCur.m_iLeft = -1;
-		} else if ( tCur.m_iRight>=0 )
-		{
-			iChild = tCur.m_iRight;
-			tCur.m_iRight = -1;
-		} else
+			Swap ( iChild, tCur.m_iLeft );
+		else if ( tCur.m_iRight>=0 )
+			Swap ( iChild, tCur.m_iRight );
+		else
 			continue;
 
 		assert ( iChild>=0 );
@@ -8180,13 +8138,9 @@ void ExprParser_t::GatherArgT ( int iNode, T & FUNCTOR )
 
 bool ExprParser_t::CheckForConstSet ( int iArgsNode, int iSkip )
 {
-	CSphVector<int> dTypes;
-	GatherArgTypes ( iArgsNode, dTypes );
-
-	for ( int i=iSkip; i<dTypes.GetLength(); i++ )
-		if ( dTypes[i]!=TOK_CONST_INT && dTypes[i]!=TOK_CONST_FLOAT && dTypes[i]!=TOK_MAP_ARG )
-			return false;
-	return true;
+	CSphVector<int> dTypes = GatherArgTypes ( iArgsNode );
+	return dTypes.Slice ( iSkip ).all_of (
+			[] ( int t ) { return t==TOK_CONST_INT || t==TOK_CONST_FLOAT || t==TOK_MAP_ARG; } );
 }
 
 
@@ -8353,8 +8307,7 @@ ISphExpr * ExprParser_t::CreateLengthNode ( const ExprNode_t & tNode, ISphExpr *
 
 ISphExpr * ExprParser_t::CreateGeodistNode ( int iArgs )
 {
-	CSphVector<int> dArgs;
-	GatherArgNodes ( iArgs, dArgs );
+	CSphVector<int> dArgs = GatherArgNodes ( iArgs );
 	assert ( dArgs.GetLength()==4 || dArgs.GetLength()==5 );
 
 	float fOut = 1.0f; // result scale, defaults to out=meters
@@ -8445,8 +8398,7 @@ ISphExpr * ExprParser_t::CreatePFNode ( int iArg )
 
 	DWORD uNodeFactorFlags = SPH_FACTOR_ENABLE | SPH_FACTOR_CALC_ATC;
 
-	CSphVector<int> dArgs;
-	GatherArgNodes ( iArg, dArgs );
+	CSphVector<int> dArgs = GatherArgNodes ( iArg );
 	assert ( dArgs.GetLength()==0 || dArgs.GetLength()==1 );
 
 	bool bNoATC = false;
@@ -8548,20 +8500,6 @@ ISphExpr * ExprParser_t::CreateRegexNode ( ISphExpr * pAttr, ISphExpr * pString 
 }
 
 
-struct GatherConstStrings_t : ISphNoncopyable
-{
-	CSphVector<bool> & m_dConstStr;
-	explicit GatherConstStrings_t ( CSphVector<bool> & dConstStr )
-		: m_dConstStr ( dConstStr )
-	{}
-
-	void Collect ( int , const ExprNode_t & tNode )
-	{
-		m_dConstStr.Add ( tNode.m_iToken==TOK_CONST_STRING );
-	}
-};
-
-
 ISphExpr * ExprParser_t::CreateConcatNode ( int iArgsNode, CSphVector<ISphExpr *> & dArgs )
 {
 	CSphVector<ESphAttr> dTypes;
@@ -8576,8 +8514,7 @@ ISphExpr * ExprParser_t::CreateConcatNode ( int iArgsNode, CSphVector<ISphExpr *
 
 
 	CSphVector<bool> dConstStr;
-	GatherConstStrings_t tCollector ( dConstStr );
-	GatherArgT ( iArgsNode, tCollector );
+	GatherArgFN ( iArgsNode, [this, &dConstStr] (int i) { dConstStr.Add ( m_dNodes[i].m_iToken==TOK_CONST_STRING );});
 
 	return new Expr_Concat_c ( dArgs, dConstStr );
 }
@@ -9864,6 +9801,9 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 
 ISphExpr * ExprParser_t::Create ( bool * pUsesWeight, CSphString & sError )
 {
+	if ( GetError () )
+		return nullptr;
+
 	// perform optimizations (tree transformations)
 	Optimize ( m_iParsed );
 #if 0

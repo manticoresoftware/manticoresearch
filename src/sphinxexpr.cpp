@@ -4827,13 +4827,6 @@ void ExprParser_t::VariousOptimizationsPass ( int iNode )
 		pLeft->m_iToken = ',';
 		pRoot->m_iFunc = ( pRoot->m_iToken=='+' ) ? FUNC_MADD : FUNC_MUL3;
 		pRoot->m_iToken = TOK_FUNC;
-		pRoot->m_iLeft = m_dNodes.GetLength();
-		pRoot->m_iRight = -1;
-
-		ExprNode_t & tArgs = m_dNodes.Add(); // invalidates all pointers!
-		tArgs.m_iToken = ',';
-		tArgs.m_iLeft = iLeft;
-		tArgs.m_iRight = iRight;
 		return;
 	}
 
@@ -6440,6 +6433,11 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 				{
 					SafeAddRef ( pLeft );
 					MoveToArgList ( pLeft, dArgs );
+					if ( pRight )
+					{
+						pRight->AddRef ();
+						MoveToArgList ( pRight, dArgs );
+					}
 				}
 
 				// spawn proper function

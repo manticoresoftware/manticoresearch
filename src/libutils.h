@@ -34,6 +34,7 @@
 #define HAVE_DLOPEN		1
 #define RTLD_LAZY		0
 #define RTLD_LOCAL		0
+#define RTLD_GLOBAL		0
 
 void *			dlsym ( void * lib, const char * name );
 void *			dlopen ( const char * libname, int );

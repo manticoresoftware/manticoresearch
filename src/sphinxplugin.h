@@ -184,6 +184,7 @@ bool sphPluginExists ( PluginType_e eType, const char * sName );
 /// that is, load the library if not yet loaded, import the symbols, register the plugin internally
 /// eRetType is only used for UDF type; might wanna change it to (void*) and pass a generic argument instead
 bool sphPluginCreate ( const char * sLib, PluginType_e eType, const char * sName, ESphAttr eUDFRetType, CSphString & sError );
+bool sphPluginCreate ( const char * sLib, PluginType_e eType, const char * sName, ESphAttr eUDFRetType, bool bDlGlobal, CSphString & sError );
 
 /// get plugin instance descriptor by name
 /// WARNING, increments users count, so non-NULL pointers you get back need to be Release()d

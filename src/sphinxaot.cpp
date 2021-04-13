@@ -1832,11 +1832,11 @@ bool LoadLemmatizerUk ( CSphString & sError )
 		{
 			bLoaded = Threads::CoContinueBool ( g_iLemmatizerUkStackSize, [&sError]
 			{
-				return sphPluginCreate ( g_sLemmatizerUkLib.cstr(), PLUGIN_INDEX_TOKEN_FILTER, g_sLemmatizerFnName.cstr(), SPH_ATTR_NONE, sError );
+				return sphPluginCreate ( g_sLemmatizerUkLib.cstr(), PLUGIN_INDEX_TOKEN_FILTER, g_sLemmatizerFnName.cstr(), SPH_ATTR_NONE, true, sError );
 			});
 		} else
 		{
-			bLoaded = sphPluginCreate ( g_sLemmatizerUkLib.cstr(), PLUGIN_INDEX_TOKEN_FILTER, g_sLemmatizerFnName.cstr(), SPH_ATTR_NONE, sError );
+			bLoaded = sphPluginCreate ( g_sLemmatizerUkLib.cstr(), PLUGIN_INDEX_TOKEN_FILTER, g_sLemmatizerFnName.cstr(), SPH_ATTR_NONE, true, sError );
 		}
 
 		if ( !bLoaded )

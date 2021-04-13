@@ -166,9 +166,9 @@ static CSphString TryDifferentPaths ( const CSphString & sLibfile )
 
 bool InitColumnar ( CSphString & sError )
 {
-	assert ( !g_pColumnarLib );
-
 #if USE_COLUMNAR
+
+	assert ( !g_pColumnarLib );
 
 #if USE_WINDOWS
 	CSphString sLibfile = "lib_manticore_columnar.dll";
@@ -242,5 +242,9 @@ const char * GetColumnarVersionStr()
 
 bool IsColumnarLibLoaded()
 {
+#if USE_COLUMNAR
 	return !!g_pColumnarLib;
+#else
+	return false;
+#endif
 }

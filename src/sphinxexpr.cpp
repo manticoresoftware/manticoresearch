@@ -1350,6 +1350,72 @@ private:
 
 //////////////////////////////////////////////////////////////////////////
 
+// very deep expression needs special stack for destroy
+class Expr_ProxyFat_c : public Expr_Unary_c
+{
+public:
+	explicit Expr_ProxyFat_c ( ISphExpr * pExpr )
+		: Expr_Unary_c ( "Expr_ProxyFat_c", pExpr )
+	{}
+
+	float Eval ( const CSphMatch & tMatch ) const final { return m_pFirst->Eval(tMatch); }
+
+	int IntEval ( const CSphMatch & tMatch ) const final { return m_pFirst->IntEval(tMatch); }
+
+	int64_t Int64Eval ( const CSphMatch & tMatch ) const final { return m_pFirst->Int64Eval(tMatch); }
+
+	int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const final { return m_pFirst->StringEval(tMatch,ppStr); }
+
+	const BYTE * StringEvalPacked ( const CSphMatch & tMatch ) const final { return m_pFirst->StringEvalPacked(tMatch); }
+
+	ByteBlob_t MvaEval ( const CSphMatch & tMatch) const final { return m_pFirst->MvaEval(tMatch); }
+
+	const BYTE * FactorEval ( const CSphMatch & tMatch) const final { return m_pFirst->FactorEval(tMatch); }
+
+	const BYTE * FactorEvalPacked ( const CSphMatch & tMatch) const final { return m_pFirst->FactorEvalPacked(tMatch); }
+
+	bool IsArglist () const final { return m_pFirst->IsArglist(); }
+
+	bool IsColumnar () const final { return m_pFirst->IsColumnar(); }
+
+	bool IsDataPtrAttr () const final { return m_pFirst->IsDataPtrAttr(); }
+
+	ISphExpr * GetArg ( int i ) const final { return m_pFirst->GetArg(i); }
+
+	int GetNumArgs() const final { return m_pFirst->GetNumArgs(); }
+
+	bool IsConst () const final { return m_pFirst->IsConst(); }
+
+	bool IsJson ( bool & bConverted ) const final { return m_pFirst->IsJson( bConverted); }
+
+	ISphExpr * Clone () const final { return new Expr_ProxyFat_c ( *this ); }
+
+protected:
+	Expr_ProxyFat_c ( const Expr_ProxyFat_c & ) = default;
+
+	~Expr_ProxyFat_c() final
+	{
+		if ( !m_pFirst || !m_pFirst->IsLast() )
+			return;
+
+		auto iStackNeeded = sphGetStackUsed ();
+		auto iCurStackSize = sphMyStackSize ();
+		int iNeedInAdvance = myinfo::DesiredStack ();
+		if ( iNeedInAdvance<=0 )
+			iStackNeeded = iCurStackSize * 2; // just from the fact that we're here, as ProxyFat is created by demand.
+		else
+			iStackNeeded += iNeedInAdvance * 2; // fixme! * 2 is not precise grade!
+
+		if ( iStackNeeded<=iCurStackSize )
+			return;
+
+		// special deep-expression delete - take subexpr and release it from dedicated coro with increased stack.
+		auto pExpr = m_pFirst.Leak();
+		assert ( pExpr && pExpr->IsLast () );
+		Threads::CoContinue ( (int) iStackNeeded, [pExpr] { pExpr->Release(); } );
+	}
+};
+
 class Expr_StrLength_c : public Expr_Unary_c
 {
 public:
@@ -9806,6 +9872,13 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 	if ( pAttrType )
 		*pAttrType = eAttrType;
 	} );
+
+	if ( pExpr && iStackNeeded>0 )
+	{
+		auto pChildExpr = pExpr;
+		pExpr = new Expr_ProxyFat_c ( pChildExpr );
+		pChildExpr->Release();
+	}
 
 	return pExpr;
 }

@@ -4989,6 +4989,11 @@ bool ExprParser_t::TransformNENE ( ExprNode_t * pRoot, ExprNode_t * pLeft, ExprN
 		pRoot->m_iToken = TOK_NOT;
 		pRoot->m_iRight = -1;
 
+		// discard optimized tokens
+		pRight->m_iToken = 0;
+		m_dNodes[pRight->m_iLeft].m_iToken = 0;
+		m_dNodes[pRight->m_iRight].m_iToken = 0;
+
 		pLeft->m_iToken = TOK_FUNC;
 		pLeft->m_iFunc = FUNC_IN;
 
@@ -5038,6 +5043,8 @@ bool ExprParser_t::TransformInNE ( ExprNode_t * pRoot, ExprNode_t * pLeft, ExprN
 	{
 		pIn1->m_pConsts->Add ( pNE1->m_iConst );
 		*pRoot = *pNotNode;
+		// discard optimized tokens
+		pNotNode->m_iToken = pNENode->m_iToken = pNE0->m_iToken = pNE1->m_iToken = 0;
 		return true;
 	}
 

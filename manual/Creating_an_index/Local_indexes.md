@@ -29,4 +29,4 @@ All index types are supported in this mode.
 | Plain       | no       | yes         |
 | Percolate   | yes      | yes         |
 | Distributed | yes      | yes         |
-| Template    | yes      | no          |
+| Template    | no       | yes         |

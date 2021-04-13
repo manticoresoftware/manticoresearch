@@ -4450,10 +4450,10 @@ int ExprParser_t::ProcessRawToken ( const char * sToken, int iLen, YYSTYPE * lva
 	auto eTok = TokHashLookup ( { sToken, iLen } );
 	if ( IsTok(eTok) )
 	{
-		if ( eTok==TOKH_COUNT ) // in case someone used 'count' as a name for an attribute
+		if ( eTok==TOKH_COUNT )
 		{
 			iRes = ParseAttrsAndFields ("count", lvalp);
-			if ( iRes>=0 )
+			if ( iRes>=0 ) // in case someone used 'count' as a name for an attribute
 				return iRes;
 		}
 		return dHash2Op[eTok-FUNC_FUNCS_COUNT];
@@ -6289,11 +6289,14 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		return nullptr;
 
 	const ExprNode_t & tNode = m_dNodes[iNode];
+	int iOp = tNode.m_iToken;
+
+	if ( iOp<=0 )	// tree doesn't need to be created (usually it was optimized away).
+		return nullptr;
 
 	// avoid spawning argument node in some cases
-	bool bSkipLeft = false;
-	bool bSkipRight = false;
-	if ( tNode.m_iToken==TOK_FUNC )
+	bool bSkipChildren = false;
+	if ( iOp==TOK_FUNC )
 	{
 		switch ( tNode.m_iFunc )
 		{
@@ -6319,36 +6322,35 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case FUNC_QUERY:
 		case FUNC_CURRENT_USER:
 		case FUNC_CONNECTION_ID:
-			bSkipLeft = true;
-			bSkipRight = true;
+			bSkipChildren = true;
 			break;
 		default:
 			break;
 		}
 	}
 
-	CSphRefcountedPtr<ISphExpr> pLeft ( bSkipLeft ? nullptr : CreateTree ( tNode.m_iLeft ) );
-	CSphRefcountedPtr<ISphExpr> pRight ( bSkipRight ? nullptr : CreateTree ( tNode.m_iRight ) );
+	CSphRefcountedPtr<ISphExpr> pLeft ( (tNode.m_iLeft<0 || bSkipChildren) ? nullptr : CreateTree ( tNode.m_iLeft ) );
+	CSphRefcountedPtr<ISphExpr> pRight ( (tNode.m_iRight<0 || bSkipChildren) ? nullptr : CreateTree ( tNode.m_iRight ) );
 
 	if ( GetCreateError() )
 		return nullptr;
 
-#define LOC_SPAWN_POLY(_classname) \
-	if ( tNode.m_eArgType==SPH_ATTR_INTEGER )		return new _classname##Int_c ( pLeft, pRight ); \
-	else if ( tNode.m_eArgType==SPH_ATTR_BIGINT )	return new _classname##Int64_c ( pLeft, pRight ); \
-	else											return new _classname##Float_c ( pLeft, pRight );
+#define LOC_SPAWN_POLY(_classname) switch (tNode.m_eArgType) { \
+	case SPH_ATTR_INTEGER:	return new _classname##Int_c ( pLeft, pRight ); \
+	case SPH_ATTR_BIGINT:	return new _classname##Int64_c ( pLeft, pRight ); \
+	default:				return new _classname##Float_c ( pLeft, pRight ); }
 
-	int iOp = tNode.m_iToken;
-	if ( iOp=='+' || iOp=='-' || iOp=='*' || iOp=='/' || iOp=='&' || iOp=='|' || iOp=='%' || iOp=='<' || iOp=='>'
-		|| iOp==TOK_LTE || iOp==TOK_GTE || iOp==TOK_EQ || iOp==TOK_NE || iOp==TOK_AND || iOp==TOK_OR || iOp==TOK_NOT )
-	{
+	switch (iOp) {
+		case '+': case '-': case '*': case '/': case '&': case '|': case '%': case '<': case '>':
+		case TOK_LTE: case TOK_GTE: case TOK_EQ: case TOK_NE: case TOK_AND: case TOK_OR: case TOK_NOT:
 		if ( pLeft && m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_JSON_FIELD && m_dNodes[tNode.m_iLeft].m_iToken==TOK_ATTR_JSON )
 			pLeft = new Expr_JsonFieldConv_c ( pLeft );
 		if ( pRight && m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_JSON_FIELD && m_dNodes[tNode.m_iRight].m_iToken==TOK_ATTR_JSON )
 			pRight = new Expr_JsonFieldConv_c ( pRight );
+		default: break;
 	}
 
-	switch ( tNode.m_iToken )
+	switch (iOp)
 	{
 		case TOK_ATTR_INT:		return new Expr_GetInt_c ( tNode.m_tLocator, tNode.m_iLocator );
 		case TOK_ATTR_BITS:		return new Expr_GetBits_c ( tNode.m_tLocator, tNode.m_iLocator );
@@ -6378,13 +6380,11 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 
 		case TOK_CONST_FLOAT:	return new Expr_GetConst_c ( tNode.m_fConst );
 		case TOK_CONST_INT:
-			if ( tNode.m_eRetType==SPH_ATTR_INTEGER )
-				return new Expr_GetIntConst_c ( (int)tNode.m_iConst );
-			else if ( tNode.m_eRetType==SPH_ATTR_BIGINT )
-				return new Expr_GetInt64Const_c ( tNode.m_iConst );
-			else
-				return new Expr_GetConst_c ( float(tNode.m_iConst) );
-			break;
+			switch (tNode.m_eRetType) {
+				case SPH_ATTR_INTEGER:	return new Expr_GetIntConst_c ( (int) tNode.m_iConst );
+				case SPH_ATTR_BIGINT:	return new Expr_GetInt64Const_c ( tNode.m_iConst );
+				default:				return new Expr_GetConst_c ( float ( tNode.m_iConst ) );
+			}
 		case TOK_CONST_STRING:
 			return new Expr_GetStrConst_c ( m_sExpr.first+GetConstStrOffset(tNode), GetConstStrLength(tNode), true );
 		case TOK_SUBKEY:
@@ -6436,7 +6436,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 //				assert ( g_dFuncs[tNode.m_iFunc].m_eFunc==eFunc );
 
 				VecRefPtrs_t<ISphExpr*> dArgs;
-				if ( !bSkipLeft )
+				if ( !bSkipChildren )
 				{
 					SafeAddRef ( pLeft );
 					MoveToArgList ( pLeft, dArgs );
@@ -6445,7 +6445,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 				// spawn proper function
 				assert ( tNode.m_iFunc>=0 && tNode.m_iFunc<int(sizeof(g_dFuncs)/sizeof(g_dFuncs[0])) );
 				assert (
-					( bSkipLeft ) || // function will handle its arglist,
+					( bSkipChildren ) || // function will handle its arglist,
 					( g_dFuncs[tNode.m_iFunc].m_iArgs>=0 && g_dFuncs[tNode.m_iFunc].m_iArgs==dArgs.GetLength() ) || // arg count matches,
 					( g_dFuncs[tNode.m_iFunc].m_iArgs<0 && -g_dFuncs[tNode.m_iFunc].m_iArgs<=dArgs.GetLength() ) ); // or min vararg count reached
 
@@ -8722,55 +8722,68 @@ int ExprParser_t::AddNodeOp ( int iOp, int iLeft, int iRight )
 
 	// deduce type
 	tNode.m_eRetType = SPH_ATTR_FLOAT; // default to float
-	if ( iOp==TOK_NEG )
+	switch (iOp)
 	{
-		// NEG just inherits the type
+	case TOK_NEG: // NEG just inherits the type
 		tNode.m_eArgType = m_dNodes[iLeft].m_eRetType;
 		tNode.m_eRetType = tNode.m_eArgType;
-	} else if ( iOp==TOK_NOT )
-	{
-		// NOT result is integer, and its argument must be integer
+		break;
+
+	case TOK_NOT: // NOT result is integer, and its argument must be integer
 		tNode.m_eArgType = m_dNodes[iLeft].m_eRetType;
 		tNode.m_eRetType = SPH_ATTR_INTEGER;
-		if ( !IsInt ( tNode.m_eArgType ))
+		if ( !IsInt ( tNode.m_eArgType ) )
 		{
 			m_sParserError.SetSprintf ( "NOT argument must be integer" );
 			return -1;
 		}
-	} else if ( iOp==TOK_NOT )
-	{
+		break;
 
-
-	} else if ( iOp==TOK_LTE || iOp==TOK_GTE || iOp==TOK_EQ || iOp==TOK_NE
-		|| iOp=='<' || iOp=='>' || iOp==TOK_AND || iOp==TOK_OR
-		|| iOp=='+' || iOp=='-' || iOp=='*' || iOp==','
-		|| iOp=='&' || iOp=='|' || iOp=='%'
-		|| iOp==TOK_IS_NULL || iOp==TOK_IS_NOT_NULL )
-	{
+	case '&': case '|':
 		tNode.m_eArgType = GetWidestRet ( iLeft, iRight );
+		tNode.m_eRetType = tNode.m_eArgType;
 
-		// arithmetical operations return arg type, logical return int
-		tNode.m_eRetType = ( iOp=='+' || iOp=='-' || iOp=='*' || iOp==',' || iOp=='&' || iOp=='|' || iOp=='%' )
-			? tNode.m_eArgType
-			: SPH_ATTR_INTEGER;
-
-		// both logical and bitwise AND/OR can only be over ints
-		if ( ( iOp==TOK_AND || iOp==TOK_OR || iOp=='&' || iOp=='|' )
-			&& !IsInt ( tNode.m_eArgType ))
+		if ( !IsInt ( tNode.m_eArgType ) ) // bitwise AND/OR can only be over ints
 		{
-			m_sParserError.SetSprintf ( "%s arguments must be integer", ( iOp==TOK_AND || iOp=='&' ) ? "AND" : "OR" );
+			m_sParserError.SetSprintf ( "%s arguments must be integer", ( iOp=='&' ) ? "&" : "|" );
 			return -1;
 		}
+		break;
+
+	case TOK_LTE: case TOK_GTE: case TOK_EQ: case TOK_NE:
+	case '<': case '>': case TOK_IS_NULL: case TOK_IS_NOT_NULL:
+		tNode.m_eArgType = GetWidestRet ( iLeft, iRight );
+		tNode.m_eRetType = SPH_ATTR_INTEGER;
+		break;
+
+	case TOK_AND: case TOK_OR:
+		tNode.m_eArgType = GetWidestRet ( iLeft, iRight );
+		tNode.m_eRetType = SPH_ATTR_INTEGER;
+
+		if ( !IsInt ( tNode.m_eArgType )) // logical AND/OR can only be over ints
+		{
+			m_sParserError.SetSprintf ( "%s arguments must be integer", ( iOp==TOK_AND ) ? "AND" : "OR" );
+			return -1;
+		}
+		break;
+
+	case '+': case '-': case '*': case ',':
+		tNode.m_eArgType = GetWidestRet ( iLeft, iRight );
+		tNode.m_eRetType = tNode.m_eArgType;
+		break;
+
+	case '%':
+		tNode.m_eArgType = GetWidestRet ( iLeft, iRight );
+		tNode.m_eRetType = tNode.m_eArgType;
 
 		// MOD can only be over ints
-		if ( iOp=='%' && !IsInt( tNode.m_eArgType ))
+		if ( !IsInt ( tNode.m_eArgType ) )
 		{
 			m_sParserError.SetSprintf ( "MOD arguments must be integer" );
 			return -1;
 		}
-
-	} else
-	{
+		break;
+	default:
 		// check for unknown op
 		assert ( iOp=='/' && "unknown op in AddNodeOp() type deducer" );
 	}
@@ -8846,7 +8859,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 
 	if ( iExpectedArgc<0 )
 	{
-		if ( iArgc<-iExpectedArgc )
+		if ( iArgc < -iExpectedArgc ) // space placed to avoid confusing ligature <-
 		{
 			m_sParserError.SetSprintf ( "%s() called with %d args, at least %d args expected", sFuncName, iArgc, -iExpectedArgc );
 			return -1;

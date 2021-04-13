@@ -3283,7 +3283,7 @@ public:
 		: m_pFirst ( pFirst )
 		, m_pSecond ( pSecond )
 		, m_pThird ( pThird )
-		, m_sExprName ( szClassName )
+		, m_szExprName ( szClassName )
 	{
 		SafeAddRef ( pFirst );
 		SafeAddRef ( pSecond );
@@ -3306,7 +3306,7 @@ public:
 
 	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) override
 	{
-		EXPR_CLASS_NAME_NOCHECK(m_sExprName.cstr());
+		EXPR_CLASS_NAME_NOCHECK( m_szExprName );
 		CALC_CHILD_HASH(m_pFirst);
 		CALC_CHILD_HASH(m_pSecond);
 		CALC_CHILD_HASH(m_pThird);
@@ -3318,14 +3318,14 @@ protected:
 	CSphRefcountedPtr<ISphExpr>	m_pFirst;
 	CSphRefcountedPtr<ISphExpr>	m_pSecond;
 	CSphRefcountedPtr<ISphExpr>	m_pThird;
-	CSphString					m_sExprName;
+	const char*					m_szExprName;
 
 protected:
 	ExprThreeway_c ( const ExprThreeway_c & rhs )
 		: m_pFirst ( SafeClone (rhs.m_pFirst) )
 		, m_pSecond ( SafeClone (rhs.m_pSecond) )
 		, m_pThird ( SafeClone (rhs.m_pThird) )
-		, m_sExprName ( rhs.m_sExprName )
+		, m_szExprName ( rhs.m_szExprName )
 	{}
 };
 

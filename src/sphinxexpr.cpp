@@ -4673,38 +4673,52 @@ void ExprParser_t::CanonizePass ( int iNode )
 		// ((const op lr) op2 right) gets replaced with (const op (lr op2/op right))
 		// constant gets promoted one level up
 		int iConst = pLeft->m_iLeft;
-		pLeft->m_iLeft = pLeft->m_iRight;
-		pLeft->m_iRight = pRoot->m_iRight; // (c op lr) -> (lr ... r)
+		int iCenter = pLeft->m_iRight;
+		int iRight = pRoot->m_iRight;
+		int iOpLeft = pLeft->m_iToken;
+		int iOp = pRoot->m_iToken;
 
-		switch ( pLeft->m_iToken )
+		int iOpNode = pRoot->m_iLeft;
+
+		// swap here is necessary in order to keep constraight (iRoot>iLeft) && (iRoot>iRight)
+		// that is, in turn, makes possible to create tree sequentally instead of recursive.
+		Swap ( m_dNodes[iOpNode], m_dNodes[iRight] );
+		Swap ( iOpNode, iRight );
+
+		switch ( iOpLeft )
 		{
 		case '+':
 		case '*':
 			// (c + lr) op r -> c + (lr op r)
 			// (c * lr) op r -> c * (lr op r)
-			Swap ( pLeft->m_iToken, pRoot->m_iToken );
+			Swap ( iOpLeft, iOp );
 			break;
 
 		case '-':
 			// (c - lr) + r -> c - (lr - r)
 			// (c - lr) - r -> c - (lr + r)
-			pLeft->m_iToken = ( pRoot->m_iToken=='+' ? '-' : '+' );
-			pRoot->m_iToken = '-';
+			iOpLeft = ( iOp=='+' ? '-' : '+' );
+			iOp = '-';
 			break;
 
 		case '/':
 			// (c / lr) * r -> c * (r / lr)
 			// (c / lr) / r -> c / (r * lr)
-			Swap ( pLeft->m_iLeft, pLeft->m_iRight );
-			pLeft->m_iToken = ( pRoot->m_iToken=='*' ) ? '/' : '*';
+			Swap ( iCenter, iRight );
+			iOpLeft = ( iOp=='*' ? '/' : '*' );
 			break;
 
 		default:
 			assert ( 0 && "internal error: unhandled op in left-const promotion" );
 		}
 
-		pRoot->m_iRight = pRoot->m_iLeft;
 		pRoot->m_iLeft = iConst;
+
+		pRoot->m_iRight = iOpNode;
+		m_dNodes[iOpNode].m_iLeft = iCenter;
+		m_dNodes[iOpNode].m_iRight = iRight;
+		m_dNodes[iOpNode].m_iToken = iOpLeft;
+		pRoot->m_iToken = iOp;
 	}
 }
 
@@ -4744,6 +4758,7 @@ void ExprParser_t::ConstantFoldPass ( int iNode )
 
 		pRoot->m_iToken = pLeft->m_iToken;
 		pRoot->m_iLeft = -1;
+		pLeft->m_iToken = 0;
 		return;
 	}
 
@@ -4781,7 +4796,9 @@ void ExprParser_t::ConstantFoldPass ( int iNode )
 				pRoot->m_iToken = TOK_CONST_FLOAT;
 			}
 			pRoot->m_iLeft = -1;
+			pLeft->m_iToken = 0;
 			pRoot->m_iRight = -1;
+			pRight->m_iToken = 0;
 			return;
 		}
 
@@ -4801,8 +4818,8 @@ void ExprParser_t::ConstantFoldPass ( int iNode )
 					pLeft->m_iConst += iSign*pConst->m_iConst;
 				} else
 				{
-					pLeft->m_fConst = FloatVal ( pLeft ) + iSign*FloatVal ( pConst );
 					pLeft->m_iToken = TOK_CONST_FLOAT;
+					pLeft->m_fConst = FloatVal ( pLeft ) + iSign*FloatVal ( pConst );
 				}
 
 				// fold ops
@@ -4829,6 +4846,7 @@ void ExprParser_t::ConstantFoldPass ( int iNode )
 
 			// promote expr arg
 			pRoot->m_iRight = pRight->m_iRight;
+			pRight->m_iToken = 0;
 		}
 	}
 
@@ -4845,16 +4863,17 @@ void ExprParser_t::ConstantFoldPass ( int iNode )
 				pRoot->m_iConst = IABS ( pLeft->m_iConst );
 			else
 				pRoot->m_fConst = (float)fabs ( fArg );
+			pLeft->m_iToken = 0;
 			break;
-		case FUNC_CEIL:		pRoot->m_iToken = TOK_CONST_INT; pRoot->m_iLeft = -1; pRoot->m_iConst = (int64_t)ceil ( fArg ); break;
-		case FUNC_FLOOR:	pRoot->m_iToken = TOK_CONST_INT; pRoot->m_iLeft = -1; pRoot->m_iConst = (int64_t)floor ( fArg ); break;
-		case FUNC_SIN:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float ( sin ( fArg) ); break;
-		case FUNC_COS:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float ( cos ( fArg ) ); break;
-		case FUNC_LN:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = fArg>0.0f ? (float) log(fArg) : 0.0f; break;
-		case FUNC_LOG2:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = fArg>0.0f ? (float)( log(fArg)*M_LOG2E ) : 0.0f; break;
-		case FUNC_LOG10:	pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = fArg>0.0f ? (float)( log(fArg)*M_LOG10E ) : 0.0f; break;
-		case FUNC_EXP:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float ( exp ( fArg ) ); break;
-		case FUNC_SQRT:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = fArg>0.0f ? (float)sqrt(fArg) : 0.0f; break;
+		case FUNC_CEIL:		pRoot->m_iToken = TOK_CONST_INT; pRoot->m_iLeft = -1; pRoot->m_iConst = (int64_t)ceil ( fArg ); pLeft->m_iToken = 0; break;
+		case FUNC_FLOOR:	pRoot->m_iToken = TOK_CONST_INT; pRoot->m_iLeft = -1; pRoot->m_iConst = (int64_t)floor ( fArg ); pLeft->m_iToken = 0; break;
+		case FUNC_SIN:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float ( sin ( fArg) ); pLeft->m_iToken = 0; break;
+		case FUNC_COS:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float ( cos ( fArg ) ); pLeft->m_iToken = 0; break;
+		case FUNC_LN:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = fArg>0.0f ? (float) log(fArg) : 0.0f; pLeft->m_iToken = 0; break;
+		case FUNC_LOG2:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = fArg>0.0f ? (float)( log(fArg)*M_LOG2E ) : 0.0f; pLeft->m_iToken = 0; break;
+		case FUNC_LOG10:	pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = fArg>0.0f ? (float)( log(fArg)*M_LOG10E ) : 0.0f; pLeft->m_iToken = 0; break;
+		case FUNC_EXP:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float ( exp ( fArg ) ); pLeft->m_iToken = 0; break;
+		case FUNC_SQRT:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = fArg>0.0f ? (float)sqrt(fArg) : 0.0f; pLeft->m_iToken = 0; break;
 		default:			break;
 		}
 		return;
@@ -4909,6 +4928,7 @@ void ExprParser_t::VariousOptimizationsPass ( int iNode )
 			pRoot->m_iToken = TOK_ATTR_SINT;
 			pRoot->m_tLocator = pLeft->m_tLocator;
 			pRoot->m_iLeft = -1;
+			pLeft->m_iToken = 0;
 		}
 	}
 }
@@ -6879,7 +6899,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 				VecRefPtrs_t<ISphExpr*> dArgs;
 				if ( !bSkipChildren )
 				{
-					SafeAddRef ( pLeft );
+					SafeAddRef (pLeft);
 					MoveToArgList ( pLeft, dArgs );
 					if ( pRight )
 					{
@@ -10308,16 +10328,28 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 	return pExpr;
 }
 
+void CheckDescendingNodes ( const CSphVector<ExprNode_t>& dNodes )
+{
+	ARRAY_CONSTFOREACH( i, dNodes )
+	{
+		assert ( i>dNodes[i].m_iLeft );
+		assert ( i>dNodes[i].m_iRight );
+	}
+}
+
 ISphExpr * ExprParser_t::Create ( bool * pUsesWeight, CSphString & sError )
 {
 	if ( GetError () )
 		return nullptr;
 
+#ifndef NDEBUG
+	CheckDescendingNodes ( m_dNodes );
+#endif
 	// perform optimizations (tree transformations)
 	Optimize ( m_iParsed );
-#if 0
-	Dump ( m_iParsed );
-	fflush ( stdout );
+
+#ifndef NDEBUG
+	CheckDescendingNodes ( m_dNodes );
 #endif
 
 	// simple semantic analysis

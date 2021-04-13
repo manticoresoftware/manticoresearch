@@ -13,6 +13,7 @@
 #pragma once
 
 #include "sphinx.h"
+#include "task_info.h"
 
 using StackSizeTuplet_t = std::pair<int,int>; // create, eval
 
@@ -53,6 +54,11 @@ bool EvalStackForTree ( const CSphVector<T> & dTree, int iStartNode, StackSizeTu
 
 	iStackNeeded = iCalculatedStack + 32*1024;
 	iStackNeeded = sphRoundUp( iStackNeeded, sphGetMemPageSize() ); // round up to memory page.
+
+	// in case we're in real query processing - propagate size of stack need for evaluations (only additional part)
+	auto* pInfo = myinfo::ref<ClientTaskInfo_t> ();
+	if ( pInfo )
+		pInfo->m_iDesiredStack = Max ( iMaxHeight * std::get<EVAL> ( tNodeStackSize ), pInfo->m_iDesiredStack );
 
 	return true;
 }

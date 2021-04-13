@@ -225,9 +225,9 @@ Threads::Handler myinfo::OwnMini ( Threads::Handler fnHandler )
 // returns ClientTaskInfo_t::m_iDistThreads
 int myinfo::DistThreads()
 {
-	auto pConn = HazardGetClient ();
-	if ( pConn )
-		return pConn->m_iDistThreads;
+	auto pNode = HazardGetClient ();
+	if ( pNode )
+		return pNode->m_iDistThreads;
 
 	sphWarning ( "internal error: myinfo::DistThreads () invoked with empty tls!" );
 	return 0;
@@ -246,9 +246,9 @@ void myinfo::SetDistThreads ( int iValue )
 // returns ClientTaskInfo_t::m_iThrottlingPeriod
 int myinfo::ThrottlingPeriodMS()
 {
-	auto pConn = HazardGetClient ();
-	if ( pConn )
-		return pConn->m_iThrottlingPeriod;
+	auto pNode = HazardGetClient ();
+	if ( pNode )
+		return pNode->m_iThrottlingPeriod;
 
 	sphWarning ( "internal error: myinfo::ThrottlingPeriodMS () invoked with empty tls!" );
 	return 0;
@@ -264,11 +264,32 @@ void myinfo::SetThrottlingPeriodMS ( int iValue )
 		sphWarning ( "internal error: myinfo::SetThrottlingPeriodMS () invoked with empty tls!" );
 }
 
+// returns ClientTaskInfo_t::m_iDesiredStack
+int myinfo::DesiredStack ()
+{
+	auto pNode = HazardGetClient ();
+	if ( pNode )
+		return pNode->m_iDesiredStack;
+
+	sphWarning ( "internal error: myinfo::DesiredStack () invoked with empty tls!" );
+	return -1;
+}
+
+// set ClientTaskInfo_t::m_iDistThreads
+void myinfo::SetDesiredStack ( int iValue )
+{
+	auto pNode = HazardGetClient ();
+	if ( pNode )
+		pNode->m_iDesiredStack = iValue;
+	else
+		sphWarning ( "internal error: myinfo::SetDesiredStack () invoked with empty tls!" );
+}
+
 int myinfo::ConnID ()
 {
-	auto pConn = HazardGetClient();
-	if ( pConn )
-		return pConn->m_iConnID;
+	auto pNode = HazardGetClient();
+	if ( pNode )
+		return pNode->m_iConnID;
 
 	sphWarning ( "internal error: myinfo::ConnID () invoked with empty tls!" );
 	return -1;

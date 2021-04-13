@@ -179,6 +179,7 @@ struct ClientTaskInfo_t : public MiniTaskInfo_t
 	int			m_iConnID = -1;
 	int 		m_iThrottlingPeriod = -1;
 	int 		m_iDistThreads = 0;
+	int 		m_iDesiredStack = -1;
 	CSphString	m_sClientName; // set once before info is published and never changes. So, assume always mt-safe
 	bool 		m_bSsl = false;
 	bool 		m_bVip = false;
@@ -236,6 +237,13 @@ namespace myinfo {
 
 	// set ClientTaskInfo_t::m_iThrottlingPeriod
 	void SetThrottlingPeriodMS ( int iValue );
+
+	// returns ClientTaskInfo_t::m_iDesiredStack
+	int DesiredStack ();
+
+	// set ClientTaskInfo_t::m_iDesiredStack.
+	// It might be used to warn (task-wide) about heavy calculations which need deep stack
+	void SetDesiredStack ( int iValue );
 
 	// returns ClientTaskInfo_t::m_iConnID
 	int ConnID ();

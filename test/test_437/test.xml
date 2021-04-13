@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>infix vs max codepoint length</name>
+
+<requires>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<sphqueries>
+
+<sphinxql>
+	show tables;
+	create table test ( title text ) morphology='stem_enru' rt_mem_limit='1024M' index_exact_words='1'  expand_keywords='1' min_infix_len='3' charset_table='0..9, english, russian, _, U+0401->U+0435, U+0451->U+0435';
+	insert into test (title) values ('БОРИСОВСКИЙ');
+	select * from test;
+	select * from test where match('*бори*');
+	select * from test where match('*борис*');
+	select * from test where match('*борисо*');
+	select * from test where match('*борисов*');
+	select * from test where match('*борисовс*');
+	select * from test where match('*борисовск*');
+	flush ramchunk test;
+	select * from test where match('*бори*');
+	select * from test where match('*борис*');
+	select * from test where match('*борисо*');
+	select * from test where match('*борисов*');
+	select * from test where match('*борисовс*');
+	select * from test where match('*борисовск*');
+	drop table test;
+</sphinxql>
+
+</sphqueries>
+
+</test>

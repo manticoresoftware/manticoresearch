@@ -18807,7 +18807,7 @@ void InfixBuilder_c<SIZE>::AddWord ( const BYTE * pWord, int iWordLength, int iC
 
 		assert ( s - ( pWord + dBytes[p] )==(dBytes[p+1] - dBytes[p]) );
 
-		while ( s<sMax && pKey<pKeyMax && pKey+Utf8CodeLen ( *s )<pKeyMax )
+		while ( s<sMax && pKey<pKeyMax && pKey+Utf8CodeLen ( *s )<=pKeyMax )
 		{
 			// copy next infix codepoint
 			do

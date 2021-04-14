@@ -36,7 +36,6 @@ SET ( CMAKE_MODULE_PATH "${MANTICORE_SOURCE_DIR}/cmake" )
 SET ( MANTICORE_MODULE_PATH "${CMAKE_MODULE_PATH}")
 SET ( EXTRA_LIBRARIES )
 SET ( EXTRA_SEARCHD_LIBRARIES )
-SET ( CMAKE_C_STANDARD 99 )
 SET ( CMAKE_CXX_STANDARD 14 )
 
 option ( DISABLE_TESTING "Disable all testing (if you just build a distr)" OFF )
@@ -307,8 +306,6 @@ else ( WIN32 )
 			set ( CFLAGS "${CFLAGS} -O3" )
 			add_definitions ( "-DNDEBUG" )
 		endif ()
-
-		set ( CFLAGS "${CFLAGS} -msse4.1" )
 
 		option ( STATIC_BINARY "Produce statically linked ELF" OFF)
 		if ( STATIC_BINARY )

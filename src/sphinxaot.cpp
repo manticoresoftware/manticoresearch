@@ -1895,11 +1895,16 @@ static bool SkipNonUkToken ( const BYTE * pWord )
 
 	while ( ( iCode = sphUTF8Decode ( pWord ) )>0 )
 	{
-		// pass-through words with non ukrainian chars
-		if ( iCode<0x400 || iCode>0x4ff )
-			return true;
-
 		iCodepoints++;
+		if ( iCode>=0x400 && iCode<=0x4ff )
+			continue;
+
+		// allow non_cjk uk mapping too
+		if ( iCode==0x69 || iCode==0x73 || iCode==0xE6 )
+			continue;
+
+		// pass-through words with non ukrainian chars
+		return true;
 	}
 
 	// pass-through 1-char "words"

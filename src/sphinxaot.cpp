@@ -1899,10 +1899,6 @@ static bool SkipNonUkToken ( const BYTE * pWord )
 		if ( iCode<0x400 || iCode>0x4ff )
 			return true;
 
-		// pass-through words with numbers
-		if ( sphIsInteger ( iCode ) )
-			return true;
-
 		iCodepoints++;
 	}
 

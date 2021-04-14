@@ -276,18 +276,17 @@ private:
 			assert ( m_pScheduler );
 		}
 
+	// called solely for mocking - no scheduler, not possible to yield. Just provided stack and executor
+	CoroWorker_c ( Handler fnHandler, VecTraits_T<BYTE> dStack )
+		: m_tCoroutine { std::move ( fnHandler ), dStack }
+	{
+		assert ( !m_pScheduler );
+	}
+
 	void Run ()
 	{
-		{
-			CoroGuard_t pThis (this);
-			m_tCoroutine.Run();
-		}
-		if ( m_tCoroutine.IsFinished () )
-		{
-			delete this;
-			return;
-		}
-		ResetEnteredAndReschedule ();
+		if ( !Resume () )
+			ResetEnteredAndReschedule ();
 	}
 
 	void ResetEnteredAndReschedule ()
@@ -359,10 +358,13 @@ public:
 
 	static void MockRun ( Handler fnHandler, VecTraits_T<BYTE> dStack )
 	{
-		CoRoutine_c tAction ( std::move ( fnHandler ), dStack );
+		CoroWorker_c tAction ( std::move ( fnHandler ), dStack );
 		auto pOldStack = Threads::TopOfStack ();
 		Threads::SetTopStack ( &dStack.Last() );
-		tAction.Run();
+		{
+			CoroGuard_t pThis ( &tAction );
+			tAction.m_tCoroutine.Run ();
+		}
 		Threads::SetTopStack ( pOldStack );
 	}
 

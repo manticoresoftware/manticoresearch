@@ -9773,16 +9773,21 @@ struct HookCheck_fn
 };
 
 
-static int SPH_EXPRNODE_STACK_SIZE = 160;
+static int EXPR_STACK_EVAL = 160;
+static int EXPR_STACK_CREATE = 400;
 
-void SetExprNodeStackItemSize ( int iSize )
+void SetExprNodeStackItemSize ( int iCreateSize, int iEvalSize )
 {
-	if ( iSize>SPH_EXPRNODE_STACK_SIZE )
-		SPH_EXPRNODE_STACK_SIZE = iSize;
+	if ( iCreateSize>EXPR_STACK_CREATE )
+		EXPR_STACK_CREATE = iCreateSize;
+
+	if ( iEvalSize>EXPR_STACK_EVAL )
+		EXPR_STACK_EVAL = iEvalSize;
 }
 
 
-ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight, CSphString & sError )
+ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
+	ESphAttr * pAttrType, bool * pUsesWeight, CSphString & sError )
 {
 	const char* szExpr = sExpr;
 
@@ -9838,9 +9843,10 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 	// Check expression stack to fit for mutual recursive function calls.
 	// This check is an approximation, because different compilers with
 	// different settings produce code which requires different stack size.
-	const int TREE_SIZE_THRESH = 100;
+	const int TREE_SIZE_THRESH = 20;
+	const StackSizeTuplet_t tExprStack = { EXPR_STACK_CREATE, EXPR_STACK_EVAL };
 	int iStackNeeded = -1;
-	if ( !EvalStackForTree ( m_dNodes, m_iParsed, SPH_EXPRNODE_STACK_SIZE, TREE_SIZE_THRESH, iStackNeeded, "expressions", sError ) )
+	if ( !EvalStackForTree ( m_dNodes, m_iParsed, tExprStack, TREE_SIZE_THRESH, iStackNeeded, "expressions", sError ) )
 		return nullptr;
 
 	ISphExpr * pExpr = nullptr;

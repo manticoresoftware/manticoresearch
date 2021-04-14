@@ -16,198 +16,269 @@
 #include "searchdsql.h"
 #include "attribute.h"
 
-static int CalcUsedStackEdge ( VecTraits_T<BYTE> dStack, BYTE uFiller )
+
+class StackMeasurer_c
 {
-	ARRAY_CONSTFOREACH ( i, dStack )
-		if ( dStack[i]!=uFiller )
-			return dStack.GetLength ()-i;
-	
-	return dStack.GetLength();
-}
+protected:
+	CSphFixedVector<BYTE> m_dMockStack { (int) Threads::GetDefaultCoroStackSize () };
+	int m_iComplexity;
 
-
-static int CalcUsedStackBytes ( VecTraits_T<BYTE> dStack, BYTE uFiller )
-{
-	int iRes=0;
-	dStack.Apply ( [&] ( BYTE uData ) { iRes += ( uData!=uFiller ) ? 1 : 0; } );
-	return iRes;
-}
-
-
-static void MockInitMem ( VecTraits_T<BYTE> dStack, BYTE uFiller )
-{
-	::memset ( dStack.begin (), uFiller, dStack.GetLengthBytes () );
-}
-
-
-static void MockParseExpr ( VecTraits_T<BYTE> dStack, const char * sExpr )
-{
-	struct
+protected:
+	int CalcUsedStackEdge ( BYTE uFiller )
 	{
-		ExprParseArgs_t m_tArgs;
-		CSphString m_sError;
-		CSphSchema m_tSchema;
-		const char * m_sExpr;
-		bool m_bSuccess;
-	} tParams;
+		ARRAY_CONSTFOREACH ( i, m_dMockStack )
+			if ( m_dMockStack[i]!=uFiller )
+				return m_dMockStack.GetLength ()-i;
 
-	CSphColumnInfo tAttr;
-	tAttr.m_eAttrType = SPH_ATTR_INTEGER;
-	tAttr.m_sName = "attr_a";
-	tParams.m_tSchema.AddAttr ( tAttr, false );
-	tAttr.m_sName = "attr_b";
-	tParams.m_tSchema.AddAttr ( tAttr, false );
-	tParams.m_sExpr = sExpr;
-
-	Threads::MockCallCoroutine ( dStack, [&tParams]
-		{
-			ISphExpr * pExprBase = sphExprParse ( tParams.m_sExpr, tParams.m_tSchema, tParams.m_sError, tParams.m_tArgs );
-			tParams.m_bSuccess = !!pExprBase;
-			SafeRelease ( pExprBase );
-		});
-
-	if ( !tParams.m_bSuccess || !tParams.m_sError.IsEmpty () )
-		sphWarning ( "stack check expression error: %s", tParams.m_sError.cstr () );
-}
-
-
-template <typename ACTION>
-static int MockMeasureStack ( VecTraits_T<BYTE> dStack, const char * szParam, BYTE uPattern, ACTION && fnAction )
-{
-	MockInitMem ( dStack, uPattern );
-	fnAction ( dStack, szParam );
-	auto iUsedStack = CalcUsedStackBytes ( dStack, uPattern );
-	auto iUsedStackEdge = CalcUsedStackEdge ( dStack, uPattern );
-	return ( Max ( iUsedStack, iUsedStackEdge )+3 ) & ~3;
-}
-
-template <typename ACTION>
-static int MockStack ( VecTraits_T<BYTE> dStack, const char * szParam, ACTION && fnAction )
-{
-	auto iStartStack55 = MockMeasureStack ( dStack, szParam, 0xDE, fnAction );
-	auto iStartStackAA = MockMeasureStack ( dStack, szParam, 0xAD, fnAction );
-	return Max ( iStartStack55, iStartStackAA );
-}
-
-template <typename GETMOCK, typename ACTION >
-int DetermineStackSize ( GETMOCK && fnGetMock, ACTION && fnAction, int iNodes )
-{
-	CSphFixedVector<BYTE> dMockStack { (int)Threads::GetDefaultCoroStackSize() };
-	StringBuilder_c sExpr;
-	fnGetMock ( sExpr, 0 );
-
-	int iStartStack = MockStack ( (VecTraits_T<BYTE>)dMockStack, sExpr.cstr(), fnAction );
-	int iDelta = 0;
-
-	// Find edge of stack where expr length became visible
-	// (we need quite big expr in order to touch deepest of the stack)
-	int iHeight = 0;
-	while ( !iDelta )
-	{
-		iHeight++;
-		fnGetMock ( sExpr, iHeight );
-		auto iCurStack = MockStack ( dMockStack, sExpr.cstr(), fnAction );
-		iDelta = iCurStack - iStartStack;
+		return m_dMockStack.GetLength ();
 	}
 
-	iStartStack += iDelta;
-	iDelta = 0;
+	void MockInitMem ( BYTE uFiller )
+	{
+		::memset ( m_dMockStack.begin (), uFiller, m_dMockStack.GetLengthBytes () );
+	}
 
-	// add iNodes frames and average stack from them (1-st already added, so add iNodes-1)
-	fnGetMock ( sExpr, iHeight + iNodes - 1 );
+	int MeasureStackWithPattern ( BYTE uPattern )
+	{
+		MockInitMem ( uPattern );
+		MockParseTest ();
+		auto iUsedStackEdge = CalcUsedStackEdge ( uPattern );
+		return sphRoundUp ( iUsedStackEdge, 4 );
+	}
 
-	auto iCurStack = MockStack ( dMockStack, sExpr.cstr(), fnAction );
-	iDelta = iCurStack-iStartStack;
-	iDelta/=iNodes;
-	iDelta = (iDelta+15)&~15;
+	int MeasureStack ()
+	{
+		auto iStartStackDE = MeasureStackWithPattern ( 0xDE );
+		auto iStartStackAD = MeasureStackWithPattern ( 0xAD );
+		return Max ( iStartStackDE, iStartStackAD );
+	}
 
-	return iDelta;
-}
+	virtual void BuildMockExpr ( int iComplexity ) = 0;
+	virtual void MockParseTest () = 0;
+
+	void BuildMockExprWrapper ( int iComplexity )
+	{
+		m_iComplexity = iComplexity + 1;
+		BuildMockExpr ( iComplexity );
+	}
+
+public:
+	int MockMeasureStack ( int iNodes )
+	{
+		BuildMockExprWrapper ( 0 );
+
+		int iStartStack = MeasureStack ();
+		int iDelta = 0;
+
+		// Find edge of stack where expr length became visible
+		// (we need quite big expr in order to touch deepest of the stack)
+		int iHeight = 0;
+		while ( iDelta<=0 )
+		{
+			++iHeight;
+			BuildMockExprWrapper ( iHeight );
+			auto iCurStack = MeasureStack ();
+			iDelta = iCurStack - iStartStack;
+		}
+
+		iStartStack += iDelta;
+
+		// add iNodes frames and average stack from them
+		BuildMockExprWrapper ( iHeight + iNodes );
+
+		auto iCurStack = MeasureStack ();
+		iDelta = iCurStack-iStartStack;
+		iDelta/=iNodes;
+		iDelta = sphRoundUp ( iDelta, 16 );
+		return iDelta;
+	}
+
+	virtual ~StackMeasurer_c () {}
+};
 
 /////////////////////////////////////////////////////////////////////
-
-static const CSphString g_sMockExpr = "(4*attr_a+2*(attr_b-1)+3)*10";
-
-static void GetMockExpr ( StringBuilder_c & sExpr, int iCount )
+/// calculate stack for expressions
+class CreateExprStackSize_c : public StackMeasurer_c
 {
-	sExpr.Clear();
-	for (int i=0; i<iCount; ++i)
-		sExpr << "(";
+	void BuildMockExpr ( int iComplexity ) final
+	{
+		m_sExpr.Clear();
+		m_sExpr << "((attr_a=0)*1)";
 
-	sExpr << g_sMockExpr;
+		for ( int i = 1; i<iComplexity+1; ++i ) // ((attr_a=0)*1) + ((attr_b=1)*3) + ((attr_b=2)*5) + ...
+			m_sExpr << "+((attr_b=" << i << ")*" << i * 2+1 << ")";
+	}
 
-	for (int i=0; i<iCount; ++i)
-		sExpr << "*(10+1))";
-}
+	void MockParseTest () override
+	{
+		struct
+		{
+			ExprParseArgs_t m_tArgs;
+			CSphString m_sError;
+			CSphSchema m_tSchema;
+			const char * m_sExpr = nullptr;
+			bool m_bSuccess = false;
+			ISphExpr * m_pExprBase = nullptr;
+		} tParams;
 
+		CSphColumnInfo tAttr;
+		tAttr.m_eAttrType = SPH_ATTR_INTEGER;
+		tAttr.m_sName = "attr_a";
+		tParams.m_tSchema.AddAttr ( tAttr, false );
+		tAttr.m_sName = "attr_b";
+		tParams.m_tSchema.AddAttr ( tAttr, false );
+
+		tParams.m_sExpr = m_sExpr.cstr();
+
+		Threads::MockCallCoroutine ( m_dMockStack, [&tParams] {
+			tParams.m_pExprBase = sphExprParse ( tParams.m_sExpr, tParams.m_tSchema, tParams.m_sError, tParams.m_tArgs );
+		} );
+
+		tParams.m_bSuccess = !!tParams.m_pExprBase;
+		SafeRelease ( tParams.m_pExprBase );
+
+		if ( !tParams.m_bSuccess || !tParams.m_sError.IsEmpty () )
+			sphWarning ( "stack check expression error: %s", tParams.m_sError.cstr () );
+	}
+
+protected:
+	StringBuilder_c m_sExpr;
+};
+
+// measure stack for evaluate expression
+class EvalExprStackSize_c : public CreateExprStackSize_c
+{
+	void MockParseTest () override
+	{
+		struct
+		{
+			ExprParseArgs_t m_tArgs;
+			CSphString m_sError;
+			CSphSchema m_tSchema;
+			const char * m_sExpr = nullptr;
+			bool m_bSuccess = false;
+			ISphExpr * m_pExprBase = nullptr;
+			CSphMatch m_tMatch;
+		} tParams;
+
+		CSphColumnInfo tAttr;
+		tAttr.m_eAttrType = SPH_ATTR_INTEGER;
+		tAttr.m_sName = "attr_a";
+		tParams.m_tSchema.AddAttr ( tAttr, false );
+		tAttr.m_sName = "attr_b";
+		tParams.m_tSchema.AddAttr ( tAttr, false );
+
+		CSphFixedVector<CSphRowitem> dRow { tParams.m_tSchema.GetRowSize () };
+		auto * pRow = dRow.Begin();
+		for ( int i = 1; i<tParams.m_tSchema.GetAttrsCount (); ++i )
+			sphSetRowAttr ( pRow, tParams.m_tSchema.GetAttr ( i ).m_tLocator, i );
+		sphSetRowAttr ( pRow, tParams.m_tSchema.GetAttr ( 0 ).m_tLocator, 123 );
+
+		tParams.m_tMatch.m_tRowID = 123;
+		tParams.m_tMatch.m_iWeight = 456;
+		tParams.m_tMatch.m_pStatic = pRow;
+
+		tParams.m_sExpr = m_sExpr.cstr();
+
+		{ // parse in dedicated coro (hope, 100K frame per level should fit any arch)
+		CSphFixedVector<BYTE> dSafeStack { m_iComplexity * 100 * 1024 };
+		Threads::MockCallCoroutine ( dSafeStack, [&tParams] {	// do in coro as for fat expr it might already require dedicated stack
+			tParams.m_pExprBase = sphExprParse ( tParams.m_sExpr, tParams.m_tSchema, tParams.m_sError, tParams.m_tArgs );
+		});
+		}
+
+		tParams.m_bSuccess = !!tParams.m_pExprBase;
+		assert ( tParams.m_pExprBase );
+
+		Threads::MockCallCoroutine ( m_dMockStack, [&tParams] {
+			tParams.m_pExprBase->Eval ( tParams.m_tMatch );
+		} );
+
+		if ( !tParams.m_bSuccess || !tParams.m_sError.IsEmpty () )
+			sphWarning ( "stack check expression error: %s", tParams.m_sError.cstr () );
+	}
+};
 
 void DetermineNodeItemStackSize()
 {
-	auto fnGetMock = [](StringBuilder_c & sExpr, int iHeight){ GetMockExpr ( sExpr, iHeight ); };
-	auto fnAction = [](VecTraits_T<BYTE> dStack, const char * szExpr) { MockParseExpr ( dStack, szExpr ); };
-	int iDelta = DetermineStackSize ( fnGetMock, fnAction, 5 );
-	sphLogDebug ( "expression stack delta %d", iDelta );
-	SetExprNodeStackItemSize(iDelta);
+	int iCreateSize, iEvalSize;
+	{
+		CreateExprStackSize_c tCreateMeter;
+		iCreateSize = tCreateMeter.MockMeasureStack ( 5 );
+	}
+	sphLogDebug ( "expression stack for creation %d", iCreateSize );
+
+	// save the metric, as next measuring eval metric with deeper recursion may already use the value
+	SetExprNodeStackItemSize ( iCreateSize, 0 );
+
+	{
+		EvalExprStackSize_c tEvalMeter;
+		iEvalSize = tEvalMeter.MockMeasureStack ( 20 );
+	}
+	sphLogDebug ( "expression stack for eval/deletion %d", iEvalSize );
+	SetExprNodeStackItemSize ( 0, iEvalSize );
 }
 
 /////////////////////////////////////////////////////////////////////
-
-static void GetMockFilterQuery ( StringBuilder_c & sQuery, int iCount )
+class FilterCreationMeasureStack_c : public StackMeasurer_c
 {
-	sQuery.Clear();
-	sQuery << "select * from test where id between 1 and 10";
-	for ( int i=0; i < iCount; i++ )
-		sQuery << " OR id between 1 and 10";
-}
-
-
-static void MockParseQuery ( VecTraits_T<BYTE> dStack, const char * szQuery )
-{
-	struct
+	void BuildMockExpr ( int iComplexity ) final
 	{
-		CSphString				m_sQuery;
-		CSphVector<SqlStmt_t>	m_dStmt;
-		CSphSchema				m_tSchema;
-		CSphString				m_sError;
-		bool					m_bSuccess;
-	} tParams;
+		m_sQuery.Clear ();
+		m_sQuery << "select * from test where id between 1 and 10";
+		for ( int i = 0; i<iComplexity; i++ )
+			m_sQuery << " OR id between 1 and 10";
+	}
 
-	tParams.m_sQuery = szQuery;
-
-	CSphColumnInfo tAttr;
-	tAttr.m_eAttrType = SPH_ATTR_BIGINT;
-	tAttr.m_sName = sphGetDocidName();
-	tParams.m_tSchema.AddAttr ( tAttr, false );
-
-	Threads::MockCallCoroutine ( dStack, [&tParams]
+	void MockParseTest () final
+	{
+		struct
 		{
-			tParams.m_bSuccess = sphParseSqlQuery ( tParams.m_sQuery.cstr(), tParams.m_sQuery.Length(), tParams.m_dStmt, tParams.m_sError, SPH_COLLATION_DEFAULT );
+			CSphString m_sQuery;
+			CSphVector<SqlStmt_t> m_dStmt;
+			CSphSchema m_tSchema;
+			CSphString m_sError;
+			bool m_bSuccess = false;
+		} tParams;
+
+		tParams.m_sQuery = m_sQuery.cstr();
+
+		CSphColumnInfo tAttr;
+		tAttr.m_eAttrType = SPH_ATTR_BIGINT;
+		tAttr.m_sName = sphGetDocidName ();
+		tParams.m_tSchema.AddAttr ( tAttr, false );
+
+		Threads::MockCallCoroutine ( m_dMockStack, [&tParams] {
+			tParams.m_bSuccess = sphParseSqlQuery ( tParams.m_sQuery.cstr (), tParams.m_sQuery.Length ()
+													, tParams.m_dStmt, tParams.m_sError, SPH_COLLATION_DEFAULT );
 			if ( !tParams.m_bSuccess )
 				return;
 
 			const CSphQuery & tQuery = tParams.m_dStmt[0].m_tQuery;
 			CreateFilterContext_t tFCtx;
-			tFCtx.m_pFilters	= &tQuery.m_dFilters;
-			tFCtx.m_pFilterTree	= &tQuery.m_dFilterTree;
-			tFCtx.m_pSchema		= &tParams.m_tSchema;
-			tFCtx.m_bScan		= true;
+			tFCtx.m_pFilters = &tQuery.m_dFilters;
+			tFCtx.m_pFilterTree = &tQuery.m_dFilterTree;
+			tFCtx.m_pSchema = &tParams.m_tSchema;
+			tFCtx.m_bScan = true;
 
 			CSphString sWarning;
 
-			CSphQueryContext tCtx(tQuery);
+			CSphQueryContext tCtx ( tQuery );
 			tParams.m_bSuccess = tCtx.CreateFilters ( tFCtx, tParams.m_sError, sWarning );
-		});
+		} );
 
-	if ( !tParams.m_bSuccess || !tParams.m_sError.IsEmpty () )
-		sphWarning ( "stack check filter error: %s", tParams.m_sError.cstr () );
-}
+		if ( !tParams.m_bSuccess || !tParams.m_sError.IsEmpty () )
+			sphWarning ( "stack check filter error: %s", tParams.m_sError.cstr () );
+	}
 
+protected:
+	StringBuilder_c m_sQuery;
+};
 
-void DetermineFilterItemStackSize()
+void DetermineFilterItemStackSize ()
 {
-	auto fnGetMock = [](StringBuilder_c & sQuery, int iHeight){ GetMockFilterQuery ( sQuery, iHeight ); };
-	auto fnAction = [](VecTraits_T<BYTE> dStack, const char * szQuery) { MockParseQuery ( dStack, szQuery ); };
-	int iDelta = DetermineStackSize ( fnGetMock, fnAction, 100 );
+	FilterCreationMeasureStack_c tCreateMeter;
+	int iDelta = tCreateMeter.MockMeasureStack ( 100 );
 	sphLogDebug ( "filter stack delta %d", iDelta );
-	SetFilterStackItemSize(iDelta);
+	SetFilterStackItemSize ( iDelta );
 }

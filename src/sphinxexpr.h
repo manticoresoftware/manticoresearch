@@ -330,7 +330,7 @@ ISphExpr * CreateGetColumnarFloatExpr ( const CSphString & sName, int iLocator )
 ISphExpr * CreateGetColumnarStrExpr ( const CSphString & sName, int iLocator );
 #endif
 
-void SetExprNodeStackItemSize ( int iSize );
+void SetExprNodeStackItemSize ( int iCreateSize, int iEvalSize );
 
 //////////////////////////////////////////////////////////////////////////
 

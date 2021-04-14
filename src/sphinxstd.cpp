@@ -1757,6 +1757,24 @@ int sphCpuThreadsCount ()
 }
 
 
+int GetMemPageSize ()
+{
+#if USE_WINDOWS
+		SYSTEM_INFO tInfo;
+		GetSystemInfo ( &tInfo );
+		return tInfo.dwPageSize;
+#else
+		return getpagesize();
+#endif
+}
+
+int sphGetMemPageSize ()
+{
+	static int iMemPageSize = GetMemPageSize ();
+	return iMemPageSize;
+}
+
+
 //////////////////////////////////////////////////////////////////////////
 
 #if USE_WINDOWS

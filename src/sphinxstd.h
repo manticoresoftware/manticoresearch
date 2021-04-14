@@ -4879,6 +4879,12 @@ using SharedPtrCustom_t = SharedPtr_T<T, CustomDeleter_T<T, DELETER>, REFCOUNTED
 
 int sphCpuThreadsCount ();
 
+int sphGetMemPageSize ();
+
+inline int sphRoundUp ( int iValue, int iLimit )
+{
+	return ( iValue+iLimit-1 ) & ~( iLimit-1 );
+}
 //////////////////////////////////////////////////////////////////////////
 struct HashFunc_Int64_t
 {

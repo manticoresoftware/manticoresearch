@@ -1,3 +1,8 @@
+common
+{
+    plugin_dir = /usr/lib
+}
+
 searchd
 {
     listen = 127.0.0.1:9312

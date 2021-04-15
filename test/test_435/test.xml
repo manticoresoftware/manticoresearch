@@ -88,6 +88,11 @@ CREATE TABLE `test_table` (
 <sphinxql>select least(cat1),least(cat2),least(cat3) from META:all</sphinxql>
 <sphinxql>select greatest(cat1),greatest(cat2),greatest(cat3) from META:all</sphinxql>
 
+<!-- exclude filters in MVA attrs -->
+<sphinxql>select id,cat2 from META:all</sphinxql>
+<sphinxql>select id from META:all where any(cat2) not in (20,30,40)</sphinxql>
+<sphinxql>select id from META:all where all(cat2) not in (20,30,40)</sphinxql>
+
 </sphqueries>
 
 </test>

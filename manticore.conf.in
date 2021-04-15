@@ -1,10 +1,8 @@
-common
-{
-    plugin_dir = /usr/lib
+common {
+    plugin_dir = /usr/local/manticore/lib
 }
 
-searchd
-{
+searchd {
     listen = 127.0.0.1:9312
     listen = 127.0.0.1:9306:mysql
     listen = 127.0.0.1:9308:http

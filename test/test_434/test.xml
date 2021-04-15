@@ -91,6 +91,20 @@ INSERT INTO test_table VALUES
 <sphinxql>select id from test order by flt desc</sphinxql>
 <sphinxql>select id,flt from test order by flt desc</sphinxql>
 
+<!-- exclude filters for bool attrs -->
+<sphinxql>select id,status from test</sphinxql>
+<sphinxql>select id from test where status!=0</sphinxql>
+<sphinxql>select id from test where status!=1</sphinxql>
+<sphinxql>select id from test where status not in (0)</sphinxql>
+<sphinxql>select id from test where status not in (1)</sphinxql>
+
+<!-- exclude filters for int attrs -->
+<sphinxql>select id,kind from test</sphinxql>
+<sphinxql>select id from test where kind!=23</sphinxql>
+<sphinxql>select id from test where kind!=43</sphinxql>
+<sphinxql>select id from test where kind not in (13,23,33,43)</sphinxql>
+<sphinxql>select id from test where kind not in (23,33)</sphinxql>
+
 </sphqueries>
 
 </test>

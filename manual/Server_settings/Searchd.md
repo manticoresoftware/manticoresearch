@@ -665,13 +665,6 @@ not_terms_only_allowed = 1
 ```
 <!-- end -->
 
-### ondisk_attrs_default
-
-Instance-wide defaults for [ondisk_attrs](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Accessing-index-files) directive. Optional, default is 0 (all attributes are loaded in memory). This directive lets you specify the default value of ondisk_attrs for all indexes served by this copy of searchd. Per-index directives take precedence, and will overwrite this instance-wide default value, allowing for fine-grain control.
-
-> **WARNING:** The functionality of this directive is taken over by [access_plain_attrs](../Server_settings/Searchd.md#access_plain_attrs) and [access_blob_attrs](../Server_settings/Searchd.md#access_blob_attrs) directives as of 3.0.2. The option is marked as deprecated and will be removed in future versions.
-
-
 ### persistent_connections_limit
 
 <!-- example conf persistent_connections_limit -->

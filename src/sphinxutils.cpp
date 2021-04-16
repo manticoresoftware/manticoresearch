@@ -887,7 +887,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "ha_period_karma",		0, NULL },
 	{ "predicted_time_costs",	0, NULL },
 	{ "persistent_connections_limit",	0, NULL },
-	{ "ondisk_attrs_default",	KEY_DEPRECATED, "per index access_plain_attrs = mmap" },
+	{ "ondisk_attrs_default",	KEY_REMOVED, NULL },
 	{ "shutdown_timeout",		0, NULL },
 	{ "query_log_min_msec",		0, NULL },
 	{ "agent_connect_timeout",	0, NULL },

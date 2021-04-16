@@ -18309,14 +18309,6 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	tDefaultFA.m_eAttr = FileAccess_e::MMAP_PREREAD;
 	tDefaultFA.m_eBlob = FileAccess_e::MMAP_PREREAD;
 
-	bool bOnDiskAttrs = hSearchd.GetBool ( "ondisk_attrs_default", false );
-	bool bOnDiskPools = hSearchd.GetStr ( "ondisk_attrs_default" )=="pool";
-	if ( bOnDiskAttrs || bOnDiskPools )
-		tDefaultFA.m_eAttr = FileAccess_e::MMAP;
-
-	if ( bOnDiskPools )
-		tDefaultFA.m_eBlob = FileAccess_e::MMAP;
-
 	tDefaultFA.m_eAttr = GetFileAccess( hSearchd, "access_plain_attrs", false, tDefaultFA.m_eAttr );
 	tDefaultFA.m_eBlob = GetFileAccess( hSearchd, "access_blob_attrs", false, tDefaultFA.m_eBlob );
 

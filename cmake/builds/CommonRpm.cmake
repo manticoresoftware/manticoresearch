@@ -9,20 +9,14 @@ set ( BINPREFIX "usr/" )
 
 set ( CPACK_RPM_PACKAGE_RELEASE 1 )
 set ( CPACK_RPM_PACKAGE_RELEASE_DIST ON )
-set ( CPACK_RPM_PACKAGE_URL "https://manticoresearch.com/" )
 set ( CPACK_RPM_PACKAGE_GROUP "Applications/Internet" )
 
 set ( CPACK_RPM_MAIN_PACKAGE_NAME "manticore")
 
 set ( CPACK_RPM_META_PACKAGE_NAME "manticore-all" )
-set ( CPACK_COMPONENT_META_DESCRIPTION "Meta Package for Manticore Search")
 set ( CPACK_RPM_META_PACKAGE_REQUIRES "manticore-server, manticore-tools" )
 set ( CPACK_RPM_META_PACKAGE_CONFLICTS "manticore, sphinx")
 
-set ( CPACK_COMPONENT_META_DESCRIPTION "Manticore Search is a powerful free open source search engine
-with a focus on low latency and high throughput full-text search
-and high volume stream filtering. This package is a group package that guarantee you have all is needed 
-to run Manticore Search.")
 set (CPACK_RPM_META_BUILD_SOURCE_DIRS_PREFIX  OFF)
 
 set ( CPACK_RPM_APPLICATIONS_PACKAGE_NAME "manticore-server" )
@@ -33,18 +27,10 @@ set ( CPACK_RPM_APPLICATIONS_PACKAGE_CONFLICTS "sphinx" )
 if ( "${DISTR_BUILD}" STREQUAL "rhel8" )
     set ( CPACK_RPM_APPLICATIONS_PACKAGE_SUGGESTS "manticore-icudata" )
 endif()
-set ( CPACK_COMPONENT_APPLICATIONS_SUMMARY "Manticore Search server files")
-set ( CPACK_COMPONENT_APPLICATIONS_DESCRIPTION "Manticore Search is a powerful free open source search engine
-with a focus on low latency and high throughput full-text search
-and high volume stream filtering.  This package contains the service daemon.")
-
 
 set ( CPACK_RPM_ICUDATA_PACKAGE_NAME "manticore-icudata" )
 set ( CPACK_RPM_ICUDATA_FILE_NAME "RPM-DEFAULT" )
-set ( CPACK_COMPONENT_ICUDATA_SUMMARY "Manticore Search ICU files")
-set ( CPACK_COMPONENT_ICUDATA_DESCRIPTION "Manticore Search is a powerful free open source search engine
-with a focus on low latency and high throughput full-text search
-and high volume stream filtering.  This package contains the ICU DAT file. You need this package only if you use the ICU morphology.")
+# other vars defined in CommonInfo
 
 set ( CPACK_RPM_TOOLS_PACKAGE_NAME "manticore-tools" )
 set ( CPACK_RPM_TOOLS_PACKAGE_CONFLICTS "sphinx, manticore <= 3.5.0_200722.1d34c49" )
@@ -52,22 +38,10 @@ if ( "${DISTR_BUILD}" STREQUAL "rhel8" )
  set ( CPACK_RPM_TOOLS_PACKAGE_SUGGESTS "manticore-icudata" )
 endif()
 set ( CPACK_RPM_TOOLS_FILE_NAME "RPM-DEFAULT" )
-set ( CPACK_COMPONENT_TOOLS_SUMMARY "Manticore Search utilities")
-set ( CPACK_COMPONENT_TOOLS_DESCRIPTION "Manticore Search is a powerful free open source search engine
-with a focus on low latency and high throughput full-text search
-and high volume stream filtering.  This package contains auxiliary tools.")
 
 set ( CPACK_RPM_DEVEL_PACKAGE_NAME "manticore-devel" )
 set ( CPACK_RPM_DEVEL_FILE_NAME "RPM-DEFAULT" )
-set ( CPACK_COMPONENT_TOOLS_SUMMARY "Manticore Search development headers")
-set ( CPACK_COMPONENT_TOOLS_DESCRIPTION "Manticore Search is a powerful free open source search engine
-with a focus on low latency and high throughput full-text search
-and high volume stream filtering. This package contains the headers for writing custom functions.")
 
-set ( CPACK_COMPONENT_CONVERTER_SUMMARY "Manticore Search index converter")
-set  ( CPACK_COMPONENT_CONVERTER_DESCRIPTION "This package provides the index_converter tool 
-for Manticore Search which converts indexes created with Manticore Search 2.x or Sphinx 2.x to 
-Manticore Search 3.x format." )
 set ( CPACK_RPM_MAIN_DEBUGINFO_PACKAGE ON )
 set ( CPACK_RPM_APPLICATIONS_DEBUGINFO_PACKAGE ON )
 set ( CPACK_RPM_TOOLS_DEBUGINFO_PACKAGE ON )
@@ -82,7 +56,6 @@ if ( source_dir_len_ LESS 75 )
 	message ( STATUS "set src prefix to /tmp/m due to too long path")
 	set ( CPACK_RPM_BUILD_SOURCE_DIRS_PREFIX "/tmp")
 endif ()
-
 
 #set ( CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST "/usr/include" )
 if (SPLIT)

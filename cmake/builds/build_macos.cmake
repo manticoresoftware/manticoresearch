@@ -2,6 +2,8 @@
 # Above line is mandatory!
 # rules to build tgz archive for Mac OS X
 
+set(CPACK_GENERATOR "TGZ")
+
 message ( STATUS "Will create TGZ with build for Mac Os X" )
 set ( SPLIT_SYMBOLS 1 )
 
@@ -45,7 +47,6 @@ if ( NOT MACOSVER )
 	set ( MACOSVER "10.12" )
 endif ()
 
-set ( CPACK_GENERATOR "TGZ" )
 LIST ( APPEND PKGSUFFIXES "osx${MACOSVER}" "x86_64" )
 
 mark_as_advanced ( CMAKE_OSX_ARCHITECTURES CMAKE_OSX_DEPLOYMENT_TARGET CMAKE_OSX_SYSROOT )

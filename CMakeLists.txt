@@ -697,58 +697,16 @@ set ( CPACK_SOURCE_IGNORE_FILES "/\\\\.idea/" "/\\\\.git/"
 
 set ( CPACK_SOURCE_GENERATOR TGZ )
 
-set ( CPACK_PACKAGE_CONTACT "${PACKAGE_NAME} package builds <build@manticoresearch.com>" )
-set ( CMAKE_PROJECT_HOMEPAGE_URL "https://manticoresearch.com" )
-set ( CPACK_PACKAGE_NAME "${PACKAGE_NAME}" )
-set ( CPACK_PACKAGE_VENDOR "${COMPANY_NAME}" )
-set ( CPACK_RESOURCE_FILE_LICENSE "${MANTICORE_BINARY_DIR}/COPYING.txt" )
-set ( CPACK_PACKAGE_DESCRIPTION_SUMMARY "Manticore Search - database for search")
-
-# meta
-set ( CPACK_COMPONENT_META_GROUP "main" )
-set ( CPACK_COMPONENT_GROUP_META_DISPLAY_NAME "Virtual" )
-set ( CPACK_COMPONENT_META_DISPLAY_NAME "${PACKAGE_NAME} meta-package" )
-
-
-# applications (indexes,indextool etc.)
-set ( CPACK_COMPONENT_TOOLS_GROUP "main" )
-set ( CPACK_COMPONENT_GROUP_TOOLS_DISPLAY_NAME "Tools" )
-set ( CPACK_COMPONENT_TOOLS_DISPLAY_NAME "${PACKAGE_NAME} t" )
-
-# searchd daemon
-set ( CPACK_COMPONENT_APPLICATIONS_GROUP "main" )
-set ( CPACK_COMPONENT_GROUP_APLLICATIONS_DISPLAY_NAME "Server" )
-set ( CPACK_COMPONENT_APPLICATIONS_DISPLAY_NAME "${PACKAGE_NAME} service" )
-
-# configurations
-set ( CPACK_COMPONENT_CONFIG_GROUP "main" )
-set ( CPACK_COMPONENT_CONFIG_DISPLAY_NAME "Configuration examples" )
-
-# documentation files
-set ( CPACK_COMPONENT_DOC_GROUP "main" )
-set ( CPACK_COMPONENT_DOC_DISPLAY_NAME "Documentation" )
-
-# converter tool
-set ( CPACK_COMPONENT_CONVERTER_GROUP "converter" )
-set ( CPACK_COMPONENT_GROUP_CONVERTER_DISPLAY_NAME "Converter" )
-set ( CPACK_COMPONENT_CONVERTER_DISPLAY_NAME "CONVERTER application" )
-
-# icu data library
-set ( CPACK_COMPONENT_ICUDATA_GROUP "main" )
-set ( CPACK_COMPONENT_ICUDATA_DISPLAY_NAME "ICU DAT file" )
-
-# development files
-set ( CPACK_COMPONENT_DEVEL_GROUP "main" )
-set ( CPACK_COMPONENT_DEVEL_DISPLAY_NAME "Development" )
-set ( CPACK_COMPONENT_GROUP_DEVEL_DISPLAY_NAME "Development files" )
+# Common all-packages info
+include(CommonInfo)
 
 set ( CPACK_RPM_COMPONENT_INSTALL 1 )
 set ( CPACK_DEB_COMPONENT_INSTALL 1 )
 set ( CPACK_ARCHIVE_COMPONENT_INSTALL 1 )
 
 if ( SPLIT )
- set (CPACK_COMPONENTS_GROUPING IGNORE )
- endif()
+	set (CPACK_COMPONENTS_GROUPING IGNORE )
+endif()
 
 include ( SetBuildType )
 

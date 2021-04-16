@@ -93,19 +93,11 @@ endif()
 install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/lib/manticore/data COMPONENT applications)
 install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/log/manticore COMPONENT applications )
 
-# tickets per components
-set ( CPACK_COMPONENT_BIN_DESCRIPTION "Manticore Search is a powerful free open source search engine
- with a focus on low latency and high throughput full-text search
- and high volume stream filtering. This package contains the search server." )
-
-set  ( CPACK_COMPONENT_CONVERTER_DESCRIPTION "This package provides the index_converter tool for Manticore Search which converts indexes created with Manticore Search 2.x or Sphinx 2.x to Manticore Search 3.x format" )
-
 # version
 # arch
 
 # dependencies will be auto calculated. FIXME! M.b. point them directly?
 #set ( CPACK_DEBIAN_BIN_PACKAGE_DEPENDS "libc6 (>= 2.15), libexpat (>= 2.0.1), libgcc1 (>= 1:3.0), libstdc++6 (>= 5.2), zlib1g (>= 1:1.1.4), lsb-base (>= 4.1+Debian11ubuntu7)" )
-
 
 set ( CPACK_DEBIAN_MAIN_PACKAGE_NAME "manticore")
 
@@ -129,29 +121,12 @@ set ( CPACK_DEBIAN_META_PACKAGE_DEPENDS "manticore-server, manticore-tools" )
 set ( CPACK_DEBIAN_META_FILE_NAME "DEB-DEFAULT" )
 set ( CPACK_DEBIAN_META_PACKAGE_DEBUG "OFF" )
 
-
 set ( CPACK_DEBIAN_ICUDATA_PACKAGE_NAME "manticore-icudata" )
-set ( CPACK_COMPONENT_ICUDATA_DESCRIPTION "Manticore Search is a powerful free open source search engine
- with a focus on low latency and high throughput full-text search
- and high volume stream filtering. This package contains the ICU DAT file. You need this package only if you use the ICU morphology" )
-
-
 set ( CPACK_DEBIAN_CONVERTER_PACKAGE_NAME "manticore-converter" )
-set ( CPACK_COMPONENT_CONVERTER_DESCRIPTION "Manticore Search is a powerful free open source search engine
- with a focus on low latency and high throughput full-text search
- and high volume stream filtering. This package contains the tool for converting indexes made prior version 3.0." )
- 
 set ( CPACK_DEBIAN_DEVEL_PACKAGE_NAME "manticore-dev" )
-set ( CPACK_COMPONENT_DEVEL_DESCRIPTION "Manticore Search is a powerful free open source search engine
- with a focus on low latency and high throughput full-text search
- and high volume stream filtering. This package contains the headers for writing custom functions." )
-
 
 set ( CPACK_DEBIAN_TOOLS_PACKAGE_NAME "manticore-tools" )
 set ( CPACK_DEBIAN_TOOLS_PACKAGE_CONFLICTS "sphinxsearch, manticore (<< 3.5.0-200722-1d34c491)" )
-set ( CPACK_COMPONENT_TOOLS_DESCRIPTION "Manticore Search is a powerful free open source search engine
- with a focus on low latency and high throughput full-text search
- and high volume stream filtering. This package contains auxiliary tools." )
 
 set ( CONFFILEDIR "${SYSCONFDIR}/manticoresearch" )
 

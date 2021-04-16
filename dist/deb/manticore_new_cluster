@@ -1,0 +1,5 @@
+#!/bin/sh
+systemctl set-environment _ADDITIONAL_SEARCHD_PARAMS='--new-cluster' &&  systemctl start manticore
+extcode=$?
+systemctl set-environment _ADDITIONAL_SEARCHD_PARAMS=''
+exit $extcode

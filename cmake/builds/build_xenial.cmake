@@ -32,6 +32,8 @@ configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/deb/manticore.generator.in"
 install ( FILES "${MANTICORE_BINARY_DIR}/manticore-generator"
 		DESTINATION /lib/systemd/system-generators PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
         GROUP_EXECUTE GROUP_READ COMPONENT applications )
+install(PROGRAMS "dist/deb/manticore_new_cluster"
+		DESTINATION ${BINPREFIX}bin COMPONENT applications)
 
 
 # some xenial-specific variables and files

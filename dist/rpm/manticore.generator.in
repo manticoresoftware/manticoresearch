@@ -61,7 +61,7 @@ PermissionsStartOnly=true
 ExecStartPre=/usr/bin/install -omanticore -gmanticore -m755 -d /var/run/manticore
 # Run ExecStart with User=manticore / Group=manticore
 Environment=LD_PRELOAD=$JEMALLOC_LOCATION
-ExecStart=/usr/bin/searchd --config /etc/manticoresearch/manticore.conf
+ExecStart=/usr/bin/searchd --config /etc/manticoresearch/manticore.conf \$_ADDITIONAL_SEARCHD_PARAMS
 ExecStop=/usr/bin/searchd --config /etc/manticoresearch/manticore.conf --stopwait
 KillMode=process
 KillSignal=SIGTERM

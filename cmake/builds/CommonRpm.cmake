@@ -143,6 +143,8 @@ if ( WITH_SYSTEMD )
 	install ( FILES ${MANTICORE_BINARY_DIR}/manticore.conf DESTINATION usr/lib/tmpfiles.d COMPONENT applications )
 	install ( PROGRAMS ${MANTICORE_BINARY_DIR}/manticore-search-generator
 			DESTINATION usr/lib/systemd/system-generators COMPONENT applications )
+	install(PROGRAMS "dist/rpm/manticore_new_cluster"
+			DESTINATION ${BINPREFIX}bin COMPONENT applications)
 
 else (WITH_SYSTEMD)
     if (SPLIT)

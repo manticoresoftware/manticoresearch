@@ -2646,7 +2646,7 @@ public:
 		return iVal;
 	}
 
-	bool IsConst () const final { return true; }
+	bool IsConst () const final { return false; }
 
 	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
 	{
@@ -3633,6 +3633,7 @@ enum Tokh_e : BYTE
 	FUNC_SUBSTRING_INDEX,
 
 	FUNC_LAST_INSERT_ID,
+	FUNC_LEVENSHTEIN,
 
 	FUNC_FUNCS_COUNT, // insert any new functions ABOVE this one
 	TOKH_TOKH_OFFSET = FUNC_FUNCS_COUNT,
@@ -3745,6 +3746,7 @@ const static TokhKeyVal_t g_dKeyValTokens[] = // no order is necessary, but crea
 	{ "substring_index",FUNC_SUBSTRING_INDEX },
 
 	{ "last_insert_id",	FUNC_LAST_INSERT_ID	 },
+	{ "levenshtein",	FUNC_LEVENSHTEIN	 },
 
 	// other reserved (operators, columns, etc.)
 	{ "count",			TOKH_COUNT			},
@@ -3796,48 +3798,48 @@ static Tokh_e TokHashLookup ( Str_t sKey )
 
 	const static BYTE dAsso[] = // values 66..91 (A..Z) copy from 98..123 (a..z),
     {
-      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-      118, 118, 118, 118, 118, 118, 118, 118,  13, 118,
-       24,  14, 118, 118, 118, 118, 118, 118, 118, 118,
-      118, 118, 118, 118, 118,  44,  33,   9,   3,  16,
-       40,  51,  37,  27, 118, 118,   6,  15,   5,   7,
-       23,  24,  20,   4,   3,  31,  15,  45,  28,  22,
-       15, 118, 118, 118, 118,   8, 118,  44,  33,   9,
-        3,  16,  40,  51,  37,  27, 118, 118,   6,  15,
-        5,   7,  23,  24,  20,   4,   3,  31,  15,  45,
-       28,  22,  15, 118, 118, 118, 118, 118, 118, 118,
-      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-      118, 118, 118, 118, 118, 118
+		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+		118, 118, 118, 118, 118, 118, 118, 118,  13, 118,
+		24,  11, 118, 118, 118, 118, 118, 118, 118, 118,
+		118, 118, 118, 118, 118,  44,  33,   9,   3,  16,
+		40,  51,  37,  27, 118, 118,   6,  15,   5,   7,
+		23,  28,  20,   4,   3,  31,  45,  45,  28,  22,
+		15, 118, 118, 118, 118,  10, 118,  44,  33,   9,
+		3,  16,  40,  51,  37,  27, 118, 118,   6,  15,
+		5,   7,  23,  28,  20,   4,   3,  31,  45,  45,
+		28,  22,  15, 118, 118, 118, 118, 118, 118, 118,
+		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+		118, 118, 118, 118, 118, 118
 	};
 
 	const static short dIndexes[] =
 	{
 		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-		-1, -1, -1, 6, 75, -1, 12, 4, 72, -1,
-		5, 80, 22, 40, 77, 28, 38, 68, 23, 74,
-		58, 10, 65, 79, 31, 39, 76, 62, 36, 29,
-		42, 63, 21, 51, 30, 32, 2, 13, 69, 43,
-		15, 35, 53, 73, 48, 1, 47, 46, 49, 59,
-		44, 57, 16, 33, 54, 9, 56, 52, 34, 27,
-		37, 41, 3, 26, 24, 8, 55, 61, 50, -1,
-		67, 70, -1, 78, -1, 7, -1, 71, -1, -1,
-		17, 60, 20, 11, -1, -1, -1, -1, 0, -1,
-		19, -1, 45, -1, 66, -1, -1, -1, -1, 14,
-		-1, -1, 18, -1, -1, -1, 25, 64,
+		-1, -1, -1, 6, 76, -1, 12, 4, 73, -1,
+		5, 81, 22, 40, 78, 28, 38, 68, 23, 75,
+		58, 10, 65, 80, 31, 39, 29, 62, 36, -1,
+		42, 63, 21, 51, 30, 32, 2, 13, 70, 43,
+		15, 35, 53, 74, 48, 1, 47, 46, 49, 59,
+		44, 57, 16, 33, 54, 9, 56, 69, 34, 27,
+		37, 52, 3, 41, 24, 8, 55, 61, 50, -1,
+		67, 71, -1, 79, -1, 7, -1, 72, -1, -1,
+		17, 60, 20, 11, -1, -1, 77, -1, 0, -1,
+		19, -1, 45, 26, 66, -1, -1, -1, -1, 14,
+		-1, -1, 18, -1, -1, -1, 25, 64
 	};
 
 	auto * s = (const BYTE*) sKey.first;
@@ -3981,7 +3983,8 @@ static FuncDesc_t g_dFuncs[FUNC_FUNCS_COUNT] = // Keep same order as in Tokh_e
 
 	{  /*"substring_index",*/	3,	TOK_FUNC,		/*FUNC_SUBSTRING_INDEX,	*/	SPH_ATTR_STRINGPTR },
 
-	{  /*"last_insert_id",*/	0,	TOK_FUNC,		/*FUNC_LAST_INSERT_ID,	*/	SPH_ATTR_STRINGPTR }
+	{  /*"last_insert_id",*/	0,	TOK_FUNC,		/*FUNC_LAST_INSERT_ID,	*/	SPH_ATTR_STRINGPTR },
+	{ /*"levenshtein", */		-1,	TOK_FUNC,		/*FUNC_LEVENSHTEIN,		*/	SPH_ATTR_NONE },
 };
 
 
@@ -3998,7 +4001,7 @@ static inline const char* FuncNameByHash ( int iFunc )
 		, "rankfactors", "packedfactors", "bm25f", "integer", "double", "length", "least", "greatest"
 		, "uint", "query", "curtime", "utc_time", "utc_timestamp", "timediff", "current_user"
 		, "connection_id", "all", "any", "indexof", "min_top_weight", "min_top_sortval", "atan2", "rand"
-		, "regex", "substring_index", "last_insert_id", };
+		, "regex", "substring_index", "last_insert_id", "levenshtein" };
 
 	return dNames[iFunc];
 }
@@ -4269,6 +4272,7 @@ private:
 	ISphExpr *				CreateConcatNode ( int iArgsNode, CSphVector<ISphExpr *> & dArgs );
 	ISphExpr *				CreateFieldNode ( int iField );
 	void					FixupIterators ( int iNode, const char * sKey, SphAttr_t * pAttr );
+	ISphExpr *				CreateLevenshteinNode ( ISphExpr * pPattern, ISphExpr * pAttr, ISphExpr * pOpts );
 
 	bool					GetError () const { return !( m_sLexerError.IsEmpty() && m_sParserError.IsEmpty() && m_sCreateError.IsEmpty() ); }
 	bool					GetCreateError () const { return !m_sCreateError.IsEmpty(); }
@@ -6340,6 +6344,117 @@ ISphExpr * ExprParser_t::CreateFieldNode ( int iField )
 	return new Expr_GetField_c ( tField.m_sName );
 }
 
+//////////////////////////////////////////////////////////////////////////
+
+struct LevenshteinOptions_t
+{
+	bool	m_bNormalize = false;
+	int		m_iLengthDelta = 0;
+};
+
+static LevenshteinOptions_t GetOptions ( const CSphNamedVariant * pValues, int iCount )
+{
+	LevenshteinOptions_t tOpts;
+
+	for ( int i=0; i<iCount; i++, pValues++ )
+	{
+		if ( pValues->m_sKey=="normalize" )
+			tOpts.m_bNormalize = ( !!pValues->m_iValue );
+		else if ( pValues->m_sKey=="length_delta" )
+			tOpts.m_iLengthDelta = pValues->m_iValue;
+	}
+
+	return tOpts;
+}
+
+template<bool PATTERN_STRING>
+class Expr_Levenshtein_c : public Expr_Binary_c
+{
+public:
+	Expr_Levenshtein_c ( ISphExpr * pPattern, ISphExpr * pAttr, const LevenshteinOptions_t tOpts )
+		: Expr_Binary_c ( "Expr_Levenshtein_c", pPattern, pAttr )
+		, m_tOpts ( tOpts )
+	{
+		if_const(PATTERN_STRING)
+		{
+			const BYTE * pBuf = nullptr;
+			CSphMatch tTmp;
+			m_iPattersLen = pPattern->StringEval ( tTmp, &pBuf );
+			m_sPattern.SetBinary ( (const char *)pBuf, m_iPattersLen );
+			FreeDataPtr ( *pPattern, pBuf );
+		}
+	}
+
+	int IntEval ( const CSphMatch & tMatch ) const final
+	{
+		assert ( !m_tOpts.m_bNormalize );
+		return GetDistance ( tMatch ).first;
+	}
+
+	float Eval ( const CSphMatch & tMatch ) const final
+	{
+		assert ( m_tOpts.m_bNormalize );
+		auto tDist = GetDistance ( tMatch );
+
+		float fDist = 1.0f;
+		if ( tDist.second )
+			fDist = (float)tDist.first / tDist.second;
+
+		return fDist;
+	}
+
+	ISphExpr * Clone () const final
+	{
+		return new Expr_Levenshtein_c<PATTERN_STRING> ( m_pFirst.Ptr(), m_pSecond.Ptr(), m_tOpts );
+	}
+
+private:
+	LevenshteinOptions_t	m_tOpts;
+	CSphString				m_sPattern;
+	int						m_iPattersLen = 0;
+
+	Expr_Levenshtein_c ( const Expr_Levenshtein_c& ) = default;
+
+	std::pair<int, int> GetDistance ( const CSphMatch & tMatch ) const
+	{
+		const BYTE * sPattern = (const BYTE *)m_sPattern.cstr();
+		int iPatternLen = m_iPattersLen;
+		if_const(!PATTERN_STRING)
+			iPatternLen = m_pFirst->StringEval ( tMatch, &sPattern );
+
+		const BYTE * pStr = nullptr;
+		int iLen = m_pSecond->StringEval ( tMatch, &pStr );
+
+		std::pair<int, int> tDist;
+		tDist.second = Max ( iPatternLen, iLen );
+		tDist.first = tDist.second;
+		if ( !m_tOpts.m_iLengthDelta || ( abs ( iPatternLen-iLen )<m_tOpts.m_iLengthDelta ) )
+			tDist.first = sphLevenshtein ( (const char *)sPattern, iPatternLen, (const char *)pStr, iLen );
+
+		FreeDataPtr ( *m_pSecond, pStr );
+		if_const(!PATTERN_STRING)
+			FreeDataPtr ( *m_pFirst, sPattern );
+
+		return tDist;
+	}
+};
+
+ISphExpr * ExprParser_t::CreateLevenshteinNode ( ISphExpr * pPattern, ISphExpr * pAttr, ISphExpr * pOpts )
+{
+	LevenshteinOptions_t tOpts;
+	if ( pOpts )
+	{
+		Expr_MapArg_c * pOptsArg = (Expr_MapArg_c *)pOpts;
+		tOpts = GetOptions ( pOptsArg->m_pValues, pOptsArg->m_iCount );
+	}
+
+	if ( pPattern->IsConst() )
+		return new Expr_Levenshtein_c<true> ( pPattern, pAttr, tOpts );
+	else
+		return new Expr_Levenshtein_c<false> ( pPattern, pAttr, tOpts );
+}
+
+//////////////////////////////////////////////////////////////////////////
 
 /// fold nodes subtree into opcodes
 ISphExpr * ExprParser_t::CreateTree ( int iNode )
@@ -6667,6 +6782,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 						return new Expr_GetStrConst_c ( sUser.first, sUser.second, false );
 					}
 					case FUNC_CONNECTION_ID: return new Expr_GetIntConst_c ( ConnID() );
+					case FUNC_LEVENSHTEIN: return CreateLevenshteinNode ( dArgs[0], dArgs[1], ( dArgs.GetLength()>2 ? dArgs[2] : nullptr ) );
 
 					default: // just make gcc happy
 						break;
@@ -8946,7 +9062,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 		bGotString |= dRetTypes[i]==SPH_ATTR_STRING;
 		bGotMva |= ( dRetTypes[i]==SPH_ATTR_UINT32SET || dRetTypes[i]==SPH_ATTR_INT64SET || dRetTypes[i]==SPH_ATTR_UINT32SET_PTR || dRetTypes[i]==SPH_ATTR_INT64SET_PTR );
 	}
-	if ( bGotString && !( eFunc==FUNC_TO_STRING || eFunc==FUNC_CONCAT || eFunc==FUNC_SUBSTRING_INDEX || eFunc==FUNC_CRC32 || eFunc==FUNC_EXIST || eFunc==FUNC_POLY2D || eFunc==FUNC_GEOPOLY2D || eFunc==FUNC_REGEX ) )
+	if ( bGotString && !( eFunc==FUNC_TO_STRING || eFunc==FUNC_CONCAT || eFunc==FUNC_SUBSTRING_INDEX || eFunc==FUNC_CRC32 || eFunc==FUNC_EXIST || eFunc==FUNC_POLY2D || eFunc==FUNC_GEOPOLY2D || eFunc==FUNC_REGEX || eFunc==FUNC_LEVENSHTEIN ) )
 	{
 		m_sParserError.SetSprintf ( "%s() arguments can not be string", sFuncName );
 		return -1;
@@ -9197,6 +9313,48 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 			if ( eArg==SPH_ATTR_UINT32SET || eArg==SPH_ATTR_UINT32SET_PTR )
 				tNode.m_eRetType = SPH_ATTR_INTEGER;
 		}
+		break;
+	case FUNC_LEVENSHTEIN:
+	{
+		if ( dRetTypes.GetLength()<2 )
+		{
+			m_sParserError.SetSprintf ( "%s() called with %d args, but at least 2 args expected", sFuncName, dRetTypes.GetLength () );
+			return -1;
+		}
+		
+		if ( dRetTypes[0]!=SPH_ATTR_STRING && dRetTypes[0]!=SPH_ATTR_STRINGPTR && dRetTypes[0]!=SPH_ATTR_JSON_FIELD )
+		{
+			m_sParserError.SetSprintf ( "%s() arguments 1 must be string", sFuncName );
+			return -1;
+		}
+
+		if ( dRetTypes[1]!=SPH_ATTR_STRING && dRetTypes[1]!=SPH_ATTR_STRINGPTR && dRetTypes[1]!=SPH_ATTR_JSON_FIELD )
+		{
+			m_sParserError.SetSprintf ( "%s() arguments 2 must be string", sFuncName );
+			return -1;
+		}
+
+		LevenshteinOptions_t tOpts;
+		if ( dRetTypes.GetLength()>2 )
+		{
+			if ( dRetTypes[2]!=SPH_ATTR_MAPARG )
+			{
+				m_sParserError.SetSprintf ( "%s() arguments 3 must be a map", sFuncName );
+				return -1;
+			}
+
+			CSphVector<int> dArgs = GatherArgNodes ( iArg );
+			assert ( dArgs.GetLength()==dRetTypes.GetLength() );
+
+			const CSphVector<CSphNamedVariant> & dOpts = m_dNodes[dArgs[2]].m_pMapArg->m_dPairs;
+			tOpts = GetOptions ( dOpts.Begin(), dOpts.GetLength() );
+		}
+
+		tNode.m_eRetType = ( tOpts.m_bNormalize ? SPH_ATTR_FLOAT : SPH_ATTR_INTEGER );
+
+		break;
+	}
+
 	default:;
 	}
 

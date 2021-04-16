@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>levenshtein distance</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	thread_stack = 256K
+}
+
+
+source test_json
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from json_src_table
+	sql_attr_uint	= gid
+	sql_attr_json	= j
+    sql_field_string = t1
+    sql_attr_string = t2
+}
+
+index test_json
+{
+	source			= test_json
+	path			= <data_path/>/test_json
+}
+
+</config>
+
+<db_create>
+CREATE TABLE json_src_table (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `gid` int(11) NOT NULL,
+  `t1` varchar(255) NOT NULL,
+  `t2` varchar(255) NOT NULL,
+  `j` varchar(8192) NOT NULL,
+  PRIMARY KEY (`id`)
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS json_src_table;</db_drop>
+
+<db_insert>
+INSERT INTO json_src_table VALUES
+(1,1,'geely', 'gily','{"name":"gily"}'),
+(2,1,'water', 'padre','{"name":"padre"}'),
+(3,1,'honda', 'handy','{"name":"handy"}'),
+(4,1,'hyundai', 'day','{"name":"day"}'),
+(5,1,'banana', 'bandage','{"name":"bandage"}'),
+(6,1,'bean', 'beam','{"name":"beam"}'),
+(7,1,'cart', 'dart','{"name":"dart"}'),
+(8,1,'crystal', 'rst','{"name":"rst"}'),
+(9,1,'led', 'most of let','{"name":"most of let it be"}')
+</db_insert>
+
+
+
+<sphqueries>
+
+<!-- distance -->
+<sphinxql>select id, levenshtein('gily', t1) as ord, t1, j.name from test_json order by ord asc</sphinxql>
+<sphinxql>select id, FLOOR(levenshtein('padre', t1, {normalize=1})*100) as ord, t1, j.name from test_json order by ord asc</sphinxql>
+<sphinxql>select id, levenshtein('honda', j.name, {normalize=0}) as ord, t1, j.name from test_json order by ord asc</sphinxql>
+<sphinxql>select id, FLOOR(levenshtein(t1, j.name, {normalize=1})*100) as ord, t1, j.name from test_json order by ord asc</sphinxql>
+<sphinxql>select id, levenshtein('bandage', t1) as ord, t1, j.name from test_json order by ord asc</sphinxql>
+
+<sphinxql>select id, substring_index(t2, ' ', -1) as c1, levenshtein('led', c1) as ord from test_json order by ord asc</sphinxql>
+
+<sphinxql>select id, levenshtein('bananamix', t1) as ord, t1 from test_json order by ord asc</sphinxql>
+<sphinxql>select id, levenshtein('bananamix', t1, {length_delta=4}) as ord, t1 from test_json order by ord asc</sphinxql>
+
+</sphqueries>
+
+
+</test>

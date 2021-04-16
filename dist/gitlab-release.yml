@@ -18,7 +18,7 @@ tarball:
     - dev-host
   script:
     - mkdir build && cd build
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISABLE_TESTING=1 ..
+    - cmake -DBUILD_TAG=$RELEASE_TAG -DDISABLE_TESTING=1 ..
     - make tarball
     - cp manticore-*.tar.gz ..
   artifacts:
@@ -43,7 +43,7 @@ osx:
     - build
   script:
     - mkdir build && cd build
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=macos -DLIBS_BUNDLE=/work ..
+    - cmake -DBUILD_TAG=$RELEASE_TAG -DDISTR_BUILD=macos -DLIBS_BUNDLE=/work ..
     - make -j2 package
     - cp manticore-*.tar.gz ..
   artifacts:
@@ -81,13 +81,13 @@ windows:
     - 'net use x: \\\\VBOXSRV\\shared'
     - mkdir sphinxbin-x64
     - cd sphinxbin-x64
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=default -DWITH_PGSQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 -DUSE_SSL=1 ..
+    - cmake -DBUILD_TAG=$RELEASE_TAG -DDISTR_BUILD=default -DWITH_PGSQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 -DUSE_SSL=1 ..
     - cmake --build . --target package --config RelWithDebInfo
     - cp manticore-*.zip ..
     - cd ..
     - mkdir sphinxconvbin-x64
     - cd sphinxconvbin-x64
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISABLE_TESTING=1 -DWITH_RE2=0 -DWITH_STEMMER=0 -WITH_EXPAT=0 -WITH_ICONV=0 -WITH_MYSQL=0 ..
+    - cmake -DBUILD_TAG=$RELEASE_TAG -DDISABLE_TESTING=1 -DWITH_RE2=0 -DWITH_STEMMER=0 -WITH_EXPAT=0 -WITH_ICONV=0 -WITH_MYSQL=0 ..
     - cmake --build . --target package --config RelWithDebInfo --clean-first    
     - cp manticore-*-converter.zip ..
   artifacts:
@@ -115,9 +115,9 @@ windows:
     - mc mirror -a dev/runner-cache/releases/$DISTR/ cache/
     - test -e cache/cache-src.tar.gz && tar -zxf cache/cache-src.tar.gz && chmod +x cache/galera*/libgalera_manticore*
     - mkdir build && cd build
-    - cmake -DPACK=1 -DSPHINX_TAG=$RELEASE_TAG $XTRAFLAGS ..
+    - cmake -DPACK=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
     - make -j4 package
-    - cmake -DPACK=1 -DSPLIT=1 -DSPHINX_TAG=$RELEASE_TAG $XTRAFLAGS ..
+    - cmake -DPACK=1 -DSPLIT=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
     - make -j4 package    
     - cp manticore*.rpm ..
     - cd ..
@@ -144,9 +144,9 @@ windows:
     - mc mirror dev/runner-cache/releases/$DISTR/ cache/
     - test -e cache/cache-src.tar.gz && tar -zxf cache/cache-src.tar.gz
     - mkdir build && cd build
-    - cmake -DPACK=1 -DSPHINX_TAG=$RELEASE_TAG $XTRAFLAGS ..
+    - cmake -DPACK=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
     - make -j4 package
-    - cmake -DPACK=1 -DSPLIT=1 -DSPHINX_TAG=$RELEASE_TAG $XTRAFLAGS ..
+    - cmake -DPACK=1 -DSPLIT=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
     - make -j4 package    
     - cp manticore*deb ..
     - cd ..

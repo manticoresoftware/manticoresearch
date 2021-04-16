@@ -1,6 +1,7 @@
 # ---------- trusty ----------
 # Above line is mandatory!
 # rules to build deb package for Ubuntu 14.04 (Trusty)
+# This file is retired and will be deleted soon.
 
 message ( STATUS "Will create DEB for Ubuntu 14.04 (Trusty)" )
 

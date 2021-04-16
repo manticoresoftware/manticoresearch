@@ -1,6 +1,7 @@
 # ---------- wheezy ----------
 # Above line is mandatory!
 # rules to build deb package for Debian wheezy
+# This file is retired and will be deleted soon.
 
 message ( STATUS "Will create DEB for Debian (wheezy)" )
 

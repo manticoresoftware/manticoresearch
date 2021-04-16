@@ -5,7 +5,7 @@
 message ( STATUS "Will create DEB for Ubuntu 18.04 (bionic)" )
 
 # m.b. postinst.bionic, postinst.debian and postinst.trusty
-FILE ( READ dist/deb/postinst.xenial.in POSTINST_SPECIFIC_IN )
+FILE ( READ dist/deb/postinst.bionic.in POSTINST_SPECIFIC_IN )
 
 # m.b. prerm.ubuntu, prerm.debian
 configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/deb/prerm.ubuntu.in"

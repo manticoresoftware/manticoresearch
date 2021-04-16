@@ -2,9 +2,7 @@
 
 # internal vars for easier substitutions
 set(MANTICORESEARCH "Manticore Search")
-set(INFO_BANNER "${MANTICORESEARCH} is a powerful free open source search engine
-with a focus on low latency and high throughput full-text search
-and high volume stream filtering.")
+set(INFO_BANNER "Lightweight SQL-first database designed for search applications that suits both big and small data collections.")
 set(THIS_PKG "${INFO_BANNER} This package")
 
 # common metadata
@@ -16,8 +14,9 @@ set(CPACK_RESOURCE_FILE_LICENSE "${MANTICORE_BINARY_DIR}/COPYING.txt")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "${MANTICORESEARCH} - database for search")
 set(CPACK_PACKAGE_DESCRIPTION "${INFO_BANNER}")
 
-# main. This is used when create 'simple package', without split
-set(CPACK_COMPONENT_MAIN_DESCRIPTION "${INFO_BANNER}")
+# main. When no 'split', group 'main' used as one solid component and should be named
+set(CPACK_COMPONENT_MAIN_DESCRIPTION "${CPACK_PACKAGE_DESCRIPTION}")
+set(CPACK_COMPONENT_MAIN_DESCRIPTION_SUMMARY "${CPACK_PACKAGE_DESCRIPTION_SUMMARY}")
 
 # meta
 set(CPACK_COMPONENT_META_GROUP "main")

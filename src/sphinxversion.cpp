@@ -20,10 +20,10 @@
 	#include "sphinxversion.h"
 #endif
 
-#ifndef SPHINX_TAG
+#ifndef BUILD_TAG
 #define BANNER_TAG "dev"
 #else
-#define BANNER_TAG SPHINX_TAG
+#define BANNER_TAG BUILD_TAG
 #endif
 
 #ifndef GIT_TIMESTAMP_ID

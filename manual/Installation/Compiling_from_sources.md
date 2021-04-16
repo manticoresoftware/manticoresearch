@@ -168,7 +168,7 @@ docker run -it --rm -v /manticore/sources:/manticore registry.gitlab.com/mantico
 # following is inside docker shell. By default, workdir will be in the source folder, mounted as volume from the host. 
 RELEASE_TAG="noicu"
 mkdir build && cd build
-cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=$DISTR -DWITH_ICU_FORCE_STATIC=0 ..
+cmake -DBUILD_TAG=$RELEASE_TAG -DDISTR_BUILD=$DISTR -DWITH_ICU_FORCE_STATIC=0 ..
 make -j4 package
 ```  
 

@@ -27,7 +27,7 @@ make -j4 package
 
 ```bash
 mkdir build && cd build
-cmake -DPACK=1 -DSPHINX_TAG="noicu" -DWITH_ICU_FORCE_STATIC=0 /path/to/sources
+cmake -DPACK=1 -DBUILD_TAG="noicu" -DWITH_ICU_FORCE_STATIC=0 /path/to/sources
 make -j4 package
 ```
 

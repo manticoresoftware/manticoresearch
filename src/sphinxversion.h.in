@@ -5,6 +5,6 @@
 // GIT_EPOCH_ID "$Format:%ct$"
 #define SPH_GIT_COMMIT_ID "@SPH_GIT_COMMIT_ID@"
 #define GIT_TIMESTAMP_ID "@GIT_TIMESTAMP_ID@"
-#cmakedefine SPHINX_TAG "@SPHINX_TAG@"
+#cmakedefine BUILD_TAG "@BUILD_TAG@"
 #cmakedefine GIT_BRANCH_ID "@GIT_BRANCH_ID@"
 #cmakedefine GDB_SOURCE_DIR "@GDB_SOURCE_DIR@"

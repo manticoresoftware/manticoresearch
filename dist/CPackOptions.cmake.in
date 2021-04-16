@@ -2,7 +2,7 @@
 SET ( GIT_TIMESTAMP_ID "@GIT_TIMESTAMP_ID@" )
 SET ( GIT_COMMIT_ID "@SPH_GIT_COMMIT_ID@" )
 SET ( CPACK_PACKAGE_NAME @PACKAGE_NAME@ )
-SET ( TAG @SPHINX_TAG@ ) # like 'my-super-puper-ver'
+SET ( TAG @BUILD_TAG@ ) # like 'my-super-puper-ver'
 SET ( SUFFIX @CPACK_SUFFIX@) # atogen, like '-stemmer' or '-rhel7'
 SET ( DISTR_SUFFIX @DISTR_SUFFIX@ ) # like ~trusty_amd64, no- prefixed
 SET ( SOURCE_DIR "@SOURCE_DIR@" )

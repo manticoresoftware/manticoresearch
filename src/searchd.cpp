@@ -14650,6 +14650,8 @@ static bool PrepareReconfigure ( const CSphString & sIndex, const CSphConfigSect
 		return false;
 	}
 
+	tSettings.m_tSchema.SetupFlags ( tSettings.m_tIndex );
+
 	if ( !CheckStoredFields ( tSettings.m_tSchema, tSettings.m_tIndex, sError ) )
 		return false;
 

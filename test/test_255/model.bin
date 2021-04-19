@@ -20,13 +20,13 @@ id | bigint |
 name | text | indexed
 idd | uint | 
 3 rows";i:21;s:37:"TRUNCATE RTINDEX rt1 WITH RECONFIGURE";i:22;s:3:"
-OK";i:23;s:8:"DESC rt1";i:24;s:97:"
+OK";i:23;s:8:"DESC rt1";i:24;s:104:"
 id | bigint | 
-name | text | indexed
+name | text | indexed stored
 title | text | indexed
 count | uint | 
 idd | uint | 
 5 rows";i:25;s:80:"REPLACE INTO rt1 (id, name, title, idd, count) VALUES (1, 'TOFU', 'food', 1, 11)";i:26;s:3:"
-OK";i:27;s:17:"SELECT * FROM rt1";i:28;s:18:"
-1 | 11 | 1
+OK";i:27;s:17:"SELECT * FROM rt1";i:28;s:25:"
+1 | 11 | 1 | TOFU
 1 rows";}}}

@@ -25,6 +25,8 @@ index rt1
     rt_attr_uint = idd
     morphology = stem_en
     wordforms = <this_test/>/wf1.txt
+    
+    #stored_fields = name
 }
 </config>
 

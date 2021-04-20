@@ -5053,49 +5053,324 @@ void ExprParser_t::MultiNEPass ( int iNode )
 	}
 }
 
-/// optimize subtree
-void ExprParser_t::Optimize ( int iNode )
+StringBuilder_c & operator<< ( StringBuilder_c & dOut, Str_t sVal )
 {
-	// fixme! m.b. iteratively repeat while something changes?
-	CanonizePass ( iNode );
-	ConstantFoldPass ( iNode );
-	VariousOptimizationsPass ( iNode );
-	MultiNEPass ( iNode );
+	dOut.AppendChunk (sVal);
+	return dOut;
 }
 
+const char* TokName (int iTok, int iFunc)
+{
+	if ( iTok<256 )
+	{
+		if ( iTok<-0 )
+			return "deleted_token_fixme";
+		static char onechar[2] = { 0 };
+		onechar[0] = char(iTok);
+		return onechar;
+	}
+	switch ( (yytokentype) iTok)
+	{
+		case TOK_CONST_INT:    return "const_int";
+		case TOK_CONST_FLOAT:  return "const_float";
+		case TOK_CONST_STRING: return "const_string";
+		case TOK_SUBKEY:       return "subkey";
+		case TOK_DOT_NUMBER:   return "dot_number";
+		case TOK_ATTR_INT:     return "attr_int";
+		case TOK_ATTR_BITS:    return "attr_bits";
+		case TOK_ATTR_FLOAT:   return "attr_float";
+		case TOK_ATTR_MVA32:   return "attr_mva32";
+		case TOK_ATTR_MVA64:   return "attr_mva64";
+		case TOK_ATTR_STRING:  return "attr_string";
+		case TOK_ATTR_FACTORS: return "attr_factors";
+		case TOK_IF:           return "if";
+		case TOK_FUNC:         return FuncNameByHash ( iFunc );
+		case TOK_FUNC_IN:      return "func_in";
+		case TOK_FUNC_RAND:    return "func_rand";
+		case TOK_FUNC_REMAP:   return "func_remap";
+		case TOK_FUNC_PF:      return "func_pf";
+		case TOK_FUNC_JA:      return "func_ja";
+		case TOK_USERVAR:      return "uservar";
+		case TOK_UDF:          return "udf";
+		case TOK_HOOK_IDENT:   return "hook_ident";
+		case TOK_HOOK_FUNC:    return "hook_func";
+		case TOK_IDENT:        return "ident";
+		case TOK_ATTR_JSON:    return "attr_json";
+		case TOK_FIELD:        return "field";
+		case TOK_COLUMNAR_INT:       return "columnar_int";
+		case TOK_COLUMNAR_TIMESTAMP: return "columnar_timestamp";
+		case TOK_COLUMNAR_BIGINT:    return "columnar_bigint";
+		case TOK_COLUMNAR_BOOL:      return "columnar_bool";
+		case TOK_COLUMNAR_FLOAT:     return "columnar_float";
+		case TOK_COLUMNAR_STRING:    return "columnar_string";
+		case TOK_COLUMNAR_UINT32SET: return "columnar_uint32set";
+		case TOK_COLUMNAR_INT64SET:  return "columnar_int64set";
+		case TOK_ATWEIGHT:     return "atweight";
+		case TOK_GROUPBY:      return "groupby";
+		case TOK_WEIGHT:       return "weight";
+		case TOK_COUNT:        return "count";
+		case TOK_DISTINCT:     return "distinct";
+		case TOK_CONST_LIST:   return "const_list";
+		case TOK_ATTR_SINT:    return "attr_sint";
+		case TOK_MAP_ARG:      return "map_arg";
+		case TOK_FOR:          return "for";
+		case TOK_ITERATOR:     return "iterator";
+		case TOK_IS:           return "is";
+		case TOK_NULL:         return "null";
+		case TOK_IS_NULL:      return "is_null";
+		case TOK_IS_NOT_NULL:  return "is_not_null";
+		case TOK_OR:           return "or";
+		case TOK_AND:          return "and";
+		case TOK_NE:           return "!=";
+		case TOK_EQ:           return "=";
+		case TOK_GTE:          return ">=";
+		case TOK_LTE:          return "<=";
+		case TOK_MOD:          return "mod";
+		case TOK_DIV:          return "div";
+		case TOK_NOT:          return "not";
+		case TOK_NEG:          return "neg";
+		default: return "Uknown_need_to_fix";
+	}
+}
 
 // debug dump
+void Dump ( int iNode, const VecTraits_T<ExprNode_t>& dNodes, StringBuilder_c& tOut )
+{
+	if ( iNode<0 )
+		return;
+
+	ExprNode_t & tNode = dNodes[iNode];
+	switch ( tNode.m_iToken )
+	{
+	case TOK_CONST_INT:
+		tOut << tNode.m_iConst;
+		break;
+
+	case TOK_CONST_FLOAT:
+		tOut << tNode.m_fConst;
+		break;
+
+	case TOK_ATTR_INT:
+	case TOK_ATTR_SINT:
+		tOut << "row[" << tNode.m_tLocator.m_iBitOffset / 32 << "]";
+		break;
+
+	default:
+		tOut << "(";
+		Dump ( tNode.m_iLeft, dNodes, tOut );
+		tOut << " ";
+		if ( tNode.m_iToken<256 )
+			tOut.RawC ( (char) tNode.m_iToken);
+		else
+			tOut << TokName (tNode.m_iToken,tNode.m_iFunc);
+		tOut << " ";
+		Dump ( tNode.m_iRight, dNodes, tOut );
+		tOut << ")";
+		break;
+	}
+}
+
 void ExprParser_t::Dump ( int iNode )
 {
 	if ( iNode<0 )
 		return;
 
-	ExprNode_t & tNode = m_dNodes[iNode];
-	switch ( tNode.m_iToken )
-	{
-		case TOK_CONST_INT:
-			printf ( INT64_FMT, tNode.m_iConst );
-			break;
-
-		case TOK_CONST_FLOAT:
-			printf ( "%f", tNode.m_fConst );
-			break;
-
-		case TOK_ATTR_INT:
-		case TOK_ATTR_SINT:
-			printf ( "row[%d]", tNode.m_tLocator.m_iBitOffset/32 );
-			break;
-
-		default:
-			printf ( "(" );
-			Dump ( tNode.m_iLeft );
-			printf ( ( tNode.m_iToken<256 ) ? " %c " : " op-%d ", tNode.m_iToken );
-			Dump ( tNode.m_iRight );
-			printf ( ")" );
-			break;
-	}
+	StringBuilder_c tOut;
+	::Dump ( iNode, m_dNodes, tOut );
+	printf ("%s\n", tOut.cstr());
 }
 
+static void PrintArrow ( StringBuilder_c & tRes, CSphVector<int>& dPref, int iFrom, int iTo, const char* szSuff )
+{
+	const char* szColor = ( iTo>iFrom ) ? " color=red": "";
+	dPref.Add ( tRes.GetLength () );
+	tRes.Sprintf ( "_%d%s->", iFrom, szSuff );
+	dPref.Add ( tRes.GetLength () );
+	tRes.Sprintf ( "_%d[label=%d%s]\n", iTo, iTo, szColor );
+	// 10:l -> 6 [label=6]
+}
+
+static void DumpNode2Dot (StringBuilder_c& tRes, CSphVector<int>& dPref, const VecTraits_T<ExprNode_t>& dNodes, int iNode )
+{
+	if ( iNode<0 )
+		return;
+
+	ExprNode_t & tNode = dNodes[iNode];
+
+	if ( tNode.m_iToken<=0 )
+		return;
+
+	dPref.Add ( tRes.GetLength () );
+	tRes << "_" << iNode; // node num
+
+	switch ( tNode.m_iToken )
+	{
+	case TOK_CONST_INT:
+		tRes.Sprintf ( "[shape=circle label=%d]\n", tNode.m_iConst );
+		break;
+
+	case TOK_CONST_FLOAT:
+		tRes.Sprintf ( "[shape=circle label=%f]\n", tNode.m_fConst );
+		break;
+
+	case TOK_ATTR_INT:
+	case TOK_ATTR_SINT:
+		tRes.Sprintf ( "[shape=oval label=row_%d]\n", tNode.m_tLocator.m_iBitOffset / 32 );
+		break;
+
+	default:
+		tRes << "[label=\"";
+		if ( tNode.m_iLeft>=0 )
+			tRes << "<l>|";
+		tRes << TokName ( tNode.m_iToken, tNode.m_iFunc );
+		if ( tNode.m_iRight>=0 )
+			tRes << "|<r>";
+		tRes << "\"]\n";
+	break;
+	}
+
+	if ( tNode.m_iLeft>=0 )
+		PrintArrow ( tRes, dPref, iNode, tNode.m_iLeft, ":l"  );
+
+	if ( tNode.m_iRight>=0 )
+		PrintArrow ( tRes, dPref, iNode, tNode.m_iRight, ":r" );
+}
+
+static void DumpTree2Dot ( StringBuilder_c& tRes, CSphVector<int>& dPref, const VecTraits_T<ExprNode_t>& dNodes, int iRoot )
+{
+	// use https://dreampuf.github.io/GraphvizOnline to visualize the graph
+	// note, that is NOT recursive, so no stack hit expected.
+
+	ARRAY_CONSTFOREACH ( i, dNodes )
+		DumpNode2Dot ( tRes, dPref, dNodes, i );
+
+	// output header (root node and pointer)
+	tRes << "root";
+	dPref.Add ( tRes.GetLength () );
+	tRes << "_[shape=invhouse label=root]\nroot";
+	dPref.Add ( tRes.GetLength () );
+	tRes << "_->";
+	dPref.Add ( tRes.GetLength () );
+	tRes << "_" << iRoot << "[label=" << iRoot << "]";
+}
+
+using StrWithPlaces_t = std::pair<CSphString, CSphVector<int>>;
+void Render2Dot ( StrWithPlaces_t& tRes, VecTraits_T<ExprNode_t>& dNodes, int iRoot )
+{
+	auto & dPlaces = tRes.second;
+	StringBuilder_c sDot;
+	DumpTree2Dot ( sDot, dPlaces, dNodes, iRoot );
+	sDot.MoveTo ( tRes.first );
+}
+
+using NamedDot = std::pair<CSphString, StrWithPlaces_t>;
+void RenderAndAddWithName ( NamedDot & tOut, VecTraits_T<ExprNode_t> & dNodes, int iRoot, const char* szName )
+{
+	tOut.first = szName;
+	Render2Dot ( tOut.second, dNodes, iRoot );
+}
+
+void PlacePrefix ( StrWithPlaces_t & tRes, const char* sPrefix )
+{
+	char c = *sPrefix;
+	auto * sRes = const_cast<char *> (tRes.first.cstr ());
+	tRes.second.Apply ( [sRes, c] ( int i ) { sRes[i] = c; } );
+}
+
+CSphString Dots2String ( CSphVector<NamedDot>& dDots )
+{
+	static const BYTE uPREFIXES = 8;
+	static const char* dPrefixes[uPREFIXES] = {"a", "b", "c", "d", "e", "f", "g", "h"};
+	int iPrefix = 0;
+
+	StringBuilder_c tOut;
+
+	tOut << "digraph A {\nedge[fontsize=9]\nnode[shape=record]\ncolor=blue\n";
+	int j = 0;
+
+	for ( int i = 1; i<dDots.GetLength (); ++i )
+	{
+		if ( dDots[i].second.first == dDots[j].second.first )
+			continue;
+		tOut << "subgraph cluster_" << dPrefixes[iPrefix] << " {\nlabel=\"" << dDots[j].first << "\"\n";
+		PlacePrefix ( dDots[j].second, dPrefixes[iPrefix] );
+		tOut << dDots[j].second.first << "\n}\n";
+		++iPrefix;
+		j = i;
+	}
+	tOut << "subgraph cluster_" << dPrefixes[iPrefix] << " {\nlabel=\"" << dDots[j].first << "\"\n";
+	PlacePrefix ( dDots[j].second, dPrefixes[iPrefix] );
+	tOut << dDots[j].second.first << "\n}\n";
+	tOut << "}";
+
+	CSphString sResult;
+	tOut.MoveTo(sResult);
+	return sResult;
+}
+
+alignas ( 128 ) static const BYTE g_UrlEncodeTable[] = { // 0 if need escape, 1 if not
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, // -.
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, // 0123456789
+	0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // ABCDEFGHIJKLMNO
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1, // PQRSTUVWXYZ_
+	0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // abcdefghijklmno
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0, // pqrstuvwxyz~
+};
+
+CSphString UrlEncode ( const CSphString& sSource )
+{
+	StringBuilder_c sRes;
+	for ( const auto* pC = sSource.cstr (); *pC; ++pC )
+	{
+		auto c = (BYTE)*pC;
+		if ( ( c & 0x80 ) || !g_UrlEncodeTable[c] )
+			sRes.Sprintf("%%%02x",c);
+		else
+			sRes.RawC((char)c);
+	}
+
+	CSphString sResult;
+	sRes.MoveTo (sResult);
+	return sResult;
+}
+
+/// optimize subtree
+void ExprParser_t::Optimize ( int iNode )
+{
+	auto eProfile = session::Profile();
+	if ( eProfile==Profile_e::DOTEXPR || eProfile==Profile_e::DOTEXPRURL )
+	{
+		// fixme! m.b. iteratively repeat while something changes?
+		CSphVector<NamedDot> dDots;
+		RenderAndAddWithName ( dDots.Add (), m_dNodes, m_iParsed, "Raw (non-optimized)" );
+		CanonizePass ( iNode );
+		RenderAndAddWithName ( dDots.Add (), m_dNodes, m_iParsed, "CanonizePass" );
+		ConstantFoldPass ( iNode );
+		RenderAndAddWithName ( dDots.Add (), m_dNodes, m_iParsed, "ConstantFoldPass" );
+		VariousOptimizationsPass ( iNode );
+		RenderAndAddWithName ( dDots.Add (), m_dNodes, m_iParsed, "VariousOptimizationsPass" );
+		MultiNEPass ( iNode );
+		RenderAndAddWithName ( dDots.Add (), m_dNodes, m_iParsed, "MultiNEPass" );
+		auto sDot = Dots2String ( dDots );
+		dDots.Reset();
+
+		StringBuilder_c tOut;
+		tOut << "Expr was: " << m_sExpr << "\n";
+		if ( eProfile==Profile_e::DOTEXPR )
+			tOut << sDot;
+		else
+			tOut << "https://dreampuf.github.io/GraphvizOnline/#" << UrlEncode(sDot);
+		printf ( "%s\n", tOut.cstr () );
+		fflush ( stdout );
+		return;
+	}
+	CanonizePass ( iNode );
+	ConstantFoldPass ( iNode );
+	VariousOptimizationsPass ( iNode );
+	MultiNEPass ( iNode );
+}
 
 /// fold arglist into array
 /// moves also ownership (so, 1-st param owned by dArgs on exit)

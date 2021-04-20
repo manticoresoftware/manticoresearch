@@ -12777,6 +12777,10 @@ Profile_e ParseProfileFormat ( const SqlStmt_t & tStmt )
 {
 	if ( tStmt.m_sSetValue=="dot" )
 		return Profile_e::DOT;
+	else if ( tStmt.m_sSetValue=="expr" )
+		return Profile_e::DOTEXPR;
+	else if ( tStmt.m_sSetValue=="exprurl" )
+		return Profile_e::DOTEXPRURL;
 	else if ( tStmt.m_iSetValue!=0 )
 		return Profile_e::PLAIN;
 	return Profile_e::NONE;

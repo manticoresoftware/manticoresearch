@@ -172,7 +172,9 @@ ScopedMiniInfo_t PublishSystemInfo ( const char * sDescription );
 enum Profile_e {
 	NONE,
 	PLAIN,
-	DOT
+	DOT,
+	DOTEXPR,
+	DOTEXPRURL,
 };
 
 volatile ESphCollation& GlobalCollation ();

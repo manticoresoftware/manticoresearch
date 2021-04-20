@@ -1802,9 +1802,19 @@ struct GroupSorter_fn : public CSphMatchComparatorState, public MatchSortAccesso
 /// match comparator interface from group-by sorter point of view
 struct ISphMatchComparator : public ISphRefcountedMT
 {
-	virtual bool VirtualIsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & tState ) const = 0;
+	inline bool VirtualIsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & tState ) const
+	{
+		assert ( m_fnLessFunc );
+		return m_fnLessFunc ( a, b, tState );
+	}
 protected:
 	            ~ISphMatchComparator () override = default;
+
+	using fnFuncLessType = bool ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t );
+	fnFuncLessType * m_fnLessFunc;
+
+	ISphMatchComparator ( fnFuncLessType * fnLessFunc ) : m_fnLessFunc { fnLessFunc }
+	{}
 };
 
 /// additional group-by sorter settings
@@ -4533,11 +4543,6 @@ private:
 /// match sorter
 struct MatchRelevanceLt_fn : public ISphMatchComparator
 {
-	bool VirtualIsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t ) const override
-	{
-		return IsLess ( a, b, t );
-	}
-
 	static bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & tState )
 	{
 		if ( a.m_iWeight!=b.m_iWeight )
@@ -4545,17 +4550,14 @@ struct MatchRelevanceLt_fn : public ISphMatchComparator
 
 		return a.m_tRowID > b.m_tRowID;
 	}
+
+	MatchRelevanceLt_fn() : ISphMatchComparator (IsLess) {}
 };
 
 
 /// match sorter
 struct MatchAttrLt_fn : public ISphMatchComparator
 {
-	bool VirtualIsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t ) const override
-	{
-		return IsLess ( a, b, t );
-	}
-
 	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
 	{
 		if ( t.m_eKeypart[0]!=SPH_KEYPART_STRING )
@@ -4576,17 +4578,14 @@ struct MatchAttrLt_fn : public ISphMatchComparator
 
 		return a.m_tRowID > b.m_tRowID;
 	}
+
+	MatchAttrLt_fn() : ISphMatchComparator (IsLess) {}
 };
 
 
 /// match sorter
 struct MatchAttrGt_fn : public ISphMatchComparator
 {
-	bool VirtualIsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t ) const override
-	{
-		return IsLess ( a, b, t );
-	}
-
 	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
 	{
 		if ( t.m_eKeypart[0]!=SPH_KEYPART_STRING )
@@ -4607,17 +4606,14 @@ struct MatchAttrGt_fn : public ISphMatchComparator
 
 		return a.m_tRowID > b.m_tRowID;
 	}
+
+	MatchAttrGt_fn() : ISphMatchComparator (IsLess) {}
 };
 
 
 /// match sorter
 struct MatchTimeSegments_fn : public ISphMatchComparator
 {
-	bool VirtualIsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t ) const override
-	{
-		return IsLess ( a, b, t );
-	}
-
 	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
 	{
 		SphAttr_t aa = a.GetAttr ( t.m_tLocator[0] );
@@ -4636,6 +4632,8 @@ struct MatchTimeSegments_fn : public ISphMatchComparator
 		return a.m_tRowID > b.m_tRowID;
 	}
 
+	MatchTimeSegments_fn() : ISphMatchComparator (IsLess) {}
+
 protected:
 	static inline int GetSegment ( SphAttr_t iStamp, SphAttr_t iNow )
 	{
@@ -4652,11 +4650,6 @@ protected:
 /// match sorter
 struct MatchExpr_fn : public ISphMatchComparator
 {
-	bool VirtualIsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t ) const override
-	{
-		return IsLess ( a, b, t );
-	}
-
 	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
 	{
 		float aa = a.GetAttrFloat ( t.m_tLocator[0] ); // FIXME! OPTIMIZE!!! simplified (dword-granular) getter could be used here
@@ -4666,6 +4659,8 @@ struct MatchExpr_fn : public ISphMatchComparator
 
 		return a.m_tRowID > b.m_tRowID;
 	}
+
+	MatchExpr_fn() : ISphMatchComparator (IsLess) {}
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -4707,42 +4702,31 @@ struct MatchExpr_fn : public ISphMatchComparator
 
 struct MatchGeneric1_fn : public ISphMatchComparator
 {
-	bool VirtualIsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t ) const override
-	{
-		return IsLess ( a, b, t );
-	}
-
 	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
 	{
 		SPH_TEST_KEYPART(0);
 		return a.m_tRowID>b.m_tRowID;
 	}
+
+	MatchGeneric1_fn() : ISphMatchComparator (IsLess) {}
 };
 
 
 struct MatchGeneric2_fn : public ISphMatchComparator
 {
-	bool VirtualIsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t ) const override
-	{
-		return IsLess ( a, b, t );
-	}
-
 	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
 	{
 		SPH_TEST_KEYPART(0);
 		SPH_TEST_KEYPART(1);
 		return a.m_tRowID>b.m_tRowID;
 	}
+
+	MatchGeneric2_fn() : ISphMatchComparator (IsLess) {}
 };
 
 
 struct MatchGeneric3_fn : public ISphMatchComparator
 {
-	bool VirtualIsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t ) const override
-	{
-		return IsLess ( a, b, t );
-	}
-
 	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
 	{
 		SPH_TEST_KEYPART(0);
@@ -4750,16 +4734,13 @@ struct MatchGeneric3_fn : public ISphMatchComparator
 		SPH_TEST_KEYPART(2);
 		return a.m_tRowID>b.m_tRowID;
 	}
+
+	MatchGeneric3_fn() : ISphMatchComparator (IsLess) {}
 };
 
 
 struct MatchGeneric4_fn : public ISphMatchComparator
 {
-	bool VirtualIsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t ) const override
-	{
-		return IsLess ( a, b, t );
-	}
-
 	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
 	{
 		SPH_TEST_KEYPART(0);
@@ -4768,16 +4749,13 @@ struct MatchGeneric4_fn : public ISphMatchComparator
 		SPH_TEST_KEYPART(3);
 		return a.m_tRowID>b.m_tRowID;
 	}
+
+	MatchGeneric4_fn() : ISphMatchComparator (IsLess) {}
 };
 
 
 struct MatchGeneric5_fn : public ISphMatchComparator
 {
-	bool VirtualIsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t ) const override
-	{
-		return IsLess ( a, b, t );
-	}
-
 	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
 	{
 		SPH_TEST_KEYPART(0);
@@ -4787,6 +4765,8 @@ struct MatchGeneric5_fn : public ISphMatchComparator
 		SPH_TEST_KEYPART(4);
 		return a.m_tRowID>b.m_tRowID;
 	}
+
+	MatchGeneric5_fn() : ISphMatchComparator (IsLess) {}
 };
 
 //////////////////////////////////////////////////////////////////////////

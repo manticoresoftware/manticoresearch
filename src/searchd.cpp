@@ -164,7 +164,6 @@ int				g_iMaxPacketSize	= 8*1024*1024;	// in bytes; for both query packets from 
 static int				g_iMaxFilters		= 256;
 static int				g_iMaxFilterValues	= 4096;
 static int				g_iMaxBatchQueries	= 32;
-static ESphCollation	g_eCollation = SPH_COLLATION_DEFAULT;
 
 static int				g_iDocstoreCache = 0;
 
@@ -1106,7 +1105,7 @@ LONG WINAPI CrashLogger::HandleCrash ( EXCEPTION_POINTERS * pExc )
 				{
 					sphSafeInfo ( g_iLogFile, "thd %d (%s), proto %s, state %s, command %s", iThd,
 							pThread->m_sThreadName.cstr(),
-							ProtoName (pSrc->m_eProto), TaskStateName ( pSrc->m_eTaskState ),
+							ProtoName (pSrc->GetProto()), TaskStateName ( pSrc->GetTaskState() ),
 							pSrc->m_sCommand ? pSrc->m_sCommand : "-" );
 					++iThd;
 					break;
@@ -2486,7 +2485,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	}
 
 	// extension v.1
-	tQuery.m_eCollation = g_eCollation;
+	tQuery.m_eCollation = GlobalCollation ();
 	if ( uMasterVer>=1 )
 		tQuery.m_eCollation = (ESphCollation)tReq.GetDword();
 
@@ -2936,10 +2935,10 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResultMeta & 
 
 	if ( tMeta.m_iMultiplier>1 )
 		tBuf.Sprintf ( " conn %d real %0.3F wall %0.3F x%d found " INT64_FMT " *""/ ",
-				 myinfo::ConnID(), iRealTime, iQueryTime, tMeta.m_iMultiplier, tMeta.m_iTotalMatches );
+				 session::ConnID(), iRealTime, iQueryTime, tMeta.m_iMultiplier, tMeta.m_iTotalMatches );
 	else
 		tBuf.Sprintf ( " conn %d real %0.3F wall %0.3F found " INT64_FMT " *""/ ",
-				 myinfo::ConnID(), iRealTime, iQueryTime, tMeta.m_iTotalMatches );
+				 session::ConnID(), iRealTime, iQueryTime, tMeta.m_iTotalMatches );
 
 	///////////////////////////////////
 	// format request as SELECT query
@@ -3088,7 +3087,7 @@ void LogSphinxqlError ( const char * sStmt, const char * sError )
 	sphFormatCurrentTime ( sTimeBuf, sizeof(sTimeBuf) );
 
 	StringBuilder_c tBuf;
-	tBuf.Appendf ( "/""* %s conn %d *""/ %s # error=%s\n", sTimeBuf, myinfo::ConnID(), sStmt, sError );
+	tBuf.Appendf ( "/""* %s conn %d *""/ %s # error=%s\n", sTimeBuf, session::ConnID(), sStmt, sError );
 
 	sphSeek ( g_iQueryLogFile, 0, SEEK_END );
 	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.GetLength() );
@@ -3139,7 +3138,7 @@ static void LogStatementSphinxql ( Str_t sQuery, int iRealTime )
 	tBuf += R"(/* )";
 	tBuf += sTimeBuf;
 
-	tBuf.Sprintf ( " conn %d real %0.3F *""/ ", myinfo::ConnID(), iRealTime );
+	tBuf.Sprintf ( " conn %d real %0.3F *""/ ", session::ConnID(), iRealTime );
 	tBuf += sQuery;
 
 	// finish statement and add line feed
@@ -5662,7 +5661,7 @@ void SearchHandler_c::RunLocalSearches ()
 		dSorters.ZeroVec ();
 
 		auto tCtx = dCtx.CloneNewContext();
-		Threads::CoThrottler_c tThrottler ( myinfo::ThrottlingPeriodMS (), bNoYeld );
+		Threads::CoThrottler_c tThrottler ( session::ThrottlingPeriodMS (), bNoYeld );
 		while ( iJob<iJobs )
 		{
 			iJob = iCurJob.fetch_add ( 1, std::memory_order_acq_rel );
@@ -6542,7 +6541,7 @@ DEFINE_RENDER ( QueryInfo_t )
 	dDst.m_sChain << (int) tInfo.m_eType << ":Query ";
 	hazard::Guard_c tGuard;
 	auto pQuery = tGuard.Protect ( tInfo.m_pHazardQuery );
-	if ( pQuery && myinfo::GetProto()!=Proto_e::MYSQL41 ) // cheat: for mysql query not used, so will not copy it then
+	if ( pQuery && session::Proto()!=Proto_e::MYSQL41 ) // cheat: for mysql query not used, so will not copy it then
 		dDst.m_pQuery = new CSphQuery ( *pQuery );
 }
 
@@ -6917,7 +6916,7 @@ bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, ISphOutputBuffer & tO
 
 bool IsMaxedOut ()
 {
-	if ( myinfo::IsVIP() )
+	if ( session::Vip () )
 		return false;
 
 	if ( g_iThdQueueMax!=0 )
@@ -7525,7 +7524,7 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 			return; // already nothing to do, early finish.
 
 		auto tCtx = dCtx.CloneNewContext ();
-		Threads::CoThrottler_c tThrottler ( myinfo::ThrottlingPeriodMS (), false );
+		Threads::CoThrottler_c tThrottler ( session::ThrottlingPeriodMS (), false );
 		while (true)
 		{
 			myinfo::SetThreadInfo ( "s %d:", iJob );
@@ -8796,7 +8795,8 @@ void HandleCommandPing ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tRe
 bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength,
 	InputBuffer_c & tBuf, ISphOutputBuffer & tOut, bool bManagePersist )
 {
-	myinfo::TaskState ( TaskState_e::QUERY );
+	auto & tSess = session::Info();
+	tSess.SetTaskState ( TaskState_e::QUERY );
 	// set on query guard
 	auto& tCrashQuery = GlobalCrashQueryGetRef();
 	tCrashQuery.m_eType = QUERY_API;
@@ -8812,7 +8812,7 @@ bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength
 	myinfo::SetCommand ( g_dApiCommands[eCommand] );
 
 	bool bPersist = false;
-	sphLogDebugv ( "conn %s(%d): got command %d, handling", myinfo::szClientName(), myinfo::ConnID(), eCommand );
+	sphLogDebugv ( "conn %s(%d): got command %d, handling", tSess.szClientName(), tSess.GetConnID(), eCommand );
 	switch ( eCommand )
 	{
 		case SEARCHD_COMMAND_SEARCH:	HandleCommandSearch ( tOut, uCommandVer, tBuf ); break;
@@ -8822,7 +8822,7 @@ bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength
 		case SEARCHD_COMMAND_PERSIST:
 			{
 				bPersist = ( tBuf.GetInt()!=0 );
-				sphLogDebugv ( "conn %s(%d): pconn is now %s", myinfo::szClientName (), myinfo::ConnID(), bPersist ? "on" : "off" );
+				sphLogDebugv ( "conn %s(%d): pconn is now %s", tSess.szClientName (), tSess.GetConnID(), bPersist ? "on" : "off" );
 				if ( !bManagePersist ) // thread pool handles all persist connections
 					break;
 			}
@@ -8834,7 +8834,7 @@ bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength
 		case SEARCHD_COMMAND_PING:		HandleCommandPing ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_UVAR:		HandleCommandUserVar ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_CALLPQ:	HandleCommandCallPq ( tOut, uCommandVer, tBuf ); break;
-		case SEARCHD_COMMAND_CLUSTERPQ:	HandleCommandClusterPq ( tOut, uCommandVer, tBuf, myinfo::szClientName () ); break;
+		case SEARCHD_COMMAND_CLUSTERPQ:	HandleCommandClusterPq ( tOut, uCommandVer, tBuf, tSess.szClientName () ); break;
 		case SEARCHD_COMMAND_GETFIELD:	HandleCommandGetField ( tOut, uCommandVer, tBuf ); break;
 		default:						assert ( 0 && "internal error: unhandled command" ); break;
 	}
@@ -10056,7 +10056,7 @@ static bool IsHttpStmt ( const SqlStmt_t & tStmt )
 }
 
 void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool bReplace, bool bCommit,
-	  CSphString & sWarning, CSphSessionAccum & tAcc, ESphCollation	eCollation, CSphVector<int64_t> & dLastIds )
+	  CSphString & sWarning, CSphSessionAccum & tAcc, CSphVector<int64_t> & dLastIds )
 {
 	MEMORY ( MEM_SQL_INSERT );
 
@@ -10390,7 +10390,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 
 			CSphVector<CSphFilterSettings> dFilters;
 			CSphVector<FilterTreeItem_t>   dFilterTree;
-			if ( !PercolateParseFilters ( dStrings[2], eCollation, tSchemaInt, dFilters, dFilterTree, sError ) )
+			if ( !PercolateParseFilters ( dStrings[2], session::Collation (), tSchemaInt, dFilters, dFilterTree, sError ) )
 				break;
 
 			PercolateQueryArgs_t tArgs ( dFilters, dFilterTree );
@@ -12752,24 +12752,11 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	tOut.Ok ( iAffected );
 }
 
-enum Profile_e {
-	NONE,
-	PLAIN,
-	DOT
-};
-
 struct SessionVars_t
 {
 	bool			m_bAutoCommit = true;
 	bool			m_bInTransaction = false;
-	ESphCollation	m_eCollation { g_eCollation };
-	Profile_e		m_eProfile { Profile_e::NONE };
-	int				m_iTimeoutS = -1;
-	int				m_iThrottlingMS = -1;
-	int				m_iDistThreads = 0;
 	CSphVector<int64_t> m_dLastIds;
-
-	bool IsProfile () const { return m_eProfile!=Profile_e::NONE; };
 };
 
 // fwd
@@ -12777,13 +12764,13 @@ void HandleMysqlShowProfile ( RowBuffer_i & tOut, const QueryProfile_c & p, bool
 
 static void HandleMysqlShowPlan ( RowBuffer_i & tOut, const QueryProfile_c & p, bool bMoreResultsFollow, bool bDot );
 
-bool IsDot ( const SqlStmt_t & tStmt, const SessionVars_t & tVars )
+bool IsDot ( const SqlStmt_t & tStmt, bool bIsDot )
 {
 	if ( tStmt.m_sThreadFormat=="dot" )
 		return true;
 	else if ( tStmt.m_sThreadFormat=="plain" )
 		return false;
-	return tVars.m_eProfile==Profile_e::DOT;
+	return bIsDot;
 }
 
 Profile_e ParseProfileFormat ( const SqlStmt_t & tStmt )
@@ -12798,6 +12785,8 @@ Profile_e ParseProfileFormat ( const SqlStmt_t & tStmt )
 void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResultMeta & tLastMeta, RowBuffer_i & dRows,
 		const CSphString & sWarning )
 {
+	auto& tSess = session::Info();
+
 	// select count
 	int iSelect = 0;
 	ARRAY_FOREACH ( i, dStmt )
@@ -12812,7 +12801,6 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 
 	// setup query for searching
 	SearchHandler_c tHandler ( iSelect, sphCreatePlainQueryParser(), QUERY_SQL, true );
-	SessionVars_t tVars;
 	QueryProfile_c tProfile;
 
 	iSelect = 0;
@@ -12829,13 +12817,13 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 			CSphString sSetName ( dStmt[i].m_sSetName );
 			sSetName.ToLower();
 			if ( sSetName=="profiling" )
-				tVars.m_eProfile = ParseProfileFormat ( dStmt[i] );
+				tSess.SetProfile ( ParseProfileFormat ( dStmt[i] ) );
 		}
 	}
 
 	// use first meta for faceted search
 	bool bUseFirstMeta = ( tHandler.m_dQueries.GetLength()>1 && !tHandler.m_dQueries[0].m_bFacet && tHandler.m_dQueries[1].m_bFacet );
-	if ( tVars.IsProfile() )
+	if ( tSess.IsProfile() )
 		tHandler.SetProfile ( &tProfile );
 
 	// do search
@@ -12880,7 +12868,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 			AggrResult_t & tRes = tHandler.m_dAggrResults[iSelect++];
 			if ( !sWarning.IsEmpty() )
 				tRes.m_sWarning = sWarning;
-			SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow, false, nullptr, ( tVars.IsProfile() ? &tProfile : nullptr ) );
+			SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow, false, nullptr, ( tSess.IsProfile() ? &tProfile : nullptr ) );
 			// mysql server breaks send on error
 			bBreak = !tRes.m_iSuccesses;
 			break;
@@ -12902,7 +12890,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 			HandleMysqlShowProfile ( dRows, tProfile, bMoreResultsFollow );
 			break;
 		case STMT_SHOW_PLAN:
-			HandleMysqlShowPlan ( dRows, tProfile, bMoreResultsFollow, ::IsDot ( dStmt[i], tVars ) );
+			HandleMysqlShowPlan ( dRows, tProfile, bMoreResultsFollow, ::IsDot ( dStmt[i], tSess.IsDot() ) );
 		default:
 			break;
 		}
@@ -12939,6 +12927,7 @@ static ESphCollation sphCollationFromName ( const CSphString & sName, CSphString
 
 void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVars, CSphSessionAccum & tAcc )
 {
+	auto& tSess = session::Info();
 	MEMORY ( MEM_SQL_SET );
 	CSphString sError;
 
@@ -12949,19 +12938,19 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 
 		if ( tStmt.m_sSetName=="wait_timeout" )
 		{
-			tVars.m_iTimeoutS = tStmt.m_iSetValue;
+			tSess.SetTimeoutS ( tStmt.m_iSetValue );
 			break;
 		}
 
 		if ( tStmt.m_sSetName=="throttling_period" )
 		{
-			tVars.m_iThrottlingMS = tStmt.m_iSetValue;
+			tSess.SetThrottlingPeriodMS( tStmt.m_iSetValue );
 			break;
 		}
 
 		if ( tStmt.m_sSetName=="max_threads_per_query" )
 		{
-			tVars.m_iDistThreads = tStmt.m_iSetValue;
+			tSess.SetDistThreads ( tStmt.m_iSetValue );
 			break;
 		}
 
@@ -13001,7 +12990,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 			CSphString & sVal = tStmt.m_sSetValue;
 			sVal.ToLower();
 
-			tVars.m_eCollation = sphCollationFromName ( sVal, &sError );
+			tSess.SetCollation ( sphCollationFromName ( sVal, &sError ) );
 			if ( !sError.IsEmpty() )
 			{
 				tOut.Error ( tStmt.m_sStmt, sError.cstr() );
@@ -13017,7 +13006,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 		} else if ( tStmt.m_sSetName=="profiling" )
 		{
 			// per-session PROFILING
-			tVars.m_eProfile = ParseProfileFormat ( tStmt );
+			tSess.SetProfile ( ParseProfileFormat ( tStmt ) );
 
 		} else
 		{
@@ -13106,7 +13095,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 			g_bCoreDump = !!tStmt.m_iSetValue;
 		} else if ( tStmt.m_sSetName=="maintenance")
 		{
-			if ( myinfo::IsVIP() )
+			if ( tSess.GetVip() )
 				g_bMaintenance = !!tStmt.m_iSetValue;
 			else
 			{
@@ -13115,7 +13104,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 			}
 		} else if ( tStmt.m_sSetName=="wait_timeout" )
 		{
-			if ( myinfo::IsVIP() )
+			if ( tSess.GetVip() )
 				g_iClientQlTimeoutS = tStmt.m_iSetValue;
 			else
 			{
@@ -13124,7 +13113,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 			}
 		} else if ( tStmt.m_sSetName=="throttling_period" )
 		{
-			if ( myinfo::IsVIP() )
+			if ( tSess.GetVip() )
 				Threads::CoThrottler_c::SetDefaultThrottlingPeriodMS ( tStmt.m_iSetValue );
 			else
 			{
@@ -13711,7 +13700,7 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, Str_t sCommand )
 {
 	using namespace DebugCmd;
 	CSphString sError;
-	bool bVipConn = myinfo::IsVIP();
+	bool bVipConn = session::Vip ();
 	auto tCmd = DebugCmd::ParseDebugCmd ( sCommand, sError );
 
 	if ( bVipConn )
@@ -14066,7 +14055,7 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt, Se
 {
 	VectorLike dTable ( tStmt.m_sStringParam );
 	dTable.MatchTuplet ( "autocommit", tVars.m_bAutoCommit ? "1" : "0" );
-	dTable.MatchTuplet ( "collation_connection", sphCollationToName ( tVars.m_eCollation ) );
+	dTable.MatchTuplet ( "collation_connection", sphCollationToName ( session::Collation() ) );
 	dTable.MatchTuplet ( "query_log_format", g_eLogFormat==LOG_FORMAT_PLAIN ? "plain" : "sphinxql" );
 	dTable.MatchTuplet ( "log_level", LogLevelName ( g_eLogLevel ) );
 	dTable.MatchTupletf ( "max_allowed_packet", "%d", g_iMaxPacketSize );
@@ -15190,7 +15179,7 @@ private:
 
 	bool IsDot ( const SqlStmt_t & tStmt ) const
 	{
-		return ::IsDot ( tStmt, m_tVars );
+		return ::IsDot ( tStmt, session::Info().IsDot() );
 	}
 
 public:
@@ -15208,8 +15197,10 @@ public:
 	// returns false if profile should be discarded (eg. SHOW PROFILE case)
 	bool Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	{
+		auto& tSess = session::Info();
+
 		// set on query guard
-		myinfo::TaskState ( TaskState_e::QUERY );
+		tSess.SetTaskState ( TaskState_e::QUERY );
 		auto& tCrashQuery = GlobalCrashQueryGetRef();
 		tCrashQuery.m_eType = QUERY_SQL;
 		tCrashQuery.m_dQuery = { (const BYTE*) sQuery.first, sQuery.second };
@@ -15219,21 +15210,21 @@ public:
 		{
 			// result set header packet
 			tOut.HeadTuplet ( "DATABASE()", "USER()" );
-			tOut.DataTuplet ( g_sDbName.cstr(), myinfo::IsVIP() ? "VIP" : "Usual" );
+			tOut.DataTuplet ( g_sDbName.cstr(), tSess.GetVip () ? "VIP" : "Usual" );
 			tOut.Eof ( false );
 			return true;
 		}
 
 		// parse SQL query
-		if ( m_tVars.IsProfile() )
+		if ( tSess.IsProfile() )
 			m_tProfile.Switch ( SPH_QSTATE_SQL_PARSE );
 
 		m_sError = "";
 
 		CSphVector<SqlStmt_t> dStmt;
-		bool bParsedOK = sphParseSqlQuery ( sQuery.first, sQuery.second, dStmt, m_sError, m_tVars.m_eCollation );
+		bool bParsedOK = sphParseSqlQuery ( sQuery.first, sQuery.second, dStmt, m_sError, tSess.GetCollation () );
 
-		if ( m_tVars.IsProfile() )
+		if ( tSess.IsProfile() )
 			m_tProfile.Switch ( SPH_QSTATE_UNKNOWN );
 
 		SqlStmt_e eStmt = STMT_PARSE_ERROR;
@@ -15255,7 +15246,7 @@ public:
 
 		if ( bParsedOK && m_bFederatedUser )
 		{
-			if ( !FixupFederatedQuery ( m_tVars.m_eCollation, dStmt,  m_sError, m_sFederatedQuery ) )
+			if ( !FixupFederatedQuery ( tSess.GetCollation (), dStmt,  m_sError, m_sFederatedQuery ) )
 			{
 				m_tLastMeta = CSphQueryResultMeta();
 				m_tLastMeta.m_sError = m_sError;
@@ -15293,7 +15284,7 @@ public:
 				dStmt.Begin()->m_pTableFunc = nullptr;
 				tHandler.m_pStmt = pStmt;
 
-				if ( m_tVars.IsProfile() )
+				if ( tSess.IsProfile() )
 					tHandler.SetProfile ( &m_tProfile );
 				if ( m_bFederatedUser )
 					tHandler.SetFederatedUser();
@@ -15303,7 +15294,7 @@ public:
 					// query just completed ok; reset out error message
 					m_sError = "";
 					AggrResult_t & tLast = tHandler.m_dAggrResults.Last();
-					SendMysqlSelectResult ( tOut, tLast, false, m_bFederatedUser, &m_sFederatedQuery, ( m_tVars.IsProfile() ? &m_tProfile : nullptr ) );
+					SendMysqlSelectResult ( tOut, tLast, false, m_bFederatedUser, &m_sFederatedQuery, ( tSess.IsProfile() ? &m_tProfile : nullptr ) );
 				}
 
 				// save meta for SHOW META (profile is saved elsewhere)
@@ -15339,8 +15330,7 @@ public:
 				StatCountCommand ( eStmt==STMT_INSERT ? SEARCHD_COMMAND_INSERT : SEARCHD_COMMAND_REPLACE );
 				StmtErrorReporter_c tErrorReporter ( tOut, pStmt->m_sStmt );
 				sphHandleMysqlInsert ( tErrorReporter, *pStmt, eStmt==STMT_REPLACE,
-					m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction, m_tLastMeta.m_sWarning, m_tAcc,
-					m_tVars.m_eCollation, m_tVars.m_dLastIds );
+					m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction, m_tLastMeta.m_sWarning, m_tAcc, m_tVars.m_dLastIds );
 				return true;
 			}
 
@@ -15762,7 +15752,7 @@ QueryProfile_c * SphinxqlSessionPublic::StartProfiling ( ESphQueryState eState )
 {
 	assert ( m_pImpl );
 	QueryProfile_c * pProfile = nullptr;
-	if ( m_pImpl->m_tVars.IsProfile() ) // the current statement might change it
+	if ( session::Info().IsProfile() ) // the current statement might change it
 	{
 		pProfile = &m_pImpl->m_tProfile;
 		pProfile->Start ( eState );
@@ -15774,24 +15764,6 @@ void SphinxqlSessionPublic::SaveLastProfile ()
 {
 	assert ( m_pImpl );
 	m_pImpl->m_tLastProfile = m_pImpl->m_tProfile;
-}
-
-int SphinxqlSessionPublic::GetBackendTimeoutS () const
-{
-	assert ( m_pImpl );
-	return m_pImpl->m_tVars.m_iTimeoutS;
-}
-
-int SphinxqlSessionPublic::GetBackendThrottlingMS () const
-{
-	assert ( m_pImpl );
-	return m_pImpl->m_tVars.m_iThrottlingMS;
-}
-
-int SphinxqlSessionPublic::GetBackendDistThreads () const
-{
-	assert ( m_pImpl );
-	return m_pImpl->m_tVars.m_iDistThreads;
 }
 
 /// sphinxql command over API
@@ -18374,7 +18346,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	{
 		CSphString sCollation = hSearchd.GetStr ( "collation_server" );
 		CSphString sError;
-		g_eCollation = sphCollationFromName ( sCollation, &sError );
+		GlobalCollation () = sphCollationFromName ( sCollation, &sError );
 		if ( !sError.IsEmpty() )
 			sphWarning ( "%s", sError.cstr() );
 	}

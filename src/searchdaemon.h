@@ -1252,7 +1252,7 @@ enum ESphHttpEndpoint
 bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, ISphOutputBuffer & tOut );
 bool IsMaxedOut ();
 void sphFormatFactors ( StringBuilder_c& dOut, const unsigned int * pFactors, bool bJson );
-void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool bReplace, bool bCommit, CSphString & sWarning, CSphSessionAccum & tAcc, ESphCollation	eCollation, CSphVector<int64_t> & dLastIds );
+void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool bReplace, bool bCommit, CSphString & sWarning, CSphSessionAccum & tAcc, CSphVector<int64_t> & dLastIds );
 void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, Str_t sQuery, CSphString & sWarning );
 void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, Str_t sQuery, bool bCommit, CSphSessionAccum & tAcc );
 
@@ -1283,11 +1283,6 @@ public:
 
 	QueryProfile_c * StartProfiling ( ESphQueryState );
 	void SaveLastProfile();
-
-	// manage backend's timeout and variables
-	int GetBackendTimeoutS() const;
-	int GetBackendThrottlingMS() const;
-	int GetBackendDistThreads() const;
 };
 
 void LogSphinxqlError ( const char * sStmt, const char * sError );

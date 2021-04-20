@@ -19,22 +19,23 @@ static auto & g_bGotSighup = sphGetGotSighup ();    // we just received SIGHUP; 
 // mostly repeats HandleClientSphinx
 void ApiServe ( AsyncNetBufferPtr_c pBuf )
 {
+	auto& tSess = session::Info();
 	// non-vip connections in maintainance should be already rejected on accept
-	assert  ( !g_bMaintenance || myinfo::IsVIP () );
+	assert  ( !g_bMaintenance || tSess.GetVip() );
 
-	auto eExpectedProto = myinfo::GetProto ();
+	auto eExpectedProto = tSess.GetProto();
 
 	bool bClientWaitsHandshake = eExpectedProto==Proto_e::SPHINXSE;
-	myinfo::SetProto ( Proto_e::SPHINX );
-	int iCID = myinfo::ConnID();
-	const char * sClientIP = myinfo::szClientName();
+	tSess.SetProto ( Proto_e::SPHINX );
+	int iCID = tSess.GetConnID();
+	const char * sClientIP = tSess.szClientName();
 
 	// needed to check permission to turn maintenance mode on/off
 	auto& tOut = *(NetGenericOutputBuffer_c *) pBuf;
 	auto& tIn = *(AsyncNetInputBuffer_c *) pBuf;
 
 	// send handshake
-	myinfo::TaskState ( TaskState_e::HANDSHAKE );
+	tSess.SetTaskState ( TaskState_e::HANDSHAKE );
 	tOut.SendDword ( SPHINX_SEARCHD_PROTO ); // that is handshake
 
 	// SphinxSE - legacy client, waits first handshake from us to be send, and answers only when it is done.

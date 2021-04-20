@@ -63,14 +63,14 @@ UservarIntSet_c Uservars ( const CSphString & sUservar )
 
 inline Str_t CurrentUser()
 {
-	if ( myinfo::IsVIP() )
+	if ( session::Vip () )
 		return { "VIP", 3 };
 	return { "Usual", 5 };
 }
 
 inline int ConnID ()
 {
-	return myinfo::ConnID ();
+	return session::ConnID ();
 }
 
 
@@ -1392,7 +1392,7 @@ protected:
 
 		auto iStackNeeded = sphGetStackUsed ();
 		auto iCurStackSize = sphMyStackSize ();
-		int iNeedInAdvance = myinfo::DesiredStack ();
+		int iNeedInAdvance = session::DesiredStack ();
 		if ( iNeedInAdvance<=0 )
 			iStackNeeded = iCurStackSize * 2; // just from the fact that we're here, as ProxyFat is created by demand.
 		else

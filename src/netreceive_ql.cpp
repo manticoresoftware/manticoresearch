@@ -585,6 +585,7 @@ inline bool UserWantsCompression ( const ByteBlob_t & tPacket )
 bool LoopClientMySQL ( BYTE & uPacketID, SphinxqlSessionPublic & tSession, int iPacketLen,
 		QueryProfile_c * pProfile, AsyncNetBufferPtr_c pBuf )
 {
+	auto& tSess = session::Info ();
 	assert ( pBuf );
 	auto& tIn = *(AsyncNetInputBuffer_c *) pBuf;
 	auto& tOut = *(NetGenericOutputBuffer_c *) pBuf;
@@ -631,7 +632,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, SphinxqlSessionPublic & tSession, int i
 			myinfo::SetDescription ( tIn.GetRawString ( iPacketLen-1 ), iPacketLen-1 ); // OPTIMIZE? could be huge, but string is hazard.
 			assert ( !tIn.GetError() );
 			sphLogDebugv ( "LoopClientMySQL command %d, '%s'", uMysqlCmd, myinfo::UnsafeDescription().first );
-			myinfo::TaskState ( TaskState_e::QUERY );
+			tSess.SetTaskState ( TaskState_e::QUERY );
 			SqlRowBuffer_c tRows ( &uPacketID, &tOut, &tSession );
 			bKeepProfile = tSession.Execute ( myinfo::UnsafeDescription(), tRows );
 		}
@@ -654,7 +655,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, SphinxqlSessionPublic & tSession, int i
 	}
 
 	// send the response packet
-	myinfo::TaskState ( TaskState_e::NET_WRITE );
+	tSess.SetTaskState ( TaskState_e::NET_WRITE );
 	if ( !tOut.Flush () )
 		return false;
 
@@ -716,23 +717,24 @@ void DebugClose ()
 // main sphinxql server
 void SqlServe ( AsyncNetBufferPtr_c pBuf )
 {
+	auto& tSess = session::Info();
 	// to close current connection from inside
 	auto pCloseFlag = PublishTaskInfo ( new DebugClose_t );
 
 	// to display 'compressed' flag, if any.
 	auto pCompressedFlag = PublishTaskInfo ( new QlCompressedInfo_t );
 
-	myinfo::SetProto ( Proto_e::MYSQL41 );
+	tSess.SetProto ( Proto_e::MYSQL41 );
 
 	// non-vip connections in maintainance should be already rejected on accept
-	assert ( !g_bMaintenance || myinfo::IsVIP () );
+	assert ( !g_bMaintenance || tSess.GetVip() );
 
 	// set off query guard
 	GlobalCrashQueryGetRef ().m_eType = QUERY_SQL;
 	const bool bCanCompression = IsCompressionAvailable();
 
-	int iCID = myinfo::ConnID();
-	const char * sClientIP = myinfo::szClientName();
+	int iCID = tSess.GetConnID();
+	const char * sClientIP = tSess.szClientName();
 
 	// fixme! durty macros to transparently substitute pBuf on the fly (to ssl, compressed, whatever)
 	#define tOut (*(NetGenericOutputBuffer_c*)pBuf)
@@ -741,10 +743,10 @@ void SqlServe ( AsyncNetBufferPtr_c pBuf )
 	/// mysql is pro-active, we NEED to send handshake before client send us something.
 	/// So, no passive probing possible.
 	// send handshake first
-	myinfo::TaskState ( TaskState_e::HANDSHAKE );
+	tSess.SetTaskState ( TaskState_e::HANDSHAKE );
 	sphLogDebugv ("Sending handshake...");
 	SendMysqlProtoHandshake ( tOut, CheckWeCanUseSSL (), bCanCompression, iCID );
-	myinfo::TaskState ( TaskState_e::NET_WRITE );
+	tSess.SetTaskState ( TaskState_e::NET_WRITE );
 	if ( !tOut.Flush () )
 	{
 		int iErrno = sphSockGetErrno ();
@@ -759,12 +761,10 @@ void SqlServe ( AsyncNetBufferPtr_c pBuf )
 	bool bKeepAlive;
 	int iPacketLen;
 	int iTimeoutS = -1;
-	int iThrottlingMS = -1;
-	int iDistThreads = 0;
 	do
 	{
 		// check for updated timeout
-		auto iCurrentTimeout = tSession.GetBackendTimeoutS(); // by default -1, means 'default'
+		auto iCurrentTimeout = tSess.GetTimeoutS(); // by default -1, means 'default'
 		if ( iCurrentTimeout<0 )
 			iCurrentTimeout = g_iClientQlTimeoutS;
 
@@ -772,22 +772,6 @@ void SqlServe ( AsyncNetBufferPtr_c pBuf )
 		{
 			iTimeoutS = iCurrentTimeout;
 			tIn.SetTimeoutUS ( S2US * iTimeoutS );
-		}
-
-		// check for throttling
-		auto iCurrentThrottling = tSession.GetBackendThrottlingMS();
-		if ( iCurrentThrottling!=iThrottlingMS )
-		{
-			iThrottlingMS = iCurrentThrottling;
-			myinfo::SetThrottlingPeriodMS ( iThrottlingMS );
-		}
-
-		// check for changed iDistThreads
-		auto iCurrentDistThreads = tSession.GetBackendDistThreads ();
-		if ( iCurrentDistThreads!=iDistThreads )
-		{
-			iDistThreads = iCurrentDistThreads;
-			myinfo::SetDistThreads ( iDistThreads );
 		}
 
 		tIn.DiscardProcessed ();
@@ -838,16 +822,16 @@ void SqlServe ( AsyncNetBufferPtr_c pBuf )
 		// handle auth packet
 		if ( !bAuthed )
 		{
-			myinfo::TaskState ( TaskState_e::HANDSHAKE );
+			tSess.SetTaskState ( TaskState_e::HANDSHAKE );
 			auto tAnswer = tIn.PopTail ( iPacketLen );
 
 			// switch to ssl by demand.
 			// You need to set a bit in handshake (g_sMysqlHandshake) in order to suggest client such switching.
 			// Client set this desirable bit only if we say that 'we can' about it before.
 
-			if ( !myinfo::IsSSL() && UserWantsSSL(tAnswer) ) // want SSL
+			if ( !tSess.GetSsl() && UserWantsSSL( tAnswer) ) // want SSL
 			{
-				myinfo::SetSSL ( MakeSecureLayer ( pBuf ) );
+				tSess.SetSsl ( MakeSecureLayer ( pBuf ) );
 				bKeepAlive = !tOut.GetError ();
 				continue; // next packet will be 'login' again, but received over SSL
 			}

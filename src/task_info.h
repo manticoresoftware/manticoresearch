@@ -169,23 +169,96 @@ using ScopedMiniInfo_t = ScopedInfo_T<MiniTaskInfo_t>;
 // command = 'SYSTEM', description = 'SYSTEM sDescription'
 ScopedMiniInfo_t PublishSystemInfo ( const char * sDescription );
 
-// client connection
+enum Profile_e {
+	NONE,
+	PLAIN,
+	DOT
+};
+
+volatile ESphCollation& GlobalCollation ();
+
+// client connection (session). Includes both state and settings.
 struct ClientTaskInfo_t : public MiniTaskInfo_t
 {
 	DECLARE_RENDER( ClientTaskInfo_t );
 
-	TaskState_e	m_eTaskState = TaskState_e::UNKNOWN;
-	Proto_e		m_eProto = Proto_e::UNKNOWN;
-	int			m_iConnID = -1;
-	int 		m_iThrottlingPeriod = -1;
-	int 		m_iDistThreads = 0;
-	int 		m_iDesiredStack = -1;
-	CSphString	m_sClientName; // set once before info is published and never changes. So, assume always mt-safe
-	bool 		m_bSsl = false;
-	bool 		m_bVip = false;
+private:
+	TaskState_e m_eTaskState = TaskState_e::UNKNOWN;
+	Proto_e m_eProto = Proto_e::UNKNOWN;
+	int m_iConnID = -1;
+	CSphString m_sClientName; // set once before info is published and never changes. So, assume always mt-safe
+	bool m_bSsl = false;
+	bool m_bVip = false;
+
+	// high level members - used as connection-wide globals
+	int m_iThrottlingPeriodMS = -1;
+	int m_iDistThreads = 0;
+	int m_iDesiredStack = -1;
+	int m_iTimeoutS = -1;
+	ESphCollation m_eCollation { GlobalCollation () };
+	Profile_e		m_eProfile { Profile_e::NONE };
+
+public:
+
+	void SetTaskState ( TaskState_e eState );
+	TaskState_e GetTaskState() const { return m_eTaskState; }
+
+	// generic setters/getters. They're defined just to help keep multi-threading clean.
+	void SetProto ( Proto_e eProto ) { m_eProto = eProto; }
+	Proto_e GetProto() const { return m_eProto; }
+
+	void SetConnID ( int iConnID ) { m_iConnID = iConnID; }
+	int GetConnID() const { return m_iConnID; }
+
+	void SetSsl ( bool bSsl ) { m_bSsl = bSsl; }
+	bool GetSsl() const { return m_bSsl; }
+
+	void SetVip ( bool bVip ) { m_bVip = bVip; }
+	bool GetVip() const { return m_bVip; }
+
+	void SetThrottlingPeriodMS ( int iThrottlingPeriodMS ) { m_iThrottlingPeriodMS = iThrottlingPeriodMS; }
+	int GetThrottlingPeriodMS() const { return m_iThrottlingPeriodMS; }
+
+	void SetDistThreads (int iDistThreads) { m_iDistThreads = iDistThreads; }
+	int GetDistThreads() const { return m_iDistThreads; }
+
+	void SetDesiredStack (int iDesiredStack) { m_iDesiredStack = iDesiredStack; }
+	int GetDesiredStack() const { return m_iDesiredStack; }
+
+	void SetTimeoutS ( int iTimeoutS ) { m_iTimeoutS = iTimeoutS; }
+	int GetTimeoutS() const { return m_iTimeoutS;}
+
+	void SetCollation ( ESphCollation eCollation ) { m_eCollation = eCollation; }
+	ESphCollation GetCollation() const { return m_eCollation; }
+
+	void SetClientName ( const char* szName ) { m_sClientName = szName; }
+	const char* szClientName() const { return m_sClientName.cstr(); }
+
+	void SetProfile ( Profile_e eProfile ) { m_eProfile = eProfile; }
+	Profile_e GetProfile() const { return m_eProfile; }
+	bool IsProfile () const { return m_eProfile!=Profile_e::NONE; };
+	bool IsDot () const { return m_eProfile==Profile_e::DOT; };
 };
 
 using ScopedClientInfo_t = ScopedInfo_T<ClientTaskInfo_t>;
+
+namespace session {
+
+	ClientTaskInfo_t & Info (bool bStrict=false);
+
+	// generic getters. If more then one assumed, consider to call Info() once and use ref instead of these 'globals'
+	inline int DistThreads () { return session::Info ().GetDistThreads (); }
+	inline int ThrottlingPeriodMS() { return session::Info ().GetThrottlingPeriodMS (); }
+	inline int DesiredStack () { return session::Info ().GetDesiredStack (); }
+	inline int TimeoutS () { return session::Info ().GetTimeoutS (); }
+	inline int ConnID () { return session::Info ().GetConnID (); }
+	inline bool Vip () { return session::Info ().GetVip (); }
+	inline bool Ssl () { return session::Info ().GetSsl(); }
+	inline Proto_e Proto () { return session::Info ().GetProto (); }
+	inline const char * szClientName () { return session::Info ().szClientName(); }
+	inline ESphCollation Collation () { return session::Info ().GetCollation (); }
+	inline Profile_e Profile () { return session::Info ().GetProfile (); }
+}
 
 namespace myinfo {
 
@@ -226,51 +299,8 @@ namespace myinfo {
 		return (TASKINFO *) GetHazardTypedNode ( TASKINFO::m_eTask );
 	}
 
-	// returns ClientTaskInfo_t::m_iDistThreads
-	int DistThreads();
-
-	// set ClientTaskInfo_t::m_iDistThreads
-	void SetDistThreads ( int iValue );
-
-	// returns ClientTaskInfo_t::m_iThrottlingPeriod
-	int ThrottlingPeriodMS();
-
-	// set ClientTaskInfo_t::m_iThrottlingPeriod
-	void SetThrottlingPeriodMS ( int iValue );
-
-	// returns ClientTaskInfo_t::m_iDesiredStack
-	int DesiredStack ();
-
-	// set ClientTaskInfo_t::m_iDesiredStack.
-	// It might be used to warn (task-wide) about heavy calculations which need deep stack
-	void SetDesiredStack ( int iValue );
-
-	// returns ClientTaskInfo_t::m_iConnID
-	int ConnID ();
-
-	// returns ClientTaskInfo_t::m_bVip
-	bool IsVIP ();
-
-	// returns ClientTaskInfo_t::m_bSsl
-	bool IsSSL ();
-
-	// set ClientTaskInfo_t::m_bSsl
-	void SetSSL ( bool bValue=true );
-
 	// set MiniTaskInfo_t::m_sCommand
 	void SetCommand ( const char * sCommand );
-
-	// set ClientTaskInfo_t::m_eProto
-	void SetProto ( Proto_e eProto );
-
-	// get ClientTaskInfo_t::m_eProto
-	Proto_e GetProto ();
-
-	// set ClientTaskInfo_t::m_eTaskState
-	void TaskState ( TaskState_e eState );
-
-	// returns ClientTaskInfo_t::m_sClientName
-	const char * szClientName ();
 
 	// set MiniTaskInfo_t::m_pHazardDescription. and refresh timer
 	// iLen used to select retire policy (lazy, or immediate retire)

@@ -6050,7 +6050,7 @@ void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tResult, 
 			return; // already nothing to do, early finish.
 
 		auto tCtx = dCtx.CloneNewContext ();
-		Threads::CoThrottler_c tThrottler ( myinfo::ThrottlingPeriodMS (), bVip );
+		Threads::CoThrottler_c tThrottler ( session::ThrottlingPeriodMS (), bVip );
 		int iTick=1; // num of times coro rescheduled by throttler
 		while ( !bInterrupt ) // some earlier job met error; abort.
 		{

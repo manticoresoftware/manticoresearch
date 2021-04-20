@@ -944,7 +944,7 @@ protected:
 		CSphString sWarning;
 		HttpErrorReporter_c tReporter;
 		CSphVector<int64_t> dLastIds;
-		sphHandleMysqlInsert ( tReporter, tStmt, bReplace, true, sWarning, tAcc, SPH_COLLATION_DEFAULT, dLastIds );
+		sphHandleMysqlInsert ( tReporter, tStmt, bReplace, true, sWarning, tAcc, dLastIds );
 
 		if ( tReporter.IsError() )
 			tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), tReporter.GetError() );

@@ -82,14 +82,16 @@ struct HttpHeaderStreamParser_t
 
 void HttpServe ( AsyncNetBufferPtr_c pBuf )
 {
-	// non-vip connections in maintainance should be already rejected on accept
-	assert  ( !g_bMaintenance || myinfo::IsVIP() );
+	auto& tSess = session::Info();
 
-	bool bINeedSSL = myinfo::GetProto ()==Proto_e::HTTPS;
-	bool bHeNeedSSL = myinfo::IsSSL ();
+	// non-vip connections in maintainance should be already rejected on accept
+	assert  ( !g_bMaintenance || tSess.GetVip() );
+
+	bool bINeedSSL = tSess.GetProto ()==Proto_e::HTTPS;
+	bool bHeNeedSSL = tSess.GetSsl();
 	bool bICanSSL = bHeNeedSSL ? CheckWeCanUseSSL () : false;
 
-	myinfo::SetProto ( Proto_e::HTTP );
+	tSess.SetProto ( Proto_e::HTTP );
 
 	// he needs, but I can't
 	if ( bHeNeedSSL && !bICanSSL )
@@ -117,13 +119,13 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf )
 	auto & tCrashQuery = GlobalCrashQueryGetRef();
 	tCrashQuery.m_eType = QUERY_JSON;
 
-	int iCID = myinfo::ConnID();
-	const char * sClientIP = myinfo::szClientName();
+	int iCID = tSess.GetConnID();
+	const char * sClientIP = tSess.szClientName();
 
 	// needed to check permission to turn maintenance mode on/off
 
 	if ( bHeNeedSSL )
-		myinfo::SetSSL ( MakeSecureLayer ( pBuf ) );
+		tSess.SetSsl ( MakeSecureLayer ( pBuf ) );
 
 	auto& tOut = *(NetGenericOutputBuffer_c *) pBuf;
 	auto& tIn = *(AsyncNetInputBuffer_c *) pBuf;

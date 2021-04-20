@@ -1496,7 +1496,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 		auto pInfo = PublishTaskInfo ( new PQInfo_t );
 		pInfo->m_iTotal = iJobs;
 		auto tCtx = dCtx.CloneNewContext ();
-		Threads::CoThrottler_c tThrottler ( myinfo::ThrottlingPeriodMS (), false );
+		Threads::CoThrottler_c tThrottler ( session::ThrottlingPeriodMS (), false );
 		while (true)
 		{
 			pInfo->m_iCurrent = iJob;

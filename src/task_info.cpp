@@ -182,12 +182,6 @@ MiniTaskInfo_t * HazardGetMini()
 	} );
 }
 
-ClientTaskInfo_t * HazardGetClient ()
-{
-	return (ClientTaskInfo_t *) HazardGetNode (
-			[] ( TaskInfo_t * pNode ) { return pNode->m_eType==ClientTaskInfo_t::m_eTask; } );
-}
-
 TaskInfo_t * myinfo::HazardTaskInfo ()
 {
 	return (TaskInfo_t *) Threads::MyThd ().m_pTaskInfo.load ( std::memory_order_acquire );
@@ -195,8 +189,13 @@ TaskInfo_t * myinfo::HazardTaskInfo ()
 
 TaskInfo_t * myinfo::GetHazardTypedNode ( BYTE eType )
 {
-	return (ClientTaskInfo_t *) HazardGetNode (
+	return HazardGetNode (
 			[eType] ( TaskInfo_t * pNode ) { return pNode->m_eType==eType; } );
+}
+
+ClientTaskInfo_t * HazardGetClient ()
+{
+	return (ClientTaskInfo_t *) myinfo::GetHazardTypedNode ( ClientTaskInfo_t::m_eTask );
 }
 
 // bind current taskinfo content to handler
@@ -222,107 +221,20 @@ Threads::Handler myinfo::OwnMini ( Threads::Handler fnHandler )
 	};
 }
 
-// returns ClientTaskInfo_t::m_iDistThreads
-int myinfo::DistThreads()
+ClientTaskInfo_t & session::Info ( bool bStrict )
 {
-	auto pNode = HazardGetClient ();
-	if ( pNode )
-		return pNode->m_iDistThreads;
+	auto * pInfo = HazardGetClient();
+	if ( !pInfo )
+	{
+		static ClientTaskInfo_t tStub;
+		pInfo = &tStub;
+		if ( bStrict )
+			sphWarning ( "internal error: session::Info () invoked with empty tls!" );
+	}
 
-	sphWarning ( "internal error: myinfo::DistThreads () invoked with empty tls!" );
-	return 0;
+	return *pInfo;
 }
 
-// set ClientTaskInfo_t::m_iDistThreads
-void myinfo::SetDistThreads ( int iValue )
-{
-	auto pNode = HazardGetClient ();
-	if ( pNode )
-		pNode->m_iDistThreads = iValue;
-	else
-		sphWarning ( "internal error: myinfo::ClientTaskInfo_t () invoked with empty tls!" );
-}
-
-// returns ClientTaskInfo_t::m_iThrottlingPeriod
-int myinfo::ThrottlingPeriodMS()
-{
-	auto pNode = HazardGetClient ();
-	if ( pNode )
-		return pNode->m_iThrottlingPeriod;
-
-	sphWarning ( "internal error: myinfo::ThrottlingPeriodMS () invoked with empty tls!" );
-	return 0;
-}
-
-// set ClientTaskInfo_t::m_iThrottlingPeriod
-void myinfo::SetThrottlingPeriodMS ( int iValue )
-{
-	auto pNode = HazardGetClient ();
-	if ( pNode )
-		pNode->m_iThrottlingPeriod = iValue;
-	else
-		sphWarning ( "internal error: myinfo::SetThrottlingPeriodMS () invoked with empty tls!" );
-}
-
-// returns ClientTaskInfo_t::m_iDesiredStack
-int myinfo::DesiredStack ()
-{
-	auto pNode = HazardGetClient ();
-	if ( pNode )
-		return pNode->m_iDesiredStack;
-
-	sphWarning ( "internal error: myinfo::DesiredStack () invoked with empty tls!" );
-	return -1;
-}
-
-// set ClientTaskInfo_t::m_iDistThreads
-void myinfo::SetDesiredStack ( int iValue )
-{
-	auto pNode = HazardGetClient ();
-	if ( pNode )
-		pNode->m_iDesiredStack = iValue;
-	else
-		sphWarning ( "internal error: myinfo::SetDesiredStack () invoked with empty tls!" );
-}
-
-int myinfo::ConnID ()
-{
-	auto pNode = HazardGetClient();
-	if ( pNode )
-		return pNode->m_iConnID;
-
-	sphWarning ( "internal error: myinfo::ConnID () invoked with empty tls!" );
-	return -1;
-}
-
-bool myinfo::IsVIP ()
-{
-	auto pNode = HazardGetClient ();
-	if ( pNode )
-		return pNode->m_bVip;
-
-	sphWarning ( "internal error: myinfo::IsVIP () invoked with empty tls!" );
-	return false;
-}
-
-bool myinfo::IsSSL ()
-{
-	auto pNode = HazardGetClient ();
-	if ( pNode )
-		return pNode->m_bSsl;
-
-	sphWarning ( "internal error: myinfo::IsSSL () invoked with empty tls!" );
-	return false;
-}
-
-void myinfo::SetSSL ( bool bValue )
-{
-	auto pNode = HazardGetClient ();
-	if ( pNode )
-		pNode->m_bSsl = bValue;
-	else
-		sphWarning ( "internal error: myinfo::SetSSL () invoked with empty tls!" );
-}
 
 void myinfo::SetCommand ( const char * sCommand )
 {
@@ -333,44 +245,11 @@ void myinfo::SetCommand ( const char * sCommand )
 		sphWarning ( "internal error: myinfo::SetCommand () invoked with empty tls!" );
 }
 
-void myinfo::SetProto ( Proto_e eProto )
+
+void ClientTaskInfo_t::SetTaskState ( TaskState_e eState )
 {
-	auto pNode = HazardGetClient ();
-	if ( pNode )
-		pNode->m_eProto = eProto;
-	else
-		sphWarning ( "internal error: myinfo::SetProto () invoked with empty tls!" );
-}
-
-Proto_e myinfo::GetProto ()
-{
-	auto pNode = HazardGetClient ();
-	if ( pNode )
-		return pNode->m_eProto;
-
-	sphWarning ( "internal error: myinfo::GetProto () invoked with empty tls!" );
-	return Proto_e::UNKNOWN;
-}
-
-void myinfo::TaskState ( TaskState_e eState )
-{
-	auto pNode = HazardGetClient ();
-	if ( pNode )
-	{
-		pNode->m_eTaskState = eState;
-		pNode->m_tmStart = sphMicroTimer();
-	} else
-		sphWarning ( "internal error: myinfo::TaskState () invoked with empty tls!" );
-}
-
-const char* myinfo::szClientName()
-{
-	auto pNode = HazardGetClient ();
-	if ( pNode )
-		return pNode->m_sClientName.cstr();
-
-	sphWarning ( "internal error: myinfo::szClientName () invoked with empty tls!" );
-	return "";
+		m_eTaskState = eState;
+		m_tmStart = sphMicroTimer();
 }
 
 Str_t myinfo::UnsafeDescription ()
@@ -477,6 +356,12 @@ volatile int &getDistThreads ()
 
 int GetEffectiveDistThreads ()
 {
-	auto iSessionVal = myinfo::DistThreads ();
+	auto iSessionVal = session::DistThreads();
 	return iSessionVal ? iSessionVal : getDistThreads ();
+}
+
+volatile ESphCollation &GlobalCollation ()
+{
+	static ESphCollation eCollation = SPH_COLLATION_DEFAULT;
+	return eCollation;
 }

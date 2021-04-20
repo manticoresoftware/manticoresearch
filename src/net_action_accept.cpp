@@ -63,7 +63,8 @@ void SetTcpNodelay ( NetConnection_t tConn )
 
 void MultiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t tConn, Proto_e eProto )
 {
-	myinfo::SetProto ( eProto ); // set initially provided proto, then m.b. switch to another by multi, if possible
+	auto& tSess = session::Info();
+	tSess.SetProto ( eProto ); // set initially provided proto, then m.b. switch to another by multi, if possible
 
 	Proto_e eMultiProto;
 	switch ( eProto )
@@ -84,7 +85,7 @@ void MultiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t tConn, Proto_e eProt
 		ApiServe ( std::move ( pBuf ));
 		break;
 	case Proto_e::HTTPS:
-		myinfo::SetSSL();
+		tSess.SetSsl ( true );
 	case Proto_e::HTTP:
 		SetTcpNodelay ( tConn );
 		HttpServe ( std::move ( pBuf ) );
@@ -193,9 +194,9 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 		FormatClientAddress ( szClientName, saStorage );
 
 		CSphScopedPtr<ClientTaskInfo_t> pClientInfo ( new ClientTaskInfo_t );
-		pClientInfo->m_sClientName = szClientName;
-		pClientInfo->m_iConnID = iConnID;
-		pClientInfo->m_bVip = m_tListener.m_bVIP;
+		pClientInfo->SetClientName ( szClientName );
+		pClientInfo->SetConnID ( iConnID );
+		pClientInfo->SetVip ( m_tListener.m_bVIP );
 
 		NetConnection_t tConn = { iClientSock, saStorage.ss_family };
 		SockWrapperPtr_c pSock ( new SockWrapper_c ( iClientSock, pClientNetLoop ) );

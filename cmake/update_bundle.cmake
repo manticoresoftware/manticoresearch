@@ -4,7 +4,7 @@ endif ()
 set(__update_bundle_included YES)
 
 # env WRITEB (as bool) means that we can store downloaded stuff to our bundle (that's to refresh the bundle)
-# env CACHE may provide path to persistent folder where we will build heavy stuff (unpacked sources, builds)
+# env CACHEB may provide path to persistent folder where we will build heavy stuff (unpacked sources, builds)
 
 function(DIAG VARR)
 	if (DIAGNOSTIC)
@@ -31,6 +31,9 @@ string(TOLOWER "${SUFFD}" SUFFD)
 diag (CMAKE_BUILD_TYPE)
 diag (SUFFD)
 
+# SUFF is line like 'darwin-x86_64' (system-arch)
+# SUFFD is line like 'debug-darwin-x86_64' - that is for system with multiconfig; SUFF for release, SUFFD for debug.
+
 # special cache folder where artefacts keep. Make it absolute also
 if (DEFINED CACHEB)
 	if (NOT EXISTS ${CACHEB})
@@ -41,6 +44,8 @@ if (DEFINED CACHEB)
 	diag(CACHEB)
 	set(HAVE_BBUILD TRUE)
 endif()
+
+# HAVE_BBUILD means we will build in aside folder (inside CACHEB) and then store the result for future.
 
 # make libs_bundle absolute, if any
 if (DEFINED LIBS_BUNDLE)
@@ -72,6 +77,7 @@ function(GET_PLATFORMED_NAMED RESULT NAME)
 	set(${RESULT} "${NAME}-${SUFFD}" PARENT_SCOPE)
 endfunction()
 
+# get path for build folder. In case with HAVE_BBUILD it will be suffixed with platform/arch/debug flag.
 function(GET_BUILD RESULT NAME)
 	if (HAVE_BBUILD)
 		diags("${NAME} build will be set to ${CACHEB}/${NAME}-${SUFF}")
@@ -124,6 +130,7 @@ function ( POPULATE PLACE NAME BUNDLE_URL REMOTE_URL )
 endfunction()
 
 # fetches given PLACE (from bundle tarball or remote) to TARGET_SRC folder.
+# archive will be fetched (from remote url or local folder) and unpacked into folder TARGET_SRC
 function(FETCH_AND_UNPACK NAME PLACE TARGET_SRC)
 	include(FetchContent)
 	if (EXISTS ${PLACE})
@@ -144,7 +151,9 @@ function(FETCH_AND_UNPACK NAME PLACE TARGET_SRC)
 	mark_as_advanced (FETCHCONTENT_SOURCE_DIR_${UNAME} FETCHCONTENT_UPDATES_DISCONNECTED_${UNAME} )
 endfunction()
 
-# default if custom is not defined
+# default if custom is not defined.
+# Include BINDIR/LIB-targets.cmake. It should provide imported target - path to includes, binaries, etc.
+# (SRCDIR is not necessary, added just for convenience and will be just displayed)
 function (FIND_LIB_BUILD_DEFAULT LIB SRCDIR BINDIR)
 	string(TOLOWER "${LIB}" SLIB)
 
@@ -168,13 +177,13 @@ function (FIND_LIB_BUILD_DEFAULT LIB SRCDIR BINDIR)
 		diags("not defined cmake_build_type, will try RelWithDebInfo and Debug")
 		get_target_property(LBR ${SLIB}::${SLIB} IMPORTED_LOCATION_RELWITHDEBINFO)
 		if (NOT EXISTS ${LBR})
-			diags("not exists rel-wiht-deb-info ${LBR}")
+			diags("not exists RelWithDebInfo ${LBR}")
 			return()
 		endif ()
 
 		get_target_property(LBD ${SLIB}::${SLIB} IMPORTED_LOCATION_DEBUG)
 		if (NOT EXISTS ${LBD})
-			diags("not exists debug ${LBD}")
+			diags("not exists Debug ${LBD}")
 			return()
 		endif ()
 	else()
@@ -193,9 +202,7 @@ function (FIND_LIB_BUILD_DEFAULT LIB SRCDIR BINDIR)
 	diag(CMAKE_BUILD_TYPE)
 endfunction()
 
-
-
-# call function FIND_${LIB}_BUILD by name
+# call function FIND_${LIB}_BUILD by name, or call default, if no such function provided
 macro(FIND_LIB_BUILD LIB LIB_SRC LIB_BUILD)
 	if (COMMAND find_${LIB}_build)
 		set(__invoke_temp_file "${CMAKE_CURRENT_BINARY_DIR}/__invoke_temp.cmake")

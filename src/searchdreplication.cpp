@@ -2716,7 +2716,10 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 	bool bOk = ( eState==ClusterState_e::DONOR || eState==ClusterState_e::SYNCED );
 
 	if ( bOk && bUpdateNodes )
-		bOk &= ClusterAlterUpdate ( sCluster, "nodes", sError );
+	{
+		sError = "";
+		bOk &= ClusterAlterUpdate ( sCluster, "nodes", false, sError );
+	}
 
 	if ( !bOk )
 	{
@@ -4809,7 +4812,7 @@ bool RemoteClusterGetNodes ( const CSphString & sCluster, const CSphString & sGT
 }
 
 // cluster ALTER statement that updates nodes option from view nodes at all nodes at cluster
-bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdate, CSphString & sError )
+bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdate, bool bRemoteError, CSphString & sError )
 	EXCLUDES ( g_tClustersLock )
 {
 	if ( sUpdate!="nodes" )
@@ -4842,8 +4845,19 @@ bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdat
 	VecRefPtrs_t<AgentConn_t *> dNodes;
 	GetNodes ( sNodes, dNodes, tReqData );
 	PQRemoteClusterUpdateNodes_c tReq;
-	bOk &= PerformRemoteTasks ( dNodes, tReq, tReq, sError );
+	bool bRemoteOk = PerformRemoteTasks ( dNodes, tReq, tReq, sError );
 	bOk &= SaveConfigInt(sError);
+
+	if ( !bRemoteOk )
+	{
+		if ( bRemoteError )
+			bOk = false;
+		else
+		{
+			sphWarning ( "cluster %s nodes update error %s", sCluster.cstr(), sError.cstr() );
+			sError = "";
+		}
+	}
 
 	return bOk;
 }
@@ -4859,8 +4873,6 @@ bool RemoteClusterUpdateNodes ( const CSphString & sCluster, CSphString * pNodes
 		sError.SetSprintf ( "unknown cluster '%s'", sCluster.cstr() );
 		return false;
 	}
-	if ( !CheckClasterState ( *ppCluster, sError ) )
-		return false;
 
 	{
 		ReplicationCluster_t * pCluster = *ppCluster;

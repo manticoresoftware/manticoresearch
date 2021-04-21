@@ -15692,7 +15692,7 @@ public:
 
 		case STMT_CLUSTER_ALTER_UPDATE:
 			m_tLastMeta = CSphQueryResultMeta();
-			if ( ClusterAlterUpdate ( pStmt->m_sCluster, pStmt->m_sSetName, m_tLastMeta.m_sError ) )
+			if ( ClusterAlterUpdate ( pStmt->m_sCluster, pStmt->m_sSetName, true, m_tLastMeta.m_sError ) )
 				tOut.Ok();
 			else
 				tOut.Error ( sQuery.first, m_tLastMeta.m_sError.cstr() );

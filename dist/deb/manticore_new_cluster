@@ -1,5 +1,17 @@
 #!/bin/sh
-systemctl set-environment _ADDITIONAL_SEARCHD_PARAMS='--new-cluster' &&  systemctl start manticore
+if [ "$1" = "--force" ]; then
+    params="--new-cluster-force"
+elif [ "$1" = "-h" -o "$1" = "--help" ]; then
+    echo "Usage: $0 [--force]"
+    echo 
+    echo "	W/o params:	starts Manticore Search node in a replication cluster, making sure the node was stopped last of all the nodes"
+    echo "	   --force:	forces starting Manticore Search node as the first node in a cluster"
+    echo 
+    exit
+else 
+    params="--new-cluster"
+fi
+systemctl set-environment _ADDITIONAL_SEARCHD_PARAMS='$params' &&  systemctl start manticore
 extcode=$?
 systemctl set-environment _ADDITIONAL_SEARCHD_PARAMS=''
 exit $extcode

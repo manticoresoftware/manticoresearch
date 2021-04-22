@@ -11497,15 +11497,13 @@ bool CSphIndex_VLN::MergeAttributes ( volatile bool * pLocalStop, const CSphInde
 }
 
 
-bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter,
-	CSphString & sError, CSphIndexProgress & tProgress, volatile bool * pLocalStop, bool bSrcSettings, bool bSupressDstDocids )
+bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, volatile bool * pLocalStop,
+	bool bSrcSettings, bool bSupressDstDocids )
 {
 	assert ( pDstIndex && pSrcIndex );
 
 	/// 'merge with self' - only apply filters/kill-lists, no real merge
 	bool bCompress = pSrcIndex==pDstIndex;
-
-	assert ( !( bCompress && bSupressDstDocids ) && "compression of index with suppression it's docids looks strange" );
 
 	const CSphSchema & tDstSchema = pDstIndex->m_tSchema;
 	const CSphSchema & tSrcSchema = pSrcIndex->m_tSchema;
@@ -11615,16 +11613,14 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	{
 		WITH_QWORD ( pDstIndex, false, QwordDst,
 			WITH_QWORD ( pSrcIndex, false, QwordSrc,
-				if ( !CSphIndex_VLN::MergeWords < QwordDst, QwordSrc > ( pDstIndex, pSrcIndex, pFilter, dDstRows,
-					dSrcRows, &tHitBuilder, sError, tBuildHeader, tProgress, pLocalStop ) )
+				if ( !CSphIndex_VLN::MergeWords < QwordDst, QwordSrc > ( pDstIndex, pSrcIndex, pFilter, dDstRows, dSrcRows, &tHitBuilder, sError, tBuildHeader, tProgress, pLocalStop ) )
 					return false;
 		));
 	} else
 	{
 		WITH_QWORD ( pDstIndex, true, QwordDst,
 			WITH_QWORD ( pSrcIndex, true, QwordSrc,
-				if ( !CSphIndex_VLN::MergeWords < QwordDst, QwordSrc > ( pDstIndex, pSrcIndex, pFilter, dDstRows,
-					dSrcRows, &tHitBuilder, sError, tBuildHeader, tProgress, pLocalStop ) )
+				if ( !CSphIndex_VLN::MergeWords < QwordDst, QwordSrc > ( pDstIndex, pSrcIndex, pFilter, dDstRows, dSrcRows, &tHitBuilder, sError, tBuildHeader, tProgress, pLocalStop ) )
 					return false;
 		));
 	}
@@ -11666,7 +11662,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	tWriteHeader.m_pFieldFilter = pSettings->m_pFieldFilter;
 	tWriteHeader.m_pFieldLens = pSettings->m_dFieldLens.Begin();
 
-	IndexBuildDone ( tBuildHeader, tWriteHeader, sHeaderName, sError ); // FIXME? is this magic dict block constant any good?..
+	IndexBuildDone ( tBuildHeader, tWriteHeader, sHeaderName, sError );
 
 	return true;
 }

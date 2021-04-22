@@ -1440,8 +1440,10 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst, const CSphConf
 
 	// need to close attribute files that was mapped with RW access to unlink and rename them on windows
 	pSrc->Dealloc();
+	pSrc->Unlock();
+
 	pDst->Dealloc();
-	pDst->Unlock ();
+	pDst->Unlock();
 
 	// pick up merge result
 	if ( !RenameIndexFiles ( hDst["path"].cstr(), sDst, pDst, bRotate ) )

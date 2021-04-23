@@ -5,7 +5,7 @@
 </p>
 
 <h1 align="center">
-  Manticore Search 3.5.4
+  Manticore Search 3.6.0
 </h1>
 
 <h3 align="center">
@@ -22,7 +22,7 @@
 
 # Introduction
 Manticore Search is a database designed specifically for search, including full-text search. What differs it from other solutions is:
-* Powerful and fast full-text searching which works fine for small and big datasets
+* Powerful and fast full-text search capabilities which works fine for small and big datasets
 * SQL-first: the native Manticore's syntax is SQL. It speaks SQL over HTTP and MySQL protocol (you can use your preferred mysql client)
 * JSON over HTTP: to provide more programmatic way to manage your data and schemas Manticore provides HTTP JSON protocol. Very similar to the one from Elasticsearch
 * Written fully in C++: starts fast, doesn't take much RAM, low-level optimizations give good performance
@@ -34,7 +34,7 @@ Manticore Search is a database designed specifically for search, including full-
 
 [Craigslist](https://www.craigslist.org/), [Socialgist](https://socialgist.com/), [PubChem](https://pubchem.ncbi.nlm.nih.gov/) and many others use Manticore for efficient searching and stream filtering.
 
-Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/sphinx) in 2017.
+Manticore Search was [forked](https://manticoresearch.com/2021/03/15/manticore-search-3-years-after-forking-from-sphinx/) from [Sphinx 2.3.2](https://github.com/sphinxsearch/sphinx) in 2017.
 
 # More features
 * Full-text search and relevance:
@@ -42,6 +42,7 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - Custom ranking
 * Other search capabilities:
   - [Rich filtering functionality](https://manual.manticoresearch.com/Searching/Full_text_matching/Operators)
+  - Both row-wise and [columnar](https://github.com/manticoresoftware/columnar) storages support
   - [Faceted search](https://play.manticoresearch.com/faceting/)
   - [Geo-spatial search](https://play.manticoresearch.com/geosearch/)
   - [Spell correction](https://play.manticoresearch.com/didyoumean/)
@@ -64,10 +65,10 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
 * Security:
   - [https support](https://play.manticoresearch.com/https/)
 * Data types:
-  - full-text field - inverted index
-  - integer and float in-memory numeric fields
-  - in-memory "string" for fast filtering
-  - on-disk "[stored](https://play.manticoresearch.com/docstore/)" for key-value purpose
+  - full-text field powered by inverted index
+  - integer and float numeric fields
+  - string
+  - on-disk "[stored](https://play.manticoresearch.com/docstore/)" for key-value purposes
   - JSON
   - multi-value attributes
 * Integrations:

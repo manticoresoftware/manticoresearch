@@ -8157,7 +8157,7 @@ public:
 #if USE_RE2
 		re2::StringPiece tBuf ( (const char *)sVal, iLen );
 		RE2::Options tOpts;
-		tOpts.set_utf8 ( true );
+		tOpts.set_encoding ( RE2::Options::Encoding::EncodingUTF8 );
 		m_pRE2 = new RE2 ( tBuf, tOpts );
 #endif
 	}

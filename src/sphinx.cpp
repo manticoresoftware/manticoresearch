@@ -21626,7 +21626,7 @@ bool CSphFieldRegExps::AddRegExp ( const char * sRegExp, CSphString & sError )
 	tRegExp.m_sTo.Trim();
 
 	RE2::Options tOptions;
-	tOptions.set_utf8 ( true );
+	tOptions.set_encoding ( RE2::Options::Encoding::EncodingUTF8 );
 	tRegExp.m_pRE2 = new RE2 ( tRegExp.m_sFrom.cstr(), tOptions );
 
 	std::string sRE2Error;

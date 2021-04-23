@@ -184,7 +184,7 @@ hello NEAR/3 world NEAR/4 "my test"
 
 The original proximity operator only worked on sets of keywords. `NEAR` is more generic and can accept arbitrary subexpressions as its two arguments, matching the document when both subexpressions are found within N words of each other, no matter in which order. `NEAR` is left associative and has the same (lowest) precedence as [BEFORE](../../Searching/Full_text_matching/Operators.md#Strict-order-operator).
 
-You should also note how a (one `NEAR/7 two NEAR/7 three`) query using `NEAR` is not really equivalent to a `"one two three"~7` one using keyword proximity operator. The difference here is that the proximity operator allows for up to 6 non-matching words between all the 3 matching words, but the version with `NEAR` is less restrictive: it would allow for up to 6 words between 'one' and 'two' and then for up to 6 more between that two-word matching and a 'three' keyword.
+You should also note how a (`one NEAR/7 two NEAR/7 three`) query using `NEAR` is not really equivalent to a `"one two three"~7` one using keyword proximity operator. The difference here is that the proximity operator allows for up to 6 non-matching words between all the 3 matching words, but the version with `NEAR` is less restrictive: it would allow for up to 6 words between 'one' and 'two' and then for up to 6 more between that two-word matching and a 'three' keyword.
 
 ### NOTNEAR operator
 

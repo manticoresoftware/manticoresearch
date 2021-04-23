@@ -82,7 +82,7 @@ path = path/to/index
 
 Absolute or relative path without extension where to store the index or where to look for it
 
-Value: path to the index, **mandatory** 
+Value: path to the index, **mandatory**
 
 #### stored_fields
 
@@ -163,7 +163,7 @@ utilsApi.sql("mode=raw&query=CREATE TABLE products(title text stored indexed, co
 ```ini
 index products {
   stored_fields = title,content
-  
+
   type = rt
   path = idx
   rt_field = title
@@ -303,10 +303,10 @@ The RAM chunk should be sized depending on the size of the data, rate of inserts
 
 A large RAM chunk will put more pressure on the storage on two events:
 
-* when flushing the RAM chunk to disk into the `ram` file 
+* when flushing the RAM chunk to disk into the `ram` file
 * when it's full and is dumped as disk chunk
 
-A large RAM chunk will also generate bigger binlogs. If the storage is slow this can translate into longer startup times in case of a recovery. 
+A large RAM chunk will also generate bigger binlogs. If the storage is slow this can translate into longer startup times in case of a recovery.
 
 In RT mode the RAM chunk size limit can be changed using `ALTER TABLE`.
 
@@ -335,14 +335,23 @@ Value: name of the source to build the index from, **mandatory**. Can be multipl
 killlist_target = main:kl
 ```
 
-Sets the index(es) that the kill-list will be applied to. Suppresses matches in the targeted index that are updated or deleted in the current index. In **:kl mode** the documents to suppress are taken from the [kill-list](../../Adding_data_from_external_storages/Adding_data_from_indexes/Killlist_in_plain_indexes.md). In **:id mode** - all document ids from the current index are suppressed in the targeted one. If neither is specified the both modes take effect. [Read more about kill-lists here](../../Adding_data_from_external_storages/Adding_data_from_indexes/Killlist_in_plain_indexes.md)
+Sets the index(es) that the kill-list will be applied to. Suppresses matches in the targeted index that are updated or deleted in the current index. In `:kl` mode the documents to suppress are taken from the [kill-list](../../Adding_data_from_external_storages/Adding_data_from_indexes/Killlist_in_plain_indexes.md). In `:id` mode all document ids from the current index are suppressed in the targeted one. If neither is specified the both modes take effect. [Read more about kill-lists here](../../Adding_data_from_external_storages/Adding_data_from_indexes/Killlist_in_plain_indexes.md)
 
 Value: **not specified** (default), target_index_name:kl, target_index_name:id, target_index_name. Multiple values are allowed
 
+#### columnar_attrs
 
+```ini
+columnar_attrs = id, attr1, attr2, attr3
+```
+
+Specifies what attributes should be stored in [the columnar storage](https://github.com/manticoresoftware/columnar/) instead of the default row-wise storage.
+
+`id` is also supported.
+
+### Creating a real-time index online via CREATE TABLE
 
 <!-- example rt_mode -->
-### Creating a real-time index online via CREATE TABLE
 ##### General syntax of CREATE TABLE
 
 ```sql
@@ -363,7 +372,7 @@ Read [more about data types here](../../Creating_an_index/Data_types.md).
 
 | Type | Equivalent in a configuration file | Notes | Aliases |
 | - | - | - | - |
-| text | rt_field  | Options: indexed, stored. Default - **both**. To keep text stored, but indexed specify "stored" only. To keep text indexed only specify only "indexed". At least one "text" field should be specified in an index | | 
+| text | rt_field  | Options: indexed, stored. Default - **both**. To keep text stored, but indexed specify "stored" only. To keep text indexed only specify only "indexed". At least one "text" field should be specified in an index | |
 | integer | rt_attr_uint	| integer	 | int, uint |
 | bigint | rt_attr_bigint	| big integer	 |   |
 | float | rt_attr_float   | float  |   |
@@ -460,7 +469,7 @@ Value: size, default **128k**.
 docstore_block_size = 32k
 ```
 
-Size of the block of documents used by document storage. Optional, default is 16kb. When stored_fields or stored_only_fields are specified, original document text is stored inside the index. To use less disk space, documents are compressed. To get more efficient disk access and better compression ratios on small documents, documents are concatenated into blocks. When indexing, documents are collected until their total size reaches the threshold. After that, this block of documents is compressed. This option can be used to get better compression ratio (by increasing block size) or to get faster access to document text (by decreasing block size). 
+Size of the block of documents used by document storage. Optional, default is 16kb. When stored_fields or stored_only_fields are specified, original document text is stored inside the index. To use less disk space, documents are compressed. To get more efficient disk access and better compression ratios on small documents, documents are concatenated into blocks. When indexing, documents are collected until their total size reaches the threshold. After that, this block of documents is compressed. This option can be used to get better compression ratio (by increasing block size) or to get faster access to document text (by decreasing block size).
 
 Value: size, default **16k**.
 

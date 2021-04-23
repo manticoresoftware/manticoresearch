@@ -21,7 +21,7 @@ Obviously, that's not much of a difference for 2000-row table, but when it comes
 
 ### sql_query_range
 
-Defines the range query. The query specified in this option must fetch min and max document IDs that will be used as range boundaries. It must return exactly two integer fields, min ID first and max ID second; the field names are ignored. When enabled, , sql_query will be required to contain $start and $end macros (because it obviously would be a mistake to index the whole table many times over). Note that the intervals specified by $start..$end will not overlap, so you should not remove document IDs that are exactly equal to $start or $end from your query. 
+Defines the range query. The query specified in this option must fetch min and max document IDs that will be used as range boundaries. It must return exactly two integer fields, min ID first and max ID second; the field names are ignored. When enabled, `sql_query` will be required to contain $start and $end macros. Note that the intervals specified by $start..$end will not overlap, so you should not remove document IDs that are exactly equal to $start or $end from your query. 
  
 ### sql_range_step
 

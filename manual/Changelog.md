@@ -1,5 +1,71 @@
 # Changelog
 
+## Version 3.6.0, Apr 16th 2021
+**Maintenance release before Manticore 4**
+
+### Major new features
+- Support for [Manticore Columnar Library](https://github.com/manticoresoftware/columnar/) for plain indexes. New setting [columnar_attrs](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#columnar_attrs) for plain indexes
+- Support for [Ukrainian Lemmatizer](https://github.com/manticoresoftware/lemmatizer-uk)
+
+### Minor changes
+- tool `manticore_new_cluster [--force]` useful for restarting a replication cluster via systemd
+- [new mode](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#blend_mode) `blend_mode='trim_all'`
+- added [support for escaping JSON path](Searching/Full_text_matching/Escaping.md#Escaping-json-node-names-in-SQL) with backticks
+- [indextool --check](Miscellaneous_tools.md#indextool) can work in RT mode
+- [FORCE/IGNORE INDEX(id)](Updating_documents/UPDATE.md#FORCE/IGNORE-INDEX) for SELECT/UPDATE
+- unique chunk id for a merged disk chunk
+- [indextool --check-disk-chunk CHUNK_NAME](Miscellaneous_tools.md#indextool)
+
+### Optimizations
+- [faster JSON parsing](https://github.com/manticoresoftware/manticoresearch/commit/0c25fc1788e3f77f60cb7fb8f1623d8466bba606), our tests show 3-4% lower latency on queries like `WHERE json.a = 1`
+- non-documented command `DEBUG SPLIT` as a prerequisite for automatic sharding/rebalancing
+
+### Bugfixes
+- [#584](https://github.com/manticoresoftware/manticoresearch/issues/524) - inaccurate and unstable FACET results
+- [#506](https://github.com/manticoresoftware/manticoresearch/issues/506) - Strange behavior when using MATCH: those who suffer from this issue need to rebuild the index as the problem was on the phase of building an index
+- [#387](https://github.com/manticoresoftware/manticoresearch/issues/387) - intermittent core dump when running query with SNIPPET() function
+- Stack optimizations useful for processing complex queries:
+  - [#469](https://github.com/manticoresoftware/manticoresearch/issues/469) - SELECT results in CRASH DUMP
+  - [e8420cc7](https://github.com/manticoresoftware/manticoresearch/tree/e8420cc789149c84731be0874be916e33b263bd6) - stack size detection for filter trees
+- [#461](https://github.com/manticoresoftware/manticoresearch/issues/461) - Update using the IN condition does not take effect correctly
+- [#464](https://github.com/manticoresoftware/manticoresearch/issues/464) - SHOW STATUS immediately after CALL PQ returns - [#481](https://github.com/manticoresoftware/manticoresearch/issues/481) - Fixed static binary build
+- [#502](https://github.com/manticoresoftware/manticoresearch/issues/502) - bug in multi-queries
+- [#514](https://github.com/manticoresoftware/manticoresearch/issues/514) - Unable to use unusual names for columns when use 'create table'
+- [d1dbe771](https://github.com/manticoresoftware/manticoresearch/commit/d1dbe771288328c963ca8512f564c6b7cf4f466c) - daemon crash on replay binlog with update of string attribute; set binlog version to 10
+- [775d0555](https://github.com/manticoresoftware/manticoresearch/commit/775d0555562f121911d3c30085947e743fadac2d)  - fixed expression stack frame detection runtime (test 207)
+- [4795dc49](https://github.com/manticoresoftware/manticoresearch/commit/4795dc49194c7745761bb5006ecb266e8a9224fa)  - percolate index filter and tags were empty for empty stored query (test 369)
+- [c3f0bf4d](https://github.com/manticoresoftware/manticoresearch/commit/c3f0bf4dca0e4eae6ea899dd566878df57eba085)  - breaks of replication SST flow at network with long latency and high error rate (different data centers replication); updated replication command version to 1.03
+- [ba2d6619](https://github.com/manticoresoftware/manticoresearch/commit/ba2d6619b8107f3fb177741bbdff3709bac248cd)  - joiner lock cluster on write operations after join into cluster (test 385)
+- [de4dcb9f](https://github.com/manticoresoftware/manticoresearch/commit/de4dcb9ff6c316bc2a9ef6c62eb64769f04ee103)  - wildcards matching with exact modifier (test 321)
+- [6524fc6a](https://github.com/manticoresoftware/manticoresearch/commit/6524fc6af032a0932bd42c37874a619e1fb7f075)  - docid checkpoints vs docstore
+- [f4ab83c2](https://github.com/manticoresoftware/manticoresearch/commit/f4ab83c291e65a5873d271c67b5491f629544f1d)  - Inconsistent indexer behavior when parsing invalid xml
+- [7b727e22](https://github.com/manticoresoftware/manticoresearch/commit/7b727e22fe01b1a180d4a8d3a3fea92c18eac707)  - Stored percolate query with NOTNEAR runs forever (test 349)
+- [812dab74](https://github.com/manticoresoftware/manticoresearch/commit/812dab745f0c972ecde5d5b3d4a313cd6e1e143e)  - wrong weight for phrase starting with wildcard
+- [1771afc6](https://github.com/manticoresoftware/manticoresearch/commit/1771afc669c75670b3511bf02ab9bfc8982b94d2)  - percolate query with wildcards generate terms without payload on matching causes interleaved hits and breaks matching (test 417)
+- [aa0d8c2b](https://github.com/manticoresoftware/manticoresearch/commit/aa0d8c2bcb41428d41dbfb66e42a872a79a4ee4b)  - fixed calculation of 'total' in case of parallelized query
+- [18d81b3c](https://github.com/manticoresoftware/manticoresearch/commit/18d81b3cfbb930b7361dae645fe13283d4fbf6ef)  - crash in Windows with multiple concurrent sessions at daemon
+- [84432f23](https://github.com/manticoresoftware/manticoresearch/commit/84432f23d6fbf7a7d0b67c8c9412eb5933b03596)  - some index settings could not be replicated
+- [93411fe6](https://github.com/manticoresoftware/manticoresearch/commit/93411fe6af4246ca4acce758944d513a1660b92b)  - On high rate of adding new events netloop sometimes freeze because of atomic 'kick' event being processed once for several events a time and loosing actual actions from them
+status of the query, not the server status
+- [d805fc12](https://github.com/manticoresoftware/manticoresearch/commit/d805fc125244ef08d14fb3d1826e2c356862d539)  - New flushed disk chunk might be lost on commit
+- [63cbf008](https://github.com/manticoresoftware/manticoresearch/commit/63cbf008d50979cdf7062664fb02a672a3bb1131)  - inaccurate 'net_read' in profiler
+- [f5379bb2](https://github.com/manticoresoftware/manticoresearch/commit/f5379bb27234b25919966c50ccb6f469ead646e2)  - Percolate issue with arabic (right to left texts)
+- [49eeb420](https://github.com/manticoresoftware/manticoresearch/commit/49eeb4202d4ce4875c07c35087d7108c1e177328)  - id not picked correctly on duplicate column name
+- [refactoring](https://github.com/manticoresoftware/manticoresearch/commit/4b7df262bbfec9b9e95a44e72ad326ac8a786c49) of network events to fix a crash in rare cases
+- [e8420cc7](https://github.com/manticoresoftware/manticoresearch/tree/e8420cc789149c84731be0874be916e33b263bd6) fix in `indextool --dumpheader`
+- [ff716353](https://github.com/manticoresoftware/manticoresearch/commit/ff7163532ed39042c0d3c3c2b902ff41f94d7f0c) - TRUNCATE WITH RECONFIGURE worked wrong with stored fields
+
+### Breaking changes:
+- New binlog format: you need to make a clean stop of Manticore before upgrading
+- Index format slightly changes: the new version can read you existing indexes fine, but if you decide to downgrade from 3.6.0 to an older version the newer indexes will be unreadable
+- Replication format change: don't replicate from an older version to 3.6.0 and vice versa, switch to the new version on all your nodes at once
+- `reverse_scan` is deprecated. Make sure you don't use this option in your queries since 3.6.0 since they will fail otherwise
+- As of this release we don't provide builds for RHEL6, Debian Jessie and Ubuntu Trusty any more. If it's mission critical for you to have them supported [contact us](https://manticoresearch.com/contact-us/)
+
+### Deprecations
+- No more implicit sorting by id. If you rely on it make sure to update your queries accordingly
+- Search option `reverse_scan` has been deprecated
+
 ## Version 3.5.4, Dec 10 2020
 
 ### New Features

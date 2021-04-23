@@ -12,7 +12,7 @@ searchd {
 ```
 Queries can also be sent to syslog by setting `syslog` instead of a file path. 
 
-In this case all search queries will be sent to syslog daemon with `LOG_INFO` priority, prefixed with `[query]` instead of timestamp. Only `plain` log format is supported for syslog. To use the syslog option Manticore must be configured `–-with-syslog` on building (official packages come with syslog support).
+In this case all search queries will be sent to syslog daemon with `LOG_INFO` priority, prefixed with `[query]` instead of timestamp. Only `plain` log format is supported for syslog.
 
 
 ## Logging format

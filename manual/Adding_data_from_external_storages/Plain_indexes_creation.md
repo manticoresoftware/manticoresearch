@@ -100,7 +100,7 @@ This would produce the `word_freq.txt` as above, however after each word would b
 sudo -u manticore indexer --merge main delta --rotate
 ```
 
-In the above example, where the main is the master, rarely modified index, and delta is the less frequently modified one, you might use the above to call `indexer` to combine the contents of the delta into the main index and rotate the indexes.
+In the above example, where the main is the master, rarely modified index, and the delta is more frequently modified one, you might use the above to call `indexer` to combine the contents of the delta into the main index and rotate the indexes.
 * `--merge-dst-range <attr> <min> <max>` runs the filter range given upon merging. Specifically, as the merge is applied to the destination index (as part of `--merge`, and is ignored if `--merge` is not specified), `indexer` will also filter the documents ending up in the destination index, and only documents will pass through the filter given will end up in the final index. This could be used for example, in an index where there is a 'deleted' attribute, where 0 means 'not deleted'. Such an index could be merged with:
 
 ```shell

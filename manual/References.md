@@ -403,7 +403,6 @@ To be put to section `searchd {}` in configuration file:
   * [net_workers](Server_settings/Searchd.md#net_workers) - Number of network threads
   * [network_timeout](Server_settings/Searchd.md#network_timeout) - Network timeout for requests from clients
   * [node_address](Server_settings/Searchd.md#node_address) - Specifies network address of the node
-  * [ondisk_attrs_default](Server_settings/Searchd.md#ondisk_attrs_default) - Instance-wide default for [ondisk_attrs](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Accessing-index-files) directive
   * [persistent_connections_limit](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#persistent_connections_limit) - Maximum number of simultaneous persistent connections to remote persistent agents
   * [pid_file](Server_settings/Searchd.md#pid_file) - Path to Manticore server pid file
   * [predicted_time_costs](Server_settings/Searchd.md#predicted_time_costs) - Costs for the query time prediction model
@@ -497,9 +496,10 @@ indextool <command> [options]
 * [--mergeidf](Miscellaneous_tools.md#indextool) - Merges several .idf files into a single one
 * [--morph](Miscellaneous_tools.md#indextool) - Applies morphology to the given STDIN and prints the result to stdout
 * [--check](Miscellaneous_tools.md#indextool) - Checks the index data files for consistency
-* [--strip-path](Starting_the_server/Manually.md#searchd-command-line-options) - Strips path names from all the file names referenced from the index
+* [--check-disk-chunk](Miscellaneous_tools.md#indextool) - Checks one disk chunk of an RT index
+* [--strip-path](Miscellaneous_tools.md#indextool) - Strips path names from all the file names referenced from the index
 * [--rotate](Miscellaneous_tools.md#indextool) - Defines whether to check index waiting for rotation in `--check`
-* [Indextool](Miscellaneous_tools.md#indextool) - Applies kill-lists for all indexes listed in the configuration file
+* [--apply-killlists](Miscellaneous_tools.md#indextool) - Applies kill-lists for all indexes listed in the configuration file
 
 ## [Wordbreaker](Miscellaneous_tools.md#wordbreaker)
 Splits compound words into components.

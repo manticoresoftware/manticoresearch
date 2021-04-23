@@ -61,10 +61,13 @@ The [new official clients](https://github.com/manticoresoftware/) (which use HTT
 
 ## Escaping asterisk
 
-Asterisk (`*`) is a special character that can have two functionalities: as wildcarding prefix/suffix expander and as any term modifier inside a phrase search.
-Unlike the other special characters that are operators, the asterisk cannot be escaped when it's in a position to offer one of it's functionalities.
+Asterisk (`*`) is a special character that can have two functionalities:
+* as wildcarding prefix/suffix expander
+* and as any term modifier inside a phrase search.
 
-In non-wildcard queries, the asterisk doesn't require escaping, regardless if it's in the charset_table or not.
+Unlike other special characters that are operators, the asterisk cannot be escaped when it's in a position to offer one of it's functionalities.
+
+In non-wildcard queries, the asterisk doesn't require escaping, regardless if it's in the `charset_table` or not.
 
 In wildcard queries, asterisk in the middle of a word doesn't require escaping. As a wildcard operator (either at start or end of the word), the asterisk will always be interpreted as the wildcard operator even if escaping is applied.
 

@@ -220,7 +220,7 @@ All other languages listed in the following list are supported by default: [Unic
 list](http://www.unicode.org/cldr/charts/latest/supplemental/languages_and_scripts.html/).
 
 <!-- example charset_table 3 -->
-To be able to work with both cjk and non-cjk languages you should set the options in your configuration file as shown below:
+To be able to work with both cjk and non-cjk languages you should set the options in your configuration file as shown below (with an [exception](../../Creating_an_index/NLP_and_tokenization/CJK.md) for Chinese):
 
 <!-- request SQL -->
 

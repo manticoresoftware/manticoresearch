@@ -1,4 +1,4 @@
-# Migration from Sphinx Search 
+# Migration from Sphinx Search
 
 ## Sphinx 2.x -> Manticore 2.x
 Manticore Search 2.x maintains compatibility with Sphinxsearch 2.x and can load existing indexes created by Sphinxsearch. In most cases, upgrading is just a matter of replacing the binaries.
@@ -64,7 +64,7 @@ In 2.x string attributes required `REPLACE`, for JSON it was only possible to up
 Doc ids used to be UNSIGNED 64-bit integers. Now they are POSITIVE SIGNED 64-bit integers.
 
 ## RT mode in Manticore 3.x
-Read here about the [RT mode](../Read_this_first.md#Real-time-mode-vs-plain-mode)⛔
+Read here about the [RT mode](../Read_this_first.md#Real-time-mode-vs-plain-mode)
 
 ## Special suffixes since Manticore 3.x
 Manticore 3.x recognizes and parses special suffixes which makes easier to use numeric values with special meaning. Common form for them is integer number + literal, like 10k or 100d, but not 40.3s (since 40.3 is not integer), or not 2d 4h (since there are two, not one value). Literals are case-insensitive, so 10W is the same as 10w. There are 2 types of such suffixes currently supported:

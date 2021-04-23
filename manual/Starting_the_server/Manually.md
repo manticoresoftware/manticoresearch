@@ -44,7 +44,7 @@ $ searchd --config /etc/manticoresearch/manticore.conf --status
 ```bash
 $ searchd --console --pidfile
 ```
-* `--console` is used to force `searchd` into console mode; typically Manticore runs as a conventional server application and logs information into log files (as specified in configuration file). Sometimes though, when debugging issues in the configuration or the server itself or trying to diagnose hard-to-track-down problems it may be easier to force it to dump information directly to the console/command line from which it is being called. Running in console mode also means that the process will not be forked (so searches are done in sequence) and logs will not be written to. (It should be noted that console mode is not the intended method for running `searchd`.)  You can invoke so: 
+* `--console` is used to force `searchd` into console mode; typically Manticore runs as a conventional server application and logs information into log files (as specified in configuration file). Sometimes though, when debugging issues in the configuration or the server itself or trying to diagnose hard-to-track-down problems it may be easier to force it to dump information directly to the console/command line from which it is being called. Running in console mode also means that the process will not be forked (so searches are done in sequence) and logs will not be written to. (It should be noted that console mode is not the intended method for running `searchd`.)  You can invoke so:
 ```bash
 $ searchd --config /etc/manticoresearch/manticore.conf --console
 ```
@@ -57,18 +57,18 @@ $ searchd --config /etc/manticoresearch/manticore.conf --iostats
 ```bash
 $ searchd --config /etc/manticoresearch/manticore.conf --cpustats
 ```
-*  `--port portnumber` (`-p` for short) is used to specify the port that Manticore should listen on to accept binary protocol requests, usually for debugging purposes. This will usually default to 9312, but sometimes you need to run it on a different port. Specifying it on the command line will override anything specified in the configuration file. The valid range is 0 to 65535, but ports numbered 1024 and below usually require a privileged account in order to run. 
+*  `--port portnumber` (`-p` for short) is used to specify the port that Manticore should listen on to accept binary protocol requests, usually for debugging purposes. This will usually default to 9312, but sometimes you need to run it on a different port. Specifying it on the command line will override anything specified in the configuration file. The valid range is 0 to 65535, but ports numbered 1024 and below usually require a privileged account in order to run.
     An example of usage:
     ```bash
     $ searchd --port 9313
     ```
-* `--listen ( address ":" port | port | path ) [ ":" protocol ]` (or `-l` for short) Works as `--port`, but allow you to specify not only the port, but full path, as IP address and port, or Unix-domain socket path, that `searchd` will listen on. In other words, you can specify either an IP address (or hostname) and port number or just a port number or Unix socket path. If you specify port number, but not the address searchd will listen on all network interfaces. Unix path is identified by a leading slash. As the last param you can also specify a protocol handler (listener) to be used for connections on this socket. Supported protocol values are 'sphinx' and 'mysql' (MySQL protocol used since 4.1). 
+* `--listen ( address ":" port | port | path ) [ ":" protocol ]` (or `-l` for short) Works as `--port`, but allow you to specify not only the port, but full path, as IP address and port, or Unix-domain socket path, that `searchd` will listen on. In other words, you can specify either an IP address (or hostname) and port number or just a port number or Unix socket path. If you specify port number, but not the address searchd will listen on all network interfaces. Unix path is identified by a leading slash. As the last param you can also specify a protocol handler (listener) to be used for connections on this socket. Supported protocol values are 'sphinx' and 'mysql' (MySQL protocol used since 4.1).
 * `--force-preread` forbids the server to serve any incoming connection until prereading of index files completes. By default, at startup the server accepts connections while index files are lazy loaded into memory. This opens extends the behavior and makes it wait until the files are loaded.
 * `--index <index>` (or `-i <index>` for short) forces this instance of `searchd`  to only serve the specified index. Like `--port`, above, this is usually for debugging purposes; more long-term changes would generally be applied to the configuration file itself.
 * `--strip-path` strips the path names from all the file names referenced from the index (stopwords, wordforms, exceptions, etc). This is useful for picking up indexes built on another machine with possibly different path layouts.
 * `--replay-flags=<OPTIONS>` switch can be used to specify a list of extra binary log replay options. The supported options are:
-    * `accept-desc-timestamp`, ignore descending transaction timestamps and replay such transactions anyway (the default behavior is to exit with an error). 
-    * `ignore-open-errors`, ignore missing binlog files (the default behavior is to exit with an error). 
+    * `accept-desc-timestamp`, ignore descending transaction timestamps and replay such transactions anyway (the default behavior is to exit with an error).
+    * `ignore-open-errors`, ignore missing binlog files (the default behavior is to exit with an error).
     Example:
     ```bash
     $ searchd --replay-flags=accept-desc-timestamp
@@ -77,8 +77,8 @@ $ searchd --config /etc/manticoresearch/manticore.conf --cpustats
 ```bash
 $ searchd --config /etc/manticoresearch/manticore.conf --coredump
 ```
-* `--new-cluster` bootstraps a replication cluster and makes the server a reference node with [cluster restart](../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) protection
-* `--new-cluster-force` bootstraps a replication cluster and makes the server a reference node bypassing [cluster restart](../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) protection
+* `--new-cluster` bootstraps a replication cluster and makes the server a reference node with [cluster restart](../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) protection. On Linux you can also run `manticore_new_cluster`. It will start Manticore in `--new-cluster` mode via systemd.
+* `--new-cluster-force` bootstraps a replication cluster and makes the server a reference node bypassing [cluster restart](../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) protection. On Linux you can also run `manticore_new_cluster --force`. It will start Manticore in `--new-cluster-force` mode via systemd.
 
 There are some options for `searchd` that are specific to Windows platforms, concerning handling as a service, and are only available in Windows binaries.
 

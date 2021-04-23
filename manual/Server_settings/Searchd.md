@@ -665,13 +665,6 @@ not_terms_only_allowed = 1
 ```
 <!-- end -->
 
-### ondisk_attrs_default
-
-Instance-wide defaults for [ondisk_attrs](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Accessing-index-files) directive. Optional, default is 0 (all attributes are loaded in memory). This directive lets you specify the default value of ondisk_attrs for all indexes served by this copy of searchd. Per-index directives take precedence, and will overwrite this instance-wide default value, allowing for fine-grain control.
-
-> **WARNING:** The functionality of this directive is taken over by [access_plain_attrs](../Server_settings/Searchd.md#access_plain_attrs) and [access_blob_attrs](../Server_settings/Searchd.md#access_blob_attrs) directives as of 3.0.2. The option is marked as deprecated and will be removed in future versions.
-
-
 ### persistent_connections_limit
 
 <!-- example conf persistent_connections_limit -->
@@ -1076,9 +1069,9 @@ server_id = 1
 ### shutdown_timeout
 
 <!-- example conf shutdown_timeout -->
-`searchd -–stopwait` waiting time, in seconds (or [special_suffixes](../Server_settings/Special_suffixes.md)). Optional, default is 3 seconds.
+`searchd --stopwait` waiting time, in seconds (or [special_suffixes](../Server_settings/Special_suffixes.md)). Optional, default is 3 seconds.
 
-When you run searchd –stopwait your server needs to perform some activities before stopping like finishing queries, flushing RT RAM chunk, flushing attributes and updating binlog. And it requires some time. searchd –stopwait will wait up to shutdown_time seconds for server to finish its jobs. Suitable time depends on your index size and load.
+When you run `searchd --stopwait` your server needs to perform some activities before stopping like finishing queries, flushing RT RAM chunk, flushing attributes and updating binlog. And it requires some time. `searchd --stopwait` will wait up to `shutdown_time` seconds for server to finish its jobs. Suitable time depends on your index size and load.
 
 
 <!-- intro -->

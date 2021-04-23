@@ -38,9 +38,11 @@ Soundex implementation matches that of MySQL. Metaphone implementation is based 
 Built-in values that are available for use in the `morphology` option are as follows:
 * none - do not perform any morphology processing
 * lemmatize_ru - apply Russian lemmatizer and pick a single root form
+* lemmatize_uk - apply Ukrainian lemmatizer and pick a single root form (install it first in [Centos](../../Installation/RHEL_and_Centos.md#Ukrainian-lemmatizer) or [Ubuntu/Debian](../../Installation/Debian_and_Ubuntu.md#Ukrainian-lemmatizer))
 * lemmatize_en - apply English lemmatizer and pick a single root form
 * lemmatize_de - apply German lemmatizer and pick a single root form
 * lemmatize_ru_all - apply Russian lemmatizer and index all possible root forms
+* lemmatize_uk_all - apply Ukrainian lemmatizer and index all possible root forms (install it first in [Centos](../../Installation/RHEL_and_Centos.md#Ukrainian-lemmatizer) or [Ubuntu/Debian](../../Installation/Debian_and_Ubuntu.md#Ukrainian-lemmatizer))
 * lemmatize_en_all - apply English lemmatizer and index all possible root forms
 * lemmatize_de_all - apply German lemmatizer and index all possible root forms
 * stem_en - apply Porter's English stemmer
@@ -107,7 +109,7 @@ utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) morp
 ```ini
 index products {
   morphology = stem_en, libstemmer_sv
-  
+
   type = rt
   path = idx
   rt_field = title
@@ -181,7 +183,7 @@ utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) morp
 index products {
   morphology_skip_fields = name
   morphology = stem_en
-  
+
   type = rt
   path = idx
   rt_field = title

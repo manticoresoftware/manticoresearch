@@ -7,6 +7,20 @@ Concatenates two or more strings into one. Non-string arguments must be explicit
 CONCAT(TO_STRING(float_attr), ',', TO_STRING(int_attr), ',', title)
 ```
 
+### LEVENSHTEIN()
+`LEVENSHTEIN ( pattern, source, {normalize=0, length_delta=0})` returns number (Levenshtein distance) of single-character edits (insertions, deletions or substitutions) between a pattern string and a source string required to change `pattern` word into the `source` word.
+
+   * pattern, source - a constant string, a string attribute, a JSON field or any expression produces string (like [SUBSTRING_INDEX()](Functions/String_functions.md#SUBSTRING_INDEX%28%29))
+   * normalize - option to get distance as a float number in range [0.0 - 1.0], there 0.0 is exact match and 1.0 is maximum difference. Default value is 0, means do not normalize and provide result as integer.
+   * length_delta -  to skip Levenshtein distance calculation and return `Max(strlen(pattern), strlen(source))` in case option is set and length of strings differs more than `length_delta value`. Default value is 0, means to calculate Levenshtein distance to all source strings. This option could be useful in case of checking only similar strings but not strings these differ a lot in length.
+   
+``` sql
+SELECT LEVENSHTEIN('gily', attr1) AS dist, WEIGHT() AS w FROM test WHERE MATCH('test') ORDER BY w DESC, dist ASC; 
+SELECT LEVENSHTEIN('gily', j.name, {length_delta=6}) AS dist, WEIGHT() AS w FROM test WHERE MATCH('test') ORDER BY w DESC; 
+SELECT LEVENSHTEIN(title, j.name, {normalize=1}) AS dist, WEIGHT() AS w FROM test WHERE MATCH ('test') ORDER BY w DESC, dist ASC; 
+```   
+   
+
 ### REGEX()
 `REGEX(attr,expr)` function returns 1 if regular expression matched to string of attribute and 0 otherwise. It works with both string and JSON attributes.
 

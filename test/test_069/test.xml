@@ -16,15 +16,38 @@ searchd
 
 <queries>
 	<sphinxql>
-		CREATE TABLE test (title text, `123abc` integer);
+		CREATE TABLE test (title text, `123abc` integer, a22 integer, `a23` integer);
 		desc test;
-		insert into test (id,title,`123abc`) values (1,'bla',10),(2,'bla',20);
+		insert into test (id,title,`123abc`,a22,a23) values (1,'bla',10,11,12);
+		insert into test (id,title,`123abc`,`a22`,a23) values (2,'bla',20,21,22);
 		select * from test;
 		select `123abc` from test;
 		select 123abc from test;
 		select * from test where 123abc>10;
 		select * from test where `123abc`>10;
+		select `a22` from test;
+		select a22 from test;
+		select * from test where a22>10;
+		select * from test where `a22`>10;
+		select `a23` from test;
+		select a23 from test;
+		select * from test where a23>10;
+		select * from test where `a23`>10;
 		drop table test;
+
+		CREATE TABLE `1a2b3c`(field1 text, field2 text);
+		show tables;
+		desc `1a2b3c`;
+		insert into `1a2b3c` values (1, 'bla', 'bla');
+		select * from `1a2b3c`;
+		drop table `1a2b3c`;
+
+		CREATE TABLE `a2b3c`(field1 text, field2 text);
+		show tables;
+		desc `a2b3c`;
+		insert into `a2b3c` values (1, 'bla', 'bla');
+		select * from `a2b3c`;
+		drop table `a2b3c`;
 
 		create table pq (`json` json) type='pq';
 		INSERT INTO pq (query, filters) VALUES ('', 'json.target==10');

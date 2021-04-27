@@ -11,6 +11,7 @@
 %error-verbose
 
 %token	TOK_IDENT "identifier"
+%token	TOK_BACKIDENT "`identifier`"
 %token	TOK_ATIDENT
 %token	TOK_CONST_INT 260 "integer"
 %token	TOK_CONST_FLOAT 261 "float"
@@ -262,20 +263,30 @@ ident_set:
 	;
 
 ident:
-	ident_set | TOK_NAMES | TOK_TRANSACTION | TOK_COLLATE
+	ident_set | TOK_NAMES | TOK_TRANSACTION | TOK_COLLATE | TOK_BACKIDENT
 	;
 
 ident_no_option:
-	ident_set_no_option | TOK_NAMES | TOK_TRANSACTION | TOK_COLLATE
+	ident_set_no_option | TOK_NAMES | TOK_TRANSACTION | TOK_COLLATE | TOK_BACKIDENT
 	;
 
 /// *** ALL_IDENT_LIST_END ***
 // WARNING! line above is MANDATORY for consistency checking!
 //////////////////////////////////////////////////////////////////////////
 
+identidx:
+	TOK_BACKIDENT
+	{
+		$$ = $1;
+		++$$.m_iStart;
+		--$$.m_iEnd;
+	}
+	| ident_set | TOK_NAMES | TOK_TRANSACTION | TOK_COLLATE
+	;
+
 one_index:
-	ident
-	| ident ':' ident
+	identidx
+	| ident ':' identidx
 		{
 			pParser->ToString (pParser->m_pStmt->m_sCluster, $1);
 			$$ = $3;
@@ -1253,7 +1264,7 @@ show_what:
 	| TOK_PLAN				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PLAN; }
 	| TOK_PLUGINS				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PLUGINS; }
 	| TOK_THREADS				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_THREADS; }
-	| TOK_CREATE TOK_TABLE ident
+	| TOK_CREATE TOK_TABLE identidx
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_CREATE_TABLE;
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $3 );
@@ -1354,7 +1365,7 @@ set_global_stmt:
 			pParser->SetStatement ( $3, SET_GLOBAL_SVAR );
 			pParser->m_pStmt->m_iSetValue = $5.m_iValue;
 		}
-	| TOK_SET TOK_INDEX ident TOK_GLOBAL TOK_USERVAR '=' '(' const_list ')'
+	| TOK_SET TOK_INDEX identidx TOK_GLOBAL TOK_USERVAR '=' '(' const_list ')'
 		{
 			pParser->SetStatement ( $5, SET_INDEX_UVAR );
 			pParser->m_pStmt->m_dSetValues = *$8.m_pValues;
@@ -1693,7 +1704,7 @@ isolation_level:
 ////////////////////////////////////////////////////////////
 
 attach_index:
-	TOK_ATTACH TOK_INDEX ident TOK_TO TOK_RTINDEX ident opt_with_truncate
+	TOK_ATTACH TOK_INDEX identidx TOK_TO TOK_RTINDEX identidx opt_with_truncate
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_ATTACH_INDEX;
@@ -1713,7 +1724,7 @@ opt_with_truncate:
 //////////////////////////////////////////////////////////////////////////
 
 flush_rtindex:
-	TOK_FLUSH TOK_RTINDEX ident
+	TOK_FLUSH TOK_RTINDEX identidx
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_FLUSH_RTINDEX;
@@ -1722,7 +1733,7 @@ flush_rtindex:
 	;
 
 flush_ramchunk:
-	TOK_FLUSH TOK_RAMCHUNK ident
+	TOK_FLUSH TOK_RAMCHUNK identidx
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_FLUSH_RAMCHUNK;
@@ -1812,7 +1823,7 @@ opt_with_reconfigure:
 
 optimize_index:
 	TOK_OPTIMIZE  { pParser->m_pStmt->m_eStmt = STMT_OPTIMIZE_INDEX; }
-		TOK_INDEX ident opt_option_clause
+		TOK_INDEX identidx opt_option_clause
 			{
 				pParser->ToString ( pParser->m_pStmt->m_sIndex, $4 );
 			}
@@ -1915,7 +1926,7 @@ opt_reload_index_from:
 	;
 
 reload_index:
-	TOK_RELOAD TOK_INDEX ident opt_reload_index_from
+	TOK_RELOAD TOK_INDEX identidx opt_reload_index_from
 		{
 			pParser->m_pStmt->m_eStmt = STMT_RELOAD_INDEX;
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $3);

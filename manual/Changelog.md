@@ -1,6 +1,6 @@
 # Changelog
 
-## Version 3.6.0, Apr 16th 2021
+## Version 3.6.0, Mar 1st 2021
 **Maintenance release before Manticore 4**
 
 ### Major new features
@@ -9,11 +9,12 @@
 
 ### Minor changes
 - tool `manticore_new_cluster [--force]` useful for restarting a replication cluster via systemd
+- [--drop-src](Adding_data_from_external_storages/Adding_data_from_indexes/Merging_indexes.md#Merging-indexes) for `indexer --merge`
 - [new mode](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#blend_mode) `blend_mode='trim_all'`
 - added [support for escaping JSON path](Searching/Full_text_matching/Escaping.md#Escaping-json-node-names-in-SQL) with backticks
 - [indextool --check](Miscellaneous_tools.md#indextool) can work in RT mode
 - [FORCE/IGNORE INDEX(id)](Updating_documents/UPDATE.md#FORCE/IGNORE-INDEX) for SELECT/UPDATE
-- unique chunk id for a merged disk chunk
+- chunk id for a merged disk chunk is now unique
 - [indextool --check-disk-chunk CHUNK_NAME](Miscellaneous_tools.md#indextool)
 
 ### Optimizations

@@ -6,7 +6,7 @@ set(INFO_BANNER "Lightweight SQL-first database designed for search applications
 set(THIS_PKG "${INFO_BANNER} This package")
 
 # common metadata
-set(CPACK_PACKAGE_CONTACT "${PACKAGE_NAME} package builds <build@manticoresearch.com>")
+set(CPACK_PACKAGE_CONTACT "Manticore Search Maintainers <build@manticoresearch.com>")
 set(CMAKE_PROJECT_HOMEPAGE_URL "https://manticoresearch.com")
 set(CPACK_PACKAGE_NAME "${PACKAGE_NAME}")
 set(CPACK_PACKAGE_VENDOR "${COMPANY_NAME}")

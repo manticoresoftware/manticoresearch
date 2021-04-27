@@ -735,7 +735,7 @@ function StopWaitSearchd ( $config, $pidfile )
 	return StopSearchd ( $config, $pidfile );
 }
 
-function RestartDaemon ()
+function RestartDaemon ($no_warnings=false)
 {
 	$stop = StopWaitSearchd ('config.conf', 'searchd.pid');
 	$status = 'stop=' . ( $stop==0 ? 'ok' : 'error' ) . ', return code=' . $stop;
@@ -743,6 +743,8 @@ function RestartDaemon ()
 	$start = StartSearchd ( 'config.conf', 'error.txt', 'searchd.pid', $error, false );
 	if ( $start == 0 || $start == 2 )
 	{
+	    if ($no_warnings)
+	        $start = 0;
 		$status .= "; start=ok" . ', return code=' . $start;
         if ( $start==2 )
             $status .= ", error=" . $error;
@@ -918,49 +920,6 @@ function NextState ( &$iter, &$limits, $ps )
 	}
 }
 
-function GetVariants ( $qnode, $enc )
-{
-	$res = array();
-	$iters = array();
-	$limits = array();
-	$pos = array();
-	$values = array();
-	$members = array();
-
-	foreach ( ChildrenArray ( $qnode) as $node )
-	{
-		if ( $node->nodeType != XML_TEXT_NODE && $node->nodeType != XML_DOCUMENT_NODE
-			&& strtolower ( $node->nodeName ) == "variants" )
-		{
-			$limits[] = $node->attributes->length;
-			$vals = array();
-			foreach ( AttrArray ($node) as $attr )
-				$vals[] = iconv ( 'utf-8', $enc, $attr->nodeValue );
-			$values[] = $vals;
-			$iters[] = 0;
-			$pos[] = count ($members);
-			$members[] = $vals[0];
-		} else
-		$members[] = iconv ( 'utf-8', $enc, $node->nodeValue );
-	}
-
-	$num_states = 1;
-	for ( $i=0; $i<count($limits); ++$i)
-		$num_states = $num_states * $limits[$i];
-
-	$text=implode ( '', $members );
-	$res[] = $text;
-	for ( $i=1; $i<$num_states; ++$i)
-	{
-		NextState ( $iters, $limits, 0);
-		for ( $j=0; $j<count ($pos); ++$j)
-			$members[$pos[$j]] = $values[$j][$iters[$j]];
-		$text=implode ( ' ', $members );
-		$res[] = $text;
-	}
-	return $res;
-}
-
 function AttrArray ( $node, $name="" )
 {
 	$res = array ();
@@ -1000,6 +959,14 @@ function ArrVal ( $var, $name, $default="" )
     if ( array_key_exists ( $name, $var ) )
         return $var[$name];
     return $default;
+}
+
+function ArrVals ( $var, $name, $delimiter=" " )
+{
+    if ( array_key_exists( $name, $var) )
+        return explode($delimiter, $var[$name]);
+    else
+        return array();
 }
 
 function TouchVal ( &$var, $name, $default="" )
@@ -1293,6 +1260,18 @@ function close_and_null_conn (&$connection)
     $connection = NULL;
 }
 
+function result_must_be_skipped ( $result )
+{
+    return  ( array_key_exists('skip', $result) && $result['skip']>0 );
+}
+
+function result_must_not_be_displayed ($result)
+{
+    if ( array_key_exists ("comment", $result) )
+        return @$result['hide']==1;
+    return @$result['skip']==1;
+}
+
 
 class SphinxConfig
 {
@@ -1304,6 +1283,7 @@ class SphinxConfig
 	private $_counters;
 	private $_dynamic_entries;
 	private $_queries;
+	private $_vars;
 	private $_sphqueries;
 	private $_query_settings;
 	private $_query_attributes;
@@ -1340,6 +1320,7 @@ class SphinxConfig
 		$this->_counters 		= array ();
 		$this->_dynamic_entries = array ();
 		$this->_queries 		= array ();
+		$this->_vars            = array ();
 		$this->_sphqueries		= array ();
 		$this->_results			= array ();
 		$this->_results_model	= array ();
@@ -1525,11 +1506,18 @@ class SphinxConfig
 			$this->GatherNodes ( $node->childNodes->item ( $i ) );
 	}
 
+	function FormatVar ($nodename, $attrs)
+    {
+        if ( array_key_exists ( 'format', $attrs ) )
+            return sprintf($attrs['format'],  $this->_vars[$nodename]);
+        return  $this->_vars[$nodename];
+    }
 
 	function GenerateQueryText ( $node )
 	{
 		global $agents;
 		$result = "";
+        $attrs = GetAttrs($node);
 
 		$nodename = strtolower ( $node->nodeName );
 		switch ( $nodename )
@@ -1542,12 +1530,45 @@ class SphinxConfig
 			case "agent1_address":	return $agents[1]["address"].":".$agents[1]["port"];
 			case "agent2_address":	return $agents[2]["address"].":".$agents[2]["port"];
 		}
+		if ( array_key_exists ($nodename, $this->_vars) )
+		    return $this->FormatVar($nodename, $attrs);
 
 		foreach ( ChildrenArray($node) as $child )
 			$result.= $this->GenerateQueryText ( $child );
 
 		return $result;
 	}
+
+    function GenerateQueryTextWithComments ( $node )
+    {
+        $results = array();
+        $result = '';
+
+        foreach ( ChildrenArray($node) as $child )
+            if ( $child->nodeName === '#comment' )
+            {
+                if ( trim($result)!='' )
+                    $results[]= array ( true, $result );
+                $results[]= array ( false, $child->nodeValue ) ;
+                $result = '';
+            } else
+                $result .= $this->GenerateQueryText ( $child );
+
+        if ( trim($result)!='' )
+            $results[]= array ( true, $result );
+        return $results;
+    }
+
+    function AddAPIUpdate ($mode, $res)
+    {
+        $res['mode'] = $mode;
+        $json = $res['query'][0];
+        $upd = json_decode ($json, true);
+        $res['query'] = $upd;
+        $res['type'] = 'apiupdate';
+        $this->_queries[] = $res;
+        return true;
+    }
 
 	function AddAPIQuery ($q, $encoding)
     {
@@ -1582,6 +1603,10 @@ class SphinxConfig
             case "extended":	$mode = SPH_MATCH_EXTENDED; break;
             case "extended2":	$mode = SPH_MATCH_EXTENDED2; break;
             case "fullscan":	$mode = SPH_MATCH_FULLSCAN; break;
+            case 'update_int':      return $this->AddAPIUpdate (SPH_UPDATE_INT, $res );
+            case 'update_mva':      return $this->AddAPIUpdate (SPH_UPDATE_MVA, $res );
+            case 'update_string':   return $this->AddAPIUpdate (SPH_UPDATE_STRING, $res );
+            case 'update_json':     return $this->AddAPIUpdate (SPH_UPDATE_JSON, $res );
             default:
                 return "unknown matching mode '" . $mode_s . "'";
         }
@@ -1663,9 +1688,108 @@ class SphinxConfig
 //        TouchVal ($res,"cutoff");
 //        TouchVal ($res,"limits");
 
-        $res['type'] = "api";
+        $res['type'] = 'api';
         $this->_queries[] = $res;
         return true;
+    }
+
+    function AddRepeatComment ($attrs)
+    {
+        $skip = (int)ArrVal ($attrs, "skip", 0);
+        $comment = 'repeat ';
+        foreach ($attrs as $name => $value)
+            $comment .= "$name=\"$value\" ";
+
+        $this->_queries[] = array(
+            'query' => trim($comment),
+            'attrs' => $attrs,
+            'type' => 'comment',
+            'hide' => $skip
+        );
+    }
+
+    function RepeatedlyAddQuery ($repeat, $addcomment, $cb)
+    {
+        $attrs = GetAttrs($repeat);
+        if ($addcomment)
+            $this->AddRepeatComment($attrs);
+
+        $delimiter = ArrVal ($attrs, "delimiter", " ");
+        $variants = ArrVals($attrs, "variants", $delimiter);
+
+        if (!empty($variants)) { // varianted query: <repeat var="foo" variants="a b c> - 3 times repeat with foo=a, foo=b, foo=c
+            $var = ArrVal($attrs, "var", "_");
+            foreach ($variants as $variant)
+            {
+                $this->_vars[$var] = $variant;
+                foreach ( ChildrenArray ( $repeat ) as $q )
+                    $cb($q);
+            }
+            return;
+        }
+
+        $count = (int)ArrVal ($attrs, "count", 1);
+
+        $vars = ArrVals($attrs, "vars", $delimiter);
+        $inits = ArrVals($attrs, "init", $delimiter);
+        $increments = ArrVals($attrs, "inc", $delimiter);
+
+        // set initial values of vars
+        foreach ($inits as $idx=>$init)
+            $this->_vars[$vars[$idx]] = $init;
+
+        for ($i=0; $i<$count; ++$i)
+        {
+            foreach ( ChildrenArray ( $repeat ) as $q )
+                $cb($q);
+
+            // set next values
+            foreach ($increments as $idx=>$inc)
+                $this->_vars[$vars[$idx]] += $inc;
+        }
+    }
+
+    function PopulateVar ($var,$cb)
+    {
+        $attrs = GetAttrs($var);
+        $name = ArrVal($attrs, "name" );
+        $delimiter = ArrVal ($attrs, "delimiter", null);
+
+        $exists = array_key_exists ( $name, $this->_vars ) && $this->_vars[$name]!=='';
+        $val = trim($cb($var));
+
+        if ( !$exists || $delimiter===null )
+            $this->_vars[$name] = $val;
+        else
+            $this->_vars[$name] .= $delimiter . $val;
+    }
+
+    function ExposeMetaIndexes ($q, $attrs, $lowername, $metaindexes)
+    {
+        $was_replaced = false;
+        if ( !empty($metaindexes) )
+            foreach ( $metaindexes as $name=>$indexes )
+                foreach ($indexes as $index)
+                {
+                    $foo = 0;
+                    $res = str_replace ( $name, $index, $q, $foo );
+                    if ($foo>0)
+                    {
+                        $was_replaced = true;
+                        $this->_queries[]=array (
+                            "query" => $res,
+                            "attrs" => $attrs,
+                            "type" => $lowername);
+                    }
+                }
+
+        if (!$was_replaced) // no metaindexes; emit 'as is'
+        {
+            $this->_queries[] = array (
+                "query" => $q,
+                "attrs" => $attrs,
+                "type" => $lowername);
+        }
     }
 
 	function AddQuery ( $q, $encoding, $metaindexes )
@@ -1682,57 +1806,49 @@ class SphinxConfig
                 break;
             case 'comment':
                 $this->_queries[] = array (
-                    "query" => iconv('utf-8', $encoding, $this->GenerateQueryText($q)),
+                    "query" => iconv('utf-8', $encoding, trim($this->GenerateQueryText($q))),
                     "attrs" => $attrs,
-                    "type" => $lowername);
-                return true;
+                    "type" => 'comment');
+                return;
+            case '#comment':
+                $this->_queries[] = array (
+                    "query" => iconv('utf-8', $encoding, trim($q->nodeValue)),
+                    "attrs" => $attrs,
+                    "type" => 'comment');
+                return;
+            case 'repeat':
+                $this->RepeatedlyAddQuery($q, true, function($q) use( $encoding, $metaindexes )
+                {
+                    $this->AddQuery ( $q, $encoding, $metaindexes );
+                } );
+                return;
+            case 'var':
+                $this->PopulateVar($q,function($foo) { return $this->GenerateQueryText ($foo); });
+                return;
             default:
-                return true;
+                return;
         }
 
-		if ( !empty($metaindexes) )
-		{
-			$was_replaced = false;
-			foreach ( $metaindexes as $name=>$indexes )
-				foreach ($indexes as $index)
-				{
-					$foo = 0;
-					$res = str_replace ( $name, $index, GetVariants ( $q, $encoding ), $foo );
-					if ($foo>0)
-					{
-						$was_replaced = true;
-						foreach ($res as $r)
-							$this->_queries[]=array (
-                                "query" => $r,
-                                "attrs" => $attrs,
-                                "type" => $lowername);
-					}
-				}
-
-			if (!$was_replaced) // no metaindexes; emit 'as is'
-			{
-				foreach ( GetVariants ( $q, $encoding ) as $r )
-					$this->_queries[]=array (
-                        "query" => $r,
-                        "attrs" => $attrs,
-                        "type" => $lowername);
-			}
-		}
-		else
-		{
-            $query_texts = preg_split ( "/;\n/", $this->GenerateQueryText ( $q ), -1, PREG_SPLIT_NO_EMPTY );
-            if ( empty ($query_texts))
+        $query_chunks = $this->GenerateQueryTextWithComments ( $q );
+        if ( empty ($query_chunks))
+            $this->_queries[] = array (
+                "query" => "",
+                "attrs" => $attrs,
+                "type" => $lowername);
+        foreach ($query_chunks as $query_chunk)
+        {
+            if ( !$query_chunk[0] ) // 0-th is bool 'statement/comment'
+            {
                 $this->_queries[] = array (
-                    "query" => "",
+                    "query" => iconv('utf-8', $encoding, $query_chunk[1]),
                     "attrs" => $attrs,
-                    "type" => $lowername);
+                    "type" => 'comment');
+                continue;
+            }
+            $query_texts = preg_split ( "/;\n\s*/", $query_chunk[1], -1, PREG_SPLIT_NO_EMPTY );
             foreach ($query_texts as $query_text)
-    			$this->_queries[] = array (
-                    "query" => iconv('utf-8', $encoding, $query_text),
-                    "attrs" => $attrs,
-                    "type" => $lowername);
-		}
-		return true;
+                $this->ExposeMetaIndexes (iconv('utf-8', $encoding, trim($query_text)), $attrs, $lowername, $metaindexes);
+        }
 	}
 
 	function AddQueries ( $queries, $encoding, $metaindexes )
@@ -1754,6 +1870,45 @@ class SphinxConfig
 					$this->AddQueries ( $child, $encoding, $metaindexes );
 			}
 	}
+
+	function AddDbInsertClause ($q, $encoding)
+    {
+        $q = trim ($q);
+        if ($q!='')
+            $this->_db_insert [] = iconv ( 'utf-8', $encoding, $q);
+    }
+
+	function AddDbInsertNode( $q, $encoding, &$accum )
+    {
+        $lowername = strtolower($q->nodeName);
+        switch ( $lowername )
+        {
+            case 'repeat':
+                $this->RepeatedlyAddQuery($q, false, function($foo) use( $encoding, &$accum )
+                {
+                    $this->AddDbInsertNode ( $foo, $encoding, $accum );
+                } );
+                return;
+            case 'db_insert':
+                $this->AddDbInsertClause($accum,$encoding);
+                $accum='';
+                return;
+            case 'var':
+                $this->PopulateVar($q,function($foo) { return $this->GenerateQueryText ($foo); });
+                return;
+            default:
+                $accum .= $this->GenerateQueryText ($q);
+        }
+    }
+
+    function AddDbInsert( $queries, $encoding )
+    {
+        $accum="";
+        foreach ( ChildrenArray ( $queries ) as $q )
+            $this->AddDbInsertNode ( $q, $encoding, $accum );
+
+        $this->AddDbInsertClause($accum,$encoding);
+    }
 
 	function Load ( $config_file )
 	{
@@ -1806,14 +1961,7 @@ class SphinxConfig
             // <query endpoint=...> - as http, <sphinxql...> - as sphinxql,
             // rest <query...> - as api.
             // also <comment...> is suitable here (copied directly into report, doesn't affect result matching)
-			foreach ( ChildrenArray ( $qs ) as $q ) {
-                $res = $this->AddQuery($q, $doc->encoding, $metaindexes);
-                if ($res !== true)
-                {
-                    printf("$config_file: %s\n", $res);
-                    return false;
-                }
-			}
+			$this->AddQueries ( $qs, $doc->encoding, $metaindexes );
 		}
 		else
 		{
@@ -1825,11 +1973,11 @@ class SphinxConfig
 				$this->_queries[] = array (
 					"query" => array ( $q ),
 					"mode" => 0,
-					"mode_s" => "(default)",
+					"mode_s" => '(default)',
 					"ranker" => 0,
-					"ranker_s" => "(default)",
-                    "index" => "*",
-                    "type" => "api" );
+					"ranker_s" => '(default)',
+                    "index" => '*',
+                    "type" => 'api' );
 			}
 		}
 
@@ -1848,7 +1996,7 @@ class SphinxConfig
 			$this->_db_drop []=$node->nodeValue;
 
 		foreach ( ChildrenArray ( $xml, "db_insert" ) as $node )
-			$this->_db_insert [] = iconv ( 'utf-8', $doc->encoding, $node->nodeValue );
+            $this->AddDbInsert ( $node, $doc->encoding );
 
 		foreach ( ChildrenArray ( $xml, "custom_insert" ) as $node )
 			$this->_custom_insert []=$node->nodeValue;
@@ -1928,11 +2076,11 @@ class SphinxConfig
 	}
 
 	function PickResult ( $query_result )
-	{
-        array_push ($this->_results, $query_result );
-		if ( IsModelGenMode () )
-			$this->_results_model[$this->SubtestNo ()][] = $query_result;
-	}
+    {
+        array_push($this->_results, $query_result);
+        if (IsModelGenMode() && !result_must_be_skipped($query_result))
+            $this->_results_model[$this->SubtestNo()][] = $query_result;
+    }
 
 	function PickResults( $query_results )
     {
@@ -2003,6 +2151,19 @@ class SphinxConfig
 		$this->PickResult ( $query_result );
 		return true;
 	}
+
+    function RunQueryApiUpdate ( $query, &$error, &$examples )
+    {
+        global $sd_address, $sd_port;
+
+        $cl = new APIClient();
+        $cl->SetServer ( $sd_address, $sd_port );
+
+        $res = $cl->XUpdateAttributes ($query['index'], $query['query']['attrs'], $query['query']['values'], $query['mode'] );
+        $query_result = array ('updated'=> $res);
+        $this->PickResult ( $query_result );
+        return true;
+    }
 
 
 	function RemovePathsFromExtFiles ( &$query )
@@ -2086,7 +2247,7 @@ class SphinxConfig
 		return false;
 	}
 
-	function PostprocessQlResult ( $query, &$query_result, &$raw_result, $connection, $no_time )
+	function PostprocessQlResult ( $query, &$query_result, &$raw_result, $connection, $no_time, $ignore_rows )
 	{
 	    $raw_result["sphinxql"] = $query;
 		$result = mysqli_wr ($query,$connection);
@@ -2119,6 +2280,16 @@ class SphinxConfig
                 $raw_result["rows"][] = $row;
 				if ( $no_time===true && array_key_exists ( 'Variable_name', $row ) && $row['Variable_name']=='time' )
 					continue;
+				$cont = false;
+                foreach ( $ignore_rows as $ignore_row )
+                {
+                    if ( array_key_exists ( $ignore_row, $row ) ) {
+                        $cont = true;
+                        break;
+                    }
+                }
+                if ($cont)
+                    continue;
 				$query_result["rows"][] = $row;
 			}
 			mysqli_free_result($result);
@@ -2150,6 +2321,9 @@ class SphinxConfig
         $cluster_name = ArrVal ($attrs, "cluster");
         $cluster_status = ArrVal ($attrs, "status");
         $example = ArrVal ($attrs, "example");
+        $skip_result = ArrVal ($attrs, 'skip',false);
+        $ignore_rows = ArrVals ($attrs, 'ignore');
+        $hide = ArrVals ($attrs, 'hide',false);
 
 		// $query - array, 0 is data, 1 is attributes, 2 is 'is_http' bool.
 
@@ -2177,6 +2351,13 @@ class SphinxConfig
 
         if ( $use_agent>0 )
             $query_result["agent"]=$use_agent;
+
+        if ($skip_result)
+            $query_result['skip']=1;
+
+        if ($hide)
+            $query_result['hide']=1;
+
 
         if ($old_agent!=$use_agent && $system_cmd!='start-agent')
 		{
@@ -2213,8 +2394,9 @@ class SphinxConfig
 			$status = '';
             switch ( $system_cmd ) {
                 case 'restart-daemon':
+                case 'restart-daemon-no-warnings':
                     close_and_null_conn($connection);
-                    $status = RestartDaemon();
+                    $status = RestartDaemon($system_cmd=='restart-daemon-no-warnings');
                     $connection = ConnectSpecificQL($use_agent);
                     break;
                 case 'kill-daemon':
@@ -2320,7 +2502,7 @@ class SphinxConfig
 			unset ( $query_ref );
 
             $raw_result = [];
-			$this->PostprocessQlResult ( $query, $query_result, $raw_result, $connection, $no_time );
+			$this->PostprocessQlResult ( $query, $query_result, $raw_result, $connection, $no_time, $ignore_rows );
 			$this->PickResult($query_result);
 			if ($example)
             {
@@ -2386,6 +2568,13 @@ class SphinxConfig
 		return true;
 	}
 
+	function ToHide($qinfo)
+    {
+        if ( array_key_exists ( 'hide', $qinfo ) )
+            return !!$qinfo['hide'];
+        return false;
+    }
+
 	function RunQuery ( &$error, &$examples, $benchmark = false )
 	{
 		global $sd_address, $sd_port, $action_retries, $action_wait_timeout, $g_pick_query;
@@ -2446,6 +2635,11 @@ class SphinxConfig
                 $bOk = $this->RunQueryQL ( $qinfo, $error, $examples, $benchmark, $ql_connection, $old_agent, $old_vip );
 			elseif ($qinfo['type']=='query')
                 $bOk = $this->RunQueryHttp ( $qinfo, $error, $examples );
+			elseif ( $qinfo['type']=='comment') {
+                $this->PickResult(array("comment" => trim($qinfo["query"]), 'skip' => 1, 'hide' => $this->ToHide($qinfo) ));
+                $bOk = true;
+            } elseif ($qinfo['type']=='apiupdate')
+                $bOk = $this->RunQueryApiUpdate ( $qinfo, $error, $examples );
 
             if (!$bOk)
 			    break;
@@ -2692,10 +2886,18 @@ class SphinxConfig
 		return 1;
 	}
 
+	function ImportantResults()
+    {
+        $_results			= array ();
+        foreach ( $this->_results as $result )
+            if ( !result_must_be_skipped ($result) )
+                $_results[] = $result;
+        return $_results;
+    }
 
 	function CompareToModel ()
 	{
-		return $this->CompareResults ( $this->FixKeys ( $this->_results ), $this->_results_model [$this->SubtestNo ()] );
+		return $this->CompareResults ( $this->FixKeys ( $this->ImportantResults () ), $this->_results_model [$this->SubtestNo ()] );
 	}
 
 
@@ -2786,19 +2988,31 @@ class SphinxConfig
 			fprintf ( $fp, "Query settings:\n%s\n", $this->_query_settings );
 	}
 
-
+    // At model generation all comments and statements displayed
+    // At testing comments with 'hide', and statements with 'skip' are not displayed.
 	function FormatResultSet ( $nquery, $result, $opts=array() )
 	{
 		global $sd_skip_indexer;
+		if (@$opts['hide'] && result_must_not_be_displayed ($result))
+		    return '';
+
+        if ( array_key_exists ("comment", $result) )
+            return "/* " . $result["comment"] . " */\n\n";
+
 		if ( array_key_exists ("http", $result) )
 			return HttpFormatResultSet ( $result, $nquery );
+
+        if ( array_key_exists ('updated', $result) )
+            return "/* Updated via SphinxAPI: " . $result['updated'] . " */\n\n";
 
 		if ( !$this->IsQueryTest () || !is_array($result) )
 			return var_export ( $result, true )."\n";
 
+		$skipped_result = result_must_be_skipped($result);
+
 		if ( array_key_exists ("sphinxql", $result) )
 		{
-			$str = "sphinxql-$nquery";
+			$str = $skipped_result?"sphinxql":"sphinxql-$nquery";
 			if ( array_key_exists ("vip", $result ) )
 				$str.=" (vip)";
 			if ( array_key_exists ("agent", $result ) )
@@ -2838,7 +3052,7 @@ class SphinxConfig
 
 		// format header
 		$qinfo = @$this->_queries[$nquery-1];
-		while ( !@array_key_exists ( "type", $qinfo) || $qinfo['type'] != 'api')
+		while ( $nquery>0 && (!@array_key_exists ( "type", $qinfo) || $qinfo['type'] != 'api' ))
         {
             --$nquery;
             $qinfo = @$this->_queries[$nquery-1];
@@ -2985,20 +3199,23 @@ class SphinxConfig
 	}
 
 	/// format and write a single result set into log file
-	function WriteQuery ( $fp, $nquery, $result )
+	function WriteQuery ( $fp, $nquery, $result, $hide=false )
 	{
-		$res_fmt = $this->FormatResultSet ( $nquery, $result );
+		$res_fmt = $this->FormatResultSet ( $nquery, $result,array('hide'=>$hide) );
 		fwrite ( $fp, $res_fmt );
 	}
 
 	/// write all the result sets
-	function WriteResults ( $fp )
+	function WriteResults ( $fp, $hide )
 	{
 		if ( $this->IsQueryTest () || $this->Requires("http") || $this->Requires("https") )
 		{
 			$nquery = 1;
-			foreach ( $this->_results as $result )
-				$this->WriteQuery ( $fp, $nquery++, $result );
+			foreach ( $this->_results as $result ) {
+                $this->WriteQuery($fp, $nquery, $result, $hide);
+                if (!result_must_be_skipped($result))
+                    ++$nquery;
+            }
 		}
 		else
 			$this->WriteCustomTestResults ( $fp );
@@ -3015,15 +3232,17 @@ class SphinxConfig
 		$this->WriteDiff ( $fp );
 		fwrite ( $fp, "\n" );
 
+        $_results = $this->ImportantResults ();
+
 		foreach ( $this->_results_model [ $this->SubtestNo() ] as $ref )
 		{
-			if (!array_key_exists ($nquery,$this->_results))
+			if (!array_key_exists ($nquery,$_results))
 			{
 				printf ( "FAILED, model has more results than current test.\n" );
 				break;
 			}
 
-			$cur = $this->_results[$nquery];
+			$cur = $_results[$nquery];
 			if ( $this->CompareResultSets ( $ref, $cur ) )
 			{
 				$nquery++;
@@ -3035,7 +3254,7 @@ class SphinxConfig
 				if ( @$cur["attrs"]!=@$ref["attrs"] )
 					$opts["format_attrs"] = 1;
 
-			$result_f_cur = $this->FormatResultSet ( $nquery+1, $this->_results[$nquery], $opts );
+			$result_f_cur = $this->FormatResultSet ( $nquery+1, $_results[$nquery], $opts );
 			$result_f_ref = $this->FormatResultSet ( $nquery+1, $ref, $opts );
 			file_put_contents ( "current", $result_f_cur );
 			file_put_contents ( "reference", $result_f_ref );
@@ -3053,7 +3272,7 @@ class SphinxConfig
 		}
 
 		$nref = count ( array_keys ( $this->_results_model [ $this->SubtestNo() ] ) );
-		$nres = count ( array_keys ( $this->_results ) );
+		$nres = count ( array_keys ( $_results ) );
 		if ( $nres > $nref )
 		{
 			$delta = $nres - $nref;
@@ -4211,7 +4430,9 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 
 		WriteExamples ( $example_file, $examples );
 
-		$allmatch = $isdemo || IsModelGenMode() || $config->CompareToModel();
+        $showall = $isdemo || IsModelGenMode();
+
+		$allmatch = $showall || $config->CompareToModel();
 		if ( !$allmatch )
 		{
 			$log .= "\tsubtest $subtest: query results mismatch; see $report_file\n";
@@ -4221,7 +4442,9 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 		if ( $isdemo )
 			$log .= "\tdemo/bugreport $subtest done; see $report_file\n";
 
-		$config->WriteResults ( $report );
+
+
+		$config->WriteResults ( $report, !$showall );
 
 		if ( !$allmatch )
 		{

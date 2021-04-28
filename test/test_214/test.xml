@@ -32,177 +32,119 @@ index rt
 }
 </config>
 
-<custom_test><![CDATA[
-$query = function ( $query,$sock,&$results )
-{
-$results[] = "running query [$query]";
+<queries>
+	<repeat count="8000" vars="i data1 data2 data3 data4" init="1 10 11 12 0.2" inc="1 10 10 10 0.2">
+		<sphinxql skip="1">
+			INSERT INTO rt ( id, title, data1, data2, data3, data4 ) VALUES ( <i/>, 'title_<i/>', <data1/>, <data2/>, <data3/>, <data4/> )
+		</sphinxql>
+	</repeat>
 
-$res = @mysql_query ( $query, $sock );
-if ($res===true)
-{
-	$results[] = "total_affected=" . @mysql_affected_rows($sock);
-}
-else if ($res===false)
-{
-	$results[] = "res=$res";
-	$results[] = "error: query: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
-}
-else
-{
-	$results[] = "total_rows=" . @mysql_num_rows($res);
-	while ($row = @mysql_fetch_array($res, MYSQL_ASSOC))
-	{
-		foreach ($row as $key => $value)
-			$foo[$key] = $value;
-		$results[] = $foo;
-	}	
-}
-};
+	<sphinxql>
+<!-- that should be disk chunk 0 -->
+select * from rt where id between 10 and 12 order by id asc;
+<!-- that should be disk chunk 1 -->
+select * from rt where id between 3500 and 3502 order by id asc;
+<!-- that should be ram chunk -->
+select * from rt where id between 6500 and 6502 order by id asc;
 
-global $g_locals, $sd_address, $sd_sphinxql_port;
-$results = array();
-$sockStr = "$sd_address:$sd_sphinxql_port";
-if ($sd_address == "localhost")
-	$sockStr = "127.0.0.1:$sd_sphinxql_port";
-$sock = @mysql_connect (
-	$sockStr,
-	$g_locals['db-user'],
-	$g_locals['db-password'] ,
-	true );
+alter table rt add column add1 integer;
 
-if ( $sock === false )
-{
-	$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
-	return;
-}
+select * from rt where id between 10 and 12 order by id asc;
+select * from rt where id between 3500 and 3502 order by id asc;
+select * from rt where id between 6500 and 6502 order by id asc;
 
-$inserted = 0;
-for ( $i=1; $i<=8000; $i++ )
-{
-	$data1 = $i*10;
-	$data2 = $i*10+1;
-	$data3 = $i*10+2;
-	$data4 = $i/5;
-	$title = "title_$i";
-	$str = "INSERT INTO rt ( id, title, data1, data2, data3, data4 ) VALUES ( $i, '$title', $data1, $data2, $data3, $data4 )";
-	$res = @mysql_query ( $str, $sock );
-	if ($res===true)
-	{
-		$inserted += mysql_affected_rows($sock);
-	}	
-	else
-	{
-		$results[] = "error: insert: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
-		return;
-	}
-}
-$results[] = "total inserted=$inserted";
+update rt set add1=11 where id=11;
+update rt set add1=3501 where id=3501;
+update rt set add1=6501 where id=6501;
 
-$query ( "select * from rt where id between 10 and 12 order by id asc", $sock, $results );		// that should be disk chunk 0
-$query ( "select * from rt where id between 3500 and 3502 order by id asc", $sock, $results );	// that should be disk chunk 1
-$query ( "select * from rt where id between 6500 and 6502 order by id asc", $sock, $results );	// that should be ram chunk
+select * from rt where id between 10 and 12 order by id asc;
+select * from rt where id between 3500 and 3502 order by id asc;
+select * from rt where id between 6500 and 6502 order by id asc;
 
-$query ( "alter table rt add column add1 integer", $sock, $results );
+flush rtindex rt;
 
-$query ( "select * from rt where id between 10 and 12 order by id asc", $sock, $results );
-$query ( "select * from rt where id between 3500 and 3502 order by id asc", $sock, $results );
-$query ( "select * from rt where id between 6500 and 6502 order by id asc", $sock, $results );
+select * from rt where id between 10 and 12 order by id asc;
+select * from rt where id between 3500 and 3502 order by id asc;
+select * from rt where id between 6500 and 6502 order by id asc;
 
-$query ( "update rt set add1=11 where id=11", $sock, $results );
-$query ( "update rt set add1=3501 where id=3501", $sock, $results );
-$query ( "update rt set add1=6501 where id=6501", $sock, $results );
+alter table rt add column add2 float;
 
-$query ( "select * from rt where id between 10 and 12 order by id asc", $sock, $results );
-$query ( "select * from rt where id between 3500 and 3502 order by id asc", $sock, $results );
-$query ( "select * from rt where id between 6500 and 6502 order by id asc", $sock, $results );
+select * from rt where id between 10 and 12 order by id asc;
+select * from rt where id between 3500 and 3502 order by id asc;
+select * from rt where id between 6500 and 6502 order by id asc;
 
-$query ( "flush rtindex rt", $sock, $results );
+update rt set add2=0.111 where id=10;
+update rt set add2=0.222 where id=3500;
+update rt set add2=0.333 where id=6500;
 
-$query ( "select * from rt where id between 10 and 12 order by id asc", $sock, $results );
-$query ( "select * from rt where id between 3500 and 3502 order by id asc", $sock, $results );
-$query ( "select * from rt where id between 6500 and 6502 order by id asc", $sock, $results );
+select * from rt where id between 10 and 12 order by id asc;
+select * from rt where id between 3500 and 3502 order by id asc;
+select * from rt where id between 6500 and 6502 order by id asc;
 
-$query ( "alter table rt add column add2 float", $sock, $results );
+alter table rt drop column data1;
+select * from rt where id between 10 and 12 order by id asc;
+select * from rt where id between 3500 and 3502 order by id asc;
+select * from rt where id between 6500 and 6502 order by id asc;
 
-$query ( "select * from rt where id between 10 and 12 order by id asc", $sock, $results );
-$query ( "select * from rt where id between 3500 and 3502 order by id asc", $sock, $results );
-$query ( "select * from rt where id between 6500 and 6502 order by id asc", $sock, $results );
+alter table rt drop column data1;
 
-$query ( "update rt set add2=0.111 where id=10", $sock, $results );
-$query ( "update rt set add2=0.222 where id=3500", $sock, $results );
-$query ( "update rt set add2=0.333 where id=6500", $sock, $results );
+alter table rt drop column data2;
+select * from rt where id between 10 and 12 order by id asc;
+select * from rt where id between 3500 and 3502 order by id asc;
+select * from rt where id between 6500 and 6502 order by id asc;
 
-$query ( "select * from rt where id between 10 and 12 order by id asc", $sock, $results );
-$query ( "select * from rt where id between 3500 and 3502 order by id asc", $sock, $results );
-$query ( "select * from rt where id between 6500 and 6502 order by id asc", $sock, $results );
+alter table rt drop column data3;
+select * from rt where id between 10 and 12 order by id asc;
+select * from rt where id between 3500 and 3502 order by id asc;
+select * from rt where id between 6500 and 6502 order by id asc;
 
-$query ( "alter table rt drop column data1", $sock, $results );
-$query ( "select * from rt where id between 10 and 12 order by id asc", $sock, $results );
-$query ( "select * from rt where id between 3500 and 3502 order by id asc", $sock, $results );
-$query ( "select * from rt where id between 6500 and 6502 order by id asc", $sock, $results );
+alter table rt drop column data4;
+select * from rt where id between 10 and 12 order by id asc;
+select * from rt where id between 3500 and 3502 order by id asc;
+select * from rt where id between 6500 and 6502 order by id asc;
 
-$query ( "alter table rt drop column data1", $sock, $results );
+alter table rt drop column add1;
+select * from rt where id between 10 and 12 order by id asc;
+select * from rt where id between 3500 and 3502 order by id asc;
+select * from rt where id between 6500 and 6502 order by id asc;
 
-$query ( "alter table rt drop column data2", $sock, $results );
-$query ( "select * from rt where id between 10 and 12 order by id asc", $sock, $results );
-$query ( "select * from rt where id between 3500 and 3502 order by id asc", $sock, $results );
-$query ( "select * from rt where id between 6500 and 6502 order by id asc", $sock, $results );
+alter table rt drop column add2;
+select * from rt where id between 10 and 12 order by id asc;
+select * from rt where id between 3500 and 3502 order by id asc;
+select * from rt where id between 6500 and 6502 order by id asc;
 
-$query ( "alter table rt drop column data3", $sock, $results );
-$query ( "select * from rt where id between 10 and 12 order by id asc", $sock, $results );
-$query ( "select * from rt where id between 3500 and 3502 order by id asc", $sock, $results );
-$query ( "select * from rt where id between 6500 and 6502 order by id asc", $sock, $results );
+alter table rt drop column add2;
 
-$query ( "alter table rt drop column data4", $sock, $results );
-$query ( "select * from rt where id between 10 and 12 order by id asc", $sock, $results );
-$query ( "select * from rt where id between 3500 and 3502 order by id asc", $sock, $results );
-$query ( "select * from rt where id between 6500 and 6502 order by id asc", $sock, $results );
+alter table rt add column add3 float;
+select * from rt where id between 10 and 12 order by id asc;
+select * from rt where id between 3500 and 3502 order by id asc;
+select * from rt where id between 6500 and 6502 order by id asc;
+update rt set add3=0.111 where id=10;
+update rt set add3=0.222 where id=3500;
+update rt set add3=0.333 where id=6500;
 
-$query ( "alter table rt drop column add1", $sock, $results );
-$query ( "select * from rt where id between 10 and 12 order by id asc", $sock, $results );
-$query ( "select * from rt where id between 3500 and 3502 order by id asc", $sock, $results );
-$query ( "select * from rt where id between 6500 and 6502 order by id asc", $sock, $results );
+select * from rt where id between 10 and 12 order by id asc;
+select * from rt where id between 3500 and 3502 order by id asc;
+select * from rt where id between 6500 and 6502 order by id asc;
 
-$query ( "alter table rt drop column add2", $sock, $results );
-$query ( "select * from rt where id between 10 and 12 order by id asc", $sock, $results );
-$query ( "select * from rt where id between 3500 and 3502 order by id asc", $sock, $results );
-$query ( "select * from rt where id between 6500 and 6502 order by id asc", $sock, $results );
+alter table rt drop column add3;
 
-$query ( "alter table rt drop column add2", $sock, $results );
+select * from rt where id between 10 and 12 order by id asc;
+select * from rt where id between 3500 and 3502 order by id asc;
+select * from rt where id between 6500 and 6502 order by id asc;
 
-$query ( "alter table rt add column add3 float", $sock, $results );
-$query ( "select * from rt where id between 10 and 12 order by id asc", $sock, $results );
-$query ( "select * from rt where id between 3500 and 3502 order by id asc", $sock, $results );
-$query ( "select * from rt where id between 6500 and 6502 order by id asc", $sock, $results );
-$query ( "update rt set add3=0.111 where id=10", $sock, $results );
-$query ( "update rt set add3=0.222 where id=3500", $sock, $results );
-$query ( "update rt set add3=0.333 where id=6500", $sock, $results );
+<!-- testing quoted columns vs expressions -->
+alter table rt add column select integer;
+alter table rt add column `select` integer;
+select `select` from rt where id=10;
+select min(`select`,`select`+1) from rt where id=10;
+select `select`=1 from rt where id=10;
 
-$query ( "select * from rt where id between 10 and 12 order by id asc", $sock, $results );
-$query ( "select * from rt where id between 3500 and 3502 order by id asc", $sock, $results );
-$query ( "select * from rt where id between 6500 and 6502 order by id asc", $sock, $results );
-
-$query ( "alter table rt drop column add3", $sock, $results );
-
-$query ( "select * from rt where id between 10 and 12 order by id asc", $sock, $results );
-$query ( "select * from rt where id between 3500 and 3502 order by id asc", $sock, $results );
-$query ( "select * from rt where id between 6500 and 6502 order by id asc", $sock, $results );
-
-// testing quoted columns vs expressions
-$query ( "alter table rt add column select integer", $sock, $results );
-$query ( "alter table rt add column `select` integer", $sock, $results );
-$query ( "select `select` from rt where id=10", $sock, $results );
-$query ( "select min(`select`,`select`+1) from rt where id=10", $sock, $results );
-$query ( "select `select`=1 from rt where id=10", $sock, $results );
-
-// add and drop attr named as field
-$query ( "alter table rt add column title integer", $sock, $results );
-$query ( "alter table rt add column title string", $sock, $results );
-$query ( "insert into rt (id, title) values (10101, 'test me')", $sock, $results );
-$query ( "select id, title from rt where id=10101", $sock, $results );
-
-@mysql_close($sock);
-	
-]]></custom_test>
-
+<!-- add and drop attr named as field -->
+alter table rt add column title integer;
+alter table rt add column title string;
+insert into rt (id, title) values (10101, 'test me');
+select id, title from rt where id=10101;
+	</sphinxql>
+</queries>
 </test>

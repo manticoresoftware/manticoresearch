@@ -54,15 +54,17 @@ CREATE TABLE test_table
 <db_insert>
 <![CDATA[insert into test_table values ( 4, 4, 'a <p>  <p> <zone_A>  <p> <p> <p> couple <p> <p> <p> of trooper</zone_A>' );]]></db_insert>
 
-<SPHQueries>
-	<SPHinxQL>select * from test where match( '"the para"~2' )</SPHinxQL>
-	<SPHinxQL>select * from test where match( '"the para"~3' )</SPHinxQL>
-	<SPHinxQL>select * from test where match( '"the zone"~2' )</SPHinxQL>
-	<SPHinxQL>select * from test where match( 'ZONE:zone_A para' )</SPHinxQL>	
-	<SPHinxQL>select * from test where match( 'couple PARAGRAPH trooper' )</SPHinxQL>	
-	<SPHinxQL>select * from test where match( 'of PARAGRAPH trooper' )</SPHinxQL>	
-	<SPHinxQL>select * from test where match( 'ZONE:zone_A "couple of"~2' )</SPHinxQL>	
-	<SPHinxQL>select * from test where match( '"one two"~0' )</SPHinxQL>
-</SPHQueries>
+<queries>
+<sphinxql>
+	select * from test where match( '"the para"~2' );
+	select * from test where match( '"the para"~3' );
+	select * from test where match( '"the zone"~2' );
+	select * from test where match( 'ZONE:zone_A para' );
+	select * from test where match( 'couple PARAGRAPH trooper' );
+	select * from test where match( 'of PARAGRAPH trooper' );
+	select * from test where match( 'ZONE:zone_A "couple of"~2' );
+	select * from test where match( '"one two"~0' );
+</sphinxql>
+</queries>
 
 </Test>

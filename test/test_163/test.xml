@@ -321,86 +321,85 @@ INSERT INTO `test_table` VALUES
 ( 9, 3, 	'c cc',		'the' )
 </db_insert>
 
-<sphqueries>
-<sphinxql>select * from dist1 order by str2 asc, idd1 desc</sphinxql>
-<sphinxql>select * from dist1 order by str2 desc, idd1 asc</sphinxql>
-<sphinxql>select * from dist2 order by str1 asc</sphinxql>
-<sphinxql>select * from dist2 order by str1 desc</sphinxql>
-<sphinxql>select * from dist3 order by str1 asc, id asc</sphinxql>
-<sphinxql>select * from dist3 order by str1 desc, idd1 desc</sphinxql>
-
-<!-- here is going new feature seamless conversion of result set attributes ( bool -> float ) | ( bool -> uint -> bigint ) -->
-<sphinxql>select * from u_bool, u_float</sphinxql>
-<sphinxql>select * from u_float, u_bool</sphinxql>
-<sphinxql>select * from u_bool, u_uint, u_bigint</sphinxql>
-<sphinxql>select * from u_uint, u_bool, u_bigint</sphinxql>
-<sphinxql>select * from u_uint, u_bigint, u_bool</sphinxql>
-<sphinxql>select * from u_bigint, u_uint, u_bool </sphinxql>
-<sphinxql>select * from u_dist10</sphinxql>
-<sphinxql>select * from u_dist11</sphinxql>
-<sphinxql>select * from u_dist20</sphinxql>
-<sphinxql>select * from u_dist21</sphinxql>
-<sphinxql>select * from u_dist22</sphinxql>
-<sphinxql>select * from u_dist23</sphinxql>
-<!-- still invalid -->
-<sphinxql>select * from u_float, u_uint</sphinxql>
-<sphinxql>select * from u_float, u_bigint</sphinxql>
-<sphinxql>select * from u_uint, u_float</sphinxql>
-<sphinxql>select * from u_bigint, u_float</sphinxql>
-<!-- test of exist function -->
-<sphinxql>select * from u_dist_aa order by id asc</sphinxql>
-<sphinxql>select *, exist ( ' aTTr2', 11 ) as cnd from u_dist_aa where cnd=11 order by id asc</sphinxql>
-<sphinxql>select *, exist ( ' Attr1', 1 ) as cnd from u_dist_aa where cnd=1 order by id asc</sphinxql>
-<!-- regression schema attributes with alias -->
-<sphinxql>select tag, idd1, idd1 * 2 as rr from dist2 order by id asc</sphinxql>
-<sphinxql>select tag, idd1 as r0, r0 * 2 as rr from dist2 order by id asc</sphinxql>
-<!-- alias as shema attribute -->
-<sphinxql>select tag, idd1 as str1, str1 as str2 from dist2 order by id asc</sphinxql>
-<!-- checking attribute aliases -->
-<sphinxql>select str1 as str11 from main</sphinxql>
-
-<!-- regression exist -->
-<sphinxql>select *, exist ( 'mva', 1000 ) + id as cnd1 from idx_mva where cnd1 &lt; 5</sphinxql>
-<sphinxql>select *, exist ( 'body', 1 ) as b from idx_mva</sphinxql>
-
-<!--regression API count(*) vs compat -->
-<sphinxql>SELECT *, count(*) as cnt, 1 as gr FROM main GROUP BY gr</sphinxql>
-
-<!-- regression bigint function vs udf return type -->
-<sphinxql>select *, bigint(idd1) b, min( bigint(idd1)) c from main</sphinxql>
-<sphinxql>select *, bigint(idd1) b, min( bigint(idd1)) c, 1 as gr from main GROUP BY gr</sphinxql>
-
-<!-- empty result set with count(*) -->
-<sphinxql>select count(*) from count2 where id in (1,2); show meta</sphinxql>
-<sphinxql>select *, count(*) from count2 where id in (1,2); show meta</sphinxql>
-<sphinxql>select count(*) from count1, count2 where id in (1,2); show meta</sphinxql>
-<sphinxql>select count(*) from count2, count1 where id in (1,2); show meta</sphinxql>
-<sphinxql>select *, count(*) from count1, count2 where id in (1,2); show meta</sphinxql>
-<sphinxql>select *, count(*) from count2, count1 where id in (1,2); show meta</sphinxql>
-<sphinxql>select idd, count(*) from count1, count2 where id in (1,2); show meta</sphinxql>
-<sphinxql>select idd, count(*) from count2, count1 where id in (1,2); show meta</sphinxql>
-<sphinxql>select *, count(*) from count1, count2 where id in (100); show meta</sphinxql>
-<sphinxql>select idd, count(*) from count2, count1 where id in (100); show meta</sphinxql>
-<sphinxql>select count(*) from dist_count1 where id in (1,2); show meta</sphinxql>
-<sphinxql>select count(*) from dist_count2 where id in (1,2); show meta</sphinxql>
-<sphinxql>select *, count(*) from dist_count1 where id in (1,2); show meta</sphinxql>
-<sphinxql>select *, count(*) from dist_count2 where id in (1,2); show meta</sphinxql>
-<sphinxql>select idd, count(*) from dist_count1 where id in (1,2); show meta</sphinxql>
-<sphinxql>select idd, count(*) from dist_count2 where id in (10,11); show meta</sphinxql>
-<sphinxql>select *, count(*) from dist_count1 where id in (100); show meta</sphinxql>
-<sphinxql>select idd, count(*) from dist_count2 where id in (100); show meta</sphinxql>
-
-<!-- empty result set with constant columns -->
-<sphinxql>select *, 123456, 2+2, sin(1.0), sin(idd), idd+1, count(*) from count2</sphinxql>
-<sphinxql>select *, 123456, 2+2, sin(1.0), sin(idd), idd+1, count(*) from count2 where id in (1,2)</sphinxql>
-
-<!-- empty result set with multiple counts -->
-<sphinxql>select idd i, count(*), idd b, count(*) c, count(distinct i) from count2  where id in (1,2)</sphinxql>
-<sphinxql>select idd i, count(*), idd b, count(*) c, count(distinct i) d from count2  where id in (1,2)</sphinxql>
-
-</sphqueries>
-
 <queries>
-<query select="*, count(*) as cnt, 1 as gr " groupfunc="attr" groupattr="gr" index="main"/>
-</queries>
+	<query select="*, count(*) as cnt, 1 as gr " groupfunc="attr" groupattr="gr" index="main"/>
+<sphinxql>
+	select * from dist1 order by str2 asc, idd1 desc;
+	select * from dist1 order by str2 desc, idd1 asc;
+	select * from dist2 order by str1 asc;
+	select * from dist2 order by str1 desc;
+	select * from dist3 order by str1 asc, id asc;
+	select * from dist3 order by str1 desc, idd1 desc;
+
+	<!-- here is going new feature seamless conversion of result set attributes ( bool -> float ) | ( bool -> uint -> bigint ) -->
+	select * from u_bool, u_float;
+	select * from u_float, u_bool;
+	select * from u_bool, u_uint, u_bigint;
+	select * from u_uint, u_bool, u_bigint;
+	select * from u_uint, u_bigint, u_bool;
+	select * from u_bigint, u_uint, u_bool ;
+	select * from u_dist10;
+	select * from u_dist11;
+	select * from u_dist20;
+	select * from u_dist21;
+	select * from u_dist22;
+	select * from u_dist23;
+	<!-- still invalid -->
+	select * from u_float, u_uint;
+	select * from u_float, u_bigint;
+	select * from u_uint, u_float;
+	select * from u_bigint, u_float;
+	<!-- test of exist function -->
+	select * from u_dist_aa order by id asc;
+	select *, exist ( ' aTTr2', 11 ) as cnd from u_dist_aa where cnd=11 order by id asc;
+	select *, exist ( ' Attr1', 1 ) as cnd from u_dist_aa where cnd=1 order by id asc;
+	<!-- regression schema attributes with alias -->
+	select tag, idd1, idd1 * 2 as rr from dist2 order by id asc;
+	select tag, idd1 as r0, r0 * 2 as rr from dist2 order by id asc;
+	<!-- alias as shema attribute -->
+	select tag, idd1 as str1, str1 as str2 from dist2 order by id asc;
+	<!-- checking attribute aliases -->
+	select str1 as str11 from main;
+
+	<!-- regression exist -->
+	select *, exist ( 'mva', 1000 ) + id as cnd1 from idx_mva where cnd1 &lt; 5;
+	select *, exist ( 'body', 1 ) as b from idx_mva;
+
+	<!--regression API count(*) vs compat -->
+	SELECT *, count(*) as cnt, 1 as gr FROM main GROUP BY gr;
+
+	<!-- regression bigint function vs udf return type -->
+	select *, bigint(idd1) b, min( bigint(idd1)) c from main;
+	select *, bigint(idd1) b, min( bigint(idd1)) c, 1 as gr from main GROUP BY gr;
+
+	<!-- empty result set with count(*) -->
+	select count(*) from count2 where id in (1,2); show meta;
+	select *, count(*) from count2 where id in (1,2); show meta;
+	select count(*) from count1, count2 where id in (1,2); show meta;
+	select count(*) from count2, count1 where id in (1,2); show meta;
+	select *, count(*) from count1, count2 where id in (1,2); show meta;
+	select *, count(*) from count2, count1 where id in (1,2); show meta;
+	select idd, count(*) from count1, count2 where id in (1,2); show meta;
+	select idd, count(*) from count2, count1 where id in (1,2); show meta;
+	select *, count(*) from count1, count2 where id in (100); show meta;
+	select idd, count(*) from count2, count1 where id in (100); show meta;
+	select count(*) from dist_count1 where id in (1,2); show meta;
+	select count(*) from dist_count2 where id in (1,2); show meta;
+	select *, count(*) from dist_count1 where id in (1,2); show meta;
+	select *, count(*) from dist_count2 where id in (1,2); show meta;
+	select idd, count(*) from dist_count1 where id in (1,2); show meta;
+	select idd, count(*) from dist_count2 where id in (10,11); show meta;
+	select *, count(*) from dist_count1 where id in (100); show meta;
+	select idd, count(*) from dist_count2 where id in (100); show meta;
+
+	<!-- empty result set with constant columns -->
+	select *, 123456, 2+2, sin(1.0), sin(idd), idd+1, count(*) from count2;
+	select *, 123456, 2+2, sin(1.0), sin(idd), idd+1, count(*) from count2 where id in (1,2);
+
+	<!-- empty result set with multiple counts -->
+	select idd i, count(*), idd b, count(*) c, count(distinct i) from count2  where id in (1,2);
+	select idd i, count(*), idd b, count(*) c, count(distinct i) d from count2  where id in (1,2);
+
+</sphinxql></queries>
+
 </test>

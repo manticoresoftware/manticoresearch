@@ -130,13 +130,14 @@ $results[] = $client->Query ('', $index);
 
 ]]></Query_Settings>
 
-<Queries><Query/></Queries>
+<queries>
+	<query/>
+<sphinxql>
+	select missed from products; select * from products;
 
-<sphqueries>
-<sphinxql>select missed from products; select * from products</sphinxql>
-
-<!-- regression SET and new SHOW statements at multi query-->
-<sphinxql>set profiling=1; select id from idx3 where match ( 'test' ); show plan; show meta; set profiling=1; show plan; show meta</sphinxql>
-</sphqueries>
+	<!-- regression SET and new SHOW statements at multi query-->
+	set profiling=1; select id from idx3 where match ( 'test' ); show plan; show meta; set profiling=1; show plan; show meta;
+</sphinxql>
+</queries>
 
 </test>

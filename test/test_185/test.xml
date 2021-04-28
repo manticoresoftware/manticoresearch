@@ -123,32 +123,32 @@ index rt
 
 </config>
 
-<sphqueries>
-<sphinxql>insert into rt (id, gid, mva1, mva2, body) values (1, 11, (1, 1), (2), 'dummy'), (3, 33, (3, 3), (3), 'dummy1')</sphinxql>
-<sphinxql>update dist_no set mva1=(3,2, 1, 2), mva1=(1, 2), section=111 where match ('test1')</sphinxql>
-<sphinxql>select * from dist_no</sphinxql>
-<sphinxql>update dist0 set mva1=(4,5, 1, 2), mva1=(8, 7), section=112 where match ('test1')</sphinxql>
-<sphinxql>select * from dist0</sphinxql>
-<sphinxql>update dist1 set mva1=(3,2, 1, 2), mva1=(9, 10), section=113 where match ('testt') and id>=2</sphinxql>
-<sphinxql>select * from dist1</sphinxql>
-<sphinxql>update dist2 set mva1=(3,2, 1, 2), mva1=(11, 12), section=114 where match ('testt') and id>=2</sphinxql>
-<sphinxql>select * from dist2</sphinxql>
-<sphinxql>update dist3 set mva1=(3,2, 1, 2), mva1=(13, 14), section=115 where gid match ('testt') and id>=2</sphinxql>
-<sphinxql>select * from dist3</sphinxql>
-<sphinxql>update dist4 set mva1=(3,2, 1, 2), mva1=(15, 16), section=116 where match ('testt') and id>=2</sphinxql>
-<sphinxql>select * from dist4</sphinxql>
-<sphinxql>update dist5 set mva1=(3,2, 1, 2), mva1=(17, 18), section=117 where match ('testt') and id>=2</sphinxql>
-<sphinxql>select * from dist5</sphinxql>
-<sphinxql>update rt set mva1=(3,2, 1, 2), gid=3212, mva2=(1, 2, 3, 4, 5, 6), mva2=(3,4,5) where id=1</sphinxql>
-<sphinxql>select * from rt</sphinxql>
-<sphinxql>update rt set mva1=() where id=3</sphinxql>
-<sphinxql>select * from rt</sphinxql>
+<queries><sphinxql>
+insert into rt (id, gid, mva1, mva2, body) values (1, 11, (1, 1), (2), 'dummy'), (3, 33, (3, 3), (3), 'dummy1');
+update dist_no set mva1=(3,2, 1, 2), mva1=(1, 2), section=111 where match ('test1');
+select * from dist_no;
+update dist0 set mva1=(4,5, 1, 2), mva1=(8, 7), section=112 where match ('test1');
+select * from dist0;
+update dist1 set mva1=(3,2, 1, 2), mva1=(9, 10), section=113 where match ('testt') and id>=2;
+select * from dist1;
+update dist2 set mva1=(3,2, 1, 2), mva1=(11, 12), section=114 where match ('testt') and id>=2;
+select * from dist2;
+update dist3 set mva1=(3,2, 1, 2), mva1=(13, 14), section=115 where gid match ('testt') and id>=2;
+select * from dist3;
+update dist4 set mva1=(3,2, 1, 2), mva1=(15, 16), section=116 where match ('testt') and id>=2;
+select * from dist4;
+update dist5 set mva1=(3,2, 1, 2), mva1=(17, 18), section=117 where match ('testt') and id>=2;
+select * from dist5;
+update rt set mva1=(3,2, 1, 2), gid=3212, mva2=(1, 2, 3, 4, 5, 6), mva2=(3,4,5) where id=1;
+select * from rt;
+update rt set mva1=() where id=3;
+select * from rt;
 
 <!-- regression update of documents with large doc-id  -->
-<sphinxql>insert into rt (id, gid, body) values (1332324836583669761, 100, 'v1'),(1332324836613029890, 200, 'v200')</sphinxql>
-<sphinxql>update rt set gid=0 where id in(1332324836583669761,1332324836613029890);</sphinxql>
-<sphinxql>select * from rt</sphinxql>
-</sphqueries>
+insert into rt (id, gid, body) values (1332324836583669761, 100, 'v1'),(1332324836613029890, 200, 'v200');
+update rt set gid=0 where id in(1332324836583669761,1332324836613029890);;
+select * from rt;
+</sphinxql></queries>
 
   <DB_Create>
 CREATE TABLE `test_table` (

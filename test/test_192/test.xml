@@ -166,77 +166,77 @@ index test20
 
 <db_insert>select 1;</db_insert>
 
-<sphqueries>
-<sphinxql>SELECT * FROM test WHERE MATCH('3+rd text')</sphinxql>
-<sphinxql>SHOW META</sphinxql>
-<sphinxql>SELECT * FROM test WHERE MATCH('3-rd text')</sphinxql>
-<sphinxql>SHOW META</sphinxql>
-<sphinxql>SELECT * FROM test WHERE MATCH('3\\@rd text')</sphinxql>
-<sphinxql>SHOW META</sphinxql>
-<sphinxql>CALL KEYWORDS ( 'man', 'test' )</sphinxql>
+<queries><sphinxql>
+SELECT * FROM test WHERE MATCH('3+rd text');
+SHOW META;
+SELECT * FROM test WHERE MATCH('3-rd text');
+SHOW META;
+SELECT * FROM test WHERE MATCH('3\\@rd text');
+SHOW META;
+CALL KEYWORDS ( 'man', 'test' );
 <!-- regression - incomplete multi-form vs blended part with wrong hit position -->
-<sphinxql>SELECT * FROM test WHERE MATCH('"a rd text"')</sphinxql>
-<sphinxql>SHOW META</sphinxql>
+SELECT * FROM test WHERE MATCH('"a rd text"');
+SHOW META;
 <!-- regression - blended part vs overshort -->
-<sphinxql>SELECT * FROM test10 WHERE MATCH('"test a text"')</sphinxql>
-<sphinxql>SHOW META</sphinxql>
-<sphinxql>SELECT * FROM test11 WHERE MATCH('"test a text"')</sphinxql>
-<sphinxql>SHOW META</sphinxql>
-<sphinxql>CALL SNIPPETS ( 'test 3+3+3+3+real text' , 'test10', ' "test a text" ', 1 as query_mode )</sphinxql>
-<sphinxql>CALL SNIPPETS ( 'test 3+3+3+3+real text' , 'test10', ' "test a text" ', 1 as query_mode, 0 as limit )</sphinxql>
-<sphinxql>SELECT * FROM test WHERE MATCH(' " 3 rd text " ')</sphinxql>
-<sphinxql>SHOW META</sphinxql>
+SELECT * FROM test10 WHERE MATCH('"test a text"');
+SHOW META;
+SELECT * FROM test11 WHERE MATCH('"test a text"');
+SHOW META;
+CALL SNIPPETS ( 'test 3+3+3+3+real text' , 'test10', ' "test a text" ', 1 as query_mode );
+CALL SNIPPETS ( 'test 3+3+3+3+real text' , 'test10', ' "test a text" ', 1 as query_mode, 0 as limit );
+SELECT * FROM test WHERE MATCH(' " 3 rd text " ');
+SHOW META;
 <!-- regression - incomplete multi-form vs blended part -->
-<sphinxql>CALL SNIPPETS ( 'the+ rd box+ must ' , 'test', ' not found ', 1 as query_mode, 0 as limit )</sphinxql>
-<sphinxql>SELECT * FROM test WHERE MATCH('other+none text')</sphinxql>
-<sphinxql>SHOW META</sphinxql>
-<sphinxql>CALL SNIPPETS ('черно-белый, черно-белая, черно-белым  черно-белыми', 'wb', 'черно-белый')</sphinxql>
-<sphinxql>SELECT * FROM wb WHERE MATCH ( ' ru-tor ' )</sphinxql>
-<sphinxql>SELECT * FROM wb WHERE MATCH ( ' ru tor ' )</sphinxql>
-<sphinxql>SELECT * FROM wb WHERE MATCH ( ' pu-tor ' )</sphinxql>
-<sphinxql>SELECT * FROM wb WHERE MATCH ( ' pu tor ' )</sphinxql>
-<sphinxql>SELECT * FROM wb WHERE MATCH ( ' "ru tor" ' )</sphinxql>
-<sphinxql>SELECT * FROM wb WHERE MATCH ( ' "pu tor" ' )</sphinxql>
-<sphinxql>CALL KEYWORDS ( 'ru-tor', 'wb' )</sphinxql>
-<sphinxql>CALL KEYWORDS ( 'ru tor', 'wb' )</sphinxql>
-<sphinxql>CALL KEYWORDS ( 'pu-tor', 'wb' )</sphinxql>
-<sphinxql>CALL KEYWORDS ( 'pu tor', 'wb' )</sphinxql>
+CALL SNIPPETS ( 'the+ rd box+ must ' , 'test', ' not found ', 1 as query_mode, 0 as limit );
+SELECT * FROM test WHERE MATCH('other+none text');
+SHOW META;
+CALL SNIPPETS ('черно-белый, черно-белая, черно-белым  черно-белыми', 'wb', 'черно-белый');
+SELECT * FROM wb WHERE MATCH ( ' ru-tor ' );
+SELECT * FROM wb WHERE MATCH ( ' ru tor ' );
+SELECT * FROM wb WHERE MATCH ( ' pu-tor ' );
+SELECT * FROM wb WHERE MATCH ( ' pu tor ' );
+SELECT * FROM wb WHERE MATCH ( ' "ru tor" ' );
+SELECT * FROM wb WHERE MATCH ( ' "pu tor" ' );
+CALL KEYWORDS ( 'ru-tor', 'wb' );
+CALL KEYWORDS ( 'ru tor', 'wb' );
+CALL KEYWORDS ( 'pu-tor', 'wb' );
+CALL KEYWORDS ( 'pu tor', 'wb' );
 
-<sphinxql>SELECT * FROM wb WHERE MATCH(' "the box" ')</sphinxql>
-<sphinxql>SHOW META</sphinxql>
-<sphinxql>SELECT * FROM wb WHERE MATCH(' the box ')</sphinxql>
-<sphinxql>SHOW META</sphinxql>
-<sphinxql>SELECT * FROM wb WHERE MATCH(' rd text ')</sphinxql>
-<sphinxql>SHOW META</sphinxql>
-<sphinxql>CALL SNIPPETS( 'the-box-of-my goes-here', 'wb', 'the-box-of-my goes-here', 1 as query_mode)</sphinxql>
-<sphinxql>CALL SNIPPETS( 'the-box-of-my goes-here', 'wb', 'the-box-of goes-here', 1 as query_mode)</sphinxql>
-<sphinxql>CALL SNIPPETS( 'the-box-of-my goes-here', 'wb', 'box-of-my goes-here', 1 as query_mode)</sphinxql>
-<sphinxql>SELECT * FROM wb WHERE MATCH('the-box-of-my goes-here')</sphinxql>
-<sphinxql>SELECT * FROM wb WHERE MATCH('the-box-of goes-here')</sphinxql>
-<sphinxql>SELECT * FROM wb WHERE MATCH('box-of-my goes-here')</sphinxql>
+SELECT * FROM wb WHERE MATCH(' "the box" ');
+SHOW META;
+SELECT * FROM wb WHERE MATCH(' the box ');
+SHOW META;
+SELECT * FROM wb WHERE MATCH(' rd text ');
+SHOW META;
+CALL SNIPPETS( 'the-box-of-my goes-here', 'wb', 'the-box-of-my goes-here', 1 as query_mode);
+CALL SNIPPETS( 'the-box-of-my goes-here', 'wb', 'the-box-of goes-here', 1 as query_mode);
+CALL SNIPPETS( 'the-box-of-my goes-here', 'wb', 'box-of-my goes-here', 1 as query_mode);
+SELECT * FROM wb WHERE MATCH('the-box-of-my goes-here');
+SELECT * FROM wb WHERE MATCH('the-box-of goes-here');
+SELECT * FROM wb WHERE MATCH('box-of-my goes-here');
 
-<sphinxql>SELECT * FROM test12 WHERE MATCH('путин')</sphinxql>
-<sphinxql>SELECT id, weight() FROM test12 WHERE MATCH('путин-то')</sphinxql>
-<sphinxql>SELECT * FROM test12 WHERE MATCH('"Военно-промышленная комиссия"')</sphinxql>
+SELECT * FROM test12 WHERE MATCH('путин');
+SELECT id, weight() FROM test12 WHERE MATCH('путин-то');
+SELECT * FROM test12 WHERE MATCH('"Военно-промышленная комиссия"');
 
-<sphinxql>INSERT INTO test12_rt (id, content) VALUES (1, 'путин-то'), (2, 'путиными'), (3, 'путена'), (4, 'Военно-промышленная комиссия превратилась в авторитетную площадку диалога')</sphinxql>
-<sphinxql>SELECT id, weight() FROM test12_rt WHERE MATCH('путин-то')</sphinxql>
+INSERT INTO test12_rt (id, content) VALUES (1, 'путин-то'), (2, 'путиными'), (3, 'путена'), (4, 'Военно-промышленная комиссия превратилась в авторитетную площадку диалога');
+SELECT id, weight() FROM test12_rt WHERE MATCH('путин-то');
 
-<sphinxql>CALL KEYWORDS('intel e8500 cpu', 'test', 1)</sphinxql>
+CALL KEYWORDS('intel e8500 cpu', 'test', 1);
 
 <!-- trim_all blend_mode cases -->
-<sphinxql>SELECT id, content, SNIPPET(content, '3rd') s FROM test_blend_all WHERE MATCH(' 3rd ')</sphinxql>
-<sphinxql>SELECT id, content, SNIPPET(content, '3rd me') s FROM test_blend_all WHERE MATCH(' 3rd me')</sphinxql>
-<sphinxql>SELECT id, content, SNIPPET(content, '3rd45 me') s FROM test_blend_all WHERE MATCH(' 3rd45 me')</sphinxql>
-<sphinxql>SELECT id, content, SNIPPET(content, '"3rd * me"') s FROM test_blend_all WHERE MATCH(' "3rd * me"')</sphinxql>
-<sphinxql>SELECT id, content, SNIPPET(content, '"3rd45 * * * me"') s FROM test_blend_all WHERE MATCH(' "3rd45 * * * me"')</sphinxql>
-<sphinxql>SELECT id, content, SNIPPET(content, '"3rd45 * * * * off"') s FROM test_blend_all WHERE MATCH(' "3rd45 * * * * off"')</sphinxql>
+SELECT id, content, SNIPPET(content, '3rd') s FROM test_blend_all WHERE MATCH(' 3rd ');
+SELECT id, content, SNIPPET(content, '3rd me') s FROM test_blend_all WHERE MATCH(' 3rd me');
+SELECT id, content, SNIPPET(content, '3rd45 me') s FROM test_blend_all WHERE MATCH(' 3rd45 me');
+SELECT id, content, SNIPPET(content, '"3rd * me"') s FROM test_blend_all WHERE MATCH(' "3rd * me"');
+SELECT id, content, SNIPPET(content, '"3rd45 * * * me"') s FROM test_blend_all WHERE MATCH(' "3rd45 * * * me"');
+SELECT id, content, SNIPPET(content, '"3rd45 * * * * off"') s FROM test_blend_all WHERE MATCH(' "3rd45 * * * * off"');
 
 <!-- regression blended head position -->
-<sphinxql>set profiling=1</sphinxql>
-<sphinxql>SELECT * FROM test20 WHERE MATCH ( ' "92X rear" ' )</sphinxql>
-<sphinxql>show plan</sphinxql>
+set profiling=1;
+SELECT * FROM test20 WHERE MATCH ( ' "92X rear" ' );
+show plan;
 
-</sphqueries>
+</sphinxql></queries>
 
 </test>

@@ -116,14 +116,14 @@ CREATE TABLE test_table3
 <db_drop>DROP TABLE IF EXISTS test_table3</db_drop>
 <db_insert>insert into test_table3 values ( 3452816845, 3, 'match1 and match2 vs match3' )</db_insert>
 
-<sphqueries>
-	<sphinxql>select * from test1 where match('aa SENTENCE bb')</sphinxql>	
-	<sphinxql>select * from test1 where match('(aa SENTENCE bb) cc')</sphinxql>	
-	<sphinxql>CALL SNIPPETS ('dummy1 match1 dummy2 match2', 'test1', ' ( match1 NEAR/3 match2 ) | ^missed1 | missed2 ', 1 as query_mode)</sphinxql>
+<queries><sphinxql>
+	select * from test1 where match('aa SENTENCE bb');
+	select * from test1 where match('(aa SENTENCE bb) cc');
+	CALL SNIPPETS ('dummy1 match1 dummy2 match2', 'test1', ' ( match1 NEAR/3 match2 ) | ^missed1 | missed2 ', 1 as query_mode);
 	<!-- here is another regression -->
-	<sphinxql>select * from test2 where match('(ZONE:z_1 aa )') order by id asc</sphinxql>	
+	select * from test2 where match('(ZONE:z_1 aa )') order by id asc;
 	<!-- here is another regression Order with Or parent -->
-	<sphinxql><![CDATA[select * from test3 where match ( ' match1 | ( match5 << match2) ' ) ]]></sphinxql>	
-</sphqueries>
+	<![CDATA[select * from test3 where match ( ' match1 | ( match5 << match2) ' ) ]]>
+</sphinxql></queries>
 
 </Test>

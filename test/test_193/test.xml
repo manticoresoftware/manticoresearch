@@ -76,53 +76,53 @@ INSERT INTO test_table VALUES
 ( 102, 'Word forms are applied after the text morestopwords' )
 </db_insert>
 
-<sphqueries>
-<sphinxql>select * from test where match('moderately')</sphinxql>
-<sphinxql>select * from test where match('implement')</sphinxql>
-<sphinxql>select * from test where match('across')</sphinxql>
-<sphinxql>select * from test where match('forms')</sphinxql>
-<sphinxql>select * from test where match('dictionary')</sphinxql>
-<sphinxql>select * from test where match('incoming')</sphinxql>
-<sphinxql>select * from test where match('stopword')</sphinxql>
-<sphinxql>select * from test where match('anotherstopword')</sphinxql>
-<sphinxql>select * from test where match('morestopwords')</sphinxql>
-<sphinxql>select * from test where match('tokenizing')</sphinxql>
+<queries><sphinxql>
+select * from test where match('moderately');
+select * from test where match('implement');
+select * from test where match('across');
+select * from test where match('forms');
+select * from test where match('dictionary');
+select * from test where match('incoming');
+select * from test where match('stopword');
+select * from test where match('anotherstopword');
+select * from test where match('morestopwords');
+select * from test where match('tokenizing');
 
-<sphinxql>set collation_connection=libc_ci</sphinxql>
-<sphinxql>select title from test2 order by title asc</sphinxql>
-<sphinxql>select title from test2 order by title desc</sphinxql>
-<sphinxql>set collation_connection=libc_cs</sphinxql>
-<sphinxql>select title from test2 order by title asc</sphinxql>
-<sphinxql>select title from test2 order by title desc</sphinxql>
-<sphinxql>set collation_connection=utf8_general_ci</sphinxql>
-<sphinxql>select title from test2 order by title asc</sphinxql>
-<sphinxql>select title from test2 order by title desc</sphinxql>
-<sphinxql>set collation_connection=binary</sphinxql>
-<sphinxql>select title from test2 order by title asc</sphinxql>
-<sphinxql>select title from test2 order by title desc</sphinxql>
+set collation_connection=libc_ci;
+select title from test2 order by title asc;
+select title from test2 order by title desc;
+set collation_connection=libc_cs;
+select title from test2 order by title asc;
+select title from test2 order by title desc;
+set collation_connection=utf8_general_ci;
+select title from test2 order by title asc;
+select title from test2 order by title desc;
+set collation_connection=binary;
+select title from test2 order by title asc;
+select title from test2 order by title desc;
 
 <!-- regression string filter with collation -->
-<sphinxql>set collation_connection=binary</sphinxql>
-<sphinxql>SELECT * FROM i_filter WHERE title='Be'</sphinxql>
-<sphinxql>SELECT * FROM i_filter WHERE j.title='BE'</sphinxql>
-<sphinxql>SELECT * FROM i_filter WHERE title='be'</sphinxql>
-<sphinxql>SELECT * FROM i_filter WHERE j.title='be'</sphinxql>
-<sphinxql>SELECT * FROM i_filter WHERE MATCH ('be') AND title='BE alive'</sphinxql>
-<sphinxql>SELECT * FROM i_filter WHERE MATCH ('be') AND j.title='Be alive'</sphinxql>
-<sphinxql>SELECT * FROM i_filter WHERE MATCH ('be') AND title='be alive'</sphinxql>
-<sphinxql>SELECT * FROM i_filter WHERE MATCH ('be') AND j.title='be alive'</sphinxql>
-<sphinxql>set collation_connection=utf8_general_ci</sphinxql>
-<sphinxql>SELECT * FROM i_filter WHERE title='be'</sphinxql>
-<sphinxql>SELECT * FROM i_filter WHERE j.title='be'</sphinxql>
-<sphinxql>SELECT * FROM i_filter WHERE MATCH ('be') AND title='BE ALIVE'</sphinxql>
-<sphinxql>SELECT * FROM i_filter WHERE MATCH ('be') AND j.title='BE ALIVE'</sphinxql>
-<sphinxql>SELECT * FROM i_filter WHERE title!='be'</sphinxql>
-<sphinxql>SELECT * FROM i_filter WHERE MATCH ('be') AND j.title!='BE'</sphinxql>
+set collation_connection=binary;
+SELECT * FROM i_filter WHERE title='Be';
+SELECT * FROM i_filter WHERE j.title='BE';
+SELECT * FROM i_filter WHERE title='be';
+SELECT * FROM i_filter WHERE j.title='be';
+SELECT * FROM i_filter WHERE MATCH ('be') AND title='BE alive';
+SELECT * FROM i_filter WHERE MATCH ('be') AND j.title='Be alive';
+SELECT * FROM i_filter WHERE MATCH ('be') AND title='be alive';
+SELECT * FROM i_filter WHERE MATCH ('be') AND j.title='be alive';
+set collation_connection=utf8_general_ci;
+SELECT * FROM i_filter WHERE title='be';
+SELECT * FROM i_filter WHERE j.title='be';
+SELECT * FROM i_filter WHERE MATCH ('be') AND title='BE ALIVE';
+SELECT * FROM i_filter WHERE MATCH ('be') AND j.title='BE ALIVE';
+SELECT * FROM i_filter WHERE title!='be';
+SELECT * FROM i_filter WHERE MATCH ('be') AND j.title!='BE';
 
 <!-- regression string expresion with missed json field -->
-<sphinxql>SELECT id, (j.mantle='be alone') as c, j FROM i_filter </sphinxql>
+SELECT id, (j.mantle='be alone') as c, j FROM i_filter ;
 
 
-</sphqueries>
+</sphinxql></queries>
 
 </test>

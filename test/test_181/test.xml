@@ -72,17 +72,16 @@ create table test_table
 
 <queries>
 <query mode="extended2" index="test1 test2" ranker="wordcount" sortmode="expr" sortby="@weight" index_weights="test1:10 test2:1">asdf</query>
-<query mode="extended2" index="test1" index_weights="test1:11"></query>
-<query mode="fullscan" index="test1" index_weights="test1:11"></query>
+<query mode="extended2" index="test1" index_weights="test1:11"/>
+<query mode="fullscan" index="test1" index_weights="test1:11"/>
 <query mode="fullscan" index="test1" index_weights="test1:11">something</query>
-</queries>
 
-<sphqueries>
-<sphinxql>insert into test3 ( id, title ) values ( 1, 'asdf asdf asdf' )</sphinxql>
-<sphinxql>insert into test4 ( id, title ) values ( 2, 'asdf' )</sphinxql>
-<sphinxql>select id, weight() as skey from test3, test4 where match('asdf') option ranker=wordcount, index_weights=(test3=1, test4=10)</sphinxql>
-<sphinxql>select id from test3 option index_weights=(test3=10)</sphinxql>
+<sphinxql>
+insert into test3 ( id, title ) values ( 1, 'asdf asdf asdf' );
+insert into test4 ( id, title ) values ( 2, 'asdf' );
+select id, weight() as skey from test3, test4 where match('asdf') option ranker=wordcount, index_weights=(test3=1, test4=10);
+select id from test3 option index_weights=(test3=10);
 <!-- regression crash on reverse_scan, MOVED to separete test 239 to pass rt mode -->
-</sphqueries>
+</sphinxql></queries>
 
 </test>

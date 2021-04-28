@@ -175,41 +175,39 @@ create table test_table
 <queries>
 	<query index="test" mode="extended2">fu*</query>
 	<query index="test" mode="extended2">func*</query>
-</queries>
+<sphinxql>
+	insert into rt values ( 1, 'the test is going there', 11 );
+	insert into rt values ( 2, 'a sojmething is going here', 12 );
+	insert into rt values ( 3, 'testing is going not here', 13 );
+	select * from rt where match ( 't*' );
+	show meta;
+	<!-- regression prefix vs utf-8 codepoint -->
+	insert into rt_prefix values ( 1001, 'Москва ква', 23 );
+	select * from plain_prefix where match ( 'Мос*' );
+	select * from rt_prefix where match ( 'Мос*' );
 
-<sphqueries>
-<sphinxql>insert into rt values ( 1, 'the test is going there', 11 )</sphinxql>
-<sphinxql>insert into rt values ( 2, 'a sojmething is going here', 12 )</sphinxql>
-<sphinxql>insert into rt values ( 3, 'testing is going not here', 13 )</sphinxql>
-<sphinxql>select * from rt where match ( 't*' )</sphinxql>
-<sphinxql>show meta</sphinxql>
-<!-- regression prefix vs utf-8 codepoint -->
-<sphinxql>insert into rt_prefix values ( 1001, 'Москва ква', 23 )</sphinxql>
-<sphinxql>select * from plain_prefix where match ( 'Мос*' )</sphinxql>
-<sphinxql>select * from rt_prefix where match ( 'Мос*' )</sphinxql>
+	select * from plain_sub_prefix where match('1*');
+	select * from plain_sub_prefix where match('12*');
+	select * from plain_sub_prefix where match('123*');
+	select * from plain_sub_prefix where match('1234*');
 
-<sphinxql>select * from plain_sub_prefix where match('1*')</sphinxql>
-<sphinxql>select * from plain_sub_prefix where match('12*')</sphinxql>
-<sphinxql>select * from plain_sub_prefix where match('123*')</sphinxql>
-<sphinxql>select * from plain_sub_prefix where match('1234*')</sphinxql>
+	select * from plain_sub_infix where match('*5');
+	select * from plain_sub_infix where match('*45');
+	select * from plain_sub_infix where match('*345');
+	select * from plain_sub_infix where match('*2345');
 
-<sphinxql>select * from plain_sub_infix where match('*5')</sphinxql>
-<sphinxql>select * from plain_sub_infix where match('*45')</sphinxql>
-<sphinxql>select * from plain_sub_infix where match('*345')</sphinxql>
-<sphinxql>select * from plain_sub_infix where match('*2345')</sphinxql>
+	<!--regression no infix collected at dict=keywords -->
+	select * from kw_infix where match('1');
+	<!--regression exact form vs infix -->
+	select * from kw_infix_morph where match('r*');
 
-<!--regression no infix collected at dict=keywords -->
-<sphinxql>select * from kw_infix where match('1')</sphinxql>
-<!--regression exact form vs infix -->
-<sphinxql>select * from kw_infix_morph where match('r*')</sphinxql>
+	<!--regression min_prefix_len at plain vs rt -->
+	insert into rt_prefix_limit values ( 1000, 'hello two world', 23 );
+	select * from plain_prefix_limit where match('hello two* world');
+	show meta;
+	select * from rt_prefix_limit where match('hello two* world');
+	show meta;
 
-<!--regression min_prefix_len at plain vs rt -->
-<sphinxql>insert into rt_prefix_limit values ( 1000, 'hello two world', 23 )</sphinxql>
-<sphinxql>select * from plain_prefix_limit where match('hello two* world')</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>select * from rt_prefix_limit where match('hello two* world')</sphinxql>
-<sphinxql>show meta</sphinxql>
-
-</sphqueries>
+</sphinxql></queries>
 
 </test>

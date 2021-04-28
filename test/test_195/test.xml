@@ -88,27 +88,27 @@ CREATE TABLE `test_zone1` (
 	]]>
 </db_insert>
 
-<sphqueries>
-<sphinxql>select * from test where match('ZONESPAN:zoneC cabbages and kings')</sphinxql>
-<sphinxql>select * from test where match('ZONESPAN:(zoneC,zoneB) kings and ships')</sphinxql>
-<sphinxql>select * from test where match('ZONESPAN:zoneC and ships')</sphinxql>
-<sphinxql>select * from test where match('ZONESPAN:zoneC kings and')</sphinxql>
-<sphinxql>select * from test where match('ZONESPAN:zoneC and kings') order by id desc OPTION max_matches=2</sphinxql>
-<sphinxql>select *, zonespanlist() as c from test where match('ZONESPAN:(zoneB,zoneC) ships cabbages') OPTION max_matches=3</sphinxql>
-<sphinxql>select *, zonespanlist() as c from test where match('ZONESPAN:(zoneC,zoneB) ships cabbages') OPTION max_matches=3</sphinxql>
-<sphinxql>select *, zonespanlist() as c from test where match('ZONESPAN:(zoneB,zoneC) ships and') OPTION max_matches=3</sphinxql> 
-<sphinxql>select *, zonespanlist() as c from test where match('ZONESPAN:(zoneC,zoneB) ships and') OPTION max_matches=3</sphinxql>
-<sphinxql>select *, zonespanlist() as c from test where match('ZONESPAN:(zoneC,zoneB) ships and') OPTION max_matches=2,sort_method=kbuffer</sphinxql>
-<sphinxql>select *, zonespanlist() as c from test where match('ZONESPAN:(zoneC,zoneB) ships and') group by gid within group order by id desc OPTION max_matches=2</sphinxql>
+<queries><sphinxql>
+select * from test where match('ZONESPAN:zoneC cabbages and kings');
+select * from test where match('ZONESPAN:(zoneC,zoneB) kings and ships');
+select * from test where match('ZONESPAN:zoneC and ships');
+select * from test where match('ZONESPAN:zoneC kings and');
+select * from test where match('ZONESPAN:zoneC and kings') order by id desc OPTION max_matches=2;
+select *, zonespanlist() as c from test where match('ZONESPAN:(zoneB,zoneC) ships cabbages') OPTION max_matches=3;
+select *, zonespanlist() as c from test where match('ZONESPAN:(zoneC,zoneB) ships cabbages') OPTION max_matches=3;
+select *, zonespanlist() as c from test where match('ZONESPAN:(zoneB,zoneC) ships and') OPTION max_matches=3;
+select *, zonespanlist() as c from test where match('ZONESPAN:(zoneC,zoneB) ships and') OPTION max_matches=3;
+select *, zonespanlist() as c from test where match('ZONESPAN:(zoneC,zoneB) ships and') OPTION max_matches=2,sort_method=kbuffer;
+select *, zonespanlist() as c from test where match('ZONESPAN:(zoneC,zoneB) ships and') group by gid within group order by id desc OPTION max_matches=2;
 <!--regression zonespan for 2+ terms and tail hits -->
-<sphinxql>select *, zonespanlist() l from i1 where match('ZONESPAN:(h1)white wine 1987') order by id asc</sphinxql>
-<sphinxql>select *, zonespanlist() l from i1 where match('ZONESPAN:(h1)1987 white wine') order by id asc</sphinxql>
-<sphinxql>select *, zonespanlist() l from i1 where match('ZONESPAN:(h1)1987 wine white 65') order by id asc</sphinxql>
-<sphinxql>select *, zonespanlist() l from i1 where match('ZONESPAN:(h1)wine white 1987 65') order by id asc</sphinxql>
-<sphinxql>select *, zonespanlist() l from i1 where match('( ZONESPAN:(h1)1987 wine white ) NEAR/3 65') order by id asc</sphinxql>
-<sphinxql>select *, zonespanlist() l from i1 where match('( ZONESPAN:(h1)wine white 1987 ) NEAR/3 65') order by id asc</sphinxql>
+select *, zonespanlist() l from i1 where match('ZONESPAN:(h1)white wine 1987') order by id asc;
+select *, zonespanlist() l from i1 where match('ZONESPAN:(h1)1987 white wine') order by id asc;
+select *, zonespanlist() l from i1 where match('ZONESPAN:(h1)1987 wine white 65') order by id asc;
+select *, zonespanlist() l from i1 where match('ZONESPAN:(h1)wine white 1987 65') order by id asc;
+select *, zonespanlist() l from i1 where match('( ZONESPAN:(h1)1987 wine white ) NEAR/3 65') order by id asc;
+select *, zonespanlist() l from i1 where match('( ZONESPAN:(h1)wine white 1987 ) NEAR/3 65') order by id asc;
 <!--must neither crash nor cut results when we have a shitload of spans-->
-<sphinxql>select *, zonespanlist() l from i1 where match('ZONESPAN:h1 hello world')</sphinxql>
-</sphqueries>
+select *, zonespanlist() l from i1 where match('ZONESPAN:h1 hello world');
+</sphinxql></queries>
 
 </test>

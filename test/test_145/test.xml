@@ -51,48 +51,50 @@ index stop1
 
 <db_insert>select 1;</db_insert>
 
-<sphqueries>
-<sphinxql>CALL SNIPPETS('click edit', 'test', '"click TO edit"', 1 AS query_mode )</sphinxql>
-<sphinxql>CALL SNIPPETS('click word1 WITH edit', 'test', '"click TO word1 edit"', 1 AS query_mode )</sphinxql>
-<sphinxql>CALL SNIPPETS('click WITH word1 edit', 'test', '"click TO word1 edit"', 1 AS query_mode )</sphinxql>
+<queries>
+<sphinxql>
+	CALL SNIPPETS('click edit', 'test', '"click TO edit"', 1 AS query_mode );
+	CALL SNIPPETS('click word1 WITH edit', 'test', '"click TO word1 edit"', 1 AS query_mode );
+	CALL SNIPPETS('click WITH word1 edit', 'test', '"click TO word1 edit"', 1 AS query_mode );
 
-<sphinxql>CALL SNIPPETS('clicking ANY edit', 'test', '"click TO edit"', 1 AS query_mode )</sphinxql>
-<sphinxql>CALL SNIPPETS('click ANY edit', 'test', '"click TO edit"', 1 AS query_mode )</sphinxql>
-<sphinxql>CALL SNIPPETS('edit ANY click', 'test', '"click TO edit"', 1 AS query_mode )</sphinxql>
-<sphinxql>CALL SNIPPETS('clicking WITH ANY AND ALL TO edit', 'test', '"click TO edit"', 1 AS query_mode )</sphinxql>
-<sphinxql>CALL SNIPPETS('click WITH ANY AND ALL TO edit', 'test', '"click TO edit"', 1 AS query_mode )</sphinxql>
+	CALL SNIPPETS('clicking ANY edit', 'test', '"click TO edit"', 1 AS query_mode );
+	CALL SNIPPETS('click ANY edit', 'test', '"click TO edit"', 1 AS query_mode );
+	CALL SNIPPETS('edit ANY click', 'test', '"click TO edit"', 1 AS query_mode );
+	CALL SNIPPETS('clicking WITH ANY AND ALL TO edit', 'test', '"click TO edit"', 1 AS query_mode );
+	CALL SNIPPETS('click WITH ANY AND ALL TO edit', 'test', '"click TO edit"', 1 AS query_mode );
 
-<sphinxql>CALL SNIPPETS('either click, edit', 'test', '"click TO edit"', 1 AS query_mode )</sphinxql>
-<sphinxql>CALL SNIPPETS('either click, edit', 'test', '"click TO ANY AND ALL edit"', 1 AS query_mode )</sphinxql>
+	CALL SNIPPETS('either click, edit', 'test', '"click TO edit"', 1 AS query_mode );
+	CALL SNIPPETS('either click, edit', 'test', '"click TO ANY AND ALL edit"', 1 AS query_mode );
 
-<sphinxql>CALL SNIPPETS('click edit', 'test', '"click TO edit"' )</sphinxql>
-<sphinxql>CALL SNIPPETS('click word1 WITH edit', 'test', '"click TO word1 edit"' )</sphinxql>
-<sphinxql>CALL SNIPPETS('click WITH word1 edit', 'test', '"click TO word1 edit"' )</sphinxql>
+	CALL SNIPPETS('click edit', 'test', '"click TO edit"' );
+	CALL SNIPPETS('click word1 WITH edit', 'test', '"click TO word1 edit"' );
+	CALL SNIPPETS('click WITH word1 edit', 'test', '"click TO word1 edit"' );
 
-<sphinxql>CALL SNIPPETS('clicking ANY edit', 'test', '"click TO edit"' )</sphinxql>
-<sphinxql>CALL SNIPPETS('click ANY edit', 'test', '"click TO edit"' )</sphinxql>
-<sphinxql>CALL SNIPPETS('edit ANY click', 'test', '"click TO edit"' )</sphinxql>
-<sphinxql>CALL SNIPPETS('clicking WITH ANY AND ALL TO edit', 'test', '"click TO edit"' )</sphinxql>
-<sphinxql>CALL SNIPPETS('click WITH ANY AND ALL TO edit', 'test', '"click TO edit"' )</sphinxql>
+	CALL SNIPPETS('clicking ANY edit', 'test', '"click TO edit"' );
+	CALL SNIPPETS('click ANY edit', 'test', '"click TO edit"' );
+	CALL SNIPPETS('edit ANY click', 'test', '"click TO edit"' );
+	CALL SNIPPETS('clicking WITH ANY AND ALL TO edit', 'test', '"click TO edit"' );
+	CALL SNIPPETS('click WITH ANY AND ALL TO edit', 'test', '"click TO edit"' );
 
-<sphinxql>CALL SNIPPETS('either click, edit', 'test', '"click TO edit"' )</sphinxql>
-<sphinxql>CALL SNIPPETS('either click, edit', 'test', '"click TO ANY AND ALL edit"' )</sphinxql>
+	CALL SNIPPETS('either click, edit', 'test', '"click TO edit"' );
+	CALL SNIPPETS('either click, edit', 'test', '"click TO ANY AND ALL edit"' );
 
-<!-- regression hightlight of multiple terms with step 0 -->
-<sphinxql><![CDATA[
-CALL SNIPPETS(('la <a >pizza</a> Pizza yes'), 'stop0', 'pizza', 255 AS limit, 1 AS query_mode);
-]]></sphinxql>
-<sphinxql><![CDATA[
-CALL SNIPPETS(('la <a >pizza</a> test Pizza yes'), 'stop1', 'pizza', 255 AS limit, 1 AS query_mode);
-]]></sphinxql>
+	<!-- regression hightlight of multiple terms with step 0 -->
+	<![CDATA[
+	CALL SNIPPETS(('la <a >pizza</a> Pizza yes'), 'stop0', 'pizza', 255 AS limit, 1 AS query_mode);
+	]]>
+	<![CDATA[
+	CALL SNIPPETS(('la <a >pizza</a> test Pizza yes'), 'stop1', 'pizza', 255 AS limit, 1 AS query_mode);
+	]]>
 
-<sphinxql><![CDATA[
-CALL SNIPPETS(('la <a >pizza</a> Pizza yes clicking WITH ANY AND ALL TO edit clicking WITH ANY AND ALL TO edit clicking WITH ANY AND ALL TO edit la <a >pizza</a> Pizza yes'), 'stop0', 'pizza', 60 AS limit, 1 AS query_mode);
-]]></sphinxql>
-<sphinxql><![CDATA[
-CALL SNIPPETS(('la <a >pizza</a> Pizza yes clicking WITH ANY AND ALL TO edit clicking WITH ANY AND ALL TO edit clicking WITH ANY AND ALL TO edit la <a >pizza</a> Pizza yes'), 'stop1', 'pizza', 60 AS limit, 1 AS query_mode);
-]]></sphinxql>
+	<![CDATA[
+	CALL SNIPPETS(('la <a >pizza</a> Pizza yes clicking WITH ANY AND ALL TO edit clicking WITH ANY AND ALL TO edit clicking WITH ANY AND ALL TO edit la <a >pizza</a> Pizza yes'), 'stop0', 'pizza', 60 AS limit, 1 AS query_mode);
+	]]>
+	<![CDATA[
+	CALL SNIPPETS(('la <a >pizza</a> Pizza yes clicking WITH ANY AND ALL TO edit clicking WITH ANY AND ALL TO edit clicking WITH ANY AND ALL TO edit la <a >pizza</a> Pizza yes'), 'stop1', 'pizza', 60 AS limit, 1 AS query_mode);
+	]]>
 
-</sphqueries>
+</sphinxql>
+</queries>
 
 </test>

@@ -76,28 +76,28 @@ INSERT INTO `test_table` VALUES
 ( 6, 14, 'bird' )
 </db_insert>
 
-<sphqueries>
-<sphinxql>insert into rt (id, idd1, body) values ( 11, 14, 'bird' )</sphinxql>
-<sphinxql>insert into rt (id, idd1, body) values ( 12, 13, 'dog eats cat' )</sphinxql>
-<sphinxql>insert into rt (id, idd1, body) values ( 13, 12, 'cat eats bird' )</sphinxql>
-<sphinxql>insert into rt (id, idd1, body) values ( 14, 11, 'a bird' )</sphinxql>
-<sphinxql>insert into rt (id, idd1, body) values ( 15, 11, 'a cat' )</sphinxql>
-<sphinxql>insert into rt (id, idd1, body) values ( 16, 11, 'a dog' )</sphinxql>
+<queries><sphinxql>
+insert into rt (id, idd1, body) values ( 11, 14, 'bird' );
+insert into rt (id, idd1, body) values ( 12, 13, 'dog eats cat' );
+insert into rt (id, idd1, body) values ( 13, 12, 'cat eats bird' );
+insert into rt (id, idd1, body) values ( 14, 11, 'a bird' );
+insert into rt (id, idd1, body) values ( 15, 11, 'a cat' );
+insert into rt (id, idd1, body) values ( 16, 11, 'a dog' );
 
-<sphinxql>select * from plain</sphinxql>
-<sphinxql>select * from rt order by id asc</sphinxql>
-<sphinxql>select * from both order by id asc</sphinxql>
-<sphinxql>select * from both where match ('a')</sphinxql>
-<sphinxql>select * from both where match ('bird') order by weight() desc, id asc</sphinxql>
-<sphinxql>select * from both where idd1=11 order by id asc</sphinxql>
-<sphinxql>select * from both where idd1!=11 order by id asc</sphinxql>
-<sphinxql>select * from both where match ('bird') and idd1!=11 order by weight() desc, id asc</sphinxql>
-<sphinxql>select * from both where idd1!=10 order by id asc</sphinxql>
+select * from plain;
+select * from rt order by id asc;
+select * from both order by id asc;
+select * from both where match ('a');
+select * from both where match ('bird') order by weight() desc, id asc;
+select * from both where idd1=11 order by id asc;
+select * from both where idd1!=11 order by id asc;
+select * from both where match ('bird') and idd1!=11 order by weight() desc, id asc;
+select * from both where idd1!=10 order by id asc;
 
 <!-- regression stopwords missed on disk chunk save (either regular or forced) -->
-<sphinxql>flush ramchunk rt</sphinxql>
-<sphinxql>select * from rt where match ('a bird') order by weight() desc, id asc</sphinxql>
-<sphinxql>call keywords ('a bird', 'rt', 1)</sphinxql>
-</sphqueries>
+flush ramchunk rt;
+select * from rt where match ('a bird') order by weight() desc, id asc;
+call keywords ('a bird', 'rt', 1);
+</sphinxql></queries>
 
 </test>

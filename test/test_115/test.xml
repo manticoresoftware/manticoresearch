@@ -87,40 +87,39 @@ index idx2
 	<query index="idx" mode="extended2">aleph NEAR/2 gimel</query>
 	<query index="idx" mode="extended2">bet NEAR/3 he</query>
 	<query index="idx" mode="extended2">aleph-bet-gimel NEAR/3 he</query>
+
+<sphinxql>
+	select * from idx where match ('aleph NEAR/2 gimel');
+	select * from idx where match ('bet NEAR/3 he');
+	select * from idx where match ('bet NEAR/2 he');
+	select * from idx where match ('aleph-bet-gimel NEAR/4 he');
+	select * from idx where match ('aleph-bet-gimel NEAR/3 he');
+	call snippets ('aleph-bet-gimel dalet he wav zajin het', 'idx', 'gimel NEAR/2 he', 1 as query_mode);
+	call snippets ('aleph-bet-gimel dalet he wav zajin het', 'idx', 'bet NEAR/3 he', 1 as query_mode);
+	call snippets ('aleph-bet-gimel dalet he wav zajin het', 'idx', 'aleph NEAR/2 gimel', 1 as query_mode);
+	CALL SNIPPETS ('U.S.S.S.B s s s s today s s s s s tomorrow', 'idx', 'B NEAR/7 today', 1 as query_mode);
+	CALL SNIPPETS ('U.S.S.S.A s s s s today s s s s s tomorrow', 'idx', 'A NEAR/7 today', 1 as query_mode);
+	select * from idx where match ('oy NEAR/1 vey') and id>=22;
+	select * from idx where match ('x NEAR/2 x') and id=3;
+	select * from idx where match ('x NEAR/2 x NEAR/2 x') and id=9;
+
+	select * from idx where match ('\' &lt;abc&gt;');
+
+	<!-- regression multi wordform with NEAR -->
+
+	set profiling = 1;
+	select * from idx1 where match (' hello test NEAR/10 world ') order by id asc;
+	show plan;
+	show meta;
+
+	select * from idx2 where match (' apple ') order by id asc;
+	show plan;
+	show meta;
+	select * from idx2 where match (' apples ') order by id asc;
+	show plan;
+	show meta;
+</sphinxql>
 </queries>
-
-<sphqueries>
-<sphinxql>select * from idx where match ('aleph NEAR/2 gimel')</sphinxql>
-<sphinxql>select * from idx where match ('bet NEAR/3 he')</sphinxql>
-<sphinxql>select * from idx where match ('bet NEAR/2 he')</sphinxql>
-<sphinxql>select * from idx where match ('aleph-bet-gimel NEAR/4 he')</sphinxql>
-<sphinxql>select * from idx where match ('aleph-bet-gimel NEAR/3 he')</sphinxql>
-<sphinxql>call snippets ('aleph-bet-gimel dalet he wav zajin het', 'idx', 'gimel NEAR/2 he', 1 as query_mode)</sphinxql>
-<sphinxql>call snippets ('aleph-bet-gimel dalet he wav zajin het', 'idx', 'bet NEAR/3 he', 1 as query_mode)</sphinxql>
-<sphinxql>call snippets ('aleph-bet-gimel dalet he wav zajin het', 'idx', 'aleph NEAR/2 gimel', 1 as query_mode)</sphinxql>
-<sphinxql>CALL SNIPPETS ('U.S.S.S.B s s s s today s s s s s tomorrow', 'idx', 'B NEAR/7 today', 1 as query_mode)</sphinxql>
-<sphinxql>CALL SNIPPETS ('U.S.S.S.A s s s s today s s s s s tomorrow', 'idx', 'A NEAR/7 today', 1 as query_mode)</sphinxql>
-<sphinxql>select * from idx where match ('oy NEAR/1 vey') and id>=22</sphinxql>
-<sphinxql>select * from idx where match ('x NEAR/2 x') and id=3</sphinxql>
-<sphinxql>select * from idx where match ('x NEAR/2 x NEAR/2 x') and id=9</sphinxql>
-
-<sphinxql>select * from idx where match ('\' &lt;abc&gt;')</sphinxql>
-
-<!-- regression multi wordform with NEAR -->
-
-<sphinxql>set profiling = 1</sphinxql>
-<sphinxql>select * from idx1 where match (' hello test NEAR/10 world ') order by id asc</sphinxql>
-<sphinxql>show plan</sphinxql>
-<sphinxql>show meta</sphinxql>
-
-<sphinxql>select * from idx2 where match (' apple ') order by id asc</sphinxql>
-<sphinxql>show plan</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>select * from idx2 where match (' apples ') order by id asc</sphinxql>
-<sphinxql>show plan</sphinxql>
-<sphinxql>show meta</sphinxql>
-
-</sphqueries>
 
 <db_create>
 CREATE TABLE test_table

@@ -100,57 +100,59 @@ INSERT INTO `test_table` VALUES
 ( 30, 300, 1, '1' ), ( 31, 301, 1, '1' ), ( 32, 302, 1, '1' ), ( 33, 303, 1, '1' ), ( 34, 304, 1, '1' ), ( 35, 305, 1, '1' )
 </db_insert>
 
-<sphqueries>
-<sphinxql>select * from test where match('test') order by fval asc</sphinxql>
-<sphinxql>select *, fval+1 as f1 from test where match('test') order by f1 desc</sphinxql>
-<sphinxql>select * from test group by fval</sphinxql>
-<sphinxql>select *, ival-1 as i1 from test group by i1</sphinxql>
-<sphinxql>select *, weight()+ival as i1 from test where match('test')</sphinxql>
-<sphinxql>select *, weight()+ival as i1 from test where match('test') and i1>1315</sphinxql>
-<sphinxql>select *, weight() as w, w+ival as i1, i1+10 as i2 from test where match('test') and i2>1325</sphinxql>
-<sphinxql>select *, 10+ival as i1, 50+i1 as i2 from test where match('test')</sphinxql>
-<sphinxql>select *, 10+ival as i1, 50+i1 as i2 from test</sphinxql>
-<sphinxql>select *, 10+ival as i1, 50+i1 as i2, i2*10 as i3 from test</sphinxql>
-<sphinxql>select *, 10+ival as i1, 50+i1 as i2, i2*10-i1 as i3 from test</sphinxql>
-<sphinxql>select *, 10+ival as i1, 50+i1 as i2, i2*fval as i3 from test</sphinxql>
-<sphinxql>select *, 10+ival as i1, 50+i1 as i2, i2*fval as i3 from test order by i3 asc</sphinxql>
-<sphinxql>select *, 10+ival as i1, 50+i1 as i2, i2*fval as i3 from test order by i1 asc, i3 desc</sphinxql>
-<sphinxql>select *, 10+ival as i1, 50+i1 as i2, i2*fval as i3 from test group by i2</sphinxql>
-<sphinxql>select *, 10+ival as i1, 50+i1 as i2, i2*id as i3 from test group by i3</sphinxql>
+<queries>
+<sphinxql>
+	select * from test where match('test') order by fval asc;
+	select *, fval+1 as f1 from test where match('test') order by f1 desc;
+	select * from test group by fval;
+	select *, ival-1 as i1 from test group by i1;
+	select *, weight()+ival as i1 from test where match('test');
+	select *, weight()+ival as i1 from test where match('test') and i1>1315;
+	select *, weight() as w, w+ival as i1, i1+10 as i2 from test where match('test') and i2>1325;
+	select *, 10+ival as i1, 50+i1 as i2 from test where match('test');
+	select *, 10+ival as i1, 50+i1 as i2 from test;
+	select *, 10+ival as i1, 50+i1 as i2, i2*10 as i3 from test;
+	select *, 10+ival as i1, 50+i1 as i2, i2*10-i1 as i3 from test;
+	select *, 10+ival as i1, 50+i1 as i2, i2*fval as i3 from test;
+	select *, 10+ival as i1, 50+i1 as i2, i2*fval as i3 from test order by i3 asc;
+	select *, 10+ival as i1, 50+i1 as i2, i2*fval as i3 from test order by i1 asc, i3 desc;
+	select *, 10+ival as i1, 50+i1 as i2, i2*fval as i3 from test group by i2;
+	select *, 10+ival as i1, 50+i1 as i2, i2*id as i3 from test group by i3;
 
-<!-- here is going another regression from bug #800-->
-<sphinxql>select *, IN ( mva, 11 ) as cnd1 from mva where cnd1=1</sphinxql>
-<!-- regression sorter gives first matches instead bests -->
-<sphinxql>select id, idd1, idd2, idd1 + idd2 as i2 from final group by idd1 order by id desc limit 0,2 option max_matches=4</sphinxql>
-<sphinxql>select id, idd1, idd2, idd1 + idd2 as i2 from final group by idd1 order by id desc limit 2,2 option max_matches=4</sphinxql>
+	<!-- here is going another regression from bug #800-->
+	select *, IN ( mva, 11 ) as cnd1 from mva where cnd1=1;
+	<!-- regression sorter gives first matches instead bests -->
+	select id, idd1, idd2, idd1 + idd2 as i2 from final group by idd1 order by id desc limit 0,2 option max_matches=4;
+	select id, idd1, idd2, idd1 + idd2 as i2 from final group by idd1 order by id desc limit 2,2 option max_matches=4;
 
-<!-- regression float unhandled filters -->
-<sphinxql>select * from test where fval&lt;=10.0</sphinxql>
-<sphinxql>select * from test where fval&gt;=10.0</sphinxql>
-<sphinxql>select * from test where fval&lt;10.0</sphinxql>
-<sphinxql>select * from test where fval&gt;10.0</sphinxql>
-<sphinxql>select * from test where fval=10.0</sphinxql>
-<sphinxql>select * from test where fval&lt;&gt;10.0</sphinxql>
+	<!-- regression float unhandled filters -->
+	select * from test where fval&lt;=10.0;
+	select * from test where fval&gt;=10.0;
+	select * from test where fval&lt;10.0;
+	select * from test where fval&gt;10.0;
+	select * from test where fval=10.0;
+	select * from test where fval&lt;&gt;10.0;
 
-<!-- regression: filters vs field lengths  -->
-<sphinxql>select * from test_lengths where title_len=0</sphinxql>
-<sphinxql>select * from test_lengths where title_len=2</sphinxql>
+	<!-- regression: filters vs field lengths  -->
+	select * from test_lengths where title_len=0;
+	select * from test_lengths where title_len=2;
 
-<!-- regression bad complex expression -->
-<sphinxql>select 50+ival*10 as ii1, 50+bad*10 from test</sphinxql>
+	<!-- regression bad complex expression -->
+	select 50+ival*10 as ii1, 50+bad*10 from test;
 
-<!-- regression: aggregate dependencies -->
-<sphinxql>select ival*ival as p, sum(p), avg(p), min(p), max(p) from test</sphinxql>
+	<!-- regression: aggregate dependencies -->
+	select ival*ival as p, sum(p), avg(p), min(p), max(p) from test;
 
-<!-- regression: mva aliasing -->
-<sphinxql>select mva a, least(a) from mva</sphinxql>
+	<!-- regression: mva aliasing -->
+	select mva a, least(a) from mva;
 
-<sphinxql>select *, ival&lt;>11 as a from test where a>0</sphinxql>
-<sphinxql>select *, ival&lt;>11 and ival&lt;>12 as a from test where a>0</sphinxql>
-<sphinxql>select *, ival&lt;>11 and ival&lt;>12 and ival&lt;>13 as a from test where a>0</sphinxql>
-<sphinxql>select *, ival&lt;>11 and ival&lt;>12 and ival&lt;>13 and ival&lt;>14 as a from test where a>0</sphinxql>
-<sphinxql>select *, ival&lt;>11 and ival&lt;>12 and ival&lt;>13 and ival&lt;>14 and id>=4 as a from test where a>0</sphinxql>
+	select *, ival&lt;>11 as a from test where a>0;
+	select *, ival&lt;>11 and ival&lt;>12 as a from test where a>0;
+	select *, ival&lt;>11 and ival&lt;>12 and ival&lt;>13 as a from test where a>0;
+	select *, ival&lt;>11 and ival&lt;>12 and ival&lt;>13 and ival&lt;>14 as a from test where a>0;
+	select *, ival&lt;>11 and ival&lt;>12 and ival&lt;>13 and ival&lt;>14 and id>=4 as a from test where a>0;
 
-</sphqueries>
+</sphinxql>
+</queries>
 
 </test>

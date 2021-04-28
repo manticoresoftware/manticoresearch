@@ -126,54 +126,54 @@ INSERT INTO `star_table` VALUES
 </db_insert>
 
 
-<sphqueries>
-<sphinxql>select * from test where match ('X files')</sphinxql>
-<sphinxql>select * from test where match ('(X files)')</sphinxql>
-<sphinxql>select * from test where match (' ( X files ) ')</sphinxql>
-<sphinxql>select * from test where match ('(x files) silver screen')</sphinxql>
-<sphinxql>select * from test where match (' X files silver screen')</sphinxql>
-<sphinxql>select * from test where match ('(x file) (silver screen)')</sphinxql>
-<sphinxql>select * from test where match ('(x file) | silver screen')</sphinxql>
-<sphinxql>select * from test where match ('(X files) | silver screen')</sphinxql>
-<sphinxql>select * from test where match ('(x files) | silver | screen')</sphinxql>
-<sphinxql>select * from test where match ('x file')</sphinxql>
-<sphinxql>select * from test where match ('the X file')</sphinxql>
+<queries><sphinxql>
+select * from test where match ('X files');
+select * from test where match ('(X files)');
+select * from test where match (' ( X files ) ');
+select * from test where match ('(x files) silver screen');
+select * from test where match (' X files silver screen');
+select * from test where match ('(x file) (silver screen)');
+select * from test where match ('(x file) | silver screen');
+select * from test where match ('(X files) | silver screen');
+select * from test where match ('(x files) | silver | screen');
+select * from test where match ('x file');
+select * from test where match ('the X file');
 
-<sphinxql>select * from star where match ('action*packed')</sphinxql>
-<sphinxql>select * from star where match ('mov*')</sphinxql>
-<sphinxql>select * from star where match ('pack*')</sphinxql>
-<sphinxql>select * from star where match ('action')</sphinxql>
+select * from star where match ('action*packed');
+select * from star where match ('mov*');
+select * from star where match ('pack*');
+select * from star where match ('action');
 
 <!-- regression tokenizer produces wrong token prt with exception -->
-<sphinxql>CALL SNIPPETS('; the test', 'snip', ';doggy|the', 1 as force_all_words )</sphinxql>
-<sphinxql>CALL SNIPPETS('; the test', 'snip', 'doggy|the', 1 as force_all_words )</sphinxql>
-<sphinxql>CALL SNIPPETS('; the test', 'snip', 'doggy|the', 0 as force_all_words )</sphinxql>
+CALL SNIPPETS('; the test', 'snip', ';doggy|the', 1 as force_all_words );
+CALL SNIPPETS('; the test', 'snip', 'doggy|the', 1 as force_all_words );
+CALL SNIPPETS('; the test', 'snip', 'doggy|the', 0 as force_all_words );
 
-<sphinxql>select * from star where match ('a?c')</sphinxql>
-<sphinxql>select * from star where match ('x%z')</sphinxql>
+select * from star where match ('a?c');
+select * from star where match ('x%z');
 
 <!-- regression tokenizer produces wild chracters -->
-<sphinxql>select * from wild1 where match ('50? of 20% not 30* found')</sphinxql>
-<sphinxql>show meta</sphinxql>
+select * from wild1 where match ('50? of 20% not 30* found');
+show meta;
 
 <!-- regression special vs synonym -->
-<sphinxql>select * from e where match ('life:\\)')</sphinxql>
-<sphinxql>show meta</sphinxql>
+select * from e where match ('life:\\)');
+show meta;
 
 <!-- regression escaped vs exception -->
-<sphinxql>select * from test where match ('so\\/dome')</sphinxql>
-<sphinxql>SHOW META</sphinxql>
-<sphinxql>select * from test where match ('si\\/dome')</sphinxql>
-<sphinxql>SHOW META</sphinxql>
-<sphinxql>select * from test where match ('X\\/dome')</sphinxql>
-<sphinxql>SHOW META</sphinxql>
+select * from test where match ('so\\/dome');
+SHOW META;
+select * from test where match ('si\\/dome');
+SHOW META;
+select * from test where match ('X\\/dome');
+SHOW META;
 
 <!-- regression on exceptions ended with specials -->
-<sphinxql>select * from test where match('one')</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>select * from test where match('"one"')</sphinxql>
-<sphinxql>show meta</sphinxql>
+select * from test where match('one');
+show meta;
+select * from test where match('"one"');
+show meta;
 
-</sphqueries>
+</sphinxql></queries>
 
 </test>

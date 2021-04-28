@@ -109,14 +109,14 @@ create table test_table
 <db_insert>insert into test_table values ( 2, 123, 'hello world' );</db_insert>
 <db_insert>insert into test_table values ( 3, 123, 'hello world' );</db_insert>
 
-<sphqueries>
-<sphinxql>select gid from dist1 where match('hello') option max_matches=2</sphinxql>
-<sphinxql>select b from dist2 where match('hello') order by id asc option max_matches=2</sphinxql>
-<sphinxql>select b from dist3 where match('hello') order by id asc option max_matches=2</sphinxql>
+<queries><sphinxql>
+select gid from dist1 where match('hello') option max_matches=2;
+select b from dist2 where match('hello') order by id asc option max_matches=2;
+select b from dist3 where match('hello') order by id asc option max_matches=2;
 
 <!-- regression crash at option named list -->
-<sphinxql>select id, gid from dist1 where match('hello') order by weight() desc, id asc option field_weights=(none1=1000, title=1);show meta</sphinxql>
+select id, gid from dist1 where match('hello') order by weight() desc, id asc option field_weights=(none1=1000, title=1);show meta;
 
-</sphqueries>
+</sphinxql></queries>
 
 </test>

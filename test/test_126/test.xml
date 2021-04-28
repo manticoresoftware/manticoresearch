@@ -123,15 +123,14 @@ index plain_inline
 <query mode="extended2" index="empty">*dog*</query>
 <!-- regression crash of daemon with docinfo=inline and dict=keywords -->
 <query mode="extended2" index="plain_inline">run*</query>
+<sphinxql>
+	insert into expanded_rt values ( 1,  'dog runs', 11 ), ( 2,  'dogs run', 22 ), ( 3,  'dogs running', 33 ), ( 4,  'dog run', 44 );
+	select * from expanded_rt where match ( 'run' );
+	show meta;
+	select * from expanded_plain where match ( 'run' );
+	show meta;
+</sphinxql>
 </queries>
-
-<sphqueries>
-<sphinxql>insert into expanded_rt values ( 1,  'dog runs', 11 ), ( 2,  'dogs run', 22 ), ( 3,  'dogs running', 33 ), ( 4,  'dog run', 44 )</sphinxql>
-<sphinxql>select * from expanded_rt where match ( 'run' )</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>select * from expanded_plain where match ( 'run' )</sphinxql>
-<sphinxql>show meta</sphinxql>
-</sphqueries>
 
 <db_create>
 CREATE TABLE `test_table`

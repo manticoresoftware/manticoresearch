@@ -101,26 +101,26 @@ CREATE TABLE test_table1
 <db_drop>DROP TABLE IF EXISTS test_table1</db_drop>
 <db_insert>INSERT INTO test_table1 VALUES ( 100, 'forty' ), ( 101, 'fortyfour' )</db_insert>
 
-<sphqueries>
-<sphinxql>select * from test where match('multi_before')</sphinxql>
-<sphinxql>select * from test where match('wordform')</sphinxql>
-<sphinxql>select * from test where match('result1')</sphinxql>
-<sphinxql>select * from test where match('result2')</sphinxql>
-<sphinxql>select * from test where match('book1')</sphinxql>
-<sphinxql>select * from test where match('book2')</sphinxql>
-<sphinxql>select * from test where match('shouldnotbe')</sphinxql>
-<sphinxql>select * from test where match('ran')</sphinxql>
-<sphinxql>select * from test where match('halt')</sphinxql>
+<queries><sphinxql>
+select * from test where match('multi_before');
+select * from test where match('wordform');
+select * from test where match('result1');
+select * from test where match('result2');
+select * from test where match('book1');
+select * from test where match('book2');
+select * from test where match('shouldnotbe');
+select * from test where match('ran');
+select * from test where match('halt');
 <!-- regression crash on wordform with multiple destination tokens -->
-<sphinxql>select * from test where match('test test')</sphinxql>
-<sphinxql>select * from test where match('test pest')</sphinxql>
+select * from test where match('test test');
+select * from test where match('test pest');
 <!-- regression for multiforms applied in the wrong order -->
-<sphinxql>select * from ord1 where match('^wound$')</sphinxql>
-<sphinxql>select * from ord2 where match('^wound$')</sphinxql>
+select * from ord1 where match('^wound$');
+select * from ord2 where match('^wound$');
 
 <!-- regression prefix matches no wordform only index -->
-<sphinxql>select id from idx_pre1 where match('forty*') order by id asc</sphinxql>
-<sphinxql>select id from idx_pre2 where match('forty*') order by id asc</sphinxql>
-</sphqueries>
+select id from idx_pre1 where match('forty*') order by id asc;
+select id from idx_pre2 where match('forty*') order by id asc;
+</sphinxql></queries>
 
 </test>

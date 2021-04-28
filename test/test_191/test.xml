@@ -102,20 +102,20 @@ INSERT INTO test_table VALUES
 ( 103, 'but most of these were largely concerned with the movements of small green pieces of paper', 4, 0, 43, '2004-07-04', 44, 45, 46, 47 )
 </db_insert>
 
-<sphqueries>
-<sphinxql>select * from main where match('planet')</sphinxql>
-<sphinxql>select * from main where match('unhappy')</sphinxql>
-<sphinxql>select * from main where match('solutions')</sphinxql>
-<sphinxql>select * from main where match('green')</sphinxql>
+<queries><sphinxql>
+select * from main where match('planet');
+select * from main where match('unhappy');
+select * from main where match('solutions');
+select * from main where match('green');
 <!-- regression inline docinfo vs expressoin -->
-<sphinxql>select * from main where match( ' "smallest white pieces of paper"/3 ')</sphinxql>
+select * from main where match( ' "smallest white pieces of paper"/3 ');
 
 <!--regression bitfields at RT index -->
-<sphinxql>desc rt</sphinxql>
-<sphinxql>INSERT INTO rt (id, title, idd10, idd11, idd1, idd2) VALUES (1, 'test', 2303, 65535, 16383, 8191 )</sphinxql>
-<sphinxql>select * from rt</sphinxql>
-<sphinxql>desc main</sphinxql>
-<sphinxql>desc delta</sphinxql>
-</sphqueries>
+desc rt;
+INSERT INTO rt (id, title, idd10, idd11, idd1, idd2) VALUES (1, 'test', 2303, 65535, 16383, 8191 );
+select * from rt;
+desc main;
+desc delta;
+</sphinxql></queries>
 
 </test>

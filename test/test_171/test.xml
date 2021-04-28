@@ -332,218 +332,218 @@ index dist_facet1
 </config>
 
 
-<sphqueries>
+<queries><sphinxql>
 
 <!-- Select count(*) on differend kind of dist indexes -->
-<sphinxql>select gr, count(*) cnt from dist_no group by gr</sphinxql>
-<sphinxql>select gr, count(*) cnt from dist0 group by gr</sphinxql>
-<sphinxql>select gr, count(*) cnt from dist1 group by gr</sphinxql>
-<sphinxql>select gr, count(*) cnt from dist2 group by gr</sphinxql>
-<sphinxql>select gr, count(*) cnt from dist3 group by gr</sphinxql>
+select gr, count(*) cnt from dist_no group by gr;
+select gr, count(*) cnt from dist0 group by gr;
+select gr, count(*) cnt from dist1 group by gr;
+select gr, count(*) cnt from dist2 group by gr;
+select gr, count(*) cnt from dist3 group by gr;
 
 <!-- Select weight() :on differend kind of dist indexes -->
-<sphinxql>select id idd, weight() cnt from dist_no group by gr</sphinxql>
-<sphinxql>select id idd, weight() cnt from dist0 group by gr</sphinxql>
-<sphinxql>select id idd, weight() cnt from dist1 group by gr within group order by id asc</sphinxql>
-<sphinxql>select id idd, weight() cnt from dist2 group by gr within group order by id asc order by id asc</sphinxql>
-<sphinxql>select id idd, weight() cnt from dist3 group by gr</sphinxql> 
+select id idd, weight() cnt from dist_no group by gr;
+select id idd, weight() cnt from dist0 group by gr;
+select id idd, weight() cnt from dist1 group by gr within group order by id asc;
+select id idd, weight() cnt from dist2 group by gr within group order by id asc order by id asc;
+select id idd, weight() cnt from dist3 group by gr;
 
 <!-- Select count(distinct) on differend kind of dist indexes -->
-<sphinxql>select count(*) cnt, count (distinct tag) tg from dist_no group by gr</sphinxql>
-<sphinxql>select count(*) cnt, count (distinct tag) tg from dist0 group by gr</sphinxql>
-<sphinxql>select count(*) cnt, count (distinct tag) tg from dist1 group by gr</sphinxql>
-<sphinxql>select count(*) cnt, count (distinct tag) tg from dist2 group by gr</sphinxql>
-<sphinxql>select count(*) cnt, count (distinct tag) tg from dist3 group by gr</sphinxql>
+select count(*) cnt, count (distinct tag) tg from dist_no group by gr;
+select count(*) cnt, count (distinct tag) tg from dist0 group by gr;
+select count(*) cnt, count (distinct tag) tg from dist1 group by gr;
+select count(*) cnt, count (distinct tag) tg from dist2 group by gr;
+select count(*) cnt, count (distinct tag) tg from dist3 group by gr;
 
 <!-- Select simple id -->
-<sphinxql>select id, tag from dist_no where match ('test')</sphinxql>
-<sphinxql>select id, tag from dist0 where match ('test')</sphinxql>
-<sphinxql>select id, tag from dist1 where match ('test')</sphinxql>
-<sphinxql>select id, tag from dist2 where match ('test')</sphinxql>
-<sphinxql>select id, tag from dist3 where match ('test')</sphinxql>
+select id, tag from dist_no where match ('test');
+select id, tag from dist0 where match ('test');
+select id, tag from dist1 where match ('test');
+select id, tag from dist2 where match ('test');
+select id, tag from dist3 where match ('test');
 
 <!-- Select aliased id -->
-<sphinxql>select id idd, tag from dist_no where match ('test')</sphinxql>
-<sphinxql>select id idd, tag from dist0 where match ('test')</sphinxql>
-<sphinxql>select id idd, tag from dist1 where match ('test')</sphinxql>
-<sphinxql>select id idd, tag from dist2 where match ('test')</sphinxql>
-<sphinxql>select id idd, tag from dist3 where match ('test')</sphinxql>
+select id idd, tag from dist_no where match ('test');
+select id idd, tag from dist0 where match ('test');
+select id idd, tag from dist1 where match ('test');
+select id idd, tag from dist2 where match ('test');
+select id idd, tag from dist3 where match ('test');
  
 <!-- Select count(*) on differend kind of dist indexes - must be error since no group by -->
-<sphinxql>select gr, count(*) cnt from dist_no</sphinxql>
-<sphinxql>select gr, count(*) cnt from dist0</sphinxql>
-<sphinxql>select gr, count(*) cnt from dist1</sphinxql>
-<!-- <sphinxql>select gr, count(*) cnt from dist2</sphinxql> -->
-<!-- <sphinxql>select gr, count(*) cnt from dist3</sphinxql> -->
+select gr, count(*) cnt from dist_no;
+select gr, count(*) cnt from dist0;
+select gr, count(*) cnt from dist1;
+<!-- select gr, count(*) cnt from dist2; -->
+<!-- select gr, count(*) cnt from dist3; -->
 
 <!-- Prohibited aggregates in where -->
-<sphinxql>select gr from dist_no where count(*)=1</sphinxql>
-<sphinxql>select gr from dist_no where @count=1</sphinxql>
-<sphinxql>select gr from dist_no where weight()=1</sphinxql>
-<sphinxql>select gr from dist_no where @weight=1</sphinxql>
-<sphinxql>select gr from dist0 where count(*)=1</sphinxql>
-<sphinxql>select gr from dist0 where @count=1</sphinxql>
-<sphinxql>select gr from dist0 where weight()=1</sphinxql>
-<sphinxql>select gr from dist0 where @weight=1</sphinxql>
-<sphinxql>select gr from dist1 where count(*)=1</sphinxql>
-<sphinxql>select gr from dist1 where @count=1</sphinxql>
-<sphinxql>select gr from dist1 where weight()=1</sphinxql>
-<sphinxql>select gr from dist1 where @weight=1</sphinxql>
-<sphinxql>select gr from dist2 where count(*)=1</sphinxql>
-<sphinxql>select gr from dist2 where @count=1</sphinxql>
-<sphinxql>select gr from dist2 where weight()=1</sphinxql>
-<sphinxql>select gr from dist2 where @weight=1</sphinxql>
-<sphinxql>select gr from dist3 where count(*)=1</sphinxql>
-<sphinxql>select gr from dist3 where @count=1</sphinxql>
-<sphinxql>select gr from dist3 where weight()=1</sphinxql>
-<sphinxql>select gr from dist3 where @weight=1</sphinxql>
+select gr from dist_no where count(*)=1;
+select gr from dist_no where @count=1;
+select gr from dist_no where weight()=1;
+select gr from dist_no where @weight=1;
+select gr from dist0 where count(*)=1;
+select gr from dist0 where @count=1;
+select gr from dist0 where weight()=1;
+select gr from dist0 where @weight=1;
+select gr from dist1 where count(*)=1;
+select gr from dist1 where @count=1;
+select gr from dist1 where weight()=1;
+select gr from dist1 where @weight=1;
+select gr from dist2 where count(*)=1;
+select gr from dist2 where @count=1;
+select gr from dist2 where weight()=1;
+select gr from dist2 where @weight=1;
+select gr from dist3 where count(*)=1;
+select gr from dist3 where @count=1;
+select gr from dist3 where weight()=1;
+select gr from dist3 where @weight=1;
 
 <!-- Checking group by result sets (formerly warnings on old syntax) -->
-<sphinxql>select id idd from dist_no where match('test')</sphinxql>
-<sphinxql>select count(*) cnt from dist_no group by gr</sphinxql>
-<sphinxql>select weight() cnt from dist_no group by gr</sphinxql>
-<sphinxql>select id idd from dist0 where match('test')</sphinxql>
-<sphinxql>select count(*) cnt from dist0 group by gr</sphinxql>
-<sphinxql>select weight() cnt from dist0 group by gr</sphinxql>
-<sphinxql>select id idd from dist1 where match('test')</sphinxql>
-<sphinxql>select count(*) cnt from dist1 group by gr</sphinxql>
-<sphinxql>select weight() cnt from dist1 group by gr</sphinxql>
-<sphinxql>select id idd from dist2 where match('test')</sphinxql>
-<sphinxql>select count(*) cnt from dist2 group by gr</sphinxql>
-<sphinxql>select weight() cnt from dist2 group by gr</sphinxql>
-<sphinxql>select id idd from dist3 where match('test')</sphinxql>
-<sphinxql>select count(*) cnt from dist3 group by gr</sphinxql>
-<sphinxql>select weight() cnt from dist3 group by gr</sphinxql>
+select id idd from dist_no where match('test');
+select count(*) cnt from dist_no group by gr;
+select weight() cnt from dist_no group by gr;
+select id idd from dist0 where match('test');
+select count(*) cnt from dist0 group by gr;
+select weight() cnt from dist0 group by gr;
+select id idd from dist1 where match('test');
+select count(*) cnt from dist1 group by gr;
+select weight() cnt from dist1 group by gr;
+select id idd from dist2 where match('test');
+select count(*) cnt from dist2 group by gr;
+select weight() cnt from dist2 group by gr;
+select id idd from dist3 where match('test');
+select count(*) cnt from dist3 group by gr;
+select weight() cnt from dist3 group by gr;
 
 <!-- Mixing old and new syntax -->
-<sphinxql>select @id idd, count(*) cnt from dist_no group by gr</sphinxql>
-<sphinxql>select id idd, @count cnt from dist_no group by gr</sphinxql>
-<sphinxql>select id idd from dist_no where @count=1 group by gr</sphinxql>
-<sphinxql>select @id idd from dist_no where count(*)=1 group by gr</sphinxql>
-<sphinxql>select id idd from dist_no group by @count</sphinxql>
-<sphinxql>select @id idd from dist_no group by count(*)</sphinxql>
-<sphinxql>select @id idd, count(*) cnt from dist0 group by gr</sphinxql>
-<sphinxql>select id idd, @count cnt from dist0 group by gr</sphinxql>
-<sphinxql>select id idd from dist0 where @count=1 group by gr</sphinxql>
-<sphinxql>select @id idd from dist0 where count(*)=1 group by gr</sphinxql>
-<sphinxql>select id idd from dist0 group by @count</sphinxql>
-<sphinxql>select @id idd from dist0 group by count(*)</sphinxql>
-<sphinxql>select @id idd, count(*) cnt from dist1 group by gr</sphinxql>
-<sphinxql>select id idd, @count cnt from dist1 group by gr</sphinxql>
-<sphinxql>select id idd from dist1 where @count=1 group by gr</sphinxql>
-<sphinxql>select @id idd from dist1 where count(*)=1 group by gr</sphinxql>
-<sphinxql>select id idd from dist1 group by @count</sphinxql>
-<sphinxql>select @id idd from dist1 group by count(*)</sphinxql>
-<sphinxql>select @id idd, count(*) cnt from dist2 group by gr</sphinxql>
-<sphinxql>select id idd, @count cnt from dist2 group by gr</sphinxql>
-<sphinxql>select id idd from dist2 where @count=1 group by gr</sphinxql>
-<sphinxql>select @id idd from dist2 where count(*)=1 group by gr</sphinxql>
-<sphinxql>select id idd from dist2 group by @count</sphinxql>
-<sphinxql>select @id idd from dist2 group by count(*)</sphinxql>
-<sphinxql>select @id idd, count(*) cnt from dist3 group by gr</sphinxql>
-<sphinxql>select id idd, @count cnt from dist3 group by gr</sphinxql>
-<sphinxql>select id idd from dist3 where @count=1 group by gr</sphinxql>
-<sphinxql>select @id idd from dist3 where count(*)=1 group by gr</sphinxql>
-<sphinxql>select id idd from dist3 group by @count</sphinxql>
-<sphinxql>select @id idd from dist3 group by count(*)</sphinxql>
+select @id idd, count(*) cnt from dist_no group by gr;
+select id idd, @count cnt from dist_no group by gr;
+select id idd from dist_no where @count=1 group by gr;
+select @id idd from dist_no where count(*)=1 group by gr;
+select id idd from dist_no group by @count;
+select @id idd from dist_no group by count(*);
+select @id idd, count(*) cnt from dist0 group by gr;
+select id idd, @count cnt from dist0 group by gr;
+select id idd from dist0 where @count=1 group by gr;
+select @id idd from dist0 where count(*)=1 group by gr;
+select id idd from dist0 group by @count;
+select @id idd from dist0 group by count(*);
+select @id idd, count(*) cnt from dist1 group by gr;
+select id idd, @count cnt from dist1 group by gr;
+select id idd from dist1 where @count=1 group by gr;
+select @id idd from dist1 where count(*)=1 group by gr;
+select id idd from dist1 group by @count;
+select @id idd from dist1 group by count(*);
+select @id idd, count(*) cnt from dist2 group by gr;
+select id idd, @count cnt from dist2 group by gr;
+select id idd from dist2 where @count=1 group by gr;
+select @id idd from dist2 where count(*)=1 group by gr;
+select id idd from dist2 group by @count;
+select @id idd from dist2 group by count(*);
+select @id idd, count(*) cnt from dist3 group by gr;
+select id idd, @count cnt from dist3 group by gr;
+select id idd from dist3 where @count=1 group by gr;
+select @id idd from dist3 where count(*)=1 group by gr;
+select id idd from dist3 group by @count;
+select @id idd from dist3 group by count(*);
 
 <!-- regression select only count ( distinct attr1 ) but group by attr2 from distributed -->
-<sphinxql>select id, count (distinct tag) tg from dist2 group by gr within group order by id asc order by id asc</sphinxql>
-<sphinxql>select id, count (distinct tag) tg from idx1, idx2 group by gr</sphinxql>
+select id, count (distinct tag) tg from dist2 group by gr within group order by id asc order by id asc;
+select id, count (distinct tag) tg from idx1, idx2 group by gr;
 
 <!-- regression select only count ( distinct attr1 ) + group by attr1 -->
-<sphinxql>select id, count (distinct tag), count(*) from distinct1, distinct2 group by tag</sphinxql>
-<sphinxql>select id, count (distinct gr), count(*) from distinct1, distinct2 group by gr</sphinxql>
-<sphinxql>select id, count (distinct tag), count(*) from distinct1, distinct2 group by gr</sphinxql>
-<sphinxql>select id, count (distinct gr), count(*) from distinct1, distinct2 group by tag</sphinxql>
-<sphinxql>select id, count (distinct tag), count(*) from distinct1, distinct1 group by tag</sphinxql>
-<sphinxql>select id, count (distinct gr), count(*) from distinct1, distinct1 group by gr</sphinxql>
-<sphinxql>select id, count (distinct tag), count(*) from distinct1, distinct1 group by gr</sphinxql>
-<sphinxql>select id, count (distinct gr), count(*) from distinct1, distinct1 group by tag</sphinxql>
+select id, count (distinct tag), count(*) from distinct1, distinct2 group by tag;
+select id, count (distinct gr), count(*) from distinct1, distinct2 group by gr;
+select id, count (distinct tag), count(*) from distinct1, distinct2 group by gr;
+select id, count (distinct gr), count(*) from distinct1, distinct2 group by tag;
+select id, count (distinct tag), count(*) from distinct1, distinct1 group by tag;
+select id, count (distinct gr), count(*) from distinct1, distinct1 group by gr;
+select id, count (distinct tag), count(*) from distinct1, distinct1 group by gr;
+select id, count (distinct gr), count(*) from distinct1, distinct1 group by tag;
 
 <!-- incorrect(aggregate) filtering -->
-<sphinxql>select id, max(tag) as cond from idx1 where cond&lt;5 group by gr</sphinxql>
+select id, max(tag) as cond from idx1 where cond&lt;5 group by gr;
 
 <!-- regression sub select offset -->
-<sphinxql>SELECT * FROM ( SELECT * FROM sub_dist_loc ORDER BY id asc LIMIT 15 ) ORDER BY id desc LIMIT 3,5</sphinxql>
-<sphinxql>SELECT * FROM ( SELECT * FROM sub_dist_1 ORDER BY id desc LIMIT 7 ) ORDER BY id desc LIMIT 4,3</sphinxql>
-<sphinxql>SELECT * FROM ( SELECT * FROM sub_dist_2 ORDER BY id asc LIMIT 11 ) ORDER BY id desc LIMIT 1,5</sphinxql>
-<sphinxql>SELECT * FROM ( SELECT * FROM sub_dist_loc ORDER BY id asc LIMIT 5 ) ORDER BY id desc LIMIT 2,4</sphinxql>
+SELECT * FROM ( SELECT * FROM sub_dist_loc ORDER BY id asc LIMIT 15 ) ORDER BY id desc LIMIT 3,5;
+SELECT * FROM ( SELECT * FROM sub_dist_1 ORDER BY id desc LIMIT 7 ) ORDER BY id desc LIMIT 4,3;
+SELECT * FROM ( SELECT * FROM sub_dist_2 ORDER BY id asc LIMIT 11 ) ORDER BY id desc LIMIT 1,5;
+SELECT * FROM ( SELECT * FROM sub_dist_loc ORDER BY id asc LIMIT 5 ) ORDER BY id desc LIMIT 2,4;
 
 <!-- regression missed offset and wrong limit at agent with divide_remote_ranges -->
-<sphinxql>SELECT * FROM dist_offset ORDER BY id asc LIMIT 23, 5</sphinxql>
+SELECT * FROM dist_offset ORDER BY id asc LIMIT 23, 5;
 
 <!-- regression missed warning when words statistics varies -->
-<sphinxql>INSERT INTO words_rt1 VALUES ( 100, 'yes of', 111 ), ( 102, 'yes pey', 122 )</sphinxql>
-<sphinxql>INSERT INTO words_rt2 VALUES ( 200, 'yes of', 211 ), ( 202, 'yes pey', 222 )</sphinxql>
-<sphinxql>select * from words1, words2 where match('yes | pey')</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>select * from words_rt1, words_rt2 where match('yes | pey')</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>select * from words_rt1, words2 where match('yes | pey')</sphinxql>
-<sphinxql>show meta</sphinxql>
+INSERT INTO words_rt1 VALUES ( 100, 'yes of', 111 ), ( 102, 'yes pey', 122 );
+INSERT INTO words_rt2 VALUES ( 200, 'yes of', 211 ), ( 202, 'yes pey', 222 );
+select * from words1, words2 where match('yes | pey');
+show meta;
+select * from words_rt1, words_rt2 where match('yes | pey');
+show meta;
+select * from words_rt1, words2 where match('yes | pey');
+show meta;
 
 <!-- implicit group by -->
-<sphinxql>SELECT id, COUNT(*) FROM dist_no</sphinxql>
-<sphinxql>SELECT id, MIN(gr) FROM dist_no</sphinxql>
-<sphinxql>SELECT id, COUNT(DISTINCT gr) FROM dist_no</sphinxql>
-<sphinxql>SELECT id, COUNT(*) FROM dist_no WITHIN GROUP ORDER BY id DESC</sphinxql>
+SELECT id, COUNT(*) FROM dist_no;
+SELECT id, MIN(gr) FROM dist_no;
+SELECT id, COUNT(DISTINCT gr) FROM dist_no;
+SELECT id, COUNT(*) FROM dist_no WITHIN GROUP ORDER BY id DESC;
 
-<sphinxql>SELECT id, COUNT(*) FROM dist2</sphinxql>
-<sphinxql>SELECT id, MIN(gr) FROM dist2</sphinxql>
-<sphinxql>SELECT id, COUNT(DISTINCT gr) FROM dist2</sphinxql>
+SELECT id, COUNT(*) FROM dist2;
+SELECT id, MIN(gr) FROM dist2;
+SELECT id, COUNT(DISTINCT gr) FROM dist2;
 
 <!-- < and > were <= and >= at distributed index -->
-<sphinxql>SELECT * FROM idx1</sphinxql>
-<sphinxql>SELECT * FROM idx1 WHERE id&gt;1</sphinxql>
-<sphinxql>SELECT * FROM dist_just1 WHERE id&gt;1</sphinxql>
+SELECT * FROM idx1;
+SELECT * FROM idx1 WHERE id&gt;1;
+SELECT * FROM dist_just1 WHERE id&gt;1;
 
 <!-- regression sub select order by weight -->
-<sphinxql>SELECT * FROM ( SELECT @id, @weight FROM sub_dist_loc WHERE MATCH ( 'test ( my | of )' ) ORDER BY @weight asc, @id desc LIMIT 15 ) ORDER BY @weight desc, @id asc LIMIT 0, 5</sphinxql>
+SELECT * FROM ( SELECT @id, @weight FROM sub_dist_loc WHERE MATCH ( 'test ( my | of )' ) ORDER BY @weight asc, @id desc LIMIT 15 ) ORDER BY @weight desc, @id asc LIMIT 0, 5;
 <!-- same, not using deprecated syntax -->
-<sphinxql>SELECT * FROM ( SELECT id, weight() as wgt FROM sub_dist_loc WHERE MATCH ( 'test ( my | of )' ) ORDER BY wgt asc, id desc LIMIT 15 ) ORDER BY wgt desc, id asc LIMIT 0, 5</sphinxql>
+SELECT * FROM ( SELECT id, weight() as wgt FROM sub_dist_loc WHERE MATCH ( 'test ( my | of )' ) ORDER BY wgt asc, id desc LIMIT 15 ) ORDER BY wgt desc, id asc LIMIT 0, 5;
 
 <!-- having -->
-<sphinxql>SELECT id, COUNT(*) cc, GROUPBY() gg FROM dist2 GROUP BY gr HAVING COUNT(*)&gt;=1</sphinxql>
-<sphinxql>SELECT id, COUNT(*) cc, GROUPBY() gg FROM dist_no GROUP BY gr HAVING COUNT(*)&gt;=1</sphinxql>
-<sphinxql>SELECT id, COUNT(*) cc, GROUPBY() gg FROM dist2 GROUP BY gr HAVING cc&lt;3</sphinxql>
-<sphinxql>SELECT id, COUNT(*) cc, GROUPBY() gg FROM dist_no GROUP BY gr HAVING cc&lt;3</sphinxql>
-<sphinxql>SELECT id, COUNT(DISTINCT tag) cc, GROUPBY() gg FROM dist2 GROUP BY gr HAVING gg IN ( 1,2,3,10)</sphinxql>
-<sphinxql>SELECT id, COUNT(DISTINCT tag) cc, GROUPBY() gg FROM dist_no GROUP BY gr HAVING gg IN ( 1,2,3,10)</sphinxql>
-<sphinxql>SELECT id, MIN(gr) aa, COUNT(*) cc, GROUPBY() gg  FROM dist2 GROUP BY tag HAVING aa=2</sphinxql>
-<sphinxql>SELECT id, MIN(gr) aa, COUNT(*) cc, GROUPBY() gg  FROM dist_no GROUP BY tag HAVING aa=2</sphinxql>
-<sphinxql>SELECT id, MAX(gr) aa, COUNT(*) cc, GROUPBY() gg   FROM dist2 GROUP BY tag HAVING aa=3</sphinxql>
-<sphinxql>SELECT id, MAX(gr) aa, COUNT(*) cc, GROUPBY() gg   FROM dist_no GROUP BY tag HAVING aa=3</sphinxql>
-<sphinxql>SELECT id, SUM(gr) aa, COUNT(*) cc, GROUPBY() gg   FROM dist2 GROUP BY tag HAVING aa&gt;5</sphinxql>
-<sphinxql>SELECT id, SUM(gr) aa, COUNT(*) cc, GROUPBY() gg   FROM dist_no GROUP BY tag HAVING aa>5</sphinxql>
-<sphinxql>select id, MIN(tag)  aa, COUNT(*) cc, GROUPBY() gg FROM dist2 GROUP 8  BY gr HAVING COUNT(*)=2</sphinxql>
-<sphinxql>select id, SUM(tag)  aa, COUNT(*) cc, GROUPBY() gg FROM dist2 GROUP 8  BY gr HAVING aa=4</sphinxql>
+SELECT id, COUNT(*) cc, GROUPBY() gg FROM dist2 GROUP BY gr HAVING COUNT(*)&gt;=1;
+SELECT id, COUNT(*) cc, GROUPBY() gg FROM dist_no GROUP BY gr HAVING COUNT(*)&gt;=1;
+SELECT id, COUNT(*) cc, GROUPBY() gg FROM dist2 GROUP BY gr HAVING cc&lt;3;
+SELECT id, COUNT(*) cc, GROUPBY() gg FROM dist_no GROUP BY gr HAVING cc&lt;3;
+SELECT id, COUNT(DISTINCT tag) cc, GROUPBY() gg FROM dist2 GROUP BY gr HAVING gg IN ( 1,2,3,10);
+SELECT id, COUNT(DISTINCT tag) cc, GROUPBY() gg FROM dist_no GROUP BY gr HAVING gg IN ( 1,2,3,10);
+SELECT id, MIN(gr) aa, COUNT(*) cc, GROUPBY() gg  FROM dist2 GROUP BY tag HAVING aa=2;
+SELECT id, MIN(gr) aa, COUNT(*) cc, GROUPBY() gg  FROM dist_no GROUP BY tag HAVING aa=2;
+SELECT id, MAX(gr) aa, COUNT(*) cc, GROUPBY() gg   FROM dist2 GROUP BY tag HAVING aa=3;
+SELECT id, MAX(gr) aa, COUNT(*) cc, GROUPBY() gg   FROM dist_no GROUP BY tag HAVING aa=3;
+SELECT id, SUM(gr) aa, COUNT(*) cc, GROUPBY() gg   FROM dist2 GROUP BY tag HAVING aa&gt;5;
+SELECT id, SUM(gr) aa, COUNT(*) cc, GROUPBY() gg   FROM dist_no GROUP BY tag HAVING aa>5;
+select id, MIN(tag)  aa, COUNT(*) cc, GROUPBY() gg FROM dist2 GROUP 8  BY gr HAVING COUNT(*)=2;
+select id, SUM(tag)  aa, COUNT(*) cc, GROUPBY() gg FROM dist2 GROUP 8  BY gr HAVING aa=4;
 
 <!-- distinct vs strings -->
-<sphinxql>select count(*) from idx_keys</sphinxql>
-<sphinxql>select count(distinct text) from idx_keys</sphinxql>
-<sphinxql>select count(*) from idx_keys group by tag</sphinxql>
-<sphinxql>select count(distinct text) from idx_keys group by tag</sphinxql>
+select count(*) from idx_keys;
+select count(distinct text) from idx_keys;
+select count(*) from idx_keys group by tag;
+select count(distinct text) from idx_keys group by tag;
 
 <!-- regression prohibit HAVING on regular\pool'ed attribute -->
-<sphinxql>SELECT id, COUNT(*) cc, GROUPBY() gg FROM dist_j GROUP BY j.j1 HAVING j.j1 IN ( 1,2 )</sphinxql>
-<sphinxql>SELECT id, COUNT(*) cc, GROUPBY() gg FROM dist_j GROUP BY j.j1 within group order by id asc HAVING gg IN ( 1,2 )</sphinxql>
+SELECT id, COUNT(*) cc, GROUPBY() gg FROM dist_j GROUP BY j.j1 HAVING j.j1 IN ( 1,2 );
+SELECT id, COUNT(*) cc, GROUPBY() gg FROM dist_j GROUP BY j.j1 within group order by id asc HAVING gg IN ( 1,2 );
 
 <!-- limit and offset different forms -->
-<sphinxql>SELECT id, tag FROM idx_keys limit 3</sphinxql>
-<sphinxql>SELECT id, tag FROM idx_keys limit 3,3</sphinxql>
-<sphinxql>SELECT id, tag FROM idx_keys limit 3 offset 3</sphinxql>
-<sphinxql>SELECT id, tag FROM idx_keys limit 2 offset 6</sphinxql>
-<sphinxql>SELECT id, tag FROM idx_keys limit 10 offset 5</sphinxql>
+SELECT id, tag FROM idx_keys limit 3;
+SELECT id, tag FROM idx_keys limit 3,3;
+SELECT id, tag FROM idx_keys limit 3 offset 3;
+SELECT id, tag FROM idx_keys limit 2 offset 6;
+SELECT id, tag FROM idx_keys limit 10 offset 5;
 
 <!-- count distinct vs max_matches -->
-<sphinxql>select count(distinct i1), count(*), i2, i1 from dist_mm group by i2 limit 5</sphinxql>
-<sphinxql>select count(distinct i1), count(*), i2, i1 from dist_mm group by i2 limit 5 option max_matches=30</sphinxql>
-<sphinxql>select count(distinct i1), count(*), i2, i1 from dist_mm group by i2 limit 5 option max_matches=29</sphinxql>
+select count(distinct i1), count(*), i2, i1 from dist_mm group by i2 limit 5;
+select count(distinct i1), count(*), i2, i1 from dist_mm group by i2 limit 5 option max_matches=30;
+select count(distinct i1), count(*), i2, i1 from dist_mm group by i2 limit 5 option max_matches=29;
 
 <!-- master fails to merge FACET result sets with agent empty result -->
-<sphinxql>SELECT mva1 FROM dist_facet1 ORDER BY id desc FACET mva1;</sphinxql>
-</sphqueries>
+SELECT mva1 FROM dist_facet1 ORDER BY id desc FACET mva1;;
+</sphinxql></queries>
 
 <db_create>
 CREATE TABLE `test_table` (

@@ -111,11 +111,12 @@ foreach ( $tests as $test )
 }
 ]]> </custom_test>
 
-<sphqueries>
-<sphinxql>CALL SNIPPETS (('allfiles/text1.txt','allfiles/text2.txt','allfiles/text3.txt','allfiles/text4.txt','allfiles/text5.txt','allfiles/text6.txt'),'dist','"Sphinxsearch dot com"',1 AS load_files)</sphinxql>
-<sphinxql>CALL SNIPPETS (('scatteredfiles/text1.txt','scatteredfiles/text2.txt','scatteredfiles/text3.txt','scatteredfiles/text4.txt','scatteredfiles/text5.txt','scatteredfiles/text6.txt'),'dist','"Sphinxsearch dot com"',1 AS load_files,1 AS load_files_scattered)</sphinxql>
+<!-- fixme! move to another test, as custom test doesn't work with anything together -->
+<queries><sphinxql>
+CALL SNIPPETS (('allfiles/text1.txt','allfiles/text2.txt','allfiles/text3.txt','allfiles/text4.txt','allfiles/text5.txt','allfiles/text6.txt'),'dist','"Sphinxsearch dot com"',1 AS load_files);
+CALL SNIPPETS (('scatteredfiles/text1.txt','scatteredfiles/text2.txt','scatteredfiles/text3.txt','scatteredfiles/text4.txt','scatteredfiles/text5.txt','scatteredfiles/text6.txt'),'dist','"Sphinxsearch dot com"',1 AS load_files,1 AS load_files_scattered);
 
-</sphqueries>
+</sphinxql></queries>
 
 <db_create>
 CREATE TABLE test_table

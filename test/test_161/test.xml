@@ -37,7 +37,7 @@ index test
 </config>
 
 <queries>
-	<query mode="extended2" sortmode="extended" sortby="paper_id asc"></query>
+	<query mode="extended2" sortmode="extended" sortby="paper_id asc"/>
 	<query mode="extended2" sortmode="extended" sortby="paper_id asc">flo*</query>
 	<query mode="extended2" sortmode="extended" sortby="paper_id asc">fa* | te*</query>
 	<query mode="extended2" sortmode="extended" sortby="paper_id asc">f*</query>

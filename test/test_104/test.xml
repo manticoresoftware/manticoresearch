@@ -62,7 +62,7 @@ searchd
 		select `1j`. `bo:a` from testj;
 		select * from testj where `1j`.`bo:a`[1]>10;
 		select * from testj where `1j`.`bo:a`[1]>9;
-		drop table testj
+		drop table testj;
 	</sphinxql>
 </queries>
 </test>

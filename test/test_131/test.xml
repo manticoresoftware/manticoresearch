@@ -47,7 +47,7 @@ index test1doc
 
 <queries>
 <query mode="extended2">the</query>
-<query mode="extended2"></query>
+<query mode="extended2"/>
 </queries>
 
 <db_create>

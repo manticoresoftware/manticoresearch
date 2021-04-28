@@ -92,28 +92,28 @@ index dist_crash
 }
 </config>
 
-<sphqueries>
-<sphinxql>select attru, attru+attrs ss from idx</sphinxql>
-<sphinxql>select attru, attru+attrs ss from idxx</sphinxql>
+<queries><sphinxql>
+select attru, attru+attrs ss from idx;
+select attru, attru+attrs ss from idxx;
 <!-- regression: warning from dist_threads local index got lost -->
-<sphinxql>select * from warn1 where match (' the box* ' )</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>select * from dist_warn where match (' the box* ' )</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>select * from warn1, warn2 where match (' the box* ' )</sphinxql>
-<sphinxql>show meta</sphinxql>
+select * from warn1 where match (' the box* ' );
+show meta;
+select * from dist_warn where match (' the box* ' );
+show meta;
+select * from warn1, warn2 where match (' the box* ' );
+show meta;
 <!-- no warnings for short wildcards -->
-<sphinxql>select * from warn3 where match (' box* ' )</sphinxql>
-<sphinxql>show warnings</sphinxql>
-<sphinxql>select * from warn3 where match (' *box ' )</sphinxql>
-<sphinxql>show warnings</sphinxql>
-<sphinxql>select * from warn3 where match (' b*x ' )</sphinxql>
-<sphinxql>show warnings</sphinxql>
-<sphinxql>select * from warn3 where match (' b?x ' )</sphinxql>
-<sphinxql>show warnings</sphinxql>
-<sphinxql>select * from warn3 where match (' b%x ' )</sphinxql>
-<sphinxql>show warnings</sphinxql>
-</sphqueries>
+select * from warn3 where match (' box* ' );
+show warnings;
+select * from warn3 where match (' *box ' );
+show warnings;
+select * from warn3 where match (' b*x ' );
+show warnings;
+select * from warn3 where match (' b?x ' );
+show warnings;
+select * from warn3 where match (' b%x ' );
+show warnings;
+</sphinxql></queries>
 
 <db_create>
 CREATE TABLE test_table

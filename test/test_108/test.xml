@@ -68,7 +68,7 @@ index idx3
 <query index="idx2">orddf</query>
 <query index="idx2">test2</query>
 
-<query index="idx3" filter_value="10" filter="mva"></query>
+<query index="idx3" filter_value="10" filter="mva"/>
 </queries>
 
 </test>

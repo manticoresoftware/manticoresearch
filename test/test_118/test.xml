@@ -25,14 +25,16 @@ index test
 } 
 </Config>
 
-<SPHQueries>
-	<SPHinxQL>insert into test (id,idd,content) values (1,1,'content'),(2,2,'you')</SPHinxQL>
-	<SPHinxQL>insert into test (id,idd,content) values (10,10,'dog cat fish')</SPHinxQL>	
-	<SPHinxQL>insert into test (id,idd,content) values (11,11,'dog cat')</SPHinxQL>
+<queries>
+<sphinxql>
+	insert into test (id,idd,content) values (1,1,'content'),(2,2,'you');
+	insert into test (id,idd,content) values (10,10,'dog cat fish');
+	insert into test (id,idd,content) values (11,11,'dog cat');
 
-	<SPHinxQL>select * from test order by id asc</SPHinxQL>
-	<SPHinxQL><![CDATA[select * from test where match( 'dog << cat' )]]></SPHinxQL>
-	<SPHinxQL>select * from test where match( '(dog | cat) -fish' )</SPHinxQL>
-</SPHQueries>
+	select * from test order by id asc;
+	<![CDATA[select * from test where match( 'dog << cat' )]]>;
+	select * from test where match( '(dog | cat) -fish' );
+</sphinxql>
+</queries>
 
 </Test>

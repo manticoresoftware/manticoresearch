@@ -56,15 +56,15 @@ create table test_table
 <db_drop>drop table if exists test_table;</db_drop>
 <db_insert><![CDATA[insert into test_table values ( 201, 3, 'Of shoes, <zoneC>and kings</zoneC>, and sealing wax, of cabbages, <zoneC>and ships.</zoneC> bla' );]]></db_insert>
 
-<sphqueries>
-<sphinxql>select * from test where match('ZONESPAN:zoneC cabbages and kings')</sphinxql>
-<sphinxql>select * from test where match('ZONESPAN:zoneC kings and ships')</sphinxql>
-<sphinxql>select * from test where match('ZONESPAN:zoneC and ships')</sphinxql>
-<sphinxql>select * from test where match('ZONESPAN:zoneC kings and')</sphinxql>
-<sphinxql>select * from test,asdf where match('ZONESPAN:zoneC and kings') option ignore_nonexistent_indexes=1</sphinxql>
-<sphinxql>SELECT 2e-1 FROM test LIMIT 1</sphinxql>
-<sphinxql>SELECT .5E1 FROM test LIMIT 1</sphinxql>
-<sphinxql>SELECT 6.e+10 FROM test LIMIT 1</sphinxql>
-</sphqueries>
+<queries><sphinxql>
+select * from test where match('ZONESPAN:zoneC cabbages and kings');
+select * from test where match('ZONESPAN:zoneC kings and ships');
+select * from test where match('ZONESPAN:zoneC and ships');
+select * from test where match('ZONESPAN:zoneC kings and');
+select * from test,asdf where match('ZONESPAN:zoneC and kings') option ignore_nonexistent_indexes=1;
+SELECT 2e-1 FROM test LIMIT 1;
+SELECT .5E1 FROM test LIMIT 1;
+SELECT 6.e+10 FROM test LIMIT 1;
+</sphinxql></queries>
 
 </test>

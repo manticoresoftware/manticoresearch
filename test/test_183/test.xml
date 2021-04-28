@@ -190,30 +190,30 @@ index pq40
 
 <!-- NOTE: the test model is made wrong, since we postponed a feature.
 Look at http://sphinxsearch.com/bugs/view.php?id=952 for details -->
-<sphqueries>
-<sphinxql>select * from tests where match ('field_one')</sphinxql>
-<sphinxql>select * from test where match ('field_one')</sphinxql>
-<sphinxql>select * from tests where match ('field_two')</sphinxql>
-<sphinxql>select * from test where match ('field_two')</sphinxql>
-<sphinxql>select * from tests where match ('@t21 field_one')</sphinxql>
-<sphinxql>select * from tests where match ('@t141 field_one')</sphinxql>
-<sphinxql>select * from test where match ('@t21 field_one')</sphinxql>
-<sphinxql>select * from tests where match ('@t21 field_two')</sphinxql>
-<sphinxql>select * from test where match ('@t21 field_two')</sphinxql>
-<sphinxql>select * from tests where match ('@t141 field_three')</sphinxql>
-<sphinxql>select * from test where match ('@t141 field_three')</sphinxql>
-<sphinxql>select * from tests where match ('@t141 field_two')</sphinxql>
-<sphinxql>select * from test where match ('@t141 field_two')</sphinxql>
-<sphinxql>select * from tests where match ('@t241 field_two')</sphinxql>
-<sphinxql>select * from test where match ('@t241 field_two')</sphinxql>
-<sphinxql>select * from tests where match ('field_one field_two')</sphinxql>
-<sphinxql>select * from test where match ('field_one field_two')</sphinxql>
-<sphinxql>select * from tests where match ('field_one @t141 field_two')</sphinxql>
-<sphinxql>select * from test where match ('field_one @t141 field_two')</sphinxql>
-<sphinxql>select * from tests where match ('field_one @t21 field_two')</sphinxql>
-<sphinxql>select * from test where match ('field_one @t21 field_two')</sphinxql>
+<queries><sphinxql>
+select * from tests where match ('field_one');
+select * from test where match ('field_one');
+select * from tests where match ('field_two');
+select * from test where match ('field_two');
+select * from tests where match ('@t21 field_one');
+select * from tests where match ('@t141 field_one');
+select * from test where match ('@t21 field_one');
+select * from tests where match ('@t21 field_two');
+select * from test where match ('@t21 field_two');
+select * from tests where match ('@t141 field_three');
+select * from test where match ('@t141 field_three');
+select * from tests where match ('@t141 field_two');
+select * from test where match ('@t141 field_two');
+select * from tests where match ('@t241 field_two');
+select * from test where match ('@t241 field_two');
+select * from tests where match ('field_one field_two');
+select * from test where match ('field_one field_two');
+select * from tests where match ('field_one @t141 field_two');
+select * from test where match ('field_one @t141 field_two');
+select * from tests where match ('field_one @t21 field_two');
+select * from test where match ('field_one @t21 field_two');
 
-<sphinxql>insert into rt40 (id,attr1,
+insert into rt40 (id,attr1,
 	field1,field2,field3,field4,field5,field6,field7,field8,field9,field10,
 	field11,field12,field13,field14,field15,field16,field17,field18,field19,field20,
 	field21,field22,field23,field24,field25,field26,field27,field28,field29,field30,
@@ -221,97 +221,97 @@ Look at http://sphinxsearch.com/bugs/view.php?id=952 for details -->
 values (123,111,'kw1','kw2','kw3','kw4','kw5','kw6','kw7','kw8','kw9','kw10',
 	'kw11','kw12','kw13','kw14','kw15','kw16','kw17','kw18','kw19','kw20',
 	'kw21','kw22','kw23','kw24','kw25','kw26','kw27','kw28','kw29','kw30',
-	'kw31','kw32','kw33','kw34','kw35','kw36','kw37','kw38','kw39','kw40')</sphinxql>
-<sphinxql>select *, 1 as testid from rt40 where match('kw37')</sphinxql>
-<sphinxql>select *, 2 as testid from rt40 where match('@field5 kw37')</sphinxql>
-<sphinxql>select *, 3 as testid from rt40 where match('@field37 kw37')</sphinxql>
+	'kw31','kw32','kw33','kw34','kw35','kw36','kw37','kw38','kw39','kw40');
+select *, 1 as testid from rt40 where match('kw37');
+select *, 2 as testid from rt40 where match('@field5 kw37');
+select *, 3 as testid from rt40 where match('@field37 kw37');
 
-<sphinxql>insert into rt28 (id,attr1,
+insert into rt28 (id,attr1,
 	field1,field2,field3,field4,field5,field6,field7,field8,field9,field10,
 	field11,field12,field13,field14,field15,field16,field17,field18,field19,field20,
 	field21,field22,field23,field24,field25,field26,field27,field28)
 values (124,222,
 	'kw1','kw2','kw3','kw4','kw5','kw6','kw7','kw8','kw9','kw10',
 	'kw11','kw12','kw13','kw14','kw15','kw16','kw17','kw18','kw19','kw20',
-	'kw21','kw22','kw23','kw24','kw25','kw26','kw27','kw28')</sphinxql>
-<sphinxql>select *, 1 as testid from rt28 where match('kw17')</sphinxql>
-<sphinxql>select *, 2 as testid from rt28 where match('@field17 kw17')</sphinxql>
-<sphinxql>select *, 3 as testid from rt28 where match('@field3 kw17')</sphinxql>
+	'kw21','kw22','kw23','kw24','kw25','kw26','kw27','kw28');
+select *, 1 as testid from rt28 where match('kw17');
+select *, 2 as testid from rt28 where match('@field17 kw17');
+select *, 3 as testid from rt28 where match('@field3 kw17');
 
-<sphinxql>insert into rt40 (id,field37) values (125,'kw37 copy2')</sphinxql>
-<sphinxql>select * from rt40 where match('kw37')</sphinxql>
-<sphinxql>select * from rt40 where match('@field37 kw37')</sphinxql>
+insert into rt40 (id,field37) values (125,'kw37 copy2');
+select * from rt40 where match('kw37');
+select * from rt40 where match('@field37 kw37');
 
-<sphinxql>insert into rt40 (id,field37) values (126,'kw37 copy3 ')</sphinxql>
-<sphinxql>select * from rt40 where match('kw37')</sphinxql>
-<sphinxql>select * from rt40 where match('@field37 kw37')</sphinxql>
+insert into rt40 (id,field37) values (126,'kw37 copy3 ');
+select * from rt40 where match('kw37');
+select * from rt40 where match('@field37 kw37');
 
 <!-- insert a bunch of dummies to force a segment merge; FIXME? implicitly depends on merging strategy.. -->
-<sphinxql>insert into rt40 (id,field39) values (200, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (201, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (202, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (203, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (204, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (205, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (206, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (207, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (208, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (209, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (210, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (211, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (212, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (213, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (214, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (215, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (216, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (217, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (218, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (219, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (220, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (221, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (222, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (223, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (224, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (225, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (226, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (227, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (228, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (229, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (230, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (231, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (232, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (233, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (234, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (235, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (236, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (237, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (238, 'badger badger badger badger mushroom mushroom')</sphinxql>
-<sphinxql>insert into rt40 (id,field39) values (239, 'badger badger badger badger mushroom mushroom')</sphinxql>
+insert into rt40 (id,field39) values (200, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (201, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (202, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (203, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (204, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (205, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (206, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (207, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (208, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (209, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (210, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (211, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (212, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (213, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (214, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (215, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (216, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (217, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (218, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (219, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (220, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (221, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (222, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (223, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (224, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (225, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (226, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (227, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (228, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (229, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (230, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (231, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (232, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (233, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (234, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (235, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (236, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (237, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (238, 'badger badger badger badger mushroom mushroom');
+insert into rt40 (id,field39) values (239, 'badger badger badger badger mushroom mushroom');
 
-<sphinxql>select * from rt40 where match('kw37')</sphinxql>
-<sphinxql>select * from rt40 where match('@field37 kw37')</sphinxql>
+select * from rt40 where match('kw37');
+select * from rt40 where match('@field37 kw37');
 
-<sphinxql>select * from rt40 where match('@field39 badger') order by weight() desc, id asc limit 40</sphinxql>
-<sphinxql>show meta</sphinxql>
+select * from rt40 where match('@field39 badger') order by weight() desc, id asc limit 40;
+show meta;
 
 <!--regression sort \ group by on expr at column over 255 -->
-<sphinxql>select id, idd265 from many_attr order by idd265 desc</sphinxql>
-<sphinxql>select id, idd265 i from many_attr order by i desc</sphinxql>
-<sphinxql>select id, idd265 + 1 as i from many_attr order by i desc</sphinxql>
-<sphinxql>select id, idd265 + 1 as i, i as i1, i1 as i2 from many_attr order by i2 desc</sphinxql>
-<sphinxql>select id, idd265 from many_attr group by idd265</sphinxql>
-<sphinxql>select id, idd265 as i from many_attr group by i</sphinxql>
-<sphinxql>select id, ( ( idd265 - 1000 ) mod  3 ) as i from many_attr group by i</sphinxql>
-<sphinxql>select id, ( ( idd265 - 1000 ) mod  3 ) as i, i as i1, i1 as i2 from many_attr group by i2</sphinxql>
+select id, idd265 from many_attr order by idd265 desc;
+select id, idd265 i from many_attr order by i desc;
+select id, idd265 + 1 as i from many_attr order by i desc;
+select id, idd265 + 1 as i, i as i1, i1 as i2 from many_attr order by i2 desc;
+select id, idd265 from many_attr group by idd265;
+select id, idd265 as i from many_attr group by i;
+select id, ( ( idd265 - 1000 ) mod  3 ) as i from many_attr group by i;
+select id, ( ( idd265 - 1000 ) mod  3 ) as i, i as i1, i1 as i2 from many_attr group by i2;
 
 <!--regression pq for column over 32 -->
-<sphinxql>insert into pq40 ( query ) values ( '@field35 4d236d9a2d102c5fe6ad1c50da4bec50 14dd5266c70789bdc806364df4586335 ab3201c6103205c14f6e56b11b2fcd46' )</sphinxql>
-<sphinxql>call pq ('pq40', ('{"field35":"4d236d9a2d102c5fe6ad1c50da4bec50 14dd5266c70789bdc806364df4586335 ab3201c6103205c14f6e56b11b2fcd46"}'), 1 as docs, 1 as query)</sphinxql>
+insert into pq40 ( query ) values ( '@field35 4d236d9a2d102c5fe6ad1c50da4bec50 14dd5266c70789bdc806364df4586335 ab3201c6103205c14f6e56b11b2fcd46' );
+call pq ('pq40', ('{"field35":"4d236d9a2d102c5fe6ad1c50da4bec50 14dd5266c70789bdc806364df4586335 ab3201c6103205c14f6e56b11b2fcd46"}'), 1 as docs, 1 as query);
 <!--regression pq match failed for single doc \ thread -->
-<sphinxql>SET GLOBAL max_threads_per_query=1</sphinxql>
-<sphinxql>call pq ('pq40', ('{"field35":"4d236d9a2d102c5fe6ad1c50da4bec50 14dd5266c70789bdc806364df4586335 ab3201c6103205c14f6e56b11b2fcd46"}'), 1 as docs, 1 as query)</sphinxql>
+SET GLOBAL max_threads_per_query=1;
+call pq ('pq40', ('{"field35":"4d236d9a2d102c5fe6ad1c50da4bec50 14dd5266c70789bdc806364df4586335 ab3201c6103205c14f6e56b11b2fcd46"}'), 1 as docs, 1 as query);
 
-</sphqueries>
+</sphinxql></queries>
 
 <db_create>
 CREATE TABLE `test_table`

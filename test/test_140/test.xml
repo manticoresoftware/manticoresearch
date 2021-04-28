@@ -79,31 +79,30 @@ index groupby_64
 
 </config>
 
-<sphqueries>
-<sphinxql>select * from main order by idd asc</sphinxql>
-<sphinxql>select * from main where match('main') order by idd asc</sphinxql>
-<sphinxql>select * from main where match('delta') order by idd asc</sphinxql>
-<sphinxql>select * from main where match('main | delta') order by idd asc</sphinxql>
-
-<sphinxql>select * from mva_64</sphinxql>
-<sphinxql>select * from mva_64 where mva1=-2099511627775 </sphinxql>
-<sphinxql>select * from mva_64 where mva1=55599511627775 </sphinxql>
-<sphinxql><![CDATA[ select * from mva_64 where mva1<-10 ]]></sphinxql>
-<sphinxql><![CDATA[ select * from mva_64 where mva1<-1099511627775 ]]></sphinxql>
-<sphinxql><![CDATA[ select * from mva_64 where mva1>50099511627775 ]]></sphinxql>
-
-<!-- regression mva64 groupby was cut at 32bit -->
-<sphinxql>select * from groupby_64</sphinxql>
-<sphinxql>select * from groupby_64 group by mva1</sphinxql>
-</sphqueries>
-
 <queries>
-<query index="mva_64"></query>
-<query filter_value="-2099511627775" filter="mva1" index="mva_64"></query>
-<query filter_value="55599511627775" filter="mva1" index="mva_64"></query>
-<query filter_range="-3000000000000 -10" filter="mva1" index="mva_64"></query>
-<query filter_range="-3000000000000 -1099511627776" filter="mva1" index="mva_64"></query>
-<query filter_range="50099511627776 600000000000000" filter="mva1" index="mva_64"></query>
+	<query index="mva_64"/>
+	<query filter_value="-2099511627775" filter="mva1" index="mva_64"/>
+	<query filter_value="55599511627775" filter="mva1" index="mva_64"/>
+	<query filter_range="-3000000000000 -10" filter="mva1" index="mva_64"/>
+	<query filter_range="-3000000000000 -1099511627776" filter="mva1" index="mva_64"/>
+	<query filter_range="50099511627776 600000000000000" filter="mva1" index="mva_64"/>
+<sphinxql>
+	select * from main order by idd asc;
+	select * from main where match('main') order by idd asc;
+	select * from main where match('delta') order by idd asc;
+	select * from main where match('main | delta') order by idd asc;
+
+	select * from mva_64;
+	select * from mva_64 where mva1=-2099511627775 ;
+	select * from mva_64 where mva1=55599511627775 ;
+	<![CDATA[ select * from mva_64 where mva1<-10 ]]>;
+	<![CDATA[ select * from mva_64 where mva1<-1099511627775 ]]>;
+	<![CDATA[ select * from mva_64 where mva1>50099511627775 ]]>;
+
+	<!-- regression mva64 groupby was cut at 32bit -->
+	select * from groupby_64;
+	select * from groupby_64 group by mva1;
+</sphinxql>
 </queries>
 
 <db_create>

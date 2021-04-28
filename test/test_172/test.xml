@@ -63,11 +63,11 @@ INSERT INTO test_table VALUES
 ( 15, 'dummy', 10, 6 )
 </db_insert>
 
-<sphqueries>
-<sphinxql>SELECT *, AVG(price) AS p FROM test GROUP BY gid ORDER BY p DESC option max_matches=2</sphinxql>
-<sphinxql>SELECT *, AVG(price) AS p FROM test GROUP BY gid ORDER BY p ASC option max_matches=2</sphinxql>
-<sphinxql>SELECT *, AVG(price) AS p FROM test WHERE price>4 GROUP BY gid ORDER BY p ASC option max_matches=2</sphinxql>
-</sphqueries>
+<queries><sphinxql>
+SELECT *, AVG(price) AS p FROM test GROUP BY gid ORDER BY p DESC option max_matches=2;
+SELECT *, AVG(price) AS p FROM test GROUP BY gid ORDER BY p ASC option max_matches=2;
+SELECT *, AVG(price) AS p FROM test WHERE price>4 GROUP BY gid ORDER BY p ASC option max_matches=2;
+</sphinxql></queries>
 
 
 </test>

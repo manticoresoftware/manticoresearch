@@ -56,30 +56,30 @@ index test2
 
 <db_insert>select 1;</db_insert>
 
-<sphqueries>
-<sphinxql>CALL SNIPPETS('Check vs Checking', 'test', 'check', 1 AS query_mode )</sphinxql>
-<sphinxql>CALL SNIPPETS('Check vs Checking', 'test', '=check', 1 AS query_mode )</sphinxql>
-<sphinxql>CALL SNIPPETS('Check vs Checking', 'test', 'checking', 1 AS query_mode )</sphinxql>
-<sphinxql>CALL SNIPPETS('Check vs Checking', 'test', '=checking', 1 AS query_mode )</sphinxql>
-<sphinxql>CALL SNIPPETS('the time has come, the walrus said, to handle many things, including Check vs Checking, but not quite limited to', 'test', 'check', 1 AS query_mode, 2 AS around, 50 AS limit )</sphinxql>
-<sphinxql>CALL SNIPPETS('the time has come, the walrus said, to handle many things, including Check vs Checking, but not quite limited to', 'test', '=check', 1 AS query_mode, 2 AS around, 50 AS limit )</sphinxql>
-<sphinxql>CALL SNIPPETS('the time has come, the walrus said, to handle many things, including Check vs Checking, but not quite limited to', 'test', 'checking', 1 AS query_mode, 2 AS around, 50 AS limit )</sphinxql>
-<sphinxql>CALL SNIPPETS('the time has come, the walrus said, to handle many things, including Check vs Checking, but not quite limited to', 'test', '=checking', 1 AS query_mode, 2 AS around, 50 AS limit )</sphinxql>
+<queries><sphinxql>
+CALL SNIPPETS('Check vs Checking', 'test', 'check', 1 AS query_mode );
+CALL SNIPPETS('Check vs Checking', 'test', '=check', 1 AS query_mode );
+CALL SNIPPETS('Check vs Checking', 'test', 'checking', 1 AS query_mode );
+CALL SNIPPETS('Check vs Checking', 'test', '=checking', 1 AS query_mode );
+CALL SNIPPETS('the time has come, the walrus said, to handle many things, including Check vs Checking, but not quite limited to', 'test', 'check', 1 AS query_mode, 2 AS around, 50 AS limit );
+CALL SNIPPETS('the time has come, the walrus said, to handle many things, including Check vs Checking, but not quite limited to', 'test', '=check', 1 AS query_mode, 2 AS around, 50 AS limit );
+CALL SNIPPETS('the time has come, the walrus said, to handle many things, including Check vs Checking, but not quite limited to', 'test', 'checking', 1 AS query_mode, 2 AS around, 50 AS limit );
+CALL SNIPPETS('the time has come, the walrus said, to handle many things, including Check vs Checking, but not quite limited to', 'test', '=checking', 1 AS query_mode, 2 AS around, 50 AS limit );
 <!-- here is going regression no star matches on fast path - words were stemmed -->
-<sphinxql>CALL SNIPPETS('check vs checking fast path', 'tstar', 'checki*', 1 AS query_mode, 0 AS limit )</sphinxql>
-<sphinxql>CALL SNIPPETS('check vs checking regular path', 'tstar', 'checki*', 1 AS query_mode, 0 AS limit, 1 AS limit_passages )</sphinxql>
+CALL SNIPPETS('check vs checking fast path', 'tstar', 'checki*', 1 AS query_mode, 0 AS limit );
+CALL SNIPPETS('check vs checking regular path', 'tstar', 'checki*', 1 AS query_mode, 0 AS limit, 1 AS limit_passages );
 <!-- here is going regression no star matches on regular path - words were stemmed -->
-<sphinxql>CALL SNIPPETS('time is dying out like everething else here', 'stars', 'dying*', 1 AS query_mode, 20 AS limit )</sphinxql>
-<sphinxql>CALL SNIPPETS('time is dying out like everething else here', 'stars', '*dying', 1 AS query_mode, 20 AS limit )</sphinxql>
-<sphinxql>CALL SNIPPETS('time is dying out like everething else here', 'stars', '*dying*', 1 AS query_mode, 20 AS limit )</sphinxql>
+CALL SNIPPETS('time is dying out like everething else here', 'stars', 'dying*', 1 AS query_mode, 20 AS limit );
+CALL SNIPPETS('time is dying out like everething else here', 'stars', '*dying', 1 AS query_mode, 20 AS limit );
+CALL SNIPPETS('time is dying out like everething else here', 'stars', '*dying*', 1 AS query_mode, 20 AS limit );
 <!-- here is going regression allow_empty inconsistency, fast vs plain path -->
-<sphinxql>CALL SNIPPETS('time is dying out like everething else here', 'test', 'nothing', 1 AS query_mode, 40 AS limit, 1 as allow_empty )</sphinxql>
-<sphinxql>CALL SNIPPETS('time is dying out like everething', 'test', 'nothing', 1 AS query_mode, 40 AS limit, 1 as allow_empty  )</sphinxql>
-<sphinxql>CALL SNIPPETS('time is dying out like everething else here', 'test', 'nothing', 40 AS limit, 1 as allow_empty  )</sphinxql>
-<sphinxql>CALL SNIPPETS('time is dying out like everething', 'test', 'nothing', 40 AS limit, 1 as allow_empty  )</sphinxql>
+CALL SNIPPETS('time is dying out like everething else here', 'test', 'nothing', 1 AS query_mode, 40 AS limit, 1 as allow_empty );
+CALL SNIPPETS('time is dying out like everething', 'test', 'nothing', 1 AS query_mode, 40 AS limit, 1 as allow_empty  );
+CALL SNIPPETS('time is dying out like everething else here', 'test', 'nothing', 40 AS limit, 1 as allow_empty  );
+CALL SNIPPETS('time is dying out like everething', 'test', 'nothing', 40 AS limit, 1 as allow_empty  );
 <!-- regression stripped option at SNIPPET expression -->
-<sphinxql><![CDATA[SELECT id, SNIPPET('hello this is a text. And this.', 'this','before_match=<strong id= %PASSAGE_ID% >', 'after_match=</strong>', 'start_passage_id=100000000') from test2 where match ('this')]]></sphinxql>
-<sphinxql><![CDATA[CALL SNIPPETS('hello this is a text. And this.',  'test2', 'this', '<strong id=%PASSAGE_ID%>' as before_match, '</strong>' as after_match, 100000000 as start_passage_id)]]></sphinxql>
-</sphqueries>
+<![CDATA[SELECT id, SNIPPET('hello this is a text. And this.', 'this','before_match=<strong id= %PASSAGE_ID% >', 'after_match=</strong>', 'start_passage_id=100000000') from test2 where match ('this')]]>;
+<![CDATA[CALL SNIPPETS('hello this is a text. And this.',  'test2', 'this', '<strong id=%PASSAGE_ID%>' as before_match, '</strong>' as after_match, 100000000 as start_passage_id)]]>;
+</sphinxql></queries>
 
 </test>

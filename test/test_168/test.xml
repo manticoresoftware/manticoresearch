@@ -104,41 +104,41 @@ index idx32
 </config>
 
 
-<sphqueries>
-<sphinxql>CALL SNIPPETS ('and here we go 2524460. 989561 as you said', 'idx', '=2524460.', 1 as query_mode, 4 as limit_words, 2 as around)</sphinxql>
-<sphinxql>CALL SNIPPETS ('What are you need here (exactly)? are dude friendly? As I know this dude\/buddy.', 'idx2', '\(exactly\) | =dude\/buddy', 1 as query_mode, 60 as limit, 2 as around)</sphinxql>
-<sphinxql>CALL SNIPPETS ('What are you need here (exactly)? are dude friendly? As I know this dude\/buddy.', 'idx2', '\(exactly\) dude\/buddy', 2 as around)</sphinxql>
-<sphinxql>CALL SNIPPETS ('What are you need here (exactly)? are dude friendly? As I know this dude\/buddy.', 'idx2', '\(exactly\) | dude\/buddy', 1 as query_mode, 2 as around)</sphinxql>
+<queries><sphinxql>
+CALL SNIPPETS ('and here we go 2524460. 989561 as you said', 'idx', '=2524460.', 1 as query_mode, 4 as limit_words, 2 as around);
+CALL SNIPPETS ('What are you need here (exactly)? are dude friendly? As I know this dude\/buddy.', 'idx2', '\(exactly\) | =dude\/buddy', 1 as query_mode, 60 as limit, 2 as around);
+CALL SNIPPETS ('What are you need here (exactly)? are dude friendly? As I know this dude\/buddy.', 'idx2', '\(exactly\) dude\/buddy', 2 as around);
+CALL SNIPPETS ('What are you need here (exactly)? are dude friendly? As I know this dude\/buddy.', 'idx2', '\(exactly\) | dude\/buddy', 1 as query_mode, 2 as around);
 
-<sphinxql>CALL SNIPPETS ('What are you need here (exactly)? are dude friendly? As I know this dude\/buddy.', 'idx2', '\(exactly\) buddy', 2 as around)</sphinxql>
-<sphinxql>CALL SNIPPETS ('What are you need here (exactly)? are dude friendly? As I know this dude\/buddy.', 'idx2', '\(exactly\) | buddy', 1 as query_mode, 2 as around)</sphinxql>
+CALL SNIPPETS ('What are you need here (exactly)? are dude friendly? As I know this dude\/buddy.', 'idx2', '\(exactly\) buddy', 2 as around);
+CALL SNIPPETS ('What are you need here (exactly)? are dude friendly? As I know this dude\/buddy.', 'idx2', '\(exactly\) | buddy', 1 as query_mode, 2 as around);
 
-<sphinxql>CALL SNIPPETS ('What are you need here+ (exactly)?', 'idx2', '\(exactly\)', 1 as query_mode, 3 as limit_passages, 2 as around)</sphinxql>
-<sphinxql>CALL SNIPPETS ('What are you need here+ (exactly)?', 'idx2', '\(exactly\)', 1 as query_mode, 0 as around, 0 as limit)</sphinxql>
+CALL SNIPPETS ('What are you need here+ (exactly)?', 'idx2', '\(exactly\)', 1 as query_mode, 3 as limit_passages, 2 as around);
+CALL SNIPPETS ('What are you need here+ (exactly)?', 'idx2', '\(exactly\)', 1 as query_mode, 0 as around, 0 as limit);
 
 <!-- regression hightlight of blend-char along with term -->
-<sphinxql>CALL SNIPPETS ('abc +hashtag abc', 'idx2', '+hashtag', 1 as query_mode, 0 as around, 0 as limit)</sphinxql>
-<sphinxql>CALL SNIPPETS ('abc +hashtag +hashtag abc', 'idx2', '+hashtag', 1 as query_mode, 0 as around, 0 as limit)</sphinxql>
-<sphinxql>CALL SNIPPETS ('abc +hashtag +hashtag', 'idx2', '+hashtag', 1 as query_mode, 0 as around, 0 as limit)</sphinxql>
-<sphinxql>CALL SNIPPETS ('abc +hashtag+bag abc', 'idx2', '+hashtag', 1 as query_mode, 0 as around, 0 as limit)</sphinxql>
-<sphinxql>CALL SNIPPETS ('abc +hashtag+bag abc', 'idx2', '+hashtag+bag', 1 as query_mode, 0 as around, 0 as limit)</sphinxql>
-<sphinxql>CALL SNIPPETS ('abc +hashtag+bag abc', 'idx2', '+hashtag +bag', 1 as query_mode, 0 as around, 0 as limit)</sphinxql>
+CALL SNIPPETS ('abc +hashtag abc', 'idx2', '+hashtag', 1 as query_mode, 0 as around, 0 as limit);
+CALL SNIPPETS ('abc +hashtag +hashtag abc', 'idx2', '+hashtag', 1 as query_mode, 0 as around, 0 as limit);
+CALL SNIPPETS ('abc +hashtag +hashtag', 'idx2', '+hashtag', 1 as query_mode, 0 as around, 0 as limit);
+CALL SNIPPETS ('abc +hashtag+bag abc', 'idx2', '+hashtag', 1 as query_mode, 0 as around, 0 as limit);
+CALL SNIPPETS ('abc +hashtag+bag abc', 'idx2', '+hashtag+bag', 1 as query_mode, 0 as around, 0 as limit);
+CALL SNIPPETS ('abc +hashtag+bag abc', 'idx2', '+hashtag +bag', 1 as query_mode, 0 as around, 0 as limit);
 <!-- regression hightlight of blend-char along with term with passages -->
-<sphinxql>CALL SNIPPETS ('hashtag+bag abc for me is not so long but who knows', 'idx2', 'hashtag+bag', 1 as query_mode, 40 as limit)</sphinxql>
-<sphinxql>CALL SNIPPETS ('for me is not so long but who knows abc hashtag+bag', 'idx2', 'hashtag+bag', 1 as query_mode, 40 as limit)</sphinxql>
-<sphinxql>CALL SNIPPETS ('for me is not so long abc hashtag+bag but who knows everyone is not same abc hashtag+bag as me or someone', 'idx2', 'hashtag+bag', 1 as query_mode, 40 as limit)</sphinxql>
-<sphinxql>CALL SNIPPETS ('for me is not so long abc hashtag+bag but who knows everyone is not same abc hashtag+bag as me or someone', 'idx2', 'hashtag+bag', 1 as query_mode, 80 as limit)</sphinxql>
+CALL SNIPPETS ('hashtag+bag abc for me is not so long but who knows', 'idx2', 'hashtag+bag', 1 as query_mode, 40 as limit);
+CALL SNIPPETS ('for me is not so long but who knows abc hashtag+bag', 'idx2', 'hashtag+bag', 1 as query_mode, 40 as limit);
+CALL SNIPPETS ('for me is not so long abc hashtag+bag but who knows everyone is not same abc hashtag+bag as me or someone', 'idx2', 'hashtag+bag', 1 as query_mode, 40 as limit);
+CALL SNIPPETS ('for me is not so long abc hashtag+bag but who knows everyone is not same abc hashtag+bag as me or someone', 'idx2', 'hashtag+bag', 1 as query_mode, 80 as limit);
 <!-- assert in the beginning of the string -->
-<sphinxql>CALL SNIPPETS ('+hashtag for me is not so long but who knows', 'idx2', '+hashtag', 1 as query_mode, 40 as limit)</sphinxql>
-<sphinxql>CALL SNIPPETS (('text1.txt'),'idx_blend1','mysql query',1 AS load_files)</sphinxql>
-<sphinxql>CALL SNIPPETS (('text2.txt'),'idx_blend2','*алгоритм*',1 AS load_files)</sphinxql>
+CALL SNIPPETS ('+hashtag for me is not so long but who knows', 'idx2', '+hashtag', 1 as query_mode, 40 as limit);
+CALL SNIPPETS (('text1.txt'),'idx_blend1','mysql query',1 AS load_files);
+CALL SNIPPETS (('text2.txt'),'idx_blend2','*алгоритм*',1 AS load_files);
 
 <!-- crash or hung on empty snippet -->
-<sphinxql>SELECT *, SNIPPET(f1,'J07A | query', 'load_files=1, html_strip_mode=index, around=10') FROM idx31 WHERE MATCH ('J07A | query')</sphinxql>
-<sphinxql>SELECT *, SNIPPET(f1,'J07A | *алгоритм*', 'load_files=1, html_strip_mode=index, around=10') FROM idx31 WHERE MATCH ('J07A | *алгоритм*')</sphinxql>
-<sphinxql>SELECT *, SNIPPET(f1,'J07A | query', 'load_files=1, html_strip_mode=index, around=10') FROM idx32 WHERE MATCH ('J07A | query')</sphinxql>
-<sphinxql>SELECT *, SNIPPET(f1,'J07A | *алгоритм*', 'load_files=1, html_strip_mode=index, around=10') FROM idx32 WHERE MATCH ('J07A | *алгоритм*')</sphinxql>
-</sphqueries>
+SELECT *, SNIPPET(f1,'J07A | query', 'load_files=1, html_strip_mode=index, around=10') FROM idx31 WHERE MATCH ('J07A | query');
+SELECT *, SNIPPET(f1,'J07A | *алгоритм*', 'load_files=1, html_strip_mode=index, around=10') FROM idx31 WHERE MATCH ('J07A | *алгоритм*');
+SELECT *, SNIPPET(f1,'J07A | query', 'load_files=1, html_strip_mode=index, around=10') FROM idx32 WHERE MATCH ('J07A | query');
+SELECT *, SNIPPET(f1,'J07A | *алгоритм*', 'load_files=1, html_strip_mode=index, around=10') FROM idx32 WHERE MATCH ('J07A | *алгоритм*');
+</sphinxql></queries>
 
 <db_create>
 CREATE TABLE test_table

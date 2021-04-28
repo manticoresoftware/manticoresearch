@@ -49,25 +49,25 @@ index dist
 
 <queries>
 <query index="dist"/>
+
+<sphinxql>
+	<!-- regression on empty mva -->
+	select mva from idx where id=5;
+	select mva from dist where id=5;
+
+	<!-- also check empty string -->
+	select to_string(mva) a from idx where id=5;
+	select to_string(mva) a from dist where id=5;
+
+	<!-- also check empty json -->
+	select jsn from idx where id=3;
+	select jsn from dist where id=3;
+
+	<!-- control show everything -->
+	select * from idx;
+	select * from dist;
+</sphinxql>
 </queries>
-
-<sphqueries>
-<!-- regression on empty mva -->
-<sphinxql>select mva from idx where id=5</sphinxql>
-<sphinxql>select mva from dist where id=5</sphinxql>
-
-<!-- also check empty string -->
-<sphinxql>select to_string(mva) a from idx where id=5</sphinxql>
-<sphinxql>select to_string(mva) a from dist where id=5</sphinxql>
-
-<!-- also check empty json -->
-<sphinxql>select jsn from idx where id=3</sphinxql>
-<sphinxql>select jsn from dist where id=3</sphinxql>
-
-<!-- control show everything -->
-<sphinxql>select * from idx</sphinxql>
-<sphinxql>select * from dist</sphinxql>
-</sphqueries>
 
 <db_create>
 CREATE TABLE `test_table` (

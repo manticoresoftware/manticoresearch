@@ -180,13 +180,13 @@ INSERT INTO test_table ( document_id, title, text ) VALUES
 	<query mode="extended2"><![CDATA[ "zzz aaa"/1 << ddd ]]></query>
 	<!-- here is going regression -->
 	<query mode="extended2" index="test1"><![CDATA[ ("h1 h2" NEAR/5 ( h3 | h4 | h5) ) << ("h1 h2" NEAR/5 ( h3 | h4 | h5) ) ]]></query>
-</queries>
 
-<sphqueries>
-<sphinxql><![CDATA[ select * from test2 where match ( ' hi | ( vi << mi )' ) and id in ( 10, 11, 12, 15 ) ]]></sphinxql>
-<sphinxql><![CDATA[ select * from test3 where match ( '"New York, New York 10451"' ) ]]></sphinxql>
-<!-- regression ExtConditional vs tail hits from other nodes -->
-<sphinxql><![CDATA[ select * from test4 where match ( ' "m1 m2 m3$"/2 ' ) ]]></sphinxql>
-</sphqueries>
+<sphinxql>
+	<![CDATA[ select * from test2 where match ( ' hi | ( vi << mi )' ) and id in ( 10, 11, 12, 15 ) ]]>;
+	<![CDATA[ select * from test3 where match ( '"New York, New York 10451"' ) ]]>;
+	<!-- regression ExtConditional vs tail hits from other nodes -->
+	<![CDATA[ select * from test4 where match ( ' "m1 m2 m3$"/2 ' ) ]]>;
+</sphinxql>
+</queries>
 
 </test>

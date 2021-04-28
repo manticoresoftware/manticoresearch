@@ -45,31 +45,33 @@ index test105
 }
 </Config>
 
-<SPHQueries>
-	<SPHinxQL>insert into test92 (id,content) values (1,'content'),(2,'you')</SPHinxQL>
-	<SPHinxQL>delete from test92 where id=1</SPHinxQL>
-	<SPHinxQL>select * from test92</SPHinxQL>
-	<SPHinxQL>insert into test92 (id,content) values (1,'newcontent')</SPHinxQL>
-	<SPHinxQL>select * from test92 where match('you')</SPHinxQL>
-	<SPHinxQL>select * from test92 where match('content')</SPHinxQL>
-	<SPHinxQL>select * from test92 where match('newcontent')</SPHinxQL>
-	<SPHinxQL>insert into test102 (id,content) values (1,'content'),(2,'newcontent')</SPHinxQL>
-	<SPHinxQL>delete from test102 where id=1</SPHinxQL>
-	<SPHinxQL>insert into test102 (id,content) values (1,'bla')</SPHinxQL>
-	<SPHinxQL>select * from test102 where match('bla')</SPHinxQL>
-	<SPHinxQL>select * from test102 where match('newcontent')</SPHinxQL>
-	<SPHinxQL>insert into test102 (id,content) values (3,'content2')</SPHinxQL>
-	<SPHinxQL>select * from test102 where match('bla')</SPHinxQL>
-	<SPHinxQL>select * from test102 where match('content2')</SPHinxQL>
-	<SPHinxQL>select * from test102 where match('newcontent')</SPHinxQL>
-	<SPHinxQL>insert into test104 (id,content) values (1,'word1'),(2,'word2')</SPHinxQL>
-	<SPHinxQL>insert into test104 (id,content) values (3,'word3')</SPHinxQL>
-	<SPHinxQL>select * from test104 where match('word1|word3') order by weight() desc, id asc</SPHinxQL>
-	<SPHinxQL>insert into test105 (id,content) values (1,'content'),(2,'newcontent')</SPHinxQL>
-	<SPHinxQL>replace into test105 (id,content) values (1,'contend')</SPHinxQL>
-	<SPHinxQL>select * from test105 where match('contend|newcontent')</SPHinxQL>
-	<SPHinxQL>select * from test105 where match('content')</SPHinxQL>
-	<SPHinxQL>select * from test105 where match('contend MAYBE newcontent')</SPHinxQL>
-</SPHQueries>
+<queries>
+	<sphinxql>
+	insert into test92 (id,content) values (1,'content'),(2,'you');
+	delete from test92 where id=1;
+	select * from test92;
+	insert into test92 (id,content) values (1,'newcontent');
+	select * from test92 where match('you');
+	select * from test92 where match('content');
+	select * from test92 where match('newcontent');
+	insert into test102 (id,content) values (1,'content'),(2,'newcontent');
+	delete from test102 where id=1;
+	insert into test102 (id,content) values (1,'bla');
+	select * from test102 where match('bla');
+	select * from test102 where match('newcontent');
+	insert into test102 (id,content) values (3,'content2');
+	select * from test102 where match('bla');
+	select * from test102 where match('content2');
+	select * from test102 where match('newcontent');
+	insert into test104 (id,content) values (1,'word1'),(2,'word2');
+	insert into test104 (id,content) values (3,'word3');
+	select * from test104 where match('word1|word3') order by weight() desc, id asc;
+	insert into test105 (id,content) values (1,'content'),(2,'newcontent');
+	replace into test105 (id,content) values (1,'contend');
+	select * from test105 where match('contend|newcontent');
+	select * from test105 where match('content');
+	select * from test105 where match('contend MAYBE newcontent');
+	</sphinxql>
+</queries>
 
 </Test>

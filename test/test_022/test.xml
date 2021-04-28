@@ -124,89 +124,88 @@ index multi22
 <query index="test_num">test 1</query>
 <query index="test_num">1 test</query>
 <query index="test_num">test one</query>
+
+<sphinxql>
+	SELECT * FROM test_num WHERE MATCH('metallica');
+	SHOW META;
+	SELECT * FROM test_num WHERE MATCH('metallica 2014');
+	SHOW META;
+
+	<!-- regression multi destination wordform vs operators -->
+	set profiling=1;
+	SELECT * FROM multi1 WHERE MATCH('me | rdogs');
+	show plan;
+	show meta;
+	SELECT * FROM multi2 WHERE MATCH('me | rdogs');
+	show plan;
+	show meta;
+	SELECT * FROM multi1 WHERE MATCH('me | dogs');
+	show plan;
+	show meta;
+	SELECT * FROM multi2 WHERE MATCH('me | dogs');
+	show plan;
+	show meta;
+	SELECT * FROM multi1 WHERE MATCH('me | (red dogs)');
+	show plan;
+	show meta;
+	SELECT * FROM multi2 WHERE MATCH('me | (red dogs)');
+	show plan;
+	show meta;
+	SELECT * FROM multi1 WHERE MATCH('meo | (red dog)');
+	show plan;
+	show meta;
+	SELECT * FROM multi2 WHERE MATCH('meo | (red dog)');
+	show plan;
+	show meta;
+	SELECT * FROM multi1 WHERE MATCH('me | =rdogs');
+	show plan;
+	show meta;
+	SELECT * FROM multi2 WHERE MATCH('me | =rdogs');
+	show plan;
+	show meta;
+	SELECT * FROM multi1 WHERE MATCH('me | rdogs$');
+	show plan;
+	show meta;
+	SELECT * FROM multi2 WHERE MATCH('me | rdogs$');
+	show plan;
+	show meta;
+	SELECT * FROM multi1 WHERE MATCH('me | =rdogs$');
+	show plan;
+	show meta;
+	SELECT * FROM multi2 WHERE MATCH('me | =rdogs$');
+	show plan;
+	show meta;
+	SELECT * FROM multi1 WHERE MATCH('test | "me rdogs" ');
+	show plan;
+	show meta;
+	SELECT * FROM multi2 WHERE MATCH('test | "me rdogs" ');
+	show plan;
+	show meta;
+
+	<!-- regression multiforms vs numbers mess -->
+	SELECT * FROM test_num WHERE MATCH('24 mois');
+	SHOW META;
+	SELECT * FROM test_num WHERE MATCH('"foo bar baz"/24 mois');
+	SHOW PLAN;
+	SELECT * FROM test_num WHERE MATCH('foo ~ 24 mois');
+
+	<!-- regression multiforms vs field modifiers -->
+	SELECT * FROM multi_fm WHERE MATCH('^rdogs$');
+	SELECT * FROM multi_fm WHERE MATCH('^red dogs$');
+
+	<!-- regression multiforms vs stemmer -->
+	SELECT * FROM multi22 WHERE MATCH('uniman');
+	show meta;
+	SELECT * FROM multi22 WHERE MATCH('man utd');
+	show meta;
+
+	<!-- checking that (MATCH(...)) is supported (Github#143) and the results don't differ from just MATCH(...) -->
+	SELECT * FROM multi22 WHERE MATCH('man');
+	show meta;
+	SELECT * FROM multi22 WHERE (MATCH('man'));
+	show meta;
+</sphinxql>
 </queries>
-
-<sphqueries>
-<sphinxql>SELECT * FROM test_num WHERE MATCH('metallica')</sphinxql>
-<sphinxql>SHOW META</sphinxql>
-<sphinxql>SELECT * FROM test_num WHERE MATCH('metallica 2014')</sphinxql>
-<sphinxql>SHOW META</sphinxql>
-
-<!-- regression multi destination wordform vs operators -->
-<sphinxql>set profiling=1</sphinxql>
-<sphinxql>SELECT * FROM multi1 WHERE MATCH('me | rdogs')</sphinxql>
-<sphinxql>show plan</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>SELECT * FROM multi2 WHERE MATCH('me | rdogs')</sphinxql>
-<sphinxql>show plan</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>SELECT * FROM multi1 WHERE MATCH('me | dogs')</sphinxql>
-<sphinxql>show plan</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>SELECT * FROM multi2 WHERE MATCH('me | dogs')</sphinxql>
-<sphinxql>show plan</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>SELECT * FROM multi1 WHERE MATCH('me | (red dogs)')</sphinxql>
-<sphinxql>show plan</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>SELECT * FROM multi2 WHERE MATCH('me | (red dogs)')</sphinxql>
-<sphinxql>show plan</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>SELECT * FROM multi1 WHERE MATCH('meo | (red dog)')</sphinxql>
-<sphinxql>show plan</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>SELECT * FROM multi2 WHERE MATCH('meo | (red dog)')</sphinxql>
-<sphinxql>show plan</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>SELECT * FROM multi1 WHERE MATCH('me | =rdogs')</sphinxql>
-<sphinxql>show plan</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>SELECT * FROM multi2 WHERE MATCH('me | =rdogs')</sphinxql>
-<sphinxql>show plan</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>SELECT * FROM multi1 WHERE MATCH('me | rdogs$')</sphinxql>
-<sphinxql>show plan</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>SELECT * FROM multi2 WHERE MATCH('me | rdogs$')</sphinxql>
-<sphinxql>show plan</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>SELECT * FROM multi1 WHERE MATCH('me | =rdogs$')</sphinxql>
-<sphinxql>show plan</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>SELECT * FROM multi2 WHERE MATCH('me | =rdogs$')</sphinxql>
-<sphinxql>show plan</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>SELECT * FROM multi1 WHERE MATCH('test | "me rdogs" ')</sphinxql>
-<sphinxql>show plan</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>SELECT * FROM multi2 WHERE MATCH('test | "me rdogs" ')</sphinxql>
-<sphinxql>show plan</sphinxql>
-<sphinxql>show meta</sphinxql>
-
-<!-- regression multiforms vs numbers mess -->
-<sphinxql>SELECT * FROM test_num WHERE MATCH('24 mois')</sphinxql>
-<sphinxql>SHOW META</sphinxql>
-<sphinxql>SELECT * FROM test_num WHERE MATCH('"foo bar baz"/24 mois')</sphinxql>
-<sphinxql>SHOW PLAN</sphinxql>
-<sphinxql>SELECT * FROM test_num WHERE MATCH('foo ~ 24 mois')</sphinxql>
-
-<!-- regression multiforms vs field modifiers -->
-<sphinxql>SELECT * FROM multi_fm WHERE MATCH('^rdogs$')</sphinxql>
-<sphinxql>SELECT * FROM multi_fm WHERE MATCH('^red dogs$')</sphinxql>
-
-<!-- regression multiforms vs stemmer -->
-<sphinxql>SELECT * FROM multi22 WHERE MATCH('uniman')</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>SELECT * FROM multi22 WHERE MATCH('man utd')</sphinxql>
-<sphinxql>show meta</sphinxql>
-
-<!-- checking that (MATCH(...)) is supported (Github#143) and the results don't differ from just MATCH(...) -->
-<sphinxql>SELECT * FROM multi22 WHERE MATCH('man')</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>SELECT * FROM multi22 WHERE (MATCH('man'))</sphinxql>
-<sphinxql>show meta</sphinxql>
-
-</sphqueries>
 
 <db_create>
 CREATE TABLE `test_table`

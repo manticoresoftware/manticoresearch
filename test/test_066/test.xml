@@ -23,8 +23,8 @@ index test
 
 </Config>
 
-<SPHQueries>
-<SPHinxQL>
+<queries>
+<sphinxql>
 	insert into test values (1,'text one',2),(2,'text two',3),(3,'text three',4),(4,'text four',4);
 	flush ramchunk test;
 	insert into test values (5,'text five',2),(6,'text six',3);
@@ -76,7 +76,7 @@ index test
 
 	select * from test order by id asc;
 
-</SPHinxQL>
-</SPHQueries>
+</sphinxql>
+</queries>
 
 </Test>

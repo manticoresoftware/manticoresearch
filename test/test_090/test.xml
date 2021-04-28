@@ -24,26 +24,28 @@ index test
 }
 </Config>
 
-<SPHQueries>
-	<SPHinxQL>insert into test (id,body) values (1,'value')</SPHinxQL>
-	<SPHinxQL>select (3-1) as a from test</SPHinxQL>
-	<SPHinxQL>select (3 -1) as a from test</SPHinxQL>
-	<SPHinxQL>select (3- 1) as a from test</SPHinxQL>
-	<SPHinxQL>select (3-0.1) as a from test</SPHinxQL>
-	<SPHinxQL>select (3- 0.1) as a from test</SPHinxQL>
-	<SPHinxQL>select (3 -0.1) as a from test</SPHinxQL>
-        <SPHinxQL>select (3--1) as a from test</SPHinxQL>
-	<SPHinxQL>select (3 --1) as a from test</SPHinxQL>
-	<SPHinxQL>select (3-- 1) as a from test</SPHinxQL>
-	<SPHinxQL>select (3--0.1) as a from test</SPHinxQL>
-	<SPHinxQL>select (3-- 0.1) as a from test</SPHinxQL>
-	<SPHinxQL>select (3 --0.1) as a from test</SPHinxQL>
-        <SPHinxQL>select (3- -1) as a from test</SPHinxQL>
-	<SPHinxQL>select (3 - -1) as a from test</SPHinxQL>
-	<SPHinxQL>select (3- - 1) as a from test</SPHinxQL>
-	<SPHinxQL>select (3- -0.1) as a from test</SPHinxQL>
-	<SPHinxQL>select (3- - 0.1) as a from test</SPHinxQL>
-	<SPHinxQL>select (3 - -0.1) as a from test</SPHinxQL>
-</SPHQueries>
+<queries>
+    <sphinxql>
+    insert into test (id,body) values (1,'value');
+    select (3-1) as a from test;
+    select (3 -1) as a from test;
+    select (3- 1) as a from test;
+    select (3-0.1) as a from test;
+    select (3- 0.1) as a from test;
+    select (3 -0.1) as a from test;
+    select (3--1) as a from test;
+    select (3 --1) as a from test;
+    select (3-- 1) as a from test;
+    select (3--0.1) as a from test;
+    select (3-- 0.1) as a from test;
+    select (3 --0.1) as a from test;
+    select (3- -1) as a from test;
+    select (3 - -1) as a from test;
+    select (3- - 1) as a from test;
+    select (3- -0.1) as a from test;
+    select (3- - 0.1) as a from test;
+    select (3 - -0.1) as a from test;
+    </sphinxql>
+</queries>
 
 </Test>

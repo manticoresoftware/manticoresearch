@@ -123,38 +123,39 @@ index dist1
 <query  index="test" mode="extended2">1-word@#1215</query>
 <query  index="test" mode="extended2">canon 16 35</query>
 <query  index="test" mode="extended2">canon 16-35</query>
+
+<sphinxql>
+	select * from fld where match ( '@title spec1 @body dummy1' ) order by id asc;
+	select * from fld where match ( '@title ( ( spec2 ) (dummy2) | text2 ) ' ) order by id asc;
+	select * from fld where match ( '@title ( ( spec3 ) @body (dummy3) | text3 ) ' ) order by id asc;
+	select * from fld where match ( '@title ( ( spec4 ) (dummy4) | @body text4 ) ' ) order by id asc;
+	select * from fld where match ( '@title ( ( spec4 ) (dummy4) @body text4 ) ' ) order by id asc;
+	select * from fld where match ( '@title ( ( spec4 ) dummy4 | @body text4 ) ' ) order by id asc;
+	select * from fld where match ( '@title ( ( spec4 ) dummy4 @body text4 ) ' ) order by id asc;
+	select * from fld where match ( '@title ( ( spec5 ) @body (dummy5) | text5 ) of my ' ) order by id asc;
+	select * from fld where match ( 'jolly rodger ;)' );
+	select * from fld where match ( '(((((((((( crashing 9 brackets');
+	select * from fld where match ( '@title(spec1 absentword) | @body(dummy1)' ) and id=1000 option ranker='wordcount', field_weights=(title=1000, body=1);
+	select * from fld where match ( 'one | !two' );
+	<!-- regression for embedded zeroes -->
+	select * from test where match ( 'wordbefore' );
+	select * from test where match ( 'wordafter' );
+	<!-- regression @@relaxed vs complex query -->
+	select * from test where match ( '@@relaxed ((@title sample) | (@ttitle sample) (@body program -in )) ' );
+	select * from test where match ( '@@relaxed ((@ttitle sample) | (@title sample) (@body program -in )) ' );
+	select * from test where match ( '@@relaxed ((@ttitle sample) | (@ttitle sample) (@body program -in )) ' );
+	<!-- regression for ranker fieldmask -->
+	select id, weight() from fld where match ( 'spec1 | dummy1' ) order by id asc option ranker='fieldmask';
+
+	<!-- query option not_terms_only_allowed -->
+	select * from i1 where match ( '-hello' ) order by id asc;
+	select * from dist1 where match ( '-hello' ) order by id asc;
+	select * from i1 where match ( '-hello' ) order by id asc option not_terms_only_allowed=1;
+	select * from i2 where match ( '-hello' ) order by id asc option not_terms_only_allowed=1;
+	select * from dist1 where match ( '-hello' ) order by id asc option not_terms_only_allowed=1;
+</sphinxql>
+
 </queries>
-<sphqueries>
-<sphinxql>select * from fld where match ( '@title spec1 @body dummy1' ) order by id asc</sphinxql>
-<sphinxql>select * from fld where match ( '@title ( ( spec2 ) (dummy2) | text2 ) ' ) order by id asc</sphinxql>
-<sphinxql>select * from fld where match ( '@title ( ( spec3 ) @body (dummy3) | text3 ) ' ) order by id asc</sphinxql>
-<sphinxql>select * from fld where match ( '@title ( ( spec4 ) (dummy4) | @body text4 ) ' ) order by id asc</sphinxql>
-<sphinxql>select * from fld where match ( '@title ( ( spec4 ) (dummy4) @body text4 ) ' ) order by id asc</sphinxql>
-<sphinxql>select * from fld where match ( '@title ( ( spec4 ) dummy4 | @body text4 ) ' ) order by id asc</sphinxql>
-<sphinxql>select * from fld where match ( '@title ( ( spec4 ) dummy4 @body text4 ) ' ) order by id asc</sphinxql>
-<sphinxql>select * from fld where match ( '@title ( ( spec5 ) @body (dummy5) | text5 ) of my ' ) order by id asc</sphinxql>
-<sphinxql>select * from fld where match ( 'jolly rodger ;)' )</sphinxql>
-<sphinxql>select * from fld where match ( '(((((((((( crashing 9 brackets')</sphinxql>
-<sphinxql>select * from fld where match ( '@title(spec1 absentword) | @body(dummy1)' ) and id=1000 option ranker='wordcount', field_weights=(title=1000, body=1)</sphinxql>
-<sphinxql>select * from fld where match ( 'one | !two' )</sphinxql>
-<!-- regression for embedded zeroes -->
-<sphinxql>select * from test where match ( 'wordbefore' )</sphinxql>
-<sphinxql>select * from test where match ( 'wordafter' )</sphinxql>
-<!-- regression @@relaxed vs complex query -->
-<sphinxql>select * from test where match ( '@@relaxed ((@title sample) | (@ttitle sample) (@body program -in )) ' )</sphinxql>
-<sphinxql>select * from test where match ( '@@relaxed ((@ttitle sample) | (@title sample) (@body program -in )) ' )</sphinxql>
-<sphinxql>select * from test where match ( '@@relaxed ((@ttitle sample) | (@ttitle sample) (@body program -in )) ' )</sphinxql>
-<!-- regression for ranker fieldmask -->
-<sphinxql>select id, weight() from fld where match ( 'spec1 | dummy1' ) order by id asc option ranker='fieldmask'</sphinxql>
-
-<!-- query option not_terms_only_allowed -->
-<sphinxql>select * from i1 where match ( '-hello' ) order by id asc</sphinxql>
-<sphinxql>select * from dist1 where match ( '-hello' ) order by id asc</sphinxql>
-<sphinxql>select * from i1 where match ( '-hello' ) order by id asc option not_terms_only_allowed=1</sphinxql>
-<sphinxql>select * from i2 where match ( '-hello' ) order by id asc option not_terms_only_allowed=1</sphinxql>
-<sphinxql>select * from dist1 where match ( '-hello' ) order by id asc option not_terms_only_allowed=1</sphinxql>
-
-</sphqueries>
 <db_create>
 CREATE TABLE `test_table`
 (

@@ -30,9 +30,9 @@ index test
 </config>
 
 <queries>
-<query mode="extended2"></query>
+<query mode="extended2"/>
 <query mode="extended2">test</query>
-<query mode="extended2" cutoff="1"></query>
+<query mode="extended2" cutoff="1"/>
 <query mode="extended2" cutoff="1">test</query>
 </queries>
 

@@ -173,32 +173,32 @@ INSERT INTO test_table ( document_id, text ) VALUES
 	<query mode="extended2" index="test"> "five tree oak one two hive"/0.4 </query>
 	<query mode="extended2" index="test"> "five tree oak one two hive"/0.59 </query>
 	<query mode="extended2" index="test"> "five tree oak one two hive"/0.60 </query>
-</queries>
 
-<sphqueries>
+<sphinxql>
 	<!-- here is going regression crash on delete doc from RT with infix -->
-	<sphinxql>INSERT INTO rt_infix VALUES ( 1, 'dummy word', 11 )</sphinxql>
-	<sphinxql>delete from rt_infix where id=1</sphinxql>
+	INSERT INTO rt_infix VALUES ( 1, 'dummy word', 11 );
+	delete from rt_infix where id=1;
 	<!-- regression float at full-text -->
-	<sphinxql>CALL KEYWORDS ( ' 3.51 ', 'num2t' )</sphinxql>
-	<sphinxql>CALL KEYWORDS ( ' 3.51 ', 'num1t' )</sphinxql>
-	<sphinxql>SELECT * FROM num2t WHERE MATCH ( ' 3.51 ' )</sphinxql>
-	<sphinxql>SHOW META</sphinxql>
-	<sphinxql>SELECT * FROM num1t WHERE MATCH ( ' 3.51 ' )</sphinxql>
-	<sphinxql>SHOW META</sphinxql>
-	<sphinxql>SELECT * FROM num2t WHERE MATCH ( ' 3 51 ' )</sphinxql>
-	<sphinxql>SHOW META</sphinxql>
-	<sphinxql>SELECT * FROM num2t WHERE MATCH ( ' "set of 3.51"/0.7 ' )</sphinxql>
-	<sphinxql>SHOW META</sphinxql>
-	<sphinxql>SELECT * FROM num1t WHERE MATCH ( ' "set of 3.51"/0.7 ' )</sphinxql>
-	<sphinxql>SHOW META</sphinxql>
-	<sphinxql>SELECT * FROM num2t WHERE MATCH ( ' "set of 3 51"/0.7 ' )</sphinxql>
-	<sphinxql>SHOW META</sphinxql>
-	<sphinxql>SELECT * FROM num1t WHERE MATCH ( ' "set of 3 51"/0.7 ' )</sphinxql>
-	<sphinxql>SHOW META</sphinxql>
+	CALL KEYWORDS ( ' 3.51 ', 'num2t' );
+	CALL KEYWORDS ( ' 3.51 ', 'num1t' );
+	SELECT * FROM num2t WHERE MATCH ( ' 3.51 ' );
+	SHOW META;
+	SELECT * FROM num1t WHERE MATCH ( ' 3.51 ' );
+	SHOW META;
+	SELECT * FROM num2t WHERE MATCH ( ' 3 51 ' );
+	SHOW META;
+	SELECT * FROM num2t WHERE MATCH ( ' "set of 3.51"/0.7 ' );
+	SHOW META;
+	SELECT * FROM num1t WHERE MATCH ( ' "set of 3.51"/0.7 ' );
+	SHOW META;
+	SELECT * FROM num2t WHERE MATCH ( ' "set of 3 51"/0.7 ' );
+	SHOW META;
+	SELECT * FROM num1t WHERE MATCH ( ' "set of 3 51"/0.7 ' );
+	SHOW META;
 
 	<!-- regression duplacates from multiple qpos -->
-	<sphinxql>SELECT id FROM test_q1 WHERE MATCH(' "наборы купить набор"/2 ') ORDER BY ID ASC</sphinxql>
-</sphqueries>
+	SELECT id FROM test_q1 WHERE MATCH(' "наборы купить набор"/2 ') ORDER BY ID ASC;
+</sphinxql>
+</queries>
 
 </test>

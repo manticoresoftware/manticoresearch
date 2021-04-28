@@ -171,19 +171,19 @@ index test_metaphone
 <query mode="extended2" index="test_stop1">ru*</query>
 <query mode="extended2" index="test_stop1">=runs</query>
 <query mode="extended2" index="test_stop1">runs</query>
-</queries>
 
-<sphqueries>
+<sphinxql>
 <!-- here is going regression 2byte vs 2byte + sbc -->
-<sphinxql>CALL KEYWORDS ('то-тический', 'test')</sphinxql>
-<sphinxql>CALL KEYWORDS ('тоЫтический', 'test')</sphinxql>
+CALL KEYWORDS ('то-тический', 'test');
+CALL KEYWORDS ('тоЫтический', 'test');
 <!-- regression stemmed word vs dict=keyword -->
-<sphinxql>INSERT INTO rt (id, idd, title) VALUES ( 1, 1, 'testing that' ),( 2, 1, 'ордеру АВАВ/А85/007' )</sphinxql>
-<sphinxql>SELECT * FROM test_ru WHERE MATCH('ордеру АВАВ')</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>SELECT * FROM rt WHERE MATCH('ордеру АВАВ')</sphinxql>
-<sphinxql>show meta</sphinxql>
-</sphqueries>
+INSERT INTO rt (id, idd, title) VALUES ( 1, 1, 'testing that' ),( 2, 1, 'ордеру АВАВ/А85/007' );
+SELECT * FROM test_ru WHERE MATCH('ордеру АВАВ');
+show meta;
+SELECT * FROM rt WHERE MATCH('ордеру АВАВ');
+show meta;
+</sphinxql>
+</queries>
 
 <db_create>
 CREATE TABLE `test_table`

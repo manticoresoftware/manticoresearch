@@ -75,16 +75,17 @@ INSERT INTO test_table (id, text) VALUES
 
 	<query select="id as sel, *" groupfunc="attr" groupattr="sel" />
 	<query filter="id" filter_value="60000000001" />
-</queries>
-<sphqueries>
-	<!-- regression id64 less not work -->
-	<sphinxql><![CDATA[ select * from test where id<60000000002 ]]></sphinxql>
-	<sphinxql>select * from test where id&lt;9223372036854775806</sphinxql>
-	<sphinxql>select * from test where id&lt;9223372036854775807</sphinxql>
-	<sphinxql>select * from test where id&lt;9223372036854775808</sphinxql>
 
-	<sphinxql>select * from test where id not between 60000000000 and 60000000001</sphinxql>
-</sphqueries>
+<sphinxql>
+	<!-- regression id64 less not work -->
+	<![CDATA[ select * from test where id<60000000002 ]]>;
+	select * from test where id&lt;9223372036854775806;
+	select * from test where id&lt;9223372036854775807;
+	select * from test where id&lt;9223372036854775808;
+
+	select * from test where id not between 60000000000 and 60000000001;
+</sphinxql>
+</queries>
 
 </test>
 

@@ -137,17 +137,18 @@ index cht
 <query index='cht' mode="extended2">a_s d f g h j k l</query>
 <query index='cht' mode="extended2">Z X C V B N_M</query>
 <query index='cht' mode="extended2">z x c v b n m</query>
+
+<sphinxql>
+	CALL KEYWORDS ('run-time (run time) issue', 'wf1');
+	CALL KEYWORDS ('run-time (run time) issue', 'wf2');
+	<!-- here is going regression crash on indexing wordforms vs multi-wordforms -->
+	SELECT * from wf3 where match ('word2word2');
+	<!-- here is going regression crash on CALL KEYWORDS to RT index with dict keywords -->
+	INSERT INTO rt VALUES ( 1, 'dummy', 100 );
+	CALL KEYWORDS ('runs runs* =runs', 'rt', 1);
+	CALL KEYWORDS ('runs runs* =runs', 'exact_wf', 1);
+</sphinxql>
 </queries>
-<sphqueries>
-<sphinxql>CALL KEYWORDS ('run-time (run time) issue', 'wf1')</sphinxql>
-<sphinxql>CALL KEYWORDS ('run-time (run time) issue', 'wf2')</sphinxql>
-<!-- here is going regression crash on indexing wordforms vs multi-wordforms -->
-<sphinxql>SELECT * from wf3 where match ('word2word2')</sphinxql>
-<!-- here is going regression crash on CALL KEYWORDS to RT index with dict keywords -->
-<sphinxql>INSERT INTO rt VALUES ( 1, 'dummy', 100 )</sphinxql>
-<sphinxql>CALL KEYWORDS ('runs runs* =runs', 'rt', 1)</sphinxql>
-<sphinxql>CALL KEYWORDS ('runs runs* =runs', 'exact_wf', 1)</sphinxql>
-</sphqueries>
 
 
 <db_create>

@@ -95,8 +95,8 @@ index mmk
 <query index="main">four</query>
 <query index="main">five</query>
 <query index="main">six</query>
-<query index="m1"></query>
-<query index="mmk"></query>
+<query index="m1"/>
+<query index="mmk"/>
 </queries>
 
 <db_create>

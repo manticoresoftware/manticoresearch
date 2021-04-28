@@ -253,34 +253,33 @@ INSERT INTO test_table VALUES
 	<!--regression for missed field modifier vs tiny expanded -->
 	<query mode="extended2" index="star_kw">*hh*</query>
 	<query mode="extended2" index="star_kw">*hh*$</query>
-</queries>
 
-<sphqueries>
+<sphinxql>
 	<!-- here is going regression blend vs special character within query-->
-	<sphinxql>select * from test1 where match ( 'zzzzzz  .(buzzzz)' )</sphinxql>
+	select * from test1 where match ( 'zzzzzz  .(buzzzz)' );
 	<!-- here is going regression many overshort tokens in query-->
-	<sphinxql>select * from test1 where match ( 'a+b' )</sphinxql>
+	select * from test1 where match ( 'a+b' );
 	<!-- here is going regression blend_char into a numeric-->
-	<sphinxql>select * from test2 where match ( 'a11-22' )</sphinxql>
-	<sphinxql>select * from test2 where match ( '11-22' )</sphinxql>
-	<sphinxql>select * from test3 where match ( ' "the dog " ' )</sphinxql>
-	<sphinxql>select * from test3 where match ( ' dog " is my " ' )</sphinxql>
-	<sphinxql>select * from test3 where match ( ' dog ' )</sphinxql>
+	select * from test2 where match ( 'a11-22' );
+	select * from test2 where match ( '11-22' );
+	select * from test3 where match ( ' "the dog " ' );
+	select * from test3 where match ( ' dog " is my " ' );
+	select * from test3 where match ( ' dog ' );
 	<!-- here is going regression many same hits at RT index -->
-	<sphinxql>INSERT INTO rt VALUES ( 1, 'thatsgoingverylongwordthathasblendedpartattheand@blendedpart and word at the end', 11 )</sphinxql>
-	<sphinxql>CALL KEYWORDS ( 'thatsgoingverylongwordthathasblendedpartattheand', 'rt', 1 )</sphinxql>
-	<sphinxql>INSERT INTO rt VALUES ( 2, 'thatsgoingverylongwordthathasblendedpartattheand@blendedpart', 11 )</sphinxql>
-	<sphinxql>CALL KEYWORDS ( 'thatsgoingverylongwordthathasblendedpartattheand', 'rt', 1 )</sphinxql>
+	INSERT INTO rt VALUES ( 1, 'thatsgoingverylongwordthathasblendedpartattheand@blendedpart and word at the end', 11 );
+	CALL KEYWORDS ( 'thatsgoingverylongwordthathasblendedpartattheand', 'rt', 1 );
+	INSERT INTO rt VALUES ( 2, 'thatsgoingverylongwordthathasblendedpartattheand@blendedpart', 11 );
+	CALL KEYWORDS ( 'thatsgoingverylongwordthathasblendedpartattheand', 'rt', 1 );
 	<!-- regression blended vs quorum argument -->
-	<sphinxql>select * from test4 where match ( ' "dog of friend"/0.5 ' )</sphinxql>
-    
-    <!-- regression blended part that is stopword and stepword step is 0 -->
-    <sphinxql>set profiling=1</sphinxql>
-    <sphinxql>select * from blend_stop where match('("Children@s Hospital Colorado")')</sphinxql>
-    <sphinxql>show plan</sphinxql>
-    <sphinxql>select * from blend_stop where match('("got@s@but@not@t ok")')</sphinxql>
-    <sphinxql>show plan</sphinxql>
-    
-</sphqueries>
+	select * from test4 where match ( ' "dog of friend"/0.5 ' );
+
+	<!-- regression blended part that is stopword and stepword step is 0 -->
+	set profiling=1;
+	select * from blend_stop where match('("Children@s Hospital Colorado")');
+	show plan;
+	select * from blend_stop where match('("got@s@but@not@t ok")');
+	show plan;
+</sphinxql>
+</queries>
 
 </test>

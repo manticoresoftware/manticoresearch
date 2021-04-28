@@ -26,10 +26,12 @@ index test
 } 
 </Config>
 
-<SPHQueries>
-	<SPHinxQL>insert into test (id,idd,grp,content) values (1,5,4,'content'),(2,2,4,'you')</SPHinxQL>
-	<SPHinxQL>select * from test</SPHinxQL>
-	<SPHinxQL>select max(idd) as mx from test group by grp</SPHinxQL>
-</SPHQueries>
+<queries>
+	<sphinxql>
+	insert into test (id,idd,grp,content) values (1,5,4,'content'),(2,2,4,'you');
+	select * from test;
+	select max(idd) as mx from test group by grp;
+	</sphinxql>
+</queries>
 
 </Test>

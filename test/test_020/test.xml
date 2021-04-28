@@ -109,11 +109,11 @@ index mva_mixed
 </config>
 
 <queries>
-<query mode="extended2" index="test" groupattr="TaG" groupfunc="attr" groupsort="@group desc"></query>
-<query mode="extended2" index="test" groupattr="tag" groupfunc="attr" groupsort="@group asc"></query>
-<query mode="extended2" index="test" groupattr="tag" groupfunc="attr" groupsort="@count desc"></query>
-<query mode="extended2" index="test" groupattr="tag" groupfunc="attr" groupsort="@count asc"></query>
-<query mode="extended2" index="test" groupattr="tag" groupfunc="attr" groupsort="tAG desc"></query>
+<query mode="extended2" index="test" groupattr="TaG" groupfunc="attr" groupsort="@group desc"/>
+<query mode="extended2" index="test" groupattr="tag" groupfunc="attr" groupsort="@group asc"/>
+<query mode="extended2" index="test" groupattr="tag" groupfunc="attr" groupsort="@count desc"/>
+<query mode="extended2" index="test" groupattr="tag" groupfunc="attr" groupsort="@count asc"/>
+<query mode="extended2" index="test" groupattr="tag" groupfunc="attr" groupsort="tAG desc"/>
 <query mode="extended2" index="test" groupattr="time" groupfunc="day">test*</query>
 <query mode="extended2" index="test" groupattr="tIMe" groupfunc="week">test*</query>
 <query mode="extended2" index="test" groupattr="time" groupfunc="month">test*</query>
@@ -121,31 +121,31 @@ index mva_mixed
 <query mode="extended2" index="test" groupattr="mva" groupfunc="attr" groupsort="@group desc" resarray="1">test*</query>
 <query mode="extended2" index="test" groupattr="mva" groupfunc="attr" groupsort="@group asc" resarray="1">test*</query>
 
-<query mode="extended2" index="test" groupattr="time" groupfunc="year" groupdistinct="tag"></query>
-<query mode="extended2" index="test2" groupattr="time" groupfunc="year" groupdistinct="tAG"></query>
-<query mode="extended2" index="test,test2" groupattr="time" groupfunc="year" groupdistinct="tag" sortmode="extended" sortby="id asc"></query>
+<query mode="extended2" index="test" groupattr="time" groupfunc="year" groupdistinct="tag"/>
+<query mode="extended2" index="test2" groupattr="time" groupfunc="year" groupdistinct="tAG"/>
+<query mode="extended2" index="test,test2" groupattr="time" groupfunc="year" groupdistinct="tag" sortmode="extended" sortby="id asc"/>
 
-<query mode="extended2" index="mini1,mini2" groupattr="time" groupfunc="year" groupdistinct="tag"></query>
+<query mode="extended2" index="mini1,mini2" groupattr="time" groupfunc="year" groupdistinct="tag"/>
 
 <query mode="extended2" index="test" groupattr="tag" groupsort="@group asc" sortmode="extended" sortby="time asc">test*</query>
 <query mode="extended2" index="test" groupattr="tAg" groupsort="@groUp asc" sortmode="extended" sortby="id desc" select="*,BIGINT(id*10) as q" filter="q" filter_range="0 1000">test*</query>
 
 <!-- here is going regression mva64 hasn't indexed -->
-<query mode="extended2" index="mva64"></query>
-<query mode="extended2" index="mva64" sortmode="extended" sortby="id asc"></query>
-<query mode="extended2" index="mva64" sortmode="extended" sortby="id desc"></query>
-<query mode="extended2" index="mva_mixed"></query>
-<query mode="extended2" index="mva_mixed" sortmode="extended" sortby="id desc"></query>
-</queries>
+<query mode="extended2" index="mva64"/>
+<query mode="extended2" index="mva64" sortmode="extended" sortby="id asc"/>
+<query mode="extended2" index="mva64" sortmode="extended" sortby="id desc"/>
+<query mode="extended2" index="mva_mixed"/>
+<query mode="extended2" index="mva_mixed" sortmode="extended" sortby="id desc"/>
 
-<sphqueries>
-<sphinxql>SELECT * FROM mva64</sphinxql>
-<sphinxql>SELECT * FROM mva64 ORDER BY id desc</sphinxql>
-<sphinxql>SELECT * FROM mva64 ORDER BY id asc</sphinxql>
-<sphinxql>SELECT * FROM mva_mixed</sphinxql>
-<sphinxql>SELECT * FROM mva_mixed GROUP BY mva ORDER BY id desc</sphinxql>
-<sphinxql>SELECT * FROM mva_mixed ORDER BY id desc</sphinxql>
-</sphqueries>
+<sphinxql>
+	SELECT * FROM mva64;
+	SELECT * FROM mva64 ORDER BY id desc;
+	SELECT * FROM mva64 ORDER BY id asc;
+	SELECT * FROM mva_mixed;
+	SELECT * FROM mva_mixed GROUP BY mva ORDER BY id desc;
+	SELECT * FROM mva_mixed ORDER BY id desc;
+</sphinxql>
+</queries>
 
 <db_create>
 CREATE TABLE `test_table`

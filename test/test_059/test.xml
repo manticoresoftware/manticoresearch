@@ -88,29 +88,28 @@ INSERT INTO `test_table` VALUES
 <query mode="extended2" index="test">"one two"</query>
 <query mode="extended2" index="test">"one two"~10</query>
 <query mode="extended2" index="test">"one two"~11</query>
-</queries>
 
-<sphqueries>
-<!-- regression rt index phrase_boundary setting -->
-<sphinxql>INSERT INTO rt1 VALUES
+<sphinxql>
+	<!-- regression rt index phrase_boundary setting -->
+	INSERT INTO rt1 VALUES
 ( 1, 'first.', 11 ),
 ( 2, ' second', 11 ),
 ( 3, 'one. two three', 11 ),
 ( 4, 'one two three', 11 )
+	;
+	<!-- RAM part -->
+	SELECT * FROM rt1 WHERE MATCH ( '"one two"~10' );
+	SELECT * FROM rt1 WHERE MATCH ( '"one two"~11' );
+	FLUSH RAMCHUNK rt1;
+	<!-- disk chunk -->
+	SELECT * FROM rt1 WHERE MATCH ( '"one two"~10' );
+	SELECT * FROM rt1 WHERE MATCH ( '"one two"~11' );
+	ATTACH INDEX disk1 TO RTINDEX rt1 WITH TRUNCATE;
+	<!-- plain attached as disk chunk -->
+	SELECT * FROM rt1 WHERE MATCH ( '"one two"~10' );
+	SELECT * FROM rt1 WHERE MATCH ( '"one two"~11' );
 </sphinxql>
-<!-- RAM part -->
-<sphinxql>SELECT * FROM rt1 WHERE MATCH ( '"one two"~10' )</sphinxql>
-<sphinxql>SELECT * FROM rt1 WHERE MATCH ( '"one two"~11' )</sphinxql>
-<sphinxql>FLUSH RAMCHUNK rt1</sphinxql>
-<!-- disk chunk -->
-<sphinxql>SELECT * FROM rt1 WHERE MATCH ( '"one two"~10' )</sphinxql>
-<sphinxql>SELECT * FROM rt1 WHERE MATCH ( '"one two"~11' )</sphinxql>
-<sphinxql>ATTACH INDEX disk1 TO RTINDEX rt1 WITH TRUNCATE</sphinxql>
-<!-- plain attached as disk chunk -->
-<sphinxql>SELECT * FROM rt1 WHERE MATCH ( '"one two"~10' )</sphinxql>
-<sphinxql>SELECT * FROM rt1 WHERE MATCH ( '"one two"~11' )</sphinxql>
-
-</sphqueries>
+</queries>
 
 
 </test>

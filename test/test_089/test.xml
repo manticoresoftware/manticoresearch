@@ -37,16 +37,18 @@ index test2
 }
 </config>
 
-<sphqueries>
-<sphinxql>insert into test (id,flt,title) values (1,0.3,'zero'),(2,.3,'no zero')</sphinxql>
-<sphinxql>select .1 as zz, flt from test where match('zero')</sphinxql>
-<sphinxql>select 0.1 as zz, flt from test where match('zero')</sphinxql>
-<sphinxql>insert into test (id,flt,title) values (10,-123,'neg')</sphinxql>
-<sphinxql>select * from test where id=-10</sphinxql>
-<sphinxql>select * from test where id=10</sphinxql>
-<sphinxql>select * from test2</sphinxql>
-<sphinxql>select * from test2 where match ( 'c' )</sphinxql>
-</sphqueries>
+<queries>
+	<sphinxql>
+	insert into test (id,flt,title) values (1,0.3,'zero'),(2,.3,'no zero');
+	select .1 as zz, flt from test where match('zero');
+	select 0.1 as zz, flt from test where match('zero');
+	insert into test (id,flt,title) values (10,-123,'neg');
+	select * from test where id=-10;
+	select * from test where id=10;
+	select * from test2;
+	select * from test2 where match ( 'c' );
+	</sphinxql>
+</queries>
 
 <db_create>
 CREATE TABLE `table2` (

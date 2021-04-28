@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>snippets vs wildcard matches - sphinxql</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT id, body FROM test_table
+}
+
+index test_idx
+{
+	source			= srctest
+	path			= <data_path/>/test
+	min_word_len	= 1
+	min_infix_len	= 1
+}
+
+</config>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES ( 1, 'test' )
+</db_insert>
+
+<queries>
+<sphinxql>
+	<!-- regression wildcards matching beside only statted words -->
+	CALL SNIPPETS ( 'test of testing case', 'test_idx', 't?st*', 1 AS query_mode, 0 as limit );
+	CALL SNIPPETS ( 'some dummy words here test of testing case and long tail also here', 'test_idx', 't?st*', 1 AS query_mode, 30 as limit );
+</sphinxql>
+</queries>
+
+</test>

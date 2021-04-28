@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>hitbuffer edge cases - common subtree regression</name>
+
+<config>
+indexer
+{
+	mem_limit		= 32M
+}
+
+searchd
+{
+	<searchd_settings/>
+	binlog_path = #
+    subtree_docs_cache  = 128k
+    subtree_hits_cache  = 128k
+}
+
+
+source test3
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table3
+	sql_attr_uint	= gid
+}
+index test3
+{
+	source			= test3
+	path			= <data_path/>/test3
+}
+</config>
+
+<db_create>
+create table test_table3
+(
+	id int not null,
+	gid int not null,
+	title varchar(64) not null
+);
+</db_create>
+
+<db_drop>drop table if exists test_table3;</db_drop>
+
+<!-- common subtree case -->
+<db_insert>
+	<repeat count="400" vars="i" inc="1" init="1">
+		INSERT INTO test_table3 VALUES ( <i/>, <i/>, 'aaa bbb' )<db_insert/></repeat>
+	<repeat count="200" vars="i" init="402" inc="1">
+		INSERT INTO test_table3 VALUES ( <i/>, <i/>, 'aaa' )<db_insert/></repeat>
+</db_insert>
+
+<custom_test><![CDATA[
+$results = array ();
+
+$client->SetMatchMode ( SPH_MATCH_EXTENDED2 );
+$results[] = 'common subtree crash';
+
+$client->SetFilter ( "@id", array ( 999999 ) );
+$client->AddQuery ( "aaa -bbb", "test3" );
+
+$client->ResetFilters ();
+$client->AddQuery ( "aaa -bbb", "test3" );
+
+$res = $client->RunQueries();
+
+if ( !$res )
+{
+	$results[] = $client->GetLastError();
+	return;
+}
+
+foreach ( $res as $r )
+{
+	unset ( $r["time"] );
+	$results[] = $r;
+}
+]]></custom_test>
+
+</test>

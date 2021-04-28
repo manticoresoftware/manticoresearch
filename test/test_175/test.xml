@@ -2,11 +2,15 @@
 <test>
 
 <name>hitbuffer edge cases</name>
+<requires>
+	<heavy/>
+	<non-rt/>
+</requires>
 
 <config>
 indexer
 {
-	mem_limit		= 16M
+	mem_limit		= 32M
 }
 
 searchd
@@ -47,18 +51,6 @@ index test2
 	index_sp		= 1
 }
 
-source test3
-{
-	type			= mysql
-	<sql_settings/>
-	sql_query		= select * from test_table3
-	sql_attr_uint	= gid
-}
-index test3
-{
-	source			= test3
-	path			= <data_path/>/test3
-}
 
 index rt
 {
@@ -101,13 +93,6 @@ index hits_plain
 {
 	source			= src_hits
 	path			= <data_path/>/plain
-	hit_format = plain
-}
-
-index hits_inline
-{
-	source			= src_hits
-	path			= <data_path/>/inline
 }
 
 <!-- flushing hits+docinfo in inline mode (bug #1310) -->
@@ -123,29 +108,6 @@ index idx_inline
 {
 	source			= src_inline
 	path			= <data_path/>/idx_inline
-}
-
-source src_inline2
-{
-	type = mysql
-	<sql_settings/>
-	sql_query = SELECT id, title, CRC32(id+11) + 31 gid1, CRC32(id+13) + 32 gid2, CRC32(id+17) + 33 gid3, CRC32(id+19) + 34 gid4, CRC32(id+23) + 35 gid5, CRC32(id+27) + 36 gid6, CRC32(id+29) + 37 gid7, CRC32(id+31) + 38 gid8, CRC32(id+37) + 39 gid9 from table_inline2
-	sql_attr_bigint = gid1
-	sql_attr_bigint = gid2
-	sql_attr_bigint = gid3
-	sql_attr_bigint = gid4
-	sql_attr_bigint = gid5
-	sql_attr_bigint = gid6
-	sql_attr_bigint = gid7
-	sql_attr_bigint = gid8
-	sql_attr_bigint = gid9
-}
-
-index idx_inline2
-{
-	source			= src_inline2
-	path			= <data_path/>/idx_inline2
-	dict = keywords
 }
 
 <!-- quorum tail vs quorum duplicates -->
@@ -178,7 +140,6 @@ index idx_qt_2
 index rt_auto_expand
 {
 	type = rt
-	charset_type = utf-8
 	rt_mem_limit = 128k
 	path = <data_path/>/rt_auto_expand
 
@@ -190,7 +151,6 @@ index rt_auto_expand
 	rt_attr_uint = idd5
 	rt_field = content
 	min_infix_len = 3
-	enable_star = 1
 	expand_keywords = 1
 }
 
@@ -225,26 +185,11 @@ create table test_table2
 );
 </db_create>
 <db_create>
-create table test_table3
-(
-	id int not null,
-	gid int not null,
-	title varchar(64) not null
-);
-</db_create>
-<db_create>
 create table table_hits
 (
 	id int not null,
 	title varchar(256) not null
 );
-</db_create>
-<db_create>
-create table table_inline2
-(
-	id int not null,
-	title text(21000) not null
-) ENGINE=MYISAM;
 </db_create>
 <db_create>
 create table table_quorum_tail
@@ -262,233 +207,128 @@ create table table_quorum_tail_2
 </db_create>
 <db_drop>drop table if exists test_table1;</db_drop>
 <db_drop>drop table if exists test_table2;</db_drop>
-<db_drop>drop table if exists test_table3;</db_drop>
 <db_drop>drop table if exists table_hits;</db_drop>
-<db_drop>drop table if exists table_inline2;</db_drop>
 <db_drop>drop table if exists table_quorum_tail;</db_drop>
 <db_drop>drop table if exists table_quorum_tail_2;</db_drop>
-<custom_insert><![CDATA[
 
-// OR boundary
-// weight on 11 must be 2xxx; used to be 1xxx (because of positions mismatch)
-$t = str_repeat ( "aaa ", 509 );
-mysql_query ( "INSERT INTO test_table1 VALUES ( 10, 1, 'bbb bbb bbb bbb $t' )" ) or die("q1:".mysql_error());
-mysql_query ( "INSERT INTO test_table1 VALUES ( 11, 1, 'aaa aaa aaa aaa bbb bbb aaa aaa' )" ) or die("q2:".mysql_error());
+<!-- OR boundary -->
+<db_insert>
+	<var name="t" />
+	<repeat count="509"><var name="t" delimiter=" ">aaa</var></repeat>
+	INSERT INTO test_table1 VALUES ( 10, 1, 'bbb bbb bbb bbb <t/>' );<db_insert/>
+	INSERT INTO test_table1 VALUES ( 11, 1, 'aaa aaa aaa aaa bbb bbb aaa aaa' )
+</db_insert>
 
-$i3 = '';
-for ( $i=1; $i < 600; $i++ )
-	mysql_query ( "INSERT INTO test_table2 VALUES ( $i, 1, 'The box. A dummy.' )" )  or die("q3:".mysql_error()."\n$i");
+<db_insert>
+	<repeat count="599" vars="i" inc="1" init="1">
+		INSERT INTO test_table2 VALUES ( <i/>, 1, 'The box. A dummy.' )<db_insert/></repeat>
+	INSERT INTO test_table2 VALUES ( 701, 1, 'The good box. A dummy.' )
+</db_insert>
 
-mysql_query ( "INSERT INTO test_table2 VALUES ( 701, 1, 'The good box. A dummy.' )" )  or die("q4:".mysql_error());
+<!-- regression skiplist vs hit_format -->
+<db_insert>
+	<repeat count="144" vars="i" inc="1" init="1">
+		INSERT INTO table_hits VALUES ( <i/>, 'I like as I' )<db_insert/></repeat>
+	INSERT INTO table_hits VALUES ( 9200, 'And I promised myself  and her  that I was going to do something with my life instead of sitting around.  I promised her I would follow my dreams of the NHL.' )<db_insert/>
+	INSERT INTO table_hits VALUES ( 9250, 'promised like as I' )<db_insert/>
+	<repeat count="200" vars="i" init="9300" inc="1">
+		INSERT INTO table_hits VALUES ( <i/>, 'i like as ' )<db_insert/></repeat>
+</db_insert>
 
-// common subtree case
-for ( $i=1; $i < 401; $i++ )
-	mysql_query ( "INSERT INTO test_table3 VALUES ( $i, $i, 'aaa bbb' )" )  or die("q5:".mysql_error()."\n$i");
+<!-- quorum tail vs quorum duplicates -->
+<db_insert>
+	INSERT INTO table_quorum_tail VALUES ( 1, 'I like as I we as I let me as I' )<db_insert/>
+	INSERT INTO table_quorum_tail VALUES ( 2, 'I like as I we as I let me as I' )<db_insert/>
+	INSERT INTO table_quorum_tail VALUES ( 3, 'I like as I we as I let me as I' )<db_insert/>
+	INSERT INTO table_quorum_tail VALUES ( 100, 'walk away from me' )<db_insert/>
+	INSERT INTO table_quorum_tail VALUES ( 101, 'walk away from me' )<db_insert/>
+	INSERT INTO table_quorum_tail VALUES ( 102, 'walk away from me' )<db_insert/>
 
-for ( $i=402; $i < 602; $i++ )
-	mysql_query ( "INSERT INTO test_table3 VALUES ( $i, $i, 'aaa' )" )  or die("q6:".mysql_error()."\n$i");
-	
-// regression skiplist vs hit_format
-for ($i=1; $i<145; $i++)
-{
-	mysql_query ("INSERT INTO table_hits VALUES ( $i, 'I like as I' ) " );
-}
-mysql_query ("INSERT INTO table_hits VALUES ( 9200, 'And I promised myself  and her  that I was going to do something with my life instead of sitting around.  I promised her I would follow my dreams of the NHL.' ) " );
-mysql_query ("INSERT INTO table_hits VALUES ( 9250, 'promised like as I' ) " );
-for ($i=9300; $i<9500; $i++)
-{
-	mysql_query ("INSERT INTO table_hits VALUES ( $i, 'i like as ' ) " );
-}
+	<var name="text" />
+	<repeat count="109"><var name="text" delimiter=" ">me me me me me me me me me me</var></repeat>
+	<var name="text" delimiter=" ">me me me me me me me me me</var>
 
-// regression docinfo=inline tail hits
-for ($i=1; $i<350; $i++)
-{
-	$text = ' his from other planet ';
-	for ( $j=0; $j<550; $j++ )
-	{
-		$text .= ' there are also good people located ';
-		$pos = ( $i + 1 ) * ( $j + 1 ) * 13;
-		$pos = $pos % ( strlen ( $text ) - 3 );
-		$text[$pos + 0] = 'c';
-		$text[$pos + 1] = 'o';
-		$text[$pos + 2] = 's';
-	}
-	$text .= ' good game ';
-	mysql_query ("INSERT INTO table_inline2 VALUES ( $i, ' $text ' ) " ) or die("q-inline-2: at doc=$i ".mysql_error()."\n$i");
-}
-	
-// quorum tail vs quorum duplicates
-for ($i=1; $i<4; $i++)
-{
-	mysql_query ( "INSERT INTO table_quorum_tail VALUES ( $i, 'I like as I we as I let me as I' ) " ) or die("qd:".mysql_error()."\n$i");
-}
-// double tail from child
-for ($i=100; $i<103; $i++)
-{
-	mysql_query ( "INSERT INTO table_quorum_tail VALUES ( $i, 'walk away from me' ) " ) or die("qd:".mysql_error()."\n$i");
-}
-$text = '';
-for ($i=1; $i<1100; $i++)
-{
-	$text .= 'me ';
-}
-mysql_query ("INSERT INTO table_quorum_tail VALUES ( 104, '$text walk as we or other like.' ) " ) or die("qd:".mysql_error()."\n$i");
-mysql_query ("INSERT INTO table_quorum_tail VALUES ( 105, 'me me me walk as we or other like.' ) " ) or die("qd:".mysql_error()."\n$i");
-for ($i=1; $i<514; $i++)
-{
-	mysql_query ( "INSERT INTO table_quorum_tail_2 VALUES ( $i, 'match that dude' ) " ) or die("qd-2:".mysql_error()."\n$i");
-}
-]]></custom_insert>
+	INSERT INTO table_quorum_tail VALUES ( 104, '<text/> walk as we or other like.' )<db_insert/>
+	INSERT INTO table_quorum_tail VALUES ( 105, 'me me me walk as we or other like.' )<db_insert/>
+</db_insert>
 
-<custom_test>
-<![CDATA[
-$results = array ();
+<db_insert>
+	<repeat count="513" vars="i" init="1" inc="1">
+		INSERT INTO table_quorum_tail_2 VALUES ( <i/>, 'match that dude' )<db_insert/></repeat>
+</db_insert>
 
-$client->SetMatchMode ( SPH_MATCH_EXTENDED2 );
+<queries>
+	<query mode="extended2" index="test1">aaa | bbb</query>
+	<query mode="extended2" index="test2">box SENTENCE good</query>
 
-// legacy
-$res = $client->Query ( "aaa | bbb", "test1" );
-unset ( $res["time"] );
-$results[] = $res;
+	<!-- regression RT dictionary lost words on merge with ID64 -->
+	<repeat count="30" vars="doc" init="1" inc="1">
+		<sphinxql skip="1">
+			REPLACE INTO rt ( id, content ) VALUES ( <doc/>, 'dummy text is going here' );</sphinxql></repeat>
 
-$res  = $client->Query ( "box SENTENCE good", "test2" );
-unset ( $res["time"] );
-$results[] = $res;
+	<sphinxql skip="1">REPLACE INTO rt ( id, content ) VALUES ( 31, 'ACT I.' );</sphinxql>
+	<repeat count="68" vars="doc" init="32" inc="1">
+		<sphinxql skip="1">
+			REPLACE INTO rt ( id, content ) VALUES ( <doc/>, 'dummy text is going here' );</sphinxql></repeat>
+	<sphinxql skip="1">REPLACE INTO rt ( id, content ) VALUES ( 100, 'And let us once again assail your ears, basketball' );</sphinxql>
+	<repeat count="20" vars="doc" init="101" inc="1">
+		<sphinxql skip="1">
+			REPLACE INTO rt ( id, content ) VALUES ( <doc/>, 'dummy text is going here' );</sphinxql></repeat>
 
-$results[] = 'common subtree crash';
+	<sphinxql>
+		select id from rt limit 0,2;
+		show meta;
+		select id from rt where match ( 'basketball' );
+		show meta;
+	</sphinxql>
 
-$client->SetFilter ( "@id", array ( 999999 ) );
-$client->AddQuery ( "aaa -bbb", "test3" );
+	<!-- regression - optimized filter broken with extra-filter -->
+	<repeat count="1499" vars="id" init="1" inc="1">
+		<sphinxql skip="1">
+			REPLACE INTO optimized_filter VALUES ( <id/>, 'dummy text is going here', 0, 1, 2, 3, 4, 5, 6, 7,8, 9 )</sphinxql></repeat>
+	<repeat count="200" vars="id" init="0" inc="1">
+		<sphinxql skip="1">
+			REPLACE INTO optimized_filter VALUES ( <id/>, 'dummy text is going here', 0, 1, 2, 3, 4, 5, 6, 7,8, 9 )</sphinxql></repeat>
 
-$client->ResetFilters ();
-$client->AddQuery ( "aaa -bbb", "test3" );
+	<sphinxql>
+		select * from optimized_filter where idd5&gt;1 and idd5&lt;20 order by id asc limit 2;
+	</sphinxql>
 
-$res = $client->RunQueries();
+	<sphinxql>
 
-if ( !$res )
-{
-	$results[] = $client->GetLastError();
-	return;
-}
+	<!-- regression skiplist -->
+	select * from hits_plain where match (' " i promised " ' );
+	show meta;
 
-foreach ( $res as $r )
-{
-	unset ( $r["time"] );
-	$results[] = $r;
-}
+	<!-- quorum tail vs quorum duplicates -->
+	select * from idx_qt where match (' \" I I I I do my best \"/4 ' );
+	select * from idx_qt where match (' \" me me me notfound \"/2 NEAR/5 like ' );
+	select * from idx_qt where match (' \" me me me notfound \"/2 NEAR/6 like ' );
+	select * from idx_qt where match (' \" me me me notfound \"/2 NEAR/7 like ' );
 
-// regression RT dictionary lost words on merge with ID64
-$query = function ( $q, $sock )
-{
-	$results = array( $q );
-	$res = @mysql_query ( $q, $sock );
-	if ( $res===false )
-	{
-		$results[]  = mysql_errno( $sock ) . "; " . mysql_error ( $sock );
-	} else
-	{	
-		while ($row = @mysql_fetch_array($res, MYSQL_ASSOC))
-		{
-			if ( array_key_exists ( "Variable_name", $row ) && $row["Variable_name"]=="time" )
-			{
-				continue;
-			}
-			if ( !array_key_exists ( "Variable_name", $row ) || !array_key_exists ( "Value", $row ) )
-			{
-				$line = "";
-				foreach ( $row as $k=>$v )
-				{
-					$line .= $k . " = " . $v . "\t";
-				}
-				$results[] = $line;
-			} else
-			{
-				$results[] = $row["Variable_name"] . " = " . $row["Value"];
-			}
-		}	
-		@mysql_free_result ( $res );
-	}
-	return $results;
-};
+	select *, weight() from idx_qt_2 where match (' \" match match that pal \"/2 ' ) order by id desc limit 5 option ranker=wordcount;
+	</sphinxql>
 
-global $sd_address, $sd_sphinxql_port;
-$sockStr = "$sd_address:$sd_sphinxql_port";
-if ($sd_address == "localhost")
-	$sockStr = "127.0.0.1:$sd_sphinxql_port";
-$sock = @mysql_connect ($sockStr,"","",	true );
+	<!-- regression - expand_keywords got lost for disk chunks of RT ndex -->
+	<sphinxql skip="1">REPLACE INTO rt_auto_expand VALUES ( 1, 'uniq got placed here avi', 1, 2, 3, 4, 5 )</sphinxql>
+	<repeat count="1698" vars="id" init="2" inc="1">
+		<sphinxql skip="1">
+			REPLACE INTO rt_auto_expand VALUES ( <id/>, 'dummy text is going here dummy text is going here dummy text is going here dummy text is going here dummy text is going here dummy text is going here aborted', 1, 2, 3, 4, 5 )</sphinxql></repeat>
+	<sphinxql skip="1">REPLACE INTO rt_auto_expand VALUES ( 2000, 'uniq got placed here', 1, 2, 3, 4, 5 )</sphinxql>
 
-for ( $doc=1; $doc<121; $doc++ )
-{
-	$text = 'dummy text is going here';
-	if ( $doc==31 )
-		$text = 'ACT I.';
-	else if ( $doc==100 )
-		$text = 'And let us once again assail your ears, basketball';
-	
-	$insert = " REPLACE INTO rt ( id, content ) VALUES ( $doc, '$text' ) ";
-	$query ( $insert, $sock );
-}	
+	<sphinxql>
+		select * from rt_auto_expand where match ( 'uniq' );
+		show meta;
+		select * from rt_auto_expand where match ( 'ace' );
+		show meta;
 
-$results = array_merge ( $results, $query ( "select id from rt limit 0,2", $sock ) );
-$results = array_merge ( $results, $query ( "show meta", $sock ) );	
-$results = array_merge ( $results, $query ( "select id from rt where match ( 'basketball' )", $sock ) );
-$results = array_merge ( $results, $query ( "show meta", $sock ) );	
+		<!-- regression call keywords fails at disk chunk term with skiplist -->
 
-// regression - optimized filter broken with extra-filter
-$text = 'dummy text is going here';
-for ( $doc=1; $doc<1700; $doc++ )
-{
-	$id = $doc % 1500;
-	$insert = " REPLACE INTO optimized_filter VALUES ( $id, '$text', 0, 1, 2, 3, 4, 5, 6, 7,8, 9 ) ";
-	$query ( $insert, $sock );
-}	
-$results = array_merge ( $results, $query ( "select * from optimized_filter where idd5>1 and idd5<20 order by id asc limit 2", $sock ) );
+		CALL KEYWORDS ('got aborted avi', 'rt_auto_expand', 1);
 
-// regression skiplist vs hit_format
-$results = array_merge ( $results, $query ( "select * from hits_plain where match (' \" i promised \" ' )", $sock ) );
-$results = array_merge ( $results, $query ( "show meta", $sock ) );	
-$results = array_merge ( $results, $query ( "select * from hits_inline where match (' \" i promised \" ' )", $sock ) );
-$results = array_merge ( $results, $query ( "show meta", $sock ) );	
-
-// regression docinfo=inline tail hits
-$results = array_merge ( $results, $query ( "select * from idx_inline2 where match (' good game ' ) and id>340", $sock ) );
-
-// quorum tail vs quorum duplicates
-$results = array_merge ( $results, $query ( "select * from idx_qt where match (' \" I I I I do my best \"/4 ' )", $sock ) );
-$results = array_merge ( $results, $query ( "select * from idx_qt where match (' \" me me me notfound \"/2 NEAR/5 like ' )", $sock ) );
-$results = array_merge ( $results, $query ( "select * from idx_qt where match (' \" me me me notfound \"/2 NEAR/6 like ' )", $sock ) );
-$results = array_merge ( $results, $query ( "select * from idx_qt where match (' \" me me me notfound \"/2 NEAR/7 like ' )", $sock ) );
-
-$results = array_merge ( $results, $query ( "select *, weight() from idx_qt_2 where match (' \" match match that pal \"/2 ' ) order by id desc limit 5 option ranker=wordcount", $sock ) );
-
-// regression - expand_keywords got lost for disk chunks of RT ndex
-$text = 'dummy text is going here dummy text is going here dummy text is going here dummy text is going here dummy text is going here dummy text is going here aborted';
-$insert = "REPLACE INTO rt_auto_expand VALUES ( 1, 'uniq got placed here avi', 1, 2, 3, 4, 5 ) ";
-$query ( $insert, $sock );
-
-for ( $id=2; $id<1700; $id++ )
-{
-	$insert = "REPLACE INTO rt_auto_expand VALUES ( $id, '$text', 1, 2, 3, 4, 5 ) ";
-	$query ( $insert, $sock );
-}
-$insert = "REPLACE INTO rt_auto_expand VALUES ( 2000, 'uniq got placed here', 1, 2, 3, 4, 5 ) ";
-$query ( $insert, $sock );
-$results = array_merge ( $results, $query ( "select * from rt_auto_expand where match ( 'uniq' ) ", $sock ) );
-$results = array_merge ( $results, $query ( "show meta", $sock ) );
-$results = array_merge ( $results, $query ( "select * from rt_auto_expand where match ( 'ace' ) ", $sock ) );
-$results = array_merge ( $results, $query ( "show meta", $sock ) );
-
-// regression call keywords fails at disk chunk term with skiplist
-$results = array_merge ( $results, $query ( " CALL KEYWORDS ('got aborted avi', 'rt_auto_expand', 1) ", $sock ) );
-
-// regression field end hits vs duplicated doc, MOVED to separete test 238 to pass rt mode
-
-// regression 
-$results = array_merge ( $results, $query ( "select id, weight() w FROM idx_xml1 WHERE MATCH('\"missed go3\" | (go3 go4)') OPTION ranker=expr('top(lcs)')", $sock ) );
-
-@mysql_close ( $sock );
-
-]]>
-</custom_test>
+		<!-- regression field end hits vs duplicated doc, MOVED to separete test 238 to pass rt mode -->
+		select id, weight() w FROM idx_xml1 WHERE MATCH('\"missed go3\" | (go3 go4)') OPTION ranker=expr('top(lcs)');
+	</sphinxql>
+</queries>
 
 </test>

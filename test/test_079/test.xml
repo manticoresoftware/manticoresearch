@@ -62,14 +62,11 @@ create table sph_test
 drop table if exists sph_test;
 </db_drop>
 
-<custom_insert><![CDATA[
-
-	$text = '';
-	for ( $i=0; $i < 1500; $i++ )
-		$text .= sprintf ( 'W%04d ', $i );
-	mysql_query ( "insert into sph_test values ( 1, '$text' )" );
-
-]]></custom_insert>
+<db_insert>
+	<var name="text" />
+	<repeat count="1500" vars="i" init="0" inc="1"><var name="text" delimiter=" "><i format="W%04d"/></var></repeat>
+	insert into sph_test values ( 1, '<text/>' )
+</db_insert>
 
 <queries>
 	<query index="main">W0000</query>

@@ -67,25 +67,19 @@ CREATE TABLE test_table
 ) ENGINE=MYISAM
 </db_create>
 
-<custom_insert><![CDATA[
+<db_insert>
+	<var name="line" />
+	<repeat count="10">
+		INSERT INTO test_table VALUES ( 0, 'a <line/> b')<db_insert/>
+		<var name="line" delimiter=" ">x</var>
+	</repeat>
+	<repeat count="510">INSERT INTO test_table VALUES ( 0, 'e x f')<db_insert/></repeat>
+	INSERT INTO test_table VALUES ( 0, 'e x f x x x e x f x x e x f x x')<db_insert/>
 
-$line = "";
-for ( $i=0; $i<10; ++$i )
-{
-	mysql_query ( "INSERT INTO test_table VALUES ( 0, 'a $line b')" );
-	$line .="x ";
-}
+	<var name="line" /><repeat count="532"><var name="line" delimiter=" ">y y i x j</var></repeat>
+	INSERT INTO test_table VALUES ( 0, '<line/>')
+</db_insert>
 
-for ( $i=0; $i<510; ++$i )
-	mysql_query ( "INSERT INTO test_table VALUES ( 0, 'e x f')" );
-mysql_query ( "INSERT INTO test_table VALUES ( 0, 'e x f x x x e x f x x e x f x x')" );
-
-$line = "";
-for ( $i=0; $i<532; ++$i )
-	$line .= " y y i x j";
-mysql_query ( "INSERT INTO test_table VALUES ( 0, '$line')" );
-
-]]></custom_insert>
 <db_drop>DROP TABLE IF EXISTS test_table</db_drop>
 
 </test>

@@ -60,19 +60,11 @@ CREATE TABLE test_table
 DROP TABLE IF EXISTS test_table;
 </db_drop>
 
-<custom_insert><![CDATA[
-	$attr = '';
-	for ( $i=1; $i < 400; $i++ )
-	{
-		$attr .= ' overrun'.$i;
-	}
-	
-	$text = sprintf ( "insert into test_table
-		(id, text, idd, attr1, attr2 ) values
-		( 1, 'text', 1, '%s', '%s' )",
-		$attr, $attr );
-	mysql_query ( $text );
-]]></custom_insert>
+<db_insert>
+	<var name="attr"/>
+	<repeat count="399" vars="i" inc="1" init="1"><var name="attr" delimiter=" ">overrun<i/></var></repeat>
+	insert into test_table (id, text, idd, attr1, attr2 ) values ( 1, 'text', 1, ' <attr/>', ' <attr/>' )
+</db_insert>
 
 <!--
 <queries>

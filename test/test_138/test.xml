@@ -94,56 +94,30 @@ create table test_kw_joined
 </db_create>
 <db_drop>drop table if exists test_kw_joined</db_drop>
 
-<custom_insert><![CDATA[
-	$sql_data = array (
-		1=>'world space',
-		2=>'one',
-		3=>'two',
-		4=>'world',
-		5=>'space',
-		6=>'unused1',
-		7=>'unused2'
-		);
-	foreach ( $sql_data as $key => $value )
-	{
-		$text = sprintf ( "insert into test_table1 values ( %d, '%s' )", $key, $value );
-		mysql_query ( $text );
-	}
-	
-	$text = sprintf ( "insert into test_table2 values ( 1, '%s' )", $sql_data[1] );
-	for ( $i=1; $i < 513; $i++ )
-	{
-		$text = '';
-		$text = sprintf ( "insert into test_table2 values ( %d, '%s' )", $i, $sql_data[1] );
-		mysql_query ( $text );
-	}
-		foreach ( $sql_data as $key => $value )
-	{
-		$text = sprintf ( "insert into test_table2 values ( %d, '%s' )", 600+$key, $value );
-		mysql_query ( $text );
-	}
-	
-	for ( $i=1; $i<=4; $i++ )
-	{
-		$text = '';
-		$iend = 300000;
-		if ( $i==4 )
-			$iend = 150000;
-		for ( $j=0; $j<$iend; $j++ )
-		{
-			$text .= 'v ';
-		}
-		if ( $i==4 )
-			$text .= ' the box';
-		mysql_query ( " insert into test_kw_joined values ( $i, '$text' ) " ) or die( "$i:" . mysql_error() );
-	}
-]]></custom_insert>
+<DB_Insert>
+	insert into test_table1 values ( 1, 'world space' ), (2, 'one'), (3, 'two'), (4, 'world'), (5, 'space'), (6, 'unused1'), (7, 'unused2')
+</DB_Insert>
+
+<DB_Insert>
+	<repeat count="512" vars="i" inc="1" init="1">insert into test_table2 values ( <i/>, 'world space' )<db_insert/></repeat>
+	insert into test_table2 values ( 601, 'world space' ), (602, 'one'), (603, 'two'), (604, 'world'), (605, 'space'), (606, 'unused1'), (607, 'unused2')
+</DB_Insert>
+
+<DB_Insert>
+	<var name="text" />
+	<repeat count="30000"><var name="text" delimiter=" ">v v v v v v v v v v </var></repeat>
+	insert into test_kw_joined values ( 1, '<text/>' )<db_insert/>
+	insert into test_kw_joined values ( 2, '<text/>' )<db_insert/>
+	insert into test_kw_joined values ( 3, '<text/>' )<db_insert/>
+	<var name="text" /><repeat count="15000"><var name="text" delimiter=" ">v v v v v v v v v v </var></repeat>
+	insert into test_kw_joined values ( 4, '<text/> the box' )
+</DB_Insert>
 
 <queries>
 	<query mode="extended2" index="test1">"one two unused1 unused2 space world"/2</query>
 	<query mode="extended2" index="test2" limits="600">"one two unused1 unused2 space world"/2</query>
 	<!-- regression index missed tail of joined hits -->
-	<query mode="extended2" index="test_kw" ></query>
+	<query mode="extended2" index="test_kw" />
 	<query mode="extended2" index="test_kw" >of</query>
 	<query mode="extended2" index="test_kw" >the box</query>
 	<query mode="extended2" index="test_kw" >v</query>

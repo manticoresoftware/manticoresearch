@@ -97,12 +97,12 @@ CREATE TABLE test_table
 DROP TABLE IF EXISTS test_table;
 </db_drop>
 
-<custom_insert><![CDATA[
-	$q = "( 1, 'dummy word not another' )";
-	for ( $i=2; $i<1000; $i++ )
-		$q .= ", ( $i, 'dummy word not another' )";
-	mysql_query ( "insert into test_table values $q" );
-]]></custom_insert>
+<db_insert>
+	<var name="q">( 1, 'dummy word not another')</var>
+	<repeat count="998" vars="i" inc="1" init="2"><var name="q" delimiter=",">( <i/>, 'dummy word not another')</var></repeat>
+	insert into test_table values <q/>
+</db_insert>
+
 
 <custom_test><![CDATA[
 

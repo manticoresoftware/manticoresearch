@@ -6,46 +6,45 @@
 <config>
 indexer
 {
-       mem_limit               = 32M
+	mem_limit               = 32M
 }
 
 searchd
 {
-       <searchd_settings/>
+	<searchd_settings/>
 }
 
 source test
 {
-       type                    = mysql
-       <sql_settings/>
-       sql_query               = select *, 'garbage' as garbage from test_table
-       sql_attr_string = garbage
+	type                    = mysql
+	<sql_settings/>
+	sql_query               = select *, 'garbage' as garbage from test_table
+	sql_attr_string = garbage
 }
 
 index test
 {
-       source                  = test
-       path                    = <data_path/>/test
+	source                  = test
+	path                    = <data_path/>/test
 }
 </config>
 
-<db_create>
-create table test_table
-(
-       id int not null,
-       title varchar(255) not null
-);
-</db_create>
-<db_drop>drop table if exists test_table;</db_drop>
-<custom_insert><![CDATA[
-
-for ( $i=1; $i<=1000; ++$i )
-   mysql_query ( "INSERT INTO test_table VALUES ( $i, 'hello world' ) " );
-
-]]></custom_insert>
-
 <queries>
-<query mode="extended2" limits="1000">hello</query>
+	<query mode="extended2" limits="1000">hello</query>
 </queries>
 
+<db_create>
+create table test_table (
+	id int not null,
+	title varchar(255) not null
+);
+</db_create>
+
+<db_drop>drop table if exists test_table;</db_drop>
+
+<db_insert>
+	<var name="text" />
+	<repeat count="1000" vars="i" inc="1" init="1"><var name="text" delimiter=",">(<i/>,'hello world')</var></repeat>
+	INSERT INTO test_table VALUES <text/>
+</db_insert>
 </test>

@@ -44,16 +44,14 @@ CREATE TABLE test_table
 ) ENGINE=MYISAM
 </db_create>
 
-<custom_insert><![CDATA[
+<db_insert>
+	<repeat count="510">INSERT INTO test_table VALUES ( 0, 'aaaa bbbb cccc dddd')<db_insert/></repeat>
+</db_insert>
+<db_insert>
+	<var name="line" /><repeat count="520"><var name="line" delimiter=" ">x cccc dddd</var></repeat>
+	INSERT INTO test_table VALUES ( 0, 'aaaa bbbb x aaaa bbbb <line/>')
+</db_insert>
 
-for ( $i=0; $i<510; ++$i )
-	mysql_query ( "INSERT INTO test_table VALUES ( 0, 'aaaa bbbb cccc dddd')" );
-$line = "";
-for ( $j=0; $j<520; ++$j )
-	$line .= " x cccc dddd";
-mysql_query ( "INSERT INTO test_table VALUES ( 0, 'aaaa bbbb x aaaa bbbb $line')" );
-
-]]></custom_insert>
 <db_drop>DROP TABLE IF EXISTS test_table</db_drop>
 
 </test>

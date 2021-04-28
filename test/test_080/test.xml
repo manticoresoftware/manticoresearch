@@ -62,15 +62,11 @@ drop table if exists sph_test;
 	<run>--merge main delta</run>
 </indexer>
 
-<custom_insert><![CDATA[
-
-	$text = 'C';
-	for ( $i=0; $i<299991; $i++ )
-		$text .= ' C';
-	$text .= ' B A A A';
-	mysql_query ( "insert into sph_test values ( 1, '', '$text' )" );
-
-]]></custom_insert>
+<db_insert>
+	<var name="text" />
+	<repeat count="299992"><var name="text" delimiter=" ">C</var></repeat>
+	insert into sph_test values ( 1, '', '<text/> B A A A' )
+</db_insert>
 
 <queries>
 	<query index="main" mode="extended2">C</query>

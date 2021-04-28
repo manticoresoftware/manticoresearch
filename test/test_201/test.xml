@@ -38,13 +38,13 @@ index test2
 </config>
 
 <queries>
-	<query filter="attr1" filter_value="101"></query>
-	<query filter="attr1" filter_value="164"></query>
-	<query filter="attr1" filter_value="165"></query>
-	<query filter="attr1" filter_value="227"></query>
-	<query filter="attr1" filter_value="228"></query>
-	<query filter="attr1" filter_value="229"></query>
-	<query filter="attr1" filter_value="230"></query>
+	<query filter="attr1" filter_value="101"/>
+	<query filter="attr1" filter_value="164"/>
+	<query filter="attr1" filter_value="165"/>
+	<query filter="attr1" filter_value="227"/>
+	<query filter="attr1" filter_value="228"/>
+	<query filter="attr1" filter_value="229"/>
+	<query filter="attr1" filter_value="230"/>
 </queries>
 
 <db_create>
@@ -60,11 +60,11 @@ CREATE TABLE `main_table2` (
 DROP TABLE IF EXISTS `main_table2`
 </db_drop>
 
-<custom_insert><![CDATA[
-$vals = array();
-for ($i=1; $i<145; ++$i)
-	$vals[] = sprintf ("(%d,'test%d',%d,'%d')",$i,$i,100+$i,1000+$i);
-mysql_query ("INSERT INTO main_table2 VALUES ".join(',',$vals));
-]]></custom_insert>
+
+<db_insert>
+	<var name="vals"/>
+	<repeat count="144" vars="i j k" init="1 101 1001" inc="1 1 1"><var name="vals" delimiter=",">(<i/>,'test<i/>',<j/>,<k/>)</var></repeat>
+	INSERT INTO main_table2 VALUES <vals/>
+</db_insert>
 
 </test>

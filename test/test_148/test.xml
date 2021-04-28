@@ -94,7 +94,6 @@ index idx_blend_crc
 	path			= <data_path/>/idx_blend_crc
 	morphology		= stem_enru
 	min_prefix_len	= 3
-	enable_star		= 1
 	index_exact_words	= 1
 	blend_mode		= trim_head, trim_tail, trim_both
 	blend_chars 	= +, %, -
@@ -107,7 +106,6 @@ index idx_blend_kw
 	path			= <data_path/>/idx_blend_kw
 	morphology		= stem_enru
 	min_prefix_len	= 3
-	enable_star		= 1
 	index_exact_words	= 1
 	blend_mode		= trim_head, trim_tail, trim_both
 	blend_chars 	= +, %, -
@@ -148,49 +146,44 @@ CREATE TABLE start_end_table
 <db_insert>insert into test_table values ( 1, 'test_148/doc1.txt', 1 );</db_insert>
 <db_insert>insert into test_table values ( 2, 'test_148/doc2.txt', 2 );</db_insert>
 <db_insert>insert into test_table values ( 3, 'test_148/doc3.txt', 3 );</db_insert>
+<db_insert>
+	<repeat count="98">insert into start_end_table (body) values ('ABB')<db_insert/></repeat>
+	insert into start_end_table (body) values ('ABB abc ABB')<db_insert/>
+	<repeat count="501">insert into start_end_table (body) values ('ABB')<db_insert/></repeat>
+</db_insert>
 
-<sphqueries>
-	<sphinxql>select * from test where match ('ZONE:zoneA dummy')</sphinxql>
-	<sphinxql>select * from test where match ('@body[1024] text')</sphinxql>
-	<sphinxql>select * from test where match ('@body[1024] dummy')</sphinxql>
-	<sphinxql>select * from start_end where match ('@body ABB') group by idd</sphinxql>
-	<sphinxql>select * from start_end where match ('@body ^ABB') group by idd</sphinxql>
-	<sphinxql>select * from start_end where match ('@body ABB$') group by idd</sphinxql>
-	<sphinxql>select * from start_end where match ('@body ^ABB$') group by idd</sphinxql>
+<queries>
+	<sphinxql>
+	select * from test where match ('ZONE:zoneA dummy');
+	select * from test where match ('@body[1024] text');
+	select * from test where match ('@body[1024] dummy');
+	select * from start_end where match ('@body ABB') group by idd;
+	select * from start_end where match ('@body ^ABB') group by idd;
+	select * from start_end where match ('@body ABB$') group by idd;
+	select * from start_end where match ('@body ^ABB$') group by idd;
 	<!-- regression of field end marker at exact term -->
-	<sphinxql>select * from i1 where match (' "=Republic =of =Ireland" ')</sphinxql>
-	<sphinxql>select * from i1 where match (' "^=Republic =of =Ireland" ')</sphinxql>
-	<sphinxql>select * from i1 where match (' "=Republic =of =Ireland$" ')</sphinxql>
-	<sphinxql>select * from i1 where match (' "^=Republic =of =Ireland$" ')</sphinxql>
-	<sphinxql>select * from i1 where match (' =Footpath$ ')</sphinxql>
-	<sphinxql>select * from i1 where match (' ^=Footpath$ ')</sphinxql>
+	select * from i1 where match (' "=Republic =of =Ireland" ');
+	select * from i1 where match (' "^=Republic =of =Ireland" ');
+	select * from i1 where match (' "=Republic =of =Ireland$" ');
+	select * from i1 where match (' "^=Republic =of =Ireland$" ');
+	select * from i1 where match (' =Footpath$ ');
+	select * from i1 where match (' ^=Footpath$ ');
 	
 	<!-- regression of field limit propagation -->
-	<sphinxql>select * from fl where match (' (@title we) live ')</sphinxql>
-	<sphinxql>select * from fl where match (' (@title we are) (@body live there) from time ')</sphinxql>
-	<sphinxql>select * from fl where match (' are (@body we) from time ')</sphinxql>
-	<sphinxql>select * from fl where match (' are (@body we) from (@title time the) here ')</sphinxql>
+	select * from fl where match (' (@title we) live ');
+	select * from fl where match (' (@title we are) (@body live there) from time ');
+	select * from fl where match (' are (@body we) from time ');
+	select * from fl where match (' are (@body we) from (@title time the) here ');
 	
 	<!-- regression of field end marker vs blended -->
-	<sphinxql>select * from idx_blend_crc where match (' x-com NEAR/10 valid')</sphinxql>
-	<sphinxql>select * from idx_blend_kw where match (' x-com NEAR/10 valid ')</sphinxql>
-	<sphinxql>CALL SNIPPETS ( 'dummy1 dummy1 valid dummy1 dummy1 dummy1 X-COM, dummy1', 'idx_blend_kw', 'x-com NEAR/10 valid', 1 as query_mode )</sphinxql>
-	
+	select * from idx_blend_crc where match (' x-com NEAR/10 valid');
+	select * from idx_blend_kw where match (' x-com NEAR/10 valid ');
+	CALL SNIPPETS ( 'dummy1 dummy1 valid dummy1 dummy1 dummy1 X-COM, dummy1', 'idx_blend_kw', 'x-com NEAR/10 valid', 1 as query_mode );
+
 	<!-- regression of field position limit vs RT index -->
-	<sphinxql>REPLACE INTO rt (id, title, description) VALUES (1, 'This is a simple test', 'This is a longer description of a simple test')</sphinxql>
-	<sphinxql>SELECT id FROM rt WHERE MATCH('@description test')</sphinxql>
-	<sphinxql>SELECT id FROM rt WHERE MATCH('@description[10] test')</sphinxql>
-	
-</sphqueries>
-
-<custom_insert><![CDATA[
-
-for ( $i=0; $i<98; ++$i )
-	mysql_query ( "insert into start_end_table (body) values ('ABB')" );
-mysql_query ( "insert into start_end_table (body) values ('ABB abc ABB')" );
-for ( $i=0; $i<501; ++$i )
-	mysql_query ( "insert into start_end_table (body) values ('ABB')" );
-
-]]></custom_insert>
-
+	REPLACE INTO rt (id, title, description) VALUES (1, 'This is a simple test', 'This is a longer description of a simple test');
+	SELECT id FROM rt WHERE MATCH('@description test');
+	SELECT id FROM rt WHERE MATCH('@description[10] test');
+	</sphinxql>
+</queries>
 </test>

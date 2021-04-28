@@ -36,26 +36,25 @@ index idx
 	<query mode="extended2" groupattr="tm" groupfunc="week">aaaa</query>
 	<query mode="extended2" groupattr="tm" groupfunc="month">aaaa</query>
 	<query mode="extended2" groupattr="tm" groupfunc="year">aaaa</query>
+	<sphinxql>
+	select tm, day(tm) d from idx where match('aaaa') group by d;
+	select tm, month(tm) d from idx where match('aaaa') group by d;
+	select tm, year(tm) d from idx where match('aaaa') group by d;
+	select tm, yearmonth(tm) d from idx where match('aaaa') group by d;
+	select tm, yearmonthday(tm) d from idx where match('aaaa') group by d;
+	<!-- check whether settings works at all -->
+	show variables like 'grouping%';
+	set global grouping_in_utc=0;
+	show variables like 'grouping_in_utc';
+	set global grouping_in_utc=1;
+	<!-- check again -->
+	select tm, day(tm) d from idx where match('aaaa') group by d;
+	select tm, month(tm) d from idx where match('aaaa') group by d;
+	select tm, year(tm) d from idx where match('aaaa') group by d;
+	select tm, yearmonth(tm) d from idx where match('aaaa') group by d;
+	select tm, yearmonthday(tm) d from idx where match('aaaa') group by d;
+	</sphinxql>
 </queries>
-
-<sphqueries>
-<sphinxql>select tm, day(tm) d from idx where match('aaaa') group by d</sphinxql>
-<sphinxql>select tm, month(tm) d from idx where match('aaaa') group by d</sphinxql>
-<sphinxql>select tm, year(tm) d from idx where match('aaaa') group by d</sphinxql>
-<sphinxql>select tm, yearmonth(tm) d from idx where match('aaaa') group by d</sphinxql>
-<sphinxql>select tm, yearmonthday(tm) d from idx where match('aaaa') group by d</sphinxql>
-<!-- check whether settings works at all -->
-<sphinxql>show variables like 'grouping%'</sphinxql>
-<sphinxql>set global grouping_in_utc=0</sphinxql>
-<sphinxql>show variables like 'grouping_in_utc'</sphinxql>
-<sphinxql>set global grouping_in_utc=1</sphinxql>
-<!-- check again -->
-<sphinxql>select tm, day(tm) d from idx where match('aaaa') group by d</sphinxql>
-<sphinxql>select tm, month(tm) d from idx where match('aaaa') group by d</sphinxql>
-<sphinxql>select tm, year(tm) d from idx where match('aaaa') group by d</sphinxql>
-<sphinxql>select tm, yearmonth(tm) d from idx where match('aaaa') group by d</sphinxql>
-<sphinxql>select tm, yearmonthday(tm) d from idx where match('aaaa') group by d</sphinxql>
-</sphqueries>
 
 <db_create>
 CREATE TABLE test_table
@@ -66,15 +65,13 @@ CREATE TABLE test_table
 ) ENGINE=MYISAM
 </db_create>
 
-<custom_insert><![CDATA[
-$stamp=0;
-for ( $i=0; $i<365*24; ++$i )
-{
-	mysql_query ( "INSERT INTO test_table VALUES ( 0, $stamp, 'aaaa')" );
-	$stamp += 3600;
-}
+<db_insert>
+	<repeat count="24" vars="stamp" init="0">
+		<var name="vals"/>
+		<repeat count="365" vars="stamp" inc="3600"><var name="vals" delimiter=",">(0,<stamp/>,'aaaa')</var></repeat>
+		INSERT INTO test_table VALUES <vals/><db_insert/></repeat>
+</db_insert>
 
-]]></custom_insert>
 <db_drop>DROP TABLE IF EXISTS test_table</db_drop>
 
 </test>

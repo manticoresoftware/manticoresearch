@@ -28,27 +28,27 @@ index rtb : rta
 
 </config>
 
-<sphqueries>
+<queries><sphinxql>
 
 <!-- rta -->
-<sphinxql>INSERT INTO `rta`(id,tag,text,attrs) VALUES ( 1, 102, 'first','ch1first'), ( 2, 102, 'second','ch1second'), ( 3, 103, 'third','ch1third')</sphinxql>
-<sphinxql>FLUSH RAMCHUNK rta</sphinxql>
+INSERT INTO `rta`(id,tag,text,attrs) VALUES ( 1, 102, 'first','ch1first'), ( 2, 102, 'second','ch1second'), ( 3, 103, 'third','ch1third');
+FLUSH RAMCHUNK rta;
 <!-- rtb -->
-<sphinxql>INSERT INTO rtb (id,tag,text,attrs) VALUES ( 4, 203, 'forth','ch2forth'), ( 2, 212, 'asecond','ch2second'), ( 3, 213, 'athird','ch2third')</sphinxql>
-<sphinxql>FLUSH RAMCHUNK rtb</sphinxql>
+INSERT INTO rtb (id,tag,text,attrs) VALUES ( 4, 203, 'forth','ch2forth'), ( 2, 212, 'asecond','ch2second'), ( 3, 213, 'athird','ch2third');
+FLUSH RAMCHUNK rtb;
 
 <!-- control sample -->
-<sphinxql>select * from rta</sphinxql>
-<sphinxql>select * from rtb</sphinxql>
+select * from rta;
+select * from rtb;
 
 <!-- updating -->
-<sphinxql>update rta set tag=400 where id=1</sphinxql>
+update rta set tag=400 where id=1;
 <!-- must fail because of undisk_attrs -->
-<sphinxql>update rtb set tag=400 where id=4</sphinxql>
+update rtb set tag=400 where id=4;
 
 <!-- check sample -->
-<sphinxql>select * from rta</sphinxql>
-<sphinxql>select * from rtb</sphinxql>
+select * from rta;
+select * from rtb;
 
-</sphqueries>
+</sphinxql></queries>
 </test>

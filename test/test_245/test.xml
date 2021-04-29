@@ -42,17 +42,17 @@ index idx_factors_rev
 
 </config>
 
-<sphqueries>
+<queries><sphinxql>
 <!-- regression packedfactors vs group by N -->
-<sphinxql>select id, groupby() g, count(*) c, t, packedfactors() p from idx_factors_rev where match ('this') group 2 by gid order by weight() desc, id asc option max_matches=5, ranker=expr('1')</sphinxql>
-<sphinxql>select id, groupby() g, count(*) c, t, packedfactors() p from idx_factors_rev where match ('this') group 3 by gid order by weight() desc, id asc option max_matches=17, ranker=expr('1')</sphinxql>
+select id, groupby() g, count(*) c, t, packedfactors() p from idx_factors_rev where match ('this') group 2 by gid order by weight() desc, id asc option max_matches=5, ranker=expr('1');
+select id, groupby() g, count(*) c, t, packedfactors() p from idx_factors_rev where match ('this') group 3 by gid order by weight() desc, id asc option max_matches=17, ranker=expr('1');
 
-<sphinxql>select id, groupby() g, count(*) c, t, packedfactors() p from idx_factors where match ('this') group 20 by gid within group order by id asc order by weight() desc, id asc option max_matches=1000, ranker=expr('1')</sphinxql>
-<sphinxql>select id, groupby() g, count(*) c, t, packedfactors() p from idx_factors where match ('this') group 2 by gid within group order by id asc order by weight() desc, id asc option max_matches=5, ranker=expr('1')</sphinxql>
-<sphinxql>select id, groupby() g, count(*) c, t, packedfactors() p from idx_factors where match ('this') group 3 by gid within group order by id asc order by weight() desc, id asc option max_matches=17, ranker=expr('1')</sphinxql>
+select id, groupby() g, count(*) c, t, packedfactors() p from idx_factors where match ('this') group 20 by gid within group order by id asc order by weight() desc, id asc option max_matches=1000, ranker=expr('1');
+select id, groupby() g, count(*) c, t, packedfactors() p from idx_factors where match ('this') group 2 by gid within group order by id asc order by weight() desc, id asc option max_matches=5, ranker=expr('1');
+select id, groupby() g, count(*) c, t, packedfactors() p from idx_factors where match ('this') group 3 by gid within group order by id asc order by weight() desc, id asc option max_matches=17, ranker=expr('1');
 
 <!-- regression for max_matches=str -->
-<sphinxql>select id from idx_factors where match ('this') option max_matches=str</sphinxql>
-</sphqueries>
+select id from idx_factors where match ('this') option max_matches=str;
+</sphinxql></queries>
 
 </test>

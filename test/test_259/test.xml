@@ -98,28 +98,28 @@ INSERT INTO `test_table` VALUES
 ( 9, 13, 	'the' )
 </db_insert>
 
-<sphqueries>
-<sphinxql>select * from dist</sphinxql>
-<sphinxql>select * from dist</sphinxql>
-<sphinxql>select * from dist2</sphinxql>
-<sphinxql>select * from dist2</sphinxql>
-<sphinxql>select * from dist3</sphinxql>
-<sphinxql>select * from dist3</sphinxql>
-<sphinxql>select * from dist3</sphinxql>
-<sphinxql>select * from dist3</sphinxql>
-<sphinxql>select * from dist3</sphinxql>
-<sphinxql>select * from dist3</sphinxql>
-<sphinxql>select * from dist2 OPTION retry_count=2</sphinxql>
-<sphinxql>select * from dist2 OPTION retry_count=2</sphinxql>
-<sphinxql>select * from dist3 OPTION retry_count=3</sphinxql>
-<sphinxql>select * from dist3 OPTION retry_count=3</sphinxql>
-<sphinxql>select * from dist3 OPTION retry_count=3</sphinxql>
-<sphinxql>select * from dist3 OPTION retry_count=3</sphinxql>
-<sphinxql>select * from dist3 OPTION retry_count=3</sphinxql>
-<sphinxql>select * from dist3 OPTION retry_count=3</sphinxql>
-<sphinxql>select * from dist3 OPTION retry_count=1</sphinxql>
-<sphinxql>select * from dist3 OPTION retry_count=1</sphinxql>
-<sphinxql>select * from dist3 OPTION retry_count=1</sphinxql>
-</sphqueries>
+<queries><sphinxql>
+select * from dist;
+select * from dist;
+select * from dist2;
+select * from dist2;
+select * from dist3;
+select * from dist3;
+select * from dist3;
+select * from dist3;
+select * from dist3;
+select * from dist3;
+select * from dist2 OPTION retry_count=2;
+select * from dist2 OPTION retry_count=2;
+select * from dist3 OPTION retry_count=3;
+select * from dist3 OPTION retry_count=3;
+select * from dist3 OPTION retry_count=3;
+select * from dist3 OPTION retry_count=3;
+select * from dist3 OPTION retry_count=3;
+select * from dist3 OPTION retry_count=3;
+select * from dist3 OPTION retry_count=1;
+select * from dist3 OPTION retry_count=1;
+select * from dist3 OPTION retry_count=1;
+</sphinxql></queries>
 
 </test>

@@ -136,27 +136,27 @@ CREATE TABLE t3
 ( 10, 123, REPEAT('abcdefghi ', 400) )
 </db_insert>
 
-<sphqueries>
+<queries><sphinxql>
 
 <!-- test that bool/float mixing works and returns correct results -->
-<sphinxql>select * from t1</sphinxql>
-<sphinxql>select * from t2</sphinxql>
-<sphinxql>select * from t1,t2</sphinxql>
+select * from t1;
+select * from t2;
+select * from t1,t2;
 
 <!-- test.. something -->
-<sphinxql>select *,attr1 from t1</sphinxql>
-<sphinxql>select attr1 from t1</sphinxql>
+select *,attr1 from t1;
+select attr1 from t1;
 
 <!-- test that select id,gid does NOT fetch all atributes via network (we will hit max_packet_size if we do!) -->
-<sphinxql>select * from dt3</sphinxql>
-<sphinxql>select id,gid from dt3</sphinxql>
+select * from dt3;
+select id,gid from dt3;
 
 <!--regression distributed vs no local matches-->
-<sphinxql>select * from dist10 where s=10</sphinxql>
-<sphinxql>select * from dist10 where s=10 group by idd</sphinxql>
+select * from dist10 where s=10;
+select * from dist10 where s=10 group by idd;
 
 <!--GROUP BY id should work-->
-<sphinxql>select id from t1 group by id</sphinxql>
-</sphqueries>
+select id from t1 group by id;
+</sphinxql></queries>
 
 </test>

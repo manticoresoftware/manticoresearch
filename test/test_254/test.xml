@@ -117,45 +117,45 @@ index wf_lemm
 
 </config>
 
-<sphqueries>
-	<sphinxql>INSERT INTO rt_blend (id, body, idd) VALUES (1, 'another quorum test testers tests re-bu@s', 11)</sphinxql>
-	<sphinxql>INSERT INTO rt_blend (id, body, idd) VALUES (2, 'quorum quorum quorumm quorummm test re-bu@s-es', 22)</sphinxql>
-	<sphinxql>INSERT INTO rt_lemm (id, body, idd) VALUES (1, 'another quorum test testers tests re-bu@s', 11)</sphinxql>
-	<sphinxql>INSERT INTO rt_lemm (id, body, idd) VALUES (2, 'quorum quorum quorumm quorummm test re-bu@s-es', 22)</sphinxql>
+<queries><sphinxql>
+	INSERT INTO rt_blend (id, body, idd) VALUES (1, 'another quorum test testers tests re-bu@s', 11);
+	INSERT INTO rt_blend (id, body, idd) VALUES (2, 'quorum quorum quorumm quorummm test re-bu@s-es', 22);
+	INSERT INTO rt_lemm (id, body, idd) VALUES (1, 'another quorum test testers tests re-bu@s', 11);
+	INSERT INTO rt_lemm (id, body, idd) VALUES (2, 'quorum quorum quorumm quorummm test re-bu@s-es', 22);
 	
 	<!-- fold wildcards options -->
-	<sphinxql>CALL KEYWORDS ( 'qu* me tests', 'plain_blend',	1 AS stats, 0 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
-	<sphinxql>CALL KEYWORDS ( 'qu* me tests', 'plain_blend',	1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
-	<sphinxql>CALL KEYWORDS ( 'qu* me tests', 'plain_blend',	0 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
-	<sphinxql>CALL KEYWORDS ( 'qu* me tests', 'rt_blend',		1 AS stats, 0 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
-	<sphinxql>CALL KEYWORDS ( 'qu* me tests', 'rt_blend',		1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
-	<sphinxql>CALL KEYWORDS ( 'qu* me tests', 'rt_blend',		0 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
-	<sphinxql>CALL KEYWORDS ( 'qu* me tests', 'tpl_blend',		1 AS stats, 0 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
-	<sphinxql>CALL KEYWORDS ( 'qu* me tests', 'tpl_blend',		1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
-	<sphinxql>CALL KEYWORDS ( 'qu* me tests', 'tpl_blend',		0 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
+	CALL KEYWORDS ( 'qu* me tests', 'plain_blend',	1 AS stats, 0 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended );
+	CALL KEYWORDS ( 'qu* me tests', 'plain_blend',	1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended );
+	CALL KEYWORDS ( 'qu* me tests', 'plain_blend',	0 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended );
+	CALL KEYWORDS ( 'qu* me tests', 'rt_blend',		1 AS stats, 0 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended );
+	CALL KEYWORDS ( 'qu* me tests', 'rt_blend',		1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended );
+	CALL KEYWORDS ( 'qu* me tests', 'rt_blend',		0 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended );
+	CALL KEYWORDS ( 'qu* me tests', 'tpl_blend',		1 AS stats, 0 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended );
+	CALL KEYWORDS ( 'qu* me tests', 'tpl_blend',		1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended );
+	CALL KEYWORDS ( 'qu* me tests', 'tpl_blend',		0 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended );
 	
 	<!-- fold blended options -->
-	<sphinxql>CALL KEYWORDS ( 're-bu@s fe@bus qu* me tests', 'plain_blend',	1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
-	<sphinxql>CALL KEYWORDS ( 're-bu@s fe@bus qu* me tests', 'plain_blend',	1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 1 AS fold_blended )</sphinxql>
-	<sphinxql>CALL KEYWORDS ( 're-bu@s fe@bus qu* me tests', 'rt_blend',	1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
-	<sphinxql>CALL KEYWORDS ( 're-bu@s fe@bus qu* me tests', 'rt_blend',	1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 1 AS fold_blended )</sphinxql>
-	<sphinxql>CALL KEYWORDS ( 're-bu@s fe@bus qu* me tests', 'tpl_blend',	1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
-	<sphinxql>CALL KEYWORDS ( 're-bu@s fe@bus qu* me tests', 'tpl_blend',	1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 1 AS fold_blended )</sphinxql>
+	CALL KEYWORDS ( 're-bu@s fe@bus qu* me tests', 'plain_blend',	1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended );
+	CALL KEYWORDS ( 're-bu@s fe@bus qu* me tests', 'plain_blend',	1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 1 AS fold_blended );
+	CALL KEYWORDS ( 're-bu@s fe@bus qu* me tests', 'rt_blend',	1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended );
+	CALL KEYWORDS ( 're-bu@s fe@bus qu* me tests', 'rt_blend',	1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 1 AS fold_blended );
+	CALL KEYWORDS ( 're-bu@s fe@bus qu* me tests', 'tpl_blend',	1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended );
+	CALL KEYWORDS ( 're-bu@s fe@bus qu* me tests', 'tpl_blend',	1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 1 AS fold_blended );
 	
 	<!-- fold lemmas options -->
-	<sphinxql>CALL KEYWORDS ( 'bus qu* me tests testing gone', 'plain_lemm',	1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
-	<sphinxql>CALL KEYWORDS ( 'bus qu* me tests testing gone', 'plain_lemm',	1 AS stats, 1 AS fold_wildcards, 1 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
-	<sphinxql>CALL KEYWORDS ( 'bus qu* me tests testing gone', 'plain_lemm',	0 AS stats, 1 AS fold_wildcards, 1 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
-	<sphinxql>CALL KEYWORDS ( 'bus qu* me tests testing gone', 'rt_lemm',		1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
-	<sphinxql>CALL KEYWORDS ( 'bus qu* me tests testing gone', 'rt_lemm',		1 AS stats, 1 AS fold_wildcards, 1 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
-	<sphinxql>CALL KEYWORDS ( 'bus qu* me tests testing gone', 'rt_lemm',		0 AS stats, 1 AS fold_wildcards, 1 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
-	<sphinxql>CALL KEYWORDS ( 'bus qu* me tests testing gone', 'tpl_lemm',		1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
-	<sphinxql>CALL KEYWORDS ( 'bus qu* me tests testing gone', 'tpl_lemm',		1 AS stats, 1 AS fold_wildcards, 1 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
-	<sphinxql>CALL KEYWORDS ( 'bus qu* me tests testing gone', 'tpl_lemm',		0 AS stats, 1 AS fold_wildcards, 1 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
+	CALL KEYWORDS ( 'bus qu* me tests testing gone', 'plain_lemm',	1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended );
+	CALL KEYWORDS ( 'bus qu* me tests testing gone', 'plain_lemm',	1 AS stats, 1 AS fold_wildcards, 1 AS fold_lemmas, 0 AS fold_blended );
+	CALL KEYWORDS ( 'bus qu* me tests testing gone', 'plain_lemm',	0 AS stats, 1 AS fold_wildcards, 1 AS fold_lemmas, 0 AS fold_blended );
+	CALL KEYWORDS ( 'bus qu* me tests testing gone', 'rt_lemm',		1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended );
+	CALL KEYWORDS ( 'bus qu* me tests testing gone', 'rt_lemm',		1 AS stats, 1 AS fold_wildcards, 1 AS fold_lemmas, 0 AS fold_blended );
+	CALL KEYWORDS ( 'bus qu* me tests testing gone', 'rt_lemm',		0 AS stats, 1 AS fold_wildcards, 1 AS fold_lemmas, 0 AS fold_blended );
+	CALL KEYWORDS ( 'bus qu* me tests testing gone', 'tpl_lemm',		1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended );
+	CALL KEYWORDS ( 'bus qu* me tests testing gone', 'tpl_lemm',		1 AS stats, 1 AS fold_wildcards, 1 AS fold_lemmas, 0 AS fold_blended );
+	CALL KEYWORDS ( 'bus qu* me tests testing gone', 'tpl_lemm',		0 AS stats, 1 AS fold_wildcards, 1 AS fold_lemmas, 0 AS fold_blended );
 
 	<!-- fold_lemmas vs hit count regression -->
-	<sphinxql>CALL KEYWORDS ( 'синей', 'wf_lemm',	1 AS stats, 0 AS fold_lemmas )</sphinxql>
-	<sphinxql>CALL KEYWORDS ( 'синей', 'wf_lemm',	1 AS stats, 1 AS fold_lemmas )</sphinxql>
-</sphqueries>
+	CALL KEYWORDS ( 'синей', 'wf_lemm',	1 AS stats, 0 AS fold_lemmas );
+	CALL KEYWORDS ( 'синей', 'wf_lemm',	1 AS stats, 1 AS fold_lemmas );
+</sphinxql></queries>
 
 </test>

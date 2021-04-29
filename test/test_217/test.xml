@@ -73,31 +73,31 @@ CREATE TABLE test_table
 ( 10, 123, 'the' )
 </db_insert>
 
-<sphqueries>
-<sphinxql>select *, weight(), packedfactors() from test where match('the') option ranker=expr('1000000+1000000*sum(sum_idf)')</sphinxql>
-<sphinxql>select *, weight(), packedfactors() from test where match('the') option idf=plain, ranker=expr('1000000+1000000*sum(sum_idf)')</sphinxql>
-<sphinxql>select *, weight(), packedfactors() from test where match('idftest1') option idf=normalized, ranker=expr('1000000+1000000*sum(sum_idf)')</sphinxql>
-<sphinxql>select *, weight(), packedfactors() from test where match('idftest1') option idf=plain, ranker=expr('1000000+1000000*sum(sum_idf)')</sphinxql>
-<sphinxql>select *, weight(), packedfactors() from test where match('idftest1') option idf='plain,tfidf_unnormalized', ranker=expr('1000000+1000000*sum(sum_idf)')</sphinxql>
-<sphinxql>select *, weight(), packedfactors() from test where match('idftest1 | fnord') option idf=normalized, ranker=expr('1000000+1000000*sum(sum_idf)')</sphinxql>
-<sphinxql>select *, weight(), packedfactors() from test where match('idftest1 | fnord') option idf=plain, ranker=expr('1000000+1000000*sum(sum_idf)')</sphinxql>
-<sphinxql>select *, weight(), packedfactors() from test where match('idftest1 | fnord') option idf='plain,tfidf_unnormalized', ranker=expr('1000000+1000000*sum(sum_idf)')</sphinxql>
+<queries><sphinxql>
+select *, weight(), packedfactors() from test where match('the') option ranker=expr('1000000+1000000*sum(sum_idf)');
+select *, weight(), packedfactors() from test where match('the') option idf=plain, ranker=expr('1000000+1000000*sum(sum_idf)');
+select *, weight(), packedfactors() from test where match('idftest1') option idf=normalized, ranker=expr('1000000+1000000*sum(sum_idf)');
+select *, weight(), packedfactors() from test where match('idftest1') option idf=plain, ranker=expr('1000000+1000000*sum(sum_idf)');
+select *, weight(), packedfactors() from test where match('idftest1') option idf='plain,tfidf_unnormalized', ranker=expr('1000000+1000000*sum(sum_idf)');
+select *, weight(), packedfactors() from test where match('idftest1 | fnord') option idf=normalized, ranker=expr('1000000+1000000*sum(sum_idf)');
+select *, weight(), packedfactors() from test where match('idftest1 | fnord') option idf=plain, ranker=expr('1000000+1000000*sum(sum_idf)');
+select *, weight(), packedfactors() from test where match('idftest1 | fnord') option idf='plain,tfidf_unnormalized', ranker=expr('1000000+1000000*sum(sum_idf)');
 <!-- regression heavy factors got enabed along with packedfactors -->
-<sphinxql>select *, weight(), packedfactors() from test where match('idftest1 the') option idf='plain,tfidf_unnormalized', ranker=expr('1')</sphinxql>
-<sphinxql>select *, weight(), packedfactors() from test where match('and idftest1 the') option idf='plain,tfidf_unnormalized', ranker=expr('1')</sphinxql>
-<sphinxql>select *, weight(), packedfactors() from test where match('the idftest1') option idf='plain,tfidf_unnormalized', ranker=expr('1')</sphinxql>
-<sphinxql>select *, weight(), packedfactors() from test where match('the and idftest1') option idf='plain,tfidf_unnormalized', ranker=expr('1')</sphinxql>
+select *, weight(), packedfactors() from test where match('idftest1 the') option idf='plain,tfidf_unnormalized', ranker=expr('1');
+select *, weight(), packedfactors() from test where match('and idftest1 the') option idf='plain,tfidf_unnormalized', ranker=expr('1');
+select *, weight(), packedfactors() from test where match('the idftest1') option idf='plain,tfidf_unnormalized', ranker=expr('1');
+select *, weight(), packedfactors() from test where match('the and idftest1') option idf='plain,tfidf_unnormalized', ranker=expr('1');
 
 <!-- packedfactors with json output -->
-<sphinxql>select *, weight(), factors({json=1}) from test where match('idftest1 the') option idf='plain,tfidf_unnormalized', ranker=expr('1')</sphinxql>
-<sphinxql>select *, weight(), packedfactors({json=1}) from test where match('and idftest1 the')  option idf='plain,tfidf_unnormalized', ranker=expr('1')</sphinxql>
-<sphinxql>select *, weight(), factors({json=1}) from test where match('the idftest1')  option idf='plain,tfidf_unnormalized', ranker=expr('1')</sphinxql>
-<sphinxql>select *, weight(), packedfactors({json=1}) from test where match('the and idftest1')  option idf='plain,tfidf_unnormalized', ranker=expr('1')</sphinxql>
-<sphinxql>select *, weight(), packedfactors({json=1}) from test_stop where match('the and idftest1')  option idf='plain,tfidf_unnormalized', ranker=expr('1')</sphinxql>
+select *, weight(), factors({json=1}) from test where match('idftest1 the') option idf='plain,tfidf_unnormalized', ranker=expr('1');
+select *, weight(), packedfactors({json=1}) from test where match('and idftest1 the')  option idf='plain,tfidf_unnormalized', ranker=expr('1');
+select *, weight(), factors({json=1}) from test where match('the idftest1')  option idf='plain,tfidf_unnormalized', ranker=expr('1');
+select *, weight(), packedfactors({json=1}) from test where match('the and idftest1')  option idf='plain,tfidf_unnormalized', ranker=expr('1');
+select *, weight(), packedfactors({json=1}) from test_stop where match('the and idftest1')  option idf='plain,tfidf_unnormalized', ranker=expr('1');
 
 <!-- regression crash of daemon witn ranker=none to distributed index \ multiple indexes -->
-<sphinxql>SELECT gid FROM test,test1 GROUP BY gid OPTION ranker=none</sphinxql>
+SELECT gid FROM test,test1 GROUP BY gid OPTION ranker=none;
 
-</sphqueries>
+</sphinxql></queries>
 
 </test>

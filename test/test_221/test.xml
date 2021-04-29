@@ -59,18 +59,18 @@ CREATE TABLE test_table
 <index>test1</index>
 </metaindex>
 
-<sphqueries>
-<sphinxql>select * from META:all where match ('a b c !war')</sphinxql>
-<sphinxql>select * from META:all where match ('hello !war')</sphinxql>
-<sphinxql>select * from META:all where match ('the !war')</sphinxql>
-<sphinxql>select * from META:all where match ('!the !war')</sphinxql>
-<sphinxql>select * from META:all where match ('!hello !war')</sphinxql>
-<sphinxql>select * from META:all where match ('hello | (!war)')</sphinxql>
-<sphinxql>select * from META:all where match ('hello | (!w)')</sphinxql>
-<sphinxql>select * from META:all where match ('hallo  | (war ( a -world))')</sphinxql>
-<sphinxql>select * from META:all where match ('war ( a -world)')</sphinxql>
-<sphinxql>select * from META:all where match ('war | ( a -world)')</sphinxql>
+<queries><sphinxql>
+select * from META:all where match ('a b c !war');
+select * from META:all where match ('hello !war');
+select * from META:all where match ('the !war');
+select * from META:all where match ('!the !war');
+select * from META:all where match ('!hello !war');
+select * from META:all where match ('hello | (!war)');
+select * from META:all where match ('hello | (!w)');
+select * from META:all where match ('hallo  | (war ( a -world))');
+select * from META:all where match ('war ( a -world)');
+select * from META:all where match ('war | ( a -world)');
 <!-- check for crash on expressions like 'a<<(*!b)'-->
-<sphinxql><![CDATA[select * from META:all where match ( 'war << ( * -world )' ) ]]></sphinxql>
-</sphqueries>
+<![CDATA[select * from META:all where match ( 'war << ( * -world )' ) ]]>;
+</sphinxql></queries>
 </test>

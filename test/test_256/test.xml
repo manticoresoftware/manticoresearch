@@ -113,47 +113,47 @@ CREATE TABLE test_table
 </db_insert>
 
 
-<sphqueries>
-	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 1, 11, 'The role of a software tester in an Agile environment goes beyond')</sphinxql>
-	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 2, 11, 'paint coating is to be tested with a wet sponge tester' )</sphinxql>
-	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 3, 11, 'technical tester builds tools' )</sphinxql>
-	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 4, 11, 'aquia magic rester' )</sphinxql>
-	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 5, 11, 'pharma exec arrested for securities fraud' )</sphinxql>
-	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 6, 11, 'was arrested for stealing a tester bottle' )</sphinxql>
-	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 7, 11, 'star allegedly tells drug tester' )</sphinxql>
+<queries><sphinxql>
+	INSERT INTO rt1 (id, idd, body) VALUES ( 1, 11, 'The role of a software tester in an Agile environment goes beyond');
+	INSERT INTO rt1 (id, idd, body) VALUES ( 2, 11, 'paint coating is to be tested with a wet sponge tester' );
+	INSERT INTO rt1 (id, idd, body) VALUES ( 3, 11, 'technical tester builds tools' );
+	INSERT INTO rt1 (id, idd, body) VALUES ( 4, 11, 'aquia magic rester' );
+	INSERT INTO rt1 (id, idd, body) VALUES ( 5, 11, 'pharma exec arrested for securities fraud' );
+	INSERT INTO rt1 (id, idd, body) VALUES ( 6, 11, 'was arrested for stealing a tester bottle' );
+	INSERT INTO rt1 (id, idd, body) VALUES ( 7, 11, 'star allegedly tells drug tester' );
 	
-	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 10, 22, 'С благодарностью к своим' )</sphinxql>
-	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 11, 22, 'с благодарностью за все' )</sphinxql>
-	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 12, 22, 'его к поощрению благодарностью всех' )</sphinxql>
-	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 13, 22, 'письма благодарности героям прошлого' )</sphinxql>
-	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 14, 22, 'его благодарность неизвестна' )</sphinxql>
-	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 15, 22, 'написать e-mail с благодарностью' )</sphinxql>
+	INSERT INTO rt1 (id, idd, body) VALUES ( 10, 22, 'С благодарностью к своим' );
+	INSERT INTO rt1 (id, idd, body) VALUES ( 11, 22, 'с благодарностью за все' );
+	INSERT INTO rt1 (id, idd, body) VALUES ( 12, 22, 'его к поощрению благодарностью всех' );
+	INSERT INTO rt1 (id, idd, body) VALUES ( 13, 22, 'письма благодарности героям прошлого' );
+	INSERT INTO rt1 (id, idd, body) VALUES ( 14, 22, 'его благодарность неизвестна' );
+	INSERT INTO rt1 (id, idd, body) VALUES ( 15, 22, 'написать e-mail с благодарностью' );
 	
 	
-	<sphinxql>CALL SUGGEST ( 'taster', 'plain1')</sphinxql>
-	<sphinxql>CALL SUGGEST ( 'taster', 'rt1')</sphinxql>
-	<sphinxql>CALL SUGGEST ( 'благодраность', 'plain1')</sphinxql>
-	<sphinxql>CALL SUGGEST ( 'благодраность', 'rt1')</sphinxql>
+	CALL SUGGEST ( 'taster', 'plain1');
+	CALL SUGGEST ( 'taster', 'rt1');
+	CALL SUGGEST ( 'благодраность', 'plain1');
+	CALL SUGGEST ( 'благодраность', 'rt1');
 	
-	<sphinxql>CALL QSUGGEST ( 'tests passed well because of taster', 'plain1')</sphinxql>
-	<sphinxql>CALL QSUGGEST ( 'tests passed well because of taster', 'rt1')</sphinxql>
-	<sphinxql>CALL QSUGGEST ( 'с превеликой благодраностью', 'plain1')</sphinxql>
-	<sphinxql>CALL QSUGGEST ( 'с превеликой благодраностью', 'rt1')</sphinxql>
+	CALL QSUGGEST ( 'tests passed well because of taster', 'plain1');
+	CALL QSUGGEST ( 'tests passed well because of taster', 'rt1');
+	CALL QSUGGEST ( 'с превеликой благодраностью', 'plain1');
+	CALL QSUGGEST ( 'с превеликой благодраностью', 'rt1');
 
 	<!-- regression suggest on dict with morph and exact_words -->
-	<sphinxql>INSERT INTO rt2 (id, idd, body) VALUES ( 1, 11, 'The role of a software tester in an Agile environment goes beyond')</sphinxql>
-	<sphinxql>INSERT INTO rt2 (id, idd, body) VALUES ( 4, 11, 'aquia magic rester' )</sphinxql>
-	<sphinxql>INSERT INTO rt2 (id, idd, body) VALUES ( 6, 11, 'was arrested for stealing a tester bottle' )</sphinxql>
-	<sphinxql>CALL SUGGEST ( 'taster', 'plain2')</sphinxql>
-	<sphinxql>CALL SUGGEST ( 'taster', 'rt2')</sphinxql>
+	INSERT INTO rt2 (id, idd, body) VALUES ( 1, 11, 'The role of a software tester in an Agile environment goes beyond');
+	INSERT INTO rt2 (id, idd, body) VALUES ( 4, 11, 'aquia magic rester' );
+	INSERT INTO rt2 (id, idd, body) VALUES ( 6, 11, 'was arrested for stealing a tester bottle' );
+	CALL SUGGEST ( 'taster', 'plain2');
+	CALL SUGGEST ( 'taster', 'rt2');
 
 	<!-- regression suggest on dict with morph and exact_words -->
-	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 21, 11, '#test from bunch of tester' )</sphinxql>
-	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 22, 11, '#test passed for #taster' )</sphinxql>
-	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 23, 11, '#test #tests passes well' )</sphinxql>
-	<sphinxql>CALL SUGGEST ( '#trest', 'rt1')</sphinxql>
-	<sphinxql>CALL SUGGEST ( '#trest', 'rt1', 1 as non_char )</sphinxql>
+	INSERT INTO rt1 (id, idd, body) VALUES ( 21, 11, '#test from bunch of tester' );
+	INSERT INTO rt1 (id, idd, body) VALUES ( 22, 11, '#test passed for #taster' );
+	INSERT INTO rt1 (id, idd, body) VALUES ( 23, 11, '#test #tests passes well' );
+	CALL SUGGEST ( '#trest', 'rt1');
+	CALL SUGGEST ( '#trest', 'rt1', 1 as non_char );
 	
-</sphqueries>
+</sphinxql></queries>
 
 </test>

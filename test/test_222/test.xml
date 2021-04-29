@@ -172,44 +172,44 @@ CREATE TABLE test_table
 <index>testple</index>
 </metaindex>
 
-<sphqueries>
+<queries><sphinxql>
 
-<sphinxql>SELECT id,gid,weight(),packedfactors() as my_weight FROM META:plain WHERE MATCH('Фичин баг') option ranker=expr('sum(exact_hit)');show meta</sphinxql>
-<sphinxql>SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('Фичин баг') option ranker=sph04;show meta</sphinxql>
-<sphinxql>SELECT id,gid,weight(),packedfactors() as my_weight FROM META:plain WHERE MATCH('^Фичин баг$') option ranker=expr('sum(exact_hit)');show meta</sphinxql>
-<sphinxql>SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('^Фичин баг$') option ranker=sph04;show meta</sphinxql>
-<sphinxql>SELECT id,gid,weight(),packedfactors() as my_weight FROM META:plain WHERE MATCH('"Фичин баг"') option ranker=expr('sum(exact_hit)');show meta</sphinxql>
-<sphinxql>SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('"Фичин баг"') option ranker=sph04;show meta</sphinxql>
-<sphinxql>SELECT id,gid,weight(),packedfactors() as my_weight FROM META:plain WHERE MATCH('english text') option ranker=expr('sum(exact_hit)');show meta</sphinxql>
-<sphinxql>SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('english text') option ranker=sph04;show meta</sphinxql>
-<sphinxql>SELECT id,gid,weight(),packedfactors() as my_weight FROM META:plain WHERE MATCH('"english text"') option ranker=expr('sum(exact_hit)');show meta</sphinxql>
-<sphinxql>SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('"english text"') option ranker=sph04;show meta</sphinxql>
-<sphinxql>SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('"Фичин баг"') option ranker=sph04;show meta</sphinxql>
-<sphinxql>SELECT GROUPBY() FROM testw</sphinxql>
+SELECT id,gid,weight(),packedfactors() as my_weight FROM META:plain WHERE MATCH('Фичин баг') option ranker=expr('sum(exact_hit)');show meta;
+SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('Фичин баг') option ranker=sph04;show meta;
+SELECT id,gid,weight(),packedfactors() as my_weight FROM META:plain WHERE MATCH('^Фичин баг$') option ranker=expr('sum(exact_hit)');show meta;
+SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('^Фичин баг$') option ranker=sph04;show meta;
+SELECT id,gid,weight(),packedfactors() as my_weight FROM META:plain WHERE MATCH('"Фичин баг"') option ranker=expr('sum(exact_hit)');show meta;
+SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('"Фичин баг"') option ranker=sph04;show meta;
+SELECT id,gid,weight(),packedfactors() as my_weight FROM META:plain WHERE MATCH('english text') option ranker=expr('sum(exact_hit)');show meta;
+SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('english text') option ranker=sph04;show meta;
+SELECT id,gid,weight(),packedfactors() as my_weight FROM META:plain WHERE MATCH('"english text"') option ranker=expr('sum(exact_hit)');show meta;
+SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('"english text"') option ranker=sph04;show meta;
+SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('"Фичин баг"') option ranker=sph04;show meta;
+SELECT GROUPBY() FROM testw;
 
 <!--regression lemmas at call keywords output -->
-<sphinxql>INSERT INTO rt_ckw VALUES ( 1, 'фичин баг, но не фичина бага', 11 )</sphinxql>
-<sphinxql>CALL KEYWORDS ( 'фичин баг', 'plain_ckw', 1 )</sphinxql>
-<sphinxql>CALL KEYWORDS ( 'фичин баг', 'rt_ckw', 1 )</sphinxql>
-<sphinxql>CALL KEYWORDS ( 'фичин баг', 'tmpl_ckw', 1 )</sphinxql>
-<sphinxql>CALL KEYWORDS ( 'фичина бага', 'plain_ckw', 1 )</sphinxql>
-<sphinxql>CALL KEYWORDS ( 'фичина бага', 'rt_ckw', 1 )</sphinxql>
-<sphinxql>CALL KEYWORDS ( 'фичина бага', 'tmpl_ckw', 1 )</sphinxql>
-<sphinxql>CALL KEYWORDS ( 'сталин жил', 'plain_ckw', 1 )</sphinxql>
-<sphinxql>CALL KEYWORDS ( 'сталин жил', 'rt_ckw', 1 )</sphinxql>
-<sphinxql>CALL KEYWORDS ( 'сталин жил', 'tmpl_ckw', 1 )</sphinxql>
-<sphinxql>CALL KEYWORDS ( 'DovE', 'plain_ckw', 1 )</sphinxql>
-<sphinxql>CALL KEYWORDS ( 'DovE', 'rt_ckw', 1 )</sphinxql>
-<sphinxql>CALL KEYWORDS ( 'DovE', 'tmpl_ckw', 1 )</sphinxql>
-<sphinxql>CALL KEYWORDS ( 'records recorded recording men man mans mens', 'plain_ckw', 1 )</sphinxql>
-<sphinxql>CALL KEYWORDS ( 'records recorded recording men man mans mens', 'rt_ckw', 1 )</sphinxql>
-<sphinxql>CALL KEYWORDS ( 'records recorded recording men man mans mens', 'tmpl_ckw', 1 )</sphinxql>
+INSERT INTO rt_ckw VALUES ( 1, 'фичин баг, но не фичина бага', 11 );
+CALL KEYWORDS ( 'фичин баг', 'plain_ckw', 1 );
+CALL KEYWORDS ( 'фичин баг', 'rt_ckw', 1 );
+CALL KEYWORDS ( 'фичин баг', 'tmpl_ckw', 1 );
+CALL KEYWORDS ( 'фичина бага', 'plain_ckw', 1 );
+CALL KEYWORDS ( 'фичина бага', 'rt_ckw', 1 );
+CALL KEYWORDS ( 'фичина бага', 'tmpl_ckw', 1 );
+CALL KEYWORDS ( 'сталин жил', 'plain_ckw', 1 );
+CALL KEYWORDS ( 'сталин жил', 'rt_ckw', 1 );
+CALL KEYWORDS ( 'сталин жил', 'tmpl_ckw', 1 );
+CALL KEYWORDS ( 'DovE', 'plain_ckw', 1 );
+CALL KEYWORDS ( 'DovE', 'rt_ckw', 1 );
+CALL KEYWORDS ( 'DovE', 'tmpl_ckw', 1 );
+CALL KEYWORDS ( 'records recorded recording men man mans mens', 'plain_ckw', 1 );
+CALL KEYWORDS ( 'records recorded recording men man mans mens', 'rt_ckw', 1 );
+CALL KEYWORDS ( 'records recorded recording men man mans mens', 'tmpl_ckw', 1 );
 
 <!-- field-start, field-end escaping test -->
-<sphinxql>SET profiling=1</sphinxql>
-<sphinxql>SELECT id FROM testw WHERE MATCH('\\^one\\$') limit 1</sphinxql>
-<sphinxql>SHOW PLAN</sphinxql>
+SET profiling=1;
+SELECT id FROM testw WHERE MATCH('\\^one\\$') limit 1;
+SHOW PLAN;
 
-</sphqueries>
+</sphinxql></queries>
 
 </test>

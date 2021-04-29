@@ -45,12 +45,12 @@ create table test_table
 <db_insert>insert into test_table values ( 1, 'asdf asdf asdf', 11 );</db_insert>
 <db_insert>insert into test_table values ( 2, 'asdf', 22 );</db_insert>
 
-<sphqueries>
+<queries><sphinxql>
 <!-- regression crash on reverse_scan -->
-<sphinxql>select * from test_rs option reverse_scan=1</sphinxql>
-<sphinxql>select * from test_rs where attr=22 option reverse_scan=1</sphinxql>
-<sphinxql>select * from test_rs option reverse_scan=1, cutoff=1</sphinxql>
-<sphinxql>select * from test_rs option cutoff=1</sphinxql>
-</sphqueries>
+select * from test_rs option reverse_scan=1;
+select * from test_rs where attr=22 option reverse_scan=1;
+select * from test_rs option reverse_scan=1, cutoff=1;
+select * from test_rs option cutoff=1;
+</sphinxql></queries>
 
 </test>

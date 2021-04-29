@@ -46,68 +46,68 @@ index rt_mva
 
 </config>
 
-<sphqueries>
+<queries><sphinxql>
 
 <!-- integrity test 1, should be 123 ver3 -->
-<sphinxql>insert into rt ( id, title ) values ( 123, 'ver1' )</sphinxql>
-<sphinxql>flush ramchunk rt</sphinxql>
+insert into rt ( id, title ) values ( 123, 'ver1' );
+flush ramchunk rt;
 
-<sphinxql>delete from rt where id=123</sphinxql>
-<sphinxql>insert into rt ( id, title ) values ( 123, 'ver2' )</sphinxql>
-<sphinxql>flush ramchunk rt</sphinxql>
+delete from rt where id=123;
+insert into rt ( id, title ) values ( 123, 'ver2' );
+flush ramchunk rt;
 
-<sphinxql>delete from rt where id=123</sphinxql>
-<sphinxql>insert into rt ( id, title ) values ( 123, 'ver3' )</sphinxql>
-<sphinxql>flush ramchunk rt</sphinxql>
+delete from rt where id=123;
+insert into rt ( id, title ) values ( 123, 'ver3' );
+flush ramchunk rt;
 
-<sphinxql>optimize index rt option sync=1</sphinxql>
-<sphinxql>select * from rt</sphinxql>
+optimize index rt option sync=1;
+select * from rt;
 
 
 <!-- integrity test 2, should be 124 ver2, 125 ver1 -->
-<sphinxql>insert into rt ( id, title ) values ( 124, 'ver1' )</sphinxql>
-<sphinxql>flush ramchunk rt</sphinxql>
+insert into rt ( id, title ) values ( 124, 'ver1' );
+flush ramchunk rt;
 
-<sphinxql>delete from rt where id=124</sphinxql>
-<sphinxql>insert into rt ( id, title ) values ( 124, 'ver2' )</sphinxql>
-<sphinxql>flush ramchunk rt</sphinxql>
+delete from rt where id=124;
+insert into rt ( id, title ) values ( 124, 'ver2' );
+flush ramchunk rt;
 
-<sphinxql>insert into rt ( id, title ) values ( 125, 'ver1' )</sphinxql>
-<sphinxql>flush ramchunk rt</sphinxql>
+insert into rt ( id, title ) values ( 125, 'ver1' );
+flush ramchunk rt;
 
-<sphinxql>optimize index rt option sync=1</sphinxql>
-<sphinxql>select * from rt order by id asc</sphinxql>
+optimize index rt option sync=1;
+select * from rt order by id asc;
 
 
 <!-- integrity test 3, should be 127 ver1 -->
-<sphinxql>insert into rt ( id, title ) values ( 126, 'ver1' )</sphinxql>
-<sphinxql>flush ramchunk rt</sphinxql>
+insert into rt ( id, title ) values ( 126, 'ver1' );
+flush ramchunk rt;
 
-<sphinxql>delete from rt where id=126</sphinxql>
-<sphinxql>insert into rt ( id, title ) values ( 126, 'ver2' )</sphinxql>
-<sphinxql>flush ramchunk rt</sphinxql>
+delete from rt where id=126;
+insert into rt ( id, title ) values ( 126, 'ver2' );
+flush ramchunk rt;
 
-<sphinxql>delete from rt where id=126</sphinxql>
-<sphinxql>insert into rt ( id, title ) values ( 127, 'ver1' )</sphinxql>
-<sphinxql>flush ramchunk rt</sphinxql>
+delete from rt where id=126;
+insert into rt ( id, title ) values ( 127, 'ver1' );
+flush ramchunk rt;
 
-<sphinxql>optimize index rt option sync=1</sphinxql>
-<sphinxql>select * from rt order by id asc</sphinxql>
+optimize index rt option sync=1;
+select * from rt order by id asc;
 
 <!-- updated MVA should not crash daemon on optimize -->
-<sphinxql>insert into rt_mva ( id, title, gid, mva1 ) values ( 1, 'ver1', 11, (11, 101) )</sphinxql>
-<sphinxql>insert into rt_mva ( id, title, gid, mva1 ) values ( 2, 'ver2', 12, (12, 102) )</sphinxql>
-<sphinxql>insert into rt_mva ( id, title, gid, mva1 ) values ( 3, 'ver3', 13, (13, 103) )</sphinxql>
-<sphinxql>flush ramchunk rt_mva</sphinxql>
-<sphinxql>insert into rt_mva ( id, title, gid, mva1 ) values ( 5, 'ver5', 15, (15, 105) )</sphinxql>
-<sphinxql>insert into rt_mva ( id, title, gid, mva1 ) values ( 6, 'ver6', 16, (16, 106) )</sphinxql>
-<sphinxql>flush ramchunk rt_mva</sphinxql>
-<sphinxql>UPDATE rt_mva SET mva1 = (1012,1002) WHERE id=2</sphinxql>
-<sphinxql>UPDATE rt_mva SET mva1 = (1015,1005) WHERE id=5</sphinxql>
+insert into rt_mva ( id, title, gid, mva1 ) values ( 1, 'ver1', 11, (11, 101) );
+insert into rt_mva ( id, title, gid, mva1 ) values ( 2, 'ver2', 12, (12, 102) );
+insert into rt_mva ( id, title, gid, mva1 ) values ( 3, 'ver3', 13, (13, 103) );
+flush ramchunk rt_mva;
+insert into rt_mva ( id, title, gid, mva1 ) values ( 5, 'ver5', 15, (15, 105) );
+insert into rt_mva ( id, title, gid, mva1 ) values ( 6, 'ver6', 16, (16, 106) );
+flush ramchunk rt_mva;
+UPDATE rt_mva SET mva1 = (1012,1002) WHERE id=2;
+UPDATE rt_mva SET mva1 = (1015,1005) WHERE id=5;
 
-<sphinxql>optimize index rt_mva option sync=1</sphinxql>
-<sphinxql>SELECT * FROM rt_mva</sphinxql>
+optimize index rt_mva option sync=1;
+SELECT * FROM rt_mva;
 
-</sphqueries>
+</sphinxql></queries>
 
 </test>

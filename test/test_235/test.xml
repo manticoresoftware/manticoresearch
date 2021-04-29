@@ -35,12 +35,12 @@ index test
 }
 </config>
 
-<sphqueries>
-<sphinxql>SHOW STATUS LIKE '%n_\_up%'</sphinxql>
-<sphinxql>SHOW META LIKE '%al%found'</sphinxql>
-<sphinxql>DESCRIBE test LIKE 'g_oup%'</sphinxql>
-<sphinxql>SHOW TABLES LIKE '__s_'</sphinxql>
-</sphqueries>
+<queries><sphinxql>
+SHOW STATUS LIKE '%n_\_up%';
+SHOW META LIKE '%al%found';
+DESCRIBE test LIKE 'g_oup%';
+SHOW TABLES LIKE '__s_';
+</sphinxql></queries>
 
 <db_create>
 CREATE TABLE test_table

@@ -154,50 +154,50 @@ index dist2
 }
 </config>
 
-<sphqueries>
-<sphinxql>SHOW STATUS LIKE '%n_\_up%'</sphinxql>
-<sphinxql>SHOW META LIKE '%al%found'</sphinxql>
-<sphinxql>DESCRIBE test LIKE 'g_oup%'</sphinxql>
-<sphinxql>SHOW AGENT STATUS LIKE '%seconds%'</sphinxql>
+<queries><sphinxql>
+SHOW STATUS LIKE '%n_\_up%';
+SHOW META LIKE '%al%found';
+DESCRIBE test LIKE 'g_oup%';
+SHOW AGENT STATUS LIKE '%seconds%';
 
-<sphinxql>SELECT *, GROUPBY(), COUNT(*) FROM test GROUP BY group_id, group_id2</sphinxql>
-<sphinxql>SELECT *, GROUPBY(), COUNT(*) FROM test GROUP BY group_id2, group_id, group_id2</sphinxql>
+SELECT *, GROUPBY(), COUNT(*) FROM test GROUP BY group_id, group_id2;
+SELECT *, GROUPBY(), COUNT(*) FROM test GROUP BY group_id2, group_id, group_id2;
 
 <!-- regression fetched_docs, fetched_hits from (pure) distributed indexes -->
-<sphinxql>SELECT * FROM loc1 WHERE MATCH ( 'text | got | here')  LIMIT 1 OPTION max_predicted_time=10000</sphinxql>
-<sphinxql>SHOW META LIKE 'local%'</sphinxql>
-<sphinxql>SHOW META LIKE 'dist%'</sphinxql>
-<sphinxql>SHOW META LIKE '%predict%'</sphinxql>
-<sphinxql>SELECT * FROM loc2 WHERE MATCH ( 'text | got | here')  LIMIT 1 OPTION max_predicted_time=10000</sphinxql>
-<sphinxql>SHOW META LIKE 'local%'</sphinxql>
-<sphinxql>SHOW META LIKE 'dist%'</sphinxql>
-<sphinxql>SHOW META LIKE '%predict%'</sphinxql>
-<sphinxql>SELECT * FROM loc1, loc2 WHERE MATCH ( 'text | got | here')  LIMIT 1 OPTION max_predicted_time=10000</sphinxql>
-<sphinxql>SHOW META LIKE 'local%'</sphinxql>
-<sphinxql>SHOW META LIKE 'dist%'</sphinxql>
-<sphinxql>SHOW META LIKE '%predict%'</sphinxql>
-<sphinxql>SELECT * FROM d1 WHERE MATCH ( 'text | got | here')  LIMIT 1 OPTION max_predicted_time=10000</sphinxql>
-<sphinxql>SHOW META LIKE 'local%'</sphinxql>
-<sphinxql>SHOW META LIKE 'dist%'</sphinxql>
-<sphinxql>SHOW META LIKE '%predict%'</sphinxql>
-<sphinxql>SELECT * FROM d2 WHERE MATCH ( 'text | got | here')  LIMIT 1 OPTION max_predicted_time=10000</sphinxql>
-<sphinxql>SHOW META LIKE 'local%'</sphinxql>
-<sphinxql>SHOW META LIKE 'dist%'</sphinxql>
-<sphinxql>SHOW META LIKE '%predict%'</sphinxql>
-<sphinxql>SELECT * FROM d3 WHERE MATCH ( 'text | got | here')  LIMIT 1 OPTION max_predicted_time=10000</sphinxql>
-<sphinxql>SHOW META LIKE 'local%'</sphinxql>
-<sphinxql>SHOW META LIKE 'dist%'</sphinxql>
-<sphinxql>SHOW META LIKE '%predict%'</sphinxql>
-<sphinxql>SELECT COUNT(*) FROM test</sphinxql>
-<sphinxql>SELECT id id1, COUNT(DISTINCT id1) FROM test</sphinxql>
+SELECT * FROM loc1 WHERE MATCH ( 'text | got | here')  LIMIT 1 OPTION max_predicted_time=10000;
+SHOW META LIKE 'local%';
+SHOW META LIKE 'dist%';
+SHOW META LIKE '%predict%';
+SELECT * FROM loc2 WHERE MATCH ( 'text | got | here')  LIMIT 1 OPTION max_predicted_time=10000;
+SHOW META LIKE 'local%';
+SHOW META LIKE 'dist%';
+SHOW META LIKE '%predict%';
+SELECT * FROM loc1, loc2 WHERE MATCH ( 'text | got | here')  LIMIT 1 OPTION max_predicted_time=10000;
+SHOW META LIKE 'local%';
+SHOW META LIKE 'dist%';
+SHOW META LIKE '%predict%';
+SELECT * FROM d1 WHERE MATCH ( 'text | got | here')  LIMIT 1 OPTION max_predicted_time=10000;
+SHOW META LIKE 'local%';
+SHOW META LIKE 'dist%';
+SHOW META LIKE '%predict%';
+SELECT * FROM d2 WHERE MATCH ( 'text | got | here')  LIMIT 1 OPTION max_predicted_time=10000;
+SHOW META LIKE 'local%';
+SHOW META LIKE 'dist%';
+SHOW META LIKE '%predict%';
+SELECT * FROM d3 WHERE MATCH ( 'text | got | here')  LIMIT 1 OPTION max_predicted_time=10000;
+SHOW META LIKE 'local%';
+SHOW META LIKE 'dist%';
+SHOW META LIKE '%predict%';
+SELECT COUNT(*) FROM test;
+SELECT id id1, COUNT(DISTINCT id1) FROM test;
 
 <!--regression group by multi vs distributed -->
-<sphinxql>SELECT *, GROUPBY(), COUNT(*) FROM dist1 GROUP BY group_id, group_id2</sphinxql>
-<sphinxql>SELECT *, GROUPBY(), COUNT(*) FROM dist1 GROUP BY group_id2, group_id, group_id2</sphinxql>
-<sphinxql>SELECT *, GROUPBY(), COUNT(*) FROM dist2 GROUP BY group_id, group_id2</sphinxql>
-<sphinxql>SELECT *, GROUPBY(), COUNT(*) FROM dist2 GROUP BY group_id2, group_id, group_id2</sphinxql>
+SELECT *, GROUPBY(), COUNT(*) FROM dist1 GROUP BY group_id, group_id2;
+SELECT *, GROUPBY(), COUNT(*) FROM dist1 GROUP BY group_id2, group_id, group_id2;
+SELECT *, GROUPBY(), COUNT(*) FROM dist2 GROUP BY group_id, group_id2;
+SELECT *, GROUPBY(), COUNT(*) FROM dist2 GROUP BY group_id2, group_id, group_id2;
 
-</sphqueries>
+</sphinxql></queries>
 
 <db_create>
 CREATE TABLE test_table

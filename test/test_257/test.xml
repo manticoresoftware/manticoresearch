@@ -182,18 +182,18 @@ index movies
 }
 </config>
 
-<sphqueries>
-<sphinxql>SELECT * FROM xml11 ORDER BY id asc</sphinxql>
-<sphinxql>SELECT * FROM xml12 ORDER BY id asc</sphinxql>
-<sphinxql>SELECT * FROM tsv21 ORDER BY id asc</sphinxql>
-<sphinxql>SELECT * FROM tsv22 ORDER BY id asc</sphinxql>
-<sphinxql>SELECT * FROM csv31 ORDER BY id asc</sphinxql>
-<sphinxql>SELECT * FROM csv32 ORDER BY id asc</sphinxql>
+<queries><sphinxql>
+SELECT * FROM xml11 ORDER BY id asc;
+SELECT * FROM xml12 ORDER BY id asc;
+SELECT * FROM tsv21 ORDER BY id asc;
+SELECT * FROM tsv22 ORDER BY id asc;
+SELECT * FROM csv31 ORDER BY id asc;
+SELECT * FROM csv32 ORDER BY id asc;
 
 <!-- regression crash on field length -->
-<sphinxql>SELECT * FROM tsv_l1 ORDER BY id asc</sphinxql>
-<sphinxql>SELECT * FROM csv_l1 ORDER BY id asc</sphinxql>
+SELECT * FROM tsv_l1 ORDER BY id asc;
+SELECT * FROM csv_l1 ORDER BY id asc;
 
-</sphqueries>
+</sphinxql></queries>
 
 </test>

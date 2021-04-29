@@ -30,7 +30,7 @@ index test
 	morphology = stem_en
 	stopwords = <this_test/>/stopwords.txt
 	<dynamic>
-	<variant></variant>
+	<variant/>
 	<variant>stopwords_unstemmed = 0</variant>
 	<variant>stopwords_unstemmed = 1</variant>
 	</dynamic>

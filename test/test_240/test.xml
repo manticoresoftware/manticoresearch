@@ -113,13 +113,13 @@ INSERT INTO `test_table` VALUES
 ( 9, 3, 	'c cc',		'the' )
 </db_insert>
 
-<sphqueries>
-<sphinxql>select * from loc_dist1 order by str1 asc</sphinxql>
-<sphinxql>select * from loc_dist1 order by str1 desc</sphinxql>
-<sphinxql>select * from loc_dist2 order by str1 asc, idd1 desc</sphinxql>
-<sphinxql>select * from loc_dist2 order by str1 desc, idd1 asc</sphinxql>
-<sphinxql>select * from loc_dist2 order by str2 asc</sphinxql>
-<sphinxql>select * from loc_dist2 order by str2 desc</sphinxql>
-<sphinxql>select * from loc_dist2 order by str2 desc, idd1 desc</sphinxql>
-</sphqueries>
+<queries><sphinxql>
+select * from loc_dist1 order by str1 asc;
+select * from loc_dist1 order by str1 desc;
+select * from loc_dist2 order by str1 asc, idd1 desc;
+select * from loc_dist2 order by str1 desc, idd1 asc;
+select * from loc_dist2 order by str2 asc;
+select * from loc_dist2 order by str2 desc;
+select * from loc_dist2 order by str2 desc, idd1 desc;
+</sphinxql></queries>
 </test>

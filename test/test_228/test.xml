@@ -86,24 +86,22 @@ INSERT INTO `test_table` VALUES
 </db_insert>
 
 <queries>
-<query mode="extended2" index="plain" groupattr="idd1" groupfunc="attr" groupsort="idd1 asc" sortmode="extended" sortby="str1 asc"></query>
-<query mode="extended2" index="plain" groupattr="idd1" groupfunc="attr" groupsort="idd1 asc" sortmode="extended" sortby="str1 desc"></query>
-<query mode="extended2" index="plain" groupattr="idd1" groupfunc="attr" groupsort="idd1 asc" sortmode="extended" sortby="str1 asc">the | dog | cat</query>
-<query mode="extended2" index="plain" groupattr="idd1" groupfunc="attr" groupsort="idd1 asc" sortmode="extended" sortby="str1 desc">the | eats | bird</query>
-</queries>
-
-<sphqueries>
-<sphinxql>select * from plain group by idd1 within group order by str1 asc</sphinxql>
-<sphinxql>select * from plain group by idd1 within group order by str1 desc</sphinxql>
-<sphinxql>select * from plain where match('the | dog | cat') group by idd1 within group order by str1 asc</sphinxql>
-<sphinxql>select * from plain where match('the | eats | bird') group by idd1 within group order by str1 desc</sphinxql>
-<sphinxql>select *, group_concat(id) from plain where match('the | eats | bird') group by idd1 within group order by str1 asc</sphinxql>
-<sphinxql>select * from ( select *, sum(id) as s1, sum(idd1) as s2, group_concat(id) from plain where match('the | eats | bird') group by idd1 within group order by str1 asc ) order by s1 asc</sphinxql>
-<sphinxql>select * from ( select *, sum(id) as s1, sum(idd1) as s2, s1+s2 as s3, group_concat(id) from plain where match('the | eats | bird') group by idd1 within group order by str1 asc ) order by s1 desc</sphinxql>
-<sphinxql>select * from ( select *, sum(id) as s1, sum(idd1) as s2, s1+s2 as s3, group_concat(id) from plain where match('the | eats | bird') group by idd1 within group order by str1 asc ) order by s2 desc</sphinxql>
-<sphinxql>select * from ( select *, sum(id) as s1, sum(idd1) as s2, s1+s2 as s3, group_concat(id) from plain where match('the | eats | bird') group by idd1 within group order by str1 asc ) order by s3 desc</sphinxql>
-<sphinxql>select * from plain where match('собака | бывает | кусачей') group by idd1 within group order by str1 desc</sphinxql>
-<sphinxql>select * from ( select *, sum(id) as s1, sum(idd1) as s2, s1+s2 as s3, group_concat(id) from plain where match('собака | бывает | ODBC') group by idd1 within group order by str1 asc ) order by s3 desc</sphinxql>
-</sphqueries>
+	<query mode="extended2" index="plain" groupattr="idd1" groupfunc="attr" groupsort="idd1 asc" sortmode="extended" sortby="str1 asc"/>
+	<query mode="extended2" index="plain" groupattr="idd1" groupfunc="attr" groupsort="idd1 asc" sortmode="extended" sortby="str1 desc"/>
+	<query mode="extended2" index="plain" groupattr="idd1" groupfunc="attr" groupsort="idd1 asc" sortmode="extended" sortby="str1 asc">the | dog | cat</query>
+	<query mode="extended2" index="plain" groupattr="idd1" groupfunc="attr" groupsort="idd1 asc" sortmode="extended" sortby="str1 desc">the | eats | bird</query>
+<sphinxql>
+	select * from plain group by idd1 within group order by str1 asc;
+	select * from plain group by idd1 within group order by str1 desc;
+	select * from plain where match('the | dog | cat') group by idd1 within group order by str1 asc;
+	select * from plain where match('the | eats | bird') group by idd1 within group order by str1 desc;
+	select *, group_concat(id) from plain where match('the | eats | bird') group by idd1 within group order by str1 asc;
+	select * from ( select *, sum(id) as s1, sum(idd1) as s2, group_concat(id) from plain where match('the | eats | bird') group by idd1 within group order by str1 asc ) order by s1 asc;
+	select * from ( select *, sum(id) as s1, sum(idd1) as s2, s1+s2 as s3, group_concat(id) from plain where match('the | eats | bird') group by idd1 within group order by str1 asc ) order by s1 desc;
+	select * from ( select *, sum(id) as s1, sum(idd1) as s2, s1+s2 as s3, group_concat(id) from plain where match('the | eats | bird') group by idd1 within group order by str1 asc ) order by s2 desc;
+	select * from ( select *, sum(id) as s1, sum(idd1) as s2, s1+s2 as s3, group_concat(id) from plain where match('the | eats | bird') group by idd1 within group order by str1 asc ) order by s3 desc;
+	select * from plain where match('собака | бывает | кусачей') group by idd1 within group order by str1 desc;
+	select * from ( select *, sum(id) as s1, sum(idd1) as s2, s1+s2 as s3, group_concat(id) from plain where match('собака | бывает | ODBC') group by idd1 within group order by str1 asc ) order by s3 desc;
+</sphinxql></queries>
 
 </test>

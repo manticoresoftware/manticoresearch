@@ -40,9 +40,9 @@ CREATE TABLE test_table
 <db_insert>INSERT INTO test_table VALUES ( 4, 123, 'aaa bbb ccc' )</db_insert>
 <db_insert>INSERT INTO test_table VALUES ( 5, 123, 'aaa bbb ddd' )</db_insert>
 
-<sphqueries>
-<sphinxql>SELECT id,WEIGHT(),title FROM test WHERE MATCH('aaa|(bbb ccc)')</sphinxql>
-<sphinxql>CALL SNIPPETS('aaa bbb ddd', 'test', 'aaa|(bbb ccc)', 1 AS query_mode)</sphinxql>
-</sphqueries>
+<queries><sphinxql>
+SELECT id,WEIGHT(),title FROM test WHERE MATCH('aaa|(bbb ccc)');
+CALL SNIPPETS('aaa bbb ddd', 'test', 'aaa|(bbb ccc)', 1 AS query_mode);
+</sphinxql></queries>
 
 </test>

@@ -24,37 +24,37 @@ index rt
 }
 </config>
 
-<sphqueries>
-<sphinxql>SET GLOBAL qcache_thresh_msec=0</sphinxql>
-<sphinxql>SET GLOBAL qcache_max_bytes=16777216</sphinxql>
-<sphinxql>TRUNCATE RTINDEX rt</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (1,111,'test one')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (2,111,'test two')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (3,111,'test three')</sphinxql>
-<sphinxql>SELECT *,WEIGHT() FROM rt WHERE MATCH('test')</sphinxql>
-<sphinxql>SELECT *,WEIGHT() FROM rt WHERE MATCH('test')</sphinxql>
-<sphinxql>SELECT *,WEIGHT() FROM rt WHERE MATCH('test')</sphinxql>
-<sphinxql>SHOW STATUS LIKE 'qcache_thresh%'</sphinxql>
-<sphinxql>SHOW STATUS LIKE 'qcache_ttl%'</sphinxql>
-<sphinxql>SHOW STATUS LIKE 'qcache_cached%'</sphinxql>
-<sphinxql>SHOW STATUS LIKE 'qcache_hits%'</sphinxql>
-<sphinxql>TRUNCATE RTINDEX rt</sphinxql>
-<sphinxql>SET GLOBAL qcache_thresh_msec=1000</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (1,222,'another generation')</sphinxql>
-<sphinxql>SELECT *,WEIGHT() FROM rt WHERE MATCH('test')</sphinxql>
-<sphinxql>SELECT *,WEIGHT() FROM rt WHERE MATCH('test')</sphinxql>
-<sphinxql>SELECT *,WEIGHT() FROM rt WHERE MATCH('another')</sphinxql>
-<sphinxql>SELECT *,WEIGHT() FROM rt WHERE MATCH('another')</sphinxql>
-<sphinxql>SHOW STATUS LIKE 'qcache_thresh%'</sphinxql>
-<sphinxql>SHOW STATUS LIKE 'qcache_ttl%'</sphinxql>
-<sphinxql>SHOW STATUS LIKE 'qcache_cached%'</sphinxql>
-<sphinxql>SHOW STATUS LIKE 'qcache_hits%'</sphinxql>
-<sphinxql>SELECT *,WEIGHT() FROM rt WHERE MATCH('another') OPTION ranker=expr('-1')</sphinxql>
+<queries><sphinxql>
+SET GLOBAL qcache_thresh_msec=0;
+SET GLOBAL qcache_max_bytes=16777216;
+TRUNCATE RTINDEX rt;
+INSERT INTO rt (id,gid,title) VALUES (1,111,'test one');
+INSERT INTO rt (id,gid,title) VALUES (2,111,'test two');
+INSERT INTO rt (id,gid,title) VALUES (3,111,'test three');
+SELECT *,WEIGHT() FROM rt WHERE MATCH('test');
+SELECT *,WEIGHT() FROM rt WHERE MATCH('test');
+SELECT *,WEIGHT() FROM rt WHERE MATCH('test');
+SHOW STATUS LIKE 'qcache_thresh%';
+SHOW STATUS LIKE 'qcache_ttl%';
+SHOW STATUS LIKE 'qcache_cached%';
+SHOW STATUS LIKE 'qcache_hits%';
+TRUNCATE RTINDEX rt;
+SET GLOBAL qcache_thresh_msec=1000;
+INSERT INTO rt (id,gid,title) VALUES (1,222,'another generation');
+SELECT *,WEIGHT() FROM rt WHERE MATCH('test');
+SELECT *,WEIGHT() FROM rt WHERE MATCH('test');
+SELECT *,WEIGHT() FROM rt WHERE MATCH('another');
+SELECT *,WEIGHT() FROM rt WHERE MATCH('another');
+SHOW STATUS LIKE 'qcache_thresh%';
+SHOW STATUS LIKE 'qcache_ttl%';
+SHOW STATUS LIKE 'qcache_cached%';
+SHOW STATUS LIKE 'qcache_hits%';
+SELECT *,WEIGHT() FROM rt WHERE MATCH('another') OPTION ranker=expr('-1');
 
 <!-- regression negative value for set global -->
-<sphinxql>SET GLOBAL query_log_min_msec=-1</sphinxql>
-<sphinxql>SET GLOBAL query_log_min_msec=1</sphinxql>
-<sphinxql>SET GLOBAL query_log_min_msec=0</sphinxql>
-</sphqueries>
+SET GLOBAL query_log_min_msec=-1;
+SET GLOBAL query_log_min_msec=1;
+SET GLOBAL query_log_min_msec=0;
+</sphinxql></queries>
 
 </test>

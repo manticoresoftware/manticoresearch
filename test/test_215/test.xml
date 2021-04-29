@@ -93,25 +93,25 @@ CREATE TABLE test_table
 ( 10, 1, 'ten' );
 </db_insert>
 
-<sphqueries>
-<sphinxql>select remove_repeats((select * from dist1 order by id asc), gid, 0, 10)</sphinxql>
-<sphinxql>select remove_repeats((select * from dist1 order by id asc), iid, 0, 10)</sphinxql>
-<sphinxql>select * from dist1 where match('one|three|four|five') order by id asc</sphinxql>
-<sphinxql>select remove_repeats((select * from dist1 where match('one|three|four|five') order by id asc), iid, 0, 10)</sphinxql>
-<sphinxql>select remove_repeats((select * from dist1 where match('one|three|four|five') order by id asc), iid, 0, 2)</sphinxql>
-<sphinxql>select remove_repeats((select * from dist2 where match('one|three|four|five') order by id asc), iid, 0, 10)</sphinxql>
-<sphinxql>select remove_repeats((select * from dist2 where match('one|three|four|five') order by id asc), iid, 0, 2)</sphinxql>
-<sphinxql>select * from (select *, weight() w from dist2 where match('test') order by id asc) order by w desc, id asc</sphinxql>
-<sphinxql>select remove_repeats((select * from (select *, weight() w from dist2 where match('test') order by id asc) order by w desc, id asc), iid, 0, 2)</sphinxql>
+<queries><sphinxql>
+select remove_repeats((select * from dist1 order by id asc), gid, 0, 10);
+select remove_repeats((select * from dist1 order by id asc), iid, 0, 10);
+select * from dist1 where match('one|three|four|five') order by id asc;
+select remove_repeats((select * from dist1 where match('one|three|four|five') order by id asc), iid, 0, 10);
+select remove_repeats((select * from dist1 where match('one|three|four|five') order by id asc), iid, 0, 2);
+select remove_repeats((select * from dist2 where match('one|three|four|five') order by id asc), iid, 0, 10);
+select remove_repeats((select * from dist2 where match('one|three|four|five') order by id asc), iid, 0, 2);
+select * from (select *, weight() w from dist2 where match('test') order by id asc) order by w desc, id asc;
+select remove_repeats((select * from (select *, weight() w from dist2 where match('test') order by id asc) order by w desc, id asc), iid, 0, 2);
 
 <!-- incorrect kill list handling (duplicates in result set) test -->
-<sphinxql>REPLACE INTO rt_killlist VALUES (1, 'asdf', 11)</sphinxql>
-<sphinxql>FLUSH RAMCHUNK rt_killlist</sphinxql>
-<sphinxql>REPLACE INTO rt_killlist VALUES (1, 'asdf', 11)</sphinxql>
-<sphinxql>FLUSH RAMCHUNK rt_killlist</sphinxql>
-<sphinxql>REPLACE INTO rt_killlist VALUES (1, 'asdf', 11)</sphinxql>
-<sphinxql>FLUSH RAMCHUNK rt_killlist</sphinxql>
-<sphinxql>SELECT * FROM rt_killlist</sphinxql>
-</sphqueries>
+REPLACE INTO rt_killlist VALUES (1, 'asdf', 11);
+FLUSH RAMCHUNK rt_killlist;
+REPLACE INTO rt_killlist VALUES (1, 'asdf', 11);
+FLUSH RAMCHUNK rt_killlist;
+REPLACE INTO rt_killlist VALUES (1, 'asdf', 11);
+FLUSH RAMCHUNK rt_killlist;
+SELECT * FROM rt_killlist;
+</sphinxql></queries>
 
 </test>

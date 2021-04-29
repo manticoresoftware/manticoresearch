@@ -71,13 +71,11 @@ index dist1
 
 
 <queries>
-<query index="dist1">test</query>
-</queries>
-
-<sphqueries>
-<sphinxql>select * from dist1 WHERE MATCH('test')</sphinxql>
-<sphinxql>show meta</sphinxql>
-</sphqueries>
+	<query index="dist1">test</query>
+<sphinxql>
+	select * from dist1 WHERE MATCH('test');
+	show meta;
+</sphinxql></queries>
 
 <db_create>
 CREATE TABLE `test_table` (

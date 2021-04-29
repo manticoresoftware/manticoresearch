@@ -47,12 +47,12 @@ index dup_end2
 }
 </config>
 
-<sphqueries>
+<queries><sphinxql>
 <!-- regression field end hits vs duplicated doc -->
-<sphinxql>select * from dup_end1 where match (' 100 ' )</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>select * from dup_end2 where match (' 100 ' )</sphinxql>
-<sphinxql>show meta</sphinxql>
-</sphqueries>
+select * from dup_end1 where match (' 100 ' );
+show meta;
+select * from dup_end2 where match (' 100 ' );
+show meta;
+</sphinxql></queries>
 
 </test>

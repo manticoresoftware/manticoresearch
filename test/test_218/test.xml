@@ -132,99 +132,99 @@ INSERT INTO test_table VALUES
 ( 109, '#abc #中国地理' )
 </db_insert>
 
-<sphqueries>
-<sphinxql>select * from test where match('mix')</sphinxql>
-<sphinxql>select * from test where match('русский')</sphinxql>
-<sphinxql>select * from test where match('test')</sphinxql>
-<sphinxql>select * from test where match('test2')</sphinxql>
-<sphinxql>select * from test where match('許多')</sphinxql>
-<sphinxql>select * from test where match('則有')</sphinxql>
-<sphinxql>select * from test where match('來')</sphinxql>
-<sphinxql>select * from test where match('這群白髮蒼蒼，')</sphinxql>
-<sphinxql>select * from test where match('ruin')</sphinxql>
-<sphinxql>select * from test where match('aaa')</sphinxql>
-<sphinxql>select * from test where match('bbb')</sphinxql>
-<sphinxql>select * from test where match('aaa-bbb')</sphinxql>
-<sphinxql>select * from test where match('msgCnt')</sphinxql>
-<sphinxql>select * from test where match('今天的心情')</sphinxql>
-<sphinxql>select * from test where match('@content 則有')</sphinxql>
-<sphinxql>select * from test where match('querymapped')</sphinxql>
+<queries><sphinxql>
+select * from test where match('mix');
+select * from test where match('русский');
+select * from test where match('test');
+select * from test where match('test2');
+select * from test where match('許多');
+select * from test where match('則有');
+select * from test where match('來');
+select * from test where match('這群白髮蒼蒼，');
+select * from test where match('ruin');
+select * from test where match('aaa');
+select * from test where match('bbb');
+select * from test where match('aaa-bbb');
+select * from test where match('msgCnt');
+select * from test where match('今天的心情');
+select * from test where match('@content 則有');
+select * from test where match('querymapped');
 
-<sphinxql>select * from test_xml where match('mix')</sphinxql>
-<sphinxql>select * from test_xml where match('русский')</sphinxql>
-<sphinxql>select * from test_xml where match('test')</sphinxql>
-<sphinxql>select * from test_xml where match('test2')</sphinxql>
-<sphinxql>select * from test_xml where match('許多')</sphinxql>
-<sphinxql>select * from test_xml where match('則有')</sphinxql>
-<sphinxql>select * from test_xml where match('來')</sphinxql>
-<sphinxql>select * from test_xml where match('這群白髮蒼蒼，')</sphinxql>
-<sphinxql>select * from test_xml where match('ruin')</sphinxql>
-<sphinxql>select * from test_xml where match('aaa')</sphinxql>
-<sphinxql>select * from test_xml where match('bbb')</sphinxql>
-<sphinxql>select * from test_xml where match('aaa-bbb')</sphinxql>
-<sphinxql>select * from test_xml where match('msgCnt')</sphinxql>
-<sphinxql>select * from test_xml where match('今天的心情')</sphinxql>
-<sphinxql>select * from test_xml where match('@content 則有')</sphinxql>
+select * from test_xml where match('mix');
+select * from test_xml where match('русский');
+select * from test_xml where match('test');
+select * from test_xml where match('test2');
+select * from test_xml where match('許多');
+select * from test_xml where match('則有');
+select * from test_xml where match('來');
+select * from test_xml where match('這群白髮蒼蒼，');
+select * from test_xml where match('ruin');
+select * from test_xml where match('aaa');
+select * from test_xml where match('bbb');
+select * from test_xml where match('aaa-bbb');
+select * from test_xml where match('msgCnt');
+select * from test_xml where match('今天的心情');
+select * from test_xml where match('@content 則有');
 
-<sphinxql>insert into test2 values(1,'this is some mixed text in english. and some blended aaa-bbb',10 )</sphinxql>
-<sphinxql>insert into test2 values(2,'許多社區長青學苑多開設有書法、插花、土風舞班，',11 )</sphinxql>
-<sphinxql>insert into test2 values(3,'а это - текст на русском. mixed in fact. test tested. more blended aaa-bbb',12 )</sphinxql>
-<sphinxql>insert into test2 values(4,'文山區長青學苑則有個十分特別的「英文歌唱班」，test; mixed blended aaa-bbb', 13 )</sphinxql>
-<sphinxql>insert into test2 values(5,'成員年齡均超過六十歲，tested', 14 )</sphinxql>
-<sphinxql>insert into test2 values(6,'這群白髮蒼蒼，test2', 15 )</sphinxql>
-<sphinxql>insert into test2 values(7,'這群白髮蒼蒼 RUINED 這群白髮蒼蒼', 16 )</sphinxql>
-<sphinxql>insert into test2 values(8,'&lt;div class="msgCnt"&gt;说说&lt;a href="http://k.t.qq.com/k/%E4%BB%8A%E5%A4%A9%E7%9A%84%E5%BF%83%E6%83%85"&gt;#今天的心情#&lt;/a&gt;：&lt;/div&gt;', 17 )</sphinxql>
-<sphinxql>select * from test2 where match('mix')</sphinxql>
-<sphinxql>select * from test2 where match('русский')</sphinxql>
-<sphinxql>select * from test2 where match('test')</sphinxql>
-<sphinxql>select * from test2 where match('test2')</sphinxql>
-<sphinxql>select * from test2 where match('許多')</sphinxql>
-<sphinxql>select * from test2 where match('則有')</sphinxql>
-<sphinxql>select * from test2 where match('來')</sphinxql>
-<sphinxql>select * from test2 where match('這群白髮蒼蒼，')</sphinxql>
-<sphinxql>select * from test2 where match('ruin')</sphinxql>
-<sphinxql>select * from test2 where match('aaa')</sphinxql>
-<sphinxql>select * from test2 where match('bbb')</sphinxql>
-<sphinxql>select * from test2 where match('aaa-bbb')</sphinxql>
-<sphinxql>select * from test2 where match('msgCnt')</sphinxql>
-<sphinxql>select * from test2 where match('今天的心情')</sphinxql>
-<sphinxql>select * from test2 where match('@title 則有')</sphinxql>
+insert into test2 values(1,'this is some mixed text in english. and some blended aaa-bbb',10 );
+insert into test2 values(2,'許多社區長青學苑多開設有書法、插花、土風舞班，',11 );
+insert into test2 values(3,'а это - текст на русском. mixed in fact. test tested. more blended aaa-bbb',12 );
+insert into test2 values(4,'文山區長青學苑則有個十分特別的「英文歌唱班」，test; mixed blended aaa-bbb', 13 );
+insert into test2 values(5,'成員年齡均超過六十歲，tested', 14 );
+insert into test2 values(6,'這群白髮蒼蒼，test2', 15 );
+insert into test2 values(7,'這群白髮蒼蒼 RUINED 這群白髮蒼蒼', 16 );
+insert into test2 values(8,'&lt;div class="msgCnt"&gt;说说&lt;a href="http://k.t.qq.com/k/%E4%BB%8A%E5%A4%A9%E7%9A%84%E5%BF%83%E6%83%85"&gt;#今天的心情#&lt;/a&gt;：&lt;/div&gt;', 17 );
+select * from test2 where match('mix');
+select * from test2 where match('русский');
+select * from test2 where match('test');
+select * from test2 where match('test2');
+select * from test2 where match('許多');
+select * from test2 where match('則有');
+select * from test2 where match('來');
+select * from test2 where match('這群白髮蒼蒼，');
+select * from test2 where match('ruin');
+select * from test2 where match('aaa');
+select * from test2 where match('bbb');
+select * from test2 where match('aaa-bbb');
+select * from test2 where match('msgCnt');
+select * from test2 where match('今天的心情');
+select * from test2 where match('@title 則有');
 
-<sphinxql>select * from test_stripped where match('msgCnt')</sphinxql>
-<sphinxql>select * from test_stripped where match('今天的心情')</sphinxql>
+select * from test_stripped where match('msgCnt');
+select * from test_stripped where match('今天的心情');
 
 <!-- regression number after RLP token and spicial chars around RLP token -->
-<sphinxql>select * from test_spec where match('凤1 凤凤凤 轉注转注')</sphinxql>
-<sphinxql>select * from test_spec where match('凤1  凤凤凤   轉注转注')</sphinxql>
-<sphinxql>select * from test_spec where match('"凤1"')</sphinxql>
-<sphinxql>select * from test_spec where match('凤1')</sphinxql>
-<sphinxql>select * from test_spec where match('^凤 轉注$')</sphinxql>
-<sphinxql>select * from test_spec where match('注 ^凤 轉凤$ 注')</sphinxql>
-<sphinxql>select * from test_spec where match('凤 !注')</sphinxql>
+select * from test_spec where match('凤1 凤凤凤 轉注转注');
+select * from test_spec where match('凤1  凤凤凤   轉注转注');
+select * from test_spec where match('"凤1"');
+select * from test_spec where match('凤1');
+select * from test_spec where match('^凤 轉注$');
+select * from test_spec where match('注 ^凤 轉凤$ 注');
+select * from test_spec where match('凤 !注');
 
 <!-- regression for blend chars vs rlp -->
-<sphinxql>select * from test where match('#中国地理')</sphinxql>
-<sphinxql>select * from test where match('中国地理')</sphinxql>
-<sphinxql>select * from test where match('#abc')</sphinxql>
-<sphinxql>select * from test where match('abc')</sphinxql>
-<sphinxql>CALL KEYWORDS ( '#中国地理', 'test' )</sphinxql>
-<sphinxql>CALL KEYWORDS ( '#abc', 'test' )</sphinxql>
+select * from test where match('#中国地理');
+select * from test where match('中国地理');
+select * from test where match('#abc');
+select * from test where match('abc');
+CALL KEYWORDS ( '#中国地理', 'test' );
+CALL KEYWORDS ( '#abc', 'test' );
 
 <!-- regression CALL KEYWORDS -->
-<sphinxql>CALL KEYWORDS ( '成員年齡均超過六十歲，tested', 'test' )</sphinxql>
-<sphinxql>CALL KEYWORDS ( '成員年齡均超過六十歲，tested', 'test2' )</sphinxql>
+CALL KEYWORDS ( '成員年齡均超過六十歲，tested', 'test' );
+CALL KEYWORDS ( '成員年齡均超過六十歲，tested', 'test2' );
 
 <!-- regression CALL SNIPPETS -->
-<sphinxql>CALL SNIPPETS ( '买新的Apple电脑', 'test', '电脑' )</sphinxql>
-<sphinxql>CALL SNIPPETS ( '买新的Apple 电脑', 'test', '电脑' )</sphinxql>
-<sphinxql>CALL KEYWORDS ( '买新的Apple电脑', 'test' )</sphinxql>
+CALL SNIPPETS ( '买新的Apple电脑', 'test', '电脑' );
+CALL SNIPPETS ( '买新的Apple 电脑', 'test', '电脑' );
+CALL KEYWORDS ( '买新的Apple电脑', 'test' );
 
-<sphinxql>insert into test3 (id, title, tag) values(1,'买新的Apple电脑 test; mixed blended aaa-bbb', 1 )</sphinxql>
-<sphinxql>insert into test3 (id, title, tag) values(2,'买新的Apple电脑tested', 2 )</sphinxql>
-<sphinxql>select id, SNIPPET(title, '电脑') from test3 where match ( '电脑' )</sphinxql>
+insert into test3 (id, title, tag) values(1,'买新的Apple电脑 test; mixed blended aaa-bbb', 1 );
+insert into test3 (id, title, tag) values(2,'买新的Apple电脑tested', 2 );
+select id, SNIPPET(title, '电脑') from test3 where match ( '电脑' );
 
-<sphinxql>call snippets('他们在那家餐厅提供美味的比萨饼。', 'test', '美味的')</sphinxql>
+call snippets('他们在那家餐厅提供美味的比萨饼。', 'test', '美味的');
 
-</sphqueries>
+</sphinxql></queries>
 
 </test>

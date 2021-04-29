@@ -33,11 +33,11 @@ index test1
 }
 </config>
 
-<sphqueries>
+<queries><sphinxql>
 <!--
-<sphinxql>SELECT id, packedfactors() p FROM test1 WHERE MATCH ('(test1 test2 test3 test4 test4 test6) | (test1 test2 test7)') OPTION ranker=expr('1')</sphinxql>
+SELECT id, packedfactors() p FROM test1 WHERE MATCH ('(test1 test2 test3 test4 test4 test6) | (test1 test2 test7)') OPTION ranker=expr('1');
 -->
-<sphinxql>SELECT id, packedfactors() p FROM test1 WHERE MATCH ('(test1 test3 test4 test4 test7) (test1 test2 test7)') OPTION ranker=expr('1')</sphinxql>
-</sphqueries>
+SELECT id, packedfactors() p FROM test1 WHERE MATCH ('(test1 test3 test4 test4 test7) (test1 test2 test7)') OPTION ranker=expr('1');
+</sphinxql></queries>
 
 </test>

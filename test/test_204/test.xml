@@ -58,15 +58,13 @@ CREATE TABLE test_table
 </db_insert>
 
 <queries>
-<query mode="extended2" index="test"></query>
-</queries>
-
-<sphqueries>
-<!-- regression crash on delete from rt index with index_field_lengths enabled -->
-<sphinxql>DELETE FROM rt1 WHERE id=1</sphinxql>
-<sphinxql>INSERT INTO rt1 (id, title, gid) VALUES (1, 'test me', 11), (2, 'test again',12)</sphinxql>
-<sphinxql>DELETE FROM rt1 WHERE id=1</sphinxql>
-<sphinxql>SELECT * FROM rt1</sphinxql>
-</sphqueries>
+	<query mode="extended2" index="test"/>
+<sphinxql>
+	<!-- regression crash on delete from rt index with index_field_lengths enabled -->
+	DELETE FROM rt1 WHERE id=1;
+	INSERT INTO rt1 (id, title, gid) VALUES (1, 'test me', 11), (2, 'test again',12);
+	DELETE FROM rt1 WHERE id=1;
+	SELECT * FROM rt1;
+</sphinxql></queries>
 
 </test>

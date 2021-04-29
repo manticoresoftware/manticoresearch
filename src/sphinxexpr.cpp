@@ -309,7 +309,7 @@ public:
 int Expr_GetColumnarString_c::StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const
 {
 	if ( m_pIterator.Ptr() && m_pIterator->AdvanceTo ( tMatch.m_tRowID ) == tMatch.m_tRowID )
-		return m_pIterator->Get ( *ppStr, false );
+		return m_pIterator->Get ( *ppStr );
 
 	return 0;
 }
@@ -318,11 +318,7 @@ int Expr_GetColumnarString_c::StringEval ( const CSphMatch & tMatch, const BYTE 
 const BYTE * Expr_GetColumnarString_c::StringEvalPacked ( const CSphMatch & tMatch ) const
 {
 	if ( m_pIterator.Ptr() && m_pIterator->AdvanceTo ( tMatch.m_tRowID ) == tMatch.m_tRowID )
-	{
-		const BYTE * pResult = nullptr;
-		m_pIterator->Get ( pResult, true );
-		return pResult;
-	}
+		return m_pIterator->GetPacked();
 
 	return nullptr;
 }
@@ -361,11 +357,7 @@ public:
 int64_t Expr_GetColumnarMva_c::Int64Eval ( const CSphMatch & tMatch ) const
 {
 	if ( m_pIterator.Ptr() && m_pIterator->AdvanceTo ( tMatch.m_tRowID ) == tMatch.m_tRowID )
-	{
-		const BYTE * pResult = nullptr;
-		m_pIterator->Get ( pResult, true );
-		return (int64_t)pResult;
-	}
+		return (int64_t)m_pIterator->GetPacked();
 
 	return 0;
 }
@@ -376,7 +368,7 @@ ByteBlob_t Expr_GetColumnarMva_c::MvaEval ( const CSphMatch & tMatch ) const
 	if ( m_pIterator.Ptr() && m_pIterator->AdvanceTo ( tMatch.m_tRowID ) == tMatch.m_tRowID )
 	{
 		const BYTE * pResult = nullptr;
-		int iBytes = m_pIterator->Get ( pResult, false );
+		int iBytes = m_pIterator->Get ( pResult );
 		return {pResult, iBytes};
 	}
 

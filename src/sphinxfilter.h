@@ -22,6 +22,9 @@ class ISphFilter
 #endif
 {
 public:
+				ISphFilter() = default;
+	virtual		~ISphFilter () {}
+
 	virtual void SetLocator ( const CSphAttrLocator & ) {}
 	virtual void SetRange ( SphAttr_t, SphAttr_t ) {}
 	virtual void SetRangeFloat ( float, float ) {}
@@ -42,9 +45,6 @@ public:
 #endif
 
 	virtual void SetRefString ( const CSphString * , int ) {}
-
-	virtual ~ISphFilter () {}
-
 	virtual ISphFilter * Optimize() { return this; }
 
 	/// evaluate filter for a given match
@@ -60,9 +60,10 @@ public:
 		return true;
 	}
 
+	/// returns true if the filter can handle exclude flag in settings
+	/// otherwise a NOT filter will be spawned on top of this filter
+	virtual bool CanExclude() const { return false; }
 	virtual ISphFilter * Join ( ISphFilter * pFilter );
-
-	ISphFilter() {}
 };
 
 // fwd

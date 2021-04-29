@@ -35,6 +35,7 @@
 #include "indexcheck.h"
 #include "coroutine.h"
 #include "columnarlib.h"
+#include "columnarfilter.h"
 #include "mini_timer.h"
 
 #include <errno.h>
@@ -1826,7 +1827,7 @@ public:
 	bool				CopyExternalFiles ( int iPostfix, StrVec_t & dCopied ) final;
 	void				CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const final;
 
-	bool				CheckEarlyReject ( const CSphVector<CSphFilterSettings> & dFilters, ISphFilter * pFilter, const ISphSchema & tSchema ) const;
+	bool				CheckEarlyReject ( const CSphVector<CSphFilterSettings> & dFilters, ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema ) const;
 
 private:
 	static const int			MIN_WRITE_BUFFER		= 262144;	///< min write buffer size
@@ -1956,7 +1957,7 @@ private:
 
 #if USE_COLUMNAR
 	RowidIterator_i *			CreateColumnarAnalyzerOrPrefilter ( const CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphFilterSettings> & dModifiedFilters, bool & bFiltersChanged, const CSphVector<FilterTreeItem_t> & dFilterTree,
-		const ISphFilter * pFilter, const ISphSchema & tSchema, CSphString & sWarning ) const;
+		const ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema, CSphString & sWarning ) const;
 #endif
 };
 
@@ -12694,69 +12695,8 @@ void CSphIndex_VLN::ScanByBlocks ( const CSphQueryContext & tCtx, CSphQueryResul
 
 #if USE_COLUMNAR
 
-static columnar::FilterType_e ToColumnarFilterType ( ESphFilter eType )
-{
-	switch ( eType )
-	{
-	case SPH_FILTER_VALUES:		return columnar::FilterType_e::VALUES;
-	case SPH_FILTER_RANGE:		return columnar::FilterType_e::RANGE;
-	case SPH_FILTER_FLOATRANGE:	return columnar::FilterType_e::FLOATRANGE;
-	default:					return columnar::FilterType_e::NONE;
-	}
-}
-
-
-static columnar::MvaAggr_e ToColumnarAggr ( ESphMvaFunc eAggr )
-{
-	switch ( eAggr )
-	{
-	case SPH_MVAFUNC_ANY:	return columnar::MvaAggr_e::ANY;
-	case SPH_MVAFUNC_ALL:	return columnar::MvaAggr_e::ALL;
-	default:				return columnar::MvaAggr_e::NONE;
-	}
-}
-
-
-static bool AddColumnarFilter ( std::vector<columnar::Filter_t> & dDst, const CSphFilterSettings & tSrc, const ISphSchema & tSchema, CSphString & sWarning )
-{
-	columnar::FilterType_e eColumnarFilterType = ToColumnarFilterType ( tSrc.m_eType );
-	if ( eColumnarFilterType==columnar::FilterType_e::NONE )
-		return false;
-
-	dDst.emplace_back();
-	auto & tDst = dDst.back();
-
-	tDst.m_sName			= tSrc.m_sAttrName.cstr();
-	tDst.m_bExclude			= tSrc.m_bExclude;
-	tDst.m_eType			= eColumnarFilterType;
-	tDst.m_eMvaAggr			= ToColumnarAggr ( tSrc.m_eMvaFunc );
-	tDst.m_iMinValue		= tSrc.m_iMinValue;
-	tDst.m_iMaxValue		= tSrc.m_iMaxValue;
-	tDst.m_fMinValue		= tSrc.m_fMinValue;
-	tDst.m_fMaxValue		= tSrc.m_fMaxValue;
-	tDst.m_bLeftUnbounded	= tSrc.m_bOpenLeft;
-	tDst.m_bRightUnbounded	= tSrc.m_bOpenRight;
-	tDst.m_bLeftClosed		= tSrc.m_bHasEqualMin;
-	tDst.m_bRightClosed		= tSrc.m_bHasEqualMax;
-
-	int iNumValues = tSrc.GetNumValues();
-	tDst.m_dValues.resize(iNumValues);
-	if ( iNumValues )
-		memcpy ( &tDst.m_dValues[0], tSrc.GetValueArray(), iNumValues*sizeof ( tDst.m_dValues[0] ) );
-
-	const CSphColumnInfo * pAttr = tSchema.GetAttr ( tSrc.m_sAttrName.cstr() );
-	if ( pAttr && IsMvaAttr ( pAttr->m_eAttrType ) && ( tDst.m_eMvaAggr==columnar::MvaAggr_e::NONE ) )
-	{
-		sWarning = "use an explicit ANY()/ALL() around a filter on MVA column";
-		tDst.m_eMvaAggr = columnar::MvaAggr_e::ANY;
-	}
-
-	return true;
-}
-
-
 RowidIterator_i * CSphIndex_VLN::CreateColumnarAnalyzerOrPrefilter ( const CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphFilterSettings> & dModifiedFilters, bool & bFiltersChanged,
-	const CSphVector<FilterTreeItem_t> & dFilterTree, const ISphFilter * pFilter, const ISphSchema & tSchema, CSphString & sWarning ) const
+	const CSphVector<FilterTreeItem_t> & dFilterTree, const ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema, CSphString & sWarning ) const
 {
 	bFiltersChanged = false;
 
@@ -12770,7 +12710,7 @@ RowidIterator_i * CSphIndex_VLN::CreateColumnarAnalyzerOrPrefilter ( const CSphV
 	{
 		dFilterMap[i] = -1;
 		const CSphColumnInfo * pCol = tSchema.GetAttr ( dFilters[i].m_sAttrName.cstr() );
-		if ( pCol && ( pCol->IsColumnar() || pCol->IsColumnarExpr() ) && AddColumnarFilter ( dColumnarFilters, dFilters[i], tSchema, sWarning ) )
+		if ( pCol && ( pCol->IsColumnar() || pCol->IsColumnarExpr() ) && AddColumnarFilter ( dColumnarFilters, dFilters[i], eCollation, tSchema, sWarning ) )
 			dFilterMap[i] = (int)dColumnarFilters.size()-1;
 	}
 
@@ -12876,7 +12816,7 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	if ( !tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning ) )
 		return false;
 
-	if ( CheckEarlyReject ( tQuery.m_dFilters, tCtx.m_pFilter, tMaxSorterSchema ) )
+	if ( CheckEarlyReject ( tQuery.m_dFilters, tCtx.m_pFilter, tQuery.m_eCollation, tMaxSorterSchema ) )
 	{
 		tMeta.m_iQueryTime += (int)( ( sphMicroTimer()-tmQueryStart )/1000 );
 		tMeta.m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
@@ -12923,7 +12863,7 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	// try to spawn a columnar iterator
 	// fixme! maybe use both iterators at the same time?
 	if ( !pIterator )
-		pIterator = CreateColumnarAnalyzerOrPrefilter ( tQuery.m_dFilters, dModifiedFilters, bFiltersChanged, tQuery.m_dFilterTree, tCtx.m_pFilter, tMaxSorterSchema, tMeta.m_sWarning );
+		pIterator = CreateColumnarAnalyzerOrPrefilter ( tQuery.m_dFilters, dModifiedFilters, bFiltersChanged, tQuery.m_dFilterTree, tCtx.m_pFilter, tQuery.m_eCollation, tMaxSorterSchema, tMeta.m_sWarning );
 #endif
 
 	if ( pIterator )
@@ -15666,7 +15606,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 }
 
 
-bool CSphIndex_VLN::CheckEarlyReject ( const CSphVector<CSphFilterSettings> & dFilters, ISphFilter * pFilter, const ISphSchema & tSchema ) const
+bool CSphIndex_VLN::CheckEarlyReject ( const CSphVector<CSphFilterSettings> & dFilters, ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema ) const
 {
 	if ( !pFilter || dFilters.IsEmpty() )
 		return false;
@@ -15687,7 +15627,7 @@ bool CSphIndex_VLN::CheckEarlyReject ( const CSphVector<CSphFilterSettings> & dF
 				continue;
 
 			if ( pCol->IsColumnar() || pCol->IsColumnarExpr() )
-				AddColumnarFilter ( dColumnarFilters, dFilters[i], tSchema, sWarning );
+				AddColumnarFilter ( dColumnarFilters, dFilters[i], eCollation, tSchema, sWarning );
 			else
 				iNonColumnar++;
 		}
@@ -15875,7 +15815,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	if ( !tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning ) )
 		return false;
 
-	if ( CheckEarlyReject ( tQuery.m_dFilters, tCtx.m_pFilter, tMaxSorterSchema ) )
+	if ( CheckEarlyReject ( tQuery.m_dFilters, tCtx.m_pFilter, tQuery.m_eCollation, tMaxSorterSchema ) )
 	{
 		tMeta.m_iQueryTime += (int)( ( sphMicroTimer()-tmQueryStart )/1000 );
 		tMeta.m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;

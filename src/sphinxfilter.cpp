@@ -1401,6 +1401,10 @@ static ISphFilter * TryToCreateExcludeFilter ( ISphFilter * pFilter, const CSphF
 	if ( !pFilter )
 		return nullptr;
 
+	// some filters can handle exclude flag themselves
+	if ( pFilter->CanExclude() )
+		return pFilter;
+
 	if ( tSettings.m_bExclude )
 		return new Filter_Not(pFilter);
 

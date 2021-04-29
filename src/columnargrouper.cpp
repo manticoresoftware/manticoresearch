@@ -119,7 +119,7 @@ SphGroupKey_t GrouperColumnarString_T<HASH>::KeyFromMatch ( const CSphMatch & tM
 		return m_pIterator->GetStringHash();
 
 	const BYTE * pStr = nullptr;
-	int iLen = m_pIterator->Get ( pStr, false );
+	int iLen = m_pIterator->Get(pStr);
 	if ( !iLen )
 		return 0;
 

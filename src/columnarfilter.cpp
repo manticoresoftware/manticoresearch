@@ -83,7 +83,7 @@ bool ColumnarFilter_c::GetValue ( RowID_t tRowID, ByteBlob_t & tData ) const
 {
 	if ( m_pIterator.Ptr() && m_pIterator->AdvanceTo(tRowID) == tRowID )
 	{
-		tData.second = m_pIterator->Get ( tData.first, false );
+		tData.second = m_pIterator->Get ( tData.first );
 		return true;
 	}
 
@@ -271,7 +271,9 @@ public:
 
 	void	SetRefString ( const CSphString * pRef, int iCount ) final;
 	bool	Eval ( const CSphMatch & tMatch ) const final;
+	bool	Test ( const columnar::MinMaxVec_t & dMinMax ) const final;
 	void	SetColumnar ( const columnar::Columnar_i * pColumnar ) final;
+	bool	CanExclude() const final { return true; }
 
 protected:
 	CSphString				m_sValue;
@@ -324,12 +326,31 @@ bool Filter_StringColumnar_c::Eval ( const CSphMatch & tMatch ) const
 			return false;
 
 		const BYTE * pStr = nullptr;
-		m_pIterator->Get ( pStr, false );
+		m_pIterator->Get(pStr);
 
 		bEqual = !m_fnStrCmp ( {pStr, iLength}, {(const BYTE*)m_sValue.cstr(), m_iLength}, false );
 	}
 
 	return bEqual==m_bEquals;
+}
+
+
+bool Filter_StringColumnar_c::Test ( const columnar::MinMaxVec_t & dMinMax ) const
+{
+	if ( m_iColumnarCol<0 )
+		return true;
+
+	int64_t iMin = dMinMax[m_iColumnarCol].first;
+	int64_t iMax = dMinMax[m_iColumnarCol].second;
+
+	if ( m_bEquals )
+		return iMin<=m_iLength && m_iLength<=iMax;
+
+	// reject the case when all strings are empty and we request non-empty strings
+	if ( !iMin && !iMax && !m_iLength )
+		return false;
+
+	return true;
 }
 
 
@@ -644,7 +665,7 @@ static ISphFilter * CreateColumnarFilterPlain ( const CSphFilterSettings & tSett
 	}
 
 	case SPH_FILTER_STRING:
-		return new Filter_StringColumnar_c ( tAttr.m_sName, eCollation, tSettings.m_bHasEqualMin || tSettings.m_bHasEqualMax );
+		return new Filter_StringColumnar_c ( tAttr.m_sName, eCollation, !tSettings.m_bExclude );
 
 	default:
 		assert ( 0 && "Unhandled columnar filter type" );
@@ -695,5 +716,84 @@ ISphFilter * TryToCreateColumnarFilter ( int iAttr, const ISphSchema & tSchema, 
 
 	return CreateColumnarFilterPlain ( tSettings, tFixedSettings, tAttr, iAttr, eCollation );
 }
+
+
+columnar::FilterType_e ToColumnarFilterType ( ESphFilter eType )
+{
+	switch ( eType )
+	{
+	case SPH_FILTER_VALUES:		return columnar::FilterType_e::VALUES;
+	case SPH_FILTER_RANGE:		return columnar::FilterType_e::RANGE;
+	case SPH_FILTER_FLOATRANGE:	return columnar::FilterType_e::FLOATRANGE;
+	case SPH_FILTER_STRING:
+	case SPH_FILTER_STRING_LIST:
+		return columnar::FilterType_e::STRINGS;
+
+	default:					return columnar::FilterType_e::NONE;
+	}
+}
+
+
+columnar::MvaAggr_e ToColumnarAggr ( ESphMvaFunc eAggr )
+{
+	switch ( eAggr )
+	{
+	case SPH_MVAFUNC_ANY:	return columnar::MvaAggr_e::ANY;
+	case SPH_MVAFUNC_ALL:	return columnar::MvaAggr_e::ALL;
+	default:				return columnar::MvaAggr_e::NONE;
+	}
+}
+
+
+bool AddColumnarFilter ( std::vector<columnar::Filter_t> & dDst, const CSphFilterSettings & tSrc, ESphCollation eCollation, const ISphSchema & tSchema, CSphString & sWarning )
+{
+	columnar::FilterType_e eColumnarFilterType = ToColumnarFilterType ( tSrc.m_eType );
+	if ( eColumnarFilterType==columnar::FilterType_e::NONE )
+		return false;
+
+	dDst.emplace_back();
+	auto & tDst = dDst.back();
+
+	tDst.m_sName			= tSrc.m_sAttrName.cstr();
+	tDst.m_bExclude			= tSrc.m_bExclude;
+	tDst.m_eType			= eColumnarFilterType;
+	tDst.m_eMvaAggr			= ToColumnarAggr ( tSrc.m_eMvaFunc );
+	tDst.m_iMinValue		= tSrc.m_iMinValue;
+	tDst.m_iMaxValue		= tSrc.m_iMaxValue;
+	tDst.m_fMinValue		= tSrc.m_fMinValue;
+	tDst.m_fMaxValue		= tSrc.m_fMaxValue;
+	tDst.m_bLeftUnbounded	= tSrc.m_bOpenLeft;
+	tDst.m_bRightUnbounded	= tSrc.m_bOpenRight;
+	tDst.m_bLeftClosed		= tSrc.m_bHasEqualMin;
+	tDst.m_bRightClosed		= tSrc.m_bHasEqualMax;
+
+	int iNumValues = tSrc.GetNumValues();
+	tDst.m_dValues.resize(iNumValues);
+	if ( iNumValues )
+		memcpy ( &tDst.m_dValues[0], tSrc.GetValueArray(), iNumValues*sizeof ( tDst.m_dValues[0] ) );
+
+	int iNumStrValues = tSrc.m_dStrings.GetLength();
+	tDst.m_dStringValues.resize(iNumStrValues);
+	for ( int i = 0; i < iNumStrValues; i++ )
+	{
+		auto & dDstStr = tDst.m_dStringValues[i];
+		dDstStr.resize ( tSrc.m_dStrings[i].Length() );
+		memcpy ( dDstStr.data(), tSrc.m_dStrings[i].cstr(), dDstStr.size() );
+	}
+
+	const CSphColumnInfo * pAttr = tSchema.GetAttr ( tSrc.m_sAttrName.cstr() );
+	if ( pAttr && IsMvaAttr ( pAttr->m_eAttrType ) && ( tDst.m_eMvaAggr==columnar::MvaAggr_e::NONE ) )
+	{
+		sWarning = "use an explicit ANY()/ALL() around a filter on MVA column";
+		tDst.m_eMvaAggr = columnar::MvaAggr_e::ANY;
+	}
+
+	// FIXME! add support for arbitrary collations in columnar storage
+	tDst.m_fnCalcStrHash = eCollation==SPH_COLLATION_DEFAULT ? LibcCIHash_fn::Hash : nullptr;
+	tDst.m_fnStrCmp = GetStringCmpFunc(eCollation);
+
+	return true;
+}
+
 
 #endif // USE_COLUMNAR

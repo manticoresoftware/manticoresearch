@@ -110,9 +110,8 @@ insert into test_table (id,price,brand_id,title,brand_name,property,categories,j
 (20,169,4,'Product Seven Six','Brand Four','Eight','(10,11)','{x:[10,11],a:["a10","a11"]}')
 </db_insert>
 
-<sphqueries>
+<queries><sphinxql>
 
-<sphinxql>
 insert into facetdemo (id,price,brand_id,title,brand_name,property,categories,j) values
 (1,529,9,'Product Five Two','Brand Nine','Four',(13,14),'{x:[13,14],a:["a13","a14"]}'),
 (2,173,10,'Product Five Seven','Brand Ten','Four',(10),'{x:[10],a:["a10"]}'),
@@ -134,104 +133,78 @@ insert into facetdemo (id,price,brand_id,title,brand_name,property,categories,j)
 (18,413,3,'Product Eight Five','Brand Three','Four',(11,12,13),'{x:[11,12,13],a:["a11","a12","a13"]}'),
 (19,78,4,'Product Six Five','Brand Four','Two',(12),'{x:[12],a:["a12"]}'),
 (20,169,4,'Product Seven Six','Brand Four','Eight',(10,11),'{x:[10,11],a:["a10","a11"]}')
-</sphinxql>
 
 <!-- multi-queries require at least one ';' (see helpers.inc) -->
 
 <!-- standard multi-queries: rt, plain, local, agent (the latter two aren't optimized, see query log) -->
-<sphinxql>select groupby() as selected,count(*) as cnt from facetdemo group by categories order by cnt desc limit 0,10; select groupby() as selected,count(*) as cnt from facetdemo group by brand_id order by cnt desc limit 0,10</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
-<sphinxql>select groupby() as selected,count(*) as cnt from facetdemo2 group by categories order by cnt desc limit 0,10; select groupby() as selected,count(*) as cnt from facetdemo2 group by brand_id order by cnt desc limit 0,10</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
-<sphinxql>select groupby() as selected,count(*) as cnt from facetdemo3 group by categories order by cnt desc limit 0,10; select groupby() as selected,count(*) as cnt from facetdemo3 group by brand_id order by cnt desc limit 0,10</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
-<sphinxql>select groupby() as selected,count(*) as cnt from facetdemo4 group by categories order by cnt desc limit 0,10; select groupby() as selected,count(*) as cnt from facetdemo4 group by brand_id order by cnt desc limit 0,10</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
+select groupby() as selected,count(*) as cnt from facetdemo group by categories order by cnt desc limit 0,10; select groupby() as selected,count(*) as cnt from facetdemo group by brand_id order by cnt desc limit 0,10; show meta like 'multiplier';
+select groupby() as selected,count(*) as cnt from facetdemo2 group by categories order by cnt desc limit 0,10; select groupby() as selected,count(*) as cnt from facetdemo2 group by brand_id order by cnt desc limit 0,10; show meta like 'multiplier';
+select groupby() as selected,count(*) as cnt from facetdemo3 group by categories order by cnt desc limit 0,10; select groupby() as selected,count(*) as cnt from facetdemo3 group by brand_id order by cnt desc limit 0,10; show meta like 'multiplier';
+select groupby() as selected,count(*) as cnt from facetdemo4 group by categories order by cnt desc limit 0,10; select groupby() as selected,count(*) as cnt from facetdemo4 group by brand_id order by cnt desc limit 0,10; show meta like 'multiplier';
 
 <!-- facet keyword for rt and plain indexes -->
-<sphinxql>select id from facetdemo limit 0,1 facet brand_id as x order by x asc;</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
-<sphinxql>select id from facetdemo limit 0,1 facet interval(price,500) as x order by x asc;</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
-<sphinxql>select id from facetdemo limit 0,1 facet brand_name by brand_id;</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
-<sphinxql>select id from facetdemo limit 0,1 facet brand_name,property by brand_id,property;</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
-<sphinxql>select id from facetdemo limit 0,1 facet brand_id+1 by brand_id+2 order by count(*) asc;</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
-<sphinxql>select id from facetdemo limit 0,1 facet brand_id order by facet() asc;</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
-<sphinxql>select id from facetdemo limit 0,1 facet brand_id+1-1 order by facet() desc;</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
-<sphinxql>select id from facetdemo limit 0,1 facet categories facet j.x facet j.a;</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
-<sphinxql>select * from facetdemo where match ('one') limit 0,15 facet brand_name, brand_id by brand_id order by brand_id asc facet property order by count(*) desc facet interval(price,200,400,600,800) order by facet() asc; show meta</sphinxql>
+select id from facetdemo limit 0,1 facet brand_id as x order by x asc; show meta like 'multiplier';
+select id from facetdemo limit 0,1 facet interval(price,500) as x order by x asc; show meta like 'multiplier';
+select id from facetdemo limit 0,1 facet brand_name by brand_id; show meta like 'multiplier';
+select id from facetdemo limit 0,1 facet brand_name,property by brand_id,property; show meta like 'multiplier';
+select id from facetdemo limit 0,1 facet brand_id+1 by brand_id+2 order by count(*) asc; show meta like 'multiplier';
+select id from facetdemo limit 0,1 facet brand_id order by facet() asc; show meta like 'multiplier';
+select id from facetdemo limit 0,1 facet brand_id+1-1 order by facet() desc; show meta like 'multiplier';
+select id from facetdemo limit 0,1 facet categories facet j.x facet j.a; show meta like 'multiplier';
+select * from facetdemo where match ('one') limit 0,15 facet brand_name, brand_id by brand_id order by brand_id asc facet property order by count(*) desc facet interval(price,200,400,600,800) order by facet() asc; show meta;
 
-<sphinxql>select id from facetdemo2 limit 0,1 facet brand_id as x order by x asc;</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
-<sphinxql>select id from facetdemo2 limit 0,1 facet interval(price,500) as x order by x asc;</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
-<sphinxql>select id from facetdemo2 limit 0,1 facet brand_name by brand_id;</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
-<sphinxql>select id from facetdemo2 limit 0,1 facet brand_name,property by brand_id,property;</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
-<sphinxql>select id from facetdemo2 limit 0,1 facet brand_id+1 by brand_id+2 order by count(*) asc;</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
-<sphinxql>select id from facetdemo2 limit 0,1 facet brand_id order by facet() asc;</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
-<sphinxql>select id from facetdemo2 limit 0,1 facet brand_id+1-1 order by facet() desc;</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
-<sphinxql>select id from facetdemo2 limit 0,1 facet categories facet j.x facet j.a;</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
-<sphinxql>select * from facetdemo2 where match ('one') limit 0,15 facet brand_name, brand_id by brand_id order by brand_id asc facet property order by count(*) desc facet interval(price,200,400,600,800) order by facet() asc; show meta</sphinxql>
+select id from facetdemo2 limit 0,1 facet brand_id as x order by x asc; show meta like 'multiplier';
+select id from facetdemo2 limit 0,1 facet interval(price,500) as x order by x asc; show meta like 'multiplier';
+select id from facetdemo2 limit 0,1 facet brand_name by brand_id; show meta like 'multiplier';
+select id from facetdemo2 limit 0,1 facet brand_name,property by brand_id,property; show meta like 'multiplier';
+select id from facetdemo2 limit 0,1 facet brand_id+1 by brand_id+2 order by count(*) asc; show meta like 'multiplier';
+select id from facetdemo2 limit 0,1 facet brand_id order by facet() asc; show meta like 'multiplier';
+select id from facetdemo2 limit 0,1 facet brand_id+1-1 order by facet() desc; show meta like 'multiplier';
+select id from facetdemo2 limit 0,1 facet categories facet j.x facet j.a; show meta like 'multiplier';
+select * from facetdemo2 where match ('one') limit 0,15 facet brand_name, brand_id by brand_id order by brand_id asc facet property order by count(*) desc facet interval(price,200,400,600,800) order by facet() asc; show meta;
 
 <!-- interval function for json fields -->
-<sphinxql>select j.x from facetdemo limit 0,1 facet interval(j.x[0],10,11,12,13);</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
+select j.x from facetdemo limit 0,1 facet interval(j.x[0],10,11,12,13); show meta like 'multiplier';
 
 <!-- multi-queries with string filters -->
-<sphinxql>select id, title, property from facetdemo2 where match ('product') and property='Four' order by id asc; select id, title, property from facetdemo2 where match ('product') and property='Seven' order by id asc</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
+select id, title, property from facetdemo2 where match ('product') and property='Four' order by id asc; select id, title, property from facetdemo2 where match ('product') and property='Seven' order by id asc; show meta like 'multiplier';
 
 <!-- count(*) statement with different spacing -->
-<sphinxql>select id from facetdemo limit 0,1 facet brand_id order by count(*) asc;</sphinxql>
-<sphinxql>select id from facetdemo limit 0,1 facet brand_id order by count(  *) asc;</sphinxql>
-<sphinxql>select id from facetdemo limit 0,1 facet brand_id order by count ( *  ) asc;</sphinxql>
-<sphinxql>select id from facetdemo limit 0,1 facet brand_id order by count (* ) asc;</sphinxql>
-<sphinxql>select id from facetdemo limit 0,1 facet brand_id order by count(* ) asc;</sphinxql>
+select id from facetdemo limit 0,1 facet brand_id order by count(*) asc;;
+select id from facetdemo limit 0,1 facet brand_id order by count(  *) asc;;
+select id from facetdemo limit 0,1 facet brand_id order by count ( *  ) asc;;
+select id from facetdemo limit 0,1 facet brand_id order by count (* ) asc;;
+select id from facetdemo limit 0,1 facet brand_id order by count(* ) asc;;
 
 <!-- count(distinct) breaks multi-query -->
-<sphinxql>select brand_id, count(distinct price) d, count(*) c from facetdemo group by brand_id facet brand_id as x order by x asc;</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
-<sphinxql>select brand_id, count(distinct price) d, count(*) c from facetdemo2 group by brand_id facet brand_id as x order by x asc;</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
+select brand_id, count(distinct price) d, count(*) c from facetdemo group by brand_id facet brand_id as x order by x asc; show meta like 'multiplier';
+select brand_id, count(distinct price) d, count(*) c from facetdemo2 group by brand_id facet brand_id as x order by x asc; show meta like 'multiplier';
 
 <!-- column aliasing -->
-<sphinxql>select * from facetdemo facet brand_id order by count(*) asc;</sphinxql>
-<sphinxql>select id from facetdemo facet brand_id as price order by count(*) asc;</sphinxql>
+select * from facetdemo facet brand_id order by count(*) asc;;
+select id from facetdemo facet brand_id as price order by count(*) asc;;
+
 <!-- failures -->
-<sphinxql>select id, price from facetdemo facet brand_id as price order by count(*) asc;</sphinxql>
-<sphinxql>select * from facetdemo facet brand_id as price order by count(*) asc;</sphinxql>
+select id, price from facetdemo facet brand_id as price order by count(*) asc;
+select * from facetdemo facet brand_id as price order by count(*) asc;
 
 <!-- regression crash on FACET\group by with different attribute sizes -->
-<sphinxql>select * from facet_gr1 order by id asc facet price_i order by id asc facet price_b order by id asc; show meta</sphinxql>
+select * from facet_gr1 order by id asc facet price_i order by id asc facet price_b order by id asc; show meta;
 
 <!-- regression need to keep implicit group by for main query -->
-<sphinxql>select id, price_b, count(*) from facet_gr1 order by id asc facet price_b order by id asc; show meta</sphinxql>
+select id, price_b, count(*) from facet_gr1 order by id asc facet price_b order by id asc; show meta;
 
-<sphinxql>select * from facetdemo where match ('one') limit 0,15 facet brand_name order by facet() asc facet interval(price,200,400,600,800) order by facet() asc;</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
-<sphinxql>select * from facetdemo where match ('one') limit 0,15 facet brand_id order by facet() asc facet interval(price,200,400,600,800) order by facet() asc;</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
+select * from facetdemo where match ('one') limit 0,15 facet brand_name order by facet() asc facet interval(price,200,400,600,800) order by facet() asc; show meta like 'multiplier';
+select * from facetdemo where match ('one') limit 0,15 facet brand_id order by facet() asc facet interval(price,200,400,600,800) order by facet() asc; show meta like 'multiplier';
 
 <!-- regression order by string that is group by \ facet key -->
-<sphinxql>select id, property, count(*) c, groupby() gr from facetdemo2 group by property order by gr desc</sphinxql>
-<sphinxql>select id, property from facetdemo2 facet property order by facet() desc;</sphinxql>
+select id, property, count(*) c, groupby() gr from facetdemo2 group by property order by gr desc;
+select id, property from facetdemo2 facet property order by facet() desc;;
 
 <!-- regression crash on multiple same facet to JSON field -->
-<sphinxql>select id, j from facetdemo facet categories facet j.x facet j.a facet j.x;</sphinxql>
-<sphinxql>select id, j from facetdemo facet categories facet j.x facet j.a;</sphinxql>
+select id, j from facetdemo facet categories facet j.x facet j.a facet j.x;;
+select id, j from facetdemo facet categories facet j.x facet j.a;
 
-</sphqueries>
+</sphinxql></queries>
 
 </test>

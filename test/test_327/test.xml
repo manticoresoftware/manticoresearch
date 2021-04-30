@@ -102,41 +102,37 @@ insert into test_table (id,price,brand_id,title,brand_name,property,categories,j
 (1,529,9,'Product Five Two','Brand Nine','Four','(13,14)','{x:[13,14],a:["a13","a14"]}')
 </db_insert>
 
-<sphqueries>
+<queries><sphinxql>
 
-<sphinxql>
 insert into facetdemo1 (id,price,brand_id,title,brand_name,property,categories,j) values
 (1,529,9,'Product Five Two','Brand Nine','Four',(13,14),'{x:[13,14],a:["a13","a14"]}'),
 (2,173,10,'Product Five Seven','Brand Ten','Four',(10),'{x:[10],a:["a10"]}'),
 (3,121,1,'Product Seven Nine','Brand One','Five',(13,14,15),'{x:[13,14,15],a:["a13","a14","a15"]}'),
 (4,474,7,'Product Ten Three','Brand Seven','Nine',(10,11,12),'{x:[10,11,12],a:["a10","a11","a12"]}'),
-(5,20,7,'Product Ten Four','Brand Seven','Seven',(13),'{x:[13],a:["a13"]}')
-</sphinxql>
+(5,20,7,'Product Ten Four','Brand Seven','Seven',(13),'{x:[13],a:["a13"]}');
 
-<sphinxql>
 insert into facetdemo2 (id,price,brand_id,title,brand_name,property,categories,j) values
 (101,529,9,'Product Five Two','Brand Nine','Four',(13,14),'{x:[13,14],a:["a13","a14"]}'),
 (102,173,10,'Product Five Seven','Brand Ten','Four',(10),'{x:[10],a:["a10"]}'),
 (103,121,1,'Product Seven Nine','Brand One','Five',(13,14,15),'{x:[13,14,15],a:["a13","a14","a15"]}'),
 (104,474,7,'Product Ten Three','Brand Seven','Nine',(10,11,12),'{x:[10,11,12],a:["a10","a11","a12"]}'),
-(105,20,7,'Product Ten Four','Brand Seven','Seven',(13),'{x:[13],a:["a13"]}')
-</sphinxql>
+(105,20,7,'Product Ten Four','Brand Seven','Seven',(13),'{x:[13],a:["a13"]}');
 
 <!-- multi-queries require at least one ';' (see helpers.inc) -->
 
-<sphinxql>select * from facetdemo1 facet brand_id;</sphinxql>
-<sphinxql>select * from facetdemo2 facet brand_id;</sphinxql>
+select * from facetdemo1 facet brand_id;;
+select * from facetdemo2 facet brand_id;;
 
-<sphinxql>select * from facetdemo11 facet brand_id;</sphinxql>
-<sphinxql>select * from facetdemo12 facet brand_id;</sphinxql>
-<sphinxql>select * from facetdemo13 facet brand_id;</sphinxql>
+select * from facetdemo11 facet brand_id;;
+select * from facetdemo12 facet brand_id;;
+select * from facetdemo13 facet brand_id;;
 
 <!-- empty result set with FACET -->
-<sphinxql>select * from facetdemo1 where price=1 facet brand_id;</sphinxql>
+select * from facetdemo1 where price=1 facet brand_id;;
 
 <!-- crash on multiple expansion to multiple distributed indexes -->
-<sphinxql>select *,* from facetdemo12, facetdemo12</sphinxql>
+select *,* from facetdemo12, facetdemo12;
 
-</sphqueries>
+</sphinxql></queries>
 
 </test>

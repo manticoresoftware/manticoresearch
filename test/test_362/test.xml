@@ -64,8 +64,8 @@ INSERT INTO test_table ( id, title, kk, poly2d_attr ) VALUES
 ( 2, 'ohai2', '10 tenten tententen tententen tententen tententen ', '1,2,3,4,4,6' )
 </db_insert>
 
-<sphqueries>
-<sphinxql>SELECT id, CONTAINS(POLY2D(poly2d_attr),2,40) FROM test</sphinxql>
-</sphqueries>
+<queries><sphinxql>
+SELECT id, CONTAINS(POLY2D(poly2d_attr),2,40) FROM test;
+</sphinxql></queries>
 
 </test>

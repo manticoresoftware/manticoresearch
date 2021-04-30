@@ -64,22 +64,22 @@ CREATE TABLE `test_table` (
 <db_drop>DROP TABLE IF EXISTS `test_table`;</db_drop>
 <db_insert>INSERT INTO `test_table` VALUES (1,1,'test one')</db_insert>
 
-<sphqueries>
+<queries><sphinxql>
 <!-- regression crash on add \ remove plain attribute at index with blobs  -->
-<sphinxql>INSERT INTO rt VALUES (1, 'text', 11, 12, 13, (101, 102), (201, 202), (301, 302))</sphinxql>
-<sphinxql>select * from rt</sphinxql>
-<sphinxql>ALTER TABLE rt drop column attr3</sphinxql>
-<sphinxql>select * from rt</sphinxql>
-<sphinxql>ALTER TABLE rt drop column m3</sphinxql>
-<sphinxql>select * from rt</sphinxql>
+INSERT INTO rt VALUES (1, 'text', 11, 12, 13, (101, 102), (201, 202), (301, 302));
+select * from rt;
+ALTER TABLE rt drop column attr3;
+select * from rt;
+ALTER TABLE rt drop column m3;
+select * from rt;
 
 <!-- regression crash on add attribute to index with index_field_lengths (these should be always last for now)  -->
-<sphinxql>INSERT INTO rt1 (id, title, attr1) VALUES (101, 'text', 201)</sphinxql>
-<sphinxql>alter table rt1 add column m11 multi</sphinxql>
-<sphinxql>alter table rt1 add column m12 multi</sphinxql>
-<sphinxql>INSERT INTO rt1 (id, title, m11, m12) VALUES (102, 'text', (), ())</sphinxql>
-<sphinxql>alter table rt1 add column attr3 uint</sphinxql>
-<sphinxql>INSERT INTO rt1 (id, title, m11, attr3) VALUES (103, 'text', (203, 207, 204), 303)</sphinxql>
-</sphqueries>
+INSERT INTO rt1 (id, title, attr1) VALUES (101, 'text', 201);
+alter table rt1 add column m11 multi;
+alter table rt1 add column m12 multi;
+INSERT INTO rt1 (id, title, m11, m12) VALUES (102, 'text', (), ());
+alter table rt1 add column attr3 uint;
+INSERT INTO rt1 (id, title, m11, attr3) VALUES (103, 'text', (203, 207, 204), 303);
+</sphinxql></queries>
 
 </test>

@@ -66,9 +66,8 @@ CREATE TABLE test_table
 <db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
 <db_insert>insert into test_table values ( 1, 'first')</db_insert>
 
-<sphqueries>
+<queries><sphinxql>
 
-<sphinxql>
 INSERT INTO test1 (id, title) VALUES
 ( 10, 'The one book might be same as two books' ),
 ( 11, 'The one book might be same as two books' ),
@@ -112,20 +111,18 @@ INSERT INTO test1 (id, title) VALUES
 ( 49, 'The one book might be same as two books' ),
 
 ( 110, 'The one book. Not same as two books' ),
-( 111, 'The one book is not same as two books. But tree might be better.' )
-</sphinxql>
+( 111, 'The one book is not same as two books. But tree might be better.' );
 
 <!-- regression for dot hit after buffer of regular matches -->
-<sphinxql> SELECT * FROM test1 WHERE MATCH (' one SENTENCE two' ) ORDER BY id DESC </sphinxql>
+ SELECT * FROM test1 WHERE MATCH (' one SENTENCE two' ) ORDER BY id DESC ;
 
 <!-- regression multi and term setup for segments broken -->
-<sphinxql>insert into multiand (id, text) values(1, 'abc')</sphinxql>
-<sphinxql>insert into multiand (id, text) values(3, 'abc')</sphinxql>
-<sphinxql>insert into multiand (id, text) values(4, 'def')</sphinxql>
-<sphinxql>insert into multiand (id, text) values(5, 'def')</sphinxql>
-<sphinxql>SELECT * FROM multiand WHERE MATCH ('abc def' ) ORDER BY id DESC </sphinxql>
+insert into multiand (id, text) values(1, 'abc');
+insert into multiand (id, text) values(3, 'abc');
+insert into multiand (id, text) values(4, 'def');
+insert into multiand (id, text) values(5, 'def');
+SELECT * FROM multiand WHERE MATCH ('abc def' ) ORDER BY id DESC ;
 
-
-</sphqueries>
+</sphinxql></queries>
 
 </test>

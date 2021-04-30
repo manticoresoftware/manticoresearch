@@ -93,80 +93,78 @@ index pq_d3
 	<index>pq_d2</index>
 </metaindex>
 
-<sphqueries>
+<queries><sphinxql>
 
 <!-- use manually assigned qids in order to test sharded calls -->
-<sphinxql>INSERT INTO pq (id, query, filters) VALUES ( 1, 'filter test', 'gid >= 10' )</sphinxql>
-<sphinxql>INSERT INTO pq1 (id, query, filters) VALUES ( 2, 'angry', 'gid >= 10 OR gid &lt;= 3')
-</sphinxql>
-<sphinxql>select * from META:multi</sphinxql>
-<sphinxql>CALL PQ ('META:multi', ('{"title":"angry test", "gid":3 }', '{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query, 'sharded' as mode)</sphinxql>
-<sphinxql>CALL PQ ('META:multi', ('{"title":"angry test", "gid":3 }', '{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query, 'sharded' as mode, 10 as shift)</sphinxql>
-<sphinxql>CALL PQ ('META:multi', ('{"title":"angry test", "gid":3 }', '{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query, 'sharded' as mode, 'gid' as docs_id)</sphinxql>
-<sphinxql>CALL PQ ('META:multi', ('{"title":"angry test", "gid":3 }', '{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query, 'sharded' as mode, 'gid' as docs_id, 10 as shift)</sphinxql>
-<sphinxql>SHOW WARNINGS</sphinxql>
+INSERT INTO pq (id, query, filters) VALUES ( 1, 'filter test', 'gid >= 10' );
+INSERT INTO pq1 (id, query, filters) VALUES ( 2, 'angry', 'gid >= 10 OR gid &lt;= 3');
+
+select * from META:multi;
+CALL PQ ('META:multi', ('{"title":"angry test", "gid":3 }', '{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query, 'sharded' as mode);
+CALL PQ ('META:multi', ('{"title":"angry test", "gid":3 }', '{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query, 'sharded' as mode, 10 as shift);
+CALL PQ ('META:multi', ('{"title":"angry test", "gid":3 }', '{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query, 'sharded' as mode, 'gid' as docs_id);
+CALL PQ ('META:multi', ('{"title":"angry test", "gid":3 }', '{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query, 'sharded' as mode, 'gid' as docs_id, 10 as shift);
+SHOW WARNINGS;
 
 <!-- doc as array of docs -->
-<sphinxql>CALL PQ ('META:multi', ('[{"title":"angry test", "gid":3 }, {"title":"filter test doc2", "gid":13}]'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query, 'sharded' as mode)</sphinxql>
-<sphinxql>CALL PQ ('META:multi', ('[{"title":"angry test", "gid":3 }, {"title":"filter test doc2", "gid":13}]'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query, 'sharded' as mode, 10 as shift)</sphinxql>
-<sphinxql>CALL PQ ('META:multi', ('[{"title":"angry test", "gid":3 }, {"title":"filter test doc2", "gid":13}]'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query, 'sharded' as mode, 'gid' as docs_id)</sphinxql>
-<sphinxql>CALL PQ ('META:multi', ('[{"title":"angry test", "gid":3 }, {"title":"filter test doc2", "gid":13}]'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query, 'sharded' as mode, 'gid' as docs_id, 10 as shift)</sphinxql>
+CALL PQ ('META:multi', ('[{"title":"angry test", "gid":3 }, {"title":"filter test doc2", "gid":13}]'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query, 'sharded' as mode);
+CALL PQ ('META:multi', ('[{"title":"angry test", "gid":3 }, {"title":"filter test doc2", "gid":13}]'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query, 'sharded' as mode, 10 as shift);
+CALL PQ ('META:multi', ('[{"title":"angry test", "gid":3 }, {"title":"filter test doc2", "gid":13}]'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query, 'sharded' as mode, 'gid' as docs_id);
+CALL PQ ('META:multi', ('[{"title":"angry test", "gid":3 }, {"title":"filter test doc2", "gid":13}]'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query, 'sharded' as mode, 'gid' as docs_id, 10 as shift);
 
 <!-- add the same gids to another shards, i.e. make them mirrors -->
-<sphinxql>INSERT INTO pq1 (id, query, filters) VALUES ( 1, 'filter test', 'gid >= 10' )</sphinxql>
-<sphinxql>INSERT INTO pq (id, query, filters) VALUES ( 2, 'angry', 'gid >= 10 OR gid &lt;= 3')</sphinxql>
+INSERT INTO pq1 (id, query, filters) VALUES ( 1, 'filter test', 'gid >= 10' );
+INSERT INTO pq (id, query, filters) VALUES ( 2, 'angry', 'gid >= 10 OR gid &lt;= 3');
 
-<sphinxql>select * from META:multi</sphinxql>
-<sphinxql>CALL PQ ('META:multi', ('{"title":"angry test", "gid":3 }', '{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query)</sphinxql>
-<sphinxql>CALL PQ ('META:multi', ('{"title":"angry test", "gid":3 }', '{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query, 10 as shift)</sphinxql>
-<sphinxql>CALL PQ ('META:multi', ('{"title":"angry test", "gid":3 }', '{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query, 'gid' as docs_id)</sphinxql>
-<sphinxql>CALL PQ ('META:multi', ('{"title":"angry test", "gid":3 }', '{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query, 'gid' as docs_id, 10 as shift)</sphinxql>
-<sphinxql>SHOW WARNINGS</sphinxql>
+select * from META:multi;
+CALL PQ ('META:multi', ('{"title":"angry test", "gid":3 }', '{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query);
+CALL PQ ('META:multi', ('{"title":"angry test", "gid":3 }', '{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query, 10 as shift);
+CALL PQ ('META:multi', ('{"title":"angry test", "gid":3 }', '{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query, 'gid' as docs_id);
+CALL PQ ('META:multi', ('{"title":"angry test", "gid":3 }', '{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query, 'gid' as docs_id, 10 as shift);
+SHOW WARNINGS;
 
 <!-- doc as array of docs -->
-<sphinxql>CALL PQ ('META:multi', ('[{"title":"angry test", "gid":3 }, {"title":"filter test doc2", "gid":13}]'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query)</sphinxql>
-<sphinxql>CALL PQ ('META:multi', ('[{"title":"angry test", "gid":3 }, {"title":"filter test doc2", "gid":13}]'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query, 10 as shift)</sphinxql>
-<sphinxql>CALL PQ ('META:multi', ('[{"title":"angry test", "gid":3 }, {"title":"filter test doc2", "gid":13}]'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query, 'gid' as docs_id)</sphinxql>
-<sphinxql>CALL PQ ('META:multi', ('[{"title":"angry test", "gid":3 }, {"title":"filter test doc2", "gid":13}]'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query, 'gid' as docs_id, 10 as shift)</sphinxql>
+CALL PQ ('META:multi', ('[{"title":"angry test", "gid":3 }, {"title":"filter test doc2", "gid":13}]'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query);
+CALL PQ ('META:multi', ('[{"title":"angry test", "gid":3 }, {"title":"filter test doc2", "gid":13}]'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query, 10 as shift);
+CALL PQ ('META:multi', ('[{"title":"angry test", "gid":3 }, {"title":"filter test doc2", "gid":13}]'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query, 'gid' as docs_id);
+CALL PQ ('META:multi', ('[{"title":"angry test", "gid":3 }, {"title":"filter test doc2", "gid":13}]'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query, 'gid' as docs_id, 10 as shift);
 
 <!-- bad json -->
-<sphinxql>CALL PQ ('META:multi', ('[{"title":"angry test", "gid":3, {"title":"filter test doc2", "gid":13}]'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query)</sphinxql>
+CALL PQ ('META:multi', ('[{"title":"angry test", "gid":3, {"title":"filter test doc2", "gid":13}]'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query);
 <!-- good, but ill-formed json (int instead of 2-nd doc) -->
-<sphinxql>CALL PQ ('META:multi', ('[{"title":"angry test", "gid":3}, 1000]'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query)</sphinxql>
+CALL PQ ('META:multi', ('[{"title":"angry test", "gid":3}, 1000]'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query);
 
 <!-- empty json -->
-<sphinxql>CALL PQ ('META:multi', ('{"title":"angry test", "gid":3}', '', '{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query, 1 as skip_empty)</sphinxql>
-<sphinxql>CALL PQ ('META:multi', ('{"title":"angry test", "gid":3}', '', '{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query)</sphinxql>
+CALL PQ ('META:multi', ('{"title":"angry test", "gid":3}', '', '{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query, 1 as skip_empty);
+CALL PQ ('META:multi', ('{"title":"angry test", "gid":3}', '', '{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query);
 
 <!-- bad json holding with no-fail -->
-<sphinxql>CALL PQ ('pq', ('{"title":"filter test doc2", "gid":13}','[{"title":"angry test", "gid":3}, 1000]'), 1 as skip_bad_json )</sphinxql>
-<sphinxql>SHOW WARNINGS</sphinxql>
-<sphinxql>CALL PQ ('pl_d1', ('{"title":"filter test doc2", "gid":13}','[{"title":"angry test", "gid":3}, 1000]'), 1 as skip_bad_json )</sphinxql>
-<sphinxql>SHOW WARNINGS</sphinxql>
-<sphinxql>CALL PQ ('pq_d1', ('{"title":"filter test doc2", "gid":13}','[{"title":"angry test", "gid":3}, 1000]'), 1 as skip_bad_json )</sphinxql>
-<sphinxql>SHOW WARNINGS</sphinxql>
+CALL PQ ('pq', ('{"title":"filter test doc2", "gid":13}','[{"title":"angry test", "gid":3}, 1000]'), 1 as skip_bad_json );
+SHOW WARNINGS;
+CALL PQ ('pl_d1', ('{"title":"filter test doc2", "gid":13}','[{"title":"angry test", "gid":3}, 1000]'), 1 as skip_bad_json );
+SHOW WARNINGS;
+CALL PQ ('pq_d1', ('{"title":"filter test doc2", "gid":13}','[{"title":"angry test", "gid":3}, 1000]'), 1 as skip_bad_json );
+SHOW WARNINGS;
 
-<sphinxql>CALL PQ ('pq', ('{"title":"filter test doc2", "gid":13}','[{"title":"angry test", "gid":3}, 1000]'), 0 as docs_json, 1 as skip_bad_json )</sphinxql>
-<sphinxql>SHOW WARNINGS</sphinxql>
-<sphinxql>CALL PQ ('pl_d1', ('{"title":"filter test doc2", "gid":13}','[{"title":"angry test", "gid":3}, 1000]'), 0 as docs_json, 1 as skip_bad_json )</sphinxql>
-<sphinxql>SHOW WARNINGS</sphinxql>
-<sphinxql>CALL PQ ('pq_d1', ('{"title":"filter test doc2", "gid":13}','[{"title":"angry test", "gid":3}, 1000]'), 0 as docs_json, 1 as skip_bad_json )</sphinxql>
-<sphinxql>SHOW WARNINGS</sphinxql>
+CALL PQ ('pq', ('{"title":"filter test doc2", "gid":13}','[{"title":"angry test", "gid":3}, 1000]'), 0 as docs_json, 1 as skip_bad_json );
+SHOW WARNINGS;
+CALL PQ ('pl_d1', ('{"title":"filter test doc2", "gid":13}','[{"title":"angry test", "gid":3}, 1000]'), 0 as docs_json, 1 as skip_bad_json );
+SHOW WARNINGS;
+CALL PQ ('pq_d1', ('{"title":"filter test doc2", "gid":13}','[{"title":"angry test", "gid":3}, 1000]'), 0 as docs_json, 1 as skip_bad_json );
+SHOW WARNINGS;
 
 <!-- test that final stage filters work -->
-<sphinxql>select id, id as quid, id*2 as quid2 from META:multi</sphinxql>
+select id, id as quid, id*2 as quid2 from META:multi;
 
 <!-- crash on query distributed PQ with empty doc -->
-<sphinxql>CALL PQ ('META:multi', '', 0 as docs, 0 as verbose, 0 as docs_json, 0 as query, 'sharded' as mode)</sphinxql>
+CALL PQ ('META:multi', '', 0 as docs, 0 as verbose, 0 as docs_json, 0 as query, 'sharded' as mode);
 
 <!-- regression no filter and tags from distributed index for empty query -->
-<sphinxql>INSERT INTO pq_loc3 (id, query, filters, tags) VALUES ( 1, '', 'gid >= 10', 'loc3 dist' )</sphinxql>
-<sphinxql>CALL PQ ('pq_loc3', ('{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as query)</sphinxql>
-<sphinxql>CALL PQ ('pq_d3', ('{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as query)</sphinxql>
+INSERT INTO pq_loc3 (id, query, filters, tags) VALUES ( 1, '', 'gid >= 10', 'loc3 dist' );
+CALL PQ ('pq_loc3', ('{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as query);
+CALL PQ ('pq_d3', ('{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as query);
 
-</sphqueries>
-
-<httpqueries>
+</sphinxql>
 
 <!-- dpq queries via http -->
 
@@ -201,6 +199,6 @@ index pq_d3
 <query endpoint="json/search">{ "index": "pm_d2"}</query>
 <query endpoint="json/search">{ "index": "pq_d2"}</query>
 
-</httpqueries>
+</queries>
 
 </test>

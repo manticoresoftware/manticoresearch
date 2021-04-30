@@ -52,17 +52,17 @@ CREATE TABLE test_table
 </db_insert>
 
 
-<sphqueries>
+<queries><sphinxql>
 
 <!-- regression: empty string was NULL at result set but empty at filter -->
-<sphinxql>select * from test</sphinxql>
-<sphinxql>select * from test where str1 is NULL</sphinxql>
-<sphinxql>select * from test where str1 is not NULL</sphinxql>
-<sphinxql>select * from test where str1=''</sphinxql>
-<sphinxql>select * from test where str1!=''</sphinxql>
-<sphinxql>select * from test where str2=''</sphinxql>
-<sphinxql>select * from test where str2!=''</sphinxql>
+select * from test;
+select * from test where str1 is NULL;
+select * from test where str1 is not NULL;
+select * from test where str1='';
+select * from test where str1!='';
+select * from test where str2='';
+select * from test where str2!='';
 
-</sphqueries>
+</sphinxql></queries>
 
 </test>

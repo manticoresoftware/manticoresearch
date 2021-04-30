@@ -17,7 +17,7 @@
 searchd
 {
 	<searchd_settings/>
-	data_dir = <data_path path="data0"></data_path>
+	data_dir = <data_path path="data0"/>
 	server_id = <agent_id/>
 }
 </agent0>
@@ -25,7 +25,7 @@ searchd
 searchd
 {
 	<searchd_settings/>
-	data_dir = <data_path path="data1"></data_path>
+	data_dir = <data_path path="data1"/>
 	server_id = <agent_id/>
 }
 </agent1>
@@ -33,7 +33,7 @@ searchd
 searchd
 {
 	<searchd_settings/>
-	data_dir = <data_path path="data2"></data_path>
+	data_dir = <data_path path="data2"/>
 	server_id = <agent_id/>
 }
 </agent2>
@@ -41,63 +41,79 @@ searchd
 </config>
 
 
-<sphqueries>
-<!-- request to node 0 -->
-<sphinxql d="0">create table pq1 type='pq'</sphinxql>
-<sphinxql d="0">create table pq2 type='pq'</sphinxql>
-<sphinxql d="0">set autocommit=0</sphinxql>
-<sphinxql d="0">insert into pq1 (id,query,tags) values (5, 'test', 't 5'), (6, 'test', 't 6'), (7, 'test', 't 7')</sphinxql>
-<sphinxql d="0">commit</sphinxql>
-<sphinxql d="0">insert into pq1 (id,query,tags) values (8, 'test', 't 8'), (9, 'test', 't 9')</sphinxql>
-<sphinxql d="0">commit</sphinxql>
+<queries>
 
-<sphinxql d="0">create cluster test</sphinxql>
-<sphinxql d="0">ALTER CLUSTER test ADD pq1</sphinxql>
-<sphinxql d="0">ALTER CLUSTER test ADD pq2</sphinxql>
+<sphinxql d="0">
+	<!-- request to node 0 -->
+	create table pq1 type='pq';
+	create table pq2 type='pq';
+	set autocommit=0;
+	insert into pq1 (id,query,tags) values (5, 'test', 't 5'), (6, 'test', 't 6'), (7, 'test', 't 7');
+	commit;
+	insert into pq1 (id,query,tags) values (8, 'test', 't 8'), (9, 'test', 't 9');
+	commit;
+
+	create cluster test;
+	ALTER CLUSTER test ADD pq1;
+	ALTER CLUSTER test ADD pq2;
+</sphinxql>
 
 <!-- request to node 1 -->
-<sphinxql d="1" cluster_connect="0">join cluster test '%addr_connect%' as nodes</sphinxql>
+<sphinxql d="1" cluster_connect="0">
+	join cluster test '%addr_connect%' as nodes;
+</sphinxql>
 
 <!-- request to node 2, chain nodes 2>1>0 and update nodes -->
-<sphinxql d="2" cluster_connect="1">join cluster test at '%addr_connect%'</sphinxql>
+<sphinxql d="2" cluster_connect="1">
+	join cluster test at '%addr_connect%';
+</sphinxql>
 
 <!-- stream to node 2 -->
-<sphinxql d="2">set autocommit=0</sphinxql>
-<sphinxql d="2">SELECT * FROM test:pq1</sphinxql>
-<sphinxql d="2">insert into test:pq1 (id,query,tags) values (21, 'test', 't 21')</sphinxql>
-<sphinxql d="2">insert into test:pq1 (id,query,tags) values (22, 'test', 't 22')</sphinxql>
-<sphinxql d="2">commit</sphinxql>
-<sphinxql d="2">insert into test:pq1 (query,tags) values ('test', 't 23')</sphinxql>
-<sphinxql d="2">delete from test:pq1 where tags any ( '21' )</sphinxql>
-<sphinxql d="2">insert into test:pq1 (query,tags) values ('test', 't 24')</sphinxql>
-<sphinxql d="2">delete from test:pq1 where id in (7,6)</sphinxql>
-<sphinxql d="2">commit</sphinxql>
-<sphinxql d="2">SELECT * FROM test:pq1</sphinxql>
+<sphinxql d="2">
+	set autocommit=0;
+	SELECT * FROM test:pq1;
+	insert into test:pq1 (id,query,tags) values (21, 'test', 't 21');
+	insert into test:pq1 (id,query,tags) values (22, 'test', 't 22');
+	commit;
+	insert into test:pq1 (query,tags) values ('test', 't 23');
+	delete from test:pq1 where tags any ( '21' );
+	insert into test:pq1 (query,tags) values ('test', 't 24');
+	delete from test:pq1 where id in (7,6);
+	commit;
+	SELECT * FROM test:pq1;
+</sphinxql>
 
 <!-- stream to node 1 -->
-<sphinxql d="1">set autocommit=0</sphinxql>
-<sphinxql d="1">SELECT * FROM test:pq1</sphinxql>
-<sphinxql d="1">insert into test:pq1 (query,tags) values ('test', 't 11'), ('test', 't 12')</sphinxql>
-<sphinxql d="1">delete from test:pq1 where tags any ( '22' )</sphinxql>
-<sphinxql d="1">commit</sphinxql>
-<sphinxql d="1">SELECT * FROM test:pq1</sphinxql>
+<sphinxql d="1">
+	set autocommit=0;
+	SELECT * FROM test:pq1;
+	insert into test:pq1 (query,tags) values ('test', 't 11'), ('test', 't 12');
+	delete from test:pq1 where tags any ( '22' );
+	commit;
+	SELECT * FROM test:pq1;
+</sphinxql>
 
 <!-- stream to node 0 -->
-<sphinxql d="0">set autocommit=0</sphinxql>
-<sphinxql d="0">SELECT * FROM test:pq1</sphinxql>
-<sphinxql d="0">insert into test:pq2 (query,tags) values ('test', 't 11'), ('test', 't 12')</sphinxql>
-<sphinxql d="0">commit</sphinxql>
-<sphinxql d="0">SELECT * FROM test:pq2</sphinxql>
+<sphinxql d="0">
+	set autocommit=0;
+	SELECT * FROM test:pq1;
+	insert into test:pq2 (query,tags) values ('test', 't 11'), ('test', 't 12');
+	commit;
+	SELECT * FROM test:pq2;
+</sphinxql>
 
 <!-- stream to node 2 -->
-<sphinxql d="2">SELECT * FROM test:pq2</sphinxql>
+<sphinxql d="2">
+	SELECT * FROM test:pq2;
+</sphinxql>
 
 <!-- cleanup -->
-<sphinxql d="0">ALTER CLUSTER test DROP pq1</sphinxql>
-<sphinxql d="0">ALTER CLUSTER test DROP pq2</sphinxql>
-<sphinxql d="0">drop table pq1</sphinxql>
-<sphinxql d="0">drop table pq2</sphinxql>
-
-</sphqueries>
+<sphinxql d="0">
+	ALTER CLUSTER test DROP pq1;
+	ALTER CLUSTER test DROP pq2;
+	drop table pq1;
+	drop table pq2;
+</sphinxql>
+</queries>
 
 </test>

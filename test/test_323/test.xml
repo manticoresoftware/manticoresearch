@@ -141,8 +141,8 @@ insert into facet_table values
 ( 13, 123, 113, 'test' )
 </db_insert>
 
-<sphqueries>
-<sphinxql>
+<queries><sphinxql>
+
 INSERT into rt VALUES (60, 'test', 70, 1100), (61, 'test', 71, 1101), (62, 'test', 72, 1102), (63, 'test', 73, 1103);
 select * from rt where match('test');
 select * from rt where match('test') and gid &gt; 72 OR pid &lt; 1101;
@@ -181,9 +181,8 @@ SELECT * FROM rt2 WHERE (match('test')) AND (user_id = 74861) AND (added_at &lt;
 <!-- wrong step over filters losing last one -->
 SELECT * FROM facet1 WHERE price=12 OR brand_id=12;SELECT * FROM facet1 WHERE price=12 OR brand_id=12;SELECT * FROM facet1 WHERE price=12 OR brand_id=12;
 SELECT * FROM rt2 WHERE user_id=74861 OR added_at=1519972227;SELECT * FROM rt2 WHERE user_id=74861 OR added_at=1519972227;SELECT * FROM rt2 WHERE user_id=74861 OR added_at=1519972227;
-SELECT * FROM dist WHERE gid=11 OR pid=303;SELECT * FROM dist WHERE gid=11 OR pid=303;SELECT * FROM dist WHERE gid=11 OR pid=303
+SELECT * FROM dist WHERE gid=11 OR pid=303;SELECT * FROM dist WHERE gid=11 OR pid=303;SELECT * FROM dist WHERE gid=11 OR pid=303;
 
-</sphinxql>
-</sphqueries>
+</sphinxql></queries>
 
 </test>

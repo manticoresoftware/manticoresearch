@@ -61,21 +61,21 @@ CREATE TABLE `test_table` (
 <db_drop>DROP TABLE IF EXISTS `test_table`;</db_drop>
 <db_insert>INSERT INTO `test_table` VALUES ( 1, 1, 'test 1' )</db_insert>
 
-<sphqueries>
-<sphinxql>INSERT INTO rt1 (id, title, j) VALUES (1, 'do it test blue', '{"price":[11,15], "doc":"manticore is very good"}' ), (2, 'tests of the best', '{"doc":"core of reactor"}' ), (3, 'the wild west', '{"price":11}' )</sphinxql>
-<sphinxql>SELECT * FROM test_d</sphinxql>
+<queries><sphinxql>
+INSERT INTO rt1 (id, title, j) VALUES (1, 'do it test blue', '{"price":[11,15], "doc":"manticore is very good"}' ), (2, 'tests of the best', '{"doc":"core of reactor"}' ), (3, 'the wild west', '{"price":11}' );
+SELECT * FROM test_d;
 
-<sphinxql>SELECT id, REGEX(title, 'est') as c, title, j FROM rt1 WHERE c>0</sphinxql>
-<sphinxql>SELECT id, title, j FROM rt1 WHERE REGEX(title, '\\bwest')</sphinxql>
+SELECT id, REGEX(title, 'est') as c, title, j FROM rt1 WHERE c>0;
+SELECT id, title, j FROM rt1 WHERE REGEX(title, '\\bwest');
 
-<sphinxql>SELECT id, title, j FROM test_d WHERE REGEX(j.doc, '^core')</sphinxql>
-<sphinxql>SELECT id, REGEX(j.doc, 'core') as c, title, j FROM test_d WHERE c>0</sphinxql>
+SELECT id, title, j FROM test_d WHERE REGEX(j.doc, '^core');
+SELECT id, REGEX(j.doc, 'core') as c, title, j FROM test_d WHERE c>0;
 
-<sphinxql>SELECT id, REGEX(to_string(j.price), '11') as c, title, j FROM test_d WHERE c>0</sphinxql>
-<sphinxql>SELECT id, REGEX(to_string(j.price), '5]') as c, title, j FROM test_d WHERE c>0</sphinxql>
-<sphinxql>SELECT id, title, j FROM rt1 WHERE REGEX(j.doc, 'is | of')</sphinxql>
-<sphinxql>SELECT id, title, j FROM test_d WHERE REGEX(j.doc, 'core of')</sphinxql>
-<sphinxql>SELECT id, title, j FROM test_d WHERE REGEX(title, 'test?')</sphinxql>
-</sphqueries>
+SELECT id, REGEX(to_string(j.price), '11') as c, title, j FROM test_d WHERE c>0;
+SELECT id, REGEX(to_string(j.price), '5]') as c, title, j FROM test_d WHERE c>0;
+SELECT id, title, j FROM rt1 WHERE REGEX(j.doc, 'is | of');
+SELECT id, title, j FROM test_d WHERE REGEX(j.doc, 'core of');
+SELECT id, title, j FROM test_d WHERE REGEX(title, 'test?');
+</sphinxql></queries>
 
 </test>

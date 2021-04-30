@@ -110,55 +110,55 @@ insert into test_table2 values
 ]]>
 </db_insert>
 
-<sphqueries>
-<sphinxql>select snippet(body,'followed') from test1 where match('followed')</sphinxql>
-<sphinxql>select snippet(body,query()) from test1 where match('followed')</sphinxql>
+<queries><sphinxql>
+select snippet(body,'followed') from test1 where match('followed');
+select snippet(body,query()) from test1 where match('followed');
 
-<sphinxql>select highlight() from test1 where match('followed')</sphinxql>
-<sphinxql>select highlight() from test1 where match('@title before')</sphinxql>
-<sphinxql>select highlight() from test1 where match('@body well')</sphinxql>
-<sphinxql>select highlight() from test1 where match('@body three')</sphinxql>
-<sphinxql>select highlight() from test1 where match('@(title,body) three')</sphinxql>
+select highlight() from test1 where match('followed');
+select highlight() from test1 where match('@title before');
+select highlight() from test1 where match('@body well');
+select highlight() from test1 where match('@body three');
+select highlight() from test1 where match('@(title,body) three');
 
-<sphinxql>select highlight({},'title') from test1 where match('@(title,body) three')</sphinxql>
-<sphinxql>select highlight({},'body') from test1 where match('@(title,body) three')</sphinxql>
-<sphinxql>select highlight({},'') from test1 where match('@(title,body) three')</sphinxql>
+select highlight({},'title') from test1 where match('@(title,body) three');
+select highlight({},'body') from test1 where match('@(title,body) three');
+select highlight({},'') from test1 where match('@(title,body) three');
 
-<sphinxql>select highlight({},'') from test1 where match('@(title,body) three')</sphinxql>
-<sphinxql>select highlight({before_match='&lt;S&gt;',after_match='&lt;/S&gt;'},'') from test1 where match('@(title,body) three')</sphinxql>
-<sphinxql>select highlight({before_match='&lt;S&gt;',after_match='&lt;/S&gt;'},'title') from test1 where match('@(title,body) three')</sphinxql>
-<sphinxql>select highlight({before_match='&lt;S&gt;',after_match='&lt;/S&gt;'},'title','document') from test1 where match('@(title,body) three')</sphinxql>
-<sphinxql>select highlight({before_match='&lt;S&gt;',after_match='&lt;/S&gt;'},'title',query()) from test1 where match('document')</sphinxql>
+select highlight({},'') from test1 where match('@(title,body) three');
+select highlight({before_match='&lt;S&gt;',after_match='&lt;/S&gt;'},'') from test1 where match('@(title,body) three');
+select highlight({before_match='&lt;S&gt;',after_match='&lt;/S&gt;'},'title') from test1 where match('@(title,body) three');
+select highlight({before_match='&lt;S&gt;',after_match='&lt;/S&gt;'},'title','document') from test1 where match('@(title,body) three');
+select highlight({before_match='&lt;S&gt;',after_match='&lt;/S&gt;'},'title',query()) from test1 where match('document');
 
-<sphinxql>select highlight({},'-body') from test1 where match('three')</sphinxql>
+select highlight({},'-body') from test1 where match('three');
 
-<sphinxql>select id, highlight({},'') from test1 where match('open followed')</sphinxql>
+select id, highlight({},'') from test1 where match('open followed');
 
-<sphinxql>select title from test1 facet id;</sphinxql>
+select title from test1 facet id;;
 
-<sphinxql>select highlight({limit=3}) from test1 where match('three')</sphinxql>
+select highlight({limit=3}) from test1 where match('three');
 
-<sphinxql>select content from test2 where match('code completion')</sphinxql>
-<sphinxql>select snippet(content,query(),'html_strip_mode=retain','limit=0') from test2 where match('code completion')</sphinxql>
-<sphinxql>select highlight({html_strip_mode=retain, limit=0}) from test2 where match('code completion')</sphinxql>
-<sphinxql>select snippet(content,query(),'html_strip_mode=strip') from test2 where match('ideas')</sphinxql>
-<sphinxql>select highlight({html_strip_mode=strip}) from test2 where match('ideas')</sphinxql>
+select content from test2 where match('code completion');
+select snippet(content,query(),'html_strip_mode=retain','limit=0') from test2 where match('code completion');
+select highlight({html_strip_mode=retain, limit=0}) from test2 where match('code completion');
+select snippet(content,query(),'html_strip_mode=strip') from test2 where match('ideas');
+select highlight({html_strip_mode=strip}) from test2 where match('ideas');
 
-<sphinxql>select body,snippet(body,query(), 'before_match=%SNIPPET_ID%','after_match=/%SNIPPET_ID%') from test1 where match('three')</sphinxql>
-<sphinxql>select highlight({before_match='%SNIPPET_ID%',after_match='/%SNIPPET_ID%'}) from test1 where match('three')</sphinxql>
+select body,snippet(body,query(), 'before_match=%SNIPPET_ID%','after_match=/%SNIPPET_ID%') from test1 where match('three');
+select highlight({before_match='%SNIPPET_ID%',after_match='/%SNIPPET_ID%'}) from test1 where match('three');
 
 <!-- regression for a crash on wrong syntax -->
-<sphinxql>select body,highlight({limit_words=10},body) AS h FROM test1 WHERE MATCH('three')</sphinxql>
+select body,highlight({limit_words=10},body) AS h FROM test1 WHERE MATCH('three');
 
-<sphinxql>select highlight() from test1_wild where match('followed')</sphinxql>
-<sphinxql>select highlight() from test1_nostored where match('followed')</sphinxql>
+select highlight() from test1_wild where match('followed');
+select highlight() from test1_nostored where match('followed');
 
-<sphinxql>desc test1s</sphinxql>
-<sphinxql>select highlight({},'body') FROM test1s WHERE MATCH('three')</sphinxql>
-<sphinxql>select highlight({},body) FROM test1s WHERE MATCH('three')</sphinxql>
-<sphinxql>select highlight({},'title') FROM test1s WHERE MATCH('well')</sphinxql>
-<sphinxql>select highlight({},title) FROM test1s WHERE MATCH('well')</sphinxql>
+desc test1s;
+select highlight({},'body') FROM test1s WHERE MATCH('three');
+select highlight({},body) FROM test1s WHERE MATCH('three');
+select highlight({},'title') FROM test1s WHERE MATCH('well');
+select highlight({},title) FROM test1s WHERE MATCH('well');
 
-</sphqueries>
+</sphinxql></queries>
 
 </test>

@@ -50,14 +50,14 @@ INSERT INTO `test_table` ( `id`, `text` ) VALUES
 ( 7, '豈祉' )
 </db_insert>
 
-<sphqueries>
-<sphinxql>select id from idx1 where match ('123') order by id asc</sphinxql>
-<sphinxql>select id from idx1 where match ('Basic') order by id asc</sphinxql>
-<sphinxql>select id from idx1 where match ('тест') order by id asc</sphinxql>
-<sphinxql>select id from idx1 where match ('interfeței') order by id asc</sphinxql>
-<sphinxql>select id from idx1 where match ('transforma') order by id asc</sphinxql>
-<sphinxql>select id from idx1 where match ('廬') order by id asc</sphinxql>
-<sphinxql>select id from idx1 where match ('祉') order by id asc</sphinxql>
-</sphqueries>
+<queries><sphinxql>
+select id from idx1 where match ('123') order by id asc;
+select id from idx1 where match ('Basic') order by id asc;
+select id from idx1 where match ('тест') order by id asc;
+select id from idx1 where match ('interfeței') order by id asc;
+select id from idx1 where match ('transforma') order by id asc;
+select id from idx1 where match ('廬') order by id asc;
+select id from idx1 where match ('祉') order by id asc;
+</sphinxql></queries>
 
 </test>

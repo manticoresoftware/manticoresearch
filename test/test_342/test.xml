@@ -77,42 +77,42 @@ index dist_1
 
 </config>
 
-<sphqueries>
-<sphinxql>insert into rt values ( 1,  'dog runs', 11 ), ( 2,  'dogs run', 22 ), ( 3,  'dogs running', 33 ), ( 4,  'dog run', 44 )</sphinxql>
-<sphinxql>select * from rt where match ( 'run' )</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>select * from rt where match ( 'run' ) option expand_keywords=0</sphinxql>
-<sphinxql>show meta</sphinxql>
+<queries><sphinxql>
+insert into rt values ( 1,  'dog runs', 11 ), ( 2,  'dogs run', 22 ), ( 3,  'dogs running', 33 ), ( 4,  'dog run', 44 );
+select * from rt where match ( 'run' );
+show meta;
+select * from rt where match ( 'run' ) option expand_keywords=0;
+show meta;
 
-<sphinxql>select * from exp_on where match ( 'run' )</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>select * from exp_on where match ( 'run' ) option expand_keywords=0</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>select * from exp_off where match ( 'run' )</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>select * from exp_off where match ( 'run' ) option expand_keywords=1</sphinxql>
-<sphinxql>show meta</sphinxql>
+select * from exp_on where match ( 'run' );
+show meta;
+select * from exp_on where match ( 'run' ) option expand_keywords=0;
+show meta;
+select * from exp_off where match ( 'run' );
+show meta;
+select * from exp_off where match ( 'run' ) option expand_keywords=1;
+show meta;
 
-<sphinxql>select * from dist_on where match ( 'run' )</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>select * from dist_on where match ( 'run' ) option expand_keywords=0</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>select * from dist_off where match ( 'run' )</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>select * from dist_off where match ( 'run' ) option expand_keywords=1</sphinxql>
-<sphinxql>show meta</sphinxql>
+select * from dist_on where match ( 'run' );
+show meta;
+select * from dist_on where match ( 'run' ) option expand_keywords=0;
+show meta;
+select * from dist_off where match ( 'run' );
+show meta;
+select * from dist_off where match ( 'run' ) option expand_keywords=1;
+show meta;
 
 <!-- new option morphology none -->
-<sphinxql>select * from exp_1 where match ( 'runs' ) order by id asc option morphology = none</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>select * from dist_1 where match ( 'runs' ) order by id asc option morphology = none</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>select * from dist_1 where match ( 'runs' ) order by id asc</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>select * from dist_1 where match ( 'runs' ) order by id asc option expand_keywords=1</sphinxql>
-<sphinxql>show meta</sphinxql>
+select * from exp_1 where match ( 'runs' ) order by id asc option morphology = none;
+show meta;
+select * from dist_1 where match ( 'runs' ) order by id asc option morphology = none;
+show meta;
+select * from dist_1 where match ( 'runs' ) order by id asc;
+show meta;
+select * from dist_1 where match ( 'runs' ) order by id asc option expand_keywords=1;
+show meta;
 
-</sphqueries>
+</sphinxql></queries>
 
 <db_create>
 create table test_table

@@ -49,10 +49,10 @@ CREATE TABLE test_table
 ( 6, 678, '{"a":[],"b":[]}', 'title' )
 </db_insert>
 
-<sphqueries>
-<sphinxql>select id, json_col j, all(x&gt;1 and x&lt;7 for x in j.a) a from test where match('title') order by id asc</sphinxql>
-<sphinxql>select id, json_col j, json_col.a jc, in(j.a,5,6) as a from test where match('title') order by id asc</sphinxql>
-<sphinxql>select id, json_col j, json_col.a jc, any(x=5 or x=6 for x in j.a) a from test where match('title') order by id asc</sphinxql>
-</sphqueries>
+<queries><sphinxql>
+select id, json_col j, all(x&gt;1 and x&lt;7 for x in j.a) a from test where match('title') order by id asc;
+select id, json_col j, json_col.a jc, in(j.a,5,6) as a from test where match('title') order by id asc;
+select id, json_col j, json_col.a jc, any(x=5 or x=6 for x in j.a) a from test where match('title') order by id asc;
+</sphinxql></queries>
 
 </test>

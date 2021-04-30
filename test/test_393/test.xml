@@ -287,31 +287,30 @@ insert into test_table values
 ( 30, 'document 30', 'Solaria`s lower regions for the surface' )
 </db_insert>
 
-<sphqueries>
-<sphinxql>select * from dist</sphinxql>
-<sphinxql>select id,title from dist</sphinxql>
-<sphinxql>select id,body from dist</sphinxql>
+<queries><sphinxql>
+select * from dist;
+select id,title from dist;
+select id,body from dist;
 
 <!-- remote cases -->
-<sphinxql>select * from dist2</sphinxql>
-<sphinxql>select * from dist3</sphinxql>
-<sphinxql>select * from dist41</sphinxql>
-<sphinxql>select * from dist42</sphinxql>
+select * from dist2;
+select * from dist3;
+select * from dist41;
+select * from dist42;
 
-<sphinxql>select * from dist_complex1 order by id desc</sphinxql>
-<sphinxql>select * from dist_complex2 order by id desc</sphinxql>
-<sphinxql>select * from dist_complex3 order by id desc</sphinxql>
+select * from dist_complex1 order by id desc;
+select * from dist_complex2 order by id desc;
+select * from dist_complex3 order by id desc;
 
+select * from dist_complex1 order by id desc limit 0,10;
+select * from dist_complex1 order by id desc limit 10,10;
+select * from dist_complex2 order by id desc limit 0,10;
+select * from dist_complex2 order by id desc limit 10,10;
+select * from dist_complex3 order by id desc limit 0,10;
+select * from dist_complex3 order by id desc limit 10,10;
 
-<sphinxql>select * from dist_complex1 order by id desc limit 0,10 </sphinxql>
-<sphinxql>select * from dist_complex1 order by id desc limit 10,10</sphinxql>
-<sphinxql>select * from dist_complex2 order by id desc limit 0,10 </sphinxql>
-<sphinxql>select * from dist_complex2 order by id desc limit 10,10</sphinxql>
-<sphinxql>select * from dist_complex3 order by id desc limit 0,10 </sphinxql>
-<sphinxql>select * from dist_complex3 order by id desc limit 10,10</sphinxql>
+select title from dist_local;
 
-<sphinxql>select title from dist_local</sphinxql>
-
-</sphqueries>
+</sphinxql></queries>
 
 </test>

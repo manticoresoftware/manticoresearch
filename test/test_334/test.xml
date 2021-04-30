@@ -175,7 +175,7 @@ INSERT INTO `test_group2` VALUES
 ( 30, 3, 4, 'test')
 </db_insert>
 
-<httpqueries>
+<queries>
 <!-- simple match query -->
 <query endpoint="json/search">{ "index": "test1", "query": { "match": { "content": "first" } } } }</query>
 <query endpoint="json/search">{ "index": "test1", "query": { "match": { "content,title": "1st second" } } } }</query>
@@ -324,12 +324,10 @@ INSERT INTO `test_group2` VALUES
 <!-- regression stored field missed at facet -->
 <query endpoint="json/search">{ "index": "dist_gr2", "aggs":{ "gr_small": { "terms": { "field": "gid" } }, "gr_tag": { "terms": { "field": "tag" } }} }</query>
 
-</httpqueries>
-
-<sphqueries>
+<sphinxql>
 <!-- regression stored field missed at facet -->
-<sphinxql>select * from test_gr1 facet gid facet tag;</sphinxql>
-<sphinxql>select * from dist_gr1 facet gid facet tag;</sphinxql>
-<sphinxql>select * from dist_gr2 facet gid facet tag;</sphinxql>
-</sphqueries>
+select * from test_gr1 facet gid facet tag;;
+select * from dist_gr1 facet gid facet tag;;
+select * from dist_gr2 facet gid facet tag;;
+</sphinxql></queries>
 </test>

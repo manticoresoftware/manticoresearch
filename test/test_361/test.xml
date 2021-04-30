@@ -100,50 +100,49 @@ INSERT INTO j_arrays ( id, gid, j ) VALUES
 	( 456, 2, '{"a":["4","5","6","2"], "t":["t4", "t5", "t6"]}' )
 </db_insert>
 
-<sphqueries>
+<queries><sphinxql>
 <!-- IN for plain indexes -->
-<sphinxql>select * from test</sphinxql>
-<sphinxql>select * from test where j.a IN (5,100)</sphinxql>
-<sphinxql>select *, IN(j.b, 100, 134) as cnd from test where cnd&lt;&gt;0</sphinxql>
-<sphinxql>select *, j.b IN(100, 134) as cnd from test where cnd&lt;&gt;0</sphinxql>
+select * from test;
+select * from test where j.a IN (5,100);
+select *, IN(j.b, 100, 134) as cnd from test where cnd&lt;&gt;0;
+select *, j.b IN(100, 134) as cnd from test where cnd&lt;&gt;0;
 
 <!-- IN for distributed indexes -->
-<sphinxql>select * from dist where j.a IN (5,100)</sphinxql>
-<sphinxql>select *, IN(j.b, 100, 134) as cnd from dist where cnd&lt;&gt;0</sphinxql>
-<sphinxql>select *, j.b IN(100, 134) as cnd from dist where cnd&lt;&gt;0</sphinxql>
+select * from dist where j.a IN (5,100);
+select *, IN(j.b, 100, 134) as cnd from dist where cnd&lt;&gt;0;
+select *, j.b IN(100, 134) as cnd from dist where cnd&lt;&gt;0;
 
 <!-- IN for PQ indexes -->
-<sphinxql>INSERT INTO pq (query, filters) VALUES ('', 'j.a IN (5, 100)')</sphinxql>
-<sphinxql>INSERT INTO pq (query, filters) VALUES ('', 'IN (j.a, 5, 100)')</sphinxql>
-<sphinxql>INSERT INTO pq (query, filters) VALUES ('', 'j.a IN (5, 100) and CRC32(\'test\')')</sphinxql>
-<sphinxql>INSERT INTO pq (query, filters) VALUES ('', 'IN (j.a, 5, 100) and CRC32(\'test\')')</sphinxql>
-<sphinxql>INSERT INTO pq (query, filters) VALUES ('', 'j.a IN (5, 100) or IN (j.b, 134, 200)')</sphinxql>
-<sphinxql>INSERT INTO pq (query, filters) VALUES ('', 'IN (j.a, 5, 100) or j.b IN (134, 200)')</sphinxql>
+INSERT INTO pq (query, filters) VALUES ('', 'j.a IN (5, 100)');
+INSERT INTO pq (query, filters) VALUES ('', 'IN (j.a, 5, 100)');
+INSERT INTO pq (query, filters) VALUES ('', 'j.a IN (5, 100) and CRC32(\'test\')');
+INSERT INTO pq (query, filters) VALUES ('', 'IN (j.a, 5, 100) and CRC32(\'test\')');
+INSERT INTO pq (query, filters) VALUES ('', 'j.a IN (5, 100) or IN (j.b, 134, 200)');
+INSERT INTO pq (query, filters) VALUES ('', 'IN (j.a, 5, 100) or j.b IN (134, 200)');
 
-<sphinxql>CALL PQ ('pq', ('{"j":{"a":5, "b":123}}', '{"j":{"a":101, "b":134}}'), 1 as docs, 1 as query)</sphinxql>
+CALL PQ ('pq', ('{"j":{"a":5, "b":123}}', '{"j":{"a":101, "b":134}}'), 1 as docs, 1 as query);
 
 <!-- crash on IN for plain indexes -->
-<sphinxql>select *, IN (missed.a,5,100) from test</sphinxql>
+select *, IN (missed.a,5,100) from test;
 
 <!-- crash on IN with large values -->
-<sphinxql>INSERT INTO pq_in (query, filters) VALUES ('', '(j.a=5 OR (j.a=6 AND NOT IN(j.b, 1220431865,6663093570)))')</sphinxql>
-<sphinxql>CALL PQ ('pq_in', ('{"j":{"a":5, "b":123}}', '{"j":{"a":6, "b":134}}'), 1 as docs, 1 as query)</sphinxql>
-<sphinxql>select *, in(j.a,1220431865,6663093570) as p from arrays</sphinxql>
+INSERT INTO pq_in (query, filters) VALUES ('', '(j.a=5 OR (j.a=6 AND NOT IN(j.b, 1220431865,6663093570)))');
+CALL PQ ('pq_in', ('{"j":{"a":5, "b":123}}', '{"j":{"a":6, "b":134}}'), 1 as docs, 1 as query);
+select *, in(j.a,1220431865,6663093570) as p from arrays;
 
 <!-- JSON expression -->
-<sphinxql>INSERT INTO pq_expr (query, filters) VALUES ('', 'abs(j.a)=22')</sphinxql>
-<sphinxql>INSERT INTO pq_expr (query, filters) VALUES ('', 'abs(j.a)=12')</sphinxql>
-<sphinxql>CALL PQ ('pq_expr', ('{"j":{"a":-12, "b":123}}', '{"j":{"a":22, "b":134}}'), 1 as docs, 1 as query)</sphinxql>
+INSERT INTO pq_expr (query, filters) VALUES ('', 'abs(j.a)=22');
+INSERT INTO pq_expr (query, filters) VALUES ('', 'abs(j.a)=12');
+CALL PQ ('pq_expr', ('{"j":{"a":-12, "b":123}}', '{"j":{"a":22, "b":134}}'), 1 as docs, 1 as query);
 
-<sphinxql>INSERT INTO pq_expr (query, filters) VALUES ('', 'GEODIST(j.lat, j.lon,0.937717,-0.0798578, {in=radians, out=m} )&lt;100000')</sphinxql>
-<sphinxql>CALL PQ ('pq_expr', ('{"j":{"lon":-0.0798578, "lat":0.937717}}', '{"j":{"lon":-0.0799989, "lat":0.891975}}', '{"j":{"some":"thing"}}', '{"j":{"lon":-0.0721455, "lat":0.926761}}'), 1 as docs, 1 as query)</sphinxql>
+INSERT INTO pq_expr (query, filters) VALUES ('', 'GEODIST(j.lat, j.lon,0.937717,-0.0798578, {in=radians, out=m} )&lt;100000');
+CALL PQ ('pq_expr', ('{"j":{"lon":-0.0798578, "lat":0.937717}}', '{"j":{"lon":-0.0799989, "lat":0.891975}}', '{"j":{"some":"thing"}}', '{"j":{"lon":-0.0721455, "lat":0.926761}}'), 1 as docs, 1 as query);
 
-<sphinxql>INSERT INTO pq_expr (query, filters) VALUES ('', 'CONTAINS(POLY2D(j.poly), 2, 3)')</sphinxql>
-<sphinxql>CALL PQ ('pq_expr', ('{"j":{"poly":"1,2,3,4,5,6.0"}}', '{"j":{"poly":"1,-2,1,2,-5,6"}}', '{"j":{"poly":"-1,2,12,4,5,6"}}'), 1 as docs, 1 as query)</sphinxql>
+INSERT INTO pq_expr (query, filters) VALUES ('', 'CONTAINS(POLY2D(j.poly), 2, 3)');
+CALL PQ ('pq_expr', ('{"j":{"poly":"1,2,3,4,5,6.0"}}', '{"j":{"poly":"1,-2,1,2,-5,6"}}', '{"j":{"poly":"-1,2,12,4,5,6"}}'), 1 as docs, 1 as query);
 
 <!-- regression crash at IN to JSON attribute -->
-<sphinxql>select * from test where j IN (5,100)</sphinxql>
+select * from test where j IN (5,100);
 
-
-</sphqueries>
+</sphinxql></queries>
 </test>

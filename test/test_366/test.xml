@@ -36,43 +36,43 @@ index rt_mem
 }
 </config>
 
-<sphqueries>
+<queries><sphinxql>
 
-<sphinxql>REPLACE INTO rt ( id, text ) VALUES ( 1, 'test me' ),( 2, 'test framework' ),( 3, 'our test framework' ),( 4, 'best test solution' )</sphinxql>
-<sphinxql>select id, weight() as w from rt where match ('test')</sphinxql>
-<sphinxql>select id, weight() as w from rt where match ('best')</sphinxql>
+REPLACE INTO rt ( id, text ) VALUES ( 1, 'test me' ),( 2, 'test framework' ),( 3, 'our test framework' ),( 4, 'best test solution' );
+select id, weight() as w from rt where match ('test');
+select id, weight() as w from rt where match ('best');
 
 <!-- 1st disk chunk -->
-<sphinxql>flush ramchunk rt</sphinxql>
-<sphinxql>select id, weight() as w from rt where match ('test')</sphinxql>
-<sphinxql>select id, weight() as w from rt where match ('best')</sphinxql>
+flush ramchunk rt;
+select id, weight() as w from rt where match ('test');
+select id, weight() as w from rt where match ('best');
 
 <!-- 2nd disk chunk -->
-<sphinxql>REPLACE INTO rt ( id, text ) VALUES ( 11, 'test me' ),( 12, 'test framework' ),( 13, 'our test framework' ),( 14, 'best test solution' )</sphinxql>
-<sphinxql>flush ramchunk rt</sphinxql>
-<sphinxql>select id, weight() as w from rt where match ('test')</sphinxql>
-<sphinxql>select id, weight() as w from rt where match ('best')</sphinxql>
+REPLACE INTO rt ( id, text ) VALUES ( 11, 'test me' ),( 12, 'test framework' ),( 13, 'our test framework' ),( 14, 'best test solution' );
+flush ramchunk rt;
+select id, weight() as w from rt where match ('test');
+select id, weight() as w from rt where match ('best');
 
 <!-- only disk chunk -->
-<sphinxql>optimize index rt option sync=1, cutoff=1</sphinxql>
-<sphinxql>select id, weight() as w from rt where match ('test')</sphinxql>
-<sphinxql>select id, weight() as w from rt where match ('best')</sphinxql>
+optimize index rt option sync=1, cutoff=1;
+select id, weight() as w from rt where match ('test');
+select id, weight() as w from rt where match ('best');
 
 <!-- regression flush of disk chunk on every commit -->
-<sphinxql>REPLACE INTO rt_mem ( id, text ) VALUES ( 11, 'test me' ),( 12, 'test framework' ),( 13, 'our test framework' ),( 14, 'best test solution' )</sphinxql>
-<sphinxql>SHOW INDEX rt_mem STATUS LIKE 'disk_chunks'</sphinxql>
+REPLACE INTO rt_mem ( id, text ) VALUES ( 11, 'test me' ),( 12, 'test framework' ),( 13, 'our test framework' ),( 14, 'best test solution' );
+SHOW INDEX rt_mem STATUS LIKE 'disk_chunks';
 
 <!-- regression insert passed after disk chunk flush -->
-<sphinxql>INSERT INTO rt ( id, text, idd ) VALUES ( 1, 'test all', 11 )</sphinxql>
-<sphinxql>flush ramchunk rt</sphinxql>
-<sphinxql>INSERT INTO rt ( id, text, idd ) VALUES ( 1, 'test all', 11 )</sphinxql>
-<sphinxql>INSERT INTO rt ( id, text, idd ) VALUES ( 5, 'test all', 11 )</sphinxql>
-<sphinxql>flush ramchunk rt</sphinxql>
-<sphinxql>INSERT INTO rt ( id, text, idd ) VALUES ( 6, 'test all', 11 )</sphinxql>
-<sphinxql>flush ramchunk rt</sphinxql>
-<sphinxql>INSERT INTO rt ( id, text, idd ) VALUES ( 1, 'test all', 11 )</sphinxql>
-<sphinxql>select id, idd from rt order by id asc</sphinxql>
+INSERT INTO rt ( id, text, idd ) VALUES ( 1, 'test all', 11 );
+flush ramchunk rt;
+INSERT INTO rt ( id, text, idd ) VALUES ( 1, 'test all', 11 );
+INSERT INTO rt ( id, text, idd ) VALUES ( 5, 'test all', 11 );
+flush ramchunk rt;
+INSERT INTO rt ( id, text, idd ) VALUES ( 6, 'test all', 11 );
+flush ramchunk rt;
+INSERT INTO rt ( id, text, idd ) VALUES ( 1, 'test all', 11 );
+select id, idd from rt order by id asc;
 
-</sphqueries>
+</sphinxql></queries>
 
 </test>

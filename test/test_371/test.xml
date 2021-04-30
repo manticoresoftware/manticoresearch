@@ -81,128 +81,127 @@ INSERT INTO json_src_table VALUES
 
 
 
-<sphqueries>
+<queries><sphinxql>
 
 <!-- substring_index()  -->
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', 0) as res from test_json</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', 1) as res from test_json</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', 2) as res from test_json</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', 5) as res from test_json</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', -1) as res from test_json</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', -2) as res from test_json</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', -5) as res from test_json</sphinxql>
+select id, substring_index('aaa.bbb.ccc.ddd', '.', 0) as res from test_json;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', 1) as res from test_json;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', 2) as res from test_json;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', 5) as res from test_json;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', -1) as res from test_json;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', -2) as res from test_json;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', -5) as res from test_json;
 
 <!-- using substring_index() in geodist function  -->
-<sphinxql>select id, j.coord, substring_index(j.coord, ' ', 1), j.lon, substring_index(j.coord, ' ', -1), j.lat from test_json</sphinxql>
-<sphinxql>select geodist(j.lat, j.lon, 0.93, -0.08 ) from test_json</sphinxql>
-<sphinxql>select geodist(substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1), 0.93, -0.08 ) from test_json</sphinxql>
-<sphinxql>select id, j.lat, j.lon, j.coord, geodist(substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1), j.lat, j.lon) as gd from test_json</sphinxql>
-<sphinxql>select id, j.lat, j.lon, j.coord, geodist(j.lat, j.lon, substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1)) as gd from test_json</sphinxql>
+select id, j.coord, substring_index(j.coord, ' ', 1), j.lon, substring_index(j.coord, ' ', -1), j.lat from test_json;
+select geodist(j.lat, j.lon, 0.93, -0.08 ) from test_json;
+select geodist(substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1), 0.93, -0.08 ) from test_json;
+select id, j.lat, j.lon, j.coord, geodist(substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1), j.lat, j.lon) as gd from test_json;
+select id, j.lat, j.lon, j.coord, geodist(j.lat, j.lon, substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1)) as gd from test_json;
 
 <!-- substring_index() check on not crash; result must be empty -->
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', '0') as res from test_json</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', '1') as res from test_json</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', '-1') as res from test_json</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', 'aaa') as res from test_json</sphinxql>
+select id, substring_index('aaa.bbb.ccc.ddd', '.', '0') as res from test_json;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', '1') as res from test_json;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', '-1') as res from test_json;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', 'aaa') as res from test_json;
 
 <!-- substring_index() from rt -->
-<sphinxql>
+
 INSERT INTO rt (id, gid, title, j) VALUES
 (1,2,'test one','{"name":"Alice","uid":123, "lon":-0.08, "lat":0.93, "coord":"-0.08 0.93", "pct":12.4, "sq":9, "poly":"1,2,3,4,5,6.0", "points":[1,2,3,4,5,6.0]}'),
 (2,3,'test two','{"name":"Bob","uid":234,"gid":12, "lon":-0.0799989, "lat":0.891975, "coord":"-0.079999 0.891975", "pct":-103.7, "sq":16, "poly":"1,-2,1,2,-5,6", "points":[1,-2,1,2,-5,6]}'),
-(3,4,'another doc','{"name":"Charlie","uid":345, "lon":-0.0721455, "lat":0.926761, "coord":"-0.072146 0.926761", "pct":4.1, "sq":225, "poly":"-1,2,12,4,5,6", "points":[-1,2,12,4,5,6]}')
-</sphinxql>
-<sphinxql>select gid, * from rt</sphinxql>
+(3,4,'another doc','{"name":"Charlie","uid":345, "lon":-0.0721455, "lat":0.926761, "coord":"-0.072146 0.926761", "pct":4.1, "sq":225, "poly":"-1,2,12,4,5,6", "points":[-1,2,12,4,5,6]}');
 
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', 0) as res from rt</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', 1) as res from rt</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', 2) as res from rt</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', 5) as res from rt</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', -1) as res from rt</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', -2) as res from rt</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', -5) as res from rt</sphinxql>
+select gid, * from rt;
 
-<sphinxql>select id, j.coord, substring_index(j.coord, ' ', 1), j.lon, substring_index(j.coord, ' ', -1), j.lat from rt</sphinxql>
-<sphinxql>select geodist(j.lat, j.lon, 0.93, -0.08 ) from rt</sphinxql>
-<sphinxql>select geodist(substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1), 0.93, -0.08 ) from rt</sphinxql>
-<sphinxql>select id, j.lat, j.lon, j.coord, geodist(substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1), j.lat, j.lon) as gd from rt</sphinxql>
-<sphinxql>select id, j.lat, j.lon, j.coord, geodist(j.lat, j.lon, substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1)) as gd from rt</sphinxql>
+select id, substring_index('aaa.bbb.ccc.ddd', '.', 0) as res from rt;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', 1) as res from rt;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', 2) as res from rt;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', 5) as res from rt;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', -1) as res from rt;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', -2) as res from rt;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', -5) as res from rt;
 
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', '0') as res from rt</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', '1') as res from rt</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', '-1') as res from rt</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', 'aaa') as res from rt</sphinxql>
+select id, j.coord, substring_index(j.coord, ' ', 1), j.lon, substring_index(j.coord, ' ', -1), j.lat from rt;
+select geodist(j.lat, j.lon, 0.93, -0.08 ) from rt;
+select geodist(substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1), 0.93, -0.08 ) from rt;
+select id, j.lat, j.lon, j.coord, geodist(substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1), j.lat, j.lon) as gd from rt;
+select id, j.lat, j.lon, j.coord, geodist(j.lat, j.lon, substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1)) as gd from rt;
+
+select id, substring_index('aaa.bbb.ccc.ddd', '.', '0') as res from rt;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', '1') as res from rt;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', '-1') as res from rt;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', 'aaa') as res from rt;
 
 <!-- substring_index() from test1_loc -->
-<sphinxql>select gid, * from test1_loc</sphinxql>
+select gid, * from test1_loc;
 
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', 0) as res from test1_loc</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', 1) as res from test1_loc</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', 2) as res from test1_loc</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', 5) as res from test1_loc</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', -1) as res from test1_loc</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', -2) as res from test1_loc</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', -5) as res from test1_loc</sphinxql>
+select id, substring_index('aaa.bbb.ccc.ddd', '.', 0) as res from test1_loc;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', 1) as res from test1_loc;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', 2) as res from test1_loc;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', 5) as res from test1_loc;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', -1) as res from test1_loc;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', -2) as res from test1_loc;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', -5) as res from test1_loc;
 
-<sphinxql>select id, j.coord, substring_index(j.coord, ' ', 1), j.lon, substring_index(j.coord, ' ', -1), j.lat from test1_loc</sphinxql>
-<sphinxql>select geodist(j.lat, j.lon, 0.93, -0.08 ) from test1_loc</sphinxql>
-<sphinxql>select geodist(substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1), 0.93, -0.08 ) from test1_loc</sphinxql>
-<sphinxql>select id, j.lat, j.lon, j.coord, geodist(substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1), j.lat, j.lon) as gd from test1_loc</sphinxql>
-<sphinxql>select id, j.lat, j.lon, j.coord, geodist(j.lat, j.lon, substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1)) as gd from test1_loc</sphinxql>
+select id, j.coord, substring_index(j.coord, ' ', 1), j.lon, substring_index(j.coord, ' ', -1), j.lat from test1_loc;
+select geodist(j.lat, j.lon, 0.93, -0.08 ) from test1_loc;
+select geodist(substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1), 0.93, -0.08 ) from test1_loc;
+select id, j.lat, j.lon, j.coord, geodist(substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1), j.lat, j.lon) as gd from test1_loc;
+select id, j.lat, j.lon, j.coord, geodist(j.lat, j.lon, substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1)) as gd from test1_loc;
 
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', '0') as res from test1_loc</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', '1') as res from test1_loc</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', '-1') as res from test1_loc</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', 'aaa') as res from test1_loc</sphinxql>
+select id, substring_index('aaa.bbb.ccc.ddd', '.', '0') as res from test1_loc;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', '1') as res from test1_loc;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', '-1') as res from test1_loc;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', 'aaa') as res from test1_loc;
 
 <!-- substring_index() from test1_dist -->
-<sphinxql>select gid, * from test1_dist</sphinxql>
+select gid, * from test1_dist;
 
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', 0) as res from test1_dist</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', 1) as res from test1_dist</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', 2) as res from test1_dist</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', 5) as res from test1_dist</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', -1) as res from test1_dist</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', -2) as res from test1_dist</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', -5) as res from test1_dist</sphinxql>
+select id, substring_index('aaa.bbb.ccc.ddd', '.', 0) as res from test1_dist;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', 1) as res from test1_dist;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', 2) as res from test1_dist;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', 5) as res from test1_dist;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', -1) as res from test1_dist;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', -2) as res from test1_dist;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', -5) as res from test1_dist;
 
-<sphinxql>select id, j.coord, substring_index(j.coord, ' ', 1), j.lon, substring_index(j.coord, ' ', -1), j.lat from test1_dist</sphinxql>
-<sphinxql>select geodist(j.lat, j.lon, 0.93, -0.08 ) from test1_dist</sphinxql>
-<sphinxql>select geodist(substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1), 0.93, -0.08 ) from test1_dist</sphinxql>
-<sphinxql>select id, j.lat, j.lon, j.coord, geodist(substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1), j.lat, j.lon) as gd from test1_dist</sphinxql>
-<sphinxql>select id, j.lat, j.lon, j.coord, geodist(j.lat, j.lon, substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1)) as gd from test1_dist</sphinxql>
+select id, j.coord, substring_index(j.coord, ' ', 1), j.lon, substring_index(j.coord, ' ', -1), j.lat from test1_dist;
+select geodist(j.lat, j.lon, 0.93, -0.08 ) from test1_dist;
+select geodist(substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1), 0.93, -0.08 ) from test1_dist;
+select id, j.lat, j.lon, j.coord, geodist(substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1), j.lat, j.lon) as gd from test1_dist;
+select id, j.lat, j.lon, j.coord, geodist(j.lat, j.lon, substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1)) as gd from test1_dist;
 
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', '0') as res from test1_dist</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', '1') as res from test1_dist</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', '-1') as res from test1_dist</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', 'aaa') as res from test1_dist</sphinxql>
+select id, substring_index('aaa.bbb.ccc.ddd', '.', '0') as res from test1_dist;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', '1') as res from test1_dist;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', '-1') as res from test1_dist;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', 'aaa') as res from test1_dist;
 
 <!-- substring_index() from test2_dist -->
-<sphinxql>select gid, * from test2_dist</sphinxql>
+select gid, * from test2_dist;
 
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', 0) as res from test2_dist</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', 1) as res from test2_dist</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', 2) as res from test2_dist</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', 5) as res from test2_dist</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', -1) as res from test2_dist</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', -2) as res from test2_dist</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', -5) as res from test2_dist</sphinxql>
+select id, substring_index('aaa.bbb.ccc.ddd', '.', 0) as res from test2_dist;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', 1) as res from test2_dist;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', 2) as res from test2_dist;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', 5) as res from test2_dist;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', -1) as res from test2_dist;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', -2) as res from test2_dist;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', -5) as res from test2_dist;
 
-<sphinxql>select id, j.coord, substring_index(j.coord, ' ', 1), j.lon, substring_index(j.coord, ' ', -1), j.lat from test2_dist</sphinxql>
-<sphinxql>select geodist(j.lat, j.lon, 0.93, -0.08 ) from test2_dist</sphinxql>
-<sphinxql>select geodist(substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1), 0.93, -0.08 ) from test2_dist</sphinxql>
-<sphinxql>select id, j.lat, j.lon, j.coord, geodist(substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1), j.lat, j.lon) as gd from test2_dist</sphinxql>
-<sphinxql>select id, j.lat, j.lon, j.coord, geodist(j.lat, j.lon, substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1)) as gd from test2_dist</sphinxql>
+select id, j.coord, substring_index(j.coord, ' ', 1), j.lon, substring_index(j.coord, ' ', -1), j.lat from test2_dist;
+select geodist(j.lat, j.lon, 0.93, -0.08 ) from test2_dist;
+select geodist(substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1), 0.93, -0.08 ) from test2_dist;
+select id, j.lat, j.lon, j.coord, geodist(substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1), j.lat, j.lon) as gd from test2_dist;
+select id, j.lat, j.lon, j.coord, geodist(j.lat, j.lon, substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1)) as gd from test2_dist;
 
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', '0') as res from test2_dist</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', '1') as res from test2_dist</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', '-1') as res from test2_dist</sphinxql>
-<sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', 'aaa') as res from test2_dist</sphinxql>
+select id, substring_index('aaa.bbb.ccc.ddd', '.', '0') as res from test2_dist;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', '1') as res from test2_dist;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', '-1') as res from test2_dist;
+select id, substring_index('aaa.bbb.ccc.ddd', '.', 'aaa') as res from test2_dist;
 
 <!-- regression substring_index from missed json field -->
-<sphinxql>select id, j.lat, j.lon, j.coord, geodist(substring_index(j.coord1,' ',-1), substring_index(j.coord2,' ',1), j.lat, j.lon) as gd, substring_index(j.coord2,' ',1) as t from test1_loc</sphinxql>
+select id, j.lat, j.lon, j.coord, geodist(substring_index(j.coord1,' ',-1), substring_index(j.coord2,' ',1), j.lat, j.lon) as gd, substring_index(j.coord2,' ',1) as t from test1_loc;
 
-</sphqueries>
-
+</sphinxql></queries>
 
 </test>

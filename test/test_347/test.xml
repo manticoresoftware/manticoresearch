@@ -104,13 +104,13 @@ create table more_text
 <db_insert>insert into more_text values (7, 'test1007 tag1'), (7, 'test2007 tag2');</db_insert>
 <db_insert>insert into more_text values (8, 'test1008 tag1'), (8, 'test2008 tag2');</db_insert>
 
-<sphqueries>
-<sphinxql>select * from test1 where match ('test1001 | test2004') order by id asc</sphinxql>
-<sphinxql>select * from test2 where match ('test2007 | test1008') order by id asc</sphinxql>
-<sphinxql>select * from test11 where match ('test1001 | test1003') order by id asc</sphinxql>
-<sphinxql>select * from test21 where match ('test1005 | test2008') order by id asc</sphinxql>
-<sphinxql>select * from test1, test2 where match ('tag1') order by id asc</sphinxql>
-<sphinxql>select * from test11, test21 where match ('tag2') order by id asc</sphinxql>
-</sphqueries>
+<queries><sphinxql>
+select * from test1 where match ('test1001 | test2004') order by id asc;
+select * from test2 where match ('test2007 | test1008') order by id asc;
+select * from test11 where match ('test1001 | test1003') order by id asc;
+select * from test21 where match ('test1005 | test2008') order by id asc;
+select * from test1, test2 where match ('tag1') order by id asc;
+select * from test11, test21 where match ('tag2') order by id asc;
+</sphinxql></queries>
 
 </test>

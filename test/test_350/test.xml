@@ -51,18 +51,18 @@ CREATE TABLE test_table
 </db_insert>
 
 
-<sphqueries>
+<queries><sphinxql>
 
 <!-- regression: warning from utf8 term -->
-<sphinxql>select * from test where match ('как*')</sphinxql>
-<sphinxql>show warnings</sphinxql>
-<sphinxql>select * from test where match ('какт*')</sphinxql>
-<sphinxql>show warnings</sphinxql>
-<sphinxql>select * from test where match ('*акт*')</sphinxql>
-<sphinxql>show warnings</sphinxql>
-<sphinxql>select * from test where match ('*акто*')</sphinxql>
-<sphinxql>show warnings</sphinxql>
+select * from test where match ('как*');
+show warnings;
+select * from test where match ('какт*');
+show warnings;
+select * from test where match ('*акт*');
+show warnings;
+select * from test where match ('*акто*');
+show warnings;
 
-</sphqueries>
+</sphinxql></queries>
 
 </test>

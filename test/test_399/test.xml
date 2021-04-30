@@ -75,8 +75,8 @@ INSERT INTO `test_table1` VALUES
 ( 4, 104, 114 )
 </DB_Insert>
 
-<sphqueries>
-<sphinxql>SELECT * FROM test_idx</sphinxql>
-</sphqueries>
+<queries><sphinxql>
+SELECT * FROM test_idx;
+</sphinxql></queries>
 
 </Test>

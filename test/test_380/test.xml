@@ -32,47 +32,47 @@ index test2
 
 </config>
 
-<sphqueries>
-	<sphinxql>insert into test (id,query,tags) values (1,'content', 't 1')</sphinxql>
-	<sphinxql>insert into test1 (id,query,tags) values (1,'content', 't 1')</sphinxql>
-	<sphinxql>select * from test</sphinxql>
-	<sphinxql>select * from test1</sphinxql>
-	<sphinxql>set autocommit=0</sphinxql>
-	<sphinxql>insert into test (id,query,tags) values (2,'content', 't 2')</sphinxql>
-	<sphinxql>insert into test1 (id,query,tags) values (2,'content', 't 2')</sphinxql>
-	<sphinxql>delete from test1 where id in (1)</sphinxql>
-	<sphinxql>delete from test where id in (1)</sphinxql>
-	<sphinxql>set autocommit=1</sphinxql>
-	<sphinxql>select * from test</sphinxql>
-	<sphinxql>select * from test1</sphinxql>
-	<sphinxql>begin</sphinxql>
-	<sphinxql>insert into test1 (id,query,tags) values (2,'content', 't 2')</sphinxql>
-	<sphinxql>rollback</sphinxql>
-	<sphinxql>select * from test1</sphinxql>
-	<sphinxql>start transaction</sphinxql>
-	<sphinxql>insert into test1 (id,query,tags) values (2,'content', 't 2')</sphinxql>
-	<sphinxql>commit</sphinxql>
-	<sphinxql>select * from test1</sphinxql>
-	<sphinxql>set autocommit=0</sphinxql>
-	<sphinxql>insert into test (id,query,tags) values (3,'content', 't 3')</sphinxql>
-	<sphinxql>select * from test</sphinxql>
-	<sphinxql>set autocommit=1</sphinxql>
-	<sphinxql>select * from test</sphinxql>
-	<sphinxql>select * from test1</sphinxql>
-	
-	<sphinxql>insert into test2 (id,query,tags) values (1, 'test', 't 11')</sphinxql>
-	<sphinxql>insert into test2 (id,query,tags) values (2, 'test of my things going well', 't 22'), (1, 'test', 't 12')</sphinxql>
-	<sphinxql>insert into test2 (id,query,tags) values (3, 'test', 't 22'), (3, 'test', 't 12'), (3, 'test', 't 23')</sphinxql>
-	<sphinxql>select * from test2</sphinxql>
-	
-	<sphinxql>set autocommit=0</sphinxql>
-	<sphinxql>insert into test2 (id,query,tags) values (5, 'test', 't 5'), (6, 'test', 't 6'), (7, 'test', 't 7')</sphinxql>
-	<sphinxql>commit</sphinxql>
-	<sphinxql>select * from test2</sphinxql>
-	<sphinxql>insert into test2 (id,query,tags) values (8, 'test', 't 8'), (9, 'test', 't 9')</sphinxql>
-	<sphinxql>delete from test2 where tags any ( '11' )</sphinxql>
-	<sphinxql>delete from test2 where id in (5,7)</sphinxql>
-	<sphinxql>commit</sphinxql>
-	<sphinxql>select * from test2</sphinxql>
-</sphqueries>	
+<queries><sphinxql>
+insert into test (id,query,tags) values (1,'content', 't 1');
+insert into test1 (id,query,tags) values (1,'content', 't 1');
+select * from test;
+select * from test1;
+set autocommit=0;
+insert into test (id,query,tags) values (2,'content', 't 2');
+insert into test1 (id,query,tags) values (2,'content', 't 2');
+delete from test1 where id in (1);
+delete from test where id in (1);
+set autocommit=1;
+select * from test;
+select * from test1;
+begin;
+insert into test1 (id,query,tags) values (2,'content', 't 2');
+rollback;
+select * from test1;
+start transaction;
+insert into test1 (id,query,tags) values (2,'content', 't 2');
+commit;
+select * from test1;
+set autocommit=0;
+insert into test (id,query,tags) values (3,'content', 't 3');
+select * from test;
+set autocommit=1;
+select * from test;
+select * from test1;
+
+insert into test2 (id,query,tags) values (1, 'test', 't 11');
+insert into test2 (id,query,tags) values (2, 'test of my things going well', 't 22'), (1, 'test', 't 12');
+insert into test2 (id,query,tags) values (3, 'test', 't 22'), (3, 'test', 't 12'), (3, 'test', 't 23');
+select * from test2;
+
+set autocommit=0;
+insert into test2 (id,query,tags) values (5, 'test', 't 5'), (6, 'test', 't 6'), (7, 'test', 't 7');
+commit;
+select * from test2;
+insert into test2 (id,query,tags) values (8, 'test', 't 8'), (9, 'test', 't 9');
+delete from test2 where tags any ( '11' );
+delete from test2 where id in (5,7);
+commit;
+select * from test2;
+</sphinxql></queries>	
 </test>

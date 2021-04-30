@@ -21,12 +21,12 @@ index pq
 }
 </config>
 
-<sphqueries>
-<sphinxql>INSERT INTO pq (query) VALUES ('me')</sphinxql>
-<sphinxql>INSERT INTO pq (query) VALUES ('we')</sphinxql>
-<sphinxql>SELECT * FROM cluster_test:pq</sphinxql>
-<sphinxql>CALL PQ ('cluster_test:pq', 'me', 1 as docs, 1 as query, 0 as docs_json)</sphinxql>
-<sphinxql>DESC cluster_test:pq</sphinxql>
-<sphinxql>DESC cluster_test:pq TABLE</sphinxql>
-</sphqueries>
+<queries><sphinxql>
+INSERT INTO pq (query) VALUES ('me');
+INSERT INTO pq (query) VALUES ('we');
+SELECT * FROM cluster_test:pq;
+CALL PQ ('cluster_test:pq', 'me', 1 as docs, 1 as query, 0 as docs_json);
+DESC cluster_test:pq;
+DESC cluster_test:pq TABLE;
+</sphinxql></queries>
 </test>

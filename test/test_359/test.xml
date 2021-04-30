@@ -50,58 +50,58 @@ index pq2
 
 </config>
 
-<sphqueries>
-<sphinxql>TRUNCATE TABLE pq</sphinxql>
-<sphinxql>INSERT INTO pq (query, filters) VALUES ('', 'json_data.text.status.state=0')</sphinxql>
-<sphinxql>INSERT INTO pq (query, filters) VALUES ('', 'json_data.text.status.favorited=\'false\'')</sphinxql>
-<sphinxql>CALL PQ ('pq', ('{"id":21,"json_data":{"text":{"status":{"state":0}}}}'), 1 as docs, 1 as query, 'id' as docs_id)</sphinxql>
+<queries><sphinxql>
+TRUNCATE TABLE pq;
+INSERT INTO pq (query, filters) VALUES ('', 'json_data.text.status.state=0');
+INSERT INTO pq (query, filters) VALUES ('', 'json_data.text.status.favorited=\'false\'');
+CALL PQ ('pq', ('{"id":21,"json_data":{"text":{"status":{"state":0}}}}'), 1 as docs, 1 as query, 'id' as docs_id);
 
 <!-- docs missed due to zero counter from not matched stored query -->
-<sphinxql>TRUNCATE TABLE pq</sphinxql>
-<sphinxql>INSERT INTO pq (query, filters) VALUES ('', 'json_data.text.status.favorited=\'false\'')</sphinxql>
-<sphinxql>INSERT INTO pq (query, filters) VALUES ('', 'json_data.text.status.state=0')</sphinxql>
-<sphinxql>CALL PQ ('pq', ('{"id":21,"json_data":{"text":{"status":{"state":0}}}}'), 1 as docs, 1 as query, 'id' as docs_id)</sphinxql>
+TRUNCATE TABLE pq;
+INSERT INTO pq (query, filters) VALUES ('', 'json_data.text.status.favorited=\'false\'');
+INSERT INTO pq (query, filters) VALUES ('', 'json_data.text.status.state=0');
+CALL PQ ('pq', ('{"id":21,"json_data":{"text":{"status":{"state":0}}}}'), 1 as docs, 1 as query, 'id' as docs_id);
 
-<sphinxql>TRUNCATE TABLE pq</sphinxql>
-<sphinxql>INSERT INTO pq (query, filters) VALUES ('', 'json_data.text.status.favorited=\'false\'')</sphinxql>
-<sphinxql>INSERT INTO pq (query, filters) VALUES ('', 'json_data.text.status.staff=\'got some\'')</sphinxql>
-<sphinxql>INSERT INTO pq (query, filters) VALUES ('', 'json_data.text.status.state=0')</sphinxql>
-<sphinxql>CALL PQ ('pq', ('{"id":21,"json_data":{"text":{"status":{"state":0}}}}'), 1 as docs, 1 as query, 'id' as docs_id)</sphinxql>
+TRUNCATE TABLE pq;
+INSERT INTO pq (query, filters) VALUES ('', 'json_data.text.status.favorited=\'false\'');
+INSERT INTO pq (query, filters) VALUES ('', 'json_data.text.status.staff=\'got some\'');
+INSERT INTO pq (query, filters) VALUES ('', 'json_data.text.status.state=0');
+CALL PQ ('pq', ('{"id":21,"json_data":{"text":{"status":{"state":0}}}}'), 1 as docs, 1 as query, 'id' as docs_id);
 
 <!-- same for full-text path -->
-<sphinxql>TRUNCATE TABLE pq</sphinxql>
-<sphinxql>INSERT INTO pq (query, filters) VALUES ('test', 'json_data.text.status.state=0')</sphinxql>
-<sphinxql>INSERT INTO pq (query, filters) VALUES ('test', 'json_data.text.status.favorited=\'false\'')</sphinxql>
-<sphinxql>CALL PQ ('pq', ('{"id":21,"json_data":{"text":{"status":{"state":0}}}, "title":"test me"}'), 1 as docs, 1 as query, 'id' as docs_id)</sphinxql>
+TRUNCATE TABLE pq;
+INSERT INTO pq (query, filters) VALUES ('test', 'json_data.text.status.state=0');
+INSERT INTO pq (query, filters) VALUES ('test', 'json_data.text.status.favorited=\'false\'');
+CALL PQ ('pq', ('{"id":21,"json_data":{"text":{"status":{"state":0}}}, "title":"test me"}'), 1 as docs, 1 as query, 'id' as docs_id);
 
-<sphinxql>TRUNCATE TABLE pq</sphinxql>
-<sphinxql>INSERT INTO pq (query, filters) VALUES ('test', 'json_data.text.status.favorited=\'false\'')</sphinxql>
-<sphinxql>INSERT INTO pq (query, filters) VALUES ('test', 'json_data.text.status.state=0')</sphinxql>
-<sphinxql>CALL PQ ('pq', ('{"id":21,"json_data":{"text":{"status":{"state":0}}}, "title":"test me"}'), 1 as docs, 1 as query, 'id' as docs_id)</sphinxql>
+TRUNCATE TABLE pq;
+INSERT INTO pq (query, filters) VALUES ('test', 'json_data.text.status.favorited=\'false\'');
+INSERT INTO pq (query, filters) VALUES ('test', 'json_data.text.status.state=0');
+CALL PQ ('pq', ('{"id":21,"json_data":{"text":{"status":{"state":0}}}, "title":"test me"}'), 1 as docs, 1 as query, 'id' as docs_id);
 
-<sphinxql>TRUNCATE TABLE pq</sphinxql>
-<sphinxql>INSERT INTO pq (query, filters) VALUES ('test', 'json_data.text.status.favorited=\'false\'')</sphinxql>
-<sphinxql>INSERT INTO pq (query, filters) VALUES ('test', 'json_data.text.status.staff=\'got some\'')</sphinxql>
-<sphinxql>INSERT INTO pq (query, filters) VALUES ('test', 'json_data.text.status.state=0')</sphinxql>
-<sphinxql>CALL PQ ('pq', ('{"id":21,"json_data":{"text":{"status":{"state":0}}}, "title":"test me"}'), 1 as docs, 1 as query, 'id' as docs_id)</sphinxql>
+TRUNCATE TABLE pq;
+INSERT INTO pq (query, filters) VALUES ('test', 'json_data.text.status.favorited=\'false\'');
+INSERT INTO pq (query, filters) VALUES ('test', 'json_data.text.status.staff=\'got some\'');
+INSERT INTO pq (query, filters) VALUES ('test', 'json_data.text.status.state=0');
+CALL PQ ('pq', ('{"id":21,"json_data":{"text":{"status":{"state":0}}}, "title":"test me"}'), 1 as docs, 1 as query, 'id' as docs_id);
 
 <!-- regression - stripper alter field -->
-<sphinxql>INSERT INTO pq1 (query) VALUES ('@title c')</sphinxql>
-<sphinxql>CALL PQ('pq1', ('{\"title\":\"a\",\"content\":\"c\"}'),1 as docs,1 as query)</sphinxql>
-<sphinxql>CALL PQ('pq1', ('{\"content\":\"c\"}'),1 as docs,1 as query)</sphinxql>
-<sphinxql>CALL PQ('pq1', ('{\"title\":\"c\"}'),1 as docs,1 as query)</sphinxql>
+INSERT INTO pq1 (query) VALUES ('@title c');
+CALL PQ('pq1', ('{\"title\":\"a\",\"content\":\"c\"}'),1 as docs,1 as query);
+CALL PQ('pq1', ('{\"content\":\"c\"}'),1 as docs,1 as query);
+CALL PQ('pq1', ('{\"title\":\"c\"}'),1 as docs,1 as query);
 
 <!-- regression - SENTENCE did not work at PQ -->
-<sphinxql>INSERT INTO pq2 (query) VALUES ('abc SENTENCE def')</sphinxql>
+INSERT INTO pq2 (query) VALUES ('abc SENTENCE def');
 
-<sphinxql>CALL PQ('pq2', 'The abc? Def or not.', 0 as docs_json, 1 as query, 1 as docs)</sphinxql>
-<sphinxql>CALL PQ('pq2', 'The abc or def is not.', 0 as docs_json, 1 as query, 1 as docs)</sphinxql>
-<sphinxql>CALL PQ('pq2', 'abc? Def', 0 as docs_json, 1 as query, 1 as docs)</sphinxql>
+CALL PQ('pq2', 'The abc? Def or not.', 0 as docs_json, 1 as query, 1 as docs);
+CALL PQ('pq2', 'The abc or def is not.', 0 as docs_json, 1 as query, 1 as docs);
+CALL PQ('pq2', 'abc? Def', 0 as docs_json, 1 as query, 1 as docs);
 
 <!-- regression - daemon hung on recursive JSON attribute encoded as string -->
-<sphinxql>CALL PQ ('pq', ('{"id":21,"json_data":\"{\\"text\\":0}\"}'), 1 as docs, 1 as query, 'id' as docs_id)</sphinxql>
-<sphinxql>SHOW WARNINGS</sphinxql>
+CALL PQ ('pq', ('{"id":21,"json_data":\"{\\"text\\":0}\"}'), 1 as docs, 1 as query, 'id' as docs_id);
+SHOW WARNINGS;
 
-</sphqueries>
+</sphinxql></queries>
 
 </test>

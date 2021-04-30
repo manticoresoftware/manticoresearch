@@ -165,35 +165,35 @@ index artdist
 }
 </config>
 
-<sphqueries>
-<sphinxql>insert into rt1 values(1,'find me',1,1,1,1,1,1,1,1,1)</sphinxql>   
-<sphinxql>insert into rt2 values(2,'find me',1,1,1,1,1,1,1,1,1)</sphinxql>   
-<sphinxql>insert into rt3 values(3,'find me',1,1,1,1,1,1,1,1,1)</sphinxql>   
-<sphinxql>insert into rt4 values(4,'find me',1,1,1,1,1,1,1,1,1)</sphinxql>   
-<sphinxql>insert into rt5 values(5,'find me',1,1,1,1,1,1,1,1,1)</sphinxql>   
-<sphinxql>insert into rt6 values(6,'find me',1,1,1,1,1,1,1,1,1)</sphinxql>   
-<sphinxql>insert into rt7 values(7,'find me',1,1,1,1,1,1,1,1,1)</sphinxql>   
-<sphinxql>insert into rt8 values(8,'find me',1,1,1,1,1,1,1,1,1)</sphinxql>   
-<sphinxql>insert into rt9 values(9,'find me',1,1,1,1,1,1,1,1,1)</sphinxql>   
-<sphinxql>insert into art1 values(1,'find me',1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32)</sphinxql>   
-<sphinxql>insert into art2 values(2,'find me',1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32)</sphinxql>   
-<sphinxql>insert into art3 values(3,'find me',1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32)</sphinxql>   
-<sphinxql>insert into art4 values(4,'find me',1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32)</sphinxql>   
-<sphinxql>insert into art5 values(5,'find me',1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32)</sphinxql>   
-<sphinxql>insert into art6 values(6,'find me',1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32)</sphinxql>   
-<sphinxql>insert into art7 values(7,'find me',1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32)</sphinxql>   
-<sphinxql>insert into art8 values(8,'find me',1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32)</sphinxql>   
-<sphinxql>insert into art9 values(9,'find me',1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32)</sphinxql> 
+<queries><sphinxql>
+insert into rt1 values(1,'find me',1,1,1,1,1,1,1,1,1);
+insert into rt2 values(2,'find me',1,1,1,1,1,1,1,1,1);
+insert into rt3 values(3,'find me',1,1,1,1,1,1,1,1,1);
+insert into rt4 values(4,'find me',1,1,1,1,1,1,1,1,1);
+insert into rt5 values(5,'find me',1,1,1,1,1,1,1,1,1);
+insert into rt6 values(6,'find me',1,1,1,1,1,1,1,1,1);
+insert into rt7 values(7,'find me',1,1,1,1,1,1,1,1,1);
+insert into rt8 values(8,'find me',1,1,1,1,1,1,1,1,1);
+insert into rt9 values(9,'find me',1,1,1,1,1,1,1,1,1);
+insert into art1 values(1,'find me',1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32);
+insert into art2 values(2,'find me',1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32);
+insert into art3 values(3,'find me',1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32);
+insert into art4 values(4,'find me',1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32);
+insert into art5 values(5,'find me',1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32);
+insert into art6 values(6,'find me',1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32);
+insert into art7 values(7,'find me',1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32);
+insert into art8 values(8,'find me',1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32);
+insert into art9 values(9,'find me',1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32);
 
 <!-- bad cases -->
-<sphinxql>select * from art1,art2,art3,art4,art5,art6,art7,art8</sphinxql>
-<sphinxql>select * from art1,art2,art3,art4,art5,art6,art7,art8,art9</sphinxql>
-<sphinxql>select * from artdist</sphinxql>
+select * from art1,art2,art3,art4,art5,art6,art7,art8;
+select * from art1,art2,art3,art4,art5,art6,art7,art8,art9;
+select * from artdist;
 
-<sphinxql>select *,1 as a1,1 as a2,1 as a3,1 as a4,1 as a5,1 as a6, 1 as a7,1 as a8,1 as a9,1 as a10,1 as a11,1 as a12,1 as a13,1 as a14,1 as a15,1 as a16,1 as a17,1 as a18,1 as a19,1 as a20,1 as a21,1 as a22,1 as a23 from rt1,rt2,rt3,rt4,rt5,rt6,rt7,rt8</sphinxql>
-<sphinxql>select *,1 as a1,1 as a2,1 as a3,1 as a4,1 as a5,1 as a6, 1 as a7,1 as a8,1 as a9,1 as a10,1 as a11,1 as a12,1 as a13,1 as a14,1 as a15,1 as a16,1 as a17,1 as a18,1 as a19,1 as a20,1 as a21,1 as a22,1 as a23 from rt1,rt2,rt3,rt4,rt5,rt6,rt7,rt8,rt9</sphinxql>
-<sphinxql>select *,1 as a1,1 as a2,1 as a3,1 as a4,1 as a5,1 as a6, 1 as a7,1 as a8,1 as a9,1 as a10,1 as a11,1 as a12,1 as a13,1 as a14,1 as a15,1 as a16,1 as a17,1 as a18,1 as a19,1 as a20,1 as a21,1 as a22,1 as a23 from rtdist</sphinxql>
-<sphinxql>select *,1 as a1,1 as a2,1 as a3,1 as a4,1 as a5,1 as a6, 1 as a7,1 as a8,1 as a9,1 as a10,1 as a11,1 as a12,1 as a13,1 as a14,1 as a15,1 as a16,1 as a17,1 as a18,1 as a19,1 as a20,1 as a21,1 as a22,1 as a23 from artdist</sphinxql>
-</sphqueries>
+select *,1 as a1,1 as a2,1 as a3,1 as a4,1 as a5,1 as a6, 1 as a7,1 as a8,1 as a9,1 as a10,1 as a11,1 as a12,1 as a13,1 as a14,1 as a15,1 as a16,1 as a17,1 as a18,1 as a19,1 as a20,1 as a21,1 as a22,1 as a23 from rt1,rt2,rt3,rt4,rt5,rt6,rt7,rt8;
+select *,1 as a1,1 as a2,1 as a3,1 as a4,1 as a5,1 as a6, 1 as a7,1 as a8,1 as a9,1 as a10,1 as a11,1 as a12,1 as a13,1 as a14,1 as a15,1 as a16,1 as a17,1 as a18,1 as a19,1 as a20,1 as a21,1 as a22,1 as a23 from rt1,rt2,rt3,rt4,rt5,rt6,rt7,rt8,rt9;
+select *,1 as a1,1 as a2,1 as a3,1 as a4,1 as a5,1 as a6, 1 as a7,1 as a8,1 as a9,1 as a10,1 as a11,1 as a12,1 as a13,1 as a14,1 as a15,1 as a16,1 as a17,1 as a18,1 as a19,1 as a20,1 as a21,1 as a22,1 as a23 from rtdist;
+select *,1 as a1,1 as a2,1 as a3,1 as a4,1 as a5,1 as a6, 1 as a7,1 as a8,1 as a9,1 as a10,1 as a11,1 as a12,1 as a13,1 as a14,1 as a15,1 as a16,1 as a17,1 as a18,1 as a19,1 as a20,1 as a21,1 as a22,1 as a23 from artdist;
+</sphinxql></queries>
 
 </test>

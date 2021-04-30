@@ -76,61 +76,61 @@ INSERT INTO `test_table` VALUES
 ( 10,'ten',		'{"tag":"eee"}' )
 </db_insert>
 
-<sphqueries>
+<queries><sphinxql>
 
-<sphinxql>select * from idx</sphinxql>
-<sphinxql>update idx set title='xxx' where id=1</sphinxql>
-<sphinxql>select * from idx</sphinxql>
-<sphinxql>update idx set title='overwrite' where id=1</sphinxql>
-<sphinxql>select * from idx</sphinxql>
-<sphinxql>update idx set title='total overwrite' where id>=5</sphinxql>
-<sphinxql>select * from idx</sphinxql>
-<sphinxql>update idx set title='updated' where id>=7</sphinxql>
-<sphinxql>select * from idx</sphinxql>
+select * from idx;
+update idx set title='xxx' where id=1;
+select * from idx;
+update idx set title='overwrite' where id=1;
+select * from idx;
+update idx set title='total overwrite' where id>=5;
+select * from idx;
+update idx set title='updated' where id>=7;
+select * from idx;
 
-<sphinxql>update idx set json_col='{"a":[2,3,4]}' where id=1</sphinxql>
-<sphinxql>select * from idx</sphinxql>
-<sphinxql>update idx set json_col.b[0]=100 where id=2</sphinxql>
-<sphinxql>select * from idx</sphinxql>
-<sphinxql>update idx set json_col='{"a":[5,6,7,8,9,10],"b":"empty"}' where id=3</sphinxql>
-<sphinxql>select * from idx</sphinxql>
-<sphinxql>update idx set json_col='{"update":"updated"}' where id>5</sphinxql>
-<sphinxql>select * from idx</sphinxql>
+update idx set json_col='{"a":[2,3,4]}' where id=1;
+select * from idx;
+update idx set json_col.b[0]=100 where id=2;
+select * from idx;
+update idx set json_col='{"a":[5,6,7,8,9,10],"b":"empty"}' where id=3;
+select * from idx;
+update idx set json_col='{"update":"updated"}' where id>5;
+select * from idx;
 
-<sphinxql>insert into rt values ( 1, 'one', 'one', 		'{"a":[1,2,3]}' )</sphinxql>
-<sphinxql>insert into rt values ( 2, 'two', 'two',		'{"b":[2,3]}' )</sphinxql>
-<sphinxql>insert into rt values ( 3, 'three', 'three',	'{"c":[3]}' )</sphinxql>
-<sphinxql>insert into rt values ( 4, 'four', 'four',	'{"d":[]}' )</sphinxql>
-<sphinxql>insert into rt values ( 5, 'five', 'five',	'{}' )</sphinxql>
-<sphinxql>select * from rt</sphinxql>
+insert into rt values ( 1, 'one', 'one', 		'{"a":[1,2,3]}' );
+insert into rt values ( 2, 'two', 'two',		'{"b":[2,3]}' );
+insert into rt values ( 3, 'three', 'three',	'{"c":[3]}' );
+insert into rt values ( 4, 'four', 'four',	'{"d":[]}' );
+insert into rt values ( 5, 'five', 'five',	'{}' );
+select * from rt;
 
-<sphinxql>update rt set text='test' where id&lt;=2</sphinxql>
-<sphinxql>select * from rt</sphinxql>
-<sphinxql>update rt set text='in' where id>=4</sphinxql>
-<sphinxql>select * from rt</sphinxql>
+update rt set text='test' where id&lt;=2;
+select * from rt;
+update rt set text='in' where id>=4;
+select * from rt;
 
-<sphinxql>update rt set json_col='{"a":[2,3,4]}' where id=1</sphinxql>
-<sphinxql>select * from rt</sphinxql>
-<sphinxql>update rt set json_col.b[0]=100 where id=2</sphinxql>
-<sphinxql>select * from rt</sphinxql>
-<sphinxql>update rt set json_col='{"a":[5,6,7,8,9,10],"b":"empty"}' where id=3</sphinxql>
-<sphinxql>select * from rt</sphinxql>
-<sphinxql>update rt set json_col='{"update":"updated"}' where id>=4</sphinxql>
-<sphinxql>select * from rt</sphinxql>
+update rt set json_col='{"a":[2,3,4]}' where id=1;
+select * from rt;
+update rt set json_col.b[0]=100 where id=2;
+select * from rt;
+update rt set json_col='{"a":[5,6,7,8,9,10],"b":"empty"}' where id=3;
+select * from rt;
+update rt set json_col='{"update":"updated"}' where id>=4;
+select * from rt;
 
 <!-- regression mix of inplace and full updates of blog attributes -->
-<sphinxql>replace into rt2 (id, name, js, mva, j2) values(1, 'test', '{"a": 1}', (1), '{"val":1}');</sphinxql>
-<sphinxql>update rt2 set js['a']=12, mva=(11,13) where id=1</sphinxql>
-<sphinxql>select * from rt2</sphinxql>
-<sphinxql>update rt2 set js['a']=23, j2.val=22 where id=1</sphinxql>
-<sphinxql>select * from rt2</sphinxql>
-<sphinxql>update rt2 set mva=(31,32) where id=1</sphinxql>
-<sphinxql>select * from rt2</sphinxql>
-<sphinxql>update rt2 set js['a']=43, mva=(41,43), j2.val=42 where id=1</sphinxql>
-<sphinxql>select * from rt2</sphinxql>
-<sphinxql>update rt2 set js = '{"a":51, "b":"new thing"}', j2.val=56 where id=1</sphinxql>
-<sphinxql>select * from rt2</sphinxql>
+replace into rt2 (id, name, js, mva, j2) values(1, 'test', '{"a": 1}', (1), '{"val":1}');;
+update rt2 set js['a']=12, mva=(11,13) where id=1;
+select * from rt2;
+update rt2 set js['a']=23, j2.val=22 where id=1;
+select * from rt2;
+update rt2 set mva=(31,32) where id=1;
+select * from rt2;
+update rt2 set js['a']=43, mva=(41,43), j2.val=42 where id=1;
+select * from rt2;
+update rt2 set js = '{"a":51, "b":"new thing"}', j2.val=56 where id=1;
+select * from rt2;
 
-</sphqueries>
+</sphinxql></queries>
 
 </test>

@@ -74,19 +74,19 @@ CREATE TABLE `test_table` (
 <db_drop>DROP TABLE IF EXISTS `test_table`;</db_drop>
 <db_insert>INSERT INTO `test_table` VALUES ( 1, 1, 'manticore search is the best'), (2, 2, 'manticore is more better' ), (3, 3, 'search with manticore like many' )</db_insert>
 
-<sphqueries>
-<sphinxql>INSERT INTO rt_bi (id, gid, title) VALUES ( 1, 1, 'manticore search is the best'), (2, 2, 'manticore is more better' )</sphinxql>
+<queries><sphinxql>
+INSERT INTO rt_bi (id, gid, title) VALUES ( 1, 1, 'manticore search is the best'), (2, 2, 'manticore is more better' );
 
-<sphinxql>CALL KEYWORDS ( 'manti*', 'idx_bi', 1 AS stats, 0 AS fold_wildcards, 'hits' as sort_mode )</sphinxql>
-<sphinxql>CALL KEYWORDS ( 'manti*', 'rt_bi', 1 AS stats, 0 AS fold_wildcards, 'hits' as sort_mode )</sphinxql>
+CALL KEYWORDS ( 'manti*', 'idx_bi', 1 AS stats, 0 AS fold_wildcards, 'hits' as sort_mode );
+CALL KEYWORDS ( 'manti*', 'rt_bi', 1 AS stats, 0 AS fold_wildcards, 'hits' as sort_mode );
 
-<sphinxql>FLUSH RAMCHUNK rt_bi</sphinxql>
-<sphinxql>INSERT INTO rt_bi (id, gid, title) VALUES (3, 3, 'search with manticore like many' )</sphinxql>
-<sphinxql>CALL KEYWORDS ( 'manti*', 'rt_bi', 1 AS stats, 0 AS fold_wildcards, 'hits' as sort_mode )</sphinxql>
+FLUSH RAMCHUNK rt_bi;
+INSERT INTO rt_bi (id, gid, title) VALUES (3, 3, 'search with manticore like many' );
+CALL KEYWORDS ( 'manti*', 'rt_bi', 1 AS stats, 0 AS fold_wildcards, 'hits' as sort_mode );
 
 <!-- regression keywords to distributed index via API -->
-<sphinxql>CALL KEYWORDS ( 'manti*', 'dist_local', 1 AS stats, 0 AS fold_wildcards, 'hits' as sort_mode )</sphinxql>
-<sphinxql>CALL KEYWORDS ( 'manti*', 'dist_remote', 1 AS stats, 0 AS fold_wildcards, 'hits' as sort_mode )</sphinxql>
-</sphqueries>
+CALL KEYWORDS ( 'manti*', 'dist_local', 1 AS stats, 0 AS fold_wildcards, 'hits' as sort_mode );
+CALL KEYWORDS ( 'manti*', 'dist_remote', 1 AS stats, 0 AS fold_wildcards, 'hits' as sort_mode );
+</sphinxql></queries>
 
 </test>

@@ -87,28 +87,30 @@ create table mva
 
 <db_drop>drop table if exists test;</db_drop>
 <db_drop>drop table if exists mva;</db_drop>
-<db_insert>insert into test values ( 1, 101, 'not found',	'notice found' );</db_insert>
-<db_insert>insert into test values ( 2, 102, 'not anyone',	'notice goods' );</db_insert>
-<db_insert>insert into test values ( 3, 103, 'not grant',	'notice goods' );</db_insert>
-<db_insert>insert into test values ( 4, 104, 'not grant',	'everyone' );</db_insert>
-<db_insert>insert into test values ( 5, 105, 'not anyone',	'grant' );</db_insert>
-<db_insert>insert into test values ( 6, 106, 'not fun',		'natural6' );</db_insert>
-<db_insert>insert into test values ( 7, 107, 'not fun',		'natural7' );</db_insert>
-<db_insert>insert into test values ( 8, 108, 'not fun',		'natural8' );</db_insert>
-<db_insert>insert into mva values (1, 1001), (1, 2001);</db_insert>
-<db_insert>insert into mva values (2, 1002), (2, 2002);</db_insert>
-<db_insert>insert into mva values (3, 1003), (3, 2003);</db_insert>
-<db_insert>insert into mva values (4, 1004), (4, 2004);</db_insert>
-<db_insert>insert into mva values (5, 1005), (5, 2005);</db_insert>
-<db_insert>insert into mva values (6, 1006), (6, 2006);</db_insert>
-<db_insert>insert into mva values (7, 1007), (7, 2007);</db_insert>
-<db_insert>insert into mva values (8, 1008), (8, 2008);</db_insert>
+<db_insert>insert into test values ( 1, 101, 'not found',	'notice found' ),
+	( 2, 102, 'not anyone',	'notice goods' ),
+	( 3, 103, 'not grant',	'notice goods' ),
+	( 4, 104, 'not grant',	'everyone' ),
+	( 5, 105, 'not anyone',	'grant' ),
+	( 6, 106, 'not fun',		'natural6' ),
+	( 7, 107, 'not fun',		'natural7' ),
+	( 8, 108, 'not fun',		'natural8' )
+</db_insert>
+<db_insert>insert into mva values (1, 1001), (1, 2001),
+	(2, 1002), (2, 2002),
+	(3, 1003), (3, 2003),
+	(4, 1004), (4, 2004),
+	(5, 1005), (5, 2005),
+	(6, 1006), (6, 2006),
+	(7, 1007), (7, 2007),
+	(8, 1008), (8, 2008)
+</db_insert>
 
-<sphqueries>
-<sphinxql>select * from test1</sphinxql>
-<sphinxql>select * from test2</sphinxql>
-<sphinxql>select * from test11</sphinxql>
-<sphinxql>select * from test21</sphinxql>
-</sphqueries>
+<queries><sphinxql>
+select * from test1;
+select * from test2;
+select * from test11;
+select * from test21;
+</sphinxql></queries>
 
 </test>

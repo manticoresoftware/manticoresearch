@@ -59,12 +59,12 @@ INSERT INTO test_table VALUES
 ( 4, 11, 'under_score <stuff>got removed</stuff>' )
 ]]></db_insert>
 
-<sphqueries>
-<sphinxql>SELECT * FROM disk</sphinxql>
-<sphinxql>SELECT * FROM rt</sphinxql>
-<sphinxql>ATTACH INDEX disk TO RTINDEX rt</sphinxql>
-<sphinxql>SELECT * FROM disk</sphinxql>
-<sphinxql>SELECT * FROM rt</sphinxql>
-</sphqueries>
+<queries><sphinxql>
+SELECT * FROM disk;
+SELECT * FROM rt;
+ATTACH INDEX disk TO RTINDEX rt;
+SELECT * FROM disk;
+SELECT * FROM rt;
+</sphinxql></queries>
 
 </test>

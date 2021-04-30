@@ -71,12 +71,12 @@ index dist
 
 </config>
 
-<sphqueries>
+<queries><sphinxql>
 
-<sphinxql>select id, groupby() g, mva from test1 group 3 by mva order by g asc</sphinxql>
-<sphinxql>select id, groupby() g, mva from dist group 3 by mva order by g asc</sphinxql>
+select id, groupby() g, mva from test1 group 3 by mva order by g asc;
+select id, groupby() g, mva from dist group 3 by mva order by g asc;
 
-</sphqueries>
+</sphinxql></queries>
 
 <db_create>
 CREATE TABLE `test_table` (

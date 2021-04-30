@@ -98,57 +98,57 @@ index pq1
 
 </config>
 
-<sphqueries>
-<sphinxql>select * from idx where match ( 'a NOTNEAR/1 c') order by id asc</sphinxql>
-<sphinxql>select * from idx where match ( 'a NOTNEAR/2 c') order by id asc</sphinxql>
-<sphinxql>select * from idx where match ( 'a NOTNEAR/3 c') order by id asc</sphinxql>
-<sphinxql>select * from idx where match ( 'a NOTNEAR/5 c') order by id asc</sphinxql>
-<sphinxql>select * from idx where match ( 'a NOTNEAR/6 c') order by id asc</sphinxql>
-<sphinxql>select * from idx where match ( 'a NOTNEAR/7 c') order by id asc</sphinxql>
-<sphinxql>select * from idx where match ( 'a NOTNEAR/15 c') order by id asc</sphinxql>
+<queries><sphinxql>
+select * from idx where match ( 'a NOTNEAR/1 c') order by id asc;
+select * from idx where match ( 'a NOTNEAR/2 c') order by id asc;
+select * from idx where match ( 'a NOTNEAR/3 c') order by id asc;
+select * from idx where match ( 'a NOTNEAR/5 c') order by id asc;
+select * from idx where match ( 'a NOTNEAR/6 c') order by id asc;
+select * from idx where match ( 'a NOTNEAR/7 c') order by id asc;
+select * from idx where match ( 'a NOTNEAR/15 c') order by id asc;
 
-<sphinxql>select * from idx where match ( 'b NOTNEAR/1 c') order by id asc</sphinxql>
-<sphinxql>select * from idx where match ( 'b NOTNEAR/2 c') order by id asc</sphinxql>
+select * from idx where match ( 'b NOTNEAR/1 c') order by id asc;
+select * from idx where match ( 'b NOTNEAR/2 c') order by id asc;
 
-<sphinxql>select * from idx where match ( '"a b" NOTNEAR/2 c') order by id asc</sphinxql>
-<sphinxql>select * from idx where match ( '"a b" NOTNEAR/3 c') order by id asc</sphinxql>
+select * from idx where match ( '"a b" NOTNEAR/2 c') order by id asc;
+select * from idx where match ( '"a b" NOTNEAR/3 c') order by id asc;
 
-<sphinxql>select * from idx where match ( 'a NOTNEAR/3 (c | d)') order by id asc</sphinxql>
-<sphinxql>select * from idx where match ( 'a NOTNEAR/3 "c * d"') order by id asc</sphinxql>
-<sphinxql>select * from idx where match ( 'a NOTNEAR/3 "c x d"') order by id asc</sphinxql>
-<sphinxql>select * from idx where match ( 'a NOTNEAR/9 "c x d"') order by id asc</sphinxql>
-<sphinxql>select * from idx where match ( 'a NOTNEAR/11 "c x x d"') order by id asc</sphinxql>
+select * from idx where match ( 'a NOTNEAR/3 (c | d)') order by id asc;
+select * from idx where match ( 'a NOTNEAR/3 "c * d"') order by id asc;
+select * from idx where match ( 'a NOTNEAR/3 "c x d"') order by id asc;
+select * from idx where match ( 'a NOTNEAR/9 "c x d"') order by id asc;
+select * from idx where match ( 'a NOTNEAR/11 "c x x d"') order by id asc;
 
-<sphinxql>select * from idx where match ( 'oy NOTNEAR/1 ho') order by id asc</sphinxql>
-<sphinxql>select * from idx where match ( 'oy NOTNEAR/2 ho') order by id asc</sphinxql>
-<sphinxql>select * from idx where match ( 'zwei NOTNEAR/2 ho') order by id asc</sphinxql>
-<sphinxql>select * from idx where match ( 'zwei NOTNEAR/4 ho') order by id asc</sphinxql>
-<sphinxql>select * from idx where match ( 'zwei NOTNEAR/1 vey') order by id asc</sphinxql>
-<sphinxql>select * from idx where match ( 'zwei NOTNEAR/2 vey') order by id asc</sphinxql>
-<sphinxql>select * from idx where match ( 'vey NOTNEAR/1 ho') order by id asc</sphinxql>
-<sphinxql>select * from idx where match ( 'vey NOTNEAR/1 oy') order by id asc</sphinxql>
+select * from idx where match ( 'oy NOTNEAR/1 ho') order by id asc;
+select * from idx where match ( 'oy NOTNEAR/2 ho') order by id asc;
+select * from idx where match ( 'zwei NOTNEAR/2 ho') order by id asc;
+select * from idx where match ( 'zwei NOTNEAR/4 ho') order by id asc;
+select * from idx where match ( 'zwei NOTNEAR/1 vey') order by id asc;
+select * from idx where match ( 'zwei NOTNEAR/2 vey') order by id asc;
+select * from idx where match ( 'vey NOTNEAR/1 ho') order by id asc;
+select * from idx where match ( 'vey NOTNEAR/1 oy') order by id asc;
 
-<sphinxql>select * from idx where match ( 'd NOTNEAR/1 a') order by id asc</sphinxql>
-<sphinxql>select * from idx where match ( 'd NOTNEAR/3 a') order by id asc</sphinxql>
+select * from idx where match ( 'd NOTNEAR/1 a') order by id asc;
+select * from idx where match ( 'd NOTNEAR/3 a') order by id asc;
 
-<sphinxql>select * from idx where match ( 'c NOTNEAR/1 x') order by id asc</sphinxql>
-<sphinxql>select * from idx where match ( 'c NOTNEAR/2 x') order by id asc</sphinxql>
-<sphinxql>select * from idx where match ( 'c NOTNEAR/3 x') order by id asc</sphinxql>
-<sphinxql>select * from idx where match ( 'x NOTNEAR/2 c') order by id asc</sphinxql>
+select * from idx where match ( 'c NOTNEAR/1 x') order by id asc;
+select * from idx where match ( 'c NOTNEAR/2 x') order by id asc;
+select * from idx where match ( 'c NOTNEAR/3 x') order by id asc;
+select * from idx where match ( 'x NOTNEAR/2 c') order by id asc;
 
-<sphinxql>select * from idx where match (' ("a b" NOTNEAR/3 (d |e)) NOTNEAR/2 c') order by id asc</sphinxql>
-<sphinxql>select * from idx where match ('"a b"~4 NOTNEAR/1 c') order by id asc</sphinxql>
-<sphinxql>select * from idx where match ('( "a b" | "a x b" ) NOTNEAR/1 c') order by id asc</sphinxql>
+select * from idx where match (' ("a b" NOTNEAR/3 (d |e)) NOTNEAR/2 c') order by id asc;
+select * from idx where match ('"a b"~4 NOTNEAR/1 c') order by id asc;
+select * from idx where match ('( "a b" | "a x b" ) NOTNEAR/1 c') order by id asc;
 
-<sphinxql>select * from idx2 where match ('a NOTNEAR/1 e') order by id asc</sphinxql>
+select * from idx2 where match ('a NOTNEAR/1 e') order by id asc;
 
 <!-- regression crash on tail hit -->
-<sphinxql>select * from idx3 where match ('beach NOTNEAR/1 hut') order by id asc</sphinxql>
+select * from idx3 where match ('beach NOTNEAR/1 hut') order by id asc;
 
 <!-- regression daemon infinite loop on fetching hits -->
-<sphinxql>insert into pq1 (id, query) values(1, ' a1 NOTNEAR/1 z1 ')</sphinxql>
-<sphinxql>CALL PQ('pq1', ('[{"id":101, "title": "dummy1 a1 dummy2 dummy 2 dumm2 a1 dummy3 dummy3 dummy3 a1 dummy4 dummy4 dummy4 dummy4 z1 dummy5 dummy5 dummy5 a1 dummy6 dummy6 dummy6 z1 dummy7 dummy7 dummy7 a1 dummy8 dummy8 dummy8  a1 dummy8 dummy8 dummy8 dummy8 a1 dummy10 dummy10 "}]'), 1 AS docs_json, 1 as docs); </sphinxql>
-</sphqueries>
+insert into pq1 (id, query) values(1, ' a1 NOTNEAR/1 z1 ');
+CALL PQ('pq1', ('[{"id":101, "title": "dummy1 a1 dummy2 dummy 2 dumm2 a1 dummy3 dummy3 dummy3 a1 dummy4 dummy4 dummy4 dummy4 z1 dummy5 dummy5 dummy5 a1 dummy6 dummy6 dummy6 z1 dummy7 dummy7 dummy7 a1 dummy8 dummy8 dummy8  a1 dummy8 dummy8 dummy8 dummy8 a1 dummy10 dummy10 "}]'), 1 AS docs_json, 1 as docs); ;
+</sphinxql></queries>
 
 <db_create>
 CREATE TABLE test_table
@@ -215,57 +215,15 @@ CREATE TABLE test_table3
 </db_create>
 <db_drop>DROP TABLE IF EXISTS `test_table3`</db_drop>
 <db_insert>
-INSERT INTO `test_table3` VALUES
-( 10, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test' ),
-( 11, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test' ),
-( 12, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test' ),
-( 13, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test' ),
-( 14, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test' ),
-( 15, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 16, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 17, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 18, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 19, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 20, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 21, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 22, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 23, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 24, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 25, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 26, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 27, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 28, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 29, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 30, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 31, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 32, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 33, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 34, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 35, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 36, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 37, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 38, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 39, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 40, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 41, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 42, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 43, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 44, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 45, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 46, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 47, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 48, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 49, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 50, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 51, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 52, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 53, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 54, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 55, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 56, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 57, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 58, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' ),
-( 59, 'beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach beach dummy test beach beach beach beach dummy test hut' )
+	<var name="xx">test beach beach beach beach</var>
+	<var name="aa"><xx/> beach dummy </var>
+	<var name="bb"><xx/> dummy</var>
+	<var name="doc">beach dummy <aa/><aa/><aa/><aa/><aa/><aa/><aa/><aa/><aa/><aa/><bb/> test</var>
+
+	<var name="values" />
+	<repeat count="5" vars="i" init="10" inc="1"><var name="values" delimiter=",">(<i/>, '<doc/>')</var></repeat>
+	<repeat count="45" vars="i" init="15" inc="1"><var name="values" delimiter=",">(<i/>, '<doc/> hut')</var></repeat>
+	INSERT INTO `test_table3` VALUES <values/>
 </db_insert>
 
 </test>

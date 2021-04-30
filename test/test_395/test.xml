@@ -102,9 +102,8 @@ insert into test_table (id,price,brand_id,title,brand_name,property,categories,j
 (1020,169,4,'Product Seven Six','Brand Four','Eight','(10,11)','{x:[10,11],a:["a10","a11"]}')
 </db_insert>
 
-<sphqueries>
+<queries><sphinxql>
 
-<sphinxql>
 insert into facetdemo (id,price,brand_id,title,brand_name,property,categories,j) values
 (1,529,9,'Product Five Two','Brand Nine','Four',(13,14),'{x:[13,14],a:["a13","a14"]}'),
 (2,173,10,'Product Five Seven','Brand Ten','Four',(10),'{x:[10],a:["a10"]}'),
@@ -125,39 +124,36 @@ insert into facetdemo (id,price,brand_id,title,brand_name,property,categories,j)
 (17,493,4,'Product Nine Six','Brand Four','Five',(11,12),'{x:[11,12],a:["a11","a12"]}'),
 (18,413,3,'Product Eight Five','Brand Three','Four',(11,12,13),'{x:[11,12,13],a:["a11","a12","a13"]}'),
 (19,78,4,'Product Six Five','Brand Four','Two',(12),'{x:[12],a:["a12"]}'),
-(20,169,4,'Product Seven Six','Brand Four','Eight',(10,11),'{x:[10,11],a:["a10","a11"]}')
-</sphinxql>
+(20,169,4,'Product Seven Six','Brand Four','Eight',(10,11),'{x:[10,11],a:["a10","a11"]}');
 
+select * from facetdemo where match ('one') limit 0,15 facet brand_name order by facet() asc facet interval(price,200,400,600,800) order by facet() asc;;
+show meta like 'multiplier';
+select * from facetdemo where match ('one') limit 0,15 facet brand_id order by facet() asc facet interval(price,200,400,600,800) order by facet() asc;;
+show meta like 'multiplier';
 
-<sphinxql>select * from facetdemo where match ('one') limit 0,15 facet brand_name order by facet() asc facet interval(price,200,400,600,800) order by facet() asc;</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
-<sphinxql>select * from facetdemo where match ('one') limit 0,15 facet brand_id order by facet() asc facet interval(price,200,400,600,800) order by facet() asc;</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
+select id, crc32(brand_name) as crc from facetdemo facet brand_name order by facet() asc facet interval(price,200,400,600,800) order by facet() asc;;
+show meta like 'multiplier';
 
-<sphinxql>select id, crc32(brand_name) as crc from facetdemo facet brand_name order by facet() asc facet interval(price,200,400,600,800) order by facet() asc;</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
+select id, brand_name, brand_id, crc32(brand_name) as crc from facetdemo group by brand_name; select id, brand_name, brand_id, crc32(brand_name) as crc, interval(price,200,400,600,800) as i from facetdemo group by i;;
+show meta like 'multiplier';
 
-<sphinxql>select id, brand_name, brand_id, crc32(brand_name) as crc from facetdemo group by brand_name; select id, brand_name, brand_id, crc32(brand_name) as crc, interval(price,200,400,600,800) as i from facetdemo group by i;</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
+select id, brand_name, brand_id, crc32(brand_name) as crc, interval(price,200,400,600,800) as i from facetdemo group by brand_name; select id, brand_name, brand_id, crc32(brand_name) as crc, interval(price,200,400,600,800) as i from facetdemo group by i;;
+show meta like 'multiplier';
 
-<sphinxql>select id, brand_name, brand_id, crc32(brand_name) as crc, interval(price,200,400,600,800) as i from facetdemo group by brand_name; select id, brand_name, brand_id, crc32(brand_name) as crc, interval(price,200,400,600,800) as i from facetdemo group by i;</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
+select id, crc32(brand_name) as crc from dist0 order by id asc facet brand_name order by facet() asc facet interval(price,200,400,600,800) order by facet() asc;;
+show meta like 'multiplier';
+select id, brand_name, brand_id, crc32(brand_name) as crc, interval(price,200,400,600,800) as i from dist0 group by brand_name within group order by id asc; select id, brand_name, brand_id, crc32(brand_name) as crc, interval(price,200,400,600,800) as i from dist0 group by i within group order by id asc;;
+show meta like 'multiplier';
 
-<sphinxql>select id, crc32(brand_name) as crc from dist0 order by id asc facet brand_name order by facet() asc facet interval(price,200,400,600,800) order by facet() asc;</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
-<sphinxql>select id, brand_name, brand_id, crc32(brand_name) as crc, interval(price,200,400,600,800) as i from dist0 group by brand_name within group order by id asc; select id, brand_name, brand_id, crc32(brand_name) as crc, interval(price,200,400,600,800) as i from dist0 group by i within group order by id asc;</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
+select id, crc32(brand_name) as crc from facetdemo facet brand_name order by facet() asc facet j.x order by facet() asc;;
+show meta like 'multiplier';
+select id, brand_name, brand_id, crc32(brand_name) as crc, j.x as i from facetdemo group by brand_name; select id, brand_name, brand_id, crc32(brand_name) as crc, j.x as i from facetdemo group by i;;
+show meta like 'multiplier';
+select id, crc32(brand_name) as crc from dist0 order by id asc facet brand_name order by facet() asc facet j.x order by facet() asc;;
+show meta like 'multiplier';
+select id, brand_name, brand_id, crc32(brand_name) as crc, j.x as i from dist0 group by brand_name; select id, brand_name, brand_id, crc32(brand_name) as crc, j.x as i from dist0 group by i;;
+show meta like 'multiplier';
 
-<sphinxql>select id, crc32(brand_name) as crc from facetdemo facet brand_name order by facet() asc facet j.x order by facet() asc;</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
-<sphinxql>select id, brand_name, brand_id, crc32(brand_name) as crc, j.x as i from facetdemo group by brand_name; select id, brand_name, brand_id, crc32(brand_name) as crc, j.x as i from facetdemo group by i;</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
-<sphinxql>select id, crc32(brand_name) as crc from dist0 order by id asc facet brand_name order by facet() asc facet j.x order by facet() asc;</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
-<sphinxql>select id, brand_name, brand_id, crc32(brand_name) as crc, j.x as i from dist0 group by brand_name; select id, brand_name, brand_id, crc32(brand_name) as crc, j.x as i from dist0 group by i;</sphinxql>
-<sphinxql>show meta like 'multiplier'</sphinxql>
-
-
-</sphqueries>
+</sphinxql></queries>
 
 </test>

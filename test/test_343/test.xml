@@ -64,36 +64,36 @@ index test4
 
 </config>
 
-<sphqueries>
-<sphinxql>SELECT * FROM test1 WHERE MATCH('run') order by id asc</sphinxql>
-<sphinxql>SELECT * FROM test1 WHERE MATCH('runs') order by id asc</sphinxql>
-<sphinxql>SELECT * FROM test1 WHERE MATCH('running') order by id asc</sphinxql>
-<sphinxql>SELECT * FROM test1 WHERE MATCH('=run') order by id asc</sphinxql>
-<sphinxql>SELECT * FROM test1 WHERE MATCH('=runs') order by id asc</sphinxql>
-<sphinxql>SELECT * FROM test1 WHERE MATCH('=running') order by id asc</sphinxql>
+<queries><sphinxql>
+SELECT * FROM test1 WHERE MATCH('run') order by id asc;
+SELECT * FROM test1 WHERE MATCH('runs') order by id asc;
+SELECT * FROM test1 WHERE MATCH('running') order by id asc;
+SELECT * FROM test1 WHERE MATCH('=run') order by id asc;
+SELECT * FROM test1 WHERE MATCH('=runs') order by id asc;
+SELECT * FROM test1 WHERE MATCH('=running') order by id asc;
 
-<sphinxql>SELECT * FROM test3 WHERE MATCH('run') order by id asc</sphinxql>
-<sphinxql>SELECT * FROM test3 WHERE MATCH('runs') order by id asc</sphinxql>
-<sphinxql>SELECT * FROM test3 WHERE MATCH('running') order by id asc</sphinxql>
-<sphinxql>SELECT * FROM test3 WHERE MATCH('=run') order by id asc</sphinxql>
-<sphinxql>SELECT * FROM test3 WHERE MATCH('=runs') order by id asc</sphinxql>
-<sphinxql>SELECT * FROM test3 WHERE MATCH('=running') order by id asc</sphinxql>
+SELECT * FROM test3 WHERE MATCH('run') order by id asc;
+SELECT * FROM test3 WHERE MATCH('runs') order by id asc;
+SELECT * FROM test3 WHERE MATCH('running') order by id asc;
+SELECT * FROM test3 WHERE MATCH('=run') order by id asc;
+SELECT * FROM test3 WHERE MATCH('=runs') order by id asc;
+SELECT * FROM test3 WHERE MATCH('=running') order by id asc;
 
-<sphinxql>SELECT * FROM test2 WHERE MATCH('run') order by id asc</sphinxql>
-<sphinxql>SELECT * FROM test2 WHERE MATCH('runs') order by id asc</sphinxql>
-<sphinxql>SELECT * FROM test2 WHERE MATCH('running') order by id asc</sphinxql>
-<sphinxql>SELECT * FROM test2 WHERE MATCH('=run') order by id asc</sphinxql>
-<sphinxql>SELECT * FROM test2 WHERE MATCH('=runs') order by id asc</sphinxql>
-<sphinxql>SELECT * FROM test2 WHERE MATCH('=running') order by id asc</sphinxql>
+SELECT * FROM test2 WHERE MATCH('run') order by id asc;
+SELECT * FROM test2 WHERE MATCH('runs') order by id asc;
+SELECT * FROM test2 WHERE MATCH('running') order by id asc;
+SELECT * FROM test2 WHERE MATCH('=run') order by id asc;
+SELECT * FROM test2 WHERE MATCH('=runs') order by id asc;
+SELECT * FROM test2 WHERE MATCH('=running') order by id asc;
 
-<sphinxql>SELECT * FROM test4 WHERE MATCH('run') order by id asc</sphinxql>
-<sphinxql>SELECT * FROM test4 WHERE MATCH('runs') order by id asc</sphinxql>
-<sphinxql>SELECT * FROM test4 WHERE MATCH('running') order by id asc</sphinxql>
-<sphinxql>SELECT * FROM test4 WHERE MATCH('=run') order by id asc</sphinxql>
-<sphinxql>SELECT * FROM test4 WHERE MATCH('=runs') order by id asc</sphinxql>
-<sphinxql>SELECT * FROM test4 WHERE MATCH('=running') order by id asc</sphinxql>
+SELECT * FROM test4 WHERE MATCH('run') order by id asc;
+SELECT * FROM test4 WHERE MATCH('runs') order by id asc;
+SELECT * FROM test4 WHERE MATCH('running') order by id asc;
+SELECT * FROM test4 WHERE MATCH('=run') order by id asc;
+SELECT * FROM test4 WHERE MATCH('=runs') order by id asc;
+SELECT * FROM test4 WHERE MATCH('=running') order by id asc;
 
-</sphqueries>
+</sphinxql></queries>
 
 <db_create>
 CREATE TABLE `test_table`

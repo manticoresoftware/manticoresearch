@@ -82,25 +82,25 @@ INSERT INTO `test_table` VALUES
 (6,3,'numeric fixup contd')
 </db_insert>
 
-<sphqueries>
-<sphinxql>show index delta settings</sphinxql>
-<sphinxql>select * from main1</sphinxql>
-<sphinxql>select * from main2</sphinxql>
-<sphinxql>select * from delta</sphinxql>
-<sphinxql>alter table delta killlist_target='main1:kl'</sphinxql>
-<sphinxql>show index delta settings</sphinxql>
-<sphinxql>select * from main1</sphinxql>
-<sphinxql>select * from main2</sphinxql>
-<sphinxql>alter table delta killlist_target='main2:kl'</sphinxql>
-<sphinxql>show index delta settings</sphinxql>
-<sphinxql>select * from main1</sphinxql>
-<sphinxql>select * from main2</sphinxql>
-<sphinxql>alter table delta killlist_target='main1:kl,  main2:kl, main3:kl'</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>show index delta settings</sphinxql>
-<sphinxql>select * from main1</sphinxql>
-<sphinxql>select * from main2</sphinxql>
-<sphinxql>show index delta2 settings</sphinxql>
-</sphqueries>
+<queries><sphinxql>
+show index delta settings;
+select * from main1;
+select * from main2;
+select * from delta;
+alter table delta killlist_target='main1:kl';
+show index delta settings;
+select * from main1;
+select * from main2;
+alter table delta killlist_target='main2:kl';
+show index delta settings;
+select * from main1;
+select * from main2;
+alter table delta killlist_target='main1:kl,  main2:kl, main3:kl';
+show meta;
+show index delta settings;
+select * from main1;
+select * from main2;
+show index delta2 settings;
+</sphinxql></queries>
 
 </test>

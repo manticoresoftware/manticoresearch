@@ -96,14 +96,14 @@ INSERT INTO test_table (id, title) VALUES
 (5, 'every sidequest listed below is questik')
 </db_insert>
 
-<sphqueries>
-<sphinxql>CALL KEYWORDS ( '*qu* test', 'dist1', 1 AS stats, 0 AS fold_wildcards )</sphinxql>
-<sphinxql>CALL KEYWORDS ( '*qu* test', 'dist2', 1 AS stats, 0 AS fold_wildcards )</sphinxql>
-<sphinxql>CALL KEYWORDS ( '*qu* test', 'dist3', 1 AS stats, 0 AS fold_wildcards )</sphinxql>
+<queries><sphinxql>
+CALL KEYWORDS ( '*qu* test', 'dist1', 1 AS stats, 0 AS fold_wildcards );
+CALL KEYWORDS ( '*qu* test', 'dist2', 1 AS stats, 0 AS fold_wildcards );
+CALL KEYWORDS ( '*qu* test', 'dist3', 1 AS stats, 0 AS fold_wildcards );
 
-<sphinxql>CALL KEYWORDS ( '*qu* te*', 'dist1', 1 AS stats, 1 AS fold_wildcards )</sphinxql>
-<sphinxql>CALL KEYWORDS ( '*qu* te*', 'dist2', 1 AS stats, 1 AS fold_wildcards )</sphinxql>
-<sphinxql>CALL KEYWORDS ( '*qu* te*', 'dist3', 1 AS stats, 1 AS fold_wildcards )</sphinxql>
-</sphqueries>
+CALL KEYWORDS ( '*qu* te*', 'dist1', 1 AS stats, 1 AS fold_wildcards );
+CALL KEYWORDS ( '*qu* te*', 'dist2', 1 AS stats, 1 AS fold_wildcards );
+CALL KEYWORDS ( '*qu* te*', 'dist3', 1 AS stats, 1 AS fold_wildcards );
+</sphinxql></queries>
 
 </test>

@@ -81,20 +81,20 @@ insert into test_table values
 ( 5, 'document 5', 'Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it.' )
 </db_insert>
 
-<sphqueries>
-<sphinxql>desc test1</sphinxql>
-<sphinxql>select title from test1</sphinxql>
-<sphinxql>select title from test1 where id=3</sphinxql>
-<sphinxql>select body from test1 where id=3</sphinxql>
-<sphinxql>select title, body from test1 where id=5</sphinxql>
-<sphinxql>select * from test1 where id=5</sphinxql>
+<queries><sphinxql>
+desc test1;
+select title from test1;
+select title from test1 where id=3;
+select body from test1 where id=3;
+select title, body from test1 where id=5;
+select * from test1 where id=5;
 
-<sphinxql>desc test2</sphinxql>
-<sphinxql>select * from test2 where match('document')</sphinxql>
-<sphinxql>select * from test2 where match('room')</sphinxql>
+desc test2;
+select * from test2 where match('document');
+select * from test2 where match('room');
 
-<sphinxql>desc test3</sphinxql>
-<sphinxql>select * from test3 where id=1</sphinxql>
-</sphqueries>
+desc test3;
+select * from test3 where id=1;
+</sphinxql></queries>
 
 </test>

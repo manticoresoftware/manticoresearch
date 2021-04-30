@@ -26,66 +26,44 @@ index rt
 }
 </config>
 
-<sphqueries>
-<sphinxql>SET GLOBAL qcache_thresh_msec=0</sphinxql>
-<sphinxql>SET GLOBAL qcache_max_bytes=16777216</sphinxql>
-<sphinxql>SET GLOBAL qcache_ttl_sec=3</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (1,111,'test one')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (2,111,'test two')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (3,111,'test three')</sphinxql>
+<queries><sphinxql>
+SET GLOBAL qcache_thresh_msec=0;
+SET GLOBAL qcache_max_bytes=16777216;
+SET GLOBAL qcache_ttl_sec=3;
+INSERT INTO rt (id,gid,title) VALUES (1,111,'test one');
+INSERT INTO rt (id,gid,title) VALUES (2,111,'test two');
+INSERT INTO rt (id,gid,title) VALUES (3,111,'test three');
 
 <!-- many dummy segments here -->
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (100,111,'no three'), (101,111,'no three'), (102,111,'no three'), (103,111,'no three'), (104,111,'no three'), (105,111,'no three')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (200,111,'no three'), (201,111,'no three'), (202,111,'no three'), (203,111,'no three'), (204,111,'no three')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (4,111,'no three')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (5,111,'no three')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (6,111,'no three')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (7,111,'no three')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (8,111,'no three')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (9,111,'no three')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (10,111,'no three')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (11,111,'no three')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (12,111,'no three')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (13,111,'no three')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (14,111,'no three')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (15,111,'no three')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (16,111,'no three')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (17,111,'no three')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (18,111,'no three')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (19,111,'no three')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (20,111,'no three')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (21,111,'no three')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (22,111,'no three')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (23,111,'no three')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (24,111,'no three')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (25,111,'no three')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (26,111,'no three')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (27,111,'no three')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (28,111,'no three')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (29,111,'no three')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (30,111,'no three')</sphinxql>
+INSERT INTO rt (id,gid,title) VALUES (100,111,'no three'), (101,111,'no three'), (102,111,'no three'), (103,111,'no three'), (104,111,'no three'), (105,111,'no three');
+INSERT INTO rt (id,gid,title) VALUES (200,111,'no three'), (201,111,'no three'), (202,111,'no three'), (203,111,'no three'), (204,111,'no three');
+</sphinxql>
+	<repeat count="27" vars="id" init="4" inc="1" skip="1">
+		<sphinxql>INSERT INTO rt (id,gid,title) VALUES (<id/>,111,'no three')</sphinxql>
+	</repeat>
 
+<sphinxql>
 <!-- cached match without actual data at RT index -->
-<sphinxql>SELECT *,WEIGHT() FROM rt WHERE MATCH('test')</sphinxql>
-<sphinxql>DELETE FROM rt where id=2</sphinxql>
-<sphinxql>SELECT *,WEIGHT() FROM rt WHERE MATCH('test')</sphinxql>
-<sphinxql>INSERT INTO rt (id,gid,title) VALUES (2,111,'test two')</sphinxql>
+SELECT *,WEIGHT() FROM rt WHERE MATCH('test');
+DELETE FROM rt where id=2;
+SELECT *,WEIGHT() FROM rt WHERE MATCH('test');
+INSERT INTO rt (id,gid,title) VALUES (2,111,'test two');
 
-<sphinxql>SELECT *,WEIGHT() FROM rt WHERE MATCH('test')</sphinxql>
-<sphinxql>REPLACE INTO rt (id,gid,title) VALUES (3,222,'test three')</sphinxql>
-<sphinxql>SELECT *,WEIGHT() FROM rt WHERE MATCH('test')</sphinxql>
+SELECT *,WEIGHT() FROM rt WHERE MATCH('test');
+REPLACE INTO rt (id,gid,title) VALUES (3,222,'test three');
+SELECT *,WEIGHT() FROM rt WHERE MATCH('test');
 
 <!-- cache clean up -->
-<sphinxql>SET GLOBAL qcache_max_bytes=0</sphinxql>
-<sphinxql>SET GLOBAL qcache_max_bytes=16777216</sphinxql>
+SET GLOBAL qcache_max_bytes=0;
+SET GLOBAL qcache_max_bytes=16777216;
 
 <!-- duplicates from segments -->
-<sphinxql>SELECT *,WEIGHT() FROM rt WHERE MATCH('test')</sphinxql>
-<sphinxql>REPLACE INTO rt (id,gid,title) VALUES (3,333,'test three')</sphinxql>
-<sphinxql>REPLACE INTO rt (id,gid,title) VALUES (3,444,'test three')</sphinxql>
-<sphinxql>REPLACE INTO rt (id,gid,title) VALUES (3,555,'test three')</sphinxql>
-<sphinxql>SELECT *,WEIGHT() FROM rt WHERE MATCH('test')</sphinxql>
+SELECT *,WEIGHT() FROM rt WHERE MATCH('test');
+REPLACE INTO rt (id,gid,title) VALUES (3,333,'test three');
+REPLACE INTO rt (id,gid,title) VALUES (3,444,'test three');
+REPLACE INTO rt (id,gid,title) VALUES (3,555,'test three');
+SELECT *,WEIGHT() FROM rt WHERE MATCH('test');
 
-</sphqueries>
+</sphinxql></queries>
 
 </test>

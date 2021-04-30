@@ -26,20 +26,20 @@ index testrt
 
 </config>
 
-<sphqueries>
+<queries><sphinxql>
 <!-- first flush on just created RT index is fine -->
-<sphinxql>insert into testrt (id, gid, title) values (1, 11, 'test me up')</sphinxql>
-<sphinxql>flush ramchunk testrt</sphinxql>
-<sphinxql>select * from testrt where match ( 'test me ') order by id desc</sphinxql>
-
+insert into testrt (id, gid, title) values (1, 11, 'test me up');
+flush ramchunk testrt;
+select * from testrt where match ( 'test me ') order by id desc;
+</sphinxql>
 <!-- next disk chunks from RT index is with embeded stopwords from RT index that is wrong -->
 <sphinxql system="restart-daemon"/>
-
-<sphinxql>select * from testrt where match ( 'test me ') order by id desc</sphinxql>
-<sphinxql>insert into testrt (id, gid, title) values (2, 22, 'test me up')</sphinxql>
-<sphinxql>select * from testrt where match ( 'test me ') order by id desc</sphinxql>
-<sphinxql>flush ramchunk testrt</sphinxql>
-<sphinxql>select * from testrt where match ( 'test me ') order by id desc</sphinxql>
-</sphqueries>
+<sphinxql>
+select * from testrt where match ( 'test me ') order by id desc;
+insert into testrt (id, gid, title) values (2, 22, 'test me up');
+select * from testrt where match ( 'test me ') order by id desc;
+flush ramchunk testrt;
+select * from testrt where match ( 'test me ') order by id desc;
+</sphinxql></queries>
 
 </test>

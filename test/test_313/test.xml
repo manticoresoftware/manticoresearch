@@ -19,9 +19,9 @@ index idx_test_agents
 }
 </config>
 
-<sphqueries>
-<sphinxql>show tables</sphinxql>
-<sphinxql>describe idx_test_agents</sphinxql>
-</sphqueries>
+<queries><sphinxql>
+show tables;
+describe idx_test_agents;
+</sphinxql></queries>
 
 </test>

@@ -78,19 +78,21 @@ INSERT INTO test_table VALUES
 <!-- for plain index this is field_lengths -->
 <!-- for RT index this is dick chunk list after RT got saved, need daemon restart -->
 
-<sphqueries>
+<queries><sphinxql>
 <!-- populate commit -->
-<sphinxql>insert into rt (id, content, text, gid) values ( 1, 'test mixed', 'test more', 1)</sphinxql>
+insert into rt (id, content, text, gid) values ( 1, 'test mixed', 'test more', 1);
 
 <!-- query test -->
-<sphinxql>select * from test where match('mixed')</sphinxql>
-<sphinxql>select * from rt where match('mixed')</sphinxql>
+select * from test where match('mixed');
+select * from rt where match('mixed');
+</sphinxql>
 
 <sphinxql system="restart-daemon"/>
 
+<sphinxql>
 <!-- query test -->
-<sphinxql>select * from test where match('mixed')</sphinxql>
-<sphinxql>select * from rt where match('mixed')</sphinxql>
-</sphqueries>
+select * from test where match('mixed');
+select * from rt where match('mixed');
+</sphinxql></queries>
 
 </test>

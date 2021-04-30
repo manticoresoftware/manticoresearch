@@ -76,14 +76,14 @@ insert into test_table values
 <index>test_rt</index>
 </metaindex>
 
-<sphqueries>
-<sphinxql>insert into test_rt values (1, '1st', 'Trevize glanced now and then at Bliss\'s face, which seemed entirely concentrated on Bander.', 11, 1.1, 'str1' )</sphinxql>
-<sphinxql>insert into test_rt values (2, '2nd', 'Trevize had grown quite certain he knew what was going on.', 12, 1.2, 'str2' )</sphinxql>
-<sphinxql>insert into test_rt values (3, '3rd', 'Bander, despite its paean to freedom, found this unique opportunity irresistible.', 13, 1.3, 'str3' )</sphinxql>
-<sphinxql>insert into test_rt values (4, '4th', 'There was no way it could speak to robots on a basis of intellectual equality, and certainly not to animals.', 14, 1.4, 'str4' )</sphinxql>
-<sphinxql>insert into test_rt values (5, '5th', 'To speak to its fellow-Solarians would be, to it, unpleasant, and what communication there must be would be forced, and never spontaneous.', 15, 1.5, 'str5' )</sphinxql>
-<sphinxql>insert into test_rt values (6, '6th', 'No wonder, Trevize thought, it was indulging itself in this way.', 16, 1.6, 'str6' )</sphinxql>
-</sphqueries>
+<queries><sphinxql>
+insert into test_rt values (1, '1st', 'Trevize glanced now and then at Bliss\'s face, which seemed entirely concentrated on Bander.', 11, 1.1, 'str1' );
+insert into test_rt values (2, '2nd', 'Trevize had grown quite certain he knew what was going on.', 12, 1.2, 'str2' );
+insert into test_rt values (3, '3rd', 'Bander, despite its paean to freedom, found this unique opportunity irresistible.', 13, 1.3, 'str3' );
+insert into test_rt values (4, '4th', 'There was no way it could speak to robots on a basis of intellectual equality, and certainly not to animals.', 14, 1.4, 'str4' );
+insert into test_rt values (5, '5th', 'To speak to its fellow-Solarians would be, to it, unpleasant, and what communication there must be would be forced, and never spontaneous.', 15, 1.5, 'str5' );
+insert into test_rt values (6, '6th', 'No wonder, Trevize thought, it was indulging itself in this way.', 16, 1.6, 'str6' );
+</sphinxql></queries>
 
 <httpqueries>
 <query endpoint="json/search">

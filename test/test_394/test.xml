@@ -65,9 +65,9 @@ insert into test_table values
 ( 5, 'document 5', 'Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it.','','','','','' )
 </db_insert>
 
-<sphqueries>
-<sphinxql>select * from loc1</sphinxql>
-<sphinxql>select * from loc2</sphinxql>
-</sphqueries>
+<queries><sphinxql>
+select * from loc1;
+select * from loc2;
+</sphinxql></queries>
 
 </test>

@@ -63,11 +63,11 @@ INSERT INTO `test_table` VALUES
 (6,1,'test 6','[]')
 </db_insert>
 
-<sphqueries>
-<sphinxql>select * from test where json_data.price is null</sphinxql>
-<sphinxql>select * from test where json_data.price is not null</sphinxql>
-<sphinxql>select * from test where json_data.price &lt; 25</sphinxql>
-<sphinxql>select * from test where json_data is not null</sphinxql>
-<sphinxql>select id i, json_data as j from test where j is not null</sphinxql>
-</sphqueries>
+<queries><sphinxql>
+select * from test where json_data.price is null;
+select * from test where json_data.price is not null;
+select * from test where json_data.price &lt; 25;
+select * from test where json_data is not null;
+select id i, json_data as j from test where j is not null;
+</sphinxql></queries>
 </test>

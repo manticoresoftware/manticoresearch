@@ -61,23 +61,23 @@ index rt
 
 </config>
 
-<sphqueries>
-<sphinxql>select id, title, weight() as w from exp_1 where match ( 'running' )</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>select id, title, weight() as w from exp_1 where match ( 'running' ) option expand_keywords=0</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>select id, title, weight() as w from exp_2 where match ( 'dogs' )</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>select id, title, weight() as w from exp_2 where match ( 'dogs' ) option expand_keywords=0</sphinxql>
-<sphinxql>show meta</sphinxql>
+<queries><sphinxql>
+select id, title, weight() as w from exp_1 where match ( 'running' );
+show meta;
+select id, title, weight() as w from exp_1 where match ( 'running' ) option expand_keywords=0;
+show meta;
+select id, title, weight() as w from exp_2 where match ( 'dogs' );
+show meta;
+select id, title, weight() as w from exp_2 where match ( 'dogs' ) option expand_keywords=0;
+show meta;
 
-<sphinxql>insert into rt (id, title, idd) values ( 1,  'dog runs', 11 ), ( 2,  'dogs run', 22 ), ( 3,  'dogs running', 33 ), ( 4,  'dog run', 44 )</sphinxql>
-<sphinxql>select id, title, weight() as w from rt where match ( 'running' )</sphinxql>
-<sphinxql>show meta</sphinxql>
-<sphinxql>select id, title, weight() as w from rt where match ( 'running' ) option expand_keywords=0</sphinxql>
-<sphinxql>show meta</sphinxql>
+insert into rt (id, title, idd) values ( 1,  'dog runs', 11 ), ( 2,  'dogs run', 22 ), ( 3,  'dogs running', 33 ), ( 4,  'dog run', 44 );
+select id, title, weight() as w from rt where match ( 'running' );
+show meta;
+select id, title, weight() as w from rt where match ( 'running' ) option expand_keywords=0;
+show meta;
 
-</sphqueries>
+</sphinxql></queries>
 
 <db_create>
 create table test_table

@@ -29,18 +29,18 @@ index idx_1
 
 </config>
 
-<sphqueries>
-<sphinxql>SET GLOBAL qcache_thresh_msec=0</sphinxql>
-<sphinxql>SET GLOBAL qcache_max_bytes=16777216</sphinxql>
-<sphinxql>SHOW STATUS LIKE 'qcache_cached%'</sphinxql>
-<sphinxql>SHOW STATUS LIKE 'qcache_hits%'</sphinxql>
+<queries><sphinxql>
+SET GLOBAL qcache_thresh_msec=0;
+SET GLOBAL qcache_max_bytes=16777216;
+SHOW STATUS LIKE 'qcache_cached%';
+SHOW STATUS LIKE 'qcache_hits%';
 
 <!-- regression wrong release of cache entry -->
-<sphinxql>SELECT id FROM idx_1 WHERE MATCH('this') ORDER BY id ASC</sphinxql>
-<sphinxql>SELECT id FROM idx_1 WHERE MATCH('this') ORDER BY id ASC</sphinxql>
-<sphinxql>SELECT id FROM idx_1 WHERE MATCH('this') ORDER BY id ASC</sphinxql>
-<sphinxql>SHOW STATUS LIKE 'qcache_cached%'</sphinxql>
-<sphinxql>SHOW STATUS LIKE 'qcache_hits%'</sphinxql>
-</sphqueries>
+SELECT id FROM idx_1 WHERE MATCH('this') ORDER BY id ASC;
+SELECT id FROM idx_1 WHERE MATCH('this') ORDER BY id ASC;
+SELECT id FROM idx_1 WHERE MATCH('this') ORDER BY id ASC;
+SHOW STATUS LIKE 'qcache_cached%';
+SHOW STATUS LIKE 'qcache_hits%';
+</sphinxql></queries>
 
 </test>

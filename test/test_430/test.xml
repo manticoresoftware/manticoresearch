@@ -99,53 +99,53 @@ CREATE TABLE `test_table` (
 <index>test_col</index>
 </metaindex>
 
-<sphqueries>
-<sphinxql>desc META:all</sphinxql>
+<queries><sphinxql>
+desc META:all;
 
-<sphinxql>select * from META:all</sphinxql>
-<sphinxql>select title from META:all</sphinxql>
-<sphinxql>select title a from META:all</sphinxql>
-<sphinxql>select title a from META:all order by a desc</sphinxql>
-<sphinxql>select title from META:all where property='Ten'</sphinxql>
-<sphinxql>select title,property from META:all where property='Ten'</sphinxql>
-<sphinxql>select id,property from META:all order by property desc</sphinxql>
-<sphinxql>select id,property from META:all group by property</sphinxql>
+select * from META:all;
+select title from META:all;
+select title a from META:all;
+select title a from META:all order by a desc;
+select title from META:all where property='Ten';
+select title,property from META:all where property='Ten';
+select id,property from META:all order by property desc;
+select id,property from META:all group by property;
 
-<sphinxql>select * from META:all where match('two')</sphinxql>
-<sphinxql>select title from META:all where match('two')</sphinxql>
-<sphinxql>select title a from META:all where match('two')</sphinxql>
-<sphinxql>select title a from META:all where match('two') order by a desc</sphinxql>
-<sphinxql>select title from META:all where match('two') and property='Ten'</sphinxql>
-<sphinxql>select title,property from META:all where match('two') and property='Ten'</sphinxql>
-<sphinxql>select id,property from META:all where match('two') order by property desc</sphinxql>
-<sphinxql>select id,property from META:all where match('two') group by property</sphinxql>
+select * from META:all where match('two');
+select title from META:all where match('two');
+select title a from META:all where match('two');
+select title a from META:all where match('two') order by a desc;
+select title from META:all where match('two') and property='Ten';
+select title,property from META:all where match('two') and property='Ten';
+select id,property from META:all where match('two') order by property desc;
+select id,property from META:all where match('two') group by property;
 
-<sphinxql>select price,brand_id from META:all</sphinxql>
-<sphinxql>select price a, brand_id b from META:all</sphinxql>
-<sphinxql>select price a from META:all order by a desc</sphinxql>
-<sphinxql>select brand_id a from META:all order by a desc</sphinxql>
-<sphinxql>select price from META:all order by price desc</sphinxql>
-<sphinxql>select brand_id from META:all order by brand_id desc</sphinxql>
-<sphinxql>select price,title from META:all where price=20</sphinxql>
-<sphinxql>select brand_id,title from META:all where brand_id=7</sphinxql>
-<sphinxql>select id,price from META:all order by price desc</sphinxql>
-<sphinxql>select id,brand_id from META:all order by brand_id desc</sphinxql>
-<sphinxql>select id,price from META:all group by price</sphinxql>
-<sphinxql>select id,brand_id from META:all group by brand_id</sphinxql>
+select price,brand_id from META:all;
+select price a, brand_id b from META:all;
+select price a from META:all order by a desc;
+select brand_id a from META:all order by a desc;
+select price from META:all order by price desc;
+select brand_id from META:all order by brand_id desc;
+select price,title from META:all where price=20;
+select brand_id,title from META:all where brand_id=7;
+select id,price from META:all order by price desc;
+select id,brand_id from META:all order by brand_id desc;
+select id,price from META:all group by price;
+select id,brand_id from META:all group by brand_id;
 
-<sphinxql>select price,brand_id from META:all where price=493</sphinxql>
-<sphinxql>select brand_id from META:all where price=493</sphinxql>
-<sphinxql>select price,brand_id from META:all where price&lt;500</sphinxql>
-<sphinxql>select brand_id from META:all where price&lt;500</sphinxql>
-<sphinxql>select price,brand_id from META:all where price&gt;500</sphinxql>
-<sphinxql>select brand_id from META:all where price&gt;500</sphinxql>
+select price,brand_id from META:all where price=493;
+select brand_id from META:all where price=493;
+select price,brand_id from META:all where price&lt;500;
+select brand_id from META:all where price&lt;500;
+select price,brand_id from META:all where price&gt;500;
+select brand_id from META:all where price&gt;500;
 
-<sphinxql>select id from META:all where title!=''</sphinxql>
-<sphinxql>select id from META:all where title=''</sphinxql>
+select id from META:all where title!='';
+select id from META:all where title='';
 
-<sphinxql>select min(length(to_string(title))) from META:all</sphinxql>
-<sphinxql>select max(length(to_string(title))) from META:all</sphinxql>
+select min(length(to_string(title))) from META:all;
+select max(length(to_string(title))) from META:all;
 
-</sphqueries>
+</sphinxql></queries>
 
 </test>

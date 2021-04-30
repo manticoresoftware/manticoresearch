@@ -76,12 +76,12 @@ CREATE TABLE `test_table` (
 (1020,169,4,'Product Seven Six','Brand Four','Eight')
 </db_insert>
 
-<sphqueries>
-<sphinxql>desc test</sphinxql>
+<queries><sphinxql>
+desc test;
 
-<sphinxql>select * from test</sphinxql>
-<sphinxql>select * from test where id=1003</sphinxql>
-<sphinxql>select title from test where match('seven')</sphinxql>
-</sphqueries>
+select * from test;
+select * from test where id=1003;
+select title from test where match('seven');
+</sphinxql></queries>
 
 </test>

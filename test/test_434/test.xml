@@ -64,47 +64,47 @@ INSERT INTO test_table VALUES
 ( 103, 'but most of these were largely concerned with the movements of small green pieces of paper', 0, 0, 43, '2004-07-04', 44, 45, 46, 47 )
 </db_insert>
 
-<sphqueries>
-<sphinxql>desc test</sphinxql>
-<sphinxql>select count(*) from test</sphinxql>
-<sphinxql>select year(date) from test</sphinxql>
-<sphinxql>select id, category from test</sphinxql>
-<sphinxql>select id from test where status=0</sphinxql>
-<sphinxql>select id from test where status=1</sphinxql>
-<sphinxql>select id from test where status in (0,1)</sphinxql>
-<sphinxql>select id from test where status not in (1)</sphinxql>
-<sphinxql>select * from test</sphinxql>
-<sphinxql>select status from test</sphinxql>
-<sphinxql>select flt from test where flt>0.3</sphinxql>
-<sphinxql>select flt from test where flt&lt;0.3</sphinxql>
-<sphinxql>select flt1 from test where flt1=23</sphinxql>
-<sphinxql>select flt1 from test where flt1=23.0</sphinxql>
-<sphinxql>select flt1 from test where flt1>23</sphinxql>
-<sphinxql>select flt1 from test where flt1>23.0</sphinxql>
-<sphinxql>select count(*) from test where flt1>23.0</sphinxql>
+<queries><sphinxql>
+desc test;
+select count(*) from test;
+select year(date) from test;
+select id, category from test;
+select id from test where status=0;
+select id from test where status=1;
+select id from test where status in (0,1);
+select id from test where status not in (1);
+select * from test;
+select status from test;
+select flt from test where flt>0.3;
+select flt from test where flt&lt;0.3;
+select flt1 from test where flt1=23;
+select flt1 from test where flt1=23.0;
+select flt1 from test where flt1>23;
+select flt1 from test where flt1>23.0;
+select count(*) from test where flt1>23.0;
 
 <!-- regression histogram estimate wrong type of filter -->
-<sphinxql>select flt from test where flt&gt;0 and flt&lt;0.01</sphinxql>
+select flt from test where flt&gt;0 and flt&lt;0.01;
 
-<sphinxql>select id from test order by flt asc</sphinxql>
-<sphinxql>select id,flt from test order by flt asc</sphinxql>
-<sphinxql>select id from test order by flt desc</sphinxql>
-<sphinxql>select id,flt from test order by flt desc</sphinxql>
+select id from test order by flt asc;
+select id,flt from test order by flt asc;
+select id from test order by flt desc;
+select id,flt from test order by flt desc;
 
 <!-- exclude filters for bool attrs -->
-<sphinxql>select id,status from test</sphinxql>
-<sphinxql>select id from test where status!=0</sphinxql>
-<sphinxql>select id from test where status!=1</sphinxql>
-<sphinxql>select id from test where status not in (0)</sphinxql>
-<sphinxql>select id from test where status not in (1)</sphinxql>
+select id,status from test;
+select id from test where status!=0;
+select id from test where status!=1;
+select id from test where status not in (0);
+select id from test where status not in (1);
 
 <!-- exclude filters for int attrs -->
-<sphinxql>select id,kind from test</sphinxql>
-<sphinxql>select id from test where kind!=23</sphinxql>
-<sphinxql>select id from test where kind!=43</sphinxql>
-<sphinxql>select id from test where kind not in (13,23,33,43)</sphinxql>
-<sphinxql>select id from test where kind not in (23,33)</sphinxql>
+select id,kind from test;
+select id from test where kind!=23;
+select id from test where kind!=43;
+select id from test where kind not in (13,23,33,43);
+select id from test where kind not in (23,33);
 
-</sphqueries>
+</sphinxql></queries>
 
 </test>

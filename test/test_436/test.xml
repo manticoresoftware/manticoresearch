@@ -29,10 +29,9 @@ index rt1
 
 </config>
 
-<sphqueries>
+<queries><sphinxql>
 
 <!--  regression: binlog crashes on replayng commit with update of string attribute -->
-<sphinxql>
 INSERT INTO rt1 (id, content, idd, title) VALUES (100, 'test stuff', 111, 'data 100');
 SELECT * FROM rt1;
 
@@ -43,7 +42,7 @@ SELECT * FROM rt1;
 <sphinxql system="start-agent-no-warnings"/>
 <sphinxql>
 SELECT * FROM rt1;
-</sphinxql>
-</sphqueries>
+
+</sphinxql></queries>
 
 </test>

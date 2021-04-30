@@ -67,9 +67,9 @@ INSERT INTO test_table VALUES
 ( 15, 'dummy', 10, 6 )
 </db_insert>
 
-<sphqueries>
-<sphinxql>desc test</sphinxql>
-<sphinxql>select * from test</sphinxql>
-</sphqueries>
+<queries><sphinxql>
+desc test;
+select * from test;
+</sphinxql></queries>
 
 </test>

@@ -20,53 +20,54 @@ searchd
 }
 </config>
 
-<sphqueries>
+<queries><sphinxql>
 
-<sphinxql>show tables</sphinxql>
-<sphinxql>create table test1 ( title text, tag integer ) stopwords = '<this_test/>/stops.txt'</sphinxql>
-<sphinxql>insert into test1 values (1,'hello',10)</sphinxql>
-<sphinxql>insert into test1 values (2,'title',10)</sphinxql>
-<sphinxql>select * from test1</sphinxql>
-<sphinxql>select * from test1 where match('hello')</sphinxql>
-<sphinxql>drop table test1</sphinxql>
+show tables;
+create table test1 ( title text, tag integer ) stopwords = '<this_test/>/stops.txt';
+insert into test1 values (1,'hello',10);
+insert into test1 values (2,'title',10);
+select * from test1;
+select * from test1 where match('hello');
+drop table test1;
 
-<sphinxql>create table test2 ( title text, tag integer ) wordforms = 'wrong.file' wordforms = '<this_test/>/wordforms.txt'</sphinxql>
-<sphinxql>insert into test2 values (1,'word form',10)</sphinxql>
-<sphinxql>select * from test2 where match('wordform')</sphinxql>
-<sphinxql>drop table test2</sphinxql>
-
+create table test2 ( title text, tag integer ) wordforms = 'wrong.file' wordforms = '<this_test/>/wordforms.txt';
+insert into test2 values (1,'word form',10);
+select * from test2 where match('wordform');
+drop table test2;
+</sphinxql>
 <sphinxql example="configless with exceptions">
 	create table test3 ( title text, tag integer ) exceptions = '<this_test/>/exceptions.txt';
 	call keywords('microsoft windows', 'test3');
 	call keywords('Microsoft Windows', 'test3');
 </sphinxql>
-<sphinxql>drop table test3</sphinxql>
+<sphinxql>
+drop table test3;
 
-<sphinxql>create table test4 ( title text, tag integer ) wordforms = '<this_test/>/wordforms.txt'</sphinxql>
-<sphinxql>drop table test4</sphinxql>
-<sphinxql>create table test4 ( title text, tag integer ) wordforms = '<this_test/>/wordforms.txt'</sphinxql>
-<sphinxql>drop table test4</sphinxql>
+create table test4 ( title text, tag integer ) wordforms = '<this_test/>/wordforms.txt';
+drop table test4;
+create table test4 ( title text, tag integer ) wordforms = '<this_test/>/wordforms.txt';
+drop table test4;
 
-<sphinxql>create table movies(title text, year int) morphology='stem_en' html_strip='1' stopwords='<this_test/>/stops.txt' bigram_index='1'</sphinxql>
-<sphinxql>show tables</sphinxql>
-<sphinxql>create table movies(title text, year int) morphology='stem_en' html_strip='1' stopwords='<this_test/>/stops.txt' bigram_index='1'</sphinxql>
-<sphinxql>show tables</sphinxql>
+create table movies(title text, year int) morphology='stem_en' html_strip='1' stopwords='<this_test/>/stops.txt' bigram_index='1';
+show tables;
+create table movies(title text, year int) morphology='stem_en' html_strip='1' stopwords='<this_test/>/stops.txt' bigram_index='1';
+show tables;
 
-<sphinxql>create table test1 (title text) wordforms = '<this_test/>/wordforms.txt <this_test/>/wordforms2.txt'</sphinxql>
-<sphinxql>show create table test1</sphinxql>
-<sphinxql>create table test2 like test1</sphinxql>
-<sphinxql>show create table test2</sphinxql>
-<sphinxql>insert into test2 values (1,'word form')</sphinxql>
-<sphinxql>insert into test2 values (2,'word1 form1')</sphinxql>
-<sphinxql>select * from test2 where match('wordform')</sphinxql>
-<sphinxql>select * from test2 where match('wordform1')</sphinxql>
-<sphinxql>drop table test1</sphinxql>
-<sphinxql>drop table test2</sphinxql>
+create table test1 (title text) wordforms = '<this_test/>/wordforms.txt <this_test/>/wordforms2.txt';
+show create table test1;
+create table test2 like test1;
+show create table test2;
+insert into test2 values (1,'word form');
+insert into test2 values (2,'word1 form1');
+select * from test2 where match('wordform');
+select * from test2 where match('wordform1');
+drop table test1;
+drop table test2;
 
-<sphinxql>create table test1 (title text) wordforms = '<this_test/>/wordform*.txt'</sphinxql>
-<sphinxql>show create table test1</sphinxql>
-<sphinxql>drop table test1</sphinxql>
+create table test1 (title text) wordforms = '<this_test/>/wordform*.txt';
+show create table test1;
+drop table test1;
 
-</sphqueries>
+</sphinxql></queries>
 
 </test>

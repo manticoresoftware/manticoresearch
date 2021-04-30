@@ -33,11 +33,9 @@ index test
 
 </config>
 
-<sphqueries>
-
-<sphinxql>desc test</sphinxql>
-<sphinxql>select * from test order by id asc</sphinxql>
-
-</sphqueries>
+<queries><sphinxql>
+desc test;
+select * from test order by id asc;
+</sphinxql></queries>
 
 </test>

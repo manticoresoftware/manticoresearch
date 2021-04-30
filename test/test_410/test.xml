@@ -30,74 +30,69 @@ index rt1
 
 </config>
 
-<sphqueries>
-<sphinxql>insert into rt1 (id, title, j, mva, gid) values
+<queries><sphinxql>
+insert into rt1 (id, title, j, mva, gid) values
 	(1, 'test 1', '{i:1, parent:[45, 101]}', (209, 212, 215), 209 ),
 	(2, 'test 2', '{i:2, parent:[45, 102]}', (211, 218), 211 ),
 	(3, 'test 3', '{i:3, parent:[46, 103]}', (207, 209, 213), 209 ),
 	(4, 'test 4', '{i:4, parent:[46, 104]}', (210, 216), 210 ),
 	(5, 'test 5', '{i:5, parent:[55, 105]}', (205, 211), 205 ),
     (6, 'test 7', '{i:6, parent:[56, 106]}', (205, 209, 211), 205 ),
-    (7, 'test 7', '{i:7, parent:[56, 107]}', (207, 211), 207 )
-</sphinxql>
+    (7, 'test 7', '{i:7, parent:[56, 107]}', (207, 211), 207 );
 
-<sphinxql>SELECT id, groupby() g, count(*) c, mva FROM rt1 GROUP 3 BY mva ORDER BY id ASC</sphinxql>
-<sphinxql>SELECT id, groupby() g, count(*) c, mva FROM rt1 GROUP BY mva ORDER BY id ASC</sphinxql>
-<sphinxql>SELECT id, j.parent[0] AS gr, groupby() g, count(*) as c, j FROM rt1 GROUP BY gr</sphinxql>
-<sphinxql>SELECT id, groupby() g, count(*) c, gid FROM rt1 GROUP 3 BY gid ORDER BY id ASC</sphinxql>
-<sphinxql>SELECT id, groupby() g, count(*) c, gid FROM rt1 GROUP BY gid ORDER BY id ASC</sphinxql>
-<sphinxql>SELECT id, COUNT(*) FROM rt1</sphinxql>
+SELECT id, groupby() g, count(*) c, mva FROM rt1 GROUP 3 BY mva ORDER BY id ASC;
+SELECT id, groupby() g, count(*) c, mva FROM rt1 GROUP BY mva ORDER BY id ASC;
+SELECT id, j.parent[0] AS gr, groupby() g, count(*) as c, j FROM rt1 GROUP BY gr;
+SELECT id, groupby() g, count(*) c, gid FROM rt1 GROUP 3 BY gid ORDER BY id ASC;
+SELECT id, groupby() g, count(*) c, gid FROM rt1 GROUP BY gid ORDER BY id ASC;
+SELECT id, COUNT(*) FROM rt1;
 
-<sphinxql>FLUSH RAMCHUNK rt1</sphinxql>
+FLUSH RAMCHUNK rt1;
 
-<sphinxql>SELECT id, groupby() g, count(*) c, mva FROM rt1 GROUP 3 BY mva ORDER BY id ASC</sphinxql>
-<sphinxql>SELECT id, groupby() g, count(*) c, mva FROM rt1 GROUP BY mva ORDER BY id ASC</sphinxql>
-<sphinxql>SELECT id, j.parent[0] AS gr, groupby() g, count(*) as c, j FROM rt1 GROUP BY gr</sphinxql>
-<sphinxql>SELECT id, groupby() g, count(*) c, gid FROM rt1 GROUP 3 BY gid ORDER BY id ASC</sphinxql>
-<sphinxql>SELECT id, groupby() g, count(*) c, gid FROM rt1 GROUP BY gid ORDER BY id ASC</sphinxql>
-<sphinxql>SELECT id, COUNT(*) FROM rt1</sphinxql>
+SELECT id, groupby() g, count(*) c, mva FROM rt1 GROUP 3 BY mva ORDER BY id ASC;
+SELECT id, groupby() g, count(*) c, mva FROM rt1 GROUP BY mva ORDER BY id ASC;
+SELECT id, j.parent[0] AS gr, groupby() g, count(*) as c, j FROM rt1 GROUP BY gr;
+SELECT id, groupby() g, count(*) c, gid FROM rt1 GROUP 3 BY gid ORDER BY id ASC;
+SELECT id, groupby() g, count(*) c, gid FROM rt1 GROUP BY gid ORDER BY id ASC;
+SELECT id, COUNT(*) FROM rt1;
 
 <!-- regression crash at grouper at different disk chunks -->
-<sphinxql>truncate rtindex rt1</sphinxql>
-<sphinxql>insert into rt1 (id, title, gid) values
+truncate rtindex rt1;
+insert into rt1 (id, title, gid) values
 	(51, 'test 1', 501 ), (52, 'test 2', 502 ), (53, 'test 3', 503 ),
 	(54, 'test 4', 504 ), (55, 'test 5', 505 ), (56, 'test 7', 506 ),
 	(57, 'test 4', 507 ), (58, 'test 5', 508 ), (59, 'test 7', 509 ),
 	(60, 'test 4', 510 ), (61, 'test 5', 511 ), (62, 'test 7', 512 ),
 	(71, 'test 1', 521 ), (72, 'test 2', 522 ), (73, 'test 3', 523 ),
 	(74, 'test 4', 524 ), (75, 'test 5', 525 ), (76, 'test 7', 526 ),
-    (77, 'test 4', 527 ), (78, 'test 5', 528 ), (79, 'test 7', 529 )
-</sphinxql>
-<sphinxql>FLUSH RAMCHUNK rt1</sphinxql>
-<sphinxql>insert into rt1 (id, title, gid) values
+    (77, 'test 4', 527 ), (78, 'test 5', 528 ), (79, 'test 7', 529 );
+FLUSH RAMCHUNK rt1;
+insert into rt1 (id, title, gid) values
 	(31, 'test 1', 401 ), (32, 'test 2', 402 ), (33, 'test 3', 403 ),
 	(34, 'test 4', 404 ), (35, 'test 5', 405 ), (36, 'test 7', 406 ),
 	(37, 'test 4', 407 ), (38, 'test 5', 408 ), (39, 'test 7', 409 ),
-	(40, 'test 4', 410 ), (41, 'test 5', 411 ), (42, 'test 7', 412 )
-</sphinxql>
-<sphinxql>FLUSH RAMCHUNK rt1</sphinxql>
-<sphinxql>insert into rt1 (id, title, gid) values
+	(40, 'test 4', 410 ), (41, 'test 5', 411 ), (42, 'test 7', 412 );
+FLUSH RAMCHUNK rt1;
+insert into rt1 (id, title, gid) values
 	(21, 'test 1', 309 ), (22, 'test 2', 310 ), (23, 'test 3', 311 ),
-	(24, 'test 4', 312 ), (25, 'test 5', 313 ), (26, 'test 7', 314 )
-</sphinxql>
-<sphinxql>FLUSH RAMCHUNK rt1</sphinxql>
-<sphinxql>SELECT id, CONCAT('title') as gr1, groupby() g, count(*) c, gid FROM rt1 GROUP BY gid ORDER BY id desc OPTION threads=1, max_matches=4</sphinxql>
+	(24, 'test 4', 312 ), (25, 'test 5', 313 ), (26, 'test 7', 314 );
+FLUSH RAMCHUNK rt1;
+SELECT id, CONCAT('title') as gr1, groupby() g, count(*) c, gid FROM rt1 GROUP BY gid ORDER BY id desc OPTION threads=1, max_matches=4;
 
 <!-- regression crash at group N by with expression at RT with disk chunks -->
-<sphinxql>truncate rtindex rt1</sphinxql>
-<sphinxql>insert into rt1 (id, title, gid) values
+truncate rtindex rt1;
+insert into rt1 (id, title, gid) values
 	(1, 'test 1', 101 ),
 	(2, 'test 2', 100 ),
     (3, 'test 3', 103 ),
-	(4, 'test 4', 100 )
-</sphinxql>
-<sphinxql>FLUSH RAMCHUNK rt1</sphinxql>
-<sphinxql>insert into rt1 (id, title, gid) values (10, 'test 10', 110 )</sphinxql>
-<sphinxql>SELECT id, gid, count(*), groupby() FROM rt1 WHERE MATCH('test') GROUP BY gid ORDER BY id ASC</sphinxql>
-<sphinxql>SELECT id, gid, count(*), groupby() FROM rt1 WHERE MATCH('test') GROUP 2 BY gid ORDER BY id ASC</sphinxql>
-<sphinxql>SELECT id, gid, count(*), groupby(), (1+2) as t FROM rt1 WHERE MATCH('test') GROUP BY gid ORDER BY id ASC</sphinxql>
-<sphinxql>SELECT id, gid, count(*), groupby(), (1+2) as t FROM rt1 WHERE MATCH('test') GROUP 2 BY gid ORDER BY id ASC</sphinxql>
+	(4, 'test 4', 100 );
+FLUSH RAMCHUNK rt1;
+insert into rt1 (id, title, gid) values (10, 'test 10', 110 );
+SELECT id, gid, count(*), groupby() FROM rt1 WHERE MATCH('test') GROUP BY gid ORDER BY id ASC;
+SELECT id, gid, count(*), groupby() FROM rt1 WHERE MATCH('test') GROUP 2 BY gid ORDER BY id ASC;
+SELECT id, gid, count(*), groupby(), (1+2) as t FROM rt1 WHERE MATCH('test') GROUP BY gid ORDER BY id ASC;
+SELECT id, gid, count(*), groupby(), (1+2) as t FROM rt1 WHERE MATCH('test') GROUP 2 BY gid ORDER BY id ASC;
 
-</sphqueries>
+</sphinxql></queries>
 
 </test>

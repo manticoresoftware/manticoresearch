@@ -31,8 +31,8 @@ index rt1
 
 </config>
 
-<sphqueries>
-<sphinxql>insert into rt1 (id, title, j) values
+<queries><sphinxql>
+insert into rt1 (id, title, j) values
 	(1, 'test 1', '{i:1, parent:[45, 101]}'),
 	(2, 'test 2', '{i:2, parent:[45, 102]}'),
 	(3, 'test 3', '{i:3, parent:[46, 103]}'),
@@ -59,14 +59,14 @@ index rt1
 	(26, 'test 26', '{i:26, parent:[95, 126]}'),
 	(27, 'test 27', '{i:27, parent:[87, 127]}'),
 	(28, 'test 28', '{i:28, parent:[87, 128]}'),
-	(29, 'test 29', '{i:29, parent:[88, 129]}')
-</sphinxql>
-<sphinxql>FLUSH RAMCHUNK rt1</sphinxql>
-<!-- regression group by on json.field broken at disk chunk of RT index  -->
-<sphinxql>SELECT id, j.parent[0] AS gr, id as i, count(*) as c FROM rt1 GROUP BY gr</sphinxql>
-<!-- regression group by for matches count more than grouper buffer cause to miss some matches data at disk chunk of RT index  -->
-<sphinxql>SELECT id, j.parent[0] AS gr, id as i, count(*) as c FROM rt1 GROUP BY i OPTION max_matches = 4</sphinxql>
+	(29, 'test 29', '{i:29, parent:[88, 129]}');
 
-</sphqueries>
+FLUSH RAMCHUNK rt1;
+<!-- regression group by on json.field broken at disk chunk of RT index  -->
+SELECT id, j.parent[0] AS gr, id as i, count(*) as c FROM rt1 GROUP BY gr;
+<!-- regression group by for matches count more than grouper buffer cause to miss some matches data at disk chunk of RT index  -->
+SELECT id, j.parent[0] AS gr, id as i, count(*) as c FROM rt1 GROUP BY i OPTION max_matches = 4;
+
+</sphinxql></queries>
 
 </test>

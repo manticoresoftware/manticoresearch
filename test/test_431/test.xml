@@ -100,12 +100,12 @@ CREATE TABLE `test_table` (
 <index>test_col</index>
 </metaindex>
 
-<sphqueries>
-<sphinxql>desc META:all</sphinxql>
+<queries><sphinxql>
+desc META:all;
 
-<sphinxql>select * from META:all</sphinxql>
-<sphinxql>select count(*) from META:all group by property</sphinxql>
-<sphinxql>select count(distinct title) from META:all group by brand_id</sphinxql>
-</sphqueries>
+select * from META:all;
+select count(*) from META:all group by property;
+select count(distinct title) from META:all group by brand_id;
+</sphinxql></queries>
 
 </test>

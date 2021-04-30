@@ -27,38 +27,40 @@ searchd
 </agent1>
 </config>
 
-<sphqueries>
+<queries>
 
-<sphinxql d="0">create table test1 ( title text, tag uint )</sphinxql>
-<sphinxql d="0">insert into test1 values (1,'word1',100)</sphinxql>
-<sphinxql d="0">insert into test1 values (2,'word2',200)</sphinxql>
-<sphinxql d="0">create table test2 ( title text, tag uint )</sphinxql>
-<sphinxql d="0">insert into test2 values (3,'word3',300)</sphinxql>
-<sphinxql d="0">insert into test2 values (4,'word4',400)</sphinxql>
-<sphinxql d="0">create table distr type='distributed' local='test1' local='test2'</sphinxql>
-<sphinxql d="0">show create table distr</sphinxql>
+<sphinxql d="0">create table test1 ( title text, tag uint );
+insert into test1 values (1,'word1',100);
+insert into test1 values (2,'word2',200);
+create table test2 ( title text, tag uint );
+insert into test2 values (3,'word3',300);
+insert into test2 values (4,'word4',400);
+create table distr type='distributed' local='test1' local='test2';
+show create table distr;
 
-<sphinxql d="0">show tables</sphinxql>
-<sphinxql d="0">desc distr</sphinxql>
+show tables;
+desc distr;
 
-<sphinxql d="0">select * from distr</sphinxql>
+select * from distr;
 
-<sphinxql d="0">drop table distr</sphinxql>
+drop table distr;
 
-<sphinxql d="0">show tables</sphinxql>
+show tables;
+</sphinxql>
 
-<sphinxql d="1">create table distr type='distributed' agent='<agent0_address/>:test1'</sphinxql>
-<sphinxql d="1">show create table distr</sphinxql>
-<sphinxql d="1">show tables</sphinxql>
-<sphinxql d="1">select * from distr</sphinxql>
-<sphinxql d="1">drop table distr</sphinxql>
+<sphinxql d="1">create table distr type='distributed' agent='<agent0_address/>:test1';
+show create table distr;
+show tables;
+select * from distr;
+drop table distr;
+</sphinxql>
 
-<sphinxql d="0">create table distr type='distributed' local='test1' local='test2'</sphinxql>
-<sphinxql d="0">drop table test1</sphinxql>
-<sphinxql d="0">show tables</sphinxql>
-<sphinxql d="0">select * from distr</sphinxql>
-<sphinxql d="0">drop table test2</sphinxql>
+<sphinxql d="0">create table distr type='distributed' local='test1' local='test2';
+drop table test1;
+show tables;
+select * from distr;
+drop table test2;
 
-</sphqueries>
+</sphinxql></queries>
 
 </test>

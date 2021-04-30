@@ -61,21 +61,20 @@ INSERT INTO json_src_table VALUES
 
 
 
-<sphqueries>
+<queries><sphinxql>
 
 <!-- distance -->
-<sphinxql>select id, levenshtein('gily', t1) as ord, t1, j.name from test_json order by ord asc</sphinxql>
-<sphinxql>select id, FLOOR(levenshtein('padre', t1, {normalize=1})*100) as ord, t1, j.name from test_json order by ord asc</sphinxql>
-<sphinxql>select id, levenshtein('honda', j.name, {normalize=0}) as ord, t1, j.name from test_json order by ord asc</sphinxql>
-<sphinxql>select id, FLOOR(levenshtein(t1, j.name, {normalize=1})*100) as ord, t1, j.name from test_json order by ord asc</sphinxql>
-<sphinxql>select id, levenshtein('bandage', t1) as ord, t1, j.name from test_json order by ord asc</sphinxql>
+select id, levenshtein('gily', t1) as ord, t1, j.name from test_json order by ord asc;
+select id, FLOOR(levenshtein('padre', t1, {normalize=1})*100) as ord, t1, j.name from test_json order by ord asc;
+select id, levenshtein('honda', j.name, {normalize=0}) as ord, t1, j.name from test_json order by ord asc;
+select id, FLOOR(levenshtein(t1, j.name, {normalize=1})*100) as ord, t1, j.name from test_json order by ord asc;
+select id, levenshtein('bandage', t1) as ord, t1, j.name from test_json order by ord asc;
 
-<sphinxql>select id, substring_index(t2, ' ', -1) as c1, levenshtein('led', c1) as ord from test_json order by ord asc</sphinxql>
+select id, substring_index(t2, ' ', -1) as c1, levenshtein('led', c1) as ord from test_json order by ord asc;
 
-<sphinxql>select id, levenshtein('bananamix', t1) as ord, t1 from test_json order by ord asc</sphinxql>
-<sphinxql>select id, levenshtein('bananamix', t1, {length_delta=4}) as ord, t1 from test_json order by ord asc</sphinxql>
+select id, levenshtein('bananamix', t1) as ord, t1 from test_json order by ord asc;
+select id, levenshtein('bananamix', t1, {length_delta=4}) as ord, t1 from test_json order by ord asc;
 
-</sphqueries>
-
+</sphinxql></queries>
 
 </test>

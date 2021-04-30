@@ -17,18 +17,18 @@ searchd
 }
 </config>
 
-<sphqueries>
+<queries><sphinxql>
 
-<sphinxql>create table t(f text, j json)</sphinxql>
-<sphinxql>insert into t(id,j) values(1,'{"id":6}')</sphinxql>
-<sphinxql>insert into t(id,j) values(2,'{"id":7}')</sphinxql>
-<sphinxql>select j.id i, count(distinct i) from t</sphinxql>
+create table t(f text, j json);
+insert into t(id,j) values(1,'{"id":6}');
+insert into t(id,j) values(2,'{"id":7}');
+select j.id i, count(distinct i) from t;
 
-<sphinxql>flush ramchunk t</sphinxql>
-<sphinxql>select j.id i, count(distinct i) from t</sphinxql>
+flush ramchunk t;
+select j.id i, count(distinct i) from t;
 
-<sphinxql>drop table t</sphinxql>
+drop table t;
 
-</sphqueries>
+</sphinxql></queries>
 
 </test>

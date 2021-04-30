@@ -15,41 +15,41 @@ searchd
 }
 </config>
 
-<sphqueries>
+<queries><sphinxql>
 
-<sphinxql>create table test1 ( title text, tag integer )</sphinxql>
-<sphinxql>insert into test1 values (1, 'word form', 11)</sphinxql>
-<sphinxql>select * from test1 where match ( 'wordform' )</sphinxql>
+create table test1 ( title text, tag integer );
+insert into test1 values (1, 'word form', 11);
+select * from test1 where match ( 'wordform' );
 
-<sphinxql>alter table test1 wordforms = '<this_test/>/wordforms.txt'</sphinxql>
+alter table test1 wordforms = '<this_test/>/wordforms.txt';
 
-<sphinxql>insert into test1 values (2, 'word form', 11)</sphinxql>
-<sphinxql>select * from test1 where match ( 'wordform' )</sphinxql>
+insert into test1 values (2, 'word form', 11);
+select * from test1 where match ( 'wordform' );
 
 <!-- regression CREATE LIKE failed -->
-<sphinxql>CREATE TABLE test11 (title TEXT, category INT) min_infix_len='4'</sphinxql>
-<sphinxql>CREATE TABLE test12 LIKE test11</sphinxql>
-<sphinxql>ALTER TABLE test11 ignore_chars='.'</sphinxql>
-<sphinxql>SHOW INDEX test11 SETTINGS</sphinxql>
-<sphinxql>SHOW INDEX test12 SETTINGS</sphinxql>
+CREATE TABLE test11 (title TEXT, category INT) min_infix_len='4';
+CREATE TABLE test12 LIKE test11;
+ALTER TABLE test11 ignore_chars='.';
+SHOW INDEX test11 SETTINGS;
+SHOW INDEX test12 SETTINGS;
 
-<sphinxql>drop table test1</sphinxql>
-<sphinxql>drop table test11</sphinxql>
-<sphinxql>drop table test12</sphinxql>
+drop table test1;
+drop table test11;
+drop table test12;
 
-<sphinxql>CREATE TABLE test1 (title text) rt_mem_limit='2G'</sphinxql>
-<sphinxql>CREATE TABLE test2 LIKE test1</sphinxql>
-<sphinxql>SHOW CREATE TABLE test1</sphinxql>
-<sphinxql>SHOW CREATE TABLE test2</sphinxql>
+CREATE TABLE test1 (title text) rt_mem_limit='2G';
+CREATE TABLE test2 LIKE test1;
+SHOW CREATE TABLE test1;
+SHOW CREATE TABLE test2;
 
-<sphinxql>ALTER TABLE test1 rt_mem_limit='1G'</sphinxql>
-<sphinxql>SHOW CREATE TABLE test1</sphinxql>
+ALTER TABLE test1 rt_mem_limit='1G';
+SHOW CREATE TABLE test1;
 
-<sphinxql>drop table test1</sphinxql>
-<sphinxql>drop table test2</sphinxql>
+drop table test1;
+drop table test2;
 
-<sphinxql>ALTER TABLE test1 RECONFIGURE</sphinxql>
+ALTER TABLE test1 RECONFIGURE;
 
-</sphqueries>
+</sphinxql></queries>
 
 </test>

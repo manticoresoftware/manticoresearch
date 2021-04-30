@@ -20,32 +20,32 @@ searchd
 }
 </config>
 
-<sphqueries>
+<queries><sphinxql>
 
-<sphinxql>show tables</sphinxql>
-<sphinxql>import table test1 from '<this_test/>/data/index'</sphinxql>
-<sphinxql>show tables</sphinxql>
-<sphinxql>select * from test1</sphinxql>
+show tables;
+import table test1 from '<this_test/>/data/index';
+show tables;
+select * from test1;
 
 <!-- regression table from old version can not insert data into full-text columns -->
-<sphinxql>import table test320 from '<this_test/>/data/rel320/idx320'</sphinxql>
-<sphinxql>select * from test320 where match ( '@keywords kw1' )</sphinxql>
-<sphinxql>REPLACE INTO test320 (id, keywords, postingtitle) VALUES (20, 'kw1 of data', 'kw1 at doc20')</sphinxql>
-<sphinxql>select * from test320 where match ( '@keywords kw1' )</sphinxql>
+import table test320 from '<this_test/>/data/rel320/idx320';
+select * from test320 where match ( '@keywords kw1' );
+REPLACE INTO test320 (id, keywords, postingtitle) VALUES (20, 'kw1 of data', 'kw1 at doc20');
+select * from test320 where match ( '@keywords kw1' );
 
 <!-- regression crash on import missed index -->
-<sphinxql>import table test_missed from './none'</sphinxql>
+import table test_missed from './none';
 
 <!--clean up -->
-<sphinxql>drop table test1</sphinxql>
-<sphinxql>drop table test320</sphinxql>
+drop table test1;
+drop table test320;
 
-<sphinxql>show tables</sphinxql>
-<sphinxql>import table pq from '<this_test/>/data/pq'</sphinxql>
-<sphinxql>show tables</sphinxql>
-<sphinxql>call pq ('pq', 'test 1', 1 as docs, 0 as docs_json )</sphinxql>
-<sphinxql>drop table pq</sphinxql>
+show tables;
+import table pq from '<this_test/>/data/pq';
+show tables;
+call pq ('pq', 'test 1', 1 as docs, 0 as docs_json );
+drop table pq;
 
-</sphqueries>
+</sphinxql></queries>
 
 </test>

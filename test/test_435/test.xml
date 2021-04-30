@@ -72,27 +72,27 @@ CREATE TABLE `test_table` (
 <index>test_col</index>
 </metaindex>
 
-<sphqueries>
-<sphinxql>desc META:all</sphinxql>
+<queries><sphinxql>
+desc META:all;
 
-<sphinxql>select * from META:all</sphinxql>
-<sphinxql>select cat1,cat2,cat3 from META:all</sphinxql>
+select * from META:all;
+select cat1,cat2,cat3 from META:all;
 
-<sphinxql>select * from META:all where any(cat1)=2</sphinxql>
-<sphinxql>select * from META:all where any(cat1)=5</sphinxql>
-<sphinxql>select * from META:all where all(cat1) in (1,2,3)</sphinxql>
-<sphinxql>select * from META:all where all(cat1) in (1,2)</sphinxql>
-<sphinxql>select * from META:all where any(cat3)&lt;=101</sphinxql>
-<sphinxql>select * from META:all where any(cat2)>=100</sphinxql>
+select * from META:all where any(cat1)=2;
+select * from META:all where any(cat1)=5;
+select * from META:all where all(cat1) in (1,2,3);
+select * from META:all where all(cat1) in (1,2);
+select * from META:all where any(cat3)&lt;=101;
+select * from META:all where any(cat2)>=100;
 
-<sphinxql>select least(cat1),least(cat2),least(cat3) from META:all</sphinxql>
-<sphinxql>select greatest(cat1),greatest(cat2),greatest(cat3) from META:all</sphinxql>
+select least(cat1),least(cat2),least(cat3) from META:all;
+select greatest(cat1),greatest(cat2),greatest(cat3) from META:all;
 
 <!-- exclude filters in MVA attrs -->
-<sphinxql>select id,cat2 from META:all</sphinxql>
-<sphinxql>select id from META:all where any(cat2) not in (20,30,40)</sphinxql>
-<sphinxql>select id from META:all where all(cat2) not in (20,30,40)</sphinxql>
+select id,cat2 from META:all;
+select id from META:all where any(cat2) not in (20,30,40);
+select id from META:all where all(cat2) not in (20,30,40);
 
-</sphqueries>
+</sphinxql></queries>
 
 </test>

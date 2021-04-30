@@ -4,8 +4,7 @@
 <name>indexer - ignore_non_plain</name>
 
 <requires>
-<non-rt/>
-<non-windows/>
+	<non-rt/>
 </requires>
 
 <config>
@@ -19,7 +18,7 @@ source sql
 	type = mysql
 	<sql_settings/>
 
-	sql_query = select id, text from test_table where mode = (select mode from test_table where id = 1000);
+	sql_query = SELECT 1 id, 'first' test, 1 mode;
 }
 
 index index
@@ -43,35 +42,18 @@ index pq
 
 indexer
 {
-        <dynamic>
-                <variant>
-			ignore_non_plain = 1
-		</variant>
-		<variant>
-                        ignore_non_plain = 0
-		</variant>
-                <variant>
-                </variant>
-	</dynamic>
+<dynamic>
+	<variant>
+	ignore_non_plain = 1
+	</variant>
+	<variant>
+	ignore_non_plain = 0
+	</variant>
+	<variant/>
+</dynamic>
 }
 
 </config>
-
-<db_drop>drop table if exists test_table</db_drop>
-
-<db_create>
-create table test_table
-(
-	id int not null,
-	text varchar(255) not null,
-	mode int
-);
-</db_create>
-
-<db_insert>
-insert into test_table values
-( 1, 'first',  1 );
-</db_insert>
 
 <custom_test><![CDATA[
 $results = [];

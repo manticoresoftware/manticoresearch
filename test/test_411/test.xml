@@ -23,116 +23,34 @@ index test
 }
 
 </config>
+<queries>
 
-<custom_test><![CDATA[
+<sphinxql>
+	INSERT INTO test VALUES (1, 'word1 word10', 1 );
+</sphinxql>
 
-global $sd_address, $sd_sphinxql_port;
+<var name="match">"word1 word2"~30</var>
+<repeat count="517" vars="i j" init="3 4" inc="1 1"><var name="match" delimiter="  | ">"word<i/>> word<j/>"~30</var></repeat>
+<sphinxql>
+	SELECT * FROM test WHERE MATCH('<match/>');
+</sphinxql>
 
-$results = array();
-$sockStr = "$sd_address:$sd_sphinxql_port";
-if ($sd_address == "localhost")
-	$sockStr = "127.0.0.1:$sd_sphinxql_port";
-$sock = @mysql_connect ($sockStr,'','',	true );
+<!-- regression ext query crash on snippet generation -->
+<var name="match">fast </var>
+<repeat count="1519" vars="i" init="1" inc="1"><var name="match" delimiter=" | ">( word word<i/>)</var></repeat>
+<sphinxql>
+	<!-- snippets fast-path ext query stack overflow -->
+	CALL SNIPPETS ( 'fast path word word1000', 'test', '<match/>', 1 as query_mode, 0 as limit );
 
-if ( $sock === false )
-{
-	$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
-	return;
-}
+	<!-- snippets ext query stack overflow -->
+	CALL SNIPPETS ( 'not a fast path is going here word word1000 and might be others', 'test', '<match/>', 1 as query_mode, 40 as limit );
 
-$query = "INSERT INTO test VALUES (1, 'word1 word10', 1 )";
-$results[] = $query;
-$res = mysql_query ( $query, $sock );
-if ($res===true)
-	$results[] = "total affected ".mysql_affected_rows($sock);
-else if ($res===false)
-	$results[] = "error ".@mysql_errno($sock)." : ".@mysql_error ($sock);
-else
-	$results[] = "total found ".mysql_num_rows ($res);
+	<!-- regression at search -->
+	INSERT INTO test VALUES (2, 'fast path word word1000', 1 );
 
-$match = '"word1 word2"~30 ';
-for ( $i=3; $i<520; $i++ )
-	$match = $match . ' | "word' . $i . ' word' . ( $i+1 ) . '"~30 ';
+	SELECT * FROM test WHERE MATCH('<match/>');
+</sphinxql>
+</queries>
 
-$query = "SELECT * FROM test WHERE MATCH('$match')";
-$results[] = $query;
-$res = mysql_query ( $query, $sock );
-if ($res===true)
-	$results[] = "total affected ".mysql_affected_rows($sock);
-else if ($res===false)
-	$results[] = "error ".@mysql_errno($sock)." : ".@mysql_error ($sock);
-else
-	$results[] = "total found ".mysql_num_rows ($res);
-
-// regression ext query crash on snippet generation
-$match = 'fast ';
-for ( $i=1; $i<1520; $i++ )
-        $match = $match . " | ( word word$i )";
-
-$match1 = $match;
-$ins1 = 'fast path word word1000';
-
-$query = "CALL SNIPPETS ( 'fast path word word1000', 'test', '$match', 1 as query_mode, 0 as limit )";
-$results[] = 'snippets fast-path ext query stack overflow';
-//$results[] = $query;
-$res = mysql_query ( $query, $sock );
-if ($res===true)
-        $results[] = "total affected ".mysql_affected_rows($sock);
-else if ($res===false)
-        $results[] = "error ".@mysql_errno($sock)." : ".@mysql_error ($sock);
-else
-{
-        while ($row = @mysql_fetch_array($res, MYSQL_ASSOC))
-        {
-                $foo = array();
-                foreach ($row as $key => $value)
-                        $foo[$key] = $value;
-                $results[] = $foo;
-        }
-}
-
-$query = "CALL SNIPPETS ( 'not a fast path is going here word word1000 and might be others', 'test', '$match', 1 as query_mode, 40 as limit )";
-$results[] = 'snippets ext query stack overflow';
-//$results[] = $query;
-$res = mysql_query ( $query, $sock );
-if ($res===true)
-        $results[] = "total affected ".mysql_affected_rows($sock);
-else if ($res===false)
-        $results[] = "error ".@mysql_errno($sock)." : ".@mysql_error ($sock);
-else
-{
-        while ($row = @mysql_fetch_array($res, MYSQL_ASSOC))
-        {
-                $foo = array();
-                foreach ($row as $key => $value)
-                        $foo[$key] = $value;
-                $results[] = $foo;
-        }
-}
-
-// regression at search
-$query = "INSERT INTO test VALUES (2, '$ins1', 1 )";
-$results[] = $query;
-$res = mysql_query ( $query, $sock );
-if ($res===true)
-	$results[] = "total affected ".mysql_affected_rows($sock);
-else if ($res===false)
-	$results[] = "error ".@mysql_errno($sock)." : ".@mysql_error ($sock);
-else
-	$results[] = "total found ".mysql_num_rows ($res);
-
-$query = "SELECT * FROM test WHERE MATCH('$match1')";
-$results[] = $query;
-$res = mysql_query ( $query, $sock );
-if ($res===true)
-	$results[] = "total affected ".mysql_affected_rows($sock);
-else if ($res===false)
-	$results[] = "error ".@mysql_errno($sock)." : ".@mysql_error ($sock);
-else
-	$results[] = "total found ".mysql_num_rows ($res);
-
-
-	
-]]></custom_test>
 
 </test>

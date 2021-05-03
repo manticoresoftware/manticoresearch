@@ -59,27 +59,6 @@ if (HAVE_COLUMNAR)
 	return() # we're done
 endif ()
 
-# check build in common cache
-diags("check build in common cache ${COLUMNAR_BUILD}/${COLUMNAR_SONAME}")
-check_imported(HAVE_COLUMNAR "${COLUMNAR_BUILD}")
-if (HAVE_COLUMNAR)
-	diags("Use cached prebuilt columnar from bundle ${COLUMNAR_LIBDIR}")
-	return() # we're done
-endif ()
-
-# packed build in the bundle, as bundle/columnar-cmake-3.x-5.7-darwin-x86_64.tar.gz
-get_platformed_named (COLUMNAR_PLATFORM_BUILD "${COLUMNARNAME}")
-diags("packet build in the bundle ${LIBS_BUNDLE}/${COLUMNAR_PLATFORM_BUILD}.tar.gz")
-if (EXISTS "${LIBS_BUNDLE}/${COLUMNAR_PLATFORM_BUILD}.tar.gz")
-	set(COLUMNAR_LIBDIR "${COLUMNAR_BINARY_DIR}/columnar")
-	fetch_and_unpack(columnar_lib "${LIBS_BUNDLE}/${COLUMNAR_PLATFORM_BUILD}.tar.gz" "${COLUMNAR_LIBDIR}")
-	check_imported(HAVE_COLUMNAR "${COLUMNAR_LIBDIR}")
-	if (HAVE_COLUMNAR)
-		diags("Use cached prebuilt columnar from bundled archive ${COLUMNAR_LIBDIR}")
-		return() # we're done
-	endif ()
-endif ()
-
 # finally set up build from sources
 populate(COLUMNAR_PLACE ${COLUMNARNAME} "${LIBS_BUNDLE}/${COLUMNAR_BUNDLEZIP}" ${COLUMNAR_GITHUB})
 get_srcpath(COLUMNAR_SRC ${COLUMNARNAME})

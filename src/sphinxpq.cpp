@@ -84,8 +84,6 @@ public:
 		EXCLUDES ( m_tLockHash, m_tLock );
 
 	bool Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings ) override;
-	void Dealloc () override {}
-	void Preread () override {}
 	void PostSetup() override EXCLUDES ( m_tLockHash, m_tLock );
 	RtAccum_t * CreateAccum ( RtAccum_t * pAccExt, CSphString & sError ) override;
 	ISphTokenizer * CloneIndexingTokenizer() const override { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
@@ -95,48 +93,19 @@ public:
 
 	// RT index stub
 	bool MultiQuery ( CSphQueryResult &, const CSphQuery &, const VecTraits_T<ISphMatchSorter *> &, const CSphMultiQueryArgs & ) const override;
-	bool MultiQueryEx ( int, const CSphQuery *, CSphQueryResult*, ISphMatchSorter **, const CSphMultiQueryArgs & ) const override;
-	virtual bool AddDocument ( ISphHits * , const CSphMatch & , const char ** , const CSphVector<DWORD> & , CSphString & , CSphString & ) { return true; }
 	bool DeleteDocument ( const VecTraits_T<DocID_t> &, CSphString & , RtAccum_t * pAccExt ) override { RollBack ( pAccExt ); return true; }
 	void ForceRamFlush ( const char* szReason ) EXCLUDES ( m_tLock ) final;
 	bool IsFlushNeed() const override;
 	bool ForceDiskChunk () override;
-	bool AttachDiskIndex ( CSphIndex * , bool, bool &, StrVec_t &, CSphString & ) override { return true; }
-	void Optimize ( int, int, int, const char * ) override {}
 	bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError ) const override;
 
 	bool Reconfigure ( CSphReconfigureSetup & tSetup ) override EXCLUDES ( m_tLockHash, m_tLock );
-	CSphIndex * GetDiskChunk ( int ) override { return NULL; } // NOLINT
 	int64_t GetLastFlushTimestamp() const override { return m_tmSaved; }
 
-	int					Kill ( DocID_t ) override { return 0; }
-	int					KillMulti ( const VecTraits_T<DocID_t> & dKlist ) override { return 0; }
-
 	// plain index stub
-	int					Build ( const CSphVector<CSphSource*> & , int , int ) override { return 0; }
-	bool				Merge ( CSphIndex * , const VecTraits_T<CSphFilterSettings> &, bool ) override { return false; }
-	void				SetBase ( const char * ) override {}
-	bool				Rename ( const char * ) override { return false; }
-	bool				Lock () override { return true; }
-	void				Unlock () override {}
-//	virtual bool				Mlock () { return false; }
 	bool				EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const override;
 	const CSphSourceStats &	GetStats () const override { return m_tStat; }
 	void				GetStatus ( CSphIndexStatus* pRes ) const override;
-	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & , CSphString * pError ) const override { return NotImplementedError(pError); }
-	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & ) const override { return false; }
-	int					UpdateAttributes ( const CSphAttrUpdate & /*tUpd*/, int /*iIndex*/, bool & /*bCritical*/, FNLOCKER, CSphString & sError, CSphString & /*sWarning*/ ) override { NotImplementedError ( &sError ); return -1; }
-	bool				SaveAttributes ( CSphString & ) const override { return true; }
-	DWORD				GetAttributeStatus () const override { return 0; }
-
-	virtual bool		CreateModifiedFiles ( bool , const CSphString & , ESphAttr , int , CSphString & ) { return true; }
-	bool				AddRemoveAttribute ( bool , const CSphString & , ESphAttr , CSphString & sError ) override { return NotImplementedError ( &sError ); }
-	void				DebugDumpHeader ( FILE *, const char *, bool ) override {}
-	void				DebugDumpDocids ( FILE * ) override {}
-	void				DebugDumpHitlist ( FILE * , const char * , bool ) override {}
-	int					DebugCheck ( FILE * ) override { return 0; } // NOLINT
-	void				DebugDumpDict ( FILE * ) override {}
-	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn ) override {}
 
 	void				IndexDeleted() override { m_bIndexDeleted = true; }
 	void				CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const final;
@@ -2155,19 +2124,6 @@ bool PercolateIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery &
 		return MultiScan ( tResult, tQuery, dSorters, tArgs );
 
 	return false;
-}
-
-bool PercolateIndex_c::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult* pResults,
-										ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs &tArgs) const
-{
-	bool bResult = false;
-	for ( int i = 0; i<iQueries; ++i )
-		if ( MultiQuery ( pResults[i], pQueries[i], { ppSorters+i, 1 }, tArgs ) )
-			bResult = true;
-		else
-			pResults[i].m_pMeta->m_iMultiplier = -1;
-
-	return bResult;
 }
 
 void PercolateIndex_c::PostSetupUnl()

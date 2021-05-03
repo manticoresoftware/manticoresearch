@@ -799,44 +799,12 @@ TEST_F ( QueryParser, soft_whitespace4 )
 	CheckQuerySoftSpace ( tQuery.m_pRoot, dQpos, sizeof ( dQpos ) / sizeof ( dQpos[0] ) );
 }
 
-
-static CSphSourceStats g_tTmpDummyStat;
-static FileAccessSettings_t g_tDummyFASettings;
-
-class CSphDummyIndex : public CSphIndex
+class CSphDummyIndex : public CSphIndexStub
 {
 public:
-	CSphDummyIndex () : CSphIndex ( NULL, NULL ) {}
+	CSphDummyIndex () : CSphIndexStub ( nullptr, nullptr ) {}
 
-	int					Kill ( DocID_t /*tDocID*/ ) override { return 0; }
-
-	int					Build ( const CSphVector<CSphSource*> & , int , int ) override { return 0; }
-	bool				Merge ( CSphIndex * , const VecTraits_T<CSphFilterSettings> &, bool ) override { return false; }
-	bool				Prealloc ( bool, FilenameBuilder_i *, StrVec_t & ) override { return false; }
-	void				Dealloc () override {}
-	void				Preread () override {}
-	void				SetBase ( const char * ) override {}
-	bool				Rename ( const char * ) override { return false; }
-	bool				Lock () override { return true; }
-	void				Unlock () override {}
-	void				PostSetup() override {}
-	bool				EarlyReject ( CSphQueryContext * , CSphMatch & ) const override { return false; }
-	const CSphSourceStats &	GetStats () const override { return g_tTmpDummyStat; }
-	void				GetStatus ( CSphIndexStatus* ) const override {}
-	bool				MultiQuery ( CSphQueryResult &, const CSphQuery & , const VecTraits_T<ISphMatchSorter *>&, const CSphMultiQueryArgs & ) const override { return false; }
-	bool				MultiQueryEx ( int , const CSphQuery * , CSphQueryResult* , ISphMatchSorter** , const CSphMultiQueryArgs & ) const override { return false; }
-	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & , CSphString * ) const override { return false; }
 	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const override;
-	int					UpdateAttributes ( const CSphAttrUpdate & , int, bool &, FNLOCKER, CSphString &, CSphString & ) override { return -1; }
-	bool				SaveAttributes ( CSphString & ) const override { return false; }
-	DWORD				GetAttributeStatus () const override { return 0; }
-	bool				AddRemoveAttribute ( bool, const CSphString &, ESphAttr, CSphString & ) override { return true; }
-	void				DebugDumpHeader ( FILE *, const char *, bool ) override {}
-	void				DebugDumpDocids ( FILE * ) override {}
-	void				DebugDumpHitlist ( FILE * , const char * , bool ) override {}
-	int					DebugCheck ( FILE * ) override { return 0; } // NOLINT
-	void				DebugDumpDict ( FILE * ) override {}
-	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn ) override {}
 
 	SmallStringHash_T < int > m_hHits;
 };

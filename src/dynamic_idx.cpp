@@ -482,14 +482,14 @@ inline const ServedDesc_t& StaticDesc()
 	return tValue;
 }
 
-class GenericTableIndex_c : public ServedIndex_c, public CSphIndex
+class GenericTableIndex_c : public ServedIndex_c, public CSphIndexStub
 {
 	CSphIndex**		m_ppIndex = nullptr;
 
 public:
 	GenericTableIndex_c ()
 		: ServedIndex_c { StaticDesc () }
-		, CSphIndex ( "dynamic", nullptr )
+		, CSphIndexStub ( "dynamic", nullptr )
 	{
 		ServedDescWPtr_c pInternals ( this );
 		m_ppIndex = &pInternals->m_pIndex;
@@ -501,41 +501,7 @@ public:
 		*m_ppIndex = nullptr;
 	}
 
-	int					Kill ( DocID_t tDocID ) override { return 0; }
-	int					Build ( const CSphVector<CSphSource*> & , int , int ) override { return 0; }
-	bool				Merge ( CSphIndex * , const VecTraits_T<CSphFilterSettings> &, bool ) override { return false; }
-	bool				Prealloc ( bool, FilenameBuilder_i *, StrVec_t & ) final { return false; }
-	void				Dealloc () final {}
-	void				Preread () final {}
-	void				SetBase ( const char * ) final {}
-	bool				Rename ( const char * ) final { return false; }
-	bool				Lock () final { return true; }
-	void				Unlock () final {}
-	bool				EarlyReject ( CSphQueryContext * , CSphMatch & ) const final { return false; }
-	const CSphSourceStats &	GetStats () const final
-	{
-		static CSphSourceStats tTmpDummyStat;
-		return tTmpDummyStat;
-	}
-	void				GetStatus ( CSphIndexStatus* ) const final {}
 	bool				MultiQuery ( CSphQueryResult & , const CSphQuery & , const VecTraits_T<ISphMatchSorter *> &, const CSphMultiQueryArgs & ) const final;
-	bool				MultiQueryEx ( int , const CSphQuery * , CSphQueryResult* , ISphMatchSorter ** , const CSphMultiQueryArgs & ) const final;
-	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & tSettings, CSphString * ) const final { return false; }
-	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & ) const final { return true; }
-	int					UpdateAttributes ( const CSphAttrUpdate & , int , bool &, FNLOCKER, CSphString & , CSphString & ) final { return -1; }
-	bool				SaveAttributes ( CSphString & ) const final { return true; }
-	DWORD				GetAttributeStatus () const final { return 0; }
-	bool				AddRemoveAttribute ( bool, const CSphString &, ESphAttr, CSphString & ) final { return true; }
-	void				DebugDumpHeader ( FILE *, const char *, bool ) final {}
-	void				DebugDumpDocids ( FILE * ) final {}
-	void				DebugDumpHitlist ( FILE * , const char * , bool ) final {}
-	int					DebugCheck ( FILE * ) final { return 0; } // NOLINT
-	void				DebugDumpDict ( FILE * ) final {}
-	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn ) final {}
-	Bson_t				ExplainQuery ( const CSphString & sQuery ) const final
-	{
-		return EmptyBson ();
-	}
 
 
 private:
@@ -572,19 +538,6 @@ bool GenericTableIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuer
 		return MultiScan ( tResult, tQuery, dSorters, tArgs );
 
 	return false;
-}
-
-bool GenericTableIndex_c::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult* pResults,
-										ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs &tArgs ) const
-{
-	bool bResult = false;
-	for ( int i = 0; i<iQueries; ++i )
-		if ( MultiQuery ( pResults[i], pQueries[i], { ppSorters+i, 1 }, tArgs ) )
-			bResult = true;
-		else
-			pResults[i].m_pMeta->m_iMultiplier = -1;
-
-	return bResult;
 }
 
 class DynMatchProcessor_c : public MatchProcessor_i, ISphNoncopyable

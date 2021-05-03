@@ -2875,8 +2875,8 @@ enum KeywordExpansion_e
 class IndexSegment_c
 {
 public:
-	virtual int		Kill ( DocID_t tDocID ) = 0;
-	virtual int		KillMulti ( const VecTraits_T<DocID_t> & dKlist ) = 0;
+	virtual int		Kill ( DocID_t tDocID ) { return 0; }
+	virtual int		KillMulti ( const VecTraits_T<DocID_t> & dKlist ) { return 0; };
 };
 
 
@@ -3222,6 +3222,56 @@ public:
 
 protected:
 	CSphString					m_sGlobalIDFPath;
+};
+
+// dummy implementation which makes most of the things optional (makes all non-disk idxes much simpler)
+class CSphIndexStub : public CSphIndex
+{
+public:
+						FWD_CTOR ( CSphIndexStub, CSphIndex );
+	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn ) override {}
+	int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer ) override { return 0; }
+	bool				Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSettings> & dFilters, bool bSupressDstDocids ) override { return false; }
+	bool				Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings ) override { return false; }
+	void				Dealloc () override {}
+	void				Preread () override {}
+	void				SetBase ( const char * ) override {}
+	bool				Rename ( const char * ) override { return false; }
+	bool				Lock () override { return true; }
+	void				Unlock () override {}
+	bool				EarlyReject ( CSphQueryContext * , CSphMatch & ) const override { return false; }
+	const CSphSourceStats &	GetStats () const override
+	{
+		static CSphSourceStats tTmpDummyStat;
+		return tTmpDummyStat;
+	}
+	void				GetStatus ( CSphIndexStatus* ) const override {}
+	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & tSettings, CSphString * ) const override { return false; }
+	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & ) const override { return true; }
+	int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning ) override { return -1; };
+	bool				SaveAttributes ( CSphString & ) const override { return true; }
+	DWORD				GetAttributeStatus () const override { return 0; }
+	bool				AddRemoveAttribute ( bool, const CSphString &, ESphAttr, CSphString & ) override { return true; }
+	void				DebugDumpHeader ( FILE *, const char *, bool ) override {}
+	void				DebugDumpDocids ( FILE * ) override {}
+	void				DebugDumpHitlist ( FILE * , const char * , bool ) override {}
+	int					DebugCheck ( FILE * ) override { return 0; }
+	void				DebugDumpDict ( FILE * ) override {}
+	Bson_t				ExplainQuery ( const CSphString & sQuery ) const override { return EmptyBson (); }
+
+	bool				MultiQuery ( CSphQueryResult & , const CSphQuery & , const VecTraits_T<ISphMatchSorter *> &, const CSphMultiQueryArgs & ) const override { return false; }
+	bool 				MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult* pResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const override
+	{
+		// naive stub implementation without common subtree cache and/or any other optimizations
+		bool bResult = false;
+		for ( int i=0; i<iQueries; ++i )
+			if ( MultiQuery ( pResults[i], pQueries[i], { ppSorters+i, 1}, tArgs ) )
+				bResult = true;
+			else
+				pResults[i].m_pMeta->m_iMultiplier = -1; // -1 means 'error'
+
+		return bResult;
+	}
 };
 
 // update attributes with index pointer attached

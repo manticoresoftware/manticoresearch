@@ -26,10 +26,10 @@ struct CSphReconfigureSetup;
 class RtAccum_t;
 
 /// RAM based updateable backend interface
-class RtIndex_i : public CSphIndex
+class RtIndex_i : public CSphIndexStub
 {
 public:
-	RtIndex_i ( const char * sIndexName, const char * sFileName ) : CSphIndex ( sIndexName, sFileName ) {}
+	RtIndex_i ( const char * sIndexName, const char * sFileName ) : CSphIndexStub ( sIndexName, sFileName ) {}
 
 	/// get internal schema (to use for Add calls)
 	virtual const CSphSchema & GetInternalSchema () const { return m_tSchema; }
@@ -62,12 +62,12 @@ public:
 	virtual bool ForceDiskChunk () = 0;
 
 	/// attach a disk chunk to current index
-	virtual bool AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, StrVec_t & dWarnings, CSphString & sError ) = 0;
+	virtual bool AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, StrVec_t & dWarnings, CSphString & sError ) { return true; };
 
 	/// truncate index (that is, kill all data)
 	virtual bool Truncate ( CSphString & sError ) = 0;
 
-	virtual void Optimize ( int iCutoff, int iFromID, int iToID, const char* szUvarFilter ) = 0;
+	virtual void Optimize ( int iCutoff, int iFromID, int iToID, const char* szUvarFilter ) {};
 
 	/// check settings vs current and return back tokenizer and dictionary in case of difference
 	virtual bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError ) const = 0;
@@ -77,7 +77,7 @@ public:
 	virtual bool Reconfigure ( CSphReconfigureSetup & tSetup ) = 0;
 
 	/// get disk chunk
-	virtual CSphIndex * GetDiskChunk ( int iChunk ) = 0;
+	virtual CSphIndex * GetDiskChunk ( int iChunk ) {return nullptr;};
 	
 	virtual RtAccum_t * CreateAccum ( RtAccum_t * pAccExt, CSphString & sError ) = 0;
 

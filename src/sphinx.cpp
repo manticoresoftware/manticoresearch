@@ -902,40 +902,11 @@ CSphVector<IndexFileExt_t> sphGetExts()
 /// this pseudo-index used to store and manage the tokenizer
 /// without any footprint in real files
 //////////////////////////////////////////////////////////////////////////
-static CSphSourceStats g_tTmpDummyStat;
-
-class CSphTokenizerIndex : public CSphIndex
+class CSphTokenizerIndex : public CSphIndexStub
 {
 public:
-						CSphTokenizerIndex ( const char * szIndexName ) : CSphIndex ( szIndexName, nullptr ) {}
-
-	int					Kill ( DocID_t tDocID ) override { return 0; }
-	int					Build ( const CSphVector<CSphSource*> & , int , int ) override { return 0; }
-	bool				Merge ( CSphIndex * , const VecTraits_T<CSphFilterSettings> &, bool ) override { return false; }
-	bool				Prealloc ( bool, FilenameBuilder_i *, StrVec_t &  ) final { return false; }
-	void				Dealloc () final {}
-	void				Preread () final {}
-	void				SetBase ( const char * ) final {}
-	bool				Rename ( const char * ) final { return false; }
-	bool				Lock () final { return true; }
-	void				Unlock () final {}
-	bool				EarlyReject ( CSphQueryContext * , CSphMatch & ) const final { return false; }
-	const CSphSourceStats &	GetStats () const final { return g_tTmpDummyStat; }
-	void				GetStatus ( CSphIndexStatus* ) const final {}
-	bool				MultiQuery ( CSphQueryResult & , const CSphQuery & , const VecTraits_T<ISphMatchSorter *> &, const CSphMultiQueryArgs & ) const final { return false; }
-	bool				MultiQueryEx ( int , const CSphQuery * , CSphQueryResult* , ISphMatchSorter ** , const CSphMultiQueryArgs & ) const final { return false; }
+						CSphTokenizerIndex ( const char * szIndexName ) : CSphIndexStub ( szIndexName, nullptr ) {}
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & tSettings, CSphString * ) const final ;
-	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & ) const final { return true; }
-	int					UpdateAttributes ( const CSphAttrUpdate & , int , bool &, FNLOCKER, CSphString & , CSphString & ) final { return -1; }
-	bool				SaveAttributes ( CSphString & ) const final { return true; }
-	DWORD				GetAttributeStatus () const final { return 0; }
-	bool				AddRemoveAttribute ( bool, const CSphString &, ESphAttr, CSphString & ) final { return true; }
-	void				DebugDumpHeader ( FILE *, const char *, bool ) final {}
-	void				DebugDumpDocids ( FILE * ) final {}
-	void				DebugDumpHitlist ( FILE * , const char * , bool ) final {}
-	int					DebugCheck ( FILE * ) final { return 0; } // NOLINT
-	void				DebugDumpDict ( FILE * ) final {}
-	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn ) final {}
 	Bson_t				ExplainQuery ( const CSphString & sQuery ) const final;
 };
 
@@ -9747,7 +9718,7 @@ public:
 		return ( m_pRow!=nullptr );
 	}
 
-	SphAttr_t GetAttr ( int iAttr )
+	SphAttr_t GetAttr ( int iAttr ) override
 	{
 		assert ( 0 && "internal error" );
 		return 0;

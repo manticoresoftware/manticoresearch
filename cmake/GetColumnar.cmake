@@ -4,7 +4,7 @@ include(update_bundle)
 
 set (COLUMNARNAME "columnar")
 set (COLUMNAR_BUNDLEZIP "${COLUMNARNAME}.zip")
-set (COLUMNAR_GITHUB "https://github.com/manticoresoftware/columnar/archive/master.zip")
+set (COLUMNAR_GITHUB "https://github.com/manticoresoftware/columnar/archive/refs/heads/1.0.0.zip")
 
 function(check_imported FOUND BINDIR)
 	if (NOT EXISTS "${BINDIR}/columnar-targets.cmake")

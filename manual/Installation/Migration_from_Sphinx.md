@@ -117,7 +117,7 @@ A special case is for indexes containing kill-lists. As the behaviour of how kil
 
 Here's the complete list of `index_converter` options:
 
-* `--config <file>` (`-c <file>` for short) tells index_converter to use the given file as its configuration. Normally, it will look for manticore.conf in the installation directory (e.g. `/usr/local/sphinx/etc/manticore.conf` if installed into `/usr/local/sphinx`), followed by the current directory you are in when calling index_converter from the shell.
+* `--config <file>` (`-c <file>` for short) tells index_converter to use the given file as its configuration. Normally, it will look for manticore.conf in the installation directory (e.g. `/usr/local/manticore/etc/manticore.conf` if installed into `/usr/local/sphinx`), followed by the current directory you are in when calling index_converter from the shell.
 * `--index` specifies which index should be converted
 * `--path` - instead of using a config file, a path containing index(es) can be used
 * `--strip-path` - strips path from filenames referenced by index: stopwords, exceptions and wordforms

@@ -28,14 +28,14 @@ Stop word files can either be created manually, or semi-automatically. [indexer]
 <!-- request SQL -->
 
 ```sql
-CREATE TABLE products(title text, price float) stopwords = '/usr/local/sphinx/data/stopwords.txt /usr/local/sphinx/data/stopwords-ru.txt /usr/local/sphinx/data/stopwords-en.txt'
+CREATE TABLE products(title text, price float) stopwords = '/usr/local/manticore/data/stopwords.txt /usr/local/manticore/data/stopwords-ru.txt /usr/local/manticore/data/stopwords-en.txt'
 ```
 
 <!-- request HTTP -->
 
 ```json
 POST /sql -d "mode=raw&query=
-CREATE TABLE products(title text, price float) stopwords = '/usr/local/sphinx/data/stopwords.txt stopwords-ru.txt stopwords-en.txt'"
+CREATE TABLE products(title text, price float) stopwords = '/usr/local/manticore/data/stopwords.txt stopwords-ru.txt stopwords-en.txt'"
 ```
 
 <!-- request PHP -->
@@ -47,7 +47,7 @@ $index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
         ],[
-            'stopwords' => '/usr/local/sphinx/data/stopwords.txt stopwords-ru.txt stopwords-en.txt'
+            'stopwords' => '/usr/local/manticore/data/stopwords.txt stopwords-ru.txt stopwords-en.txt'
         ]);
 ```
 <!-- intro -->
@@ -56,7 +56,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) stopwords = \'/usr/local/sphinx/data/stopwords.txt /usr/local/sphinx/data/stopwords-ru.txt /usr/local/sphinx/data/stopwords-en.txt\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) stopwords = \'/usr/local/manticore/data/stopwords.txt /usr/local/manticore/data/stopwords-ru.txt /usr/local/manticore/data/stopwords-en.txt\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -64,20 +64,20 @@ utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) stop
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) stopwords = \'/usr/local/sphinx/data/stopwords.txt /usr/local/sphinx/data/stopwords-ru.txt /usr/local/sphinx/data/stopwords-en.txt\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) stopwords = \'/usr/local/manticore/data/stopwords.txt /usr/local/manticore/data/stopwords-ru.txt /usr/local/manticore/data/stopwords-en.txt\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) stopwords = '/usr/local/sphinx/data/stopwords.txt /usr/local/sphinx/data/stopwords-ru.txt /usr/local/sphinx/data/stopwords-en.txt'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) stopwords = '/usr/local/manticore/data/stopwords.txt /usr/local/manticore/data/stopwords-ru.txt /usr/local/manticore/data/stopwords-en.txt'");
 ```
 <!-- request CONFIG -->
 
 ```ini
 index products {
-  stopwords = /usr/local/sphinx/data/stopwords.txt
+  stopwords = /usr/local/manticore/data/stopwords.txt
   stopwords = stopwords-ru.txt stopwords-en.txt
   
   type = rt

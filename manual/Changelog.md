@@ -1,6 +1,6 @@
 # Changelog
 
-## Version 3.6.0, Mar 1st 2021
+## Version 3.6.0, May 3rd 2021
 **Maintenance release before Manticore 4**
 
 ### Major new features

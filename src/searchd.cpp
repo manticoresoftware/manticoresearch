@@ -18831,7 +18831,7 @@ static void InitBanner()
 		sColumnar.SetSprintf ( " (columnar %s)", szColumnarVer );
 
 	g_sBanner.SetSprintf ( "%s%s%s",  szMANTICORE_NAME, sColumnar.cstr(), szMANTICORE_BANNER_TEXT );
-	g_sMySQLVersion.SetSprintf ( "%s%s", szMANTICORE_NAME, sColumnar.cstr() );
+	g_sMySQLVersion.SetSprintf ( "%s%s", szMANTICORE_VERSION, sColumnar.cstr() );
 	g_sStatusVersion.SetSprintf ( "%s%s", szMANTICORE_VERSION, sColumnar.cstr() );
 }
 

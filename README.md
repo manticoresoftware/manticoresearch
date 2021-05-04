@@ -5,7 +5,7 @@
 </p>
 
 <h1 align="center">
-  Manticore Search 3.5.4
+  Manticore Search 3.6.0
 </h1>
 
 <h3 align="center">
@@ -23,6 +23,8 @@
 # Introduction
 Manticore Search is a database designed specifically for search, including full-text search. What differs it from other solutions is:
 * Powerful and fast full-text searching which works fine for small and big datasets
+* Traditional row-wise storage for small, medium and big size datasets
+* Columnar storage support via [Manticore Columnar Library](https://github.com/manticoresoftware/columnar/) for super big datasets (much bigger than can be fit in RAM)
 * SQL-first: the native Manticore's syntax is SQL. It speaks SQL over HTTP and MySQL protocol (you can use your preferred mysql client)
 * JSON over HTTP: to provide more programmatic way to manage your data and schemas Manticore provides HTTP JSON protocol. Very similar to the one from Elasticsearch
 * Written fully in C++: starts fast, doesn't take much RAM, low-level optimizations give good performance
@@ -77,6 +79,7 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - [With MySQL as a storage engine](https://manual.manticoresearch.com/Extensions/SphinxSE#Using-SphinxSE)
   - [With MySQL via FEDERATED engine](https://manual.manticoresearch.com/Extensions/FEDERATED)
   - [ProxySQL](https://manticoresearch.com/2018/06/18/using-proxysql-to-route-inserts-in-a-distributed-realtime-index/)
+  - [Manticore Columnar Library](https://github.com/manticoresoftware/columnar)
   
 # Installation
 
@@ -114,15 +117,16 @@ Read [the full instruction for the docker image](https://dockr.ly/33biV0U) for m
 ### YUM repo for RHEL/Centos
 ```
 sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
-sudo yum install manticore
+sudo yum install manticore manticore-columnar-lib
 ```
 
 ### APT repo for Ubuntu/Debian
 ```
+sudo apt-key adv --fetch-keys 'http://repo.manticoresearch.com/GPG-KEY-manticore'
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
 sudo dpkg -i manticore-repo.noarch.deb
 sudo apt update
-sudo apt install manticore
+sudo apt install manticore manticore-columnar-lib
 ```
 
 ### Homebrew on MacOS

@@ -10,4 +10,6 @@ RUN wget https://dl.bintray.com/boostorg/release/1.${boostminorver}.0/source/boo
 
 CMD []
 
+# fixme! Change in all dockers b2 install line at fall of 2021 to:
+#   && ./b2 install  --with-context --with-system \
 # docker build -t focal_boost:172 .

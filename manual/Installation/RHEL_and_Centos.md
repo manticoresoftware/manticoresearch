@@ -18,6 +18,8 @@ Then install Manticore Search:
 ```bash
 sudo yum install manticore manticore-columnar-lib
 ```
+(you can skip `manticore-columnar-lib` - package for the [Manticore Columnar Library](https://github.com/manticoresoftware/columnar), if you are sure you don't need it).
+
 ###### Development packages
 If you prefer "Nightly" (development) versions do:
 

@@ -6,6 +6,7 @@
 ### Major new features
 - Support for [Manticore Columnar Library](https://github.com/manticoresoftware/columnar/) for plain indexes. New setting [columnar_attrs](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#columnar_attrs) for plain indexes
 - Support for [Ukrainian Lemmatizer](https://github.com/manticoresoftware/lemmatizer-uk)
+- Fully revised histograms. When building an index Manticore also builds histograms for each field in it, which it then uses for faster filtering. In 3.6.0 the algorithm was fully revised and you can get a higher performance if you have a lot of data and do a lot of filtering.
 
 ### Minor changes
 - tool `manticore_new_cluster [--force]` useful for restarting a replication cluster via systemd

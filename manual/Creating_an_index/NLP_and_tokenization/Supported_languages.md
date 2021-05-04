@@ -1,6 +1,6 @@
 # Supported languages
 
-Manticore supports many languages. Basic support for most is enabled by default via `charset_table = non_cjk` (which is a default value). 
+Manticore supports many languages. Basic support for most is enabled by default via `charset_table = non_cjk` (which is a default value).
 
 For many languages we provide [stopwords](../../Creating_an_index/NLP_and_tokenization/Ignoring_stop-words.md#stopwords) file (you can also use your own one) which you can use to improve search relevance.
 
@@ -18,15 +18,15 @@ The below table includes a complete list of supported languages. You can use it 
 | Armenian | charset_table=non_cjk | hy | - | |
 | Assamese | specify charset_table specify charset_table manually | - | - | |
 | Basque | charset_table=non_cjk | eu | - | |
-| Bengali | charset_table=non_cjk | bn | - | | 
+| Bengali | charset_table=non_cjk | bn | - | |
 | Bishnupriya | specify charset_table manually | - | - | |
 | Buhid | specify charset_table manually | - | - | |
-| Bulgarian | charset_table=non_cjk | bg | - | | 
-| Catalan | charset_table=non_cjk | ca | morphology=libstemmer_ca | | 
+| Bulgarian | charset_table=non_cjk | bg | - | |
+| Catalan | charset_table=non_cjk | ca | morphology=libstemmer_ca | |
 | Chinese | charset_table=chinese or ngram_chars=chinese | zh | morphology=icu_chinese or ngram_chars=1 correspondingly | ICU dictionary based segmentation is much more accurate than ngram-based |
 | Croatian | charset_table=non_cjk | hr | - | |
 | Kurdish | charset_table=non_cjk | ckb | - | |
-| Czech | charset_table=non_cjk | cz | morphology=stem_cz (Czech stemmer) | | 
+| Czech | charset_table=non_cjk | cz | morphology=stem_cz (Czech stemmer) | |
 | Danish | charset_table=non_cjk | da | morphology=libstemmer_da | |
 | Dutch | charset_table=non_cjk | nl | morphology=libstemmer_nl | |
 | English | charset_table=non_cjk | en | morphology=lemmatize_en (single root form); morphology=lemmatize_en_all (all root forms); morphology=stem_en (Porter's English stemmer); morphology=stem_enru (Porter's English and Russian stemmers); morphology=libstemmer_en (English from libstemmer)  | |
@@ -82,5 +82,6 @@ The below table includes a complete list of supported languages. You can use it 
 | Tamil | specify charset_table manually | - | morphology=libstemmer_ta | |
 | Thai | charset_table=non_cjk | th | - | |
 | Turkish | charset_table=non_cjk | tr | morphology=libstemmer_tr | |
+| Ukrainian | charset_table=non_cjk,U+0406->U+0456,U+0456,U+0407->U+0457,U+0457,U+0490->U+0491,U+0491   | - | morphology=lemmatize_uk_all | Requires [installation](../../../Installation/Debian_and_Ubuntu.md#Ukrainian-lemmatizer) of UK lemmatizer |
 | Yoruba | charset_table=non_cjk | yo | - | |
 | Zulu | charset_table=non_cjk | zu | - |  |

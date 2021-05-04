@@ -126,9 +126,6 @@ Integer. Distributed retries count.
 ### retry_delay
 Integer. Distributed retry delay, msec.
 
-### reverse_scan
-`0` or `1`, lets you control the order in which full-scan query processes the rows.
-
 ### sort_method
 * `pq` - priority queue, set by default
 * `kbuffer` - gives faster sorting for already pre-sorted data, e.g. index data sorted by id
@@ -145,4 +142,4 @@ SELECT * FROM index WHERE MATCH ('yes@no') OPTION token_filter='mylib.so:blend:@
 ```
 
 ## FORCE/IGNORE INDEX(id)
-In rare cases Manticore's built-in query analyzer can be wrong in understanding a query and whether an index by id should be used or not. It can cause poor performance of queries like `SELECT ... WHERE id = 123`. Adding `FORCE INDEX(id)` will force Manticore use the index. `IGNORE INDEX(id)` will force ignore it. 
+In rare cases Manticore's built-in query analyzer can be wrong in understanding a query and whether an index by id should be used or not. It can cause poor performance of queries like `SELECT ... WHERE id = 123`. Adding `FORCE INDEX(id)` will force Manticore use the index. `IGNORE INDEX(id)` will force ignore it.

@@ -11,9 +11,10 @@ You can install and start Manticore easily in Ubuntu, Centos, Debian, Windows an
 <!-- request Ubuntu -->
 ```bash
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-repo.noarch.deb
+sudo dpkg -i manticore-dev-repo.noarch.deb
+sudo apt-key adv --fetch-keys 'http://repo.manticoresearch.com/GPG-KEY-manticore'
 sudo apt update
-sudo apt install manticore
+sudo apt install manticore manticore-columnar-lib
 sudo systemctl start manticore
 ```
 
@@ -23,9 +24,10 @@ sudo systemctl start manticore
 <!-- request Debian -->
 ```bash
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-repo.noarch.deb
+sudo dpkg -i manticore-dev-repo.noarch.deb
+sudo apt-key adv --fetch-keys 'http://repo.manticoresearch.com/GPG-KEY-manticore'
 sudo apt update
-sudo apt install manticore
+sudo apt install manticore manticore-columnar-lib
 sudo systemctl start manticore
 ```
 
@@ -35,7 +37,7 @@ sudo systemctl start manticore
 <!-- request Centos -->
 ```bash
 sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
-sudo yum install manticore
+sudo yum install manticore manticore-columnar-lib
 sudo systemctl start manticore
 ```
 
@@ -544,7 +546,7 @@ searchRequest.setIndex("forum");
 searchRequest.setQuery(query);
 HashMap<String,Object> highlight = new HashMap<String,Object>(){{
     put("fields",new String[] {"title"});
-            
+
 }};
 searchRequest.setHighlight(highlight);
 searchResponse = searchApi.search(searchRequest);
@@ -762,8 +764,8 @@ query.put("range",new HashMap<String,Object>(){{
         put("lte",10);
     }});
 }});
-deleteRequest.index("products").setQuery(query); 
+deleteRequest.index("products").setQuery(query);
 indexApi.delete(deleteRequest);
-      
+
 ```
 <!-- end -->

@@ -1069,9 +1069,9 @@ server_id = 1
 ### shutdown_timeout
 
 <!-- example conf shutdown_timeout -->
-`searchd -–stopwait` waiting time, in seconds (or [special_suffixes](../Server_settings/Special_suffixes.md)). Optional, default is 3 seconds.
+`searchd --stopwait` waiting time, in seconds (or [special_suffixes](../Server_settings/Special_suffixes.md)). Optional, default is 3 seconds.
 
-When you run searchd –stopwait your server needs to perform some activities before stopping like finishing queries, flushing RT RAM chunk, flushing attributes and updating binlog. And it requires some time. searchd –stopwait will wait up to shutdown_time seconds for server to finish its jobs. Suitable time depends on your index size and load.
+When you run `searchd --stopwait` your server needs to perform some activities before stopping like finishing queries, flushing RT RAM chunk, flushing attributes and updating binlog. And it requires some time. `searchd --stopwait` will wait up to `shutdown_time` seconds for server to finish its jobs. Suitable time depends on your index size and load.
 
 
 <!-- intro -->

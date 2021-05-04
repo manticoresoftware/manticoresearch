@@ -3,14 +3,14 @@
 lemmatizer_base
 ----------------
 
-Lemmatizer dictionaries base path. Optional, default is /usr/local/share (as in --datadir switch to ./configure script).
+Lemmatizer dictionaries base path. Optional, default is /usr/local/share.
 
 Our lemmatizer implementation (see [Morphology](../Creating_an_index/NLP_and_tokenization/Morphology.md) for a discussion of what lemmatizers are) is dictionary driven. lemmatizer\_base directive configures the base dictionary path. File names are hardcoded and specific to a given lemmatizer; the Russian lemmatizer uses ru.pak dictionary file. The dictionaries can be obtained from the Manticore website (<https://manticoresearch.com/downloads/>).
 
 Example:
 
 ```ini
-lemmatizer_base = /usr/local/share/sphinx/dicts/
+lemmatizer_base = /usr/share/manticore/
 ```
 
 progressive_merge
@@ -67,5 +67,5 @@ Specifies the trusted directory from which the [UDF libraries](../Extensions/UDF
 Example:
 
 ```ini
-plugin_dir = /usr/local/sphinx/lib
+plugin_dir = /usr/local/manticore/lib/
 ```

@@ -5,7 +5,7 @@ Token filter plugins let you implement a custom tokenizer that makes tokens acco
 * Index-time tokenizer declared by [index_token_filter](../../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#index_token_filter) in index settings
 * query-time tokenizer declared by [token_filter](../../../Searching/Options.md#token_filter) OPTION directive
 
-Token filters processing tokens after base tokenizer processed text at field or query and made tokens from it. In the text processing pipeline, the token filters will run after the base tokenizer processing occurs (which process the text from field or query and create tokens out of them).
+In the text processing pipeline, the token filters will run after the base tokenizer processing occurs (which processes the text from field or query and creates tokens out of them).
 
 ## Index-time tokenizer
 

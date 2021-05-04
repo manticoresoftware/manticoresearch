@@ -220,7 +220,7 @@ All other languages listed in the following list are supported by default: [Unic
 list](http://www.unicode.org/cldr/charts/latest/supplemental/languages_and_scripts.html/).
 
 <!-- example charset_table 3 -->
-To be able to work with both cjk and non-cjk languages you should set the options in your configuration file as shown below:
+To be able to work with both cjk and non-cjk languages you should set the options in your configuration file as shown below (with an [exception](../../Creating_an_index/NLP_and_tokenization/CJK.md) for Chinese):
 
 <!-- request SQL -->
 
@@ -1176,14 +1176,14 @@ You can build an .idf file using [indextool](../../Miscellaneous_tools.md#indext
 <!-- request SQL -->
 
 ```sql
-CREATE TABLE products(title text, price float) global_idf = '/usr/local/sphinx/var/global.idf'
+CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'
 ```
 
 <!-- request HTTP -->
 
 ```http
 POST /sql -d "mode=raw&query=
-CREATE TABLE products(title text, price float) global_idf = '/usr/local/sphinx/var/global.idf'"
+CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'"
 ```
 
 <!-- request PHP -->
@@ -1195,7 +1195,7 @@ $index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
         ],[
-             'global_idf' => '/usr/local/sphinx/var/global.idf'
+             'global_idf' => '/usr/local/manticore/var/global.idf'
         ]);
 ```
 <!-- intro -->
@@ -1204,7 +1204,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) global_idf = \'/usr/local/sphinx/var/global.idf\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) global_idf = \'/usr/local/manticore/var/global.idf\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -1212,7 +1212,7 @@ utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) glob
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) global_idf = \'/usr/local/sphinx/var/global.idf\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) global_idf = \'/usr/local/manticore/var/global.idf\'');
 ```
 <!-- intro -->
 ##### java:
@@ -1220,7 +1220,7 @@ res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) global_idf = '/usr/local/sphinx/var/global.idf'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'");
 ```
 
 
@@ -1228,7 +1228,7 @@ utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) glob
 
 ```ini
 index products {
-  global_idf = /usr/local/sphinx/var/global.idf
+  global_idf = /usr/local/manticore/var/global.idf
 
   type = rt
   path = idx

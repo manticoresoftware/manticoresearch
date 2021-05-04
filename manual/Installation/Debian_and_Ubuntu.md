@@ -1,6 +1,6 @@
 # Installing Manticore in Debian or Ubuntu
 
-Supported releases:
+### Supported releases:
 
 * Debian
   * 9.0 (Stretch)
@@ -11,36 +11,39 @@ Supported releases:
   * 18.04 LTS (Bionic)
   * 20.04 LTS (Focal)
 
-Supported platforms:
-* x86
-* x86_64
+### APT repository
+The easiest way to install Manticore in Ubuntu/Debian is by using our APT repository
 
-You can install Manticore by adding Manticore's APT repository to your repositories:
-
+Install the repository:
 ```bash
-apt-key adv --fetch-keys 'http://repo.manticoresearch.com/GPG-KEY-manticore'
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-dpkg -i manticore-repo.noarch.deb
-apt update
+sudo dpkg -i manticore-repo.noarch.deb
+sudo apt-key adv --fetch-keys 'http://repo.manticoresearch.com/GPG-KEY-manticore'
+sudo apt update
 ```
+(install `wget` if it's not installed; install `gnupg2` if `apt-key` fails).
 
-and then install Manticore Search with just `apt install`:
+Then install Manticore Search:
+```
+sudo apt install manticore manticore-columnar-lib
+```
+(you can skip `manticore-columnar-lib` - package for the [Manticore Columnar Library](https://github.com/manticoresoftware/columnar), if you are sure you don't need it).
 
+###### Development packages
+If you prefer "Nightly" (development) versions do:
 ```bash
-apt install manticore
+wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
+sudo dpkg -i manticore-repo.noarch.deb
+sudo apt-key adv --fetch-keys 'http://repo.manticoresearch.com/GPG-KEY-manticore'
+sudo apt update
+sudo apt install manticore manticore-columnar-lib
 ```
 
-In case you want to install "Nightly" (development) version:
-```bash
-apt-key adv --fetch-keys 'http://repo.manticoresearch.com/GPG-KEY-manticore'
-wget https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb
-dpkg -i manticore-dev-repo.noarch.deb
-apt update
-apt install manticore
-```
-
+### Standalone DEB packages
 You can also download individual .deb files from [our site](https://manticoresearch.com/downloads/).
 
+### More packages you may need
+#### For indexer
 Manticore package depends on zlib and ssl libraries, nothing else is strictly required. However if you plan to use [indexer](../Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-tool) to create indexes from external storages you'll need to install appropriate client libraries. To know what exactly libraries `indexer` requires run it and look at the top of it's output:
 
 ```bash
@@ -90,16 +93,46 @@ sudo apt-get install libmysqlclient20 libodbc1 libpq5 libexpat1
 
 If you aren't going to use `indexer` tool at all, you don't need to find and install any libraries.
 
-To enable CJK tokenization support the official packages contain binaries with embedded ICU library and include ICU data file. They are independent from any ICU runtime library which might be available on your system, and can't be upgraded.
+To enable CJK tokenization support, the official packages contain binaries with embedded ICU library and include ICU data file. They are independent from any ICU runtime library which might be available on your system, and can't be upgraded.
 
-After preparing a configuration file (see [Quick start guide](../Quick_start_guide.md)), you can start searchd server:
+#### Ukrainian lemmatizer
+The lemmatizer requires Python 3.9+. **Make sure you have it installed and that it's configured with `--enable-shared`.**
+
+Here's how to install Python 3.9 and the Ukrainian lemmatizer on Debian and Ubuntu:
 
 ```bash
-systemctl start manticore
+# install Manticore Search and UK lemmatizer from APT repository
+cd ~
+wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
+dpkg -i manticore-repo.noarch.deb
+apt-key adv --fetch-keys 'http://repo.manticoresearch.com/GPG-KEY-manticore'
+apt -y update
+apt -y install manticore manticore-lemmatizer-uk
+
+# install packages needed for building Python
+apt -y update
+apt -y install wget build-essential libreadline-gplv2-dev libncursesw5-dev libssl-dev libsqlite3-dev tk-dev libgdbm-dev libc6-dev libbz2-dev libffi-dev zlib1g-dev
+
+# download, build and install Python 3.9
+cd ~
+wget https://www.python.org/ftp/python/3.9.4/Python-3.9.4.tgz
+tar xzf Python-3.9.4.tgz
+cd Python-3.9.4
+./configure --enable-optimizations --enable-shared
+make -j8 altinstall
+
+# update linker cache
+ldconfig
+
+# install pymorphy2 and UK dictionary
+pip3.9 install pymorphy2[fast]
+pip3.9 install pymorphy2-dicts-uk
 ```
 
-To enable Manticore at boot:
+After you have all installed make sure you have the following in your Manticore Search configuration file (/etc/manticoresearch/manticore.conf by default):
 
-```bash
-systemctl enable manticore
+```
+common {
+    plugin_dir = /usr/local/manticore/lib/
+}
 ```

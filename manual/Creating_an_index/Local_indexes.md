@@ -6,7 +6,7 @@ Real-time mode requires no index definition in the configuration file and [data_
 
 Replication is available only in this mode.
 
-In this mode you can use SQL commands like `CREATE TABLE`, `ALTER TABLE` and `DROP TABLE` to create and change index schema and drop it. This mode is especially useful for **real-time** and **percolate indexes**. 
+In this mode you can use SQL commands like `CREATE TABLE`, `ALTER TABLE` and `DROP TABLE` to create and change index schema and drop it. This mode is especially useful for **real-time** and **percolate indexes**.
 
 Index names are case insensitive in RT mode.
 

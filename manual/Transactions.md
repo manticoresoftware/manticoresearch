@@ -13,6 +13,9 @@ Transactions are not supported for:
 * TRUNCATE - for [emptying a real-time index](Emptying_an_index.md)
 * ATTACH - for [attaching a plain index to a real-time index](Adding_data_from_external_storages/Adding_data_from_indexes/Attaching_a_plain_index_to_RT_index.md)
 * CREATE - [for creating an index](Creating_an_index/Local_indexes.md)
+* DROP - [for deleting an index](Deleting_an_index.md)
+
+Please also note, that transactions in Manticore do not aim to provide isolation. The idea of transactions in Manticore is to let you accumulate a number of writes and run them at once at commit or rollback them all if needed. Transactions are integrated with [binary log](Logging/Binary_logging.md) which gives durability and consistency.
 
 ## Automatic and manual mode
 
@@ -25,7 +28,7 @@ SET AUTOCOMMIT = {0 | 1}
 Transactions are limited to a single RT or percolate index, and also limited in size. They are atomic, consistent, overly isolated, and durable. Overly isolated means that the changes are not only invisible to the concurrent transactions but even to the current session itself.
 
 
-## BEGIN, COMMIT, and ROLLBACK 
+## BEGIN, COMMIT, and ROLLBACK
 
 ```sql
 START TRANSACTION | BEGIN
@@ -37,7 +40,7 @@ ROLLBACK
 
 `COMMIT` statement commits the current transaction, making all its changes permanent.
 
-`ROLLBACK` statement rolls back the current transaction, canceling all its changes. 
+`ROLLBACK` statement rolls back the current transaction, canceling all its changes.
 
 ## Examples
 
@@ -79,7 +82,7 @@ Empty set (0.00 sec)
 
 Here changes is NOT automatically committed. So, insertion is not visible even in the same session, since they're not committed. Also, despite absent `BEGIN` statement, transaction is implicitly started.
 
-So, let's finally commit it: 
+So, let's finally commit it:
 
 ```sql
 commit;

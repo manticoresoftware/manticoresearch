@@ -496,9 +496,10 @@ indextool <command> [options]
 * [--mergeidf](Miscellaneous_tools.md#indextool) - Merges several .idf files into a single one
 * [--morph](Miscellaneous_tools.md#indextool) - Applies morphology to the given STDIN and prints the result to stdout
 * [--check](Miscellaneous_tools.md#indextool) - Checks the index data files for consistency
-* [--strip-path](Starting_the_server/Manually.md#searchd-command-line-options) - Strips path names from all the file names referenced from the index
+* [--check-disk-chunk](Miscellaneous_tools.md#indextool) - Checks one disk chunk of an RT index
+* [--strip-path](Miscellaneous_tools.md#indextool) - Strips path names from all the file names referenced from the index
 * [--rotate](Miscellaneous_tools.md#indextool) - Defines whether to check index waiting for rotation in `--check`
-* [Indextool](Miscellaneous_tools.md#indextool) - Applies kill-lists for all indexes listed in the configuration file
+* [--apply-killlists](Miscellaneous_tools.md#indextool) - Applies kill-lists for all indexes listed in the configuration file
 
 ## [Wordbreaker](Miscellaneous_tools.md#wordbreaker)
 Splits compound words into components.

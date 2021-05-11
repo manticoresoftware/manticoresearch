@@ -3,7 +3,7 @@
 This is the simplest way to pass data to the indexer. It was created due to xmlpipe2 limitations. Namely, indexer must map each attribute and field tag in XML file to corresponding schema element. This mapping requires some time. And time increases with increasing the number of fields and attributes in schema. There is no such issue in tsvpipe because each field and attribute is a particular column in TSV file. So, in some cases tsvpipe could work slightly faster than xmlpipe2.
 
 ## File format
-The first column in TSV/CSV file must be a document ID. The rest ones must mirror the declaration of fields and attributes in schema definition.
+The first column in TSV/CSV file must be a document ID. The rest ones must mirror the declaration of fields and attributes in schema definition. Note that you don't need to declare the document ID in the schema, since it's always considered to be present, should be in the 1st column and needs to be a unique signed positive non-zero 64-bit integer.
 
 The difference between tsvpipe and csvpipe is delimiter and quoting rules. tsvpipe has tab character as hardcoded delimiter and has no quoting rules. csvpipe has option `csvpipe_delimiter` for delimiter with default value ',' and also has quoting rules, such as:
 

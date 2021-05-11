@@ -38,7 +38,7 @@ Soundex implementation matches that of MySQL. Metaphone implementation is based 
 Built-in values that are available for use in the `morphology` option are as follows:
 * none - do not perform any morphology processing
 * lemmatize_ru - apply Russian lemmatizer and pick a single root form
-* lemmatize_uk - apply Ukrainian lemmatizer and pick a single root form (install it first in [Centos](../../Installation/RHEL_and_Centos.md#Ukrainian-lemmatizer) or [Ubuntu/Debian](../../Installation/Debian_and_Ubuntu.md#Ukrainian-lemmatizer)). For correct work of the lemmatizer make sure specific Ukrainian characters are preserved in your `charset_table` since by default they are not. For that override them, like this: `charset_table='non_cjk,U+0406->U+0456,U+0456,U+0407->U+0457,U+0457,U+0490->U+0491,U+0491'`.
+* lemmatize_uk - apply Ukrainian lemmatizer and pick a single root form (install it first in [Centos](../../Installation/RHEL_and_Centos.md#Ukrainian-lemmatizer) or [Ubuntu/Debian](../../Installation/Debian_and_Ubuntu.md#Ukrainian-lemmatizer)). For correct work of the lemmatizer make sure specific Ukrainian characters are preserved in your `charset_table` since by default they are not. For that override them, like this: `charset_table='non_cjk,U+0406->U+0456,U+0456,U+0407->U+0457,U+0457,U+0490->U+0491,U+0491'`. [Here](https://play.manticoresearch.com/ua-lemmatizer/) is an interactive course about how to install and use the urkainian lemmatizer.
 * lemmatize_en - apply English lemmatizer and pick a single root form
 * lemmatize_de - apply German lemmatizer and pick a single root form
 * lemmatize_ru_all - apply Russian lemmatizer and index all possible root forms

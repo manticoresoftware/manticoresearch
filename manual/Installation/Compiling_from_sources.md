@@ -58,12 +58,12 @@ For the server these dependencies may be in play:
 
 ### From git
 
-Manticore sources are [hosted on github](https://github.com/manticoresoftware/manticoresearch). Clone the repo, then checkout desired branch or tag. Our public git workfow contains only main `master` branch, which represents bleeding-edge of development. On release we create a versioned tag, like `3.5.4`, and start a new branch for current release, in this case `manticore-3.5.4`. The head of the versioned branch after all changes is used as source to build all binary releases. For example, to take sources of version 3.5.4 you can run:
+Manticore sources are [hosted on github](https://github.com/manticoresoftware/manticoresearch). Clone the repo, then checkout desired branch or tag. Our public git workfow contains only main `master` branch, which represents bleeding-edge of development. On release we create a versioned tag, like `3.6.0`, and start a new branch for current release, in this case `manticore-3.6.0`. The head of the versioned branch after all changes is used as source to build all binary releases. For example, to take sources of version 3.6.0 you can run:
 
 ```bash
 git clone https://github.com/manticoresoftware/manticoresearch.git
 cd manticoresearch
-git checkout manticore-3.5.4
+git checkout manticore-3.6.0
 ```
 
 When using sources from GitHub you'll need `flex` and `bison` tools, since all internal parsers are provided as lex/yacc sources.
@@ -73,9 +73,9 @@ When using sources from GitHub you'll need `flex` and `bison` tools, since all i
 Tarballs are available [here](https://manticoresearch.com/downloads/). Look for "Source tar.gz". Those provided by github 'Source code' archives are not what you want, so avoid using them (mainly they lack the git version which we use to make version string). The tarball sources have pre-built lexers and parsers, so flex and bison tools are not required for a build.
 
 ```bash
-wget -c https://repo.manticoresearch.com/repository/manticoresearch_source/release/manticore-3.5.4-201002-13f8d08-release-source.tar.gz
-tar -zxf manticore-3.5.4-*.tar.gz
-cd manticore-3.5.4-*
+wget -c https://repo.manticoresearch.com/repository/manticoresearch_source/release/manticore-3.6.0-210504-96d61d8-release-source.tar.gz
+tar -zxf manticore-3.6.0-*.tar.gz
+cd manticore-3.6.0-*
 ```
 
 ### Configuring
@@ -83,7 +83,7 @@ cd manticore-3.5.4-*
 Manticore uses cmake for pre-compiling configuration. To use it make a build directory somewhere, go to it, then invoke cmake, pointing it to the source dir. Simplest is to create the build directory inside unpacked sources. 
 
 ```bash
-cd manticore-3.5.4
+cd manticore-3.6.0
 mkdir build && cd build
 cmake -DWITH_MYSQL=1 -DWITH_RE2=1 ..
 ```

@@ -124,7 +124,7 @@ indexApi.insert(newdoc);
 <!-- example noid -->
 ## Auto ID provisioning
 
-In case of omitted ID it's assigned automatically. [auto-id](../Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md#Auto-ID) you can read more about Auto ID.
+In case you don't specify the ID it's assigned automatically. Read more about auto-ID [here](../Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md#Auto-ID).
 
 <!-- intro -->
 ##### SQL:

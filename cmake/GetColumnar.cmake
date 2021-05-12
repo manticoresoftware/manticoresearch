@@ -49,7 +49,8 @@ function(columnar_install)
 	endif()
 endfunction()
 
-get_buildd(COLUMNAR_BUILD ${COLUMNARNAME})
+#get_buildd(COLUMNAR_BUILD ${COLUMNARNAME})
+set(COLUMNAR_BUILD "${MANTICORE_BINARY_DIR}/${COLUMNARNAME}")
 
 # first check 'lazy' case - build from previous run
 diags("first check 'lazy' case - build from previous run ${MANTICORE_BINARY_DIR}/columnar/${COLUMNAR_SONAME}")
@@ -60,35 +61,35 @@ if (HAVE_COLUMNAR)
 endif ()
 
 # check build in common cache
-diags("check build in common cache ${COLUMNAR_BUILD}/${COLUMNAR_SONAME}")
-check_imported(HAVE_COLUMNAR "${COLUMNAR_BUILD}")
-if (HAVE_COLUMNAR)
-	diags("Use cached prebuilt columnar from bundle ${COLUMNAR_LIBDIR}")
-	return() # we're done
-endif ()
+#diags("check build in common cache ${COLUMNAR_BUILD}/${COLUMNAR_SONAME}")
+#check_imported(HAVE_COLUMNAR "${COLUMNAR_BUILD}")
+#if (HAVE_COLUMNAR)
+#	diags("Use cached prebuilt columnar from bundle ${COLUMNAR_LIBDIR}")
+#	return() # we're done
+#endif ()
 
 # packed build in the bundle, as bundle/columnar-cmake-3.x-5.7-darwin-x86_64.tar.gz
 get_platformed_named (COLUMNAR_PLATFORM_BUILD "${COLUMNARNAME}")
-diags("packet build in the bundle ${LIBS_BUNDLE}/${COLUMNAR_PLATFORM_BUILD}.tar.gz")
-if (EXISTS "${LIBS_BUNDLE}/${COLUMNAR_PLATFORM_BUILD}.tar.gz")
-	set(COLUMNAR_LIBDIR "${COLUMNAR_BINARY_DIR}/columnar")
-	fetch_and_unpack(columnar_lib "${LIBS_BUNDLE}/${COLUMNAR_PLATFORM_BUILD}.tar.gz" "${COLUMNAR_LIBDIR}")
-	check_imported(HAVE_COLUMNAR "${COLUMNAR_LIBDIR}")
-	if (HAVE_COLUMNAR)
-		diags("Use cached prebuilt columnar from bundled archive ${COLUMNAR_LIBDIR}")
-		return() # we're done
-	endif ()
-endif ()
+#diags("packet build in the bundle ${LIBS_BUNDLE}/${COLUMNAR_PLATFORM_BUILD}.tar.gz")
+#if (EXISTS "${LIBS_BUNDLE}/${COLUMNAR_PLATFORM_BUILD}.tar.gz")
+#	set(COLUMNAR_LIBDIR "${COLUMNAR_BINARY_DIR}/columnar")
+#	fetch_and_unpack(columnar_lib "${LIBS_BUNDLE}/${COLUMNAR_PLATFORM_BUILD}.tar.gz" "${COLUMNAR_LIBDIR}")
+#	check_imported(HAVE_COLUMNAR "${COLUMNAR_LIBDIR}")
+#	if (HAVE_COLUMNAR)
+#		diags("Use cached prebuilt columnar from bundled archive ${COLUMNAR_LIBDIR}")
+#		return() # we're done
+#	endif ()
+#endif ()
 
 # finally set up build from sources
 populate(COLUMNAR_PLACE ${COLUMNARNAME} "${LIBS_BUNDLE}/${COLUMNAR_BUNDLEZIP}" ${COLUMNAR_GITHUB})
-get_srcpath(COLUMNAR_SRC ${COLUMNARNAME})
+set(COLUMNAR_SRC "${MANTICORE_BINARY_DIR}/${COLUMNARNAME}-src")
 
-diags("check if src folder is empty")
-if (NOT EXISTS "${COLUMNAR_SRC}/CMakeLists.txt")
+		#diags("check if src folder is empty")
+#if (NOT EXISTS "${COLUMNAR_SRC}/CMakeLists.txt")
 	diags("need to fetch sources from ${COLUMNAR_PLACE} to ${COLUMNAR_SRC}")
 	fetch_and_unpack(columnar ${COLUMNAR_PLACE} ${COLUMNAR_SRC})
-endif ()
+#endif ()
 
 if (EXISTS "${COLUMNAR_SRC}/CMakeLists.txt")
 	if ( DEFINED DEBUG_COLUMNAR_DEST )

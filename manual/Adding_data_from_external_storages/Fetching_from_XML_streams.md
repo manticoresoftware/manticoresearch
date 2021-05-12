@@ -50,7 +50,7 @@ that in-document field order must not matter, sir</content>
 
 Arbitrary fields and attributes are allowed. They also can occur in the stream in arbitrary order within each document; the order is ignored. There is a restriction on maximum field length; fields longer than 2 MB will be truncated to 2 MB (this limit can be changed in the source).
 
-The schema, ie. complete fields and attributes list, must be declared before any document could be parsed. This can be done either in the configuration file using `xmlpipe_field` and `xmlpipe_attr_XXX` settings, or right in the stream using \<sphinx:schema\> element. \<sphinx:schema\> is optional. It is only allowed to occur as the very first sub-element in \<sphinx:docset\>. If there is no in-stream schema definition, settings from the configuration file will be used. Otherwise, stream settings take precedence.
+The schema, ie. complete fields and attributes list, must be declared before any document could be parsed. This can be done either in the configuration file using `xmlpipe_field` and `xmlpipe_attr_XXX` settings, or right in the stream using `<sphinx:schema>` element. `<sphinx:schema>` is optional. It is only allowed to occur as the very first sub-element in `<sphinx:docset>`. If there is no in-stream schema definition, settings from the configuration file will be used. Otherwise, stream settings take precedence.
 
 Unknown tags (which were not declared neither as fields nor as attributes) will be ignored with a warning. In the example above, \<misc\> will be ignored. All embedded tags and their attributes (such as \*\* in \<subject\> in the example above) will be silently ignored.
 

@@ -208,6 +208,7 @@ add_dependencies ( tarball vergen )
 add_library ( libsphinx STATIC ${LIBSPHINX_SRCS} ${HEADERS} ${GHEADERS} ${LIBSPHINX_BISON} ${LIBSPHINX_FLEX} ${CHARSET_FILES} ${CHARSET_TEMPLATE} "../misc/manticore.natvis" )
 add_dependencies ( libsphinx vergen )
 target_link_libraries(libsphinx ${EXTRA_LIBRARIES})
+target_link_libraries(libsphinx Boost::context)
 diag(EXTRA_LIBRARIES)
 
 if (VALGRIND_FOUND)

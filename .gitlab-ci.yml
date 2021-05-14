@@ -277,7 +277,6 @@ build_bsd:
       - cache/*-src
       - cache/galera*64/libgalera*
       - cache/galera*64/galera-targets.cmake
-      - cache/icu*64/*icu*
       - cache/re2*64/*re2*
       - cache/stemmer*64/*stemmer*  
 

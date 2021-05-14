@@ -173,7 +173,7 @@ else ()
 	target_compile_options(icu PRIVATE "-fPIC")
 endif ()
 
-target_include_directories(icu PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/source/common)
+target_include_directories(icu BEFORE PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/source/common)
 
 set_target_properties(icu PROPERTIES
 		MAP_IMPORTED_CONFIG_MINSIZEREL RelWithDebInfo

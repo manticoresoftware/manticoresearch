@@ -740,11 +740,7 @@ CSphSource * SpawnSourceODBC ( const CSphConfigSection & hSource, const char * s
 	LOC_GETS ( tParams.m_sOdbcDSN, "odbc_dsn" );
 	LOC_GETS ( tParams.m_sColBuffers, "sql_column_buffers" );
 
-	CSphSource_ODBC * pSrc = new CSphSource_ODBC(sSourceName);
-	if ( !pSrc->Setup ( tParams ) )
-		SafeDelete ( pSrc );
-
-	return pSrc;
+	return CreateSourceODBC ( tParams, sSourceName );
 }
 
 CSphSource * SpawnSourceMSSQL ( const CSphConfigSection & hSource, const char * sSourceName )
@@ -759,11 +755,7 @@ CSphSource * SpawnSourceMSSQL ( const CSphConfigSection & hSource, const char * 
 	LOC_GETS ( tParams.m_sColBuffers, "sql_column_buffers" );
 	LOC_GETS ( tParams.m_sOdbcDSN, "odbc_dsn" ); // a shortcut, may be used instead of other specific combination
 
-	CSphSource_MSSQL * pSrc = new CSphSource_MSSQL(sSourceName);
-	if ( !pSrc->Setup ( tParams ) )
-		SafeDelete ( pSrc );
-
-	return pSrc;
+	return CreateSourceMSSQL ( tParams, sSourceName );
 }
 #endif // USE_ODBC
 

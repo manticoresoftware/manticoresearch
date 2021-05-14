@@ -50,10 +50,6 @@
 #define STDERR_FILENO		fileno(stderr)
 #endif
 
-#if USE_ODBC
-#include <sqlext.h>
-#endif
-
 /////////////////////////////////////////////////////////////////////////////
 
 using RowID_t = DWORD;
@@ -2281,67 +2277,11 @@ struct CSphSourceParams_ODBC: CSphSourceParams_SQL
 };
 
 /// ODBC source implementation
-struct CSphSource_ODBC : CSphSource_SQL
-{
-	explicit				CSphSource_ODBC ( const char * sName );
-	bool					Setup ( const CSphSourceParams_ODBC & tParams );
 
-protected:
-	virtual void			SqlDismissResult ();
-	virtual bool			SqlQuery ( const char * sQuery );
-	virtual bool			SqlIsError ();
-	virtual const char *	SqlError ();
-	virtual bool			SqlConnect ();
-	virtual void			SqlDisconnect ();
-	virtual int				SqlNumFields();
-	virtual bool			SqlFetchRow();
-	virtual const char *	SqlColumn ( int iIndex );
-	virtual const char *	SqlFieldName ( int iIndex );
-	virtual DWORD			SqlColumnLength ( int iIndex );
+CSphSource * CreateSourceODBC ( const CSphSourceParams_ODBC & tParams, const char * sSourceName );
 
-	virtual void			OdbcPostConnect () {}
+CSphSource * CreateSourceMSSQL ( const CSphSourceParams_ODBC & tParams, const char * sSourceName );
 
-protected:
-	CSphString				m_sOdbcDSN;
-	bool					m_bWinAuth;
-	bool					m_bUnicode;
-
-	SQLHENV					m_hEnv;
-	SQLHDBC					m_hDBC;
-	SQLHANDLE				m_hStmt;
-	int						m_nResultCols;
-	CSphString				m_sError;
-
-	struct QueryColumn_t
-	{
-		CSphVector<char>	m_dContents;
-		CSphVector<char>	m_dRaw;
-		CSphString			m_sName;
-		SQLLEN				m_iInd;
-		int					m_iBytes;		///< size of actual data in m_dContents, in bytes
-		int					m_iBufferSize;	///< size of m_dContents and m_dRaw buffers, in bytes
-		bool				m_bUCS2;		///< whether this column needs UCS-2 to UTF-8 translation
-		bool				m_bTruncated;	///< whether data was truncated when fetching rows
-	};
-
-	static const int		DEFAULT_COL_SIZE	= 1024;			///< default column buffer size
-	static const int		VARCHAR_COL_SIZE	= 1048576;		///< default column buffer size for VARCHAR columns
-	static const int		MAX_COL_SIZE		= 8*1048576;	///< hard limit on column buffer size
-	static const int		WARN_ROW_SIZE		= 32*1048576;	///< warning thresh (NOT a hard limit) on row buffer size
-
-	CSphVector<QueryColumn_t>	m_dColumns;
-	SmallStringHash_T<int>		m_hColBuffers;
-
-	void					GetSqlError ( SQLSMALLINT iHandleType, SQLHANDLE hHandle );
-};
-
-
-/// MS SQL source implementation
-struct CSphSource_MSSQL : public CSphSource_ODBC
-{
-	explicit				CSphSource_MSSQL ( const char * sName ) : CSphSource_ODBC ( sName ) { m_bUnicode=true; }
-	virtual void			OdbcPostConnect ();
-};
 #endif // USE_ODBC
 
 

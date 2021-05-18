@@ -51,7 +51,7 @@
 const char * szCommand ( int eCmd)
 {
 	const char* szCommands[SEARCHD_COMMAND_TOTAL] = {"command_search", "command_excerpt", "command_update",
-		"command_keywords", "command_persist", "command_status", "command_flushattrs", "command_sphinxql",
+		"command_keywords", "command_persist", "command_status", "gap_6", "command_flushattrs", "command_sphinxql",
 		"command_ping", "command_delete", "command_set", "command_insert", "command_replace", "command_commit",
 		"command_suggest", "command_json", "command_callpq", "command_clusterpq", "command_getfield"};
 	if ( eCmd<SEARCHD_COMMAND_TOTAL )

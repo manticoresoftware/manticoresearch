@@ -13,5 +13,6 @@ execute_process ( COMMAND ${CMAKE_COMMAND} -E compare_files ${cmpfile} smoke_ref
 
 if ( res_is_different_from_model )
 	execute_process ( COMMAND diff --unified=3 ${cmpfile} smoke_ref.txt RESULT_VARIABLE difres )
+	message ( SEND_ERROR "${difres}" )
 	message ( SEND_ERROR "${cmpfile} does not match smoke_ref.txt!" )
 endif ()

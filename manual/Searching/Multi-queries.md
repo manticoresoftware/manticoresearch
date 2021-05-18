@@ -13,7 +13,7 @@ Multi-queries require all the search queries in a batch to be independent, and s
 <!-- example multi-query 1 -->
 You can run multiple search queries with SQL by just separating them with a semicolon. When Manticore receives a query formatted like that from a client all the inter-statement optimizations will be applied.
 
-There are no restrictions on the queries at all, except just a sanity check on a number of queries in a single batch (see [max_batch_queries](../Server_settings/Searchd.md#max_batch_queries)).
+Multi-queries don't support queries with `FACET`. The number of multi-queries in one batch shoudln't exceed [max_batch_queries](../Server_settings/Searchd.md#max_batch_queries).
 
 
 <!-- intro -->

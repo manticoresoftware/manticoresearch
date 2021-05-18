@@ -310,7 +310,7 @@ command_update: 4
 command_keywords: 1
 command_persist: 1
 command_status: 1
-: 0
+gap_6: 0
 command_flushattrs: 0
 command_sphinxql: 0
 command_ping: 0

@@ -6263,6 +6263,17 @@ void CSphSchema::AddField ( const CSphColumnInfo & tField )
 	m_dFields.Add ( tField );
 }
 
+void CSphSchema::RemoveField ( const char * szFieldName )
+{
+	auto iIdx = GetFieldIndex ( szFieldName );
+	RemoveField ( iIdx );
+}
+
+void CSphSchema::RemoveField ( int iIdx )
+{
+	if (iIdx>=0)
+		m_dFields.Remove ( iIdx );
+}
 
 int CSphSchema::GetAttrId_FirstFieldLen() const
 {
@@ -11440,7 +11451,39 @@ bool sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc,	CSphString & sEr
 
 bool CSphIndex_VLN::AddRemoveField ( bool bAddField, const CSphString & sFieldName, CSphString & sError )
 {
-	return true; // fixme! implement...
+	CSphSchema tNewSchema = m_tSchema;
+	if ( !Alter_AddRemoveFieldFromSchema ( bAddField, tNewSchema, sFieldName, sError ) )
+		return false;
+
+	m_tSchema = tNewSchema;
+
+	BuildHeader_t tBuildHeader ( m_tStats );
+	tBuildHeader.m_iDocinfo = m_iDocinfo;
+	tBuildHeader.m_iDocinfoIndex = m_iDocinfoIndex;
+	tBuildHeader.m_iMinMaxIndex = m_iMinMaxIndex;
+
+	*(DictHeader_t *) &tBuildHeader = *(DictHeader_t *) &m_tWordlist;
+
+	if ( !bAddField )
+	{
+		// main challenge if removing...
+		// fixme! implement...
+	}
+
+	CSphString sHeaderName = GetIndexFileName ( SPH_EXT_SPH, true );
+	WriteHeader_t tWriteHeader;
+	tWriteHeader.m_pSettings = &m_tSettings;
+	tWriteHeader.m_pSchema = &tNewSchema;
+	tWriteHeader.m_pTokenizer = m_pTokenizer;
+	tWriteHeader.m_pDict = m_pDict;
+	tWriteHeader.m_pFieldFilter = m_pFieldFilter;
+	tWriteHeader.m_pFieldLens = m_dFieldLens.Begin ();
+
+	// save the header
+	if ( !IndexBuildDone ( tBuildHeader, tWriteHeader, sHeaderName, sError ) ) 	return false;
+	if ( !JuggleFile ( SPH_EXT_SPH, sError ) )		return false;
+
+	return true;
 }
 
 

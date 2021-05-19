@@ -289,3 +289,26 @@ bool IndexAlterHelper_c::Alter_AddRemoveFromSchema ( CSphSchema & tSchema, const
 	AddToSchema ( tSchema, sAttrName, eAttrType, sError );
 	return true;
 }
+
+
+bool IndexAlterHelper_c::Alter_AddRemoveFieldFromSchema ( bool bAdd, CSphSchema & tSchema, const CSphString & sFieldName, CSphString & sError )
+{
+	if ( bAdd )
+	{
+		// fixme! dupes?
+		//tCol.m_uFieldFlags = CSphColumnInfo::FIELD_INDEXED; // fixme! stored must be processed someway aside
+		//tCol.m_bPayload = false; // fixme? support it or not?
+		tSchema.AddField ( sFieldName.cstr () );
+		return true;
+	} else {
+		auto iIdx = tSchema.GetFieldIndex ( sFieldName.cstr () );
+		if ( iIdx>=0 && tSchema.GetFieldsCount()==1 )
+		{
+			sError.SetSprintf ("Unable to delete last field from the index");
+			return false;
+		}
+		tSchema.RemoveField ( iIdx );
+		return true;
+	}
+}
+

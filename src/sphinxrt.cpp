@@ -1116,6 +1116,8 @@ private:
 	RtSegment_t *				MergeSegments ( const RtSegment_t * pSeg1, const RtSegment_t * pSeg2, bool bHasMorphology ) const;
 	static void					CopyWord ( RtSegment_t & tDst, const RtSegment_t & tSrc, RtDocWriter_t & tOutDoc, RtDocReader_t & tInDoc, RtWord_t & tWord, const CSphVector<RowID_t> & tRowMap );
 
+	void						DeleteField ( RtSegment_t * pSeg, int iKillField );
+
 	bool						LoadMeta ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings );
 	bool						PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings );
 	void						SaveMeta ( int64_t iTID, bool bSaveChunks=true );
@@ -2188,6 +2190,14 @@ void RtIndex_c::CopyWord ( RtSegment_t & tDst, const RtSegment_t & tSrc, RtDocWr
 		// copy doc
 		tOutDoc.ZipDoc ( tDoc );
 	}
+}
+
+void RtIndex_c::DeleteField ( RtSegment_t * pSeg, int iKillField )
+{
+	assert ( iKillField>=0 );
+
+	// fixme! implement...
+
 }
 
 
@@ -7202,7 +7212,46 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ES
 
 bool RtIndex_c::AddRemoveField ( bool bAdd, const CSphString & sFieldName, CSphString & sError )
 {
-	return true; // fixme! implement...
+	SphOptimizeGuard_t tStopOptimize ( m_tOptimizingLock, m_bOptimizeStop ); // got write-locked at daemon
+
+	CSphSchema tOldSchema = m_tSchema;
+	CSphSchema tNewSchema = m_tSchema;
+
+	if ( !Alter_AddRemoveFieldFromSchema ( bAdd, tNewSchema, sFieldName, sError ) )
+		return false;
+
+	auto iRemoveIdx = m_tSchema.GetFieldIndex ( sFieldName.cstr () );
+	m_tSchema = tNewSchema;
+
+	CSphFixedVector<int> dChunkNames = GetChunkNames ( m_dDiskChunks );
+
+	// modify the in-memory data of disk chunks
+	// fixme: we can't rollback in-memory changes, so we just show errors here for now
+	ARRAY_FOREACH ( iDiskChunk, m_dDiskChunks )
+		if ( !m_dDiskChunks[iDiskChunk]->AddRemoveField ( bAdd, sFieldName, sError ) )
+			sphWarning ( "%s attribute to %s.%d: %s", bAdd ? "adding" : "removing", m_sPath.cstr ()
+						 , dChunkNames[iDiskChunk], sError.cstr () );
+
+	// now modify the ramchunk
+	if (!bAdd)
+	{
+		for ( RtSegment_t * pSeg : m_dRamChunks )
+		{
+			assert ( pSeg );
+
+			DeleteField ( pSeg, iRemoveIdx );
+			pSeg->UpdateUsedRam ();
+		}
+	}
+
+	// fixme: we can't rollback at this point
+	Verify ( SaveRamChunk ( m_dRamChunks ) );
+
+	SaveMeta ( m_iTID );
+
+	// fixme: notify that it was ALTER that caused the flush
+	g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr (), m_iTID, false );
+	return true;
 }
 
 //////////////////////////////////////////////////////////////////////////

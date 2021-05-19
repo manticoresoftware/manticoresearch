@@ -1532,6 +1532,10 @@ public:
 	void					AddField ( const char * sFieldName );
 	void					AddField ( const CSphColumnInfo & tField );
 
+	/// remove field
+	void					RemoveField ( const char * szFieldName );
+	void					RemoveField ( int iIdx );
+
 	/// get field index by name
 	/// returns -1 if not found
 	int						GetFieldIndex ( const char * sName ) const final;
@@ -3002,6 +3006,8 @@ class IndexAlterHelper_c
 public:
 	bool				Alter_AddRemoveAttr ( const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, const CSphRowitem * pDocinfo, const CSphRowitem * pDocinfoMax, const BYTE * pBlobPool, WriteWrapper_c & tSPAWriter, WriteWrapper_c & tSPBWriter, bool bAddAttr, const CSphString & sAttrName );
 	bool 				Alter_AddRemoveFromSchema ( CSphSchema & tSchema, const CSphString & sAttrName, ESphAttr eAttrType, bool bAdd, CSphString & sError );
+
+	bool 				Alter_AddRemoveFieldFromSchema ( bool bAdd, CSphSchema & tSchema, const CSphString & sFieldName, CSphString & sError );
 
 	virtual bool		Alter_IsMinMax ( const CSphRowitem * pDocinfo, int iStride ) const;
 };

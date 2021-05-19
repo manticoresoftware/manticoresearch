@@ -1538,6 +1538,8 @@ public:
 	template <class QWORDDST, class QWORDSRC>
 	static bool			MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, const CSphVector<RowID_t> & dDstRows, const CSphVector<RowID_t> & dSrcRows, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, CSphIndexProgress & tProgress, volatile bool * pLocalStop );
 	static bool			DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, volatile bool * pLocalStop, bool bSrcSettings, bool bSupressDstDocids );
+	template <class QWORD>
+	static bool			DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, int iKillField );
 
 	int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning ) final;
 	bool				SaveAttributes ( CSphString & sError ) const final;
@@ -11449,12 +11451,149 @@ bool sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc,	CSphString & sEr
 	return CSphIndex_VLN::DoMerge ( pDstIndex, pSrcIndex, nullptr, sError, tProgress, pLocalStop, bSrcSettings, false );
 }
 
+namespace QwordIteration
+{
+	template<typename QWORD>
+	inline void PrepareQword ( QWORD & tQword, const CSphDictReader & tReader, bool bWordDict ) //NOLINT
+	{
+		tQword.m_tDoc.m_tRowID = INVALID_ROWID;
+
+		tQword.m_iDocs = tReader.m_iDocs;
+		tQword.m_iHits = tReader.m_iHits;
+		tQword.m_bHasHitlist = tReader.m_bHasHitlist;
+
+		tQword.m_uHitPosition = 0;
+		tQword.m_iHitlistPos = 0;
+
+		if ( bWordDict )
+			tQword.m_rdDoclist->SeekTo ( tReader.m_iDoclistOffset, tReader.m_iHint );
+	}
+
+	template<typename QWORD>
+	inline bool NextDocument ( QWORD & tQword, const CSphIndex_VLN * pSourceIndex )
+	{
+		while (true)
+		{
+			tQword.GetNextDoc();
+			if ( tQword.m_tDoc.m_tRowID==INVALID_ROWID )
+				return false;
+
+			tQword.SeekHitlist ( tQword.m_iHitlistPos );
+			return true;
+		}
+	}
+
+	template<typename QWORD>
+	inline void ConfigureQword ( QWORD & tQword, DataReaderFactory_c * pHits, DataReaderFactory_c * pDocs, int iDynamic )
+	{
+		tQword.SetHitReader ( pHits );
+		tQword.m_rdHitlist->SeekTo ( 1, READ_NO_SIZE_HINT );
+
+		tQword.SetDocReader ( pDocs );
+		tQword.m_rdDoclist->SeekTo ( 1, READ_NO_SIZE_HINT );
+
+		tQword.m_tDoc.Reset ( iDynamic );
+	}
+}; // namespace QwordIteration
+
+template < typename QWORD >
+bool CSphIndex_VLN::DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, int iKillField )
+{
+	assert ( iKillField>=0 );
+
+	bool bWordDict = pHitBuilder->IsWordDict ();
+
+	CSphAutofile tDummy;
+	pHitBuilder->CreateIndexFiles ( pIndex->GetIndexFileName("tmp.spd").cstr(), pIndex->GetIndexFileName("tmp.spp").cstr(), pIndex->GetIndexFileName("tmp.spe").cstr(), false, 0, tDummy, nullptr );
+
+	CSphDictReader tWordsReader ( pIndex->GetSettings().m_iSkiplistBlockSize );
+	if ( !tWordsReader.Setup ( pIndex->GetIndexFileName(SPH_EXT_SPI), pIndex->m_tWordlist.GetWordsEnd(), pIndex->m_tSettings.m_eHitless, sError, bWordDict ) )
+		return false;
+
+	/// prepare for indexing
+	pHitBuilder->HitblockBegin();
+	pHitBuilder->HitReset();
+
+	/// setup qword
+	QWORD tQword ( false, false );
+	DataReaderFactoryPtr_c tDocs {
+		NewProxyReader ( pIndex->GetIndexFileName ( SPH_EXT_SPD ), sError,
+			DataReaderFactory_c::DOCS, pIndex->m_tMutableSettings.m_tFileAccess.m_iReadBufferDocList, FileAccess_e::FILE )
+	};
+	if ( !tDocs )
+		return false;
+
+	DataReaderFactoryPtr_c tHits {
+		NewProxyReader ( pIndex->GetIndexFileName ( SPH_EXT_SPP ), sError,
+			DataReaderFactory_c::HITS, pIndex->m_tMutableSettings.m_tFileAccess.m_iReadBufferHitList, FileAccess_e::FILE  )
+	};
+	if ( !tHits )
+		return false;
+
+	if ( !sError.IsEmpty () || sphInterrupted () )
+		return false;
+
+	QwordIteration::ConfigureQword ( tQword, tHits, tDocs, pIndex->m_tSchema.GetDynamicSize() );
+
+	/// process
+	while ( tWordsReader.Read () )
+	{
+		if ( sphInterrupted () )
+			return false;
+
+		bool bHitless = !tWordsReader.m_bHasHitlist;
+		QwordIteration::PrepareQword ( tQword, tWordsReader, bWordDict );
+
+		CSphAggregateHit tHit;
+		tHit.m_uWordID = tWordsReader.m_uWordID; // !COMMIT m_sKeyword anyone?
+		tHit.m_sKeyword = tWordsReader.GetWord();
+		tHit.m_dFieldMask.UnsetAll();
+
+		// transfer hits
+		while ( QwordIteration::NextDocument ( tQword, pIndex ) )
+		{
+			if ( sphInterrupted () )
+				return false;
+
+			if ( bHitless )
+			{
+				tHit.m_tRowID = tQword.m_tDoc.m_tRowID;
+				tHit.m_dFieldMask = tQword.m_dQwordFields; // fixme! what field mask on hitless? m.b. write 0 here?
+				tHit.m_dFieldMask.DeleteBit (iKillField);
+				if ( tHit.m_dFieldMask.TestAll ( false ) )
+					continue;
+				tHit.SetAggrCount ( tQword.m_uMatchHits );
+				pHitBuilder->cidxHit ( &tHit );
+			} else
+			{
+				assert ( tQword.m_bHasHitlist );
+				tHit.m_tRowID = tQword.m_tDoc.m_tRowID;
+				for ( Hitpos_t uHit = tQword.GetNextHit(); uHit!=EMPTY_HIT; uHit = tQword.GetNextHit() )
+				{
+					int iField = HITMAN::GetField ( uHit );
+					if ( iKillField==iField )
+						continue;
+
+					if ( iField>iKillField )
+						HITMAN::DecrementField ( uHit );
+
+					tHit.m_iWordPos = uHit;
+					pHitBuilder->cidxHit ( &tHit );
+				}
+			}
+		}
+	}
+
+	return true;
+}
+
 bool CSphIndex_VLN::AddRemoveField ( bool bAddField, const CSphString & sFieldName, CSphString & sError )
 {
 	CSphSchema tNewSchema = m_tSchema;
 	if ( !Alter_AddRemoveFieldFromSchema ( bAddField, tNewSchema, sFieldName, sError ) )
 		return false;
 
+	auto iRemoveIdx = m_tSchema.GetFieldIndex ( sFieldName.cstr () );
 	m_tSchema = tNewSchema;
 
 	BuildHeader_t tBuildHeader ( m_tStats );
@@ -11467,7 +11606,75 @@ bool CSphIndex_VLN::AddRemoveField ( bool bAddField, const CSphString & sFieldNa
 	if ( !bAddField )
 	{
 		// main challenge if removing...
-		// fixme! implement...
+
+		CSphAutofile tTmpDict ( GetIndexFileName ( "spi.tmp" ), SPH_O_NEW, sError, true );
+		CSphAutofile tNewDict ( GetIndexFileName ( SPH_EXT_SPI, true ), SPH_O_NEW, sError );
+
+		if ( !sError.IsEmpty () || tTmpDict.GetFD ()<0 || tNewDict.GetFD ()<0 || sphInterrupted () )
+			return false;
+
+		DictRefPtr_c pDict { m_pDict->Clone () };
+
+		int iHitBufferSize = 8 * 1024 * 1024;
+		CSphVector<SphWordID_t> dDummy;
+		CSphHitBuilder tHitBuilder ( m_tSettings, dDummy, true, iHitBufferSize, pDict, &sError );
+
+		// FIXME? is this magic dict block constant any good?..
+		pDict->DictBegin ( tTmpDict, tNewDict, iHitBufferSize );
+
+		// merge dictionaries, doclists and hitlists
+		if ( pDict->GetSettings().m_bWordDict )
+		{
+			WITH_QWORD ( this, false, Qword,
+				if ( !CSphIndex_VLN::DeleteField <Qword> ( this, &tHitBuilder, sError, tBuildHeader, iRemoveIdx ) )
+					return false;
+			);
+		} else
+		{
+			WITH_QWORD ( this, true, Qword,
+				if ( !CSphIndex_VLN::DeleteField <Qword> ( this, &tHitBuilder, sError, tBuildHeader, iRemoveIdx ) )
+					return false;
+			);
+		}
+
+		if ( sphInterrupted () )
+			return false;
+
+		// finalize
+		CSphAggregateHit tFlush;
+		tFlush.m_tRowID = INVALID_ROWID;
+		tFlush.m_uWordID = 0;
+		tFlush.m_sKeyword = (BYTE*)""; // tricky: assertion in cidxHit calls strcmp on this in case of empty index!
+		tFlush.m_iWordPos = EMPTY_HIT;
+		tFlush.m_dFieldMask.UnsetAll();
+		tHitBuilder.cidxHit ( &tFlush );
+
+		int iMinInfixLen = m_tSettings.m_iMinInfixLen;
+		if ( !tHitBuilder.cidxDone ( iHitBufferSize, iMinInfixLen, m_pTokenizer->GetMaxCodepointLength(), &tBuildHeader ) )
+			return false;
+
+		/// as index is w-locked, we can also detach doclist/hitlist/dictionary and juggle them.
+
+		m_tWordlist.Reset();
+		if ( !JuggleFile ( SPH_EXT_SPI, sError ) )	return false;
+		m_tWordlist.m_iDictCheckpointsOffset = tBuildHeader.m_iDictCheckpointsOffset;
+		m_tWordlist.m_iDictCheckpoints = tBuildHeader.m_iDictCheckpoints;
+		m_tWordlist.m_iInfixCodepointBytes = tBuildHeader.m_iInfixCodepointBytes;
+		m_tWordlist.m_iInfixBlocksOffset =  tBuildHeader.m_iInfixBlocksOffset;
+		m_tWordlist.m_iInfixBlocksWordsSize = tBuildHeader.m_iInfixBlocksWordsSize;
+		m_tWordlist.m_dCheckpoints.Reset ( m_tWordlist.m_iDictCheckpoints );
+		if ( !PreallocWordlist() )					return false;
+
+		m_tSkiplists.Reset ();
+		if ( !JuggleFile ( SPH_EXT_SPE, sError ) )	return false;
+		if ( !PreallocSkiplist() )					return false;
+
+		m_pDoclistFile = nullptr;
+		m_pHitlistFile = nullptr;
+		if ( !JuggleFile ( SPH_EXT_SPD, sError ) )	return false;
+		if ( !JuggleFile ( SPH_EXT_SPP, sError ) )	return false;
+		if ( !SpawnReaders() )						return false;
+
 	}
 
 	CSphString sHeaderName = GetIndexFileName ( SPH_EXT_SPH, true );

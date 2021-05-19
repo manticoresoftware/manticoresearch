@@ -24,7 +24,7 @@ set ( LIBSPHINX_SRCS sphinx.cpp sphinxexcerpt.cpp
 		fileio.cpp memio.cpp queryprofile.cpp columnarfilter.cpp columnargrouper.cpp
 		columnarlib.cpp collation.cpp fnv64.cpp histogram.cpp
 		threads_detached.cpp hazard_pointer.cpp task_info.cpp mini_timer.cpp
-		dynamic_idx.cpp libutils.cpp )
+		dynamic_idx.cpp libutils.cpp sphinx_alter.cpp)
 set ( INDEXER_SRCS indexer.cpp )
 set ( INDEXTOOL_SRCS indextool.cpp )
 set ( SEARCHD_SRCS_TESTABLE searchdha.cpp http/http_parser.c searchdhttp.cpp

@@ -351,6 +351,10 @@ struct RtDocWriter_t
 	CSphTightVector<BYTE> *		m_pDocs;
 	RowID_t						m_tLastRowID {INVALID_ROWID};
 
+	explicit RtDocWriter_t ( CSphTightVector<BYTE> * pDocs )
+		: m_pDocs ( pDocs )
+	{}
+
 	explicit RtDocWriter_t ( RtSegment_t * pSeg )
 		: m_pDocs ( &pSeg->m_dDocs )
 	{}
@@ -375,6 +379,8 @@ struct RtDocWriter_t
 		pDocs->Resize ( pEnd-pBegin );
 	}
 
+	inline void operator<< ( const RtDoc_t & tDoc) { ZipDoc (tDoc); }
+
 	DWORD ZipDocPtr () const
 	{
 		return m_pDocs->GetLength();
@@ -394,31 +400,34 @@ RtDocReader_t::RtDocReader_t ( const RtSegment_t * pSeg, const RtWord_t & tWord 
 	m_tDoc.m_tRowID = INVALID_ROWID;
 }
 
-const RtDoc_t * RtDocReader_t::UnzipDoc ()
+void RtDocReader_t::UnzipDoc ( RtDoc_t& tOut )
 {
-	if ( !m_iLeft || !m_pDocs )
-		return NULL;
-
+	assert ( m_iLeft && m_pDocs );
 	const BYTE * pIn = m_pDocs;
 	RowID_t tDeltaID;
 	pIn = UnzipDword ( &tDeltaID, pIn );
-	m_tDoc.m_tRowID += tDeltaID;
-	pIn = UnzipDword ( &m_tDoc.m_uDocFields, pIn );
-	pIn = UnzipDword ( &m_tDoc.m_uHits, pIn );
-	if ( m_tDoc.m_uHits==1 )
+	tOut.m_tRowID += tDeltaID;
+	pIn = UnzipDword ( &tOut.m_uDocFields, pIn );
+	pIn = UnzipDword ( &tOut.m_uHits, pIn );
+	if ( tOut.m_uHits==1 )
 	{
 		DWORD a, b;
 		pIn = UnzipDword ( &a, pIn );
 		pIn = UnzipDword ( &b, pIn );
-		m_tDoc.m_uHit = a + ( b<<24 );
+		tOut.m_uHit = a + ( b<<24 );
 	} else
-		pIn = UnzipDword ( &m_tDoc.m_uHit, pIn );
+		pIn = UnzipDword ( &tOut.m_uHit, pIn );
 	m_pDocs = pIn;
-
-	m_iLeft--;
-	return &m_tDoc;
+	--m_iLeft;
 }
 
+const RtDoc_t * RtDocReader_t::UnzipDoc ()
+{
+	if ( !m_iLeft || !m_pDocs )
+		return nullptr;
+	UnzipDoc ( m_tDoc );
+	return &m_tDoc;
+}
 
 struct RtWordWriter_t
 {
@@ -434,10 +443,11 @@ struct RtWordWriter_t
 	bool								m_bKeywordDict;
 	int									m_iWordsCheckpoint;
 
-	RtWordWriter_t ( RtSegment_t * pSeg, bool bKeywordDict, int iWordsCheckpoint )
-		: m_pWords ( &pSeg->m_dWords )
-		, m_pCheckpoints ( &pSeg->m_dWordCheckpoints )
-		, m_pKeywordCheckpoints ( &pSeg->m_dKeywordCheckpoints )
+	RtWordWriter_t ( CSphTightVector<BYTE> * pWords, CSphVector<RtWordCheckpoint_t> * pCheckpoints,
+				  CSphVector<BYTE> * pKeywordCheckpoints, bool bKeywordDict, int iWordsCheckpoint )
+		: m_pWords ( pWords )
+		, m_pCheckpoints ( pCheckpoints )
+		, m_pKeywordCheckpoints ( pKeywordCheckpoints )
 		, m_uLastWordID ( 0 )
 		, m_uLastDoc ( 0 )
 		, m_iWords ( 0 )
@@ -448,6 +458,10 @@ struct RtWordWriter_t
 		assert ( !m_pCheckpoints->GetLength() );
 		assert ( !m_pKeywordCheckpoints->GetLength() );
 	}
+
+	RtWordWriter_t ( RtSegment_t * pSeg, bool bKeywordDict, int iWordsCheckpoint )
+		: RtWordWriter_t ( &pSeg->m_dWords, &pSeg->m_dWordCheckpoints, &pSeg->m_dKeywordCheckpoints, bKeywordDict, iWordsCheckpoint )
+	{}
 
 	void ZipWord ( const RtWord_t & tWord )
 	{
@@ -499,7 +513,9 @@ struct RtWordWriter_t
 		m_uLastDoc = tWord.m_uDoc;
 	}
 
-	void PutBytes ( const BYTE * pData, int iLen )
+	inline void operator<< ( const RtWord_t & tWord ) { ZipWord (tWord);}
+
+	void PutBytes ( const BYTE * pData, int iLen ) const
 	{
 		sphPutBytes ( m_pWords, pData, iLen );
 	}
@@ -525,18 +541,19 @@ void RtWordReader_t::Reset ( const RtSegment_t * pSeg )
 	m_iWords = 0;
 }
 
-const RtWord_t * RtWordReader_t::UnzipWord ()
+
+void RtWordReader_t::UnzipWord ( RtWord_t& tWord )
 {
+	assert ( m_pCur<m_pMax );
+
 	if ( ++m_iWords==m_iWordsCheckpoint )
 	{
-		m_tWord.m_uDoc = 0;
+		tWord.m_uDoc = 0;
 		m_iWords = 1;
 		++m_iCheckpoint;
 		if ( !m_bWordDict )
-			m_tWord.m_uWordID = 0;
+			tWord.m_uWordID = 0;
 	}
-	if ( m_pCur>=m_pMax )
-		return nullptr;
 
 	const BYTE * pIn = m_pCur;
 	DWORD uDeltaDoc;
@@ -561,17 +578,26 @@ const RtWord_t * RtWordReader_t::UnzipWord ()
 	{
 		SphWordID_t uDeltaID;
 		pIn = UnzipWordid ( &uDeltaID, pIn );
-		m_tWord.m_uWordID += uDeltaID;
+		tWord.m_uWordID += uDeltaID;
 	}
-	pIn = UnzipDword ( &m_tWord.m_uDocs, pIn );
-	pIn = UnzipDword ( &m_tWord.m_uHits, pIn );
+	pIn = UnzipDword ( &tWord.m_uDocs, pIn );
+	pIn = UnzipDword ( &tWord.m_uHits, pIn );
 	pIn = UnzipDword ( &uDeltaDoc, pIn );
 	m_pCur = pIn;
 
-	m_tWord.m_bHasHitlist = ( m_eHitlessMode==SPH_HITLESS_NONE || ( m_eHitlessMode==SPH_HITLESS_SOME && !( m_tWord.m_uDocs & HITLESS_DOC_FLAG ) ) );
-	m_tWord.m_uDocs = ( m_eHitlessMode==SPH_HITLESS_NONE ? m_tWord.m_uDocs : ( m_tWord.m_uDocs & HITLESS_DOC_MASK ) );
+	tWord.m_bHasHitlist = ( m_eHitlessMode==SPH_HITLESS_NONE || ( m_eHitlessMode==SPH_HITLESS_SOME && !( tWord.m_uDocs & HITLESS_DOC_FLAG ) ) );
+	tWord.m_uDocs = ( m_eHitlessMode==SPH_HITLESS_NONE ? tWord.m_uDocs : ( tWord.m_uDocs & HITLESS_DOC_MASK ) );
 
-	m_tWord.m_uDoc += uDeltaDoc;
+	tWord.m_uDoc += uDeltaDoc;
+}
+
+
+const RtWord_t * RtWordReader_t::UnzipWord ()
+{
+	if ( m_pCur>=m_pMax )
+		return nullptr;
+
+	UnzipWord ( m_tWord );
 	return &m_tWord;
 }
 
@@ -580,6 +606,10 @@ struct RtHitWriter_t
 {
 	CSphTightVector<BYTE> *		m_pHits;
 	DWORD						m_uLastHit = 0;
+
+	explicit RtHitWriter_t ( CSphTightVector<BYTE> * pHits )
+		: m_pHits ( pHits )
+	{}
 
 	explicit RtHitWriter_t ( RtSegment_t * pSeg )
 		: m_pHits ( &pSeg->m_dHits )
@@ -590,6 +620,8 @@ struct RtHitWriter_t
 		ZipDword ( m_pHits, uValue - m_uLastHit );
 		m_uLastHit = uValue;
 	}
+
+	inline void operator<< (DWORD uValue) { ZipHit (uValue); }
 
 	void ZipRestart ()
 	{
@@ -991,6 +1023,8 @@ public:
 	bool				SaveAttributes ( CSphString & sError ) const final;
 	DWORD				GetAttributeStatus () const final { return m_uDiskAttrStatus; }
 	bool				AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError ) final;
+	bool				AddRemoveField ( bool, const CSphString &, CSphString & ) final;
+
 
 	void				DebugDumpHeader ( FILE * , const char * , bool ) final {}
 	void				DebugDumpDocids ( FILE * ) final {}
@@ -1113,6 +1147,8 @@ private:
 	void						MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, const RtSegment_t & tSeg2, const CSphVector<RowID_t> & dRowMap1, const CSphVector<RowID_t> & dRowMap2 ) const;
 	RtSegment_t *				MergeSegments ( const RtSegment_t * pSeg1, const RtSegment_t * pSeg2, bool bHasMorphology ) const;
 	static void					CopyWord ( RtSegment_t & tDst, const RtSegment_t & tSrc, RtDocWriter_t & tOutDoc, RtDocReader_t & tInDoc, RtWord_t & tWord, const CSphVector<RowID_t> & tRowMap );
+
+	void						DeleteField ( RtSegment_t * pSeg, int iKillField );
 
 	bool						LoadMeta ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings );
 	bool						PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings );
@@ -2186,6 +2222,118 @@ void RtIndex_c::CopyWord ( RtSegment_t & tDst, const RtSegment_t & tSrc, RtDocWr
 		// copy doc
 		tOutDoc.ZipDoc ( tDoc );
 	}
+}
+
+template<typename FN>
+inline bool ProcessField ( RtDoc_t & tOutDoc, DWORD uHit, int iKillField, FN&& fnProcessor )
+{
+	assert ( iKillField >=0 );
+
+	int iField = HITMAN::GetField ( uHit );
+	if ( iKillField==iField )
+		return false;
+
+	if ( iField>iKillField )
+	{
+		--iField;
+		HITMAN::DecrementField ( uHit );
+	}
+
+	++tOutDoc.m_uHits;
+	if ( iField<32 )
+		tOutDoc.m_uDocFields |= ( 1UL << iField );
+
+	fnProcessor ( uHit );
+	return true;
+}
+
+void CopyWordWithoutField ( CSphTightVector<BYTE> * pOutHits, RtDocWriter_t & tOutDocs, RtWord_t & tOutWord, const RtSegment_t & tSrc, RtDocReader_t & tInDocs, int iKillField  )
+{
+	assert ( iKillField>=0 );
+
+	RtDoc_t tInDoc, tOutDoc;
+	while ( tInDocs  )
+	{
+		tInDocs >> tInDoc;
+		tOutDoc = tInDoc;
+		tOutDoc.m_uHits = tOutDoc.m_uDocFields = 0;
+
+		if ( tInDoc.m_uHits!=1 )
+		{
+			RtHitReader_t tInHits ( &tSrc, &tInDoc );
+			RtHitWriter_t tOutHits ( pOutHits );
+			tOutDoc.m_uHit = tOutHits.ZipHitPtr();
+			DWORD uHit;
+			while ( tInHits )
+			{
+				tInHits >> uHit;
+				if ( !ProcessField ( tOutDoc, uHit, iKillField, [&tOutHits] ( Hitpos_t x ) { tOutHits << x; } ) )
+					continue;
+			}
+		} else
+			if ( !ProcessField ( tOutDoc, tOutDoc.m_uHit, iKillField, [&tOutDoc] ( Hitpos_t x ) { tOutDoc.m_uHit = x; } ) )
+				continue;
+
+		if ( !tOutDoc.m_uHits )
+			continue;
+
+		tOutDocs << tOutDoc;
+
+		++tOutWord.m_uDocs;
+		tOutWord.m_uHits += tOutDoc.m_uHits;
+	}
+}
+
+void RtIndex_c::DeleteField ( RtSegment_t * pSeg, int iKillField )
+{
+	assert ( iKillField>=0 );
+
+	CSphTightVector<BYTE> dWords;
+	CSphVector<RtWordCheckpoint_t> dWordCheckpoints;
+	CSphTightVector<BYTE> dDocs;
+	CSphTightVector<BYTE> dHits;
+	CSphVector<BYTE> dKeywordCheckpoints;
+
+	const RtSegment_t & tInSeg = *pSeg;
+	dWords.Reserve ( tInSeg.m_dWords.GetLength () );
+	dDocs.Reserve ( tInSeg.m_dDocs.GetLength () );
+	dHits.Reserve ( tInSeg.m_dHits.GetLength () );
+
+	RtWordWriter_t tOutWords ( &dWords, &dWordCheckpoints, &dKeywordCheckpoints,  m_bKeywordDict, m_iWordsCheckpoint );
+	RtWordReader_t tInWords ( &tInSeg, m_bKeywordDict, m_iWordsCheckpoint, m_tSettings.m_eHitless );
+
+	RtWord_t tInWord, tOutWord;
+	while ( tInWords )
+	{
+		tInWords >> tInWord;
+
+		tOutWord = tInWord;
+		tOutWord.m_uDocs = tOutWord.m_uHits = 0;
+
+		RtDocWriter_t tOutDocs ( &dDocs );
+		tOutWord.m_uDoc = tOutDocs.ZipDocPtr ();
+
+		RtDocReader_t tInDocs ( &tInSeg, tInWord );
+		CopyWordWithoutField ( &dHits, tOutDocs, tOutWord, tInSeg, tInDocs, iKillField );
+
+		// append word to the dictionary
+		if ( tOutWord.m_uDocs )
+			tOutWords << tOutWord;
+	}
+
+	// swap data to refreshed
+	RtSegment_t & tOutSeg = *pSeg;
+	tOutSeg.m_dWords.SwapData ( dWords );
+	tOutSeg.m_dWordCheckpoints.SwapData ( dWordCheckpoints );
+	tOutSeg.m_dDocs.SwapData ( dDocs );
+	tOutSeg.m_dHits.SwapData ( dHits );
+	tOutSeg.m_dKeywordCheckpoints.SwapData ( dKeywordCheckpoints );
+
+	if ( m_bKeywordDict )
+		FixupSegmentCheckpoints ( pSeg );
+
+	BuildSegmentInfixes ( &tOutSeg, m_pDict->HasMorphology (), m_bKeywordDict, m_tSettings.m_iMinInfixLen,
+					   m_iWordsCheckpoint, ( m_iMaxCodepointLength>1 ), m_tSettings.m_eHitless );
 }
 
 
@@ -7195,6 +7343,50 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ES
 	// fixme: notify that it was ALTER that caused the flush
 	g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, false );
 
+	return true;
+}
+
+bool RtIndex_c::AddRemoveField ( bool bAdd, const CSphString & sFieldName, CSphString & sError )
+{
+	SphOptimizeGuard_t tStopOptimize ( m_tOptimizingLock, m_bOptimizeStop ); // got write-locked at daemon
+
+	CSphSchema tOldSchema = m_tSchema;
+	CSphSchema tNewSchema = m_tSchema;
+
+	if ( !Alter_AddRemoveFieldFromSchema ( bAdd, tNewSchema, sFieldName, sError ) )
+		return false;
+
+	auto iRemoveIdx = m_tSchema.GetFieldIndex ( sFieldName.cstr () );
+	m_tSchema = tNewSchema;
+
+	CSphFixedVector<int> dChunkNames = GetChunkNames ( m_dDiskChunks );
+
+	// modify the in-memory data of disk chunks
+	// fixme: we can't rollback in-memory changes, so we just show errors here for now
+	ARRAY_FOREACH ( iDiskChunk, m_dDiskChunks )
+		if ( !m_dDiskChunks[iDiskChunk]->AddRemoveField ( bAdd, sFieldName, sError ) )
+			sphWarning ( "%s attribute to %s.%d: %s", bAdd ? "adding" : "removing", m_sPath.cstr ()
+						 , dChunkNames[iDiskChunk], sError.cstr () );
+
+	// now modify the ramchunk
+	if (!bAdd)
+	{
+		for ( RtSegment_t * pSeg : m_dRamChunks )
+		{
+			assert ( pSeg );
+
+			DeleteField ( pSeg, iRemoveIdx );
+			pSeg->UpdateUsedRam ();
+		}
+	}
+
+	// fixme: we can't rollback at this point
+	Verify ( SaveRamChunk ( m_dRamChunks ) );
+
+	SaveMeta ( m_iTID );
+
+	// fixme: notify that it was ALTER that caused the flush
+	g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr (), m_iTID, false );
 	return true;
 }
 

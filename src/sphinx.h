@@ -766,11 +766,12 @@ class Hitman_c
 protected:
 	enum
 	{
-		POS_BITS		= 31 - FIELD_BITS,
-		FIELD_OFF		= 32 - FIELD_BITS,
-		FIELDEND_OFF	= 31 - FIELD_BITS,
-		FIELDEND_MASK	= (1UL << POS_BITS),
-		POS_MASK		= (1UL << POS_BITS) - 1
+		FIELD_OFF		= 32 - FIELD_BITS,			// 24
+		POS_BITS		= FIELD_OFF - 1,			// 23
+		FIELDEND_OFF	= POS_BITS,					// 23
+		FIELDEND_MASK	= (1UL << POS_BITS),		// 0x00800000
+		POS_MASK		= FIELDEND_MASK - 1,		// 0x007FFFFF
+		FIELD_MASK		= ~(FIELDEND_MASK|POS_MASK),// 0xFF000000
 	};
 
 public:
@@ -787,6 +788,12 @@ public:
 	static inline int GetField ( Hitpos_t uHitpos )
 	{
 		return uHitpos >> FIELD_OFF;
+	}
+
+	static inline void DecrementField ( Hitpos_t& uHitpos )
+	{
+		assert ( uHitpos & FIELD_MASK );
+		uHitpos -= (1UL << FIELD_OFF);
 	}
 
 	static inline int GetPos ( Hitpos_t uHitpos )
@@ -904,6 +911,28 @@ struct FieldMask_t
 	{
 		for ( auto& uMask : m_dMask )
 			uMask = ~uMask;
+	}
+
+	// keep bits up to iIdx; shift bits over iIdx right by 1
+	void DeleteBit ( int iIdx )
+	{
+		const auto iDwordIdx = iIdx / 32;
+		const auto iDwordBitPos = iIdx % 32;
+
+		DWORD uCarryBit = 0;
+		for ( int i = SIZE-1; i>iDwordIdx; --i )
+		{
+			bool bNextCarry = m_dMask[i] & 1;
+			m_dMask[i] = uCarryBit | ( m_dMask[i] >> 1 );
+			uCarryBit = bNextCarry ? 0x80000000 : 0;
+		}
+
+		DWORD uShiftBit = 1 << ( iDwordBitPos );	// like: 00000000 00000000 00000100 00000000
+		DWORD uKeepMask = uShiftBit-1;				// like: 00000000 00000000 00000011 11111111
+		DWORD uMoveMask = ~(uShiftBit | uKeepMask);	// like: 11111111 11111111 11111000 00000000
+
+		DWORD uKept = m_dMask[iDwordIdx] & uKeepMask;
+		m_dMask[iDwordIdx] = uCarryBit | ( ( m_dMask[iDwordIdx] & uMoveMask ) >> 1 ) | uKept;
 	}
 };
 
@@ -1317,7 +1346,8 @@ struct CSphColumnInfo
 	{
 		FIELD_NONE		= 0,
 		FIELD_STORED	= 1<<0,
-		FIELD_INDEXED	= 1<<1
+		FIELD_INDEXED	= 1<<1,
+		FIELD_IS_ATTRIBUTE 	= 1<<2,		// internal flag used in 'alter'
 	};
 
 	enum
@@ -1501,6 +1531,10 @@ public:
 
 	void					AddField ( const char * sFieldName );
 	void					AddField ( const CSphColumnInfo & tField );
+
+	/// remove field
+	void					RemoveField ( const char * szFieldName );
+	void					RemoveField ( int iIdx );
 
 	/// get field index by name
 	/// returns -1 if not found
@@ -2966,19 +3000,16 @@ public:
 	virtual bool		IsError() const = 0;
 };
 
-// common add/remove attribute code for both RT and plain indexes
+// common add/remove attribute/field code for both RT and plain indexes
 class IndexAlterHelper_c
 {
-protected:
+public:
 	bool				Alter_AddRemoveAttr ( const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, const CSphRowitem * pDocinfo, const CSphRowitem * pDocinfoMax, const BYTE * pBlobPool, WriteWrapper_c & tSPAWriter, WriteWrapper_c & tSPBWriter, bool bAddAttr, const CSphString & sAttrName );
 	bool 				Alter_AddRemoveFromSchema ( CSphSchema & tSchema, const CSphString & sAttrName, ESphAttr eAttrType, bool bAdd, CSphString & sError );
 
-	virtual bool		Alter_IsMinMax ( const CSphRowitem * pDocinfo, int iStride ) const;
+	bool 				Alter_AddRemoveFieldFromSchema ( bool bAdd, CSphSchema & tSchema, const CSphString & sFieldName, CSphString & sError );
 
-private:
-	void				CreateAttrMap ( CSphVector<int> & dAttrMap, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, int iAttrToRemove );
-	const CSphRowitem *	CopyRow ( const CSphRowitem * pDocinfo, DWORD * pTmpDocinfo, int iOldStride );
-	const CSphRowitem * CopyRowAttrByAttr ( const CSphRowitem * pDocinfo, DWORD * pTmpDocinfo, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, const CSphVector<int> & dAttrMap, int iOldStride );
+	virtual bool		Alter_IsMinMax ( const CSphRowitem * pDocinfo, int iStride ) const;
 };
 
 
@@ -3129,6 +3160,8 @@ public:
 
 	virtual bool				AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError ) = 0;
 
+	virtual bool				AddRemoveField ( bool bAdd, const CSphString & sFieldName, CSphString & sError ) = 0;
+
 	virtual void				FlushDeadRowMap ( bool bWaitComplete ) const {};
 	virtual bool				LoadKillList ( CSphFixedVector<DocID_t> * pKillList, KillListTargets_c & tTargets, CSphString & sError ) const { return true; }
 	virtual bool				AlterKillListTarget ( KillListTargets_c & tTargets, CSphString & sError ) { return false; }
@@ -3252,6 +3285,7 @@ public:
 	bool				SaveAttributes ( CSphString & ) const override { return true; }
 	DWORD				GetAttributeStatus () const override { return 0; }
 	bool				AddRemoveAttribute ( bool, const CSphString &, ESphAttr, CSphString & ) override { return true; }
+	bool				AddRemoveField ( bool, const CSphString &, CSphString & ) override { return true; }
 	void				DebugDumpHeader ( FILE *, const char *, bool ) override {}
 	void				DebugDumpDocids ( FILE * ) override {}
 	void				DebugDumpHitlist ( FILE * , const char * , bool ) override {}

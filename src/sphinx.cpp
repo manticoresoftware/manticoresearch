@@ -1441,218 +1441,6 @@ private:
 	CSphWriter & m_tWriter;
 };
 
-
-bool IndexAlterHelper_c::Alter_AddRemoveAttr ( const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, const CSphRowitem * pDocinfo, const CSphRowitem * pDocinfoMax,
-	const BYTE * pBlobPool, WriteWrapper_c & tSPAWriter, WriteWrapper_c & tSPBWriter, bool bAddAttr, const CSphString & sAttrName )
-{
-	int nOldBlobs = 0;
-	for ( int i = 0; i < tOldSchema.GetAttrsCount(); i++ )
-		if ( sphIsBlobAttr ( tOldSchema.GetAttr(i) ) )
-			nOldBlobs++;
-
-	int nNewBlobs = 0;
-	for ( int i = 0; i < tNewSchema.GetAttrsCount(); i++ )
-		if ( sphIsBlobAttr ( tNewSchema.GetAttr(i) ) )
-			nNewBlobs++;
-
-	bool bHadBlobs = nOldBlobs>0;
-	bool bHaveBlobs = nNewBlobs>0;
-
-	const CSphColumnInfo * pAttr = bAddAttr ? tNewSchema.GetAttr ( sAttrName.cstr() ) : tOldSchema.GetAttr ( sAttrName.cstr() ) ;
-	assert ( pAttr );
-
-	bool bBlob = sphIsBlobAttr ( *pAttr );
-	bool bBlobsModified = bBlob && ( bAddAttr || bHaveBlobs==bHadBlobs );
-
-	int iOldStride = tOldSchema.GetRowSize();
-	int iNewStride = tNewSchema.GetRowSize();
-
-	const CSphRowitem * pNextDocinfo = nullptr;
-	CSphFixedVector<DWORD> dAttrRow ( iNewStride );
-	CSphTightVector<BYTE> dBlobRow;
-
-	if ( bAddAttr )
-	{
-		bool bHasFieldLen = ( tNewSchema.GetAttrId_FirstFieldLen()!=-1 );
-		CSphVector<int> dAttrMap;
-		if ( bHadBlobs!=bHaveBlobs || bHasFieldLen )
-			CreateAttrMap ( dAttrMap, tOldSchema, tNewSchema, -1 );
-
-		const CSphColumnInfo * pNewAttr = tNewSchema.GetAttr ( sAttrName.cstr() );
-		assert ( pNewAttr );
-
-		while ( pDocinfo < pDocinfoMax )
-		{
-			if ( bHadBlobs==bHaveBlobs && !bHasFieldLen )
-				pNextDocinfo = CopyRow ( pDocinfo, dAttrRow.Begin(), iOldStride );
-			else
-				pNextDocinfo = CopyRowAttrByAttr ( pDocinfo, dAttrRow.Begin(), tOldSchema, tNewSchema, dAttrMap, iOldStride );
-
-			if ( !pNewAttr->m_tLocator.IsBlobAttr() )
-				sphSetRowAttr ( dAttrRow.Begin(), pNewAttr->m_tLocator, 0 );
-
-			if ( bBlob && !Alter_IsMinMax ( pDocinfo, iOldStride ) )
-			{
-				sphAddAttrToBlobRow ( pDocinfo, dBlobRow, pBlobPool, nOldBlobs );
-
-				SphOffset_t tRowOffset = tSPBWriter.GetPos();
-				tSPBWriter.PutBytes ( dBlobRow.Begin(), dBlobRow.GetLength() );
-				if ( tSPBWriter.IsError() )
-					return false;
-
-				sphSetBlobRowOffset ( dAttrRow.Begin(), tRowOffset );
-			}
-
-			tSPAWriter.PutBytes ( (const BYTE *)dAttrRow.Begin(), iNewStride*sizeof(CSphRowitem) );
-			if ( tSPAWriter.IsError() )
-				return false;
-
-			pDocinfo = pNextDocinfo;
-		}
-	} else
-	{
-		int iAttrToRemove = tOldSchema.GetAttrIndex ( sAttrName.cstr() );
-		const CSphColumnInfo & tOldAttr = tOldSchema.GetAttr ( iAttrToRemove );
-		assert ( iAttrToRemove>=0 );
-
-		CSphVector<int> dAttrMap;
-		CreateAttrMap ( dAttrMap, tOldSchema, tNewSchema, iAttrToRemove );
-
-		while ( pDocinfo < pDocinfoMax )
-		{
-			pNextDocinfo = CopyRowAttrByAttr ( pDocinfo, dAttrRow.Begin(), tOldSchema, tNewSchema, dAttrMap, iOldStride );
-
-			if ( bBlobsModified && !Alter_IsMinMax ( pDocinfo, iOldStride ) )
-			{
-				sphRemoveAttrFromBlobRow ( pDocinfo, dBlobRow, pBlobPool, nOldBlobs, tOldAttr.m_tLocator.m_iBlobAttrId );
-
-				SphOffset_t tRowOffset = tSPBWriter.GetPos();
-				tSPBWriter.PutBytes ( dBlobRow.Begin(), dBlobRow.GetLength() );
-				if ( tSPBWriter.IsError() )
-					return false;
-
-				sphSetBlobRowOffset ( dAttrRow.Begin(), tRowOffset );
-			}
-
-			tSPAWriter.PutBytes ( (const BYTE *)dAttrRow.Begin(), iNewStride*sizeof(CSphRowitem) );
-			if ( tSPAWriter.IsError() )
-				return false;
-
-			pDocinfo = pNextDocinfo;
-		}
-	}
-
-	return true;
-}
-
-
-bool IndexAlterHelper_c::Alter_AddRemoveFromSchema ( CSphSchema & tSchema, const CSphString & sAttrName, ESphAttr eAttrType, bool bAdd, CSphString & sError )
-{
-	const CSphColumnInfo * pBlobLocator = tSchema.GetAttr ( sphGetBlobLocatorName() );
-
-	bool bBlob = sphIsBlobAttr ( eAttrType );
-	if ( bAdd )
-	{
-		bool bRebuild = false;
-		if ( bBlob && !pBlobLocator )
-		{
-			bRebuild = true;
-			CSphColumnInfo tCol ( sphGetBlobLocatorName() );
-			tCol.m_eAttrType = SPH_ATTR_BIGINT;
-
-			// should be right after docid
-			tSchema.InsertAttr ( 1, tCol, false );
-		}
-
-		CSphColumnInfo tInfo ( sAttrName.cstr(), eAttrType );
-		if ( tSchema.GetAttrId_FirstFieldLen()!=-1 )
-		{
-			bRebuild = true;
-			tSchema.InsertAttr ( tSchema.GetAttrId_FirstFieldLen(), tInfo, false );
-		} else
-		{
-			tSchema.AddAttr ( tInfo, false );
-		}
-
-		// rebuild locators in the schema
-		if ( bRebuild )
-		{
-			const char * szTmpColName = "$_tmp";
-			CSphColumnInfo tTmpCol ( szTmpColName, SPH_ATTR_BIGINT );
-			tSchema.AddAttr ( tTmpCol, false );
-			tSchema.RemoveAttr ( szTmpColName, false );
-		}
-	} else
-	{
-		tSchema.RemoveAttr ( sAttrName.cstr(), false );
-
-		if ( bBlob && pBlobLocator )
-		{
-			// remove blob locator if no blobs are left
-			int nBlobs = 0;
-			for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
-				if ( sphIsBlobAttr ( tSchema.GetAttr(i) ) )
-					nBlobs++;
-
-			if ( !nBlobs )
-				tSchema.RemoveAttr ( sphGetBlobLocatorName(), false );
-		}
-
-		if ( !tSchema.GetAttrsCount() )
-		{
-			sError = "unable to remove the only attribute left";
-			return false;
-		}
-	}
-
-	return true;
-}
-
-
-bool IndexAlterHelper_c::Alter_IsMinMax ( const CSphRowitem * pDocinfo, int iStride ) const
-{
-	return false;
-}
-
-
-void IndexAlterHelper_c::CreateAttrMap ( CSphVector<int> & dAttrMap, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, int iAttrToRemove )
-{
-	dAttrMap.Resize ( tOldSchema.GetAttrsCount() );
-	for ( int iAttr = 0; iAttr < tOldSchema.GetAttrsCount(); iAttr++ )
-		if ( iAttr!=iAttrToRemove )
-			dAttrMap[iAttr] = tNewSchema.GetAttrIndex ( tOldSchema.GetAttr(iAttr).m_sName.cstr() );
-		else
-			dAttrMap[iAttr] = -1;
-}
-
-
-const CSphRowitem * IndexAlterHelper_c::CopyRow ( const CSphRowitem * pDocinfo, DWORD * pTmpDocinfo, int iOldStride )
-{
-	memcpy ( pTmpDocinfo, pDocinfo, iOldStride*sizeof(DWORD) );
-	return pDocinfo + iOldStride;
-}
-
-
-const CSphRowitem * IndexAlterHelper_c::CopyRowAttrByAttr ( const CSphRowitem * pDocinfo, DWORD * pTmpDocinfo, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, const CSphVector<int> & dAttrMap, int iOldStride )
-{
-	for ( int iAttr = 0; iAttr < tOldSchema.GetAttrsCount(); iAttr++ )
-	{
-		if ( dAttrMap[iAttr]==-1 )
-			continue;
-
-		const CSphColumnInfo & tOldAttr = tOldSchema.GetAttr(iAttr);
-		const CSphColumnInfo & tNewAttr = tNewSchema.GetAttr(dAttrMap[iAttr]);
-
-		if ( sphIsBlobAttr(tOldAttr) )
-			continue;
-
-		SphAttr_t tValue = sphGetRowAttr ( pDocinfo, tOldAttr.m_tLocator );
-		sphSetRowAttr ( pTmpDocinfo, tNewAttr.m_tLocator, tValue );
-	}
-
-	return pDocinfo + iOldStride;
-}
-
 //////////////////////////////////////////////////////////////////////////
 
 struct FileDebugCheckReader_c final : public DebugCheckReader_i
@@ -1750,6 +1538,8 @@ public:
 	template <class QWORDDST, class QWORDSRC>
 	static bool			MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, const CSphVector<RowID_t> & dDstRows, const CSphVector<RowID_t> & dSrcRows, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, CSphIndexProgress & tProgress, volatile bool * pLocalStop );
 	static bool			DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, volatile bool * pLocalStop, bool bSrcSettings, bool bSupressDstDocids );
+	template <class QWORD>
+	static bool			DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, int iKillField );
 
 	int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning ) final;
 	bool				SaveAttributes ( CSphString & sError ) const final;
@@ -1758,6 +1548,7 @@ public:
 	bool				WriteLookupAndHistograms ( const CSphString & sSPA, const CSphString & sSPT, const CSphString & sSPHI, DWORD uTotalDocs, CSphString & sError ) const;
 
 	bool				AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError ) final;
+	bool				AddRemoveField ( bool bAdd, const CSphString & sFieldName, CSphString & sError ) final;
 	void				FlushDeadRowMap ( bool bWaitComplete ) const final;
 	bool				LoadKillList ( CSphFixedVector<DocID_t> * pKillList, KillListTargets_c & tTargets, CSphString & sError ) const final;
 	bool				AlterKillListTarget ( KillListTargets_c & tTargets, CSphString & sError ) final;
@@ -6438,18 +6229,18 @@ void CSphSchema::RemoveAttr ( const char * szAttr, bool bDynamic )
 	if ( iIndex<0 )
 		return;
 
-	CSphVector<CSphColumnInfo> dBackup = m_dAttrs;
-
 	if ( bDynamic )
 		m_dDynamicUsed.Reset();
 	else
 		m_dStaticUsed.Reset();
 
 	CSphSchemaHelper::ResetSchemaHelper();
-	m_dAttrs.Reset();
 	m_iFirstFieldLenAttr = -1;
 	m_iLastFieldLenAttr = -1;
 
+	CSphVector<CSphColumnInfo> dBackup;
+	dBackup.Reserve ( m_dAttrs.GetLength() );
+	dBackup.SwapData ( m_dAttrs );
 	ARRAY_FOREACH ( i, dBackup )
 		if ( i!=iIndex )
 			AddAttr ( dBackup[i], bDynamic );
@@ -6474,6 +6265,17 @@ void CSphSchema::AddField ( const CSphColumnInfo & tField )
 	m_dFields.Add ( tField );
 }
 
+void CSphSchema::RemoveField ( const char * szFieldName )
+{
+	auto iIdx = GetFieldIndex ( szFieldName );
+	RemoveField ( iIdx );
+}
+
+void CSphSchema::RemoveField ( int iIdx )
+{
+	if (iIdx>=0)
+		m_dFields.Remove ( iIdx );
+}
 
 int CSphSchema::GetAttrId_FirstFieldLen() const
 {
@@ -8904,6 +8706,7 @@ bool CSphHitBuilder::cidxDone ( int iMemLimit, int & iMinInfixLen, int iMaxCodep
 	// close all data files
 	m_wrDoclist.CloseFile ();
 	m_wrHitlist.CloseFile ( true );
+	m_wrSkiplist.CloseFile ();
 	return !IsError();
 }
 
@@ -11647,6 +11450,250 @@ bool sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc,	CSphString & sEr
 	auto pSrcIndex = ( const CSphIndex_VLN * ) pSrc;
 
 	return CSphIndex_VLN::DoMerge ( pDstIndex, pSrcIndex, nullptr, sError, tProgress, pLocalStop, bSrcSettings, false );
+}
+
+namespace QwordIteration
+{
+	template<typename QWORD>
+	inline void PrepareQword ( QWORD & tQword, const CSphDictReader & tReader, bool bWordDict ) //NOLINT
+	{
+		tQword.m_tDoc.m_tRowID = INVALID_ROWID;
+
+		tQword.m_iDocs = tReader.m_iDocs;
+		tQword.m_iHits = tReader.m_iHits;
+		tQword.m_bHasHitlist = tReader.m_bHasHitlist;
+
+		tQword.m_uHitPosition = 0;
+		tQword.m_iHitlistPos = 0;
+
+		if ( bWordDict )
+			tQword.m_rdDoclist->SeekTo ( tReader.m_iDoclistOffset, tReader.m_iHint );
+	}
+
+	template<typename QWORD>
+	inline bool NextDocument ( QWORD & tQword, const CSphIndex_VLN * pSourceIndex )
+	{
+		while (true)
+		{
+			tQword.GetNextDoc();
+			if ( tQword.m_tDoc.m_tRowID==INVALID_ROWID )
+				return false;
+
+			tQword.SeekHitlist ( tQword.m_iHitlistPos );
+			return true;
+		}
+	}
+
+	template<typename QWORD>
+	inline void ConfigureQword ( QWORD & tQword, DataReaderFactory_c * pHits, DataReaderFactory_c * pDocs, int iDynamic )
+	{
+		tQword.SetHitReader ( pHits );
+		tQword.m_rdHitlist->SeekTo ( 1, READ_NO_SIZE_HINT );
+
+		tQword.SetDocReader ( pDocs );
+		tQword.m_rdDoclist->SeekTo ( 1, READ_NO_SIZE_HINT );
+
+		tQword.m_tDoc.Reset ( iDynamic );
+	}
+}; // namespace QwordIteration
+
+template < typename QWORD >
+bool CSphIndex_VLN::DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, int iKillField )
+{
+	assert ( iKillField>=0 );
+
+	bool bWordDict = pHitBuilder->IsWordDict ();
+
+	CSphAutofile tDummy;
+	pHitBuilder->CreateIndexFiles ( pIndex->GetIndexFileName("tmp.spd").cstr(), pIndex->GetIndexFileName("tmp.spp").cstr(), pIndex->GetIndexFileName("tmp.spe").cstr(), false, 0, tDummy, nullptr );
+
+	CSphDictReader tWordsReader ( pIndex->GetSettings().m_iSkiplistBlockSize );
+	if ( !tWordsReader.Setup ( pIndex->GetIndexFileName(SPH_EXT_SPI), pIndex->m_tWordlist.GetWordsEnd(), pIndex->m_tSettings.m_eHitless, sError, bWordDict ) )
+		return false;
+
+	/// prepare for indexing
+	pHitBuilder->HitblockBegin();
+	pHitBuilder->HitReset();
+
+	/// setup qword
+	QWORD tQword ( false, false );
+	DataReaderFactoryPtr_c tDocs {
+		NewProxyReader ( pIndex->GetIndexFileName ( SPH_EXT_SPD ), sError,
+			DataReaderFactory_c::DOCS, pIndex->m_tMutableSettings.m_tFileAccess.m_iReadBufferDocList, FileAccess_e::FILE )
+	};
+	if ( !tDocs )
+		return false;
+
+	DataReaderFactoryPtr_c tHits {
+		NewProxyReader ( pIndex->GetIndexFileName ( SPH_EXT_SPP ), sError,
+			DataReaderFactory_c::HITS, pIndex->m_tMutableSettings.m_tFileAccess.m_iReadBufferHitList, FileAccess_e::FILE  )
+	};
+	if ( !tHits )
+		return false;
+
+	if ( !sError.IsEmpty () || sphInterrupted () )
+		return false;
+
+	QwordIteration::ConfigureQword ( tQword, tHits, tDocs, pIndex->m_tSchema.GetDynamicSize() );
+
+	/// process
+	while ( tWordsReader.Read () )
+	{
+		if ( sphInterrupted () )
+			return false;
+
+		bool bHitless = !tWordsReader.m_bHasHitlist;
+		QwordIteration::PrepareQword ( tQword, tWordsReader, bWordDict );
+
+		CSphAggregateHit tHit;
+		tHit.m_uWordID = tWordsReader.m_uWordID; // !COMMIT m_sKeyword anyone?
+		tHit.m_sKeyword = tWordsReader.GetWord();
+		tHit.m_dFieldMask.UnsetAll();
+
+		// transfer hits
+		while ( QwordIteration::NextDocument ( tQword, pIndex ) )
+		{
+			if ( sphInterrupted () )
+				return false;
+
+			if ( bHitless )
+			{
+				tHit.m_tRowID = tQword.m_tDoc.m_tRowID;
+				tHit.m_dFieldMask = tQword.m_dQwordFields; // fixme! what field mask on hitless? m.b. write 0 here?
+				tHit.m_dFieldMask.DeleteBit (iKillField);
+				if ( tHit.m_dFieldMask.TestAll ( false ) )
+					continue;
+				tHit.SetAggrCount ( tQword.m_uMatchHits );
+				pHitBuilder->cidxHit ( &tHit );
+			} else
+			{
+				assert ( tQword.m_bHasHitlist );
+				tHit.m_tRowID = tQword.m_tDoc.m_tRowID;
+				for ( Hitpos_t uHit = tQword.GetNextHit(); uHit!=EMPTY_HIT; uHit = tQword.GetNextHit() )
+				{
+					int iField = HITMAN::GetField ( uHit );
+					if ( iKillField==iField )
+						continue;
+
+					if ( iField>iKillField )
+						HITMAN::DecrementField ( uHit );
+
+					tHit.m_iWordPos = uHit;
+					pHitBuilder->cidxHit ( &tHit );
+				}
+			}
+		}
+	}
+
+	return true;
+}
+
+bool CSphIndex_VLN::AddRemoveField ( bool bAddField, const CSphString & sFieldName, CSphString & sError )
+{
+	CSphSchema tNewSchema = m_tSchema;
+	if ( !Alter_AddRemoveFieldFromSchema ( bAddField, tNewSchema, sFieldName, sError ) )
+		return false;
+
+	auto iRemoveIdx = m_tSchema.GetFieldIndex ( sFieldName.cstr () );
+	m_tSchema = tNewSchema;
+
+	BuildHeader_t tBuildHeader ( m_tStats );
+	tBuildHeader.m_iDocinfo = m_iDocinfo;
+	tBuildHeader.m_iDocinfoIndex = m_iDocinfoIndex;
+	tBuildHeader.m_iMinMaxIndex = m_iMinMaxIndex;
+
+	*(DictHeader_t *) &tBuildHeader = *(DictHeader_t *) &m_tWordlist;
+
+	if ( !bAddField )
+	{
+		// main challenge if removing...
+
+		CSphAutofile tTmpDict ( GetIndexFileName ( "spi.tmp" ), SPH_O_NEW, sError, true );
+		CSphAutofile tNewDict ( GetIndexFileName ( SPH_EXT_SPI, true ), SPH_O_NEW, sError );
+
+		if ( !sError.IsEmpty () || tTmpDict.GetFD ()<0 || tNewDict.GetFD ()<0 || sphInterrupted () )
+			return false;
+
+		DictRefPtr_c pDict { m_pDict->Clone () };
+
+		int iHitBufferSize = 8 * 1024 * 1024;
+		CSphVector<SphWordID_t> dDummy;
+		CSphHitBuilder tHitBuilder ( m_tSettings, dDummy, true, iHitBufferSize, pDict, &sError );
+
+		// FIXME? is this magic dict block constant any good?..
+		pDict->DictBegin ( tTmpDict, tNewDict, iHitBufferSize );
+
+		// merge dictionaries, doclists and hitlists
+		if ( pDict->GetSettings().m_bWordDict )
+		{
+			WITH_QWORD ( this, false, Qword,
+				if ( !CSphIndex_VLN::DeleteField <Qword> ( this, &tHitBuilder, sError, tBuildHeader, iRemoveIdx ) )
+					return false;
+			);
+		} else
+		{
+			WITH_QWORD ( this, true, Qword,
+				if ( !CSphIndex_VLN::DeleteField <Qword> ( this, &tHitBuilder, sError, tBuildHeader, iRemoveIdx ) )
+					return false;
+			);
+		}
+
+		if ( sphInterrupted () )
+			return false;
+
+		// finalize
+		CSphAggregateHit tFlush;
+		tFlush.m_tRowID = INVALID_ROWID;
+		tFlush.m_uWordID = 0;
+		tFlush.m_sKeyword = (BYTE*)""; // tricky: assertion in cidxHit calls strcmp on this in case of empty index!
+		tFlush.m_iWordPos = EMPTY_HIT;
+		tFlush.m_dFieldMask.UnsetAll();
+		tHitBuilder.cidxHit ( &tFlush );
+
+		int iMinInfixLen = m_tSettings.m_iMinInfixLen;
+		if ( !tHitBuilder.cidxDone ( iHitBufferSize, iMinInfixLen, m_pTokenizer->GetMaxCodepointLength(), &tBuildHeader ) )
+			return false;
+
+		/// as index is w-locked, we can also detach doclist/hitlist/dictionary and juggle them.
+		tTmpDict.Close();
+		tNewDict.Close();
+
+		m_tWordlist.Reset();
+		if ( !JuggleFile ( SPH_EXT_SPI, sError ) )	return false;
+		m_tWordlist.m_iDictCheckpointsOffset = tBuildHeader.m_iDictCheckpointsOffset;
+		m_tWordlist.m_iDictCheckpoints = tBuildHeader.m_iDictCheckpoints;
+		m_tWordlist.m_iInfixCodepointBytes = tBuildHeader.m_iInfixCodepointBytes;
+		m_tWordlist.m_iInfixBlocksOffset =  tBuildHeader.m_iInfixBlocksOffset;
+		m_tWordlist.m_iInfixBlocksWordsSize = tBuildHeader.m_iInfixBlocksWordsSize;
+		m_tWordlist.m_dCheckpoints.Reset ( m_tWordlist.m_iDictCheckpoints );
+		if ( !PreallocWordlist() )					return false;
+
+		m_tSkiplists.Reset ();
+		if ( !JuggleFile ( SPH_EXT_SPE, sError ) )	return false;
+		if ( !PreallocSkiplist() )					return false;
+
+		m_pDoclistFile = nullptr;
+		m_pHitlistFile = nullptr;
+		if ( !JuggleFile ( SPH_EXT_SPD, sError ) )	return false;
+		if ( !JuggleFile ( SPH_EXT_SPP, sError ) )	return false;
+		if ( !SpawnReaders() )						return false;
+
+	}
+
+	CSphString sHeaderName = GetIndexFileName ( SPH_EXT_SPH, true );
+	WriteHeader_t tWriteHeader;
+	tWriteHeader.m_pSettings = &m_tSettings;
+	tWriteHeader.m_pSchema = &tNewSchema;
+	tWriteHeader.m_pTokenizer = m_pTokenizer;
+	tWriteHeader.m_pDict = m_pDict;
+	tWriteHeader.m_pFieldFilter = m_pFieldFilter;
+	tWriteHeader.m_pFieldLens = m_dFieldLens.Begin ();
+
+	// save the header
+	if ( !IndexBuildDone ( tBuildHeader, tWriteHeader, sHeaderName, sError ) ) 	return false;
+	if ( !JuggleFile ( SPH_EXT_SPH, sError ) )		return false;
+
+	return true;
 }
 
 

@@ -29,12 +29,11 @@ public:
 		FLAG_ATTRIBUTE	= 1<<2
 	};
 
-			DdlParser_c ( CSphVector<SqlStmt_t> & dStmt );
+			explicit DdlParser_c ( CSphVector<SqlStmt_t> & dStmt );
 
-	void	SetFlag ( DWORD uFlag );
-	void	AddCreateTableCol ( const SqlNode_t & tCol, ESphAttr eAttrType );
+	const char* GetLastError() const { return m_sError.scstr(); };
+	bool	AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t & tCol );
 	void	AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits );
-	bool	AddCreateTableField ( const SqlNode_t & tCol, CSphString * pError=nullptr );
 	void	AddCreateTableOption ( const SqlNode_t & tName, const SqlNode_t & tValue );
 
 	void	JoinClusterAt ( const SqlNode_t & tAt );
@@ -42,11 +41,12 @@ public:
 	void	AddInsval ( CSphVector<SqlInsert_t> & dVec, const SqlNode_t & tNode );
 
 private:
-	DWORD	m_uFlags = 0;
-
+	CSphString	m_sError;
 	void	AddField ( const CSphString & sName, DWORD uFlags );
+	bool	AddAttribute ( const CSphString & sName, ESphAttr eAttrType );
 };
 
+DWORD ConvertFlags ( int iFlags );
 
 bool ParseDdl ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CSphString & sError );
 bool IsDdlQuery ( const char * szQuery, int iLen );

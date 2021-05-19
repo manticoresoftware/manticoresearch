@@ -14505,19 +14505,37 @@ static void AddAttrToIndex ( const SqlStmt_t & tStmt, const ServedDesc_t * pServ
 	CSphString sAttrToAdd = tStmt.m_sAlterAttr;
 	sAttrToAdd.ToLower();
 
-	if ( pServed->m_pIndex->GetMatchSchema().GetAttr ( sAttrToAdd.cstr() ) )
+	bool bIndexed = tStmt.m_uFieldFlags & CSphColumnInfo::FIELD_INDEXED;
+	bool bAttribute = tStmt.m_uFieldFlags & CSphColumnInfo::FIELD_IS_ATTRIBUTE; // beware, m.b. true only for strings
+
+	bool bHasAttr = pServed->m_pIndex->GetMatchSchema ().GetAttr ( sAttrToAdd.cstr () );
+	bool bHasField = pServed->m_pIndex->GetMatchSchema ().GetFieldIndex ( sAttrToAdd.cstr () )!=-1;
+
+	if ( !bIndexed && bHasAttr )
 	{
-		sError.SetSprintf ( "'%s' attribute already in schema", sAttrToAdd.cstr() );
+		sError.SetSprintf ( "'%s' attribute already in schema", sAttrToAdd.cstr () );
 		return;
 	}
 
-	if ( tStmt.m_eAlterColType!=SPH_ATTR_STRING && pServed->m_pIndex->GetMatchSchema().GetFieldIndex ( sAttrToAdd.cstr () )!=-1 )
+	if ( bIndexed && bHasField )
+	{
+		sError.SetSprintf ( "'%s' field already in schema", sAttrToAdd.cstr() );
+		return;
+	}
+
+	if ( !bIndexed && bHasField && tStmt.m_eAlterColType!=SPH_ATTR_STRING )
 	{
 		sError.SetSprintf ( "cannot add attribute that shadows '%s' field", sAttrToAdd.cstr () );
 		return;
 	}
 
-	pServed->m_pIndex->AddRemoveAttribute ( true, sAttrToAdd, tStmt.m_eAlterColType, sError );
+	if ( bIndexed )
+	{
+		pServed->m_pIndex->AddRemoveField ( true, sAttrToAdd, sError );
+		if (bAttribute)
+			pServed->m_pIndex->AddRemoveAttribute ( true, sAttrToAdd, tStmt.m_eAlterColType, sError );
+	} else
+		pServed->m_pIndex->AddRemoveAttribute ( true, sAttrToAdd, tStmt.m_eAlterColType, sError );
 }
 
 
@@ -14526,26 +14544,35 @@ static void RemoveAttrFromIndex ( const SqlStmt_t & tStmt, const ServedDesc_t * 
 	CSphString sAttrToRemove = tStmt.m_sAlterAttr;
 	sAttrToRemove.ToLower();
 
+	bool bIsAttr = true;
 	const CSphColumnInfo * pAttr = pServed->m_pIndex->GetMatchSchema().GetAttr ( sAttrToRemove.cstr() );
 	if ( !pAttr )
 	{
-		sError.SetSprintf ( "attribute '%s' does not exist", sAttrToRemove.cstr() );
-		return;
+		pAttr = pServed->m_pIndex->GetMatchSchema ().GetField ( sAttrToRemove.cstr () );
+		if ( !pAttr )
+		{
+			sError.SetSprintf ( "attribute '%s' does not exist", sAttrToRemove.cstr() );
+			return;
+		}
+		bIsAttr = false;
 	}
 
-	if ( sAttrToRemove==sphGetDocidName() || sphIsInternalAttr ( *pAttr ) )
+	if ( bIsAttr && ( sAttrToRemove==sphGetDocidName () || sphIsInternalAttr ( *pAttr ) ) )
 	{
 		sError.SetSprintf ( "unable to remove built-in attribute '%s'", sAttrToRemove.cstr() );
 		return;
 	}
 
-	if ( pServed->m_pIndex->GetMatchSchema().GetAttrsCount()==1 )
+	if ( bIsAttr && pServed->m_pIndex->GetMatchSchema().GetAttrsCount()==1 )
 	{
 		sError.SetSprintf ( "unable to remove last attribute '%s'", sAttrToRemove.cstr() );
 		return;
 	}
 
-	pServed->m_pIndex->AddRemoveAttribute ( false, sAttrToRemove, pAttr->m_eAttrType, sError );
+	if ( bIsAttr )
+		pServed->m_pIndex->AddRemoveAttribute ( false, sAttrToRemove, pAttr->m_eAttrType, sError );
+	else
+		pServed->m_pIndex->AddRemoveField ( false, sAttrToRemove, sError );
 }
 
 

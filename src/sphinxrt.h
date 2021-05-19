@@ -232,6 +232,9 @@ struct RtDocReader_t
 	RtDocReader_t() = default;
 	RtDocReader_t ( const RtSegment_t * pSeg, const RtWord_t &tWord );
 	const RtDoc_t * UnzipDoc ();
+	void UnzipDoc ( RtDoc_t& tOut );
+	inline void operator>> ( RtDoc_t & tDoc) { UnzipDoc(tDoc); }
+	inline operator bool() const { return m_iLeft && m_pDocs; }
 };
 
 struct RtWordReader_t
@@ -250,6 +253,15 @@ struct RtWordReader_t
 	RtWordReader_t ( const RtSegment_t * pSeg, bool bWordDict, int iWordsCheckpoint, ESphHitless eHitlessMode );
 	void Reset ( const RtSegment_t * pSeg );
 	const RtWord_t * UnzipWord ();
+	void UnzipWord ( RtWord_t& tWord );
+	inline void operator>> ( RtWord_t & tWord )
+	{
+		if ( m_bWordDict && !tWord.m_sWord )
+			tWord.m_sWord = m_tPackedWord;
+
+		UnzipWord(tWord);
+	}
+	inline operator bool() const { return m_pCur<m_pMax; }
 };
 
 struct RtHitReader_t
@@ -261,6 +273,8 @@ struct RtHitReader_t
 	RtHitReader_t () = default;
 	explicit RtHitReader_t ( const RtSegment_t * pSeg, const RtDoc_t * pDoc );
 	DWORD UnzipHit ();
+	inline void operator>>(DWORD& uValue) { uValue = UnzipHit(); }
+	inline operator bool() const { return m_iLeft>0; }
 	ByteBlob_t GetHitsBlob() const;
 };
 

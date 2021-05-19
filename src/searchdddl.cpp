@@ -93,22 +93,6 @@ DdlParser_c::DdlParser_c ( CSphVector<SqlStmt_t> & dStmt )
 }
 
 
-void DdlParser_c::SetFlag ( DWORD uFlag )
-{
-	m_uFlags |= uFlag;
-}
-
-
-void DdlParser_c::AddCreateTableCol ( const SqlNode_t & tCol, ESphAttr eAttrType )
-{
-	assert(m_pStmt);
-	CSphColumnInfo & tAttr = m_pStmt->m_tCreateTable.m_dAttrs.Add();
-	ToString ( tAttr.m_sName, tCol );
-	tAttr.m_sName.ToLower();
-	tAttr.m_eAttrType = eAttrType;
-}
-
-
 void DdlParser_c::AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits )
 {
 	assert(m_pStmt);
@@ -123,51 +107,84 @@ void DdlParser_c::AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits )
 void DdlParser_c::AddField ( const CSphString & sName, DWORD uFlags )
 {
 	assert(m_pStmt);
-	CSphColumnInfo & tField = m_pStmt->m_tCreateTable.m_dFields.Add();
+	auto & tField = m_pStmt->m_tCreateTable.m_dFields.Add();
 	tField.m_sName = sName;
 	tField.m_uFieldFlags = uFlags;
 }
 
 
-bool DdlParser_c::AddCreateTableField ( const SqlNode_t & tCol, CSphString * pError )
+bool DdlParser_c::AddAttribute ( const CSphString & sName, ESphAttr eAttrType )
 {
+	assert( m_pStmt );
+	auto & tAttr = m_pStmt->m_tCreateTable.m_dAttrs.Add ();
+	tAttr.m_sName = sName;
+	tAttr.m_eAttrType = eAttrType;
+	return true;
+}
+
+
+DWORD ConvertFlags (int iFlags)
+{
+	// convert flags;
+	DWORD uFieldFlags = 0;
+	uFieldFlags |= ( iFlags & DdlParser_c::FLAG_INDEXED ) ? CSphColumnInfo::FIELD_INDEXED : 0;
+	uFieldFlags |= ( iFlags & DdlParser_c::FLAG_STORED ) ? CSphColumnInfo::FIELD_STORED : 0;
+	uFieldFlags |= ( iFlags & DdlParser_c::FLAG_ATTRIBUTE ) ? CSphColumnInfo::FIELD_IS_ATTRIBUTE : 0;
+
+	return uFieldFlags;
+}
+
+
+bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t & tCol )
+{
+	assert( m_pStmt );
+
+	CSphString sName;
+	ToString ( sName, tName );
+	sName.ToLower ();
+
+	auto eAttrType = (ESphAttr) tCol.m_iValue;
+	auto iType = tCol.m_iType;
+
+	if ( eAttrType!=SPH_ATTR_STRING )
+	{
+		if ( iType )
+		{
+			m_sError.SetSprintf ( "options 'attribute', 'stored', 'indexed' are not appliable to non-string column '%s'", sName.cstr () );
+			return false;
+		}
+		return AddAttribute ( sName, eAttrType );
+	}
+
 	// actually, this may or may not be a field
 	// it all depends on the combination of flags provided
-	CSphString sName;
-	ToString ( sName, tCol );
-	sName.ToLower();
-
-	if ( m_uFlags & FLAG_ATTRIBUTE )
+	assert ( eAttrType==SPH_ATTR_STRING );
+	if ( iType & FLAG_ATTRIBUTE )
 	{
-		if ( m_uFlags & FLAG_STORED )
+		if ( iType & FLAG_STORED )
 		{
-			if ( pError )
-				pError->SetSprintf ( "unable to create a stored attribute '%s'", sName.cstr() );
-
+			m_sError.SetSprintf ( "unable to create a stored attribute '%s'", sName.cstr() );
 			return false;
 		}
 
-		if ( m_uFlags & FLAG_INDEXED )
-			AddField ( sName, CSphColumnInfo::FIELD_INDEXED );
-
 		// add attribute
-		AddCreateTableCol ( tCol, SPH_ATTR_STRING );
+		AddAttribute ( sName, SPH_ATTR_STRING );
+
+		if ( iType & FLAG_INDEXED )
+			AddField ( sName, CSphColumnInfo::FIELD_INDEXED );
 	}
 	else
 	{
 		// convert flags;
 		DWORD uFieldFlags = 0;
-		uFieldFlags |= ( m_uFlags & FLAG_INDEXED ) ? CSphColumnInfo::FIELD_INDEXED : 0;
-		uFieldFlags |= ( m_uFlags & FLAG_STORED ) ? CSphColumnInfo::FIELD_STORED : 0;
+		uFieldFlags |= ( iType & FLAG_INDEXED ) ? CSphColumnInfo::FIELD_INDEXED : 0;
+		uFieldFlags |= ( iType & FLAG_STORED ) ? CSphColumnInfo::FIELD_STORED : 0;
 
 		if ( !uFieldFlags )
 			uFieldFlags = CSphColumnInfo::FIELD_INDEXED | CSphColumnInfo::FIELD_STORED;
 
 		AddField ( sName, uFieldFlags );
 	}
-
-	m_uFlags = 0;
-
 	return true;
 }
 

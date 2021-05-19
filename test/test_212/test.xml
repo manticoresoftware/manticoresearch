@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+	<name>alter ft</name>
+
+	<requires>
+		<force-rt/>
+	</requires>
+	<skip_indexer/>
+
+	<config>
+	searchd
+	{
+		<searchd_settings/>
+		data_dir = <data_path path="data0"/>
+	}
+	</config>
+
+	<queries>
+		<sphinxql>
+			create table rt (title text, body text indexed attribute, t2 text stored, data int) type='rt';
+			INSERT INTO rt ( id, title, body, t2, data ) VALUES ( 1, 'title', 'foo', 'stored 1', 10 ), ( 2, 'title', 'foo', 'stored 2', 20 ),( 3, 'title_2', 'bar', 'stored 3', 30 );
+			flush ramchunk rt;
+			INSERT INTO rt ( id, title, body, t2, data ) VALUES ( 4, 'title', 'foo', 'stored 4', 40 ), ( 5, 'title', 'foo', 'stored 5', 50 ),( 6, 'title_2', 'bar', 'stored 6', 60 );
+			select * from rt order by id asc;
+			desc rt;
+
+			<!-- usual text and string without flags -->
+			alter table rt add column b1 text;
+			alter table rt add column b2 string;
+			desc rt;
+
+			insert into rt (id, b1, b2) values (7, 'mother', 'father');
+			select *, weight() from rt where match('mother') order by id asc;
+			select *, weight() from rt where match('father') order by id asc;
+			flush ramchunk rt;
+			select *, weight() from rt where match('mother') order by id asc;
+			select *, weight() from rt where match('father') order by id asc;
+
+			alter table rt drop column b1;
+			alter table rt drop column b2;
+			select *, weight() from rt where match('mother') order by id asc;
+
+			<!-- ft with same tokens as in another fields -->
+			select id,weight() from rt where match ('title') order by id asc;
+			select id,weight() from rt where match ('@title title') order by id asc;
+			alter table rt add column t text;
+			insert into rt(id,t) values (8,'title'),(9,'title');
+			select id,weight() from rt where match ('title') order by id asc;
+			select id,weight() from rt where match ('@title title') order by id asc;
+			select id,weight() from rt where match ('@t title') order by id asc;
+			flush ramchunk rt;
+			select id,weight() from rt where match ('title') order by id asc;
+			select id,weight() from rt where match ('@title title') order by id asc;
+			select id,weight() from rt where match ('@t title') order by id asc;
+			insert into rt(id,t) values (10,'title'),(11,'title');
+			select id,weight() from rt where match ('title') order by id asc;
+			select id,weight() from rt where match ('@title title') order by id asc;
+			select id,weight() from rt where match ('@t title') order by id asc;
+			alter table rt drop column t;
+			select id,weight() from rt where match ('title') order by id asc;
+			select id,weight() from rt where match ('@title title') order by id asc;
+			select id,weight() from rt where match ('@t title') order by id asc;
+
+			<!-- double field and attr, separated -->
+			desc rt;
+			alter table rt add column cc text;
+			alter table rt add column cc string;
+			desc rt;
+			alter table rt drop column cc;
+			desc rt;
+			alter table rt drop column cc;
+			desc rt;
+			alter table rt drop column cc;
+
+			<!-- indexed attribute - both string and rt -->
+			alter table rt add column dd string attribute indexed;
+			desc rt;
+
+			<!-- dropping always first removes attribute, then ft -->
+			alter table rt drop column dd;
+			desc rt;
+			alter table rt drop column dd;
+			desc rt;
+			alter table rt drop column dd;
+
+			drop table rt;
+
+			<!-- removing field from the middle -->
+			create table tt (t text, i int) type='rt';
+
+			alter table tt add column t1 text;
+			alter table tt add column t2 text;
+
+			<!-- oneshot insert to be sure they're in the same ram-segment -->
+			insert into tt (id, t, t1, t2 ) values (1,'foo','',''),(2, 'bar', 'bor',''), (3, 'baz', 'bor', 'bor');
+
+			desc tt;
+		</sphinxql>
+		<repeat var="fld" delimiter="/" variants="/@t /@t1 /@t2 "><repeat var="tok"  variants="foo bar baz bor">
+			<sphinxql>
+				select id,weight() from tt where match ('<fld/><tok/>') order by id asc;
+			</sphinxql>
+		</repeat></repeat>
+		<sphinxql>
+			<!-- remove field from between t and t2 -->
+			alter table tt drop column t1;
+		</sphinxql>
+		<repeat var="fld" delimiter="/" variants="/@t /@t1 /@t2 "><repeat var="tok"  variants="foo bar baz bor">
+			<sphinxql>
+				select id,weight() from tt where match ('<fld/><tok/>') order by id asc;
+			</sphinxql>
+		</repeat></repeat>
+		<sphinxql>
+			drop table tt;
+
+			<!-- removing field from the middle, disk chunk -->
+			create table ttt (t text, i int) type='rt';
+
+			alter table ttt add column t1 text;
+			alter table ttt add column t2 text;
+
+			insert into ttt (id, t, t1, t2 ) values (1,'foo','',''),(2, 'bar', 'bor',''), (3, 'baz', 'bor', 'bor');
+			flush ramchunk ttt;
+
+			desc ttt;
+		</sphinxql>
+		<repeat var="fld" delimiter="/" variants="/@t /@t1 /@t2 "><repeat var="tok"  variants="foo bar baz bor">
+			<sphinxql>
+				select id,weight() from ttt where match ('<fld/><tok/>') order by id asc;
+			</sphinxql>
+		</repeat></repeat>
+		<sphinxql>
+
+			<!-- remove field from between t and t2 -->
+			alter table ttt drop column t1;
+		</sphinxql>
+		<repeat var="fld" delimiter="/" variants="/@t /@t1 /@t2 "><repeat var="tok"  variants="foo bar baz bor">
+			<sphinxql>
+				select id,weight() from ttt where match ('<fld/><tok/>') order by id asc;
+			</sphinxql>
+		</repeat></repeat>
+		<sphinxql>
+			drop table ttt;
+		</sphinxql>
+	</queries>
+
+</test>

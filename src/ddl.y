@@ -84,6 +84,10 @@ ident:
 	| TOK_TYPE
 	;
 
+text_or_string:
+	TOK_TEXT		{ $$.m_iType = ( DdlParser_c::FLAG_INDEXED | DdlParser_c::FLAG_STORED ); }
+	| TOK_STRING	{ $$.m_iType = DdlParser_c::FLAG_ATTRIBUTE; }
+	;
 //////////////////////////////////////////////////////////////////////////
 
 alter_col_type:
@@ -94,10 +98,11 @@ alter_col_type:
 	| TOK_MULTI		{ $$.m_iValue = SPH_ATTR_UINT32SET; }
 	| TOK_MULTI64	{ $$.m_iValue = SPH_ATTR_INT64SET; }
 	| TOK_JSON		{ $$.m_iValue = SPH_ATTR_JSON; }
-	| TOK_STRING	{ $$.m_iValue = SPH_ATTR_STRING; }
 	| TOK_INT		{ $$.m_iValue = SPH_ATTR_INTEGER; }
 	| TOK_UINT		{ $$.m_iValue = SPH_ATTR_INTEGER; }
 	| TOK_TIMESTAMP	{ $$.m_iValue = SPH_ATTR_TIMESTAMP; }
+	| text_or_string 		{ $$.m_iValue = SPH_ATTR_STRING; }
+	| text_or_string field_flag_list { $$.m_iValue = SPH_ATTR_STRING; $$.m_iType = $2.m_iType; }
 	;
 
 alter:
@@ -108,6 +113,7 @@ alter:
 			pParser->ToString ( tStmt.m_sIndex, $3 );
 			pParser->ToString ( tStmt.m_sAlterAttr, $6 );
 			tStmt.m_eAlterColType = (ESphAttr)$7.m_iValue;
+			tStmt.m_uFieldFlags = ConvertFlags($7.m_iType);
 		}
 	| TOK_ALTER TOK_TABLE ident TOK_DROP TOK_COLUMN ident
 		{
@@ -167,30 +173,26 @@ alter:
 //////////////////////////////////////////////////////////////////////////
 
 field_flag:
-	TOK_INDEXED			{ pParser->SetFlag ( DdlParser_c::FLAG_INDEXED ); }
-	| TOK_STORED		{ pParser->SetFlag ( DdlParser_c::FLAG_STORED ); }
-	| TOK_ATTRIBUTE		{ pParser->SetFlag ( DdlParser_c::FLAG_ATTRIBUTE ); }
+	TOK_INDEXED			{ $$.m_iType = DdlParser_c::FLAG_INDEXED; }
+	| TOK_STORED		{ $$.m_iType = DdlParser_c::FLAG_STORED; }
+	| TOK_ATTRIBUTE		{ $$.m_iType = DdlParser_c::FLAG_ATTRIBUTE; }
 	;
 
 field_flag_list:
 	field_flag
-	| field_flag_list field_flag
+	| field_flag_list field_flag { $$.m_iType |= $2.m_iType; }
 	;
 
 create_table_item:
-	ident alter_col_type 					{ pParser->AddCreateTableCol ( $1, (ESphAttr)$2.m_iValue ); }
+	ident alter_col_type
+	{
+		if ( !pParser->AddCreateTableCol ( $1, $2 ) )
+		 {
+		 	yyerror ( pParser, pParser->GetLastError() );
+            YYERROR;
+		 }
+	 }
 	| ident TOK_BIT '(' TOK_CONST_INT ')'	{ pParser->AddCreateTableBitCol ( $1, $4.m_iValue ); }
-	| ident TOK_TEXT						{ pParser->AddCreateTableField($1); }
-	| ident TOK_TEXT field_flag_list		{ pParser->AddCreateTableField($1); }
-	| ident TOK_STRING field_flag_list
-	  {
-		CSphString sError;
-	    if ( !pParser->AddCreateTableField ( $1, &sError ) )
-		{
-			yyerror ( pParser, sError.cstr() );
-			YYERROR;
-		}
-      }
 	;
 
 create_table_item_list:

@@ -1758,6 +1758,7 @@ public:
 	bool				WriteLookupAndHistograms ( const CSphString & sSPA, const CSphString & sSPT, const CSphString & sSPHI, DWORD uTotalDocs, CSphString & sError ) const;
 
 	bool				AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError ) final;
+	bool				AddRemoveField ( bool bAdd, const CSphString & sFieldName, CSphString & sError ) final;
 	void				FlushDeadRowMap ( bool bWaitComplete ) const final;
 	bool				LoadKillList ( CSphFixedVector<DocID_t> * pKillList, KillListTargets_c & tTargets, CSphString & sError ) const final;
 	bool				AlterKillListTarget ( KillListTargets_c & tTargets, CSphString & sError ) final;
@@ -11647,6 +11648,11 @@ bool sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc,	CSphString & sEr
 	auto pSrcIndex = ( const CSphIndex_VLN * ) pSrc;
 
 	return CSphIndex_VLN::DoMerge ( pDstIndex, pSrcIndex, nullptr, sError, tProgress, pLocalStop, bSrcSettings, false );
+}
+
+bool CSphIndex_VLN::AddRemoveField ( bool bAddField, const CSphString & sFieldName, CSphString & sError )
+{
+	return true; // fixme! implement...
 }
 
 

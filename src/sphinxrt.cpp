@@ -991,6 +991,8 @@ public:
 	bool				SaveAttributes ( CSphString & sError ) const final;
 	DWORD				GetAttributeStatus () const final { return m_uDiskAttrStatus; }
 	bool				AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError ) final;
+	bool				AddRemoveField ( bool, const CSphString &, CSphString & ) final;
+
 
 	void				DebugDumpHeader ( FILE * , const char * , bool ) final {}
 	void				DebugDumpDocids ( FILE * ) final {}
@@ -7196,6 +7198,11 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ES
 	g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, false );
 
 	return true;
+}
+
+bool RtIndex_c::AddRemoveField ( bool bAdd, const CSphString & sFieldName, CSphString & sError )
+{
+	return true; // fixme! implement...
 }
 
 //////////////////////////////////////////////////////////////////////////

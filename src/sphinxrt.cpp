@@ -2224,12 +2224,116 @@ void RtIndex_c::CopyWord ( RtSegment_t & tDst, const RtSegment_t & tSrc, RtDocWr
 	}
 }
 
+template<typename FN>
+inline bool ProcessField ( RtDoc_t & tOutDoc, DWORD uHit, int iKillField, FN&& fnProcessor )
+{
+	assert ( iKillField >=0 );
+
+	int iField = HITMAN::GetField ( uHit );
+	if ( iKillField==iField )
+		return false;
+
+	if ( iField>iKillField )
+	{
+		--iField;
+		HITMAN::DecrementField ( uHit );
+	}
+
+	++tOutDoc.m_uHits;
+	if ( iField<32 )
+		tOutDoc.m_uDocFields |= ( 1UL << iField );
+
+	fnProcessor ( uHit );
+	return true;
+}
+
+void CopyWordWithoutField ( CSphTightVector<BYTE> * pOutHits, RtDocWriter_t & tOutDocs, RtWord_t & tOutWord, const RtSegment_t & tSrc, RtDocReader_t & tInDocs, int iKillField  )
+{
+	assert ( iKillField>=0 );
+
+	RtDoc_t tInDoc, tOutDoc;
+	while ( tInDocs  )
+	{
+		tInDocs >> tInDoc;
+		tOutDoc = tInDoc;
+		tOutDoc.m_uHits = tOutDoc.m_uDocFields = 0;
+
+		if ( tInDoc.m_uHits!=1 )
+		{
+			RtHitReader_t tInHits ( &tSrc, &tInDoc );
+			RtHitWriter_t tOutHits ( pOutHits );
+			tOutDoc.m_uHit = tOutHits.ZipHitPtr();
+			DWORD uHit;
+			while ( tInHits )
+			{
+				tInHits >> uHit;
+				if ( !ProcessField ( tOutDoc, uHit, iKillField, [&tOutHits] ( Hitpos_t x ) { tOutHits << x; } ) )
+					continue;
+			}
+		} else
+			if ( !ProcessField ( tOutDoc, tOutDoc.m_uHit, iKillField, [&tOutDoc] ( Hitpos_t x ) { tOutDoc.m_uHit = x; } ) )
+				continue;
+
+		if ( !tOutDoc.m_uHits )
+			continue;
+
+		tOutDocs << tOutDoc;
+
+		++tOutWord.m_uDocs;
+		tOutWord.m_uHits += tOutDoc.m_uHits;
+	}
+}
+
 void RtIndex_c::DeleteField ( RtSegment_t * pSeg, int iKillField )
 {
 	assert ( iKillField>=0 );
 
-	// fixme! implement...
+	CSphTightVector<BYTE> dWords;
+	CSphVector<RtWordCheckpoint_t> dWordCheckpoints;
+	CSphTightVector<BYTE> dDocs;
+	CSphTightVector<BYTE> dHits;
+	CSphVector<BYTE> dKeywordCheckpoints;
 
+	const RtSegment_t & tInSeg = *pSeg;
+	dWords.Reserve ( tInSeg.m_dWords.GetLength () );
+	dDocs.Reserve ( tInSeg.m_dDocs.GetLength () );
+	dHits.Reserve ( tInSeg.m_dHits.GetLength () );
+
+	RtWordWriter_t tOutWords ( &dWords, &dWordCheckpoints, &dKeywordCheckpoints,  m_bKeywordDict, m_iWordsCheckpoint );
+	RtWordReader_t tInWords ( &tInSeg, m_bKeywordDict, m_iWordsCheckpoint, m_tSettings.m_eHitless );
+
+	RtWord_t tInWord, tOutWord;
+	while ( tInWords )
+	{
+		tInWords >> tInWord;
+
+		tOutWord = tInWord;
+		tOutWord.m_uDocs = tOutWord.m_uHits = 0;
+
+		RtDocWriter_t tOutDocs ( &dDocs );
+		tOutWord.m_uDoc = tOutDocs.ZipDocPtr ();
+
+		RtDocReader_t tInDocs ( &tInSeg, tInWord );
+		CopyWordWithoutField ( &dHits, tOutDocs, tOutWord, tInSeg, tInDocs, iKillField );
+
+		// append word to the dictionary
+		if ( tOutWord.m_uDocs )
+			tOutWords << tOutWord;
+	}
+
+	// swap data to refreshed
+	RtSegment_t & tOutSeg = *pSeg;
+	tOutSeg.m_dWords.SwapData ( dWords );
+	tOutSeg.m_dWordCheckpoints.SwapData ( dWordCheckpoints );
+	tOutSeg.m_dDocs.SwapData ( dDocs );
+	tOutSeg.m_dHits.SwapData ( dHits );
+	tOutSeg.m_dKeywordCheckpoints.SwapData ( dKeywordCheckpoints );
+
+	if ( m_bKeywordDict )
+		FixupSegmentCheckpoints ( pSeg );
+
+	BuildSegmentInfixes ( &tOutSeg, m_pDict->HasMorphology (), m_bKeywordDict, m_tSettings.m_iMinInfixLen,
+					   m_iWordsCheckpoint, ( m_iMaxCodepointLength>1 ), m_tSettings.m_eHitless );
 }
 
 

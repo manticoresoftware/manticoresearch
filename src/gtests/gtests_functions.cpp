@@ -3460,3 +3460,24 @@ TEST ( functions, histogram )
 		ASSERT_EQ( iRes, 3 );
 	}
 }
+
+TEST ( functions, field_mask )
+{
+	FieldMask_t foo;
+	foo.Assign32(0x55555555);
+	ASSERT_TRUE ( foo.Test ( 6 ) );
+	ASSERT_TRUE ( foo.Test ( 30 ) );
+	foo.DeleteBit (15);
+	ASSERT_EQ (foo.GetMask32(),0x2AAAD555);
+
+	// test that removing a high bit works
+	foo.Set (250);
+	foo.DeleteBit(249);
+	ASSERT_TRUE ( foo.Test (249));
+
+	// test that removing DWORD-edge bit carries edge correct
+	foo.Set(224);
+	foo.DeleteBit(223);
+	ASSERT_TRUE ( foo.Test ( 223 ) );
+
+}

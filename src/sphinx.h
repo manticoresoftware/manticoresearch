@@ -766,11 +766,12 @@ class Hitman_c
 protected:
 	enum
 	{
-		POS_BITS		= 31 - FIELD_BITS,
-		FIELD_OFF		= 32 - FIELD_BITS,
-		FIELDEND_OFF	= 31 - FIELD_BITS,
-		FIELDEND_MASK	= (1UL << POS_BITS),
-		POS_MASK		= (1UL << POS_BITS) - 1
+		FIELD_OFF		= 32 - FIELD_BITS,			// 24
+		POS_BITS		= FIELD_OFF - 1,			// 23
+		FIELDEND_OFF	= POS_BITS,					// 23
+		FIELDEND_MASK	= (1UL << POS_BITS),		// 0x00800000
+		POS_MASK		= FIELDEND_MASK - 1,		// 0x007FFFFF
+		FIELD_MASK		= ~(FIELDEND_MASK|POS_MASK),// 0xFF000000
 	};
 
 public:
@@ -787,6 +788,12 @@ public:
 	static inline int GetField ( Hitpos_t uHitpos )
 	{
 		return uHitpos >> FIELD_OFF;
+	}
+
+	static inline void DecrementField ( Hitpos_t& uHitpos )
+	{
+		assert ( uHitpos & FIELD_MASK );
+		uHitpos -= (1UL << FIELD_OFF);
 	}
 
 	static inline int GetPos ( Hitpos_t uHitpos )
@@ -904,6 +911,28 @@ struct FieldMask_t
 	{
 		for ( auto& uMask : m_dMask )
 			uMask = ~uMask;
+	}
+
+	// keep bits up to iIdx; shift bits over iIdx right by 1
+	void DeleteBit ( int iIdx )
+	{
+		const auto iDwordIdx = iIdx / 32;
+		const auto iDwordBitPos = iIdx % 32;
+
+		DWORD uCarryBit = 0;
+		for ( int i = SIZE-1; i>iDwordIdx; --i )
+		{
+			bool bNextCarry = m_dMask[i] & 1;
+			m_dMask[i] = uCarryBit | ( m_dMask[i] >> 1 );
+			uCarryBit = bNextCarry ? 0x80000000 : 0;
+		}
+
+		DWORD uShiftBit = 1 << ( iDwordBitPos );	// like: 00000000 00000000 00000100 00000000
+		DWORD uKeepMask = uShiftBit-1;				// like: 00000000 00000000 00000011 11111111
+		DWORD uMoveMask = ~(uShiftBit | uKeepMask);	// like: 11111111 11111111 11111000 00000000
+
+		DWORD uKept = m_dMask[iDwordIdx] & uKeepMask;
+		m_dMask[iDwordIdx] = uCarryBit | ( ( m_dMask[iDwordIdx] & uMoveMask ) >> 1 ) | uKept;
 	}
 };
 

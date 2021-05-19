@@ -2996,19 +2996,14 @@ public:
 	virtual bool		IsError() const = 0;
 };
 
-// common add/remove attribute code for both RT and plain indexes
+// common add/remove attribute/field code for both RT and plain indexes
 class IndexAlterHelper_c
 {
-protected:
+public:
 	bool				Alter_AddRemoveAttr ( const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, const CSphRowitem * pDocinfo, const CSphRowitem * pDocinfoMax, const BYTE * pBlobPool, WriteWrapper_c & tSPAWriter, WriteWrapper_c & tSPBWriter, bool bAddAttr, const CSphString & sAttrName );
 	bool 				Alter_AddRemoveFromSchema ( CSphSchema & tSchema, const CSphString & sAttrName, ESphAttr eAttrType, bool bAdd, CSphString & sError );
 
 	virtual bool		Alter_IsMinMax ( const CSphRowitem * pDocinfo, int iStride ) const;
-
-private:
-	void				CreateAttrMap ( CSphVector<int> & dAttrMap, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, int iAttrToRemove );
-	const CSphRowitem *	CopyRow ( const CSphRowitem * pDocinfo, DWORD * pTmpDocinfo, int iOldStride );
-	const CSphRowitem * CopyRowAttrByAttr ( const CSphRowitem * pDocinfo, DWORD * pTmpDocinfo, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, const CSphVector<int> & dAttrMap, int iOldStride );
 };
 
 

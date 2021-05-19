@@ -240,8 +240,6 @@ build_mac:
       - cache/icu*64/*icu*
       - cache/re2*64/*re2*
       - cache/stemmer*64/*stemmer*
-      - cache/boost*64
-
 
 build_bsd:
   stage: routines

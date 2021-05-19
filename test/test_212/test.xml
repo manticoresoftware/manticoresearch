@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 	<name>alter ft</name>
+
+	<requires>
+		<force-rt/>
+	</requires>
 	<skip_indexer/>
 
 	<config>

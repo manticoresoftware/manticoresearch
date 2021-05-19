@@ -4,6 +4,7 @@
 
 * CentOS 7 and RHEL 7
 * CentOS 8 and RHEL 8
+* CentOS Stream 8
 
 ### YUM repository
 
@@ -38,6 +39,14 @@ If you plan to use [indexer](../Adding_data_from_external_storages/Plain_indexes
 ```bash
 sudo yum install mysql-libs postgresql-libs expat unixODBC
 ```
+
+In CentOS Stream 8 you may need to run:
+
+```
+dnf install mariadb-connector-c
+```
+
+if you get error `sql_connect: MySQL source wasn't initialized. Wrong name in dlopen?` trying to build a plain index from MySQL.
 
 #### Ukrainian lemmatizer
 The lemmatizer requires Python 3.9+. **Make sure you have it installed and that it's configured with `--enable-shared`.**

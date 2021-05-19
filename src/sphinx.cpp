@@ -8706,6 +8706,7 @@ bool CSphHitBuilder::cidxDone ( int iMemLimit, int & iMinInfixLen, int iMaxCodep
 	// close all data files
 	m_wrDoclist.CloseFile ();
 	m_wrHitlist.CloseFile ( true );
+	m_wrSkiplist.CloseFile ();
 	return !IsError();
 }
 
@@ -11654,6 +11655,8 @@ bool CSphIndex_VLN::AddRemoveField ( bool bAddField, const CSphString & sFieldNa
 			return false;
 
 		/// as index is w-locked, we can also detach doclist/hitlist/dictionary and juggle them.
+		tTmpDict.Close();
+		tNewDict.Close();
 
 		m_tWordlist.Reset();
 		if ( !JuggleFile ( SPH_EXT_SPI, sError ) )	return false;

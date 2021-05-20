@@ -234,14 +234,14 @@ string|text [stored|attribute] [indexed]
 2. `stored` - stored in a docstore (stored on disk, not in RAM, lazy read)
 3. `attribute` - makes it string attribute (can sort/group by it)
 
-Specifying any property resets the others.
+Specifying at least one property overrides all the default ones (see below), i.e. if you decide to use a custom combination of properties you need to list all the properties you want.
 
 **No properties specfied:**
 
 `string` and `text` are aliases, but if you don’t specify any properties they by default means different things:
 
-* just `string` means `attribute` (see details [below](#Text)).
-* just `text` means `stored` + `indexed` (see details [below](#String)).
+* just `string` by default means `attribute` (see details [below](#Text)).
+* just `text` by default means `stored` + `indexed` (see details [below](#String)).
 
 ### Text
 

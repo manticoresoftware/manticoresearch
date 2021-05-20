@@ -221,11 +221,30 @@ Below is the list of data types supported by Manticore Search:
 
 The identifier of a document in the index. Document IDs must be **unique signed positive non-zero 64-bit integers**. Note that no negative or zero values are allowed. Document IDs are implicit and have no declaration. Update operation is forbidden on document ids.
 
-## Text
+## Character data types
+
+General syntax:
+```
+string|text [stored|attribute] [indexed]
+```
+
+Properties:
+1. indexed - full-text indexed (can be used in full-text queries)
+2. stored - stored in a docstore (stored on disk, not in RAM, lazy read)
+3. attribute - makes it string attribute (can sort/group by it)
+
+Specifying any property resets the others.
+
+No properties specfied:
+`string` and `text` are aliases, but if you don’t specify any properties they by default means different things:
+* just `string` means `attribute`.
+* just `text` means `stored` + `indexed`.
+
+### Text
 
 <!-- example working with text -->
 
-Text data type forms the full-text part of the index. Text fields are indexed and can be searched for keywords.
+Text (just `text` or `text/string indexed`) data type forms the full-text part of the index. Text fields are indexed and can be searched for keywords.
 
 Text is passed through an analyzer pipeline that converts the text to words, applies morphology transformations etc. Eventually a full-text index (a special data structure that enables quick searches for a keyword) gets built from that text.
 
@@ -307,7 +326,7 @@ index products
 
 <!-- example working with indexed only  -->
 
-This behavior can overridden by explicitly specifying that the text is only indexed.
+This behavior can be overridden by explicitly specifying that the text is only indexed.
 
 <!-- intro -->
 ##### SQL:
@@ -447,11 +466,11 @@ utilsApi.sql("mode=raw&query=CREATE TABLE products(title text indexed)");
 
 <!-- end -->
 
-## String
+### String
 
 <!-- example for string attributes  -->
 
-Unlike full-text fields, string attributes are stored as they are received and cannot be used in full-text searches. Instead they are returned in results, they can be used in `WHERE` clause for comparison filtering or `REGEX` and they can be used for sorting and aggregation. In general it's not recommended to store large texts in string attributes, but use string attributes for metadata like names, titles, tags, keys.
+Unlike full-text fields, string attributes (just `string` or `string/text attribute`) are stored as they are received and cannot be used in full-text searches. Instead they are returned in results, they can be used in `WHERE` clause for comparison filtering or `REGEX` and they can be used for sorting and aggregation. In general it's not recommended to store large texts in string attributes, but use string attributes for metadata like names, titles, tags, keys.
 
 <!-- intro -->
 ##### SQL:

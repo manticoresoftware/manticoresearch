@@ -1149,7 +1149,7 @@ attr_update_reserve=size
 ```
 
 <!-- example attr_update_reserve -->
-attr_update_reserve is a per-index setting which sets the space to be reserved for blob attribute updates. Optional, default value is 128k.
+`attr_update_reserve` is a per-index setting which sets the space to be reserved for blob attribute updates. Optional, default value is 128k.
 
 When blob attributes (MVAs, strings, JSON), are updated, their length may change. If the updated string (or MVA, or JSON) is shorter than the old one, it overwrites the old one in the .SPB file. But if the updated string is longer, updates are written to the end of the .SPB file. This file is memory mapped, that's why resizing it may be a rather slow process, depending on the OS implementation of memory mapped files.
 
@@ -1233,4 +1233,4 @@ index products {
 attr_flush_period = 900 # persist updates to disk every 15 minutes
 ```
 
-When updating attributes the changes are first written to in-memory copy of attributes. This setting allows to set the interval between flushing the updates to disk.
+When updating attributes the changes are first written to in-memory copy of attributes. This setting allows to set the interval between flushing the updates to disk. It defaults to 0, which disables the periodic flushing, but flushing will still occur at normal shut-down.

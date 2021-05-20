@@ -228,17 +228,20 @@ General syntax:
 string|text [stored|attribute] [indexed]
 ```
 
-Properties:
-1. indexed - full-text indexed (can be used in full-text queries)
-2. stored - stored in a docstore (stored on disk, not in RAM, lazy read)
-3. attribute - makes it string attribute (can sort/group by it)
+**Properties:**
+
+1. `indexed` - full-text indexed (can be used in full-text queries)
+2. `stored` - stored in a docstore (stored on disk, not in RAM, lazy read)
+3. `attribute` - makes it string attribute (can sort/group by it)
 
 Specifying any property resets the others.
 
-No properties specfied:
+**No properties specfied:**
+
 `string` and `text` are aliases, but if you don’t specify any properties they by default means different things:
-* just `string` means `attribute`.
-* just `text` means `stored` + `indexed`.
+
+* just `string` means `attribute` (see details [below](#Text)).
+* just `text` means `stored` + `indexed` (see details [below](#String)).
 
 ### Text
 

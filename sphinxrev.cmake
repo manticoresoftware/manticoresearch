@@ -137,21 +137,14 @@ if ( NOT SPH_GIT_COMMIT_ID )
 endif ()
 
 if (NOT SPH_GIT_COMMIT_ID)
-	set(DEVMODE "$ENV{DEVMODE}")
-	if ( DEVMODE )
-		message(STATUS "Dev mode, no guess, using predefined version")
-		set(VERNUMBERS "0.0.1")
-		set(GIT_TIMESTAMP_ID "202020")
-		set(SPH_GIT_COMMIT_ID "DEADBEEF")
-		set(BUILD_TAG "devmode")
-		set(GIT_BRANCH_ID "fake head from devmode")
-		set(SOURCE_DATE_EPOCH "1607089638")
-	endif ()
-endif ()
-
-# nothing found, bail with error
-if ( NOT SPH_GIT_COMMIT_ID )
-	message(FATAL_ERROR "Git not found, or the sources are not git clone, or not located in the folder originally unpacked from tarball, or not contain pre-created sphinxversion.h header. Please, put this file to your src/ folder manually. Devmode=${DEVMODE}")
+	# nothing found
+	message(STATUS "Dev mode, no guess, using predefined version")
+	set(VERNUMBERS "0.0.1")
+	set(GIT_TIMESTAMP_ID "000000")
+	set(SPH_GIT_COMMIT_ID "DEADBEEF")
+	set(BUILD_TAG "devmode")
+	set(GIT_BRANCH_ID "developer version")
+	set(SOURCE_DATE_EPOCH "1607089638")
 endif ()
 
 # extract version number string from sphinxversion.h.in

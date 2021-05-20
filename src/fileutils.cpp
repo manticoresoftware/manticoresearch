@@ -18,6 +18,8 @@
 	#define getcwd		_getcwd
 
 	#include "shlwapi.h"
+	#pragma comment(linker, "/defaultlib:Shlwapi.lib")
+	#pragma message("Automatically linking with Shlwapi.lib")
 #else
 	#include <glob.h>
 #endif

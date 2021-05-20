@@ -5,10 +5,10 @@
 <!-- example ALTER -->
 
 ```sql
-ALTER TABLE index {ADD|DROP} COLUMN column_name [{INTEGER|INT|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON|STRING|TIMESTAMP}]
+ALTER TABLE index {ADD|DROP} COLUMN column_name [{INTEGER|INT|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON|STRING|TIMESTAMP|TEXT [INDEXED [ATTRIBUTE]]}]
 ```
 
-It supports adding one attribute at a time for RT indexes. The supported attribute types are:
+It supports adding one field at a time for RT indexes. Supported data types are:
 * int
 * bigint
 * float
@@ -16,13 +16,16 @@ It supports adding one attribute at a time for RT indexes. The supported attribu
 * multi-valued
 * multi-valued 64bit
 * json
-* string 
+* string
+* `text` / `text indexed` - full-text indexed field
+* `text indexed attribute` - fill text indexed field + string attribute
 
 #### Important notes:
 * Querying an index is impossible (because of a write lock) while adding a column. 
 * Newly created attribute's values are set to 0. 
 * `ALTER` will not work for distributed indexes and indexes without any attributes. 
-* `DROP COLUMN` will fail if an index has only one attribute.
+* `DROP COLUMN` will fail if an index has only one field.
+* When dropping a field which is both a full-text field and a string attribute the first `ALTER DROP` run drops the attribute, the second one drops the full-text field.
 
 <!-- request Example -->
 ```sql
@@ -36,10 +39,8 @@ mysql> desc rt;
 | group_id   | uint      |
 | date_added | timestamp |
 +------------+-----------+
-4 rows in set (0.01 sec)
 
 mysql> alter table rt add column test integer;
-Query OK, 0 rows affected (0.04 sec)
 
 mysql> desc rt;
 +------------+-----------+
@@ -51,10 +52,8 @@ mysql> desc rt;
 | date_added | timestamp |
 | test       | uint      |
 +------------+-----------+
-5 rows in set (0.00 sec)
 
 mysql> alter table rt drop column group_id;
-Query OK, 0 rows affected (0.01 sec)
 
 mysql> desc rt;
 +------------+-----------+
@@ -65,7 +64,57 @@ mysql> desc rt;
 | date_added | timestamp |
 | test       | uint      |
 +------------+-----------+
-4 rows in set (0.00 sec)
+
+mysql> alter table rt add column title text indexed;
+
+mysql> desc rt;
++------------+-----------+------------+
+| Field      | Type      | Properties |
++------------+-----------+------------+
+| id         | bigint    |            |
+| text       | text      | indexed    |
+| title      | text      | indexed    |
+| date_added | timestamp |            |
+| test       | uint      |            |
++------------+-----------+------------+
+
+mysql> alter table rt add column title text attribute;
+
+mysql> desc rt;
++------------+-----------+------------+
+| Field      | Type      | Properties |
++------------+-----------+------------+
+| id         | bigint    |            |
+| text       | text      | indexed    |
+| title      | text      | indexed    |
+| date_added | timestamp |            |
+| test       | uint      |            |
+| title      | string    |            |
++------------+-----------+------------+
+
+mysql> alter table rt drop column title;
+
+mysql> desc rt;
++------------+-----------+------------+
+| Field      | Type      | Properties |
++------------+-----------+------------+
+| id         | bigint    |            |
+| text       | text      | indexed    |
+| title      | text      | indexed    |
+| date_added | timestamp |            |
+| test       | uint      |            |
++------------+-----------+------------+
+mysql> alter table rt drop column title;
+
+mysql> desc rt;
++------------+-----------+------------+
+| Field      | Type      | Properties |
++------------+-----------+------------+
+| id         | bigint    |            |
+| text       | text      | indexed    |
+| date_added | timestamp |            |
+| test       | uint      |            |
++------------+-----------+------------+
 ```
 
 <!-- end -->

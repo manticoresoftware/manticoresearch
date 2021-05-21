@@ -118,8 +118,8 @@ windows:
     - mkdir build && cd build
     - cmake -GNinja -DPACK=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
     - cmake --build . --target package -j4
-    - cmake -DPACK=1 -DSPLIT=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
-    - cmake --build . --target package -j4
+    - cmake -DSPLIT=1 .
+    - cpack
     - cp manticore*.rpm ..
     - cd ..
     - tar -zcf cache/cache-src.tar.gz cache/*-src
@@ -147,8 +147,8 @@ windows:
     - mkdir build && cd build
     - cmake -GNinja -DPACK=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
     - cmake --build . --target package -j4
-    - cmake -DPACK=1 -DSPLIT=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
-    - cmake --build . --target package -j4
+    - cmake -DSPLIT=1 .
+    - cpack
     - cp manticore*deb ..
     - cd ..
     - tar -zcf cache/cache-src.tar.gz cache/*-src

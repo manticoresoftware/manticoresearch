@@ -37,6 +37,7 @@ osx:
   dependencies: []
   variables:
     CACHEB: "../cache"
+    LIBS_BUNDLE: "/work"
     OPENSSL_ROOT_DIR: "/usr/local/opt/openssl"
     DIAGNOSTIC: 1
   tags:
@@ -44,7 +45,7 @@ osx:
     - build
   script:
     - mkdir build && cd build
-    - cmake -DBUILD_TAG=$RELEASE_TAG -DDISTR_BUILD=macos -DLIBS_BUNDLE=/work ..
+    - cmake -GNinja -DBUILD_TAG=$RELEASE_TAG -DDISTR_BUILD=macos ..
     - cmake --build . --target package -j2
     - cp manticore-*.tar.gz ..
   artifacts:
@@ -115,7 +116,7 @@ windows:
     - mc mirror -a dev/runner-cache/releases/$DISTR/ cache/
     - test -e cache/cache-src.tar.gz && tar -zxf cache/cache-src.tar.gz && chmod +x cache/galera*/libgalera_manticore*
     - mkdir build && cd build
-    - cmake -DPACK=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
+    - cmake -GNinja -DPACK=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
     - cmake --build . --target package -j4
     - cmake -DPACK=1 -DSPLIT=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
     - cmake --build . --target package -j4
@@ -144,7 +145,7 @@ windows:
     - mc mirror dev/runner-cache/releases/$DISTR/ cache/
     - test -e cache/cache-src.tar.gz && tar -zxf cache/cache-src.tar.gz
     - mkdir build && cd build
-    - cmake -DPACK=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
+    - cmake -GNinja -DPACK=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
     - cmake --build . --target package -j4
     - cmake -DPACK=1 -DSPLIT=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
     - cmake --build . --target package -j4

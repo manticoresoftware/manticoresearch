@@ -26,7 +26,7 @@ sudo systemctl stop manticore
 The Manticore service is set to run at boot. You can check it by running:
 
 ```shell
-sudo systemctl is-active manticore
+sudo systemctl is-enabled manticore
 ```
 
 If you want to disable Manticore starting at boot time run:

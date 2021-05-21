@@ -661,12 +661,11 @@ inline int sphUTF8Len ( const char * pStr, int iMax )
 		return 0;
 
 	const BYTE * pBuf = (const BYTE*) pStr;
-	const BYTE * pMax = pBuf + iMax;
 	int iRes = 0, iCode;
 
-	while ( pBuf<pMax && iRes<iMax && ( iCode = sphUTF8Decode ( pBuf ) )!=0 )
+	while ( pBuf<( (const BYTE *) pStr+iMax ) && iRes<iMax && ( iCode = sphUTF8Decode ( pBuf ) )!=0 )
 		if ( iCode>0 )
-			iRes++;
+			++iRes;
 
 	return iRes;
 }

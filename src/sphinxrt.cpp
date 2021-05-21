@@ -4535,7 +4535,7 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter )
 		DWORD uPrevHitOffset = 0;
 
 		RtWord_t tWord;
-		memset ( &tWord, 0, sizeof(tWord) );
+		tWord.m_bHasHitlist = false;
 
 		BYTE sWord[SPH_MAX_KEYWORD_LEN+2], sLastWord[SPH_MAX_KEYWORD_LEN+2];
 		memset ( sWord, 0, sizeof(sWord) );

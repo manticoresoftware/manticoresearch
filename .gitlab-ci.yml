@@ -38,11 +38,11 @@ stages:
 
 job_mirror:
   stage: mirroring
+  needs: [ ]
   rules:
     - if: $TEST==null && $CI_COMMIT_BRANCH == "master"
   tags:
     - dev-host
-  dependencies: []
   script:
     - ~/gitsync.sh
   cache: {}
@@ -50,6 +50,7 @@ job_mirror:
 
 docs_deploy:
   stage: routines
+  needs: [ ]
   rules:
     - if: $CI_COMMIT_BRANCH == "master" || $CI_COMMIT_BRANCH =~ /^manticore-.*$/
   <<: *docs
@@ -57,12 +58,12 @@ docs_deploy:
 
 pages:
   stage: routines
+  needs: [ ]
   rules:
     - when: manual
       allow_failure: true
   tags:
     - docker
-  dependencies: []
   variables:
     GIT_STRATEGY: none
     REDIR_URL: "https://manual.manticoresearch.com/dev/"
@@ -80,6 +81,7 @@ pages:
   
 simple_tests:
   stage: routines
+  needs: [ ]
   rules:
     - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && $WHAT=='$WHAT'
     - if: $TEST =~ /simple/ && $WHAT=='$WHAT'
@@ -87,8 +89,7 @@ simple_tests:
     - if: $TEST =~ /simple/ && $WHAT==null
   tags:
     - specdocker
-  dependencies: []
-  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:latest
+  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:320
   variables:
     CTEST_BUILD_CONFIGURATION: "Debug"
     CACHEB: "../cache"
@@ -117,11 +118,56 @@ simple_tests:
       - cache/icu*64/*icu*
       - cache/re2*64/*re2*
       - cache/stemmer*64/*stemmer*
+      - cache/gtest-*
+  retry: 1
+
+simple_tests_no_columnar:
+  stage: routines
+  needs: [ ]
+  rules:
+    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && $WHAT=='$WHAT'
+    - if: $TEST =~ /simple/ && $WHAT=='$WHAT'
+    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && $WHAT==null
+    - if: $TEST =~ /simple/ && $WHAT==null
+  tags:
+    - specdocker
+  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:320
+  variables:
+    CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
+    CACHEB: "../cache"
+    DIAGNOSTIC: 1 # let's set it by default forever
+    WITH_COLUMNAR: 0
+  script:
+    - mc config host add dev $MINIO_HOST
+    - mc mirror --overwrite dev/uploads/aot/ /work/aot/
+    - ctest -V -S misc/ctest/gltest.cmake
+  after_script:
+    - cd build && mkdir xml_simple_tests_no_columnar
+    - cp -r Testing/2*/*.xml xml_simple_tests_no_columnar
+  artifacts:
+    paths:
+    - build/xml_simple_tests_no_columnar
+    - build/test/test_*/report.txt
+    - build/test/error*.txt
+    - build/test/searchd.log
+    expire_in: 12 hrs
+    when: always
+  cache:
+    key: ubuntu_bionic
+    paths:
+      - cache/*-src
+      - cache/galera*64/libgalera*
+      - cache/galera*64/galera-targets.cmake
+      - cache/icu*64/*icu*
+      - cache/re2*64/*re2*
+      - cache/stemmer*64/*stemmer*
+      - cache/gtest-*
   retry: 1
 
 
 release_tests:
   stage: routines
+  needs: [ ]
   rules:
     - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && $WHAT=='$WHAT'
     - if: $TEST =~ /release/ && $WHAT=='$WHAT'
@@ -129,8 +175,7 @@ release_tests:
     - if: $TEST =~ /release/ && $WHAT==null
   tags:
     - specdocker # once test 58 fixed, m.b. change to 'docker' and gitlab then cloud will help us testing.
-  dependencies: []
-  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:latest
+  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:320
   variables:
     CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
     CACHEB: "../cache"
@@ -160,6 +205,7 @@ release_tests:
       - cache/icu*64/*icu*
       - cache/re2*64/*re2*
       - cache/stemmer*64/*stemmer*
+      - cache/gtest-*
   retry: 1
 
 
@@ -173,12 +219,12 @@ win_tests:
   tags:
     - windev19
     - build
-  dependencies: []
+  needs: [ ]
   variables:
     LIBS_BUNDLE: "x:/bundle"
     CACHEB: "x:/cache"
     OPENSSL_ROOT_DIR: "x:/bundle/openssl-x64"
-    BOOST_ROOT: "x:/boost_1_72_0"
+    BOOST_ROOT: "x:/boost_1_75_0"
     WIN_TEST_CI: "1"
     CTEST_CMAKE_GENERATOR: "Visual Studio 16 2019"
     DIAGNOSTIC: 1 # let's set it by default forever
@@ -211,7 +257,7 @@ build_mac:
   tags:
     - mac
     - build
-  dependencies: []
+  needs: [ ]
   variables:
     CTEST_BUILD_CONFIGURATION: "Debug"
     CACHEB: "../cache"
@@ -251,12 +297,12 @@ build_bsd:
   tags:
     - freebsd
     - build
-  dependencies: []
+  needs: [ ]
   variables:
     CTEST_BUILD_CONFIGURATION: "Debug"
     CACHEB: "../cache"
     DIAGNOSTIC: 1 # let's set it by default forever
-    USE_GALERA: 1
+#    USE_GALERA: 1  # galera need to be fixed on freebsd 13
   script:
     - mkdir build && cd build
     - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=..
@@ -289,13 +335,14 @@ push_results:
       when: always      
   tags:
     - docker
-  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:latest
-  dependencies:
+  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:320
+  needs:
     - simple_tests
     - release_tests
     - win_tests
     - build_mac
     - build_bsd
+    - simple_tests_no_columnar
   variables:
     GIT_STRATEGY: fetch
   script:
@@ -321,7 +368,7 @@ check_docs_examples:
       - "test/**/*"
       - "manual/**/*.md"
       when: always
-  dependencies:
+  needs:
     - release_tests
   <<: *docs
 
@@ -337,6 +384,15 @@ deploy_hook:
       when: always
   trigger:
     include: '/dist/gitlab-release.yml'
+  needs:
+    - job: simple_tests
+      artifacts: false
+    - job: win_tests
+      artifacts: false
+    - job: build_mac
+      artifacts: false
+    - job: simple_tests_no_columnar
+      artifacts: false
 
 
 variables:

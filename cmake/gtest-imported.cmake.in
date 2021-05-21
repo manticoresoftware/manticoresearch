@@ -1,0 +1,31 @@
+cmake_minimum_required ( VERSION 3.17 )
+
+project ( google-test-prebuild NONE )
+
+include ( ExternalProject )
+ExternalProject_Add ( gtest_populate
+		URL "${GTEST_GITHUB}"
+		SOURCE_DIR "${GTEST_SRC}"
+		BUILD_COMMAND "${CMAKE_COMMAND}" -E echo "Starting build"
+		COMMAND "${CMAKE_COMMAND}" -DCMAKE_BUILD_TYPE=RelWithDebInfo .
+		COMMAND "${CMAKE_COMMAND}" --build . --config RelWithDebInfo
+		COMMAND "${CMAKE_COMMAND}" --install . --config RelWithDebInfo --prefix "${GTEST_BUILD}"
+		COMMAND "${CMAKE_COMMAND}" -DCMAKE_BUILD_TYPE=Debug .
+        COMMAND "${CMAKE_COMMAND}" --build . --config Debug
+        COMMAND "${CMAKE_COMMAND}" --install . --config Debug --prefix "${GTEST_BUILD}"
+		INSTALL_COMMAND ""
+		TEST_COMMAND ""
+		)
+
+# here is trick with configuration, m.b. used as a recipe for similar cases:
+# - setting -DCMAKE_BUILD_TYPE - works over single-config generators, and it needs separate run of cmake.
+# - using simultaneously --config option on build and install - works over multi-config generators, which NOT
+# reads and depends from CMAKE_BUILD_TYPE.
+# Using both build_type and --config achieves desired config to be built and installed despite the actual generator
+# (if single - it will read variable, if multi - it will obey --config key)
+#
+# Note also that usually you might need --clean-first before second round, as build in 'single' case most probably
+# happens in one and same folder. Here that is not the case, as GTest made well to build in config-related folder
+# even with single-config.
+#
+# file configured from cmake/gtest-imported.cmake.in

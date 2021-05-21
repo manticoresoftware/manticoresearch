@@ -43,14 +43,6 @@ struct StoredQuery_t : public StoredQuery_i, public ISphRefcountedMT
 	bool							IsFullscan() const { return m_pXQ->m_bEmpty; }
 };
 
-static bool NotImplementedError ( CSphString * pError )
-{
-	if ( pError )
-		*pError = "not implemented";
-
-	return false;
-}
-
 using StoredQuerySharedPtr_t = SharedPtr_t<StoredQuery_t*>;
 using StoredQuerySharedPtrVecSharedPtr_t = SharedPtr_t<CSphVector<StoredQuerySharedPtr_t> *>;
 class SharedPQSlice_t : public VecTraits_T<const StoredQuerySharedPtr_t>

@@ -2713,7 +2713,7 @@ public:
 		dWords.Uniq();
 		for ( const auto& sWord : dWords )
 		{
-			int iLen = Min ( sWord.Length(), 255 );
+			int iLen = Min ( sWord.Length (), (size_t) 255 );
 			if ( !iLen )
 				continue;
 			m_uMaxLen = Max ( m_uMaxLen, iLen );

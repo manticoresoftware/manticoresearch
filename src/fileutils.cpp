@@ -85,7 +85,9 @@ bool CSphSavedFile::Collect ( const char * szFilename, CSphString * pError )
 {
 	if ( !szFilename || !*szFilename )
 	{
-		memset ( this, 0, sizeof(*this) );
+		m_sFilename.SetBinary ( nullptr, 0 );
+		m_uSize = m_uCTime = m_uMTime = 0;
+		m_uCRC32 = 0;
 		return true;
 	}
 

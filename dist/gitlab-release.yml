@@ -13,9 +13,10 @@ tarball:
   interruptible: true
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /tarball/
-  dependencies: []
+  needs: []
   tags:
-    - dev-host
+    - docker
+  image: registry.gitlab.com/manticoresearch/dev/bionic_cmake:320
   script:
     - mkdir build && cd build
     - cmake -DBUILD_TAG=$RELEASE_TAG -DDISABLE_TESTING=1 ..
@@ -33,9 +34,10 @@ osx:
   retry: 1
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /osx/
-  dependencies: []
+  needs: []
   variables:
     CACHEB: "../cache"
+    LIBS_BUNDLE: "/work"
     OPENSSL_ROOT_DIR: "/usr/local/opt/openssl"
     DIAGNOSTIC: 1
   tags:
@@ -43,8 +45,8 @@ osx:
     - build
   script:
     - mkdir build && cd build
-    - cmake -DBUILD_TAG=$RELEASE_TAG -DDISTR_BUILD=macos -DLIBS_BUNDLE=/work ..
-    - make -j2 package
+    - cmake -GNinja -DBUILD_TAG=$RELEASE_TAG -DDISTR_BUILD=macos ..
+    - cmake --build . --target package -j2
     - cp manticore-*.tar.gz ..
   artifacts:
     paths:
@@ -60,14 +62,13 @@ osx:
       - cache/icu*64/*icu*
       - cache/re2*64/*re2*
       - cache/stemmer*64/*stemmer*
-      - cache/boost*64
 
 windows:
   stage: build
   interruptible: true
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /windows/
-  dependencies: []
+  needs: []
   tags:
     - windev19
     - build
@@ -75,20 +76,20 @@ windows:
     LIBS_BUNDLE: "x:/bundle"
     CACHEB: "x:/cache"
     OPENSSL_ROOT: "x:/bundle/openssl-x64"
-    BOOST_ROOT: "x:/boost_1_72_0"
+    BOOST_ROOT: "x:/boost_1_75_0"
     DIAGNOSTIC: 1
   script:
     - 'net use x: \\\\VBOXSRV\\shared'
     - mkdir sphinxbin-x64
     - cd sphinxbin-x64
-    - cmake -DBUILD_TAG=$RELEASE_TAG -DDISTR_BUILD=default -DWITH_PGSQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 -DUSE_SSL=1 ..
+    - cmake -DBUILD_TAG=$RELEASE_TAG -DDISTR_BUILD=default -DUSE_SSL=1 ..
     - cmake --build . --target package --config RelWithDebInfo
     - cp manticore-*.zip ..
     - cd ..
     - mkdir sphinxconvbin-x64
     - cd sphinxconvbin-x64
-    - cmake -DBUILD_TAG=$RELEASE_TAG -DDISABLE_TESTING=1 -DWITH_RE2=0 -DWITH_STEMMER=0 -WITH_EXPAT=0 -WITH_ICONV=0 -WITH_MYSQL=0 ..
-    - cmake --build . --target package --config RelWithDebInfo --clean-first    
+    - cmake -DBUILD_TAG=$RELEASE_TAG -DONLY_CONVERTER=1 ..
+    - cmake --build . --target package --config RelWithDebInfo
     - cp manticore-*-converter.zip ..
   artifacts:
     paths:
@@ -100,7 +101,7 @@ windows:
 .redhat_based:
   stage: build
   interruptible: true
-  dependencies: []
+  needs: []
   variables:
     REPO_DIST_NAME: "centos"
     CACHEB: "../cache"
@@ -115,10 +116,10 @@ windows:
     - mc mirror -a dev/runner-cache/releases/$DISTR/ cache/
     - test -e cache/cache-src.tar.gz && tar -zxf cache/cache-src.tar.gz && chmod +x cache/galera*/libgalera_manticore*
     - mkdir build && cd build
-    - cmake -DPACK=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
-    - make -j4 package
-    - cmake -DPACK=1 -DSPLIT=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
-    - make -j4 package    
+    - cmake -GNinja -DPACK=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
+    - cmake --build . --target package -j4
+    - cmake -DSPLIT=1 .
+    - cpack
     - cp manticore*.rpm ..
     - cd ..
     - tar -zcf cache/cache-src.tar.gz cache/*-src
@@ -132,7 +133,7 @@ windows:
 .debian_based:
   stage: build
   interruptible: true
-  dependencies: []
+  needs: []
   tags:
     - docker
   variables:
@@ -144,10 +145,10 @@ windows:
     - mc mirror dev/runner-cache/releases/$DISTR/ cache/
     - test -e cache/cache-src.tar.gz && tar -zxf cache/cache-src.tar.gz
     - mkdir build && cd build
-    - cmake -DPACK=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
-    - make -j4 package
-    - cmake -DPACK=1 -DSPLIT=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
-    - make -j4 package    
+    - cmake -GNinja -DPACK=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
+    - cmake --build . --target package -j4
+    - cmake -DSPLIT=1 .
+    - cpack
     - cp manticore*deb ..
     - cd ..
     - tar -zcf cache/cache-src.tar.gz cache/*-src
@@ -165,7 +166,7 @@ rhel7:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /rhel7/
   variables:
     REPO_DIST_VER: "7"
-  image: registry.gitlab.com/manticoresearch/dev/centos7_cmake:317
+  image: registry.gitlab.com/manticoresearch/dev/centos7_cmake:320
 
 rhelsplit7:
   extends:
@@ -175,7 +176,7 @@ rhelsplit7:
   variables:
     XTRAFLAGS: "-DSPLIT_APPS=ON -DNOAPI=ON"
     REPO_DIST_VER: "7"
-  image: registry.gitlab.com/manticoresearch/dev/centos7_cmake:317
+  image: registry.gitlab.com/manticoresearch/dev/centos7_cmake:320
 
 rhel8:
   extends:
@@ -184,42 +185,42 @@ rhel8:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /rhel8/
   variables:
     REPO_DIST_VER: "8"
-  image: registry.gitlab.com/manticoresearch/dev/centos8_cmake:317
+  image: registry.gitlab.com/manticoresearch/dev/centos8_cmake:320
 
 stretch:
   extends:
     - .debian_based
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /stretch/
-  image: registry.gitlab.com/manticoresearch/dev/stretch_cmake:317
+  image: registry.gitlab.com/manticoresearch/dev/stretch_cmake:320
 
 xenial:
   extends:
     - .debian_based
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /xenial/
-  image: registry.gitlab.com/manticoresearch/dev/xenial_cmake:317
+  image: registry.gitlab.com/manticoresearch/dev/xenial_cmake:320
 
 bionic:
   extends:
     - .debian_based
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /bionic/
-  image: registry.gitlab.com/manticoresearch/dev/bionic_cmake:317
+  image: registry.gitlab.com/manticoresearch/dev/bionic_cmake:320
 
 focal:
   extends:
     - .debian_based
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /focal/
-  image: registry.gitlab.com/manticoresearch/dev/focal_cmake:317
+  image: registry.gitlab.com/manticoresearch/dev/focal_cmake:320
 
 buster:
   extends:
     - .debian_based
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /buster/
-  image: registry.gitlab.com/manticoresearch/dev/buster_cmake:317
+  image: registry.gitlab.com/manticoresearch/dev/buster_cmake:320
 
 
 collect_repo:
@@ -233,12 +234,24 @@ collect_repo:
     - echo "Collected packages"
     - ls -1
     - ~/upload_repo.sh
-  dependencies: [rhel7, rhel8, rhelsplit7, stretch, xenial, bionic, buster, focal, tarball, osx, windows]
+  needs:
+    - rhel7
+    - rhel8
+    - job: rhelsplit7
+      optional: true
+    - stretch
+    - xenial
+    - bionic
+    - buster
+    - focal
+    - tarball
+    - osx
+    - windows
 
 
 build_docker:
   stage: deploy
-  dependencies: []
+  needs: []
   interruptible: true
   variables:
     GIT_STRATEGY: none
@@ -262,7 +275,7 @@ build_docker:
   rules:
     - if: $WHAT=="all" && $CI_COMMIT_BRANCH == "master"
     - if: $WHAT =~ /collect/ && $CI_COMMIT_BRANCH == "master"
-  dependencies: [tarball, osx, windows, rhel7, rhel8, stretch, xenial, bionic, buster]
+  needs: [tarball, osx, windows, rhel7, rhel8, stretch, xenial, bionic, buster]
   tags:
     - dev-host
   variables:

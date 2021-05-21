@@ -1,6 +1,6 @@
-# production system for ubertesting. Look base at dist/build_dockers/bionic/cmake_317
+# production system for ubertesting. Look base at dist/build_dockers/bionic/cmake_320
 
-FROM registry.gitlab.com/manticoresearch/dev/bionic_cmake:317
+FROM registry.gitlab.com/manticoresearch/dev/bionic_cmake:320
 RUN apt-get update && apt-get install -y --no-install-recommends -q \
     php \
     php-mysql \
@@ -35,4 +35,4 @@ WORKDIR /work
 ENTRYPOINT ["bash", "/entry_point.sh"]
 CMD []
 
-# docker build -t registry.gitlab.com/manticoresearch/dev/ubertests_public .
+# docker build -t registry.gitlab.com/manticoresearch/dev/ubertests_public:320 .

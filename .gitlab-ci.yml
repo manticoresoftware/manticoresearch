@@ -38,11 +38,11 @@ stages:
 
 job_mirror:
   stage: mirroring
+  needs: [ ]
   rules:
     - if: $TEST==null && $CI_COMMIT_BRANCH == "master"
   tags:
     - dev-host
-  dependencies: []
   script:
     - ~/gitsync.sh
   cache: {}
@@ -50,6 +50,7 @@ job_mirror:
 
 docs_deploy:
   stage: routines
+  needs: [ ]
   rules:
     - if: $CI_COMMIT_BRANCH == "master" || $CI_COMMIT_BRANCH =~ /^manticore-.*$/
   <<: *docs
@@ -57,12 +58,12 @@ docs_deploy:
 
 pages:
   stage: routines
+  needs: [ ]
   rules:
     - when: manual
       allow_failure: true
   tags:
     - docker
-  dependencies: []
   variables:
     GIT_STRATEGY: none
     REDIR_URL: "https://manual.manticoresearch.com/dev/"
@@ -80,6 +81,7 @@ pages:
   
 simple_tests:
   stage: routines
+  needs: [ ]
   rules:
     - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && $WHAT=='$WHAT'
     - if: $TEST =~ /simple/ && $WHAT=='$WHAT'
@@ -87,7 +89,6 @@ simple_tests:
     - if: $TEST =~ /simple/ && $WHAT==null
   tags:
     - specdocker
-  dependencies: []
   image: registry.gitlab.com/manticoresearch/dev/ubertests_public:320
   variables:
     CTEST_BUILD_CONFIGURATION: "Debug"
@@ -123,6 +124,7 @@ simple_tests:
 
 release_tests:
   stage: routines
+  needs: [ ]
   rules:
     - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && $WHAT=='$WHAT'
     - if: $TEST =~ /release/ && $WHAT=='$WHAT'
@@ -130,7 +132,6 @@ release_tests:
     - if: $TEST =~ /release/ && $WHAT==null
   tags:
     - specdocker # once test 58 fixed, m.b. change to 'docker' and gitlab then cloud will help us testing.
-  dependencies: []
   image: registry.gitlab.com/manticoresearch/dev/ubertests_public:320
   variables:
     CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
@@ -175,7 +176,7 @@ win_tests:
   tags:
     - windev19
     - build
-  dependencies: []
+  needs: [ ]
   variables:
     LIBS_BUNDLE: "x:/bundle"
     CACHEB: "x:/cache"
@@ -213,7 +214,7 @@ build_mac:
   tags:
     - mac
     - build
-  dependencies: []
+  needs: [ ]
   variables:
     CTEST_BUILD_CONFIGURATION: "Debug"
     CACHEB: "../cache"
@@ -253,7 +254,7 @@ build_bsd:
   tags:
     - freebsd
     - build
-  dependencies: []
+  needs: [ ]
   variables:
     CTEST_BUILD_CONFIGURATION: "Debug"
     CACHEB: "../cache"
@@ -292,7 +293,7 @@ push_results:
   tags:
     - docker
   image: registry.gitlab.com/manticoresearch/dev/ubertests_public:320
-  dependencies:
+  needs:
     - simple_tests
     - release_tests
     - win_tests
@@ -323,7 +324,7 @@ check_docs_examples:
       - "test/**/*"
       - "manual/**/*.md"
       when: always
-  dependencies:
+  needs:
     - release_tests
   <<: *docs
 

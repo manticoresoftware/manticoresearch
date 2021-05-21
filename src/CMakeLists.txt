@@ -222,6 +222,18 @@ endif ( USE_SSL )
 
 add_dependencies ( lsearchd vergen )
 
+if (ONLY_CONVERTER)
+	add_executable(index_converter ${INDEX_CONV_SRCS})
+	target_link_libraries(index_converter libsphinx)
+
+	if (SPLIT_SYMBOLS)
+		split_dbg(index_converter)
+	endif ()
+
+	INSTALL(TARGETS index_converter RUNTIME DESTINATION ${BINPREFIX}bin COMPONENT converter)
+	return()
+endif()
+
 # our executables
 add_executable(searchd searchd.cpp)
 target_link_libraries(searchd lsearchd libsphinx ${EXTRA_SEARCHD_LIBRARIES} ${WSREP})

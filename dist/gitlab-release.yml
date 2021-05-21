@@ -82,14 +82,14 @@ windows:
     - 'net use x: \\\\VBOXSRV\\shared'
     - mkdir sphinxbin-x64
     - cd sphinxbin-x64
-    - cmake -DBUILD_TAG=$RELEASE_TAG -DDISTR_BUILD=default -DWITH_PGSQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 -DUSE_SSL=1 ..
+    - cmake -DBUILD_TAG=$RELEASE_TAG -DDISTR_BUILD=default -DUSE_SSL=1 ..
     - cmake --build . --target package --config RelWithDebInfo
     - cp manticore-*.zip ..
     - cd ..
     - mkdir sphinxconvbin-x64
     - cd sphinxconvbin-x64
-    - cmake -DBUILD_TAG=$RELEASE_TAG -DDISABLE_TESTING=1 -DWITH_RE2=0 -DWITH_STEMMER=0 -WITH_EXPAT=0 -WITH_ICONV=0 -WITH_MYSQL=0 ..
-    - cmake --build . --target package --config RelWithDebInfo --clean-first    
+    - cmake -DBUILD_TAG=$RELEASE_TAG -DONLY_CONVERTER=1 ..
+    - cmake --build . --target package --config RelWithDebInfo
     - cp manticore-*-converter.zip ..
   artifacts:
     paths:

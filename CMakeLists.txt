@@ -100,6 +100,21 @@ also option forced to ON values: WITH_MYSQL, WITH_EXPAT, WITH_PGSQL, WITH_RE2, W
 Also LIBS_BUNDLE is automatically set to folder 'bundle' placed one level above the sources" )
 endif ()
 
+if ( ONLY_CONVERTER )
+	SET(DISABLE_TESTING ON CACHE BOOL "Forced no testing" FORCE)
+	set(WITH_ODBC 0 CACHE BOOL "" FORCE)
+	set(WITH_MYSQL 0 CACHE BOOL "" FORCE)
+	set(WITH_PGSQL 0 CACHE BOOL "" FORCE)
+	set(WITH_RE2 OFF CACHE BOOL "" FORCE)
+	set(WITH_STEMMER OFF CACHE BOOL "" FORCE)
+	set(WITH_EXPAT OFF CACHE BOOL "" FORCE)
+	set(WITH_ICONV OFF CACHE BOOL "" FORCE)
+	set(WITH_COLUMNAR OFF CACHE BOOL "" FORCE)
+	set(WITH_ICU OFF CACHE BOOL "" FORCE)
+	set(USE_GALERA 0 CACHE BOOL "" FORCE)
+	set(USE_SSL 0 CACHE BOOL "" FORCE)
+endif ()
+
 # Collect build info which will be embedded into binaries
 SET ( BANNER )
 # append any text to build info

@@ -15,7 +15,8 @@ tarball:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /tarball/
   dependencies: []
   tags:
-    - dev-host
+    - docker
+  image: registry.gitlab.com/manticoresearch/dev/bionic_cmake:320
   script:
     - mkdir build && cd build
     - cmake -DBUILD_TAG=$RELEASE_TAG -DDISABLE_TESTING=1 ..
@@ -44,7 +45,7 @@ osx:
   script:
     - mkdir build && cd build
     - cmake -DBUILD_TAG=$RELEASE_TAG -DDISTR_BUILD=macos -DLIBS_BUNDLE=/work ..
-    - make -j2 package
+    - cmake --build . --target package -j2
     - cp manticore-*.tar.gz ..
   artifacts:
     paths:
@@ -60,7 +61,6 @@ osx:
       - cache/icu*64/*icu*
       - cache/re2*64/*re2*
       - cache/stemmer*64/*stemmer*
-      - cache/boost*64
 
 windows:
   stage: build
@@ -75,7 +75,7 @@ windows:
     LIBS_BUNDLE: "x:/bundle"
     CACHEB: "x:/cache"
     OPENSSL_ROOT: "x:/bundle/openssl-x64"
-    BOOST_ROOT: "x:/boost_1_72_0"
+    BOOST_ROOT: "x:/boost_1_75_0"
     DIAGNOSTIC: 1
   script:
     - 'net use x: \\\\VBOXSRV\\shared'
@@ -116,9 +116,9 @@ windows:
     - test -e cache/cache-src.tar.gz && tar -zxf cache/cache-src.tar.gz && chmod +x cache/galera*/libgalera_manticore*
     - mkdir build && cd build
     - cmake -DPACK=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
-    - make -j4 package
+    - cmake --build . --target package -j4
     - cmake -DPACK=1 -DSPLIT=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
-    - make -j4 package    
+    - cmake --build . --target package -j4
     - cp manticore*.rpm ..
     - cd ..
     - tar -zcf cache/cache-src.tar.gz cache/*-src
@@ -145,9 +145,9 @@ windows:
     - test -e cache/cache-src.tar.gz && tar -zxf cache/cache-src.tar.gz
     - mkdir build && cd build
     - cmake -DPACK=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
-    - make -j4 package
+    - cmake --build . --target package -j4
     - cmake -DPACK=1 -DSPLIT=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
-    - make -j4 package    
+    - cmake --build . --target package -j4
     - cp manticore*deb ..
     - cd ..
     - tar -zcf cache/cache-src.tar.gz cache/*-src
@@ -165,7 +165,7 @@ rhel7:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /rhel7/
   variables:
     REPO_DIST_VER: "7"
-  image: registry.gitlab.com/manticoresearch/dev/centos7_cmake:317
+  image: registry.gitlab.com/manticoresearch/dev/centos7_cmake:320
 
 rhelsplit7:
   extends:
@@ -175,7 +175,7 @@ rhelsplit7:
   variables:
     XTRAFLAGS: "-DSPLIT_APPS=ON -DNOAPI=ON"
     REPO_DIST_VER: "7"
-  image: registry.gitlab.com/manticoresearch/dev/centos7_cmake:317
+  image: registry.gitlab.com/manticoresearch/dev/centos7_cmake:320
 
 rhel8:
   extends:
@@ -184,42 +184,42 @@ rhel8:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /rhel8/
   variables:
     REPO_DIST_VER: "8"
-  image: registry.gitlab.com/manticoresearch/dev/centos8_cmake:317
+  image: registry.gitlab.com/manticoresearch/dev/centos8_cmake:320
 
 stretch:
   extends:
     - .debian_based
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /stretch/
-  image: registry.gitlab.com/manticoresearch/dev/stretch_cmake:317
+  image: registry.gitlab.com/manticoresearch/dev/stretch_cmake:320
 
 xenial:
   extends:
     - .debian_based
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /xenial/
-  image: registry.gitlab.com/manticoresearch/dev/xenial_cmake:317
+  image: registry.gitlab.com/manticoresearch/dev/xenial_cmake:320
 
 bionic:
   extends:
     - .debian_based
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /bionic/
-  image: registry.gitlab.com/manticoresearch/dev/bionic_cmake:317
+  image: registry.gitlab.com/manticoresearch/dev/bionic_cmake:320
 
 focal:
   extends:
     - .debian_based
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /focal/
-  image: registry.gitlab.com/manticoresearch/dev/focal_cmake:317
+  image: registry.gitlab.com/manticoresearch/dev/focal_cmake:320
 
 buster:
   extends:
     - .debian_based
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /buster/
-  image: registry.gitlab.com/manticoresearch/dev/buster_cmake:317
+  image: registry.gitlab.com/manticoresearch/dev/buster_cmake:320
 
 
 collect_repo:

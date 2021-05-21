@@ -88,7 +88,7 @@ simple_tests:
   tags:
     - specdocker
   dependencies: []
-  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:latest
+  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:320
   variables:
     CTEST_BUILD_CONFIGURATION: "Debug"
     CACHEB: "../cache"
@@ -130,7 +130,7 @@ release_tests:
   tags:
     - specdocker # once test 58 fixed, m.b. change to 'docker' and gitlab then cloud will help us testing.
   dependencies: []
-  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:latest
+  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:320
   variables:
     CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
     CACHEB: "../cache"
@@ -178,7 +178,7 @@ win_tests:
     LIBS_BUNDLE: "x:/bundle"
     CACHEB: "x:/cache"
     OPENSSL_ROOT_DIR: "x:/bundle/openssl-x64"
-    BOOST_ROOT: "x:/boost_1_72_0"
+    BOOST_ROOT: "x:/boost_1_75_0"
     WIN_TEST_CI: "1"
     CTEST_CMAKE_GENERATOR: "Visual Studio 16 2019"
     DIAGNOSTIC: 1 # let's set it by default forever
@@ -256,7 +256,7 @@ build_bsd:
     CTEST_BUILD_CONFIGURATION: "Debug"
     CACHEB: "../cache"
     DIAGNOSTIC: 1 # let's set it by default forever
-    USE_GALERA: 1
+#    USE_GALERA: 1  # galera need to be fixed on freebsd 13
   script:
     - mkdir build && cd build
     - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=..
@@ -289,7 +289,7 @@ push_results:
       when: always      
   tags:
     - docker
-  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:latest
+  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:320
   dependencies:
     - simple_tests
     - release_tests

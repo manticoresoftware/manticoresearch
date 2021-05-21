@@ -121,6 +121,49 @@ simple_tests:
       - cache/gtest-*
   retry: 1
 
+simple_tests_no_columnar:
+  stage: routines
+  needs: [ ]
+  rules:
+    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && $WHAT=='$WHAT'
+    - if: $TEST =~ /simple/ && $WHAT=='$WHAT'
+    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && $WHAT==null
+    - if: $TEST =~ /simple/ && $WHAT==null
+  tags:
+    - specdocker
+  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:320
+  variables:
+    CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
+    CACHEB: "../cache"
+    DIAGNOSTIC: 1 # let's set it by default forever
+    WITH_COLUMNAR: 0
+  script:
+    - mc config host add dev $MINIO_HOST
+    - mc mirror --overwrite dev/uploads/aot/ /work/aot/
+    - ctest -V -S misc/ctest/gltest.cmake
+  after_script:
+    - cd build && mkdir xml_simple_tests_no_columnar
+    - cp -r Testing/2*/*.xml xml_simple_tests_no_columnar
+  artifacts:
+    paths:
+    - build/xml_simple_tests_no_columnar
+    - build/test/test_*/report.txt
+    - build/test/error*.txt
+    - build/test/searchd.log
+    expire_in: 12 hrs
+    when: always
+  cache:
+    key: ubuntu_bionic
+    paths:
+      - cache/*-src
+      - cache/galera*64/libgalera*
+      - cache/galera*64/galera-targets.cmake
+      - cache/icu*64/*icu*
+      - cache/re2*64/*re2*
+      - cache/stemmer*64/*stemmer*
+      - cache/gtest-*
+  retry: 1
+
 
 release_tests:
   stage: routines
@@ -299,6 +342,7 @@ push_results:
     - win_tests
     - build_mac
     - build_bsd
+    - simple_tests_no_columnar
   variables:
     GIT_STRATEGY: fetch
   script:
@@ -340,6 +384,15 @@ deploy_hook:
       when: always
   trigger:
     include: '/dist/gitlab-release.yml'
+  needs:
+    - job: simple_tests
+      artifacts: false
+    - job: win_tests
+      artifacts: false
+    - job: build_mac
+      artifacts: false
+    - job: simple_tests_no_columnar
+      artifacts: false
 
 
 variables:

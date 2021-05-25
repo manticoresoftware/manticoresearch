@@ -2941,10 +2941,11 @@ private:
 class Expr_StrEq_c : public Expr_Binary_c
 {
 public:
-	Expr_StrEq_c ( ISphExpr * pLeft, ISphExpr * pRight, ESphCollation eCollation )
+	Expr_StrEq_c ( ISphExpr * pLeft, ISphExpr * pRight, ESphCollation eCollation, bool bEq )
 		: Expr_Binary_c ( "Expr_StrEq_c", pLeft, pRight )
 	{
 		m_fnStrCmp = GetStringCmpFunc ( eCollation );
+		m_bEqual = bEq;
 	}
 
 	int IntEval ( const CSphMatch & tMatch ) const final
@@ -2959,7 +2960,10 @@ public:
 		FreeDataPtr ( *m_pFirst, pLeft );
 		FreeDataPtr ( *m_pSecond, pRight );
 
-		return (int)bEq;
+		if ( m_bEqual )
+			return (int)bEq;
+		else
+			return	(int)(!bEq);
 	}
 
 	float Eval ( const CSphMatch & tMatch ) const final { return (float)IntEval ( tMatch ); }
@@ -2969,6 +2973,7 @@ public:
 	{
 		EXPR_CLASS_NAME("Expr_StrEq_c");
 		CALC_POD_HASH(m_fnStrCmp);
+		CALC_POD_HASH(m_bEqual);
 		CALC_CHILD_HASH(m_pFirst);
 		CALC_CHILD_HASH(m_pSecond);
 		return CALC_DEP_HASHES();
@@ -2981,6 +2986,7 @@ public:
 
 private:
 	SphStringCmp_fn m_fnStrCmp {nullptr};
+	bool m_bEqual = true;
 
 	Expr_StrEq_c ( const Expr_StrEq_c& ) = default;
 };
@@ -6874,16 +6880,27 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case TOK_GTE:			LOC_SPAWN_POLY ( Expr_Gte ); break;
 
 		// fixme! Both branches below returns same result. Refactor!
-		case TOK_EQ:			if ( ( m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_STRING
+		case TOK_EQ:
+		case TOK_NE:
+								if ( ( m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_STRING
 										|| m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_STRINGPTR
 										|| m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_JSON_FIELD
 									)
 									&& ( m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRING
 										|| m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRINGPTR )
 									)
-									return new Expr_StrEq_c ( pLeft, pRight, m_eCollation );
-								LOC_SPAWN_POLY ( Expr_Eq ); break;
-		case TOK_NE:			LOC_SPAWN_POLY ( Expr_Ne ); break;
+								{
+									return new Expr_StrEq_c ( pLeft, pRight, m_eCollation, ( iOp==TOK_EQ ) );
+								}
+								if ( iOp==TOK_EQ )
+								{
+									LOC_SPAWN_POLY ( Expr_Eq );
+								} else
+								{
+									LOC_SPAWN_POLY ( Expr_Ne );
+								}
+								break;
+
 		case TOK_AND:			LOC_SPAWN_POLY ( Expr_And ); break;
 		case TOK_OR:			LOC_SPAWN_POLY ( Expr_Or ); break;
 		case TOK_NOT:

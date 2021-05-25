@@ -281,6 +281,13 @@ SELECT * from wild_exact_rt where MATCH('="*abc*"');
 INSERT INTO wild_exact_pq (id, query) VALUES (1, '="*abc*"');
 CALL PQ('wild_exact_pq', ('abc', 'abcdef', 'defabcdef'), 0 as docs_json, 1 as docs);
 
+<!-- string filters -->
+insert into pq_filter1(filters, id) values('j.test ="asd"',    11);
+insert into pq_filter1(filters, id) values('"asd" = j.test',   12);
+insert into pq_filter1(filters, id) values('j.test !="asd"',   21);
+insert into pq_filter1(filters, id) values('"asd" != j.test ', 22);
+CALL PQ ('pq_filter1', ('{"j":{"test":"asd"}, "id":101}', '{"j":{"test":"best"}, "id":102}', '{"j":{"gid":12}, "id":103}'), 1 as docs, 1 as docs_json, 1 as query, 'id' as docs_id );
+
 </sphinxql></queries>
 
 </test>

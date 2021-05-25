@@ -814,6 +814,11 @@ select j from objects where id=9 and j[0]!=1 and j[1]&gt;0 and j[2]&lt;1;
 <!-- type conversion in where clause -->
 select j from objects where id=9 and integer(j[0])=0 and integer(j[1])=1 and integer(j[2])=0;
 select j from objects where id=9 and integer(j[0])!=1 and double(j[1])&gt;0 and bigint(j[2])&lt;1;
+
+<!-- string filters -->
+select id, j.name from test where id&lt;6 and j.name='Alice' order by id asc;
+select id, j.name from test where id&lt;6 and j.name != 'Alice' order by id asc;
+
 </sphinxql>
 </queries>
 </test>

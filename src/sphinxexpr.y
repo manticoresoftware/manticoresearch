@@ -268,6 +268,8 @@ streq:
 	expr TOK_EQ strval				{ $$ = pParser->AddNodeOp ( TOK_EQ, $1, $3 ); }
 	| strval TOK_EQ expr			{ $$ = pParser->AddNodeOp ( TOK_EQ, $3, $1 ); }
 	| strval TOK_EQ strval			{ $$ = pParser->AddNodeOp ( TOK_EQ, $1, $3 ); }
+	| expr TOK_NE strval			{ $$ = pParser->AddNodeOp ( TOK_NE, $1, $3 ); }
+	| strval TOK_NE expr			{ $$ = pParser->AddNodeOp ( TOK_NE, $3, $1 ); }
 	;
 
 strval:

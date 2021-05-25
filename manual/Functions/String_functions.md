@@ -8,11 +8,11 @@ CONCAT(TO_STRING(float_attr), ',', TO_STRING(int_attr), ',', title)
 ```
 
 ### LEVENSHTEIN()
-`LEVENSHTEIN ( pattern, source, {normalize=0, length_delta=0})` returns number (Levenshtein distance) of single-character edits (insertions, deletions or substitutions) between a pattern string and a source string required to change `pattern` word into the `source` word.
+`LEVENSHTEIN ( pattern, source, {normalize=0, length_delta=0})` returns number (Levenshtein distance) of single-character edits (insertions, deletions or substitutions) between `pattern` and `source` strings required to make in `pattern` to make it `source`.
 
-   * pattern, source - constant string, string field name, JSON field name or any expression which produces a string (like e.g. [SUBSTRING_INDEX()](../Functions/String_functions.md#SUBSTRING_INDEX%28%29))
-   * normalize - option to get distance as a float number in the range of [0.0 - 1.0], where 0.0 is the exact match and 1.0 is the maximum difference. Default value is 0, means to not normalize and provide the result as integer.
-   * length_delta - to skip Levenshtein distance calculation and return `max(strlen(pattern), strlen(source))` in case the option is set and lengths of the string differ more than by `length_delta` value. Default value is 0, means to calculate Levenshtein distance for any input strings. This option could be useful in case of checking only similar strings but not strings, that differ a lot in length.
+   * `pattern`, `source` - constant string, string field name, JSON field name or any expression which produces a string (like e.g. [SUBSTRING_INDEX()](../Functions/String_functions.md#SUBSTRING_INDEX%28%29))
+   * `normalize` - option to get distance as a float number in the range of `[0.0 - 1.0]`, where 0.0 is the exact match and 1.0 is the maximum difference. Default value is 0, means to not normalize and provide the result as integer.
+   * `length_delta` - to skip Levenshtein distance calculation and return `max(strlen(pattern), strlen(source))` in case the option is set and lengths of the strings differ more than by `length_delta` value. Default value is 0, means to calculate Levenshtein distance for any input strings. This option could be useful in case of checking mostly similar strings.
 
 ``` sql
 SELECT LEVENSHTEIN('gily', attr1) AS dist, WEIGHT() AS w FROM test WHERE MATCH('test') ORDER BY w DESC, dist ASC;

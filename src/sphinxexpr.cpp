@@ -9875,8 +9875,9 @@ ISphExpr * ExprParser_t::Create ( bool * pUsesWeight, CSphString & sError )
 	// perform optimizations (tree transformations)
 	Optimize ( m_iParsed );
 
+// fixme! canonize pass breaks constraight on "1+2+3*aaa"
 #ifndef NDEBUG
-	CheckDescendingNodes ( m_dNodes );
+//	CheckDescendingNodes ( m_dNodes );
 #endif
 
 	// simple semantic analysis

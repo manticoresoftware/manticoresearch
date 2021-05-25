@@ -1,0 +1,17 @@
+cmake_minimum_required ( VERSION 3.17 )
+
+project ( google-benchmark-prebuild NONE )
+
+include ( ExternalProject )
+ExternalProject_Add ( gbench_populate
+		URL "${GBENCH_PLACE}"
+		CMAKE_ARGS -DBENCHMARK_ENABLE_GTEST_TESTS=OFF
+		BUILD_COMMAND "${CMAKE_COMMAND}" -E echo "Starting build"
+		COMMAND "${CMAKE_COMMAND}" -DCMAKE_BUILD_TYPE=Release .
+		COMMAND "${CMAKE_COMMAND}" --build . --config Release
+		COMMAND "${CMAKE_COMMAND}" --install . --config Release --prefix "${GBENCH_BUILD}"
+		INSTALL_COMMAND ""
+		TEST_COMMAND ""
+		)
+
+# file configured from cmake/gbench-imported.cmake.in

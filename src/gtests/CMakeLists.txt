@@ -15,7 +15,7 @@ if (TARGET GTest::gmock_main)
 			gtests_searchdaemon.cpp
 			gtests_pqstuff.cpp
 			gtests_json.cpp
-			cJSON_test.c gtests_threadstuff.cpp)
+			gtests_threadstuff.cpp)
 
 	add_executable ( gmanticoretest ${GTESTS_SRC} )
 	target_include_directories ( gmanticoretest PRIVATE .. )

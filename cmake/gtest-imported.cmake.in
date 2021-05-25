@@ -4,15 +4,14 @@ project ( google-test-prebuild NONE )
 
 include ( ExternalProject )
 ExternalProject_Add ( gtest_populate
-		URL "${GTEST_GITHUB}"
-		SOURCE_DIR "${GTEST_SRC}"
+		URL "${GTEST_PLACE}"
 		BUILD_COMMAND "${CMAKE_COMMAND}" -E echo "Starting build"
 		COMMAND "${CMAKE_COMMAND}" -DCMAKE_BUILD_TYPE=RelWithDebInfo .
 		COMMAND "${CMAKE_COMMAND}" --build . --config RelWithDebInfo
 		COMMAND "${CMAKE_COMMAND}" --install . --config RelWithDebInfo --prefix "${GTEST_BUILD}"
 		COMMAND "${CMAKE_COMMAND}" -DCMAKE_BUILD_TYPE=Debug .
-        COMMAND "${CMAKE_COMMAND}" --build . --config Debug
-        COMMAND "${CMAKE_COMMAND}" --install . --config Debug --prefix "${GTEST_BUILD}"
+		COMMAND "${CMAKE_COMMAND}" --build . --config Debug
+		COMMAND "${CMAKE_COMMAND}" --install . --config Debug --prefix "${GTEST_BUILD}"
 		INSTALL_COMMAND ""
 		TEST_COMMAND ""
 		)

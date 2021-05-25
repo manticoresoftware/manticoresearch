@@ -280,87 +280,94 @@ if (NOT STATIC_BINARY)
 	INSTALL(FILES sphinxudf.h  DESTINATION usr/include/manticore COMPONENT devel)
 endif ()
 
-if ( NOT DISABLE_TESTING )
-
-	if ( CMAKE_VERSION VERSION_GREATER 3.1.0 AND NOT DISABLE_GTESTS )
-		add_subdirectory ( gtests )
-	endif()
-
-	add_executable ( tests ${TESTS_SRCS} )
-	target_link_libraries ( tests libsphinx ${EXTRA_LIBRARIES} )
-
-	if (WITH_MYSQL)
-		# compile rtestconfig.h
-		hsnippet ( rtestconfig testrt.conf "static" )
-
-		set (DATAFLD "${MANTICORE_BINARY_DIR}/test/data")
-		file ( MAKE_DIRECTORY ${DATAFLD} )
-		add_definitions ( -DDATAFLD="${DATAFLD}/" )
-		source_group ( "Testing config" FILES testrt.conf.in )
-		add_executable ( testrt testrt.cpp testrt.conf )
-		target_link_libraries ( testrt libsphinx ${EXTRA_LIBRARIES} )
-
-		# testrt is alive, however it needs database 'lj' accessible
-		# in order to work. So, avoid it's calling till the base is persist
-		# in out CI env
-		if (0)
-
-		add_test ( NAME "\"Remove dump index\""
-				COMMAND ${CMAKE_COMMAND} -E remove "${DATAFLD}/dump.*" )
-		SET_TESTS_PROPERTIES ( "\"Remove dump index\"" PROPERTIES FIXTURES_SETUP TESTRT )
-
-		add_test ( NAME "\"Internal rt src/testrt\""
-				WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-				COMMAND testrt )
-		SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt\"" PROPERTIES FIXTURES_REQUIRED TESTRT )
-		SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt\"" PROPERTIES RESOURCE_LOCK DbAccess )
-
-		add_test ( NAME "\"Internal rt src/testrt step 1000\""
-				WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-				COMMAND testrt 1000 )
-		SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 1000\"" PROPERTIES FIXTURES_REQUIRED TESTRT )
-		SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 1000\"" PROPERTIES RESOURCE_LOCK DbAccess )
-
-		add_test ( NAME "\"Internal rt src/testrt step 100\""
-				WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-				COMMAND testrt 100 )
-		SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 100\"" PROPERTIES FIXTURES_REQUIRED TESTRT )
-		SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 1000\"" PROPERTIES RESOURCE_LOCK DbAccess )
-
-		add_test ( NAME "\"Internal rt src/testrt step 10\""
-				WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-				COMMAND testrt 10 )
-		SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 10\"" PROPERTIES FIXTURES_REQUIRED TESTRT )
-		SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 1000\"" PROPERTIES RESOURCE_LOCK DbAccess )
-
-		add_test ( NAME "\"Internal rt src/testrt step 1\""
-				WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-				COMMAND testrt 1 )
-		SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 1\"" PROPERTIES FIXTURES_REQUIRED TESTRT )
-		SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 1000\"" PROPERTIES RESOURCE_LOCK DbAccess )
-
-		endif(0)
-	endif (WITH_MYSQL)
-
-	# since cmake 3.18 names need fixup
-	include(fixup_test_name)
-
-	# first check syntax
-	if (NOT WIN32 )
-	find_package ( PythonInterp QUIET )
-	if ( PYTHONINTERP_FOUND AND NOT DISABLE_GTESTS )
-		fixup_test_name ( RESERVED_TEST "SphinxQL reserved keywords consistency" )
-		message ( STATUS "python binary is ${PYTHON_EXECUTABLE}" ) # !COMMIT
-		add_test ( NAME ${RESERVED_TEST}
-				WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-				COMMAND ${PYTHON_EXECUTABLE} reserved.py )
-		SET_TESTS_PROPERTIES ( ${RESERVED_TEST} PROPERTIES LABELS LINTER )
-	endif()
-	endif()
-
-	fixup_test_name (tst "Internal src/tests")
-	add_test ( NAME ${tst}
-			#    	CONFIGURATIONS Debug
-			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-			COMMAND "tests" )
+if ( DISABLE_TESTING )
+	return()
 endif()
+
+if ( CMAKE_VERSION VERSION_GREATER 3.1.0 AND NOT DISABLE_GTESTS )
+	add_subdirectory ( gtests )
+endif()
+
+add_executable ( tests ${TESTS_SRCS} )
+target_link_libraries ( tests libsphinx ${EXTRA_LIBRARIES} )
+
+if (WITH_MYSQL)
+	# compile rtestconfig.h
+	hsnippet ( rtestconfig testrt.conf "static" )
+
+	set (DATAFLD "${MANTICORE_BINARY_DIR}/test/data")
+	file ( MAKE_DIRECTORY ${DATAFLD} )
+	add_definitions ( -DDATAFLD="${DATAFLD}/" )
+	source_group ( "Testing config" FILES testrt.conf.in )
+	add_executable ( testrt testrt.cpp testrt.conf )
+	target_link_libraries ( testrt libsphinx ${EXTRA_LIBRARIES} )
+
+	# testrt is alive, however it needs database 'lj' accessible
+	# in order to work. So, avoid it's calling till the base is persist
+	# in out CI env
+	if (0)
+
+	add_test ( NAME "\"Remove dump index\""
+			COMMAND ${CMAKE_COMMAND} -E remove "${DATAFLD}/dump.*" )
+	SET_TESTS_PROPERTIES ( "\"Remove dump index\"" PROPERTIES FIXTURES_SETUP TESTRT )
+
+	add_test ( NAME "\"Internal rt src/testrt\""
+			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+			COMMAND testrt )
+	SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt\"" PROPERTIES FIXTURES_REQUIRED TESTRT )
+	SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt\"" PROPERTIES RESOURCE_LOCK DbAccess )
+
+	add_test ( NAME "\"Internal rt src/testrt step 1000\""
+			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+			COMMAND testrt 1000 )
+	SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 1000\"" PROPERTIES FIXTURES_REQUIRED TESTRT )
+	SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 1000\"" PROPERTIES RESOURCE_LOCK DbAccess )
+
+	add_test ( NAME "\"Internal rt src/testrt step 100\""
+			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+			COMMAND testrt 100 )
+	SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 100\"" PROPERTIES FIXTURES_REQUIRED TESTRT )
+	SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 1000\"" PROPERTIES RESOURCE_LOCK DbAccess )
+
+	add_test ( NAME "\"Internal rt src/testrt step 10\""
+			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+			COMMAND testrt 10 )
+	SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 10\"" PROPERTIES FIXTURES_REQUIRED TESTRT )
+	SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 1000\"" PROPERTIES RESOURCE_LOCK DbAccess )
+
+	add_test ( NAME "\"Internal rt src/testrt step 1\""
+			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+			COMMAND testrt 1 )
+	SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 1\"" PROPERTIES FIXTURES_REQUIRED TESTRT )
+	SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 1000\"" PROPERTIES RESOURCE_LOCK DbAccess )
+
+	endif(0)
+endif (WITH_MYSQL)
+
+# since cmake 3.18 names need fixup
+include(fixup_test_name)
+
+# first check syntax
+if (NOT WIN32 )
+find_package ( PythonInterp QUIET )
+if ( PYTHONINTERP_FOUND AND NOT DISABLE_GTESTS )
+	fixup_test_name ( RESERVED_TEST "SphinxQL reserved keywords consistency" )
+	message ( STATUS "python binary is ${PYTHON_EXECUTABLE}" ) # !COMMIT
+	add_test ( NAME ${RESERVED_TEST}
+			WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+			COMMAND ${PYTHON_EXECUTABLE} reserved.py )
+	SET_TESTS_PROPERTIES ( ${RESERVED_TEST} PROPERTIES LABELS LINTER )
+endif()
+endif()
+
+fixup_test_name (tst "Internal src/tests")
+add_test ( NAME ${tst}
+		#    	CONFIGURATIONS Debug
+		WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+		COMMAND "tests" )
+
+SET (GBENCH OFF)
+
+if (GBENCH)
+	add_subdirectory(gbenches)
+endif ()

@@ -11,29 +11,26 @@ endif ()
 
 include(update_bundle)
 
-# check pre-built gtests
-get_build(GTEST_BUILD gtest)
-find_package(GTest CONFIG PATHS "${GTEST_BUILD}")
-#diagp (GTest::gmock_main)
+# set global cache path to cmake
+get_cache(CACHE_BUILDS)
+set(CMAKE_PREFIX_PATH "${CACHE_BUILDS}")
 
+# check pre-built gtests
+find_package(GTest QUIET CONFIG)
 if (TARGET GTest::gmock_main)
 	return()
 endif()
 
 # not found. Populate and build cache package for now and future usage.
 MESSAGE(STATUS "prebuilt googletest wasn't found. Will build it right now...")
-get_srcpath(GTEST_SRC googletest)
 populate(GTEST_PLACE "gtests" ${GTEST_URL} ${GTEST_GITHUB})
-if (NOT EXISTS "${GTEST_SRC}/README.md")
-	fetch_and_unpack("gtests" ${GTEST_PLACE} ${GTEST_SRC})
-endif()
 
 # build as external project and install into cache
-set(GTEST_EXTERNAL_DIR "${CMAKE_BINARY_DIR}/googletest-external")
-configure_file(${MANTICORE_SOURCE_DIR}/cmake/gtest-imported.cmake.in ${GTEST_EXTERNAL_DIR}/CMakeLists.txt)
-execute_process(COMMAND ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}" . WORKING_DIRECTORY ${GTEST_EXTERNAL_DIR})
-execute_process(COMMAND ${CMAKE_COMMAND} --build . WORKING_DIRECTORY ${GTEST_EXTERNAL_DIR})
+get_build(GTEST_BUILD gtest)
+configure_file(${MANTICORE_SOURCE_DIR}/cmake/gtest-imported.cmake.in "${MANTICORE_BINARY_DIR}/gtestbuild/CMakeLists.txt")
+execute_process(COMMAND "${CMAKE_COMMAND}" -G "${CMAKE_GENERATOR}" . WORKING_DIRECTORY "${MANTICORE_BINARY_DIR}/gtestbuild")
+execute_process(COMMAND "${CMAKE_COMMAND}" --build . WORKING_DIRECTORY "${MANTICORE_BINARY_DIR}/gtestbuild")
 
 # now it should find
-find_package(GTest CONFIG PATHS "${GTEST_BUILD}")
+find_package(GTest CONFIG)
 diagp(GTest::gmock_main)

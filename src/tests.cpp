@@ -311,49 +311,6 @@ void BenchExpr ()
 
 //////////////////////////////////////////////////////////////////////////
 
-void BenchLocators ()
-{
-	const int MAX_ITEMS = 10;
-	const int NUM_MATCHES = 1000;
-	const int NUM_RUNS = 100000;
-
-	CSphRowitem dStatic[MAX_ITEMS];
-	CSphRowitem dDynamic[MAX_ITEMS];
-	CSphAttrLocator tLoc[NUM_MATCHES];
-	CSphMatch tMatch[NUM_MATCHES];
-
-	for ( int i=0; i<MAX_ITEMS; i++ )
-		dStatic[i] = dDynamic[i] = i;
-
-	srand ( 0 );
-	for ( int i=0; i<NUM_MATCHES; i++ )
-	{
-		tLoc[i].m_iBitCount = 32;
-		tLoc[i].m_iBitOffset = 32*( rand() % MAX_ITEMS ); // NOLINT
-		tLoc[i].m_bDynamic = ( rand() % 2 )==1; // NOLINT
-		tMatch[i].m_pStatic = dStatic;
-		tMatch[i].m_pDynamic = dDynamic;
-	}
-
-	printf ( "benchmarking locators\n" );
-	for ( int iRun=1; iRun<=3; iRun++ )
-	{
-		uint64_t tmLoc = sphMicroTimer();
-		int iSum = 0;
-		for ( int i=0; i<NUM_RUNS; i++ )
-			for ( int j=0; j<NUM_MATCHES; j++ )
-				iSum += (int)tMatch[j].GetAttr ( tLoc[j] );
-		tmLoc = sphMicroTimer() - tmLoc;
-		printf ( "run %d: sum=%d time=%d.%d msec\n", iRun, iSum, (int)(tmLoc/1000), (int)((tmLoc%1000)/100) );
-	}
-
-	// manually cleanup to avoid automatic delete
-	for ( int i=0; i<NUM_MATCHES; i++ )
-		tMatch[i].m_pDynamic = NULL;
-}
-
-//////////////////////////////////////////////////////////////////////////
-
 static volatile int g_iMutexBench = 0;
 
 void DummyThread ( void * )
@@ -966,7 +923,6 @@ int main ()
 	BenchStripper ();
 	BenchTokenizer ();
 	BenchExpr ();
-	BenchLocators ();
 	BenchThreads ();
 #endif
 

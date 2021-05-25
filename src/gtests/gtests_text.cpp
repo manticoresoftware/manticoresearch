@@ -425,7 +425,7 @@ TEST ( Text, expression_parser )
 	SafeDeleteArray ( pRow );
 }
 
-TEST ( Text, DISABLED_bench_expression_parser )
+TEST ( Text, expression_parser_many )
 {
 	CSphColumnInfo tCol;
 
@@ -505,50 +505,13 @@ TEST ( Text, DISABLED_bench_expression_parser )
 	for ( const auto* szTest :  ppTests )
 		dTests.Add ( szTest );
 
-	int NRUNS = 10000;
-	for ( int i = 0; i<100; ++i )
-		for ( const auto & sTest : dTests )
-		{
-			CSphString sError;
-			ExprParseArgs_t tExprArgs;
-			ISphExprRefPtr_c pExpr ( sphExprParse ( sTest.cstr (), tSchema, sError, tExprArgs ) );
-			ASSERT_TRUE ( pExpr.Ptr () ) << sError.cstr () << ": " << sTest.cstr();
-		}
-
-
-	int64_t tmTime = sphMicroTimer ();
-
-	for ( int i = 0; i<NRUNS; ++i )
-		for ( const auto & sTest : dTests )
-		{
-			CSphString sError;
-			ExprParseArgs_t tExprArgs;
-			ISphExprRefPtr_c pExpr ( sphExprParse ( sTest.cstr (), tSchema, sError, tExprArgs ) );
-			ASSERT_TRUE ( pExpr.Ptr () ) << sError.cstr ();
-		}
-
-	int64_t tmTimeNew = sphMicroTimer ();
-
-	// sphExprParseOld is removed and mo more available; this test still usable as general bench
-/*	for ( int i = 0; i<NRUNS; ++i )
-		for ( const auto & sTest : dTests )
-		{
-			CSphString sError;
-			ExprParseArgs_t tExprArgs;
-			ISphExprRefPtr_c pExpr ( sphExprParseOld ( sTest.cstr (), tSchema, sError, tExprArgs ) );
-			ASSERT_TRUE ( pExpr.Ptr () ) << sError.cstr ();
-		} */
-
-	int64_t tmTimeOld = sphMicroTimer ();
-
-
-	tmTimeOld -= tmTimeNew;
-	tmTimeNew -= tmTime;
-
-	NRUNS = NRUNS*dTests.GetLength();
-
-	std::cout << "new-eval  " << float ( NRUNS ) / tmTimeNew << "M/sec, old " << float ( NRUNS ) / tmTimeOld
-			  << "M/sec\n";
+	for ( const auto & sTest : dTests )
+	{
+		CSphString sError;
+		ExprParseArgs_t tExprArgs;
+		ISphExprRefPtr_c pExpr ( sphExprParse ( sTest.cstr (), tSchema, sError, tExprArgs ) );
+		ASSERT_TRUE ( pExpr.Ptr () ) << sError.cstr () << ": " << sTest.cstr();
+	}
 
 	SafeDeleteArray ( pRow );
 }

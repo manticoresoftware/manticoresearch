@@ -285,7 +285,7 @@ void CSphTokenizerSettings::Setup ( const CSphConfigSection & hIndex, CSphString
 			sWarning = "ngram_chars specified, but ngram_len=0; IGNORED";
 	}
 
-	m_sCaseFolding = hIndex.GetStr ( "charset_table" );
+	m_sCaseFolding = hIndex.GetStr ( "charset_table", SPHINX_DEFAULT_UTF8_TABLE );
 	m_iMinWordLen = Max ( hIndex.GetInt ( "min_word_len", 1 ), 1 );
 	m_sNgramChars = hIndex.GetStr ( "ngram_chars" );
 	m_sSynonymsFile = hIndex.GetStr ( "exceptions" ); // new option name

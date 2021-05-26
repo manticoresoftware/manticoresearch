@@ -11,9 +11,7 @@
 
 #pragma once
 
-#if HAVE_CONFIG_H
 #include "config.h"
-#endif
 
 #include "sphinxstd.h"
 
@@ -47,7 +45,7 @@ public:
 
 namespace sph {
 
-#if USE_WINDOWS
+#if _WIN32
 
 class Event_c : public ISphNoncopyable
 {

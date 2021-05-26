@@ -6,9 +6,10 @@
 <requires>
 <non-windows/>
 <non-rt/>
+<python/>
 </requires>
 
-<config>#!/usr/bin/python
+<config>#!<python/>
 print ("""
 indexer
 {

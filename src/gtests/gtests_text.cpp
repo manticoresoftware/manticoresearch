@@ -579,6 +579,7 @@ TEST ( Text, ArabicStemmer )
 }
 
 //////////////////////////////////////////////////////////////////////////
+#include "source_svpipe.h"
 
 TEST ( Text, cvs_source )
 {
@@ -711,7 +712,9 @@ TEST ( Text, cvs_source )
 
 //////////////////////////////////////////////////////////////////////////
 
-#if USE_LIBEXPAT
+#if WITH_EXPAT
+#include "source_xmlpipe2.h"
+
 TEST ( Text, xml_source_attr_error )
 {
 	const char * sTest = 

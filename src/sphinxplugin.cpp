@@ -188,7 +188,7 @@ static bool PluginLoadSymbols ( void * pDesc, const SymbolDesc_t * pSymbol, void
 }
 #endif // HAVE_DLOPEN
 
-#if !USE_WINDOWS
+#if !_WIN32
 #ifndef offsetof
 
 #define offsetof(T, M) \
@@ -542,7 +542,7 @@ bool sphPluginReload ( const char * sName, CSphString & sError )
 	}
 
 	// load new library and check every plugin
-#if !USE_WINDOWS
+#if !_WIN32
 	PluginLib_c * pNewLib = LoadPluginLibrary ( sName, sError, bDlGlobal, true );
 #else
 	PluginLib_c * pNewLib = LoadPluginLibrary ( sName, sError, bDlGlobal, false );

@@ -21,7 +21,7 @@
 
 #include <boost/icl/interval.hpp>
 
-#if USE_WINDOWS
+#if _WIN32
 #pragma warning(disable:4250) // inheritance via dominance is our intent
 #endif
 

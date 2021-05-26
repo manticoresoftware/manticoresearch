@@ -1,6 +1,6 @@
 #!/bin/sh
 set -e
-# Automatically added by build_wheezy, build_jessie
-if [ -x "@SYSCONFDIR@/init.d/manticore" ]; then
+# Automatically added by build on debian
+if [ -x "@CMAKE_INSTALL_FULL_SYSCONFDIR@/init.d/manticore" ]; then
 	invoke-rc.d manticore stop
 fi

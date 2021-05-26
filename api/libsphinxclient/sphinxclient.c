@@ -1460,7 +1460,7 @@ void sock_close ( int sock )
 void SPH_FD_SET ( int fd, fd_set * fdset ) { FD_SET ( fd, fdset ); }
 #pragma warning(default:4127) // conditional expr is const
 #pragma warning(default:4389) // signed/unsigned mismatch
-#else // !USE_WINDOWS
+#else // !_WIN32
 #define	SPH_FD_SET FD_SET
 #endif
 

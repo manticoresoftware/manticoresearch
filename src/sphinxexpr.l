@@ -2,7 +2,14 @@
 
 #define YY_NO_INPUT
 
-#if USE_WINDOWS
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wsign-compare"
+#pragma GCC diagnostic ignored "-Wpragmas"
+#endif
+
+
+#if _WIN32
 #define YY_NO_UNISTD_H 1
 #pragma warning(push,1)
 #endif
@@ -150,8 +157,12 @@ const char* yy1lex_unhold ( yyscan_t yyscanner )
 	return nullptr;
 }
 
-#if USE_WINDOWS
+#if _WIN32
 #pragma warning(pop)
+#endif
+
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
 #endif
 
 // %option backup

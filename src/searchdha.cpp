@@ -23,7 +23,7 @@
 #include <atomic>
 #include <errno.h>
 
-#if !USE_WINDOWS
+#if !_WIN32
 	#include <netinet/in.h>
 	#include <netdb.h>
 #else
@@ -70,7 +70,7 @@ CSphString HostDesc_t::GetMyUrl() const
 	#define sphLogDebugA( ... ) TimePrefixed::LogDebugv ("A ", __VA_ARGS__)
 	#define sphLogDebugL( ... ) TimePrefixed::LogDebugv ("L ", __VA_ARGS__)
 #else
-#if USE_WINDOWS
+#if _WIN32
 #pragma warning(disable:4390)
 #endif
 	#define sphLogDebugA( ... )
@@ -617,7 +617,7 @@ void MultiAgentDesc_c::ChooseWeightedRandAgent ( int * pBestAgent, CSphVector<in
 	auto fLimit = fBound;
 	for ( auto j : dCandidates )
 		fLimit += m_dWeights[j];
-	auto fChance = sphRand () * fLimit / UINT_MAX;
+	auto fChance = sphRand () * fLimit / float(UINT_MAX);
 
 	if ( fChance<=fBound )
 		return;
@@ -1016,7 +1016,7 @@ bool ParseAddressPort ( HostDesc_t& dHost, const char ** ppLine, const WarnInfo_
 	CSphString sSub ( pAnchor, p-pAnchor );
 	if ( eState==apUNIX )
 	{
-#if !USE_WINDOWS
+#if !_WIN32
 		if ( strlen ( sSub.cstr () ) + 1>sizeof(((struct sockaddr_un *)0)->sun_path) )
 			return tInfo.ErrSkip ( "UNIX socket path is too long" );
 #endif
@@ -1399,7 +1399,7 @@ void IOVec_c::StepForward ( size_t uStep )
 		{
 			IOPTR ( tIOVec ) = IOBUFTYPE ( ( BYTE * ) IOPTR ( tIOVec ) + uStep );
 
-#if USE_WINDOWS
+#if _WIN32
 			IOLEN ( tIOVec ) -= (DWORD)uStep;
 #else
 			IOLEN ( tIOVec ) -= uStep;
@@ -1423,7 +1423,7 @@ void SafeCloseSocket ( int & iFD )
 #if !HAVE_EVENTFD
 static bool CreateSocketPair ( int &iSock1, int &iSock2, CSphString &sError )
 {
-#if USE_WINDOWS
+#if _WIN32
 	union {
 		struct sockaddr_in inaddr;
 		struct sockaddr addr;
@@ -1519,7 +1519,7 @@ static bool CreateSocketPair ( int &iSock1, int &iSock2, CSphString &sError )
 
 inline static bool IS_PENDING ( int iErr )
 {
-#if USE_WINDOWS
+#if _WIN32
 	return iErr==ERROR_IO_PENDING || iErr==0;
 #else
 	return iErr==EAGAIN || iErr==EWOULDBLOCK;
@@ -1533,7 +1533,7 @@ inline static bool IS_PENDING_PROGRESS ( int iErr )
 
 /////////////////////////////////////////////////////////////////////////////
 // some extended win-specific stuff
-#if USE_WINDOWS
+#if _WIN32
 
 static LPFN_CONNECTEX ConnectEx = nullptr;
 
@@ -1875,7 +1875,7 @@ void AgentConn_t::InitReplyBuf ( int iSize )
 	}
 }
 
-#if USE_WINDOWS
+#if _WIN32
 void AgentConn_t::LeakRecvTo ( CSphFixedVector<BYTE>& dOut )
 {
 	assert ( dOut.IsEmpty () );
@@ -1902,7 +1902,7 @@ void AgentConn_t::LeakSendTo ( CSphVector <ISphOutputBuffer* >& dOut, CSphVector
 /// raw (platform specific) send (scattered - from several buffers)
 /// raw (platform specific) receive
 	
-#if USE_WINDOWS
+#if _WIN32
 inline SSIZE_T AgentConn_t::RecvChunk ()
 {
 	assert ( !m_pPollerTask->m_dRead.m_bInUse );
@@ -1954,7 +1954,7 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 	if ( pSs->sa_family==AF_UNIX || g_iTFO==TFO_ABSENT || !(g_iTFO & TFO_CONNECT) )
 		return 0;
 	m_iStartQuery = sphMicroTimer (); // copied old behaviour
-#if USE_WINDOWS
+#if _WIN32
 	if ( !ConnectEx )
 		return 0;
 
@@ -2007,7 +2007,7 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 	State ( Agent_e::CONNECTING );
 	gStats().m_iAgentConnect.fetch_add ( 1, std::memory_order_relaxed );
 	return 1;
-#else // USE_WINDOWS
+#else // _WIN32
 #if defined (MSG_FASTOPEN)
 
 	BuildData ();
@@ -2370,7 +2370,7 @@ bool AgentConn_t::EstablishConnection ()
 		pIn->sin_addr.s_addr = m_tDesc.m_uAddr;
 		len = sizeof ( *pIn );
 	}
-#if !USE_WINDOWS
+#if !_WIN32
 	else if ( ss.ss_family==AF_UNIX )
 	{
 		auto * pUn = ( struct sockaddr_un * ) &ss;
@@ -2725,8 +2725,8 @@ void PollableEvent_t::DisposeEvent () const
 }
 
 
-struct Task_t:
-#if USE_WINDOWS
+struct TaskNet_t:
+#if _WIN32
 	DoubleOverlapped_t,
 #endif
 	EnqueuedTimeout_t
@@ -2746,10 +2746,10 @@ ThreadRole LazyThread;
 
 // low-level ops depends from epoll/kqueue/iocp availability
 
-#if USE_WINDOWS
+#if _WIN32
 class NetEvent_c
 {
-	Task_t *			m_pTask = nullptr;
+	TaskNet_t *			m_pTask = nullptr;
 	bool				m_bWrite = false;
 	DWORD				m_uNumberOfBytesTransferred = 0;
 	bool				m_bSignaler = true;
@@ -2766,7 +2766,7 @@ public:
 
 		auto pOvl = (SingleOverlapped_t *) pEntry->lpOverlapped;
 		auto uOffset = pOvl->m_uParentOffset;
-		m_pTask = (Task_t *) ( (BYTE*) pOvl - uOffset );
+		m_pTask = (TaskNet_t *) ( (BYTE*) pOvl - uOffset );
 		m_bWrite = uOffset<sizeof ( OVERLAPPED );
 		m_uNumberOfBytesTransferred = pEntry->dwNumberOfBytesTransferred;
 
@@ -2782,7 +2782,7 @@ public:
 		}
 	}
 
-	inline Task_t * GetTask () const
+	inline TaskNet_t * GetTask () const
 	{
 		return m_pTask;
 	}
@@ -2829,18 +2829,18 @@ public:
 class NetEvent_c
 {
 	struct epoll_event * m_pEntry = nullptr;
-	const Task_t * m_pSignalerTask = nullptr;
+	const TaskNet_t * m_pSignalerTask = nullptr;
 
 public:
-	NetEvent_c ( struct epoll_event * pEntry, const Task_t * pSignaler )
+	NetEvent_c ( struct epoll_event * pEntry, const TaskNet_t * pSignaler )
 		: m_pEntry ( pEntry )
 		, m_pSignalerTask ( pSignaler )
 	{}
 
-	inline Task_t * GetTask ()
+	inline TaskNet_t * GetTask ()
 	{
 		assert ( m_pEntry );
-		return ( Task_t * ) m_pEntry->data.ptr;
+		return ( TaskNet_t * ) m_pEntry->data.ptr;
 	}
 
 	inline bool IsSignaler ()
@@ -2897,18 +2897,18 @@ public:
 class NetEvent_c
 {
 	struct kevent * m_pEntry = nullptr;
-	const Task_t * m_pSignalerTask = nullptr;
+	const TaskNet_t * m_pSignalerTask = nullptr;
 
 public:
-	NetEvent_c ( struct kevent * pEntry, const Task_t * pSignaler )
+	NetEvent_c ( struct kevent * pEntry, const TaskNet_t * pSignaler )
 		: m_pEntry ( pEntry )
 		, m_pSignalerTask ( pSignaler )
 	{}
 
-	inline Task_t * GetTask ()
+	inline TaskNet_t * GetTask ()
 	{
 		assert ( m_pEntry );
-		return ( Task_t * ) m_pEntry->udata;
+		return ( TaskNet_t * ) m_pEntry->udata;
 	}
 
 	inline bool IsSignaler ()
@@ -2974,7 +2974,7 @@ protected:
 
 	// perform actual changing OR scheduling of pTask subscription state (on BSD we collect changes and will populate later)
 	// NOTE! m_uIOChanged==0 field here means active 'unsubscribe' (in use for deletion)
-void events_change_io ( Task_t * pTask )
+	void events_change_io ( TaskNet_t * pTask )
 	{
 		assert ( pTask );
 
@@ -2988,11 +2988,11 @@ void events_change_io ( Task_t * pTask )
 		auto iEvents = events_apply_task_changes ( pTask );
 		m_iEvents += iEvents;
 		pTask->m_uIOActive = pTask->m_uIOChanged;
-		pTask->m_uIOChanged = Task_t::NO;
+		pTask->m_uIOChanged = TaskNet_t::NO;
 		sphLogDebugL ( "L events_apply_task_changes returned %d, now %d events counted", iEvents, m_iEvents );
 	}
 protected:
-#if USE_WINDOWS
+#if _WIN32
 						  // for windows it is one more level of indirection:
 						  // we set and wait for the tasks in one thread,
 						  // and iocp also have several working threads.
@@ -3025,7 +3025,7 @@ protected:
 
 private:
 	// each action added one-by-one...
-	int events_apply_task_changes ( Task_t * pTask )
+	int events_apply_task_changes ( TaskNet_t * pTask )
 	{
 		// if socket already closed (say, FATAL in action),
 		// we don't need to unsubscribe events, but still need to return num of deleted events
@@ -3111,7 +3111,7 @@ protected:
 #else
 	int m_iEFD = -1;
 	PollableEvent_t m_dSignaler;
-	Task_t			m_dSignalerTask;
+	TaskNet_t			m_dSignalerTask;
 
 	inline void events_create ( int iSizeHint )
 	{
@@ -3123,7 +3123,7 @@ protected:
 		// m_pPayload here used ONLY as store for pointer for comparing with &m_dSignaller,
 		// NEVER called this way (since it NOT points to AgentConn_t instance)
 		m_dSignalerTask.m_pPayload = ( AgentConn_t * ) &m_dSignaler;
-		m_dSignalerTask.m_uIOChanged = Task_t::RO;
+		m_dSignalerTask.m_uIOChanged = TaskNet_t::RO;
 
 		sphLogDebugv( "Add internal signaller");
 		events_change_io ( &m_dSignalerTask );
@@ -3152,7 +3152,7 @@ private:
 	}
 
 	// apply changes in case of epoll
-	int events_apply_task_changes ( Task_t * pTask )
+	int events_apply_task_changes ( TaskNet_t * pTask )
 	{
 		auto iEvents = 0; // how many events we add/delete
 
@@ -3161,8 +3161,8 @@ private:
 		// to keep in health poller's input buffer
 		bool bApply = pTask->m_ifd!=-1;
 
-		bool bWrite = pTask->m_uIOChanged==Task_t::RW;
-		bool bRead = pTask->m_uIOChanged!=Task_t::NO;
+		bool bWrite = pTask->m_uIOChanged==TaskNet_t::RW;
+		bool bRead = pTask->m_uIOChanged!=TaskNet_t::NO;
 
 		int iOp = 0;
 		epoll_event tEv = { 0 };
@@ -3242,13 +3242,13 @@ private:
 		m_dReady.Reserve ( iSizeHint * 2 + m_iCReserve );
 	}
 
-	int events_apply_task_changes ( Task_t * pTask )
+	int events_apply_task_changes ( TaskNet_t * pTask )
 	{
 		int iEvents = 0;
-		bool bWrite = pTask->m_uIOChanged==Task_t::RW;
-		bool bRead = pTask->m_uIOChanged!=Task_t::NO;
-		bool bWasWrite = pTask->m_uIOActive==Task_t::RW;;
-		bool bWasRead = ( pTask->m_uIOActive!=Task_t::NO);
+		bool bWrite = pTask->m_uIOChanged==TaskNet_t::RW;
+		bool bRead = pTask->m_uIOChanged!=TaskNet_t::NO;
+		bool bWasWrite = pTask->m_uIOActive==TaskNet_t::RW;;
+		bool bWasRead = ( pTask->m_uIOActive!=TaskNet_t::NO);
 		bool bApply = pTask->m_ifd!=-1;
 
 		// boring combination matrix below
@@ -3334,7 +3334,7 @@ protected:
 /// Like ISphNetEvents, but most syscalls optimized out
 class LazyNetEvents_c : ISphNoncopyable, protected NetEventsFlavour_c
 {
-	using VectorTask_c = CSphVector<Task_t*>;
+	using VectorTask_c = CSphVector<TaskNet_t*>;
 
 	// stuff to transfer (enqueue) tasks
 	VectorTask_c *	m_pEnqueuedTasks GUARDED_BY (m_dActiveLock) = nullptr; // ext. mt queue where we add tasks
@@ -3348,9 +3348,9 @@ class LazyNetEvents_c : ISphNoncopyable, protected NetEventsFlavour_c
 
 private:
 	/// maps AgentConn_t -> Task_c for new/existing task
-	static inline Task_t * CreateNewTask ( AgentConn_t * pConnection )
+	static inline TaskNet_t * CreateNewTask ( AgentConn_t * pConnection )
 	{
-		auto pTask = new Task_t;
+		auto pTask = new TaskNet_t;
 		pTask->m_ifd = pTask->m_iStoredfd = pConnection->m_iSock;
 		pTask->m_pPayload = pConnection;
 		pConnection->m_pPollerTask = pTask;
@@ -3367,7 +3367,7 @@ private:
 	// or even both) are still in work, and so we need to keep the 'overlapped' structs alive for them.
 	// So, we can't just delete the task in the case. Instead we invalidate it (set m_ifd=-1, nullify payload),
 	// so that the next return from events_wait will recognize it and finally totally destroy the task for us.
-	AgentConn_t * DeleteTask ( Task_t * pTask, bool bReleasePayload=true )
+	AgentConn_t * DeleteTask ( TaskNet_t * pTask, bool bReleasePayload=true )
 	{
 		assert ( pTask );
 		sphLogDebugL ( "L DeleteTask for %p, (conn %p, io %d), release=%d", pTask, pTask->m_pPayload, pTask->m_uIOActive, bReleasePayload );
@@ -3381,7 +3381,7 @@ private:
 		if ( pConnection && pConnection->m_pPollerTask==pTask )
 			pConnection->m_pPollerTask = nullptr;
 
-#if USE_WINDOWS
+#if _WIN32
 		pTask->m_ifd = -1;
 		pTask = nullptr; // save from delete below
 #endif
@@ -3406,7 +3406,7 @@ private:
 	}
 
 
-	void ProcessChanges ( Task_t * pTask )
+	void ProcessChanges ( TaskNet_t * pTask )
 	{
 		sphLogDebugL ( "L ProcessChanges for %p, (conn %p) (%d->%d), tm=" INT64_FMT " sock=%d", pTask, pTask->m_pPayload,
 			pTask->m_uIOActive, pTask->m_uIOChanged, pTask->m_iTimeoutTimeUS, pTask->m_ifd );
@@ -3487,7 +3487,7 @@ private:
 		bool bHasTimeout = false;
 		while ( !m_dTimeouts.IsEmpty () )
 		{
-			auto* pTask = ( Task_t* ) m_dTimeouts.Root ();
+			auto* pTask = ( TaskNet_t* ) m_dTimeouts.Root ();
 			assert ( pTask->m_iTimeoutTimeUS>0 );
 
 			m_iNextTimeoutUS = pTask->m_iTimeoutTimeUS - sphMicroTimer ();
@@ -3525,7 +3525,7 @@ private:
 	{
 		while ( !m_dTimeouts.IsEmpty () )
 		{
-			auto pTask = ( Task_t* ) m_dTimeouts.Root ();
+			auto pTask = ( TaskNet_t* ) m_dTimeouts.Root ();
 			m_dTimeouts.Pop ();
 			CSphRefcountedPtr<AgentConn_t> pKeepConn ( DeleteTask ( pTask, false ) );
 			if ( pKeepConn )
@@ -3533,7 +3533,7 @@ private:
 		}
 	}
 
-	inline bool IsTickProcessed ( Task_t * pTask )
+	inline bool IsTickProcessed ( TaskNet_t * pTask )
 	{
 		if ( !pTask )
 			return false;
@@ -3556,7 +3556,7 @@ private:
 		auto iEvents = events_wait ( m_iNextTimeoutUS );
 		auto iWaited = sphMicroTimer() - iStarted;
 
-#if USE_WINDOWS
+#if _WIN32
 		ProcessEnqueuedTasks (); // we have 'pushed' our iocp inside, if it is fired, the fire event is last
 #endif
 
@@ -3604,11 +3604,11 @@ private:
 				continue;
 			}
 
-			Task_t * pTask = tEvent.GetTask ();
+			TaskNet_t * pTask = tEvent.GetTask ();
 
 			if ( !pTask )
 			{
-#if USE_WINDOWS
+#if _WIN32
 				m_iEvents -= 2;
 #endif
 				continue;
@@ -3672,7 +3672,7 @@ private:
 		return true;
 	}
 
-	void AddToQueue ( Task_t * pTask, bool bInternal )
+	void AddToQueue ( TaskNet_t * pTask, bool bInternal )
 	{
 		if ( bInternal )
 		{
@@ -3714,7 +3714,7 @@ public:
 		if ( pConnection->m_pPollerTask )
 			return false;
 
-		Task_t * pTask = CreateNewTask ( pConnection );
+		TaskNet_t * pTask = CreateNewTask ( pConnection );
 		assert ( pTask );
 		assert ( iTimeoutMS>0 );
 
@@ -3727,7 +3727,7 @@ public:
 		// for win it is vitable important to apply changes immediately,
 		// since iocp has to be enqueued before read/write op, not after!
 		// Tomat: moved here to fix race between call from main thd from ScheduleDistrJobs and loop processing from ProcessEnqueuedTasks
-#if USE_WINDOWS
+#if _WIN32
 		if ( uActivateIO )
 			events_change_io ( pTask );
 #endif
@@ -3740,7 +3740,7 @@ public:
 
 	void ChangeDeleteTask ( AgentConn_t * pConnection, int64_t iTimeoutUS )
 	{
-		auto pTask = ( Task_t * ) pConnection->m_pPollerTask;
+		auto pTask = ( TaskNet_t * ) pConnection->m_pPollerTask;
 		assert ( pTask );
 
 		// check for same timeout as we have. Avoid dupes, if so.
@@ -3766,12 +3766,12 @@ public:
 
 	void DisableWrite ( AgentConn_t * pConnection )
 	{
-		auto pTask = ( Task_t * ) pConnection->m_pPollerTask;
+		auto pTask = ( TaskNet_t * ) pConnection->m_pPollerTask;
 		assert ( pTask );
 
-		if ( Task_t::RO!=pTask->m_uIOActive )
+		if ( TaskNet_t::RO!=pTask->m_uIOActive )
 		{
-			pTask->m_uIOChanged = Task_t::RO;
+			pTask->m_uIOChanged = TaskNet_t::RO;
 			sphLogDebugv ( "- %d DisableWrite enqueueing (task %p) (%d->%d), innet=%d", pConnection->m_iStoreTag, pTask,
 						   pTask->m_uIOActive, pTask->m_uIOChanged, pConnection->InNetLoop());
 

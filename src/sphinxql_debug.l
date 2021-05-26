@@ -3,7 +3,7 @@
 
 #define YY_NO_INPUT
 
-#if USE_WINDOWS
+#if _WIN32
 #define YY_NO_UNISTD_H 1
 #pragma warning(push,1)
 #endif
@@ -103,6 +103,6 @@ FLOAT_CONSTANT      ({I}\.{I}?|{I}?\.{I}){EXPONENT}?
 %%
 
 
-#if USE_WINDOWS
+#if _WIN32
 #pragma warning(pop)
 #endif

@@ -15,24 +15,32 @@
 # If no file found, it will  try to fetch it from github, address
 # https://github.com/manticoresoftware/re2/archive/master.zip
 
-#set(RE2_GITHUB "https://github.com/manticoresoftware/re2/archive/master.zip")
-# download specific revision by tag
-set(RE2_GITHUB "https://github.com/manticoresoftware/re2/archive/2015-06-01.zip")
-set(RE2_BUNDLEZIP "re2-master.zip")
+set(RE2_REPO "https://github.com/manticoresoftware/re2")
+set(RE2_BRANCH "2015-06-01") # specific tag for reproducable builds
+set(RE2_SRC_MD5 "023053ef20051a0fc5911a76869be59f")
 
+set(RE2_GITHUB "${RE2_REPO}/archive/${RE2_BRANCH}.zip")
+set(RE2_BUNDLE "${LIBS_BUNDLE}/re2-${RE2_BRANCH}.zip")
+
+cmake_minimum_required(VERSION 3.17 FATAL_ERROR)
 include(update_bundle)
 
-set ( WITH_RE2_INCLUDES "" CACHE PATH "path to re2 header files" )
-set ( WITH_RE2_LIBS "" CACHE PATH "path to re2 libraries" )
-set ( WITH_RE2_ROOT "" CACHE PATH "path to the libre2 bundle (where both header and library lives)" )
-mark_as_advanced ( WITH_RE2_INCLUDES WITH_RE2_LIBS WITH_RE2_ROOT )
+# if it is allowed to use system library - try to use it
+if (NOT WITH_RE2_FORCE_STATIC)
+	find_package(re2 MODULE QUIET)
+	return_if_target_found (re2::re2 "as default (sys or other) lib")
+endif ()
 
-function (PATCH_GIT RESULT RE2_SRC)
+# determine destination folder where we expect pre-built re2
+find_package(re2 QUIET CONFIG)
+return_if_target_found (re2::re2 "found ready (no need to build)")
+
+function(PATCH_GIT RESULT RE2_SRC)
 	find_package(Git QUIET)
 	if (NOT GIT_EXECUTABLE)
 		return()
-	endif()
-	execute_process(COMMAND "${GIT_EXECUTABLE}" apply libre2.patch WORKING_DIRECTORY "${RE2_SRC}" )
+	endif ()
+	execute_process(COMMAND "${GIT_EXECUTABLE}" apply libre2.patch WORKING_DIRECTORY "${RE2_SRC}")
 	set(${RESULT} TRUE PARENT_SCOPE)
 endfunction()
 
@@ -41,63 +49,41 @@ function(PATCH_PATCH RESULT RE2_SRC)
 	if (NOT PATCH_PROG)
 		return()
 	endif ()
-	execute_process( COMMAND "${PATCH_PROG}" -p1 --binary -i libre2.patch WORKING_DIRECTORY "${RE2_SRC}" )
+	execute_process(COMMAND "${PATCH_PROG}" -p1 --binary -i libre2.patch WORKING_DIRECTORY "${RE2_SRC}")
 	set(${RESULT} TRUE PARENT_SCOPE)
 endfunction()
 
 # cb to finalize RE2 sources (patch, add cmake)
-function (PREPARE_RE2 RE2_SRC)
+function(PREPARE_RE2 RE2_SRC)
 	# check if it is already patched before
 	if (EXISTS "${RE2_SRC}/is_patched.txt")
 		return()
-	endif ()
-
-	if (NOT EXISTS "${RE2_SRC}/MakefileOrig")
-		configure_file("${RE2_SRC}/Makefile" "${RE2_SRC}/MakefileOrig" COPYONLY)
 	endif ()
 
 	file(COPY "${MANTICORE_SOURCE_DIR}/libre2/libre2.patch" DESTINATION "${RE2_SRC}")
 	patch_git(PATCHED ${RE2_SRC})
 	if (NOT PATCHED)
 		patch_patch(PATCHED ${RE2_SRC})
-	endif()
+	endif ()
 
 	if (NOT PATCHED)
 		message(FATAL_ERROR "Couldn't patch RE2 distro. No Git or Patch found")
 		return()
-	endif()
+	endif ()
 
 	file(WRITE "${RE2_SRC}/is_patched.txt" "ok")
-	configure_file("${MANTICORE_SOURCE_DIR}/libre2/CMakeLists.txt" "${RE2_SRC}/CMakeLists.txt" COPYONLY)
+	execute_process(COMMAND ${CMAKE_COMMAND} -E copy_if_different "${MANTICORE_SOURCE_DIR}/libre2/CMakeLists.txt" "${RE2_SRC}/CMakeLists.txt")
 endfunction()
 
-# cb to realize if we have in-source unpacked RE2
-function(CHECK_RE2_SRC RESULT HINT)
-	if (HINT STREQUAL EMBEDDED AND EXISTS "${MANTICORE_SOURCE_DIR}/libre2/re2/re2.h")
-		set(RE2_SRC "${MANTICORE_SOURCE_DIR}/libre2" PARENT_SCOPE)
-		set(RE2_BUILD "${MANTICORE_SOURCE_DIR}/libre2" PARENT_SCOPE)
-		set(${RESULT} TRUE PARENT_SCOPE)
-	elseif(EXISTS "${HINT}/re2/re2.h")
-		set(${RESULT} TRUE PARENT_SCOPE)
-	endif()
-endfunction()
+# prepare sources
+select_nearest_url(RE2_PLACE re2 ${RE2_BUNDLE} ${RE2_GITHUB})
+fetch_and_check(re2 ${RE2_PLACE} ${RE2_SRC_MD5} RE2_SRC)
+prepare_re2( ${RE2_SRC})
 
-provide(RE2 "${RE2_GITHUB}" "${RE2_BUNDLEZIP}")
-if (RE2_FROMSOURCES)
-	add_subdirectory(${RE2_SRC} ${RE2_BUILD} EXCLUDE_FROM_ALL)
-	set(RE2_LIBRARIES re2)
-elseif (NOT RE2_FOUND)
-	return()
-endif()
+# build
+get_build(RE2_BUILD re2)
+external_build(re2 RE2_SRC RE2_BUILD)
 
-list(APPEND EXTRA_LIBRARIES ${RE2_LIBRARIES})
-set(USE_RE2 1)
-memcfgvalues(USE_RE2)
-
-message(STATUS "library: ${RE2_LIBRARIES}")
-diag(RE2_FOUND)
-diag(RE2_INCLUDE_DIRS)
-diag(RE2_LIBRARIES)
-diag(RE2_SRC)
-diag(RE2_BUILD)
-diag(RE2_FROMSOURCES)
+# now it should find
+find_package(re2 REQUIRED CONFIG)
+return_if_target_found (re2::re2 "was built")

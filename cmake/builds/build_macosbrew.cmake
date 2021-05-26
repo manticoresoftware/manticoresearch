@@ -1,31 +1,34 @@
 # ---------- macosbrew ----------
 
 message ( STATUS "Installing for MacOS via Brew" )
+set (CPACK_PACKAGING_INSTALL_PREFIX /usr/local)
+
 set ( SPLIT_SYMBOLS 1 )
 
 # configure specific stuff
 set ( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -arch x86_64" )
 set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -arch x86_64" )
 
+# now get system paths
+set (CMAKE_INSTALL_PREFIX "${CPACK_PACKAGING_INSTALL_PREFIX}" CACHE PATH "prefix from distr build" FORCE)
+include (GNUInstallDirs)
+
+#fixup - CMAKE_INSTALL_DOCDIR is share/doc/MANTICORE, fixup to share/doc/manticore
+set (CMAKE_INSTALL_DOCDIR "${CMAKE_INSTALL_DATAROOTDIR}/doc/manticore")
+GNUInstallDirs_get_absolute_install_dir (CMAKE_INSTALL_FULL_DOCDIR CMAKE_INSTALL_DOCDIR DOCDIR)
+
 # generate config files
+configure_config (manticore)
 
-file ( READ "manticore.conf.in" _MINCONF )
-string ( REPLACE "@CONFDIR@/log/searchd.pid" "@RUNDIR@/searchd.pid" _MINCONF "${_MINCONF}" )
-string ( REPLACE "@CONFDIR@/log" "@LOGDIR@" _MINCONF "${_MINCONF}" )
-file ( WRITE "${MANTICORE_BINARY_DIR}/manticore.conf.in" "${_MINCONF}" )
-unset ( _MINCONF )
-set ( CONFDIR "${CMAKE_INSTALL_LOCALSTATEDIR}/manticore" )
-set ( RUNDIR "${CMAKE_INSTALL_LOCALSTATEDIR}/run/manticore" )
-set ( LOGDIR "${CMAKE_INSTALL_LOCALSTATEDIR}/log/manticore" )
-configure_file ( "manticore.conf.in" "${MANTICORE_BINARY_DIR}/manticore.conf" @ONLY )
+install (FILES ${MANTICORE_BINARY_DIR}/manticore.conf.dist DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/manticore COMPONENT doc RENAME manticore.conf)
+install (DIRECTORY misc/stopwords DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT applications)
 
-# install specific stuff
-configure_file ( "${MANTICORE_BINARY_DIR}/manticore.conf.in" "${MANTICORE_BINARY_DIR}/manticore.conf.dist" @ONLY )
-INSTALL ( FILES ${MANTICORE_BINARY_DIR}/manticore.conf.dist
-                DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/manticore COMPONENT doc RENAME manticore.conf )
-install ( DIRECTORY misc/stopwords DESTINATION ${CMAKE_INSTALL_DATADIR}/${PACKAGE_NAME} COMPONENT applications)
-if (USE_ICU)
-	install ( FILES ${ICU_DATA} DESTINATION ${CMAKE_INSTALL_DATADIR}/${PACKAGE_NAME}/icu COMPONENT applications)
-endif()
+SET (FULL_SHARE_DIR "${CMAKE_INSTALL_FULL_DATADIR}/manticore")
+if (WITH_ICU)
+	install_icudata (${CMAKE_INSTALL_DATADIR}/manticore/icu)
+endif ()
 
+SET ( LOCALDATADIR "${CMAKE_INSTALL_FULL_LOCALSTATEDIR}/manticore/data")
+
+set (installed ON)
 # data and log dirs are created by brew formula

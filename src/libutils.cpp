@@ -12,7 +12,9 @@
 
 #include "libutils.h"
 
-#if USE_WINDOWS
+#if _WIN32
+
+#include "sphinxstd.h"
 
 void * dlsym ( void * lib, const char * name )
 {
@@ -42,4 +44,4 @@ const char * dlerror()
 	return sError;
 }
 
-#endif // USE_WINDOWS
+#endif // _WIN32

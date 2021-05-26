@@ -14,7 +14,7 @@
     - $DOCS_ERRORS_DIR
   variables:
     DOCKER_HOST: tcp://docker:2375/
-    DOCKER_DRIVER: overlay2   
+    DOCKER_DRIVER: overlay2
     RELEASE_FILENAME: latest_release_version
     DOCS_ERRORS_DIR: build/docs/
 
@@ -77,8 +77,8 @@ pages:
     paths:
     - public
   cache: {}
-    
-  
+
+
 simple_tests:
   stage: routines
   needs: [ ]
@@ -94,6 +94,8 @@ simple_tests:
     CTEST_BUILD_CONFIGURATION: "Debug"
     CACHEB: "../cache"
     DIAGNOSTIC: 1 # let's set it by default forever
+    WITH_COVERAGE: 1
+#    CTEST_CMAKE_GENERATOR: "Ninja" # fails because of coverage
   script:
     - mc config host add dev $MINIO_HOST
     - mc mirror --overwrite dev/uploads/aot/ /work/aot/
@@ -110,58 +112,9 @@ simple_tests:
     expire_in: 12 hrs
     when: always
   cache:
-    key: ubuntu_bionic
+    key: bionic
     paths:
-      - cache/*-src
-      - cache/galera*64/libgalera*
-      - cache/galera*64/galera-targets.cmake
-      - cache/icu*64/*icu*
-      - cache/re2*64/*re2*
-      - cache/stemmer*64/*stemmer*
-      - cache/gtest-*
-  retry: 1
-
-simple_tests_no_columnar:
-  stage: routines
-  needs: [ ]
-  rules:
-    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && $WHAT=='$WHAT'
-    - if: $TEST =~ /simple/ && $WHAT=='$WHAT'
-    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && $WHAT==null
-    - if: $TEST =~ /simple/ && $WHAT==null
-  tags:
-    - specdocker
-  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:320
-  variables:
-    CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
-    CACHEB: "../cache"
-    DIAGNOSTIC: 1 # let's set it by default forever
-    WITH_COLUMNAR: 0
-  script:
-    - mc config host add dev $MINIO_HOST
-    - mc mirror --overwrite dev/uploads/aot/ /work/aot/
-    - ctest -V -S misc/ctest/gltest.cmake
-  after_script:
-    - cd build && mkdir xml_simple_tests_no_columnar
-    - cp -r Testing/2*/*.xml xml_simple_tests_no_columnar
-  artifacts:
-    paths:
-    - build/xml_simple_tests_no_columnar
-    - build/test/test_*/report.txt
-    - build/test/error*.txt
-    - build/test/searchd.log
-    expire_in: 12 hrs
-    when: always
-  cache:
-    key: ubuntu_bionic
-    paths:
-      - cache/*-src
-      - cache/galera*64/libgalera*
-      - cache/galera*64/galera-targets.cmake
-      - cache/icu*64/*icu*
-      - cache/re2*64/*re2*
-      - cache/stemmer*64/*stemmer*
-      - cache/gtest-*
+      - cache
   retry: 1
 
 
@@ -180,6 +133,8 @@ release_tests:
     CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
     CACHEB: "../cache"
     DIAGNOSTIC: 1 # let's set it by default forever
+    CTEST_CMAKE_GENERATOR: "Ninja"
+    CMAKE_INTERPROCEDURAL_OPTIMIZATION: 1
   script:
     - mc config host add dev $MINIO_HOST
     - mc mirror --overwrite dev/uploads/aot/ /work/aot/
@@ -197,15 +152,9 @@ release_tests:
     expire_in: 12 hrs
     when: always
   cache:
-    key: ubuntu_bionic
+    key: bionic
     paths:
-      - cache/*-src
-      - cache/galera*64/libgalera*
-      - cache/galera*64/galera-targets.cmake
-      - cache/icu*64/*icu*
-      - cache/re2*64/*re2*
-      - cache/stemmer*64/*stemmer*
-      - cache/gtest-*
+      - cache
   retry: 1
 
 
@@ -223,9 +172,9 @@ win_tests:
   variables:
     LIBS_BUNDLE: "x:/bundle"
     CACHEB: "x:/cache"
-    OPENSSL_ROOT_DIR: "x:/bundle/openssl-x64"
     BOOST_ROOT: "x:/boost_1_75_0"
     WIN_TEST_CI: "1"
+    WITH_POSTGRESQL: 0
     CTEST_CMAKE_GENERATOR: "Visual Studio 16 2019"
     DIAGNOSTIC: 1 # let's set it by default forever
   script:
@@ -245,7 +194,41 @@ win_tests:
   cache: {}
   retry: 1
 
-
+build_rpi4:
+  stage: routines
+  rules:
+    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && $WHAT=='$WHAT'
+    - if: $TEST =~ /arm/ && $WHAT=='$WHAT'
+    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && $WHAT==null
+    - if: $TEST =~ /arm/ && $WHAT==null
+  tags:
+    - arm64
+    - focal
+  needs: [ ]
+  variables:
+    CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
+    CACHEB: "../cache"
+    WITH_ICU: 1
+    WITH_GALERA: 1
+    DIAGNOSTIC: 1 # let's set it by default forever
+    CTEST_CMAKE_GENERATOR: "Ninja"
+  script:
+    - mkdir build && cd build
+    - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=..
+  after_script:
+    - cd build && mkdir xml_build_arm
+    - cp -r Testing/2*/*.xml xml_build_arm
+  artifacts:
+    paths:
+      - build/xml_build_arm
+      - build/CMakeFiles/CMake*.log
+    expire_in: 12 hrs
+    when: always
+  cache:
+    key: raspberrypi4
+    paths:
+      - cache
+  retry: 1
 
 build_mac:
   stage: routines
@@ -259,12 +242,13 @@ build_mac:
     - build
   needs: [ ]
   variables:
-    CTEST_BUILD_CONFIGURATION: "Debug"
+    CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
     CACHEB: "../cache"
     OPENSSL_ROOT_DIR: "/usr/local/opt/openssl"
     WITH_ICU: 1
-    USE_GALERA: 1
+    WITH_GALERA: 1
     DIAGNOSTIC: 1 # let's set it by default forever
+    CTEST_CMAKE_GENERATOR: "Ninja"
   script:
     - mkdir build && cd build
     - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=..
@@ -278,14 +262,9 @@ build_mac:
     expire_in: 12 hrs
     when: always
   cache:
-    key: darwin
+    key: mojave
     paths:
-      - cache/*-src
-      - cache/galera*64/libgalera*
-      - cache/galera*64/galera-targets.cmake
-      - cache/icu*64/*icu*
-      - cache/re2*64/*re2*
-      - cache/stemmer*64/*stemmer*
+      - cache
 
 build_bsd:
   stage: routines
@@ -299,10 +278,12 @@ build_bsd:
     - build
   needs: [ ]
   variables:
-    CTEST_BUILD_CONFIGURATION: "Debug"
+    CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
     CACHEB: "../cache"
     DIAGNOSTIC: 1 # let's set it by default forever
-#    USE_GALERA: 1  # galera need to be fixed on freebsd 13
+    WITH_GALERA: 1
+    WITH_ICU: 1
+#    CTEST_CMAKE_GENERATOR: "Ninja" # Doesn't want to build galera & columnar...
   script:
     - mkdir build && cd build
     - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=..
@@ -316,14 +297,10 @@ build_bsd:
     expire_in: 12 hrs
     when: always
   cache:
-    key: freebsd
+    key: freebsd13
     paths:
-      - cache/*-src
-      - cache/galera*64/libgalera*
-      - cache/galera*64/galera-targets.cmake
-      - cache/re2*64/*re2*
-      - cache/stemmer*64/*stemmer*  
-
+      - cache
+  retry: 1
 
 # build and upload on regular commits
 push_results:
@@ -342,7 +319,7 @@ push_results:
     - win_tests
     - build_mac
     - build_bsd
-    - simple_tests_no_columnar
+    - build_rpi4
   variables:
     GIT_STRATEGY: fetch
   script:
@@ -383,7 +360,7 @@ deploy_hook:
     - if: $CI_COMMIT_TITLE !~ /^noci .*$/i
       when: always
   trigger:
-    include: '/dist/gitlab-release.yml'
+    include: dist/gitlab-release.yml
   needs:
     - job: simple_tests
       artifacts: false
@@ -391,10 +368,9 @@ deploy_hook:
       artifacts: false
     - job: build_mac
       artifacts: false
-    - job: simple_tests_no_columnar
-      artifacts: false
 
 
 variables:
   DOCS_AUTOCOMMIT_TITLE: 'Docs_examples_update'
-  DOCS_EXAMPLES_FILEPATH: 'build/test/examples.txt'      
+  DOCS_EXAMPLES_FILEPATH: 'build/test/examples.txt'
+  VERBOSE: 1

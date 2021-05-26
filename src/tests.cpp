@@ -216,7 +216,7 @@ void BenchStripper ()
 //////////////////////////////////////////////////////////////////////////
 
 
-#if USE_WINDOWS
+#if _WIN32
 #define NOINLINE __declspec(noinline)
 #else
 #define NOINLINE
@@ -907,7 +907,7 @@ int main ()
 	Threads::PrepareMainThread ( &cTopOfMainStack );
 	setvbuf ( stdout, NULL, _IONBF, 0 );
 
-#if USE_WINDOWS
+#if _WIN32
 	SetProcessAffinityMask ( GetCurrentProcess(), 1 );
 #endif
 

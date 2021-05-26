@@ -53,7 +53,7 @@ void Detached::AloneShutdowncatch ()
 
 	// all about windows that we use pthread_kill right now.
 	// if analogue exists there, the limitation can be removed.
-#if !USE_WINDOWS
+#if !_WIN32
 	searchd::AddShutdownCb ( [&]
 	{
 		int iThreads;

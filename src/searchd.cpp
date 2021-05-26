@@ -76,7 +76,7 @@ extern "C"
 
 /////////////////////////////////////////////////////////////////////////////
 
-#if USE_WINDOWS
+#if _WIN32
 	// Win-specific headers and calls
 	#include <io.h>
 
@@ -99,7 +99,7 @@ extern "C"
 /////////////////////////////////////////////////////////////////////////////
 
 static bool				g_bService		= false;
-#if USE_WINDOWS
+#if _WIN32
 static bool				g_bServiceStop	= false;
 static const char *		g_sServiceName	= "searchd";
 HANDLE					g_hPipe			= INVALID_HANDLE_VALUE;
@@ -192,7 +192,7 @@ ThreadRole HandlerThread; // thread which serves clients
 static CSphString		g_sConfigFile;
 static bool				g_bCleanLoadedConfig = true; // whether to clean config when it parsed and no more necessary
 
-#if USE_WINDOWS
+#if _WIN32
 static bool				g_bSeamlessRotate	= false;
 #else
 static bool				g_bSeamlessRotate	= true;
@@ -288,7 +288,7 @@ int sphFormatCurrentTime ( char * sTimeBuf, int iBufLen )
 	int64_t iNow = sphMicroTimer ();
 	time_t ts = (time_t) ( iNow/1000000 ); // on some systems (eg. FreeBSD 6.2), tv.tv_sec has another type and we can't just pass it
 
-#if !USE_WINDOWS
+#if !_WIN32
 	struct tm tmp;
 	localtime_r ( &ts, &tmp );
 #else
@@ -310,13 +310,13 @@ int sphFormatCurrentTime ( char * sTimeBuf, int iBufLen )
 
 /// physically emit log entry
 /// buffer must have 1 extra byte for linefeed
-#if USE_WINDOWS
+#if _WIN32
 void sphLogEntry ( ESphLogLevel eLevel, char * sBuf, char * sTtyBuf )
 #else
 void sphLogEntry ( ESphLogLevel , char * sBuf, char * sTtyBuf )
 #endif
 {
-#if USE_WINDOWS
+#if _WIN32
 	if ( g_bService && g_iLogFile==STDOUT_FILENO )
 	{
 		HANDLE hEventSource;
@@ -496,7 +496,7 @@ bool DieOrFatalCb ( bool bDie, const char * sFmt, va_list ap )
 	return false; // don't lot to stdout
 }
 
-#if !USE_WINDOWS
+#if !_WIN32
 static CSphString GetNamedPipeName ( int iPid )
 {
 	CSphString sRes;
@@ -511,7 +511,7 @@ void LogChangeMode ( int iFile, int iMode )
 	if ( iFile<0 || iMode==0 || iFile==STDOUT_FILENO || iFile==STDERR_FILENO )
 		return;
 
-#if !USE_WINDOWS
+#if !_WIN32
 	fchmod ( iFile, iMode );
 #endif
 }
@@ -661,14 +661,14 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	// force even long time searches to shut
 	sphInterruptNow ();
 
-#if !USE_WINDOWS
+#if !_WIN32
 	int fdStopwait = -1;
 #endif
 	bool bAttrsSaveOk = true;
 	if ( g_pShared )
 		g_pShared->m_bDaemonAtShutdown = true;
 
-#if !USE_WINDOWS
+#if !_WIN32
 	// stopwait handshake
 	CSphString sPipeName = GetNamedPipeName ( getpid() );
 	fdStopwait = ::open ( sPipeName.cstr(), O_WRONLY | O_NONBLOCK );
@@ -772,7 +772,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	Threads::Done ( g_iLogFile );
 
-#if USE_WINDOWS
+#if _WIN32
 	CloseHandle ( g_hPipe );
 #else
 	if ( fdStopwait>=0 )
@@ -926,7 +926,7 @@ const char		g_sCrashedBannerBad[] = "\n--- crashed invalid query ---\n";
 const char		g_sCrashedBannerTail[] = "\n--- request dump end ---\n";
 const char		g_sCrashedIndex[] = "--- local index:";
 const char		g_sEndLine[] = "\n";
-#if USE_WINDOWS
+#if _WIN32
 const char		g_sMinidumpBanner[] = "minidump located at: ";
 #endif
 #if SPH_ALLOCS_PROFILER
@@ -936,15 +936,15 @@ static BYTE		g_dCrashQueryBuff [4096];
 static char		g_sCrashInfo [SPH_TIME_PID_MAX_SIZE] = "[][]\n";
 static int		g_iCrashInfoLen = 0;
 
-#if USE_WINDOWS
+#if _WIN32
 static char		g_sMinidump[SPH_TIME_PID_MAX_SIZE] = "";
 #endif
 
-#if !USE_WINDOWS
+#if !_WIN32
 void CrashLogger::HandleCrash ( int sig ) NO_THREAD_SAFETY_ANALYSIS
 #else
 LONG WINAPI CrashLogger::HandleCrash ( EXCEPTION_POINTERS * pExc )
-#endif // !USE_WINDOWS
+#endif // !_WIN32
 {
 	if ( g_iLogFile<0 )
 	{
@@ -965,7 +965,7 @@ LONG WINAPI CrashLogger::HandleCrash ( EXCEPTION_POINTERS * pExc )
 	auto& tQuery = GlobalCrashQueryGetRef ();
 
 	bool bValidQuery = IsFilled ( tQuery.m_dQuery );
-#if !USE_WINDOWS
+#if !_WIN32
 	if ( bValidQuery )
 	{
 		size_t iPageSize = getpagesize();
@@ -1070,7 +1070,7 @@ LONG WINAPI CrashLogger::HandleCrash ( EXCEPTION_POINTERS * pExc )
 
 	sphSafeInfo ( g_iLogFile, szMANTICORE_NAME );
 
-#if USE_WINDOWS
+#if _WIN32
 	// mini-dump reference
 	int iMiniDumpLen = snprintf ( (char *)g_dCrashQueryBuff, sizeof(g_dCrashQueryBuff),
 		"%s %s.%p.mdmp\n", g_sMinidumpBanner, g_sMinidump, tQuery.m_dQuery.first );
@@ -1080,7 +1080,7 @@ LONG WINAPI CrashLogger::HandleCrash ( EXCEPTION_POINTERS * pExc )
 #endif
 
 	// log trace
-#if !USE_WINDOWS
+#if !_WIN32
 	sphSafeInfo ( g_iLogFile, "Handling signal %d", sig );
 	// print message to stdout during daemon start
 	if ( g_bLogStdout && g_iLogFile!=STDOUT_FILENO )
@@ -1142,7 +1142,7 @@ void CrashLogger::SetupTimePID ()
 		"------- FATAL: CRASH DUMP -------\n[%s] [%5d]\n", sTimeBuf, (int)getpid() );
 }
 
-#if USE_WINDOWS
+#if _WIN32
 void SetSignalHandlers ( bool )
 {
 	sphBacktraceInit ();
@@ -1196,7 +1196,7 @@ void SetSignalHandlers ( bool bAllowCtrlC=false ) REQUIRES ( MainThread )
 }
 #endif
 
-#if !USE_WINDOWS
+#if !_WIN32
 int sphCreateUnixSocket ( const char * sPath ) REQUIRES ( MainThread )
 {
 	static struct sockaddr_un uaddr;
@@ -1228,7 +1228,7 @@ int sphCreateUnixSocket ( const char * sPath ) REQUIRES ( MainThread )
 
 	return iSock;
 }
-#endif // !USE_WINDOWS
+#endif // !_WIN32
 
 
 int sphCreateInetSocket ( const ListenerDesc_t & tDesc ) REQUIRES ( MainThread )
@@ -1297,7 +1297,7 @@ bool AddGlobalListener ( const ListenerDesc_t& tDesc ) REQUIRES ( MainThread )
 	tListener.m_bTcp = true;
 	tListener.m_bVIP = tDesc.m_bVIP;
 
-#if !USE_WINDOWS
+#if !_WIN32
 	if ( !tDesc.m_sUnix.IsEmpty () )
 	{
 		tListener.m_iSock = sphCreateUnixSocket ( tDesc.m_sUnix.cstr () );
@@ -1434,7 +1434,7 @@ void SendErrorReply ( ISphOutputBuffer & tOut, const char * sTemplate, ... )
 }
 
 // fix MSVC 2005 fuckup
-#if USE_WINDOWS
+#if _WIN32
 #pragma conform(forScope,on)
 #endif
 
@@ -13663,7 +13663,7 @@ void HandleShutdownCrash ( RowBuffer_i & tOut, const CSphString & sPasswd, Debug
 	tOut.Eof ();
 	if ( eCmd==DebugCmd::Cmd_e::SHUTDOWN )
 	{
-#if USE_WINDOWS
+#if _WIN32
 		sigterm(1);
 #else
 		kill ( 0, SIGTERM );
@@ -13675,7 +13675,7 @@ void HandleShutdownCrash ( RowBuffer_i & tOut, const CSphString & sPasswd, Debug
 	}
 }
 
-#if !USE_WINDOWS
+#if !_WIN32
 void HandleProcDump ( RowBuffer_i & tOut )
 {
 	tOut.HeadTuplet ( "command", "result" );
@@ -13867,7 +13867,7 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, Str_t sCommand )
 		{
 		case Cmd_e::SHUTDOWN:
 		case Cmd_e::CRASH: HandleShutdownCrash ( tOut, tCmd.m_sParam, tCmd.m_eCommand ); return;
-#if !USE_WINDOWS
+#if !_WIN32
 		case Cmd_e::PROCDUMP: HandleProcDump ( tOut ); return;
 		case Cmd_e::SETGDB: HandleSetGdb ( tOut, tCmd.m_iPar1!=0 ); return;
 		case Cmd_e::GDBSTATUS: HandleGdbStatus ( tOut ); return;
@@ -13902,7 +13902,7 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, Str_t sCommand )
 
 	// no known command; provide short help.
 	BYTE uMask = bVipConn ? DebugCmd::NEED_VIP : DebugCmd::NONE;
-#if !USE_WINDOWS
+#if !_WIN32
 	uMask |= DebugCmd::NO_WIN;
 #endif
 
@@ -17239,7 +17239,7 @@ bool LoadAndCheckConfig ()
 		if ( !isspace(*p) )
 			break;
 
-#if USE_WINDOWS
+#if _WIN32
 	bool bIsWindows = true;
 #else
 	bool bIsWindows = false;
@@ -17785,7 +17785,7 @@ void CheckReopenLogs () REQUIRES ( MainThread )
 	g_bGotSigusr1 = 0;
 }
 
-#if !USE_WINDOWS
+#if !_WIN32
 #define WINAPI
 #else
 
@@ -18001,7 +18001,7 @@ void ServiceDelete ()
 	else
 		sphInfo ( "Service '%s' deleted successfully.", g_sServiceName );
 }
-#endif // USE_WINDOWS
+#endif // _WIN32
 
 
 void ShowHelp ()
@@ -18020,7 +18020,7 @@ void ShowHelp ()
 		"\t\t\t(PID is taken from pid_file specified in config file)\n"
 		"--iostats\t\tlog per-query io stats\n"
 		"--cpustats\t\tlog per-query cpu stats\n"
-#if USE_WINDOWS
+#if _WIN32
 		"--install\t\tinstall as Windows service\n"
 		"--delete\t\tdelete Windows service\n"
 		"--servicename <name>\tuse given service name (default is 'searchd')\n"
@@ -18040,7 +18040,7 @@ void ShowHelp ()
 		"-l, --listen <spec>\tlisten on given address, port or path (overrides\n"
 		"\t\t\tconfig settings)\n"
 		"-i, --index <index>\tonly serve given index(es)\n"
-#if !USE_WINDOWS
+#if !_WIN32
 		"--nodetach\t\tdo not detach into background\n"
 #endif
 		"--logdebug, --logdebugv, --logdebugvv\n"
@@ -18052,7 +18052,7 @@ void ShowHelp ()
 		"\n"
 		"Examples:\n"
 		"searchd --config /usr/local/sphinx/etc/manticore.conf\n"
-#if USE_WINDOWS
+#if _WIN32
 		"searchd --install --config c:\\sphinx\\manticore.conf\n"
 #endif
 		);
@@ -18073,7 +18073,7 @@ void InitSharedBuffer ()
 }
 
 
-#if USE_WINDOWS
+#if _WIN32
 BOOL WINAPI CtrlHandler ( DWORD )
 {
 	if ( !g_bService )
@@ -18086,7 +18086,7 @@ static char g_sNameBuf[512] = { 0 };
 static char g_sPid[30] = { 0 };
 
 
-#if !USE_WINDOWS
+#if !_WIN32
 // returns 'true' only once - at the very start, to show it beatiful way.
 bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 {
@@ -18253,12 +18253,12 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 }
 #else
 const int		WIN32_PIPE_BUFSIZE=32;
-#endif // !USE_WINDOWS
+#endif // !_WIN32
 
 /// check for incoming signals, and react on them
 void CheckSignals () REQUIRES ( MainThread )
 {
-#if USE_WINDOWS
+#if _WIN32
 	if ( g_bService && g_bServiceStop )
 	{
 		Shutdown ();
@@ -18281,7 +18281,7 @@ void CheckSignals () REQUIRES ( MainThread )
 		exit ( 0 );
 	}
 
-#if USE_WINDOWS
+#if _WIN32
 
 	BYTE dPipeInBuf [ WIN32_PIPE_BUFSIZE ];
 	DWORD nBytesRead = 0;
@@ -18318,7 +18318,7 @@ void TickHead () REQUIRES ( MainThread )
 	Threads::CallCoroutine ( CheckRotate );
 
 	sphInfo ( nullptr ); // flush dupes
-#if USE_WINDOWS
+#if _WIN32
 	// at windows there is no signals that interrupt sleep
 	// need to sleep less to make main loop more responsible
 	int tmSleep = 100;
@@ -18904,7 +18904,7 @@ void StopOrStopWaitAnother ( CSphVariant * v, bool bWait ) REQUIRES ( MainThread
 
 	int iWaitTimeout = g_iShutdownTimeoutUs + 100000;
 
-#if USE_WINDOWS
+#if _WIN32
 	bool bTerminatedOk = false;
 
 	char szPipeName[64];
@@ -19051,7 +19051,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 #endif // USE_VTUNE
 	g_tmStarted = sphMicroTimer();
 
-#if USE_WINDOWS
+#if _WIN32
 	CSphVector<char *> dArgs;
 	if ( g_bService )
 	{
@@ -19146,7 +19146,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		OPT1 ( "--pidfile" )		bOptPIDFile = true;
 		OPT1 ( "--iostats" )		g_bIOStats = true;
 		OPT1 ( "--cpustats" )		g_bCpuStats = true;
-#if USE_WINDOWS
+#if _WIN32
 		OPT1 ( "--install" )		{ if ( !g_bService ) { ServiceInstall ( argc, argv ); return 0; } }
 		OPT1 ( "--delete" )			{ if ( !g_bService ) { ServiceDelete (); return 0; } }
 		OPT1 ( "--ntservice" )		{} // it's valid but handled elsewhere
@@ -19178,7 +19178,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		OPT ( "-p", "--port" )		{ bOptPort = true; iOptPort = atoi ( argv[++i] ); }
 		OPT ( "-l", "--listen" )	{ bOptListen = true; sOptListen = argv[++i]; }
 		OPT ( "-i", "--index" )		dOptIndexes.Add ( argv[++i] );
-#if USE_WINDOWS
+#if _WIN32
 		OPT1 ( "--servicename" )	++i; // it's valid but handled elsewhere
 #endif
 
@@ -19190,7 +19190,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		sphFatal ( "malformed or unknown option near '%s'; use '-h' or '--help' to see available options.", argv[i] );
 
 	g_sConfigFile = sphGetConfigFile ( szCmdConfigFile );
-#if USE_WINDOWS
+#if _WIN32
 	// init WSA on Windows
 	// we need to do it this early because otherwise gethostbyname() from config parser could fail
 	WSADATA tWSAData;
@@ -19301,7 +19301,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 	bool bVisualLoad = true;
 	bool bWatched = false;
-#if !USE_WINDOWS
+#if !_WIN32
 	// Let us start watchdog right now, on foreground first.
 	int iDevNull = open ( "/dev/null", O_RDWR );
 	if ( g_bWatchdog && !g_bOptNoDetach )
@@ -19373,7 +19373,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		}
 	}
 
-#if !USE_WINDOWS
+#if !_WIN32
 	if ( !g_bOptNoDetach && !bWatched )
 	{
 		switch ( fork () )
@@ -19506,7 +19506,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	{
 		ReleaseTTYFlag();
 
-#if !USE_WINDOWS
+#if !_WIN32
 		if ( !bWatched || bVisualLoad )
 		{
 			close ( STDIN_FILENO );
@@ -19529,7 +19529,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 	if ( bOptPIDFile )
 	{
-#if !USE_WINDOWS
+#if !_WIN32
 		// re-lock pid
 		// FIXME! there's a potential race here
 		if ( !sphLockEx ( g_iPidFD, true ) )
@@ -19550,7 +19550,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 				errno, strerrorm(errno) );
 	}
 
-#if USE_WINDOWS
+#if _WIN32
 	SetConsoleCtrlHandler ( CtrlHandler, TRUE );
 #endif
 
@@ -19600,7 +19600,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	// serve clients
 	/////////////////
 
-#if USE_WINDOWS
+#if _WIN32
 	if ( g_bService )
 		MySetServiceStatus ( SERVICE_RUNNING, NO_ERROR, 0 );
 #endif
@@ -19712,7 +19712,7 @@ inline int mainimpl ( int argc, char **argv )
 	sphBacktraceSetBinaryName ( argv[0] );
 	GeodistInit();
 
-#if USE_WINDOWS
+#if _WIN32
 	int iNameIndex = -1;
 	for ( int i=1; i<argc; i++ )
 	{

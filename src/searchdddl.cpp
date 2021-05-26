@@ -17,28 +17,11 @@
 // unused parameter, simply to avoid type clash between all my yylex() functions
 #define YY_DECL static int my_lex ( YYSTYPE * lvalp, void * yyscanner, DdlParser_c * pParser )
 
-#if USE_WINDOWS
+#if _WIN32
 	#define YY_NO_UNISTD_H 1
 #endif
 
-#ifdef CMAKE_GENERATED_LEXER
-	#ifdef __GNUC__
-		#pragma GCC diagnostic push 
-		#pragma GCC diagnostic ignored "-Wsign-compare"
-		#pragma GCC diagnostic ignored "-Wpragmas"
-		#pragma GCC diagnostic ignored "-Wunneeded-internal-declaration"
-	#endif
-
-	#include "flexddl.c"
-
-	#ifdef __GNUC__
-		#pragma GCC diagnostic pop
-	#endif
-
-#else
-	#include "llddl.c"
-#endif
-
+#include "flexddl.c"
 
 void yyerror ( DdlParser_c * pParser, const char * sMessage )
 {
@@ -77,11 +60,7 @@ static int yylex ( YYSTYPE * lvalp, DdlParser_c * pParser )
 }
 #endif
 
-#ifdef CMAKE_GENERATED_GRAMMAR
-	#include "bisddl.c"
-#else
-	#include "yyddl.c"
-#endif
+#include "bisddl.c"
 
 //////////////////////////////////////////////////////////////////////////
 

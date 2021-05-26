@@ -20,7 +20,7 @@ using VersionStr_fn =			const char * (*)();
 static void *					g_pColumnarLib = nullptr;
 static CreateStorageReader_fn	g_fnCreateColumnarStorage = nullptr;
 static CreateBuilder_fn 		g_fnCreateColumnarBuilder = nullptr;
-static Setup_fn 				g_fnSetupColumnar = nullptr;
+static Setup_fn 				g_fnSetupColumnar;
 static VersionStr_fn			g_fnVersionStr = nullptr;
 
 /////////////////////////////////////////////////////////////////////
@@ -102,7 +102,7 @@ columnar::Builder_i * CreateColumnarBuilder ( const ISphSchema & tSchema, const 
 	return pBuilder;
 }
 
-
+#if HAVE_DLOPEN
 template <typename T>
 static bool LoadFunc ( T & pFunc, void * pHandle, const char * szFunc, const CSphString & sLib, CSphString & sError )
 {
@@ -144,42 +144,11 @@ private:
 	void * m_pHandle = nullptr;
 };
 
-
-static CSphString TryDifferentPaths ( const CSphString & sLibfile )
-{
-	CSphString sPathToExe = GetPathOnly ( GetExecutablePath() );
-	CSphString sPath;
-	sPath.SetSprintf ( "%s%s", sPathToExe.cstr(), sLibfile.cstr() );
-	if ( sphFileExists ( sPath.cstr() ) )
-		return sPath;
-
-#if USE_WINDOWS || defined ( __APPLE__ )
-	sPath.SetSprintf ( "%s/../lib/%s", sPathToExe.cstr(), sLibfile.cstr() );
-	sPath = sphNormalizePath(sPath);
-	if ( sphFileExists ( sPath.cstr() ) )
-		return sPath;
-#endif
-
-	return sLibfile;
-}
-
-
 bool InitColumnar ( CSphString & sError )
 {
 	assert ( !g_pColumnarLib );
 
-#if USE_WINDOWS
-	CSphString sLibfile = "lib_manticore_columnar.dll";
-#else
-	CSphString sLibfile = "lib_manticore_columnar.so";
-#endif
-
-#ifdef DEBUG_COLUMNAR_PATH
-	sLibfile = DEBUG_COLUMNAR_PATH;
-#else
-	sLibfile = TryDifferentPaths(sLibfile);
-#endif
-
+	CSphString sLibfile = GET_COLUMNAR_FULLPATH();
 	ScopedHandle_c tHandle ( dlopen ( sLibfile.cstr(), RTLD_LAZY | RTLD_LOCAL ) );
 	if ( !tHandle.Get() )
 	{
@@ -213,13 +182,23 @@ bool InitColumnar ( CSphString & sError )
 	return true;
 }
 
-
 void ShutdownColumnar()
 {
 	if ( g_pColumnarLib )
 		dlclose(g_pColumnarLib);
 }
 
+#else
+bool InitColumnar ( CSphString & sError )
+{
+	return false;
+}
+
+
+void ShutdownColumnar()
+{
+}
+#endif
 
 const char * GetColumnarVersionStr()
 {

@@ -1,0 +1,5 @@
+${POSTINST_HEAD}
+
+${POSTINST_TAIL}
+
+exit 0

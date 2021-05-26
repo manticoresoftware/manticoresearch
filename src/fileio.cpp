@@ -61,7 +61,7 @@ CSphAutofile::~CSphAutofile()
 static int AutoFileOpen ( const CSphString & sName, int iMode )
 {
 	int iFD = -1;
-#if USE_WINDOWS
+#if _WIN32
 	if ( iMode==SPH_O_READ )
 	{
 		intptr_t tFD = (intptr_t)CreateFile ( sName.cstr(), GENERIC_READ , FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL );
@@ -830,7 +830,7 @@ void CSphWriter::SeekTo ( SphOffset_t iPos, bool bTruncate )
 
 //////////////////////////////////////////////////////////////////////////
 
-#if USE_WINDOWS
+#if _WIN32
 
 // atomic seek+read for Windows
 int sphPread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset )
@@ -907,4 +907,4 @@ int sphPread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset )
 }
 
 #endif // HAVE_PREAD
-#endif // USE_WINDOWS
+#endif // _WIN32

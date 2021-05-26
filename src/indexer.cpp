@@ -18,6 +18,8 @@
 #include "sphinxplugin.h"
 #include "attribute.h"
 #include "icu.h"
+#include <config_indexer.h>
+#include "source_sql.h"
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -25,7 +27,7 @@
 #include <errno.h>
 #include <signal.h>
 
-#if USE_WINDOWS
+#if _WIN32
 	#define snprintf	_snprintf
 	#define popen		_popen
 	#define RMODE "rb"
@@ -62,7 +64,7 @@ static bool				g_bIgnoreNonPlain	= false;
 
 static ESphOnFileFieldError	g_eOnFileFieldError = FFE_IGNORE_FIELD;
 
-#if USE_WINDOWS
+#if _WIN32
 static char			g_sMinidump[256];
 #endif
 
@@ -457,7 +459,7 @@ void SqlAttrsConfigure ( CSphSourceParams_SQL & tParams, const CSphVariant * pHe
 }
 
 
-#if USE_ZLIB
+#if WITH_ZLIB
 bool ConfigureUnpack ( CSphVariant * pHead, ESphUnpackFormat eFormat, CSphSourceParams_SQL & tParams, const char * )
 {
 	for ( CSphVariant * pVal = pHead; pVal; pVal = pVal->m_pNext )
@@ -480,7 +482,7 @@ bool ConfigureUnpack ( CSphVariant * pHead, ESphUnpackFormat, CSphSourceParams_S
 	}
 	return true;
 }
-#endif // USE_ZLIB
+#endif // WITH_ZLIB
 
 
 bool ParseJoinedField ( const char * sBuf, CSphJoinedField * pField, const char * sSourceName )
@@ -684,7 +686,9 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 }
 
 
-#if USE_PGSQL
+#if WITH_POSTGRESQL
+#include "source_pgsql.h"
+
 CSphSource * SpawnSourcePgSQL ( const CSphConfigSection & hSource, const char * sSourceName )
 {
 	assert ( hSource["type"]=="pgsql" );
@@ -695,16 +699,14 @@ CSphSource * SpawnSourcePgSQL ( const CSphConfigSection & hSource, const char * 
 
 	LOC_GETS ( tParams.m_sClientEncoding,	"sql_client_encoding" );
 
-	CSphSource_PgSQL * pSrcPgSQL = new CSphSource_PgSQL ( sSourceName );
-	if ( !pSrcPgSQL->Setup ( tParams ) )
-		SafeDelete ( pSrcPgSQL );
-
-	return pSrcPgSQL;
+	return CreateSourcePGSQL ( tParams, sSourceName );
 }
-#endif // USE_PGSQL
+#endif // WITH_POSTGRESQL
 
 
-#if USE_MYSQL
+#if WITH_MYSQL
+#include "source_mysql.h"
+
 CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * sSourceName )
 {
 	assert ( hSource["type"]=="mysql" );
@@ -719,16 +721,14 @@ CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * 
 	LOC_GETS ( tParams.m_sSslCert,			"mysql_ssl_cert" );
 	LOC_GETS ( tParams.m_sSslCA,			"mysql_ssl_ca" );
 
-	CSphSource_MySQL * pSrcMySQL = new CSphSource_MySQL(sSourceName);
-	if ( !pSrcMySQL->Setup ( tParams ) )
-		SafeDelete ( pSrcMySQL );
-
-	return pSrcMySQL;
+	return CreateSourceMysql ( tParams, sSourceName );
 }
-#endif // USE_MYSQL
+#endif // WITH_MYSQL
 
 
-#if USE_ODBC
+#if WITH_ODBC
+#include "source_odbc.h"
+
 CSphSource * SpawnSourceODBC ( const CSphConfigSection & hSource, const char * sSourceName )
 {
 	assert ( hSource["type"]=="odbc" );
@@ -757,14 +757,16 @@ CSphSource * SpawnSourceMSSQL ( const CSphConfigSection & hSource, const char * 
 
 	return CreateSourceMSSQL ( tParams, sSourceName );
 }
-#endif // USE_ODBC
+#endif // WITH_ODBC
 
+#if WITH_EXPAT
+#include "source_xmlpipe2.h"
 
 CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char * sSourceName )
 {
 	assert ( hSource["type"]=="xmlpipe2" );
 
-#if USE_LIBEXPAT
+
 	if ( !( hSource.Exists ( "xmlpipe_command" ) ))
 	{
 		fprintf ( stdout, "ERROR: key 'xmlpipe_command' not found in source '%s'\n", sSourceName );
@@ -784,14 +786,10 @@ CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char 
 		fprintf ( stdout, "ERROR: xmlpipe: %s", sError.cstr() );
 
 	return pResult;
-#else
-	fprintf ( stdout, "WARNING: source '%s': xmlpipe2 support NOT compiled in. To use xmlpipe2, "
-			"install missing XML libraries, reconfigure, and rebuild Manticore\n", sSourceName );
-	return NULL;
-#endif // USE_LIBEXPAT
 }
+#endif // WITH_EXPAT
 
-
+#include "source_svpipe.h"
 CSphSource * SpawnSourceTSVPipe ( const CSphConfigSection & hSource, const char * sSourceName )
 {
 	assert ( hSource["type"]=="tsvpipe" );
@@ -842,17 +840,17 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 		return NULL;
 	}
 
-	#if USE_PGSQL
+	#if WITH_POSTGRESQL
 	if ( hSource["type"]=="pgsql" )
 		return SpawnSourcePgSQL ( hSource, sSourceName );
 	#endif
 
-	#if USE_MYSQL
+	#if WITH_MYSQL
 	if ( hSource["type"]=="mysql" )
 		return SpawnSourceMySQL ( hSource, sSourceName );
 	#endif
 
-	#if USE_ODBC
+	#if WITH_ODBC
 	if ( hSource["type"]=="odbc" )
 		return SpawnSourceODBC ( hSource, sSourceName );
 
@@ -860,8 +858,10 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 		return SpawnSourceMSSQL ( hSource, sSourceName );
 	#endif
 
+	#if WITH_EXPAT
 	if ( hSource["type"]=="xmlpipe2" )
 		return SpawnSourceXMLPipe ( hSource, sSourceName );
+	#endif
 
 	if ( hSource["type"]=="tsvpipe" )
 		return SpawnSourceTSVPipe ( hSource, sSourceName );
@@ -1477,7 +1477,7 @@ extern int64_t g_iIndexerCurrentRangeMax;
 extern int64_t g_iIndexerPoolStartDocID;
 extern int64_t g_iIndexerPoolStartHit;
 
-#if !USE_WINDOWS
+#if !_WIN32
 
 void sigsegv ( int sig )
 {
@@ -1519,7 +1519,7 @@ void SetSignalHandlers ()
 	}
 }
 
-#else // if USE_WINDOWS
+#else // if _WIN32
 
 LONG WINAPI sigsegv ( EXCEPTION_POINTERS * pExc )
 {
@@ -1544,7 +1544,7 @@ void SetSignalHandlers ()
 	SetUnhandledExceptionFilter ( sigsegv );
 }
 
-#endif // USE_WINDOWS
+#endif // _WIN32
 
 bool SendRotate ( const CSphConfig & hConf, bool bForce )
 {
@@ -1581,7 +1581,7 @@ bool SendRotate ( const CSphConfig & hConf, bool bForce )
 	}
 	fclose ( fp );
 
-#if USE_WINDOWS
+#if _WIN32
 	char szPipeName[64];
 	snprintf ( szPipeName, sizeof(szPipeName), "\\\\.\\pipe\\searchd_%d", iPID );
 
@@ -1653,16 +1653,18 @@ static void ShowVersion()
 	fprintf ( stdout, "%s%s%s",  szMANTICORE_NAME, sColumnar.cstr(), szMANTICORE_BANNER_TEXT );
 }
 
-
+// Built on Linux x86_64 by GNU 8.3.1 compiler.
 static void ShowHelp ()
 {
 	fprintf ( stdout,
-#ifdef COMPILER
-		"Built by gcc/clang v " COMPILER ",\n\n"
-#endif
+		"Built"
 #ifdef OS_UNAME
-		"Built on " OS_UNAME "\n\n"
+				" on " OS_UNAME
 #endif
+#ifdef COMPILER
+								" by " COMPILER " compiler"
+#endif
+															".\n\n"
 #ifdef CONFIGURE_FLAGS
 		CONFIGURE_FLAGS "\n\n"
 #endif

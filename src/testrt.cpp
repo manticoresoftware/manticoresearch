@@ -15,6 +15,7 @@
 #include "sphinxutils.h"
 #include "sphinxsort.h"
 #include "searchdaemon.h"
+#include "source_mysql.h"
 
 #if HAVE_RTESTCONFIG_H
 #include "rtestconfig.h"
@@ -26,20 +27,16 @@ const char * rtestconfig = "error";
 #define DATAFLD "data/"
 #endif
 
-#if USE_WINDOWS
+#if _WIN32
 #include "psapi.h"
-#pragma comment(linker, "/defaultlib:psapi.lib")
-#pragma message("Automatically linking with psapi.lib")
 #endif
 
 int			COMMIT_STEP = 1;
 float		g_fTotalMB = 0.0f;
 
-void SetupIndexing ( CSphSource_MySQL * pSrc, const CSphSourceParams_MySQL & tParams )
+void SetupIndexing ( CSphSource * pSrc )
 {
 	CSphString sError;
-	if ( !pSrc->Setup ( tParams ) )
-		sphDie ( "setup failed" );
 	if ( !pSrc->Connect ( sError ) )
 		sphDie ( "connect failed: %s", sError.cstr() );
 	if ( !pSrc->IterateStart ( sError ) )
@@ -86,7 +83,7 @@ void DoSearch ( CSphIndex * pIndex )
 
 static int g_iFieldsCount = 0;
 
-void DoIndexing ( CSphSource_MySQL * pSrc, RtIndex_i * pIndex )
+void DoIndexing ( CSphSource_SQL * pSrc, RtIndex_i * pIndex )
 {
 	CSphString sError, sWarning, sFilter;
 
@@ -331,7 +328,7 @@ void SqlAttrsConfigure ( CSphSourceParams_SQL &tParams, const CSphVariant * pHea
 }
 
 
-#if USE_ZLIB
+#if WITH_ZLIB
 
 bool ConfigureUnpack ( CSphVariant * pHead, ESphUnpackFormat eFormat, CSphSourceParams_SQL &tParams, const char * )
 {
@@ -355,7 +352,7 @@ bool ConfigureUnpack ( CSphVariant * pHead, ESphUnpackFormat, CSphSourceParams_S
 	}
 	return true;
 }
-#endif // USE_ZLIB
+#endif // WITH_ZLIB
 
 
 bool ParseJoinedField ( const char * sBuf, CSphJoinedField * pField, const char * sSourceName )
@@ -550,7 +547,7 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL &tParams, const CSphConfigSection
 }
 
 
-CSphSource_MySQL * SpawnSource ( const char * sSourceName, const CSphConfigType &hSources, ISphTokenizer * pTok, CSphDict * pDict )
+CSphSource_SQL * SpawnSource ( const char * sSourceName, const CSphConfigType &hSources, ISphTokenizer * pTok, CSphDict * pDict )
 {
 	const CSphConfigSection &hSource = hSources[sSourceName];
 
@@ -566,12 +563,15 @@ CSphSource_MySQL * SpawnSource ( const char * sSourceName, const CSphConfigType 
 	LOC_GETS ( tParams.m_sSslCert, "mysql_ssl_cert" );
 	LOC_GETS ( tParams.m_sSslCA, "mysql_ssl_ca" );
 
-	auto * pSrc = new CSphSource_MySQL ( "sSourceName" );
+	//auto * pSrc = new CSphSource_MySQL ( "sSourceName" );
+	auto * pSrc = CreateSourceMysql ( tParams, "sSourceName" );
+	if (!pSrc)
+		sphDie ( "setup failed" );
 	pSrc->SetTokenizer ( pTok );
 	pSrc->SetDict ( pDict );
 
-	SetupIndexing ( pSrc, tParams );
-	return pSrc;
+	SetupIndexing ( pSrc );
+	return (CSphSource_SQL*) pSrc;
 }
 
 
@@ -580,7 +580,7 @@ static RtIndex_i * g_pIndex = NULL;
 
 void IndexingThread ( void * pArg )
 {
-	CSphSource_MySQL * pSrc = (CSphSource_MySQL *) pArg;
+	auto * pSrc = (CSphSource_SQL *) pArg;
 	DoIndexing ( pSrc, g_pIndex );
 }
 
@@ -606,11 +606,11 @@ int main ( int argc, char ** argv )
 
 	TokenizerRefPtr_c pTok {sphCreateUTF8Tokenizer()};
 	DictRefPtr_c pDict {sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt1", false, 32, nullptr, sError )};
-	CSphSource_MySQL * pSrc = SpawnSource ( "test1", hSources, pTok, pDict );
+	auto * pSrc = SpawnSource ( "test1", hSources, pTok, pDict );
 
 	TokenizerRefPtr_c pTok2 {sphCreateUTF8Tokenizer()};
 	DictRefPtr_c pDict2 {sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt2", false, 32, nullptr, sError )};
-	CSphSource_MySQL * pSrc2 = SpawnSource ( "test2", hSources, pTok2, pDict2 );
+	auto * pSrc2 = SpawnSource ( "test2", hSources, pTok2, pDict2 );
 
 	CSphSchema tSrcSchema;
 	if ( !pSrc->UpdateSchema ( &tSrcSchema, sError ) )
@@ -679,7 +679,7 @@ int main ( int argc, char ** argv )
 #if SPH_DEBUG_LEAKS || SPH_ALLOCS_PROFILER
 	sphAllocsStats();
 #endif
-#if USE_WINDOWS
+#if _WIN32
 	PROCESS_MEMORY_COUNTERS pmc;
 	HANDLE hProcess = OpenProcess ( PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, GetCurrentProcessId() );
 	if ( hProcess && GetProcessMemoryInfo ( hProcess, &pmc, sizeof(pmc)) )

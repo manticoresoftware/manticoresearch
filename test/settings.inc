@@ -198,7 +198,7 @@ function GetVersion ()
 
 function GuessReplication()
 {
-	$repli_on = 'DGALERA_SONAME';
+	$repli_on = 'DWITH_GALERA=1';
 	global $g_repli;
 	
 	$banner = GetBanner();
@@ -224,7 +224,7 @@ function GuessSSL ()
 	$banner = GetBanner();
 	foreach ( $banner as $line )
 	{
-		if ( strpos ( $line, 'DUSE_SSL=1' ) !== false || strpos ( $line, 'DUSE_SSL=ON' ) !== false )
+		if ( strpos ( $line, 'DWITH_SSL=1' ) !== false )
 		{
 			$g_ssl = true;
 			break;
@@ -288,9 +288,9 @@ function PublishLocals ( &$locals, $benchmark )
 
 	foreach ( array ( 'searchd', 'indexer', 'spelldump' ) as $key )
 	{
+		$KEY = getenv(strtoupper($key));
 		if ( !array_key_exists ( $key, $locals ) )
-			$locals[$key] = $locals['bin'] . $pref. $key . $ext;
-//		print ($locals['bin'].$pref.$key.$ext."\n");
+			$locals[$key] = $KEY ? $KEY : $locals['bin'] . $pref . $key . $ext;
 	}
 
 	$g_locals = $locals;

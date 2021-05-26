@@ -39,7 +39,8 @@ function(check_re2 HINT)
 	if (RE2_LIBRARY AND NOT EXISTS ${RE2_LIBRARY})
 		unset(RE2_LIBRARY CACHE)
 	endif ()
-	FIND_LIBRARY(RE2_LIBRARY NAMES re2 RE2 libre2.a HINTS ${HINT} NO_DEFAULT_PATH)
+	set(CMAKE_FIND_LIBRARY_SUFFIXES .a .lib .so .dylib .dll)
+	FIND_LIBRARY(RE2_LIBRARY NAMES re2 RE2 HINTS ${HINT} NO_DEFAULT_PATH)
 endfunction()
 
 # First check if include path was explicitly given.
@@ -62,7 +63,8 @@ else ()
 		endif ()
 
 		if ( WITH_RE2_LIBS )
-			FIND_LIBRARY(RE2_LIBRARY NAMES re2 RE2 libre2.a
+			set(CMAKE_FIND_LIBRARY_SUFFIXES .a .lib .so .dylib .dll)
+			FIND_LIBRARY(RE2_LIBRARY NAMES re2 RE2
 					PATHS
 					${WITH_RE2_LIBS}
 					/usr/lib/x86_64-linux-gnu
@@ -77,14 +79,13 @@ endif ()
 
 mark_as_advanced ( RE2_INCLUDE_DIRS RE2_LIBRARY )
 
-# Handle the QUIETLY and REQUIRED arguments and set LIBICONV_FOUND
-# to TRUE if all listed variables are TRUE.
-# (Use ${CMAKE_ROOT}/Modules instead of ${CMAKE_CURRENT_LIST_DIR} because CMake
-#  itself includes this FindLibArchive when built with an older CMake that does
-#  not provide it.  The older CMake also does not have CMAKE_CURRENT_LIST_DIR.)
-include ( ${CMAKE_ROOT}/Modules/FindPackageHandleStandardArgs.cmake )
-find_package_handle_standard_args ( RE2 REQUIRED_VARS RE2_INCLUDE_DIRS RE2_LIBRARY )
+include ( FindPackageHandleStandardArgs )
+find_package_handle_standard_args ( re2 REQUIRED_VARS RE2_INCLUDE_DIRS RE2_LIBRARY )
 
-if ( RE2_FOUND )
-	set ( RE2_LIBRARIES ${RE2_LIBRARY} )
+if (re2_FOUND AND NOT TARGET re2::re2)
+	add_library(re2::re2 UNKNOWN IMPORTED)
+	set_target_properties(re2::re2 PROPERTIES
+		IMPORTED_LOCATION "${RE2_LIBRARY}"
+		INTERFACE_INCLUDE_DIRECTORIES "${RE2_INCLUDE_DIRS}"
+	)
 endif ()

@@ -14,10 +14,11 @@
 #include "fileutils.h"
 #include "sphinxint.h"
 
-#if USE_WINDOWS
+#if _WIN32
 	#define getcwd		_getcwd
 
-	#include "shlwapi.h"
+	#include <shlwapi.h>
+
 	#pragma comment(linker, "/defaultlib:Shlwapi.lib")
 	#pragma message("Automatically linking with Shlwapi.lib")
 #else
@@ -307,7 +308,7 @@ int64_t sphGetFileSize ( const CSphString& sFile, CSphString * sError )
 
 bool sphTruncate ( int iFD )
 {
-#if USE_WINDOWS
+#if _WIN32
 	return SetEndOfFile ( (HANDLE) _get_osfhandle(iFD) )!=0;
 #else
 	auto iPos = ::lseek ( iFD, 0, SEEK_CUR );
@@ -438,7 +439,7 @@ bool sphWrite ( int iFD, const Str_t & dBuf )
 }
 
 
-#if USE_WINDOWS
+#if _WIN32
 static void AddFile ( StrVec_t & dFilesFound, const CSphString & sPath, const WIN32_FIND_DATA & tFFData, bool bNeedDirs )
 {
 	bool bDir = !!( tFFData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY );
@@ -457,7 +458,7 @@ StrVec_t FindFiles ( const char * szPath, bool bNeedDirs )
 {
 	StrVec_t dFilesFound;
 
-#if USE_WINDOWS
+#if _WIN32
 	WIN32_FIND_DATA tFFData;
 	const char * szLastSlash = NULL;
 	for ( const char * s = szPath; *s; s++ )
@@ -510,7 +511,7 @@ bool MkDir ( const char * szDir )
 	if ( sphDirExists ( szDir ) )
 		return true;
 
-#if USE_WINDOWS
+#if _WIN32
 	if ( mkdir ( szDir ) )
 #else
 	if ( mkdir ( szDir, S_IRWXU ) )
@@ -609,7 +610,7 @@ namespace sph
 {
 	int rename ( const char * sOld, const char * sNew )
 	{
-#if USE_WINDOWS
+#if _WIN32
 		if ( MoveFileEx ( sOld, sNew, MOVEFILE_REPLACE_EXISTING ) )
 			return 0;
 		errno = GetLastError();
@@ -651,7 +652,7 @@ bool IsPathAbsolute ( const CSphString & sPath )
 	if ( !sPath.Length() )
 		return false;
 
-#if USE_WINDOWS
+#if _WIN32
 	return !PathIsRelative ( sPath.cstr() );
 #else
 	return sPath.cstr() && IsSlash ( sPath.cstr()[0] );
@@ -720,7 +721,7 @@ const char * GetExtension ( const CSphString & sFullPath )
 
 CSphString GetExecutablePath()
 {
-#if USE_WINDOWS
+#if _WIN32
 	HMODULE hModule = GetModuleHandle(NULL);
 	CHAR szPath[MAX_PATH];
 	GetModuleFileName ( hModule, szPath, MAX_PATH );

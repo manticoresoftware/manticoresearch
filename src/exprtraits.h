@@ -16,7 +16,7 @@
 #include "sphinxexpr.h"
 #include "sphinxfilter.h"
 
-#if USE_WINDOWS
+#if _WIN32
 #ifndef NDEBUG
 #define EXPR_CLASS_NAME(name) \
 	{\

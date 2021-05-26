@@ -1,7 +1,7 @@
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.17)
 PROJECT(icu CXX)
 SET(CMAKE_CXX_STANDARD 11)
-set(ICU_SRCS
+add_library(icu
 		source/common/appendable.cpp
 		source/common/bmpset.cpp
 		source/common/brkeng.cpp
@@ -143,48 +143,67 @@ set(ICU_SRCS
 		source/stubdata/stubdata.cpp
 		)
 
-add_library(icu STATIC ${ICU_SRCS})
+# Set a default build type for single-configuration CMake generators if no build type is set.
+if (NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
+	set(CMAKE_BUILD_TYPE RelWithDebInfo)
+	message (STATUS "Automatically set build type to RelWithDebInfo since no other provided")
+endif()
 
-target_compile_options(icu PRIVATE "-DU_IMPORT=")
-target_compile_options(icu PRIVATE "-DU_EXPORT=")
-target_compile_options(icu PRIVATE "-DU_EXPORT2=")
-target_compile_options(icu PRIVATE "-DU_COMMON_IMPLEMENTATION")
-target_compile_options(icu PRIVATE "-DU_STATIC_IMPLEMENTATION")
-target_compile_options(icu PRIVATE "-DU_CHARSET_IS_UTF8=1")
-target_compile_options(icu PRIVATE "-DU_NO_DEFAULT_INCLUDE_UTF_HEADERS=1")
-target_compile_options(icu PRIVATE "-D_CRT_SECURE_NO_WARNINGS")
-target_compile_options(icu PRIVATE "-DUCONFIG_USE_WINDOWS_LCID_MAPPING_API=0")
+OPTION (STATIC_BUILD "build without dlopen, pure static" OFF )
 
-if (WIN32)
-	target_compile_definitions(icu PRIVATE "-wd4541 -wd4800 -wd4996")
+target_compile_definitions(icu PRIVATE U_IMPORT= U_EXPORT= U_EXPORT2= U_COMMON_IMPLEMENTATION)
+target_compile_definitions(icu PRIVATE $<$<CXX_COMPILER_ID:MSVC>:UCONFIG_USE_WINDOWS_LCID_MAPPING_API=0>)
+target_compile_options(icu PRIVATE $<$<CXX_COMPILER_ID:MSVC>:-D_CRT_SECURE_NO_WARNINGS -wd4541 -wd4800 -wd4996>)
+target_compile_definitions(icu PUBLIC U_STATIC_IMPLEMENTATION U_CHARSET_IS_UTF8=1 U_NO_DEFAULT_INCLUDE_UTF_HEADERS=1)
 
-	# on win we have default /GR- flag (no rtti), but ICU requires it, so remove the flag
-	set(CompilerFlags
-			CMAKE_CXX_FLAGS
-			CMAKE_CXX_FLAGS_DEBUG
-			CMAKE_CXX_FLAGS_RELEASE
-			CMAKE_CXX_FLAGS_MINSIZEREL
-			CMAKE_CXX_FLAGS_RELWITHDEBINFO
-			)
-	foreach (CompilerFlag ${CompilerFlags})
-		STRING(REPLACE "/GR-" " " ${CompilerFlag} "${${CompilerFlag}}")
-	endforeach ()
-else ()
-	target_compile_options(icu PRIVATE "-fPIC")
-endif ()
+if (STATIC_BUILD)
+	target_compile_definitions(icu PRIVATE HAVE_DLOPEN=0)
+endif()
 
-target_include_directories(icu BEFORE PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/source/common)
-
-set_target_properties(icu PROPERTIES
-		MAP_IMPORTED_CONFIG_MINSIZEREL RelWithDebInfo
-		MAP_IMPORTED_CONFIG_RELEASE RelWithDebInfo
+target_include_directories(icu PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/source/common>$<INSTALL_INTERFACE:include/icu>)
+set_target_properties (icu PROPERTIES
+		DEBUG_POSTFIX d
+		PDB_NAME icu
+		PDB_NAME_DEBUG icud
+		COMPILE_PDB_NAME icu
+		COMPILE_PDB_NAME_DEBUG icud
 		)
-set_target_properties(icu PROPERTIES EXPORT_PROPERTIES "MAP_IMPORTED_CONFIG_MINSIZEREL;MAP_IMPORTED_CONFIG_RELEASE")
 
 # separate target for icu data
-file(GLOB ICU_DATA "${CMAKE_CURRENT_SOURCE_DIR}/source/data/in/icu*.dat")
+file ( GLOB ICU_DATA "${CMAKE_CURRENT_SOURCE_DIR}/source/data/in/icu*.dat" )
+get_filename_component ( ICU_DATA ${ICU_DATA} NAME )
 
-add_library(icudata INTERFACE)
-target_sources(icudata INTERFACE "${ICU_DATA}")
+add_library ( icudata INTERFACE )
+target_sources ( icudata INTERFACE $<INSTALL_INTERFACE:data/${ICU_DATA}> )
 
-export(TARGETS icu icudata FILE "icu-targets.cmake" NAMESPACE icu::)
+# installation stuff
+set ( CMAKE_CMAKE_DIR "lib/cmake/icu" )
+
+# ensure ALL externally required headers and are exported here
+install ( DIRECTORY source/common/unicode DESTINATION include/icu FILES_MATCHING PATTERN "*.h")
+install ( FILES "source/data/in/${ICU_DATA}" DESTINATION data )
+install ( TARGETS icu icudata EXPORT icuExport RUNTIME DESTINATION lib LIBRARY DESTINATION lib  )
+install (EXPORT icuExport FILE icu-targets.cmake DESTINATION "${CMAKE_CMAKE_DIR}" NAMESPACE icu::)
+if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+	install (FILES "$<TARGET_FILE_DIR:icu>/icu$<$<CONFIG:Debug>:d>.pdb" DESTINATION lib OPTIONAL)
+endif ()
+
+include ( CMakePackageConfigHelpers )
+
+file ( WRITE icu-config.cmake.in
+		"\@PACKAGE_INIT@
+
+if(NOT TARGET icu::icu)
+    include(\"\${CMAKE_CURRENT_LIST_DIR}/icu-targets.cmake\")
+    get_target_property ( configs icu::icu IMPORTED_CONFIGURATIONS )
+    foreach (config DEBUG RELEASE MINSIZEREL)
+        if (NOT \${config} IN_LIST configs)
+            set_property ( TARGET icu::icu PROPERTY MAP_IMPORTED_CONFIG_\${config} RelWithDebInfo )
+        endif ()
+    endforeach ()
+endif()
+" )
+
+configure_package_config_file ( icu-config.cmake.in "${CMAKE_CURRENT_BINARY_DIR}/icu-config.cmake"
+		INSTALL_DESTINATION "${CMAKE_CMAKE_DIR}" )
+install ( FILES "${CMAKE_CURRENT_BINARY_DIR}/icu-config.cmake" DESTINATION "${CMAKE_CMAKE_DIR}" )

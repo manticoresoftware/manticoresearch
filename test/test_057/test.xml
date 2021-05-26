@@ -39,8 +39,8 @@ index rt
 	<!-- 2nd disk chunk -->
 	REPLACE INTO rt ( id, text ) VALUES ( 11, 'test me' ),( 12, 'test framework' ),( 13, 'our test framework' ),( 14, 'best test solution' );
 	flush ramchunk rt;
-	select id, weight() as w from rt where match ('test');
-	select id, weight() as w from rt where match ('best');
+	select id, weight() as w from rt where match ('test') order by id asc;
+	select id, weight() as w from rt where match ('best') order by id asc;
 
 	<!-- 3rd disk chunk -->
 	REPLACE INTO rt ( id, text ) VALUES ( 5, 'test me' ),( 15, 'test framework' );

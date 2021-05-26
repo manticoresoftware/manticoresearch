@@ -20,11 +20,7 @@
 // EXTENDED PARSER RELOADED
 //////////////////////////////////////////////////////////////////////////
 class XQParser_t;
-#ifdef CMAKE_GENERATED_GRAMMAR
-	#include "bissphinxquery.h"
-#else
-	#include "yysphinxquery.h"
-#endif
+#include "bissphinxquery.h"
 
 // #define XQDEBUG 1
 // #define XQ_DUMP_TRANSFORMED_TREE 1
@@ -766,21 +762,7 @@ void yyerror ( XQParser_t * pParser, const char * sMessage )
 		pParser->m_pParsed->m_sParseError.SetSprintf ( "%s near '%s'", sMessage, pParser->m_pErrorAt );
 }
 
-#if USE_WINDOWS
-#pragma warning(push,1)
-#pragma warning(disable:4702) // unreachable code
-#endif
-
-#ifdef CMAKE_GENERATED_GRAMMAR
-	#include "bissphinxquery.c"
-#else
-	#include "yysphinxquery.c"
-#endif
-
-
-#if USE_WINDOWS
-#pragma warning(pop)
-#endif
+#include "bissphinxquery.c"
 
 //////////////////////////////////////////////////////////////////////////
 

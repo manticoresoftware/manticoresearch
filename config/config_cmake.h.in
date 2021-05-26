@@ -1,36 +1,13 @@
 /* Striped config.h.in especially for cmake.  */
 
-/* Define to use the just-compiled grammar (will be defined if we have bison available). */
-#cmakedefine CMAKE_GENERATED_GRAMMAR 1
-
-/* Define to use the just-compiled lexer (will be defined if we have flex available). */
-#cmakedefine CMAKE_GENERATED_LEXER 1
-
 /* Define to be the name of the compiler. */
 #cmakedefine COMPILER "${COMPILER}"
 
+/* Full name OS */
+#cmakedefine OS_UNAME "${OS_UNAME}"
+
 /* Flags used to configure me */
 #cmakedefine CONFIGURE_FLAGS "${CONFIGURE_FLAGS}"
-
-/* Define to 1 if you want runtime load libexpat using dlopen */
-#cmakedefine DL_EXPAT ${DL_EXPAT}
-#cmakedefine EXPAT_LIB "${EXPAT_LIB}"
-
-/* Define to 1 if you want runtime load mysql using dlopen */
-#cmakedefine DL_MYSQL ${DL_MYSQL}
-#cmakedefine MYSQL_LIB "${MYSQL_LIB}"
-
-/* Define to 1 if you want runtime load icu using dlopen */
-#cmakedefine DL_ICU ${DL_ICU}
-#cmakedefine ICU_LIB "${ICU_LIB}"
-
-/* Define to 1 if runtime load PosgreSQL using dlopen */
-#cmakedefine DL_PGSQL ${DL_PGSQL}
-#cmakedefine PGSQL_LIB "${PGSQL_LIB}"
-
-/* Define to 1 if you want runtime load odbc/iodbc using dlopen */
-#cmakedefine DL_UNIXODBC ${DL_UNIXODBC}
-#cmakedefine UNIXODBC_LIB "${UNIXODBC_LIB}"
 
 /* Define to 1 if you have the `backtrace' function. */
 #cmakedefine HAVE_BACKTRACE ${HAVE_BACKTRACE}
@@ -41,11 +18,15 @@
 /* Define to 1 if you have the `clock_gettime' function. */
 #cmakedefine HAVE_CLOCK_GETTIME ${HAVE_CLOCK_GETTIME}
 
+#if DLSTUFF
+
 /* Define to 1 if you have the `dlerror' function. */
-#cmakedefine HAVE_DLERROR ${HAVE_DLERROR}
+#cmakedefine01 HAVE_DLERROR
 
 /* Define to 1 if you have the `dlopen' function. */
 #cmakedefine01 HAVE_DLOPEN
+
+#endif
 
 /* Define if  you have async 'getaddrinfo_a' */
 #cmakedefine HAVE_GETADDRINFO_A ${HAVE_GETADDRINFO_A}
@@ -135,77 +116,57 @@
 #cmakedefine HAVE_SYS_PRCTL_H ${HAVE_SYS_PRCTL_H}
 
 /* Define to 1 if you have valgrind headers (might be used in coroutines to mark mem as stack). */
-#cmakedefine HAVE_VALGRIND ${HAVE_VALGRIND}
-
-/* whether 2nd arg to iconv() is const ptr */
-#cmakedefine ICONV_INBUF_CONST ${ICONV_INBUF_CONST}
-
-/* Full name OS */
-#cmakedefine OS_UNAME "${OS_UNAME}"
-
-/* Disable overriding of c++ memory routines */
-#cmakedefine SPH_DONT_OVERRIDE_MEMROUTINES ${SPH_DONT_OVERRIDE_MEMROUTINES}
-
-/* whether unaligned RAM access is possible */
-#cmakedefine UNALIGNED_RAM_ACCESS ${UNALIGNED_RAM_ACCESS}
-
-/* define to use expat XML library */
-#cmakedefine USE_LIBEXPAT ${USE_LIBEXPAT}
-
-/* define to use iconv library */
-#cmakedefine USE_LIBICONV ${USE_LIBICONV}
-
-/* libstemmer support */
-#cmakedefine USE_LIBSTEMMER ${USE_LIBSTEMMER}
-
-/* little-endian */
-#define USE_LITTLE_ENDIAN ${USE_LITTLE_ENDIAN}
-
-/* Define to 1 if you want to compile with MySQL support */
-#cmakedefine USE_MYSQL ${USE_MYSQL}
-
-/* define to use ODBC library */
-#cmakedefine USE_ODBC ${USE_ODBC}
-
-/* Define to 1 if you want to compile with PostgreSQL support */
-#cmakedefine USE_PGSQL ${USE_PGSQL}
-
-/* re2 library support */
-#cmakedefine USE_RE2 ${USE_RE2}
-
-/* ICU library support */
-#cmakedefine USE_ICU ${USE_ICU}
-
-/* columnar library support */
-#cmakedefine USE_COLUMNAR ${USE_COLUMNAR}
-
-/* default path to columnar shared library */
-#cmakedefine DEBUG_COLUMNAR_PATH "${DEBUG_COLUMNAR_PATH}"
-
-/* define to use Alexandresku's loki small obj allocator for movable attrs */
-#cmakedefine USE_SMALLALLOC ${USE_SMALLALLOC}
-
-/* define to use POSIX Syslog for logging */
-#cmakedefine USE_SYSLOG ${USE_SYSLOG}
-
-/* define to use Zlib */
-#cmakedefine USE_ZLIB ${USE_ZLIB}
+#cmakedefine HAVE_VALGRIND ${Valgrind_FOUND}
 
 /* define if mincore has unsigned 3-rd param */
 #cmakedefine HAVE_UNSIGNED_MINCORE ${HAVE_UNSIGNED_MINCORE}
 
-/* versioned name of replication lib */
+/* define to use POSIX Syslog for logging */
+#cmakedefine01 USE_SYSLOG
+
+/* little-endian */
+#define USE_LITTLE_ENDIAN (!${USE_BIG_ENDIAN})
+
+/* define to use Alexandresku's loki small obj allocator for movable attrs */
+#cmakedefine01 WITH_SMALLALLOC
+
+/* Disable overriding of c++ memory routines */
+#cmakedefine01 DISABLE_MEMROUTINES
+
+/* whether unaligned RAM access is possible */
+#cmakedefine UNALIGNED_RAM_ACCESS ${UNALIGNED_RAM_ACCESS}
+
+/* name of replication lib - usually libgalera_manticore.so */
 #define GALERA_SONAME "${GALERA_SONAME}"
 
-/* define to set custom directory for shared files */
-#define FULL_SHARE_DIR "${FULL_SHARE_DIR}"
+/* re2 library support */
+#cmakedefine01 WITH_RE2
 
-/* Whether to compile for Windows */
-#cmakedefine01 USE_WINDOWS
+/* libstemmer support */
+#cmakedefine01 WITH_STEMMER
+
+/* ICU library support: "WITH" - feature available, "DL" - load dynamically, "LIB" - lib to load */
+#cmakedefine01 WITH_ICU
+#cmakedefine01 DL_ICU
+#cmakedefine ICU_LIB "${ICU_LIB}"
 
 /* Whether to use OpenSSL */
-#cmakedefine01 USE_SSL
+#cmakedefine01 WITH_SSL
 
-#cmakedefine01 HAVE_TLS_SERVER_METHOD
-#cmakedefine01 HAVE_TLSV1_2_METHOD
-#cmakedefine01 HAVE_TLSV1_1_SERVER_METHOD
+/* define to use Zlib */
+#cmakedefine01 WITH_ZLIB
+
+/* default name of columnar shared library */
+#cmakedefine LIB_MANTICORE_COLUMNAR "${LIB_MANTICORE_COLUMNAR}"
+
+/* define to set custom directory for shared files. Absolute as /usr/local/share/manticore */
+#define FULL_SHARE_DIR "${FULL_SHARE_DIR}"
+
+/* define to set custom directory for shared files */
+#cmakedefine LOCALDATADIR "${LOCALDATADIR}"
+
+/* define to set custom directory for shared files. Absolute as /etc */
+#define SYSCONFDIR "${CMAKE_INSTALL_FULL_SYSCONFDIR}"
+
+/* hardcoded default plugin dir */
+#define HARDCODED_PLUGIN_DIR "/usr/local/lib/manticore"

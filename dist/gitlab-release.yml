@@ -3,30 +3,76 @@ stages:
   - repoupload
   - deploy
 
+variables:
+  CMAKE_INTERPROCEDURAL_OPTIMIZATION: 1
+  VERBOSE: 1
+  DIAGNOSTIC: 1
+
 start:
   stage: build
   script:
     - echo "Build started."
 
-tarball:
+.redhat_based:
   stage: build
   interruptible: true
-  rules:
-    - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /tarball/
-  needs: []
+  variables:
+    REPO_DIST_NAME: "centos"
+    CACHEB: "../cache"
   tags:
     - docker
-  image: registry.gitlab.com/manticoresearch/dev/bionic_cmake:320
+  before_script:
+    - mc config host add dev $MINIO_HOST
   script:
+    - ln -s $(pwd) /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789/src
+    - cd /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789/src
+    - mc mirror -a dev/runner-cache/releases/$DISTR/ cache/
     - mkdir build && cd build
-    - cmake -DBUILD_TAG=$RELEASE_TAG -DDISABLE_TESTING=1 ..
-    - make tarball
-    - cp manticore-*.tar.gz ..
+    - cmake -GNinja -DPACK=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
+    - cmake --build . --target package
+    - cmake -DSPLIT=1 .
+    - cmake --build . --target package
+    - cp manticore*.rpm ..
+    - cd ..
+    - mc mirror --overwrite -a cache/ dev/runner-cache/releases/$DISTR/
   artifacts:
     paths:
-      - manticore-*.tar.gz
+      - manticore*.rpm
     when: on_success
     expire_in: 12 hrs
+
+.debian_based:
+  stage: build
+  interruptible: true
+  tags:
+    - docker
+  variables:
+    CACHEB: "../cache"
+  before_script:
+    - mc config host add dev $MINIO_HOST
+  script:
+    - mc mirror dev/runner-cache/releases/$DISTR/ cache/
+    - mkdir build && cd build
+    - cmake -GNinja -DPACK=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
+    - cmake --build . --target package
+    - cmake -DSPLIT=1 .
+    - cmake --build . --target package
+    - cp manticore*deb ..
+    - cd ..
+    - mc mirror --overwrite cache/ dev/runner-cache/releases/$DISTR/
+  artifacts:
+    paths:
+      - manticore*deb
+    when: on_success
+    expire_in: 12 hrs
+
+.collect_job:
+  variables:
+    GIT_STRATEGY: none
+  stage: repoupload
+  interruptible: true
+  tags:
+    - dev-host
 
 osx:
   stage: build
@@ -39,14 +85,13 @@ osx:
     CACHEB: "../cache"
     LIBS_BUNDLE: "/work"
     OPENSSL_ROOT_DIR: "/usr/local/opt/openssl"
-    DIAGNOSTIC: 1
   tags:
     - mac
     - build
   script:
     - mkdir build && cd build
-    - cmake -GNinja -DBUILD_TAG=$RELEASE_TAG -DDISTR_BUILD=macos ..
-    - cmake --build . --target package -j2
+    - cmake .. -GNinja -DDISTR_BUILD=macos -DBUILD_TAG=$RELEASE_TAG
+    - cmake --build . --target package
     - cp manticore-*.tar.gz ..
   artifacts:
     paths:
@@ -54,43 +99,34 @@ osx:
     when: on_success
     expire_in: 12 hrs
   cache:
-    key: darwin-release
+    key: mojave
     paths:
-      - cache/*-src
-      - cache/galera*64/libgalera*
-      - cache/galera*64/galera-targets.cmake
-      - cache/icu*64/*icu*
-      - cache/re2*64/*re2*
-      - cache/stemmer*64/*stemmer*
+      - cache
+
+collect_osx:
+  extends: [ .collect_job ]
+  needs: [ osx ]
+  script: [ ~/upload_repo_arc.sh ]
 
 windows:
   stage: build
   interruptible: true
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /windows/
-  needs: []
   tags:
     - windev19
     - build
   variables:
     LIBS_BUNDLE: "x:/bundle"
     CACHEB: "x:/cache"
-    OPENSSL_ROOT: "x:/bundle/openssl-x64"
     BOOST_ROOT: "x:/boost_1_75_0"
-    DIAGNOSTIC: 1
   script:
     - 'net use x: \\\\VBOXSRV\\shared'
     - mkdir sphinxbin-x64
     - cd sphinxbin-x64
-    - cmake -DBUILD_TAG=$RELEASE_TAG -DDISTR_BUILD=default -DUSE_SSL=1 ..
+    - cmake -DBUILD_TAG=$RELEASE_TAG -DDISTR_BUILD=default -DWITH_SSL=1 ..
     - cmake --build . --target package --config RelWithDebInfo
     - cp manticore-*.zip ..
-    - cd ..
-    - mkdir sphinxconvbin-x64
-    - cd sphinxconvbin-x64
-    - cmake -DBUILD_TAG=$RELEASE_TAG -DONLY_CONVERTER=1 ..
-    - cmake --build . --target package --config RelWithDebInfo
-    - cp manticore-*-converter.zip ..
   artifacts:
     paths:
       - manticore-*.zip
@@ -98,79 +134,29 @@ windows:
     expire_in: 12 hrs
   cache: {}
 
-.redhat_based:
-  stage: build
-  interruptible: true
-  needs: []
-  variables:
-    REPO_DIST_NAME: "centos"
-    CACHEB: "../cache"
-    DIAGNOSTIC: 1 # let's set it by default forever
-  tags:
-    - docker
-  before_script:
-    - mc config host add dev $MINIO_HOST
-  script:
-    - ln -s $(pwd) /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789/src
-    - cd /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789/src
-    - mc mirror -a dev/runner-cache/releases/$DISTR/ cache/
-    - test -e cache/cache-src.tar.gz && tar -zxf cache/cache-src.tar.gz && chmod +x cache/galera*/libgalera_manticore*
-    - mkdir build && cd build
-    - cmake -GNinja -DPACK=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
-    - cmake --build . --target package -j4
-    - cmake -DSPLIT=1 .
-    - cpack
-    - cp manticore*.rpm ..
-    - cd ..
-    - tar -zcf cache/cache-src.tar.gz cache/*-src
-    - mc mirror --exclude "*.dir" --exclude "*.o" --exclude "*/CMakeFiles/*" --exclude "*/Makefile" --exclude "*-src/*" --exclude "galera-*/*.a" --exclude "*/cmake_install.cmake" --overwrite -a cache/ dev/runner-cache/releases/$DISTR/
-  artifacts:
-    paths:
-      - manticore*.rpm
-    when: on_success
-    expire_in: 12 hrs
-
-.debian_based:
-  stage: build
-  interruptible: true
-  needs: []
-  tags:
-    - docker
-  variables:
-    CACHEB: "../cache"
-    DIAGNOSTIC: 1 # let's set it by default forever
-  before_script:
-    - mc config host add dev $MINIO_HOST
-  script:
-    - mc mirror dev/runner-cache/releases/$DISTR/ cache/
-    - test -e cache/cache-src.tar.gz && tar -zxf cache/cache-src.tar.gz
-    - mkdir build && cd build
-    - cmake -GNinja -DPACK=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
-    - cmake --build . --target package -j4
-    - cmake -DSPLIT=1 .
-    - cpack
-    - cp manticore*deb ..
-    - cd ..
-    - tar -zcf cache/cache-src.tar.gz cache/*-src
-    - mc mirror --exclude "*.dir" --exclude "*.o" --exclude "*/CMakeFiles/*" --exclude "*/Makefile" --exclude "*-src/*" --exclude "galera-*/*.a" --exclude "*/cmake_install.cmake" --overwrite cache/ dev/runner-cache/releases/$DISTR/
-  artifacts:
-    paths:
-      - manticore*deb
-    when: on_success
-    expire_in: 12 hrs
+collect_windows:
+  extends: [ .collect_job ]
+  needs: [ windows ]
+  script: [ ~/upload_repo_arc.sh ]
 
 rhel7:
-  extends:
-    - .redhat_based
+  extends: [ .redhat_based ]
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /rhel7/
   variables:
     REPO_DIST_VER: "7"
   image: registry.gitlab.com/manticoresearch/dev/centos7_cmake:320
 
+collect_rhel7:
+  extends: [ .collect_job ]
+  script: [ ~/upload_repo_rpm.sh ]
+  variables:
+    DISTRO: 7
+  needs: [ rhel7 ]
+
+
 rhelsplit7:
-  extends:
-    - .redhat_based
+  extends: [ .redhat_based ]
   rules:
     - if: $WHAT =~ /rhelsplit7/
   variables:
@@ -178,79 +164,137 @@ rhelsplit7:
     REPO_DIST_VER: "7"
   image: registry.gitlab.com/manticoresearch/dev/centos7_cmake:320
 
+collect_rhelsplit7:
+  extends: [ .collect_job ]
+  script: [ ~/upload_repo_rpm.sh ]
+  variables:
+    DISTRO: 7
+  needs:
+    - job: rhelsplit7
+      optional: true
+
 rhel8:
-  extends:
-    - .redhat_based
+  extends: [ .redhat_based ]
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /rhel8/
   variables:
     REPO_DIST_VER: "8"
   image: registry.gitlab.com/manticoresearch/dev/centos8_cmake:320
 
+collect_rhel8:
+  extends: [ .collect_job ]
+  script: [ ~/upload_repo_rpm.sh ]
+  variables:
+    DISTRO: 8
+  needs: [ rhel8 ]
+
 stretch:
-  extends:
-    - .debian_based
+  extends: [ .debian_based ]
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /stretch/
   image: registry.gitlab.com/manticoresearch/dev/stretch_cmake:320
 
+collect_stretch:
+  extends: [ .collect_job ]
+  script: [ ~/upload_repo_deb.sh ]
+  variables:
+    DISTRO: stretch
+  needs: [ stretch ]
+
+
 xenial:
-  extends:
-    - .debian_based
+  extends: [ .debian_based ]
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /xenial/
   image: registry.gitlab.com/manticoresearch/dev/xenial_cmake:320
 
+collect_xenial:
+  extends: [ .collect_job ]
+  script: [ ~/upload_repo_deb.sh ]
+  variables:
+    DISTRO: xenial
+  needs: [ xenial ]
+
+
 bionic:
-  extends:
-    - .debian_based
+  extends: [ .debian_based ]
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /bionic/
   image: registry.gitlab.com/manticoresearch/dev/bionic_cmake:320
 
+collect_bionic:
+  extends: [ .collect_job ]
+  script: [ ~/upload_repo_deb.sh ]
+  variables:
+    DISTRO: bionic
+  needs: [ bionic ]
+
+
 focal:
-  extends:
-    - .debian_based
+  extends: [ .debian_based ]
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /focal/
   image: registry.gitlab.com/manticoresearch/dev/focal_cmake:320
 
+collect_focal:
+  extends: [ .collect_job ]
+  script: [ ~/upload_repo_deb.sh ]
+  variables:
+    DISTRO: focal
+  needs: [ focal ]
+
+
+focalarm:
+  stage: build
+  interruptible: true
+  rules:
+    - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /focalarm/
+  tags:
+    - arm64
+    - focal
+  variables:
+    CACHEB: "../cache"
+    DIAGNOSTIC: 1 # let's set it by default forever
+  script:
+    - mkdir build && cd build
+    - cmake -GNinja -DPACK=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
+    - cmake --build . --target package
+    - cmake -DSPLIT=1 .
+    - cmake --build . --target package
+    - cp manticore*deb ..
+  artifacts:
+    paths:
+      - manticore*deb
+    when: on_success
+    expire_in: 12 hrs
+  cache:
+    key: focalarm
+    paths:
+      - cache
+
+collect_focalarm:
+  extends: [ .collect_job ]
+  script: [ ~/upload_repo_deb.sh ]
+  variables:
+    DISTRO: focal
+  needs: [ focalarm ]
+
 buster:
-  extends:
-    - .debian_based
+  extends: [ .debian_based ]
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /buster/
   image: registry.gitlab.com/manticoresearch/dev/buster_cmake:320
 
-
-collect_repo:
-  stage: repoupload
-  interruptible: true
-  rules:
-    - if: $SOME_VAR==null  #strange hack but without that - the job is skips
-  tags:
-    - dev-host
-  script:
-    - echo "Collected packages"
-    - ls -1
-    - ~/upload_repo.sh
-  needs:
-    - rhel7
-    - rhel8
-    - job: rhelsplit7
-      optional: true
-    - stretch
-    - xenial
-    - bionic
-    - buster
-    - focal
-    - tarball
-    - osx
-
+collect_buster:
+  extends: [ .collect_job ]
+  script: [ ~/upload_repo_deb.sh ]
+  variables:
+    DISTRO: buster
+  needs: [ buster ]
 
 build_docker:
   stage: deploy
-  needs: []
+  needs: [ collect_bionic ]
   interruptible: true
   variables:
     GIT_STRATEGY: none
@@ -262,32 +306,3 @@ build_docker:
   script:
     - echo "Build docker image"
     - ~/build.sh
-
-
-# collect artifacts from all previous jobs.
-# m.b. it has sense to also publish them in one click to github release?
-
-# use hidden job instead of commented out
-.collect:
-  stage: deploy
-  interruptible: true
-  rules:
-    - if: $WHAT=="all" && $CI_COMMIT_BRANCH == "master"
-    - if: $WHAT =~ /collect/ && $CI_COMMIT_BRANCH == "master"
-  needs: [tarball, osx, windows, rhel7, rhel8, stretch, xenial, bionic, buster]
-  tags:
-    - dev-host
-  variables:
-    GIT_STRATEGY: none
-  script:
-    - echo "Collected packages"
-    - ls -1
-    - ~/upload_repo.sh
-  artifacts:
-    paths:
-      - manticore*
-    when: on_success
-    expire_in: 1 week
-  allow_failure: false
-  cache: {}
-

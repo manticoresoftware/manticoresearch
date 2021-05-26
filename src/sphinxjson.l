@@ -1,11 +1,14 @@
 %{
-#ifdef CMAKE_GENERATED_GRAMMAR
-	#include "bissphinxjson.h"
-#else
-	#include "yysphinxjson.h"
+#include "bissphinxjson.h"
+
+#ifdef __GNUC__
+	#pragma GCC diagnostic push
+	#pragma GCC diagnostic ignored "-Wsign-compare"
+	#pragma GCC diagnostic ignored "-Wpragmas"
+	#pragma GCC diagnostic ignored "-Wunneeded-internal-declaration"
 #endif
 
-#if USE_WINDOWS
+#if _WIN32
 #pragma warning(push,1)
 #endif
 
@@ -120,6 +123,10 @@ void yy2lex_unhold ( yyscan_t yyscanner )
 	}
 }
 
-#if USE_WINDOWS
+#if _WIN32
 #pragma warning(pop)
+#endif
+
+#ifdef __GNUC__
+	#pragma GCC diagnostic pop
 #endif

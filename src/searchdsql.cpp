@@ -200,27 +200,11 @@ private:
 									// unused parameter, simply to avoid type clash between all my yylex() functions
 #define YY_DECL static int my_lex ( YYSTYPE * lvalp, void * yyscanner, SqlParser_c * pParser )
 
-#if USE_WINDOWS
+#if _WIN32
 #define YY_NO_UNISTD_H 1
 #endif
 
-#ifdef CMAKE_GENERATED_LEXER
-	#ifdef __GNUC__
-		#pragma GCC diagnostic push
-		#pragma GCC diagnostic ignored "-Wsign-compare"
-		#pragma GCC diagnostic ignored "-Wpragmas"
-		#pragma GCC diagnostic ignored "-Wunneeded-internal-declaration"
-	#endif
-
-	#include "flexsphinxql.c"
-
-	#ifdef __GNUC__
-		#pragma GCC diagnostic pop
-	#endif
-
-#else
-	#include "llsphinxql.c"
-#endif
+#include "flexsphinxql.c"
 
 void yyerror ( SqlParser_c * pParser, const char * sMessage )
 {
@@ -259,11 +243,7 @@ static int yylex ( YYSTYPE * lvalp, SqlParser_c * pParser )
 }
 #endif
 
-#ifdef CMAKE_GENERATED_GRAMMAR
-	#include "bissphinxql.c"
-#else
-	#include "yysphinxql.c"
-#endif
+#include "bissphinxql.c"
 
 //////////////////////////////////////////////////////////////////////////
 

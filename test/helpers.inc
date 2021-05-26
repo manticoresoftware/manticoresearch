@@ -4027,7 +4027,7 @@ class SphinxConfig
 
 	function Dump ( $node, $fp, $dynamic_only, $agentid )
 	{
-		global $index_data_path, $agents, $g_locals;
+		global $index_data_path, $agents, $g_locals, $python;
 
 		$nodename = strtolower ( $node->nodeName );
 
@@ -4037,6 +4037,7 @@ class SphinxConfig
 			case "#text":				fwrite ( $fp, $node->nodeValue ); return;
 			case "static":				fwrite ( $fp, $node->nodeValue ); return;
 			case "searchd_settings":	$this->WriteSearchdSettings ( $fp ); return;
+			case "python":				fwrite ( $fp, $python ); return;
 			case "sql_settings":		$this->WriteSqlSettings ( $fp, $node->attributes ); return;
             case "odbc_settings":       $this->WriteOdbcSettings ( $fp, $node->attributes); return;
 			case "my_address":

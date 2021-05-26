@@ -29,7 +29,7 @@
 #include <execinfo.h>
 #endif
 
-#if USE_WINDOWS
+#if _WIN32
 #include <io.h> // for ::open on windows
 #include <dbghelp.h>
 #pragma comment(linker, "/defaultlib:dbghelp.lib")
@@ -38,20 +38,13 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <glob.h>
-
-#if HAVE_DLOPEN
-#include <dlfcn.h>
-#endif // HAVE_DLOPEN
-
-#ifndef HAVE_DLERROR
-#define dlerror() ""
-#endif // HAVE_DLERROR
-
 #endif
 
 #if HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
 #endif
+
+#include "libutils.h"
 
 //////////////////////////////////////////////////////////////////////////
 // STRING FUNCTIONS
@@ -1049,7 +1042,7 @@ bool CSphConfigParser::ValidateKey ( const char * sKey )
 	return true;
 }
 
-#if !USE_WINDOWS
+#if !_WIN32
 
 bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dResult, const char * sArgs )
 {
@@ -1283,7 +1276,7 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 
 			if ( *p=='#' )
 			{
-#if !USE_WINDOWS
+#if !_WIN32
 				if ( !pBuffer && m_iLine==1 && p==sBuf && p[1]=='!' )
 				{
 					CSphVector<char> dResult;
@@ -2446,7 +2439,7 @@ volatile bool& getSafeGDB ()
 	return bHaveJemalloc;
 }
 
-#if !USE_WINDOWS
+#if !_WIN32
 
 #define SPH_BACKTRACE_ADDR_COUNT 128
 #define SPH_BT_BINARY_NAME 2
@@ -2918,7 +2911,7 @@ void sphBacktraceInit()
 	g_bSafeGDB = bSafeGdb;
 }
 
-#else // USE_WINDOWS
+#else // _WIN32
 
 const char * DoBacktrace ( int, int )
 {
@@ -2960,7 +2953,7 @@ void sphBacktraceInit()
 {
 }
 
-#endif // USE_WINDOWS
+#endif // _WIN32
 
 
 static bool g_bUnlinkOld = true;
@@ -3040,6 +3033,8 @@ void sphConfigureCommon ( const CSphConfig & hConf )
 
 	if ( hCommon("plugin_dir") )
 		sphPluginInit ( hCommon["plugin_dir"].cstr() );
+	else
+		sphPluginInit ( HARDCODED_PLUGIN_DIR );
 }
 
 bool sphIsChineseCode ( int iCode )

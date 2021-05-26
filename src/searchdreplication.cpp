@@ -27,18 +27,10 @@
 #include "replication/wsrep_api.h"
 #include "coroutine.h"
 
-#if !USE_WINDOWS
+#if !_WIN32
 // MAC-specific header
 #include <netinet/in.h>
 #endif
-
-const char * GetReplicationDL()
-{
-	auto szDl = GET_GALERA_SONAME();
-	if ( szDl )
-		return szDl;
-	return "libgalera_smm.so";
-}
 
 // global application context for wsrep callbacks
 
@@ -786,7 +778,7 @@ void Instr_fn ( wsrep_pfs_instr_type_t type, wsrep_pfs_instr_ops_t ops, wsrep_pf
 	if ( type==WSREP_PFS_INSTR_TYPE_THREAD || type==WSREP_PFS_INSTR_TYPE_FILE )
 		return;
 
-#if !USE_WINDOWS
+#if !_WIN32
 	if ( type==WSREP_PFS_INSTR_TYPE_MUTEX )
 	{
 		switch ( ops )
@@ -937,10 +929,11 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 	assert ( g_bReplicationEnabled );
 	wsrep_t * pWsrep = nullptr;
 	// let's load and initialize provider
-	auto eRes = (wsrep_status_t)wsrep_load ( GetReplicationDL(), &pWsrep, Logger_fn );
+	CSphString sGaleraFullPath = GET_GALERA_FULLPATH ();
+	auto eRes = (wsrep_status_t)wsrep_load ( sGaleraFullPath.cstr(), &pWsrep, Logger_fn );
 	if ( eRes!=WSREP_OK )
 	{
-		sError.SetSprintf ( "provider '%s' - failed to load, %d '%s'", GetReplicationDL(), (int)eRes, GetStatus ( eRes ) );
+		sError.SetSprintf ( "provider '%s' - failed to load, %d '%s'", sGaleraFullPath.cstr(), (int)eRes, GetStatus ( eRes ) );
 		return false;
 	}
 	assert ( pWsrep );
@@ -2048,7 +2041,7 @@ bool CommitMonitor_c::CommitTOI ( ServedDesc_t * pDesc, CSphString & sError ) EX
 	return true;
 }
 
-static bool UpdateAPI ( AttrUpdateArgs & tUpd, int & iUpdate )
+static bool UpdateAPI ( AttrUpdateArgs& tUpd, int & iUpdate )
 {
 	if ( !tUpd.m_pDesc )
 	{
@@ -2461,9 +2454,7 @@ static void SetListener ( const CSphVector<ListenerDesc_t> & dListeners )
 		g_sIncomingIP = g_sListenReplicationIP;
 
 	g_sIncomingProto.SetSprintf ( "%s:%d", g_sIncomingIP.cstr(), dListeners[iPort].m_iPort );
-
-	CSphString sReplicationDL = GetReplicationDL();
-	g_bReplicationEnabled = ( IsConfigless() && !sReplicationDL.IsEmpty() );
+	g_bReplicationEnabled = IsConfigless();
 }
 
 // start clusters on daemon start

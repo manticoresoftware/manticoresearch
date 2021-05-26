@@ -18,7 +18,7 @@
 
 #include <sys/stat.h>
 
-#if USE_WINDOWS
+#if _WIN32
 	#include <direct.h>
 
 	#define stat		_stat64
@@ -154,7 +154,7 @@ public:
 	/// ctor
 	CSphMappedBuffer ()
 	{
-#if USE_WINDOWS
+#if _WIN32
 		m_iFD = INVALID_HANDLE_VALUE;
 		m_iMap = INVALID_HANDLE_VALUE;
 #else
@@ -173,7 +173,7 @@ public:
 		m_sFilename = sFile;
 		m_bWrite = bWrite;
 
-#if USE_WINDOWS
+#if _WIN32
 		assert ( m_iFD==INVALID_HANDLE_VALUE );
 #else
 		assert ( m_iFD==-1 );
@@ -183,7 +183,7 @@ public:
 		T * pData = NULL;
 		int64_t iCount = 0;
 
-#if USE_WINDOWS
+#if _WIN32
 		int iAccessMode = GENERIC_READ;
 		if ( bWrite )
 			iAccessMode |= GENERIC_WRITE;
@@ -272,7 +272,7 @@ public:
 	{
 		this->MemUnlock();
 
-#if USE_WINDOWS
+#if _WIN32
 		if ( this->GetWritePtr() )
 			::UnmapViewOfFile ( this->GetWritePtr() );
 
@@ -302,7 +302,7 @@ public:
 		if ( bMlock )
 			this->MemUnlock();
 
-#if USE_WINDOWS
+#if _WIN32
 		assert ( m_iMap );
 
 		::UnmapViewOfFile ( this->GetWritePtr() );
@@ -325,7 +325,7 @@ public:
 		}
 #endif
 
-#if !USE_WINDOWS
+#if !_WIN32
 		if ( sphSeek ( m_iFD, uNewSize, SEEK_SET ) < 0 )
 		{
 			sError.SetSprintf ( "failed to seek '%s': %s (length=" UINT64_FMT ")", m_sFilename.cstr(), strerror(errno), uNewSize );
@@ -380,7 +380,7 @@ public:
 #endif
 								;
 
-#if !USE_WINDOWS
+#if !_WIN32
 		auto uPageSize = getpagesize ();
 		auto uSize = this->GetLengthBytes();
 		auto uPages = ( uSize+uPageSize-1 ) / uPageSize;
@@ -402,7 +402,7 @@ public:
 		if ( !this->GetWritePtr() )
 			return true;
 
-#if USE_WINDOWS
+#if _WIN32
 		if ( !::FlushViewOfFile ( this->GetWritePtr(), this->GetLengthBytes() ) )
 		{
 			sError.SetSprintf ( "FlushViewOfFile failed for '%s': errno %d", m_sFilename.cstr(), ::GetLastError() );
@@ -428,7 +428,7 @@ public:
 	const char * GetFileName() const { return m_sFilename.cstr(); }
 
 private:
-#if USE_WINDOWS
+#if _WIN32
 	HANDLE		m_iFD;
 	HANDLE		m_iMap;
 #else

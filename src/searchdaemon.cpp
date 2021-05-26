@@ -18,11 +18,21 @@
 #include "optional.h"
 #include "coroutine.h"
 
-#if USE_WINDOWS
+#if _WIN32
 	#define USE_PSI_INTERFACE 1
 	// for MAC address
+
 	#include <iphlpapi.h>
+	#pragma message("Automatically linking with IPHLPAPI.lib")
 	#pragma comment(lib, "IPHLPAPI.lib")
+
+	#pragma comment(linker, "/defaultlib:ws2_32.lib")
+	#pragma message("Automatically linking with ws2_32.lib")
+
+	// socket function definitions
+	#pragma comment(linker, "/defaultlib:wsock32.lib")
+	#pragma message("Automatically linking with wsock32.lib")
+
 #else
 	#include <netdb.h>
 	// for MAC address
@@ -422,7 +432,7 @@ ListenerDesc_t ParseListener( const char* sSpec )
 // NETWORK SOCKET WRAPPERS
 /////////////////////////////////////////////////////////////////////////////
 
-#if USE_WINDOWS
+#if _WIN32
 const char * sphSockError ( int iErr )
 {
 	if ( iErr==0 )
@@ -444,7 +454,7 @@ const char* sphSockError( int )
 
 int sphSockGetErrno()
 {
-#if USE_WINDOWS
+#if _WIN32
 	return WSAGetLastError();
 #else
 	return errno;
@@ -454,7 +464,7 @@ int sphSockGetErrno()
 
 void sphSockSetErrno( int iErr )
 {
-#if USE_WINDOWS
+#if _WIN32
 	WSASetLastError ( iErr );
 #else
 	errno = iErr;
@@ -472,7 +482,7 @@ int sphSockPeekErrno()
 
 int sphSetSockNB( int iSock )
 {
-#if USE_WINDOWS
+#if _WIN32
 	u_long uMode = 1;
 		return ioctlsocket ( iSock, FIONBIO, &uMode );
 #else
@@ -514,7 +524,7 @@ void sphSetSockTFO ( int iSock)
 #endif
 }
 
-#if USE_WINDOWS
+#if _WIN32
 
 /// on Windows, the wrapper just prevents the warnings
 
@@ -529,7 +539,7 @@ static void FDSet ( int fd, fd_set * fdset )
 
 #pragma warning(pop) // restore warnings
 
-#else // !USE_WINDOWS
+#else // !_WIN32
 #if !HAVE_POLL
 #define SPH_FDSET_OVERFLOW( _fd ) ( (_fd)<0 || (_fd)>=(int)FD_SETSIZE )
 
@@ -543,7 +553,7 @@ static void FDSet( int fd, fd_set* set )
 }
 
 #endif // !HAVE_POLL
-#endif // USE_WINDOWS
+#endif // _WIN32
 
 /// wait until socket is readable or writable
 int sphPoll( int iSock, int64_t tmTimeout, bool bWrite )
@@ -731,7 +741,7 @@ void SmartOutputBuffer_t::Reset()
 	m_dBuf.Reserve( NETOUTBUF );
 };
 
-#if USE_WINDOWS
+#if _WIN32
 void SmartOutputBuffer_t::LeakTo ( CSphVector<ISphOutputBuffer *> dOut )
 {
 	for ( auto & pChunk : m_dChunks )
@@ -1416,7 +1426,7 @@ CSphString GetMacAddress()
 {
 	StringBuilder_c sMAC( ":" );
 
-#if USE_WINDOWS
+#if _WIN32
 	CSphFixedVector<IP_ADAPTER_ADDRESSES> dAdapters ( 128 );
 	PIP_ADAPTER_ADDRESSES pAdapter = dAdapters.Begin();
 	auto uSize = (DWORD) dAdapters.GetLengthBytes();

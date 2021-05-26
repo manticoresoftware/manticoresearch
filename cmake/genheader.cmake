@@ -3,19 +3,6 @@ if ( __genheader_included )
 endif ()
 set ( __genheader_included YES )
 
-function( DIAG VARR )
-	if ( DIAGNOSTIC )
-		message ( STATUS "${VARR} -> ${${VARR}}" )
-	endif ()
-endfunction()
-
-function( DIAGS MSG )
-	if ( DIAGNOSTIC )
-		message ( STATUS "${MSG}" )
-	endif ()
-endfunction()
-
-
 # stuff to automatically generate c++ headers from template and plain text files/templates
 
 # retrieve result of php ubertest.php show <NAME> and put it to outvar
@@ -49,7 +36,7 @@ endfunction()
 
 # generate custom header NAME.h from given text file placed on TEXTPATH
 # if 'file' doesnt exist, but 'file.in' exists, it will be loaded and configured
-function( HSNIPPET NAME TEXTPATH STATIC )
+function( HSNIPPET NAME TEXTPATH )
 
 	set ( _SRCFILE "${CMAKE_CURRENT_SOURCE_DIR}/${TEXTPATH}" )
 	message ( STATUS "Generate ${NAME}.h from ${_SRCFILE}" )
@@ -73,7 +60,7 @@ function( HSNIPPET NAME TEXTPATH STATIC )
 	string ( TOUPPER "${NAME}" UPNAME )
 	configure_file ( "${MANTICORE_SOURCE_DIR}/src/literal.h.in"
 			"${MANTICORE_BINARY_DIR}/config/${NAME}.h" @ONLY )
-	add_definitions ( -DHAVE_${UPNAME}_H )
+	set (HAVE_${UPNAME}_H TRUE PARENT_SCOPE)
 endfunction()
 
 # if filepath tailed with '.in', remove that extension
@@ -211,6 +198,5 @@ function( HSNIPPETFOLDER FOLDERGLOB TEMPLATE )
 	configure_file ( "${TARGET_HDR}1" "${TARGET_HDR}" COPYONLY)
 	file ( REMOVE "${TARGET_HDR}1" )
 
-	add_definitions ( -DHAVE_${SNIPPETNAMEUPPER}_H )
-
+	set (HAVE_${SNIPPETNAMEUPPER}_H TRUE PARENT_SCOPE)
 endfunction()

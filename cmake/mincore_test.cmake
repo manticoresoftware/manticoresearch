@@ -25,8 +25,6 @@
 # See the License for more information.
 #=============================================================================
 
-message ( STATUS "Checking if mincore has unsigned 3-rd param" )
-
 set ( _MINCORE_TEST "#include <unistd.h>
 #include <sys/mman.h>
 

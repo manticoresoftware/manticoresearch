@@ -13,9 +13,6 @@ if (!defined("JSON_UNESCAPED_SLASHES") || !defined("JSON_UNESCAPED_UNICODE"))
 if (!function_exists("curl_init"))
 	die("ERROR: missing required curl_init(); add php_curl.so (.dll on Windows) to your php.ini!");
 
-if ( !$windows && !is_executable("/usr/bin/python"))
-		die("ubertest needs python support; install python");
-
 //////////////////////
 // parse command line
 //////////////////////
@@ -88,6 +85,7 @@ $user_skip = false;
 $force_guess = true;
 $show = false;
 $showpar = array();
+$ctest = false;
 
 for ( $i=0; $i<count($args); $i++ )
 {
@@ -107,7 +105,7 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="-b" || $arg=="--bindir" )		$locals['bin'] = $args[++$i];
 	else if ( $arg=="-t" || $arg=="--testdir" )		$locals['testdir'] = $args[++$i];
 	else if ( $arg=="-tt" )							$locals['scriptdir'] = $args[++$i];
-	else if ( $arg=="--ctest" )						{ $locals['ctest'] = true; $force_guess = false; }
+	else if ( $arg=="--ctest" )						{ $locals['ctest'] = true; $ctest = true; $force_guess = false; }
 	else if ( $arg=="--rt" )						$locals['rt_mode'] = true;
 	else if ( $arg=="--columnar" )					$locals['columnar_mode'] = true;
 	else if ( $arg=="--test-thd-pool" )				$locals['use_pool'] = true;
@@ -152,6 +150,13 @@ if ( !$run && !$show )
 	print ( "ERROR: no run mode defined; run with no arguments for help screen.\n" );
 	exit ( 1 );
 }
+
+$python = getenv('python');
+if (!$python)
+	$python = "/usr/bin/python";
+
+if (!$windows && !is_executable($python) && !$ctest)
+	die("ubertest needs python support; install python");
 
 $cygwin = false;
 if ( $locals['scriptdir']!=$locals['testdir'] )

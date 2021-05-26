@@ -14,12 +14,11 @@
 #include "sphinxint.h"
 #include "icu.h"
 
-#if USE_ICU
+#if WITH_ICU
 
 #ifndef U_STATIC_IMPLEMENTATION
 #define U_STATIC_IMPLEMENTATION
 #endif
-
 
 #ifndef U_CHARSET_IS_UTF8
 #define U_CHARSET_IS_UTF8 1
@@ -34,16 +33,9 @@
 #include <unicode/udata.h>
 #include <unicode/ustring.h>
 
-#if USE_WINDOWS
-	#include <shlwapi.h>
-
-	#pragma comment(linker, "/defaultlib:Shlwapi.lib")
-	#pragma message("Automatically linking with Shlwapi.lib")
-#endif
-
 extern CSphVector<CharsetAlias_t> g_dCharsetAliases;
 
-static CSphString g_sICUDir = GET_ICU_DATA_DIR();
+static CSphString g_sICUDir;
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -54,10 +46,7 @@ static void ConfigureICU()
 	if ( g_bICUInitialized )
 		return;
 
-#if USE_WINDOWS
-	if ( PathIsRelative(GET_ICU_DATA_DIR()) )
-		g_sICUDir.SetSprintf ( "%s%s", GetPathOnly ( GetExecutablePath() ).cstr(), GET_ICU_DATA_DIR() );
-#endif
+	g_sICUDir = GET_ICU_DATA_DIR();
 
 	u_setDataDirectory ( g_sICUDir.cstr() );
 

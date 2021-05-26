@@ -26,7 +26,7 @@
 #define DebugvL( LETTER, ... ) TimePrefixed::LogDebugv ( #LETTER " ", __VA_ARGS__)
 #define DebugvvL( LETTER, ... ) TimePrefixed::LogDebugvv ( #LETTER " ", __VA_ARGS__)
 #else
-#if USE_WINDOWS
+#if _WIN32
 #pragma warning(disable:4390)
 #endif
 #define WarnL( ... )
@@ -207,7 +207,7 @@ struct TaskProperties_t
 
 // Task class descriptor just stores pointers to function-checker and function-worker
 
-#if (USE_WINDOWS && _MSC_VER<1910)
+#if (_WIN32 && _MSC_VER<1910)
 // visual studio 2015 causes C2719 error when tries compile 'contains' for fixed fector of TaskProperties_t
 TaskFlavour_t g_Tasks [ NUM_TASKS ];
 TaskProperties_t g_TaskProps [ NUM_TASKS ];

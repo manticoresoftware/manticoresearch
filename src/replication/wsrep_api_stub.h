@@ -6,6 +6,10 @@
 // (every necessary functions just return 'not implemented' status)
 
 
+#if HAVE_WSREP
+#include "wsrep_api.h"
+#else
+
 #ifndef WSREP_H
 #define WSREP_H
 
@@ -1324,3 +1328,4 @@ void wsrep_unload ( wsrep_t* hptr ) {}
 #endif
 
 #endif /* WSREP_H */
+#endif

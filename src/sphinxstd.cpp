@@ -16,7 +16,7 @@
 
 #include <math.h>
 
-#if !USE_WINDOWS
+#if !_WIN32
 #include <sys/time.h> // for gettimeofday
 
 // define this if you want to run gprof over the threads model - to track children threads also.
@@ -30,7 +30,7 @@ int g_iMaxCoroStackSize = 1024*1024;
 
 char CSphString::EMPTY[] = "";
 
-#if USE_WINDOWS
+#if _WIN32
 #ifndef NDEBUG
 
 void sphAssert ( const char * sExpr, const char * sFile, int iLine )
@@ -50,7 +50,7 @@ void sphAssert ( const char * sExpr, const char * sFile, int iLine )
 }
 
 #endif // !NDEBUG
-#endif // USE_WINDOWS
+#endif // _WIN32
 
 /////////////////////////////////////////////////////////////////////////////
 // DEBUG MEMORY MANAGER
@@ -346,8 +346,7 @@ void debugdeallocate ( void * pPtr )
 // ALLOCACTIONS COUNT/SIZE PROFILER
 //////////////////////////////////////////////////////////////////////////////
 
-#else
-#if SPH_ALLOCS_PROFILER
+#elif SPH_ALLOCS_PROFILER
 
 #undef new
 
@@ -642,8 +641,7 @@ void sphMemStatDump ( int iFD )
 // PRODUCTION MEMORY MANAGER
 //////////////////////////////////////////////////////////////////////////////
 
-#else
-#ifndef SPH_DONT_OVERRIDE_MEMROUTINES
+#elif !DISABLE_MEMROUTINES
 
 void * operator new ( size_t iSize )
 {
@@ -674,9 +672,7 @@ void operator delete [] ( void * pPtr ) throw ()
 		::free ( pPtr );
 }
 
-#endif // SPH_DONT_OVERRIDE_MEMROUTINES
-#endif // SPH_ALLOCS_PROFILER
-#endif // SPH_DEBUG_LEAKS
+#endif // DISABLE_MEMROUTINES
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -692,79 +688,38 @@ void operator delete [] ( void * pPtr ) throw ()
 
 static SphDieCallback_t g_pfDieCallback = nullptr;
 
-#ifndef FULL_SHARE_DIR
-#define FULL_SHARE_DIR "."
-#endif
-
+// absolute path from outside, as /usr/share/manticore, when prefix / or /usr. Or /usr/local/share/manticore if prefix /usr/local/
 const char * GET_FULL_SHARE_DIR()
 {
 	const char * szEnv = getenv ( "FULL_SHARE_DIR" );
-	return szEnv ? szEnv : FULL_SHARE_DIR;
+	if ( szEnv )
+		return szEnv;
+	return FULL_SHARE_DIR;
 }
 
-const char * GET_GALERA_SONAME ()
+// galera_soname must be provided by configuration.
+CSphString GET_GALERA_FULLPATH ()
 {
+	CSphString sResult;
+#ifndef _WIN32
 	const char * szEnv = getenv ( "GALERA_SONAME" );
 	if ( szEnv )
-		return szEnv;
-	return
-#ifdef GALERA_SONAME
-			GALERA_SONAME;
-#else
-			nullptr;
+		sResult = szEnv;
+	else
+		sResult.SetSprintf ( "%s/%s", GET_MANTICORE_MODULES(), GALERA_SONAME );
 #endif
+	return sResult;
 }
 
-const char * GET_MYSQL_LIB()
+CSphString GET_COLUMNAR_FULLPATH ()
 {
-	const char * szEnv = getenv ( "MYSQL_LIB" );
+	CSphString sResult;
+	const char * szEnv = getenv ( "LIB_MANTICORE_COLUMNAR" );
 	if ( szEnv )
-		return szEnv;
-	return
-#ifdef MYSQL_LIB
-			MYSQL_LIB;
-#else
-			nullptr;
-#endif
-}
-
-const char * GET_PGSQL_LIB ()
-{
-	const char * szEnv = getenv ( "PGSQL_LIB" );
-	if ( szEnv )
-		return szEnv;
-	return
-#ifdef PGSQL_LIB
-			PGSQL_LIB;
-#else
-			nullptr;
-#endif
-}
-
-const char * GET_UNIXODBC_LIB ()
-{
-	const char * szEnv = getenv ( "UNIXODBC_LIB" );
-	if ( szEnv )
-		return szEnv;
-	return
-#ifdef UNIXODBC_LIB
-			UNIXODBC_LIB;
-#else
-			nullptr;
-#endif
-}
-
-const char * GET_EXPAT_LIB ()
-{
-	const char * szEnv = getenv ( "EXPAT_LIB" );
-	if ( szEnv )
-		return szEnv;
-	return
-#ifdef EXPAT_LIB
-			EXPAT_LIB;
-#else
-			nullptr;
-#endif
+		sResult = szEnv;
+	else
+		sResult.SetSprintf ( "%s/" LIB_MANTICORE_COLUMNAR, GET_MANTICORE_MODULES() );
+	return sResult;
 }
 
 const char * GET_ICU_DATA_DIR ()
@@ -772,15 +727,33 @@ const char * GET_ICU_DATA_DIR ()
 	const char * szEnv = getenv ( "ICU_DATA_DIR" );
 	if ( szEnv )
 		return szEnv;
-	return
-#ifdef ICU_DATA_DIR
-			ICU_DATA_DIR;
-#else
-			nullptr;
-#endif
+
+	static CSphString sModulesPrefix;
+	if ( sModulesPrefix.IsEmpty() )
+	{
+		CSphString sInitModulesPrefix;
+		sInitModulesPrefix.SetSprintf ("%s/icu",GET_FULL_SHARE_DIR());
+		sModulesPrefix.Swap(sInitModulesPrefix);
+	}
+	return sModulesPrefix.cstr();
 }
 
-#if USE_WINDOWS
+const char * GET_MANTICORE_MODULES ()
+{
+	const char * szEnv = getenv ( "MANTICORE_MODULES" );
+	if ( szEnv )
+		return szEnv;
+	static CSphString sModulesPrefix;
+	if ( sModulesPrefix.IsEmpty() )
+	{
+		CSphString sInitModulesPrefix;
+		sInitModulesPrefix.SetSprintf ("%s/modules",GET_FULL_SHARE_DIR());
+		sModulesPrefix.Swap(sInitModulesPrefix);
+	}
+	return sModulesPrefix.cstr();
+}
+
+#if _WIN32
 	void * mmalloc ( size_t uSize, Mode_e, Share_e )
 	{
 		return ::malloc ( (size_t)uSize );
@@ -883,7 +856,7 @@ bool mmunlock ( void * pMem, size_t uSize )
 	return munlock ( pMem, uSize )==0;
 }
 
-#endif // USE_WINDOWS
+#endif // _WIN32
 
 void sphSetDieCallback ( SphDieCallback_t pfDieCallback )
 {
@@ -965,7 +938,7 @@ void sphSrand ( DWORD uSeed )
 void sphAutoSrand ()
 {
 	// get timestamp
-#if !USE_WINDOWS
+#if !_WIN32
 	struct timeval tv;
 	gettimeofday ( &tv, NULL );
 #else
@@ -1022,7 +995,7 @@ int64_t sphGetStackUsed()
 	return ( iHeight>=0 ) ? iHeight : -iHeight; // on different arch stack may grow in different directions
 }
 
-#if !USE_WINDOWS
+#if !_WIN32
 bool sphIsLtLib()
 {
 #ifndef _CS_GNU_LIBPTHREAD_VERSION
@@ -1042,7 +1015,7 @@ bool sphIsLtLib()
 // MUTEX and EVENT
 //////////////////////////////////////////////////////////////////////////
 
-#if USE_WINDOWS
+#if _WIN32
 
 // Windows mutex implementation
 
@@ -1187,7 +1160,7 @@ bool CSphMutex::TimedLock ( int iMsec )
 		if ( iRes!=EBUSY )
 			break;
 		// below is inlined sphSleepMsec(1) - placed here to avoid dependency from libsphinx (for wordbreaker)
-#if USE_WINDOWS
+#if _WIN32
 		Sleep ( 1 );
 #else
 		struct timeval tvTimeout;
@@ -1331,7 +1304,7 @@ bool AutoEvent_T<true>::WaitEvent ( int iMsec )
 // RWLOCK
 //////////////////////////////////////////////////////////////////////////
 
-#if USE_WINDOWS
+#if _WIN32
 
 // Windows rwlock implementation
 
@@ -1545,7 +1518,7 @@ bool CSphRwlock::Unlock ()
 /// microsecond precision timestamp
 int64_t sphMicroTimer()
 {
-#if USE_WINDOWS
+#if _WIN32
 	// Windows time query
 	static int64_t iBase = 0;
 	static int64_t iStart = 0;
@@ -1576,7 +1549,7 @@ int64_t sphMicroTimer()
 	struct timeval tv;
 	gettimeofday ( &tv, NULL );
 	return int64_t(tv.tv_sec)*int64_t(1000000) + int64_t(tv.tv_usec);
-#endif // USE_WINDOWS
+#endif // _WIN32
 }
 
 /// return cpu time, in microseconds
@@ -1747,7 +1720,7 @@ const char*		sphCheckEndian()
 
 int sphCpuThreadsCount ()
 {
-#if USE_WINDOWS
+#if _WIN32
 	SYSTEM_INFO tInfo;
 	GetSystemInfo ( &tInfo );
 	return tInfo.dwNumberOfProcessors;
@@ -1759,7 +1732,7 @@ int sphCpuThreadsCount ()
 
 int GetMemPageSize ()
 {
-#if USE_WINDOWS
+#if _WIN32
 		SYSTEM_INFO tInfo;
 		GetSystemInfo ( &tInfo );
 		return tInfo.dwPageSize;
@@ -1777,7 +1750,7 @@ int sphGetMemPageSize ()
 
 //////////////////////////////////////////////////////////////////////////
 
-#if USE_WINDOWS
+#if _WIN32
 #pragma warning(push,1)
 #pragma warning(disable:4530)
 #endif
@@ -1792,7 +1765,7 @@ int sphGetMemPageSize ()
 #define new        new(__FILE__,__LINE__)
 #endif
 
-#if USE_WINDOWS
+#if _WIN32
 #pragma warning(pop)
 #endif
 
@@ -2408,7 +2381,7 @@ const Str_t& StringBuilder_c::LazyComma_c::RawComma ( const std::function<void (
 }
 
 
-#ifdef USE_SMALLALLOC
+#if WITH_SMALLALLOC
 
 ////////////////////////////////////////////////////////////////////////////////
 /// FixedAllocator_c, PtrAttrAllocator_c

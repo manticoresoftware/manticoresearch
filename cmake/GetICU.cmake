@@ -8,65 +8,54 @@
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the License for more information.
 #=============================================================================
-FOREACH (policy CMP0074)
-	IF (POLICY ${policy})
-		CMAKE_POLICY(SET ${policy} NEW)
-	ENDIF ()
-ENDFOREACH ()
+set(ICU_GITHUB "https://github.com/unicode-org/icu/releases/download/release-65-1/icu4c-65_1-src.tgz")
+set(ICU_BUNDLE "${LIBS_BUNDLE}/icu4c-65_1-src.tgz")
+set(ICU_SRC_MD5 "d1ff436e26cabcb28e6cb383d32d1339")
 
+cmake_minimum_required(VERSION 3.17 FATAL_ERROR)
 include(update_bundle)
 
-set(ICU_GITHUB "https://github.com/unicode-org/icu/releases/download/release-65-1/icu4c-65_1-src.tgz")
-set(ICU_BUNDLEZIP "icu4c-65_1-src.tgz")
-
-# cb to check if provided icu dir contains icu src
-function(CHECK_ICU_SRC RESULT HINT)
-	if(EXISTS "${HINT}/as_is")
-		set(${RESULT} TRUE PARENT_SCOPE)
-	endif()
+# helpers
+function(install_icudata DEST)
+	if (NOT TARGET icu::icudata)
+		return()
+	endif ()
+	get_target_property(ICU_DATA icu::icudata INTERFACE_SOURCES)
+	diag(ICU_DATA)
+	install (FILES ${ICU_DATA} DESTINATION "${DEST}" COMPONENT icudata)
 endfunction()
 
-# cb to finalize icu sources (add cmake)
-function(PREPARE_ICU ICU_SRC)
-	# check if it is already patched before
-	if (NOT EXISTS "${ICU_SRC}/CMakeLists.txt")
-		configure_file("${CMAKE_SOURCE_DIR}/libicu/CMakeLists.txt" "${ICU_SRC}/CMakeLists.txt" COPYONLY)
-	endif ()
-endfunction()
-
-set (__icu_namespace "icu::")
-provide(ICU "${ICU_GITHUB}" "${ICU_BUNDLEZIP}")
-if (ICU_FROMSOURCES)
-	add_subdirectory(${ICU_SRC} ${ICU_BUILD} EXCLUDE_FROM_ALL)
-	set(ICU_LIBRARIES icu)
-	set(__icu_namespace)
-elseif (NOT ICU_FOUND)
-	unset(WITH_ICU CACHE)
-	return()
+# if it is allowed to use system library - try to use it
+if (NOT WITH_ICU_FORCE_STATIC)
+	find_package(icu MODULE QUIET)
+	return_if_target_found (icu::icu "as default (sys or other)")
 endif ()
 
-get_target_property(ICU_DATA ${__icu_namespace}icudata INTERFACE_SOURCES)
+if (WITH_ICU_FORCE_BUILD) # special case for static binary
+	select_nearest_url(ICU_PLACE icu ${ICU_BUNDLE} ${ICU_GITHUB})
+	fetch_and_check(icu ${ICU_PLACE} ${ICU_SRC_MD5} ICU_SRC)
+	configure_file("${MANTICORE_SOURCE_DIR}/libicu/CMakeLists.txt" "${ICU_SRC}/CMakeLists.txt" COPYONLY)
+	message(STATUS "Build icu from sources since we want special build for static release")
+	set (ICU_BUILD "${MANTICORE_BINARY_DIR}/icu-build-static-force")
+	external_build(icu ICU_SRC ICU_BUILD "STATIC_BUILD=ON")
+	find_package(icu REQUIRED CONFIG PATHS "${ICU_BUILD}")
+	trace (icu::icu)
+	return_if_target_found (icu::icu "was built and saved")
+endif()
 
-list(APPEND EXTRA_LIBRARIES ${ICU_LIBRARIES})
-set(USE_ICU 1)
-memcfgvalues(USE_ICU)
+# determine destination folder where we expect pre-built icu
+find_package(icu QUIET CONFIG)
+return_if_target_found (icu::icu "ready (no need to build)")
 
-if (WIN32)
-	# FIXME! need a proper way to detect if CMAKE_INSTALL_DATADIR is not default
-	if (NOT CMAKE_INSTALL_DATADIR STREQUAL "share")
-		add_compile_definitions(ICU_DATA_DIR="${CMAKE_INSTALL_DATADIR}/icu")
-	else ()
-		add_compile_definitions(ICU_DATA_DIR="../share/icu")
-	endif ()
-else ()
-	add_compile_definitions(ICU_DATA_DIR="${CMAKE_INSTALL_FULL_DATADIR}/${PACKAGE_NAME}/icu")
-endif ()
+# not found. Populate and prepare sources
+select_nearest_url(ICU_PLACE icu ${ICU_BUNDLE} ${ICU_GITHUB})
+fetch_and_check(icu ${ICU_PLACE} ${ICU_SRC_MD5} ICU_SRC)
+execute_process(COMMAND ${CMAKE_COMMAND} -E copy_if_different "${MANTICORE_SOURCE_DIR}/libicu/CMakeLists.txt" "${ICU_SRC}/CMakeLists.txt")
 
-message(STATUS "library: ${ICU_LIBRARIES}, icu-data: ${ICU_DATA}")
-diag(ICU_FOUND)
-diag(ICU_INCLUDE_DIRS)
-diag(ICU_LIBRARIES)
-diag(ICU_SRC)
-diag(ICU_BUILD)
-diag(ICU_FROMSOURCES)
-diag(ICU_DATA)
+# build external project
+get_build(ICU_BUILD icu)
+external_build(icu ICU_SRC ICU_BUILD)
+
+# now it should find
+find_package(icu REQUIRED CONFIG)
+return_if_target_found (icu::icu "was built and saved")

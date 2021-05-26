@@ -24,19 +24,12 @@
 // MACHINE-DEPENDENT STUFF
 /////////////////////////////////////////////////////////////////////////////
 
-#if USE_WINDOWS
+#if _WIN32
 	// Win-specific headers and calls
 	#include <winsock2.h>
 
 	#define HAVE_POLL 1
 	static inline int poll ( struct pollfd *pfd, int nfds, int timeout ) { return WSAPoll ( pfd, nfds, timeout ); }
-	#pragma comment(linker, "/defaultlib:ws2_32.lib")
-	#pragma message("Automatically linking with ws2_32.lib")
-
-	// socket function definitions
-	#pragma comment(linker, "/defaultlib:wsock32.lib")
-	#pragma message("Automatically linking with wsock32.lib")
-
 	#define sphSockRecv(_sock,_buf,_len)	::recv(_sock,_buf,_len,0)
 	#define sphSockSend(_sock,_buf,_len)	::send(_sock,_buf,_len,0)
 	#define sphSockClose(_sock)				::closesocket(_sock)
@@ -280,7 +273,7 @@ void CheckPort( int iPort );
 ListenerDesc_t ParseListener( const char* sSpec );
 
 // use check outside ParseListener in order to make tests consistent despite platforms
-#if USE_WINDOWS
+#if _WIN32
 	#define CHECK_LISTENER(dListener) \
 		if ( !(dListener).m_sUnix.IsEmpty() ) \
 			sphFatal( "UNIX sockets are not supported on Windows" );
@@ -465,7 +458,7 @@ public:
 //	void PrependBuf ( SmartOutputBuffer_t &dBuf );
 	size_t GetIOVec ( CSphVector<sphIovec> &dOut ) const;
 	void Reset();
-#if USE_WINDOWS
+#if _WIN32
 	void LeakTo ( CSphVector<ISphOutputBuffer *> dOut );
 #endif
 };

@@ -16,9 +16,8 @@ add_executable ( gmanticorebench
 
 target_include_directories (gmanticorebench PRIVATE .. )
 target_link_libraries (gmanticorebench
-		libsphinx
+		lmanticore
 		lsearchd
-		${EXTRA_LIBRARIES}
-		${WSREP}
+		stub_ssl
 		benchmark::benchmark)
 

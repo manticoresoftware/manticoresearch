@@ -1,0 +1,30 @@
+/* Indexer-specific config flags, isolated from the all rest of the daemon */
+
+/* ODBC support: "WITH" - feature available, "DL" - load dynamically, "LIB" - lib to load */
+#cmakedefine01 WITH_ODBC
+#cmakedefine01 DL_ODBC
+#cmakedefine ODBC_LIB "${ODBC_LIB}"
+
+/* EXPAT support: "WITH" - feature available, "DL" - load dynamically, "LIB" - lib to load */
+#cmakedefine01 WITH_EXPAT
+#cmakedefine01 DL_EXPAT
+#cmakedefine EXPAT_LIB "${EXPAT_LIB}"
+
+/* iconv support: "WITH" - feature available, "DL" - load dynamically, "LIB" - lib to load */
+#cmakedefine01 WITH_ICONV
+#cmakedefine01 DL_ICONV
+#cmakedefine ICONV_LIB "${ICONV_LIB}"
+#cmakedefine01 ICONV_INBUF_CONST
+
+/* MySQL support: "WITH" - feature available, "DL" - load dynamically, "LIB" - lib to load */
+#cmakedefine01 WITH_MYSQL
+#cmakedefine01 DL_MYSQL
+#cmakedefine MYSQL_LIB "${MYSQL_LIB}"
+
+/* PosgreSQL support: "WITH" - feature available, "DL" - load dynamically, "LIB" - lib to load */
+#cmakedefine01 WITH_POSTGRESQL
+#cmakedefine01 DL_POSTGRESQL
+#cmakedefine POSTGRESQL_LIB "${POSTGRESQL_LIB}"
+
+
+

@@ -5,22 +5,15 @@ set ( CTEST_BUILD_NAME "$ENV{CI_COMMIT_REF_NAME}" )
 set ( CTEST_BUILD_CONFIGURATION "$ENV{CTEST_BUILD_CONFIGURATION}" )
 set ( CTEST_CMAKE_GENERATOR "$ENV{CTEST_CMAKE_GENERATOR}" )
 set ( LIBS_BUNDLE "$ENV{LIBS_BUNDLE}" )
-set ( OPENSSL_ROOT_DIR "$ENV{OPENSSL_ROOT_DIR}" )
 set ( DISABLE_GTESTS "$ENV{DISABLE_GTESTS}" )
 set ( CTEST_REGEX "$ENV{CTEST_REGEX}" )
 set ( WIN_TEST_CI "$ENV{WIN_TEST_CI}" )
 set ( SEARCHD_CLI_EXTRA "$ENV{SEARCHD_CLI_EXTRA}" )
+set ( WITH_COVERAGE "$ENV{WITH_COVERAGE}" )
 set_property ( GLOBAL PROPERTY Label P$ENV{CI_PIPELINE_ID} J$ENV{CI_JOB_ID} )
 
 # how may times try the test before it is considered failed
 set (RETRIES 5)
-
-# set defaults for CI Windows test
-if ( WIN_TEST_CI )
-	if ( NOT CTEST_BUILD_CONFIGURATION )
-		set ( CTEST_BUILD_CONFIGURATION "Debug" )
-	endif()
-endif()
 
 #MESSAGE (STATUS "WINTEST: ${WIN_TEST_CI}, config ${CTEST_BUILD_CONFIGURATION}")
 
@@ -36,26 +29,12 @@ if ( NOT CTEST_SOURCE_DIRECTORY )
 	set ( CTEST_SOURCE_DIRECTORY ".." )
 endif ()
 
-if ( DEFINED ENV{WITH_PGSQL} )
-	set ( WITH_PGSQL "$ENV{WITH_PGSQL}" )
-elseif ( WIN_TEST_CI )
-	set ( WITH_PGSQL 0 )
-else()
-	set ( WITH_PGSQL 1 )
+if ( DEFINED ENV{WITH_COVERAGE} )
+	set (WITH_POSTGRESQL "$ENV{WITH_POSTGRESQL}" )
 endif()
 # common test options
-set ( CONFIG_OPTIONS "WITH_ODBC=1;WITH_RE2=1;WITH_STEMMER=1;WITH_PGSQL=${WITH_PGSQL};WITH_EXPAT=1;USE_SSL=1" )
+set ( CONFIG_OPTIONS "WITH_ODBC=1;WITH_RE2=1;WITH_STEMMER=1;WITH_POSTGRESQL=${WITH_POSTGRESQL};WITH_EXPAT=1;WITH_SSL=1" )
 set ( CTEST_BINARY_DIRECTORY "build" )
-
-if ( WIN_TEST_CI )
-	LIST(APPEND CONFIG_OPTIONS "CMAKE_INSTALL_PREFIX=.") # fixme! check if it could be used not only for win...
-else()
-	LIST(APPEND CONFIG_OPTIONS "CMAKE_INSTALL_DATADIR=${CTEST_SOURCE_DIRECTORY}/build/installdir")
-endif()
-
-if (DEFINED ENV{WITH_COLUMNAR})
-	LIST(APPEND CONFIG_OPTIONS "WITH_COLUMNAR=$ENV{WITH_COLUMNAR}")
-endif ()
 
 if ( CTEST_BUILD_CONFIGURATION STREQUAL Debug )
 	# configure coverage
@@ -75,10 +54,6 @@ endif ()
 
 if ( SEARCHD_CLI_EXTRA )
 	LIST ( APPEND CONFIG_OPTIONS "SEARCHD_CLI_EXTRA=${SEARCHD_CLI_EXTRA}" )
-endif()
-
-if ( WIN_TEST_CI )
-	LIST ( APPEND CONFIG_OPTIONS "WIN_TEST_CI=${WIN_TEST_CI}" )
 endif()
 
 SET ( CTEST_START_WITH_EMPTY_BINARY_DIRECTORY TRUE )
@@ -113,20 +88,7 @@ set ( CTEST_CUSTOM_WARNING_EXCEPTION ".*flexsphinx.*" )
 ctest_start ( "Continuous" )
 ctest_update ()
 ctest_configure ()
-if ( WIN_TEST_CI )
-	ctest_build ( TARGET install )
-
-	# dirty hack for icu: executables located at CTEST_BINARY_DIRECTORY/src/Debug/*.exe
-	# same folder used as install prefix, and everything installed there. So we could push icu data
-	# into expected place using installed icu from known location
-	file(MAKE_DIRECTORY "${CTEST_BINARY_DIRECTORY}/src/share/icu")
-	file(COPY "${CTEST_BINARY_DIRECTORY}/share/icu/" DESTINATION "${CTEST_BINARY_DIRECTORY}/src/share/icu/" FILES_MATCHING PATTERN "*.dat")
-
-	# the same hack for dlls. They with binaries placed in the bin folder by installation
-	file(COPY "${CTEST_BINARY_DIRECTORY}/bin/" DESTINATION "${CTEST_BINARY_DIRECTORY}/src/Debug/" FILES_MATCHING PATTERN "*.dll")
-else ( WIN_TEST_CI )
-	ctest_build ( TARGET install FLAGS "-j5" )
-endif ()
+ctest_build ()
 
 if ( CTEST_REGEX )
 	ctest_test ( RETURN_VALUE retcode INCLUDE "${CTEST_REGEX}" REPEAT UNTIL_PASS:${RETRIES})

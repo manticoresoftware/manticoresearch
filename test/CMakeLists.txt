@@ -1,6 +1,6 @@
 cmake_minimum_required ( VERSION 3.3 )
 
-FOREACH (policy CMP0110)
+FOREACH (policy CMP0070 CMP0110)
 	IF (POLICY ${policy})
 		CMAKE_POLICY(SET ${policy} NEW)
 	ENDIF ()
@@ -9,17 +9,10 @@ ENDFOREACH ()
 # will add the tests from test suite
 # each test will be added as separate one
 
-function (test_prop test)
-	SET_TESTS_PROPERTIES ( "${test}" PROPERTIES SKIP_RETURN_CODE 42 )
-	SET_TESTS_PROPERTIES ( "${test}" PROPERTIES FIXTURES_REQUIRED UBER )
-	SET_TESTS_PROPERTIES ( "${test}" PROPERTIES RESOURCE_LOCK DbAccess )
-endfunction()
-
-if ( DISABLE_TESTING )
+if ( NOT BUILD_TESTING )
 	return()
 endif()
 
-	
 find_program(CYGPATH NAMES cygpath)
 diag(CYGPATH)
 if (CYGPATH AND WIN32)
@@ -41,34 +34,85 @@ diag(MANTICORE_SCRIPTING_DIR)
 file ( GLOB tests "test_[0-9]*" )
 list ( SORT tests )
 
+if (TARGET icu::icudata)
+	get_target_property (ICU_DATA icu::icudata INTERFACE_SOURCES)
+	get_filename_component (ICU_DATA_DIR "${ICU_DATA}" DIRECTORY)
+endif ()
+
+if (TARGET galera::galera)
+	get_target_property (GALERA_MODULE galera::galera LOCATION)
+endif ()
+
+set (MANTICORE_MODULES "${MANTICORE_BINARY_DIR}/usr/share/manticore/modules")
+set (FULL_SHARE_DIR "${MANTICORE_SOURCE_DIR}/misc")
+
+find_package (PythonInterp QUIET)
+
 if ( NOT "${CMAKE_CURRENT_SOURCE_DIR}" STREQUAL "${CMAKE_CURRENT_BINARY_DIR}")
-	message ( STATUS "Create ubertest.php proxy" )
-	configure_file ( "ubertest.php.in" "${MANTICORE_BINARY_DIR}/test/ubertest.php" @ONLY )
+	message ( STATUS "Create ubertest.php proxies" )
+	configure_file ("ubertest.php.in" "${MANTICORE_BINARY_DIR}/test/ubertest.php" @ONLY)
 endif()
 	
-if ( NOT SEARCHD_CLI_EXTRA )
-	set ( SEARCHD_CLI_EXTRA "" )
+if ( SEARCHD_CLI_EXTRA )
+	set ( sd_extra "--sd_extra ${SEARCHD_CLI_EXTRA}" )
 endif()
 
 # since cmake 3.18 names need fixup
 include(fixup_test_name)
 
+function (_test_prop test)
+	SET_TESTS_PROPERTIES ("${test}" PROPERTIES SKIP_RETURN_CODE 42 FIXTURES_REQUIRED UBER RESOURCE_LOCK DbAccess)
+	SET_TESTS_PROPERTIES ("${test}" PROPERTIES ENVIRONMENT DbAccess)
+
+	SET_TESTS_PROPERTIES ("${test}" PROPERTIES ENVIRONMENT "INDEXER=$<TARGET_FILE:indexer>;SEARCHD=$<TARGET_FILE:searchd>")
+	if (COMMAND ubertest_properties) #cb from outside
+		ubertest_properties ("${test}")
+	endif ()
+endfunction ()
+
+function (_add_ubertest testN tst_name REQUIRES prefix label flags)
+	fixup_test_name (_tstn "${prefix}_${tst_name}")
+	add_test (NAME "${_tstn}"
+			#    	CONFIGURATIONS Debug
+			WORKING_DIRECTORY "${MANTICORE_BINARY_DIR}/test"
+			COMMAND php ubertest.php
+			--ctest -u test --strict-verbose --no-demo
+			${flags}
+			${sd_extra} t ${testN})
+
+	SET (_labels "${label}")
+	foreach (require ${REQUIRES})
+		LIST (APPEND _labels ${require})
+	endforeach ()
+	SET_TESTS_PROPERTIES ("${_tstn}" PROPERTIES LABELS "${_labels}")
+	if ("HEAVY" IN_LIST REQUIRES)
+		SET_TESTS_PROPERTIES ("${_tstn}" PROPERTIES TIMEOUT "1800")
+	endif ()
+	_test_prop ("${_tstn}")
+endfunction ()
+
+function (add_ubertest testN tst_name REQUIRES)
+	if (NOT "FORCE-RT" IN_LIST REQUIRES)
+		_add_ubertest ("${testN}" "${tst_name}" "${REQUIRES}" "test" "PLAIN" "")
+	endif ()
+	if (NOT "NON-RT" IN_LIST REQUIRES)
+		_add_ubertest ("${testN}" "${tst_name}" "${REQUIRES}" "rt" "RT" "--rt --ignore-weights")
+	endif ()
+endfunction ()
+
 fixup_test_name(tst "Cleaning guess cache")
-add_test ( NAME ${tst}
-		#    	CONFIGURATIONS Debug
-		COMMAND ${CMAKE_COMMAND} -E remove guess.txt )
+add_test ( NAME ${tst} COMMAND ${CMAKE_COMMAND} -E remove guess.txt )
 SET_TESTS_PROPERTIES (${tst} PROPERTIES FIXTURES_SETUP UBER )
 
 fixup_test_name(tst "Cleaning errors")
-add_test ( NAME ${tst}
-		COMMAND ${CMAKE_COMMAND} -E remove error_all.txt )
+add_test ( NAME ${tst} COMMAND ${CMAKE_COMMAND} -E remove error_all.txt )
 SET_TESTS_PROPERTIES ( ${tst} PROPERTIES FIXTURES_SETUP UBER )
 
 foreach ( test ${tests} )
 	# get the last dir (filename)
-	get_filename_component ( onetest "${test}" NAME_WE )
+	get_filename_component ( testN "${test}" NAME_WE )
 	# crop the 'test_' heading (so, only number is rest)
-	STRING ( REGEX REPLACE "^test_" "" onetest "${onetest}" )
+	STRING ( REGEX REPLACE "^test_" "" testN "${testN}" )
 
 	set (REQUIRES "")
 	# check if we can extract the name for the test from it
@@ -107,7 +151,7 @@ foreach ( test ${tests} )
 		endif ()
 
 	else ()
-		if ( onetest STREQUAL "028" ) # the only non-xml test we have
+		if (testN STREQUAL "028" ) # the only non-xml test we have
 			set ( test_name "spelldump...")
 		else()
 			set ( test_name "" )
@@ -127,81 +171,42 @@ foreach ( test ${tests} )
 		endif()
 	endif()
 
-	if ( NOT USE_ODBC AND "ODBC" IN_LIST REQUIRES )
+	if ( NOT WITH_ODBC AND "ODBC" IN_LIST REQUIRES )
 		set ( ADD_TEST 0 )
 		set ( EXPLANATION "ODBC provider" )
 	endif ()
 
-	if ( NOT USE_RE2 AND "RE2" IN_LIST REQUIRES )
+	if ( NOT TARGET re2::re2 AND RE2 IN_LIST REQUIRES )
 		set ( ADD_TEST 0)
 		set ( EXPLANATION "RE2" )
 	endif()
 
-	if ( NOT USE_ICU AND "ICU" IN_LIST REQUIRES )
+	if ( NOT WITH_ICU AND "ICU" IN_LIST REQUIRES )
 		set ( ADD_TEST 0 )
 		set ( EXPLANATION "ICU" )
 	endif ()
 
-	if ( NOT USE_GALERA AND "REPLICATION" IN_LIST REQUIRES )
+	if ( NOT WITH_GALERA AND "REPLICATION" IN_LIST REQUIRES )
 		set ( ADD_TEST 0 )
 		set ( EXPLANATION "Galera library for replication" )
 	endif ()
 
-	STRING(CONFIGURE "${onetest} -- ${test_name}" tst_name @ONLY ESCAPE_QUOTES)
-	if ( ADD_TEST )
-		# conditionally add plain test
-		if ( NOT "FORCE-RT" IN_LIST REQUIRES )
-			fixup_test_name (tstn "test_${tst_name}")
-			add_test ( NAME "${tstn}"
-					#    	CONFIGURATIONS Debug
-					WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-					COMMAND php ubertest.php
-						-b "${MANTICORE_BINARY_DIR}/src/"
-						-t "${MANTICORE_BINARY_DIR}/test/"
-						-tt "${MANTICORE_SCRIPTING_DIR}/test/"
-						--ctest -u test --strict-verbose --no-demo
-						"--sd_extra" "${SEARCHD_CLI_EXTRA}"
-						t ${onetest} )
+	if (NOT PYTHONINTERP_FOUND AND "PYTHON" IN_LIST REQUIRES)
+		set (ADD_TEST 0)
+		set (EXPLANATION "Python interpreter")
+	endif ()
 
-			SET (labels "PLAIN")
-			foreach ( require ${REQUIRES} )
-				LIST (APPEND labels ${require})
-			endforeach ()
-			SET_TESTS_PROPERTIES ( "${tstn}" PROPERTIES LABELS "${labels}" )
-			if ("HEAVY" IN_LIST REQUIRES)
-				SET_TESTS_PROPERTIES("${tstn}" PROPERTIES TIMEOUT "1800")
-			endif ()
-			test_prop ( "${tstn}" )
-		endif()
+	if (COMMAND ubertest_filter) #cb from outside
+		ubertest_filter (ADD_TEST EXPLANATION "${REQUIRES}")
+	endif ()
 
-		# conditionally add rt test
-		if ( NOT "NON-RT" IN_LIST REQUIRES )
-			fixup_test_name(tstn "rt_${tst_name}")
-			add_test ( NAME "${tstn}"
-					#			CONFIGURATIONS "Debug"
-					WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-					COMMAND php ubertest.php
-					-b "${MANTICORE_BINARY_DIR}/src/"
-					-t "${MANTICORE_BINARY_DIR}/test/"
-					-tt "${MANTICORE_SCRIPTING_DIR}/test/"
-					--ctest -u test --strict-verbose --no-demo
-					"--sd_extra" "${SEARCHD_CLI_EXTRA}"
-					--rt --ignore-weights
-					t ${onetest} )
-			SET ( labels "RT" )
-			foreach ( require ${REQUIRES} )
-				LIST ( APPEND labels ${require} )
-			endforeach ()
-			SET_TESTS_PROPERTIES ( "${tstn}" PROPERTIES LABELS "${labels}" )
-			if ("HEAVY" IN_LIST REQUIRES)
-				SET_TESTS_PROPERTIES("${tstn}" PROPERTIES TIMEOUT "1800")
-			endif ()
-			test_prop ( "${tstn}" )
-		endif()
-	else()
+	STRING(CONFIGURE "${testN} -- ${test_name}" tst_name @ONLY ESCAPE_QUOTES)
+	if (ADD_TEST)
+		add_ubertest ("${testN}" "${tst_name}" "${REQUIRES}")
+	else ()
 		message (STATUS "Skip adding test ${tst_name} since it requires ${EXPLANATION}")
-	endif(ADD_TEST)
-#		SET_TESTS_PROPERTIES ( "\"test_${ts)t_name}\"" "\"rt_${tst_name}\"" PROPERTIES ATTACHED_FILES_ON_FAIL "${MANTICORE_BINARY_DIR}/test/test_${onetest}/report.txt" )
+	endif ()
+#		SET_TESTS_PROPERTIES ( "\"test_${ts)t_name}\"" "\"rt_${tst_name}\"" PROPERTIES ATTACHED_FILES_ON_FAIL "${MANTICORE_BINARY_DIR}/test/test_${testN}/report.txt" )
 
 endforeach ()
 

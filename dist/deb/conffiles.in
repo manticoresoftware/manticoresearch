@@ -1,3 +1,3 @@
-@SYSCONFDIR@/default/manticore
-@SYSCONFDIR@/manticoresearch/manticore.conf
-@SYSCONFDIR@/init.d/manticore
+@CMAKE_INSTALL_FULL_SYSCONFDIR@/default/manticore
+@CMAKE_INSTALL_FULL_SYSCONFDIR@/manticoresearch/manticore.conf
+@CMAKE_INSTALL_FULL_SYSCONFDIR@/init.d/manticore

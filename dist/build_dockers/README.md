@@ -20,7 +20,7 @@ usually need.
 ```bash
 mkdir build && cd build
 cmake -DPACK=1 /path/to/sources
-make -j4 package
+cmake --build . --target package -j4
 ```
 
 ### Example of building package using system ICU instead of embedded
@@ -28,7 +28,7 @@ make -j4 package
 ```bash
 mkdir build && cd build
 cmake -DPACK=1 -DBUILD_TAG="noicu" -DWITH_ICU_FORCE_STATIC=0 /path/to/sources
-make -j4 package
+cmake --build . --target package -j4
 ```
 
 ### Building rpm for redhat/centos
@@ -49,10 +49,12 @@ cd /manticore0123456789012345678901234567890123456789012345678901234567890123456
 Add aliases to your `~/.bash_aliases`, like:
 
 ```bash
-alias buildcentos7='docker run -it --rm -v /manticore/sources:/manticore registry.gitlab.com/manticoresearch/dev/centos7_cmake bash'
-alias buildxenial='docker run -it --rm -v /manticore/sources:/manticore registry.gitlab.com/manticoresearch/dev/xenial_cmake bash'
+alias buildcentos7='docker run -it --rm -v /manticore/sources:/manticore registry.gitlab.com/manticoresearch/dev/centos7_cmake:320 bash'
+alias buildxenial='docker run -it --rm -v /manticore/sources:/manticore registry.gitlab.com/manticoresearch/dev/xenial_cmake:320 bash'
 # ... (etc)
 ```
+
+**Note:** you can look to `dist/gitlab-release.yml` to figure out actual docker images need to build.
 
 Then simple typing
 ```bash
@@ -63,13 +65,13 @@ will run docker for building xenial image, mount sources to the docker and run s
 ### Couple of internal details
 
 Each docker made from 3 layers:
-1. The deepest - essential build stuff and libraries, except boost and icu. Once built it should not be rebuild anymore,
+1. The deepest - essential build stuff and libraries, except boost and icu. Once built it should not be rebuilt anymore,
 since packets are changed from time to time, and similar run to build the image in future will not produce the same
-image. Let's keep things consistent! Also it defines env `DISTR` which is used in builds instead of manual ping-poing,
+image. Let's keep things consistent! Also, it defines env `DISTR` which is used in builds instead of manual ping-pong,
 and maybe `CXXFLAGS` to provide compiler-specific flags, if they necessary for that distro to build in.
 2. Layer with boost library. We use boost built from sources. That is dedicated layer to update the boost if we need it.
 3. Layer with cmake and expiring things (mc, ca-certificates). They are changing quite often. 
 
-Also 3 oneline scripts provided to build each layer, and one `build.sh` to rule them all (however line for building base
+Also, 3 oneline scripts provided to build each layer, and one `build.sh` to rule them all (however line for building base
 image is commented there, since intented to be used only once). `distr.txt` contains name of the distr, however it is
 also automated by taking name of the folder where all this stuff placed.

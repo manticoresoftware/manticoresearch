@@ -173,7 +173,7 @@ void CharsetFold ( CSphIndex * pIndex, FILE * fp )
 
 	CSphLowercaser tLC = pIndex->GetTokenizer()->GetLowercaser();
 
-#if USE_WINDOWS
+#if _WIN32
 	setmode ( fileno(stdout), O_BINARY );
 #endif
 

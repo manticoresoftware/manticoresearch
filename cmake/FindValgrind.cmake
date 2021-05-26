@@ -10,8 +10,8 @@
 #
 #   VALGRIND_FOUND        - true if valgrind was found
 #   VALGRIND_INCLUDE_DIRS - include search path
-#   VALGRIND_PROGRAM      - executable (valgrind is not library, nothing to link)
-
+# imported interface target Valgrind::Valgrind with include also created
+#
 #=============================================================================
 # Copyright 2021, Manticore Software LTD (https://manticoresearch.com)
 #
@@ -35,24 +35,12 @@ find_path (VALGRIND_INCLUDE_DIR valgrind/valgrind.h
 		$ENV{VALGRIND_PREFIX}/include
 		)
 
-find_program(VALGRIND_PROGRAM NAMES valgrind PATH
-		/usr/bin
-		/usr/local/bin
-		${VALGRIND_PREFIX}/bin
-		$ENV{VALGRIND_PREFIX}/bin
-		)
+mark_as_advanced (VALGRIND_INCLUDE_DIR)
 
-mark_as_advanced (VALGRIND_PROGRAM VALGRIND_INCLUDE_DIR )
-# Handle the QUIETLY and REQUIRED arguments and set VALGRIND_FOUND
-# to TRUE if all listed variables are TRUE.
-# (Use ${CMAKE_ROOT}/Modules instead of ${CMAKE_CURRENT_LIST_DIR} because CMake
-#  itself includes this FindLibArchive when built with an older CMake that does
-#  not provide it.  The older CMake also does not have CMAKE_CURRENT_LIST_DIR.)
-include ( ${CMAKE_ROOT}/Modules/FindPackageHandleStandardArgs.cmake )
-find_package_handle_standard_args ( Valgrind REQUIRED_VARS VALGRIND_INCLUDE_DIR )
+include ( FindPackageHandleStandardArgs )
+find_package_handle_standard_args (Valgrind REQUIRED_VARS VALGRIND_INCLUDE_DIR)
 
-if ( VALGRIND_FOUND )
-	add_library(valgrind::valgrind INTERFACE IMPORTED)
-	set_target_properties(valgrind::valgrind PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${VALGRIND_INCLUDE_DIR}")
-	set ( HAVE_VALGRIND 1)
+if (Valgrind_FOUND AND NOT TARGET Valgrind::Valgrind)
+	add_library(Valgrind::Valgrind INTERFACE IMPORTED)
+	set_target_properties(Valgrind::Valgrind PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${VALGRIND_INCLUDE_DIR}")
 endif()

@@ -8,17 +8,7 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#ifdef BUILD_WITH_CMAKE
-	#include "gen_sphinxversion.h"
-#else
-	#include "sphinxversion.h"
-#endif
-
-#ifdef BUILD_WITH_CMAKE
-	#include "gen_sphinxversion.h"
-#else
-	#include "sphinxversion.h"
-#endif
+#include "gen_sphinxversion.h"
 
 #ifndef BUILD_TAG
 #define BANNER_TAG "dev"

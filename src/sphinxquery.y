@@ -1,5 +1,5 @@
 %{
-#if USE_WINDOWS
+#if _WIN32
 #pragma warning(push,1)
 #pragma warning(disable:4702) // unreachable code
 #endif
@@ -145,6 +145,6 @@ phrasetoken:
 
 %%
 
-#if USE_WINDOWS
+#if _WIN32
 #pragma warning(pop)
 #endif

@@ -20,7 +20,7 @@
 
 #include <utility>
 
-#if USE_WINDOWS
+#if _WIN32
 bool LoadExFunctions ();
 #endif
 
@@ -412,7 +412,7 @@ protected:
 	virtual ~Reporter_i () {};
 };
 
-#if USE_WINDOWS
+#if _WIN32
 	struct SingleOverlapped_t : public OVERLAPPED
 	{
 		ULONG_PTR	m_uParentOffset; // how many bytes add to this to take pointer to parent
@@ -489,7 +489,7 @@ public:
 		return m_iIOChunks;
 	}
 
-#if USE_WINDOWS
+#if _WIN32
 	inline void LeakTo ( CSphVector<sphIovec>& dIOVec )
 	{
 		m_dIOVec.SwapData ( dIOVec );
@@ -549,7 +549,7 @@ public:
 	void AbortCallback();
 	bool CheckOrphaned();
 
-#if USE_WINDOWS
+#if _WIN32
 	// move recv buffer to dOut, reinit mine.
 	void LeakRecvTo ( CSphFixedVector<BYTE>& dOut );
 	void LeakSendTo ( CSphVector <ISphOutputBuffer* >& dOut, CSphVector<sphIovec>& dOutIO );

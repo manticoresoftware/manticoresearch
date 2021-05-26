@@ -17,7 +17,7 @@
 #include "netreceive_http.h"
 #include "coroutine.h"
 
-#if USE_WINDOWS
+#if _WIN32
 // Win-specific headers and calls
 #include <io.h>
 using sph_sa_family_t=ADDRESS_FAMILY;

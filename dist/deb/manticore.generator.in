@@ -9,8 +9,8 @@ is_jemalloc() {
         jemalloc_disabled=0
         jemalloc_preload=true
 
-        if [ -f /etc/default/manticore ]; then
-                jemalloc_disabled=$(awk '/^jemalloc_disabled$/ {print $1;}' /etc/default/manticore | wc -l)
+        if [ -f @CMAKE_INSTALL_FULL_SYSCONFDIR@/default/manticore ]; then
+                jemalloc_disabled=$(awk '/^jemalloc_disabled$/ {print $1;}' @CMAKE_INSTALL_FULL_SYSCONFDIR@/default/manticore | wc -l)
         fi
 
         if [ -f /sys/kernel/mm/transparent_hugepage/enabled ]; then
@@ -39,8 +39,8 @@ is_jemalloc() {
 
 is_jemalloc
 
-if [ ! -e /lib/systemd/system/manticore.service ]; then
-	M_UNIT_FILE="/lib/systemd/system/manticore.service"
+if [ ! -e @CMAKE_INSTALL_FULL_LIBDIR@/systemd/system/manticore.service ]; then
+	M_UNIT_FILE="@CMAKE_INSTALL_FULL_LIBDIR@/systemd/system/manticore.service"
 else
 	M_UNIT_FILE="$2/manticore.service"
 fi
@@ -58,11 +58,11 @@ User=manticore
 Group=manticore
 # Run ExecStartPre with root-permissions
 PermissionsStartOnly=true
-ExecStartPre=/usr/bin/install -omanticore -gmanticore -m755 -d /var/run/manticore
+ExecStartPre=/usr/bin/install -omanticore -gmanticore -m755 -d @CMAKE_INSTALL_FULL_RUNSTATEDIR@/manticore
 # Run ExecStart with User=manticore / Group=manticore
 Environment=LD_PRELOAD=$JEMALLOC_LOCATION
-ExecStart=/usr/bin/searchd --config /etc/manticoresearch/manticore.conf \$_ADDITIONAL_SEARCHD_PARAMS
-ExecStop=/usr/bin/searchd --config /etc/manticoresearch/manticore.conf --stopwait
+ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/searchd --config @CMAKE_INSTALL_FULL_SYSCONFDIR@/manticoresearch/manticore.conf \$_ADDITIONAL_SEARCHD_PARAMS
+ExecStop=@CMAKE_INSTALL_FULL_BINDIR@/searchd --config @CMAKE_INSTALL_FULL_SYSCONFDIR@/manticoresearch/manticore.conf --stopwait
 KillMode=process
 KillSignal=SIGTERM
 SendSIGKILL=no
@@ -70,7 +70,7 @@ LimitNOFILE=infinity
 LimitCORE=infinity
 Restart=on-failure
 TimeoutStartSec=infinity
-PIDFile=/var/run/manticore/searchd.pid
+PIDFile=@CMAKE_INSTALL_FULL_RUNSTATEDIR@/manticore/searchd.pid
 
 [Install]
 WantedBy=multi-user.target

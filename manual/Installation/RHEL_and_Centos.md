@@ -82,6 +82,6 @@ After you have all installed make sure you have the following in your Manticore 
 
 ```
 common {
-    plugin_dir = /usr/local/manticore/lib/
+    plugin_dir = /usr/local/lib/manticore/
 }
 ```

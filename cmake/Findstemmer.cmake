@@ -17,7 +17,6 @@
 # (To distribute this file outside of CMake, substitute the full
 #  License text for the above reference.)
 
-
 FIND_PATH ( STEMMER_INCLUDE_DIR libstemmer.h ONLY_CMAKE_FIND_ROOT_PATH)
 
 SET ( STEMMER_NAMES ${STEMMER_NAMES} stemmer stemmer_c )
@@ -25,11 +24,15 @@ FIND_LIBRARY ( STEMMER_LIBRARY NAMES ${STEMMER_NAMES} ONLY_CMAKE_FIND_ROOT_PATH)
 
 # handle the QUIETLY and REQUIRED arguments and set STEMMER_FOUND to TRUE if 
 # all listed variables are TRUE
-include ( ${CMAKE_ROOT}/Modules/FindPackageHandleStandardArgs.cmake )
-FIND_PACKAGE_HANDLE_STANDARD_ARGS ( STEMMER REQUIRED_VARS STEMMER_LIBRARY STEMMER_INCLUDE_DIR )
+include ( FindPackageHandleStandardArgs )
+FIND_PACKAGE_HANDLE_STANDARD_ARGS ( stemmer REQUIRED_VARS STEMMER_LIBRARY STEMMER_INCLUDE_DIR )
 
 MARK_AS_ADVANCED (STEMMER_INCLUDE_DIR STEMMER_LIBRARY )
 
-if ( STEMMER_FOUND )
-	set ( STEMMER_LIBRARIES ${STEMMER_LIBRARY} )
+if (STEMMER_FOUND AND NOT TARGET stemmer::stemmer)
+	add_library(stemmer::stemmer UNKNOWN IMPORTED)
+	set_target_properties(stemmer::stemmer PROPERTIES
+			IMPORTED_LOCATION "${STEMMER_LIBRARY}"
+			INTERFACE_INCLUDE_DIRECTORIES "${STEMMER_INCLUDE_DIR}"
+			)
 endif ()

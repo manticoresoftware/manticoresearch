@@ -1,177 +1,54 @@
 # Configure Galera build
-cmake_minimum_required ( VERSION 3.11 FATAL_ERROR )
+cmake_minimum_required (VERSION 3.17 FATAL_ERROR)
 
-# Galera is unique dependency, since it never influents overall build, nor provides include headers, just
-# standalone dynamic library.
-#
-# Getting galera pefroms following behaviour:
-# - if prebuilds found in usual place (non-cleaned build) - just use them.
-# - if prebuilds found in cache/ - use them.
-# - if prebuilds found in bundle/<archive> - unpack into usual build folder and use them.
-# in these only cases may build for mac/bsd, otherwise this platform is silently skipped.
-# - if found sources in bundle - use them (CACHEB step may be just populated it).
-# - otherwise use sources from github.
-# target galera build to bundle/build, otherwise perform usual build folder.
+set(GALERA_REPO "https://github.com/klirichek/galera")
+set(GALERA_BRANCH "5e7af6e5")
+set(GALERA_SRC_MD5 "33be7903e01e5cd6d966d88c47fc5c4d")
 
-set(HAVE_GALERA 0) # below will be overriden, if necessary
+set(GALERA_GITHUB "${GALERA_REPO}/archive/${GALERA_BRANCH}.zip")
+set(GALERA_BUNDLE "${LIBS_BUNDLE}/galera-${GALERA_BRANCH}.zip")
 
-if (WIN32)
-	return() # sorry, no galera for windows
-endif ()
-
-include(update_bundle)
-
-set (GALERANAME "galera-cmake-3.x-5.7")
-set (GALERA_BUNDLEZIP "${GALERANAME}.zip")
-
-# fixme! Republish into public repo when migration done
-# that is strict link to github revision
-set(GALERA_GITHUB "https://github.com/klirichek/galera/archive/manticore-3.5.1.zip")
-#set(GALERA_GITHUB "https://github.com/klirichek/galera/archive/cmake-3.x-5.7.zip")
-#set(GALERA_GITHUB "https://github.com/manticoresoftware/galera/archive/cmake-3.x-5.7.zip")
-
-function(get_galera_api_version OUTVAR HEADER)
-	SET(APIVER "1")
-	if (EXISTS "${HEADER}")
-		message(STATUS "Parsing ${HEADER} for wsrep API version")
-		FILE(READ "${HEADER}" _CONTENT)
-		# replace lf into ';' (it makes list from the line)
-		STRING(REGEX REPLACE "\n" ";" _CONTENT "${_CONTENT}")
-		foreach (LINE ${_CONTENT})
-			# match definitions like - #define NAME "VALUE"
-			IF ("${LINE}" MATCHES "^#define[ \t]+WSREP_INTERFACE_VERSION[ \t]+\"(.*)\"")
-				set(APIVER "${CMAKE_MATCH_1}")
-			endif ()
-		endforeach ()
-	endif ()
-	set("${OUTVAR}" "${APIVER}" PARENT_SCOPE)
-endfunction()
-
-# add RPATH only to specific target
-function(SET_SEARCHD_RPATH GALERA_LIBDIR)
-	if (NOT WIN32)
-		set(BINARYNAME searchd)
-		file(RELATIVE_PATH relgalera "${MANTICORE_BINARY_DIR}/src" "${GALERA_LIBDIR}")
-		set (ORIGIN "$ORIGIN")
-		if (APPLE)
-			set(ORIGIN "@loader_path")
-		endif()
-		set_target_properties(${BINARYNAME} PROPERTIES INSTALL_RPATH "${ORIGIN}")
-		set_target_properties(${BINARYNAME} PROPERTIES BUILD_RPATH "${ORIGIN}/${relgalera}")
-		# when building, don't use the install RPATH already
-		# (but later on when installing)
-		set_target_properties(${BINARYNAME} PROPERTIES BUILD_WITH_INSTALL_RPATH FALSE)
-		# add the automatically determined parts of the RPATH
-		# which point to directories outside the build tree to the install RPATH
-		set_target_properties(${BINARYNAME} PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
-		diag(GALERA_LIBDIR)
-		diag(${MANTICORE_BINARY_DIR}/src)
-		diag(relgalera)
-		diag(CMAKE_SYSTEM_NAME)
-	endif ()
-endfunction()
-
-function(check_imported FOUND BINDIR)
-	if (NOT EXISTS "${BINDIR}/galera-targets.cmake")
-		return()
-	endif()
-
-	include("${BINDIR}/galera-targets.cmake")
-	string(TOUPPER "${CMAKE_BUILD_TYPE}" UPB)
-	get_target_property(LBB galera::galera_manticore LOCATION_${UPB})
-	if (NOT EXISTS ${LBB})
-		diags("not exists ${LBB}")
-		return()
-	endif ()
-
-	get_filename_component(BUILDPATH ${LBB} PATH)
-	get_filename_component(BUILDNAME ${LBB} NAME)
-
-	diags ("GALERA_LIBRARY -> ${LBB}")
-
-	set (GALERA_LIBRARY "${LBB}" PARENT_SCOPE)
-	set (GALERA_LIBDIR "${BUILDPATH}" PARENT_SCOPE)
-	set (GALERA_SONAME "${BUILDNAME}" PARENT_SCOPE)
-	set (${FOUND} 1 PARENT_SCOPE)
-endfunction()
-
-function(galera_install)
-	if (NOT HAVE_GALERA)
-		return()
-	endif()
-    if ( APPLE )
-        set ( GALERA_PATH "${BINPREFIX}lib" )
-    else()
-        set ( GALERA_PATH "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}" )
-    endif()
-	if (GALERA_LIBRARY)
-		# can't make 'true install' for imported target; only file installation available
-		diags ("Install galera as usual file from imported target")
-		install(PROGRAMS ${GALERA_LIBRARY} DESTINATION "${GALERA_PATH}" COMPONENT applications )
-	else()
-		diags("Install galera as usual file from imported target")
-		install(TARGETS galera_manticore LIBRARY DESTINATION "${GALERA_PATH}" COMPONENT applications NAMELINK_SKIP)
-	endif()
-endfunction()
-
-# knowning version is necessary to further investigations
-set(WSREP_PATH "${MANTICORE_SOURCE_DIR}/src/replication" CACHE STRING "")
-get_galera_api_version(GALERA_SOVERSION "${WSREP_PATH}/wsrep_api.h")
-
-get_buildd(GALERA_BUILD ${GALERANAME})
-
-# first check 'lazy' case - build from previous run
-diags("first check 'lazy' case - build from previous run ${MANTICORE_BINARY_DIR}/galera/${GALERA_SONAME}")
-check_imported (HAVE_GALERA "${MANTICORE_BINARY_DIR}/galera")
-if (HAVE_GALERA)
-	diags("Use 'lazy' prebuilt galera from previous build ${GALERA_LIBDIR}")
-	return() # we're done
-endif ()
-
-# check build in common cache
-diags("check build in common cache ${GALERA_BUILD}/${GALERA_SONAME}")
-check_imported(HAVE_GALERA "${GALERA_BUILD}")
-if (HAVE_GALERA)
-	diags("Use cached prebuilt galera from bundle ${GALERA_LIBDIR}")
-	return() # we're done
-endif ()
-
-# packet build in the bundle, as bundle/galera-cmake-3.x-5.7-darwin-x86_64.tar.gz
-get_platformed_named (GALERA_PLATFORM_BUILD "${GALERANAME}")
-diags("packet build in the bundle ${LIBS_BUNDLE}/${GALERA_PLATFORM_BUILD}.tar.gz")
-if (EXISTS "${LIBS_BUNDLE}/${GALERA_PLATFORM_BUILD}.tar.gz")
-	set(GALERA_LIBDIR "${MANTICORE_BINARY_DIR}/galera")
-	fetch_and_unpack(galera_lib "${LIBS_BUNDLE}/${GALERA_PLATFORM_BUILD}.tar.gz" "${GALERA_LIBDIR}")
-	check_imported(HAVE_GALERA "${GALERA_LIBDIR}")
-	if (HAVE_GALERA)
-		diags("Use cached prebuilt galera from bundled archive ${GALERA_LIBDIR}")
-		return() # we're done
-	endif ()
-endif ()
-
-# finally set up build from sources
-populate(GALERA_PLACE ${GALERANAME} "${LIBS_BUNDLE}/${GALERA_BUNDLEZIP}" ${GALERA_GITHUB})
-get_srcpath(GALERA_SRC ${GALERANAME})
-
-diags("check if src folder is empty")
-if (NOT EXISTS "${GALERA_SRC}/README")
-	diags("need to fetch sources from ${GALERA_PLACE} to ${GALERA_SRC}")
-	fetch_and_unpack(galera ${GALERA_PLACE} ${GALERA_SRC})
-endif ()
-
-if (EXISTS "${GALERA_SRC}/README")
-	set(GALERA_LIBDIR "${GALERA_BUILD}")
-	add_subdirectory(${GALERA_SRC} ${GALERA_BUILD})
-	set(HAVE_GALERA 1)
-	if (NOT GALERA_SONAME) # ad-hoc, find more proper way!
-		if (APPLE)
-			set(GALERA_SONAME "libgalera_manticore.${GALERA_SOVERSION}.dylib")
-		else()
-			set(GALERA_SONAME "libgalera_manticore.so.${GALERA_SOVERSION}")
-		endif()
-	endif()
+if (DEFINED WITH_GALERA AND NOT WITH_GALERA) # already defined and required NOT to be used
 	return()
 endif()
 
-UNSET(GALERA_SOVERSION)
-# return with HAVE_GALERA = 0
+# here WITH_GALERA is not defined, or explicitly required.
+set (WITH_GALERA ON CACHE BOOL "Build and use Galera replication library" FORCE)
+add_feature_info (Galera WITH_GALERA "replication of indexes")
+
+# that will read galera location from the target and install it to final destination
+include (printers) # for diag
+function (install_galera DEST)
+	get_target_property (GALERA_MODULE galera::galera LOCATION)
+	diag (GALERA_MODULE)
+	install (PROGRAMS ${GALERA_MODULE} DESTINATION "${DEST}" COMPONENT applications)
+endfunction ()
+
+function (cache_galera_module_name)
+	get_target_property (GALERA_MODULE galera::galera LOCATION)
+	get_filename_component (_name ${GALERA_MODULE} NAME)
+	SET (GALERA_SONAME "${_name}" CACHE STRING "Filename of galera replication library")
+endfunction ()
+
+# that will find prebuilt, if any
+include (update_bundle)	# that would actualize CMAKE_PREFIX_PATH with our cache
+find_package(galera QUIET)
+set_package_properties (galera PROPERTIES TYPE RUNTIME
+		DESCRIPTION "provides support for replication"
+		URL "${GALERA_REPO}"
+		)
+if (TARGET galera::galera)
+	diagst (galera::galera "library found ready (no need to build)")
+	return ()
+endif ()
+
+# not found. Populate and build cache package for now and future usage.
+select_nearest_url(GALERA_PLACE "galera" ${GALERA_BUNDLE} ${GALERA_GITHUB})
+set(WSREP_PATH "${MANTICORE_SOURCE_DIR}/src/replication") # WSREP_PATH provides path to galera-imported for build
+get_build(GALERA_BUILD galera)
+configure_file(${MANTICORE_SOURCE_DIR}/cmake/galera-imported.cmake.in galera-build/CMakeLists.txt) # consumes GALERA_PLACE, GALERA_SRC_MD5, WSREP_PATH, GALERA_BUILD
+execute_process(COMMAND ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}" . WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/galera-build)
+execute_process(COMMAND ${CMAKE_COMMAND} --build . WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/galera-build)
+
+find_package(galera REQUIRED)
+diagst (galera::galera "library was built and saved")

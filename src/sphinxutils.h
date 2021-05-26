@@ -389,7 +389,7 @@ namespace TimePrefixed {
 //////////////////////////////////////////////////////////////////////////
 
 /// how do we properly exit from the crash handler?
-#if !USE_WINDOWS
+#if !_WIN32
 	#define CRASH_EXIT_CORE { signal ( sig, SIG_DFL ); kill ( getpid(), sig ); }
 	#ifndef NDEBUG
 		// UNIX debug build, die and dump core
@@ -412,7 +412,7 @@ namespace TimePrefixed {
 /// async safe, BUT NOT THREAD SAFE, fprintf
 void sphSafeInfo ( int iFD, const char * sFmt, ... );
 
-#if !USE_WINDOWS
+#if !_WIN32
 /// UNIX backtrace gets printed out to a stream
 void sphBacktrace ( int iFD, bool bSafe=false );
 #else

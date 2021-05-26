@@ -34,9 +34,7 @@ typedef int __declspec("SAL_nokernel") __declspec("SAL_nodriver") __prefast_flag
 #define __attribute__(x)
 #endif
 
-#if HAVE_CONFIG_H
 #include "config.h"
-#endif
 
 // supress C4577 ('noexcept' used with no exception handling mode specified)
 #if _MSC_VER==1900
@@ -69,22 +67,14 @@ typedef int __declspec("SAL_nokernel") __declspec("SAL_nodriver") __prefast_flag
 #include <sys/types.h>
 #endif
 
-#ifndef USE_WINDOWS
-#ifdef _MSC_VER
-#define USE_WINDOWS 1
-#else
-#define USE_WINDOWS 0
-#endif // _MSC_VER
-#endif
-
-#if !USE_WINDOWS
+#if !_WIN32
 #include <sys/mman.h>
 #include <errno.h>
 #include <pthread.h>
 #include <semaphore.h>
 #endif
 
-#if USE_WINDOWS
+#if _WIN32
 	#include <io.h>
 	#define sphSeek		_lseeki64
 	typedef __int64		SphOffset_t;
@@ -143,20 +133,9 @@ typedef int __declspec("SAL_nokernel") __declspec("SAL_nodriver") __prefast_flag
 
 #else
 
-#if USE_ODBC
-// UnixODBC compatible DWORD
-#if defined(__alpha) || defined(__sparcv9) || defined(__LP64__) || (defined(__HOS_AIX__) && defined(_LP64)) || defined(__APPLE__)
-typedef unsigned int		DWORD;
-#else
-typedef unsigned long		DWORD;
-#endif
-#else
-// default DWORD
-typedef unsigned int		DWORD;
-#endif // USE_ODBC
-
-typedef unsigned short		WORD;
-typedef unsigned char		BYTE;
+using DWORD = unsigned int;
+using WORD = unsigned short;
+using BYTE = unsigned char;
 
 #endif // _WIN32
 
@@ -290,7 +269,7 @@ void			sphMemStatMMapDel ( int64_t iSize );
 #define new		new(__FILE__,__LINE__)
 #define NEW_IS_OVERRIDED 1
 
-#if USE_RE2
+#if WITH_RE2
 #define MYTHROW() throw()
 #else
 #define MYTHROW() noexcept
@@ -467,21 +446,6 @@ inline int sphBitCount ( DWORD n )
 
 using SphDieCallback_t = bool (*) ( bool bDie, const char *, va_list );
 
-/// use env variables, if available, instead of hard-coded macro
-const char * GET_FULL_SHARE_DIR();
-
-const char * GET_GALERA_SONAME ();
-
-const char * GET_MYSQL_LIB();
-
-const char * GET_PGSQL_LIB ();
-
-const char * GET_UNIXODBC_LIB ();
-
-const char * GET_EXPAT_LIB ();
-
-const char * GET_ICU_DATA_DIR ();
-
 /// crash with an error message, and do not have searchd watchdog attempt to resurrect
 void			sphDie ( const char * sFmt, ... ) __attribute__ ( ( format ( printf, 1, 2 ) ) ) NO_RETURN;
 
@@ -501,7 +465,7 @@ void			sphSetDieCallback ( SphDieCallback_t pfDieCallback );
 /// how much bits do we need for given int
 inline int sphLog2 ( uint64_t uValue )
 {
-#if USE_WINDOWS
+#if _WIN32
 	DWORD uRes;
 	if ( BitScanReverse ( &uRes, (DWORD)( uValue>>32 ) ) )
 		return 33+uRes;
@@ -584,7 +548,7 @@ DWORD		sphRand ();
 // DEBUGGING
 /////////////////////////////////////////////////////////////////////////////
 
-#if USE_WINDOWS
+#if _WIN32
 #ifndef NDEBUG
 
 void sphAssert ( const char * sExpr, const char * sFile, int iLine );
@@ -593,7 +557,7 @@ void sphAssert ( const char * sExpr, const char * sFile, int iLine );
 #define assert(_expr) (void)( (_expr) || ( sphAssert ( #_expr, __FILE__, __LINE__ ), 0 ) )
 
 #endif // !NDEBUG
-#endif // USE_WINDOWS
+#endif // _WIN32
 
 
 // to avoid disappearing of _expr in release builds
@@ -4153,7 +4117,7 @@ public:
 extern int g_iMaxCoroStackSize;
 
 /// my thread handle and thread func magic
-#if USE_WINDOWS
+#if _WIN32
 typedef HANDLE SphThread_t;
 typedef DWORD SphThreadKey_t;
 #else
@@ -4193,7 +4157,7 @@ const T & SingleC_T ()
 	return Single_T<T, T_tag> ();
 }
 
-#if !USE_WINDOWS
+#if !_WIN32
 /// what kind of threading lib do we have? The number of frames in the stack depends from it
 bool sphIsLtLib();
 #endif
@@ -4225,7 +4189,7 @@ public:
 	}
 };
 
-#if USE_WINDOWS
+#if _WIN32
 	using TMutex = HANDLE;
 #else
 	using TMutex = pthread_mutex_t;
@@ -4270,7 +4234,7 @@ public:
 protected:
 	bool m_bInitialized = false;
 
-#if USE_WINDOWS
+#if _WIN32
 	HANDLE m_hEvent = 0;
 #else
 	pthread_cond_t m_tCond;
@@ -4372,7 +4336,7 @@ class CAPABILITY ( "mutex" ) CSphRwlock : public ISphNoncopyable
 public:
 	CSphRwlock ();
 	~CSphRwlock () {
-#if !USE_WINDOWS
+#if !_WIN32
 		SafeDelete ( m_pLock );
 		SafeDelete ( m_pWritePreferHelper );
 #endif
@@ -4390,7 +4354,7 @@ public:
 
 private:
 	bool				m_bInitialized = false;
-#if USE_WINDOWS
+#if _WIN32
 	HANDLE				m_hWriteMutex = 0;
 	HANDLE				m_hReadEvent = 0;
 	LONG				m_iReaders = 0;
@@ -4676,7 +4640,7 @@ public:
 
 //////////////////////////////////////////////////////////////////////////
 
-#if USE_WINDOWS
+#if _WIN32
 #define DISABLE_CONST_COND_CHECK \
 	__pragma ( warning ( push ) ) \
 	__pragma ( warning ( disable:4127 ) )
@@ -5579,7 +5543,7 @@ inline int sphZipToPtr ( BYTE * pData, T tValue )
 /// internals based on Alexandresku's 'loki' implementation - 'Allocator for small objects'
 static const int MAX_SMALL_OBJECT_SIZE = 64;
 
-#ifdef USE_SMALLALLOC
+#if WITH_SMALLALLOC
 BYTE * sphAllocateSmall ( int iBytes );
 void sphDeallocateSmall ( BYTE * pBlob, int iBytes );
 size_t sphGetSmallAllocatedSize ();	// how many allocated right now
@@ -5590,7 +5554,7 @@ inline void sphDeallocateSmall(const BYTE* pBlob, int) {delete[]pBlob;};
 inline void sphDeallocateSmall(const BYTE* pBlob) {delete[]pBlob;};
 inline size_t sphGetSmallAllocatedSize() {return 0;};    // how many allocated right now
 inline size_t sphGetSmallReservedSize() {return 0;};    // how many pooled from the sys right now
-#endif // USE_SMALLALLOC
+#endif // WITH_SMALLALLOC
 
 // helper to use in vector as custom allocator
 namespace sph {
@@ -5622,6 +5586,21 @@ void sphDeallocatePacked ( BYTE * pBlob );
 DWORD		sphUnzipInt ( const BYTE * & pBuf );
 SphOffset_t sphUnzipOffset ( const BYTE * & pBuf );
 
+/// use env variables, if available, instead of hard-coded macro
+// this returns env FULL_SHARE_DIR, or hardcoded path, or '.' if nothing hardcoded
+const char * GET_FULL_SHARE_DIR();
+
+// this returns env ICU_DATA_DIR, or hardcoded path, or nullptr if nothing hardcoded
+const char * GET_ICU_DATA_DIR ();
+
+// this returns env MANTICORE_MODULES, or GET_FULL_SHARE_DIR()/modules
+const char * GET_MANTICORE_MODULES ();
+
+// this returns env GALERA_SONAME, or GET_MANTICORE_MODULES()/libgalera_manticore.so
+CSphString GET_GALERA_FULLPATH ();
+
+// this returns env LIB_MANTICORE_COLUMNAR, or GET_MANTICORE_MODULES()/lib_manticore_columnar.xx (xx=so or dll)
+CSphString GET_COLUMNAR_FULLPATH ();
 
 // fast diagnostic logging.
 // Being a macro, it will be optimized out by compiler when not in use

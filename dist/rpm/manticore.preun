@@ -1,4 +1,0 @@
-if [ "$1" = 0 ] ; then
-    /sbin/service manticore stop >/dev/null 2>&1
-    /sbin/chkconfig --del manticore
-fi

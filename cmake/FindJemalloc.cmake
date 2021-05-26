@@ -2,15 +2,14 @@
 # FindJEMALLOC
 # --------------
 #
-# Find JEMALLOC library and headers
+# Find Jemalloc library
 #
 # The module defines the following variables:
 #
 # ::
 #
-#   JEMALLOC_FOUND        - true if libre2 was found
-#   JEMALLOC_INCLUDE_DIRS - include search path
-#   JEMALLOC_LIBRARIES    - libraries to link
+#   Jemalloc_FOUND        - true if Jemalloc was found
+#   In case it found, imported target Jemalloc::Jemalloc is defined to link with
 
 #=============================================================================
 # Copyright 2017-2021, Manticore Software LTD (https://manticoresearch.com)
@@ -28,37 +27,29 @@
 # First check if include path was explicitly given.
 # If so, it has the maximum priority over any other possibilities
 
-find_program ( JEMALLOC_CONFIG_PROGRAM jemalloc-config	)
-if ( JEMALLOC_CONFIG_PROGRAM )
-	# use jemalloc-config to set different vars
-	execute_process (
-			COMMAND ${JEMALLOC_CONFIG_PROGRAM} --libs
-			OUTPUT_VARIABLE JEMALLOC_LIBS
-			OUTPUT_STRIP_TRAILING_WHITESPACE
-	)
-	execute_process (
-			COMMAND ${JEMALLOC_CONFIG_PROGRAM} --libdir
-			OUTPUT_VARIABLE JEMALLOC_LIBDIR
-			OUTPUT_STRIP_TRAILING_WHITESPACE
-	)
-	execute_process (
-			COMMAND ${JEMALLOC_CONFIG_PROGRAM} --includedir
-			OUTPUT_VARIABLE JEMALLOC_INCLUDE_DIRS
-			OUTPUT_STRIP_TRAILING_WHITESPACE
-	)
-	mark_as_advanced ( JEMALLOC_LIBS JEMALLOC_LIBDIR )
-endif()
-find_library ( JEMALLOC_LIBRARY jemalloc HINT "${JEMALLOC_LIBDIR}" )
-mark_as_advanced ( JEMALLOC_LIBRARY JEMALLOC_CONFIG_PROGRAM )
+find_package (PkgConfig QUIET)
 
-# Handle the QUIETLY and REQUIRED arguments and set LIBICONV_FOUND
-# to TRUE if all listed variables are TRUE.
-# (Use ${CMAKE_ROOT}/Modules instead of ${CMAKE_CURRENT_LIST_DIR} because CMake
-#  itself includes this FindLibArchive when built with an older CMake that does
-#  not provide it.  The older CMake also does not have CMAKE_CURRENT_LIST_DIR.)
-include ( ${CMAKE_ROOT}/Modules/FindPackageHandleStandardArgs.cmake )
+pkg_check_modules (PC_JEMALLOC QUIET jemalloc)
+
+# Look for the header file.
+find_path (JEMALLOC_INCLUDE_DIR NAMES "jemalloc/jemalloc.h" HINTS ${PC_JEMALLOC_INCLUDEDIR})
+
+# Look for the library.
+find_library (JEMALLOC_LIBRARY NAMES jemalloc libjemalloc NAMES_PER_DIR HINTS ${PC_JEMALLOC_LIBDIR})
+
+mark_as_advanced ( JEMALLOC_LIBRARY JEMALLOC_INCLUDE_DIR )
+
+include (FindPackageHandleStandardArgs)
 find_package_handle_standard_args ( Jemalloc REQUIRED_VARS JEMALLOC_LIBRARY )
+set_package_properties (Jemalloc PROPERTIES TYPE RUNTIME
+		DESCRIPTION "a general purpose malloc(3) implementation that emphasizes fragmentation avoidance and scalable concurrency support"
+		URL "http://jemalloc.net/"
+		)
 
-if ( JEMALLOC_FOUND )
-	set ( JEMALLOC_LIBRARIES ${JEMALLOC_LIBRARY} )
+if (JEMALLOC_FOUND AND NOT TARGET Jemalloc::Jemalloc)
+	add_library (Jemalloc::Jemalloc UNKNOWN IMPORTED)
+	set_target_properties( Jemalloc::Jemalloc PROPERTIES IMPORTED_LOCATION "${JEMALLOC_LIBRARY}" )
+	if (JEMALLOC_INCLUDE_DIR)
+		target_include_directories(Jemalloc::Jemalloc INTERFACE "${JEMALLOC_INCLUDE_DIR}")
+	endif()
 endif ()

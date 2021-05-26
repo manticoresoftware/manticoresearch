@@ -13,7 +13,7 @@
 #include "threadutils.h"
 #include "sphinx.h"
 
-#if !USE_WINDOWS
+#if !_WIN32
 // UNIX-specific headers and calls
 #include <sys/syscall.h>
 #include <signal.h>
@@ -76,7 +76,7 @@ const char * RelaxedProtoName ( Proto_e eProto )
 
 int GetOsThreadId ()
 {
-#if USE_WINDOWS
+#if _WIN32
 	return GetCurrentThreadId();
 #elif defined ( __APPLE__ )
 	uint64_t tid;
@@ -1132,14 +1132,14 @@ Threads::Scheduler_i * GetAloneScheduler ( int iMaxThreads, const char * szName 
 	return new Threads::AloneThread_c ( iOrder++, szName? szName: "alone" );
 }
 
-#if !USE_WINDOWS
+#if !_WIN32
 void * Threads::Init ( bool bDetached )
 #else
 void * Threads::Init ( bool )
 #endif
 {
 	static bool bInit = false;
-#if !USE_WINDOWS
+#if !_WIN32
 	static pthread_attr_t tJoinableAttr;
 	static pthread_attr_t tDetachedAttr;
 #endif
@@ -1150,7 +1150,7 @@ void * Threads::Init ( bool )
 		sphMemStatInit();
 #endif
 
-#if !USE_WINDOWS
+#if !_WIN32
 		if ( pthread_attr_init ( &tJoinableAttr ) )
 			sphDie ( "FATAL: pthread_attr_init( joinable ) failed" );
 
@@ -1162,7 +1162,7 @@ void * Threads::Init ( bool )
 #endif
 		bInit = true;
 	}
-#if !USE_WINDOWS
+#if !_WIN32
 	if ( pthread_attr_setstacksize ( &tJoinableAttr, STACK_SIZE ) )
 		sphDie ( "FATAL: pthread_attr_setstacksize( joinable ) failed" );
 
@@ -1207,7 +1207,7 @@ CSphString Threads::GetName ( const SphThread_t * pThread )
 /// my join thread wrapper
 bool Threads::Join ( SphThread_t * pThread )
 {
-#if USE_WINDOWS
+#if _WIN32
 	DWORD uWait = WaitForSingleObject ( *pThread, INFINITE );
 	CloseHandle ( *pThread );
 	*pThread = NULL;
@@ -1220,7 +1220,7 @@ bool Threads::Join ( SphThread_t * pThread )
 /// my own thread
 SphThread_t Threads::Self ()
 {
-#if USE_WINDOWS
+#if _WIN32
 	return GetCurrentThread();
 #else
 	return pthread_self ();
@@ -1235,7 +1235,7 @@ bool Threads::Same ( const LowThreadDesc_t * pFirst, const LowThreadDesc_t * pSe
 	if ( !pFirst || !pSecond )
 		return false;
 
-#if USE_WINDOWS
+#if _WIN32
 	// can not use m_tThread on Windows as GetCurrentThread returns -2 and that handle valid only inside thread itself
 	return ( pFirst->m_iThreadID==pSecond->m_iThreadID );
 #else
@@ -1410,7 +1410,7 @@ void RuntimeThreadContext_t::Run ( const void * pStack )
 }
 
 
-#if USE_WINDOWS
+#if _WIN32
 DWORD __stdcall ThreadProcWrapper_fn ( void * pArg )
 #else
 void * ThreadProcWrapper_fn ( void * pArg )
@@ -1446,7 +1446,7 @@ bool Threads::Create ( SphThread_t * pThread, Handler fnRun, bool bDetached, con
 	}
 
 	// create thread
-#if USE_WINDOWS
+#if _WIN32
 	Threads::Init ( bDetached );
 	*pThread = CreateThread ( NULL, STACK_SIZE, ThreadProcWrapper_fn, pCtx.Ptr(), 0, NULL );
 	if ( *pThread )
@@ -1481,7 +1481,7 @@ bool Threads::Create ( SphThread_t * pThread, Handler fnRun, bool bDetached, con
 		return true;
 	}
 
-#endif // USE_WINDOWS
+#endif // _WIN32
 
 	// thread creation failed so we need to cleanup ourselves
 	return false;

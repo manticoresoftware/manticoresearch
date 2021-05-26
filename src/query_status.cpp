@@ -13,7 +13,7 @@
 #include "networking_daemon.h"
 #include "query_status.h"
 
-#if USE_WINDOWS
+#if _WIN32
 // Win-specific headers and calls
 #include <io.h>
 #else
@@ -172,7 +172,7 @@ int sphSockRead( int iSock, void* buf, int iLen, int iReadTimeout, bool bIntr )
 		if ( tmMicroLeft<=0 )
 			break; // timed out
 
-#if USE_WINDOWS
+#if _WIN32
 		// Windows EINTR emulation
 		// Ctrl-C will not interrupt select on Windows, so let's handle that manually
 		// forcibly limit select() to 100 ms, and check flag afterwards
@@ -201,7 +201,7 @@ int sphSockRead( int iSock, void* buf, int iLen, int iReadTimeout, bool bIntr )
 		// if there was a timeout, report it as an error
 		if ( iRes==0 )
 		{
-#if USE_WINDOWS
+#if _WIN32
 			// Windows EINTR emulation
 			if ( bIntr )
 			{
@@ -321,7 +321,7 @@ void QueryStatus ( CSphVariant * v ) REQUIRES ( MainThread )
 			continue;
 
 		int iSock = -1;
-#if !USE_WINDOWS
+#if !_WIN32
 		if ( !tDesc.m_sUnix.IsEmpty() )
 		{
 			// UNIX connection

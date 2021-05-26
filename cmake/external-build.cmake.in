@@ -1,0 +1,31 @@
+cmake_minimum_required ( VERSION 3.17 )
+
+project ( ${module}-prebuild NONE )
+
+include ( ExternalProject )
+
+if(${CMAKE_CXX_COMPILER_ID} MATCHES "MSVC")
+message (STATUS "Build for Windows: configurations RelWithDebInfo, then for Debug")
+ExternalProject_Add ( ${module}_populate
+	SOURCE_DIR ${MODULE_SRC}
+	${MODULE_CACHE}BUILD_COMMAND "${CMAKE_COMMAND}" -E echo "Starting build config RelWithDebInfo on Windows"
+	COMMAND "${CMAKE_COMMAND}" --build . --config RelWithDebInfo
+	COMMAND "${CMAKE_COMMAND}" --install . --config RelWithDebInfo --prefix "${MODULE_BUILD}"
+	COMMAND "${CMAKE_COMMAND}" -E echo "Starting build config Debug on Windows"
+	COMMAND "${CMAKE_COMMAND}" --build . --config Debug
+	COMMAND "${CMAKE_COMMAND}" --install . --config Debug --prefix "${MODULE_BUILD}"
+	INSTALL_COMMAND ""
+	TEST_COMMAND ""
+	)
+else()
+message (STATUS "Build for non-windows: only RelWithDebInfo")
+ExternalProject_Add ( ${module}_populate
+	SOURCE_DIR ${MODULE_SRC}
+	${MODULE_CACHE}BUILD_COMMAND "${CMAKE_COMMAND}" -DCMAKE_BUILD_TYPE=RelWithDebInfo .
+	COMMAND "${CMAKE_COMMAND}" --build . --config RelWithDebInfo
+	INSTALL_COMMAND "${CMAKE_COMMAND}" --install . --config RelWithDebInfo --prefix "${MODULE_BUILD}"
+	TEST_COMMAND ""
+	)
+endif()
+
+# file configured from cmake/external-build.cmake.in

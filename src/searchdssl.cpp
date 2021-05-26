@@ -10,18 +10,12 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinx.h"
-#include "sphinxutils.h"
 #include "searchdssl.h"
 
-#if !USE_SSL
-
-void SetServerSSLKeys ( CSphVariant *,  CSphVariant *,  CSphVariant * ) {}
-bool CheckWeCanUseSSL () { return false; }
-bool MakeSecureLayer ( AsyncNetBufferPtr_c & ) { return false; }
-
-#else
-
+#if WITH_SSL
+#ifdef DAEMON
+#include "sphinx.h"
+#include "sphinxutils.h"
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/bio.h>
@@ -538,5 +532,12 @@ bool MakeSecureLayer ( AsyncNetBufferPtr_c& pSource )
 	pSource = new AsyncSSBufferedSocket_c ( std::move ( pFrontEnd ) );
 	return true;
 }
+#else
 
+// these stubs for non-daemon (i.e. for tests)
+void SetServerSSLKeys ( CSphVariant *,  CSphVariant *,  CSphVariant * ) {}
+bool CheckWeCanUseSSL () { return false; }
+bool MakeSecureLayer ( AsyncNetBufferPtr_c & ) { return false; }
+
+#endif
 #endif

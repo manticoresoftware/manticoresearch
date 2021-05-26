@@ -13,13 +13,17 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
 
-CMAKE_MINIMUM_REQUIRED(VERSION 2.8.12)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.17)
 
-INCLUDE_DIRECTORIES(".")
+ADD_LIBRARY(wsrep STATIC wsrep_gtid.c wsrep_uuid.c wsrep_loader.c wsrep_dummy.c)
+target_compile_definitions(wsrep PUBLIC HAVE_WSREP)
 
-SET(WSREP_SOURCES wsrep_gtid.c wsrep_uuid.c wsrep_loader.c wsrep_dummy.c)
+# fool protect: galera should be built with the same wsrep version.
+# It that is not true, here on linking with galera_wsrep we'll have config-time error
+FILE (STRINGS "wsrep_api.h" _wsrep LIMIT_COUNT 1 REGEX "WSREP_INTERFACE_VERSION")
+STRING (REGEX MATCH "[0-9]+" WSREP_API "${_wsrep}")
+set_target_properties (wsrep PROPERTIES WSREP_API_VERSION ${WSREP_API})
+target_link_libraries (wsrep PRIVATE galera::galera_wsrep)
 
-ADD_LIBRARY(wsrep ${WSREP_SOURCES})
+add_library ( manticore::wsrep ALIAS wsrep )
 
-#ADD_EXECUTABLE(listener wsrep_listener.c ${WSREP_SOURCES})
-#TARGET_LINK_LIBRARIES(listener ${LIBDL})

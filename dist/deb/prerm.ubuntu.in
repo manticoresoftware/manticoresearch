@@ -1,6 +1,6 @@
 #!/bin/sh
 set -e
-# Automatically added by build_xenial, build_trusty
-if [ -x "@SYSCONFDIR@/init.d/manticore" ] || [ -e "@SYSCONFDIR@/init/manticore.conf" ]; then
+# Automatically added by build on ubuntu
+if [ -x "@CMAKE_INSTALL_FULL_SYSCONFDIR@/init.d/manticore" ] || [ -e "@CMAKE_INSTALL_FULL_SYSCONFDIR@/init/manticore.conf" ]; then
 	invoke-rc.d manticore stop
 fi

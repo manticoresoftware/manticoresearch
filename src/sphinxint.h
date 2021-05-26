@@ -1651,7 +1651,7 @@ BYTE sphDoclistHintPack ( SphOffset_t iDocs, SphOffset_t iLen );
 // wordlist checkpoints frequency
 #define SPH_WORDLIST_CHECKPOINT 64
 
-#if USE_WINDOWS
+#if _WIN32
 void localtime_r ( const time_t * clock, struct tm * res );
 void gmtime_r ( const time_t * clock, struct tm * res );
 #endif
@@ -1743,9 +1743,12 @@ struct StoredToken_t
 
 void FillStoredTokenInfo ( StoredToken_t & tToken, const BYTE * sToken, ISphTokenizer * pTokenizer );
 
-class CSphConfigSection;
-CSphSource * sphCreateSourceTSVpipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName );
-CSphSource * sphCreateSourceCSVpipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName );
+struct RemapXSV_t
+{
+	int m_iAttr {-1};
+	int m_iField {-1};
+	int m_iTag {-1};
+};
 
 void sphFixupLocator ( CSphAttrLocator & tLocator, const ISphSchema * pOldSchema, const ISphSchema * pNewSchema );
 

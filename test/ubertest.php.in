@@ -8,6 +8,11 @@ $testdir = "@MANTICORE_BINARY_DIR@/test/";
 $scriptdir = "@MANTICORE_SCRIPTING_DIR@/test/";
 $testsrc = "@CMAKE_CURRENT_SOURCE_DIR@";
 
+putenv("ICU_DATA_DIR=@ICU_DATA_DIR@");
+putenv("GALERA_SONAME=@GALERA_MODULE@");
+putenv("FULL_SHARE_DIR=@FULL_SHARE_DIR@");
+putenv("python=@PYTHON_EXECUTABLE@");
+
 chdir ("$testsrc");
 $shellcmd = PHP_BINARY . " ubertest.php";
 
@@ -20,6 +25,7 @@ if ( is_array($args) && !empty($args) )
 }
 
 echo "cd $testsrc\n$shellcmd\n";
-passthru ("$shellcmd");
+passthru ("$shellcmd",$err);
+exit($err);
 
 ?>

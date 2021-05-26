@@ -17,14 +17,22 @@
 
 #include "networking_daemon.h"
 
-// set SSL key, certificate and ca-certificate to be used in SSL, if required.
-// does NOT anyway initialize SSL library or call any of it's funcitons.
-void SetServerSSLKeys ( CSphVariant * pSslCert, CSphVariant * pSslKey, CSphVariant * pSslCa );
+#if WITH_SSL
+	// set SSL key, certificate and ca-certificate to be used in SSL, if required.
+	// does NOT anyway initialize SSL library or call any of it's funcitons.
+	void SetServerSSLKeys ( CSphVariant * pSslCert, CSphVariant * pSslKey, CSphVariant * pSslCa );
 
-// Try to initialize SSL, if not yet done. Returns whether it is usable or not (i.e. - no lib, no keys, any error).
-// used to set 'switch-to-ssl' bit in mysql handshake depending from whether we can do it, or not.
-bool CheckWeCanUseSSL ();
+	// Try to initialize SSL, if not yet done. Returns whether it is usable or not (i.e. - no lib, no keys, any error).
+	// used to set 'switch-to-ssl' bit in mysql handshake depending from whether we can do it, or not.
+	bool CheckWeCanUseSSL ();
 
-// Replace pSource with it's SSL version.
-// any data not consumed from original source will be considered as part of ssl handshake.
-bool MakeSecureLayer ( AsyncNetBufferPtr_c & pSource );
+	// Replace pSource with it's SSL version.
+	// any data not consumed from original source will be considered as part of ssl handshake.
+	bool MakeSecureLayer ( AsyncNetBufferPtr_c & pSource );
+
+#else
+	// these stubs work together with NOT including searchdsll.cpp into the final build
+	inline void SetServerSSLKeys ( CSphVariant *,  CSphVariant *,  CSphVariant * ) {}
+	inline bool CheckWeCanUseSSL () { return false; }
+	inline bool MakeSecureLayer ( AsyncNetBufferPtr_c & ) { return false; }
+#endif

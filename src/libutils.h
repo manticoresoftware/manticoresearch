@@ -10,37 +10,24 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#ifndef _libutils_
-#define _libutils_
+#pragma once
 
-#include "sphinxstd.h"
+#if _WIN32
+	#undef HAVE_DLOPEN
+	#define HAVE_DLOPEN		1
+	#define RTLD_LAZY		0
+	#define RTLD_NOW		0
+	#define RTLD_LOCAL		0
+	#define RTLD_GLOBAL		0
 
-#if !USE_WINDOWS
-	#include <unistd.h>
-	#include <sys/time.h>
-	#if HAVE_DLOPEN
-		#include <dlfcn.h>
-	#endif // HAVE_DLOPEN
-#endif // !USE_WINDOWS
-
-#if !USE_WINDOWS
-	#ifndef HAVE_DLERROR
-		#define dlerror() ""
-	#endif // HAVE_DLERROR
-#endif // !USE_WINDOWS
-
-#if USE_WINDOWS
-#undef HAVE_DLOPEN
-#define HAVE_DLOPEN		1
-#define RTLD_LAZY		0
-#define RTLD_LOCAL		0
-#define RTLD_GLOBAL		0
-
-void *			dlsym ( void * lib, const char * name );
-void *			dlopen ( const char * libname, int );
-int				dlclose ( void * lib );
-const char *	dlerror();
-
-#endif // USE_WINDOWS
-
-#endif // _libutils_
+	void *			dlsym ( void * lib, const char * name );
+	void *			dlopen ( const char * libname, int );
+	int				dlclose ( void * lib );
+	const char *	dlerror();
+#else // !_WIN32
+#define DLSTUFF 1
+#include "config.h"
+#if HAVE_DLOPEN
+	#include <dlfcn.h>
+#endif // HAVE_DLOPEN
+#endif // _WIN32

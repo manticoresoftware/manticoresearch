@@ -1,3 +1,9 @@
+%{
+#if _WIN32
+#pragma warning(push,1)
+#endif
+%}
+
 %lex-param		{ ExprParser_t * pParser }
 %parse-param	{ ExprParser_t * pParser }
 %pure-parser
@@ -277,3 +283,6 @@ strval:
 
 
 %%
+#if _WIN32
+#pragma warning(pop)
+#endif

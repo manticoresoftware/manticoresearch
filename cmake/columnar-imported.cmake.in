@@ -1,0 +1,13 @@
+cmake_minimum_required ( VERSION 3.17 )
+
+project ( columnar-prebuild NONE )
+
+include ( ExternalProject )
+ExternalProject_Add ( columnar_populate
+		${COLUMNAR_LOCATOR}
+		CMAKE_ARGS -DCACHEB=${CACHEB} -DSKIP_COLUMNAR=${SKIP_COLUMNAR}
+		BUILD_COMMAND "${CMAKE_COMMAND}" --build . --config RelWithDebInfo
+		INSTALL_COMMAND "${CMAKE_COMMAND}" --install . --config RelWithDebInfo --prefix "${COLUMNAR_BUILD}"
+		)
+
+# file configured from cmake/columnar-imported.cmake.in

@@ -9,9 +9,6 @@
 //
 
 #include "compressed_mysql.h"
-#include "networking_daemon.h"
-
-#if USE_ZLIB
 #include <zlib.h>
 
 bool IsCompressionAvailable () { return true; }
@@ -169,10 +166,3 @@ int MysqlCompressedSocket_c::ReadFromBackend ( int iNeed, int iHaveSpace, bool b
 	}
 	return iRead;
 }
-
-#else // USE_ZLIB
-
-bool IsCompressionAvailable () { return false; }
-void MakeMysqlCompressedLayer ( AsyncNetBufferPtr_c & pSource ) { };
-
-#endif

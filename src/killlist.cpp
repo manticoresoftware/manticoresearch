@@ -40,7 +40,7 @@ bool DeadRowMap_c::Set ( RowID_t tRowID, DWORD * pData )
 
 #ifdef HAVE_SYNC_FETCH
 	DWORD uPrev = __sync_fetch_and_or ( pDword, uMask );
-#elif USE_WINDOWS
+#elif _WIN32
 	DWORD uPrev = _InterlockedOr ( (long*)pDword, (long)uMask );
 #else
 	ScopedMutex_t tLock ( m_tLock );

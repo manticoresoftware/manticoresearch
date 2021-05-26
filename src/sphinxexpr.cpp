@@ -27,7 +27,7 @@
 #include <time.h>
 #include <math.h>
 
-#if USE_RE2
+#if WITH_RE2
 #include <re2/re2.h>
 #endif
 
@@ -3303,12 +3303,7 @@ struct UdfCall_t
 //////////////////////////////////////////////////////////////////////////
 class ExprParser_t;
 
-#ifdef 	CMAKE_GENERATED_GRAMMAR
-	#include "bissphinxexpr.h"
-#else
-	#include "yysphinxexpr.h"
-#endif
-
+#include "bissphinxexpr.h"
 
 /// known operations, columns and functions
 enum Tokh_e : BYTE
@@ -7956,7 +7951,7 @@ class Expr_Regex_c final : public Expr_ArgVsSet_T<int>
 {
 protected:
 	uint64_t m_uFilterHash = SPH_FNV64_SEED;
-#if USE_RE2
+#if WITH_RE2
 	RE2 *	m_pRE2 = nullptr;
 #endif
 
@@ -7970,7 +7965,7 @@ public:
 		if ( iLen )
 			m_uFilterHash = sphFNV64 ( sVal, iLen );
 
-#if USE_RE2
+#if WITH_RE2
 		re2::StringPiece tBuf ( (const char *)sVal, iLen );
 		RE2::Options tOpts;
 		tOpts.set_encoding ( RE2::Options::Encoding::EncodingUTF8 );
@@ -7980,7 +7975,7 @@ public:
 
 	~Expr_Regex_c() final
 	{
-#if USE_RE2
+#if WITH_RE2
 		SafeDelete ( m_pRE2 );
 #endif
 	}
@@ -7988,7 +7983,7 @@ public:
 	int IntEval ( const CSphMatch & tMatch ) const final
 	{
 		int iRes = 0;
-#if USE_RE2
+#if WITH_RE2
 		if ( !m_pRE2 )
 			return 0;
 
@@ -8019,7 +8014,7 @@ private:
 		Expr_Regex_c ( const Expr_Regex_c& rhs )
 		: Expr_ArgVsSet_T ( rhs )
 		, m_uFilterHash ( rhs.m_uFilterHash )
-#if USE_RE2
+#if WITH_RE2
 		, m_pRE2 ( rhs.m_pRE2)
 #endif
 		{}
@@ -8188,7 +8183,7 @@ ISphExpr * ExprParser_t::CreateIntervalNode ( int iArgsNode, CSphVector<ISphExpr
 			default:				return new Expr_Interval_c<float> ( dArgs ); break;
 		}
 	}
-#if !USE_WINDOWS
+#if !_WIN32
 	return nullptr;
 #endif
 }
@@ -8520,17 +8515,7 @@ ISphExpr * ExprParser_t::CreateConcatNode ( int iArgsNode, CSphVector<ISphExpr *
 //////////////////////////////////////////////////////////////////////////
 #define YY_DECL inline int yy1lex ( YYSTYPE * lvalp, void * yyscanner, ExprParser_t * pParser )
 
-#ifdef __GNUC__
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wsign-compare"
-#pragma GCC diagnostic ignored "-Wpragmas"
-#endif
-
 #include "flexsphinxexpr.c"
-
-#ifdef __GNUC__
-#pragma GCC diagnostic pop
-#endif
 
 #ifndef NDEBUG
 // using a proxy to be possible to debug inside yylex
@@ -8553,19 +8538,7 @@ void yyerror ( ExprParser_t * pParser, const char * sMessage )
 	pParser->m_sParserError.SetSprintf ( "Sphinx expr: %s near '%s'", sMessage, szToken );
 }
 
-#if USE_WINDOWS
-#pragma warning(push,1)
-#endif
-
-#ifdef CMAKE_GENERATED_GRAMMAR
-	#include "bissphinxexpr.c"
-#else
-	#include "yysphinxexpr.c"
-#endif
-
-#if USE_WINDOWS
-#pragma warning(pop)
-#endif
+#include "bissphinxexpr.c"
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -9049,7 +9022,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 		break;
 	case FUNC_REGEX:
 		{
-#if USE_RE2
+#if WITH_RE2
 			int iLeft = m_dNodes[iArg].m_iLeft;
 			ESphAttr eLeft = m_dNodes[iLeft].m_eRetType;
 			bool bIsLeftGood = ( eLeft==SPH_ATTR_STRING || eLeft==SPH_ATTR_STRINGPTR || eLeft==SPH_ATTR_JSON_FIELD );

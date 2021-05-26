@@ -1,0 +1,6 @@
+# Automatically added by build_{buster|debian|stretch|wheezy}.cmake
+if [ -x "@CMAKE_INSTALL_FULL_SYSCONFDIR@/init.d/manticore" ]; then
+	update-rc.d manticore defaults >/dev/null
+	invoke-rc.d manticore start || exit $?
+fi
+# End automatically added section

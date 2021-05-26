@@ -11,10 +11,6 @@ endif ()
 
 include(update_bundle)
 
-# set global cache path to cmake
-get_cache(CACHE_BUILDS)
-set(CMAKE_PREFIX_PATH "${CACHE_BUILDS}")
-
 # check pre-built gtests
 find_package(GTest QUIET CONFIG)
 if (TARGET GTest::gmock_main)
@@ -23,7 +19,7 @@ endif()
 
 # not found. Populate and build cache package for now and future usage.
 MESSAGE(STATUS "prebuilt googletest wasn't found. Will build it right now...")
-populate(GTEST_PLACE "gtests" ${GTEST_URL} ${GTEST_GITHUB})
+select_nearest_url(GTEST_PLACE "gtests" ${GTEST_URL} ${GTEST_GITHUB})
 
 # build as external project and install into cache
 get_build(GTEST_BUILD gtest)
@@ -33,4 +29,4 @@ execute_process(COMMAND "${CMAKE_COMMAND}" --build . WORKING_DIRECTORY "${MANTIC
 
 # now it should find
 find_package(GTest CONFIG)
-diagp(GTest::gmock_main)
+trace(GTest::gmock_main)

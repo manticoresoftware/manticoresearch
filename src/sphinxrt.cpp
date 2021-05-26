@@ -40,7 +40,7 @@
 #include <fcntl.h>
 #include <atomic>
 
-#if USE_WINDOWS
+#if _WIN32
 #include <errno.h>
 #else
 #include <unistd.h>
@@ -1079,7 +1079,7 @@ public:
 	static int64_t		NumAliveDocs ( const CSphIndex * pChunk ) ;
 
 public:
-#if USE_WINDOWS
+#if _WIN32
 #pragma warning(push,1)
 #pragma warning(disable:4100)
 #endif
@@ -1113,7 +1113,7 @@ public:
 	void				DebugDumpHitlist ( FILE * , const char * , bool ) final {}
 	void				DebugDumpDict ( FILE * ) final {}
 	int					DebugCheck ( FILE * fp ) final;
-#if USE_WINDOWS
+#if _WIN32
 #pragma warning(pop)
 #endif
 
@@ -9100,7 +9100,7 @@ void BinlogWriter_c::Write ()
 }
 
 
-#if USE_WINDOWS
+#if _WIN32
 int fsync ( int iFD )
 {
 	// map fd to handle

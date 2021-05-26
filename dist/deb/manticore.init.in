@@ -21,15 +21,15 @@
 . /lib/lsb/init-functions
 
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-DAEMON=@BINDIRFULL@/searchd
-DAEMONOPTS='-c @SYSCONFDIR@/manticoresearch/manticore.conf'
+DAEMON=@CMAKE_INSTALL_FULL_BINDIR@/searchd
+DAEMONOPTS='-c @CMAKE_INSTALL_FULL_SYSCONFDIR@/manticoresearch/manticore.conf'
 NAME=manticore
 DESC=manticore
 
 test -x $DAEMON || exit 0
 
-LOGDIR=@LOGDIR@
-PIDFILE=@RUNDIR@/searchd.pid
+LOGDIR=${CMAKE_INSTALL_FULL_LOCALSTATEDIR}/log/manticore
+PIDFILE=@CMAKE_INSTALL_FULL_RUNSTATEDIR@/manticore/searchd.pid
 DODTIME=1                   # Time to wait for the server to die, in seconds
                             # If this value is set too low you might not
                             # let some servers to die gracefully and
@@ -38,12 +38,12 @@ DODTIME=1                   # Time to wait for the server to die, in seconds
 STARTDELAY=0.5
 
 # Include manticore defaults if available
-if [ -f @SYSCONFDIR@/default/manticore ] ; then
-    . @SYSCONFDIR@/default/manticore
+if [ -f @CMAKE_INSTALL_FULL_SYSCONFDIR@/default/manticore ] ; then
+    . @CMAKE_INSTALL_FULL_SYSCONFDIR@/default/manticore
 fi
 
 if [ "$START" != "yes" ]; then
-  echo "To enable $NAME, edit @SYSCONFDIR@/default/manticore and set START=yes"
+  echo "To enable $NAME, edit @CMAKE_INSTALL_FULL_SYSCONFDIR@/default/manticore and set START=yes"
   exit 0
 fi
 
@@ -97,12 +97,12 @@ do_force_stop() {
 }
 
 do_start() {
-	test -e @RUNDIR@ || install -m 755 -o root -d root @RUNDIR@
+	test -e @CMAKE_INSTALL_FULL_RUNSTATEDIR@/manticore || install -m 755 -o root -d root @CMAKE_INSTALL_FULL_RUNSTATEDIR@/manticore
         # Check if we have the configuration file
-        if [ ! -f @SYSCONFDIR@/manticoresearch/manticore.conf ]; then
+        if [ ! -f @CMAKE_INSTALL_FULL_SYSCONFDIR@/manticoresearch/manticore.conf ]; then
             echo "\n"
-            echo "Please create an @SYSCONFDIR@/manticoresearch/manticore.conf configuration file."
-            echo "A template is provided as @SYSCONFDIR@/manticoresearch/manticore.conf.sample."
+            echo "Please create an @CMAKE_INSTALL_FULL_SYSCONFDIR@/manticoresearch/manticore.conf configuration file."
+            echo "A template is provided as @CMAKE_INSTALL_FULL_SYSCONFDIR@/manticoresearch/manticore.conf.sample."
             exit 1
         fi
 
@@ -165,7 +165,7 @@ case "$1" in
     fi
     ;;
   *)
-    N=@SYSCONFDIR@/init.d/$NAME
+    N=@CMAKE_INSTALL_FULL_SYSCONFDIR@/init.d/$NAME
     # echo "Usage: $N {start|stop|restart|reload|force-reload}" >&2
     echo "Usage: $N {start|stop|restart|force-reload|status|force-stop}" >&2
     exit 1

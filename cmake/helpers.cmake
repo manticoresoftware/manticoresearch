@@ -3,253 +3,187 @@ if ( __cmake_helpers_included )
 endif ()
 set ( __cmake_helpers_included YES )
 
-# check for list of headers, ;-separated. For every existing header.h
-# the HAVE_HEADER_H became defined as 1
-include ( CheckIncludeFile )
-macro( ac_check_headers _HEADERS )
-	foreach ( it ${_HEADERS} )
-		string ( REGEX REPLACE "[/.]" "_" _it "${it}" )
-		string ( TOUPPER "${_it}" _it )
-		check_include_file ( "${it}" "HAVE_${_it}" )
-	endforeach ( it )
-endmacro( ac_check_headers )
-
-# check for list of functions, ;-separated. For every existing
-# function the HAVE_FUNCION became defined as 1
-include ( CheckFunctionExists )
-macro( ac_check_funcs _FUNCTIONS )
-	foreach ( it ${_FUNCTIONS} )
-		string ( TOUPPER "${it}" _it )
-		check_function_exists ( "${it}" "HAVE_${_it}" )
-	endforeach ( it )
-endmacro( ac_check_funcs )
-
-macro( ac_check_func_ex _FUNCTION _INCLUDES _LIBS )
-	string ( TOUPPER "${_FUNCTION}" __FUNCTION )
-	set ( saved_includes "${CMAKE_REQUIRED_INCLUDES}" )
-	set ( saved_libs "${CMAKE_REQUIRED_LIBRARIES}" )
-	set ( CMAKE_REQUIRED_INCLUDES "${_INCLUDES}" )
-	set ( CMAKE_REQUIRED_LIBRARIES "${_LIBS}" )
-	check_function_exists ( "${_FUNCTION}" "HAVE_${__FUNCTION}" )
-	set ( CMAKE_REQUIRED_INCLUDES "${saved_includes}" )
-	set ( CMAKE_REQUIRED_LIBRARIES "${saved_libs}" )
-endmacro( ac_check_func_ex _FUNCTION _INCLUDES _LIBS )
-
-# remove cr lf from input string
-#macro (remove_crlf _SOURCE _DESTINATION)
-#	string(REGEX REPLACE "\n" "" _DESTINATION "${_SOURCE}")
-#endmacro(remove_crlf)
-
-# AWI, downloaded from KDE repository since has not yet been transferred
-# to cmake repository as of 2006-07-31.
-# http://websvn.kde.org/trunk/KDE/kdelibs/cmake/modules/CheckPrototypeExists.cmake?rev=505849&view=markup
-#
-# - Check if the prototype for a function exists.
-# CHECK_PROTOTYPE_EXISTS (FUNCTION HEADER VARIABLE)
-#
-# FUNCTION - the name of the function you are looking for
-# HEADER - the header(s) where the prototype should be declared
-# VARIABLE - variable to store the result
-#
-
-include ( CheckCXXSourceCompiles )
-macro( check_prototype_exists _SYMBOL _HEADER _RESULT )
-	set ( _INCLUDE_FILES )
-	foreach ( it ${_HEADER} )
-		set ( _INCLUDE_FILES "${_INCLUDE_FILES}#include <${it}>\n" )
-	endforeach ( it )
-
-	set ( _CHECK_PROTO_EXISTS_SOURCE_CODE "
-${_INCLUDE_FILES}
-void cmakeRequireSymbol(int dummy,...){(void)dummy;}
-int main()
-{
-#ifndef ${_SYMBOL}
-#ifndef _MSC_VER
-cmakeRequireSymbol(0,&${_SYMBOL});
-#else
-char i = sizeof(&${_SYMBOL});
-#endif
-#endif
-return 0;
-}
-" )
-	CHECK_CXX_SOURCE_COMPILES ( "${_CHECK_PROTO_EXISTS_SOURCE_CODE}" ${_RESULT} )
-endmacro( check_prototype_exists _SYMBOL _HEADER _RESULT )
-
-
-# - Check if the symbol is defined in thad header file
-# CHECK_SYMBOL_DEFINED (SYMBOL HEADER VARIABLE)
-#
-# SYMBOL - the name of the symbol you are looking for
-# HEADER - the header(s) where the symbol should be defined
-# VARIABLE - variable to store the result
-#
-macro( check_symbol_defined _SYMBOL _HEADER _RESULT )
-	set ( _INCLUDE_FILES )
-	foreach ( it ${_HEADER} )
-		set ( _INCLUDE_FILES "${_INCLUDE_FILES}#include <${it}>\n" )
-	endforeach ( it )
-
-	set ( _CHECK_PROTO_EXISTS_SOURCE_CODE "
-${_INCLUDE_FILES}
-#ifdef ${_SYMBOL}
-int main() { return 0; }
-#else
-#error NO_SYMBOLS
-#endif
-" )
-	CHECK_CXX_SOURCE_COMPILES ( "${_CHECK_PROTO_EXISTS_SOURCE_CODE}" ${_RESULT} )
-endmacro( check_symbol_defined _SYMBOL _HEADER _RESULT )
-
-macro( SPHINX_CHECK_DEFINE _SYMBOL _HEADER )
-	string ( TOUPPER "${_SYMBOL}" __SYMBOL )
-	check_symbol_defined ( "${_SYMBOL}" "${_HEADER}" "HAVE_${__SYMBOL}" )
-endmacro( SPHINX_CHECK_DEFINE _SYMBOL _HEADER )
-# - Check if the DIR symbol exists like in AC_HEADER_DIRENT.
-# CHECK_DIRSYMBOL_EXISTS(FILES VARIABLE)
-#
-# FILES - include files to check
-# VARIABLE - variable to return result
-#
-# This module is a small but important variation on CheckSymbolExists.cmake.
-# The symbol always searched for is DIR, and the test programme follows
-# the AC_HEADER_DIRENT test programme rather than the CheckSymbolExists.cmake
-# test programme which always fails since DIR tends to be typedef'd
-# rather than #define'd.
-#
-# The following variables may be set before calling this macro to
-# modify the way the check is run:
-#
-# CMAKE_REQUIRED_FLAGS = string of compile command line flags
-# CMAKE_REQUIRED_DEFINITIONS = list of macros to define (-DFOO=bar)
-# CMAKE_REQUIRED_INCLUDES = list of include directories
-# CMAKE_REQUIRED_LIBRARIES = list of libraries to link
-
-MACRO( CHECK_DIRSYMBOL_EXISTS FILES VARIABLE )
-	IF ( NOT DEFINED ${VARIABLE} )
-		SET ( CMAKE_CONFIGURABLE_FILE_CONTENT "/* */\n" )
-		SET ( MACRO_CHECK_DIRSYMBOL_EXISTS_FLAGS ${CMAKE_REQUIRED_FLAGS} )
-		IF ( CMAKE_REQUIRED_LIBRARIES )
-			SET ( CHECK_DIRSYMBOL_EXISTS_LIBS
-					"-DLINK_LIBRARIES:STRING=${CMAKE_REQUIRED_LIBRARIES}" )
-		ELSE ( CMAKE_REQUIRED_LIBRARIES )
-			SET ( CHECK_DIRSYMBOL_EXISTS_LIBS )
-		ENDIF ( CMAKE_REQUIRED_LIBRARIES )
-		IF ( CMAKE_REQUIRED_INCLUDES )
-			SET ( CMAKE_DIRSYMBOL_EXISTS_INCLUDES
-					"-DINCLUDE_DIRECTORIES:STRING=${CMAKE_REQUIRED_INCLUDES}" )
-		ELSE ( CMAKE_REQUIRED_INCLUDES )
-			SET ( CMAKE_DIRSYMBOL_EXISTS_INCLUDES )
-		ENDIF ( CMAKE_REQUIRED_INCLUDES )
-		FOREACH ( FILE ${FILES} )
-			SET ( CMAKE_CONFIGURABLE_FILE_CONTENT
-					"${CMAKE_CONFIGURABLE_FILE_CONTENT}#include <${FILE}>\n" )
-		ENDFOREACH ( FILE )
-		SET ( CMAKE_CONFIGURABLE_FILE_CONTENT
-				"${CMAKE_CONFIGURABLE_FILE_CONTENT}\nint main()\n{if ((DIR *) 0) return 0;}\n" )
-
-		CONFIGURE_FILE ( "${CMAKE_ROOT}/Modules/CMakeConfigurableFile.in"
-				"${CMAKE_BINARY_DIR}/CMakeFiles/CMakeTmp/CheckDIRSymbolExists.c" @ONLY )
-
-		MESSAGE ( STATUS "Looking for DIR in ${FILES}" )
-		TRY_COMPILE ( ${VARIABLE}
-				${CMAKE_BINARY_DIR}
-				${CMAKE_BINARY_DIR}/CMakeFiles/CMakeTmp/CheckDIRSymbolExists.c
-				COMPILE_DEFINITIONS ${CMAKE_REQUIRED_DEFINITIONS}
-				CMAKE_FLAGS
-				-DCOMPILE_DEFINITIONS:STRING=${MACRO_CHECK_DIRSYMBOL_EXISTS_FLAGS}
-				"${CHECK_DIRSYMBOL_EXISTS_LIBS}"
-				"${CMAKE_DIRSYMBOL_EXISTS_INCLUDES}"
-				OUTPUT_VARIABLE OUTPUT )
-		IF ( ${VARIABLE} )
-			MESSAGE ( STATUS "Looking for DIR in ${FILES} - found" )
-			SET ( ${VARIABLE} 1 CACHE INTERNAL "Have symbol DIR" )
-			FILE ( APPEND ${CMAKE_BINARY_DIR}/CMakeFiles/CMakeOutput.log
-					"Determining if the DIR symbol is defined as in AC_HEADER_DIRENT "
-					"passed with the following output:\n"
-					"${OUTPUT}\nFile ${CMAKE_BINARY_DIR}/CMakeFiles/CMakeTmp/CheckDIRSymbolExists.c:\n"
-					"${CMAKE_CONFIGURABLE_FILE_CONTENT}\n" )
-		ELSE ( ${VARIABLE} )
-			MESSAGE ( STATUS "Looking for DIR in ${FILES} - not found." )
-			SET ( ${VARIABLE} "" CACHE INTERNAL "Have symbol DIR" )
-			FILE ( APPEND ${CMAKE_BINARY_DIR}/CMakeFiles/CMakeError.log
-					"Determining if the DIR symbol is defined as in AC_HEADER_DIRENT "
-					"failed with the following output:\n"
-					"${OUTPUT}\nFile ${CMAKE_BINARY_DIR}/CMakeFiles/CMakeTmp/CheckDIRSymbolExists.c:\n"
-					"${CMAKE_CONFIGURABLE_FILE_CONTENT}\n" )
-		ENDIF ( ${VARIABLE} )
-	ENDIF ( NOT DEFINED ${VARIABLE} )
-ENDMACRO( CHECK_DIRSYMBOL_EXISTS )
-
-
-include ( CheckLibraryExists )
-macro( AC_SEARCH_LIBS LIB_REQUIRED FUNCTION_NAME LIB_DIR )
+include (printers)
+include(CheckFunctionExists)
+function(add_lib_for FUNCTION_NAME LIBS_REQUIRED LIB_TRG)
 	# check if we can use FUNCTION_NAME first.
 	# if possible without extra libs - ok. If no - try to use LIB_REQUIRED list.
-	# finally define TARGET_VAR as 1 if found, and also append found (if necessary) library path to LIB_DIR
-	#if(${LIB_REQUIRED})
-	string ( TOUPPER ${FUNCTION_NAME} _upcase_name )
-	set ( HAVE_NAME HAVE_${_upcase_name} )
-	set ( LIB_NAME LIB_${_upcase_name} )
-	if ( NOT DEFINED ${HAVE_NAME})
-		check_function_exists ( ${FUNCTION_NAME} ${HAVE_NAME} )
-		if ( NOT ${HAVE_NAME} )
-			foreach ( LIB ${LIB_REQUIRED} )
-				find_library ( ${LIB_NAME} ${LIB} )
-				UNSET ( ${HAVE_NAME} CACHE )
-				check_library_exists ( ${LIB} ${FUNCTION_NAME} ${LIB_NAME} ${HAVE_NAME} )
-				if ( ${${HAVE_NAME}} )
-					break ()
+	# finally append found (if necessary) library to the link of LIB_TRG
+	string(TOUPPER ${FUNCTION_NAME} _fupcase_name)
+	set(HAVE_NAME HAVE_${_fupcase_name})
+	set(FUNC_FOR_NAME FUNC_FOR_${_fupcase_name})
+	if (NOT DEFINED ${HAVE_NAME})
+		check_function_exists(${FUNCTION_NAME} ${HAVE_NAME})
+		if (NOT ${HAVE_NAME})
+			foreach (LIB ${LIBS_REQUIRED})
+				set(LIB_XXX "LIB_${LIB}")
+				UNSET(${HAVE_NAME} CACHE)
+				set(CMAKE_REQUIRED_LIBRARIES ${LIB})
+				check_function_exists(${FUNCTION_NAME} ${HAVE_NAME})
+				if (${${HAVE_NAME}})
+					find_library(LIB_${LIB} ${LIB})
+					set(${FUNC_FOR_NAME} "${LIB}" CACHE INTERNAL "Library for function ${FUNCTION}")
+					mark_as_advanced(${FUNC_FOR_NAME} LIB_${LIB})
+					break()
 				endif ()
-			endforeach ( LIB )
+			endforeach (LIB)
 		endif ()
+	endif ()
+	if (DEFINED ${FUNC_FOR_NAME})
+		target_link_libraries(${LIB_TRG} INTERFACE ${${FUNC_FOR_NAME}})
+	endif ()
+	mark_as_advanced(${HAVE_NAME})
+endfunction()
+
+function (with_menu_comp PACKAGE Component NAME INFO)
+	string (TOUPPER "${Component}" COMPONENT)
+	if (NOT DEFINED WITH_${COMPONENT})
+		find_package (${PACKAGE} COMPONENTS ${Component})
+		if ( ${PACKAGE}_FOUND)
+			set (WITH_${COMPONENT} ON CACHE BOOL "link with ${NAME} library")
+		endif()
+		mark_as_advanced (${PACKAGE}_FOUND)
+	elseif (WITH_${COMPONENT} AND NOT TARGET ${PACKAGE}::${Component})
+		find_package (${PACKAGE} REQUIRED COMPONENTS ${Component})
+	endif()
+	add_feature_info (${PACKAGE} WITH_${COMPONENT} "${INFO}")
+	trace (${PACKAGE}::${Component})
+	bannervar (WITH_${Component})
+endfunction ()
+
+function (with_menu Package NAME INFO)
+	string (TOUPPER "${Package}" PACKAGE)
+	if (NOT DEFINED WITH_${PACKAGE})
+		find_package (${Package})
+		if (${Package}_FOUND)
+			set (WITH_${PACKAGE} ON CACHE BOOL "link with ${NAME} library")
+		endif ()
+		mark_as_advanced(${Package}_FOUND)
+	elseif (WITH_${PACKAGE} AND NOT TARGET ${Package}::${Package})
+		find_package (${Package} REQUIRED)
+	endif ()
+	add_feature_info (${Package} WITH_${PACKAGE} "${INFO}")
+	trace (${Package}::${Package})
+	bannervar (WITH_${PACKAGE})
+endfunction()
+
+function (with_get Package NAME INFO)
+	string (TOUPPER "${Package}" PACKAGE)
+	if (NOT DEFINED WITH_${PACKAGE} OR WITH_${PACKAGE} )
+		include (Get${PACKAGE})
+		set (WITH_${PACKAGE} ON CACHE BOOL "compile with ${NAME} library")
+	endif()
+	add_feature_info (${Package} WITH_${PACKAGE} "${INFO}")
+	trace (${Package}::${Package})
+	bannervar (WITH_${PACKAGE})
+	if (WITH_${PACKAGE})
+		bannervar (WITH_${PACKAGE}_FORCE_STATIC)
+	endif()
+endfunction()
+
+function (__get_imported_soname TRG OUTVAR)
+	get_target_property (_lib ${TRG} LOCATION)
+	if (NOT _lib)
+		diags ("${TRG}: location is not determined")
+		return()
+	endif()
+	GET_SONAME ("${_lib}" _solib)
+	if (NOT _solib)
+		diags ("${TRG}: no soname")
+		return ()
+	endif ()
+	set ("${OUTVAR}" "${_solib}" PARENT_SCOPE)
+endfunction()
+
+function (__copyp SRC DST PROPERTY) # copy property from SRC to DST, if exists
+	get_target_property (_prp ${SRC} ${PROPERTY})
+	if (_prp)
+		set_target_properties (${DST} PROPERTIES ${PROPERTY} "${_prp}" )
+	endif ()
+endfunction ()
+
+function (__make_dl_lib SRC) # copy lib without location
+	add_library ("${SRC}_ld" INTERFACE IMPORTED)
+	foreach (_prop
+			INTERFACE_COMPILE_DEFINITIONS
+			INTERFACE_COMPILE_FEATURES
+			INTERFACE_COMPILE_OPTIONS
+			INTERFACE_INCLUDE_DIRECTORIES
+			INTERFACE_LINK_LIBRARIES
+			INTERFACE_LINK_DEPENDS
+			INTERFACE_LINK_DIRECTORIES
+			INTERFACE_LINK_OPTIONS
+			INTERFACE_POSITION_INDEPENDENT_CODE
+			INTERFACE_SOURCES
+			INTERFACE_SYSTEM_INCLUDE_DIRECTORIES
+			MAP_IMPORTED_CONFIG_RELEASE
+			MAP_IMPORTED_CONFIG_RELWITHDEBINFO
+			MAP_IMPORTED_CONFIG_DEBUG
+			MAP_IMPORTED_CONFIG_MINSIZEREL)
+		__copyp (${SRC} ${SRC}_ld ${_prop})
+	endforeach ()
+endfunction ()
+
+# windows installation stuff
+function(__win_install_lib _lib)
+	if (NOT TARGET ${_lib} OR NOT WIN32)
+		return()
+	endif()
+	get_property (_type TARGET ${_lib} PROPERTY TYPE)
+	if (_type STREQUAL SHARED_LIBRARY OR _type STREQUAL INTERFACE_LIBRARY)
+		get_property (_file TARGET ${_lib} PROPERTY LOCATION)
+		addruntime ("${_file}")
+		get_property (_deps TARGET ${_lib} PROPERTY INTERFACE_LINK_LIBRARIES)
+		foreach (_dep ${_deps})
+			trace (${_dep})
+			__win_install_lib(${_dep})
+		endforeach()
+	endif()
+endfunction()
+
+function (win_install_c Package Component)
+	string (TOUPPER "${Component}" COMPONENT)
+	if (NOT WITH_${COMPONENT})
+		return()
+	endif()
+	__win_install_lib ("${Package}::${Component}")
+endfunction()
+
+function (win_install Package)
+	win_install_c (${Package} ${Package})
+endfunction ()
+
+function (dl_package Package NAME)
+	string (TOUPPER "${Package}" PACKAGE)
+	if (NOT WITH_${PACKAGE} OR NOT (HAVE_DLOPEN OR WIN32))
+		diag (WITH_${PACKAGE} HAVE_DLOPEN WIN32)
+		diags ("can't make dl_${PACKAGE} - package not found, or no dlopen, or not windows")
+		return()
 	endif()
 
-	if ( ${${HAVE_NAME}} )
-		if ( ${LIB_NAME} )
-			set ( ${LIB_DIR} "${${LIB_DIR}};${${LIB_NAME}}" )
+	if (DEFINED DL_${PACKAGE} AND NOT DL_${PACKAGE})
+		diags ("DL_${PACKAGE} is explicitly set to FALSE - will not dynamically-load")
+		return()
+	endif()
+
+	__get_imported_soname ( "${Package}::${Package}" _lib)
+	if (NOT _lib)
+		if (DL_${PACKAGE})
+			message (FATAL_ERROR "Cant dynamicaly load ${Package}: library is not present")
 		endif()
-	endif (  )
-	mark_as_advanced( ${LIB_NAME} ${HAVE_NAME})
-	#endif(${LIB_REQUIRED})
-endmacro()
+		diags ("imported soname of ${Package}::${Package} is empty (no location, or no soname) - will not dynamically-load")
+		return() # library is not preset as external essence, can't dlopen it
+	endif()
 
-macro( REMOVE_CRLF RETVAL INSTR )
-	if ( NOT INSTR EQUAL "" )
-		string ( REGEX REPLACE "\n" "" ${RETVAL} ${INSTR} )
-	endif ()
-	#	set(${RETVAL} "${RETVAL}" PARENT_SCOPE)
-endmacro()
+	set (DL_${PACKAGE} ON CACHE BOOL "load ${NAME} dynamically in runtime (usually with dlopen)")
+	set (${PACKAGE}_LIB "${_lib}" CACHE FILEPATH "Library file of ${NAME}")
+	__make_dl_lib (${Package}::${Package})
 
-# check if PACKAGE is available.
-# if so, add the option to use or don't use the package.
-# if the option set, set OUTVAR to 1, append the lib path to LIB_DIR, include directories
-include ( CMakeDependentOption )
-macro( OPTION_MENU PACKAGE PROMPT OUTVAR LIB_DIR )
-	find_package ( ${PACKAGE} QUIET )
-	CMAKE_DEPENDENT_OPTION ( WITH_${PACKAGE} "${PROMPT}" ON "${PACKAGE}_FOUND" OFF )
-	IF ( WITH_${PACKAGE} )
-		set ( ${OUTVAR} 1 )
-		if ( ${PACKAGE}_LIBRARIES )
-			list ( APPEND ${LIB_DIR} ${${PACKAGE}_LIBRARIES} )
-		endif ( ${PACKAGE}_LIBRARIES )
-		include_directories ( ${${PACKAGE}_INCLUDE_DIRS} )
-	ENDIF ( WITH_${PACKAGE} )
-endmacro()
-
-function(parse_tbd RAWLIB OUTVAR)
-	FILE(READ "${RAWLIB}" _CONTENT)
-	# replace lf into ';' (it makes list from the line)
-	STRING(REGEX REPLACE "\n" ";" _CONTENT "${_CONTENT}")
-	foreach (LINE ${_CONTENT})
-		# match definitions like - // GIT_*_ID VALUE
-		if ("${LINE}" MATCHES "^install-name:[ \t]+(.*)")
-			set(DYLIB "${CMAKE_MATCH_1}")
-			break()
-		endif ()
-	endforeach ()
-	set("${OUTVAR}" "${DYLIB}" PARENT_SCOPE)
+	GET_FILENAME_COMPONENT (_FNAME ${_lib} NAME)
+	infomsg ("${PACKAGE} will be loaded dynamically in runtime as ${_FNAME} (${_lib})")
+	trace (${Package}::${Package}_ld)
+	bannervar (DL_${PACKAGE})
+	bannervar (${PACKAGE}_LIB)
 endfunction()
 
 function ( GET_SONAME RAWLIB OUTVAR )
@@ -264,9 +198,7 @@ function ( GET_SONAME RAWLIB OUTVAR )
 		if ( APPLE )
 			GET_FILENAME_COMPONENT(EXTNAME "${RAWLIB}" EXT)
 			if (EXTNAME STREQUAL ".tbd")
-				parse_tbd("${RAWLIB}" dylib)
-				set("${OUTVAR}" "${dylib}" PARENT_SCOPE)
-				return()
+				return() # library is present in system by design, no need to unbind from it via dlopen at all.
 			endif()
 			execute_process ( COMMAND "${CMAKE_OBJDUMP}" -macho -dylib-id "${RAWLIB}"
 					WORKING_DIRECTORY "${SOURCE_DIR}"
@@ -289,216 +221,50 @@ function ( GET_SONAME RAWLIB OUTVAR )
 			FOREACH ( LINE ${_CONTENT} )
 				IF ( "${LINE}" MATCHES "^[ \t]+SONAME[ \t]+(.*)" )
 					set ( "${OUTVAR}" "${CMAKE_MATCH_1}" PARENT_SCOPE)
+					break()
 				endif ()
 			endforeach ()
 		endif(APPLE)
+	else()
+		GET_FILENAME_COMPONENT (LIBNAME "${RAWLIB}" NAME_WE)
+		set("${OUTVAR}" "${LIBNAME}.dll" PARENT_SCOPE)
 	endif()
 endfunction()
 
-
-# pre-filter contents by wide regexp (to process later only few matched lines)
-# that is significantly boost whole test since we will deal only with tiny blob
-function ( PREFILTER CONTENT NAMES )
-	STRING ( REGEX REPLACE ";" "|" REGNAMELIST "${${NAMES}}" )
-	STRING ( REGEX REPLACE "::" ".*" REGNAMELIST "${REGNAMELIST}" )
-	set (LINES "")
-	FOREACH ( LINE ${${CONTENT}} )
-		IF ( "${LINE}" MATCHES "${REGNAMELIST}" )
-			list ( APPEND LINES "${LINE}" )
-		endif ()
-	endforeach ()
-	set ( "${CONTENT}" "${LINES}" PARENT_SCOPE)
+function(configure_config data)
+	# generate config files
+	set (RUNDIR "${CMAKE_INSTALL_FULL_RUNSTATEDIR}/manticore")
+	set (LOGDIR "${CMAKE_INSTALL_FULL_LOCALSTATEDIR}/log/manticore")
+	set (CONFDIR "${CMAKE_INSTALL_FULL_LOCALSTATEDIR}/${data}")
+	configure_file ("${MANTICORE_SOURCE_DIR}/manticore.conf.in" "${MANTICORE_BINARY_DIR}/manticore.conf" @ONLY)
 endfunction()
 
-function( GET_NAMES RAWLIB NAMELIST MANGLEDLIST DEMANGLEDLIST )
-	if ( NOT MSVC )
-		if ( NOT DEFINED CMAKE_OBJDUMP )
-			find_package ( BinUtils QUIET )
-		endif ()
-		if ( NOT DEFINED CMAKE_OBJDUMP )
-			find_program ( CMAKE_OBJDUMP objdump )
-		endif ()
-		mark_as_advanced ( CMAKE_OBJDUMP BinUtils_DIR )
-
-		if ( NOT DEFINED CPPFILT )
-			find_program ( CPPFILT c++filt )
-		endif()
-		mark_as_advanced ( CPPFILT )
-
-		set ( MANGLED "" )
-		set ( ORIGINAL "" )
-		set ( DEMANGLED "" )
-		if ( APPLE )
-			set (OBJOPT "-macho;-t")
-		else()
-			set (OBJOPT "-T")
-		endif()
-		list (APPEND OBJOPT ${RAWLIB})
-
-		# extract mangled names first
-		execute_process ( COMMAND ${CMAKE_OBJDUMP} ${OBJOPT}
-				WORKING_DIRECTORY "${SOURCE_DIR}"
-				RESULT_VARIABLE res
-				OUTPUT_VARIABLE _CONTENT
-				ERROR_QUIET
-				OUTPUT_STRIP_TRAILING_WHITESPACE )
-
-		STRING ( REGEX REPLACE "\n" ";" _CONTENT "${_CONTENT}" )
-		prefilter (_CONTENT ${NAMELIST})
-
-		# extract pure names (without namespaces)
-		set (PURENAMES "")
-		FOREACH ( TMPL ${${NAMELIST}} )
-			IF ( "${TMPL}" MATCHES ".*::(.*)$" )
-				list ( APPEND PURENAMES "${CMAKE_MATCH_1}" )
-			else()
-				list ( APPEND PURENAMES "${TMPL}" )
-			endif ()
-		endforeach ()
-
-		# extract mangled names and rearrange original list also
-		set (RAWMANGLED "")
-		FOREACH ( LINE ${_CONTENT} )
-			FOREACH ( TMPL ${PURENAMES} )
-				IF ( "${LINE}" MATCHES "^.*[ \t](.*${TMPL}.*)" )
-					list ( APPEND RAWMANGLED "${CMAKE_MATCH_1}" )
-					list ( APPEND ORIGINAL "${TMPL}" )
-				endif ()
-			endforeach ()
-		endforeach ()
-
-		# on Apple remove extra leading underscores before demangling
-		if ( APPLE )
-			set ( FOR_CPPFILT "" )
-			FOREACH ( MNGL ${RAWMANGLED} )
-				IF ( "${MNGL}" MATCHES "^_(_.*)" ) # double __ is ok
-					list ( APPEND FOR_CPPFILT ${MNGL} )
-					list ( APPEND MANGLED "${CMAKE_MATCH_1}" )
-				elseif ( "${MNGL}" MATCHES "^_(.*)" ) # throw out leading single _
-					list ( APPEND FOR_CPPFILT ${CMAKE_MATCH_1} )
-					list ( APPEND MANGLED "${CMAKE_MATCH_1}" )
-				else() # add the rest as is
-					list ( APPEND FOR_CPPFILT ${MNGL} )
-					list ( APPEND MANGLED "${MNGL}" )
-				endif ()
-			endforeach()
-		else()
-			set ( FOR_CPPFILT "${RAWMANGLED}" )
-			set ( MANGLED "${RAWMANGLED}" )
-		endif()
-
-		# extract demangled names then
-		if ( DEFINED CPPFILT )
-			message (STATUS "Demangling using c++filt")
-			FOREACH ( MNGL ${FOR_CPPFILT} )
-				execute_process ( COMMAND "${CPPFILT}" "${MNGL}"
-						WORKING_DIRECTORY "${SOURCE_DIR}"
-						RESULT_VARIABLE res
-						OUTPUT_VARIABLE _CONTENT
-						ERROR_QUIET
-						OUTPUT_STRIP_TRAILING_WHITESPACE )
-
-				IF ( "${_CONTENT}" MATCHES "^(.*)\\(.*" )
-					set ( _CONTENT ${CMAKE_MATCH_1} )
-				elseif ( "${_CONTENT}" MATCHES "^_(.*)" )
-					set ( _CONTENT ${CMAKE_MATCH_1} )
-				endif ()
-				list ( APPEND DEMANGLED "${_CONTENT}" )
-			endforeach ()
-
-		else()
-			message ( STATUS "Demangling using objdump -TC" )
-			execute_process ( COMMAND "${CMAKE_OBJDUMP}" -TC "${RAWLIB}"
-					WORKING_DIRECTORY "${SOURCE_DIR}"
-					RESULT_VARIABLE res
-					OUTPUT_VARIABLE _CONTENT
-					ERROR_QUIET
-					OUTPUT_STRIP_TRAILING_WHITESPACE )
-
-			STRING ( REGEX REPLACE "\n" ";" _CONTENT "${_CONTENT}" )
-			prefilter ( _CONTENT ${NAMELIST} )
-			FOREACH ( LINE ${_CONTENT} )
-				#message (STATUS "line is ${LINE}")
-				FOREACH ( TMPL ${PURENAMES} )
-					IF ( "${LINE}" MATCHES "^.*[ \t](.*${TMPL}.*)" )
-						set (TMP ${CMAKE_MATCH_1})
-						IF ( "${TMP}" MATCHES "^(.*)\\(.*" )
-							set ( TMP ${CMAKE_MATCH_1} )
-						endif ()
-						list ( APPEND DEMANGLED "${TMP}" )
-					endif ()
-				endforeach ()
-			endforeach ()
-		endif( DEFINED CPPFILT )
-
-		set ( "${NAMELIST}" "${ORIGINAL}" PARENT_SCOPE )
-		set ( "${MANGLEDLIST}" "${DEMANGLED}" PARENT_SCOPE )
-		set ( "${DEMANGLEDLIST}" "${MANGLED}" PARENT_SCOPE )
+macro (return_if_target_found TRG LEGEND)
+	if (TARGET ${TRG})
+		diagst (${TRG} "${LEGEND}")
+		return ()
 	endif ()
-endfunction()
+endmacro ()
 
-# windows case. The pdbs are located in bin/config/*.pdb
-function( __split_win_dbg BINARYNAME )
-	set ( PDB_PATH "${CMAKE_CURRENT_BINARY_DIR}/\${CMAKE_INSTALL_CONFIG_NAME}" )
-	INSTALL ( FILES ${PDB_PATH}/${BINARYNAME}.pdb DESTINATION debug COMPONENT dbgsymbols )
-endfunction()
-
-# Mac OS case. We have to explicitly extract dSYM and then strip the binary
-function ( __split_apple_dbg BINARYNAME DOINSTALL )
-	if ( NOT DEFINED CMAKE_DSYMUTIL )
-		find_program ( CMAKE_DSYMUTIL dsymutil )
-	endif ()
-	if ( NOT DEFINED CMAKE_DSYMUTIL )
-		message ( SEND_ERROR "Missed objcopy prog. Can't split symbols!" )
-		unset ( SPLIT_SYMBOLS CACHE )
-	endif ()
-	mark_as_advanced ( CMAKE_DSYMUTIL )
-
-	ADD_CUSTOM_COMMAND ( TARGET ${BINARYNAME} POST_BUILD
-			COMMAND ${CMAKE_DSYMUTIL} -f $<TARGET_FILE:${BINARYNAME}> -o $<TARGET_FILE:${BINARYNAME}>.dSYM
-			COMMAND strip -S $<TARGET_FILE:${BINARYNAME}>
-			)
-	if ( DOINSTALL )
-		INSTALL ( FILES ${MANTICORE_BINARY_DIR}/src/${BINARYNAME}.dSYM
-				DESTINATION ${LIBDIR}/debug/usr/bin COMPONENT dbgsymbols )
+macro (getruntime OUTVAR)
+	if (TARGET RUNTIME)
+		get_target_property (${OUTVAR} RUNTIME LIBS)
 	endif()
-endfunction()
+endmacro ()
 
-# non-windows case. For linux - use objcopy to make 'clean' and 'debug' binaries
-function( __split_linux_dbg BINARYNAME DOINSTALL )
-	if ( NOT DEFINED CMAKE_OBJCOPY )
-		find_package ( BinUtils QUIET )
-	endif ()
-	if ( NOT DEFINED CMAKE_OBJCOPY )
-		find_program ( CMAKE_OBJCOPY objcopy )
-	endif ()
-	if ( NOT DEFINED CMAKE_OBJCOPY )
-		message ( SEND_ERROR "Missed objcopy prog. Can't split symbols!" )
-		unset ( SPLIT_SYMBOLS CACHE )
-	endif ( NOT DEFINED CMAKE_OBJCOPY )
-	mark_as_advanced ( CMAKE_OBJCOPY BinUtils_DIR )
-
-	ADD_CUSTOM_COMMAND ( TARGET ${BINARYNAME} POST_BUILD
-			COMMAND ${CMAKE_OBJCOPY} --only-keep-debug $<TARGET_FILE:${BINARYNAME}> $<TARGET_FILE:${BINARYNAME}>.dbg
-			COMMAND ${CMAKE_OBJCOPY} --strip-all $<TARGET_FILE:${BINARYNAME}>
-			COMMAND ${CMAKE_OBJCOPY} --add-gnu-debuglink=$<TARGET_FILE:${BINARYNAME}>.dbg $<TARGET_FILE:${BINARYNAME}>
-			COMMENT "Splitting symbols from ${BINARYNAME}"
-			VERBATIM
-			)
-	if ( DOINSTALL )
-		INSTALL ( FILES $<TARGET_FILE:${BINARYNAME}>.dbg
-				DESTINATION ${CMAKE_INSTALL_LIBDIR}/debug/usr/bin
-				COMPONENT dbgsymbols )
+# append any text to build info
+function (addruntime library)
+	if (NOT TARGET RUNTIME)
+		add_library (RUNTIME INTERFACE)
 	endif()
-endfunction()
+	set_property (TARGET RUNTIME APPEND PROPERTY LIBS "${library}")
+endfunction ()
 
-# split debug symbols from target, install them
-function( split_dbg BINARYNAME )
-	if ( MSVC )
-		__split_win_dbg ( ${BINARYNAME} TRUE )
-	elseif ( APPLE )
-		__split_apple_dbg ( ${BINARYNAME} TRUE )
-	else ()
-		__split_linux_dbg ( ${BINARYNAME} TRUE )
-	endif ()
-endfunction()
+
+# helpers to shorten generate lines
+set(GNUCXX "$<COMPILE_LANG_AND_ID:CXX,Clang,AppleClang,GNU>")
+set(CLANGXX "$<COMPILE_LANG_AND_ID:CXX,Clang,AppleClang>")
+set(GNUC "$<COMPILE_LANG_AND_ID:C,Clang,AppleClang,GNU>")
+set(CLANGC "$<COMPILE_LANG_AND_ID:CXX,Clang,AppleClang>")
+set(GNUC_CXX "$<OR:${GNUCXX},${GNUC}>")
+set(CLANGC_CXX "$<OR:${CLANGXX},${CLANGC}>")

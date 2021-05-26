@@ -4,61 +4,26 @@ Compiling from sources can be used for custom build configurations, such as disa
 
 In our CI/CD pipeline Manticore Search is compiled using [these docker images](https://github.com/manticoresoftware/manticoresearch/tree/master/dist/build_dockers), so instead of reading all the below you might want to master them and make modifications that are important for you.
 
-## Required tools 
-
-* C++ compiler
-  * in Linux - GNU gcc (4.7.2 and above) or clang can be used
-  * in Windows - Microsoft Visual Studio 2015 and above (community edition is enough)
-  * on Mac OS - XCode
-* Cmake - used on all the platforms (version 3.13 or above required)
-
-## Available features and their dependencies
-
-Manticore consists of different tools. The main one is Manticore search server - `searchd`. Features available in the server depend on different third-party libraries:
-
-* SSL (for HTTPS implementation)
-* Galera (for replication)
-* Stemmer (for language stemming)
-* ICU (for support of segmentation for CJK languages)
-* RE2 (for regular expressions)
-
-Some features, like support of AOT lemmatization and basic stemming are embedded and don't need any libraries.
-
-Another big tool is `indexer`, which [creates plain indexes from different sources](../Adding_data_from_external_storages/Plain_indexes_creation.md). There may be different external storages. The list of libraries which indexer can use (and depend from) includes:
-* mysql
-* postresql
-* expat
-* odbc and others. 
-
-None of them are mandatory by default, but they are obviously necessary if you want to index a source, provided by a particular storage.
-
-Internally manticore consists of big library 'libsphinx' with which different tools are linked. Because of the fact, that some dependencies are mandatory for that library, they also apply to all the tools despite the fact whether they are used or not there. The common dependencies are:
-
-* By default, only indexing of mysql sources is expected. So, the configuration script will search for mysql dev client lib, and if nothing found, will fail. To have the possibility of indexing mysql, you need at least dev version of MySQL library. Usually it is provided in a package named `libmysqlclient-dev` or `mysql-devel`, depending on Linux flavour you use. Also, different derivatives, as dev package from mariadb (which are `libmariadb-dev` or `mariadb-devel`) might be ok. If you have mysql or derivative installed by some custom path, set env variable `MYSQL_DIR` to that path for configuration. Configuration will look for available program `mysql_config`, and use data, provided by it. **OR** will look for header `mysql.h` and library `mysqlclient`, if no `mysql_config` program found. If you're **not** going to use mysql sources you can explicitly set `-DWITH_MYSQL=0` or `-DWITH_MYSQL=NO` as config parameter.
-* `git`, `flex`, `bison` - needed if the sources are cloned from git repository. If you use official tarball with sources, they are not necessary (git is used to pick commit hash). Flex and bison are used to build parsers. In tarball sources the version is hardcoded, and parses also pre-builded into C-sources, so these tools are not necessary.
-* RE2 - used for [regexp_filter](../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter) feature. For using the feature Manticore must be configured with `-DWITH_RE2=1`, otherwise it will not be available. If configured, system-wide RE2 will be searched, and if nothing  found, configuration will download RE2 sources and build the feature as embedded.
-* stemmer - used for additional language stemmers. Might be configured by `-DWITH_STEMMER=1`. If required, will be searched in the system and linked. If not found - configuration will download snowball sources and build the feature as embedded.
-* ICU - for CJK languages. It replaces previous RLP platform, also used for that purpose. By default the ICU is configured as embedded, and will be built from sources. ICU, RE2 and stemmer may be either searched and used as shared libraries, provided by your system or explicitly build from sources and statically linked forever. The first option makes the binaries smaller and more flexible for upgrade (that is simple: upgrade a library in the system and take all benefits/fixes of the upgrade). By default the RE2 and stemmer libraries supposed to be used from system, and ICU configured to be built as static from sources. You can manually tune that behaviour by providing boolean options `-DWITH_ICU_FORCE_STATIC=`, `-DWITH_RE2_FORCE_STATIC=`, and `-DWITH_STEMMER_FORCE_STATIC=`.
-
-### For indexing (performed by running `indexer` tool)
-* Indexing of postgresql is supported by `postgresql-devel` or `libpq-dev` packages. Absence of these packages is not fatal, your tool just will not be able to index postgresql source then. The feature can be switched on using `-DWITH_PGSQL=` option.
-* Indexing of xmlpipe is supported by `expat` library, provided by `expat-devel` or `libexpat-dev` package. The feature is automatically switched on or off depending on availability of expat library. It ca also be manually tuned with help of option `-DWITH_EXPAT=1`.
-* Indexing of generic ODBC source is supported by either `iodbc` or `unixodbc` libraries that are provided by `unixODBC-devel` or `unixodbc-dev` or iodbc alternatively. The feature is automatically switched on or off depending on availability of client library. Use `-DWITH_ODBC=` to tune it manually.
-
-When used with a source indexer will try to dynamically load the necessary runtime library, and if nothing is available it will report an error. So, it is reasonable to provide _all_ dev packages for building, and then in runtime provide only actually necessary client libraries.
-
-### For serving queries (performed by `searchd` binary)
-
-For the server these dependencies may be in play:
-
-* If you're going to work over https - you need dev version of **ssl** lib. Usually it comes in a package named like `libssl-dev` (debian-based) or `openssl-devel` (redhat-based). That is mandatory for support of https, but not strictly mandatory for the server (i.e. no ssl means no possibility to connect by https, but other protocols will work). SSL library versions starting from 1.0.2 to 1.1.1 may be used by Manticore, however note that **for the sake of security it's highly recommended to use the freshest possible SSL library**. For now only v1.1.1 is supported, the rest are outdated (see [openssl release strategy](https://www.openssl.org/policies/releasestrat.html) for details)
-* if you want replication functionality - Galera library has to be built. It will be downloaded and included into the build, however it requires by itself `boost` library. Having `libboost-all-dev` on debian-based, or `boost-devel` on redhat should be enough. Also, it requires ssl (despite of the requirements of the server).
-    
 ## General building guide
 
-### From git
+### Required tools 
 
-Manticore sources are [hosted on github](https://github.com/manticoresoftware/manticoresearch). Clone the repo, then checkout desired branch or tag. Our public git workfow contains only main `master` branch, which represents bleeding-edge of development. On release we create a versioned tag, like `3.6.0`, and start a new branch for current release, in this case `manticore-3.6.0`. The head of the versioned branch after all changes is used as source to build all binary releases. For example, to take sources of version 3.6.0 you can run:
+* C++ compiler
+  * in Linux - GNU (4.7.2 and above) or Clang can be used
+  * in Windows - Microsoft Visual Studio 2019 and above (community edition is enough)
+  * on Mac OS - Clang (from command line tools of XCode, use `xcode-select --install` to install).
+  * Bison, Flex - on most of the systems available as packages, on Windows available in cygwin framework.
+* Cmake - used on all the platforms (version 3.19 or above required)
+
+### Fetching sources
+
+#### From git
+
+Manticore sources are [hosted on github](https://github.com/manticoresoftware/manticoresearch). Clone the repo, then
+checkout desired branch or tag. Our public git workfow contains only main `master` branch, which represents
+bleeding-edge of development. On release we create a versioned tag, like `3.6.0`, and start a new branch for current
+release, in this case `manticore-3.6.0`. The head of the versioned branch after all changes is used as source to build
+all binary releases. For example, to take sources of version 3.6.0 you can run:
 
 ```bash
 git clone https://github.com/manticoresoftware/manticoresearch.git
@@ -66,177 +31,361 @@ cd manticoresearch
 git checkout manticore-3.6.0
 ```
 
-When using sources from GitHub you'll need `flex` and `bison` tools, since all internal parsers are provided as lex/yacc sources.
+#### From archive
 
-### From tarball
-
-Tarballs are available [here](https://manticoresearch.com/downloads/). Look for "Source tar.gz". Those provided by github 'Source code' archives are not what you want, so avoid using them (mainly they lack the git version which we use to make version string). The tarball sources have pre-built lexers and parsers, so flex and bison tools are not required for a build.
+You can download desired code from github by using 'download zip' button. Both .zip and .tar.gz are suitable.
 
 ```bash
-wget -c https://repo.manticoresearch.com/repository/manticoresearch_source/release/manticore-3.6.0-210504-96d61d8-release-source.tar.gz
-tar -zxf manticore-3.6.0-*.tar.gz
-cd manticore-3.6.0-*
+wget -c https://github.com/manticoresoftware/manticoresearch/archive/refs/tags/3.6.0.tar.gz
+tar -zxf 3.6.0.tar.gz
+cd manticoresearch-3.6.0
 ```
 
 ### Configuring
 
-Manticore uses cmake for pre-compiling configuration. To use it make a build directory somewhere, go to it, then invoke cmake, pointing it to the source dir. Simplest is to create the build directory inside unpacked sources. 
+Manticore uses cmake for. Assume you're staying inside source dir.
 
 ```bash
-cd manticore-3.6.0
+mkdir build && cd build
+cmake ..
+```
+
+The cmake script will investigate available features and configure the build according to them. By default all features 
+considered enabled, if they're available. Also script downloads and build some external libraries assuming you want to use
+them. Implicitly you get support of maximal number of features.
+
+Also, you can rule configuration explicitly, with flags and options. To demand feature `FOO` add `-DFOO=1` to cmake call.
+To disable it - same way, `-DFOO=0`. If not explicitly noticed, enabling of not available feature (say, `WITH_GALERA` on 
+MS Windows build) will cause configuration to fail with error. Disabling of a feature, apart excluding it from build, also
+disables it's investigation on the system, and disables their downloading/building, as it would be done for some external
+libs in case of implicit configuration.
+
+#### Confirutation flags and options
+
+- **USE_SYSLOG** - allows to use `syslog` in [query logging](Logging/Query_logging.md). 
+
+
+- **WITH_GALERA** - support replication on search daemon. Support will be configured for the build. Also, sources of Galera library will be downloaded, built and final module will be included into distribution/installation. Usually it is safe if you build with galera, but not
+distribute the library itself (so, no galera module - no replication). But sometimes you may need to explicitly disable it. Say, if you 
+want to build static binary which by desing can't load any libraries, so that even presence of call to 'dlopen' function inside daemon
+will cause link error.
+
+
+- **WITH_RE2** - build with using RE2 regular expression library. It is necessary for functions like [REGEX()](../Functions/String_functions.md#REGEX%28%29), and [regexp_filter](../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter)
+  feature.
+
+
+- **WITH_RE2_FORCE_STATIC** - download sources of RE2, compile them and link with them statically, so that final binaries will not depend on
+presence of shared `RE2` library in your system.
+
+
+- **WITH_STEMMER** - build with using Snowball stemming library.
+
+
+- **WITH_STEMMER_FORCE_STATIC** - download snowball sources, compile them and link with them statically, so that final
+  binaries will not depend on presence of shared `libstemmer` library in your system.
+
+
+- **WITH_ICU** - build with using icu, International Components for Unicode library. That is used in tokenization of Chineze, for text
+segmentation. It is in game when morplology like `icu_chinese` in use.
+
+
+- **WITH_ICU_FORCE_STATIC** - download icu sources, compile them and link with them statically, so that final binaries will not depend on presence of shared `icu` library in your system. Also include icu data file into installation/distribution. Purpose of statically linked ICU - is to have the library of known version, so that behaviour is determined and not depends on any system libraries. You most probably would prefer to use system ICU instead, because it may be updated in time without need to recompile manticore daemon. In this case
+it is you need to explicitly disable this option. That will also save you some place occupied by icu data file (about 30M), as it will NOT be included into distribution then.
+
+
+- **WITH_SSL** - used for support https, and also encrypted mysql connections to the daemon. System OpenSSL library will be linked to daemon. That implies, that OpenSSL will be required to start the daemon.
+  That is mandatory for support of https, but not strictly mandatory for the server (i.e. no ssl means no possibility to
+  connect by https, but other protocols will work). SSL library versions starting from 1.0.2 to 1.1.1 may be used by
+  Manticore, however note that **for the sake of security it's highly recommended to use the freshest possible SSL
+  library**. For now only v1.1.1 is supported, the rest are outdated (
+  see [openssl release strategy](https://www.openssl.org/policies/releasestrat.html)
+
+
+- **WITH_ZLIB** - used by indexer to work with compressed columns from mysql. Used by daemon to provide support of compressed mysql proto.
+
+
+- **WITH_ODBC** - used by indexer to support indexing sources from ODBC providers (they're typically UnixODBC and iODBC). On MS Windows ODBC is
+the proper way to work witn MS SQL sources, so indexing of `MSSQL` also implies this flag.
+- **DL_ODBC** - don't link with ODBC library. If ODBC is linked, but not available, you can't start `indexer` tool even if you want to index something not related to ODBC. This option asks indexer to load the library in runtime only when you want to deal with ODBC source.
+- **ODBC_LIB** - name of ODBC library file. Indexer will try to load that file when you want to index ODBC source. That option is written automatically from available ODBC shared library investigation. You can also override that name on runtime, providing environment variable `ODBC_LIB` with proper path to alternative library before running indexer.
+
+
+- **WITH_EXPAT** - used by indexer to support indexing xmlpile sources.
+- **DL_EXPAT** - don't link with EXPAT library. If EXPAT is linked, but not available, you can't start `indexer` tool
+  even if you want to index something not related to xmlpile. This option asks indexer to load the library in runtime only
+  when you want to deal with xmlpile source.
+- **EXPAT_LIB** - name of EXPAT library file. Indexer will try to load that file when you want to index xmlpipe source. That
+  option is written automatically from available EXPAT shared library investigation. You can also override that name on
+  runtime, providing environment variable `EXPAT_LIB` with proper path to alternative library before running indexer.
+
+
+- **WITH_ICONV** - for support different encodings when indexing xmlpipe sources with indexer.
+- **DL_ICONV** - don't link with iconv library. If iconv is linked, but not available, you can't start `indexer` tool
+    even if you want to index something not related to xmlpile. This option asks indexer to load the library in runtime
+    only when you want to deal with xmlpile source.
+- **ICONV_LIB** - name of iconv library file. Indexer will try to load that file when you want to index xmlpipe source.
+  That option is written automatically from available iconv shared library investigation. You can also override that
+  name on runtime, providing environment variable `ICONV_LIB` with proper path to alternative library before running
+  indexer.
+
+
+- **WITH_MYSQL** - used by indexer to support indexing mysql sources.
+- **DL_MYSQL** - don't link with mysql library. If mysql is linked, but not available, you can't start `indexer` tool
+  even if you want to index something not related to mysql. This option asks indexer to load the library in runtime
+  only when you want to deal with mysql source.
+- **MYSQL_LIB** - name of mysql library file. Indexer will try to load that file when you want to index mysql source.
+  That option is written automatically from available mysql shared library investigation. You can also override that
+  name on runtime, providing environment variable `MYSQL_LIB` with proper path to alternative library before running
+  indexer.
+
+
+- **WITH_POSTGRESQL** - used by indexer to support indexing postgresql sources.
+- **DL_POSTGRESQL** - don't link with postgresql library. If postgresql is linked, but not available, you can't start `indexer` tool
+  even if you want to index something not related to postgresql. This option asks indexer to load the library in runtime
+  only when you want to deal with postgresql source.
+- **POSTGRESQL_LIB** - name of postgresql library file. Indexer will try to load that file when you want to index
+  postgresql source.
+  That option is written automatically from available postgresql shared library investigation. You can also override that
+  name on runtime, providing environment variable `POSTGRESQL_LIB` with proper path to alternative library before running
+  indexer.
+
+
+- **LOCALDATADIR** - default path where daemon stores binlog. If that path is not provided or disabled explicitly in daemon's
+runtime config (that is file `manticore.conf`, no way related to this build configuration), binlogs will be placed to this path.
+It is assumed to be absolute, however that is not strictly necessary, and you may play with relative values also. You most
+probably would not, however, change default value defined by configuration, which, depending on target system, might be
+something like `/var/data`, `/var/lib/manticore/data`, or `/usr/local/var/lib/manticore/data`.
+
+
+- **FULL_SHARE_DIR** - default path where all assets are stored. It may be overriden by environment variable `FULL_SHARE_DIR` before starting
+any tool which uses files from that folder. That is quite important path, as many things are by default expected there.
+That are - predefined charset tables, stopwords, manticore modules and icu data files - all placed into that folder. Configuration
+script usually determines that path to be something like `/usr/share/manticore`, or `/usr/local/share/manticore`.
+
+
+- **DISTR_BUILD** - shortcut of the options for releasing packages. That is string value with the name of the target platform.
+It may be used instead of manually configuring all the stuff. On debian and redhat linuxes default falue might be determined by light
+introspection and set to generic 'debian' or 'rhel'. Otherwize value is not defined.
+- **PACK** - even more shortcut. It reads `DISTR` environment variable, assigns it to **DISTR_BUILD** param and then works as usual.
+That is very useful when building in prepared build systems, like docker containers, where that `DISTR` variable is set on system level and reflects target system for which such container intended.
+
+
+- **CMAKE_INSTALL_PREFIX** (path) - where to install the project. Building itself installs nothing, but prepares
+  installation rules which are executed once you run 'make install' command, or create a package. It has a default
+  depending on the cmake (on Linux usually /usr/local). Also, it defines values for mentioned variables `LOCALDATADIR` and `FULL_SHARE_DIR`.
+
+
+- **BUILD_TESTING** (bool) whether to support testing. If enabled, after the build you can run 'ctest' and test the
+  build. Note that testing implies additional dependencies, like at least presence of PHP cli, python and available
+  mysql server with test database. For 'just build', just disable the option, you don't need to care about it.
+
+
+- **LIBS_BUNDLE** - path to a folder with different libraries. This is mostly relevant for Windows building, but may be
+  also helpful if you build quite often, in order to avoid downloading third-party sources each time. That path is never modified
+  by configuring script in default behaviour; you should put everything there by youself. When, say, we want support of stemmer -
+the sources will be downloaded from snowball homepage, then extracted, configured, built, etc. Originall source tarball (which is `libstemmer_c.tgz`) you may store to that folder. Next time you want to build from scratch, configure script looks first to the bundle,
+and if it found stemmer there, it will not download it again from internet.
+
+
+- **CACHEB** - path to a folder with stored builds of 3-rd party libraries. Usually features like galera, re2, icu, etc. first downloaded
+or being got from bundle, then unpacked, built and installed into temporary internal folder. When building manticore that folder is then used as the place where the things required to support asked feature are live. Finally they either link with manticore, if it is library; either go directly to distribution/installation (like galera or icu data). When **CACHEB** is defined either as cmake config param, either as system environment variable, it is used as target folder for that builds. This folder might be kept across builds, so that stored libraries there will not be rebuilt anymore, making whole build process much shorter.
+
+
+- **CMAKE_BUILD_TYPE** (string) - can be Debug, Release, MinSizeRel and RelWithDebInfo (default). Usually we use just 'Debug' and 'RelWithDebInfo'. The first produces slower binaries, well applicable for testing and debugging features.
+    The last is for production. On Windows
+
+Note, that some options organized in triples: `WITH_XXX`, `DL_XXX` and `XXX_LIB` - like support of mysql, odbc, etc. `WITH_XXX` deternimes
+whether next two has effect or not. I.e., if you set `WITH_ODBC` to `0` - there is no sence to provide `DL_ODBC` and `ODBC_LIB`, and these two
+will have no effect if whole feature is disabled. Also, `XXX_LIB` has no sense without `DL_XXX`, because if you don't want `DL_XXX` option, dynamic loading will not be used, and name provided by `XXX_LIB` is useless. That is used by default introspection.
+
+Also, using `iconv` library assumes `expat` and is useless if last is disabled.
+
+Also, some libraries may be always available, and so, there is no sence to avoid linkage with them. For example, in windows that is ODBC. On Mac Os that is Expat, iconv and m.b. others. Default introspection determines such libraries and effectively emits only `WITH_XXX` for them, without `DL_XXX` and `XXX_LIB`, that makes the things simpler.
+
+With some options in game configuring might look like:
+
+```bash
 mkdir build && cd build
 cmake -DWITH_MYSQL=1 -DWITH_RE2=1 ..
 ```
 
-The cmake script will investigate available features and configure the build according to them.
+Apart general configuration values, you may also investigate file `CMakeCache.txt` which is left in build folder right after you run configuration. Any values defined there might be redefined explicitly when running cmake. For example, you may run `cmake -DHAVE_GETADDRINFO_A=FALSE ...`, and that config run will not assume investigated value of that variable, but will use one you've provided. 
 
-### Caveats
+#### Specific environment variables
 
-1. If you want to configure without mysql, provide explicitly `-DWITH_MYSQL=0`, otherwise configuring will fail if mysql is absent.
-2. If you want to finally build full-featured RPM package, path to build directory must be long enough in order to correctly build debug symbols. Like `/manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789`, for example. That is because RPM tools modify the path over compiled binaries when building debug info, and it can just write over existing room and won't allocate more. Above mentioned long path has 100 chars and that is quite enough for such case.
+Environment variables are useful to provide some kind of global settings which are stored aside build configuration and just present 'always'.
+For persistency they may be set globally on the system using different ways - like add them to `.bashrc` file, or embedd into Dockerfile if you produce docker-based build system, or written in system preferences environment variables on Windows. Also you may set them short-live using `export VAR=value` in the shell. Or even shorter, prepending values to cmake call, like `CACHEB=/my/cache cmake ...` - this way it will only work on this call and will not be visible on the next.
 
-### Configuration options
+Some of such variables are known to be used in general by cmake and some other tools. That is things like `CXX` which determines current C++ compiler, or `CXX_FLAGS` to provide compiler flags, etc.
 
-Options may be either provided in the form `-DNAME=VALUE` or via any available GUI or TUI interface interactively. On console systems usually together with `cmake` is also provided `ccmake` tool, which provides friendly access to the configuration.
+However we have some of the variables specific to manticore configuration, which are invented solely for our builds.
+ 
+- **CACHEB** - same as config **CACHEB** option
+- **LIBS_BUNDLE** - same as config **LIBS_BUNDLE** option
+- **DISTR** - used to initialize `DISTR_BUILD` option when `-DPACK=1` is used.
+- **DIAGNOSTIC** - make output of cmake configuration much more verbose, explaining every thing happening
+- **WRITEB** - assumes **LIBS_BUNDLE**, and if set, will download source archive files for different tools to LIBS_BUNDLE folder. That is, if fresh version of stemmer came out - you can manually remove libstemmer_c.tgz from the bundle, and then run oneshot `WRITEB=1 cmake ...` - it will not found stemmer's sources in the bundle, and then download them from vendor's site to the bundle (without WRITEB it will download them into some temporary folder inside build and it will dissapear as you wipe the build folder).
 
-* `CMAKE_BUILD_TYPE` (string) - can be Debug, Release, MinSizeRel and RelWithDebInfo (default). Usually we use just 'Debug' and 'RelWithDebInfo'. The first produces slower binaries, well applicable for testing and debugging features. The last is for production.
-* `CMAKE_INSTALL_PREFIX` (path) - where to install the project. Building itself installs nothing, but prepares installation rules which are executed once you run 'make install' command, or create a package. It has a default depending on the cmake (on Linux usually /usr/local).
-* `DISABLE_TESTING` (bool) whether to support testing. If enabled, after the build you cam run 'ctest' and test the build. Note that testing implies additional dependencies, like at least presence of PHP cli, python and available mysql server with test database. For 'just build', just disable the option, you don't need to care about it.
-* `USE_BISON`, `USE_FLEX` (bool) - enabled by default, specifies whether to enable bison and flex tools. You can disable them building from tarball, as the necessary files already pre-generated and packed inside
-* `LIBS_BUNDLE` - path to a folder with different libraries. This is mostly relevant for Windows building, but may be also helpful if you build quite often, in order to avoid downloading third-party sources each time.
-* `DISTR_BUILD` - in case the target is packaging, it specifies the target operating system. Supported values are: `bionic`, `buster`, `debian`, `default`, `jessie`, `macos`, `macosbrew`, `rhel6`, `rhel7`, `rhel8`, `stretch`, `trusty`, `wheezy`, `xenial`. Providing `DISTR_BUILD` will cause to configure CMAKE_BUILD_TYPE as RelWithDebInfo, and WITH_MYSQL, WITH_EXPAT, WITH_PGSQL, WITH_RE2, WITH_STEMMER, and DISABLE_TESTING as 1. This option is intended for building packages. For example, running `cmake -DDISTR_BUILD=rhel8`, then `make package` will build RPM packaged for Red Hat Enterprise 8.
+At the end of configuration you may see what is available and will be used in the list like this one:
 
-### Building on Linux systems
-
-One line to get all dependencies on Debian/Ubuntu:
-
-```bash
-apt-get install build-essential cmake unixodbc-dev libpq-dev libexpat-dev libmysqlclient-dev libicu-dev libssl-dev libboost-system-dev libboost-program-options-dev git flex bison
+```
+-- Enabled features compiled in:
+ * Galera, replication of indexes
+ * re2, a regular expression library
+ * stemmer, stemming library (Snowball)
+ * icu, International Components for Unicode
+ * OpenSSL, for encrypted networking
+ * ZLIB, for compressed data and networking
+ * ODBC, for indexing MSSQL (windows) and generic ODBC sources with indexer
+ * EXPAT, for indexing xmlpipe sources with indexer
+ * Iconv, for support different encodings when indexing xmlpipe sources with indexer
+ * Mysql, for indexing mysql sources with indexer
+ * PostgreSQL, for indexing postgresql sources with indexer
 ```
 
-Note: on Debian 9 (Stretch) package `libmysqlclient-dev` is absent. Use `default-libmysqlclient-dev` there instead.
-
-One line to get all dependencies on Redhat/Centos:
+### Building
 
 ```bash
-yum install gcc gcc-c++ make cmake mysql-devel expat-devel postgresql-devel unixODBC-devel libicu-devel openssl-devel boost-devel rpm-build systemd-units  git flex bison
+cmake --build . --config RelWithDebInfo
 ```
 
-RHEL/CentOS 6  ships with an old version of the GCC compiler, which doesn't support `-std=c++11` flag, for compiling use `devtools` repository:
-
-```bash
-wget http://people.centos.org/tru/devtools-2/devtools-2.repo -O /etc/yum.repos.d/devtools-2.repo
-yum upgrade -y
-yum install -y devtoolset-2-gcc devtoolset-2-binutils devtoolset-2-gcc-c++
-export PATH=/opt/rh/devtoolset-2/root/usr/bin:$PATH
-```
-
-#### Compiling
-
-To compile run:
-
-```bash
-make -j4
-```
+### Installation
 
 To install run:
 
 ```bash
-make -j4 install
+cmake --install . --config RelWithDebInfo
 ```
 
-For building package use target `package`. It will build package according to selection, provided by `-DDISTR_BUILD` option. By default it will be a simple zip archive with binaries and supplementary files.
+to install into custom (non-default) folder, run
 
 ```bash
-make -j4 package
+cmake --install . --prefix path/to/build --config RelWithDebInfo
 ```
 
-For building source tarball for future, use target `tarball`. All lexers and stemmers will be created running flex/bison. Then the current version will be embedded into a header file, stemmer/re2 will be embedded into sources (if configured), and the final folder will be packed into the tarball for distribution.
+### Building packages
+
+For building package use target `package`. It will build package according to selection, provided by `-DDISTR_BUILD`
+option. By default it will be a simple .zip or .tgz archive with all binaries and supplement files.
 
 ```bash
-make tarball
-```
-
-### Building for Linux systems via Docker
-
-For preparing official packages we use docker containers. They include all necessary environment components and are proved as working solutions by our own builds. You can recreate any of them using Dockerfiles and `README.md` instruction, provided in `dist/build_dockers/` folder of the sources. That is easiest way to make the binaries for any supported Linux distribution, and also make packages there. Each docker provides `DISTR` environment variable, which can be passed directly to `DISTR_BUILD` config value (as `-DDISTR_BUILD=$DISTR` clause to cmake).
-
-For example, to create RedHat 7 package 'as official', but without embedded ICU with it's big datafile, you may execute (implies that sources are placed in `/manticore/sources` folder of the host):
-
-```bash
-docker run -it --rm -v /manticore/sources:/manticore registry.gitlab.com/manticoresearch/dev/bionic_cmake314 bash
-# following is inside docker shell. By default, workdir will be in the source folder, mounted as volume from the host. 
-RELEASE_TAG="noicu"
-mkdir build && cd build
-cmake -DBUILD_TAG=$RELEASE_TAG -DDISTR_BUILD=$DISTR -DWITH_ICU_FORCE_STATIC=0 ..
-make -j4 package
-```  
-
-### Building on Windows
-
-For building on Windows you need:
-
-* Visual Studio
-* Cmake for Windows
-* prebuilt Expat, MySQL and PostgreSQL in bundle directory.
-
-If you build from git clone, you also need to provide `git`, `flex` and `bison` tools. They may be found in `cygwin` framework. When building from tarball these tools are not necessary. Building might be performed from `cmd` or from cygwin console.
-
-For a simple building on x64:
-
-```cmd
-mkdir build
-cd build
-cmake -G "Visual Studio 16 2019" -DLIBS_BUNDLE="C:\bundle" "C:\manticore"
-cmake -DWITH_PGSQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 .
 cmake --build . --target package --config RelWithDebInfo
 ```
 
-### Building on FreeBSD
+#### Building for Linux systems via Docker
 
-Support for FreeBSD is limited and successful compiling is not guaranteed. We recommend checking the issue tracker for unresolved issues on this platform before trying to compile latest versions.
+For preparing official packages we use docker containers. They include all necessary environment components and are
+proved as working solutions by our own builds. You can recreate any of them using Dockerfiles and `README.md`
+instruction, provided in `dist/build_dockers/` folder of the sources. That is easiest way to make the binaries for any
+supported Linux distribution, and also make packages there. Each docker provides `DISTR` environment variable, which is
+consumed by applying `PACK` config option, so that whole configuring might be done by
+single `cmake -DPACK=1 /path/to/sources`.
 
-FreeBSD uses clang instead of gcc as system compiler and it is installed by default.
-
-First install required packages:
-
-```bash
-pkg install cmake bison flex
-```
-
-To compile a version without optional dependencies:
+For example, to create RedHat 7 package 'as official', but without embedded ICU with it's big datafile, you may
+execute (implies that sources are placed in `/manticore/sources` folder of the host):
 
 ```bash
-cmake -DUSE_GALERA=0 -DWITH_MYSQL=0 -DDISABLE_TESTING=1 ../manticoresearch/
-make
-``` 
+docker run -it --rm -v /manticore/sources:/manticore registry.gitlab.com/manticoresearch/dev/bionic_cmake:320 bash
+# following is inside docker shell. By default, workdir will be in the source folder, mounted as volume from the host. 
+RELEASE_TAG="noicu"
+mkdir build && cd build
+cmake -DPACK=1 -DBUILD_TAG=$RELEASE_TAG -DWITH_ICU_FORCE_STATIC=0 ..
+cmake --build . --target package
+```  
 
-Except for Galera the rest of optional dependencies can be installed so:
+## Some advanced things about building
 
-```bash
-pkg install mariadb103-client postgresql-libpqxx unixODBC icu expat
-```
-
-(you can replace `mariadb103-client` with the MySQL client package of your choice)
-
-Building with all optional features and installation system-wide:
-
-```bash
-cmake -DUSE_GALERA=0 -DWITH_PGSQL=1 -DDISABLE_TESTING=1 -DCMAKE_INSTALL_PREFIX=/ -DCMAKE_INSTALL_LOCALSTATEDIR=/var ../manticoresearch/
-make
-make install
-```
-   
-## Recompilation (update)
+### Recompilation (update) on single-config
 
 If you didn't change the path for sources and build, just move to you build folder and run:
 
 ```bash
 cmake .
-make clean
-make
+cmake --build . --clean-first --config RelWithDebInfo
 ```
 
-If by any reason it doesn't work, you can delete file `CMakeCache.txt` located in the build folder. After this step you have to run cmake again, pointing to the source folder and configuring the options.
+If by any reason it doesn't work, you can delete file `CMakeCache.txt` located in the build folder. After this step you
+have to run cmake again, pointing to the source folder and configuring the options.
 
 If it also doesn't help, just wipe out your build folder and begin from scratch.
+
+### Build types
+
+- shortly - just provide `--config RelWithDebInfo` as written above. It will make no mistake ).
+
+We use two build types. For development it is `Debug` - it assigns compiler flags for optimization and other things the
+way that it is very friendly for development, in means debug runs with step-by-step execution. However, produced
+binaries are quite large and slow for production. For relasign we use another type - `RelWithDebInfo` - which means '
+release build with debug info'. It produces production binaries with embedded debug info. Last then split away into
+separate debuginfo packages which are stored aside with release packages and might be used if some abnormal things, like
+crashes, happens - for investigation and bugfixing. Cmake also provides `Release` and `MinSizeRel`, but we're not using
+them. If build type is not available, cmake will make `noconfig` build.
+
+#### Build system generators
+
+There are two types of generators: single-config and multi-config.
+
+- single-config needs build type provided on configuration, via CMAKE_BUILD_TYPE parameter. If it is not defined, build
+  fall-back to `RelWithDebInfo` type which is quite well if you want just build manticore from sources and not going to
+  participate in development. For explicit build you should config providing build type, like `-DCMAKE_BUILD_TYPE=Debug`.
+- multi-config selects build type during the build. It should be provided with '--config' option, otherwise it will
+  build kind of `noconfig`, which is quite strange and not desirable. So, for explicit build you should build with `--config Debug` key.
+
+If you want to specify build type, but don't want to care about whether it is 'single' or 'multi' config generator - just provide necessary keys in both place. I.e., configure with `-DCMAKE_BUILD_TYPE=Debug`, and then build with `--config Debug`. Just be sure that both values are same. If target builder is single-config, it will consume confirutation param. If it is multi-config, configuration param will be ignored, but correct build confirutation will then be selected by --config key.
+
+If you want RelWihtDebInfo (i.e. just build for production) and know you're on single-config platform (that is all, except Windows) - you can omit --config flag on cmake invocation. Default RelWithDebInfo will be configured then, and used. All the commands for 'building', 'installation' and 'building package' will became shorter then.
+
+#### Explicitly select build system generators
+
+Cmake is the tool which is not performing building by itself, but it generates rules for system local build system.
+Usually it determines available build system well, but sometimes you might need to provide generator explicitly.
+
+- on Windows, if you have more than one version ov Visual Studio installed, you might need to specify which one to use,
+  as:
+  `cmake -G "Visual Studio 16 2019" ....`
+- on all other platforms - usually `Unix makefiles` are in game, but you can specify another one, as Ninja, or Ninja
+  Multi-Config, as:
+  `cmake -GNinja ...` or `cmake -G"Ninja Multi-Config" ...`.
+
+### Caveats
+
+1. If you want to finally build full-featured RPM package, path to build directory must be long enough in order to
+   correctly build debug symbols.
+   Like `/manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789`, for
+   example. That is because RPM tools modify the path over compiled binaries when building debug info, and it can just
+   write over existing room and won't allocate more. Above mentioned long path has 100 chars and that is quite enough
+   for such case.
+
+## External depenencies
+
+Some libraries should be available if you want to use them.
+- for indexing (`indexer` tool): `expat`, `iconv`, `mysql`, `odbc`, `postgresql` - one or all of them should be available.
+- for serving queries (`searchd` daemon): `openssl` might be necessary.
+- for both - Boost is mandatory. Look to our dockerfiles for the way to build/install it.
+
+On build system you need 'dev' or 'devel' versions of that packages installed (i.e. - libmysqlclient-devel, unixodbc-devel, etc. Look to our dockerfiles for the names of concrete packages).
+
+On run systems these packages should present at least in final (non-dev) variants. (devel variants usually larger, as they include not only target binaries, but also different development stuff like include headers, etc.).
+
+### Building on Windows
+
+Apart necessary pre-requisites, you might need prebuilt `expat`, `iconv`, `mysql` and `postgresql` client libraries. You have either to build them yourself, either contact us to get our build bundle (that is simple zip archive where folder with these targets located).
+
+- ODBC is not necessary, as it is system library.
+- OpenSSL might be build from sources, or download prebuilt from https://slproweb.com/products/Win32OpenSSL.html (that is mentioned in cmake internal script on FindOpenSSL).
+- Boost might be donwloaded pre-built from https://www.boost.org/ releases.
+
+### See what is compiled
+
+Run `indexer -h`. It will say which features was configured and built (whenever they're explicit, or investigated, doesn't matter):
+
+```
+Built on Linux x86_64 by GNU 8.3.1 compiler.
+
+Configured with these definitions: -DDISTR_BUILD=rhel8 -DUSE_SYSLOG=1 -DWITH_GALERA=1 -DWITH_RE2=1 -DWITH_RE2_FORCE_STATIC=1
+-DWITH_STEMMER=1 -DWITH_STEMMER_FORCE_STATIC=1 -DWITH_ICU=1 -DWITH_ICU_FORCE_STATIC=1 -DWITH_SSL=1 -DWITH_ZLIB=1 -DWITH_ODBC=1 -DDL_ODBC=1
+-DODBC_LIB=libodbc.so.2 -DWITH_EXPAT=1 -DDL_EXPAT=1 -DEXPAT_LIB=libexpat.so.1 -DWITH_ICONV=1 -DWITH_MYSQL=1 -DDL_MYSQL=1
+-DMYSQL_LIB=libmariadb.so.3 -DWITH_POSTGRESQL=1 -DDL_POSTGRESQL=1 -DPOSTGRESQL_LIB=libpq.so.5 -DLOCALDATADIR=/var/lib/manticore/data
+-DFULL_SHARE_DIR=/usr/share/manticore
+```

@@ -1686,7 +1686,7 @@ static bool TryRename ( const char * sPrefix, const char * sFromPostfix, const c
 	snprintf ( sFrom, sizeof(sFrom), "%s%s", sPrefix, sFromPostfix );
 	snprintf ( sTo, sizeof(sTo), "%s%s", sPrefix, sToPostfix );
 
-#if USE_WINDOWS
+#if _WIN32
 	::unlink ( sTo );
 #endif
 

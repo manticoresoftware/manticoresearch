@@ -187,7 +187,7 @@ extern ThreadRole MainThread;
 
 namespace CrashLogger
 {
-#if !USE_WINDOWS
+#if !_WIN32
 	void HandleCrash( int );
 #else
 	LONG WINAPI HandleCrash ( EXCEPTION_POINTERS * pExc );

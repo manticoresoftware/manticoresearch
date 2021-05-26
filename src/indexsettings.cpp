@@ -19,7 +19,7 @@
 #include "icu.h"
 #include "attribute.h"
 
-#if !USE_WINDOWS
+#if !_WIN32
 	#include <glob.h>
 #endif
 
@@ -487,7 +487,7 @@ void CSphDictSettings::DumpReadable ( SettingsFormatterState_t & tState, const C
 
 bool CSphFieldFilterSettings::Setup ( const CSphConfigSection & hIndex, CSphString & sWarning )
 {
-#if USE_RE2
+#if WITH_RE2
 	// regular expressions
 	m_dRegexps.Resize ( 0 );
 	for ( CSphVariant * pFilter = hIndex("regexp_filter"); pFilter; pFilter = pFilter->m_pNext )
@@ -1825,7 +1825,7 @@ MutableIndexSettings_c::MutableIndexSettings_c()
 	, m_iMemLimit { DEFAULT_RT_MEM_LIMIT }
 	, m_dLoaded ( (int)MutableName_e::TOTAL )
 {
-#if !USE_WINDOWS
+#if !_WIN32
 	m_bPreopen	= true;
 #else
 	m_bPreopen	= false;

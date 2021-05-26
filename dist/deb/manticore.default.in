@@ -1,10 +1,10 @@
 #
 # Settings for the manticore searchd daemon
-# Please read @DOCDIRFULL@/README.Debian for details.
+# Please read @CMAKE_INSTALL_FULL_DOCDIR@/README.Debian for details.
 #
 
 # Should manticore run automatically on startup? (default: no)
-# Before doing this you might want to modify @SYSCONFDIR@/sphinxsearch/sphinx.conf
+# Before doing this you might want to modify @CMAKE_INSTALL_FULL_SYSCONFDIR@/manticoresearch/manticore.conf
 # so that it works for you.
 START=no
 

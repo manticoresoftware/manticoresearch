@@ -16,7 +16,7 @@
 #include "netstate_api.h"
 #include "coroutine.h"
 
-#if USE_WINDOWS
+#if _WIN32
 // Win-specific headers and calls
 #include <io.h>
 #else
@@ -720,7 +720,7 @@ static int AsyncRecvNBChunk ( SockWrapper_c * pSock, BYTE *& pBuf, int & iLeftBy
 	return (int) iRes;
 }
 
-#if USE_WINDOWS
+#if _WIN32
 #define EMULATE_EINTR 1
 #endif
 

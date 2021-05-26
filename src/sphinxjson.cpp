@@ -14,8 +14,8 @@
 #include "sphinxint.h"
 #include "json/cJSON.h"
 
-#if USE_WINDOWS
-#include <io.h> // for isatty() in llsphinxjson.c
+#if _WIN32
+#include <io.h> // for isatty() in sphinxjson.c
 #endif
 
 
@@ -788,24 +788,7 @@ public:
 #define YY_NO_UNISTD_H 1
 #define YY_DECL inline static int my_lex ( YYSTYPE * lvalp, void * yyscanner, JsonParser_c * pParser )
 
-#ifdef CMAKE_GENERATED_LEXER
-
-#ifdef __GNUC__
-	#pragma GCC diagnostic push 
-	#pragma GCC diagnostic ignored "-Wsign-compare"
-	#pragma GCC diagnostic ignored "-Wpragmas"
-	#pragma GCC diagnostic ignored "-Wunneeded-internal-declaration"
-#endif
-
 #include "flexsphinxjson.c"
-
-#ifdef __GNUC__
-	#pragma GCC diagnostic pop
-#endif
-
-#else
-	#include "llsphinxjson.c"
-#endif
 
 void yyerror ( JsonParser_c * pParser, const char * sMessage )
 {
@@ -829,13 +812,8 @@ inline static int yylex ( YYSTYPE * lvalp, JsonParser_c * pParser )
 }
 #endif
 
-#ifdef CMAKE_GENERATED_GRAMMAR
-	#include "bissphinxjson.c"
+#include "bissphinxjson.c"
 #include "sphinxutils.h"
-
-#else
-	#include "yysphinxjson.c"
-#endif
 
 bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool bToLowercase, bool bCheckSize, CSphString & sError )
 {

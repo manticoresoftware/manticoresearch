@@ -25,15 +25,9 @@
 #include <string.h>
 #include <limits.h>
 
-#if HAVE_CONFIG_H
 #include "config.h"
-#endif
 
-#if USE_PGSQL
-#include <libpq-fe.h>
-#endif
-
-#if USE_WINDOWS
+#if _WIN32
 #include <winsock2.h>
 #include <WS2tcpip.h>
 #else
@@ -41,11 +35,7 @@
 #include <unistd.h>
 #endif
 
-#if USE_MYSQL
-#include <mysql.h>
-#endif
-
-#if USE_WINDOWS
+#if _WIN32
 #define STDOUT_FILENO		fileno(stdout)
 #define STDERR_FILENO		fileno(stderr)
 #endif
@@ -2040,62 +2030,6 @@ protected:
 	CSphVector<CSphVector<BYTE>> m_dDocFields;
 };
 
-struct CSphUnpackInfo
-{
-	ESphUnpackFormat	m_eFormat;
-	CSphString			m_sName;
-};
-
-struct CSphJoinedField
-{
-	CSphString			m_sName;
-	CSphString			m_sQuery;
-	CSphString			m_sRanged;
-	bool				m_bPayload;
-	bool				m_bRangedMain;
-};
-
-
-/// generic SQL source params
-struct CSphSourceParams_SQL
-{
-	// query params
-	CSphString						m_sQuery;
-	CSphString						m_sQueryRange;
-	CSphString						m_sQueryKilllist;
-	int64_t							m_iRangeStep = 1024;
-	int64_t							m_iRefRangeStep = 1024;
-	bool							m_bPrintQueries = false;
-	bool							m_bPrintRTQueries = false;
-	CSphString						m_sDumpRTIndex;
-
-	StrVec_t						m_dQueryPre;
-	StrVec_t						m_dQueryPost;
-	StrVec_t						m_dQueryPostIndex;
-	CSphVector<CSphColumnInfo>		m_dAttrs;
-	StrVec_t						m_dFileFields;
-
-	int								m_iRangedThrottleMs = 0;
-	int								m_iMaxFileBufferSize = 0;
-	ESphOnFileFieldError			m_eOnFileFieldError {FFE_IGNORE_FIELD};
-
-	CSphVector<CSphUnpackInfo>		m_dUnpack;
-	DWORD							m_uUnpackMemoryLimit = 0;
-
-	CSphVector<CSphJoinedField>		m_dJoinedFields;
-
-	// connection params
-	CSphString						m_sHost;
-	CSphString						m_sUser;
-	CSphString						m_sPass;
-	CSphString						m_sDB;
-	unsigned int					m_uPort = 0;
-
-	// hooks
-	CSphString						m_sHookConnect;
-	CSphString						m_sHookQueryRange;
-	CSphString						m_sHookPostIndex;
-};
 
 struct SqlQuotation_t : public BaseQuotation_t
 {
@@ -2106,219 +2040,6 @@ struct SqlQuotation_t : public BaseQuotation_t
 };
 
 using SqlEscapedBuilder_c = EscapedStringBuilder_T<SqlQuotation_t>;
-
-/// generic SQL source
-/// multi-field plain-text documents fetched from given query
-struct CSphSource_SQL : CSphSource_Document
-{
-	explicit			CSphSource_SQL ( const char * sName );
-						~CSphSource_SQL () override = default;
-
-	bool				Setup ( const CSphSourceParams_SQL & pParams );
-	bool				Connect ( CSphString & sError ) override;
-	void				Disconnect () override;
-	bool				IterateStart ( CSphString & sError ) override;
-	BYTE **				NextDocument ( bool & bEOF, CSphString & sError ) override;
-	const int *			GetFieldLengths () const override;
-	void				PostIndex () override;
-
-	ISphHits *			IterateJoinedHits ( CSphString & sError ) override;
-
-	bool				IterateMultivaluedStart ( int iAttr, CSphString & sError ) override;
-	bool				IterateMultivaluedNext ( int64_t & iDocID, int64_t & iMvaValue ) override;
-
-	bool				IterateKillListStart ( CSphString & sError ) override;
-	bool				IterateKillListNext ( DocID_t & tDocId ) override;
-
-private:
-	bool				m_bSqlConnected = false;	///< am i connected?
-
-protected:
-	CSphString			m_sSqlDSN;
-
-	BYTE *				m_dFields [ SPH_MAX_FIELDS ] { nullptr };
-	int					m_dFieldLengths [ SPH_MAX_FIELDS ];
-	ESphUnpackFormat	m_dUnpack [ SPH_MAX_FIELDS ] { SPH_UNPACK_NONE };
-
-	DocID_t				m_tMinID = 0;			///< grand min ID
-	DocID_t				m_tMaxID = 0;			///< grand max ID
-	DocID_t				m_tCurrentID = 0;		///< current min ID
-	DocID_t				m_tMaxFetchedID = 0;	///< max actually fetched ID
-	int					m_iMultiAttr = -1;		///< multi-valued attr being currently fetched
-	int					m_iSqlFields = 0;		///< field count (for row dumper)
-
-	CSphSourceParams_SQL		m_tParams;
-
-	bool				m_bCanUnpack = false;
-	bool				m_bUnpackFailed = false;
-	bool				m_bUnpackOverflow = false;
-	CSphVector<char>	m_dUnpackBuffers [ SPH_MAX_FIELDS ];
-
-	int					m_iJoinedHitField = -1;	///< currently pulling joined hits from this field (index into schema; -1 if not pulling)
-	DocID_t				m_iJoinedHitID = 0;		///< last document id
-	int					m_iJoinedHitPos = 0;	///< last hit position
-
-	static const int			MACRO_COUNT = 2;
-	static const char * const	MACRO_VALUES [ MACRO_COUNT ];
-
-protected:
-	/// by what reason the internal SetupRanges called
-	enum ERangesReason
-	{
-		SRE_DOCS,
-		SRE_MVA,
-		SRE_JOINEDHITS
-	};
-
-protected:
-	bool					SetupRanges ( const char * sRangeQuery, const char * sQuery, const char * sPrefix, CSphString & sError, ERangesReason iReason );
-	bool					RunQueryStep ( const char * sQuery, CSphString & sError );
-
-protected:
-	virtual void			SqlDismissResult () = 0;
-	virtual bool			SqlQuery ( const char * sQuery ) = 0;
-	virtual bool			SqlIsError () = 0;
-	virtual const char *	SqlError () = 0;
-	virtual bool			SqlConnect () = 0;
-	virtual void			SqlDisconnect () = 0;
-	virtual int				SqlNumFields() = 0;
-	virtual bool			SqlFetchRow() = 0;
-	virtual DWORD			SqlColumnLength ( int iIndex ) = 0;
-	virtual const char *	SqlColumn ( int iIndex ) = 0;
-	virtual const char *	SqlFieldName ( int iIndex ) = 0;
-
-	const char *	SqlUnpackColumn ( int iIndex, DWORD & uUnpackedLen, ESphUnpackFormat eFormat );
-	void			ReportUnpackError ( int iIndex, int iError );
-
-	void DumpRowsHeader ();
-	void DumpRowsHeaderSphinxql ();
-
-	void DumpDocument ();
-	void DumpDocumentSphinxql ();
-
-	using TinyCol_t = std::pair<int,bool>; // int idx in sql resultset; bool whether it is string
-	CSphVector<TinyCol_t>	m_dDumpMap;
-	SqlEscapedBuilder_c			m_sCollectDump;
-	int 					m_iCutoutDumpSize = 100*1024;
-};
-
-
-#if USE_MYSQL
-/// MySQL source params
-struct CSphSourceParams_MySQL : CSphSourceParams_SQL
-{
-	CSphString	m_sUsock;					///< UNIX socket
-	int			m_iFlags;					///< connection flags
-	CSphString	m_sSslKey;
-	CSphString	m_sSslCert;
-	CSphString	m_sSslCA;
-
-				CSphSourceParams_MySQL ();	///< ctor. sets defaults
-};
-
-
-/// MySQL source implementation
-/// multi-field plain-text documents fetched from given query
-struct CSphSource_MySQL : CSphSource_SQL
-{
-	explicit				CSphSource_MySQL ( const char * sName );
-	bool					Setup ( const CSphSourceParams_MySQL & tParams );
-
-protected:
-	MYSQL_RES *				m_pMysqlResult = nullptr;
-	MYSQL_FIELD *			m_pMysqlFields = nullptr;
-	MYSQL_ROW				m_tMysqlRow = nullptr;
-	MYSQL					m_tMysqlDriver;
-	unsigned long *			m_pMysqlLengths = nullptr;
-
-	CSphString				m_sMysqlUsock;
-	unsigned long			m_iMysqlConnectFlags = 0;
-	CSphString				m_sSslKey;
-	CSphString				m_sSslCert;
-	CSphString				m_sSslCA;
-
-protected:
-	void			SqlDismissResult () override;
-	bool			SqlQuery ( const char * sQuery ) override;
-	bool			SqlIsError () override;
-	const char *	SqlError () override;
-	bool			SqlConnect () override;
-	void			SqlDisconnect () override;
-	int				SqlNumFields() override;
-	bool			SqlFetchRow() override;
-	DWORD			SqlColumnLength ( int iIndex ) override;
-	const char *	SqlColumn ( int iIndex ) override;
-	const char *	SqlFieldName ( int iIndex ) override;
-};
-#endif // USE_MYSQL
-
-
-#if USE_PGSQL
-/// PgSQL specific source params
-struct CSphSourceParams_PgSQL : CSphSourceParams_SQL
-{
-	CSphString		m_sClientEncoding;
-					CSphSourceParams_PgSQL ();
-};
-
-
-/// PgSQL source implementation
-/// multi-field plain-text documents fetched from given query
-struct CSphSource_PgSQL : CSphSource_SQL
-{
-	explicit				CSphSource_PgSQL ( const char * sName );
-	bool					Setup ( const CSphSourceParams_PgSQL & pParams );
-	bool					IterateStart ( CSphString & sError ) final;
-
-protected:
-	PGresult * 				m_pPgResult = nullptr;	///< postgresql execution restult context
-	PGconn *				m_tPgDriver = nullptr;	///< postgresql connection context
-
-	int						m_iPgRows = 0;		///< how much rows last step returned
-	int						m_iPgRow = 0;		///< current row (0 based, as in PQgetvalue)
-
-	CSphString				m_sPgClientEncoding;
-	CSphVector<bool>		m_dIsColumnBool;
-
-protected:
-	void			SqlDismissResult () final;
-	bool			SqlQuery ( const char * sQuery ) final;
-	bool			SqlIsError () final;
-	const char *	SqlError () final;
-	bool			SqlConnect () final;
-	void			SqlDisconnect () final;
-	int				SqlNumFields() final;
-	bool			SqlFetchRow() final;
-	DWORD	SqlColumnLength ( int iIndex ) final;
-	const char *	SqlColumn ( int iIndex ) final;
-	const char *	SqlFieldName ( int iIndex ) final;
-};
-#endif // USE_PGSQL
-
-#if USE_ODBC
-struct CSphSourceParams_ODBC: CSphSourceParams_SQL
-{
-	CSphString	m_sOdbcDSN;			///< ODBC DSN
-	CSphString	m_sColBuffers;		///< column buffer sizes (eg "col1=2M, col2=4M")
-	bool		m_bWinAuth;			///< auth type (MS SQL only)
-
-				CSphSourceParams_ODBC ();
-};
-
-/// ODBC source implementation
-
-CSphSource * CreateSourceODBC ( const CSphSourceParams_ODBC & tParams, const char * sSourceName );
-
-CSphSource * CreateSourceMSSQL ( const CSphSourceParams_ODBC & tParams, const char * sSourceName );
-
-#endif // USE_ODBC
-
-
-#if USE_LIBEXPAT
-class CSphConfigSection;
-CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, FILE * pPipe, const char * szSourceName, int iMaxFieldLen, CSphString & sError );
-#endif
-
 
 /////////////////////////////////////////////////////////////////////////////
 // SEARCH QUERIES

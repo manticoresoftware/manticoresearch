@@ -3,6 +3,6 @@ Manticore
 
 searchd will start automatically however the default configuration does not supply
 any indexes. Therefore, searchd will not continue running. You have to edit
-@SYSCONFDIR@/manticoresearch/manticore.conf to get any meaningful mode of operation.
+@CMAKE_INSTALL_FULL_SYSCONFDIR@/manticoresearch/manticore.conf to get any meaningful mode of operation.
 
-Documentation is available in @DOCDIRFULL@.
+Documentation is available in @CMAKE_INSTALL_FULL_DOCDIR@.

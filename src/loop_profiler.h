@@ -16,7 +16,7 @@
 // vtune
 #ifdef USE_VTUNE
 #include "ittnotify.h"
-#if USE_WINDOWS
+#if _WIN32
 #pragma comment(linker, "/defaultlib:libittnotify.lib")
 #pragma message("Automatically linking with libittnotify.lib")
 #endif

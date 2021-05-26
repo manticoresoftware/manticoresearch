@@ -1812,7 +1812,7 @@ void sphAotShutdown ()
 		SafeDelete ( pLemmantizer );
 }
 
-#if USE_WINDOWS
+#if _WIN32
 static CSphString g_sLemmatizerUkLib = "lemmatize_uk.dll";
 #else
 static CSphString g_sLemmatizerUkLib = "lemmatize_uk.so";

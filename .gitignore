@@ -70,3 +70,5 @@
 /test/ql/data/*.lock
 /test/ql/*.class
 /test/ql/*.exe
+
+/local_*_src.txt

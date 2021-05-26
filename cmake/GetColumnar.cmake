@@ -1,108 +1,87 @@
-set(HAVE_COLUMNAR 0) # will be overridden later
-
 include(update_bundle)
 
-set (COLUMNARNAME "columnar")
-set (COLUMNAR_BUNDLEZIP "${COLUMNARNAME}.zip")
-set (COLUMNAR_GITHUB "https://github.com/manticoresoftware/columnar/archive/master.zip")
+set (COLUMNAR_ABI 8)
+set (COLUMNAR_REQUIRED_VER 1.${COLUMNAR_ABI} )
 
-function(check_imported FOUND BINDIR)
-	if (NOT EXISTS "${BINDIR}/columnar-targets.cmake")
-		return()
-	endif()
+# Path COLUMNAR_SRC has to be provided from outside. If it is defined, columnar sources will be added via 'add_subdirectory',
+# as submodule from that folder. Note that path to columnar in that case you have to provide in runtime via env.
 
-	include("${BINDIR}/columnar-targets.cmake")
-	string(TOUPPER "${CMAKE_BUILD_TYPE}" UPB)
-	get_target_property(LBB columnar LOCATION_${UPB})
-	if (NOT EXISTS ${LBB})
-		diags("not exists ${LBB}")
-		return()
-	endif ()
+# Variable SKIP_COLUMNAR is set to install only columnar API and build manticore; NOT build columnar itself.
 
-	get_filename_component(BUILDPATH ${LBB} PATH)
-	get_filename_component(BUILDNAME ${LBB} NAME)
+# Otherwise we first try perform find_package(), and if not success - download columnar sources, build them and install
+# into temporary folder which then will be used in find_package() call to locate columnar_api
 
-	diags ("COLUMNAR_LIBRARY -> ${LBB}")
-
-	set (COLUMNAR_LIBRARY "${LBB}" PARENT_SCOPE)
-	set (COLUMNAR_LIBDIR "${BUILDPATH}" PARENT_SCOPE)
-	set (COLUMNAR_SONAME "${BUILDNAME}" PARENT_SCOPE)
-	set (${FOUND} 1 PARENT_SCOPE)
-endfunction()
-
-function(columnar_install)
-	if (NOT HAVE_COLUMNAR)
-		return()
-	endif()
-    if ( APPLE )
-        set ( COLUMNAR_PATH "${BINPREFIX}lib" )
-    else()
-        set ( COLUMNAR_PATH "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}" )
-    endif()
-	if (COLUMNAR_LIBRARY)
-		# can't make 'true install' for imported target; only file installation available
-		diags ("Install columnar as usual file from imported target")
-		install(PROGRAMS ${COLUMNAR_LIBRARY} DESTINATION "${COLUMNAR_PATH}" COMPONENT applications )
-	else()
-		diags("Install columnar as usual file from imported target")
-		install(TARGETS columnar_manticore LIBRARY DESTINATION "${COLUMNAR_PATH}" COMPONENT applications NAMELINK_SKIP)
-	endif()
-endfunction()
-
-#get_buildd(COLUMNAR_BUILD ${COLUMNARNAME})
-set(COLUMNAR_BUILD "${MANTICORE_BINARY_DIR}/${COLUMNARNAME}")
-
-# first check 'lazy' case - build from previous run
-diags("first check 'lazy' case - build from previous run ${MANTICORE_BINARY_DIR}/columnar/${COLUMNAR_SONAME}")
-check_imported (HAVE_COLUMNAR "${MANTICORE_BINARY_DIR}/columnar")
-if (HAVE_COLUMNAR)
-	diags("Use 'lazy' prebuilt columnar from previous build ${COLUMNAR_LIBDIR}")
-	return() # we're done
+if (WIN32)
+	set (LIB_MANTICORE_COLUMNAR "lib_manticore_columnar.dll")
+else ()
+	set (LIB_MANTICORE_COLUMNAR "lib_manticore_columnar.so")
 endif ()
 
-# check build in common cache
-#diags("check build in common cache ${COLUMNAR_BUILD}/${COLUMNAR_SONAME}")
-#check_imported(HAVE_COLUMNAR "${COLUMNAR_BUILD}")
-#if (HAVE_COLUMNAR)
-#	diags("Use cached prebuilt columnar from bundle ${COLUMNAR_LIBDIR}")
-#	return() # we're done
-#endif ()
-
-# packed build in the bundle, as bundle/columnar-cmake-3.x-5.7-darwin-x86_64.tar.gz
-get_platformed_named (COLUMNAR_PLATFORM_BUILD "${COLUMNARNAME}")
-#diags("packet build in the bundle ${LIBS_BUNDLE}/${COLUMNAR_PLATFORM_BUILD}.tar.gz")
-#if (EXISTS "${LIBS_BUNDLE}/${COLUMNAR_PLATFORM_BUILD}.tar.gz")
-#	set(COLUMNAR_LIBDIR "${COLUMNAR_BINARY_DIR}/columnar")
-#	fetch_and_unpack(columnar_lib "${LIBS_BUNDLE}/${COLUMNAR_PLATFORM_BUILD}.tar.gz" "${COLUMNAR_LIBDIR}")
-#	check_imported(HAVE_COLUMNAR "${COLUMNAR_LIBDIR}")
-#	if (HAVE_COLUMNAR)
-#		diags("Use cached prebuilt columnar from bundled archive ${COLUMNAR_LIBDIR}")
-#		return() # we're done
-#	endif ()
-#endif ()
-
-# finally set up build from sources
-populate(COLUMNAR_PLACE ${COLUMNARNAME} "${LIBS_BUNDLE}/${COLUMNAR_BUNDLEZIP}" ${COLUMNAR_GITHUB})
-set(COLUMNAR_SRC "${MANTICORE_BINARY_DIR}/${COLUMNARNAME}-src")
-
-		#diags("check if src folder is empty")
-#if (NOT EXISTS "${COLUMNAR_SRC}/CMakeLists.txt")
-	diags("need to fetch sources from ${COLUMNAR_PLACE} to ${COLUMNAR_SRC}")
-	fetch_and_unpack(columnar ${COLUMNAR_PLACE} ${COLUMNAR_SRC})
-#endif ()
-
-if (EXISTS "${COLUMNAR_SRC}/CMakeLists.txt")
-	if ( DEFINED DEBUG_COLUMNAR_DEST )
-		if ( MSVC )
-			set ( DEBUG_COLUMNAR_PATH "${DEBUG_COLUMNAR_DEST}/lib_manticore_columnar.dll" )
-		else ()
-			set ( DEBUG_COLUMNAR_PATH "${DEBUG_COLUMNAR_DEST}/lib_manticore_columnar.so" )
-		endif ()
-		message ( STATUS "DEBUG_COLUMNAR_PATH is set to ${DEBUG_COLUMNAR_PATH}" )
+macro (return_if_columnar_found)
+	if (TARGET columnar::columnar)
+		get_target_property (COLUMNARLIB columnar::columnar LOCATION)
+		get_filename_component (LIB_MANTICORE_COLUMNAR ${COLUMNARLIB} NAME)
+		message (STATUS "Name is ${LIB_MANTICORE_COLUMNAR}")
+		message (STATUS "Location is ${COLUMNARLIB}")
+		trace (columnar::columnar)
+	else()
+		message (STATUS "Location of columnar is not known; you need to provide it manually in env if you want in-place testing possible")
 	endif ()
+	include (FeatureSummary)
+	set_package_properties (columnar PROPERTIES TYPE RUNTIME
+			DESCRIPTION "column-oriented storage library, aiming to provide decent performance with low memory footprint at big data volume"
+			URL "https://github.com/manticoresoftware/columnar/"
+			)
+	if (TARGET columnar::columnar_api)
+		trace (columnar::columnar_api)
+		return ()
+	endif ()
+endmacro ()
 
-	set(COLUMNAR_LIBDIR "${COLUMNAR_BUILD}")
-	add_subdirectory(${COLUMNAR_SRC} ${COLUMNAR_BUILD})
-	include_directories ( ${COLUMNAR_SRC} )
-	set(HAVE_COLUMNAR 1)
+# special CI path. Columnar set this with path to it's sources. We don't need to build it, and also target API assumed available
+if (TARGET columnar::columnar_api)
+	message (STATUS "Columnar is already defined, skip.")
+	return ()
+endif ()
+
+if (COLUMNAR_SRC)
+	set (SKIP_COLUMNAR FALSE)
+	add_subdirectory ("${COLUMNAR_SRC}" "${MANTICORE_BINARY_DIR}/columnar-build")
+	message (STATUS "Name is ${LIB_MANTICORE_COLUMNAR}, build as sub-project.")
+	message (STATUS "Location is unknown, somewhere in subdir of columnar-build")
+	trace_internal (columnar::columnar)
+	include (FeatureSummary)
+	set_package_properties (columnar PROPERTIES TYPE RUNTIME
+			DESCRIPTION "column-oriented storage library, aiming to provide decent performance with low memory footprint at big data volume"
+			URL "https://github.com/manticoresoftware/columnar/"
+			)
+	return()
 endif()
+
+# set current path to modules in local usr
+set (COLUMNAR_BUILD "${MANTICORE_BINARY_DIR}/usr")
+list (APPEND CMAKE_PREFIX_PATH "${COLUMNAR_BUILD}")
+message (DEBUG "CMAKE_PREFIX_PATH became ${CMAKE_PREFIX_PATH}")
+
+find_package (columnar ${COLUMNAR_REQUIRED_VER} CONFIG)
+return_if_columnar_found ()
+
+# Not found. get columnar src, build columnar_api.
+set (SKIP_COLUMNAR TRUE) # that will cause columnar NOT to build, only build columnar_api
+
+if (DEFINED ENV{COLUMNAR_LOCATOR})
+	set (COLUMNAR_LOCATOR $ENV{COLUMNAR_LOCATOR})
+elseif (EXISTS "${MANTICORE_SOURCE_DIR}/local_columnar_src.txt")
+	file (READ "${MANTICORE_SOURCE_DIR}/local_columnar_src.txt" COLUMNAR_LOCATOR)
+else ()
+	file (READ "${MANTICORE_SOURCE_DIR}/columnar_src.txt" COLUMNAR_LOCATOR)
+endif ()
+
+string (CONFIGURE "${COLUMNAR_LOCATOR}" COLUMNAR_LOCATOR) # that is to expand possible inside variables
+
+configure_file (${MANTICORE_SOURCE_DIR}/cmake/columnar-imported.cmake.in columnar-build/CMakeLists.txt)
+execute_process (COMMAND ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}" . WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/columnar-build)
+execute_process (COMMAND ${CMAKE_COMMAND} --build . WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/columnar-build)
+
+find_package (columnar ${COLUMNAR_REQUIRED_VER} REQUIRED CONFIG)
+return_if_columnar_found ()

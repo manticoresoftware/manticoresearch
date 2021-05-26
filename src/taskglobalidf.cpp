@@ -15,7 +15,7 @@
 #include "global_idf.h"
 
 // logf() is not there sometimes (eg. Solaris 9)
-#if !USE_WINDOWS && !HAVE_LOGF
+#if !_WIN32 && !HAVE_LOGF
 static inline float logf ( float v )
 {
 	return (float) log ( v );

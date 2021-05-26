@@ -33,17 +33,13 @@ endmacro()
 
 include(update_bundle)
 
-# set global cache path to cmake
-get_cache(CACHE_BUILDS)
-set(CMAKE_PREFIX_PATH "${CACHE_BUILDS}")
-
 # check pre-built gbenches
 find_package(benchmark QUIET CONFIG)
 fixup_benches_and_return_if_found()
 
 # not found. Populate and build cache package for now and future usage.
 MESSAGE(STATUS "prebuilt googlebench wasn't found. Will build it right now...")
-populate(GBENCH_PLACE "gbench" ${GBENCH_URL} ${GBENCH_GITHUB})
+select_nearest_url(GBENCH_PLACE "gbench" ${GBENCH_URL} ${GBENCH_GITHUB})
 
 # build as external project and install into cache
 get_build(GBENCH_BUILD benchmark)

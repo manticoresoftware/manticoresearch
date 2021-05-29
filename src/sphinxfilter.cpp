@@ -1513,16 +1513,12 @@ void FixupFilterSettings ( const CSphFilterSettings & tSettings, ESphAttr eAttrT
 }
 
 
-static bool ValuesIntersect ( const CSphVector<SphAttr_t> & dLeft, const CSphVector<SphAttr_t> & dRight )
+static bool ValuesAreSame ( const CSphVector<SphAttr_t> & dLeft, const CSphVector<SphAttr_t> & dRight )
 {
-	const CSphVector<SphAttr_t> & dL = dLeft.GetLength() < dRight.GetLength() ? dLeft : dRight;
-	const CSphVector<SphAttr_t> & dR = dLeft.GetLength() < dRight.GetLength() ? dRight : dLeft;
+	if ( dLeft.GetLength()!=dRight.GetLength() )
+		return false;
 
-	for ( auto & i : dL )
-		if ( dR.BinarySearch(i) )
-			return true;
-
-	return false;
+	return !memcmp ( dLeft.Begin(), dRight.Begin(), dLeft.GetLengthBytes() );
 }
 
 
@@ -1627,24 +1623,21 @@ static bool MergeFilters ( CSphFilterSettings & tLeft, const CSphFilterSettings 
 	{
 		if ( tRight.m_eType==SPH_FILTER_VALUES )
 		{
-			if ( tLeft.m_bExclude==tRight.m_bExclude )
+			if ( tLeft.m_bExclude!=tRight.m_bExclude )
 			{
-				SphAttr_t * pValues = tLeft.m_dValues.AddN ( tRight.m_dValues.GetLength() );
-				memcpy ( pValues, tRight.m_dValues.Begin(), tRight.m_dValues.GetLength()*sizeof ( tRight.m_dValues[0] ) );
-				tLeft.m_dValues.Uniq();
-				return true;
-			}
-			else
-			{
-				if ( ValuesIntersect ( tLeft.m_dValues, tRight.m_dValues ) )
+				// IN (a) and NOT IN (a) => null
+				if ( ValuesAreSame ( tLeft.m_dValues, tRight.m_dValues ) )
 				{
 					bRejectIndex = true;
 					return true;
 				}
-
-				if ( tLeft.m_bExclude ) // current is "not equals", new is "equals"
-					bRemoveLeft = true;
-
+			}
+			else if ( tLeft.m_bExclude )
+			{
+				// NOT IN (a) and NOT IN(b) => NOT IN(a,b)
+				SphAttr_t * pValues = tLeft.m_dValues.AddN ( tRight.m_dValues.GetLength() );
+				memcpy ( pValues, tRight.m_dValues.Begin(), tRight.m_dValues.GetLength()*sizeof ( tRight.m_dValues[0] ) );
+				tLeft.m_dValues.Uniq();
 				return true;
 			}
 		}

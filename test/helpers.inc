@@ -815,6 +815,63 @@ function RoundFloatValues ( &$values, $roundoff )
 }
 
 
+function JsonRsetFixup ( &$set )
+{
+	if ( isset ( $set["rows"] ) )
+	{
+		$rows = json_decode ( $set["rows"], 1 );
+		if ( isset ( $rows["hits"] ) && isset ( $rows["hits"]["hits"] ) )
+		{
+			foreach ( $rows["hits"]["hits"] as &$hit )
+			{
+				RoundFloatValues ( $hit, 6 );
+				if ( isset ( $hit["_source"] ) )
+					ksort ( $hit["_source"] );
+			}
+		}
+
+		$set["rows"] = json_encode ( $rows );
+	}
+
+	if ( isset ( $set["http_endpoint"] ) && $set["http_endpoint"]=="sql" && isset ( $set["rows"] ) )
+	{
+		$rows = json_decode ( $set["rows"], 1 );
+		if ( isset ( $rows["data"] ) )
+		{
+			foreach ( $rows["data"] as &$entry )
+			{
+				if ( is_array($entry) && isset ( $entry["Properties"] ) && $entry["Properties"]=="columnar" )
+					$entry["Properties"] = "";
+			}
+		}
+		$set["rows"] = json_encode ( $rows );
+	}
+}
+
+
+function SqlRsetFixup ( &$set )
+{
+	if ( !isset ( $set["rows"] ) )
+		return;
+
+	foreach	( $set["rows"] as &$row )
+	{
+		if ( count($row)!=3 )
+			continue;
+
+		$keys = array_keys($row);
+		if ( count($keys)!=3 )
+			return;
+
+		if ( $keys[0]!='Field' || $keys[1]!='Type' || $keys[2]!='Properties' )
+			return;
+
+		if ( $row['Properties']=='columnar' )
+			$row['Properties'] = '';
+	}
+}
+
+
 function CompareResultSetFixup ( &$set, $roundoff, $variants_match )
 {
 	global $g_ignore_weights;
@@ -830,19 +887,11 @@ function CompareResultSetFixup ( &$set, $roundoff, $variants_match )
 					$set["matches"][$id]["attrs"][$name] = sprintf ( "%.{$roundoff}f", $set["matches"][$id]["attrs"][$name] );
 			}
 
-
 	// fixup floats in json via http
-	if ( isset ( $set["http"] ) && $set["http"]==1 && isset ( $set["rows"] ) )
-	{
-		$rows = json_decode ( $set["rows"], 1 );
-		if ( isset ( $rows["hits"] ) && isset ( $rows["hits"]["hits"] ) )
-		{
-			foreach ( $rows["hits"]["hits"] as &$hit )
-				RoundFloatValues ( $hit, 6 );
-		}
-
-		$set["rows"] = json_encode ( $rows );
-	}
+	if ( isset ( $set["http"] ) && $set["http"]==1 )
+		JsonRsetFixup ( $set );
+	else
+		SqlRsetFixup ( $set );
 
     // fixup sphinxql trim
     if ( isset ( $set['sphinxql'] ) )
@@ -1371,6 +1420,15 @@ class SphinxConfig
 			return false;
 		return $g_locals['rt_mode'];
 	}
+
+	function IsColumnar()
+	{
+		global $g_locals;
+		if ( !array_key_exists ('columnar_mode', $g_locals) )
+			return false;
+		return $g_locals['columnar_mode'];
+	}
+
 	function NeedIndexerEx ()
 	{
 		return count ( $this->_indexer_runs ) > 0;
@@ -2294,12 +2352,16 @@ class SphinxConfig
 			}
 			mysqli_free_result($result);
 
-			if ( isset ( $query_result["rows"] ) && isset ( $query_result["rows"][0] ) && isset ( $query_result["rows"][0]["Create Table"] ) )
-			{
-				$create_res = $query_result["rows"][0]["Create Table"];
-				if ( $this->PostprocessDDL($create_res) )
-					$query_result["rows"][0]["Create Table"] = $create_res;
-			}
+			if ( isset ( $query_result["rows"] ) )
+				foreach ( $query_result["rows"] as &$row )
+				{
+					if ( isset ( $row["Create Table"] ) )
+					{
+						$create_res = $row["Create Table"];
+						if ( $this->PostprocessDDL($create_res) )
+							$row["Create Table"] = $create_res;
+					}
+				}
 		}
 	}
 
@@ -3600,6 +3662,7 @@ class SphinxConfig
 				$lines = explode("\n", str_replace("\\\n", "", $match[$content][0]));
 				$justcopy = false;
 				$rtcopy = false;
+				$attr_names = array();
 				$idxbody = "";
 				foreach ($lines as $line)
 				{
@@ -3627,13 +3690,17 @@ class SphinxConfig
 									{
 										if ( array_key_exists ( $key, $schemas[$value]['types'] ) )
 										{
-											if ( $schemas[$value]['types'][$key] == "FIELD")
+											$rt_attr_type = $schemas[$value]['types'][$key];
+											if ( $rt_attr_type!="rt_attr_json" )
+												$attr_names[] = $key;
+
+											if ( $rt_attr_type == "FIELD" )
 											{
 												$idxbody .= "\trt_field\t= $key\n";
 												$idxbody .= "\trt_attr_string\t= $key\n";
 											} else
 											{
-												$idxbody .= "\t".$schemas[$value]['types'][$key]."\t= $key";
+												$idxbody .= "\t".$rt_attr_type."\t= $key";
 												if (isset($schemas[$value]['bits'][$key]))
 													$idxbody .= $schemas[$value]['bits'][$key];
 												$idxbody .= "\n";
@@ -3661,6 +3728,14 @@ class SphinxConfig
 						break;
 					}
 				}
+
+				if ( $this->IsColumnar() )
+				{
+					$attr_names[] = "id";
+					$columnar_attrs = "\n\tcolumnar_attrs=".implode ( ",", array_unique($attr_names) );
+					$idxbody.= "$columnar_attrs";
+				}
+
 				$idx .= "$idxbody\n}\n";
 				$srclen = $match[$epilog][1] - $match[$body][1];
 				$config = substr_replace ($config, $idx, $match[$body][1]-$shift,$srclen );
@@ -4095,6 +4170,12 @@ function CheckConfig ( $config, $path )
 	if ( $config->Requires("non-rt") && $config->IsRt() )
 	{
 		printf ( "SKIPPING %s, %s - explicitly non-RT test skipped in RT mode\n", $path, $config->Name () );
+		return false;
+	}
+
+	if ( $config->Requires("non-columnar") && $config->IsColumnar() )
+	{
+		printf ( "SKIPPING %s, %s - explicitly non-columnar test skipped in columnar mode\n", $path, $config->Name () );
 		return false;
 	}
 

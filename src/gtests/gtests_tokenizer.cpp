@@ -802,11 +802,11 @@ TEST_F ( QueryParser, soft_whitespace4 )
 class CSphDummyIndex : public CSphIndexStub
 {
 public:
-	CSphDummyIndex () : CSphIndexStub ( nullptr, nullptr ) {}
+	SmallStringHash_T<int> m_hHits;
 
-	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const override;
+			CSphDummyIndex() : CSphIndexStub ( nullptr, nullptr ) {}
 
-	SmallStringHash_T < int > m_hHits;
+	bool	FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const override;
 };
 
 

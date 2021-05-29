@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>configless vs columnar</name>
+
+<requires>
+	<force-rt/>
+	<columnar/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+<sphinxql>
+	show tables;
+	create table test1 ( title text, tag integer ) engine='columnar';
+	create table test2 ( title text, tag integer ) engine='rowwise';
+	desc test1;
+	desc test2;
+	show create table test1;
+	show create table test2;
+
+	create table test11 like test1;
+	create table test22 like test2;
+	desc test11;
+	desc test22;
+	show create table test11;
+	show create table test22;
+
+	drop table test1;
+	drop table test2;
+	drop table test11;
+	drop table test22;
+
+	create table test1 ( title text, uid integer, tags json ) engine='columnar';
+	show meta;
+	desc test1;
+	show create table test1;
+	create table test2 like test1;
+	show meta;
+	desc test2;
+	show create table test2;
+
+	drop table test1;
+	drop table test2;
+
+	create table test1 ( title text, tag1 integer engine='columnar', tag2 integer engine='rowwise' );
+	desc test1;
+	show create table test1;
+	drop table test1;
+
+	create table test1 ( title text, tag1 integer, tag2 integer engine='rowwise' ) engine='columnar';
+	desc test1;
+	show create table test1;
+	drop table test1;
+
+	create table test1 ( title text, tag1 integer, tag2 integer engine='columnar' ) engine='rowwise';
+	desc test1;
+	show create table test1;
+	drop table test1;
+</sphinxql>
+</queries>
+
+</test>

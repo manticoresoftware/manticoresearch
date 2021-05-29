@@ -94,7 +94,6 @@ typedef int __declspec("SAL_nokernel") __declspec("SAL_nodriver") __prefast_flag
 	typedef off_t		SphOffset_t;
 #endif
 
-
 /////////////////////////////////////////////////////////////////////////////
 // COMPILE-TIME CHECKS
 /////////////////////////////////////////////////////////////////////////////
@@ -160,6 +159,9 @@ typedef unsigned short		WORD;
 typedef unsigned char		BYTE;
 
 #endif // _WIN32
+
+/// row entry (storage only, does not necessarily map 1:1 to attributes)
+using CSphRowitem = DWORD;
 
 // switch off clang-specific warning about non-necessary capturing of constants
 #ifdef __clang__

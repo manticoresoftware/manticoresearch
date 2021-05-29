@@ -2048,7 +2048,7 @@ bool CommitMonitor_c::CommitTOI ( ServedDesc_t * pDesc, CSphString & sError ) EX
 	return true;
 }
 
-static bool UpdateAPI ( AttrUpdateArgs& tUpd, int & iUpdate )
+static bool UpdateAPI ( AttrUpdateArgs & tUpd, int & iUpdate )
 {
 	if ( !tUpd.m_pDesc )
 	{

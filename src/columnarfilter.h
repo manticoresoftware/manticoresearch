@@ -15,18 +15,6 @@
 
 #if USE_COLUMNAR
 
-class ColumnarFilterTraits_c
-{
-public:
-			ColumnarFilterTraits_c() = default;
-			ColumnarFilterTraits_c ( ISphExpr * pExpr );
-
-	void	SetColumnarCol ( int iColumnarCol );
-
-protected:
-	int		m_iColumnarCol = -1;
-};
-
 ISphFilter * TryToCreateColumnarFilter ( int iAttr, const ISphSchema & tSchema, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, ESphCollation eCollation,
 	CSphString & sError, CSphString & sWarning );
 

@@ -89,12 +89,17 @@ static int g_iFieldsCount = 0;
 void DoIndexing ( CSphSource_MySQL * pSrc, RtIndex_i * pIndex )
 {
 	CSphString sError, sWarning, sFilter;
-	CSphVector<int64_t> dMvas;
 
 	int64_t tmStart = sphMicroTimer ();
 	int64_t tmAvgCommit = 0;
 	int64_t tmMaxCommit = 0;
 	int iCommits = 0;
+
+	InsertDocData_t tDoc ( pIndex->GetMatchSchema() );
+	tDoc.m_dFields.Resize(g_iFieldsCount);
+
+	int iDynamic = pIndex->GetMatchSchema().GetRowSize();
+
 	while (true)
 	{
 		bool bEOF = false;
@@ -102,12 +107,13 @@ void DoIndexing ( CSphSource_MySQL * pSrc, RtIndex_i * pIndex )
 		if ( !pFields )
 			break;
 
-		CSphVector<VecTraits_T<const char>> dFields ( g_iFieldsCount );
-		ARRAY_FOREACH (i, dFields)
-			dFields[i] = VecTraits_T<const char> ( pFields[i], strlen ( pFields[i] ) );
+		ARRAY_FOREACH ( i, tDoc.m_dFields )
+			tDoc.m_dFields[i] = VecTraits_T<const char> ( pFields[i], strlen ( pFields[i] ) );
+
+		tDoc.m_tDoc.Combine ( pSrc->m_tDocInfo, iDynamic );
 
 		if ( !bEOF )
-			pIndex->AddDocument ( dFields, pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
+			pIndex->AddDocument ( tDoc, false, sFilter, sError, sWarning, NULL );
 
 		auto& const_stat = pSrc->GetStats ();
 		++const_cast<CSphSourceStats&>(const_stat).m_iTotalDocuments;

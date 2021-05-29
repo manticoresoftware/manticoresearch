@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 
+<requires>
+	<non-columnar/>
+</requires>
+
 <name>API distributed updates; QL uberpackets</name>
 
 <config>

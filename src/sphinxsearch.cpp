@@ -2925,7 +2925,7 @@ public:
 		return -1;
 	}
 
-	ISphExpr * CreateNode ( int iID, ISphExpr * _pLeft, ESphEvalStage *, bool *, CSphString & ) final
+	ISphExpr * CreateNode ( int iID, ISphExpr * _pLeft, const ISphSchema *, ESphEvalStage *, bool *, CSphString & ) final
 	{
 		SafeAddRef ( _pLeft );
 		CSphRefcountedPtr<ISphExpr> pLeft ( _pLeft );

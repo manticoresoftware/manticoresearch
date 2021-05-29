@@ -26,9 +26,11 @@
 %token	TOK_BOOL
 %token	TOK_CLUSTER
 %token	TOK_COLUMN
+%token	TOK_COLUMNAR
 %token	TOK_CREATE
 %token	TOK_DOUBLE
 %token	TOK_DROP
+%token	TOK_ENGINE
 %token	TOK_EXISTS
 %token	TOK_FLOAT
 %token	TOK_FROM
@@ -105,8 +107,13 @@ alter_col_type:
 	| text_or_string field_flag_list { $$.m_iValue = SPH_ATTR_STRING; $$.m_iType = $2.m_iType; }
 	;
 
+columnar_flag:
+	// empty
+	| TOK_COLUMNAR	{ pParser->m_pStmt->m_bColumnar = true; }
+	;
+
 alter:
-	TOK_ALTER TOK_TABLE ident TOK_ADD TOK_COLUMN ident alter_col_type
+	TOK_ALTER TOK_TABLE ident TOK_ADD TOK_COLUMN ident alter_col_type columnar_flag
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_ALTER_ADD;
@@ -192,6 +199,14 @@ create_table_item:
             YYERROR;
 		 }
 	 }
+	| ident alter_col_type TOK_ENGINE '=' TOK_QUOTED_STRING
+	{
+		if ( !pParser->AddCreateTableCol ( $1, $2, $5 ) )
+		 {
+		 	yyerror ( pParser, pParser->GetLastError() );
+            YYERROR;
+		 }
+	}
 	| ident TOK_BIT '(' TOK_CONST_INT ')'	{ pParser->AddCreateTableBitCol ( $1, $4.m_iValue ); }
 	;
 
@@ -207,6 +222,7 @@ create_table_items:
 
 create_table_option:
 	ident '=' TOK_QUOTED_STRING			{ pParser->AddCreateTableOption ( $1, $3 ); }
+	| TOK_ENGINE '=' TOK_QUOTED_STRING	{ pParser->AddCreateTableOption ( $1, $3 ); }
 	;
 
 create_table_option_list:

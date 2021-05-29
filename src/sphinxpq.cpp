@@ -65,9 +65,7 @@ public:
 	explicit PercolateIndex_c ( const CSphSchema & tSchema, const char * sIndexName, const char * sPath );
 	~PercolateIndex_c () override;
 
-	bool AddDocument ( const VecTraits_T<VecTraits_T<const char >> &dFields, CSphMatch & tDoc,
-		bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr, const VecTraits_T<int64_t> & dMvas,
-		CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt ) override;
+	bool AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt ) override;
 	bool MatchDocuments ( RtAccum_t * pAccExt, PercolateMatchResult_t &tRes ) override;
 	bool Commit ( int * pDeleted, RtAccum_t * pAccExt ) override;
 	void RollBack ( RtAccum_t * pAccExt ) override;
@@ -714,9 +712,7 @@ RtAccum_t * PercolateIndex_c::CreateAccum ( RtAccum_t * pAccExt, CSphString & sE
 }
 
 
-bool PercolateIndex_c::AddDocument ( const VecTraits_T<VecTraits_T<const char >> &dFields,
-	CSphMatch & tDoc, bool , const CSphString & , const char ** ppStr, const VecTraits_T<int64_t> & dMvas,
-	CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt )
+bool PercolateIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt )
 {
 	auto * pAcc = (RtAccum_t *) AcquireAccum ( m_pDict, pAccExt, true, true, &sError );
 	if ( !pAcc )
@@ -729,7 +725,7 @@ bool PercolateIndex_c::AddDocument ( const VecTraits_T<VecTraits_T<const char >>
 		return false;
 	}
 
-	CSphSource_StringVector tSrc ( dFields, m_tSchema );
+	CSphSource_StringVector tSrc ( tDoc.m_dFields, m_tSchema );
 	if ( m_tSettings.m_bHtmlStrip &&
 		!tSrc.SetStripHTML ( m_tSettings.m_sHtmlIndexAttrs.cstr(), m_tSettings.m_sHtmlRemoveElements.cstr(),
 			m_tSettings.m_bIndexSP, m_tSettings.m_sZones.cstr(), sError ) )
@@ -740,14 +736,14 @@ bool PercolateIndex_c::AddDocument ( const VecTraits_T<VecTraits_T<const char >>
 		pFieldFilter = m_pFieldFilter->Clone();
 
 	// TODO: field filter \ token filter?
-	tSrc.Setup ( m_tSettings );
+	tSrc.Setup ( m_tSettings, nullptr );
 	tSrc.SetTokenizer ( tTokenizer );
 	tSrc.SetDict ( pAcc->m_pDict );
 	tSrc.SetFieldFilter ( pFieldFilter );
 	if ( !tSrc.Connect ( m_sLastError ) )
 		return false;
 
-	m_tSchema.CloneWholeMatch ( tSrc.m_tDocInfo, tDoc );
+	m_tSchema.CloneWholeMatch ( tSrc.m_tDocInfo, tDoc.m_tDoc );
 
 	bool bEOF = false;
 	if ( !tSrc.IterateStart ( sError ) || !tSrc.IterateDocument ( bEOF, sError ) )
@@ -756,7 +752,7 @@ bool PercolateIndex_c::AddDocument ( const VecTraits_T<VecTraits_T<const char >>
 	ISphHits * pHits = tSrc.IterateHits ( sError );
 	pAcc->GrabLastWarning ( sWarning );
 
-	pAcc->AddDocument ( pHits, tDoc, true, m_tSchema.GetRowSize(), ppStr, dMvas, nullptr );
+	pAcc->AddDocument ( pHits, tDoc, true, m_tSchema.GetRowSize(), nullptr );
 
 	return true;
 }

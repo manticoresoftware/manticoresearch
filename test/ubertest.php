@@ -45,6 +45,7 @@ if ( !is_array($args) || empty($args) )
 	print ( "--managed\t\tdon't run searchd during test (for debugging)\n" );
 	print ( "--skip-indexer\t\tskip DB creation and indexer stages and go directly to queries/custom tests\n");
 	print ( "--rt\t\t\ttest RT backend (auto-convert all local indexes)\n" );
+	print ( "--columnar\t\t\ttest attrs as columnar\n" );
 	print ( "--no-drop-db\t\tKeep test db tables after the test (for debugging)\n");
 	print ( "--keep-all\t\tKeep test db and all test data (like generated configs, etc.) after the test (for debugging)\n");
 	print ( "--no-demo\t\tJust skip all tests without models. Else - run them, but never fail (for debugging)\n");
@@ -69,6 +70,7 @@ if ( !is_array($args) || empty($args) )
 
 $locals = array();
 $locals['rt_mode'] = false;
+$locals['columnar_mode'] = false;
 $locals['testdir'] = '';
 $locals['scriptdir'] = '';
 $locals['ctest'] = false;
@@ -107,6 +109,7 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="-tt" )							$locals['scriptdir'] = $args[++$i];
 	else if ( $arg=="--ctest" )						{ $locals['ctest'] = true; $force_guess = false; }
 	else if ( $arg=="--rt" )						$locals['rt_mode'] = true;
+	else if ( $arg=="--columnar" )					$locals['columnar_mode'] = true;
 	else if ( $arg=="--test-thd-pool" )				$locals['use_pool'] = true;
 	else if ( $arg=="--strict" )					$g_strict = true;
 	else if ( $arg=="--strict-verbose" )			{ $g_strict = true; $g_strictverbose = true; }

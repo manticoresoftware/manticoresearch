@@ -3,7 +3,10 @@
 
 <name>Smart attribute updates</name>
 
-<requires> <variant_match /> </requires>
+<requires>
+	<variant_match/>
+	<non-columnar/>
+</requires>
 
 <config>
 indexer

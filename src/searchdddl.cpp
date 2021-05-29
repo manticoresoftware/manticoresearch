@@ -113,16 +113,6 @@ void DdlParser_c::AddField ( const CSphString & sName, DWORD uFlags )
 }
 
 
-bool DdlParser_c::AddAttribute ( const CSphString & sName, ESphAttr eAttrType )
-{
-	assert( m_pStmt );
-	auto & tAttr = m_pStmt->m_tCreateTable.m_dAttrs.Add ();
-	tAttr.m_sName = sName;
-	tAttr.m_eAttrType = eAttrType;
-	return true;
-}
-
-
 DWORD ConvertFlags (int iFlags)
 {
 	// convert flags;
@@ -135,7 +125,11 @@ DWORD ConvertFlags (int iFlags)
 }
 
 
+#if USE_COLUMNAR
+bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t & tCol, AttrEngine_e eEngine )
+#else
 bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t & tCol )
+#endif
 {
 	assert( m_pStmt );
 
@@ -153,7 +147,14 @@ bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t &
 			m_sError.SetSprintf ( "options 'attribute', 'stored', 'indexed' are not appliable to non-string column '%s'", sName.cstr () );
 			return false;
 		}
-		return AddAttribute ( sName, eAttrType );
+
+		CSphColumnInfo & tAttr = m_pStmt->m_tCreateTable.m_dAttrs.Add();
+		tAttr.m_sName = sName;
+		tAttr.m_eAttrType = eAttrType;
+#if USE_COLUMNAR
+		tAttr.m_eEngine = eEngine;
+#endif
+		return true;
 	}
 
 	// actually, this may or may not be a field
@@ -168,7 +169,12 @@ bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t &
 		}
 
 		// add attribute
-		AddAttribute ( sName, SPH_ATTR_STRING );
+		CSphColumnInfo & tAttr = m_pStmt->m_tCreateTable.m_dAttrs.Add();
+		tAttr.m_sName = sName;
+		tAttr.m_eAttrType = SPH_ATTR_STRING;
+#if USE_COLUMNAR
+		tAttr.m_eEngine = eEngine;
+#endif
 
 		if ( iType & FLAG_INDEXED )
 			AddField ( sName, CSphColumnInfo::FIELD_INDEXED );
@@ -186,6 +192,26 @@ bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t &
 		AddField ( sName, uFieldFlags );
 	}
 	return true;
+}
+
+
+bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t & tCol, const SqlNode_t & tEngine )
+{
+#if USE_COLUMNAR
+	AttrEngine_e eEngine = AttrEngine_e::DEFAULT;
+
+	CSphString sEngine = ToStringUnescape(tEngine);
+	CSphString sEngineLowerCase = sEngine;
+	sEngineLowerCase.ToLower();
+
+	if ( !StrToAttrEngine ( eEngine, sEngineLowerCase, m_sError ) )
+		return false;
+
+	return AddCreateTableCol ( tName, tCol, eEngine );
+#else
+	m_sError = "no columnar support compiled";
+	return false;
+#endif
 }
 
 

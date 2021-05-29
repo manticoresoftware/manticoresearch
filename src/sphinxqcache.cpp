@@ -12,6 +12,7 @@
 
 #include "sphinx.h"
 #include "sphinxqcache.h"
+#include "exprtraits.h"
 #include "mini_timer.h"
 
 //////////////////////////////////////////////////////////////////////////

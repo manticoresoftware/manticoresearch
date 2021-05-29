@@ -229,6 +229,7 @@ struct SqlStmt_t
 	CSphString				m_sAlterAttr;
 	CSphString				m_sAlterOption;
 	ESphAttr				m_eAlterColType = SPH_ATTR_NONE;
+	bool					m_bColumnar = false;
 	DWORD					m_uFieldFlags = 0;
 
 	// CREATE TABLE specific

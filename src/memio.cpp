@@ -54,6 +54,14 @@ CSphString MemoryReader_c::GetString()
 }
 
 
+SphOffset_t MemoryReader_c::GetOffset()
+{
+	SphOffset_t tRes = 0;
+	GetBytes ( &tRes, sizeof(tRes) );
+	return tRes;
+}
+
+
 DWORD MemoryReader_c::GetDword()
 {
 	DWORD uRes = 0;

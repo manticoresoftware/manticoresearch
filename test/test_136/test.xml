@@ -4,7 +4,8 @@
 <name>persistent MVA updates surviving after hard killing part 2 - *nix only</name>
 
 <requires>
-<variant_match/>
+	<variant_match/>
+	<non-columnar/>
 </requires>
 
 <config>

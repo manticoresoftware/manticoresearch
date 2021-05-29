@@ -22,7 +22,8 @@ public:
 	void			GetLocator ( CSphAttrLocator & tOut ) const final {}
 	ESphAttr		GetResultType () const final { return m_eAttrType; }
 	SphGroupKey_t	KeyFromMatch ( const CSphMatch & tMatch ) const final;
-	SphGroupKey_t	KeyFromValue ( SphAttr_t ) const final;
+	SphGroupKey_t	KeyFromValue ( SphAttr_t ) const final { assert(0); return SphGroupKey_t(); }
+	void			MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const override { assert(0); }
 	void			SetColumnar ( const columnar::Columnar_i * pColumnar ) final;
 	CSphGrouper *	Clone() const final;
 
@@ -54,13 +55,6 @@ SphGroupKey_t GrouperColumnarInt_c::KeyFromMatch ( const CSphMatch & tMatch ) co
 }
 
 
-SphGroupKey_t GrouperColumnarInt_c::KeyFromValue ( SphAttr_t ) const
-{
-	assert(0);
-	return SphGroupKey_t();
-}
-
-
 void GrouperColumnarInt_c::SetColumnar ( const columnar::Columnar_i * pColumnar )
 {
 	assert(pColumnar);
@@ -86,7 +80,8 @@ public:
 	void			GetLocator ( CSphAttrLocator & tOut ) const final {}
 	ESphAttr		GetResultType () const final { return SPH_ATTR_BIGINT; }
 	SphGroupKey_t	KeyFromMatch ( const CSphMatch & tMatch ) const final;
-	SphGroupKey_t	KeyFromValue ( SphAttr_t ) const final;
+	SphGroupKey_t	KeyFromValue ( SphAttr_t ) const final { assert(0); return SphGroupKey_t(); }
+	void			MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const final { assert(0); }
 	void			SetColumnar ( const columnar::Columnar_i * pColumnar ) final;
 	CSphGrouper *	Clone() const final;
 
@@ -127,13 +122,6 @@ SphGroupKey_t GrouperColumnarString_T<HASH>::KeyFromMatch ( const CSphMatch & tM
 }
 
 template <typename HASH>
-SphGroupKey_t GrouperColumnarString_T<HASH>::KeyFromValue ( SphAttr_t ) const
-{
-	assert(0);
-	return SphGroupKey_t();
-}
-
-template <typename HASH>
 void GrouperColumnarString_T<HASH>::SetColumnar ( const columnar::Columnar_i * pColumnar )
 {
 	assert(pColumnar);
@@ -153,6 +141,56 @@ CSphGrouper * GrouperColumnarString_T<HASH>::Clone() const
 
 //////////////////////////////////////////////////////////////////////////
 
+template <typename T>
+class GrouperColumnarMVA_T : public CSphGrouper
+{
+public:
+					GrouperColumnarMVA_T ( const CSphColumnInfo & tAttr ) : m_sAttrName ( tAttr.m_sName ) {}
+					GrouperColumnarMVA_T ( const GrouperColumnarMVA_T & rhs ) : m_sAttrName ( rhs.m_sAttrName ) {}
+
+	void			GetLocator ( CSphAttrLocator & tOut ) const final {}
+	ESphAttr		GetResultType () const final { return SPH_ATTR_BIGINT; }
+	SphGroupKey_t	KeyFromMatch ( const CSphMatch & tMatch ) const final { assert(0); return SphGroupKey_t(); }
+	void			MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const final;
+	SphGroupKey_t	KeyFromValue ( SphAttr_t ) const final { assert(0); return SphGroupKey_t(); }
+	void			SetColumnar ( const columnar::Columnar_i * pColumnar ) final;
+	CSphGrouper *	Clone() const final { return new GrouperColumnarMVA_T(*this); }
+	bool			IsMultiValue() const final { return true; }
+
+private:
+	CSphString							m_sAttrName;
+	CSphScopedPtr<columnar::Iterator_i>	m_pIterator {nullptr};
+};
+
+template <typename T>
+void GrouperColumnarMVA_T<T>::MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const
+{
+	dKeys.Resize(0);
+
+	if ( !m_pIterator.Ptr() || m_pIterator->AdvanceTo ( tMatch.m_tRowID ) != tMatch.m_tRowID )
+		return;
+
+	const BYTE * pMVA = nullptr;
+	int iLen = m_pIterator->Get(pMVA);
+	int iNumValues = iLen/sizeof(T);
+	auto pValues = (const T*)pMVA;
+
+	dKeys.Resize(iNumValues);
+	for ( int i = 0; i < iNumValues; i++ )
+		dKeys[i] = (SphGroupKey_t)pValues[i];
+}
+
+template <typename T>
+void GrouperColumnarMVA_T<T>::SetColumnar ( const columnar::Columnar_i * pColumnar )
+{
+	assert(pColumnar);
+	columnar::IteratorHints_t tHints;
+	std::string sError; // fixme! report errors
+	m_pIterator = pColumnar->CreateIterator ( m_sAttrName.cstr(), tHints, sError );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 CSphGrouper * CreateGrouperColumnarInt ( const CSphColumnInfo & tAttr )
 {
 	return new GrouperColumnarInt_c(tAttr);
@@ -168,6 +206,15 @@ CSphGrouper * CreateGrouperColumnarString ( const CSphColumnInfo & tAttr, ESphCo
 	case SPH_COLLATION_LIBC_CS:			return new GrouperColumnarString_T<LibcCSHash_fn> ( tAttr, eCollation );
 	default:							return new GrouperColumnarString_T<BinaryHash_fn> ( tAttr, eCollation );
 	}
+}
+
+
+CSphGrouper * CreateGrouperColumnarMVA ( const CSphColumnInfo & tAttr )
+{
+	if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET || tAttr.m_eAttrType==SPH_ATTR_UINT32SET_PTR )
+		return new GrouperColumnarMVA_T<DWORD>(tAttr);
+
+	return new GrouperColumnarMVA_T<int64_t>(tAttr);
 }
 
 #endif // USE_COLUMNAR

@@ -24,7 +24,8 @@ set ( LIBSPHINX_SRCS sphinx.cpp sphinxexcerpt.cpp
 		fileio.cpp memio.cpp queryprofile.cpp columnarfilter.cpp columnargrouper.cpp
 		columnarlib.cpp collation.cpp fnv64.cpp histogram.cpp
 		threads_detached.cpp hazard_pointer.cpp task_info.cpp mini_timer.cpp
-		dynamic_idx.cpp libutils.cpp sphinx_alter.cpp)
+		dynamic_idx.cpp libutils.cpp columnarrt.cpp columnarmisc.cpp
+		exprtraits.cpp columnarexpr.cpp sphinx_alter.cpp )
 set ( INDEXER_SRCS indexer.cpp )
 set ( INDEXTOOL_SRCS indextool.cpp )
 set ( SEARCHD_SRCS_TESTABLE searchdha.cpp http/http_parser.c searchdhttp.cpp
@@ -56,7 +57,7 @@ list ( APPEND HEADERS lz4/lz4.h lz4/lz4hc.h )
 list ( APPEND HEADERS http/http_parser.h )
 list ( APPEND HEADERS secondaryindex.h searchnode.h killlist.h attribute.h accumulator.h global_idf.h optional.h
 		event.h coroutine.h threadutils.h hazard_pointer.h task_info.h mini_timer.h collation.h fnv64.h histogram.h
-		sortsetup.h dynamic_idx.h indexsettings.h columnarlib.h )
+		sortsetup.h dynamic_idx.h indexsettings.h columnarlib.h columnarrt.h columnarmisc.h exprtraits.h columnarexpr.h )
 list ( APPEND HEADERS fileio.h memio.h queryprofile.h columnarfilter.h columnargrouper.h fileutils.h libutils.h )
 file ( GLOB SEARCHD_H "searchd*.h" "task*.h" "stackmock.h" )
 list ( APPEND SEARCHD_H net_action_accept.h netreceive_api.h netreceive_http.h

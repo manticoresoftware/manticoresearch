@@ -3,6 +3,10 @@
 
 <name>Full string/json updates</name>
 
+<requires>
+	<non-columnar/>
+</requires>
+
 <config>
 indexer
 {

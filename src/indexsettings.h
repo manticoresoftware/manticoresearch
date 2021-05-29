@@ -149,12 +149,19 @@ enum ESphWordpart
 	SPH_WORDPART_INFIX		= 2		///< infix
 };
 
+#if USE_COLUMNAR
+enum class AttrEngine_e
+{
+	DEFAULT,
+	ROWWISE,
+	COLUMNAR
+};
+#endif
+
 /// indexing-related source settings
 /// NOTE, newly added fields should be synced with CSphSource::Setup()
 class CSphSourceSettings
 {
-	int		m_iMinPrefixLen = 0;		///< min indexable prefix (0 means don't index prefixes)
-
 public:
 	int		m_iMinInfixLen = 0;			///< min indexable infix length (0 means don't index infixes)
 	int		m_iMaxSubstringLen = 0;		///< max indexable infix and prefix (0 means don't limit infixes and prefixes)
@@ -170,13 +177,21 @@ public:
 	StrVec_t m_dStoredFields;		///< list of stored fields
 	StrVec_t m_dStoredOnlyFields;	///< list of "fields" that are stored but not indexed
 
-	StrVec_t m_dColumnarAttrs;			///< list of attributes to place in columnar store
+#if USE_COLUMNAR
+	AttrEngine_e m_eEngine = AttrEngine_e::DEFAULT;	///< attribute storage engine
+#endif
+
+	StrVec_t m_dColumnarAttrs;			///< list of attributes to be placed in columnar store
+	StrVec_t m_dRowwiseAttrs;			///< list of attributes to NOT be placed in columnar store
 	StrVec_t m_dColumnarStringsNoHash;	///< list of columnar string attributes that don't need pregenerated hashes
 
 	ESphWordpart GetWordpart ( const char * sField, bool bWordDict );
 	int GetMinPrefixLen ( bool bWordDict ) const;
 	void SetMinPrefixLen ( int iMinPrefixLen );
 	int RawMinPrefixLen () const;
+
+private:
+	int		m_iMinPrefixLen = 0;		///< min indexable prefix (0 means don't index prefixes)
 };
 
 
@@ -343,14 +358,17 @@ struct RtTypedAttr_t
 int						GetNumRtTypes();
 const RtTypedAttr_t &	GetRtType ( int iType );
 
+#if USE_COLUMNAR
+bool					StrToAttrEngine ( AttrEngine_e & eEngine, const CSphString & sValue, CSphString & sError );
+#endif
 
 struct CreateTableSettings_t
 {
-	CSphString					m_sLike;
-	bool						m_bIfNotExists = false;
-	CSphVector<CSphColumnInfo>	m_dAttrs;
-	CSphVector<CSphColumnInfo>	m_dFields;
-	CSphVector<NameValueStr_t>	m_dOpts;
+	CSphString						m_sLike;
+	bool							m_bIfNotExists = false;
+	CSphVector<CSphColumnInfo>		m_dAttrs;
+	CSphVector<CSphColumnInfo>		m_dFields;
+	CSphVector<NameValueStr_t>		m_dOpts;
 };
 
 
@@ -370,8 +388,6 @@ public:
 	const CSphConfigSection &	AsCfg() const;
 	const CSphString &			GetError() const { return m_sError; }
 
-	void			SetDefaults();
-
 private:
 	CSphConfigSection m_hCfg;
 
@@ -380,6 +396,12 @@ private:
 	StrVec_t		m_dWordformFiles;
 	StrVec_t		m_dHitlessFiles;
 	CSphString		m_sError;
+#if USE_COLUMNAR
+	AttrEngine_e	m_eEngine = AttrEngine_e::DEFAULT;
+#endif
+
+	void			SetupColumnarAttrs ( const CreateTableSettings_t & tCreateTable );
+	void			SetDefaults();
 };
 
 

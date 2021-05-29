@@ -722,6 +722,7 @@ void HistogramContainer_c::Reset()
 		SafeDelete ( m_dHistogramHash.IterateGet() );
 
 	m_dHistogramHash.Reset();
+	m_dHistograms.Resize(0);
 }
 
 
@@ -805,7 +806,11 @@ bool HistogramContainer_c::Load ( const CSphString & sFile, CSphString & sError 
 bool HistogramContainer_c::Add ( Histogram_i * pHistogram )
 {
 	assert ( pHistogram );
-	return m_dHistogramHash.Add ( pHistogram, pHistogram->GetAttrName() );
+	if ( !m_dHistogramHash.Add ( pHistogram, pHistogram->GetAttrName() ) )
+		return false;
+
+	m_dHistograms.Add(pHistogram);
+	return true;
 }
 
 
@@ -898,4 +903,27 @@ int64_t EstimateFilterSelectivity ( const CSphFilterSettings & tSettings, const 
 		return INT64_MAX;
 
 	return iEstimate;
+}
+
+
+void CreateHistograms ( HistogramContainer_c & tHistograms, CSphVector<PlainOrColumnar_t> & dAttrsForHistogram, const ISphSchema & tSchema )
+{
+	int iColumnar = 0;
+	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
+	{
+		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
+		Histogram_i * pHistogram = CreateHistogram ( tAttr.m_sName, tAttr.m_eAttrType );
+		if ( pHistogram )
+		{
+			tHistograms.Add(pHistogram);
+			PlainOrColumnar_t & tNewAttr = dAttrsForHistogram.Add();
+			if ( tAttr.IsColumnar() )
+				tNewAttr.m_iColumnarId = iColumnar;
+			else
+				tNewAttr.m_tLocator = tAttr.m_tLocator;
+		}
+
+		if ( tAttr.IsColumnar() )
+			iColumnar++;
+	}
 }

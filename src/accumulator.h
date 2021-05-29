@@ -79,6 +79,7 @@ struct ReplicationCommand_t
 };
 
 class RtIndex_i;
+class ColumnarBuilderRT_i;
 
 /// indexing accumulator
 class RtAccum_t
@@ -87,9 +88,9 @@ public:
 	DWORD							m_uAccumDocs {0};
 	CSphTightVector<CSphWordHit>	m_dAccum;
 	CSphTightVector<CSphRowitem>	m_dAccumRows;
-	CSphVector<DocID_t>			m_dAccumKlist;
-	CSphTightVector<BYTE>		m_dBlobs;
-	CSphVector<DWORD>			m_dPerDocHitsCount;
+	CSphVector<DocID_t>				m_dAccumKlist;
+	CSphTightVector<BYTE>			m_dBlobs;
+	CSphVector<DWORD>				m_dPerDocHitsCount;
 	CSphVector<ReplicationCommand_t *> m_dCmd;
 
 	bool						m_bKeywordDict {true};
@@ -106,7 +107,7 @@ public:
 	void			CleanupPart();
 	void			Cleanup();
 
-	void			AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bReplace, int iRowSize, const char ** ppStr, const VecTraits_T<int64_t> & dMvas, const DocstoreBuilder_i::Doc_t * pStoredDoc );
+	void			AddDocument ( ISphHits * pHits, const InsertDocData_t & tDoc, bool bReplace, int iRowSize, const DocstoreBuilder_i::Doc_t * pStoredDoc );
 	RtSegment_t *	CreateSegment ( int iRowSize, int iWordsCheckpoint, ESphHitless eHitless, const VecTraits_T<SphWordID_t> & dHitlessWords );
 	void			CleanupDuplicates ( int iRowSize );
 	void			GrabLastWarning ( CSphString & sWarning );
@@ -129,19 +130,24 @@ public:
 	bool			SetupDocstore ( RtIndex_i & tIndex, CSphString & sError );
 
 private:
+	bool								m_bReplace = false;		///< insert or replace mode (affects CleanupDuplicates() behavior)
+
 	CSphRefcountedPtr<ISphRtDictWraper>	m_pDictRt;
-	bool						m_bReplace = false;		///< insert or replace mode (affects CleanupDuplicates() behavior)
-	BlobRowBuilder_i *			m_pBlobWriter {nullptr};
-	CSphScopedPtr<DocstoreRT_i>	m_pDocstore {nullptr};
-	RowID_t						m_tNextRowID {0};
-	CSphFixedVector<BYTE>		m_dPackedKeywords { 0 };
-	uint64_t					m_uSchemaHash { 0 };
-	void						ResetDict ();
+	CSphScopedPtr<BlobRowBuilder_i>		m_pBlobWriter {nullptr};
+	CSphScopedPtr<DocstoreRT_i>			m_pDocstore {nullptr};
+#if USE_COLUMNAR
+	CSphScopedPtr<ColumnarBuilderRT_i>	m_pColumnarBuilder {nullptr};
+#endif
+	RowID_t								m_tNextRowID = 0;
+	CSphFixedVector<BYTE>				m_dPackedKeywords { 0 };
+	uint64_t							m_uSchemaHash = 0;
 
 	// FIXME!!! index is unlocked between add data and commit or at begin and end
-	RtIndex_i *					m_pIndex = nullptr;		///< my current owner in this thread
+	RtIndex_i *							m_pIndex = nullptr;		///< my current owner in this thread
 
+	void			ResetDict();
 	void			SetupDocstore();
+	void			CreateSegmentHits ( RtSegment_t * pSeg, int iWordsCheckpoint, ESphHitless eHitless, const VecTraits_T<SphWordID_t> & dHitlessWords );
 };
 
 #endif // _accumulator_

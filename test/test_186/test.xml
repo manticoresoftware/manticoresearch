@@ -3,7 +3,9 @@
 
 <name>Bigint and float attribute updates via sphinxql</name>
 
-<requires></requires>
+<requires>
+	<non-columnar/>
+</requires>
 
 <config>
 indexer

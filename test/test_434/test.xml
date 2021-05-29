@@ -65,7 +65,6 @@ INSERT INTO test_table VALUES
 </db_insert>
 
 <queries><sphinxql>
-desc test;
 select count(*) from test;
 select year(date) from test;
 select id, category from test;

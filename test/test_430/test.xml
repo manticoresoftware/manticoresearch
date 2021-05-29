@@ -100,8 +100,6 @@ CREATE TABLE `test_table` (
 </metaindex>
 
 <queries><sphinxql>
-desc META:all;
-
 select * from META:all;
 select title from META:all;
 select title a from META:all;
@@ -146,6 +144,7 @@ select id from META:all where title='';
 select min(length(to_string(title))) from META:all;
 select max(length(to_string(title))) from META:all;
 
+select length(title) from META:all;
 </sphinxql></queries>
 
 </test>

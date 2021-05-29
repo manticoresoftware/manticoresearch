@@ -15,30 +15,16 @@
 
 #if USE_COLUMNAR
 
-ColumnarFilterTraits_c::ColumnarFilterTraits_c ( ISphExpr * pExpr )
-{
-	assert(pExpr);
-	pExpr->Command ( SPH_EXPR_GET_COLUMNAR_COL, &m_iColumnarCol );
-}
-
-
-void ColumnarFilterTraits_c::SetColumnarCol ( int iColumnarCol )
-{
-	m_iColumnarCol = iColumnarCol;
-}
-
-//////////////////////////////////////////////////////////////////////////
-
-class ColumnarFilter_c : public ISphFilter, public ColumnarFilterTraits_c
+class ColumnarFilter_c : public ISphFilter
 {
 public:
 			ColumnarFilter_c ( const CSphString & sAttrName );
 
-	void	SetColumnarCol ( int iColumnarCol ) final;
 	void	SetColumnar ( const columnar::Columnar_i * pColumnar ) override;
 
 protected:
 	CSphString							m_sAttrName;
+	int									m_iColumnarCol = -1;
 	const columnar::Columnar_i *		m_pColumnar = nullptr;
 	CSphScopedPtr<columnar::Iterator_i>	m_pIterator {nullptr};
 
@@ -54,16 +40,17 @@ ColumnarFilter_c::ColumnarFilter_c ( const CSphString & sAttrName )
 
 void ColumnarFilter_c::SetColumnar ( const columnar::Columnar_i * pColumnar )
 {
-	assert(pColumnar);
 	m_pColumnar = pColumnar;
+
+	if ( !pColumnar )	// this can happen on RT columnar setup, when we have the filters but each chunk has its own columnar storage
+	{
+		m_pIterator.Reset();
+		return;
+	}
+
 	std::string sError; // fixme! report errors
 	m_pIterator = pColumnar->CreateIterator ( m_sAttrName.cstr(), columnar::IteratorHints_t(), sError );
-}
-
-
-void ColumnarFilter_c::SetColumnarCol ( int iColumnarCol )
-{
-	ColumnarFilterTraits_c::SetColumnarCol(iColumnarCol);
+	m_iColumnarCol = pColumnar->GetAttributeId ( m_sAttrName.cstr() );
 }
 
 
@@ -248,7 +235,8 @@ bool Filter_ValuesColumnar_c::EvalBlockBinary ( SphAttr_t uMin, SphAttr_t uMax )
 
 bool Filter_ValuesColumnar_c::IsDegenerate() const
 {
-	assert(m_pColumnar);
+	if ( !m_pColumnar )
+		return false;
 
 	columnar::Filter_t tFilter;
 	tFilter.m_sName = m_sAttrName.cstr();
@@ -264,78 +252,75 @@ bool Filter_ValuesColumnar_c::IsDegenerate() const
 
 //////////////////////////////////////////////////////////////////////////
 
-class Filter_StringColumnar_c : public ColumnarFilter_c
+template <bool MULTI>
+class Filter_StringColumnar_T : public ColumnarFilter_c
 {
 public:
-			Filter_StringColumnar_c ( const CSphString & sAttrName, ESphCollation eCollation, bool bEquals );
+				Filter_StringColumnar_T ( const CSphString & sAttrName, ESphCollation eCollation, bool bEquals );
 
-	void	SetRefString ( const CSphString * pRef, int iCount ) final;
-	bool	Eval ( const CSphMatch & tMatch ) const final;
-	bool	Test ( const columnar::MinMaxVec_t & dMinMax ) const final;
-	void	SetColumnar ( const columnar::Columnar_i * pColumnar ) final;
-	bool	CanExclude() const final { return true; }
+	void		SetRefString ( const CSphString * pRef, int iCount ) final;
+	bool		Eval ( const CSphMatch & tMatch ) const final;
+	bool		Test ( const columnar::MinMaxVec_t & dMinMax ) const final;
+	void		SetColumnar ( const columnar::Columnar_i * pColumnar ) final;
+	bool		CanExclude() const final { return true; }
 
 protected:
-	CSphString				m_sValue;
-	int						m_iLength = 0;
-	uint64_t				m_uHash = 0;
-	bool					m_bHash = false;
-	ESphCollation			m_eCollation;
-	SphStringCmp_fn			m_fnStrCmp = nullptr;
+	int						m_iMinLength = 0;
+	int						m_iMaxLength = 0;
+	CSphVector<uint64_t>	m_dHashes;
+	bool					m_bHasHashes = false;
+	ESphCollation			m_eCollation = SPH_COLLATION_DEFAULT;
+	StrHashCalc_fn			m_fnHashCalc = nullptr;
 	bool					m_bEquals = true;
+
+	uint64_t	GetStringHash() const;
 };
 
 
-Filter_StringColumnar_c::Filter_StringColumnar_c ( const CSphString & sAttrName, ESphCollation eCollation, bool bEquals )
+template <bool MULTI>
+Filter_StringColumnar_T<MULTI>::Filter_StringColumnar_T ( const CSphString & sAttrName, ESphCollation eCollation, bool bEquals )
 	: ColumnarFilter_c ( sAttrName )
 	, m_eCollation ( eCollation )
-	, m_fnStrCmp ( GetStringCmpFunc ( eCollation ) )
+	, m_fnHashCalc ( GetStringHashCalcFunc(eCollation) )
 	, m_bEquals ( bEquals )
 {}
 
-
-void Filter_StringColumnar_c::SetRefString ( const CSphString * pRef, int iCount )
+template <bool MULTI>
+void Filter_StringColumnar_T<MULTI>::SetRefString ( const CSphString * pRef, int iCount )
 {
-	assert ( iCount<=1 );
-	if ( pRef )
-	{
-		m_sValue = *pRef;
-		m_iLength = m_sValue.Length();
-	}
+	if_const ( !MULTI )
+		assert ( iCount<=1 );
 
-	assert ( iCount<=1 );
-	if ( pRef && pRef->Length() )
-		m_uHash = LibcCIHash_fn::Hash ( (const BYTE*)pRef->cstr(), pRef->Length() );
-	else
-		m_uHash = 0;
+	m_iMinLength = m_iMaxLength = 0;
+	for ( int i = 0; i < iCount; i++ )
+	{
+		const CSphString & sRef = pRef[i];
+		int iLength = sRef.Length();
+		m_iMinLength = Min ( iLength, m_iMinLength );
+		m_iMaxLength = Max ( iLength, m_iMaxLength );
+		m_dHashes.Add ( iLength ? m_fnHashCalc ( (const BYTE*)sRef.cstr(), iLength, SPH_FNV64_SEED ) : 0 );	
+	}
 }
 
-
-bool Filter_StringColumnar_c::Eval ( const CSphMatch & tMatch ) const
+template <bool MULTI>
+bool Filter_StringColumnar_T<MULTI>::Eval ( const CSphMatch & tMatch ) const
 {
 	if ( !m_pIterator.Ptr() || m_pIterator->AdvanceTo ( tMatch.m_tRowID ) != tMatch.m_tRowID )
 		return false;
 
-	bool bEqual;
-	if ( m_bHash )
-		bEqual = m_uHash==m_pIterator->GetStringHash();
-	else
-	{
-		int iLength = m_pIterator->GetLength();
-		if ( iLength!=m_iLength )
-			return false;
+	uint64_t uHash = GetStringHash();
+	if_const ( !MULTI )
+		return ( m_dHashes[0]==uHash ) ^ (!m_bEquals);
 
-		const BYTE * pStr = nullptr;
-		m_pIterator->Get(pStr);
+	for ( auto i : m_dHashes )
+		if ( i==uHash )
+			return true ^ (!m_bEquals);
 
-		bEqual = !m_fnStrCmp ( {pStr, iLength}, {(const BYTE*)m_sValue.cstr(), m_iLength}, false );
-	}
-
-	return bEqual==m_bEquals;
+	return false ^ (!m_bEquals);
 }
 
-
-bool Filter_StringColumnar_c::Test ( const columnar::MinMaxVec_t & dMinMax ) const
+template <bool MULTI>
+bool Filter_StringColumnar_T<MULTI>::Test ( const columnar::MinMaxVec_t & dMinMax ) const
 {
 	if ( m_iColumnarCol<0 )
 		return true;
@@ -343,28 +328,47 @@ bool Filter_StringColumnar_c::Test ( const columnar::MinMaxVec_t & dMinMax ) con
 	int64_t iMin = dMinMax[m_iColumnarCol].first;
 	int64_t iMax = dMinMax[m_iColumnarCol].second;
 
-	if ( m_bEquals )
-		return iMin<=m_iLength && m_iLength<=iMax;
+	if ( m_bEquals )	
+		return m_iMaxLength>=iMin && m_iMinLength<=iMax;
 
 	// reject the case when all strings are empty and we request non-empty strings
-	if ( !iMin && !iMax && !m_iLength )
+	if ( !iMin && !iMax && !m_iMinLength && !m_iMaxLength )
 		return false;
 
 	return true;
 }
 
-
-void Filter_StringColumnar_c::SetColumnar ( const columnar::Columnar_i * pColumnar )
+template <bool MULTI>
+void Filter_StringColumnar_T<MULTI>::SetColumnar ( const columnar::Columnar_i * pColumnar )
 {
-	assert(pColumnar);
+	if ( !pColumnar )
+	{
+		m_pIterator.Reset();
+		return;
+	}
 
 	columnar::IteratorHints_t tHints;
 	tHints.m_bNeedStringHashes = m_eCollation==SPH_COLLATION_DEFAULT;
 
 	std::string sError; // fixme! report errors
 	m_pIterator = pColumnar->CreateIterator ( m_sAttrName.cstr(), tHints, sError );
-	m_bHash = m_pIterator.Ptr() && m_pIterator->HaveStringHashes();
+	m_bHasHashes = m_pIterator.Ptr() && m_pIterator->HaveStringHashes();
 }
+
+template <bool MULTI>
+uint64_t Filter_StringColumnar_T<MULTI>::GetStringHash() const
+{
+	if ( m_bHasHashes )
+		return m_pIterator->GetStringHash();
+
+	const BYTE * pStr = nullptr;
+	int iLen = m_pIterator->Get(pStr);
+	if ( !iLen )
+		return 0;
+
+	return m_fnHashCalc ( pStr, iLen, SPH_FNV64_SEED );
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -561,6 +565,14 @@ void Filter_RangeColumnar_MVA_T<T, FUNC, HAS_EQUAL_MIN, HAS_EQUAL_MAX, OPEN_LEFT
 
 //////////////////////////////////////////////////////////////////////////
 
+class Filter_NullColumnar_c : public ISphFilter
+{
+public:
+	bool		Eval ( const CSphMatch & tMatch ) const final { return true; }
+};
+
+//////////////////////////////////////////////////////////////////////////
+
 template < typename T, typename FUNC>
 static ISphFilter * CreateColumnarMvaFilterValues ( const CSphString & sName, const CSphFilterSettings & tSettings )
 {
@@ -598,8 +610,27 @@ static ISphFilter * CreateColumnarMvaRangeFilter ( const CSphString & sName, con
 }
 
 
-static ISphFilter * CreateColumnarFilterMVA ( const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, const CSphColumnInfo & tAttr, int iAttr )
+static CSphString GetAttributeName ( int iAttr, const ISphSchema & tSchema )
 {
+	const CSphColumnInfo & tAttr = tSchema.GetAttr(iAttr);
+
+	// if it is a columnar expression working over an aliased attribute, fetch that attribute name
+	if ( tAttr.IsColumnarExpr() )
+	{
+		CSphString sAliasedCol;
+		tAttr.m_pExpr->Command ( SPH_EXPR_GET_COLUMNAR_COL, &sAliasedCol );
+		return sAliasedCol;
+	}
+
+	return tAttr.m_sName;
+}
+
+
+static ISphFilter * CreateColumnarFilterMVA ( int iAttr, const ISphSchema & tSchema, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings )
+{
+	const CSphColumnInfo & tAttr = tSchema.GetAttr(iAttr);
+	CSphString sAttrName = GetAttributeName ( iAttr, tSchema );
+
 	bool bWide = tAttr.m_eAttrType==SPH_ATTR_INT64SET || tAttr.m_eAttrType==SPH_ATTR_INT64SET_PTR;
 	bool bRange = tFixedSettings.m_eType==SPH_FILTER_RANGE;
 	bool bAll = tSettings.m_eMvaFunc==SPH_MVAFUNC_ALL;
@@ -609,68 +640,53 @@ static ISphFilter * CreateColumnarFilterMVA ( const CSphFilterSettings & tSettin
 
 	switch ( iIndex )
 	{
-	case 0:	pFilter = CreateColumnarMvaFilterValues<uint32_t,MvaEvalAny_c> ( tAttr.m_sName, tSettings ); break;
-	case 1: pFilter = CreateColumnarMvaFilterValues<uint32_t,MvaEvalAll_c> ( tAttr.m_sName, tSettings ); break;
+	case 0:	pFilter = CreateColumnarMvaFilterValues<uint32_t,MvaEvalAny_c> ( sAttrName, tSettings ); break;
+	case 1: pFilter = CreateColumnarMvaFilterValues<uint32_t,MvaEvalAll_c> ( sAttrName, tSettings ); break;
 
-	case 2:	pFilter = CreateColumnarMvaRangeFilter<uint32_t,MvaEvalAny_c> ( tAttr.m_sName, tSettings ); break;
-	case 3:	pFilter = CreateColumnarMvaRangeFilter<uint32_t,MvaEvalAll_c> ( tAttr.m_sName, tSettings ); break;
+	case 2:	pFilter = CreateColumnarMvaRangeFilter<uint32_t,MvaEvalAny_c> ( sAttrName, tSettings ); break;
+	case 3:	pFilter = CreateColumnarMvaRangeFilter<uint32_t,MvaEvalAll_c> ( sAttrName, tSettings ); break;
 
-	case 4:	pFilter = CreateColumnarMvaFilterValues<int64_t,MvaEvalAny_c> ( tAttr.m_sName, tSettings ); break;
-	case 5:	pFilter = CreateColumnarMvaFilterValues<int64_t,MvaEvalAll_c> ( tAttr.m_sName, tSettings ); break;
+	case 4:	pFilter = CreateColumnarMvaFilterValues<int64_t,MvaEvalAny_c> ( sAttrName, tSettings ); break;
+	case 5:	pFilter = CreateColumnarMvaFilterValues<int64_t,MvaEvalAll_c> ( sAttrName, tSettings ); break;
 
-	case 6:	pFilter = CreateColumnarMvaRangeFilter<int64_t,MvaEvalAny_c> ( tAttr.m_sName, tSettings ); break;
-	case 7:	pFilter = CreateColumnarMvaRangeFilter<int64_t,MvaEvalAll_c> ( tAttr.m_sName, tSettings ); break;
+	case 6:	pFilter = CreateColumnarMvaRangeFilter<int64_t,MvaEvalAny_c> ( sAttrName, tSettings ); break;
+	case 7:	pFilter = CreateColumnarMvaRangeFilter<int64_t,MvaEvalAll_c> ( sAttrName, tSettings ); break;
 
 	default:
 		assert ( 0 && "Unsupported MVA filter type" );
 	}
 
-	if ( pFilter )
-		pFilter->SetColumnarCol(iAttr);
-
 	return pFilter;
 }
 
 
-static ISphFilter * CreateColumnarFilterPlain ( const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, const CSphColumnInfo & tAttr, int iAttr, ESphCollation eCollation )
+static ISphFilter * CreateColumnarFilterPlain ( int iAttr, const ISphSchema & tSchema, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, ESphCollation eCollation )
 {
+	ISphFilter * pFilter = nullptr;
+	CSphString sAttrName = GetAttributeName ( iAttr, tSchema );
+
 	switch ( tFixedSettings.m_eType )
 	{
 	case SPH_FILTER_VALUES:
+	{
 		if ( tSettings.GetNumValues()==1 )
-		{
-			ISphFilter * pFilter = new Filter_SingleValueColumnar_c ( tAttr.m_sName );
-			pFilter->SetColumnarCol(iAttr);
-			return pFilter;
-		}
+			pFilter = new Filter_SingleValueColumnar_c(sAttrName);
 		else
-		{
-			ISphFilter * pFilter = new Filter_ValuesColumnar_c ( tAttr.m_sName );
-			pFilter->SetColumnarCol(iAttr);
-			return pFilter;
-		}
-
-	case SPH_FILTER_RANGE:
-	{
-		ISphFilter * pFilter = CreateColumnarRangeFilter<SphAttr_t> ( tAttr.m_sName, tSettings );
-		pFilter->SetColumnarCol(iAttr);
-		return pFilter;
+			pFilter = new Filter_ValuesColumnar_c(sAttrName);
 	}
+	break;
 
-	case SPH_FILTER_FLOATRANGE:
-	{
-		ISphFilter * pFilter = CreateColumnarRangeFilter<float> ( tAttr.m_sName, tSettings );
-		pFilter->SetColumnarCol(iAttr);
-		return pFilter;
-	}
-
-	case SPH_FILTER_STRING:
-		return new Filter_StringColumnar_c ( tAttr.m_sName, eCollation, !tSettings.m_bExclude );
+	case SPH_FILTER_RANGE:		pFilter = CreateColumnarRangeFilter<SphAttr_t> ( sAttrName, tSettings ); break;
+	case SPH_FILTER_FLOATRANGE:	pFilter = CreateColumnarRangeFilter<float> ( sAttrName, tSettings ); break;
+	case SPH_FILTER_STRING:		pFilter = new Filter_StringColumnar_T<false> ( sAttrName, eCollation, !tSettings.m_bExclude ); break;
+	case SPH_FILTER_STRING_LIST:pFilter = new Filter_StringColumnar_T<true> ( sAttrName, eCollation, !tSettings.m_bExclude ); break;
 
 	default:
 		assert ( 0 && "Unhandled columnar filter type" );
-		return nullptr;
+		break;
 	}
+
+	return pFilter;
 }
 
 
@@ -700,6 +716,9 @@ ISphFilter * TryToCreateColumnarFilter ( int iAttr, const ISphSchema & tSchema, 
 		return nullptr;
 	}
 
+	if ( tFixedSettings.m_eType==SPH_FILTER_NULL )
+		return new Filter_NullColumnar_c;
+
 	if ( IsMvaAttr(tAttr.m_eAttrType) )
 	{
 		if ( tFixedSettings.m_eType!=SPH_FILTER_VALUES && tFixedSettings.m_eType!=SPH_FILTER_RANGE )
@@ -711,10 +730,10 @@ ISphFilter * TryToCreateColumnarFilter ( int iAttr, const ISphSchema & tSchema, 
 		if ( tSettings.m_eMvaFunc==SPH_MVAFUNC_NONE )
 			sWarning.SetSprintf ( "use an explicit ANY()/ALL() around a filter on MVA column" );
 
-		return CreateColumnarFilterMVA ( tSettings, tFixedSettings, tAttr, iAttr );
+		return CreateColumnarFilterMVA ( iAttr, tSchema, tSettings, tFixedSettings );
 	}
 
-	return CreateColumnarFilterPlain ( tSettings, tFixedSettings, tAttr, iAttr, eCollation );
+	return CreateColumnarFilterPlain ( iAttr, tSchema, tSettings, tFixedSettings, eCollation );
 }
 
 

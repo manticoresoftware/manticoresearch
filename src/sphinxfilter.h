@@ -33,7 +33,6 @@ public:
 
 #if USE_COLUMNAR
 	virtual void SetColumnar ( const columnar::Columnar_i * ) {}
-	virtual void SetColumnarCol ( int ) {}
 
 	/// similar to EvalBlock w/pMinDocinfo and pMaxDocinfo, but for filter expressions
 	/// their results are not stored into matches, so no docinfo here

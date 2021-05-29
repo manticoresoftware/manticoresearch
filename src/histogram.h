@@ -12,6 +12,7 @@
 #define _histogram_
 
 #include "sphinx.h"
+#include "columnarmisc.h"
 
 class CSphReader;
 class CSphWriter;
@@ -58,7 +59,10 @@ public:
 	Histogram_i *	Get ( const CSphString & sAttr ) const;
 	DWORD			GetNumValues() const;
 
+	void			Insert ( int iHistogram, SphAttr_t tAttr ) { m_dHistograms[iHistogram]->Insert(tAttr); }
+
 private:
+	CSphVector<Histogram_i*>		m_dHistograms;
 	SmallStringHash_T<Histogram_i*>	m_dHistogramHash;
 
 	void			Reset();
@@ -66,7 +70,7 @@ private:
 
 
 Histogram_i *	CreateHistogram ( const CSphString & sAttr, ESphAttr eAttrType, int iSize=0 );
-
+void			CreateHistograms ( HistogramContainer_c & tHistograms, CSphVector<PlainOrColumnar_t> & dAttrsForHistogram, const ISphSchema & tSchema );
 int64_t			EstimateFilterSelectivity ( const CSphFilterSettings & tSettings, const HistogramContainer_c * pHistogramContainer );
 
 #endif // _histogram_

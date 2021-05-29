@@ -93,6 +93,8 @@ select id,cat2 from META:all;
 select id from META:all where any(cat2) not in (20,30,40);
 select id from META:all where all(cat2) not in (20,30,40);
 
+select length(cat1), length(cat2), length(cat3) from META:all;
+
 </sphinxql></queries>
 
 </test>

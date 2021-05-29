@@ -67,8 +67,6 @@ STATIC_SIZE_ASSERT ( RowID_t, 4 );
 
 //////////////////////////////////////////////////////////////////////////
 
-/// row entry (storage only, does not necessarily map 1:1 to attributes)
-typedef DWORD			CSphRowitem;
 typedef const BYTE *	CSphRowitemPtr;
 
 /// widest integer type that can be be stored as an attribute (ideally, fully decoupled from rowitem size!)
@@ -959,11 +957,12 @@ inline bool operator== ( const CSphWordHit& lhs, const CSphWordHit& rhs )
 /// attribute locator within the row
 struct CSphAttrLocator
 {
-	int				m_iBitOffset {-1};
-	int				m_iBitCount {-1};
-	int				m_iBlobAttrId {-1};
-	int				m_nBlobAttrs {0};
-	bool			m_bDynamic {true};
+	int				m_iBitOffset	= -1;
+	int				m_iBitCount		= -1;
+	int				m_iBlobAttrId	= -1;
+	int				m_iBlobRowOffset = 1;
+	int				m_nBlobAttrs	= 0;
+	bool			m_bDynamic		= true;
 
 	CSphAttrLocator () = default;
 
@@ -1186,7 +1185,6 @@ public:
 		SafeDeleteArray ( m_pDynamic );
 	}
 
-private:
 	/// assignment
 	void Combine ( const CSphMatch & rhs, int iDynamic )
 	{
@@ -1223,7 +1221,6 @@ private:
 		}
 	}
 
-public:
 	/// integer getter
 	SphAttr_t GetAttr ( const CSphAttrLocator & tLoc ) const
 	{
@@ -1338,7 +1335,6 @@ enum ESphAggrFunc
 	SPH_AGGR_CAT
 };
 
-
 /// source column info
 struct CSphColumnInfo
 {
@@ -1360,7 +1356,6 @@ struct CSphColumnInfo
 #endif
 	};
 
-
 	CSphString		m_sName;		///< column name
 	ESphAttr		m_eAttrType;	///< attribute type
 	ESphWordpart	m_eWordpart { SPH_WORDPART_WHOLE };	///< wordpart processing type
@@ -1381,6 +1376,9 @@ struct CSphColumnInfo
 	bool			m_bWeight = false;				///< is a weight column
 	DWORD			m_uFieldFlags = FIELD_INDEXED;	///< stored/indexed/highlighted etc
 	DWORD			m_uAttrFlags = ATTR_NONE;		///< attribute storage spec
+#if USE_COLUMNAR
+	AttrEngine_e	m_eEngine = AttrEngine_e::DEFAULT;	///< used together with per-table engine specs to determine attribute storage
+#endif
 
 	WORD			m_uNext = 0xFFFF;			///< next in linked list for hash in CSphSchema
 
@@ -1600,7 +1598,7 @@ public:
 
 	bool					HasBlobAttrs() const;
 	int						GetCachedRowSize() const;
-	void					SetupFlags ( const CSphSourceSettings & tSettings );
+	void					SetupFlags ( const CSphSourceSettings & tSettings, bool bPQ, StrVec_t * pWarnings );
 	bool					HasStoredFields() const;
 	bool					HasColumnarAttrs() const;
 	bool					HasNonColumnarAttrs() const;
@@ -1631,10 +1629,12 @@ private:
 	void					RebuildHash ();
 
 	/// rebuild the attribute value array
-	void					RebuildLocators ( bool bDynamic );
+	void					RebuildLocators();
 
 	/// add iAddVal to all indexes strictly greater than iStartIdx in hash structures
 	void					UpdateHash ( int iStartIdx, int iAddVal );
+
+	void					SetupColumnarFlags ( const CSphSourceSettings & tSettings, StrVec_t * pWarnings );
 };
 
 /// lightweight schema to be used in sorters, result sets, etc
@@ -1857,7 +1857,7 @@ public:
 	virtual bool						UpdateSchema ( CSphSchema * pInfo, CSphString & sError );
 
 	/// setup misc indexing settings (prefix/infix/exact-word indexing, position steps)
-	void								Setup ( const CSphSourceSettings & tSettings );
+	void								Setup ( const CSphSourceSettings & tSettings, StrVec_t * pWarnings );
 
 	bool								SetupMorphFields ( CSphString & sError );
 
@@ -2728,6 +2728,9 @@ public:
 	CSphQueryResultMeta *	m_pMeta = nullptr; 		///< not owned
 	const BYTE *			m_pBlobPool = nullptr;	///< pointer to blob attr storage. Used only during calculations.
 	const DocstoreReader_i* m_pDocstore = nullptr;	///< pointer to docstore reader fixme! not need in aggr
+#if USE_COLUMNAR
+	columnar::Columnar_i *	m_pColumnar = nullptr;
+#endif
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -2982,34 +2985,14 @@ protected:
 		ATTRS_ROWMAP_UPDATED	= ( 1UL<<2 )
 	};
 
-	virtual bool		Update_WriteBlobRow ( UpdateContext_t & tCtx, int iUpd, CSphRowitem * pDocinfo, const BYTE * pBlob, int iLength, int nBlobAttrs, bool & bCritical, CSphString & sError ) = 0;
+	virtual bool		Update_WriteBlobRow ( UpdateContext_t & tCtx, int iUpd, CSphRowitem * pDocinfo, const BYTE * pBlob, int iLength, int nBlobAttrs, const CSphAttrLocator & tBlobRowLoc, bool & bCritical, CSphString & sError ) = 0;
 
+	bool				Update_CheckAttributes ( const UpdateContext_t & tCtx, CSphString & sError );
 	bool				Update_FixupData ( UpdateContext_t & tCtx, CSphString & sError );
 	bool				Update_InplaceJson ( UpdateContext_t & tCtx, CSphString & sError, bool bDryRun );
 	bool				Update_Blobs ( UpdateContext_t & tCtx, bool & bCritical, CSphString & sError );
 	void				Update_Plain ( UpdateContext_t & tCtx );
 	bool				Update_HandleJsonWarnings ( UpdateContext_t & tCtx, int iUpdated, CSphString & sWarning, CSphString & sError );
-};
-
-
-class WriteWrapper_c
-{
-public:
-	virtual void		PutBytes ( const BYTE * pData, int iSize ) = 0;
-	virtual SphOffset_t	GetPos() const = 0;
-	virtual bool		IsError() const = 0;
-};
-
-// common add/remove attribute/field code for both RT and plain indexes
-class IndexAlterHelper_c
-{
-public:
-	bool				Alter_AddRemoveAttr ( const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, const CSphRowitem * pDocinfo, const CSphRowitem * pDocinfoMax, const BYTE * pBlobPool, WriteWrapper_c & tSPAWriter, WriteWrapper_c & tSPBWriter, bool bAddAttr, const CSphString & sAttrName );
-	bool 				Alter_AddRemoveFromSchema ( CSphSchema & tSchema, const CSphString & sAttrName, ESphAttr eAttrType, bool bAdd, CSphString & sError );
-
-	bool 				Alter_AddRemoveFieldFromSchema ( bool bAdd, CSphSchema & tSchema, const CSphString & sFieldName, CSphString & sError );
-
-	virtual bool		Alter_IsMinMax ( const CSphRowitem * pDocinfo, int iStride ) const;
 };
 
 
@@ -3158,7 +3141,7 @@ public:
 
 	virtual DWORD				GetAttributeStatus () const = 0;
 
-	virtual bool				AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError ) = 0;
+	virtual bool				AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, bool bColumnar, CSphString & sError ) = 0;
 
 	virtual bool				AddRemoveField ( bool bAdd, const CSphString & sFieldName, CSphString & sError ) = 0;
 
@@ -3284,7 +3267,7 @@ public:
 	int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning ) override { return -1; };
 	bool				SaveAttributes ( CSphString & ) const override { return true; }
 	DWORD				GetAttributeStatus () const override { return 0; }
-	bool				AddRemoveAttribute ( bool, const CSphString &, ESphAttr, CSphString & ) override { return true; }
+	bool				AddRemoveAttribute ( bool, const CSphString &, ESphAttr, bool, CSphString & ) override { return true; }
 	bool				AddRemoveField ( bool, const CSphString &, CSphString & ) override { return true; }
 	void				DebugDumpHeader ( FILE *, const char *, bool ) override {}
 	void				DebugDumpDocids ( FILE * ) override {}

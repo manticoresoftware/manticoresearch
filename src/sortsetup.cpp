@@ -165,7 +165,8 @@ private:
 	bool	SetupSortByRelevance();
 	void	UnifyInternalAttrNames();
 	bool	CheckOrderByMva ( CSphString & sError ) const;
-	int		FindAliasedGroupby() const;
+	void	FindAliasedGroupby();
+	void	FindAliasedSortby();
 	bool	IsJsonAttr() const;
 	void	SetupJsonAttr();
 	bool	SetupJsonField ( CSphString & sError );
@@ -233,11 +234,17 @@ bool SortStateSetup_c::CheckOrderByMva ( CSphString & sError ) const
 }
 
 
-int SortStateSetup_c::FindAliasedGroupby() const
+void SortStateSetup_c::FindAliasedGroupby()
 {
+	if ( m_iAttr>=0 )
+		return;
+
 	int iAttr = m_tSchema.GetAttrIndex(m_szTok);
 	if ( iAttr>=0 )
-		return iAttr;
+	{
+		m_iAttr = iAttr;
+		return;
+	}
 
 	// try to lookup aliased count(*) and aliased groupby() in select items
 	for ( auto & i : m_tQuery.m_dItems )
@@ -246,24 +253,51 @@ int SortStateSetup_c::FindAliasedGroupby() const
 			continue;
 
 		if ( i.m_sExpr.Begins("@") )
-			return m_tSchema.GetAttrIndex ( i.m_sExpr.cstr() );
+		{
+			m_iAttr = m_tSchema.GetAttrIndex ( i.m_sExpr.cstr() );
+			return;
+		}
 
 		if ( i.m_sExpr=="count(*)" )
-			return m_tSchema.GetAttrIndex ( "@count" );
+		{
+			m_iAttr = m_tSchema.GetAttrIndex ( "@count" );
+			return;
+		}
 
 		if ( i.m_sExpr=="groupby()" )
 		{
 			CSphString sGroupJson = SortJsonInternalSet ( m_tQuery.m_sGroupBy );
-			iAttr = m_tSchema.GetAttrIndex ( sGroupJson.cstr() );
+			m_iAttr = m_tSchema.GetAttrIndex ( sGroupJson.cstr() );
 			// try numeric group by
-			if ( iAttr<0 )
-				iAttr = m_tSchema.GetAttrIndex ( "@groupby" );
+			if ( m_iAttr<0 )
+				m_iAttr = m_tSchema.GetAttrIndex ( "@groupby" );
 
-			return iAttr;
+			return;
 		}
 	}
+}
 
-	return iAttr;
+
+void SortStateSetup_c::FindAliasedSortby()
+{
+	if ( m_iAttr>=0 )
+		return;
+
+	int iAttr = m_tSchema.GetAttrIndex(m_szTok);
+	if ( iAttr>=0 )
+	{
+		m_iAttr = iAttr;
+		return;
+	}
+
+	for ( auto & i : m_tQuery.m_dItems )
+	{
+		if ( !i.m_sAlias.cstr() || strcasecmp ( i.m_sAlias.cstr(), m_szTok ) )
+			continue;
+
+		m_iAttr = m_tSchema.GetAttrIndex ( i.m_sExpr.cstr() );
+		return;
+	}
 }
 
 
@@ -354,13 +388,15 @@ void SortStateSetup_c::SetupJsonConversions()
 		return;
 
 	// try json conversion functions (integer()/double()/bigint() in the order by clause)
+	ESphAttr eAttrType = SPH_ATTR_NONE;
 	ExprParseArgs_t tExprArgs;
-	tExprArgs.m_pAttrType = &m_eAttrType;
+	tExprArgs.m_pAttrType = &eAttrType;
 	CSphString sError; // ignored
 	ISphExpr * pExpr = sphExprParse ( m_szTok, m_tSchema, sError, tExprArgs );
 	if ( !pExpr )
 		return;
 
+	m_eAttrType = eAttrType;
 	m_tExtraExpr.m_pExpr = pExpr;
 	m_tExtraExpr.m_tKey = JsonKey_t ( m_szTok, (int) strlen(m_szTok) );
 	m_tExtraExpr.m_eType = m_eAttrType;
@@ -375,7 +411,7 @@ void SortStateSetup_c::SetupPrecalculatedJson()
 	if ( m_iAttr>=0 )
 		return;
 
-	// try precalculated json fields received from agents (prefixed with @int_*)
+	// try precalculated json fields/columnar attrs received from agents (prefixed with @int_*)
 	CSphString sName;
 	sName.SetSprintf ( "%s%s", GetInternalAttrPrefix(), m_szTok );
 	m_iAttr = m_tSchema.GetAttrIndex ( sName.cstr() );
@@ -392,7 +428,9 @@ bool SortStateSetup_c::Setup ( CSphString & sError )
 	if ( !CheckOrderByMva(sError) )
 		return false;
 
-	m_iAttr = FindAliasedGroupby();
+	FindAliasedGroupby();
+	FindAliasedSortby();
+
 	if ( !SetupColumnar(sError) )
 		return false;
 

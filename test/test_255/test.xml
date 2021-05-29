@@ -4,6 +4,7 @@
 <name>RECONFIGURE in RT indexes</name>
 <requires>
     <force-rt/>
+    <non-columnar/>
 </requires>
 
 <skip_indexer/>

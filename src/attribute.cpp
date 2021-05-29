@@ -321,6 +321,8 @@ BlobRowBuilder_Mem_c::BlobRowBuilder_Mem_c ( const ISphSchema & tSchema, CSphTig
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tCol = tSchema.GetAttr(i);
+		if ( tCol.IsColumnar() )
+			continue;
 
 		AttributePacker_i * pPacker = nullptr;
 		switch ( tCol.m_eAttrType )
@@ -485,10 +487,15 @@ BlobRowBuilder_i * sphCreateBlobRowBuilderUpdate ( const ISphSchema & tSchema, C
 
 //////////////////////////////////////////////////////////////////////////
 
+static int64_t GetBlobRowOffset ( const CSphRowitem * pDocinfo, int iBlobRowOffset )
+{
+	return sphUnalignedRead ( *((int64_t*)pDocinfo + iBlobRowOffset) );
+}
+
 static int64_t GetBlobRowOffset ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator )
 {
-	// blob row locator NEEDS to be the 2nd attribute after docid
-	return sphGetBlobRowOffset ( tLocator.m_bDynamic ? tMatch.m_pDynamic : tMatch.m_pStatic );
+	// blob row locator NEEDS to be 1st or 2nd attribute after docid (see tLocator.m_iBlobRowOffset)
+	return GetBlobRowOffset ( tLocator.m_bDynamic ? tMatch.m_pDynamic : tMatch.m_pStatic, tLocator.m_iBlobRowOffset );
 }
 
 template <typename T>
@@ -565,28 +572,16 @@ ByteBlob_t sphGetBlobAttr ( const CSphMatch & tMatch, const CSphAttrLocator & tL
 const BYTE * sphGetBlobAttr ( const CSphRowitem * pDocinfo, const CSphAttrLocator & tLocator, const BYTE * pBlobPool, int & iLengthBytes )
 {
 	assert ( pBlobPool );
-	int64_t iOffset = sphGetBlobRowOffset ( pDocinfo );
+	int64_t iOffset = GetBlobRowOffset ( pDocinfo, tLocator.m_iBlobRowOffset );
 	return GetBlobAttr ( pBlobPool+iOffset, tLocator.m_iBlobAttrId, tLocator.m_nBlobAttrs, iLengthBytes );
 }
 
 ByteBlob_t sphGetBlobAttr ( const CSphRowitem * pDocinfo, const CSphAttrLocator & tLocator, const BYTE * pBlobPool )
 {
 	assert ( pBlobPool );
-	int64_t iOffset = sphGetBlobRowOffset ( pDocinfo );
+	int64_t iOffset = GetBlobRowOffset ( pDocinfo, tLocator.m_iBlobRowOffset );
 	return GetBlobAttr ( pBlobPool+iOffset, tLocator.m_iBlobAttrId, tLocator.m_nBlobAttrs );
 }
-
-int64_t sphGetBlobRowOffset ( const CSphRowitem * pDocinfo )
-{
-	return sphUnalignedRead ( *((int64_t*)pDocinfo + 1) );
-}
-
-
-void sphSetBlobRowOffset ( CSphRowitem * pDocinfo, int64_t iOffset )
-{
-	sphUnalignedWrite ( (int64_t*)pDocinfo + 1, iOffset );
-}
-
 
 template <typename T>
 static int GetBlobAttrLen ( int iBlobAttrId, const BYTE * pRow )
@@ -656,12 +651,13 @@ int64_t sphCopyBlobRow ( CSphTightVector<BYTE> & dDstPool, const CSphTightVector
 }
 
 
-void sphAddAttrToBlobRow ( const CSphRowitem * pDocinfo, CSphTightVector<BYTE> & dBlobRow, const BYTE * pPool, int nBlobs )
+void sphAddAttrToBlobRow ( const CSphRowitem * pDocinfo, CSphTightVector<BYTE> & dBlobRow, const BYTE * pPool, int nBlobs, const CSphAttrLocator * pOldBlobRowLoc )
 {
 	dBlobRow.Resize ( 0 );
 	if ( nBlobs )
 	{
-		const BYTE * pOldRow = pPool + sphGetBlobRowOffset ( pDocinfo );
+		assert(pOldBlobRowLoc);
+		const BYTE * pOldRow = pPool + sphGetRowAttr ( pDocinfo, *pOldBlobRowLoc );
 		DWORD uOldBlobLen = sphGetBlobTotalLen ( pOldRow, nBlobs );
 		DWORD uLenSize = RowFlagsToLen ( *pOldRow );
 		dBlobRow.Resize ( uOldBlobLen + uLenSize );
@@ -682,7 +678,7 @@ void sphAddAttrToBlobRow ( const CSphRowitem * pDocinfo, CSphTightVector<BYTE> &
 }
 
 
-void sphRemoveAttrFromBlobRow ( const CSphRowitem * pDocinfo, CSphTightVector<BYTE> & dBlobRow, const BYTE * pPool, int nBlobs, int iBlobAttrId )
+void sphRemoveAttrFromBlobRow ( const CSphRowitem * pDocinfo, CSphTightVector<BYTE> & dBlobRow, const BYTE * pPool, int nBlobs, int iBlobAttrId, const CSphAttrLocator & tBlobRowLoc )
 {
 	if ( nBlobs<=1 )
 	{
@@ -690,7 +686,7 @@ void sphRemoveAttrFromBlobRow ( const CSphRowitem * pDocinfo, CSphTightVector<BY
 		return;
 	}
 
-	const BYTE * pOldRow = pPool + sphGetBlobRowOffset ( pDocinfo );
+	const BYTE * pOldRow = pPool + sphGetRowAttr ( pDocinfo, tBlobRowLoc );
 	BYTE uFlags = *pOldRow;
 	CSphVector<DWORD> dAttrLengths;
 	for ( int i = 0; i < nBlobs; i++ )

@@ -3,6 +3,8 @@
 
 <name>distributed updates</name>
 
+<requires><non-columnar/></requires>
+
 <config>
 indexer
 {

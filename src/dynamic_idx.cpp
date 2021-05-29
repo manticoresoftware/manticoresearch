@@ -503,10 +503,8 @@ public:
 
 	bool				MultiQuery ( CSphQueryResult & , const CSphQuery & , const VecTraits_T<ISphMatchSorter *> &, const CSphMultiQueryArgs & ) const final;
 
-
 private:
-	bool MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQuery
-			, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const;
+	bool MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const;
 
 	virtual void SetSorterStuff ( CSphMatch * pMatch ) const = 0;
 	virtual bool FillNextMatch () const = 0;

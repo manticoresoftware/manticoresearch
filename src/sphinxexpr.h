@@ -79,6 +79,7 @@ enum ESphExprCommand
 	SPH_EXPR_SET_QUERY,
 	SPH_EXPR_SET_EXTRA_DATA,
 	SPH_EXPR_GET_DEPENDENT_COLS, ///< used to determine proper evaluating stage
+	SPH_EXPR_UPDATE_DEPENDENT_COLS,
 	SPH_EXPR_GET_UDF,
 
 #if USE_COLUMNAR
@@ -225,7 +226,7 @@ struct ISphExprHook
 	/// create node by OID
 	/// pEvalStage is an optional out-parameter
 	/// hook may fill it, but that is *not* required
-	virtual ISphExpr * CreateNode ( int iID, ISphExpr * pLeft, ESphEvalStage * pEvalStage, bool * pNeedDocIds, CSphString & sError ) = 0;
+	virtual ISphExpr * CreateNode ( int iID, ISphExpr * pLeft, const ISphSchema * pRsetSchema, ESphEvalStage * pEvalStage, bool * pNeedDocIds, CSphString & sError ) = 0;
 
 	/// get identifier return type by OID
 	virtual ESphAttr GetIdentType ( int iID ) const = 0;
@@ -323,12 +324,6 @@ struct ExprParseArgs_t
 ISphExpr * sphExprParse ( const char * sExpr, const ISphSchema & tSchema, CSphString & sError, ExprParseArgs_t & tArgs );
 
 ISphExpr * sphJsonFieldConv ( ISphExpr * pExpr );
-
-#if USE_COLUMNAR
-ISphExpr * CreateGetColumnarIntExpr ( const CSphString & sName, int iLocator );
-ISphExpr * CreateGetColumnarFloatExpr ( const CSphString & sName, int iLocator );
-ISphExpr * CreateGetColumnarStrExpr ( const CSphString & sName, int iLocator );
-#endif
 
 void SetExprNodeStackItemSize ( int iCreateSize, int iEvalSize );
 

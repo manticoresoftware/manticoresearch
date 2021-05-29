@@ -93,6 +93,9 @@ columnar::Builder_i * CreateColumnarBuilder ( const ISphSchema & tSchema, const 
 		tColumnarSchema.push_back ( { tAttr.m_sName.cstr(), eAttrType, fnStringCalcHash } );
 	}
 
+	if ( tColumnarSchema.empty() )
+		return nullptr;
+
 	assert ( g_fnCreateColumnarBuilder );
 	columnar::Builder_i * pBuilder = g_fnCreateColumnarBuilder ( tSettings, tColumnarSchema, sFilename.cstr(), sErrorSTL );
 	if ( !pBuilder )

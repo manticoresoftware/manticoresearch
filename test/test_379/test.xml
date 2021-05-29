@@ -3,6 +3,10 @@
 
 <name>id attr index</name>
 
+<requires>
+	<non-columnar/>
+</requires>
+
 <config>
 indexer
 {

@@ -376,3 +376,16 @@ uint64_t BinaryHash_fn::Hash ( const BYTE * pStr, int iLen, uint64_t uPrev )
 	assert ( pStr && iLen );
 	return sphFNV64 ( pStr, iLen, uPrev );
 }
+
+/////////////////////////////////////////////////////////////////////
+
+StrHashCalc_fn GetStringHashCalcFunc ( ESphCollation eCollation )
+{
+	switch ( eCollation )
+	{
+	case SPH_COLLATION_LIBC_CS:			return LibcCSHash_fn::Hash;
+	case SPH_COLLATION_UTF8_GENERAL_CI:	return Utf8CIHash_fn::Hash;
+	case SPH_COLLATION_BINARY:			return BinaryHash_fn::Hash;
+	default:							return LibcCIHash_fn::Hash;
+	}
+}

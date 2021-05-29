@@ -622,10 +622,17 @@ void CSphIndexSettings::ParseStoredFields ( const CSphConfigSection & hIndex )
 #if USE_COLUMNAR
 bool CSphIndexSettings::ParseColumnarSettings ( const CSphConfigSection & hIndex, CSphString & sError )
 {
-	if ( hIndex.Exists("columnar_attrs") && !IsColumnarLibLoaded() )
+	if ( ( hIndex.Exists("columnar_attrs") || hIndex.Exists("rowwise_attrs") || hIndex.Exists("engine") ) && !IsColumnarLibLoaded() )
 	{
 		sError = "columnar library not loaded";
 		return false;
+	}
+
+	{
+		CSphString sEngine = hIndex.GetStr ( "engine" );
+		sEngine.ToLower();
+		if ( !StrToAttrEngine ( m_eEngine, sEngine, sError ) )
+			return false;
 	}
 
 	{
@@ -633,6 +640,13 @@ bool CSphIndexSettings::ParseColumnarSettings ( const CSphConfigSection & hIndex
 		sAttrs.ToLower();
 		sphSplit ( m_dColumnarAttrs, sAttrs.cstr() );
 		m_dColumnarAttrs.Uniq();
+	}
+
+	{
+		CSphString sAttrs = hIndex.GetStr ( "rowwise_attrs" );
+		sAttrs.ToLower();
+		sphSplit ( m_dRowwiseAttrs, sAttrs.cstr() );
+		m_dRowwiseAttrs.Uniq();
 	}
 
 	{
@@ -909,6 +923,13 @@ void CSphIndexSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i *
 		tOut.Add ( "hitless_words",		sHitlessFiles,			true );
 	}
 
+#if USE_COLUMNAR
+	if ( m_eEngine==AttrEngine_e::COLUMNAR )
+		tOut.Add ( "engine",			"columnar",				true );
+	else if ( m_eEngine==AttrEngine_e::ROWWISE )
+		tOut.Add ( "engine",			"rowwise",				true );
+#endif
+
 	DocstoreSettings_t::Format ( tOut, pFilenameBuilder );
 }
 
@@ -941,6 +962,29 @@ static StrVec_t SplitArg ( const CSphString & sValue, StrVec_t & dFiles )
 	return dValues;
 }
 
+#if USE_COLUMNAR
+bool StrToAttrEngine ( AttrEngine_e & eEngine, const CSphString & sValue, CSphString & sError )
+{
+	if ( sValue.IsEmpty() )
+	{
+		eEngine = AttrEngine_e::DEFAULT;
+		return true;
+	}
+
+	if ( sValue!="columnar" && sValue!="rowwise" )
+	{
+		sError.SetSprintf ( "unknown engine: %s", sValue.cstr() );
+		return false;
+	}
+
+	if ( sValue=="columnar" )
+		eEngine = AttrEngine_e::COLUMNAR;
+	else if ( sValue=="rowwise" )
+		eEngine = AttrEngine_e::ROWWISE;
+
+	return true;
+}
+#endif
 
 bool IndexSettingsContainer_c::AddOption ( const CSphString & sName, const CSphString & sValue )
 {
@@ -1018,6 +1062,16 @@ bool IndexSettingsContainer_c::AddOption ( const CSphString & sName, const CSphS
 
 	}
 
+#if USE_COLUMNAR
+	if ( sName=="engine" )
+	{
+		if ( !StrToAttrEngine ( m_eEngine, sValue, m_sError ) )
+			return false;
+
+		return Add ( sName, sValue );
+	}
+#endif
+
 	return Add ( sName, sValue );
 }
 
@@ -1025,6 +1079,31 @@ bool IndexSettingsContainer_c::AddOption ( const CSphString & sName, const CSphS
 void IndexSettingsContainer_c::RemoveKeys ( const CSphString & sName )
 {
 	m_hCfg.Delete(sName);
+}
+
+
+void IndexSettingsContainer_c::SetupColumnarAttrs ( const CreateTableSettings_t & tCreateTable )
+{
+#if USE_COLUMNAR
+	StringBuilder_c sColumnarAttrs(",");
+	StringBuilder_c sRowwiseAttrs(",");
+	if ( m_eEngine==AttrEngine_e::COLUMNAR )
+		sColumnarAttrs << sphGetDocidName();
+
+	for ( const auto & i : tCreateTable.m_dAttrs )
+	{
+		if ( i.m_eEngine==AttrEngine_e::COLUMNAR )
+			sColumnarAttrs << i.m_sName;
+		else if ( i.m_eEngine==AttrEngine_e::ROWWISE )
+			sRowwiseAttrs << i.m_sName;
+	}
+
+	if ( sColumnarAttrs.GetLength() )
+		Add ( "columnar_attrs", sColumnarAttrs.cstr() );
+
+	if ( sRowwiseAttrs.GetLength() )
+		Add ( "rowwise_attrs", sRowwiseAttrs.cstr() );
+#endif
 }
 
 
@@ -1070,9 +1149,10 @@ bool IndexSettingsContainer_c::Populate ( const CreateTableSettings_t & tCreateT
 		if ( !AddOption ( i.m_sName, i.m_sValue ) )
 			return false;
 
+	SetupColumnarAttrs(tCreateTable);
+
 	if ( !Contains("type") )
 		Add ( "type", "rt" );
-
 
 	bool bDistributed = Get("type")=="distributed";
 	if ( !bDistributed )
@@ -1517,6 +1597,17 @@ static void AddFieldSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tF
 }
 
 
+static void AddEngineSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr )
+{
+#if USE_COLUMNAR
+	if ( tAttr.m_eEngine==AttrEngine_e::COLUMNAR )
+		sRes << " engine='columnar'";
+	else if ( tAttr.m_eEngine==AttrEngine_e::ROWWISE )
+		sRes << " engine='rowwise'";
+#endif
+}
+
+
 CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex, const CSphSchema & tSchema )
 {
 	assert ( pIndex );
@@ -1545,6 +1636,8 @@ CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex
 		}
 		else
 			sRes << tAttr.m_sName << " " << GetAttrTypeName(tAttr);
+
+		AddEngineSettings ( sRes, tAttr );
 
 		bHasAttrs = true;
 	}

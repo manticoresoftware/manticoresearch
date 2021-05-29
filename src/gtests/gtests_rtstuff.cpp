@@ -106,7 +106,7 @@ public:
 	MOCK_METHOD1 ( IterateKillListNext, bool (DocID_t & ) ) ; // return false
 	int GetFieldCount () const { return m_iFields; }
 
-	VecTraits_T<VecTraits_T<const char>> GetFields ()
+	CSphVector<VecTraits_T<const char>> GetFields ()
 	{
 		m_dFields.Resize(0);
 		for ( int i=0; i<m_iFields; ++i)
@@ -191,7 +191,7 @@ public:
 	MOCK_METHOD1 ( IterateKillListNext, bool (DocID_t & ) ); // return false
 	int  GetFieldCount () const { return m_iMaxFields; }
 
-	VecTraits_T<VecTraits_T<const char>> GetFields ()
+	CSphVector<VecTraits_T<const char>> GetFields ()
 	{
 		m_dMeasuredFields.Resize ( 0 );
 		for ( const char * pStr : m_ppFields )
@@ -263,7 +263,7 @@ TEST_P ( RTN, WeightBoundary )
 
 	pSrc->SetTokenizer ( pTok );
 	pSrc->SetDict ( pDict );
-	pSrc->Setup ( CSphSourceSettings() );
+	pSrc->Setup ( CSphSourceSettings(), nullptr );
 
 	EXPECT_TRUE ( pSrc->Connect ( sError ) );
 	EXPECT_TRUE ( pSrc->IterateStart ( sError ) );
@@ -290,7 +290,9 @@ TEST_P ( RTN, WeightBoundary )
 	StrVec_t dWarnings;
 	EXPECT_TRUE ( pIndex->Prealloc ( false, nullptr, dWarnings ) );
 
-	CSphVector<int64_t> dMvas;
+	InsertDocData_t tDoc ( pIndex->GetMatchSchema() );
+	int iDynamic = pIndex->GetMatchSchema().GetRowSize();
+
 	CSphString sFilter;
 	bool bEOF = false;
 	while (true)
@@ -299,7 +301,9 @@ TEST_P ( RTN, WeightBoundary )
 		if ( bEOF )
 			break;
 
-		pIndex->AddDocument ( pSrc->GetFields(), pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
+		tDoc.m_dFields = pSrc->GetFields();
+		tDoc.m_tDoc.Combine ( pSrc->m_tDocInfo, iDynamic );
+		pIndex->AddDocument ( tDoc, false, sFilter, sError, sWarning, NULL );
 		pIndex->Commit ( NULL, NULL );
 	}
 
@@ -371,7 +375,7 @@ TEST_F ( RT, RankerFactors )
 	pSrc->SetTokenizer ( pTok );
 	pSrc->SetDict ( pDict );
 
-	pSrc->Setup ( CSphSourceSettings () );
+	pSrc->Setup ( CSphSourceSettings(), nullptr );
 	ASSERT_TRUE ( pSrc->Connect ( sError ) );
 	ASSERT_TRUE ( pSrc->IterateStart ( sError ) );
 
@@ -393,7 +397,9 @@ TEST_F ( RT, RankerFactors )
 	Verify ( pIndex->Prealloc ( false, nullptr, dWarnings ) );
 
 	CSphString sFilter;
-	CSphVector<int64_t> dMvas;
+	InsertDocData_t tDoc ( pIndex->GetMatchSchema() );
+	int iDynamic = pIndex->GetMatchSchema().GetRowSize();
+
 	bool bEOF = false;
 	while (true)
 	{
@@ -401,7 +407,9 @@ TEST_F ( RT, RankerFactors )
 		if ( bEOF )
 			break;
 
-		pIndex->AddDocument ( pSrc->GetFields (), pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
+		tDoc.m_dFields = pSrc->GetFields();
+		tDoc.m_tDoc.Combine ( pSrc->m_tDocInfo, iDynamic );
+		pIndex->AddDocument ( tDoc, false, sFilter, sError, sWarning, NULL );
 	}
 	pIndex->Commit ( NULL, NULL );
 	pSrc->Disconnect ();
@@ -551,7 +559,7 @@ TEST_F ( RT, SendVsMerge )
 	pSrc->SetTokenizer ( pTok );
 	pSrc->SetDict ( pDict );
 
-	pSrc->Setup ( CSphSourceSettings() );
+	pSrc->Setup ( CSphSourceSettings(), nullptr );
 	ASSERT_TRUE ( pSrc->Connect ( sError ) );
 	ASSERT_TRUE ( pSrc->IterateStart ( sError ) );
 
@@ -592,7 +600,9 @@ TEST_F ( RT, SendVsMerge )
 	ASSERT_TRUE ( pSorter );
 
 	CSphString sFilter;
-	CSphVector<int64_t> dMvas;
+	InsertDocData_t tDoc ( pIndex->GetMatchSchema() );
+	int iDynamic = pIndex->GetMatchSchema().GetRowSize();
+
 	bool bEOF = false;
 	while (true)
 	{
@@ -600,7 +610,9 @@ TEST_F ( RT, SendVsMerge )
 		if ( bEOF )
 			break;
 
-		pIndex->AddDocument ( pSrc->GetFields (), pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
+		tDoc.m_dFields = pSrc->GetFields();
+		tDoc.m_tDoc.Combine ( pSrc->m_tDocInfo, iDynamic );
+		pIndex->AddDocument ( tDoc, false, sFilter, sError, sWarning, NULL );
 		sError = ""; // need to reset error message
 		if ( pSrc->m_iDocsCounter==350 )
 		{

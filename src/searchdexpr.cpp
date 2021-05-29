@@ -228,6 +228,7 @@ public:
 protected:
 	CSphRefcountedPtr<ISphExpr>		m_pArgs;
 	CSphRefcountedPtr<ISphExpr>		m_pText;
+	int								m_iTextLocator = -1;
 	CSphVector<int>					m_dRequestedFieldIds;
 	CSphIndex *						m_pIndex = nullptr;
 	QueryProfile_c *				m_pProfiler = nullptr;
@@ -236,6 +237,8 @@ protected:
 
 
 				Expr_HighlightTraits_c ( const Expr_HighlightTraits_c & rhs );
+
+	void		SetTextExpr ( ISphExpr * pExpr, const ISphSchema * pRsetSchema );
 };
 
 
@@ -263,8 +266,26 @@ Expr_HighlightTraits_c::Expr_HighlightTraits_c ( const Expr_HighlightTraits_c & 
 
 void Expr_HighlightTraits_c::FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
 {
-	if ( m_pText )
+	if ( !m_pText )
+		return;
+
+	// when highlight expression was created, the m_pText was a GetColumnarString expression
+	// but when the result is converted to dynamic schema, m_pText becomes a plain GetString expression
+	// we need to update m_pText pointer
+	if ( !m_pText->IsColumnar() )
+	{
 		m_pText->FixupLocator ( pOldSchema, pNewSchema );
+		return;
+	}
+
+#if USE_COLUMNAR
+	CSphString sColumnarCol;
+	m_pText->Command ( SPH_EXPR_GET_COLUMNAR_COL, &sColumnarCol );
+	m_iTextLocator = pNewSchema->GetAttrIndex ( sColumnarCol.cstr() );
+	assert ( m_iTextLocator!=0 );
+
+	m_pText = pNewSchema->GetAttr(m_iTextLocator).m_pExpr;
+#endif
 }
 
 
@@ -275,6 +296,15 @@ void Expr_HighlightTraits_c::Command ( ESphExprCommand eCmd, void * pArg )
 
 	if ( m_pText )
 		m_pText->Command ( eCmd, pArg );
+
+	if ( eCmd==SPH_EXPR_GET_DEPENDENT_COLS && m_pText && m_pText->IsColumnar() )
+	{
+		assert ( m_iTextLocator>=0 );
+		static_cast < CSphVector<int>* >(pArg)->Add ( m_iTextLocator );
+	}
+
+	if ( eCmd==SPH_EXPR_UPDATE_DEPENDENT_COLS && m_iTextLocator>=*static_cast<int*>(pArg) )
+		m_iTextLocator--;
 
 	if ( QueryExprTraits_c::Command ( eCmd, pArg ) )
 	{
@@ -292,26 +322,40 @@ uint64_t Expr_HighlightTraits_c::GetHash ( const ISphSchema &, uint64_t, bool & 
 }
 
 
+void Expr_HighlightTraits_c::SetTextExpr ( ISphExpr * pExpr, const ISphSchema * pRsetSchema )
+{
+	m_pText = pExpr;
+	SafeAddRef(m_pText);
+
+#if USE_COLUMNAR
+	if ( m_pText && m_pText->IsColumnar() )
+	{
+		CSphString sColumnarCol;
+		m_pText->Command ( SPH_EXPR_GET_COLUMNAR_COL, &sColumnarCol );
+		m_iTextLocator = pRsetSchema->GetAttrIndex ( sColumnarCol.cstr() ); 
+	}
+#endif
+}
+
 //////////////////////////////////////////////////////////////////////////
 class Expr_Snippet_c : public Expr_HighlightTraits_c
 {
 public:
-				Expr_Snippet_c ( ISphExpr * pArglist, CSphIndex * pIndex, QueryProfile_c * pProfiler, QueryType_e eQueryType, CSphString & sError );
+				Expr_Snippet_c ( ISphExpr * pArglist, CSphIndex * pIndex, const ISphSchema * pRsetSchema, QueryProfile_c * pProfiler, QueryType_e eQueryType, CSphString & sError );
 
 	int			StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const override;
 	ISphExpr *	Clone() const override;
 };
 
 
-Expr_Snippet_c::Expr_Snippet_c ( ISphExpr * pArglist, CSphIndex * pIndex, QueryProfile_c * pProfiler, QueryType_e eQueryType, CSphString & sError )
+Expr_Snippet_c::Expr_Snippet_c ( ISphExpr * pArglist, CSphIndex * pIndex, const ISphSchema * pRsetSchema, QueryProfile_c * pProfiler, QueryType_e eQueryType, CSphString & sError )
 	: Expr_HighlightTraits_c ( pIndex, pProfiler, pArglist->GetArg(1) )
 {
 	m_pArgs = pArglist;
 	SafeAddRef ( m_pArgs );
 	assert ( m_pArgs->IsArglist() );
 
-	m_pText = pArglist->GetArg(0);
-	SafeAddRef ( m_pText );
+	SetTextExpr ( pArglist->GetArg(0), pRsetSchema );
 
 	CSphMatch tDummy;
 	char * pWords;
@@ -417,7 +461,7 @@ ISphExpr * Expr_Snippet_c::Clone () const
 class Expr_Highlight_c final : public Expr_HighlightTraits_c
 {
 public:
-				Expr_Highlight_c ( ISphExpr * pArglist, CSphIndex * pIndex, QueryProfile_c * pProfiler, QueryType_e eQueryType, CSphString & sError );
+				Expr_Highlight_c ( ISphExpr * pArglist, CSphIndex * pIndex, const ISphSchema * pRsetSchema, QueryProfile_c * pProfiler, QueryType_e eQueryType, CSphString & sError );
 
 	int			StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const final;
 	void		Command ( ESphExprCommand eCmd, void * pArg ) final;
@@ -439,7 +483,7 @@ private:
 };
 
 
-Expr_Highlight_c::Expr_Highlight_c ( ISphExpr * pArglist, CSphIndex * pIndex, QueryProfile_c * pProfiler, QueryType_e eQueryType, CSphString & sError )
+Expr_Highlight_c::Expr_Highlight_c ( ISphExpr * pArglist, CSphIndex * pIndex, const ISphSchema * pRsetSchema, QueryProfile_c * pProfiler, QueryType_e eQueryType, CSphString & sError )
 	: Expr_HighlightTraits_c ( pIndex, pProfiler, ( pArglist && pArglist->IsArglist() && pArglist->GetNumArgs()==3 ) ? pArglist->GetArg(2) : nullptr )
 {
 	assert ( m_pIndex );
@@ -473,8 +517,7 @@ Expr_Highlight_c::Expr_Highlight_c ( ISphExpr * pArglist, CSphIndex * pIndex, Qu
 			ParseFields(pArg2);
 		else
 		{
-			m_pText = pArg2;
-			SafeAddRef(m_pText);
+			SetTextExpr ( pArg2, pRsetSchema );
 			m_dRequestedFieldIds.Add(0);
 		}
 	}
@@ -714,7 +757,7 @@ int ExprHook_c::IsKnownFunc ( const char * sFunc ) const
 }
 
 
-ISphExpr * ExprHook_c::CreateNode ( int iID, ISphExpr * pLeft, ESphEvalStage * pEvalStage, bool * pNeedDocIds, CSphString & sError )
+ISphExpr * ExprHook_c::CreateNode ( int iID, ISphExpr * pLeft, const ISphSchema * pRsetSchema, ESphEvalStage * pEvalStage, bool * pNeedDocIds, CSphString & sError )
 {
 	if ( pEvalStage )
 		*pEvalStage = SPH_EVAL_POSTLIMIT;
@@ -727,11 +770,11 @@ ISphExpr * ExprHook_c::CreateNode ( int iID, ISphExpr * pLeft, ESphEvalStage * p
 	switch ( iID )
 	{
 	case HOOK_SNIPPET:
-		pRes = new Expr_Snippet_c ( pLeft, m_pIndex, m_pProfiler, m_eQueryType, sError );
+		pRes = new Expr_Snippet_c ( pLeft, m_pIndex, pRsetSchema, m_pProfiler, m_eQueryType, sError );
 		break;
 
 	case HOOK_HIGHLIGHT:
-		pRes = new Expr_Highlight_c ( pLeft, m_pIndex, m_pProfiler, m_eQueryType, sError );
+		pRes = new Expr_Highlight_c ( pLeft, m_pIndex, pRsetSchema, m_pProfiler, m_eQueryType, sError );
 		break;
 
 	default:

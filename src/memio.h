@@ -26,6 +26,7 @@ public:
 	uint64_t		UnzipOffset();
 	DWORD			UnzipInt();
 	CSphString		GetString();
+	SphOffset_t		GetOffset();
 	DWORD			GetDword();
 	WORD			GetWord();
 	void			GetBytes ( void * pData, int iLen );

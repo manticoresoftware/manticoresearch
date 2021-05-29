@@ -187,7 +187,9 @@ function GuessODBC ()
 function GuessColumnar()
 {
     global $g_columnar_compiled, $g_columnar_loaded;
-    $g_columnar_compiled = GuessFeature ( 'test_columnar.conf','no columnar support compiled');
+    $columnar_compiled1 = GuessFeature ( 'test_columnar.conf','no columnar support compiled');
+    $columnar_compiled2 = GuessFeature ( 'test_columnar.conf',"unknown key name 'columnar_attrs'");
+	$g_columnar_compiled = $columnar_compiled1 && $columnar_compiled2;
     $g_columnar_loaded = GuessFeature ( 'test_columnar.conf','columnar library not loaded');
 }
 

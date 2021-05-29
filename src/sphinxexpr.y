@@ -110,6 +110,7 @@ attr:
 	| TOK_ATTR_JSON					{ $$ = pParser->AddNodeAttr ( TOK_ATTR_JSON, $1 ); }
 	| TOK_ATTR_MVA32				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_MVA32, $1 ); }
 	| TOK_ATTR_MVA64				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_MVA64, $1 ); }
+	| TOK_ATTR_STRING				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_STRING, $1 ); }
 	| TOK_COLUMNAR_INT 				{ $$ = pParser->AddNodeColumnar ( TOK_COLUMNAR_INT, $1 ); }
 	| TOK_COLUMNAR_TIMESTAMP		{ $$ = pParser->AddNodeColumnar ( TOK_COLUMNAR_TIMESTAMP, $1 ); }
 	| TOK_COLUMNAR_BIGINT 			{ $$ = pParser->AddNodeColumnar ( TOK_COLUMNAR_BIGINT, $1 ); }
@@ -179,7 +180,6 @@ map_key:
 arg:
 	expr
 	| '{' maparg '}'				{ $$ = $2; }
-	| TOK_ATTR_STRING				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_STRING, $1 ); }
 	| TOK_ATTR_FACTORS				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_FACTORS, $1 ); }
 	| TOK_CONST_STRING				{ $$ = pParser->AddNodeString ( $1 ); }
 	;
@@ -252,7 +252,6 @@ subkey:
 	| TOK_SUBKEY					{ $$ = pParser->AddNodeJsonSubkey ( $1 ); }
 	| TOK_DOT_NUMBER				{ $$ = pParser->AddNodeJsonSubkey ( $1 ); }
 	| '[' TOK_CONST_STRING ']'		{ $$ = pParser->AddNodeString ( $2 ); }
-	| '[' TOK_ATTR_STRING ']'		{ $$ = pParser->AddNodeAttr ( TOK_ATTR_STRING, $2 ); }
 	;
 
 for_loop:
@@ -274,7 +273,6 @@ streq:
 
 strval:
 	TOK_CONST_STRING				{ $$ = pParser->AddNodeString ( $1 ); }
-	| TOK_ATTR_STRING				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_STRING, $1 ); }
 	;
 
 

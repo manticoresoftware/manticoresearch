@@ -2,6 +2,7 @@
 
 <test>
 <name>RT: ram vs disk chunk search</name>
+<requires><non-columnar/></requires>
 
 <skip_indexer/>
 <config>

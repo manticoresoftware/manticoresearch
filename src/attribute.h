@@ -43,12 +43,6 @@ BlobRowBuilder_i *	sphCreateBlobRowBuilder ( const ISphSchema & tSchema, CSphTig
 // create mem-based blob row builder for updates
 BlobRowBuilder_i *	sphCreateBlobRowBuilderUpdate ( const ISphSchema & tSchema, CSphTightVector<BYTE> & dPool, const CSphBitvec & dAttrsUpdated );
 
-// get an offset into blob pool from docinfo
-int64_t				sphGetBlobRowOffset ( const CSphRowitem * pDocinfo );
-
-// set blob pool offset
-void				sphSetBlobRowOffset ( CSphRowitem * pDocinfo, int64_t iOffset );
-
 // fetches a attribute data and its length from the pool
 const BYTE *		sphGetBlobAttr ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool, int & iLengthBytes );
 
@@ -69,10 +63,10 @@ DWORD				sphGetBlobTotalLen ( const BYTE * pBlobRow, int nBlobAttrs );
 int64_t				sphCopyBlobRow ( CSphTightVector<BYTE> & dDstPool, const CSphTightVector<BYTE> & dSrcPool, int64_t iOffset, int nBlobs );
 
 // add a new blob attr to a row (on ALTER)
-void				sphAddAttrToBlobRow ( const CSphRowitem * pDocinfo, CSphTightVector<BYTE> & dBlobRow, const BYTE * pPool, int nBlobs );
+void				sphAddAttrToBlobRow ( const CSphRowitem * pDocinfo, CSphTightVector<BYTE> & dBlobRow, const BYTE * pPool, int nBlobs, const CSphAttrLocator * pOldBlobRowLoc );
 
 // remove a blob attr from a blob row (on ALTER)
-void				sphRemoveAttrFromBlobRow ( const CSphRowitem * pDocinfo, CSphTightVector<BYTE> & dBlobRow, const BYTE * pPool, int nBlobs, int iBlobAttrId );
+void				sphRemoveAttrFromBlobRow ( const CSphRowitem * pDocinfo, CSphTightVector<BYTE> & dBlobRow, const BYTE * pPool, int nBlobs, int iBlobAttrId, const CSphAttrLocator & tBlobRowLoc );
 
 // verify blob row record
 bool				sphCheckBlobRow ( int64_t iOff, DebugCheckReader_i & tBlobs, const CSphSchema & tSchema, CSphString & sError );

@@ -33,7 +33,11 @@ public:
 	virtual bool	ProcessInRowIdOrder() const = 0;
 };
 
-using fnGetBlobPoolFromMatch = std::function< const BYTE* ( const CSphMatch * )>;
+using GetBlobPoolFromMatch_fn = std::function< const BYTE* ( const CSphMatch * )>;
+
+#if USE_COLUMNAR
+using GetColumnarFromMatch_fn = std::function< columnar::Columnar_i * ( const CSphMatch * )>;
+#endif
 
 /// generic match sorter interface
 class ISphMatchSorter
@@ -120,7 +124,11 @@ public:
 
 	/// transform collected matches into standalone (copy all pooled attrs to ptrs, drop unused)
 	/// param fnBlobPoolFromMatch provides pool pointer from currently processed match pointer.
-	void				TransformPooled2StandalonePtrs ( fnGetBlobPoolFromMatch fnBlobPoolFromMatch );
+#if USE_COLUMNAR
+	void				TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnBlobPoolFromMatch, GetColumnarFromMatch_fn fnGetColumnarFromMatch );
+#else
+	void				TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnBlobPoolFromMatch );
+#endif
 
 protected:
 	SharedPtr_t<ISphSchema*>	m_pSchema;	///< sorter schema (adds dynamic attributes on top of index schema)
@@ -128,7 +136,7 @@ protected:
 	StrVec_t					m_dTransformed;
 
 #if USE_COLUMNAR
-	columnar::Columnar_i *		m_pColumnar;
+	columnar::Columnar_i *		m_pColumnar = nullptr;
 #endif
 };
 
@@ -163,12 +171,14 @@ class CSphGrouper : public BlobPool_c, public ISphRefcountedMT
 public:
 	virtual SphGroupKey_t	KeyFromValue ( SphAttr_t uValue ) const = 0;
 	virtual SphGroupKey_t	KeyFromMatch ( const CSphMatch & tMatch ) const = 0;
+	virtual void			MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const = 0;
 	virtual void			GetLocator ( CSphAttrLocator & tOut ) const = 0;
 	virtual ESphAttr		GetResultType () const = 0;
 	virtual CSphGrouper *	Clone() const = 0;
+	virtual bool			IsMultiValue() const { return false; }
 
 #if USE_COLUMNAR
-	virtual void			SetColumnar ( const columnar::Columnar_i * pColumnar ) {}
+	virtual void			SetColumnar ( const columnar::Columnar_i * ) {}
 #endif
 
 protected:

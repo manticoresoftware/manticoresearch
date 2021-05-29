@@ -121,9 +121,6 @@ struct IFilter_Range: virtual ISphFilter
 // attr
 
 class Filter_Values : public IFilter_Attr, public IFilter_Values
-#if USE_COLUMNAR
-	, public ColumnarFilterTraits_c
-#endif
 {
 public:
 	bool Eval ( const CSphMatch & tMatch ) const final
@@ -141,23 +138,10 @@ public:
 
 		return EvalBlockValues ( uBlockMin, uBlockMax );
 	}
-
-#if USE_COLUMNAR
-	bool Test ( const columnar::MinMaxVec_t & dMinMax ) const final
-	{
-		if ( m_iColumnarCol<0 )
-			return true;
-
-		return EvalBlockValues ( dMinMax[m_iColumnarCol].first, dMinMax[m_iColumnarCol].second );
-	}
-#endif
 };
 
 
 class Filter_SingleValue : public IFilter_Attr
-#if USE_COLUMNAR
-	, public ColumnarFilterTraits_c
-#endif
 {
 public:
 #ifndef NDEBUG
@@ -185,21 +169,6 @@ public:
 		SphAttr_t uBlockMax = sphGetRowAttr ( pMaxDocinfo, m_tLocator );
 		return ( uBlockMin<=m_RefValue && m_RefValue<=uBlockMax );
 	}
-
-#if USE_COLUMNAR
-	bool Test ( const columnar::MinMaxVec_t & dMinMax ) const final
-	{
-		if ( m_iColumnarCol<0 )
-			return true;
-
-		return ( dMinMax[m_iColumnarCol].first<=m_RefValue && m_RefValue<=dMinMax[m_iColumnarCol].second );
-	}
-
-	void SetColumnarCol ( int iColumnarCol ) final
-	{
-		ColumnarFilterTraits_c::SetColumnarCol(iColumnarCol);
-	}
-#endif
 
 protected:
 	SphAttr_t m_RefValue;
@@ -232,9 +201,6 @@ private:
 
 template < bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT >
 struct Filter_Range : public IFilter_Attr, public IFilter_Range
-#if USE_COLUMNAR
-	, public ColumnarFilterTraits_c
-#endif
 {
 	bool Eval ( const CSphMatch & tMatch ) const final
 	{
@@ -252,21 +218,6 @@ struct Filter_Range : public IFilter_Attr, public IFilter_Range
 		// not-reject
 		return EvalBlockRangeAny<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT> ( uBlockMin, uBlockMax, m_iMinValue, m_iMaxValue );
 	}
-
-#if USE_COLUMNAR
-	bool Test ( const columnar::MinMaxVec_t & dMinMax ) const final
-	{
-		if ( m_iColumnarCol<0 )
-			return true;
-
-		return EvalBlockRangeAny<HAS_EQUAL_MIN,HAS_EQUAL_MAX> ( dMinMax[m_iColumnarCol].first, dMinMax[m_iColumnarCol].second, m_iMinValue, m_iMaxValue );
-	}
-
-	void SetColumnarCol ( int iColumnarCol ) final
-	{
-		ColumnarFilterTraits_c::SetColumnarCol(iColumnarCol);
-	}
-#endif
 };
 
 // float
@@ -590,6 +541,12 @@ struct Filter_And2 final : public ISphFilter
 	{
 		return m_pArg1->Test(dMinMax) && m_pArg2->Test(dMinMax);
 	}
+
+	void SetColumnar ( const columnar::Columnar_i * pColumnar ) final
+	{
+		m_pArg1->SetColumnar(pColumnar);
+		m_pArg2->SetColumnar(pColumnar);
+	}
 #endif
 
 	ISphFilter * Join ( ISphFilter * pFilter ) final
@@ -640,6 +597,13 @@ struct Filter_And3 final : public ISphFilter
 	{
 		return m_pArg1->Test(dMinMax) && m_pArg2->Test(dMinMax) && m_pArg3->Test(dMinMax);
 	}
+
+	void SetColumnar ( const columnar::Columnar_i * pColumnar ) final
+	{
+		m_pArg1->SetColumnar(pColumnar);
+		m_pArg2->SetColumnar(pColumnar);
+		m_pArg3->SetColumnar(pColumnar);
+	}
 #endif
 
 	ISphFilter * Join ( ISphFilter * pFilter ) final
@@ -689,14 +653,8 @@ struct Filter_And final : public ISphFilter
 	}
 
 #if USE_COLUMNAR
-	bool Test ( const columnar::MinMaxVec_t & dMinMax ) const final
-	{
-		for ( auto pFilter : m_dFilters )
-			if ( !pFilter->Test(dMinMax) )
-				return false;
-
-		return true;
-	}
+	bool Test ( const columnar::MinMaxVec_t & dMinMax ) const final		{ return m_dFilters.all_of ( [&dMinMax]( ISphFilter * pFilter ){ return pFilter->Test(dMinMax); } ); }
+	void SetColumnar ( const columnar::Columnar_i * pColumnar ) final	{ m_dFilters.for_each ( [pColumnar]( ISphFilter * pFilter ){ pFilter->SetColumnar(pColumnar); } ); }
 #endif
 
 	ISphFilter * Join ( ISphFilter * pFilter ) final
@@ -763,6 +721,12 @@ struct Filter_Or final : public ISphFilter
 	{
 		return ( m_pLeft->Test(dMinMax) || m_pRight->Test(dMinMax) );
 	}
+
+	void SetColumnar ( const columnar::Columnar_i * pColumnar ) final
+	{
+		m_pLeft->SetColumnar(pColumnar);
+		m_pRight->SetColumnar(pColumnar);
+	}
 #endif
 
 	void SetBlobStorage ( const BYTE * pBlobPool ) final
@@ -813,6 +777,13 @@ struct Filter_Not final : public ISphFilter
 	{
 		m_pFilter->SetBlobStorage ( pBlobPool );
 	}
+
+#if USE_COLUMNAR
+	void SetColumnar ( const columnar::Columnar_i * pColumnar ) final
+	{
+		m_pFilter->SetColumnar(pColumnar);
+	}
+#endif
 };
 
 /// impl
@@ -964,7 +935,7 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, ESphFil
 			return ReportError ( sError, "unsupported filter type '%s' on MVA column", eFilterType );
 
 		if ( tSettings.m_eMvaFunc==SPH_MVAFUNC_NONE )
-			sWarning.SetSprintf ( "suggest an explicit ANY()/ALL() around a filter on MVA column" );
+			sWarning.SetSprintf ( "use an explicit ANY()/ALL() around a filter on MVA column" );
 
 		bool bWide = eAttrType==SPH_ATTR_INT64SET || eAttrType==SPH_ATTR_INT64SET_PTR;
 		bool bRange = ( eFilterType==SPH_FILTER_RANGE );
@@ -1094,51 +1065,24 @@ public:
 
 template < bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX >
 class ExprFilterRange_c : public ExprFilter_c<IFilter_Range>
-#if USE_COLUMNAR
-	, public ColumnarFilterTraits_c
-#endif
 {
 public:
 	explicit ExprFilterRange_c ( ISphExpr * pExpr )
 		: ExprFilter_c<IFilter_Range> ( pExpr )
-#if USE_COLUMNAR
-		, ColumnarFilterTraits_c(pExpr)
-#endif
 	{}
 
 	bool Eval ( const CSphMatch & tMatch ) const final
 	{
 		return EvalRange<HAS_EQUAL_MIN, HAS_EQUAL_MAX> ( m_pExpr->Int64Eval(tMatch), m_iMinValue, m_iMaxValue );
 	}
-
-#if USE_COLUMNAR
-	bool Test ( const columnar::MinMaxVec_t & dMinMax ) const final
-	{
-		if ( m_iColumnarCol<0 )
-			return true;
-
-		return EvalBlockRangeAny<HAS_EQUAL_MIN,HAS_EQUAL_MAX> ( dMinMax[m_iColumnarCol].first, dMinMax[m_iColumnarCol].second, m_iMinValue, m_iMaxValue );
-	}
-
-	void SetColumnarCol ( int iColumnarCol ) final
-	{
-		ColumnarFilterTraits_c::SetColumnarCol(iColumnarCol);
-	}
-#endif
 };
 
 
 class ExprFilterValues_c : public ExprFilter_c<IFilter_Values>
-#if USE_COLUMNAR
-	, public ColumnarFilterTraits_c
-#endif
 {
 public:
 	explicit ExprFilterValues_c ( ISphExpr * pExpr )
 		: ExprFilter_c<IFilter_Values> ( pExpr )
-#if USE_COLUMNAR
-		, ColumnarFilterTraits_c(pExpr)
-#endif
 	{}
 
 	bool Eval ( const CSphMatch & tMatch ) const final
@@ -1146,21 +1090,6 @@ public:
 		assert ( this->m_pExpr );
 		return EvalValues ( m_pExpr->Int64Eval ( tMatch ) );
 	}
-
-#if USE_COLUMNAR
-	bool Test ( const std::vector<std::pair<SphAttr_t,SphAttr_t>> & dMinMax ) const final
-	{
-		if ( m_iColumnarCol<0 )
-			return true;
-
-		return EvalBlockValues ( dMinMax[m_iColumnarCol].first, dMinMax[m_iColumnarCol].second );
-	}
-
-	void SetColumnarCol ( int iColumnarCol ) final
-	{
-		ColumnarFilterTraits_c::SetColumnarCol(iColumnarCol);
-	}
-#endif
 };
 
 
@@ -1357,13 +1286,6 @@ static void SetFilterLocator ( ISphFilter * pFilter, const CSphFilterSettings & 
 	const CSphColumnInfo & tAttr = tSchema.GetAttr(iAttr);
 
 	pFilter->SetLocator ( tAttr.m_tLocator );
-
-#if USE_COLUMNAR
-	// check if we're creating a filter over a column that fetches a columnar expression
-	// if that's true, we can use a block filter with values taken from columnar storage
-	if ( tAttr.IsColumnarExpr() )
-		pFilter->SetColumnarCol ( tSchema.GetAttrIndex ( tAttr.m_sName.cstr() ) );
-#endif
 }
 
 
@@ -1549,17 +1471,25 @@ static ISphFilter * TryToCreatePlainAttrFilter ( ISphFilter * pFilter, const CSp
 }
 
 
-static void FixupFilterSettings ( const CSphFilterSettings & tSettings, CommonFilterSettings_t & tFixedSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName )
+static bool FixupFilterSettings ( const CSphFilterSettings & tSettings, CommonFilterSettings_t & tFixedSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName, CSphString & sError )
 {
 	assert ( tCtx.m_pSchema );
 	const ISphSchema & tSchema = *tCtx.m_pSchema;
 
 	int iAttr = ( tSettings.m_eType!=SPH_FILTER_EXPRESSION ? tSchema.GetAttrIndex ( sAttrName.cstr() ) : -1 );
 	if ( iAttr<0 )
-		return;
+		return true;
 
-	const CSphColumnInfo & tAttr =  tSchema.GetAttr(iAttr);
+	const CSphColumnInfo & tAttr = tSchema.GetAttr(iAttr);
+	bool bIntFilter = tSettings.m_eType==SPH_FILTER_VALUES || tSettings.m_eType==SPH_FILTER_RANGE || tSettings.m_eType==SPH_FILTER_FLOATRANGE;
+	if ( bIntFilter && ( tAttr.m_eAttrType==SPH_ATTR_STRING || tAttr.m_eAttrType==SPH_ATTR_STRINGPTR ) )
+	{
+		sError.SetSprintf ( "unsupported filter on a '%s' string column", tAttr.m_sName.cstr() );
+		return false;
+	}
+
 	FixupFilterSettings ( tSettings, tAttr.m_eAttrType, tFixedSettings );
+	return true;
 }
 
 void FixupFilterSettings ( const CSphFilterSettings & tSettings, ESphAttr eAttrType, CommonFilterSettings_t & tFixedSettings )
@@ -1851,7 +1781,8 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 	ESphAttr eAttrType = SPH_ATTR_NONE;
 	CSphRefcountedPtr<ISphExpr> pExpr;
 
-	FixupFilterSettings ( tSettings, tFixedSettings, tCtx, sAttrName );
+	if ( !FixupFilterSettings ( tSettings, tFixedSettings, tCtx, sAttrName, sError ) )
+		return nullptr;
 
 	pFilter = TryToCreateExpressionFilter ( pFilter, tSettings, tCtx, sAttrName, tFixedSettings, eAttrType, pExpr, sError, sWarning );
 	pFilter = TryToCreatePlainAttrFilter ( pFilter, tSettings, tCtx, bHaving, sAttrName, tFixedSettings, eAttrType, pExpr, sError, sWarning );

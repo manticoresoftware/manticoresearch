@@ -913,7 +913,7 @@ bool sphParseJsonInsert ( const char * szInsert, SqlStmt_t & tStmt, DocID_t & tD
 
 static bool ParseUpdateDeleteQueries ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError )
 {	
-	tStmt.m_tQuery.m_sSelect = "*";
+	tStmt.m_tQuery.m_sSelect = "id";
 	if ( !ParseIndex ( tRoot, tStmt, sError ) )
 		return false;
 
@@ -926,7 +926,7 @@ static bool ParseUpdateDeleteQueries ( const JsonObj_c & tRoot, SqlStmt_t & tStm
 		CSphFilterSettings & tFilter = tStmt.m_tQuery.m_dFilters.Add();
 		tFilter.m_eType = SPH_FILTER_VALUES;
 		tFilter.m_dValues.Add ( tId.IntVal() );
-		tFilter.m_sAttrName = "@id";
+		tFilter.m_sAttrName = "id";
 
 		tDocId = tId.IntVal();
 	}
@@ -1126,7 +1126,7 @@ bool sphParseJsonStatement ( const char * szStmt, SqlStmt_t & tStmt, CSphString 
 
 
 //////////////////////////////////////////////////////////////////////////
-static void PackedShortMVA2Json ( StringBuilder_c& tOut, const BYTE * pMVA )
+static void PackedShortMVA2Json ( StringBuilder_c & tOut, const BYTE * pMVA )
 {
 	auto dMVA = sphUnpackPtrAttr ( pMVA );
 	auto nValues = dMVA.second / sizeof ( DWORD );
@@ -1135,7 +1135,7 @@ static void PackedShortMVA2Json ( StringBuilder_c& tOut, const BYTE * pMVA )
 		tOut.NtoA(pValues[i]);
 }
 
-static void PackedWideMVA2Json ( StringBuilder_c &tOut, const BYTE * pMVA )
+static void PackedWideMVA2Json ( StringBuilder_c & tOut, const BYTE * pMVA )
 {
 	auto dMVA = sphUnpackPtrAttr ( pMVA );
 	auto nValues = dMVA.second / sizeof ( int64_t );
@@ -1144,8 +1144,7 @@ static void PackedWideMVA2Json ( StringBuilder_c &tOut, const BYTE * pMVA )
 		tOut.NtoA(pValues[i]);
 }
 
-static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t &tRes, ESphAttr eAttrType,
-	const CSphMatch &tMatch, const CSphAttrLocator &tLoc )
+static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t & tRes, ESphAttr eAttrType, const CSphMatch & tMatch, const CSphAttrLocator & tLoc )
 {
 	switch ( eAttrType )
 	{
@@ -1258,8 +1257,7 @@ static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t &tRes
 }
 
 
-static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t & tRes, ESphAttr eAttrType, const char * szCol,
-	const CSphMatch & tMatch, const CSphAttrLocator & tLoc )
+static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t & tRes, ESphAttr eAttrType, const char * szCol, const CSphMatch & tMatch, const CSphAttrLocator & tLoc )
 {
 	assert ( sphPlainAttrToPtrAttr ( eAttrType )==eAttrType );
 	tOut.AppendName ( szCol );

@@ -38,6 +38,16 @@ index test
 	columnar_attrs 	= id, price, brand_id, brand_name, property
 	stored_fields	= title
 }
+
+index partial
+{
+	type 			= rt
+	path			= <data_path/>/test_partial
+	rt_attr_uint	= gid
+	rt_field		= title
+
+	columnar_attrs 	= id
+}
 </config>
 
 <db_create>
@@ -77,11 +87,21 @@ CREATE TABLE `test_table` (
 </db_insert>
 
 <queries><sphinxql>
-desc test;
 
+desc test;
 select * from test;
 select * from test where id=1003;
 select title from test where match('seven');
+
+desc partial;
+insert into partial values(1,'title',1);
+insert into partial values(2,'title',2);
+select * from partial;
+
+update partial set gid=100 where id=1;
+update partial set gid=200 where id=2;
+select * from partial;
+
 </sphinxql></queries>
 
 </test>

@@ -1183,7 +1183,8 @@ static CSphIndex * CreateIndex ( CSphConfig & hConf, const CSphString & sIndex, 
 	if ( hConf["index"][sIndex]("type") && hConf["index"][sIndex]["type"]=="rt" )
 	{
 		CSphSchema tSchema;
-		if ( bFromJson || sphRTSchemaConfigure ( hConf["index"][sIndex], tSchema, sError, false ) )
+		CSphIndexSettings tSettings;
+		if ( bFromJson || sphRTSchemaConfigure ( hConf["index"][sIndex], tSchema, tSettings, sError, false, false ) )
 			return sphCreateIndexRT ( tSchema, sIndex.cstr(), 32*1024*1024, hConf["index"][sIndex]["path"].cstr(), bDictKeywords );
 	} else
 	{

@@ -13,8 +13,6 @@
 #include "attribute.h"
 #include "sphinxint.h"
 
-#if USE_COLUMNAR
-
 class ColumnarFilter_c : public ISphFilter
 {
 public:
@@ -813,6 +811,3 @@ bool AddColumnarFilter ( std::vector<columnar::Filter_t> & dDst, const CSphFilte
 
 	return true;
 }
-
-
-#endif // USE_COLUMNAR

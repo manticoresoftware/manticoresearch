@@ -10162,9 +10162,7 @@ AttributeConverter_c::AttributeConverter_c ( const CSphSchema & tSchema, const C
 		else
 			m_dColumnarRemap[i] = -1;
 
-#if USE_COLUMNAR
 	m_dColumnarAttrs.Resize(iColumnarAttr);
-#endif
 	m_tStrings.m_dOff.Reset(iAttrs);
 }
 
@@ -10294,11 +10292,9 @@ void AttributeConverter_c::SetDefaultAttrValue ( int iCol )
 	SphAttr_t tAttr;
 	if ( CSphMatchVariant::ConvertPlainAttr ( tDefaultVal, tCol.m_eAttrType, tAttr ) )
 	{
-#if USE_COLUMNAR
 		if ( tCol.IsColumnar() )
 			m_dColumnarAttrs [ m_dColumnarRemap[iCol] ] = tAttr;
 		else
-#endif
 			m_tDoc.SetAttr ( tLoc, tAttr );
 	}
 }
@@ -10333,11 +10329,9 @@ bool AttributeConverter_c::SetAttrValue ( int iCol, const SqlInsert_t & tVal, in
 	SphAttr_t tAttr;
 	if ( CSphMatchVariant::ConvertPlainAttr ( tVal, tCol.m_eAttrType, tAttr ) )
 	{
-#if USE_COLUMNAR
 		if ( tCol.IsColumnar() )
 			m_dColumnarAttrs [ m_dColumnarRemap[iCol] ] = tAttr;
 		else
-#endif
 			m_tDoc.SetAttr ( tLoc, tAttr );
 	}
 

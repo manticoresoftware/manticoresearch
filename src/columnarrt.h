@@ -13,8 +13,6 @@
 
 #include "sphinx.h"
 
-#if USE_COLUMNAR
-
 class ColumnarRT_i : public columnar::Columnar_i
 {
 public:
@@ -46,7 +44,5 @@ ColumnarRT_i *			CreateColumnarRT ( const CSphSchema & tSchema, ColumnarBuilderR
 
 // used by ram segments and binlog
 ColumnarRT_i *			CreateColumnarRT ( const CSphSchema & tSchema, CSphReader & tReader, CSphString & sError );
-
-#endif // USE_COLUMNAR
 
 #endif // _columnarrt_

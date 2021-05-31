@@ -195,12 +195,8 @@ public:
 
 	void	BindWeights ( const CSphQuery & tQuery, const CSphSchema & tSchema, CSphString & sWarning );
 
-#if USE_COLUMNAR
 	bool	SetupCalc ( CSphQueryResultMeta & tMeta, const ISphSchema & tInSchema, const CSphSchema & tSchema, const BYTE * pBlobPool, const columnar::Columnar_i * pColumnar,
 				const CSphVector<const ISphSchema *> & dInSchemas );
-#else
-	bool	SetupCalc ( CSphQueryResultMeta & tMeta, const ISphSchema & tInSchema, const CSphSchema & tSchema, const BYTE * pBlobPool, const CSphVector<const ISphSchema *> & dInSchemas );
-#endif
 
 	bool	CreateFilters ( CreateFilterContext_t &tCtx, CSphString &sError, CSphString &sWarning );
 
@@ -216,9 +212,7 @@ public:
 	void	ExprCommand ( ESphExprCommand eCmd, void * pArg );
 	void	SetBlobPool ( const BYTE * pBlobPool );
 
-#if USE_COLUMNAR
 	void	SetColumnar ( const columnar::Columnar_i * pColumnar );
-#endif
 
 	void	SetupExtraData ( ISphRanker * pRanker, ISphMatchSorter * pSorter );
 	void	ResetFilters();
@@ -1186,11 +1180,7 @@ enum ESphExt
 	SPH_EXT_SPH,
 	SPH_EXT_SPA,
 	SPH_EXT_SPB,
-
-#if USE_COLUMNAR
 	SPH_EXT_SPC,
-#endif
-
 	SPH_EXT_SPI,
 	SPH_EXT_SPD,
 	SPH_EXT_SPP,

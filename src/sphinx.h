@@ -1349,11 +1349,8 @@ struct CSphColumnInfo
 	enum
 	{
 		ATTR_NONE				= 0,
-
-#if USE_COLUMNAR
 		ATTR_COLUMNAR			= 1<<0,
 		ATTR_COLUMNAR_HASHES	= 1<<1
-#endif
 	};
 
 	CSphString		m_sName;		///< column name
@@ -1376,9 +1373,7 @@ struct CSphColumnInfo
 	bool			m_bWeight = false;				///< is a weight column
 	DWORD			m_uFieldFlags = FIELD_INDEXED;	///< stored/indexed/highlighted etc
 	DWORD			m_uAttrFlags = ATTR_NONE;		///< attribute storage spec
-#if USE_COLUMNAR
 	AttrEngine_e	m_eEngine = AttrEngine_e::DEFAULT;	///< used together with per-table engine specs to determine attribute storage
-#endif
 
 	WORD			m_uNext = 0xFFFF;			///< next in linked list for hash in CSphSchema
 
@@ -2728,9 +2723,7 @@ public:
 	CSphQueryResultMeta *	m_pMeta = nullptr; 		///< not owned
 	const BYTE *			m_pBlobPool = nullptr;	///< pointer to blob attr storage. Used only during calculations.
 	const DocstoreReader_i* m_pDocstore = nullptr;	///< pointer to docstore reader fixme! not need in aggr
-#if USE_COLUMNAR
 	columnar::Columnar_i *	m_pColumnar = nullptr;
-#endif
 };
 
 /////////////////////////////////////////////////////////////////////////////

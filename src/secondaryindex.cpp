@@ -316,7 +316,6 @@ bool RowidIterator_Intersect_T<T>::IteratorState_t::WarmupDocs()
 	return true;
 }
 
-#if USE_COLUMNAR
 template <>
 bool RowidIterator_Intersect_T<columnar::BlockIterator_i>::IteratorState_t::WarmupDocs()
 {
@@ -334,7 +333,6 @@ bool RowidIterator_Intersect_T<columnar::BlockIterator_i>::IteratorState_t::Warm
 
 	return true;
 }
-#endif
 
 template <typename T>
 bool RowidIterator_Intersect_T<T>::IteratorState_t::WarmupDocs ( RowID_t tRowID )
@@ -475,7 +473,6 @@ int64_t RowidIterator_Intersect_T<T>::GetNumProcessed() const
 	return iTotal;
 }
 
-#if USE_COLUMNAR
 class RowidIterator_Wrapper_c : public RowidIterator_i
 {
 public:
@@ -498,7 +495,6 @@ bool RowidIterator_Wrapper_c::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
 	dRowIdBlock = { (RowID_t *)dSpan.begin(), (int64_t)dSpan.size() };
 	return true;
 }
-#endif
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -790,7 +786,7 @@ RowidIterator_i * CreateIteratorIntersect ( CSphVector<RowidIterator_i*> & dIter
 	return new RowidIterator_Intersect_T<RowidIterator_i> ( dIterators.Begin(), dIterators.GetLength() );
 }
 
-#if USE_COLUMNAR
+
 RowidIterator_i * CreateIteratorWrapper ( columnar::BlockIterator_i * pIterator )
 {
 	return new RowidIterator_Wrapper_c(pIterator);
@@ -801,7 +797,6 @@ RowidIterator_i * CreateIteratorIntersect ( std::vector<columnar::BlockIterator_
 {
 	return new RowidIterator_Intersect_T<columnar::BlockIterator_i> ( &dIterators[0], (int)dIterators.size() );
 }
-#endif
 
 
 //////////////////////////////////////////////////////////////////////////

@@ -13,8 +13,6 @@
 
 #include "sphinx.h"
 
-#if USE_COLUMNAR
-
 using ScopedTypedIterator_t = std::pair<std::unique_ptr<columnar::Iterator_i>,ESphAttr>;
 
 template <typename ITERATOR>
@@ -29,18 +27,12 @@ CSphVector<ScopedTypedIterator_t> CreateAllColumnarIterators ( const columnar::C
 void SetColumnarAttr ( int iAttr, ESphAttr eType, columnar::Builder_i * pBuilder, columnar::Iterator_i * pIterator, CSphVector<int64_t> & dTmp );
 void SetDefaultColumnarAttr ( int iAttr, ESphAttr eType, columnar::Builder_i * pBuilder );
 
-#endif // USE_COLUMNAR
-
 struct PlainOrColumnar_t
 {
 	CSphAttrLocator	m_tLocator;
 	int				m_iColumnarId = -1;
 
-#if USE_COLUMNAR
 	SphAttr_t		Get ( const CSphRowitem * pRow, CSphVector<ScopedTypedIterator_t> & dIterators ) const;
-#else
-	SphAttr_t		Get ( const CSphRowitem * pRow ) const;
-#endif
 };
 
 #endif // _columnarmisc_

@@ -797,7 +797,6 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "docstore_block_size",	0, nullptr },
 	{ "docstore_compression",	0, nullptr },
 	{ "docstore_compression_level",	0, nullptr },
-#if USE_COLUMNAR
 	{ "columnar_attrs",			0, nullptr },
 	{ "rowwise_attrs",			0, nullptr },
 	{ "columnar_strings_no_hash", 0, nullptr },
@@ -806,7 +805,6 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "columnar_subblock",		0, nullptr },
 	{ "columnar_subblock_mva",	0, nullptr },
 	{ "columnar_minmax_leaf",	0, nullptr },
-#endif
 	{ nullptr,					0, nullptr }
 };
 

@@ -14,8 +14,6 @@
 #include "exprtraits.h"
 #include "sphinxint.h"
 
-#if USE_COLUMNAR
-
 template <typename T>
 class Expr_Columnar_MVAIn_T : public Expr_ArgVsConstSet_T<int64_t>
 {
@@ -576,23 +574,3 @@ ISphExpr * CreateExpr_GetColumnarInt ( const CSphString & sName )		{ return new 
 ISphExpr * CreateExpr_GetColumnarFloat ( const CSphString & sName )		{ return new Expr_GetColumnarFloat_c(sName); }
 ISphExpr * CreateExpr_GetColumnarString ( const CSphString & sName )	{ return new Expr_GetColumnarString_c(sName); }
 ISphExpr * CreateExpr_GetColumnarMva ( const CSphString & sName )		{ return new Expr_GetColumnarMva_c(sName); }
-
-#else
-
-ISphExpr * CreateExpr_ColumnarMva32In ( const CSphString & sName, ConstList_c * pConsts )	{ return nullptr; }
-ISphExpr * CreateExpr_ColumnarMva64In ( const CSphString & sName, ConstList_c * pConsts )	{ return nullptr; }
-ISphExpr * CreateExpr_ColumnarStringIn ( const CSphString & sName, ConstList_c * pConsts, ESphCollation eCollation ) { return nullptr; }
-
-ISphExpr * CreateExpr_ColumnarStringLength ( const CSphString & sName )	{ return nullptr; }
-ISphExpr * CreateExpr_ColumnarMva32Length ( const CSphString & sName )	{ return nullptr; }
-ISphExpr * CreateExpr_ColumnarMva64Length ( const CSphString & sName )	{ return nullptr; }
-
-ISphExpr * CreateExpr_ColumnarMva32Aggr ( ISphExpr * pExpr, ESphAggrFunc eFunc )	{ return nullptr; }
-ISphExpr * CreateExpr_ColumnarMva64Aggr ( ISphExpr * pExpr, ESphAggrFunc eFunc )	{ return nullptr; }
-
-ISphExpr * CreateExpr_GetColumnarInt ( const CSphString & sName )		{ return nullptr; }
-ISphExpr * CreateExpr_GetColumnarFloat ( const CSphString & sName )		{ return nullptr; }
-ISphExpr * CreateExpr_GetColumnarString ( const CSphString & sName )	{ return nullptr; }
-ISphExpr * CreateExpr_GetColumnarMva ( const CSphString & sName )		{ return nullptr; }
-
-#endif //USE_COLUMNAR

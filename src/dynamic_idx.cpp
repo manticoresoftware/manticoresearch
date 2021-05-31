@@ -595,11 +595,8 @@ bool GenericTableIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery
 	// setup calculations and result schema
 	CSphQueryContext tCtx ( tQuery );
 
-#if USE_COLUMNAR
-	if ( !tCtx.SetupCalc ( tMeta, tMaxSorterSchema, m_tSchema, nullptr, nullptr, dSorterSchemas ) ) return false;
-#else
-	if ( !tCtx.SetupCalc ( tMeta, tMaxSorterSchema, m_tSchema, nullptr, dSorterSchemas ) ) return false;
-#endif
+	if ( !tCtx.SetupCalc ( tMeta, tMaxSorterSchema, m_tSchema, nullptr, nullptr, dSorterSchemas ) )
+		return false;
 
 	// setup filters
 	CreateFilterContext_t tFlx;

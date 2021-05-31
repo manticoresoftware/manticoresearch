@@ -13,8 +13,6 @@
 
 #include "sphinxstd.h"
 
-#if USE_COLUMNAR
-
 #include "columnar.h"
 #include "builder.h"
 
@@ -22,8 +20,6 @@ class ISphSchema;
 
 columnar::Columnar_i *	CreateColumnarStorageReader ( const CSphString & sFile, DWORD uNumDocs, CSphString & sError );
 columnar::Builder_i *	CreateColumnarBuilder ( const ISphSchema & tSchema, const columnar::Settings_t & tSettings, const CSphString & sFilename, CSphString & sError );
-
-#endif // USE_COLUMNAR
 
 bool			InitColumnar ( CSphString & sError );
 void			ShutdownColumnar();

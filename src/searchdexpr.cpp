@@ -278,14 +278,12 @@ void Expr_HighlightTraits_c::FixupLocator ( const ISphSchema * pOldSchema, const
 		return;
 	}
 
-#if USE_COLUMNAR
 	CSphString sColumnarCol;
 	m_pText->Command ( SPH_EXPR_GET_COLUMNAR_COL, &sColumnarCol );
 	m_iTextLocator = pNewSchema->GetAttrIndex ( sColumnarCol.cstr() );
 	assert ( m_iTextLocator!=0 );
 
 	m_pText = pNewSchema->GetAttr(m_iTextLocator).m_pExpr;
-#endif
 }
 
 
@@ -327,14 +325,12 @@ void Expr_HighlightTraits_c::SetTextExpr ( ISphExpr * pExpr, const ISphSchema * 
 	m_pText = pExpr;
 	SafeAddRef(m_pText);
 
-#if USE_COLUMNAR
 	if ( m_pText && m_pText->IsColumnar() )
 	{
 		CSphString sColumnarCol;
 		m_pText->Command ( SPH_EXPR_GET_COLUMNAR_COL, &sColumnarCol );
 		m_iTextLocator = pRsetSchema->GetAttrIndex ( sColumnarCol.cstr() ); 
 	}
-#endif
 }
 
 //////////////////////////////////////////////////////////////////////////

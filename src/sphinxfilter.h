@@ -16,10 +16,7 @@
 #include "sphinx.h"
 #include "columnarlib.h"
 
-class ISphFilter
-#if USE_COLUMNAR
-	: public columnar::BlockTester_i
-#endif
+class ISphFilter : public columnar::BlockTester_i
 {
 public:
 				ISphFilter() = default;
@@ -31,7 +28,6 @@ public:
 	virtual void SetValues ( const SphAttr_t *, int ) {}
 	virtual void SetBlobStorage ( const BYTE * ) {}
 
-#if USE_COLUMNAR
 	virtual void SetColumnar ( const columnar::Columnar_i * ) {}
 
 	/// similar to EvalBlock w/pMinDocinfo and pMaxDocinfo, but for filter expressions
@@ -41,7 +37,6 @@ public:
 		// if filter does not implement block-level evaluation we assume the block will pass
 		return true;
 	}
-#endif
 
 	virtual void SetRefString ( const CSphString * , int ) {}
 	virtual ISphFilter * Optimize() { return this; }
@@ -77,10 +72,7 @@ struct CreateFilterContext_t
 
 	const ISphSchema *			m_pSchema = nullptr;
 	const BYTE *				m_pBlobPool = nullptr;
-
-#if USE_COLUMNAR
 	const columnar::Columnar_i * m_pColumnar = nullptr;
-#endif
 
 	ESphCollation				m_eCollation = SPH_COLLATION_DEFAULT;
 	bool						m_bScan = false;

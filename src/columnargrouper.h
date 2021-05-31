@@ -13,13 +13,9 @@
 
 #include "sphinx.h"
 
-#if USE_COLUMNAR
-
 class CSphGrouper;
 CSphGrouper * CreateGrouperColumnarInt ( const CSphColumnInfo & tAttr );
 CSphGrouper * CreateGrouperColumnarString ( const CSphColumnInfo & tAttr, ESphCollation eCollation );
 CSphGrouper * CreateGrouperColumnarMVA ( const CSphColumnInfo & tAttr );
-
-#endif // USE_COLUMNAR
 
 #endif // _columnargrouper_

@@ -536,7 +536,6 @@ struct Filter_And2 final : public ISphFilter
 		return m_pArg1->EvalBlock ( pMin, pMax ) && m_pArg2->EvalBlock ( pMin, pMax );
 	}
 
-#if USE_COLUMNAR
 	bool Test ( const columnar::MinMaxVec_t & dMinMax ) const final
 	{
 		return m_pArg1->Test(dMinMax) && m_pArg2->Test(dMinMax);
@@ -547,7 +546,6 @@ struct Filter_And2 final : public ISphFilter
 		m_pArg1->SetColumnar(pColumnar);
 		m_pArg2->SetColumnar(pColumnar);
 	}
-#endif
 
 	ISphFilter * Join ( ISphFilter * pFilter ) final
 	{
@@ -592,7 +590,6 @@ struct Filter_And3 final : public ISphFilter
 		return m_pArg1->EvalBlock ( pMin, pMax ) && m_pArg2->EvalBlock ( pMin, pMax ) && m_pArg3->EvalBlock ( pMin, pMax );
 	}
 
-#if USE_COLUMNAR
 	bool Test ( const columnar::MinMaxVec_t & dMinMax ) const final
 	{
 		return m_pArg1->Test(dMinMax) && m_pArg2->Test(dMinMax) && m_pArg3->Test(dMinMax);
@@ -604,7 +601,6 @@ struct Filter_And3 final : public ISphFilter
 		m_pArg2->SetColumnar(pColumnar);
 		m_pArg3->SetColumnar(pColumnar);
 	}
-#endif
 
 	ISphFilter * Join ( ISphFilter * pFilter ) final
 	{
@@ -652,10 +648,8 @@ struct Filter_And final : public ISphFilter
 		return true;
 	}
 
-#if USE_COLUMNAR
 	bool Test ( const columnar::MinMaxVec_t & dMinMax ) const final		{ return m_dFilters.all_of ( [&dMinMax]( ISphFilter * pFilter ){ return pFilter->Test(dMinMax); } ); }
 	void SetColumnar ( const columnar::Columnar_i * pColumnar ) final	{ m_dFilters.for_each ( [pColumnar]( ISphFilter * pFilter ){ pFilter->SetColumnar(pColumnar); } ); }
-#endif
 
 	ISphFilter * Join ( ISphFilter * pFilter ) final
 	{
@@ -716,7 +710,6 @@ struct Filter_Or final : public ISphFilter
 		return ( m_pLeft->EvalBlock ( pMinDocinfo, pMaxDocinfo ) || m_pRight->EvalBlock ( pMinDocinfo, pMaxDocinfo ) );
 	}
 
-#if USE_COLUMNAR
 	bool Test ( const columnar::MinMaxVec_t & dMinMax ) const final
 	{
 		return ( m_pLeft->Test(dMinMax) || m_pRight->Test(dMinMax) );
@@ -727,7 +720,6 @@ struct Filter_Or final : public ISphFilter
 		m_pLeft->SetColumnar(pColumnar);
 		m_pRight->SetColumnar(pColumnar);
 	}
-#endif
 
 	void SetBlobStorage ( const BYTE * pBlobPool ) final
 	{
@@ -778,12 +770,10 @@ struct Filter_Not final : public ISphFilter
 		m_pFilter->SetBlobStorage ( pBlobPool );
 	}
 
-#if USE_COLUMNAR
 	void SetColumnar ( const columnar::Columnar_i * pColumnar ) final
 	{
 		m_pFilter->SetColumnar(pColumnar);
 	}
-#endif
 };
 
 /// impl
@@ -1023,7 +1013,6 @@ public:
 			m_pExpr->Command ( SPH_EXPR_SET_BLOB_POOL, (void*)pBlobPool );
 	}
 
-#if USE_COLUMNAR
 	void SetColumnar ( const columnar::Columnar_i * pColumnar ) final
 	{
 		if ( !m_pExpr )
@@ -1031,7 +1020,6 @@ public:
 
 		m_pExpr->Command ( SPH_EXPR_SET_COLUMNAR, (void*)pColumnar );
 	}
-#endif
 
 protected:
 	const BYTE *				m_pBlobPool {nullptr};
@@ -1295,10 +1283,7 @@ static void SetFilterSettings ( ISphFilter * pFilter, const CSphFilterSettings &
 		return;
 
 	pFilter->SetBlobStorage ( tCtx.m_pBlobPool );
-#if USE_COLUMNAR
 	pFilter->SetColumnar ( tCtx.m_pColumnar );
-#endif
-
 	pFilter->SetRange ( tSettings.m_iMinValue, tSettings.m_iMaxValue );
 	if ( tFixedSettings.m_eType==SPH_FILTER_FLOATRANGE )
 		pFilter->SetRangeFloat ( (float)tFixedSettings.m_fMinValue, (float)tFixedSettings.m_fMaxValue );
@@ -1407,10 +1392,8 @@ static ISphFilter * TryToCreateExpressionFilter ( ISphFilter * pFilter, const CS
 	if ( iAttr>=0 && !bColumnar )
 		return nullptr;
 
-#if USE_COLUMNAR
 	pFilter = TryToCreateColumnarFilter ( iAttr, tSchema, tSettings, tFixedSettings, tCtx.m_eCollation, sError, sWarning );
 	if ( !pFilter )
-#endif
 	{
 		ExprParseArgs_t tExprArgs;
 		tExprArgs.m_pAttrType = &eAttrType;

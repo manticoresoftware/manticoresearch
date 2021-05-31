@@ -11,8 +11,6 @@
 #include "columnargrouper.h"
 #include "sphinxsort.h"
 
-#if USE_COLUMNAR
-
 class GrouperColumnarInt_c : public CSphGrouper
 {
 public:
@@ -216,5 +214,3 @@ CSphGrouper * CreateGrouperColumnarMVA ( const CSphColumnInfo & tAttr )
 
 	return new GrouperColumnarMVA_T<int64_t>(tAttr);
 }
-
-#endif // USE_COLUMNAR

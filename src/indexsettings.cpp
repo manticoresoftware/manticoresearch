@@ -619,7 +619,6 @@ void CSphIndexSettings::ParseStoredFields ( const CSphConfigSection & hIndex )
 }
 
 
-#if USE_COLUMNAR
 bool CSphIndexSettings::ParseColumnarSettings ( const CSphConfigSection & hIndex, CSphString & sError )
 {
 	if ( ( hIndex.Exists("columnar_attrs") || hIndex.Exists("rowwise_attrs") || hIndex.Exists("engine") ) && !IsColumnarLibLoaded() )
@@ -664,7 +663,7 @@ bool CSphIndexSettings::ParseColumnarSettings ( const CSphConfigSection & hIndex
 
 	return true;
 }
-#endif
+
 
 bool CSphIndexSettings::ParseDocstoreSettings ( const CSphConfigSection & hIndex, CSphString & sWarning, CSphString & sError )
 {
@@ -728,10 +727,8 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 
 	ParseStoredFields(hIndex);
 
-#if USE_COLUMNAR
 	if ( !ParseColumnarSettings ( hIndex, sError ) )
 		return false;
-#endif
 
 	if ( RawMinPrefixLen()==0 && m_dPrefixFields.GetLength()!=0 )
 	{
@@ -923,12 +920,10 @@ void CSphIndexSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i *
 		tOut.Add ( "hitless_words",		sHitlessFiles,			true );
 	}
 
-#if USE_COLUMNAR
 	if ( m_eEngine==AttrEngine_e::COLUMNAR )
 		tOut.Add ( "engine",			"columnar",				true );
 	else if ( m_eEngine==AttrEngine_e::ROWWISE )
 		tOut.Add ( "engine",			"rowwise",				true );
-#endif
 
 	DocstoreSettings_t::Format ( tOut, pFilenameBuilder );
 }
@@ -962,7 +957,7 @@ static StrVec_t SplitArg ( const CSphString & sValue, StrVec_t & dFiles )
 	return dValues;
 }
 
-#if USE_COLUMNAR
+
 bool StrToAttrEngine ( AttrEngine_e & eEngine, const CSphString & sValue, CSphString & sError )
 {
 	if ( sValue.IsEmpty() )
@@ -984,7 +979,7 @@ bool StrToAttrEngine ( AttrEngine_e & eEngine, const CSphString & sValue, CSphSt
 
 	return true;
 }
-#endif
+
 
 bool IndexSettingsContainer_c::AddOption ( const CSphString & sName, const CSphString & sValue )
 {
@@ -1062,7 +1057,6 @@ bool IndexSettingsContainer_c::AddOption ( const CSphString & sName, const CSphS
 
 	}
 
-#if USE_COLUMNAR
 	if ( sName=="engine" )
 	{
 		if ( !StrToAttrEngine ( m_eEngine, sValue, m_sError ) )
@@ -1070,7 +1064,6 @@ bool IndexSettingsContainer_c::AddOption ( const CSphString & sName, const CSphS
 
 		return Add ( sName, sValue );
 	}
-#endif
 
 	return Add ( sName, sValue );
 }
@@ -1084,7 +1077,6 @@ void IndexSettingsContainer_c::RemoveKeys ( const CSphString & sName )
 
 void IndexSettingsContainer_c::SetupColumnarAttrs ( const CreateTableSettings_t & tCreateTable )
 {
-#if USE_COLUMNAR
 	StringBuilder_c sColumnarAttrs(",");
 	StringBuilder_c sRowwiseAttrs(",");
 	if ( m_eEngine==AttrEngine_e::COLUMNAR )
@@ -1103,7 +1095,6 @@ void IndexSettingsContainer_c::SetupColumnarAttrs ( const CreateTableSettings_t 
 
 	if ( sRowwiseAttrs.GetLength() )
 		Add ( "rowwise_attrs", sRowwiseAttrs.cstr() );
-#endif
 }
 
 
@@ -1599,12 +1590,10 @@ static void AddFieldSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tF
 
 static void AddEngineSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr )
 {
-#if USE_COLUMNAR
 	if ( tAttr.m_eEngine==AttrEngine_e::COLUMNAR )
 		sRes << " engine='columnar'";
 	else if ( tAttr.m_eEngine==AttrEngine_e::ROWWISE )
 		sRes << " engine='rowwise'";
-#endif
 }
 
 

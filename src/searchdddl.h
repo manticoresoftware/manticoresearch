@@ -33,12 +33,7 @@ public:
 
 	const char * GetLastError() const { return m_sError.scstr(); };
 
-#if USE_COLUMNAR
 	bool	AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t & tCol, AttrEngine_e eEngine = AttrEngine_e::DEFAULT );
-#else
-	bool	AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t & tCol );
-#endif
-
 	void	AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits );
 	bool	AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t & tCol, const SqlNode_t & tEngine );
 	void	AddCreateTableOption ( const SqlNode_t & tName, const SqlNode_t & tValue );

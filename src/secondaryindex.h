@@ -37,11 +37,8 @@ RowidIterator_i * CreateFilteredIterator ( const CSphVector<CSphFilterSettings> 
 	const CSphVector<IndexHint_t> & dHints, const HistogramContainer_c & tHistograms, const BYTE * pDocidLookup );
 
 RowidIterator_i * CreateIteratorIntersect ( CSphVector<RowidIterator_i*> & dIterators );
-
-#if USE_COLUMNAR
 RowidIterator_i * CreateIteratorWrapper ( columnar::BlockIterator_i * pIterator );
 RowidIterator_i * CreateIteratorIntersect ( std::vector<columnar::BlockIterator_i *> & dIterators );
-#endif
 
 bool ReturnIteratorResult ( RowID_t * pRowID, RowID_t * pRowIdStart, RowIdBlock_t & dRowIdBlock );
 

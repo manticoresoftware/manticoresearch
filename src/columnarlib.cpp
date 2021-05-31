@@ -12,8 +12,6 @@
 #include "sphinx.h"
 #include "libutils.h"
 
-#if USE_COLUMNAR
-
 using CreateStorageReader_fn =	columnar::Columnar_i * (*) ( const std::string & sFilename, uint32_t uTotalDocs, std::string & sError );
 using CreateBuilder_fn =		columnar::Builder_i * (*) ( const columnar::Settings_t & tSettings, const columnar::Schema_t & tSchema, const std::string & sFile, std::string & sError );
 using Setup_fn =				void (*) ( columnar::Malloc_fn, columnar::Free_fn );
@@ -146,7 +144,6 @@ private:
 	void * m_pHandle = nullptr;
 };
 
-#endif // USE_COLUMNAR
 
 static CSphString TryDifferentPaths ( const CSphString & sLibfile )
 {
@@ -169,8 +166,6 @@ static CSphString TryDifferentPaths ( const CSphString & sLibfile )
 
 bool InitColumnar ( CSphString & sError )
 {
-#if USE_COLUMNAR
-
 	assert ( !g_pColumnarLib );
 
 #if USE_WINDOWS
@@ -214,7 +209,6 @@ bool InitColumnar ( CSphString & sError )
 
 	g_fnSetupColumnar ( malloc, free );
 	g_pColumnarLib = tHandle.Leak();
-#endif
 
 	return true;
 }
@@ -222,32 +216,22 @@ bool InitColumnar ( CSphString & sError )
 
 void ShutdownColumnar()
 {
-#if USE_COLUMNAR
 	if ( g_pColumnarLib )
 		dlclose(g_pColumnarLib);
-#endif
 }
 
 
 const char * GetColumnarVersionStr()
 {
-#if USE_COLUMNAR
 	if ( !IsColumnarLibLoaded() )
 		return nullptr;
 
 	assert ( g_fnVersionStr );
 	return g_fnVersionStr();
-#else
-	return nullptr;
-#endif
 }
 
 
 bool IsColumnarLibLoaded()
 {
-#if USE_COLUMNAR
 	return !!g_pColumnarLib;
-#else
-	return false;
-#endif
 }

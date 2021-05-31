@@ -10,8 +10,6 @@
 
 #include "columnarmisc.h"
 
-#if USE_COLUMNAR
-
 CSphVector<ScopedTypedIterator_t> CreateAllColumnarIterators ( const columnar::Columnar_i * pColumnar, const ISphSchema & tSchema )
 {
 	CSphVector<ScopedTypedIterator_t> dIterators;
@@ -91,9 +89,7 @@ void SetDefaultColumnarAttr ( int iAttr, ESphAttr eType, columnar::Builder_i * p
 	}
 }
 
-#endif // USE_COLUMNAR
 
-#if USE_COLUMNAR
 SphAttr_t PlainOrColumnar_t::Get ( const CSphRowitem * pRow, CSphVector<ScopedTypedIterator_t> & dIterators ) const
 {
 	if ( m_iColumnarId>=0 )
@@ -101,9 +97,3 @@ SphAttr_t PlainOrColumnar_t::Get ( const CSphRowitem * pRow, CSphVector<ScopedTy
 
 	return sphGetRowAttr ( pRow, m_tLocator );
 }
-#else
-SphAttr_t PlainOrColumnar_t::Get ( const CSphRowitem * pRow ) const
-{
-	return sphGetRowAttr ( pRow, m_tLocator );
-}
-#endif

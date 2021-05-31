@@ -38,8 +38,7 @@ $g_model	= false;
 $g_re2		= false;
 $g_icu		= false;
 $g_odbc     = false;
-$g_columnar_compiled 	= false;
-$g_columnar_loaded 		= false;
+$g_columnar_loaded = false;
 $g_strict	= false;
 $g_skipdemo = false;
 $g_usemarks = true; // that we mark the output of every test in the searchd.log and query.log
@@ -186,10 +185,7 @@ function GuessODBC ()
 
 function GuessColumnar()
 {
-    global $g_columnar_compiled, $g_columnar_loaded;
-    $columnar_compiled1 = GuessFeature ( 'test_columnar.conf','no columnar support compiled');
-    $columnar_compiled2 = GuessFeature ( 'test_columnar.conf',"unknown key name 'columnar_attrs'");
-	$g_columnar_compiled = $columnar_compiled1 && $columnar_compiled2;
+    global $g_columnar_loaded;
     $g_columnar_loaded = GuessFeature ( 'test_columnar.conf','columnar library not loaded');
 }
 

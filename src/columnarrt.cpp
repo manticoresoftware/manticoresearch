@@ -13,8 +13,6 @@
 #include "memio.h"
 #include "attribute.h"
 
-#if USE_COLUMNAR
-
 template <typename T>
 static std::pair<T,T> GetLengthOffset ( const CSphVector<T> & dLengths, RowID_t tRowID )
 {
@@ -624,5 +622,3 @@ ColumnarRT_i * CreateColumnarRT ( const CSphSchema & tSchema, CSphReader & tRead
 
 	return pColumnar.LeakPtr();
 }
-
-#endif // USE_COLUMNAR

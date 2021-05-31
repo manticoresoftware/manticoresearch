@@ -77,9 +77,7 @@ void AddToSchema ( CSphSchema & tSchema, const CSphString & sAttrName, ESphAttr 
 	}
 
 	CSphColumnInfo tInfo ( sAttrName.cstr(), eAttrType );
-#if USE_COLUMNAR
 	tInfo.m_uAttrFlags |= bColumnar ? CSphColumnInfo::ATTR_COLUMNAR : 0;
-#endif
 
 	if ( tSchema.GetAttrId_FirstFieldLen()!=-1 )
 	{
@@ -361,7 +359,7 @@ bool IndexAlterHelper_c::Alter_AddRemoveRowwiseAttr ( const CSphSchema & tOldSch
 		return tCtx.RemoveRowwiseAttr();
 }
 
-#if USE_COLUMNAR
+
 bool IndexAlterHelper_c::Alter_AddRemoveColumnar ( bool bAdd, const ISphSchema & tOldSchema, const ISphSchema & tNewSchema, columnar::Columnar_i * pColumnar, columnar::Builder_i * pBuilder, DWORD uRows, const CSphString & sIndex, CSphString & sError )
 {
 	std::string sErrorSTL;
@@ -415,17 +413,15 @@ bool IndexAlterHelper_c::Alter_AddRemoveColumnar ( bool bAdd, const ISphSchema &
 
 	return true;
 }
-#endif
+
 
 bool IndexAlterHelper_c::Alter_AddRemoveFromSchema ( CSphSchema & tSchema, const CSphString & sAttrName, ESphAttr eAttrType, bool bColumnar, bool bAdd, CSphString & sError )
 {
-#if !USE_COLUMNAR
-	if ( bAdd && bColumnar )
+	if ( bAdd && bColumnar && !IsColumnarLibLoaded() )
 	{
-		sError.SetSprintf ( "Unable to add a columnar attribute '%s': executable built without columnar support", sAttrName.cstr() );
+		sError.SetSprintf ( "Unable to add a columnar attribute '%s': columnar library not loaded", sAttrName.cstr() );
 		return false;
 	}
-#endif
 
 	if ( bAdd )
 	{

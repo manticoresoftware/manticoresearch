@@ -35,10 +35,8 @@ struct InsertDocData_t
 
 	CSphAttrLocator						m_tDocIDLocator;
 
-#if USE_COLUMNAR
 	CSphVector<SphAttr_t>				m_dColumnarAttrs;
 	int									m_iColumnarID = -1;
-#endif
 
 										InsertDocData_t ( const ISphSchema & tSchema );
 
@@ -211,10 +209,7 @@ public:
 	OpenHash_T<RowID_t, DocID_t>	m_tDocIDtoRowID;		///< speeds up docid-rowid lookups
 	DeadRowMap_Ram_c				m_tDeadRowMap;
 	CSphScopedPtr<DocstoreRT_i>		m_pDocstore{nullptr};
-
-#if USE_COLUMNAR
 	CSphScopedPtr<ColumnarRT_i>		m_pColumnar{nullptr};
-#endif
 
 							RtSegment_t ( DWORD uDocs );
 

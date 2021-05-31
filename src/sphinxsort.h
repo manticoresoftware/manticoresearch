@@ -16,12 +16,10 @@
 #include "sphinx.h"
 #include "sortsetup.h"
 
-#if USE_COLUMNAR
 namespace columnar
 {
 	class Columnar_i;
 }
-#endif
 
 
 class MatchProcessor_i
@@ -34,10 +32,7 @@ public:
 };
 
 using GetBlobPoolFromMatch_fn = std::function< const BYTE* ( const CSphMatch * )>;
-
-#if USE_COLUMNAR
 using GetColumnarFromMatch_fn = std::function< columnar::Columnar_i * ( const CSphMatch * )>;
-#endif
 
 /// generic match sorter interface
 class ISphMatchSorter
@@ -67,10 +62,8 @@ public:
 	/// set blob pool pointer (for string+groupby sorters)
 	virtual void		SetBlobPool ( const BYTE * ) {}
 
-#if USE_COLUMNAR
 	/// set columnar (to work with columnar attributes)
 	virtual void		SetColumnar ( columnar::Columnar_i * pColumnar );
-#endif
 
 	/// set sorter schema
 	virtual void		SetSchema ( ISphSchema * pSchema, bool bRemapCmp );
@@ -124,20 +117,14 @@ public:
 
 	/// transform collected matches into standalone (copy all pooled attrs to ptrs, drop unused)
 	/// param fnBlobPoolFromMatch provides pool pointer from currently processed match pointer.
-#if USE_COLUMNAR
 	void				TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnBlobPoolFromMatch, GetColumnarFromMatch_fn fnGetColumnarFromMatch );
-#else
-	void				TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnBlobPoolFromMatch );
-#endif
 
 protected:
 	SharedPtr_t<ISphSchema*>	m_pSchema;	///< sorter schema (adds dynamic attributes on top of index schema)
 	CSphMatchComparatorState	m_tState;		///< protected to set m_iNow automatically on SetState() calls
 	StrVec_t					m_dTransformed;
 
-#if USE_COLUMNAR
 	columnar::Columnar_i *		m_pColumnar = nullptr;
-#endif
 };
 
 
@@ -176,10 +163,7 @@ public:
 	virtual ESphAttr		GetResultType () const = 0;
 	virtual CSphGrouper *	Clone() const = 0;
 	virtual bool			IsMultiValue() const { return false; }
-
-#if USE_COLUMNAR
 	virtual void			SetColumnar ( const columnar::Columnar_i * ) {}
-#endif
 
 protected:
 	virtual					~CSphGrouper () {}; // =default causes bunch of errors building on wheezy

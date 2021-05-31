@@ -4153,7 +4153,7 @@ function CopyDirContents ( $from, $to )
 
 function CheckConfig ( $config, $path )
 {
-	global $g_re2, $g_icu, $g_odbc, $windows, $g_locals, $mysql_simulated, $g_repli, $g_ssl, $g_columnar_compiled, $g_columnar_loaded;
+	global $g_re2, $g_icu, $g_odbc, $windows, $g_locals, $mysql_simulated, $g_repli, $g_ssl, $g_columnar_loaded;
 	
 	if ( $config->Requires("non-windows") && $windows )
 	{
@@ -4207,12 +4207,6 @@ function CheckConfig ( $config, $path )
 
 	if ( $config->Requires("columnar") )
 	{
-		if ( !$g_columnar_compiled )
-		{
-			printf ( "SKIPPING %s, %s - compile with columnar support to run this test\n", $path, $config->Name () );
-			return false;
-		}
-
 		if ( !$g_columnar_loaded )
 		{
 			printf ( "SKIPPING %s, %s - columnar library not loaded\n", $path, $config->Name () );

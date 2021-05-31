@@ -33,4 +33,3 @@ ISphExpr * CreateExpr_GetColumnarString ( const CSphString & sName );
 ISphExpr * CreateExpr_GetColumnarMva ( const CSphString & sName );
 
 #endif // _columnarexpr_
-

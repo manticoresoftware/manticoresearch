@@ -135,9 +135,7 @@ private:
 	CSphRefcountedPtr<ISphRtDictWraper>	m_pDictRt;
 	CSphScopedPtr<BlobRowBuilder_i>		m_pBlobWriter {nullptr};
 	CSphScopedPtr<DocstoreRT_i>			m_pDocstore {nullptr};
-#if USE_COLUMNAR
 	CSphScopedPtr<ColumnarBuilderRT_i>	m_pColumnarBuilder {nullptr};
-#endif
 	RowID_t								m_tNextRowID = 0;
 	CSphFixedVector<BYTE>				m_dPackedKeywords { 0 };
 	uint64_t							m_uSchemaHash = 0;

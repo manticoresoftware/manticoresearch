@@ -149,14 +149,14 @@ enum ESphWordpart
 	SPH_WORDPART_INFIX		= 2		///< infix
 };
 
-#if USE_COLUMNAR
+
 enum class AttrEngine_e
 {
 	DEFAULT,
 	ROWWISE,
 	COLUMNAR
 };
-#endif
+
 
 /// indexing-related source settings
 /// NOTE, newly added fields should be synced with CSphSource::Setup()
@@ -177,9 +177,7 @@ public:
 	StrVec_t m_dStoredFields;		///< list of stored fields
 	StrVec_t m_dStoredOnlyFields;	///< list of "fields" that are stored but not indexed
 
-#if USE_COLUMNAR
 	AttrEngine_e m_eEngine = AttrEngine_e::DEFAULT;	///< attribute storage engine
-#endif
 
 	StrVec_t m_dColumnarAttrs;			///< list of attributes to be placed in columnar store
 	StrVec_t m_dRowwiseAttrs;			///< list of attributes to NOT be placed in columnar store
@@ -250,10 +248,7 @@ enum ESphBigram
 };
 
 
-class CSphIndexSettings : public CSphSourceSettings, public DocstoreSettings_t
-#if USE_COLUMNAR
-	, public columnar::Settings_t
-#endif
+class CSphIndexSettings : public CSphSourceSettings, public DocstoreSettings_t, public columnar::Settings_t
 {
 public:
 	ESphHitFormat	m_eHitFormat = SPH_HIT_FORMAT_PLAIN;
@@ -283,11 +278,7 @@ public:
 
 private:
 	void			ParseStoredFields ( const CSphConfigSection & hIndex );
-
-#if USE_COLUMNAR
 	bool			ParseColumnarSettings ( const CSphConfigSection & hIndex, CSphString & sError );
-#endif
-
 	bool			ParseDocstoreSettings ( const CSphConfigSection & hIndex, CSphString & sWarning, CSphString & sError );
 };
 
@@ -358,9 +349,7 @@ struct RtTypedAttr_t
 int						GetNumRtTypes();
 const RtTypedAttr_t &	GetRtType ( int iType );
 
-#if USE_COLUMNAR
 bool					StrToAttrEngine ( AttrEngine_e & eEngine, const CSphString & sValue, CSphString & sError );
-#endif
 
 struct CreateTableSettings_t
 {
@@ -396,9 +385,7 @@ private:
 	StrVec_t		m_dWordformFiles;
 	StrVec_t		m_dHitlessFiles;
 	CSphString		m_sError;
-#if USE_COLUMNAR
 	AttrEngine_e	m_eEngine = AttrEngine_e::DEFAULT;
-#endif
 
 	void			SetupColumnarAttrs ( const CreateTableSettings_t & tCreateTable );
 	void			SetDefaults();

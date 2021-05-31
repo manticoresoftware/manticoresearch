@@ -84,12 +84,11 @@ int GetStringRemapCount ( const ISphSchema & tDstSchema, const ISphSchema & tSrc
 }
 
 //////////////////////////////////////////////////////////////////////////
-#if USE_COLUMNAR
 void ISphMatchSorter::SetColumnar ( columnar::Columnar_i * pColumnar )
 {
 	m_pColumnar = pColumnar;
 }
-#endif
+
 
 void ISphMatchSorter::SetSchema ( ISphSchema * pSchema, bool bRemapCmp )
 {
@@ -137,11 +136,7 @@ void ISphMatchSorter::SetFilteredAttrs ( const sph::StringSet & hAttrs, bool bAd
 class MatchesToNewSchema_c : public MatchProcessor_i
 {
 public:
-#if USE_COLUMNAR
 		MatchesToNewSchema_c ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema, GetBlobPoolFromMatch_fn fnGetBlobPool, GetColumnarFromMatch_fn fnGetColumnar );
-#else
-		MatchesToNewSchema_c ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema, GetBlobPoolFromMatch_fn fnGetBlobPool );
-#endif
 		~MatchesToNewSchema_c();
 
 	// performs actual processing acording created plan
@@ -170,9 +165,7 @@ private:
 		ISphExpr *				m_pExpr = nullptr;
 		Action_e				m_eAction;
 
-#if USE_COLUMNAR
 		mutable columnar::Columnar_i * m_pPrevColumnar = nullptr;
-#endif
 	};
 
 	int						m_iDynamicSize;		// target dynamic size, from schema
@@ -180,31 +173,19 @@ private:
 	CSphVector<std::pair<CSphAttrLocator, CSphAttrLocator>> m_dRemapCmp;	// remap @int_attr_ATTR -> ATTR
 	CSphVector<int>			m_dDataPtrAttrs;	// orphaned attrs we have to free before swap to new attr
 	GetBlobPoolFromMatch_fn	m_fnGetBlobPool;	// provides base for pool copying
-#if USE_COLUMNAR
 	GetColumnarFromMatch_fn	m_fnGetColumnar;	// columnar storage getter
-#endif
 
 	void		SetupAction ( const CSphColumnInfo & tOld, const CSphColumnInfo & tNew, const ISphSchema * pOldSchema, MapAction_t & tAction );
 	inline void	ProcessMatch ( CSphMatch * pMatch );
 
-#if USE_COLUMNAR
 	inline void PerformAction ( const MapAction_t & tAction, CSphMatch * pMatch, CSphMatch & tResult, const BYTE * pBlobPool, columnar::Columnar_i * pColumnar );
-#else
-	inline void	PerformAction ( const MapAction_t & tAction, CSphMatch * pMatch, CSphMatch & tResult, const BYTE * pBlobPool );
-#endif
 };
 
 
-#if USE_COLUMNAR
 MatchesToNewSchema_c::MatchesToNewSchema_c ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema, GetBlobPoolFromMatch_fn fnGetBlobPool, GetColumnarFromMatch_fn fnGetColumnar )
-#else
-MatchesToNewSchema_c::MatchesToNewSchema_c ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema, GetBlobPoolFromMatch_fn fnGetBlobPool )
-#endif
 	: m_iDynamicSize ( pNewSchema->GetDynamicSize () )
 	, m_fnGetBlobPool ( std::move ( fnGetBlobPool ) )
-#if USE_COLUMNAR
 	, m_fnGetColumnar ( std::move ( fnGetColumnar ) )
-#endif
 {
 	assert ( pOldSchema && pNewSchema );
 
@@ -257,7 +238,6 @@ void MatchesToNewSchema_c::SetupAction ( const CSphColumnInfo & tOld, const CSph
 
 	// columnar attr replaced by an expression
 	// we now need to create an expression that fetches data from columnar storage
-#if USE_COLUMNAR
 	if ( tOld.IsColumnar() && tNew.m_pExpr )
 	{
 		CSphString		sError;
@@ -276,7 +256,6 @@ void MatchesToNewSchema_c::SetupAction ( const CSphColumnInfo & tOld, const CSph
 
 		return;
 	}
-#endif
 
 	// same type - just copy attr as is
 	if ( tOld.m_eAttrType==tNew.m_eAttrType )
@@ -300,15 +279,9 @@ void MatchesToNewSchema_c::ProcessMatch ( CSphMatch * pMatch )
 	tResult.Reset ( m_iDynamicSize );
 
 	const BYTE * pBlobPool = m_fnGetBlobPool(pMatch);
-#if USE_COLUMNAR
 	columnar::Columnar_i * pColumnar = m_fnGetColumnar(pMatch);
-#endif
 	for ( const auto & tAction : m_dActions )
-#if USE_COLUMNAR
 		PerformAction ( tAction, pMatch, tResult, pBlobPool, pColumnar );
-#else
-		PerformAction ( tAction, pMatch, tResult, pBlobPool );
-#endif
 
 	// remap comparator attributes
 	for ( const auto & tRemap : m_dRemapCmp )
@@ -322,20 +295,14 @@ void MatchesToNewSchema_c::ProcessMatch ( CSphMatch * pMatch )
 }
 
 
-#if USE_COLUMNAR
 void MatchesToNewSchema_c::PerformAction ( const MapAction_t & tAction, CSphMatch * pMatch, CSphMatch & tResult, const BYTE * pBlobPool, columnar::Columnar_i * pColumnar )
-#else 
-void MatchesToNewSchema_c::PerformAction ( const MapAction_t & tAction, CSphMatch * pMatch, CSphMatch & tResult, const BYTE * pBlobPool )
-#endif
 {
-#if USE_COLUMNAR
 	// try to minimize columnar switches inside the expression as this leads to recreating iterators
 	if ( ( tAction.m_eAction==MapAction_t::EVALEXPR_INT || tAction.m_eAction==MapAction_t::EVALEXPR_BIGINT || tAction.m_eAction==MapAction_t::EVALEXPR_STR ) && pColumnar!=tAction.m_pPrevColumnar )
 	{
 		tAction.m_pExpr->Command ( SPH_EXPR_SET_COLUMNAR, (void*)pColumnar );
 		tAction.m_pPrevColumnar = pColumnar;
 	}
-#endif
 
 	SphAttr_t uValue = 0;
 	switch ( tAction.m_eAction )
@@ -408,9 +375,7 @@ private:
 	const ISphSchema &	m_tOldSchema;
 	CSphSchema &		m_tNewSchema;
 
-#if USE_COLUMNAR
 	void	ReplaceColumnarAttrWithExpression ( CSphColumnInfo & tAttr, int iLocator );
-#endif
 };
 
 
@@ -429,18 +394,16 @@ void TransformedSchemaBuilder_c::AddAttr ( const CSphString & sName )
 	CSphColumnInfo tAttr = *pAttr;
 	tAttr.m_tLocator.Reset();
 
-#if USE_COLUMNAR
 	// check if new columnar attributes were added (that were not in the select list originally)
 	if ( tAttr.IsColumnar() )
 		ReplaceColumnarAttrWithExpression ( tAttr, m_tNewSchema.GetAttrsCount() );
-#endif
 
 	tAttr.m_eAttrType = sphPlainAttrToPtrAttr ( tAttr.m_eAttrType );
 
 	m_tNewSchema.AddAttr ( tAttr, true );
 }
 
-#if USE_COLUMNAR
+
 void TransformedSchemaBuilder_c::ReplaceColumnarAttrWithExpression ( CSphColumnInfo & tAttr, int iLocator )
 {
 	assert ( tAttr.IsColumnar() );
@@ -463,14 +426,9 @@ void TransformedSchemaBuilder_c::ReplaceColumnarAttrWithExpression ( CSphColumnI
 	// now remove it from schema (it will be added later with the supplied expression)
 	m_tNewSchema.RemoveAttr( tAttr.m_sName.cstr(), true );
 }
-#endif
 
 
-#if USE_COLUMNAR
 void ISphMatchSorter::TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnBlobPoolFromMatch, GetColumnarFromMatch_fn fnGetColumnarFromMatch )
-#else
-void ISphMatchSorter::TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnBlobPoolFromMatch )
-#endif
 {
 	auto * pOldSchema = GetSchema();
 	assert ( pOldSchema );
@@ -526,12 +484,7 @@ void ISphMatchSorter::TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn f
 			pExpr->FixupLocator ( pOldSchema, pNewSchema );
 	}
 
-#if USE_COLUMNAR
 	MatchesToNewSchema_c fnFinal ( pOldSchema, pNewSchema, std::move ( fnBlobPoolFromMatch ), std::move ( fnGetColumnarFromMatch ) );
-#else
-	MatchesToNewSchema_c fnFinal ( pOldSchema, pNewSchema, std::move ( fnBlobPoolFromMatch ) );
-#endif
-
 	Finalize ( fnFinal, false );
 	SetSchema ( pNewSchema, true );
 }
@@ -1615,17 +1568,8 @@ public:
 		return PRED::Hash ( pStr, iLen );
 	}
 
-	CSphGrouper * Clone () const final
-	{
-		return new GrouperStringExpr_T<PRED> ( m_pExpr );
-	}
-
-#if USE_COLUMNAR
-	void SetColumnar ( const columnar::Columnar_i * pColumnar ) final
-	{
-		m_pExpr->Command ( SPH_EXPR_SET_COLUMNAR, (void*)pColumnar );
-	}
-#endif
+	CSphGrouper *	Clone() const final { return new GrouperStringExpr_T<PRED> ( m_pExpr ); }
+	void			SetColumnar ( const columnar::Columnar_i * pColumnar ) final { m_pExpr->Command ( SPH_EXPR_SET_COLUMNAR, (void*)pColumnar ); }
 
 protected:
 	CSphRefcountedPtr<ISphExpr>	m_pExpr;
@@ -2993,13 +2937,11 @@ public:
 		m_pGrouper->SetBlobPool ( pBlobPool );
 	}
 
-#if USE_COLUMNAR
 	void SetColumnar ( columnar::Columnar_i * pColumnar ) final
 	{
 		CSphMatchQueueTraits::SetColumnar(pColumnar);
 		m_pGrouper->SetColumnar(pColumnar);
 	}
-#endif
 
 	/// get entries count
 	int GetLength () const override
@@ -5358,7 +5300,6 @@ void QueueCreator_c::CreateGrouperByAttr ( ESphAttr eType, const CSphColumnInfo 
 	case SPH_ATTR_STRINGPTR:
 		// percolate select list push matches with string_ptr
 
-		#if USE_COLUMNAR
 		// check if it is a columnar attr or an expression spawned instead of a columnar attr
 		// even if it is an expression, spawn a new one, because a specialized grouper works a lot faster because it doesn't allocate and store string in the match
 		if ( tGroupByAttr.IsColumnar() || tGroupByAttr.IsColumnarExpr() )
@@ -5366,9 +5307,7 @@ void QueueCreator_c::CreateGrouperByAttr ( ESphAttr eType, const CSphColumnInfo 
 			m_tGroupSorterSettings.m_pGrouper = CreateGrouperColumnarString ( tGroupByAttr, m_tQuery.m_eCollation );
 			bGrouperUsesAttrs = false;
 		}
-		else
-		#endif
-		if ( tGroupByAttr.m_pExpr && !tGroupByAttr.m_pExpr->IsDataPtrAttr() )
+		else if ( tGroupByAttr.m_pExpr && !tGroupByAttr.m_pExpr->IsDataPtrAttr() )
 		{
 			m_tGroupSorterSettings.m_pGrouper = CreateGrouperStringExpr ( tGroupByAttr.m_pExpr, m_tQuery.m_eCollation );
 			bGrouperUsesAttrs = false;
@@ -5379,14 +5318,12 @@ void QueueCreator_c::CreateGrouperByAttr ( ESphAttr eType, const CSphColumnInfo 
 
 	case SPH_ATTR_UINT32SET:
 	case SPH_ATTR_INT64SET:
-#if USE_COLUMNAR
 		if ( tGroupByAttr.IsColumnar() || tGroupByAttr.IsColumnarExpr() )
 		{
 			m_tGroupSorterSettings.m_pGrouper = CreateGrouperColumnarMVA ( tGroupByAttr );
 			bGrouperUsesAttrs = false;
 			break;
 		}
-#endif
 
 		if ( eType==SPH_ATTR_UINT32SET )
 			m_tGroupSorterSettings.m_pGrouper = new GrouperMVA_T<DWORD>(tLoc);
@@ -5396,24 +5333,20 @@ void QueueCreator_c::CreateGrouperByAttr ( ESphAttr eType, const CSphColumnInfo 
 
 	case SPH_ATTR_UINT32SET_PTR:
 	case SPH_ATTR_INT64SET_PTR:
-#if USE_COLUMNAR
 		if ( tGroupByAttr.IsColumnar() || tGroupByAttr.IsColumnarExpr() )
 		{
 			m_tGroupSorterSettings.m_pGrouper = CreateGrouperColumnarMVA ( tGroupByAttr );
 			bGrouperUsesAttrs = false;
 		}
-#endif	
 		break;
 
 	case SPH_ATTR_INTEGER:
 	case SPH_ATTR_BIGINT:
-		#if USE_COLUMNAR
 		if ( tGroupByAttr.IsColumnar() || ( tGroupByAttr.IsColumnarExpr() && tGroupByAttr.m_eStage>SPH_EVAL_PREFILTER ) )
 		{
 			m_tGroupSorterSettings.m_pGrouper = CreateGrouperColumnarInt ( tGroupByAttr );
 			bGrouperUsesAttrs = false;
 		}
-		#endif	
 		break;
 
 	default:

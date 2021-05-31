@@ -13,13 +13,9 @@
 
 #include "sphinxfilter.h"
 
-#if USE_COLUMNAR
-
 ISphFilter * TryToCreateColumnarFilter ( int iAttr, const ISphSchema & tSchema, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, ESphCollation eCollation,
 	CSphString & sError, CSphString & sWarning );
 
 bool AddColumnarFilter ( std::vector<columnar::Filter_t> & dDst, const CSphFilterSettings & tSrc, ESphCollation eCollation, const ISphSchema & tSchema, CSphString & sWarning );
-
-#endif // USE_COLUMNAR
 
 #endif // _columnarfilter_

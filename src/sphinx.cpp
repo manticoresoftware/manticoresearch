@@ -6442,12 +6442,17 @@ void CSphSchema::SetupColumnarFlags ( const CSphSourceSettings & tSettings, StrV
 			}
 		}
 
-		tAttr.m_eEngine = AttrEngine_e::DEFAULT;
-		if ( hColumnar.Exists ( tAttr.m_sName ) )
-			tAttr.m_eEngine = AttrEngine_e::COLUMNAR;
-
-		if ( hRowwise.Exists ( tAttr.m_sName ) )
+		if ( sphIsInternalAttr(tAttr) )
 			tAttr.m_eEngine = AttrEngine_e::ROWWISE;
+		else
+		{
+			tAttr.m_eEngine = AttrEngine_e::DEFAULT;
+			if ( hColumnar.Exists ( tAttr.m_sName ) )
+				tAttr.m_eEngine = AttrEngine_e::COLUMNAR;
+
+			if ( hRowwise.Exists ( tAttr.m_sName ) )
+				tAttr.m_eEngine = AttrEngine_e::ROWWISE;
+		}
 
 		// combine per-index and per-attribute engine settings
 		AttrEngine_e eEngine = tSettings.m_eEngine;

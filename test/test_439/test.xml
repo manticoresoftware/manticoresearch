@@ -66,6 +66,11 @@ searchd
 	desc test1;
 	show create table test1;
 	drop table test1;
+
+	create table t(f text, s string) engine='columnar';
+	insert into t values (1,'text','string');
+	select * from t;
+	drop table t;
 </sphinxql>
 </queries>
 

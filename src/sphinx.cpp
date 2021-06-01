@@ -6483,6 +6483,12 @@ void CSphSchema::SetupColumnarFlags ( const CSphSourceSettings & tSettings, StrV
 		bHaveColumnar = true;
 	}
 
+	// if all blob attrs turned columnar, there's no point in keeping the blob locator
+	bool bHaveBlobs = m_dAttrs.any_of ( []( const CSphColumnInfo & tAttr ){ return sphIsBlobAttr(tAttr); } );
+	const CSphColumnInfo * pBlobLocator = GetAttr ( sphGetBlobLocatorName() );
+	if ( !bHaveBlobs && pBlobLocator )
+		RemoveAttr ( sphGetBlobLocatorName(), pBlobLocator->m_tLocator.m_bDynamic );
+
 	if ( bHaveColumnar )
 		RebuildLocators();	// remove columnar attrs from row storage
 }
@@ -16760,10 +16766,15 @@ void CSphIndex_VLN::CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const
 	dFiles.Add ( GetIndexFileName ( SPH_EXT_SPM ) );
 	if ( !m_bIsEmpty )
 	{
-		dFiles.Add ( GetIndexFileName ( SPH_EXT_SPA ) );
+		if ( m_tSchema.HasNonColumnarAttrs() )
+			dFiles.Add ( GetIndexFileName ( SPH_EXT_SPA ) );
+
 		dFiles.Add ( GetIndexFileName ( SPH_EXT_SPT ) );
 		if ( m_tSchema.GetAttr ( sphGetBlobLocatorName () ) )
 			dFiles.Add ( GetIndexFileName ( SPH_EXT_SPB ) );
+
+		if ( m_uVersion>=63 && m_tSchema.HasColumnarAttrs() )
+			dFiles.Add ( GetIndexFileName ( SPH_EXT_SPC ) );
 	}
 
 	if ( m_uVersion>=55 )

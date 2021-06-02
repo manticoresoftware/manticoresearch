@@ -288,6 +288,20 @@ insert into pq_filter1(filters, id) values('j.test !="asd"',   21);
 insert into pq_filter1(filters, id) values('"asd" != j.test ', 22);
 CALL PQ ('pq_filter1', ('{"j":{"test":"asd"}, "id":101}', '{"j":{"test":"best"}, "id":102}', '{"j":{"gid":12}, "id":103}'), 1 as docs, 1 as docs_json, 1 as query, 'id' as docs_id );
 
-</sphinxql></queries>
+</sphinxql>
+
+<!-- regression max_matches default vs user set -->
+<sphinxql>TRUNCATE RTINDEX pq</sphinxql>
+<repeat count="2000" vars="i" init="1" inc="1">
+    <sphinxql skip="1">
+        INSERT INTO pq (id, query) VALUES (<i/>, 'test ops')
+    </sphinxql>
+</repeat>
+<sphinxql>
+select * from pq limit 20, 5;
+select * from pq limit 1020, 5 option max_matches=1100;
+</sphinxql>
+
+</queries>
 
 </test>

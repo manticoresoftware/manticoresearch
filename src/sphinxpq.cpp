@@ -1776,6 +1776,7 @@ void PercolateIndex_c::ReplayCommit ( StoredQuery_i * pQuery )
 	if ( !pIdx ) // new entry; possible fast insert
 	{
 		AddToStoredUnl ( StoredQuerySharedPtr_t ( pStoredQuery ));
+		m_tStat.m_iTotalDocuments++;
 		return;
 	}
 
@@ -1816,6 +1817,8 @@ int PercolateIndex_c::ReplayDeleteQueries ( const VecTraits_T<int64_t>& dQueries
 
 	ScWL_t wLock ( m_tLock );
 	m_pQueries = pNewVec;
+	m_tStat.m_iTotalDocuments -= iDeleted;
+
 	return iDeleted;
 }
 
@@ -1854,6 +1857,7 @@ int PercolateIndex_c::ReplayDeleteQueries ( const char * sTags )
 	{
 		ScWL_t wLock ( m_tLock );
 		m_pQueries = pNewVec;
+		m_tStat.m_iTotalDocuments -= iDeleted;
 	}
 
 	return iDeleted;
@@ -2332,6 +2336,8 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilename
 			LoadStoredQuery ( uVersion, tQuery, rdMeta );
 		m_iTID = rdMeta.GetOffset ();
 	}
+
+	m_tStat.m_iTotalDocuments = uQueries;
 
 	CSphString sMutableFile;
 	sMutableFile.SetSprintf ( "%s%s", m_sFilename.cstr(), sphGetExt ( SPH_EXT_SETTINGS ).cstr() );

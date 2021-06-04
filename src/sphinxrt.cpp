@@ -2808,7 +2808,6 @@ RtSegment_t * RtIndex_c::MergeSegments ( const RtSegment_t * pSeg1, const RtSegm
 
 	pSeg->BuildDocID2RowIDMap ( m_tSchema );
 
-	assert ( pSeg->m_dRows.GetLength() );
 	assert ( pSeg->m_uRows );
 	assert ( pSeg->m_tAliveRows==pSeg->m_uRows );
 

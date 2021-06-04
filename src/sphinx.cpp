@@ -11322,7 +11322,8 @@ bool CSphIndex_VLN::MergeAttributes ( AttrMergeContext_t & tCtx )
 			sphSetRowAttr ( dTmpRow.Begin(), pBlobLocator->m_tLocator, uNewOffset );
 
 			tCtx.m_tWriterSPA.PutBytes ( dTmpRow.Begin(), iStrideBytes );
-		} else
+		}
+		else if ( iStrideBytes )
 			tCtx.m_tWriterSPA.PutBytes ( pRow, iStrideBytes );
 
 		DocID_t tDocID;

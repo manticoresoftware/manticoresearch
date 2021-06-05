@@ -408,6 +408,8 @@ void Expr_GetColumnar_Traits_c::Command ( ESphExprCommand eCmd, void * pArg )
 			std::string sError; // FIXME! report errors
 			m_pIterator = pColumnar->CreateIterator ( m_sName.cstr(), columnar::IteratorHints_t(), sError );
 		}
+		else
+			m_pIterator.Reset();
 	}
 	break;
 

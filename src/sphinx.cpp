@@ -12449,9 +12449,14 @@ struct SphFinalMatchCalc_t final : MatchProcessor_i, ISphNoncopyable
 			for ( auto & pMatch : dMatches )
 			{
 				assert(pMatch);
+				if ( pMatch->m_iTag>=0 )
+					continue;
+
 				m_tCtx.CalcItem ( *pMatch, tItem );
-				pMatch->m_iTag = m_iTag;
 			}
+
+		for ( auto & pMatch : dMatches )
+			pMatch->m_iTag = m_iTag;
 	}
 };
 

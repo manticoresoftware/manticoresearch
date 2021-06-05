@@ -63,7 +63,7 @@ public:
 	virtual void		SetBlobPool ( const BYTE * ) {}
 
 	/// set columnar (to work with columnar attributes)
-	virtual void		SetColumnar ( columnar::Columnar_i * pColumnar );
+	virtual void		SetColumnar ( columnar::Columnar_i * pColumnar ) {}
 
 	/// set sorter schema
 	virtual void		SetSchema ( ISphSchema * pSchema, bool bRemapCmp );
@@ -123,8 +123,6 @@ protected:
 	SharedPtr_t<ISphSchema*>	m_pSchema;	///< sorter schema (adds dynamic attributes on top of index schema)
 	CSphMatchComparatorState	m_tState;		///< protected to set m_iNow automatically on SetState() calls
 	StrVec_t					m_dTransformed;
-
-	columnar::Columnar_i *		m_pColumnar = nullptr;
 };
 
 

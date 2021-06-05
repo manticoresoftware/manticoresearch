@@ -84,11 +84,6 @@ int GetStringRemapCount ( const ISphSchema & tDstSchema, const ISphSchema & tSrc
 }
 
 //////////////////////////////////////////////////////////////////////////
-void ISphMatchSorter::SetColumnar ( columnar::Columnar_i * pColumnar )
-{
-	m_pColumnar = pColumnar;
-}
-
 
 void ISphMatchSorter::SetSchema ( ISphSchema * pSchema, bool bRemapCmp )
 {

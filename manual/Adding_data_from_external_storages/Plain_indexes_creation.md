@@ -124,7 +124,13 @@ sudo -u manticore indexer myindex --keep-attrs=/path/to/index/files --keep-attrs
 * `--dump-rows <FILE>` dumps rows fetched by SQL source(s) into the specified file, in a MySQL compatible syntax. Resulting dumps are the exact representation of data as received by `indexer` and help to repeat indexing-time issues. The command performs fetching from the source and creates both index files and the dump file.
 * `--print-rt <rt_index> <index>` outputs fetched data from source as INSERTs for a real-time index. The first lines of the dump will contain the real-time fields and attributes (as a reflection of the plain index fields and attributes). The command performs fetching from the source and creates both index files and the dump output. The command can be used as `sudo -u manticore indexer -c manticore.conf --print-rt indexrt indexplain > dump.sql`. Only sql-based sources are supported.
 * `--sighup-each` is useful when you are rebuilding many big indexes, and want each one rotated into `searchd` as soon as possible. With `--sighup-each`, `indexer` will send the SIGHUP signal to searchd after successfully completing work on each index. (The default behavior is to send a single SIGHUP after all the indexes are built).
-* `--nohup` is useful when you want to check your index with indextool before actually rotating it. indexer won't send the SIGHUP if this option is on.
+* `--nohup` is useful when you want to check your index with indextool before actually rotating it. indexer won't send the SIGHUP if this option is on. Index files are renamed to .tmp. Use indextool to rename index files to .new and rotate it. Example usage:
+
+```shell
+sudo -u manticore indexer --rotate --nohup myindex
+sudo -u manticore indextool --rotate --check myindex
+```
+
 * `--print-queries` prints out SQL queries that `indexer` sends to the database, along with SQL connection and disconnection events. That is useful to diagnose and fix problems with SQL sources.
 * `--help` (`-h` for short) lists all of the parameters that can be called in `indexer`.
 * `-v` shows `indexer` version.

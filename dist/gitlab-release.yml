@@ -246,7 +246,6 @@ collect_repo:
     - focal
     - tarball
     - osx
-    - windows
 
 
 build_docker:

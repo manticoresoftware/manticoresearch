@@ -3401,7 +3401,8 @@ void HandleCommandClusterPq ( ISphOutputBuffer & tOut, WORD uCommandVer, InputBu
 		return;
 
 	PQRemoteCommand_e eClusterCmd = (PQRemoteCommand_e)tBuf.GetWord();
-	sphLogDebugRpl ( "remote cluster command %d, client %s", (int)eClusterCmd, sClient );
+	if ( eClusterCmd!=CLUSTER_FILE_SEND )
+		sphLogDebugRpl ( "remote cluster command %d, client %s", (int)eClusterCmd, sClient );
 
 	CSphString sError;
 	PQRemoteData_t tCmd;
@@ -3483,7 +3484,8 @@ void HandleCommandClusterPq ( ISphOutputBuffer & tOut, WORD uCommandVer, InputBu
 			break;
 	}
 
-	sphLogDebugRpl ( "remote cluster command %d, client %s - %s", (int)eClusterCmd, sClient, ( bOk ? "ok" : "error" ) );
+	if ( eClusterCmd!=CLUSTER_FILE_SEND || !bOk )
+		sphLogDebugRpl ( "remote cluster command %d, client %s - %s", (int)eClusterCmd, sClient, ( bOk ? "ok" : "error" ) );
 
 	if ( !bOk )
 	{

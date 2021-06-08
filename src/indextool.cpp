@@ -1017,6 +1017,7 @@ static void ShowHelp ()
 		"-h, --help\t\tdisplay this help message\n"
 		"-v\t\t\tdisplay version information\n"
 		"--check <INDEX>\t\tperform index consistency check\n"
+                "--rotate rotate index after --check in case it's valid\n"
 		"--checkconfig\t\tperform config consistency check\n"
 		"--dumpconfig <SPH-FILE>\tdump index header in config format by file name\n"
 		"--dumpdocids <INDEX>\tdump docids by index name\n"

@@ -46,7 +46,7 @@ There are 3 different binlog flushing strategies, controlled by directive `binlo
 * 1, flush and sync every transaction. Worst performance, but every committed transaction data is guaranteed to be saved.
 * 2, flush every transaction, sync every second. Good performance, and every committed transaction is guaranteed to be saved in case of server crash. However, in case of OS/hardware crash up to 1 second worth of committed transactions can be lost.
 
-For those familiar with MySQL and InnoDB, this directive is entirely similar to innodb_flush_log_at_trx_commit. Default mode is flush every transaction, sync every second (mode 2).
+Default mode is flush every transaction, sync every second (mode 2).
 
 ```ini
 searchd {

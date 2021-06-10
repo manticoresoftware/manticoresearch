@@ -35,7 +35,7 @@ static void HttpBuildReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, con
 
 	const char * sContent = ( bHtml ? "text/html" : "application/json" );
 	CSphString sHttp;
-	sHttp.SetSprintf ( "HTTP/1.1 %s\r\nServer: %s\r\nContent-Type: %s; charset=UTF-8\r\nContent-Length:%d\r\n\r\n", g_dHttpStatus[eCode], g_sStatusVersion.cstr(), sContent, iBodyLen );
+	sHttp.SetSprintf ( "HTTP/1.1 %s\r\nServer: %s\r\nContent-Type: %s; charset=UTF-8\r\nContent-Length: %d\r\n\r\n", g_dHttpStatus[eCode], g_sStatusVersion.cstr(), sContent, iBodyLen );
 
 	int iHeaderLen = sHttp.Length();
 	dData.Resize ( iHeaderLen + iBodyLen );

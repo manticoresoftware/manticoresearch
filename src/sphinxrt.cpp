@@ -1167,7 +1167,7 @@ protected:
 
 private:
 	static const DWORD			META_HEADER_MAGIC	= 0x54525053;	///< my magic 'SPRT' header
-	static const DWORD			META_VERSION		= 18;			///< current version fixme! Also change version in indextool.cpp, and support the changes!
+	static const DWORD			META_VERSION		= 19;			///< current version fixme! Also change version in indextool.cpp, and support the changes!
 
 	int							m_iStride;
 	uint64_t					m_uSchemaHash = 0;
@@ -4518,7 +4518,7 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 				return false;
 		}
 
-		if ( uVersion>=18 && rdChunk.GetByte() )
+		if ( uVersion>=19 && rdChunk.GetByte() )
 		{
 			pSeg->m_pColumnar = CreateColumnarRT ( m_tSchema, rdChunk, m_sLastError );
 			if ( !pSeg->m_pColumnar )

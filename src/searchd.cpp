@@ -3149,15 +3149,17 @@ static void LogStatementSphinxql ( Str_t sQuery, int iRealTime )
 }
 
 
-static void LogFilterStatementSphinxql ( Str_t sQuery, SqlStmt_e eStmt )
+static int64_t LogFilterStatementSphinxql ( Str_t sQuery, SqlStmt_e eStmt )
 {
 	if ( g_tLogStatements.IsEmpty() )
-		return;
+		return 0;
 
 	if ( !g_tLogStatements.BitGet ( eStmt ) )
-		return;
+		return 0;
 
+	int64_t tmStarted = sphMicroTimer();
 	LogStatementSphinxql ( sQuery, 0 );
+	return tmStarted;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -15350,6 +15352,30 @@ RtIndex_i * CSphSessionAccum::GetIndex ()
 
 static bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, CSphString & sFederatedQuery );
 
+static const CSphString g_sLogDoneStmt = "/* DONE */";
+static const Str_t g_tLogDoneStmt = FromStr ( g_sLogDoneStmt );
+
+struct LogStmtGuard_t
+{
+	LogStmtGuard_t ( const Str_t & sQuery, SqlStmt_e eStmt, bool bMulti )
+	{
+		m_tmStarted = LogFilterStatementSphinxql ( sQuery, eStmt );
+		m_bLogDone = ( m_tmStarted && eStmt!=STMT_UPDATE && eStmt!=STMT_SELECT && !bMulti ); // update and select will log differently
+	}
+
+	~LogStmtGuard_t ()
+	{
+		if ( m_bLogDone )
+		{
+			int64_t tmDelta = sphMicroTimer() - m_tmStarted;
+			LogStatementSphinxql ( g_tLogDoneStmt, (int)( tmDelta / 1000 ) );
+		}
+	}
+
+	int64_t m_tmStarted = 0;
+	bool m_bLogDone = false;
+};
+
 class CSphinxqlSession
 {
 private:
@@ -15426,7 +15452,7 @@ public:
 
 		myinfo::SetCommand ( g_dSqlStmts[eStmt] );
 
-		LogFilterStatementSphinxql ( sQuery, eStmt );
+		LogStmtGuard_t tLogGuard ( sQuery, eStmt, dStmt.GetLength()>1 );
 
 		if ( bParsedOK && m_bFederatedUser )
 		{

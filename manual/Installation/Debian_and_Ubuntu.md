@@ -16,7 +16,7 @@ The easiest way to install Manticore in Ubuntu/Debian is by using our APT reposi
 
 Install the repository:
 ```bash
-sudo apt-key adv --fetch-keys 'http://repo.manticoresearch.com/GPG-KEY-manticore'
+wget -qO - https://repo.manticoresearch.com/GPG-KEY-manticore | sudo apt-key add -
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
 sudo dpkg -i manticore-repo.noarch.deb
 sudo apt update
@@ -32,9 +32,9 @@ sudo apt install manticore manticore-columnar-lib
 ###### Development packages
 If you prefer "Nightly" (development) versions do:
 ```bash
-sudo apt-key adv --fetch-keys 'http://repo.manticoresearch.com/GPG-KEY-manticore'
-wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-repo.noarch.deb
+wget -qO - https://repo.manticoresearch.com/GPG-KEY-manticore | sudo apt-key add -
+wget https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb
+sudo dpkg -i manticore-dev-repo.noarch.deb
 sudo apt update
 sudo apt install manticore manticore-columnar-lib
 ```
@@ -103,15 +103,15 @@ Here's how to install Python 3.9 and the Ukrainian lemmatizer on Debian and Ubun
 ```bash
 # install Manticore Search and UK lemmatizer from APT repository
 cd ~
-apt-key adv --fetch-keys 'http://repo.manticoresearch.com/GPG-KEY-manticore'
+wget -qO - https://repo.manticoresearch.com/GPG-KEY-manticore | sudo apt-key add -
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-dpkg -i manticore-repo.noarch.deb
-apt -y update
-apt -y install manticore manticore-lemmatizer-uk
+sudo dpkg -i manticore-repo.noarch.deb
+sudo apt -y update
+sudo apt -y install manticore manticore-lemmatizer-uk
 
 # install packages needed for building Python
-apt -y update
-apt -y install wget build-essential libreadline-gplv2-dev libncursesw5-dev libssl-dev libsqlite3-dev tk-dev libgdbm-dev libc6-dev libbz2-dev libffi-dev zlib1g-dev
+sudo apt -y update
+sudo apt -y install wget build-essential libreadline-gplv2-dev libncursesw5-dev libssl-dev libsqlite3-dev tk-dev libgdbm-dev libc6-dev libbz2-dev libffi-dev zlib1g-dev
 
 # download, build and install Python 3.9
 cd ~
@@ -119,14 +119,14 @@ wget https://www.python.org/ftp/python/3.9.4/Python-3.9.4.tgz
 tar xzf Python-3.9.4.tgz
 cd Python-3.9.4
 ./configure --enable-optimizations --enable-shared
-make -j8 altinstall
+sudo make -j8 altinstall
 
 # update linker cache
-ldconfig
+sudo ldconfig
 
 # install pymorphy2 and UK dictionary
-pip3.9 install pymorphy2[fast]
-pip3.9 install pymorphy2-dicts-uk
+sudo pip3.9 install pymorphy2[fast]
+sudo pip3.9 install pymorphy2-dicts-uk
 ```
 
 After you have all installed make sure you have the following in your Manticore Search configuration file (/etc/manticoresearch/manticore.conf by default):

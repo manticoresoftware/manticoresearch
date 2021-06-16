@@ -42,7 +42,7 @@ const char * GetReplicationDL()
 
 // global application context for wsrep callbacks
 
-static int GetQueryTimeout ( int64_t iTimeout=0 ); // 2 minutes in msec
+static int64_t GetQueryTimeout ( int64_t iTimeout=0 ); // 2 minutes in msec
 // 200 msec is ok as we do not need to any missed nodes in cluster node list
 static int			g_iAnyNodesTimeout = 200;
 static int			g_iNodeRetry = 3;
@@ -2972,7 +2972,7 @@ void GetNodes ( const CSphString & sNodes, VecAgentDesc_t & dNodes )
 	GetNodes_T ( sNodes, tIt );
 }
 
-static AgentConn_t * CreateAgent ( const AgentDesc_t & tDesc, const PQRemoteData_t & tReq, int iTimeoutMs )
+static AgentConn_t * CreateAgent ( const AgentDesc_t & tDesc, const PQRemoteData_t & tReq, int64_t iTimeoutMs )
 {
 	AgentConn_t * pAgent = new AgentConn_t;
 	pAgent->m_tDesc.CloneFrom ( tDesc );
@@ -2998,7 +2998,7 @@ static void GetNodes ( const CSphString & sNodes, VecRefPtrs_t<AgentConn_t *> & 
 		dNodes[i] = CreateAgent ( *dDesc[i], tReq, GetQueryTimeout() );
 }
 
-static void GetNodes ( const VecAgentDesc_t & dDesc, VecRefPtrs_t<AgentConn_t *> & dNodes, const PQRemoteData_t & tReq, int iTimeout )
+static void GetNodes ( const VecAgentDesc_t & dDesc, VecRefPtrs_t<AgentConn_t *> & dNodes, const PQRemoteData_t & tReq, int64_t iTimeout )
 {
 	dNodes.Resize ( dDesc.GetLength() );
 	ARRAY_FOREACH ( i, dDesc )
@@ -5068,10 +5068,10 @@ int LoadUpdate ( const BYTE * pBuf, int iLen, CSphQuery & tQuery )
 	return tReader.GetPos();
 }
 
-int GetQueryTimeout ( int64_t iTimeout )
+int64_t GetQueryTimeout ( int64_t iTimeout )
 {
 	// need default of 2 minutes in msec for replication requests as they are mostly long running
-	int iTm = Max ( g_iAgentQueryTimeoutMs, 120 * 1000 );
+	int64_t iTm = Max ( g_iAgentQueryTimeoutMs, 120 * 1000 );
 	return Max ( iTm, Min ( iTimeout, INT_MAX ) );
 }
 

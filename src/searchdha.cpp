@@ -1610,7 +1610,7 @@ bool AgentConn_t::Fail ( const char * sFmt, ... )
 	va_start ( ap, sFmt );
 	m_sFailure.SetSprintfVa ( sFmt, ap );
 	va_end ( ap );
-	sphLogDebugA ( "%d Fail() %s, ref=%d", m_iStoreTag, m_sFailure.cstr (), ( int ) GetRefcount () );
+	sphLogDebugv ( "%d Fail() %s, ref=%d", m_iStoreTag, m_sFailure.cstr (), ( int ) GetRefcount () ); // want to log failure at extended log mode wo recompile of daemon
 	return false;
 }
 
@@ -1622,7 +1622,7 @@ bool AgentConn_t::Fatal ( AgentStats_e eStat, const char * sMessage, ... )
 	va_start ( ap, sMessage );
 	m_sFailure.SetSprintfVa ( sMessage, ap );
 	va_end ( ap );
-	sphLogDebugA ( "%d FATAL: %s", m_iStoreTag, m_sFailure.cstr () );
+	sphLogDebugv ( "%d FATAL: %s", m_iStoreTag, m_sFailure.cstr () ); // want to log failure at extended log mode wo recompile of daemon
 	State ( Agent_e::RETRY );
 	Finish ( true );
 	agent_stats_inc ( *this, eStat );
@@ -1681,7 +1681,7 @@ void AgentConn_t::SendingState ()
 	{
 		track_processing_time ( *this );
 		State ( Agent_e::HEALTHY );
-		m_iPoolerTimeoutUS = sphMicroTimer () + 1000 * m_iMyQueryTimeoutMs;
+		m_iPoolerTimeoutUS = sphMicroTimer () + m_iMyQueryTimeoutMs * 1000;
 		LazyDeleteOrChange ( m_iPoolerTimeoutUS ); // assign new time value, don't touch the handler
 	}
 }
@@ -2045,7 +2045,7 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 		sphLogDebugA ( "%d sendmsg/connectx returned %d", m_iStoreTag, ( size_t ) iRes );
 		sphLogDebugv ( "TFO send succeeded, %zu bytes sent", ( size_t ) iRes );
 		// now 'connect' and 'query' merged, so timeout became common.
-		m_iPoolerTimeoutUS += 1000*m_iMyQueryTimeoutMs;
+		m_iPoolerTimeoutUS += m_iMyQueryTimeoutMs * 1000;
 		gStats().m_iAgentConnectTFO.fetch_add ( 1, std::memory_order_relaxed );
 		return SendQuery ( iRes ) ? 1 : -1;
 	}
@@ -2295,11 +2295,11 @@ bool AgentConn_t::DoQuery()
 	auto iNow = sphMicroTimer ();
 	if ( m_iSock>=0 )
 	{
-		sphLogDebugA ( "%d branch for established(%d). Timeout %d", m_iStoreTag, m_iSock, m_iMyQueryTimeoutMs );
+		sphLogDebugA ( "%d branch for established(%d). Timeout " INT64_FMT, m_iStoreTag, m_iSock, m_iMyQueryTimeoutMs );
 		m_bConnectHandshake = false;
 		m_pReplyCur += sizeof ( int );
 		m_iStartQuery = iNow; /// copied from old behaviour
-		m_iPoolerTimeoutUS = iNow + 1000 * m_iMyQueryTimeoutMs;
+		m_iPoolerTimeoutUS = iNow + m_iMyQueryTimeoutMs * 1000;
 		return SendQuery ();
 	}
 
@@ -2315,7 +2315,7 @@ bool AgentConn_t::DoQuery()
 		m_tOutput.StartNewChunk ();
 	}
 
-	sphLogDebugA ( "%d branch for not established. Timeout %d", m_iStoreTag, m_iMyQueryTimeoutMs );
+	sphLogDebugA ( "%d branch for not established. Timeout " INT64_FMT, m_iStoreTag, m_iMyQueryTimeoutMs );
 	m_iPoolerTimeoutUS = iNow + 1000 * m_iMyConnectTimeoutMs;
 	if ( !m_tDesc.m_bNeedResolve )
 		return EstablishConnection ();
@@ -3432,8 +3432,8 @@ private:
 			pTask->m_iTimeoutTimeUS = pTask->m_iPlannedTimeout;
 			pTask->m_iPlannedTimeout = 0;
 			m_dTimeouts.Change ( pTask );
-			sphLogDebugL ( "L change/add timeout for %p, " INT64_FMT " (%d) is changed one", pTask, pTask->m_iTimeoutTimeUS,
-				( int ) ( pTask->m_iTimeoutTimeUS - sphMicroTimer () ) );
+			sphLogDebugL ( "L change/add timeout for %p, " INT64_FMT " (" INT64_FMT ") is changed one", pTask, pTask->m_iTimeoutTimeUS,
+				( pTask->m_iTimeoutTimeUS - sphMicroTimer () ) );
 			sphLogDebugL ( "%s", m_dTimeouts.DebugDump ( "L " ).cstr () );
 		}
 	}

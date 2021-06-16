@@ -514,7 +514,7 @@ public:
 
 	// time-tracking and timeout settings
 	int				m_iMyConnectTimeoutMs { g_iAgentConnectTimeoutMs };	///< populated from parent distr
-	int				m_iMyQueryTimeoutMs { g_iAgentQueryTimeoutMs };		///< in msec
+	int64_t			m_iMyQueryTimeoutMs { g_iAgentQueryTimeoutMs };		///< in msec
 	int64_t			m_iStartQuery = 0;	///< the timestamp of the latest request // actualized
 	int64_t			m_iEndQuery = 0;	///< the timestamp of the end of the latest operation // actual
 	int64_t			m_iWall = 0;		///< wall time spent vs this agent // actualized

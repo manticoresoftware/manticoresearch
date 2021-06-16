@@ -3,8 +3,8 @@
 
 <sphinx:schema>
 <sphinx:field name="content"/>
-<sphinx:attr name="title" type="string"/>
 <sphinx:attr name="gid" type="int"/>
+<sphinx:attr name="title" type="string"/>
 </sphinx:schema>
 
 <sphinx:document id="1">

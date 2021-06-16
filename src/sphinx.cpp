@@ -21957,42 +21957,6 @@ struct RemapXSV_t
 	int m_iTag {-1};
 };
 
-static void MaybeRemoveBlobRowLocator ( CSphSchema & tSchema, CSphVector<RemapXSV_t> * pRemap = nullptr )
-{
-	if ( !tSchema.GetAttr ( sphGetBlobLocatorName() ) )
-		return;
-
-	bool bHaveNonColumnarBlobs = false;
-	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
-	{
-		const CSphColumnInfo & tCol = tSchema.GetAttr(i);
-		if ( tCol.m_tLocator.IsBlobAttr() && !tCol.IsColumnar() )
-		{
-			bHaveNonColumnarBlobs = true;
-			break;
-		}
-	}
-
-	// if all of our strings/json/mva attrs are stored in columnar storage, we don't need said locator
-	if ( !bHaveNonColumnarBlobs )
-	{
-		int iAttr = tSchema.GetAttrIndex ( sphGetBlobLocatorName() );
-		assert ( iAttr!=-1 );
-		tSchema.RemoveAttr ( sphGetBlobLocatorName(), true );
-
-		// fixup remap
-		if ( pRemap )
-			for ( auto & i : *pRemap )
-			{
-				assert ( i.m_iAttr!=iAttr ); // no internal attrs in the remap
-				if ( i.m_iAttr>iAttr )
-					i.m_iAttr--;
-			}
-	}
-}
-
-
-
 CSphSource_Document::CSphBuildHitsState_t::CSphBuildHitsState_t ()
 {
 	Reset();
@@ -23315,7 +23279,6 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 		return false;
 
 	m_tSchema.SetupFlags ( *this, false, nullptr );
-	MaybeRemoveBlobRowLocator(m_tSchema);
 
 	// check it
 	if ( m_tSchema.GetFieldsCount()>SPH_MAX_FIELDS )
@@ -26450,6 +26413,8 @@ void CSphSource_MSSQL::OdbcPostConnect ()
 
 class CSphSource_BaseSV : public CSphSource_Document, public CSphSchemaConfigurator<CSphSource_BaseSV>
 {
+	using BASE = CSphSource_Document;
+
 public:
 	explicit		CSphSource_BaseSV ( const char * sName );
 					~CSphSource_BaseSV () override;
@@ -26468,6 +26433,7 @@ public:
 	bool	IterateKillListNext ( DocID_t & ) override				{ return false; }
 
 	bool	Setup ( const CSphConfigSection & hSource, FILE * pPipe, CSphString & sError );
+	void	Setup ( const CSphSourceSettings & tSettings, StrVec_t * pWarnings ) override;
 
 protected:
 	enum ESphParseResult
@@ -26656,6 +26622,23 @@ bool CSphSource_BaseSV::Setup ( const CSphConfigSection & hSource, FILE * pPipe,
 }
 
 
+void CSphSource_BaseSV::Setup ( const CSphSourceSettings & tSettings, StrVec_t * pWarnings )
+{
+	// detect a case when blob row locator was removed (because all blobs became columnar)
+	bool bHadLocator = !!m_tSchema.GetAttr ( sphGetBlobLocatorName() );
+	BASE::Setup ( tSettings, pWarnings );
+	bool bHaveLocator = !!m_tSchema.GetAttr ( sphGetBlobLocatorName() );
+
+	if ( bHadLocator && !bHaveLocator )
+	{
+		const int iBlobLocatorId = 1;
+		for ( auto & i : m_dRemap )
+			if ( i.m_iAttr>iBlobLocatorId )
+				i.m_iAttr--;
+	}
+}
+
+
 bool CSphSource_BaseSV::Connect ( CSphString & sError )
 {
 	// source settings have been updated after ::Setup
@@ -26667,8 +26650,6 @@ bool CSphSource_BaseSV::Connect ( CSphString & sError )
 
 	if ( !AddAutoAttrs ( sError ) )
 		return false;
-
-	MaybeRemoveBlobRowLocator ( m_tSchema, &m_dRemap );
 
 	AllocDocinfo();
 

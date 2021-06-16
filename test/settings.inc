@@ -102,7 +102,7 @@ function LoadCachedGuesses ()
 function CacheGuesses ()
 {
 	global $g_locals;
-	global $g_re2, $g_icu, $g_odbc, $g_repli, $g_ssl;
+	global $g_re2, $g_icu, $g_odbc, $g_repli, $g_ssl, $g_columnar_loaded;
 
 	$guessfile = $g_locals['scriptdir'].'guess.txt';
 
@@ -112,6 +112,7 @@ function CacheGuesses ()
 	if ( $g_odbc ) $text .= "global \$g_odbc; \$g_odbc = true;\n";
 	if ( $g_repli ) $text .= "global \$g_repli; \$g_repli = true;\n";
 	if ( $g_ssl ) $text .= "global \$g_ssl; \$g_ssl = true;\n";
+	if ( $g_columnar_loaded ) $text .= "global \$g_columnar_loaded; \$g_columnar_loaded = true;\n";
 
 	file_put_contents ( $guessfile, $text );
 }

@@ -1852,7 +1852,7 @@ public:
 	virtual bool						UpdateSchema ( CSphSchema * pInfo, CSphString & sError );
 
 	/// setup misc indexing settings (prefix/infix/exact-word indexing, position steps)
-	void								Setup ( const CSphSourceSettings & tSettings, StrVec_t * pWarnings );
+	virtual void						Setup ( const CSphSourceSettings & tSettings, StrVec_t * pWarnings );
 
 	bool								SetupMorphFields ( CSphString & sError );
 

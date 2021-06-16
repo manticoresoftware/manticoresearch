@@ -31,11 +31,21 @@ index test
 	columnar_attrs 	= title, gid
 }
 
+index test2
+{
+	source			= src1
+	path			= <data_path/>/test2
+	columnar_attrs 	= id, title, gid
+}
+
 </config>
 
 <queries><sphinxql>
 desc test;
 select * from test order by id asc;
+
+desc test2;
+select * from test2 order by id asc;
 </sphinxql></queries>
 
 </test>

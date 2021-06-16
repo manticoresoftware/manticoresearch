@@ -2806,7 +2806,7 @@ struct FileChunks_t
 	int m_iChunkBytes = 0; // length bytes of one hash chunk in file
 
 	// count of chunks for file size
-	int GetChunksCount() const { return int( ceilf ( float(m_iFileSize) / m_iChunkBytes ) ); }
+	int GetChunksCount() const { return int( ( m_iFileSize + m_iChunkBytes - 1) / m_iChunkBytes ); }
 };
 
 

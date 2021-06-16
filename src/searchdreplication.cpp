@@ -4300,10 +4300,14 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 	assert ( !sIndexPath.IsEmpty() );
 	assert ( dIndexFiles.GetLength() );
 
+	sphLogDebugRpl ( "calculate sha1 of index files chunks '%s'", sIndex.cstr() );
+
 	SyncSrc_t tSigSrc;
 	tSigSrc.m_dIndexFiles.SwapData ( dIndexFiles );
 	if ( !SyncSigBegin ( tSigSrc, sError ) )
 		return false;
+
+	sphLogDebugRpl ( "calculated sha1 of index '%s', files %d, hashes %d", sIndex.cstr(), tSigSrc.m_dIndexFiles.GetLength(), tSigSrc.m_dHashes.GetLength() );
 
 	int64_t tmLongOpTimeout = GetQueryTimeout ( tSigSrc.m_tmTook * 3 ); // timeout = sha verify (of all index files) + preload (of all index files) +1 (for slow io)
 
@@ -4415,6 +4419,8 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 		PQRemoteIndexAdd_c tReq;
 		if ( !PerformRemoteTasks ( dNodes, tReq, tReq, sError ) )
 			return false;
+
+		sphLogDebugRpl ( "remote index '%s' added", sIndex.cstr() );
 	}
 
 	return true;

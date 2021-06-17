@@ -137,7 +137,7 @@ public:
 	// performs actual processing acording created plan
 	void Process ( CSphMatch * pMatch ) final			{ ProcessMatch(pMatch); }
 	void Process ( VecTraits_T<CSphMatch *> & dMatches ){ dMatches.for_each ( [this]( CSphMatch * pMatch ){ ProcessMatch(pMatch); } ); }
-	bool ProcessInRowIdOrder() const final				{ return false;	}
+	bool ProcessInRowIdOrder() const final				{ return m_dActions.any_of ( []( const MapAction_t & i ){ return i.IsExprEval(); } ); }
 
 private:
 	struct MapAction_t
@@ -161,6 +161,11 @@ private:
 		Action_e				m_eAction;
 
 		mutable columnar::Columnar_i * m_pPrevColumnar = nullptr;
+
+		bool IsExprEval() const
+		{
+			return m_eAction==EVALEXPR_INT || m_eAction==EVALEXPR_BIGINT || m_eAction==EVALEXPR_STR || m_eAction==EVALEXPR_MVA;
+		}
 	};
 
 	int						m_iDynamicSize;		// target dynamic size, from schema
@@ -293,7 +298,7 @@ void MatchesToNewSchema_c::ProcessMatch ( CSphMatch * pMatch )
 void MatchesToNewSchema_c::PerformAction ( const MapAction_t & tAction, CSphMatch * pMatch, CSphMatch & tResult, const BYTE * pBlobPool, columnar::Columnar_i * pColumnar )
 {
 	// try to minimize columnar switches inside the expression as this leads to recreating iterators
-	if ( ( tAction.m_eAction==MapAction_t::EVALEXPR_INT || tAction.m_eAction==MapAction_t::EVALEXPR_BIGINT || tAction.m_eAction==MapAction_t::EVALEXPR_STR ) && pColumnar!=tAction.m_pPrevColumnar )
+	if ( tAction.IsExprEval() && pColumnar!=tAction.m_pPrevColumnar )
 	{
 		tAction.m_pExpr->Command ( SPH_EXPR_SET_COLUMNAR, (void*)pColumnar );
 		tAction.m_pPrevColumnar = pColumnar;

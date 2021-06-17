@@ -611,9 +611,9 @@ Useful for extremely high query rates, when just 1 thread is not enough to manag
 
 ### net_wait_tm
 
-Controls busy loop interval of a network thread, default is -1, might be set to -1, 0, positive integer.
+Controls busy loop interval of the network thread, default is -1, might be set to -1, 0 or a positive integer.
 
-In case server configured as pure master and routes requests to agents it is important to handle requests without delays and do not allow net-thread to sleep or cut out from CPU. Here is busy loop to do that. After incoming request, network thread use CPU poll for `10 * net_wait_tm` milliseconds in case `net_wait_tm` is positive number or polls only with CPU in case `net_wait_tm` is `0`. Also busy loop might be disabled with `net_wait_tm = -1` - this way poller set timeout to actual agent's timeouts on system polling call.
+In case server is configured as a pure master and just routes requests to agents it is important to handle requests without delays and to not allow the network thread to sleep. There is a busy loop for that. After and incoming request the network thread uses CPU poll for `10 * net_wait_tm` milliseconds in case `net_wait_tm` is a positive number or polls only with CPU in case `net_wait_tm` is `0`. Also the busy loop can be disabled with `net_wait_tm = -1` - this way the poller sets timeout to actual agent's timeouts on system polling call.
 
 > **WARNING:** CPU busy loop actually loads CPU core, so setting this value to any non-default will cause noticeable CPU usage even with idle server.
 

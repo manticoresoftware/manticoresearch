@@ -62,9 +62,9 @@ public:
 class ColumnarAttrRT_c : public ColumnarAttrRT_i
 {
 public:
-	void	AddDoc ( SphAttr_t tAttr ) override				{ assert ( 0 && "Unsupported type" ); }
-	void	AddDoc ( const BYTE * pData, int iLength )		{ assert ( 0 && "Unsupported type" ); }
-	void	AddDoc ( const int64_t * pData, int iLength	)	{ assert ( 0 && "Unsupported type" ); }
+	void	AddDoc ( SphAttr_t tAttr ) override						{ assert ( 0 && "Unsupported type" ); }
+	void	AddDoc ( const BYTE * pData, int iLength ) override		{ assert ( 0 && "Unsupported type" ); }
+	void	AddDoc ( const int64_t * pData, int iLength	) override	{ assert ( 0 && "Unsupported type" ); }
 };
 
 
@@ -210,7 +210,7 @@ class ColumnarAttr_String_c : public ColumnarAttrRT_c
 public:
 			ColumnarAttr_String_c ( ESphAttr eType ) : m_eType ( eType ) {}
 
-	void	AddDoc ( const BYTE * pData, int iLength );
+	void	AddDoc ( const BYTE * pData, int iLength ) override;
 
 	void	Kill ( const CSphVector<RowID_t> & dKilled ) override;
 	void	Save ( MemoryWriter_c & tWriter ) override	{ SaveData(tWriter); }
@@ -331,7 +331,7 @@ class ColumnarAttr_MVA_T : public ColumnarAttrRT_c
 public:
 			ColumnarAttr_MVA_T ( ESphAttr eType ) : m_eType ( eType ) {}
 
-	void	AddDoc ( const int64_t * pData, int iLength );
+	void	AddDoc ( const int64_t * pData, int iLength ) override;
 
 	void	Kill ( const CSphVector<RowID_t> & dKilled ) override;
 	void	Save ( MemoryWriter_c & tWriter ) override	{ SaveData(tWriter); }

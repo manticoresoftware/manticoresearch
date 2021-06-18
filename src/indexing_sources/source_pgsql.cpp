@@ -86,7 +86,7 @@ static const char * GET_POSTGRESQL_LIB ()
 struct CSphSource_PgSQL : CSphSource_SQL
 {
 	explicit				CSphSource_PgSQL ( const char * sName );
-	bool					Setup ( const CSphSourceParams_PgSQL & tParams );
+	bool					SetupPgSQL ( const CSphSourceParams_PgSQL & tParams );
 	bool					IterateStart ( CSphString & sError ) final;
 
 protected:
@@ -139,10 +139,10 @@ const char * CSphSource_PgSQL::SqlError ()
 }
 
 
-bool CSphSource_PgSQL::Setup ( const CSphSourceParams_PgSQL & tParams )
+bool CSphSource_PgSQL::SetupPgSQL ( const CSphSourceParams_PgSQL & tParams )
 {
 	// checks
-	CSphSource_SQL::Setup ( tParams );
+	CSphSource_SQL::SetupSQL ( tParams );
 
 	m_sPgClientEncoding = tParams.m_sClientEncoding;
 	if ( !m_sPgClientEncoding.cstr() )
@@ -307,7 +307,7 @@ DWORD CSphSource_PgSQL::SqlColumnLength ( int iIndex )
 CSphSource * CreateSourcePGSQL ( const CSphSourceParams_PgSQL & tParams, const char * sSourceName )
 {
 	auto * pSrc = new CSphSource_PgSQL ( sSourceName );
-	if ( !pSrc->Setup ( tParams ) )
+	if ( !pSrc->SetupPgSQL ( tParams ) )
 		SafeDelete ( pSrc );
 
 	return pSrc;

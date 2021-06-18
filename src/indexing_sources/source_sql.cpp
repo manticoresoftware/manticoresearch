@@ -79,7 +79,7 @@ CSphSource_SQL::CSphSource_SQL ( const char * sName )
 }
 
 
-bool CSphSource_SQL::Setup ( const CSphSourceParams_SQL & tParams )
+bool CSphSource_SQL::SetupSQL ( const CSphSourceParams_SQL & tParams )
 {
 	// checks
 	assert ( !tParams.m_sQuery.IsEmpty() );

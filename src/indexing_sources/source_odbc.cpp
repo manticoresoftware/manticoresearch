@@ -79,7 +79,7 @@ static const char * GET_ODBC_LIB ()
 struct CSphSource_ODBC : CSphSource_SQL
 {
 	explicit				CSphSource_ODBC ( const char * sName );
-	bool					Setup ( const CSphSourceParams_ODBC & tParams );
+	bool					SetupODBC ( const CSphSourceParams_ODBC & tParams );
 
 protected:
 	void					SqlDismissResult () final;
@@ -399,9 +399,9 @@ DWORD CSphSource_ODBC::SqlColumnLength ( int iIndex )
 }
 
 
-bool CSphSource_ODBC::Setup ( const CSphSourceParams_ODBC & tParams )
+bool CSphSource_ODBC::SetupODBC ( const CSphSourceParams_ODBC & tParams )
 {
-	if ( !CSphSource_SQL::Setup ( tParams ) )
+	if ( !CSphSource_SQL::SetupSQL ( tParams ) )
 		return false;
 
 	// parse column buffers spec, if any
@@ -579,7 +579,7 @@ void CSphSource_MSSQL::OdbcPostConnect ()
 CSphSource * CreateSourceODBC ( const CSphSourceParams_ODBC & tParams, const char * sSourceName )
 {
 	auto * pSrc = new CSphSource_ODBC ( sSourceName );
-	if ( !pSrc->Setup ( tParams ) )
+	if ( !pSrc->SetupODBC ( tParams ) )
 		SafeDelete ( pSrc );
 
 	return pSrc;
@@ -588,7 +588,7 @@ CSphSource * CreateSourceODBC ( const CSphSourceParams_ODBC & tParams, const cha
 CSphSource * CreateSourceMSSQL ( const CSphSourceParams_ODBC & tParams, const char * sSourceName )
 {
 	auto * pSrc = new CSphSource_MSSQL ( sSourceName );
-	if ( !pSrc->Setup ( tParams ) )
+	if ( !pSrc->SetupODBC ( tParams ) )
 		SafeDelete ( pSrc );
 
 	return pSrc;

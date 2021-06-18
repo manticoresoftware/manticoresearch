@@ -1712,10 +1712,10 @@ public:
 	SphGroupKey_t	KeyFromValue ( SphAttr_t ) const override					{ assert(0); return SphGroupKey_t(); }
 	SphGroupKey_t	KeyFromMatch ( const CSphMatch & tMatch ) const override	{ assert(0); return SphGroupKey_t(); }
 	void			MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const override;
-	void			GetLocator ( CSphAttrLocator & tOut ) const { tOut = m_tLocator; }
+	void			GetLocator ( CSphAttrLocator & tOut ) const override { tOut = m_tLocator; }
 	ESphAttr		GetResultType () const override;
 	CSphGrouper *	Clone() const override { return new GrouperMVA_T ( m_tLocator ); }
-	bool			IsMultiValue() const { return true; }
+	bool			IsMultiValue() const override { return true; }
 
 private:
 	CSphAttrLocator	m_tLocator;

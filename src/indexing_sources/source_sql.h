@@ -77,7 +77,7 @@ struct CSphSource_SQL : CSphSource_Document
 	explicit			CSphSource_SQL ( const char * sName );
 						~CSphSource_SQL () override = default;
 
-	bool				Setup ( const CSphSourceParams_SQL & pParams );
+	bool				SetupSQL ( const CSphSourceParams_SQL & pParams );
 	bool				Connect ( CSphString & sError ) override;
 	void				Disconnect () override;
 	bool				IterateStart ( CSphString & sError ) override;

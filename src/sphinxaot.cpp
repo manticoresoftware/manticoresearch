@@ -1772,7 +1772,6 @@ public:
 class TokenizerUk_c : public CSphAotTokenizerTmpl
 {
 	LemmatizerUk_c m_tLemmatizer;
-	int m_iExtraCount = 0;
 
 public:
 	TokenizerUk_c ( ISphTokenizer * pTok, CSphDict * pDict, bool bIndexExact );

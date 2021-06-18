@@ -132,7 +132,7 @@ public:
 	explicit		CSphSource_XMLPipe2 ( const char * sName );
 					~CSphSource_XMLPipe2 () final;
 
-	bool			Setup ( int iFieldBufferMax, bool bFixupUTF8, FILE * pPipe, const CSphConfigSection & hSource, CSphString & sError );			///< memorize the command
+	bool			SetupXML ( int iFieldBufferMax, bool bFixupUTF8, FILE * pPipe, const CSphConfigSection & hSource, CSphString & sError );			///< memorize the command
 	bool			Connect ( CSphString & sError ) final;			///< run the command and open the pipe
 	void			Disconnect () final;							///< close the pipe
 
@@ -355,7 +355,7 @@ const char * CSphSource_XMLPipe2::DecorateMessageVA ( const char * sTemplate, va
 }
 
 
-bool CSphSource_XMLPipe2::Setup ( int iFieldBufferMax, bool bFixupUTF8, FILE * pPipe, const CSphConfigSection & hSource, CSphString & sError )
+bool CSphSource_XMLPipe2::SetupXML ( int iFieldBufferMax, bool bFixupUTF8, FILE * pPipe, const CSphConfigSection & hSource, CSphString & sError )
 {
 	assert ( !m_pBuffer && !m_pFieldBuffer && !m_pPipe );
 
@@ -1191,7 +1191,7 @@ CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, FILE *
 	bool bUTF8 = pSource->GetInt ( "xmlpipe_fixup_utf8", 0 )!=0;
 
 	auto * pXMLPipe = new CSphSource_XMLPipe2(szSourceName);
-	if ( !pXMLPipe->Setup ( iMaxFieldLen, bUTF8, pPipe, *pSource, sError ) )
+	if ( !pXMLPipe->SetupXML ( iMaxFieldLen, bUTF8, pPipe, *pSource, sError ) )
 		SafeDelete ( pXMLPipe );
 
 	return pXMLPipe;

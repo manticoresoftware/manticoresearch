@@ -92,7 +92,7 @@ static const char * GET_MYSQL_LIB()
 struct CSphSource_MySQL : CSphSource_SQL
 {
 	explicit				CSphSource_MySQL ( const char * sName );
-	bool					Setup ( const CSphSourceParams_MySQL & tParams );
+	bool					SetupMySQL ( const CSphSourceParams_MySQL & tParams );
 
 protected:
 	MYSQL_RES *				m_pMysqlResult = nullptr;
@@ -291,9 +291,9 @@ DWORD CSphSource_MySQL::SqlColumnLength ( int iIndex )
 }
 
 
-bool CSphSource_MySQL::Setup ( const CSphSourceParams_MySQL & tParams )
+bool CSphSource_MySQL::SetupMySQL ( const CSphSourceParams_MySQL & tParams )
 {
-	if ( !CSphSource_SQL::Setup ( tParams ) )
+	if ( !CSphSource_SQL::SetupSQL ( tParams ) )
 		return false;
 
 	m_sMysqlUsock = tParams.m_sUsock;
@@ -315,7 +315,7 @@ bool CSphSource_MySQL::Setup ( const CSphSourceParams_MySQL & tParams )
 CSphSource * CreateSourceMysql ( const CSphSourceParams_MySQL & tParams, const char * sSourceName )
 {
 	auto * pSrc = new CSphSource_MySQL ( sSourceName );
-	if ( !pSrc->Setup ( tParams ) )
+	if ( !pSrc->SetupMySQL ( tParams ) )
 		SafeDelete ( pSrc );
 
 	return pSrc;

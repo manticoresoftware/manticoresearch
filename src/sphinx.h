@@ -2857,7 +2857,7 @@ public:
 
 	virtual bool				AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, bool bColumnar, CSphString & sError ) = 0;
 
-	virtual bool				AddRemoveField ( bool bAdd, const CSphString & sFieldName, CSphString & sError ) = 0;
+	virtual bool				AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD, CSphString & sError ) = 0;
 
 	virtual void				FlushDeadRowMap ( bool bWaitComplete ) const {};
 	virtual bool				LoadKillList ( CSphFixedVector<DocID_t> * pKillList, KillListTargets_c & tTargets, CSphString & sError ) const { return true; }
@@ -2982,7 +2982,7 @@ public:
 	bool				SaveAttributes ( CSphString & ) const override { return true; }
 	DWORD				GetAttributeStatus () const override { return 0; }
 	bool				AddRemoveAttribute ( bool, const CSphString &, ESphAttr, bool, CSphString & ) override { return true; }
-	bool				AddRemoveField ( bool, const CSphString &, CSphString & ) override { return true; }
+	bool				AddRemoveField ( bool, const CSphString &, DWORD, CSphString & ) override { return true; }
 	void				DebugDumpHeader ( FILE *, const char *, bool ) override {}
 	void				DebugDumpDocids ( FILE * ) override {}
 	void				DebugDumpHitlist ( FILE * , const char * , bool ) override {}

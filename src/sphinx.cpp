@@ -1509,7 +1509,7 @@ public:
 	DWORD				GetAttributeStatus () const final;
 
 	bool				AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, bool bColumnar, CSphString & sError ) final;
-	bool				AddRemoveField ( bool bAdd, const CSphString & sFieldName, CSphString & sError ) final;
+	bool				AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD uFieldFlags, CSphString & sError ) final;
 
 	void				FlushDeadRowMap ( bool bWaitComplete ) const final;
 	bool				LoadKillList ( CSphFixedVector<DocID_t> * pKillList, KillListTargets_c & tTargets, CSphString & sError ) const final;
@@ -1651,6 +1651,8 @@ private:
 
 	bool						Alter_IsMinMax ( const CSphRowitem * pDocinfo, int iStride ) const override;
 	bool						AddRemoveColumnarAttr ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, const ISphSchema & tOldSchema, const ISphSchema & tNewSchema, CSphString & sError );
+	bool						DeleteFieldFromDict ( int iFieldId, BuildHeader_t & tBuildHeader, CSphString & sError );
+	bool						AddRemoveFieldFromDocstore ( const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError );
 
 	bool						Build_SetupInplace ( SphOffset_t & iHitsGap, int iHitsMax, int iFdHits ) const;
 	bool						Build_SetupDocstore ( CSphScopedPtr<DocstoreBuilder_i> & pDocstore );
@@ -11546,10 +11548,123 @@ bool CSphIndex_VLN::DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder *
 	return true;
 }
 
-bool CSphIndex_VLN::AddRemoveField ( bool bAddField, const CSphString & sFieldName, CSphString & sError )
+
+bool CSphIndex_VLN::DeleteFieldFromDict ( int iFieldId, BuildHeader_t & tBuildHeader, CSphString & sError )
 {
+	CSphAutofile tTmpDict ( GetIndexFileName ( "spi.tmp" ), SPH_O_NEW, sError, true );
+	CSphAutofile tNewDict ( GetIndexFileName ( SPH_EXT_SPI, true ), SPH_O_NEW, sError );
+
+	if ( !sError.IsEmpty () || tTmpDict.GetFD ()<0 || tNewDict.GetFD ()<0 || sphInterrupted () )
+		return false;
+
+	DictRefPtr_c pDict { m_pDict->Clone () };
+
+	int iHitBufferSize = 8 * 1024 * 1024;
+	CSphVector<SphWordID_t> dDummy;
+	CSphHitBuilder tHitBuilder ( m_tSettings, dDummy, true, iHitBufferSize, pDict, &sError );
+
+	// FIXME? is this magic dict block constant any good?..
+	pDict->DictBegin ( tTmpDict, tNewDict, iHitBufferSize );
+
+	// merge dictionaries, doclists and hitlists
+	if ( pDict->GetSettings().m_bWordDict )
+	{
+		WITH_QWORD ( this, false, Qword,
+			if ( !CSphIndex_VLN::DeleteField <Qword> ( this, &tHitBuilder, sError, tBuildHeader, iFieldId ) )
+				return false;
+		);
+	} else
+	{
+		WITH_QWORD ( this, true, Qword,
+			if ( !CSphIndex_VLN::DeleteField <Qword> ( this, &tHitBuilder, sError, tBuildHeader, iFieldId ) )
+				return false;
+		);
+	}
+
+	if ( sphInterrupted() )
+		return false;
+
+	// finalize
+	CSphAggregateHit tFlush;
+	tFlush.m_tRowID = INVALID_ROWID;
+	tFlush.m_uWordID = 0;
+	tFlush.m_sKeyword = (BYTE*)""; // tricky: assertion in cidxHit calls strcmp on this in case of empty index!
+	tFlush.m_iWordPos = EMPTY_HIT;
+	tFlush.m_dFieldMask.UnsetAll();
+	tHitBuilder.cidxHit ( &tFlush );
+
+	int iMinInfixLen = m_tSettings.m_iMinInfixLen;
+	if ( !tHitBuilder.cidxDone ( iHitBufferSize, iMinInfixLen, m_pTokenizer->GetMaxCodepointLength(), &tBuildHeader ) )
+		return false;
+
+	/// as index is w-locked, we can also detach doclist/hitlist/dictionary and juggle them.
+	tTmpDict.Close();
+	tNewDict.Close();
+
+	m_tWordlist.Reset();
+	if ( !JuggleFile ( SPH_EXT_SPI, sError ) )	return false;
+	m_tWordlist.m_iDictCheckpointsOffset= tBuildHeader.m_iDictCheckpointsOffset;
+	m_tWordlist.m_iDictCheckpoints		= tBuildHeader.m_iDictCheckpoints;
+	m_tWordlist.m_iInfixCodepointBytes	= tBuildHeader.m_iInfixCodepointBytes;
+	m_tWordlist.m_iInfixBlocksOffset	= tBuildHeader.m_iInfixBlocksOffset;
+	m_tWordlist.m_iInfixBlocksWordsSize = tBuildHeader.m_iInfixBlocksWordsSize;
+	m_tWordlist.m_dCheckpoints.Reset ( m_tWordlist.m_iDictCheckpoints );
+	if ( !PreallocWordlist() )					return false;
+
+	m_tSkiplists.Reset ();
+	if ( !JuggleFile ( SPH_EXT_SPE, sError ) )	return false;
+	if ( !PreallocSkiplist() )					return false;
+
+	m_pDoclistFile = nullptr;
+	m_pHitlistFile = nullptr;
+	if ( !JuggleFile ( SPH_EXT_SPD, sError ) )	return false;
+	if ( !JuggleFile ( SPH_EXT_SPP, sError ) )	return false;
+	if ( !SpawnReaders() )						return false;
+
+	return true;
+}
+
+
+bool CSphIndex_VLN::AddRemoveFieldFromDocstore ( const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError )
+{
+	int iOldNumStored = 0;
+	for ( int i = 0; i < tOldSchema.GetFieldsCount(); i++ )
+		if ( tOldSchema.IsFieldStored(i) )
+			iOldNumStored++;
+
+	int iNewNumStored = 0;
+	for ( int i = 0; i < tNewSchema.GetFieldsCount(); i++ )
+		if ( tNewSchema.IsFieldStored(i) )
+			iNewNumStored++;
+
+	if ( iOldNumStored==iNewNumStored )
+		return true;
+
+	CSphScopedPtr<DocstoreBuilder_i> pDocstoreBuilder(nullptr);
+	if ( iNewNumStored )
+	{
+		pDocstoreBuilder = CreateDocstoreBuilder ( GetIndexFileName ( SPH_EXT_SPDS, true ), m_pDocstore->GetDocstoreSettings(), sError );
+		if ( !pDocstoreBuilder.Ptr() )
+			return false;
+
+		Alter_AddRemoveFieldFromDocstore ( *pDocstoreBuilder, m_pDocstore.Ptr(), (DWORD)m_iDocinfo, tNewSchema );
+	}
+
+	if ( !JuggleFile ( SPH_EXT_SPDS, sError, !!iOldNumStored, !!iNewNumStored ) )
+		return false;
+
+	m_pDocstore.Reset();
+	PreallocDocstore();
+
+	return true;
+}
+
+
+bool CSphIndex_VLN::AddRemoveField ( bool bAddField, const CSphString & sFieldName, DWORD uFieldFlags, CSphString & sError )
+{
+	CSphSchema tOldSchema = m_tSchema;
 	CSphSchema tNewSchema = m_tSchema;
-	if ( !Alter_AddRemoveFieldFromSchema ( bAddField, tNewSchema, sFieldName, sError ) )
+	if ( !Alter_AddRemoveFieldFromSchema ( bAddField, tNewSchema, sFieldName, uFieldFlags, sError ) )
 		return false;
 
 	auto iRemoveIdx = m_tSchema.GetFieldIndex ( sFieldName.cstr () );
@@ -11562,81 +11677,11 @@ bool CSphIndex_VLN::AddRemoveField ( bool bAddField, const CSphString & sFieldNa
 
 	*(DictHeader_t *) &tBuildHeader = *(DictHeader_t *) &m_tWordlist;
 
-	if ( !bAddField )
-	{
-		// main challenge if removing...
+	if ( !bAddField && !DeleteFieldFromDict ( iRemoveIdx, tBuildHeader, sError ) )
+		return false;
 
-		CSphAutofile tTmpDict ( GetIndexFileName ( "spi.tmp" ), SPH_O_NEW, sError, true );
-		CSphAutofile tNewDict ( GetIndexFileName ( SPH_EXT_SPI, true ), SPH_O_NEW, sError );
-
-		if ( !sError.IsEmpty () || tTmpDict.GetFD ()<0 || tNewDict.GetFD ()<0 || sphInterrupted () )
-			return false;
-
-		DictRefPtr_c pDict { m_pDict->Clone () };
-
-		int iHitBufferSize = 8 * 1024 * 1024;
-		CSphVector<SphWordID_t> dDummy;
-		CSphHitBuilder tHitBuilder ( m_tSettings, dDummy, true, iHitBufferSize, pDict, &sError );
-
-		// FIXME? is this magic dict block constant any good?..
-		pDict->DictBegin ( tTmpDict, tNewDict, iHitBufferSize );
-
-		// merge dictionaries, doclists and hitlists
-		if ( pDict->GetSettings().m_bWordDict )
-		{
-			WITH_QWORD ( this, false, Qword,
-				if ( !CSphIndex_VLN::DeleteField <Qword> ( this, &tHitBuilder, sError, tBuildHeader, iRemoveIdx ) )
-					return false;
-			);
-		} else
-		{
-			WITH_QWORD ( this, true, Qword,
-				if ( !CSphIndex_VLN::DeleteField <Qword> ( this, &tHitBuilder, sError, tBuildHeader, iRemoveIdx ) )
-					return false;
-			);
-		}
-
-		if ( sphInterrupted () )
-			return false;
-
-		// finalize
-		CSphAggregateHit tFlush;
-		tFlush.m_tRowID = INVALID_ROWID;
-		tFlush.m_uWordID = 0;
-		tFlush.m_sKeyword = (BYTE*)""; // tricky: assertion in cidxHit calls strcmp on this in case of empty index!
-		tFlush.m_iWordPos = EMPTY_HIT;
-		tFlush.m_dFieldMask.UnsetAll();
-		tHitBuilder.cidxHit ( &tFlush );
-
-		int iMinInfixLen = m_tSettings.m_iMinInfixLen;
-		if ( !tHitBuilder.cidxDone ( iHitBufferSize, iMinInfixLen, m_pTokenizer->GetMaxCodepointLength(), &tBuildHeader ) )
-			return false;
-
-		/// as index is w-locked, we can also detach doclist/hitlist/dictionary and juggle them.
-		tTmpDict.Close();
-		tNewDict.Close();
-
-		m_tWordlist.Reset();
-		if ( !JuggleFile ( SPH_EXT_SPI, sError ) )	return false;
-		m_tWordlist.m_iDictCheckpointsOffset = tBuildHeader.m_iDictCheckpointsOffset;
-		m_tWordlist.m_iDictCheckpoints = tBuildHeader.m_iDictCheckpoints;
-		m_tWordlist.m_iInfixCodepointBytes = tBuildHeader.m_iInfixCodepointBytes;
-		m_tWordlist.m_iInfixBlocksOffset =  tBuildHeader.m_iInfixBlocksOffset;
-		m_tWordlist.m_iInfixBlocksWordsSize = tBuildHeader.m_iInfixBlocksWordsSize;
-		m_tWordlist.m_dCheckpoints.Reset ( m_tWordlist.m_iDictCheckpoints );
-		if ( !PreallocWordlist() )					return false;
-
-		m_tSkiplists.Reset ();
-		if ( !JuggleFile ( SPH_EXT_SPE, sError ) )	return false;
-		if ( !PreallocSkiplist() )					return false;
-
-		m_pDoclistFile = nullptr;
-		m_pHitlistFile = nullptr;
-		if ( !JuggleFile ( SPH_EXT_SPD, sError ) )	return false;
-		if ( !JuggleFile ( SPH_EXT_SPP, sError ) )	return false;
-		if ( !SpawnReaders() )						return false;
-
-	}
+	if ( !AddRemoveFieldFromDocstore ( tOldSchema, tNewSchema, sError ) )
+		return false;
 
 	CSphString sHeaderName = GetIndexFileName ( SPH_EXT_SPH, true );
 	WriteHeader_t tWriteHeader;

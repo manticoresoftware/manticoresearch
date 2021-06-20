@@ -203,6 +203,7 @@ public:
 
 
 	int				AddField ( const CSphString & sName, DocstoreDataType_e eType ) final;
+	void			RemoveField ( const CSphString & sName, DocstoreDataType_e eType ) final;
 	int				GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const final;
 
 	int				GetNumFields() const final { return m_dFields.GetLength(); }
@@ -213,27 +214,45 @@ public:
 private:
 	CSphVector<Field_t>			m_dFields;
 	SmallStringHash_T<int>		m_hFields;
+
+	CSphString		BuildCompoundName ( const CSphString & sName, DocstoreDataType_e eType ) const;
 };
+
+
+CSphString DocstoreFields_c::BuildCompoundName ( const CSphString & sName, DocstoreDataType_e eType ) const
+{
+	CSphString sCompound;
+	sCompound.SetSprintf ( "%d%s", eType, sName.cstr() );
+	return sCompound;
+}
 
 
 int DocstoreFields_c::AddField ( const CSphString & sName, DocstoreDataType_e eType )
 {
 	int iField = m_dFields.GetLength();
 	m_dFields.Add ( {sName, eType} );
-	
-	CSphString sCompound;
-	sCompound.SetSprintf ( "%d%s", eType, sName.cstr() );
-	m_hFields.Add ( iField, sCompound );
-
+	m_hFields.Add ( iField, BuildCompoundName ( sName, eType ) );
 	return iField;
+}
+
+
+void DocstoreFields_c::RemoveField ( const CSphString & sName, DocstoreDataType_e eType )
+{
+	int iFieldId = GetFieldId ( sName, eType );
+	if ( iFieldId==-1 )
+		return;
+
+	m_dFields.Remove ( iFieldId, 1 );
+
+	m_hFields.Reset();
+	ARRAY_FOREACH ( i, m_dFields )
+		m_hFields.Add (  i, BuildCompoundName ( m_dFields[i].m_sName, m_dFields[i].m_eType ) );
 }
 
 
 int DocstoreFields_c::GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const
 {
-	CSphString sCompound;
-	sCompound.SetSprintf ( "%d%s", eType, sName.cstr() );
-	int * pField = m_hFields(sCompound);
+	int * pField = m_hFields ( BuildCompoundName ( sName, eType ) );
 	return pField ? *pField : -1;
 }
 
@@ -1200,6 +1219,7 @@ public:
 
 	void	AddDoc ( RowID_t tRowID, const Doc_t & tDoc ) final;
 	int		AddField ( const CSphString & sName, DocstoreDataType_e eType ) final;
+	void	RemoveField ( const CSphString & sName, DocstoreDataType_e eType ) final;
 	void	Finalize() final;
 
 private:
@@ -1291,6 +1311,12 @@ void DocstoreBuilder_c::AddDoc ( RowID_t tRowID, const Doc_t & tDoc )
 int DocstoreBuilder_c::AddField ( const CSphString & sName, DocstoreDataType_e eType )
 {
 	return m_tFields.AddField ( sName, eType );
+}
+
+
+void DocstoreBuilder_c::RemoveField ( const CSphString & sName, DocstoreDataType_e eType )
+{
+	return m_tFields.RemoveField ( sName, eType );
 }
 
 
@@ -1534,9 +1560,10 @@ public:
 
 	void				AddDoc ( RowID_t tRowID, const DocstoreBuilder_i::Doc_t & tDoc ) final;
 	int					AddField ( const CSphString & sName, DocstoreDataType_e eType ) final;
+	void				RemoveField ( const CSphString & sName, DocstoreDataType_e eType ) final;
 	void				Finalize() final {};
 
-	void				SwapRows (RowID_t tDstID, RowID_t tSrcID ) final;
+	void				SwapRows ( RowID_t tDstID, RowID_t tSrcID ) final;
 	void				DropTail ( RowID_t tTailID ) final;
 
 	DocstoreDoc_t		GetDoc ( RowID_t tRowID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const final;
@@ -1627,6 +1654,12 @@ void DocstoreRT_c::DropTail ( RowID_t tTailID )
 int DocstoreRT_c::AddField ( const CSphString & sName, DocstoreDataType_e eType )
 {
 	return m_tFields.AddField ( sName, eType );
+}
+
+
+void DocstoreRT_c::RemoveField ( const CSphString & sName, DocstoreDataType_e eType )
+{
+	return m_tFields.RemoveField ( sName, eType );
 }
 
 

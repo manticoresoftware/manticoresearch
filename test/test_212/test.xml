@@ -25,7 +25,7 @@
 			desc rt;
 
 			<!-- usual text and string without flags -->
-			alter table rt add column b1 text;
+			alter table rt add column b1 text indexed;
 			alter table rt add column b2 string;
 			desc rt;
 
@@ -63,7 +63,7 @@
 
 			<!-- double field and attr, separated -->
 			desc rt;
-			alter table rt add column cc text;
+			alter table rt add column cc text indexed;
 			alter table rt add column cc string;
 			desc rt;
 			alter table rt drop column cc;
@@ -88,8 +88,8 @@
 			<!-- removing field from the middle -->
 			create table tt (t text, i int) type='rt';
 
-			alter table tt add column t1 text;
-			alter table tt add column t2 text;
+			alter table tt add column t1 text indexed;
+			alter table tt add column t2 text indexed;
 
 			<!-- oneshot insert to be sure they're in the same ram-segment -->
 			insert into tt (id, t, t1, t2 ) values (1,'foo','',''),(2, 'bar', 'bor',''), (3, 'baz', 'bor', 'bor');
@@ -116,8 +116,8 @@
 			<!-- removing field from the middle, disk chunk -->
 			create table ttt (t text, i int) type='rt';
 
-			alter table ttt add column t1 text;
-			alter table ttt add column t2 text;
+			alter table ttt add column t1 text indexed;
+			alter table ttt add column t2 text indexed;
 
 			insert into ttt (id, t, t1, t2 ) values (1,'foo','',''),(2, 'bar', 'bor',''), (3, 'baz', 'bor', 'bor');
 			flush ramchunk ttt;
@@ -141,6 +141,47 @@
 		</repeat></repeat>
 		<sphinxql>
 			drop table ttt;
+		</sphinxql>
+
+		<sphinxql>
+			create table a1(title1 text);
+			desc a1;
+			insert into a1 values (1,'title1_1');
+			select * from a1;
+			alter table a1 add column title2 text;
+			desc a1;
+			select * from a1;
+			insert into a1 values (2,'title1_2','title2_2');
+			select * from a1;
+			alter table a1 add column title3 text;
+			desc a1;
+			insert into a1 values (3,'title1_3','title2_3','title3_3');
+			select * from a1;
+			alter table a1 drop column title2;
+			desc a1;
+			select * from a1;
+			alter table a1 drop column title1;
+			desc a1;
+			select * from a1;
+			drop table a1;
+
+			create table a1(title1 text);
+			insert into a1 values (1,'title1_1');
+			insert into a1 values (2,'title1_2');
+			insert into a1 values (3,'title1_3');
+			flush ramchunk a1;
+			desc a1;
+			select * from a1 order by id asc;
+			alter table a1 add column title2 text;
+			desc a1;
+			select * from a1 order by id asc;
+			insert into a1 values (4,'title1_4','title2_4');
+			flush ramchunk a1;
+			select * from a1 order by id asc;
+			alter table a1 drop column title1;
+			desc a1;
+			select * from a1 order by id asc;
+			drop table a1;
 		</sphinxql>
 	</queries>
 

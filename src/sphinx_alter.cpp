@@ -15,6 +15,7 @@
 #include "attribute.h"
 #include "fileio.h"
 #include "columnarmisc.h"
+#include "docstore.h"
 
 namespace {
 
@@ -433,16 +434,19 @@ bool IndexAlterHelper_c::Alter_AddRemoveFromSchema ( CSphSchema & tSchema, const
 }
 
 
-bool IndexAlterHelper_c::Alter_AddRemoveFieldFromSchema ( bool bAdd, CSphSchema & tSchema, const CSphString & sFieldName, CSphString & sError )
+bool IndexAlterHelper_c::Alter_AddRemoveFieldFromSchema ( bool bAdd, CSphSchema & tSchema, const CSphString & sFieldName, DWORD uFieldFlags, CSphString & sError )
 {
 	if ( bAdd )
 	{
-		// fixme! dupes?
-		//tCol.m_uFieldFlags = CSphColumnInfo::FIELD_INDEXED; // fixme! stored must be processed someway aside
-		//tCol.m_bPayload = false; // fixme? support it or not?
-		tSchema.AddField ( sFieldName.cstr () );
+		CSphColumnInfo tField;
+		tField.m_sName = sFieldName;
+		tField.m_uFieldFlags = uFieldFlags;
+		//tField.m_bPayload = false; // fixme? support it or not?
+		tSchema.AddField(tField);
 		return true;
-	} else {
+	}
+	else
+	{
 		auto iIdx = tSchema.GetFieldIndex ( sFieldName.cstr () );
 		if ( iIdx>=0 && tSchema.GetFieldsCount()==1 )
 		{
@@ -452,6 +456,61 @@ bool IndexAlterHelper_c::Alter_AddRemoveFieldFromSchema ( bool bAdd, CSphSchema 
 		tSchema.RemoveField ( iIdx );
 		return true;
 	}
+}
+
+
+void IndexAlterHelper_c::Alter_AddRemoveFieldFromDocstore ( DocstoreBuilder_i & tBuilder, const Docstore_i * pDocstore, DWORD uNumDocs, const CSphSchema & tNewSchema )
+{
+	struct Field_t
+	{
+		CSphString	m_sName;
+		int			m_iOldId = -1;
+		int			m_iRsetId = -1;
+	};
+
+	CSphVector<Field_t> dStoredFields;
+	for ( int i = 0; i < tNewSchema.GetFieldsCount(); i++ )
+		if ( tNewSchema.IsFieldStored(i) )
+		{
+			const CSphString & sName = tNewSchema.GetFieldName(i);
+			int iFieldId = pDocstore ? pDocstore->GetFieldId ( sName, DOCSTORE_TEXT ) : -1;
+			dStoredFields.Add ( { sName, iFieldId, -1 } );
+		}
+
+	IntVec_t dStoredFieldIds;
+	for ( auto & i : dStoredFields )
+	{
+		if ( i.m_iOldId>=0 )
+		{
+			i.m_iRsetId = dStoredFieldIds.GetLength();
+			dStoredFieldIds.Add ( i.m_iOldId );
+		}
+
+		tBuilder.AddField ( i.m_sName, DOCSTORE_TEXT );
+	}
+
+	DocstoreDoc_t tOldDoc;
+	DocstoreBuilder_i::Doc_t tNewDoc;
+	tNewDoc.m_dFields.Resize ( dStoredFields.GetLength() );
+
+	for ( RowID_t tRowID = 0; tRowID < uNumDocs; tRowID++ )
+	{
+		if ( pDocstore )
+			tOldDoc = pDocstore->GetDoc ( tRowID, &dStoredFieldIds, -1, false );
+
+		ARRAY_FOREACH ( i, dStoredFields )
+		{
+			const Field_t & tField = dStoredFields[i];
+			if ( tField.m_iRsetId!=-1 )
+				tNewDoc.m_dFields[i] = tOldDoc.m_dFields[tField.m_iRsetId];
+			else
+				tNewDoc.m_dFields[i] = {nullptr,0};
+		}
+
+		tBuilder.AddDoc ( tRowID, tNewDoc );
+	}
+
+	tBuilder.Finalize();
 }
 
 //////////////////////////////////////////////////////////////////////////

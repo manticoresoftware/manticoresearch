@@ -1106,7 +1106,7 @@ public:
 	DWORD				GetAttributeStatus () const final { return m_uDiskAttrStatus; }
 
 	bool				AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, bool bColumnar, CSphString & sError ) final;
-	bool				AddRemoveField ( bool, const CSphString &, CSphString & ) final;
+	bool				AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD uFieldFlags, CSphString & sError ) final;
 
 	void				DebugDumpHeader ( FILE * , const char * , bool ) final {}
 	void				DebugDumpDocids ( FILE * ) final {}
@@ -1233,7 +1233,9 @@ private:
 	RtSegment_t *				MergeSegments ( const RtSegment_t * pSeg1, const RtSegment_t * pSeg2, bool bHasMorphology ) const;
 	static void					CopyWord ( RtSegment_t & tDst, const RtSegment_t & tSrc, RtDocWriter_t & tOutDoc, RtDocReader_t & tInDoc, RtWord_t & tWord, const CSphVector<RowID_t> & tRowMap );
 
-	void						DeleteField ( RtSegment_t * pSeg, int iKillField );
+	void						DeleteFieldFromDict ( RtSegment_t * pSeg, int iKillField );
+	void						AddFieldToRamchunk ( const CSphString & sFieldName, DWORD uFieldFlags, const CSphSchema & tNewSchema );
+	void						RemoveFieldFromRamchunk ( const CSphString & sFieldName, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema );
 
 	bool						LoadMeta ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings );
 	bool						PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings );
@@ -2443,7 +2445,8 @@ void CopyWordWithoutField ( CSphTightVector<BYTE> * pOutHits, RtDocWriter_t & tO
 	}
 }
 
-void RtIndex_c::DeleteField ( RtSegment_t * pSeg, int iKillField )
+
+void RtIndex_c::DeleteFieldFromDict ( RtSegment_t * pSeg, int iKillField )
 {
 	assert ( iKillField>=0 );
 
@@ -2491,8 +2494,7 @@ void RtIndex_c::DeleteField ( RtSegment_t * pSeg, int iKillField )
 	if ( m_bKeywordDict )
 		FixupSegmentCheckpoints ( pSeg );
 
-	BuildSegmentInfixes ( &tOutSeg, m_pDict->HasMorphology (), m_bKeywordDict, m_tSettings.m_iMinInfixLen,
-					   m_iWordsCheckpoint, ( m_iMaxCodepointLength>1 ), m_tSettings.m_eHitless );
+	BuildSegmentInfixes ( &tOutSeg, m_pDict->HasMorphology (), m_bKeywordDict, m_tSettings.m_iMinInfixLen, m_iWordsCheckpoint, ( m_iMaxCodepointLength>1 ), m_tSettings.m_eHitless );
 }
 
 
@@ -7601,17 +7603,68 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ES
 	return true;
 }
 
-bool RtIndex_c::AddRemoveField ( bool bAdd, const CSphString & sFieldName, CSphString & sError )
+
+void RtIndex_c::AddFieldToRamchunk ( const CSphString & sFieldName, DWORD uFieldFlags, const CSphSchema & tNewSchema )
+{
+	if ( !(uFieldFlags & CSphColumnInfo::FIELD_STORED) )
+		return;
+
+	assert ( m_pDocstoreFields.Ptr() );
+	m_pDocstoreFields->AddField ( sFieldName, DOCSTORE_TEXT );
+
+	for ( RtSegment_t * pSeg : m_dRamChunks )
+	{
+		CSphScopedPtr<DocstoreRT_i> pNewDocstore ( CreateDocstoreRT() );
+		Alter_AddRemoveFieldFromDocstore ( *pNewDocstore, pSeg->m_pDocstore.Ptr(), pSeg->m_uRows, tNewSchema );
+		pSeg->m_pDocstore.Swap(pNewDocstore);
+
+		pSeg->UpdateUsedRam();
+	}
+}
+
+
+void RtIndex_c::RemoveFieldFromRamchunk ( const CSphString & sFieldName, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema )
+{
+	bool bRemoveStored = m_pDocstoreFields.Ptr() && m_pDocstoreFields->GetFieldId ( sFieldName, DOCSTORE_TEXT )!=-1;
+	bool bLastStored = !tNewSchema.HasStoredFields();
+	if ( bRemoveStored )
+		m_pDocstoreFields->RemoveField ( sFieldName, DOCSTORE_TEXT );
+
+	int iFieldId = tOldSchema.GetFieldIndex ( sFieldName.cstr () );
+
+	for ( RtSegment_t * pSeg : m_dRamChunks )
+	{
+		assert ( pSeg );
+
+		DeleteFieldFromDict ( pSeg, iFieldId );
+
+		if ( bRemoveStored )
+		{
+			if ( !bLastStored )
+			{
+				CSphScopedPtr<DocstoreRT_i> pNewDocstore ( CreateDocstoreRT() );
+				Alter_AddRemoveFieldFromDocstore ( *pNewDocstore, pSeg->m_pDocstore.Ptr(), pSeg->m_uRows, tNewSchema );
+				pSeg->m_pDocstore.Swap(pNewDocstore);
+			}
+			else
+				pSeg->m_pDocstore.Reset();
+		}
+
+		pSeg->UpdateUsedRam();
+	}
+}
+
+
+bool RtIndex_c::AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD uFieldFlags, CSphString & sError )
 {
 	SphOptimizeGuard_t tStopOptimize ( m_tOptimizingLock, m_bOptimizeStop ); // got write-locked at daemon
 
 	CSphSchema tOldSchema = m_tSchema;
 	CSphSchema tNewSchema = m_tSchema;
 
-	if ( !Alter_AddRemoveFieldFromSchema ( bAdd, tNewSchema, sFieldName, sError ) )
+	if ( !Alter_AddRemoveFieldFromSchema ( bAdd, tNewSchema, sFieldName, uFieldFlags, sError ) )
 		return false;
 
-	auto iRemoveIdx = m_tSchema.GetFieldIndex ( sFieldName.cstr () );
 	m_tSchema = tNewSchema;
 
 	CSphFixedVector<int> dChunkNames = GetChunkNames ( m_dDiskChunks );
@@ -7619,21 +7672,13 @@ bool RtIndex_c::AddRemoveField ( bool bAdd, const CSphString & sFieldName, CSphS
 	// modify the in-memory data of disk chunks
 	// fixme: we can't rollback in-memory changes, so we just show errors here for now
 	ARRAY_FOREACH ( iDiskChunk, m_dDiskChunks )
-		if ( !m_dDiskChunks[iDiskChunk]->AddRemoveField ( bAdd, sFieldName, sError ) )
-			sphWarning ( "%s attribute to %s.%d: %s", bAdd ? "adding" : "removing", m_sPath.cstr ()
-						 , dChunkNames[iDiskChunk], sError.cstr () );
+		if ( !m_dDiskChunks[iDiskChunk]->AddRemoveField ( bAdd, sFieldName, uFieldFlags, sError ) )
+			sphWarning ( "%s attribute to %s.%d: %s", bAdd ? "adding" : "removing", m_sPath.cstr(), dChunkNames[iDiskChunk], sError.cstr() );
 
-	// now modify the ramchunk
-	if (!bAdd)
-	{
-		for ( RtSegment_t * pSeg : m_dRamChunks )
-		{
-			assert ( pSeg );
-
-			DeleteField ( pSeg, iRemoveIdx );
-			pSeg->UpdateUsedRam ();
-		}
-	}
+	if ( bAdd )
+		AddFieldToRamchunk ( sFieldName, uFieldFlags, tNewSchema );
+	else
+		RemoveFieldFromRamchunk ( sFieldName, tOldSchema, tNewSchema );
 
 	// fixme: we can't rollback at this point
 	Verify ( SaveRamChunk ( m_dRamChunks ) );

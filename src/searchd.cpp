@@ -14685,7 +14685,7 @@ static void AddAttrToIndex ( const SqlStmt_t & tStmt, const ServedDesc_t * pServ
 
 	if ( bIndexed )
 	{
-		pServed->m_pIndex->AddRemoveField ( true, sAttrToAdd, sError );
+		pServed->m_pIndex->AddRemoveField ( true, sAttrToAdd, tStmt.m_uFieldFlags, sError );
 		if ( bAttribute )
 			pServed->m_pIndex->AddRemoveAttribute ( true, sAttrToAdd, tStmt.m_eAlterColType, tStmt.m_bColumnar, sError );
 	}
@@ -14727,7 +14727,7 @@ static void RemoveAttrFromIndex ( const SqlStmt_t & tStmt, const ServedDesc_t * 
 	if ( bIsAttr )
 		pServed->m_pIndex->AddRemoveAttribute ( false, sAttrToRemove, pAttr->m_eAttrType, false, sError );
 	else
-		pServed->m_pIndex->AddRemoveField ( false, sAttrToRemove, sError );
+		pServed->m_pIndex->AddRemoveField ( false, sAttrToRemove, 0, sError );
 }
 
 

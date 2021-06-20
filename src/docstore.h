@@ -19,6 +19,7 @@ public:
 	virtual		~DocstoreAddField_i() {}
 
 	virtual int	AddField ( const CSphString & sName, DocstoreDataType_e eType ) = 0;
+	virtual void RemoveField ( const CSphString & sName, DocstoreDataType_e eType ) = 0;
 };
 
 class DocstoreGetField_i

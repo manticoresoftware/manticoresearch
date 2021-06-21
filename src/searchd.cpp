@@ -14660,6 +14660,7 @@ static void AddAttrToIndex ( const SqlStmt_t & tStmt, const ServedDesc_t * pServ
 	sAttrToAdd.ToLower();
 
 	bool bIndexed = tStmt.m_uFieldFlags & CSphColumnInfo::FIELD_INDEXED;
+	bool bStored = tStmt.m_uFieldFlags & CSphColumnInfo::FIELD_STORED;
 	bool bAttribute = tStmt.m_uFieldFlags & CSphColumnInfo::FIELD_IS_ATTRIBUTE; // beware, m.b. true only for strings
 
 	bool bHasAttr = pServed->m_pIndex->GetMatchSchema ().GetAttr ( sAttrToAdd.cstr () );
@@ -14683,7 +14684,7 @@ static void AddAttrToIndex ( const SqlStmt_t & tStmt, const ServedDesc_t * pServ
 		return;
 	}
 
-	if ( bIndexed )
+	if ( bIndexed || bStored )
 	{
 		pServed->m_pIndex->AddRemoveField ( true, sAttrToAdd, tStmt.m_uFieldFlags, sError );
 		if ( bAttribute )

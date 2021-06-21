@@ -37,6 +37,7 @@ public:
 	void	AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits );
 	bool	AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t & tCol, const SqlNode_t & tEngine );
 	void	AddCreateTableOption ( const SqlNode_t & tName, const SqlNode_t & tValue );
+	bool	SetupAlterTable  ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, const SqlNode_t & tType );
 
 	void	JoinClusterAt ( const SqlNode_t & tAt );
 
@@ -46,9 +47,8 @@ private:
 	CSphString	m_sError;
 
 	void	AddField ( const CSphString & sName, DWORD uFlags );
+	static bool CheckFieldFlags ( ESphAttr eAttrType, int iFlags, const CSphString & sName, CSphString & sError );
 };
-
-DWORD ConvertFlags ( int iFlags );
 
 bool ParseDdl ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CSphString & sError );
 bool IsDdlQuery ( const char * szQuery, int iLen );

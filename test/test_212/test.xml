@@ -182,6 +182,16 @@
 			desc a1;
 			select * from a1 order by id asc;
 			drop table a1;
+
+			create table t (f text, stored_only text stored);
+			alter table t add column stored_only2 text stored;
+			desc t;
+			drop table t;
+
+			create table t ( f text );
+			alter table t add column f2 text indexed attribute stored;
+			desc t;
+			drop table t;
 		</sphinxql>
 	</queries>
 

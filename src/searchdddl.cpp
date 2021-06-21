@@ -92,7 +92,7 @@ void DdlParser_c::AddField ( const CSphString & sName, DWORD uFlags )
 }
 
 
-DWORD ConvertFlags (int iFlags)
+static DWORD ConvertFlags ( int iFlags )
 {
 	// convert flags;
 	DWORD uFieldFlags = 0;
@@ -101,6 +101,45 @@ DWORD ConvertFlags (int iFlags)
 	uFieldFlags |= ( iFlags & DdlParser_c::FLAG_ATTRIBUTE ) ? CSphColumnInfo::FIELD_IS_ATTRIBUTE : 0;
 
 	return uFieldFlags;
+}
+
+
+bool DdlParser_c::CheckFieldFlags ( ESphAttr eAttrType, int iFlags, const CSphString & sName, CSphString & sError )
+{
+	if ( eAttrType==SPH_ATTR_STRING )
+	{
+		if ( ( iFlags & FLAG_ATTRIBUTE ) && ( iFlags & FLAG_STORED ) )
+		{
+			sError.SetSprintf ( "unable to create a stored attribute '%s'", sName.cstr() );
+			return false;
+		}
+	}
+	else
+	{
+		if ( iFlags )
+		{
+			sError.SetSprintf ( "options 'attribute', 'stored', 'indexed' are not appliable to non-string column '%s'", sName.cstr() );
+			return false;
+		}
+	}
+
+	return true;
+}
+
+
+bool DdlParser_c::SetupAlterTable  ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, const SqlNode_t & tType )
+{
+	assert( m_pStmt );
+
+	m_pStmt->m_eStmt = STMT_ALTER_ADD;
+	ToString ( m_pStmt->m_sIndex, tIndex );
+	ToString ( m_pStmt->m_sAlterAttr, tAttr );
+	m_pStmt->m_sIndex.ToLower();
+	m_pStmt->m_sAlterAttr.ToLower();
+	m_pStmt->m_eAlterColType = (ESphAttr)tType.m_iValue;
+	m_pStmt->m_uFieldFlags = ConvertFlags(tType.m_iType);
+
+	return CheckFieldFlags ( m_pStmt->m_eAlterColType, tType.m_iType, m_pStmt->m_sAlterAttr, m_sError );
 }
 
 
@@ -115,14 +154,11 @@ bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t &
 	auto eAttrType = (ESphAttr) tCol.m_iValue;
 	auto iType = tCol.m_iType;
 
+	if ( !CheckFieldFlags ( eAttrType, iType, sName, m_sError ) )
+		return false;
+
 	if ( eAttrType!=SPH_ATTR_STRING )
 	{
-		if ( iType )
-		{
-			m_sError.SetSprintf ( "options 'attribute', 'stored', 'indexed' are not appliable to non-string column '%s'", sName.cstr () );
-			return false;
-		}
-
 		CSphColumnInfo & tAttr = m_pStmt->m_tCreateTable.m_dAttrs.Add();
 		tAttr.m_sName = sName;
 		tAttr.m_eAttrType = eAttrType;
@@ -135,12 +171,6 @@ bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t &
 	assert ( eAttrType==SPH_ATTR_STRING );
 	if ( iType & FLAG_ATTRIBUTE )
 	{
-		if ( iType & FLAG_STORED )
-		{
-			m_sError.SetSprintf ( "unable to create a stored attribute '%s'", sName.cstr() );
-			return false;
-		}
-
 		// add attribute
 		CSphColumnInfo & tAttr = m_pStmt->m_tCreateTable.m_dAttrs.Add();
 		tAttr.m_sName = sName;
@@ -162,6 +192,7 @@ bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t &
 
 		AddField ( sName, uFieldFlags );
 	}
+
 	return true;
 }
 

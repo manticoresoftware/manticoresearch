@@ -115,12 +115,11 @@ columnar_flag:
 alter:
 	TOK_ALTER TOK_TABLE ident TOK_ADD TOK_COLUMN ident alter_col_type columnar_flag
 		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_ALTER_ADD;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
-			pParser->ToString ( tStmt.m_sAlterAttr, $6 );
-			tStmt.m_eAlterColType = (ESphAttr)$7.m_iValue;
-			tStmt.m_uFieldFlags = ConvertFlags($7.m_iType);
+			if ( !pParser->SetupAlterTable ( $3, $6, $7 ) )
+			{
+			 	yyerror ( pParser, pParser->GetLastError() );
+	            YYERROR;
+			}
 		}
 	| TOK_ALTER TOK_TABLE ident TOK_DROP TOK_COLUMN ident
 		{

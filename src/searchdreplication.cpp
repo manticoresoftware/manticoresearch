@@ -3665,7 +3665,7 @@ static bool SyncSigVerify ( const SyncSrc_t & tSrc, CSphString & sError )
 
 		if ( memcmp ( dHash, tSrc.GetFileHash ( iFile ), HASH20_SIZE )!=0 )
 		{
-			sError.SetSprintf ( "%s sha1 does not matched, expected %s, got %s", sFileName.cstr(),
+			sError.SetSprintf ( "%s sha1 does not match, expected %s, got %s", sFileName.cstr(),
 				BinToHex ( dHash, HASH20_SIZE ).cstr(), BinToHex ( tSrc.GetFileHash ( iFile ), HASH20_SIZE ).cstr() );
 			return false;
 		}

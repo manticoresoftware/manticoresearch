@@ -9,16 +9,18 @@ ALTER TABLE index {ADD|DROP} COLUMN column_name [{INTEGER|INT|BIGINT|FLOAT|BOOL|
 ```
 
 It supports adding one field at a time for RT indexes. Supported data types are:
-* int
-* bigint
-* float
-* bool
-* multi-valued
-* multi-valued 64bit
-* json
-* string
-* `text` / `text indexed` - full-text indexed field
-* `text indexed attribute` - fill text indexed field + string attribute
+* `int` - integer attribute
+* `bigint` - big integer attribute
+* `float` - float attribute
+* `bool` - boolean attribute
+* `multi` - multi-valued integer attribute
+* `multi64` - multi-valued bigint attribute
+* `json` - json attribute
+* `string` / `text attribute` - string attribute
+* `text` / `text indexed stored` / `string indexed stored` - full-text indexed field with original value stored in docstore
+* `text indexed` / `string indexed` - full-text indexed field, indexed only (not storing the original value)
+* `text indexed attribute` / `string indexed attribute` - fill text indexed field + string attribute (not storing the original value in docstore)
+* `text indexed attribute stored` / `string indexed attribute stored` - fill text indexed field (stored in docstore) + string attribute
 
 #### Important notes:
 * Querying an index is impossible (because of a write lock) while adding a column. 

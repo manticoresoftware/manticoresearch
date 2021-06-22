@@ -180,6 +180,21 @@ index movies
     stored_fields = director_name,actor_2_name,actor_1_name,movie_title,actor_3_name
     stored_only_fields = color,movie_imdb_link,language,country,content_rating
 }
+
+source src_hang
+{
+  type = csvpipe
+  csvpipe_command = cat <this_test/>/data3.csv
+  csvpipe_field = f
+  csvpipe_attr_json = j
+}
+
+index idx_hang
+{
+  type = plain
+  source = src_hang
+  path = <data_path/>/idx_hang
+}
 </config>
 
 <queries><sphinxql>

@@ -19,17 +19,6 @@
 		pParser->m_pLastToken = yytext; \
 	}
 
-#define STRING_BEGIN \
-	{ \
-		lvalp->m_sValue.m_iStart = yytext - pParser->m_pSource; \
-	}
-
-#define STRING_END \
-	{ \
-		lvalp->m_sValue.m_iLen = yytext - pParser->m_pSource + yyleng - lvalp->m_sValue.m_iStart ; \
-		pParser->m_pLastToken = pParser->m_pSource + lvalp->m_sValue.m_iStart; \
-	}
-
 %}
 
 ID					[a-zA-Z_][a-zA-Z_0-9]*
@@ -48,66 +37,35 @@ EXP_CONSTANT        {I}{EXPONENT}
 %option case-insensitive
 %option batch
 %option align
+%option fast
 %option 8bit
-%option full
-%option ecs
-%option warn
-%option perf-report
 
 %x ccomment
-%x QSTR
-%x DQSTR
 
 %%
 
 "//"         		{ BEGIN(ccomment); }
 "#"         		{ BEGIN(ccomment); }
-<ccomment>[^\n]+
-<ccomment>\n		{ BEGIN(INITIAL); }
+<ccomment>[^\n]+    { }
+<ccomment>"\n"		{ BEGIN(INITIAL); }
 
-
-'	                { STRING_BEGIN; BEGIN (QSTR); }
-<QSTR>[^'\n\\]+
-<QSTR>'             { STRING_END; BEGIN(INITIAL); lvalp->m_eType = JSON_STRING; return TOK_STRING; }
-
-					/* string in double quotes */
-\"	                { STRING_BEGIN; BEGIN (DQSTR); }
-<DQSTR>[^\"\n\\]+
-<DQSTR>\"			{ STRING_END; BEGIN(INITIAL); lvalp->m_eType = JSON_STRING; return TOK_STRING; }
-
-					/* string process escaped char and unexpected EOF */
-<QSTR,DQSTR>\\.
-<QSTR,DQSTR><<EOF>>
-
-{SIGN}{I}						{ lvalp->m_eType = JSON_INT64; lvalp->m_iValue = strtoll ( yytext, NULL, 10 ); return TOK_INT; }
-
-{SIGN}{I}\.{EXPONENT}?			|
-{SIGN}{I}\.{I}					|
-{SIGN}{I}{EXPONENT}				|
-{SIGN}{I}\.{I}{EXPONENT}?		{ lvalp->m_eType = JSON_DOUBLE; lvalp->m_fValue = strtod ( yytext, NULL ); return TOK_FLOAT; }
-
-{SIGN}
-{SIGN}{I}\.[eE]
-{SIGN}{I}\.[eE]{SIGN}
-{SIGN}{I}(\.{I})?[eE]
-{SIGN}{I}(\.{I})?[eE]{SIGN}
+'([^'\\]|\\.|\\\\)*'	{ STORE_BOUNDS; lvalp->m_eType = JSON_STRING; return TOK_STRING; }
+\"([^"\\]|\\.|\\\\)*\"	{ STORE_BOUNDS; lvalp->m_eType = JSON_STRING; return TOK_STRING; }
 
 "true"					{ lvalp->m_eType = JSON_TRUE; return TOK_TRUE; }
 "false"					{ lvalp->m_eType = JSON_FALSE; return TOK_FALSE; }
 "null"					{ lvalp->m_eType = JSON_NULL; return TOK_NULL; }
+
+
+{SIGN}{FLOAT_CONSTANT}	|
+{SIGN}{EXP_CONSTANT}	{ lvalp->m_eType = JSON_DOUBLE; lvalp->m_fValue = strtod ( yytext, NULL ); return TOK_FLOAT; }
+{SIGN}{DIGIT}+			{ lvalp->m_eType = JSON_INT64; lvalp->m_iValue = strtoll ( yytext, NULL, 10 ); return TOK_INT; }
 {ID}					{ STORE_BOUNDS; lvalp->m_eType = JSON_STRING; return TOK_IDENT; }
 
 {SPACE}+				{ ; }
 .			            { return yytext[0]; }
 
 %%
-
-// additional options instead of 'fast':
-//%option full
-//%option ecs
-//%option warn
-//%option perf-report
-
 
 // warning, lexer generator dependent!
 // flex inserts trailing zero as needed into the buffer when lexing
@@ -128,5 +86,5 @@ void yy2lex_unhold ( yyscan_t yyscanner )
 #endif
 
 #ifdef __GNUC__
-	#pragma GCC diagnostic pop
+#pragma GCC diagnostic pop
 #endif

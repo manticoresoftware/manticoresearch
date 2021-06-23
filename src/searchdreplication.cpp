@@ -3883,7 +3883,7 @@ static bool ReadChunk ( int iChunk, FileReader_t & tReader, StringBuilder_c & sE
 	tReader.m_tArgs.m_iFileOff = (int64_t)tChunk.m_iChunkBytes * iChunk;
 	tReader.m_tArgs.m_iSendSize = iSendSize;
 
-	bool bSeek = ( tReader.m_iChunk!=-1 && iChunk!=tReader.m_iChunk+1 );
+	bool bSeek = ( iChunk!=tReader.m_iChunk+1 );
 	tReader.m_iChunk = iChunk;
 
 	// seek to new chunk
@@ -3973,7 +3973,7 @@ static bool Next ( FileReader_t & tReader, StringBuilder_c & sErrors )
 	return ReadChunk ( iNewChunk, tReader, sErrors );
 }
 
-static bool InitReader ( FileReader_t & tReader, CSphString & sError )
+static bool InitReader ( FileReader_t & tReader, StringBuilder_c & sErrors )
 {
 	assert ( tReader.m_pSyncSrc );
 	assert ( tReader.m_pSyncDst );
@@ -4002,23 +4002,17 @@ static bool InitReader ( FileReader_t & tReader, CSphString & sError )
 	}
 	assert ( iChunk<iCount );
 	assert ( !pDst->m_dNodeChunks.BitGet ( tChunk.m_iHashStartItem + iChunk ) );
-	tReader.m_iChunk = iChunk;
 
-	int iSendSize = tChunk.m_iChunkBytes;
-	if ( iChunk==iCount-1 ) // calculate file tail size for last chunk
-		iSendSize = tChunk.m_iFileSize - tChunk.m_iChunkBytes * iChunk;
-
-	tReader.m_tArgs.m_iFileOff = (int64_t)tChunk.m_iChunkBytes * iChunk;
-	tReader.m_tArgs.m_iSendSize = iSendSize;
 	tReader.m_tArgs.m_sRemoteFileName = pDst->m_dRemotePaths[iFile];
 
+	CSphString sError;
 	if ( tReader.m_tFile.Open ( pSrc->m_dIndexFiles[iFile], SPH_O_READ, sError, false )<0 )
+	{
+		sErrors += sError.cstr();
 		return false;
+	}
 
-	if ( !tReader.m_tFile.Read ( tReader.m_tArgs.m_pSendBuff, iSendSize, sError ) )
-		return false;
-
-	return true;
+	return ReadChunk ( iChunk, tReader, sErrors );
 }
 
 static void ReportSendStat ( const VecRefPtrs_t<AgentConn_t *> & dNodes, const CSphFixedVector<FileReader_t> & dReaders, const CSphString & sCluster, const CSphString & sIndex )
@@ -4045,6 +4039,8 @@ static void ReportSendStat ( const VecRefPtrs_t<AgentConn_t *> & dNodes, const C
 // send file to multiple nodes by chunks as API command CLUSTER_FILE_SEND
 static bool SendFile ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteFileState_t> & dDesc, const CSphString & sCluster, const CSphString & sIndex, CSphString & sError )
 {
+	StringBuilder_c tErrors ( ";" );
+
 	// setup buffers
 	CSphFixedVector<BYTE> dReadBuf ( tSigSrc.m_iMaxChunkBytes * dDesc.GetLength() );
 	CSphFixedVector<FileReader_t> dReaders  ( dDesc.GetLength() );
@@ -4059,8 +4055,11 @@ static bool SendFile ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteFileSta
 		tReader.m_pSyncSrc = dDesc[iNode].m_pSyncSrc;
 		tReader.m_pSyncDst = dDesc[iNode].m_pSyncDst;
 
-		if ( !InitReader ( tReader, sError ) )
+		if ( !InitReader ( tReader, tErrors ) )
+		{
+			sError = tErrors.cstr();
 			return false;
+		}
 
 		assert ( !tReader.m_bDone );
 	}
@@ -4075,8 +4074,6 @@ static bool SendFile ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteFileSta
 	CSphRefcountedPtr<RemoteAgentsObserver_i> tReporter ( GetObserver() );
 	PQRemoteFileSend_c tReq;
 	ScheduleDistrJobs ( dNodes, &tReq, &tReq, tReporter, g_iNodeRetry, g_iNodeRetryWait );
-
-	StringBuilder_c tErrors ( ";" );
 
 	bool bDone = false;
 	VecRefPtrs_t<AgentConn_t *> dNewNode;
@@ -4670,7 +4667,7 @@ bool RemoteClusterSynced ( const PQRemoteData_t & tCmd, CSphString & sError ) EX
 	if ( !ppCluster )
 	{
 		sError.SetSprintf ( "unknown cluster '%s'", tCmd.m_sCluster.cstr() );
-		bValid = false;
+		return false;
 	}
 
 	int iRes = 0;

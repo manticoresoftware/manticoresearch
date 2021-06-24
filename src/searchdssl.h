@@ -24,7 +24,7 @@
 
 	// Try to initialize SSL, if not yet done. Returns whether it is usable or not (i.e. - no lib, no keys, any error).
 	// used to set 'switch-to-ssl' bit in mysql handshake depending from whether we can do it, or not.
-	bool CheckWeCanUseSSL ();
+    bool CheckWeCanUseSSL ( CSphString * pError=nullptr );
 
 	// Replace pSource with it's SSL version.
 	// any data not consumed from original source will be considered as part of ssl handshake.
@@ -33,6 +33,11 @@
 #else
 	// these stubs work together with NOT including searchdsll.cpp into the final build
 	inline void SetServerSSLKeys ( CSphVariant *,  CSphVariant *,  CSphVariant * ) {}
-	inline bool CheckWeCanUseSSL () { return false; }
+	inline bool CheckWeCanUseSSL ( CSphString * pError=nullptr )
+	{
+		if ( pError )
+			*pError="daemon built without SSL support";
+		return false;
+	}
 	inline bool MakeSecureLayer ( AsyncNetBufferPtr_c & ) { return false; }
 #endif

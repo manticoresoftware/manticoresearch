@@ -97,7 +97,11 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf )
 	if ( bHeNeedSSL && !bICanSSL )
 	{
 		if ( bINeedSSL )
+#if !USE_SSL
+			sphWarning ( "Client tries to connect with https to secure port, but we can't serve as daemon built without SSL support" );
+#else
 			sphWarning ( "Client tries to connect with https to secure port, but we can't serve" );
+#endif
 
 		// that will drop the connection (we can't say anything as can't encrypt our message)
 		return;
@@ -143,7 +147,7 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf )
 			if ( iChunk>0 )
 				continue;
 
-			if ( !iChunk )
+			if ( !iChunk && tIn.GetError() )
 				sphWarning ( "failed to receive HTTP request (client=%s(%d)) max packet size(%d) exceeded)",
 					sClientIP, iCID, g_iMaxPacketSize );
 

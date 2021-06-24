@@ -62,13 +62,17 @@ void fnSslLockDynDestroy ( CRYPTO_dynlock_value * pLock, const char * , int )
 
 static BIO_METHOD * BIO_s_coroAsync ( bool bDestroy = false );
 
-static int fnSslError ( const char * pStr, size_t iLen, void * )
+static int fnSslError ( const char * pStr, size_t iLen, void * pError )
 {
 	// trim line ending from string end
 	while ( iLen && sphIsSpace ( pStr[iLen-1] ) )
 		iLen--;
 
-	sphWarning ( "%.*s", (int)iLen, pStr );
+	if ( pError )
+		( (CSphString *)pError )->SetSprintf ( "%.*s", (int)iLen, pStr );
+	else
+		sphWarning ( "%.*s", (int)iLen, pStr );
+
 	return 1;
 }
 
@@ -105,33 +109,33 @@ static bool IsKeysSet()
 }
 
 // set SSL key, certificate and ca-certificate to global SSL context
-static bool SetGlobalKeys ( SSL_CTX * pCtx )
+static bool SetGlobalKeys ( SSL_CTX * pCtx, CSphString * pError )
 {
 	if ( !(IsKeysSet()) )
 		return false;
 
 	if ( !g_sSslCert.IsEmpty () && SSL_CTX_use_certificate_file ( pCtx, g_sSslCert.cstr (), SSL_FILETYPE_PEM )<=0 )
 	{
-		ERR_print_errors_cb ( &fnSslError, nullptr );
+		ERR_print_errors_cb ( &fnSslError, pError );
 		return false;
 	}
 
 	if ( !g_sSslKey.IsEmpty () && SSL_CTX_use_PrivateKey_file ( pCtx, g_sSslKey.cstr (), SSL_FILETYPE_PEM )<=0 )
 	{
-		ERR_print_errors_cb ( &fnSslError, nullptr );
+		ERR_print_errors_cb ( &fnSslError, pError );
 		return false;
 	}
 
 	if ( !g_sSslCa.IsEmpty () && SSL_CTX_load_verify_locations ( pCtx, g_sSslCa.cstr(), nullptr )<=0 )
 	{
-		ERR_print_errors_cb ( &fnSslError, nullptr );
+		ERR_print_errors_cb ( &fnSslError, pError );
 		return false;
 	}
 
 	// check key and certificate file match
 	if ( SSL_CTX_check_private_key( pCtx )!=1 )
 	{
-		ERR_print_errors_cb ( &fnSslError, nullptr );
+		ERR_print_errors_cb ( &fnSslError, pError );
 		return false;
 	}
 
@@ -207,7 +211,7 @@ static SmartSSL_CTX_t GetSslCtx ()
 	return pSslCtx;
 }
 
-static SmartSSL_CTX_t GetReadySslCtx ()
+static SmartSSL_CTX_t GetReadySslCtx ( CSphString * pError=nullptr )
 {
 	if ( !IsKeysSet ())
 		return SmartSSL_CTX_t ( nullptr );
@@ -218,7 +222,7 @@ static SmartSSL_CTX_t GetReadySslCtx ()
 
 	static bool bKeysLoaded = false;
 
-	if ( !bKeysLoaded && SetGlobalKeys ( pCtx ))
+	if ( !bKeysLoaded && SetGlobalKeys ( pCtx, pError ) )
 		bKeysLoaded = true;
 
 	if ( !bKeysLoaded )
@@ -228,7 +232,7 @@ static SmartSSL_CTX_t GetReadySslCtx ()
 }
 
 // is global SSL context created and keys set
-bool CheckWeCanUseSSL ()
+bool CheckWeCanUseSSL ( CSphString * pError )
 {
 	static bool bCheckPerformed = false; // to check only once
 	static bool bWeCanUseSSL;
@@ -237,7 +241,7 @@ bool CheckWeCanUseSSL ()
 		return bWeCanUseSSL;
 
 	bCheckPerformed = true;
-	bWeCanUseSSL = ( GetReadySslCtx ()!=nullptr );
+	bWeCanUseSSL = ( GetReadySslCtx ( pError )!=nullptr );
 	return bWeCanUseSSL;
 }
 

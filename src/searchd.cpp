@@ -19041,6 +19041,22 @@ static void InitBanner()
 	g_sStatusVersion.SetSprintf ( "%s%s", szMANTICORE_VERSION, sColumnar.cstr() );
 }
 
+static void CheckSSL ()
+{
+	// check for SSL inited well
+	for ( const auto & tListener : g_dListeners )
+	{
+		CSphString sError;
+		if ( tListener.m_eProto==Proto_e::HTTPS )
+		{
+			if ( !CheckWeCanUseSSL ( &sError ) )
+				sphWarning ( "SSL init error: %s", sError.cstr() );
+
+			break;
+		}
+	}
+}
+
 
 int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 {
@@ -19436,6 +19452,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	}
 
 	SetServerSSLKeys ( hSearchd ( "ssl_cert" ), hSearchd ( "ssl_key" ), hSearchd ( "ssl_ca" ) );
+	CheckSSL();
 
 	// set up ping service (if necessary) before loading indexes
 	// (since loading ha-mirrors of distributed already assumes ping is usable).

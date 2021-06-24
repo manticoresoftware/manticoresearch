@@ -18208,7 +18208,7 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 				int iSig = WTERMSIG ( iStatus );
 				const char * sSig = NULL;
 				if ( iSig==SIGINT )
-					sSig = "SIGINIT";
+					sSig = "SIGINT";
 				else if ( iSig==SIGTERM )
 					sSig = "SIGTERM";
 				else if ( WATCHDOG_SIGKILL && iSig==SIGKILL )

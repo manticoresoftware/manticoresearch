@@ -120,9 +120,9 @@ sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
 sudo yum install manticore manticore-columnar-lib
 ```
 
-### APT repo for Ubuntu/Debian
+### APT repo for Ubuntu/Debian/Mint
 ```
-sudo apt-key adv --fetch-keys 'http://repo.manticoresearch.com/GPG-KEY-manticore'
+wget -qO - https://repo.manticoresearch.com/GPG-KEY-manticore | sudo apt-key add -
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
 sudo dpkg -i manticore-repo.noarch.deb
 sudo apt update
@@ -141,7 +141,7 @@ See [instruction here](https://manual.manticoresearch.com/Installation/Windows).
 See [instruction here](https://manual.manticoresearch.com/Installation/MacOS).
 
 
-# Documentation and community channels
+# Documentation and community sites
 
   * [Interactive courses](https://play.manticoresearch.com)
   * [Documentation](https://manual.manticoresearch.com)

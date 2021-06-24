@@ -166,7 +166,7 @@
 #cmakedefine LOCALDATADIR "${LOCALDATADIR}"
 
 /* define to set custom directory for shared files. Absolute as /etc */
-#define SYSCONFDIR "${CMAKE_INSTALL_FULL_SYSCONFDIR}"
+#define SYSCONFDIR "${CMAKE_INSTALL_FULL_SYSCONFDIR}/manticoresearch"
 
 /* hardcoded default plugin dir */
 #define HARDCODED_PLUGIN_DIR "/usr/local/lib/manticore"

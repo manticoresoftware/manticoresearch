@@ -1,7 +1,7 @@
 # Managing replication nodes 
 
 <!-- example managing replication nodes 1 -->
-`ALTER CLUSTER <cluster_name> UPDATE <nodes>` statement updates node lists on each node of the cluster to include every active node in the cluster. See [Joining a cluster](../../Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md) for more info on node lists.
+`ALTER CLUSTER <cluster_name> UPDATE nodes` statement updates node lists on each node of the cluster to include every active node in the cluster. See [Joining a cluster](../../Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md) for more info on node lists.
 
 
 <!-- intro -->
@@ -76,3 +76,12 @@ For example, when the cluster was initially created, the list of nodes used for 
 But the list of nodes used for rejoining the cluster is still the same. Running the `ALTER CLUSTER ... UPDATE nodes` copies the list of active nodes to the list of nodes used to rejoin on restart. After this, the list of nodes used on restart includes all the active nodes in the cluster.
 
 Both lists of nodes can be viewed using [Cluster status](../../Creating_a_cluster/Setting_up_replication/Replication_cluster_status.md) statement (`cluster_post_nodes_set` and `cluster_post_nodes_view`).
+
+## Removing node from cluster
+
+To remove a node from a replication cluster you need to:
+1. stop the node
+2. remove info about the cluster in `<data_dir>/manticore.json` (`/var/lib/manticore/manticore.json` in most cases) on the node you've stopped
+3. run `ALTER CLUSTER cluster_name UPDATE nodes` on any other node
+
+After this the other nodes will forget about the detached node and the node will forget about the cluster. It won't impact indexes neither in the cluster nor on the detached node.

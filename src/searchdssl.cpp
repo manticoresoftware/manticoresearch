@@ -540,7 +540,12 @@ bool MakeSecureLayer ( AsyncNetBufferPtr_c& pSource )
 
 // these stubs for non-daemon (i.e. for tests)
 void SetServerSSLKeys ( CSphVariant *,  CSphVariant *,  CSphVariant * ) {}
-bool CheckWeCanUseSSL () { return false; }
+bool CheckWeCanUseSSL ( CSphString * pError )
+{
+	if ( pError )
+		*pError="daemon built without SSL support";
+	return false;
+}
 bool MakeSecureLayer ( AsyncNetBufferPtr_c & ) { return false; }
 
 #endif

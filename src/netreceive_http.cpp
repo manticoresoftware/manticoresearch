@@ -97,11 +97,7 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf )
 	if ( bHeNeedSSL && !bICanSSL )
 	{
 		if ( bINeedSSL )
-#if !USE_SSL
-			sphWarning ( "Client tries to connect with https to secure port, but we can't serve as daemon built without SSL support" );
-#else
 			sphWarning ( "Client tries to connect with https to secure port, but we can't serve" );
-#endif
 
 		// that will drop the connection (we can't say anything as can't encrypt our message)
 		return;

@@ -391,6 +391,12 @@ There can be multiple `listen` directives, `searchd` will listen for client conn
 
 Unix-domain sockets are not supported on Windows.
 
+#### Listening on privileged ports
+
+By default Linux won't allow you to let Manticore listen on port below 1024 (e.g. `listen = 127.0.0.1:80:http` or `listen = 127.0.0.1:443:https`) unless you run the searchd under root. If you still want to be able to start Manticore so it listens on ports < 1024 under non-root consider doing one of the following (either of these should work):
+* `setcap CAP_NET_BIND_SERVICE=+eip /usr/bin/searchd`
+* add `AmbientCapabilities=CAP_NET_BIND_SERVICE` to Manticore's systemd unit (`/lib/systemd/system-generators/manticore-search-generator`) and reload the daemon (`systemctl daemon-reload`)
+
 #### Technical details about Sphinx API protocol and TFO
 <details>
 Legacy Sphinx protocol has 2 phases: handshake exchanging and data flow. The handshake consists of a packet of 4 bytes from the client, and a packet of 4 bytes from the daemon with only one purpose - the client determines that the remote is a real Sphinx daemon, the daemon determines that the remote is a real Sphinx client. The main dataflow is quite simple: let's both sides declare their handshakes, and the opposite check them. That exchange with short packets implies using special `TCP_NODELAY` flag, which switches off Nagle's TCP algorithm and declares, that the TCP connection will be performed as a dialogue of small packages.

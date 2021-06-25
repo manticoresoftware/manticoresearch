@@ -63,7 +63,7 @@ ExecStartPre=/usr/bin/install -omanticore -gmanticore -m755 -d @CMAKE_INSTALL_FU
 Environment=LD_PRELOAD=$JEMALLOC_LOCATION
 ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/searchd --config @CMAKE_INSTALL_FULL_SYSCONFDIR@/manticoresearch/manticore.conf \$_ADDITIONAL_SEARCHD_PARAMS
 ExecStop=@CMAKE_INSTALL_FULL_BINDIR@/searchd --config @CMAKE_INSTALL_FULL_SYSCONFDIR@/manticoresearch/manticore.conf --stopwait
-KillMode=process
+KillMode=@SYSTEMD_KILLMODE@
 KillSignal=SIGTERM
 SendSIGKILL=no
 LimitNOFILE=infinity

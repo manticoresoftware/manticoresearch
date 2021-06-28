@@ -269,7 +269,7 @@ collect_focal:
   script: [ ~/upload_repo_deb.sh ]
   variables:
     DISTRO: focal
-  needs: [ focal focalarm ]
+  needs: [ focal, focalarm ]
 
 buster:
   extends: [ .debian_based ]

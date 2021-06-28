@@ -7973,6 +7973,10 @@ public:
 #endif
 	}
 
+#if WITH_RE2
+	RE2 * GetRE2() const { return m_pRE2; }
+#endif
+
 	~Expr_Regex_c() final
 	{
 #if WITH_RE2
@@ -8488,7 +8492,16 @@ ISphExpr * ExprParser_t::CreateForInNode ( int iNode )
 
 ISphExpr * ExprParser_t::CreateRegexNode ( ISphExpr * pAttr, ISphExpr * pString )
 {
-	return new Expr_Regex_c ( pAttr, pString );
+	auto pExpr = new Expr_Regex_c ( pAttr, pString );
+#if WITH_RE2
+	auto* pRe2 = pExpr->GetRE2();
+	if ( !pRe2->ok() )
+	{
+		m_sCreateError.SetSprintf ( "RE2: error parsing '%s': %s", pRe2->pattern().c_str(), pRe2->error().c_str() );
+		SafeDelete ( pExpr );
+	}
+#endif
+	return pExpr;
 }
 
 

@@ -1251,11 +1251,11 @@ static ISphFilter * TryToCreateExpressionFilter ( CSphRefcountedPtr<ISphExpr> & 
 	pExpr = sphExprParse ( sAttrName.cstr(), tSchema, sError, tExprArgs );
 	if ( pExpr )
 		return CreateFilterExpr ( pExpr, tSettings, tFixedSettings, sError, tExprArgs.m_eCollation, *tExprArgs.m_pAttrType );
-	else
-	{
+
+	if ( sError.IsEmpty() )
 		sError.SetSprintf ( "no such filter attribute '%s'", sAttrName.cstr() );
-		return nullptr;
-	}
+
+	return nullptr;
 }
 
 

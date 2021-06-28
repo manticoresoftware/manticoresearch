@@ -124,14 +124,27 @@ Call `DEBUG` without params to show list of useful commands (in general) and sub
 However you can invoke `DEBUG` without params to know which subcommands of the statement are available in any particular case:
 
 ```sql
-mysql> debug;
-+----------------+---------------------+
-| command        | meaning             |
-+----------------+---------------------+
-| flush logs     | emulate USR1 signal |
-| reload indexes | emulate HUP signal  |
-+----------------+---------------------+
-2 rows in set (0,00 sec)
+MySQL [(none)]> debug;
++------------------------------------------------------------------+----------------------------------------------------------------------------------------+
+| command                                                          | meaning                                                                                |
++------------------------------------------------------------------+----------------------------------------------------------------------------------------+
+| flush logs                                                       | emulate USR1 signal                                                                    |
+| reload indexes                                                   | emulate HUP signal                                                                     |
+| debug token <password>                                           | calculate token for password                                                           |
+| debug malloc_stats                                               | perform 'malloc_stats', result in searchd.log                                          |
+| debug malloc_trim                                                | pefrorm 'malloc_trim' call                                                             |
+| debug sleep <N>                                                  | sleep for <N> seconds                                                                  |
+| debug tasks                                                      | display global tasks stat (use select from @@system.tasks instead)                     |
+| debug systhreads                                                 | display task manager threads (use select from @@system.systhreads instead)             |
+| debug sched                                                      | display task manager schedule (use select from @@system.sched instead)                 |
+| debug merge <IDX> [chunk] <X> [into] [chunk] <Y> [option sync=1] | For RT index <IDX> merge disk chunk X into disk chunk Y                                |
+| debug drop [chunk] <X> [from] <IDX> [option sync=1]              | For RT index <IDX> drop disk chunk X                                                   |
+| debug files <IDX> [option format=all|external]                   | list files belonging to <IDX>. 'all' - including external (wordforms, stopwords, etc.) |
+| debug close                                                      | ask server to close connection from it's side                                          |
+| debug compress <IDX> [chunk] <X> [option sync=1]                 | Compress disk chunk X of RT index <IDX> (wipe out deleted documents)                   |
+| debug split <IDX> [chunk] <X> on @<uservar> [option sync=1]      | Split disk chunk X of RT index <IDX> using set of DocIDs from @uservar                 |
++------------------------------------------------------------------+----------------------------------------------------------------------------------------+
+15 rows in set (0.00 sec)
 ```
 
 (these commands are already documented, but such short help just remind about them).
@@ -139,16 +152,32 @@ mysql> debug;
 If you connect via 'VIP' connection (see [listen](Server_settings/Searchd.md#listen) for details) the output might be a bit different:
 
 ```sql
-mysql> debug;
-+---------------------------+------------------------------+
-| command                   | meaning                      |
-+---------------------------+------------------------------+
-| debug shutdown <password> | emulate TERM signal          |
-| debug token <password>    | calculate token for password |
-| flush logs                | emulate USR1 signal          |
-| reload indexes            | emulate HUP signal           |
-+---------------------------+------------------------------+
-4 rows in set (0,00 sec)
+MySQL [(none)]> debug;
++------------------------------------------------------------------+----------------------------------------------------------------------------------------+
+| command                                                          | meaning                                                                                |
++------------------------------------------------------------------+----------------------------------------------------------------------------------------+
+| flush logs                                                       | emulate USR1 signal                                                                    |
+| reload indexes                                                   | emulate HUP signal                                                                     |
+| debug shutdown <password>                                        | emulate TERM signal                                                                    |
+| debug crash <password>                                           | crash daemon (make SIGSEGV action)                                                     |
+| debug token <password>                                           | calculate token for password                                                           |
+| debug malloc_stats                                               | perform 'malloc_stats', result in searchd.log                                          |
+| debug malloc_trim                                                | pefrorm 'malloc_trim' call                                                             |
+| debug procdump                                                   | ask watchdog to dump us                                                                |
+| debug setgdb on|off                                              | enable or disable potentially dangerous crash dumping with gdb                         |
+| debug setgdb status                                              | show current mode of gdb dumping                                                       |
+| debug sleep <N>                                                  | sleep for <N> seconds                                                                  |
+| debug tasks                                                      | display global tasks stat (use select from @@system.tasks instead)                     |
+| debug systhreads                                                 | display task manager threads (use select from @@system.systhreads instead)             |
+| debug sched                                                      | display task manager schedule (use select from @@system.sched instead)                 |
+| debug merge <IDX> [chunk] <X> [into] [chunk] <Y> [option sync=1] | For RT index <IDX> merge disk chunk X into disk chunk Y                                |
+| debug drop [chunk] <X> [from] <IDX> [option sync=1]              | For RT index <IDX> drop disk chunk X                                                   |
+| debug files <IDX> [option format=all|external]                   | list files belonging to <IDX>. 'all' - including external (wordforms, stopwords, etc.) |
+| debug close                                                      | ask server to close connection from it's side                                          |
+| debug compress <IDX> [chunk] <X> [option sync=1]                 | Compress disk chunk X of RT index <IDX> (wipe out deleted documents)                   |
+| debug split <IDX> [chunk] <X> on @<uservar> [option sync=1]      | Split disk chunk X of RT index <IDX> using set of DocIDs from @uservar                 |
++------------------------------------------------------------------+----------------------------------------------------------------------------------------+
+20 rows in set (0.00 sec)
 ```
 
 Here you can see additional commands available only in the current context (namely, if you connected on a VIP port). Two additional subcommands available right now are `token` and `shutdown`. The first one just calculates a hash (SHA1) of the <password> (which, in turn, may be empty, or a word, or num/phrase enclosed in '-quotes) like:

@@ -236,14 +236,6 @@ focal:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /focal/
   image: registry.gitlab.com/manticoresearch/dev/focal_cmake:320
 
-collect_focal:
-  extends: [ .collect_job ]
-  script: [ ~/upload_repo_deb.sh ]
-  variables:
-    DISTRO: focal
-  needs: [ focal ]
-
-
 focalarm:
   stage: build
   interruptible: true
@@ -272,12 +264,12 @@ focalarm:
     paths:
       - cache
 
-collect_focalarm:
+collect_focal:
   extends: [ .collect_job ]
   script: [ ~/upload_repo_deb.sh ]
   variables:
     DISTRO: focal
-  needs: [ focalarm ]
+  needs: [ focal focalarm ]
 
 buster:
   extends: [ .debian_based ]

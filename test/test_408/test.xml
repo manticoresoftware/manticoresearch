@@ -244,6 +244,10 @@ insert into hit_1(id, title) values (1, 'protest, to teach, to feed, and'), (2, 
 	SELECT * FROM some WHERE MATCH(' tin woodman ') order by id asc; SHOW META;
 	SELECT * FROM some WHERE MATCH(' "lowered his axe" ') order by id asc; SHOW META;
 	SELECT * FROM some WHERE MATCH(' "and lowered his axe" ') order by id asc; SHOW META;
+
+	flush ramchunk all;
+	SELECT * FROM all WHERE MATCH(' tin woodman '); SHOW META;
+	SELECT * FROM all WHERE MATCH(' lowered '); SHOW META;
 </sphinxql></queries>
 
 </test>

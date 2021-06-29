@@ -508,9 +508,10 @@ struct RtWordWriter_t
 
 	bool								m_bKeywordDict;
 	int									m_iWordsCheckpoint;
+	const ESphHitless 					m_eHitlessMode = SPH_HITLESS_NONE;
 
 	RtWordWriter_t ( CSphTightVector<BYTE> * pWords, CSphVector<RtWordCheckpoint_t> * pCheckpoints,
-				  CSphVector<BYTE> * pKeywordCheckpoints, bool bKeywordDict, int iWordsCheckpoint )
+				  CSphVector<BYTE> * pKeywordCheckpoints, bool bKeywordDict, int iWordsCheckpoint, ESphHitless eHitlessMode )
 		: m_pWords ( pWords )
 		, m_pCheckpoints ( pCheckpoints )
 		, m_pKeywordCheckpoints ( pKeywordCheckpoints )
@@ -519,14 +520,15 @@ struct RtWordWriter_t
 		, m_iWords ( 0 )
 		, m_bKeywordDict ( bKeywordDict )
 		, m_iWordsCheckpoint ( iWordsCheckpoint )
+		, m_eHitlessMode ( eHitlessMode )
 	{
 		assert ( !m_pWords->GetLength() );
 		assert ( !m_pCheckpoints->GetLength() );
 		assert ( !m_pKeywordCheckpoints->GetLength() );
 	}
 
-	RtWordWriter_t ( RtSegment_t * pSeg, bool bKeywordDict, int iWordsCheckpoint )
-		: RtWordWriter_t ( &pSeg->m_dWords, &pSeg->m_dWordCheckpoints, &pSeg->m_dKeywordCheckpoints, bKeywordDict, iWordsCheckpoint )
+	RtWordWriter_t ( RtSegment_t * pSeg, bool bKeywordDict, int iWordsCheckpoint, ESphHitless eHitlessMode )
+		: RtWordWriter_t ( &pSeg->m_dWords, &pSeg->m_dWordCheckpoints, &pSeg->m_dKeywordCheckpoints, bKeywordDict, iWordsCheckpoint, eHitlessMode )
 	{}
 
 	void ZipWord ( const RtWord_t & tWord )
@@ -566,7 +568,7 @@ struct RtWordWriter_t
 		const BYTE * pBegin = pWords->Begin();
 
 		DWORD uDocs = tWord.m_uDocs;
-		if ( !tWord.m_bHasHitlist )
+		if ( !tWord.m_bHasHitlist && m_eHitlessMode==SPH_HITLESS_SOME )
 			uDocs |= HITLESS_DOC_FLAG;
 
 		ZipDword ( pEnd, uDocs );
@@ -1997,7 +1999,7 @@ void RtAccum_t::CreateSegmentHits ( RtSegment_t * pSeg, int iWordsCheckpoint, ES
 
 	RtWord_t tWord;
 	RtDocWriter_t tOutDoc ( pSeg );
-	RtWordWriter_t tOutWord ( pSeg, m_bKeywordDict, iWordsCheckpoint );
+	RtWordWriter_t tOutWord ( pSeg, m_bKeywordDict, iWordsCheckpoint, eHitless );
 	RtHitWriter_t tOutHit ( pSeg );
 
 	const BYTE * pPacketBase = m_bKeywordDict ? GetPackedKeywords() : nullptr;
@@ -2461,7 +2463,7 @@ void RtIndex_c::DeleteFieldFromDict ( RtSegment_t * pSeg, int iKillField )
 	dDocs.Reserve ( tInSeg.m_dDocs.GetLength () );
 	dHits.Reserve ( tInSeg.m_dHits.GetLength () );
 
-	RtWordWriter_t tOutWords ( &dWords, &dWordCheckpoints, &dKeywordCheckpoints,  m_bKeywordDict, m_iWordsCheckpoint );
+	RtWordWriter_t tOutWords ( &dWords, &dWordCheckpoints, &dKeywordCheckpoints,  m_bKeywordDict, m_iWordsCheckpoint, m_tSettings.m_eHitless );
 	RtWordReader_t tInWords ( &tInSeg, m_bKeywordDict, m_iWordsCheckpoint, m_tSettings.m_eHitless );
 
 	RtWord_t tInWord, tOutWord;
@@ -2683,7 +2685,7 @@ void RtIndex_c::MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, c
 	tSeg.m_dDocs.Reserve ( Max ( tSeg1.m_dDocs.GetLength(), tSeg2.m_dDocs.GetLength() ) );
 	tSeg.m_dHits.Reserve ( Max ( tSeg1.m_dHits.GetLength(), tSeg2.m_dHits.GetLength() ) );
 
-	RtWordWriter_t tOut ( &tSeg, m_bKeywordDict, m_iWordsCheckpoint );
+	RtWordWriter_t tOut ( &tSeg, m_bKeywordDict, m_iWordsCheckpoint, m_tSettings.m_eHitless );
 	RtWordReader_t tIn1 ( &tSeg1, m_bKeywordDict, m_iWordsCheckpoint, m_tSettings.m_eHitless );
 	RtWordReader_t tIn2 ( &tSeg2, m_bKeywordDict, m_iWordsCheckpoint, m_tSettings.m_eHitless );
 
@@ -3616,7 +3618,7 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 			}
 
 			DWORD iDocsCount = iDocs;
-			if ( !pWord->m_bHasHitlist )
+			if ( !pWord->m_bHasHitlist && m_tSettings.m_eHitless==SPH_HITLESS_SOME )
 				iDocsCount |= HITLESS_DOC_FLAG;
 
 			tWriterDict.ZipInt ( iDocsCount );

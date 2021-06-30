@@ -43,7 +43,7 @@ cd manticoresearch-3.6.0
 
 ### Configuring
 
-Manticore uses cmake for. Assume you're staying inside source dir.
+Manticore uses cmake. Assume you're staying inside source dir.
 
 ```bash
 mkdir build && cd build
@@ -171,14 +171,19 @@ introspection and set to generic 'debian' or 'rhel'. Otherwize value is not defi
 That is very useful when building in prepared build systems, like docker containers, where that `DISTR` variable is set on system level and reflects target system for which such container intended.
 
 
-- **CMAKE_INSTALL_PREFIX** (path) - where to install the project. Building itself installs nothing, but prepares
-  installation rules which are executed once you run 'make install' command, or create a package. It has a default
-  depending on the cmake (on Linux usually /usr/local). Also, it defines values for mentioned variables `LOCALDATADIR` and `FULL_SHARE_DIR`.
+- **CMAKE_INSTALL_PREFIX** (path) - where manticore except itself installed. Building installs 
+  nothing, but prepares installation rules which are executed once you run `cmake --install` command, or 
+  create a package and then install it. Prefix may be freely changed anytime, even during install - by invoking 
+  `cmake --install . --prefix /path/to/installation`. However, at config time this variable once used to initialize 
+  default values of `LOCALDATADIR` and `FULL_SHARE_DIR`. So, for example, setting it to `/my/custom` at configure 
+  time will hardcode `LOCALDATADIR` as `/my/custom/var/lib/manticore/data`, and `FULL_SHARE_DIR` as 
+  `/my/custom/usr/share/manticore`. 
 
 
 - **BUILD_TESTING** (bool) whether to support testing. If enabled, after the build you can run 'ctest' and test the
   build. Note that testing implies additional dependencies, like at least presence of PHP cli, python and available
-  mysql server with test database. For 'just build', just disable the option, you don't need to care about it.
+  mysql server with test database. By default this param is on. So, for 'just build', you might want to disable the 
+  option by explicitly specifying 'off' value.
 
 
 - **LIBS_BUNDLE** - path to a folder with different libraries. This is mostly relevant for Windows building, but may be
@@ -191,9 +196,6 @@ and if it found stemmer there, it will not download it again from internet.
 - **CACHEB** - path to a folder with stored builds of 3-rd party libraries. Usually features like galera, re2, icu, etc. first downloaded
 or being got from bundle, then unpacked, built and installed into temporary internal folder. When building manticore that folder is then used as the place where the things required to support asked feature are live. Finally they either link with manticore, if it is library; either go directly to distribution/installation (like galera or icu data). When **CACHEB** is defined either as cmake config param, either as system environment variable, it is used as target folder for that builds. This folder might be kept across builds, so that stored libraries there will not be rebuilt anymore, making whole build process much shorter.
 
-
-- **CMAKE_BUILD_TYPE** (string) - can be Debug, Release, MinSizeRel and RelWithDebInfo (default). Usually we use just 'Debug' and 'RelWithDebInfo'. The first produces slower binaries, well applicable for testing and debugging features.
-    The last is for production. On Windows
 
 Note, that some options organized in triples: `WITH_XXX`, `DL_XXX` and `XXX_LIB` - like support of mysql, odbc, etc. `WITH_XXX` deternimes
 whether next two has effect or not. I.e., if you set `WITH_ODBC` to `0` - there is no sence to provide `DL_ODBC` and `ODBC_LIB`, and these two
@@ -210,12 +212,12 @@ mkdir build && cd build
 cmake -DWITH_MYSQL=1 -DWITH_RE2=1 ..
 ```
 
-Apart general configuration values, you may also investigate file `CMakeCache.txt` which is left in build folder right after you run configuration. Any values defined there might be redefined explicitly when running cmake. For example, you may run `cmake -DHAVE_GETADDRINFO_A=FALSE ...`, and that config run will not assume investigated value of that variable, but will use one you've provided. 
+Apart general configuration values, you may also investigate file `CMakeCache.txt` which is left in build folder right after you run configuration. Any values defined there might be redefined explicitly when running cmake. For example, you may run `cmake -DHAVE_GETADDRINFO_A=FALSE ...`, and that config run will not assume investigated value of that variable, but will use one you've provided.
 
 #### Specific environment variables
 
 Environment variables are useful to provide some kind of global settings which are stored aside build configuration and just present 'always'.
-For persistency they may be set globally on the system using different ways - like add them to `.bashrc` file, or embedd into Dockerfile if you produce docker-based build system, or written in system preferences environment variables on Windows. Also you may set them short-live using `export VAR=value` in the shell. Or even shorter, prepending values to cmake call, like `CACHEB=/my/cache cmake ...` - this way it will only work on this call and will not be visible on the next.
+For persistency they may be set globally on the system using different ways - like add them to `.bashrc` file, or embedd into Dockerfile if you produce docker-based build system, or write in system preferences environment variables on Windows. Also you may set them short-live using `export VAR=value` in the shell. Or even shorter, prepending values to cmake call, like `CACHEB=/my/cache cmake ...` - this way it will only work on this call and will not be visible on the next.
 
 Some of such variables are known to be used in general by cmake and some other tools. That is things like `CXX` which determines current C++ compiler, or `CXX_FLAGS` to provide compiler flags, etc.
 
@@ -316,8 +318,8 @@ If it also doesn't help, just wipe out your build folder and begin from scratch.
 
 We use two build types. For development it is `Debug` - it assigns compiler flags for optimization and other things the
 way that it is very friendly for development, in means debug runs with step-by-step execution. However, produced
-binaries are quite large and slow for production. For relasign we use another type - `RelWithDebInfo` - which means '
-release build with debug info'. It produces production binaries with embedded debug info. Last then split away into
+binaries are quite large and slow for production. For releasing we use another type - `RelWithDebInfo` - which means 
+'release build with debug info'. It produces production binaries with embedded debug info. Last then split away into
 separate debuginfo packages which are stored aside with release packages and might be used if some abnormal things, like
 crashes, happens - for investigation and bugfixing. Cmake also provides `Release` and `MinSizeRel`, but we're not using
 them. If build type is not available, cmake will make `noconfig` build.
@@ -326,27 +328,43 @@ them. If build type is not available, cmake will make `noconfig` build.
 
 There are two types of generators: single-config and multi-config.
 
-- single-config needs build type provided on configuration, via CMAKE_BUILD_TYPE parameter. If it is not defined, build
+- single-config needs build type provided on configuration, via `CMAKE_BUILD_TYPE` parameter. If it is not defined, build
   fall-back to `RelWithDebInfo` type which is quite well if you want just build manticore from sources and not going to
-  participate in development. For explicit build you should config providing build type, like `-DCMAKE_BUILD_TYPE=Debug`.
-- multi-config selects build type during the build. It should be provided with '--config' option, otherwise it will
-  build kind of `noconfig`, which is quite strange and not desirable. So, for explicit build you should build with `--config Debug` key.
+  participate in development. For explicit build you should provide build type, like `-DCMAKE_BUILD_TYPE=Debug`.
+- multi-config selects build type during the build. It should be provided with `--config` option, otherwise it will
+  build kind of `noconfig`, which is quite strange and not desirable. So, you should always specify build type, like `--config Debug`.
 
-If you want to specify build type, but don't want to care about whether it is 'single' or 'multi' config generator - just provide necessary keys in both place. I.e., configure with `-DCMAKE_BUILD_TYPE=Debug`, and then build with `--config Debug`. Just be sure that both values are same. If target builder is single-config, it will consume confirutation param. If it is multi-config, configuration param will be ignored, but correct build confirutation will then be selected by --config key.
+If you want to specify build type, but don't want to care about whether it is 'single' or 'multi' config generator - 
+just provide necessary keys in both places. I.e., configure with `-DCMAKE_BUILD_TYPE=Debug`, and then build with `--config Debug`.
+Just be sure that both values are same. If target builder is single-config, it will consume confirutation param.
+If it is multi-config, configuration param will be ignored, but correct build confirutation will then be selected by --config key.
 
-If you want RelWihtDebInfo (i.e. just build for production) and know you're on single-config platform (that is all, except Windows) - you can omit --config flag on cmake invocation. Default RelWithDebInfo will be configured then, and used. All the commands for 'building', 'installation' and 'building package' will became shorter then.
+If you want RelWihtDebInfo (i.e. just build for production) and know you're on single-config platform (that is all, except Windows) - you can omit `--config` flag on cmake invocation. Default `CMAKE_BUILD_TYPE=RelWithDebInfo` will be configured then, and used.
+All the commands for 'building', 'installation' and 'building package' will become shorter then.
 
 #### Explicitly select build system generators
 
-Cmake is the tool which is not performing building by itself, but it generates rules for system local build system.
-Usually it determines available build system well, but sometimes you might need to provide generator explicitly.
+Cmake is the tool which is not performing building by itself, but it generates rules for local build system.
+Usually it determines available build system well, but sometimes you might need to provide generator explicitly. You 
+can run `cmake -G` and review the list of available generators.
 
 - on Windows, if you have more than one version ov Visual Studio installed, you might need to specify which one to use,
   as:
-  `cmake -G "Visual Studio 16 2019" ....`
-- on all other platforms - usually `Unix makefiles` are in game, but you can specify another one, as Ninja, or Ninja
-  Multi-Config, as:
-  `cmake -GNinja ...` or `cmake -G"Ninja Multi-Config" ...`.
+ ```bash
+  cmake -G "Visual Studio 16 2019" ....
+  ```
+- on all other platforms - usually `Unix makefiles` are in game, but you can specify another one, as `Ninja`, or `Ninja
+  Multi-Config`, as:
+```bash
+  cmake -GNinja ... 
+  ```
+  or
+```bash
+  cmake -G"Ninja Multi-Config" ...
+```
+Ninja Multi-Config is quite useful, as it is really 'multi-config', and available on linux/macos/bsd. With this 
+generator you may shift choosing of configuration type to build time, and also you may build several configurations 
+in one and same build folder, changing only `--config` param.
 
 ### Caveats
 
@@ -360,9 +378,9 @@ Usually it determines available build system well, but sometimes you might need 
 ## External depenencies
 
 Some libraries should be available if you want to use them.
-- for indexing (`indexer` tool): `expat`, `iconv`, `mysql`, `odbc`, `postgresql` - one or all of them should be available.
+- for indexing (`indexer` tool): `expat`, `iconv`, `mysql`, `odbc`, `postgresql`. Without them, you could only index 
+  `tsv` and `csv` sources.
 - for serving queries (`searchd` daemon): `openssl` might be necessary.
-- for both - Boost is mandatory. Look to our dockerfiles for the way to build/install it.
 
 On build system you need 'dev' or 'devel' versions of that packages installed (i.e. - libmysqlclient-devel, unixodbc-devel, etc. Look to our dockerfiles for the names of concrete packages).
 

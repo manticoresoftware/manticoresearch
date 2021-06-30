@@ -18,9 +18,8 @@ ExternalProject_Add ( gtest_populate
 		)
 
 # here is trick with configuration, m.b. used as a recipe for similar cases:
-# - setting -DCMAKE_BUILD_TYPE - works over single-config generators, and it needs separate run of cmake.
-# - using simultaneously --config option on build and install - works over multi-config generators, which NOT
-# reads and depends from CMAKE_BUILD_TYPE.
+# - -DCMAKE_BUILD_TYPE param - works over single-config generators, and it needs separate run of cmake.
+# - --config option - works over multi-config generators, and they NOT read anyway CMAKE_BUILD_TYPE.
 # Using both build_type and --config achieves desired config to be built and installed despite the actual generator
 # (if single - it will read variable, if multi - it will obey --config key)
 #

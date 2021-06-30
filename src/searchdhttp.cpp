@@ -947,9 +947,14 @@ protected:
 		sphHandleMysqlInsert ( tReporter, tStmt, bReplace, true, sWarning, tAcc, dLastIds );
 
 		if ( tReporter.IsError() )
+		{
 			tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), tReporter.GetError() );
-		else
+		} else
+		{
+			if ( dLastIds.GetLength() )
+				tDocId = dLastIds[0];
 			tResult = sphEncodeInsertResultJson ( tStmt.m_sIndex.cstr(), bReplace, tDocId );
+		}
 
 		return !tReporter.IsError();
 	}

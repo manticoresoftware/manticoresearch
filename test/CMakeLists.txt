@@ -31,9 +31,6 @@ diag(CMAKE_CURRENT_SOURCE_DIR)
 diag(MANTICORE_BINARY_DIR)
 diag(MANTICORE_SCRIPTING_DIR)
 
-file ( GLOB tests "test_[0-9]*" )
-list ( SORT tests )
-
 if (TARGET icu::icudata)
 	get_target_property (ICU_DATA icu::icudata INTERFACE_SOURCES)
 	get_filename_component (ICU_DATA_DIR "${ICU_DATA}" DIRECTORY)
@@ -65,12 +62,13 @@ function (_test_prop test)
 	SET_TESTS_PROPERTIES ("${test}" PROPERTIES ENVIRONMENT DbAccess)
 
 	SET_TESTS_PROPERTIES ("${test}" PROPERTIES ENVIRONMENT "INDEXER=$<TARGET_FILE:indexer>;SEARCHD=$<TARGET_FILE:searchd>")
-	if (COMMAND ubertest_properties) #cb from outside
-		ubertest_properties ("${test}")
+	# m.b. append extra properties
+	if (COMMAND special_ubertest_properties) #cb from outside
+		special_ubertest_properties ("${test}")
 	endif ()
 endfunction ()
 
-function (_add_ubertest testN tst_name REQUIRES prefix label flags)
+function (add_ubertest testN tst_name LABELS prefix label flags)
 	fixup_test_name (_tstn "${prefix}_${tst_name}")
 	add_test (NAME "${_tstn}"
 			#    	CONFIGURATIONS Debug
@@ -81,22 +79,22 @@ function (_add_ubertest testN tst_name REQUIRES prefix label flags)
 			${sd_extra} t ${testN})
 
 	SET (_labels "${label}")
-	foreach (require ${REQUIRES})
+	foreach (require ${LABELS})
 		LIST (APPEND _labels ${require})
 	endforeach ()
 	SET_TESTS_PROPERTIES ("${_tstn}" PROPERTIES LABELS "${_labels}")
-	if ("HEAVY" IN_LIST REQUIRES)
+	if ("HEAVY" IN_LIST LABELS)
 		SET_TESTS_PROPERTIES ("${_tstn}" PROPERTIES TIMEOUT "1800")
 	endif ()
 	_test_prop ("${_tstn}")
 endfunction ()
 
-function (add_ubertest testN tst_name REQUIRES)
-	if (NOT "FORCE-RT" IN_LIST REQUIRES)
-		_add_ubertest ("${testN}" "${tst_name}" "${REQUIRES}" "test" "PLAIN" "")
+function (add_ubertests testN tst_name LABELS)
+	if (NOT "FORCE-RT" IN_LIST LABELS)
+		add_ubertest ("${testN}" "${tst_name}" "${LABELS}" "test" "PLAIN" "")
 	endif ()
-	if (NOT "NON-RT" IN_LIST REQUIRES)
-		_add_ubertest ("${testN}" "${tst_name}" "${REQUIRES}" "rt" "RT" "--rt --ignore-weights")
+	if (NOT "NON-RT" IN_LIST LABELS)
+		add_ubertest ("${testN}" "${tst_name}" "${LABELS}" "rt" "RT" "--rt --ignore-weights")
 	endif ()
 endfunction ()
 
@@ -108,13 +106,16 @@ fixup_test_name(tst "Cleaning errors")
 add_test ( NAME ${tst} COMMAND ${CMAKE_COMMAND} -E remove error_all.txt )
 SET_TESTS_PROPERTIES ( ${tst} PROPERTIES FIXTURES_SETUP UBER )
 
+file (GLOB tests "test_[0-9]*")
+list (SORT tests)
+
 foreach ( test ${tests} )
 	# get the last dir (filename)
 	get_filename_component ( testN "${test}" NAME_WE )
 	# crop the 'test_' heading (so, only number is rest)
 	STRING ( REGEX REPLACE "^test_" "" testN "${testN}" )
 
-	set (REQUIRES "")
+	set (LABELS "")
 	# check if we can extract the name for the test from it
 	if ( EXISTS "${test}/test.xml" )
 		# open the file with the test and read _chunk of 512 bytes
@@ -145,7 +146,7 @@ foreach ( test ${tests} )
 			foreach ( require ${_requires} )
 				string ( STRIP ${require} require )
 				STRING ( TOUPPER "${require}" require )
-				LIST (APPEND REQUIRES ${require})
+				LIST (APPEND LABELS ${require})
 			endforeach ()
 
 		endif ()
@@ -160,53 +161,61 @@ foreach ( test ${tests} )
 
 	set ( ADD_TEST 1 )
 	if ( WIN32 OR CYGWIN )
-		if ("NON-WINDOWS" IN_LIST REQUIRES )
+		if ("NON-WINDOWS" IN_LIST LABELS )
 			set ( ADD_TEST 0)
 			set ( EXPLANATION "non-windows")
 		endif()
 	else()
-		if ( "WINDOWS" IN_LIST REQUIRES )
+		if ( "WINDOWS" IN_LIST LABELS )
 			set ( ADD_TEST 0)
 			set ( EXPLANATION "windows" )
 		endif()
 	endif()
 
-	if ( NOT WITH_ODBC AND "ODBC" IN_LIST REQUIRES )
+	if ( NOT WITH_ODBC AND "ODBC" IN_LIST LABELS )
 		set ( ADD_TEST 0 )
 		set ( EXPLANATION "ODBC provider" )
 	endif ()
 
-	if ( NOT TARGET re2::re2 AND RE2 IN_LIST REQUIRES )
+	if ( NOT TARGET re2::re2 AND RE2 IN_LIST LABELS )
 		set ( ADD_TEST 0)
 		set ( EXPLANATION "RE2" )
 	endif()
 
-	if ( NOT WITH_ICU AND "ICU" IN_LIST REQUIRES )
+	if ( NOT WITH_ICU AND "ICU" IN_LIST LABELS )
 		set ( ADD_TEST 0 )
 		set ( EXPLANATION "ICU" )
 	endif ()
 
-	if ( NOT WITH_GALERA AND "REPLICATION" IN_LIST REQUIRES )
+	if ( NOT WITH_GALERA AND "REPLICATION" IN_LIST LABELS )
 		set ( ADD_TEST 0 )
 		set ( EXPLANATION "Galera library for replication" )
 	endif ()
 
-	if (NOT PYTHONINTERP_FOUND AND "PYTHON" IN_LIST REQUIRES)
+	if (NOT PYTHONINTERP_FOUND AND "PYTHON" IN_LIST LABELS)
 		set (ADD_TEST 0)
 		set (EXPLANATION "Python interpreter")
 	endif ()
 
-	if (COMMAND ubertest_filter) #cb from outside
-		ubertest_filter (ADD_TEST EXPLANATION "${REQUIRES}")
+	STRING(CONFIGURE "${testN} -- ${test_name}" tst_name @ONLY ESCAPE_QUOTES)
+
+	# m.b. add special flavour of a test
+	if (ADD_TEST)
+		if (COMMAND special_ubertest_addtest) #cb from outside
+			special_ubertest_addtest ("${testN}" "${tst_name}" "${LABELS}")
+		endif ()
 	endif ()
 
-	STRING(CONFIGURE "${testN} -- ${test_name}" tst_name @ONLY ESCAPE_QUOTES)
+	# additially apply special external filter, if any
+	if (COMMAND special_ubertest_filter) #cb from outside
+		special_ubertest_filter (ADD_TEST EXPLANATION "${LABELS}")
+	endif ()
+
 	if (ADD_TEST)
-		add_ubertest ("${testN}" "${tst_name}" "${REQUIRES}")
+		add_ubertests ("${testN}" "${tst_name}" "${LABELS}")
 	else ()
 		message (STATUS "Skip adding test ${tst_name} since it requires ${EXPLANATION}")
 	endif ()
-#		SET_TESTS_PROPERTIES ( "\"test_${ts)t_name}\"" "\"rt_${tst_name}\"" PROPERTIES ATTACHED_FILES_ON_FAIL "${MANTICORE_BINARY_DIR}/test/test_${testN}/report.txt" )
 
 endforeach ()
 

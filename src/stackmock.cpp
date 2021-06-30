@@ -201,10 +201,11 @@ class EvalExprStackSize_c : public CreateExprStackSize_c
 
 void DetermineNodeItemStackSize()
 {
-	int iCreateSize, iEvalSize;
+	int iCreateSize = 368;
+	int iEvalSize = 48;
 	{
-		CreateExprStackSize_c tCreateMeter;
-		iCreateSize = tCreateMeter.MockMeasureStack ( 5 );
+//		CreateExprStackSize_c tCreateMeter;
+//		iCreateSize = tCreateMeter.MockMeasureStack ( 5 );
 	}
 	sphLogDebug ( "expression stack for creation %d", iCreateSize );
 
@@ -212,8 +213,8 @@ void DetermineNodeItemStackSize()
 	SetExprNodeStackItemSize ( iCreateSize, 0 );
 
 	{
-		EvalExprStackSize_c tEvalMeter;
-		iEvalSize = tEvalMeter.MockMeasureStack ( 20 );
+//		EvalExprStackSize_c tEvalMeter;
+//		iEvalSize = tEvalMeter.MockMeasureStack ( 20 );
 	}
 	sphLogDebug ( "expression stack for eval/deletion %d", iEvalSize );
 	SetExprNodeStackItemSize ( 0, iEvalSize );
@@ -277,8 +278,9 @@ protected:
 
 void DetermineFilterItemStackSize ()
 {
-	FilterCreationMeasureStack_c tCreateMeter;
-	int iDelta = tCreateMeter.MockMeasureStack ( 100 );
+	int iDelta = 208;
+//	FilterCreationMeasureStack_c tCreateMeter;
+//	iDelta = tCreateMeter.MockMeasureStack ( 100 );
 	sphLogDebug ( "filter stack delta %d", iDelta );
 	SetFilterStackItemSize ( iDelta );
 }

@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>alter after daemon hard kill</name>
+
+<requires><watchdog/></requires>
+<skip_indexer/>
+
+<config>
+searchd
+{
+    <searchd_settings/>
+    data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+<sphinxql>
+create table rt (title text, body text indexed attribute, t2 text stored, data int) type='rt';
+INSERT INTO rt ( id, title, body, t2, data ) VALUES ( 1, 'title', 'foo', 'stored 1', 10 ), ( 2, 'title', 'foo', 'stored 2', 20 ),( 3, 'title_2', 'bar', 'stored 3', 30 );
+</sphinxql>
+
+<sphinxql>
+alter table rt add column b1 text indexed;
+</sphinxql>
+<sphinxql system="kill-daemon"/>
+<sphinxql system="start-agent-no-warnings"/>
+
+<sphinxql>
+desc rt;
+alter table rt drop column b1;
+</sphinxql>
+<sphinxql system="kill-daemon"/>
+<sphinxql system="start-agent-no-warnings"/>
+
+<sphinxql>
+desc rt;
+alter table rt add column b2 string;
+</sphinxql>
+<sphinxql system="kill-daemon"/>
+<sphinxql system="start-agent-no-warnings"/>
+
+<sphinxql>
+desc rt;
+alter table rt drop column b2;
+</sphinxql>
+<sphinxql system="kill-daemon"/>
+<sphinxql system="start-agent-no-warnings"/>
+
+<sphinxql>
+desc rt;
+alter table rt add column b2 string stored;
+</sphinxql>
+<sphinxql system="kill-daemon"/>
+<sphinxql system="start-agent-no-warnings"/>
+
+<sphinxql>
+desc rt;
+ALTER TABLE rt rt_mem_limit='1G';
+</sphinxql>
+<sphinxql system="kill-daemon"/>
+<sphinxql system="start-agent-no-warnings"/>
+
+<sphinxql>
+SHOW CREATE TABLE rt;
+drop table rt;
+</sphinxql>
+</queries>
+
+</test>

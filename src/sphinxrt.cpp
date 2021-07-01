@@ -1294,6 +1294,7 @@ private:
 	void						SetSchema ( const CSphSchema & tSchema );
 
 	void						SetMemLimit ( int64_t iMemLimit );
+	void						AlterSave ( bool bSaveRam );
 };
 
 
@@ -7590,17 +7591,13 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ES
 	{
 		if ( !AddRemoveColumnarAttr ( bAdd, sAttrName, eAttrType, tOldSchema, tNewSchema, sError ) )
 			return false;
-	}
-	else
+	} else
+	{
 		AddRemoveRowwiseAttr ( bAdd, sAttrName, eAttrType, tOldSchema, tNewSchema, sError );
+	}
 
 	// fixme: we can't rollback at this point
-	Verify ( SaveRamChunk ( m_dRamChunks ) );
-
-	SaveMeta ( m_iTID );
-
-	// fixme: notify that it was ALTER that caused the flush
-	g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, false );
+	AlterSave ( true );
 
 	return true;
 }
@@ -7683,13 +7680,24 @@ bool RtIndex_c::AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD
 		RemoveFieldFromRamchunk ( sFieldName, tOldSchema, tNewSchema );
 
 	// fixme: we can't rollback at this point
-	Verify ( SaveRamChunk ( m_dRamChunks ) );
+	AlterSave ( true );
+
+	return true;
+}
+
+void RtIndex_c::AlterSave ( bool bSaveRam )
+{
+	if ( bSaveRam )
+	{
+		Verify ( SaveRamChunk ( m_dRamChunks ) );
+	}
 
 	SaveMeta ( m_iTID );
 
 	// fixme: notify that it was ALTER that caused the flush
 	g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr (), m_iTID, false );
-	return true;
+
+	QcacheDeleteIndex ( GetIndexId() );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -8772,6 +8780,8 @@ bool RtIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 	TokenizerRefPtr_c pIndexing { ISphTokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError ) };
 	if ( pIndexing )
 		m_pTokenizerIndexing = pIndexing;
+
+	AlterSave ( false );
 
 	return true;
 }

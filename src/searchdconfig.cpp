@@ -726,6 +726,7 @@ static bool SetupConfiglessMode ( const CSphConfig & hConf, const CSphString & s
 	return true;
 }
 
+static const char * g_sJsonConfName = "manticore.json";
 
 // load data from JSON config on daemon start
 bool LoadConfigInt ( const CSphConfig & hConf, const CSphString & sConfigFile, CSphString & sError ) REQUIRES (MainThread)
@@ -744,11 +745,19 @@ bool LoadConfigInt ( const CSphConfig & hConf, const CSphString & sConfigFile, C
 	// might hung on pushing 1500 transactions
 	ReplicationSetIncoming ( hSearchd.GetStr ( "node_address" ) );
 
-	// check data_dir exists and available
+	// check data_dir exists and could write there
 	if ( !CheckPath ( g_sDataDir, true, sError ) )
 		return false;
 
-	g_sConfigPath.SetSprintf ( "%s/manticore.json", g_sDataDir.cstr() );
+	g_sConfigPath.SetSprintf ( "%s/%s", g_sDataDir.cstr(), g_sJsonConfName );
+	
+	// check that file is readable in case it exists
+	if ( sphFileExists ( g_sConfigPath.cstr(), nullptr ) && !sphIsReadable ( g_sConfigPath.cstr(), &sError ) )
+	{
+		sError.SetSprintf ( "failed to use JSON config %s: %s", g_sConfigPath.cstr(), sError.cstr() );
+		return false;
+	}
+
 	if ( !ConfigRead ( g_sConfigPath, g_dCfgClusters, g_dCfgIndexes, sError ) )
 	{
 		sError.SetSprintf ( "failed to use JSON config %s: %s", g_sConfigPath.cstr(), sError.cstr() );

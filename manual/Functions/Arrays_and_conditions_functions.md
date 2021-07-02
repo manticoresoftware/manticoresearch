@@ -7,7 +7,7 @@
 SELECT ALL(x>3 AND x<7 FOR x IN j.intarray) FROM test;
 ```
 
-`ALL(mva)` is a special constructor for multi value attributes. When used in conjunction with comparison operators it returns 1 if all values compared are found among the MVA values.
+`ALL(mva)` is a special constructor for multi value attributes. When used in conjunction with comparison operators (including comparison with `IN()`) it returns 1 if all values from the mva attribute are found among the compared values.
 
 ```sql
 SELECT * FROM test WHERE ALL(mymva)>10;
@@ -29,7 +29,7 @@ if you like such filtering and want to use it in production, consider the soluti
 ### ANY()
 `ANY(cond FOR var IN json.array)` works similar to [ALL()](../Functions/Arrays_and_conditions_functions.md#ALL%28%29) except for it returns 1 if condition is true for any element in array.
 
-`ANY(mva)` is a special constructor for multi value attributes. When used in conjunction with comparison operators it returns 1 if any of the values compared are found among the MVA values. ANY is used by default if no constructor is used, however a warning will be raised about missing constructor.
+`ANY(mva)` is a special constructor for multi value attributes. When used in conjunction with comparison operators (including comparison with `IN()`) it returns 1 if any of the mva values are found among the compared values. ANY is used by default if no constructor is used, however a warning will be raised about missing constructor.
 
 `ANY(string list)` is a special operation for filtering string tags.  Works similar to [ALL()](../Functions/Arrays_and_conditions_functions.md#ALL%28%29) except if condition is true for the case when any tag of tested expression match.
 

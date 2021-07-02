@@ -29,6 +29,7 @@ RUN apt-get update && apt-get install -y \
 && mc update
 
 ADD sphinx /root/.sphinx
+ADD aot.sh /root/aot.sh
 ADD entry_point.sh /
 VOLUME [ "/work" ]
 WORKDIR /work

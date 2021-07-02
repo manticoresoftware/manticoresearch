@@ -151,6 +151,8 @@ if ( !$run && !$show )
 	exit ( 1 );
 }
 
+$VLG = getenv('VLG');
+
 $python = getenv('python');
 if (!$python)
 	$python = "/usr/bin/python";

@@ -497,7 +497,10 @@ function CheckSearchdLog ( $error_file, &$retval )
 
 function UseValgrind ()
 {
-	global $g_locals;
+	global $g_locals, $VLG;
+	if ( $VLG )
+		return true;
+
 	if ( isset ( $g_locals['valgrindsearchd'] ) )
 		return  $g_locals['valgrindsearchd'];
 	else
@@ -518,19 +521,37 @@ function WaitRetries ()
 	return ActionRetries()*50;
 }
 
-function GetSearchd ( &$searchd, &$error )
+function GetSearchd ( &$searchd, &$error, $full_featured )
 {
-	global $g_locals;
+	global $g_locals, $VLG;
 
 	if ( isset ( $g_locals['valgrindoptions'] ) )
 		$vlgoptions = $g_locals['valgrindoptions'];
 	else
 		$vlgoptions = '--leak-check=full';
 
-	if ( UseValgrind() ) {
-		$searchd = "valgrind $vlgoptions ";
-		if ( file_exists("valgrind.supp" ) )
-			$searchd .= "--suppressions=" . getcwd() . "/valgrind.supp ";
+	if ( $full_featured && UseValgrind() ) {
+		if ( $VLG )
+		{
+            $vlgvars = explode ( ' ', $VLG );
+            foreach ( $vlgvars as &$vlgvar )
+            {
+                if ( substr ( $vlgvar, 0, 10 ) == "--log-file" ) # --log-file=/sphinx/sphinxfrommac/build/Testing/Temporary/MemoryChecker.308.log
+                {
+                    $lgfile = explode ('=', $vlgvar)[1];
+                    $vlgvar="--log-fd=9 9>>$lgfile";
+                    break;
+                }
+            }
+            $VLG1 = implode (' ', $vlgvars);
+			$searchd = "$VLG1 ";
+		}
+		else
+		{
+			$searchd = "valgrind $vlgoptions ";
+			if ( file_exists("valgrind.supp" ) )
+				$searchd .= "--suppressions=" . getcwd() . "/valgrind.supp ";
+		}
 		$searchd .= $g_locals['searchd'];
 	}
 	else
@@ -566,7 +587,7 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watch
 //	print ($abs_error_file . "\n");
 //	print ($abs_pidfile . "\n");
 
-	if (!GetSearchd ($path, $error))
+	if (!GetSearchd ($path, $error, true))
 		return 1;
 
 	// try to wait a bit here
@@ -713,7 +734,7 @@ function StopSearchd ( $config, $pidfile )
 	$action_retries = ActionRetries();
 	if ( file_exists($abs_pidfile) && count(file($abs_pidfile)) )
 	{
-		GetSearchd ($path, $error);
+		GetSearchd ($path, $error, false);
 		$dummy = array();
 		exec ( "$path --config $abs_config --stopwait", $dummy, $ret );
 

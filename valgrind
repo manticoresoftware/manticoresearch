@@ -1,0 +1,20 @@
+#!/bin/bash
+
+vlg="$vlg"
+
+while [ -n "$1" ]
+do
+  p="$1"
+  shift
+  vlg="$vlg $p"
+  if [ 'zsuppressions' = z"${p:2:12}" ]; then
+    break
+  fi
+done
+
+if [ -n "$1" ]; then
+  if [ 'zubertest' = z"${2:0:8}" ]; then
+    export VLG="$vlg"
+  fi
+fi
+$@

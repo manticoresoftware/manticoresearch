@@ -19411,6 +19411,9 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	}
 #endif
 
+	// init before workpool, as last checks binlog
+	sphRTInit ( hSearchd, bTestMode, hConf("common") ? hConf["common"]("common") : nullptr );
+
 	// after next line executed we're in mt env, need to take rwlock accessing config.
 	StartGlobalWorkPool ();
 
@@ -19492,7 +19495,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	DetermineNodeItemStackSize();
 	DetermineFilterItemStackSize();
 	ModifyDaemonPaths ( hSearchd );
-	sphRTInit ( hSearchd, bTestMode, hConf("common") ? hConf["common"]("common") : nullptr );
+//	sphRTInit ( hSearchd, bTestMode, hConf("common") ? hConf["common"]("common") : nullptr );
 
 	if ( hSearchd.Exists ( "snippets_file_prefix" ) )
 		g_sSnippetsFilePrefix = hSearchd["snippets_file_prefix"].cstr();

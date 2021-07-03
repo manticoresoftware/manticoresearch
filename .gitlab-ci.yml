@@ -323,7 +323,7 @@ push_results:
   variables:
     GIT_STRATEGY: fetch
   script:
-    - ctest -VV -S misc/ctest/upload.cmake
+    - ctest -S misc/ctest/upload.cmake
   artifacts:
     paths:
       - build/junit_*.xml

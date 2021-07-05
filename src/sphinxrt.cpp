@@ -6232,8 +6232,7 @@ void QueryDiskChunks ( const CSphQuery & tQuery,
 		int64_t iTotalDocs,
 		const char * szIndexName,
 		SorterSchemaTransform_c & tSSTransform,
-		int64_t tmMaxTimer,
-		bool bVip
+		int64_t tmMaxTimer
 		)
 {
 	if ( tGuard.m_dDiskChunks.IsEmpty() )
@@ -6260,14 +6259,14 @@ void QueryDiskChunks ( const CSphQuery & tQuery,
 
 	std::atomic<bool> bInterrupt {false};
 	std::atomic<int32_t> iCurChunk { iJobs-1 };
-	CoExecuteN ( dCtx.Concurrency ( iJobs ), bVip, [&]
+	CoExecuteN ( dCtx.Concurrency ( iJobs ), [&]
 	{
 		auto iChunk = iCurChunk.fetch_sub ( 1, std::memory_order_acq_rel );
 		if ( iChunk<0 || bInterrupt )
 			return; // already nothing to do, early finish.
 
 		auto tCtx = dCtx.CloneNewContext ();
-		Threads::CoThrottler_c tThrottler ( session::ThrottlingPeriodMS (), bVip );
+		Threads::CoThrottler_c tThrottler ( session::ThrottlingPeriodMS () );
 		int iTick=1; // num of times coro rescheduled by throttler
 		while ( !bInterrupt ) // some earlier job met error; abort.
 		{
@@ -6826,7 +6825,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 
 	if ( !tGuard.m_dDiskChunks.IsEmpty() )
 		QueryDiskChunks ( tQuery, tMeta, tArgs, tGuard, dSorters, pProfiler, bGotLocalDF, pLocalDocs, iTotalDocs,
-				m_sIndexName.cstr(), tSSTransform, tmMaxTimer, tArgs.m_bNoYeld );
+				m_sIndexName.cstr(), tSSTransform, tmMaxTimer );
 
 	////////////////////
 	// search RAM chunk

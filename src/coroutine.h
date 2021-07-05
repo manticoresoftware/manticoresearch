@@ -29,7 +29,7 @@ using Waiter_t = SharedPtrCustom_t<void *>;
 void CoGo ( Handler handler, Scheduler_i* pScheduler );
 
 // start task continuation in coroutine, second-priority
-void CoCo ( Handler handler, Waiter_t tSignaller, bool bVip );
+void CoCo ( Handler handler, Waiter_t tSignaller );
 
 // perform handler in dedicated coro with custom stack (scheduler is same, or global if none)
 // try to run immediately (if thread wasn't switched yet), or push to first-priority queue
@@ -69,7 +69,7 @@ bool CoContinueBool ( int iStack, HANDLER handler )
 
 // Run handler in single or many user threads.
 // NOTE! even with concurrency==1 it is not sticked to the same OS thread, so avoid using thread-local storage.
-void CoExecuteN ( int iConcurrency, bool bVip, Handler&& handler );
+void CoExecuteN ( int iConcurrency, Handler&& handler );
 
 Scheduler_i * CoCurrentScheduler ();
 
@@ -101,7 +101,6 @@ class CoThrottler_c
 
 	sph::MiniTimer_c m_dTimerGuard;
 	bool m_bSameThread = true;
-	bool m_bNoYeld = false;
 
 	bool MaybeThrottle ();
 
@@ -109,7 +108,7 @@ public:
 	// -1 means 'use value of tmThrotleTimeQuantumMs'
 	// 0 means 'don't throttle'
 	// any other positive expresses throttling interval in milliseconds
-	CoThrottler_c ( int tmPeriodMs, bool bNoYeld );
+	CoThrottler_c ( int tmPeriodMs = -1 );
 
 	// that changes default daemon-wide
 	inline static void SetDefaultThrottlingPeriodMS ( int tmPeriodMs )
@@ -338,7 +337,7 @@ class CAPABILITY ( "mutex" ) CoroRWLock_c : public ISphNoncopyable
 
 public:
 	bool WriteLock() ACQUIRE();
-//	bool UpgradeLock (  bool bVip ) RELEASE() ACQUIRE();
+//	bool UpgradeLock () RELEASE() ACQUIRE();
 	bool ReadLock() ACQUIRE_SHARED();
 	bool Unlock() UNLOCK_FUNCTION();
 };

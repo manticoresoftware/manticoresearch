@@ -5641,14 +5641,11 @@ void SearchHandler_c::RunLocalSearches ()
 //	for ( int iOrder : dOrder )
 //		sphWarning ( "Sorted: %d, Order %d, mass %d", !!bSingle, iOrder, (int) m_dLocal[iOrder].m_iMass );
 
-	bool bNoYeld = false;
-	if ( m_pUpdates )
-		bNoYeld = m_pUpdates->m_bNoYeld;
 
 	std::atomic<int32_t> iTotalSuccesses { 0 };
 	const auto iJobs = iNumLocals;
 	std::atomic<int32_t> iCurJob { 0 };
-	CoExecuteN ( dCtx.Concurrency ( iJobs ), bNoYeld, [&]
+	CoExecuteN ( dCtx.Concurrency ( iJobs ), [&]
 	{
 		auto iJob = iCurJob.load ( std::memory_order_relaxed );
 		if ( iJob>=iJobs )
@@ -5659,7 +5656,7 @@ void SearchHandler_c::RunLocalSearches ()
 		dSorters.ZeroVec ();
 
 		auto tCtx = dCtx.CloneNewContext();
-		Threads::CoThrottler_c tThrottler ( session::ThrottlingPeriodMS (), bNoYeld );
+		Threads::CoThrottler_c tThrottler ( session::ThrottlingPeriodMS () );
 		while ( iJob<iJobs )
 		{
 			iJob = iCurJob.fetch_add ( 1, std::memory_order_acq_rel );
@@ -5708,7 +5705,6 @@ void SearchHandler_c::RunLocalSearches ()
 			// do the query
 			CSphMultiQueryArgs tMultiArgs ( iIndexWeight );
 			tMultiArgs.m_uPackedFactorFlags = tQueueRes.m_uPackedFactorFlags;
-			tMultiArgs.m_bNoYeld = bNoYeld;
 			if ( m_bGotLocalDF )
 			{
 				tMultiArgs.m_bLocalDF = true;
@@ -7517,7 +7513,7 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 	dCtx.LimitConcurrency ( GetEffectiveDistThreads () );
 
 	std::atomic<int32_t> iCurJob { 0 };
-	CoExecuteN ( dCtx.Concurrency ( iJobs ), false, [&]
+	CoExecuteN ( dCtx.Concurrency ( iJobs ), [&]
 	{
 		sphLogDebug ( "MakeSnippetsCoro Coro started" );
 		auto iJob = iCurJob.fetch_add ( 1, std::memory_order_acq_rel );
@@ -7525,7 +7521,7 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 			return; // already nothing to do, early finish.
 
 		auto tCtx = dCtx.CloneNewContext ();
-		Threads::CoThrottler_c tThrottler ( session::ThrottlingPeriodMS (), false );
+		Threads::CoThrottler_c tThrottler ( session::ThrottlingPeriodMS () );
 		while (true)
 		{
 			myinfo::SetThreadInfo ( "s %d:", iJob );

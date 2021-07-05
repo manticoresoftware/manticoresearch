@@ -2622,7 +2622,6 @@ struct CSphMultiQueryArgs : public ISphNoncopyable
 	const SmallStringHash_T<int64_t> *		m_pLocalDocs = nullptr;
 	int64_t									m_iTotalDocs = 0;
 	bool									m_bModifySorterSchemas {true};
-	bool									m_bNoYeld = false;
 
 	CSphMultiQueryArgs ( int iIndexWeight );
 };
@@ -3032,7 +3031,6 @@ struct CSphAttrUpdateEx
 	CSphString *			m_pError = nullptr;		///< the error, if any
 	CSphString *			m_pWarning = nullptr;	///< the warning, if any
 	int						m_iAffected = 0;		///< num of updated rows.
-	bool					m_bNoYeld = false;
 };
 
 struct SphQueueSettings_t

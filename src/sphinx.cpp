@@ -6267,11 +6267,7 @@ ISphSchema * CSphSchema::CloneMe () const
 
 bool CSphSchema::HasBlobAttrs() const
 {
-	for ( const auto & i : m_dAttrs )
-		if ( sphIsBlobAttr(i) )
-			return true;
-
-	return false;
+	return m_dAttrs.any_of ([] (const CSphColumnInfo& i) { return sphIsBlobAttr(i);});
 }
 
 

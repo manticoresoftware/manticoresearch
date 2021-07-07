@@ -223,7 +223,7 @@ index products {
 infix_fields = field1[, field2, ...]
 ```
 
-The list of full-text fields to limit infix indexing to. Applies to [dict](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict) only. Optional, default is empty (index all fields in infix mode).
+The list of full-text fields to limit infix indexing to. Applies to [dict=crc](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict) only. Optional, default is empty (index all fields in infix mode).
 
 Similar to [prefix_fields](../../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#prefix_fields), but lets you limit infix-indexing to given fields.
 

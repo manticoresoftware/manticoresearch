@@ -40,6 +40,7 @@
 #include "mini_timer.h"
 #include "sphinx_alter.h"
 #include "conversion.h"
+#include "binlog.h"
 
 #include <errno.h>
 #include <ctype.h>
@@ -1503,6 +1504,9 @@ public:
 	static bool			DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, int iKillField );
 
 	int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning ) final;
+
+	// the only txn we can replay is 'update attributes', but it is processed by dedicated branch in binlog, so we have nothing to do here.
+	bool 				ReplayTxn (Binlog::Blop_e, CSphReader&, const char*, Binlog::FnCheckTxn&&) final {return false;}
 	bool				SaveAttributes ( CSphString & sError ) const final;
 	DWORD				GetAttributeStatus () const final;
 
@@ -7439,8 +7443,8 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, b
 	if ( !Update_HandleJsonWarnings ( tCtx, iUpdated, sWarning, sError ) )
 		return -1;
 
-	if ( tCtx.m_uUpdateMask && m_bBinlog && g_pBinlog )
-		g_pBinlog->BinlogUpdateAttributes ( &m_iTID, m_sIndexName.cstr(), tUpd );
+	if ( tCtx.m_uUpdateMask && m_bBinlog )
+		Binlog::CommitUpdateAttributes ( &m_iTID, m_sIndexName.cstr(), tUpd );
 
 	m_uAttrsStatus |= tCtx.m_uUpdateMask; // FIXME! add lock/atomic?
 
@@ -7516,8 +7520,8 @@ bool CSphIndex_VLN::SaveAttributes ( CSphString & sError ) const
 			return false;
 	}
 
-	if ( m_bBinlog && g_pBinlog )
-		g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, false );
+	if ( m_bBinlog )
+		Binlog::NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, false );
 
 	if ( m_uAttrsStatus==uAttrStatus )
 		m_uAttrsStatus = 0;
@@ -12610,7 +12614,7 @@ void RunFullscan ( ITERATOR & tIterator, TO_STATIC && fnToStatic, const CSphQuer
 	int iIndex = bHasFilterCalc*32 + bHasSortCalc*16 + bHasFilter*8 + bRandomize*4 + bHasTimer*2 + bHasCutoff;
 
 	std::function<void (ITERATOR &, TO_STATIC &&, const CSphQueryContext &, CSphQueryResultMeta &, const VecTraits_T<ISphMatchSorter *> &, CSphMatch &, int, int, int64_t, bool &)> fnScan;
-	
+
 	switch ( iIndex )
 	{
 		case 0:		fnScan = &Fullscan<false, false, false, false, false, false, ITERATOR, TO_STATIC>; break;

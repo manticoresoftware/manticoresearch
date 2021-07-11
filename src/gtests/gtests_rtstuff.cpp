@@ -17,6 +17,7 @@
 #include "sphinxrt.h"
 #include "sphinxsort.h"
 #include "searchdaemon.h"
+#include "binlog.h"
 
 #include <gmock/gmock.h>
 
@@ -43,10 +44,10 @@ void TestRTInit ()
 	CSphConfigSection tRTConfig;
 
 	sphRTInit ( tRTConfig, true, nullptr );
-	sphRTConfigure ( tRTConfig, true );
+	Binlog::Configure ( tRTConfig, true );
 
 	SmallStringHash_T<CSphIndex *> hIndexes;
-	sphReplayBinlog ( hIndexes );
+	Binlog::Replay ( hIndexes );
 }
 
 #define RT_INDEX_FILE_NAME "test_temp"
@@ -225,7 +226,7 @@ protected:
 
 	void TearDown() override
 	{
-		sphRTDone ();
+		Binlog::Deinit ();
 		DeleteIndexFiles ( RT_INDEX_FILE_NAME );
 	}
 

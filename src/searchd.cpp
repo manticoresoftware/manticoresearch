@@ -39,6 +39,7 @@
 #include "query_status.h"
 #include "sphinxql_debug.h"
 #include "stackmock.h"
+#include "binlog.h"
 
 // services
 #include "taskping.h"
@@ -746,7 +747,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	// clear shut down of rt indexes + binlog
 	sphDoneIOStats();
-	sphRTDone();
+	Binlog::Deinit();
 
 	ShutdownDocstore();
 	sphShutdownWordforms ();
@@ -16621,8 +16622,7 @@ static bool RotateIndexMT ( ServedIndex_c* pIndex, const CSphString & sIndex, St
 	sphLogDebug ( "all went fine; swap them" );
 
 	pNew->m_iTID = pOld->m_iTID;
-	if ( g_pBinlog )
-		g_pBinlog->NotifyIndexFlush ( sIndex.cstr(), pOld->m_iTID, false );
+	Binlog::NotifyIndexFlush ( sIndex.cstr(), pOld->m_iTID, false );
 
 	// set new index to hash
 	tNewIndex.m_sIndexPath = tNewIndex.m_pIndex->GetFilename();
@@ -19187,8 +19187,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		OPT1 ( "--new-cluster-force" )	bNewClusterForce = true;
 
 		// FIXME! add opt=(csv)val handling here
-		OPT1 ( "--replay-flags=accept-desc-timestamp" )		uReplayFlags |= SPH_REPLAY_ACCEPT_DESC_TIMESTAMP;
-		OPT1 ( "--replay-flags=ignore-open-errors" )			uReplayFlags |= SPH_REPLAY_IGNORE_OPEN_ERROR;
+		OPT1 ( "--replay-flags=accept-desc-timestamp" )		uReplayFlags |= Binlog::REPLAY_ACCEPT_DESC_TIMESTAMP;
+		OPT1 ( "--replay-flags=ignore-open-errors" )		uReplayFlags |= Binlog::REPLAY_IGNORE_OPEN_ERROR;
 
 		// handle 1-arg options
 		else if ( (i+1)>=argc )		break;
@@ -19545,7 +19545,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	if ( bOptPIDFile && !bWatched )
 		sphLockUn ( g_iPidFD );
 
-	sphRTConfigure ( hSearchd, bTestMode );
+	Binlog::Configure ( hSearchd, bTestMode );
 	SetUidShort ( bTestMode );
 	InitDocstore ( g_iDocstoreCache );
 	InitParserOption();
@@ -19640,7 +19640,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		}
 	});
 
-	sphReplayBinlog ( hIndexes, uReplayFlags, DumpMemStat );
+	Binlog::Replay ( hIndexes, uReplayFlags, DumpMemStat );
 	hIndexes.Reset();
 
 	// no need to create another cluster on restart by watchdog resurrection

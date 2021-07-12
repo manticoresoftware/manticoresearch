@@ -736,7 +736,7 @@ static wsrep_cb_status_t Unordered_fn ( void * pCtx, const void * pData, size_t 
 // This is the listening thread. It blocks in wsrep::recv() call until
 // disconnect from cluster. It will apply and commit writesets through the
 // callbacks defined above.
-static void ReplicationRecv_fn ( SharedPtr_t<ReceiverCtx_t *> pCtx )
+static void ReplicationRecv_fn ( SharedPtr_t<ReceiverCtx_t> pCtx )
 {
 	g_pTlsCluster = pCtx->m_pCluster;
 	pCtx->m_pCluster->m_bHasWorker = true;
@@ -964,7 +964,7 @@ static bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sErro
 		sphLogDebugRpl ( "cluster '%s', indexes '%s', nodes '%s'", tArgs.m_pCluster->m_sName.cstr(), sIndexes.cstr(), tArgs.m_pCluster->m_sClusterNodes.cstr() );
 	}
 
-	SharedPtr_t<ReceiverCtx_t *> pRecvArgs { new ReceiverCtx_t() };
+	SharedPtr_t<ReceiverCtx_t> pRecvArgs { new ReceiverCtx_t() };
 	pRecvArgs->m_pCluster = tArgs.m_pCluster;
 	CSphString sFullClusterPath = GetClusterPath ( tArgs.m_pCluster->m_sPath );
 

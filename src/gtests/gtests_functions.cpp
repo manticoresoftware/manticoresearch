@@ -2559,10 +2559,10 @@ TEST ( functions, RawTrivialVector )
 
 TEST ( functions, SharedPtr )
 {
-	SharedPtr_t<int *> pFoo;
+	SharedPtr_t<int> pFoo;
 	ASSERT_FALSE ( bool(pFoo) );
 	{
-		SharedPtr_t<int *> pBar { new int };
+		SharedPtr_t<int> pBar { new int };
 		*pBar = 10;
 		pFoo = pBar;
 		ASSERT_EQ ( *pFoo, 10 );

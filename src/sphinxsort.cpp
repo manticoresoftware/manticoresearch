@@ -414,7 +414,7 @@ public:
 	VecTraits_T<RowID_t> GetJustPopped() const override { return m_dJustPopped; }
 
 protected:
-	SharedPtr_t<ISphSchema*>	m_pSchema;	///< sorter schema (adds dynamic attributes on top of index schema)
+	SharedPtr_t<ISphSchema>		m_pSchema;		///< sorter schema (adds dynamic attributes on top of index schema)
 	CSphMatchComparatorState	m_tState;		///< protected to set m_iNow automatically on SetState() calls
 	StrVec_t					m_dTransformed;
 
@@ -1980,7 +1980,7 @@ struct CSphGroupSorterSettings
 	bool				m_bDistinct = false;///< whether we need distinct
 	CSphRefcountedPtr<CSphGrouper>		m_pGrouper;///< group key calculator
 	bool				m_bImplicit = false;///< for queries with aggregate functions but without group by clause
-	SharedPtr_t<ISphFilter *>	m_pAggrFilterTrait; ///< aggregate filter that got owned by grouper
+	SharedPtr_t<ISphFilter>	m_pAggrFilterTrait; ///< aggregate filter that got owned by grouper
 	bool				m_bJson = false;	///< whether we're grouping by Json attribute
 	int					m_iMaxMatches = 0;
 

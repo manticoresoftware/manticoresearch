@@ -4757,9 +4757,10 @@ public:
 	}
 };
 /// shared pointer for any object, managed by refcount
-template < typename PTR, typename DELETER, typename REFCOUNTED = ISphRefcountedMT >
+template < typename T, typename DELETER, typename REFCOUNTED = ISphRefcountedMT >
 class SharedPtr_T
 {
+	using PTR = T*;
 	template <typename RefCountedT>
 	struct SharedState_T : public RefCountedT
 	{
@@ -4775,7 +4776,7 @@ class SharedPtr_T
 
 		~SharedState_T() override
 		{
-			m_fnDelete.Delete(m_pPtr);
+			m_fnDelete.Delete((void*)m_pPtr);
 			m_pPtr = nullptr;
 		}
 	};
@@ -4837,13 +4838,13 @@ public:
 };
 
 template <typename T, typename REFCOUNTED = ISphRefcountedMT>
-using SharedPtr_t = SharedPtr_T<T, Deleter_T<T, ETYPE::SINGLE>, REFCOUNTED>;
+using SharedPtr_t = SharedPtr_T<T, Deleter_T<T*, ETYPE::SINGLE>, REFCOUNTED>;
 
 template<typename T, typename REFCOUNTED = ISphRefcountedMT>
-using SharedPtrArr_t = SharedPtr_T<T, Deleter_T<T, ETYPE::ARRAY>, REFCOUNTED>;
+using SharedPtrArr_t = SharedPtr_T<T, Deleter_T<T*, ETYPE::ARRAY>, REFCOUNTED>;
 
-template<typename T, typename DELETER=std::function<void(T)>, typename REFCOUNTED = ISphRefcountedMT>
-using SharedPtrCustom_t = SharedPtr_T<T, CustomDeleter_T<T, DELETER>, REFCOUNTED>;
+template<typename T, typename DELETER=std::function<void(T*)>, typename REFCOUNTED = ISphRefcountedMT>
+using SharedPtrCustom_t = SharedPtr_T<T, CustomDeleter_T<T*, DELETER>, REFCOUNTED>;
 
 int sphCpuThreadsCount ();
 

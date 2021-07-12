@@ -110,7 +110,7 @@ public:
 	int64_t GetTotalReceived () const;
 };
 
-using SockWrapperPtr_c = SharedPtr_t<SockWrapper_c *>;
+using SockWrapperPtr_c = SharedPtr_t<SockWrapper_c>;
 
 
 /// simple network request buffer
@@ -198,6 +198,6 @@ class AsyncNetBuffer_c : public AsyncNetInputBuffer_c, public NetGenericOutputBu
 {
 };
 
-using AsyncNetBufferPtr_c = SharedPtr_t<AsyncNetBuffer_c *>;
+using AsyncNetBufferPtr_c = SharedPtr_t<AsyncNetBuffer_c>;
 
 AsyncNetBufferPtr_c MakeAsyncNetBuffer ( SockWrapperPtr_c pSock );

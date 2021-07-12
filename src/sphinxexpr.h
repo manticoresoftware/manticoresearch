@@ -251,7 +251,7 @@ public:
 class Expr_MapArg_c : public Expr_NoLocator_c
 {
 public:
-	SharedPtrArr_t<CSphNamedVariant *>	m_pValues;
+	SharedPtrArr_t<CSphNamedVariant>	m_pValues;
 	int64_t								m_iCount = 0;
 
 	// c-tr from raw vector - adopt values

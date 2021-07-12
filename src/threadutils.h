@@ -128,7 +128,7 @@ struct Scheduler_i
 	virtual void IterateChildren ( ThreadFN & fnHandler ) {}
 };
 
-using SchedulerSharedPtr_t = SharedPtr_t<Scheduler_i *>;
+using SchedulerSharedPtr_t = SharedPtr_t<Scheduler_i>;
 
 // none of the functions below used in the code. Both maybe only in tests.
 SchedulerSharedPtr_t MakeThreadPool ( size_t iThreadCount, const char * szName="" );

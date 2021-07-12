@@ -46,8 +46,8 @@ struct StoredQuery_t : public StoredQuery_i, public ISphRefcountedMT
 	bool							IsFullscan() const { return m_pXQ->m_bEmpty; }
 };
 
-using StoredQuerySharedPtr_t = SharedPtr_t<StoredQuery_t*>;
-using StoredQuerySharedPtrVecSharedPtr_t = SharedPtr_t<CSphVector<StoredQuerySharedPtr_t> *>;
+using StoredQuerySharedPtr_t = SharedPtr_t<StoredQuery_t>;
+using StoredQuerySharedPtrVecSharedPtr_t = SharedPtr_t<CSphVector<StoredQuerySharedPtr_t>>;
 class SharedPQSlice_t : public VecTraits_T<const StoredQuerySharedPtr_t>
 {
 	using BASE_t = VecTraits_T<const StoredQuerySharedPtr_t>;

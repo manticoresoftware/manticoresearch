@@ -2252,6 +2252,33 @@ TEST ( functions, LazyVectorCopyMove )
 	dCopy.Append(dVec);
 }
 
+TEST ( functions, BitVec_managing )
+{
+	{
+		CSphBitvec foo ( 10 );
+		CSphBitvec bar ( 1000 );
+		foo.BitSet ( 9 );
+		bar.BitSet ( 900 );
+		bar.Swap ( foo );
+		ASSERT_TRUE ( foo.BitGet ( 900 ) );
+		ASSERT_TRUE ( bar.BitGet ( 9 ) );
+	}
+	{
+		CSphBitvec baz;
+		CSphBitvec fee ( 100 );
+		fee.BitSet ( 90 );
+		baz = std::move ( fee );
+		ASSERT_TRUE ( baz.BitGet ( 90 ) );
+	}
+	{
+		CSphBitvec baz;
+		CSphBitvec fee ( 1000 );
+		fee.BitSet ( 90 );
+		baz = std::move ( fee );
+		ASSERT_TRUE ( baz.BitGet ( 90 ) );
+	}
+}
+
 #ifdef _WIN32
 #pragma warning(push) // store current warning values
 #pragma warning(disable:4101)

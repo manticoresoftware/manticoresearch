@@ -4511,44 +4511,85 @@ AtScopeExit_T<ACTION> AtScopeExit ( ACTION &&action )
 
 /// generic dynamic bitvector
 /// with a preallocated part for small-size cases, and a dynamic route for big-size ones
-class CSphBitvec
+template<int STATICBITS=128>
+class BitVec_T
 {
+	static const int DWBYTES = sizeof ( DWORD );
+	static const int DWBITS = DWBYTES * 8;
+	static const int STATICDWORDS = STATICBITS / DWBITS;
+
 protected:
 	DWORD *		m_pData = nullptr;
-	DWORD		m_uStatic[4] {0};
+	DWORD		m_uStatic[STATICDWORDS] {0};
 	int			m_iElements = 0;
 
 public:
-	CSphBitvec () = default;
+	BitVec_T () = default;
 
-	explicit CSphBitvec ( int iElements )
+	explicit BitVec_T ( int iElements )
 	{
 		Init ( iElements );
 	}
 
-	~CSphBitvec ()
+	~BitVec_T ()
 	{
 		if ( m_pData!=m_uStatic )
 			SafeDeleteArray ( m_pData );
 	}
 
 	/// copy ctor
-	CSphBitvec ( const CSphBitvec & rhs )
+	BitVec_T ( const BitVec_T & rhs )
 	{
 		m_pData = nullptr;
-		m_iElements = 0;
-		*this = rhs;
+		m_iElements = rhs.m_iElements;
+		auto iDwSize = GetSize ();
+		m_pData = ( m_iElements>STATICBITS ) ? new DWORD[iDwSize] : m_uStatic;
+		memcpy ( m_pData, rhs.m_pData, DWBYTES * iDwSize );
 	}
 
-	/// copy
-	CSphBitvec & operator = ( const CSphBitvec & rhs )
+	void Swap ( BitVec_T & rhs ) noexcept
 	{
-		if ( m_pData!=m_uStatic )
-			SafeDeleteArray ( m_pData );
+		if ( m_pData==m_uStatic && rhs.m_pData==rhs.m_uStatic )
+			// both static - just exchange values
+			for ( auto i = 0; i<STATICDWORDS; ++i )
+				std::swap ( m_uStatic[i], rhs.m_uStatic[i] );
+		else if ( m_pData==m_uStatic )
+		{
+			// me static, rhs dynamic
+			assert ( rhs.m_pData!=rhs.m_uStatic );
+			for ( auto i = 0; i<STATICDWORDS; ++i )
+				rhs.m_uStatic[i] = m_uStatic[i];
+			m_pData = rhs.m_pData;
+			rhs.m_pData = rhs.m_uStatic;
+		}
+		else if ( rhs.m_pData==rhs.m_uStatic )
+		{
+			// me dynamic, rhs static
+			assert ( m_pData!=m_uStatic );
+			for ( auto i = 0; i<STATICDWORDS; ++i )
+				m_uStatic[i] = rhs.m_uStatic[i];
+			rhs.m_pData = m_pData;
+			m_pData = m_uStatic;
+		}
+		else
+		{
+			// both dynamic. No need to copy static at all
+			assert ( rhs.m_pData!=rhs.m_uStatic );
+			assert ( m_pData!=m_uStatic );
+			std::swap ( m_pData, rhs.m_pData );
+		}
+		std::swap ( m_iElements, rhs.m_iElements );
+	}
 
-		Init ( rhs.m_iElements );
-		memcpy ( m_pData, rhs.m_pData, sizeof(m_uStatic[0]) * GetSize() );
+	BitVec_T ( BitVec_T && rhs ) noexcept
+	{
+		Swap ( rhs );
+	}
 
+	/// copy/move
+	BitVec_T & operator= ( BitVec_T rhs )
+	{
+		Swap ( rhs );
 		return *this;
 	}
 
@@ -4556,7 +4597,7 @@ public:
 	{
 		assert ( iElements>=0 );
 		m_iElements = iElements;
-		if ( iElements > int(sizeof(m_uStatic)*8) )
+		if ( iElements>STATICBITS )
 		{
 			int iSize = GetSize();
 			m_pData = new DWORD [ iSize ];
@@ -4569,14 +4610,14 @@ public:
 
 	void Clear ()
 	{
-		int iSize = GetSize();
-		memset ( m_pData, 0, sizeof(DWORD)*iSize );
+		int iByteSize = GetByteSize();
+		memset ( m_pData, 0, iByteSize );
 	}
 
 	void Set ()
 	{
-		int iSize = GetSize();
-		memset ( m_pData, 0xff, sizeof(DWORD)*iSize );
+		int iByteSize = GetByteSize ();
+		memset ( m_pData, 0xff, iByteSize );
 	}
 
 
@@ -4612,9 +4653,14 @@ public:
 		return m_pData;
 	}
 
-	int GetSize() const
+	int GetSize() const // be aware, that is size in DWORDs!
 	{
 		return (m_iElements+31)/32;
+	}
+
+	int GetByteSize () const
+	{
+		return GetSize () * DWBYTES;
 	}
 
 	bool IsEmpty() const
@@ -4622,7 +4668,7 @@ public:
 		if (!m_pData)
 			return true;
 
-		return GetSize ()==0;
+		return GetBits ()==0;
 	}
 
 	int GetBits() const
@@ -4633,12 +4679,14 @@ public:
 	int BitCount () const
 	{
 		int iBitSet = 0;
-		for ( int i=0; i<GetSize(); i++ )
+		for ( int i=0; i<GetSize(); ++i )
 			iBitSet += sphBitCount ( m_pData[i] );
 
 		return iBitSet;
 	}
 };
+
+using CSphBitvec = BitVec_T<>;
 
 //////////////////////////////////////////////////////////////////////////
 

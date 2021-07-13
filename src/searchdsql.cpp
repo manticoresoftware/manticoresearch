@@ -194,6 +194,14 @@ private:
 };
 
 
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wshorten-64-to-32"
+#pragma clang diagnostic ignored "-Wimplicit-fallthrough"
+#pragma clang diagnostic ignored "-Wmissing-noreturn"
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wunneeded-internal-declaration"
+#endif
 
 #define YYSTYPE SqlNode_t
 
@@ -244,6 +252,10 @@ static int yylex ( YYSTYPE * lvalp, SqlParser_c * pParser )
 #endif
 
 #include "bissphinxql.c"
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -382,7 +394,7 @@ static Option_e ParseOption ( const CSphString& sOpt )
 	return ( pCol ? *pCol : Option_e::INVALID_OPTION );
 }
 
-bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
+static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 {
 	// trick! following vectors must be sorted, as BinarySearch used to determine presence of a value.
 	static Option_e dDeleteOptions[] = { Option_e::STORE };
@@ -1568,7 +1580,7 @@ void SqlParser_SplitClusterIndex ( CSphString & sIndex, CSphString * pCluster )
 	{
 		CSphString sTmp = sIndex; // m_sIndex.SetBinary can not accept this(m_sIndex) pointer
 
-		int iPos = sDelimiter - sIndex.cstr();
+		int iPos = int ( sDelimiter - sIndex.cstr() );
 		int iLen = sIndex.Length();
 		sIndex.SetBinary ( sTmp.cstr() + iPos + 1, iLen - iPos - 1 );
 		if ( pCluster )
@@ -1663,7 +1675,7 @@ bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, co
 			if ( sJsonDot )
 			{
 				assert ( sJsonDot>sAttrName );
-				sJsonField.SetBinary ( sAttrName, sJsonDot - sAttrName );
+				sJsonField.SetBinary ( sAttrName, int ( sJsonDot - sAttrName ) );
 				sAttrName = sJsonField.cstr();
 			}
 

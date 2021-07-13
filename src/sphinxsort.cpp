@@ -19,6 +19,7 @@
 #include "columnargrouper.h"
 #include "columnarexpr.h"
 #include "exprtraits.h"
+#include "conversion.h"
 
 #include <time.h>
 #include <math.h>
@@ -132,11 +133,11 @@ class MatchesToNewSchema_c : public MatchProcessor_i
 {
 public:
 		MatchesToNewSchema_c ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema, GetBlobPoolFromMatch_fn fnGetBlobPool, GetColumnarFromMatch_fn fnGetColumnar );
-		~MatchesToNewSchema_c();
+		~MatchesToNewSchema_c() override;
 
 	// performs actual processing acording created plan
 	void Process ( CSphMatch * pMatch ) final			{ ProcessMatch(pMatch); }
-	void Process ( VecTraits_T<CSphMatch *> & dMatches ){ dMatches.for_each ( [this]( CSphMatch * pMatch ){ ProcessMatch(pMatch); } ); }
+	void Process ( VecTraits_T<CSphMatch *> & dMatches ) final { dMatches.for_each ( [this]( CSphMatch * pMatch ){ ProcessMatch(pMatch); } ); }
 	bool ProcessInRowIdOrder() const final				{ return m_dActions.any_of ( []( const MapAction_t & i ){ return i.IsExprEval(); } ); }
 
 private:
@@ -1203,7 +1204,7 @@ void CSphUpdateQueue::DoUpdate()
 	if ( !m_iTotal )
 		return;
 
-	int iMemoryNeed = Min ( m_iCount, m_iTotal );
+	int iMemoryNeed = (int) Min ( m_iCount, m_iTotal );
 	m_tWorkSet.m_dDocids.Reserve ( iMemoryNeed );
 	m_tWorkSet.m_dRowOffset.Resize ( iMemoryNeed );
 	m_tWorkSet.m_dRowOffset.Fill ( 0 );
@@ -1413,32 +1414,38 @@ GROUPER_BEGIN_SPLIT_UTC ( CSphGrouperYearUtc )
 		return (tSplit.tm_year + 1900);
 GROUPER_END
 
-bool bGroupingInUtc = false;
+static bool g_bSortGroupingInUtc = false;
 
-CSphGrouper * getDayGrouper ( const CSphAttrLocator &tLoc )
+void SetGroupingInUtcSort ( bool bGroupingInUtc )
 {
-	return bGroupingInUtc
+	g_bSortGroupingInUtc = bGroupingInUtc;
+}
+
+
+static CSphGrouper * getDayGrouper ( const CSphAttrLocator &tLoc )
+{
+	return g_bSortGroupingInUtc
 			? (CSphGrouper *) new CSphGrouperDayUtc ( tLoc )
 			: (CSphGrouper *) new CSphGrouperDay ( tLoc );
 }
 
-CSphGrouper * getWeekGrouper ( const CSphAttrLocator &tLoc )
+static CSphGrouper * getWeekGrouper ( const CSphAttrLocator &tLoc )
 {
-	return bGroupingInUtc
+	return g_bSortGroupingInUtc
 		   ? (CSphGrouper *) new CSphGrouperWeekUtc ( tLoc )
 		   : (CSphGrouper *) new CSphGrouperWeek ( tLoc );
 }
 
-CSphGrouper * getMonthGrouper ( const CSphAttrLocator &tLoc )
+static CSphGrouper * getMonthGrouper ( const CSphAttrLocator &tLoc )
 {
-	return bGroupingInUtc
+	return g_bSortGroupingInUtc
 		   ? (CSphGrouper *) new CSphGrouperMonthUtc ( tLoc )
 		   : (CSphGrouper *) new CSphGrouperMonth ( tLoc );
 }
 
-CSphGrouper * getYearGrouper ( const CSphAttrLocator &tLoc )
+static CSphGrouper * getYearGrouper ( const CSphAttrLocator &tLoc )
 {
-	return bGroupingInUtc
+	return g_bSortGroupingInUtc
 		   ? (CSphGrouper *) new CSphGrouperYearUtc ( tLoc )
 		   : (CSphGrouper *) new CSphGrouperYear ( tLoc );
 }
@@ -1966,7 +1973,7 @@ struct CSphGroupSorterSettings
 class IAggrFunc
 {
 public:
-	virtual			~IAggrFunc() {};
+	virtual			~IAggrFunc() {}
 	virtual void	Ungroup ( CSphMatch & ) {}
 	virtual void	Update ( CSphMatch &, const CSphMatch &, bool bGrouped ) = 0;
 	virtual void	Finalize ( CSphMatch & ) {}
@@ -2151,55 +2158,61 @@ public:
 // helpers to blob serialization
 using BStream_c = TightPackedVec_T<BYTE>;
 
-BStream_c & operator<< ( BStream_c & dOut, const ByteBlob_t & tData )
+static BStream_c & operator<< ( BStream_c & dOut, const ByteBlob_t & tData )
 {
 	dOut.Append ( tData.first, tData.second );
 	return dOut;
 }
 
 template <typename NUM>
-BStream_c & operator<< ( BStream_c & dOut, NUM iNum )
+static BStream_c & operator<< ( BStream_c & dOut, NUM iNum )
 {
 	sphUnalignedWrite ( dOut.AddN ( sizeof ( NUM ) ), iNum );
 	return dOut;
 }
 
+// unused for now
+/*
 template<typename T>
-BStream_c & operator<< ( BStream_c & dOut, const VecTraits_T<T> & tData )
+static BStream_c & operator<< ( BStream_c & dOut, const VecTraits_T<T> & tData )
 {
 	dOut << tData.GetLength ();
 	tData.Apply ( [&dOut] ( const T & tChunk ) { dOut << tChunk; } );
 	return dOut;
 }
+*/
 
-BStream_c & operator<< ( BStream_c & dOut, const VecTraits_T<BYTE> & tData )
+static BStream_c & operator<< ( BStream_c & dOut, const VecTraits_T<BYTE> & tData )
 {
 	return dOut << tData.GetLength () << ByteBlob_t { tData.begin(), tData.GetLength () };
 }
 
-BStream_c & operator<< ( BStream_c & dOut, const CSphString& sData )
+// unused for now
+/*
+static BStream_c & operator<< ( BStream_c & dOut, const CSphString& sData )
 {
-	return dOut << VecTraits_T<BYTE> ( (BYTE*) sData.cstr(), sData.Length() );
+	return dOut << VecTraits_T<BYTE> ( (BYTE*) const_cast<char*>( sData.cstr() ), sData.Length() );
 }
 
-BStream_c & operator<< ( BStream_c & dOut, const StringBuilder_c & sData )
+static BStream_c & operator<< ( BStream_c & dOut, const StringBuilder_c & sData )
 {
-	return dOut << VecTraits_T<BYTE> ( (BYTE*) sData.cstr (), sData.GetLength () );
+	return dOut << VecTraits_T<BYTE> ( (BYTE*) const_cast<char*>( sData.cstr() ), sData.GetLength () );
 }
+*/
 
 // helpers to de-serialize
 template<typename NUM>
-ByteBlob_t & operator>> ( ByteBlob_t & dIn, NUM & iNum )
+static ByteBlob_t & operator>> ( ByteBlob_t & dIn, NUM & iNum )
 {
 	assert ( dIn.first );
 	assert ( dIn.second>=(int)sizeof (NUM) );
-	iNum = sphUnalignedRead ( *(NUM *) dIn.first );
+	iNum = sphUnalignedRead ( *(const NUM *) dIn.first );
 	dIn.first += sizeof ( NUM );
 	dIn.second -= sizeof ( NUM );
 	return dIn;
 }
 
-ByteBlob_t & operator>> ( ByteBlob_t & dIn, ByteBlob_t & tData )
+static ByteBlob_t & operator>> ( ByteBlob_t & dIn, ByteBlob_t & tData )
 {
 	assert ( dIn.first );
 	assert ( dIn.second>=tData.second );
@@ -2209,8 +2222,9 @@ ByteBlob_t & operator>> ( ByteBlob_t & dIn, ByteBlob_t & tData )
 	return dIn;
 }
 
-template<typename T>
-ByteBlob_t & operator>> ( ByteBlob_t & dIn, CSphVector<T>& tData )
+// unused for now
+/*template<typename T>
+static ByteBlob_t & operator>> ( ByteBlob_t & dIn, CSphVector<T> & tData )
 {
 	int iLen;
 	dIn >> iLen;
@@ -2218,8 +2232,9 @@ ByteBlob_t & operator>> ( ByteBlob_t & dIn, CSphVector<T>& tData )
 	tData.Apply ( [&dIn] ( T & tChunk ) { dIn >> tChunk; } );
 	return dIn;
 }
+*/
 
-ByteBlob_t & operator>> ( ByteBlob_t & dIn, VecTraits_T<BYTE> & tData )
+static ByteBlob_t & operator>> ( ByteBlob_t & dIn, VecTraits_T<BYTE> & tData )
 {
 	int iLen;
 	dIn >> iLen;
@@ -2442,7 +2457,7 @@ private:
 public:
 	void SetSchema ( const ISphSchema * pSchema )
 	{
-		m_pSchema = ( CSphSchemaHelper * ) pSchema; /// lazy hack
+		m_pSchema = (const CSphSchemaHelper *) pSchema; /// lazy hack
 		m_dRowBuf.Reset ( m_pSchema->GetDynamicSize() );
 	}
 
@@ -2625,10 +2640,10 @@ bool PushJsonField ( int64_t iValue, const BYTE * pBlobPool, PUSH && fnPush )
 		{
 			bool bRes = false;
 			iLen = sphJsonUnpackInt ( &pValue );
-			auto p = (int*)pValue;
+			auto p = (const int*)pValue;
 			for ( int i=0;i<iLen;i++ )
 			{
-				int64_t iPacked = sphJsonPackTypeOffset ( JSON_INT32, (BYTE*)p-pBlobPool );
+				int64_t iPacked = sphJsonPackTypeOffset ( JSON_INT32, (const BYTE*)p-pBlobPool );
 				uGroupKey = *p++;
 				bRes |= fnPush ( &iPacked, uGroupKey );
 			}
@@ -2640,11 +2655,11 @@ bool PushJsonField ( int64_t iValue, const BYTE * pBlobPool, PUSH && fnPush )
 		{
 			bool bRes = false;
 			iLen = sphJsonUnpackInt ( &pValue );
-			auto p = (int64_t*)pValue;
+			auto p = (const int64_t*)pValue;
 			ESphJsonType eType = eJson==JSON_INT64_VECTOR ? JSON_INT64 : JSON_DOUBLE;
 			for ( int i=0;i<iLen;i++ )
 			{
-				int64_t iPacked = sphJsonPackTypeOffset ( eType, (BYTE*)p-pBlobPool );
+				int64_t iPacked = sphJsonPackTypeOffset ( eType, (const BYTE*)p-pBlobPool );
 				uGroupKey = *p++;
 				bRes |= fnPush ( &iPacked, uGroupKey );
 			}
@@ -2712,7 +2727,7 @@ public:
 
 	FWD_BASECTOR( BaseGroupSorter_c )
 
-	virtual ~BaseGroupSorter_c()
+	~BaseGroupSorter_c() override
 	{
 		for ( auto &pAggregate : m_dAggregates )
 			SafeDelete ( pAggregate );
@@ -2828,7 +2843,7 @@ protected:
 	{
 		for ( auto * pAggregate : this->m_dAggregates )
 			pAggregate->Update ( tDst, tSrc, bGrouped );
-	};
+	}
 
 	void AggrUngroup ( CSphMatch & tMatch )
 	{
@@ -2881,7 +2896,6 @@ struct KBufferGroupSorter_T : public CSphMatchQueueTraits, protected BaseGroupSo
 {
 	using MYTYPE = KBufferGroupSorter_T<COMPGROUP,DISTINCT,NOTIFICATIONS>;
 	ESphGroupBy 				m_eGroupBy;     ///< group-by function
-	CSphRefcountedPtr<CSphGrouper>	m_pGrouper;
 	int							m_iLimit;		///< max matches to be retrieved
 	CSphUniqounter				m_tUniq;
 	bool						m_bSortByDistinct = false;
@@ -2896,7 +2910,6 @@ public:
 			: CSphMatchQueueTraits ( tSettings.m_iMaxMatches*GROUPBY_FACTOR )
 			, BaseGroupSorter_c ( tSettings )
 			, m_eGroupBy ( pQuery->m_eGroupFunc )
-			, m_pGrouper ( tSettings.m_pGrouper )
 			, m_iLimit ( tSettings.m_iMaxMatches )
 			, m_tGroupSorter (*this)
 			, m_tSubSorter ( *this, pComp )
@@ -2905,6 +2918,8 @@ public:
 		assert ( !DISTINCT || tSettings.m_tDistinctAttr.m_iBitOffset>=0 );
 		if_const ( NOTIFICATIONS )
 			m_dJustPopped.Reserve ( m_iSize );
+
+		m_pGrouper = tSettings.m_pGrouper;
 	}
 
 	/// schema setup
@@ -3435,8 +3450,8 @@ private:
 	// lazy resort matches so that best are located up to iBound
 	void BinaryPartition ( int iBound )
 	{
-		float COEFF = Max ( 1.0, float(Used ()) / iBound );
-		int iPivot = this->m_dIData[iBound/COEFF];
+		float COEFF = Max ( 1.0f, float(Used()) / iBound );
+		int iPivot = this->m_dIData[ int(iBound/COEFF) ];
 
 		--iBound;
 		int a=0;
@@ -3458,7 +3473,9 @@ private:
 				b = j;  // too many elems aquired; continue with left part
 			else
 				a = i;  // too less elems aquired; continue with right part
-			iPivot = this->m_dIData[( a * ( COEFF-1 )+b ) / COEFF];
+
+			int iPivotIndex = int ( ( a * ( COEFF-1 )+b ) / COEFF );
+			iPivot = this->m_dIData[iPivotIndex];
 		}
 	}
 };
@@ -4305,7 +4322,7 @@ public:
 	using KBufferGroupSorter::m_tSubSorter;
 
 	/// ctor
-	FWD_BASECTOR( CSphKBufferJsonGroupSorter );
+	FWD_BASECTOR( CSphKBufferJsonGroupSorter )
 
 	/// add entry to the queue
 	bool Push ( const CSphMatch & tMatch ) override
@@ -4316,9 +4333,9 @@ public:
 		CSphGrouper * pGrouper = this->m_pGrouper;
 		const BYTE * pBlobPool = ((CSphGrouperJsonField*)pGrouper)->GetBlobPool();
 
-		return PushJsonField ( iValue, pBlobPool, [this, &tMatch]( SphAttr_t * pAttr, SphGroupKey_t uGroupKey )
+		return PushJsonField ( iValue, pBlobPool, [this, &tMatch]( SphAttr_t * pAttr, SphGroupKey_t uMatchGroupKey )
 			{
-				return this->PushEx ( tMatch, uGroupKey, false, false, pAttr );
+				return this->PushEx ( tMatch, uMatchGroupKey, false, false, pAttr );
 			}
 		);
 	}
@@ -4991,8 +5008,8 @@ static inline ESphSortKeyPart Attr2Keypart ( ESphAttr eType )
 template < typename COMPGROUP >
 static ISphMatchSorter * sphCreateSorter3rd ( const ISphMatchComparator * pComp, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings, bool bHasPackedFactors, bool bHasAggregates )
 {
-	BYTE uSelector = 8*( tSettings.m_bJson ? 1:0 ) + 4*( pQuery->m_iGroupbyLimit>1 ? 1:0 ) + 2*( tSettings.m_bImplicit ? 1:0 ) + ( ( tSettings.m_pGrouper && tSettings.m_pGrouper->IsMultiValue() ) ? 1:0 );
-	switch ( uSelector )
+	BYTE uSelector3rd = 8*( tSettings.m_bJson ? 1:0 ) + 4*( pQuery->m_iGroupbyLimit>1 ? 1:0 ) + 2*( tSettings.m_bImplicit ? 1:0 ) + ( ( tSettings.m_pGrouper && tSettings.m_pGrouper->IsMultiValue() ) ? 1:0 );
+	switch ( uSelector3rd )
 	{
 	case 0:	CREATE_SORTER_4TH ( CSphKBufferGroupSorter,		COMPGROUP, pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
 	case 1: CREATE_SORTER_4TH ( MultiValueGroupSorter_T,	COMPGROUP, pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
@@ -5009,12 +5026,12 @@ static ISphMatchSorter * sphCreateSorter2nd ( ESphSortFunc eGroupFunc, const ISp
 {
 	switch ( eGroupFunc )
 	{
-		case FUNC_GENERIC1:		return sphCreateSorter3rd<MatchGeneric1_fn>	( pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates ); break;
-		case FUNC_GENERIC2:		return sphCreateSorter3rd<MatchGeneric2_fn>	( pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates ); break;
-		case FUNC_GENERIC3:		return sphCreateSorter3rd<MatchGeneric3_fn>	( pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates ); break;
-		case FUNC_GENERIC4:		return sphCreateSorter3rd<MatchGeneric4_fn>	( pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates ); break;
-		case FUNC_GENERIC5:		return sphCreateSorter3rd<MatchGeneric5_fn>	( pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates ); break;
-		case FUNC_EXPR:			return sphCreateSorter3rd<MatchExpr_fn>		( pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates ); break;
+		case FUNC_GENERIC1:		return sphCreateSorter3rd<MatchGeneric1_fn>	( pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+		case FUNC_GENERIC2:		return sphCreateSorter3rd<MatchGeneric2_fn>	( pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+		case FUNC_GENERIC3:		return sphCreateSorter3rd<MatchGeneric3_fn>	( pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+		case FUNC_GENERIC4:		return sphCreateSorter3rd<MatchGeneric4_fn>	( pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+		case FUNC_GENERIC5:		return sphCreateSorter3rd<MatchGeneric5_fn>	( pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+		case FUNC_EXPR:			return sphCreateSorter3rd<MatchExpr_fn>		( pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
 		default:				return nullptr;
 	}
 }
@@ -5725,7 +5742,7 @@ public:
 				pDst += iElemLen;
 			}
 
-			int iStrLen = pDst-dBuf.Begin();
+			int iStrLen = int ( pDst-dBuf.Begin() );
 			// filling junk space
 			while ( pDst<dBuf.Begin()+dBuf.GetLength() )
 				*pDst++ = '\0';
@@ -5867,16 +5884,16 @@ static ISphMatchSorter * CreatePlainSorter ( ESphSortFunc eMatchFunc, bool bKbuf
 {
 	switch ( eMatchFunc )
 	{
-		case FUNC_REL_DESC:		return CreatePlainSorter<MatchRelevanceLt_fn>	( bKbuffer, iMaxMatches, bFactors ); break;
-		case FUNC_ATTR_DESC:	return CreatePlainSorter<MatchAttrLt_fn>		( bKbuffer, iMaxMatches, bFactors ); break;
-		case FUNC_ATTR_ASC:		return CreatePlainSorter<MatchAttrGt_fn>		( bKbuffer, iMaxMatches, bFactors ); break;
-		case FUNC_TIMESEGS:		return CreatePlainSorter<MatchTimeSegments_fn>	( bKbuffer, iMaxMatches, bFactors ); break;
-		case FUNC_GENERIC1:		return CreatePlainSorter<MatchGeneric1_fn>		( bKbuffer, iMaxMatches, bFactors ); break;
-		case FUNC_GENERIC2:		return CreatePlainSorter<MatchGeneric2_fn>		( bKbuffer, iMaxMatches, bFactors ); break;
-		case FUNC_GENERIC3:		return CreatePlainSorter<MatchGeneric3_fn>		( bKbuffer, iMaxMatches, bFactors ); break;
-		case FUNC_GENERIC4:		return CreatePlainSorter<MatchGeneric4_fn>		( bKbuffer, iMaxMatches, bFactors ); break;
-		case FUNC_GENERIC5:		return CreatePlainSorter<MatchGeneric5_fn>		( bKbuffer, iMaxMatches, bFactors ); break;
-		case FUNC_EXPR:			return CreatePlainSorter<MatchExpr_fn>			( bKbuffer, iMaxMatches, bFactors ); break;
+		case FUNC_REL_DESC:		return CreatePlainSorter<MatchRelevanceLt_fn>	( bKbuffer, iMaxMatches, bFactors );
+		case FUNC_ATTR_DESC:	return CreatePlainSorter<MatchAttrLt_fn>		( bKbuffer, iMaxMatches, bFactors );
+		case FUNC_ATTR_ASC:		return CreatePlainSorter<MatchAttrGt_fn>		( bKbuffer, iMaxMatches, bFactors );
+		case FUNC_TIMESEGS:		return CreatePlainSorter<MatchTimeSegments_fn>	( bKbuffer, iMaxMatches, bFactors );
+		case FUNC_GENERIC1:		return CreatePlainSorter<MatchGeneric1_fn>		( bKbuffer, iMaxMatches, bFactors );
+		case FUNC_GENERIC2:		return CreatePlainSorter<MatchGeneric2_fn>		( bKbuffer, iMaxMatches, bFactors );
+		case FUNC_GENERIC3:		return CreatePlainSorter<MatchGeneric3_fn>		( bKbuffer, iMaxMatches, bFactors );
+		case FUNC_GENERIC4:		return CreatePlainSorter<MatchGeneric4_fn>		( bKbuffer, iMaxMatches, bFactors );
+		case FUNC_GENERIC5:		return CreatePlainSorter<MatchGeneric5_fn>		( bKbuffer, iMaxMatches, bFactors );
+		case FUNC_EXPR:			return CreatePlainSorter<MatchExpr_fn>			( bKbuffer, iMaxMatches, bFactors );
 		default:				return nullptr;
 	}
 }

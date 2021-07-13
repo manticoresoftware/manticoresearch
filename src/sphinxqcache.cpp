@@ -78,7 +78,7 @@ public:
 };
 
 /// query cache instance
-Qcache_c						g_Qcache;
+static Qcache_c						g_Qcache;
 
 //////////////////////////////////////////////////////////////////////////
 void QcacheEntry_c::Append ( RowID_t uRowid, DWORD uWeight )
@@ -190,7 +190,7 @@ void QcacheEntry_c::FlushFrame()
 		uLastId = m_dFrame[i].m_tRowID;
 
 		if ( bIndexWeights )
-			m_dFrame[i].m_uWeight = m_hWeights.FindOrAdd ( m_dFrame[i].m_uWeight, m_hWeights.GetLength() );
+			m_dFrame[i].m_uWeight = m_hWeights.FindOrAdd ( m_dFrame[i].m_uWeight, (int)m_hWeights.GetLength() );
 		iWeightBytes = Max ( iWeightBytes, NumBytes ( m_dFrame[i].m_uWeight ) );
 	}
 

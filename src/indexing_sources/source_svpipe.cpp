@@ -13,10 +13,10 @@
 #include "source_svpipe.h"
 
 #include "indexcheck.h"
-#include "common_stuff.h"
 #include "schema_configurator.h"
 #include "attribute.h"
 #include "sphinxint.h"
+#include "conversion.h"
 
 class CSphSource_BaseSV : public CSphSource_Document, public CSphSchemaConfigurator<CSphSource_BaseSV>
 {
@@ -193,7 +193,7 @@ bool CSphSource_BaseSV::SetupPipe ( const CSphConfigSection & hSource, FILE * pP
 			const char * pColon = strchr ( sColumn.cstr(), ':' );
 			if ( pColon )
 			{
-				int iColon = pColon-sColumn.cstr();
+				int iColon = int ( pColon-sColumn.cstr() );
 				CSphString sTmp;
 				sTmp.SetBinary ( sColumn.cstr(), iColon );
 				sColumn.Swap ( sTmp );
@@ -447,7 +447,7 @@ CSphSource_BaseSV::ESphParseResult CSphSource_TSV::SplitColumns ( CSphString & s
 			bool bNull = !*pData;
 			bool bEOL = ( *pData=='\r' || *pData=='\n' );
 
-			int iLen = pData - m_dBuf.Begin() - iColumnStart;
+			int iLen = int ( pData - m_dBuf.Begin() ) - iColumnStart;
 			assert ( iLen>=0 );
 			m_dColumnsLen[iCol] = iLen;
 			*pData++ = '\0';
@@ -468,11 +468,11 @@ CSphSource_BaseSV::ESphParseResult CSphSource_TSV::SplitColumns ( CSphString & s
 			}
 
 			// column separator found
-			iColumnStart = pData - m_dBuf.Begin();
+			iColumnStart = int ( pData - m_dBuf.Begin() );
 			continue;
 		}
 
-		int iOff = pData - m_dBuf.Begin();
+		int iOff = int ( pData - m_dBuf.Begin() );
 
 		// if there is space at the start, move data around
 		// if not, resize the buffer
@@ -521,7 +521,7 @@ CSphSource_BaseSV::ESphParseResult CSphSource_TSV::SplitColumns ( CSphString & s
 
 	// tail data
 	assert ( pData<=pEnd );
-	m_iDataStart = pData - m_dBuf.Begin();
+	m_iDataStart = int ( pData - m_dBuf.Begin() );
 	return CSphSource_BaseSV::GOT_DOCUMENT;
 }
 
@@ -592,7 +592,7 @@ CSphSource_BaseSV::ESphParseResult CSphSource_CSV::SplitColumns ( CSphString & s
 			bool bDelimiter = ( *s==m_iDelimiter );
 			bool bQuot = ( *s=='"' );
 			bool bEscape = ( *s=='\\' );
-			int iOff = s - m_dBuf.Begin();
+			int iOff = int ( s - m_dBuf.Begin() );
 			bool bEscaped = ( iEscapeStart>=0 && iEscapeStart+1==iOff );
 
 			// escape symbol outside double quotation
@@ -648,7 +648,7 @@ CSphSource_BaseSV::ESphParseResult CSphSource_CSV::SplitColumns ( CSphString & s
 				continue;
 			}
 
-			int iLen = d - m_dBuf.Begin() - iColumnStart;
+			int iLen = int ( d - m_dBuf.Begin() - iColumnStart );
 			assert ( iLen>=0 );
 			if ( iCol<m_dColumnsLen.GetLength() )
 				m_dColumnsLen[iCol] = iLen;
@@ -670,7 +670,7 @@ CSphSource_BaseSV::ESphParseResult CSphSource_CSV::SplitColumns ( CSphString & s
 
 			assert ( bDelimiter );
 			// column separator found
-			iColumnStart = d - m_dBuf.Begin();
+			iColumnStart = int ( d - m_dBuf.Begin() );
 			bOnlySpace = true;
 			bQuoted = false;
 			bHasQuot = false;
@@ -682,8 +682,8 @@ CSphSource_BaseSV::ESphParseResult CSphSource_CSV::SplitColumns ( CSphString & s
 		// read in more data
 		/////////////////////
 
-		int iDstOff = s - m_dBuf.Begin();
-		int iSrcOff = d - m_dBuf.Begin();
+		int iDstOff = int ( s - m_dBuf.Begin() );
+		int iSrcOff = int ( d - m_dBuf.Begin() );
 
 		// if there is space at the start, move data around
 		// if not, resize the buffer
@@ -742,7 +742,7 @@ CSphSource_BaseSV::ESphParseResult CSphSource_CSV::SplitColumns ( CSphString & s
 
 	// tail data
 	assert ( s<=pEnd );
-	m_iDataStart = s - m_dBuf.Begin();
+	m_iDataStart = int ( s - m_dBuf.Begin() );
 	return CSphSource_BaseSV::GOT_DOCUMENT;
 }
 

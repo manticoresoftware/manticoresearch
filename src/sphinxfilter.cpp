@@ -18,8 +18,19 @@
 #include "histogram.h"
 #include "coroutine.h"
 #include "stackmock.h"
+#include "conversion.h"
+
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wimplicit-int-conversion"
+#pragma clang diagnostic ignored "-Wuninitialized-const-reference"
+#endif
 
 #include <boost/icl/interval.hpp>
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
 
 #if _WIN32
 #pragma warning(disable:4250) // inheritance via dominance is our intent

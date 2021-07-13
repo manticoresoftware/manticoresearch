@@ -47,7 +47,7 @@ static const char * GET_MYSQL_LIB()
 	static decltype (&mysql_fetch_fields) sph_mysql_fetch_fields = nullptr;
 	static decltype (&mysql_fetch_lengths) sph_mysql_fetch_lengths = nullptr;
 
-	bool InitDynamicMysql()
+	static bool InitDynamicMysql()
 	{
 		const char * sFuncs[] = { "mysql_free_result", "mysql_next_result", "mysql_use_result"
 			, "mysql_num_rows", "mysql_query", "mysql_errno", "mysql_error"

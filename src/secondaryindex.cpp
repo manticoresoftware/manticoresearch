@@ -478,9 +478,9 @@ class RowidIterator_Wrapper_c : public RowidIterator_i
 public:
 			RowidIterator_Wrapper_c ( columnar::BlockIterator_i * pIterator ) : m_pIterator ( pIterator ) {}
 
-	bool	HintRowID ( RowID_t tRowID ) { return m_pIterator->HintRowID(tRowID); }
-	bool	GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock );
-	int64_t	GetNumProcessed() const { return m_pIterator->GetNumProcessed(); }
+	bool	HintRowID ( RowID_t tRowID ) override { return m_pIterator->HintRowID(tRowID); }
+	bool	GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock ) override;
+	int64_t	GetNumProcessed() const override { return m_pIterator->GetNumProcessed(); }
 
 private:
 	CSphScopedPtr<columnar::BlockIterator_i> m_pIterator;
@@ -549,7 +549,6 @@ static RowidIterator_i * CreateIterator ( const CSphFilterSettings & tFilter, co
 		{
 			CREATE_ITERATOR_WITH_OPEN ( RowidIterator_LookupRange_T, tFilter, tFilter.m_iMinValue, tFilter.m_iMaxValue, pDocidLookup );
 		}
-		break;
 		
 	default:
 		break;
@@ -567,7 +566,7 @@ struct IndexWithEstimate_t : public SecondaryIndexInfo_t
 };
 
 
-bool NextSet ( CSphBitvec & dSet, const CSphVector<IndexWithEstimate_t> & dSecondaryIndexes )
+static bool NextSet ( CSphBitvec & dSet, const CSphVector<IndexWithEstimate_t> & dSecondaryIndexes )
 {
 	for ( int i = 0; i < dSet.GetBits(); i++ )
 	{
@@ -616,7 +615,7 @@ private:
 };
 
 
-float CalcQueryCost ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<IndexWithEstimate_t> & dSecondaryIndexes, int64_t iTotalDocs )
+static float CalcQueryCost ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<IndexWithEstimate_t> & dSecondaryIndexes, int64_t iTotalDocs )
 {
 	float fCost = 0.0f;
 	int64_t iDocsProcessedByIndexes = 0;
@@ -660,7 +659,7 @@ float CalcQueryCost ( const CSphVector<CSphFilterSettings> & dFilters, const CSp
 }
 
 
-void SelectIterators ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<IndexHint_t> & dHints, CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, const HistogramContainer_c & tHistograms )
+static void SelectIterators ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<IndexHint_t> & dHints, CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, const HistogramContainer_c & tHistograms )
 {
 	dEnabledIndexes.Resize(0);
 
@@ -681,9 +680,9 @@ void SelectIterators ( const CSphVector<CSphFilterSettings> & dFilters, const CS
 			continue;
 
 		IndexHint_e * pHint = nullptr;
-		ARRAY_FOREACH_COND ( i, dHints, !pHint )
-			if ( dHints[i].m_sIndex==tFilter.m_sAttrName )
-				pHint = &dHints[i].m_eHint;
+		ARRAY_FOREACH_COND ( iHint, dHints, !pHint )
+			if ( dHints[iHint].m_sIndex==tFilter.m_sAttrName )
+				pHint = &dHints[iHint].m_eHint;
 
 		if ( pHint && *pHint==INDEX_HINT_IGNORE )
 			continue;
@@ -923,15 +922,15 @@ void LookupReader_c::SetData ( const BYTE * pData )
 		return;
 
 	const BYTE * p = pData;
-	m_nDocs = *(DWORD*)p;
+	m_nDocs = *(const DWORD*)p;
 	p += sizeof(DWORD);
-	m_nDocsPerCheckpoint = *(DWORD*)p;
+	m_nDocsPerCheckpoint = *(const DWORD*)p;
 	p += sizeof(DWORD);
-	m_tMaxDocID = *(DocID_t*)p;
+	m_tMaxDocID = *(const DocID_t*)p;
 	p += sizeof(DocID_t);
 
 	m_nCheckpoints = (m_nDocs+m_nDocsPerCheckpoint-1)/m_nDocsPerCheckpoint;
-	m_pCheckpoints = (DocidLookupCheckpoint_t *)p;
+	m_pCheckpoints = (const DocidLookupCheckpoint_t *)p;
 }
 
 //////////////////////////////////////////////////////////////////////////

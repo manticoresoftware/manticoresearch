@@ -380,7 +380,9 @@ CSphString sphNormalizePath( const CSphString & sOrigPath )
 				szPath += 3;
 				continue;
 			}
-		default: break;
+			break;
+		default:
+			break;
 		}
 
 		dChunks.Add( { szPath, iChunkLen } );

@@ -48,6 +48,8 @@
 
 #endif
 
+using namespace Threads;
+
 //////////////////////////////////////////////////////////////////////////
 
 #define BINLOG_WRITE_BUFFER		256*1024
@@ -389,11 +391,11 @@ void RtSegment_t::BuildDocID2RowIDMap ( const CSphSchema & tSchema )
 {
 	m_tDocIDtoRowID.Reset(m_uRows);
 
-	int iStride = GetStride();
-	RowID_t tRowID = 0;
-
 	if ( !tSchema.GetAttr(0).IsColumnar() )
 	{
+		int iStride = GetStride();
+		RowID_t tRowID = 0;
+
 		for ( int i=0; i<m_dRows.GetLength(); i+=iStride )
 			m_tDocIDtoRowID.Add ( sphGetDocID ( &m_dRows[i] ), tRowID++ );
 	}
@@ -771,7 +773,7 @@ void MemoryWriter_c::ZipInt ( DWORD uVal )
 class RtIndex_c;
 
 /// TLS indexing accumulator (we disallow two uncommitted adds within one thread; and so need at most one)
-thread_local RtAccum_t* g_pTlsAccum;
+static thread_local RtAccum_t * g_pTlsAccum;
 
 /// binlog file view of the index
 /// everything that a given log file needs to know about an index
@@ -821,11 +823,10 @@ class BinlogWriter_c : public CSphWriter
 {
 public:
 					BinlogWriter_c ();
-	virtual			~BinlogWriter_c () {}
 
-	virtual	void	Flush ();
-	void			Write ();
-	void			Fsync ();
+	void			Flush() override;
+	void			Write();
+	void			Fsync();
 	bool			HasUnwrittenData () const { return m_iPoolUsed>0; }
 	bool			HasUnsyncedData () const { return m_iLastFsyncPos!=m_iLastWritePos; }
 
@@ -862,8 +863,8 @@ private:
 class RtBinlog_c : public ISphBinlog
 {
 public:
-	RtBinlog_c ();
-	~RtBinlog_c ();
+			RtBinlog_c();
+			~RtBinlog_c() override;
 
 	void	BinlogCommit ( int64_t * pTID, const char * sIndexName, const RtSegment_t * pSeg, const CSphVector<DocID_t> & dKlist, bool bKeywordDict );
 	void	BinlogUpdateAttributes ( int64_t * pTID, const char * sIndexName, const CSphAttrUpdate & tUpd ) final;
@@ -1455,7 +1456,7 @@ CSphSource_StringVector::CSphSource_StringVector ( const VecTraits_T<const char 
 	m_dFields.Reserve ( dFields.GetLength() + 1 );
 	for ( const char* sField : dFields )
 	{
-		m_dFields.Add ( (BYTE*) sField );
+		m_dFields.Add ( (BYTE*) const_cast<char*>(sField) );
 		m_dFieldLengths.Add ( (int) strlen ( sField ) );
 		assert ( sField );
 	}
@@ -1472,7 +1473,7 @@ CSphSource_StringVector::CSphSource_StringVector ( const VecTraits_T<VecTraits_T
 	m_dFields.Reserve ( dFields.GetLength() + 1 );
 	for ( const auto& dField : dFields )
 	{
-		m_dFields.Add ( (BYTE*) dField.begin() );
+		m_dFields.Add ( (BYTE*)const_cast<char*> ( dField.begin() ) );
 		m_dFieldLengths.Add ( dField.GetLength () );
 		assert ( dField.begin() || dField.IsEmpty () );
 	}
@@ -1877,7 +1878,7 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const InsertDocData_t & tDoc, bo
 		case SPH_ATTR_INT64SET:
 			{
 				const int64_t * pMva = &tDoc.m_dMvas[iMva];
-				int nValues = *pMva++;
+				int nValues = (int)*pMva++;
 				iMva += nValues+1;
 
 				if ( tColumn.IsColumnar() )
@@ -2411,7 +2412,8 @@ inline bool ProcessField ( RtDoc_t & tOutDoc, DWORD uHit, int iKillField, FN&& f
 	return true;
 }
 
-void CopyWordWithoutField ( CSphTightVector<BYTE> * pOutHits, RtDocWriter_t & tOutDocs, RtWord_t & tOutWord, const RtSegment_t & tSrc, RtDocReader_t & tInDocs, int iKillField  )
+
+static void CopyWordWithoutField ( CSphTightVector<BYTE> * pOutHits, RtDocWriter_t & tOutDocs, RtWord_t & tOutWord, const RtSegment_t & tSrc, RtDocReader_t & tInDocs, int iKillField  )
 {
 	assert ( iKillField>=0 );
 
@@ -3374,17 +3376,17 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 
 			DocID_t tDocID;
 
-			ARRAY_FOREACH ( i, dColumnarIterators )
+			ARRAY_FOREACH ( iIterator, dColumnarIterators )
 			{
-				auto & tIt = dColumnarIterators[i];
-				Verify ( AdvanceIterator ( tIt.first.get(), tRowID ) );
-				SetColumnarAttr ( i, tIt.second, pColumnarBuilder.Ptr(), tIt.first.get(), dTmp );
+				auto & tIterator = dColumnarIterators[iIterator];
+				Verify ( AdvanceIterator ( tIterator.first.get(), tRowID ) );
+				SetColumnarAttr ( iIterator, tIterator.second, pColumnarBuilder.Ptr(), tIterator.first.get(), dTmp );
 			}
 
 			tDocID = iColumnarIdLoc>=0 ? dColumnarIterators[iColumnarIdLoc].first->Get() : sphGetDocID(pRow);
 
-			ARRAY_FOREACH ( i, dAttrsForHistogram )
-				tHistograms.Insert ( i, dAttrsForHistogram[i].Get ( pRow, dColumnarIterators ) );
+			ARRAY_FOREACH ( iHistogram, dAttrsForHistogram )
+				tHistograms.Insert ( iHistogram, dAttrsForHistogram[iHistogram].Get ( pRow, dColumnarIterators ) );
 
 			dLookup[tNextRowID] = { tDocID, tNextRowID };
 			if ( pDocstoreBuilder.Ptr() )
@@ -3779,8 +3781,8 @@ void RtIndex_c::SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_
 	tWriter.PutDword ( tCtx.m_dCheckpoints.GetLength() );
 
 	int iInfixCodepointBytes = ( m_tSettings.m_iMinInfixLen && m_pDict->GetSettings().m_bWordDict ? m_pTokenizer->GetMaxCodepointLength() : 0 );
-	tWriter.PutByte ( iInfixCodepointBytes ); // m_iInfixCodepointBytes, v.27+
-	tWriter.PutDword ( tCtx.m_iInfixBlockOffset ); // m_iInfixBlocksOffset, v.27+
+	tWriter.PutByte ( (BYTE)iInfixCodepointBytes ); // m_iInfixCodepointBytes, v.27+
+	tWriter.PutDword ( (DWORD)tCtx.m_iInfixBlockOffset ); // m_iInfixBlocksOffset, v.27+
 	tWriter.PutDword ( tCtx.m_iInfixCheckpointWordsSize ); // m_iInfixCheckpointWordsSize, v.34+
 
 	// stats
@@ -3994,7 +3996,7 @@ bool RtIndex_c::SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, co
 	if ( tLast.Ptr() )
 		m_dRamChunks.Add ( AdoptSegment ( tLast ) );
 
-	int iSavedChunkId = pDiskChunk->GetIndexId();
+	int iSavedChunkId = (int)pDiskChunk->GetIndexId();
 
 	// update field lengths
 	if ( m_tSchema.GetAttrId_FirstFieldLen()>=0 )
@@ -4085,14 +4087,14 @@ bool RtIndex_c::LoadMeta ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath
 	uVersion = rdMeta.GetDword();
 	if ( uVersion==0 || uVersion>META_VERSION )
 	{
-		m_sLastError.SetSprintf ( "%s is v.%d, binary is v.%d", sMeta.cstr(), uVersion, META_VERSION );
+		m_sLastError.SetSprintf ( "%s is v.%u, binary is v.%u", sMeta.cstr(), uVersion, META_VERSION );
 		return false;
 	}
 
 	DWORD uMinFormatVer = 14;
 	if ( uVersion<uMinFormatVer )
 	{
-		m_sLastError.SetSprintf ( "indexes with meta prior to v.%d are no longer supported (use index_converter tool); %s is v.%d", uMinFormatVer, sMeta.cstr(), uVersion );
+		m_sLastError.SetSprintf ( "indexes with meta prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, sMeta.cstr(), uVersion );
 		return false;
 	}
 
@@ -4385,7 +4387,7 @@ bool RtIndex_c::SaveRamChunk ( const VecTraits_T<const RtSegmentRefPtf_t> &dSegm
 	for ( const RtSegment_t * pSeg : dSegments )
 	{
 		wrChunk.PutDword ( pSeg->m_uRows );
-		wrChunk.PutDword ( pSeg->m_tAliveRows.load ( std::memory_order_relaxed ) );
+		wrChunk.PutDword ( (DWORD)pSeg->m_tAliveRows.load ( std::memory_order_relaxed ) );
 		wrChunk.PutDword ( 0 );
 		SaveVector ( wrChunk, pSeg->m_dWords );
 		if ( m_bKeywordDict )
@@ -4573,7 +4575,7 @@ void RtIndex_c::PostSetup()
 	// bigram filter
 	if ( m_tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE && m_tSettings.m_eBigramIndex!=SPH_BIGRAM_ALL )
 	{
-		m_pTokenizer->SetBuffer ( (BYTE*)m_tSettings.m_sBigramWords.cstr(), m_tSettings.m_sBigramWords.Length() );
+		m_pTokenizer->SetBuffer ( (BYTE*)const_cast<char*> ( m_tSettings.m_sBigramWords.cstr() ), m_tSettings.m_sBigramWords.Length() );
 
 		BYTE * pTok = NULL;
 		while ( ( pTok = m_pTokenizer->GetToken() )!=NULL )
@@ -4692,7 +4694,7 @@ int RtIndex_c::DebugCheck ( FILE * fp )
 
 	tReporter.Done();
 
-	return tReporter.GetNumFails() + iFailsPlain;
+	return int ( tReporter.GetNumFails() + iFailsPlain );
 }
 
 void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter )
@@ -4744,7 +4746,7 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter )
 			if ( bCheckpoint )
 			{
 				nCheckpointWords = 1;
-				iCheckpointOffset = pCurWord - tSegment.m_dWords.Begin();
+				iCheckpointOffset = int ( pCurWord - tSegment.m_dWords.Begin() );
 				tWord.m_uDoc = 0;
 				if ( !m_bKeywordDict )
 					tWord.m_uWordID = 0;
@@ -4909,7 +4911,7 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter )
 					iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, sWord+1, tWord.m_uDoc, uPrevDocOffset );
 
 			// read doclist
-			DWORD uDocOffset = pCurDoc-tSegment.m_dDocs.Begin();
+			DWORD uDocOffset = DWORD ( pCurDoc-tSegment.m_dDocs.Begin() );
 			if ( tWord.m_uDoc!=uDocOffset )
 			{
 				tReporter.Fail ( "unexpected doclist offset (wordid=" UINT64_FMT "(%s)(%d), doclist_offset=%u, expected_offset=%u)",
@@ -5035,7 +5037,7 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter )
 					}
 				} else
 				{
-					DWORD uExpectedHitOffset = pCurHit-tSegment.m_dHits.Begin();
+					DWORD uExpectedHitOffset = DWORD ( pCurHit-tSegment.m_dHits.Begin() );
 					if ( tDoc.m_uHit!=uExpectedHitOffset )
 					{
 						tReporter.Fail ( "unexpected hitlist offset (segment=%d, word=%d, wordid=" UINT64_FMT ", rowid=%u, offset=%u, expected_offset=%u",
@@ -5236,10 +5238,6 @@ public:
 	RtQword_t ()
 	{
 		m_tMatch.Reset ( 0 );
-	}
-
-	virtual ~RtQword_t ()
-	{
 	}
 
 	const CSphMatch & GetNextDoc() final
@@ -5518,7 +5516,7 @@ bool RtQwordSetup_t::QwordSetup ( ISphQword * pQword ) const
 
 bool RtIndex_c::EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const
 {
-	auto pSegment = (RtSegment_t*)pCtx->m_pIndexData;
+	auto pSegment = (RtSegment_t*)const_cast<void*>(pCtx->m_pIndexData);
 	tMatch.m_pStatic = pSegment->GetDocinfoByRowID ( tMatch.m_tRowID );
 
 	pCtx->CalcFilter ( tMatch );
@@ -5535,7 +5533,7 @@ bool RtIndex_c::EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) cons
 
 ISphQword * RtQwordSetup_t::ScanSpawn () const
 {
-	return new RtScanQword_t ( m_pIndex->GetStats().m_iTotalDocuments );
+	return new RtScanQword_t ( (int)m_pIndex->GetStats().m_iTotalDocuments );
 }
 
 
@@ -6169,7 +6167,7 @@ public:
 
 	bool HasSegments () const							{ return ( m_iSeg==0 || m_dSegments.BitCount()>0 );	}
 	void Process ( CSphMatch * pMatch ) final			{ ProcessMatch ( pMatch ); }
-	void Process ( VecTraits_T<CSphMatch *> & dMatches ){ dMatches.for_each ( [this]( CSphMatch * pMatch ){ ProcessMatch(pMatch); } ); }
+	void Process ( VecTraits_T<CSphMatch *> & dMatches ) final { dMatches.for_each ( [this]( CSphMatch * pMatch ){ ProcessMatch(pMatch); } ); }
 	bool ProcessInRowIdOrder() const final				{ return m_tCtx.m_dCalcFinal.any_of ( []( const CSphQueryContext::CalcItem_t & i ){ return i.m_pExpr && i.m_pExpr->IsColumnar(); } );	}
 
 private:
@@ -6995,7 +6993,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	tCtx.BindWeights ( tQuery, m_tSchema, tMeta.m_sWarning );
 
 	CSphVector<BYTE> dFiltered;
-	const BYTE * sModifiedQuery = (BYTE *)tQuery.m_sQuery.cstr();
+	const BYTE * sModifiedQuery = (const BYTE *)tQuery.m_sQuery.cstr();
 
 	FieldFilterRefPtr_c pFieldFilter;
 	if ( m_pFieldFilter && sModifiedQuery )
@@ -7134,7 +7132,8 @@ struct CSphRtQueryFilter : public ISphQueryFilter, public ISphNoncopyable
 	}
 };
 
-void HashKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, SmallStringHash_T<CSphKeywordInfo> & hKeywords )
+
+static void HashKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, SmallStringHash_T<CSphKeywordInfo> & hKeywords )
 {
 	for ( CSphKeywordInfo & tSrc : dKeywords )
 	{
@@ -7146,6 +7145,7 @@ void HashKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, SmallStringHash_T<C
 		tDst.m_iHits += tSrc.m_iHits;
 	}
 }
+
 
 void RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const char * sQuery, const GetKeywordsSettings_t & tSettings, bool bFillOnly, CSphString * pError, const SphChunkGuard_t & tGuard ) const
 {
@@ -8657,7 +8657,7 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 	// bigram filter
 	if ( tSettings.m_tIndex.m_eBigramIndex!=SPH_BIGRAM_NONE && tSettings.m_tIndex.m_eBigramIndex!=SPH_BIGRAM_ALL )
 	{
-		pTokenizer->SetBuffer ( (BYTE*)tSettings.m_tIndex.m_sBigramWords.cstr(), tSettings.m_tIndex.m_sBigramWords.Length() );
+		pTokenizer->SetBuffer ( (BYTE*)const_cast<char*> ( tSettings.m_tIndex.m_sBigramWords.cstr() ), tSettings.m_tIndex.m_sBigramWords.Length() );
 
 		BYTE * pTok = NULL;
 		while ( ( pTok = pTokenizer->GetToken() )!=NULL )
@@ -9158,7 +9158,7 @@ void BinlogWriter_c::Write ()
 
 
 #if _WIN32
-int fsync ( int iFD )
+static int fsync ( int iFD )
 {
 	// map fd to handle
 	HANDLE h = (HANDLE) _get_osfhandle ( iFD );
@@ -9663,8 +9663,7 @@ void RtBinlog_c::LoadMeta ()
 	// so let's support empty (!) binlogs w/ known versions and compatible metas
 	DWORD uVersion = rdMeta.GetDword();
 	if ( uVersion==1 || uVersion>BINLOG_VERSION )
-		sphDie ( "binlog meta file %s is v.%d, binary is v.%d; recovery requires previous binary version",
-			sMeta.cstr(), uVersion, BINLOG_VERSION );
+		sphDie ( "binlog meta file %s is v.%u, binary is v.%u; recovery requires previous binary version", sMeta.cstr(), uVersion, BINLOG_VERSION );
 
 	const bool bLoaded64bit = ( rdMeta.GetByte()==1 );
 	m_dLogFiles.Resize ( rdMeta.UnzipInt() ); // FIXME! sanity check
@@ -9675,8 +9674,7 @@ void RtBinlog_c::LoadMeta ()
 	// ok, so there is actual recovery data
 	// let's require that exact version and bitness, then
 	if ( uVersion!=BINLOG_VERSION )
-		sphDie ( "binlog meta file %s is v.%d, binary is v.%d; recovery requires previous binary version",
-			sMeta.cstr(), uVersion, BINLOG_VERSION );
+		sphDie ( "binlog meta file %s is v.%u, binary is v.%u; recovery requires previous binary version", sMeta.cstr(), uVersion, BINLOG_VERSION );
 
 	if ( !bLoaded64bit )
 		sphDie ( "indexes with 32-bit docids are no longer supported; recovery requires previous binary version" );
@@ -9876,7 +9874,7 @@ int RtBinlog_c::ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, D
 
 	DWORD uVersion = tReader.GetDword();
 	if ( uVersion!=BINLOG_VERSION || tReader.GetErrorFlag() )
-		sphDie ( "binlog: log %s is v.%d, binary is v.%d; recovery requires previous binary version", sLog.cstr(), uVersion, BINLOG_VERSION );
+		sphDie ( "binlog: log %s is v.%u, binary is v.%u; recovery requires previous binary version", sLog.cstr(), uVersion, BINLOG_VERSION );
 
 	/////////////
 	// do replay
@@ -10019,7 +10017,7 @@ bool RtBinlog_c::ReplayCommit ( int iBinlog, DWORD uReplayFlags, BinlogReader_c 
 	CSphRefcountedPtr<RtSegment_t> pSeg;
 	CSphVector<DocID_t> dKlist;
 
-	DWORD uRows = tReader.UnzipOffset();
+	DWORD uRows = (DWORD)tReader.UnzipOffset();
 	if ( uRows )
 	{
 		pSeg = new RtSegment_t(uRows);
@@ -10670,11 +10668,11 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSche
 	}
 
 	// add id column
-	CSphColumnInfo tCol ( sphGetDocidName() );
-	tCol.m_eAttrType = SPH_ATTR_BIGINT;
+	CSphColumnInfo tDocIdCol ( sphGetDocidName() );
+	tDocIdCol.m_eAttrType = SPH_ATTR_BIGINT;
 	if ( !bPQ )
-		SetColumnarFlag ( tCol, tSettings );
-	tSchema.AddAttr ( tCol, false );
+		SetColumnarFlag ( tDocIdCol, tSettings );
+	tSchema.AddAttr ( tDocIdCol, false );
 
 	// attrs
 	const int iNumTypes = 9;
@@ -10725,11 +10723,11 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSche
 	// add blob attr locator
 	if ( tSchema.HasBlobAttrs() )
 	{
-		CSphColumnInfo tCol ( sphGetBlobLocatorName() );
-		tCol.m_eAttrType = SPH_ATTR_BIGINT;
+		CSphColumnInfo tBlobLocCol ( sphGetBlobLocatorName() );
+		tBlobLocCol.m_eAttrType = SPH_ATTR_BIGINT;
 
 		// should be right after docid
-		tSchema.InsertAttr ( 1, tCol, false );
+		tSchema.InsertAttr ( 1, tBlobLocCol, false );
 
 		// rebuild locators in the schema
 		const char * szTmpColName = "$_tmp";

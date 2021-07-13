@@ -39,7 +39,7 @@ using VecListedPointers_t = CSphFixedVector<ListedPointer_t>;
 using RetiredPointer_t = std::pair <void*,Deleter_fn>;
 
 // for tracking that alloc/dealloc of hazard is in one thread
-ThreadRole thHazardThread;
+static ThreadRole thHazardThread;
 
 using fnHazardProcessor=std::function<void ( Pointer_t )>;
 
@@ -89,7 +89,7 @@ struct Storage_t : public VecListedPointers_t
 };
 
 // to ensure whole retiring operation done in one thread
-ThreadRole thRetiringThread;
+static ThreadRole thRetiringThread;
 
 using VecRetiredPointers_t = CSphVector<RetiredPointer_t>;
 
@@ -287,7 +287,8 @@ RetiredSink_c& dGlobalSink ()
 }
 } // unnamed namespace
 
-ThreadState_c & ThreadState ()
+
+static ThreadState_c & ThreadState ()
 {
 	static thread_local ThreadState_c tState;
 	return tState;

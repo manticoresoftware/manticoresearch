@@ -321,7 +321,7 @@ uint64_t LibcCSHash_fn::Hash ( const BYTE * pStr, int iLen, uint64_t uPrev )
 
 	assert ( pStr && iLen );
 
-	int iCompositeLen = iLen + 1 + (int)( 3.0f * iLen ) + LOCALE_SAFE_GAP;
+	int iCompositeLen = iLen + 1 + (int)( 3.0f * (float)iLen ) + LOCALE_SAFE_GAP;
 	CSphFixedVector<BYTE> dBuf { iCompositeLen };
 
 	memcpy ( dBuf.Begin(), pStr, iLen );

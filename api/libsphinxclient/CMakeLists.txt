@@ -21,6 +21,11 @@ PROJECT ( SPHINXCLIENT
 add_library ( sphinxclient STATIC sphinxclient.c )
 target_compile_options (sphinxclient PRIVATE $<$<COMPILE_LANG_AND_ID:C,Clang,AppleClang,GNU>:-g3 -Wall -O0>)
 
+target_compile_options (sphinxclient PRIVATE $<$<COMPILE_LANG_AND_ID:C,Clang>:
+	-Wno-reserved-id-macro -Wno-extra-semi-stmt -Wno-cast-qual -Wno-sign-conversion -Wno-language-extension-token
+	-Wno-nonportable-system-include-path -Wno-format-nonliteral -Wno-missing-prototypes -Wno-sign-compare
+	-Wno-deprecated-declarations -Wno-cast-align -Wno-newline-eof>)
+
 if (NOT BUILD_TESTING OR DISABLE_GTESTS OR WIN32 OR TEST_SPECIAL_EXTERNAL )
 	return()
 endif()

@@ -56,7 +56,7 @@ struct SettingsFormatterState_t;
 class SettingsWriter_c
 {
 public:
-	virtual			~SettingsWriter_c() {}
+	virtual			~SettingsWriter_c() = default;
 
 	virtual void	DumpReadable ( SettingsFormatterState_t & tState, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder ) const;
 	virtual void	Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const = 0;

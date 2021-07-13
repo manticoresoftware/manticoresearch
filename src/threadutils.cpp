@@ -242,7 +242,7 @@ public:
 		Operation & operator* ()
 		{
 			return *m_pIterator;
-		};
+		}
 
 		Iterator_c & operator++ ()
 		{

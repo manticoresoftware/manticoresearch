@@ -132,7 +132,7 @@ private:
 template<typename T>
 ColumnarAttr_Int_T<T>::ColumnarAttr_Int_T ( ESphAttr eType, int iBits )
 	: m_eType ( eType )
-	, m_uMask ( iBits==64 ? 0xFFFFFFFFFFFFFFFFULL : (T)( (1ULL<<iBits)-1 ) )
+	, m_uMask ( iBits==64 ? (T)0xFFFFFFFFFFFFFFFFULL : (T)( (1ULL<<iBits)-1 ) )
 {}
 
 template<typename T>
@@ -149,7 +149,7 @@ void ColumnarAttr_Int_T<T>::SaveData ( WRITER & tWriter )
 	tWriter.PutDword(m_eType);
 	tWriter.PutOffset(m_uMask);
 	tWriter.PutDword ( m_dValues.GetLength() );
-	tWriter.PutBytes ( m_dValues.Begin(), m_dValues.GetLengthBytes64() );
+	tWriter.PutBytes ( m_dValues.Begin(), (int)m_dValues.GetLengthBytes64() );
 }
 
 template<typename T>
@@ -158,7 +158,7 @@ void ColumnarAttr_Int_T<T>::LoadData ( READER & tReader )
 {
 	m_uMask = (T)tReader.GetOffset();
 	m_dValues.Resize ( tReader.GetDword() );
-	tReader.GetBytes ( m_dValues.Begin(), m_dValues.GetLengthBytes64() );
+	tReader.GetBytes ( m_dValues.Begin(), (int)m_dValues.GetLengthBytes64() );
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -251,7 +251,7 @@ void ColumnarAttr_String_c::Kill ( const CSphVector<RowID_t> & dKilled )
 
 		int64_t iLength, iOffset;
 		std::tie(iLength, iOffset) = GetLengthOffset ( m_dLengths, tRowID );
-		m_dData.Remove ( iOffset, iLength );
+		m_dData.Remove ( (int)iOffset, (int)iLength );
 
 		for ( RowID_t tNextRowID = tRowID+1; tNextRowID < (RowID_t)m_dLengths.GetLength(); tNextRowID++ )
 			m_dLengths[tNextRowID] -= iLength;
@@ -263,18 +263,18 @@ void ColumnarAttr_String_c::SaveData ( WRITER & tWriter )
 {
 	tWriter.PutDword(m_eType);
 	tWriter.PutDword ( m_dLengths.GetLength() );
-	tWriter.PutBytes ( m_dLengths.Begin(), m_dLengths.GetLengthBytes64() );
+	tWriter.PutBytes ( m_dLengths.Begin(), (int)m_dLengths.GetLengthBytes64() );
 	tWriter.PutDword ( m_dData.GetLength() );
-	tWriter.PutBytes ( m_dData.Begin(), m_dData.GetLengthBytes64() );
+	tWriter.PutBytes ( m_dData.Begin(), (int)m_dData.GetLengthBytes64() );
 }
 
 template <typename READER>
 void ColumnarAttr_String_c::LoadData ( READER & tReader )
 {
 	m_dLengths.Resize ( tReader.GetDword() );
-	tReader.GetBytes ( m_dLengths.Begin(), m_dLengths.GetLengthBytes64() );
+	tReader.GetBytes ( m_dLengths.Begin(), (int)m_dLengths.GetLengthBytes64() );
 	m_dData.Resize ( tReader.GetDword() );
-	tReader.GetBytes ( m_dData.Begin(), m_dData.GetLengthBytes64() );
+	tReader.GetBytes ( m_dData.Begin(), (int)m_dData.GetLengthBytes64() );
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -359,7 +359,7 @@ template <typename T>
 void ColumnarAttr_MVA_T<T>::AddDoc ( const int64_t * pData, int iLength )
 {
 	m_iTotalLength += iLength;
-	m_dLengths.Add(m_iTotalLength);
+	m_dLengths.Add ( (int)m_iTotalLength );
 	for ( int i = 0; i < iLength; i++ )
 		m_dData.Add ( (T)pData[i] );
 }
@@ -386,9 +386,9 @@ void ColumnarAttr_MVA_T<T>::SaveData ( WRITER & tWriter )
 {
 	tWriter.PutDword(m_eType);
 	tWriter.PutDword ( m_dLengths.GetLength() );
-	tWriter.PutBytes ( m_dLengths.Begin(), m_dLengths.GetLengthBytes64() );
+	tWriter.PutBytes ( m_dLengths.Begin(), (int)m_dLengths.GetLengthBytes64() );
 	tWriter.PutDword ( m_dData.GetLength() );
-	tWriter.PutBytes ( m_dData.Begin(), m_dData.GetLengthBytes64() );
+	tWriter.PutBytes ( m_dData.Begin(), (int)m_dData.GetLengthBytes64() );
 }
 
 template <typename T>
@@ -396,9 +396,9 @@ template <typename READER>
 void ColumnarAttr_MVA_T<T>::LoadData ( READER & tReader )
 {
 	m_dLengths.Resize ( tReader.GetDword() );
-	tReader.GetBytes ( m_dLengths.Begin(), m_dLengths.GetLengthBytes64() );
+	tReader.GetBytes ( m_dLengths.Begin(), (int)m_dLengths.GetLengthBytes64() );
 	m_dData.Resize ( tReader.GetDword() );
-	tReader.GetBytes ( m_dData.Begin(), m_dData.GetLengthBytes64() );
+	tReader.GetBytes ( m_dData.Begin(), (int)m_dData.GetLengthBytes64() );
 }
 
 ////////////////////////////////////////////////////////////////////

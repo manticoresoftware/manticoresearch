@@ -128,7 +128,7 @@ class PersistentConnectionsPool_c
 	int Step ( int* ) REQUIRES ( m_dDataLock ); // step over the ring
 
 public:
-	~PersistentConnectionsPool_c ()	{ Shutdown (); };
+	~PersistentConnectionsPool_c ()	{ Shutdown (); }
 	void	ReInit ( int iPoolSize ) REQUIRES ( !m_dDataLock );
 	int		RentConnection () REQUIRES ( !m_dDataLock );
 	void	ReturnConnection ( int iSocket ) REQUIRES ( !m_dDataLock );
@@ -219,8 +219,8 @@ struct AgentOptions_t
 };
 
 
-extern const char * sAgentStatsNames[eMaxAgentStat + ehMaxStat];
-using HostMetricsSnapshot_t = uint64_t[eMaxAgentStat + ehMaxStat];
+extern const char * sAgentStatsNames[(int)eMaxAgentStat + (int)ehMaxStat];
+using HostMetricsSnapshot_t = uint64_t[(int)eMaxAgentStat + (int)ehMaxStat];
 
 /// per-host dashboard
 struct HostDashboard_t : public ISphRefcountedMT
@@ -251,14 +251,14 @@ private:
 		DWORD m_uPeriod = 0xFFFFFFFF;
 	} m_dPeriodicMetrics[STATS_DASH_PERIODS] GUARDED_BY ( m_dMetricsLock );
 
-	~HostDashboard_t ();
+	~HostDashboard_t() override;
 };
 
 class IPinger
 {
 public:
 	virtual void Subscribe ( HostDashboard_t* pHost ) = 0;
-	virtual ~IPinger() {};
+	virtual ~IPinger() {}
 };
 
 void SetGlobalPinger ( IPinger* pPinger );
@@ -407,9 +407,6 @@ public:
 	// called by outline observer, or by netloop checking for orphaned
 	// must return 'true' if reporter is abandoned - i.e. if all expected connections are finished.
 	virtual bool IsDone () const = 0;
-
-protected:
-	virtual ~Reporter_i () {};
 };
 
 #if _WIN32
@@ -429,18 +426,21 @@ protected:
 		CSphFixedVector<BYTE>				m_dReadBuf { 0 };	// used for canceling recv operation
 		CSphVector<ISphOutputBuffer *>		m_dWriteBuf;		// used for canceling send operation
 		CSphVector<sphIovec>				m_dOutIO;			// used for canceling send operation
-		inline bool IsInUse ()
+
+		inline bool IsInUse()
 		{
 			return m_dWrite.m_bInUse || m_dRead.m_bInUse;
-		};
-		DoubleOverlapped_t ()
+		}
+
+		DoubleOverlapped_t()
 		{
 			m_dWrite.Zero();
 			m_dRead.Zero();
 			m_dWrite.m_uParentOffset = (LPBYTE) &m_dWrite-(LPBYTE) this;
 			m_dRead.m_uParentOffset = (LPBYTE) &m_dRead-(LPBYTE) this;
 		}
-		~DoubleOverlapped_t ()
+
+		~DoubleOverlapped_t()
 		{
 			for ( auto* pWriteBuf : m_dWriteBuf )
 				SafeDelete (pWriteBuf);
@@ -699,7 +699,7 @@ struct DistributedIndex_t : public ServedStats_c, public ISphRefcountedMT
 	void ForEveryHost ( ProcessFunctor );
 
 private:
-	~DistributedIndex_t ();
+	~DistributedIndex_t() override;
 };
 
 using DistributedIndexRefPtr_t = CSphRefcountedPtr<DistributedIndex_t>;
@@ -712,7 +712,7 @@ public:
 		: RLockedHashIt_c ( pHash )
 	{}
 
-	~RLockedDistrIt_c () UNLOCK_FUNCTION() {};
+	~RLockedDistrIt_c () UNLOCK_FUNCTION() {}
 
 	DistributedIndexRefPtr_t Get () REQUIRES_SHARED ( m_pHash->IndexesRWLock () )
 	{
@@ -860,7 +860,8 @@ extern ThreadRole NetPoollingThread;
 
 struct NetPollEvent_t : public EnqueuedTimeout_t, public ISphRefcountedMT
 {
-	struct {
+	struct
+	{
 		mutable void *		pPtr = nullptr; // opaque pointer to internals of poller
 		mutable int			iIdx = -1;		// or opaque index to internals of poller
 	}					m_tBack;
@@ -886,10 +887,6 @@ struct NetPollEvent_t : public EnqueuedTimeout_t, public ISphRefcountedMT
 	{
 		return m_tBack.pPtr!=nullptr || m_tBack.iIdx!=-1;
 	}
-
-protected:
-	virtual ~NetPollEvent_t ()
-	{}
 };
 
 using NetPoolEventRefPtr_c = CSphRefcountedPtr<NetPollEvent_t>;

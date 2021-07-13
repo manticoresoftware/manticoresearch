@@ -65,7 +65,7 @@ void SetLocalTemporaryUserVar ( const CSphString & sName, VecTraits_T<DocID_t> &
 	UservarAdd ( sName, dSetValues, false );
 }
 
-UservarIntSet_c UservarsHook ( const CSphString& sUservar )
+static UservarIntSet_c UservarsHook ( const CSphString& sUservar )
 {
 	ScRL_t rLock ( g_tUservarsMutex );
 	Uservar_t* pVar = g_hUservars ( sUservar );

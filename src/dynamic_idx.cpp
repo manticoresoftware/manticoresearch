@@ -13,6 +13,8 @@
 #include "dynamic_idx.h"
 #include "sphinxsort.h"
 
+using namespace Threads;
+
 class Feeder_c : public RowBuffer_i
 {
 	CSphSchema* 	m_pSchema = nullptr;
@@ -174,9 +176,9 @@ public:
 	void PutPercentAsString ( int64_t iVal, int64_t iBase ) override
 	{
 		if ( iBase )
-			PutFloatAsString ( iVal * 100.0 / iBase, nullptr );
+			PutFloatAsString ( iVal * 100.0f / iBase, nullptr );
 		else
-			PutFloatAsString ( 100.0, nullptr );
+			PutFloatAsString ( 100.0f, nullptr );
 	}
 
 	void PutNumAsString ( int64_t iVal ) override
@@ -496,7 +498,7 @@ public:
 		*m_ppIndex = this;
 	}
 
-	~GenericTableIndex_c ()
+	~GenericTableIndex_c() override
 	{
 		*m_ppIndex = nullptr;
 	}
@@ -548,7 +550,7 @@ public:
 
 	void Process ( CSphMatch * pMatch ) final			{ ProcessMatch(pMatch); }
 	bool ProcessInRowIdOrder() const final				{ return false;	}
-	void Process ( VecTraits_T<CSphMatch *> & dMatches ){ dMatches.for_each ( [this]( CSphMatch * pMatch ){ ProcessMatch(pMatch); } ); }
+	void Process ( VecTraits_T<CSphMatch *> & dMatches ) final { dMatches.for_each ( [this]( CSphMatch * pMatch ){ ProcessMatch(pMatch); } ); }
 
 private:
 	int							m_iTag;

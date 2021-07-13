@@ -83,6 +83,11 @@ typedef struct st_sphinx_udf_init
 	char						is_const;		///< whether a function returns a constant
 } SPH_UDF_INIT;
 
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wlanguage-extension-token"
+#endif
+
 /// integer return types
 #if defined(_MSC_VER) || defined(__WIN__)
 typedef __int64					sphinx_int64_t;
@@ -90,6 +95,10 @@ typedef unsigned __int64		sphinx_uint64_t;
 #else
 typedef long long				sphinx_int64_t;
 typedef unsigned long long		sphinx_uint64_t;
+#endif
+
+#ifdef __clang__
+#pragma clang diagnostic pop
 #endif
 
 //////////////////////////////////////////////////////////////////////////

@@ -12,6 +12,7 @@
 
 #include "attribute.h"
 #include "sphinxint.h"
+#include "conversion.h"
 #include <math.h>
 
 template <typename T>
@@ -450,14 +451,13 @@ void HistogramStreamed_T<T>::Aggregate ( int iBins )
 template<typename T>
 int HistogramStreamed_T<T>::GetBucket ( T tValue, bool bCounterLess ) const
 {
-	T tVal = ConvertType<T> ( tValue );
-	if ( tVal<m_tMinValue )
+	if ( tValue<m_tMinValue )
 		return 0;
-	if ( tVal>m_tMaxValue )
+	if ( tValue>m_tMaxValue )
 		return ( m_iSize - 1 );
 
 	// m_dBuckets is larger than m_iSize
-	int iBestBucket = FindSpan ( m_dBuckets.Slice ( 0, m_iSize ), tVal );
+	int iBestBucket = FindSpan ( m_dBuckets.Slice ( 0, m_iSize ), tValue );
 
 	assert ( iBestBucket>=0 && iBestBucket<m_iSize );
 
@@ -465,7 +465,7 @@ int HistogramStreamed_T<T>::GetBucket ( T tValue, bool bCounterLess ) const
 	{
 		const HSBucket_T<T> & tBucketL = m_dBuckets[iBestBucket];
 		const HSBucket_T<T> & tBucketR = m_dBuckets[iBestBucket+1];
-		T tDistL = tVal - tBucketL.m_tCentroid;
+		T tDistL = tValue - tBucketL.m_tCentroid;
 		T tDist = tBucketR.m_tCentroid - tBucketL.m_tCentroid;
 
 		if ( tDistL>( tDist/3 ) && tDistL<( tDist*2/3 ) ) // center case - select bucket with smaller \ larger counter
@@ -496,7 +496,7 @@ int HistogramStreamed_T<T>::LerpCounter ( int iBucket, T tVal ) const
 	float fLerp = (float)tDistL / (float)tDist;
 	assert ( fLerp>=0.0f && fLerp<=1.0f );
 
-	int iCount = fLerp * tBucketL.m_iCount + ( 1.0f - fLerp ) * tBucketR.m_iCount;
+	int iCount = int ( fLerp * tBucketL.m_iCount + ( 1.0f - fLerp ) * tBucketR.m_iCount );
 
 	return iCount;
 }
@@ -504,14 +504,13 @@ int HistogramStreamed_T<T>::LerpCounter ( int iBucket, T tVal ) const
 template<typename T>
 HSBucketTrait_t HistogramStreamed_T<T>::GetBucket ( T tValue ) const
 {
-	T tVal = ConvertType<T> ( tValue );
-	if ( tVal<m_tMinValue )
+	if ( tValue<m_tMinValue )
 		return HSBucketTrait_t ( 0, m_dBuckets[0].m_iCount );
 
-	if ( tVal>m_tMaxValue )
+	if ( tValue>m_tMaxValue )
 		return HSBucketTrait_t (  m_iSize - 1, m_dBuckets[m_iSize-1].m_iCount );
 
-	int iItem = FindSpan ( m_dBuckets.Slice ( 0, m_iSize ), tVal );
+	int iItem = FindSpan ( m_dBuckets.Slice ( 0, m_iSize ), tValue );
 	int iCount = 0;
 
 	assert ( iItem>=0 && iItem<m_iSize );
@@ -519,7 +518,7 @@ HSBucketTrait_t HistogramStreamed_T<T>::GetBucket ( T tValue ) const
 	if ( iItem==m_iSize-1 )
 		iCount = m_dBuckets[iItem].m_iCount;
 	else
-		iCount = LerpCounter ( iItem, tVal );
+		iCount = LerpCounter ( iItem, tValue );
 
 	return HSBucketTrait_t ( iItem, iCount );
 }
@@ -554,7 +553,7 @@ bool HistogramStreamed_T<T>::EstimateRsetSize ( const CSphFilterSettings & tFilt
 
 	case SPH_FILTER_FLOATRANGE:
 		assert ( TYPE==HISTOGRAM_STREAMED_FLOAT );
-		iEstimate = EstimateRangeFilter ( tFilter.m_bExclude, tFilter.m_bHasEqualMin, tFilter.m_bHasEqualMax, tFilter.m_bOpenLeft, tFilter.m_bOpenRight, tFixedSettings.m_fMinValue, tFixedSettings.m_fMaxValue );
+		iEstimate = EstimateRangeFilter ( tFilter.m_bExclude, tFilter.m_bHasEqualMin, tFilter.m_bHasEqualMax, tFilter.m_bOpenLeft, tFilter.m_bOpenRight, (T)tFixedSettings.m_fMinValue, (T)tFixedSettings.m_fMaxValue );
 		return true;
 
 	default:

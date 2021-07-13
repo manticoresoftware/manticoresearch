@@ -2020,7 +2020,7 @@ void ExtTerm_T<USE_BM25>::CollectHits ( const ExtDoc_t * pMatched )
 	// so let's drop the stored hits that we already used
 	// so that we won't need to loop through them the next time GetHits gets called for the same docs chunk
 	// however, remove only the hits that we've processed. others will be processed in the next GetDocsChunk() call
-	int nProcessed = pStoredHit-m_dStoredHits.Begin();
+	int nProcessed = int ( pStoredHit-m_dStoredHits.Begin() );
 	m_dStoredHits.Pop();	// end marker
 	m_dStoredHits.Remove ( 0, nProcessed );
 }
@@ -2187,7 +2187,7 @@ void ExtTermHitless_T<USE_BM25>::CollectHits ( const ExtDoc_t * pMatched )
 		*(this->m_pNanoBudget) -= g_iPredictorCostHit*nHits;
 
 	// same logic as in ExtTerm_T::CollectHits
-	int nProcessed = pStoredHit-this->m_dStoredHits.Begin();
+	int nProcessed = int ( pStoredHit-this->m_dStoredHits.Begin() );
 	this->m_dStoredHits.Pop();	// end marker
 	this->m_dStoredHits.Remove ( 0, nProcessed );
 }
@@ -2229,7 +2229,7 @@ void BufferedNode_c::CopyMatchingHits ( CSphVector<ExtHit_t> & dHits, const ExtD
 	}
 
 	// remove only the hits that we've processed. others will be processed in the next GetDocsChunk() call
-	int nProcessed = pMyHit-m_dMyHits.Begin();
+	int nProcessed = int ( pMyHit-m_dMyHits.Begin() );
 	m_dMyHits.Pop();	// end marker
 	m_dMyHits.Remove ( 0, nProcessed );
 }
@@ -2782,7 +2782,7 @@ ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::ExtMultiAnd_T ( const VecTraits_T<XQNode_t*
 		tNode.m_pQword = CreateQueryWord ( tXQNode.m_dWords[0], tSetup );
 		assert ( tNode.m_pQword );
 		tNode.m_iAtomPos = tNode.m_pQword->m_iAtomPos;
-		tNode.m_uNodepos = i;
+		tNode.m_uNodepos = (WORD)i;
 		tNode.m_bNotWeighted = tXQNode.m_bNotWeighted;
 		tNode.m_dQueriedFields = tXQNode.m_dSpec.m_dFieldMask;
 		tNode.UpdateWideFieldFlag(tSetup);
@@ -3140,7 +3140,7 @@ inline void ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::PushNextHit ( int iNode )
 			tNode.m_bHitsOver = true;
 		else if ( tNode.m_dQueriedFields.Test ( HITMAN::GetField(uHit) ) )
 		{
-			m_tQueue.Push ( HitWithQpos_t ( iNode, uHit, tNode.m_iAtomPos ) );
+			m_tQueue.Push ( HitWithQpos_t ( iNode, uHit, (WORD)tNode.m_iAtomPos ) );
 			break;
 		}
 	}
@@ -3214,7 +3214,7 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::CollectHits ( const ExtDoc_t * pMatche
 		*m_pNanoBudget -= g_iPredictorCostHit*nHits;
 
 	// look at ExtTerm_T for more info on this code
-	int nProcessed = pStoredHit-m_dStoredHits.Begin();
+	int nProcessed = int ( pStoredHit-m_dStoredHits.Begin() );
 	m_dStoredHits.Pop();	// end marker
 	m_dStoredHits.Remove ( 0, nProcessed );
 

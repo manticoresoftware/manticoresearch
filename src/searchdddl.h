@@ -31,7 +31,7 @@ public:
 
 			explicit DdlParser_c ( CSphVector<SqlStmt_t> & dStmt );
 
-	const char * GetLastError() const { return m_sError.scstr(); };
+	const char * GetLastError() const { return m_sError.scstr(); }
 
 	bool	AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t & tCol, AttrEngine_e eEngine = AttrEngine_e::DEFAULT );
 	void	AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits );

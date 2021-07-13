@@ -863,7 +863,7 @@ void sphSetDieCallback ( SphDieCallback_t pfDieCallback )
 	g_pfDieCallback = pfDieCallback;
 }
 
-void vDie ( const char * sFmt, va_list ap )
+static void vDie ( const char * sFmt, va_list ap )
 {
 	// if there's no callback,
 	// or if callback returns true,
@@ -1738,7 +1738,7 @@ int sphCpuThreadsCount ()
 }
 
 
-int GetMemPageSize ()
+static int GetMemPageSize()
 {
 #if _WIN32
 		SYSTEM_INFO tInfo;
@@ -1754,7 +1754,6 @@ int sphGetMemPageSize ()
 	static int iMemPageSize = GetMemPageSize ();
 	return iMemPageSize;
 }
-
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -2285,7 +2284,7 @@ StringBuilder_c & StringBuilder_c::operator<< ( void * pVal )
 void StringBuilder_c::Grow ( int iLen )
 {
 	assert ( m_iSize<m_iUsed + iLen + GROW_STEP );
-	m_iSize = sph::DefaultRelimit::Relimit( m_iSize, m_iUsed + iLen + GROW_STEP );
+	m_iSize = (int)sph::DefaultRelimit::Relimit ( m_iSize, m_iUsed + iLen + GROW_STEP );
 	auto * pNew = new char[m_iSize];
 	if ( m_szBuffer )
 		memcpy ( pNew, m_szBuffer, m_iUsed + 1 );

@@ -97,7 +97,7 @@ public:
 				return 0; // unexpected io failure
 		}
 
-		int iChunk = Min ( m_iBuffUsed-m_iBuffPos, iMax );
+		int iChunk = (int)Min ( m_iBuffUsed-m_iBuffPos, iMax );
 		*ppData = m_pBuff + m_iBuffPos;
 		m_iBuffPos += iChunk;
 		return iChunk;

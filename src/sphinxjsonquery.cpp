@@ -84,7 +84,7 @@ void QueryTreeBuilder_c::CollectKeywords ( const char * szStr, XQNode_t * pNode,
 
 		int iPrevDeltaPos = 0;
 		if ( m_pPlugin && m_pPlugin->m_fnPushToken )
-			sToken = m_pPlugin->m_fnPushToken ( m_pPluginData, (char*)sToken, &iPrevDeltaPos, m_pTokenizer->GetTokenStart(), m_pTokenizer->GetTokenEnd() - m_pTokenizer->GetTokenStart() );
+			sToken = m_pPlugin->m_fnPushToken ( m_pPluginData, const_cast<char*>(sToken), &iPrevDeltaPos, m_pTokenizer->GetTokenStart(), int ( m_pTokenizer->GetTokenEnd() - m_pTokenizer->GetTokenStart() ) );
 
 		m_iAtomPos += 1 + iPrevDeltaPos;
 
@@ -516,12 +516,13 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 	iTotalNodes += pMustNode ? 1 : 0;
 	iTotalNodes += pShouldNode ? 1 : 0;
 	iTotalNodes += pMustNotNode ? 1 : 0;
-	
+
+	XQNode_t * pResultNode = nullptr;
+
 	if ( !iTotalNodes )
 		return nullptr;
 	else if ( iTotalNodes==1 )
 	{
-		XQNode_t * pResultNode = nullptr;
 		if ( pMustNode )
 			pResultNode = pMustNode;
 		else if ( pShouldNode )
@@ -530,11 +531,9 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 			pResultNode = pMustNotNode;
 
 		assert ( pResultNode );
-
-		return pResultNode;
 	} else
 	{
-		XQNode_t * pResultNode = pMustNode ? pMustNode : pMustNotNode;
+		pResultNode = pMustNode ? pMustNode : pMustNotNode;
 		assert ( pResultNode );
 		
 		// combine 'must' and 'must_not' with AND
@@ -562,11 +561,9 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 
 			pResultNode = pMaybeNode;
 		}
-
-		return pResultNode;
 	}
 
-	return nullptr;
+	return pResultNode;
 }
 
 
@@ -721,21 +718,21 @@ static bool ParseLimits ( const JsonObj_c & tRoot, CSphQuery & tQuery, CSphStrin
 		return false;
 
 	if ( tLimit )
-		tQuery.m_iLimit = tLimit.IntVal();
+		tQuery.m_iLimit = (int)tLimit.IntVal();
 
 	JsonObj_c tOffset = tRoot.GetIntItem ( "offset", "from", sError );
 	if ( !sError.IsEmpty() )
 		return false;
 
 	if ( tOffset )
-		tQuery.m_iOffset = tOffset.IntVal();
+		tQuery.m_iOffset = (int)tOffset.IntVal();
 
 	JsonObj_c tMaxMatches = tRoot.GetIntItem ( "max_matches", sError, true );
 	if ( !sError.IsEmpty() )
 		return false;
 
 	if ( tMaxMatches )
-		tQuery.m_iMaxMatches = tMaxMatches.IntVal();
+		tQuery.m_iMaxMatches = (int)tMaxMatches.IntVal();
 
 	return true;
 }
@@ -830,7 +827,7 @@ bool sphParseJsonQuery ( const char * szQuery, JsonQuery_c & tQuery, bool & bPro
 }
 
 
-bool ParseJsonInsert ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t & tDocId, bool bReplace, CSphString & sError )
+static bool ParseJsonInsert ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t & tDocId, bool bReplace, CSphString & sError )
 {
 	tStmt.m_eStmt = bReplace ? STMT_REPLACE : STMT_INSERT;
 
@@ -1364,7 +1361,7 @@ void JsonRenderAccessSpecs ( JsonEscapedBuilder & tRes, const bson::Bson_c & tBs
 			tRes.AppendEscapedWithComma ( String ( tNode ).cstr() );
 		} );
 	}
-	int iPos = Int ( tBson.ChildByName ( SZ_MAX_FIELD_POS ) );
+	int iPos = (int)Int ( tBson.ChildByName ( SZ_MAX_FIELD_POS ) );
 	if ( iPos )
 		tRes.Sprintf ( "\"max_field_pos\":%d", iPos );
 
@@ -1652,7 +1649,7 @@ bool sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings
 	JsonObj_c tAffected = tJsonRoot.GetIntItem ( bUpdate ? "updated" : "deleted", sError );
 	if ( tAffected )
 	{
-		iAffected = tAffected.IntVal();
+		iAffected = (int)tAffected.IntVal();
 		return true;
 	}
 
@@ -1667,58 +1664,6 @@ bool sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings
 	return false;
 }
 
-void AddAccessSpecs ( JsonEscapedBuilder &tOut, const XQNode_t * pNode, const CSphSchema &tSchema, const StrVec_t &dZones )
-{
-	assert ( pNode );
-
-	// dump spec for keyword nodes
-	// FIXME? double check that spec does *not* affect non keyword nodes
-	if ( pNode->m_dSpec.IsEmpty () || !pNode->m_dWords.GetLength () )
-		return;
-
-	const XQLimitSpec_t &tSpec = pNode->m_dSpec;
-	if ( tSpec.m_bFieldSpec && !tSpec.m_dFieldMask.TestAll ( true ) )
-	{
-		ScopedComma_c sFieldsArray ( tOut, ",", "\"fields\":[", "]" );
-		for ( int i = 0; i<tSchema.GetFieldsCount (); ++i )
-			if ( tSpec.m_dFieldMask.Test ( i ) )
-				tOut.AppendEscapedWithComma ( tSchema.GetFieldName ( i ) );
-	}
-	tOut.Sprintf ( "\"max_field_pos\":%d", tSpec.m_iFieldMaxPos );
-
-	if ( !tSpec.m_dZones.IsEmpty () )
-	{
-		ScopedComma_c sZoneDelim ( tOut, ",", tSpec.m_bZoneSpan ? "\"zonespans\":[" : "\"zones\":[", "]" );
-		for ( int iZone : tSpec.m_dZones )
-			tOut.AppendEscapedWithComma ( dZones[iZone].cstr() );
-	}
-}
-
-void CreateKeywordNode ( JsonEscapedBuilder & tOut, const XQKeyword_t &tKeyword )
-{
-	ScopedComma_c sRoot ( tOut, ",", "{", "}");
-	tOut << "\"" SZ_TYPE "\":\"KEYWORD\")";
-	tOut << "\"" SZ_WORD "\":"; tOut.AppendEscapedSkippingComma ( tKeyword.m_sWord.cstr () );
-	tOut.Sprintf ( R"("querypos":%d)", tKeyword.m_iAtomPos);
-
-	if ( tKeyword.m_bExcluded )
-		tOut << R"("excluded":true)";
-
-	if ( tKeyword.m_bExpanded )
-		tOut << R"("expanded":true)";
-
-	if ( tKeyword.m_bFieldStart )
-		tOut << R"("field_start":true)";
-
-	if ( tKeyword.m_bFieldEnd )
-		tOut << R"("field_end":true)";
-
-	if ( tKeyword.m_bMorphed )
-		tOut << R"("morphed":true)";
-
-	if ( tKeyword.m_fBoost!=1.0f ) // really comparing floats?
-		tOut.Sprintf ( R"("boost":%f)", tKeyword.m_fBoost) ;
-}
 
 //////////////////////////////////////////////////////////////////////////
 // Highlight
@@ -2067,9 +2012,9 @@ static bool ParseSort ( const JsonObj_c & tSort, CSphQuery & tQuery, bool & bGot
 				return false;
 			}
 
-			SortField_t & tItem = dSort.Add();
-			tItem.m_sName = sSortName;
-			tItem.m_bAsc = ( sOrder=="asc" );
+			SortField_t & tAscItem = dSort.Add();
+			tAscItem.m_sName = sSortName;
+			tAscItem.m_bAsc = ( sOrder=="asc" );
 			continue;
 		}
 

@@ -28,6 +28,8 @@
 
 #endif
 
+using namespace Threads;
+
 int g_tmWait = -1;
 int	g_iThrottleAction = 0;
 const char * g_sMaxedOutMessage = "maxed out, dismissing client";
@@ -77,7 +79,7 @@ enum class NetloopState_e : BYTE
 	POLL_IDLE,
 };
 
-const char* NetloopStateName ( NetloopState_e eState )
+static const char * NetloopStateName ( NetloopState_e eState )
 {
 	switch (eState)
 	{
@@ -94,7 +96,7 @@ const char* NetloopStateName ( NetloopState_e eState )
 // display incoming string as client name in show threads
 DEFINE_RENDER( ListenTaskInfo_t )
 {
-	auto & tInfo = *(ListenTaskInfo_t *) pSrc;
+	auto & tInfo = *(ListenTaskInfo_t *) const_cast<void*>(pSrc);
 	dDst.m_sChain << (int) tInfo.m_eType << ":Listen ";
 	dDst.m_sDescription << "tick: " << tInfo.m_uTick << " works: " << tInfo.m_uWorks << " state: " << NetloopStateName ( tInfo.m_eThdState );
 }
@@ -318,8 +320,7 @@ class CSphNetLoop::Impl_c
 
 	void AddAction ( ISphNetAction * pElem ) EXCLUDES ( NetPoollingThread )
 	{
-		sphLogDebugvv ( "AddAction action as %d, events %d, timeout %d",
-				pElem->m_iSock, pElem->m_uNetEvents, (int) pElem->m_iTimeoutTimeUS );
+		sphLogDebugvv ( "AddAction action as %d, events %u, timeout %d", pElem->m_iSock, pElem->m_uNetEvents, (int) pElem->m_iTimeoutTimeUS );
 		{
 			ScopedMutex_t tExtLock ( m_tExtLock );
 			m_dWorkExternal.Add ( pElem );
@@ -472,7 +473,7 @@ void SockWrapper_c::Impl_c::NetLoopDestroying () REQUIRES ( NetPoollingThread )
 void SockWrapper_c::Impl_c::EngageWaiterAndYield ( int64_t tmTimeUntilUs )
 {
 	assert ( m_pNetLoop );
-	sphLogDebugv ( "CoYieldWith (m_iEvent=%d), timeout %d", m_uNetEvents, int(tmTimeUntilUs-sphMicroTimer ()) );
+	sphLogDebugv ( "CoYieldWith (m_iEvent=%u), timeout %d", m_uNetEvents, int(tmTimeUntilUs-sphMicroTimer ()) );
 	m_iTimeoutTimeUS = tmTimeUntilUs;
 	if ( !m_fnWakeFromPoll ) // must be set here, NOT in ctr (since m.b. constructed in different ctx)
 		m_fnWakeFromPoll = Threads::CurrentRestarter ();
@@ -486,7 +487,7 @@ void SockWrapper_c::Impl_c::EngageWaiterAndYield ( int64_t tmTimeUntilUs )
 	m_bEngaged.store ( false, std::memory_order_release );
 
 	// here we switched back by call m_fnWakeFromPoll.
-	sphLogDebugv ( "EngageWaiterAndYield awake (m_iSock=%d, events=%d)", m_iSock, m_uNetEvents );
+	sphLogDebugv ( "EngageWaiterAndYield awake (m_iSock=%d, events=%u)", m_iSock, m_uNetEvents );
 }
 
 // Called in strict order after EngageWaiterAndYield.
@@ -1027,13 +1028,17 @@ void AsyncNetInputBuffer_c::DiscardProcessed ( int iHowMany )
 
 	switch ( iHowMany ) {
 		case 0:
-			if ( iPos==m_iLen ) {
-				Resize ( 0 );
+			if ( iPos==m_iLen )
+			{
+				Resize(0);
 				iHowMany = iPos;
 			}
 			break;
 		case -1: iHowMany = iPos;
-		default: Remove ( iPos-iHowMany, iHowMany );
+		// [[clang::fallthrough]];
+		default:
+			Remove ( iPos-iHowMany, iHowMany );
+			break;
 	}
 
 	m_pCur -= iHowMany;
@@ -1093,9 +1098,9 @@ public:
 	{
 	}
 
-	void SetWTimeoutUS ( int64_t iTimeoutUS ) final { m_pSocket->SetWTimeoutUS ( iTimeoutUS ); };
+	void SetWTimeoutUS ( int64_t iTimeoutUS ) final { m_pSocket->SetWTimeoutUS ( iTimeoutUS ); }
 	int64_t GetWTimeoutUS () const final { return m_pSocket->GetWTimeoutUS (); }
-	void SetTimeoutUS ( int64_t iTimeoutUS ) final { m_pSocket->SetTimeoutUS ( iTimeoutUS ); };
+	void SetTimeoutUS ( int64_t iTimeoutUS ) final { m_pSocket->SetTimeoutUS ( iTimeoutUS ); }
 	int64_t GetTimeoutUS () const final { return m_pSocket->GetTimeoutUS (); }
 
 };

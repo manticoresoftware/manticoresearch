@@ -20,7 +20,6 @@ class ISphFilter : public columnar::BlockTester_i
 {
 public:
 				ISphFilter() = default;
-	virtual		~ISphFilter () {}
 
 	virtual void SetLocator ( const CSphAttrLocator & ) {}
 	virtual void SetRange ( SphAttr_t, SphAttr_t ) {}
@@ -84,7 +83,7 @@ struct CreateFilterContext_t
 	const HistogramContainer_c * m_pHistograms = nullptr;
 
 	CreateFilterContext_t ( const ISphSchema * pSchema=nullptr )
-		: m_pSchema ( pSchema ) {};
+		: m_pSchema ( pSchema ) {}
 
 	~CreateFilterContext_t();
 };
@@ -109,8 +108,8 @@ void SetFilterStackItemSize ( int iSize );
 class PercolateFilter_i
 {
 public:
-	PercolateFilter_i () {};
-	virtual ~PercolateFilter_i() {};
+	PercolateFilter_i () {}
+	virtual ~PercolateFilter_i() {}
 
 	virtual bool Eval ( SphAttr_t uUID ) = 0;
 	virtual void SetRange ( SphAttr_t tMin, SphAttr_t tMax ) {}
@@ -286,7 +285,7 @@ struct MvaEvalAny_c
 	template<typename T>
 	static inline bool Eval ( const VecTraits_T<T> & dMvas, SphAttr_t tValue )
 	{
-		return !!dMvas.BinarySearch(tValue);
+		return !!dMvas.BinarySearch((T)tValue);
 	}
 
 	template<typename T, bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX >

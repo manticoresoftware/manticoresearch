@@ -479,9 +479,10 @@ public:
 		return m_pTlsThis;
 	}
 };
+
 thread_local CoroWorker_c * CoroWorker_c::m_pTlsThis = nullptr;
 
-CoroWorker_c * CoWorker ()
+static CoroWorker_c * CoWorker()
 {
 	auto pWorker = CoroWorker_c::CurrentWorker();
 	assert ( pWorker && "function must be called from inside coroutine");
@@ -523,7 +524,7 @@ void CoContinue ( Handler fnHandler, int iStack )
 	WaitForDeffered ( std::move ( dWaiter ));
 }
 
-void CallPlainCoroutine ( Handler fnHandler )
+static void CallPlainCoroutine ( Handler fnHandler )
 {
 	auto pScheduler = GlobalWorkPool ();
 	CSphAutoEvent tEvent;

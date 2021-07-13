@@ -12,6 +12,16 @@
 
 #include "searchdddl.h"
 
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wshorten-64-to-32"
+#pragma clang diagnostic ignored "-Wimplicit-fallthrough"
+#pragma clang diagnostic ignored "-Wmissing-noreturn"
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wexit-time-destructors"
+#pragma clang diagnostic ignored "-Wunneeded-internal-declaration"
+#endif
+
 #define YYSTYPE SqlNode_t
 
 // unused parameter, simply to avoid type clash between all my yylex() functions
@@ -61,6 +71,10 @@ static int yylex ( YYSTYPE * lvalp, DdlParser_c * pParser )
 #endif
 
 #include "bisddl.c"
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -289,7 +303,7 @@ bool ParseDdl ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CS
 }
 
 
-const char * g_szDDL[] = { "alter", "create", "drop", "join", "import" };
+static const char * g_szDDL[] = { "alter", "create", "drop", "join", "import" };
 
 bool IsDdlQuery ( const char * szQuery, int iLen )
 {
@@ -305,7 +319,7 @@ bool IsDdlQuery ( const char * szQuery, int iLen )
 		p++;
 
 	CSphString sStatement;
-	sStatement.SetBinary ( pStart, p-pStart );
+	sStatement.SetBinary ( pStart, int ( p-pStart ) );
 	sStatement.ToLower();
 
 	for ( const auto & i : g_szDDL )

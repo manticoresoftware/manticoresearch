@@ -140,6 +140,7 @@ struct CmpPSortersByRandom_fn
 class BlobPool_c
 {
 public:
+	virtual			~BlobPool_c() = default;
 	virtual void	SetBlobPool ( const BYTE * pBlobPool ) { m_pBlobPool = pBlobPool; }
 	const BYTE *	GetBlobPool () const { return m_pBlobPool; }
 
@@ -164,7 +165,7 @@ public:
 	virtual void			SetColumnar ( const columnar::Columnar_i * ) {}
 
 protected:
-	virtual					~CSphGrouper () {}; // =default causes bunch of errors building on wheezy
+							~CSphGrouper () override {} // =default causes bunch of errors building on wheezy
 };
 
 const char *	GetInternalAttrPrefix();
@@ -172,6 +173,7 @@ int 			GetStringRemapCount ( const ISphSchema & tDstSchema, const ISphSchema & t
 bool			IsSortStringInternal ( const CSphString & sColumnName );
 bool			IsSortJsonInternal ( const CSphString & sColumnName );
 CSphString		SortJsonInternalSet ( const CSphString & sColumnName );
+void			SetGroupingInUtcSort ( bool bGroupingInUtc );
 
 /// creates proper queue for given query
 /// may return NULL on error; in this case, error message is placed in sError

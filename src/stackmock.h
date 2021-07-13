@@ -18,8 +18,7 @@
 using StackSizeTuplet_t = std::pair<int,int>; // create, eval
 
 template <typename T>
-bool EvalStackForTree ( const CSphVector<T> & dTree, int iStartNode, StackSizeTuplet_t tNodeStackSize,
-		int iTreeSizeThresh, int & iStackNeeded, const char * szName, CSphString & sError )
+bool EvalStackForTree ( const CSphVector<T> & dTree, int iStartNode, StackSizeTuplet_t tNodeStackSize, int iTreeSizeThresh, int & iStackNeeded, const char * szName, CSphString & sError )
 {
 	enum eStackSizePurpose { CREATE, EVAL };
 	iStackNeeded = -1;
@@ -52,7 +51,7 @@ bool EvalStackForTree ( const CSphVector<T> & dTree, int iStartNode, StackSizeTu
 		return false;
 	}
 
-	iStackNeeded = iCalculatedStack + 32*1024;
+	iStackNeeded = (int)iCalculatedStack + 32*1024;
 	iStackNeeded = sphRoundUp( iStackNeeded, sphGetMemPageSize() ); // round up to memory page.
 
 	// in case we're in real query processing - propagate size of stack need for evaluations (only additional part)

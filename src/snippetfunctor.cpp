@@ -241,7 +241,7 @@ TokenFunctorTraits_c::TokenFunctorTraits_c ( ISphTokenizer * pTokenizer, const S
 {
 	SafeAddRef(pTokenizer);
 	assert(m_pTokenizer);
-	m_pTokenizer->SetBuffer ( (BYTE*)szDoc, m_iDocLen );
+	m_pTokenizer->SetBuffer ( (BYTE*)const_cast<char*>(szDoc), m_iDocLen );
 	m_pDoc = m_pTokenizer->GetBufferPtr();
 	m_pDocMax = m_pTokenizer->GetBufferEnd();
 
@@ -1478,7 +1478,7 @@ void HitCollector_c::OnSPZ ( BYTE iSPZ, DWORD uPosition, const char * sZoneName,
 		assert ( ( ( m_dZones.Last()>>32 ) & UINT32_MASK )==uPosition );
 		assert ( sZoneName );
 
-		m_tContainer.AddHits ( m_pDict->GetWordID ( (BYTE *)sZoneName ), NULL, 0, HITMAN::Create ( m_iField, uPosition ) );
+		m_tContainer.AddHits ( m_pDict->GetWordID ( (BYTE *)const_cast<char*>(sZoneName) ), NULL, 0, HITMAN::Create ( m_iField, uPosition ) );
 		break;
 	default: assert ( 0 && "impossible SPZ" );
 	}

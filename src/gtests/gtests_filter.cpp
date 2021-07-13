@@ -14,12 +14,13 @@
 
 #include "sphinx.h"
 #include "sphinxfilter.h"
+#include "conversion.h"
 
 class filter_block_level : public ::testing::Test
 {
 
 protected:
-	void SetDefault ( )
+	void SetDefault()
 	{
 		tOpt.m_sAttrName = "gid";
 		tOpt.m_bExclude = false;
@@ -30,9 +31,9 @@ protected:
 		tOpt.m_eType = SPH_FILTER_RANGE;
 	}
 
-	virtual void SetUp ()
+	void SetUp() override
 	{
-		SetDefault ();
+		SetDefault();
 	}
 
 	CSphFilterSettings tOpt;

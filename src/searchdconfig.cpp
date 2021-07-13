@@ -27,6 +27,8 @@ static CSphString	g_sDataDir;
 static CSphString	g_sConfigPath;
 static bool			g_bConfigless = false;
 
+using namespace Threads;
+
 static CoroSpinlock_c	g_tSaveInProgress;
 
 extern ISphBinlog * g_pBinlog;
@@ -95,7 +97,7 @@ void ModifyDaemonPaths ( CSphConfigSection & hSearchd )
 
 
 // support for old-style absolute paths
-void MakeRelativePath ( CSphString & sPath )
+static void MakeRelativePath ( CSphString & sPath )
 {
 	bool bAbsolute = strchr ( sPath.cstr(), '/' ) || strchr ( sPath.cstr(), '\\' );
 	if ( !bAbsolute )
@@ -175,7 +177,7 @@ void ClusterOptions_t::Parse ( const CSphString & sOptions )
 
 		// set name
 		CSphString sName;
-		sName.SetBinary ( sNameStart, sCur - sNameStart );
+		sName.SetBinary ( sNameStart, int ( sCur - sNameStart ) );
 
 		// skip set char and space prior to values
 		while ( *sCur && ( sphIsSpace ( *sCur ) || *sCur=='=' ) )
@@ -187,7 +189,7 @@ void ClusterOptions_t::Parse ( const CSphString & sOptions )
 			sCur++;
 
 		CSphString sVal;
-		sVal.SetBinary ( sValStart, sCur - sValStart );
+		sVal.SetBinary ( sValStart, int ( sCur - sValStart ) );
 
 		m_hOptions.Add ( sVal, sName );
 
@@ -487,7 +489,7 @@ bool ConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_t> & dC
 	if ( !tConfigFile.Open ( sConfigPath, sError ) )
 		return false;
 
-	int iSize = tConfigFile.GetFilesize();
+	int iSize = (int)tConfigFile.GetFilesize();
 	if ( !iSize )
 		return true;
 

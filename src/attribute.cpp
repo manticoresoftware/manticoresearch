@@ -37,7 +37,7 @@ static BYTE CalcBlobRowFlags ( DWORD uTotalLen )
 }
 
 
-DWORD RowFlagsToLen ( BYTE uFlags )
+static DWORD RowFlagsToLen ( BYTE uFlags )
 {
 	switch ( uFlags )
 	{
@@ -94,7 +94,7 @@ public:
 
 		for ( int i = 0; i<nValues; i++ )
 		{
-			auto iVal = sphUnalignedRead ( *(int64_t*)pData );
+			auto iVal = sphUnalignedRead ( *(int64_t*)const_cast<BYTE*>(pData) );
 			*pResult = INT(iVal);
 			pResult++;
 			pData += iValueSize;
@@ -246,11 +246,11 @@ SphOffset_t BlobRowBuilder_File_c::Flush()
 		switch ( uFlags )
 		{
 		case BLOB_ROW_LEN_BYTE:
-			m_tWriter.PutByte(uTotalLen);
+			m_tWriter.PutByte((BYTE)uTotalLen);
 			break;
 
 		case BLOB_ROW_LEN_WORD:
-			m_tWriter.PutWord(uTotalLen);
+			m_tWriter.PutWord((WORD)uTotalLen);
 			break;
 
 		case BLOB_ROW_LEN_DWORD:
@@ -489,7 +489,7 @@ BlobRowBuilder_i * sphCreateBlobRowBuilderUpdate ( const ISphSchema & tSchema, C
 
 static int64_t GetBlobRowOffset ( const CSphRowitem * pDocinfo, int iBlobRowOffset )
 {
-	return sphUnalignedRead ( *((int64_t*)pDocinfo + iBlobRowOffset) );
+	return sphUnalignedRead ( *((int64_t*)const_cast<CSphRowitem *>(pDocinfo) + iBlobRowOffset) );
 }
 
 static int64_t GetBlobRowOffset ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator )
@@ -501,12 +501,12 @@ static int64_t GetBlobRowOffset ( const CSphMatch & tMatch, const CSphAttrLocato
 template <typename T>
 static const BYTE * GetBlobAttr ( int iBlobAttrId, int nBlobAttrs, const BYTE * pRow, int & iLengthBytes )
 {
-	T uLen1 = sphUnalignedRead ( *((T*)pRow + iBlobAttrId) );
-	T uLen0 = iBlobAttrId > 0 ? sphUnalignedRead ( *((T*)pRow + iBlobAttrId - 1) ) : 0;
+	T uLen1 = sphUnalignedRead ( *( (const T*)pRow + iBlobAttrId ) );
+	T uLen0 = iBlobAttrId > 0 ? sphUnalignedRead ( *((const T*)pRow + iBlobAttrId - 1) ) : 0;
 	iLengthBytes = (int)uLen1-uLen0;
 	assert ( iLengthBytes>=0 );
 
-	return iLengthBytes ? (const BYTE *)((T*)pRow + nBlobAttrs) + uLen0 : nullptr;
+	return iLengthBytes ? (const BYTE *)((const T*)pRow + nBlobAttrs) + uLen0 : nullptr;
 }
 
 
@@ -529,7 +529,7 @@ static const BYTE * GetBlobAttr ( const BYTE * pRow, int iBlobAttrId, int nBlobA
 template <typename T>
 static ByteBlob_t GetBlobAttr ( int iBlobAttrId, int nBlobAttrs, const BYTE * pRow )
 {
-	auto pTRow = (T*)pRow;
+	auto pTRow = (const T*)pRow;
 	T uLen1 = sphUnalignedRead ( pTRow[iBlobAttrId] );
 	T uLen0 = (iBlobAttrId > 0) ? sphUnalignedRead ( pTRow[iBlobAttrId - 1] ) : 0;
 	auto iLengthBytes = (int)uLen1-uLen0;
@@ -588,8 +588,8 @@ static int GetBlobAttrLen ( int iBlobAttrId, const BYTE * pRow )
 {
 	assert ( pRow );
 
-	T uLen1 = sphUnalignedRead ( *((T*)pRow + iBlobAttrId) );
-	T uLen0 = iBlobAttrId > 0 ? sphUnalignedRead ( *((T*)pRow+iBlobAttrId-1) ) : 0;
+	T uLen1 = sphUnalignedRead ( *((const T*)pRow + iBlobAttrId) );
+	T uLen0 = iBlobAttrId > 0 ? sphUnalignedRead ( *((const T*)pRow+iBlobAttrId-1) ) : 0;
 
 	return (int)uLen1-uLen0;
 }

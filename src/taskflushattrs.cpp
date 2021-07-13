@@ -94,13 +94,16 @@ static void SaveIndexesMT ( void* = nullptr )
 	ScheduleFlushAttrs ();
 }
 
-void EngageSaveIndexes ()
+
+static void EngageSaveIndexes()
 {
 	static TaskID iSaveTask = -1;
 	if ( iSaveTask<0 )
-		iSaveTask = TaskManager::RegisterGlobal ( "Save indexes", SaveIndexesMT,nullptr,1,1);
-	TaskManager::StartJob ( iSaveTask );
+		iSaveTask = TaskManager::RegisterGlobal ( "Save indexes", SaveIndexesMT, nullptr, 1, 1 );
+
+	TaskManager::StartJob(iSaveTask);
 }
+
 
 int CommandFlush () EXCLUDES ( MainThread )
 {

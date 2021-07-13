@@ -159,7 +159,7 @@ bool CSphSource_ODBC::SqlQuery ( const char * sQuery )
 		return false;
 	}
 
-	if ( sph_SQLExecDirect ( m_hStmt, (SQLCHAR *)sQuery, SQL_NTS )==SQL_ERROR )
+	if ( sph_SQLExecDirect ( m_hStmt, (SQLCHAR *)const_cast<char*>(sQuery), SQL_NTS )==SQL_ERROR )
 	{
 		GetSqlError ( SQL_HANDLE_STMT, m_hStmt );
 		if ( m_tParams.m_bPrintQueries )
@@ -270,8 +270,7 @@ bool CSphSource_ODBC::SqlConnect ()
 
 	char szOutConn [2048];
 	SQLSMALLINT iOutConn = 0;
-	if ( sph_SQLDriverConnect ( m_hDBC, nullptr, (SQLTCHAR*) m_sOdbcDSN.cstr(), SQL_NTS,
-		(SQLCHAR*)szOutConn, sizeof(szOutConn), &iOutConn, SQL_DRIVER_NOPROMPT )==SQL_ERROR )
+	if ( sph_SQLDriverConnect ( m_hDBC, nullptr, (SQLTCHAR*) const_cast<char*>( m_sOdbcDSN.cstr() ), SQL_NTS, (SQLCHAR*)szOutConn, sizeof(szOutConn), &iOutConn, SQL_DRIVER_NOPROMPT )==SQL_ERROR )
 	{
 		GetSqlError ( SQL_HANDLE_DBC, m_hDBC );
 		if ( m_tParams.m_bPrintQueries )
@@ -359,7 +358,7 @@ bool CSphSource_ODBC::SqlFetchRow ()
 					{
 						// data fetched ok; add trailing zero
 						tCol.m_dContents[tCol.m_iInd] = '\0';
-						tCol.m_iBytes = tCol.m_iInd;
+						tCol.m_iBytes = (int)tCol.m_iInd;
 
 					} else if ( tCol.m_iInd>=tCol.m_iBufferSize && !tCol.m_bTruncated )
 					{
@@ -428,7 +427,7 @@ bool CSphSource_ODBC::SetupODBC ( const CSphSourceParams_ODBC & tParams )
 			const char * pIdent = p;
 			while ( sphIsAlpha(*p) )
 				++p;
-			sCol.SetBinary ( pIdent, p-pIdent );
+			sCol.SetBinary ( pIdent, int ( p-pIdent ) );
 
 			// skip space
 			while ( sphIsSpace(*p) )

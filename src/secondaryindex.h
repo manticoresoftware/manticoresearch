@@ -106,7 +106,7 @@ public:
 		DocID_t tCurDocID = pFound->m_tBaseDocID;
 
 		// 1st entry doesnt have docid
-		RowID_t tRowID = sphUnalignedRead ( *(RowID_t*)pCur );
+		RowID_t tRowID = sphUnalignedRead ( *(RowID_t*)const_cast<BYTE*>(pCur) );
 		pCur += sizeof(RowID_t);
 
 		if ( tCurDocID==tDocID )
@@ -117,7 +117,7 @@ public:
 		{
 			DocID_t tDeltaDocID = sphUnzipOffset(pCur);
 			assert ( tDeltaDocID>=0 );
-			tRowID = sphUnalignedRead ( *(RowID_t*)pCur );
+			tRowID = sphUnalignedRead ( *(RowID_t*)const_cast<BYTE*>(pCur) );
 			pCur += sizeof(RowID_t);
 
 			tCurDocID += tDeltaDocID;
@@ -203,7 +203,7 @@ public:
 		if ( !m_iProcessedDocs )
 		{
 			tDocID = m_tCurDocID;
-			tRowID = sphUnalignedRead ( *(RowID_t*)m_pCur );
+			tRowID = sphUnalignedRead ( *(RowID_t*)const_cast<BYTE*>(m_pCur) );
 			m_pCur += sizeof(RowID_t);
 
 			m_iProcessedDocs++;
@@ -213,7 +213,7 @@ public:
 		DocID_t tDelta = sphUnzipOffset ( m_pCur );
 		assert ( tDelta>=0 );
 
-		tRowID = sphUnalignedRead ( *(RowID_t*)m_pCur );
+		tRowID = sphUnalignedRead ( *(RowID_t*)const_cast<BYTE*>(m_pCur) );
 		m_pCur += sizeof(RowID_t);
 
 		m_tCurDocID += tDelta;
@@ -276,6 +276,5 @@ private:
 
 
 bool WriteDocidLookup ( const CSphString & sFilename, const CSphFixedVector<DocidRowidPair_t> & dLookup, CSphString & sError );
-
 
 #endif // _secondaryindex_

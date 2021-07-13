@@ -12,6 +12,7 @@
 
 #include "sphinxjson.h"
 #include "sphinxint.h"
+#include "conversion.h"
 #include "json/cJSON.h"
 
 #if _WIN32
@@ -114,7 +115,7 @@ inline int parseUTF16 ( char* &pTarget, const char * s, const char* sMax )
 }
 
 // unescaped pEscaped, modify pEscaped to unescaped chain, return the length of unescaped
-int JsonUnescape ( char* pTarget, const char * pEscaped, int iLen )
+int JsonUnescape ( char * pTarget, const char * pEscaped, int iLen )
 {
 	assert ( pEscaped );
 	const char * s = pEscaped;
@@ -159,7 +160,7 @@ int JsonUnescape ( char* pTarget, const char * pEscaped, int iLen )
 		assert ( s<sMax );
 		// this snippet replaces a line '*d++=*s++'. On typical string (10% escapes) it provides total time about
 		// 50% better then byte-by-byte copying.
-		sEscape = ( char * ) memchr ( s, '\\', sMax - s );
+		sEscape = (const char *) memchr ( s, '\\', sMax - s );
 		if ( !sEscape )
 			sEscape = sMax;
 		auto iChunk = sEscape - s;
@@ -167,7 +168,7 @@ int JsonUnescape ( char* pTarget, const char * pEscaped, int iLen )
 		d += iChunk;
 		s += iChunk;
 	}
-	return d - pTarget;
+	return int ( d - pTarget );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -377,7 +378,7 @@ namespace // static unnamed
 				sphJsonUnpackInt ( &p );
 
 			DWORD uMask = sphGetDword ( p );
-			printf ( "%s (bloom mask: 0x%08x)\n", eType==JSON_OBJECT ? "JSON_OBJECT" : "JSON_ROOT", uMask );
+			printf ( "%s (bloom mask: 0x%08x)\n", eType==JSON_OBJECT ? "JSON_OBJECT" : "JSON_ROOT", (uint32_t)uMask );
 			p += 4; // skip bloom table
 			while ( true )
 			{
@@ -784,13 +785,22 @@ public:
 	}
 };
 
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wshorten-64-to-32"
+#pragma clang diagnostic ignored "-Wimplicit-fallthrough"
+#pragma clang diagnostic ignored "-Wmissing-noreturn"
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wunneeded-internal-declaration"
+#endif
+
 // unused parameter, simply to avoid type clash between all my yylex() functions
 #define YY_NO_UNISTD_H 1
 #define YY_DECL inline static int my_lex ( YYSTYPE * lvalp, void * yyscanner, JsonParser_c * pParser )
 
 #include "flexsphinxjson.c"
 
-void yyerror ( JsonParser_c * pParser, const char * sMessage )
+static void yyerror ( JsonParser_c * pParser, const char * sMessage )
 {
 	yy2lex_unhold ( pParser->m_pScanner );
 	pParser->m_sError.Sprintf ( "%s near '%s'", sMessage, pParser->m_pLastToken );
@@ -813,6 +823,11 @@ inline static int yylex ( YYSTYPE * lvalp, JsonParser_c * pParser )
 #endif
 
 #include "bissphinxjson.c"
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
+
 #include "sphinxutils.h"
 
 bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool bToLowercase, bool bCheckSize, CSphString & sError )
@@ -893,13 +908,13 @@ int sphJsonNodeSize ( ESphJsonType eType, const BYTE *pData )
 		if ( !p )
 			return -1;
 		iLen = sphJsonUnpackInt ( &p );
-		return p - pData + iLen * 4;
+		return int ( p - pData ) + iLen * 4;
 	case JSON_INT64_VECTOR:
 	case JSON_DOUBLE_VECTOR:
 		if ( !p )
 			return -1;
 		iLen = sphJsonUnpackInt ( &p );
-		return p - pData + iLen * 8;
+		return int ( p - pData ) + iLen * 8;
 	case JSON_STRING:
 	case JSON_STRING_VECTOR:
 	case JSON_MIXED_VECTOR:
@@ -907,7 +922,7 @@ int sphJsonNodeSize ( ESphJsonType eType, const BYTE *pData )
 		if ( !p )
 			return -1;
 		iLen = sphJsonUnpackInt ( &p );
-		return p - pData + iLen;
+		return int ( p - pData ) + iLen;
 	case JSON_ROOT:
 		if ( !p )
 			return -1;
@@ -922,7 +937,7 @@ int sphJsonNodeSize ( ESphJsonType eType, const BYTE *pData )
 			p += iLen;
 			sphJsonSkipNode ( eNode, &p );
 		}
-		return p - pData;
+		return int ( p - pData );
 	default:
 		return 0;
 	}
@@ -979,6 +994,7 @@ int sphJsonFieldLength ( ESphJsonType eType, const BYTE * pData )
 		return sphJsonUnpackInt ( &p );
 	case JSON_OBJECT:
 		sphJsonUnpackInt ( &p ); // skip size, then continue
+		// [[clang::fallthrough]];
 	case JSON_ROOT:
 		p += 4; // skip filter
 		while (true)
@@ -1110,7 +1126,6 @@ ESphJsonType sphJsonFindByIndex ( ESphJsonType eType, const BYTE ** ppValue, int
 		}
 	default:
 		return JSON_EOF;
-		break;
 	}
 }
 
@@ -1257,7 +1272,7 @@ bool sphJsonNameSplit ( const char * sName, CSphString * sColumn, CSphString * s
 	if ( !*pSep )
 		return false;
 
-	int iSep = pSep - sName;
+	int iSep = int ( pSep - sName );
 	if ( sColumn )
 	{
 		sColumn->SetBinary ( sName, iSep );
@@ -1275,22 +1290,6 @@ JsonKey_t::JsonKey_t ( const char * sKey, int iLen )
 	m_iLen = iLen;
 	m_uMask = sphJsonKeyMask ( sKey, m_iLen );
 	m_sKey.SetBinary ( sKey, m_iLen );
-}
-
-
-void JsonStoreInt ( BYTE * p, int v )
-{
-	*p++ = BYTE(DWORD(v));
-	*p++ = BYTE(DWORD(v) >> 8);
-	*p++ = BYTE(DWORD(v) >> 16);
-	*p   = BYTE(DWORD(v) >> 24);
-}
-
-
-void JsonStoreBigint ( BYTE * p, int64_t v )
-{
-	JsonStoreInt ( p, (DWORD)( v & 0xffffffffUL ) );
-	JsonStoreInt ( p+4, (int)( v>>32 ) );
 }
 
 
@@ -1407,7 +1406,7 @@ bool sphJsonStringToNumber ( const char * s, int iLen, ESphJsonType &eType, int6
 		}
 	}
 
-	iLen = pVal-sVal;
+	iLen = int ( pVal-sVal );
 	if ( !iLen || iLen==64 )
 		return false;
 
@@ -1888,7 +1887,7 @@ bool JsonObj_c::GetError ( const char * szBuf, int iBufLen, CSphString & sError 
 
 	int iLen = iErrorWindowLen;
 	if ( szErrorStart-szBuf+iLen>iBufLen )
-		iLen = iBufLen - ( szErrorStart - szBuf );
+		iLen = iBufLen - int ( szErrorStart - szBuf );
 
 	sError.SetSprintf ( "JSON parse error at: %.*s", iLen, szErrorStart );
 	return true;
@@ -2140,6 +2139,7 @@ void bson::ForEach ( const NodeHandle_t &tLocator, Action_f&& fAction )
 		break;
 	}
 	case JSON_OBJECT: sphJsonUnpackInt ( &p );
+		// [[clang::fallthrough]];
 	case JSON_ROOT:
 	{
 		p += 4; // skip bloom
@@ -2203,6 +2203,7 @@ void bson::ForEach ( const NodeHandle_t &tLocator, NamedAction_f&& fAction )
 	}
 
 	case JSON_OBJECT: sphJsonUnpackInt ( &p );
+		// [[clang::fallthrough]];
 	case JSON_ROOT:
 	{
 		p += 4; // skip bloom
@@ -2268,6 +2269,7 @@ void bson::ForSome ( const NodeHandle_t &tLocator, CondAction_f&& fAction )
 		break;
 	}
 	case JSON_OBJECT: sphJsonUnpackInt ( &p );
+		// [[clang::fallthrough]];
 	case JSON_ROOT:
 	{
 		p += 4; // skip bloom
@@ -2335,6 +2337,7 @@ void bson::ForSome ( const NodeHandle_t &tLocator, CondNamedAction_f&& fAction )
 	}
 
 	case JSON_OBJECT: sphJsonUnpackInt ( &p );
+		// [[clang::fallthrough]];
 	case JSON_ROOT:
 	{
 		p += 4; // skip bloom
@@ -2388,6 +2391,7 @@ bool Bson_c::IsEmpty() const
 		return 0==sphJsonUnpackInt ( &p );
 	case JSON_OBJECT:
 		sphJsonUnpackInt ( &p ); // skip size, no break then
+		// [[clang::fallthrough]];
 	case JSON_ROOT:
 		return JSON_EOF == ( ESphJsonType ) p[4]; // skip bloom filter
 	default:
@@ -2474,8 +2478,6 @@ NodeHandle_t Bson_c::ChildByName ( const char * sName ) const
 			return { p, eType };
 		sphJsonSkipNode ( eType, &p );
 	}
-	m_sError << "No such member " << sName;
-	return nullnode;
 }
 
 NodeHandle_t Bson_c::ChildByIndex ( int iIndex ) const
@@ -2889,6 +2891,7 @@ BsonIterator_c::BsonIterator_c ( const NodeHandle_t &dParent )
 		break;
 
 		case JSON_OBJECT: sphJsonUnpackInt ( &m_pData );
+			// [[clang::fallthrough]];
 		case JSON_ROOT:
 			{
 				m_pData += 4; // skip bloom
@@ -2930,8 +2933,11 @@ BsonIterator_c::BsonIterator_c ( const NodeHandle_t &dParent )
 			m_iSize = 1;
 			m_dData = dParent;
 			break;
+
 		case JSON_EOF:
 			Finish();
+			break;
+
 		default: break;
 	}
 	if ( !m_iSize )
@@ -2982,6 +2988,8 @@ bool BsonIterator_c::Next()
 			if ( m_eType==JSON_MIXED_VECTOR )
 				m_dData.second = ESphJsonType ( *m_pData++ );
 			m_dData.first = m_pData;
+			break;
+
 		default:
 			break;
 	}
@@ -3032,7 +3040,7 @@ public:
 	inline int MeasureAndOptimizeVector ( cJSON * pCJSON, ESphJsonType &eType )
 	{
 		int iSize = 0;
-		ESphJsonType eOutType;
+		ESphJsonType eOutType = JSON_TOTAL;
 		cJSON * pNode;
 		bool bAllSame = true;
 		cJSON_ArrayForEach( pNode, pCJSON )
@@ -3230,12 +3238,17 @@ BsonContainer2_c::BsonContainer2_c ( const char * sJson, bool bAutoconv, bool bT
 	m_dData.first = pData;
 }
 
+// unused for now
 // bench, then m.b. throw out
-bool sphJsonStringToNumberOld ( const char * s, int iLen, ESphJsonType & eType, int64_t & iVal, double & fVal )
+/*
+static bool sphJsonStringToNumberOld ( const char * s, int iLen, ESphJsonType & eType, int64_t & iVal, double & fVal )
 {
 	// skip whitespace
 	while ( iLen>0 && ( *s==' ' || *s=='\n' || *s=='\r' || *s=='\t' || *s=='\f' ) )
-		++s, --iLen;
+	{
+		++s;
+		--iLen;
+	}
 
 	if ( iLen<=0 )
 		return false;
@@ -3310,7 +3323,7 @@ bool sphJsonStringToNumberOld ( const char * s, int iLen, ESphJsonType & eType, 
 	}
 
 	return false;
-}
+}*/
 
 // stuff below used only for testing/benching
 
@@ -3374,7 +3387,7 @@ int sphJsonUnescape ( char ** pEscaped, int iLen )
 	}
 
 	*pEscaped = pStart;
-	return d - pStart;
+	return int ( d - pStart );
 }
 
 // this one moves finally nothing, just set point inside quotes and returns correct len
@@ -3429,7 +3442,7 @@ int sphJsonUnescape1 ( char ** pEscaped, int iLen )
 	}
 
 	*pEscaped = pStart;
-	return d - pStart;
+	return int ( d - pStart );
 }
 
 // Code below is non-recursive cJsonToBson.
@@ -3579,10 +3592,9 @@ bool bson::cJsonToBsonLinear ( const cJSON * pNode, CSphVector<BYTE> &dData, Str
 }
 */
 
-const char * g_dTypeNames[JSON_TOTAL] = {
-	"EOF", "INT32", "INT64", "DOUBLE", "STRING",
-	"STRING_VECTOR", "INT32_VECTOR", "INT64_VECTOR", "DOUBLE_VECTOR", "MIXED_VECTOR",
-	"OBJECT", "BOOL", "BOOL", "NULL", "ROOT_OBJECT"
+static const char * g_dTypeNames[JSON_TOTAL] =
+{
+	"EOF", "INT32", "INT64", "DOUBLE", "STRING", "STRING_VECTOR", "INT32_VECTOR", "INT64_VECTOR", "DOUBLE_VECTOR", "MIXED_VECTOR", "OBJECT", "BOOL", "BOOL", "NULL", "ROOT_OBJECT"
 };
 
 const char * JsonTypeName ( ESphJsonType eType )

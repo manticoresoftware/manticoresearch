@@ -60,7 +60,7 @@ int sphinx_factors_unpack ( const unsigned int * in, SPH_UDF_FACTORS * out )
 	// extract size, extract document-level factors
 	size = *in++;
 	out->doc_bm25 = *in++;
-	out->doc_bm25a = *(float*)in++;
+	out->doc_bm25a = *(const float*)in++;
 	out->matched_fields = *in++;
 	out->doc_word_count = *in++;
 	out->num_fields = *in++;
@@ -97,17 +97,17 @@ int sphinx_factors_unpack ( const unsigned int * in, SPH_UDF_FACTORS * out )
 			f->id = *in++;
 			f->lcs = *in++;
 			f->word_count = *in++;
-			f->tf_idf = *(float*)in++;
-			f->min_idf = *(float*)in++;
-			f->max_idf = *(float*)in++;
-			f->sum_idf = *(float*)in++;
+			f->tf_idf = *(const float*)in++;
+			f->min_idf = *(const float*)in++;
+			f->max_idf = *(const float*)in++;
+			f->sum_idf = *(const float*)in++;
 			f->min_hit_pos = (int)*in++;
 			f->min_best_span_pos = (int)*in++;
 			f->max_window_hits = (int)*in++;
 			f->min_gaps = (int)*in++;
-			f->atc = *(float*)in++;
+			f->atc = *(const float*)in++;
 			f->lccs = *in++;
-			f->wlccs = *(float*)in++;
+			f->wlccs = *(const float*)in++;
 			f->exact_hit = (char)( ( exact_hit_mask [ i>>5 ] & ( 1UL<<( i&31 ) ) )!=0 );
 			f->exact_order = (char)( ( exact_order_mask [ i>>5 ] & ( 1UL<<( i&31 ) ) )!=0 );
 		} else
@@ -133,7 +133,7 @@ int sphinx_factors_unpack ( const unsigned int * in, SPH_UDF_FACTORS * out )
 		{
 			t->id = *in++;
 			t->tf = (int)*in++;
-			t->idf = *(float*)in++;
+			t->idf = *(const float*)in++;
 		}
 	}
 
@@ -244,13 +244,13 @@ const unsigned int * sphinx_get_doc_factor_ptr ( const unsigned int * in, enum s
 		return in + 6 + fields_size;
 
 	return 0;
-};
+}
 
 
 float sphinx_get_doc_factor_float ( const unsigned int * in, enum sphinx_doc_factor f )
 {
 	if ( f==SPH_DOCF_BM25A )
-		return *(float*)&in[2];
+		return *(const float*)&in[2];
 	else
 		return 0.0f;
 }

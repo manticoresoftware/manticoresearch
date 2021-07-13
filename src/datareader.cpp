@@ -33,8 +33,8 @@ public:
 		: m_szFileName ( szFileName )
 	{}
 
-	RowID_t		UnzipRowid() override { return UnzipInt (); };
-	SphWordID_t	UnzipWordid() override { return UnzipOffset (); };
+	RowID_t		UnzipRowid() override { return UnzipInt (); }
+	SphWordID_t	UnzipWordid() override { return UnzipOffset (); }
 
 protected:
 	const char * m_szFileName = nullptr;
@@ -90,7 +90,7 @@ private:
 		m_iSize = iSize;
 	}
 
-	BYTE GetByte()
+	BYTE GetByte() override
 	{
 		auto iPos = m_pPointer - m_pBase;
 		if ( iPos>=0 && iPos<m_iSize )
@@ -315,15 +315,13 @@ private:
 
 //////////////////////////////////////////////////////////////////////////
 
-extern int g_iReadUnhinted;
-
 DataReaderFactory_c * NewProxyReader ( const CSphString & sFile, CSphString & sError, DataReaderFactory_c::Kind_e eKind, int iReadBuffer, FileAccess_e eAccess )
 {
 	auto eState = StateByKind ( eKind );
 	DataReaderFactory_c * pReader = nullptr;
 
 	if ( eAccess==FileAccess_e::FILE )
-		pReader = new DirectFactory_c ( sFile, sError, eState, iReadBuffer, g_iReadUnhinted );
+		pReader = new DirectFactory_c ( sFile, sError, eState, iReadBuffer, GetUnhintedBuffer() );
 	else
 		pReader = new MMapFactory_c ( sFile, sError, eAccess );
 

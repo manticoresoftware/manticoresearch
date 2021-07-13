@@ -364,7 +364,7 @@ Expr_Snippet_c::Expr_Snippet_c ( ISphExpr * pArglist, CSphIndex * pIndex, const 
 
 		CSphString sArgs;
 		sArgs.SetBinary ( pWords, iLen );
-		char * pWords = const_cast<char *> ( sArgs.cstr() );
+		pWords = const_cast<char *> ( sArgs.cstr() );
 
 		const char * sEnd = pWords + iLen;
 		while ( pWords<sEnd && *pWords && sphIsSpace ( *pWords ) )	pWords++;

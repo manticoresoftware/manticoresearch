@@ -39,6 +39,7 @@ class DocstoreBuilder_i;
 class IndexAlterHelper_c
 {
 public:
+	virtual			~IndexAlterHelper_c() = default;
 	virtual bool	Alter_IsMinMax ( const CSphRowitem * pDocinfo, int iStride ) const { return false; }
 
 protected:

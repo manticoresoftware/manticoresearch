@@ -385,7 +385,7 @@ int stem_ru_table_i ( LOC_CHAR_TYPE * word, int len, LOC_TABLE_ENTRY * table, LO
 
 #undef STEM_RU_FUNC
 #define STEM_RU_FUNC(func,table) \
-	int func ( LOC_CHAR_TYPE * word, int len ) \
+	static int func ( LOC_CHAR_TYPE * word, int len ) \
 	{ \
 		return stem_ru_table ( word, len, LOC_PREFIX(table), \
 			sizeof(LOC_PREFIX(table))/sizeof(LOC_TABLE_ENTRY) ); \
@@ -393,7 +393,7 @@ int stem_ru_table_i ( LOC_CHAR_TYPE * word, int len, LOC_TABLE_ENTRY * table, LO
 
 #undef STEM_RU_FUNC_I
 #define STEM_RU_FUNC_I(table) \
-	int LOC_PREFIX(stem_##table##_i) ( LOC_CHAR_TYPE * word, int len ) \
+	static int LOC_PREFIX(stem_##table##_i) ( LOC_CHAR_TYPE * word, int len ) \
 	{ \
 		return stem_ru_table_i ( word, len, LOC_PREFIX(table), LOC_PREFIX(table##_i), \
 			sizeof(LOC_PREFIX(table##_i))/sizeof(LOC_TABLE_INDEX) ); \

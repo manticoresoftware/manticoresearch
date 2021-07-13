@@ -45,7 +45,7 @@ static const char * GET_POSTGRESQL_LIB ()
 	static decltype (&PQfinish) sph_PQfinish = nullptr;
 	static decltype (&PQerrorMessage) sph_PQerrorMessage = nullptr;
 
-	bool InitDynamicPosgresql ()
+	static bool InitDynamicPosgresql ()
 	{
 		const char * sFuncs[] = {"PQgetvalue", "PQgetlength", "PQclear",
 				"PQsetdbLogin", "PQstatus", "PQsetClientEncoding", "PQexec",

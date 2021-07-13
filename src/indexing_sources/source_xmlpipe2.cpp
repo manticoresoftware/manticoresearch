@@ -14,9 +14,9 @@
 
 #include "source_xmlpipe2.h"
 #include "indexcheck.h"
-#include "common_stuff.h"
 #include "schema_configurator.h"
 #include "attribute.h"
+#include "conversion.h"
 
 #define XMLIMPORT
 #include "expat.h"
@@ -70,7 +70,7 @@ static const char * GET_ICONV_LIB ()
 	static decltype (&XML_SetElementHandler) sph_XML_SetElementHandler = nullptr;
 	static decltype (&XML_SetCharacterDataHandler) sph_XML_SetCharacterDataHandler = nullptr;
 	static decltype (&XML_SetUnknownEncodingHandler) sph_XML_SetUnknownEncodingHandler = nullptr;
-	bool InitDynamicExpat ()
+	static bool InitDynamicExpat ()
 	{
 		const char * sFuncs[] = { "XML_ParserFree", "XML_Parse",
 				"XML_GetCurrentColumnNumber", "XML_GetCurrentLineNumber", "XML_GetErrorCode", "XML_ErrorString",
@@ -109,7 +109,7 @@ static const char * GET_ICONV_LIB ()
 		static decltype (&iconv_close) sph_iconv_close = nullptr;
 		static decltype (&iconv_open) sph_iconv_open = nullptr;
 
-		bool InitDynamicIconv ()
+		static bool InitDynamicIconv ()
 		{
 			const char * sFuncs[] = { "iconv", "iconv_close", "iconv_open" };
 			void ** pFuncs[] = { (void **) & sph_iconv, (void **) & sph_iconv_close, (void **) & sph_iconv_open, };

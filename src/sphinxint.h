@@ -308,7 +308,7 @@ struct MemTracker_c : ISphNoncopyable
 inline int64_t MVA_UPSIZE ( const DWORD * pMva )
 {
 #if USE_LITTLE_ENDIAN
-	return *(int64_t*)pMva;
+	return *(int64_t*)( const_cast<DWORD*>(pMva) );
 #else
 	int64_t iMva = (int64_t)( (uint64_t)pMva[0] | ( ( (uint64_t)pMva[1] )<<32 ) );
 	return iMva;
@@ -409,7 +409,7 @@ public:
 
 /// find a value-enclosing span in a sorted vector (aka an index at which vec[i] <= val < vec[i+1])
 template < typename T, typename U >
-static int FindSpan ( const VecTraits_T<T> & dVec, U tRef, int iSmallTreshold=8 )
+int FindSpan ( const VecTraits_T<T> & dVec, U tRef, int iSmallTreshold=8 )
 {
 	// empty vector
 	if ( !dVec.GetLength() )
@@ -436,7 +436,7 @@ static int FindSpan ( const VecTraits_T<T> & dVec, U tRef, int iSmallTreshold=8 
 		return 0;
 
 	if ( ( pEnd[-1]<tRef || pEnd[-1]==tRef ) && tRef<pEnd[0] )
-		return pEnd-dVec.Begin()-1;
+		return int ( pEnd-dVec.Begin()-1 );
 
 	while ( pEnd-pStart>1 )
 	{
@@ -449,7 +449,7 @@ static int FindSpan ( const VecTraits_T<T> & dVec, U tRef, int iSmallTreshold=8 
 		assert ( pMid+1 < &dVec.Last() );
 
 		if ( ( pMid[0]<tRef || pMid[0]==tRef ) && tRef<pMid[1] )
-			return pMid - dVec.Begin();
+			return int ( pMid - dVec.Begin() );
 
 		if ( tRef<pMid[0] )
 			pEnd = pMid;
@@ -1137,7 +1137,6 @@ int				ConsiderStack ( const struct XQNode_t * pRoot, CSphString & sError );
 void			sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, bool bHasBooleanOptimization, const ISphKeywordsStat * pKeywords );
 void			TransformAotFilter ( XQNode_t * pNode, const CSphWordforms * pWordforms, const CSphIndexSettings& tSettings );
 bool			sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, CSphString & sError, CSphIndexProgress & tProgress, volatile bool * pLocalStop, bool bSrcSettings );
-CSphString		sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSchema );
 int				ExpandKeywords ( int iIndexOpt, QueryOption_e eQueryOpt, const CSphIndexSettings & tSettings, bool bWordDict );
 bool			ParseMorphFields ( const CSphString & sMorphology, const CSphString & sMorphFields, const CSphVector<CSphColumnInfo> & dFields, CSphBitvec & tMorphFields, CSphString & sError );
 
@@ -1167,7 +1166,7 @@ extern const char * g_sTagInfixBlocks;
 extern const char * g_sTagInfixEntries;
 
 template < typename VECTOR >
-static int sphPutBytes ( VECTOR * pOut, const void * pData, int iLen )
+int sphPutBytes ( VECTOR * pOut, const void * pData, int iLen )
 {
 	int iOff = pOut->GetLength();
 	pOut->Resize ( iOff + iLen );
@@ -1634,7 +1633,7 @@ public:
 		// tricky bit, this byte leads the entry so it must never be 0 (aka eof mark)!
 		if ( iDelta<=8 && iMatch<=15 )
 		{
-			BYTE uPacked = ( 0x80 + ( (iDelta-1)<<4 ) + iMatch );
+			BYTE uPacked = BYTE ( 0x80 + ( (iDelta-1)<<4 ) + iMatch );
 			WRITER.PutBytes ( &uPacked, 1 );
 		} else
 		{
@@ -1822,7 +1821,7 @@ class HashCollection_c
 public:
 	void AppendNewHash ( const char* sExt, const BYTE* pHash);
 
-	void /*REFACTOR*/ SaveSHA() {};
+	void /*REFACTOR*/ SaveSHA() {}
 
 };
 
@@ -1831,7 +1830,7 @@ class WriterWithHash_c : public CSphWriter
 {
 public:
 	WriterWithHash_c ( const char* sExt, HashCollection_c* pCollector );
-	~WriterWithHash_c ();
+	~WriterWithHash_c () override;
 
 	virtual void Flush () override;
 	void CloseFile ();
@@ -1859,17 +1858,6 @@ struct SchemaItemVariant_t
 	CSphAttrLocator m_tLoc;
 };
 
-template <typename T>
-inline T ConvertType ( SphAttr_t tValue )
-{
-	return (T)tValue;
-}
-
-template <>
-inline float ConvertType<float>( SphAttr_t tValue )
-{
-	return sphDW2F(tValue);
-}
 
 using SchemaItemHash_c = OpenHash_T<SchemaItemVariant_t, uint64_t, HashFunc_Int64_t>;
 

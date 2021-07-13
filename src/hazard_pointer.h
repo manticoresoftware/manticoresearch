@@ -86,7 +86,7 @@ class ScopedPtr_T : ISphNoncopyable
 
 public:
 	///< default ctr (for vectors)
-	explicit ScopedPtr_T () {};
+	explicit ScopedPtr_T () {}
 
 	/// construction from raw pointer
 	explicit ScopedPtr_T ( PTR pPtr )
@@ -162,7 +162,7 @@ struct AtomicPointer_t
 	std::atomic<Pointer_t> m_pData;
 	void Set ( const void * pData )
 	{
-		m_pData.store ( (Pointer_t) pData, std::memory_order_release );
+		m_pData.store ( (Pointer_t)const_cast<void*>(pData), std::memory_order_release );
 	}
 };
 

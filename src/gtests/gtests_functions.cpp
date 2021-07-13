@@ -18,6 +18,7 @@
 #include "threadutils.h"
 #include <cmath>
 #include "histogram.h"
+#include "conversion.h"
 
 // Miscelaneous short functional tests: TDigest, SpanSearch,
 // stringbuilder, CJson, TaggedHash, Log2
@@ -34,7 +35,7 @@ protected:
 		SafeDelete ( pDigest );
 	}
 
-	virtual void SetUp ()
+	void SetUp() override
 	{
 		sphSrand ( 0 );
 		pDigest = sphCreateTDigest ();

@@ -68,7 +68,7 @@ struct PublicThreadDesc_t
 
 	PublicThreadDesc_t() = default;
 	void Swap (PublicThreadDesc_t& rhs);
-	MOVE_BYSWAP ( PublicThreadDesc_t );
+	MOVE_BYSWAP ( PublicThreadDesc_t )
 };
 
 // flatten info from thread. iCols make hint for huge descriptions to avoid full copy
@@ -88,7 +88,7 @@ BYTE RegisterRenderer ( RenderFnPtr pFunc );
     TASKINFO () {  \
         if (!m_eTask) m_eTask = RegisterRenderer ( TASKINFO::Render ); \
         m_eType = m_eTask; \
-    };                                  \
+    }                                  \
     static void Render ( const void * pSrc, PublicThreadDesc_t & dDst )
 
 // Defines declared stuf (has to be written in .cpp to avoid multiple definitions)
@@ -238,8 +238,8 @@ public:
 
 	void SetProfile ( Profile_e eProfile ) { m_eProfile = eProfile; }
 	Profile_e GetProfile() const { return m_eProfile; }
-	bool IsProfile () const { return m_eProfile!=Profile_e::NONE; };
-	bool IsDot () const { return m_eProfile==Profile_e::DOT; };
+	bool IsProfile () const { return m_eProfile!=Profile_e::NONE; }
+	bool IsDot () const { return m_eProfile==Profile_e::DOT; }
 };
 
 using ScopedClientInfo_t = ScopedInfo_T<ClientTaskInfo_t>;

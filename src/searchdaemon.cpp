@@ -246,7 +246,7 @@ void VectorLike::FillTail ( int iHas )
 }
 
 
-const char* g_dIndexTypeName[1 + ( int ) IndexType_e::ERROR_] = {
+static const char * g_dIndexTypeName[1 + ( int ) IndexType_e::ERROR_] = {
 	"plain",
 	"template",
 	"rt",
@@ -781,7 +781,7 @@ CSphString InputBuffer_c::GetRawString( int iLen )
 	}
 
 	if ( iLen )
-		sRes.SetBinary(( char* ) m_pCur, iLen );
+		sRes.SetBinary( (const char*) m_pCur, iLen );
 
 	m_pCur += iLen;
 	return sRes;

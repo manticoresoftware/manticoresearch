@@ -11,9 +11,9 @@
 //
 
 #include "source_sql.h"
-#include "common_stuff.h"
 #include "attribute.h"
 #include "sphinxint.h"
+#include "conversion.h"
 
 #if WITH_ZLIB
 #include <zlib.h>
@@ -115,7 +115,8 @@ bool CSphSource_SQL::SetupSQL ( const CSphSourceParams_SQL & tParams )
 	return true;
 }
 
-const char * SubstituteParams ( const char * sQuery, const char * const * dMacroses, const char ** dValues, int iMcount )
+
+static const char * SubstituteParams ( const char * sQuery, const char * const * dMacroses, const char ** dValues, int iMcount )
 {
 	// OPTIMIZE? things can be precalculated
 	const char * sCur = sQuery;
@@ -364,6 +365,7 @@ static void FormatEscaped ( FILE * fp, const char * sLine )
 		case '\t':
 		case '\'':
 		case '\\':	*sOut++ = '\\'; // no break intended
+		// [[clang::fallthrough]];
 		default:	*sOut++ = sLine[i];
 	}
 	*sOut++ = '\'';
@@ -820,7 +822,7 @@ BYTE ** CSphSource_SQL::NextDocument ( bool & bEOF, CSphString & sError )
 			continue;
 		}
 		#endif
-		m_dFields[i] = (BYTE*) SqlColumn ( m_tSchema.GetField(i).m_iIndex );
+		m_dFields[i] = (BYTE*) const_cast<char*> ( SqlColumn ( m_tSchema.GetField(i).m_iIndex ) );
 		m_dFieldLengths[i] = SqlColumnLength ( m_tSchema.GetField(i).m_iIndex );
 	}
 
@@ -1363,7 +1365,7 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 			}
 
 			// build those hits
-			BYTE * dText[] = { (BYTE *)SqlColumn(1) };
+			BYTE * dText[] = { (BYTE *)const_cast<char*>( SqlColumn(1) ) };
 			m_tState.m_dFields = dText;
 			m_tState.m_dFieldLengths.Resize(1);
 			m_tState.m_dFieldLengths[0] = SqlColumnLength(1);

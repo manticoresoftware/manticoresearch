@@ -30,7 +30,7 @@ typedef int __declspec("SAL_nokernel") __declspec("SAL_nodriver") __prefast_flag
 #define vsnprintf _vsnprintf
 #endif
 
-#ifndef __GNUC__
+#if !defined(__GNUC__) && !defined(__clang__)
 #define __attribute__(x)
 #endif
 
@@ -77,7 +77,9 @@ typedef int __declspec("SAL_nokernel") __declspec("SAL_nodriver") __prefast_flag
 #if _WIN32
 	#include <io.h>
 	#define sphSeek		_lseeki64
-	typedef __int64		SphOffset_t;
+	typedef int64_t		SphOffset_t;
+	#define popen		_popen
+	#define pclose		_pclose
 #else
 	#include <unistd.h>
 	#define sphSeek		lseek
@@ -88,7 +90,7 @@ typedef int __declspec("SAL_nokernel") __declspec("SAL_nodriver") __prefast_flag
 // COMPILE-TIME CHECKS
 /////////////////////////////////////////////////////////////////////////////
 
-#if defined (__GNUC__)
+#if defined (__GNUC__) || defined (__clang__)
 #define VARIABLE_IS_NOT_USED __attribute__((unused))
 #define NO_RETURN  __attribute__ ((__noreturn__))
 #else
@@ -465,16 +467,16 @@ void			sphSetDieCallback ( SphDieCallback_t pfDieCallback );
 /// how much bits do we need for given int
 inline int sphLog2 ( uint64_t uValue )
 {
-#if _WIN32
+#if defined(__GNUC__) || defined(__clang__)
+	if ( !uValue )
+		return 0;
+	return 64 - __builtin_clzll(uValue);
+#elif _WIN32
 	DWORD uRes;
 	if ( BitScanReverse ( &uRes, (DWORD)( uValue>>32 ) ) )
 		return 33+uRes;
 	BitScanReverse ( &uRes, DWORD(uValue) );
 	return 1+uRes;
-#elif __GNUC__ || __clang__
-	if ( !uValue )
-		return 0;
-	return 64 - __builtin_clzll(uValue);
 #else
 	int iBits = 0;
 	while ( uValue )
@@ -485,18 +487,6 @@ inline int sphLog2 ( uint64_t uValue )
 	return iBits;
 #endif
 }
-
-/// float vs dword conversion
-inline DWORD sphF2DW ( float f )	{ union { float f; DWORD d; } u; u.f = f; return u.d; }
-
-/// dword vs float conversion
-inline float sphDW2F ( DWORD d )	{ union { float f; DWORD d; } u; u.d = d; return u.f; }
-
-/// double to bigint conversion
-inline uint64_t sphD2QW ( double f )	{ union { double f; uint64_t d; } u; u.f = f; return u.d; }
-
-/// bigint to double conversion
-inline double sphQW2D ( uint64_t d )	{ union { double f; uint64_t d; } u; u.d = d; return u.f; }
 
 /// microsecond precision timestamp
 /// current UNIX timestamp in seconds multiplied by 1000000, plus microseconds since the beginning of current second
@@ -1074,8 +1064,14 @@ public:
 
 	template<typename TT, typename INT>
 	VecTraits_T ( const std::pair<TT *, INT> & dData )
-		: m_pData ( (T*) dData.first ),
-		m_iCount ( dData.second * sizeof ( TT ) / sizeof ( T ) )
+		: m_pData ( (T*) dData.first )
+		, m_iCount ( dData.second * sizeof ( TT ) / sizeof ( T ) )
+	{}
+
+	template<typename TT, typename INT>
+	VecTraits_T ( const std::pair<const TT *, INT> & dData )
+		: m_pData ( (T*) const_cast<TT*>( dData.first ) )
+		, m_iCount ( dData.second * sizeof ( TT ) / sizeof ( T ) )
 	{}
 
 	VecTraits_T Slice ( int64_t iBegin=0, int64_t iCount=-1 ) const
@@ -1146,21 +1142,21 @@ public:
 		if ( pBuf < m_pData || pBuf >= m_pData + m_iCount )
 			return -1;
 
-		return pBuf - m_pData;
+		return int ( pBuf-m_pData );
 	}
 
 	/// make possible to pass VecTraits_T<T*> into funcs which need VecTraits_T<const T*>
 	/// fixme! M.b. add check and fire error if T is not a pointer?
 	operator VecTraits_T<const typename std::remove_pointer<T>::type *> & () const
 	{
-		return *( VecTraits_T<const typename std::remove_pointer<T>::type *>* ) ( this );
+		return *( VecTraits_T<const typename std::remove_pointer<T>::type *>* ) ( const_cast<VecTraits_T<T>*>(this) );
 	}
 
 	template<typename TT>
 	operator VecTraits_T<TT> & () const
 	{
 		STATIC_ASSERT ( sizeof ( T )==sizeof ( TT ), SIZE_OF_DERIVED_NOT_SAME_AS_ORIGIN );
-		return *( VecTraits_T<TT> * ) ( this );
+		return *( VecTraits_T<TT> * ) ( const_cast<VecTraits_T<T>*>(this) );
 	}
 
 	template<typename TT, typename INT>
@@ -1451,7 +1447,7 @@ public:
 
 	// append raw blob: defined ONLY in POD specialization.
 	static inline void CopyVoid ( T * pNew, const void * pData, int64_t iLength )
-	{ Copy ( pNew, ( T * ) pData, iLength ); }
+	{ Copy ( pNew, (T*)const_cast<void*>(pData), iLength ); }
 
 	static inline void Zero ( T * pData, int64_t iLength )
 	{ memset ((void *) pData, 0, iLength * sizeof ( T )); }
@@ -1532,7 +1528,7 @@ public:
 		}
 		while ( iLimit<iNewLimit )
 		{
-			iLimit = ( int ) ( iLimit * 1.2f );
+			iLimit = ( int ) ( (float)iLimit * 1.2f );
 			assert ( iLimit>0 );
 		}
 		return iLimit;
@@ -1567,7 +1563,7 @@ public:
 	Vector_T () = default;
 
 	/// ctor with initial size
-	explicit Vector_T ( int iCount )
+	explicit Vector_T ( int64_t iCount )
 	{
 		Resize ( iCount );
 	}
@@ -1697,7 +1693,7 @@ public:
 		if ( !pValue )
 			return false;
 
-		Remove ( pValue - Begin() );
+		Remove ( int ( pValue - Begin() ) );
 		return true;
 	}
 
@@ -1730,7 +1726,7 @@ public:
 
 		// check that we really need to be called
 		if ( iNewLimit<=m_iLimit )
-			return iDiscard;
+			return (int)iDiscard;
 
 		if ( iDiscard>0 )
 		{
@@ -1865,7 +1861,7 @@ public:
 	/// query current reserved size, in elements
 	inline int GetLimit () const
 	{
-		return m_iLimit;
+		return (int)m_iLimit;
 	}
 
 	/// query currently allocated RAM, in bytes
@@ -2515,7 +2511,7 @@ public:
 		explicit Iterator_c ( HashEntry_t * pIterator=nullptr)
 			: m_pIterator ( pIterator ) {}
 
-		KeyValue_t& operator*() { return *m_pIterator; };
+		KeyValue_t& operator*() { return *m_pIterator; }
 
 		Iterator_c & operator++ ()
 		{
@@ -2855,7 +2851,7 @@ public:
 		return pBuf;
 	}
 
-	/// \return internal string and releases it from being destroyed in d-tr
+	/// internal string and releases it from being destroyed in d-tr
 	void LeakToVec ( CSphVector<BYTE> &dVec )
 	{
 		if ( m_sValue==EMPTY )
@@ -3059,7 +3055,7 @@ public:
 		::Swap ( m_bStarted, rhs.m_bStarted );
 	}
 
-	inline bool Started() const { return m_bStarted; };
+	inline bool Started() const { return m_bStarted; }
 
 	operator Str_t()
 	{
@@ -3359,7 +3355,7 @@ public:
 
 			if ( pCur>( pEnd-3 ) ) // need 1 ending quote + terminator
 			{
-				m_iUsed = pCur-m_szBuffer;
+				m_iUsed = int ( pCur-m_szBuffer );
 				GrowEnough ( 32 );
 				pEnd = m_szBuffer+m_iSize;
 				pCur = m_szBuffer+m_iUsed;
@@ -3367,7 +3363,7 @@ public:
 		}
 		*pCur++ = T::cQuote;
 		*pCur = '\0';
-		m_iUsed = pCur - m_szBuffer;
+		m_iUsed = int ( pCur - m_szBuffer );
 	}
 
 	// dedicated EscBld::eEscape with comma
@@ -3402,7 +3398,7 @@ public:
 
 			if ( pCur>( pEnd-3 ) ) // need 1 ending quote + terminator
 			{
-				m_iUsed = pCur-m_szBuffer;
+				m_iUsed = int ( pCur-m_szBuffer );
 				GrowEnough ( 32 );
 				pEnd = m_szBuffer+m_iSize;
 				pCur = m_szBuffer+m_iUsed;
@@ -3410,7 +3406,7 @@ public:
 		}
 		*pCur++ = T::cQuote;
 		*pCur = '\0';
-		m_iUsed = pCur - m_szBuffer;
+		m_iUsed = int ( pCur - m_szBuffer );
 	}
 
 	// dedicated EscBld::eEscape with comma with external len
@@ -3445,7 +3441,7 @@ public:
 
 			if ( pCur>( pEnd-3 ) ) // need 1 ending quote + terminator
 			{
-				m_iUsed = pCur-m_szBuffer;
+				m_iUsed = int ( pCur-m_szBuffer );
 				GrowEnough ( 32 );
 				pEnd = m_szBuffer+m_iSize;
 				pCur = m_szBuffer+m_iUsed;
@@ -3453,7 +3449,7 @@ public:
 		}
 		*pCur++ = T::cQuote;
 		*pCur = '\0';
-		m_iUsed = pCur - m_szBuffer;
+		m_iUsed = int ( pCur - m_szBuffer );
 	}
 
 	// dedicated EscBld::eFixupSpace
@@ -3481,14 +3477,14 @@ public:
 
 			if ( pCur>( pEnd-2 ) ) // need terminator
 			{
-				m_iUsed = pCur-m_szBuffer;
+				m_iUsed = int ( pCur-m_szBuffer );
 				GrowEnough ( 32 );
 				pEnd = m_szBuffer+m_iSize;
 				pCur = m_szBuffer+m_iUsed;
 			}
 		}
 		*pCur = '\0';
-		m_iUsed = pCur - m_szBuffer;
+		m_iUsed = int ( pCur - m_szBuffer );
 	}
 
 	// dedicated EscBld::eAll (=EscBld::eFixupSpace | EscBld::eEscape )
@@ -3523,7 +3519,7 @@ public:
 
 			if ( pCur>( pEnd-3 ) ) // need 1 ending quote + terminator
 			{
-				m_iUsed = pCur-m_szBuffer;
+				m_iUsed = int(pCur-m_szBuffer);
 				GrowEnough ( 32 );
 				pEnd = m_szBuffer+m_iSize;
 				pCur = m_szBuffer+m_iUsed;
@@ -3531,7 +3527,7 @@ public:
 		}
 		*pCur++ = T::cQuote;
 		*pCur = '\0';
-		m_iUsed = pCur-m_szBuffer;
+		m_iUsed = int(pCur-m_szBuffer);
 	}
 
 	// dedicated EscBld::eAll (=EscBld::eFixupSpace | EscBld::eEscape ) with external len
@@ -3568,7 +3564,7 @@ public:
 
 			if ( pCur>( pEnd-3 ) ) // need 1 ending quote + terminator
 			{
-				m_iUsed = pCur-m_szBuffer;
+				m_iUsed = int ( pCur-m_szBuffer );
 				GrowEnough ( 32 );
 				pEnd = m_szBuffer+m_iSize;
 				pCur = m_szBuffer+m_iUsed;
@@ -3576,7 +3572,7 @@ public:
 		}
 		*pCur++ = T::cQuote;
 		*pCur = '\0';
-		m_iUsed = pCur-m_szBuffer;
+		m_iUsed = int ( pCur-m_szBuffer );
 	}
 
 	// generic implementation. Used this way in tests. For best performance consider to use specialized versions
@@ -4052,7 +4048,7 @@ public:
 	CSphLargeBuffer () {}
 
 	/// dtor
-	virtual ~CSphLargeBuffer ()
+	~CSphLargeBuffer() override
 	{
 		this->Reset();
 	}
@@ -4096,7 +4092,7 @@ public:
 
 
 	/// deallocate storage
-	virtual void Reset ()
+	void Reset() override
 	{
 		this->MemUnlock();
 
@@ -4772,7 +4768,7 @@ class SharedPtr_T
 			: m_fnDelete ( std::forward<DEL>(fnDelete) )
 		{}
 
-		~SharedState_T()
+		~SharedState_T() override
 		{
 			m_fnDelete.Delete(m_pPtr);
 			m_pPtr = nullptr;
@@ -5457,7 +5453,7 @@ public:
 				m_pNext = m_pIterator->m_pNext;
 		}
 
-		ListNode_t & operator* () { return *m_pIterator; };
+		ListNode_t & operator* () { return *m_pIterator; }
 
 		Iterator_c & operator++ ()
 		{
@@ -5564,9 +5560,9 @@ namespace sph {
 	{
 	protected:
 		/// grow enough to hold that much entries.
-		inline static T * Allocate ( int iLimit )
+		inline static T * Allocate ( int64_t iLimit )
 		{
-			return sphAllocateSmall ( iLimit*sizeof(T) );
+			return sphAllocateSmall ( int ( iLimit*sizeof(T) ) );
 		}
 
 		inline static void Deallocate ( T * pData )
@@ -5648,7 +5644,7 @@ public:
 		assert (false && "NRVO failed");
 	}
 
-	MOVE_BYSWAP ( LocMessage_c);
+	MOVE_BYSWAP ( LocMessage_c)
 	~LocMessage_c ();
 
 	template<typename T>

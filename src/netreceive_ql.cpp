@@ -220,7 +220,7 @@ void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iAffectedR
 	BYTE * pBuf = sVarLen;
 	pBuf = MysqlPackInt ( pBuf, iAffectedRows );
 	pBuf = MysqlPackInt ( pBuf, iLastID );
-	int iLen = pBuf - sVarLen;
+	int iLen = int ( pBuf - sVarLen );
 
 	int iMsgLen = 0;
 	if ( sMessage )
@@ -691,7 +691,7 @@ struct QlCompressedInfo_t : public TaskInfo_t
 
 DEFINE_RENDER( QlCompressedInfo_t )
 {
-	auto & tInfo = *(QlCompressedInfo_t *) pSrc;
+	auto & tInfo = *(QlCompressedInfo_t *)const_cast<void*>(pSrc);
 	if ( tInfo.m_bCompressed )
 		dDst.m_sProto << "compressed";
 	dDst.m_sChain << (int) tInfo.m_eType << ":QlCompressed ";

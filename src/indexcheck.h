@@ -18,7 +18,7 @@
 class DebugCheckReader_i
 {
 public:
-	virtual			~DebugCheckReader_i () {};
+	virtual			~DebugCheckReader_i () = default;
 
 	virtual int64_t	GetLengthBytes () = 0;
 	virtual bool	GetBytes ( void * pData, int iSize ) = 0;

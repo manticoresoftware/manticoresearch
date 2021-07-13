@@ -739,7 +739,7 @@ class Docstore_c : public Docstore_i, public DocstoreSettings_t
 
 public:
 						Docstore_c ( const CSphString & sFilename );
-						~Docstore_c();
+						~Docstore_c() override;
 
 	bool				Init ( CSphString & sError );
 
@@ -1561,7 +1561,7 @@ public:
 	void				AddDoc ( RowID_t tRowID, const DocstoreBuilder_i::Doc_t & tDoc ) final;
 	int					AddField ( const CSphString & sName, DocstoreDataType_e eType ) final;
 	void				RemoveField ( const CSphString & sName, DocstoreDataType_e eType ) final;
-	void				Finalize() final {};
+	void				Finalize() final {}
 
 	void				SwapRows ( RowID_t tDstID, RowID_t tSrcID ) final;
 	void				DropTail ( RowID_t tTailID ) final;
@@ -1569,7 +1569,7 @@ public:
 	DocstoreDoc_t		GetDoc ( RowID_t tRowID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const final;
 	int					GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const final;
 	DocstoreSettings_t	GetDocstoreSettings() const final;
-	void				CreateReader ( int64_t iSessionId ) const final {};
+	void				CreateReader ( int64_t iSessionId ) const final {}
 
 	bool				Load ( CSphReader & tReader ) final;
 	void				Save ( CSphWriter & tWriter ) final;

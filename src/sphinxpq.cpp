@@ -21,6 +21,8 @@
 
 #include <atomic>
 
+using namespace Threads;
+
 /// protection from concurrent changes during binlog replay
 #ifndef NDEBUG
 static auto &g_bRTChangesAllowed = RTChangesAllowed ();
@@ -1028,7 +1030,7 @@ namespace {
 int FullscanWithoutDocs ( PercolateMatchContext_t & tMatchCtx )
 {
 	const CSphIndex * pIndex = tMatchCtx.m_pTermSetup->m_pIndex;
-	auto uRows = ((RtSegment_t *) tMatchCtx.m_pCtx->m_pIndexData)->m_uRows;
+	auto uRows = ((const RtSegment_t *) tMatchCtx.m_pCtx->m_pIndexData)->m_uRows;
 
 	CSphMatch tDoc;
 	int iMatchesCount = 0;
@@ -1045,7 +1047,7 @@ int FullscanWithoutDocs ( PercolateMatchContext_t & tMatchCtx )
 int FullScanCollectingDocs ( PercolateMatchContext_t & tMatchCtx )
 {
 	const CSphIndex * pIndex = tMatchCtx.m_pTermSetup->m_pIndex;
-	const RtSegment_t * pSeg = (RtSegment_t *) tMatchCtx.m_pCtx->m_pIndexData;
+	const RtSegment_t * pSeg = (const RtSegment_t *) tMatchCtx.m_pCtx->m_pIndexData;
 	int iStride = tMatchCtx.m_tSchema.GetRowSize ();
 
 	int iCountIdx = tMatchCtx.m_dDocsMatched.GetLength ();
@@ -1059,7 +1061,7 @@ int FullScanCollectingDocs ( PercolateMatchContext_t & tMatchCtx )
 		tDoc.m_tRowID = i;
 		if ( !pIndex->EarlyReject ( tMatchCtx.m_pCtx.Ptr(), tDoc ) )
 		{
-			tMatchCtx.m_dDocsMatched.Add ( sphGetDocID ( pRow ));
+			tMatchCtx.m_dDocsMatched.Add ( (int)sphGetDocID(pRow) );
 			++iMatchesCount;
 		}
 		pRow += iStride;
@@ -1105,13 +1107,13 @@ int FtMatchingCollectingDocs ( const StoredQuery_t * pStored, PercolateMatchCont
 	// reserve space for matched docs counter
 	tMatchCtx.m_dDocsMatched.Add ( iMatchesCount );
 
-	const RtSegment_t * pSeg = (RtSegment_t *) tMatchCtx.m_pCtx->m_pIndexData;
+	const RtSegment_t * pSeg = (const RtSegment_t *)tMatchCtx.m_pCtx->m_pIndexData;
 	const CSphMatch * pMatch = pRanker->GetMatchesBuffer();
 	for ( auto iMatches = pRanker->GetMatches (); iMatches!=0; iMatches = pRanker->GetMatches ())
 	{
 		int * pDocids = tMatchCtx.m_dDocsMatched.AddN ( iMatches );
 		for ( int i = 0; i<iMatches; ++i )
-			pDocids[i] = sphGetDocID ( pSeg->GetDocinfoByRowID ( pMatch[i].m_tRowID ) );
+			pDocids[i] = (int)sphGetDocID ( pSeg->GetDocinfoByRowID ( pMatch[i].m_tRowID ) );
 		iMatchesCount += iMatches;
 	}
 
@@ -1131,7 +1133,7 @@ void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_t & tMa
 	if ( !pStored->IsFullscan() && tMatchCtx.m_tReject.Filter ( pStored, tMatchCtx.m_bUtf8 ) )
 		return;
 
-	const RtSegment_t * pSeg = (RtSegment_t *)tMatchCtx.m_pCtx->m_pIndexData;
+	const RtSegment_t * pSeg = (const RtSegment_t *)tMatchCtx.m_pCtx->m_pIndexData;
 	const BYTE * pBlobs = pSeg->m_dBlobs.Begin();
 
 	++tMatchCtx.m_iEarlyPassed;
@@ -1235,7 +1237,7 @@ struct PQMergeIterator_t
 		}
 	}
 
-	inline int CurElem() const { return m_dElems[m_iIdx]; };
+	inline int CurElem() const { return m_dElems[m_iIdx]; }
 	inline PercolateQueryDesc& CurDesc() const { return m_pMatch->m_dQueryMatched[CurElem()];}
 	inline int CurDt () const { return m_pMatch->m_dDt[CurElem ()]; }
 	inline int* CurDocs () const { return &m_pMatch->m_dDocsMatched[m_dDocOffsets[CurElem ()]]; }
@@ -1416,7 +1418,7 @@ struct PQInfo_t : public TaskInfo_t
 
 DEFINE_RENDER( PQInfo_t )
 {
-	auto & tInfo = *(PQInfo_t *) pSrc;
+	auto & tInfo = *(const PQInfo_t *) pSrc;
 	dDst.m_sChain << (int) tInfo.m_eType << ":PQ ";
 	if ( tInfo.m_iTotal )
 		dDst.m_sDescription.Sprintf ( "%d%% of %d:", tInfo.m_iCurrent * 100 / tInfo.m_iTotal, tInfo.m_iTotal );
@@ -1536,7 +1538,7 @@ bool PercolateIndex_c::EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch
 	if ( !pCtx->m_pFilter )
 		return false;
 
-	auto *pSegment = (RtSegment_t*)pCtx->m_pIndexData;
+	auto * pSegment = (const RtSegment_t*)pCtx->m_pIndexData;
 	tMatch.m_pStatic = pSegment->GetDocinfoByRowID ( tMatch.m_tRowID );
 
 	return !pCtx->m_pFilter->Eval ( tMatch );
@@ -1911,7 +1913,7 @@ public:
 
 	bool ProcessInRowIdOrder() const final				{ return false; }
 	void Process ( CSphMatch * pMatch ) final			{ ProcessMatch(pMatch); }
-	void Process ( VecTraits_T<CSphMatch *> & dMatches ){ dMatches.for_each ( [this]( CSphMatch * pMatch ){ ProcessMatch(pMatch); } ); }
+	void Process ( VecTraits_T<CSphMatch *> & dMatches ) final { dMatches.for_each ( [this]( CSphMatch * pMatch ){ ProcessMatch(pMatch); } ); }
 
 private:
 	int							m_iTag;
@@ -2122,7 +2124,7 @@ void PercolateIndex_c::PostSetupUnl()
 	// bigram filter
 	if ( m_tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE && m_tSettings.m_eBigramIndex!=SPH_BIGRAM_ALL )
 	{
-		m_pTokenizer->SetBuffer ( (BYTE*)m_tSettings.m_sBigramWords.cstr(), m_tSettings.m_sBigramWords.Length() );
+		m_pTokenizer->SetBuffer ( (BYTE*)const_cast<char*> ( m_tSettings.m_sBigramWords.cstr() ), m_tSettings.m_sBigramWords.Length() );
 
 		for ( auto * pTok = m_pTokenizer->GetToken (); pTok; pTok = m_pTokenizer->GetToken () )
 			m_tSettings.m_dBigramWords.Add() = (const char*)pTok;
@@ -2254,7 +2256,7 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilename
 	DWORD uVersion = rdMeta.GetDword();
 	if ( uVersion==0 || uVersion>META_VERSION )
 	{
-		m_sLastError.SetSprintf ( "%s is v.%d, binary is v.%d", sMeta.cstr(), uVersion, META_VERSION );
+		m_sLastError.SetSprintf ( "%s is v.%u, binary is v.%u", sMeta.cstr(), uVersion, META_VERSION );
 		return false;
 	}
 
@@ -2262,7 +2264,7 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilename
 	DWORD uMinFormatVer = 8;
 	if ( uVersion<uMinFormatVer )
 	{
-		m_sLastError.SetSprintf ( "indexes prior to v.%d are no longer supported (use index_converter tool); %s is v.%d", uMinFormatVer, m_sFilename.cstr(), uVersion );
+		m_sLastError.SetSprintf ( "indexes prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, m_sFilename.cstr(), uVersion );
 		return false;
 	}
 
@@ -2735,7 +2737,7 @@ void MergePqResults ( const VecTraits_T<CPqResult *> &dChunks, CPqResult &dRes, 
 			{
 				*pDocs = iDocCount;
 				for ( int i=1; i<iDocCount+1; ++i )
-					pDocs[i] = hDocids.FindOrAdd ( tMin.m_pResult->m_dDocids[tMin.m_pDocs[i]], hDocids.GetLength () );
+					pDocs[i] = hDocids.FindOrAdd ( tMin.m_pResult->m_dDocids[tMin.m_pDocs[i]], (int)hDocids.GetLength () );
 			} else
 				memcpy ( pDocs, tMin.m_pDocs, sizeof(int) * (iDocCount + 1) );
 

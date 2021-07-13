@@ -291,7 +291,7 @@ static bool IsIpAddress ( const char * sURL )
 /// Set flag m_bNeedResolve if address is AF_INET, host is not empty and not plain IP address,
 /// and also if global flag for postponed resolving is set.
 /// Otherwise resolve address now (if appliable) and then forbid any name resolving in future.
-bool ResolveAddress ( AgentDesc_t &tAgent, const WarnInfo_c & tInfo )
+static bool ResolveAddress ( AgentDesc_t &tAgent, const WarnInfo_c & tInfo )
 {
 	tAgent.m_bNeedResolve = false;
 	if ( tAgent.m_iFamily!=AF_INET )
@@ -347,7 +347,7 @@ class DNSResolver_c
 		assert ( m_pCallback );
 		if ( !m_bCallbackInvoked )
 			m_pCallback ( 0 );
-	};
+	}
 
 	void FinishResolve ( struct addrinfo * pResult )
 	{
@@ -359,7 +359,7 @@ class DNSResolver_c
 		freeaddrinfo ( pResult );
 		m_pCallback ( uIP );
 		m_bCallbackInvoked = true;
-	};
+	}
 
 // platform-specific part starts here.
 #if HAVE_GETADDRINFO_A
@@ -460,7 +460,7 @@ void SetGlobalPinger ( IPinger* pPinger )
 }
 
 // Subscribe hosts with just enabled pings (i.e. where iNeedPing is exactly 1, no more)
-void PingCheckAdd ( HostDashboard_t* pHost )
+static void PingCheckAdd ( HostDashboard_t* pHost )
 {
 	if ( !g_pPinger )
 		return;
@@ -480,7 +480,7 @@ void PingCheckAdd ( HostDashboard_t* pHost )
 // class also provides mirror choosing using different strategies
 /////////////////////////////////////////////////////////////////////////////
 
-GuardedHash_c & g_MultiAgents()
+static GuardedHash_c & g_MultiAgents()
 {
 	static GuardedHash_c dGlobalHash;
 	return dGlobalHash;
@@ -924,7 +924,7 @@ SearchdStats_t & gStats ()
 }
 
 // generic stats track - always to agent stats, separately to dashboard.
-void agent_stats_inc ( AgentConn_t &tAgent, AgentStats_e iCountID )
+static void agent_stats_inc ( AgentConn_t &tAgent, AgentStats_e iCountID )
 {
 	assert ( iCountID<=eMaxAgentStat );
 	assert ( tAgent.m_tDesc.m_pDash );
@@ -955,7 +955,7 @@ void agent_stats_inc ( AgentConn_t &tAgent, AgentStats_e iCountID )
 }
 
 // special case of stats - all is ok, just need to track the time in dashboard.
-void track_processing_time ( AgentConn_t &tAgent )
+static void track_processing_time ( AgentConn_t &tAgent )
 {
 	// first we count temporary statistic (into dashboard)
 	assert ( tAgent.m_tDesc.m_pDash );
@@ -1013,7 +1013,7 @@ bool ParseAddressPort ( HostDesc_t& dHost, const char ** ppLine, const WarnInfo_
 	if ( p==pAnchor )
 		return tInfo.ErrSkip ( "host name or path expected" );
 
-	CSphString sSub ( pAnchor, p-pAnchor );
+	CSphString sSub ( pAnchor, int ( p-pAnchor ) );
 	if ( eState==apUNIX )
 	{
 #if !_WIN32
@@ -1092,7 +1092,7 @@ void ParseIndexList ( const CSphString &sIndexes, StrVec_t &dOut )
 	if ( sIndexes.IsEmpty () )
 		return;
 
-	auto * p = ( char * ) sSplit.cstr ();
+	auto * p = const_cast<char *> ( sSplit.cstr() );
 	while ( *p )
 	{
 		// skip non-alphas
@@ -1120,7 +1120,7 @@ void ParseIndexList ( const CSphString &sIndexes, StrVec_t &dOut )
 }
 
 // parse agent's options line and modify pOptions
-bool ParseOptions ( AgentOptions_t * pOptions, const CSphString& sOptions, const WarnInfo_c & tWI )
+static bool ParseOptions ( AgentOptions_t * pOptions, const CSphString & sOptions, const WarnInfo_c & tWI )
 {
 	StrVec_t dSplitParts;
 	sphSplit ( dSplitParts, sOptions.cstr (), "," ); // diff. options are ,-separated
@@ -1167,7 +1167,7 @@ bool ParseOptions ( AgentOptions_t * pOptions, const CSphString& sOptions, const
 }
 
 // check whether all index(es) in list are valid index names
-bool CheckIndexNames ( const CSphString &sIndexes, const WarnInfo_c & tWI )
+static bool CheckIndexNames ( const CSphString & sIndexes, const WarnInfo_c & tWI )
 {
 	StrVec_t dRawIndexes, dParsedIndexes;
 
@@ -1305,9 +1305,11 @@ AgentDesc_t &AgentDesc_t::CloneFrom ( const AgentDesc_t &rhs )
 
 //// global dashboard
 
-namespace Dashboard {
-	RwLock_t g_tDashLock;
-	VecRefPtrs_t<HostDashboard_t*> g_dDashes GUARDED_BY( g_tDashLock );
+namespace Dashboard
+{
+
+static RwLock_t g_tDashLock;
+static VecRefPtrs_t<HostDashboard_t*> g_dDashes GUARDED_BY( g_tDashLock );
 
 void CleanupOrphaned ()
 {
@@ -1413,7 +1415,7 @@ void IOVec_c::StepForward ( size_t uStep )
 /// PollableEvent_c : an event which could be watched by poll/epoll/kqueue
 /////////////////////////////////////////////////////////////////////////////
 
-void SafeCloseSocket ( int & iFD )
+static void SafeCloseSocket ( int & iFD )
 {
 	if ( iFD>=0 )
 		sphSockClose ( iFD );
@@ -1429,7 +1431,7 @@ static bool CreateSocketPair ( int &iSock1, int &iSock2, CSphString &sError )
 		struct sockaddr addr;
 	} tAddr;
 
-	int iListen = socket ( AF_INET, SOCK_STREAM, IPPROTO_TCP );
+	int iListen = (int)socket ( AF_INET, SOCK_STREAM, IPPROTO_TCP );
 	if ( iListen<0 )
 	{
 		sError.SetSprintf ( "failed to create listen socket: %s", sphSockError() );
@@ -1465,7 +1467,7 @@ static bool CreateSocketPair ( int &iSock1, int &iSock2, CSphString &sError )
 		return false;
 	}
 
-	int iWrite = socket ( AF_INET, SOCK_STREAM, 0 );
+	int iWrite = (int)socket ( AF_INET, SOCK_STREAM, 0 );
 	auto tCloseWrite = AtScopeExit  ( [&iWrite] { if ( iWrite>=0 ) sphSockClose (iWrite); } );
 
 	if ( iWrite<0 )
@@ -1480,7 +1482,7 @@ static bool CreateSocketPair ( int &iSock1, int &iSock2, CSphString &sError )
 		return false;
 	}
 
-	int iRead = accept ( iListen, NULL, NULL );
+	int iRead = (int)accept ( iListen, NULL, NULL );
 	if ( iRead<0 )
 	{
 		sError.SetSprintf ( "failed to accept loopback: %s\n", sphSockError() );
@@ -1966,7 +1968,7 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 	int iRes = bind ( m_iSock, (SOCKADDR*) &sAddr, sizeof ( sAddr ) );
 	if ( iRes != 0 )
 	{
-		Fail ( "bind failed: %d %s", m_tDesc.m_sAddr.cstr () );
+		Fail ( "bind failed: %d %s", iRes, m_tDesc.m_sAddr.cstr() );
 		return 0;
 	}
 
@@ -2149,7 +2151,7 @@ public:
 			SafeAddRef ( m_pConnection )
 		else
 			SafeRelease ( m_pConnection ) // yes, SafeRelease will make m_pConnection=0 at the end!
-	};
+	}
 
 	void Report ( bool bParam ) final
 	{
@@ -2157,10 +2159,10 @@ public:
 		SafeRelease ( m_pConnection )
 		if ( m_pCallback )
 			m_pCallback ( bParam );
-	};
+	}
 
 	// just always return 'false' here to suppress any kind of 'orphaned' stuff.
-	bool IsDone () const final { return false; };
+	bool IsDone () const final { return false; }
 
 private:
 	using BoolCallBack_f = std::function<void ( bool )>;
@@ -2174,8 +2176,7 @@ private:
 /// Schedule one job (remote). Callback pAction will be called with bool 'success' param on finish.
 /// If connection is blackhole, returns false, and callback will NOT be called in the case
 /// (since blackholes live alone).
-bool RunRemoteTaskImpl ( AgentConn_t* pConnection, RequestBuilder_i* pQuery, ReplyParser_i* pParser,
-	Reporter_i* pReporter, int iQueryRetry, int iQueryDelay )
+static bool RunRemoteTaskImpl ( AgentConn_t * pConnection, RequestBuilder_i * pQuery, ReplyParser_i * pParser, Reporter_i * pReporter, int iQueryRetry, int iQueryDelay )
 {
 	sphLogDebugv ( "S ==========> ScheduleDistrJob()" );
 	pConnection->GenericInit ( pQuery, pParser, pReporter, iQueryRetry, iQueryDelay );
@@ -2213,13 +2214,14 @@ bool RunRemoteTask ( AgentConn_t* pConnection, RequestBuilder_i* pQuery, ReplyPa
 	return RunRemoteTaskImpl ( pConnection, pQuery, pParser, pReporter, iQueryRetry, iQueryDelay );
 }
 
-bool RunRemoteTask ( AgentConn_t* pConnection, RequestBuilder_i* pQuery, ReplyParser_i* pParser,
-	const Deffered_f& pAction, int iQueryRetry, int iQueryDelay )
+// unused for now
+/*
+static bool RunRemoteTask ( AgentConn_t * pConnection, RequestBuilder_i * pQuery, ReplyParser_i * pParser, const Deffered_f & pAction, int iQueryRetry, int iQueryDelay )
 {
-	CSphRefcountedPtr<Reporter_i> pReporter (
-		new ReportCallback_c ( pAction, pConnection ));
+	CSphRefcountedPtr<Reporter_i> pReporter ( new ReportCallback_c ( pAction, pConnection ) );
 	return RunRemoteTaskImpl ( pConnection, pQuery, pParser, pReporter, iQueryRetry, iQueryDelay );
 }
+*/
 
 // this is run once entering query loop for all retries (and all mirrors).
 void AgentConn_t::GenericInit ( RequestBuilder_i * pQuery, ReplyParser_i * pParser,
@@ -2379,7 +2381,7 @@ bool AgentConn_t::EstablishConnection ()
 	}
 #endif
 
-	m_iSock = socket ( m_tDesc.m_iFamily, SOCK_STREAM, 0 );
+	m_iSock = (int)socket ( m_tDesc.m_iFamily, SOCK_STREAM, 0 );
 	sphLogDebugA ( "%d Created new socket %d", m_iStoreTag, m_iSock );
 
 	if ( m_iSock<0 )
@@ -2742,7 +2744,7 @@ struct TaskNet_t:
 	BYTE			m_uIOChanged = NO;		// need IO changes: dequeue (if !m_uIOActive), 1-set to rw, 2-set to ro
 };
 
-ThreadRole LazyThread;
+static ThreadRole LazyThread;
 
 // low-level ops depends from epoll/kqueue/iocp availability
 
@@ -2935,7 +2937,7 @@ public:
 		if ( ( m_pEntry->flags & EV_ERROR )==0 )
 			return false;
 
-		sphLogDebugL ( "L error for %lu, errno=%lu, %s", m_pEntry->ident, m_pEntry->data, sphSockError (
+		sphLogDebugL ( "L error for %u, errno=%u, %s", m_pEntry->ident, m_pEntry->data, sphSockError (
 			m_pEntry->data ) );
 		return true;
 	}
@@ -3020,7 +3022,7 @@ protected:
 	inline void fire_event ()
 	{
 		if ( !PostQueuedCompletionStatus ( m_IOCP, 0, 0, 0 ) )
-			sphLogDebugv ( "L PostQueuedCompletionStatus failed with error %d", GetLastError () );
+			sphLogDebugv ( "L PostQueuedCompletionStatus failed with error %u", GetLastError() );
 	}
 
 private:
@@ -3072,7 +3074,7 @@ private:
 		{
 			sphLogDebugL ( "L Associate %d with iocp %d, %d events before", pTask->m_ifd, m_IOCP, m_iEvents );
 			if ( !CreateIoCompletionPort ( (HANDLE)(ULONG_PTR)pTask->m_ifd, m_IOCP, (ULONG_PTR) pTask->m_ifd, 0 ) )
-				sphLogDebugv ( "L Associate %d with port %d failed with error %d", pTask->m_ifd, m_IOCP, GetLastError () );
+				sphLogDebugv ( "L Associate %d with port %d failed with error %u", pTask->m_ifd, m_IOCP, GetLastError() );
 			return 2;
 		}
 		sphLogDebugL ( "L According to state, %d already associated with iocp %d, no action", pTask->m_ifd, m_IOCP );
@@ -3836,7 +3838,7 @@ protected:
 	std::atomic<int> m_iSucceeded { 0 };	//< num of tasks finished successfully
 	std::atomic<int> m_iFinished { 0 };		//< num of tasks finished.
 	std::atomic<int> m_iTasks { 0 };		//< total num of tasks
-	CoroEvent_c m_tChanged;		//< the signaller
+	Threads::CoroEvent_c m_tChanged;		//< the signaller
 
 public:
 	void FeedTask ( bool bAdd ) final

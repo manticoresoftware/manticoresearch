@@ -303,6 +303,8 @@ class PluginQueryTokenFilter_c;
 class XQParseHelper_c
 {
 public:
+	virtual			~XQParseHelper_c() = default;
+
 	void			SetString ( const char * szString );
 
 	bool			AddField ( FieldMask_t & dFields, const char * szField, int iLen );
@@ -385,5 +387,7 @@ int		sphMarkCommonSubtrees ( int iXQ, const XQQuery_t * pXQ );
 
 /// whatever to allow alone operator NOT at query
 void	AllowOnlyNot ( bool bAllowed );
+
+CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSchema );
 
 #endif // _sphinxquery_

@@ -39,14 +39,14 @@ static bool TransformMacro ( CSphString & sSrc, CSphString & sPost, const char *
 
 	int iSrcLen = sSrc.Length();
 	auto iPassLen = (int)strlen(szMacro);
-	int iTailLen = iSrcLen - iPassLen - ( sPass - sSrc.cstr() );
+	int iTailLen = iSrcLen - iPassLen - int ( sPass - sSrc.cstr() );
 
 	// copy tail
 	if ( iTailLen )
 		sPost.SetBinary ( sPass+iPassLen, iTailLen );
 
 	CSphString sPre;
-	sPre.SetBinary ( sSrc.cstr(), sPass - sSrc.cstr() );
+	sPre.SetBinary ( sSrc.cstr(), int ( sPass - sSrc.cstr() ) );
 	sSrc.Swap ( sPre );
 
 	return true;
@@ -234,8 +234,6 @@ public:
 		, m_uLastPos ( 0 )
 	{}
 
-	virtual ~SnippetsFastQword_c () {}
-
 	void Setup ( DWORD uLastPos )
 	{
 		m_iDocs = 0;
@@ -320,7 +318,7 @@ inline bool operator < ( const SphHitMark_t & a, const SphHitMark_t & b )
 // with sentence in query we should consider SENTECE, PARAGRAPH, ZONE
 // with paragraph in query we should consider PARAGRAPH, ZONE
 // with zone in query we should consider ZONE
-int ConvertSPZ ( DWORD eSPZ )
+static int ConvertSPZ ( DWORD eSPZ )
 {
 	if ( eSPZ & SPH_SPZ_SENTENCE )
 		return MAGIC_CODE_SENTENCE;
@@ -1418,7 +1416,7 @@ bool SnippetBuilder_c::Impl_c::SetQuery ( const CSphString & sQuery, bool bIgnor
 	assert( m_pState->m_pQuerySettings);
 
 	CSphVector<BYTE> dFiltered;
-	const BYTE * szModifiedQuery = (BYTE *)sQuery.cstr();
+	const BYTE * szModifiedQuery = (const BYTE *)sQuery.cstr();
 	if ( m_pFieldFilter && szModifiedQuery )
 	{
 		if ( m_pFieldFilter->Apply ( szModifiedQuery, dFiltered, true ) )
@@ -1615,4 +1613,4 @@ CSphVector<BYTE> SnippetBuilder_c::PackResult ( SnippetResult_t & tRes, const Ve
 {
 	assert ( m_pImpl );
 	return m_pImpl->PackResult ( tRes, dRequestedFields );
-};
+}

@@ -631,7 +631,7 @@ void stem_dmetaphone ( BYTE * pWord )
 
 	while ( iCode!=0 )
 	{
-		int iCur = pLastPtr-sOriginal;
+		int iCur = int ( pLastPtr-sOriginal );
 		if ( iCur>=iLength )
 			break;
 
@@ -648,7 +648,7 @@ void stem_dmetaphone ( BYTE * pWord )
 		if ( iCode>128 && iCode!=0xC7 && iCode!=0xE7 && iCode!=0xD1 && iCode!=0xF1 )
 			return;
 
-		iAdvance = ProcessCode ( iCode, pLastPtr-sOriginal, Word, sPrimary, sSecondary );
+		iAdvance = ProcessCode ( iCode, int ( pLastPtr-sOriginal ), Word, sPrimary, sSecondary );
 	}
 
 	if ( !pWord[0] || sPrimary [0] )

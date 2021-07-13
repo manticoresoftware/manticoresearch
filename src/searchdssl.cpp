@@ -16,9 +16,19 @@
 #ifdef DAEMON
 #include "sphinx.h"
 #include "sphinxutils.h"
+
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wlanguage-extension-token"
+#endif
+
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/bio.h>
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
 
 // need by OpenSSL
 struct CRYPTO_dynlock_value
@@ -32,7 +42,17 @@ static CSphString g_sSslCert;
 static CSphString g_sSslKey;
 static CSphString g_sSslCa;
 
-void fnSslLock ( int iMode, int iLock, const char * , int )
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-function"
+#endif
+
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+#endif
+
+static void fnSslLock ( int iMode, int iLock, const char * , int )
 {
 	if ( iMode & CRYPTO_LOCK )
 		g_dSslLocks[iLock].Lock();
@@ -40,13 +60,13 @@ void fnSslLock ( int iMode, int iLock, const char * , int )
 		g_dSslLocks[iLock].Unlock();
 }
 
-CRYPTO_dynlock_value * fnSslLockDynCreate ( const char * , int )
+static CRYPTO_dynlock_value * fnSslLockDynCreate ( const char * , int )
 {
 	auto * pLock = new CRYPTO_dynlock_value;
 	return pLock;
 }
 
-void fnSslLockDyn ( int iMode, CRYPTO_dynlock_value * pLock, const char * , int )
+static void fnSslLockDyn ( int iMode, CRYPTO_dynlock_value * pLock, const char * , int )
 {
 	assert ( pLock );
 	if ( iMode & CRYPTO_LOCK )
@@ -55,7 +75,7 @@ void fnSslLockDyn ( int iMode, CRYPTO_dynlock_value * pLock, const char * , int 
 		pLock->m_tLock.Unlock();
 }
 
-void fnSslLockDynDestroy ( CRYPTO_dynlock_value * pLock, const char * , int )
+static void fnSslLockDynDestroy ( CRYPTO_dynlock_value * pLock, const char * , int )
 {
 	SafeDelete ( pLock );
 }
@@ -75,6 +95,14 @@ static int fnSslError ( const char * pStr, size_t iLen, void * pError )
 
 	return 1;
 }
+
+#ifdef __clang__
+#pragma GCC diagnostic pop
+#endif
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
 
 #define FBLACK	"\x1b[30m"
 #define FRED	"\x1b[31m"
@@ -294,7 +322,7 @@ public:
 			iRes = 1;
 			break;
 		case BIO_CTRL_DGRAM_GET_RECV_TIMEOUT:
-			iRes = m_tIn.GetTimeoutUS();
+			iRes = (long)m_tIn.GetTimeoutUS();
 			sphLogDebugv ( BACKN "~~ BioBackCtrl (%p) get recv tm %lds" NORM, this, long (iRes / S2US) );
 			break;
 		case BIO_CTRL_DGRAM_SET_SEND_TIMEOUT:
@@ -303,7 +331,7 @@ public:
 			iRes = 1;
 			break;
 		case BIO_CTRL_DGRAM_GET_SEND_TIMEOUT:
-			iRes = m_tOut.GetWTimeoutUS();
+			iRes = (long)m_tOut.GetWTimeoutUS();
 			sphLogDebugv ( BACKN "~~ BioBackCtrl (%p) get recv tm %lds" NORM, this, long (iRes / S2US) );
 			break;
 		case BIO_CTRL_FLUSH:
@@ -500,8 +528,8 @@ public:
 
 	void SetWTimeoutUS ( int64_t iTimeoutUS ) final
 	{
-		BIO_ctrl ( m_pSslBackend, BIO_CTRL_DGRAM_SET_SEND_TIMEOUT, iTimeoutUS, nullptr );
-	};
+		BIO_ctrl ( m_pSslBackend, BIO_CTRL_DGRAM_SET_SEND_TIMEOUT, (long)iTimeoutUS, nullptr );
+	}
 
 	int64_t GetWTimeoutUS () const final
 	{
@@ -510,7 +538,7 @@ public:
 
 	void SetTimeoutUS ( int64_t iTimeoutUS ) final
 	{
-		BIO_ctrl ( m_pSslBackend, BIO_CTRL_DGRAM_SET_RECV_TIMEOUT, iTimeoutUS, nullptr );
+		BIO_ctrl ( m_pSslBackend, BIO_CTRL_DGRAM_SET_RECV_TIMEOUT, (long)iTimeoutUS, nullptr );
 	}
 
 	int64_t GetTimeoutUS () const final

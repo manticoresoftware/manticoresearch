@@ -17,6 +17,7 @@
 #include "indexformat.h"
 #include "secondaryindex.h"
 #include "docstore.h"
+#include "conversion.h"
 
 
 DebugCheckError_c::DebugCheckError_c ( FILE * pFile )
@@ -340,7 +341,7 @@ bool DiskIndexChecker_c::ReadHeader ( CSphString & sError )
 	m_uVersion = tHeaderReader.GetDword();
 	if ( m_uVersion<=1 || m_uVersion>INDEX_FORMAT_VERSION )
 	{
-		sError.SetSprintf ( "%s is v.%d, binary is v.%d", szHeader, m_uVersion, INDEX_FORMAT_VERSION );
+		sError.SetSprintf ( "%s is v.%u, binary is v.%u", szHeader, m_uVersion, INDEX_FORMAT_VERSION );
 		return false;
 	}
 
@@ -348,7 +349,7 @@ bool DiskIndexChecker_c::ReadHeader ( CSphString & sError )
 	DWORD uMinFormatVer = 54;
 	if ( m_uVersion<uMinFormatVer )
 	{
-		sError.SetSprintf ( "indexes prior to v.%d are no longer supported (use index_converter tool); %s is v.%d", uMinFormatVer, szHeader, m_uVersion );
+		sError.SetSprintf ( "indexes prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, szHeader, m_uVersion );
 		return false;
 	}
 
@@ -1177,7 +1178,7 @@ void DiskIndexChecker_c::CheckDocidLookup()
 
 	CSphFixedVector<CSphRowitem> dRow ( m_tSchema.GetRowSize() );
 	m_tAttrReader.SeekTo ( 0, (int) dRow.GetLengthBytes() );
-	CSphBitvec dRowids ( m_iNumRows );
+	CSphBitvec dRowids ( (int)m_iNumRows );
 
 	int iDocs = tLookup.GetDword();
 	int iDocsPerCheckpoint = tLookup.GetDword();

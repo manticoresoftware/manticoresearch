@@ -470,8 +470,8 @@ public:
 	explicit Bson_c ( const VecTraits_T<BYTE>& dBlob );
 
 	// traits
-	bool IsAssoc () const { return bson::IsAssoc ( m_dData ); }; /// whether we can access members by name
-	bool IsArray () const { return bson::IsArray ( m_dData ); }; /// whether we can access members by index
+	bool IsAssoc () const { return bson::IsAssoc ( m_dData ); } /// whether we can access members by name
+	bool IsArray () const { return bson::IsArray ( m_dData ); } /// whether we can access members by index
 	bool IsNull () const { return m_dData==nullnode; } /// whether node valid (i.e. not eof type, not nullptr locator).
 	operator bool() const { return !IsNull(); } // same as IsNull.
 	bool IsString () const { return m_dData.second==JSON_STRING; }
@@ -479,7 +479,7 @@ public:
 	bool IsDouble () const { return bson::IsDouble ( m_dData ); }
 	bool IsNumeric () const { return bson::IsNumeric (m_dData); }
 
-	bool IsNonEmptyString () const { return bson::IsString ( m_dData ) && !IsEmpty (); }; /// whether we can return non-empty string
+	bool IsNonEmptyString () const { return bson::IsString ( m_dData ) && !IsEmpty (); } /// whether we can return non-empty string
 	bool IsEmpty () const; /// whether container bson has child elements, or string is empty.
 	int CountValues() const; /// count of elems. Objs and root will linearly iterate, other returns immediately.
 	int StandaloneSize() const; /// size of blob need to save node as root (standalone) bson
@@ -549,7 +549,7 @@ class BsonContainer_c : public Bson_c
 public:
 	explicit BsonContainer_c ( char* sJson, bool bAutoconv=false, bool bToLowercase=true, bool bCheckSize=true );
 	explicit BsonContainer_c ( const char * sJsonc, bool bAutoconv=false, bool bToLowercase = true, bool bCheckSize=true )
-	: BsonContainer_c ( ( char * ) CSphString ( sJsonc ).cstr (), bToLowercase, bCheckSize ) {}
+	: BsonContainer_c ( const_cast<char *> ( CSphString ( sJsonc ).cstr() ), bToLowercase, bCheckSize ) {}
 };
 
 class BsonContainer2_c : public Bson_c
@@ -685,6 +685,10 @@ public:
 };
 
 }; // namespace bson
+
+int sphJsonUnescape ( char ** pEscaped, int iLen );
+int sphJsonUnescape1 ( char ** pEscaped, int iLen );
+int JsonUnescape ( char * pTarget, const char * pEscaped, int iLen );
 
 #endif // _sphinxjson_
 

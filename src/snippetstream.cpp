@@ -24,7 +24,7 @@ static void CopyString ( BYTE * sDst, const BYTE * sSrc, int iLen )
 	int iBackup = ( iLen > MAX_WORD_BYTES ) ? MAX_WORD_BYTES : iLen;
 	int iBackup2 = ( iBackup+3 )>>2;
 	DWORD * d = (DWORD*)sDst;
-	DWORD * s = (DWORD*)sSrc;
+	auto * s = (const DWORD*)sSrc;
 	while ( iBackup2-->0 )
 		*d++ = *s++;
 	sDst[iBackup] = '\0';
@@ -54,7 +54,7 @@ static uint64_t PackZone ( DWORD uPosition, int iSiblingIndex, int iZoneType )
 }
 
 
-int FindAddZone ( const char * sZoneName, int iZoneNameLen, SmallStringHash_T<int> & hZones )
+static int FindAddZone ( const char * sZoneName, int iZoneNameLen, SmallStringHash_T<int> & hZones )
 {
 	CSphString sZone;
 	sZone.SetBinary ( sZoneName, iZoneNameLen );
@@ -87,7 +87,7 @@ static int AddZone ( const char * pStart, const char * pEnd, int uPosition, HitC
 		dZoneStack.Add ( iSelf );
 
 		// add zone itself
-		int iZoneNameLen = pEnd-pStart-1;
+		int iZoneNameLen = int ( pEnd-pStart ) - 1;
 		CopyZoneName ( dZoneName, pStart, iZoneNameLen );
 
 		iZone = FindAddZone ( dZoneName.Begin(), iZoneNameLen, hZones );
@@ -99,12 +99,12 @@ static int AddZone ( const char * pStart, const char * pEnd, int uPosition, HitC
 			dZoneParent.Add ( iZone );
 
 			// zone position in characters
-			dZonePos.Add ( pStart-pBuf );
+			dZonePos.Add ( int ( pStart-pBuf ) );
 		}
 
 #ifndef NDEBUG
 		if ( !bNeedExtraZoneInfo )
-			dZonePos.Add ( pStart-pBuf );
+			dZonePos.Add ( int ( pStart-pBuf ) );
 #endif
 
 	} else					// close zone
@@ -116,7 +116,7 @@ static int AddZone ( const char * pStart, const char * pEnd, int uPosition, HitC
 		assert ( iOpening<pEnd-pBuf && strncmp ( pBuf+iOpening, pStart+1, pEnd-pStart-2 )==0 );
 #endif
 
-		int iZoneNameLen = pEnd-pStart-2;
+		int iZoneNameLen = int ( pEnd-pStart ) - 2;
 		CopyZoneName ( dZoneName, pStart+1, iZoneNameLen );
 
 		iZone = FindAddZone ( dZoneName.Begin(), iZoneNameLen, hZones );
@@ -132,7 +132,7 @@ static int AddZone ( const char * pStart, const char * pEnd, int uPosition, HitC
 		if ( bNeedExtraZoneInfo )
 		{
 			// zone position in characters
-			dZonePos.Add ( pStart-pBuf );
+			dZonePos.Add ( int ( pStart-pBuf ) );
 
 			// the parent for the closing zone is the previous zone on stack
 			int iParentZone = dZoneStack.GetLength()>2 ? dZoneStack[dZoneStack.GetLength()-2] : 0;
@@ -142,7 +142,7 @@ static int AddZone ( const char * pStart, const char * pEnd, int uPosition, HitC
 
 #ifndef NDEBUG
 		if ( !bNeedExtraZoneInfo )
-			dZonePos.Add ( pStart-pBuf );
+			dZonePos.Add ( int ( pStart-pBuf ) );
 #endif
 
 
@@ -175,7 +175,7 @@ static int FindTagEnd ( const char * sData )
 	if ( !*s )
 		return -1;
 
-	return s-sData;
+	return int ( s-sData );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -262,7 +262,7 @@ void CacheStreamer_c::StoreOverlap ( int iStart, int iLen, int iBoundary )
 			if ( iLen<=4 && iTokLen<=16 )
 			{
 				BYTE uType = (BYTE)(TYPE_TOKOVER1+iLen-1);
-				m_dTokenStream.Last() = ( uType<<4 )+ (BYTE)iTokLen-1;
+				m_dTokenStream.Last() = BYTE ( ( uType<<4 )+ (BYTE)iTokLen-1 );
 				m_eLastStored = uType;
 				return;
 			} else if ( iLen>=5 && iLen<=6 && iTokLen<=8 )
@@ -333,11 +333,11 @@ void CacheStreamer_c::StoreToken ( const TokenInfo_t & tTok, int iTermIndex )
 	BYTE * p = StoreEntry ( bMultiform ? 14 : 13 );
 
 	BYTE eTok = (BYTE)( bMultiform ? TYPE_MULTIFORM : TYPE_TOKEN );
-	p[0] = ( eTok<<4 );
+	p[0] = BYTE ( eTok<<4 );
 	sphUnalignedWrite ( p+1, tTok.m_iStart );
 	p[5] = BYTE(tTok.m_iLen);
 	sphUnalignedWrite ( p+6, tTok.m_uPosition );
-	p[10] = ( tTok.m_bWord<<1 ) + tTok.m_bStopWord;
+	p[10] = BYTE ( ( tTok.m_bWord<<1 ) + tTok.m_bStopWord );
 	sphUnalignedWrite ( p+11, (WORD)(iTermIndex+1) );
 	if ( bMultiform )
 		p[13] = (BYTE)tTok.m_iMultiPosLen;
@@ -697,8 +697,8 @@ void TokenizeDocument ( HitCollector_i & tFunctor, const CSphHTMLStripper * pStr
 				tTok.m_uWordId = 0;
 				tTok.m_bStopWord = false;
 				tTok.m_uPosition = uPosition; // let's stick to last blended part
-				tTok.m_iStart = pLastTokenEnd - pStartPtr;
-				tTok.m_iLen = pBlendedEnd - pLastTokenEnd;
+				tTok.m_iStart = int ( pLastTokenEnd - pStartPtr );
+				tTok.m_iLen = int ( pBlendedEnd - pLastTokenEnd );
 				tTok.m_bWord = false;
 				if ( !tFunctor.OnToken ( tTok, dMultiToken, NULL ) )
 				{
@@ -766,7 +766,7 @@ void TokenizeDocument ( HitCollector_i & tFunctor, const CSphHTMLStripper * pStr
 			{
 				BYTE sTmpBuf [ 3*SPH_MAX_WORD_LEN+4];
 				sTmpBuf[0] = MAGIC_WORD_HEAD_NONSTEMMED;
-				CopyString ( sTmpBuf+1, sWord, pTokenizer->GetTokenEnd() - pTokenStart );
+				CopyString ( sTmpBuf+1, sWord, int ( pTokenizer->GetTokenEnd() - pTokenStart ) );
 				dMultiToken.Add ( pDict->GetWordIDNonStemmed ( sTmpBuf ) );
 			}
 
@@ -785,20 +785,18 @@ void TokenizeDocument ( HitCollector_i & tFunctor, const CSphHTMLStripper * pStr
 			{
 				// FIXME!!! implement proper handling of blend-chars
 				if ( ( pBlendedStart - pLastTokenEnd )>0 )
-					bDone = !tFunctor.OnOverlap ( pLastTokenEnd-pStartPtr, pBlendedStart - pLastTokenEnd, pTokenizer->GetBoundary() ? pTokenizer->GetBoundaryOffset() : -1 );
+					bDone = !tFunctor.OnOverlap ( int ( pLastTokenEnd-pStartPtr ),  int ( pBlendedStart-pLastTokenEnd ), pTokenizer->GetBoundary() ? pTokenizer->GetBoundaryOffset() : -1 );
 
 				tTok.m_uWordId = 0;
 				tTok.m_bStopWord = false;
 				tTok.m_uPosition = uPosition; // let's stick to 1st blended part
-				tTok.m_iStart = pBlendedStart - pStartPtr;
-				tTok.m_iLen = pTokenStart - pBlendedStart;
+				tTok.m_iStart = int ( pBlendedStart - pStartPtr );
+				tTok.m_iLen = int ( pTokenStart - pBlendedStart );
 				tTok.m_bWord = false;
 				if ( !bDone )
 					bDone = !tFunctor.OnToken ( tTok, dMultiToken, &dMultiPosDelta );
 			} else
-			{
-				bDone = !tFunctor.OnOverlap ( pLastTokenEnd-pStartPtr, pTokenStart - pLastTokenEnd, pTokenizer->GetBoundary() ? pTokenizer->GetBoundaryOffset() : -1 );
-			}
+				bDone = !tFunctor.OnOverlap ( int ( pLastTokenEnd-pStartPtr ), int ( pTokenStart - pLastTokenEnd ), pTokenizer->GetBoundary() ? pTokenizer->GetBoundaryOffset() : -1 );
 
 			if ( bDone	)
 			{
@@ -827,7 +825,7 @@ void TokenizeDocument ( HitCollector_i & tFunctor, const CSphHTMLStripper * pStr
 			if ( iTagEnd!=-1 )
 			{
 				assert ( pTokenStart+iTagEnd<pTokenizer->GetBufferEnd() );
-				tFunctor.OnSkipHtml ( pTokenStart-pStartPtr, iTagEnd+1 );
+				tFunctor.OnSkipHtml ( int ( pTokenStart-pStartPtr ), iTagEnd+1 );
 				pTokenizer->SetBufferPtr ( pTokenStart+iTagEnd+1 );
 				pLastTokenEnd = pTokenStart+iTagEnd+1; // fix it up to prevent adding last chunk on exit
 			}
@@ -891,7 +889,7 @@ void TokenizeDocument ( HitCollector_i & tFunctor, const CSphHTMLStripper * pStr
 		pLastTokenEnd = pTokenizer->GetTokenEnd ();
 
 		// might differ when sbsc got replaced by utf codepoint
-		int iTokenLen = pLastTokenEnd - pTokenStart;
+		int iTokenLen = int ( pLastTokenEnd - pTokenStart );
 		auto iWordLen = (int) strlen ( ( const char *)sWord );
 
 		bool bPopExactMulti = false;
@@ -920,7 +918,7 @@ void TokenizeDocument ( HitCollector_i & tFunctor, const CSphHTMLStripper * pStr
 			uStep = 1;
 
 		tTok.m_uPosition = ( iWord || tTok.m_bStopWord ) ? uPosition : 0;
-		tTok.m_iStart = pTokenStart - pStartPtr;
+		tTok.m_iStart = int ( pTokenStart - pStartPtr );
 		tTok.m_iLen = iTokenLen;
 		tTok.m_bWord = !!iWord;
 
@@ -943,8 +941,8 @@ void TokenizeDocument ( HitCollector_i & tFunctor, const CSphHTMLStripper * pStr
 		tTok.m_uWordId = 0;
 		tTok.m_bStopWord = false;
 		tTok.m_uPosition = uPosition; // let's stick to last blended part, uPosition and not uPosition-1 as no iteration happened at exit
-		tTok.m_iStart = pLastTokenEnd - pStartPtr;
-		tTok.m_iLen = pBlendedEnd - pLastTokenEnd;
+		tTok.m_iStart = int ( pLastTokenEnd - pStartPtr );
+		tTok.m_iLen = int ( pBlendedEnd - pLastTokenEnd );
 		tTok.m_bWord = false;
 		tTok.m_iMultiPosLen = 0;
 		tFunctor.OnToken ( tTok, dMultiToken, &dMultiPosDelta );
@@ -952,7 +950,7 @@ void TokenizeDocument ( HitCollector_i & tFunctor, const CSphHTMLStripper * pStr
 	}
 
 	if ( pLastTokenEnd!=pTokenizer->GetBufferEnd() )
-		tFunctor.OnTail ( pLastTokenEnd-pStartPtr, pTokenizer->GetBufferEnd() - pLastTokenEnd, pTokenizer->GetBoundary() ? pTokenizer->GetBoundaryOffset() : -1 );
+		tFunctor.OnTail ( int ( pLastTokenEnd-pStartPtr ), int ( pTokenizer->GetBufferEnd() - pLastTokenEnd ), pTokenizer->GetBoundary() ? pTokenizer->GetBoundaryOffset() : -1 );
 
 	tFunctor.OnFinish();
 }

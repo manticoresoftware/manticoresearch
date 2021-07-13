@@ -209,7 +209,7 @@ class RT : public ::testing::Test
 {
 
 protected:
-	virtual void SetUp ()
+	void SetUp() override
 	{
 		StartGlobalWorkPool ();
 		DeleteIndexFiles ( RT_INDEX_FILE_NAME );
@@ -223,7 +223,7 @@ protected:
 		tSrcSchema.AddField ( "content" );
 	}
 
-	virtual void TearDown ()
+	void TearDown() override
 	{
 		sphRTDone ();
 		DeleteIndexFiles ( RT_INDEX_FILE_NAME );

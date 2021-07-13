@@ -17,6 +17,7 @@
 #include "sphinxplugin.h"
 #include "sphinxqcache.h"
 #include "attribute.h"
+#include "conversion.h"
 
 #include <math.h>
 
@@ -109,20 +110,20 @@ class ExtRanker_c : public ISphRanker, public ISphZoneCheck
 {
 public:
 								ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, bool bSkipQCache, bool bCollectHits, bool bUseBM25 );
-	virtual						~ExtRanker_c ();
-	virtual void				Reset ( const ISphQwordSetup & tSetup );
+								~ExtRanker_c() override;
+	void						Reset ( const ISphQwordSetup & tSetup ) override;
 
-	virtual CSphMatch *			GetMatchesBuffer () { return m_dMatches; }
+	CSphMatch *					GetMatchesBuffer () override { return m_dMatches; }
 	int							GetQwords ( ExtQwordsHash_t & hQwords )					{ return m_pRoot ? m_pRoot->GetQwords ( hQwords ) : -1; }
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
 	virtual void				SetTermDupes ( const ExtQwordsHash_t & , int ) {}
 	virtual bool				InitState ( const CSphQueryContext &, CSphString & )	{ return true; }
 
-	virtual void				FinalizeCache ( const ISphSchema & tSorterSchema );
+	void						FinalizeCache ( const ISphSchema & tSorterSchema ) override;
 
 public:
 	// FIXME? hide and friend?
-	virtual SphZoneHit_e		IsInZone ( int iZone, const ExtHit_t * pHit, int * pLastSpan );
+	SphZoneHit_e				IsInZone ( int iZone, const ExtHit_t * pHit, int * pLastSpan ) override;
 	virtual const CSphIndex *	GetIndex() { return m_pIndex; }
 	const CSphQueryContext * GetCtx() const { return m_pCtx; }
 
@@ -187,9 +188,9 @@ public:
 		: ExtRanker_T<USE_BM25> ( tXQ, tSetup, bSkipQCache, false )
 	{}
 
-	virtual int		GetMatches ();
+	int		GetMatches () override;
 
-	virtual bool InitState ( const CSphQueryContext & tCtx, CSphString & )
+	bool	InitState ( const CSphQueryContext & tCtx, CSphString & ) override
 	{
 		m_iWeights = tCtx.m_iWeights;
 		m_pWeights = tCtx.m_dWeights;
@@ -205,7 +206,7 @@ public:
 		: ExtRanker_T<false> ( tXQ, tSetup, bSkipQCache, false )
 	{}
 
-	virtual int		GetMatches ();
+	int		GetMatches () override;
 };
 
 
@@ -219,15 +220,15 @@ protected:
 
 public:
 					ExtRanker_State_T ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, bool bSkipQCache, bool bCollectHits = true );
-	virtual int		GetMatches ();
+	int				GetMatches () override;
 
-	virtual bool InitState ( const CSphQueryContext & tCtx, CSphString & sError )
+	bool InitState ( const CSphQueryContext & tCtx, CSphString & sError ) override
 	{
 		return m_tState.Init ( tCtx.m_iWeights, &tCtx.m_dWeights[0], this, sError, tCtx.m_uPackedFactorFlags );
 	}
 
 private:
-	virtual bool ExtraDataImpl ( ExtraData_e eType, void ** ppResult )
+	bool ExtraDataImpl ( ExtraData_e eType, void ** ppResult ) override
 	{
 		switch ( eType )
 		{
@@ -255,7 +256,7 @@ void RenderAccessSpecs ( StringBuilder_c & tRes, const bson::Bson_c& tBson, bool
 			tRes << String ( tNode );
 		} );
 	}
-	int iPos = Int ( tBson.ChildByName ( SZ_MAX_FIELD_POS ) );
+	int iPos = (int)Int ( tBson.ChildByName ( SZ_MAX_FIELD_POS ) );
 	if ( iPos )
 		tRes.Sprintf ( "max_field_pos=%d", iPos );
 
@@ -1801,7 +1802,7 @@ void FactorPool_c::Free ( BYTE * pPtr )
 	assert ( (pPtr-m_dPool.Begin() ) % GetIntElementSize()==0);
 	assert ( pPtr>=m_dPool.Begin() && pPtr<&( m_dPool.Last() ) );
 
-	int iIndex = ( pPtr-m_dPool.Begin() )/GetIntElementSize();
+	int iIndex = int ( pPtr-m_dPool.Begin() ) / GetIntElementSize();
 	m_dFree.Free ( iIndex );
 }
 

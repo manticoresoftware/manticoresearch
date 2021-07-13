@@ -104,13 +104,6 @@ TEST ( CJson, format )
 
 }
 
-// defined in sphinxjson
-int sphJsonUnescape ( char ** pEscaped, int iLen );
-int sphJsonUnescape1 ( char ** pEscaped, int iLen );
-
-// unescaped pEscaped, modify pEscaped to unescaped chain, return the length of unescaped
-// that is actually used, defined in sphinxjson.cpp
-int JsonUnescape ( char* pTarget, const char* pEscaped, int iLen );
 
 int JsonStrUnescape ( char* pTarget, const CSphString& sSource )
 {

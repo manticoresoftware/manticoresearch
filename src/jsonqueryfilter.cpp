@@ -201,7 +201,7 @@ bool GeoDistInfo_c::ParseDistance ( const JsonObj_c & tDistance, CSphString & sE
 		p++;
 
 	CSphString sNumber;
-	sNumber.SetBinary ( szNumber, p-szNumber );
+	sNumber.SetBinary ( szNumber, int ( p-szNumber ) );
 
 	while ( *p && sphIsSpace(*p) )
 		p++;
@@ -211,7 +211,7 @@ bool GeoDistInfo_c::ParseDistance ( const JsonObj_c & tDistance, CSphString & sE
 		p++;
 
 	CSphString sUnit;
-	sUnit.SetBinary ( szUnit, p-szUnit );
+	sUnit.SetBinary ( szUnit, int ( p-szUnit ) );
 
 	m_fDistance = (float)atof ( sNumber.cstr() );
 

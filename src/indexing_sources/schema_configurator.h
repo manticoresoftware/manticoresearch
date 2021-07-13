@@ -30,15 +30,14 @@ struct CSphSchemaConfigurator
 					int iBits = strtol ( pColon+1, NULL, 10 );
 					if ( iBits<=0 || iBits>ROWITEM_BITS )
 					{
-						sphWarn ( "%s", ((T*)this)->DecorateMessage ( "attribute '%s': invalid bitcount=%d (bitcount ignored)", tCol.m_sName.cstr(), iBits ) );
+						sphWarn ( "%s", ((T*)const_cast<CSphSchemaConfigurator*>(this))->DecorateMessage ( "attribute '%s': invalid bitcount=%d (bitcount ignored)", tCol.m_sName.cstr(), iBits ) );
 						iBits = -1;
 					}
 
 					tCol.m_tLocator.m_iBitCount = iBits;
-				} else
-				{
-					sphWarn ( "%s", ((T*)this)->DecorateMessage ( "attribute '%s': bitcount is only supported for integer types", tCol.m_sName.cstr() ) );
 				}
+				else
+					sphWarn ( "%s", ((T*)const_cast<CSphSchemaConfigurator*>(this))->DecorateMessage ( "attribute '%s': bitcount is only supported for integer types", tCol.m_sName.cstr() ) );
 			}
 
 			tCol.m_iIndex = tSchema.GetAttrsCount ();
@@ -69,7 +68,7 @@ struct CSphSchemaConfigurator
 				bFound = !strcmp ( tSchema.GetFieldName(i), sFieldName );
 
 			if ( bFound )
-				sphWarn ( "%s", ((T*)this)->DecorateMessage ( "duplicate field '%s'", sFieldName ) );
+				sphWarn ( "%s", ((T*)const_cast<CSphSchemaConfigurator*>(this))->DecorateMessage ( "duplicate field '%s'", sFieldName ) );
 			else
 				AddFieldToSchema ( sFieldName, bWordDict, tSchema );
 		}
@@ -78,7 +77,7 @@ struct CSphSchemaConfigurator
 	void AddFieldToSchema ( const char * sFieldName, bool bWordDict, CSphSchema & tSchema ) const
 	{
 		CSphColumnInfo tCol ( sFieldName );
-		tCol.m_eWordpart = ((T*)this)->GetWordpart ( tCol.m_sName.cstr(), bWordDict );
+		tCol.m_eWordpart = ((T*)const_cast<CSphSchemaConfigurator*>(this))->GetWordpart ( tCol.m_sName.cstr(), bWordDict );
 		tSchema.AddField ( tCol );
 	}
 };

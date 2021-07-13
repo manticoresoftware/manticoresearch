@@ -98,8 +98,7 @@
 #include "sphinxrt.h"
 #include "task_info.h"
 #include "coroutine.h"
-
-using namespace Threads;
+#include "conversion.h"
 
 #define SPHINXAPI_PORT            9312
 #define SPHINXQL_PORT            9306
@@ -388,14 +387,14 @@ public:
 
 	BYTE* ReservePlace ( int64_t iPlace )
 	{
-		auto pRes = m_dBuf.AddN ( iPlace );
+		auto pRes = m_dBuf.AddN ( (int)iPlace );
 		m_dBuf.Resize ( m_dBuf.Idx(pRes));
 		return pRes;
 	}
 
 	void CommitZeroCopy ( int64_t iSize )
 	{
-		m_dBuf.AddN ( iSize );
+		m_dBuf.AddN ( (int)iSize );
 	}
 
 	void Rewind ( int64_t iPos )
@@ -475,7 +474,7 @@ public:
 			return false;
 		m_dBuf.Resize ( 0 ); // check and fix!
 		return true;
-	};
+	}
 
 	virtual bool SendBuffer ( const VecTraits_T<BYTE> & dData ) = 0;
 
@@ -543,7 +542,7 @@ protected:
 			return 0;
 		}
 
-		T iRes = sphUnalignedRead( *( T* ) m_pCur );
+		T iRes = sphUnalignedRead( *( T* ) const_cast<BYTE*>(m_pCur) );
 		m_pCur += sizeof( T );
 		return iRes;
 	}
@@ -746,7 +745,8 @@ struct ServedDesc_t
 // create ServedDesc[R|W]Ptr_c instance to have actual access to the members.
 class ServedIndex_c : public ISphRefcountedMT, private ServedDesc_t, public ServedStats_c
 {
-	mutable CoroRWLock_c m_tLock;
+	mutable Threads::CoroRWLock_c m_tLock;
+
 private:
 	friend class ServedDescRPtr_c;
 	friend class ServedDescWPtr_c;
@@ -1036,7 +1036,7 @@ public:
 	explicit RLockedServedIt_c ( const GuardedHash_c * pHash ) ACQUIRE_SHARED ( pHash->IndexesRWLock(), m_pHash->IndexesRWLock() )
 		: RLockedHashIt_c ( pHash )
 	{}
-	~RLockedServedIt_c() UNLOCK_FUNCTION() {}; // d-tr explicitly written because attr UNLOCK_FUNCTION().
+	~RLockedServedIt_c() UNLOCK_FUNCTION() {} // d-tr explicitly written because attr UNLOCK_FUNCTION().
 
 	ServedIndexRefPtr_c Get () REQUIRES_SHARED ( m_pHash->IndexesRWLock() )
 	{
@@ -1193,6 +1193,8 @@ class RowBuffer_i;
 class StmtErrorReporter_i
 {
 public:
+	virtual ~StmtErrorReporter_i() = default;
+
 	virtual void Ok ( int iAffectedRows, const CSphString & sWarning, int64_t iLastInsertId ) = 0;
 	virtual void Ok ( int iAffectedRows, int nWarnings=0 ) = 0;
 	virtual void ErrorEx ( MysqlErrors_e iErr, const char * sError ) = 0;

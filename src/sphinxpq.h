@@ -267,7 +267,7 @@ struct PercolateMatchContext_t : public PQMatchContextResult_t
 		m_pTermSetup->m_pIndex = pIndex;
 		m_pTermSetup->m_pCtx = m_pCtx.Ptr ();
 		m_pTermSetup->m_bHasWideFields = bHasWideFields;
-	};
+	}
 };
 
 void PercolateMergeResults ( const VecTraits_T<PQMatchContextResult_t *> &dMatches, PercolateMatchResult_t &tRes );

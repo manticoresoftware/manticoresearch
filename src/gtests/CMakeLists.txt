@@ -33,6 +33,10 @@ if (WITH_EXPAT)
 endif()
 
 target_compile_options(gmanticoretest PRIVATE $<$<OR:$<COMPILE_LANG_AND_ID:CXX,GNU>,$<COMPILE_LANG_AND_ID:C,GNU>>:-Wno-array-bounds -Wno-stringop-truncation -Wno-restrict -Wno-stringop-overflow>)
+target_compile_options(gmanticoretest PRIVATE $<$<OR:$<COMPILE_LANG_AND_ID:CXX,Clang>,$<COMPILE_LANG_AND_ID:C,Clang>>:
+	-Wno-suggest-override -Wno-inconsistent-missing-override -Wno-suggest-destructor-override -Wno-shadow -Wno-used-but-marked-unused
+	-Wno-float-conversion -Wno-header-hygiene
+>)
 
 include ( GoogleTest )
 GTEST_DISCOVER_TESTS ( gmanticoretest PROPERTIES LABELS GOOGLE )

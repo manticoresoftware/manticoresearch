@@ -13,6 +13,8 @@
 #include "searchdtask.h"
 #include "searchdaemon.h"
 
+using namespace Threads;
+
 /// flushing period, defined from `rt_flush_period` config param
 static int64_t g_iRtFlushPeriodUs = 36000000000ll; // default period is 10 hours
 void SetRtFlushPeriod ( int64_t iPeriod )

@@ -15,8 +15,9 @@
 
 #include "sphinxexpr.h"
 #include "sphinxfilter.h"
+#include "conversion.h"
 
-#if _WIN32
+#if _WIN32 && !defined(__clang__)
 #ifndef NDEBUG
 #define EXPR_CLASS_NAME(name) \
 	{\

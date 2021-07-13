@@ -457,7 +457,7 @@ protected:
 	virtual ~Handler_t ()
 	{
 		m_tLock.Done ();
-	};
+	}
 
 public:
 	Handler_t ( int payload )

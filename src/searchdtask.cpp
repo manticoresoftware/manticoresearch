@@ -212,8 +212,8 @@ struct TaskProperties_t
 TaskFlavour_t g_Tasks [ NUM_TASKS ];
 TaskProperties_t g_TaskProps [ NUM_TASKS ];
 #else
-CSphFixedVector<TaskFlavour_t> g_Tasks { NUM_TASKS };
-CSphFixedVector<TaskProperties_t> g_TaskProps { NUM_TASKS };
+static CSphFixedVector<TaskFlavour_t> g_Tasks { NUM_TASKS };
+static CSphFixedVector<TaskProperties_t> g_TaskProps { NUM_TASKS };
 #endif
 
 static std::atomic<int> g_iTasks {0};
@@ -277,8 +277,8 @@ using TaskRefP_c = CSphRefcountedPtr<Task_t>;
 using VectorTask_c = CSphVector<Task_t*>;
 
 // task pool thread context
-ThreadRole MtJobThread;
-ThreadRole TaskThread;
+static ThreadRole MtJobThread;
+static ThreadRole TaskThread;
 class LazyJobs_c;
 struct TaskWorker_t: public ListNode_t
 {

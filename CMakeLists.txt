@@ -165,10 +165,27 @@ if (COVERAGE_TEST)
 			)
 endif (COVERAGE_TEST)
 
-# options for clang in C++
+# options for clang in C++ (permanently disabled warnings)
 target_compile_options (lextra INTERFACE $<${CLANGXX}:
-		-Wno-deprecated-register -Wno-missing-exception-spec -Wno-implicit-exception-spec-mismatch -Wno-invalid-offsetof>)
+		-Wno-deprecated-register -Wno-missing-exception-spec -Wno-implicit-exception-spec-mismatch -Wno-invalid-offsetof
+		-Wno-c++98-compat-pedantic -Wno-nonportable-system-include-path -Wno-old-style-cast -Wno-unused-parameter
+		-Wno-sign-conversion -Wno-zero-as-null-pointer-constant -Wno-reserved-id-macro -Wno-extra-semi-stmt -Wno-undef
+		-Wno-format-nonliteral -Wno-cast-align -Wno-deprecated-declarations -Wno-switch-enum -Wno-unused-macros
+		-Wno-disabled-macro-expansion -Wno-documentation -Wno-documentation-deprecated-sync -Wno-documentation-unknown-command
+		-Wno-format-pedantic -Wno-covered-switch-default -Wno-implicit-int-float-conversion -Wno-exit-time-destructors
+		-Wno-float-equal -Wno-double-promotion -Wno-missing-field-initializers -Wno-unused-local-typedef
+		-Wno-global-constructors -Wno-deprecated-copy-dtor -Wno-gnu-anonymous-struct -Wno-nested-anon-types
+		-Wno-undefined-func-template> )
 
+# options for clang in C++ (temporarily disabled warnings)
+target_compile_options (lextra INTERFACE $<${CLANGXX}:
+		-Wno-thread-safety-analysis -Wno-unknown-argument -Wno-unused-command-line-argument -Wno-implicit-fallthrough
+		-Wno-format -Wno-unknown-pragmas -Wno-cast-qual -Wno-unreachable-code -Wno-language-extension-token
+		-Wno-implicit-int-conversion -Wno-shorten-64-to-32 -Wno-missing-prototypes -Wno-newline-eof -Wno-tautological-unsigned-zero-compare
+		-Wno-shadow-uncaptured-local -Wno-deprecated-dynamic-exception-spec -Wno-missing-variable-declarations -Wno-string-conversion
+		-Wno-unreachable-code-break -Wno-unreachable-code-return -Wno-sign-compare  -Wno-atomic-implicit-seq-cst -Wno-microsoft-cast
+		-Wno-enum-enum-conversion -Wno-unused-function -Wno-missing-noreturn -Wno-unused-variable> )
+		              
 # Checking for unaligned RAM access
 include (check_unaligned_ram_access)
 

@@ -163,7 +163,7 @@ public:
 	}
 
 	/// dtor
-	virtual ~CSphMappedBuffer ()
+	~CSphMappedBuffer() override
 	{
 		this->Reset();
 	}
@@ -195,7 +195,7 @@ public:
 		HANDLE iFD = CreateFile ( sFile.cstr(), iAccessMode, uShare, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0 );
 		if ( iFD==INVALID_HANDLE_VALUE )
 		{
-			sError.SetSprintf ( "failed to open file '%s' (errno %d)", sFile, ::GetLastError() );
+			sError.SetSprintf ( "failed to open file '%s' (errno %u)", sFile.cstr(), ::GetLastError() );
 			return false;
 		}
 		m_iFD = iFD;
@@ -203,7 +203,7 @@ public:
 		LARGE_INTEGER tLen;
 		if ( GetFileSizeEx ( iFD, &tLen )==0 )
 		{
-			sError.SetSprintf ( "failed to fstat file '%s' (errno %d)", sFile, ::GetLastError() );
+			sError.SetSprintf ( "failed to fstat file '%s' (errno %u)", sFile.cstr(), ::GetLastError() );
 			Reset();
 			return false;
 		}
@@ -224,7 +224,7 @@ public:
 			pData = (T *)::MapViewOfFile ( m_iMap, iMapAccessMode, 0, 0, 0 );
 			if ( !pData )
 			{
-				sError.SetSprintf ( "failed to map file '%s': (errno %d, length=" INT64_FMT ")", sFile, ::GetLastError(), (int64_t)tLen.QuadPart );
+				sError.SetSprintf ( "failed to map file '%s': (errno %u, length=" INT64_FMT ")", sFile.cstr(), ::GetLastError(), (int64_t)tLen.QuadPart );
 				Reset();
 				return false;
 			}
@@ -268,7 +268,7 @@ public:
 		return true;
 	}
 
-	virtual void Reset ()
+	void Reset() override
 	{
 		this->MemUnlock();
 
@@ -311,7 +311,7 @@ public:
 		m_iMap = ::CreateFileMapping ( m_iFD, nullptr, m_bWrite ? PAGE_READWRITE : PAGE_READONLY, (DWORD)( uNewSize >> 32 ), (DWORD) ( uNewSize & 0xFFFFFFFFULL ), nullptr );
 		if ( !m_iMap )
 		{
-			sError.SetSprintf ( "CreateFileMapping failed for '%s': (errno %d, length=" UINT64_FMT ")", m_sFilename.cstr(), ::GetLastError(), uNewSize );
+			sError.SetSprintf ( "CreateFileMapping failed for '%s': (errno %u, length=" UINT64_FMT ")", m_sFilename.cstr(), ::GetLastError(), uNewSize );
 			Reset();
 			return false;
 		}
@@ -319,7 +319,7 @@ public:
 		void * pMapped = (T *)::MapViewOfFile ( m_iMap, FILE_MAP_READ | ( m_bWrite ? FILE_MAP_WRITE : 0 ), 0, 0, 0 );
 		if ( !pMapped )
 		{
-			sError.SetSprintf ( "MapViewOfFile failed for '%s': (errno %d, length=" UINT64_FMT ")", m_sFilename.cstr(), ::GetLastError(), uNewSize );
+			sError.SetSprintf ( "MapViewOfFile failed for '%s': (errno %u, length=" UINT64_FMT ")", m_sFilename.cstr(), ::GetLastError(), uNewSize );
 			Reset();
 			return false;
 		}
@@ -372,15 +372,15 @@ public:
 
 	uint64_t GetCoreSize () const
 	{
+#if !_WIN32
 				using PAGETYPE =
-#if HAVE_UNSIGNED_MINCORE
+	#if HAVE_UNSIGNED_MINCORE
 							BYTE
-#else
+	#else
 							char
-#endif
+	#endif
 								;
 
-#if !_WIN32
 		auto uPageSize = getpagesize ();
 		auto uSize = this->GetLengthBytes();
 		auto uPages = ( uSize+uPageSize-1 ) / uPageSize;
@@ -395,7 +395,7 @@ public:
 #else
 		return 0; // fixme! implement...
 #endif
-	};
+	}
 
 	bool Flush ( bool bWaitComplete, CSphString & sError ) const
 	{
@@ -405,13 +405,13 @@ public:
 #if _WIN32
 		if ( !::FlushViewOfFile ( this->GetWritePtr(), this->GetLengthBytes() ) )
 		{
-			sError.SetSprintf ( "FlushViewOfFile failed for '%s': errno %d", m_sFilename.cstr(), ::GetLastError() );
+			sError.SetSprintf ( "FlushViewOfFile failed for '%s': errno %u", m_sFilename.cstr(), ::GetLastError() );
 			return false;
 		}
 
 		if ( bWaitComplete && !::FlushFileBuffers(m_iFD) )
 		{
-			sError.SetSprintf ( "FlushFileBuffers failed for '%s': errno %d", m_sFilename.cstr(), ::GetLastError() );
+			sError.SetSprintf ( "FlushFileBuffers failed for '%s': errno %u", m_sFilename.cstr(), ::GetLastError() );
 			return false;
 		}
 #else

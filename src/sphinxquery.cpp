@@ -121,7 +121,7 @@ bool XQParseHelper_c::ParseFields ( FieldMask_t & dFields, int & iMaxFieldPos, b
 			++pPtr;
 
 		assert ( pPtr-pFieldStart>0 );
-		if ( !AddField ( dFields, pFieldStart, pPtr-pFieldStart ) )
+		if ( !AddField ( dFields, pFieldStart, int ( pPtr-pFieldStart ) ) )
 			return false;
 
 		m_pTokenizer->SetBufferPtr ( pPtr );
@@ -155,7 +155,7 @@ bool XQParseHelper_c::ParseFields ( FieldMask_t & dFields, int & iMaxFieldPos, b
 
 			} else if ( *pPtr==',' )
 			{
-				if ( !AddField ( dFields, pFieldStart, pPtr-pFieldStart ) )
+				if ( !AddField ( dFields, pFieldStart, int ( pPtr-pFieldStart ) ) )
 					return false;
 
 				pFieldStart = nullptr;
@@ -163,7 +163,7 @@ bool XQParseHelper_c::ParseFields ( FieldMask_t & dFields, int & iMaxFieldPos, b
 
 			} else if ( *pPtr==')' )
 			{
-				if ( !AddField ( dFields, pFieldStart, pPtr-pFieldStart ) )
+				if ( !AddField ( dFields, pFieldStart, int ( pPtr-pFieldStart ) ) )
 					return false;
 
 				m_pTokenizer->SetBufferPtr ( ++pPtr );
@@ -185,7 +185,7 @@ bool XQParseHelper_c::ParseFields ( FieldMask_t & dFields, int & iMaxFieldPos, b
 				return Error ( "error parsing field list: missing closing ')' in field block operator" );
 			else
 			{
-				if ( !AddField ( dFields, pFieldStart, pPtr-pFieldStart ) )
+				if ( !AddField ( dFields, pFieldStart, int ( pPtr-pFieldStart ) ) )
 					return false;
 
 				if ( bNegate )
@@ -299,7 +299,7 @@ bool XQParseHelper_c::CheckQuorumProximity ( XQNode_t * pNode )
 	if ( pNode->GetOp()==SPH_QUERY_PROXIMITY && pNode->m_iOpArg<1 )
 		return Error ( "proximity threshold too low (%d)", pNode->m_iOpArg );
 
-	return pNode->m_dChildren.all_of ( [&] ( XQNode_t * pNode ) { return CheckQuorumProximity ( pNode ); } );
+	return pNode->m_dChildren.all_of ( [&] ( XQNode_t * pChild ) { return CheckQuorumProximity(pChild); } );
 }
 
 
@@ -582,8 +582,7 @@ void XQParseHelper_c::DeleteNodesWOFields ( XQNode_t * pNode )
 			CSphVector<XQNode_t *> dChildren;
 			CollectChildren ( pChild, dChildren );
 #ifndef NDEBUG
-			bool bAllEmpty = dChildren.all_of (
-				[] ( XQNode_t * pNode ) { return pNode->m_dSpec.m_dFieldMask.TestAll ( false ); } );
+			bool bAllEmpty = dChildren.all_of ( [] ( XQNode_t * pChildNode ) { return pChildNode->m_dSpec.m_dFieldMask.TestAll ( false ); } );
 			assert ( pChild->m_dChildren.GetLength()==0 || ( dChildren.GetLength() && bAllEmpty ) );
 #endif
 			if ( dChildren.GetLength() )
@@ -668,8 +667,8 @@ class XQParser_t : public XQParseHelper_c
 	friend int yyparse (XQParser_t * pParser);
 
 public:
-					XQParser_t ();
-					~XQParser_t ();
+					XQParser_t();
+					~XQParser_t() override;
 
 public:
 	bool			Parse ( XQQuery_t & tQuery, const char * sQuery, const CSphQuery * pQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings );
@@ -751,7 +750,7 @@ protected:
 
 //////////////////////////////////////////////////////////////////////////
 
-int yylex ( YYSTYPE * lvalp, XQParser_t * pParser )
+static int yylex ( YYSTYPE * lvalp, XQParser_t * pParser )
 {
 	return pParser->GetToken ( lvalp );
 }
@@ -762,7 +761,16 @@ void yyerror ( XQParser_t * pParser, const char * sMessage )
 		pParser->m_pParsed->m_sParseError.SetSprintf ( "%s near '%s'", sMessage, pParser->m_pErrorAt );
 }
 
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wfloat-conversion"
+#endif
+
 #include "bissphinxquery.c"
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -1023,7 +1031,7 @@ int XQParser_t::ParseZone ( const char * pZone )
 
 		// extract and lowercase it
 		CSphString sZone;
-		sZone.SetBinary ( pZone, p-pZone );
+		sZone.SetBinary ( pZone, int(p-pZone) );
 		sZone.ToLower();
 
 		// register it in zones list
@@ -1058,7 +1066,7 @@ int XQParser_t::ParseZone ( const char * pZone )
 
 			// extract and lowercase it
 			CSphString sZone;
-			sZone.SetBinary ( pZone, p-pZone );
+			sZone.SetBinary ( pZone, int(p-pZone) );
 			sZone.ToLower();
 
 			// register it in zones list
@@ -1090,7 +1098,7 @@ bool XQParser_t::GetNumber ( const char * p, const char * sRestart )
 	int iDots = 0;
 	const char * sToken = p;
 	const char * sEnd = m_pTokenizer->GetBufferEnd ();
-	while ( p<sEnd && ( isdigit ( *(BYTE*)p ) || *p=='.' ) )
+	while ( p<sEnd && ( isdigit ( *(const BYTE*)p ) || *p=='.' ) )
 	{
 		iDots += ( *p=='.' );
 		p++;
@@ -1144,7 +1152,7 @@ bool XQParser_t::GetNumber ( const char * p, const char * sRestart )
 			if ( sToken )
 			{
 				m_dIntTokens.Add ( sToken );
-				if ( m_pDict->GetWordID ( (BYTE*)sToken ) )
+				if ( m_pDict->GetWordID ( (BYTE*)const_cast<char*>(sToken) ) )
 					m_tPendingToken.tInt.iStrIndex = m_dIntTokens.GetLength()-1;
 				else
 					m_dIntTokens.Pop();
@@ -1212,7 +1220,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		m_pErrorAt = pTokenStart;
 
 		const char * p = pTokenStart;
-		while ( p<sBufferEnd && isspace ( *(BYTE*)p ) ) p++; // to avoid CRT assertions on Windows
+		while ( p<sBufferEnd && isspace ( *(const BYTE*)p ) ) p++; // to avoid CRT assertions on Windows
 
 		if ( m_bCheckNumber )
 		{
@@ -1240,7 +1248,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 
 		int iPrevDeltaPos = 0;
 		if ( m_pPlugin && m_pPlugin->m_fnPushToken )
-			sToken = m_pPlugin->m_fnPushToken ( m_pPluginData, (char*)sToken, &iPrevDeltaPos, m_pTokenizer->GetTokenStart(), m_pTokenizer->GetTokenEnd() - m_pTokenizer->GetTokenStart() );
+			sToken = m_pPlugin->m_fnPushToken ( m_pPluginData, const_cast<char*>(sToken), &iPrevDeltaPos, m_pTokenizer->GetTokenStart(), int ( m_pTokenizer->GetTokenEnd() - m_pTokenizer->GetTokenStart() ) );
 
 		if ( !sToken )
 			return 0;
@@ -1339,11 +1347,11 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 				const char * sEnd = m_pTokenizer->GetTokenStart();
 				for ( ; sCur<sEnd; sCur++ )
 				{
-					int iCur = sCur - pLastTokenEnd;
+					int iCur = int ( sCur - pLastTokenEnd );
 					switch ( *sCur )
 					{
 					case '*':
-						iStar = sCur - pLastTokenEnd;
+						iStar = int ( sCur - pLastTokenEnd );
 						break;
 					case ' ':
 						if ( iSpace+2==iCur && iStar+1==iCur ) // match only [ * ] (separate single star) as valid shift operator
@@ -1720,9 +1728,7 @@ void XQParser_t::PhraseShiftQpos ( XQNode_t * pNode )
 }
 
 
-bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery,
-	const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict,
-	const CSphIndexSettings & tSettings )
+bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings )
 {
 	// FIXME? might wanna verify somehow that pTokenizer has all the specials etc from sphSetupQueryTokenizer
 	TokenizerRefPtr_c pMyTokenizer { pTokenizer->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT ) };
@@ -1767,7 +1773,7 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 	DictRefPtr_c pMyDict { GetStatelessDict ( pDict ) };
 
 	Setup ( pSchema, pMyTokenizer, pMyDict, &tParsed, tSettings );
-	m_sQuery = (BYTE*) sQuery;
+	m_sQuery = (BYTE*)const_cast<char*>(sQuery);
 	m_iQueryLen = sQuery ? (int) strlen(sQuery) : 0;
 	m_iPendingNulls = 0;
 	m_iPendingType = 0;
@@ -1922,7 +1928,7 @@ CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSche
 				if ( pSchema )
 					sFields.SetSprintf ( "%s,%s", sFields.cstr(), pSchema->GetFieldName(i) );
 				else
-					sFields.SetSprintf ( "%s,%d", sFields.cstr(), pNode->m_dSpec.m_dFieldMask.GetMask32() );
+					sFields.SetSprintf ( "%s,%u", sFields.cstr(), pNode->m_dSpec.m_dFieldMask.GetMask32() );
 			}
 
 			sRes.SetSprintf ( "( @%s: %s )", sFields.cstr()+1, sRes.cstr() );
@@ -3434,7 +3440,7 @@ static void sphHashSubphrases ( XQNode_t * pNode, BigramHash_t & hBirgam )
 }
 
 
-bool sphIsNodeStrongest ( const XQNode_t * pNode, const CSphVector<XQNode_t *> & dSimilar )
+static bool sphIsNodeStrongest ( const XQNode_t * pNode, const CSphVector<XQNode_t *> & dSimilar )
 {
 	//
 	// The cases when query won't be optimized:
@@ -4455,11 +4461,10 @@ void sphSetupQueryTokenizer ( ISphTokenizer * pTokenizer, bool bWildcards, bool 
 class QueryParserPlain_c : public QueryParser_i
 {
 public:
-	virtual bool IsFullscan ( const CSphQuery & tQuery ) const;
-	virtual bool IsFullscan ( const XQQuery_t & tQuery ) const;
-	virtual bool ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery,
-		const ISphTokenizer * pQueryTokenizer, const ISphTokenizer * pQueryTokenizerJson,
-		const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings ) const;
+	bool IsFullscan ( const CSphQuery & tQuery ) const override;
+	bool IsFullscan ( const XQQuery_t & tQuery ) const override;
+	bool ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const ISphTokenizer * pQueryTokenizer, const ISphTokenizer * pQueryTokenizerJson,
+		const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings ) const override;
 };
 
 

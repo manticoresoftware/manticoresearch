@@ -69,7 +69,7 @@ static void PingWorker ( void* pCookie )
 	assert ( !pHost->m_tHost.m_pDash );
 
 	// fixme! Review the timeouts (g_iPingIntervalUs for both came from legacy)
-	pConn->m_iMyConnectTimeoutMs = g_iPingIntervalUs/1000;
+	pConn->m_iMyConnectTimeoutMs = int(g_iPingIntervalUs/1000);
 	pConn->m_iMyQueryTimeoutMs = g_iPingIntervalUs/1000;
 	pConn->m_tDesc.m_pDash = pHost;
 
@@ -110,7 +110,7 @@ public:
 			return;
 
 		SchedulePing ( pHost );
-	};
+	}
 };
 
 void Ping::Start()

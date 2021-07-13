@@ -181,7 +181,7 @@ namespace sph
 		if ( !sIn )
 			return;
 
-		const char * p = (char *) sIn;
+		const char * p = sIn;
 		const char * pEnd = p + (( iLen<0 ) ? strlen(sIn) : iLen);
 		while (p<pEnd)
 		{
@@ -492,7 +492,7 @@ public:
 	const char * sWarning () const;
 
 	bool ErrEmpty () const { return m_sErrors.IsEmpty (); }
-	bool WarnEmpty () const { return m_sWarnings.IsEmpty (); };
+	bool WarnEmpty () const { return m_sWarnings.IsEmpty (); }
 
 	void AddStringsFrom ( const Warner_c &sSrc );
 	void MoveErrorsTo ( CSphString &sTarget );

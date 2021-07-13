@@ -18,7 +18,7 @@ const int MAX_STR_LENGTH = 512;
 
 //////////////////////////////////////////////////////////////////////////
 
-BYTE GetWordchar ( const char * & szSet )
+static BYTE GetWordchar ( const char * & szSet )
 {
 	if ( *szSet=='\\' )
 	{
@@ -42,7 +42,7 @@ BYTE GetWordchar ( const char * & szSet )
 }
 
 
-bool IsInSet ( BYTE uLetter, const char * szSet )
+static bool IsInSet ( BYTE uLetter, const char * szSet )
 {
 	if ( !szSet )
 		return false;
@@ -83,7 +83,7 @@ bool IsInSet ( BYTE uLetter, const char * szSet )
 }
 
 
-bool GetSetMinMax ( const char * szSet, BYTE & uMin, BYTE & uMax )
+static bool GetSetMinMax ( const char * szSet, BYTE & uMin, BYTE & uMax )
 {
 	if ( !szSet || !*szSet )
 		return false;
@@ -424,7 +424,7 @@ enum AffixFormat_e
 	AFFIX_FORMAT_UNKNOWN
 };
 
-const char * AffixFormatName[] =
+static const char * AffixFormatName[] =
 {
 	"ISpell",
 	"MySpell"
@@ -943,7 +943,7 @@ enum OutputMode_e
 	M_DEFAULT = M_EXACT_OR_LONGEST
 };
 
-const char * dModeName[] =
+static const char * dModeName[] =
 {
 	"debug",
 	"duplicates",
@@ -1017,12 +1017,15 @@ int main ( int iArgs, char ** dArgs )
 	{
 		case 4:
 			sLocale = dArgs[i + 3];
+			// [[clang::fallthrough]];
 		case 3:
 			sResult = dArgs[i + 2];
+			// [[clang::fallthrough]];
 		case 2:
 			sAffix = dArgs[i + 1];
 			sDict = dArgs[i];
 			break;
+
 		default:
 			printf ( "Usage: spelldump [options] <dictionary> <affix> [result] [locale-name]\n\n"
 				"Options:\n"
@@ -1164,7 +1167,11 @@ int main ( int iArgs, char ** dArgs )
 			}
 
 			case M_DUPLICATES:
-				if ( dWords.GetLength()==1 ) break;
+				if ( dWords.GetLength()==1 )
+					break;
+
+				// [[clang::fallthrough]];
+
 			case M_DEBUG:
 				ARRAY_FOREACH ( iWord, dWords )
 					fprintf ( pFile, "%s > %s %s/%d\n", sKey, dWords[iWord].m_sWord.cstr(),	dWords[iWord].m_sRules, dWords.GetLength() );

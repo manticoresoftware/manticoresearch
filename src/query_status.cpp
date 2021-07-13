@@ -36,7 +36,7 @@ public:
 	{
 		SendBufferImpl ( dData ); return true;
 	}
-	void SetWTimeoutUS ( int64_t iTimeoutUS ) final {};
+	void SetWTimeoutUS ( int64_t iTimeoutUS ) final {}
 	int64_t GetWTimeoutUS () const final { return 0ll; }
 
 private:
@@ -142,7 +142,7 @@ private:
 
 /////////////////////////////////////////////////////////////////////////////
 
-int RecvNBChunk( int iSock, char*& pBuf, int& iLeftBytes )
+static int RecvNBChunk( int iSock, char *& pBuf, int & iLeftBytes )
 {
 	// try to receive next chunk
 	auto iRes = sphSockRecv ( iSock, pBuf, iLeftBytes );
@@ -155,7 +155,7 @@ int RecvNBChunk( int iSock, char*& pBuf, int& iLeftBytes )
 	return ( int ) iRes;
 }
 
-int sphSockRead( int iSock, void* buf, int iLen, int iReadTimeout, bool bIntr )
+static int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr )
 {
 	assert ( iLen>0 );
 
@@ -276,7 +276,7 @@ bool NetInputBuffer_c::ReadFrom( int iLen, int iTimeout, bool bIntr, bool bAppen
 	if ( iLen<=0 || iLen>g_iMaxPacketSize || m_iSock<0 )
 		return false;
 
-	int iOff = m_pCur - m_pBuf;
+	int iOff = int ( m_pCur - m_pBuf );
 	Resize( m_iLen );
 	Reserve( iTail + iLen );
 	BYTE* pBuf = m_pData + iTail;
@@ -358,7 +358,7 @@ void QueryStatus ( CSphVariant * v ) REQUIRES ( MainThread )
 				: tDesc.m_uIP;
 			sin.sin_port = htons ( (short)tDesc.m_iPort );
 
-			iSock = socket ( AF_INET, SOCK_STREAM, 0 );
+			iSock = (int)socket ( AF_INET, SOCK_STREAM, 0 );
 			if ( iSock<0 )
 				sphFatal ( "failed to create TCP socket: %s", sphSockError() );
 
@@ -387,7 +387,7 @@ void QueryStatus ( CSphVariant * v ) REQUIRES ( MainThread )
 
 		DWORD uVer = tIn.GetDword();
 		if ( uVer!=SPHINX_SEARCHD_PROTO && uVer!=0x01000000UL ) // workaround for all the revisions that sent it in host order...
-			sphFatal ( "handshake failure (unexpected protocol version=%d)", uVer );
+			sphFatal ( "handshake failure (unexpected protocol version=%u)", uVer );
 
 		if ( tIn.GetWord()!=SEARCHD_OK )
 			sphFatal ( "status command failed" );

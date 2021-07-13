@@ -28,12 +28,19 @@
 #define U_NO_DEFAULT_INCLUDE_UTF_HEADERS 1
 #endif
 
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wsuggest-override"
+#pragma clang diagnostic ignored "-Wsuggest-destructor-override"
+#endif
 
 #include <unicode/brkiter.h>
 #include <unicode/udata.h>
 #include <unicode/ustring.h>
 
-extern CSphVector<CharsetAlias_t> g_dCharsetAliases;
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
 
 static CSphString g_sICUDir;
 
@@ -143,7 +150,7 @@ bool ICUPreprocessor_c::Process ( const BYTE * pBuffer, int iLength, CSphVector<
 		bool bIsChineseCode = sphIsChineseCode(iCode);
 		if ( !bFirstCode && bWasChineseCode!=bIsChineseCode )
 		{
-			AddTextChunk ( pChunkStart, pTmp-pChunkStart, dOut, bWasChineseCode, bQuery );
+			AddTextChunk ( pChunkStart, int ( pTmp-pChunkStart ), dOut, bWasChineseCode, bQuery );
 			pChunkStart = pTmp;
 		}
 
@@ -151,7 +158,7 @@ bool ICUPreprocessor_c::Process ( const BYTE * pBuffer, int iLength, CSphVector<
 		bFirstCode = false;
 	}
 
-	AddTextChunk ( pChunkStart, pBuffer-pChunkStart, dOut, bWasChineseCode, bQuery );
+	AddTextChunk ( pChunkStart, int ( pBuffer-pChunkStart ), dOut, bWasChineseCode, bQuery );
 
 	return true;
 }
@@ -265,7 +272,7 @@ const BYTE * ICUPreprocessor_c::GetNextTokenICU ( int & iTokenLen )
 
 		if ( pStart!=pMax )
 		{
-			iTokenLen = pMax-pStart;
+			iTokenLen = int ( pMax-pStart );
 			return pStart;
 		}
 	}
@@ -303,9 +310,6 @@ public:
 	int				Apply ( const BYTE * sField, int iLength, CSphVector<BYTE> & dStorage, bool bQuery ) final;
 	void			GetSettings ( CSphFieldFilterSettings & tSettings ) const final;
 	ISphFieldFilter * Clone() const final;
-
-protected:
-					~FieldFilterICU_c() {}
 };
 
 
@@ -401,7 +405,7 @@ bool sphCheckTokenizerICU ( CSphIndexSettings & tSettings, const CSphTokenizerSe
 	const CSphLowercaser & tLC = pTokenizer->GetLowercaser();
 
 	const CharsetAlias_t * pCJKAlias = nullptr;
-	for ( const auto & i : g_dCharsetAliases )
+	for ( const auto & i : GetCharsetAliases() )
 		if ( i.m_sName=="cjk" )
 			pCJKAlias = &i;
 

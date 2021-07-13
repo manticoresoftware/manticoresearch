@@ -24,11 +24,21 @@
 #include "task_info.h"
 #include "exprtraits.h"
 #include "columnarexpr.h"
+#include "conversion.h"
 #include <time.h>
 #include <math.h>
 
 #if WITH_RE2
-#include <re2/re2.h>
+	#ifdef __clang__
+		#pragma clang diagnostic push
+		#pragma clang diagnostic ignored "-Wextra-semi"
+	#endif
+
+	#include <re2/re2.h>
+
+	#ifdef __clang__
+		#pragma clang diagnostic pop
+	#endif
 #endif
 
 #ifndef M_LOG2E
@@ -86,6 +96,7 @@ struct ExprLocatorTraits_t
 	int m_iLocator; // used by SPH_EXPR_GET_DEPENDENT_COLS
 
 	ExprLocatorTraits_t ( const CSphAttrLocator & tLocator, int iLocator ) : m_tLocator ( tLocator ), m_iLocator ( iLocator ) {}
+	virtual ~ExprLocatorTraits_t() = default;
 
 	virtual void HandleCommand ( ESphExprCommand eCmd, void * pArg )
 	{
@@ -616,7 +627,7 @@ public:
 	void Command ( ESphExprCommand eCmd, void * pArg ) final
 	{
 		if ( eCmd==SPH_EXPR_SET_EXTRA_DATA )
-			static_cast<ISphExtra*>(pArg)->ExtraData ( EXTRA_GET_DATA_ZONESPANS, (void**)&m_pData );
+			static_cast<ISphExtra*>(pArg)->ExtraData ( EXTRA_GET_DATA_ZONESPANS, (void**)const_cast<IntVec_t**>(&m_pData) );
 	}
 
 	bool IsDataPtrAttr() const final
@@ -1106,7 +1117,7 @@ private:
 //////////////////////////////////////////////////////////////////////////
 
 // very deep expression needs special stack for destroy
-class Expr_ProxyFat_c : public Expr_Unary_c
+class Expr_ProxyFat_c final : public Expr_Unary_c
 {
 public:
 	explicit Expr_ProxyFat_c ( ISphExpr * pExpr )
@@ -1376,7 +1387,7 @@ protected:
 			}
 
 			if ( pStr )
-				dResult.Append ( pStr, iLen );
+				dResult.Append ( const_cast<BYTE*>(pStr), iLen );
 
 			FreeDataPtr ( i.m_pExpr, pStr );
 		}
@@ -1438,7 +1449,7 @@ public:
 			case SPH_ATTR_STRING:
 			{
 				CSphVector<BYTE> dTmp;
-				int iLen = m_pFirst->StringEval ( tMatch, ppStr );
+				iLen = m_pFirst->StringEval ( tMatch, ppStr );
 				dTmp.Resize(iLen+1);
 				if ( ppStr )
 				{
@@ -1847,6 +1858,7 @@ protected:
 			ESphJsonType eType;
 			if ( sphJsonStringToNumber ( (const char*)pVal, iLen, eType, iVal, fVal ) )
 				return eType==JSON_DOUBLE ? (T)fVal : (T)iVal;
+			return 0;
 		}
 		default:			return 0;
 		}
@@ -2153,7 +2165,7 @@ public:
 
 private:
 	int m_iNow {0};
-	Expr_Now_c ( const Expr_Now_c & rhs) : m_iNow (rhs.m_iNow) {};
+	Expr_Now_c ( const Expr_Now_c & rhs) : m_iNow (rhs.m_iNow) {}
 };
 
 
@@ -2482,12 +2494,12 @@ int Expr_SubstringIndex_c::LeftSearch ( const char * pDoc, int iDocLen, int iCou
 				if ( iCount==0 )
 				{
 					if ( ppResStr && !bGetRight )
-						*pResLen = SetResultString ( pDoc, pStrBeg - pDoc, ppResStr );
+						*pResLen = SetResultString ( pDoc, int ( pStrBeg - pDoc ), ppResStr );
 
 					if ( ppResStr && bGetRight )
 					{
 						pStrBeg += m_iLenDelim;
-						*pResLen = SetResultString ( pStrBeg, iDocLen - (pStrBeg - pDoc), ppResStr );
+						*pResLen = SetResultString ( pStrBeg, iDocLen - int (pStrBeg - pDoc), ppResStr );
 					}
 
 					return iTotalDelim;
@@ -3057,7 +3069,7 @@ DECLARE_BINARY_TRAITS ( Expr_Div_c )
 	   {
 			   float fSecond = m_pSecond->Eval ( tMatch );
 			   // ideally this would be SQLNULL instead of plain 0.0f
-			   return fSecond ? m_pFirst->Eval ( tMatch )/fSecond : 0.0f;
+			   return fSecond!=0.0f ? m_pFirst->Eval ( tMatch )/fSecond : 0.0f;
 	   }
 DECLARE_END()
 
@@ -3217,44 +3229,44 @@ DECLARE_TIMESTAMP_UTC ( Expr_Year_utc_c, s.tm_year + 1900 )
 DECLARE_TIMESTAMP_UTC ( Expr_YearMonth_utc_c, (s.tm_year + 1900) * 100 + s.tm_mon + 1 )
 DECLARE_TIMESTAMP_UTC ( Expr_YearMonthDay_utc_c, (s.tm_year + 1900) * 10000 + (s.tm_mon + 1) * 100 + s.tm_mday )
 
-extern bool bGroupingInUtc; // defined in searchd.cpp
+static bool g_bExprGroupingInUtc = false;
 
-void setGroupingInUtc ( bool b_GroupingInUtc )
+void SetGroupingInUtcExpr ( bool bGroupingInUtc )
 {
-	bGroupingInUtc = b_GroupingInUtc;
+	g_bExprGroupingInUtc = bGroupingInUtc;
 }
 
-Expr_Unary_c * ExprDay ( ISphExpr * pFirst )
+static Expr_Unary_c * ExprDay ( ISphExpr * pFirst )
 {
-	return bGroupingInUtc
+	return g_bExprGroupingInUtc
 		   ? (Expr_Unary_c *) new Expr_Day_utc_c ( pFirst )
 		   : (Expr_Unary_c *) new Expr_Day_c ( pFirst );
 }
 
-Expr_Unary_c * ExprMonth ( ISphExpr * pFirst )
+static Expr_Unary_c * ExprMonth ( ISphExpr * pFirst )
 {
-	return bGroupingInUtc
+	return g_bExprGroupingInUtc
 		   ? (Expr_Unary_c *) new Expr_Month_utc_c ( pFirst )
 		   : (Expr_Unary_c *) new Expr_Month_c ( pFirst );
 }
 
-Expr_Unary_c * ExprYear ( ISphExpr * pFirst )
+static Expr_Unary_c * ExprYear ( ISphExpr * pFirst )
 {
-	return bGroupingInUtc
+	return g_bExprGroupingInUtc
 		   ? (Expr_Unary_c *) new Expr_Year_utc_c ( pFirst )
 		   : (Expr_Unary_c *) new Expr_Year_c ( pFirst );
 }
 
-Expr_Unary_c * ExprYearMonth ( ISphExpr * pFirst )
+static Expr_Unary_c * ExprYearMonth ( ISphExpr * pFirst )
 {
-	return bGroupingInUtc
+	return g_bExprGroupingInUtc
 		   ? (Expr_Unary_c *) new Expr_YearMonth_utc_c ( pFirst )
 		   : (Expr_Unary_c *) new Expr_YearMonth_c ( pFirst );
 }
 
-Expr_Unary_c * ExprYearMonthDay ( ISphExpr * pFirst )
+static Expr_Unary_c * ExprYearMonthDay ( ISphExpr * pFirst )
 {
-	return bGroupingInUtc
+	return g_bExprGroupingInUtc
 		   ? (Expr_Unary_c *) new Expr_YearMonthDay_utc_c ( pFirst )
 		   : (Expr_Unary_c *) new Expr_YearMonthDay_c ( pFirst );
 }
@@ -3263,7 +3275,7 @@ Expr_Unary_c * ExprYearMonthDay ( ISphExpr * pFirst )
 // UDF CALL SITE
 //////////////////////////////////////////////////////////////////////////
 
-void * UdfMalloc ( int iLen )
+static void * UdfMalloc ( int iLen )
 {
 	return new BYTE [ iLen ];
 }
@@ -3302,6 +3314,13 @@ struct UdfCall_t
 // PARSER INTERNALS
 //////////////////////////////////////////////////////////////////////////
 class ExprParser_t;
+
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wshorten-64-to-32"
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wmissing-noreturn"
+#endif
 
 #include "bissphinxexpr.h"
 
@@ -3606,7 +3625,7 @@ static Tokh_e TokHashLookup ( Str_t sKey )
 	{
 	  default:
 		iHash += dAsso[(unsigned char) s[2]];
-	  /*FALLTHROUGH*/
+		// [[clang::fallthrough]];
 	  case 2:
 	  case 1:
 		iHash += dAsso[(unsigned char) s[0]];
@@ -3622,6 +3641,7 @@ static Tokh_e TokHashLookup ( Str_t sKey )
 		return g_dKeyValTokens[iFunc].second;
 	return TOKH_UNKNOWN;
 }
+
 
 static int TokHashCheck()
 {
@@ -4443,7 +4463,7 @@ void ExprParser_t::ConstantFoldPass ( int iNode )
 			switch ( pRoot->m_iToken )
 			{
 				case TOK_NEG:	pRoot->m_fConst = -pLeft->m_fConst; break;
-				case TOK_NOT:	pRoot->m_fConst = !pLeft->m_fConst; break;
+				case TOK_NOT:	pRoot->m_fConst = pLeft->m_fConst==0.0f; break;
 				default:		assert ( 0 && "internal error: unhandled arithmetic token during const-float optimization" );
 			}
 		}
@@ -4482,7 +4502,7 @@ void ExprParser_t::ConstantFoldPass ( int iNode )
 					case '+':	pRoot->m_fConst = fLeft + fRight; break;
 					case '-':	pRoot->m_fConst = fLeft - fRight; break;
 					case '*':	pRoot->m_fConst = fLeft * fRight; break;
-					case '/':	pRoot->m_fConst = fRight ? fLeft / fRight : 0.0f; break; // FIXME! We don't have 'NULL', cant distinguish from 0.0f
+					case '/':	pRoot->m_fConst = fRight!=0.0f ? fLeft / fRight : 0.0f; break; // FIXME! We don't have 'NULL', cant distinguish from 0.0f
 					default:	assert ( 0 && "internal error: unhandled arithmetic token during const-float optimization" );
 				}
 				pRoot->m_iToken = TOK_CONST_FLOAT;
@@ -4772,13 +4792,14 @@ void ExprParser_t::MultiNEPass ( int iNode )
 	}
 }
 
-StringBuilder_c & operator<< ( StringBuilder_c & dOut, Str_t sVal )
+
+static StringBuilder_c & operator<< ( StringBuilder_c & dOut, Str_t sVal )
 {
 	dOut.AppendChunk (sVal);
 	return dOut;
 }
 
-const char* TokName (int iTok, int iFunc)
+static const char * TokName (int iTok, int iFunc)
 {
 	if ( iTok<256 )
 	{
@@ -4853,7 +4874,7 @@ const char* TokName (int iTok, int iFunc)
 }
 
 // debug dump
-void Dump ( int iNode, const VecTraits_T<ExprNode_t>& dNodes, StringBuilder_c& tOut )
+static void Dump ( int iNode, const VecTraits_T<ExprNode_t>& dNodes, StringBuilder_c& tOut )
 {
 	if ( iNode<0 )
 		return;
@@ -4974,7 +4995,7 @@ static void DumpTree2Dot ( StringBuilder_c& tRes, CSphVector<int>& dPref, const 
 }
 
 using StrWithPlaces_t = std::pair<CSphString, CSphVector<int>>;
-void Render2Dot ( StrWithPlaces_t& tRes, VecTraits_T<ExprNode_t>& dNodes, int iRoot )
+static void Render2Dot ( StrWithPlaces_t& tRes, VecTraits_T<ExprNode_t>& dNodes, int iRoot )
 {
 	auto & dPlaces = tRes.second;
 	StringBuilder_c sDot;
@@ -4983,20 +5004,20 @@ void Render2Dot ( StrWithPlaces_t& tRes, VecTraits_T<ExprNode_t>& dNodes, int iR
 }
 
 using NamedDot = std::pair<CSphString, StrWithPlaces_t>;
-void RenderAndAddWithName ( NamedDot & tOut, VecTraits_T<ExprNode_t> & dNodes, int iRoot, const char* szName )
+static void RenderAndAddWithName ( NamedDot & tOut, VecTraits_T<ExprNode_t> & dNodes, int iRoot, const char* szName )
 {
 	tOut.first = szName;
 	Render2Dot ( tOut.second, dNodes, iRoot );
 }
 
-void PlacePrefix ( StrWithPlaces_t & tRes, const char* sPrefix )
+static void PlacePrefix ( StrWithPlaces_t & tRes, const char* sPrefix )
 {
 	char c = *sPrefix;
 	auto * sRes = const_cast<char *> (tRes.first.cstr ());
 	tRes.second.Apply ( [sRes, c] ( int i ) { sRes[i] = c; } );
 }
 
-CSphString Dots2String ( CSphVector<NamedDot>& dDots )
+static CSphString Dots2String ( CSphVector<NamedDot>& dDots )
 {
 	static const BYTE uPREFIXES = 8;
 	static const char* dPrefixes[uPREFIXES] = {"a", "b", "c", "d", "e", "f", "g", "h"};
@@ -5038,7 +5059,7 @@ alignas ( 128 ) static const BYTE g_UrlEncodeTable[] = { // 0 if need escape, 1 
 	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0, // pqrstuvwxyz~
 };
 
-CSphString UrlEncode ( const CSphString& sSource )
+static CSphString UrlEncode ( const CSphString& sSource )
 {
 	StringBuilder_c sRes;
 	for ( const auto* pC = sSource.cstr (); *pC; ++pC )
@@ -5158,18 +5179,24 @@ public:
 			case SPH_UDF_TYPE_UINT32:		*(DWORD*)&m_dArgvals[i] = m_dArgs[i]->IntEval ( tMatch ); break;
 			case SPH_UDF_TYPE_INT64:		m_dArgvals[i] = m_dArgs[i]->Int64Eval ( tMatch ); break;
 			case SPH_UDF_TYPE_FLOAT:		*(float*)&m_dArgvals[i] = m_dArgs[i]->Eval ( tMatch ); break;
-			case SPH_UDF_TYPE_STRING:		tArgs.str_lengths[i] = m_dArgs[i]->StringEval ( tMatch, (const BYTE**)&tArgs.arg_values[i] ); break;
+			case SPH_UDF_TYPE_STRING:
+			{
+				const char * szValue = tArgs.arg_values[i];
+				tArgs.str_lengths[i] = m_dArgs[i]->StringEval ( tMatch, (const BYTE**)&szValue );
+				break;
+			}
+
 			case SPH_UDF_TYPE_UINT32SET:
 			case SPH_UDF_TYPE_INT64SET:
 			{
 				auto dMva = m_dArgs[i]->MvaEval ( tMatch );
-				tArgs.arg_values[i] = (char*) dMva.first;
+				tArgs.arg_values[i] = (char*)const_cast<BYTE*>(dMva.first);
 				tArgs.str_lengths[i] = dMva.second / (( tArgs.arg_types[i]==SPH_UDF_TYPE_UINT32SET ) ? sizeof(DWORD) : sizeof(int64_t));
 				break;
 			}
 
 			case SPH_UDF_TYPE_FACTORS:
-				tArgs.arg_values[i] = (char *)m_dArgs[i]->FactorEval ( tMatch );
+				tArgs.arg_values[i] = (char *)const_cast<BYTE*>( m_dArgs[i]->FactorEval(tMatch) );
 				m_pCall->m_dArgs2Free.Add(i);
 				break;
 
@@ -5993,7 +6020,11 @@ public:
 		while ( p<pMax )
 		{
 			if ( isdigit(p[0]) || ( p+1<pMax && p[0]=='-' && isdigit(p[1]) ) )
-				dPoly.Add ( (float)strtod ( p, (char**)&p ) );
+			{
+				char * pValue = const_cast<char*>(p);
+				dPoly.Add ( (float)strtod ( p, &pValue ) );
+				p = pValue;
+			}
 			else
 				p++;
 		}
@@ -6210,7 +6241,6 @@ class Expr_GetQuery_c final : public Expr_StrNoLocator_c
 {
 public:
 	Expr_GetQuery_c() = default;
-	~Expr_GetQuery_c() = default;
 
 	int StringEval ( const CSphMatch &, const BYTE ** ppStr ) const final
 	{
@@ -6442,7 +6472,7 @@ ISphExpr * ExprParser_t::CreateLevenshteinNode ( ISphExpr * pPattern, ISphExpr *
 	if ( pOpts )
 	{
 		Expr_MapArg_c * pOptsArg = (Expr_MapArg_c *)pOpts;
-		tOpts = GetOptions ( pOptsArg->m_pValues, pOptsArg->m_iCount );
+		tOpts = GetOptions ( pOptsArg->m_pValues, int ( pOptsArg->m_iCount ) );
 	}
 
 	if ( pPattern->IsConst() )
@@ -6533,7 +6563,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 			pLeft = new Expr_JsonFieldConv_c ( pLeft );
 		if ( pRight && m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_JSON_FIELD && m_dNodes[tNode.m_iRight].m_iToken==TOK_ATTR_JSON )
 			pRight = new Expr_JsonFieldConv_c ( pRight );
-			break;
+		break;
 
 		default:
 			break;
@@ -6576,18 +6606,18 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 
 		case TOK_WEIGHT:		return new Expr_GetWeight_c ();
 
-		case '+':				return new Expr_Add_c ( pLeft, pRight ); break;
-		case '-':				return new Expr_Sub_c ( pLeft, pRight ); break;
-		case '*':				return new Expr_Mul_c ( pLeft, pRight ); break;
-		case '/':				return new Expr_Div_c ( pLeft, pRight ); break;
-		case '&':				return new Expr_BitAnd_c ( pLeft, pRight ); break;
-		case '|':				return new Expr_BitOr_c ( pLeft, pRight ); break;
-		case '%':				return new Expr_Mod_c ( pLeft, pRight ); break;
+		case '+':				return new Expr_Add_c ( pLeft, pRight );
+		case '-':				return new Expr_Sub_c ( pLeft, pRight );
+		case '*':				return new Expr_Mul_c ( pLeft, pRight );
+		case '/':				return new Expr_Div_c ( pLeft, pRight );
+		case '&':				return new Expr_BitAnd_c ( pLeft, pRight );
+		case '|':				return new Expr_BitOr_c ( pLeft, pRight );
+		case '%':				return new Expr_Mod_c ( pLeft, pRight );
 
-		case '<':				LOC_SPAWN_POLY ( Expr_Lt ); break;
-		case '>':				LOC_SPAWN_POLY ( Expr_Gt ); break;
-		case TOK_LTE:			LOC_SPAWN_POLY ( Expr_Lte ); break;
-		case TOK_GTE:			LOC_SPAWN_POLY ( Expr_Gte ); break;
+		case '<':				LOC_SPAWN_POLY ( Expr_Lt );
+		case '>':				LOC_SPAWN_POLY ( Expr_Gt );
+		case TOK_LTE:			LOC_SPAWN_POLY ( Expr_Lte );
+		case TOK_GTE:			LOC_SPAWN_POLY ( Expr_Gte );
 
 		// fixme! Both branches below returns same result. Refactor!
 		case TOK_EQ:
@@ -6609,10 +6639,9 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 								{
 									LOC_SPAWN_POLY ( Expr_Ne );
 								}
-								break;
 
-		case TOK_AND:			LOC_SPAWN_POLY ( Expr_And ); break;
-		case TOK_OR:			LOC_SPAWN_POLY ( Expr_Or ); break;
+		case TOK_AND:			LOC_SPAWN_POLY ( Expr_And );
+		case TOK_OR:			LOC_SPAWN_POLY ( Expr_Or );
 		case TOK_NOT:
 			return ( tNode.m_eArgType==SPH_ATTR_BIGINT )
 				? (ISphExpr * ) new Expr_NotInt64_c ( pLeft )
@@ -6623,7 +6652,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 				return new Expr_Arglist_c ( pLeft, pRight );
 			break;
 
-		case TOK_NEG:			assert ( !pRight ); return new Expr_Neg_c ( pLeft ); break;
+		case TOK_NEG:			assert ( !pRight ); return new Expr_Neg_c ( pLeft );
 		case TOK_FUNC:
 			{
 				// fold arglist to array
@@ -6838,7 +6867,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 				}
 				return new Expr_JsonField_c ( tNode.m_tLocator, tNode.m_iLocator, dArgs, dTypes );
 			}
-			break;
+
 		case TOK_ITERATOR:
 			{
 				// iterator, e.g. handles "x.gid" in SELECT ALL(x.gid=1 FOR x IN json.array)
@@ -8174,17 +8203,17 @@ ISphExpr * ExprParser_t::CreateIntervalNode ( int iArgsNode, CSphVector<ISphExpr
 	{
 		switch ( eAttrType )
 		{
-			case SPH_ATTR_INTEGER:	return new Expr_IntervalConst_c<int> ( dArgs ); break;
-			case SPH_ATTR_BIGINT:	return new Expr_IntervalConst_c<int64_t> ( dArgs ); break;
-			default:				return new Expr_IntervalConst_c<float> ( dArgs ); break;
+			case SPH_ATTR_INTEGER:	return new Expr_IntervalConst_c<int> ( dArgs );
+			case SPH_ATTR_BIGINT:	return new Expr_IntervalConst_c<int64_t> ( dArgs );
+			default:				return new Expr_IntervalConst_c<float> ( dArgs );
 		}
 	} else
 	{
 		switch ( eAttrType )
 		{
-			case SPH_ATTR_INTEGER:	return new Expr_Interval_c<int> ( dArgs ); break;
-			case SPH_ATTR_BIGINT:	return new Expr_Interval_c<int64_t> ( dArgs ); break;
-			default:				return new Expr_Interval_c<float> ( dArgs ); break;
+			case SPH_ATTR_INTEGER:	return new Expr_Interval_c<int> ( dArgs );
+			case SPH_ATTR_BIGINT:	return new Expr_Interval_c<int64_t> ( dArgs );
+			default:				return new Expr_Interval_c<float> ( dArgs );
 		}
 	}
 #if !_WIN32
@@ -8239,7 +8268,6 @@ ISphExpr * ExprParser_t::CreateInNode ( int iNode )
 					}
 				}
 			}
-			break;
 
 		// create IN(arg,uservar)
 		case TOK_USERVAR:
@@ -8259,18 +8287,12 @@ ISphExpr * ExprParser_t::CreateInNode ( int iNode )
 
 			switch ( tLeft.m_iToken )
 			{
-				case TOK_ATTR_MVA32:
-					return new Expr_MVAInU_c<DWORD> ( tLeft.m_tLocator, tLeft.m_iLocator, pUservar );
-				case TOK_ATTR_MVA64:
-					return new Expr_MVAInU_c<int64_t> ( tLeft.m_tLocator, tLeft.m_iLocator, pUservar );
-				case TOK_ATTR_STRING:
-					return new Expr_StrInU_c ( tLeft.m_tLocator, tLeft.m_iLocator, pUservar, m_eCollation );
-				case TOK_ATTR_JSON:
-					return new Expr_JsonFieldIn_c ( pUservar, CSphRefcountedPtr<ISphExpr> { CreateTree ( m_dNodes[iNode].m_iLeft ) } );
-				default:
-					return new Expr_InUservar_c ( CSphRefcountedPtr<ISphExpr> { CreateTree ( m_dNodes[iNode].m_iLeft ) }, pUservar );
+				case TOK_ATTR_MVA32:	return new Expr_MVAInU_c<DWORD> ( tLeft.m_tLocator, tLeft.m_iLocator, pUservar );
+				case TOK_ATTR_MVA64:	return new Expr_MVAInU_c<int64_t> ( tLeft.m_tLocator, tLeft.m_iLocator, pUservar );
+				case TOK_ATTR_STRING:	return new Expr_StrInU_c ( tLeft.m_tLocator, tLeft.m_iLocator, pUservar, m_eCollation );
+				case TOK_ATTR_JSON:		return new Expr_JsonFieldIn_c ( pUservar, CSphRefcountedPtr<ISphExpr> { CreateTree ( m_dNodes[iNode].m_iLeft ) } );
+				default:				return new Expr_InUservar_c ( CSphRefcountedPtr<ISphExpr> { CreateTree ( m_dNodes[iNode].m_iLeft ) }, pUservar );
 			}
-			break;
 		}
 
 		// oops, unhandled case
@@ -8432,9 +8454,9 @@ ISphExpr * ExprParser_t::CreateBitdotNode ( int iArgsNode, CSphVector<ISphExpr *
 	ESphAttr eAttrType = m_dNodes[iArgsNode].m_eRetType;
 	switch ( eAttrType )
 	{
-		case SPH_ATTR_INTEGER:	return new Expr_Bitdot_c<int> ( dArgs ); break;
-		case SPH_ATTR_BIGINT:	return new Expr_Bitdot_c<int64_t> ( dArgs ); break;
-		default:				return new Expr_Bitdot_c<float> ( dArgs ); break;
+		case SPH_ATTR_INTEGER:	return new Expr_Bitdot_c<int> ( dArgs );
+		case SPH_ATTR_BIGINT:	return new Expr_Bitdot_c<int64_t> ( dArgs );
+		default:				return new Expr_Bitdot_c<float> ( dArgs );
 	}
 }
 
@@ -8553,6 +8575,11 @@ void yyerror ( ExprParser_t * pParser, const char * sMessage )
 
 #include "bissphinxexpr.c"
 
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
+
 //////////////////////////////////////////////////////////////////////////
 
 ExprParser_t::~ExprParser_t ()
@@ -8654,7 +8681,7 @@ int ExprParser_t::AddNodeColumnar ( int iTokenType, uint64_t uAttrLocator )
 {
 	ExprNode_t & tNode = m_dNodes.Add();
 	tNode.m_iToken = iTokenType;
-	tNode.m_iLocator = uAttrLocator;
+	tNode.m_iLocator = (int)uAttrLocator;
 
 	switch ( iTokenType )
 	{
@@ -8681,7 +8708,7 @@ int ExprParser_t::AddNodeField ( int iTokenType, uint64_t uAttrLocator )
 
 	ExprNode_t & tNode = m_dNodes.Add();
 	tNode.m_iToken = iTokenType;
-	tNode.m_iLocator = uAttrLocator;
+	tNode.m_iLocator = (int)uAttrLocator;
 	tNode.m_eRetType = SPH_ATTR_STRINGPTR;
 	return m_dNodes.GetLength()-1;
 }
@@ -9401,7 +9428,7 @@ int ExprParser_t::AddNodeUdf ( int iCall, int iArg )
 					eRes = SPH_UDF_TYPE_JSON;
 					break;
 				default:
-					m_sParserError.SetSprintf ( "internal error: unmapped UDF argument type (arg=%d, type=%d)", i, dArgTypes[i] );
+					m_sParserError.SetSprintf ( "internal error: unmapped UDF argument type (arg=%d, type=%u)", i, dArgTypes[i] );
 					return -1;
 			}
 		}
@@ -9598,7 +9625,7 @@ const char * ExprParser_t::Attr2Ident ( uint64_t uAttrLoc )
 const char * ExprParser_t::Field2Ident ( uint64_t uAttrLoc )
 {
 	CSphString sIdent;
-	sIdent = m_pSchema->GetField(uAttrLoc).m_sName;
+	sIdent = m_pSchema->GetField ( (int)uAttrLoc ).m_sName;
 	m_dIdents.Add ( sIdent.Leak() );
 	return m_dIdents.Last();
 }
@@ -9841,7 +9868,8 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 	return pExpr;
 }
 
-void CheckDescendingNodes ( const CSphVector<ExprNode_t>& dNodes )
+#ifndef NDEBUG
+static void CheckDescendingNodes ( const CSphVector<ExprNode_t> & dNodes )
 {
 	ARRAY_CONSTFOREACH( i, dNodes )
 	{
@@ -9849,6 +9877,7 @@ void CheckDescendingNodes ( const CSphVector<ExprNode_t>& dNodes )
 		assert ( i>dNodes[i].m_iRight );
 	}
 }
+#endif
 
 ISphExpr * ExprParser_t::Create ( bool * pUsesWeight, CSphString & sError )
 {

@@ -98,11 +98,13 @@ extern "C"
 
 /////////////////////////////////////////////////////////////////////////////
 
+using namespace Threads;
+
 static bool				g_bService		= false;
 #if _WIN32
 static bool				g_bServiceStop	= false;
 static const char *		g_sServiceName	= "searchd";
-HANDLE					g_hPipe			= INVALID_HANDLE_VALUE;
+static HANDLE			g_hPipe			= INVALID_HANDLE_VALUE;
 #endif
 
 static StrVec_t	g_dArgs;
@@ -141,8 +143,8 @@ static bool				g_bWatchdog			= true;
 static int				g_iExpansionLimit	= 0;
 static int				g_iShutdownTimeoutUs	= 3000000; // default timeout on daemon shutdown and stopwait is 3 seconds
 static int				g_iBacklog			= SEARCHD_BACKLOG;
-int						g_iThdQueueMax		= 0;
-bool					g_bGroupingInUtc	= false;
+static int				g_iThdQueueMax		= 0;
+static bool				g_bGroupingInUtc	= false;
 static auto&			g_iTFO = sphGetTFO ();
 static CSphString		g_sShutdownToken;
 static int				g_iServerID = 0;
@@ -167,7 +169,7 @@ static int				g_iMaxBatchQueries	= 32;
 
 static int				g_iDocstoreCache = 0;
 
-auto &			g_iDistThreads		= getDistThreads();
+static auto &	g_iDistThreads		= getDistThreads();
 int				g_iAgentConnectTimeoutMs = 1000;
 int				g_iAgentQueryTimeoutMs = 3000;	// global (default). May be override by index-scope values, if one specified
 
@@ -260,7 +262,7 @@ static CSphQueryResultMeta		g_tLastMeta GUARDED_BY ( g_tLastMetaLock );
 // MISC
 /////////////////////////////////////////////////////////////////////////////
 
-void ReleaseTTYFlag()
+static void ReleaseTTYFlag()
 {
 	if ( g_pShared )
 		g_pShared->m_bHaveTTY = true;
@@ -311,9 +313,9 @@ int sphFormatCurrentTime ( char * sTimeBuf, int iBufLen )
 /// physically emit log entry
 /// buffer must have 1 extra byte for linefeed
 #if _WIN32
-void sphLogEntry ( ESphLogLevel eLevel, char * sBuf, char * sTtyBuf )
+static void sphLogEntry ( ESphLogLevel eLevel, char * sBuf, char * sTtyBuf )
 #else
-void sphLogEntry ( ESphLogLevel , char * sBuf, char * sTtyBuf )
+static void sphLogEntry ( ESphLogLevel , char * sBuf, char * sTtyBuf )
 #endif
 {
 #if _WIN32
@@ -328,12 +330,13 @@ void sphLogEntry ( ESphLogLevel , char * sBuf, char * sTtyBuf )
 			lpszStrings[0] = g_sServiceName;
 			lpszStrings[1] = sBuf;
 
-			WORD eType = EVENTLOG_INFORMATION_TYPE;
+			WORD eType;
 			switch ( eLevel )
 			{
 				case SPH_LOG_FATAL:		eType = EVENTLOG_ERROR_TYPE; break;
 				case SPH_LOG_WARNING:	eType = EVENTLOG_WARNING_TYPE; break;
 				case SPH_LOG_INFO:		eType = EVENTLOG_INFORMATION_TYPE; break;
+				default:				eType = EVENTLOG_INFORMATION_TYPE; break;
 			}
 
 			ReportEvent ( hEventSource,	// event log handle
@@ -790,7 +793,7 @@ void sighup ( int )
 }
 
 
-void sigterm ( int )
+static void sigterm ( int )
 {
 	// tricky bit
 	// we can't call exit() here because malloc()/free() are not re-entrant
@@ -800,15 +803,17 @@ void sigterm ( int )
 }
 
 
-void sigusr1 ( int )
+static void sigusr1 ( int )
 {
 	g_bGotSigusr1 = true;
 }
 
-void sigusr2 ( int )
+
+static void sigusr2 ( int )
 {
 	g_bGotSigusr2 = true;
 }
+
 
 struct QueryCopyState_t
 {
@@ -821,7 +826,7 @@ struct QueryCopyState_t
 // crash query handler
 static const int g_iQueryLineLen = 80;
 static const char g_dEncodeBase64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-bool sphCopyEncodedBase64 ( QueryCopyState_t & tEnc )
+static bool sphCopyEncodedBase64 ( QueryCopyState_t & tEnc )
 {
 	BYTE * pDst = tEnc.m_pDst;
 	const BYTE * pDstBase = tEnc.m_pDst;
@@ -1052,11 +1057,9 @@ LONG WINAPI CrashLogger::HandleCrash ( EXCEPTION_POINTERS * pExc )
 		}
 		assert ( tCopyState.m_pSrc==tCopyState.m_pSrcEnd );
 
-		int iLeft = tCopyState.m_pDst-g_dCrashQueryBuff;
+		int iLeft = int ( tCopyState.m_pDst-g_dCrashQueryBuff );
 		if ( iLeft>0 )
-		{
 			sphWrite ( g_iLogFile, g_dCrashQueryBuff, iLeft );
-		}
 	}
 
 	// tail
@@ -2880,7 +2883,7 @@ static void AppendHint ( const char * szHint, const StrVec_t & dIndexes, StringB
 	if ( dIndexes.IsEmpty() )
 		return;
 	tBuf << " " << szHint;
-	ScopedComma_c sIndex ( tBuf, ",", " INDEX (", ")" );
+	ScopedComma_c tComma ( tBuf, ",", " INDEX (", ")" );
 	for ( const auto & sIndex : dIndexes )
 		tBuf << sIndex;
 }
@@ -3591,10 +3594,10 @@ namespace { // static
 
 void RemapResult ( AggrResult_t & dResult )
 {
-	const ISphSchema& tSchema = dResult.m_tSchema;
-	int iAttrsCount = tSchema.GetAttrsCount ();
-	CSphVector<int> dMapFrom ( iAttrsCount );
-	CSphVector<int> dRowItems ( iAttrsCount );
+	const ISphSchema & tSchema = dResult.m_tSchema;
+	int iAttrsCount = tSchema.GetAttrsCount();
+	CSphVector<int> dMapFrom(iAttrsCount);
+	CSphVector<int> dRowItems(iAttrsCount);
 	static const int SIZE_OF_ROW = 8 * sizeof ( CSphRowitem );
 
 	for ( auto & tRes : dResult.m_dResults )
@@ -3602,7 +3605,7 @@ void RemapResult ( AggrResult_t & dResult )
 		dMapFrom.Resize ( 0 );
 		dRowItems.Resize ( 0 );
 		CSphSchema & dSchema = tRes.m_tSchema;
-		for ( int i = 0, iAttrsCount = tSchema.GetAttrsCount(); i<iAttrsCount; ++i )
+		for ( int i = 0; i<iAttrsCount; ++i )
 		{
 			auto iSrcCol = dSchema.GetAttrIndex ( tSchema.GetAttr ( i ).m_sName.cstr () );
 			dMapFrom.Add ( iSrcCol );
@@ -4283,19 +4286,19 @@ void ProcessLocalPostlimit ( AggrResult_t & tRes, const CSphQuery & tQuery, bool
 	int iLimit = ( tQuery.m_iOuterLimit ? tQuery.m_iOuterLimit : tQuery.m_iLimit );
 	iLimit += Max ( tQuery.m_iOffset, tQuery.m_iOuterOffset );
 	CSphVector<const CSphColumnInfo *> dPostlimit;
-	for ( auto& dRes : tRes.m_dResults )
+	for ( auto & tResult : tRes.m_dResults )
 	{
 		dPostlimit.Resize ( 0 );
-		ExtractPostlimit ( dRes.m_tSchema, bMaster, dPostlimit );
+		ExtractPostlimit ( tResult.m_tSchema, bMaster, dPostlimit );
 		if ( dPostlimit.IsEmpty () )
 			continue;
 
-		int iLimit = ( tQuery.m_iOuterLimit ? tQuery.m_iOuterLimit : tQuery.m_iLimit );
+		iLimit = ( tQuery.m_iOuterLimit ? tQuery.m_iOuterLimit : tQuery.m_iLimit );
 
 		// we can't estimate limit.offset per result set
 		// as matches got merged and sort next step
-		if ( !dRes.m_bTag )
-			ProcessSinglePostlimit ( dRes, dPostlimit, tQuery.m_sQuery.cstr (), 0, iLimit );
+		if ( !tResult.m_bTag )
+			ProcessSinglePostlimit ( tResult, dPostlimit, tQuery.m_sQuery.cstr (), 0, iLimit );
 	}
 }
 
@@ -7926,7 +7929,7 @@ void HandleCommandExcerpt ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & t
 
 static bool DoGetKeywords ( const CSphString & sIndex, const CSphString & sQuery, const GetKeywordsSettings_t & tSettings, CSphVector <CSphKeywordInfo> & dKeywords, CSphString & sError, SearchFailuresLog_c & tFailureLog );
 
-void HandleCommandKeywords ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq )
+static void HandleCommandKeywords ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq )
 {
 	if ( !CheckCommandVersion ( uVer, VER_COMMAND_KEYWORDS, tOut ) )
 		return;
@@ -11304,7 +11307,8 @@ void DescribeDistributedSchema ( VectorLike& dOut, DistributedIndex_t* pDistr )
 		const MultiAgentDesc_c & tMultiAgent = *pDistr->m_dAgents[i];
 		if ( tMultiAgent.IsHA () )
 		{
-			ARRAY_CONSTFOREACH ( j, tMultiAgent )
+			int iNumMultiAgents = tMultiAgent.GetLength();
+			for ( int j = 0; j < iNumMultiAgents; j++ )
 			{
 				const AgentDesc_t & tDesc = tMultiAgent[j];
 				StringBuilder_c sValue;
@@ -13241,7 +13245,8 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 		} else if ( tStmt.m_sSetName=="grouping_in_utc")
 		{
 			g_bGroupingInUtc = !!tStmt.m_iSetValue;
-			setGroupingInUtc ( g_bGroupingInUtc );
+			SetGroupingInUtcExpr ( g_bGroupingInUtc );
+			SetGroupingInUtcSort ( g_bGroupingInUtc );
 		} else if ( tStmt.m_sSetName=="cpustats")
 		{
 			g_bCpuStats = !!tStmt.m_iSetValue;
@@ -14055,12 +14060,9 @@ struct ExtraLastInsertID_t : public ISphExtra
 {
 	explicit ExtraLastInsertID_t ( const CSphVector<int64_t> & dIds )
 		: m_dIds ( dIds )
-	{
-	}
+	{}
 
-	virtual ~ExtraLastInsertID_t () = default;
-
-	virtual bool ExtraDataImpl ( ExtraData_e eCmd, void ** pData )
+	bool ExtraDataImpl ( ExtraData_e eCmd, void ** pData ) override
 	{
 		if ( eCmd==EXTRA_GET_LAST_INSERT_ID )
 		{
@@ -16911,15 +16913,17 @@ static bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSe
 {
 	// pick config settings
 	// they should be overriden later by Preload() if needed
-	CSphString sWarning;
-	if ( !tSettings.Setup ( hIndex, szIndexName, sWarning, sError ) )
 	{
-		sphWarning ( "ERROR: index '%s': %s - NOT SERVING", szIndexName, sError.cstr() );
-		return false;
-	}
+		CSphString sWarning;
+		if ( !tSettings.Setup ( hIndex, szIndexName, sWarning, sError ) )
+		{
+			sphWarning ( "ERROR: index '%s': %s - NOT SERVING", szIndexName, sError.cstr() );
+			return false;
+		}
 
-	if ( !sWarning.IsEmpty() )
-		sphWarning ( "index '%s': %s", szIndexName, sWarning.cstr() );
+		if ( !sWarning.IsEmpty() )
+			sphWarning ( "index '%s': %s", szIndexName, sWarning.cstr() );
+	}
 
 	if ( !sphRTSchemaConfigure ( hIndex, tSchema, tSettings, sError, bPercolate, bPercolate ) )
 	{
@@ -18422,12 +18426,12 @@ static void ConfigureDaemonLog ( const CSphString & sMode )
 	CSphBitvec tLogStatements ( STMT_TOTAL );
 	StringBuilder_c sWrongModes ( "," );
 
-	for ( const CSphString & sMode : dOpts )
+	for ( const CSphString & sOpt : dOpts )
 	{
-		if ( sMode=="0" ) // emplicitly disable all statements
+		if ( sOpt=="0" ) // emplicitly disable all statements
 			return;
 
-		if ( sMode=="1" || sMode=="*" ) // enable all statements
+		if ( sOpt=="1" || sOpt=="*" ) // enable all statements
 		{
 			tLogStatements.Set();
 			g_tLogStatements = tLogStatements;
@@ -18435,7 +18439,7 @@ static void ConfigureDaemonLog ( const CSphString & sMode )
 		}
 
 		// check for whole statement enumerated
-		int * pMode = hStmt ( sMode );
+		int * pMode = hStmt ( sOpt );
 		if ( pMode )
 		{
 			tLogStatements.BitSet ( *pMode );
@@ -18443,7 +18447,7 @@ static void ConfigureDaemonLog ( const CSphString & sMode )
 		}
 
 		bool bHasWild = false;
-		for ( const char * s = sMode.cstr(); *s && !bHasWild; s++ )
+		for ( const char * s = sOpt.cstr(); *s && !bHasWild; s++ )
 			bHasWild = sphIsWild ( *s );
 
 		if ( bHasWild )
@@ -18451,7 +18455,7 @@ static void ConfigureDaemonLog ( const CSphString & sMode )
 			bool bMatched = false;
 			for ( int i=0; i<(int)( sizeof(g_dSqlStmts)/sizeof(g_dSqlStmts[0]) ); i++ )
 			{
-				if ( sphWildcardMatch ( g_dSqlStmts[i], sMode.cstr() ) )
+				if ( sphWildcardMatch ( g_dSqlStmts[i], sOpt.cstr() ) )
 				{
 					tLogStatements.BitSet ( i );
 					bMatched = true;
@@ -18463,7 +18467,7 @@ static void ConfigureDaemonLog ( const CSphString & sMode )
 				continue;
 		}
 
-		sWrongModes += sMode.cstr();
+		sWrongModes += sOpt.cstr();
 	}
 
 	if ( tLogStatements.BitCount() )
@@ -18532,7 +18536,8 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	if ( hSearchd ( "grouping_in_utc" ) )
 	{
 		g_bGroupingInUtc = (hSearchd["grouping_in_utc"].intval ()!=0);
-		setGroupingInUtc ( g_bGroupingInUtc );
+		SetGroupingInUtcExpr ( g_bGroupingInUtc );
+		SetGroupingInUtcSort ( g_bGroupingInUtc );
 	}
 
 	// sha1 password hash for shutdown action
@@ -18681,8 +18686,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 // ServiceMain -> ConfigureAndPreload -> ConfigureAndPreloadInt -> PreloadIndex -> ConfigureAndPreloadIndex
 // from any another thread:
 // CSphinxqlSession::Execute -> HandleMysqlImportTable -> AddExistingIndexInt -> PreloadIndex -> ConfigureAndPreloadIndex
-ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
-		StrVec_t & dWarnings, CSphString & sError )
+ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * sIndexName, StrVec_t & dWarnings, CSphString & sError )
 {
 	ESphAddIndex eAdd = AddIndex ( sIndexName, hIndex, false, false, nullptr, sError );
 
@@ -18704,7 +18708,6 @@ ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const 
 		if ( RotateIndexGreedy ( *pJustAddedLocalWl, sIndexName, sError ) )
 		{
 			CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( CreateFilenameBuilder(sIndexName) );
-			StrVec_t dWarnings;
 			bPreloadOk = sphFixupIndexSettings ( pJustAddedLocalWl->m_pIndex, hIndex, g_bStripPath, pFilenameBuilder.Ptr(), dWarnings, sError );
 		} else
 		{

@@ -157,7 +157,7 @@ public:
 	virtual ISphExpr* Clone() const = 0;
 
 protected:
-	~ISphExpr() override {};
+	~ISphExpr() override {}
 };
 
 using ISphExprRefPtr_c = CSphRefcountedPtr<ISphExpr>;
@@ -184,7 +184,7 @@ inline void FreeDataPtr ( const ISphExpr * pExpr, const void * pData )
 /// set global behavior of grouping by day/week/month/year functions:
 /// if invoked true, params treated as UTC timestamps,
 /// and as local timestamps otherwise (default)
-void setGroupingInUtc ( bool b_GroupingInUtc );
+void SetGroupingInUtcExpr ( bool bGroupingInUtc );
 
 /// named int/string variant
 /// used for named expression function arguments block
@@ -201,9 +201,9 @@ struct CSphNamedVariant
 /// can never be evaluated in floats or integers, only StringEval() is allowed
 struct ISphStringExpr : public ISphExpr
 {
-	virtual float Eval ( const CSphMatch & ) const { assert ( 0 && "one just does not simply evaluate a string as float" ); return 0; }
-	virtual int IntEval ( const CSphMatch & ) const { assert ( 0 && "one just does not simply evaluate a string as int" ); return 0; }
-	virtual int64_t Int64Eval ( const CSphMatch & ) const { assert ( 0 && "one just does not simply evaluate a string as bigint" ); return 0; }
+	float		Eval ( const CSphMatch & ) const override { assert ( 0 && "one just does not simply evaluate a string as float" ); return 0; }
+	int			IntEval ( const CSphMatch & ) const override { assert ( 0 && "one just does not simply evaluate a string as int" ); return 0; }
+	int64_t		Int64Eval ( const CSphMatch & ) const override { assert ( 0 && "one just does not simply evaluate a string as bigint" ); return 0; }
 };
 
 /// hook to extend expressions

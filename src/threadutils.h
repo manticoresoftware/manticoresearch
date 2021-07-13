@@ -114,7 +114,7 @@ using Keeper_t = SharedPtrCustom_t<void*>;
 
 struct Scheduler_i
 {
-	virtual ~Scheduler_i() {};
+	virtual ~Scheduler_i() {}
 	virtual void Schedule ( Handler handler, bool bVip ) = 0;
 	virtual void ScheduleContinuation ( Handler handler ) // if task already started
 	{
@@ -124,8 +124,8 @@ struct Scheduler_i
 	virtual int WorkingThreads() const = 0;
 	virtual int Works () const = 0;
 	virtual void StopAll () = 0;
-	virtual void DiscardOnFork() {};
-	virtual void IterateChildren ( ThreadFN & fnHandler ) {};
+	virtual void DiscardOnFork() {}
+	virtual void IterateChildren ( ThreadFN & fnHandler ) {}
 };
 
 using SchedulerSharedPtr_t = SharedPtr_t<Scheduler_i *>;

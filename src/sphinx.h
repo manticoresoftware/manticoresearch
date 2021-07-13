@@ -311,7 +311,7 @@ class ISphTokenizer : public ISphRefcountedMT
 {
 	/// trivial dtor - inherited from Refcounted
 protected:
-	~ISphTokenizer() override {};
+	~ISphTokenizer() override {}
 public:
 	/// set new translation table
 	/// returns true on success, false on failure
@@ -580,10 +580,6 @@ class CSphAutofile;
 struct DictHeader_t;
 class CSphDict : public ISphRefcountedMT
 {
-protected:
-	/// virtualizing dtor. Protected to follow refcounted rules.
-	virtual                ~CSphDict () {}
-
 public:
 	static const int	ST_OK = 0;
 	static const int	ST_ERROR = 1;
@@ -1017,7 +1013,7 @@ inline SphAttr_t sphGetRowAttr ( const CSphRowitem * pRow, const CSphAttrLocator
 		return SphAttr_t ( pRow[iItem] );
 	case 2*ROWITEM_BITS:
 #if USE_LITTLE_ENDIAN
-		return *(SphAttr_t*) (pRow + iItem);
+		return *(SphAttr_t*) (const_cast<CSphRowitem*>(pRow) + iItem);
 #else
 		return SphAttr_t ( pRow[iItem] ) + ( SphAttr_t ( pRow[iItem+1] ) << ROWITEM_BITS ); break;
 #endif
@@ -1072,7 +1068,7 @@ inline void sphAddCounterAttr ( CSphRowitem * pRow, const CSphRowitem * pVal, co
 		return;
 	case 2*ROWITEM_BITS:
 #if USE_LITTLE_ENDIAN
-		uValue = *(SphAttr_t *) ( pRow+iItem ) +*(SphAttr_t *) ( pVal+iItem );
+		uValue = *(SphAttr_t *) ( pRow+iItem ) +*(SphAttr_t *) ( const_cast<CSphRowitem*>(pVal)+iItem );
 		memcpy ( pRow+iItem, &uValue, ROWITEM_BITS / 4 );
 #else
 		uValue = SphAttr_t ( pRow[iItem] ) + ( SphAttr_t ( pRow[iItem+1] ) << ROWITEM_BITS )
@@ -1222,11 +1218,7 @@ public:
 		return 0;
 	}
 
-	/// float getter
-	float GetAttrFloat ( const CSphAttrLocator & tLoc ) const
-	{
-		return sphDW2F ( (DWORD)sphGetRowAttr ( tLoc.m_bDynamic ? m_pDynamic : m_pStatic, tLoc ) );
-	}
+	float GetAttrFloat ( const CSphAttrLocator & tLoc ) const;
 
 	/// integer setter
 	void SetAttr ( const CSphAttrLocator & tLoc, SphAttr_t uValue ) const
@@ -1252,13 +1244,7 @@ public:
 		sphAddCounterAttr ( m_pDynamic, tLoc.m_bDynamic ? tValue.m_pDynamic : tValue.m_pStatic, tLoc );
 	}
 
-	/// float setter
-	void SetAttrFloat ( const CSphAttrLocator & tLoc, float fValue ) const
-	{
-		assert ( tLoc.m_bDynamic );
-		assert ( tLoc.GetMaxRowitem() < (int)m_pDynamic[-1] );
-		sphSetRowAttr ( m_pDynamic, tLoc, sphF2DW ( fValue ) );
-	}
+	void SetAttrFloat ( const CSphAttrLocator & tLoc, float fValue ) const;
 
 	/// fetches blobs from both data ptr attrs and pooled blob attrs
 	ByteBlob_t FetchAttrData ( const CSphAttrLocator & tLoc, const BYTE * pPool ) const;
@@ -1750,8 +1736,6 @@ using ISphHits = CSphVector<CSphWordHit>;
 /// field filter
 class ISphFieldFilter : public ISphRefcountedMT
 {
-protected:
-	virtual                     ~ISphFieldFilter ();
 public:
 								ISphFieldFilter();
 
@@ -1771,7 +1755,9 @@ public:
 	void						SetParent ( ISphFieldFilter * pParent );
 
 protected:
-	ISphFieldFilter *		m_pParent;
+	ISphFieldFilter *			m_pParent = nullptr;
+
+								~ISphFieldFilter () override;
 };
 
 using FieldFilterRefPtr_c = CSphRefcountedPtr<ISphFieldFilter>;
@@ -1786,7 +1772,7 @@ ISphFieldFilter * sphCreateFilterICU ( ISphFieldFilter * pParent, const char * s
 class AttrSource_i
 {
 public:
-	virtual							~AttrSource_i () {};
+	virtual							~AttrSource_i () {}
 
 	/// returns value of a given attribute
 	virtual SphAttr_t 				GetAttr ( int iAttr ) = 0;
@@ -1809,7 +1795,7 @@ public:
 	explicit							CSphSource ( const char * sName );
 
 	/// dtor
-	virtual								~CSphSource ();
+										~CSphSource() override;
 
 	/// set dictionary
 	void								SetDict ( CSphDict * dict );
@@ -2153,8 +2139,8 @@ class CSphFilterSettings : public CommonFilterSettings_t
 public:
 	CSphString			m_sAttrName = "";	///< filtered attribute name
 	bool				m_bExclude = false;		///< whether this is "include" or "exclude" filter (default is "include")
-	bool				m_bHasEqualMin = true;	///< has filter "equal" component or pure greater\less (for min)
-	bool				m_bHasEqualMax = true;	///< has filter "equal" component or pure greater\less (for max)
+	bool				m_bHasEqualMin = true;	///< has filter "equal" component or pure greater/less (for min)
+	bool				m_bHasEqualMax = true;	///< has filter "equal" component or pure greater/less (for max)
 	bool				m_bOpenLeft = false;
 	bool				m_bOpenRight = false;
 	bool				m_bIsNull = false;		///< for NULL or NOT NULL
@@ -2626,8 +2612,9 @@ enum KeywordExpansion_e
 class IndexSegment_c
 {
 public:
+	virtual			~IndexSegment_c() {}
 	virtual int		Kill ( DocID_t tDocID ) { return 0; }
-	virtual int		KillMulti ( const VecTraits_T<DocID_t> & dKlist ) { return 0; };
+	virtual int		KillMulti ( const VecTraits_T<DocID_t> & dKlist ) { return 0; }
 };
 
 
@@ -2699,6 +2686,8 @@ protected:
 		ATTRS_ROWMAP_UPDATED	= ( 1UL<<2 )
 	};
 
+	virtual				~IndexUpdateHelper_c() {}
+
 	virtual bool		Update_WriteBlobRow ( UpdateContext_t & tCtx, int iUpd, CSphRowitem * pDocinfo, const BYTE * pBlob, int iLength, int nBlobAttrs, const CSphAttrLocator & tBlobRowLoc, bool & bCritical, CSphString & sError ) = 0;
 
 	bool				Update_CheckAttributes ( const UpdateContext_t & tCtx, CSphString & sError );
@@ -2738,6 +2727,8 @@ enum DocstoreDataType_e
 class DocstoreReader_i
 {
 public:
+	virtual			~DocstoreReader_i() = default;
+
 	virtual void	CreateReader ( int64_t iSessionId ) const {}
 	virtual bool	GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const = 0;
 	virtual int		GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const = 0;
@@ -2759,11 +2750,11 @@ class CSphIndex : public ISphKeywordsStat, public IndexSegment_c, public Docstor
 {
 public:
 	explicit					CSphIndex ( const char * sIndexName, const char * sFilename );
-	virtual						~CSphIndex ();
+								~CSphIndex() override;
 
-	virtual const CSphString &	GetLastError () const { return m_sLastError; }
-	virtual const CSphString &	GetLastWarning () const { return m_sLastWarning; }
-	virtual const CSphSchema &	GetMatchSchema () const { return m_tSchema; }			///< match schema as returned in result set (possibly different from internal storage schema!)
+	virtual const CSphString &	GetLastError() const { return m_sLastError; }
+	virtual const CSphString &	GetLastWarning() const { return m_sLastWarning; }
+	virtual const CSphSchema &	GetMatchSchema() const { return m_tSchema; }			///< match schema as returned in result set (possibly different from internal storage schema!)
 
 	virtual	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn pfnProgress ) = 0;
 	virtual void				SetInplaceSettings ( int iHitGap, float fRelocFactor, float fWriteFactor );
@@ -2859,7 +2850,7 @@ public:
 
 	virtual bool				AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD, CSphString & sError ) = 0;
 
-	virtual void				FlushDeadRowMap ( bool bWaitComplete ) const {};
+	virtual void				FlushDeadRowMap ( bool bWaitComplete ) const {}
 	virtual bool				LoadKillList ( CSphFixedVector<DocID_t> * pKillList, KillListTargets_c & tTargets, CSphString & sError ) const { return true; }
 	virtual bool				AlterKillListTarget ( KillListTargets_c & tTargets, CSphString & sError ) { return false; }
 	virtual void				KillExistingDocids ( CSphIndex * pTarget ) {}
@@ -2895,7 +2886,7 @@ public:
 	const char *				GetFilename () const { return m_sFilename.cstr(); }
 
 	/// get actual index files list
-	virtual void				GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameBuilder_i * pFilenameBuilder ) const {};
+	virtual void				GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameBuilder_i * pFilenameBuilder ) const {}
 
 	/// internal make document id list from external docinfo, DO NOT USE
 	virtual CSphFixedVector<SphAttr_t> BuildDocList () const;
@@ -2958,7 +2949,7 @@ protected:
 class CSphIndexStub : public CSphIndex
 {
 public:
-						FWD_CTOR ( CSphIndexStub, CSphIndex );
+						FWD_CTOR ( CSphIndexStub, CSphIndex )
 	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn ) override {}
 	int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer ) override { return 0; }
 	bool				Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSettings> & dFilters, bool bSupressDstDocids ) override { return false; }
@@ -2978,7 +2969,7 @@ public:
 	void				GetStatus ( CSphIndexStatus* ) const override {}
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & tSettings, CSphString * ) const override { return false; }
 	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & ) const override { return true; }
-	int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning ) override { return -1; };
+	int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning ) override { return -1; }
 	bool				SaveAttributes ( CSphString & ) const override { return true; }
 	DWORD				GetAttributeStatus () const override { return 0; }
 	bool				AddRemoveAttribute ( bool, const CSphString &, ESphAttr, bool, CSphString & ) override { return true; }
@@ -3057,10 +3048,13 @@ CSphIndex *			sphCreateIndexTemplate ( const char * szIndexName );
 void				sphSetJsonOptions ( bool bStrict, bool bAutoconvNumbers, bool bKeynamesToLowercase );
 
 /// setup per-keyword read buffer sizes
-void SetUnhintedBuffer ( int iReadUnhinted );
+void				SetUnhintedBuffer ( int iReadUnhinted );
+int					GetUnhintedBuffer();
 
 /// check query for expressions
 bool				sphHasExpressions ( const CSphQuery & tQuery, const CSphSchema & tSchema );
+
+const CSphVector<CharsetAlias_t> & GetCharsetAliases();
 
 //////////////////////////////////////////////////////////////////////////
 

@@ -12,6 +12,7 @@
 #include "collation.h"
 #include "attribute.h"
 #include "sphinxint.h"
+#include "conversion.h"
 
 class ColumnarFilter_c : public ISphFilter
 {
@@ -735,7 +736,7 @@ ISphFilter * TryToCreateColumnarFilter ( int iAttr, const ISphSchema & tSchema, 
 }
 
 
-columnar::FilterType_e ToColumnarFilterType ( ESphFilter eType )
+static columnar::FilterType_e ToColumnarFilterType ( ESphFilter eType )
 {
 	switch ( eType )
 	{
@@ -751,7 +752,7 @@ columnar::FilterType_e ToColumnarFilterType ( ESphFilter eType )
 }
 
 
-columnar::MvaAggr_e ToColumnarAggr ( ESphMvaFunc eAggr )
+static columnar::MvaAggr_e ToColumnarAggr ( ESphMvaFunc eAggr )
 {
 	switch ( eAggr )
 	{

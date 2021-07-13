@@ -24,7 +24,7 @@ DWORD DeadRowMap_c::GetNumDeads () const
 	if ( m_iNumDeads<0 )
 		m_iNumDeads = HasDead () ? CountDeads () : 0;
 
-	return m_iNumDeads;
+	return (DWORD)m_iNumDeads;
 }
 
 
@@ -56,7 +56,7 @@ bool DeadRowMap_c::Set ( RowID_t tRowID, DWORD * pData )
 	return bSet;
 }
 
-DWORD CountBits ( const VecTraits_T<DWORD>& dData )
+static DWORD CountBits ( const VecTraits_T<DWORD>& dData )
 {
 	DWORD U = 0;
 	dData.Apply ( [&U] ( DWORD uData ) { U += sphBitCount ( uData ); } );

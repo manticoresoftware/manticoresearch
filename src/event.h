@@ -37,7 +37,7 @@ public:
 		m_sWhat.SetSprintf ( "%s, error %d", szWhat, iEc );
 	}
 
-	virtual ~SystemError_c () noexcept {}
+	~SystemError_c () noexcept override {}
 
 	int Errno () const noexcept { return m_iErrorCode; }
 	const char* sWhat() const noexcept { return m_sWhat.scstr(); }

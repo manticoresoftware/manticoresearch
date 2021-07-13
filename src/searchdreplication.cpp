@@ -19,12 +19,26 @@
 #include "fileutils.h"
 #include <math.h>
 
+
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wkeyword-macro"
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wnewline-eof"
+#pragma clang diagnostic ignored "-Wunused-function"
+#endif
+
 #if !HAVE_WSREP
 #include "replication/wsrep_api_stub.h"
 // it also populates header guard, so next including of 'normal' wsrep_api will break nothing
 #endif
 
 #include "replication/wsrep_api.h"
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
+
 #include "coroutine.h"
 
 #if !_WIN32
@@ -132,7 +146,7 @@ struct ReplicationCluster_t : public ClusterDesc_t
 	bool					IsPrimary() const { return ( m_iStatus==WSREP_VIEW_PRIMARY ); }
 
 private:
-	CoroEvent_c m_tStateChanged;
+	Threads::CoroEvent_c m_tStateChanged;
 	ClusterState_e m_eNodeState { ClusterState_e::CLOSED };
 };
 
@@ -197,7 +211,7 @@ static RwLock_t g_tClustersLock;
 static SmallStringHash_T<ReplicationCluster_t *> g_hClusters GUARDED_BY ( g_tClustersLock );
 
 // hack for abort callback to invalidate only specific cluster
-thread_local ReplicationCluster_t* g_pTlsCluster;
+static thread_local ReplicationCluster_t* g_pTlsCluster;
 
 /////////////////////////////////////////////////////////////////////////////
 // forward declarations
@@ -279,7 +293,7 @@ static bool IsInetAddrFree ( DWORD uAddr, int iPort )
 	iaddr.sin_addr.s_addr = uAddr;
 	iaddr.sin_port = htons ( (short)iPort );
 
-	int iSock = socket ( AF_INET, SOCK_STREAM, 0 );
+	int iSock = (int)socket ( AF_INET, SOCK_STREAM, 0 );
 	if ( iSock==-1 )
 	{
 		sphWarning ( "failed to create TCP socket: %s", sphSockError() );
@@ -580,7 +594,7 @@ static wsrep_cb_status_t ViewChanged_fn ( void * pAppCtx, void * pRecvCtx, const
 	LogGroupView ( pView );
 	ReplicationCluster_t * pCluster = pLocalCtx->m_pCluster;
 	memcpy ( pCluster->m_dUUID.Begin(), pView->state_id.uuid.data, pCluster->m_dUUID.GetLengthBytes() );
-	pCluster->m_iConfID = pView->view;
+	pCluster->m_iConfID = (int)pView->view;
 	pCluster->m_iSize = pView->memb_num;
 	pCluster->m_iIdx = pView->my_idx;
 	pCluster->SetPrimary ( pView->status );
@@ -772,8 +786,7 @@ static void ReplicationRecv_fn ( SharedPtr_t<ReceiverCtx_t *> pCtx )
 //						mutex is passes through this variable.
 // @param ts			time to wait for condition.
 
-void Instr_fn ( wsrep_pfs_instr_type_t type, wsrep_pfs_instr_ops_t ops, wsrep_pfs_instr_tag_t tag, void** value,
-	void** alliedvalue, const void* ts )
+static void Instr_fn ( wsrep_pfs_instr_type_t type, wsrep_pfs_instr_ops_t ops, wsrep_pfs_instr_tag_t tag, void ** value,	void ** alliedvalue, const void * ts )
 {
 	if ( type==WSREP_PFS_INSTR_TYPE_THREAD || type==WSREP_PFS_INSTR_TYPE_FILE )
 		return;
@@ -886,7 +899,7 @@ void Instr_fn ( wsrep_pfs_instr_type_t type, wsrep_pfs_instr_ops_t ops, wsrep_pf
 
 static int GetClusterMemLimit ( const StrVec_t & dIndexes )
 {
-	int iMemLimit = 0;
+	int64_t iMemLimit = 0;
 	int iIndexes = 0;
 	for ( const CSphString & sIndex : dIndexes )
 	{
@@ -902,7 +915,7 @@ static int GetClusterMemLimit ( const StrVec_t & dIndexes )
 	const int CACHE_PER_INDEX = 16;
 
 	// change default cache size to 16Mb per added index or size of largest rt_mem_limit of RT index
-	int iSize = iMemLimit / 1024 / 1024;
+	int iSize = int ( iMemLimit / 1024 / 1024 );
 	int iCount = Max ( 1, iIndexes );
 	iSize = Max ( iCount * CACHE_PER_INDEX, iSize );
 
@@ -918,13 +931,13 @@ struct ReplInfo_t : public TaskInfo_t
 
 DEFINE_RENDER( ReplInfo_t )
 {
-	auto & tInfo = *(ReplInfo_t *) pSrc;
+	auto & tInfo = *(ReplInfo_t *) const_cast<void*>(pSrc);
 	dDst.m_sChain << (int) tInfo.m_eType << ":Repl ";
 	dDst.m_sClientName << "wsrep" << tInfo.m_sIncoming.cstr();
 }
 
 // create cluster from desc and become master node or join existed cluster
-bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
+static bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 {
 	assert ( g_bReplicationEnabled );
 	wsrep_t * pWsrep = nullptr;
@@ -993,7 +1006,7 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 
 	// wsrep provider initialization arguments
 	wsrep_init_args wsrep_args;
-	wsrep_args.app_ctx		= pRecvArgs,
+	wsrep_args.app_ctx		= (void*)pRecvArgs;
 
 	wsrep_args.node_name	= sMyName.cstr();
 	wsrep_args.node_address	= tArgs.m_sListenAddr.cstr();
@@ -1050,7 +1063,7 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 }
 
 // shutdown and delete cluster, also join cluster recv thread
-void ReplicateClusterDone ( ReplicationCluster_t * pCluster )
+static void ReplicateClusterDone ( ReplicationCluster_t * pCluster )
 {
 	if ( !pCluster )
 		return;
@@ -1269,9 +1282,12 @@ static void ReplicateClusterStats ( ReplicationCluster_t * pCluster, VectorLike 
 				dOut.Addf ( "%f", pVars->value._double );
 				break;
 
-			default:
 			case WSREP_VAR_INT64:
 				dOut.Addf ( "%l", pVars->value._int64 );
+				break;
+
+			default:
+				assert ( 0 && "Internal error" );
 				break;
 			}
 		}
@@ -1339,7 +1355,7 @@ void ReplicateClustersDelete() EXCLUDES ( g_tClustersLock )
 }
 
 // clean up cluster prior to start it again
-void DeleteClusterByName ( const CSphString& sCluster ) EXCLUDES ( g_tClustersLock )
+static void DeleteClusterByName ( const CSphString& sCluster ) EXCLUDES ( g_tClustersLock )
 {
 	ScWL_t wLock( g_tClustersLock );
 	auto** ppCluster = g_hClusters ( sCluster );
@@ -1805,10 +1821,9 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 			assert ( tCmd.m_dDeleteQueries.GetLength() || !tCmd.m_sDeleteTags.IsEmpty() );
 			SaveDeleteQuery ( tCmd.m_dDeleteQueries, tCmd.m_sDeleteTags.cstr(), dBufQueries );
 
-			ARRAY_FOREACH ( i, tCmd.m_dDeleteQueries )
-			{
-				uQueryHash = sphFNV64 ( tCmd.m_dDeleteQueries.Begin()+i, sizeof(tCmd.m_dDeleteQueries[0]), uQueryHash );
-			}
+			ARRAY_FOREACH ( iQuery, tCmd.m_dDeleteQueries )
+				uQueryHash = sphFNV64 ( tCmd.m_dDeleteQueries.Begin()+iQuery, sizeof(tCmd.m_dDeleteQueries[0]), uQueryHash );
+
 			uQueryHash = sphFNV64cont ( tCmd.m_sDeleteTags.cstr(), uQueryHash );
 			break;
 
@@ -2366,7 +2381,7 @@ static bool NewClusterForce ( const CSphString & sPath, CSphString & sError )
 	return true;
 }
 
-const char * g_sLibFiles[] = { "grastate.dat", "galera.cache" };
+static const char * g_sLibFiles[] = { "grastate.dat", "galera.cache" };
 
 // clean up Galera files at cluster path to start new and fresh cluster again
 static void NewClusterClean ( const CSphString & sPath )
@@ -2554,7 +2569,6 @@ void ReplicationStart ( const CSphConfigSection & hSearchd, const CSphVector<Lis
 			g_hClusters.Add ( pElem.LeakPtr(), tDesc.m_sName );
 		}
 
-		CSphString sError;
 		if ( !ReplicateClusterInit ( tArgs, sError ) )
 		{
 			sphLogFatal ( "%s", sError.cstr() );
@@ -2957,7 +2971,8 @@ struct AgentDescIterator_t
 	}
 };
 
-void GetNodes ( const CSphString & sNodes, VecAgentDesc_t & dNodes )
+
+static void GetNodes ( const CSphString & sNodes, VecAgentDesc_t & dNodes )
 {
 	AgentDescIterator_t tIt ( dNodes );
 	GetNodes_T ( sNodes, tIt );
@@ -3196,7 +3211,7 @@ public:
 		tCmd.m_iSendSize = tBuf.GetInt();
 		const BYTE * pData = nullptr;
 		tBuf.GetBytesZerocopy ( &pData, tCmd.m_iSendSize );
-		tCmd.m_pSendBuff = (BYTE *)pData;
+		tCmd.m_pSendBuff = const_cast<BYTE *>(pData);
 	}
 
 	static void BuildReply ( const PQRemoteReply_t & tRes, ISphOutputBuffer & tOut )
@@ -3605,18 +3620,18 @@ static bool SyncSigCompare ( int iFile, const CSphString & sName, const SyncSrc_
 	while ( iReadTotal<tChunk.m_iFileSize )
 	{
 		int64_t iLeftTotal = tChunk.m_iFileSize - iReadTotal;
-		int iLeft = Min ( iLeftTotal, tChunk.m_iChunkBytes );
+		int64_t iLeft = Min ( iLeftTotal, tChunk.m_iChunkBytes );
 		iReadTotal += iLeft;
 
 		if ( !tIndexFile.Read ( pReadData, iLeft, sError ) )
 			return false;
 
 		// update whole file hash
-		tHashFile.Update ( pReadData, iLeft );
+		tHashFile.Update ( pReadData, (int)iLeft );
 
 		// update and flush chunk hash
 		tHashChunk.Init();
-		tHashChunk.Update ( pReadData, iLeft );
+		tHashChunk.Update ( pReadData, (int)iLeft );
 		tHashChunk.Final ( pHashChunk );
 
 		if ( memcmp ( pHashChunk, tSrc.GetChunkHash ( iFile, iChunk ), HASH20_SIZE )==0 )
@@ -3878,7 +3893,7 @@ static bool ReadChunk ( int iChunk, FileReader_t & tReader, StringBuilder_c & sE
 
 	int iSendSize = tChunk.m_iChunkBytes;
 	if ( iChunk==tChunk.GetChunksCount()-1 ) // calculate file tail size for last chunk
-		iSendSize = tChunk.m_iFileSize - tChunk.m_iChunkBytes * iChunk;
+		iSendSize = int ( tChunk.m_iFileSize - int64_t(tChunk.m_iChunkBytes) * iChunk );
 
 	tReader.m_tArgs.m_iFileOff = (int64_t)tChunk.m_iChunkBytes * iChunk;
 	tReader.m_tArgs.m_iSendSize = iSendSize;
@@ -4171,11 +4186,11 @@ static bool SyncSigBegin ( SyncSrc_t & tSync, CSphString & sError )
 		int64_t iFileSize = tIndexFile.GetSize();
 
 		// rsync uses sqrt ( iSize ) but that make too small buffers
-		int iChunkBytes = iFileSize / 2000;
+		int iChunkBytes = int ( iFileSize / 2000 );
 		// no need too small chunks
 		iChunkBytes = Max ( iChunkBytes, iMinChunkBuf );
 		if ( iFileSize<iChunkBytes )
-			iChunkBytes = iFileSize;
+			iChunkBytes = (int)iFileSize;
 
 		FileChunks_t & tSlice = tSync.m_dChunks[i];
 		tSlice.m_iFileSize = iFileSize;
@@ -4207,7 +4222,7 @@ static bool SyncSigBegin ( SyncSrc_t & tSync, CSphString & sError )
 		while ( iReadTotal<tChunk.m_iFileSize )
 		{
 			int64_t iLeftTotal = tChunk.m_iFileSize - iReadTotal;
-			int iLeft = Min ( iLeftTotal, tChunk.m_iChunkBytes );
+			int iLeft = (int)Min ( iLeftTotal, tChunk.m_iChunkBytes );
 			iReadTotal += iLeft;
 
 			if ( !tIndexFile.Read ( dReadBuf.Begin(), iLeft, sError ) )

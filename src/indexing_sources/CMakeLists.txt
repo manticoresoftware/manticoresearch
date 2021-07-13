@@ -13,14 +13,11 @@ add_library (common_includes INTERFACE)
 target_include_directories (common_includes INTERFACE "${MANTICORE_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries (common_includes INTERFACE lextra)
 
-add_library (common_sources common_stuff.cpp common_stuff.h)
-target_link_libraries (common_sources PUBLIC common_includes)
-
 add_library (indexer_sources INTERFACE)
 
 # tsv/csv pipe
 add_library (source_svpipe source_svpipe.cpp source_svpipe.h)
-target_link_libraries (source_svpipe PRIVATE common_sources PUBLIC common_includes)
+target_link_libraries (source_svpipe PUBLIC common_includes)
 target_link_libraries (indexer_sources INTERFACE source_svpipe)
 
 # generic sql

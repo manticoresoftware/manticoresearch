@@ -79,7 +79,7 @@ public:
 
 														/// create empty and stopped profile
 					QueryProfile_c();
-	virtual 		~QueryProfile_c() {};
+	virtual 		~QueryProfile_c() {}
 
 	/// switch to a new query state, and record a timestamp
 	/// returns previous state, to simplify Push/Pop like scenarios

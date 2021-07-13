@@ -80,7 +80,7 @@ void sphSplit ( StrVec_t & dOut, const char * sIn )
 	if ( !sIn )
 		return;
 
-	const char * p = (char*)sIn;
+	const char * p = sIn;
 	while ( *p )
 	{
 		// skip non-alphas
@@ -107,7 +107,7 @@ void sphSplitApply ( const char * sIn, int iSize, StrFunctor &&dFunc )
 	if (!dFunc)
 		return;
 
-	const char * p = ( char * ) sIn;
+	const char * p = sIn;
 	if ( iSize<0 ) iSize = (int) strlen (p);
 	const char * pEnd = p + iSize;
 	while ( p < pEnd )
@@ -133,8 +133,8 @@ void sphSplitApply ( const char * sIn, int iSize, StrFunctor &&dFunc )
 // if line starts from a bound char, first splitted str will be an empty string
 void sphSplit ( StrVec_t & dOut, const char * sIn, int iLen, const char * sBounds )
 {
-	sph::Split ( sIn, iLen, sBounds, [&] ( const char * sToken, int iLen ) {
-		dOut.Add ().SetBinary ( sToken, iLen );
+	sph::Split ( sIn, iLen, sBounds, [&] ( const char * sToken, int iTokenLen ) {
+		dOut.Add ().SetBinary ( sToken, iTokenLen );
 	} );
 }
 
@@ -372,7 +372,7 @@ bool sphWildcardMatch ( const char * sString, const char * sPattern, const int *
 		return sphWildcardMatchSpec ( sString, pPattern ); // ascii vs utf-8
 
 //	if ( pString && pPattern )
-		return sphWildcardMatchSpec ( pString, pPattern ); // utf-8 vs utf-8
+	return sphWildcardMatchSpec ( pString, pPattern ); // utf-8 vs utf-8
 
 //	return false; // dead, but causes warn either by compiler, either by analysis. Leave as is.
 }
@@ -392,22 +392,24 @@ int64_t sphGetSize64 ( const char * sValue, char ** ppErr, int64_t iDefault )
 
 	switch ( *sEnd )
 	{
-	case 't': case 'T':
-		iRes *= 1024;
-	case 'g': case 'G':
-		iRes *= 1024;
-	case 'm': case 'M':
-		iRes *= 1024;
+	case 't': case 'T':	iRes *= 1024;
+	// [[clang::fallthrough]];
+	case 'g': case 'G':	iRes *= 1024;
+	// [[clang::fallthrough]];
+	case 'm': case 'M':	iRes *= 1024;
+	// [[clang::fallthrough]];
 	case 'k': case 'K':
 		iRes *= 1024;
 		++sEnd;
-	case '\0':
 		break;
+
+	case '\0': break;
 	default:
 		// an error happened; write address to ppErr
 		if ( ppErr )
 			*ppErr = sEnd;
 		iRes = iDefault;
+		break;
 	}
 	return iRes;
 }
@@ -427,16 +429,21 @@ int64_t sphGetTime64 ( const char* sValue, char** ppErr, int64_t iDefault )
 	switch ( *sEnd )
 	{
 		case 'w': case 'W' : iRes *= 7; // passthrow
+		// [[clang::fallthrough]];
 		case 'd': case 'D' : iRes *= 24; // passthrow
+		// [[clang::fallthrough]];
 		case 'h': case 'H' : iRes *= 3600 * 1000000LL; break;
 		case 'm': case 'M':
-			switch ( sEnd[1] ) {
+			switch ( sEnd[1] )
+			{
 				case 's': case 'S' : iRes *= 1000; break;
 				default: iRes *= 1000000*60; break;
 			}
 			break;
+
 		case 'u': case 'U':
-			switch ( sEnd[1] ) {
+			switch ( sEnd[1] )
+			{
 				case 's': case 'S' : break; // no multiplier for useconds
 				default:
 					if ( ppErr )
@@ -1528,30 +1535,31 @@ static void StdoutLogger ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 }
 
 static const int MAX_PREFIXES = 10;
-const char * dDisabledLevelLogs[SPH_LOG_MAX+1][MAX_PREFIXES] = {{0}};
+static const char * g_dDisabledLevelLogs[SPH_LOG_MAX+1][MAX_PREFIXES] = {{0}};
 
 void sphLogSupress ( const char * sNewPrefix, ESphLogLevel eLevel )
 {
-	for ( const char * &sPrefix : dDisabledLevelLogs[eLevel] )
+	for ( const char * &sPrefix : g_dDisabledLevelLogs[eLevel] )
 		if ( !sPrefix )
 		{
 			sPrefix = sNewPrefix;
 			return;
 		} else if ( !strcmp ( sPrefix, sNewPrefix ) )
 			return;
+
 	// no space, just overwrite the last one
-	dDisabledLevelLogs[eLevel][MAX_PREFIXES-1] = sNewPrefix;
+	g_dDisabledLevelLogs[eLevel][MAX_PREFIXES-1] = sNewPrefix;
 }
 
 void sphLogSupressRemove ( const char * sDelPrefix, ESphLogLevel eLevel )
 {
-	const char ** ppSource = dDisabledLevelLogs[eLevel];
+	const char ** ppSource = g_dDisabledLevelLogs[eLevel];
 	int i = 0;
-	for ( const char *&sPrefix : dDisabledLevelLogs[eLevel] )
+	for ( const char *&sPrefix : g_dDisabledLevelLogs[eLevel] )
 		if ( sPrefix && !strcmp (sDelPrefix, sPrefix) )
 			ppSource[i++] = sPrefix;
 	for (;i<MAX_PREFIXES;++i)
-		dDisabledLevelLogs[eLevel][i] = nullptr;
+		g_dDisabledLevelLogs[eLevel][i] = nullptr;
 }
 
 
@@ -1564,7 +1572,7 @@ volatile SphLogger_fn& g_pLogger()
 inline void Log ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 {
 	if ( !g_pLogger() ) return;
-	for ( const char * sPrefix : dDisabledLevelLogs[eLevel] )
+	for ( const char * sPrefix : g_dDisabledLevelLogs[eLevel] )
 		if ( sPrefix && !strncmp ( sPrefix, sFmt, strlen ( sPrefix ) ) )
 			return;
 		else if ( !sPrefix )
@@ -1642,7 +1650,8 @@ void sphLogDebugRpl_impl ( const char * sFmt, ... )
 	va_end ( ap );
 }
 
-namespace TimePrefixed {
+namespace TimePrefixed
+{
 	static int64_t g_uTimePrefix = 0;
 
 	void TimeStart ()
@@ -1650,7 +1659,7 @@ namespace TimePrefixed {
 		g_uTimePrefix = sphMicroTimer ();
 	}
 
-	void TimedLogVa ( const char* sPrefix, const char* sFmt, va_list ap, ESphLogLevel eLevel )
+	static void TimedLogVa ( const char* sPrefix, const char* sFmt, va_list ap, ESphLogLevel eLevel )
 	{
 		if ( eLevel>g_eLogLevel )
 			return;
@@ -1887,7 +1896,7 @@ namespace tmtoa {
 	// how many rest digits causes new scale to add instead of frac
 	static const int iPrecAfter[NUM_SCALES] = { 0, 3, 3, 2, 2, 2, 1 };
 
-	us_t calc_round ( int iScale, int iPrec )
+	static us_t calc_round ( int iScale, int iPrec )
 	{
 		// prec:	0	1	2	3	4	5	6	7	8	9	10	11	12	13
 		// ---------------------------------------------------------------
@@ -2082,7 +2091,7 @@ static int SkipFmt64 ( const char * sFmt )
 	if ( sFmt[0]!='\0' && sFmt[1]!='\0' && sFmt[0]=='l' && ( sFmt[1]=='d' || sFmt[1]=='i' || sFmt[1]=='u' ) )
 		return 2;
 
-	// %li %ld %lu
+	// %li %ld %u
 	if ( sFmt[0]!='\0' && ( sFmt[0]=='d' || sFmt[0]=='i' || sFmt[0]=='u' ) )
 		return 1;
 
@@ -2120,8 +2129,8 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 			auto uLen = sPercent - sFmt + 1;
 			if ( uLen )
 			{
-				Grow ( pOutput, uLen );
-				memcpy ( tail ( pOutput ), sFmt - 1, (int) uLen );
+				Grow ( pOutput, (int)uLen );
+				memcpy ( tail ( pOutput ), sFmt - 1, (int)uLen );
 				pOutput += uLen;
 				sFmt+=uLen;
 			}
@@ -2153,6 +2162,7 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 				state = SHAVEFILL;
 				break;
 			}
+		// [[clang::fallthrough]];
 		case '1': case '2': case '3':
 		case '4': case '5': case '6':
 		case '7': case '8': case '9':
@@ -2317,7 +2327,7 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 				} else
 				{
 					// plain %f - output arbitrary 6 or 8 digits
-					pOutput += PrintVarFloat ( tail ( pOutput ), fValue );
+					pOutput += PrintVarFloat ( tail ( pOutput ), (float)fValue );
 					assert (( sFmt - pF )==2 );
 				}
 
@@ -2418,7 +2428,7 @@ void sphSafeInfo ( int iFD, const char * sFmt, ... )
 }
 
 
-int sphSafeInfo ( char * pBuf, const char * sFmt, ... )
+static int sphSafeInfo ( char * pBuf, const char * sFmt, ... )
 {
 	va_list ap;
 	va_start ( ap, sFmt );
@@ -2426,6 +2436,7 @@ int sphSafeInfo ( char * pBuf, const char * sFmt, ... )
 	va_end ( ap );
 	return iLen;
 }
+
 
 volatile int& getParentPID ()
 {
@@ -3284,9 +3295,10 @@ void Warner_c::MoveAllTo ( CSphString &sTarget )
 	Clear();
 }
 
-namespace TlsMsg {
+namespace TlsMsg
+{
 
-	StringBuilder_c* TlsMsgs(bool bDoClear=true)
+	static StringBuilder_c* TlsMsgs ( bool bDoClear=true )
 	{
 		thread_local StringBuilder_c* pContainer;
 		if (!pContainer)
@@ -3364,7 +3376,7 @@ void UidShortSetup ( int iServer, int iStarted )
 }
 
 // RNG of the integers 0-255
-BYTE g_dPearsonRNG[256] = {
+static BYTE g_dPearsonRNG[256] = {
 	    98,  6, 85,150, 36, 23,112,164,135,207,169,  5, 26, 64,165,219, //  1
 	    61, 20, 68, 89,130, 63, 52,102, 24,229,132,245, 80,216,195,115, //  2
 	    90,168,156,203,177,120,  2,190,188,  7,100,185,174,243,162, 10, //  3

@@ -10,10 +10,11 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinxstd.h"
+#include "conversion.h"
 
 #include <math.h>
 #include <float.h>
+
 
 DWORD sphToDword ( const char * s )
 {
@@ -34,4 +35,27 @@ float sphToFloat ( const char * s )
 		return FLT_MAX;
 
 	return (float)fRes;
+}
+
+
+int64_t sphToInt64 ( const char * szNumber, CSphString * pError )
+{
+	if ( !szNumber )
+		return 0;
+
+	char * szEndPtr = nullptr;
+	errno = 0;
+
+	int64_t iNumber = strtoll ( szNumber, &szEndPtr, 10 );
+	if ( pError )
+	{
+		if ( szNumber==szEndPtr )
+			pError->SetSprintf ( "invalid number \"%s\", " INT64_FMT " assumed", szNumber, iNumber );
+		else if ( errno==ERANGE && iNumber==LONG_MIN )
+			pError->SetSprintf ( "underflow detected \"%s\", " INT64_FMT " assumed", szNumber, iNumber );
+		else if ( errno==ERANGE && iNumber==LONG_MAX )
+			pError->SetSprintf ( "overflow detected \"%s\", " INT64_FMT " assumed", szNumber, iNumber );
+	}
+
+	return iNumber;
 }

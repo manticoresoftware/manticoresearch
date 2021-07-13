@@ -13,6 +13,7 @@
 #include "columnarexpr.h"
 #include "exprtraits.h"
 #include "sphinxint.h"
+#include "conversion.h"
 
 template <typename T>
 class Expr_Columnar_MVAIn_T : public Expr_ArgVsConstSet_T<int64_t>
@@ -51,7 +52,7 @@ int Expr_Columnar_MVAIn_T<T>::IntEval ( const CSphMatch & tMatch ) const
 	{
 		const uint8_t * pData = nullptr;
 		int iLen = m_pIterator->Get(pData);
-		return MvaEval_Any<T> ( { (T*)pData, int64_t(iLen/sizeof(T)) }, m_dValues );
+		return MvaEval_Any<T> ( { (T*)const_cast<uint8_t*>(pData), int64_t(iLen/sizeof(T)) }, m_dValues );
 	}
 
 	return 0;
@@ -430,7 +431,7 @@ class Expr_GetColumnarInt_c : public Expr_GetColumnar_Traits_c
 
 public:
 	float		Eval ( const CSphMatch & tMatch ) const override		{ return (float)FetchValue(tMatch); }
-	int			IntEval ( const CSphMatch & tMatch ) const override		{ return FetchValue(tMatch); }
+	int			IntEval ( const CSphMatch & tMatch ) const override		{ return (int)FetchValue(tMatch); }
 	int64_t		Int64Eval ( const CSphMatch & tMatch ) const override	{ return FetchValue(tMatch); }
 	uint64_t	GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final;
 	ISphExpr *	Clone() const final { return new Expr_GetColumnarInt_c(m_sName); }
@@ -462,9 +463,9 @@ class Expr_GetColumnarFloat_c : public Expr_GetColumnarInt_c
 	using Expr_GetColumnarInt_c::Expr_GetColumnarInt_c;
 
 public:
-	float	Eval ( const CSphMatch & tMatch ) const final		{ return sphDW2F(FetchValue(tMatch)); }
-	int		IntEval ( const CSphMatch & tMatch ) const final	{ return (int)sphDW2F(FetchValue(tMatch)); }
-	int64_t	Int64Eval ( const CSphMatch & tMatch ) const final	{ return (int64_t)sphDW2F(FetchValue(tMatch)); }
+	float	Eval ( const CSphMatch & tMatch ) const final		{ return sphDW2F ( (DWORD)FetchValue(tMatch) ); }
+	int		IntEval ( const CSphMatch & tMatch ) const final	{ return (int)sphDW2F ( (DWORD)FetchValue(tMatch) ); }
+	int64_t	Int64Eval ( const CSphMatch & tMatch ) const final	{ return (int64_t)sphDW2F ( (DWORD)FetchValue(tMatch) ); }
 };
 
 /////////////////////////////////////////////////////////////////////

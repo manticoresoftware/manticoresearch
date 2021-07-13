@@ -23,8 +23,9 @@
 #include "searchdreplication.h"
 #include "accumulator.h"
 
-const char * g_dHttpStatus[] = { "200 OK", "206 Partial Content", "400 Bad Request", "403 Forbidden", "500 Internal Server Error",
+static const char * g_dHttpStatus[] = { "200 OK", "206 Partial Content", "400 Bad Request", "403 Forbidden", "500 Internal Server Error",
 								 "501 Not Implemented", "503 Service Unavailable", "526 Invalid SSL Certificate" };
+
 STATIC_ASSERT ( sizeof(g_dHttpStatus)/sizeof(g_dHttpStatus[0])==SPH_HTTP_STATUS_TOTAL, SPH_HTTP_STATUS_SHOULD_BE_SAME_AS_SPH_HTTP_STATUS_TOTAL );
 
 extern CSphString g_sStatusVersion;
@@ -131,7 +132,7 @@ static void UriPercentReplace ( CSphString & sEntity, bool bAlsoPlus=true )
 	if ( sEntity.IsEmpty() )
 		return;
 
-	char * pDst = (char *)sEntity.cstr();
+	char * pDst = const_cast<char *> ( sEntity.cstr() );
 	const char * pSrc = pDst;
 	char cPlus = bAlsoPlus ? ' ' : '+';
 	while ( *pSrc )
@@ -170,7 +171,7 @@ bool HttpRequestParser_c::ParseList ( const char * sAt, int iLen )
 		if ( *sCur!='&' && *sCur!='=' )
 			continue;
 
-		int iValueLen = sCur - sLast;
+		int iValueLen = int ( sCur - sLast );
 		if ( *sCur=='&' )
 		{
 			sVal.SetBinary ( sLast, iValueLen );
@@ -193,14 +194,15 @@ bool HttpRequestParser_c::ParseList ( const char * sAt, int iLen )
 
 	if ( !sName.IsEmpty() )
 	{
-		sVal.SetBinary ( sLast, sCur - sLast );
+		sVal.SetBinary ( sLast, int ( sCur - sLast ) );
 		UriPercentReplace ( sName );
 		UriPercentReplace ( sVal );
 		m_hOptions.Add ( sVal, sName );
 	}
 
-	if ( sRawData ) {
-		sVal.SetBinary ( sRawData, sCur - sRawData );
+	if ( sRawData )
+	{
+		sVal.SetBinary ( sRawData, int ( sCur - sRawData ) );
 		sName.SetSprintf ( "decoded_%s", sRawName.cstr() );
 		UriPercentReplace ( sName );
 		UriPercentReplace ( sVal, false ); // avoid +-decoding
@@ -571,9 +573,9 @@ static PubSearchHandler_c * CreateMsearchHandler ( const QueryParser_i * pQueryP
 		CSphQueryItem & tItem = tQuery.m_dRefItems.Add();
 		tItem.m_sExpr = tBucket.m_sCol;
 		tItem.m_sAlias = tBucket.m_sCol;
-		CSphQueryItem & tCountItem = tQuery.m_dRefItems.Add();
-		tCountItem.m_sExpr = "count(*)";
-		tCountItem.m_sAlias = "count(*)";
+		CSphQueryItem & tAggCountItem = tQuery.m_dRefItems.Add();
+		tAggCountItem.m_sExpr = "count(*)";
+		tAggCountItem.m_sAlias = "count(*)";
 
 		tQuery.m_sGroupBy = tBucket.m_sCol;
 		tQuery.m_sFacetBy = tBucket.m_sCol;
@@ -701,7 +703,7 @@ protected:
 
 typedef std::pair<CSphString,MysqlColumnType_e> ColumnNameType_t;
 
-const char * GetTypeName ( MysqlColumnType_e eType )
+static const char * GetTypeName ( MysqlColumnType_e eType )
 {
 	switch ( eType )
 	{
@@ -718,8 +720,6 @@ class JsonRowBuffer_c : public RowBuffer_i
 {
 public:
 	JsonRowBuffer_c () {}
-
-	virtual ~JsonRowBuffer_c() {}
 
 	void PutFloatAsString ( float fVal, const char * sFormat ) override
 	{
@@ -831,7 +831,7 @@ public:
 		m_dColumns.Add ( ColumnNameType_t { sName, eType } );
 	}
 
-	void Add ( BYTE ) override {};
+	void Add ( BYTE ) override {}
 
 	const JsonEscapedBuilder & Finish()
 	{
@@ -1332,7 +1332,8 @@ struct Endpoint_t
 	const char * m_szName2;
 };
 
-Endpoint_t g_dEndpoints[] =
+
+static Endpoint_t g_dEndpoints[] =
 {
 	{ "index.html",	nullptr },
 	{ "sql",		nullptr },

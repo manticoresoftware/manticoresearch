@@ -39,7 +39,7 @@ static CSphString GetPathForNewIndex ( const CSphString & sIndexName )
 	return sRes;
 }
 
-void MakeRelativePath ( CSphString & sPath )
+static void MakeRelativePath ( CSphString & sPath )
 {
 	bool bAbsolute = strchr ( sPath.cstr(), '/' ) || strchr ( sPath.cstr(), '\\' );
 	if ( !bAbsolute )
@@ -96,7 +96,7 @@ static FilenameBuilder_i * CreateFilenameBuilder ( const char * szIndex )
 	return nullptr;
 }
 
-void StripStdin ( const char * sIndexAttrs, const char * sRemoveElements )
+static void StripStdin ( const char * sIndexAttrs, const char * sRemoveElements )
 {
 	CSphString sError;
 	CSphHTMLStripper tStripper ( true );
@@ -121,7 +121,7 @@ void StripStdin ( const char * sIndexAttrs, const char * sRemoveElements )
 }
 
 
-void ApplyMorphology ( CSphIndex * pIndex )
+static void ApplyMorphology ( CSphIndex * pIndex )
 {
 	CSphVector<BYTE> dInBuffer, dOutBuffer;
 	const int READ_BUFFER_SIZE = 1024;
@@ -166,7 +166,7 @@ void ApplyMorphology ( CSphIndex * pIndex )
 }
 
 
-void CharsetFold ( CSphIndex * pIndex, FILE * fp )
+static void CharsetFold ( CSphIndex * pIndex, FILE * fp )
 {
 	CSphVector<BYTE> sBuf1 ( 16384 );
 	CSphVector<BYTE> sBuf2 ( 16384 );
@@ -232,7 +232,7 @@ void CharsetFold ( CSphIndex * pIndex, FILE * fp )
 		BYTE * pRealEnd = sBuf1.Begin() + iBuf1 + iGot;
 		if ( pIn < pRealEnd )
 		{
-			iBuf1 = pRealEnd - pIn;
+			iBuf1 = int ( pRealEnd - pIn );
 			memmove ( sBuf1.Begin(), pIn, iBuf1 );
 		}
 	}
@@ -248,7 +248,7 @@ struct IDFWord_t
 STATIC_SIZE_ASSERT	( IDFWord_t, 12 );
 
 
-bool BuildIDF ( const CSphString & sFilename, const StrVec_t & dFiles, CSphString & sError, bool bSkipUnique )
+static bool BuildIDF ( const CSphString & sFilename, const StrVec_t & dFiles, CSphString & sError, bool bSkipUnique )
 {
 	// text dictionaries are ordered alphabetically - we can use that fact while reading
 	// to merge duplicates, calculate total number of occurrences and process bSkipUnique
@@ -404,7 +404,7 @@ bool BuildIDF ( const CSphString & sFilename, const StrVec_t & dFiles, CSphStrin
 }
 
 
-bool MergeIDF ( const CSphString & sFilename, const StrVec_t & dFiles, CSphString & sError, bool bSkipUnique )
+static bool MergeIDF ( const CSphString & sFilename, const StrVec_t & dFiles, CSphString & sError, bool bSkipUnique )
 {
 	// binary dictionaries are ordered by 64-bit word id, we can use that for merging.
 	// read every file, check repeating word ids, merge if found, write to disk if not
@@ -546,7 +546,7 @@ bool MergeIDF ( const CSphString & sFilename, const StrVec_t & dFiles, CSphStrin
 static const DWORD META_HEADER_MAGIC = 0x54525053;    ///< my magic 'SPRT' header
 static const DWORD META_VERSION = 18;
 
-const char * AttrType2Str ( ESphAttr eAttrType )
+static const char * AttrType2Str ( ESphAttr eAttrType )
 {
 	switch ( eAttrType )
 	{
@@ -571,11 +571,10 @@ const char * AttrType2Str ( ESphAttr eAttrType )
 	case SPH_ATTR_INT64SET_PTR:		return "SPH_ATTR_INT64SET_PTR";
 	case SPH_ATTR_JSON_PTR:			return "SPH_ATTR_JSON_PTR";
 	case SPH_ATTR_JSON_FIELD_PTR:	return "SPH_ATTR_JSON_FIELD_PTR";
-	default: return "";
+	default:						return "SPH_ATTR_NONE";
 	}
-
-	return "SPH_ATTR_NONE";
 }
+
 
 static void InfoMetaSchemaColumn ( CSphReader & rdInfo, DWORD uVersion )
 {
@@ -584,12 +583,12 @@ static void InfoMetaSchemaColumn ( CSphReader & rdInfo, DWORD uVersion )
 	fprintf ( stdout, " %s", AttrType2Str ((ESphAttr)rdInfo.GetDword ()) );
 
 	rdInfo.GetDword (); // ignore rowitem
-	fprintf ( stdout, " offset %d/", rdInfo.GetDword () );
-	fprintf ( stdout, "count %d", rdInfo.GetDword () );
-	fprintf ( stdout, " payload %d", rdInfo.GetByte () );
+	fprintf ( stdout, " offset %u/", rdInfo.GetDword () );
+	fprintf ( stdout, "count %u", rdInfo.GetDword() );
+	fprintf ( stdout, " payload %d", rdInfo.GetByte() );
 
 	if ( uVersion>=61 )
-		fprintf ( stdout, " attr flags %d", rdInfo.GetDword() );
+		fprintf ( stdout, " attr flags %u", rdInfo.GetDword() );
 }
 
 
@@ -599,7 +598,7 @@ static void InfoMetaSchemaField ( CSphReader & rdInfo, DWORD uVersion )
 	{
 		CSphString sName = rdInfo.GetString();
 		fprintf ( stdout, "%s", sName.cstr() );
-		fprintf ( stdout, " field flags %d", rdInfo.GetDword() );
+		fprintf ( stdout, " field flags %u", rdInfo.GetDword() );
 		fprintf ( stdout, " payload %d", rdInfo.GetByte () );
 	}
 	else
@@ -607,7 +606,7 @@ static void InfoMetaSchemaField ( CSphReader & rdInfo, DWORD uVersion )
 }
 
 
-void InfoMetaSchema ( CSphReader &rdMeta, DWORD uVersion )
+static void InfoMetaSchema ( CSphReader &rdMeta, DWORD uVersion )
 {
 	fprintf ( stdout, "\n ======== SCHEMA ========" );
 	int iNumFields = rdMeta.GetDword ();
@@ -628,24 +627,25 @@ void InfoMetaSchema ( CSphReader &rdMeta, DWORD uVersion )
 	}
 }
 
-void InfoMetaIndexSettings ( CSphReader &tReader, DWORD uVersion )
+
+static void InfoMetaIndexSettings ( CSphReader &tReader, DWORD uVersion )
 {
 	fprintf ( stdout, "\n ======== INDEX SETTINGS ========" );
-	fprintf ( stdout, "\nMinPrefixLen: %d", tReader.GetDword () );
-	fprintf ( stdout, "\nMinInfixLen: %d", tReader.GetDword () );
-	fprintf ( stdout, "\nMaxSubstringLen: %d", tReader.GetDword () );
+	fprintf ( stdout, "\nMinPrefixLen: %u", tReader.GetDword () );
+	fprintf ( stdout, "\nMinInfixLen: %u", tReader.GetDword () );
+	fprintf ( stdout, "\nMaxSubstringLen: %u", tReader.GetDword () );
 	fprintf ( stdout, "\nbHtmlStrip: %d", tReader.GetByte () );
 	fprintf ( stdout, "\nsHtmlIndexAttrs: %s", tReader.GetString ().cstr() );
 	fprintf ( stdout, "\nsHtmlRemoveElements: %s", tReader.GetString ().cstr() );
 	fprintf ( stdout, "\nbIndexExactWords: %d", tReader.GetByte () );
-	fprintf ( stdout, "\neHitless: %d", tReader.GetDword () );
-	fprintf ( stdout, "\neHitFormat: %d", tReader.GetDword () );
+	fprintf ( stdout, "\neHitless: %u", tReader.GetDword () );
+	fprintf ( stdout, "\neHitFormat: %u", tReader.GetDword () );
 	fprintf ( stdout, "\nbIndexSP: %d", tReader.GetByte () );
 	fprintf ( stdout, "\nsZones: %s", tReader.GetString ().cstr () );
-	fprintf ( stdout, "\niBoundaryStep: %d", tReader.GetDword () );
-	fprintf ( stdout, "\niStopwordStep: %d", tReader.GetDword () );
-	fprintf ( stdout, "\niOvershortStep: %d", tReader.GetDword () );
-	fprintf ( stdout, "\niEmbeddedLimit: %d", tReader.GetDword () );
+	fprintf ( stdout, "\niBoundaryStep: %u", tReader.GetDword () );
+	fprintf ( stdout, "\niStopwordStep: %u", tReader.GetDword () );
+	fprintf ( stdout, "\niOvershortStep: %u", tReader.GetDword () );
+	fprintf ( stdout, "\niEmbeddedLimit: %u", tReader.GetDword () );
 	fprintf ( stdout, "\neBigramIndex: %d", tReader.GetByte () );
 	fprintf ( stdout, "\nsBigramWords: %s", tReader.GetString ().cstr () );
 	fprintf ( stdout, "\nbIndexFieldLens: %d", tReader.GetByte () );
@@ -654,10 +654,11 @@ void InfoMetaIndexSettings ( CSphReader &tReader, DWORD uVersion )
 	fprintf ( stdout, "\nsIndexTokenFilter: %s", tReader.GetString ().cstr () );
 	fprintf ( stdout, "\ntBlobUpdateSpace: " INT64_FMT, tReader.GetOffset () );
 	if ( uVersion>=56 )
-		fprintf ( stdout, "\niSkiplistBlockSize: %d", tReader.GetDword () );
+		fprintf ( stdout, "\niSkiplistBlockSize: %u", tReader.GetDword () );
 	if ( uVersion>=60 )
 		fprintf ( stdout, "\nsHitlessFiles: %s", tReader.GetString ().cstr () );
 }
+
 
 static void InfoMetaFileInfo ( CSphReader &tReader )
 {
@@ -665,10 +666,11 @@ static void InfoMetaFileInfo ( CSphReader &tReader )
 	fprintf ( stdout, "\nuSize: " INT64_FMT, tReader.GetOffset () );
 	fprintf ( stdout, "\nuCTime: " INT64_FMT, tReader.GetOffset () );
 	fprintf ( stdout, "\nuMTime: " INT64_FMT, tReader.GetOffset () );
-	fprintf ( stdout, "\nuCRC32: %d", tReader.GetDword () );
+	fprintf ( stdout, "\nuCRC32: %u", tReader.GetDword () );
 }
 
-bool InfoMetaTokenizerSettings ( CSphReader &tReader, DWORD uVersion)
+
+static bool InfoMetaTokenizerSettings ( CSphReader &tReader, DWORD uVersion)
 {
 	fprintf ( stdout, "\n ======== TOKENIZER SETTINGS ========" );
 
@@ -682,7 +684,7 @@ bool InfoMetaTokenizerSettings ( CSphReader &tReader, DWORD uVersion)
 	}
 
 	fprintf ( stdout, "\nsCaseFolding: %s", tReader.GetString ().cstr () );
-	fprintf ( stdout, "\niMinWordLen: %d", tReader.GetDword() );
+	fprintf ( stdout, "\niMinWordLen: %u", tReader.GetDword() );
 
 
 		bool bsyn = !!tReader.GetByte ();
@@ -699,7 +701,7 @@ bool InfoMetaTokenizerSettings ( CSphReader &tReader, DWORD uVersion)
 	InfoMetaFileInfo ( tReader );
 	fprintf ( stdout, "\nsBoundary: %s", tReader.GetString ().cstr () );
 	fprintf ( stdout, "\nsIgnoreChars : %s", tReader.GetString ().cstr () );
-	fprintf ( stdout, "\niNgramLen : %d", tReader.GetDword ());
+	fprintf ( stdout, "\niNgramLen : %u", tReader.GetDword ());
 	fprintf ( stdout, "\nsNgramChars : %s", tReader.GetString ().cstr () );
 	fprintf ( stdout, "\nsBlendChars : %s", tReader.GetString ().cstr () );
 	fprintf ( stdout, "\nsBlendMode : %s", tReader.GetString ().cstr () );
@@ -707,7 +709,8 @@ bool InfoMetaTokenizerSettings ( CSphReader &tReader, DWORD uVersion)
 	return true;
 }
 
-void InfoMetaDictionarySettings ( CSphReader &tReader )
+
+static void InfoMetaDictionarySettings ( CSphReader & tReader )
 {
 	fprintf ( stdout, "\n ======== DICTIONARY SETTINGS ========" );
 
@@ -758,14 +761,15 @@ void InfoMetaDictionarySettings ( CSphReader &tReader )
 		InfoMetaFileInfo ( tReader );
 	}
 
-	fprintf ( stdout, "\niMinStemmingLen : %d", tReader.GetDword () );
+	fprintf ( stdout, "\niMinStemmingLen : %u", tReader.GetDword () );
 	fprintf ( stdout, "\nbWordDict : %d", tReader.GetByte () );
 	fprintf ( stdout, "\nbStopwordsUnstemmed : %d", tReader.GetByte () );
 	fprintf ( stdout, "\nsMorphFingerprint : %s", tReader.GetString ().cstr() );
 
 }
 
-void InfoMetaFieldFilterSettings ( CSphReader &tReader )
+
+static void InfoMetaFieldFilterSettings ( CSphReader & tReader )
 {
 	fprintf ( stdout, "\n ======== FIELD FILTER SETTINGS ========" );
 
@@ -778,7 +782,8 @@ void InfoMetaFieldFilterSettings ( CSphReader &tReader )
 		fprintf (stdout, "\n Filter(%d) = %s", i, tReader.GetString ().cstr());
 }
 
-void InfoMeta ( const CSphString &sMeta )
+
+static void InfoMeta ( const CSphString & sMeta )
 {
 	fprintf ( stdout, "\nDescribing meta %s", sMeta.cstr());
 	CSphString sError;
@@ -790,34 +795,34 @@ void InfoMeta ( const CSphString &sMeta )
 	}
 
 	DWORD dwFoo = rdMeta.GetDword();
-	fprintf (stdout, "\nMagick: 0x%x (expected 0x%x)", dwFoo, META_HEADER_MAGIC);
+	fprintf ( stdout, "\nMagick: 0x%x (expected 0x%x)", (uint32_t)dwFoo, (uint32_t)META_HEADER_MAGIC );
 	if ( dwFoo!=META_HEADER_MAGIC )
 	{
 		fprintf ( stdout, "\nwrong magick!");
 		return;
 	}
 	DWORD uVersion = rdMeta.GetDword ();
-	fprintf ( stdout, "\nVersion: %d (expected 1 to %d)", uVersion, META_VERSION );
+	fprintf ( stdout, "\nVersion: %u (expected 1 to %u)", uVersion, META_VERSION );
 	if ( uVersion==0 || uVersion>META_VERSION )
 	{
-		fprintf ( stdout, "%s is v.%d, binary is v.%d", sMeta.cstr (), uVersion, META_VERSION );
+		fprintf ( stdout, "%s is v.%u, binary is v.%u", sMeta.cstr (), uVersion, META_VERSION );
 		return;
 	}
 
-	fprintf ( stdout, "\nTotal documents: %d", rdMeta.GetDword());
+	fprintf ( stdout, "\nTotal documents: %u", rdMeta.GetDword());
 	fprintf ( stdout, "\nTotal bytes: " INT64_FMT, rdMeta.GetOffset () );
 	fprintf ( stdout, "\nTID: " INT64_FMT, rdMeta.GetOffset () );
 
 
 	DWORD uSettingsVer = rdMeta.GetDword ();
-	fprintf (stdout, "\n Settings ver: %d", uSettingsVer );
+	fprintf (stdout, "\n Settings ver: %u", uSettingsVer );
 	InfoMetaSchema(rdMeta, uSettingsVer);
 	InfoMetaIndexSettings(rdMeta, uSettingsVer);
 	InfoMetaTokenizerSettings (rdMeta, uSettingsVer);
 	InfoMetaDictionarySettings(rdMeta);
 
-	fprintf ( stdout, "\niWordsCheckpoint: %d", rdMeta.GetDword () );
-	fprintf ( stdout, "\niMaxCodepointLength: %d", rdMeta.GetDword () );
+	fprintf ( stdout, "\niWordsCheckpoint: %u", rdMeta.GetDword () );
+	fprintf ( stdout, "\niMaxCodepointLength: %u", rdMeta.GetDword () );
 	fprintf ( stdout, "\niBloomKeyLen: %d", rdMeta.GetByte () );
 	fprintf ( stdout, "\niBloomHashesCount: %d", rdMeta.GetByte () );
 
@@ -854,7 +859,7 @@ struct IndexInfo_t
 };
 
 
-void ApplyKilllist ( IndexInfo_t & tTarget, const IndexInfo_t & tKiller, const KillListTarget_t & tSettings )
+static void ApplyKilllist ( IndexInfo_t & tTarget, const IndexInfo_t & tKiller, const KillListTarget_t & tSettings )
 {
 	if ( tSettings.m_uFlags & KillListTarget_t::USE_DOCIDS )
 	{
@@ -874,7 +879,7 @@ void ApplyKilllist ( IndexInfo_t & tTarget, const IndexInfo_t & tKiller, const K
 }
 
 
-void ApplyKilllists ( CSphConfig & hConf )
+static void ApplyKilllists ( CSphConfig & hConf )
 {
 	int nIndexes = 0;
 	hConf["index"].IterateStart();
@@ -934,7 +939,7 @@ void ApplyKilllists ( CSphConfig & hConf )
 			for ( const auto & i : dWarnings )
 				fprintf ( stdout, "WARNING: index %s: %s\n", tIndex.m_sName.cstr(), i.cstr() );
 
-			tIndex.m_nDocs = pIndex->GetStats().m_iTotalDocuments;
+			tIndex.m_nDocs = (DWORD)pIndex->GetStats().m_iTotalDocuments;
 		}
 
 		CSphString sLookup;
@@ -1082,7 +1087,7 @@ static void SetCmd ( IndextoolCmd_e eCmd )
 
 
 // this must be more or less in sync with our daemon index loading code
-bool ReadJsonConfig ( const CSphString & sConfigPath, CSphConfig & hConf, CSphString & sError )
+static bool ReadJsonConfig ( const CSphString & sConfigPath, CSphConfig & hConf, CSphString & sError )
 {
 	if ( !sphIsReadable ( sConfigPath, nullptr ) )
 		return true;
@@ -1091,7 +1096,7 @@ bool ReadJsonConfig ( const CSphString & sConfigPath, CSphConfig & hConf, CSphSt
 	if ( !tConfigFile.Open ( sConfigPath, sError ) )
 		return false;
 
-	int iSize = tConfigFile.GetFilesize();
+	int iSize = (int)tConfigFile.GetFilesize();
 	if ( !iSize )
 		return true;
 
@@ -1280,7 +1285,7 @@ int main ( int argc, char ** argv )
 		}
 		OPT1 ( "--check-disk-chunk" )
 		{
-			iCheckChunk = strtoll ( argv[++i], NULL, 10 ); continue;
+			iCheckChunk = (int)strtoll ( argv[++i], NULL, 10 ); continue;
 		}
 
 		// options with 2 args
@@ -1555,8 +1560,8 @@ int main ( int argc, char ** argv )
 				if ( !pIndex->Prealloc ( bStripPath, nullptr, dWarnings ) )
 					sphDie ( "index '%s': prealloc failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
 
-				for ( const auto & i : dWarnings )
-					fprintf ( stdout, "WARNING: index %s: %s\n", sIndex.cstr(), i.cstr() );
+				for ( const auto & sWarning : dWarnings )
+					fprintf ( stdout, "WARNING: index %s: %s\n", sIndex.cstr(), sWarning.cstr() );
 
 				pIndex->Preread();
 			} else

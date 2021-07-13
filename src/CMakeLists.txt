@@ -49,7 +49,8 @@ add_library(lmanticore STATIC sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sphin
 		task_info.cpp mini_timer.cpp fileio.cpp memio.cpp queryprofile.cpp columnarfilter.cpp columnargrouper.cpp
 		columnarlib.cpp collation.cpp fnv64.cpp histogram.cpp threads_detached.cpp hazard_pointer.cpp task_info.cpp
 		mini_timer.cpp dynamic_idx.cpp columnarrt.cpp columnarmisc.cpp exprtraits.cpp columnarexpr.cpp
-		sphinx_alter.cpp )
+		sphinx_alter.cpp conversion.cpp )
+
 target_link_libraries (lmanticore PUBLIC lextra)
 
 add_library(lmanticore_icu OBJECT STATIC icu.cpp)
@@ -67,7 +68,7 @@ if (WITH_RE2)
 endif ()
 
 add_subdirectory (indexing_sources)
-target_link_libraries (lmanticore PUBLIC common_sources)
+target_link_libraries (lmanticore PUBLIC common_includes)
 
 if (WIN32)
 	target_sources (lmanticore PRIVATE libutils.cpp)
@@ -104,7 +105,7 @@ set ( HEADERS sphinxexcerpt.h sphinxfilter.h sphinxint.h sphinxjsonquery.h sphin
 		searchnode.h killlist.h attribute.h accumulator.h global_idf.h optional.h event.h threadutils.h
 		hazard_pointer.h task_info.h mini_timer.h collation.h fnv64.h histogram.h sortsetup.h dynamic_idx.h
 		indexsettings.h columnarlib.h fileio.h memio.h queryprofile.h columnarfilter.h columnargrouper.h fileutils.h
-		libutils.h ${MANTICORE_BINARY_DIR}/config/config.h)
+		libutils.h conversion.h ${MANTICORE_BINARY_DIR}/config/config.h)
 
 set ( SEARCHD_H searchdaemon.h searchdconfig.h searchdddl.h searchdexpr.h searchdha.h searchdreplication.h searchdsql.h
 		searchdtask.h task_info.h taskflushattrs.h taskflushbinlog.h taskflushmutable.h taskglobalidf.h
@@ -211,7 +212,7 @@ target_link_libraries (searchd_ssl PUBLIC lextra)
 if (WITH_SSL)
 	target_compile_definitions (searchd_ssl PRIVATE DAEMON)
 	target_link_libraries (searchd_ssl PRIVATE OpenSSL::SSL)
-	target_compile_options (searchd_ssl PRIVATE "$<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wno-deprecated-declarations>")
+	target_compile_options (searchd_ssl PRIVATE "$<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wno-deprecated-declarations -Wno-pedantic>")
 	include(CheckFunctionExists)
 	set(CMAKE_REQUIRED_LIBRARIES "OpenSSL::SSL")
 	check_function_exists(TLS_server_method HAVE_TLS_SERVER_METHOD)
@@ -228,6 +229,7 @@ if (WITH_SSL)
 	endif()
 	if (WIN32 AND TARGET OpenSSL::applink)
 		target_link_libraries (searchd_ssl PRIVATE OpenSSL::applink)
+		target_compile_options ( OpenSSL::applink INTERFACE $<${CLANGXX}: -Wno-pedantic -Wno-missing-prototypes> )
 	endif()
 endif (WITH_SSL)
 
@@ -264,6 +266,7 @@ if (NOT STATIC_BINARY)
 	target_link_libraries(wordbreaker lmanticore)
 	target_link_libraries(index_converter lmanticore)
 	add_library(udfexample MODULE udfexample.c)
+	target_compile_options (udfexample PRIVATE "$<$<COMPILE_LANG_AND_ID:C,Clang>:-Wno-deprecated-declarations>")
 endif ()
 
 if ( SPLIT_SYMBOLS )

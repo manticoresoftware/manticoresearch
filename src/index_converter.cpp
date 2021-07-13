@@ -914,8 +914,8 @@ CSphRowitem * AttrConverter_t::NextRow()
 			{
 				// blob packer expect all types of MVA as int64
 				m_dMVA.Resize ( iValues );
-				for ( int i=0; i<iValues; i++ )
-					m_dMVA[i] = pMva[i];
+				for ( int iValue=0; iValue<iValues; iValue++ )
+					m_dMVA[iValue] = pMva[iValue];
 
 				pMva = (const DWORD *)m_dMVA.Begin();
 			} else
@@ -1572,11 +1572,11 @@ static void CopyAndUpdateSchema ( const Index_t & tIndex, CSphSchema & tSchema )
 
 	if ( tSchema.HasBlobAttrs() )
 	{
-		CSphColumnInfo tCol ( sphGetBlobLocatorName() );
-		tCol.m_eAttrType = SPH_ATTR_BIGINT;
+		CSphColumnInfo tBlobLocatorCol ( sphGetBlobLocatorName() );
+		tBlobLocatorCol.m_eAttrType = SPH_ATTR_BIGINT;
 
 		// should be right after docid
-		tSchema.InsertAttr ( 1, tCol, false );
+		tSchema.InsertAttr ( 1, tBlobLocatorCol, false );
 
 		// rebuild locators in the schema
 		const char * szTmpColName = "$_tmp";

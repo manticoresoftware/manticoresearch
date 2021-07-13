@@ -91,7 +91,7 @@ public:
 
 	int							GetAtomPos() const;
 
-	virtual bool SetupScan ( const RtIndex_c * pIndex, int iSegment, const SphChunkGuard_t & tGuard ) { return false; };
+	virtual bool SetupScan ( const RtIndex_c * pIndex, int iSegment, const SphChunkGuard_t & tGuard ) { return false; }
 };
 
 
@@ -123,7 +123,7 @@ public:
 		SafeAddRef ( pDict );
 		m_pDict = pDict;
 	}
-	inline CSphDict * Dict() const { return m_pDict; };
+	inline CSphDict * Dict() const { return m_pDict; }
 
 	virtual ISphQword *					ScanSpawn() const = 0;
 };
@@ -132,7 +132,6 @@ public:
 class ISphRanker : public ISphExtra
 {
 public:
-	virtual						~ISphRanker () {}
 	virtual CSphMatch *			GetMatchesBuffer() = 0;
 	virtual int					GetMatches () = 0;
 	virtual void				Reset ( const ISphQwordSetup & tSetup ) = 0;
@@ -224,8 +223,7 @@ Bson_t Explain ( ExplainQueryArgs_t & tArgs );
 class WordlistStub_c : public ISphWordlist
 {
 public:
-	WordlistStub_c() {};
-	~WordlistStub_c() override {}
+	WordlistStub_c() {}
 	void GetPrefixedWords ( const char * , int , const char * , ISphWordlist::Args_t & ) const override {}
 	void GetInfixedWords ( const char * , int , const char * , ISphWordlist::Args_t & ) const override {}
 };

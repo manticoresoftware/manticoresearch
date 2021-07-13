@@ -136,7 +136,7 @@ bool	IsNotRealAttribute ( const CSphColumnInfo & tColumn );
 inline DocID_t sphGetDocID ( const CSphRowitem * pData )
 {
 	assert ( pData );
-	return sphUnalignedRead ( *(DocID_t*)pData );
+	return sphUnalignedRead ( *(DocID_t*)(const_cast<CSphRowitem *>(pData)) );
 }
 
 #endif

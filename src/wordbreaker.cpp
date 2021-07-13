@@ -30,12 +30,12 @@ inline int IsAlpha ( int c )
 }
 
 // copied over from sphinxutils; remove at some point
-void StrSplit ( StrVec_t & dOut, const char * sIn )
+static void StrSplit ( StrVec_t & dOut, const char * sIn )
 {
 	if ( !sIn )
 		return;
 
-	const char * p = (char*)sIn;
+	const char * p = sIn;
 	while ( *p )
 	{
 		// skip non-alphas
@@ -50,7 +50,7 @@ void StrSplit ( StrVec_t & dOut, const char * sIn )
 		while ( IsAlpha(*p) )
 			p++;
 		if ( sNext!=p )
-			dOut.Add().SetBinary ( sNext, p-sNext );
+			dOut.Add().SetBinary ( sNext, int ( p-sNext ) );
 	}
 }
 
@@ -226,7 +226,7 @@ struct Split_t
 
 static LangModel_c g_LM;
 
-void UrlBreakInit ( const char * sDict, bool bVerbose )
+static void UrlBreakInit ( const char * sDict, bool bVerbose )
 {
 	FILE * fp = fopen ( sDict, "rb" );
 	if ( !fp )
@@ -284,7 +284,7 @@ void UrlBreakInit ( const char * sDict, bool bVerbose )
 }
 
 
-void UrlBreak ( Split_t & tBest, const char * sWord )
+static void UrlBreak ( Split_t & tBest, const char * sWord )
 {
 	auto iLen = (const int) strlen(sWord);
 
@@ -379,7 +379,7 @@ void UrlBreak ( Split_t & tBest, const char * sWord )
 }
 
 
-char * Strip ( char * sBuf )
+static char * Strip ( char * sBuf )
 {
 	char * p = sBuf;
 	while ( *p && isspace(*p) )
@@ -392,7 +392,7 @@ char * Strip ( char * sBuf )
 }
 
 
-void UrlBreakTest ( const char * sTestFile )
+static void UrlBreakTest ( const char * sTestFile )
 {
 	// load the test data
 	CSphVector <StrVec_t> dTests;
@@ -505,13 +505,13 @@ void UrlBreakTest ( const char * sTestFile )
 }
 
 
-bool UrlBreakIsChar ( int c )
+static bool UrlBreakIsChar ( int c )
 {
 	return ( c>='a' && c<='z' );
 }
 
 
-void UrlBreakBench ( const char * sBenchFile )
+static void UrlBreakBench ( const char * sBenchFile )
 {
 	int64_t tmWall = sphMicroTimer();
 
@@ -563,7 +563,7 @@ void UrlBreakBench ( const char * sBenchFile )
 }
 
 
-void UrlBreakSplit ()
+static void UrlBreakSplit()
 {
 	char sBuf[1024];
 	char sSpace[] = " ";

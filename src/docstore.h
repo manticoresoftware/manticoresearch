@@ -33,8 +33,6 @@ public:
 class DocstoreFields_i : public DocstoreAddField_i, public DocstoreGetField_i
 {
 public:
-	virtual		~DocstoreFields_i() {}
-
 	virtual int GetNumFields() const = 0;
 };
 

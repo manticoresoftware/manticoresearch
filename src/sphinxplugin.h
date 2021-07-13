@@ -102,7 +102,7 @@ public:
 		, m_eRetType ( eRetType )
 	{}
 
-	virtual ESphAttr	GetUdfRetType() const { return m_eRetType; }
+	ESphAttr			GetUdfRetType() const override { return m_eRetType; }
 };
 
 /// registered user-defined ranker descriptor

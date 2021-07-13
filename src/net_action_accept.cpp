@@ -81,11 +81,13 @@ void MultiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t tConn, Proto_e eProt
 		if ( pBuf->HasBytes ()==4 )
 			SetTcpNodelay ( tConn );
 		// no break;
+		// [[clang::fallthrough]];
 	case Proto_e::SPHINX:
 		ApiServe ( std::move ( pBuf ));
 		break;
 	case Proto_e::HTTPS:
 		tSess.SetSsl ( true );
+		// [[clang::fallthrough]];
 	case Proto_e::HTTP:
 		SetTcpNodelay ( tConn );
 		HttpServe ( std::move ( pBuf ) );
@@ -105,7 +107,7 @@ public:
 	void ProcessAccept ( DWORD uGotEvents, CSphNetLoop * pLoop );
 };
 
-DWORD NextConnectionID()
+static DWORD NextConnectionID()
 {
 	static std::atomic<DWORD> g_iConnectionID { 1 };        ///< global conn-id
 	return g_iConnectionID.fetch_add ( 1, std::memory_order_relaxed );
@@ -142,8 +144,7 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 			if ( iErrno==EINTR || iErrno==ECONNABORTED || iErrno==EAGAIN || iErrno==EWOULDBLOCK )
 			{
 				if ( iAccepted )
-					sphLogDebugv ( "%p accepted %d connections all, tick=%u",
-							this, iAccepted, myinfo::ref<ListenTaskInfo_t> ()->m_uTick );
+					sphLogDebugv ( "%p accepted %d connections all, tick=%u", this, iAccepted, myinfo::ref<ListenTaskInfo_t> ()->m_uTick );
 				return;
 			}
 
@@ -212,7 +213,7 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 			{
 				Threads::CoGo ( [pBuf = std::move ( pBuf ), tConn, pInfo = pClientInfo.LeakPtr(), eProto ] () mutable
 					{
-						ScopedClientInfo_t _ { pInfo }; // make visible task info
+						ScopedClientInfo_t __ { pInfo }; // make visible task info
 						MultiServe ( std::move ( pBuf ), tConn, eProto );
 					}, fnMakeScheduler () );
 				break;
@@ -221,13 +222,14 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 			{
 				Threads::CoGo ( [pBuf = std::move ( pBuf ), pInfo = pClientInfo.LeakPtr () ] () mutable
 					{
-						ScopedClientInfo_t _ { pInfo }; // make visible task info
+						ScopedClientInfo_t __ { pInfo }; // make visible task info
 						SqlServe ( std::move ( pBuf ) );
 					}, fnMakeScheduler () );
 				break;
 			}
 			case Proto_e::REPLICATION:
 				assert (false && "replication must be processed on another level");
+				break;
 
 			default:
 				break;

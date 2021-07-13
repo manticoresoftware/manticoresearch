@@ -16,7 +16,7 @@
 #include "sphinxexcerpt.h"
 
 
-bool operator < ( const Passage_t & a, const Passage_t & b )
+static bool operator < ( const Passage_t & a, const Passage_t & b )
 {
 	if ( a.m_iUniqQwords==b.m_iUniqQwords )
 	{
@@ -296,5 +296,4 @@ CSphVector<Passage_t> PassageContext_t::SelectBest ( const SnippetLimits_t & tLi
 	}
 
 	return dPassagesToShow;
-	dPassagesToShow.Resize(0);
 }

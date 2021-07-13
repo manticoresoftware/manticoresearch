@@ -35,7 +35,7 @@ struct FieldBlob_t
 struct DocHash_t : private OpenHash_T<int, DocID_t>
 {
 	explicit DocHash_t ( int iElems ) : OpenHash_T<int, DocID_t> { iElems } {}
-	int Count () const { return GetLength(); }
+	int Count () const { return (int)GetLength(); }
 	bool Exists ( DocID_t tId ) const { return ( Find ( tId )!=nullptr ); }
 	void Set ( DocID_t tId, int iOff ) { Acquire ( tId ) = iOff;}
 	using OpenHash_T<int, DocID_t>::Acquire;
@@ -68,7 +68,7 @@ struct GetFieldRequestBuilder_t : public RequestBuilder_i
 
 	explicit GetFieldRequestBuilder_t ( const VecTraits_T<const CSphColumnInfo *>& dFieldCols )
 		: m_dFieldCols ( dFieldCols )
-		{};
+	{}
 
 	void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
 	{
@@ -107,7 +107,7 @@ struct GetFieldReplyParser_t : public ReplyParser_i
 			tReq.GetBytesZerocopy( &pReply->m_pFieldsRaw, iFieldsLen );
 
 		return !tReq.GetError();
-	};
+	}
 };
 
 struct ProxyFieldRequestBuilder_t : public RequestBuilder_i
@@ -116,7 +116,8 @@ struct ProxyFieldRequestBuilder_t : public RequestBuilder_i
 
 	explicit ProxyFieldRequestBuilder_t ( const FieldRequest_t & tArgs )
 		: m_tArgs ( tArgs )
-	{};
+	{}
+
 	void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
 	{
 		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_GETFIELD, VER_COMMAND_GETFIELD );

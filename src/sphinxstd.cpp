@@ -1051,8 +1051,9 @@ bool CSphMutex::Unlock ()
 
 EventWrapper_c::EventWrapper_c ()
 {
-	m_hEvent = CreateEvent ( NULL, TRUE, FALSE, NULL );
-	m_bInitialized = ( m_hEvent!=0 );
+	InitializeConditionVariable ( &m_tCond );
+	InitializeCriticalSection ( &m_tMutex );
+	m_bInitialized = true;
 }
 
 EventWrapper_c::~EventWrapper_c ()
@@ -1061,21 +1062,26 @@ EventWrapper_c::~EventWrapper_c ()
 		return;
 
 	m_bInitialized = false;
-	CloseHandle ( m_hEvent );
+	DeleteCriticalSection ( &m_tMutex );
+	// no need to deinit m_tCond as it is local
 }
 
 template<>
 void AutoEvent_T<true>::SetEvent()
 {
+	EnterCriticalSection (&m_tMutex);
 	m_iSent = 1;
-	::SetEvent ( m_hEvent );
+	LeaveCriticalSection (&m_tMutex);
+	WakeConditionVariable (&m_tCond);
 }
 
 template<>
 void AutoEvent_T<false>::SetEvent ()
 {
+	EnterCriticalSection (&m_tMutex);
 	++m_iSent;
-	::SetEvent ( m_hEvent );
+	LeaveCriticalSection (&m_tMutex);
+	WakeConditionVariable (&m_tCond);
 }
 
 template<>
@@ -1084,16 +1090,17 @@ bool AutoEvent_T<true>::WaitEvent ( int iMsec )
 	if ( !m_bInitialized )
 		return false;
 
-	if ( !m_iSent )
-	{
-		DWORD iTime=( iMsec == -1 )?INFINITE:iMsec;
-		auto iRes=WaitForSingleObject ( m_hEvent, iTime );
-		if ( iRes == WAIT_TIMEOUT )
+	DWORD iTime=( iMsec == -1 )?INFINITE:iMsec;
+	EnterCriticalSection(&m_tMutex);
+	while (!m_iSent)
+		if (!SleepConditionVariableCS(&m_tCond, &m_tMutex, iTime) && GetLastError()==ERROR_TIMEOUT)
+		{
+			LeaveCriticalSection (&m_tMutex);
 			return false;
-	}
+		}
 
-	ResetEvent ( m_hEvent );
-	m_iSent=0;
+	m_iSent = 0;
+	LeaveCriticalSection(&m_tMutex);
 	return true;
 }
 
@@ -1103,16 +1110,17 @@ bool AutoEvent_T<false>::WaitEvent ( int iMsec )
 	if ( !m_bInitialized )
 		return false;
 
-	if ( !m_iSent )
-	{
-		DWORD iTime=( iMsec == -1 )?INFINITE:iMsec;
-		auto iRes=WaitForSingleObject ( m_hEvent, iTime );
-		if ( iRes == WAIT_TIMEOUT )
+	DWORD iTime=( iMsec == -1 )?INFINITE:iMsec;
+	EnterCriticalSection(&m_tMutex);
+	while (!m_iSent)
+		if (!SleepConditionVariableCS(&m_tCond, &m_tMutex, iTime) && GetLastError()==ERROR_TIMEOUT)
+		{
+			LeaveCriticalSection (&m_tMutex);
 			return false;
-	}
+		}
 
-	ResetEvent ( m_hEvent );
 	--m_iSent;
+	LeaveCriticalSection(&m_tMutex);
 	return true;
 }
 

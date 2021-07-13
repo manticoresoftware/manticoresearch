@@ -626,6 +626,8 @@ private:
 		while ( true )
 			if ( !JobTick ( *pWorker ) )
 				break;
+			else
+				sphSleepMsec ( 500 );
 
 		m_iIdleWorkers.fetch_sub ( 1, std::memory_order_relaxed );
 		ScWL_t _ { m_dWorkersLock };

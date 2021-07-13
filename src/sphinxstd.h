@@ -438,12 +438,41 @@ struct WIDEST<T1, T2>
 
 inline int sphBitCount ( DWORD n )
 {
+#if __GNUC__ || __clang__
+	return __builtin_popcount ( n );
+#else
 	// MIT HACKMEM count
 	// works for 32-bit numbers only
 	// fix last line for 64-bit numbers
 	register DWORD tmp;
 	tmp = n - ((n >> 1) & 033333333333) - ((n >> 2) & 011111111111);
 	return ( (tmp + (tmp >> 3) ) & 030707070707) % 63;
+#endif
+}
+
+inline int sphBitCount ( uint64_t n )
+{
+#if __GNUC__ || __clang__
+	return __builtin_popcountll ( n );
+#else
+	// MIT HACKMEM count without division
+	unsigned long tmp = ( n >> 1 ) & 0x7777777777777777UL;
+	n -= tmp;
+	tmp = ( tmp >> 1 ) & 0x7777777777777777UL;
+	n -= tmp;
+	tmp = ( tmp >> 1 ) & 0x7777777777777777UL;
+	n -= tmp;
+	n = ( n+( n >> 4 ) ) & 0x0F0F0F0F0F0F0F0FUL;
+	n = n * 0x0101010101010101UL;
+	return n >> 56;
+#endif
+}
+
+// that is fastest variant of MIT HACKMEM count specified to single byte argument
+// benches of different variants are available in gbenches/popcount
+inline int sphBitCount ( BYTE n )
+{
+	return (int) ( ( ( ( ( DWORD ( n ) * 0x08040201 ) >> 3 ) & 0x11111111 ) * 0x11111111 ) >> 28 );
 }
 
 using SphDieCallback_t = bool (*) ( bool bDie, const char *, va_list );

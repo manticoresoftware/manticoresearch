@@ -12,6 +12,7 @@ add_executable ( gmanticorebench
 		json.cpp
 		cJSON_test.c
 		locators.cpp
+		popcount.cpp
 		)
 
 target_include_directories (gmanticorebench PRIVATE .. )

@@ -2927,4 +2927,3 @@ TEST ( functions, static_trait )
 	ASSERT_TRUE ( std::is_member_function_pointer<decltype ( &foo::bar )>::value );
 	ASSERT_FALSE ( std::is_member_function_pointer<decltype ( &foo::bar_static )>::value );
 }
-

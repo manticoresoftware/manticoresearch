@@ -4235,7 +4235,8 @@ protected:
 	bool m_bInitialized = false;
 
 #if _WIN32
-	HANDLE m_hEvent = 0;
+	CONDITION_VARIABLE m_tCond;
+	CRITICAL_SECTION   m_tMutex;
 #else
 	pthread_cond_t m_tCond;
 	pthread_mutex_t m_tMutex;

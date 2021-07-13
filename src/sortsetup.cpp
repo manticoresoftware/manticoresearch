@@ -325,8 +325,8 @@ void SortStateSetup_c::SetupJsonAttr()
 
 bool SortStateSetup_c::SetupJsonField ( CSphString & sError )
 {
-	CSphString sJsonCol, sJsonKey;
-	if ( !sphJsonNameSplit ( m_szTok, &sJsonCol, &sJsonKey ) )
+	CSphString sJsonCol;
+	if ( !sphJsonNameSplit ( m_szTok, &sJsonCol ) )
 		return true;
 
 	m_iAttr = m_tSchema.GetAttrIndex ( sJsonCol.cstr() );

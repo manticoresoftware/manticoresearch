@@ -1005,8 +1005,8 @@ bool IndexUpdateHelper_c::Update_FixupData ( UpdateContext_t & tCtx, CSphString 
 
 		if ( iUpdAttrId<0 )
 		{
-			CSphString sJsonCol, sJsonKey;
-			if ( sphJsonNameSplit ( sUpdAttrName.cstr(), &sJsonCol, &sJsonKey ) )
+			CSphString sJsonCol;
+			if ( sphJsonNameSplit ( sUpdAttrName.cstr(), &sJsonCol ) )
 			{
 				iUpdAttrId = tCtx.m_tSchema.GetAttrIndex ( sJsonCol.cstr() );
 				if ( iUpdAttrId>=0 )

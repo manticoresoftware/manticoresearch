@@ -5194,7 +5194,6 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 		return false;
 
 	CSphString sJsonColumn;
-	CSphString sJsonKey;
 	if ( m_tQuery.m_eGroupFunc==SPH_GROUPBY_MULTIPLE )
 	{
 		CSphVector<CSphAttrLocator> dLocators;
@@ -5213,7 +5212,7 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 		for ( auto& sGroupBy : dGroupBy )
 		{
 			CSphString sJsonExpr;
-			if ( sphJsonNameSplit ( sGroupBy.cstr(), &sJsonColumn, &sJsonKey ) )
+			if ( sphJsonNameSplit ( sGroupBy.cstr(), &sJsonColumn ) )
 			{
 				sJsonExpr = sGroupBy;
 				sGroupBy = sJsonColumn;
@@ -5248,7 +5247,7 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 		return true;
 	}
 
-	if ( sphJsonNameSplit ( m_tQuery.m_sGroupBy.cstr(), &sJsonColumn, &sJsonKey ) )
+	if ( sphJsonNameSplit ( m_tQuery.m_sGroupBy.cstr(), &sJsonColumn ) )
 	{
 		const int iAttr = tSchema.GetAttrIndex ( sJsonColumn.cstr() );
 		if ( iAttr<0 )

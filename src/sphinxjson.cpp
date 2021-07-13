@@ -1240,7 +1240,7 @@ const BYTE * sphJsonFieldFormat ( JsonEscapedBuilder & sOut, const BYTE * pData,
 }
 
 
-bool sphJsonNameSplit ( const char * sName, CSphString * sColumn, CSphString * sKey )
+bool sphJsonNameSplit ( const char * sName, CSphString * sColumn )
 {
 	if ( !sName )
 		return false;
@@ -1264,10 +1264,6 @@ bool sphJsonNameSplit ( const char * sName, CSphString * sColumn, CSphString * s
 		sColumn->SetBinary ( sName, iSep );
 		sColumn->Trim();
 	}
-
-	if ( sKey )
-		*sKey = sName + iSep + ( *pSep=='.' ? 1 : 0 );
-
 	return true;
 }
 

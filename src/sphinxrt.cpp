@@ -818,24 +818,20 @@ CSphFixedVector<int> GetChunkNames ( const VecTraits_T<IDX> & dIndexes )
 struct RtAttrMergeContext_t
 {
 	RtSegment_t &					m_tDstSeg;
-	const RtSegment_t &				m_tSrcSeg;
 	int								m_iNumBlobs;
-	const CSphVector<RowID_t> &		m_dRowMap;
-	columnar::Builder_i *			m_pColumnarBuilder = nullptr;
 	RowID_t &						m_tResultRowID;
+	columnar::Builder_i *			m_pColumnarBuilder;
 
-	RtAttrMergeContext_t ( 	RtSegment_t & tDstSeg, const RtSegment_t & tSrcSeg, int iNumBlobs, const CSphVector<RowID_t> & dRowMap, RowID_t & tResultRowID )
+	RtAttrMergeContext_t ( RtSegment_t & tDstSeg, int iNumBlobs, RowID_t & tResultRowID, columnar::Builder_i * pColumnarBuilder )
 		: m_tDstSeg ( tDstSeg )
-		, m_tSrcSeg ( tSrcSeg )
 		, m_iNumBlobs ( iNumBlobs )
-		, m_dRowMap ( dRowMap )
 		, m_tResultRowID ( tResultRowID )
+		, m_pColumnarBuilder ( pColumnarBuilder )
 	{}
 };
 
 
 struct RtQword_t;
-class RtRowIterator_c;
 struct SaveDiskDataContext_t;
 using Selector_t = std::function<bool (int*,int*)>;
 
@@ -1037,8 +1033,7 @@ private:
 
 	int							CompareWords ( const RtWord_t * pWord1, const RtWord_t * pWord2 ) const;
 
-	template <typename ITERATOR, typename TO_STATIC>
-	void						MergeAttributes ( ITERATOR & tIterator, TO_STATIC && fnToStatic, RtAttrMergeContext_t & tCtx ) const;
+	void						MergeAttributes ( const RtSegment_t & tSrcSeg, CSphVector<RowID_t> & dRowMap, RtAttrMergeContext_t & tCtx ) const;
 
 	void						MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, const RtSegment_t & tSeg2, const CSphVector<RowID_t> & dRowMap1, const CSphVector<RowID_t> & dRowMap2 ) const;
 	RtSegment_t *				MergeSegments ( const RtSegment_t * pSeg1, const RtSegment_t * pSeg2, bool bHasMorphology ) const;
@@ -2311,30 +2306,62 @@ void RtIndex_c::DeleteFieldFromDict ( RtSegment_t * pSeg, int iKillField )
 }
 
 
-class RtRowIterator_c : public ISphNoncopyable
+// iterate over alive rows range
+class RtLiveRows_c
 {
 public:
-	RtRowIterator_c ( const RtSegment_t & tSeg )
-		: m_tRowIDMax ( tSeg.m_uRows )
+	using Loc_t = struct { const CSphRowitem * m_pRow; RowID_t m_tRowID; };
+
+	class Iterator_c
+	{
+		const RtLiveRows_c& m_tOwner;
+		Loc_t m_tLoc;
+
+	public:
+		explicit Iterator_c ( const RtLiveRows_c& tOwner, bool bBegin )
+			: m_tOwner { tOwner }
+			, m_tLoc { bBegin ? tOwner.FirstAliveRow () : tOwner.EndRow() }
+		{}
+
+		Loc_t operator*() { return m_tLoc; };
+		bool operator!= ( const Iterator_c & rhs ) const { return m_tLoc.m_pRow!=rhs.m_tLoc.m_pRow; }
+
+		Iterator_c & operator++ ()
+		{
+			m_tLoc = m_tOwner.NextAliveRow ( m_tLoc );
+			return *this;
+		}
+	};
+
+	// c++11 style iteration
+	Iterator_c begin () const { return Iterator_c ( *this, true ); }
+	Iterator_c end() const { return Iterator_c ( *this, false ); }
+
+	RtLiveRows_c ( const RtSegment_t & tSeg, int iStride )
+		: m_pRow ( tSeg.m_dRows.Begin() )
+		, m_pRowMax ( tSeg.m_dRows.Begin() + tSeg.m_dRows.GetLength() )
+		, m_iStride ( iStride )
 		, m_tDeadRowMap ( tSeg.m_tDeadRowMap )
 	{}
 
-	RowID_t GetNextRowID()
+private:
+	Loc_t SkipDeadRows ( Loc_t tRow ) const
 	{
-		while ( m_tRowID<m_tRowIDMax && m_tDeadRowMap.IsSet(m_tRowID) )
-			m_tRowID++;
-
-		if ( m_tRowID>=m_tRowIDMax )
-			return INVALID_ROWID;
-
-		m_tRowID++;
-		return m_tRowID-1;
+		for ( ;tRow.m_pRow<m_pRowMax; tRow.m_pRow+= m_iStride, ++tRow.m_tRowID )
+			if ( !m_tDeadRowMap.IsSet ( tRow.m_tRowID ) )
+				break;
+		return tRow;
 	}
 
-protected:
-	RowID_t	m_tRowID = 0;
-	RowID_t	m_tRowIDMax = 0;
-	const DeadRowMap_Ram_c & m_tDeadRowMap;
+	Loc_t FirstAliveRow () const  { return SkipDeadRows ( { m_pRow, 0 } ); }
+	Loc_t EndRow () const { return { m_pRowMax, 0 }; }
+	Loc_t NextAliveRow ( Loc_t tRow ) const { return SkipDeadRows ( { tRow.m_pRow+m_iStride, tRow.m_tRowID+1 } ); }
+
+private:
+	const CSphRowitem *			m_pRow;
+	const CSphRowitem *			m_pRowMax;
+	const int					m_iStride;
+	const DeadRowMap_Ram_c &	m_tDeadRowMap;
 };
 
 template <typename BLOOM_TRAITS>
@@ -2430,40 +2457,37 @@ void BuildSegmentInfixes ( RtSegment_t * pSeg, bool bHasMorphology, bool bKeywor
 }
 
 
-template <typename ITERATOR, typename TO_STATIC>
-void RtIndex_c::MergeAttributes ( ITERATOR & tIterator, TO_STATIC && fnToStatic, RtAttrMergeContext_t & tCtx ) const
+void RtIndex_c::MergeAttributes ( const RtSegment_t & tSrcSeg, CSphVector<RowID_t> & dRowMap, RtAttrMergeContext_t & tCtx ) const
 {
-	auto dColumnarIterators = CreateAllColumnarIterators ( tCtx.m_tSrcSeg.m_pColumnar.Ptr(), m_tSchema );
+	auto dColumnarIterators = CreateAllColumnarIterators ( tSrcSeg.m_pColumnar.Ptr(), m_tSchema );
 	CSphVector<int64_t> dTmp;
 
 	const CSphColumnInfo * pBlobRowLocator = m_tSchema.GetAttr ( sphGetBlobLocatorName() );
 
-	RowID_t tRowID;
-	while ( ( tRowID = tIterator.GetNextRowID() )!=INVALID_ROWID )
+	for ( const auto& dRow : RtLiveRows_c ( tSrcSeg, m_iStride ) )
 	{
-		CSphRowitem * pRow = fnToStatic(tRowID);
-		auto pNewRow = tCtx.m_tDstSeg.m_dRows.AddN(m_iStride);
-		memcpy ( pNewRow, pRow, m_iStride*sizeof(CSphRowitem) );
+		auto pNewRow = tCtx.m_tDstSeg.m_dRows.AddN ( m_iStride );
+		memcpy ( pNewRow, dRow.m_pRow, m_iStride*sizeof(CSphRowitem) );
 
 		if ( tCtx.m_iNumBlobs )
 		{
 			assert ( pBlobRowLocator ) ;
-			int64_t iOldOffset = sphGetRowAttr ( pRow, pBlobRowLocator->m_tLocator );
-			int64_t iNewOffset = sphCopyBlobRow ( tCtx.m_tDstSeg.m_dBlobs, tCtx.m_tSrcSeg.m_dBlobs, iOldOffset, tCtx.m_iNumBlobs );
+			int64_t iOldOffset = sphGetRowAttr ( dRow.m_pRow , pBlobRowLocator->m_tLocator );
+			int64_t iNewOffset = sphCopyBlobRow ( tCtx.m_tDstSeg.m_dBlobs, tSrcSeg.m_dBlobs, iOldOffset, tCtx.m_iNumBlobs );
 			sphSetRowAttr ( pNewRow, pBlobRowLocator->m_tLocator, iNewOffset );
 		}
 
 		ARRAY_FOREACH ( i, dColumnarIterators )
 		{
 			auto & tIt = dColumnarIterators[i];
-			Verify ( AdvanceIterator ( tIt.first.get(), tRowID ) );
+			Verify ( AdvanceIterator ( tIt.first.get(), dRow.m_tRowID ) );
 			SetColumnarAttr ( i, tIt.second, tCtx.m_pColumnarBuilder, tIt.first.get(), dTmp );
 		}
 
 		if ( tCtx.m_tDstSeg.m_pDocstore )
-			tCtx.m_tDstSeg.m_pDocstore->AddPackedDoc ( tCtx.m_tResultRowID, tCtx.m_tSrcSeg.m_pDocstore.Ptr(), tRowID );
+			tCtx.m_tDstSeg.m_pDocstore->AddPackedDoc ( tCtx.m_tResultRowID, tSrcSeg.m_pDocstore.Ptr(), dRow.m_tRowID );
 
-		tCtx.m_dRowMap[tRowID] = tCtx.m_tResultRowID++;
+		dRowMap[dRow.m_tRowID] = tCtx.m_tResultRowID++;
 	}
 }
 
@@ -2563,6 +2587,8 @@ RtSegment_t * RtIndex_c::MergeSegments ( const RtSegment_t * pSeg1, const RtSegm
 
 	CSphVector<RowID_t> dRowMap1(pSeg1->m_uRows);
 	CSphVector<RowID_t> dRowMap2(pSeg2->m_uRows);
+	dRowMap1.Fill ( INVALID_ROWID );
+	dRowMap2.Fill ( INVALID_ROWID );
 
 	int nBlobAttrs = 0;
 	for ( int i = 0; i < m_tSchema.GetAttrsCount(); i++ )
@@ -2573,31 +2599,9 @@ RtSegment_t * RtIndex_c::MergeSegments ( const RtSegment_t * pSeg1, const RtSegm
 
 	CSphScopedPtr<ColumnarBuilderRT_i> pColumnarBuilder ( CreateColumnarBuilderRT(m_tSchema) );
 
-	{
-		for ( auto & i : dRowMap1 )
-			i = INVALID_ROWID;
-
-		auto fnToStatic = [pSeg1, this]( RowID_t tRowID ){ return pSeg1->m_dRows.Begin()+(int64_t)tRowID*m_iStride; };
-		RtRowIterator_c tIt ( *pSeg1 );
-
-		RtAttrMergeContext_t tCtx ( *pSeg, *pSeg1, nBlobAttrs, dRowMap1, tNextRowID );
-		tCtx.m_pColumnarBuilder = pColumnarBuilder.Ptr();
-
-		MergeAttributes ( tIt, fnToStatic, tCtx );
-	}
-
-	{
-		for ( auto & i : dRowMap2 )
-			i = INVALID_ROWID;
-
-		auto fnToStatic = [pSeg2, this]( RowID_t tRowID ){ return pSeg2->m_dRows.Begin()+(int64_t)tRowID*m_iStride; };
-		RtRowIterator_c tIt ( *pSeg2 );
-
-		RtAttrMergeContext_t tCtx ( *pSeg, *pSeg2, nBlobAttrs, dRowMap2, tNextRowID );
-		tCtx.m_pColumnarBuilder = pColumnarBuilder.Ptr();
-
-		MergeAttributes ( tIt, fnToStatic, tCtx );
-	}
+	RtAttrMergeContext_t tCtx ( *pSeg, nBlobAttrs, tNextRowID, pColumnarBuilder.Ptr() );
+	MergeAttributes ( *pSeg1, dRowMap1, tCtx );
+	MergeAttributes ( *pSeg2, dRowMap2, tCtx );
 
 	assert ( tNextRowID<=INT_MAX );
 	pSeg->m_uRows = tNextRowID;
@@ -3212,11 +3216,9 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 
 		auto dColumnarIterators = CreateAllColumnarIterators ( tSeg.m_pColumnar.Ptr(), m_tSchema );
 
-		RtRowIterator_c tIt(tSeg);
-		RowID_t tRowID;
-		while ( ( tRowID = tIt.GetNextRowID() )!=INVALID_ROWID )
+		for ( const auto & dRow : RtLiveRows_c ( tSeg, iStride ) )
 		{
-			const CSphRowitem * pRow = tSeg.m_dRows.Begin() + (int64_t)tRowID*iStride;
+			auto* pRow = dRow.m_pRow;
 			tMinMaxBuilder.Collect(pRow);
 			if ( pBlobLocatorAttr )
 			{
@@ -3234,7 +3236,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 			ARRAY_FOREACH ( iIterator, dColumnarIterators )
 			{
 				auto & tIterator = dColumnarIterators[iIterator];
-				Verify ( AdvanceIterator ( tIterator.first.get(), tRowID ) );
+				Verify ( AdvanceIterator ( tIterator.first.get(), dRow.m_tRowID ) );
 				SetColumnarAttr ( iIterator, tIterator.second, pColumnarBuilder.Ptr(), tIterator.first.get(), dTmp );
 			}
 
@@ -3247,10 +3249,10 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 			if ( pDocstoreBuilder.Ptr() )
 			{
 				assert ( tSeg.m_pDocstore.Ptr() );
-				pDocstoreBuilder->AddDoc ( tNextRowID, tSeg.m_pDocstore->GetDoc ( tRowID, nullptr, -1, false ) );
+				pDocstoreBuilder->AddDoc ( tNextRowID, tSeg.m_pDocstore->GetDoc ( dRow.m_tRowID, nullptr, -1, false ) );
 			}
 
-			tCtx.m_dRowMaps[i][tRowID] = tNextRowID++;
+			tCtx.m_dRowMaps[i][dRow.m_tRowID] = tNextRowID++;
 		}
 	}
 
@@ -6484,15 +6486,10 @@ void PerformFullScan ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 		if ( tCtx.m_pFilter )
 			tCtx.m_pFilter->SetColumnar(pColumnar);
 
-		RtRowIterator_c tIt(tSeg);
-		while (true)
+		for (const auto& dRow : RtLiveRows_c ( *dRamChunks[iSeg], iStride ) )
 		{
-			RowID_t tRowID = tIt.GetNextRowID();
-			if ( tRowID==INVALID_ROWID )
-				break;
-
-			tMatch.m_tRowID = tRowID;
-			tMatch.m_pStatic = tSeg.m_dRows.Begin() + (int64_t)tRowID*iStride;
+			tMatch.m_tRowID = dRow.m_tRowID;
+			tMatch.m_pStatic = dRow.m_pRow;
 
 			tCtx.CalcFilter ( tMatch );
 			if ( tCtx.m_pFilter && !tCtx.m_pFilter->Eval ( tMatch ) )

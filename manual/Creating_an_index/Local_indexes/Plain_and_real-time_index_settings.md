@@ -180,9 +180,9 @@ index products {
 stored_only_fields = title,content
 ```
 
-A list of fields that will be stored in the index but will be not indexed. Similar to [stored_fields](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#stored_fields) except when a field is specified in stored_only_fields it is only stored, not indexed and can’t be searched with fulltext queries. It can only be returned with search results.
+A list of fields that will be stored in the index but will be not indexed. Similar to [stored_fields](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#stored_fields) except when a field is specified in `stored_only_fields` it is only stored, not indexed and can’t be searched with fulltext queries. It can only be returned with search results.
 
-Value: comma separated list of fields that should be stored only, not indexed. Default is empty.
+Value: comma separated list of fields that should be stored only, not indexed. Default is empty. Note, the fields listed in `stored_only_fields` should be also declared as `rt_field` (see below).
 
 ### Real-time index settings:
 

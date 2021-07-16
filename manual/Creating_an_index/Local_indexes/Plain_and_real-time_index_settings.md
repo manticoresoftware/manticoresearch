@@ -90,15 +90,15 @@ Value: path to the index, **mandatory**
 stored_fields = title, content
 ```
 
-By default when an index is defined in a configuration file, original full-text field's content is not stored, but just indexed. If this option is set, the field's contents will be both indexes and stored
-
-Value: comma separated list of **full-text** fields that should be stored. Default is empty.
-
 <!-- example stored_fields -->
 
-A list of fields to be stored in the index. Optional, default is empty (do not store original field text) for [Plain mode](../../Creating_an_index/Local_indexes.md#Defining-index-schema-in-config-%28Plain mode%29), but enabled for every field for [RT mode](../../Creating_an_index/Local_indexes.md#Online-schema-management-%28RT-mode%29).
+By default when an index is defined in a configuration file, full-text fields' original content is not stored, but just indexed. If this option is set, values from the fields will be both indexed and stored.
 
-By default, original document text is not stored in the index in the [Plain mode](../../Creating_an_index/Local_indexes.md#Defining-index-schema-in-config-%28Plain mode%29). If stored_fields option is set (or RT mode is used), the field's full text is stored in the index. It can be returned with search results.
+Value: comma separated list of **full-text** fields that should be stored. Default is empty (i.e. does not store original field text) for [Plain mode](../../Creating_an_index/Local_indexes.md#Defining-index-schema-in-config-%28Plain mode%29), but is enabled for every field for [RT mode](../../Creating_an_index/Local_indexes.md#Online-schema-management-%28RT-mode%29) as long as it's declared as just `text`.
+
+Note, in case of a real-time index the fields listed in `stored_only_fields` should be also declared as [rt_field](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_field).
+
+Note also, that you don't need to list attributes in `stored_fields`, since their original values are stored anyway. `stored_fields` is only for full-text fields.
 
 See also [docstore_block_size](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#docstore_block_size), [docstore_compression](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#docstore_compression) for document storage compression options.
 
@@ -182,7 +182,17 @@ stored_only_fields = title,content
 
 A list of fields that will be stored in the index but will be not indexed. Similar to [stored_fields](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#stored_fields) except when a field is specified in `stored_only_fields` it is only stored, not indexed and can’t be searched with fulltext queries. It can only be returned with search results.
 
-Value: comma separated list of fields that should be stored only, not indexed. Default is empty. Note, the fields listed in `stored_only_fields` should be also declared as `rt_field` (see below).
+Value: comma separated list of fields that should be stored only, not indexed. Default is empty. Note, in case of a real-time index the fields listed in `stored_only_fields` should be also declared as [rt_field](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_field).
+
+Note also, that you don't need to list attributes in `stored_only_fields`, since their original values are stored anyway. If to compare `stored_only_fields` to string attributes the former (stored field):
+* is stored on disk and doesn't require memory
+* is stored compressed
+* can be only fetched, you can't sort/filter/group by the value
+
+The latter (string attribute) is:
+* stored on disk and in memory
+* stored uncompressed
+* can be used for sorting, grouping, filtering and anything else you want to do with attributes.
 
 ### Real-time index settings:
 

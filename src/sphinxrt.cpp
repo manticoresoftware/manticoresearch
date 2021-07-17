@@ -321,11 +321,13 @@ int RtSegment_t::GetStride () const
 	return int ( m_dRows.GetLength() / m_uRows );
 }
 
-
-bool RtSegment_t::IsAlive ( DocID_t tDocid ) const
+const CSphRowitem * RtSegment_t::FindAliveRow ( DocID_t tDocid ) const
 {
 	RowID_t tRowID = GetRowidByDocid(tDocid);
-	return tRowID!=INVALID_ROWID && !m_tDeadRowMap.IsSet(tRowID);
+	if ( tRowID==INVALID_ROWID || m_tDeadRowMap.IsSet(tRowID) )
+		return nullptr;
+
+	return GetDocinfoByRowID(tRowID);
 }
 
 
@@ -908,7 +910,7 @@ public:
 	void				PostSetup() final;
 	bool				IsRT() const final { return true; }
 
-	int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning ) final;
+	int					UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning ) final;
 	bool				SaveAttributes ( CSphString & sError ) const final;
 	DWORD				GetAttributeStatus () const final { return m_uDiskAttrStatus; }
 
@@ -1079,9 +1081,10 @@ private:
 	bool						AddRemoveColumnarAttr ( bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError );
 	void						AddRemoveRowwiseAttr ( bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError );
 
-	void						Update_CollectRowPtrs ( UpdateContext_t & tCtx, const SphChunkGuard_t & tGuard );
-	bool						Update_WriteBlobRow ( UpdateContext_t & tCtx, int iUpd, CSphRowitem * pDocinfo, const BYTE * pBlob, int iLength, int nBlobAttrs, const CSphAttrLocator & tBlobRowLoc, bool & bCritical, CSphString & sError ) override;
-	bool						Update_DiskChunks ( UpdateContext_t & tCtx, const SphChunkGuard_t & tGuard,	int & iUpdated, CSphString & sError );
+	bool						Update_WriteBlobRow ( UpdateContext_t & tCtx, CSphRowitem * pDocinfo,
+			const BYTE * pBlob, int iLength, int nBlobAttrs, const CSphAttrLocator & tBlobRowLoc, bool & bCritical, CSphString & sError ) override;
+
+	bool						Update_DiskChunks ( UpdateContext_t & tCtx, const SphChunkGuard_t & tGuard, CSphString & sError );
 
 	void						GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameBuilder_i * pParentBuilder ) const override;
 	DocstoreBuilder_i::Doc_t *	FetchDocFields ( DocstoreBuilder_i::Doc_t & tStoredDoc, CSphSource_StringVector & tSrc ) const;
@@ -1338,7 +1341,7 @@ bool RtIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphS
 			tDocID = UidShort();
 			bDuplicate = false;
 			ARRAY_FOREACH_COND ( i, tGuard.m_dRamChunks, !bDuplicate )
-				bDuplicate = tGuard.m_dRamChunks[i]->IsAlive(tDocID);
+				bDuplicate = tGuard.m_dRamChunks[i]->FindAliveRow(tDocID)!=nullptr;
 		}
 
 		tDoc.SetID(tDocID);
@@ -1360,7 +1363,7 @@ bool RtIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphS
 		GetReaderChunks ( tGuard );
 		for ( const auto & pSegment : tGuard.m_dRamChunks )
 		{
-			if ( pSegment->IsAlive(tDocID) )
+			if ( pSegment->FindAliveRow(tDocID) )
 			{
 				sError.SetSprintf ( "duplicate id '" INT64_FMT "'", tDocID );
 				return false; // already exists and not deleted; INSERT fails
@@ -7192,81 +7195,61 @@ bool RtIndex_c::FillKeywords ( CSphVector<CSphKeywordInfo> & dKeywords ) const
 }
 
 
-static RtSegment_t * UpdateFindSegment ( const SphChunkGuard_t & tGuard, CSphRowitem * & pRow, DocID_t tDocID )
+// for each RamSegment collect list of rows and indexes in update ctx
+CSphFixedVector<CSphVector<UpdatedRowData_t>> Update_CollectRowPtrs ( UpdateContext_t & tCtx, const SphChunkGuard_t & tGuard  )
 {
-	assert ( tDocID );
+	CSphFixedVector<CSphVector<UpdatedRowData_t>> dUpdateSets { tGuard.m_dRamChunks.GetLength () };
 
-	for ( const auto& pChunk : tGuard.m_dRamChunks )
-	{
-		RowID_t tRowID = pChunk->GetRowidByDocid(tDocID);
-		if ( tRowID==INVALID_ROWID || pChunk->m_tDeadRowMap.IsSet(tRowID) )
-			continue;
-
-		pRow = const_cast<CSphRowitem *> ( pChunk->GetDocinfoByRowID(tRowID) );
-		return pChunk;
-	}
-
-	return nullptr;
-}
-
-
-void RtIndex_c::Update_CollectRowPtrs ( UpdateContext_t & tCtx, const SphChunkGuard_t & tGuard )
-{
-	for ( int iUpd = tCtx.m_iFirst; iUpd<tCtx.m_iLast; iUpd++ )
-	{
-		DocID_t uDocid = tCtx.m_tUpd.m_dDocids[iUpd];
-
-		CSphRowitem * pRow = nullptr;
-		RtSegment_t * pSegment = UpdateFindSegment ( tGuard, pRow, uDocid );
-
-		UpdatedRowData_t & tNew = tCtx.GetRowData(iUpd);
-		tNew.m_pRow = pRow;
-		tNew.m_pAttrPool = ( pSegment && pSegment->m_dRows.GetLength() ) ? &pSegment->m_dRows[0] : nullptr;
-		tNew.m_pBlobPool = ( pSegment && pSegment->m_dBlobs.GetLength() ) ? &pSegment->m_dBlobs[0] : nullptr;
-		tNew.m_pSegment = pSegment;
-	}
-}
-
-
-bool RtIndex_c::Update_DiskChunks ( UpdateContext_t & tCtx, const SphChunkGuard_t & tGuard, int & iUpdated, CSphString & sError )
-{
-	for ( int iUpd=tCtx.m_iFirst; iUpd<tCtx.m_iLast; iUpd++ )
-	{
-		if ( tCtx.GetRowData(iUpd).m_bUpdated )
-			continue;
-
-		for ( int iChunk = tGuard.m_dDiskChunks.GetLength()-1; iChunk>=0; iChunk-- )
+	// collect idxes of alive (not-yet-updated) rows
+	const auto & dDocids = tCtx.m_tUpd.m_pUpdate->m_dDocids;
+	ARRAY_CONSTFOREACH (i, dDocids)
+	if ( !tCtx.m_tUpd.m_dUpdated.BitGet ( i ) )
+		ARRAY_CONSTFOREACH ( j, tGuard.m_dRamChunks )
 		{
-			// run just this update
-			// FIXME! might be inefficient in case of big batches (redundant allocs in disk update)
-			bool bCritical = false;
-			CSphString sWarning;
-			int iRes = const_cast<CSphIndex *>( tGuard.m_dDiskChunks[iChunk] )->UpdateAttributes ( tCtx.m_tUpd, iUpd, bCritical, tCtx.m_fnBlobsLocker, sError, sWarning );
+			auto pRow = tGuard.m_dRamChunks[j]->FindAliveRow ( dDocids[i] );
+			if ( !pRow )
+				continue;
 
-			// FIXME! need to handle critical failures here (chunk is unusable at this point)
-			assert ( !bCritical );
-
-			// FIXME! maybe emit a warning to client as well?
-			if ( iRes<0 )
-				return false;
-
-			// update stats
-			iUpdated += iRes;
-			m_uDiskAttrStatus |= tGuard.m_dDiskChunks[iChunk]->GetAttributeStatus();
-
-			// we only need to update the most fresh chunk
-			if ( iRes>0 )
-				break;
+			auto& dUpd = dUpdateSets[j].Add ();
+			dUpd.m_pRow = const_cast<CSphRowitem *>(pRow);
+			dUpd.m_iIdx = i;
+			assert ( dUpd.m_pRow );
 		}
+		return dUpdateSets;
+}
+
+
+bool RtIndex_c::Update_DiskChunks ( UpdateContext_t & tCtx, const SphChunkGuard_t & tGuard, CSphString & sError )
+{
+	for ( int iChunk = tGuard.m_dDiskChunks.GetLength()-1; iChunk>=0; iChunk-- )
+	{
+		if ( tCtx.m_tUpd.AllApplied () )
+			break;
+
+		// run just this update
+		// FIXME! might be inefficient in case of big batches (redundant allocs in disk update)
+		bool bCritical = false;
+		CSphString sWarning;
+		int iRes = const_cast<CSphIndex *>( tGuard.m_dDiskChunks[iChunk] )->UpdateAttributes ( tCtx.m_tUpd, bCritical, tCtx.m_fnBlobsLocker, sError, sWarning );
+
+		// FIXME! need to handle critical failures here (chunk is unusable at this point)
+		assert ( !bCritical );
+
+		// FIXME! maybe emit a warning to client as well?
+		if ( iRes<0 )
+			return false;
+
+		m_uDiskAttrStatus |= tGuard.m_dDiskChunks[iChunk]->GetAttributeStatus();
 	}
 
 	return true;
 }
 
 
-bool RtIndex_c::Update_WriteBlobRow ( UpdateContext_t & tCtx, int iUpd, CSphRowitem * pDocinfo, const BYTE * pBlob, int iLength, int nBlobAttrs, const CSphAttrLocator & tBlobRowLoc, bool & bCritical, CSphString & sError )
+bool RtIndex_c::Update_WriteBlobRow ( UpdateContext_t & tCtx, CSphRowitem * pDocinfo, const BYTE * pBlob, int iLength,
+		int nBlobAttrs, const CSphAttrLocator & tBlobRowLoc, bool & bCritical, CSphString & sError )
 {
-	IndexSegment_c * pSegment = tCtx.GetRowData(iUpd).m_pSegment;
+	auto * pSegment = (RtSegment_t*)tCtx.m_pSegment;
 	assert ( pSegment );
 
 	bCritical = false;
@@ -7290,62 +7273,74 @@ bool RtIndex_c::Update_WriteBlobRow ( UpdateContext_t & tCtx, int iUpd, CSphRowi
 	sphSetRowAttr ( pDocinfo, tBlobRowLoc, iPoolSize );
 
 	// update blob pool ptrs since they could have changed after the resize
-	for ( auto & i : tCtx.m_dUpdatedRows )
-		if ( i.m_pSegment==pSegment )
-			i.m_pBlobPool = &dBlobPool[0];
-
+	tCtx.m_pBlobPool = dBlobPool.begin();
 	return true;
 }
 
 
 // FIXME! might be inconsistent in case disk chunk update fails
-int RtIndex_c::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning )
+int RtIndex_c::UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning )
 {
-	assert ( tUpd.m_dDocids.GetLength()==tUpd.m_dRowOffset.GetLength() );
-	DWORD uRows = tUpd.m_dDocids.GetLength();
+	const auto& tUpdc = *tUpd.m_pUpdate;
+	assert ( tUpdc.m_dDocids.GetLength()==tUpdc.m_dRowOffset.GetLength() );
 
-	UpdateContext_t tCtx ( tUpd, m_tSchema, nullptr, ( iIndex<0 ) ? 0 : iIndex, ( iIndex<0 ) ? uRows : iIndex+1, std::move (fnLocker) );
+	if ( tUpdc.m_dDocids.IsEmpty()  || tUpd.AllApplied () )
+		return 0;
+
+	// FIXME!!! grab Writer lock to prevent segments retirement during commit(merge)
+	if ( m_dRamChunks.IsEmpty() && m_dDiskChunks.IsEmpty() )
+		return 0;
+
+	int iUpdated = tUpd.m_iAffected;
+
+	UpdateContext_t tCtx ( tUpd, m_tSchema, std::move (fnLocker) );
 
 	if ( !Update_CheckAttributes ( tCtx, sError ) )
 		return -1;
 
-	if ( ( !m_dRamChunks.GetLength() && !m_dDiskChunks.GetLength() ) || !uRows )
-		return 0;
-
-	// FIXME!!! grab Writer lock to prevent segments retirement during commit(merge)
-
 	RlChunkGuard_t tGuard ( m_tReading );
 	GetReaderChunks ( tGuard );
 
-	Update_CollectRowPtrs ( tCtx, tGuard );
-	if ( !Update_FixupData ( tCtx, sError ) )
+	if ( !Update_PrepareListOfUpdatedAttributes ( tCtx, sError ) )
 		return -1;
 
-	if ( tUpd.m_bStrict )
-		if ( !Update_InplaceJson ( tCtx, sError, true ) )
+	auto dRamUpdateSets = Update_CollectRowPtrs ( tCtx, tGuard );
+	ARRAY_CONSTFOREACH ( i, dRamUpdateSets )
+	{
+		if ( dRamUpdateSets[i].IsEmpty() )
+			continue;
+
+		const RtSegment_t * pSeg = tGuard.m_dRamChunks[i];
+		tCtx.m_dRowsToUpdate.SwapData ( dRamUpdateSets[i] );
+		tCtx.m_pAttrPool = pSeg->m_dRows.begin();
+		tCtx.m_pBlobPool = pSeg->m_dBlobs.begin();
+		tCtx.m_pSegment = const_cast<RtSegment_t*>(pSeg);
+//		tCtx.m_fnBlobsLocker = [pSeg] () REQUIRES_SHARED ( pSeg->m_tLock ) { pSeg->m_tLock.UpgradeLock (); };
+
+		if ( tUpdc.m_bStrict )
+			if ( !Update_InplaceJson ( tCtx, sError, true ) )
+				return -1;
+
+		// second pass
+		tCtx.m_iJsonWarnings = 0;
+		Update_InplaceJson ( tCtx, sError, false );
+
+		if ( !Update_Blobs ( tCtx, bCritical, sError ) )
 			return -1;
 
-	// second pass
-	tCtx.m_iJsonWarnings = 0;
-	Update_InplaceJson ( tCtx, sError, false );
+		Update_Plain ( tCtx );
 
-	if ( !Update_Blobs ( tCtx, bCritical, sError ) )
-		return -1;
+		if ( tUpd.AllApplied () )
+			break;
+	}
 
-	Update_Plain ( tCtx );
-
-	int iUpdated = 0;
-	for ( const auto & i : tCtx.m_dUpdatedRows )
-		if ( i.m_bUpdated )
-			iUpdated++;
-
-	if ( !Update_DiskChunks ( tCtx, tGuard, iUpdated, sError ) )
+	if ( !Update_DiskChunks ( tCtx, tGuard, sError ) )
 		sphWarn ( "INTERNAL ERROR: index %s update failure: %s", m_sIndexName.cstr(), sError.cstr() );
 
 	// bump the counter, binlog the update!
-	assert ( iIndex<0 );
-	Binlog::CommitUpdateAttributes ( &m_iTID, m_sIndexName.cstr(), tUpd );
+	Binlog::CommitUpdateAttributes ( &m_iTID, m_sIndexName.cstr(), tUpdc );
 
+	iUpdated = tUpd.m_iAffected - iUpdated;
 	if ( !Update_HandleJsonWarnings ( tCtx, iUpdated, sWarning, sError ) )
 		return -1;
 

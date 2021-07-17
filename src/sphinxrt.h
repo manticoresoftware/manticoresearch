@@ -200,7 +200,7 @@ public:
 	DWORD					GetMergeFactor() const;
 	int						GetStride() const;
 
-	bool					IsAlive ( DocID_t tDocid ) const;
+	const CSphRowitem * 	FindAliveRow ( DocID_t tDocid ) const;
 	const CSphRowitem *		GetDocinfoByRowID ( RowID_t tRowID ) const;
 	RowID_t					GetRowidByDocid ( DocID_t tDocID ) const;
 

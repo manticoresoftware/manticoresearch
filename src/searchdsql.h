@@ -216,7 +216,7 @@ struct SqlStmt_t
 	StrVec_t				m_dCallStrings;
 
 	// UPDATE specific
-	CSphAttrUpdate			m_tUpdate;
+	AttrUpdateSharedPtr_t	m_pUpdate;
 	int						m_iListStart = -1; // < the position of start and end of index's definition in original query.
 	int						m_iListEnd = -1;
 

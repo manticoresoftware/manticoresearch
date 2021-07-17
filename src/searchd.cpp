@@ -7985,11 +7985,11 @@ static void HandleCommandKeywords ( ISphOutputBuffer & tOut, WORD uVer, InputBuf
 class UpdateRequestBuilder_c : public RequestBuilder_i
 {
 public:
-	explicit UpdateRequestBuilder_c ( const CSphAttrUpdate & pUpd ) : m_tUpd ( pUpd ) {}
+	explicit UpdateRequestBuilder_c ( AttrUpdateSharedPtr_t pUpd ) : m_pUpd ( pUpd ) {}
 	void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer& tOut ) const final;
 
 protected:
-	const CSphAttrUpdate & m_tUpd;
+	AttrUpdateSharedPtr_t m_pUpd;
 };
 
 
@@ -8014,15 +8014,16 @@ protected:
 void UpdateRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const
 {
 	const char * sIndexes = tAgent.m_tDesc.m_sIndexes.cstr();
-	assert ( m_tUpd.m_dAttributes.all_of ( [&] ( const TypedAttribute_t & tAttr ) { return ( tAttr.m_eType!=SPH_ATTR_INT64SET ); } ) );
+	assert ( m_pUpd->m_dAttributes.all_of ( [&] ( const TypedAttribute_t & tAttr ) { return ( tAttr.m_eType!=SPH_ATTR_INT64SET ); } ) );
+	auto& tUpd = *m_pUpd;
 
 	// API header
 	auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_UPDATE, VER_COMMAND_UPDATE );
 
 	tOut.SendString ( sIndexes );
-	tOut.SendInt ( m_tUpd.m_dAttributes.GetLength() );
-	tOut.SendInt ( m_tUpd.m_bIgnoreNonexistent ? 1 : 0 );
-	for ( const auto & i : m_tUpd.m_dAttributes )
+	tOut.SendInt ( tUpd.m_dAttributes.GetLength() );
+	tOut.SendInt ( tUpd.m_bIgnoreNonexistent ? 1 : 0 );
+	for ( const auto & i : tUpd.m_dAttributes )
 	{
 		tOut.SendString ( i.m_sName.cstr() );
 
@@ -8038,14 +8039,14 @@ void UpdateRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOutp
 		tOut.SendInt ( eUpdate );
 	}
 
-	tOut.SendInt ( m_tUpd.m_dDocids.GetLength() );
+	tOut.SendInt ( tUpd.m_dDocids.GetLength() );
 
-	ARRAY_FOREACH ( iDoc, m_tUpd.m_dDocids )
+	ARRAY_FOREACH ( iDoc, tUpd.m_dDocids )
 	{
-		tOut.SendUint64 ( m_tUpd.m_dDocids[iDoc] );
+		tOut.SendUint64 ( tUpd.m_dDocids[iDoc] );
 
-		const DWORD * pPool = m_tUpd.m_dPool.Begin() + m_tUpd.m_dRowOffset[iDoc];
-		for ( const auto & i : m_tUpd.m_dAttributes )
+		const DWORD * pPool = tUpd.m_dPool.Begin() + tUpd.m_dRowOffset[iDoc];
+		for ( const auto & i : tUpd.m_dAttributes )
 		{
 			DWORD uVal = *pPool++;
 
@@ -8074,7 +8075,7 @@ void UpdateRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOutp
 				{
 					DWORD uBlobLen = *pPool++;
 					tOut.SendDword ( uBlobLen );
-					tOut.SendBytes ( m_tUpd.m_dBlobs.Begin()+uVal, uBlobLen );
+					tOut.SendBytes ( tUpd.m_dBlobs.Begin()+uVal, uBlobLen );
 				}
 				break;
 
@@ -8086,7 +8087,8 @@ void UpdateRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOutp
 	}
 }
 
-static void DoCommandUpdate ( const CSphString & sIndex, const char * sDistributed, const CSphAttrUpdate & tUpd, int & iSuccesses, int & iUpdated, SearchFailuresLog_c & dFails, ServedIndexRefPtr_c & pServed )
+static void DoCommandUpdate ( const CSphString & sIndex, const char * sDistributed, AttrUpdateSharedPtr_t pUpd,
+	int & iSuccesses, int & iUpdated, SearchFailuresLog_c & dFails, ServedIndexRefPtr_c & pServed )
 {
 	CSphString sCluster;
 	{
@@ -8105,13 +8107,14 @@ static void DoCommandUpdate ( const CSphString & sIndex, const char * sDistribut
 	RtAccum_t tAcc ( false );
 	ReplicationCommand_t * pCmd = tAcc.AddCommand ( ReplicationCommand_e::UPDATE_API, sCluster, sIndex );
 	assert ( pCmd );
-	pCmd->m_pUpdateAPI = &tUpd;
+	pCmd->m_pUpdateAPI = std::move(pUpd);
 
 	HandleCmdReplicate ( tAcc, sError, sWarning, iUpd );
 
 	if ( iUpd<0 )
+	{
 		dFails.Submit ( sIndex, sDistributed, sError.cstr() );
-	else
+	} else
 	{
 		iUpdated += iUpd;
 		++iSuccesses;
@@ -8152,7 +8155,8 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 
 	// parse request
 	CSphString sIndexes = tReq.GetString ();
-	CSphAttrUpdate tUpd;
+	AttrUpdateSharedPtr_t pUpd { new CSphAttrUpdate };
+	CSphAttrUpdate& tUpd = *pUpd;
 	CSphVector<DWORD> dMva;
 
 	tUpd.m_dAttributes.Resize ( tReq.GetDword() ); // FIXME! check this
@@ -8292,8 +8296,10 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 		const CSphString & sReqIndex = dIndexNames[iIdx];
 		auto pLocal = GetServed ( sReqIndex );
 		if ( pLocal )
-			DoCommandUpdate ( sReqIndex, nullptr, tUpd, iSuccesses, iUpdated, dFails, pLocal );
-		else if ( dDistributed[iIdx] )
+		{
+			DoCommandUpdate ( sReqIndex, nullptr, pUpd, iSuccesses, iUpdated, dFails, pLocal );
+
+		} else if ( dDistributed[iIdx] )
 		{
 			auto * pDist = dDistributed[iIdx];
 
@@ -8305,7 +8311,7 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 				if ( !pServed )
 					continue;
 
-				DoCommandUpdate ( sLocal, sReqIndex.cstr(), tUpd, iSuccesses, iUpdated, dFails, pServed );
+				DoCommandUpdate ( sLocal, sReqIndex.cstr(), pUpd, iSuccesses, iUpdated, dFails, pServed );
 			}
 
 			// update remote agents
@@ -8315,7 +8321,7 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 				pDist->GetAllHosts ( dAgents );
 
 				// connect to remote agents and query them
-				UpdateRequestBuilder_c tReqBuilder ( tUpd );
+				UpdateRequestBuilder_c tReqBuilder ( pUpd );
 				UpdateReplyParser_c tParser ( &iUpdated );
 				iSuccesses += PerformRemoteTasks ( dAgents, &tReqBuilder, &tParser );
 			}
@@ -12067,7 +12073,7 @@ static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sInde
 	RtAccum_t tAcc ( false );
 	ReplicationCommand_t * pCmd = tAcc.AddCommand ( tStmt.m_bJson ? ReplicationCommand_e::UPDATE_JSON : ReplicationCommand_e::UPDATE_QL, tStmt.m_sCluster, sIndex );
 	assert ( pCmd );
-	pCmd->m_pUpdateAPI = &tStmt.m_tUpdate;
+	pCmd->m_pUpdateAPI = tStmt.m_pUpdate;
 	pCmd->m_pUpdateCond = &tStmt.m_tQuery;
 
 	HandleCmdReplicate ( tAcc, sError, sWarning, iUpdated );
@@ -12104,7 +12110,6 @@ static bool CanRunUpdate ( AttrUpdateArgs & tArgs )
 
 void HandleMySqlExtendedUpdate ( AttrUpdateArgs & tArgs )
 {
-	assert ( tArgs.m_pUpdate );
 	assert ( tArgs.m_pError );
 	assert ( tArgs.m_pWarning );
 	assert ( tArgs.m_pIndexName );
@@ -12115,7 +12120,6 @@ void HandleMySqlExtendedUpdate ( AttrUpdateArgs & tArgs )
 		return;
 	}
 
-	assert ( tArgs.m_pQuery );
 	assert ( tArgs.m_pQuery );
 
 	SearchHandler_c tHandler ( 1, CreateQueryParser ( tArgs.m_bJson ), tArgs.m_pQuery->m_eQueryType, false );
@@ -12157,7 +12161,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	int iUpdated = 0;
 	int iWarns = 0;
 
-	for ( const auto & i : tStmt.m_tUpdate.m_dAttributes )
+	for ( const auto & i : tStmt.m_pUpdate->m_dAttributes )
 	{
 		if ( i.m_sName==sphGetDocidName() )
 		{

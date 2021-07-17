@@ -1590,7 +1590,7 @@ update:
 		one_index_opt_chunk TOK_SET update_items_list where_clause opt_option_clause opt_hint_clause
 			{
 				pParser->GenericStatement ( &$3 );
-				pParser->m_pStmt->m_tUpdate.m_dRowOffset.Add ( 0 );
+				pParser->m_pStmt->m_pUpdate->m_dRowOffset.Add ( 0 );
 			}
 	;
 
@@ -1603,11 +1603,11 @@ update_item:
 	ident '=' const_int
 		{
 			// it is performance-critical to forcibly inline this
-			pParser->m_pStmt->m_tUpdate.m_dPool.Add ( (DWORD)$3.m_iValue );
+			pParser->m_pStmt->m_pUpdate->m_dPool.Add ( (DWORD)$3.m_iValue );
 			DWORD uHi = (DWORD)( $3.m_iValue>>32 );
 			if ( uHi )
 			{
-				pParser->m_pStmt->m_tUpdate.m_dPool.Add ( uHi );
+				pParser->m_pStmt->m_pUpdate->m_dPool.Add ( uHi );
 				pParser->AddUpdatedAttr ( $1, SPH_ATTR_BIGINT );
 			} else
 			{
@@ -1617,7 +1617,7 @@ update_item:
 	| ident '=' const_float
 		{
 			// it is performance-critical to forcibly inline this
-			pParser->m_pStmt->m_tUpdate.m_dPool.Add ( sphF2DW ( $3.m_fValue ) );
+			pParser->m_pStmt->m_pUpdate->m_dPool.Add ( sphF2DW ( $3.m_fValue ) );
 			pParser->AddUpdatedAttr ( $1, SPH_ATTR_FLOAT );
 		}
 	| ident '=' '(' const_list ')'
@@ -1632,11 +1632,11 @@ update_item:
 	| json_expr '=' const_int // duplicate ident code (avoiding s/r conflict)
 		{
 			// it is performance-critical to forcibly inline this
-			pParser->m_pStmt->m_tUpdate.m_dPool.Add ( (DWORD)$3.m_iValue );
+			pParser->m_pStmt->m_pUpdate->m_dPool.Add ( (DWORD)$3.m_iValue );
 			DWORD uHi = (DWORD)( $3.m_iValue>>32 );
 			if ( uHi )
 			{
-				pParser->m_pStmt->m_tUpdate.m_dPool.Add ( uHi );
+				pParser->m_pStmt->m_pUpdate->m_dPool.Add ( uHi );
 				pParser->AddUpdatedAttr ( $1, SPH_ATTR_BIGINT );
 			} else
 			{
@@ -1646,7 +1646,7 @@ update_item:
 	| json_expr '=' const_float
 		{
 			// it is performance-critical to forcibly inline this
-			pParser->m_pStmt->m_tUpdate.m_dPool.Add ( sphF2DW ( $3.m_fValue ) );
+			pParser->m_pStmt->m_pUpdate->m_dPool.Add ( sphF2DW ( $3.m_fValue ) );
 			pParser->AddUpdatedAttr ( $1, SPH_ATTR_FLOAT );
 		}
 	| ident '=' TOK_QUOTED_STRING

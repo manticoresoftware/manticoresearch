@@ -241,7 +241,7 @@ static bool SendClusterIndexes ( const ReplicationCluster_t * pCluster, const CS
 static bool RemoteClusterSynced ( const PQRemoteData_t & tCmd, CSphString & sError );
 
 // callback for Galera apply_cb to parse replicated command
-static bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CSphString & sCluster, RtAccum_t & tAcc, CSphAttrUpdate& tUpd, CSphQuery & tQuery );
+static bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CSphString & sCluster, RtAccum_t & tAcc, CSphQuery & tQuery );
 
 // callback for Galera commit_cb to commit replicated command
 static bool HandleCmdReplicated ( RtAccum_t & tAcc );
@@ -423,7 +423,6 @@ struct ReceiverCtx_t
 
 	// share of remote commands received between apply and commit callbacks
 	RtAccum_t m_tAcc { false };
-	CSphAttrUpdate m_tUpdAPI;
 	CSphQuery m_tQuery;
 
 	~ReceiverCtx_t() { Cleanup(); }
@@ -651,8 +650,6 @@ void ReceiverCtx_t::Cleanup()
 {
 	m_tAcc.Cleanup();
 
-	m_tUpdAPI = CSphAttrUpdate();
-
 	for ( CSphFilterSettings & tItem : m_tQuery.m_dFilters )
 	{
 		// fixme! What a legacy WTF? you take val from tItem.GetValueArray, compare with tItem.m_dValues,
@@ -684,7 +681,7 @@ static wsrep_cb_status_t Apply_fn ( void * pCtx, const void * pData, size_t uSiz
 	bool bIsolated = ( ( uFlags & WSREP_FLAG_ISOLATION )!=0 );
 	sphLogDebugRpl ( "writeset at apply, seq " INT64_FMT ", size %d, flags %u, on %s", (int64_t)pMeta->gtid.seqno, (int)uSize, uFlags, ( bCommit ? "commit" : "rollback" ) );
 
-	if ( !ParseCmdReplicated ( (const BYTE *)pData, (int) uSize, bIsolated, pLocalCtx->m_pCluster->m_sName, pLocalCtx->m_tAcc, pLocalCtx->m_tUpdAPI, pLocalCtx->m_tQuery ) )
+	if ( !ParseCmdReplicated ( (const BYTE *)pData, (int) uSize, bIsolated, pLocalCtx->m_pCluster->m_sName, pLocalCtx->m_tAcc, pLocalCtx->m_tQuery ) )
 		return WSREP_CB_FAILURE;
 
 	return WSREP_CB_SUCCESS;
@@ -1463,7 +1460,7 @@ static bool ControlIndexWrite ( const CSphString & sIndex, bool bEnableWrite, CS
 }
 
 // callback for Galera apply_cb to parse replicated commands
-bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CSphString & sCluster, RtAccum_t & tAcc, CSphAttrUpdate & tUpd, CSphQuery & tQuery )
+bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CSphString & sCluster, RtAccum_t & tAcc, CSphQuery & tQuery )
 {
 	MemoryReader_c tReader ( pData, iLen );
 
@@ -1562,8 +1559,8 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 			break;
 
 		case ReplicationCommand_e::UPDATE_API:
-			LoadUpdate ( pRequest, iRequestLen, tUpd );
-			pCmd->m_pUpdateAPI = &tUpd;
+			pCmd->m_pUpdateAPI = new CSphAttrUpdate;
+			LoadUpdate ( pRequest, iRequestLen, *pCmd->m_pUpdateAPI );
 			sphLogDebugRpl ( "update, index '%s'", pCmd->m_sIndex.cstr() );
 			break;
 
@@ -1573,10 +1570,10 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 			// can not handle multiple updates - only one update at time
 			assert ( !tQuery.m_dFilters.GetLength() );
 
-			int iGot = LoadUpdate ( pRequest, iRequestLen, tUpd );
+			pCmd->m_pUpdateAPI = new CSphAttrUpdate;
+			int iGot = LoadUpdate ( pRequest, iRequestLen, *pCmd->m_pUpdateAPI );
 			assert ( iGot<iRequestLen );
 			LoadUpdate ( pRequest + iGot, iRequestLen - iGot, tQuery );
-			pCmd->m_pUpdateAPI = &tUpd;
 			pCmd->m_pUpdateCond = &tQuery;
 			sphLogDebugRpl ( "update %s, index '%s'", ( eCommand==ReplicationCommand_e::UPDATE_QL ? "ql" : "json" ),  pCmd->m_sIndex.cstr() );
 			break;
@@ -2051,7 +2048,7 @@ static bool UpdateAPI ( AttrUpdateArgs& tUpd, int & iUpdate )
 	}
 
 	bool bCritical = false;
-	iUpdate = tUpd.m_pDesc->m_pIndex->UpdateAttributes ( *tUpd.m_pUpdate, -1, bCritical, tUpd.m_fnLocker, *tUpd.m_pError, *tUpd.m_pWarning );
+	iUpdate = tUpd.m_pDesc->m_pIndex->UpdateAttributes ( tUpd.m_pUpdate, bCritical, tUpd.m_fnLocker, *tUpd.m_pError, *tUpd.m_pWarning );
 	return ( iUpdate>=0 );
 }
 

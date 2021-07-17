@@ -2455,6 +2455,35 @@ struct CSphAttrUpdate
 	bool							m_bStrict = false;				///< whether to check for incompatible types first, or just ignore them
 };
 
+using AttrUpdateSharedPtr_t = SharedPtr_t<CSphAttrUpdate>;
+
+struct AttrUpdateInc_t // for cascade (incremental) update
+{
+	AttrUpdateSharedPtr_t			m_pUpdate;	///< the unchangeable update pool
+	CSphBitvec						m_dUpdated;			///< bitmask of updated rows
+	int								m_iAffected = 0;	///< num of updated rows.
+
+	explicit AttrUpdateInc_t ( AttrUpdateSharedPtr_t pUpd )
+		: m_pUpdate ( std::move(pUpd) )
+		, m_dUpdated ( m_pUpdate->m_dDocids.GetLength() )
+	{}
+
+	void MarkUpdated ( int iUpd )
+	{
+		if ( m_dUpdated.BitGet ( iUpd ) )
+			return;
+
+		++m_iAffected;
+		m_dUpdated.BitSet ( iUpd );
+	}
+
+	bool AllApplied () const
+	{
+		assert ( m_dUpdated.GetBits() >= m_iAffected );
+		return m_dUpdated.GetBits() == m_iAffected;
+	}
+};
+
 /////////////////////////////////////////////////////////////////////////////
 // FULLTEXT INDICES
 /////////////////////////////////////////////////////////////////////////////
@@ -2620,11 +2649,8 @@ public:
 
 struct UpdatedRowData_t
 {
-	CSphRowitem *		m_pRow {nullptr};
-	IndexSegment_c *	m_pSegment {nullptr};
-	CSphRowitem *		m_pAttrPool {nullptr};
-	BYTE *				m_pBlobPool {nullptr};
-	bool				m_bUpdated {false};
+	CSphRowitem *		m_pRow;		/// row in the index
+	int					m_iIdx;		/// idx in updateset
 };
 
 class Histogram_i;
@@ -2652,26 +2678,24 @@ using FNLOCKER = std::function<void()>;
 
 struct UpdateContext_t
 {
-	const CSphAttrUpdate &					m_tUpd;
+	AttrUpdateInc_t &						m_tUpd;
 	const ISphSchema &						m_tSchema;
 	const HistogramContainer_c *			m_pHistograms {nullptr};
+	CSphRowitem *							m_pAttrPool {nullptr};
+	BYTE *									m_pBlobPool {nullptr};
+	IndexSegment_c *						m_pSegment {nullptr};
 
-	CSphVector<UpdatedRowData_t>			m_dUpdatedRows;
-	CSphFixedVector<UpdatedAttribute_t>		m_dUpdatedAttrs;
+	CSphVector<UpdatedRowData_t>			m_dRowsToUpdate;
+	CSphFixedVector<UpdatedAttribute_t>		m_dUpdatedAttrs;	// manipulation schema (1 item per column of schema)
 
 	CSphBitvec			m_dSchemaUpdateMask;
 	DWORD				m_uUpdateMask {0};
-
-	int					m_iFirst {0};
-	int					m_iLast {0};
 	FNLOCKER			m_fnBlobsLocker;
 	bool				m_bBlobUpdate {false};
 	int					m_iJsonWarnings {0};
 
 
-						UpdateContext_t ( const CSphAttrUpdate & tUpd, const ISphSchema & tSchema, const HistogramContainer_c * pHistograms, int iFirst, int iLast, FNLOCKER fnLocker );
-
-	UpdatedRowData_t &	GetRowData ( int iUpd );
+	UpdateContext_t ( AttrUpdateInc_t & tUpd, const ISphSchema & tSchema, FNLOCKER fnLocker );
 };
 
 
@@ -2688,14 +2712,15 @@ protected:
 
 	virtual				~IndexUpdateHelper_c() {}
 
-	virtual bool		Update_WriteBlobRow ( UpdateContext_t & tCtx, int iUpd, CSphRowitem * pDocinfo, const BYTE * pBlob, int iLength, int nBlobAttrs, const CSphAttrLocator & tBlobRowLoc, bool & bCritical, CSphString & sError ) = 0;
+	virtual bool		Update_WriteBlobRow ( UpdateContext_t & tCtx, CSphRowitem * pDocinfo, const BYTE * pBlob,
+			int iLength, int nBlobAttrs, const CSphAttrLocator & tBlobRowLoc, bool & bCritical, CSphString & sError ) = 0;
 
 	bool				Update_CheckAttributes ( const UpdateContext_t & tCtx, CSphString & sError );
-	bool				Update_FixupData ( UpdateContext_t & tCtx, CSphString & sError );
-	bool				Update_InplaceJson ( UpdateContext_t & tCtx, CSphString & sError, bool bDryRun );
+	static bool			Update_PrepareListOfUpdatedAttributes ( UpdateContext_t & tCtx, CSphString & sError );
+	static bool			Update_InplaceJson ( UpdateContext_t & tCtx, CSphString & sError, bool bDryRun );
 	bool				Update_Blobs ( UpdateContext_t & tCtx, bool & bCritical, CSphString & sError );
-	void				Update_Plain ( UpdateContext_t & tCtx );
-	bool				Update_HandleJsonWarnings ( UpdateContext_t & tCtx, int iUpdated, CSphString & sWarning, CSphString & sError );
+	static void			Update_Plain ( UpdateContext_t & tCtx );
+	static bool			Update_HandleJsonWarnings ( UpdateContext_t & tCtx, int iUpdated, CSphString & sWarning, CSphString & sError );
 };
 
 
@@ -2838,7 +2863,10 @@ public:
 	/// returns non-negative amount of actually found and updated records on success
 	/// on failure, -1 is returned and GetLastError() contains error message
 	/// fnLocker, if provided, used to lock affected row during update for exclusive access
-	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning ) = 0;
+	int							UpdateAttributes ( AttrUpdateSharedPtr_t pUpd, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning );
+
+	/// update accumulating state
+	virtual int					UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning ) = 0;
 
 	virtual Binlog::CheckTnxResult_t ReplayTxn ( Binlog::Blop_e eOp, CSphReader & tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCheck ) = 0;
 	/// saves memory-cached attributes, if there were any updates to them
@@ -2970,7 +2998,7 @@ public:
 	void				GetStatus ( CSphIndexStatus* ) const override {}
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & tSettings, CSphString * ) const override { return false; }
 	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & ) const override { return true; }
-	int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning ) override { return -1; }
+	int					UpdateAttributes ( AttrUpdateInc_t&, bool &, FNLOCKER, CSphString & , CSphString & ) override { return -1; }
 	Binlog::CheckTnxResult_t ReplayTxn ( Binlog::Blop_e, CSphReader &, CSphString &, Binlog::CheckTxn_fn&& ) override { return Binlog::CheckTnxResult_t(); }
 	bool				SaveAttributes ( CSphString & ) const override { return true; }
 	DWORD				GetAttributeStatus () const override { return 0; }
@@ -3001,7 +3029,7 @@ public:
 // update attributes with index pointer attached
 struct CSphAttrUpdateEx
 {
-	const CSphAttrUpdate *	m_pUpdate = nullptr;	///< the unchangeable update pool
+	AttrUpdateSharedPtr_t	m_pUpdate;				///< the unchangeable update pool
 	CSphIndex *				m_pIndex = nullptr;		///< the index on which the update should happen
 	CSphString *			m_pError = nullptr;		///< the error, if any
 	CSphString *			m_pWarning = nullptr;	///< the warning, if any

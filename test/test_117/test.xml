@@ -2,7 +2,10 @@
 
 <test>
 <name>RT: ram vs disk chunk search</name>
-<requires><non-columnar/></requires>
+<requires>
+	<non-rt/>
+	<non-columnar/>
+</requires>
 
 <skip_indexer/>
 <config>
@@ -39,159 +42,116 @@ index rt_mva
 	rt_attr_multi	= mva1
 }
 
-index rt_rand
-{
-	type			= rt
-	path			= <data_path/>/rt_rand
-	rt_field		= text
-	rt_attr_uint	= gid
-}
 </config>
 
-<db_drop>
-drop table if exists rt0
-</db_drop>
-<db_create>
-create table rt0
-(
-	id int not null,
-	title varchar(255) not null,
-	content varchar(255) not null,
-	id1 int,
-	id2 int
-);
-</db_create>
-<db_insert>
-insert into rt0 values
-( 1000000, 'first title', 'first content',  1000000, 1000000 );
-</db_insert>
+<queries>
+	<sphinxql skip="1">INSERT INTO rt0 VALUES ( 1, 'submarine', 'submarine', 1001, 300001 )</sphinxql>
 
-<custom_test><![CDATA[
+	<var title=""/>
+	<var content=""/>
+	<repeat count="49" vars="i id1 id2" init="2 1002 300002" inc="1 1 1">
+		<var name="title" delimiter=" ">dusty<i/></var>
+		<var name="content" delimiter=" ">itsupposedtobeaverylongrecord<i/></var>
+		<sphinxql skip="1">
+			INSERT INTO rt0 VALUES ( <i/>, '<title/>', '<content/>', <id1/>, <id2/> )
+		</sphinxql>
+	</repeat>
+	<var title=""/>
+	<var content=""/>
+	<repeat count="20" vars="i id1 id2" init="50 1050 300050" inc="1 1 1">
+		<var name="title" delimiter=" ">dusty<i/></var>
+		<var name="content" delimiter=" ">itsupposedtobeaverylongrecord<i/></var>
+		<sphinxql skip="1">
+			INSERT INTO rt0 VALUES ( <i/>, '<title/>', '<content/>', <id1/>, <id2/> )
+		</sphinxql>
+	</repeat>
+	<var title=""/>
+	<var content=""/>
+	<repeat count="20" vars="i id1 id2" init="100 1100 300100" inc="1 1 1">
+		<var name="title" delimiter=" ">dusty<i/></var>
+		<var name="content" delimiter=" ">itsupposedtobeaverylongrecord<i/></var>
+		<sphinxql skip="1">
+			INSERT INTO rt0 VALUES ( <i/>, '<title/>', '<content/>', <id1/>, <id2/> )
+		</sphinxql>
+	</repeat>
+	<var title=""/>
+	<var content=""/>
+	<repeat count="20" vars="i id1 id2" init="150 1150 300150" inc="1 1 1">
+		<var name="title" delimiter=" ">dusty<i/></var>
+		<var name="content" delimiter=" ">itsupposedtobeaverylongrecord<i/></var>
+		<sphinxql skip="1">
+			INSERT INTO rt0 VALUES ( <i/>, '<title/>', '<content/>', <id1/>, <id2/> )
+		</sphinxql>
+	</repeat>
+	<var title=""/>
+	<var content=""/>
+	<repeat count="20" vars="i id1 id2" init="200 1200 300200" inc="1 1 1">
+		<var name="title" delimiter=" ">dusty<i/></var>
+		<var name="content" delimiter=" ">itsupposedtobeaverylongrecord<i/></var>
+		<sphinxql skip="1">
+			INSERT INTO rt0 VALUES ( <i/>, '<title/>', '<content/>', <id1/>, <id2/> )
+		</sphinxql>
+	</repeat>
+	<var title=""/>
+	<var content=""/>
+	<repeat count="20" vars="i id1 id2" init="250 1250 300250" inc="1 1 1">
+		<var name="title" delimiter=" ">dusty<i/></var>
+		<var name="content" delimiter=" ">itsupposedtobeaverylongrecord<i/></var>
+		<sphinxql skip="1">
+			INSERT INTO rt0 VALUES ( <i/>, '<title/>', '<content/>', <id1/>, <id2/> )
+		</sphinxql>
+	</repeat>
+	<sphinxql skip="1">
+		INSERT INTO rt0 VALUES ( 301, 'submarine', 'submarine', 77, 77 );
+		REPLACE INTO rt0 VALUES ( 1, 'submarine', 'submarine', 11, 11 );
+	</sphinxql>
+	<sphinxql>
+		select * from rt0 where match('submarine') order by weight() desc, id asc;
+		select * from rt0 where id=1 order by weight() desc, id asc;
+	</sphinxql>
 
-global $g_locals, $sd_address, $sd_sphinxql_port;
-$results = array();
-$sockStr = "$sd_address:$sd_sphinxql_port";
-if ($sd_address == "localhost")
-	$sockStr = "127.0.0.1:$sd_sphinxql_port";
-$sock = @mysql_connect (
-	$sockStr,
-	$g_locals['db-user'],
-	$g_locals['db-password'] ,
-	true );
+	<!-- regression. Crash on fetching updated MVA values from RT disk chunk -->
 
-if ( $sock === false )
-{
-	$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
-	return;
-}
+	<var name="mva"/>
+	<repeat count="100" vars="i" init="1" inc="1">
+		<var name="mva" delimiter=","><i/></var>
+	</repeat>
 
-$query = function($q,$sock,$i)
-{
-	$results = array();
-	$res = @mysql_query ( $q, $sock );
-	if ($res===true)
-	{
-		$results[] = "query $i: total_affected=" . mysql_affected_rows($sock);
-	}
-	else if ($res===false)
-	{
-		$results[] = "query $i: res=$res";
-		$results[] = "error: query: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
-	}
-	else
-	{
-		$results[] = "query $i: total_rows=" . @mysql_num_rows($res) . " q=" . $q;
-		while ($row = @mysql_fetch_array($res, MYSQL_ASSOC))
-		{
-			$foo = array();
-			foreach ($row as $key => $value)
-				$foo[$key] = $value;
-			$results[] = $foo;
-		}	
-	}
-	return $results;
-};
+	<var name="q">(200, 'dummy2', 'stuff2', 200, (<mva/>))</var>
+	<repeat count="99" vars="id" init="201" inc="1">
+		<var name="q" delimiter=",">( <id/>, 'dummy<id/>', 'stuff<id/>', <id/>, (<mva/>))</var>
+	</repeat>
+	<sphinxql skip="1">INSERT INTO rt_mva ( id, title, content, idd, mva1 ) VALUES <q/></sphinxql>
+	<var name="q">(300, 'dummy3', 'stuff3', 300, (<mva/>))</var>
+	<repeat count="99" vars="id" init="301" inc="1">
+		<var name="q" delimiter=",">( <id/>, 'dummy<id/>', 'stuff<id/>', <id/>, (<mva/>))</var>
+	</repeat>
+	<sphinxql skip="1">INSERT INTO rt_mva ( id, title, content, idd, mva1 ) VALUES <q/></sphinxql>
+	<var name="q">(400, 'dummy4', 'stuff4', 400, (<mva/>))</var>
+	<repeat count="99" vars="id" init="401" inc="1">
+		<var name="q" delimiter=",">( <id/>, 'dummy<id/>', 'stuff<id/>', <id/>, (<mva/>))</var>
+	</repeat>
+	<sphinxql skip="1">INSERT INTO rt_mva ( id, title, content, idd, mva1 ) VALUES <q/></sphinxql>
+	<var name="q">(500, 'dummy5', 'stuff5', 500, (<mva/>))</var>
+	<repeat count="99" vars="id" init="501" inc="1">
+		<var name="q" delimiter=",">( <id/>, 'dummy<id/>', 'stuff<id/>', <id/>, (<mva/>))</var>
+	</repeat>
+	<sphinxql skip="1">INSERT INTO rt_mva ( id, title, content, idd, mva1 ) VALUES <q/></sphinxql>
+	<var name="q">(600, 'dummy6', 'stuff6', 600, (<mva/>))</var>
+	<repeat count="99" vars="id" init="601" inc="1">
+		<var name="q" delimiter=",">( <id/>, 'dummy<id/>', 'stuff<id/>', <id/>, (<mva/>))</var>
+	</repeat>
+	<sphinxql skip="1">INSERT INTO rt_mva ( id, title, content, idd, mva1 ) VALUES <q/></sphinxql>
+	<var name="q">(700, 'dummy7', 'stuff7', 700, (<mva/>))</var>
+	<repeat count="99" vars="id" init="701" inc="1">
+		<var name="q" delimiter=",">( <id/>, 'dummy<id/>', 'stuff<id/>', <id/>, (<mva/>))</var>
+	</repeat>
+	<sphinxql skip="1">INSERT INTO rt_mva ( id, title, content, idd, mva1 ) VALUES <q/></sphinxql>
 
-$errors = '';
-
-mysql_query ( "INSERT INTO rt0 VALUES ( 1, 'submarine', 'submarine', 1001, 300001 )", $sock );
-
-$lastID = 300;
-$title = '';
-$content = '';
-for ( $i=2; $i<$lastID; $i++ )
-{
-	$title .= ' dusty' . $i;
-	$content .= ' itsupposedtobeaverylongrecord' . $i;
-	$id1 = $i + 1000;
-	$id2 = $i + 300000;
-
-	mysql_query ( "INSERT INTO rt0 VALUES ( $i, '$title', '$content', $id1, $id2 )", $sock );
-	
-	if ( $i % 50 == 0 )
-	{
-		$title = '';
-		$content = '';
-	}
-}
-
-$lastID = $lastID + 1;
-mysql_query ( "INSERT INTO rt0 VALUES ( $lastID, 'submarine', 'submarine', 77, 77 )", $sock);
-mysql_query ( "REPLACE INTO rt0 VALUES ( 1, 'submarine', 'submarine', 11, 11 )", $sock);
-
-$queries = array ( "match('submarine')", "id=1" );
-for ( $i=0; $i<count ( $queries ); $i++ )
-{
-	$results = array_merge ( $results, $query ( "select * from rt0 where $queries[$i] order by weight() desc, id asc", $sock, $i ) );
-}
-
-// regression
-// crash on fetching updated MVA values from RT disk chunk
-$step = 100;
-$mva = '(1';
-for ($i=2; $i<101; $i++ ) $mva .= ",$i";
-$mva .= ")";
-for ( $i=2; $i<8; $i++ )
-{
-	$id = $i * $step;
-	$q = "INSERT INTO rt_mva ( id, title, content, idd, mva1 ) VALUES ( $id, 'dummy$i', 'stuff$i', $id, $mva )";
-	
-	while ( $id<$i * $step + $step )
-	{
-		$id += 1;
-		$q = $q . ", ( $id, 'dummy$id', 'stuff$id', $id, $mva )";
-	}
-	mysql_query ( $q, $sock );
-}
-
-$results = array_merge ( $results, $query ( "UPDATE rt_mva SET mva1 = (1000,1004,1001) WHERE id<400", $sock, 0 ) );
-$results = array_merge ( $results, $query ( "SELECT * FROM rt_mva WHERE id<203", $sock, 0 ) );
-
-$ROWS = 5;
-$RUNS = 5;
-$ids = array();
-$random_works = false;
-
-for ( $i=1; $i<=$ROWS; $i++ )
-	mysql_query ( "INSERT INTO rt_rand VALUES ($i, 'a', 1)", $sock );
-
-for ($i=0; $i<$RUNS; $i++)
-{
-	$res = mysql_query ( "SELECT id FROM rt_rand ORDER BY RAND()", $sock );
-	while  ( $row=mysql_fetch_assoc($res) )
-		$ids[] = $row['id'];
-}
-
-for ( $i=1; $i<$RUNS; $i++ )
-{
-	for ( $j=0; $j<$ROWS; $j++ )
-		$random_works |= ( $ids [ $j ]!=$ids [ $i*$ROWS+$j ] );
-}
-
-$results[] = $random_works;
-
-@mysql_close($sock);
-
-]]></custom_test>
+	<sphinxql>
+		UPDATE rt_mva SET mva1 = (1000,1004,1001) WHERE id&lt;400;
+		SELECT * FROM rt_mva WHERE id&lt;203;
+	</sphinxql>
+</queries>
 
 </test>

@@ -16241,11 +16241,11 @@ void WriterWithHash_c::Flush()
 	}
 }
 
-/*const BYTE * WriterWithHash_c::GetHASHBlob () const
+const BYTE * WriterWithHash_c::GetHASHBlob () const
 {
 	assert ( m_bHashDone );
 	return m_dHashValue;
-}*/
+}
 
 void WriterWithHash_c::CloseFile ()
 {

@@ -1836,10 +1836,9 @@ public:
 	void CloseFile ();
 
 	// get resulting BLOB, is valid only after StopHashing()
-	//const BYTE * GetHASHBlob () const;
+	const BYTE * GetHASHBlob () const;
 
 private:
-	//void StopHashing ();
 
 	HashCollection_c * m_pCollection;
 	const char * m_sExt;

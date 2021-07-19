@@ -316,7 +316,6 @@ void QueryStatus ( CSphVariant * v ) REQUIRES ( MainThread )
 	for ( ; v; v = v->m_pNext )
 	{
 		ListenerDesc_t tDesc = ParseListener ( v->cstr() );
-		CHECK_LISTENER( tDesc );
 		if ( tDesc.m_eProto!=Proto_e::SPHINX )
 			continue;
 

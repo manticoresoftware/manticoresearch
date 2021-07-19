@@ -894,6 +894,14 @@ void sphDieRestart ( const char * sFmt, ... )
 	exit ( 2 ); // almost CRASH_EXIT
 }
 
+void sphFatalVa ( const char * sFmt, va_list ap )
+{
+	g_pLogger () ( SPH_LOG_FATAL, sFmt, ap );
+	if ( g_pfDieCallback )
+		g_pfDieCallback ( false, sFmt, ap );
+	exit ( 1 );
+}
+
 void sphFatal ( const char * sFmt, ... )
 {
 	va_list ap;

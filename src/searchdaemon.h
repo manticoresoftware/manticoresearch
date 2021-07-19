@@ -211,12 +211,12 @@ enum ESphAddIndex
 
 struct ListenerDesc_t
 {
-	Proto_e m_eProto;
+	Proto_e m_eProto = Proto_e::UNKNOWN;
 	CSphString m_sUnix;
-	DWORD m_uIP;
-	int m_iPort;
-	int m_iPortsCount;
-	bool m_bVIP;
+	DWORD m_uIP = 0;
+	int m_iPort = 0;
+	int m_iPortsCount = 0;
+	bool m_bVIP = false;
 };
 
 // 'like' matcher
@@ -268,18 +268,8 @@ CSphString GetTypeName ( IndexType_e eType );
 IndexType_e TypeOfIndexConfig ( const CSphString & sType );
 
 // forwards from searchd
-void CheckPort( int iPort );
-ListenerDesc_t ParseListener( const char* sSpec );
-
-// use check outside ParseListener in order to make tests consistent despite platforms
-#if _WIN32
-	#define CHECK_LISTENER(dListener) \
-		if ( !(dListener).m_sUnix.IsEmpty() ) \
-			sphFatal( "UNIX sockets are not supported on Windows" );
-#else
-	#define CHECK_LISTENER(dListener)
-#endif
-
+bool CheckPort( int iPort, CSphString * pFatal=nullptr );
+ListenerDesc_t ParseListener ( const char * sSpec, CSphString * pFatal=nullptr );
 
 /////////////////////////////////////////////////////////////////////////////
 // NETWORK SOCKET WRAPPERS
@@ -303,7 +293,7 @@ Invokes getaddrinfo for given host which perform name resolving (dns).
  \param[in] bIP set true if sHost contains IP address (false by default)
  so no potentially lengthy network host address lockup necessary
  \return ipv4 address as DWORD, to be directly used as s_addr in connect(). */
-DWORD sphGetAddress( const char* sHost, bool bFatal = false, bool bIP = false );
+DWORD sphGetAddress( const char* sHost, bool bFatal = false, bool bIP = false, CSphString * pFatal=nullptr );
 char* sphFormatIP( char* sBuffer, int iBufferSize, DWORD uAddress );
 CSphString GetMacAddress();
 

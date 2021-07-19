@@ -98,7 +98,15 @@ searchd
 	drop table pq1;
 	drop table pq2;
 	drop table pq3;
+	DELETE cluster test;
 </sphinxql>
+
+<!-- no FATAL daemon exit for invalid addresses -->
+<sphinxql d="2">join cluster test2 at 'test_tmg_890123765'</sphinxql>
+<sphinxql d="2">join cluster test2 at 'test_tmg_890123765:9312'</sphinxql>
+<sphinxql d="2">join cluster test2 at 'test_tmg_890123765:9312:test'</sphinxql>
+<sphinxql d="2">join cluster test2 at 'test_tmg_890123765:9312:9325'</sphinxql>
+
 
 </queries>
 

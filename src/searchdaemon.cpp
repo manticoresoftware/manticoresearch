@@ -280,14 +280,30 @@ IndexType_e TypeOfIndexConfig( const CSphString& sType )
 	return IndexType_e::ERROR_;
 }
 
-void CheckPort( int iPort )
+static void MaybeFatalLog ( CSphString * pFatal, const char * sTemplate, ... )
 {
-	if ( !IsPortInRange( iPort ))
-		sphFatal( "port %d is out of range", iPort );
+	va_list ap;
+
+	va_start ( ap, sTemplate );
+	if ( pFatal )
+		pFatal->SetSprintfVa ( sTemplate, ap );
+	else
+		sphFatalVa ( sTemplate, ap );
+	va_end ( ap );
+}
+
+bool CheckPort ( int iPort, CSphString * pFatal )
+{
+	if ( !IsPortInRange ( iPort ) )
+	{
+		MaybeFatalLog ( pFatal, "port %d is out of range", iPort );
+		return false;
+	}
+	return true;
 }
 
 // check only proto name in lowcase, no '_vip'
-static Proto_e SimpleProtoByName ( const CSphString& sProto )
+static Proto_e SimpleProtoByName ( const CSphString& sProto, CSphString * pFatal )
 {
 	if ( sProto=="" )
 		return Proto_e::SPHINX;
@@ -301,33 +317,41 @@ static Proto_e SimpleProtoByName ( const CSphString& sProto )
 		return Proto_e::REPLICATION;
 	if ( sProto=="sphinx" )
 		return Proto_e::SPHINXSE;
-	sphFatal( "unknown listen protocol type '%s'", sProto.scstr());
-	return Proto_e::SPHINX;
+	
+	MaybeFatalLog ( pFatal, "unknown listen protocol type '%s'", sProto.scstr());
+	return Proto_e::UNKNOWN;
 }
 
-static void ProtoByName( CSphString sFullProto, ListenerDesc_t& tDesc )
+static bool ProtoByName ( CSphString sFullProto, ListenerDesc_t & tDesc, CSphString * pFatal )
 {
 	sFullProto.ToLower();
 	StrVec_t dParts;
 	sphSplit( dParts, sFullProto.cstr(), "_" );
 
 	if ( !dParts.IsEmpty() )
-		tDesc.m_eProto = SimpleProtoByName( dParts[0] );
+	{
+		tDesc.m_eProto = SimpleProtoByName( dParts[0], pFatal );
+		if ( tDesc.m_eProto==Proto_e::UNKNOWN )
+			return false;
+	}
 
 	if ( dParts.GetLength()==1 )
-		return;
+		return true;
 
 	if ( dParts.GetLength()==2 && dParts[1]=="vip" )
 	{
 		tDesc.m_bVIP = true;
-		return;
+		return true;
 	}
 
-	sphFatal( "unknown listen protocol type '%s'", sFullProto.scstr() );
+	MaybeFatalLog ( pFatal, "unknown listen protocol type '%s'", sFullProto.scstr() );
+	return false;
 }
 
+static const ListenerDesc_t g_tInvalidListener;
+
 /// listen = ( address ":" port | port | path | address ":" port start - port end ) [ ":" protocol ] [ "_vip" ]
-ListenerDesc_t ParseListener( const char* sSpec )
+ListenerDesc_t ParseListener ( const char* sSpec, CSphString * pFatal )
 {
 	ListenerDesc_t tRes;
 	tRes.m_eProto = Proto_e::SPHINX;
@@ -341,7 +365,10 @@ ListenerDesc_t ParseListener( const char* sSpec )
 
 	int iParts = dParts.GetLength();
 	if ( iParts>3 )
-		sphFatal( "invalid listen format (too many fields)" );
+	{
+		MaybeFatalLog ( pFatal, "invalid listen format (too many fields)" );
+		return g_tInvalidListener;
+	}
 
 	assert ( iParts>=1 && iParts<=3 );
 
@@ -350,13 +377,23 @@ ListenerDesc_t ParseListener( const char* sSpec )
 	if ( *dParts[0].scstr()=='/' )
 	{
 		if ( iParts>2 )
-			sphFatal( "invalid listen format (too many fields)" );
+		{
+			MaybeFatalLog ( pFatal, "invalid listen format (too many fields)" );
+			return g_tInvalidListener;
+		}
 
-		if ( iParts==2 )
-			ProtoByName( dParts[1], tRes );
+		if ( iParts==2 && !ProtoByName ( dParts[1], tRes, pFatal ) )
+			return g_tInvalidListener;
 
 		tRes.m_sUnix = dParts[0];
+
+		// MOVED!!! check outside ParseListener in order to make tests consistent despite platforms
+#if _WIN32
+		MaybeFatalLog ( pFatal, "UNIX sockets are not supported on Windows" );
+		return g_tInvalidListener;
+#else
 		return tRes;
+#endif
 	}
 
 	// check if it all starts with a valid port number
@@ -372,7 +409,8 @@ ListenerDesc_t ParseListener( const char* sSpec )
 	if ( bAllDigits && iLen<=5 ) // if we have num from only digits, it may be only port, nothing else!
 	{
 		iPort = atol( sPart );
-		CheckPort( iPort ); // lets forbid ambiguous magic like 0:sphinx or 99999:mysql41
+		if ( !CheckPort ( iPort, pFatal ) ) // lets forbid ambiguous magic like 0:sphinx or 99999:mysql41
+			return g_tInvalidListener;
 	}
 
 	// handle TCP port case
@@ -380,11 +418,16 @@ ListenerDesc_t ParseListener( const char* sSpec )
 	if ( iParts==1 )
 	{
 		if ( iPort )
+		{
 			// port name on itself
 			tRes.m_iPort = iPort;
-		else
+		} else
+		{
 			// host name on itself
-			tRes.m_uIP = sphGetAddress( sSpec, GETADDR_STRICT );
+			tRes.m_uIP = sphGetAddress ( sSpec, GETADDR_STRICT, false, pFatal );
+			if ( pFatal && !pFatal->IsEmpty() )
+				return g_tInvalidListener;
+		}
 		return tRes;
 	}
 
@@ -393,36 +436,56 @@ ListenerDesc_t ParseListener( const char* sSpec )
 	{
 		// 1st part is a valid port number; must be port:proto
 		if ( iParts!=2 )
-			sphFatal( "invalid listen format (expected port:proto, got extra trailing part in listen=%s)", sSpec );
+		{
+			MaybeFatalLog ( pFatal, "invalid listen format (expected port:proto, got extra trailing part in listen=%s)", sSpec );
+			return g_tInvalidListener;
+		}
 
 		tRes.m_iPort = iPort;
-		ProtoByName( dParts[1], tRes );
+		if ( !ProtoByName ( dParts[1], tRes, pFatal ) )
+			return g_tInvalidListener;
 		return tRes;
 	}
 
 	// 1st part must be a host name; must be host:port[:proto]
-	if ( iParts==3 )
-		ProtoByName( dParts[2], tRes );
+	if ( iParts==3 && !ProtoByName ( dParts[2], tRes, pFatal ) )
+		return g_tInvalidListener;
 
-	tRes.m_uIP = dParts[0].IsEmpty()
-				 ? htonl(INADDR_ANY)
-				 : sphGetAddress( dParts[0].cstr(), GETADDR_STRICT );
+	if ( dParts[0].IsEmpty() )
+	{
+		tRes.m_uIP = htonl(INADDR_ANY);
+	} else
+	{
+		tRes.m_uIP = sphGetAddress ( dParts[0].cstr(), GETADDR_STRICT, false, pFatal );
+		if ( pFatal && !pFatal->IsEmpty() )
+			return g_tInvalidListener;
+	}
 
 
 	auto dPorts = sphSplit( dParts[1].scstr(), "-" );
 	tRes.m_iPort = atoi( dPorts[0].cstr());
-	CheckPort( tRes.m_iPort );
+	if ( !CheckPort( tRes.m_iPort, pFatal ) )
+		return g_tInvalidListener;
 
 	if ( dPorts.GetLength()==2 )
 	{
 		int iPortsEnd = atoi( dPorts[1].scstr() );
-		CheckPort( iPortsEnd );
+		if ( !CheckPort ( iPortsEnd, pFatal ) )
+			return g_tInvalidListener;
+
 		int iPortsCount = iPortsEnd - tRes.m_iPort + 1;
+
 		if ( iPortsEnd<=tRes.m_iPort )
-			sphFatal( "ports range invalid %d-%d", tRes.m_iPort, iPortsEnd );
+		{
+			MaybeFatalLog ( pFatal, "ports range invalid %d-%d", tRes.m_iPort, iPortsEnd );
+			return g_tInvalidListener;
+		}
 		if ( iPortsCount<2 )
-			sphFatal( "ports range %d-%d count should be at least 2, got %d", tRes.m_iPort, iPortsEnd,
-					  iPortsCount );
+		{
+			MaybeFatalLog( pFatal, "ports range %d-%d count should be at least 2, got %d", tRes.m_iPort, iPortsEnd, iPortsCount );
+			return g_tInvalidListener;
+		}
+
 		tRes.m_iPortsCount = iPortsCount;
 	}
 	return tRes;
@@ -579,7 +642,7 @@ int sphPoll( int iSock, int64_t tmTimeout, bool bWrite )
 }
 
 
-DWORD sphGetAddress( const char* sHost, bool bFatal, bool bIP )
+DWORD sphGetAddress( const char* sHost, bool bFatal, bool bIP, CSphString * pFatal )
 {
 	struct addrinfo tHints, * pResult = nullptr;
 	memset( &tHints, 0, sizeof( tHints ));
@@ -592,7 +655,9 @@ DWORD sphGetAddress( const char* sHost, bool bFatal, bool bIP )
 	auto pOrigResult = pResult;
 	if ( iResult!=0 || !pResult )
 	{
-		if ( bFatal )
+		if ( pFatal )
+			pFatal->SetSprintf ( "no AF_INET address found for: %s", sHost );
+		else if ( bFatal )
 			sphFatal( "no AF_INET address found for: %s", sHost );
 		else
 			sphLogDebugv( "no AF_INET address found for: %s", sHost );

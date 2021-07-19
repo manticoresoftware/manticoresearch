@@ -2962,8 +2962,8 @@ void GetNodes_T ( const CSphString & sNodes, NODE_ITERATOR & tIt )
 			sCur++;
 		}
 
-		if ( *sAddrs )
-			tIt.SetNode ( sAddrs );
+		if ( *sAddrs && !tIt.SetNode ( sAddrs ) )
+			return;
 	}
 }
 
@@ -2971,24 +2971,29 @@ void GetNodes_T ( const CSphString & sNodes, NODE_ITERATOR & tIt )
 struct AgentDescIterator_t
 {
 	VecAgentDesc_t & m_dNodes;
-	explicit AgentDescIterator_t ( VecAgentDesc_t & dNodes )
+	CSphString * m_pError;
+
+	explicit AgentDescIterator_t ( VecAgentDesc_t & dNodes, CSphString * pError )
 		: m_dNodes ( dNodes )
+		, m_pError ( pError )
 	{}
 
-	void SetNode ( const char * sListen )
+	bool SetNode ( const char * sListen )
 	{
-		ListenerDesc_t tListen = ParseListener ( sListen );
-		CHECK_LISTENER( tListen );
+		ListenerDesc_t tListen = ParseListener ( sListen, m_pError );
+
+		if ( tListen.m_eProto==Proto_e::UNKNOWN )
+			return false;
 
 		if ( tListen.m_eProto!=Proto_e::SPHINX )
-			return;
+			return true;
 
 		if ( tListen.m_uIP==0 )
-			return;
+			return true;
 
 		// filter out own address to do not query itself
 		if ( g_sIncomingProto.Begins ( sListen ) )
-			return;
+			return true;
 
 		char sAddrBuf [ SPH_ADDRESS_SIZE ];
 		sphFormatIP ( sAddrBuf, sizeof(sAddrBuf), tListen.m_uIP );
@@ -3001,13 +3006,20 @@ struct AgentDescIterator_t
 		pDesc->m_bNeedResolve = false;
 		pDesc->m_bPersistent = false;
 		pDesc->m_iFamily = AF_INET;
+
+		return true;
 	}
 };
 
+static void GetNodes ( const CSphString & sNodes, VecAgentDesc_t & dNodes, CSphString & sError )
+{
+	AgentDescIterator_t tIt ( dNodes, &sError );
+	GetNodes_T ( sNodes, tIt );
+}
 
 static void GetNodes ( const CSphString & sNodes, VecAgentDesc_t & dNodes )
 {
-	AgentDescIterator_t tIt ( dNodes );
+	AgentDescIterator_t tIt ( dNodes, nullptr );
 	GetNodes_T ( sNodes, tIt );
 }
 
@@ -3054,19 +3066,20 @@ struct ListenerProtocolIterator_t
 		: m_eProto ( eProto )
 	{}
 
-	void SetNode ( const char * sListen )
+	bool SetNode ( const char * sListen )
 	{
 		ListenerDesc_t tListen = ParseListener ( sListen );
-		CHECK_LISTENER( tListen );
 
 		// filter out wrong protocol
 		if ( tListen.m_eProto!=m_eProto )
-			return;
+			return true;
 
 		char sAddrBuf [ SPH_ADDRESS_SIZE ];
 		sphFormatIP ( sAddrBuf, sizeof(sAddrBuf), tListen.m_uIP );
 
 		m_sNodes.Appendf ( "%s:%d", sAddrBuf, tListen.m_iPort );
+
+		return true;
 	}
 };
 
@@ -5147,10 +5160,10 @@ bool ClusterOperationProhibit ( const ServedDesc_t * pDesc, CSphString & sError,
 bool ClusterGetNodes ( const CSphString & sClusterNodes, const CSphString & sCluster, const CSphString & sGTID, CSphString & sError, CSphString & sNodes )
 {
 	VecAgentDesc_t dDesc;
-	GetNodes ( sClusterNodes, dDesc );
-	if ( !dDesc.GetLength() )
+	GetNodes ( sClusterNodes, dDesc, sError );
+	if ( !dDesc.GetLength() || !sError.IsEmpty() )
 	{
-		sError.SetSprintf ( "%s invalid node", sClusterNodes.cstr() );
+		sError.SetSprintf ( "%s invalid node, %s", sClusterNodes.cstr(), sError.cstr() );
 		return false;
 	}
 

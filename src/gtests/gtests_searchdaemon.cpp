@@ -1034,6 +1034,10 @@ TEST ( ParseListener, simple_ip_no_port )
 
 	for (const auto& sCase : dTable)
 	{
+#if _WIN32
+		if ( sCase.sSpec[0]=='/' ) // skip of UNIX socket cases on Windows
+			continue;
+#endif
 		ListenerDesc_t tDesc = ParseListener( sCase.sSpec );
 		EXPECT_TRUE ( tDesc==sCase.sRes ) << sCase.sSpec;
 	}

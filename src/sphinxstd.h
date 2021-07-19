@@ -456,6 +456,7 @@ void			sphDieRestart ( const char * sMessage, ... ) __attribute__ ( ( format ( p
 
 /// shutdown (not crash) on unrrecoverable error
 void			sphFatal ( const char * sFmt, ... ) __attribute__ ( ( format ( printf, 1, 2 ) ) ) NO_RETURN;
+void			sphFatalVa ( const char * sFmt, va_list ap );
 
 /// log fatal error, not shutdown
 void			sphFatalLog ( const char * sFmt, ... ) __attribute__ ( ( format ( printf, 1, 2 ) ) );

@@ -200,7 +200,9 @@ if (WIN32)
 	endif ()
 else ()
 	include (GetGALERA)
-	cache_galera_module_name() # write GALERA_SONAME as var to cache
+	if (WITH_GALERA)
+		cache_galera_module_name() # write GALERA_SONAME as var to cache
+	endif ()
 	diag(WITH_GALERA)
 	bannervar (WITH_GALERA)
 endif ()

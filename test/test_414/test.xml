@@ -15,15 +15,18 @@ searchd
     attr_update_reserve = 1024
 }
 
-source src_xml1
+source src_sql
 {
-	type = xmlpipe2
-	xmlpipe_command = cat <this_test/>/data.xml
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test
+	sql_attr_uint	= gid
+	sql_field_string = t
 }
 
 index idx
 {
-	source			= src_xml1
+	source			= src_sql
 	path			= <data_path/>/idx
 }
 
@@ -31,7 +34,22 @@ index idx
 
 <queries><sphinxql>
 update idx set t='When blob attributes (MVAs, strings, JSON), are updated, their length may change. If the updated string (or MVA, or JSON) is shorter than the old one, it overwrites the old one in the .SPB file. But if the updated string is longer, updates are written to the end of the .SPB file. This file is memory mapped, thats why resizing it may be a rather slow process, depending on the OS implementation of memory mapped files.' where t='this is';
-select id, gid, t from idx order by id desc;
+select id, t from idx order by id desc;
 </sphinxql></queries>
+
+<db_create>
+create table test
+(
+	id int not null,
+	gid int not null,
+	t varchar(10) not null
+);
+</db_create>
+<db_drop>drop table if exists test;</db_drop>
+<db_insert>
+	INSERT INTO test VALUES (1,1,'this is'),(2,1,'this is'),(3,1,'this is'),(4,1,'this is'),(5,1,'this is'),(6,1,'this is'),(7,1,'this is'),(8,1,'this is'),(9,1,'this is');
+	<repeat count="448" vars="i" inc="1" init="0"> INSERT INTO test VALUES (<i/>0,1,'this is'),(<i/>1,1,'this is'),(<i/>2,1,'this is'),(<i/>3,1,'this is'),(<i/>4,1,'this is'),(<i/>5,1,'this is'),(<i/>6,1,'this is'),(<i/>7,1,'this is'),(<i/>8,1,'this is'),(<i/>9,1,'this is')<db_insert/></repeat>
+	INSERT INTO test VALUES (4480,1,'this is'),(4481,1,'this is'),(4482,1,'this is');
+</db_insert>
 
 </test>

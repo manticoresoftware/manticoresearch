@@ -504,8 +504,7 @@ Besides the usual `manticore` package, you can also install Manticore Search by 
 * removed HTTP /search endpoint
 
 ### Deprecations
-* ondisk_attrs, ondisk_attrs_default, mlock (replaced by
-    [access]()\* directives)
+* read_buffer, ondisk_attrs, ondisk_attrs_default, mlock (replaced by `access_*` directives)
 
 ### Bugfixes
 * [849c16e1](https://github.com/manticoresoftware/manticoresearch/commit/849c16e1040f382795ba0635cb48686f9db4f2d8) allow attribute names starting with numbers in select list

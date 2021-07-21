@@ -886,33 +886,14 @@ read_timeout = 1
 ```
 <!-- end -->
 
-### read_buffer
-
-<!-- example conf read_buffer -->
-Per-keyword read buffer size. Optional, default is 256K
-
-For every keyword occurrence in every search query, there are two associated read buffers (one for document list and one for hit list). This setting lets you control their sizes, increasing per-query RAM use, but possibly decreasing IO time. Minimal value is 8K. Apart general size, you may also tune buffers for document lists and hit lists individually, using [read_buffer_docs](../Server_settings/Searchd.md#read_buffer_docs)
-and [read_buffer_hits](../Server_settings/Searchd.md#read_buffer_hits) params.
-
-Large values make sense in general for slow storage. For storage capable of high IOPS, experimenting should be done in the low values area.
-
-<!-- intro -->
-##### Example:
-
-<!-- request Example -->
-
-```ini
-read_buffer = 1M
-```
-<!-- end -->
-
-
 ### read_buffer_docs
 
 <!-- example conf read_buffer_docs -->
-Per-keyword read buffer size for document lists. Optional, default is 256K, minimal is 8K
+Per-keyword read buffer size for document lists. Optional, default is 256K, minimal is 8K.
 
-This is same as [read_buffer](../Server_settings/Searchd.md#read_buffer), but manages size for document lists only. If both params exist; `read_buffer_docs` overrides more general `read_buffer`. Also you may set [read_buffer_docs](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Other-performance-related-settings) on per-index basis; that value will override anything set on server's config level.
+For every keyword occurrence in every search query, there are two associated read buffers (one for document list and one for hit list). This setting lets you control the document list buffer size. Bigger buffer size might increase per-query RAM use, but possibly decrease IO time. Large values make sense in general for slow storage. For storage capable of high IOPS, experimenting should be done in the low values area.
+
+You may also want to set [read_buffer_docs](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Other-performance-related-settings) on per-index basis; that value will override anything set on server's config level.
 
 
 <!-- intro -->
@@ -929,10 +910,11 @@ read_buffer_docs = 128K
 ### read_buffer_hits
 
 <!-- example conf read_buffer_hits -->
-Per-keyword read buffer size for hit lists. Optional, default is 256K, minimal is 8K
+Per-keyword read buffer size for hit lists. Optional, default is 256K, minimal is 8K.
 
-This is same as [read_buffer](../Server_settings/Searchd.md#read_buffer), but manages size for hit lists only. If both params exist; `read_buffer_hits`  overrides more general `read_buffer`. Also you may set [read_buffer_hits](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Other-performance-related-settings) on per-index basis; that valuewill override anything set on server's config level.
+For every keyword occurrence in every search query, there are two associated read buffers (one for document list and one for hit list). This setting lets you control the hit list buffer size. Bigger buffer size might increase per-query RAM use, but possibly decrease IO time. Large values make sense in general for slow storage. For storage capable of high IOPS, experimenting should be done in the low values area.
 
+You may also want to set [read_buffer_hits](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Other-performance-related-settings) on per-index basis; that valuewill override anything set on server's config level.
 
 <!-- intro -->
 ##### Example:

@@ -138,7 +138,6 @@
 * [morphology_skip_fields](Creating_an_index/NLP_and_tokenization/Morphology.md#morphology_skip_fields)
 * [ngram_chars](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)
 * [ngram_len](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#ngram_len)
-* [ondisk_attrs](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Accessing-index-files)
 * [overshort_step](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#overshort_step)
 * [path](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#path)
 * [phrase_boundary](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary)
@@ -414,7 +413,6 @@ To be put to section `searchd {}` in configuration file:
   * [query_log_format](Server_settings/Searchd.md#query_log_format) - Query log format
   * [query_log_min_msec](Server_settings/Searchd.md#query_log_min_msec) - Prevents logging too fast queries
   * [query_log_mode](Server_settings/Searchd.md#query_log_mode) - Query log file permissions mode
-  * [read_buffer](Server_settings/Searchd.md#read_buffer) - Per-keyword read buffer size
   * [read_buffer_docs](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#read_buffer_docs) - Per-keyword read buffer size for document lists
   * [read_buffer_hits](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#read_buffer_hits) - Per-keyword read buffer size for hit lists
   * [read_unhinted](Server_settings/Searchd.md#read_unhinted) - Unhinted read size

@@ -3194,7 +3194,7 @@ DECLARE_TERNARY ( Expr_Mul3_c,	FIRST*SECOND*THIRD,					INTFIRST*INTSECOND*INTTHI
 		int64_t Int64Eval ( const CSphMatch & tMatch ) const final { return IntEval(tMatch); } \
 		int IntEval ( const CSphMatch & tMatch ) const final \
 		{ \
-			time_t ts = (time_t)INTFIRST;	\
+			time_t ts = (time_t)INT64FIRST;	\
 			struct tm s = {0}; \
 			localtime_r ( &ts, &s ); \
 			return _expr; \
@@ -8948,7 +8948,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 	case FUNC_MINUTE:
 	case FUNC_SECOND:
 		assert ( iArg>=0 );
-		if ( m_dNodes[iArg].m_eRetType!=SPH_ATTR_INTEGER && m_dNodes[iArg].m_eRetType!=SPH_ATTR_TIMESTAMP )
+		if ( m_dNodes[iArg].m_eRetType!=SPH_ATTR_INTEGER && m_dNodes[iArg].m_eRetType!=SPH_ATTR_TIMESTAMP && m_dNodes[iArg].m_eRetType!=SPH_ATTR_BIGINT)
 		{
 			m_sParserError.SetSprintf ( "%s() argument must be integer or timestamp", sFuncName );
 			return -1;

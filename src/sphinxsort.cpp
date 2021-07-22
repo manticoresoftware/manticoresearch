@@ -1165,7 +1165,6 @@ private:
 	CSphString *		m_pError;
 	CSphString *		m_pWarning;
 	int *				m_pAffected;
-	FNLOCKER			m_fnLocker;
 
 	const int			m_iCount = 0;
 	DocID_t				m_iLastID = 0;
@@ -1194,7 +1193,7 @@ CSphUpdateQueue::CSphUpdateQueue ( int iSize, CSphAttrUpdateEx * pUpdate, bool b
 	m_pError	= pUpdate->m_pError;
 	m_pWarning	= pUpdate->m_pWarning;
 	m_pAffected = &pUpdate->m_iAffected;
-	m_fnLocker	= pUpdate->m_fnLocker;
+
 }
 
 
@@ -1270,7 +1269,7 @@ void CSphUpdateQueue::Update()
 	m_pWorkSet->m_dRowOffset.Resize ( m_pWorkSet->m_dDocids.GetLength() );
 
 	bool bCritical = false;
-	*m_pAffected += m_pIndex->UpdateAttributes ( m_pWorkSet, bCritical, m_fnLocker, *m_pError, *m_pWarning );
+	*m_pAffected += m_pIndex->UpdateAttributes ( m_pWorkSet, bCritical, *m_pError, *m_pWarning );
 	assert ( !bCritical ); // fixme! handle this
 
 	m_pWorkSet->m_dDocids.Resize ( 0 );

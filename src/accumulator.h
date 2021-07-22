@@ -75,6 +75,7 @@ struct ReplicationCommand_t
 
 	// update
 	AttrUpdateSharedPtr_t m_pUpdateAPI;
+	bool m_bBlobUpdate = false;
 	const CSphQuery * m_pUpdateCond = nullptr;
 };
 

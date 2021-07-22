@@ -1155,7 +1155,7 @@ bool Binlog_c::ReplayUpdateAttributes ( int iBinlog, BinlogReader_c & tReader ) 
 
 		CSphString sError, sWarning;
 		bool bCritical = false;
-		tIndex.m_pIndex->UpdateAttributes ( pUpd, bCritical, nullptr, sError, sWarning ); // FIXME! check for errors
+		tIndex.m_pIndex->UpdateAttributes ( pUpd, bCritical, sError, sWarning ); // FIXME! check for errors
 		assert ( !bCritical ); // fixme! handle this
 
 		// update committed tid on replay in case of unexpected / mismatched tid

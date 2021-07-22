@@ -868,6 +868,14 @@ bool Threads::CoroRWLock_c::ReadLock ()
  * 2. reschedule until we have only 1 reader ('pending' and 'wlocked' bits ignored)
  * 3. append 'wlock' bit. Finally on acquire wlock bit is set, pending is inherited, others zero.
  */
+/*
+ * Elevation has one fundamental problem, that is why it is commented out as dangerous solution.
+ * One (and only one!) reader is ok to elevate (that is why it is left here and not totally wiped out).
+ * When more than one want to elevate concurrently from different threads - that by the fact means, they want
+ * exclusive (write) lock, and they already step into acquiring it by holding shared (read) lock.
+ * Such 'semi-exclusive' state is ill and means immediate deadlock on the waiting (i.e. all candidates waits until
+ * shared lock released by all others, and such mutual waiting is dead).
+ * Since it is hard to avoid concurrency, let's forget about elevation for a while or forever.
 bool Threads::CoroRWLock_c::UpgradeLock ( bool bVip )
 {
 	assert ( IsInsideCoroutine () );
@@ -885,6 +893,7 @@ bool Threads::CoroRWLock_c::UpgradeLock ( bool bVip )
 	} while ( !m_uLock.compare_exchange_weak ( uMyState, uTargetState, std::memory_order_acq_rel ) );
 	return true;
 }
+ */
 
 /* unlocking:
  * 1. If 'wlock' bit is set, reset it

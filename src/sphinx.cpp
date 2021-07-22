@@ -957,12 +957,11 @@ Bson_t CSphTokenizerIndex::ExplainQuery ( const CSphString & sQuery ) const
 
 //////////////////////////////////////////////////////////////////////////
 
-UpdateContext_t::UpdateContext_t ( AttrUpdateInc_t & tUpd, const ISphSchema & tSchema, FNLOCKER fnLocker )
+UpdateContext_t::UpdateContext_t ( AttrUpdateInc_t & tUpd, const ISphSchema & tSchema )
 	: m_tUpd ( tUpd )
 	, m_tSchema ( tSchema )
 	, m_dUpdatedAttrs ( tUpd.m_pUpdate->m_dAttributes.GetLength() )
 	, m_dSchemaUpdateMask ( tSchema.GetAttrsCount() )
-	, m_fnBlobsLocker { std::move (fnLocker) }
 {}
 
 //////////////////////////////////////////////////////////////////////////
@@ -1206,7 +1205,6 @@ bool IndexUpdateHelper_c::Update_Blobs ( UpdateContext_t & tCtx, bool & bCritica
 
 	CSphTightVector<BYTE> tBlobPool;
 	CSphScopedPtr<BlobRowBuilder_i> pBlobRowBuilder ( sphCreateBlobRowBuilderUpdate ( tCtx.m_tSchema, tBlobPool, tCtx.m_dSchemaUpdateMask ) );
-	bool bBlobsLocked = false;
 
 	const CSphColumnInfo * pBlobLocator = tCtx.m_tSchema.GetAttr ( sphGetBlobLocatorName() );
 
@@ -1279,13 +1277,6 @@ bool IndexUpdateHelper_c::Update_Blobs ( UpdateContext_t & tCtx, bool & bCritica
 		}
 
 		pBlobRowBuilder->Flush();
-
-		// ensure nobody uses segment/index before we continue
-		if ( !bBlobsLocked && tCtx.m_fnBlobsLocker )
-		{
-			tCtx.m_fnBlobsLocker();
-			bBlobsLocked = true;
-		}
 
 		assert(pBlobLocator);
 		if ( !Update_WriteBlobRow ( tCtx, tRow.m_pRow, tBlobPool.Begin(), tBlobPool.GetLength(), iBlobAttrId, pBlobLocator->m_tLocator, bCritical, sError ) )
@@ -1489,7 +1480,7 @@ public:
 	template <class QWORD>
 	static bool			DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, int iKillField );
 
-	int					UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning ) final;
+	int					UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSphString & sError, CSphString & sWarning ) final;
 
 	// the only txn we can replay is 'update attributes', but it is processed by dedicated branch in binlog, so we have nothing to do here.
 	Binlog::CheckTnxResult_t ReplayTxn (Binlog::Blop_e, CSphReader&, CSphString & , Binlog::CheckTxn_fn&&) final { return Binlog::CheckTnxResult_t(); }
@@ -7104,10 +7095,10 @@ float CSphIndex::GetGlobalIDF ( const CSphString & sWord, int64_t iDocsLocal, bo
 }
 
 
-int CSphIndex::UpdateAttributes ( AttrUpdateSharedPtr_t pUpd, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning )
+int CSphIndex::UpdateAttributes ( AttrUpdateSharedPtr_t pUpd, bool & bCritical, CSphString & sError, CSphString & sWarning )
 {
 	AttrUpdateInc_t tUpdInc { std::move (pUpd) };
-	return UpdateAttributes ( tUpdInc, bCritical, std::move ( fnLocker ), sError, sWarning );
+	return UpdateAttributes ( tUpdInc, bCritical, sError, sWarning );
 }
 
 CSphVector<SphAttr_t> CSphIndex::BuildDocList () const
@@ -7365,7 +7356,7 @@ void CSphIndex_VLN::Update_MinMax ( UpdateContext_t & tCtx )
 }
 
 
-int CSphIndex_VLN::UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning )
+int CSphIndex_VLN::UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSphString & sError, CSphString & sWarning )
 {
 	assert ( tUpd.m_pUpdate->m_dDocids.GetLength()==tUpd.m_pUpdate->m_dRowOffset.GetLength() );
 
@@ -7375,7 +7366,7 @@ int CSphIndex_VLN::UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, 
 
 	int iUpdated = tUpd.m_iAffected;
 
-	UpdateContext_t tCtx ( tUpd, m_tSchema, std::move(fnLocker) );
+	UpdateContext_t tCtx ( tUpd, m_tSchema );
 	tCtx.m_pHistograms = m_pHistograms;
 	tCtx.m_pBlobPool = m_tBlobAttrs.GetWritePtr();
 	tCtx.m_pAttrPool = m_tAttr.GetWritePtr ();

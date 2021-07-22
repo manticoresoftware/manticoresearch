@@ -902,7 +902,7 @@ public:
 	void				PostSetup() final;
 	bool				IsRT() const final { return true; }
 
-	int					UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning ) final;
+	int					UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSphString & sError, CSphString & sWarning ) final;
 	bool				SaveAttributes ( CSphString & sError ) const final;
 	DWORD				GetAttributeStatus () const final { return m_uDiskAttrStatus; }
 
@@ -7204,7 +7204,7 @@ bool RtIndex_c::Update_DiskChunks ( UpdateContext_t & tCtx, const SphChunkGuard_
 		// FIXME! might be inefficient in case of big batches (redundant allocs in disk update)
 		bool bCritical = false;
 		CSphString sWarning;
-		int iRes = const_cast<CSphIndex *>( tGuard.m_dDiskChunks[iChunk] )->UpdateAttributes ( tCtx.m_tUpd, bCritical, tCtx.m_fnBlobsLocker, sError, sWarning );
+		int iRes = const_cast<CSphIndex *>( tGuard.m_dDiskChunks[iChunk] )->UpdateAttributes ( tCtx.m_tUpd, bCritical, sError, sWarning );
 
 		// FIXME! need to handle critical failures here (chunk is unusable at this point)
 		assert ( !bCritical );
@@ -7253,7 +7253,7 @@ bool RtIndex_c::Update_WriteBlobRow ( UpdateContext_t & tCtx, CSphRowitem * pDoc
 
 
 // FIXME! might be inconsistent in case disk chunk update fails
-int RtIndex_c::UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning )
+int RtIndex_c::UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSphString & sError, CSphString & sWarning )
 {
 	const auto& tUpdc = *tUpd.m_pUpdate;
 	assert ( tUpdc.m_dDocids.GetLength()==tUpdc.m_dRowOffset.GetLength() );
@@ -7267,7 +7267,7 @@ int RtIndex_c::UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, FNLO
 
 	int iUpdated = tUpd.m_iAffected;
 
-	UpdateContext_t tCtx ( tUpd, m_tSchema, std::move (fnLocker) );
+	UpdateContext_t tCtx ( tUpd, m_tSchema );
 
 	if ( !Update_CheckAttributes ( tCtx, sError ) )
 		return -1;

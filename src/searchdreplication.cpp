@@ -264,7 +264,7 @@ static bool IsUpdateCommand ( const RtAccum_t & tAcc );
 
 static void SaveUpdate ( const CSphAttrUpdate & tUpd, CSphVector<BYTE> & dOut );
 
-static int LoadUpdate ( const BYTE * pBuf, int iLen, CSphAttrUpdate & tUpd );
+static int LoadUpdate ( const BYTE * pBuf, int iLen, CSphAttrUpdate & tUpd, bool & bBlob );
 
 static void SaveUpdate ( const CSphQuery & tQuery, CSphVector<BYTE> & dOut );
 
@@ -1560,7 +1560,7 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 
 		case ReplicationCommand_e::UPDATE_API:
 			pCmd->m_pUpdateAPI = new CSphAttrUpdate;
-			LoadUpdate ( pRequest, iRequestLen, *pCmd->m_pUpdateAPI );
+			LoadUpdate ( pRequest, iRequestLen, *pCmd->m_pUpdateAPI, pCmd->m_bBlobUpdate );
 			sphLogDebugRpl ( "update, index '%s'", pCmd->m_sIndex.cstr() );
 			break;
 
@@ -1571,7 +1571,7 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 			assert ( !tQuery.m_dFilters.GetLength() );
 
 			pCmd->m_pUpdateAPI = new CSphAttrUpdate;
-			int iGot = LoadUpdate ( pRequest, iRequestLen, *pCmd->m_pUpdateAPI );
+			int iGot = LoadUpdate ( pRequest, iRequestLen, *pCmd->m_pUpdateAPI, pCmd->m_bBlobUpdate );
 			assert ( iGot<iRequestLen );
 			LoadUpdate ( pRequest + iGot, iRequestLen - iGot, tQuery );
 			pCmd->m_pUpdateCond = &tQuery;
@@ -2048,7 +2048,7 @@ static bool UpdateAPI ( AttrUpdateArgs& tUpd, int & iUpdate )
 	}
 
 	bool bCritical = false;
-	iUpdate = tUpd.m_pDesc->m_pIndex->UpdateAttributes ( tUpd.m_pUpdate, bCritical, tUpd.m_fnLocker, *tUpd.m_pError, *tUpd.m_pWarning );
+	iUpdate = tUpd.m_pDesc->m_pIndex->UpdateAttributes ( tUpd.m_pUpdate, bCritical, *tUpd.m_pError, *tUpd.m_pWarning );
 	return ( iUpdate>=0 );
 }
 
@@ -2080,26 +2080,27 @@ bool CommitMonitor_c::Update ( bool bCluster, CSphString & sError )
 	tUpd.m_pQuery = tCmd.m_pUpdateCond;
 	tUpd.m_pIndexName = &tCmd.m_sIndex;
 	tUpd.m_bJson = ( tCmd.m_eCommand==ReplicationCommand_e::UPDATE_JSON );
-	// can not reshedule into common quque for replication - could be dead-lock with incoming clients into the same index
-	tUpd.m_bNoYeld = bCluster;
-	ServedDescRPtr_c tDesc ( pServed );
-	tUpd.m_pDesc = tDesc.Ptr ();
 
-	// that might be called when blob updates necessary, however we don't need to call it actually more than once
-	bool bWlocked = false;
-	tUpd.m_fnLocker = [&bWlocked, &tDesc, bCluster] {
-		if (!bWlocked)
-		{
-			tDesc.UpgradeLock ( bCluster );
-			bWlocked = true;
-		}
-	};
+	bool bUpdateAPI = tCmd.m_eCommand==ReplicationCommand_e::UPDATE_API;
+	assert ( bUpdateAPI || tCmd.m_pUpdateCond );
 
-	if ( tCmd.m_eCommand==ReplicationCommand_e::UPDATE_API )
-		return UpdateAPI ( tUpd, *m_pUpdated );
+	if ( tCmd.m_bBlobUpdate )
+	{
+		ServedDescWPtr_c tDesc ( pServed );
+		tUpd.m_pDesc = tDesc.Ptr ();
+		if ( bUpdateAPI )
+			return UpdateAPI ( tUpd, *m_pUpdated );
 
-	assert ( tCmd.m_pUpdateCond );
-	HandleMySqlExtendedUpdate ( tUpd );
+		HandleMySqlExtendedUpdate ( tUpd );
+	} else {
+		ServedDescRPtr_c tDesc ( pServed );
+		tUpd.m_pDesc = tDesc.Ptr ();
+		if ( bUpdateAPI )
+			return UpdateAPI ( tUpd, *m_pUpdated );
+
+		HandleMySqlExtendedUpdate ( tUpd );
+	}
+
 	if ( sError.IsEmpty() )
 		*m_pUpdated += tUpd.m_iAffected;
 
@@ -5374,18 +5375,20 @@ void SaveUpdate ( const CSphAttrUpdate & tUpd, CSphVector<BYTE> & dOut )
 	SaveArray ( tUpd.m_dPool, tWriter );
 }
 
-int LoadUpdate ( const BYTE * pBuf, int iLen, CSphAttrUpdate & tUpd )
+int LoadUpdate ( const BYTE * pBuf, int iLen, CSphAttrUpdate & tUpd, bool & bBlob )
 {
 	MemoryReader_c tIn ( pBuf, iLen );
 	
 	tUpd.m_bIgnoreNonexistent = !!tIn.GetByte();
 	tUpd.m_bStrict = !!tIn.GetByte();
 
+	bBlob = false;
 	tUpd.m_dAttributes.Resize ( tIn.GetDword() );
 	for ( TypedAttribute_t & tElem : tUpd.m_dAttributes )
 	{
 		tElem.m_sName = tIn.GetString();
 		tElem.m_eType = (ESphAttr)tIn.GetDword();
+		bBlob |= ( tElem.m_eType==SPH_ATTR_UINT32SET || tElem.m_eType==SPH_ATTR_INT64SET || tElem.m_eType==SPH_ATTR_JSON || tElem.m_eType==SPH_ATTR_STRING );
 	}
 
 	GetArray ( tUpd.m_dDocids, tIn );

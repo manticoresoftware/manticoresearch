@@ -2675,8 +2675,6 @@ struct UpdatedAttribute_t
 	int					m_iSchemaAttr = -1;
 };
 
-using FNLOCKER = std::function<void()>;
-
 struct UpdateContext_t
 {
 	AttrUpdateInc_t &						m_tUpd;
@@ -2691,12 +2689,11 @@ struct UpdateContext_t
 
 	CSphBitvec			m_dSchemaUpdateMask;
 	DWORD				m_uUpdateMask {0};
-	FNLOCKER			m_fnBlobsLocker;
 	bool				m_bBlobUpdate {false};
 	int					m_iJsonWarnings {0};
 
 
-	UpdateContext_t ( AttrUpdateInc_t & tUpd, const ISphSchema & tSchema, FNLOCKER fnLocker );
+	UpdateContext_t ( AttrUpdateInc_t & tUpd, const ISphSchema & tSchema );
 };
 
 
@@ -2864,10 +2861,10 @@ public:
 	/// returns non-negative amount of actually found and updated records on success
 	/// on failure, -1 is returned and GetLastError() contains error message
 	/// fnLocker, if provided, used to lock affected row during update for exclusive access
-	int							UpdateAttributes ( AttrUpdateSharedPtr_t pUpd, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning );
+	int							UpdateAttributes ( AttrUpdateSharedPtr_t pUpd, bool & bCritical, CSphString & sError, CSphString & sWarning );
 
 	/// update accumulating state
-	virtual int					UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning ) = 0;
+	virtual int					UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSphString & sError, CSphString & sWarning ) = 0;
 
 	virtual Binlog::CheckTnxResult_t ReplayTxn ( Binlog::Blop_e eOp, CSphReader & tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCheck ) = 0;
 	/// saves memory-cached attributes, if there were any updates to them
@@ -2999,7 +2996,7 @@ public:
 	void				GetStatus ( CSphIndexStatus* ) const override {}
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & tSettings, CSphString * ) const override { return false; }
 	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & ) const override { return true; }
-	int					UpdateAttributes ( AttrUpdateInc_t&, bool &, FNLOCKER, CSphString & , CSphString & ) override { return -1; }
+	int					UpdateAttributes ( AttrUpdateInc_t&, bool &, CSphString & , CSphString & ) override { return -1; }
 	Binlog::CheckTnxResult_t ReplayTxn ( Binlog::Blop_e, CSphReader &, CSphString &, Binlog::CheckTxn_fn&& ) override { return Binlog::CheckTnxResult_t(); }
 	bool				SaveAttributes ( CSphString & ) const override { return true; }
 	DWORD				GetAttributeStatus () const override { return 0; }
@@ -3035,7 +3032,6 @@ struct CSphAttrUpdateEx
 	CSphString *			m_pError = nullptr;		///< the error, if any
 	CSphString *			m_pWarning = nullptr;	///< the warning, if any
 	int						m_iAffected = 0;		///< num of updated rows.
-	FNLOCKER				m_fnLocker;
 	bool					m_bNoYeld = false;
 };
 

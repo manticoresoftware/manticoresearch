@@ -3875,6 +3875,7 @@ template < typename T >
 class CSphScopedPtr : public ISphNoncopyable
 {
 public:
+					CSphScopedPtr()				= default;
 	explicit		CSphScopedPtr ( T * pPtr )	{ m_pPtr = pPtr; }
 					~CSphScopedPtr ()			{ SafeDelete ( m_pPtr ); }
 	T *				operator -> () const		{ return m_pPtr; }
@@ -3895,13 +3896,13 @@ public:
 		Swap ( pPtr );
 		return *this;
 	}
-	T *				LeakPtr ()					{ T * pPtr = m_pPtr; m_pPtr = NULL; return pPtr; }
+	T *				LeakPtr ()					{ T * pPtr = m_pPtr; m_pPtr = nullptr; return pPtr; }
 	void			Reset ()					{ SafeDelete ( m_pPtr ); }
 	inline void 	Swap (CSphScopedPtr & rhs) noexcept { ::Swap(m_pPtr,rhs.m_pPtr);}
 
 
 protected:
-	T *				m_pPtr;
+	T *				m_pPtr = nullptr;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -3911,12 +3912,25 @@ protected:
 template < typename T >
 class CSphRefcountedPtr
 {
+	using RAWT = typename std::remove_const<T>::type;
+	using CT = const T;
+	using TYPE = CSphRefcountedPtr<T>;
+	using CTYPE = CSphRefcountedPtr<const T>;
+	using RAWTYPE = CSphRefcountedPtr<RAWT>;
+
 public:
 	explicit		CSphRefcountedPtr () = default;		///< default NULL wrapper construction (for vectors)
 	explicit		CSphRefcountedPtr ( T * pPtr ) : m_pPtr ( pPtr ) {}	///< construction from raw pointer, takes over ownership!
 
 	CSphRefcountedPtr ( const CSphRefcountedPtr& rhs )
 		: m_pPtr ( rhs.m_pPtr )
+	{
+		SafeAddRef ( m_pPtr );
+	}
+
+	template <typename DERIVED>
+	explicit CSphRefcountedPtr ( const CSphRefcountedPtr<DERIVED> & rhs )
+			: m_pPtr ( rhs.Ptr() )
 	{
 		SafeAddRef ( m_pPtr );
 	}
@@ -3952,6 +3966,7 @@ public:
 	}
 
 	T * Ptr() const { return m_pPtr; }
+	CT * CPtr () const { return m_pPtr; }
 
 public:
 	/// assignment of a raw pointer, takes over ownership!
@@ -4773,6 +4788,7 @@ private:
 };
 
 using RefCountedRefPtr_t = CSphRefcountedPtr<ISphRefcountedMT>;
+using cRefCountedRefPtr_t = CSphRefcountedPtr<const ISphRefcountedMT>;
 
 template <class T>
 struct VecRefPtrs_t : public ISphNoncopyable, public CSphVector<T>

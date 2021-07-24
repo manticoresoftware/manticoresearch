@@ -381,6 +381,13 @@ Some libraries should be available if you want to use them.
 - for indexing (`indexer` tool): `expat`, `iconv`, `mysql`, `odbc`, `postgresql`. Without them, you could only index 
   `tsv` and `csv` sources.
 - for serving queries (`searchd` daemon): `openssl` might be necessary.
+- for all (required, mandatory!) we need Boost library. Minimal version is 1.61.0, however we build the binaries with fresher 1.75.0. 
+Even more fresh (like 1.76) should also be ok. On Windows you can download pre-built Boost from their site (boost.org) and
+install into default suggested path (that is C:\\boost...). On Mac Os the one provided in brew is ok. On linuxes you can check
+available version in official repositories, and if it doesn't match requirements you can build from sources. We need
+component 'context', you can also build components 'system' and 'program_options', they will be necessary if you also want
+to build Galera library from the sources. Look into `dist/build_dockers/xxx/boost_175/Dockerfile` for a short self-documented
+script/instruction how to do it.
 
 On build system you need 'dev' or 'devel' versions of that packages installed (i.e. - libmysqlclient-devel, unixodbc-devel, etc. Look to our dockerfiles for the names of concrete packages).
 

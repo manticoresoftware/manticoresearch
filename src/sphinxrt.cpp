@@ -3098,18 +3098,11 @@ bool RtIndex_c::ForceDiskChunk()
 }
 
 
-struct SaveDiskDataContext_t
+struct SaveDiskDataContext_t : public BuildHeader_t
 {
 	SphOffset_t						m_tDocsOffset {0};
 	SphOffset_t						m_tLastDocPos {0};
-	SphOffset_t						m_tCheckpointsPosition {0};
-	SphOffset_t						m_tMinMaxPos {0};
-	DWORD							m_uRows {0};
-	int64_t							m_iDocinfoIndex {0};
-	int64_t							m_iTotalDocs {0};
-	int64_t							m_iInfixBlockOffset {0};
-	int								m_iInfixCheckpointWordsSize {0};
-	ISphInfixBuilder *				m_pInfixer {nullptr};
+	CSphScopedPtr<ISphInfixBuilder>	m_pInfixer {nullptr};
 	CSphVector<Checkpoint_t>		m_dCheckpoints;
 	CSphVector<BYTE>				m_dKeywordCheckpoints;
 	CSphVector<CSphVector<RowID_t>>	m_dRowMaps;
@@ -3120,19 +3113,15 @@ struct SaveDiskDataContext_t
 		: m_szFilename ( szFilename )
 		, m_tGuard ( tGuard )
 	{
-		m_dRowMaps.Resize ( tGuard.m_dRamChunks.GetLength() );
-
-		ARRAY_FOREACH ( i, m_dRowMaps )
+		m_dRowMaps.Reserve ( tGuard.m_dRamChunks.GetLength() );
+		for ( const auto & pSeg : tGuard.m_dRamChunks )
 		{
-			m_dRowMaps[i].Resize ( tGuard.m_dRamChunks[i]->m_uRows );
-			for ( auto & j : m_dRowMaps[i] )
-				j = INVALID_ROWID;
+			auto& dRowMap = m_dRowMaps.Add();
+			dRowMap.Reserve ( pSeg->m_uRows );
+			dRowMap.Resize ( pSeg->m_uRows ); // need space for ALL rows, incl. dead (they will be INVALID_ROWID)
+			dRowMap.Fill ( INVALID_ROWID );
 		}
-	}
-
-	~SaveDiskDataContext_t()
-	{
-		delete m_pInfixer;
+		assert ( m_dRowMaps.GetLength() == tGuard.m_dRamChunks.GetLength() );
 	}
 };
 
@@ -3159,7 +3148,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	if ( pBlobLocatorAttr )
 	{
 		pBlobRowBuilder = sphCreateBlobRowBuilder ( m_tSchema, sSPB, m_tSettings.m_tBlobUpdateSpace, sError );
-		if ( !pBlobRowBuilder.Ptr() )
+		if ( !pBlobRowBuilder )
 			return false;
 	}
 
@@ -3167,10 +3156,10 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	if ( m_tSchema.HasStoredFields() )
 	{
 		pDocstoreBuilder = CreateDocstoreBuilder ( sSPDS, m_tSettings, sError );
-		if ( !pDocstoreBuilder.Ptr() )
+		if ( !pDocstoreBuilder )
 			return false;
 
-		SetupDocstoreFields ( *pDocstoreBuilder.Ptr(), m_tSchema );
+		SetupDocstoreFields ( *pDocstoreBuilder, m_tSchema );
 	}
 
 	CSphScopedPtr<columnar::Builder_i> pColumnarBuilder(nullptr);
@@ -3185,11 +3174,11 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	CSphVector<PlainOrColumnar_t> dAttrsForHistogram;
 	CreateHistograms ( tHistograms, dAttrsForHistogram, m_tSchema );
 
-	tCtx.m_iTotalDocs = 0;
+	tCtx.m_iTotalDocuments = 0;
 	for ( const auto & i : tCtx.m_tGuard.m_dRamChunks )
-		tCtx.m_iTotalDocs += i->m_tAliveRows.load ( std::memory_order_relaxed );
+		tCtx.m_iTotalDocuments += i->m_tAliveRows.load ( std::memory_order_relaxed );
 
-	CSphFixedVector<DocidRowidPair_t> dLookup ( tCtx.m_iTotalDocs );
+	CSphFixedVector<DocidRowidPair_t> dLookup ( tCtx.m_iTotalDocuments );
 
 	int iColumnarIdLoc = -1;
 	if ( m_tSchema.GetAttr(0).IsColumnar() )
@@ -3198,8 +3187,8 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	CSphVector<int64_t> dTmp;
 	RowID_t tNextRowID = 0;
 	int iStride = m_tSchema.GetRowSize();
-	CSphFixedVector<CSphRowitem> dRow ( iStride );
-	CSphRowitem * pNewRow = dRow.Begin();
+	CSphFixedVector<CSphRowitem> dNewRow { iStride };
+	CSphRowitem * pNewRow = dNewRow.Begin();
 	ARRAY_FOREACH ( i, tCtx.m_tGuard.m_dRamChunks )
 	{
 		const RtSegment_t & tSeg = *tCtx.m_tGuard.m_dRamChunks[i];
@@ -3212,11 +3201,11 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 			tMinMaxBuilder.Collect(pRow);
 			if ( pBlobLocatorAttr )
 			{
-				SphAttr_t tBlobOffset = sphGetRowAttr ( pRow, pBlobLocatorAttr->m_tLocator );
-				SphOffset_t tOffset = pBlobRowBuilder->Flush ( tSeg.m_dBlobs.Begin() + tBlobOffset );
+				auto tSrcOffset = sphGetRowAttr ( pRow, pBlobLocatorAttr->m_tLocator );
+				auto tTargetOffset = pBlobRowBuilder->Flush ( tSeg.m_dBlobs.Begin() + tSrcOffset );
 
 				memcpy ( pNewRow, pRow, iStride*sizeof(CSphRowitem) );
-				sphSetRowAttr ( pNewRow, pBlobLocatorAttr->m_tLocator, tOffset );
+				sphSetRowAttr ( pNewRow, pBlobLocatorAttr->m_tLocator, tTargetOffset );
 				tWriterSPA.PutBytes ( pNewRow, iStride*sizeof(CSphRowitem) );
 			} else
 				tWriterSPA.PutBytes ( pRow, iStride*sizeof(CSphRowitem) );
@@ -3236,9 +3225,9 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 				tHistograms.Insert ( iHistogram, dAttrsForHistogram[iHistogram].Get ( pRow, dColumnarIterators ) );
 
 			dLookup[tNextRowID] = { tDocID, tNextRowID };
-			if ( pDocstoreBuilder.Ptr() )
+			if ( pDocstoreBuilder )
 			{
-				assert ( tSeg.m_pDocstore.Ptr() );
+				assert ( tSeg.m_pDocstore );
 				pDocstoreBuilder->AddDoc ( tNextRowID, tSeg.m_pDocstore->GetDoc ( dRow.m_tRowID, nullptr, -1, false ) );
 			}
 
@@ -3253,10 +3242,10 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 		return false;
 	}
 
-	if ( pBlobRowBuilder.Ptr() && !pBlobRowBuilder->Done(sError) )
+	if ( pBlobRowBuilder && !pBlobRowBuilder->Done ( sError ) )
 		return false;
 
-	if ( pDocstoreBuilder.Ptr() )
+	if ( pDocstoreBuilder )
 		pDocstoreBuilder->Finalize();
 
 	dLookup.Sort ( bind ( &DocidRowidPair_t::m_tDocID ) );
@@ -3271,12 +3260,12 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 
 	tMinMaxBuilder.FinishCollect();
 
-	tCtx.m_uRows = tNextRowID;
-	if ( tCtx.m_uRows && m_tSchema.HasNonColumnarAttrs() )
+	tCtx.m_iDocinfo = tNextRowID;
+	if ( tCtx.m_iDocinfo && m_tSchema.HasNonColumnarAttrs() )
 	{
 		const CSphTightVector<CSphRowitem> & dMinMaxRows = tMinMaxBuilder.GetCollected();
 
-		tCtx.m_tMinMaxPos = tWriterSPA.GetPos();
+		tCtx.m_iMinMaxIndex = tWriterSPA.GetPos () / sizeof ( CSphRowitem );
 		tCtx.m_iDocinfoIndex = ( dMinMaxRows.GetLength() / m_tSchema.GetRowSize() / 2 ) - 1;
 		tWriterSPA.PutBytes ( dMinMaxRows.Begin(), dMinMaxRows.GetLength()*sizeof(CSphRowitem) );
 	}
@@ -3522,7 +3511,7 @@ void RtIndex_c::WriteCheckpoints ( SaveDiskDataContext_t & tCtx, CSphWriter & tW
 	if ( tCtx.m_pInfixer )
 		tCtx.m_pInfixer->SaveEntries ( tWriterDict );
 
-	tCtx.m_tCheckpointsPosition = tWriterDict.GetPos();
+	tCtx.m_iDictCheckpointsOffset = tWriterDict.GetPos();
 	if ( m_bKeywordDict )
 	{
 		const char * pCheckpoints = (const char *)tCtx.m_dKeywordCheckpoints.Begin();
@@ -3547,11 +3536,11 @@ void RtIndex_c::WriteCheckpoints ( SaveDiskDataContext_t & tCtx, CSphWriter & tW
 	// flush infix hash blocks
 	if ( tCtx.m_pInfixer )
 	{
-		tCtx.m_iInfixBlockOffset = tCtx.m_pInfixer->SaveEntryBlocks ( tWriterDict );
-		tCtx.m_iInfixCheckpointWordsSize = tCtx.m_pInfixer->GetBlocksWordsSize();
+		tCtx.m_iInfixBlocksOffset = tCtx.m_pInfixer->SaveEntryBlocks ( tWriterDict );
+		tCtx.m_iInfixBlocksWordsSize = tCtx.m_pInfixer->GetBlocksWordsSize();
 
-		if ( tCtx.m_iInfixBlockOffset>UINT_MAX )
-			sphWarning ( "INTERNAL ERROR: dictionary size " INT64_FMT " overflow at infix save", tCtx.m_iInfixBlockOffset );
+		if ( tCtx.m_iInfixBlocksOffset>UINT_MAX )
+			sphWarning ( "INTERNAL ERROR: dictionary size " INT64_FMT " overflow at infix save", tCtx.m_iInfixBlocksOffset );
 	}
 
 	// flush header
@@ -3559,9 +3548,9 @@ void RtIndex_c::WriteCheckpoints ( SaveDiskDataContext_t & tCtx, CSphWriter & tW
 	// primary storage is in the index wide header
 	tWriterDict.PutBytes ( "dict-header", 11 );
 	tWriterDict.ZipInt ( tCtx.m_dCheckpoints.GetLength() );
-	tWriterDict.ZipOffset ( tCtx.m_tCheckpointsPosition );
+	tWriterDict.ZipOffset ( tCtx.m_iDictCheckpointsOffset );
 	tWriterDict.ZipInt ( m_pTokenizer->GetMaxCodepointLength() );
-	tWriterDict.ZipInt ( (DWORD)tCtx.m_iInfixBlockOffset );
+	tWriterDict.ZipInt ( (DWORD)tCtx.m_iInfixBlocksOffset );
 }
 
 
@@ -3570,7 +3559,7 @@ bool RtIndex_c::WriteDeadRowMap ( SaveDiskDataContext_t & tContext, CSphString &
 	CSphString sName;
 	sName.SetSprintf ( "%s%s", tContext.m_szFilename, sphGetExt(SPH_EXT_SPM).cstr() );
 
-	return ::WriteDeadRowMap ( sName, tContext.m_uRows, sError );
+	return ::WriteDeadRowMap ( sName, tContext.m_iDocinfo, sError );
 }
 
 
@@ -3609,64 +3598,34 @@ static void FixupIndexSettings ( CSphIndexSettings & tSettings )
 }
 
 
+// SaveDiskChunk -> SaveDiskData -> SaveDiskHeader
 void RtIndex_c::SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_t & tStats ) const
 {
-	CSphWriter tWriter;
-	CSphString sName, sError;
-	sName.SetSprintf ( "%s%s", tCtx.m_szFilename, sphGetExt(SPH_EXT_SPH).cstr() );
-	tWriter.OpenFile ( sName.cstr(), sError );
+	tCtx.m_iDictCheckpoints = tCtx.m_dCheckpoints.GetLength ();
+	tCtx.m_iInfixCodepointBytes = ( m_tSettings.m_iMinInfixLen && m_pDict->GetSettings ().m_bWordDict )
+			? m_pTokenizer->GetMaxCodepointLength ()
+			: 0;
 
-	// format
-	tWriter.PutDword ( INDEX_MAGIC_HEADER );
-	tWriter.PutDword ( INDEX_FORMAT_VERSION );
+	tCtx.m_iTotalBytes = tStats.m_Stats.m_iTotalBytes;
 
-	// schema
-	WriteSchema ( tWriter, m_tSchema );
-
-	// wordlist checkpoints
-	tWriter.PutOffset ( tCtx.m_tCheckpointsPosition );
-	tWriter.PutDword ( tCtx.m_dCheckpoints.GetLength() );
-
-	int iInfixCodepointBytes = ( m_tSettings.m_iMinInfixLen && m_pDict->GetSettings().m_bWordDict ? m_pTokenizer->GetMaxCodepointLength() : 0 );
-	tWriter.PutByte ( (BYTE)iInfixCodepointBytes ); // m_iInfixCodepointBytes, v.27+
-	tWriter.PutDword ( (DWORD)tCtx.m_iInfixBlockOffset ); // m_iInfixBlocksOffset, v.27+
-	tWriter.PutDword ( tCtx.m_iInfixCheckpointWordsSize ); // m_iInfixCheckpointWordsSize, v.34+
-
-	// stats
-	tWriter.PutDword ( (DWORD)tCtx.m_iTotalDocs ); // FIXME? we don't expect over 4G docs per just 1 local index
-	tWriter.PutOffset ( tStats.m_Stats.m_iTotalBytes );
-
-	// index settings
-	// FIXME: remove this?
 	CSphIndexSettings tSettings = m_tSettings;
 	FixupIndexSettings ( tSettings );
-	SaveIndexSettings ( tWriter, tSettings );
 
-	// tokenizer
-	SaveTokenizerSettings ( tWriter, m_pTokenizer, m_tSettings.m_iEmbeddedLimit );
+	WriteHeader_t tWriteHeader;
+	tWriteHeader.m_pSettings = &tSettings;
+	tWriteHeader.m_pSchema = &m_tSchema;
+	tWriteHeader.m_pTokenizer = m_pTokenizer;
+	tWriteHeader.m_pDict = m_pDict;
+	tWriteHeader.m_pFieldFilter = m_pFieldFilter;
+	tWriteHeader.m_pFieldLens = m_dFieldLens.Begin();
 
-	// dictionary
-	// can not use embedding as stopwords id differs between RT and plain dictionaries
-	SaveDictionarySettings ( tWriter, m_pDict, m_bKeywordDict, 0 );
+	CSphWriter tWriter;
+	CSphString sName, sError;
+	sName.SetSprintf ( "%s%s", tCtx.m_szFilename, sphGetExt ( SPH_EXT_SPH ).cstr () );
+	if ( !tWriter.OpenFile ( sName.cstr (), sError ) )
+		return; // fixme! report error...
 
-	// min-max count
-	tWriter.PutOffset ( tCtx.m_uRows );
-	tWriter.PutOffset ( tCtx.m_iDocinfoIndex );
-	tWriter.PutOffset ( tCtx.m_tMinMaxPos/sizeof(CSphRowitem) );		// min-max count
-
-	// field filter
-	CSphFieldFilterSettings tFieldFilterSettings;
-	if ( m_pFieldFilter.Ptr() )
-		m_pFieldFilter->GetSettings(tFieldFilterSettings);
-	tFieldFilterSettings.Save(tWriter);
-
-	// field lengths
-	if ( m_tSettings.m_bIndexFieldLens )
-		for ( int i=0; i <m_tSchema.GetFieldsCount(); i++ )
-			tWriter.PutOffset ( tStats.m_dFieldLens[i] );
-
-	// done
-	tWriter.CloseFile ();
+	IndexWriteHeader ( tCtx, tWriteHeader, tWriter, m_bKeywordDict, true );
 }
 
 void RtIndex_c::SaveMetaSpecial ( int64_t iTID, const VecTraits_T<int> & dChunkNames )

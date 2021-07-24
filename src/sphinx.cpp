@@ -126,8 +126,6 @@ int64_t		g_iIndexerCurrentRangeMax	= 0;
 int64_t		g_iIndexerPoolStartDocID	= 0;
 int64_t		g_iIndexerPoolStartHit		= 0;
 
-struct BuildHeader_t;
-struct WriteHeader_t;
 static bool IndexBuildDone ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & tWriteHeader, const CSphString & sFileName, CSphString & sError );
 
 /////////////////////////////////////////////////////////////////////////////
@@ -757,29 +755,6 @@ void AttrIndexBuilder_c::FlushComputed ()
 //////////////////////////////////////////////////////////////////////////
 
 class CSphHitBuilder;
-
-struct BuildHeader_t : public CSphSourceStats, public DictHeader_t
-{
-	explicit BuildHeader_t ( const CSphSourceStats & tStat )
-	{
-		m_iTotalDocuments = tStat.m_iTotalDocuments;
-		m_iTotalBytes = tStat.m_iTotalBytes;
-	}
-
-	int64_t				m_iDocinfo {0};
-	int64_t				m_iDocinfoIndex {0};
-	int64_t				m_iMinMaxIndex {0};
-};
-
-struct WriteHeader_t
-{
-	const CSphIndexSettings * m_pSettings;
-	const CSphSchema * m_pSchema;
-	TokenizerRefPtr_c m_pTokenizer;
-	DictRefPtr_c m_pDict;
-	FieldFilterRefPtr_c m_pFieldFilter;
-	const int64_t * m_pFieldLens;
-};
 
 const char* CheckFmtMagic ( DWORD uHeader )
 {
@@ -8492,7 +8467,7 @@ void SaveIndexSettings ( CSphWriter & tWriter, const CSphIndexSettings & tSettin
 }
 
 
-static bool IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & tWriteHeader, CSphWriter & fdInfo )
+void IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & tWriteHeader, CSphWriter & fdInfo, bool bForceWordDict, bool SkipEmbeddDict )
 {
 	// version
 	fdInfo.PutDword ( INDEX_MAGIC_HEADER );
@@ -8521,7 +8496,7 @@ static bool IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHe
 
 	// dictionary info
 	assert ( tWriteHeader.m_pDict );
-	SaveDictionarySettings ( fdInfo, tWriteHeader.m_pDict, false, tWriteHeader.m_pSettings->m_iEmbeddedLimit );
+	SaveDictionarySettings ( fdInfo, tWriteHeader.m_pDict, bForceWordDict, SkipEmbeddDict ? 0 : tWriteHeader.m_pSettings->m_iEmbeddedLimit );
 
 	fdInfo.PutOffset ( tBuildHeader.m_iDocinfo );
 	fdInfo.PutOffset ( tBuildHeader.m_iDocinfoIndex );
@@ -8535,10 +8510,8 @@ static bool IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHe
 
 	// average field lengths
 	if ( tWriteHeader.m_pSettings->m_bIndexFieldLens )
-		for ( int i=0; i < tWriteHeader.m_pSchema->GetFieldsCount(); i++ )
+		for ( int i=0; i < tWriteHeader.m_pSchema->GetFieldsCount(); ++i )
 			fdInfo.PutOffset ( tWriteHeader.m_pFieldLens[i] );
-
-	return true;
 }
 
 
@@ -8548,7 +8521,8 @@ bool IndexBuildDone ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & 
 	if ( !fdInfo.OpenFile ( sFileName, sError ) )
 		return false;
 
-	return IndexWriteHeader ( tBuildHeader, tWriteHeader, fdInfo );
+	 IndexWriteHeader ( tBuildHeader, tWriteHeader, fdInfo, false );
+	 return true;
 }
 
 
@@ -11313,6 +11287,9 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	if ( !CheckDocsCount ( tResultRowID, sError ) )
 		return false;
 
+	if ( pDocstoreBuilder.Ptr() )
+		pDocstoreBuilder->Finalize();
+
 	CSphAutofile tTmpDict ( pDstIndex->GetIndexFileName("spi.tmp"), SPH_O_NEW, sError, true );
 	CSphAutofile tDict ( pDstIndex->GetIndexFileName ( SPH_EXT_SPI, true ), SPH_O_NEW, sError );
 
@@ -11369,9 +11346,6 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	dDocidLookup.Sort ( CmpDocidLookup_fn() );
 	if ( !WriteDocidLookup ( sSPT, dDocidLookup, sError ) )
 		return false;
-
-	if ( pDocstoreBuilder.Ptr() )
-		pDocstoreBuilder->Finalize();
 
 	CSphString sHeaderName = pDstIndex->GetIndexFileName ( SPH_EXT_SPH, true );
 
@@ -16613,10 +16587,7 @@ bool CSphIndex_VLN::CopyExternalFiles ( int iPostfix, StrVec_t & dCopied )
 	tWriteHeader.m_pFieldLens = m_dFieldLens.Begin();
 
 	// save the header
-	if ( !IndexBuildDone ( tBuildHeader, tWriteHeader, GetIndexFileName(SPH_EXT_SPH), m_sLastError ) )
-		return false;
-
-	return true;
+	return IndexBuildDone ( tBuildHeader, tWriteHeader, GetIndexFileName(SPH_EXT_SPH), m_sLastError );
 }
 
 void CSphIndex_VLN::CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const

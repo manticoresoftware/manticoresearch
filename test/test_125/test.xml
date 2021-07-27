@@ -383,6 +383,15 @@ INSERT INTO name_table VALUES
 	SELECT bigint(1000000)*1000000;
 	SELECT 1000000*bigint(1000000);
 	SELECT bigint(1000000.0)*1000000;
+
+	<!-- BIGINT() for time functions -->
+	SELECT year(22496904880);
+	SELECT month(22496904880);
+	SELECT day(22496904880);
+	SELECT hour(22496904880);
+	SELECT minute(22496904880);
+
+
 	<!-- expect false, because above. Fixme! -->
 	SELECT 1000000000000=bigint(1000000.0)*1000000;
 

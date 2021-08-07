@@ -1,28 +1,32 @@
 # Manual on options are here: https://clang.llvm.org/docs/ClangFormatStyleOptions.html
+# last fixed
 ---
 Language:        Cpp
-Standard: c++11
+Standard: c++14
 Cpp11BracedListStyle: true
-ColumnLimit:     120
+ColumnLimit:     0
 IndentWidth:     4
 ConstructorInitializerIndentWidth: 4
-ContinuationIndentWidth: 6
+ContinuationIndentWidth: 8
 AccessModifierOffset: -4
 TabWidth:        4
 UseTab:          Always
 
 AlignAfterOpenBracket: DontAlign
-AlignConsecutiveAssignments: true
-AlignConsecutiveDeclarations: true
+AlignConsecutiveAssignments: None
+AlignConsecutiveBitFields: AcrossEmptyLinesAndComments
+AlignConsecutiveDeclarations: None
 AlignEscapedNewlines: Left
-AlignOperands:   true
+AlignOperands: AlignAfterOperator
 AlignTrailingComments: true
 
 AllowAllParametersOfDeclarationOnNextLine: false
 AllowShortBlocksOnASingleLine: Empty
 AllowShortCaseLabelsOnASingleLine: true
+AllowShortEnumsOnASingleLine: true
 AllowShortFunctionsOnASingleLine: Inline
 AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: All
 AllowShortLoopsOnASingleLine: false
 
 AlwaysBreakAfterReturnType: None
@@ -30,8 +34,8 @@ AlwaysBreakBeforeMultilineStrings: false
 AlwaysBreakTemplateDeclarations: MultiLine
 
 ExperimentalAutoDetectBinPacking: true
-BinPackArguments: true
-BinPackParameters: true
+BinPackArguments: false
+BinPackParameters: false
 
 BreakBeforeBraces: Custom
 BraceWrapping:
@@ -49,25 +53,33 @@ BraceWrapping:
   AfterExternBlock: true
   BeforeElse:      false
   IndentBraces:    false
+  BeforeLambdaBody: false
+  BeforeWhile: false
 
 BreakBeforeBinaryOperators: NonAssignment
 BreakBeforeInheritanceComma: true
-BreakInheritanceList: AfterColon
+BreakInheritanceList: BeforeComma
 BreakBeforeTernaryOperators: true
-BreakConstructorInitializersBeforeComma: false
 BreakConstructorInitializers: BeforeComma
 BreakStringLiterals: false
 
-CommentPragmas:  '^ IWYU pragma:'
+EmptyLineBeforeAccessModifier: LogicalBlock
+EmptyLineAfterAccessModifier: Never
+
 CompactNamespaces: false
 ConstructorInitializerAllOnOneLineOrOnePerLine: false
 
+
 DisableFormat:   false
 FixNamespaceComments: true
+ShortNamespaceLines: 10
 ForEachMacros:
   - ARRAY_FOREACH
   - ARRAY_FOREACH_COND
-IncludeBlocks:   Regroup
+  - ARRAY_CONSTFOREACH
+  - ARRAY_CONSTFOREACH_COND
+
+IncludeBlocks: Preserve
 IncludeCategories:
   - Regex:           '^"(json|http)/'
     Priority:        20
@@ -80,8 +92,10 @@ IncludeCategories:
   - Regex:           '.*'
     Priority:        10
 IncludeIsMainRegex: '^gtests_'
+IndentCaseBlocks: true
 IndentCaseLabels: false
-IndentPPDirectives: BeforeHash
+IndentPPDirectives: None
+IndentAccessModifiers: false
 
 IndentWrappedFunctionNames: true
 KeepEmptyLinesAtTheStartOfBlocks: false
@@ -105,22 +119,27 @@ PointerAlignment: Left
 
 ReflowComments:  true
 
-SortIncludes:    false
+SortIncludes: Never
 SortUsingDeclarations: false
 
 SpaceAfterCStyleCast: false
+SpaceAfterLogicalNot: false
 SpaceAfterTemplateKeyword: false
-#SpaceBeforeAssignmentOperators: true
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeCaseColon: false
 SpaceBeforeCpp11BracedList: true
 SpaceBeforeCtorInitializerColon: true
 SpaceBeforeInheritanceColon: false
 SpaceBeforeParens: NonEmptyParentheses
+SpaceBeforeSquareBrackets: false
 SpacesInParentheses: true
 SpaceBeforeRangeBasedForLoopColon: true
+SpaceInEmptyBlock: false
 SpaceInEmptyParentheses: false
 SpacesBeforeTrailingComments: 1
 SpacesInAngles:  false
-#SpacesInContainerLiterals: false
+SpacesInConditionalStatement: false
+SpacesInContainerLiterals: false
 SpacesInCStyleCastParentheses: false
 SpacesInSquareBrackets: false
 
@@ -129,4 +148,12 @@ StatementMacros:
   - SafeDeleteArray
   - SafeRelease
   - SafeAddRef
+  - sphWarning
+  - sphInfo
+  - sphLogDebug
+  - sphLogDebugv
+  - sphLogDebugvv
+  - sphLogDebugRpl
 
+AttributeMacros: [ 'VARIABLE_IS_NOT_USED','NO_RETURN','FORCE_INLINE','CAPABILITY', 'SCOPED_CAPABILITY' ]
+#StatementAttributeLikeMacros: [ 'VARIABLE_IS_NOT_USED','NO_RETURN','FORCE_INLINE','CAPABILITY', 'SCOPED_CAPABILITY' ]

@@ -2287,7 +2287,6 @@ public:
 		assert ( pArg && pDelim && pCount );
 		SafeAddRef ( pArg );
 		m_bFreeResPtr = m_pArg->IsDataPtrAttr();
-
 		const BYTE * pBuf = nullptr;
 		CSphMatch tTmp;
 		
@@ -2316,13 +2315,12 @@ public:
 		int iDocLen = m_pArg->StringEval ( tMatch, (const BYTE **)&pDoc );
 		int iLength = 0;
 		*ppStr = nullptr;
-
 		if ( pDoc && iDocLen>0 && m_iLenDelim>0 && m_iCount!=0 )
 		{
 			if ( m_iCount>0 )
-				LeftSearch ( pDoc, iDocLen, m_iCount, false, ppStr, &iLength );
+                LeftSearch(pDoc, iDocLen, m_iCount, false, ppStr, &iLength);
 			else
-				RightSearch ( pDoc, iDocLen, m_iCount, ppStr, &iLength );
+                RightSearch(pDoc, iDocLen, m_iCount, ppStr, &iLength);
 		}
 
 		FreeDataPtr ( *m_pArg, pDoc );
@@ -2467,7 +2465,6 @@ int Expr_SubstringIndex_c::LeftSearch ( const char * pDoc, int iDocLen, int iCou
 	const char * pDelEnd = pDelBeg + m_iLenDelim;
 	const char * pStrBeg = pDoc;
 	const char * pStrEnd = (pStrBeg + iDocLen) - m_iLenDelim + 1;
-
 	while ( pStrBeg<pStrEnd )
 	{
 		//	check first delimer string's char with current char from pStr
@@ -2535,6 +2532,137 @@ int Expr_SubstringIndex_c::RightSearch ( const char * pDoc, int iDocLen, int iCo
 
 	//	find delimer sub string according to iCount and return result
 	return LeftSearch ( pDoc, iDocLen, iCount, true, ppResStr, pResLen );
+}
+
+class Expr_Upper_c : public ISphStringExpr {
+private:
+    CSphRefcountedPtr<ISphExpr> m_pArg;
+    bool m_bFreeResPtr = false;
+public:
+    explicit Expr_Upper_c (ISphExpr * pArg)
+    : m_pArg ( pArg )
+    , m_bFreeResPtr ( false  )
+    {
+        assert(pArg);
+        SafeAddRef(pArg);
+        m_bFreeResPtr = m_pArg->IsDataPtrAttr();
+        const BYTE * pBuf = nullptr;
+        CSphMatch tTmp;
+    }
+
+    void FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override
+    {
+        if ( m_pArg )
+            m_pArg->FixupLocator ( pOldSchema, pNewSchema );
+    }
+
+    void Command ( ESphExprCommand eCmd, void * pArg ) override
+    {
+        if ( m_pArg )
+            m_pArg->Command ( eCmd, pArg );
+    }
+
+    int StringEval (const CSphMatch & tMatch, const BYTE ** ppStr) const final
+    {
+        const char * pDoc = nullptr;
+        int iDocLen = m_pArg->StringEval (tMatch, (const BYTE **)&pDoc);
+        int iLength = 0;
+        *ppStr = nullptr;
+        if (pDoc && iDocLen>0)
+        {
+            UpperString(pDoc, iDocLen, ppStr, &iLength);
+        }
+
+        FreeDataPtr ( *m_pArg, pDoc);
+
+        return iLength;
+    }
+
+    bool IsDataPtrAttr() const final
+    {
+        return m_bFreeResPtr;
+    }
+
+    int IntEval (const CSphMatch & tMatch) const final
+    {
+        int iVal = 0;
+        const char * pBuf = nullptr;
+        int  iLen = StringEval ( tMatch, (const BYTE **) &pBuf );
+
+        if ( iLen && pBuf )
+        {
+            const char * pMax = sphFindLastNumeric ( pBuf, iLen );
+            if ( pBuf<pMax )
+            {
+                iVal = strtol ( pBuf, NULL, 10 );
+            }
+            else
+            {
+                CSphString sBuf;
+                sBuf.SetBinary ( pBuf, iLen );
+                iVal = strtol ( sBuf.cstr(), NULL, 10 );
+            }
+        }
+
+        FreeDataPtr ( *this, pBuf );
+        return iVal;
+    }
+    bool IsConst () const final { return false; }
+
+    uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
+    {
+        EXPR_CLASS_NAME("Expr_Upper_c");
+        CALC_CHILD_HASH(m_pArg);
+        return CALC_DEP_HASHES();
+    }
+
+    ISphExpr * Clone () const final
+    {
+        return new Expr_Upper_c ( *this );
+    }
+
+private:
+    int SetResultString ( const char * pDoc, int iDocLen, const BYTE ** ppResStr ) const;
+    int UpperString ( const  char * pDoc, int iDocLen, const BYTE ** ppResStr, int * pResLen ) const;
+
+    Expr_Upper_c ( const Expr_Upper_c& rhs )
+            : m_pArg ( SafeClone (rhs.m_pArg) )
+            , m_bFreeResPtr ( rhs.m_bFreeResPtr )
+    {}
+};
+
+int Expr_Upper_c::SetResultString ( const char * pDoc, int iDocLen, const BYTE ** ppResStr ) const
+{
+    if ( !IsDataPtrAttr() )
+    {
+        *ppResStr = (const BYTE *) pDoc;
+    }
+    else
+    {
+        CSphString  sRetVal;
+        sRetVal.SetBinary ( pDoc, iDocLen );
+        *ppResStr = (const BYTE *) sRetVal.Leak();
+    }
+    return iDocLen;
+}
+
+int Expr_Upper_c::UpperString ( const char * pDoc, int iDocLen, const BYTE ** ppResStr, int * pResLen ) const
+{
+    char * pStrBeg = const_cast<char *>(pDoc);
+    const char * pStrEnd = (pStrBeg + iDocLen);
+    while (pStrBeg < pStrEnd)
+    {
+        if (islower(*pStrBeg))
+        {
+            *pStrBeg -= 32;
+        }
+        pStrBeg += 1;
+    }
+    if ( ppResStr )
+    {
+        *pResLen = SetResultString(pDoc, iDocLen, ppResStr);
+    }
+    return iDocLen;
 }
 
 class Expr_Iterator_c : public Expr_JsonField_c
@@ -3194,7 +3322,7 @@ DECLARE_TERNARY ( Expr_Mul3_c,	FIRST*SECOND*THIRD,					INTFIRST*INTSECOND*INTTHI
 		int64_t Int64Eval ( const CSphMatch & tMatch ) const final { return IntEval(tMatch); } \
 		int IntEval ( const CSphMatch & tMatch ) const final \
 		{ \
-			time_t ts = (time_t)INTFIRST;	\
+			time_t ts = (time_t)INT64FIRST;	\
 			struct tm s = {0}; \
 			localtime_r ( &ts, &s ); \
 			return _expr; \
@@ -3406,6 +3534,7 @@ enum Tokh_e : BYTE
 	FUNC_REGEX,
 
 	FUNC_SUBSTRING_INDEX,
+	FUNC_UPPER,
 
 	FUNC_LAST_INSERT_ID,
 	FUNC_LEVENSHTEIN,
@@ -3519,6 +3648,7 @@ const static TokhKeyVal_t g_dKeyValTokens[] = // no order is necessary, but crea
 	{ "regex",			FUNC_REGEX			 },
 
 	{ "substring_index",FUNC_SUBSTRING_INDEX },
+    { "upper",          FUNC_UPPER           },
 
 	{ "last_insert_id",	FUNC_LAST_INSERT_ID	 },
 	{ "levenshtein",	FUNC_LEVENSHTEIN	 },
@@ -3573,49 +3703,50 @@ static Tokh_e TokHashLookup ( Str_t sKey )
 
 	const static BYTE dAsso[] = // values 66..91 (A..Z) copy from 98..123 (a..z),
     {
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118,  13, 118,
-		24,  11, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118,  44,  33,   9,   3,  16,
-		40,  51,  37,  27, 118, 118,   6,  15,   5,   7,
-		23,  28,  20,   4,   3,  31,  45,  45,  28,  22,
-		15, 118, 118, 118, 118,  10, 118,  44,  33,   9,
-		3,  16,  40,  51,  37,  27, 118, 118,   6,  15,
-		5,   7,  23,  28,  20,   4,   3,  31,  45,  45,
-		28,  22,  15, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118
-	};
+            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+            124, 124, 124, 124, 124, 124, 124, 124,  22, 124,
+            6,  14, 124, 124, 124, 124, 124, 124, 124, 124,
+            124, 124, 124, 124, 124,  56,  43,   9,   3,  17,
+            25,  44,  33,  27, 124, 124,   6,  15,	 5,  26,
+            23,  22,  20,   4,   3,  30,  47,  47,	28,  15,
+            15, 124, 124, 124, 124,  17, 124,  56,  43,   9,
+            3,  17,  25,  44,  33,  27, 124, 124,   6,  15,
+            5,  26,  23,  22,  20,   4,   3,  30,  47,  47,
+            28,  15,  15, 124, 124, 124, 124, 124, 124, 124,
+            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+            124, 124, 124, 124, 124, 124
+    };
 
 	const static short dIndexes[] =
-	{
-		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-		-1, -1, -1, 6, 76, -1, 12, 4, 73, -1,
-		5, 81, 22, 40, 78, 28, 38, 68, 23, 75,
-		58, 10, 65, 80, 31, 39, 29, 62, 36, -1,
-		42, 63, 21, 51, 30, 32, 2, 13, 70, 43,
-		15, 35, 53, 74, 48, 1, 47, 46, 49, 59,
-		44, 57, 16, 33, 54, 9, 56, 69, 34, 27,
-		37, 52, 3, 41, 24, 8, 55, 61, 50, -1,
-		67, 71, -1, 79, -1, 7, -1, 72, -1, -1,
-		17, 60, 20, 11, -1, -1, 77, -1, 0, -1,
-		19, -1, 45, 26, 66, -1, -1, -1, -1, 14,
-		-1, -1, 18, -1, -1, -1, 25, 64
-	};
+            {
+                    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+                    -1, -1, -1, 6, 77, -1, 12, 4, 74, -1,
+                    5, 82, 22, 40, 79, 28, 38, 69, 23, 13,
+                    58, 10, 65, 81, 31, 39, 15, 62, 36, 29,
+                    42, 63, 51, 21, 30, 44, 2, 71, 76, 43,
+                    48, 56, 35, 53, 27, 32, 47, 46, 16, 52,
+                    7, 57, 61, 33, 54, 75, 9, 1, 80, 70,
+                    49, 59, 50, 41, 24, 55, 3, 8, 68, 45,
+                    34, -1, 37, 72, -1, -1, -1, 20, -1, 60,
+                    67, -1, 73, -1, -1, 17, 11, 66, 19, -1,
+                    78, -1, 0, -1, 14, 26, -1, -1, -1, -1,
+                    -1, -1, -1, 18, -1, -1, -1, -1, -1, -1,
+                    25, -1, -1, 64
+            };
 
 	auto * s = (const BYTE*) sKey.first;
 	auto iLen = sKey.second;
@@ -3758,8 +3889,10 @@ static FuncDesc_t g_dFuncs[FUNC_FUNCS_COUNT] = // Keep same order as in Tokh_e
 	{  /*"regex",		*/		2,	TOK_FUNC,		/*FUNC_REGEX,			*/	SPH_ATTR_INTEGER },
 
 	{  /*"substring_index",*/	3,	TOK_FUNC,		/*FUNC_SUBSTRING_INDEX,	*/	SPH_ATTR_STRINGPTR },
+    {  /*"upper",          */	1,	TOK_FUNC,		/*FUNC_UPPER,           */	SPH_ATTR_STRINGPTR },
 
-	{  /*"last_insert_id",*/	0,	TOK_FUNC,		/*FUNC_LAST_INSERT_ID,	*/	SPH_ATTR_STRINGPTR },
+
+    {  /*"last_insert_id",*/	0,	TOK_FUNC,		/*FUNC_LAST_INSERT_ID,	*/	SPH_ATTR_STRINGPTR },
 	{ /*"levenshtein", */		-1,	TOK_FUNC,		/*FUNC_LEVENSHTEIN,		*/	SPH_ATTR_NONE },
 };
 
@@ -3777,7 +3910,7 @@ static inline const char* FuncNameByHash ( int iFunc )
 		, "rankfactors", "packedfactors", "bm25f", "integer", "double", "length", "least", "greatest"
 		, "uint", "query", "curtime", "utc_time", "utc_timestamp", "timediff", "current_user"
 		, "connection_id", "all", "any", "indexof", "min_top_weight", "min_top_sortval", "atan2", "rand"
-		, "regex", "substring_index", "last_insert_id", "levenshtein" };
+		, "regex", "substring_index", "upper", "last_insert_id", "levenshtein" };
 
 	return dNames[iFunc];
 }
@@ -6826,6 +6959,9 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 					case FUNC_SUBSTRING_INDEX:
 						return new Expr_SubstringIndex_c ( dArgs[0], dArgs[1], dArgs[2] );
 
+                    case FUNC_UPPER:
+                        return new Expr_Upper_c ( dArgs[0]);
+
 					case FUNC_LAST_INSERT_ID: return new Expr_LastInsertID_c();
 					case FUNC_CURRENT_USER: {
 						auto sUser = CurrentUser();
@@ -8889,7 +9025,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 		bGotString |= dRetTypes[i]==SPH_ATTR_STRING;
 		bGotMva |= ( dRetTypes[i]==SPH_ATTR_UINT32SET || dRetTypes[i]==SPH_ATTR_INT64SET || dRetTypes[i]==SPH_ATTR_UINT32SET_PTR || dRetTypes[i]==SPH_ATTR_INT64SET_PTR );
 	}
-	if ( bGotString && !( eFunc==FUNC_LENGTH || eFunc==FUNC_TO_STRING || eFunc==FUNC_CONCAT || eFunc==FUNC_SUBSTRING_INDEX || eFunc==FUNC_CRC32 || eFunc==FUNC_EXIST || eFunc==FUNC_POLY2D || eFunc==FUNC_GEOPOLY2D || eFunc==FUNC_REGEX || eFunc==FUNC_LEVENSHTEIN ) )
+	if ( bGotString && !( eFunc==FUNC_LENGTH || eFunc==FUNC_TO_STRING || eFunc==FUNC_CONCAT || eFunc==FUNC_SUBSTRING_INDEX || eFunc==FUNC_UPPER || eFunc==FUNC_CRC32 || eFunc==FUNC_EXIST || eFunc==FUNC_POLY2D || eFunc==FUNC_GEOPOLY2D || eFunc==FUNC_REGEX || eFunc==FUNC_LEVENSHTEIN ) )
 	{
 		m_sParserError.SetSprintf ( "%s() arguments can not be string", sFuncName );
 		return -1;
@@ -8948,7 +9084,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 	case FUNC_MINUTE:
 	case FUNC_SECOND:
 		assert ( iArg>=0 );
-		if ( m_dNodes[iArg].m_eRetType!=SPH_ATTR_INTEGER && m_dNodes[iArg].m_eRetType!=SPH_ATTR_TIMESTAMP )
+		if ( m_dNodes[iArg].m_eRetType!=SPH_ATTR_INTEGER && m_dNodes[iArg].m_eRetType!=SPH_ATTR_TIMESTAMP && m_dNodes[iArg].m_eRetType!=SPH_ATTR_BIGINT)
 		{
 			m_sParserError.SetSprintf ( "%s() argument must be integer or timestamp", sFuncName );
 			return -1;
@@ -9046,6 +9182,20 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 			return -1;
 		}
 		break;
+    case FUNC_UPPER:
+        if ( dRetTypes.GetLength()!=1 )
+        {
+            m_sParserError.SetSprintf ( "%s() called with %d args, but 1 arg expected", sFuncName
+                    , dRetTypes.GetLength () );
+            return -1;
+        }
+
+        if ( dRetTypes[0]!=SPH_ATTR_STRING && dRetTypes[0]!=SPH_ATTR_STRINGPTR && dRetTypes[0]!=SPH_ATTR_JSON && dRetTypes[0]!=SPH_ATTR_JSON_FIELD )
+        {
+            m_sParserError.SetSprintf ( "%s() argument 1 must be string or json", sFuncName );
+            return -1;
+        }
+        break;
 	case FUNC_GEODIST: // check GEODIST args count, and that optional arg 5 is a map argument
 		if ( dRetTypes.GetLength ()>5 )
 		{

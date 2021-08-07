@@ -978,6 +978,7 @@ struct CSphAttrLocator
 		m_iBitOffset = -1;
 		m_iBitCount = -1;
 		m_iBlobAttrId = -1;
+		m_iBlobRowOffset = 1;
 		m_nBlobAttrs = 0;
 		m_bDynamic = true;
 	}

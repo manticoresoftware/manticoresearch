@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2020, Manticore Software LTD (http://manticoresearch.com)
+// Copyright (c) 2017-2021, Manticore Software LTD (http://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -35,7 +35,7 @@ struct CSphMatchComparatorState
 	bool				UsesBitfields() const;
 	void				FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema, bool bRemapKeyparts );
 
-	inline int CmpStrings ( const CSphMatch & a, const CSphMatch & b, int iAttr ) const
+	FORCE_INLINE int CmpStrings ( const CSphMatch & a, const CSphMatch & b, int iAttr ) const
 	{
 		assert ( iAttr>=0 && iAttr<MAX_ATTRS );
 		assert ( m_eKeypart[iAttr]==SPH_KEYPART_STRING || m_eKeypart[iAttr]==SPH_KEYPART_STRINGPTR );

@@ -298,7 +298,7 @@ CALL PQ ('pq_filter1', ('{"j":{"test":"asd"}, "id":101}', '{"j":{"test":"best"},
     </sphinxql>
 </repeat>
 <sphinxql>
-select * from pq limit 20, 5;
+select * from pq order by id asc limit 20, 5;
 select * from pq limit 1020, 5 option max_matches=1100;
 </sphinxql>
 

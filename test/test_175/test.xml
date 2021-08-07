@@ -276,7 +276,7 @@ create table table_quorum_tail_2
 			REPLACE INTO rt ( id, content ) VALUES ( <doc/>, 'dummy text is going here' );</sphinxql></repeat>
 
 	<sphinxql>
-		select id from rt limit 0,2;
+		select id from rt order by id asc limit 0,2;
 		show meta;
 		select id from rt where match ( 'basketball' );
 		show meta;

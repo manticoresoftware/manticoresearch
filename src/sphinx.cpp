@@ -12291,7 +12291,7 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext& tCtx, const CSphQuery & tQ
 				// so we can avoid the simple 'first-element' assertion
 				if_const ( RANDOMIZE )
 				{
-					if ( !bRand && pSorter->m_bRandomize )
+					if ( !bRand && pSorter->IsRandom() )
 					{
 						bRand = true;
 						tMatch.m_iWeight = ( sphRand() & 0xffff ) * iIndexWeight;
@@ -12305,8 +12305,10 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext& tCtx, const CSphQuery & tQ
 
 				if_const ( USE_FACTORS )
 				{
-					pRanker->ExtraData ( EXTRA_SET_MATCHPUSHED, (void**)&( pSorter->m_iJustPushed) );
-					pRanker->ExtraData ( EXTRA_SET_MATCHPOPPED, (void**)&( pSorter->m_dJustPopped) );
+					RowID_t tJustPushed = pSorter->GetJustPushed();
+					VecTraits_T<RowID_t> dJustPopped = pSorter->GetJustPopped();
+					pRanker->ExtraData ( EXTRA_SET_MATCHPUSHED, (void**)&tJustPushed );
+					pRanker->ExtraData ( EXTRA_SET_MATCHPOPPED, (void**)&dJustPopped );
 				}
 			}
 
@@ -12882,7 +12884,7 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	}
 
 	// prepare to work them rows
-	bool bRandomize = dSorters[0]->m_bRandomize;
+	bool bRandomize = dSorters[0]->IsRandom();
 
 	CSphMatch tMatch;
 	tMatch.Reset ( tMaxSorterSchema.GetDynamicSize() );
@@ -15810,7 +15812,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	pRanker->ExtraData ( EXTRA_SET_BLOBPOOL, (void**)&pBlobPool );
 
 	int iMatchPoolSize = 0;
-	dSorters.Apply ( [&iMatchPoolSize] ( const ISphMatchSorter * p ) { iMatchPoolSize += p->m_iMatchCapacity; } );
+	dSorters.Apply ( [&iMatchPoolSize] ( const ISphMatchSorter * p ) { iMatchPoolSize += p->GetMatchCapacity(); } );
 
 	pRanker->ExtraData ( EXTRA_SET_POOL_CAPACITY, (void**)&iMatchPoolSize );
 
@@ -15854,7 +15856,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	}
 
 	bool bHaveRandom = false;
-	dSorters.Apply ( [&bHaveRandom] ( const ISphMatchSorter * p ) { bHaveRandom |= p->m_bRandomize; } );
+	dSorters.Apply ( [&bHaveRandom] ( const ISphMatchSorter * p ) { bHaveRandom |= p->IsRandom(); } );
 
 	bool bUseFactors = !!( tCtx.m_uPackedFactorFlags & SPH_FACTOR_ENABLE );
 	bool bHaveDead = m_tDeadRowMap.HasDead();
@@ -23561,7 +23563,7 @@ std::pair<int, int> GetMaxSchemaIndexAndMatchCapacity ( const VecTraits_T<ISphMa
 	int iMatchPoolSize = 0;
 	ARRAY_FOREACH ( i, dSorters )
 	{
-		iMatchPoolSize += dSorters[i]->m_iMatchCapacity;
+		iMatchPoolSize += dSorters[i]->GetMatchCapacity();
 		if ( dSorters[i]->GetSchema ()->GetAttrsCount ()>iMaxSchemaSize )
 		{
 			iMaxSchemaSize = dSorters[i]->GetSchema ()->GetAttrsCount ();

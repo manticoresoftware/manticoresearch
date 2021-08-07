@@ -507,19 +507,23 @@ inline double sqr ( double v ) { return v*v;}
 inline float fsqr ( float v ) { return v*v; }
 
 #ifndef FORCE_INLINE
-#  ifdef _MSC_VER
-#    define FORCE_INLINE __forceinline
-#  else
-#    if defined (__cplusplus) || defined (__STDC_VERSION__) && __STDC_VERSION__ >= 199901L   /* C99 */
-#      ifdef __GNUC__
-#        define FORCE_INLINE inline __attribute__((always_inline))
-#      else
-#        define FORCE_INLINE inline
-#      endif
-#    else
-#      define FORCE_INLINE
-#    endif
-#  endif
+	#ifndef NDEBUG
+		#define FORCE_INLINE inline
+	#else
+		#ifdef _MSC_VER
+			#define FORCE_INLINE __forceinline
+		#else
+			#if defined (__cplusplus) || defined (__STDC_VERSION__) && __STDC_VERSION__ >= 199901L   /* C99 */
+				#ifdef __GNUC__
+					#define FORCE_INLINE inline __attribute__((always_inline))
+				#else
+					#define FORCE_INLINE inline
+				#endif
+			#else
+				#define FORCE_INLINE
+			#endif
+		#endif
+	#endif
 #endif
 
 //////////////////////////////////////////////////////////////////////////

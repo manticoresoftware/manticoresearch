@@ -74,6 +74,7 @@ public:
 	uint32_t	AdvanceTo ( uint32_t tRowID ) override { m_tRowID = tRowID; return tRowID; }
 
 	int64_t		Get() override						{ assert ( 0 && "Unsupported function" ); return 0; }
+	void		Fetch ( const columnar::Span_T<uint32_t> & dRowIDs, columnar::Span_T<int64_t> & dValues ) override { assert ( 0 && "Unsupported function" ); }
 
 	int			Get ( const uint8_t * & pData ) override { assert ( 0 && "Unsupported function" ); return 0; }
 	uint8_t *	GetPacked() override				{ assert ( 0 && "Unsupported function" ); return 0; }
@@ -95,10 +96,23 @@ public:
 			ColumnarIterator_Int_T ( const CSphVector<T> & dValues ) : m_dValues ( dValues ) {}
 
 	int64_t	Get() override { return m_dValues[m_tRowID]; }
+	void	Fetch ( const columnar::Span_T<uint32_t> & dRowIDs, columnar::Span_T<int64_t> & dValues ) override;
 
 private:
 	const CSphVector<T> & m_dValues;
 };
+
+template<typename T>
+void ColumnarIterator_Int_T<T>::Fetch ( const columnar::Span_T<uint32_t> & dRowIDs, columnar::Span_T<int64_t> & dValues )
+{
+	uint32_t * pRowID = dRowIDs.begin();
+	uint32_t * pRowIDEnd = dRowIDs.end();
+	int64_t * pValue = dValues.begin();
+	while ( pRowID<pRowIDEnd )
+		*pValue++ = m_dValues[*pRowID++];
+}
+
+/////////////////////////////////////////////////////////////////////
 
 template<typename T>
 class ColumnarAttr_Int_T : public ColumnarAttrRT_c

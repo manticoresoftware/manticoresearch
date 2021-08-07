@@ -6585,7 +6585,7 @@ static bool SetupFilters ( const CSphQuery & tQuery, const ISphSchema * pSchema,
 void PerformFullScan ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks, int iMaxDynamicSize, int iIndexWeight, int iStride, int iCutoff, int64_t tmMaxTimer, QueryProfile_c* pProfiler,
 		CSphQueryContext & tCtx, VecTraits_T<ISphMatchSorter*> & dSorters, CSphString & sWarning )
 {
-	bool bRandomize = dSorters[0]->m_bRandomize;
+	bool bRandomize = dSorters[0]->IsRandom();
 
 	SwitchProfile ( pProfiler, SPH_QSTATE_FULLSCAN );
 
@@ -6695,7 +6695,7 @@ static bool DoFullScanQuery ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 void PerformFullTextSearch ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks, RtQwordSetup_t & tTermSetup, ISphRanker * pRanker, int iIndexWeight, int iCutoff, QueryProfile_c * pProfiler,
 		CSphQueryContext & tCtx, VecTraits_T<ISphMatchSorter*> & dSorters )
 {
-	bool bRandomize = dSorters[0]->m_bRandomize;
+	bool bRandomize = dSorters[0]->IsRandom();
 	// query matching
 	ARRAY_FOREACH ( iSeg, dRamChunks )
 	{
@@ -6763,8 +6763,10 @@ void PerformFullTextSearch ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks, 
 
 					if ( tCtx.m_uPackedFactorFlags & SPH_FACTOR_ENABLE )
 					{
-						pRanker->ExtraData ( EXTRA_SET_MATCHPUSHED, (void**)&(pSorter->m_iJustPushed) );
-						pRanker->ExtraData ( EXTRA_SET_MATCHPOPPED, (void**)&(pSorter->m_dJustPopped) );
+						RowID_t tJustPushed = pSorter->GetJustPushed();
+						VecTraits_T<RowID_t> dJustPopped = pSorter->GetJustPopped();
+						pRanker->ExtraData ( EXTRA_SET_MATCHPUSHED, (void**)&tJustPushed );
+						pRanker->ExtraData ( EXTRA_SET_MATCHPOPPED, (void**)&dJustPopped );
 					}
 				}
 

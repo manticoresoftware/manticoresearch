@@ -629,7 +629,7 @@ TEST_F ( RT, SendVsMerge )
 	tResult.m_tSchema = *pSorter->GetSchema ();
 
 	auto & tOneRes = tResult.m_dResults.First ();
-	ASSERT_EQ ( tResult.GetLength (), 350 );
+	ASSERT_EQ ( tResult.GetLength (), 20 );
 	for ( int i = 0; i<tResult.GetLength (); ++i )
 	{
 		const RowID_t uID = tOneRes.m_dMatches[i].m_tRowID;

@@ -70,12 +70,12 @@ index test_rt
 { "insert" : { "index" : "test_rt", "id" :10, "doc": { "int_col" :10, "flt_col" :10.10,"content" : "bulk doc ten" } } }
 </query>
 
-<query endpoint="json/search">{ "index": "test_rt", "query": { "match_all": {} } } }</query>
+<query endpoint="json/search">{ "index": "test_rt", "query": { "match_all": {} }, "sort": [ "id" ] } }</query>
 
-<query endpoint="json/search">{ "index": "test_rt", "limit": 5, "query": { "match_all": {} } } }</query>
+<query endpoint="json/search">{ "index": "test_rt", "limit": 5, "query": { "match_all": {} }, "sort": [ "id" ] } }</query>
 <query endpoint="json/search">{ "index": "test_rt", "limit": 5, "offset": 5, "query": { "match_all": {} } } }</query>
 
-<query endpoint="json/search">{ "index": "test_rt", "size": 5, "query": { "match_all": {} } } }</query>
+<query endpoint="json/search">{ "index": "test_rt", "size": 5, "query": { "match_all": {} }, "sort": [ "id" ] } }</query>
 <query endpoint="json/search">{ "index": "test_rt", "size": 5, "from": 5, "query": { "match_all": {} } } }</query>
 
 

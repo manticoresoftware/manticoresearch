@@ -1993,7 +1993,7 @@ bool PercolateIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery & 
 	StringBuilder_c sFilters;
 
 	// prepare to work them rows
-	bool bRandomize = dSorters[0]->m_bRandomize;
+	bool bRandomize = dSorters[0]->IsRandom();
 
 	CSphMatch tMatch;
 	// note: we reserve dynamic area in match using max sorter schema, but then fill it by locators from index schema.

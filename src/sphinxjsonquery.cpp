@@ -732,7 +732,10 @@ static bool ParseLimits ( const JsonObj_c & tRoot, CSphQuery & tQuery, CSphStrin
 		return false;
 
 	if ( tMaxMatches )
+	{
 		tQuery.m_iMaxMatches = (int)tMaxMatches.IntVal();
+		tQuery.m_bExplicitMaxMatches = true;
+	}
 
 	return true;
 }

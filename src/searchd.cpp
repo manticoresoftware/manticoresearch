@@ -2389,6 +2389,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	sphColumnToLowercase ( const_cast<char *>( tQuery.m_sGroupBy.cstr() ) );
 
 	tQuery.m_iMaxMatches = tReq.GetInt ();
+	tQuery.m_bExplicitMaxMatches = tQuery.m_iMaxMatches!=DEFAULT_MAX_MATCHES; // fixme?
 	tQuery.m_sGroupSortBy = tReq.GetString ();
 	tQuery.m_iCutoff = tReq.GetInt();
 	tQuery.m_iRetryCount = tReq.GetInt ();
@@ -4796,14 +4797,11 @@ int64_t CalcPredictedTimeMsec ( const CSphQueryResultMeta & tMeta )
 
 int GetMaxMatches ( int iQueryMaxMatches, const CSphIndex * pIndex )
 {
-	if ( iQueryMaxMatches>DEFAULT_MAX_MATCHES )
-	{
-		int64_t iDocs = Min ( (int)INT_MAX, pIndex->GetStats().m_iTotalDocuments ); // clamp to int max
-		return Min ( iQueryMaxMatches, Max ( iDocs, DEFAULT_MAX_MATCHES ) ); // do not want 0 sorter and sorter longer than query.max_matches
-	} else
-	{
+	if ( iQueryMaxMatches<=DEFAULT_MAX_MATCHES )
 		return iQueryMaxMatches;
-	}
+
+	int64_t iDocs = Min ( (int)INT_MAX, pIndex->GetStats().m_iTotalDocuments ); // clamp to int max
+	return Min ( iQueryMaxMatches, Max ( iDocs, DEFAULT_MAX_MATCHES ) ); // do not want 0 sorter and sorter longer than query.max_matches
 }
 
 

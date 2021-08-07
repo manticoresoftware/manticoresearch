@@ -999,8 +999,7 @@ struct CSphAttrLocator
 };
 
 
-/// getter
-inline SphAttr_t sphGetRowAttr ( const CSphRowitem * pRow, const CSphAttrLocator & tLoc )
+FORCE_INLINE SphAttr_t sphGetRowAttr ( const CSphRowitem * pRow, const CSphAttrLocator & tLoc )
 {
 	assert(pRow);
 	assert ( tLoc.m_iBitCount );
@@ -1024,8 +1023,7 @@ inline SphAttr_t sphGetRowAttr ( const CSphRowitem * pRow, const CSphAttrLocator
 }
 
 
-/// setter
-inline void sphSetRowAttr ( CSphRowitem * pRow, const CSphAttrLocator & tLoc, SphAttr_t uValue )
+FORCE_INLINE void sphSetRowAttr ( CSphRowitem * pRow, const CSphAttrLocator & tLoc, SphAttr_t uValue )
 {
 	assert(pRow);
 	assert ( tLoc.m_iBitCount );
@@ -1208,7 +1206,7 @@ public:
 	}
 
 	/// integer getter
-	SphAttr_t GetAttr ( const CSphAttrLocator & tLoc ) const
+	FORCE_INLINE SphAttr_t GetAttr ( const CSphAttrLocator & tLoc ) const
 	{
 		// m_pRowpart[tLoc.m_bDynamic] is 30% faster on MSVC 2005
 		// same time on gcc 4.x though, ~1 msec per 1M calls, so lets avoid the hassle for now
@@ -1221,7 +1219,7 @@ public:
 	float GetAttrFloat ( const CSphAttrLocator & tLoc ) const;
 
 	/// integer setter
-	void SetAttr ( const CSphAttrLocator & tLoc, SphAttr_t uValue ) const
+	FORCE_INLINE void SetAttr ( const CSphAttrLocator & tLoc, SphAttr_t uValue ) const
 	{
 		assert ( tLoc.m_bDynamic );
 		assert ( tLoc.GetMaxRowitem() < (int)m_pDynamic[-1] );
@@ -2277,6 +2275,7 @@ struct CSphQuery
 	CSphString		m_sSortBy;			///< attribute to sort by
 	int64_t			m_iRandSeed = -1;	///< random seed for ORDER BY RAND(), -1 means do not set
 	int				m_iMaxMatches = DEFAULT_MAX_MATCHES;	///< max matches to retrieve, default is 1000. more matches use more memory and CPU time to hold and sort them
+	bool			m_bExplicitMaxMatches = false; ///< did we specify the max_matches explicitly?
 
 	bool			m_bSortKbuffer = false;		///< whether to use PQ or K-buffer sorting algorithm
 	bool			m_bZSlist = false;			///< whether the ranker has to fetch the zonespanlist with this query

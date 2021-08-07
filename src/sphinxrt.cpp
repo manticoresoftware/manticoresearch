@@ -897,16 +897,8 @@ public:
 	int					KillMulti ( const VecTraits_T<DocID_t> & dKlist ) final;
 	bool				IsAlive ( DocID_t tDocID ) const final;
 
-	int					Build ( const CSphVector<CSphSource*> & , int , int ) final { return 0; }
-	bool				Merge ( CSphIndex * , const VecTraits_T<CSphFilterSettings> &, bool ) final { return false; }
-
 	bool				Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings ) final;
-	void				Dealloc () final {}
 	void				Preread () final;
-	void				SetBase ( const char * ) final {}
-	bool				Rename ( const char * ) final { return true; }
-	bool				Lock () final { return true; }
-	void				Unlock () final {}
 	void				PostSetup() final;
 	bool				IsRT() const final { return true; }
 
@@ -917,10 +909,6 @@ public:
 	bool				AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, bool bColumnar, CSphString & sError ) final;
 	bool				AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD uFieldFlags, CSphString & sError ) final;
 
-	void				DebugDumpHeader ( FILE * , const char * , bool ) final {}
-	void				DebugDumpDocids ( FILE * ) final {}
-	void				DebugDumpHitlist ( FILE * , const char * , bool ) final {}
-	void				DebugDumpDict ( FILE * ) final {}
 	int					DebugCheck ( FILE * fp ) final;
 #if _WIN32
 #pragma warning(pop)
@@ -932,7 +920,6 @@ public:
 	void				GetStatus ( CSphIndexStatus* ) const final;
 
 	bool				MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const final;
-	bool				MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult* pResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const final;
 	void				DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, bool bFillOnly, CSphString * pError, const SphChunkGuard_t & tGuard ) const;
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, CSphString * pError ) const final;
 	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const final;
@@ -6967,19 +6954,6 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	tMeta.m_iQueryTime = int ( ( sphMicroTimer()-tmQueryStart )/1000 );
 	tMeta.m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
 	return true;
-}
-
-bool RtIndex_c::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult* pResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const
-{
-	// FIXME! OPTIMIZE! implement common subtree cache here
-	bool bResult = false;
-	for ( int i=0; i<iQueries; ++i )
-		if ( MultiQuery ( pResults[i], pQueries[i], { ppSorters+i, 1}, tArgs ) )
-			bResult = true;
-		else
-			pResults[i].m_pMeta->m_iMultiplier = -1; // -1 means 'error'
-
-	return bResult;
 }
 
 

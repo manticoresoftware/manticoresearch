@@ -278,7 +278,7 @@ public:
 			~ColumnarProxySorter_T() override;
 
 	bool	Push ( const CSphMatch & tEntry ) final							{ return PushMatch(tEntry); }
-	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) override	{ dMatches.for_each ( [this]( auto & tMatch ){ if ( tMatch.m_tRowID!=INVALID_ROWID ) this->PushMatch(tMatch); } ); }
+	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) override	{ assert ( 0 && "No batch push to proxy sorter" ); }
 
 	bool	IsGroupby() const override										{ return m_pSorter->IsGroupby(); }
 	bool	PushGrouped ( const CSphMatch & tEntry, bool bNewSet ) override	{ return m_pSorter->PushGrouped ( tEntry, bNewSet ); }
@@ -342,19 +342,19 @@ private:
 
 	FORCE_INLINE bool PushMatch ( const CSphMatch & tEntry );
 	void	PushCollectedToSorter();
-	bool	FetchColumnarValues ( VecTraits_T<CSphMatch> & dMatches );
+	void	FetchColumnarValues ( VecTraits_T<CSphMatch> & dMatches );
 	void	SpawnIterators();
 	void	DoSetSchema ( const ISphSchema * pSchema );
-	bool	FetchValuesIteratorGeneric ( VecTraits_T<CSphMatch> & dMatches );
-	bool	FetchValuesIterator1Single ( VecTraits_T<CSphMatch> & dMatches );
-	bool	FetchValuesMultiIterator ( VecTraits_T<CSphMatch> & dMatches );
+	void	FetchValuesIteratorGeneric ( VecTraits_T<CSphMatch> & dMatches );
+	void	FetchValuesIterator1Single ( VecTraits_T<CSphMatch> & dMatches );
+	void	FetchValuesMultiIterator ( VecTraits_T<CSphMatch> & dMatches );
 
 	// these are unrolled versions of FetchValuesMultiIterator
-	bool	FetchValuesIterator1 ( VecTraits_T<CSphMatch> & dMatches );
-	bool	FetchValuesIterator2 ( VecTraits_T<CSphMatch> & dMatches );
-	bool	FetchValuesIterator3 ( VecTraits_T<CSphMatch> & dMatches );
-	bool	FetchValuesIterator4 ( VecTraits_T<CSphMatch> & dMatches );
-	bool	FetchValuesIterator5 ( VecTraits_T<CSphMatch> & dMatches );
+	void	FetchValuesIterator1 ( VecTraits_T<CSphMatch> & dMatches );
+	void	FetchValuesIterator2 ( VecTraits_T<CSphMatch> & dMatches );
+	void	FetchValuesIterator3 ( VecTraits_T<CSphMatch> & dMatches );
+	void	FetchValuesIterator4 ( VecTraits_T<CSphMatch> & dMatches );
+	void	FetchValuesIterator5 ( VecTraits_T<CSphMatch> & dMatches );
 };
 
 template <typename GENERIC, typename COMP, typename SINGLE>
@@ -550,8 +550,8 @@ void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::PushCollectedToSorter()
 		return;
 
 	VecTraits_T<CSphMatch> dMatches = { pData, iNumMatches };
-	if ( FetchColumnarValues(dMatches) )
-		m_pSorter->Push(dMatches);
+	FetchColumnarValues(dMatches);
+	m_pSorter->Push(dMatches);
 
 	m_pCurMatch = m_dData.Begin();
 	m_pCurRowID = m_dRowIDs.Begin();
@@ -589,7 +589,7 @@ void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::SpawnIterators()
 }
 
 template <typename GENERIC, typename COMP, typename SINGLE>
-bool ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIterator1Single ( VecTraits_T<CSphMatch> & dMatches )
+void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIterator1Single ( VecTraits_T<CSphMatch> & dMatches )
 {
 	IteratorWithLocator_t & tIterator = m_dIterators[0];
 
@@ -620,18 +620,18 @@ bool ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIterator1Single ( Ve
 		}
 
 		m_iPushed += iNumMatches;
-		return iNumMatches>0;
 	}
+	else
+	{
+		for ( auto & tMatch : dMatches )
+			sphSetRowAttr ( tMatch.m_pDynamic, tIterator.m_tLocator, *pValue++ );
 
-	for ( auto & tMatch : dMatches )
-		sphSetRowAttr ( tMatch.m_pDynamic, tIterator.m_tLocator, *pValue++ );
-
-	m_iPushed += dMatches.GetLength();
-	return true;
+		m_iPushed += dMatches.GetLength();
+	}
 }
 
 template <typename GENERIC, typename COMP, typename SINGLE>
-bool ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIterator1 ( VecTraits_T<CSphMatch> & dMatches )
+void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIterator1 ( VecTraits_T<CSphMatch> & dMatches )
 {
 	IteratorWithLocator_t & tIt = m_dIterators[0];
 
@@ -666,18 +666,19 @@ bool ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIterator1 ( VecTrait
 		}
 
 		m_iPushed += iNumMatches;
-		return iNumMatches>0;
+		return;
 	}
+	else
+	{
+		for ( auto & tMatch : dMatches )
+			sphSetRowAttr ( tMatch.m_pDynamic, tIt.m_tLocator, *pValue++ );
 
-	for ( auto & tMatch : dMatches )
-		sphSetRowAttr ( tMatch.m_pDynamic, tIt.m_tLocator, *pValue++ );
-
-	m_iPushed += dMatches.GetLength();
-	return true;
+		m_iPushed += dMatches.GetLength();
+	}
 }
 
 template <typename GENERIC, typename COMP, typename SINGLE>
-bool ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIterator2 ( VecTraits_T<CSphMatch> & dMatches )
+void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIterator2 ( VecTraits_T<CSphMatch> & dMatches )
 {
 	IteratorWithLocator_t & tIt0 = m_dIterators[0];
 	IteratorWithLocator_t & tIt1 = m_dIterators[1];
@@ -723,7 +724,7 @@ bool ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIterator2 ( VecTrait
 		}
 
 		m_iPushed += iNumMatches;
-		return iNumMatches>0;
+		return;
 	}
 
 	ARRAY_FOREACH ( iMatch, dMatches )
@@ -734,11 +735,10 @@ bool ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIterator2 ( VecTrait
 	}
 
 	m_iPushed += dMatches.GetLength();
-	return true;
 }
 
 template <typename GENERIC, typename COMP, typename SINGLE>
-bool ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIterator3 ( VecTraits_T<CSphMatch> & dMatches )
+void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIterator3 ( VecTraits_T<CSphMatch> & dMatches )
 {
 	IteratorWithLocator_t & tIt0 = m_dIterators[0];
 	IteratorWithLocator_t & tIt1 = m_dIterators[1];
@@ -792,7 +792,7 @@ bool ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIterator3 ( VecTrait
 		}
 
 		m_iPushed += iNumMatches;
-		return iNumMatches>0;
+		return;
 	}
 
 	ARRAY_FOREACH ( iMatch, dMatches )
@@ -804,11 +804,10 @@ bool ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIterator3 ( VecTrait
 	}
 
 	m_iPushed += dMatches.GetLength();
-	return true;
 }
 
 template <typename GENERIC, typename COMP, typename SINGLE>
-bool ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIterator4 ( VecTraits_T<CSphMatch> & dMatches )
+void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIterator4 ( VecTraits_T<CSphMatch> & dMatches )
 {
 	IteratorWithLocator_t & tIt0 = m_dIterators[0];
 	IteratorWithLocator_t & tIt1 = m_dIterators[1];
@@ -869,7 +868,7 @@ bool ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIterator4 ( VecTrait
 		}
 
 		m_iPushed += iNumMatches;
-		return iNumMatches>0;
+		return;
 	}
 
 	ARRAY_FOREACH ( iMatch, dMatches )
@@ -882,11 +881,10 @@ bool ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIterator4 ( VecTrait
 	}
 
 	m_iPushed += dMatches.GetLength();
-	return true;
 }
 
 template <typename GENERIC, typename COMP, typename SINGLE>
-bool ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIterator5 ( VecTraits_T<CSphMatch> & dMatches )
+void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIterator5 ( VecTraits_T<CSphMatch> & dMatches )
 {
 	IteratorWithLocator_t & tIt0 = m_dIterators[0];
 	IteratorWithLocator_t & tIt1 = m_dIterators[1];
@@ -954,7 +952,7 @@ bool ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIterator5 ( VecTrait
 		}
 
 		m_iPushed += iNumMatches;
-		return iNumMatches>0;
+		return;
 	}
 
 	ARRAY_FOREACH ( iMatch, dMatches )
@@ -968,11 +966,10 @@ bool ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIterator5 ( VecTrait
 	}
 
 	m_iPushed += dMatches.GetLength();
-	return true;
 }
 
 template <typename GENERIC, typename COMP, typename SINGLE>
-bool ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesMultiIterator ( VecTraits_T<CSphMatch> & dMatches )
+void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesMultiIterator ( VecTraits_T<CSphMatch> & dMatches )
 {
 	int iNumValues = dMatches.GetLength();
 	columnar::Span_T<uint32_t> dRowIDs ( m_dRowIDs.Begin(), iNumValues );
@@ -1022,7 +1019,7 @@ bool ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesMultiIterator ( VecT
 		}
 
 		m_iPushed += iNumMatches;
-		return iNumMatches>0;
+		return;
 	}
 
 	ARRAY_FOREACH ( iMatch, dMatches )
@@ -1037,11 +1034,10 @@ bool ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesMultiIterator ( VecT
 	}
 
 	m_iPushed += dMatches.GetLength();
-	return true;
 }
 
 template <typename GENERIC, typename COMP, typename SINGLE>
-bool ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIteratorGeneric ( VecTraits_T<CSphMatch> & dMatches )
+void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIteratorGeneric ( VecTraits_T<CSphMatch> & dMatches )
 {
 	for ( auto & i : m_dIterators )
 	{
@@ -1069,30 +1065,34 @@ bool ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIteratorGeneric ( Ve
 		}
 
 		m_iPushed += iNumMatches;
-		return iNumMatches>0;
 	}
-
-	m_iPushed += dMatches.GetLength();
-	return true;
+	else
+		m_iPushed += dMatches.GetLength();
 }
 
 template <typename GENERIC, typename COMP, typename SINGLE>
-bool ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchColumnarValues ( VecTraits_T<CSphMatch> & dMatches )
+void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchColumnarValues ( VecTraits_T<CSphMatch> & dMatches )
 {
 	if ( !m_iFastPathAttrs )
-		return FetchValuesIteratorGeneric(dMatches);
+	{
+		FetchValuesIteratorGeneric(dMatches);
+		return;
+	}
 
 	if ( m_iFastPathAttrs==1 && m_iFastPathAttrs==m_dIterators.GetLength() )
-		return FetchValuesIterator1Single(dMatches);
+	{
+		FetchValuesIterator1Single(dMatches);
+		return;
+	}
 
 	switch ( m_dIterators.GetLength() )
 	{
-	case 1:		return FetchValuesIterator1(dMatches);
-	case 2:		return FetchValuesIterator2(dMatches);
-	case 3:		return FetchValuesIterator3(dMatches);
-	case 4:		return FetchValuesIterator4(dMatches);
-	case 5:		return FetchValuesIterator5(dMatches);
-	default:	return FetchValuesMultiIterator(dMatches);
+	case 1:		FetchValuesIterator1(dMatches); break;
+	case 2:		FetchValuesIterator2(dMatches); break;
+	case 3:		FetchValuesIterator3(dMatches); break;
+	case 4:		FetchValuesIterator4(dMatches); break;
+	case 5:		FetchValuesIterator5(dMatches); break;
+	default:	FetchValuesMultiIterator(dMatches); break;
 	}
 }
 

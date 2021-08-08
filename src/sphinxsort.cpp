@@ -667,6 +667,8 @@ public:
 		for ( auto & i : dMatches )
 			if ( i.m_tRowID!=INVALID_ROWID )
 				PushT ( i, [this] ( CSphMatch & tTrg, const CSphMatch & tMatch ) { m_pSchema->CloneMatch ( tTrg, tMatch ); } );
+			else
+				m_iTotal++;
 	}
 
 	bool	PushGrouped ( const CSphMatch &, bool ) final					{ assert(0); return false; }
@@ -904,6 +906,8 @@ public:
 		for ( const auto & i : dMatches )
 			if ( i.m_tRowID!=INVALID_ROWID )
 				PushT ( i, [this] ( CSphMatch & tTrg, const CSphMatch & tMatch ) { m_pSchema->CloneMatch ( tTrg, tMatch ); } );
+			else
+				m_iTotal++;
 	}
 
 	bool	PushGrouped ( const CSphMatch &, bool ) final	{ assert(0); return false; }
@@ -1139,6 +1143,8 @@ public:
 		for ( const auto & i : dMatches )
 			if ( i.m_tRowID!=INVALID_ROWID )
 				PushMatch(i);
+			else
+				m_iTotal++;
 	}
 
 	bool				PushGrouped ( const CSphMatch &, bool ) final { assert(0); return false; }
@@ -1283,6 +1289,8 @@ public:
 		for ( const auto & i : dMatches )
 			if ( i.m_tRowID!=INVALID_ROWID )
 				PushMatch(i);
+			else
+				m_iTotal++;
 	}
 
 	bool				PushGrouped ( const CSphMatch &, bool ) final { assert(0); return false; }
@@ -3167,13 +3175,7 @@ public:
 	{}
 
 	bool	Push ( const CSphMatch & tEntry ) override						{ return PushEx<false> ( tEntry, m_pGrouper->KeyFromMatch(tEntry), false ); }
-	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) override
-	{
-		for ( const auto & i : dMatches )
-			if ( i.m_tRowID!=INVALID_ROWID )
-				PushEx<false> ( i, m_pGrouper->KeyFromMatch(i), false );
-	}
-
+	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) override	{ assert ( 0 && "Not supported in grouping"); }
 	bool	PushGrouped ( const CSphMatch & tEntry, bool ) override			{ return PushEx<true> ( tEntry, tEntry.GetAttr ( m_tLocGroupby ), false ); }
 	ISphMatchSorter * Clone() const override								{ return this->template CloneSorterT<MYTYPE>(); }
 
@@ -3622,13 +3624,7 @@ public:
 	int GetLength() override				{ return Min ( m_iUsed, m_iLimit );	}
 
 	bool	Push ( const CSphMatch & tEntry ) override						{ return PushEx<false> ( tEntry, m_pGrouper->KeyFromMatch(tEntry), false ); }
-	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) final
-	{
-		for ( const auto & i : dMatches )
-			if ( i.m_tRowID!=INVALID_ROWID )
-				PushEx<false> ( i, m_pGrouper->KeyFromMatch(i), false );
-	}
-
+	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) final	{ assert ( 0 && "Not supported in grouping"); }
 	bool	PushGrouped ( const CSphMatch & tEntry, bool bNewSet ) override	{ return PushEx<true> ( tEntry, tEntry.GetAttr ( m_tLocGroupby ), bNewSet ); }
 
 	/// store all entries into specified location in sorted order, and remove them from queue
@@ -4328,12 +4324,7 @@ public:
 	FWD_BASECTOR( CSphKBufferJsonGroupSorter )
 
 	bool	Push ( const CSphMatch & tEntry ) final							{ return PushMatch(tEntry); }
-	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) final
-	{
-		for ( const auto & i : dMatches )
-			if ( i.m_tRowID!=INVALID_ROWID )
-				PushMatch(i);
-	}
+	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) final	{ assert ( 0 && "Not supported in grouping"); }
 
 	/// add pre-grouped entry to the queue
 	bool PushGrouped ( const CSphMatch & tEntry, bool bNewSet ) override
@@ -4407,13 +4398,7 @@ public:
 	void	SetBlobPool ( const BYTE * pBlobPool ) final { BlobPool_c::SetBlobPool ( pBlobPool ); }
 
 	bool	Push ( const CSphMatch & tEntry ) final							{ return PushEx<false>(tEntry); }
-	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) final
-	{
-		for ( const auto & i : dMatches )
-			if ( i.m_tRowID!=INVALID_ROWID )
-				PushEx<false>(i);
-	}
-
+	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) final	{ assert ( 0 && "Not supported in grouping"); }
 	bool	PushGrouped ( const CSphMatch & tEntry, bool ) final			{ return PushEx<true>(tEntry); }
 
 	/// store all entries into specified location in sorted order, and remove them from queue

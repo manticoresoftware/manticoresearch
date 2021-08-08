@@ -932,9 +932,6 @@ public:
 	int					GetWordCheckoint() const { return m_iWordsCheckpoint; }
 	int					GetMaxCodepointLength() const { return m_iMaxCodepointLength; }
 
-	// TODO: implement me
-	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn ) final {}
-
 	bool				IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError ) const final;
 	bool				Reconfigure ( CSphReconfigureSetup & tSetup ) final;
 	int64_t				GetLastFlushTimestamp() const final;
@@ -995,7 +992,7 @@ private:
 	CSphVector<CSphIndex*>		m_dDiskChunks GUARDED_BY ( m_tChunkLock );
 	int							m_iLockFD = -1;
 	volatile bool				m_bOptimizing = false;
-	volatile bool				m_bOptimizeStop = false;
+	std::atomic<bool>			m_bOptimizeStop { false };
 	bool						m_bIndexDeleted = false;
 
 	int64_t						m_iSavedTID;
@@ -7305,9 +7302,9 @@ bool RtIndex_c::SaveAttributes ( CSphString & sError ) const
 struct SphOptimizeGuard_t : ISphNoncopyable
 {
 	CSphMutex &			m_tLock;
-	volatile bool &		m_bOptimizeStop;
+	std::atomic<bool>&	m_bOptimizeStop;
 
-	SphOptimizeGuard_t ( CSphMutex & tLock, volatile bool & bOptimizeStop )
+	SphOptimizeGuard_t ( CSphMutex & tLock, std::atomic<bool>& bOptimizeStop )
 		: m_tLock ( tLock )
 		, m_bOptimizeStop ( bOptimizeStop )
 	{
@@ -7772,8 +7769,10 @@ CSphIndex * RtIndex_c::CompressDiskChunk ( const CSphIndex * pChunk )
 	CSphString sCompressed;
 	sCompressed.SetSprintf ( "%s.tmp", pChunk->GetFilename() );
 
+	MergeCb_c tMonitor ( &m_bOptimizeStop );
+
 	// check forced exit after long operation
-	if ( m_bOptimizeStop || m_bSaveDisabled || sphInterrupted () )
+	if ( m_bSaveDisabled || tMonitor.NeedStop() )
 		return nullptr;
 
 	// need klist for merged chunk only after we got disk chunks and going to merge them
@@ -7782,8 +7781,8 @@ CSphIndex * RtIndex_c::CompressDiskChunk ( const CSphIndex * pChunk )
 	Verify ( m_tWriting.Unlock() );
 
 	// merge data to disk ( data is constant during that phase )
-	CSphIndexProgress tProgress;
-	if ( !sphMerge ( pChunk, pChunk, sError, tProgress, &m_bOptimizeStop, true ) )
+	CSphIndexProgress tProgress ( &tMonitor );
+	if ( !sphMerge ( pChunk, pChunk, sError, tProgress, true ) )
 	{
 		sphWarning ( "rt compress: index %s: failed to compress %s (error %s)",
 			m_sIndexName.cstr(), sOld.cstr(), sError.cstr() );
@@ -7791,7 +7790,7 @@ CSphIndex * RtIndex_c::CompressDiskChunk ( const CSphIndex * pChunk )
 	}
 
 	// check forced exit after long operation
-	if ( m_bOptimizeStop || m_bSaveDisabled || sphInterrupted () )
+	if ( m_bSaveDisabled || tMonitor.NeedStop() )
 		return nullptr;
 
 	auto fnFnameBuilder = GetIndexFilenameBuilder ();
@@ -8091,12 +8090,15 @@ bool RtIndex_c::SplitOneChunk ( int iChunk, const char* szUvarFilter )
 	m_dKillsWhileOptimizing.Reset ();
 	Verify ( m_tWriting.Unlock () );
 
+	MergeCb_c		  tMonitor ( &m_bOptimizeStop );
+	CSphIndexProgress tProgress ( &tMonitor );
+
 	// get 1-st chunk - one which doesn't match filter the filter
-	if ( !pOldChunk->Merge ( nullptr, dFilters, false ) )
+	if ( !pOldChunk->Merge ( nullptr, dFilters, false, tProgress ) )
 		return false;
 
 	// check forced exit after long operation
-	if ( m_bOptimizeStop || m_bSaveDisabled || sphInterrupted () )
+	if ( m_bSaveDisabled || tMonitor.NeedStop() )
 		return false;
 
 	// prealloc new (optimized) chunk
@@ -8139,15 +8141,15 @@ bool RtIndex_c::SplitOneChunk ( int iChunk, const char* szUvarFilter )
 	}
 
 	// check forced exit after long operation
-	if ( m_bOptimizeStop || m_bSaveDisabled || sphInterrupted () )
+	if ( m_bSaveDisabled || tMonitor.NeedStop() )
 		return false;
 
 	// prepare <I>ncluded chunk - one with included docs, it will be placed instead of original one
 	dFilter.m_bExclude = false;
-	pOldChunk->Merge ( nullptr, dFilters, false );
+	pOldChunk->Merge ( nullptr, dFilters, false, tProgress );
 
 	// check forced exit after long operation
-	if ( m_bOptimizeStop || m_bSaveDisabled || sphInterrupted () )
+	if ( m_bSaveDisabled || tMonitor.NeedStop() )
 		return false;
 
 	CSphScopedPtr<CSphIndex> pChunkI { PreallocDiskChunk ( sMerged.cstr(), pOldChunk->m_iChunk, pFilenameBuilder.Ptr (), dWarnings, sError, pOldChunk->GetName() ) };
@@ -8169,7 +8171,7 @@ bool RtIndex_c::SplitOneChunk ( int iChunk, const char* szUvarFilter )
 	}
 
 	// check forced exit after long operation
-	if ( m_bOptimizeStop || m_bSaveDisabled || sphInterrupted () )
+	if ( m_bSaveDisabled || tMonitor.NeedStop() )
 		return false;
 
 	// Writing lock - to wipe out writers
@@ -8234,7 +8236,8 @@ bool RtIndex_c::MergeTwoChunks ( int iA, int iB )
 	sMerged.SetSprintf ( "%s.tmp", pOldest->GetFilename() ); // fixme! implicit dependency (merging creates file suffixed .tmp, that is implicit here.
 
 	// check forced exit after long operation
-	if ( m_bOptimizeStop || m_bSaveDisabled || sphInterrupted ())
+	MergeCb_c tMonitor ( &m_bOptimizeStop );
+	if ( m_bSaveDisabled || tMonitor.NeedStop() )
 		return false;
 
 	// need klist for merged chunk only after we got disk chunks and going to merge them
@@ -8243,8 +8246,8 @@ bool RtIndex_c::MergeTwoChunks ( int iA, int iB )
 	Verify ( m_tWriting.Unlock() );
 
 	// merge data to disk ( data is constant during that phase )
-	CSphIndexProgress tProgress;
-	bool bMerged = sphMerge ( pOldest, pOlder, sError, tProgress, &m_bOptimizeStop, true );
+	CSphIndexProgress tProgress ( &tMonitor );
+	bool bMerged = sphMerge ( pOldest, pOlder, sError, tProgress, true );
 	if ( !bMerged )
 	{
 		sphWarning ( "rt optimize: index %s: failed to merge %s to %s (error %s)",
@@ -8253,7 +8256,7 @@ bool RtIndex_c::MergeTwoChunks ( int iA, int iB )
 	}
 
 	// check forced exit after long operation
-	if ( m_bOptimizeStop || m_bSaveDisabled || sphInterrupted ())
+	if ( m_bSaveDisabled || tMonitor.NeedStop() )
 		return false;
 
 	CreateFilenameBuilder_fn fnCreateFilenameBuilder = GetIndexFilenameBuilder ();
@@ -8278,7 +8281,7 @@ bool RtIndex_c::MergeTwoChunks ( int iA, int iB )
 		return false;
 	}
 	// check forced exit after long operation
-	if ( m_bOptimizeStop || m_bSaveDisabled || sphInterrupted ())
+	if ( m_bSaveDisabled || tMonitor.NeedStop() )
 		return false;
 
 	// lets rotate indexes
@@ -8290,7 +8293,7 @@ bool RtIndex_c::MergeTwoChunks ( int iA, int iB )
 		return false;
 	}
 
-	if ( m_bOptimizeStop || sphInterrupted ()) // protection
+	if ( tMonitor.NeedStop() ) // protection
 		return false;
 
 	// merged replaces recent chunk
@@ -8318,7 +8321,7 @@ bool RtIndex_c::MergeTwoChunks ( int iA, int iB )
 	Verify ( m_tChunkLock.Unlock() );
 	Verify ( m_tWriting.Unlock() );
 
-	if ( m_bOptimizeStop || sphInterrupted () )
+	if ( tMonitor.NeedStop() )
 	{
 		sphWarning ( "rt optimize: index %s: forced to shutdown, remove old index files manually '%s', '%s'",
 			m_sIndexName.cstr(), sOlder.cstr(), sOldest.cstr() );

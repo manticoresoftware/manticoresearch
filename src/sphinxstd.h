@@ -3297,6 +3297,34 @@ private:
 	};
 };
 
+// make percent honouring fixed-point floats
+// sprintf ( "%.2D", MakePercent (1.014,10,2) ) will print "10.14"
+template<typename NUM>
+int64_t PercentOf ( NUM tVal, NUM tBase, int iFloatDigits = 1 )
+{
+	NUM tMultiplier = 100;
+	switch ( iFloatDigits )
+	{
+	case 6:
+		tMultiplier *= 10;
+	case 5:
+		tMultiplier *= 10;
+	case 4:
+		tMultiplier *= 10;
+	case 3:
+		tMultiplier *= 10;
+	case 2:
+		tMultiplier *= 10;
+	case 1:
+		tMultiplier *= 10;
+	default: break;
+	}
+	if ( tBase )
+		return int64_t ( tVal * tMultiplier / tBase );
+	else
+		return int64_t ( tMultiplier );
+}
+
 struct BaseQuotation_t
 {
 	// represents char for quote

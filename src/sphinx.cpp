@@ -1386,10 +1386,10 @@ struct AttrMergeContext_t
 	columnar::Builder_i *			m_pColumnarBuilder = nullptr;
 
 	RowID_t &						m_tResultRowID;
-	volatile bool &					m_bLocalStop;
+	MergeCb_c & 					m_tMonitor;
 
 	AttrMergeContext_t ( const CSphIndex_VLN & tIndex,  const CSphVector<RowID_t> & dRowMap, AttrIndexBuilder_c & tMinMax, HistogramContainer_c & tHistograms, CSphVector<PlainOrColumnar_t> & dAttrsForHistogram,
-		CSphFixedVector<DocidRowidPair_t> & dDocidLookup, CSphWriter & tWriterSPA, RowID_t & tResultRowID, volatile bool & bLocalStop )
+			CSphFixedVector<DocidRowidPair_t> & dDocidLookup, CSphWriter & tWriterSPA, RowID_t & tResultRowID, MergeCb_c & tMonitor )
 		: m_tIndex ( tIndex )
 		, m_dRowMap ( dRowMap )
 		, m_tMinMax ( tMinMax )
@@ -1398,7 +1398,7 @@ struct AttrMergeContext_t
 		, m_dDocidLookup ( dDocidLookup )
 		, m_tWriterSPA ( tWriterSPA )
 		, m_tResultRowID ( tResultRowID )
-		, m_bLocalStop ( bLocalStop )
+		, m_tMonitor ( tMonitor )
 	{}
 };
 
@@ -1416,8 +1416,7 @@ public:
 	explicit			CSphIndex_VLN ( const char * szIndexName, const char * szFilename );
 						~CSphIndex_VLN() override;
 
-	int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer ) final;
-	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn pfnProgress ) final { m_tProgress.m_fnProgress = pfnProgress; }
+	int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer, CSphIndexProgress & tProgress ) final;
 
 	bool				LoadHeader ( const char * sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
 
@@ -1447,11 +1446,11 @@ public:
 	bool 				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const final;
 	void				GetSuggest ( const SuggestArgs_t & tArgs, SuggestResult_t & tRes ) const final;
 
-	bool				Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSettings> & dFilters, bool bSupressDstDocids ) final;
+	bool				Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSettings> & dFilters, bool bSupressDstDocids, CSphIndexProgress & tProgress ) final;
 
 	template <class QWORDDST, class QWORDSRC>
-	static bool			MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, const CSphVector<RowID_t> & dDstRows, const CSphVector<RowID_t> & dSrcRows, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, CSphIndexProgress & tProgress, volatile bool * pLocalStop );
-	static bool			DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, volatile bool * pLocalStop, bool bSrcSettings, bool bSupressDstDocids );
+	static bool			MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, const CSphVector<RowID_t> & dDstRows, const CSphVector<RowID_t> & dSrcRows, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, CSphIndexProgress & tProgress);
+	static bool			DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, bool bSrcSettings, bool bSupressDstDocids );
 	template <class QWORD>
 	static bool			DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, int iKillField );
 
@@ -1515,9 +1514,6 @@ private:
 	CSphFixedVector<int64_t>		m_dFieldLens;	///< total per-field lengths summed over entire indexed data, in tokens
 	CSphString						m_sKeepAttrs;			///< retain attributes of that index reindexing
 	StrVec_t						m_dKeepAttrs;
-
-private:
-	mutable CSphIndexProgress		m_tProgress;
 
 private:
 	int64_t						m_iDocinfo;				///< my docinfo cache size
@@ -1586,7 +1582,7 @@ private:
 
 	bool						RelocateBlock ( int iFile, BYTE * pBuffer, int iRelocationSize, SphOffset_t * pFileSize, CSphBin * pMinBin, SphOffset_t * pSharedOffset );
 
-	bool						SortDocidLookup ( int iFD, int nBlocks, int iMemoryLimit, int nLookupsInBlock, int nLookupsInLastBlock );
+	bool						SortDocidLookup ( int iFD, int nBlocks, int iMemoryLimit, int nLookupsInBlock, int nLookupsInLastBlock, CSphIndexProgress& tProgress );
 
 	bool						CollectQueryMvas ( const CSphVector<CSphSource*> & dSources, QueryMvaContainer_c & tMvaContainer );
 
@@ -1596,7 +1592,7 @@ private:
 	bool						JuggleFile ( ESphExt eExt, CSphString & sError, bool bNeedSrc=true, bool bNeedDst=true ) const;
 	XQNode_t *					ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta & tMeta, CSphScopedPayload * pPayloads, DWORD uQueryDebugFlags ) const;
 
-	static RowID_t				CreateRowMaps ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, CSphVector<RowID_t> & dSrcRowMap, CSphVector<RowID_t> & dDstRowMap, bool bSupressDstDocids );
+	static RowID_t				CreateRowMaps ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, CSphVector<RowID_t> & dSrcRowMap, CSphVector<RowID_t> & dDstRowMap, bool bSupressDstDocids, MergeCb_c & tMonitor );
 	static bool					MergeAttributes ( AttrMergeContext_t & tCtx );
 
 	void						Update_CollectRowPtrs ( UpdateContext_t & tCtx );
@@ -9530,11 +9526,11 @@ void WarnAboutKillList ( const CSphVector<DocID_t> & dKillList, const KillListTa
 }
 
 
-bool CSphIndex_VLN::SortDocidLookup ( int iFD, int nBlocks, int iMemoryLimit, int nLookupsInBlock, int nLookupsInLastBlock )
+bool CSphIndex_VLN::SortDocidLookup ( int iFD, int nBlocks, int iMemoryLimit, int nLookupsInBlock, int nLookupsInLastBlock, CSphIndexProgress & tProgress )
 {
-	m_tProgress.m_ePhase = CSphIndexProgress::PHASE_LOOKUP;
-	m_tProgress.m_iDocids = 0;
-	m_tProgress.m_iDocidsTotal = m_tStats.m_iTotalDocuments;
+	tProgress.PhaseBegin ( CSphIndexProgress::PHASE_LOOKUP );
+	assert (!tProgress.m_iDocids);
+	tProgress.m_iDocidsTotal = m_tStats.m_iTotalDocuments;
 
 	if ( !nBlocks )
 		return true;
@@ -9598,8 +9594,8 @@ bool CSphIndex_VLN::SortDocidLookup ( int iFD, int nBlocks, int iMemoryLimit, in
 		tProcessed++;
 		if ( ( tProcessed % 10000 )==0 )
 		{
-			m_tProgress.m_iDocids = tProcessed;
-			m_tProgress.Show ( false );
+			tProgress.m_iDocids = tProcessed;
+			tProgress.Show ( );
 		}
 	}
 
@@ -9612,8 +9608,8 @@ bool CSphIndex_VLN::SortDocidLookup ( int iFD, int nBlocks, int iMemoryLimit, in
 
 	tWatchdog.AllIsDone();
 
-	m_tProgress.m_iDocids = m_tProgress.m_iDocidsTotal;
-	m_tProgress.Show(true);
+	tProgress.m_iDocids = tProgress.m_iDocidsTotal;
+	tProgress.PhaseEnd();
 
 	return true;
 }
@@ -9755,7 +9751,7 @@ void CSphIndex_VLN::Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, 
 }
 
 
-int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer )
+int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer, CSphIndexProgress& tProgress )
 {
 	assert ( dSources.GetLength() );
 
@@ -9929,13 +9925,14 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	}
 
 	m_tStats.Reset ();
-	m_tProgress.m_ePhase = CSphIndexProgress::PHASE_COLLECT;
+	tProgress.PhaseBegin ( CSphIndexProgress::PHASE_COLLECT );
 
 	CSphVector<int> dHitBlocks;
 	dHitBlocks.Reserve ( 1024 );
 
 	AttrIndexBuilder_c tMinMax(m_tSchema);
 	RowID_t tRowID = 0;
+	int64_t			   iHitsTotal = 0;
 
 	ARRAY_FOREACH ( iSource, dSources )
 	{
@@ -9982,9 +9979,9 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			// show progress bar
 			if ( ( pSource->GetStats().m_iTotalDocuments % 1000 )==0 )
 			{
-				m_tProgress.m_iDocuments = m_tStats.m_iTotalDocuments + pSource->GetStats().m_iTotalDocuments;
-				m_tProgress.m_iBytes = m_tStats.m_iTotalBytes + pSource->GetStats().m_iTotalBytes;
-				m_tProgress.Show ( false );
+				tProgress.m_iDocuments = m_tStats.m_iTotalDocuments + pSource->GetStats().m_iTotalDocuments;
+				tProgress.m_iBytes	   = m_tStats.m_iTotalBytes + pSource->GetStats().m_iTotalBytes;
+				tProgress.Show();
 			}
 
 			// update crashdump
@@ -10053,10 +10050,10 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					return 0;
 
 				// progress bar
-				m_tProgress.m_iHitsTotal += iHits;
-				m_tProgress.m_iDocuments = m_tStats.m_iTotalDocuments + pSource->GetStats().m_iTotalDocuments;
-				m_tProgress.m_iBytes = m_tStats.m_iTotalBytes + pSource->GetStats().m_iTotalBytes;
-				m_tProgress.Show ( false );
+				iHitsTotal += iHits;
+				tProgress.m_iDocuments = m_tStats.m_iTotalDocuments + pSource->GetStats().m_iTotalDocuments;
+				tProgress.m_iBytes	   = m_tStats.m_iTotalBytes + pSource->GetStats().m_iTotalBytes;
+				tProgress.Show();
 			}
 
 			// update total field lengths
@@ -10116,7 +10113,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				sphSort ( dHits.Begin(), iHits, CmpHit_fn() );
 				m_pDict->HitblockPatch ( dHits.Begin(), iHits );
 				pHits = dHits.Begin();
-				m_tProgress.m_iHitsTotal += iHits;
+				iHitsTotal += iHits;
 				dHitBlocks.Add ( tHitBuilder.cidxWriteRawVLB ( fdHits.GetFD(), dHits.Begin(), iHits ) );
 				if ( dHitBlocks.Last()<0 )
 					return 0;
@@ -10148,7 +10145,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				m_pDict->HitblockPatch ( dHits.Begin(), iStoredHits );
 
 				pHits = dHits.Begin();
-				m_tProgress.m_iHitsTotal += iStoredHits;
+				iHitsTotal += iStoredHits;
 
 				dHitBlocks.Add ( tHitBuilder.cidxWriteRawVLB ( fdHits.GetFD(), dHits.Begin(), iStoredHits ) );
 				if ( dHitBlocks.Last()<0 )
@@ -10178,7 +10175,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			sphSort ( dHits.Begin(), iHits, CmpHit_fn() );
 			m_pDict->HitblockPatch ( dHits.Begin(), iHits );
 		}
-		m_tProgress.m_iHitsTotal += iHits;
+		iHitsTotal += iHits;
 
 		dHitBlocks.Add ( tHitBuilder.cidxWriteRawVLB ( fdHits.GetFD(), dHits.Begin(), iHits ) );
 
@@ -10202,9 +10199,9 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 	dDocidLookup.Reset(0);
 
-	m_tProgress.m_iDocuments = m_tStats.m_iTotalDocuments;
-	m_tProgress.m_iBytes = m_tStats.m_iTotalBytes;
-	m_tProgress.Show ( true );
+	tProgress.m_iDocuments = m_tStats.m_iTotalDocuments;
+	tProgress.m_iBytes	   = m_tStats.m_iTotalBytes;
+	tProgress.PhaseEnd();
 
 	if ( bHaveNonColumnarAttrs )
 	{
@@ -10278,7 +10275,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	WarnAboutKillList ( dKillList, m_tSettings.m_tKlistTargets );
 
 	m_iMinMaxIndex = m_tStats.m_iTotalDocuments*m_tSchema.GetRowSize();
-	if ( !SortDocidLookup ( fdTmpLookup.GetFD(), nDocidLookupBlocks, iMemoryLimit, nDocidLookupsPerBlock, nDocidLookup ) )
+	if ( !SortDocidLookup ( fdTmpLookup.GetFD(), nDocidLookupBlocks, iMemoryLimit, nDocidLookupsPerBlock, nDocidLookup, tProgress ) )
 		return 0;
 
 	///////////////////////////////////
@@ -10368,8 +10365,9 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		}
 
 		// init progress meter
-		m_tProgress.m_ePhase = CSphIndexProgress::PHASE_SORT;
-		m_tProgress.m_iHits = 0;
+		tProgress.PhaseBegin ( CSphIndexProgress::PHASE_SORT );
+		assert ( !tProgress.m_iHits );
+		tProgress.m_iHitsTotal = iHitsTotal;
 
 		// while the queue has data for us
 		// FIXME! analyze binsRead return code
@@ -10417,14 +10415,14 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			// progress
 			if ( ++iHitsSorted==1000000 )
 			{
-				m_tProgress.m_iHits += iHitsSorted;
-				m_tProgress.Show ( false );
+				tProgress.m_iHits += iHitsSorted;
+				tProgress.Show();
 				iHitsSorted = 0;
 			}
 		}
 
-		m_tProgress.m_iHits = m_tProgress.m_iHitsTotal; // sum might be less than total because of dupes!
-		m_tProgress.Show ( true );
+		tProgress.m_iHits = tProgress.m_iHitsTotal; // sum might be less than total because of dupes!
+		tProgress.PhaseEnd();
 
 		ARRAY_FOREACH ( i, dBins )
 			SafeDelete ( dBins[i] );
@@ -10739,14 +10737,14 @@ public:
 	template < typename QWORD >
 	inline void TransferData ( QWORD & tQword, SphWordID_t iWordID, const BYTE * sWord,
 							const CSphIndex_VLN * pSourceIndex, const ISphFilter * pFilter,
-							const CSphVector<RowID_t> & dRows, volatile bool * pLocalStop )
+							const CSphVector<RowID_t>& dRows, MergeCb_c & tMonitor )
 	{
 		CSphAggregateHit tHit;
 		tHit.m_uWordID = iWordID;
 		tHit.m_sKeyword = sWord;
 		tHit.m_dFieldMask.UnsetAll();
 
-		while ( CSphMerger::NextDocument ( tQword, pSourceIndex, pFilter, dRows ) && !sphInterrupted()  && !*pLocalStop )
+		while ( CSphMerger::NextDocument ( tQword, pSourceIndex, pFilter, dRows ) && !tMonitor.NeedStop() )
 		{
 			if ( tQword.m_bHasHitlist )
 				TransferHits ( tQword, tHit, dRows );
@@ -10792,8 +10790,9 @@ private:
 
 template < typename QWORDDST, typename QWORDSRC >
 bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, const CSphVector<RowID_t> & dDstRows, const CSphVector<RowID_t> & dSrcRows,
-	CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat,	CSphIndexProgress & tProgress, volatile bool * pLocalStop )
+	CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat,	CSphIndexProgress & tProgress )
 {
+	auto& tMonitor = tProgress.GetMergeCb();
 	CSphAutofile tDummy;
 	pHitBuilder->CreateIndexFiles ( pDstIndex->GetIndexFileName("tmp.spd").cstr(), pDstIndex->GetIndexFileName("tmp.spp").cstr(), pDstIndex->GetIndexFileName("tmp.spe").cstr(), false, 0, tDummy, NULL );
 
@@ -10833,7 +10832,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 	if ( !tSrcHits )
 		return false;
 
-	if ( !sError.IsEmpty () || sphInterrupted () || *pLocalStop )
+	if ( !sError.IsEmpty () || tMonitor.NeedStop () )
 		return false;
 
 	DataReaderFactoryPtr_c tDstDocs {
@@ -10850,7 +10849,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 	if ( !tDstHits )
 		return false;
 
-	if ( !sError.IsEmpty() || sphInterrupted () || *pLocalStop )
+	if ( !sError.IsEmpty() || tMonitor.NeedStop () )
 		return false;
 
 	CSphMerger tMerger(pHitBuilder);
@@ -10863,8 +10862,8 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 	bool bDstWord = tDstReader.Read();
 	bool bSrcWord = !bCompress && tSrcReader.Read();
 
-	tProgress.m_ePhase = CSphIndexProgress::PHASE_MERGE;
-	tProgress.Show ( false );
+	tProgress.PhaseBegin ( CSphIndexProgress::PHASE_MERGE );
+	tProgress.Show();
 
 	int iWords = 0;
 	int iHitlistsDiscarded = 0;
@@ -10873,11 +10872,11 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 		if ( iWords==1000 )
 		{
 			tProgress.m_iWords += 1000;
-			tProgress.Show ( false );
+			tProgress.Show();
 			iWords = 0;
 		}
 
-		if ( sphInterrupted () || *pLocalStop )
+		if ( tMonitor.NeedStop () )
 			return false;
 
 		const int iCmp = bCompress ? -1 : tDstReader.CmpWord ( tSrcReader );
@@ -10886,14 +10885,14 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 		{
 			// transfer documents and hits from destination
 			CSphMerger::PrepareQword<QWORDDST> ( tDstQword, tDstReader, bWordDict );
-			tMerger.TransferData<QWORDDST> ( tDstQword, tDstReader.m_uWordID, tDstReader.GetWord(), pDstIndex, pFilter, dDstRows, pLocalStop );
+			tMerger.TransferData<QWORDDST> ( tDstQword, tDstReader.m_uWordID, tDstReader.GetWord(), pDstIndex, pFilter, dDstRows, tMonitor );
 			bDstWord = tDstReader.Read();
 
 		} else if ( !bDstWord || ( bSrcWord && iCmp>0 ) )
 		{
 			// transfer documents and hits from source
 			CSphMerger::PrepareQword<QWORDSRC> ( tSrcQword, tSrcReader, bWordDict );
-			tMerger.TransferData<QWORDSRC> ( tSrcQword, tSrcReader.m_uWordID, tSrcReader.GetWord(), pSrcIndex, NULL, dSrcRows, pLocalStop );
+			tMerger.TransferData<QWORDSRC> ( tSrcQword, tSrcReader.m_uWordID, tSrcReader.GetWord(), pSrcIndex, NULL, dSrcRows, tMonitor );
 			bSrcWord = tSrcReader.Read();
 
 		} else // merge documents and hits inside the word
@@ -10921,7 +10920,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 			// transfer hits from destination
 			while ( tMerger.NextDocument ( tDstQword, pDstIndex, pFilter, dDstRows ) )
 			{
-				if ( sphInterrupted () || *pLocalStop )
+				if ( tMonitor.NeedStop () )
 					return false;
 
 				if ( bHitless )
@@ -10939,7 +10938,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 			// transfer hits from source
 			while ( tMerger.NextDocument ( tSrcQword, pSrcIndex, NULL, dSrcRows ) )
 			{
-				if ( sphInterrupted () || *pLocalStop )
+				if ( tMonitor.NeedStop () )
 					return false;
 
 				if ( bHitless )
@@ -10967,7 +10966,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 	}
 
 	tProgress.m_iWords += iWords;
-	tProgress.Show ( false );
+	tProgress.Show();
 
 	if ( iHitlistsDiscarded )
 		sphWarning ( "discarded hitlists for %u words", iHitlistsDiscarded );
@@ -10976,7 +10975,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 }
 
 
-bool CSphIndex_VLN::Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSettings> & dFilters, bool bSupressDstDocids )
+bool CSphIndex_VLN::Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSettings> & dFilters, bool bSupressDstDocids, CSphIndexProgress& tProgress )
 {
 	// if no source provided - special pass. No preload/preread, just merge with filters
 	if ( pSource )
@@ -11025,17 +11024,16 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSet
 	CSphScopedPtr<ISphFilter> pFilter(nullptr);
 	pFilter = CreateMergeFilters ( dFilters, m_tSchema, m_tBlobAttrs.GetWritePtr(), m_pColumnar.Ptr() );
 
-	bool bLocalStop = false;
-	return CSphIndex_VLN::DoMerge ( this, (const CSphIndex_VLN *)pSource, pFilter.Ptr(), m_sLastError, m_tProgress, &bLocalStop, false, bSupressDstDocids );
+	return CSphIndex_VLN::DoMerge ( this, (const CSphIndex_VLN *)pSource, pFilter.Ptr(), m_sLastError, tProgress, false, bSupressDstDocids );
 }
 
 
-RowID_t CSphIndex_VLN::CreateRowMaps ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, CSphVector<RowID_t> & dSrcRowMap, CSphVector<RowID_t> & dDstRowMap, bool bSupressDstDocids )
+RowID_t CSphIndex_VLN::CreateRowMaps ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, CSphVector<RowID_t> & dSrcRowMap, CSphVector<RowID_t> & dDstRowMap, bool bSupressDstDocids, MergeCb_c & tMonitor )
 {
 	int iStride = pDstIndex->m_tSchema.GetRowSize();
 
 	DeadRowMap_Ram_c tExtraDeadMap(0);
-	if ( bSupressDstDocids )
+	if ( bSupressDstDocids ) // skip monitoring supressions as they're used _only_ from indexer call and never from flavours of optimize.
 	{
 		tExtraDeadMap.Reset ( dDstRowMap.GetLength() );
 
@@ -11051,6 +11049,9 @@ RowID_t CSphIndex_VLN::CreateRowMaps ( const CSphIndex_VLN * pDstIndex, const CS
 	const DWORD * pRow = pDstIndex->m_tAttr.GetWritePtr();
 	RowID_t tRowID = 0;
 
+	// say to observer we're going to collect alive rows from dst index
+	// (kills directed to that index must be collected to reapply at the finish)
+	tMonitor.SetEvent ( MergeCb_c::E_COLLECT_START, pDstIndex->m_iChunk );
 	for ( int i = 0; i < dDstRowMap.GetLength(); i++, pRow+=iStride )
 	{
 		if ( pDstIndex->m_tDeadRowMap.IsSet(i) )
@@ -11070,7 +11071,10 @@ RowID_t CSphIndex_VLN::CreateRowMaps ( const CSphIndex_VLN * pDstIndex, const CS
 
 		dDstRowMap[i] = tRowID++;
 	}
+	tMonitor.SetEvent ( MergeCb_c::E_COLLECT_FINISHED, pDstIndex->m_iChunk );
 
+	// say to observer we're going to collect alive rows from src index (again, issue to kills).
+	tMonitor.SetEvent ( MergeCb_c::E_COLLECT_START, pSrcIndex->m_iChunk );
 	for ( int i = 0; i < dSrcRowMap.GetLength(); i++ )
 	{
 		if ( pSrcIndex->m_tDeadRowMap.IsSet(i) )
@@ -11078,13 +11082,14 @@ RowID_t CSphIndex_VLN::CreateRowMaps ( const CSphIndex_VLN * pDstIndex, const CS
 
 		dSrcRowMap[i] = tRowID++;
 	}
-
+	tMonitor.SetEvent ( MergeCb_c::E_COLLECT_FINISHED, pSrcIndex->m_iChunk );
 	return tRowID;
 }
 
 
 bool CSphIndex_VLN::MergeAttributes ( AttrMergeContext_t & tCtx )
 {
+	auto& tMonitor = tCtx.m_tMonitor;
 	auto dColumnarIterators = CreateAllColumnarIterators ( tCtx.m_tIndex.m_pColumnar.Ptr(), tCtx.m_tIndex.m_tSchema );
 	CSphVector<int64_t> dTmp;
 
@@ -11101,7 +11106,7 @@ bool CSphIndex_VLN::MergeAttributes ( AttrMergeContext_t & tCtx )
 
 	for ( RowID_t tRowID = 0; tRowID < (RowID_t)tCtx.m_dRowMap.GetLength64(); tRowID++, pRow += ( pRow ? iStride : 0 ) )
 	{
-		if ( sphInterrupted () || tCtx.m_bLocalStop )
+		if ( tMonitor.NeedStop() )
 			return false;
 
 		if ( tCtx.m_dRowMap[tRowID]==INVALID_ROWID )
@@ -11149,9 +11154,10 @@ bool CSphIndex_VLN::MergeAttributes ( AttrMergeContext_t & tCtx )
 }
 
 
-bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, volatile bool * pLocalStop,
+bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress,
 	bool bSrcSettings, bool bSupressDstDocids )
 {
+	auto & tMonitor = tProgress.GetMergeCb();
 	assert ( pDstIndex && pSrcIndex );
 
 	/// 'merge with self' - only apply filters/kill-lists, no real merge
@@ -11222,7 +11228,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	CSphVector<RowID_t> dSrcRows ( bCompress ? 0LL : pSrcIndex->m_iDocinfo );
 	CSphVector<RowID_t> dDstRows(pDstIndex->m_iDocinfo);
 
-	RowID_t uTotalDocs = CreateRowMaps ( pDstIndex, pSrcIndex, pFilter, dSrcRows, dDstRows, bSupressDstDocids );
+	RowID_t uTotalDocs = CreateRowMaps ( pDstIndex, pSrcIndex, pFilter, dSrcRows, dDstRows, bSupressDstDocids, tMonitor );
 	RowID_t tResultRowID = 0;
 	CSphFixedVector<DocidRowidPair_t> dDocidLookup(uTotalDocs);
 
@@ -11231,7 +11237,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	CreateHistograms ( tHistograms, dAttrsForHistogram, pDstIndex->m_tSchema );
 
 	{
-		AttrMergeContext_t tCtx ( *pDstIndex, dDstRows, tMinMax, tHistograms, dAttrsForHistogram, dDocidLookup, tWriterSPA, tResultRowID, *pLocalStop );
+		AttrMergeContext_t tCtx ( *pDstIndex, dDstRows, tMinMax, tHistograms, dAttrsForHistogram, dDocidLookup, tWriterSPA, tResultRowID, tMonitor );
 		tCtx.m_pBlobRowBuilder = pBlobRowBuilder.Ptr();
 		tCtx.m_pDocstoreBuilder = pDocstoreBuilder.Ptr();
 		tCtx.m_pColumnarBuilder = pColumnarBuilder.Ptr();
@@ -11242,7 +11248,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 
 	if ( !bCompress )
 	{
-		AttrMergeContext_t tCtx ( *pSrcIndex, dSrcRows, tMinMax, tHistograms, dAttrsForHistogram, dDocidLookup, tWriterSPA, tResultRowID, *pLocalStop );
+		AttrMergeContext_t tCtx ( *pSrcIndex, dSrcRows, tMinMax, tHistograms, dAttrsForHistogram, dDocidLookup, tWriterSPA, tResultRowID, tMonitor );
 		tCtx.m_pBlobRowBuilder = pBlobRowBuilder.Ptr();
 		tCtx.m_pDocstoreBuilder = pDocstoreBuilder.Ptr();
 		tCtx.m_pColumnarBuilder = pColumnarBuilder.Ptr();
@@ -11293,7 +11299,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	CSphAutofile tTmpDict ( pDstIndex->GetIndexFileName("spi.tmp"), SPH_O_NEW, sError, true );
 	CSphAutofile tDict ( pDstIndex->GetIndexFileName ( SPH_EXT_SPI, true ), SPH_O_NEW, sError );
 
-	if ( !sError.IsEmpty() || tTmpDict.GetFD()<0 || tDict.GetFD()<0 || sphInterrupted () || *pLocalStop )
+	if ( !sError.IsEmpty() || tTmpDict.GetFD()<0 || tDict.GetFD()<0 || tMonitor.NeedStop() )
 		return false;
 
 	DictRefPtr_c pDict { pSettings->m_pDict->Clone() };
@@ -11310,14 +11316,14 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	{
 		WITH_QWORD ( pDstIndex, false, QwordDst,
 			WITH_QWORD ( pSrcIndex, false, QwordSrc,
-				if ( !CSphIndex_VLN::MergeWords < QwordDst, QwordSrc > ( pDstIndex, pSrcIndex, pFilter, dDstRows, dSrcRows, &tHitBuilder, sError, tBuildHeader, tProgress, pLocalStop ) )
+				if ( !CSphIndex_VLN::MergeWords < QwordDst, QwordSrc > ( pDstIndex, pSrcIndex, pFilter, dDstRows, dSrcRows, &tHitBuilder, sError, tBuildHeader, tProgress ) )
 					return false;
 		));
 	} else
 	{
 		WITH_QWORD ( pDstIndex, true, QwordDst,
 			WITH_QWORD ( pSrcIndex, true, QwordSrc,
-				if ( !CSphIndex_VLN::MergeWords < QwordDst, QwordSrc > ( pDstIndex, pSrcIndex, pFilter, dDstRows, dSrcRows, &tHitBuilder, sError, tBuildHeader, tProgress, pLocalStop ) )
+				if ( !CSphIndex_VLN::MergeWords < QwordDst, QwordSrc > ( pDstIndex, pSrcIndex, pFilter, dDstRows, dSrcRows, &tHitBuilder, sError, tBuildHeader, tProgress ) )
 					return false;
 		));
 	}
@@ -11327,7 +11333,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	if ( !WriteDeadRowMap ( pDstIndex->GetIndexFileName ( SPH_EXT_SPM, true ), tResultRowID, sError ) )
 		return false;
 
-	if ( sphInterrupted () || *pLocalStop )
+	if ( tMonitor.NeedStop () )
 		return false;
 
 	// finalize
@@ -11363,12 +11369,12 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 }
 
 
-bool sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc,	CSphString & sError, CSphIndexProgress & tProgress, volatile bool * pLocalStop, bool bSrcSettings )
+bool sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc,	CSphString & sError, CSphIndexProgress & tProgress, bool bSrcSettings )
 {
 	auto pDstIndex = ( const CSphIndex_VLN * ) pDst;
 	auto pSrcIndex = ( const CSphIndex_VLN * ) pSrc;
 
-	return CSphIndex_VLN::DoMerge ( pDstIndex, pSrcIndex, nullptr, sError, tProgress, pLocalStop, bSrcSettings, false );
+	return CSphIndex_VLN::DoMerge ( pDstIndex, pSrcIndex, nullptr, sError, tProgress, bSrcSettings, false );
 }
 
 namespace QwordIteration
@@ -22561,54 +22567,6 @@ void sphSetJsonOptions ( bool bStrict, bool bAutoconvNumbers, bool bKeynamesToLo
 	g_bJsonKeynamesToLowercase = bKeynamesToLowercase;
 }
 
-
-static inline float GetPercent ( int64_t a, int64_t b )
-{
-	if ( b==0 )
-		return 100.0f;
-
-	int64_t r = a*100000/b;
-	return float(r)/1000;
-}
-
-
-const char * CSphIndexProgress::BuildMessage() const
-{
-	static char sBuf[256];
-	switch ( m_ePhase )
-	{
-		case PHASE_COLLECT:
-			snprintf ( sBuf, sizeof(sBuf), "collected " INT64_FMT " docs, %.1f MB", m_iDocuments, float(m_iBytes)/1000000.0f );
-			break;
-
-		case PHASE_SORT:
-			snprintf ( sBuf, sizeof(sBuf), "sorted %.1f Mhits, %.1f%% done", float(m_iHits)/1000000, GetPercent ( m_iHits, m_iHitsTotal ) );
-			break;
-
-		case PHASE_MERGE:
-			snprintf ( sBuf, sizeof(sBuf), "merged %.1f Kwords", float(m_iWords)/1000 );
-			break;
-
-		case PHASE_LOOKUP:
-			snprintf ( sBuf, sizeof(sBuf), "creating lookup: %.1f Kdocs, %.1f%% done", float(m_iDocids)/1000, GetPercent ( m_iDocids, m_iDocidsTotal ) );
-			break;
-
-		default:
-			assert ( 0 && "internal error: unhandled progress phase" );
-			snprintf ( sBuf, sizeof(sBuf), "(progress-phase-%d)", m_ePhase );
-			break;
-	}
-
-	sBuf[sizeof(sBuf)-1] = '\0';
-	return sBuf;
-}
-
-
-void CSphIndexProgress::Show ( bool bPhaseEnd ) const
-{
-	if ( m_fnProgress )
-		m_fnProgress ( this, bPhaseEnd );
-}
 
 //////////////////////////////////////////////////////////////////////////
 

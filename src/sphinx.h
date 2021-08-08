@@ -2490,40 +2490,96 @@ struct AttrUpdateInc_t // for cascade (incremental) update
 /////////////////////////////////////////////////////////////////////////////
 
 /// progress info
-struct CSphIndexProgress
+class MergeCb_c
 {
+	std::atomic<bool> * m_pStop = nullptr;
+
+public:
+	enum Event_e : BYTE
+	{
+		E_IDLE,
+		E_COLLECT_START,		// begin collecting alive docs on merge; payload is chunk ID
+		E_COLLECT_FINISHED,		// collecting alive docs on merge is finished; payload is chunk ID
+		E_MERGEATTRS_START,
+		E_MERGEATTRS_FINISHED,
+		E_KEYWORDS,
+		E_FINISHED,
+	};
+
+	explicit MergeCb_c ( std::atomic<bool>* pStop = nullptr )
+		: m_pStop ( pStop )
+	{}
+	virtual ~MergeCb_c() = default;
+
+	virtual void SetEvent ( Event_e eEvent, int64_t iPayload ) {}
+
+	inline bool NeedStop () const
+	{
+		return sphInterrupted() || ( m_pStop && m_pStop->load ( std::memory_order_relaxed ) );
+	}
+};
+
+class CSphIndexProgress : private MergeCb_c
+{
+	MergeCb_c * m_pMergeHook;
+
+private:
+	virtual void ShowImpl ( bool bPhaseEnd ) const {};
+
+public:
 	enum Phase_e
 	{
 		PHASE_COLLECT,				///< document collection phase
 		PHASE_SORT,					///< final sorting phase
 		PHASE_LOOKUP,				///< docid lookup construction
-		PHASE_MERGE					///< index merging
+		PHASE_MERGE,				///< index merging
+		PHASE_UNKNOWN,
 	};
 
-	Phase_e			m_ePhase { PHASE_COLLECT };		///< current indexing phase
+	Phase_e			m_ePhase;		///< current indexing phase
 
-	int64_t			m_iDocuments = 0;	///< PHASE_COLLECT: documents collected so far
-	int64_t			m_iBytes = 0;		///< PHASE_COLLECT: bytes collected so far;
-										///< PHASE_PREREAD: bytes read so far;
-	int64_t			m_iBytesTotal = 0;	///< PHASE_PREREAD: total bytes to read;
+	union {
+		int64_t m_iDocuments;		///< PHASE_COLLECT: documents collected so far
+		int64_t m_iDocids;			///< PHASE_LOOKUP: docids added to lookup so far
+		int64_t m_iHits;			///< PHASE_SORT: hits sorted so far
+		int64_t m_iWords;			///< PHASE_MERGE: words merged so far
+	};
 
-	SphOffset_t		m_iHits {0};		///< PHASE_SORT: hits sorted so far
-	SphOffset_t		m_iHitsTotal {0};	///< PHASE_SORT: hits total
+	union {
+		int64_t m_iBytes;			///< PHASE_COLLECT: bytes collected so far;
+		int64_t m_iDocidsTotal;		///< PHASE_LOOKUP: total docids
+		int64_t m_iHitsTotal;		///< PHASE_SORT: hits total
+	};
 
-	int64_t			m_iDocids {0};		///< PHASE_LOOKUP: docids added to lookup so far
-	int64_t			m_iDocidsTotal {0};	///< PHASE_LOOKUP: total docids
+public:
+	explicit CSphIndexProgress( MergeCb_c * pMergeHook = nullptr )
+	{
+		if ( pMergeHook )
+			m_pMergeHook = pMergeHook;
+		else
+			m_pMergeHook = static_cast<MergeCb_c *>(this);
+		PhaseBegin ( PHASE_UNKNOWN );
+	}
 
-	int				m_iWords = 0;		///< PHASE_MERGE: words merged so far
+	inline void PhaseBegin ( Phase_e ePhase )
+	{
+		m_ePhase = ePhase;
+		m_iDocuments = m_iBytes = 0;
+	}
 
-	int				m_iDone = 0;		///< generic percent, 0..1000 range
+	inline void PhaseEnd() const
+	{
+		if ( m_ePhase!=PHASE_UNKNOWN )
+			ShowImpl ( true );
+	}
 
-	using IndexingProgress_fn = void (*) ( const CSphIndexProgress * pStat, bool bPhaseEnd );
-	IndexingProgress_fn m_fnProgress {nullptr};
+	inline void Show() const
+	{
+		ShowImpl ( false );
+	}
 
-	/// builds a message to print
-	/// WARNING, STATIC BUFFER, NON-REENTRANT
-	const char * BuildMessage() const;
-	void Show ( bool bPhaseEnd ) const;
+	// cb
+	MergeCb_c& GetMergeCb() const { return *m_pMergeHook; }
 };
 
 
@@ -2771,15 +2827,14 @@ class ISphMatchSorter;
 class CSphIndex : public ISphKeywordsStat, public IndexSegment_c, public DocstoreReader_i
 {
 public:
-	explicit					CSphIndex ( const char * sIndexName, const char * sFilename );
+								CSphIndex ( const char * sIndexName, const char * sFilename );
 								~CSphIndex() override;
 
-	virtual const CSphString &	GetLastError() const { return m_sLastError; }
-	virtual const CSphString &	GetLastWarning() const { return m_sLastWarning; }
+	const CSphString &			GetLastError() const { return m_sLastError; }
+	const CSphString &			GetLastWarning() const { return m_sLastWarning; }
 	virtual const CSphSchema &	GetMatchSchema() const { return m_tSchema; }			///< match schema as returned in result set (possibly different from internal storage schema!)
 
-	virtual	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn pfnProgress ) = 0;
-	virtual void				SetInplaceSettings ( int iHitGap, float fRelocFactor, float fWriteFactor );
+	void						SetInplaceSettings ( int iHitGap, float fRelocFactor, float fWriteFactor );
 	void						SetFieldFilter ( ISphFieldFilter * pFilter );
 	const ISphFieldFilter *		GetFieldFilter() const { return m_pFieldFilter; }
 	void						SetTokenizer ( ISphTokenizer * pTokenizer );
@@ -2805,10 +2860,10 @@ public:
 
 public:
 	/// build index by indexing given sources
-	virtual int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer ) = 0;
+	virtual int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer, CSphIndexProgress & ) = 0;
 
 	/// build index by mering current index with given index
-	virtual bool				Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSettings> & dFilters, bool bSupressDstDocids ) = 0;
+	virtual bool				Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSettings> & dFilters, bool bSupressDstDocids, CSphIndexProgress & tProgress ) = 0;
 
 public:
 	/// check all data files, preload schema, and preallocate enough RAM to load memory-cached data
@@ -2976,10 +3031,9 @@ class CSphIndexStub : public CSphIndex
 {
 public:
 						FWD_CTOR ( CSphIndexStub, CSphIndex )
-	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn ) override {}
-	int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer ) override { return 0; }
-	bool				Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSettings> & dFilters, bool bSupressDstDocids ) override { return false; }
-	bool				Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings ) override { return false; }
+	int					Build ( const CSphVector<CSphSource *> &, int, int, CSphIndexProgress& ) override { return 0; }
+	bool				Merge ( CSphIndex *, const VecTraits_T<CSphFilterSettings> &, bool, CSphIndexProgress & ) override { return false; }
+	bool				Prealloc ( bool, FilenameBuilder_i *, StrVec_t & ) override { return false; }
 	void				Dealloc () override {}
 	void				Preread () override {}
 	void				SetBase ( const char * ) override {}

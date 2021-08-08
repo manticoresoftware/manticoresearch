@@ -53,7 +53,7 @@ add_library(lmanticore STATIC sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sphin
 
 target_link_libraries (lmanticore PUBLIC lextra)
 
-add_library(lmanticore_icu OBJECT STATIC icu.cpp)
+add_library(lmanticore_icu icu.cpp)
 if (WITH_ICU)
 	target_link_libraries (lmanticore_icu PRIVATE icu::icu)
 endif()

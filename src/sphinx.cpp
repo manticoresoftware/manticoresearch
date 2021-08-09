@@ -1368,39 +1368,6 @@ public:
 };
 
 
-class CSphIndex_VLN;
-
-struct AttrMergeContext_t
-{
-	const CSphIndex_VLN &			m_tIndex;
-	const CSphVector<RowID_t> &		m_dRowMap;
-	AttrIndexBuilder_c &			m_tMinMax;
-	HistogramContainer_c &			m_tHistograms;
-	CSphVector<PlainOrColumnar_t> &	m_dAttrsForHistogram;
-	CSphFixedVector<DocidRowidPair_t> & m_dDocidLookup;
-	CSphWriter &					m_tWriterSPA;
-	BlobRowBuilder_i *				m_pBlobRowBuilder = nullptr;
-	DocstoreBuilder_i *				m_pDocstoreBuilder = nullptr;
-	columnar::Builder_i *			m_pColumnarBuilder = nullptr;
-
-	RowID_t &						m_tResultRowID;
-	MergeCb_c & 					m_tMonitor;
-
-	AttrMergeContext_t ( const CSphIndex_VLN & tIndex,  const CSphVector<RowID_t> & dRowMap, AttrIndexBuilder_c & tMinMax, HistogramContainer_c & tHistograms, CSphVector<PlainOrColumnar_t> & dAttrsForHistogram,
-			CSphFixedVector<DocidRowidPair_t> & dDocidLookup, CSphWriter & tWriterSPA, RowID_t & tResultRowID, MergeCb_c & tMonitor )
-		: m_tIndex ( tIndex )
-		, m_dRowMap ( dRowMap )
-		, m_tMinMax ( tMinMax )
-		, m_tHistograms ( tHistograms )
-		, m_dAttrsForHistogram ( dAttrsForHistogram )
-		, m_dDocidLookup ( dDocidLookup )
-		, m_tWriterSPA ( tWriterSPA )
-		, m_tResultRowID ( tResultRowID )
-		, m_tMonitor ( tMonitor )
-	{}
-};
-
-
 /// this is my actual VLN-compressed phrase index implementation
 class CSphIndex_VLN : public CSphIndex, public IndexUpdateHelper_c, public IndexAlterHelper_c, public DebugCheckHelper_c
 {
@@ -1409,6 +1376,7 @@ class CSphIndex_VLN : public CSphIndex, public IndexUpdateHelper_c, public Index
 	friend class AttrIndexBuilder_c;
 	friend struct SphFinalMatchCalc_t;
 	friend class KeepAttrs_c;
+	friend class AttrMerger_c;
 
 public:
 	explicit			CSphIndex_VLN ( const char * szIndexName, const char * szFilename );
@@ -1447,7 +1415,7 @@ public:
 	bool				Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSettings> & dFilters, bool bSupressDstDocids, CSphIndexProgress & tProgress ) final;
 
 	template <class QWORDDST, class QWORDSRC>
-	static bool			MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, const CSphVector<RowID_t> & dDstRows, const CSphVector<RowID_t> & dSrcRows, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, CSphIndexProgress & tProgress);
+	static bool			MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, VecTraits_T<RowID_t> dDstRows, VecTraits_T<RowID_t> dSrcRows, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphIndexProgress & tProgress);
 	static bool			DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, bool bSrcSettings, bool bSupressDstDocids );
 	template <class QWORD>
 	static bool			DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, int iKillField );
@@ -1590,9 +1558,7 @@ private:
 	bool						JuggleFile ( ESphExt eExt, CSphString & sError, bool bNeedSrc=true, bool bNeedDst=true ) const;
 	XQNode_t *					ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta & tMeta, CSphScopedPayload * pPayloads, DWORD uQueryDebugFlags ) const;
 
-	static RowID_t				CreateRowMaps ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, CSphVector<RowID_t> & dSrcRowMap, CSphVector<RowID_t> & dDstRowMap, bool bSupressDstDocids, MergeCb_c & tMonitor );
-	static bool					MergeAttributes ( AttrMergeContext_t & tCtx );
-
+	static std::pair<DWORD,DWORD>		CreateRowMapsAndCountTotalDocs ( const CSphIndex_VLN* pSrcIndex, const CSphIndex_VLN* pDstIndex, CSphFixedVector<RowID_t>& dSrcRowMap, CSphFixedVector<RowID_t>& dDstRowMap, const ISphFilter* pFilter, bool bSupressDstDocids, MergeCb_c& tMonitor );
 	void						Update_CollectRowPtrs ( UpdateContext_t & tCtx );
 	bool						Update_WriteBlobRow ( UpdateContext_t & tCtx, CSphRowitem * pDocinfo, const BYTE * pBlob,
 										int iLength, int nBlobAttrs, const CSphAttrLocator & tBlobRowLoc, bool & bCritical, CSphString & sError ) override;
@@ -1619,6 +1585,47 @@ private:
 
 	RowidIterator_i *			CreateColumnarAnalyzerOrPrefilter ( const CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphFilterSettings> & dModifiedFilters, bool & bFiltersChanged, const CSphVector<FilterTreeItem_t> & dFilterTree,
 		const ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema, CSphString & sWarning ) const;
+};
+
+class AttrMerger_c
+{
+	AttrIndexBuilder_c				m_tMinMax;
+	HistogramContainer_c			m_tHistograms;
+	CSphVector<PlainOrColumnar_t>	m_dAttrsForHistogram;
+	CSphFixedVector<DocidRowidPair_t> m_dDocidLookup {0};
+	CSphWriter						m_tWriterSPA;
+	BlobRowBuilder_i * 				m_pBlobRowBuilder = nullptr;
+	DocstoreBuilder_i * 			m_pDocstoreBuilder = nullptr;
+	columnar::Builder_i *			m_pColumnarBuilder = nullptr;
+	RowID_t							m_tResultRowID = 0;
+	int64_t							m_iTotalBytes = 0;
+
+	MergeCb_c & 					m_tMonitor;
+	CSphString &					m_sError;
+	int64_t							m_iTotalDocs;
+
+private:
+	bool CopyPureColumnarAttributes ( const CSphIndex_VLN& tIndex, const VecTraits_T<RowID_t>& dRowMap );
+	bool CopyMixedAttributes ( const CSphIndex_VLN& tIndex, const VecTraits_T<RowID_t>& dRowMap );
+
+public:
+	AttrMerger_c ( MergeCb_c & tMonitor, CSphString & sError, int64_t iTotalDocs )
+		: m_tMonitor ( tMonitor )
+		, m_sError ( sError)
+		, m_iTotalDocs ( iTotalDocs )
+	{
+	}
+
+	~AttrMerger_c()
+	{
+		SafeDelete ( m_pColumnarBuilder );
+		SafeDelete ( m_pDocstoreBuilder );
+		SafeDelete ( m_pBlobRowBuilder );
+	}
+
+	bool Prepare ( const CSphIndex_VLN* pSrcIndex, const CSphIndex_VLN* pDstIndex );
+	bool CopyAttributes ( const CSphIndex_VLN& tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive );
+	bool FinishMergeAttributes ( const CSphIndex_VLN* pDstIndex, BuildHeader_t& tBuildHeader );
 };
 
 
@@ -8515,8 +8522,8 @@ bool IndexBuildDone ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & 
 	if ( !fdInfo.OpenFile ( sFileName, sError ) )
 		return false;
 
-	 IndexWriteHeader ( tBuildHeader, tWriteHeader, fdInfo, false );
-	 return true;
+	IndexWriteHeader ( tBuildHeader, tWriteHeader, fdInfo, false );
+	return true;
 }
 
 
@@ -10693,7 +10700,7 @@ public:
 	}
 
 	template < typename QWORD >
-	inline bool NextDocument ( QWORD & tQword, const CSphIndex_VLN * pSourceIndex, const ISphFilter * pFilter, const CSphVector<RowID_t> & dRows )
+	inline bool NextDocument ( QWORD & tQword, const CSphIndex_VLN * pSourceIndex, const ISphFilter * pFilter, const VecTraits_T<RowID_t> & dRows )
 	{
 		while (true)
 		{
@@ -10729,7 +10736,7 @@ public:
 	template < typename QWORD >
 	inline void TransferData ( QWORD & tQword, SphWordID_t iWordID, const BYTE * sWord,
 							const CSphIndex_VLN * pSourceIndex, const ISphFilter * pFilter,
-							const CSphVector<RowID_t>& dRows, MergeCb_c & tMonitor )
+							const VecTraits_T<RowID_t>& dRows, MergeCb_c & tMonitor )
 	{
 		CSphAggregateHit tHit;
 		tHit.m_uWordID = iWordID;
@@ -10752,7 +10759,7 @@ public:
 	}
 
 	template < typename QWORD >
-	inline void TransferHits ( QWORD & tQword, CSphAggregateHit & tHit, const CSphVector<RowID_t> & dRows )
+	inline void TransferHits ( QWORD & tQword, CSphAggregateHit & tHit, const VecTraits_T<RowID_t> & dRows )
 	{
 		assert ( tQword.m_bHasHitlist );
 		tHit.m_tRowID = dRows[tQword.m_tDoc.m_tRowID];
@@ -10781,8 +10788,8 @@ private:
 
 
 template < typename QWORDDST, typename QWORDSRC >
-bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, const CSphVector<RowID_t> & dDstRows, const CSphVector<RowID_t> & dSrcRows,
-	CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat,	CSphIndexProgress & tProgress )
+bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, VecTraits_T<RowID_t> dDstRows, VecTraits_T<RowID_t> dSrcRows,
+	CSphHitBuilder * pHitBuilder, CSphString & sError, CSphIndexProgress & tProgress )
 {
 	auto& tMonitor = tProgress.GetMergeCb();
 	CSphAutofile tDummy;
@@ -10884,7 +10891,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 		{
 			// transfer documents and hits from source
 			CSphMerger::PrepareQword<QWORDSRC> ( tSrcQword, tSrcReader, bWordDict );
-			tMerger.TransferData<QWORDSRC> ( tSrcQword, tSrcReader.m_uWordID, tSrcReader.GetWord(), pSrcIndex, NULL, dSrcRows, tMonitor );
+			tMerger.TransferData<QWORDSRC> ( tSrcQword, tSrcReader.m_uWordID, tSrcReader.GetWord(), pSrcIndex, nullptr, dSrcRows, tMonitor );
 			bSrcWord = tSrcReader.Read();
 
 		} else // merge documents and hits inside the word
@@ -10928,7 +10935,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 			}
 
 			// transfer hits from source
-			while ( tMerger.NextDocument ( tSrcQword, pSrcIndex, NULL, dSrcRows ) )
+			while ( tMerger.NextDocument ( tSrcQword, pSrcIndex, nullptr, dSrcRows ) )
 			{
 				if ( tMonitor.NeedStop () )
 					return false;
@@ -10949,12 +10956,6 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 			bDstWord = tDstReader.Read();
 			bSrcWord = tSrcReader.Read();
 		}
-	}
-
-	if ( !bCompress )
-	{
-		tStat.m_iTotalDocuments += pSrcIndex->m_tStats.m_iTotalDocuments;
-		tStat.m_iTotalBytes += pSrcIndex->m_tStats.m_iTotalBytes;
 	}
 
 	tProgress.m_iWords += iWords;
@@ -11020,8 +11021,12 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSet
 }
 
 
-RowID_t CSphIndex_VLN::CreateRowMaps ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, CSphVector<RowID_t> & dSrcRowMap, CSphVector<RowID_t> & dDstRowMap, bool bSupressDstDocids, MergeCb_c & tMonitor )
+std::pair<DWORD,DWORD> CSphIndex_VLN::CreateRowMapsAndCountTotalDocs ( const CSphIndex_VLN* pSrcIndex, const CSphIndex_VLN* pDstIndex, CSphFixedVector<RowID_t>& dSrcRowMap, CSphFixedVector<RowID_t>& dDstRowMap, const ISphFilter* pFilter, bool bSupressDstDocids, MergeCb_c& tMonitor )
 {
+	if ( pSrcIndex!=pDstIndex )
+		dSrcRowMap.Reset ( pSrcIndex->m_iDocinfo );
+	dDstRowMap.Reset ( pDstIndex->m_iDocinfo );
+
 	int iStride = pDstIndex->m_tSchema.GetRowSize();
 
 	DeadRowMap_Ram_c tExtraDeadMap(0);
@@ -11039,12 +11044,13 @@ RowID_t CSphIndex_VLN::CreateRowMaps ( const CSphIndex_VLN * pDstIndex, const CS
 	dDstRowMap.Fill ( INVALID_ROWID );
 
 	const DWORD * pRow = pDstIndex->m_tAttr.GetWritePtr();
-	RowID_t tRowID = 0;
+	int64_t iTotalDocs = 0;
+	std::pair<DWORD, DWORD> iPerIndexDocs {0,0};
 
 	// say to observer we're going to collect alive rows from dst index
 	// (kills directed to that index must be collected to reapply at the finish)
 	tMonitor.SetEvent ( MergeCb_c::E_COLLECT_START, pDstIndex->m_iChunk );
-	for ( int i = 0; i < dDstRowMap.GetLength(); i++, pRow+=iStride )
+	for ( int i = 0; i < dDstRowMap.GetLength(); ++i, pRow+=iStride )
 	{
 		if ( pDstIndex->m_tDeadRowMap.IsSet(i) )
 			continue;
@@ -11061,88 +11067,227 @@ RowID_t CSphIndex_VLN::CreateRowMaps ( const CSphIndex_VLN * pDstIndex, const CS
 				continue;
 		}
 
-		dDstRowMap[i] = tRowID++;
+		dDstRowMap[i] = (RowID_t)iTotalDocs++;
 	}
 	tMonitor.SetEvent ( MergeCb_c::E_COLLECT_FINISHED, pDstIndex->m_iChunk );
+	iPerIndexDocs.first = (DWORD)iTotalDocs;
 
 	// say to observer we're going to collect alive rows from src index (again, issue to kills).
 	tMonitor.SetEvent ( MergeCb_c::E_COLLECT_START, pSrcIndex->m_iChunk );
-	for ( int i = 0; i < dSrcRowMap.GetLength(); i++ )
+	for ( int i = 0; i < dSrcRowMap.GetLength(); ++i )
 	{
 		if ( pSrcIndex->m_tDeadRowMap.IsSet(i) )
 			continue;
 
-		dSrcRowMap[i] = tRowID++;
+		dSrcRowMap[i] = (RowID_t)iTotalDocs++;
 	}
 	tMonitor.SetEvent ( MergeCb_c::E_COLLECT_FINISHED, pSrcIndex->m_iChunk );
-	return tRowID;
+	iPerIndexDocs.second = DWORD ( iTotalDocs - iPerIndexDocs.first );
+	return iPerIndexDocs;
 }
 
 
-bool CSphIndex_VLN::MergeAttributes ( AttrMergeContext_t & tCtx )
+bool AttrMerger_c::Prepare ( const CSphIndex_VLN* pSrcIndex, const CSphIndex_VLN* pDstIndex )
 {
-	auto& tMonitor = tCtx.m_tMonitor;
-	auto dColumnarIterators = CreateAllColumnarIterators ( tCtx.m_tIndex.m_pColumnar.Ptr(), tCtx.m_tIndex.m_tSchema );
+	auto sSPA = pDstIndex->GetIndexFileName ( SPH_EXT_SPA, true );
+	if ( pDstIndex->m_tSchema.HasNonColumnarAttrs() && !m_tWriterSPA.OpenFile ( sSPA, m_sError ) )
+		return false;
+
+	if ( pDstIndex->m_tSchema.HasBlobAttrs() )
+	{
+		m_pBlobRowBuilder = sphCreateBlobRowBuilder ( pSrcIndex->m_tSchema, pDstIndex->GetIndexFileName ( SPH_EXT_SPB, true ), pSrcIndex->GetSettings().m_tBlobUpdateSpace, m_sError );
+		if ( !m_pBlobRowBuilder )
+			return false;
+	}
+
+	if ( pDstIndex->m_pDocstore )
+	{
+		m_pDocstoreBuilder = CreateDocstoreBuilder ( pDstIndex->GetIndexFileName ( SPH_EXT_SPDS, true ), pDstIndex->m_pDocstore->GetDocstoreSettings(), m_sError );
+		if ( !m_pDocstoreBuilder )
+			return false;
+
+		for ( int i = 0; i < pDstIndex->m_tSchema.GetFieldsCount(); ++i )
+			if ( pDstIndex->m_tSchema.IsFieldStored ( i ) )
+				m_pDocstoreBuilder->AddField ( pDstIndex->m_tSchema.GetFieldName ( i ), DOCSTORE_TEXT );
+	}
+
+	if ( pDstIndex->m_tSchema.HasColumnarAttrs() )
+	{
+		m_pColumnarBuilder = CreateColumnarBuilder ( pDstIndex->m_tSchema, pDstIndex->m_tSettings, pDstIndex->GetIndexFileName ( SPH_EXT_SPC, true ), m_sError );
+		if ( !m_pColumnarBuilder )
+			return false;
+	}
+
+	m_tMinMax.Init ( pDstIndex->m_tSchema );
+
+	m_dDocidLookup.Reset ( m_iTotalDocs );
+	CreateHistograms ( m_tHistograms, m_dAttrsForHistogram, pDstIndex->m_tSchema );
+
+	m_tResultRowID = 0;
+	return true;
+}
+
+
+bool AttrMerger_c::CopyPureColumnarAttributes ( const CSphIndex_VLN& tIndex, const VecTraits_T<RowID_t>& dRowMap )
+{
+	assert ( !tIndex.m_tAttr.GetWritePtr() );
+	assert ( tIndex.m_tSchema.GetAttr ( 0 ).IsColumnar() );
+
+	auto dColumnarIterators = CreateAllColumnarIterators ( tIndex.m_pColumnar.Ptr(), tIndex.m_tSchema );
 	CSphVector<int64_t> dTmp;
 
-	int iStride = tCtx.m_tIndex.m_tSchema.GetRowSize();
-
-	int iColumnarIdLoc = -1;
-	if ( tCtx.m_tIndex.m_tSchema.GetAttr(0).IsColumnar() )
-		iColumnarIdLoc = 0;
-
-	CSphFixedVector<CSphRowitem> dTmpRow ( iStride );
-	auto iStrideBytes = dTmpRow.GetLengthBytes();
-	const CSphRowitem * pRow = tCtx.m_tIndex.m_tAttr.GetWritePtr();
-	const CSphColumnInfo * pBlobLocator = tCtx.m_tIndex.m_tSchema.GetAttr ( sphGetBlobLocatorName() );
-
-	for ( RowID_t tRowID = 0; tRowID < (RowID_t)tCtx.m_dRowMap.GetLength64(); tRowID++, pRow += ( pRow ? iStride : 0 ) )
+	for ( RowID_t tRowID = 0, tRows = (RowID_t)dRowMap.GetLength64(); tRowID < tRows; ++tRowID )
 	{
-		if ( tMonitor.NeedStop() )
+		if ( m_tMonitor.NeedStop() )
 			return false;
 
-		if ( tCtx.m_dRowMap[tRowID]==INVALID_ROWID )
+		if ( dRowMap[tRowID] == INVALID_ROWID )
 			continue;
 
-		if ( tCtx.m_tResultRowID==INVALID_ROWID )
-			return false;
+		// limit granted by caller code
+		assert ( m_tResultRowID != INVALID_ROWID );
 
-		tCtx.m_tMinMax.Collect(pRow);
-
-		if ( tCtx.m_pBlobRowBuilder )
-		{
-			const BYTE * pOldBlobRow = tCtx.m_tIndex.m_tBlobAttrs.GetWritePtr() + sphGetRowAttr ( pRow, pBlobLocator->m_tLocator );
-			uint64_t uNewOffset = tCtx.m_pBlobRowBuilder->Flush ( pOldBlobRow );
-
-			memcpy ( dTmpRow.Begin(), pRow, iStrideBytes);
-			sphSetRowAttr ( dTmpRow.Begin(), pBlobLocator->m_tLocator, uNewOffset );
-
-			tCtx.m_tWriterSPA.PutBytes ( dTmpRow.Begin(), iStrideBytes );
-		}
-		else if ( iStrideBytes )
-			tCtx.m_tWriterSPA.PutBytes ( pRow, iStrideBytes );
-
-		DocID_t tDocID;
 		ARRAY_FOREACH ( i, dColumnarIterators )
 		{
-			auto & tIt = dColumnarIterators[i];
+			auto& tIt = dColumnarIterators[i];
 			Verify ( AdvanceIterator ( tIt.first.get(), tRowID ) );
-			SetColumnarAttr ( i, tIt.second, tCtx.m_pColumnarBuilder, tIt.first.get(), dTmp );
+			SetColumnarAttr ( i, tIt.second, m_pColumnarBuilder, tIt.first.get(), dTmp );
 		}
 
-		tDocID = iColumnarIdLoc>=0 ? dColumnarIterators[iColumnarIdLoc].first->Get() : sphGetDocID(pRow);
+		ARRAY_FOREACH ( i, m_dAttrsForHistogram )
+			m_tHistograms.Insert ( i, m_dAttrsForHistogram[i].Get ( nullptr, dColumnarIterators ) );
 
-		ARRAY_FOREACH ( i, tCtx.m_dAttrsForHistogram )
-			tCtx.m_tHistograms.Insert ( i, tCtx.m_dAttrsForHistogram[i].Get ( pRow, dColumnarIterators ) );
+		if ( m_pDocstoreBuilder )
+			m_pDocstoreBuilder->AddDoc ( m_tResultRowID, tIndex.m_pDocstore->GetDoc ( tRowID, nullptr, -1, false ) );
 
-		if ( tCtx.m_pDocstoreBuilder )
-			tCtx.m_pDocstoreBuilder->AddDoc ( tCtx.m_tResultRowID, tCtx.m_tIndex.m_pDocstore->GetDoc ( tRowID, nullptr, -1, false ) );
+		m_dDocidLookup[m_tResultRowID] = { dColumnarIterators[0].first->Get(), m_tResultRowID };
+		++m_tResultRowID;
+	}
+	return true;
+}
 
-		tCtx.m_dDocidLookup[tCtx.m_tResultRowID] = { tDocID, tCtx.m_tResultRowID };
-		tCtx.m_tResultRowID++;
+bool AttrMerger_c::CopyMixedAttributes ( const CSphIndex_VLN& tIndex, const VecTraits_T<RowID_t>& dRowMap )
+{
+	auto dColumnarIterators = CreateAllColumnarIterators ( tIndex.m_pColumnar.Ptr(), tIndex.m_tSchema );
+	CSphVector<int64_t> dTmp;
+
+	int iColumnarIdLoc = tIndex.m_tSchema.GetAttr ( 0 ).IsColumnar() ? 0 : - 1;
+	const CSphRowitem* pRow = tIndex.m_tAttr.GetWritePtr();
+	assert ( pRow );
+	int iStride = tIndex.m_tSchema.GetRowSize();
+	CSphFixedVector<CSphRowitem> dTmpRow ( iStride );
+	auto iStrideBytes = dTmpRow.GetLengthBytes();
+	const CSphColumnInfo* pBlobLocator = tIndex.m_tSchema.GetAttr ( sphGetBlobLocatorName() );
+
+	for ( RowID_t tRowID = 0, tRows = (RowID_t)dRowMap.GetLength64(); tRowID < tRows; ++tRowID, pRow += iStride )
+	{
+		if ( m_tMonitor.NeedStop() )
+			return false;
+
+		if ( dRowMap[tRowID] == INVALID_ROWID )
+			continue;
+
+		// limit granted by caller code
+		assert ( m_tResultRowID != INVALID_ROWID );
+
+		m_tMinMax.Collect ( pRow );
+
+		if ( m_pBlobRowBuilder )
+		{
+			const BYTE* pOldBlobRow = tIndex.m_tBlobAttrs.GetWritePtr() + sphGetRowAttr ( pRow, pBlobLocator->m_tLocator );
+			uint64_t	uNewOffset	= m_pBlobRowBuilder->Flush ( pOldBlobRow );
+
+			memcpy ( dTmpRow.Begin(), pRow, iStrideBytes );
+			sphSetRowAttr ( dTmpRow.Begin(), pBlobLocator->m_tLocator, uNewOffset );
+
+			m_tWriterSPA.PutBytes ( dTmpRow.Begin(), iStrideBytes );
+		} else if ( iStrideBytes )
+			m_tWriterSPA.PutBytes ( pRow, iStrideBytes );
+
+		ARRAY_FOREACH ( i, dColumnarIterators )
+		{
+			auto& tIt = dColumnarIterators[i];
+			Verify ( AdvanceIterator ( tIt.first.get(), tRowID ) );
+			SetColumnarAttr ( i, tIt.second, m_pColumnarBuilder, tIt.first.get(), dTmp );
+		}
+
+		DocID_t tDocID = iColumnarIdLoc >= 0 ? dColumnarIterators[iColumnarIdLoc].first->Get() : sphGetDocID ( pRow );
+
+		ARRAY_FOREACH ( i, m_dAttrsForHistogram )
+			m_tHistograms.Insert ( i, m_dAttrsForHistogram[i].Get ( pRow, dColumnarIterators ) );
+
+		if ( m_pDocstoreBuilder )
+			m_pDocstoreBuilder->AddDoc ( m_tResultRowID, tIndex.m_pDocstore->GetDoc ( tRowID, nullptr, -1, false ) );
+
+		m_dDocidLookup[m_tResultRowID] = { tDocID, m_tResultRowID };
+		++m_tResultRowID;
 	}
 
 	return true;
+}
+
+
+bool AttrMerger_c::CopyAttributes ( const CSphIndex_VLN& tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive )
+{
+	if ( !uAlive )
+		return true;
+
+	// that is very empyric, however is better than nothing.
+	m_iTotalBytes += tIndex.m_tStats.m_iTotalBytes * ( (float)uAlive / (float)dRowMap.GetLength64() );
+
+	if ( !tIndex.m_tAttr.GetWritePtr() )
+		return CopyPureColumnarAttributes( tIndex, dRowMap );
+	return CopyMixedAttributes ( tIndex, dRowMap );
+}
+
+
+bool AttrMerger_c::FinishMergeAttributes ( const CSphIndex_VLN* pDstIndex, BuildHeader_t& tBuildHeader )
+{
+	m_tMinMax.FinishCollect();
+	assert ( m_tResultRowID==m_iTotalDocs );
+	tBuildHeader.m_iDocinfo = m_iTotalDocs;
+	tBuildHeader.m_iTotalDocuments = m_iTotalDocs;
+	tBuildHeader.m_iTotalBytes = m_iTotalBytes;
+
+	m_dDocidLookup.Sort ( CmpDocidLookup_fn() );
+	if ( !WriteDocidLookup ( pDstIndex->GetIndexFileName ( SPH_EXT_SPT, true ), m_dDocidLookup, m_sError ) )
+		return false;
+
+	if ( pDstIndex->m_tSchema.HasNonColumnarAttrs() )
+	{
+		if ( m_iTotalDocs )
+		{
+			tBuildHeader.m_iMinMaxIndex = m_tWriterSPA.GetPos() / sizeof(CSphRowitem);
+			const auto& dMinMaxRows		 = m_tMinMax.GetCollected();
+			m_tWriterSPA.PutBytes ( dMinMaxRows.Begin(), dMinMaxRows.GetLengthBytes64() );
+			tBuildHeader.m_iDocinfoIndex = ( dMinMaxRows.GetLength() / pDstIndex->m_tSchema.GetRowSize() / 2 ) - 1;
+		}
+
+		m_tWriterSPA.CloseFile();
+		if ( m_tWriterSPA.IsError() )
+			return false;
+	}
+
+	if ( m_pBlobRowBuilder && !m_pBlobRowBuilder->Done(m_sError) )
+		return false;
+
+	std::string sErrorSTL;
+	if ( m_pColumnarBuilder && !m_pColumnarBuilder->Done(sErrorSTL) )
+	{
+		m_sError = sErrorSTL.c_str();
+		return false;
+	}
+
+	if ( !m_tHistograms.Save ( pDstIndex->GetIndexFileName ( SPH_EXT_SPHI, true ), m_sError ) )
+		return false;
+
+	if ( !CheckDocsCount ( m_tResultRowID, m_sError ) )
+		return false;
+
+	if ( m_pDocstoreBuilder )
+		m_pDocstoreBuilder->Finalize();
+
+	return WriteDeadRowMap ( pDstIndex->GetIndexFileName ( SPH_EXT_SPM, true ), m_tResultRowID, m_sError );
 }
 
 
@@ -11157,7 +11302,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 
 	const CSphSchema & tDstSchema = pDstIndex->m_tSchema;
 	const CSphSchema & tSrcSchema = pSrcIndex->m_tSchema;
-	if ( !tDstSchema.CompareTo ( tSrcSchema, sError ) )
+	if ( !bCompress && !tDstSchema.CompareTo ( tSrcSchema, sError ) )
 		return false;
 
 	if ( !bCompress && pDstIndex->m_tSettings.m_eHitless!=pSrcIndex->m_tSettings.m_eHitless )
@@ -11174,120 +11319,33 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 		return false;
 	}
 
+	// Create global list of documents to be merged from both sources
+	// here we can also quickly consider to reject whole merge if N of final docs is >4G
+	CSphFixedVector<RowID_t> dSrcRows{0}, dDstRows{0};
+	auto tTotalDocs = CreateRowMapsAndCountTotalDocs ( pSrcIndex, pDstIndex, dSrcRows, dDstRows, pFilter, bSupressDstDocids, tMonitor );
+	int64_t iTotalDocs = (int64_t)tTotalDocs.first + (int64_t)tTotalDocs.second;
+	if ( iTotalDocs >= INVALID_ROWID )
+		return false; // too many docs in merged segment (>4G even with filtered/killed), abort.
+
 	BuildHeader_t tBuildHeader ( pDstIndex->m_tStats );
-	const CSphIndex_VLN * pSettings = ( bSrcSettings ? pSrcIndex : pDstIndex );
 
-	/////////////////////////////////////////
-	// merging attributes (.spa, .spb)
-	/////////////////////////////////////////
-	CSphString sSPA = pDstIndex->GetIndexFileName ( SPH_EXT_SPA, true );
-	CSphString sSPT = pDstIndex->GetIndexFileName ( SPH_EXT_SPT, true );
-	CSphString sSPHI = pDstIndex->GetIndexFileName ( SPH_EXT_SPHI, true );
-	CSphWriter tWriterSPA;
-	if ( pDstIndex->m_tSchema.HasNonColumnarAttrs() && !tWriterSPA.OpenFile ( sSPA, sError ) )
+	// merging attributes
+	{
+		AttrMerger_c tAttrMerger ( tMonitor, sError, iTotalDocs );
+		if ( !tAttrMerger.Prepare ( pSrcIndex, pDstIndex ) )
 			return false;
 
-	CSphScopedPtr<BlobRowBuilder_i> pBlobRowBuilder(nullptr);
-	if ( pSrcIndex->m_tSchema.HasBlobAttrs() )
-	{
-		pBlobRowBuilder = sphCreateBlobRowBuilder ( pSrcIndex->m_tSchema, pDstIndex->GetIndexFileName ( SPH_EXT_SPB, true ), pSrcIndex->GetSettings().m_tBlobUpdateSpace, sError );
-		if ( !pBlobRowBuilder.Ptr() )
+		if ( !tAttrMerger.CopyAttributes ( *pDstIndex, dDstRows, tTotalDocs.first ) )
+			return false;
+
+		if ( !bCompress && !tAttrMerger.CopyAttributes ( *pSrcIndex, dSrcRows, tTotalDocs.second ) )
+			return false;
+
+		if ( !tAttrMerger.FinishMergeAttributes ( pDstIndex, tBuildHeader ) )
 			return false;
 	}
 
-	CSphScopedPtr<DocstoreBuilder_i> pDocstoreBuilder(nullptr);
-	if ( pDstIndex->m_pDocstore )
-	{
-		pDocstoreBuilder = CreateDocstoreBuilder ( pDstIndex->GetIndexFileName ( SPH_EXT_SPDS, true ), pDstIndex->m_pDocstore->GetDocstoreSettings(), sError );
-		if ( !pDocstoreBuilder.Ptr() )
-			return false;
-
-		for ( int i = 0; i < pDstIndex->m_tSchema.GetFieldsCount(); i++ )
-			if ( pDstIndex->m_tSchema.IsFieldStored(i) )
-				pDocstoreBuilder->AddField ( pDstIndex->m_tSchema.GetFieldName(i), DOCSTORE_TEXT );
-	}
-
-	CSphScopedPtr<columnar::Builder_i> pColumnarBuilder(nullptr);
-	if ( pDstIndex->m_tSchema.HasColumnarAttrs() )
-	{
-		pColumnarBuilder = CreateColumnarBuilder ( pDstIndex->m_tSchema, pDstIndex->m_tSettings, pDstIndex->GetIndexFileName ( SPH_EXT_SPC, true ), sError );
-		if ( !pColumnarBuilder.Ptr() )
-			return false;
-	}
-
-	AttrIndexBuilder_c tMinMax ( pDstIndex->m_tSchema );
-
-	CSphVector<RowID_t> dSrcRows ( bCompress ? 0LL : pSrcIndex->m_iDocinfo );
-	CSphVector<RowID_t> dDstRows(pDstIndex->m_iDocinfo);
-
-	RowID_t uTotalDocs = CreateRowMaps ( pDstIndex, pSrcIndex, pFilter, dSrcRows, dDstRows, bSupressDstDocids, tMonitor );
-	RowID_t tResultRowID = 0;
-	CSphFixedVector<DocidRowidPair_t> dDocidLookup(uTotalDocs);
-
-	HistogramContainer_c tHistograms;
-	CSphVector<PlainOrColumnar_t> dAttrsForHistogram;
-	CreateHistograms ( tHistograms, dAttrsForHistogram, pDstIndex->m_tSchema );
-
-	{
-		AttrMergeContext_t tCtx ( *pDstIndex, dDstRows, tMinMax, tHistograms, dAttrsForHistogram, dDocidLookup, tWriterSPA, tResultRowID, tMonitor );
-		tCtx.m_pBlobRowBuilder = pBlobRowBuilder.Ptr();
-		tCtx.m_pDocstoreBuilder = pDocstoreBuilder.Ptr();
-		tCtx.m_pColumnarBuilder = pColumnarBuilder.Ptr();
-
-		if ( !MergeAttributes(tCtx) )
-			return false;
-	}
-
-	if ( !bCompress )
-	{
-		AttrMergeContext_t tCtx ( *pSrcIndex, dSrcRows, tMinMax, tHistograms, dAttrsForHistogram, dDocidLookup, tWriterSPA, tResultRowID, tMonitor );
-		tCtx.m_pBlobRowBuilder = pBlobRowBuilder.Ptr();
-		tCtx.m_pDocstoreBuilder = pDocstoreBuilder.Ptr();
-		tCtx.m_pColumnarBuilder = pColumnarBuilder.Ptr();
-
-		if ( !MergeAttributes(tCtx) )
-			return false;
-	}
-
-	tMinMax.FinishCollect();
-	tBuildHeader.m_iDocinfo = uTotalDocs;
-
-	if ( pDstIndex->m_tSchema.HasNonColumnarAttrs() )
-	{
-		if ( uTotalDocs )
-		{
-			tBuildHeader.m_iMinMaxIndex = tWriterSPA.GetPos() / sizeof(CSphRowitem);
-
-			const CSphTightVector<CSphRowitem> & dMinMaxRows = tMinMax.GetCollected();
-			tWriterSPA.PutBytes ( dMinMaxRows.Begin(), dMinMaxRows.GetLength()*sizeof(CSphRowitem) );
-
-			tBuildHeader.m_iDocinfoIndex = ( dMinMaxRows.GetLength() / tDstSchema.GetRowSize() / 2 ) - 1;
-		}
-
-		tWriterSPA.CloseFile();
-		if ( tWriterSPA.IsError() )
-			return false;
-	}
-
-	if ( pBlobRowBuilder.Ptr() && !pBlobRowBuilder->Done(sError) )
-		return false;
-
-	std::string sErrorSTL;
-	if ( pColumnarBuilder.Ptr() && !pColumnarBuilder->Done(sErrorSTL) )
-	{
-		sError = sErrorSTL.c_str();
-		return false;
-	}
-
-	if ( !tHistograms.Save ( sSPHI, sError ) )
-		return false;
-
-	if ( !CheckDocsCount ( tResultRowID, sError ) )
-		return false;
-
-	if ( pDocstoreBuilder.Ptr() )
-		pDocstoreBuilder->Finalize();
-
+	const CSphIndex_VLN* pSettings = ( bSrcSettings ? pSrcIndex : pDstIndex );
 	CSphAutofile tTmpDict ( pDstIndex->GetIndexFileName("spi.tmp"), SPH_O_NEW, sError, true );
 	CSphAutofile tDict ( pDstIndex->GetIndexFileName ( SPH_EXT_SPI, true ), SPH_O_NEW, sError );
 
@@ -11308,22 +11366,17 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	{
 		WITH_QWORD ( pDstIndex, false, QwordDst,
 			WITH_QWORD ( pSrcIndex, false, QwordSrc,
-				if ( !CSphIndex_VLN::MergeWords < QwordDst, QwordSrc > ( pDstIndex, pSrcIndex, pFilter, dDstRows, dSrcRows, &tHitBuilder, sError, tBuildHeader, tProgress ) )
+				if ( !CSphIndex_VLN::MergeWords < QwordDst, QwordSrc > ( pDstIndex, pSrcIndex, pFilter, dDstRows, dSrcRows, &tHitBuilder, sError, tProgress ) )
 					return false;
 		));
 	} else
 	{
 		WITH_QWORD ( pDstIndex, true, QwordDst,
 			WITH_QWORD ( pSrcIndex, true, QwordSrc,
-				if ( !CSphIndex_VLN::MergeWords < QwordDst, QwordSrc > ( pDstIndex, pSrcIndex, pFilter, dDstRows, dSrcRows, &tHitBuilder, sError, tBuildHeader, tProgress ) )
+				if ( !CSphIndex_VLN::MergeWords < QwordDst, QwordSrc > ( pDstIndex, pSrcIndex, pFilter, dDstRows, dSrcRows, &tHitBuilder, sError, tProgress ) )
 					return false;
 		));
 	}
-
-	tBuildHeader.m_iTotalDocuments = tResultRowID;
-
-	if ( !WriteDeadRowMap ( pDstIndex->GetIndexFileName ( SPH_EXT_SPM, true ), tResultRowID, sError ) )
-		return false;
 
 	if ( tMonitor.NeedStop () )
 		return false;
@@ -11339,10 +11392,6 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 
 	int iMinInfixLen = pSettings->m_tSettings.m_iMinInfixLen;
 	if ( !tHitBuilder.cidxDone ( iHitBufferSize, iMinInfixLen, pSettings->m_pTokenizer->GetMaxCodepointLength(), &tBuildHeader ) )
-		return false;
-
-	dDocidLookup.Sort ( CmpDocidLookup_fn() );
-	if ( !WriteDocidLookup ( sSPT, dDocidLookup, sError ) )
 		return false;
 
 	CSphString sHeaderName = pDstIndex->GetIndexFileName ( SPH_EXT_SPH, true );

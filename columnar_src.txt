@@ -1,1 +1,1 @@
-GIT_REPOSITORY https://github.com/manticoresoftware/columnar.git GIT_TAG 5d72e735
+GIT_REPOSITORY https://github.com/manticoresoftware/columnar.git GIT_TAG e8509d93

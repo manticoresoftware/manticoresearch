@@ -12,16 +12,6 @@
 
 #include "searchdddl.h"
 
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wshorten-64-to-32"
-#pragma clang diagnostic ignored "-Wimplicit-fallthrough"
-#pragma clang diagnostic ignored "-Wmissing-noreturn"
-#pragma clang diagnostic ignored "-Wmissing-prototypes"
-#pragma clang diagnostic ignored "-Wexit-time-destructors"
-#pragma clang diagnostic ignored "-Wunneeded-internal-declaration"
-#endif
-
 #define YYSTYPE SqlNode_t
 
 // unused parameter, simply to avoid type clash between all my yylex() functions
@@ -71,10 +61,6 @@ static int yylex ( YYSTYPE * lvalp, DdlParser_c * pParser )
 #endif
 
 #include "bisddl.c"
-
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
 
 //////////////////////////////////////////////////////////////////////////
 

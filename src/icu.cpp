@@ -28,19 +28,11 @@
 #define U_NO_DEFAULT_INCLUDE_UTF_HEADERS 1
 #endif
 
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wsuggest-override"
-#pragma clang diagnostic ignored "-Wsuggest-destructor-override"
-#endif
 
 #include <unicode/brkiter.h>
 #include <unicode/udata.h>
 #include <unicode/ustring.h>
 
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
 
 static CSphString g_sICUDir;
 

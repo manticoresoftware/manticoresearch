@@ -60,18 +60,8 @@
 #endif
 
 #if WITH_RE2
-	#include <string>
-
-	#ifdef __clang__
-		#pragma clang diagnostic push
-		#pragma clang diagnostic ignored "-Wextra-semi"
-	#endif
-
-	#include <re2/re2.h>
-
-	#ifdef __clang__
-		#pragma clang diagnostic pop
-	#endif
+#include <string>
+#include <re2/re2.h>
 #endif
 
 #if _WIN32
@@ -15320,10 +15310,6 @@ static void TransformAotFilterKeyword ( XQNode_t * pNode, LemmatizerTrait_i * pL
 	}
 }
 
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wmissing-prototypes"
-#endif
 
 /// AOT morph guesses transform
 /// replaces tokens with their respective morph guesses subtrees
@@ -15365,10 +15351,6 @@ void TransformAotFilter ( XQNode_t * pNode, LemmatizerTrait_i * pLemmatizer, con
 	assert ( pNode->m_dWords.GetLength()==1 );
 	TransformAotFilterKeyword ( pNode, pLemmatizer, pNode->m_dWords[0], pWordforms, tSettings );
 }
-
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
 
 void TransformAotFilter ( XQNode_t * pNode, const CSphWordforms * pWordforms, const CSphIndexSettings & tSettings )
 {
@@ -20529,10 +20511,6 @@ struct HtmlEntity_t
 	int				m_iCode;
 };
 
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wimplicit-fallthrough"
-#endif
 
 static inline DWORD HtmlEntityHash ( const BYTE * str, int len )
 {
@@ -20579,10 +20557,6 @@ static inline DWORD HtmlEntityHash ( const BYTE * str, int len )
 	return hval + asso_values [ str[len-1] ];
 }
 
-
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
 
 static inline int HtmlEntityLookup ( const BYTE * str, int len )
 {

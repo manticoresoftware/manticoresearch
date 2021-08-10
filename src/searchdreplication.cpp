@@ -19,26 +19,12 @@
 #include "fileutils.h"
 #include <math.h>
 
-
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wkeyword-macro"
-#pragma clang diagnostic ignored "-Wmissing-prototypes"
-#pragma clang diagnostic ignored "-Wnewline-eof"
-#pragma clang diagnostic ignored "-Wunused-function"
-#endif
-
 #if !HAVE_WSREP
 #include "replication/wsrep_api_stub.h"
 // it also populates header guard, so next including of 'normal' wsrep_api will break nothing
 #endif
 
 #include "replication/wsrep_api.h"
-
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
-
 #include "coroutine.h"
 
 #if !_WIN32

@@ -124,17 +124,7 @@ CSphString DebugCommand_t::sOpt ( const char * szName, const char * szDefault ) 
 #pragma GCC diagnostic ignored "-Wpragmas"
 #endif
 
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wshorten-64-to-32"
-#pragma clang diagnostic ignored "-Wmissing-noreturn"
-#endif
-
 #include "flexsphinxqldebug.c"
-
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
 
 #ifdef __GNUC__
 #pragma GCC diagnostic pop

@@ -30,7 +30,7 @@ class TDigest : public ::testing::Test
 {
 
 protected:
-	virtual void TearDown ()
+	void TearDown () override
 	{
 		SafeDelete ( pDigest );
 	}

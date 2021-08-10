@@ -25,7 +25,8 @@ workflow:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "master" && $CI_COMMIT_TITLE != $DOCS_AUTOCOMMIT_TITLE
     - if: $CI_COMMIT_BRANCH =~ /^manticore-.*$/ && $CI_COMMIT_TITLE != $DOCS_AUTOCOMMIT_TITLE
-    - if: $TEST || $WHAT
+    - if: $TEST
+    - if: $WHAT
 
 # to skip ci add [ci skip] or [skip ci] in commit message in any capitalization
 
@@ -52,7 +53,8 @@ docs_deploy:
   stage: routines
   needs: [ ]
   rules:
-    - if: $CI_COMMIT_BRANCH == "master" || $CI_COMMIT_BRANCH =~ /^manticore-.*$/
+    - if: $CI_COMMIT_BRANCH == "master"
+    - if: $CI_COMMIT_BRANCH =~ /^manticore-.*$/
   <<: *docs
 
 
@@ -306,10 +308,10 @@ build_bsd:
 push_results:
   stage: publish
   rules:
-    - if: $WHAT=='$WHAT' 
+    - if: $WHAT=='$WHAT'
       when: always
-    - if: $WHAT==null 
-      when: always      
+    - if: $WHAT==null
+      when: always
   tags:
     - docker
   image: registry.gitlab.com/manticoresearch/dev/ubertests_public:320
@@ -340,7 +342,8 @@ push_results:
 check_docs_examples:
   stage: publish
   rules:
-    - if: $CI_COMMIT_BRANCH == "master" || $CI_COMMIT_BRANCH =~ /^manticore-.*$/
+    - if: $CI_COMMIT_BRANCH == "master"
+    - if: $CI_COMMIT_BRANCH =~ /^manticore-.*$/
     - changes:
       - "test/**/*"
       - "manual/**/*.md"

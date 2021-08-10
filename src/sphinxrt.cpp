@@ -4663,7 +4663,7 @@ int RtIndex_c::DebugCheck ( FILE * fp )
 
 	DebugCheckError_c tReporter(fp);
 
-	if ( m_iLockFD<0 && m_iCheckChunk!=-1 )
+	if ( m_iLockFD<0 && m_iCheckChunk==-1 )
 		sphWarning ( "failed to load RAM chunks, checking only %d disk chunks", m_dChunkNames.GetLength() );
 
 	if ( m_iStride!=m_tSchema.GetRowSize() )

@@ -194,14 +194,6 @@ private:
 };
 
 
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wshorten-64-to-32"
-#pragma clang diagnostic ignored "-Wimplicit-fallthrough"
-#pragma clang diagnostic ignored "-Wmissing-noreturn"
-#pragma clang diagnostic ignored "-Wmissing-prototypes"
-#pragma clang diagnostic ignored "-Wunneeded-internal-declaration"
-#endif
 
 #define YYSTYPE SqlNode_t
 
@@ -252,10 +244,6 @@ static int yylex ( YYSTYPE * lvalp, SqlParser_c * pParser )
 #endif
 
 #include "bissphinxql.c"
-
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
 
 //////////////////////////////////////////////////////////////////////////
 

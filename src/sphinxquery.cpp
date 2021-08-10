@@ -761,16 +761,7 @@ void yyerror ( XQParser_t * pParser, const char * sMessage )
 		pParser->m_pParsed->m_sParseError.SetSprintf ( "%s near '%s'", sMessage, pParser->m_pErrorAt );
 }
 
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wfloat-conversion"
-#endif
-
 #include "bissphinxquery.c"
-
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
 
 //////////////////////////////////////////////////////////////////////////
 

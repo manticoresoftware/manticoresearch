@@ -16,19 +16,15 @@
 #ifdef DAEMON
 #include "sphinx.h"
 #include "sphinxutils.h"
-
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wlanguage-extension-token"
-#endif
-
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/bio.h>
 
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
+static CSphString g_sSslCert;
+static CSphString g_sSslKey;
+static CSphString g_sSslCa;
+
+#if not defined OPENSSL_API_COMPAT or OPENSSL_API_COMPAT >= 0x10100000L
 
 // need by OpenSSL
 struct CRYPTO_dynlock_value
@@ -38,21 +34,7 @@ struct CRYPTO_dynlock_value
 
 static CSphFixedVector<CSphMutex> g_dSslLocks { 0 };
 
-static CSphString g_sSslCert;
-static CSphString g_sSslKey;
-static CSphString g_sSslCa;
-
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunused-function"
-#endif
-
-#ifdef __GNUC__
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-function"
-#endif
-
-static void fnSslLock ( int iMode, int iLock, const char * , int )
+static void fnSslLock ( int iMode, int iLock, const char*, int )
 {
 	if ( iMode & CRYPTO_LOCK )
 		g_dSslLocks[iLock].Lock();
@@ -60,13 +42,13 @@ static void fnSslLock ( int iMode, int iLock, const char * , int )
 		g_dSslLocks[iLock].Unlock();
 }
 
-static CRYPTO_dynlock_value * fnSslLockDynCreate ( const char * , int )
+static CRYPTO_dynlock_value* fnSslLockDynCreate ( const char*, int )
 {
-	auto * pLock = new CRYPTO_dynlock_value;
+	auto* pLock = new CRYPTO_dynlock_value;
 	return pLock;
 }
 
-static void fnSslLockDyn ( int iMode, CRYPTO_dynlock_value * pLock, const char * , int )
+static void fnSslLockDyn ( int iMode, CRYPTO_dynlock_value* pLock, const char*, int )
 {
 	assert ( pLock );
 	if ( iMode & CRYPTO_LOCK )
@@ -75,10 +57,18 @@ static void fnSslLockDyn ( int iMode, CRYPTO_dynlock_value * pLock, const char *
 		pLock->m_tLock.Unlock();
 }
 
-static void fnSslLockDynDestroy ( CRYPTO_dynlock_value * pLock, const char * , int )
+static void fnSslLockDynDestroy ( CRYPTO_dynlock_value* pLock, const char*, int )
 {
 	SafeDelete ( pLock );
 }
+
+inline static void ResetSslLocks ( int iLocks )
+{
+	g_dSslLocks.Reset ( iLocks );
+}
+#else
+inline static void ResetSslLocks ( int iLocks ) {}
+#endif
 
 static BIO_METHOD * BIO_s_coroAsync ( bool bDestroy = false );
 
@@ -95,14 +85,6 @@ static int fnSslError ( const char * pStr, size_t iLen, void * pError )
 
 	return 1;
 }
-
-#ifdef __clang__
-#pragma GCC diagnostic pop
-#endif
-
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
 
 #define FBLACK	"\x1b[30m"
 #define FRED	"\x1b[31m"
@@ -189,7 +171,7 @@ static void SslFreeCtx ( SSL_CTX * pCtx )
 	ERR_remove_state ( 0 );
 	ERR_free_strings();
 
-	g_dSslLocks.Reset ( 0 );
+	ResetSslLocks ( 0 );
 }
 
 using SmartSSL_CTX_t = SharedPtrCustom_t<SSL_CTX *>;
@@ -201,7 +183,7 @@ static SmartSSL_CTX_t GetSslCtx ()
 	if ( !pSslCtx )
 	{
 		int iLocks = CRYPTO_num_locks();
-		g_dSslLocks.Reset ( iLocks );
+		ResetSslLocks ( iLocks );
 
 		CRYPTO_set_locking_callback ( &fnSslLock );
 		CRYPTO_set_dynlock_create_callback ( &fnSslLockDynCreate );

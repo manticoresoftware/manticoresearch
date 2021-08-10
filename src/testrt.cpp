@@ -12,6 +12,7 @@
 
 #include "sphinx.h"
 #include "sphinxrt.h"
+#include "binlog.h"
 #include "sphinxutils.h"
 #include "sphinxsort.h"
 #include "searchdaemon.h"
@@ -627,9 +628,9 @@ int main ( int argc, char ** argv )
 
 	CSphConfigSection tRTConfig;
 	sphRTInit ( tRTConfig, true, nullptr );
-	sphRTConfigure ( tRTConfig, true );
+	Binlog::Configure ( tRTConfig, true );
 	SmallStringHash_T< CSphIndex * > dTemp;
-	sphReplayBinlog ( dTemp );
+	Binlog::Replay ( dTemp );
 	RtIndex_i * pIndex = sphCreateIndexRT ( tSchema, "testrt", 32*1024*1024, DATAFLD "dump", false );
 	pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
 	pIndex->SetDictionary ( pDict );
@@ -689,7 +690,7 @@ int main ( int argc, char ** argv )
 #endif
 
 	SafeDelete ( pIndex );
-	sphRTDone ();
+	Binlog::Deinit ();
 }
 
 

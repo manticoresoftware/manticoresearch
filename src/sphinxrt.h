@@ -120,13 +120,9 @@ public:
 /// initialize subsystem
 class CSphConfigSection;
 void sphRTInit ( const CSphConfigSection & hSearchd, bool bTestMode, const CSphConfigSection * pCommon );
-void sphRTConfigure ( const CSphConfigSection & hSearchd, bool bTestMode );
 bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSchema, const CSphIndexSettings & tSettings, CSphString & sError, bool bSkipValidation, bool bPQ );
 bool sphRTSchemaConfigure ( const CSphVector<CSphColumnInfo> & dFields, const CSphVector<CSphColumnInfo> & dAttrs, CSphSchema & tSchema, CSphString & sError, bool bSkipValidation );
 void sphRTSetTestMode ();
-
-/// deinitialize subsystem
-void sphRTDone ();
 
 /// RT index factory
 RtIndex_i * sphCreateIndexRT ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict );
@@ -135,20 +131,6 @@ typedef void ProgressCallbackSimple_t ();
 
 
 //////////////////////////////////////////////////////////////////////////
-
-enum ESphBinlogReplayFlags
-{
-	SPH_REPLAY_ACCEPT_DESC_TIMESTAMP = 1,
-	SPH_REPLAY_IGNORE_OPEN_ERROR = 2
-};
-
-/// replay stored binlog
-void sphReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, DWORD uReplayFlags = 0, ProgressCallbackSimple_t * pfnProgressCallback = nullptr );
-
-bool sphFlushBinlogEnabled();
-void sphFlushBinlog ();
-int64_t sphNextFlushTimestamp();
-
 
 /// Exposed internal stuff (for pq and for testing)
 

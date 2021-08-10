@@ -12,13 +12,14 @@
 #include "taskflushbinlog.h"
 #include "searchdtask.h"
 #include "searchdaemon.h"
+#include "binlog.h"
 
 static void ScheduleFlushBinlogNext ();
 
 static void OnceFlushFtBinlog ( void* )
 {
 	auto pDesc = PublishSystemInfo ( "FLUSH RT BINLOG" );
-	sphFlushBinlog ();
+	Binlog::Flush ();
 	ScheduleFlushBinlogNext ();
 }
 
@@ -27,12 +28,12 @@ static void ScheduleFlushBinlogNext ()
 	static int iFlushBinlogTask = -1;
 	if ( iFlushBinlogTask<0 )
 		iFlushBinlogTask = TaskManager::RegisterGlobal ( "Flush binlog", OnceFlushFtBinlog, nullptr, 1, 1 );
-	TaskManager::ScheduleJob ( iFlushBinlogTask, sphNextFlushTimestamp ());
+	TaskManager::ScheduleJob ( iFlushBinlogTask, Binlog::NextFlushTimestamp ());
 }
 
 void StartRtBinlogFlushing ()
 {
-	if ( !sphFlushBinlogEnabled ())
+	if ( !Binlog::IsFlushEnabled() )
 		return;
 
 	ScheduleFlushBinlogNext ();

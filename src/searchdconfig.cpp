@@ -31,9 +31,6 @@ using namespace Threads;
 
 static CoroSpinlock_c	g_tSaveInProgress;
 
-extern ISphBinlog * g_pBinlog;
-
-
 static CSphString GetPathForNewIndex ( const CSphString & sIndexName )
 {
 	CSphString sRes;

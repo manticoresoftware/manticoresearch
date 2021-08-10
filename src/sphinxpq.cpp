@@ -18,6 +18,7 @@
 #include "indexsettings.h"
 #include "coroutine.h"
 #include "mini_timer.h"
+#include "binlog.h"
 
 #include <atomic>
 
@@ -110,6 +111,10 @@ public:
 
 	int64_t				GetMemLimit() const final { return 0; }
 
+	bool ReplayTxn(Binlog::Blop_e eOp,CSphReader& tReader, const char* szInfo, Binlog::FnCheckTxn&& fnCanContinue) override; // cb from binlog
+	bool ReplayAdd(CSphReader& tReader, const char* szInfo, Binlog::FnCheckTxn&& fnCanContinue);
+	bool ReplayDelete(CSphReader& tReader, Binlog::FnCheckTxn&& fnCanContinue);
+
 private:
 	static const DWORD				META_HEADER_MAGIC = 0x50535451;	///< magic 'PSTQ' header
 	static const DWORD				META_VERSION = 8;				///< current version, new index format
@@ -156,6 +161,8 @@ private:
 	void AddToStoredUnl ( StoredQuerySharedPtr_t tNew ) REQUIRES ( m_tLockHash, m_tLock );
 	void PostSetupUnl () REQUIRES ( m_tLockHash, m_tLock  );
 	SharedPQSlice_t GetStored () const EXCLUDES ( m_tLock );
+
+	void BinlogReconfigure ( CSphReconfigureSetup & tSetup );
 
 	bool NeedStoreWordID () const override { return ( m_tSettings.m_eHitless==SPH_HITLESS_SOME && m_dHitlessWords.GetLength() ); }
 };
@@ -1763,9 +1770,9 @@ StoredQuery_i * PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, co
 
 void PercolateIndex_c::ReplayCommit ( StoredQuery_i * pQuery )
 {
-	if ( GetBinlog() )
-		GetBinlog()->BinlogPqAdd ( &m_iTID, m_sIndexName.cstr(), *pQuery );
-
+	Binlog::Commit ( Binlog::PQ_ADD, &m_iTID, m_sIndexName.cstr(), true, [pQuery] (CSphWriter& tWriter) {
+		SaveStoredQuery ( *pQuery, tWriter );
+	});
 	auto *pStoredQuery = (StoredQuery_t *) pQuery;
 
 	ScopedMutex_t tLockHash {m_tLockHash};
@@ -1814,8 +1821,9 @@ int PercolateIndex_c::ReplayDeleteQueries ( const VecTraits_T<int64_t>& dQueries
 	};
 
 	assert ( iDeleted );
-	if ( GetBinlog() )
-		GetBinlog()->BinlogPqDelete ( &m_iTID, m_sIndexName.cstr(), dQueries, nullptr );
+	Binlog::Commit ( Binlog::PQ_DELETE, &m_iTID, m_sIndexName.cstr(), true, [dQueries] (CSphWriter& tWriter) {
+		SaveDeleteQuery ( dQueries, nullptr, tWriter );
+	});
 
 	ScWL_t wLock ( m_tLock );
 	m_pQueries = pNewVec;
@@ -1852,8 +1860,10 @@ int PercolateIndex_c::ReplayDeleteQueries ( const char * sTags )
 			++iDeleted;
 		}
 	}
-	if ( iDeleted && GetBinlog() )
-		GetBinlog()->BinlogPqDelete ( &m_iTID, m_sIndexName.cstr(), {nullptr, 0}, sTags );
+	if ( iDeleted )
+		Binlog::Commit ( Binlog::PQ_DELETE, &m_iTID, m_sIndexName.cstr(), true, [sTags] (CSphWriter& tWriter) {
+			SaveDeleteQuery ( { nullptr,0 }, sTags, tWriter );
+		});
 
 	if ( iDeleted )
 	{
@@ -1899,6 +1909,56 @@ bool PercolateIndex_c::Commit ( int * pDeleted, RtAccum_t * pAccExt )
 	if ( pDeleted )
 		*pDeleted = iDeleted;
 
+	return true;
+}
+
+bool PercolateIndex_c::ReplayTxn (Binlog::Blop_e eOp,CSphReader& tReader, const char* szInfo, Binlog::FnCheckTxn&& fnCanContinue)
+{
+	switch ( eOp )
+	{
+	case Binlog::PQ_ADD: return ReplayAdd(tReader, szInfo, std::move(fnCanContinue));
+	case Binlog::PQ_DELETE: return ReplayDelete(tReader, std::move(fnCanContinue));
+	default: assert (false && "unknown op provided to replay");
+	}
+	return false;
+}
+
+bool PercolateIndex_c::ReplayAdd (CSphReader& tReader, const char* szInfo, Binlog::FnCheckTxn&& fnCanContinue)
+{
+	StoredQueryDesc_t tStored;
+	LoadStoredQuery ( PQ_META_VERSION_MAX, tStored, tReader );
+
+	if (fnCanContinue())
+	{
+		CSphString sError;
+		PercolateQueryArgs_t tArgs ( tStored );
+		// at binlog query already passed replace checks
+		tArgs.m_bReplace = true;
+
+		// actually replay
+		StoredQuery_i * pQuery = CreateQuery ( tArgs, sError );
+		if ( !pQuery )
+			sphDie ( "%s apply error ('%s')", szInfo, sError.cstr() );
+
+		ReplayCommit ( pQuery );
+	}
+	return false;
+}
+
+bool PercolateIndex_c::ReplayDelete (CSphReader& tReader, Binlog::FnCheckTxn&& fnCanContinue)
+{
+	CSphVector<int64_t> dQueries;
+	CSphString sTags;
+	LoadDeleteQuery ( dQueries, sTags, tReader );
+
+	if (fnCanContinue())
+	{
+		// actually replay
+		if ( dQueries.GetLength() )
+			ReplayDeleteQueries ( dQueries );
+		else
+			ReplayDeleteQueries ( sTags.cstr() );
+	}
 	return true;
 }
 
@@ -2392,8 +2452,7 @@ void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown
 
 	wrMeta.PutOffset ( m_iTID );
 
-	if ( GetBinlog() )
-		GetBinlog()->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, bShutdown );
+	Binlog::NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, bShutdown );
 
 	m_iSavedTID = m_iTID;
 	m_tmSaved = sphMicroTimer();
@@ -2508,10 +2567,24 @@ bool PercolateIndex_c::IsSameSettings ( CSphReconfigureSettings & tSettings, CSp
 		  bSameSchema, tSettings, tSetup, dWarnings, sError );
 }
 
+void PercolateIndex_c::BinlogReconfigure ( CSphReconfigureSetup & tSetup )
+{
+	Binlog::Commit(Binlog::RECONFIGURE,&m_iTID,m_sIndexName.cstr(),false,[&tSetup] (CSphWriter& tWriter) {
+		// reconfigure data
+		SaveIndexSettings ( tWriter, tSetup.m_tIndex );
+		SaveTokenizerSettings ( tWriter, tSetup.m_pTokenizer, 0 );
+		SaveDictionarySettings ( tWriter, tSetup.m_pDict, false, 0 );
+
+		CSphFieldFilterSettings tFieldFilterSettings;
+		if ( tSetup.m_pFieldFilter.Ptr() )
+			tSetup.m_pFieldFilter->GetSettings(tFieldFilterSettings);
+		tFieldFilterSettings.Save(tWriter);
+	});
+}
+
 bool PercolateIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 {
-	if ( GetBinlog() )
-		GetBinlog()->BinlogReconfigure ( &m_iTID, m_sIndexName.cstr(), tSetup );
+	BinlogReconfigure ( tSetup );
 
 	m_tSchema = tSetup.m_tSchema;
 
@@ -2550,7 +2623,7 @@ bool PercolateIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 bool PercolateIndex_c::IsFlushNeed() const
 {
 	// m_iTID get managed by binlog that is why wo binlog there is no need to compare it
-	if ( GetBinlog() && GetBinlog()->IsActive() && m_iTID<=m_iSavedTID )
+	if ( Binlog::IsActive() && m_iTID<=m_iSavedTID )
 		return false;
 
 	return !m_bSaveDisabled;

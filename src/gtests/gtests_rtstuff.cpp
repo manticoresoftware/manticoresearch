@@ -44,7 +44,7 @@ void TestRTInit ()
 	CSphConfigSection tRTConfig;
 
 	sphRTInit ( tRTConfig, true, nullptr );
-	Binlog::Configure ( tRTConfig, true );
+	Binlog::Configure ( tRTConfig, true, 0 );
 
 	SmallStringHash_T<CSphIndex *> hIndexes;
 	Binlog::Replay ( hIndexes );

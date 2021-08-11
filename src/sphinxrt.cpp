@@ -885,9 +885,9 @@ public:
 
 	static int64_t		NumAliveDocs ( const CSphIndex * pChunk ) ;
 
-	bool ReplayTxn(Binlog::Blop_e eOp,CSphReader& tReader, const char* szInfo, Binlog::FnCheckTxn&& fnCanContinue) override; // cb from binlog
-	bool ReplayCommit(CSphReader& tReader, const char* szInfo, Binlog::FnCheckTxn&& fnCanContinue);
-	bool ReplayReconfigure(CSphReader& tReader, const char* szInfo, Binlog::FnCheckTxn&& fnCanContinue);
+	Binlog::CheckTnxResult_t ReplayTxn ( Binlog::Blop_e eOp,CSphReader& tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCanContinue ) override; // cb from binlog
+	Binlog::CheckTnxResult_t ReplayCommit ( CSphReader& tReader, Binlog::CheckTxn_fn&& fnCanContinue );
+	Binlog::CheckTnxResult_t ReplayReconfigure ( CSphReader& tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCanContinue );
 
 public:
 #if _WIN32
@@ -7885,18 +7885,18 @@ int64_t RtIndex_c::NumAliveDocs ( const CSphIndex * pChunk )
 	return pChunk->GetStats ().m_iTotalDocuments - tStatus.m_iDead;
 }
 
-bool RtIndex_c::ReplayTxn (Binlog::Blop_e eOp,CSphReader& tReader, const char* szInfo, Binlog::FnCheckTxn&& fnCanContinue)
+Binlog::CheckTnxResult_t RtIndex_c::ReplayTxn (Binlog::Blop_e eOp,CSphReader& tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCanContinue)
 {
 	switch ( eOp )
 	{
-	case Binlog::COMMIT: return ReplayCommit(tReader, szInfo, std::move(fnCanContinue));
-	case Binlog::RECONFIGURE: return ReplayReconfigure(tReader, szInfo, std::move(fnCanContinue));
+	case Binlog::COMMIT: return ReplayCommit(tReader, std::move(fnCanContinue));
+	case Binlog::RECONFIGURE: return ReplayReconfigure(tReader, sError, std::move(fnCanContinue));
 	default: assert (false && "unknown op provided to replay");
 	}
-	return false;
+	return Binlog::CheckTnxResult_t();
 }
 
-bool RtIndex_c::ReplayCommit (CSphReader& tReader, const char* szInfo, Binlog::FnCheckTxn&& fnCanContinue)
+Binlog::CheckTnxResult_t RtIndex_c::ReplayCommit ( CSphReader& tReader, Binlog::CheckTxn_fn&& fnCanContinue )
 {
 	CSphRefcountedPtr<RtSegment_t> pSeg;
 	CSphVector<DocID_t> dKlist;
@@ -7947,7 +7947,8 @@ bool RtIndex_c::ReplayCommit (CSphReader& tReader, const char* szInfo, Binlog::F
 
 	Binlog::LoadVector ( tReader, dKlist );
 
-	if (fnCanContinue())
+	Binlog::CheckTnxResult_t tRes = fnCanContinue();
+	if ( tRes.m_bValid && tRes.m_bApply )
 	{
 		// in case dict=keywords
 		// + cook checkpoint
@@ -7960,14 +7961,13 @@ bool RtIndex_c::ReplayCommit (CSphReader& tReader, const char* szInfo, Binlog::F
 		}
 
 		// actually replay
-		return CommitReplayable ( pSeg, dKlist, nullptr, false );
+		tRes.m_bApply = CommitReplayable ( pSeg, dKlist, nullptr, false );
 	}
-	return false;
+	return tRes;
 }
 
-bool RtIndex_c::ReplayReconfigure (CSphReader& tReader, const char* szInfo, Binlog::FnCheckTxn&& fnCanContinue)
+Binlog::CheckTnxResult_t RtIndex_c::ReplayReconfigure ( CSphReader& tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCanContinue )
 {
-	CSphString sError;
 	CSphTokenizerSettings tTokenizerSettings;
 	CSphDictSettings tDictSettings;
 	CSphEmbeddedFiles tEmbeddedFiles;
@@ -7978,12 +7978,16 @@ bool RtIndex_c::ReplayReconfigure (CSphReader& tReader, const char* szInfo, Binl
 	CSphReconfigureSettings tSettings;
 	LoadIndexSettings ( tSettings.m_tIndex, tReader, INDEX_FORMAT_VERSION );
 	if ( !tSettings.m_tTokenizer.Load ( pFilenameBuilder.Ptr(), tReader, tEmbeddedFiles, sError ) )
-		sphDie ( "%s failed to load settings",szInfo);
+	{
+		sError.SetSprintf ( "failed to load settings, %s", sError.cstr() );
+		return Binlog::CheckTnxResult_t();
+	}
 
 	tSettings.m_tDict.Load ( tReader, tEmbeddedFiles, sError );
 	tSettings.m_tFieldFilter.Load(tReader);
 
-	if (fnCanContinue())
+	Binlog::CheckTnxResult_t tRes = fnCanContinue();
+	if ( tRes.m_bValid && tRes.m_bApply )
 	{
 		sError = "";
 		CSphReconfigureSetup tSetup;
@@ -7991,13 +7995,12 @@ bool RtIndex_c::ReplayReconfigure (CSphReader& tReader, const char* szInfo, Binl
 		bool bSame = IsSameSettings ( tSettings, tSetup, dWarnings, sError );
 
 		if ( !sError.IsEmpty() )
-			sphWarning ( "%s wrong settings (error=%s)", szInfo, sError.cstr() );
+			sphWarning ( "binlog: reconfigure: wrong settings (index=%s, error=%s)", m_sIndexName.cstr(), sError.cstr() );
 
 		if ( !bSame )
-			return Reconfigure ( tSetup );
-		return true;
+			tRes.m_bApply = Reconfigure ( tSetup );
 	}
-	return false;
+	return tRes;
 }
 
 

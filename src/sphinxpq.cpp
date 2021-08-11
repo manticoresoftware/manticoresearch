@@ -111,9 +111,9 @@ public:
 
 	int64_t				GetMemLimit() const final { return 0; }
 
-	bool ReplayTxn(Binlog::Blop_e eOp,CSphReader& tReader, const char* szInfo, Binlog::FnCheckTxn&& fnCanContinue) override; // cb from binlog
-	bool ReplayAdd(CSphReader& tReader, const char* szInfo, Binlog::FnCheckTxn&& fnCanContinue);
-	bool ReplayDelete(CSphReader& tReader, Binlog::FnCheckTxn&& fnCanContinue);
+	Binlog::CheckTnxResult_t ReplayTxn(Binlog::Blop_e eOp,CSphReader& tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCanContinue) override; // cb from binlog
+	Binlog::CheckTnxResult_t ReplayAdd(CSphReader& tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCanContinue);
+	Binlog::CheckTnxResult_t ReplayDelete(CSphReader& tReader, Binlog::CheckTxn_fn&& fnCanContinue);
 
 private:
 	static const DWORD				META_HEADER_MAGIC = 0x50535451;	///< magic 'PSTQ' header
@@ -1912,25 +1912,25 @@ bool PercolateIndex_c::Commit ( int * pDeleted, RtAccum_t * pAccExt )
 	return true;
 }
 
-bool PercolateIndex_c::ReplayTxn (Binlog::Blop_e eOp,CSphReader& tReader, const char* szInfo, Binlog::FnCheckTxn&& fnCanContinue)
+Binlog::CheckTnxResult_t PercolateIndex_c::ReplayTxn ( Binlog::Blop_e eOp,CSphReader& tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCanContinue )
 {
 	switch ( eOp )
 	{
-	case Binlog::PQ_ADD: return ReplayAdd(tReader, szInfo, std::move(fnCanContinue));
+	case Binlog::PQ_ADD: return ReplayAdd(tReader, sError, std::move(fnCanContinue));
 	case Binlog::PQ_DELETE: return ReplayDelete(tReader, std::move(fnCanContinue));
 	default: assert (false && "unknown op provided to replay");
 	}
-	return false;
+	return Binlog::CheckTnxResult_t();
 }
 
-bool PercolateIndex_c::ReplayAdd (CSphReader& tReader, const char* szInfo, Binlog::FnCheckTxn&& fnCanContinue)
+Binlog::CheckTnxResult_t PercolateIndex_c::ReplayAdd ( CSphReader& tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCanContinue )
 {
 	StoredQueryDesc_t tStored;
 	LoadStoredQuery ( PQ_META_VERSION_MAX, tStored, tReader );
 
-	if (fnCanContinue())
+	Binlog::CheckTnxResult_t tRes = fnCanContinue();
+	if ( tRes.m_bValid && tRes.m_bApply )
 	{
-		CSphString sError;
 		PercolateQueryArgs_t tArgs ( tStored );
 		// at binlog query already passed replace checks
 		tArgs.m_bReplace = true;
@@ -1938,20 +1938,25 @@ bool PercolateIndex_c::ReplayAdd (CSphReader& tReader, const char* szInfo, Binlo
 		// actually replay
 		StoredQuery_i * pQuery = CreateQuery ( tArgs, sError );
 		if ( !pQuery )
-			sphDie ( "%s apply error ('%s')", szInfo, sError.cstr() );
+		{
+			sError.SetSprintf ( "apply error, %s", sError.cstr() );
+			tRes = Binlog::CheckTnxResult_t();
+			return tRes;
+		}
 
 		ReplayCommit ( pQuery );
 	}
-	return false;
+	return tRes;
 }
 
-bool PercolateIndex_c::ReplayDelete (CSphReader& tReader, Binlog::FnCheckTxn&& fnCanContinue)
+Binlog::CheckTnxResult_t PercolateIndex_c::ReplayDelete (CSphReader& tReader, Binlog::CheckTxn_fn&& fnCanContinue)
 {
 	CSphVector<int64_t> dQueries;
 	CSphString sTags;
 	LoadDeleteQuery ( dQueries, sTags, tReader );
 
-	if (fnCanContinue())
+	Binlog::CheckTnxResult_t tRes = fnCanContinue();
+	if ( tRes.m_bValid && tRes.m_bApply )
 	{
 		// actually replay
 		if ( dQueries.GetLength() )
@@ -1959,7 +1964,7 @@ bool PercolateIndex_c::ReplayDelete (CSphReader& tReader, Binlog::FnCheckTxn&& f
 		else
 			ReplayDeleteQueries ( sTags.cstr() );
 	}
-	return true;
+	return tRes;
 }
 
 

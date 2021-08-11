@@ -450,6 +450,7 @@ using SphDieCallback_t = bool (*) ( bool bDie, const char *, va_list );
 
 /// crash with an error message, and do not have searchd watchdog attempt to resurrect
 void			sphDie ( const char * sFmt, ... ) __attribute__ ( ( format ( printf, 1, 2 ) ) ) NO_RETURN;
+void			sphDieVa ( const char * sFmt, va_list ap );
 
 /// crash with an error message, but have searchd watchdog attempt to resurrect
 void			sphDieRestart ( const char * sMessage, ... ) __attribute__ ( ( format ( printf, 1, 2 ) ) ) NO_RETURN;

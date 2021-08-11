@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>RT replaying binlog with applied TXN</name>
+
+<skip_indexer/>
+<config>
+searchd
+{
+<searchd_settings/>
+	binlog_path = data
+}
+
+index testrt1
+{
+	type 			= rt
+	path = <data_path/>/testrt1
+	rt_field 		= dummy
+	rt_attr_uint 	= idd
+}
+
+index testrt2
+{
+	type 			= rt
+	path = <data_path/>/testrt2
+	rt_field 		= dummy
+	rt_attr_uint 	= idd
+}
+
+</config>
+
+<queries>
+	<sphinxql>
+        INSERT INTO testrt2 VALUES (2, 'dummy', 12);
+		INSERT INTO testrt1 VALUES (1, 'dummy', 11);
+        INSERT INTO testrt1 VALUES (3, 'dummy', 13);
+        INSERT INTO testrt1 VALUES (5, 'dummy', 13);
+        INSERT INTO testrt2 VALUES (4, 'dummy', 14);
+        INSERT INTO testrt2 VALUES (6, 'dummy', 14);
+
+		FLUSH RAMCHUNK testrt1;
+	</sphinxql>
+	<sphinxql system="kill-daemon"/>
+	<sphinxql system="start-agent"/>
+	<sphinxql>
+		SELECT * FROM testrt1 order by id asc;
+        SELECT * FROM testrt2 order by id asc;
+	</sphinxql>
+</queries>
+
+</test>

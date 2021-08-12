@@ -30,5 +30,10 @@ namespace Binlog {
 		TOTAL
 	};
 
-	using FnCheckTxn = std::function <bool()>;
+	struct CheckTnxResult_t
+	{
+		bool m_bValid = false;
+		bool m_bApply = false;
+	};
+	using CheckTxn_fn = std::function <CheckTnxResult_t()>;
 }

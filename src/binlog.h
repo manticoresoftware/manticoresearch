@@ -22,7 +22,10 @@ namespace Binlog {
 	enum ReplayFlags_e
 	{
 		REPLAY_ACCEPT_DESC_TIMESTAMP = 1,
-		REPLAY_IGNORE_OPEN_ERROR = 2
+		REPLAY_IGNORE_OPEN_ERROR = 2,
+		REPLAY_IGNORE_TRX_ERROR = 4,
+
+		REPLAY_IGNORE_ALL_ERRORS = 0xFF
 	};
 
 	using FnWriteCommit = std::function<void (CSphWriter&)>;
@@ -47,7 +50,7 @@ namespace Binlog {
 	}
 
 	void Init ( const CSphConfigSection & hSearchd, bool bTestMode );
-	void Configure ( const CSphConfigSection & hSearchd, bool bTestMode );
+	void Configure ( const CSphConfigSection & hSearchd, bool bTestMode, DWORD uReplayFlags );
 	void Deinit ();
 	bool IsActive();
 
@@ -59,7 +62,7 @@ namespace Binlog {
 	void Commit (Blop_e eOp, int64_t * pTID, const char * sIndexName, bool bIncTID, FnWriteCommit&& fnSaver);
 
 	/// replay stored binlog
-	void Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, DWORD uReplayFlags = 0, ProgressCallbackSimple_t * pfnProgressCallback = nullptr );
+	void Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback = nullptr );
 
 	// dedicated for Commit BLOP_UPDATE_ATTRS
 	void CommitUpdateAttributes ( int64_t * pTID, const char * szIndexName, const CSphAttrUpdate & tUpd );

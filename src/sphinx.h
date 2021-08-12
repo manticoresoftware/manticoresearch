@@ -2840,7 +2840,7 @@ public:
 	/// fnLocker, if provided, used to lock affected row during update for exclusive access
 	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning ) = 0;
 
-	virtual bool 				ReplayTxn (Binlog::Blop_e eOp, CSphReader& tReader, const char* szInfo, Binlog::FnCheckTxn&& fnCanContinue) = 0;
+	virtual Binlog::CheckTnxResult_t ReplayTxn ( Binlog::Blop_e eOp, CSphReader & tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCheck ) = 0;
 	/// saves memory-cached attributes, if there were any updates to them
 	/// on failure, false is returned and GetLastError() contains error message
 	virtual bool				SaveAttributes ( CSphString & sError ) const = 0;
@@ -2971,7 +2971,7 @@ public:
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & tSettings, CSphString * ) const override { return false; }
 	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & ) const override { return true; }
 	int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning ) override { return -1; }
-	bool 				ReplayTxn (Binlog::Blop_e, CSphReader&, const char*, Binlog::FnCheckTxn&&) override { return false; }
+	Binlog::CheckTnxResult_t ReplayTxn ( Binlog::Blop_e, CSphReader &, CSphString &, Binlog::CheckTxn_fn&& ) override { return Binlog::CheckTnxResult_t(); }
 	bool				SaveAttributes ( CSphString & ) const override { return true; }
 	DWORD				GetAttributeStatus () const override { return 0; }
 	bool				AddRemoveAttribute ( bool, const CSphString &, ESphAttr, bool, CSphString & ) override { return true; }

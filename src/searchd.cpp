@@ -19189,6 +19189,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		// FIXME! add opt=(csv)val handling here
 		OPT1 ( "--replay-flags=accept-desc-timestamp" )		uReplayFlags |= Binlog::REPLAY_ACCEPT_DESC_TIMESTAMP;
 		OPT1 ( "--replay-flags=ignore-open-errors" )		uReplayFlags |= Binlog::REPLAY_IGNORE_OPEN_ERROR;
+		OPT1 ( "--replay-flags=ignore-trx-errors" )			uReplayFlags |= Binlog::REPLAY_IGNORE_TRX_ERROR;
+		OPT1 ( "--replay-flags=ignore-all-errors" )			uReplayFlags |= Binlog::REPLAY_IGNORE_ALL_ERRORS;
 
 		// handle 1-arg options
 		else if ( (i+1)>=argc )		break;
@@ -19545,7 +19547,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	if ( bOptPIDFile && !bWatched )
 		sphLockUn ( g_iPidFD );
 
-	Binlog::Configure ( hSearchd, bTestMode );
+	Binlog::Configure ( hSearchd, bTestMode, uReplayFlags );
 	SetUidShort ( bTestMode );
 	InitDocstore ( g_iDocstoreCache );
 	InitParserOption();
@@ -19640,7 +19642,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		}
 	});
 
-	Binlog::Replay ( hIndexes, uReplayFlags, DumpMemStat );
+	Binlog::Replay ( hIndexes, DumpMemStat );
 	hIndexes.Reset();
 
 	// no need to create another cluster on restart by watchdog resurrection

@@ -288,6 +288,8 @@ focalarm:
   tags:
     - arm64
     - focal
+  variables:
+    XTRAFLAGS: "-DCMAKE_C_COMPILER=/usr/bin/clang-12 -DCMAKE_CXX_COMPILER=/usr/bin/clang++-12"
   cache:
     key: focalarm
     paths:

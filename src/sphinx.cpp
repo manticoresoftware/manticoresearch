@@ -602,11 +602,16 @@ private:
 
 
 AttrIndexBuilder_c::AttrIndexBuilder_c ( const CSphSchema & tSchema )
-	: m_uStride ( tSchema.GetRowSize() )
 {
-	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
+	Init ( tSchema );
+}
+
+void AttrIndexBuilder_c::Init ( const CSphSchema& tSchema )
+{
+	m_uStride = tSchema.GetRowSize();
+	for ( int i = 0; i < tSchema.GetAttrsCount(); ++i )
 	{
-		const CSphColumnInfo & tCol = tSchema.GetAttr(i);
+		const CSphColumnInfo& tCol = tSchema.GetAttr ( i );
 		if ( tCol.IsColumnar() )
 			continue;
 
@@ -639,17 +644,10 @@ AttrIndexBuilder_c::AttrIndexBuilder_c ( const CSphSchema & tSchema )
 	m_dFloatIndexMin.Resize ( m_dFloatAttrs.GetLength() );
 	m_dFloatIndexMax.Resize ( m_dFloatAttrs.GetLength() );
 
-	for ( auto & i : m_dIntIndexMin )
-		i = LLONG_MAX;
-
-	for ( auto & i : m_dIntIndexMax )
-		i = LLONG_MIN;
-
-	for ( auto & i : m_dFloatIndexMin )
-		i = FLT_MAX;
-
-	for ( auto & i : m_dFloatIndexMax )
-		i = FLT_MIN;
+	m_dIntIndexMin.Fill ( LLONG_MAX );
+	m_dIntIndexMax.Fill ( LLONG_MIN );
+	m_dFloatIndexMin.Fill ( FLT_MAX );
+	m_dFloatIndexMax.Fill ( FLT_MIN );
 
 	ResetLocal();
 }

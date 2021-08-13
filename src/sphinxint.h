@@ -326,7 +326,9 @@ class AttrIndexBuilder_c : ISphNoncopyable
 {
 public:
 	explicit	AttrIndexBuilder_c ( const CSphSchema & tSchema );
+				AttrIndexBuilder_c() = default;
 
+	void		Init ( const CSphSchema & tSchema );
 	void		Collect ( const CSphRowitem * pRow );
 	void		FinishCollect();
 	const CSphTightVector<CSphRowitem> & GetCollected() const;

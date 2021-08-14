@@ -386,10 +386,9 @@ INSERT INTO name_table VALUES
 
 	<!-- BIGINT() for time functions -->
 	SELECT year(22496904880);
-	SELECT month(22496904880);
-	SELECT day(22496904880);
-	SELECT hour(22496904880);
-	SELECT minute(22496904880);
+	<!-- check BIGINT for day(), month(), yearmonth(), yearmonthday() -->
+	select 22496904880 a, day(a)-day(a) b, month(a)-month(a) c, yearmonth(a) e, yearmonthday(a)-yearmonthday(a) f from test where match('title');
+
 
 
 	<!-- expect false, because above. Fixme! -->

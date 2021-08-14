@@ -140,8 +140,8 @@ Set filters check if attribute value is equal to any of the values in the specif
 ```json
 {
   "index":"test1",
-    "query": 
-    {
+  "query": 
+  {
     "in": 
     {
       "price": [1,10,100]
@@ -205,7 +205,7 @@ Example:
       "distance_type": "adaptive",
       "distance":"100 km"
     }
-      }
+  }
 }
 ```
 

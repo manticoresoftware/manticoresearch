@@ -1140,16 +1140,17 @@ struct AggrResult_t final: CSphQueryResultMeta
 class SearchHandler_c;
 class PubSearchHandler_c
 {
-	SearchHandler_c * m_pImpl = nullptr;
-
 public:
-	PubSearchHandler_c ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster );
-	~PubSearchHandler_c ();
+						PubSearchHandler_c ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster );
+						~PubSearchHandler_c();
 
 	void				RunQueries ();					///< run all queries, get all results
 	void				SetQuery ( int iQuery, const CSphQuery & tQuery, ISphTableFunc * pTableFunc );
 	void				SetProfile ( QueryProfile_c * pProfile );
 	AggrResult_t *		GetResult ( int iResult );
+
+private:
+	SearchHandler_c *	m_pImpl = nullptr;
 };
 
 

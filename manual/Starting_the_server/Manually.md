@@ -69,6 +69,8 @@ $ searchd --config /etc/manticoresearch/manticore.conf --cpustats
 * `--replay-flags=<OPTIONS>` switch can be used to specify a list of extra binary log replay options. The supported options are:
     * `accept-desc-timestamp`, ignore descending transaction timestamps and replay such transactions anyway (the default behavior is to exit with an error).
     * `ignore-open-errors`, ignore missing binlog files (the default behavior is to exit with an error).
+    * `ignore-trx-errors`, ignore any transaction errors and skip current binlog file (the default behavior is to exit with an error).
+    * `ignore-all-errors`, ignore any errors described above (the default behavior is to exit with an error).
     Example:
     ```bash
     $ searchd --replay-flags=accept-desc-timestamp

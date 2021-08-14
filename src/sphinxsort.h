@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2020, Manticore Software LTD (http://manticoresearch.com)
+// Copyright (c) 2017-2021, Manticore Software LTD (http://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -38,23 +38,16 @@ using GetColumnarFromMatch_fn = std::function< columnar::Columnar_i * ( const CS
 class ISphMatchSorter
 {
 public:
-	bool				m_bRandomize = false;
-	int64_t				m_iTotal = 0;
-
-	RowID_t				m_iJustPushed {INVALID_ROWID};
-	int					m_iMatchCapacity = 0;
-	CSphTightVector<RowID_t> m_dJustPopped;
-
 	virtual				~ISphMatchSorter() {}
 
 	/// check if this sorter does groupby
 	virtual bool		IsGroupby() const = 0;
 
 	/// set match comparator state
-	void				SetState ( const CSphMatchComparatorState & tState );
+	virtual void		SetState ( const CSphMatchComparatorState & tState ) = 0;
 
 	/// get match comparator stat
-	const CSphMatchComparatorState & GetState() const { return m_tState; }
+	virtual const CSphMatchComparatorState & GetState() const = 0;
 
 	/// set group comparator state
 	virtual void		SetGroupState ( const CSphMatchComparatorState & ) {}
@@ -63,27 +56,30 @@ public:
 	virtual void		SetBlobPool ( const BYTE * ) {}
 
 	/// set columnar (to work with columnar attributes)
-	virtual void		SetColumnar ( columnar::Columnar_i * pColumnar ) {}
+	virtual void		SetColumnar ( columnar::Columnar_i * pColumnar ) = 0;
 
 	/// set sorter schema
-	virtual void		SetSchema ( ISphSchema * pSchema, bool bRemapCmp );
+	virtual void		SetSchema ( ISphSchema * pSchema, bool bRemapCmp ) = 0;
 
 	/// get incoming schema
-	const ISphSchema *	GetSchema() const { return ( ISphSchema *) m_pSchema; }
+	virtual const ISphSchema *	GetSchema() const = 0;
 
 	/// base push
 	/// returns false if the entry was rejected as duplicate
 	/// returns true otherwise (even if it was not actually inserted)
 	virtual bool		Push ( const CSphMatch & tEntry ) = 0;
 
+	/// push multiple matches at once
+	virtual void		Push ( const VecTraits_T<const CSphMatch> & dMatches ) = 0;
+
 	/// submit pre-grouped match. bNewSet indicates that the match begins the bunch of matches got from one source
 	virtual bool		PushGrouped ( const CSphMatch & tEntry, bool bNewSet ) = 0;
 
 	/// get	rough entries count, due of aggregate filtering phase
-	virtual int			GetLength() const = 0;
+	virtual int			GetLength() = 0;
 
 	/// get total count of non-duplicates Push()ed through this queue
-	int64_t				GetTotalCount() const { return m_iTotal; }
+	virtual int64_t		GetTotalCount() const = 0;
 
 	/// process collected entries up to length count
 	virtual void		Finalize ( MatchProcessor_i & tProcessor, bool bCallProcessInResultSetOrder ) = 0;
@@ -96,7 +92,6 @@ public:
 	/// get a pointer to the worst element, NULL if there is no fixed location
 	virtual const CSphMatch * GetWorst() const { return nullptr; }
 
-
 	/// returns whether the sorter can be cloned to distribute processing over multi threads
 	/// (delete and update sorters are too complex by side effects and can't be cloned)
 	virtual bool		CanBeCloned() const { return true; }
@@ -108,21 +103,22 @@ public:
 	virtual void		MoveTo ( ISphMatchSorter * pRhs ) = 0;
 
 	/// makes the same sorter
-	void				CloneTo ( ISphMatchSorter * pTrg ) const;
-
-	const CSphMatchComparatorState & GetComparatorState() const { return m_tState; }
+	virtual void		CloneTo ( ISphMatchSorter * pTrg ) const = 0;
 
 	/// set attributes list these should copied into result set \ final matches
-	void				SetFilteredAttrs ( const sph::StringSet & hAttrs, bool bAddDocid );
+	virtual void		SetFilteredAttrs ( const sph::StringSet & hAttrs, bool bAddDocid ) = 0;
 
 	/// transform collected matches into standalone (copy all pooled attrs to ptrs, drop unused)
 	/// param fnBlobPoolFromMatch provides pool pointer from currently processed match pointer.
-	void				TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnBlobPoolFromMatch, GetColumnarFromMatch_fn fnGetColumnarFromMatch );
+	virtual void		TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnBlobPoolFromMatch, GetColumnarFromMatch_fn fnGetColumnarFromMatch ) = 0;
 
-protected:
-	SharedPtr_t<ISphSchema*>	m_pSchema;	///< sorter schema (adds dynamic attributes on top of index schema)
-	CSphMatchComparatorState	m_tState;		///< protected to set m_iNow automatically on SetState() calls
-	StrVec_t					m_dTransformed;
+	virtual void		SetRandom ( bool bRandom ) = 0;
+	virtual bool		IsRandom() const = 0;
+
+	virtual int			GetMatchCapacity() const = 0;
+
+	virtual RowID_t		GetJustPushed() const = 0;
+	virtual VecTraits_T<RowID_t> GetJustPopped() const = 0;
 };
 
 
@@ -132,7 +128,7 @@ struct CmpPSortersByRandom_fn
 	{
 		assert ( a );
 		assert ( b );
-		return a->m_bRandomize<b->m_bRandomize;
+		return a->IsRandom()<b->IsRandom();
 	}
 };
 
@@ -183,6 +179,5 @@ ISphMatchSorter * sphCreateQueue ( const SphQueueSettings_t & tQueue, const CSph
 
 void sphCreateMultiQueue ( const SphQueueSettings_t & tQueue, const VecTraits_T<CSphQuery> & dQueries, VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors,
 	SphQueueRes_t & tRes, StrVec_t * pExtra );
-
 
 #endif // _sphinxsort_

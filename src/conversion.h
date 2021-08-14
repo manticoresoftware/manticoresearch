@@ -19,25 +19,25 @@ int64_t sphToInt64 ( const char * szNumber, CSphString * pError=nullptr );
 float 	sphToFloat ( const char * s );
 
 /// float vs dword conversion
-inline DWORD sphF2DW ( float f )	{ union { float f; DWORD d; } u; u.f = f; return u.d; }
+FORCE_INLINE DWORD sphF2DW ( float f )	{ union { float f; DWORD d; } u; u.f = f; return u.d; }
 
 /// dword vs float conversion
-inline float sphDW2F ( DWORD d )	{ union { float f; DWORD d; } u; u.d = d; return u.f; }
+FORCE_INLINE float sphDW2F ( DWORD d )	{ union { float f; DWORD d; } u; u.d = d; return u.f; }
 
 /// double to bigint conversion
-inline uint64_t sphD2QW ( double f )	{ union { double f; uint64_t d; } u; u.f = f; return u.d; }
+FORCE_INLINE uint64_t sphD2QW ( double f )	{ union { double f; uint64_t d; } u; u.f = f; return u.d; }
 
 /// bigint to double conversion
-inline double sphQW2D ( uint64_t d )	{ union { double f; uint64_t d; } u; u.d = d; return u.f; }
+FORCE_INLINE double sphQW2D ( uint64_t d )	{ union { double f; uint64_t d; } u; u.d = d; return u.f; }
 
 template <typename T>
-inline T ConvertType ( SphAttr_t tValue )
+FORCE_INLINE T ConvertType ( SphAttr_t tValue )
 {
 	return (T)tValue;
 }
 
 template <>
-inline float ConvertType<float>( SphAttr_t tValue )
+FORCE_INLINE float ConvertType<float>( SphAttr_t tValue )
 {
 	return sphDW2F ( (DWORD)tValue );
 }

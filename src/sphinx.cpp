@@ -40,6 +40,7 @@
 #include "mini_timer.h"
 #include "sphinx_alter.h"
 #include "conversion.h"
+#include "binlog.h"
 
 #include <errno.h>
 #include <ctype.h>
@@ -60,18 +61,8 @@
 #endif
 
 #if WITH_RE2
-	#include <string>
-
-	#ifdef __clang__
-		#pragma clang diagnostic push
-		#pragma clang diagnostic ignored "-Wextra-semi"
-	#endif
-
-	#include <re2/re2.h>
-
-	#ifdef __clang__
-		#pragma clang diagnostic pop
-	#endif
+#include <string>
+#include <re2/re2.h>
 #endif
 
 #if _WIN32
@@ -1513,6 +1504,9 @@ public:
 	static bool			DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, int iKillField );
 
 	int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning ) final;
+
+	// the only txn we can replay is 'update attributes', but it is processed by dedicated branch in binlog, so we have nothing to do here.
+	Binlog::CheckTnxResult_t ReplayTxn (Binlog::Blop_e, CSphReader&, CSphString & , Binlog::CheckTxn_fn&&) final { return Binlog::CheckTnxResult_t(); }
 	bool				SaveAttributes ( CSphString & sError ) const final;
 	DWORD				GetAttributeStatus () const final;
 
@@ -6277,11 +6271,7 @@ ISphSchema * CSphSchema::CloneMe () const
 
 bool CSphSchema::HasBlobAttrs() const
 {
-	for ( const auto & i : m_dAttrs )
-		if ( sphIsBlobAttr(i) )
-			return true;
-
-	return false;
+	return m_dAttrs.any_of ([] (const CSphColumnInfo& i) { return sphIsBlobAttr(i);});
 }
 
 
@@ -7453,8 +7443,8 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, b
 	if ( !Update_HandleJsonWarnings ( tCtx, iUpdated, sWarning, sError ) )
 		return -1;
 
-	if ( tCtx.m_uUpdateMask && m_bBinlog && g_pBinlog )
-		g_pBinlog->BinlogUpdateAttributes ( &m_iTID, m_sIndexName.cstr(), tUpd );
+	if ( tCtx.m_uUpdateMask && m_bBinlog )
+		Binlog::CommitUpdateAttributes ( &m_iTID, m_sIndexName.cstr(), tUpd );
 
 	m_uAttrsStatus |= tCtx.m_uUpdateMask; // FIXME! add lock/atomic?
 
@@ -7530,8 +7520,8 @@ bool CSphIndex_VLN::SaveAttributes ( CSphString & sError ) const
 			return false;
 	}
 
-	if ( m_bBinlog && g_pBinlog )
-		g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, false );
+	if ( m_bBinlog )
+		Binlog::NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, false );
 
 	if ( m_uAttrsStatus==uAttrStatus )
 		m_uAttrsStatus = 0;
@@ -12243,7 +12233,8 @@ void CSphQueryContext::SetupExtraData ( ISphRanker * pRanker, ISphMatchSorter * 
 
 
 template<bool USE_KLIST, bool RANDOMIZE, bool USE_FACTORS>
-void CSphIndex_VLN::MatchExtended ( CSphQueryContext& tCtx, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dSorters, ISphRanker * pRanker, int iTag, int iIndexWeight ) const
+void CSphIndex_VLN::MatchExtended ( CSphQueryContext& tCtx, const CSphQuery & tQuery,
+		const VecTraits_T<ISphMatchSorter *> & dSorters, ISphRanker * pRanker, int iTag, int iIndexWeight ) const
 {
 	QueryProfile_c * pProfile = tCtx.m_pProfile;
 	CSphScopedProfile tProf (pProfile, SPH_QSTATE_UNKNOWN);
@@ -12291,7 +12282,7 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext& tCtx, const CSphQuery & tQ
 				// so we can avoid the simple 'first-element' assertion
 				if_const ( RANDOMIZE )
 				{
-					if ( !bRand && pSorter->m_bRandomize )
+					if ( !bRand && pSorter->IsRandom() )
 					{
 						bRand = true;
 						tMatch.m_iWeight = ( sphRand() & 0xffff ) * iIndexWeight;
@@ -12305,8 +12296,10 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext& tCtx, const CSphQuery & tQ
 
 				if_const ( USE_FACTORS )
 				{
-					pRanker->ExtraData ( EXTRA_SET_MATCHPUSHED, (void**)&( pSorter->m_iJustPushed) );
-					pRanker->ExtraData ( EXTRA_SET_MATCHPOPPED, (void**)&( pSorter->m_dJustPopped) );
+					RowID_t tJustPushed = pSorter->GetJustPushed();
+					VecTraits_T<RowID_t> dJustPopped = pSorter->GetJustPopped();
+					pRanker->ExtraData ( EXTRA_SET_MATCHPUSHED, (void**)&tJustPushed );
+					pRanker->ExtraData ( EXTRA_SET_MATCHPOPPED, (void**)&dJustPopped );
 				}
 			}
 
@@ -12621,7 +12614,7 @@ void RunFullscan ( ITERATOR & tIterator, TO_STATIC && fnToStatic, const CSphQuer
 	int iIndex = bHasFilterCalc*32 + bHasSortCalc*16 + bHasFilter*8 + bRandomize*4 + bHasTimer*2 + bHasCutoff;
 
 	std::function<void (ITERATOR &, TO_STATIC &&, const CSphQueryContext &, CSphQueryResultMeta &, const VecTraits_T<ISphMatchSorter *> &, CSphMatch &, int, int, int64_t, bool &)> fnScan;
-	
+
 	switch ( iIndex )
 	{
 		case 0:		fnScan = &Fullscan<false, false, false, false, false, false, ITERATOR, TO_STATIC>; break;
@@ -12882,7 +12875,7 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	}
 
 	// prepare to work them rows
-	bool bRandomize = dSorters[0]->m_bRandomize;
+	bool bRandomize = dSorters[0]->IsRandom();
 
 	CSphMatch tMatch;
 	tMatch.Reset ( tMaxSorterSchema.GetDynamicSize() );
@@ -15318,10 +15311,6 @@ static void TransformAotFilterKeyword ( XQNode_t * pNode, LemmatizerTrait_i * pL
 	}
 }
 
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wmissing-prototypes"
-#endif
 
 /// AOT morph guesses transform
 /// replaces tokens with their respective morph guesses subtrees
@@ -15363,10 +15352,6 @@ void TransformAotFilter ( XQNode_t * pNode, LemmatizerTrait_i * pLemmatizer, con
 	assert ( pNode->m_dWords.GetLength()==1 );
 	TransformAotFilterKeyword ( pNode, pLemmatizer, pNode->m_dWords[0], pWordforms, tSettings );
 }
-
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
 
 void TransformAotFilter ( XQNode_t * pNode, const CSphWordforms * pWordforms, const CSphIndexSettings & tSettings )
 {
@@ -15810,7 +15795,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	pRanker->ExtraData ( EXTRA_SET_BLOBPOOL, (void**)&pBlobPool );
 
 	int iMatchPoolSize = 0;
-	dSorters.Apply ( [&iMatchPoolSize] ( const ISphMatchSorter * p ) { iMatchPoolSize += p->m_iMatchCapacity; } );
+	dSorters.Apply ( [&iMatchPoolSize] ( const ISphMatchSorter * p ) { iMatchPoolSize += p->GetMatchCapacity(); } );
 
 	pRanker->ExtraData ( EXTRA_SET_POOL_CAPACITY, (void**)&iMatchPoolSize );
 
@@ -15854,7 +15839,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	}
 
 	bool bHaveRandom = false;
-	dSorters.Apply ( [&bHaveRandom] ( const ISphMatchSorter * p ) { bHaveRandom |= p->m_bRandomize; } );
+	dSorters.Apply ( [&bHaveRandom] ( const ISphMatchSorter * p ) { bHaveRandom |= p->IsRandom(); } );
 
 	bool bUseFactors = !!( tCtx.m_uPackedFactorFlags & SPH_FACTOR_ENABLE );
 	bool bHaveDead = m_tDeadRowMap.HasDead();
@@ -20527,10 +20512,6 @@ struct HtmlEntity_t
 	int				m_iCode;
 };
 
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wimplicit-fallthrough"
-#endif
 
 static inline DWORD HtmlEntityHash ( const BYTE * str, int len )
 {
@@ -20577,10 +20558,6 @@ static inline DWORD HtmlEntityHash ( const BYTE * str, int len )
 	return hval + asso_values [ str[len-1] ];
 }
 
-
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
 
 static inline int HtmlEntityLookup ( const BYTE * str, int len )
 {
@@ -23561,7 +23538,7 @@ std::pair<int, int> GetMaxSchemaIndexAndMatchCapacity ( const VecTraits_T<ISphMa
 	int iMatchPoolSize = 0;
 	ARRAY_FOREACH ( i, dSorters )
 	{
-		iMatchPoolSize += dSorters[i]->m_iMatchCapacity;
+		iMatchPoolSize += dSorters[i]->GetMatchCapacity();
 		if ( dSorters[i]->GetSchema ()->GetAttrsCount ()>iMaxSchemaSize )
 		{
 			iMaxSchemaSize = dSorters[i]->GetSchema ()->GetAttrsCount ();

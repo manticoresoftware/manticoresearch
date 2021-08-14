@@ -99,7 +99,7 @@ if (NOT WIN32)
 	add_feature_info (Static STATIC_BINARY "make pure static build undependent of any local libraries")
 	if (STATIC_BINARY)
 		# options for clang/gcc c and c++
-		target_compile_options (lextra INTERFACE $<${GNUC_CXX}:-static>)
+		target_compile_options (lextra INTERFACE $<${ONLYGNUCLANGC_CXX}:-static>)
 		set (HAVE_DLOPEN 0 CACHE BOOL "" FORCE)
 		set (HAVE_DLERROR 0 CACHE BOOL "" FORCE)
 		set (HAVE_GETADDRINFO_A 0 CACHE BOOL "" FORCE)
@@ -119,7 +119,7 @@ if (NOT WIN32)
 	endif ()
 endif()
 
-include (TestBigEndian)
+include (TestBigEndian) # fixme! That is deprecated in cmake 3.20 in favor to CMAKE_<LANG>_BYTE_ORDER var
 test_big_endian (USE_BIG_ENDIAN)
 
 check_include_file ("sys/types.h" HAVE_SYS_TYPES_H)
@@ -149,14 +149,15 @@ set (USE_SYSLOG ${HAVE_SYSLOG_H} CACHE BOOL "compile with possibility to use sys
 bannervar (USE_SYSLOG)
 
 # options for clang/gcc c and c++
-target_compile_options (lextra INTERFACE $<${GNUC_CXX}:-D_FILE_OFFSET_BITS=64 -fno-strict-aliasing -Wall>)
+target_compile_options ( lextra INTERFACE $<${ONLYGNUCLANGC_CXX}:-D_FILE_OFFSET_BITS=64 -Wall -fno-strict-aliasing> )
+target_compile_options ( lextra INTERFACE $<${CLANG_CL}:/clang:-Wall -fno-strict-aliasing> )
 
 # disable rtti
-target_compile_options (lextra INTERFACE $<${GNUCXX}:-fno-rtti>$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/GR->)
+target_compile_options ( lextra INTERFACE $<${ONLYGNUCLANGCXX}:-fno-rtti>$<${MSCXX}:/GR-> ) # no rtti
 
 
 if (COVERAGE_TEST)
-	target_compile_options (lextra INTERFACE $<${GNUC_CXX}:-fprofile-arcs -ftest-coverage>)
+	target_compile_options (lextra INTERFACE $<${ONLYGNUCLANGC_CXX}:-fprofile-arcs -ftest-coverage>)
 	target_link_options (lextra INTERFACE
 			$<$<LINK_LANG_AND_ID:CXX,GNU>:-lgcov --coverage>
 			$<$<LINK_LANG_AND_ID:C,GNU>:-lgcov --coverage>
@@ -165,27 +166,10 @@ if (COVERAGE_TEST)
 			)
 endif (COVERAGE_TEST)
 
-# options for clang in C++ (permanently disabled warnings)
-target_compile_options (lextra INTERFACE $<${CLANGXX}:
-		-Wno-deprecated-register -Wno-missing-exception-spec -Wno-implicit-exception-spec-mismatch -Wno-invalid-offsetof
-		-Wno-c++98-compat-pedantic -Wno-nonportable-system-include-path -Wno-old-style-cast -Wno-unused-parameter
-		-Wno-sign-conversion -Wno-zero-as-null-pointer-constant -Wno-reserved-id-macro -Wno-extra-semi-stmt -Wno-undef
-		-Wno-format-nonliteral -Wno-cast-align -Wno-deprecated-declarations -Wno-switch-enum -Wno-unused-macros
-		-Wno-disabled-macro-expansion -Wno-documentation -Wno-documentation-deprecated-sync -Wno-documentation-unknown-command
-		-Wno-format-pedantic -Wno-covered-switch-default -Wno-implicit-int-float-conversion -Wno-exit-time-destructors
-		-Wno-float-equal -Wno-double-promotion -Wno-missing-field-initializers -Wno-unused-local-typedef
-		-Wno-global-constructors -Wno-deprecated-copy-dtor -Wno-gnu-anonymous-struct -Wno-nested-anon-types
-		-Wno-undefined-func-template> )
+# options for clang in C++
+target_compile_options ( lextra INTERFACE $<${CLANGCXX}:
+		-Wno-deprecated-register -Wno-missing-exception-spec -Wno-implicit-exception-spec-mismatch -Wno-invalid-offsetof> )
 
-# options for clang in C++ (temporarily disabled warnings)
-target_compile_options (lextra INTERFACE $<${CLANGXX}:
-		-Wno-thread-safety-analysis -Wno-unknown-argument -Wno-unused-command-line-argument -Wno-implicit-fallthrough
-		-Wno-format -Wno-unknown-pragmas -Wno-cast-qual -Wno-unreachable-code -Wno-language-extension-token
-		-Wno-implicit-int-conversion -Wno-shorten-64-to-32 -Wno-missing-prototypes -Wno-newline-eof -Wno-tautological-unsigned-zero-compare
-		-Wno-shadow-uncaptured-local -Wno-deprecated-dynamic-exception-spec -Wno-missing-variable-declarations -Wno-string-conversion
-		-Wno-unreachable-code-break -Wno-unreachable-code-return -Wno-sign-compare  -Wno-atomic-implicit-seq-cst -Wno-microsoft-cast
-		-Wno-enum-enum-conversion -Wno-unused-function -Wno-missing-noreturn -Wno-unused-variable> )
-		              
 # Checking for unaligned RAM access
 include (check_unaligned_ram_access)
 

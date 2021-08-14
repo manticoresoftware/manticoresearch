@@ -29,16 +29,7 @@
 #include <math.h>
 
 #if WITH_RE2
-	#ifdef __clang__
-		#pragma clang diagnostic push
-		#pragma clang diagnostic ignored "-Wextra-semi"
-	#endif
-
-	#include <re2/re2.h>
-
-	#ifdef __clang__
-		#pragma clang diagnostic pop
-	#endif
+#include <re2/re2.h>
 #endif
 
 #ifndef M_LOG2E
@@ -3314,13 +3305,6 @@ struct UdfCall_t
 // PARSER INTERNALS
 //////////////////////////////////////////////////////////////////////////
 class ExprParser_t;
-
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wshorten-64-to-32"
-#pragma clang diagnostic ignored "-Wmissing-prototypes"
-#pragma clang diagnostic ignored "-Wmissing-noreturn"
-#endif
 
 #include "bissphinxexpr.h"
 
@@ -8574,11 +8558,6 @@ void yyerror ( ExprParser_t * pParser, const char * sMessage )
 }
 
 #include "bissphinxexpr.c"
-
-
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
 
 //////////////////////////////////////////////////////////////////////////
 

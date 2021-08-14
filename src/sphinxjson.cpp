@@ -785,15 +785,6 @@ public:
 	}
 };
 
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wshorten-64-to-32"
-#pragma clang diagnostic ignored "-Wimplicit-fallthrough"
-#pragma clang diagnostic ignored "-Wmissing-noreturn"
-#pragma clang diagnostic ignored "-Wmissing-prototypes"
-#pragma clang diagnostic ignored "-Wunneeded-internal-declaration"
-#endif
-
 // unused parameter, simply to avoid type clash between all my yylex() functions
 #define YY_NO_UNISTD_H 1
 #define YY_DECL inline static int my_lex ( YYSTYPE * lvalp, void * yyscanner, JsonParser_c * pParser )
@@ -823,11 +814,6 @@ inline static int yylex ( YYSTYPE * lvalp, JsonParser_c * pParser )
 #endif
 
 #include "bissphinxjson.c"
-
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
-
 #include "sphinxutils.h"
 
 bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool bToLowercase, bool bCheckSize, CSphString & sError )

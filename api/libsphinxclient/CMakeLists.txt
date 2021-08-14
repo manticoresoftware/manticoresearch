@@ -19,12 +19,11 @@ PROJECT ( SPHINXCLIENT
 
 # our mega-lib
 add_library ( sphinxclient STATIC sphinxclient.c )
-target_compile_options (sphinxclient PRIVATE $<$<COMPILE_LANG_AND_ID:C,Clang,AppleClang,GNU>:-g3 -Wall -O0>)
-
-target_compile_options (sphinxclient PRIVATE $<$<COMPILE_LANG_AND_ID:C,Clang>:
-	-Wno-reserved-id-macro -Wno-extra-semi-stmt -Wno-cast-qual -Wno-sign-conversion -Wno-language-extension-token
-	-Wno-nonportable-system-include-path -Wno-format-nonliteral -Wno-missing-prototypes -Wno-sign-compare
-	-Wno-deprecated-declarations -Wno-cast-align -Wno-newline-eof>)
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+	target_compile_options ( sphinxclient PRIVATE -g3 /clang:-Wall -O0 )
+else ()
+	target_compile_options ( sphinxclient PRIVATE -g3 -Wall -O0 )
+endif ()
 
 if (NOT BUILD_TESTING OR DISABLE_GTESTS OR WIN32 OR TEST_SPECIAL_EXTERNAL )
 	return()

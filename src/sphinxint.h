@@ -64,10 +64,6 @@ const int64_t DEFAULT_RT_MEM_LIMIT = 128 * 1024 * 1024;
 // INTERNAL GLOBALS
 //////////////////////////////////////////////////////////////////////////
 
-/// binlog, defined in sphinxrt.cpp
-extern class ISphBinlog *		g_pBinlog;
-ISphBinlog *					GetBinlog();
-
 /// costs for max_predicted_time limits, defined in sphinxsearch.cpp
 /// measured in nanoseconds (that is, 1e-9)
 extern int g_iPredictorCostSkip;
@@ -1098,28 +1094,6 @@ void SetUserVarsHook ( fnGetUserVar fnHook );
 bool UservarsAvailable();
 
 UservarIntSet_c Uservars ( const CSphString & sUservar );
-
-//////////////////////////////////////////////////////////////////////////
-// BINLOG INTERNALS
-//////////////////////////////////////////////////////////////////////////
-
-struct StoredQueryDesc_t;
-
-/// global binlog interface
-class ISphBinlog : ISphNoncopyable
-{
-public:
-	virtual				~ISphBinlog () {}
-
-	virtual void		BinlogUpdateAttributes ( int64_t * pTID, const char * sIndexName, const CSphAttrUpdate & tUpd ) = 0;
-	virtual void		NotifyIndexFlush ( const char * sIndexName, int64_t iTID, bool bShutdown ) = 0;
-
-	virtual void		BinlogReconfigure ( int64_t * pTID, const char * sIndexName, const CSphReconfigureSetup & tSetup ) = 0;
-	virtual bool		IsActive () = 0; // i.e. binlog is not disabled, say, by empty path.
-
-	virtual void		BinlogPqAdd ( int64_t * pTID, const char * sIndexName, const StoredQueryDesc_t & tStored ) = 0;
-	virtual void		BinlogPqDelete ( int64_t * pTID, const char * sIndexName, const VecTraits_T<int64_t>& dQueries, const char * sTags ) = 0;
-};
 
 //////////////////////////////////////////////////////////////////////////
 // MISC FUNCTION PROTOTYPES

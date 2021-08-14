@@ -863,7 +863,7 @@ void sphSetDieCallback ( SphDieCallback_t pfDieCallback )
 	g_pfDieCallback = pfDieCallback;
 }
 
-static void vDie ( const char * sFmt, va_list ap )
+void sphDieVa ( const char * sFmt, va_list ap )
 {
 	// if there's no callback,
 	// or if callback returns true,
@@ -880,7 +880,7 @@ void sphDie ( const char * sFmt, ... )
 {
 	va_list ap;
 	va_start ( ap, sFmt );
-	vDie ( sFmt, ap );
+	sphDieVa ( sFmt, ap );
 	va_end ( ap );
 	exit ( 1 );
 }
@@ -889,7 +889,7 @@ void sphDieRestart ( const char * sFmt, ... )
 {
 	va_list ap;
 	va_start ( ap, sFmt );
-	vDie ( sFmt, ap );
+	sphDieVa ( sFmt, ap );
 	va_end ( ap );
 	exit ( 2 ); // almost CRASH_EXIT
 }

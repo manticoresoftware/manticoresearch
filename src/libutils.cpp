@@ -18,7 +18,7 @@
 
 void * dlsym ( void * lib, const char * name )
 {
-	return GetProcAddress ( (HMODULE)lib, name );
+	return (void*)GetProcAddress ( (HMODULE)lib, name );
 }
 
 

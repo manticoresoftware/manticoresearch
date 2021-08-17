@@ -1578,7 +1578,7 @@ private:
 	void						SetupStarDict ( DictRefPtr_c &pDict ) const;
 	void						SetupExactDict ( DictRefPtr_c &pDict ) const;
 
-	bool						RelocateBlock ( int iFile, BYTE * pBuffer, int iRelocationSize, SphOffset_t * pFileSize, CSphBin * pMinBin, SphOffset_t * pSharedOffset );
+	bool						RelocateBlock ( int iFile, BYTE * pBuffer, int iRelocationSize, SphOffset_t * pFileSize, CSphBin & dMinBin, SphOffset_t * pSharedOffset );
 
 	bool						SortDocidLookup ( int iFD, int nBlocks, int iMemoryLimit, int nLookupsInBlock, int nLookupsInLastBlock, CSphIndexProgress& tProgress );
 
@@ -8904,14 +8904,14 @@ static const int MIN_KEYWORDS_DICT	= 4*1048576;	// FIXME! ideally must be in syn
 /////////////////////////////////////////////////////////////////////////////
 
 bool CSphIndex_VLN::RelocateBlock ( int iFile, BYTE * pBuffer, int iRelocationSize,
-	SphOffset_t * pFileSize, CSphBin * pMinBin, SphOffset_t * pSharedOffset )
+	SphOffset_t * pFileSize, CSphBin & dMinBin, SphOffset_t * pSharedOffset )
 {
-	assert ( pBuffer && pFileSize && pMinBin && pSharedOffset );
+	assert ( pBuffer && pFileSize && pSharedOffset );
 
-	SphOffset_t iBlockStart = pMinBin->m_iFilePos;
-	SphOffset_t iBlockLeft = pMinBin->m_iFileLeft;
+	SphOffset_t iBlockStart = dMinBin.m_iFilePos;
+	SphOffset_t iBlockLeft = dMinBin.m_iFileLeft;
 
-	ESphBinRead eRes = pMinBin->Precache ();
+	ESphBinRead eRes = dMinBin.Precache ();
 	switch ( eRes )
 	{
 	case BIN_PRECACHE_OK:
@@ -8955,7 +8955,7 @@ bool CSphIndex_VLN::RelocateBlock ( int iFile, BYTE * pBuffer, int iRelocationSi
 	assert ( uTotalRead==iBlockLeft );
 
 	// update block pointers
-	pMinBin->m_iFilePos = uNewBlockStart;
+	dMinBin.m_iFilePos = uNewBlockStart;
 	*pSharedOffset = *pFileSize;
 
 	return true;
@@ -9540,19 +9540,20 @@ bool CSphIndex_VLN::SortDocidLookup ( int iFD, int nBlocks, int iMemoryLimit, in
 	DeleteOnFail_c tWatchdog;
 	tWatchdog.AddWriter ( &tWriter.GetWriter() );
 
-	CSphVector<CSphBin*> dBins;
+	RawVector_T<CSphBin> dBins;
 	SphOffset_t iSharedOffset = -1;
 
 	dBins.Reserve ( nBlocks );
 
 	int iBinSize = CSphBin::CalcBinSize ( iMemoryLimit, nBlocks, "sort_lookup" );
 
+	dBins.Reserve_static (nBlocks);
 	for ( int i=0; i<nBlocks; ++i )
 	{
-		dBins.Add ( new CSphBin() );
-		dBins[i]->m_iFileLeft = ( ( i==nBlocks-1 ) ? nLookupsInLastBlock : nLookupsInBlock )*sizeof(DocidRowidPair_t);
-		dBins[i]->m_iFilePos = ( i==0 ) ? 0 : dBins[i-1]->m_iFilePos + dBins[i-1]->m_iFileLeft;
-		dBins[i]->Init ( iFD, &iSharedOffset, iBinSize );
+		auto& dBin = dBins.Add();
+		dBin.m_iFileLeft = ( ( i==nBlocks-1 ) ? nLookupsInLastBlock : nLookupsInBlock )*sizeof(DocidRowidPair_t);
+		dBin.m_iFilePos = ( i==0 ) ? 0 : dBins[i-1].m_iFilePos + dBins[i-1].m_iFileLeft;
+		dBin.Init ( iFD, &iSharedOffset, iBinSize );
 	}
 
 	CSphFixedVector<DocidRowidPair_t> dTopDocIDs ( nBlocks );
@@ -9562,7 +9563,7 @@ bool CSphIndex_VLN::SortDocidLookup ( int iFD, int nBlocks, int iMemoryLimit, in
 
 	for ( int i=0; i<nBlocks; ++i )
 	{
-		if ( dBins[i]->ReadBytes ( &dTopDocIDs[i], sizeof(DocidRowidPair_t) )!=BIN_READ_OK )
+		if ( dBins[i].ReadBytes ( &dTopDocIDs[i], sizeof(DocidRowidPair_t) )!=BIN_READ_OK )
 		{
 			m_sLastError.SetSprintf ( "sort_lookup: warmup failed (io error?)" );
 			return false;
@@ -9579,7 +9580,7 @@ bool CSphIndex_VLN::SortDocidLookup ( int iFD, int nBlocks, int iMemoryLimit, in
 		tWriter.AddPair ( dTopDocIDs[iBin] );
 
 		tLookupQueue.Pop();
-		ESphBinRead eRes = dBins[iBin]->ReadBytes ( &dTopDocIDs[iBin], sizeof(DocidRowidPair_t) );
+		ESphBinRead eRes = dBins[iBin].ReadBytes ( &dTopDocIDs[iBin], sizeof(DocidRowidPair_t) );
 		if ( eRes==BIN_READ_ERROR )
 		{
 			m_sLastError.SetSprintf ( "sort_lookup: failed to read entry" );
@@ -9601,8 +9602,7 @@ bool CSphIndex_VLN::SortDocidLookup ( int iFD, int nBlocks, int iMemoryLimit, in
 		return false;
 
 	// clean up readers
-	ARRAY_FOREACH ( i, dBins )
-		SafeDelete ( dBins[i] );
+	dBins.Reset();
 
 	tWatchdog.AllIsDone();
 	tProgress.m_iDocids = tProgress.m_iDocidsTotal;
@@ -9757,7 +9757,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		return 0;
 
 	// vars shared between phases
-	CSphVector<CSphBin*> dBins;
+	RawVector_T<CSphBin> dBins;
 	SphOffset_t iSharedOffset = -1;
 
 	m_pDict->HitblockBegin();
@@ -10280,7 +10280,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 	// initialize readers
 	assert ( dBins.IsEmpty() );
-	dBins.Reserve ( dHitBlocks.GetLength() );
+	dBins.Reserve_static ( dHitBlocks.GetLength() );
 
 	iSharedOffset = -1;
 
@@ -10308,10 +10308,10 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 	ARRAY_FOREACH ( i, dHitBlocks )
 	{
-		dBins.Add ( new CSphBin ( m_tSettings.m_eHitless, m_pDict->GetSettings().m_bWordDict ) );
-		dBins[i]->m_iFileLeft = dHitBlocks[i];
-		dBins[i]->m_iFilePos = ( i==0 ) ? iHitsGap : dBins[i-1]->m_iFilePos + dBins[i-1]->m_iFileLeft;
-		dBins[i]->Init ( fdHits.GetFD(), &iSharedOffset, iBinSize );
+		dBins.Emplace_back ( m_tSettings.m_eHitless, m_pDict->GetSettings().m_bWordDict );
+		dBins[i].m_iFileLeft = dHitBlocks[i];
+		dBins[i].m_iFilePos = ( i==0 ) ? iHitsGap : dBins[i-1].m_iFilePos + dBins[i-1].m_iFileLeft;
+		dBins[i].Init ( fdHits.GetFD(), &iSharedOffset, iBinSize );
 	}
 
 	// if there were no hits, create zero-length index files
@@ -10338,7 +10338,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	if ( iRawBlocks )
 	{
 		int iLastBin = dBins.GetLength () - 1;
-		SphOffset_t iHitFileSize = dBins[iLastBin]->m_iFilePos + dBins [iLastBin]->m_iFileLeft;
+		SphOffset_t iHitFileSize = dBins[iLastBin].m_iFilePos + dBins [iLastBin].m_iFileLeft;
 
 		CSphHitQueue tQueue ( iRawBlocks );
 		CSphAggregateHit tHit;
@@ -10350,7 +10350,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		CSphFixedVector<BYTE> dActive ( iRawBlocks );
 		for ( int i=0; i<iRawBlocks; i++ )
 		{
-			if ( !dBins[i]->ReadHit ( &tHit ) )
+			if ( !dBins[i].ReadHit ( &tHit ) )
 			{
 				m_sLastError.SetSprintf ( "sort_hits: warmup failed (io error?)" );
 				return 0;
@@ -10376,16 +10376,16 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			// pack and emit queue root
 			if ( m_bInplaceSettings )
 			{
-				if ( iMinBlock==-1 || dBins[iMinBlock]->IsEOF () || !dActive[iMinBlock] )
+				if ( iMinBlock==-1 || dBins[iMinBlock].IsEOF () || !dActive[iMinBlock] )
 				{
 					iMinBlock = -1;
 					ARRAY_FOREACH ( i, dBins )
-						if ( !dBins[i]->IsEOF () && dActive[i] && ( iMinBlock==-1 || dBins[i]->m_iFilePos < dBins[iMinBlock]->m_iFilePos ) )
+						if ( !dBins[i].IsEOF () && dActive[i] && ( iMinBlock==-1 || dBins[i].m_iFilePos < dBins[iMinBlock].m_iFilePos ) )
 							iMinBlock = i;
 				}
 
 				int iToWriteMax = 3*sizeof(DWORD);
-				if ( iMinBlock!=-1 && ( tHitBuilder.GetHitfilePos() + iToWriteMax ) > dBins[iMinBlock]->m_iFilePos )
+				if ( iMinBlock!=-1 && ( tHitBuilder.GetHitfilePos() + iToWriteMax ) > dBins[iMinBlock].m_iFilePos )
 				{
 					if ( !RelocateBlock ( fdHits.GetFD (), dRelocationBuffer.Begin(), iRelocationSize, &iHitFileSize, dBins[iMinBlock], &iSharedOffset ) )
 						return 0;
@@ -10402,7 +10402,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			tQueue.Pop ();
 			if ( dActive[iBin] )
 			{
-				dBins[iBin]->ReadHit ( &tHit );
+				dBins[iBin].ReadHit ( &tHit );
 				dActive[iBin] = ( tHit.m_uWordID!=0 );
 				if ( dActive[iBin] )
 					tQueue.Push ( tHit, iBin );
@@ -10419,10 +10419,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 		tProgress.m_iHits = tProgress.m_iHitsTotal; // sum might be less than total because of dupes!
 		tProgress.PhaseEnd();
-
-		ARRAY_FOREACH ( i, dBins )
-			SafeDelete ( dBins[i] );
-
 		dBins.Reset ();
 
 		CSphAggregateHit tFlush;
@@ -19021,7 +19017,7 @@ private:
 	SphWordID_t				HitblockGetID ( const char * pWord, int iLen, SphWordID_t uCRC );
 	HitblockKeyword_t *		HitblockAddKeyword ( DWORD uHash, const char * pWord, int iLen, SphWordID_t uID );
 
-	void					DictReadEntry ( CSphBin * pBin, DictKeywordTagged_t & tEntry, BYTE * pKeyword );
+	void					DictReadEntry ( CSphBin & dBin, DictKeywordTagged_t & tEntry, BYTE * pKeyword );
 	void					DictFlush ();
 };
 
@@ -19277,20 +19273,20 @@ inline bool CSphDictKeywords::DictKeywordTagged_t::IsLess ( const DictKeywordTag
 };
 
 
-void CSphDictKeywords::DictReadEntry ( CSphBin * pBin, DictKeywordTagged_t & tEntry, BYTE * pKeyword )
+void CSphDictKeywords::DictReadEntry ( CSphBin & dBin, DictKeywordTagged_t & tEntry, BYTE * pKeyword )
 {
-	int iKeywordLen = pBin->ReadByte ();
+	int iKeywordLen = dBin.ReadByte ();
 	if ( iKeywordLen<0 )
 	{
 		// early eof or read error; flag must be raised
-		assert ( pBin->IsError() );
+		assert ( dBin.IsError() );
 		return;
 	}
 
 	assert ( iKeywordLen>0 && iKeywordLen<MAX_KEYWORD_BYTES-1 );
-	if ( pBin->ReadBytes ( pKeyword, iKeywordLen )!=BIN_READ_OK )
+	if ( dBin.ReadBytes ( pKeyword, iKeywordLen )!=BIN_READ_OK )
 	{
-		assert ( pBin->IsError() );
+		assert ( dBin.IsError() );
 		return;
 	}
 	pKeyword[iKeywordLen] = '\0';
@@ -19298,12 +19294,12 @@ void CSphDictKeywords::DictReadEntry ( CSphBin * pBin, DictKeywordTagged_t & tEn
 	assert ( m_iSkiplistBlockSize>0 );
 
 	tEntry.m_sKeyword = (char*)pKeyword;
-	tEntry.m_uOff = pBin->UnzipOffset();
-	tEntry.m_iDocs = pBin->UnzipInt();
-	tEntry.m_iHits = pBin->UnzipInt();
-	tEntry.m_uHint = (BYTE) pBin->ReadByte();
+	tEntry.m_uOff = dBin.UnzipOffset();
+	tEntry.m_iDocs = dBin.UnzipInt();
+	tEntry.m_iHits = dBin.UnzipInt();
+	tEntry.m_uHint = (BYTE) dBin.ReadByte();
 	if ( tEntry.m_iDocs > m_iSkiplistBlockSize )
-		tEntry.m_iSkiplistPos = pBin->UnzipOffset();
+		tEntry.m_iSkiplistPos = dBin.UnzipOffset();
 	else
 		tEntry.m_iSkiplistPos = 0;
 }
@@ -19352,7 +19348,8 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphStri
 	assert ( m_iSkiplistBlockSize>0 );
 
 	// initialize readers
-	CSphVector<CSphBin*> dBins ( m_dDictBlocks.GetLength() );
+	RawVector_T<CSphBin> dBins;
+	dBins.Reserve_static ( m_dDictBlocks.GetLength() );
 
 	int iMaxBlock = 0;
 	ARRAY_FOREACH ( i, m_dDictBlocks )
@@ -19364,21 +19361,15 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphStri
 	SphOffset_t iSharedOffset = -1;
 	ARRAY_FOREACH ( i, m_dDictBlocks )
 	{
-		dBins[i] = new CSphBin();
-		dBins[i]->m_iFileLeft = m_dDictBlocks[i].m_iLen;
-		dBins[i]->m_iFilePos = m_dDictBlocks[i].m_iPos;
-		dBins[i]->Init ( m_iTmpFD, &iSharedOffset, iBinSize );
+		auto& dBin = dBins.Add();
+		dBin.m_iFileLeft = m_dDictBlocks[i].m_iLen;
+		dBin.m_iFilePos = m_dDictBlocks[i].m_iPos;
+		dBin.Init ( m_iTmpFD, &iSharedOffset, iBinSize );
 	}
 
 	// keywords storage
 	CSphFixedVector<BYTE> dKeywords { MAX_KEYWORD_BYTES * dBins.GetLength() };
 	BYTE* pKeywords = dKeywords.begin();
-
-#define LOC_CLEANUP() \
-		{ \
-			ARRAY_FOREACH ( iIdx, dBins ) \
-				SafeDelete ( dBins[iIdx] ); \
-		}
 
 	// do the sort
 	CSphQueue < DictKeywordTagged_t, DictKeywordTagged_t > qWords ( dBins.GetLength() );
@@ -19387,10 +19378,9 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphStri
 	ARRAY_FOREACH ( i, dBins )
 	{
 		DictReadEntry ( dBins[i], tEntry, pKeywords + i*MAX_KEYWORD_BYTES );
-		if ( dBins[i]->IsError() )
+		if ( dBins[i].IsError() )
 		{
 			sError.SetSprintf ( "entry read error in dictionary sort (bin %d of %d)", i, dBins.GetLength() );
-			LOC_CLEANUP();
 			return false;
 		}
 
@@ -19451,13 +19441,12 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphStri
 		int iBin = tWord.m_iBlock;
 		qWords.Pop ();
 
-		if ( !dBins[iBin]->IsDone() )
+		if ( !dBins[iBin].IsDone() )
 		{
 			DictReadEntry ( dBins[iBin], tEntry, pKeywords + iBin*MAX_KEYWORD_BYTES );
-			if ( dBins[iBin]->IsError() )
+			if ( dBins[iBin].IsError() )
 			{
 				sError.SetSprintf ( "entry read error in dictionary sort (bin %d of %d)", iBin, dBins.GetLength() );
-				LOC_CLEANUP();
 				return false;
 			}
 
@@ -19511,9 +19500,6 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphStri
 	m_wrDict.ZipInt ( (DWORD)pHeader->m_iInfixBlocksOffset );
 
 	// about it
-	LOC_CLEANUP();
-	#undef LOC_CLEANUP
-
 	m_wrDict.CloseFile ();
 	if ( m_wrDict.IsError() )
 		sError.SetSprintf ( "dictionary write error (out of space?)" );

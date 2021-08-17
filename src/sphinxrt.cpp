@@ -3265,14 +3265,14 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 
 	int iSegments = tCtx.m_tGuard.m_dRamChunks.GetLength();
 
-	CSphVector<RtWordReader_t*> dWordReaders(iSegments);
+	RawVector_T<RtWordReader_t> dWordReaders;
+	dWordReaders.Reserve_static ( iSegments );
 	CSphVector<const RtWord_t*> dWords(iSegments);
-
-	ARRAY_FOREACH ( i, dWordReaders )
-		dWordReaders[i] = new RtWordReader_t ( tCtx.m_tGuard.m_dRamChunks[i], m_bKeywordDict, m_iWordsCheckpoint, m_tSettings.m_eHitless );
-
-	ARRAY_FOREACH ( i, dWords )
-		dWords[i] = dWordReaders[i]->UnzipWord();
+	for ( int i = 0; i < iSegments; ++i )
+	{
+		dWordReaders.Emplace_back ( tCtx.m_tGuard.m_dRamChunks[i], m_bKeywordDict, m_iWordsCheckpoint, m_tSettings.m_eHitless );
+		dWords[i] = dWordReaders[i].UnzipWord();
+	}
 
 	// loop keywords
 	int iWords = 0;
@@ -3447,14 +3447,10 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 		// read next words
 		for ( int i = 0; i < tSegsWithWord.GetBits(); ++i )
 			if ( tSegsWithWord.BitGet(i) )
-				dWords[i] = dWordReaders[i]->UnzipWord();
+				dWords[i] = dWordReaders[i].UnzipWord();
 	}
 
 	tCtx.m_tDocsOffset = tWriterDocs.GetPos();
-
-	for ( auto i : dWordReaders )
-		delete i;
-
 	return true;
 }
 

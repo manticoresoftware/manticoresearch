@@ -647,67 +647,67 @@ const RtWord_t * RtWordReader_t::UnzipWord ()
 }
 
 
-struct RtHitWriter_t
+class RtHitWriter_c
 {
-	CSphTightVector<BYTE> &		m_dHits;
-	DWORD						m_uLastHit = 0;
+	CSphTightVector<BYTE>& m_dHits;
+	DWORD m_uLastHit = 0;
 
-	explicit RtHitWriter_t ( CSphTightVector<BYTE> * pHits )
-		: m_dHits ( *pHits )
+public:
+	explicit RtHitWriter_c ( CSphTightVector<BYTE>& dHits )
+		: m_dHits ( dHits )
 	{}
 
-	explicit RtHitWriter_t ( RtSegment_t * pSeg )
-		: m_dHits ( pSeg->m_dHits )
-	{}
-
-	void ZipHit ( DWORD uValue )
+	inline void operator<< ( DWORD uValue )
 	{
 		ZipDword ( m_dHits, uValue - std::exchange ( m_uLastHit, uValue ) );
 	}
 
-	inline void operator<< (DWORD uValue) { ZipHit (uValue); }
-
-	void ZipRestart ()
+	void ZipRestart()
 	{
 		m_uLastHit = 0;
 	}
 
-	DWORD ZipHitPos () const
+	DWORD WriterPos() const
 	{
 		return m_dHits.GetLength();
 	}
 };
 
-RtHitReader_t::RtHitReader_t ( const RtSegment_t * pSeg, const RtDoc_t * pDoc )
+RtHitReader_c::RtHitReader_c ( const RtSegment_t& dSeg, const RtDoc_t& dDoc )
+	: m_pCur ( dSeg.m_dHits.begin() + dDoc.m_uHit)
+	, m_uLeft ( dDoc.m_uHits )
+	, m_uValue ( EMPTY_HIT )
+{}
+
+void RtHitReader_c::Seek ( const RtSegment_t& dSeg, const RtDoc_t& dDoc )
 {
-	m_pCur = pSeg->m_dHits.Begin() + pDoc->m_uHit;
-	m_iLeft = pDoc->m_uHits;
-	m_uLast = 0;
+	Seek ( dSeg.m_dHits.begin() + dDoc.m_uHit, dDoc.m_uHits );
 }
 
-DWORD RtHitReader_t::UnzipHit ()
+void RtHitReader_c::Seek ( const BYTE* pHits, DWORD uHits )
 {
-	if ( !m_iLeft )
-		return 0;
-
-	m_uLast += UnzipDword ( m_pCur );
-	--m_iLeft;
-	return m_uLast;
+	m_pCur = pHits;
+	m_uLeft = uHits;
+	m_uValue = EMPTY_HIT;
 }
 
-ByteBlob_t RtHitReader_t::GetHitsBlob () const
+DWORD RtHitReader_c::UnzipHit ()
 {
-	const BYTE * pEnd = m_pCur;
-	for ( auto i = 0U; i<m_iLeft; ++i )
-		SkipZipped (pEnd);
-	return { m_pCur, pEnd-m_pCur };
+	if ( !m_pCur || !m_uLeft )
+		return EMPTY_HIT;
+	m_uValue += UnzipDword ( m_pCur );
+	--m_uLeft;
+	return m_uValue;
 }
 
-void RtHitReader2_t::Seek ( SphOffset_t uOff, int iHits )
+
+ByteBlob_t GetHitsBlob ( const RtSegment_t& tSeg, const RtDoc_t& tDoc )
 {
-	m_pCur = m_pBase + uOff;
-	m_iLeft = iHits;
-	m_uLast = 0;
+	const BYTE* pHits = &tSeg.m_dHits[tDoc.m_uHit];
+	const BYTE* pEnd = pHits;
+	for ( auto i = 0U; i < tDoc.m_uHits; ++i )
+		SkipZipped ( pEnd );
+	return { pHits, pEnd - pHits };
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1766,7 +1766,7 @@ void RtAccum_t::CreateSegmentHits ( RtSegment_t * pSeg, int iWordsCheckpoint, ES
 	RtWord_t tWord;
 	RtDocWriter_t tOutDoc ( pSeg );
 	RtWordWriter_t tOutWord ( pSeg, m_bKeywordDict, iWordsCheckpoint, eHitless );
-	RtHitWriter_t tOutHit ( pSeg );
+	RtHitWriter_c tOutHit ( pSeg->m_dHits );
 
 	const BYTE * pPacketBase = m_bKeywordDict ? GetPackedKeywords() : nullptr;
 
@@ -1792,7 +1792,7 @@ void RtAccum_t::CreateSegmentHits ( RtSegment_t * pSeg, int iWordsCheckpoint, ES
 				tOutDoc.ZipDoc ( tDoc );
 				tDoc.m_uDocFields = 0;
 				tDoc.m_uHits = 0;
-				tDoc.m_uHit = tOutHit.ZipHitPos();
+				tDoc.m_uHit = tOutHit.WriterPos();
 			}
 
 			tDoc.m_tRowID = tHit.m_tRowID;
@@ -1857,7 +1857,7 @@ void RtAccum_t::CreateSegmentHits ( RtSegment_t * pSeg, int iWordsCheckpoint, ES
 			if ( uEmbeddedHit )
 				tOutHit << std::exchange ( uEmbeddedHit, 0 );
 
-			tOutHit.ZipHit ( tHit.m_uWordPos );
+			tOutHit << tHit.m_uWordPos;
 			++tDoc.m_uHits;
 		}
 		uPrevHit = tHit.m_uWordPos;
@@ -2133,13 +2133,11 @@ void RtIndex_c::CopyWord ( RtSegment_t & tDst, const RtSegment_t & tSrc, RtDocWr
 
 		if ( pDoc->m_uHits!=1 )
 		{
-			RtHitReader_t tInHit ( &tSrc, pDoc );
-
 			tDoc.m_uHit = tDst.m_dHits.GetLength ();
-			tDst.m_dHits.Append ( tInHit.GetHitsBlob () );
+			tDst.m_dHits.Append ( GetHitsBlob ( tSrc, *pDoc ) );
 
 			// this is reference of what append (hitsblob) above does.
-//			RtHitWriter_t tOutHit ( &tDst );
+//			RtHitWriter_c tOutHit ( &tDst );
 //			tDoc.m_uHit = tOutHit.ZipHitPos();
 //			for ( DWORD uValue=tInHit.UnzipHit(); uValue; uValue=tInHit.UnzipHit() )
 //				tOutHit.ZipHit ( uValue );
@@ -2151,13 +2149,13 @@ void RtIndex_c::CopyWord ( RtSegment_t & tDst, const RtSegment_t & tSrc, RtDocWr
 }
 
 template<typename FN>
-inline bool ProcessField ( RtDoc_t & tOutDoc, DWORD uHit, int iKillField, FN&& fnProcessor )
+inline void ProcessField ( RtDoc_t & tOutDoc, DWORD uHit, int iKillField, FN&& fnProcessor )
 {
 	assert ( iKillField >=0 );
 
 	int iField = HITMAN::GetField ( uHit );
 	if ( iKillField==iField )
-		return false;
+		return;
 
 	if ( iField>iKillField )
 	{
@@ -2170,7 +2168,6 @@ inline bool ProcessField ( RtDoc_t & tOutDoc, DWORD uHit, int iKillField, FN&& f
 		tOutDoc.m_uDocFields |= ( 1UL << iField );
 
 	fnProcessor ( uHit );
-	return true;
 }
 
 
@@ -2187,19 +2184,13 @@ static void CopyWordWithoutField ( CSphTightVector<BYTE> * pOutHits, RtDocWriter
 
 		if ( tInDoc.m_uHits!=1 )
 		{
-			RtHitReader_t tInHits ( &tSrc, &tInDoc );
-			RtHitWriter_t tOutHits ( pOutHits );
-			tOutDoc.m_uHit = tOutHits.ZipHitPos();
-			DWORD uHit;
-			while ( tInHits )
-			{
-				tInHits >> uHit;
-				if ( !ProcessField ( tOutDoc, uHit, iKillField, [&tOutHits] ( Hitpos_t x ) { tOutHits << x; } ) )
-					continue;
-			}
+			RtHitReader_c tInHits ( tSrc, tInDoc );
+			RtHitWriter_c tOutHits ( *pOutHits );
+			tOutDoc.m_uHit = tOutHits.WriterPos();
+			while ( tInHits.UnzipHit() )
+				ProcessField ( tOutDoc, *tInHits, iKillField, [&tOutHits] ( Hitpos_t x ) { tOutHits << x; } );
 		} else
-			if ( !ProcessField ( tOutDoc, tOutDoc.m_uHit, iKillField, [&tOutDoc] ( Hitpos_t x ) { tOutDoc.m_uHit = x; } ) )
-				continue;
+			ProcessField ( tOutDoc, tOutDoc.m_uHit, iKillField, [&tOutDoc] ( Hitpos_t x ) { tOutDoc.m_uHit = x; } );
 
 		if ( !tOutDoc.m_uHits )
 			continue;
@@ -3355,8 +3346,8 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 				if ( pDoc->m_uHits>1 )
 				{
 					DWORD uLastHit = 0;
-					RtHitReader_t tInHit ( tCtx.m_tGuard.m_dRamChunks[iSegment], pDoc );
-					for ( DWORD uValue=tInHit.UnzipHit(); uValue; uValue=tInHit.UnzipHit() )
+					RtHitReader_c tInHits ( *tCtx.m_tGuard.m_dRamChunks[iSegment], *pDoc );
+					for ( DWORD uValue=tInHits.UnzipHit(); uValue; uValue=tInHits.UnzipHit() )
 						tWriterHits.ZipInt ( uValue - std::exchange ( uLastHit, uValue ) );
 					tWriterHits.ZipInt(0);
 				}
@@ -5000,7 +4991,7 @@ public:
 		} else
 		{
 			m_uNextHit = 0;
-			m_tHitReader.Seek ( DWORD(uOff), iHits );
+			m_tHitReader.Seek ( m_pHits + DWORD(uOff), iHits );
 		}
 	}
 
@@ -5023,16 +5014,17 @@ public:
 	{
 		m_pSeg = pSeg;
 		m_tDocReader = RtDocReader_t ( pSeg, tWord );
-		m_tHitReader.m_pBase = pSeg->m_dHits.Begin();
+		m_pHits = pSeg->m_dHits.begin();
 	}
 
 private:
 	RtDocReader_t		m_tDocReader;
+	RtHitReader_c		m_tHitReader;
+
 	CSphMatch			m_tMatch;
-
 	DWORD				m_uNextHit {0};
-	RtHitReader2_t		m_tHitReader;
 
+	const BYTE* m_pHits {nullptr};
 	const RtSegment_t * m_pSeg {nullptr};
 };
 
@@ -5095,7 +5087,7 @@ public:
 
 			m_iHits = pDoc->m_uHits;
 			m_uHitEmbeded = pDoc->m_uHit;
-			m_tHitReader = RtHitReader_t ( m_pSegment, pDoc );
+			m_tHitReader.Seek ( *m_pSegment, *pDoc );
 
 			return m_tMatch;
 		}
@@ -5147,7 +5139,7 @@ private:
 	const RtSubstringPayload_t *	m_pPayload;
 	CSphMatch					m_tMatch;
 	RtDocReader_t				m_tDocReader;
-	RtHitReader_t				m_tHitReader;
+	RtHitReader_c				m_tHitReader;
 	const RtSegment_t *			m_pSegment;
 
 	DWORD						m_uDoclist;

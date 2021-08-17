@@ -263,25 +263,22 @@ struct RtDocReader_t
 	inline operator bool() const { return m_iLeft && m_pDocs; }
 };
 
-struct RtHitReader_t
+class RtHitReader_c
 {
-	const BYTE * m_pCur = nullptr;
-	DWORD m_iLeft = 0;
-	DWORD m_uLast = 0;
+	const BYTE* m_pCur = nullptr;
+	DWORD m_uLeft = 0;
+	DWORD m_uValue = 0;
 
-	RtHitReader_t () = default;
-	explicit RtHitReader_t ( const RtSegment_t * pSeg, const RtDoc_t * pDoc );
+public:
+	RtHitReader_c() = default;
+	RtHitReader_c ( const RtSegment_t& dSeg, const RtDoc_t& dDoc );
+	void Seek ( const RtSegment_t& dSeg, const RtDoc_t& dDoc );
+	void Seek ( const BYTE* pHits, DWORD uHits );
+	inline DWORD operator*() const { return m_uValue; }
 	DWORD UnzipHit ();
-	inline void operator>>(DWORD& uValue) { uValue = UnzipHit(); }
-	inline operator bool() const { return m_iLeft>0; }
-	ByteBlob_t GetHitsBlob() const;
 };
 
-struct RtHitReader2_t : public RtHitReader_t
-{
-	const BYTE * m_pBase = nullptr;
-	void Seek ( SphOffset_t uOff, int iHits );
-};
+ByteBlob_t GetHitsBlob ( const RtSegment_t* pSeg, const RtDoc_t* pDoc );
 
 class CSphSource_StringVector : public CSphSource_Document
 {

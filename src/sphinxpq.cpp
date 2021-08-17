@@ -812,7 +812,7 @@ public:
 		} else
 		{
 			m_uNextHit = 0;
-			m_tHitReader.Seek ( DWORD(uOff), iHits );
+			m_tHitReader.Seek ( m_pHits + DWORD ( uOff ), iHits );
 		}
 	}
 
@@ -832,7 +832,7 @@ public:
 		m_tDocReader = RtDocReader_t();
 		m_pSeg = pSeg;
 		SafeAddRef ( pSeg );
-		m_tHitReader.m_pBase = pSeg->m_dHits.Begin();
+		m_pHits = pSeg->m_dHits.begin();
 
 		m_dDoclist.Set ( dDoclist.Begin(), dDoclist.GetLength() );
 		dDoclist.LeakData();
@@ -858,10 +858,11 @@ private:
 	CSphFixedVector<Slice_t>	m_dDoclist { 0 };
 	CSphMatch					m_tMatch;
 	RtDocReader_t				m_tDocReader;
-	RtHitReader2_t				m_tHitReader;
+	RtHitReader_c				m_tHitReader;
 
 	int							m_iDoc = 0;
 	DWORD						m_uNextHit = 0;
+	const BYTE*					m_pHits = nullptr;
 };
 
 

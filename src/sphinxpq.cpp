@@ -222,25 +222,22 @@ static SegmentReject_t SegmentGetRejects ( const RtSegment_t * pSeg, bool bBuild
 
 		if ( bMultiDocs )
 		{
-				RtDocReader_t tDoc ( pSeg, *pWord );
-				while ( true )
+			RtDocReader_c tDoc ( pSeg, *pWord );
+			while ( tDoc.UnzipDoc() )
+			{
+
+				assert ( tDoc->m_tRowID<pSeg->m_uRows );
+				tReject.m_dPerDocTerms[tDoc->m_tRowID].Add ( uHash );
+
+				if ( bBuildInfix )
 				{
-					const RtDoc_t * pDoc = tDoc.UnzipDoc();
-					if ( !pDoc )
-						break;
-
-					assert ( pDoc->m_tRowID<pSeg->m_uRows );
-					tReject.m_dPerDocTerms[pDoc->m_tRowID].Add ( uHash );
-
-					if ( bBuildInfix )
-					{
-						uint64_t * pBloom = tReject.m_dPerDocWilds.Begin() + pDoc->m_tRowID * PERCOLATE_BLOOM_SIZE;
-						BloomGenTraits_t tBloom2Doc0 ( pBloom );
-						BloomGenTraits_t tBloom2Doc1 ( pBloom + PERCOLATE_BLOOM_WILD_COUNT );
-						BuildBloom ( pDictWord, iLen, BLOOM_NGRAM_0, bUtf8, PERCOLATE_BLOOM_WILD_COUNT, tBloom2Doc0 );
-						BuildBloom ( pDictWord, iLen, BLOOM_NGRAM_1, bUtf8, PERCOLATE_BLOOM_WILD_COUNT, tBloom2Doc1 );
-					}
+					uint64_t * pBloom = tReject.m_dPerDocWilds.Begin() + tDoc->m_tRowID * PERCOLATE_BLOOM_SIZE;
+					BloomGenTraits_t tBloom2Doc0 ( pBloom );
+					BloomGenTraits_t tBloom2Doc1 ( pBloom + PERCOLATE_BLOOM_WILD_COUNT );
+					BuildBloom ( pDictWord, iLen, BLOOM_NGRAM_0, bUtf8, PERCOLATE_BLOOM_WILD_COUNT, tBloom2Doc0 );
+					BuildBloom ( pDictWord, iLen, BLOOM_NGRAM_1, bUtf8, PERCOLATE_BLOOM_WILD_COUNT, tBloom2Doc1 );
 				}
+			}
 		}
 	}
 
@@ -777,30 +774,23 @@ public:
 	const CSphMatch & GetNextDoc() final
 	{
 		m_iHits = 0;
-		while (true)
+		while ( !m_tDocReader.UnzipDoc() )
 		{
-			const RtDoc_t * pDoc = m_tDocReader.UnzipDoc();
-			if ( !pDoc && m_iDoc>=m_dDoclist.GetLength() )
+			if ( m_iDoc >= m_dDoclist.GetLength() )
 			{
 				m_tMatch.m_tRowID = INVALID_ROWID;
 				return m_tMatch;
 			}
-
-			if ( !pDoc )
-			{
-				SetupReader();
-				pDoc = m_tDocReader.UnzipDoc();
-				assert ( pDoc );
-			}
-
-			m_tMatch.m_tRowID = pDoc->m_tRowID;
-			m_dQwordFields.Assign32 ( pDoc->m_uDocFields );
-			m_uMatchHits = pDoc->m_uHits;
-			m_iHitlistPos = (uint64_t(pDoc->m_uHits)<<32) + pDoc->m_uHit;
-			m_bAllFieldsKnown = false;
-
-			return m_tMatch;
+			SetupReader();
 		}
+
+		const auto& tDoc = *m_tDocReader;
+		m_tMatch.m_tRowID = tDoc.m_tRowID;
+		m_dQwordFields.Assign32 ( tDoc.m_uDocFields );
+		m_uMatchHits = tDoc.m_uHits;
+		m_iHitlistPos = (uint64_t( tDoc.m_uHits)<<32) + tDoc.m_uHit;
+		m_bAllFieldsKnown = false;
+		return m_tMatch;
 	}
 
 	void SeekHitlist ( SphOffset_t uOff ) final
@@ -829,7 +819,7 @@ public:
 	bool Setup ( const RtSegment_t * pSeg, CSphVector<Slice_t> & dDoclist )
 	{
 		m_iDoc = 0;
-		m_tDocReader = RtDocReader_t();
+		m_tDocReader.Reset();
 		m_pSeg = pSeg;
 		SafeAddRef ( pSeg );
 		m_pHits = pSeg->m_dHits.begin();
@@ -850,14 +840,14 @@ private:
 		RtWord_t tWord;
 		tWord.m_uDoc = m_dDoclist[m_iDoc].m_uOff;
 		tWord.m_uDocs = m_dDoclist[m_iDoc].m_uLen;
-		m_tDocReader = RtDocReader_t ( m_pSeg, tWord );
+		m_tDocReader.Init ( m_pSeg, tWord );
 		++m_iDoc;
 	}
 
 	constRtSegmentRefPtf_t		m_pSeg;
 	CSphFixedVector<Slice_t>	m_dDoclist { 0 };
 	CSphMatch					m_tMatch;
-	RtDocReader_t				m_tDocReader;
+	RtDocReader_c				m_tDocReader;
 	RtHitReader_c				m_tHitReader;
 
 	int							m_iDoc = 0;

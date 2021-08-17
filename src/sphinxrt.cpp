@@ -410,37 +410,31 @@ void RtSegment_t::BuildDocID2RowIDMap ( const CSphSchema & tSchema )
 
 //////////////////////////////////////////////////////////////////////////
 
-struct RtDocWriter_t
+class RtDocWriter_c
 {
 	CSphTightVector<BYTE> &		m_dDocs;
 	RowID_t						m_tLastRowID {INVALID_ROWID};
 
-	explicit RtDocWriter_t ( CSphTightVector<BYTE> & dDocs )
+public:
+	explicit RtDocWriter_c ( CSphTightVector<BYTE> & dDocs )
 		: m_dDocs ( dDocs )
 	{}
 
-	explicit RtDocWriter_t ( RtSegment_t * pSeg )
-		: m_dDocs ( pSeg->m_dDocs )
-	{}
-
-	void ZipDoc ( const RtDoc_t & tDoc )
+	inline void operator<< ( const RtDoc_t & tDoc)
 	{
 		m_dDocs.ReserveGap ( 5 + 5 * sizeof ( DWORD ) );
 		ZipDword ( m_dDocs, tDoc.m_tRowID - std::exchange ( m_tLastRowID, tDoc.m_tRowID ) );
 		ZipDword ( m_dDocs, tDoc.m_uDocFields );
 		ZipDword ( m_dDocs, tDoc.m_uHits );
-		if ( tDoc.m_uHits==1 )
+		if ( tDoc.m_uHits == 1 )
 		{
 			ZipDword ( m_dDocs, tDoc.m_uHit & 0xffffffUL );
-			ZipDword ( m_dDocs, tDoc.m_uHit>>24 );
+			ZipDword ( m_dDocs, tDoc.m_uHit >> 24 );
 		} else
 			ZipDword ( m_dDocs, tDoc.m_uHit );
-
 	}
 
-	inline void operator<< ( const RtDoc_t & tDoc) { ZipDoc (tDoc); }
-
-	DWORD ZipDocPos () const
+	DWORD WriterPos () const
 	{
 		return m_dDocs.GetLength();
 	}
@@ -452,37 +446,36 @@ struct RtDocWriter_t
 };
 
 
-RtDocReader_t::RtDocReader_t ( const RtSegment_t * pSeg, const RtWord_t & tWord )
+RtDocReader_c::RtDocReader_c ( const RtSegment_t * pSeg, const RtWord_t & tWord )
 {
-	m_pDocs = ( pSeg->m_dDocs.Begin() ? pSeg->m_dDocs.Begin() + tWord.m_uDoc : NULL );
+	Init ( pSeg, tWord );
+}
+
+void RtDocReader_c::Init ( const RtSegment_t* pSeg, const RtWord_t& tWord )
+{
+	m_pDocs = ( pSeg->m_dDocs.begin() ? pSeg->m_dDocs.begin() + tWord.m_uDoc : nullptr );
 	m_iLeft = tWord.m_uDocs;
 	m_tDoc.m_tRowID = INVALID_ROWID;
 }
 
-void RtDocReader_t::UnzipDoc ( RtDoc_t& tOut )
+bool RtDocReader_c::UnzipDoc ()
 {
-	assert ( m_iLeft && m_pDocs );
-	const BYTE * pIn = m_pDocs;
-	tOut.m_tRowID += UnzipDword ( pIn );
-	UnzipDword ( &tOut.m_uDocFields, pIn );
-	UnzipDword ( &tOut.m_uHits, pIn );
-	if ( tOut.m_uHits==1 )
+	if ( !m_iLeft || !m_pDocs )
+		return false;
+	const BYTE* pIn = m_pDocs;
+	m_tDoc.m_tRowID += UnzipDword ( pIn );
+	UnzipDword ( &m_tDoc.m_uDocFields, pIn );
+	UnzipDword ( &m_tDoc.m_uHits, pIn );
+	if ( m_tDoc.m_uHits == 1 )
 	{
 		auto a = UnzipDword ( pIn );
 		auto b = UnzipDword ( pIn );
-		tOut.m_uHit = a + ( b << 24 );
+		m_tDoc.m_uHit = a + ( b << 24 );
 	} else
-		UnzipDword ( &tOut.m_uHit, pIn );
+		UnzipDword ( &m_tDoc.m_uHit, pIn );
 	m_pDocs = pIn;
 	--m_iLeft;
-}
-
-const RtDoc_t * RtDocReader_t::UnzipDoc ()
-{
-	if ( !m_iLeft || !m_pDocs )
-		return nullptr;
-	UnzipDoc ( m_tDoc );
-	return &m_tDoc;
+	return true;
 }
 
 struct RtWordWriter_t
@@ -998,7 +991,7 @@ private:
 
 	void						MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, const RtSegment_t & tSeg2, const CSphVector<RowID_t> & dRowMap1, const CSphVector<RowID_t> & dRowMap2 ) const;
 	RtSegment_t *				MergeSegments ( const RtSegment_t * pSeg1, const RtSegment_t * pSeg2, bool bHasMorphology ) const;
-	static void					CopyWord ( RtSegment_t & tDst, const RtSegment_t & tSrc, RtDocWriter_t & tOutDoc, RtDocReader_t & tInDoc, RtWord_t & tWord, const CSphVector<RowID_t> & tRowMap );
+	static void					CopyWord ( RtSegment_t & tDst, const RtSegment_t & tSrc, RtDocWriter_c & tOutDoc, RtDocReader_c & tInDoc, RtWord_t & tWord, const CSphVector<RowID_t> & tRowMap );
 
 	void						DeleteFieldFromDict ( RtSegment_t * pSeg, int iKillField );
 	void						AddFieldToRamchunk ( const CSphString & sFieldName, DWORD uFieldFlags, const CSphSchema & tNewSchema );
@@ -1758,13 +1751,8 @@ void RtAccum_t::CreateSegmentHits ( RtSegment_t * pSeg, int iWordsCheckpoint, ES
 	tClosingHit.m_uWordPos = EMPTY_HIT;
 
 	RtDoc_t tDoc;
-	tDoc.m_tRowID = INVALID_ROWID;
-	tDoc.m_uDocFields = 0;
-	tDoc.m_uHits = 0;
-	tDoc.m_uHit = 0;
-
 	RtWord_t tWord;
-	RtDocWriter_t tOutDoc ( pSeg );
+	RtDocWriter_c tOutDoc ( pSeg->m_dDocs );
 	RtWordWriter_t tOutWord ( pSeg, m_bKeywordDict, iWordsCheckpoint, eHitless );
 	RtHitWriter_c tOutHit ( pSeg->m_dHits );
 
@@ -1789,7 +1777,7 @@ void RtAccum_t::CreateSegmentHits ( RtSegment_t * pSeg, int iWordsCheckpoint, ES
 					tDoc.m_uHit = uEmbeddedHit;
 				}
 
-				tOutDoc.ZipDoc ( tDoc );
+				tOutDoc << tDoc;
 				tDoc.m_uDocFields = 0;
 				tDoc.m_uHits = 0;
 				tDoc.m_uHit = tOutHit.WriterPos();
@@ -1819,7 +1807,7 @@ void RtAccum_t::CreateSegmentHits ( RtSegment_t * pSeg, int iWordsCheckpoint, ES
 			tWord.m_uWordID = tHit.m_uWordID;
 			tWord.m_uDocs = 0;
 			tWord.m_uHits = 0;
-			tWord.m_uDoc = tOutDoc.ZipDocPos();
+			tWord.m_uDoc = tOutDoc.WriterPos();
 			uPrevHit = EMPTY_HIT;
 			if ( eHitless==SPH_HITLESS_NONE || eHitless==SPH_HITLESS_ALL || !tWord.m_uWordID || tHit.m_uWordPos==EMPTY_HIT )
 			{
@@ -2111,30 +2099,26 @@ ReplicationCommand_t * RtAccum_t::AddCommand ( ReplicationCommand_e eCmd, const 
 	return pCmd;
 }
 
-void RtIndex_c::CopyWord ( RtSegment_t & tDst, const RtSegment_t & tSrc, RtDocWriter_t & tOutDoc, RtDocReader_t & tInDoc,
+void RtIndex_c::CopyWord ( RtSegment_t & tDst, const RtSegment_t & tSrc, RtDocWriter_c & tOutDoc, RtDocReader_c & tInDoc,
 		RtWord_t & tWord, const CSphVector<RowID_t> & dRowMap )
 {
 	// copy docs
-	while (true)
+	while ( tInDoc.UnzipDoc() )
 	{
-		const RtDoc_t * pDoc = tInDoc.UnzipDoc();
-		if ( !pDoc )
-			break;
-
-		RowID_t tNewRowID = dRowMap[pDoc->m_tRowID];
+		auto tNewRowID = dRowMap[tInDoc->m_tRowID];
 		if ( tNewRowID==INVALID_ROWID )
 			continue;
 
-		RtDoc_t tDoc = *pDoc;
+		RtDoc_t tDoc = *tInDoc;
 		tDoc.m_tRowID = tNewRowID;
 
 		++tWord.m_uDocs;
-		tWord.m_uHits += pDoc->m_uHits;
+		tWord.m_uHits += tInDoc->m_uHits;
 
-		if ( pDoc->m_uHits!=1 )
+		if ( tInDoc->m_uHits!=1 )
 		{
 			tDoc.m_uHit = tDst.m_dHits.GetLength ();
-			tDst.m_dHits.Append ( GetHitsBlob ( tSrc, *pDoc ) );
+			tDst.m_dHits.Append ( GetHitsBlob ( tSrc, *tInDoc ) );
 
 			// this is reference of what append (hitsblob) above does.
 //			RtHitWriter_c tOutHit ( &tDst );
@@ -2144,7 +2128,7 @@ void RtIndex_c::CopyWord ( RtSegment_t & tDst, const RtSegment_t & tSrc, RtDocWr
 		}
 
 		// copy doc
-		tOutDoc.ZipDoc ( tDoc );
+		tOutDoc << tDoc;
 	}
 }
 
@@ -2171,20 +2155,18 @@ inline void ProcessField ( RtDoc_t & tOutDoc, DWORD uHit, int iKillField, FN&& f
 }
 
 
-static void CopyWordWithoutField ( CSphTightVector<BYTE> * pOutHits, RtDocWriter_t & tOutDocs, RtWord_t & tOutWord, const RtSegment_t & tSrc, RtDocReader_t & tInDocs, int iKillField  )
+static void CopyWordWithoutField ( CSphTightVector<BYTE> * pOutHits, RtDocWriter_c & tOutDocs, RtWord_t & tOutWord, const RtSegment_t & tSrc, RtDocReader_c & tInDocs, int iKillField  )
 {
 	assert ( iKillField>=0 );
 
-	RtDoc_t tInDoc, tOutDoc;
-	while ( tInDocs  )
+	while ( tInDocs.UnzipDoc() )
 	{
-		tInDocs >> tInDoc;
-		tOutDoc = tInDoc;
+		RtDoc_t tOutDoc = *tInDocs;
 		tOutDoc.m_uHits = tOutDoc.m_uDocFields = 0;
 
-		if ( tInDoc.m_uHits!=1 )
+		if ( tInDocs->m_uHits!=1 )
 		{
-			RtHitReader_c tInHits ( tSrc, tInDoc );
+			RtHitReader_c tInHits ( tSrc, *tInDocs );
 			RtHitWriter_c tOutHits ( *pOutHits );
 			tOutDoc.m_uHit = tOutHits.WriterPos();
 			while ( tInHits.UnzipHit() )
@@ -2229,10 +2211,10 @@ void RtIndex_c::DeleteFieldFromDict ( RtSegment_t * pSeg, int iKillField )
 		tOutWord = tInWord;
 		tOutWord.m_uDocs = tOutWord.m_uHits = 0;
 
-		RtDocWriter_t tOutDocs ( dDocs );
-		tOutWord.m_uDoc = tOutDocs.ZipDocPos ();
+		RtDocWriter_c tOutDocs ( dDocs );
+		tOutWord.m_uDoc = tOutDocs.WriterPos();
 
-		RtDocReader_t tInDocs ( &tInSeg, tInWord );
+		RtDocReader_c tInDocs ( &tInSeg, tInWord );
 		CopyWordWithoutField ( &dHits, tOutDocs, tOutWord, tInSeg, tInDocs, iKillField );
 
 		// append word to the dictionary
@@ -2480,23 +2462,23 @@ void RtIndex_c::MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, c
 	{
 		int iCmp = CompareWords ( pWords1, pWords2 );
 
-		RtDocWriter_t tOutDoc ( &tSeg );
+		RtDocWriter_c tOutDoc ( tSeg.m_dDocs );
 
 		RtWord_t tWord = iCmp<=0 ? *pWords1 : *pWords2;
 		tWord.m_uDocs = 0;
 		tWord.m_uHits = 0;
-		tWord.m_uDoc = tOutDoc.ZipDocPos();
+		tWord.m_uDoc = tOutDoc.WriterPos();
 
 		// if words are equal, copy both
 		if ( iCmp<=0 )
 		{
-			RtDocReader_t tInDoc ( &tSeg1, *pWords1 );
+			RtDocReader_c tInDoc ( &tSeg1, *pWords1 );
 			CopyWord ( tSeg, tSeg1, tOutDoc, tInDoc, tWord, dRowMap1 );
 		}
 
 		if ( iCmp>=0 )
 		{
-			RtDocReader_t tInDoc ( &tSeg2, *pWords2 );
+			RtDocReader_c tInDoc ( &tSeg2, *pWords2 );
 			CopyWord ( tSeg, tSeg2, tOutDoc, tInDoc, tWord, dRowMap2 );
 		}
 
@@ -3306,11 +3288,11 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 			else
 				continue;
 
-			RtDocReader_t tDocReader ( tCtx.m_tGuard.m_dRamChunks[iSegment], *dWords[iSegment] );
+			RtDocReader_c tDocReader ( tCtx.m_tGuard.m_dRamChunks[iSegment], *dWords[iSegment] );
 
-			const RtDoc_t * pDoc;
-			while ( !!( pDoc = tDocReader.UnzipDoc() ) )
+			while ( tDocReader.UnzipDoc() )
 			{
+				const auto* pDoc = (const RtDoc_t*)tDocReader;
 				RowID_t tRowID = tCtx.m_dRowMaps[iSegment][pDoc->m_tRowID];
 				if ( tRowID==INVALID_ROWID )
 					continue;
@@ -3347,7 +3329,7 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 				{
 					DWORD uLastHit = 0;
 					RtHitReader_c tInHits ( *tCtx.m_tGuard.m_dRamChunks[iSegment], *pDoc );
-					for ( DWORD uValue=tInHits.UnzipHit(); uValue; uValue=tInHits.UnzipHit() )
+					while ( DWORD uValue = tInHits.UnzipHit() )
 						tWriterHits.ZipInt ( uValue - std::exchange ( uLastHit, uValue ) );
 					tWriterHits.ZipInt(0);
 				}
@@ -4954,32 +4936,29 @@ void RtIndex_c::SetDebugCheck ( bool bCheckIdDups, int iCheckChunk )
 struct RtQword_t final : public ISphQword
 {
 public:
-	RtQword_t ()
-	{
-		m_tMatch.Reset ( 0 );
-	}
+	RtQword_t () = default;
 
 	const CSphMatch & GetNextDoc() final
 	{
 		while (true)
 		{
-			const RtDoc_t * pDoc = m_tDocReader.UnzipDoc();
-			if ( !pDoc )
+			if ( !m_tDocReader.UnzipDoc() )
 			{
 				m_tMatch.m_tRowID = INVALID_ROWID;
 				return m_tMatch;
 			}
 
-			if ( m_pSeg->m_tDeadRowMap.IsSet ( pDoc->m_tRowID ) )
-				continue;
-
-			m_tMatch.m_tRowID = pDoc->m_tRowID;
-			m_dQwordFields.Assign32 ( pDoc->m_uDocFields );
-			m_uMatchHits = pDoc->m_uHits;
-			m_iHitlistPos = (uint64_t(pDoc->m_uHits)<<32) + pDoc->m_uHit;
-			m_bAllFieldsKnown = false;
-			return m_tMatch;
+			if ( !m_pSeg->m_tDeadRowMap.IsSet ( m_tDocReader->m_tRowID ) )
+				break;
 		}
+
+		const auto* pDoc = (const RtDoc_t*)m_tDocReader;
+		m_tMatch.m_tRowID = pDoc->m_tRowID;
+		m_dQwordFields.Assign32 ( pDoc->m_uDocFields );
+		m_uMatchHits = pDoc->m_uHits;
+		m_iHitlistPos = (uint64_t(pDoc->m_uHits)<<32) + pDoc->m_uHit;
+		m_bAllFieldsKnown = false;
+		return m_tMatch;
 	}
 
 	void SeekHitlist ( SphOffset_t uOff ) final
@@ -5013,12 +4992,12 @@ public:
 	void SetupReader ( const RtSegment_t * pSeg, const RtWord_t & tWord )
 	{
 		m_pSeg = pSeg;
-		m_tDocReader = RtDocReader_t ( pSeg, tWord );
+		m_tDocReader.Init ( pSeg, tWord );
 		m_pHits = pSeg->m_dHits.begin();
 	}
 
 private:
-	RtDocReader_t		m_tDocReader;
+	RtDocReader_c		m_tDocReader;
 	RtHitReader_c		m_tHitReader;
 
 	CSphMatch			m_tMatch;
@@ -5062,35 +5041,26 @@ public:
 	const CSphMatch & GetNextDoc() final
 	{
 		m_iHits = 0;
-		while (true)
-		{
-			const RtDoc_t * pDoc = m_tDocReader.UnzipDoc();
-			if ( !pDoc && !m_uDoclistLeft )
+		while ( true )
+			if ( !m_tDocReader.UnzipDoc() )
 			{
-				m_tMatch.m_tRowID = INVALID_ROWID;
-				return m_tMatch;
-			}
-
-			if ( !pDoc && m_uDoclistLeft )
-			{
+				if ( !m_uDoclistLeft )
+				{
+					m_tMatch.m_tRowID = INVALID_ROWID;
+					return m_tMatch;
+				}
 				SetupReader();
-				pDoc = m_tDocReader.UnzipDoc();
-				assert ( pDoc );
-			}
+			} else if ( !m_pSegment->m_tDeadRowMap.IsSet ( m_tDocReader->m_tRowID ) )
+				break;
 
-			if ( m_pSegment->m_tDeadRowMap.IsSet ( pDoc->m_tRowID ) )
-				continue;
-
-			m_tMatch.m_tRowID = pDoc->m_tRowID;
-			m_dQwordFields.Assign32 ( pDoc->m_uDocFields );
-			m_bAllFieldsKnown = false;
-
-			m_iHits = pDoc->m_uHits;
-			m_uHitEmbeded = pDoc->m_uHit;
-			m_tHitReader.Seek ( *m_pSegment, *pDoc );
-
-			return m_tMatch;
-		}
+		const auto* pDoc = (const RtDoc_t*) m_tDocReader;
+		m_tMatch.m_tRowID = pDoc->m_tRowID;
+		m_dQwordFields.Assign32 ( pDoc->m_uDocFields );
+		m_bAllFieldsKnown = false;
+		m_iHits = pDoc->m_uHits;
+		m_uHitEmbeded = pDoc->m_uHit;
+		m_tHitReader.Seek ( *m_pSegment, *pDoc );
+		return m_tMatch;
 	}
 
 	void SeekHitlist ( SphOffset_t ) final
@@ -5105,13 +5075,15 @@ public:
 
 	bool SetupScan ( const RtIndex_c *, int iSegment, const SphChunkGuard_t & tGuard ) final
 	{
-		m_uDoclist = 0;
-		m_uDoclistLeft = 0;
-		m_tDocReader = RtDocReader_t();
-		m_pSegment = nullptr;
+		m_tDocReader.Reset();
 
 		if ( iSegment<0 )
+		{
+			m_pSegment = nullptr;
+			m_uDoclist = 0;
+			m_uDoclistLeft = 0;
 			return false;
+		}
 
 		m_pSegment = tGuard.m_dRamChunks[iSegment];
 		m_uDoclist = m_pPayload->m_dSegment2Doclists[iSegment].m_uOff;
@@ -5131,14 +5103,14 @@ private:
 		RtWord_t tWord;
 		tWord.m_uDoc = m_pPayload->m_dDoclist[m_uDoclist].m_uOff;
 		tWord.m_uDocs = m_pPayload->m_dDoclist[m_uDoclist].m_uLen;
-		m_tDocReader = RtDocReader_t ( m_pSegment, tWord );
+		m_tDocReader.Init ( m_pSegment, tWord );
 		++m_uDoclist;
 		--m_uDoclistLeft;
 	}
 
 	const RtSubstringPayload_t *	m_pPayload;
 	CSphMatch					m_tMatch;
-	RtDocReader_t				m_tDocReader;
+	RtDocReader_c				m_tDocReader;
 	RtHitReader_c				m_tHitReader;
 	const RtSegment_t *			m_pSegment;
 

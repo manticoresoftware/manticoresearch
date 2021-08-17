@@ -249,18 +249,21 @@ struct RtWordReader_t
 	inline operator bool() const { return m_pCur < m_pMax; }
 };
 
-struct RtDocReader_t
+class RtDocReader_c
 {
-	const BYTE * m_pDocs = nullptr;
+	const BYTE* m_pDocs = nullptr;
 	int m_iLeft = 0;
 	RtDoc_t m_tDoc;
 
-	RtDocReader_t() = default;
-	RtDocReader_t ( const RtSegment_t * pSeg, const RtWord_t &tWord );
-	const RtDoc_t * UnzipDoc ();
-	void UnzipDoc ( RtDoc_t& tOut );
-	inline void operator>> ( RtDoc_t & tDoc) { UnzipDoc(tDoc); }
-	inline operator bool() const { return m_iLeft && m_pDocs; }
+public:
+	RtDocReader_c() = default;
+	RtDocReader_c ( const RtSegment_t* pSeg, const RtWord_t& tWord );
+	void Init ( const RtSegment_t* pSeg, const RtWord_t& tWord );
+	void Reset () { m_pDocs = nullptr; m_iLeft = 0; }
+	bool UnzipDoc();
+	inline explicit operator RtDoc_t*() { return &m_tDoc; }
+	inline RtDoc_t* operator->() { return &m_tDoc; }
+	inline const RtDoc_t& operator*() const { return m_tDoc; }
 };
 
 class RtHitReader_c

@@ -139,10 +139,10 @@ STATIC_ASSERT ( SPH_MAX_KEYWORD_LEN<255, MAX_KEYWORD_LEN_SHOULD_FITS_BYTE );
 
 struct RtDoc_t
 {
-	RowID_t m_tRowID { INVALID_ROWID };    ///< row id
-	DWORD m_uDocFields = 0;            ///< fields mask
-	DWORD m_uHits = 0;                ///< hit count
-	DWORD m_uHit = 0;                    ///< either index into segment hits, or the only hit itself (if hit count is 1)
+	RowID_t m_tRowID { INVALID_ROWID };	///< row id
+	DWORD m_uDocFields = 0;				///< fields mask
+	DWORD m_uHits = 0;					///< hit count
+	DWORD m_uHit = 0;					///< either index into segment hits, or the only hit itself (if hit count is 1)
 };
 
 
@@ -154,9 +154,9 @@ struct RtWord_t
 		const BYTE * m_sWord;
 		typename WIDEST<SphWordID_t, const BYTE *>::T m_null = 0;
 	};
-	DWORD m_uDocs = 0;    ///< document count (for stats and/or BM25)
-	DWORD m_uHits = 0;    ///< hit count (for stats and/or BM25)
-	DWORD m_uDoc = 0;        ///< index into segment docs
+	DWORD m_uDocs = 0;		///< document count (for stats and/or BM25)
+	DWORD m_uHits = 0;		///< hit count (for stats and/or BM25)
+	DWORD m_uDoc = 0;		///< index into segment docs
 	bool m_bHasHitlist = true;
 };
 
@@ -222,6 +222,33 @@ private:
 using RtSegmentRefPtf_t = CSphRefcountedPtr<RtSegment_t>;
 using constRtSegmentRefPtf_t = CSphRefcountedPtr<const RtSegment_t>;
 
+struct RtWordReader_t
+{
+	BYTE m_tPackedWord[SPH_MAX_KEYWORD_LEN + 1];
+	const BYTE* m_pCur = nullptr;
+	const BYTE* m_pMax = nullptr;
+	RtWord_t m_tWord;
+	int m_iWords = 0;
+
+	bool m_bWordDict;
+	int m_iWordsCheckpoint;
+	int m_iCheckpoint = 0;
+	const ESphHitless m_eHitlessMode = SPH_HITLESS_NONE;
+
+	RtWordReader_t ( const RtSegment_t* pSeg, bool bWordDict, int iWordsCheckpoint, ESphHitless eHitlessMode );
+	void Reset ( const RtSegment_t* pSeg );
+	const RtWord_t* UnzipWord();
+	void UnzipWord ( RtWord_t& tWord );
+	inline void operator>> ( RtWord_t& tWord )
+	{
+		if ( m_bWordDict && !tWord.m_sWord )
+			tWord.m_sWord = m_tPackedWord;
+
+		UnzipWord ( tWord );
+	}
+	inline operator bool() const { return m_pCur < m_pMax; }
+};
+
 struct RtDocReader_t
 {
 	const BYTE * m_pDocs = nullptr;
@@ -234,33 +261,6 @@ struct RtDocReader_t
 	void UnzipDoc ( RtDoc_t& tOut );
 	inline void operator>> ( RtDoc_t & tDoc) { UnzipDoc(tDoc); }
 	inline operator bool() const { return m_iLeft && m_pDocs; }
-};
-
-struct RtWordReader_t
-{
-	BYTE m_tPackedWord[SPH_MAX_KEYWORD_LEN + 1];
-	const BYTE * m_pCur = nullptr;
-	const BYTE * m_pMax = nullptr;
-	RtWord_t m_tWord;
-	int m_iWords = 0;
-
-	bool m_bWordDict;
-	int m_iWordsCheckpoint;
-	int m_iCheckpoint = 0;
-	const ESphHitless m_eHitlessMode = SPH_HITLESS_NONE;
-
-	RtWordReader_t ( const RtSegment_t * pSeg, bool bWordDict, int iWordsCheckpoint, ESphHitless eHitlessMode );
-	void Reset ( const RtSegment_t * pSeg );
-	const RtWord_t * UnzipWord ();
-	void UnzipWord ( RtWord_t& tWord );
-	inline void operator>> ( RtWord_t & tWord )
-	{
-		if ( m_bWordDict && !tWord.m_sWord )
-			tWord.m_sWord = m_tPackedWord;
-
-		UnzipWord(tWord);
-	}
-	inline operator bool() const { return m_pCur<m_pMax; }
 };
 
 struct RtHitReader_t

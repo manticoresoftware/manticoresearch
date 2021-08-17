@@ -9547,7 +9547,7 @@ bool CSphIndex_VLN::SortDocidLookup ( int iFD, int nBlocks, int iMemoryLimit, in
 
 	int iBinSize = CSphBin::CalcBinSize ( iMemoryLimit, nBlocks, "sort_lookup" );
 
-	for ( int i=0; i<nBlocks; i++ )
+	for ( int i=0; i<nBlocks; ++i )
 	{
 		dBins.Add ( new CSphBin() );
 		dBins[i]->m_iFileLeft = ( ( i==nBlocks-1 ) ? nLookupsInLastBlock : nLookupsInBlock )*sizeof(DocidRowidPair_t);
@@ -9560,12 +9560,12 @@ bool CSphIndex_VLN::SortDocidLookup ( int iFD, int nBlocks, int iMemoryLimit, in
 
 	CmpQueuedLookup_fn::m_pStorage = dTopDocIDs.Begin();
 
-	for ( int i=0; i<nBlocks; i++ )
+	for ( int i=0; i<nBlocks; ++i )
 	{
 		if ( dBins[i]->ReadBytes ( &dTopDocIDs[i], sizeof(DocidRowidPair_t) )!=BIN_READ_OK )
 		{
 			m_sLastError.SetSprintf ( "sort_lookup: warmup failed (io error?)" );
-			return 0;
+			return false;
 		}
 
 		tLookupQueue.Push(i);
@@ -9605,10 +9605,8 @@ bool CSphIndex_VLN::SortDocidLookup ( int iFD, int nBlocks, int iMemoryLimit, in
 		SafeDelete ( dBins[i] );
 
 	tWatchdog.AllIsDone();
-
 	tProgress.m_iDocids = tProgress.m_iDocidsTotal;
 	tProgress.PhaseEnd();
-
 	return true;
 }
 
@@ -10281,7 +10279,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	///////////////////////////////////
 
 	// initialize readers
-	assert ( dBins.GetLength()==0 );
+	assert ( dBins.IsEmpty() );
 	dBins.Reserve ( dHitBlocks.GetLength() );
 
 	iSharedOffset = -1;
@@ -19330,7 +19328,7 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphStri
 	DictFlush ();
 	m_wrTmpDict.CloseFile (); // tricky: file is not owned, so it won't get closed, and iTmpFD won't get invalidated
 
-	if ( !m_dDictBlocks.GetLength() )
+	if ( m_dDictBlocks.IsEmpty() )
 		m_wrDict.CloseFile();
 
 	if ( m_wrTmpDict.IsError() || m_wrDict.IsError() )
@@ -19339,7 +19337,7 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphStri
 		return false;
 	}
 
-	if ( !m_dDictBlocks.GetLength() )
+	if ( m_dDictBlocks.IsEmpty() )
 	{
 		pHeader->m_iDictCheckpointsOffset = m_wrDict.GetPos ();
 		pHeader->m_iDictCheckpoints = 0;
@@ -19347,12 +19345,9 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphStri
 	}
 
 	// infix builder, if needed
-	ISphInfixBuilder * pInfixer = sphCreateInfixBuilder ( pHeader->m_iInfixCodepointBytes, &sError );
+	CSphScopedPtr<ISphInfixBuilder> pInfixer { sphCreateInfixBuilder ( pHeader->m_iInfixCodepointBytes, &sError ) };
 	if ( !sError.IsEmpty() )
-	{
-		SafeDelete ( pInfixer );
 		return false;
-	}
 
 	assert ( m_iSkiplistBlockSize>0 );
 
@@ -19376,14 +19371,13 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphStri
 	}
 
 	// keywords storage
-	BYTE * pKeywords = new BYTE [ MAX_KEYWORD_BYTES*dBins.GetLength() ];
+	CSphFixedVector<BYTE> dKeywords { MAX_KEYWORD_BYTES * dBins.GetLength() };
+	BYTE* pKeywords = dKeywords.begin();
 
-	#define LOC_CLEANUP() \
+#define LOC_CLEANUP() \
 		{ \
 			ARRAY_FOREACH ( iIdx, dBins ) \
 				SafeDelete ( dBins[iIdx] ); \
-			SafeDeleteArray ( pKeywords ); \
-			SafeDelete ( pInfixer ); \
 		}
 
 	// do the sort
@@ -22595,7 +22589,7 @@ ISphWordlist::Args_t::Args_t ( bool bPayload, int iExpansionLimit, bool bHasExac
 {
 	m_sBuf.Reserve ( 2048 * SPH_MAX_WORD_LEN * 3 );
 	m_dExpanded.Reserve ( 2048 );
-	m_pPayload = NULL;
+	m_pPayload = nullptr;
 	m_iTotalDocs = 0;
 	m_iTotalHits = 0;
 }

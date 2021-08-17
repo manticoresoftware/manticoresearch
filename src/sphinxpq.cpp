@@ -568,7 +568,7 @@ static Slice_t GetPrefixLocator ( const char * sWord, bool bHasMorphology, const
 	tChPoint.m_uLen = pSeg->m_dWords.GetLength();
 
 	// find initial checkpoint or check words prior to 1st checkpoint
-	if ( pSeg->m_dWordCheckpoints.GetLength() )
+	if ( !pSeg->m_dWordCheckpoints.IsEmpty() )
 	{
 		const RtWordCheckpoint_t * pLast = &pSeg->m_dWordCheckpoints.Last();
 		const RtWordCheckpoint_t * pCheckpoint = sphSearchCheckpoint ( sPrefix, iPrefix, 0, true, true, pSeg->m_dWordCheckpoints.Begin(), pLast );
@@ -581,7 +581,7 @@ static Slice_t GetPrefixLocator ( const char * sWord, bool bHasMorphology, const
 				tChPoint.m_uOff = pCheckpoint->m_iOffset;
 
 			// find the last checkpoint that meets prefix condition ( ie might be a span of terms that splat to a couple of checkpoints )
-			pCheckpoint++;
+			++pCheckpoint;
 			while ( pCheckpoint<=pLast )
 			{
 				iNameLen = (int) strnlen ( pCheckpoint->m_sWord, SPH_MAX_KEYWORD_LEN );
@@ -590,7 +590,7 @@ static Slice_t GetPrefixLocator ( const char * sWord, bool bHasMorphology, const
 					tChPoint.m_uOff = pCheckpoint->m_iOffset;
 				if ( iCmp<0 )
 					break;
-				pCheckpoint++;
+				++pCheckpoint;
 			}
 		}
 	}
@@ -818,7 +818,7 @@ public:
 
 	Hitpos_t GetNextHit () final
 	{
-		if ( m_uNextHit==0 )
+		if ( !m_uNextHit )
 			return Hitpos_t ( m_tHitReader.UnzipHit() );
 		else if ( m_uNextHit==0xffffffffUL )
 			return EMPTY_HIT;
@@ -855,7 +855,7 @@ private:
 		tWord.m_uDoc = m_dDoclist[m_iDoc].m_uOff;
 		tWord.m_uDocs = m_dDoclist[m_iDoc].m_uLen;
 		m_tDocReader = RtDocReader_t ( m_pSeg, tWord );
-		m_iDoc++;
+		++m_iDoc;
 	}
 
 	constRtSegmentRefPtf_t		m_pSeg;

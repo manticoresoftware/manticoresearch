@@ -1145,8 +1145,7 @@ template < typename VECTOR >
 int sphPutBytes ( VECTOR * pOut, const void * pData, int iLen )
 {
 	int iOff = pOut->GetLength();
-	pOut->Resize ( iOff + iLen );
-	memcpy ( pOut->Begin()+iOff, pData, iLen );
+	pOut->Append ( pData, iLen );
 	return iOff;
 }
 
@@ -1269,16 +1268,10 @@ int sphCheckpointCmpStrictly ( const char * sWord, int iLen, SphWordID_t iWordID
 	return iRes;
 }
 
-template < typename CP >
-struct SphCheckpointAccess_fn
-{
-	const CP & operator () ( const CP * pCheckpoint ) const { return *pCheckpoint; }
-};
-
 template < typename CP, typename PRED >
 const CP * sphSearchCheckpoint ( const char * sWord, int iWordLen, SphWordID_t iWordID
 							, bool bStarMode, bool bWordDict
-							, const CP * pFirstCP, const CP * pLastCP, const PRED & tPred )
+							, const CP * pFirstCP, const CP * pLastCP, PRED && tPred )
 {
 	assert ( !bWordDict || iWordLen>0 );
 
@@ -1286,34 +1279,30 @@ const CP * sphSearchCheckpoint ( const char * sWord, int iWordLen, SphWordID_t i
 	const CP * pEnd = pLastCP;
 
 	if ( bStarMode && sphCheckpointCmp ( sWord, iWordLen, iWordID, bWordDict, tPred ( pStart ) )<0 )
-		return NULL;
+		return nullptr;
 	if ( !bStarMode && sphCheckpointCmpStrictly ( sWord, iWordLen, iWordID, bWordDict, tPred ( pStart ) )<0 )
-		return NULL;
+		return nullptr;
 
 	if ( sphCheckpointCmpStrictly ( sWord, iWordLen, iWordID, bWordDict, tPred ( pEnd ) )>=0 )
-		pStart = pEnd;
-	else
+		return pEnd;
+
+	while ( pEnd-pStart>1 )
 	{
-		while ( pEnd-pStart>1 )
-		{
-			const CP * pMid = pStart + (pEnd-pStart)/2;
-			const int iCmpRes = sphCheckpointCmpStrictly ( sWord, iWordLen, iWordID, bWordDict, tPred ( pMid ) );
+		const CP * pMid = pStart + (pEnd-pStart)/2;
+		const int iCmpRes = sphCheckpointCmpStrictly ( sWord, iWordLen, iWordID, bWordDict, tPred ( pMid ) );
 
-			if ( iCmpRes==0 )
-			{
-				pStart = pMid;
-				break;
-			} else if ( iCmpRes<0 )
-				pEnd = pMid;
-			else
-				pStart = pMid;
-		}
-
-		assert ( pStart>=pFirstCP );
-		assert ( pStart<=pLastCP );
-		assert ( sphCheckpointCmp ( sWord, iWordLen, iWordID, bWordDict, tPred ( pStart ) )>=0
-			&& sphCheckpointCmpStrictly ( sWord, iWordLen, iWordID, bWordDict, tPred ( pEnd ) )<0 );
+		if ( !iCmpRes )
+			return pMid;
+		else if ( iCmpRes<0 )
+			pEnd = pMid;
+		else
+			pStart = pMid;
 	}
+
+	assert ( pStart >= pFirstCP );
+	assert ( pStart <= pLastCP );
+	assert ( sphCheckpointCmp ( sWord, iWordLen, iWordID, bWordDict, tPred ( pStart ) )>=0
+		&& sphCheckpointCmpStrictly ( sWord, iWordLen, iWordID, bWordDict, tPred ( pEnd ) )<0 );
 
 	return pStart;
 }
@@ -1321,7 +1310,7 @@ const CP * sphSearchCheckpoint ( const char * sWord, int iWordLen, SphWordID_t i
 template < typename CP >
 const CP * sphSearchCheckpoint ( const char * sWord, int iWordLen, SphWordID_t iWordID, bool bStarMode, bool bWordDict , const CP * pFirstCP, const CP * pLastCP )
 {
-	return sphSearchCheckpoint ( sWord, iWordLen, iWordID, bStarMode, bWordDict, pFirstCP, pLastCP, SphCheckpointAccess_fn<CP>() );
+	return sphSearchCheckpoint ( sWord, iWordLen, iWordID, bStarMode, bWordDict, pFirstCP, pLastCP, [] ( const CP* pCP ) { return *pCP; } );
 }
 
 
@@ -1594,9 +1583,7 @@ public:
 		int iMinLen = Min ( m_iLastLen, iLen );
 		assert ( iMinLen<(int)sizeof(m_sLastKeyword) );
 		while ( iMatch<iMinLen && m_sLastKeyword[iMatch]==pWord[iMatch] )
-		{
-			iMatch++;
-		}
+			++iMatch;
 
 		BYTE iDelta = (BYTE)( iLen - iMatch );
 		assert ( iDelta>0 );

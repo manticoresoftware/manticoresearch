@@ -91,7 +91,7 @@ volatile bool &RTChangesAllowed ()
 // Variable Length Byte (VLB) encoding
 // store int variable in as much bytes as actually needed to represent it
 template < typename T, typename P >
-static inline void ZipT ( CSphVector < BYTE, P > * pOut, T uValue )
+static inline void ZipT ( CSphVector < BYTE, P > & dOut, T uValue )
 {
 	do
 	{
@@ -99,20 +99,7 @@ static inline void ZipT ( CSphVector < BYTE, P > * pOut, T uValue )
 		uValue >>= 7;
 		if ( uValue )
 			bOut |= 0x80;
-		pOut->Add ( bOut );
-	} while ( uValue );
-}
-
-template < typename T >
-static inline void ZipT ( BYTE * & pOut, T uValue )
-{
-	do
-	{
-		BYTE bOut = (BYTE)( uValue & 0x7f );
-		uValue >>= 7;
-		if ( uValue )
-			bOut |= 0x80;
-		*pOut++ = bOut;
+		dOut.Add ( bOut );
 	} while ( uValue );
 }
 
@@ -134,7 +121,7 @@ STATIC_ASSERT ( SPH_MAX_KEYWORD_LEN<255, MAX_KEYWORD_LEN_SHOULD_FITS_BYTE );
 
 // Variable Length Byte (VLB) decoding
 template < typename T >
-static inline const BYTE * UnzipT ( T * pValue, const BYTE * pIn )
+static inline void UnzipT ( T * pValue, const BYTE *& pIn )
 {
 	T uValue = 0;
 	BYTE uIn;
@@ -148,7 +135,23 @@ static inline const BYTE * UnzipT ( T * pValue, const BYTE * pIn )
 	} while ( uIn & 0x80U );
 
 	*pValue = uValue;
-	return pIn;
+}
+
+template < typename T >
+static inline T UnzipT ( const BYTE *& pIn )
+{
+	T uValue = 0;
+	BYTE uIn;
+	int iOff = 0;
+
+	do
+	{
+		uIn = *pIn++;
+		uValue += ( T ( uIn & 0x7FU ) ) << iOff;
+		iOff += 7;
+	} while ( uIn & 0x80U );
+
+	return uValue;
 }
 
 /* // Note difference: in code below zipped bytes came in BE order (most significant first)
@@ -409,42 +412,37 @@ void RtSegment_t::BuildDocID2RowIDMap ( const CSphSchema & tSchema )
 
 struct RtDocWriter_t
 {
-	CSphTightVector<BYTE> *		m_pDocs;
+	CSphTightVector<BYTE> &		m_dDocs;
 	RowID_t						m_tLastRowID {INVALID_ROWID};
 
-	explicit RtDocWriter_t ( CSphTightVector<BYTE> * pDocs )
-		: m_pDocs ( pDocs )
+	explicit RtDocWriter_t ( CSphTightVector<BYTE> & dDocs )
+		: m_dDocs ( dDocs )
 	{}
 
 	explicit RtDocWriter_t ( RtSegment_t * pSeg )
-		: m_pDocs ( &pSeg->m_dDocs )
+		: m_dDocs ( pSeg->m_dDocs )
 	{}
 
 	void ZipDoc ( const RtDoc_t & tDoc )
 	{
-		CSphTightVector<BYTE> * pDocs = m_pDocs;
-		BYTE * pEnd = pDocs->AddN ( 12*sizeof(DWORD) );
-		const BYTE * pBegin = pDocs->Begin();
-
-		ZipDword ( pEnd, tDoc.m_tRowID - m_tLastRowID );
-		m_tLastRowID = tDoc.m_tRowID;
-		ZipDword ( pEnd, tDoc.m_uDocFields );
-		ZipDword ( pEnd, tDoc.m_uHits );
+		m_dDocs.ReserveGap ( 5 + 5 * sizeof ( DWORD ) );
+		ZipDword ( m_dDocs, tDoc.m_tRowID - std::exchange ( m_tLastRowID, tDoc.m_tRowID ) );
+		ZipDword ( m_dDocs, tDoc.m_uDocFields );
+		ZipDword ( m_dDocs, tDoc.m_uHits );
 		if ( tDoc.m_uHits==1 )
 		{
-			ZipDword ( pEnd, tDoc.m_uHit & 0xffffffUL );
-			ZipDword ( pEnd, tDoc.m_uHit>>24 );
+			ZipDword ( m_dDocs, tDoc.m_uHit & 0xffffffUL );
+			ZipDword ( m_dDocs, tDoc.m_uHit>>24 );
 		} else
-			ZipDword ( pEnd, tDoc.m_uHit );
+			ZipDword ( m_dDocs, tDoc.m_uHit );
 
-		pDocs->Resize ( pEnd-pBegin );
 	}
 
 	inline void operator<< ( const RtDoc_t & tDoc) { ZipDoc (tDoc); }
 
-	DWORD ZipDocPtr () const
+	DWORD ZipDocPos () const
 	{
-		return m_pDocs->GetLength();
+		return m_dDocs.GetLength();
 	}
 
 	void ZipRestart ()
@@ -465,19 +463,16 @@ void RtDocReader_t::UnzipDoc ( RtDoc_t& tOut )
 {
 	assert ( m_iLeft && m_pDocs );
 	const BYTE * pIn = m_pDocs;
-	RowID_t tDeltaID;
-	pIn = UnzipDword ( &tDeltaID, pIn );
-	tOut.m_tRowID += tDeltaID;
-	pIn = UnzipDword ( &tOut.m_uDocFields, pIn );
-	pIn = UnzipDword ( &tOut.m_uHits, pIn );
+	tOut.m_tRowID += UnzipDword ( pIn );
+	UnzipDword ( &tOut.m_uDocFields, pIn );
+	UnzipDword ( &tOut.m_uHits, pIn );
 	if ( tOut.m_uHits==1 )
 	{
-		DWORD a, b;
-		pIn = UnzipDword ( &a, pIn );
-		pIn = UnzipDword ( &b, pIn );
-		tOut.m_uHit = a + ( b<<24 );
+		auto a = UnzipDword ( pIn );
+		auto b = UnzipDword ( pIn );
+		tOut.m_uHit = a + ( b << 24 );
 	} else
-		pIn = UnzipDword ( &tOut.m_uHit, pIn );
+		UnzipDword ( &tOut.m_uHit, pIn );
 	m_pDocs = pIn;
 	--m_iLeft;
 }
@@ -492,7 +487,7 @@ const RtDoc_t * RtDocReader_t::UnzipDoc ()
 
 struct RtWordWriter_t
 {
-	CSphTightVector<BYTE> *				m_pWords;
+	CSphTightVector<BYTE> &				m_dWords;
 	CSphVector<RtWordCheckpoint_t> *	m_pCheckpoints;
 	CSphVector<BYTE> *					m_pKeywordCheckpoints;
 
@@ -507,7 +502,7 @@ struct RtWordWriter_t
 
 	RtWordWriter_t ( CSphTightVector<BYTE> * pWords, CSphVector<RtWordCheckpoint_t> * pCheckpoints,
 				  CSphVector<BYTE> * pKeywordCheckpoints, bool bKeywordDict, int iWordsCheckpoint, ESphHitless eHitlessMode )
-		: m_pWords ( pWords )
+		: m_dWords ( *pWords )
 		, m_pCheckpoints ( pCheckpoints )
 		, m_pKeywordCheckpoints ( pKeywordCheckpoints )
 		, m_uLastWordID ( 0 )
@@ -517,7 +512,7 @@ struct RtWordWriter_t
 		, m_iWordsCheckpoint ( iWordsCheckpoint )
 		, m_eHitlessMode ( eHitlessMode )
 	{
-		assert ( !m_pWords->GetLength() );
+		assert ( pWords && pWords->IsEmpty() );
 		assert ( !m_pCheckpoints->GetLength() );
 		assert ( !m_pKeywordCheckpoints->GetLength() );
 	}
@@ -528,7 +523,6 @@ struct RtWordWriter_t
 
 	void ZipWord ( const RtWord_t & tWord )
 	{
-		CSphTightVector<BYTE> * pWords = m_pWords;
 		if ( ++m_iWords==m_iWordsCheckpoint )
 		{
 			RtWordCheckpoint_t & tCheckpoint = m_pCheckpoints->Add();
@@ -544,7 +538,7 @@ struct RtWordWriter_t
 				// reset keywords delta encoding
 				m_tLastKeyword.Reset();
 			}
-			tCheckpoint.m_iOffset = pWords->GetLength();
+			tCheckpoint.m_iOffset = m_dWords.GetLength();
 
 			m_uLastWordID = 0;
 			m_uLastDoc = 0;
@@ -552,25 +546,19 @@ struct RtWordWriter_t
 		}
 
 		if ( !m_bKeywordDict )
-		{
-			ZipWordid ( pWords, tWord.m_uWordID - m_uLastWordID );
-		} else
-		{
+			ZipWordid ( m_dWords, tWord.m_uWordID - m_uLastWordID );
+		else
 			m_tLastKeyword.PutDelta ( *this, tWord.m_sWord+1, tWord.m_sWord[0] );
-		}
 
-		BYTE * pEnd = pWords->AddN ( 4*sizeof(DWORD) );
-		const BYTE * pBegin = pWords->Begin();
+		m_dWords.ReserveGap ( 3+3*sizeof(DWORD) );
 
 		DWORD uDocs = tWord.m_uDocs;
 		if ( !tWord.m_bHasHitlist && m_eHitlessMode==SPH_HITLESS_SOME )
 			uDocs |= HITLESS_DOC_FLAG;
 
-		ZipDword ( pEnd, uDocs );
-		ZipDword ( pEnd, tWord.m_uHits );
-		ZipDword ( pEnd, tWord.m_uDoc - m_uLastDoc );
-
-		pWords->Resize ( pEnd-pBegin );
+		ZipDword ( m_dWords, uDocs );
+		ZipDword ( m_dWords, tWord.m_uHits );
+		ZipDword ( m_dWords, tWord.m_uDoc - m_uLastDoc );
 
 		m_uLastWordID = tWord.m_uWordID;
 		m_uLastDoc = tWord.m_uDoc;
@@ -580,7 +568,7 @@ struct RtWordWriter_t
 
 	void PutBytes ( const BYTE * pData, int iLen ) const
 	{
-		sphPutBytes ( m_pWords, pData, iLen );
+		sphPutBytes ( &m_dWords, pData, iLen );
 	}
 };
 
@@ -619,7 +607,6 @@ void RtWordReader_t::UnzipWord ( RtWord_t& tWord )
 	}
 
 	const BYTE * pIn = m_pCur;
-	DWORD uDeltaDoc;
 	if ( m_bWordDict )
 	{
 		BYTE iMatch, iDelta, uPacked;
@@ -638,20 +625,15 @@ void RtWordReader_t::UnzipWord ( RtWord_t& tWord )
 		m_tPackedWord[1+m_tPackedWord[0]] = 0;
 		pIn += iDelta;
 	} else
-	{
-		SphWordID_t uDeltaID;
-		pIn = UnzipWordid ( &uDeltaID, pIn );
-		tWord.m_uWordID += uDeltaID;
-	}
-	pIn = UnzipDword ( &tWord.m_uDocs, pIn );
-	pIn = UnzipDword ( &tWord.m_uHits, pIn );
-	pIn = UnzipDword ( &uDeltaDoc, pIn );
+		tWord.m_uWordID += UnzipWordid ( pIn );
+
+	UnzipDword ( &tWord.m_uDocs, pIn );
+	UnzipDword ( &tWord.m_uHits, pIn );
+	tWord.m_uDoc += UnzipDword ( pIn );
 	m_pCur = pIn;
 
 	tWord.m_bHasHitlist = ( m_eHitlessMode==SPH_HITLESS_NONE || ( m_eHitlessMode==SPH_HITLESS_SOME && !( tWord.m_uDocs & HITLESS_DOC_FLAG ) ) );
 	tWord.m_uDocs = ( m_eHitlessMode==SPH_HITLESS_NONE ? tWord.m_uDocs : ( tWord.m_uDocs & HITLESS_DOC_MASK ) );
-
-	tWord.m_uDoc += uDeltaDoc;
 }
 
 
@@ -667,21 +649,20 @@ const RtWord_t * RtWordReader_t::UnzipWord ()
 
 struct RtHitWriter_t
 {
-	CSphTightVector<BYTE> *		m_pHits;
+	CSphTightVector<BYTE> &		m_dHits;
 	DWORD						m_uLastHit = 0;
 
 	explicit RtHitWriter_t ( CSphTightVector<BYTE> * pHits )
-		: m_pHits ( pHits )
+		: m_dHits ( *pHits )
 	{}
 
 	explicit RtHitWriter_t ( RtSegment_t * pSeg )
-		: m_pHits ( &pSeg->m_dHits )
+		: m_dHits ( pSeg->m_dHits )
 	{}
 
 	void ZipHit ( DWORD uValue )
 	{
-		ZipDword ( m_pHits, uValue - m_uLastHit );
-		m_uLastHit = uValue;
+		ZipDword ( m_dHits, uValue - std::exchange ( m_uLastHit, uValue ) );
 	}
 
 	inline void operator<< (DWORD uValue) { ZipHit (uValue); }
@@ -691,9 +672,9 @@ struct RtHitWriter_t
 		m_uLastHit = 0;
 	}
 
-	DWORD ZipHitPtr () const
+	DWORD ZipHitPos () const
 	{
-		return m_pHits->GetLength();
+		return m_dHits.GetLength();
 	}
 };
 
@@ -709,9 +690,7 @@ DWORD RtHitReader_t::UnzipHit ()
 	if ( !m_iLeft )
 		return 0;
 
-	DWORD uValue;
-	m_pCur = UnzipDword ( &uValue, m_pCur );
-	m_uLast += uValue;
+	m_uLast += UnzipDword ( m_pCur );
 	--m_iLeft;
 	return m_uLast;
 }
@@ -737,28 +716,24 @@ uint64_t MemoryReader_c::UnzipOffset()
 {
 	assert ( m_pCur );
 	assert ( m_pCur<m_pData+m_iLen );
-	uint64_t uVal = 0;
-	m_pCur = UnzipQword ( &uVal, m_pCur );
-	return uVal;
+	return UnzipQword ( m_pCur );
 }
 
 DWORD MemoryReader_c::UnzipInt()
 {
 	assert ( m_pCur );
 	assert ( m_pCur<m_pData+m_iLen );
-	DWORD uVal = 0;
-	m_pCur = UnzipDword ( &uVal, m_pCur );
-	return uVal;
+	return UnzipDword ( m_pCur );
 }
 
 void MemoryWriter_c::ZipOffset ( uint64_t uVal )
 {
-	ZipQword ( &m_dBuf, uVal );
+	ZipQword ( m_dBuf, uVal );
 }
 
 void MemoryWriter_c::ZipInt ( DWORD uVal )
 {
-	ZipDword ( &m_dBuf, uVal );
+	ZipDword ( m_dBuf, uVal );
 }
 //////////////////////////////////////////////////////////////////////////
 
@@ -1817,7 +1792,7 @@ void RtAccum_t::CreateSegmentHits ( RtSegment_t * pSeg, int iWordsCheckpoint, ES
 				tOutDoc.ZipDoc ( tDoc );
 				tDoc.m_uDocFields = 0;
 				tDoc.m_uHits = 0;
-				tDoc.m_uHit = tOutHit.ZipHitPtr();
+				tDoc.m_uHit = tOutHit.ZipHitPos();
 			}
 
 			tDoc.m_tRowID = tHit.m_tRowID;
@@ -1844,7 +1819,7 @@ void RtAccum_t::CreateSegmentHits ( RtSegment_t * pSeg, int iWordsCheckpoint, ES
 			tWord.m_uWordID = tHit.m_uWordID;
 			tWord.m_uDocs = 0;
 			tWord.m_uHits = 0;
-			tWord.m_uDoc = tOutDoc.ZipDocPtr();
+			tWord.m_uDoc = tOutDoc.ZipDocPos();
 			uPrevHit = EMPTY_HIT;
 			if ( eHitless==SPH_HITLESS_NONE || eHitless==SPH_HITLESS_ALL || !tWord.m_uWordID || tHit.m_uWordPos==EMPTY_HIT )
 			{
@@ -1880,10 +1855,7 @@ void RtAccum_t::CreateSegmentHits ( RtSegment_t * pSeg, int iWordsCheckpoint, ES
 		} else
 		{
 			if ( uEmbeddedHit )
-			{
-				tOutHit.ZipHit ( uEmbeddedHit );
-				uEmbeddedHit = 0;
-			}
+				tOutHit << std::exchange ( uEmbeddedHit, 0 );
 
 			tOutHit.ZipHit ( tHit.m_uWordPos );
 			++tDoc.m_uHits;
@@ -2168,7 +2140,7 @@ void RtIndex_c::CopyWord ( RtSegment_t & tDst, const RtSegment_t & tSrc, RtDocWr
 
 			// this is reference of what append (hitsblob) above does.
 //			RtHitWriter_t tOutHit ( &tDst );
-//			tDoc.m_uHit = tOutHit.ZipHitPtr();
+//			tDoc.m_uHit = tOutHit.ZipHitPos();
 //			for ( DWORD uValue=tInHit.UnzipHit(); uValue; uValue=tInHit.UnzipHit() )
 //				tOutHit.ZipHit ( uValue );
 		}
@@ -2217,7 +2189,7 @@ static void CopyWordWithoutField ( CSphTightVector<BYTE> * pOutHits, RtDocWriter
 		{
 			RtHitReader_t tInHits ( &tSrc, &tInDoc );
 			RtHitWriter_t tOutHits ( pOutHits );
-			tOutDoc.m_uHit = tOutHits.ZipHitPtr();
+			tOutDoc.m_uHit = tOutHits.ZipHitPos();
 			DWORD uHit;
 			while ( tInHits )
 			{
@@ -2266,8 +2238,8 @@ void RtIndex_c::DeleteFieldFromDict ( RtSegment_t * pSeg, int iKillField )
 		tOutWord = tInWord;
 		tOutWord.m_uDocs = tOutWord.m_uHits = 0;
 
-		RtDocWriter_t tOutDocs ( &dDocs );
-		tOutWord.m_uDoc = tOutDocs.ZipDocPtr ();
+		RtDocWriter_t tOutDocs ( dDocs );
+		tOutWord.m_uDoc = tOutDocs.ZipDocPos ();
 
 		RtDocReader_t tInDocs ( &tInSeg, tInWord );
 		CopyWordWithoutField ( &dHits, tOutDocs, tOutWord, tInSeg, tInDocs, iKillField );
@@ -2522,7 +2494,7 @@ void RtIndex_c::MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, c
 		RtWord_t tWord = iCmp<=0 ? *pWords1 : *pWords2;
 		tWord.m_uDocs = 0;
 		tWord.m_uHits = 0;
-		tWord.m_uDoc = tOutDoc.ZipDocPtr();
+		tWord.m_uDoc = tOutDoc.ZipDocPos();
 
 		// if words are equal, copy both
 		if ( iCmp<=0 )
@@ -3374,8 +3346,7 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 				} else
 				{
 					tWriterDocs.ZipInt ( pDoc->m_uDocFields );
-					tWriterDocs.ZipOffset ( tWriterHits.GetPos() - uLastHitpos );
-					uLastHitpos = tWriterHits.GetPos();
+					tWriterDocs.ZipOffset ( tWriterHits.GetPos() - std::exchange ( uLastHitpos, tWriterHits.GetPos() ) );
 				}
 
 				tLastRowID = tRowID;
@@ -3386,11 +3357,7 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 					DWORD uLastHit = 0;
 					RtHitReader_t tInHit ( tCtx.m_tGuard.m_dRamChunks[iSegment], pDoc );
 					for ( DWORD uValue=tInHit.UnzipHit(); uValue; uValue=tInHit.UnzipHit() )
-					{
-						tWriterHits.ZipInt ( uValue - uLastHit );
-						uLastHit = uValue;
-					}
-
+						tWriterHits.ZipInt ( uValue - std::exchange ( uLastHit, uValue ) );
 					tWriterHits.ZipInt(0);
 				}
 			}
@@ -4533,7 +4500,6 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter )
 			}
 
 			const BYTE * pIn = pCurWord;
-			DWORD uDeltaDoc;
 			if ( m_bKeywordDict )
 			{
 				BYTE iMatch, iDelta, uPacked;
@@ -4631,12 +4597,9 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter )
 				iLastWordLen = iWordLen;
 			} else
 			{
-				SphWordID_t uDeltaID;
-				pIn = UnzipWordid ( &uDeltaID, pIn );
+				tWord.m_uWordID += UnzipWordid ( pIn );
 				if ( pIn>=pMaxWord )
 					tReporter.Fail ( "reading past wordlist end (segment=%d, word=%d)", iSegment, nWordsRead );
-
-				tWord.m_uWordID += uDeltaID;
 
 				if ( tWord.m_uWordID<=uPrevWordID )
 				{
@@ -4646,23 +4609,22 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter )
 				uPrevWordID = tWord.m_uWordID;
 			}
 
-			pIn = UnzipDword ( &tWord.m_uDocs, pIn );
+			UnzipDword ( &tWord.m_uDocs, pIn );
 			if ( pIn>=pMaxWord )
 			{
 				sWord[sizeof(sWord)-1] = '\0';
 				tReporter.Fail ( "invalid docs/hits (segment=%d, word=%d, read_word=%s, docs=%u, hits=%u)", iSegment, nWordsRead, sWord+1, tWord.m_uDocs, tWord.m_uHits );
 			}
 
-			pIn = UnzipDword ( &tWord.m_uHits, pIn );
+			UnzipDword ( &tWord.m_uHits, pIn );
 			if ( pIn>=pMaxWord )
 				tReporter.Fail ( "reading past wordlist end (segment=%d, word=%d)", iSegment, nWordsRead );
 
-			pIn = UnzipDword ( &uDeltaDoc, pIn );
+			tWord.m_uDoc += UnzipDword ( pIn );
 			if ( pIn>pMaxWord )
 				tReporter.Fail ( "reading past wordlist end (segment=%d, word=%d)", iSegment, nWordsRead );
 
 			pCurWord = pIn;
-			tWord.m_uDoc += uDeltaDoc;
 
 			if ( !tWord.m_uDocs || !tWord.m_uHits || tWord.m_uHits<tWord.m_uDocs )
 			{
@@ -4717,8 +4679,7 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter )
 				bool bEmbeddedHit = false;
 				pIn = pCurDoc;
 
-				RowID_t tDeltaRowID;
-				pIn = UnzipDword ( &tDeltaRowID, pIn );
+				tDoc.m_tRowID += UnzipDword ( pIn );
 				if ( pIn>=pMaxDoc )
 				{
 					tReporter.Fail ( "reading past doclist end (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, doclist_offset=%u, doclist_size=%d)",
@@ -4726,10 +4687,7 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter )
 					break;
 				}
 
-				tDoc.m_tRowID += tDeltaRowID;
-				DWORD uDocField;
-				pIn = UnzipDword ( &uDocField, pIn );
-
+				UnzipDword ( &tDoc.m_uDocFields, pIn );
 				if ( pIn>=pMaxDoc )
 				{
 					tReporter.Fail ( "reading past doclist end (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, doclist_offset=%u, doclist_size=%d)",
@@ -4737,8 +4695,7 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter )
 					break;
 				}
 
-				tDoc.m_uDocFields = uDocField;
-				pIn = UnzipDword ( &tDoc.m_uHits, pIn );
+				UnzipDword ( &tDoc.m_uHits, pIn );
 				if ( pIn>=pMaxDoc )
 				{
 					tReporter.Fail ( "reading past doclist end (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, doclist_offset=%u, doclist_size=%d)",
@@ -4750,8 +4707,7 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter )
 				{
 					bEmbeddedHit = true;
 
-					DWORD a, b;
-					pIn = UnzipDword ( &a, pIn );
+					auto a = UnzipDword ( pIn );
 					if ( pIn>=pMaxDoc )
 					{
 						tReporter.Fail ( "reading past doclist end (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, doclist_offset=%u, doclist_size=%d)",
@@ -4759,7 +4715,7 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter )
 						break;
 					}
 
-					pIn = UnzipDword ( &b, pIn );
+					auto b = UnzipDword ( pIn );
 					if ( pIn>pMaxDoc )
 					{
 						tReporter.Fail ( "reading past doclist end (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, doclist_offset=%u, doclist_size=%d)",
@@ -4770,7 +4726,7 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter )
 					tDoc.m_uHit = HITMAN::Create ( b, a );
 				} else
 				{
-					pIn = UnzipDword ( &tDoc.m_uHit, pIn );
+					UnzipDword ( &tDoc.m_uHit, pIn );
 					if ( pIn>pMaxDoc )
 					{
 						tReporter.Fail ( "reading past doclist end (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, doclist_offset=%u, doclist_size=%d)",
@@ -4838,15 +4794,12 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter )
 
 					for ( DWORD uHit = 0; uHit < tDoc.m_uHits && pCurHit; uHit++ )
 					{
-						DWORD uValue = 0;
-						pCurHit = UnzipDword ( &uValue, pCurHit );
+						uHitlistEntry += UnzipDword ( pCurHit );
 						if ( pCurHit>pMaxHit )
 						{
 							tReporter.Fail ( "reading past hitlist end (segment=%d, word=%d, wordid=" UINT64_FMT ", rowid=%u)", iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, tDoc.m_tRowID );
 							break;
 						}
-
-						uHitlistEntry += uValue;
 
 						DWORD uPosInField = HITMAN::GetPos ( uHitlistEntry );
 						bool bLastInField = HITMAN::IsEnd ( uHitlistEntry );
@@ -5057,20 +5010,12 @@ public:
 
 	Hitpos_t GetNextHit () final
 	{
-		if ( m_uNextHit==0 )
-		{
+		if ( !m_uNextHit )
 			return Hitpos_t ( m_tHitReader.UnzipHit() );
-
-		} else if ( m_uNextHit==0xffffffffUL )
-		{
+		else if ( m_uNextHit==0xffffffffUL )
 			return EMPTY_HIT;
-
-		} else
-		{
-			DWORD uRes = m_uNextHit;
-			m_uNextHit = 0xffffffffUL;
-			return Hitpos_t ( uRes );
-		}
+		else
+			return Hitpos_t ( std::exchange ( m_uNextHit, 0xffffffffUL ) );
 	}
 
 	bool SetupScan ( const RtIndex_c * pIndex, int iSegment, const SphChunkGuard_t & tGuard ) final
@@ -5167,15 +5112,7 @@ public:
 	{
 		if ( m_iHits>1 )
 			return Hitpos_t ( m_tHitReader.UnzipHit() );
-		else if ( m_iHits==1 )
-		{
-			Hitpos_t tHit ( m_uHitEmbeded );
-			m_uHitEmbeded = EMPTY_HIT;
-			return tHit;
-		} else
-		{
-			return EMPTY_HIT;
-		}
+		return ( m_iHits==1 ) ? Hitpos_t ( std::exchange ( m_uHitEmbeded, EMPTY_HIT ) ) : EMPTY_HIT;
 	}
 
 	bool SetupScan ( const RtIndex_c *, int iSegment, const SphChunkGuard_t & tGuard ) final

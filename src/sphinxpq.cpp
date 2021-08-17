@@ -823,11 +823,7 @@ public:
 		else if ( m_uNextHit==0xffffffffUL )
 			return EMPTY_HIT;
 		else
-		{
-			Hitpos_t tHit ( m_uNextHit );
-			m_uNextHit = 0xffffffffUL;
-			return tHit;
-		}
+			return Hitpos_t ( std::exchange ( m_uNextHit, 0xffffffffUL ) );
 	}
 
 	bool Setup ( const RtSegment_t * pSeg, CSphVector<Slice_t> & dDoclist )

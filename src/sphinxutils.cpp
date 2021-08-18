@@ -2508,8 +2508,9 @@ static bool DumpGdb ( int iFD )
 		return true;
 	}
 #if HAVE_SYS_PRCTL_H
-	sphSafeInfo ( g_sPid, "%d", getpid () );
-	g_sNameBuf [ ::readlink ( "/proc/self/exe", g_sNameBuf, 511 ) ] = 0;
+	int iPos = sphSafeInfo ( g_sPid, "%d", getpid () );
+	g_sPid[iPos-1] = '\0'; // make null-terminated from EOL string
+	g_sNameBuf [ ::readlink ( "/proc/self/exe", g_sNameBuf, 511 ) ] = '\0';
 
 	if ( g_bSafeGDB || iParentPID==-1 ) // jemalloc looks safe, or user explicitly asked to invoke gdb anyway
 		return sphDumpGdb ( iFD, g_sNameBuf, g_sPid );
@@ -2585,14 +2586,15 @@ bool sphDumpGdb (int iFD, const char* sName, const char* sPid )
 				_Exit ( 1 );
 			if ( dup2 ( iFD, STDERR_FILENO )==-1 )
 				_Exit ( 1 );
-			execlp ( "gdb", "gdb", "--batch", "-n",
+			execlp ( "gdb", "gdb", "-batch", "-n",
 				"-ex", "info threads",
 				"-ex", "thread apply all bt",
 				"-ex", "echo \nMain thread:\n",
 				"-ex", "bt",
 				"-ex", "echo \nLocal variables:\n",
 				"-ex", "info locals",
-				"-ex", "detach", "-e", sName, "-p", sPid, nullptr );
+				"-ex", "detach",
+				"-se", sName, "-p", sPid, nullptr );
 
 			// If gdb failed to start, signal back
 			_Exit ( 1 );

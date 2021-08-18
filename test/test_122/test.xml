@@ -18,7 +18,7 @@ searchd
 index rt
 {
 	type = rt
-	path = data/rt
+	path =<data_path/>/rt
 	rt_attr_uint = gid
 	rt_attr_string = author
 	rt_field = title
@@ -27,7 +27,7 @@ index rt
 index rt_multy_str
 {
 	type = rt
-	path = data/rt_multy_str
+	path =<data_path/>/rt_multy_str
 	rt_field = title
 	rt_attr_uint = gid
 	rt_attr_string = place

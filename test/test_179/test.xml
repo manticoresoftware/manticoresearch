@@ -45,7 +45,7 @@ index test_plain_for_dist
 index test_rt
 {
         type                    = rt
-        path                    = data/test_rt
+        path                    =<data_path/>/test_rt
         rt_attr_uint    = gid
         rt_field                = title
 }

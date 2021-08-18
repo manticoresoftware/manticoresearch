@@ -18,7 +18,7 @@ searchd
 index test
 {
 	type	= rt
-	path	= data/test
+	path	=<data_path/>/test
 	rt_field	= title
 	rt_field	= content
 	rt_attr_uint = dummy

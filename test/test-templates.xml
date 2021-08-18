@@ -68,7 +68,7 @@ searchd
 index test
 {
 	type			= rt
-	path			= data/test
+	path			=<data_path/>/test
 	rt_attr_uint	= gid
 	rt_field		= title
 } 

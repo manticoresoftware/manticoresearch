@@ -15,6 +15,7 @@ searchd
 index test
 {
 	type			= rt
+	# here is intentionally 'data' vs data_path, as it is used in show status in resultset
 	path			= data/test
 	rt_attr_uint	= gid
 	rt_field		= text

@@ -15,19 +15,19 @@ searchd
 index test
 {
 	type 			= percolate
-	path			= data/test
+	path			=<data_path/>/test
 }
 
 index test1
 {
 	type 			= percolate
-	path			= data/test1
+	path			=<data_path/>/test1
 }
 
 index test2
 {
 	type 			= percolate
-	path			= data/test2
+	path			=<data_path/>/test2
 }
 
 </config>

@@ -18,28 +18,28 @@ searchd
 index test92
 {
 	type			= rt
-	path			= data/test92
+	path			=<data_path/>/test92
 	rt_attr_uint	= idd
 	rt_field		= content
 }
 index test102
 {
 	type			= rt
-	path			= data/test102
+	path			=<data_path/>/test102
 	rt_attr_uint	= idd
 	rt_field		= content
 }
 index test104
 {
 	type	= rt
-	path	= data/test104
+	path	=<data_path/>/test104
 	rt_attr_uint	= idd
 	rt_field	= content
 }
 index test105
 {
 	type	= rt
-	path	= data/test105
+	path	=<data_path/>/test105
 	rt_attr_uint	= idd
 	rt_field	= content
 }

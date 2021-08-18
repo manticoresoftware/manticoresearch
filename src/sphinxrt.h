@@ -222,11 +222,9 @@ private:
 using RtSegmentRefPtf_t = CSphRefcountedPtr<RtSegment_t>;
 using constRtSegmentRefPtf_t = CSphRefcountedPtr<const RtSegment_t>;
 
-struct RtWordReader_t
+class RtWordReader_c
 {
 	BYTE m_tPackedWord[SPH_MAX_KEYWORD_LEN + 1];
-	const BYTE* m_pCur = nullptr;
-	const BYTE* m_pMax = nullptr;
 	RtWord_t m_tWord;
 	int m_iWords = 0;
 
@@ -235,18 +233,17 @@ struct RtWordReader_t
 	int m_iCheckpoint = 0;
 	const ESphHitless m_eHitlessMode = SPH_HITLESS_NONE;
 
-	RtWordReader_t ( const RtSegment_t* pSeg, bool bWordDict, int iWordsCheckpoint, ESphHitless eHitlessMode );
-	void Reset ( const RtSegment_t* pSeg );
-	const RtWord_t* UnzipWord();
-	void UnzipWord ( RtWord_t& tWord );
-	inline void operator>> ( RtWord_t& tWord )
-	{
-		if ( m_bWordDict && !tWord.m_sWord )
-			tWord.m_sWord = m_tPackedWord;
+public:
+	const BYTE* m_pCur = nullptr;
+	const BYTE* m_pMax = nullptr;
 
-		UnzipWord ( tWord );
-	}
-	inline operator bool() const { return m_pCur < m_pMax; }
+	RtWordReader_c ( const RtSegment_t * pSeg, bool bWordDict, int iWordsCheckpoint, ESphHitless eHitlessMode );
+	void Reset ( const RtSegment_t * pSeg );
+	inline int Checkpoint() const { return m_iCheckpoint; }
+	const RtWord_t* UnzipWord();
+	inline explicit operator RtWord_t*() { return &m_tWord; }
+	inline RtWord_t* operator->() { return &m_tWord; }
+	inline const RtWord_t& operator*() const { return m_tWord; }
 };
 
 class RtDocReader_c

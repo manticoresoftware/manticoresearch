@@ -201,13 +201,13 @@ static SegmentReject_t SegmentGetRejects ( const RtSegment_t * pSeg, bool bBuild
 		tReject.m_dWilds.Fill ( 0 );
 	}
 
-	RtWordReader_t tDict ( pSeg, true, PERCOLATE_WORDS_PER_CP, eHitless );
-	const RtWord_t * pWord = nullptr;
+	RtWordReader_c tDict ( pSeg, true, PERCOLATE_WORDS_PER_CP, eHitless );
 	BloomGenTraits_t tBloom0 ( tReject.m_dWilds.Begin() );
 	BloomGenTraits_t tBloom1 ( tReject.m_dWilds.Begin() + PERCOLATE_BLOOM_WILD_COUNT );
 
-	while ( ( pWord = tDict.UnzipWord() )!=nullptr )
+	while ( tDict.UnzipWord() )
 	{
+		const auto* pWord = (const RtWord_t*)tDict;
 		const BYTE * pDictWord = pWord->m_sWord + 1;
 		int iLen = pWord->m_sWord[0];
 
@@ -921,16 +921,16 @@ bool PercolateQwordSetup_c::QwordSetup ( ISphQword * pQword ) const
 	CSphVector<Slice_t> dDictWords;
 	ARRAY_FOREACH ( i, dDictLoc )
 	{
-		RtWordReader_t tReader ( m_pSeg, true, PERCOLATE_WORDS_PER_CP, m_eHitless );
+		RtWordReader_c tReader ( m_pSeg, true, PERCOLATE_WORDS_PER_CP, m_eHitless );
 		// locator
 		// m_uOff - Start
 		// m_uLen - End
 		tReader.m_pCur = pWordBase + dDictLoc[i].m_uOff;
 		tReader.m_pMax = pWordBase + dDictLoc[i].m_uLen;
 
-		const RtWord_t * pWord = nullptr;
-		while ( ( pWord = tReader.UnzipWord() )!=nullptr )
+		while ( tReader.UnzipWord() )
 		{
+			const auto* pWord = (const RtWord_t*)tReader;
 			// stemmed terms do not match any kind of wild-cards
 			if ( ( eCmp==PERCOLATE::PREFIX || eCmp==PERCOLATE::INFIX ) && m_pDict->HasMorphology() && pWord->m_sWord[1]!=MAGIC_WORD_HEAD_NONSTEMMED )
 				continue;

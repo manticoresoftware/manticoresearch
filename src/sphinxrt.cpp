@@ -478,11 +478,11 @@ bool RtDocReader_c::UnzipDoc ()
 	return true;
 }
 
-struct RtWordWriter_t
+class RtWordWriter_c
 {
 	CSphTightVector<BYTE> &				m_dWords;
-	CSphVector<RtWordCheckpoint_t> *	m_pCheckpoints;
-	CSphVector<BYTE> *					m_pKeywordCheckpoints;
+	CSphVector<RtWordCheckpoint_t> &	m_dCheckpoints;
+	CSphVector<BYTE> &					m_dKeywordCheckpoints;
 
 	CSphKeywordDeltaWriter				m_tLastKeyword;
 	SphWordID_t							m_uLastWordID;
@@ -493,11 +493,12 @@ struct RtWordWriter_t
 	int									m_iWordsCheckpoint;
 	const ESphHitless 					m_eHitlessMode = SPH_HITLESS_NONE;
 
-	RtWordWriter_t ( CSphTightVector<BYTE> * pWords, CSphVector<RtWordCheckpoint_t> * pCheckpoints,
-				  CSphVector<BYTE> * pKeywordCheckpoints, bool bKeywordDict, int iWordsCheckpoint, ESphHitless eHitlessMode )
-		: m_dWords ( *pWords )
-		, m_pCheckpoints ( pCheckpoints )
-		, m_pKeywordCheckpoints ( pKeywordCheckpoints )
+public:
+	RtWordWriter_c ( CSphTightVector<BYTE> & dWords, CSphVector<RtWordCheckpoint_t> & dCheckpoints,
+				  CSphVector<BYTE> & dKeywordCheckpoints, bool bKeywordDict, int iWordsCheckpoint, ESphHitless eHitlessMode )
+		: m_dWords ( dWords )
+		, m_dCheckpoints ( dCheckpoints )
+		, m_dKeywordCheckpoints ( dKeywordCheckpoints )
 		, m_uLastWordID ( 0 )
 		, m_uLastDoc ( 0 )
 		, m_iWords ( 0 )
@@ -505,28 +506,25 @@ struct RtWordWriter_t
 		, m_iWordsCheckpoint ( iWordsCheckpoint )
 		, m_eHitlessMode ( eHitlessMode )
 	{
-		assert ( pWords && pWords->IsEmpty() );
-		assert ( !m_pCheckpoints->GetLength() );
-		assert ( !m_pKeywordCheckpoints->GetLength() );
+		assert ( dWords.IsEmpty() );
+		assert ( dCheckpoints.IsEmpty() );
+		assert ( dKeywordCheckpoints.IsEmpty() );
 	}
 
-	RtWordWriter_t ( RtSegment_t * pSeg, bool bKeywordDict, int iWordsCheckpoint, ESphHitless eHitlessMode )
-		: RtWordWriter_t ( &pSeg->m_dWords, &pSeg->m_dWordCheckpoints, &pSeg->m_dKeywordCheckpoints, bKeywordDict, iWordsCheckpoint, eHitlessMode )
-	{}
-
-	void ZipWord ( const RtWord_t & tWord )
+	void operator<< ( const RtWord_t& tWord ) // we never chain calls, so void as return type is ok.
 	{
 		if ( ++m_iWords==m_iWordsCheckpoint )
 		{
-			RtWordCheckpoint_t & tCheckpoint = m_pCheckpoints->Add();
+			sphWarning("word writing, checkpoint added");
+			RtWordCheckpoint_t & tCheckpoint = m_dCheckpoints.Add();
 			if ( !m_bKeywordDict )
 				tCheckpoint.m_uWordID = tWord.m_uWordID;
 			else
 			{
 				int iLen = tWord.m_sWord[0];
 				assert ( iLen && iLen-1<SPH_MAX_KEYWORD_LEN );
-				tCheckpoint.m_uWordID = sphPutBytes ( m_pKeywordCheckpoints, tWord.m_sWord+1, iLen+1 );
-				m_pKeywordCheckpoints->Last() = '\0'; // checkpoint is NULL terminating string
+				tCheckpoint.m_uWordID = sphPutBytes ( &m_dKeywordCheckpoints, tWord.m_sWord+1, iLen+1 );
+				m_dKeywordCheckpoints.Last() = '\0'; // checkpoint is NULL terminating string
 
 				// reset keywords delta encoding
 				m_tLastKeyword.Reset();
@@ -557,15 +555,13 @@ struct RtWordWriter_t
 		m_uLastDoc = tWord.m_uDoc;
 	}
 
-	inline void operator<< ( const RtWord_t & tWord ) { ZipWord (tWord);}
-
 	void PutBytes ( const BYTE * pData, int iLen ) const
 	{
 		sphPutBytes ( &m_dWords, pData, iLen );
 	}
 };
 
-RtWordReader_t::RtWordReader_t ( const RtSegment_t * pSeg, bool bWordDict, int iWordsCheckpoint, ESphHitless eHitlessMode )
+RtWordReader_c::RtWordReader_c ( const RtSegment_t * pSeg, bool bWordDict, int iWordsCheckpoint, ESphHitless eHitlessMode )
 	: m_bWordDict ( bWordDict )
 	, m_iWordsCheckpoint ( iWordsCheckpoint )
 	, m_eHitlessMode ( eHitlessMode )
@@ -576,7 +572,7 @@ RtWordReader_t::RtWordReader_t ( const RtSegment_t * pSeg, bool bWordDict, int i
 		m_tWord.m_sWord = m_tPackedWord;
 }
 
-void RtWordReader_t::Reset ( const RtSegment_t * pSeg )
+void RtWordReader_c::Reset ( const RtSegment_t * pSeg )
 {
 	m_pCur = pSeg->m_dWords.Begin();
 	m_pMax = m_pCur + pSeg->m_dWords.GetLength();
@@ -586,17 +582,18 @@ void RtWordReader_t::Reset ( const RtSegment_t * pSeg )
 }
 
 
-void RtWordReader_t::UnzipWord ( RtWord_t& tWord )
+const RtWord_t* RtWordReader_c::UnzipWord ()
 {
-	assert ( m_pCur<m_pMax );
+	if (m_pCur >= m_pMax)
+		return nullptr;
 
 	if ( ++m_iWords==m_iWordsCheckpoint )
 	{
-		tWord.m_uDoc = 0;
+		m_tWord.m_uDoc = 0;
 		m_iWords = 1;
 		++m_iCheckpoint;
 		if ( !m_bWordDict )
-			tWord.m_uWordID = 0;
+			m_tWord.m_uWordID = 0;
 	}
 
 	const BYTE * pIn = m_pCur;
@@ -618,24 +615,14 @@ void RtWordReader_t::UnzipWord ( RtWord_t& tWord )
 		m_tPackedWord[1+m_tPackedWord[0]] = 0;
 		pIn += iDelta;
 	} else
-		tWord.m_uWordID += UnzipWordid ( pIn );
+		m_tWord.m_uWordID += UnzipWordid ( pIn );
 
-	UnzipDword ( &tWord.m_uDocs, pIn );
-	UnzipDword ( &tWord.m_uHits, pIn );
-	tWord.m_uDoc += UnzipDword ( pIn );
+	UnzipDword ( &m_tWord.m_uDocs, pIn );
+	UnzipDword ( &m_tWord.m_uHits, pIn );
+	m_tWord.m_uDoc +=  UnzipDword ( pIn );
+	m_tWord.m_bHasHitlist = ( m_eHitlessMode==SPH_HITLESS_NONE || ( m_eHitlessMode==SPH_HITLESS_SOME && !( m_tWord.m_uDocs & HITLESS_DOC_FLAG ) ) );
+	m_tWord.m_uDocs = ( m_eHitlessMode==SPH_HITLESS_NONE ? m_tWord.m_uDocs : ( m_tWord.m_uDocs & HITLESS_DOC_MASK ) );
 	m_pCur = pIn;
-
-	tWord.m_bHasHitlist = ( m_eHitlessMode==SPH_HITLESS_NONE || ( m_eHitlessMode==SPH_HITLESS_SOME && !( tWord.m_uDocs & HITLESS_DOC_FLAG ) ) );
-	tWord.m_uDocs = ( m_eHitlessMode==SPH_HITLESS_NONE ? tWord.m_uDocs : ( tWord.m_uDocs & HITLESS_DOC_MASK ) );
-}
-
-
-const RtWord_t * RtWordReader_t::UnzipWord ()
-{
-	if ( m_pCur>=m_pMax )
-		return nullptr;
-
-	UnzipWord ( m_tWord );
 	return &m_tWord;
 }
 
@@ -991,7 +978,7 @@ private:
 
 	void						MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, const RtSegment_t & tSeg2, const CSphVector<RowID_t> & dRowMap1, const CSphVector<RowID_t> & dRowMap2 ) const;
 	RtSegment_t *				MergeSegments ( const RtSegment_t * pSeg1, const RtSegment_t * pSeg2, bool bHasMorphology ) const;
-	static void					CopyWord ( RtSegment_t & tDst, const RtSegment_t & tSrc, RtDocWriter_c & tOutDoc, RtDocReader_c & tInDoc, RtWord_t & tWord, const CSphVector<RowID_t> & tRowMap );
+	static void					CopyWord ( RtSegment_t& tDstSeg, RtWord_t& tDstWord, RtDocWriter_c& tDstDoc, const RtSegment_t& tSrcSeg, const RtWord_t* pSrcWord, const CSphVector<RowID_t>& dRowMap );
 
 	void						DeleteFieldFromDict ( RtSegment_t * pSeg, int iKillField );
 	void						AddFieldToRamchunk ( const CSphString & sFieldName, DWORD uFieldFlags, const CSphSchema & tNewSchema );
@@ -1753,7 +1740,7 @@ void RtAccum_t::CreateSegmentHits ( RtSegment_t * pSeg, int iWordsCheckpoint, ES
 	RtDoc_t tDoc;
 	RtWord_t tWord;
 	RtDocWriter_c tOutDoc ( pSeg->m_dDocs );
-	RtWordWriter_t tOutWord ( pSeg, m_bKeywordDict, iWordsCheckpoint, eHitless );
+	RtWordWriter_c tOutWord ( pSeg->m_dWords, pSeg->m_dWordCheckpoints, pSeg->m_dKeywordCheckpoints, m_bKeywordDict, iWordsCheckpoint, eHitless );
 	RtHitWriter_c tOutHit ( pSeg->m_dHits );
 
 	const BYTE * pPacketBase = m_bKeywordDict ? GetPackedKeywords() : nullptr;
@@ -1801,7 +1788,7 @@ void RtAccum_t::CreateSegmentHits ( RtSegment_t * pSeg, int iWordsCheckpoint, ES
 					assert ( pPackedWord[0] && pPackedWord[0]+1<GetPackedLen() );
 					tWord.m_sWord = pPackedWord;
 				}
-				tOutWord.ZipWord ( tWord );
+				tOutWord << tWord;
 			}
 
 			tWord.m_uWordID = tHit.m_uWordID;
@@ -2099,26 +2086,26 @@ ReplicationCommand_t * RtAccum_t::AddCommand ( ReplicationCommand_e eCmd, const 
 	return pCmd;
 }
 
-void RtIndex_c::CopyWord ( RtSegment_t & tDst, const RtSegment_t & tSrc, RtDocWriter_c & tOutDoc, RtDocReader_c & tInDoc,
-		RtWord_t & tWord, const CSphVector<RowID_t> & dRowMap )
+void RtIndex_c::CopyWord ( RtSegment_t& tDstSeg, RtWord_t& tDstWord, RtDocWriter_c& tDstDoc, const RtSegment_t& tSrcSeg, const RtWord_t* pSrcWord, const CSphVector<RowID_t>& dRowMap )
 {
+	RtDocReader_c tSrcDocs ( &tSrcSeg, *pSrcWord );
 	// copy docs
-	while ( tInDoc.UnzipDoc() )
+	while ( tSrcDocs.UnzipDoc() )
 	{
-		auto tNewRowID = dRowMap[tInDoc->m_tRowID];
+		auto tNewRowID = dRowMap[tSrcDocs->m_tRowID];
 		if ( tNewRowID==INVALID_ROWID )
 			continue;
 
-		RtDoc_t tDoc = *tInDoc;
+		RtDoc_t tDoc = *tSrcDocs;
 		tDoc.m_tRowID = tNewRowID;
 
-		++tWord.m_uDocs;
-		tWord.m_uHits += tInDoc->m_uHits;
+		++tDstWord.m_uDocs;
+		tDstWord.m_uHits += tSrcDocs->m_uHits;
 
-		if ( tInDoc->m_uHits!=1 )
+		if ( tSrcDocs->m_uHits!=1 )
 		{
-			tDoc.m_uHit = tDst.m_dHits.GetLength ();
-			tDst.m_dHits.Append ( GetHitsBlob ( tSrc, *tInDoc ) );
+			tDoc.m_uHit = tDstSeg.m_dHits.GetLength ();
+			tDstSeg.m_dHits.Append ( GetHitsBlob ( tSrcSeg, *tSrcDocs ) );
 
 			// this is reference of what append (hitsblob) above does.
 //			RtHitWriter_c tOutHit ( &tDst );
@@ -2128,7 +2115,7 @@ void RtIndex_c::CopyWord ( RtSegment_t & tDst, const RtSegment_t & tSrc, RtDocWr
 		}
 
 		// copy doc
-		tOutDoc << tDoc;
+		tDstDoc << tDoc;
 	}
 }
 
@@ -2200,21 +2187,19 @@ void RtIndex_c::DeleteFieldFromDict ( RtSegment_t * pSeg, int iKillField )
 	dDocs.Reserve ( tInSeg.m_dDocs.GetLength () );
 	dHits.Reserve ( tInSeg.m_dHits.GetLength () );
 
-	RtWordWriter_t tOutWords ( &dWords, &dWordCheckpoints, &dKeywordCheckpoints,  m_bKeywordDict, m_iWordsCheckpoint, m_tSettings.m_eHitless );
-	RtWordReader_t tInWords ( &tInSeg, m_bKeywordDict, m_iWordsCheckpoint, m_tSettings.m_eHitless );
+	RtWordWriter_c tOutWords ( dWords, dWordCheckpoints, dKeywordCheckpoints,  m_bKeywordDict, m_iWordsCheckpoint, m_tSettings.m_eHitless );
+	RtWordReader_c tInWord ( &tInSeg, m_bKeywordDict, m_iWordsCheckpoint, m_tSettings.m_eHitless );
 
-	RtWord_t tInWord, tOutWord;
-	while ( tInWords )
+	RtWord_t tOutWord;
+	while ( tInWord.UnzipWord() )
 	{
-		tInWords >> tInWord;
-
-		tOutWord = tInWord;
+		tOutWord = *tInWord;
 		tOutWord.m_uDocs = tOutWord.m_uHits = 0;
 
 		RtDocWriter_c tOutDocs ( dDocs );
 		tOutWord.m_uDoc = tOutDocs.WriterPos();
 
-		RtDocReader_c tInDocs ( &tInSeg, tInWord );
+		RtDocReader_c tInDocs ( &tInSeg, *tInWord );
 		CopyWordWithoutField ( &dHits, tOutDocs, tOutWord, tInSeg, tInDocs, iKillField );
 
 		// append word to the dictionary
@@ -2364,22 +2349,21 @@ void BuildSegmentInfixes ( RtSegment_t * pSeg, bool bHasMorphology, bool bKeywor
 	pSeg->m_dInfixFilterCP.Fill ( 0 );
 
 	uint64_t * pRough = pSeg->m_dInfixFilterCP.Begin();
-	const RtWord_t * pWord = nullptr;
-	RtWordReader_t rdDictRough ( pSeg, true, iWordsCheckpoint, eHitlessMode );
-	while ( ( pWord = rdDictRough.UnzipWord () )!=nullptr )
+	RtWordReader_c rdDictRough ( pSeg, true, iWordsCheckpoint, eHitlessMode );
+	while ( rdDictRough.UnzipWord() )
 	{
-		const BYTE * pDictWord = pWord->m_sWord+1;
+		const BYTE * pDictWord = rdDictRough->m_sWord+1;
 		if ( bHasMorphology && *pDictWord!=MAGIC_WORD_HEAD_NONSTEMMED )
 			continue;
 
-		int iLen = pWord->m_sWord[0];
+		int iLen = rdDictRough->m_sWord[0];
 		if ( *pDictWord<0x20 ) // anyway skip heading magic chars in the prefix, like NONSTEMMED maker
 		{
 			pDictWord++;
 			iLen--;
 		}
 
-		uint64_t * pVal = pRough + rdDictRough.m_iCheckpoint * BLOOM_PER_ENTRY_VALS_COUNT * BLOOM_HASHES_COUNT;
+		uint64_t * pVal = pRough + rdDictRough.Checkpoint() * BLOOM_PER_ENTRY_VALS_COUNT * BLOOM_HASHES_COUNT;
 		BloomGenTraits_t tBloom0 ( pVal );
 		BloomGenTraits_t tBloom1 ( pVal+BLOOM_PER_ENTRY_VALS_COUNT );
 		BuildBloom ( pDictWord, iLen, BLOOM_NGRAM_0, bUtf8, BLOOM_PER_ENTRY_VALS_COUNT, tBloom0 );
@@ -2451,19 +2435,17 @@ void RtIndex_c::MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, c
 	tSeg.m_dDocs.Reserve ( Max ( tSeg1.m_dDocs.GetLength(), tSeg2.m_dDocs.GetLength() ) );
 	tSeg.m_dHits.Reserve ( Max ( tSeg1.m_dHits.GetLength(), tSeg2.m_dHits.GetLength() ) );
 
-	RtWordWriter_t tOut ( &tSeg, m_bKeywordDict, m_iWordsCheckpoint, m_tSettings.m_eHitless );
-	RtWordReader_t tIn1 ( &tSeg1, m_bKeywordDict, m_iWordsCheckpoint, m_tSettings.m_eHitless );
-	RtWordReader_t tIn2 ( &tSeg2, m_bKeywordDict, m_iWordsCheckpoint, m_tSettings.m_eHitless );
+	RtDocWriter_c tOutDoc ( tSeg.m_dDocs );
+	RtWordWriter_c tOut ( tSeg.m_dWords, tSeg.m_dWordCheckpoints, tSeg.m_dKeywordCheckpoints, m_bKeywordDict, m_iWordsCheckpoint, m_tSettings.m_eHitless );
+	RtWordReader_c tIn1 ( &tSeg1, m_bKeywordDict, m_iWordsCheckpoint, m_tSettings.m_eHitless );
+	RtWordReader_c tIn2 ( &tSeg2, m_bKeywordDict, m_iWordsCheckpoint, m_tSettings.m_eHitless );
 
-	const RtWord_t * pWords1 = tIn1.UnzipWord ();
-	const RtWord_t * pWords2 = tIn2.UnzipWord ();
+	const RtWord_t* pWords1 = tIn1.UnzipWord();
+	const RtWord_t* pWords2 = tIn2.UnzipWord();
 
 	while ( pWords1 || pWords2 )
 	{
 		int iCmp = CompareWords ( pWords1, pWords2 );
-
-		RtDocWriter_c tOutDoc ( tSeg.m_dDocs );
-
 		RtWord_t tWord = iCmp<=0 ? *pWords1 : *pWords2;
 		tWord.m_uDocs = 0;
 		tWord.m_uHits = 0;
@@ -2471,27 +2453,23 @@ void RtIndex_c::MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, c
 
 		// if words are equal, copy both
 		if ( iCmp<=0 )
-		{
-			RtDocReader_c tInDoc ( &tSeg1, *pWords1 );
-			CopyWord ( tSeg, tSeg1, tOutDoc, tInDoc, tWord, dRowMap1 );
-		}
+			CopyWord ( tSeg, tWord, tOutDoc, tSeg1, pWords1, dRowMap1 );
 
 		if ( iCmp>=0 )
-		{
-			RtDocReader_c tInDoc ( &tSeg2, *pWords2 );
-			CopyWord ( tSeg, tSeg2, tOutDoc, tInDoc, tWord, dRowMap2 );
-		}
+			CopyWord ( tSeg, tWord, tOutDoc, tSeg2, pWords2, dRowMap2 );
 
-		// append word to the dictionary
+		// append non-empty word to the dictionary
 		if ( tWord.m_uDocs )
-			tOut.ZipWord ( tWord );
+			tOut << tWord;
 
-		// move forward (both readers if words are equal)
-		if ( iCmp<=0 )
-			pWords1 = tIn1.UnzipWord();
+		// move forward. Beware, tWord refer to static buffer inside tIn1 or tIn2, so call UnzipWord() before storing the word is NOT safe!
+		if ( iCmp <= 0 )
+			pWords1 = tIn1.UnzipWord(); // move forward
 
-		if ( iCmp>=0 )
-			pWords2 = tIn2.UnzipWord();
+		if ( iCmp >= 0 )
+			pWords2 = tIn2.UnzipWord(); // move forward
+
+		tOutDoc.ZipRestart();
 	}
 }
 
@@ -2546,8 +2524,10 @@ RtSegment_t * RtIndex_c::MergeSegments ( const RtSegment_t * pSeg1, const RtSegm
 	if ( !pSeg->m_uRows )
 	{
 		SafeRelease ( pSeg );
-		return pSeg;
+		return nullptr;
 	}
+
+	pSeg->BuildDocID2RowIDMap ( m_tSchema );
 
 	MergeKeywords ( *pSeg, *pSeg1, *pSeg2, dRowMap1, dRowMap2 );
 
@@ -2555,8 +2535,6 @@ RtSegment_t * RtIndex_c::MergeSegments ( const RtSegment_t * pSeg1, const RtSegm
 		FixupSegmentCheckpoints ( pSeg );
 
 	BuildSegmentInfixes ( pSeg, bHasMorphology, m_bKeywordDict, m_tSettings.m_iMinInfixLen, m_iWordsCheckpoint, ( m_iMaxCodepointLength>1 ), m_tSettings.m_eHitless );
-
-	pSeg->BuildDocID2RowIDMap ( m_tSchema );
 
 	assert ( pSeg->m_uRows );
 	assert ( pSeg->m_tAliveRows==pSeg->m_uRows );
@@ -3238,13 +3216,13 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 
 	int iSegments = tCtx.m_tGuard.m_dRamChunks.GetLength();
 
-	RawVector_T<RtWordReader_t> dWordReaders;
+	RawVector_T<RtWordReader_c> dWordReaders;
 	dWordReaders.Reserve_static ( iSegments );
 	CSphVector<const RtWord_t*> dWords(iSegments);
 	for ( int i = 0; i < iSegments; ++i )
 	{
 		dWordReaders.Emplace_back ( tCtx.m_tGuard.m_dRamChunks[i], m_bKeywordDict, m_iWordsCheckpoint, m_tSettings.m_eHitless );
-		dWords[i] = dWordReaders[i].UnzipWord();
+		dWords[i] = dWordReaders.Last().UnzipWord();
 	}
 
 	// loop keywords
@@ -3289,7 +3267,6 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 				continue;
 
 			RtDocReader_c tDocReader ( tCtx.m_tGuard.m_dRamChunks[iSegment], *dWords[iSegment] );
-
 			while ( tDocReader.UnzipDoc() )
 			{
 				const auto* pDoc = (const RtDoc_t*)tDocReader;
@@ -3310,7 +3287,7 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 				iHits += pDoc->m_uHits;
 				tSkiplistRowID = tRowID;
 
-				tWriterDocs.ZipOffset ( tRowID - tLastRowID );
+				tWriterDocs.ZipOffset ( tRowID - std::exchange ( tLastRowID, tRowID ) );
 				tWriterDocs.ZipInt ( pDoc->m_uHits );
 				if ( pDoc->m_uHits==1 )
 				{
@@ -3321,8 +3298,6 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 					tWriterDocs.ZipInt ( pDoc->m_uDocFields );
 					tWriterDocs.ZipOffset ( tWriterHits.GetPos() - std::exchange ( uLastHitpos, tWriterHits.GetPos() ) );
 				}
-
-				tLastRowID = tRowID;
 
 				// loop hits from current segment
 				if ( pDoc->m_uHits>1 )
@@ -5240,7 +5215,7 @@ bool RtIndex_c::RtQwordSetupSegment ( RtQword_t * pQword, const RtSegment_t * pC
 	// no checkpoints - check all words
 	// no checkpoints matched - check only words prior to 1st checkpoint
 	// checkpoint found - check words at that checkpoint
-	RtWordReader_t tReader ( pCurSeg, m_bKeywordDict, m_iWordsCheckpoint, m_tSettings.m_eHitless );
+	RtWordReader_c tReader ( pCurSeg, m_bKeywordDict, m_iWordsCheckpoint, m_tSettings.m_eHitless );
 
 	if ( pCurSeg->m_dWordCheckpoints.GetLength() )
 	{
@@ -5261,37 +5236,46 @@ bool RtIndex_c::RtQwordSetupSegment ( RtQword_t * pQword, const RtSegment_t * pC
 	}
 
 	// find the word between checkpoints
-	const RtWord_t * pWord = NULL;
-	while ( ( pWord = tReader.UnzipWord() )!=NULL )
+	if ( m_bKeywordDict )
 	{
 		int iCmp = 0;
-		if ( m_bKeywordDict )
-		{
-			iCmp = sphDictCmpStrictly ( (const char *)pWord->m_sWord+1, pWord->m_sWord[0], sWord, iWordLen );
-		} else
-		{
-			if ( pWord->m_uWordID<uWordID )
-				iCmp = -1;
-			else if ( pWord->m_uWordID>uWordID )
-				iCmp = 1;
-		}
+		do {
+			if ( !tReader.UnzipWord() )
+				return false;
+			iCmp = sphDictCmpStrictly ( (const char*)tReader->m_sWord + 1, tReader->m_sWord[0], sWord, iWordLen );
+		} while ( iCmp < 0 );
 
-		if ( iCmp==0 )
-		{
-			pQword->m_iDocs += pWord->m_uDocs;
-			pQword->m_iHits += pWord->m_uHits;
-			pQword->m_bHasHitlist &= pWord->m_bHasHitlist;
-			if ( bSetup )
-				pQword->SetupReader ( pCurSeg, *pWord );
-
-			return true;
-
-		} else if ( iCmp>0 )
-		{
+		if ( !!iCmp )
 			return false;
-		}
+
+		assert ( !iCmp );
+		const auto* pWord = (const RtWord_t*)tReader;
+		pQword->m_iDocs += pWord->m_uDocs;
+		pQword->m_iHits += pWord->m_uHits;
+		pQword->m_bHasHitlist &= pWord->m_bHasHitlist;
+		if ( bSetup )
+			pQword->SetupReader ( pCurSeg, *pWord );
+
+		return true;
 	}
-	return false;
+
+	assert ( !m_bKeywordDict );
+	do
+		if ( !tReader.UnzipWord() )
+			return false;
+	while ( tReader->m_uWordID < uWordID );
+
+	if ( tReader->m_uWordID>uWordID )
+		return false;
+
+	const auto* pWord = (const RtWord_t*)tReader;
+	pQword->m_iDocs += pWord->m_uDocs;
+	pQword->m_iHits += pWord->m_uHits;
+	pQword->m_bHasHitlist &= pWord->m_bHasHitlist;
+	if ( bSetup )
+		pQword->SetupReader ( pCurSeg, *pWord );
+
+	return true;
 }
 
 struct RtExpandedEntry_t
@@ -5517,7 +5501,7 @@ void RtIndex_c::GetPrefixedWords ( const char * sSubstring, int iSubLen, const c
 	ARRAY_FOREACH ( iSeg, dSegments )
 	{
 		const RtSegment_t * pCurSeg = dSegments[iSeg];
-		RtWordReader_t tReader ( pCurSeg, true, m_iWordsCheckpoint, m_tSettings.m_eHitless );
+		RtWordReader_c tReader ( pCurSeg, true, m_iWordsCheckpoint, m_tSettings.m_eHitless );
 
 		// find initial checkpoint or check words prior to 1st checkpoint
 		if ( pCurSeg->m_dWordCheckpoints.GetLength() )
@@ -5536,18 +5520,14 @@ void RtIndex_c::GetPrefixedWords ( const char * sSubstring, int iSubLen, const c
 		}
 
 		// find the word between checkpoints
-		const RtWord_t * pWord = NULL;
-		while ( ( pWord = tReader.UnzipWord() )!=NULL )
+		while ( tReader.UnzipWord() )
 		{
+			const auto* pWord = (const RtWord_t*)tReader;
 			int iCmp = sphDictCmp ( sSubstring, iSubLen, (const char *)pWord->m_sWord+1, pWord->m_sWord[0] );
 			if ( iCmp<0 )
-			{
 				break;
-			} else if ( iCmp==0 && iSubLen<=pWord->m_sWord[0]
-				&& sphWildcardMatch ( (const char *)pWord->m_sWord+1+iSkipMagic, sWildcard, pWildcard ) )
-			{
+			else if ( iCmp==0 && iSubLen<=pWord->m_sWord[0] && sphWildcardMatch ( (const char *)pWord->m_sWord+1+iSkipMagic, sWildcard, pWildcard ) )
 				tDict2Payload.Add ( pWord, iSeg );
-			}
 			// FIXME!!! same case 'boxi*' matches 'box' document at plain index
 			// but masked by a checkpoint search
 		}
@@ -5624,28 +5604,27 @@ void RtIndex_c::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 		int * pWildcard = ( sphIsUTF8 ( sWildcard ) && sphUTF8ToWideChar ( sWildcard, dWildcard, SPH_MAX_WORD_LEN ) ) ? dWildcard : NULL;
 
 		// walk those checkpoints, check all their words
-		ARRAY_FOREACH ( i, dPoints )
+		for ( DWORD uPoint : dPoints )
 		{
-			int iNext = (int)dPoints[i];
-			int iCur = iNext-1;
-			RtWordReader_t tReader ( pSeg, true, m_iWordsCheckpoint, m_tSettings.m_eHitless );
+			auto iNext = (int)uPoint;
+			auto iCur = iNext-1;
+			RtWordReader_c tReader ( pSeg, true, m_iWordsCheckpoint, m_tSettings.m_eHitless );
 			if ( iCur>=0 )
 				tReader.m_pCur = pSeg->m_dWords.Begin() + pSeg->m_dWordCheckpoints[iCur].m_iOffset;
 			if ( iNext<pSeg->m_dWordCheckpoints.GetLength() )
 				tReader.m_pMax = pSeg->m_dWords.Begin() + pSeg->m_dWordCheckpoints[iNext].m_iOffset;
 
-			const RtWord_t * pWord = NULL;
-			while ( ( pWord = tReader.UnzipWord() )!=NULL )
+			while ( tReader.UnzipWord() )
 			{
-				if ( tArgs.m_bHasExactForms && pWord->m_sWord[1]!=MAGIC_WORD_HEAD_NONSTEMMED )
+				if ( tArgs.m_bHasExactForms && tReader->m_sWord[1]!=MAGIC_WORD_HEAD_NONSTEMMED )
 					continue;
 
 				// check it
-				if ( !sphWildcardMatch ( (const char*)pWord->m_sWord+1+iSkipMagic, sWildcard, pWildcard ) )
+				if ( !sphWildcardMatch ( (const char*)tReader->m_sWord+1+iSkipMagic, sWildcard, pWildcard ) )
 					continue;
 
 				// matched, lets add
-				tDict2Payload.Add ( pWord, iSeg );
+				tDict2Payload.Add ( (const RtWord_t*)tReader, iSeg );
 			}
 		}
 	}
@@ -5666,7 +5645,7 @@ void RtIndex_c::GetSuggest ( const SuggestArgs_t & tArgs, SuggestResult_t & tRes
 	if ( dSegments.GetLength() )
 	{
 		assert ( !tRes.m_pWordReader && !tRes.m_pSegments );
-		CSphScopedPtr<RtWordReader_t> pReader { new RtWordReader_t ( dSegments[0], true, m_iWordsCheckpoint, m_tSettings.m_eHitless ) };
+		CSphScopedPtr<RtWordReader_c> pReader { new RtWordReader_c ( dSegments[0], true, m_iWordsCheckpoint, m_tSettings.m_eHitless ) };
 		tRes.m_pWordReader = pReader.Ptr();
 		tRes.m_pSegments = &tGuard.m_dRamChunks;
 		tRes.m_bHasExactDict = m_tSettings.m_bIndexExactWords;
@@ -5733,7 +5712,7 @@ void RtIndex_c::SetCheckpoint ( SuggestResult_t & tRes, DWORD iCP ) const
 {
 	assert ( tRes.m_pWordReader && tRes.m_pSegments );
 	const CSphFixedVector<const RtSegment_t*> & dSegments = *( (const CSphFixedVector<const RtSegment_t*> *)tRes.m_pSegments );
-	auto * pReader = (RtWordReader_t *)tRes.m_pWordReader;
+	auto * pReader = (RtWordReader_c*)tRes.m_pWordReader;
 
 	int iSeg = iCP>>24;
 	assert ( iSeg>=0 && iSeg<dSegments.GetLength() );
@@ -5752,13 +5731,12 @@ void RtIndex_c::SetCheckpoint ( SuggestResult_t & tRes, DWORD iCP ) const
 bool RtIndex_c::ReadNextWord ( SuggestResult_t & tRes, DictWord_t & tWord ) const
 {
 	assert ( tRes.m_pWordReader );
-	auto * pReader = (RtWordReader_t *)tRes.m_pWordReader;
+	auto& tReader = *(RtWordReader_c*)tRes.m_pWordReader;
 
-	const RtWord_t * pWord = pReader->UnzipWord();
-
-	if ( !pWord )
+	if ( !tReader.UnzipWord() )
 		return false;
 
+	const auto* pWord = (const RtWord_t*)tReader;
 	tWord.m_sWord = (const char *)( pWord->m_sWord + 1 );
 	tWord.m_iLen = pWord->m_sWord[0];
 	tWord.m_iDocs = pWord->m_uDocs;

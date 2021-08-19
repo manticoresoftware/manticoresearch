@@ -1125,7 +1125,7 @@ bool IndexUpdateHelper_c::Update_InplaceJson ( UpdateContext_t & tCtx, CSphStrin
 					sError.SetSprintf ( "attribute '%s' can not be updated (not found or incompatible types)", tUpd.m_dAttributes[i].m_sName.cstr() );
 					return false;
 				} else
-					tCtx.m_iJsonWarnings++;
+					++tCtx.m_iJsonWarnings;
 			}
 
 			IncUpdatePoolPos ( tCtx, i, iPos );
@@ -7182,7 +7182,7 @@ void Intersect ( LookupReaderIterator_c& tReader1, DocIdIndexReader_c & tReader2
 	DocID_t tDocID1 = 0, tDocID2 = 0;
 	bool bHaveDocs1 = tReader1.Read ( tDocID1, tRowID1 );
 	bool bHaveDocs2 = tReader2.ReadDocID ( tDocID2 );
-	
+
 	while ( bHaveDocs1 && bHaveDocs2 )
 	{
 		if ( tDocID1 < tDocID2 )
@@ -9935,7 +9935,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 	AttrIndexBuilder_c tMinMax(m_tSchema);
 	RowID_t tRowID = 0;
-	int64_t			   iHitsTotal = 0;
+	int64_t iHitsTotal = 0;
 
 	ARRAY_FOREACH ( iSource, dSources )
 	{
@@ -9983,7 +9983,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			if ( ( pSource->GetStats().m_iTotalDocuments % 1000 )==0 )
 			{
 				tProgress.m_iDocuments = m_tStats.m_iTotalDocuments + pSource->GetStats().m_iTotalDocuments;
-				tProgress.m_iBytes	   = m_tStats.m_iTotalBytes + pSource->GetStats().m_iTotalBytes;
+				tProgress.m_iBytes = m_tStats.m_iTotalBytes + pSource->GetStats().m_iTotalBytes;
 				tProgress.Show();
 			}
 
@@ -10055,7 +10055,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				// progress bar
 				iHitsTotal += iHits;
 				tProgress.m_iDocuments = m_tStats.m_iTotalDocuments + pSource->GetStats().m_iTotalDocuments;
-				tProgress.m_iBytes	   = m_tStats.m_iTotalBytes + pSource->GetStats().m_iTotalBytes;
+				tProgress.m_iBytes = m_tStats.m_iTotalBytes + pSource->GetStats().m_iTotalBytes;
 				tProgress.Show();
 			}
 
@@ -10203,7 +10203,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	dDocidLookup.Reset(0);
 
 	tProgress.m_iDocuments = m_tStats.m_iTotalDocuments;
-	tProgress.m_iBytes	   = m_tStats.m_iTotalBytes;
+	tProgress.m_iBytes = m_tStats.m_iTotalBytes;
 	tProgress.PhaseEnd();
 
 	if ( bHaveNonColumnarAttrs )

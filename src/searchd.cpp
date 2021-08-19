@@ -1437,11 +1437,6 @@ void SendErrorReply ( ISphOutputBuffer & tOut, const char * sTemplate, ... )
 		sphInfo ( "query error: %s", sError.cstr() );
 }
 
-// fix MSVC 2005 fuckup
-#if _WIN32
-#pragma conform(forScope,on)
-#endif
-
 void DistributedIndex_t::GetAllHosts ( VectorAgentConn_t &dTarget ) const
 {
 	for ( const auto * pMultiAgent : m_dAgents )
@@ -18093,11 +18088,12 @@ BOOL WINAPI CtrlHandler ( DWORD )
 }
 #endif
 
+
+#if !_WIN32
+
 static char g_sNameBuf[512] = { 0 };
 static char g_sPid[30] = { 0 };
 
-
-#if !_WIN32
 // returns 'true' only once - at the very start, to show it beatiful way.
 bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 {

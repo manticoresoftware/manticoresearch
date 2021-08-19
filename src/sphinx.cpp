@@ -11045,7 +11045,7 @@ std::pair<DWORD,DWORD> CSphIndex_VLN::CreateRowMapsAndCountTotalDocs ( const CSp
 
 	const DWORD * pRow = pDstIndex->m_tAttr.GetWritePtr();
 	int64_t iTotalDocs = 0;
-	std::pair<DWORD, DWORD> iPerIndexDocs {0,0};
+	std::pair<DWORD, DWORD> tPerIndexDocs {0,0};
 
 	// say to observer we're going to collect alive rows from dst index
 	// (kills directed to that index must be collected to reapply at the finish)
@@ -11070,7 +11070,9 @@ std::pair<DWORD,DWORD> CSphIndex_VLN::CreateRowMapsAndCountTotalDocs ( const CSp
 		dDstRowMap[i] = (RowID_t)iTotalDocs++;
 	}
 	tMonitor.SetEvent ( MergeCb_c::E_COLLECT_FINISHED, pDstIndex->m_iChunk );
-	iPerIndexDocs.first = (DWORD)iTotalDocs;
+	tPerIndexDocs.first = (DWORD)iTotalDocs;
+	if ( dSrcRowMap.IsEmpty() )
+		return tPerIndexDocs;
 
 	// say to observer we're going to collect alive rows from src index (again, issue to kills).
 	tMonitor.SetEvent ( MergeCb_c::E_COLLECT_START, pSrcIndex->m_iChunk );
@@ -11082,8 +11084,8 @@ std::pair<DWORD,DWORD> CSphIndex_VLN::CreateRowMapsAndCountTotalDocs ( const CSp
 		dSrcRowMap[i] = (RowID_t)iTotalDocs++;
 	}
 	tMonitor.SetEvent ( MergeCb_c::E_COLLECT_FINISHED, pSrcIndex->m_iChunk );
-	iPerIndexDocs.second = DWORD ( iTotalDocs - iPerIndexDocs.first );
-	return iPerIndexDocs;
+	tPerIndexDocs.second = DWORD ( iTotalDocs - tPerIndexDocs.first );
+	return tPerIndexDocs;
 }
 
 
@@ -11136,10 +11138,14 @@ bool AttrMerger_c::CopyPureColumnarAttributes ( const CSphIndex_VLN& tIndex, con
 	auto dColumnarIterators = CreateAllColumnarIterators ( tIndex.m_pColumnar.Ptr(), tIndex.m_tSchema );
 	CSphVector<int64_t> dTmp;
 
+	m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_START, tIndex.m_iChunk );
 	for ( RowID_t tRowID = 0, tRows = (RowID_t)dRowMap.GetLength64(); tRowID < tRows; ++tRowID )
 	{
 		if ( m_tMonitor.NeedStop() )
+		{
+			m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_FINISHED, tIndex.m_iChunk );
 			return false;
+		}
 
 		if ( dRowMap[tRowID] == INVALID_ROWID )
 			continue;
@@ -11163,6 +11169,7 @@ bool AttrMerger_c::CopyPureColumnarAttributes ( const CSphIndex_VLN& tIndex, con
 		m_dDocidLookup[m_tResultRowID] = { dColumnarIterators[0].first->Get(), m_tResultRowID };
 		++m_tResultRowID;
 	}
+	m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_FINISHED, tIndex.m_iChunk );
 	return true;
 }
 
@@ -11179,10 +11186,14 @@ bool AttrMerger_c::CopyMixedAttributes ( const CSphIndex_VLN& tIndex, const VecT
 	auto iStrideBytes = dTmpRow.GetLengthBytes();
 	const CSphColumnInfo* pBlobLocator = tIndex.m_tSchema.GetAttr ( sphGetBlobLocatorName() );
 
+	m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_START, tIndex.m_iChunk );
 	for ( RowID_t tRowID = 0, tRows = (RowID_t)dRowMap.GetLength64(); tRowID < tRows; ++tRowID, pRow += iStride )
 	{
 		if ( m_tMonitor.NeedStop() )
+		{
+			m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_FINISHED, tIndex.m_iChunk );
 			return false;
+		}
 
 		if ( dRowMap[tRowID] == INVALID_ROWID )
 			continue;
@@ -11222,7 +11233,7 @@ bool AttrMerger_c::CopyMixedAttributes ( const CSphIndex_VLN& tIndex, const VecT
 		m_dDocidLookup[m_tResultRowID] = { tDocID, m_tResultRowID };
 		++m_tResultRowID;
 	}
-
+	m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_FINISHED, tIndex.m_iChunk );
 	return true;
 }
 

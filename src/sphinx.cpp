@@ -94,6 +94,8 @@ void gmtime_r ( const time_t * clock, struct tm * res )
 }
 #endif
 
+#include <boost/preprocessor/repetition/repeat.hpp>
+
 // forward decl
 void sphWarn ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 1, 2 ) ) );
 
@@ -12600,87 +12602,22 @@ template <typename ITERATOR, typename TO_STATIC>
 void RunFullscan ( ITERATOR & tIterator, TO_STATIC && fnToStatic, const CSphQueryContext & tCtx, CSphQueryResultMeta & tMeta, const VecTraits_T<ISphMatchSorter *>& dSorters, CSphMatch & tMatch, int iCutoff, bool bRandomize,
 	int iIndexWeight, int64_t tmMaxTimer, bool & bStop )
 {
-	bool bHasFilterCalc = !!tCtx.m_dCalcFilter.GetLength();
-	bool bHasSortCalc = !!tCtx.m_dCalcSort.GetLength();
+	bool bHasFilterCalc = !tCtx.m_dCalcFilter.IsEmpty();
+	bool bHasSortCalc = !tCtx.m_dCalcSort.IsEmpty();
 	bool bHasFilter = !!tCtx.m_pFilter;
 	bool bHasTimer = tmMaxTimer>0;
 	bool bHasCutoff = iCutoff!=-1;
 	int iIndex = bHasFilterCalc*32 + bHasSortCalc*16 + bHasFilter*8 + bRandomize*4 + bHasTimer*2 + bHasCutoff;
 
-	std::function<void (ITERATOR &, TO_STATIC &&, const CSphQueryContext &, CSphQueryResultMeta &, const VecTraits_T<ISphMatchSorter *> &, CSphMatch &, int, int, int64_t, bool &)> fnScan;
-
 	switch ( iIndex )
 	{
-		case 0:		fnScan = &Fullscan<false, false, false, false, false, false, ITERATOR, TO_STATIC>; break;
-		case 1:		fnScan = &Fullscan<false, false, false, false, false, true,  ITERATOR, TO_STATIC>; break;
-		case 2:		fnScan = &Fullscan<false, false, false, false, true,  false, ITERATOR, TO_STATIC>; break;
-		case 3:		fnScan = &Fullscan<false, false, false, false, true,  true,  ITERATOR, TO_STATIC>; break;
-		case 4:		fnScan = &Fullscan<false, false, false, true,  false, false, ITERATOR, TO_STATIC>; break;
-		case 5:		fnScan = &Fullscan<false, false, false, true,  false, true,  ITERATOR, TO_STATIC>; break;
-		case 6:		fnScan = &Fullscan<false, false, false, true,  true,  false, ITERATOR, TO_STATIC>; break;
-		case 7:		fnScan = &Fullscan<false, false, false, true,  true,  true,  ITERATOR, TO_STATIC>; break;
-		case 8:		fnScan = &Fullscan<false, false, true,  false, false, false, ITERATOR, TO_STATIC>; break;
-		case 9:		fnScan = &Fullscan<false, false, true,  false, false, true,  ITERATOR, TO_STATIC>; break;
-		case 10:	fnScan = &Fullscan<false, false, true,  false, true,  false, ITERATOR, TO_STATIC>; break;
-		case 11:	fnScan = &Fullscan<false, false, true,  false, true,  true,  ITERATOR, TO_STATIC>; break;
-		case 12:	fnScan = &Fullscan<false, false, true,  true,  false, false, ITERATOR, TO_STATIC>; break;
-		case 13:	fnScan = &Fullscan<false, false, true,  true,  false, true,  ITERATOR, TO_STATIC>; break;
-		case 14:	fnScan = &Fullscan<false, false, true,  true,  true,  false, ITERATOR, TO_STATIC>; break;
-		case 15:	fnScan = &Fullscan<false, false, true,  true,  true,  true,  ITERATOR, TO_STATIC>; break;
-		case 16:	fnScan = &Fullscan<false, true,  false, false, false, false, ITERATOR, TO_STATIC>; break;
-		case 17:	fnScan = &Fullscan<false, true,  false, false, false, true,  ITERATOR, TO_STATIC>; break;
-		case 18:	fnScan = &Fullscan<false, true,  false, false, true,  false, ITERATOR, TO_STATIC>; break;
-		case 19:	fnScan = &Fullscan<false, true,  false, false, true,  true,  ITERATOR, TO_STATIC>; break;
-		case 20:	fnScan = &Fullscan<false, true,  false, true,  false, false, ITERATOR, TO_STATIC>; break;
-		case 21:	fnScan = &Fullscan<false, true,  false, true,  false, true,  ITERATOR, TO_STATIC>; break;
-		case 22:	fnScan = &Fullscan<false, true,  false, true,  true,  false, ITERATOR, TO_STATIC>; break;
-		case 23:	fnScan = &Fullscan<false, true,  false, true,  true,  true,  ITERATOR, TO_STATIC>; break;
-		case 24:	fnScan = &Fullscan<false, true,  true,  false, false, false, ITERATOR, TO_STATIC>; break;
-		case 25:	fnScan = &Fullscan<false, true,  true,  false, false, true,  ITERATOR, TO_STATIC>; break;
-		case 26:	fnScan = &Fullscan<false, true,  true,  false, true,  false, ITERATOR, TO_STATIC>; break;
-		case 27:	fnScan = &Fullscan<false, true,  true,  false, true,  true,  ITERATOR, TO_STATIC>; break;
-		case 28:	fnScan = &Fullscan<false, true,  true,  true,  false, false, ITERATOR, TO_STATIC>; break;
-		case 29:	fnScan = &Fullscan<false, true,  true,  true,  false, true,	 ITERATOR, TO_STATIC>; break;
-		case 30:	fnScan = &Fullscan<false, true,  true,  true,  true,  false, ITERATOR, TO_STATIC>; break;
-		case 31:	fnScan = &Fullscan<false, true,  true,  true,  true,  true,  ITERATOR, TO_STATIC>; break;
-		case 32:	fnScan = &Fullscan<true,  false, false, false, false, false, ITERATOR, TO_STATIC>; break;
-		case 33:	fnScan = &Fullscan<true,  false, false, false, false, true,  ITERATOR, TO_STATIC>; break;
-		case 34:	fnScan = &Fullscan<true,  false, false, false, true,  false, ITERATOR, TO_STATIC>; break;
-		case 35:	fnScan = &Fullscan<true,  false, false, false, true,  true,  ITERATOR, TO_STATIC>; break;
-		case 36:	fnScan = &Fullscan<true,  false, false, true,  false, false, ITERATOR, TO_STATIC>; break;
-		case 37:	fnScan = &Fullscan<true,  false, false, true,  false, true,  ITERATOR, TO_STATIC>; break;
-		case 38:	fnScan = &Fullscan<true,  false, false, true,  true,  false, ITERATOR, TO_STATIC>; break;
-		case 39:	fnScan = &Fullscan<true,  false, false, true,  true,  true,  ITERATOR, TO_STATIC>; break;
-		case 40:	fnScan = &Fullscan<true,  false, true,  false, false, false, ITERATOR, TO_STATIC>; break;
-		case 41:	fnScan = &Fullscan<true,  false, true,  false, false, true,  ITERATOR, TO_STATIC>; break;
-		case 42:	fnScan = &Fullscan<true,  false, true,  false, true,  false, ITERATOR, TO_STATIC>; break;
-		case 43:	fnScan = &Fullscan<true,  false, true,  false, true,  true,  ITERATOR, TO_STATIC>; break;
-		case 44:	fnScan = &Fullscan<true,  false, true,  true,  false, false, ITERATOR, TO_STATIC>; break;
-		case 45:	fnScan = &Fullscan<true,  false, true,  true,  false, true,  ITERATOR, TO_STATIC>; break;
-		case 46:	fnScan = &Fullscan<true,  false, true,  true,  true,  false, ITERATOR, TO_STATIC>; break;
-		case 47:	fnScan = &Fullscan<true,  false, true,  true,  true,  true,  ITERATOR, TO_STATIC>; break;
-		case 48:	fnScan = &Fullscan<true,  true,  false, false, false, false, ITERATOR, TO_STATIC>; break;
-		case 49:	fnScan = &Fullscan<true,  true,  false, false, false, true,  ITERATOR, TO_STATIC>; break;
-		case 50:	fnScan = &Fullscan<true,  true,  false, false, true,  false, ITERATOR, TO_STATIC>; break;
-		case 51:	fnScan = &Fullscan<true,  true,  false, false, true,  true,  ITERATOR, TO_STATIC>; break;
-		case 52:	fnScan = &Fullscan<true,  true,  false, true,  false, false, ITERATOR, TO_STATIC>; break;
-		case 53:	fnScan = &Fullscan<true,  true,  false, true,  false, true,  ITERATOR, TO_STATIC>; break;
-		case 54:	fnScan = &Fullscan<true,  true,  false, true,  true,  false, ITERATOR, TO_STATIC>; break;
-		case 55:	fnScan = &Fullscan<true,  true,  false, true,  true,  true,  ITERATOR, TO_STATIC>; break;
-		case 56:	fnScan = &Fullscan<true,  true,  true,  false, false, false, ITERATOR, TO_STATIC>; break;
-		case 57:	fnScan = &Fullscan<true,  true,  true,  false, false, true,  ITERATOR, TO_STATIC>; break;
-		case 58:	fnScan = &Fullscan<true,  true,  true,  false, true,  false, ITERATOR, TO_STATIC>; break;
-		case 59:	fnScan = &Fullscan<true,  true,  true,  false, true,  true,  ITERATOR, TO_STATIC>; break;
-		case 60:	fnScan = &Fullscan<true,  true,  true,  true,  false, false, ITERATOR, TO_STATIC>; break;
-		case 61:	fnScan = &Fullscan<true,  true,  true,  true,  false, true,	 ITERATOR, TO_STATIC>; break;
-		case 62:	fnScan = &Fullscan<true,  true,  true,  true,  true,  false, ITERATOR, TO_STATIC>; break;
-		case 63:	fnScan = &Fullscan<true,  true,  true,  true,  true,  true,  ITERATOR, TO_STATIC>; break;
+#define DECL_FNSCAN( _, n, params ) case n: Fullscan<!!(n&32), !!(n&16), !!(n&8), !!(n&4), !!(n&2), !!(n&1), ITERATOR, TO_STATIC> params; break;
+	BOOST_PP_REPEAT ( 64, DECL_FNSCAN, ( tIterator, std::forward<TO_STATIC> ( fnToStatic ), tCtx, tMeta, dSorters, tMatch, iCutoff, iIndexWeight, tmMaxTimer, bStop ) )
+#undef DECL_FNSCAN
 		default:
 			assert ( 0 && "Internal error" );
 			break;
 	}
-
-	fnScan ( tIterator, std::forward<TO_STATIC>(fnToStatic), tCtx, tMeta, dSorters, tMatch, iCutoff, iIndexWeight, tmMaxTimer, bStop );
 }
 
 

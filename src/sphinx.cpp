@@ -451,6 +451,8 @@ public:
 		return pSetup->Setup ( this );
 	}
 
+	using is_worddict =  std::integral_constant<bool, !DISABLE_HITLIST_SEEK>;
+
 private:
 	int m_iSkipListBlock = -1;
 
@@ -1420,7 +1422,7 @@ public:
 	bool				Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSettings> & dFilters, bool bSupressDstDocids, CSphIndexProgress & tProgress ) final;
 
 	template <class QWORDDST, class QWORDSRC>
-	static bool			MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, VecTraits_T<RowID_t> dDstRows, VecTraits_T<RowID_t> dSrcRows, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphIndexProgress & tProgress);
+	static bool			MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, VecTraits_T<RowID_t> dDstRows, VecTraits_T<RowID_t> dSrcRows, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphIndexProgress & tProgress);
 	static bool			DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, bool bSrcSettings, bool bSupressDstDocids );
 	template <class QWORD>
 	static bool			DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, int iKillField );
@@ -10502,6 +10504,7 @@ BYTE sphDoclistHintPack ( SphOffset_t iDocs, SphOffset_t iLen )
 }
 
 // !COMMIT eliminate this, move to dict (or at least couple with CWordlist)
+template<bool WORDDICT>
 class CSphDictReader
 {
 public:
@@ -10519,10 +10522,7 @@ private:
 	CSphReader *	m_pReader = nullptr;
 	SphOffset_t		m_iMaxPos = 0;
 	int				m_iSkiplistBlockSize = 0;
-
-	bool			m_bWordDict = true;
 	char			m_sWord[MAX_KEYWORD_BYTES];
-
 	int				m_iCheckpoint = 1;
 
 public:
@@ -10532,23 +10532,22 @@ public:
 		m_sWord[0] = '\0';
 	}
 
-	bool Setup ( const CSphString & sFilename, SphOffset_t iMaxPos, ESphHitless eHitless, CSphString & sError, bool bWordDict )
+	bool Setup ( const CSphString & sFilename, SphOffset_t iMaxPos, ESphHitless eHitless, CSphString & sError )
 	{
 		if ( !m_tMyReader.Open ( sFilename, sError ) )
 			return false;
 
-		Setup ( &m_tMyReader, iMaxPos, eHitless, bWordDict );
+		Setup ( &m_tMyReader, iMaxPos, eHitless );
 		return true;
 	}
 
-	void Setup ( CSphReader * pReader, SphOffset_t iMaxPos, ESphHitless eHitless, bool bWordDict )
+	void Setup ( CSphReader * pReader, SphOffset_t iMaxPos, ESphHitless eHitless )
 	{
 		m_pReader = pReader;
 		m_pReader->SeekTo ( 1, READ_NO_SIZE_HINT );
 
 		m_iMaxPos = iMaxPos;
 		m_eHitless = eHitless;
-		m_bWordDict = bWordDict;
 		m_sWord[0] = '\0';
 		m_iCheckpoint = 1;
 	}
@@ -10561,7 +10560,7 @@ public:
 			return false;
 
 		// get leading value
-		SphWordID_t iWord0 = m_bWordDict ? m_pReader->GetByte() : m_pReader->UnzipWordid();
+		SphWordID_t iWord0 = WORDDICT ? m_pReader->GetByte() : m_pReader->UnzipWordid();
 		if ( !iWord0 )
 		{
 			// handle checkpoint
@@ -10575,13 +10574,13 @@ public:
 			if ( m_pReader->GetPos()>=m_iMaxPos )
 				return false;
 
-			iWord0 = m_bWordDict ? m_pReader->GetByte() : m_pReader->UnzipWordid(); // get next word
+			iWord0 = WORDDICT ? m_pReader->GetByte() : m_pReader->UnzipWordid(); // get next word
 		}
 		if ( !iWord0 )
 			return false; // some failure
 
 		// get word entry
-		if ( m_bWordDict )
+		if_const ( WORDDICT )
 		{
 			// unpack next word
 			// must be in sync with DictEnd()!
@@ -10635,13 +10634,9 @@ public:
 
 	int CmpWord ( const CSphDictReader & tOther ) const
 	{
-		if ( m_bWordDict )
+		if_const ( WORDDICT )
 			return strcmp ( m_sWord, tOther.m_sWord );
-
-		int iRes = 0;
-		iRes = m_uWordID<tOther.m_uWordID ? -1 : iRes;
-		iRes = m_uWordID>tOther.m_uWordID ? 1 : iRes;
-		return iRes;
+		return ( m_uWordID < tOther.m_uWordID ) ? -1 : ( m_uWordID == tOther.m_uWordID ? 0 : 1 );
 	}
 
 	BYTE * GetWord() const { return (BYTE *)const_cast<char*>(m_sWord); }
@@ -10680,16 +10675,10 @@ static bool CheckDocsCount ( int64_t iDocs, CSphString & sError )
 	return false;
 }
 
-
-class CSphMerger
+namespace QwordIteration
 {
-public:
-	explicit CSphMerger ( CSphHitBuilder * pHitBuilder )
-		: m_pHitBuilder ( pHitBuilder )
-	{}
-
-	template < typename QWORD >
-	static inline void PrepareQword ( QWORD & tQword, const CSphDictReader & tReader, bool bWordDict ) //NOLINT
+	template<typename QWORD>
+	inline void PrepareQword ( QWORD & tQword, const CSphDictReader<QWORD::is_worddict::value> & tReader ) //NOLINT
 	{
 		tQword.m_tDoc.m_tRowID = INVALID_ROWID;
 
@@ -10700,12 +10689,12 @@ public:
 		tQword.m_uHitPosition = 0;
 		tQword.m_iHitlistPos = 0;
 
-		if ( bWordDict )
+		if_const ( QWORD::is_worddict::value )
 			tQword.m_rdDoclist->SeekTo ( tReader.m_iDoclistOffset, tReader.m_iHint );
 	}
 
-	template < typename QWORD >
-	inline bool NextDocument ( QWORD & tQword, const CSphIndex_VLN * pSourceIndex, const ISphFilter * pFilter, const VecTraits_T<RowID_t> & dRows )
+	template<typename QWORD>
+	inline bool NextDocument ( QWORD & tQword, const CSphIndex_VLN * pSourceIndex )
 	{
 		while (true)
 		{
@@ -10714,41 +10703,58 @@ public:
 				return false;
 
 			tQword.SeekHitlist ( tQword.m_iHitlistPos );
-
-			if ( dRows[tQword.m_tDoc.m_tRowID]==INVALID_ROWID )
-			{
-				while ( tQword.m_bHasHitlist && tQword.GetNextHit()!=EMPTY_HIT );
-				continue;
-			}
-
-			if ( pFilter )
-			{
-				CSphMatch tMatch;
-				tMatch.m_tRowID = tQword.m_tDoc.m_tRowID;
-				tMatch.m_pStatic = pSourceIndex->GetDocinfoByRowID ( tQword.m_tDoc.m_tRowID );
-
-				if ( !pFilter->Eval ( tMatch ) )
-				{
-					while ( tQword.m_bHasHitlist && tQword.GetNextHit()!=EMPTY_HIT );
-					continue;
-				}
-			}
-
 			return true;
 		}
 	}
 
 	template < typename QWORD >
+	inline bool NextDocument ( QWORD & tQword, const CSphIndex_VLN * pSourceIndex, const VecTraits_T<RowID_t> & dRows )
+	{
+		while (true)
+		{
+			tQword.GetNextDoc();
+			if ( tQword.m_tDoc.m_tRowID==INVALID_ROWID )
+				return false;
+
+			if ( dRows[tQword.m_tDoc.m_tRowID]==INVALID_ROWID )
+				continue;
+
+			tQword.SeekHitlist ( tQword.m_iHitlistPos );
+			return true;
+		}
+	}
+
+	template<typename QWORD>
+	inline void ConfigureQword ( QWORD & tQword, DataReaderFactory_c * pHits, DataReaderFactory_c * pDocs, int iDynamic )
+	{
+		tQword.SetHitReader ( pHits );
+		tQword.m_rdHitlist->SeekTo ( 1, READ_NO_SIZE_HINT );
+
+		tQword.SetDocReader ( pDocs );
+		tQword.m_rdDoclist->SeekTo ( 1, READ_NO_SIZE_HINT );
+
+		tQword.m_tDoc.Reset ( iDynamic );
+	}
+}; // namespace QwordIteration
+
+class CSphMerger
+{
+public:
+	explicit CSphMerger ( CSphHitBuilder * pHitBuilder )
+		: m_pHitBuilder ( pHitBuilder )
+	{}
+
+	template < typename QWORD >
 	inline void TransferData ( QWORD & tQword, SphWordID_t iWordID, const BYTE * sWord,
-							const CSphIndex_VLN * pSourceIndex, const ISphFilter * pFilter,
-							const VecTraits_T<RowID_t>& dRows, MergeCb_c & tMonitor )
+							const CSphIndex_VLN * pSourceIndex, const VecTraits_T<RowID_t>& dRows,
+							MergeCb_c & tMonitor )
 	{
 		CSphAggregateHit tHit;
 		tHit.m_uWordID = iWordID;
 		tHit.m_sKeyword = sWord;
 		tHit.m_dFieldMask.UnsetAll();
 
-		while ( CSphMerger::NextDocument ( tQword, pSourceIndex, pFilter, dRows ) && !tMonitor.NeedStop() )
+		while ( QwordIteration::NextDocument ( tQword, pSourceIndex, dRows ) && !tMonitor.NeedStop() )
 		{
 			if ( tQword.m_bHasHitlist )
 				TransferHits ( tQword, tHit, dRows );
@@ -10775,42 +10781,30 @@ public:
 		}
 	}
 
-	template < typename QWORD >
-	static inline void ConfigureQword ( QWORD & tQword, DataReaderFactory_c * pHits, DataReaderFactory_c * pDocs, int iDynamic )
-	{
-		tQword.SetHitReader ( pHits );
-		tQword.m_rdHitlist->SeekTo ( 1, READ_NO_SIZE_HINT );
-
-		tQword.SetDocReader ( pDocs );
-		tQword.m_rdDoclist->SeekTo ( 1, READ_NO_SIZE_HINT );
-
-		tQword.m_tDoc.Reset ( iDynamic );
-	}
-
 private:
 	CSphHitBuilder *	m_pHitBuilder;
 };
 
 
 template < typename QWORDDST, typename QWORDSRC >
-bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, VecTraits_T<RowID_t> dDstRows, VecTraits_T<RowID_t> dSrcRows,
+bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, VecTraits_T<RowID_t> dDstRows, VecTraits_T<RowID_t> dSrcRows,
 	CSphHitBuilder * pHitBuilder, CSphString & sError, CSphIndexProgress & tProgress )
 {
 	auto& tMonitor = tProgress.GetMergeCb();
 	CSphAutofile tDummy;
-	pHitBuilder->CreateIndexFiles ( pDstIndex->GetIndexFileName("tmp.spd").cstr(), pDstIndex->GetIndexFileName("tmp.spp").cstr(), pDstIndex->GetIndexFileName("tmp.spe").cstr(), false, 0, tDummy, NULL );
+	pHitBuilder->CreateIndexFiles ( pDstIndex->GetIndexFileName("tmp.spd").cstr(), pDstIndex->GetIndexFileName("tmp.spp").cstr(), pDstIndex->GetIndexFileName("tmp.spe").cstr(), false, 0, tDummy, nullptr );
 
-	CSphDictReader tDstReader ( pDstIndex->GetSettings().m_iSkiplistBlockSize );
-	CSphDictReader tSrcReader ( pSrcIndex->GetSettings().m_iSkiplistBlockSize );
+	static_assert ( QWORDDST::is_worddict::value == QWORDDST::is_worddict::value, "can't merge worddict with non-worddict" );
 
-	bool bWordDict = pHitBuilder->IsWordDict();
+	CSphDictReader<QWORDDST::is_worddict::value> tDstReader ( pDstIndex->GetSettings().m_iSkiplistBlockSize );
+	CSphDictReader<QWORDSRC::is_worddict::value> tSrcReader ( pSrcIndex->GetSettings().m_iSkiplistBlockSize );
 
 	/// compress means: I don't want true merge, I just want to apply deadrows and filter
 	bool bCompress = pDstIndex==pSrcIndex;
 
-	if ( !tDstReader.Setup ( pDstIndex->GetIndexFileName(SPH_EXT_SPI), pDstIndex->m_tWordlist.GetWordsEnd(), pDstIndex->m_tSettings.m_eHitless, sError, bWordDict ) )
+	if ( !tDstReader.Setup ( pDstIndex->GetIndexFileName(SPH_EXT_SPI), pDstIndex->m_tWordlist.GetWordsEnd(), pDstIndex->m_tSettings.m_eHitless, sError ) )
 		return false;
-	if ( !bCompress && !tSrcReader.Setup ( pSrcIndex->GetIndexFileName(SPH_EXT_SPI), pSrcIndex->m_tWordlist.GetWordsEnd(), pSrcIndex->m_tSettings.m_eHitless, sError, bWordDict ) )
+	if ( !bCompress && !tSrcReader.Setup ( pSrcIndex->GetIndexFileName(SPH_EXT_SPI), pSrcIndex->m_tWordlist.GetWordsEnd(), pSrcIndex->m_tSettings.m_eHitless, sError ) )
 		return false;
 
 	/// prepare for indexing
@@ -10858,8 +10852,8 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 
 	CSphMerger tMerger(pHitBuilder);
 
-	CSphMerger::ConfigureQword<QWORDDST> ( tDstQword, tDstHits, tDstDocs, pDstIndex->m_tSchema.GetDynamicSize() );
-	CSphMerger::ConfigureQword<QWORDSRC> ( tSrcQword, tSrcHits, tSrcDocs, pSrcIndex->m_tSchema.GetDynamicSize() );
+	QwordIteration::ConfigureQword<QWORDDST> ( tDstQword, tDstHits, tDstDocs, pDstIndex->m_tSchema.GetDynamicSize() );
+	QwordIteration::ConfigureQword<QWORDSRC> ( tSrcQword, tSrcHits, tSrcDocs, pSrcIndex->m_tSchema.GetDynamicSize() );
 
 	/// merge
 
@@ -10888,15 +10882,15 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 		if ( !bSrcWord || ( bDstWord && iCmp<0 ) )
 		{
 			// transfer documents and hits from destination
-			CSphMerger::PrepareQword<QWORDDST> ( tDstQword, tDstReader, bWordDict );
-			tMerger.TransferData<QWORDDST> ( tDstQword, tDstReader.m_uWordID, tDstReader.GetWord(), pDstIndex, pFilter, dDstRows, tMonitor );
+			QwordIteration::PrepareQword<QWORDDST> ( tDstQword, tDstReader );
+			tMerger.TransferData<QWORDDST> ( tDstQword, tDstReader.m_uWordID, tDstReader.GetWord(), pDstIndex, dDstRows, tMonitor );
 			bDstWord = tDstReader.Read();
 
 		} else if ( !bDstWord || ( bSrcWord && iCmp>0 ) )
 		{
 			// transfer documents and hits from source
-			CSphMerger::PrepareQword<QWORDSRC> ( tSrcQword, tSrcReader, bWordDict );
-			tMerger.TransferData<QWORDSRC> ( tSrcQword, tSrcReader.m_uWordID, tSrcReader.GetWord(), pSrcIndex, nullptr, dSrcRows, tMonitor );
+			QwordIteration::PrepareQword<QWORDSRC> ( tSrcQword, tSrcReader );
+			tMerger.TransferData<QWORDSRC> ( tSrcQword, tSrcReader.m_uWordID, tSrcReader.GetWord(), pSrcIndex, dSrcRows, tMonitor );
 			bSrcWord = tSrcReader.Read();
 
 		} else // merge documents and hits inside the word
@@ -10906,12 +10900,12 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 			bool bHitless = !tDstReader.m_bHasHitlist;
 			if ( tDstReader.m_bHasHitlist!=tSrcReader.m_bHasHitlist )
 			{
-				iHitlistsDiscarded++;
+				++iHitlistsDiscarded;
 				bHitless = true;
 			}
 
-			CSphMerger::PrepareQword<QWORDDST> ( tDstQword, tDstReader, bWordDict );
-			CSphMerger::PrepareQword<QWORDSRC> ( tSrcQword, tSrcReader, bWordDict );
+			QwordIteration::PrepareQword<QWORDDST> ( tDstQword, tDstReader );
+			QwordIteration::PrepareQword<QWORDSRC> ( tSrcQword, tSrcReader );
 
 			CSphAggregateHit tHit;
 			tHit.m_uWordID = tDstReader.m_uWordID; // !COMMIT m_sKeyword anyone?
@@ -10922,7 +10916,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 			// and we don't need to merge hits from the same document
 
 			// transfer hits from destination
-			while ( tMerger.NextDocument ( tDstQword, pDstIndex, pFilter, dDstRows ) )
+			while ( QwordIteration::NextDocument ( tDstQword, pDstIndex, dDstRows ) )
 			{
 				if ( tMonitor.NeedStop () )
 					return false;
@@ -10940,7 +10934,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 			}
 
 			// transfer hits from source
-			while ( tMerger.NextDocument ( tSrcQword, pSrcIndex, nullptr, dSrcRows ) )
+			while ( QwordIteration::NextDocument ( tSrcQword, pSrcIndex, dSrcRows ) )
 			{
 				if ( tMonitor.NeedStop () )
 					return false;
@@ -11382,14 +11376,14 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	{
 		WITH_QWORD ( pDstIndex, false, QwordDst,
 			WITH_QWORD ( pSrcIndex, false, QwordSrc,
-				if ( !CSphIndex_VLN::MergeWords < QwordDst, QwordSrc > ( pDstIndex, pSrcIndex, pFilter, dDstRows, dSrcRows, &tHitBuilder, sError, tProgress ) )
+				if ( !CSphIndex_VLN::MergeWords < QwordDst, QwordSrc > ( pDstIndex, pSrcIndex, dDstRows, dSrcRows, &tHitBuilder, sError, tProgress ) )
 					return false;
 		));
 	} else
 	{
 		WITH_QWORD ( pDstIndex, true, QwordDst,
 			WITH_QWORD ( pSrcIndex, true, QwordSrc,
-				if ( !CSphIndex_VLN::MergeWords < QwordDst, QwordSrc > ( pDstIndex, pSrcIndex, pFilter, dDstRows, dSrcRows, &tHitBuilder, sError, tProgress ) )
+				if ( !CSphIndex_VLN::MergeWords < QwordDst, QwordSrc > ( pDstIndex, pSrcIndex, dDstRows, dSrcRows, &tHitBuilder, sError, tProgress ) )
 					return false;
 		));
 	}
@@ -11434,63 +11428,16 @@ bool sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc,	CSphString & sEr
 	return CSphIndex_VLN::DoMerge ( pDstIndex, pSrcIndex, nullptr, sError, tProgress, bSrcSettings, false );
 }
 
-namespace QwordIteration
-{
-	template<typename QWORD>
-	inline void PrepareQword ( QWORD & tQword, const CSphDictReader & tReader, bool bWordDict ) //NOLINT
-	{
-		tQword.m_tDoc.m_tRowID = INVALID_ROWID;
-
-		tQword.m_iDocs = tReader.m_iDocs;
-		tQword.m_iHits = tReader.m_iHits;
-		tQword.m_bHasHitlist = tReader.m_bHasHitlist;
-
-		tQword.m_uHitPosition = 0;
-		tQword.m_iHitlistPos = 0;
-
-		if ( bWordDict )
-			tQword.m_rdDoclist->SeekTo ( tReader.m_iDoclistOffset, tReader.m_iHint );
-	}
-
-	template<typename QWORD>
-	inline bool NextDocument ( QWORD & tQword, const CSphIndex_VLN * pSourceIndex )
-	{
-		while (true)
-		{
-			tQword.GetNextDoc();
-			if ( tQword.m_tDoc.m_tRowID==INVALID_ROWID )
-				return false;
-
-			tQword.SeekHitlist ( tQword.m_iHitlistPos );
-			return true;
-		}
-	}
-
-	template<typename QWORD>
-	inline void ConfigureQword ( QWORD & tQword, DataReaderFactory_c * pHits, DataReaderFactory_c * pDocs, int iDynamic )
-	{
-		tQword.SetHitReader ( pHits );
-		tQword.m_rdHitlist->SeekTo ( 1, READ_NO_SIZE_HINT );
-
-		tQword.SetDocReader ( pDocs );
-		tQword.m_rdDoclist->SeekTo ( 1, READ_NO_SIZE_HINT );
-
-		tQword.m_tDoc.Reset ( iDynamic );
-	}
-}; // namespace QwordIteration
-
 template < typename QWORD >
 bool CSphIndex_VLN::DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, int iKillField )
 {
 	assert ( iKillField>=0 );
 
-	bool bWordDict = pHitBuilder->IsWordDict ();
-
 	CSphAutofile tDummy;
 	pHitBuilder->CreateIndexFiles ( pIndex->GetIndexFileName("tmp.spd").cstr(), pIndex->GetIndexFileName("tmp.spp").cstr(), pIndex->GetIndexFileName("tmp.spe").cstr(), false, 0, tDummy, nullptr );
 
-	CSphDictReader tWordsReader ( pIndex->GetSettings().m_iSkiplistBlockSize );
-	if ( !tWordsReader.Setup ( pIndex->GetIndexFileName(SPH_EXT_SPI), pIndex->m_tWordlist.GetWordsEnd(), pIndex->m_tSettings.m_eHitless, sError, bWordDict ) )
+	CSphDictReader<QWORD::is_worddict::value> tWordsReader ( pIndex->GetSettings().m_iSkiplistBlockSize );
+	if ( !tWordsReader.Setup ( pIndex->GetIndexFileName(SPH_EXT_SPI), pIndex->m_tWordlist.GetWordsEnd(), pIndex->m_tSettings.m_eHitless, sError ) )
 		return false;
 
 	/// prepare for indexing
@@ -11525,7 +11472,7 @@ bool CSphIndex_VLN::DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder *
 			return false;
 
 		bool bHitless = !tWordsReader.m_bHasHitlist;
-		QwordIteration::PrepareQword ( tQword, tWordsReader, bWordDict );
+		QwordIteration::PrepareQword ( tQword, tWordsReader );
 
 		CSphAggregateHit tHit;
 		tHit.m_uWordID = tWordsReader.m_uWordID; // !COMMIT m_sKeyword anyone?

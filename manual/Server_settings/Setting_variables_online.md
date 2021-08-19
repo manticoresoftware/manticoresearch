@@ -55,7 +55,7 @@ Known global server variables are:
 * `QCACHE_MAX_BYTES = <value>` Changes the [query_cache](../Searching/Query_cache.md) RAM use limit to a given value.
 * `QCACHE_THRESH_MSEC = <value>` Changes the [query_cache>](../Searching/Query_cache.md) minimum wall time threshold to a given value.
 * `QCACHE_TTL_SEC = <value>` Changes the [query_cache](../Searching/Query_cache.md) TTL for a cached result to a given value.
-* `MAINTENANCE = {0 | 1}` When set to 1, puts the server in maintenance mode. Only clients with vip connections can execute queries in this mode. All new non-vip incoming connections are refused.
+* `MAINTENANCE = {0 | 1}` When set to 1, puts the server in maintenance mode. Only clients with vip connections can execute queries in this mode. All new non-vip incoming connections are refused. Existing connections are left intact.
 * `GROUPING_IN_UTC = {0 | 1}` When set to 1, cause timed grouping functions (day(), month(), year(), yearmonth(), yearmonthday()) to be calculated in utc. Read the doc for [grouping_in_utc](../Server_settings/Searchd.md) config params for more details.
 * `QUERY_LOG_MIN_MSEC = <value>` Changes the [query_log_min_msec](../Server_settings/Searchd.md#query_log_min_msec) searchd settings value. In this case it expects value exactly in milliseconds and doesn't parse time suffixes, as in config.
 

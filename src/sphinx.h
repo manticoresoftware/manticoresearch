@@ -2696,10 +2696,18 @@ enum KeywordExpansion_e
 // an index or a part of an index that has its own row ids
 class IndexSegment_c
 {
+protected:
+	mutable IndexSegment_c * m_pKillHook = nullptr; // if set, killed docids will be emerged also here.
+
 public:
-	virtual			~IndexSegment_c() {}
 	virtual int		Kill ( DocID_t tDocID ) { return 0; }
-	virtual int		KillMulti ( const VecTraits_T<DocID_t> & dKlist ) { return 0; }
+	virtual int		KillMulti ( const VecTraits_T<DocID_t> & dKlist ) { return 0; };
+	virtual			~IndexSegment_c() {};
+
+	inline void SetKillHook ( IndexSegment_c * pKillHook ) const
+	{
+		m_pKillHook = pKillHook;
+	}
 };
 
 
@@ -2935,7 +2943,6 @@ public:
 	virtual bool				LoadKillList ( CSphFixedVector<DocID_t> * pKillList, KillListTargets_c & tTargets, CSphString & sError ) const { return true; }
 	virtual bool				AlterKillListTarget ( KillListTargets_c & tTargets, CSphString & sError ) { return false; }
 	virtual void				KillExistingDocids ( CSphIndex * pTarget ) {}
-	int							KillMulti ( const VecTraits_T<DocID_t> & dKlist ) override { return 0; }
 	virtual bool				IsAlive ( DocID_t tDocID ) const { return false; }
 
 	bool						GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const override { return false; }

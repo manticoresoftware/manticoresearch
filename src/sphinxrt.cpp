@@ -5224,7 +5224,9 @@ bool RtIndex_c::RtQwordSetupSegment ( RtQword_t * pQword, const RtSegment_t * pC
 
 	if ( pCurSeg->m_dWordCheckpoints.GetLength() )
 	{
-		const RtWordCheckpoint_t * pCp = sphSearchCheckpoint ( sWord, iWordLen, uWordID, false, m_bKeywordDict, pCurSeg->m_dWordCheckpoints );
+		const RtWordCheckpoint_t * pCp = m_bKeywordDict
+			  ? sphSearchCheckpointWrd ( sWord, iWordLen, false, pCurSeg->m_dWordCheckpoints )
+			  : sphSearchCheckpointCrc ( uWordID, pCurSeg->m_dWordCheckpoints );
 
 		const BYTE * pWords = pCurSeg->m_dWords.Begin();
 
@@ -5511,7 +5513,7 @@ void RtIndex_c::GetPrefixedWords ( const char * sSubstring, int iSubLen, const c
 		// find initial checkpoint or check words prior to 1st checkpoint
 		if ( pCurSeg->m_dWordCheckpoints.GetLength() )
 		{
-			const RtWordCheckpoint_t * pCurCheckpoint = sphSearchCheckpoint ( sSubstring, iSubLen, 0, true, true, pCurSeg->m_dWordCheckpoints );
+			const RtWordCheckpoint_t * pCurCheckpoint = sphSearchCheckpointWrd( sSubstring, iSubLen, true, pCurSeg->m_dWordCheckpoints );
 			if ( pCurCheckpoint )
 			{
 				// there could be valid data prior 1st checkpoint that should be unpacked and checked

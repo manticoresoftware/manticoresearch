@@ -410,15 +410,26 @@ void CWordlist::DebugPopulateCheckpoints()
 }
 
 
-const CSphWordlistCheckpoint * CWordlist::FindCheckpoint ( const char * sWord, int iWordLen, SphWordID_t iWordID, bool bStarMode ) const
+const CSphWordlistCheckpoint * CWordlist::FindCheckpointCrc ( SphWordID_t iWordID ) const
 {
 	if ( m_pCpReader ) // FIXME!!! fall to regular checkpoints after data got read
 	{
 		MappedCheckpoint_fn tPred ( m_dCheckpoints.Begin(), m_tBuf.GetWritePtr() + m_iDictCheckpointsOffset, m_pCpReader );
-		return sphSearchCheckpoint ( sWord, iWordLen, iWordID, bStarMode, m_bWordDict, m_dCheckpoints, std::move(tPred) );
+		return sphSearchCheckpointCrc( iWordID, m_dCheckpoints, std::move(tPred));
 	}
 
-	return sphSearchCheckpoint ( sWord, iWordLen, iWordID, bStarMode, m_bWordDict, m_dCheckpoints );
+	return sphSearchCheckpointCrc ( iWordID, m_dCheckpoints );
+}
+
+const CSphWordlistCheckpoint * CWordlist::FindCheckpointWrd ( const char* sWord, int iWordLen, bool bStarMode ) const
+{
+	if ( m_pCpReader ) // FIXME!!! fall to regular checkpoints after data got read
+	{
+		MappedCheckpoint_fn tPred ( m_dCheckpoints.Begin(), m_tBuf.GetWritePtr() + m_iDictCheckpointsOffset, m_pCpReader );
+		return sphSearchCheckpointWrd ( sWord, iWordLen, bStarMode, m_dCheckpoints, std::move ( tPred ) );
+	}
+
+	return sphSearchCheckpointWrd ( sWord, iWordLen, bStarMode, m_dCheckpoints );
 }
 
 
@@ -507,7 +518,7 @@ void CWordlist::GetPrefixedWords ( const char * sSubstring, int iSubLen, const c
 	int * pWildcard = ( sphIsUTF8 ( sWildcard ) && sphUTF8ToWideChar ( sWildcard, dWildcard, SPH_MAX_WORD_LEN ) ) ? dWildcard : NULL;
 
 	// assume dict=crc never has word with wordid=0, however just don't consider it and explicitly set nullptr.
-	const CSphWordlistCheckpoint * pCheckpoint = m_bWordDict ? FindCheckpoint ( sSubstring, iSubLen, 0, true ) : nullptr;
+	const CSphWordlistCheckpoint * pCheckpoint = m_bWordDict ? FindCheckpointWrd ( sSubstring, iSubLen, true ) : nullptr;
 	const int iSkipMagic = ( BYTE(*sSubstring)<0x20 ); // whether to skip heading magic chars in the prefix, like NONSTEMMED maker
 	while ( pCheckpoint )
 	{

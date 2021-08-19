@@ -294,6 +294,9 @@ private:
 	bool						m_bSetupReaders = false;
 	RowID_t						m_iRowsCount = INVALID_ROWID;
 
+private:
+	bool SetupWithWrd ( const DiskIndexQwordTraits_c& tWord, CSphDictEntry& tRes ) const;
+	bool SetupWithCrc ( const DiskIndexQwordTraits_c& tWord, CSphDictEntry& tRes ) const;
 };
 
 /// query word from the searcher's point of view
@@ -7953,7 +7956,7 @@ private:
 	BYTE						m_sLastKeyword [ MAX_KEYWORD_BYTES ];
 
 	const CSphVector<SphWordID_t> &	m_dHitlessWords;
-	DictRefPtr_c			m_pDict;
+	DictRefPtr_c				m_pDict;
 	CSphString *				m_pLastError;
 
 	int							m_iSkiplistBlockSize = 0;
@@ -10868,7 +10871,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 
 	int iWords = 0;
 	int iHitlistsDiscarded = 0;
-	for ( ; bDstWord || bSrcWord; iWords++ )
+	for ( ; bDstWord || bSrcWord; ++iWords )
 	{
 		if ( iWords==1000 )
 		{
@@ -12913,7 +12916,7 @@ ISphQword * DiskIndexQwordSetup_c::QwordSpawn ( const XQKeyword_t & tWord ) cons
 
 bool DiskIndexQwordSetup_c::QwordSetup ( ISphQword * pWord ) const
 {
-	DiskIndexQwordTraits_c * pMyWord = (DiskIndexQwordTraits_c*)pWord;
+	auto * pMyWord = (DiskIndexQwordTraits_c*)pWord;
 
 	// setup attrs
 	pMyWord->m_tDoc.Reset ( m_iDynamicRowitems );
@@ -12922,6 +12925,76 @@ bool DiskIndexQwordSetup_c::QwordSetup ( ISphQword * pWord ) const
 	return pMyWord->Setup ( this );
 }
 
+bool DiskIndexQwordSetup_c::SetupWithWrd ( const DiskIndexQwordTraits_c& tWord, CSphDictEntry& tRes ) const
+{
+	auto* pIndex = (CSphIndex_VLN*)const_cast<CSphIndex*> ( m_pIndex );
+	const char * sWord = tWord.m_sDictWord.cstr();
+	int iWordLen = sWord ? (int) strlen ( sWord ) : 0;
+	if ( tWord.m_sWord.Ends("*") )
+	{
+		iWordLen = Max ( iWordLen-1, 0 );
+
+		// might match either infix or prefix
+		int iMinLen = Max ( pIndex->m_tSettings.GetMinPrefixLen ( true ), pIndex->m_tSettings.m_iMinInfixLen );
+		if ( pIndex->m_tSettings.GetMinPrefixLen ( true ) )
+			iMinLen = Min ( iMinLen, pIndex->m_tSettings.GetMinPrefixLen ( true ) );
+		if ( pIndex->m_tSettings.m_iMinInfixLen )
+			iMinLen = Min ( iMinLen, pIndex->m_tSettings.m_iMinInfixLen );
+
+		// bail out term shorter than prefix or infix allowed
+		if ( iWordLen<iMinLen )
+			return false;
+	}
+
+	// leading special symbols trimming
+	if ( tWord.m_sDictWord.Begins("*") )
+	{
+		++sWord;
+		iWordLen = Max ( iWordLen-1, 0 );
+		// bail out term shorter than infix allowed
+		if ( iWordLen<pIndex->m_tSettings.m_iMinInfixLen )
+			return false;
+	}
+
+	const CSphWordlistCheckpoint * pCheckpoint = pIndex->m_tWordlist.FindCheckpointWrd ( sWord, iWordLen, false );
+	if ( !pCheckpoint )
+		return false;
+
+	// decode wordlist chunk
+	const BYTE * pBuf = pIndex->m_tWordlist.AcquireDict ( pCheckpoint );
+	assert ( pBuf );
+	assert ( m_iSkiplistBlockSize>0 );
+
+	KeywordsBlockReader_c tCtx ( pBuf, m_iSkiplistBlockSize );
+	while ( tCtx.UnpackWord() )
+	{
+		// block is sorted
+		// so once keywords are greater than the reference word, no more matches
+		assert ( tCtx.GetWordLen()>0 );
+		int iCmp = sphDictCmpStrictly ( sWord, iWordLen, tCtx.GetWord(), tCtx.GetWordLen() );
+		if ( iCmp<0 )
+			return false;
+		if ( iCmp==0 )
+			break;
+	}
+	if ( tCtx.GetWordLen()<=0 )
+		return false;
+	tRes = tCtx;
+	return true;
+}
+
+bool DiskIndexQwordSetup_c::SetupWithCrc ( const DiskIndexQwordTraits_c& tWord, CSphDictEntry& tRes ) const
+{
+	auto * pIndex = (CSphIndex_VLN *)const_cast<CSphIndex *>(m_pIndex);
+	const CSphWordlistCheckpoint * pCheckpoint = pIndex->m_tWordlist.FindCheckpointCrc ( tWord.m_uWordID );
+	if ( !pCheckpoint )
+		return false;
+
+	const BYTE * pBuf = pIndex->m_tWordlist.AcquireDict ( pCheckpoint );
+	assert ( pBuf );
+	assert ( m_iSkiplistBlockSize>0 );
+	return pIndex->m_tWordlist.GetWord ( pBuf, tWord.m_uWordID, tRes );
+}
 
 bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 {
@@ -12933,7 +13006,7 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 	tWord.m_iDocs = 0;
 	tWord.m_iHits = 0;
 
-	CSphIndex_VLN * pIndex = (CSphIndex_VLN *)const_cast<CSphIndex *>(m_pIndex);
+	auto * pIndex = (CSphIndex_VLN *)const_cast<CSphIndex *>(m_pIndex);
 
 	// !COMMIT FIXME!
 	// the below stuff really belongs in wordlist
@@ -12948,69 +13021,13 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 	if ( !pIndex->m_tWordlist.m_dCheckpoints.GetLength() )
 		return false;
 
-	const char * sWord = tWord.m_sDictWord.cstr();
-	const bool bWordDict = pIndex->m_pDict->GetSettings().m_bWordDict;
-	int iWordLen = sWord ? (int) strlen ( sWord ) : 0;
-	if ( bWordDict && tWord.m_sWord.Ends("*") )
-	{
-		iWordLen = Max ( iWordLen-1, 0 );
-
-		// might match either infix or prefix
-		int iMinLen = Max ( pIndex->m_tSettings.GetMinPrefixLen ( bWordDict ), pIndex->m_tSettings.m_iMinInfixLen );
-		if ( pIndex->m_tSettings.GetMinPrefixLen ( bWordDict ) )
-			iMinLen = Min ( iMinLen, pIndex->m_tSettings.GetMinPrefixLen ( bWordDict ) );
-		if ( pIndex->m_tSettings.m_iMinInfixLen )
-			iMinLen = Min ( iMinLen, pIndex->m_tSettings.m_iMinInfixLen );
-
-		// bail out term shorter than prefix or infix allowed
-		if ( iWordLen<iMinLen )
-			return false;
-	}
-
-	// leading special symbols trimming
-	if ( bWordDict && tWord.m_sDictWord.Begins("*") )
-	{
-		sWord++;
-		iWordLen = Max ( iWordLen-1, 0 );
-		// bail out term shorter than infix allowed
-		if ( iWordLen<pIndex->m_tSettings.m_iMinInfixLen )
-			return false;
-	}
-
-	const CSphWordlistCheckpoint * pCheckpoint = pIndex->m_tWordlist.FindCheckpoint ( sWord, iWordLen, tWord.m_uWordID, false );
-	if ( !pCheckpoint )
-		return false;
-
-	// decode wordlist chunk
-	const BYTE * pBuf = pIndex->m_tWordlist.AcquireDict ( pCheckpoint );
-	assert ( pBuf );
-
-	assert ( m_iSkiplistBlockSize>0 );
-
 	CSphDictEntry tRes;
-	if ( bWordDict )
+	if ( pIndex->m_pDict->GetSettings().m_bWordDict )
 	{
-		KeywordsBlockReader_c tCtx ( pBuf, m_iSkiplistBlockSize );
-		while ( tCtx.UnpackWord() )
-		{
-			// block is sorted
-			// so once keywords are greater than the reference word, no more matches
-			assert ( tCtx.GetWordLen()>0 );
-			int iCmp = sphDictCmpStrictly ( sWord, iWordLen, tCtx.GetWord(), tCtx.GetWordLen() );
-			if ( iCmp<0 )
-				return false;
-			if ( iCmp==0 )
-				break;
-		}
-		if ( tCtx.GetWordLen()<=0 )
+		if ( !SetupWithWrd ( tWord, tRes ) )
 			return false;
-		tRes = tCtx;
-
-	} else
-	{
-		if ( !pIndex->m_tWordlist.GetWord ( pBuf, tWord.m_uWordID, tRes ) )
-			return false;
-	}
+	} else if ( !SetupWithCrc ( tWord, tRes ) )
+		return false;
 
 	const ESphHitless eMode = pIndex->m_tSettings.m_eHitless;
 	tWord.m_iDocs = eMode==SPH_HITLESS_SOME ? ( tRes.m_iDocs & HITLESS_DOC_MASK ) : tRes.m_iDocs;

@@ -511,7 +511,7 @@ static Slice_t GetTermLocator ( const char * sWord, int iLen, const RtSegment_t 
 	// tighten dictionary location
 	if ( pSeg->m_dWordCheckpoints.GetLength() )
 	{
-		const RtWordCheckpoint_t * pCheckpoint = sphSearchCheckpoint ( sWord, iLen, 0, false, true, pSeg->m_dWordCheckpoints );
+		const RtWordCheckpoint_t* pCheckpoint = sphSearchCheckpointWrd ( sWord, iLen, false, pSeg->m_dWordCheckpoints );
 		if ( !pCheckpoint )
 		{
 			tChPoint.m_uLen = pSeg->m_dWordCheckpoints.Begin()->m_iOffset;
@@ -568,7 +568,7 @@ static Slice_t GetPrefixLocator ( const char * sWord, bool bHasMorphology, const
 	if ( !pSeg->m_dWordCheckpoints.IsEmpty() )
 	{
 		const RtWordCheckpoint_t * pLast = &pSeg->m_dWordCheckpoints.Last();
-		const RtWordCheckpoint_t * pCheckpoint = sphSearchCheckpoint ( sPrefix, iPrefix, 0, true, true, pSeg->m_dWordCheckpoints );
+		const RtWordCheckpoint_t * pCheckpoint = sphSearchCheckpointWrd( sPrefix, iPrefix, true, pSeg->m_dWordCheckpoints );
 
 		if ( pCheckpoint )
 		{

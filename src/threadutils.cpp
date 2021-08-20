@@ -453,7 +453,7 @@ struct Service_t : public TaskService_t, public Service_i
 
 public:
 
-	Service_t (bool bOneThread)
+	explicit Service_t (bool bOneThread)
 	: m_bOneThread ( bOneThread ) {}
 
 	template<typename Handler>
@@ -518,7 +518,7 @@ public:
 		wake_one_thread_and_unlock ( dLock );
 	}
 
-	void run () override NO_THREAD_SAFETY_ANALYSIS
+	void run () NO_THREAD_SAFETY_ANALYSIS override
 	{
 		LOG ( DETAIL, MT ) << "run " << m_iOutstandingWork << " st:" << !!m_bStopped;
 		if ( m_iOutstandingWork==0 )

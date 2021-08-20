@@ -1000,7 +1000,7 @@ private:
 	bool						WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sError ) const;
 	bool						WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDict, CSphString & sError ) const;
 	void						WriteCheckpoints ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDict ) const;
-	bool						WriteDeadRowMap ( SaveDiskDataContext_t & tCtx, CSphString & sError ) const;
+	static bool					WriteDeadRowMap ( SaveDiskDataContext_t & tCtx, CSphString & sError );
 
 	void						GetPrefixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const final;
 	void						GetInfixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const final;
@@ -1135,9 +1135,7 @@ static int64_t SegmentsGetUsedRam ( const VecTraits_T<RtSegmentRefPtf_t> & dSegm
 static int64_t SegmentsGetRamLeft ( const VecTraits_T<RtSegmentRefPtf_t> & dSegments, int64_t iMemLimit )
 {
 	iMemLimit -= SegmentsGetUsedRam ( dSegments );
-	if ( iMemLimit<0 )
-		iMemLimit = 0;
-	return iMemLimit;
+	return Max ( iMemLimit, 0 );
 }
 
 static int64_t SegmentsGetDeadRows ( const VecTraits_T<RtSegmentRefPtf_t> & dSegments )
@@ -2802,7 +2800,7 @@ void RtIndex_c::BinlogCommit ( RtSegment_t * pSeg, const CSphVector<DocID_t> & d
 bool RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const CSphVector<DocID_t> & dAccKlist, int * pTotalKilled, bool bForceDump )
 {
 	// store statistics, because pNewSeg just might get merged
-	int iNewDocs = pNewSeg ? pNewSeg->m_uRows : 0;
+	int iNewDocs = pNewSeg ? (int)pNewSeg->m_uRows : 0;
 
 	CSphVector<int64_t> dLens;
 	int iFirstFieldLenAttr = m_tSchema.GetAttrId_FirstFieldLen();
@@ -3474,7 +3472,7 @@ void RtIndex_c::WriteCheckpoints ( SaveDiskDataContext_t & tCtx, CSphWriter & tW
 }
 
 
-bool RtIndex_c::WriteDeadRowMap ( SaveDiskDataContext_t & tContext, CSphString & sError ) const
+bool RtIndex_c::WriteDeadRowMap ( SaveDiskDataContext_t & tContext, CSphString & sError ) // static
 {
 	CSphString sName;
 	sName.SetSprintf ( "%s%s", tContext.m_szFilename, sphGetExt(SPH_EXT_SPM).cstr() );
@@ -7180,12 +7178,12 @@ bool RtIndex_c::SaveAttributes ( CSphString & sError ) const
 }
 
 
-struct SphOptimizeGuard_t : ISphNoncopyable
+struct SCOPED_CAPABILITY SphOptimizeGuard_t : ISphNoncopyable
 {
 	CSphMutex &			m_tLock;
 	std::atomic<bool>&	m_bOptimizeStop;
 
-	SphOptimizeGuard_t ( CSphMutex & tLock, std::atomic<bool>& bOptimizeStop )
+	SphOptimizeGuard_t ( CSphMutex & tLock, std::atomic<bool>& bOptimizeStop ) ACQUIRE ( tLock )
 		: m_tLock ( tLock )
 		, m_bOptimizeStop ( bOptimizeStop )
 	{
@@ -7193,7 +7191,7 @@ struct SphOptimizeGuard_t : ISphNoncopyable
 		m_tLock.Lock();
 	}
 
-	~SphOptimizeGuard_t ()
+	~SphOptimizeGuard_t () RELEASE()
 	{
 		m_bOptimizeStop = false;
 		m_tLock.Unlock();

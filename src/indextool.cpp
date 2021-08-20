@@ -1008,10 +1008,16 @@ static void ApplyKilllists ( CSphConfig & hConf )
 }
 
 
-static void ShowVersion ()
+static void ShowVersion()
 {
-	fprintf ( stdout, "%s", szMANTICORE_BANNER );
+	const char * szColumnarVer = GetColumnarVersionStr();
+	CSphString sColumnar = "";
+	if ( szColumnarVer )
+		sColumnar.SetSprintf ( " (columnar %s)", szColumnarVer );
+
+	fprintf ( stdout, "%s%s%s",  szMANTICORE_NAME, sColumnar.cstr(), szMANTICORE_BANNER_TEXT );
 }
+
 
 static void ShowHelp ()
 {
@@ -1343,8 +1349,14 @@ int main ( int argc, char ** argv )
 		}
 	}
 
+	CSphString sError;
+	bool bColumnarError = !InitColumnar ( sError );
+
 	if ( !bQuiet )
-		fprintf ( stdout, "%s", szMANTICORE_BANNER );
+		ShowVersion();
+
+	if ( bColumnarError )
+		fprintf ( stdout, "Error initializing columnar storage: %s", sError.cstr() );
 
 	if ( i!=argc )
 	{
@@ -1356,7 +1368,6 @@ int main ( int argc, char ** argv )
 	// load proper config
 	//////////////////////
 
-	CSphString sError;
 	if ( !sphInitCharsetAliasTable ( sError ) )
 		sphDie ( "failed to init charset alias table: %s", sError.cstr() );
 
@@ -1628,6 +1639,8 @@ int main ( int argc, char ** argv )
 		default:
 			sphDie ( "INTERNAL ERROR: unhandled command (id=%d)", (int)g_eCommand );
 	}
+
+	ShutdownColumnar();
 
 	return 0;
 }

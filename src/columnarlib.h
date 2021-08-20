@@ -20,6 +20,7 @@ class ISphSchema;
 
 columnar::Columnar_i *	CreateColumnarStorageReader ( const CSphString & sFile, DWORD uNumDocs, CSphString & sError );
 columnar::Builder_i *	CreateColumnarBuilder ( const ISphSchema & tSchema, const columnar::Settings_t & tSettings, const CSphString & sFilename, CSphString & sError );
+void					CheckColumnarStorage ( const CSphString & sFile, DWORD uNumRows, std::function<void (const char*)> fnError, std::function<void (const char*)> fnProgress );
 
 bool			InitColumnar ( CSphString & sError );
 void			ShutdownColumnar();

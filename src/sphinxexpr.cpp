@@ -2315,12 +2315,13 @@ public:
 		int iDocLen = m_pArg->StringEval ( tMatch, (const BYTE **)&pDoc );
 		int iLength = 0;
 		*ppStr = nullptr;
+
 		if ( pDoc && iDocLen>0 && m_iLenDelim>0 && m_iCount!=0 )
 		{
 			if ( m_iCount>0 )
-                LeftSearch(pDoc, iDocLen, m_iCount, false, ppStr, &iLength);
+			    LeftSearch( pDoc, iDocLen, m_iCount, false, ppStr, &iLength );
 			else
-                RightSearch(pDoc, iDocLen, m_iCount, ppStr, &iLength);
+                RightSearch( pDoc, iDocLen, m_iCount, ppStr, &iLength );
 		}
 
 		FreeDataPtr ( *m_pArg, pDoc );
@@ -2465,6 +2466,7 @@ int Expr_SubstringIndex_c::LeftSearch ( const char * pDoc, int iDocLen, int iCou
 	const char * pDelEnd = pDelBeg + m_iLenDelim;
 	const char * pStrBeg = pDoc;
 	const char * pStrEnd = (pStrBeg + iDocLen) - m_iLenDelim + 1;
+
 	while ( pStrBeg<pStrEnd )
 	{
 		//	check first delimer string's char with current char from pStr
@@ -2534,18 +2536,21 @@ int Expr_SubstringIndex_c::RightSearch ( const char * pDoc, int iDocLen, int iCo
 	return LeftSearch ( pDoc, iDocLen, iCount, true, ppResStr, pResLen );
 }
 
-class Expr_Upper_c : public ISphStringExpr {
+class Expr_Upper_c : public ISphStringExpr
+{
 private:
     CSphRefcountedPtr<ISphExpr> m_pArg;
     bool m_bFreeResPtr = false;
+
 public:
-    explicit Expr_Upper_c (ISphExpr * pArg)
-    : m_pArg ( pArg )
-    , m_bFreeResPtr ( false  )
+    explicit Expr_Upper_c ( ISphExpr * pArg )
+    	: m_pArg ( pArg )
+    	, m_bFreeResPtr ( false  )
     {
-        assert(pArg);
-        SafeAddRef(pArg);
+        assert( pArg );
+        SafeAddRef( pArg );
         m_bFreeResPtr = m_pArg->IsDataPtrAttr();
+
         const BYTE * pBuf = nullptr;
         CSphMatch tTmp;
     }
@@ -2562,18 +2567,19 @@ public:
             m_pArg->Command ( eCmd, pArg );
     }
 
-    int StringEval (const CSphMatch & tMatch, const BYTE ** ppStr) const final
+    int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const final
     {
         const char * pDoc = nullptr;
         int iDocLen = m_pArg->StringEval (tMatch, (const BYTE **)&pDoc);
         int iLength = 0;
         *ppStr = nullptr;
-        if (pDoc && iDocLen>0)
+
+        if ( pDoc && iDocLen>0 )
         {
-            UpperString(pDoc, iDocLen, ppStr, &iLength);
+            UpperString( pDoc, iDocLen, ppStr, &iLength );
         }
 
-        FreeDataPtr ( *m_pArg, pDoc);
+        FreeDataPtr ( *m_pArg, pDoc );
 
         return iLength;
     }
@@ -2583,7 +2589,34 @@ public:
         return m_bFreeResPtr;
     }
 
-    int IntEval (const CSphMatch & tMatch) const final
+	//	base class does not convert string to float
+	float Eval ( const CSphMatch & tMatch ) const final
+	{
+		float fVal = 0.f;
+		const char * pBuf = nullptr;
+		int  iLen = StringEval ( tMatch, (const BYTE **) &pBuf );
+
+		if ( iLen && pBuf )
+		{
+			const char * pMax = sphFindLastNumeric ( pBuf, iLen );
+			if ( pBuf<pMax )
+			{
+				fVal = (float) strtod ( pBuf, nullptr );
+			}
+			else
+			{
+				CSphString sBuf;
+				sBuf.SetBinary ( pBuf, iLen );
+				fVal = (float) strtod ( sBuf.cstr(), nullptr );
+			}
+		}
+
+		FreeDataPtr ( *this, pBuf );
+		return fVal;
+	}
+	
+	//	base class does not convert string to int
+    int IntEval ( const CSphMatch & tMatch ) const final
     {
         int iVal = 0;
         const char * pBuf = nullptr;
@@ -2607,6 +2640,33 @@ public:
         FreeDataPtr ( *this, pBuf );
         return iVal;
     }
+
+	//	base class does not convert string to int64
+	int64_t Int64Eval ( const CSphMatch & tMatch ) const final
+	{
+		int64_t iVal = 0;
+		const char * pBuf = nullptr;
+		int  iLen = StringEval ( tMatch, (const BYTE **) &pBuf );
+
+		if ( iLen && pBuf )
+		{
+			const char * pMax = sphFindLastNumeric ( pBuf, iLen );
+			if ( pBuf<pMax )
+			{
+				iVal = strtoll ( pBuf, nullptr, 10 );
+			}
+			else
+			{
+				CSphString sBuf;
+				sBuf.SetBinary ( pBuf, iLen );
+				iVal = strtoll ( sBuf.cstr(), nullptr, 10 );
+			}
+		}
+
+		FreeDataPtr ( *this, pBuf );
+		return iVal;
+	}
+	
     bool IsConst () const final { return false; }
 
     uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
@@ -2626,11 +2686,13 @@ private:
     int UpperString ( const  char * pDoc, int iDocLen, const BYTE ** ppResStr, int * pResLen ) const;
 
     Expr_Upper_c ( const Expr_Upper_c& rhs )
-            : m_pArg ( SafeClone (rhs.m_pArg) )
-            , m_bFreeResPtr ( rhs.m_bFreeResPtr )
+		: m_pArg ( SafeClone (rhs.m_pArg) )
+		, m_bFreeResPtr ( rhs.m_bFreeResPtr )
     {}
 };
 
+//	in case of input static string, function returns only pointer and length of uppercase string. buffer is not allocated
+//	in case of input dynamic string, function allocates buffer for the uppercase string and copy the resultant string to it
 int Expr_Upper_c::SetResultString ( const char * pDoc, int iDocLen, const BYTE ** ppResStr ) const
 {
     if ( !IsDataPtrAttr() )
@@ -2648,20 +2710,29 @@ int Expr_Upper_c::SetResultString ( const char * pDoc, int iDocLen, const BYTE *
 
 int Expr_Upper_c::UpperString ( const char * pDoc, int iDocLen, const BYTE ** ppResStr, int * pResLen ) const
 {
-    char * pStrBeg = const_cast<char *>(pDoc);
+    // Create a new memory buffer and store the original string in it.
+    char * pStrBuffer = new char();
+    memcpy(pStrBuffer, pDoc, iDocLen);
+    char * pStrBeg = pStrBuffer;
     const char * pStrEnd = (pStrBeg + iDocLen);
-    while (pStrBeg < pStrEnd)
+	
+    while ( pStrBeg < pStrEnd )
     {
-        if (islower(*pStrBeg))
+		// check first if the current char is a lowercase letter or a special character
+        if ( islower(*pStrBeg) )
         {
+			// if the current char is lowercase letter then convert it to an uppercase letter
             *pStrBeg -= 32;
         }
         pStrBeg += 1;
     }
+
+    // return the resultant string
     if ( ppResStr )
     {
-        *pResLen = SetResultString(pDoc, iDocLen, ppResStr);
+        *pResLen = SetResultString( pStrBuffer, iDocLen, ppResStr );
     }
+
     return iDocLen;
 }
 

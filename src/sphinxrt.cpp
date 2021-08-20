@@ -8771,6 +8771,7 @@ bool RtIndex_c::CopyExternalFiles ( int /*iPostfix*/, StrVec_t & dCopied )
 	return true;
 }
 
+// todo! Remove this, make using GetIndexFiles instead (this is duplication of existing functionality)
 void RtIndex_c::CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const
 {
 	if ( m_pTokenizer && !m_pTokenizer->GetSettings().m_sSynonymsFile.IsEmpty() )
@@ -8796,6 +8797,14 @@ void RtIndex_c::CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const
 	if ( sphIsReadable ( sPath ) )
 		dFiles.Add ( sPath );
 	sPath.SetSprintf ( "%s.ram", m_sPath.cstr () );
+	if ( sphIsReadable ( sPath ) )
+		dFiles.Add ( sPath );
+
+	if ( !m_tMutableSettings.NeedSave() )
+		return;
+
+	// should be file already after post-setup
+	sPath.SetSprintf ( "%s%s", m_sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ).cstr() );
 	if ( sphIsReadable ( sPath ) )
 		dFiles.Add ( sPath );
 }

@@ -337,7 +337,7 @@ const char *	sphLoadConfig ( const char * sOptConfig, bool bQuiet, bool bIgnoreI
 
 bool			sphInitCharsetAliasTable ( CSphString & sError );
 
-enum ESphLogLevel
+enum ESphLogLevel : BYTE
 {
 	SPH_LOG_FATAL	= 0,
 	SPH_LOG_WARNING	= 1,
@@ -356,7 +356,7 @@ volatile SphLogger_fn& g_pLogger();
 
 void sphLogVa ( const char * sFmt, va_list ap, ESphLogLevel eLevel = SPH_LOG_WARNING );
 void sphWarning_impl ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
-void sphLogf ( ESphLogLevel eLevel, const char* sFmt, ... );
+void sphLogf ( ESphLogLevel eLevel, const char* sFmt, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) ); // NOLINT;
 void sphInfo_impl ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
 void sphLogFatal ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
 void sphLogDebug_impl ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT

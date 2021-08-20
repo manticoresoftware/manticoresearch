@@ -5774,10 +5774,10 @@ CSphString GET_COLUMNAR_FULLPATH ();
 
 // fast diagnostic logging.
 // Being a macro, it will be optimized out by compiler when not in use
-
+enum ESphLogLevel : BYTE; // values are in sphinxutils.h
 struct LogMessage_t
 {
-	LogMessage_t ();
+	LogMessage_t ( BYTE uLevel = 5 ); // LOG_VERBOSE_DEBUG
 	~LogMessage_t ();
 
 	template<typename T>
@@ -5789,6 +5789,7 @@ struct LogMessage_t
 
 private:
 	StringBuilder_c m_dLog;
+	ESphLogLevel m_eLevel;
 };
 
 // for LOG (foo, bar) -> define LOG_LEVEL_foo as boolean, define LOG_COMPONENT_bar as expression

@@ -3413,21 +3413,23 @@ BYTE Pearson8 ( const BYTE * pBuf, int iLen )
 
 
 namespace { // to make logMutex static inside .o
-	CSphMutex & logMutex ()
-	{
-		return Single_T<CSphMutex, LogMessage_t> ();
-	}
+//	CSphMutex & logMutex ()
+//	{
+//		return Single_T<CSphMutex, LogMessage_t> ();
+//	}
 }
 
-LogMessage_t::LogMessage_t ()
+LogMessage_t::LogMessage_t ( BYTE uLevel )
+	: m_eLevel ( (ESphLogLevel) uLevel )
 {
-	logMutex ().Lock ();
+//	logMutex ().Lock ();
 }
 
 LogMessage_t::~LogMessage_t ()
 {
-	logMutex ().Unlock ();
-	sphLogDebugv ( "%s", m_dLog.cstr() );
+//	logMutex ().Unlock ();
+//	sphLogDebugv ( "%s", m_dLog.cstr() );
+	sphLogf ( m_eLevel, "%s", m_dLog.cstr() );
 }
 
 LocMessage_c::LocMessage_c ( LocMessages_c* pOwner )

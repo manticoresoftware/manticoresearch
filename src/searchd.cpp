@@ -657,6 +657,15 @@ public:
 	}
 };
 
+#define LOG_LEVEL_SHUTDOWN false
+#define LOG_COMPONENT_SEARCHD __LINE__ << " "
+
+#define LOGINFO(Level,Component) \
+    if_const (LOG_LEVEL_##Level) \
+        LogMessage_t {SPH_LOG_INFO} << LOG_COMPONENT_##Component
+
+#define SHUTINFO LOGINFO (SHUTDOWN,SEARCHD)
+
 /////////////////////////////////////////////////////////////////////////////
 // SIGNAL HANDLERS
 /////////////////////////////////////////////////////////////////////////////
@@ -688,24 +697,29 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	int64_t tmShutStarted = sphMicroTimer ();
 
 	// release all planned/scheduled tasks
+	SHUTINFO << "Shut down task manager ...";
 	TaskManager::ShutDown();
 
 	ShutdownFlushingMutable();
 
 	// stop search threads; up to shutdown_timeout seconds
+	SHUTINFO << "Wait preread (if any) finished ...";
 	WaitFinishPreread ( g_iShutdownTimeoutUs );
 
 	// save attribute updates for all local indexes
+	SHUTINFO << "Finally save indexes ...";
 	bAttrsSaveOk = FinallySaveIndexes();
 
 	// right before unlock loop
 	if ( g_bJsonConfigLoadedOk )
 	{
 		CSphString sError;
+		SHUTINFO << "Save json config ...";
 		SaveConfigInt(sError);
 	}
 
 	// stop netloop processing
+	SHUTINFO << "Stop netloop processing ...";
 	for ( auto & pNetLoop : g_dNetLoops )
 	{
 		pNetLoop->StopNetLoop ();
@@ -713,6 +727,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	}
 
 	// stop netloop threads
+	SHUTINFO << "Stop netloop pool ...";
 	if ( g_pTickPoolThread )
 		g_pTickPoolThread->StopAll ();
 
@@ -721,8 +736,10 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	// shutdown ssl,
 	// shutdown tick threads,
 	// shutdown alone tasks
+	SHUTINFO << "Invoke shutdown callbacks ...";
 	searchd::FireShutdownCbs ();
 
+	SHUTINFO << "Waiting clients to finish ... (" << myinfo::CountClients() << ")";
 	while ( ( myinfo::CountClients ()>0 ) && ( sphMicroTimer ()-tmShutStarted )<g_iShutdownTimeoutUs )
 		sphSleepMsec ( 50 );
 
@@ -734,34 +751,52 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	}
 
 	// unlock indexes and release locks if needed
+	SHUTINFO << "Unlock indexes ...";
 	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next(); )
 	{
 		auto pIdx = (const ServedDesc_t *) it.Get(); // breaks any access, but we're finishing, that's ok.
 		if ( pIdx && pIdx->m_pIndex )
 			pIdx->m_pIndex->Unlock();
 	}
+	SHUTINFO << "Remove local indexes list ...";
 	SafeDelete ( g_pLocalIndexes );
 
 	// unlock Distr indexes automatically done by d-tr
+	SHUTINFO << "Remove distr indexes list ...";
 	SafeDelete ( g_pDistIndexes );
 
 	// clear shut down of rt indexes + binlog
+	SHUTINFO << "Finish IO stats collecting ...";
 	sphDoneIOStats();
+
+	SHUTINFO << "Finish RT serving ...";
 	Binlog::Deinit();
 
+	SHUTINFO << "Shutdown docstore ...";
 	ShutdownDocstore();
+
+	SHUTINFO << "Shutdown wordforms ...";
 	sphShutdownWordforms ();
+
+	SHUTINFO << "Shutdown global IDFs ...";
 	sph::ShutdownGlobalIDFs ();
+
+	SHUTINFO << "Shutdown aot ...";
 	sphAotShutdown ();
+
+	SHUTINFO << "Shutdown columnar ...";
 	ShutdownColumnar();
 
+	SHUTINFO << "Shutdown listeners ...";
 	for ( auto& dListener : g_dListeners )
 		if ( dListener.m_iSock>=0 )
 			sphSockClose ( dListener.m_iSock );
 
+	SHUTINFO << "Close persistent sockets ...";
 	ClosePersistentSockets();
 
 	// close pid
+	SHUTINFO << "Release (close) pid file ...";
 	if ( g_iPidFD!=-1 )
 		::close ( g_iPidFD );
 	g_iPidFD = -1;
@@ -770,6 +805,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	if ( g_bPidIsMine && !g_sPidFile.IsEmpty() )
 		::unlink ( g_sPidFile.cstr() );
 
+	SHUTINFO << "Shutdown hazard pointers ...";
 	hazard::Shutdown ();
 	sphInfo ( "shutdown daemon version '%s' ...", g_sStatusVersion.cstr() );
 	sphInfo ( "shutdown complete" );

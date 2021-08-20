@@ -93,6 +93,7 @@ public:
 	bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError ) const override;
 
 	bool Reconfigure ( CSphReconfigureSetup & tSetup ) override EXCLUDES ( m_tLockHash, m_tLock );
+	void ProcessDiskChunk ( int, VisitChunk_fn&& ) final {};
 	int64_t GetLastFlushTimestamp() const override { return m_tmSaved; }
 
 	// plain index stub

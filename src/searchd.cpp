@@ -14470,22 +14470,30 @@ void HandleMysqlShowIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, b
 
 	if ( pServed )
 	{
-		CSphIndex * pIndex = pServed ? pServed->m_pIndex : nullptr;
+		CSphIndex * pIndex = pServed->m_pIndex;
 
-		if ( iChunk>=0 && pServed && pIndex && pIndex->IsRT ())
-			pIndex = static_cast<RtIndex_i *>( pIndex )->GetDiskChunk ( iChunk );
+		if ( iChunk>=0 && pIndex && pIndex->IsRT ())
+		{
+			static_cast<RtIndex_i *>( pIndex )->ProcessDiskChunk ( iChunk, [&tOut, &tStmt] (const CSphIndex* pIndex)
+			{
+				if ( !pIndex )
+				{
+					tOut.Error ( tStmt.m_sStmt, "SHOW INDEX STATUS requires an existing index" );
+					return;
+				}
 
-		if ( !pServed || !pIndex ) {
-			tOut.Error ( tStmt.m_sStmt, "SHOW INDEX STATUS requires an existing index" );
+				VectorLike dStatus ( tStmt.m_sStringParam );
+				AddDiskIndexStatus ( dStatus, pIndex, false );
+				tOut.DataTable ( dStatus );
+			});
 			return;
 		}
 
-		if ( iChunk>=0 ) {
-			VectorLike dStatus ( tStmt.m_sStringParam );
-			AddDiskIndexStatus ( dStatus, pIndex, false );
-			tOut.DataTable ( dStatus );
-		} else
+		if ( pIndex )
 			AddPlainIndexStatus ( tOut, pServed, (const ServedStats_c *) pServed, bFederatedUser, tStmt.m_sIndex, tStmt.m_sStringParam );
+		else
+			tOut.Error ( tStmt.m_sStmt, "SHOW INDEX STATUS requires an existing index" );
+
 		return;
 	}
 
@@ -14557,16 +14565,23 @@ void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	{
 		auto * pRtIndex = static_cast<RtIndex_i *>( pIndex );
 		int iChunk = 0;
-		while ( true )
+		bool bKeepIteration = true;
+		while ( bKeepIteration )
 		{
-			auto * pChunk = pRtIndex->GetDiskChunk ( iChunk );
-			if ( !pChunk )
-				break;
-
-			tOut.PutNumAsString ( pChunk->m_iChunk );
-			PutIndexStatus ( tOut, pChunk );
-			if ( !tOut.Commit () )
-				break;
+			pRtIndex->ProcessDiskChunk (iChunk,[&bKeepIteration, &tOut] (const CSphIndex* pChunk) {
+				if ( !pChunk )
+				{
+					bKeepIteration = false;
+					return;
+				}
+				tOut.PutNumAsString ( pChunk->m_iChunk );
+				PutIndexStatus ( tOut, pChunk );
+				if ( !tOut.Commit () )
+				{
+					bKeepIteration = false;
+					return;
+				}
+			});
 			++iChunk;
 		}
 	} else {
@@ -14582,31 +14597,35 @@ void HandleMysqlShowIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t & tStmt 
 {
 	CSphString sError;
 	ServedDescRPtr_c pServed ( GetServed ( tStmt.m_sIndex ) );
+	CSphIndex * pIndex = pServed ? pServed->m_pIndex : nullptr;
 
 	int iChunk = tStmt.m_iIntParam;
 	if ( tStmt.m_dIntSubkeys.GetLength ()>=1 )
-		iChunk = tStmt.m_dIntSubkeys[0];
+		iChunk = (int) tStmt.m_dIntSubkeys[0];
 
-	CSphIndex * pIndex = pServed ? pServed->m_pIndex : nullptr;
-
-	if ( iChunk>=0 && pServed && pIndex && pIndex->IsRT() )
-		pIndex = static_cast<RtIndex_i *>( pIndex )->GetDiskChunk ( iChunk );
-
-	if ( !pServed || !pIndex )
+	auto fnShowSettings = [&tOut, szStmt=tStmt.m_sStmt] ( const CSphIndex* pIndex )
 	{
-		tOut.Error ( tStmt.m_sStmt, "SHOW INDEX SETTINGS requires an existing index" );
-		return;
-	}
+		if ( !pIndex )
+		{
+			tOut.Error ( szStmt, "SHOW INDEX SETTINGS requires an existing index" );
+			return;
+		}
 
-	if (!tOut.HeadOfStrings ( { "Variable_name", "Value" } ))
-		return;
+		if ( !tOut.HeadOfStrings ( { "Variable_name", "Value" } ) )
+			return;
 
-	StringBuilder_c tBuf;
-	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( CreateFilenameBuilder ( pIndex->GetName() ) );
-	DumpSettings ( tBuf, *pIndex, pFilenameBuilder.Ptr() );
+		StringBuilder_c tBuf;
+		CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( CreateFilenameBuilder ( pIndex->GetName () ) );
+		DumpSettings ( tBuf, *pIndex, pFilenameBuilder.Ptr () );
 
-	tOut.DataTuplet ( "settings", tBuf.cstr() );
-	tOut.Eof();
+		tOut.DataTuplet ( "settings", tBuf.cstr () );
+		tOut.Eof ();
+	};
+
+	if ( iChunk>=0 && pIndex && pIndex->IsRT() )
+		static_cast<RtIndex_i *>( pIndex )->ProcessDiskChunk ( iChunk, fnShowSettings );
+	else
+		fnShowSettings ( pIndex );
 }
 
 

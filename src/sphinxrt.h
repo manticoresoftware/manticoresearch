@@ -26,6 +26,8 @@ struct CSphReconfigureSettings;
 struct CSphReconfigureSetup;
 class RtAccum_t;
 
+using VisitChunk_fn = std::function<void ( const CSphIndex* pIndex )>;
+
 struct InsertDocData_t
 {
 	CSphMatch							m_tDoc;
@@ -94,9 +96,16 @@ public:
 	/// current data got saved with current settings
 	virtual bool Reconfigure ( CSphReconfigureSetup & tSetup ) = 0;
 
+	/// do something const with disk chunk (query settings, status, etc.)
+	/// hides internal disk chunks storage
+	virtual void ProcessDiskChunk ( int iChunk, VisitChunk_fn&& fnVisitor ) = 0;
+
 	/// get disk chunk
-	virtual CSphIndex * GetDiskChunk ( int iChunk ) {return nullptr;}
-	
+	virtual CSphIndex* GetDiskChunk ( int iChunk )
+	{
+		return nullptr;
+	}
+
 	virtual RtAccum_t * CreateAccum ( RtAccum_t * pAccExt, CSphString & sError ) = 0;
 
 	// instead of cloning for each AddDocument() call we could just call this method and improve batch inserts speed

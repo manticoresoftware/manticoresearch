@@ -833,7 +833,7 @@ public:
 	// helpers
 	CSphIndex *			CompressDiskChunk ( const CSphIndex * pChunk ) REQUIRES ( m_tOptimizingLock );
 	bool				SkipOrDrop ( int iChunk, const CSphIndex * pChunk, int64_t * pAlives=nullptr ) REQUIRES ( m_tOptimizingLock );
-	CSphIndex *			GetDiskChunk ( int iChunk ) final { return m_dDiskChunks.GetLength()>iChunk ? m_dDiskChunks[iChunk] : nullptr; }
+	void				ProcessDiskChunk ( int iChunk, VisitChunk_fn&& fnVisitor ) final;
 	ISphTokenizer *		CloneIndexingTokenizer() const final { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
 
 	static int64_t		NumAliveDocs ( const CSphIndex * pChunk ) ;
@@ -1101,6 +1101,14 @@ RtIndex_c::~RtIndex_c ()
 		sphInfo ( "rt: index %s: ramchunk saved in %d.%03d sec",
 			m_sIndexName.cstr(), (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
 	}
+}
+
+void RtIndex_c::ProcessDiskChunk ( int iChunk, VisitChunk_fn&& fnVisitor )
+{
+	if (iChunk<0 || iChunk>=m_dDiskChunks.GetLength())
+		fnVisitor(nullptr);
+	else
+		fnVisitor ( m_dDiskChunks[iChunk] );
 }
 
 bool RtIndex_c::IsFlushNeed() const

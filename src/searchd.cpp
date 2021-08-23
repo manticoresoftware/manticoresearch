@@ -5197,8 +5197,8 @@ void SearchHandler_c::SetQueryParser ( const QueryParser_i * pParser, QueryType_
 
 LockedCollection_c::~LockedCollection_c()
 {
-	for ( m_hUsed.IterateStart (); m_hUsed.IterateNext(); )
-		SafeDelete ( m_hUsed.IterateGet () );
+	for ( auto& tUsed : m_hUsed )
+		SafeDelete ( tUsed.second );
 }
 
 bool LockedCollection_c::AddRLocked ( const CSphString & sName )

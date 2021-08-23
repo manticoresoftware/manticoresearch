@@ -2601,6 +2601,24 @@ TEST ( functions, SharedPtr )
 	ASSERT_EQ ( *pFoo, 20 );
 }
 
+TEST ( functions, SharedPtrCompare )
+{
+	SharedPtr_t<int> pFoo;
+	ASSERT_EQ ( pFoo, nullptr );
+	ASSERT_TRUE ( pFoo == nullptr );
+	SharedPtr_t<int> pBar { new int };
+	*pBar = 10;
+	pFoo = pBar;
+	auto pBaz = pFoo;
+	ASSERT_EQ ( *pFoo, 10 );
+	ASSERT_EQ ( pFoo, pBar );
+	ASSERT_EQ ( pFoo, pBaz );
+	ASSERT_EQ ( pBaz, pBar );
+	ASSERT_TRUE ( pFoo == pBar );
+	ASSERT_TRUE ( pFoo == pBaz );
+	ASSERT_TRUE ( pBaz == pBar );
+}
+
 void pr (const VecTraits_T<DWORD>& dData, int a=-1, int b=-1)
 {
 	return;

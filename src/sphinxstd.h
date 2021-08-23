@@ -1308,6 +1308,17 @@ public:
 		return !any_of ( cond );
 	}
 
+	template<typename FILTER>
+	inline int64_t count_of ( FILTER&& cond ) const NO_THREAD_SAFETY_ANALYSIS
+	{
+		int64_t iRes = 0;
+		for ( int64_t i = 0; i < m_iCount; ++i )
+			if ( cond ( m_pData[i] ) )
+				++iRes;
+
+		return iRes;
+	}
+
 	/// Apply an action to every member
 	/// Apply ( [] (T& item) {...} );
 	template < typename ACTION >
@@ -1341,6 +1352,13 @@ public:
 	{
 		for ( int i = 0; i<m_iCount; ++i )
 			m_pData[i] = rhs;
+	}
+
+	/// fill with sequence (appliable only to integers)
+	void FillSeq ( T iStart = 0, T iStep = 1 )
+	{
+		for ( int i = 0; i < m_iCount; ++i, iStart += iStep )
+			m_pData[i] = iStart;
 	}
 
 protected:
@@ -2547,6 +2565,10 @@ public:
 			: m_pIterator ( pIterator ) {}
 
 		KeyValue_t& operator*() { return *m_pIterator; }
+		KeyValue_t* operator->() const
+		{
+			return m_pIterator;
+		};
 
 		Iterator_c & operator++ ()
 		{
@@ -2554,9 +2576,14 @@ public:
 			return *this;
 		}
 
-		bool operator!= ( const Iterator_c & rhs ) const
+		bool operator== ( const Iterator_c& rhs ) const
 		{
-			return m_pIterator!=rhs.m_pIterator;
+			return m_pIterator == rhs.m_pIterator;
+		}
+
+		bool operator!= ( const Iterator_c& rhs ) const
+		{
+			return !operator== ( rhs );
 		}
 	};
 
@@ -4081,6 +4108,12 @@ public:
 	T * GetWritePtr () const
 	{
 		return m_pData;
+	}
+
+	/// returns read address - same as write, but const pointer
+	const T* GetReadPtr() const
+	{
+		return GetWritePtr();
 	}
 
 	void Set ( T * pData, int64_t iCount )

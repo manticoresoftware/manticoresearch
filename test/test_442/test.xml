@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+	<name>select substring_index</name>
+	<requires><sphinxql_keep_null/></requires>
+
+	<config>
+		indexer
+		{
+		mem_limit = 16M
+		}
+
+		searchd
+		{
+		<searchd_settings/>
+		thread_stack = 256K
+		}
+
+
+		source test_json
+		{
+		type			= mysql
+		<sql_settings/>
+		sql_query		= select * from json_src_table
+		sql_attr_uint	= gid
+		sql_attr_json	= j
+		}
+
+		index test_json
+		{
+		source			= test_json
+		path			= <data_path/>/test_json
+		}
+
+		index rt
+		{
+		type			= rt
+		path			= <data_path/>/rt
+		rt_attr_uint	= gid
+		rt_field		= title
+		rt_attr_json	= j
+		}
+
+		index test1_loc
+		{
+		type = distributed
+		local = test_json
+		}
+
+		index test1_dist
+		{
+		type = distributed
+		agent = <my_address/>:test_json
+		}
+
+		index test2_dist
+		{
+		type = distributed
+		local = test_json
+		agent = <my_address/>:test_json
+		}
+
+	</config>
+
+	<db_create>
+		CREATE TABLE json_src_table (
+		`id` int(11) NOT NULL AUTO_INCREMENT,
+		`gid` int(11) NOT NULL,
+		`title` varchar(255) NOT NULL,
+		`j` varchar(8192) NOT NULL,
+		PRIMARY KEY (`id`)
+		);
+	</db_create>
+	<db_drop>DROP TABLE IF EXISTS json_src_table;</db_drop>
+
+	<db_insert>
+		INSERT INTO json_src_table VALUES
+		(1,1,'test one','{"name":"Alice","uid":123, "lon":-0.08, "lat":0.93, "coord":"-0.08 0.93", "pct":12.4, "sq":9, "poly":"1,2,3,4,5,6.0", "points":[1,2,3,4,5,6.0]}'),
+		(2,1,'test two','{"name":"Bob","uid":234,"gid":12, "lon":-0.0799989, "lat":0.891975, "coord":"-0.079999 0.891975", "pct":-103.7, "sq":16, "poly":"1,-2,1,2,-5,6", "points":[1,-2,1,2,-5,6]}'),
+		(3,2,'another doc','{"name":"Charlie","uid":345, "lon":-0.0721455, "lat":0.926761, "coord":"-0.072146 0.926761", "pct":4.1, "sq":225, "poly":"-1,2,12,4,5,6", "points":[-1,2,12,4,5,6]}')
+	</db_insert>
+
+
+
+	<queries><sphinxql>
+
+		<!-- substring_index()  -->
+		select id, upper('abcdefghijk') as res from test_json;
+		select id, upper('abcdefghijk1234') as res from test_json;
+		select id, upper('abcdefghijk-092k1ss') as res from test_json;
+		select id, upper('ABCnskndmsndms 1234') as res from test_json;
+		select id, upper('Abkkwndknd ssAQ ASDW323-.') as res from test_json;
+		<!-- upper() from rt -->
+
+		INSERT INTO rt (id, gid, title, j) VALUES
+		(1,2,'test one','{"name":"alice"}'),
+		(2,3,'test two','{"name":"bob"}'),
+		(3,4,'another doc','{"name":"charlie",}');
+
+		select gid, * from rt;
+
+		select id, upper('hello-world',) as res from rt;
+		select id, upper('hello 12 world') as res from rt;
+		select id, upper('hello12323 world') as res from rt;
+		select id, upper('hello world') as res from rt;
+
+		select id, upper('aaa..jjdjwew.-192933' ) as res from rt;
+		select id, upper('aaa..jjdjwew.-192933') as res from rt;
+		select id, upper('aaa..jjdjwew.-192933') as res from rt;
+		select id, upper('aaa..jjdjwew.-192933') as res from rt;
+
+		<!-- upper() from test1_dist -->
+		select gid, * from test1_dist;
+
+		select id, upper('aaa..jjdjwew.-192933') as res from test1_dist;
+		select id, upper('aaa..jjdjwew.-19 2933') as res from test1_dist;
+		select id, upper('aaa..jjdjwew .-192933') as res from test1_dist;
+		select id, upper('aaa..jjdjwew.-192933') as res from test1_dist;
+		select id, upper('aaa..jjdjwew.-192933') as res from test1_dist;
+		select id, upper('aaa..jjdjwew.-192933') as res from test1_dist;
+		select id, upper('aaa..jjdjwew.-192933') as res from test1_dist;
+
+		<!-- regression substring_index from missed json field -->
+		select id, concat('hello', ' ', 'world') as v0, upper(v0) as v from rt;
+
+	</sphinxql></queries>
+
+</test>

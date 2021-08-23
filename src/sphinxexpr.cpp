@@ -2711,7 +2711,7 @@ int Expr_Upper_c::SetResultString ( const char * pDoc, int iDocLen, const BYTE *
 int Expr_Upper_c::UpperString ( const char * pDoc, int iDocLen, const BYTE ** ppResStr, int * pResLen ) const
 {
     // Create a new memory buffer and store the original string in it.
-    char * pStrBuffer = new char();
+    char * pStrBuffer = new char[iDocLen];
     memcpy(pStrBuffer, pDoc, iDocLen);
     char * pStrBeg = pStrBuffer;
     const char * pStrEnd = (pStrBeg + iDocLen);

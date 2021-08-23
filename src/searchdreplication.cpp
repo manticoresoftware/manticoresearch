@@ -1031,7 +1031,7 @@ static bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sErro
 	}
 
 	// let's start listening thread with proper provider set
-	auto pScheduler = GetAloneScheduler(-1, sMyName.cstr ());
+	auto pScheduler = MakeSingleThreadExecutor ( -1, sMyName.cstr() );
 	Threads::CoGo ( [pRecvArgs,sIncoming] () mutable
 	{
 		// publish stuff in 'show threads'

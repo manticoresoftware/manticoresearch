@@ -120,19 +120,46 @@ struct Scheduler_i
 	{
 		Schedule ( std::move ( handler ), false );
 	}
+	// RAII keeper of scheduler (when it exists, scheduler will not finish). That is necessary, say, if the only work is
+	// paused and moved somewhere (for example, as cb in epoll polling). Without keeper scheduler then finish and it will
+	// be impossible to resume it later.
 	virtual Keeper_t KeepWorking() = 0;
-	virtual int WorkingThreads() const = 0;
-	virtual int Works () const = 0;
+
+	// number of parallel contextes might be necessary when working via this scheduler
+	// alone and strand obviously has 1 worker; threadpool has many.
+	virtual int WorkingThreads() const
+	{
+		return 1;
+	};
+	virtual const char* Name() const
+	{
+		return "unnamed_sched";
+	}
+};
+
+struct SchedulerWithBackend_i: public Scheduler_i
+{
+	virtual bool SetBackend ( Scheduler_i* pBackend ) = 0;
+};
+
+struct Worker_i: public Scheduler_i
+{
+	virtual int Works() const = 0;
 	virtual void StopAll () = 0;
 	virtual void DiscardOnFork() {}
 	virtual void IterateChildren ( ThreadFN & fnHandler ) {}
 };
 
 using SchedulerSharedPtr_t = SharedPtr_t<Scheduler_i>;
+using WorkerSharedPtr_t = SharedPtr_t<Worker_i>;
 
 // none of the functions below used in the code. Both maybe only in tests.
-SchedulerSharedPtr_t MakeThreadPool ( size_t iThreadCount, const char * szName="" );
-SchedulerSharedPtr_t MakeAloneThread ( size_t iOrderNum, const char * szName = "" );
+WorkerSharedPtr_t MakeThreadPool ( size_t iThreadCount, const char* szName = "" );
+WorkerSharedPtr_t MakeAloneThread ( size_t iOrderNum, const char* szName = "" );
+
+// Alone scheduler works on top of another scheduler and provides sequental execution of the tasks (each time only one
+// task may be performed, no concurrent execution). It also gives FIFO ordering of the tasks.
+SchedulerSharedPtr_t MakeAloneScheduler ( Scheduler_i* pBase, const char* szName = nullptr );
 
 /// stack of a thread (that is NOT stack of the coroutine!)
 static const DWORD STACK_SIZE = 128 * 1024;
@@ -196,20 +223,18 @@ namespace CrashLogger
 };
 
 // Scheduler to global thread pool
-Threads::Scheduler_i* GlobalWorkPool ();
+Threads::Worker_i* GlobalWorkPool ();
 void SetMaxChildrenThreads ( int iThreads );
 void StartGlobalWorkPool ();
 
 /// schedule stop of the global thread pool
 void WipeGlobalSchedulerOnShutdownAndFork ();
 
-void WipeSchedulerOnFork ( Threads::Scheduler_i * );
+void WipeSchedulerOnFork ( Threads::Worker_i * );
 
 // Scheduler to dedicated thread (or nullptr, if current N of such threads >= iMaxThreads)
 // you MUST schedule at least one job, or explicitly delete non-engaged scheduler (it will leak otherwise).
-Threads::Scheduler_i* GetAloneScheduler ( int iMaxThreads, const char* szName=nullptr );
-
-using SchedulerFabric_fn = std::function<Threads::Scheduler_i * ( void )>;
+Threads::Scheduler_i* MakeSingleThreadExecutor ( int iMaxThreads, const char* szName = nullptr );
 
 // add handler which will be called on daemon's shutdown right after
 // sphInterrupted() is set to true. Returns cookie for refer the callback in future.

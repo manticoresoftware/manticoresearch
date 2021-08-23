@@ -85,6 +85,8 @@ void CoMoveTo ( Scheduler_i * pScheduler );
 // yield to external context
 void CoYield ();
 
+void CoReschedule();
+
 // create context and return resuming functor.
 // calling resumer will run handler until it finishes or yields.
 // returns flag of how coroutine interrupted: finished(true) or yielded(false)
@@ -147,6 +149,9 @@ Waiter_t DefferedContinuator();
 
 // yield, then release passed waiter.
 void WaitForDeffered ( Waiter_t&& );
+
+// start dTasks, then yield until iN of them completed. Returns idx of the task which fired the trigger
+int WaitForN ( int iN, std::initializer_list<Handler> dTasks );
 
 // set to 1 for manual testing/debugging in single thread and predefined sequence of chunks
 #define MODELING 0
@@ -350,6 +355,86 @@ public:
 	~CoroSpinlock_c ();
 	void Lock () ACQUIRE();
 	void Unlock () RELEASE();
+};
+
+/// capability for tracing scheduler
+using SchedRole CAPABILITY ( "role" ) = Scheduler_i*;
+using RoledSchedulerSharedPtr_t CAPABILITY ( "role" ) = SchedulerSharedPtr_t;
+
+inline void AcquireSched ( SchedRole R ) ACQUIRE( R ) NO_THREAD_SAFETY_ANALYSIS
+{
+	CoMoveTo ( R );
+}
+
+inline void AcquireSched ( RoledSchedulerSharedPtr_t & R ) ACQUIRE( R ) NO_THREAD_SAFETY_ANALYSIS
+{
+	CoMoveTo ( R );
+}
+
+class SCOPED_CAPABILITY ScopedScheduler_c : ISphNoncopyable
+{
+	SchedRole m_pRoleRef = nullptr;
+public:
+	ScopedScheduler_c() = default;
+	inline explicit ScopedScheduler_c ( SchedRole pRole ) ACQUIRE ( pRole )
+	{
+		if ( !pRole )
+			return;
+
+		m_pRoleRef = CoCurrentScheduler ();
+//		if ( m_pRoleRef )
+			AcquireSched ( pRole );
+	}
+
+	inline explicit ScopedScheduler_c ( RoledSchedulerSharedPtr_t& pRole ) ACQUIRE ( pRole )
+	{
+		if ( !pRole )
+			return;
+
+		m_pRoleRef = CoCurrentScheduler ();
+//		if ( m_pRoleRef )
+			AcquireSched ( pRole );
+	}
+
+	~ScopedScheduler_c () RELEASE()
+	{
+		if ( m_pRoleRef )
+			AcquireSched ( m_pRoleRef );
+	}
+};
+
+inline void CheckAcquiredSched ( SchedRole R ) ACQUIRE( R ) NO_THREAD_SAFETY_ANALYSIS
+{
+//	assert ( !CoCurrentScheduler () || R==CoCurrentScheduler() );
+	assert ( R==CoCurrentScheduler () );
+}
+
+inline void CheckAcquiredSched ( RoledSchedulerSharedPtr_t& R ) ACQUIRE( R ) NO_THREAD_SAFETY_ANALYSIS
+{
+//	assert ( !CoCurrentScheduler () || R==CoCurrentScheduler () );
+	assert ( R==CoCurrentScheduler () );
+}
+
+inline void CheckReleasedSched ( SchedRole R ) RELEASE( R ) NO_THREAD_SAFETY_ANALYSIS
+{
+}
+
+inline void CheckReleasedSched ( RoledSchedulerSharedPtr_t & R ) RELEASE( R ) NO_THREAD_SAFETY_ANALYSIS
+{
+}
+
+class SCOPED_CAPABILITY CheckRole_c
+{
+public:
+	/// acquire on creation
+	inline explicit CheckRole_c ( SchedRole tRole ) ACQUIRE( tRole )
+	{
+		CheckAcquiredSched ( tRole );
+	}
+
+	/// release on going out of scope
+	~CheckRole_c () RELEASE()
+	{}
 };
 
 using SccRL_t = CSphScopedRLock_T<CoroRWLock_c>;

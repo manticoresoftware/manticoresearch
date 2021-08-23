@@ -432,6 +432,7 @@ struct Service_i
 };
 
 #define LOG_LEVEL_WORKS false
+#define LOG_LEVEL_ST false
 
 /// performs tasks pushed with post() in one or many threads until they done.
 /// Naming convention of members is inherited from boost::asio as drop-in replacement.
@@ -446,7 +447,7 @@ struct Service_t : public TaskService_t, public Service_i
 	OpSchedule_t m_OpVipQueue;					/// The queue of handlers that have to be delivered BEFORE OpQueue
 
 	// Per-thread call stack to track the state of each thread in the service.
-	using ThreadCallStack_c = CallStack_c<TaskService_t, TaskServiceThreadInfo_t>;
+	using ThreadCallStack_c = CallStack_c<Service_t, TaskServiceThreadInfo_t>;
 
 	class Work_c;			/// Scoped RAII work to keep service running. calls work_started/work_finished
 	friend class Work_c;
@@ -670,8 +671,220 @@ public:
 };
 
 #define LOG_COMPONENT_TP LOG_COMPONENT_MT << ": "
+#define LOG_COMPONENT_ST LOG_COMPONENT_MT << " strand: "
 
-class ThreadPool_c final : public Scheduler_i
+// strand - sequental scheduler. Operations executed strictly sequentally and in FIFO order.
+// It looks like 'single thread', but actual thread is provided from backend and may change.
+class Strand_c final : public SchedulerWithBackend_i
+{
+	const char* m_szName = nullptr;
+	// strand has no backend thread/threadpool and works over another scheduler.
+	Scheduler_i * m_pBackend;
+
+	CSphMutex m_dMutex;
+	bool m_bLocked GUARDED_BY ( m_dMutex ) = false;
+	bool m_bShutdown = false;
+	OpSchedule_t m_OpReadyQueue;	/// The queue for current run
+	OpSchedule_t m_OpWaitQueue GUARDED_BY ( m_dMutex );	/// The queue for the next run
+
+	// Per-thread call stack to track the state of each thread in the service.
+	using StrandCallStack_c = CallStack_c<Strand_c>;
+
+	class Invoker_c
+	{
+		Keeper_t m_tParentKeeper;
+		Strand_c * m_pOwner;
+
+	public:
+		explicit Invoker_c( Strand_c* pRand );
+		Invoker_c ( const Invoker_c& rhs ) = default;
+		Invoker_c ( Invoker_c && rhs ) noexcept;
+		Invoker_c & operator= ( Invoker_c && rhs ) noexcept;
+		void run ();
+	};
+
+	friend class Invoker_c;
+
+	bool Enqueue ( Handler handler )
+	{
+		ScopedMutex_t tLock ( m_dMutex );
+		if ( m_bShutdown )
+			return false;
+
+		auto * pOp = new CompletionHandler_c<Handler> ( std::move ( handler ) );
+		if ( m_bLocked )
+		{
+			m_OpWaitQueue.Push (pOp);
+			LOG ( ST, ST ) << "		enqueued to wait queue, was locked " << pOp;
+			return false;
+		}
+
+		m_bLocked = true;
+		tLock.Unlock();
+		m_OpReadyQueue.Push(pOp);
+		LOG ( ST, ST ) << "		enqueued to ready queue, locked " << pOp;
+		return true;
+	}
+
+	// try to execute immediately, or then post to primary queue
+	void PostContinuationToBackend ( Handler handler )
+	{
+		// Add the function to the strand and schedule the strand if required.
+		if ( m_pBackend )
+			m_pBackend->ScheduleContinuation ( std::move(handler) );
+	}
+
+	void PostContinuation ( Handler handler ) // try to execute immediately, or then post to primary queue
+	{
+		auto bThisThread = !!StrandCallStack_c::Contains ( this );
+		if ( bThisThread )
+		{
+			LOG ( ST, ST ) << "PostContinuation fast in this thread";
+			Threads::JobTimer_t dTrack;
+
+			// barrier ensures that no operations till here would be reordered below.
+			std::atomic_thread_fence ( std::memory_order_acquire );
+			handler ();
+			std::atomic_thread_fence ( std::memory_order_release );
+
+			LOG ( ST, ST ) << "strand PostContinuation performed without queuing";
+			return;
+		}
+
+		bool bFirst = Enqueue ( std::move ( handler ) );
+
+		// Add the function to the strand and schedule the strand if required.
+		if ( bFirst )
+		{
+			Invoker_c tInvoker { this };
+			PostContinuationToBackend ( [t=std::move(tInvoker)] () mutable { t.run(); } );
+		}
+	}
+
+	void Kick()
+	{
+		Invoker_c tInvoker { this };
+		PostContinuationToBackend( [t = std::move ( tInvoker )] () mutable { t.run (); } );
+	}
+
+public:
+	explicit Strand_c ( Scheduler_i* pBackend, const char* szName=nullptr )
+		: m_szName { szName }
+		, m_pBackend { pBackend }
+	{}
+
+	void Schedule ( Handler handler, bool bVip ) final
+	{
+		LOG ( ST, ST ) << "Post";
+		bool bFirst = Enqueue ( std::move ( handler ) );
+		if ( bFirst && m_pBackend )
+		{
+			LOG ( ST, ST ) << "Post scheduled invoker to backend";
+			Invoker_c tInvoker { this };
+			m_pBackend->Schedule ( [t=std::move(tInvoker)] () mutable { t.run (); }, bVip );
+		}
+		LOG ( ST, ST ) << "Post finished";
+	}
+
+	void ScheduleContinuation ( Handler handler ) final
+	{
+		LOG ( ST, ST ) << "ScheduleContinuation";
+		PostContinuation ( std::move ( handler ) );
+		LOG ( ST, ST ) << "Post finished";
+	}
+
+	Keeper_t KeepWorking () final
+	{
+		assert ( m_pBackend );
+		return m_pBackend->KeepWorking();
+	}
+
+	bool SetBackend ( Scheduler_i* pBackend ) final
+	{
+		ScopedMutex_t tLock ( m_dMutex );
+		if ( m_bLocked )
+		{
+			if ( m_pBackend ) // everything healthy and work, can't change right now
+				return false;
+
+			assert ( !m_pBackend );
+			m_pBackend = pBackend;
+			Kick();
+		}
+
+		m_pBackend = pBackend;
+		return true;
+	}
+
+	const char * Name () const final { return m_szName; }
+};
+
+Strand_c::Invoker_c::Invoker_c ( Strand_c * pRand )
+	: m_tParentKeeper { pRand->KeepWorking () }
+	, m_pOwner ( pRand )
+{}
+
+Strand_c::Invoker_c::Invoker_c ( Strand_c::Invoker_c && rhs ) noexcept
+	: m_pOwner ( rhs.m_pOwner )
+{
+	m_tParentKeeper.Swap ( rhs.m_tParentKeeper );
+}
+
+Strand_c::Invoker_c & Strand_c::Invoker_c::operator= ( Strand_c::Invoker_c && rhs ) noexcept
+{
+	m_tParentKeeper.Swap ( rhs.m_tParentKeeper );
+	m_pOwner = rhs.m_pOwner;
+	return *this;
+}
+
+void Strand_c::Invoker_c::run ()
+{
+	struct OnInvokerFinished_t
+	{
+		Strand_c::Invoker_c* m_pThis;
+
+		~OnInvokerFinished_t()
+		{
+			bool bMoreHandlers;
+			auto* pOwner = m_pThis->m_pOwner;
+			{
+				ScopedMutex_t tLock ( pOwner->m_dMutex );
+				pOwner->m_OpReadyQueue.Push ( pOwner->m_OpWaitQueue );
+				bMoreHandlers = pOwner->m_bLocked = !pOwner->m_OpReadyQueue.Empty ();
+			}
+
+			LOG ( ST, ST ) << "OnInvokerFinished_t: " << bMoreHandlers;
+
+			if ( !bMoreHandlers )
+			{
+				LOG ( ST, ST ) << "OnInvokerFinished_t, abandoned, unlocked";
+				return;
+			}
+			LOG ( ST, ST ) << "OnInvokerFinished_t, have more, locked";
+
+			Strand_c::Invoker_c tInvoker { *m_pThis };
+//			pOwner->Schedule ( [t=std::move(tInvoker)] () mutable { t.run (); }, true );
+			pOwner->PostContinuationToBackend ( [t = std::move ( tInvoker )] () mutable { t.run (); } );
+		}
+	};
+
+	StrandCallStack_c::Context_c dCtx ( m_pOwner );
+
+	// that will ensure the next handler, if any, will be scheduled on block exit
+	OnInvokerFinished_t VARIABLE_IS_NOT_USED dOnFinished = { this };
+
+	// Run all ready handlers. No lock is required since the ready queue is
+	// accessed only within the strand.
+	while ( !m_pOwner->m_OpReadyQueue.Empty () )
+	{
+		auto * pOp = m_pOwner->m_OpReadyQueue.Front ();
+		m_pOwner->m_OpReadyQueue.Pop ();
+		LOG ( ST, ST ) << "run op: " << pOp;
+		pOp->Complete ( pOp );
+	}
+}
+
+class ThreadPool_c final : public Worker_i
 {
 	using Work = Service_t::Work_c;
 
@@ -811,7 +1024,7 @@ public:
 	}
 };
 
-class AloneThread_c final : public Scheduler_i
+class AloneThread_c final : public Worker_i
 {
 	CSphString m_sName;
 	int m_iThreadNum;
@@ -874,8 +1087,6 @@ public:
 		return Keeper_t ( nullptr, [this] ( void * ) { m_tService.work_finished (); } );
 	}
 
-	int WorkingThreads () const final { return 1; }
-
 	void StopAll () final {}
 
 	static int GetRunners () { return m_iRunningAlones; }
@@ -889,14 +1100,21 @@ public:
 int AloneThread_c::m_iRunningAlones = 0;
 
 
-SchedulerSharedPtr_t MakeThreadPool ( size_t iThreadCount, const char * szName )
+WorkerSharedPtr_t MakeThreadPool ( size_t iThreadCount, const char* szName )
 {
-	return SchedulerSharedPtr_t {new ThreadPool_c ( iThreadCount, szName )};
+	return WorkerSharedPtr_t { new ThreadPool_c ( iThreadCount, szName ) };
 }
 
-SchedulerSharedPtr_t MakeAloneThread ( size_t iOrderNum, const char * szName )
+WorkerSharedPtr_t MakeAloneThread ( size_t iOrderNum, const char* szName )
 {
-	return SchedulerSharedPtr_t {new AloneThread_c ( (int) iOrderNum, szName )};
+	return WorkerSharedPtr_t { new AloneThread_c ( (int)iOrderNum, szName ) };
+}
+
+// Alone scheduler works on top of another scheduler and provides sequental execution of the tasks (each time only one
+// task may be performed, no concurrent execution). It also gives FIFO ordering of the tasks.
+SchedulerSharedPtr_t MakeAloneScheduler ( Scheduler_i* pBase, const char* szName )
+{
+	return SchedulerSharedPtr_t { new Strand_c ( pBase, szName ) };
 }
 
 } // namespace Threads
@@ -969,9 +1187,9 @@ static int g_iMaxChildrenThreads = 1;
 
 
 namespace {
-SchedulerSharedPtr_t& GlobalPoolSingletone ()
+WorkerSharedPtr_t& GlobalPoolSingletone ()
 {
-	static SchedulerSharedPtr_t pPool;
+	static WorkerSharedPtr_t pPool;
 	return pPool;
 }
 }
@@ -979,7 +1197,7 @@ SchedulerSharedPtr_t& GlobalPoolSingletone ()
 void StartGlobalWorkPool ()
 {
 	sphLogDebug ( "StartGlobalWorkpool" );
-	SchedulerSharedPtr_t & pPool = GlobalPoolSingletone ();
+	WorkerSharedPtr_t& pPool = GlobalPoolSingletone ();
 	pPool = new ThreadPool_c ( g_iMaxChildrenThreads, "work" );
 }
 
@@ -989,9 +1207,9 @@ void SetMaxChildrenThreads ( int iThreads )
 	g_iMaxChildrenThreads = Max ( 1, iThreads );
 }
 
-Threads::Scheduler_i * GlobalWorkPool ()
+Threads::Worker_i * GlobalWorkPool ()
 {
-	SchedulerSharedPtr_t& pPool = GlobalPoolSingletone ();
+	WorkerSharedPtr_t& pPool = GlobalPoolSingletone ();
 	assert ( pPool && "invoke StartGlobalWorkPool first");
 	return pPool;
 }
@@ -1005,34 +1223,34 @@ void WipeGlobalSchedulerOnShutdownAndFork ()
 #endif
 
 	Threads::RegisterIterator ( [] ( ThreadFN & fnHandler ) {
-		SchedulerSharedPtr_t & pPool = GlobalPoolSingletone ();
+		WorkerSharedPtr_t& pPool = GlobalPoolSingletone ();
 		if ( pPool )
 			pPool->IterateChildren ( fnHandler );
 	} );
 
 	searchd::AddOnForkCleanupCb ( [] {
-		SchedulerSharedPtr_t & pPool = GlobalPoolSingletone ();
+		WorkerSharedPtr_t& pPool = GlobalPoolSingletone ();
 		if ( pPool )
 			pPool->DiscardOnFork ();
 	} );
 
 	searchd::AddShutdownCb ( [] {
-		SchedulerSharedPtr_t & pPool = GlobalPoolSingletone ();
+		WorkerSharedPtr_t& pPool = GlobalPoolSingletone ();
 		if ( pPool )
 			pPool->StopAll ();
 	} );
 }
 
-void WipeSchedulerOnFork ( Threads::Scheduler_i * pScheduler )
+void WipeSchedulerOnFork ( Threads::Worker_i* pWorker )
 {
-	Threads::RegisterIterator ( [pScheduler] ( ThreadFN & fnHandler ) {
-		if ( pScheduler )
-			pScheduler->IterateChildren ( fnHandler );
+	Threads::RegisterIterator ( [pWorker] ( ThreadFN& fnHandler ) {
+		if ( pWorker )
+			pWorker->IterateChildren ( fnHandler );
 	} );
 
-	searchd::AddOnForkCleanupCb ( [pScheduler] {
-		if ( pScheduler )
-			pScheduler->DiscardOnFork ();
+	searchd::AddOnForkCleanupCb ( [pWorker] {
+		if ( pWorker )
+			pWorker->DiscardOnFork();
 	} );
 }
 
@@ -1123,7 +1341,7 @@ void Threads::IterateActive ( ThreadFN fnHandler )
 	g_dIteratorsList ().IterateActive ( std::move ( fnHandler ) );
 }
 
-Threads::Scheduler_i * GetAloneScheduler ( int iMaxThreads, const char * szName )
+Threads::Scheduler_i * MakeSingleThreadExecutor ( int iMaxThreads, const char * szName )
 {
 	if ( iMaxThreads>0 && Threads::AloneThread_c::GetRunners ()>=iMaxThreads )
 		return nullptr;

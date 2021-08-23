@@ -581,6 +581,11 @@ void CoYield ()
 	CoWorker ()->Yield_();
 }
 
+void CoReschedule()
+{
+	CoWorker()->Reschedule();
+}
+
 Resumer_fn MakeCoroExecutor ( Handler fnHandler )
 {
 	auto* pWorker = CoWorker ()->MakeWorker ( std::move ( fnHandler ) );
@@ -612,6 +617,36 @@ void WaitForDeffered ( Waiter_t&& dWaiter )
 {
 	// do nothing. Moved dWaiter will be released outside the coro after yield.
 	CoYieldWith ( [capturedWaiter = std::move ( dWaiter ) ] {} );
+}
+
+int WaitForN ( int iN, std::initializer_list<Handler> dTasks )
+{
+	assert ( iN > 0 && "trigger N must be >0" );
+	assert ( dTasks.size() > 0 && dTasks.size() >= iN && "num of tasks to wait must be non-zero, and not greater than trigger" );
+	int iRes = -1;
+
+	// need to store parentSched, since CoYieldWith executed _outside_ coroutine, so it has _no_ scheduler!
+	auto pParentSched = CoCurrentScheduler();
+
+	CoYieldWith ( [&iRes, &dTasks, iN, pParentSched, fnResumer = CurrentRestarter()] {
+		SharedPtr_t<std::atomic<int>> pCounter { new std::atomic<int> };
+		pCounter->store ( 0, std::memory_order_release );
+		int i = 0;
+		for ( const auto& fnHandler : dTasks )
+		{
+			CoGo ( [pCounter, fnResumer, &fnHandler, i, iN, &iRes] {
+				fnHandler();
+				if ( pCounter->fetch_add ( 1, std::memory_order_acq_rel ) == iN - 1 )
+				{
+					iRes = i;
+					fnResumer();
+				}
+			},
+					pParentSched );
+			++i;
+		}
+	} );
+	return iRes;
 }
 }
 

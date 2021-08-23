@@ -236,7 +236,7 @@ static volatile bool						g_bNeedRotate = false;		// true if there were pending 
 static volatile bool						g_bInRotate = false;		// true while we are rotating
 static volatile bool						g_bReloadForced = false;	// true in case reload issued via SphinxQL
 
-static SchedulerSharedPtr_t					g_pTickPoolThread;
+static WorkerSharedPtr_t					g_pTickPoolThread;
 static CSphVector<CSphNetLoop*>				g_dNetLoops;
 
 /// command names

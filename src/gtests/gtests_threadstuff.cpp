@@ -44,12 +44,3 @@ TEST ( ThreadPool, Counter100 )
 	ASSERT_EQ ( v, 100 );
 }
 
-TEST ( ThreadPool, Counter100c )
-{
-	SetMaxChildrenThreads ( 300 );
-	StartGlobalWorkPool();
-	int v = 0;
-	for ( int i = 0; i<100000; ++i )
-		Threads::CallCoroutine ( [&] { ++v; } );
-	ASSERT_EQ ( v, 100000 );
-}

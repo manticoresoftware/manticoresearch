@@ -600,17 +600,12 @@ Handler CurrentRestarter ()
 
 Waiter_t DefferedRestarter ()
 {
-	return Waiter_t ( nullptr, [fnProceed= CoWorker ()->SecondaryRestarter ()] ( void * )
-	{
-		fnProceed ();
-	} );
+	return { nullptr, [fnProceed= CoWorker ()->SecondaryRestarter ()] ( void * ) { fnProceed (); }};
 }
 
 Waiter_t DefferedContinuator ()
 {
-	return Waiter_t ( nullptr, [fnProceed = CoWorker ()->Continuator ()] ( void * ) {
-		fnProceed ();
-	} );
+	return { nullptr, [fnProceed = CoWorker ()->Continuator ()] ( void * ) { fnProceed (); }};
 }
 
 void WaitForDeffered ( Waiter_t&& dWaiter )
@@ -816,11 +811,13 @@ static const DWORD uxFE = ~ux01; // mask for pending flag flag (0xFFFFFFFE)
  * 2. increase N of readers */
 bool Threads::CoroRWLock_c::ReadLock ()
 {
-	assert ( IsInsideCoroutine () );
 	auto uPrevState = m_uLock.load ( std::memory_order_acquire ); // memory_order_acquire
 	do {
 		if ( uPrevState & ux03 ) // check only pending and wlock bits
-			CoWorker ()->Reschedule ();
+		{
+			assert ( IsInsideCoroutine() );
+			CoWorker()->Reschedule();
+		}
 		uPrevState &= uxFC;
 	} while ( !m_uLock.compare_exchange_weak ( uPrevState, uPrevState+ux04, std::memory_order_acq_rel ) );
 	assert ( ( uPrevState & uxFC )!=uxFC ); // hope, 30 bit is enough to count all re-entered r-locks.
@@ -835,8 +832,6 @@ bool Threads::CoroRWLock_c::ReadLock ()
  */
  bool Threads::CoroRWLock_c::WriteLock ()
 {
-	assert ( IsInsideCoroutine () );
-
 	// prohibit further readers; from setting pending bit they may only release but no more acquire.
 	auto uMyState = m_uLock.fetch_or ( ux01, std::memory_order_acq_rel );
 
@@ -846,7 +841,10 @@ bool Threads::CoroRWLock_c::ReadLock ()
 
 	do {
 		if ( uMyState & uxFE ) // check all except pending bit
-			CoWorker ()->Reschedule (); // works like spin-lock, but that is ok for now
+		{
+			assert ( IsInsideCoroutine() );
+			CoWorker()->Reschedule(); // works like spin-lock, but that is ok for now
+		}
 
 		// if we're waiting after another w-lock, it releases pending bit
 		// we need to reinstall it in order to keep readers out. Target state is just pure 2-lock bit here.
@@ -900,7 +898,6 @@ bool Threads::CoroRWLock_c::UpgradeLock ()
  */
 bool Threads::CoroRWLock_c::Unlock ()
 {
-	assert ( IsInsideCoroutine () );
 	auto uMyState = m_uLock.load ( std::memory_order_acquire );  // memory_order_acquire
 	if ( ( uMyState & uxFE )==ux02 ) // was w-locked, reset keeping only pending bit
 		m_uLock.fetch_and ( ux01, std::memory_order_acq_rel ); // released exclusive lock memory_order_release
@@ -917,18 +914,17 @@ Threads::CoroSpinlock_c::~CoroSpinlock_c ()
 
 void Threads::CoroSpinlock_c::Lock()
 {
-	assert ( Threads::IsInsideCoroutine () );
 	while ( true )
 	{
 		bool bCurrent = false;
 		if ( m_bLocked.compare_exchange_weak ( bCurrent, true, std::memory_order_acquire ) )
 			break;
+		assert ( Threads::IsInsideCoroutine() );
 		Threads::CoWorker ()->Reschedule ();
 	}
 }
 
 void Threads::CoroSpinlock_c::Unlock()
 {
-	assert ( Threads::IsInsideCoroutine () );
 	m_bLocked.store ( false, std::memory_order_release );
 }

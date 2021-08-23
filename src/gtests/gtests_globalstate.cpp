@@ -61,9 +61,13 @@ public:
 		Threads::PrepareMainThread ( &cTopOfMainStack );
 		CreateSynonymsFile ();
 		CreateSynonymsFile ( g_sMagic );
-
+		auto iThreads = sphCpuThreadsCount();
+		//		iThreads = 1; // uncomment if want to run all coro tests in single thread
+		SetMaxChildrenThreads ( iThreads );
+		WipeGlobalSchedulerOnShutdownAndFork();
+		StartGlobalWorkPool();
 #if _WIN32
-			// init WSA on Windows
+		// init WSA on Windows
 	WSADATA wsa_data;
 	int wsa_startup_err;
 

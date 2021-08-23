@@ -17,6 +17,6 @@
 
 #include "sphinxstd.h"
 
-void EnqueueForOptimize ( CSphString sIndex, int iCutoff=0, int iFrom=-1, int iTo=-1, const char* szUvarFilter = nullptr );
+void EnqueueForOptimize ( CSphString sIndex, int iCutoff = 0, int iFrom = -1, int iTo = -1, const char* szUvarFilter = nullptr, bool byOrder = true );
 
 #endif //MANTICORE_TASKOPTIMIZE_H

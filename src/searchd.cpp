@@ -13471,10 +13471,10 @@ void HandleMysqlOptimizeManual ( RowBuffer_i & tOut, const DebugCmd::DebugComman
 	if ( tCmd.bOpt("sync") )
 	{
 		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( tCmd.iOpt("cutoff"), iFrom, iTo, nullptr );
+			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( tCmd.iOpt("cutoff"), iFrom, iTo, nullptr, !tCmd.bOpt ( "byid" ) );
 	} else
-		EnqueueForOptimize ( sIndex, tCmd.iOpt ( "cutoff" ), iFrom, iTo );
-	tOut.Ok ();
+		EnqueueForOptimize ( sIndex, tCmd.iOpt ( "cutoff" ), iFrom, iTo, nullptr, !tCmd.bOpt ( "byid" ) );
+	tOut.Ok();
 }
 
 // command 'drop [chunk] X [from] <IDX> [option...]'
@@ -13493,9 +13493,9 @@ void HandleMysqlDropManual ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t 
 	if ( tCmd.bOpt("sync") )
 	{
 		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( 0, iChunk, -1, nullptr );
+			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( 0, iChunk, -1, nullptr, !tCmd.bOpt ( "byid" ) );
 	} else
-		EnqueueForOptimize ( sIndex, 0, iChunk, -1 );
+		EnqueueForOptimize ( sIndex, 0, iChunk, -1, nullptr, !tCmd.bOpt ( "byid" ) );
 	tOut.Ok ();
 }
 
@@ -13515,10 +13515,10 @@ void HandleMysqlCompress ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & 
 	if ( tCmd.bOpt("sync") )
 	{
 		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( 0, -1, iChunk, nullptr );
+			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( 0, -1, iChunk, nullptr, !tCmd.bOpt ( "byid" ) );
 	} else
-		EnqueueForOptimize ( sIndex, 1, iChunk, iChunk );
-	tOut.Ok ();
+		EnqueueForOptimize ( sIndex, 1, iChunk, iChunk, nullptr, !tCmd.bOpt ( "byid" ) );
+	tOut.Ok();
 }
 
 // command 'split <IDX> [chunk] N on @uservar [option...]'
@@ -13560,9 +13560,9 @@ void HandleMysqlSplit ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCm
 	}
 
 	if ( tCmd.bOpt ( "sync" ) )
-		pRTIndex->Optimize ( -1, iChunk, iChunk, tCmd.m_sParam2.cstr() );
+		pRTIndex->Optimize ( -1, iChunk, iChunk, tCmd.m_sParam2.cstr(), !tCmd.bOpt ( "byid" ) );
 	else
-		EnqueueForOptimize ( sIndex, -1, iChunk, iChunk, tCmd.m_sParam2.cstr() );
+		EnqueueForOptimize ( sIndex, -1, iChunk, iChunk, tCmd.m_sParam2.cstr(), !tCmd.bOpt ( "byid" ) );
 	tOut.Ok ();
 }
 
@@ -14000,7 +14000,7 @@ void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	if ( tStmt.m_tQuery.m_bSync )
 	{
 		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize(tStmt.m_tQuery.m_iCutoff,-1,-1,nullptr);
+			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize(tStmt.m_tQuery.m_iCutoff,-1,-1,nullptr,true);
 
 		return;
 	}

@@ -23,17 +23,19 @@ struct OptimizeTask_t
 	int m_iCutoff;
 	CSphString m_sIndex;
 	CSphString m_sFilter;
+	bool m_bByOrder;
 
-	OptimizeTask_t (CSphString sIndex, int iCutoff, int iFrom, int iTo, const char* szFilter)
+	OptimizeTask_t (CSphString sIndex, int iCutoff, int iFrom, int iTo, const char* szFilter, bool bByOrder)
 	: m_iFrom (iFrom)
 	, m_iTo (iTo)
 	, m_iCutoff (iCutoff)
 	, m_sIndex {std::move (sIndex)}
 	, m_sFilter ( szFilter )
+	, m_bByOrder ( bByOrder )
 	{}
 };
 
-void EnqueueForOptimize ( CSphString sIndex, int iCutoff, int iFrom, int iTo, const char* szUvarFilter )
+void EnqueueForOptimize ( CSphString sIndex, int iCutoff, int iFrom, int iTo, const char* szUvarFilter, bool bByOrder )
 {
 	static int iOptimizeTask = -1;
 	if ( iOptimizeTask<0 )
@@ -56,11 +58,11 @@ void EnqueueForOptimize ( CSphString sIndex, int iCutoff, int iFrom, int iTo, co
 				// FIXME: MVA update would wait w-lock here for a very long time
 				assert ( dReadLocked->m_eType==IndexType_e::RT );
 				const char* szFilter = pTask->m_sFilter.IsEmpty() ? nullptr : pTask->m_sFilter.cstr();
-				static_cast<RtIndex_i*>( dReadLocked->m_pIndex )->Optimize (pTask->m_iCutoff, pTask->m_iFrom, pTask->m_iTo, szFilter);
+				static_cast<RtIndex_i*>( dReadLocked->m_pIndex )->Optimize (pTask->m_iCutoff, pTask->m_iFrom, pTask->m_iTo, szFilter, pTask->m_bByOrder);
 			},
 			[] ( void* pPayload ) // releaser
 			{
 				CSphScopedPtr<OptimizeTask_t> pTask { (OptimizeTask_t *) pPayload };
 			}, 1 );
-	TaskManager::StartJob ( iOptimizeTask, new OptimizeTask_t (std::move(sIndex), iCutoff, iFrom, iTo, szUvarFilter) );
+	TaskManager::StartJob ( iOptimizeTask, new OptimizeTask_t (std::move(sIndex), iCutoff, iFrom, iTo, szUvarFilter, bByOrder) );
 }

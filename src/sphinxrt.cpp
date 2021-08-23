@@ -599,6 +599,10 @@ const RtWord_t* RtWordReader_c::UnzipWord ()
 	const BYTE * pIn = m_pCur;
 	if ( m_bWordDict )
 	{
+		// 1dddmmmm -> delta, match (packed into 1 byte)
+		// 0ddddddd mmmmmmmm -> delta, match (occupy 2 bytes)
+		// then delta bytes of symbols
+		// overwrites previous token: delta symbols starting from match. At the end (delta+match) put 0-terminator
 		BYTE iMatch, iDelta, uPacked;
 		uPacked = *pIn++;
 		if ( uPacked & 0x80 )
@@ -1445,7 +1449,7 @@ bool RtIndex_c::AddDocument ( ISphHits * pHits, const InsertDocData_t & tDoc, bo
 	if ( pAcc )
 		pAcc->AddDocument ( pHits, tDoc, bReplace, m_tSchema.GetRowSize(), pStoredDoc );
 
-	return ( pAcc!=NULL );
+	return !pAcc;
 }
 
 
@@ -1485,18 +1489,12 @@ void RtAccum_t::ResetDict ()
 
 const BYTE * RtAccum_t::GetPackedKeywords () const
 {
-	if ( !m_dPackedKeywords.IsEmpty() )
-		return m_dPackedKeywords.begin();
-	else
-		return m_pDictRt->GetPackedKeywords();
+	return m_dPackedKeywords.IsEmpty() ? m_pDictRt->GetPackedKeywords() : m_dPackedKeywords.begin();
 }
 
 int RtAccum_t::GetPackedLen () const
 {
-	if ( !m_dPackedKeywords.IsEmpty() )
-		return m_dPackedKeywords.GetLength();
-	else
-		return m_pDictRt->GetPackedLen();
+	return m_dPackedKeywords.IsEmpty() ? m_pDictRt->GetPackedLen() : m_dPackedKeywords.GetLength();
 }
 
 void RtAccum_t::Sort ()
@@ -1894,7 +1892,7 @@ struct AccumDocHits_t
 
 struct CmpDocHitIndex_t
 {
-	inline bool IsLess ( const AccumDocHits_t & a, const AccumDocHits_t & b ) const
+	inline static bool IsLess ( const AccumDocHits_t & a, const AccumDocHits_t & b )
 	{
 		return ( a.m_tDocID<b.m_tDocID || ( a.m_tDocID==b.m_tDocID && a.m_iDocIndex<b.m_iDocIndex ) );
 	}
@@ -5168,7 +5166,7 @@ bool RtQwordSetup_t::QwordSetup ( ISphQword * pQword ) const
 {
 	// there was two dynamic_casts here once but they're not necessary
 	// maybe it's worth to rewrite class hierarchy to avoid c-casts here?
-	const RtIndex_c * pIndex = (const RtIndex_c *)m_pIndex;
+	const auto * pIndex = (const RtIndex_c *)m_pIndex;
 	return pQword->SetupScan ( pIndex, m_iSeg, m_tGuard );
 }
 
@@ -5614,7 +5612,7 @@ void RtIndex_c::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 			continue;
 
 		int dWildcard [ SPH_MAX_WORD_LEN + 1 ];
-		int * pWildcard = ( sphIsUTF8 ( sWildcard ) && sphUTF8ToWideChar ( sWildcard, dWildcard, SPH_MAX_WORD_LEN ) ) ? dWildcard : NULL;
+		int * pWildcard = ( sphIsUTF8 ( sWildcard ) && sphUTF8ToWideChar ( sWildcard, dWildcard, SPH_MAX_WORD_LEN ) ) ? dWildcard : nullptr;
 
 		// walk those checkpoints, check all their words
 		for ( DWORD uPoint : dPoints )

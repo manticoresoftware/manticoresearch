@@ -3760,6 +3760,7 @@ bool RtIndex_c::SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, co
 
 	if ( pSavedChunkId )
 		*pSavedChunkId = iSavedChunkId;
+	Preread();
 	return true;
 }
 
@@ -7950,6 +7951,7 @@ bool RtIndex_c::CompressOneChunk ( int iChunkID )
 
 	// we might remove old index files
 	sphUnlinkIndex ( sOld.cstr (), true );
+	Preread();
 	return true;
 }
 
@@ -8122,6 +8124,7 @@ bool RtIndex_c::SplitOneChunk ( int iChunkID, const char* szUvarFilter )
 
 	// we might remove old index files
 	sphUnlinkIndex ( sOld.cstr (), true );
+	Preread();
 	return true;
 }
 
@@ -8235,6 +8238,7 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID )
 	sphUnlinkIndex ( sOldest.cstr(), true );
 
 	// FIXME: wipe out 'merged' index files in case of error
+	Preread();
 	return true;
 }
 

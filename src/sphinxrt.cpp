@@ -828,9 +828,9 @@ public:
 	void				Optimize ( int iCutoff, int iFromID, int iToID, const char * szUvarFilter, bool bByOrder ) final REQUIRES ( m_tChunkLock );
 	void				CommonMerge ( std::function<bool ( int*, int*)>&& fnSelector, const char* szUvarFilter=nullptr ) REQUIRES ( m_tChunkLock );
 	void				DropDiskChunk ( int iChunkID ) REQUIRES ( m_tOptimizingLock );
-	bool				CompressOneChunk ( int iChunk ) REQUIRES ( m_tOptimizingLock );
+	bool				CompressOneChunk ( int iChunkID ) REQUIRES ( m_tOptimizingLock );
 	bool				MergeTwoChunks ( int iA, int iB ) REQUIRES ( m_tOptimizingLock );
-	bool				SplitOneChunk ( int iChunk, const char* szUvarFilter ) REQUIRES ( m_tOptimizingLock );
+	bool				SplitOneChunk ( int iChunkID, const char* szUvarFilter ) REQUIRES ( m_tOptimizingLock );
 	bool				SplitOneChunkFast ( int iChunkID, const char * szUvarFilter, bool& bResult ) REQUIRES ( m_tOptimizingLock );
 	int					ChunkIdxByChunkID (int iChunkID) const REQUIRES ( m_tChunkLock );
 	int					ChunkIDByChunkIdx (int iChunkIdx) const REQUIRES ( m_tChunkLock );

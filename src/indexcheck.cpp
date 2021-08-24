@@ -18,6 +18,7 @@
 #include "secondaryindex.h"
 #include "docstore.h"
 #include "conversion.h"
+#include "columnarlib.h"
 
 
 DebugCheckError_c::DebugCheckError_c ( FILE * pFile )
@@ -305,6 +306,7 @@ private:
 	void	CheckAttributes();
 	void	CheckKillList() const;
 	void	CheckBlockIndex();
+	void	CheckColumnar();
 	void	CheckDocidLookup();
 	void	CheckDocids();
 	void	CheckDocstore();
@@ -398,7 +400,7 @@ bool DiskIndexChecker_c::OpenFiles ( CSphString & sError )
 	if ( !m_tDeadRowReader.Open ( GetFilename(SPH_EXT_SPM).cstr(), sError ) )
 		return m_tReporter.Fail ( "unable to open dead-row map: %s", sError.cstr() );
 
-	if ( !m_tAttrReader.Open ( GetFilename(SPH_EXT_SPA).cstr(), sError ) )
+	if ( m_tSchema.HasNonColumnarAttrs() && !m_tAttrReader.Open ( GetFilename(SPH_EXT_SPA).cstr(), sError ) )
 		return m_tReporter.Fail ( "unable to open attributes: %s", sError.cstr() );
 
 	if ( m_tSchema.GetAttr ( sphGetBlobLocatorName() ) )
@@ -417,11 +419,7 @@ bool DiskIndexChecker_c::OpenFiles ( CSphString & sError )
 		m_bHasDocstore = true;
 	}
 
-	CSphAutofile tDocinfo ( GetFilename(SPH_EXT_SPA), SPH_O_READ, sError );
-	if ( tDocinfo.GetFD()<0 )
-		return false;
-
-	m_bIsEmpty = m_tAttrReader.GetFilesize()==0;
+	m_bIsEmpty = m_iNumRows==0;
 
 	return true;
 }
@@ -443,6 +441,7 @@ void DiskIndexChecker_c::Check()
 	CheckDocs();
 	CheckAttributes();
 	CheckBlockIndex();
+	CheckColumnar();
 	CheckKillList();
 	CheckDocstore();
 
@@ -981,6 +980,9 @@ void DiskIndexChecker_c::CheckDocs()
 
 void DiskIndexChecker_c::CheckAttributes()
 {
+	if ( !m_tSchema.HasNonColumnarAttrs() )
+		return;
+
 	const int64_t iMinMaxStart = sizeof(DWORD) * m_iMinMaxIndex;
 	const int64_t iMinMaxEnd = sizeof(DWORD) * m_iMinMaxIndex + sizeof(DWORD) * ( m_iDocinfoIndex+1 ) * m_tSchema.GetRowSize() * 2;
 	const int64_t iMinMaxBytes = iMinMaxEnd - iMinMaxStart;
@@ -1055,6 +1057,9 @@ void DiskIndexChecker_c::CheckKillList() const
 
 void DiskIndexChecker_c::CheckBlockIndex()
 {
+	if ( !m_tSchema.HasNonColumnarAttrs() )
+		return;
+
 	m_tReporter.Msg ( "checking attribute blocks index..." );
 
 	int64_t iAllRowsTotal = m_iNumRows + (m_iDocinfoIndex+1)*2;
@@ -1160,6 +1165,19 @@ void DiskIndexChecker_c::CheckBlockIndex()
 }
 
 
+void DiskIndexChecker_c::CheckColumnar()
+{
+	if ( !m_tSchema.HasColumnarAttrs() )
+		return;
+
+	m_tReporter.Msg ( "checking columnar storage..." );
+
+	CheckColumnarStorage ( GetFilename(SPH_EXT_SPC), (DWORD)m_iNumRows,
+		[this]( const char * szError ){ m_tReporter.Fail ( "%s", szError ); },
+		[this]( const char * szProgress ){ m_tReporter.Progress ( "%s", szProgress ); } );
+}
+
+
 void DiskIndexChecker_c::CheckDocidLookup()
 {
 	CSphString sError;
@@ -1175,6 +1193,9 @@ void DiskIndexChecker_c::CheckDocidLookup()
 		return;
 	}
 	int64_t iLookupEnd = tLookup.GetFilesize();
+
+	const CSphColumnInfo * pId = m_tSchema.GetAttr("id");
+	assert(pId);
 
 	CSphFixedVector<CSphRowitem> dRow ( m_tSchema.GetRowSize() );
 	m_tAttrReader.SeekTo ( 0, (int) dRow.GetLengthBytes() );
@@ -1227,8 +1248,7 @@ void DiskIndexChecker_c::CheckDocidLookup()
 				tDelta = tLookup.UnzipOffset();
 				tRowID = tLookup.GetDword();
 				if ( tDelta<0 )
-					m_tReporter.Fail ( "invalid docid delta " INT64_FMT " at row %u, checkpoint %d, doc %d, last docid " INT64_FMT,
-						tDocID, tRowID, iCp, i, tLastDocID );
+					m_tReporter.Fail ( "invalid docid delta " INT64_FMT " at row %u, checkpoint %d, doc %d, last docid " INT64_FMT, tDocID, tRowID, iCp, i, tLastDocID );
 				else
 					tDocID = tLastDocID + tDelta;
 
@@ -1236,7 +1256,7 @@ void DiskIndexChecker_c::CheckDocidLookup()
 
 			if ( tRowID>=m_iNumRows )
 				m_tReporter.Fail ( "rowid %u out of bounds " INT64_FMT, tRowID, m_iNumRows );
-			else
+			else if ( !pId->IsColumnar() )
 			{
 				// read only docid
 				m_tAttrReader.SeekTo ( dRow.GetLengthBytes() * tRowID, sizeof(DocID_t) );
@@ -1258,17 +1278,20 @@ void DiskIndexChecker_c::CheckDocidLookup()
 		iCp++;
 	}
 
-	for ( int i=0; i<m_iNumRows; i++ )
+	if ( !pId->IsColumnar() )
 	{
-		if ( dRowids.BitGet ( i ) )
-			continue;
+		for ( int i=0; i<m_iNumRows; i++ )
+		{
+			if ( dRowids.BitGet ( i ) )
+				continue;
 
-		m_tAttrReader.SeekTo ( dRow.GetLengthBytes() * i, sizeof(DocID_t) );
-		m_tAttrReader.GetBytes ( dRow.Begin(), sizeof(DocID_t) );
+			m_tAttrReader.SeekTo ( dRow.GetLengthBytes() * i, sizeof(DocID_t) );
+			m_tAttrReader.GetBytes ( dRow.Begin(), sizeof(DocID_t) );
 
-		DocID_t tDocID = sphGetDocID ( dRow.Begin() );
+			DocID_t tDocID = sphGetDocID ( dRow.Begin() );
 		
-		m_tReporter.Fail ( "row %u(" INT64_FMT ") not mapped at lookup, docid " INT64_FMT, i, m_iNumRows, tDocID );
+			m_tReporter.Fail ( "row %u(" INT64_FMT ") not mapped at lookup, docid " INT64_FMT, i, m_iNumRows, tDocID );
+		}
 	}
 }
 

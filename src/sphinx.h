@@ -2711,11 +2711,14 @@ public:
 };
 
 
-struct UpdatedRowData_t
+struct RowToUpdateData_t
 {
-	CSphRowitem *		m_pRow;		/// row in the index
+	const CSphRowitem *	m_pRow;		/// row in the index
 	int					m_iIdx;		/// idx in updateset
 };
+
+using RowsToUpdateData_t = CSphVector<RowToUpdateData_t>;
+using RowsToUpdate_t = VecTraits_T<RowToUpdateData_t>;
 
 class Histogram_i;
 class HistogramContainer_c;
@@ -2747,7 +2750,6 @@ struct UpdateContext_t
 	BYTE *									m_pBlobPool {nullptr};
 	IndexSegment_c *						m_pSegment {nullptr};
 
-	CSphVector<UpdatedRowData_t>			m_dRowsToUpdate;
 	CSphFixedVector<UpdatedAttribute_t>		m_dUpdatedAttrs;	// manipulation schema (1 item per column of schema)
 
 	CSphBitvec			m_dSchemaUpdateMask;
@@ -2778,9 +2780,9 @@ protected:
 
 	bool				Update_CheckAttributes ( const UpdateContext_t & tCtx, CSphString & sError );
 	static bool			Update_PrepareListOfUpdatedAttributes ( UpdateContext_t & tCtx, CSphString & sError );
-	static bool			Update_InplaceJson ( UpdateContext_t & tCtx, CSphString & sError, bool bDryRun );
-	bool				Update_Blobs ( UpdateContext_t & tCtx, bool & bCritical, CSphString & sError );
-	static void			Update_Plain ( UpdateContext_t & tCtx );
+	static bool			Update_InplaceJson ( const RowsToUpdate_t& dRows, UpdateContext_t & tCtx, CSphString & sError, bool bDryRun );
+	bool				Update_Blobs ( const RowsToUpdate_t& dRows, UpdateContext_t & tCtx, bool & bCritical, CSphString & sError );
+	static void			Update_Plain ( const RowsToUpdate_t& dRows, UpdateContext_t & tCtx );
 	static bool			Update_HandleJsonWarnings ( UpdateContext_t & tCtx, int iUpdated, CSphString & sWarning, CSphString & sError );
 };
 
@@ -2922,7 +2924,6 @@ public:
 public:
 	/// returns non-negative amount of actually found and updated records on success
 	/// on failure, -1 is returned and GetLastError() contains error message
-	/// fnLocker, if provided, used to lock affected row during update for exclusive access
 	int							UpdateAttributes ( AttrUpdateSharedPtr_t pUpd, bool & bCritical, CSphString & sError, CSphString & sWarning );
 
 	/// update accumulating state

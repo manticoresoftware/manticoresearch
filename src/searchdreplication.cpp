@@ -2084,6 +2084,11 @@ bool CommitMonitor_c::Update ( bool bCluster, CSphString & sError )
 	bool bUpdateAPI = tCmd.m_eCommand==ReplicationCommand_e::UPDATE_API;
 	assert ( bUpdateAPI || tCmd.m_pUpdateCond );
 
+	// fixme! Provide fine-grain locking.
+	// that is - we don't lock right now, but provide locking functor (which executes r-locking or w-locking) over internal index structures,
+	// NOT over index descriptor, as it owns nothing!
+	// that is no difference for solid (plain) indexes, but is important for complex (distributed, rt), as we can then acquire/release lock
+	// sequentally for different index parts (chunks, segments)
 	if ( tCmd.m_bBlobUpdate )
 	{
 		ServedDescWPtr_c tDesc ( pServed );
@@ -4693,7 +4698,7 @@ public:
 		if ( !m_pIndexDesc )
 			return;
 
-		RtIndex_i * pIndex = (RtIndex_i *)m_pIndexDesc->m_pIndex;
+		auto * pIndex = (RtIndex_i *)m_pIndexDesc->m_pIndex;
 		pIndex->EnableSave();
 
 		m_pIndexDesc = nullptr;
@@ -4715,7 +4720,7 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 
 	CSphVector<CSphString> dIndexFiles;
 	IndexSaveGuard_t tIndexSaveGuard ( pIndexDesc );
-	RtIndex_i * pIndex = (RtIndex_i *)pIndexDesc->m_pIndex;
+	auto * pIndex = (RtIndex_i *)pIndexDesc->m_pIndex;
 	pIndex->LockFileState ( dIndexFiles );
 
 	CSphString sIndexPath = pIndexDesc->m_sIndexPath;

@@ -845,7 +845,7 @@ private:
 		++m_iDoc;
 	}
 
-	constRtSegmentRefPtf_t		m_pSeg;
+	ConstRtSegmentRefPtf_t		m_pSeg;
 	CSphFixedVector<Slice_t>	m_dDoclist { 0 };
 	CSphMatch					m_tMatch;
 	RtDocReader_c				m_tDocReader;

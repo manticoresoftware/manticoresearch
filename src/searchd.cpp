@@ -15121,7 +15121,7 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 		return;
 	}
 
-	RtIndex_i * pRtIndex = (RtIndex_i*)pWriteLocked->m_pIndex;
+	auto * pRtIndex = (RtIndex_i*)pWriteLocked->m_pIndex;
 
 	// get all table settings as a string
 	CSphString sCreateTable = BuildCreateTable ( pWriteLocked->m_pIndex->GetName(), pWriteLocked->m_pIndex, pRtIndex->GetInternalSchema() );

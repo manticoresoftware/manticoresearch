@@ -118,8 +118,7 @@ void CSphAutofile::SetTemporary()
 
 const char * CSphAutofile::GetFilename() const
 {
-	assert ( m_sFilename.cstr() );
-	return m_sFilename.cstr();
+	return m_sFilename.scstr();
 }
 
 

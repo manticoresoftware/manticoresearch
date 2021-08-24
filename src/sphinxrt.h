@@ -204,8 +204,8 @@ public:
 
 							RtSegment_t ( DWORD uDocs );
 
-	int64_t					GetUsedRam();				// get cached ram usage counter
-	void					UpdateUsedRam();			// recalculate ram usage, update index ram counter
+	int64_t					GetUsedRam() const;				// get cached ram usage counter
+	void					UpdateUsedRam() const;			// recalculate ram usage, update index ram counter
 	DWORD					GetMergeFactor() const;
 	int						GetStride() const;
 
@@ -221,7 +221,7 @@ public:
 	void					AddRemoveColumnarAttr ( bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, const CSphString & sPath, CSphString & sError );
 
 private:
-	int64_t					m_iUsedRam = 0;			///< ram usage counter
+	mutable int64_t			m_iUsedRam = 0;			///< ram usage counter
 
 							~RtSegment_t () final;
 
@@ -229,7 +229,7 @@ private:
 };
 
 using RtSegmentRefPtf_t = CSphRefcountedPtr<RtSegment_t>;
-using constRtSegmentRefPtf_t = CSphRefcountedPtr<const RtSegment_t>;
+using ConstRtSegmentRefPtf_t = CSphRefcountedPtr<const RtSegment_t>;
 
 class RtWordReader_c
 {
@@ -292,7 +292,6 @@ ByteBlob_t GetHitsBlob ( const RtSegment_t* pSeg, const RtDoc_t* pDoc );
 class CSphSource_StringVector : public CSphSource_Document
 {
 public:
-	explicit			CSphSource_StringVector ( const VecTraits_T<const char *> &dFields, const CSphSchema & tSchema );
 	explicit			CSphSource_StringVector ( const VecTraits_T<VecTraits_T<const char >> &dFields, const CSphSchema &tSchema );
 						~CSphSource_StringVector () override = default;
 

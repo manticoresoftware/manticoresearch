@@ -2085,7 +2085,7 @@ static bool SaveRtIndex ( Index_t & tIndex, CSphString & sWarning, CSphString & 
 		return false;
 
 	wrChunk.PutDword ( tIndex.m_iSegmentSeq );
-	wrChunk.PutDword ( 0 ); // m_dRamChunks.GetLength()
+	wrChunk.PutDword ( 0 ); // N of RAM segs
 
 	// field lengths
 	wrChunk.PutDword ( tIndex.m_dSchemaFields.GetLength() );

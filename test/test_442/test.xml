@@ -31,11 +31,26 @@
 		path			= <data_path/>/test_json
 		}
 
+		source test_json_string
+		{
+		type			= mysql
+		<sql_settings/>
+		sql_query		= select * from json_string_table
+		sql_attr_uint	= gid
+		sql_attr_json	= j
+		}
+
+		index test_json_string
+		{
+		source			= test_json_string
+		path			= <data_path/>/test_json_string
+		}
+
 		index rt
 		{
 		type			= rt
 		path			= <data_path/>/rt
-		rt_attr_uint	= gid
+		rt_attr_uint	= gids
 		rt_field		= title
 		rt_attr_json	= j
 		}
@@ -59,6 +74,20 @@
 		agent = <my_address/>:test_json
 		}
 
+		source strings
+		{
+		type = mysql
+		<sql_settings/>
+		sql_query = SELECT *, 'dummy' FROM string_table
+		sql_attr_string = string_value
+		}
+
+		index strings
+		{
+		source	= strings
+		path	= <data_path/>/strings
+		}
+
 	</config>
 
 	<db_create>
@@ -70,7 +99,29 @@
 		PRIMARY KEY (`id`)
 		);
 	</db_create>
+
+	<db_create>
+		CREATE TABLE json_string_table (
+		`id` int(11) NOT NULL AUTO_INCREMENT,
+		`gid` int(11) NOT NULL,
+		`title` varchar(255) NOT NULL,
+		`j` varchar(8192) NOT NULL,
+		PRIMARY KEY (`id`)
+		);
+	</db_create>
+
+
+	<db_create>
+		CREATE TABLE string_table
+		(
+		id INT NOT NULL,
+		string_value VARCHAR(255) NOT NULL
+		);
+	</db_create>
+
 	<db_drop>DROP TABLE IF EXISTS json_src_table;</db_drop>
+	<db_drop>DROP TABLE IF EXISTS json_string_table;</db_drop>
+	<db_drop>DROP TABLE IF EXISTS string_table;</db_drop>
 
 	<db_insert>
 		INSERT INTO json_src_table VALUES
@@ -79,18 +130,31 @@
 		(3,2,'another doc','{"name":"Charlie","uid":345, "lon":-0.0721455, "lat":0.926761, "coord":"-0.072146 0.926761", "pct":4.1, "sq":225, "poly":"-1,2,12,4,5,6", "points":[-1,2,12,4,5,6]}')
 	</db_insert>
 
+	<db_insert>
+		INSERT INTO json_string_table VALUES
+		(1,1,'test one','{"name":"Alice","uid":123, "jobs":["aaa", "bbb", "ccc"]}'),
+		(2,1,'test two','{"name":"Bob","uid":234,"gid":12, "jobs":["aaa", "bbb", "ccc"]}')
+	</db_insert>
+
+
+	<db_insert>
+		INSERT INTO string_table VALUES
+		(1, 'asdf'),
+		(2, 'ASDF'),
+		(3, 'qwer'),
+		(4, '')
+	</db_insert>
+
 
 
 	<queries><sphinxql>
 
+
 		<!-- substring_index()  -->
 		select id, upper('abcdefghijk') as res from test_json;
-		select id, upper('abcdefghijk1234') as res from test_json;
-		select id, upper('abcdefghijk-092k1ss') as res from test_json;
-		select id, upper('ABCnskndmsndms 1234') as res from test_json;
-		select id, upper('Abkkwndknd ssAQ ASDW323-.') as res from test_json;
-		<!-- upper() from rt -->
 
+
+		<!-- upper() from rt -->
 		INSERT INTO rt (id, gid, title, j) VALUES
 		(1,2,'test one','{"name":"alice"}'),
 		(2,3,'test two','{"name":"bob"}'),
@@ -98,29 +162,42 @@
 
 		select gid, * from rt;
 
-		select id, upper('hello-world',) as res from rt;
-		select id, upper('hello 12 world') as res from rt;
 		select id, upper('hello12323 world') as res from rt;
-		select id, upper('hello world') as res from rt;
-
 		select id, upper('aaa..jjdjwew.-192933' ) as res from rt;
-		select id, upper('aaa..jjdjwew.-192933') as res from rt;
-		select id, upper('aaa..jjdjwew.-192933') as res from rt;
-		select id, upper('aaa..jjdjwew.-192933') as res from rt;
+
 
 		<!-- upper() from test1_dist -->
 		select gid, * from test1_dist;
 
-		select id, upper('aaa..jjdjwew.-192933') as res from test1_dist;
-		select id, upper('aaa..jjdjwew.-19 2933') as res from test1_dist;
 		select id, upper('aaa..jjdjwew .-192933') as res from test1_dist;
-		select id, upper('aaa..jjdjwew.-192933') as res from test1_dist;
-		select id, upper('aaa..jjdjwew.-192933') as res from test1_dist;
-		select id, upper('aaa..jjdjwew.-192933') as res from test1_dist;
-		select id, upper('aaa..jjdjwew.-192933') as res from test1_dist;
 
 		<!-- regression substring_index from missed json field -->
 		select id, concat('hello', ' ', 'world') as v0, upper(v0) as v from rt;
+
+		<!-- upper() check on not crash; result must be empty -->
+		select id, upper(abcdefghijk) as res from test_json;
+		select id, upper('abcdefghijk','cde') as res from test_json;
+
+		<!-- test upper function for JSON attributes -->
+		select upper(j.name) as name from test1_loc;
+		select id, upper(j.name) as name, j.lat, j.lon, j.coord from test1_loc;
+		select upper(j.name) as name, geodist(substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1), 0.93, -0.08 ) from test1_loc;
+
+		<!-- test upper function for expression that produces string like `concat string sttributes` -->
+		select id, substring_index('aaa.bbb.ccc.ddd', '.', 1) as res, upper(res) as res1 from test_json;
+		select id, concat('aaa.bbb.ccc.ddd', '.','eee.fff') as res, upper(res) as res1 from test_json;
+
+		<!-- test upper function for string attributes -->
+		select * from strings;
+
+		select id, string_value, upper(string_value) from strings;
+
+		<!-- test upper function for json attribute expression-->
+		select * from test_json_string;
+
+		select id, j.jobs, upper(j.jobs[1]) from test_json_string;
+
+
 
 	</sphinxql></queries>
 

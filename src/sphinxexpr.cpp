@@ -2287,6 +2287,7 @@ public:
 		assert ( pArg && pDelim && pCount );
 		SafeAddRef ( pArg );
 		m_bFreeResPtr = m_pArg->IsDataPtrAttr();
+
 		const BYTE * pBuf = nullptr;
 		CSphMatch tTmp;
 		
@@ -2682,7 +2683,7 @@ public:
     }
 
 private:
-    int SetResultString ( const char * pDoc, int iDocLen, const BYTE ** ppResStr ) const;
+    int SetResult ( const char * pDoc, int iDocLen, const BYTE ** ppResStr ) const;
     int UpperString ( const  char * pDoc, int iDocLen, const BYTE ** ppResStr, int * pResLen ) const;
 
     Expr_Upper_c ( const Expr_Upper_c& rhs )
@@ -2693,7 +2694,7 @@ private:
 
 //	in case of input static string, function returns only pointer and length of uppercase string. buffer is not allocated
 //	in case of input dynamic string, function allocates buffer for the uppercase string and copy the resultant string to it
-int Expr_Upper_c::SetResultString ( const char * pDoc, int iDocLen, const BYTE ** ppResStr ) const
+int Expr_Upper_c::SetResult ( const char * pDoc, int iDocLen, const BYTE ** ppResStr ) const
 {
     if ( !IsDataPtrAttr() )
     {
@@ -2715,22 +2716,18 @@ int Expr_Upper_c::UpperString ( const char * pDoc, int iDocLen, const BYTE ** pp
     memcpy(pStrBuffer, pDoc, iDocLen);
     char * pStrBeg = pStrBuffer;
     const char * pStrEnd = (pStrBeg + iDocLen);
-	
+
     while ( pStrBeg < pStrEnd )
     {
-		// check first if the current char is a lowercase letter or a special character
-        if ( islower(*pStrBeg) )
-        {
-			// if the current char is lowercase letter then convert it to an uppercase letter
-            *pStrBeg -= 32;
-        }
-        pStrBeg += 1;
+        // convert the current character to its uppercase version if it exists
+        *pStrBeg = toupper(*pStrBeg);
+        pStrBeg++;
     }
 
     // return the resultant string
     if ( ppResStr )
     {
-        *pResLen = SetResultString( pStrBuffer, iDocLen, ppResStr );
+        *pResLen = SetResult( pStrBuffer, iDocLen, ppResStr );
     }
 
     return iDocLen;

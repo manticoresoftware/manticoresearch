@@ -46,7 +46,7 @@ private:
 	const ISphTokenizer *		m_pQueryTokenizerQL {nullptr};
 	const CSphIndexSettings &	m_tSettings;
 
-	void			AddChildKeyword ( XQNode_t * pParent, const char * szKeyword, int iSkippedPosBeforeToken, const XQLimitSpec_t & tLimitSpec );
+	XQNode_t *		AddChildKeyword ( XQNode_t * pParent, const char * szKeyword, int iSkippedPosBeforeToken, const XQLimitSpec_t & tLimitSpec );
 };
 
 
@@ -125,18 +125,19 @@ void QueryTreeBuilder_c::CollectKeywords ( const char * szStr, XQNode_t * pNode,
 				m_iAtomPos--;
 		}
 
+		XQNode_t * pChildNode = nullptr;
 		if ( bMultiDest && !bMultiDestHead )
 		{
 			assert ( m_dMultiforms.GetLength() );
 			m_dMultiforms.Last().m_iDestCount++;
 			m_dDestForms.Add ( sToken );
 		} else
-			AddChildKeyword ( pNode, sToken, iSkippedPosBeforeToken, tLimitSpec );
+			pChildNode = AddChildKeyword ( pNode, sToken, iSkippedPosBeforeToken, tLimitSpec );
 
 		if ( bMultiDestHead )
 		{
 			MultiformNode_t & tMulti = m_dMultiforms.Add();
-			tMulti.m_pNode = pNode;
+			tMulti.m_pNode = pChildNode;
 			tMulti.m_iDestStart = m_dDestForms.GetLength();
 			tMulti.m_iDestCount = 0;
 		}
@@ -169,7 +170,7 @@ XQNode_t * QueryTreeBuilder_c::CreateNode ( XQLimitSpec_t & tLimitSpec )
 }
 
 
-void QueryTreeBuilder_c::AddChildKeyword ( XQNode_t * pParent, const char * szKeyword, int iSkippedPosBeforeToken, const XQLimitSpec_t & tLimitSpec )
+XQNode_t * QueryTreeBuilder_c::AddChildKeyword ( XQNode_t * pParent, const char * szKeyword, int iSkippedPosBeforeToken, const XQLimitSpec_t & tLimitSpec )
 {
 	XQKeyword_t tKeyword ( szKeyword, m_iAtomPos );
 	tKeyword.m_iSkippedBefore = iSkippedPosBeforeToken;
@@ -178,6 +179,8 @@ void QueryTreeBuilder_c::AddChildKeyword ( XQNode_t * pParent, const char * szKe
 	pNode->m_dWords.Add ( tKeyword );
 	pParent->m_dChildren.Add ( pNode );
 	m_dSpawned.Add ( pNode );
+
+	return pNode;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -217,9 +220,7 @@ bool QueryParserJson_c::IsFullscan ( const XQQuery_t & tQuery ) const
 }
 
 
-bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, const CSphQuery * pQuery,
-	const ISphTokenizer * pQueryTokenizerQL, const ISphTokenizer * pQueryTokenizerJson, const CSphSchema * pSchema, CSphDict * pDict,
-	const CSphIndexSettings & tSettings ) const
+bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, const CSphQuery * pQuery, const ISphTokenizer * pQueryTokenizerQL, const ISphTokenizer * pQueryTokenizerJson, const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings ) const
 {
 	JsonObj_c tRoot ( szQuery );
 

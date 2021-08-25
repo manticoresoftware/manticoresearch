@@ -44,6 +44,27 @@ TEST ( ThreadPool, Counter100 )
 	ASSERT_EQ ( v, 100 );
 }
 
+void Counter100c()
+{
+	using namespace Threads;
+	std::atomic<int> v {0};
+	CallCoroutine ( [&] {
+	  auto dWaiter = DefferedContinuator();
+		for ( int i = 0; i < 100; ++i )
+			CoCo ( [&] {
+				v.fetch_add(1,std::memory_order_relaxed);
+			},
+					dWaiter );
+		WaitForDeffered ( std::move(dWaiter) );
+		ASSERT_EQ ( v, 100 );
+	} );
+}
+
+TEST ( ThreadPool, Counter100c )
+{
+	for (auto i=0; i<100; ++i)
+		Counter100c();
+}
 
 const char* SH()
 {

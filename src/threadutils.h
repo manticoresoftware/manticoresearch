@@ -110,7 +110,7 @@ using Predicate = std::function<bool ()>;
 using Handlers = std::initializer_list<Handler>;
 
 // used to RAII keep Scheduler running (when work finished - it is usually destroyed)
-using Keeper_t = SharedPtrCustom_t<void*>;
+using Keeper_t = SharedPtrCustom_t<void>;
 
 struct Scheduler_i
 {

@@ -23,7 +23,7 @@ size_t GetDefaultCoroStackSize();
 size_t AlignStackSize ( size_t iSize );
 
 // used as signaller - invokes custom deleter in d-tr.
-using Waiter_t = SharedPtrCustom_t<void *>;
+using Waiter_t = SharedPtrCustom_t<void>;
 
 // start handler in coroutine, first-priority
 void CoGo ( Handler handler, Scheduler_i* pScheduler );

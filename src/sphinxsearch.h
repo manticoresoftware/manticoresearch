@@ -44,7 +44,7 @@ bool operator == ( const SkiplistEntry_t & a, RowID_t b );
 bool operator < ( RowID_t a, const SkiplistEntry_t & b );
 
 class RtIndex_c;
-struct SphChunkGuard_t;
+struct RtGuard_t;
 
 /// term, searcher view
 class ISphQword
@@ -91,7 +91,7 @@ public:
 
 	int							GetAtomPos() const;
 
-	virtual bool SetupScan ( const RtIndex_c * pIndex, int iSegment, const SphChunkGuard_t & tGuard ) { return false; }
+	virtual bool SetupScan ( const RtIndex_c * pIndex, int iSegment, const RtGuard_t& tGuard ) { return false; }
 };
 
 
@@ -211,7 +211,7 @@ struct ExplainQueryArgs_t
 	int m_iExpandKeywords = 0;
 	int m_iExpansionLimit = 0;
 	bool m_bExpandPrefix = false;
-	const void * m_pIndexData = nullptr;
+	cRefCountedRefPtr_t m_pIndexData;
 
 	explicit ExplainQueryArgs_t ( const CSphString & sQuery )
 		: m_sQuery ( sQuery )

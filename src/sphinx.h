@@ -2693,11 +2693,31 @@ enum KeywordExpansion_e
 };
 
 
+struct RowToUpdateData_t
+{
+	const CSphRowitem*	m_pRow;	/// row in the index
+	int					m_iIdx;	/// idx in updateset
+};
+
+using RowsToUpdateData_t = CSphVector<RowToUpdateData_t>;
+using RowsToUpdate_t = VecTraits_T<RowToUpdateData_t>;
+
+struct PostponedUpdate_t
+{
+	AttrUpdateSharedPtr_t	m_pUpdate;
+	RowsToUpdateData_t		m_dRowsToUpdate;
+};
+
 // an index or a part of an index that has its own row ids
 class IndexSegment_c
 {
 protected:
 	mutable IndexSegment_c * m_pKillHook = nullptr; // if set, killed docids will be emerged also here.
+
+public:
+	// stuff for dispatch races between changes and updates
+	mutable std::atomic<bool>		m_bAttrsBusy { false };
+	CSphVector<PostponedUpdate_t>	m_dPostponedUpdates;
 
 public:
 	virtual int		Kill ( DocID_t tDocID ) { return 0; }
@@ -2708,17 +2728,25 @@ public:
 	{
 		m_pKillHook = pKillHook;
 	}
+
+	inline void ResetPostponedUpdates()
+	{
+		m_bAttrsBusy = false;
+		m_dPostponedUpdates.Reset();
+	}
 };
 
-
-struct RowToUpdateData_t
+// helper - collects killed documents
+struct KillAccum_t final : public IndexSegment_c
 {
-	const CSphRowitem *	m_pRow;		/// row in the index
-	int					m_iIdx;		/// idx in updateset
-};
+	CSphVector<DocID_t> m_dDocids;
 
-using RowsToUpdateData_t = CSphVector<RowToUpdateData_t>;
-using RowsToUpdate_t = VecTraits_T<RowToUpdateData_t>;
+	int Kill ( DocID_t tDocID ) final
+	{
+		m_dDocids.Add ( tDocID );
+		return 1;
+	}
+};
 
 class Histogram_i;
 class HistogramContainer_c;
@@ -2929,6 +2957,9 @@ public:
 	/// update accumulating state
 	virtual int					UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSphString & sError, CSphString & sWarning ) = 0;
 
+	/// apply serie of updates, assuming them prepared (no need to full-scan attributes), and index is offline, i.e. no concurrency
+	virtual void				UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & dUpdates, IndexSegment_c * pSeg ) = 0;
+
 	virtual Binlog::CheckTnxResult_t ReplayTxn ( Binlog::Blop_e eOp, CSphReader & tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCheck ) = 0;
 	/// saves memory-cached attributes, if there were any updates to them
 	/// on failure, false is returned and GetLastError() contains error message
@@ -3058,6 +3089,7 @@ public:
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & tSettings, CSphString * ) const override { return false; }
 	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & ) const override { return true; }
 	int					UpdateAttributes ( AttrUpdateInc_t&, bool &, CSphString & , CSphString & ) override { return -1; }
+	void				UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & dUpdates, IndexSegment_c * pSeg ) override {}
 	Binlog::CheckTnxResult_t ReplayTxn ( Binlog::Blop_e, CSphReader &, CSphString &, Binlog::CheckTxn_fn&& ) override { return {}; }
 	bool				SaveAttributes ( CSphString & ) const override { return true; }
 	DWORD				GetAttributeStatus () const override { return 0; }

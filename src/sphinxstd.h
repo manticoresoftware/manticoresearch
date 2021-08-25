@@ -4001,6 +4001,15 @@ public:
 		return *this;
 	}
 
+	template<typename DERIVED>
+	CSphRefcountedPtr& operator= ( const CSphRefcountedPtr<DERIVED>& rhs )
+	{
+		SafeRelease ( m_pPtr );
+		m_pPtr = rhs.Ptr();
+		SafeAddRef ( m_pPtr );
+		return *this;
+	}
+
 	void Swap ( CSphRefcountedPtr& rhs ) noexcept
 	{
 		::Swap(m_pPtr, rhs.m_pPtr);
@@ -4025,7 +4034,7 @@ public:
 
 public:
 	/// assignment of a raw pointer, takes over ownership!
-	CSphRefcountedPtr<T> & operator = ( T * pPtr )
+	CSphRefcountedPtr& operator = ( T * pPtr )
 	{
 		SafeRelease ( m_pPtr );
 		m_pPtr = pPtr;

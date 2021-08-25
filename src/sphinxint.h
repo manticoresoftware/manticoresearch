@@ -183,8 +183,6 @@ public:
 	const SmallStringHash_T<int64_t> *		m_pLocalDocs = nullptr;
 	int64_t									m_iTotalDocs = 0;
 
-	const IndexSegment_c *					m_pIndexSegment {nullptr};	// intended for docid -> rowid lookups
-
 public:
 	explicit CSphQueryContext ( const CSphQuery & q );
 			~CSphQueryContext ();
@@ -1432,7 +1430,7 @@ struct SuggestResult_t
 	CSphVector<char>			m_dTrigrams;
 	// payload
 	void *						m_pWordReader = nullptr;
-	void *						m_pSegments = nullptr;
+	cRefCountedRefPtr_t			m_pSegments;
 	bool						m_bMergeWords = false;
 	// word
 	CSphString		m_sWord;
@@ -1495,9 +1493,9 @@ public:
 		ISphSubstringPayload *		m_pPayload;
 		int							m_iTotalDocs;
 		int							m_iTotalHits;
-		const void *				m_pIndexData;
+		cRefCountedRefPtr_t			m_pIndexData;
 
-		Args_t ( bool bPayload, int iExpansionLimit, bool bHasExactForms, ESphHitless eHitless, const void * pIndexData );
+		Args_t ( bool bPayload, int iExpansionLimit, bool bHasExactForms, ESphHitless eHitless, cRefCountedRefPtr_t pIndexData );
 		~Args_t ();
 		void AddExpanded ( const BYTE * sWord, int iLen, int iDocs, int iHits );
 		const char * GetWordExpanded ( int iIndex ) const;
@@ -1540,7 +1538,7 @@ struct ExpansionContext_t
 	bool m_bMergeSingles				= false;
 	CSphScopedPayload * m_pPayloads		= nullptr;
 	ESphHitless m_eHitless				{SPH_HITLESS_NONE};
-	const void * m_pIndexData			= nullptr;
+	cRefCountedRefPtr_t	m_pIndexData;
 
 	bool m_bOnlyTreeFix					= false;
 };

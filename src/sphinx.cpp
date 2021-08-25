@@ -1427,9 +1427,10 @@ public:
 	static bool			DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, int iKillField );
 
 	int					UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSphString & sError, CSphString & sWarning ) final;
+	void				UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & dUpdates, IndexSegment_c * /*pSeg*/) final;
 
 	// the only txn we can replay is 'update attributes', but it is processed by dedicated branch in binlog, so we have nothing to do here.
-	Binlog::CheckTnxResult_t ReplayTxn (Binlog::Blop_e, CSphReader&, CSphString & , Binlog::CheckTxn_fn&&) final { return Binlog::CheckTnxResult_t(); }
+	Binlog::CheckTnxResult_t ReplayTxn (Binlog::Blop_e, CSphReader&, CSphString & , Binlog::CheckTxn_fn&&) final { return {}; }
 	bool				SaveAttributes ( CSphString & sError ) const final;
 	DWORD				GetAttributeStatus () const final;
 
@@ -1566,6 +1567,7 @@ private:
 
 	static std::pair<DWORD,DWORD>		CreateRowMapsAndCountTotalDocs ( const CSphIndex_VLN* pSrcIndex, const CSphIndex_VLN* pDstIndex, CSphFixedVector<RowID_t>& dSrcRowMap, CSphFixedVector<RowID_t>& dDstRowMap, const ISphFilter* pFilter, bool bSupressDstDocids, MergeCb_c& tMonitor );
 	RowsToUpdateData_t			Update_CollectRowPtrs ( const UpdateContext_t & tCtx );
+	RowsToUpdate_t				Update_PrepareGatheredRowPtrs ( RowsToUpdate_t & dWRows, UpdateContext_t & tCtx );
 	bool						Update_WriteBlobRow ( UpdateContext_t & tCtx, CSphRowitem * pDocinfo, const BYTE * pBlob,
 										int iLength, int nBlobAttrs, const CSphAttrLocator & tBlobRowLoc, bool & bCritical, CSphString & sError ) override;
 	void						Update_MinMax ( const RowsToUpdate_t& dRows, const UpdateContext_t & tCtx );
@@ -7237,6 +7239,48 @@ RowsToUpdateData_t CSphIndex_VLN::Update_CollectRowPtrs ( const UpdateContext_t 
 	return dRowsToUpdate;
 }
 
+// We fill docinfo ptr for actual rows, and move out non-actual (the ones which doesn't point to existing document)
+// note, it actually chante (rearrange) rows!
+RowsToUpdate_t CSphIndex_VLN::Update_PrepareGatheredRowPtrs ( RowsToUpdate_t & dWRows, UpdateContext_t & tCtx )
+{
+	RowsToUpdate_t dRows = dWRows; // that is actually to indicate that we CHANGE contents inside dWRows, so it should be passed by non-const reference.
+
+	const auto & dDocids = tCtx.m_tUpd.m_pUpdate->m_dDocids;
+	dRows.Sort ( Lesser ( [&dDocids] ( auto& a, auto& b ) { return dDocids[a.m_iIdx]<dDocids[b.m_iIdx]; } ) );
+	LookupReaderIterator_c tLookupReader ( m_tDocidLookup.GetReadPtr() );
+
+	RowID_t tRowID = INVALID_ROWID;
+	DocID_t tDocID = 0;
+	bool bHaveDocs = tLookupReader.Read ( tDocID, tRowID );
+	bool bHaveDocsToUpdate = !dRows.IsEmpty();
+	DocID_t tDocIDPrepared = bHaveDocsToUpdate ? dDocids[dRows[0].m_iIdx] : 0;
+	int iReadIdx = 0;
+	int iWriteIdx = 0;
+
+	while ( bHaveDocs && bHaveDocsToUpdate )
+	{
+		if ( tDocID < tDocIDPrepared )
+		{
+			tLookupReader.HintDocID ( tDocIDPrepared );
+			bHaveDocs = tLookupReader.Read ( tDocID, tRowID );
+			continue;
+		} else if ( tDocID == tDocIDPrepared )
+		{
+			dRows[iWriteIdx].m_pRow = GetDocinfoByRowID ( tRowID );
+			assert ( dRows[iWriteIdx].m_pRow );
+			Swap ( dRows[iWriteIdx].m_iIdx, dRows[iReadIdx].m_iIdx );
+			bHaveDocs = tLookupReader.Read ( tDocID, tRowID );
+			++iWriteIdx;
+		}
+
+		++iReadIdx;
+		bHaveDocsToUpdate = iReadIdx < dRows.GetLength();
+		if ( bHaveDocsToUpdate )
+			tDocIDPrepared = dDocids[dRows[iReadIdx].m_iIdx];
+	}
+	return dWRows.Slice ( 0, iWriteIdx );
+}
+
 
 bool CSphIndex_VLN::Update_WriteBlobRow ( UpdateContext_t & tCtx, CSphRowitem * pDocinfo, const BYTE * pBlob,
 		int iLength, int nBlobAttrs, const CSphAttrLocator & tBlobRowLoc, bool & bCritical, CSphString & sError )
@@ -7401,7 +7445,36 @@ int CSphIndex_VLN::UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, 
 
 	m_uAttrsStatus |= tCtx.m_uUpdateMask; // FIXME! add lock/atomic?
 
+	if ( m_bAttrsBusy.load ( std::memory_order_acquire ) )
+	{
+		auto& tNewUpdate = m_dPostponedUpdates.Add();
+		tNewUpdate.m_pUpdate = tUpd.m_pUpdate;
+		tNewUpdate.m_dRowsToUpdate.SwapData ( dRowsToUpdate );
+	}
+
 	return iUpdated;
+}
+
+void CSphIndex_VLN::UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & dUpdates, IndexSegment_c *)
+{
+	if ( dUpdates.IsEmpty () )
+		return;
+
+	CSphString sError;
+	bool bCritical;
+
+	for ( auto & tUpdate : dUpdates )
+	{
+		AttrUpdateInc_t tUpdInc { tUpdate.m_pUpdate }; // dont move, keep update (need twice when split chunks)
+		UpdateContext_t tCtx ( tUpdInc, m_tSchema );
+		auto dRows = Update_PrepareGatheredRowPtrs ( tUpdate.m_dRowsToUpdate, tCtx );
+		if ( !DoUpdateAttributes ( dRows, tCtx, bCritical, sError ) )
+		{
+			sphWarning ("UpdateAttributesOffline: %s", sError.cstr() );
+			break;
+		}
+		m_uAttrsStatus |= tCtx.m_uUpdateMask; // FIXME! add lock/atomic?
+	}
 }
 
 // safely rename an index file
@@ -11151,17 +11224,16 @@ bool AttrMerger_c::CopyPureColumnarAttributes ( const CSphIndex_VLN& tIndex, con
 	auto dColumnarIterators = CreateAllColumnarIterators ( tIndex.m_pColumnar.Ptr(), tIndex.m_tSchema );
 	CSphVector<int64_t> dTmp;
 
-	m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_START, tIndex.m_iChunk );
+	int iChunk = tIndex.m_iChunk;
+	m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_START, iChunk );
+	auto _ = AtScopeExit ( [this, iChunk] { m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_FINISHED, iChunk ); } );
 	for ( RowID_t tRowID = 0, tRows = (RowID_t)dRowMap.GetLength64(); tRowID < tRows; ++tRowID )
 	{
-		if ( m_tMonitor.NeedStop() )
-		{
-			m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_FINISHED, tIndex.m_iChunk );
-			return false;
-		}
-
 		if ( dRowMap[tRowID] == INVALID_ROWID )
 			continue;
+
+		if ( m_tMonitor.NeedStop() )
+			return false;
 
 		// limit granted by caller code
 		assert ( m_tResultRowID != INVALID_ROWID );
@@ -11182,7 +11254,6 @@ bool AttrMerger_c::CopyPureColumnarAttributes ( const CSphIndex_VLN& tIndex, con
 		m_dDocidLookup[m_tResultRowID] = { dColumnarIterators[0].first->Get(), m_tResultRowID };
 		++m_tResultRowID;
 	}
-	m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_FINISHED, tIndex.m_iChunk );
 	return true;
 }
 
@@ -11199,17 +11270,16 @@ bool AttrMerger_c::CopyMixedAttributes ( const CSphIndex_VLN& tIndex, const VecT
 	auto iStrideBytes = dTmpRow.GetLengthBytes();
 	const CSphColumnInfo* pBlobLocator = tIndex.m_tSchema.GetAttr ( sphGetBlobLocatorName() );
 
-	m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_START, tIndex.m_iChunk );
+	int iChunk = tIndex.m_iChunk;
+	m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_START, iChunk );
+	auto _ = AtScopeExit ( [this, iChunk] { m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_FINISHED, iChunk ); } );
 	for ( RowID_t tRowID = 0, tRows = (RowID_t)dRowMap.GetLength64(); tRowID < tRows; ++tRowID, pRow += iStride )
 	{
-		if ( m_tMonitor.NeedStop() )
-		{
-			m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_FINISHED, tIndex.m_iChunk );
-			return false;
-		}
-
 		if ( dRowMap[tRowID] == INVALID_ROWID )
 			continue;
+
+		if ( m_tMonitor.NeedStop() )
+			return false;
 
 		// limit granted by caller code
 		assert ( m_tResultRowID != INVALID_ROWID );
@@ -11246,7 +11316,6 @@ bool AttrMerger_c::CopyMixedAttributes ( const CSphIndex_VLN& tIndex, const VecT
 		m_dDocidLookup[m_tResultRowID] = { tDocID, m_tResultRowID };
 		++m_tResultRowID;
 	}
-	m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_FINISHED, tIndex.m_iChunk );
 	return true;
 }
 
@@ -11946,6 +12015,7 @@ CSphVector<SphAttr_t> CSphIndex_VLN::BuildDocList () const
 		pRow += iStride;
 	}
 
+	dResult.Uniq();
 	return dResult;
 }
 
@@ -15630,7 +15700,6 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	tCtx.m_pProfile = pProfile;
 	tCtx.m_pLocalDocs = tArgs.m_pLocalDocs;
 	tCtx.m_iTotalDocs = ( tArgs.m_iTotalDocs ? tArgs.m_iTotalDocs : m_tStats.m_iTotalDocuments );
-	tCtx.m_pIndexSegment = this;
 
 	if ( !tCtx.SetupCalc ( tMeta, tMaxSorterSchema, m_tSchema, m_tBlobAttrs.GetWritePtr(), m_pColumnar.Ptr(), dSorterSchemas ) )
 		return false;
@@ -22543,7 +22612,7 @@ int sphDictCmpStrictly ( const char * pStr1, int iLen1, const char * pStr2, int 
 }
 
 
-ISphWordlist::Args_t::Args_t ( bool bPayload, int iExpansionLimit, bool bHasExactForms, ESphHitless eHitless, const void * pIndexData )
+ISphWordlist::Args_t::Args_t ( bool bPayload, int iExpansionLimit, bool bHasExactForms, ESphHitless eHitless, cRefCountedRefPtr_t pIndexData )
 	: m_bPayload ( bPayload )
 	, m_iExpansionLimit ( iExpansionLimit )
 	, m_bHasExactForms ( bHasExactForms )

@@ -19695,10 +19695,10 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 			if ( pLocked )
 				hIndexes.Add ( pLocked->m_pIndex, it.GetName () );
 		}
-	});
 
-	Binlog::Replay ( hIndexes, DumpMemStat );
-	hIndexes.Reset();
+		Binlog::Replay ( hIndexes, DumpMemStat );
+		hIndexes.Reset();
+	} );
 
 	// no need to create another cluster on restart by watchdog resurrection
 	if ( bWatched && !bVisualLoad )

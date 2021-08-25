@@ -21,6 +21,7 @@
 #include "attribute.h"
 #include "docstore.h"
 #include "columnarrt.h"
+#include "coroutine.h"
 
 struct CSphReconfigureSettings;
 struct CSphReconfigureSetup;
@@ -98,7 +99,7 @@ public:
 
 	/// do something const with disk chunk (query settings, status, etc.)
 	/// hides internal disk chunks storage
-	virtual void ProcessDiskChunk ( int iChunk, VisitChunk_fn&& fnVisitor ) = 0;
+	virtual void ProcessDiskChunk ( int iChunk, VisitChunk_fn&& fnVisitor ) {};
 
 	/// get disk chunk
 	virtual CSphIndex* GetDiskChunk ( int iChunk )
@@ -185,6 +186,9 @@ struct RtWordCheckpoint_t
 struct RtSegment_t final : IndexSegment_c, ISphRefcountedMT
 {
 public:
+	mutable int						m_iLocked = 0;	// if segment currently used in an op
+	mutable Threads::CoroRWLock_c	m_tLock;		// fine-grain lock
+
 	CSphTightVector<BYTE>			m_dWords;
 	CSphVector<RtWordCheckpoint_t>	m_dWordCheckpoints;
 	CSphTightVector<uint64_t>		m_dInfixFilterCP;
@@ -193,8 +197,8 @@ public:
 
 	DWORD							m_uRows = 0;			///< number of actually allocated rows
 	std::atomic<int64_t>			m_tAliveRows { 0 };		///< number of alive (non-killed) rows
-	CSphTightVector<CSphRowitem>	m_dRows;				///< row data storage
-	CSphTightVector<BYTE>			m_dBlobs;				///< storage for blob attrs
+	CSphTightVector<CSphRowitem>	m_dRows GUARDED_BY ( m_tLock );				///< row data storage
+	CSphTightVector<BYTE>			m_dBlobs GUARDED_BY ( m_tLock );            ///< storage for blob attrs
 	CSphVector<BYTE>				m_dKeywordCheckpoints;
 	std::atomic<int64_t> *			m_pRAMCounter = nullptr;///< external RAM counter
 	OpenHash_T<RowID_t, DocID_t>	m_tDocIDtoRowID;		///< speeds up docid-rowid lookups
@@ -218,7 +222,6 @@ public:
 
 	void					SetupDocstore ( const CSphSchema * pSchema );
 	void					BuildDocID2RowIDMap ( const CSphSchema & tSchema );
-	void					AddRemoveColumnarAttr ( bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, const CSphString & sPath, CSphString & sError );
 
 private:
 	mutable int64_t			m_iUsedRam = 0;			///< ram usage counter

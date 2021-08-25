@@ -1305,16 +1305,15 @@ bool Binlog_c::IsBinlogWritable ( int64_t * pTID )
 	if ( m_bReplayMode )
 		return false;
 
-	if ( m_bDisabled )
+	if ( !m_bDisabled )
+		return true;
+
+	if ( pTID ) // still need to advance TID as index flush according to it
 	{
-		if ( pTID ) // still need to advance TID as index flush according to it
-		{
-			ScopedMutex_t tLock ( m_tWriteLock );
-			++(*pTID);
-		}
-		return false;
+		ScopedMutex_t tLock ( m_tWriteLock );
+		++(*pTID);
 	}
-	return true;
+	return false;
 }
 
 // commit stuff. Indexes call this function with serialization cb; binlog is agnostic to alien data structures.

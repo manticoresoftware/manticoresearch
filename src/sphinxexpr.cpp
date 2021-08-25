@@ -2537,14 +2537,15 @@ int Expr_SubstringIndex_c::RightSearch ( const char * pDoc, int iDocLen, int iCo
 	return LeftSearch ( pDoc, iDocLen, iCount, true, ppResStr, pResLen );
 }
 
-class Expr_Upper_c : public ISphStringExpr
+template<bool UPPER>
+class Expr_Case_c : public ISphStringExpr
 {
 private:
     CSphRefcountedPtr<ISphExpr> m_pArg;
     bool m_bFreeResPtr = false;
 
 public:
-    explicit Expr_Upper_c ( ISphExpr * pArg )
+    explicit Expr_Case_c ( ISphExpr * pArg )
     	: m_pArg ( pArg )
     	, m_bFreeResPtr ( false  )
     {
@@ -2577,7 +2578,7 @@ public:
 
         if ( pDoc && iDocLen>0 )
         {
-            UpperString( pDoc, iDocLen, ppStr, &iLength );
+            DoCase( pDoc, iDocLen, ppStr, &iLength );
         }
 
         FreeDataPtr ( *m_pArg, pDoc );
@@ -2672,29 +2673,30 @@ public:
 
     uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
     {
-        EXPR_CLASS_NAME("Expr_Upper_c");
+        EXPR_CLASS_NAME("Expr_Case_c");
         CALC_CHILD_HASH(m_pArg);
         return CALC_DEP_HASHES();
     }
 
     ISphExpr * Clone () const final
     {
-        return new Expr_Upper_c ( *this );
+        return new Expr_Case_c ( *this );
     }
 
 private:
     int SetResult ( const char * pDoc, int iDocLen, const BYTE ** ppResStr ) const;
-    int UpperString ( const  char * pDoc, int iDocLen, const BYTE ** ppResStr, int * pResLen ) const;
+    int DoCase ( const  char * pDoc, int iDocLen, const BYTE ** ppResStr, int * pResLen ) const;
 
-    Expr_Upper_c ( const Expr_Upper_c& rhs )
+    Expr_Case_c ( const Expr_Case_c& rhs )
 		: m_pArg ( SafeClone (rhs.m_pArg) )
 		, m_bFreeResPtr ( rhs.m_bFreeResPtr )
     {}
 };
 
-//	in case of input static string, function returns only pointer and length of uppercase string. buffer is not allocated
-//	in case of input dynamic string, function allocates buffer for the uppercase string and copy the resultant string to it
-int Expr_Upper_c::SetResult ( const char * pDoc, int iDocLen, const BYTE ** ppResStr ) const
+//	in case of input static string, function returns only pointer and length of uppercase or lowercase string. buffer is not allocated
+//	in case of input dynamic string, function allocates buffer for the uppercase or lowercase string and copy the resultant string to it
+template<bool UPPER>
+int Expr_Case_c<UPPER>::SetResult ( const char * pDoc, int iDocLen, const BYTE ** ppResStr ) const
 {
     if ( !IsDataPtrAttr() )
     {
@@ -2709,7 +2711,9 @@ int Expr_Upper_c::SetResult ( const char * pDoc, int iDocLen, const BYTE ** ppRe
     return iDocLen;
 }
 
-int Expr_Upper_c::UpperString ( const char * pDoc, int iDocLen, const BYTE ** ppResStr, int * pResLen ) const
+// For upper() function
+template<>
+int Expr_Case_c<true>::DoCase ( const char * pDoc, int iDocLen, const BYTE ** ppResStr, int * pResLen ) const
 {
     // Create a new memory buffer and store the original string in it.
     char * pStrBuffer = new char[iDocLen];
@@ -2721,6 +2725,32 @@ int Expr_Upper_c::UpperString ( const char * pDoc, int iDocLen, const BYTE ** pp
     {
         // convert the current character to its uppercase version if it exists
         *pStrBeg = toupper(*pStrBeg);
+        pStrBeg++;
+    }
+
+    // return the resultant string
+    if ( ppResStr )
+    {
+        *pResLen = SetResult( pStrBuffer, iDocLen, ppResStr );
+    }
+
+    return iDocLen;
+}
+
+// For lower() function
+template<>
+int Expr_Case_c<false> :: DoCase ( const char * pDoc, int iDocLen, const BYTE ** ppResStr, int * pResLen ) const
+{
+    // Create a new memory buffer and store the original string in it.
+    char * pStrBuffer = new char[iDocLen];
+    memcpy(pStrBuffer, pDoc, iDocLen);
+    char * pStrBeg = pStrBuffer;
+    const char * pStrEnd = (pStrBeg + iDocLen);
+
+    while ( pStrBeg < pStrEnd )
+    {
+        // convert the current character to its lowercase version if it exists
+        *pStrBeg = tolower(*pStrBeg);
         pStrBeg++;
     }
 
@@ -3603,8 +3633,9 @@ enum Tokh_e : BYTE
 
 	FUNC_SUBSTRING_INDEX,
 	FUNC_UPPER,
+    FUNC_LOWER,
 
-	FUNC_LAST_INSERT_ID,
+    FUNC_LAST_INSERT_ID,
 	FUNC_LEVENSHTEIN,
 
 	FUNC_FUNCS_COUNT, // insert any new functions ABOVE this one
@@ -3717,8 +3748,10 @@ const static TokhKeyVal_t g_dKeyValTokens[] = // no order is necessary, but crea
 
 	{ "substring_index",FUNC_SUBSTRING_INDEX },
     { "upper",          FUNC_UPPER           },
+    { "lower",          FUNC_LOWER           },
 
-	{ "last_insert_id",	FUNC_LAST_INSERT_ID	 },
+
+    { "last_insert_id",	FUNC_LAST_INSERT_ID	 },
 	{ "levenshtein",	FUNC_LEVENSHTEIN	 },
 
 	// other reserved (operators, columns, etc.)
@@ -3771,49 +3804,47 @@ static Tokh_e TokHashLookup ( Str_t sKey )
 
 	const static BYTE dAsso[] = // values 66..91 (A..Z) copy from 98..123 (a..z),
     {
-            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-            124, 124, 124, 124, 124, 124, 124, 124,  22, 124,
-            6,  14, 124, 124, 124, 124, 124, 124, 124, 124,
-            124, 124, 124, 124, 124,  56,  43,   9,   3,  17,
-            25,  44,  33,  27, 124, 124,   6,  15,	 5,  26,
-            23,  22,  20,   4,   3,  30,  47,  47,	28,  15,
-            15, 124, 124, 124, 124,  17, 124,  56,  43,   9,
-            3,  17,  25,  44,  33,  27, 124, 124,   6,  15,
-            5,  26,  23,  22,  20,   4,   3,  30,  47,  47,
-            28,  15,  15, 124, 124, 124, 124, 124, 124, 124,
-            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-            124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-            124, 124, 124, 124, 124, 124
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108,  16, 108,
+            38,   5, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 14,   5,   5, 0,  21,
+            38,  39,  50,  21, 108, 108,  14,  23, 2,  30,
+            12,  10,   9,   1,   0,  30,  50,  35, 34,  31,
+            7, 108, 108, 108, 108,  22, 108,  14,   5,   5,
+            0,  21,  38,  39,  50,  21, 108, 108,  14,  23,
+            2,  30,  12,  10,   9,   1,   0,  30,  50,  35,
+            34,  31,   7, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108
     };
 
 	const static short dIndexes[] =
             {
-                    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                    -1, -1, -1, 6, 77, -1, 12, 4, 74, -1,
-                    5, 82, 22, 40, 79, 28, 38, 69, 23, 13,
-                    58, 10, 65, 81, 31, 39, 15, 62, 36, 29,
-                    42, 63, 51, 21, 30, 44, 2, 71, 76, 43,
-                    48, 56, 35, 53, 27, 32, 47, 46, 16, 52,
-                    7, 57, 61, 33, 54, 75, 9, 1, 80, 70,
-                    49, 59, 50, 41, 24, 55, 3, 8, 68, 45,
-                    34, -1, 37, 72, -1, -1, -1, 20, -1, 60,
-                    67, -1, 73, -1, -1, 17, 11, 66, 19, -1,
-                    78, -1, 0, -1, 14, 26, -1, -1, -1, -1,
-                    -1, -1, -1, 18, -1, -1, -1, -1, -1, -1,
-                    25, -1, -1, 64
+                    -1, -1, -1, -1, -1, 78, -1, 12, 4, 75,
+                    5, 32, 22, 40, 10, 65, 38, 76, 6, 1,
+                    58, 39, -1, 42, 82, 31, 80, 28, -1, 70,
+                    23, 43, 36, 49, 83, 57, 51, 46, -1, 62,
+                    72, 77, 53, 30, 2, 59, 29, 35, 9, 33,
+                    11, 44, 21, 13, 63, 67, 68, 47, 17, 81,
+                    55, 27, 73, 69, 54, 15, 61, 52, 50, 56,
+                    41, 64, 48, 14, 8, 0, 34, 71, 37, 60,
+                    16, -1, 3, -1, -1, 25, 45, 66, 19, -1,
+                    -1, -1, -1, 20, 24, 7, 26, -1, -1, -1,
+                    -1, -1, -1, 79, 18, -1, -1, 74,
             };
 
 	auto * s = (const BYTE*) sKey.first;
@@ -3958,6 +3989,9 @@ static FuncDesc_t g_dFuncs[FUNC_FUNCS_COUNT] = // Keep same order as in Tokh_e
 
 	{  /*"substring_index",*/	3,	TOK_FUNC,		/*FUNC_SUBSTRING_INDEX,	*/	SPH_ATTR_STRINGPTR },
     {  /*"upper",          */	1,	TOK_FUNC,		/*FUNC_UPPER,           */	SPH_ATTR_STRINGPTR },
+    {  /*"lower",          */	1,	TOK_FUNC,		/*FUNC_LOWER,           */	SPH_ATTR_STRINGPTR },
+
+
 
 
     {  /*"last_insert_id",*/	0,	TOK_FUNC,		/*FUNC_LAST_INSERT_ID,	*/	SPH_ATTR_STRINGPTR },
@@ -3978,7 +4012,7 @@ static inline const char* FuncNameByHash ( int iFunc )
 		, "rankfactors", "packedfactors", "bm25f", "integer", "double", "length", "least", "greatest"
 		, "uint", "query", "curtime", "utc_time", "utc_timestamp", "timediff", "current_user"
 		, "connection_id", "all", "any", "indexof", "min_top_weight", "min_top_sortval", "atan2", "rand"
-		, "regex", "substring_index", "upper", "last_insert_id", "levenshtein" };
+		, "regex", "substring_index", "upper", "lower", "last_insert_id", "levenshtein" };
 
 	return dNames[iFunc];
 }
@@ -7028,7 +7062,9 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 						return new Expr_SubstringIndex_c ( dArgs[0], dArgs[1], dArgs[2] );
 
                     case FUNC_UPPER:
-                        return new Expr_Upper_c ( dArgs[0]);
+                        return new Expr_Case_c<true> ( dArgs[0]);
+                    case FUNC_LOWER:
+                        return new Expr_Case_c<false> ( dArgs[0]);
 
 					case FUNC_LAST_INSERT_ID: return new Expr_LastInsertID_c();
 					case FUNC_CURRENT_USER: {
@@ -9093,7 +9129,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 		bGotString |= dRetTypes[i]==SPH_ATTR_STRING;
 		bGotMva |= ( dRetTypes[i]==SPH_ATTR_UINT32SET || dRetTypes[i]==SPH_ATTR_INT64SET || dRetTypes[i]==SPH_ATTR_UINT32SET_PTR || dRetTypes[i]==SPH_ATTR_INT64SET_PTR );
 	}
-	if ( bGotString && !( eFunc==FUNC_LENGTH || eFunc==FUNC_TO_STRING || eFunc==FUNC_CONCAT || eFunc==FUNC_SUBSTRING_INDEX || eFunc==FUNC_UPPER || eFunc==FUNC_CRC32 || eFunc==FUNC_EXIST || eFunc==FUNC_POLY2D || eFunc==FUNC_GEOPOLY2D || eFunc==FUNC_REGEX || eFunc==FUNC_LEVENSHTEIN ) )
+	if ( bGotString && !( eFunc==FUNC_LENGTH || eFunc==FUNC_TO_STRING || eFunc==FUNC_CONCAT || eFunc==FUNC_SUBSTRING_INDEX || eFunc==FUNC_UPPER  || eFunc ==FUNC_LOWER || eFunc==FUNC_CRC32 || eFunc==FUNC_EXIST || eFunc==FUNC_POLY2D || eFunc==FUNC_GEOPOLY2D || eFunc==FUNC_REGEX || eFunc==FUNC_LEVENSHTEIN ) )
 	{
 		m_sParserError.SetSprintf ( "%s() arguments can not be string", sFuncName );
 		return -1;
@@ -9251,6 +9287,20 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 		}
 		break;
     case FUNC_UPPER:
+        if ( dRetTypes.GetLength()!=1 )
+        {
+            m_sParserError.SetSprintf ( "%s() called with %d args, but 1 arg expected", sFuncName
+                    , dRetTypes.GetLength () );
+            return -1;
+        }
+
+        if ( dRetTypes[0]!=SPH_ATTR_STRING && dRetTypes[0]!=SPH_ATTR_STRINGPTR && dRetTypes[0]!=SPH_ATTR_JSON && dRetTypes[0]!=SPH_ATTR_JSON_FIELD )
+        {
+            m_sParserError.SetSprintf ( "%s() argument 1 must be string or json", sFuncName );
+            return -1;
+        }
+        break;
+    case FUNC_LOWER:
         if ( dRetTypes.GetLength()!=1 )
         {
             m_sParserError.SetSprintf ( "%s() called with %d args, but 1 arg expected", sFuncName

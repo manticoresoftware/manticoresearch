@@ -660,10 +660,6 @@ public:
 #define LOG_LEVEL_SHUTDOWN false
 #define LOG_COMPONENT_SEARCHD __LINE__ << " "
 
-#define LOGINFO(Level,Component) \
-    if_const (LOG_LEVEL_##Level) \
-        LogMessage_t {SPH_LOG_INFO} << LOG_COMPONENT_##Component
-
 #define SHUTINFO LOGINFO (SHUTDOWN,SEARCHD)
 
 /////////////////////////////////////////////////////////////////////////////

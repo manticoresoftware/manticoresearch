@@ -64,6 +64,12 @@ using namespace Threads;
 #define Verify(_expr) _expr
 #endif
 
+#define LOG_LEVEL_RTDIAG true
+#define LOG_LEVEL_DEBUGV false
+#define LOG_COMPONENT_RTSEG __LINE__ << " " << CoCurrentScheduler()->Name() << " "
+
+#define RTLOG LOGINFO ( RTDIAG, RTSEG )
+
 //////////////////////////////////////////////////////////////////////////
 // GLOBALS
 //////////////////////////////////////////////////////////////////////////

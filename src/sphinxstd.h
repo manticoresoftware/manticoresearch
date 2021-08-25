@@ -5796,8 +5796,12 @@ private:
 
 #define LOG_MSG LogMessage_t {}
 #define LOG( Level, Component ) \
-    if (LOG_LEVEL_##Level) \
+    if_const (LOG_LEVEL_##Level) \
         LOG_MSG << LOG_COMPONENT_##Component
+
+#define LOGINFO( Level, Component ) \
+	if_const ( LOG_LEVEL_##Level ) \
+		LogMessage_t { SPH_LOG_INFO } << LOG_COMPONENT_##Component
 
 class LocMessages_c;
 class LocMessage_c

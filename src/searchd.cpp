@@ -18957,7 +18957,9 @@ void StopOrStopWaitAnother ( CSphVariant * v, bool bWait ) REQUIRES ( MainThread
 	{
 		sPipeName = GetNamedPipeName ( iPid );
 		::unlink ( sPipeName.cstr () ); // avoid garbage to pollute us
+                int iMask = umask ( 0 );
 		iPipeCreated = mkfifo ( sPipeName.cstr(), 0666 );
+                umask ( iMask );
 		if ( iPipeCreated!=-1 )
 			fdPipe = ::open ( sPipeName.cstr(), O_RDONLY | O_NONBLOCK );
 

@@ -406,6 +406,7 @@ void RtSegment_t::BuildDocID2RowIDMap ( const CSphSchema & tSchema )
 	{
 		int iStride = GetStride();
 		RowID_t tRowID = 0;
+		FakeRL_t _ {m_tLock}; // no need true lock as the func is in game during build/merge when segment is not yet published
 
 		for ( int i=0; i<m_dRows.GetLength(); i+=iStride )
 			m_tDocIDtoRowID.Add ( sphGetDocID ( &m_dRows[i] ), tRowID++ );
@@ -2779,6 +2780,7 @@ void RtIndex_c::MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, c
 RtSegment_t* RtIndex_c::MergeTwoSegments ( const RtSegment_t* pA, const RtSegment_t* pB ) const
 {
 	auto* pSeg = new RtSegment_t ( 0 );
+	FakeWL_t _ {pSeg->m_tLock};
 
 	if ( m_tSchema.HasStoredFields() )
 		pSeg->SetupDocstore ( &m_tSchema );

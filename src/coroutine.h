@@ -441,4 +441,8 @@ using SccRL_t = CSphScopedRLock_T<CoroRWLock_c>;
 using SccWL_t = CSphScopedWLock_T<CoroRWLock_c>;
 using ScopedCoroSpinlock_t = CSphScopedLock<CoroSpinlock_c>;
 
+// fake locks
+using FakeRL_t = FakeScopedRLock_T<CoroRWLock_c>;
+using FakeWL_t = FakeScopedWLock_T<CoroRWLock_c>;
+
 } // namespace Threads

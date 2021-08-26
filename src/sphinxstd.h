@@ -4545,6 +4545,22 @@ protected:
 	LOCKED & m_tLock;
 };
 
+/// scoped shared (read) fake fake - do nothing, just mute warnings
+template<class LOCKED=CSphRwlock>
+struct SCOPED_CAPABILITY FakeScopedRLock_T : ISphNoncopyable
+{
+	explicit FakeScopedRLock_T ( LOCKED & tLock ) ACQUIRE_SHARED ( tLock ) {}
+	~FakeScopedRLock_T() RELEASE () {}
+};
+
+/// scoped exclusive (write) fake lock - does nothing, just mute warnings
+template<class LOCKED=CSphRwlock>
+struct SCOPED_CAPABILITY FakeScopedWLock_T : ISphNoncopyable
+{
+	explicit FakeScopedWLock_T ( LOCKED & tLock ) ACQUIRE ( tLock ) EXCLUDES ( tLock ) {}
+	~FakeScopedWLock_T() RELEASE () {}
+};
+
 /// scoped lock owner - unlock in dtr
 template <class LOCKED=CSphRwlock>
 class SCOPED_CAPABILITY ScopedUnlock_T : ISphNoncopyable

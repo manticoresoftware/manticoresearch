@@ -44,6 +44,13 @@ index test2
   path      = <data_path/>/test_dummy2
 }
 
+index test_wf
+{
+  source    = src1
+  path      = <data_path/>/test_dummy_wf
+  wordforms = <this_test/>/wordforms.txt
+}
+
 index dist2
 {
   type	= distributed
@@ -323,6 +330,8 @@ INSERT INTO `test_group2` VALUES
 
 <!-- regression stored field missed at facet -->
 <query endpoint="json/search">{ "index": "dist_gr2", "aggs":{ "gr_small": { "terms": { "field": "gid" } }, "gr_tag": { "terms": { "field": "tag" } }} }</query>
+
+<query endpoint="json/search">{"index":"test_wf","query":{"match":{"content":"quite"}}}</query>
 
 <sphinxql>
 <!-- regression stored field missed at facet -->

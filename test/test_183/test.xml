@@ -26,6 +26,7 @@ index test
 {
 	source			= srctest
 	path			= <data_path/>/test
+    charset_table   = 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451
 }
 source srctests
 {
@@ -39,6 +40,7 @@ index tests
 {
 	source			= srctests
 	path			= <data_path/>/tests
+    charset_table   = 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451
 }
 
 index rt28

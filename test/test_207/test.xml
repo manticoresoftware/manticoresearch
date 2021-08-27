@@ -34,6 +34,7 @@ index test1
 	morphology		= lemmatize_ru_all
 	blend_chars		= @, .
 	wordforms		= <this_test/>/wordforms.txt
+    charset_table   = 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451
 }
 
 index test2 : test1
@@ -65,6 +66,7 @@ index testrt1
 	wordforms		= <this_test/>/wordforms.txt
 	rt_attr_uint	= gid
 	rt_field		= title
+    charset_table   = 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451
 }
 
 index testrt2 : testrt1

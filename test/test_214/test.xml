@@ -29,6 +29,8 @@ index rt
   <variant>index_field_lengths = 0</variant>
   <variant>index_field_lengths = 1</variant>
 </dynamic>
+
+    charset_table   = 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451
 }
 </config>
 

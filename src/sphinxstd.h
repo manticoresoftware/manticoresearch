@@ -2134,7 +2134,7 @@ protected:
 	using VecTraits_T<T>::m_iCount;
 
 public:
-	explicit CSphFixedVector ( int64_t iSize )
+	explicit CSphFixedVector ( int64_t iSize ) noexcept
 	{
 		m_iCount = iSize;
 		assert ( iSize>=0 );

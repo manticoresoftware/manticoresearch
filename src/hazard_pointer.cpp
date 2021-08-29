@@ -123,11 +123,27 @@ struct VecOfRetired_t : public VecRetiredPointers_t, public ISphNoncopyable
 	}
 };
 
+// when thread hazard destructes, it may still have some alive retired
+// we will leak them into this sink, and sometimes refine with another threads.
+class RetiredSink_c
+{
+	CSphMutex m_dGuard;
+	VecRetiredPointers_t m_dSink GUARDED_BY (m_dGuard);
+
+	void PruneSink () REQUIRES ( m_dGuard );
+	void MaybePruneSink () REQUIRES ( m_dGuard );
+
+public:
+	void AdoptRetired ( VecOfRetired_t& dRetired ) EXCLUDES ( m_dGuard );
+	void FinallyPruneSink () EXCLUDES ( m_dGuard );
+};
+
 // main hazard pointer storage class (per-thread)
 class ThreadState_c : public ISphNoncopyable
 {
 	Storage_t	m_tHazards;
 	VecOfRetired_t m_tRetired  GUARDED_BY ( thRetiringThread );
+	static RetiredSink_c m_dGlobalSink;
 
 	// generic main GC procedure
 	void Scan();
@@ -148,6 +164,8 @@ public:
 	AtomicPointer_t* HazardAlloc();
 	void HazardDealloc ( AtomicPointer_t * pPointer );
 	void IterateHazards ( fnHazardProcessor&& fnProcessor ) const;
+
+	static void FinallyPruneSink();
 };
 
 namespace { // unnamed (static)
@@ -242,50 +260,35 @@ bool TryPruneOnePointer ( RetiredPointer_t* pSrc )
 	PrunePointer ( pSrc );
 	return true;
 }
+} // unnamed namespace
 
 // when thread hazard destructes, it may still have some alive retired
 // we will leak them into this sink, and sometimes refine with another threads.
-class RetiredSink_c
+void RetiredSink_c::PruneSink ()
 {
-	CSphMutex m_dGuard;
-	VecRetiredPointers_t m_dSink GUARDED_BY (m_dGuard);
-
-	void PruneSink () REQUIRES ( m_dGuard )
-	{
-		auto iCompressed = PruneRetiredImpl ( m_dSink.begin (), m_dSink.GetLength () );
-		m_dSink.Resize ( iCompressed );
-	}
-
-	void MaybePruneSink () REQUIRES ( m_dGuard )
-	{
-		if ( m_dSink.GetLength()>=GetCleanupSize () )
-			PruneSink();
-	}
-
-public:
-	// adopt retired chunk from finishing thread
-	// called from thread d-tr, to sink pointers finaly alived.
-	// called from Shutdown, to sink last pointers in the process.
-	void AdoptRetired ( VecOfRetired_t& dRetired ) EXCLUDES ( m_dGuard )
-	{
-		ScopedMutex_t _ ( m_dGuard );
-		ScopedRole_c r ( thRetiringThread );
-		m_dSink.Append ( dRetired.Slice ( 0, dRetired.m_iCurrent ) );
-		dRetired.m_iCurrent = 0;
-		MaybePruneSink ();
-	}
-
-	// prune as many as possible.
-	// rest just retire and finally clean sink
-	void FinallyPruneSink () EXCLUDES ( m_dGuard );
-};
-
-RetiredSink_c& dGlobalSink ()
-{
-	static RetiredSink_c g_dGlobalSink;
-	return g_dGlobalSink;
+	auto iCompressed = PruneRetiredImpl ( m_dSink.begin (), m_dSink.GetLength () );
+	m_dSink.Resize ( iCompressed );
 }
-} // unnamed namespace
+
+void RetiredSink_c::MaybePruneSink ()
+{
+	if ( m_dSink.GetLength()>=GetCleanupSize () )
+		PruneSink();
+}
+
+// adopt retired chunk from finishing thread
+// called from thread d-tr, to sink pointers finaly alived.
+// called from Shutdown, to sink last pointers in the process.
+void RetiredSink_c::AdoptRetired ( VecOfRetired_t& dRetired )
+{
+	ScopedMutex_t _ ( m_dGuard );
+	ScopedRole_c r ( thRetiringThread );
+	m_dSink.Append ( dRetired.Slice ( 0, dRetired.m_iCurrent ) );
+	dRetired.m_iCurrent = 0;
+	MaybePruneSink ();
+}
+
+RetiredSink_c ThreadState_c::m_dGlobalSink;
 
 
 static ThreadState_c & ThreadState ()
@@ -305,7 +308,7 @@ ThreadState_c::ThreadState_c ()
 ThreadState_c::~ThreadState_c ()
 {
 	while ( m_tRetired.NotEmpty() )
-		dGlobalSink ().AdoptRetired ( m_tRetired );
+		m_dGlobalSink.AdoptRetired ( m_tRetired );
 }
 
 // GC enterpoint - called when no more place for retired
@@ -378,20 +381,25 @@ void ThreadState_c::IterateHazards ( fnHazardProcessor&& fnProcessor ) const
 }
 
 void RetiredSink_c::FinallyPruneSink ()
-	{
-		ScopedMutex_t _ ( m_dGuard );
-		PruneSink ();
+{
+	ScopedMutex_t _ ( m_dGuard );
+	PruneSink ();
 
-		// retire all non-sinked active
-		for ( auto& dTailed : m_dSink )
-			ThreadState ().Retire ( dTailed, false );
-		m_dSink.Reset();
-	}
+	// retire all non-sinked active
+	for ( auto& dTailed : m_dSink )
+		ThreadState ().Retire ( dTailed, false );
+	m_dSink.Reset();
+}
+
+void ThreadState_c::FinallyPruneSink()
+{
+	m_dGlobalSink.FinallyPruneSink();
+}
 
 void ThreadState_c::Shutdown ()
 {
 	ScopedRole_c _ ( thRetiringThread );
-	dGlobalSink ().FinallyPruneSink ();
+	ThreadState_c::FinallyPruneSink ();
 
 	int iIteration=1;
 	while ( m_tRetired.NotEmpty () )

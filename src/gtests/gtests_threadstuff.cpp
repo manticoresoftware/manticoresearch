@@ -62,7 +62,7 @@ void Counter100c()
 
 TEST ( ThreadPool, Counter100c )
 {
-	//for (auto i=0; i<100; ++i)
+	for (auto i=0; i<100; ++i)
 		Counter100c();
 }
 

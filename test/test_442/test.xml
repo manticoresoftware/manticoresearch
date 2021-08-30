@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
-	<name>select substring_index</name>
+	<name>select upper/lower</name>
 	<requires><sphinxql_keep_null/></requires>
 
 	<config>
@@ -64,13 +64,6 @@
 		index test1_dist
 		{
 		type = distributed
-		agent = <my_address/>:test_json
-		}
-
-		index test2_dist
-		{
-		type = distributed
-		local = test_json
 		agent = <my_address/>:test_json
 		}
 
@@ -181,7 +174,6 @@
 		select id, concat('hello', ' ', 'world') as v0, upper(v0) as v from rt;
 		select id, concat('HELLO', ' ', 'WORLD') as v0, lower(v0) as v from rt;
 
-		<!-- upper() and lower() check on not crash; result must be empty -->
 		select id, upper(abcdefghijk) as res from test_json;
 		select id, upper('abcdefghijk','cde') as res from test_json;
 		select id, lower(SDMSJDNJSAS) as res from test_json;
@@ -191,7 +183,6 @@
 		select * from test1_loc;
 
 		select upper(j.name) as name from test1_loc;
-		select id, upper(j.name) as name, j.lat, j.lon, j.coord from test1_loc;
 		select upper(j.name) as name, geodist(substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1), 0.93, -0.08 ) from test1_loc;
 		select lower(j.name) as job from test1_loc;
 		select lower(j.name) as job, geodist(substring_index(j.coord,' ',-1), substring_index(j.coord,' ',1), 0.93, -0.08 ) from test1_loc;

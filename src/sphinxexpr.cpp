@@ -2570,34 +2570,27 @@ public:
         int iLength = 0;
         *ppStr = nullptr;
 
-        char * pStrBuffer = new char[iDocLen];
-        memcpy(pStrBuffer, pDoc, iDocLen);
-        char * pStrBeg = pStrBuffer;
-        const char * pStrEnd = (pStrBeg + iDocLen);
+        //create CSphVector and store the value
+        CSphVector< BYTE > pStrBuffer;
+        memcpy(pStrBuffer.AddN(iDocLen+1),pDoc,iDocLen+1);
+
+        unsigned char * pStrBeg = pStrBuffer.begin();
+        const unsigned char * pStrEnd = (pStrBeg + iDocLen);
 
         if ( pDoc && iDocLen>0 )
         {
-            while ( pStrBeg < pStrEnd )
-            {
+            while( pStrBeg < pStrEnd ) {
                 // convert the current character to its uppercase or lowercase version if it exists
-                DoCase( pStrBeg );
+                DoCase( reinterpret_cast<char *>( pStrBeg ) );
                 pStrBeg++;
             }
-
-            // return the resultant string
-            if ( ppStr )
-            {
-                iLength = SetResult( pStrBuffer, iDocLen, ppStr );
-            }
-
-            delete[] pStrBuffer;
-
-            return iDocLen;
         }
 
+        *ppStr = pStrBuffer.LeakData();
         FreeDataPtr ( *m_pArg, pDoc );
 
-        return iLength;
+        // return the resultant string
+        return iDocLen;
     }
 
     bool IsDataPtrAttr() const final
@@ -2698,31 +2691,12 @@ public:
     }
 
 private:
-    int SetResult ( const char * pDoc, int iDocLen, const BYTE ** ppResStr ) const;
     void DoCase ( char * pString ) const;
 
     Expr_Case_c ( const Expr_Case_c& rhs )
 		: m_pArg ( SafeClone (rhs.m_pArg) )
     {}
 };
-
-//	in case of input static string, function returns only pointer and length of uppercase or lowercase string. buffer is not allocated
-//	in case of input dynamic string, function allocates buffer for the uppercase or lowercase string and copy the resultant string to it
-template<bool UPPER>
-int Expr_Case_c<UPPER>::SetResult ( const char * pDoc, int iDocLen, const BYTE ** ppResStr ) const
-{
-    if ( !IsDataPtrAttr() )
-    {
-        *ppResStr = (const BYTE *) pDoc;
-    }
-    else
-    {
-        CSphString  sRetVal;
-        sRetVal.SetBinary ( pDoc, iDocLen );
-        *ppResStr = (const BYTE *) sRetVal.Leak();
-    }
-    return iDocLen;
-}
 
 // For upper() function
 template<>

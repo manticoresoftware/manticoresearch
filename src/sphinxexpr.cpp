@@ -2320,9 +2320,9 @@ public:
 		if ( pDoc && iDocLen>0 && m_iLenDelim>0 && m_iCount!=0 )
 		{
 			if ( m_iCount>0 )
-			    LeftSearch( pDoc, iDocLen, m_iCount, false, ppStr, &iLength );
+			        LeftSearch( pDoc, iDocLen, m_iCount, false, ppStr, &iLength );
 			else
-                RightSearch( pDoc, iDocLen, m_iCount, ppStr, &iLength );
+                    RightSearch( pDoc, iDocLen, m_iCount, ppStr, &iLength );
 		}
 
 		FreeDataPtr ( *m_pArg, pDoc );
@@ -2542,19 +2542,13 @@ class Expr_Case_c : public ISphStringExpr
 {
 private:
     CSphRefcountedPtr<ISphExpr> m_pArg;
-    bool m_bFreeResPtr = false;
 
 public:
     explicit Expr_Case_c ( ISphExpr * pArg )
     	: m_pArg ( pArg )
-    	, m_bFreeResPtr ( false  )
     {
         assert( pArg );
         SafeAddRef( pArg );
-        m_bFreeResPtr = m_pArg->IsDataPtrAttr();
-
-        const BYTE * pBuf = nullptr;
-        CSphMatch tTmp;
     }
 
     void FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override
@@ -2576,9 +2570,29 @@ public:
         int iLength = 0;
         *ppStr = nullptr;
 
+        char * pStrBuffer = new char[iDocLen];
+        memcpy(pStrBuffer, pDoc, iDocLen);
+        char * pStrBeg = pStrBuffer;
+        const char * pStrEnd = (pStrBeg + iDocLen);
+
         if ( pDoc && iDocLen>0 )
         {
-            DoCase( pDoc, iDocLen, ppStr, &iLength );
+            while ( pStrBeg < pStrEnd )
+            {
+                // convert the current character to its uppercase or lowercase version if it exists
+                DoCase( pStrBeg );
+                pStrBeg++;
+            }
+
+            // return the resultant string
+            if ( ppStr )
+            {
+                iLength = SetResult( pStrBuffer, iDocLen, ppStr );
+            }
+
+            delete[] pStrBuffer;
+
+            return iDocLen;
         }
 
         FreeDataPtr ( *m_pArg, pDoc );
@@ -2588,7 +2602,7 @@ public:
 
     bool IsDataPtrAttr() const final
     {
-        return m_bFreeResPtr;
+        return true;
     }
 
 	//	base class does not convert string to float
@@ -2685,11 +2699,10 @@ public:
 
 private:
     int SetResult ( const char * pDoc, int iDocLen, const BYTE ** ppResStr ) const;
-    int DoCase ( const  char * pDoc, int iDocLen, const BYTE ** ppResStr, int * pResLen ) const;
+    void DoCase ( char * pString ) const;
 
     Expr_Case_c ( const Expr_Case_c& rhs )
 		: m_pArg ( SafeClone (rhs.m_pArg) )
-		, m_bFreeResPtr ( rhs.m_bFreeResPtr )
     {}
 };
 
@@ -2713,54 +2726,16 @@ int Expr_Case_c<UPPER>::SetResult ( const char * pDoc, int iDocLen, const BYTE *
 
 // For upper() function
 template<>
-int Expr_Case_c<true>::DoCase ( const char * pDoc, int iDocLen, const BYTE ** ppResStr, int * pResLen ) const
+void Expr_Case_c<true> :: DoCase ( char *pString ) const
 {
-    // Create a new memory buffer and store the original string in it.
-    char * pStrBuffer = new char[iDocLen];
-    memcpy(pStrBuffer, pDoc, iDocLen);
-    char * pStrBeg = pStrBuffer;
-    const char * pStrEnd = (pStrBeg + iDocLen);
-
-    while ( pStrBeg < pStrEnd )
-    {
-        // convert the current character to its uppercase version if it exists
-        *pStrBeg = toupper(*pStrBeg);
-        pStrBeg++;
-    }
-
-    // return the resultant string
-    if ( ppResStr )
-    {
-        *pResLen = SetResult( pStrBuffer, iDocLen, ppResStr );
-    }
-
-    return iDocLen;
+    *pString = toupper(*pString);
 }
 
 // For lower() function
 template<>
-int Expr_Case_c<false> :: DoCase ( const char * pDoc, int iDocLen, const BYTE ** ppResStr, int * pResLen ) const
+void Expr_Case_c<false> :: DoCase ( char *pString ) const
 {
-    // Create a new memory buffer and store the original string in it.
-    char * pStrBuffer = new char[iDocLen];
-    memcpy(pStrBuffer, pDoc, iDocLen);
-    char * pStrBeg = pStrBuffer;
-    const char * pStrEnd = (pStrBeg + iDocLen);
-
-    while ( pStrBeg < pStrEnd )
-    {
-        // convert the current character to its lowercase version if it exists
-        *pStrBeg = tolower(*pStrBeg);
-        pStrBeg++;
-    }
-
-    // return the resultant string
-    if ( ppResStr )
-    {
-        *pResLen = SetResult( pStrBuffer, iDocLen, ppResStr );
-    }
-
-    return iDocLen;
+    *pString = tolower(*pString);
 }
 
 class Expr_Iterator_c : public Expr_JsonField_c
@@ -3991,10 +3966,7 @@ static FuncDesc_t g_dFuncs[FUNC_FUNCS_COUNT] = // Keep same order as in Tokh_e
     {  /*"upper",          */	1,	TOK_FUNC,		/*FUNC_UPPER,           */	SPH_ATTR_STRINGPTR },
     {  /*"lower",          */	1,	TOK_FUNC,		/*FUNC_LOWER,           */	SPH_ATTR_STRINGPTR },
 
-
-
-
-    {  /*"last_insert_id",*/	0,	TOK_FUNC,		/*FUNC_LAST_INSERT_ID,	*/	SPH_ATTR_STRINGPTR },
+    { /*"last_insert_id",*/	0,	TOK_FUNC,		/*FUNC_LAST_INSERT_ID,	*/	SPH_ATTR_STRINGPTR },
 	{ /*"levenshtein", */		-1,	TOK_FUNC,		/*FUNC_LEVENSHTEIN,		*/	SPH_ATTR_NONE },
 };
 

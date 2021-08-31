@@ -11,7 +11,6 @@
 /*.sdf
 /*.opensdf
 /.hg
-/.DS_Store
 
 # /api/libsphinxclient/
 /api/libsphinxclient/*.ncb
@@ -71,6 +70,5 @@
 /test/ql/data/*.lock
 /test/ql/*.class
 /test/ql/*.exe
-/test/.DS_Store
 
 /local_*_src.txt

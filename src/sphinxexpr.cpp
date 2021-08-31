@@ -2570,9 +2570,9 @@ public:
         int iLength = 0;
         *ppStr = nullptr;
 
-        //create CSphVector and store the value
+        // create CSphVector and store the value
         CSphVector< BYTE > pStrBuffer;
-        memcpy(pStrBuffer.AddN(iDocLen+1),pDoc,iDocLen+1);
+        memcpy(pStrBuffer.AddN(iDocLen),pDoc,iDocLen);
 
         unsigned char * pStrBeg = pStrBuffer.begin();
         const unsigned char * pStrEnd = (pStrBeg + iDocLen);
@@ -2702,13 +2702,15 @@ private:
 template<>
 void Expr_Case_c<true> :: DoCase ( char *pString ) const
 {
-    *pString = toupper(*pString);
+	// converts a letter into it's uppercase letter if exits.
+	*pString = toupper(*pString);
 }
 
 // For lower() function
 template<>
 void Expr_Case_c<false> :: DoCase ( char *pString ) const
 {
+	// converts a letter into it's lowercase letter if exists.
     *pString = tolower(*pString);
 }
 

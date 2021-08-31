@@ -2571,10 +2571,10 @@ public:
         *ppStr = nullptr;
 
         // create CSphVector and store the value
-        CSphVector< BYTE > pStrBuffer;
-        memcpy(pStrBuffer.AddN(iDocLen),pDoc,iDocLen);
+        CSphVector< BYTE > dStrBuffer;
+		dStrBuffer.Append(pDoc, iDocLen);
 
-        unsigned char * pStrBeg = pStrBuffer.begin();
+        unsigned char * pStrBeg = dStrBuffer.begin();
         const unsigned char * pStrEnd = (pStrBeg + iDocLen);
 
         if ( pDoc && iDocLen>0 )
@@ -2586,7 +2586,7 @@ public:
             }
         }
 
-        *ppStr = pStrBuffer.LeakData();
+        *ppStr = dStrBuffer.LeakData();
         FreeDataPtr ( *m_pArg, pDoc );
 
         // return the resultant string
@@ -2702,7 +2702,6 @@ private:
 template<>
 void Expr_Case_c<true> :: DoCase ( char *pString ) const
 {
-	// converts a letter into it's uppercase letter if exits.
 	*pString = toupper(*pString);
 }
 
@@ -2710,7 +2709,6 @@ void Expr_Case_c<true> :: DoCase ( char *pString ) const
 template<>
 void Expr_Case_c<false> :: DoCase ( char *pString ) const
 {
-	// converts a letter into it's lowercase letter if exists.
     *pString = tolower(*pString);
 }
 

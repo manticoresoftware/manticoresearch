@@ -941,6 +941,9 @@ static bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sErro
 	CSphString sMyName;
 	sMyName.SetSprintf ( "daemon_%d_%s", GetOsThreadId(), tArgs.m_pCluster->m_sName.cstr() );
 
+	CSphString sThName; // shorter name without extra 'daemon_'
+	sThName.SetSprintf ( "%s_repl", tArgs.m_pCluster->m_sName.cstr() );
+
 	CSphString sConnectNodes;
 	if ( tArgs.m_sNodes.IsEmpty() )
 	{
@@ -1031,7 +1034,7 @@ static bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sErro
 	}
 
 	// let's start listening thread with proper provider set
-	auto pScheduler = MakeSingleThreadExecutor ( -1, sMyName.cstr() );
+	auto pScheduler = MakeSingleThreadExecutor ( -1, sThName.cstr() );
 	Threads::CoGo ( [pRecvArgs,sIncoming] () mutable
 	{
 		// publish stuff in 'show threads'

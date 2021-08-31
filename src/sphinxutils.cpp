@@ -1650,6 +1650,32 @@ void sphLogDebugRpl_impl ( const char * sFmt, ... )
 	va_end ( ap );
 }
 
+namespace // use string builder with custom formatters
+{
+void CustomLogVa ( const char* sFmt, va_list ap, ESphLogLevel eLevel )
+{
+	StringBuilder_c sMyLine;
+	sMyLine.vSprintf ( sFmt, ap );
+	sphLogf ( eLevel, "%s", sMyLine.cstr() );
+}
+} // namespace
+
+void CustomLog::Warning_impl ( const char * sFmt, ... )
+{
+	va_list ap;
+	va_start ( ap, sFmt );
+	CustomLogVa ( sFmt, ap, SPH_LOG_WARNING );
+	va_end ( ap );
+}
+
+void CustomLog::Info_impl ( const char * sFmt, ... )
+{
+	va_list ap;
+	va_start ( ap, sFmt );
+	CustomLogVa ( sFmt, ap, SPH_LOG_INFO );
+	va_end ( ap );
+}
+
 namespace TimePrefixed
 {
 	static int64_t g_uTimePrefix = 0;

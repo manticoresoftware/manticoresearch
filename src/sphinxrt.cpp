@@ -8826,10 +8826,10 @@ void RtIndex_c::CommonMerge ( std::function<bool ( int*, int* )>&& fnSelector, c
 
 	if ( sphInterrupted() )
 	{
-		sphWarning ( "rt: index %s: optimization terminated chunk(s) %d ( left %d ) in %d.%03d sec", m_sIndexName.cstr(), iChunks, iDiskChunks, (int)( tmPass / 1000000 ), (int)( ( tmPass / 1000 ) % 1000 ) );
+		LogWarning ( "rt: index %s: optimization terminated chunk(s) %d ( left %d ) in %.3t", m_sIndexName.cstr(), iChunks, iDiskChunks, tmPass );
 	} else
 	{
-		sphInfo ( "rt: index %s: optimized %s chunk(s) %d ( left %d ) in %d.%03d sec", m_sIndexName.cstr(), g_bProgressiveMerge ? "progressive" : "regular", iChunks, iDiskChunks, (int)( tmPass / 1000000 ), (int)( ( tmPass / 1000 ) % 1000 ) );
+		LogInfo ( "rt: index %s: optimized %s chunk(s) %d ( left %d ) in %.3t", m_sIndexName.cstr(), g_bProgressiveMerge ? "progressive" : "regular", iChunks, iDiskChunks, tmPass );
 	}
 }
 

@@ -19765,8 +19765,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	Detached::AloneShutdowncatch ();
 
 	// time for replication to sync with cluster
-	ReplicationStart ( hSearchd, dListenerDescs, bNewCluster, bNewClusterForce );
 	searchd::AddShutdownCb ( ReplicateClustersDelete );
+	ReplicationStart ( hSearchd, dListenerDescs, bNewCluster, bNewClusterForce );
 
 	// ready, steady, go
 	sphInfo ( "accepting connections" );

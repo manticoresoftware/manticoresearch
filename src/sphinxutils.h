@@ -386,6 +386,14 @@ namespace TimePrefixed {
 	void LogDebugvv ( const char* sPrefix, const char* sFmt, ... );
 }
 
+namespace CustomLog {
+	void Warning_impl ( const char* sFmt, ... );
+	void Info_impl ( const char* sFmt, ... );
+}
+
+#define LogWarning( ... ) do if ( g_eLogLevel >= SPH_LOG_WARNING ) CustomLog::Warning_impl ( __VA_ARGS__ ); while ( 0 )
+#define LogInfo( ... ) do if ( g_eLogLevel >= SPH_LOG_INFO ) CustomLog::Info_impl ( __VA_ARGS__ ); while ( 0 )
+
 //////////////////////////////////////////////////////////////////////////
 
 /// how do we properly exit from the crash handler?

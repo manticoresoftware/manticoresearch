@@ -9389,6 +9389,8 @@ void RtIndex_c::LockFileState ( CSphVector<CSphString>& dFiles )
 	m_tOptimizingLock.Unlock();
 
 	ForceRamFlush ( "forced" );
+	CSphString sError;
+	SaveAttributes ( sError ); // fixme! report error, better discard whole locking
 	m_bSaveDisabled = true;
 
 	GetIndexFiles ( dFiles, nullptr );

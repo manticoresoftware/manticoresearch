@@ -6668,9 +6668,9 @@ int QueueCreator_c::ReduceMaxMatches() const
 {
 	assert ( !m_bGotGroupby );
 	if ( m_tQuery.m_bExplicitMaxMatches || m_tQuery.m_bHasOuter || !m_tSettings.m_bComputeItems )
-		return m_tSettings.m_iMaxMatches;
+		return Max ( m_tSettings.m_iMaxMatches, 1 );
 
-	return Min ( m_tSettings.m_iMaxMatches, m_tQuery.m_iLimit+m_tQuery.m_iOffset );
+	return Max ( Min ( m_tSettings.m_iMaxMatches, m_tQuery.m_iLimit+m_tQuery.m_iOffset ), 1 );
 }
 
 

@@ -139,5 +139,10 @@ INSERT INTO `test_table` VALUES
 	select id, str1 from plain,rt1 where match ('^cat$') order by id asc;
 	select id, str1 from plain,rt1 where match ('cat') order by id asc;
 
+</sphinxql>
+<sphinxql>
+    <!-- regression limit 0 crash at sorted usage -->
+    select * from plain limit 0;
+
 </sphinxql></queries>
 </test>

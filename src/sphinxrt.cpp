@@ -8752,7 +8752,7 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID )
 
 void RtIndex_c::StopOptimize()
 {
-	m_bOptimizeStop.store ( true, std::memory_order_acquire );
+	m_bOptimizeStop.store ( true, std::memory_order_release );
 	while ( m_iOptimizesRun.load(std::memory_order_relaxed)>0 )
 		m_tOptimizesRunChanged.WaitEvent();
 }

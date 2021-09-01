@@ -463,24 +463,14 @@ max_batch_queries = 256
 ```
 <!-- end -->
 
+### max_connections
 
-### threads
-
-<!-- example threads -->
-Number of working threads (or, size of thread pool) of Manticore daemon. Manticore creates this number of OS threads on start, and they perform all jobs inside the daemon such as executing queries, creating snippets, etc. Some operations may be split into sub-tasks and executed in parallel, for example:
-
-* Search in a real-time index
-* Search in a distributed index consisting of local indexes
-* Percolate query call
-* and others
-
-By default it's set to the number of CPU cores on the server. Manticore creates the threads on start and keep them until it's stopped. Each sub-task can use one of the threads when it needs it, when the sub-task finishes it releases the thread so another sub-task can use it.
-
-In case of intensive I/O type of load it might make sense to set the value higher than the # of CPU cores.
+<!-- example max_connections -->
+Maximum number of simultaneous client connections. Unlimited by default. That is usually noticeable only when using any kind of persistent connections, like cli mysql sessions or persistent remote connections from remote distributed indexes. When the limit is exceeded you can still connect to the server using the [VIP connection](../Connecting_to_the_server/MySQL_protocol.md#VIP-connection)
 
 <!-- request Example -->
 ```ini
-threads = 10
+max_connections = 10
 ```
 
 <!-- end -->
@@ -633,11 +623,22 @@ Defines how many clients are accepted on each iteration of the network loop. Def
 
 Defines how many requests are processed on each iteration of the network loop. Default is 0 (unlimited), which should be fine for most users. This is a fine tuning option to control the throughput of the network loop in high load scenarios.
 
+### network_timeout
+
+<!-- example conf network_timeout -->
+Network client request read/write timeout, in seconds (or [special_suffixes](../Server_settings/Special_suffixes.md)). Optional, default is 5 seconds. `searchd` will forcibly close a client connection which fails to send a query or read a result within this timeout.
+
+<!-- request Example -->
+
+```ini
+read_timeout = 1
+```
+<!-- end -->
 
 ### node_address
 
 <!-- example conf node_address -->
-This setting lets you specify the network address of the node. By default it set to replication [listen](../Server_settings/Searchd.md#listen) address. That is correct in most cases, however there are situations where you have to specify it manually:
+This setting lets you specify the network address of the node. By default it is set to replication [listen](../Server_settings/Searchd.md#listen) address. That is correct in most cases, however there are situations where you have to specify it manually:
 
 * node behind a firewall
 * network address translation enabled (NAT)
@@ -859,30 +860,6 @@ By default the searchd and query log files are created with 600 permission, so o
 
 ```ini
 query_log_mode  = 666
-```
-<!-- end -->
-
-### max_connections
-
-<!-- example max_connections -->
-Maximum number of simultaneous client connections. Unlimited by default. That is usually noticeable only when using any kind of persistent connections, like cli mysql sessions or persistent remote connections from remote distributed indexes. When the limit is exceeded you can still connect to the server using the [VIP connection](../Connecting_to_the_server/MySQL_protocol.md#VIP-connection)
-
-<!-- request Example -->
-```ini
-max_connections = 10
-```
-
-<!-- end -->
-
-### network_timeout
-
-<!-- example conf network_timeout -->
-Network client request read/write timeout, in seconds (or [special_suffixes](../Server_settings/Special_suffixes.md)). Optional, default is 5 seconds. `searchd` will forcibly close a client connection which fails to send a query or read a result within this timeout.
-
-<!-- request Example -->
-
-```ini
-read_timeout = 1
 ```
 <!-- end -->
 
@@ -1243,6 +1220,26 @@ subtree_hits_cache = 16M
 ```
 <!-- end -->
 
+### threads
+
+<!-- example threads -->
+Number of working threads (or, size of thread pool) of Manticore daemon. Manticore creates this number of OS threads on start, and they perform all jobs inside the daemon such as executing queries, creating snippets, etc. Some operations may be split into sub-tasks and executed in parallel, for example:
+
+* Search in a real-time index
+* Search in a distributed index consisting of local indexes
+* Percolate query call
+* and others
+
+By default it's set to the number of CPU cores on the server. Manticore creates the threads on start and keep them until it's stopped. Each sub-task can use one of the threads when it needs it, when the sub-task finishes it releases the thread so another sub-task can use it.
+
+In case of intensive I/O type of load it might make sense to set the value higher than the # of CPU cores.
+
+<!-- request Example -->
+```ini
+threads = 10
+```
+
+<!-- end -->
 
 ### thread_stack
 

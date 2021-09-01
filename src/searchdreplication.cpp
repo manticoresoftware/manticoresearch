@@ -1656,7 +1656,7 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 		if ( !sWarning.IsEmpty() )
 			sphWarning ( "%s", sWarning.cstr() );
 		// FIXME!!! make update trx
-		return true;
+		return bOk;
 
 	}
 
@@ -2813,7 +2813,13 @@ struct FileChunks_t
 	int m_iChunkBytes = 0; // length bytes of one hash chunk in file
 
 	// count of chunks for file size
-	int GetChunksCount() const { return int( ( m_iFileSize + m_iChunkBytes - 1) / m_iChunkBytes ); }
+	int GetChunksCount() const
+	{
+		if ( m_iFileSize )
+			return int( ( m_iFileSize + m_iChunkBytes - 1) / m_iChunkBytes );
+		else
+			return 0;
+	}
 
 	int GetChunkFileLength ( int iChunk ) const
 	{
@@ -3243,7 +3249,8 @@ public:
 		tCmd.m_iFile = tBuf.GetInt();
 		tCmd.m_iChunk = tBuf.GetInt();
 		const BYTE * pData = nullptr;
-		tBuf.GetBytesZerocopy ( &pData, tCmd.m_iSendSize );
+		if ( tCmd.m_iSendSize )
+			tBuf.GetBytesZerocopy ( &pData, tCmd.m_iSendSize );
 		tCmd.m_pSendBuff = const_cast<BYTE *>(pData);
 	}
 
@@ -4406,7 +4413,7 @@ static bool Next ( FileReader_t & tReader, StringBuilder_c & sErrors )
 		if ( !pDst->m_dNodeChunks.BitGet ( tNewChunk.m_iHashStartItem + iNewChunk ) )
 			break;
 	}
-	assert ( iNewChunk<iNewCount );
+	assert ( !iNewCount || iNewChunk<iNewCount );
 	assert ( !pDst->m_dNodeChunks.BitGet ( tNewChunk.m_iHashStartItem + iNewChunk ) );
 	return ReadChunk ( iNewChunk, tReader, sErrors );
 }
@@ -4629,6 +4636,7 @@ static bool SyncSigBegin ( SyncSrc_t & tSync, CSphString & sError )
 		tSync.m_iMaxChunkBytes = Max ( tSlice.m_iChunkBytes, tSync.m_iMaxChunkBytes );
 	}
 	tSync.m_dHashes.Reset ( iHashes * HASH20_SIZE );
+	tSync.m_dHashes.Fill ( 0 );
 
 	SHA1_c tHashFile;
 	SHA1_c tHashChunk;

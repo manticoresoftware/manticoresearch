@@ -85,29 +85,38 @@ Besides using the exposed ports 9306 and 9308 you can log into the instance by r
 
 ### HTTP protocol
 
+
 HTTP protocol is exposed on port 9308. You can map the port locally and connect with curl:
 
 ```bash
 docker run --name manticore -p 9308:9308 -d manticoresearch/manticore
 ```
 
+<!-- example create -->
 Create a table:
 
+<!-- request HTTP -->
 ```json
 POST /sql -d 'mode=raw&query=CREATE TABLE testrt ( title text, content text, gid integer)'
 ```
+<!-- end -->
+<!-- example insert -->
 Insert a document:
 
+<!-- request HTTP -->
 ```json
 POST /insert
 -d'{"index":"testrt","id":1,"doc":{"title":"Hello","content":"world","gid":1}}'
 ```
-
+<!-- end -->
+<!-- example search -->
 Perform a simple search:
 
+<!-- request HTTP -->
 ```json
 POST /search -d '{"index":"testrt","query":{"match":{"*":"hello world"}}}'
 ```
+<!-- end -->
 
 ### Logging
 

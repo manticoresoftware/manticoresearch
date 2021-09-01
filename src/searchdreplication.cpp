@@ -1437,7 +1437,7 @@ static bool SetIndexCluster ( const CSphString & sIndex, const CSphString & sClu
 }
 
 // lock or unlock write operations to disk chunks of index
-static bool ControlIndexWrite ( const CSphString & sIndex, bool bEnableWrite, CSphString & sError )
+static bool EnableIndexWrite ( const CSphString & sIndex, CSphString & sError )
 {
 	ServedIndexRefPtr_c pServed = GetServed ( sIndex );
 	if ( !pServed )
@@ -1454,10 +1454,7 @@ static bool ControlIndexWrite ( const CSphString & sIndex, bool bEnableWrite, CS
 	}
 
 	auto * pIndex = (RtIndex_i*)pDesc->m_pIndex;
-	if ( bEnableWrite )
-		pIndex->EnableSave();
-	else
-		pIndex->ProhibitSave();
+	pIndex->EnableSave();
 
 	return true;
 }
@@ -2237,7 +2234,7 @@ static bool ReplicatedIndexes ( const CSphFixedVector<CSphString> & dIndexes, co
 
 	// need to enable back local index write
 	for ( const CSphString & sIndex : dIndexes )
-		bOk &= ControlIndexWrite ( sIndex, true, sError );
+		bOk &= EnableIndexWrite ( sIndex, sError );
 
 	if ( !bOk )
 		return false;
@@ -3945,8 +3942,8 @@ public:
 	}
 
 private:
-	CSphOrderedHash < RecvState_c, uint64_t, IdentityHash_fn, 64 > m_hStates;
-	Threads::CoroSpinlock_c m_tLock; // prevent modification of hash from multiple clients
+	CSphOrderedHash < RecvState_c, uint64_t, IdentityHash_fn, 64 > m_hStates GUARDED_BY (m_tLock);
+	Threads::CoroSpinlock_c m_tLock;
 };
 
 static StatesCache_c g_tRecvStates;
@@ -4225,14 +4222,13 @@ static void RemoveFiles ( const FilesTrait_t & tIndexFiles, const StrVec_t & dRe
 bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSphString & sError )
 {
 	uint64_t uWriter = GetWriterKey ( tCmd.m_sCluster, tCmd.m_sIndex );
-	ScopedState_t tStateGuard ( uWriter );
-
 	if ( !g_tRecvStates.HasState ( uWriter ) )
 	{
 		sError.SetSprintf ( "missed writer state at joiner node for cluster '%s' index '%s'", tCmd.m_sCluster.cstr(), tCmd.m_sIndex.cstr() );
 		return false;
 	}
 
+	ScopedState_t tStateGuard ( uWriter );
 	CSphScopedPtr<MergeState_t> pMerge { g_tRecvStates.GetState ( uWriter ).Flush ( sError ) };
 	if ( !pMerge.Ptr() )
 		return false;

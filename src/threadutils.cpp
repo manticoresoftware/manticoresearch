@@ -294,7 +294,7 @@ public:
 protected:
 	// protect ctr and dtr of this type
 	SchedulerOperation_t ( fnFuncType* fnFunc ) : m_fnFunc ( fnFunc ) {}
-	~SchedulerOperation_t () {}
+	~SchedulerOperation_t () = default;
 };
 
 using OpSchedule_t = OpQueue_T<SchedulerOperation_t>;

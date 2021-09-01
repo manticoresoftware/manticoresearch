@@ -933,12 +933,6 @@ public:
 		return m_iMaxDiskChunkId;
 	}
 
-	ConstDiskChunkRefPtr_t DiskChunk(int iNum) const
-	{
-		ScRL_t rLock ( m_tLock );
-		return ( *m_pChunks )[iNum];
-	}
-
 	ConstDiskChunkRefPtr_t DiskChunkByID ( int iChunkID ) const
 	{
 		ScRL_t rLock ( m_tLock );
@@ -993,16 +987,11 @@ public:
 		return m_tSegmentMerger;
 	}
 
-	// when workers came from the pool, that number will be different. For now let's just stick to -2.
-	static int MergeOpID ()
+	enum OpID_e : int
 	{
-		return -2;
-	}
-
-	static int SaveOpID ()
-	{
-		return -3;
-	}
+		SaveOp_e = -3,
+		MergeOp_e = -2,
+	};
 };
 
 // helper for easier access to ConstRtData members
@@ -1035,14 +1024,12 @@ public:
 		Threads::CheckAcquiredSched ( tOwner.SerialChunkAccess() );
 	}
 
-	~RtWriter_c() EXCLUDES ( m_tOwner.m_tLock )
+	~RtWriter_c()
 	{
-		// use leak since we convert 'data*' to 'const data*' here.
 		Flush();
 	}
 
 	enum Copy_e { copy };
-	enum CopyNoLock_e { copy_no_lock };
 	enum Empty_e { empty };
 
 	void InitRamSegs ( Empty_e ) { m_pNewRamSegs = new RtSegVec_c (); }
@@ -1062,20 +1049,6 @@ public:
 			m_pNewDiskChunks->Add ( pChunk );
 	}
 
-	void InitRamSegs ( CopyNoLock_e ) REQUIRES ( m_tOwner.m_tLock )
-	{
-		InitRamSegs ( empty );
-		for ( const auto & pSeg : *m_tOwner.m_pSegments )
-			m_pNewRamSegs->Add ( pSeg );
-	}
-
-	void InitDiskChunks ( CopyNoLock_e ) REQUIRES ( m_tOwner.m_tLock )
-	{
-		InitDiskChunks ( empty );
-		for ( const auto & pChunk : *m_tOwner.m_pChunks )
-			m_pNewDiskChunks->Add ( pChunk );
-	}
-
 	void Lock () ACQUIRE ( m_tOwner.m_tLock )
 	{
 		m_tOwner.m_tLock.WriteLock();
@@ -1083,6 +1056,8 @@ public:
 
 	void FlushNoLock() REQUIRES ( m_tOwner.m_tLock )
 	{
+		// use leak since we convert 'data*' to 'const data*' here.
+
 		if ( m_pNewDiskChunks )
 			m_tOwner.m_pChunks = m_pNewDiskChunks.Leak ();
 
@@ -3187,12 +3162,11 @@ void RtIndex_c::StartMergeSegments ( bool bHasNewSegment )
 		// collect all RAM segments not occupied by any op (only ops we know is 'merge segments' and 'save ram chunk')
 		LazyVector_T<ConstRtSegmentRefPtf_t> dSegments;
 		bool bSaveActive = false;
-		int iSaveOp = m_tRtChunks.SaveOpID();
 		for ( const auto & dSeg : *m_tRtChunks.RamSegs () )
 		{
 			if ( !dSeg->m_iLocked )
 				dSegments.Add ( dSeg );
-			else if ( dSeg->m_iLocked==iSaveOp )
+			else if ( dSeg->m_iLocked == RtData_c::SaveOp_e )
 				bSaveActive = true;
 		}
 
@@ -3214,7 +3188,7 @@ void RtIndex_c::StartMergeSegments ( bool bHasNewSegment )
 			return;
 		}
 
-		int iMergeOp = m_tRtChunks.MergeOpID ();
+		int iMergeOp = RtData_c::MergeOp_e;
 
 		RtSegmentRefPtf_t pMerged { nullptr };
 
@@ -4060,6 +4034,7 @@ void RtIndex_c::WaitRAMSegmentsUnlocked () const
 		Threads::ScopedScheduler_c ( m_tRtChunks.MergeSegmentsWorker () );
 }
 
+// i.e. create new disk chunk from ram segments
 bool RtIndex_c::SaveDiskChunk ( bool bForced )
 {
 	if ( m_bSaveDisabled ) // fixme! review, m.b. refactor
@@ -4069,9 +4044,9 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced )
 
 	RTLOG << "SaveDiskChunk( " << (bForced?"forced":"not forced") << ")";
 
-	int iSaveOp = m_tRtChunks.SaveOpID();
+	int iSaveOp = RtData_c::SaveOp_e;
 
-	// if forced - wait all segments. Otherwise can continue with subset of currently available segments
+	// if forced - wait all segments. Otherwise, can continue with subset of currently available segments
 	// note that segments may be locked by currently executing SaveDiskChunk. If so, we wait them finished and continue.
 	// that will cause another disk chunk written right after just finished, since op is forced it is ok.
 	if ( bForced )
@@ -4374,7 +4349,7 @@ bool RtIndex_c::LoadMeta ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath
 }
 
 
-bool RtIndex_c::PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings )
+bool RtIndex_c::PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings ) NO_THREAD_SAFETY_ANALYSIS
 {
 	// load disk chunks, if any
 	RtWriter_c tWriter { m_tRtChunks };
@@ -4598,7 +4573,7 @@ bool RtIndex_c::SaveRamChunk ()
 }
 
 
-bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
+bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes ) NO_THREAD_SAFETY_ANALYSIS
 {
 	MEMORY ( MEM_INDEX_RT );
 
@@ -7920,7 +7895,6 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex* pIndex, bool bTruncate, bool & bFat
 	const CSphIndexSettings & tSettings = pIndex->GetSettings();
 	if ( tSettings.m_iStopwordStep!=1 )
 		LOC_ERROR ( "ATTACH currently requires stopword_step=1 in disk index (RT-side support not implemented yet)" );
-
 
 	bool bEmptyRT = m_tRtChunks.IsEmpty();
 	// ATTACH to exist index require these checks

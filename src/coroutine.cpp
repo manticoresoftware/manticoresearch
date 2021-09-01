@@ -766,12 +766,12 @@ Threads::CoroEvent_c::~CoroEvent_c ()
 // else atomically set flag 'signaled'
 void Threads::CoroEvent_c::SetEvent()
 {
-	DWORD uState = m_uState.load ( std::memory_order_relaxed );
+	BYTE uState = m_uState.load ( std::memory_order_relaxed );
 	do
 	{
 		if ( uState & Waited_e )
 		{
-			m_uState.store (1); // memory_order_sec_cst - to ensure that next call will not resume again
+			m_uState.store ( Signaled_e ); // memory_order_sec_cst - to ensure that next call will not resume again
 			fnResume ( m_pCtx );
 			return;
 		}
@@ -788,7 +788,7 @@ void Threads::CoroEvent_c::WaitEvent()
 		if ( m_pCtx!= CoWorker() )
 			m_pCtx = CoWorker();
 		CoYieldWith ( [this] {
-			DWORD uState = m_uState.load ( std::memory_order_relaxed );
+			BYTE uState = m_uState.load ( std::memory_order_relaxed );
 			do
 			{
 				if ( uState & Signaled_e )

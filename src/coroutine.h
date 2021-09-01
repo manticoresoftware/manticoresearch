@@ -319,13 +319,13 @@ public:
 
 class CoroEvent_c
 {
-	enum ESTATE : DWORD
+	enum ESTATE : BYTE
 	{
 		Signaled_e = 1, Waited_e = 2,
 	};
 
 	volatile void* m_pCtx = nullptr;
-	volatile std::atomic<DWORD> m_uState {0};
+	volatile std::atomic<BYTE> m_uState {0};
 
 public:
 	~CoroEvent_c();

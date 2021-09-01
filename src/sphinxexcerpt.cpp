@@ -396,7 +396,7 @@ private:
 		bool IsLess ( const WeightedPassage_t & a, const WeightedPassage_t  & b ) const;
 	};
 
-	SharedPtr_t<SnippetBuilderStatelessMembers_t *> m_pState;
+	SharedPtr_t<SnippetBuilderStatelessMembers_t> m_pState;
 	TokenizerRefPtr_c				m_pTokenizer;
 	TokenizerRefPtr_c				m_pQueryTokenizer;
 	DictRefPtr_c					m_pDict;

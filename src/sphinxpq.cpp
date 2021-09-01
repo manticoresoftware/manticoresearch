@@ -46,8 +46,8 @@ struct StoredQuery_t : public StoredQuery_i, public ISphRefcountedMT
 	bool							IsFullscan() const { return m_pXQ->m_bEmpty; }
 };
 
-using StoredQuerySharedPtr_t = SharedPtr_t<StoredQuery_t*>;
-using StoredQuerySharedPtrVecSharedPtr_t = SharedPtr_t<CSphVector<StoredQuerySharedPtr_t> *>;
+using StoredQuerySharedPtr_t = SharedPtr_t<StoredQuery_t>;
+using StoredQuerySharedPtrVecSharedPtr_t = SharedPtr_t<CSphVector<StoredQuerySharedPtr_t>>;
 class SharedPQSlice_t : public VecTraits_T<const StoredQuerySharedPtr_t>
 {
 	using BASE_t = VecTraits_T<const StoredQuerySharedPtr_t>;
@@ -93,6 +93,7 @@ public:
 	bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError ) const override;
 
 	bool Reconfigure ( CSphReconfigureSetup & tSetup ) override EXCLUDES ( m_tLockHash, m_tLock );
+	void ProcessDiskChunk ( int, VisitChunk_fn&& ) final {};
 	int64_t GetLastFlushTimestamp() const override { return m_tmSaved; }
 
 	// plain index stub
@@ -201,13 +202,13 @@ static SegmentReject_t SegmentGetRejects ( const RtSegment_t * pSeg, bool bBuild
 		tReject.m_dWilds.Fill ( 0 );
 	}
 
-	RtWordReader_t tDict ( pSeg, true, PERCOLATE_WORDS_PER_CP, eHitless );
-	const RtWord_t * pWord = nullptr;
+	RtWordReader_c tDict ( pSeg, true, PERCOLATE_WORDS_PER_CP, eHitless );
 	BloomGenTraits_t tBloom0 ( tReject.m_dWilds.Begin() );
 	BloomGenTraits_t tBloom1 ( tReject.m_dWilds.Begin() + PERCOLATE_BLOOM_WILD_COUNT );
 
-	while ( ( pWord = tDict.UnzipWord() )!=nullptr )
+	while ( tDict.UnzipWord() )
 	{
+		const auto* pWord = (const RtWord_t*)tDict;
 		const BYTE * pDictWord = pWord->m_sWord + 1;
 		int iLen = pWord->m_sWord[0];
 
@@ -222,25 +223,22 @@ static SegmentReject_t SegmentGetRejects ( const RtSegment_t * pSeg, bool bBuild
 
 		if ( bMultiDocs )
 		{
-				RtDocReader_t tDoc ( pSeg, *pWord );
-				while ( true )
+			RtDocReader_c tDoc ( pSeg, *pWord );
+			while ( tDoc.UnzipDoc() )
+			{
+
+				assert ( tDoc->m_tRowID<pSeg->m_uRows );
+				tReject.m_dPerDocTerms[tDoc->m_tRowID].Add ( uHash );
+
+				if ( bBuildInfix )
 				{
-					const RtDoc_t * pDoc = tDoc.UnzipDoc();
-					if ( !pDoc )
-						break;
-
-					assert ( pDoc->m_tRowID<pSeg->m_uRows );
-					tReject.m_dPerDocTerms[pDoc->m_tRowID].Add ( uHash );
-
-					if ( bBuildInfix )
-					{
-						uint64_t * pBloom = tReject.m_dPerDocWilds.Begin() + pDoc->m_tRowID * PERCOLATE_BLOOM_SIZE;
-						BloomGenTraits_t tBloom2Doc0 ( pBloom );
-						BloomGenTraits_t tBloom2Doc1 ( pBloom + PERCOLATE_BLOOM_WILD_COUNT );
-						BuildBloom ( pDictWord, iLen, BLOOM_NGRAM_0, bUtf8, PERCOLATE_BLOOM_WILD_COUNT, tBloom2Doc0 );
-						BuildBloom ( pDictWord, iLen, BLOOM_NGRAM_1, bUtf8, PERCOLATE_BLOOM_WILD_COUNT, tBloom2Doc1 );
-					}
+					uint64_t * pBloom = tReject.m_dPerDocWilds.Begin() + tDoc->m_tRowID * PERCOLATE_BLOOM_SIZE;
+					BloomGenTraits_t tBloom2Doc0 ( pBloom );
+					BloomGenTraits_t tBloom2Doc1 ( pBloom + PERCOLATE_BLOOM_WILD_COUNT );
+					BuildBloom ( pDictWord, iLen, BLOOM_NGRAM_0, bUtf8, PERCOLATE_BLOOM_WILD_COUNT, tBloom2Doc0 );
+					BuildBloom ( pDictWord, iLen, BLOOM_NGRAM_1, bUtf8, PERCOLATE_BLOOM_WILD_COUNT, tBloom2Doc1 );
 				}
+			}
 		}
 	}
 
@@ -514,7 +512,7 @@ static Slice_t GetTermLocator ( const char * sWord, int iLen, const RtSegment_t 
 	// tighten dictionary location
 	if ( pSeg->m_dWordCheckpoints.GetLength() )
 	{
-		const RtWordCheckpoint_t * pCheckpoint = sphSearchCheckpoint ( sWord, iLen, 0, false, true, pSeg->m_dWordCheckpoints.Begin(), &pSeg->m_dWordCheckpoints.Last() );
+		const RtWordCheckpoint_t* pCheckpoint = sphSearchCheckpointWrd ( sWord, iLen, false, pSeg->m_dWordCheckpoints );
 		if ( !pCheckpoint )
 		{
 			tChPoint.m_uLen = pSeg->m_dWordCheckpoints.Begin()->m_iOffset;
@@ -568,10 +566,10 @@ static Slice_t GetPrefixLocator ( const char * sWord, bool bHasMorphology, const
 	tChPoint.m_uLen = pSeg->m_dWords.GetLength();
 
 	// find initial checkpoint or check words prior to 1st checkpoint
-	if ( pSeg->m_dWordCheckpoints.GetLength() )
+	if ( !pSeg->m_dWordCheckpoints.IsEmpty() )
 	{
 		const RtWordCheckpoint_t * pLast = &pSeg->m_dWordCheckpoints.Last();
-		const RtWordCheckpoint_t * pCheckpoint = sphSearchCheckpoint ( sPrefix, iPrefix, 0, true, true, pSeg->m_dWordCheckpoints.Begin(), pLast );
+		const RtWordCheckpoint_t * pCheckpoint = sphSearchCheckpointWrd( sPrefix, iPrefix, true, pSeg->m_dWordCheckpoints );
 
 		if ( pCheckpoint )
 		{
@@ -581,7 +579,7 @@ static Slice_t GetPrefixLocator ( const char * sWord, bool bHasMorphology, const
 				tChPoint.m_uOff = pCheckpoint->m_iOffset;
 
 			// find the last checkpoint that meets prefix condition ( ie might be a span of terms that splat to a couple of checkpoints )
-			pCheckpoint++;
+			++pCheckpoint;
 			while ( pCheckpoint<=pLast )
 			{
 				iNameLen = (int) strnlen ( pCheckpoint->m_sWord, SPH_MAX_KEYWORD_LEN );
@@ -590,7 +588,7 @@ static Slice_t GetPrefixLocator ( const char * sWord, bool bHasMorphology, const
 					tChPoint.m_uOff = pCheckpoint->m_iOffset;
 				if ( iCmp<0 )
 					break;
-				pCheckpoint++;
+				++pCheckpoint;
 			}
 		}
 	}
@@ -777,30 +775,23 @@ public:
 	const CSphMatch & GetNextDoc() final
 	{
 		m_iHits = 0;
-		while (true)
+		while ( !m_tDocReader.UnzipDoc() )
 		{
-			const RtDoc_t * pDoc = m_tDocReader.UnzipDoc();
-			if ( !pDoc && m_iDoc>=m_dDoclist.GetLength() )
+			if ( m_iDoc >= m_dDoclist.GetLength() )
 			{
 				m_tMatch.m_tRowID = INVALID_ROWID;
 				return m_tMatch;
 			}
-
-			if ( !pDoc )
-			{
-				SetupReader();
-				pDoc = m_tDocReader.UnzipDoc();
-				assert ( pDoc );
-			}
-
-			m_tMatch.m_tRowID = pDoc->m_tRowID;
-			m_dQwordFields.Assign32 ( pDoc->m_uDocFields );
-			m_uMatchHits = pDoc->m_uHits;
-			m_iHitlistPos = (uint64_t(pDoc->m_uHits)<<32) + pDoc->m_uHit;
-			m_bAllFieldsKnown = false;
-
-			return m_tMatch;
+			SetupReader();
 		}
+
+		const auto& tDoc = *m_tDocReader;
+		m_tMatch.m_tRowID = tDoc.m_tRowID;
+		m_dQwordFields.Assign32 ( tDoc.m_uDocFields );
+		m_uMatchHits = tDoc.m_uHits;
+		m_iHitlistPos = (uint64_t( tDoc.m_uHits)<<32) + tDoc.m_uHit;
+		m_bAllFieldsKnown = false;
+		return m_tMatch;
 	}
 
 	void SeekHitlist ( SphOffset_t uOff ) final
@@ -812,31 +803,27 @@ public:
 		} else
 		{
 			m_uNextHit = 0;
-			m_tHitReader.Seek ( DWORD(uOff), iHits );
+			m_tHitReader.Seek ( m_pHits + DWORD ( uOff ), iHits );
 		}
 	}
 
 	Hitpos_t GetNextHit () final
 	{
-		if ( m_uNextHit==0 )
+		if ( !m_uNextHit )
 			return Hitpos_t ( m_tHitReader.UnzipHit() );
 		else if ( m_uNextHit==0xffffffffUL )
 			return EMPTY_HIT;
 		else
-		{
-			Hitpos_t tHit ( m_uNextHit );
-			m_uNextHit = 0xffffffffUL;
-			return tHit;
-		}
+			return Hitpos_t ( std::exchange ( m_uNextHit, 0xffffffffUL ) );
 	}
 
 	bool Setup ( const RtSegment_t * pSeg, CSphVector<Slice_t> & dDoclist )
 	{
 		m_iDoc = 0;
-		m_tDocReader = RtDocReader_t();
+		m_tDocReader.Reset();
 		m_pSeg = pSeg;
 		SafeAddRef ( pSeg );
-		m_tHitReader.m_pBase = pSeg->m_dHits.Begin();
+		m_pHits = pSeg->m_dHits.begin();
 
 		m_dDoclist.Set ( dDoclist.Begin(), dDoclist.GetLength() );
 		dDoclist.LeakData();
@@ -854,18 +841,19 @@ private:
 		RtWord_t tWord;
 		tWord.m_uDoc = m_dDoclist[m_iDoc].m_uOff;
 		tWord.m_uDocs = m_dDoclist[m_iDoc].m_uLen;
-		m_tDocReader = RtDocReader_t ( m_pSeg, tWord );
-		m_iDoc++;
+		m_tDocReader.Init ( m_pSeg, tWord );
+		++m_iDoc;
 	}
 
-	constRtSegmentRefPtf_t		m_pSeg;
+	ConstRtSegmentRefPtf_t		m_pSeg;
 	CSphFixedVector<Slice_t>	m_dDoclist { 0 };
 	CSphMatch					m_tMatch;
-	RtDocReader_t				m_tDocReader;
-	RtHitReader2_t				m_tHitReader;
+	RtDocReader_c				m_tDocReader;
+	RtHitReader_c				m_tHitReader;
 
 	int							m_iDoc = 0;
 	DWORD						m_uNextHit = 0;
+	const BYTE*					m_pHits = nullptr;
 };
 
 
@@ -934,16 +922,16 @@ bool PercolateQwordSetup_c::QwordSetup ( ISphQword * pQword ) const
 	CSphVector<Slice_t> dDictWords;
 	ARRAY_FOREACH ( i, dDictLoc )
 	{
-		RtWordReader_t tReader ( m_pSeg, true, PERCOLATE_WORDS_PER_CP, m_eHitless );
+		RtWordReader_c tReader ( m_pSeg, true, PERCOLATE_WORDS_PER_CP, m_eHitless );
 		// locator
 		// m_uOff - Start
 		// m_uLen - End
 		tReader.m_pCur = pWordBase + dDictLoc[i].m_uOff;
 		tReader.m_pMax = pWordBase + dDictLoc[i].m_uLen;
 
-		const RtWord_t * pWord = nullptr;
-		while ( ( pWord = tReader.UnzipWord() )!=nullptr )
+		while ( tReader.UnzipWord() )
 		{
+			const auto* pWord = (const RtWord_t*)tReader;
 			// stemmed terms do not match any kind of wild-cards
 			if ( ( eCmp==PERCOLATE::PREFIX || eCmp==PERCOLATE::INFIX ) && m_pDict->HasMorphology() && pWord->m_sWord[1]!=MAGIC_WORD_HEAD_NONSTEMMED )
 				continue;
@@ -1453,7 +1441,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 		tRes.m_tmSetup = sphMicroTimer ()+tRes.m_tmSetup;
 
 	std::atomic<int32_t> iCurJob {0};
-	CoExecuteN ( dCtx.Concurrency ( iJobs ), false, [&]
+	CoExecuteN ( dCtx.Concurrency ( iJobs ), [&]
 	{
 		auto iJob = iCurJob.fetch_add ( 1, std::memory_order_acq_rel );
 		if ( iJob>=iJobs )
@@ -1462,7 +1450,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 		auto pInfo = PublishTaskInfo ( new PQInfo_t );
 		pInfo->m_iTotal = iJobs;
 		auto tCtx = dCtx.CloneNewContext ();
-		Threads::CoThrottler_c tThrottler ( session::ThrottlingPeriodMS (), false );
+		Threads::CoThrottler_c tThrottler ( session::ThrottlingPeriodMS () );
 		while (true)
 		{
 			pInfo->m_iCurrent = iJob;

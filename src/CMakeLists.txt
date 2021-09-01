@@ -53,7 +53,7 @@ add_library(lmanticore STATIC sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sphin
 
 target_link_libraries (lmanticore PUBLIC lextra)
 
-add_library(lmanticore_icu OBJECT STATIC icu.cpp)
+add_library(lmanticore_icu icu.cpp)
 if (WITH_ICU)
 	target_link_libraries (lmanticore_icu PRIVATE icu::icu)
 endif()
@@ -298,16 +298,18 @@ if (WIN32)
 	endif()
 endif()
 
+# ---------------------------- benching stuff ----------------------------
+set ( WITH_BENCHES OFF CACHE BOOL "Build development benches" )
+if (WITH_BENCHES)
+	add_subdirectory ( gbenches )
+	add_feature_info ( benches WITH_BENCHES "development benchmarks" )
+endif ()
+
 if ( NOT BUILD_TESTING )
 	return()
 endif()
 
-# ----------
-# DESTINATION bin -> in make install with / put to foo/bin, in packaging with / to foo/bin
-# DESTINATION ${CMAKE_INSTALL_BINDIR} -> in make install with / put to foo/usr/bin, in packaging to foo/bin
-
-
-# ---------------------------- Below is pure testing and benching stuff ----------------------------
+# ---------------------------- Below is pure testing stuff ----------------------------
 
 if ( CMAKE_VERSION VERSION_GREATER 3.1.0 AND NOT DISABLE_GTESTS AND NOT TEST_SPECIAL_EXTERNAL)
 	add_subdirectory ( gtests )
@@ -396,8 +398,3 @@ if (NOT TEST_SPECIAL_EXTERNAL)
 			COMMAND "tests" )
 endif()
 
-SET (GBENCH OFF)
-
-if (GBENCH)
-	add_subdirectory(gbenches)
-endif ()

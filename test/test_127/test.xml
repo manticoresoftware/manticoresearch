@@ -18,7 +18,7 @@ searchd
 index rt
 {
 	type = rt
-	path = data/rt
+	path =<data_path/>/rt
 	rt_attr_uint = id1
 	rt_field = title
 } 

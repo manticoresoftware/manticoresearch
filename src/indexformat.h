@@ -108,7 +108,8 @@ public:
 	void								Reset();
 	bool								Preread ( const CSphString & sName, bool bWordDict, int iSkiplistBlockSize, CSphString & sError );
 
-	const CSphWordlistCheckpoint *		FindCheckpoint ( const char * sWord, int iWordLen, SphWordID_t iWordID, bool bStarMode ) const;
+	const CSphWordlistCheckpoint *		FindCheckpointCrc ( SphWordID_t iWordID ) const;
+	const CSphWordlistCheckpoint *		FindCheckpointWrd ( const char * sWord, int iWordLen, bool bStarMode ) const;
 	bool								GetWord ( const BYTE * pBuf, SphWordID_t iWordID, CSphDictEntry & tWord ) const;
 
 	const BYTE *						AcquireDict ( const CSphWordlistCheckpoint * pCheckpoint ) const;
@@ -154,5 +155,31 @@ private:
 	int				m_iSkiplistBlockSize = 0;
 };
 
+// header of a disk index or chunk
+struct BuildHeader_t : public CSphSourceStats, public DictHeader_t
+{
+	BuildHeader_t() = default;
+	explicit BuildHeader_t ( const CSphSourceStats & tStat )
+	{
+		m_iTotalDocuments = tStat.m_iTotalDocuments;
+		m_iTotalBytes = tStat.m_iTotalBytes;
+	}
+
+	int64_t				m_iDocinfo {0};
+	int64_t				m_iDocinfoIndex {0};
+	int64_t				m_iMinMaxIndex {0};
+};
+
+struct WriteHeader_t
+{
+	const CSphIndexSettings *	m_pSettings;
+	const CSphSchema * 			m_pSchema;
+	TokenizerRefPtr_c			m_pTokenizer;
+	DictRefPtr_c				m_pDict;
+	FieldFilterRefPtr_c			m_pFieldFilter;
+	const int64_t *				m_pFieldLens;
+};
+
+void IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & tWriteHeader, CSphWriter & fdInfo, bool bForceWordDict, bool SkipEmbeddDict=false );
 
 #endif // _indexformat_

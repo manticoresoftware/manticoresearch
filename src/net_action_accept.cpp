@@ -180,12 +180,13 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
  * - vip: alone scheduler and zero netloop. All work (polling and calculations) performed by dedicated alone thread.
  */
 		auto pClientNetLoop = pLoop;
+		using SchedulerFabric_fn = std::function<Threads::Scheduler_i*( void )>;
 		SchedulerFabric_fn fnMakeScheduler = nullptr;
 		if ( m_tListener.m_bVIP )
 		{
 			pClientNetLoop = nullptr;
 			// fixme! for now pass -1, which means 'no limit N of workers'. M.b. need to obey max_children here.
-			fnMakeScheduler = [] { sphLogDebugv ( "-~-~-~-~-~-~-~-~ Alone sched created -~-~-~-~-~-~-~-~" ); return GetAloneScheduler ( -1 ); };
+			fnMakeScheduler = [] { sphLogDebugv ( "-~-~-~-~-~-~-~-~ Alone sched created -~-~-~-~-~-~-~-~" ); return MakeSingleThreadExecutor ( -1 ); };
 		} else
 		{
 			fnMakeScheduler = [] { sphLogDebugv ( "-~-~-~-~-~-~-~-~ MT sched created -~-~-~-~-~-~-~-~" ); return GlobalWorkPool (); };

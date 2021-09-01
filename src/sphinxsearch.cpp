@@ -1604,7 +1604,7 @@ struct RankerState_MatchAny_fn : public RankerState_Proximity_fn<false,false>
 		m_iLastHitPosWithField = -1;
 
 		int iRank = 0;
-		for ( int i=0; i<m_iFields; i++ )
+		for ( int i=0; i<m_iFields; ++i )
 		{
 			if ( m_uMatchMask[i] )
 				iRank += (int)( sphBitCount ( m_uMatchMask[i] ) + ( m_uLCS[i]-1 )*m_iPhraseK )*m_pWeights[i];

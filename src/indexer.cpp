@@ -294,16 +294,45 @@ SphWordID_t CSphStopwordBuilderDict::GetWordID ( const BYTE * pWord, int iLen, b
 
 /////////////////////////////////////////////////////////////////////////////
 
-void ShowProgress ( const CSphIndexProgress * pProgress, bool bPhaseEnd )
+struct ConsoleIndexProgress_t: public CSphIndexProgress
 {
-	// if in quiet mode, do not show anything at all
-	// if in no-progress mode, only show phase ends
-	if ( g_bQuiet || ( !g_bProgress && !bPhaseEnd ) )
-		return;
+	void ShowImpl ( bool bPhaseEnd ) const final
+	{
+		// if in quiet mode, do not show anything at all
+		// if in no-progress mode, only show phase ends
+		if ( g_bQuiet || ( !g_bProgress && !bPhaseEnd ) )
+			return;
 
-	fprintf ( stdout, "%s%c", pProgress->BuildMessage(), bPhaseEnd ? '\n' : '\r' );
-	fflush ( stdout );
-}
+		StringBuilder_c cOut;
+		switch ( m_ePhase )
+		{
+		case PHASE_COLLECT:
+			cOut.Sprintf ( "collected %l docs, %.1D MB", m_iDocuments, m_iBytes / 100000 );
+			break;
+			// Example:	( "%.4F", 999005 ) will output '99.9005'.
+			//( "%.3D", (int64_t) -10000 ) will output '-10.000'
+
+		case PHASE_SORT:
+			cOut.Sprintf ( "sorted %.1D Mhits, %.1D%% done", m_iHits / 100000, PercentOf ( m_iHits, m_iHitsTotal ) );
+			break;
+
+		case PHASE_MERGE:
+			cOut.Sprintf ( "merged %.1D Kwords", m_iWords / 100 );
+			break;
+
+		case PHASE_LOOKUP:
+			cOut.Sprintf ( "creating lookup: %.1D Kdocs, %.1D%% done", m_iDocids / 100, PercentOf ( m_iDocids, m_iDocidsTotal ) );
+			break;
+
+		default:
+			assert ( 0 && "internal error: unhandled progress phase" );
+			cOut.Sprintf ( "(progress-phase-%d)", m_ePhase );
+			break;
+		}
+		fprintf ( stdout, "%s%c", cOut.cstr(), bPhaseEnd ? '\n' : '\r' );
+		fflush ( stdout );
+	};
+};
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -1206,7 +1235,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 			fprintf ( stdout, "WARNING: index '%s': prefix_fields and infix_fields has no effect with dict=keywords, ignoring\n", sIndexName );
 		}
 
-		pIndex->SetProgressCallback ( ShowProgress );
 		if ( bInplaceEnable )
 			pIndex->SetInplaceSettings ( iHitGap, fRelocFactor, fWriteFactor );
 
@@ -1222,7 +1250,8 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		}
 		pIndex->Setup ( tSettings );
 
-		bOK = pIndex->Build ( dSources, g_iMemLimit, g_iWriteBuffer )!=0;
+		ConsoleIndexProgress_t tProgress;
+		bOK = pIndex->Build ( dSources, g_iMemLimit, g_iWriteBuffer, tProgress )!=0;
 		if ( bOK && g_bRotate && g_bSendHUP )
 		{
 			sIndexPath.SetSprintf ( "%s.new", hIndex["path"].cstr() );
@@ -1398,12 +1427,12 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst, const CSphConf
 			}
 	}
 
-	pDst->SetProgressCallback ( ShowProgress );
 
+	ConsoleIndexProgress_t tProgress;
 	int64_t tmMergeTime = sphMicroTimer();
 
 	{
-		if ( !pDst->Merge ( pSrc, tPurge, true ) )
+		if ( !pDst->Merge ( pSrc, tPurge, true, tProgress ) )
 			sphDie ( "failed to merge index '%s' into index '%s': %s", sSrc, sDst, pDst->GetLastError().cstr() );
 
 		if ( !pDst->GetLastWarning().IsEmpty() )
@@ -1412,7 +1441,7 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst, const CSphConf
 
 	if ( bDropSrc )
 	{
-		if ( !pSrc->Merge ( pSrc, {}, true ) )
+		if ( !pSrc->Merge ( pSrc, {}, true, tProgress ) )
 			sphDie ( "failed to drop index '%s' : %s", sSrc, pSrc->GetLastError().cstr() );
 
 		if ( !pSrc->GetLastWarning().IsEmpty() )

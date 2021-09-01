@@ -11,7 +11,6 @@
 //
 
 #include "searchdtask.h"
-#include "searchdaemon.h"
 #include "coroutine.h"
 
 #ifndef VERBOSE_TASKMANAGER
@@ -60,7 +59,7 @@ void TimeoutQueue_c::ShiftUp ( int iHole )
 	if ( m_dQueue.IsEmpty ())
 		return;
 	int iParent = ( iHole - 1 ) / 2;
-	// shift up if needed, so that worst (lesser) ones float to the top
+	// shift up if needed, so that worst (lesser) one's float to the top
 	while ( iHole && *m_dQueue[iHole]<*m_dQueue[iParent] )
 	{
 		Swap ( m_dQueue[iHole], m_dQueue[iParent] );
@@ -206,16 +205,8 @@ struct TaskProperties_t
 };
 
 // Task class descriptor just stores pointers to function-checker and function-worker
-
-#if (_WIN32 && _MSC_VER<1910)
-// visual studio 2015 causes C2719 error when tries compile 'contains' for fixed fector of TaskProperties_t
-TaskFlavour_t g_Tasks [ NUM_TASKS ];
-TaskProperties_t g_TaskProps [ NUM_TASKS ];
-#else
-static CSphFixedVector<TaskFlavour_t> g_Tasks { NUM_TASKS };
-static CSphFixedVector<TaskProperties_t> g_TaskProps { NUM_TASKS };
-#endif
-
+static TaskFlavour_t g_Tasks [ NUM_TASKS ];
+static TaskProperties_t g_TaskProps [ NUM_TASKS ];
 static std::atomic<int> g_iTasks {0};
 
 // task of determined flavour with stored payload
@@ -328,7 +319,7 @@ struct TaskWorker_t: public ListNode_t
 	}
 
 	// do task's job
-	void PerformTask ( Task_t* pTask ) REQUIRES (MtJobThread)
+	static void PerformTask ( Task_t* pTask ) REQUIRES (MtJobThread)
 	{
 		assert ( pTask );
 		// we've extracted the task and going to work on it.
@@ -337,11 +328,11 @@ struct TaskWorker_t: public ListNode_t
 				   m_iMyThreadID, ( int ) m_tDesc.m_iTotalJobsDone, m_tDesc.m_tmTotalWorkedTimeUS );
 	}
 
-	// returns timeout after which we'll regarded idle too much
-	int TimeToDeadMS ( int64_t iIdlePeriod )
+	// returns timeout after which we'll regard idle too much
+	int TimeToDeadMS ( int64_t iIdlePeriod ) const
 	{
 		auto iLastJob = (m_tDesc.m_tmLastJobDoneTimeUS>0) ? m_tDesc.m_tmLastJobDoneTimeUS : sphMicroTimer();
-		auto mSecs = (( iLastJob + iIdlePeriod ) - sphMicroTimer ()) / 1000;
+		auto mSecs = int ( ( ( iLastJob + iIdlePeriod ) - sphMicroTimer() ) / 1000 );
 		return Max ( mSecs, 0 );
 	}
 };
@@ -377,7 +368,7 @@ class LazyJobs_c: ISphNoncopyable
 	List_t m_dWorkers GUARDED_BY ( m_dWorkersLock );
 	int m_iNextThreadId = 0;
 	RwLock_t m_dWorkersLock;
-	std::atomic<long> m_iIdleWorkers;
+	std::atomic<long> m_iIdleWorkers {0};
 	int64_t m_tmIdlePeriodUS = IDLE_TIME_TO_FINISH; // workers will be finished after idle of this time, in uS
 	CSphAutoEvent m_tJobSignal;
 	volatile bool m_bShutdown = false;
@@ -497,7 +488,7 @@ private:
 			ProcessEnqueuedTasks ();
 		while ( HasTimeoutActions ());
 
-		int iMsec = ( m_iNextTimeoutUS>999 ) ? m_iNextTimeoutUS / 1000 : -1;
+		int iMsec = ( m_iNextTimeoutUS>999 ) ? int(m_iNextTimeoutUS / 1000) : -1;
 		DebugT ( "calculated timeout is %d ms", iMsec );
 		auto iStarted = sphMicroTimer ();
 		bool VARIABLE_IS_NOT_USED bWasKicked = m_tSignal.WaitEvent ( iMsec );
@@ -602,7 +593,7 @@ private:
 			if ( !pTask )
 				return true;
 			DebugM ( "%d starting job", tWorker.m_iMyThreadID );
-			tWorker.PerformTask ( pTask );
+			TaskWorker_t::PerformTask ( pTask );
 		}
 	}
 
@@ -733,7 +724,7 @@ public:
 		Threads::RegisterIterator ( IterateLazyThreads );
 
 		SphThread_t tThd;
-		Threads::Create ( &tThd, [this] { WorkerFunc(); }, true, "TaskSched" );
+		Threads::Create ( &tThd, [this] () NO_THREAD_SAFETY_ANALYSIS { WorkerFunc(); }, true, "TaskSched" );
 		m_iScheduler = TaskManager::RegisterGlobal ( "Scheduler",
 			[] ( void* pScheduledJob ) REQUIRES ( TaskThread )
 			{
@@ -794,7 +785,7 @@ public:
 public:
 	//statictics
 
-	CSphVector<TaskManager::TaskInfo_t> GetTaskInfo () const NO_THREAD_SAFETY_ANALYSIS
+	static CSphVector<TaskManager::TaskInfo_t> GetTaskInfo () NO_THREAD_SAFETY_ANALYSIS
 	{
 		CSphVector<TaskManager::TaskInfo_t> dRes;
 		for ( int i = 0, gTasks = g_iTasks.load ( std::memory_order_relaxed ); i<gTasks; ++i )
@@ -905,7 +896,7 @@ void TaskManager::StartJob ( TaskID iTask,  void* pPayload )
 
 CSphVector<TaskManager::TaskInfo_t> TaskManager::GetTaskInfo ()
 {
-	return LazyTasker ().GetTaskInfo();
+	return LazyJobs_c::GetTaskInfo();
 }
 
 CSphVector<TaskManager::ThreadInfo_t> TaskManager::GetThreadsInfo ()

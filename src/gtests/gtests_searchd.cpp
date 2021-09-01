@@ -70,9 +70,9 @@ void ThdRotate ()
 	}
 }
 
-// disabled since needs coro context now. fixme!
-TEST ( searchd_stuff, DISABLED_crash_on_exists )
+TEST ( searchd_stuff, crash_on_exists )
 {
+	Threads::CallCoroutine ( [&] {
 	g_pLocals = new GuardedHash_c ();
 	g_sIndex = "reader-test-17";
 	g_dLocals.Reset ( 30 );
@@ -100,6 +100,7 @@ TEST ( searchd_stuff, DISABLED_crash_on_exists )
 	Threads::Join ( &th4 );
 	Threads::Join ( &th5 );
 	Threads::Join ( &thRot );
+	});
 }
 
 #if POLLING_EPOLL

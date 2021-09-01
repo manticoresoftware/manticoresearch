@@ -19,7 +19,7 @@ index test
 {
 
 	type			= rt
-	path			= data/test
+	path			=<data_path/>/test
 	rt_attr_uint	= idd
 	rt_attr_uint	= grp
 	rt_field		= content

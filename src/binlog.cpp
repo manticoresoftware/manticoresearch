@@ -1127,7 +1127,8 @@ bool Binlog_c::ReplayUpdateAttributes ( int iBinlog, BinlogReader_c & tReader ) 
 	auto tmStamp = (int64_t) tReader.UnzipOffset();
 
 	// load transaction data
-	CSphAttrUpdate tUpd;
+	AttrUpdateSharedPtr_t pUpd { new CSphAttrUpdate };
+	auto& tUpd = *pUpd;
 	tUpd.m_bIgnoreNonexistent = true;
 
 	int iAttrs = (int)tReader.UnzipOffset();
@@ -1154,7 +1155,7 @@ bool Binlog_c::ReplayUpdateAttributes ( int iBinlog, BinlogReader_c & tReader ) 
 
 		CSphString sError, sWarning;
 		bool bCritical = false;
-		tIndex.m_pIndex->UpdateAttributes ( tUpd, -1, bCritical, nullptr, sError, sWarning ); // FIXME! check for errors
+		tIndex.m_pIndex->UpdateAttributes ( pUpd, bCritical, sError, sWarning ); // FIXME! check for errors
 		assert ( !bCritical ); // fixme! handle this
 
 		// update committed tid on replay in case of unexpected / mismatched tid
@@ -1304,16 +1305,15 @@ bool Binlog_c::IsBinlogWritable ( int64_t * pTID )
 	if ( m_bReplayMode )
 		return false;
 
-	if ( m_bDisabled )
+	if ( !m_bDisabled )
+		return true;
+
+	if ( pTID ) // still need to advance TID as index flush according to it
 	{
-		if ( pTID ) // still need to advance TID as index flush according to it
-		{
-			ScopedMutex_t tLock ( m_tWriteLock );
-			++(*pTID);
-		}
-		return false;
+		ScopedMutex_t tLock ( m_tWriteLock );
+		++(*pTID);
 	}
-	return true;
+	return false;
 }
 
 // commit stuff. Indexes call this function with serialization cb; binlog is agnostic to alien data structures.

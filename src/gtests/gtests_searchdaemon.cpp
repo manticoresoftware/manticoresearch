@@ -107,6 +107,9 @@ class DeathLogger_c: protected tstlogger, public ::testing::Test
 protected:
 	void SetUp() override
 	{
+		auto pPool = GlobalWorkPool ();
+		assert ( pPool );
+		pPool->StopAll();
 		m_bOutToStderr = true;
 		tstlogger::setup();
 	}
@@ -564,9 +567,9 @@ TEST ( new_addref_flavour, create_served_index_concept )
 	pFee->Release();
 }
 
-// disabled since needs coro context now. fixme!
-TEST ( T_IndexHash, DISABLED_served_hash_and_getter )
+TEST ( T_IndexHash, served_hash_and_getter )
 {
+	Threads::CallCoroutine ( [&] {
 	auto pHash = new GuardedHash_c;
 	ServedDesc_t tDesc;
 	pHash->AddUniq ( RefCountedRefPtr_t ( new ServedIndex_c ( tDesc )), "hello" );
@@ -602,6 +605,7 @@ TEST ( T_IndexHash, DISABLED_served_hash_and_getter )
 	delete pHash;
 	ASSERT_EQ ( pFoo->GetRefcount (), 1 ) << "we're the only owner now";
 	SafeRelease ( pFee );
+	});
 }
 
 
@@ -626,9 +630,9 @@ TEST ( T_IndexHash, served_hash_add_or_replace )
 	SafeRelease ( pIdx2 );
 }
 
-// disabled since needs coro context now. fixme!
-TEST ( T_IndexHash, DISABLED_ensure_right_refcounting )
+TEST ( T_IndexHash, ensure_right_refcounting )
 {
+	Threads::CallCoroutine ( [&] {
 	auto pHash = new GuardedHash_c;
 	ServedDesc_t tDesc;
 	pHash->AddUniq ( RefCountedRefPtr_t ( new ServedIndex_c ( tDesc ) ), "hello" );
@@ -660,6 +664,7 @@ TEST ( T_IndexHash, DISABLED_ensure_right_refcounting )
 	delete pHash;
 	ASSERT_EQ ( pFoo->GetRefcount (), 1 ) << "we're the only owner now";
 	SafeRelease ( pFee );
+	});
 }
 
 

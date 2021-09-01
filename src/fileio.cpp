@@ -13,7 +13,6 @@
 #include "fileio.h"
 #include "sphinxint.h"
 
-#define SPH_READ_PROGRESS_CHUNK (8192*1024)
 #define SPH_READ_NOPROGRESS_CHUNK (32768*1024)
 
 #if PARANOID
@@ -119,8 +118,7 @@ void CSphAutofile::SetTemporary()
 
 const char * CSphAutofile::GetFilename() const
 {
-	assert ( m_sFilename.cstr() );
-	return m_sFilename.cstr();
+	return m_sFilename.scstr();
 }
 
 
@@ -167,9 +165,7 @@ bool CSphAutofile::Read ( void * pBuf, int64_t iCount, CSphString & sError )
 	BYTE * pCur = (BYTE *)pBuf;
 	while ( iToRead>0 )
 	{
-		int64_t iToReadOnce = ( m_pStat )
-			? Min ( iToRead, SPH_READ_PROGRESS_CHUNK )
-			: Min ( iToRead, SPH_READ_NOPROGRESS_CHUNK );
+		int64_t iToReadOnce = Min ( iToRead, SPH_READ_NOPROGRESS_CHUNK );
 		int64_t iGot = sphRead ( GetFD(), pCur, (size_t)iToReadOnce );
 
 		if ( iGot==-1 )
@@ -193,12 +189,6 @@ bool CSphAutofile::Read ( void * pBuf, int64_t iCount, CSphString & sError )
 
 		iToRead -= iGot;
 		pCur += iGot;
-
-		if ( m_pStat )
-		{
-			m_pStat->m_iBytes += iGot;
-			m_pStat->Show ( false );
-		}
 	}
 
 	if ( iToRead!=0 )
@@ -211,11 +201,6 @@ bool CSphAutofile::Read ( void * pBuf, int64_t iCount, CSphString & sError )
 	return true;
 }
 
-
-void CSphAutofile::SetProgressCallback ( CSphIndexProgress * pStat )
-{
-	m_pStat = pStat;
-}
 
 //////////////////////////////////////////////////////////////////////////
 

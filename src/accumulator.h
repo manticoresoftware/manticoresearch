@@ -74,7 +74,8 @@ struct ReplicationCommand_t
 	bool					m_bIsolated = false;
 
 	// update
-	const CSphAttrUpdate * m_pUpdateAPI = nullptr;
+	AttrUpdateSharedPtr_t m_pUpdateAPI;
+	bool m_bBlobUpdate = false;
 	const CSphQuery * m_pUpdateCond = nullptr;
 };
 

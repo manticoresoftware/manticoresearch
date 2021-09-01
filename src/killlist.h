@@ -139,8 +139,8 @@ private:
 };
 
 
-template <typename TARGET, typename KILLER, typename MAP>
-int KillByLookup ( TARGET & tTargetReader, KILLER & tKillerReader, MAP & tDeadRowMap )
+template <typename TARGET, typename KILLER, typename MAP, typename FNHOOK>
+int KillByLookup ( TARGET & tTargetReader, KILLER & tKillerReader, MAP & tDeadRowMap, FNHOOK fnHook )
 {
 	RowID_t tTargetRowID = INVALID_ROWID;
 
@@ -165,7 +165,10 @@ int KillByLookup ( TARGET & tTargetReader, KILLER & tKillerReader, MAP & tDeadRo
 		else
 		{
 			if ( tDeadRowMap.Set ( tTargetRowID ) )
-				iKilled++;
+			{
+				fnHook ( tKillerDocID );
+				++iKilled;
+			}
 
 			bHaveKillerDocs = tKillerReader.ReadDocID ( tKillerDocID );
 			bHaveTargetDocs = tTargetReader.Read ( tTargetDocID, tTargetRowID );

@@ -245,6 +245,7 @@ class RTN : public RT, public ::testing::WithParamInterface<DWORD>
 TEST_P ( RTN, WeightBoundary )
 {
 	using namespace testing;
+	Threads::CallCoroutine ( [&] {
 	DictRefPtr_c pDict { sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "weight", false, 32, nullptr, sError ) };
 
 	tCol.m_sName = "id";
@@ -335,6 +336,7 @@ TEST_P ( RTN, WeightBoundary )
 	SafeDelete ( tQuery.m_pQueryParser );
 	SafeDelete ( pIndex );
 	SafeDelete ( pSrc );
+	});
 }
 
 INSTANTIATE_TEST_SUITE_P ( RT_N, RTN, ::testing::Values ( 1500, 1500, 1500, 1500, 1500 ) );
@@ -343,6 +345,7 @@ INSTANTIATE_TEST_SUITE_P ( RT_N, RTN, ::testing::Values ( 1500, 1500, 1500, 1500
 TEST_F ( RT, RankerFactors )
 {
 	using namespace testing;
+	Threads::CallCoroutine ( [&] {
 
 	const char * dFields[] = {
 		"Seven lies multiplied by seven", "", "Multiplied by seven again", "", "Seven lies multiplied by seven"
@@ -530,12 +533,14 @@ TEST_F ( RT, RankerFactors )
 	SafeDelete ( pIndex );
 	SafeDelete ( pSrc );
 	pTok = nullptr; // owned and deleted by index
+	});
 }
 
 
 TEST_F ( RT, SendVsMerge )
 {
 	using namespace testing;
+	Threads::CallCoroutine ( [&] {
 
 	auto pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt", false, 32, nullptr, sError );
 
@@ -645,4 +650,5 @@ TEST_F ( RT, SendVsMerge )
 	SafeDelete ( pIndex );
 	SafeDelete ( pSrc );
 	pTok = nullptr; // owned and deleted by index
+	});
 }

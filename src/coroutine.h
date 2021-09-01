@@ -23,13 +23,13 @@ size_t GetDefaultCoroStackSize();
 size_t AlignStackSize ( size_t iSize );
 
 // used as signaller - invokes custom deleter in d-tr.
-using Waiter_t = SharedPtrCustom_t<void *>;
+using Waiter_t = SharedPtrCustom_t<void>;
 
 // start handler in coroutine, first-priority
 void CoGo ( Handler handler, Scheduler_i* pScheduler );
 
 // start task continuation in coroutine, second-priority
-void CoCo ( Handler handler, Waiter_t tSignaller, bool bVip );
+void CoCo ( Handler handler, Waiter_t tSignaller );
 
 // perform handler in dedicated coro with custom stack (scheduler is same, or global if none)
 // try to run immediately (if thread wasn't switched yet), or push to first-priority queue
@@ -69,7 +69,7 @@ bool CoContinueBool ( int iStack, HANDLER handler )
 
 // Run handler in single or many user threads.
 // NOTE! even with concurrency==1 it is not sticked to the same OS thread, so avoid using thread-local storage.
-void CoExecuteN ( int iConcurrency, bool bVip, Handler&& handler );
+void CoExecuteN ( int iConcurrency, Handler&& handler );
 
 Scheduler_i * CoCurrentScheduler ();
 
@@ -84,6 +84,8 @@ void CoMoveTo ( Scheduler_i * pScheduler );
 
 // yield to external context
 void CoYield ();
+
+void CoReschedule();
 
 // create context and return resuming functor.
 // calling resumer will run handler until it finishes or yields.
@@ -101,7 +103,6 @@ class CoThrottler_c
 
 	sph::MiniTimer_c m_dTimerGuard;
 	bool m_bSameThread = true;
-	bool m_bNoYeld = false;
 
 	bool MaybeThrottle ();
 
@@ -109,7 +110,7 @@ public:
 	// -1 means 'use value of tmThrotleTimeQuantumMs'
 	// 0 means 'don't throttle'
 	// any other positive expresses throttling interval in milliseconds
-	CoThrottler_c ( int tmPeriodMs, bool bNoYeld );
+	CoThrottler_c ( int tmPeriodMs = -1 );
 
 	// that changes default daemon-wide
 	inline static void SetDefaultThrottlingPeriodMS ( int tmPeriodMs )
@@ -148,6 +149,9 @@ Waiter_t DefferedContinuator();
 
 // yield, then release passed waiter.
 void WaitForDeffered ( Waiter_t&& );
+
+// start dTasks, then yield until iN of them completed. Returns idx of the task which fired the trigger
+int WaitForN ( int iN, std::initializer_list<Handler> dTasks );
 
 // set to 1 for manual testing/debugging in single thread and predefined sequence of chunks
 #define MODELING 0
@@ -315,16 +319,33 @@ public:
 
 class CoroEvent_c
 {
-	enum ESTATE : DWORD
+	enum ESTATE : BYTE
 	{
 		Signaled_e = 1, Waited_e = 2,
 	};
 
 	volatile void* m_pCtx = nullptr;
-	volatile std::atomic<DWORD> m_uState {0};
+	volatile std::atomic<BYTE> m_uState {0};
 
 public:
 	~CoroEvent_c();
+	void SetEvent ();
+	void WaitEvent ();
+};
+
+// multi-event - more than one waiters possible, SetEvent fires all of them.
+class CoroMultiEvent_c
+{
+	enum ESTATE : BYTE
+	{
+		Signaled_e = 1, Waited_e = 2,
+	};
+
+	OperationsQueue_c m_tOps;
+	volatile std::atomic<BYTE> m_uState {0};
+
+public:
+	~CoroMultiEvent_c();
 	void SetEvent ();
 	void WaitEvent ();
 };
@@ -338,7 +359,7 @@ class CAPABILITY ( "mutex" ) CoroRWLock_c : public ISphNoncopyable
 
 public:
 	bool WriteLock() ACQUIRE();
-	bool UpgradeLock (  bool bVip ) RELEASE() ACQUIRE();
+//	bool UpgradeLock () RELEASE() ACQUIRE();
 	bool ReadLock() ACQUIRE_SHARED();
 	bool Unlock() UNLOCK_FUNCTION();
 };
@@ -353,8 +374,92 @@ public:
 	void Unlock () RELEASE();
 };
 
+/// capability for tracing scheduler
+using SchedRole CAPABILITY ( "role" ) = Scheduler_i*;
+using RoledSchedulerSharedPtr_t CAPABILITY ( "role" ) = SchedulerSharedPtr_t;
+
+inline void AcquireSched ( SchedRole R ) ACQUIRE( R ) NO_THREAD_SAFETY_ANALYSIS
+{
+	CoMoveTo ( R );
+}
+
+inline void AcquireSched ( RoledSchedulerSharedPtr_t & R ) ACQUIRE( R ) NO_THREAD_SAFETY_ANALYSIS
+{
+	CoMoveTo ( R );
+}
+
+class SCOPED_CAPABILITY ScopedScheduler_c : ISphNoncopyable
+{
+	SchedRole m_pRoleRef = nullptr;
+public:
+	ScopedScheduler_c() = default;
+	inline explicit ScopedScheduler_c ( SchedRole pRole ) ACQUIRE ( pRole )
+	{
+		if ( !pRole )
+			return;
+
+		m_pRoleRef = CoCurrentScheduler ();
+//		if ( m_pRoleRef )
+			AcquireSched ( pRole );
+	}
+
+	inline explicit ScopedScheduler_c ( RoledSchedulerSharedPtr_t& pRole ) ACQUIRE ( pRole )
+	{
+		if ( !pRole )
+			return;
+
+		m_pRoleRef = CoCurrentScheduler ();
+//		if ( m_pRoleRef )
+			AcquireSched ( pRole );
+	}
+
+	~ScopedScheduler_c () RELEASE()
+	{
+		if ( m_pRoleRef )
+			AcquireSched ( m_pRoleRef );
+	}
+};
+
+inline void CheckAcquiredSched ( SchedRole R ) ACQUIRE( R ) NO_THREAD_SAFETY_ANALYSIS
+{
+//	assert ( !CoCurrentScheduler () || R==CoCurrentScheduler() );
+	assert ( R==CoCurrentScheduler () );
+}
+
+inline void CheckAcquiredSched ( RoledSchedulerSharedPtr_t& R ) ACQUIRE( R ) NO_THREAD_SAFETY_ANALYSIS
+{
+//	assert ( !CoCurrentScheduler () || R==CoCurrentScheduler () );
+	assert ( R==CoCurrentScheduler () );
+}
+
+inline void CheckReleasedSched ( SchedRole R ) RELEASE( R ) NO_THREAD_SAFETY_ANALYSIS
+{
+}
+
+inline void CheckReleasedSched ( RoledSchedulerSharedPtr_t & R ) RELEASE( R ) NO_THREAD_SAFETY_ANALYSIS
+{
+}
+
+class SCOPED_CAPABILITY CheckRole_c
+{
+public:
+	/// acquire on creation
+	inline explicit CheckRole_c ( SchedRole tRole ) ACQUIRE( tRole )
+	{
+		CheckAcquiredSched ( tRole );
+	}
+
+	/// release on going out of scope
+	~CheckRole_c () RELEASE()
+	{}
+};
+
 using SccRL_t = CSphScopedRLock_T<CoroRWLock_c>;
 using SccWL_t = CSphScopedWLock_T<CoroRWLock_c>;
 using ScopedCoroSpinlock_t = CSphScopedLock<CoroSpinlock_c>;
+
+// fake locks
+using FakeRL_t = FakeScopedRLock_T<CoroRWLock_c>;
+using FakeWL_t = FakeScopedWLock_T<CoroRWLock_c>;
 
 } // namespace Threads

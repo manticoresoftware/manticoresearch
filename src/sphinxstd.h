@@ -438,12 +438,41 @@ struct WIDEST<T1, T2>
 
 inline int sphBitCount ( DWORD n )
 {
+#if __GNUC__ || __clang__
+	return __builtin_popcount ( n );
+#else
 	// MIT HACKMEM count
 	// works for 32-bit numbers only
 	// fix last line for 64-bit numbers
 	register DWORD tmp;
 	tmp = n - ((n >> 1) & 033333333333) - ((n >> 2) & 011111111111);
 	return ( (tmp + (tmp >> 3) ) & 030707070707) % 63;
+#endif
+}
+
+inline int sphBitCount ( uint64_t n )
+{
+#if __GNUC__ || __clang__
+	return __builtin_popcountll ( n );
+#else
+	// MIT HACKMEM count without division
+	unsigned long tmp = ( n >> 1 ) & 0x7777777777777777UL;
+	n -= tmp;
+	tmp = ( tmp >> 1 ) & 0x7777777777777777UL;
+	n -= tmp;
+	tmp = ( tmp >> 1 ) & 0x7777777777777777UL;
+	n -= tmp;
+	n = ( n+( n >> 4 ) ) & 0x0F0F0F0F0F0F0F0FUL;
+	n = n * 0x0101010101010101UL;
+	return n >> 56;
+#endif
+}
+
+// that is fastest variant of MIT HACKMEM count specified to single byte argument
+// benches of different variants are available in gbenches/popcount
+inline int sphBitCount ( BYTE n )
+{
+	return (int) ( ( ( ( ( DWORD ( n ) * 0x08040201 ) >> 3 ) & 0x11111111 ) * 0x11111111 ) >> 28 );
 }
 
 using SphDieCallback_t = bool (*) ( bool bDie, const char *, va_list );
@@ -1279,6 +1308,17 @@ public:
 		return !any_of ( cond );
 	}
 
+	template<typename FILTER>
+	inline int64_t count_of ( FILTER&& cond ) const NO_THREAD_SAFETY_ANALYSIS
+	{
+		int64_t iRes = 0;
+		for ( int64_t i = 0; i < m_iCount; ++i )
+			if ( cond ( m_pData[i] ) )
+				++iRes;
+
+		return iRes;
+	}
+
 	/// Apply an action to every member
 	/// Apply ( [] (T& item) {...} );
 	template < typename ACTION >
@@ -1312,6 +1352,13 @@ public:
 	{
 		for ( int i = 0; i<m_iCount; ++i )
 			m_pData[i] = rhs;
+	}
+
+	/// fill with sequence (appliable only to integers)
+	void FillSeq ( T iStart = 0, T iStep = 1 )
+	{
+		for ( int i = 0; i < m_iCount; ++i, iStart += iStep )
+			m_pData[i] = iStart;
 	}
 
 protected:
@@ -2087,7 +2134,7 @@ protected:
 	using VecTraits_T<T>::m_iCount;
 
 public:
-	explicit CSphFixedVector ( int64_t iSize )
+	explicit CSphFixedVector ( int64_t iSize ) noexcept
 	{
 		m_iCount = iSize;
 		assert ( iSize>=0 );
@@ -2518,6 +2565,10 @@ public:
 			: m_pIterator ( pIterator ) {}
 
 		KeyValue_t& operator*() { return *m_pIterator; }
+		KeyValue_t* operator->() const
+		{
+			return m_pIterator;
+		};
 
 		Iterator_c & operator++ ()
 		{
@@ -2525,9 +2576,14 @@ public:
 			return *this;
 		}
 
-		bool operator!= ( const Iterator_c & rhs ) const
+		bool operator== ( const Iterator_c& rhs ) const
 		{
-			return m_pIterator!=rhs.m_pIterator;
+			return m_pIterator == rhs.m_pIterator;
+		}
+
+		bool operator!= ( const Iterator_c& rhs ) const
+		{
+			return !operator== ( rhs );
 		}
 	};
 
@@ -3268,6 +3324,34 @@ private:
 	};
 };
 
+// make percent honouring fixed-point floats
+// sprintf ( "%.2D", MakePercent (1.014,10,2) ) will print "10.14"
+template<typename NUM>
+int64_t PercentOf ( NUM tVal, NUM tBase, int iFloatDigits = 1 )
+{
+	NUM tMultiplier = 100;
+	switch ( iFloatDigits )
+	{
+	case 6:
+		tMultiplier *= 10;
+	case 5:
+		tMultiplier *= 10;
+	case 4:
+		tMultiplier *= 10;
+	case 3:
+		tMultiplier *= 10;
+	case 2:
+		tMultiplier *= 10;
+	case 1:
+		tMultiplier *= 10;
+	default: break;
+	}
+	if ( tBase )
+		return int64_t ( tVal * tMultiplier / tBase );
+	else
+		return int64_t ( tMultiplier );
+}
+
 struct BaseQuotation_t
 {
 	// represents char for quote
@@ -3846,6 +3930,7 @@ template < typename T >
 class CSphScopedPtr : public ISphNoncopyable
 {
 public:
+					CSphScopedPtr()				= default;
 	explicit		CSphScopedPtr ( T * pPtr )	{ m_pPtr = pPtr; }
 					~CSphScopedPtr ()			{ SafeDelete ( m_pPtr ); }
 	T *				operator -> () const		{ return m_pPtr; }
@@ -3866,13 +3951,13 @@ public:
 		Swap ( pPtr );
 		return *this;
 	}
-	T *				LeakPtr ()					{ T * pPtr = m_pPtr; m_pPtr = NULL; return pPtr; }
+	T *				LeakPtr ()					{ T * pPtr = m_pPtr; m_pPtr = nullptr; return pPtr; }
 	void			Reset ()					{ SafeDelete ( m_pPtr ); }
 	inline void 	Swap (CSphScopedPtr & rhs) noexcept { ::Swap(m_pPtr,rhs.m_pPtr);}
 
 
 protected:
-	T *				m_pPtr;
+	T *				m_pPtr = nullptr;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -3882,12 +3967,25 @@ protected:
 template < typename T >
 class CSphRefcountedPtr
 {
+	using RAWT = typename std::remove_const<T>::type;
+	using CT = const T;
+	using TYPE = CSphRefcountedPtr<T>;
+	using CTYPE = CSphRefcountedPtr<const T>;
+	using RAWTYPE = CSphRefcountedPtr<RAWT>;
+
 public:
 	explicit		CSphRefcountedPtr () = default;		///< default NULL wrapper construction (for vectors)
 	explicit		CSphRefcountedPtr ( T * pPtr ) : m_pPtr ( pPtr ) {}	///< construction from raw pointer, takes over ownership!
 
 	CSphRefcountedPtr ( const CSphRefcountedPtr& rhs )
 		: m_pPtr ( rhs.m_pPtr )
+	{
+		SafeAddRef ( m_pPtr );
+	}
+
+	template <typename DERIVED>
+	explicit CSphRefcountedPtr ( const CSphRefcountedPtr<DERIVED> & rhs )
+			: m_pPtr ( rhs.Ptr() )
 	{
 		SafeAddRef ( m_pPtr );
 	}
@@ -3900,6 +3998,15 @@ public:
 	CSphRefcountedPtr& operator= ( CSphRefcountedPtr rhs )
 	{
 		Swap(rhs);
+		return *this;
+	}
+
+	template<typename DERIVED>
+	CSphRefcountedPtr& operator= ( const CSphRefcountedPtr<DERIVED>& rhs )
+	{
+		SafeRelease ( m_pPtr );
+		m_pPtr = rhs.Ptr();
+		SafeAddRef ( m_pPtr );
 		return *this;
 	}
 
@@ -3923,10 +4030,11 @@ public:
 	}
 
 	T * Ptr() const { return m_pPtr; }
+	CT * CPtr () const { return m_pPtr; }
 
 public:
 	/// assignment of a raw pointer, takes over ownership!
-	CSphRefcountedPtr<T> & operator = ( T * pPtr )
+	CSphRefcountedPtr& operator = ( T * pPtr )
 	{
 		SafeRelease ( m_pPtr );
 		m_pPtr = pPtr;
@@ -4009,6 +4117,12 @@ public:
 	T * GetWritePtr () const
 	{
 		return m_pData;
+	}
+
+	/// returns read address - same as write, but const pointer
+	const T* GetReadPtr() const
+	{
+		return GetWritePtr();
 	}
 
 	void Set ( T * pData, int64_t iCount )
@@ -4431,6 +4545,22 @@ protected:
 	LOCKED & m_tLock;
 };
 
+/// scoped shared (read) fake fake - do nothing, just mute warnings
+template<class LOCKED=CSphRwlock>
+struct SCOPED_CAPABILITY FakeScopedRLock_T : ISphNoncopyable
+{
+	explicit FakeScopedRLock_T ( LOCKED & tLock ) ACQUIRE_SHARED ( tLock ) {}
+	~FakeScopedRLock_T() RELEASE () {}
+};
+
+/// scoped exclusive (write) fake lock - does nothing, just mute warnings
+template<class LOCKED=CSphRwlock>
+struct SCOPED_CAPABILITY FakeScopedWLock_T : ISphNoncopyable
+{
+	explicit FakeScopedWLock_T ( LOCKED & tLock ) ACQUIRE ( tLock ) EXCLUDES ( tLock ) {}
+	~FakeScopedWLock_T() RELEASE () {}
+};
+
 /// scoped lock owner - unlock in dtr
 template <class LOCKED=CSphRwlock>
 class SCOPED_CAPABILITY ScopedUnlock_T : ISphNoncopyable
@@ -4512,44 +4642,85 @@ AtScopeExit_T<ACTION> AtScopeExit ( ACTION &&action )
 
 /// generic dynamic bitvector
 /// with a preallocated part for small-size cases, and a dynamic route for big-size ones
-class CSphBitvec
+template<int STATICBITS=128>
+class BitVec_T
 {
+	static const int DWBYTES = sizeof ( DWORD );
+	static const int DWBITS = DWBYTES * 8;
+	static const int STATICDWORDS = STATICBITS / DWBITS;
+
 protected:
 	DWORD *		m_pData = nullptr;
-	DWORD		m_uStatic[4] {0};
+	DWORD		m_uStatic[STATICDWORDS] {0};
 	int			m_iElements = 0;
 
 public:
-	CSphBitvec () = default;
+	BitVec_T () = default;
 
-	explicit CSphBitvec ( int iElements )
+	explicit BitVec_T ( int iElements )
 	{
 		Init ( iElements );
 	}
 
-	~CSphBitvec ()
+	~BitVec_T ()
 	{
 		if ( m_pData!=m_uStatic )
 			SafeDeleteArray ( m_pData );
 	}
 
 	/// copy ctor
-	CSphBitvec ( const CSphBitvec & rhs )
+	BitVec_T ( const BitVec_T & rhs )
 	{
 		m_pData = nullptr;
-		m_iElements = 0;
-		*this = rhs;
+		m_iElements = rhs.m_iElements;
+		auto iDwSize = GetSize ();
+		m_pData = ( m_iElements>STATICBITS ) ? new DWORD[iDwSize] : m_uStatic;
+		memcpy ( m_pData, rhs.m_pData, DWBYTES * iDwSize );
 	}
 
-	/// copy
-	CSphBitvec & operator = ( const CSphBitvec & rhs )
+	void Swap ( BitVec_T & rhs ) noexcept
 	{
-		if ( m_pData!=m_uStatic )
-			SafeDeleteArray ( m_pData );
+		if ( m_pData==m_uStatic && rhs.m_pData==rhs.m_uStatic )
+			// both static - just exchange values
+			for ( auto i = 0; i<STATICDWORDS; ++i )
+				std::swap ( m_uStatic[i], rhs.m_uStatic[i] );
+		else if ( m_pData==m_uStatic )
+		{
+			// me static, rhs dynamic
+			assert ( rhs.m_pData!=rhs.m_uStatic );
+			for ( auto i = 0; i<STATICDWORDS; ++i )
+				rhs.m_uStatic[i] = m_uStatic[i];
+			m_pData = rhs.m_pData;
+			rhs.m_pData = rhs.m_uStatic;
+		}
+		else if ( rhs.m_pData==rhs.m_uStatic )
+		{
+			// me dynamic, rhs static
+			assert ( m_pData!=m_uStatic );
+			for ( auto i = 0; i<STATICDWORDS; ++i )
+				m_uStatic[i] = rhs.m_uStatic[i];
+			rhs.m_pData = m_pData;
+			m_pData = m_uStatic;
+		}
+		else
+		{
+			// both dynamic. No need to copy static at all
+			assert ( rhs.m_pData!=rhs.m_uStatic );
+			assert ( m_pData!=m_uStatic );
+			std::swap ( m_pData, rhs.m_pData );
+		}
+		std::swap ( m_iElements, rhs.m_iElements );
+	}
 
-		Init ( rhs.m_iElements );
-		memcpy ( m_pData, rhs.m_pData, sizeof(m_uStatic[0]) * GetSize() );
+	BitVec_T ( BitVec_T && rhs ) noexcept
+	{
+		Swap ( rhs );
+	}
 
+	/// copy/move
+	BitVec_T & operator= ( BitVec_T rhs )
+	{
+		Swap ( rhs );
 		return *this;
 	}
 
@@ -4557,7 +4728,7 @@ public:
 	{
 		assert ( iElements>=0 );
 		m_iElements = iElements;
-		if ( iElements > int(sizeof(m_uStatic)*8) )
+		if ( iElements>STATICBITS )
 		{
 			int iSize = GetSize();
 			m_pData = new DWORD [ iSize ];
@@ -4570,14 +4741,14 @@ public:
 
 	void Clear ()
 	{
-		int iSize = GetSize();
-		memset ( m_pData, 0, sizeof(DWORD)*iSize );
+		int iByteSize = GetByteSize();
+		memset ( m_pData, 0, iByteSize );
 	}
 
 	void Set ()
 	{
-		int iSize = GetSize();
-		memset ( m_pData, 0xff, sizeof(DWORD)*iSize );
+		int iByteSize = GetByteSize ();
+		memset ( m_pData, 0xff, iByteSize );
 	}
 
 
@@ -4613,9 +4784,14 @@ public:
 		return m_pData;
 	}
 
-	int GetSize() const
+	int GetSize() const // be aware, that is size in DWORDs!
 	{
 		return (m_iElements+31)/32;
+	}
+
+	int GetByteSize () const
+	{
+		return GetSize () * DWBYTES;
 	}
 
 	bool IsEmpty() const
@@ -4623,7 +4799,7 @@ public:
 		if (!m_pData)
 			return true;
 
-		return GetSize ()==0;
+		return GetBits ()==0;
 	}
 
 	int GetBits() const
@@ -4634,12 +4810,14 @@ public:
 	int BitCount () const
 	{
 		int iBitSet = 0;
-		for ( int i=0; i<GetSize(); i++ )
+		for ( int i=0; i<GetSize(); ++i )
 			iBitSet += sphBitCount ( m_pData[i] );
 
 		return iBitSet;
 	}
 };
+
+using CSphBitvec = BitVec_T<>;
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -4696,6 +4874,7 @@ private:
 };
 
 using RefCountedRefPtr_t = CSphRefcountedPtr<ISphRefcountedMT>;
+using cRefCountedRefPtr_t = CSphRefcountedPtr<const ISphRefcountedMT>;
 
 template <class T>
 struct VecRefPtrs_t : public ISphNoncopyable, public CSphVector<T>
@@ -4758,14 +4937,15 @@ public:
 	}
 };
 /// shared pointer for any object, managed by refcount
-template < typename PTR, typename DELETER, typename REFCOUNTED = ISphRefcountedMT >
+template < typename T, typename DELETER, typename REFCOUNTED = ISphRefcountedMT >
 class SharedPtr_T
 {
-	template <typename RefCountedT>
-	struct SharedState_T : public RefCountedT
+	using PTR = T*;
+	template <typename DELL, bool STATEFUL_DELETER = std::is_member_function_pointer<decltype ( &DELL::Delete )>::value>
+	struct SharedState_T : public REFCOUNTED
 	{
 		PTR m_pPtr = nullptr;
-		DELETER m_fnDelete;
+		DELL m_fnDelete;
 
 		SharedState_T() = default;
 
@@ -4776,12 +4956,24 @@ class SharedPtr_T
 
 		~SharedState_T() override
 		{
-			m_fnDelete.Delete(m_pPtr);
+			m_fnDelete.Delete((void*)m_pPtr);
 			m_pPtr = nullptr;
 		}
 	};
 
-	using SharedState_t = SharedState_T<REFCOUNTED>;
+	template <typename DELL>
+	struct SharedState_T<DELL, false> : public REFCOUNTED
+	{
+		PTR m_pPtr = nullptr;
+		SharedState_T() = default;
+		~SharedState_T()
+		{
+			DELL::Delete((void*)m_pPtr);
+			m_pPtr = nullptr;
+		}
+	};
+
+	using SharedState_t = SharedState_T<DELETER>;
 	using StatePtr = CSphRefcountedPtr<SharedState_t>;
 
 	StatePtr m_tState;
@@ -4831,20 +5023,20 @@ public:
 	/// assignment of a raw pointer
 	SharedPtr_T & operator = ( PTR pPtr )
 	{
-		m_tState = new SharedState_t;
+		m_tState = new SharedState_t();
 		m_tState->m_pPtr = pPtr;
 		return *this;
 	}
 };
 
 template <typename T, typename REFCOUNTED = ISphRefcountedMT>
-using SharedPtr_t = SharedPtr_T<T, Deleter_T<T, ETYPE::SINGLE>, REFCOUNTED>;
+using SharedPtr_t = SharedPtr_T<T, Deleter_T<T*, ETYPE::SINGLE>, REFCOUNTED>;
 
 template<typename T, typename REFCOUNTED = ISphRefcountedMT>
-using SharedPtrArr_t = SharedPtr_T<T, Deleter_T<T, ETYPE::ARRAY>, REFCOUNTED>;
+using SharedPtrArr_t = SharedPtr_T<T, Deleter_T<T*, ETYPE::ARRAY>, REFCOUNTED>;
 
-template<typename T, typename DELETER=std::function<void(T)>, typename REFCOUNTED = ISphRefcountedMT>
-using SharedPtrCustom_t = SharedPtr_T<T, CustomDeleter_T<T, DELETER>, REFCOUNTED>;
+template<typename T, typename DELETER=std::function<void(T*)>, typename REFCOUNTED = ISphRefcountedMT>
+using SharedPtrCustom_t = SharedPtr_T<T, CustomDeleter_T<T*, DELETER>, REFCOUNTED>;
 
 int sphCpuThreadsCount ();
 
@@ -5607,10 +5799,10 @@ CSphString GET_COLUMNAR_FULLPATH ();
 
 // fast diagnostic logging.
 // Being a macro, it will be optimized out by compiler when not in use
-
+enum ESphLogLevel : BYTE; // values are in sphinxutils.h
 struct LogMessage_t
 {
-	LogMessage_t ();
+	LogMessage_t ( BYTE uLevel = 5 ); // LOG_VERBOSE_DEBUG
 	~LogMessage_t ();
 
 	template<typename T>
@@ -5622,14 +5814,19 @@ struct LogMessage_t
 
 private:
 	StringBuilder_c m_dLog;
+	ESphLogLevel m_eLevel;
 };
 
 // for LOG (foo, bar) -> define LOG_LEVEL_foo as boolean, define LOG_COMPONENT_bar as expression
 
 #define LOG_MSG LogMessage_t {}
 #define LOG( Level, Component ) \
-    if (LOG_LEVEL_##Level) \
+    if_const (LOG_LEVEL_##Level) \
         LOG_MSG << LOG_COMPONENT_##Component
+
+#define LOGINFO( Level, Component ) \
+	if_const ( LOG_LEVEL_##Level ) \
+		LogMessage_t { SPH_LOG_INFO } << LOG_COMPONENT_##Component
 
 class LocMessages_c;
 class LocMessage_c

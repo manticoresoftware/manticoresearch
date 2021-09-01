@@ -16,7 +16,7 @@ server_id = 0
 index rt1
 {
 	type 			= rt
-	path			= data/rt1
+	path			=<data_path/>/rt1
 	rt_field = title
 	rt_attr_uint = gid	
 }
@@ -24,7 +24,7 @@ index rt1
 index pq1
 {
 	type 			= percolate
-	path			= data/pq1
+	path			=<data_path/>/pq1
 }
 
 </config>

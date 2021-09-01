@@ -32,15 +32,12 @@ public:
 	SphOffset_t		GetSize ();
 
 	bool			Read ( void * pBuf, int64_t iCount, CSphString & sError );
-	void			SetProgressCallback ( CSphIndexProgress * pStat );
 
 protected:
 	int			m_iFD = -1;					///< my file descriptor
 	CSphString	m_sFilename;				///< my file name
 	bool		m_bTemporary = false;		///< whether to unlink this file on Close()
 	bool		m_bWouldTemporary = false;	///< backup of the m_bTemporary
-
-	CSphIndexProgress *	m_pStat = nullptr;
 };
 
 

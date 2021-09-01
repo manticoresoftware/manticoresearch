@@ -61,7 +61,7 @@ public:
 
 // fwd
 using UservarIntSetValues_c = CSphVector<SphAttr_t>;
-using UservarIntSet_c = SharedPtr_t<UservarIntSetValues_c *>;
+using UservarIntSet_c = SharedPtr_t<UservarIntSetValues_c>;
 class HistogramContainer_c;
 
 struct CreateFilterContext_t

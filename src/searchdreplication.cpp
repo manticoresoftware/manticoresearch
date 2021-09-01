@@ -241,7 +241,7 @@ static bool SendClusterIndexes ( const ReplicationCluster_t * pCluster, const CS
 static bool RemoteClusterSynced ( const PQRemoteData_t & tCmd, CSphString & sError );
 
 // callback for Galera apply_cb to parse replicated command
-static bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CSphString & sCluster, RtAccum_t & tAcc, CSphAttrUpdate& tUpd, CSphQuery & tQuery );
+static bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CSphString & sCluster, RtAccum_t & tAcc, CSphQuery & tQuery );
 
 // callback for Galera commit_cb to commit replicated command
 static bool HandleCmdReplicated ( RtAccum_t & tAcc );
@@ -264,7 +264,7 @@ static bool IsUpdateCommand ( const RtAccum_t & tAcc );
 
 static void SaveUpdate ( const CSphAttrUpdate & tUpd, CSphVector<BYTE> & dOut );
 
-static int LoadUpdate ( const BYTE * pBuf, int iLen, CSphAttrUpdate & tUpd );
+static int LoadUpdate ( const BYTE * pBuf, int iLen, CSphAttrUpdate & tUpd, bool & bBlob );
 
 static void SaveUpdate ( const CSphQuery & tQuery, CSphVector<BYTE> & dOut );
 
@@ -423,7 +423,6 @@ struct ReceiverCtx_t
 
 	// share of remote commands received between apply and commit callbacks
 	RtAccum_t m_tAcc { false };
-	CSphAttrUpdate m_tUpdAPI;
 	CSphQuery m_tQuery;
 
 	~ReceiverCtx_t() { Cleanup(); }
@@ -651,8 +650,6 @@ void ReceiverCtx_t::Cleanup()
 {
 	m_tAcc.Cleanup();
 
-	m_tUpdAPI = CSphAttrUpdate();
-
 	for ( CSphFilterSettings & tItem : m_tQuery.m_dFilters )
 	{
 		// fixme! What a legacy WTF? you take val from tItem.GetValueArray, compare with tItem.m_dValues,
@@ -684,7 +681,7 @@ static wsrep_cb_status_t Apply_fn ( void * pCtx, const void * pData, size_t uSiz
 	bool bIsolated = ( ( uFlags & WSREP_FLAG_ISOLATION )!=0 );
 	sphLogDebugRpl ( "writeset at apply, seq " INT64_FMT ", size %d, flags %u, on %s", (int64_t)pMeta->gtid.seqno, (int)uSize, uFlags, ( bCommit ? "commit" : "rollback" ) );
 
-	if ( !ParseCmdReplicated ( (const BYTE *)pData, (int) uSize, bIsolated, pLocalCtx->m_pCluster->m_sName, pLocalCtx->m_tAcc, pLocalCtx->m_tUpdAPI, pLocalCtx->m_tQuery ) )
+	if ( !ParseCmdReplicated ( (const BYTE *)pData, (int) uSize, bIsolated, pLocalCtx->m_pCluster->m_sName, pLocalCtx->m_tAcc, pLocalCtx->m_tQuery ) )
 		return WSREP_CB_FAILURE;
 
 	return WSREP_CB_SUCCESS;
@@ -736,7 +733,7 @@ static wsrep_cb_status_t Unordered_fn ( void * pCtx, const void * pData, size_t 
 // This is the listening thread. It blocks in wsrep::recv() call until
 // disconnect from cluster. It will apply and commit writesets through the
 // callbacks defined above.
-static void ReplicationRecv_fn ( SharedPtr_t<ReceiverCtx_t *> pCtx )
+static void ReplicationRecv_fn ( SharedPtr_t<ReceiverCtx_t> pCtx )
 {
 	g_pTlsCluster = pCtx->m_pCluster;
 	pCtx->m_pCluster->m_bHasWorker = true;
@@ -944,6 +941,9 @@ static bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sErro
 	CSphString sMyName;
 	sMyName.SetSprintf ( "daemon_%d_%s", GetOsThreadId(), tArgs.m_pCluster->m_sName.cstr() );
 
+	CSphString sThName; // shorter name without extra 'daemon_'
+	sThName.SetSprintf ( "%s_repl", tArgs.m_pCluster->m_sName.cstr() );
+
 	CSphString sConnectNodes;
 	if ( tArgs.m_sNodes.IsEmpty() )
 	{
@@ -964,7 +964,7 @@ static bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sErro
 		sphLogDebugRpl ( "cluster '%s', indexes '%s', nodes '%s'", tArgs.m_pCluster->m_sName.cstr(), sIndexes.cstr(), tArgs.m_pCluster->m_sClusterNodes.cstr() );
 	}
 
-	SharedPtr_t<ReceiverCtx_t *> pRecvArgs { new ReceiverCtx_t() };
+	SharedPtr_t<ReceiverCtx_t> pRecvArgs { new ReceiverCtx_t() };
 	pRecvArgs->m_pCluster = tArgs.m_pCluster;
 	CSphString sFullClusterPath = GetClusterPath ( tArgs.m_pCluster->m_sPath );
 
@@ -1034,7 +1034,7 @@ static bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sErro
 	}
 
 	// let's start listening thread with proper provider set
-	auto pScheduler = GetAloneScheduler(-1, sMyName.cstr ());
+	auto pScheduler = MakeSingleThreadExecutor ( -1, sThName.cstr() );
 	Threads::CoGo ( [pRecvArgs,sIncoming] () mutable
 	{
 		// publish stuff in 'show threads'
@@ -1437,7 +1437,7 @@ static bool SetIndexCluster ( const CSphString & sIndex, const CSphString & sClu
 }
 
 // lock or unlock write operations to disk chunks of index
-static bool ControlIndexWrite ( const CSphString & sIndex, bool bEnableWrite, CSphString & sError )
+static bool EnableIndexWrite ( const CSphString & sIndex, CSphString & sError )
 {
 	ServedIndexRefPtr_c pServed = GetServed ( sIndex );
 	if ( !pServed )
@@ -1454,16 +1454,13 @@ static bool ControlIndexWrite ( const CSphString & sIndex, bool bEnableWrite, CS
 	}
 
 	auto * pIndex = (RtIndex_i*)pDesc->m_pIndex;
-	if ( bEnableWrite )
-		pIndex->EnableSave();
-	else
-		pIndex->ProhibitSave();
+	pIndex->EnableSave();
 
 	return true;
 }
 
 // callback for Galera apply_cb to parse replicated commands
-bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CSphString & sCluster, RtAccum_t & tAcc, CSphAttrUpdate & tUpd, CSphQuery & tQuery )
+bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CSphString & sCluster, RtAccum_t & tAcc, CSphQuery & tQuery )
 {
 	MemoryReader_c tReader ( pData, iLen );
 
@@ -1562,8 +1559,8 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 			break;
 
 		case ReplicationCommand_e::UPDATE_API:
-			LoadUpdate ( pRequest, iRequestLen, tUpd );
-			pCmd->m_pUpdateAPI = &tUpd;
+			pCmd->m_pUpdateAPI = new CSphAttrUpdate;
+			LoadUpdate ( pRequest, iRequestLen, *pCmd->m_pUpdateAPI, pCmd->m_bBlobUpdate );
 			sphLogDebugRpl ( "update, index '%s'", pCmd->m_sIndex.cstr() );
 			break;
 
@@ -1573,10 +1570,10 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 			// can not handle multiple updates - only one update at time
 			assert ( !tQuery.m_dFilters.GetLength() );
 
-			int iGot = LoadUpdate ( pRequest, iRequestLen, tUpd );
+			pCmd->m_pUpdateAPI = new CSphAttrUpdate;
+			int iGot = LoadUpdate ( pRequest, iRequestLen, *pCmd->m_pUpdateAPI, pCmd->m_bBlobUpdate );
 			assert ( iGot<iRequestLen );
 			LoadUpdate ( pRequest + iGot, iRequestLen - iGot, tQuery );
-			pCmd->m_pUpdateAPI = &tUpd;
 			pCmd->m_pUpdateCond = &tQuery;
 			sphLogDebugRpl ( "update %s, index '%s'", ( eCommand==ReplicationCommand_e::UPDATE_QL ? "ql" : "json" ),  pCmd->m_sIndex.cstr() );
 			break;
@@ -2051,7 +2048,7 @@ static bool UpdateAPI ( AttrUpdateArgs& tUpd, int & iUpdate )
 	}
 
 	bool bCritical = false;
-	iUpdate = tUpd.m_pDesc->m_pIndex->UpdateAttributes ( *tUpd.m_pUpdate, -1, bCritical, tUpd.m_fnLocker, *tUpd.m_pError, *tUpd.m_pWarning );
+	iUpdate = tUpd.m_pDesc->m_pIndex->UpdateAttributes ( tUpd.m_pUpdate, bCritical, *tUpd.m_pError, *tUpd.m_pWarning );
 	return ( iUpdate>=0 );
 }
 
@@ -2083,26 +2080,32 @@ bool CommitMonitor_c::Update ( bool bCluster, CSphString & sError )
 	tUpd.m_pQuery = tCmd.m_pUpdateCond;
 	tUpd.m_pIndexName = &tCmd.m_sIndex;
 	tUpd.m_bJson = ( tCmd.m_eCommand==ReplicationCommand_e::UPDATE_JSON );
-	// can not reshedule into common quque for replication - could be dead-lock with incoming clients into the same index
-	tUpd.m_bNoYeld = bCluster;
-	ServedDescRPtr_c tDesc ( pServed );
-	tUpd.m_pDesc = tDesc.Ptr ();
 
-	// that might be called when blob updates necessary, however we don't need to call it actually more than once
-	bool bWlocked = false;
-	tUpd.m_fnLocker = [&bWlocked, &tDesc, bCluster] {
-		if (!bWlocked)
-		{
-			tDesc.UpgradeLock ( bCluster );
-			bWlocked = true;
-		}
-	};
+	bool bUpdateAPI = tCmd.m_eCommand==ReplicationCommand_e::UPDATE_API;
+	assert ( bUpdateAPI || tCmd.m_pUpdateCond );
 
-	if ( tCmd.m_eCommand==ReplicationCommand_e::UPDATE_API )
-		return UpdateAPI ( tUpd, *m_pUpdated );
+	// fixme! Provide fine-grain locking.
+	// that is - we don't lock right now, but provide locking functor (which executes r-locking or w-locking) over internal index structures,
+	// NOT over index descriptor, as it owns nothing!
+	// that is no difference for solid (plain) indexes, but is important for complex (distributed, rt), as we can then acquire/release lock
+	// sequentally for different index parts (chunks, segments)
+	if ( tCmd.m_bBlobUpdate )
+	{
+		ServedDescWPtr_c tDesc ( pServed );
+		tUpd.m_pDesc = tDesc.Ptr ();
+		if ( bUpdateAPI )
+			return UpdateAPI ( tUpd, *m_pUpdated );
 
-	assert ( tCmd.m_pUpdateCond );
-	HandleMySqlExtendedUpdate ( tUpd );
+		HandleMySqlExtendedUpdate ( tUpd );
+	} else {
+		ServedDescRPtr_c tDesc ( pServed );
+		tUpd.m_pDesc = tDesc.Ptr ();
+		if ( bUpdateAPI )
+			return UpdateAPI ( tUpd, *m_pUpdated );
+
+		HandleMySqlExtendedUpdate ( tUpd );
+	}
+
 	if ( sError.IsEmpty() )
 		*m_pUpdated += tUpd.m_iAffected;
 
@@ -2231,7 +2234,7 @@ static bool ReplicatedIndexes ( const CSphFixedVector<CSphString> & dIndexes, co
 
 	// need to enable back local index write
 	for ( const CSphString & sIndex : dIndexes )
-		bOk &= ControlIndexWrite ( sIndex, true, sError );
+		bOk &= EnableIndexWrite ( sIndex, sError );
 
 	if ( !bOk )
 		return false;
@@ -3946,8 +3949,8 @@ public:
 	}
 
 private:
-	CSphOrderedHash < RecvState_c, uint64_t, IdentityHash_fn, 64 > m_hStates;
-	Threads::CoroSpinlock_c m_tLock; // prevent modification of hash from multiple clients
+	CSphOrderedHash < RecvState_c, uint64_t, IdentityHash_fn, 64 > m_hStates GUARDED_BY (m_tLock);
+	Threads::CoroSpinlock_c m_tLock;
 };
 
 static StatesCache_c g_tRecvStates;
@@ -4226,14 +4229,13 @@ static void RemoveFiles ( const FilesTrait_t & tIndexFiles, const StrVec_t & dRe
 bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSphString & sError )
 {
 	uint64_t uWriter = GetWriterKey ( tCmd.m_sCluster, tCmd.m_sIndex );
-	ScopedState_t tStateGuard ( uWriter );
-
 	if ( !g_tRecvStates.HasState ( uWriter ) )
 	{
 		sError.SetSprintf ( "missed writer state at joiner node for cluster '%s' index '%s'", tCmd.m_sCluster.cstr(), tCmd.m_sIndex.cstr() );
 		return false;
 	}
 
+	ScopedState_t tStateGuard ( uWriter );
 	CSphScopedPtr<MergeState_t> pMerge { g_tRecvStates.GetState ( uWriter ).Flush ( sError ) };
 	if ( !pMerge.Ptr() )
 		return false;
@@ -4703,7 +4705,7 @@ public:
 		if ( !m_pIndexDesc )
 			return;
 
-		RtIndex_i * pIndex = (RtIndex_i *)m_pIndexDesc->m_pIndex;
+		auto * pIndex = (RtIndex_i *)m_pIndexDesc->m_pIndex;
 		pIndex->EnableSave();
 
 		m_pIndexDesc = nullptr;
@@ -4725,7 +4727,7 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 
 	CSphVector<CSphString> dIndexFiles;
 	IndexSaveGuard_t tIndexSaveGuard ( pIndexDesc );
-	RtIndex_i * pIndex = (RtIndex_i *)pIndexDesc->m_pIndex;
+	auto * pIndex = (RtIndex_i *)pIndexDesc->m_pIndex;
 	pIndex->LockFileState ( dIndexFiles );
 
 	CSphString sIndexPath = pIndexDesc->m_sIndexPath;
@@ -5385,18 +5387,20 @@ void SaveUpdate ( const CSphAttrUpdate & tUpd, CSphVector<BYTE> & dOut )
 	SaveArray ( tUpd.m_dPool, tWriter );
 }
 
-int LoadUpdate ( const BYTE * pBuf, int iLen, CSphAttrUpdate & tUpd )
+int LoadUpdate ( const BYTE * pBuf, int iLen, CSphAttrUpdate & tUpd, bool & bBlob )
 {
 	MemoryReader_c tIn ( pBuf, iLen );
 	
 	tUpd.m_bIgnoreNonexistent = !!tIn.GetByte();
 	tUpd.m_bStrict = !!tIn.GetByte();
 
+	bBlob = false;
 	tUpd.m_dAttributes.Resize ( tIn.GetDword() );
 	for ( TypedAttribute_t & tElem : tUpd.m_dAttributes )
 	{
 		tElem.m_sName = tIn.GetString();
 		tElem.m_eType = (ESphAttr)tIn.GetDword();
+		bBlob |= ( tElem.m_eType==SPH_ATTR_UINT32SET || tElem.m_eType==SPH_ATTR_INT64SET || tElem.m_eType==SPH_ATTR_JSON || tElem.m_eType==SPH_ATTR_STRING );
 	}
 
 	GetArray ( tUpd.m_dDocids, tIn );

@@ -106,7 +106,7 @@ UPDATE rt_mva SET mva1 = (1012,1002) WHERE id=2;
 UPDATE rt_mva SET mva1 = (1015,1005) WHERE id=5;
 
 optimize index rt_mva option sync=1;
-SELECT * FROM rt_mva;
+SELECT * FROM rt_mva order by id asc;
 
 </sphinxql></queries>
 

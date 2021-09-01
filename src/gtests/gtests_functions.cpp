@@ -2252,6 +2252,33 @@ TEST ( functions, LazyVectorCopyMove )
 	dCopy.Append(dVec);
 }
 
+TEST ( functions, BitVec_managing )
+{
+	{
+		CSphBitvec foo ( 10 );
+		CSphBitvec bar ( 1000 );
+		foo.BitSet ( 9 );
+		bar.BitSet ( 900 );
+		bar.Swap ( foo );
+		ASSERT_TRUE ( foo.BitGet ( 900 ) );
+		ASSERT_TRUE ( bar.BitGet ( 9 ) );
+	}
+	{
+		CSphBitvec baz;
+		CSphBitvec fee ( 100 );
+		fee.BitSet ( 90 );
+		baz = std::move ( fee );
+		ASSERT_TRUE ( baz.BitGet ( 90 ) );
+	}
+	{
+		CSphBitvec baz;
+		CSphBitvec fee ( 1000 );
+		fee.BitSet ( 90 );
+		baz = std::move ( fee );
+		ASSERT_TRUE ( baz.BitGet ( 90 ) );
+	}
+}
+
 #ifdef _WIN32
 #pragma warning(push) // store current warning values
 #pragma warning(disable:4101)
@@ -2559,10 +2586,10 @@ TEST ( functions, RawTrivialVector )
 
 TEST ( functions, SharedPtr )
 {
-	SharedPtr_t<int *> pFoo;
+	SharedPtr_t<int> pFoo;
 	ASSERT_FALSE ( bool(pFoo) );
 	{
-		SharedPtr_t<int *> pBar { new int };
+		SharedPtr_t<int> pBar { new int };
 		*pBar = 10;
 		pFoo = pBar;
 		ASSERT_EQ ( *pFoo, 10 );
@@ -2572,6 +2599,24 @@ TEST ( functions, SharedPtr )
 	ASSERT_EQ ( *pFoo, 10 );
 	pFoo = b;
 	ASSERT_EQ ( *pFoo, 20 );
+}
+
+TEST ( functions, SharedPtrCompare )
+{
+	SharedPtr_t<int> pFoo;
+	ASSERT_EQ ( pFoo, nullptr );
+	ASSERT_TRUE ( pFoo == nullptr );
+	SharedPtr_t<int> pBar { new int };
+	*pBar = 10;
+	pFoo = pBar;
+	auto pBaz = pFoo;
+	ASSERT_EQ ( *pFoo, 10 );
+	ASSERT_EQ ( pFoo, pBar );
+	ASSERT_EQ ( pFoo, pBaz );
+	ASSERT_EQ ( pBaz, pBar );
+	ASSERT_TRUE ( pFoo == pBar );
+	ASSERT_TRUE ( pFoo == pBaz );
+	ASSERT_TRUE ( pBaz == pBar );
 }
 
 void pr (const VecTraits_T<DWORD>& dData, int a=-1, int b=-1)
@@ -2885,5 +2930,128 @@ TEST ( functions, field_mask )
 	foo.Set(224);
 	foo.DeleteBit(223);
 	ASSERT_TRUE ( foo.Test ( 223 ) );
+
+}
+
+class foo
+{
+public:
+	void bar() {};
+	static void bar_static() {}
+};
+
+TEST ( functions, static_trait )
+{
+	ASSERT_TRUE ( std::is_member_function_pointer<decltype ( &foo::bar )>::value );
+	ASSERT_FALSE ( std::is_member_function_pointer<decltype ( &foo::bar_static )>::value );
+}
+
+template<typename T>
+class RefCountedTestVec_T final : public ISphRefcountedMT, public LazyVector_T<T>
+{
+protected:
+	~RefCountedTestVec_T () final { }
+
+public:
+	RefCountedTestVec_T () = default;
+};
+
+template <typename T>
+using DataVecRefPtr_t = CSphRefcountedPtr<RefCountedTestVec_T<T> >;
+
+template <typename T>
+using ConstDataVecRefPtr_t = CSphRefcountedPtr<const RefCountedTestVec_T<T> >;
+
+struct DataVecMutable_c : ISphNoncopyable
+{
+public:
+	ConstDataVecRefPtr_t<int> & m_tOwner;
+
+	DataVecRefPtr_t<int> m_tNewData;
+	// shortcuts
+	RefCountedTestVec_T<int> & m_dData;
+
+	explicit DataVecMutable_c ( ConstDataVecRefPtr_t<int>& tData )
+			: m_tOwner { tData }
+			, m_tNewData { new RefCountedTestVec_T<int> () }
+			, m_dData { *m_tNewData }
+	{
+		m_dData.Reserve ( tData->GetLength() );
+		for ( const auto & i : *tData )
+			m_dData.Add(i);
+	}
+
+	~DataVecMutable_c ()
+	{
+		m_tOwner = m_tNewData.Leak();
+	}
+};
+
+TEST ( functions, mutate_via_ref )
+{
+	// original immutable data
+	DataVecRefPtr_t<int> origData { new RefCountedTestVec_T<int> };
+	origData->Add ( 1 );
+	origData->Add ( 2 );
+	origData->Add ( 3 );
+	ASSERT_EQ ( origData->GetRefcount (), 1 );
+
+	// make const snapshot of orig data
+	ConstDataVecRefPtr_t<int> refData;
+	refData = origData.Leak();
+
+	ASSERT_EQ ( refData->GetLength (), 3 );
+	ASSERT_EQ ( ( *refData )[0], 1 );
+	ASSERT_EQ ( ( *refData )[1], 2 );
+	ASSERT_EQ ( ( *refData )[2], 3 );
+	ASSERT_EQ ( refData->GetRefcount(), 1 );
+
+	ASSERT_EQ ( refData->GetRefcount (), 1 );
+	auto prevRefData = refData;
+	ASSERT_EQ ( refData->GetRefcount (), 2 );
+
+	// make mutable snapshot
+	{
+		DataVecMutable_c foo { refData };
+		ASSERT_EQ ( refData->GetRefcount (), 2 );
+		ASSERT_EQ ( foo.m_tNewData->GetRefcount (), 1 );
+		ASSERT_EQ ( foo.m_tNewData->GetLength (), 3 );
+		ASSERT_EQ ( foo.m_dData.GetLength (), 3 );
+		ASSERT_EQ ( &foo.m_dData, foo.m_tNewData );
+
+		// mutate mutable data
+		foo.m_dData.Resize(4);
+		foo.m_dData[0] = 10;
+		foo.m_dData[3] = 42;
+
+		// check that orig (ref) is not changed
+		ASSERT_EQ ( refData->GetLength (), 3 );
+		ASSERT_EQ ( ( *refData )[0], 1 );
+		ASSERT_EQ ( ( *refData )[1], 2 );
+		ASSERT_EQ ( ( *refData )[2], 3 );
+
+		// check that mutation is changed
+		ASSERT_EQ ( foo.m_tNewData->GetLength (), 4 );
+		ASSERT_EQ ( foo.m_dData.GetLength (), 4 );
+		ASSERT_EQ ( foo.m_dData[0], 10 );
+		ASSERT_EQ ( foo.m_dData[1], 2 );
+		ASSERT_EQ ( foo.m_dData[2], 3 );
+		ASSERT_EQ ( foo.m_dData[3], 42 );
+	}
+
+	// check that prev data is still unchanged (i.e. 'another reader')
+	ASSERT_EQ ( prevRefData->GetLength (), 3 );
+	ASSERT_EQ ( ( *prevRefData )[0], 1 );
+	ASSERT_EQ ( ( *prevRefData )[1], 2 );
+	ASSERT_EQ ( ( *prevRefData )[2], 3 );
+	ASSERT_EQ ( prevRefData->GetRefcount (), 1 );
+
+	// check that ref data is now pointee to new values provided by mutator
+	ASSERT_EQ ( refData->GetLength (), 4 );
+	ASSERT_EQ ( ( *refData )[0], 10 );
+	ASSERT_EQ ( ( *refData )[1], 2 );
+	ASSERT_EQ ( ( *refData )[2], 3 );
+	ASSERT_EQ ( ( *refData )[3], 42 );
+	ASSERT_EQ ( refData->GetRefcount (), 1 );
 
 }

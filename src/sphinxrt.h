@@ -21,10 +21,13 @@
 #include "attribute.h"
 #include "docstore.h"
 #include "columnarrt.h"
+#include "coroutine.h"
 
 struct CSphReconfigureSettings;
 struct CSphReconfigureSetup;
 class RtAccum_t;
+
+using VisitChunk_fn = std::function<void ( const CSphIndex* pIndex )>;
 
 struct InsertDocData_t
 {
@@ -85,7 +88,7 @@ public:
 	/// truncate index (that is, kill all data)
 	virtual bool Truncate ( CSphString & sError ) = 0;
 
-	virtual void Optimize ( int iCutoff, int iFromID, int iToID, const char* szUvarFilter ) {}
+	virtual void Optimize ( int iCutoff, int iFromID, int iToID, const char* szUvarFilter, bool ByOrder ) {}
 
 	/// check settings vs current and return back tokenizer and dictionary in case of difference
 	virtual bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError ) const = 0;
@@ -94,9 +97,16 @@ public:
 	/// current data got saved with current settings
 	virtual bool Reconfigure ( CSphReconfigureSetup & tSetup ) = 0;
 
+	/// do something const with disk chunk (query settings, status, etc.)
+	/// hides internal disk chunks storage
+	virtual void ProcessDiskChunk ( int iChunk, VisitChunk_fn&& fnVisitor ) {};
+
 	/// get disk chunk
-	virtual CSphIndex * GetDiskChunk ( int iChunk ) {return nullptr;}
-	
+	virtual CSphIndex* GetDiskChunk ( int iChunk )
+	{
+		return nullptr;
+	}
+
 	virtual RtAccum_t * CreateAccum ( RtAccum_t * pAccExt, CSphString & sError ) = 0;
 
 	// instead of cloning for each AddDocument() call we could just call this method and improve batch inserts speed
@@ -139,10 +149,10 @@ STATIC_ASSERT ( SPH_MAX_KEYWORD_LEN<255, MAX_KEYWORD_LEN_SHOULD_FITS_BYTE );
 
 struct RtDoc_t
 {
-	RowID_t m_tRowID { INVALID_ROWID };    ///< row id
-	DWORD m_uDocFields = 0;            ///< fields mask
-	DWORD m_uHits = 0;                ///< hit count
-	DWORD m_uHit = 0;                    ///< either index into segment hits, or the only hit itself (if hit count is 1)
+	RowID_t m_tRowID { INVALID_ROWID };	///< row id
+	DWORD m_uDocFields = 0;				///< fields mask
+	DWORD m_uHits = 0;					///< hit count
+	DWORD m_uHit = 0;					///< either index into segment hits, or the only hit itself (if hit count is 1)
 };
 
 
@@ -154,9 +164,9 @@ struct RtWord_t
 		const BYTE * m_sWord;
 		typename WIDEST<SphWordID_t, const BYTE *>::T m_null = 0;
 	};
-	DWORD m_uDocs = 0;    ///< document count (for stats and/or BM25)
-	DWORD m_uHits = 0;    ///< hit count (for stats and/or BM25)
-	DWORD m_uDoc = 0;        ///< index into segment docs
+	DWORD m_uDocs = 0;		///< document count (for stats and/or BM25)
+	DWORD m_uHits = 0;		///< hit count (for stats and/or BM25)
+	DWORD m_uDoc = 0;		///< index into segment docs
 	bool m_bHasHitlist = true;
 };
 
@@ -176,6 +186,9 @@ struct RtWordCheckpoint_t
 struct RtSegment_t final : IndexSegment_c, ISphRefcountedMT
 {
 public:
+	mutable int						m_iLocked = 0;	// if segment currently used in an op
+	mutable Threads::CoroRWLock_c	m_tLock;		// fine-grain lock
+
 	CSphTightVector<BYTE>			m_dWords;
 	CSphVector<RtWordCheckpoint_t>	m_dWordCheckpoints;
 	CSphTightVector<uint64_t>		m_dInfixFilterCP;
@@ -184,8 +197,8 @@ public:
 
 	DWORD							m_uRows = 0;			///< number of actually allocated rows
 	std::atomic<int64_t>			m_tAliveRows { 0 };		///< number of alive (non-killed) rows
-	CSphTightVector<CSphRowitem>	m_dRows;				///< row data storage
-	CSphTightVector<BYTE>			m_dBlobs;				///< storage for blob attrs
+	CSphTightVector<CSphRowitem>	m_dRows GUARDED_BY ( m_tLock );				///< row data storage
+	CSphTightVector<BYTE>			m_dBlobs GUARDED_BY ( m_tLock );            ///< storage for blob attrs
 	CSphVector<BYTE>				m_dKeywordCheckpoints;
 	std::atomic<int64_t> *			m_pRAMCounter = nullptr;///< external RAM counter
 	OpenHash_T<RowID_t, DocID_t>	m_tDocIDtoRowID;		///< speeds up docid-rowid lookups
@@ -195,12 +208,12 @@ public:
 
 							RtSegment_t ( DWORD uDocs );
 
-	int64_t					GetUsedRam();				// get cached ram usage counter
-	void					UpdateUsedRam();			// recalculate ram usage, update index ram counter
+	int64_t					GetUsedRam() const;				// get cached ram usage counter
+	void					UpdateUsedRam() const;			// recalculate ram usage, update index ram counter
 	DWORD					GetMergeFactor() const;
 	int						GetStride() const;
 
-	bool					IsAlive ( DocID_t tDocid ) const;
+	const CSphRowitem * 	FindAliveRow ( DocID_t tDocid ) const;
 	const CSphRowitem *		GetDocinfoByRowID ( RowID_t tRowID ) const;
 	RowID_t					GetRowidByDocid ( DocID_t tDocID ) const;
 
@@ -209,10 +222,9 @@ public:
 
 	void					SetupDocstore ( const CSphSchema * pSchema );
 	void					BuildDocID2RowIDMap ( const CSphSchema & tSchema );
-	void					AddRemoveColumnarAttr ( bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, const CSphString & sPath, CSphString & sError );
 
 private:
-	int64_t					m_iUsedRam = 0;			///< ram usage counter
+	mutable int64_t			m_iUsedRam = 0;			///< ram usage counter
 
 							~RtSegment_t () final;
 
@@ -220,27 +232,11 @@ private:
 };
 
 using RtSegmentRefPtf_t = CSphRefcountedPtr<RtSegment_t>;
-using constRtSegmentRefPtf_t = CSphRefcountedPtr<const RtSegment_t>;
+using ConstRtSegmentRefPtf_t = CSphRefcountedPtr<const RtSegment_t>;
 
-struct RtDocReader_t
-{
-	const BYTE * m_pDocs = nullptr;
-	int m_iLeft = 0;
-	RtDoc_t m_tDoc;
-
-	RtDocReader_t() = default;
-	RtDocReader_t ( const RtSegment_t * pSeg, const RtWord_t &tWord );
-	const RtDoc_t * UnzipDoc ();
-	void UnzipDoc ( RtDoc_t& tOut );
-	inline void operator>> ( RtDoc_t & tDoc) { UnzipDoc(tDoc); }
-	inline operator bool() const { return m_iLeft && m_pDocs; }
-};
-
-struct RtWordReader_t
+class RtWordReader_c
 {
 	BYTE m_tPackedWord[SPH_MAX_KEYWORD_LEN + 1];
-	const BYTE * m_pCur = nullptr;
-	const BYTE * m_pMax = nullptr;
 	RtWord_t m_tWord;
 	int m_iWords = 0;
 
@@ -249,44 +245,56 @@ struct RtWordReader_t
 	int m_iCheckpoint = 0;
 	const ESphHitless m_eHitlessMode = SPH_HITLESS_NONE;
 
-	RtWordReader_t ( const RtSegment_t * pSeg, bool bWordDict, int iWordsCheckpoint, ESphHitless eHitlessMode );
+public:
+	const BYTE* m_pCur = nullptr;
+	const BYTE* m_pMax = nullptr;
+
+	RtWordReader_c ( const RtSegment_t * pSeg, bool bWordDict, int iWordsCheckpoint, ESphHitless eHitlessMode );
 	void Reset ( const RtSegment_t * pSeg );
-	const RtWord_t * UnzipWord ();
-	void UnzipWord ( RtWord_t& tWord );
-	inline void operator>> ( RtWord_t & tWord )
-	{
-		if ( m_bWordDict && !tWord.m_sWord )
-			tWord.m_sWord = m_tPackedWord;
-
-		UnzipWord(tWord);
-	}
-	inline operator bool() const { return m_pCur<m_pMax; }
+	inline int Checkpoint() const { return m_iCheckpoint; }
+	const RtWord_t* UnzipWord();
+	inline explicit operator RtWord_t*() { return &m_tWord; }
+	inline RtWord_t* operator->() { return &m_tWord; }
+	inline const RtWord_t& operator*() const { return m_tWord; }
 };
 
-struct RtHitReader_t
+class RtDocReader_c
 {
-	const BYTE * m_pCur = nullptr;
-	DWORD m_iLeft = 0;
-	DWORD m_uLast = 0;
+	const BYTE* m_pDocs = nullptr;
+	int m_iLeft = 0;
+	RtDoc_t m_tDoc;
 
-	RtHitReader_t () = default;
-	explicit RtHitReader_t ( const RtSegment_t * pSeg, const RtDoc_t * pDoc );
+public:
+	RtDocReader_c() = default;
+	RtDocReader_c ( const RtSegment_t* pSeg, const RtWord_t& tWord );
+	void Init ( const RtSegment_t* pSeg, const RtWord_t& tWord );
+	void Reset () { m_pDocs = nullptr; m_iLeft = 0; }
+	bool UnzipDoc();
+	inline explicit operator RtDoc_t*() { return &m_tDoc; }
+	inline RtDoc_t* operator->() { return &m_tDoc; }
+	inline const RtDoc_t& operator*() const { return m_tDoc; }
+};
+
+class RtHitReader_c
+{
+	const BYTE* m_pCur = nullptr;
+	DWORD m_uLeft = 0;
+	DWORD m_uValue = 0;
+
+public:
+	RtHitReader_c() = default;
+	RtHitReader_c ( const RtSegment_t& dSeg, const RtDoc_t& dDoc );
+	void Seek ( const RtSegment_t& dSeg, const RtDoc_t& dDoc );
+	void Seek ( const BYTE* pHits, DWORD uHits );
+	inline DWORD operator*() const { return m_uValue; }
 	DWORD UnzipHit ();
-	inline void operator>>(DWORD& uValue) { uValue = UnzipHit(); }
-	inline operator bool() const { return m_iLeft>0; }
-	ByteBlob_t GetHitsBlob() const;
 };
 
-struct RtHitReader2_t : public RtHitReader_t
-{
-	const BYTE * m_pBase = nullptr;
-	void Seek ( SphOffset_t uOff, int iHits );
-};
+ByteBlob_t GetHitsBlob ( const RtSegment_t* pSeg, const RtDoc_t* pDoc );
 
 class CSphSource_StringVector : public CSphSource_Document
 {
 public:
-	explicit			CSphSource_StringVector ( const VecTraits_T<const char *> &dFields, const CSphSchema & tSchema );
 	explicit			CSphSource_StringVector ( const VecTraits_T<VecTraits_T<const char >> &dFields, const CSphSchema &tSchema );
 						~CSphSource_StringVector () override = default;
 

@@ -978,6 +978,7 @@ struct CSphAttrLocator
 		m_iBitOffset = -1;
 		m_iBitCount = -1;
 		m_iBlobAttrId = -1;
+		m_iBlobRowOffset = 1;
 		m_nBlobAttrs = 0;
 		m_bDynamic = true;
 	}
@@ -2455,45 +2456,130 @@ struct CSphAttrUpdate
 	bool							m_bStrict = false;				///< whether to check for incompatible types first, or just ignore them
 };
 
+using AttrUpdateSharedPtr_t = SharedPtr_t<CSphAttrUpdate>;
+
+struct AttrUpdateInc_t // for cascade (incremental) update
+{
+	AttrUpdateSharedPtr_t			m_pUpdate;	///< the unchangeable update pool
+	CSphBitvec						m_dUpdated;			///< bitmask of updated rows
+	int								m_iAffected = 0;	///< num of updated rows.
+
+	explicit AttrUpdateInc_t ( AttrUpdateSharedPtr_t pUpd )
+		: m_pUpdate ( std::move(pUpd) )
+		, m_dUpdated ( m_pUpdate->m_dDocids.GetLength() )
+	{}
+
+	void MarkUpdated ( int iUpd )
+	{
+		if ( m_dUpdated.BitGet ( iUpd ) )
+			return;
+
+		++m_iAffected;
+		m_dUpdated.BitSet ( iUpd );
+	}
+
+	bool AllApplied () const
+	{
+		assert ( m_dUpdated.GetBits() >= m_iAffected );
+		return m_dUpdated.GetBits() == m_iAffected;
+	}
+};
+
 /////////////////////////////////////////////////////////////////////////////
 // FULLTEXT INDICES
 /////////////////////////////////////////////////////////////////////////////
 
 /// progress info
-struct CSphIndexProgress
+class MergeCb_c
 {
+	std::atomic<bool> * m_pStop = nullptr;
+
+public:
+	enum Event_e : BYTE
+	{
+		E_IDLE,
+		E_COLLECT_START,		// begin collecting alive docs on merge; payload is chunk ID
+		E_COLLECT_FINISHED,		// collecting alive docs on merge is finished; payload is chunk ID
+		E_MERGEATTRS_START,
+		E_MERGEATTRS_FINISHED,
+		E_KEYWORDS,
+		E_FINISHED,
+	};
+
+	explicit MergeCb_c ( std::atomic<bool>* pStop = nullptr )
+		: m_pStop ( pStop )
+	{}
+	virtual ~MergeCb_c() = default;
+
+	virtual void SetEvent ( Event_e eEvent, int64_t iPayload ) {}
+
+	inline bool NeedStop () const
+	{
+		return sphInterrupted() || ( m_pStop && m_pStop->load ( std::memory_order_relaxed ) );
+	}
+};
+
+class CSphIndexProgress : private MergeCb_c
+{
+	MergeCb_c * m_pMergeHook;
+
+private:
+	virtual void ShowImpl ( bool bPhaseEnd ) const {};
+
+public:
 	enum Phase_e
 	{
 		PHASE_COLLECT,				///< document collection phase
 		PHASE_SORT,					///< final sorting phase
 		PHASE_LOOKUP,				///< docid lookup construction
-		PHASE_MERGE					///< index merging
+		PHASE_MERGE,				///< index merging
+		PHASE_UNKNOWN,
 	};
 
-	Phase_e			m_ePhase { PHASE_COLLECT };		///< current indexing phase
+	Phase_e			m_ePhase;		///< current indexing phase
 
-	int64_t			m_iDocuments = 0;	///< PHASE_COLLECT: documents collected so far
-	int64_t			m_iBytes = 0;		///< PHASE_COLLECT: bytes collected so far;
-										///< PHASE_PREREAD: bytes read so far;
-	int64_t			m_iBytesTotal = 0;	///< PHASE_PREREAD: total bytes to read;
+	union {
+		int64_t m_iDocuments;		///< PHASE_COLLECT: documents collected so far
+		int64_t m_iDocids;			///< PHASE_LOOKUP: docids added to lookup so far
+		int64_t m_iHits;			///< PHASE_SORT: hits sorted so far
+		int64_t m_iWords;			///< PHASE_MERGE: words merged so far
+	};
 
-	SphOffset_t		m_iHits {0};		///< PHASE_SORT: hits sorted so far
-	SphOffset_t		m_iHitsTotal {0};	///< PHASE_SORT: hits total
+	union {
+		int64_t m_iBytes;			///< PHASE_COLLECT: bytes collected so far;
+		int64_t m_iDocidsTotal;		///< PHASE_LOOKUP: total docids
+		int64_t m_iHitsTotal;		///< PHASE_SORT: hits total
+	};
 
-	int64_t			m_iDocids {0};		///< PHASE_LOOKUP: docids added to lookup so far
-	int64_t			m_iDocidsTotal {0};	///< PHASE_LOOKUP: total docids
+public:
+	explicit CSphIndexProgress( MergeCb_c * pMergeHook = nullptr )
+	{
+		if ( pMergeHook )
+			m_pMergeHook = pMergeHook;
+		else
+			m_pMergeHook = static_cast<MergeCb_c *>(this);
+		PhaseBegin ( PHASE_UNKNOWN );
+	}
 
-	int				m_iWords = 0;		///< PHASE_MERGE: words merged so far
+	inline void PhaseBegin ( Phase_e ePhase )
+	{
+		m_ePhase = ePhase;
+		m_iDocuments = m_iBytes = 0;
+	}
 
-	int				m_iDone = 0;		///< generic percent, 0..1000 range
+	inline void PhaseEnd() const
+	{
+		if ( m_ePhase!=PHASE_UNKNOWN )
+			ShowImpl ( true );
+	}
 
-	using IndexingProgress_fn = void (*) ( const CSphIndexProgress * pStat, bool bPhaseEnd );
-	IndexingProgress_fn m_fnProgress {nullptr};
+	inline void Show() const
+	{
+		ShowImpl ( false );
+	}
 
-	/// builds a message to print
-	/// WARNING, STATIC BUFFER, NON-REENTRANT
-	const char * BuildMessage() const;
-	void Show ( bool bPhaseEnd ) const;
+	// cb
+	MergeCb_c& GetMergeCb() const { return *m_pMergeHook; }
 };
 
 
@@ -2592,7 +2678,6 @@ struct CSphMultiQueryArgs : public ISphNoncopyable
 	const SmallStringHash_T<int64_t> *		m_pLocalDocs = nullptr;
 	int64_t									m_iTotalDocs = 0;
 	bool									m_bModifySorterSchemas {true};
-	bool									m_bNoYeld = false;
 
 	CSphMultiQueryArgs ( int iIndexWeight );
 };
@@ -2608,23 +2693,59 @@ enum KeywordExpansion_e
 };
 
 
+struct RowToUpdateData_t
+{
+	const CSphRowitem*	m_pRow;	/// row in the index
+	int					m_iIdx;	/// idx in updateset
+};
+
+using RowsToUpdateData_t = CSphVector<RowToUpdateData_t>;
+using RowsToUpdate_t = VecTraits_T<RowToUpdateData_t>;
+
+struct PostponedUpdate_t
+{
+	AttrUpdateSharedPtr_t	m_pUpdate;
+	RowsToUpdateData_t		m_dRowsToUpdate;
+};
+
 // an index or a part of an index that has its own row ids
 class IndexSegment_c
 {
+protected:
+	mutable IndexSegment_c * m_pKillHook = nullptr; // if set, killed docids will be emerged also here.
+
 public:
-	virtual			~IndexSegment_c() {}
+	// stuff for dispatch races between changes and updates
+	mutable std::atomic<bool>		m_bAttrsBusy { false };
+	CSphVector<PostponedUpdate_t>	m_dPostponedUpdates;
+
+public:
 	virtual int		Kill ( DocID_t tDocID ) { return 0; }
-	virtual int		KillMulti ( const VecTraits_T<DocID_t> & dKlist ) { return 0; }
+	virtual int		KillMulti ( const VecTraits_T<DocID_t> & dKlist ) { return 0; };
+	virtual			~IndexSegment_c() {};
+
+	inline void SetKillHook ( IndexSegment_c * pKillHook ) const
+	{
+		m_pKillHook = pKillHook;
+	}
+
+	inline void ResetPostponedUpdates()
+	{
+		m_bAttrsBusy = false;
+		m_dPostponedUpdates.Reset();
+	}
 };
 
-
-struct UpdatedRowData_t
+// helper - collects killed documents
+struct KillAccum_t final : public IndexSegment_c
 {
-	CSphRowitem *		m_pRow {nullptr};
-	IndexSegment_c *	m_pSegment {nullptr};
-	CSphRowitem *		m_pAttrPool {nullptr};
-	BYTE *				m_pBlobPool {nullptr};
-	bool				m_bUpdated {false};
+	CSphVector<DocID_t> m_dDocids;
+
+	int Kill ( DocID_t tDocID ) final
+	{
+		m_dDocids.Add ( tDocID );
+		return 1;
+	}
 };
 
 class Histogram_i;
@@ -2648,30 +2769,24 @@ struct UpdatedAttribute_t
 	int					m_iSchemaAttr = -1;
 };
 
-using FNLOCKER = std::function<void()>;
-
 struct UpdateContext_t
 {
-	const CSphAttrUpdate &					m_tUpd;
+	AttrUpdateInc_t &						m_tUpd;
 	const ISphSchema &						m_tSchema;
 	const HistogramContainer_c *			m_pHistograms {nullptr};
+	CSphRowitem *							m_pAttrPool {nullptr};
+	BYTE *									m_pBlobPool {nullptr};
+	IndexSegment_c *						m_pSegment {nullptr};
 
-	CSphVector<UpdatedRowData_t>			m_dUpdatedRows;
-	CSphFixedVector<UpdatedAttribute_t>		m_dUpdatedAttrs;
+	CSphFixedVector<UpdatedAttribute_t>		m_dUpdatedAttrs;	// manipulation schema (1 item per column of schema)
 
 	CSphBitvec			m_dSchemaUpdateMask;
 	DWORD				m_uUpdateMask {0};
-
-	int					m_iFirst {0};
-	int					m_iLast {0};
-	FNLOCKER			m_fnBlobsLocker;
 	bool				m_bBlobUpdate {false};
 	int					m_iJsonWarnings {0};
 
 
-						UpdateContext_t ( const CSphAttrUpdate & tUpd, const ISphSchema & tSchema, const HistogramContainer_c * pHistograms, int iFirst, int iLast, FNLOCKER fnLocker );
-
-	UpdatedRowData_t &	GetRowData ( int iUpd );
+	UpdateContext_t ( AttrUpdateInc_t & tUpd, const ISphSchema & tSchema );
 };
 
 
@@ -2688,14 +2803,15 @@ protected:
 
 	virtual				~IndexUpdateHelper_c() {}
 
-	virtual bool		Update_WriteBlobRow ( UpdateContext_t & tCtx, int iUpd, CSphRowitem * pDocinfo, const BYTE * pBlob, int iLength, int nBlobAttrs, const CSphAttrLocator & tBlobRowLoc, bool & bCritical, CSphString & sError ) = 0;
+	virtual bool		Update_WriteBlobRow ( UpdateContext_t & tCtx, CSphRowitem * pDocinfo, const BYTE * pBlob,
+			int iLength, int nBlobAttrs, const CSphAttrLocator & tBlobRowLoc, bool & bCritical, CSphString & sError ) = 0;
 
 	bool				Update_CheckAttributes ( const UpdateContext_t & tCtx, CSphString & sError );
-	bool				Update_FixupData ( UpdateContext_t & tCtx, CSphString & sError );
-	bool				Update_InplaceJson ( UpdateContext_t & tCtx, CSphString & sError, bool bDryRun );
-	bool				Update_Blobs ( UpdateContext_t & tCtx, bool & bCritical, CSphString & sError );
-	void				Update_Plain ( UpdateContext_t & tCtx );
-	bool				Update_HandleJsonWarnings ( UpdateContext_t & tCtx, int iUpdated, CSphString & sWarning, CSphString & sError );
+	static bool			Update_PrepareListOfUpdatedAttributes ( UpdateContext_t & tCtx, CSphString & sError );
+	static bool			Update_InplaceJson ( const RowsToUpdate_t& dRows, UpdateContext_t & tCtx, CSphString & sError, bool bDryRun );
+	bool				Update_Blobs ( const RowsToUpdate_t& dRows, UpdateContext_t & tCtx, bool & bCritical, CSphString & sError );
+	static void			Update_Plain ( const RowsToUpdate_t& dRows, UpdateContext_t & tCtx );
+	static bool			Update_HandleJsonWarnings ( UpdateContext_t & tCtx, int iUpdated, CSphString & sWarning, CSphString & sError );
 };
 
 
@@ -2749,15 +2865,14 @@ class ISphMatchSorter;
 class CSphIndex : public ISphKeywordsStat, public IndexSegment_c, public DocstoreReader_i
 {
 public:
-	explicit					CSphIndex ( const char * sIndexName, const char * sFilename );
+								CSphIndex ( const char * sIndexName, const char * sFilename );
 								~CSphIndex() override;
 
-	virtual const CSphString &	GetLastError() const { return m_sLastError; }
-	virtual const CSphString &	GetLastWarning() const { return m_sLastWarning; }
+	const CSphString &			GetLastError() const { return m_sLastError; }
+	const CSphString &			GetLastWarning() const { return m_sLastWarning; }
 	virtual const CSphSchema &	GetMatchSchema() const { return m_tSchema; }			///< match schema as returned in result set (possibly different from internal storage schema!)
 
-	virtual	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn pfnProgress ) = 0;
-	virtual void				SetInplaceSettings ( int iHitGap, float fRelocFactor, float fWriteFactor );
+	void						SetInplaceSettings ( int iHitGap, float fRelocFactor, float fWriteFactor );
 	void						SetFieldFilter ( ISphFieldFilter * pFilter );
 	const ISphFieldFilter *		GetFieldFilter() const { return m_pFieldFilter; }
 	void						SetTokenizer ( ISphTokenizer * pTokenizer );
@@ -2783,10 +2898,10 @@ public:
 
 public:
 	/// build index by indexing given sources
-	virtual int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer ) = 0;
+	virtual int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer, CSphIndexProgress & ) = 0;
 
 	/// build index by mering current index with given index
-	virtual bool				Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSettings> & dFilters, bool bSupressDstDocids ) = 0;
+	virtual bool				Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSettings> & dFilters, bool bSupressDstDocids, CSphIndexProgress & tProgress ) = 0;
 
 public:
 	/// check all data files, preload schema, and preallocate enough RAM to load memory-cached data
@@ -2837,8 +2952,13 @@ public:
 public:
 	/// returns non-negative amount of actually found and updated records on success
 	/// on failure, -1 is returned and GetLastError() contains error message
-	/// fnLocker, if provided, used to lock affected row during update for exclusive access
-	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning ) = 0;
+	int							UpdateAttributes ( AttrUpdateSharedPtr_t pUpd, bool & bCritical, CSphString & sError, CSphString & sWarning );
+
+	/// update accumulating state
+	virtual int					UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSphString & sError, CSphString & sWarning ) = 0;
+
+	/// apply serie of updates, assuming them prepared (no need to full-scan attributes), and index is offline, i.e. no concurrency
+	virtual void				UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & dUpdates, IndexSegment_c * pSeg ) = 0;
 
 	virtual Binlog::CheckTnxResult_t ReplayTxn ( Binlog::Blop_e eOp, CSphReader & tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCheck ) = 0;
 	/// saves memory-cached attributes, if there were any updates to them
@@ -2855,7 +2975,6 @@ public:
 	virtual bool				LoadKillList ( CSphFixedVector<DocID_t> * pKillList, KillListTargets_c & tTargets, CSphString & sError ) const { return true; }
 	virtual bool				AlterKillListTarget ( KillListTargets_c & tTargets, CSphString & sError ) { return false; }
 	virtual void				KillExistingDocids ( CSphIndex * pTarget ) {}
-	int							KillMulti ( const VecTraits_T<DocID_t> & dKlist ) override { return 0; }
 	virtual bool				IsAlive ( DocID_t tDocID ) const { return false; }
 
 	bool						GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const override { return false; }
@@ -2890,7 +3009,7 @@ public:
 	virtual void				GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameBuilder_i * pFilenameBuilder ) const {}
 
 	/// internal make document id list from external docinfo, DO NOT USE
-	virtual CSphFixedVector<SphAttr_t> BuildDocList () const;
+	virtual CSphVector<SphAttr_t> BuildDocList () const;
 
 	virtual void				GetFieldFilterSettings ( CSphFieldFilterSettings & tSettings ) const;
 
@@ -2951,10 +3070,9 @@ class CSphIndexStub : public CSphIndex
 {
 public:
 						FWD_CTOR ( CSphIndexStub, CSphIndex )
-	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn ) override {}
-	int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer ) override { return 0; }
-	bool				Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSettings> & dFilters, bool bSupressDstDocids ) override { return false; }
-	bool				Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings ) override { return false; }
+	int					Build ( const CSphVector<CSphSource *> &, int, int, CSphIndexProgress& ) override { return 0; }
+	bool				Merge ( CSphIndex *, const VecTraits_T<CSphFilterSettings> &, bool, CSphIndexProgress & ) override { return false; }
+	bool				Prealloc ( bool, FilenameBuilder_i *, StrVec_t & ) override { return false; }
 	void				Dealloc () override {}
 	void				Preread () override {}
 	void				SetBase ( const char * ) override {}
@@ -2970,8 +3088,9 @@ public:
 	void				GetStatus ( CSphIndexStatus* ) const override {}
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & tSettings, CSphString * ) const override { return false; }
 	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & ) const override { return true; }
-	int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning ) override { return -1; }
-	Binlog::CheckTnxResult_t ReplayTxn ( Binlog::Blop_e, CSphReader &, CSphString &, Binlog::CheckTxn_fn&& ) override { return Binlog::CheckTnxResult_t(); }
+	int					UpdateAttributes ( AttrUpdateInc_t&, bool &, CSphString & , CSphString & ) override { return -1; }
+	void				UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & dUpdates, IndexSegment_c * pSeg ) override {}
+	Binlog::CheckTnxResult_t ReplayTxn ( Binlog::Blop_e, CSphReader &, CSphString &, Binlog::CheckTxn_fn&& ) override { return {}; }
 	bool				SaveAttributes ( CSphString & ) const override { return true; }
 	DWORD				GetAttributeStatus () const override { return 0; }
 	bool				AddRemoveAttribute ( bool, const CSphString &, ESphAttr, bool, CSphString & ) override { return true; }
@@ -3001,13 +3120,11 @@ public:
 // update attributes with index pointer attached
 struct CSphAttrUpdateEx
 {
-	const CSphAttrUpdate *	m_pUpdate = nullptr;	///< the unchangeable update pool
+	AttrUpdateSharedPtr_t	m_pUpdate;				///< the unchangeable update pool
 	CSphIndex *				m_pIndex = nullptr;		///< the index on which the update should happen
 	CSphString *			m_pError = nullptr;		///< the error, if any
 	CSphString *			m_pWarning = nullptr;	///< the warning, if any
 	int						m_iAffected = 0;		///< num of updated rows.
-	FNLOCKER				m_fnLocker;
-	bool					m_bNoYeld = false;
 };
 
 struct SphQueueSettings_t

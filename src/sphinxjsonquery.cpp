@@ -947,8 +947,10 @@ static bool ParseUpdateDeleteQueries ( const JsonObj_c & tRoot, SqlStmt_t & tStm
 
 static bool ParseJsonUpdate ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError )
 {
+	CSphAttrUpdate & tUpd = *tStmt.m_pUpdate;
+
 	tStmt.m_eStmt = STMT_UPDATE;
-	tStmt.m_tUpdate.m_dRowOffset.Add ( 0 );
+	tUpd.m_dRowOffset.Add ( 0 );
 
 	if ( !ParseUpdateDeleteQueries ( tRoot, tStmt, tDocId, sError ) )
 		return false;
@@ -974,7 +976,6 @@ static bool ParseJsonUpdate ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_
 			return false;
 		}
 
-		CSphAttrUpdate & tUpd = tStmt.m_tUpdate;
 		CSphString sAttr = tItem.Name();
 		TypedAttribute_t & tTypedAttr = tUpd.m_dAttributes.Add();
 		tTypedAttr.m_sName = sAttr.ToLower();

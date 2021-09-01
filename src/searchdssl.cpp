@@ -174,7 +174,7 @@ static void SslFreeCtx ( SSL_CTX * pCtx )
 	ResetSslLocks ( 0 );
 }
 
-using SmartSSL_CTX_t = SharedPtrCustom_t<SSL_CTX *>;
+using SmartSSL_CTX_t = SharedPtrCustom_t<SSL_CTX>;
 
 // init SSL library and global context by demand
 static SmartSSL_CTX_t GetSslCtx ()
@@ -448,7 +448,7 @@ static BIO * BIO_new_coroAsync ( AsyncNetBufferPtr_c pSource )
 	return pBio;
 }
 
-using BIOPtr_c = SharedPtrCustom_t<BIO *>;
+using BIOPtr_c = SharedPtrCustom_t<BIO>;
 
 class AsyncSSBufferedSocket_c final : public AsyncNetBuffer_c
 {

@@ -15,7 +15,7 @@ searchd
 index test
 {
 	type			= rt
-	path			= data/test
+	path			=<data_path/>/test
 	rt_attr_uint	= gid
 	rt_field		= title
 	rt_field		= content
@@ -24,7 +24,7 @@ index test
 index rt_zs
 {
 	type			= rt
-	path			= data/rt_zs
+	path			=<data_path/>/rt_zs
 	rt_attr_uint	= gid
 	rt_field		= title
 }

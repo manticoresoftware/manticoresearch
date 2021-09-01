@@ -866,7 +866,7 @@ static void ApplyKilllist ( IndexInfo_t & tTarget, const IndexInfo_t & tKiller, 
 		LookupReaderIterator_c tTargetReader ( tTarget.m_tLookup.GetWritePtr() );
 		LookupReaderIterator_c tKillerReader ( tKiller.m_tLookup.GetWritePtr() );
 
-		KillByLookup ( tTargetReader, tKillerReader, tTarget.m_tDeadRowMap );
+		KillByLookup ( tTargetReader, tKillerReader, tTarget.m_tDeadRowMap, [] ( DocID_t ) {} );
 	}
 
 	if ( tSettings.m_uFlags & KillListTarget_t::USE_KLIST )
@@ -874,7 +874,7 @@ static void ApplyKilllist ( IndexInfo_t & tTarget, const IndexInfo_t & tKiller, 
 		LookupReaderIterator_c tTargetReader ( tTarget.m_tLookup.GetWritePtr() );
 		DocidListReader_c tKillerReader ( tKiller.m_dKilllist );
 
-		KillByLookup ( tTargetReader, tKillerReader, tTarget.m_tDeadRowMap );
+		KillByLookup ( tTargetReader, tKillerReader, tTarget.m_tDeadRowMap, [] ( DocID_t ) {} );
 	}
 }
 

@@ -897,7 +897,7 @@ private:
 	float						m_fWeightedAvgDocLen {0.0f};
 	CSphVector<int>				m_dWeights;		///< per field weights
 	SphFactorHash_t *			m_pHash {nullptr};
-	SharedPtrArr_t<CSphNamedVariant *> m_pFieldWeights;
+	SharedPtrArr_t<CSphNamedVariant> m_pFieldWeights;
 	int64_t						m_iCount = 0;
 
 	Expr_BM25F_c ( const Expr_BM25F_c& rhs )

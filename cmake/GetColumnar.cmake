@@ -37,7 +37,7 @@ if (TARGET columnar::columnar_api)
 endif ()
 
 # set current path to modules in local usr
-set (COLUMNAR_BUILD "${MANTICORE_BINARY_DIR}/usr")
+set (COLUMNAR_BUILD "${MANTICORE_BINARY_DIR}/usr/${COLUMNAR_ABI}")
 list (APPEND CMAKE_PREFIX_PATH "${COLUMNAR_BUILD}")
 message (DEBUG "CMAKE_PREFIX_PATH became ${CMAKE_PREFIX_PATH}")
 

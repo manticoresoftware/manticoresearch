@@ -51,6 +51,11 @@ bannervar (DISTR_BUILD)
 
 add_library (lextra INTERFACE) # main interface lib to collect all build-wide libs and options
 
+# Looking for threads library
+set ( THREADS_PREFER_PTHREAD_FLAG ON )
+find_package ( Threads REQUIRED )
+target_link_libraries ( lextra INTERFACE Threads::Threads )
+
 # Checking for specific headers
 include (CheckIncludeFile)
 
@@ -128,11 +133,6 @@ check_include_file ("inttypes.h" HAVE_INTTYPES_H)
 check_include_file ("malloc.h" HAVE_MALLOC_H)
 
 target_compile_options (lextra INTERFACE $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:-D_CRT_SECURE_NO_WARNINGS -wd4996 -wd4706 -wd4244 -wd4702>)
-
-# Looking for threads library
-set (THREADS_PREFER_PTHREAD_FLAG ON)
-find_package (Threads REQUIRED)
-target_link_libraries (lextra INTERFACE Threads::Threads)
 
 include (CheckFunctionExists)
 check_function_exists (strnlen HAVE_STRNLEN)

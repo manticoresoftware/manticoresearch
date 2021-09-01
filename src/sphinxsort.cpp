@@ -414,7 +414,7 @@ public:
 	VecTraits_T<RowID_t> GetJustPopped() const override { return m_dJustPopped; }
 
 protected:
-	SharedPtr_t<ISphSchema*>	m_pSchema;	///< sorter schema (adds dynamic attributes on top of index schema)
+	SharedPtr_t<ISphSchema>		m_pSchema;		///< sorter schema (adds dynamic attributes on top of index schema)
 	CSphMatchComparatorState	m_tState;		///< protected to set m_iNow automatically on SetState() calls
 	StrVec_t					m_dTransformed;
 
@@ -662,7 +662,7 @@ public:
 	bool	IsGroupby () const final										{ return false; }
 	const CSphMatch * GetWorst() const final								{ return m_dIData.IsEmpty() ? nullptr : Root(); }
 	bool	Push ( const CSphMatch & tEntry ) final							{ return PushT ( tEntry, [this] ( CSphMatch & tTrg, const CSphMatch & tMatch ) { m_pSchema->CloneMatch ( tTrg, tMatch ); }); }
-	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) final	
+	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) final
 	{
 		for ( auto & i : dMatches )
 			if ( i.m_tRowID!=INVALID_ROWID )
@@ -1137,16 +1137,18 @@ public:
 
 	bool				IsGroupby() const final { return false; }
 	int					GetLength () final { return ( m_iTotal ? m_iCount : 0 ); }
-	bool				Push ( const CSphMatch & tEntry ) final							{ return PushMatch(tEntry); }
-	void				Push ( const VecTraits_T<const CSphMatch> & dMatches ) final
+	bool				Push ( const CSphMatch& tEntry ) final
 	{
-		for ( const auto & i : dMatches )
-			if ( i.m_tRowID!=INVALID_ROWID )
-				PushMatch(i);
+		return PushMatch ( tEntry );
+	}
+	void Push ( const VecTraits_T<const CSphMatch>& dMatches ) final
+	{
+		for ( const auto& i : dMatches )
+			if ( i.m_tRowID != INVALID_ROWID )
+				PushMatch ( i );
 			else
 				m_iTotal++;
 	}
-
 	bool				PushGrouped ( const CSphMatch &, bool ) final { assert(0); return false; }
 	int					Flatten ( CSphMatch * ) final;
 	void				SetSchema ( ISphSchema * pSchema, bool bRemapCmp ) final;
@@ -1156,12 +1158,13 @@ public:
 	void				MoveTo ( ISphMatchSorter* ) final {}
 
 private:
-	CSphAttrUpdate		m_tWorkSet;
+	AttrUpdateSharedPtr_t	m_pWorkSet;
+	bool				m_bIgnoreNonexistent;
+	bool				m_bStrict;
 	CSphIndex *			m_pIndex;
 	CSphString *		m_pError;
 	CSphString *		m_pWarning;
 	int *				m_pAffected;
-	FNLOCKER			m_fnLocker;
 
 	const int			m_iCount = 0;
 	DocID_t				m_iLastID = 0;
@@ -1172,27 +1175,29 @@ private:
 	void				DoUpdate();
 	void				Update();
 
-	inline bool			PushMatch ( const CSphMatch & tEntry );
+	inline bool			PushMatch ( const CSphMatch& tEntry );
 };
 
 
 CSphUpdateQueue::CSphUpdateQueue ( int iSize, CSphAttrUpdateEx * pUpdate, bool bIgnoreNonexistent, bool bStrict )
-	: m_iCount ( iSize )
+	: m_bIgnoreNonexistent ( bIgnoreNonexistent )
+	, m_bStrict ( bStrict )
+	, m_iCount ( iSize )
 	, m_tWriter ( m_dDocid )
 {
-	m_tWorkSet.m_bIgnoreNonexistent = bIgnoreNonexistent;
-	m_tWorkSet.m_bStrict = bStrict;
-	m_tWorkSet.m_dAttributes = pUpdate->m_pUpdate->m_dAttributes;
-	m_tWorkSet.m_dPool = pUpdate->m_pUpdate->m_dPool;
-	m_tWorkSet.m_dBlobs = pUpdate->m_pUpdate->m_dBlobs;
-	m_pIndex = pUpdate->m_pIndex;
-	m_pError = pUpdate->m_pError;
-	m_pWarning = pUpdate->m_pWarning;
+	m_pWorkSet						 = pUpdate->m_pUpdate;
+	m_pWorkSet->m_bIgnoreNonexistent = m_bIgnoreNonexistent;
+	m_pWorkSet->m_bStrict			 = m_bStrict;
+	m_pWorkSet->m_dDocids.Resize ( 0 );
+	m_pIndex	= pUpdate->m_pIndex;
+	m_pError	= pUpdate->m_pError;
+	m_pWarning	= pUpdate->m_pWarning;
 	m_pAffected = &pUpdate->m_iAffected;
-	m_fnLocker = pUpdate->m_fnLocker;
+
 }
 
 
+/// add entry to the queue
 bool CSphUpdateQueue::PushMatch ( const CSphMatch & tEntry )
 {
 	++m_iTotal;
@@ -1208,7 +1213,7 @@ bool CSphUpdateQueue::PushMatch ( const CSphMatch & tEntry )
 	return true;
 }
 
-
+/// final update pass
 int CSphUpdateQueue::Flatten ( CSphMatch * )
 {
 	DoUpdate();
@@ -1235,9 +1240,9 @@ void CSphUpdateQueue::DoUpdate()
 		return;
 
 	int iMemoryNeed = (int) Min ( m_iCount, m_iTotal );
-	m_tWorkSet.m_dDocids.Reserve ( iMemoryNeed );
-	m_tWorkSet.m_dRowOffset.Resize ( iMemoryNeed );
-	m_tWorkSet.m_dRowOffset.Fill ( 0 );
+	m_pWorkSet->m_dDocids.Reserve ( iMemoryNeed );
+	m_pWorkSet->m_dRowOffset.Resize ( iMemoryNeed );
+	m_pWorkSet->m_dRowOffset.Fill ( 0 );
 
 	DocID_t iLastId = 0;
 	MemoryReader_c tReader ( m_dDocid.Begin(), m_dDocid.GetLength() );
@@ -1246,7 +1251,7 @@ void CSphUpdateQueue::DoUpdate()
 	{
 		DocID_t iCur = iLastId + tReader.UnzipOffset();
 		iLastId = iCur;
-		m_tWorkSet.m_dDocids.Add ( iCur );
+		m_pWorkSet->m_dDocids.Add ( iCur );
 
 		if ( ( ( i+1 )%m_iCount )!=0 )
 			continue;
@@ -1254,21 +1259,20 @@ void CSphUpdateQueue::DoUpdate()
 		Update();
 	}
 
-	if ( m_tWorkSet.m_dDocids.GetLength() )
+	if ( !m_pWorkSet->m_dDocids.IsEmpty() )
 		Update();
 }
 
 
 void CSphUpdateQueue::Update()
 {
-	m_tWorkSet.m_dRowOffset.Resize ( m_tWorkSet.m_dDocids.GetLength() );
+	m_pWorkSet->m_dRowOffset.Resize ( m_pWorkSet->m_dDocids.GetLength() );
 
 	bool bCritical = false;
-	*m_pAffected += m_pIndex->UpdateAttributes ( m_tWorkSet, -1, bCritical, m_fnLocker, *m_pError, *m_pWarning );
+	*m_pAffected += m_pIndex->UpdateAttributes ( m_pWorkSet, bCritical, *m_pError, *m_pWarning );
 	assert ( !bCritical ); // fixme! handle this
 
-	m_tWorkSet.m_dDocids.Resize ( 0 );
-	m_tWorkSet.m_dRowOffset.Resize ( 0 );
+	m_pWorkSet->m_dDocids.Resize ( 0 );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1980,7 +1984,7 @@ struct CSphGroupSorterSettings
 	bool				m_bDistinct = false;///< whether we need distinct
 	CSphRefcountedPtr<CSphGrouper>		m_pGrouper;///< group key calculator
 	bool				m_bImplicit = false;///< for queries with aggregate functions but without group by clause
-	SharedPtr_t<ISphFilter *>	m_pAggrFilterTrait; ///< aggregate filter that got owned by grouper
+	SharedPtr_t<ISphFilter>	m_pAggrFilterTrait; ///< aggregate filter that got owned by grouper
 	bool				m_bJson = false;	///< whether we're grouping by Json attribute
 	int					m_iMaxMatches = 0;
 
@@ -5194,7 +5198,6 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 		return false;
 
 	CSphString sJsonColumn;
-	CSphString sJsonKey;
 	if ( m_tQuery.m_eGroupFunc==SPH_GROUPBY_MULTIPLE )
 	{
 		CSphVector<CSphAttrLocator> dLocators;
@@ -5213,7 +5216,7 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 		for ( auto& sGroupBy : dGroupBy )
 		{
 			CSphString sJsonExpr;
-			if ( sphJsonNameSplit ( sGroupBy.cstr(), &sJsonColumn, &sJsonKey ) )
+			if ( sphJsonNameSplit ( sGroupBy.cstr(), &sJsonColumn ) )
 			{
 				sJsonExpr = sGroupBy;
 				sGroupBy = sJsonColumn;
@@ -5248,7 +5251,7 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 		return true;
 	}
 
-	if ( sphJsonNameSplit ( m_tQuery.m_sGroupBy.cstr(), &sJsonColumn, &sJsonKey ) )
+	if ( sphJsonNameSplit ( m_tQuery.m_sGroupBy.cstr(), &sJsonColumn ) )
 	{
 		const int iAttr = tSchema.GetAttrIndex ( sJsonColumn.cstr() );
 		if ( iAttr<0 )

@@ -337,7 +337,7 @@ const char *	sphLoadConfig ( const char * sOptConfig, bool bQuiet, bool bIgnoreI
 
 bool			sphInitCharsetAliasTable ( CSphString & sError );
 
-enum ESphLogLevel
+enum ESphLogLevel : BYTE
 {
 	SPH_LOG_FATAL	= 0,
 	SPH_LOG_WARNING	= 1,
@@ -356,7 +356,7 @@ volatile SphLogger_fn& g_pLogger();
 
 void sphLogVa ( const char * sFmt, va_list ap, ESphLogLevel eLevel = SPH_LOG_WARNING );
 void sphWarning_impl ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
-void sphLogf ( ESphLogLevel eLevel, const char* sFmt, ... );
+void sphLogf ( ESphLogLevel eLevel, const char* sFmt, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) ); // NOLINT;
 void sphInfo_impl ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
 void sphLogFatal ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
 void sphLogDebug_impl ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
@@ -385,6 +385,14 @@ namespace TimePrefixed {
 	void LogDebugv ( const char* sPrefix, const char* sFmt, ... );
 	void LogDebugvv ( const char* sPrefix, const char* sFmt, ... );
 }
+
+namespace CustomLog {
+	void Warning_impl ( const char* sFmt, ... );
+	void Info_impl ( const char* sFmt, ... );
+}
+
+#define LogWarning( ... ) do if ( g_eLogLevel >= SPH_LOG_WARNING ) CustomLog::Warning_impl ( __VA_ARGS__ ); while ( 0 )
+#define LogInfo( ... ) do if ( g_eLogLevel >= SPH_LOG_INFO ) CustomLog::Info_impl ( __VA_ARGS__ ); while ( 0 )
 
 //////////////////////////////////////////////////////////////////////////
 

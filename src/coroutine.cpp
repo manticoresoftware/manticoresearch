@@ -804,6 +804,56 @@ void Threads::CoroEvent_c::WaitEvent()
 	std::atomic_thread_fence ( std::memory_order_release );
 }
 
+Threads::CoroMultiEvent_c::~CoroMultiEvent_c ()
+{
+	// edge case: event destroyed being in wait state.
+	// Let's resume then.
+	if ( !m_tOps.IsEmpty() && (m_uState.load() & Waited_e)!=0 )
+		m_tOps.RunAll();
+}
+
+// If 'waited' state detected, resume waiter.
+// else atomically set flag 'signaled'
+void Threads::CoroMultiEvent_c::SetEvent()
+{
+	BYTE uState = m_uState.load ( std::memory_order_relaxed );
+	do
+	{
+		if ( uState & Waited_e )
+		{
+			m_uState.store ( Signaled_e ); // memory_order_sec_cst - to ensure that next call will not resume again
+			m_tOps.RunAll();
+			return;
+		}
+	} while ( !m_uState.compare_exchange_weak ( uState, uState | Signaled_e, std::memory_order_relaxed ) );
+}
+
+// if 'signaled' state detected, clean all flags and return.
+// else yield, then (out of coro) atomically set 'waited' flag, checking also 'signaled' flag again.
+// on resume clean all flags.
+void Threads::CoroMultiEvent_c::WaitEvent()
+{
+	if ( !( m_uState.load ( std::memory_order_relaxed ) & Signaled_e ) )
+	{
+		m_tOps.AddOp ( CoWorker()->SecondaryRestarter() );
+		CoYieldWith ( [this] {
+			BYTE uState = m_uState.load ( std::memory_order_relaxed );
+			do
+			{
+				if ( uState & Signaled_e )
+				{
+					m_tOps.RunAll();
+					return;
+				}
+			} while ( !m_uState.compare_exchange_weak ( uState, uState | Waited_e, std::memory_order_relaxed ) );
+		} );
+	}
+
+	m_tOps.RunAll();
+	m_uState.store ( 0, std::memory_order_relaxed );
+	std::atomic_thread_fence ( std::memory_order_release );
+}
+
 bool Threads::IsInsideCoroutine ()
 {
 	// need safe function to call without coroutunes setup like in indexer

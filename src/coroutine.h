@@ -333,6 +333,23 @@ public:
 	void WaitEvent ();
 };
 
+// multi-event - more than one waiters possible, SetEvent fires all of them.
+class CoroMultiEvent_c
+{
+	enum ESTATE : BYTE
+	{
+		Signaled_e = 1, Waited_e = 2,
+	};
+
+	OperationsQueue_c m_tOps;
+	volatile std::atomic<BYTE> m_uState {0};
+
+public:
+	~CoroMultiEvent_c();
+	void SetEvent ();
+	void WaitEvent ();
+};
+
 bool IsInsideCoroutine ();
 
 // instead of real blocking it yield current coro, so, MUST be used only with coro context

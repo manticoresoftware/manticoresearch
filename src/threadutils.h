@@ -161,6 +161,20 @@ WorkerSharedPtr_t MakeAloneThread ( size_t iOrderNum, const char* szName = "" );
 // task may be performed, no concurrent execution). It also gives FIFO ordering of the tasks.
 SchedulerSharedPtr_t MakeAloneScheduler ( Scheduler_i* pBase, const char* szName = nullptr );
 
+class OperationsQueue_c
+{
+	class Impl_c;
+	Impl_c * m_pImpl = nullptr;
+
+public:
+	OperationsQueue_c();
+	~OperationsQueue_c();
+
+	void AddOp (Handler fnOp);
+	void RunAll();
+	bool IsEmpty() const;
+};
+
 /// stack of a thread (that is NOT stack of the coroutine!)
 static const DWORD STACK_SIZE = 128 * 1024;
 

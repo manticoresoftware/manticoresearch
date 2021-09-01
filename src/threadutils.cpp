@@ -1267,6 +1267,80 @@ int Threads::GetNumOfRunning()
 //////////////////////////////////////////////////////////////////////////
 /// helpers to iterate over all registered threads
 
+class OperationsQueue_c::Impl_c
+{
+	CSphMutex m_tQueueGuard;
+	OpSchedule_t m_tQueue GUARDED_BY ( m_tQueueGuard );
+
+public:
+	void AddOp ( Handler fnCb )
+	{
+		auto pCb = ( new CompletionHandler_c<Handler> ( std::move ( fnCb ) ) );
+		ScopedMutex_t tGuard ( m_tQueueGuard );
+		m_tQueue.Push_front ( pCb );
+	}
+
+	void RunAll ()
+	{
+		OpSchedule_t tQueue;
+		{
+			ScopedMutex_t tGuard ( m_tQueueGuard );
+			if ( m_tQueue.Empty() )
+				return;
+			tQueue.Push ( m_tQueue );
+		}
+		while ( !tQueue.Empty() )
+		{
+			auto* pOp = tQueue.Front();
+			tQueue.Pop();
+			pOp->Complete ( pOp );
+		}
+	}
+
+	bool IsEmpty() const NO_THREAD_SAFETY_ANALYSIS
+	{
+		return m_tQueue.Empty();
+	}
+
+	~Impl_c()
+	{
+		while ( !m_tQueue.Empty () )
+		{
+			auto * pOp = m_tQueue.Front ();
+			m_tQueue.Pop ();
+			pOp->Complete ( nullptr );
+		}
+	}
+};
+
+OperationsQueue_c::OperationsQueue_c()
+	: m_pImpl ( new Impl_c )
+{}
+
+OperationsQueue_c::~OperationsQueue_c()
+{
+	SafeDelete ( m_pImpl );
+}
+
+void OperationsQueue_c::AddOp (Handler fnOp)
+{
+	assert ( m_pImpl );
+	m_pImpl->AddOp(std::move(fnOp));
+}
+
+void OperationsQueue_c::RunAll()
+{
+	assert ( m_pImpl );
+	m_pImpl->RunAll();
+}
+
+bool OperationsQueue_c::IsEmpty() const
+{
+	assert ( m_pImpl );
+	return m_pImpl->IsEmpty();
+}
+
+
 namespace { // static
 
 	class IterationHandler_c : public SchedulerOperation_t

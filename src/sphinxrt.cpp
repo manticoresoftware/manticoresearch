@@ -1132,18 +1132,18 @@ public:
 	void				Optimize ( int iCutoff, int iFromID, int iToID, const char * szUvarFilter, bool bByOrder ) final;
 	void				CommonMerge ( std::function<bool ( int*, int*)>&& fnSelector, const char* szUvarFilter=nullptr );
 	void				DropDiskChunk ( int iChunk );
-	bool				CompressOneChunk ( int iChunk ) REQUIRES ( m_tOptimizingLock );
-	bool				MergeTwoChunks ( int iA, int iB ) REQUIRES ( m_tOptimizingLock );
-	bool				SplitOneChunk ( int iChunkID, const char* szUvarFilter ) REQUIRES ( m_tOptimizingLock );
-	bool				SplitOneChunkFast ( int iChunkID, const char * szUvarFilter, bool& bResult ) REQUIRES ( m_tOptimizingLock );
+	bool				CompressOneChunk ( int iChunk );
+	bool				MergeTwoChunks ( int iA, int iB );
+	bool				SplitOneChunk ( int iChunkID, const char* szUvarFilter );
+	bool				SplitOneChunkFast ( int iChunkID, const char * szUvarFilter, bool& bResult );
 	int					ChunkIdxByChunkID (int iChunkID) const;
 	int					ChunkIDByChunkIdx (int iChunkIdx) const;
 
 	// helpers
-	ConstDiskChunkRefPtr_t	MergeDiskChunks ( const char * szParentAction, ConstDiskChunkRefPtr_t dChunkA, ConstDiskChunkRefPtr_t dChunkB, CSphIndexProgress& tProgress, VecTraits_T<CSphFilterSettings> dFilters ) REQUIRES ( m_tOptimizingLock );
+	ConstDiskChunkRefPtr_t	MergeDiskChunks ( const char * szParentAction, ConstDiskChunkRefPtr_t dChunkA, ConstDiskChunkRefPtr_t dChunkB, CSphIndexProgress& tProgress, VecTraits_T<CSphFilterSettings> dFilters );
 	bool				PublishMergedChunks ( const char * szParentAction,std::function<bool ( int, DiskChunkVec_c & )> && fnPusher) REQUIRES ( m_tRtChunks.SerialChunkAccess () );
 	bool 				RenameOptimizedChunk ( ConstDiskChunkRefPtr_t pChunk, const char * szParentAction );
-	bool				SkipOrDrop ( int iChunk, const CSphIndex& dChunk, bool bCheckAlive ) REQUIRES ( m_tOptimizingLock );
+	bool				SkipOrDrop ( int iChunk, const CSphIndex& dChunk, bool bCheckAlive );
 	void				ProcessDiskChunk ( int iChunk, VisitChunk_fn&& fnVisitor ) final;
 	template <typename VISITOR>
 	void				ProcessDiskChunkByID ( int iChunkID, VISITOR&& fnVisitor ) const;
@@ -1236,8 +1236,10 @@ private:
 	uint64_t					m_uSchemaHash = 0;
 	std::atomic<int64_t>		m_iRamChunksAllocatedRAM;
 
-	CSphMutex					m_tOptimizingLock;
-	CSphMutex					m_tSaveFinished;
+	std::atomic<bool>			m_bOptimizeStop { false };
+	std::atomic<int>			m_iOptimizesRun {0};
+	Threads::CoroMultiEvent_c	m_tOptimizesRunChanged;
+	friend class OptimizeGuard_c;
 
 	int64_t						m_iSoftRamLimit;
 	int64_t						m_iDoubleBufferLimit;
@@ -1246,7 +1248,7 @@ private:
 	RtData_c					m_tRtChunks;	// that is main set of disk chunks and RAM segments
 	bool						m_bSegMergeQueued GUARDED_BY ( m_tRtChunks.SerialChunkAccess() ) = false;
 	int							m_iLockFD = -1;
-	std::atomic<bool>			m_bOptimizeStop { false };
+
 	bool						m_bIndexDeleted = false;
 
 	int64_t						m_iSavedTID;
@@ -1338,6 +1340,7 @@ private:
 	void						SetMemLimit ( int64_t iMemLimit );
 	void						AlterSave ( bool bSaveRam );
 	void 						BinlogCommit ( RtSegment_t * pSeg, const CSphVector<DocID_t> & dKlist );
+	void						StopOptimize();
 };
 
 
@@ -7627,23 +7630,22 @@ bool RtIndex_c::SaveAttributes ( CSphString & sError ) const
 }
 
 
-struct SCOPED_CAPABILITY SphOptimizeGuard_t : ISphNoncopyable
+class OptimizeGuard_c : ISphNoncopyable
 {
-	CSphMutex &			m_tLock;
-	std::atomic<bool>&	m_bOptimizeStop;
+	RtIndex_c & m_tIndex;
+	bool m_bPreviousOptimizeState;
 
-	SphOptimizeGuard_t ( CSphMutex & tLock, std::atomic<bool>& bOptimizeStop ) ACQUIRE ( tLock )
-		: m_tLock ( tLock )
-		, m_bOptimizeStop ( bOptimizeStop )
+public:
+	explicit OptimizeGuard_c ( RtIndex_c& tIndex )
+		: m_tIndex ( tIndex )
+		, m_bPreviousOptimizeState ( tIndex.m_bOptimizeStop.load ( std::memory_order_acquire ) )
 	{
-		bOptimizeStop = true;
-		m_tLock.Lock();
+		m_tIndex.StopOptimize();
 	}
 
-	~SphOptimizeGuard_t () RELEASE()
+	~OptimizeGuard_c ()
 	{
-		m_bOptimizeStop = false;
-		m_tLock.Unlock();
+		m_tIndex.m_bOptimizeStop.store ( m_bPreviousOptimizeState, std::memory_order_release );
 	}
 };
 
@@ -7762,7 +7764,10 @@ void RtIndex_c::RemoveFieldFromRamchunk ( const CSphString & sFieldName, const C
 
 bool RtIndex_c::AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD uFieldFlags, CSphString & sError )
 {
-	SphOptimizeGuard_t tStopOptimize ( m_tOptimizingLock, m_bOptimizeStop ); // got write-locked at daemon
+	OptimizeGuard_c tStopOptimize ( *this );
+
+	// go to serial fiber.
+	ScopedScheduler_c tSerialFiber ( m_tRtChunks.SerialChunkAccess() );
 
 	CSphSchema tOldSchema = m_tSchema;
 	CSphSchema tNewSchema = m_tSchema;
@@ -7816,11 +7821,11 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ES
 
 	// here must be exclusively LOCKED access, we don't rely from the topmost lock and go isolated ourselves
 
+	// stop all optimize tasks
+	OptimizeGuard_c tStopOptimize ( *this );
+
 	// go to serial fiber.
 	ScopedScheduler_c tSerialFiber ( m_tRtChunks.SerialChunkAccess() );
-
-	// stop all optimize tasks
-	SphOptimizeGuard_t tStopOptimize ( m_tOptimizingLock, m_bOptimizeStop ); // got write-locked at daemon
 
 	// wait all secondary service tasks (merge segments, save disk chunk) to finish and release all the segments.
 	WaitRAMSegmentsUnlocked();
@@ -7908,8 +7913,6 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex* pIndex, bool bTruncate, bool & bFat
 	if ( bTruncate && !Truncate ( sError ) )
 		return false;
 
-	SphOptimizeGuard_t tStopOptimize ( m_tOptimizingLock, m_bOptimizeStop ); // got write-locked at daemon
-
 	int iTotalKilled = 0;
 
 	// attach to non-empty RT: first flush RAM segments to disk chunk, then apply upcoming index'es docs as k-list.
@@ -7992,8 +7995,8 @@ void RtIndex_c::UnlinkRAMChunk ( const char* szInfo )
 
 bool RtIndex_c::Truncate ( CSphString& )
 {
-	// TRUNCATE needs an exclusive lock, should be write-locked at daemon, conflicts only with optimize
-	SphOptimizeGuard_t tStopOptimize ( m_tOptimizingLock, m_bOptimizeStop );
+	// TRUNCATE will drop everything; so all 'optimizing' should be discarded as useless
+	OptimizeGuard_c tStopOptimize ( *this );
 
 	// do truncate in serial fiber. As it is re-enterable, don't care if we already there.
 	ScopedScheduler_c tSerialFiber ( m_tRtChunks.SerialChunkAccess() );
@@ -8747,14 +8750,22 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID )
 	return true;
 }
 
+void RtIndex_c::StopOptimize()
+{
+	m_bOptimizeStop.store ( true, std::memory_order_acquire );
+	while ( m_iOptimizesRun.load(std::memory_order_relaxed)>0 )
+		m_tOptimizesRunChanged.WaitEvent();
+}
 
 void RtIndex_c::CommonMerge ( std::function<bool ( int*, int* )>&& fnSelector, const char* szUvarFilter )
 {
 	int64_t tmStart = sphMicroTimer();
 	sphLogDebug( "rt optimize: index %s: optimization started",  m_sIndexName.cstr() );
 
-	ScopedMutex_t tOptimizing ( m_tOptimizingLock );
-//	m_bOptimizing = true;
+	if ( m_bOptimizeStop.load ( std::memory_order_acquire ) )
+		return;
+
+	m_iOptimizesRun.fetch_add ( 1 );
 
 	int iChunks = 0;
 
@@ -8787,7 +8798,9 @@ void RtIndex_c::CommonMerge ( std::function<bool ( int*, int* )>&& fnSelector, c
 		++iChunks;
 	}
 
-//	m_bOptimizing = false;
+	m_iOptimizesRun.fetch_sub ( 1 );
+	m_tOptimizesRunChanged.SetEvent();
+
 	int64_t tmPass = sphMicroTimer() - tmStart;
 	int iDiskChunks = m_tRtChunks.GetDiskChunksCount();
 
@@ -9335,11 +9348,8 @@ void RtIndex_c::CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const
 
 void RtIndex_c::ProhibitSave()
 {
-	m_bOptimizeStop = true;
-	// just wait optimize finished
-	m_tOptimizingLock.Lock();
+	StopOptimize();
 	m_eSaving.store ( WriteState_e::DISCARD, std::memory_order_relaxed );
-	m_tOptimizingLock.Unlock();
 }
 
 void RtIndex_c::EnableSave()
@@ -9350,11 +9360,7 @@ void RtIndex_c::EnableSave()
 
 void RtIndex_c::LockFileState ( CSphVector<CSphString>& dFiles )
 {
-	m_bOptimizeStop = true;
-	// just wait optimize finished
-	m_tOptimizingLock.Lock();
-	m_tOptimizingLock.Unlock();
-
+	StopOptimize();
 	ForceRamFlush ( "forced" );
 	CSphString sError;
 	SaveAttributes ( sError ); // fixme! report error, better discard whole locking

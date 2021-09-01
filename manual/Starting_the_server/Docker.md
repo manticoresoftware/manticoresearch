@@ -2,7 +2,8 @@
 
 The image is based on [current release of Manticore package](https://manticoresearch.com/downloads/).
 
-<!-- the below should be in sync with https://github.com/manticoresoftware/docker/blob/master/README.md -->
+[comment]: # (the below should be in sync with https://github.com/manticoresoftware/docker/blob/master/README.md)
+
 The default configuration includes a sample Real-Time index and listens on the default ports:
 
   * `9306` for connections from a MySQL client

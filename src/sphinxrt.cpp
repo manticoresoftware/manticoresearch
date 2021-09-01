@@ -1104,17 +1104,12 @@ CSphVector<int> GetChunkIds ( const VecTraits_T<DiskChunkRefPtr_t> & dChunks )
 	return dIds;
 }
 
-/* fixme! That zoo of locks in rtindex looks brain-screwing
- *
-
-	mutable CSphRwlock			m_tChunkLock;		// protect both RAM segments and disk chunks
-	mutable CSphRwlock			m_tReading;			// reading op over disk chunk. w-lock on drop and merge chunks
-	CSphMutex					m_tWriting;			// commit, drop, save disk chunk, merge uses it
-	CSphMutex					m_tFlushLock;		// when saving ram chunk to .ram - serialize forced vs timered flush, no other usage at all
-	CSphMutex					m_tOptimizingLock;	// when optimizing is in game
-	CSphMutex					m_tSaveFinished;	// fixed #1137, tricky ping-pong with m_tWritting and double buffer
- *
-*/
+enum class WriteState_e : int
+{
+	ENABLED,	// normal
+	DISCARD,	// disabled, current result will not be necessary (can escape to don't waste resources)
+	DISABLED,	// disabled, current stage must be completed first
+};
 
 class RtIndex_c final : public RtIndex_i, public ISphNoncopyable, public ISphWordlist, public ISphWordlistSuggest,
 		public IndexUpdateHelper_c, public IndexAlterHelper_c, public DebugCheckHelper_c
@@ -1263,7 +1258,7 @@ private:
 	int							m_iMaxCodepointLength = 0;
 	TokenizerRefPtr_c			m_pTokenizerIndexing;
 	bool						m_bLoadRamPassedOk = true;
-	bool						m_bSaveDisabled = false;
+	std::atomic<WriteState_e>	m_eSaving { WriteState_e::ENABLED };
 	bool						m_bHasFiles = false;
 
 	// fixme! make this *Lens atomic together with disk/ram data, to avoid any kind of race among them
@@ -1365,7 +1360,7 @@ RtIndex_c::~RtIndex_c ()
 	int64_t tmSave = sphMicroTimer();
 	bool bValid = m_pTokenizer && m_pDict && m_bLoadRamPassedOk;
 
-	if ( bValid && !m_bSaveDisabled )
+	if ( bValid )
 	{
 		SaveRamChunk();
 		SaveMeta();
@@ -1435,10 +1430,7 @@ bool RtIndex_c::IsFlushNeed() const
 	if ( Binlog::IsActive() && m_iTID<=m_iSavedTID )
 		return false;
 
-	if ( m_bSaveDisabled )
-		return false;
-
-	return true;
+	return m_eSaving.load(std::memory_order_relaxed)==WriteState_e::ENABLED;
 }
 
 static int64_t SegmentsGetUsedRam ( const ConstRtSegmentSlice_t& dSegments )
@@ -3414,9 +3406,6 @@ bool RtIndex_c::ForceDiskChunk()
 {
 	MEMORY ( MEM_INDEX_RT );
 
-	if ( m_bSaveDisabled ) // fixme! review, m.b. refactor
-		return true;
-
 	ScopedScheduler_c tSerialFiber ( m_tRtChunks.SerialChunkAccess() );
 	return SaveDiskChunk ( true );
 }
@@ -3955,7 +3944,7 @@ void RtIndex_c::SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_
 
 void RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )
 {
-	if ( m_bSaveDisabled )
+	if ( m_eSaving.load ( std::memory_order_relaxed ) != WriteState_e::ENABLED )
 		return;
 
 	// sanity check
@@ -4037,7 +4026,7 @@ void RtIndex_c::WaitRAMSegmentsUnlocked () const
 // i.e. create new disk chunk from ram segments
 bool RtIndex_c::SaveDiskChunk ( bool bForced )
 {
-	if ( m_bSaveDisabled ) // fixme! review, m.b. refactor
+	if ( m_eSaving.load(std::memory_order_relaxed) != WriteState_e::ENABLED ) // fixme! review, m.b. refactor
 		return true;
 
 	assert ( CoCurrentScheduler() == m_tRtChunks.SerialChunkAccess () );
@@ -4498,7 +4487,7 @@ static bool LoadVector ( CSphReader & tReader, CSphVector < T, P > & tVector,
 
 bool RtIndex_c::SaveRamChunk ()
 {
-	if ( m_bSaveDisabled )
+	if ( m_eSaving.load ( std::memory_order_relaxed ) != WriteState_e::ENABLED )
 		return true;
 
 	MEMORY ( MEM_INDEX_RT );
@@ -7559,6 +7548,12 @@ int RtIndex_c::UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSph
 	if ( m_tRtChunks.IsEmpty() )
 		return 0;
 
+	if ( m_eSaving.load ( std::memory_order_relaxed ) == WriteState_e::DISABLED )
+	{
+		sError = "index is locked now, try again later";
+		return -1;
+	}
+
 	RtGuard_t tGuard ( m_tRtChunks.RtData() );
 	int iUpdated = tUpd.m_iAffected;
 
@@ -7619,7 +7614,7 @@ bool RtIndex_c::SaveAttributes ( CSphString & sError ) const
 
 	const auto& pDiskChunks = m_tRtChunks.DiskChunks();
 
-	if ( pDiskChunks->IsEmpty() || m_bSaveDisabled )
+	if ( pDiskChunks->IsEmpty() || ( m_eSaving.load ( std::memory_order_acquire ) == WriteState_e::DISCARD ) )
 		return true;
 
 	for ( auto& pChunk : *pDiskChunks )
@@ -8281,11 +8276,9 @@ bool RtIndex_c::PublishMergedChunks ( const char* szParentAction,
 			tChangeset.m_pNewDiskChunks->Add ( pChunk );
 	}
 
-	if ( !bReplaced || m_bSaveDisabled )
+	if ( !bReplaced )
 	{
-		if ( !bReplaced )
-			sphWarning (
-					"rt %s: index %s: unable to locate victim chunk after merge, leave everything unchanged", szParentAction, m_sIndexName.cstr() );
+		sphWarning ( "rt %s: index %s: unable to locate victim chunk after merge, leave everything unchanged", szParentAction, m_sIndexName.cstr() );
 		tChangeset.m_pNewDiskChunks = nullptr; // discard changes, i.e. disk chunk set will NOT be modified
 		return false;
 	}
@@ -8619,7 +8612,7 @@ bool RtIndex_c::SplitOneChunk ( int iChunkID, const char* szUvarFilter )
 	auto pChunkI = MergeDiskChunks ( "2-nd part of split", pVictim, pVictim, tProgress, dFilters );
 
 	// check forced exit after long operation (that is - after merge)
-	if ( !pChunkI || m_bSaveDisabled || tMonitor.NeedStop() )
+	if ( !pChunkI || tMonitor.NeedStop() )
 		return false;
 
 	CSphIndex& tIndexI = pChunkI->CastIdx(); // const breakage is ok since we don't yet published the index
@@ -8768,7 +8761,7 @@ void RtIndex_c::CommonMerge ( std::function<bool ( int*, int* )>&& fnSelector, c
 	int iA = -1;
 	int iB = -1;
 
-	while ( fnSelector ( &iA, &iB ) && !sphInterrupted () && !m_bOptimizeStop && !m_bSaveDisabled )
+	while ( fnSelector ( &iA, &iB ) && !sphInterrupted () && !m_bOptimizeStop )
 	{
 		assert ( iA!=-1 || iB!=-1 );
 		// note! iA and iB is disk chunk IDs, not order nums!
@@ -9345,13 +9338,13 @@ void RtIndex_c::ProhibitSave()
 	m_bOptimizeStop = true;
 	// just wait optimize finished
 	m_tOptimizingLock.Lock();
-	m_bSaveDisabled = true;
+	m_eSaving.store ( WriteState_e::DISCARD, std::memory_order_relaxed );
 	m_tOptimizingLock.Unlock();
 }
 
 void RtIndex_c::EnableSave()
 {
-	m_bSaveDisabled = false;
+	m_eSaving.store ( WriteState_e::ENABLED, std::memory_order_relaxed );
 	m_bOptimizeStop = false;
 }
 
@@ -9365,7 +9358,7 @@ void RtIndex_c::LockFileState ( CSphVector<CSphString>& dFiles )
 	ForceRamFlush ( "forced" );
 	CSphString sError;
 	SaveAttributes ( sError ); // fixme! report error, better discard whole locking
-	m_bSaveDisabled = true;
+	m_eSaving.store ( WriteState_e::DISABLED, std::memory_order_release );
 
 	GetIndexFiles ( dFiles, nullptr );
 }

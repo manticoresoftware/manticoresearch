@@ -239,14 +239,16 @@ protected:
 	CSphDictSettings tDictSettings;
 };
 
-class RTN : public RT, public ::testing::WithParamInterface<DWORD>
-{};
+/*
+ * It was instantiated several times, but that wasn't work, since on every instantiation couple of attributes was inserted into schema, having idex's schema the same.
+ */
 
-TEST_P ( RTN, WeightBoundary )
+TEST_F ( RT, WeightBoundary )
 {
+	DWORD uParam = 1500;
 	using namespace testing;
 	Threads::CallCoroutine ( [&] {
-	DictRefPtr_c pDict { sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "weight", false, 32, nullptr, sError ) };
+	DictRefPtr_c pDict { sphCreateDictionaryCRC ( tDictSettings, nullptr, pTok, "weight", false, 32, nullptr, sError ) };
 
 	tCol.m_sName = "id";
 	tCol.m_eAttrType = SPH_ATTR_BIGINT;
@@ -305,8 +307,8 @@ TEST_P ( RTN, WeightBoundary )
 
 		tDoc.m_dFields = pSrc->GetFields();
 		tDoc.m_tDoc.Combine ( pSrc->m_tDocInfo, iDynamic );
-		pIndex->AddDocument ( tDoc, false, sFilter, sError, sWarning, NULL );
-		pIndex->Commit ( NULL, NULL );
+		pIndex->AddDocument ( tDoc, false, sFilter, sError, sWarning, nullptr );
+		pIndex->Commit ( nullptr, nullptr );
 	}
 
 	pSrc->Disconnect ();
@@ -330,7 +332,7 @@ TEST_P ( RTN, WeightBoundary )
 	tOneRes.FillFromSorter ( pSorter );
 	ASSERT_EQ ( tResult.GetLength (), 1 ) << "results found";
 	ASSERT_EQ ( tOneRes.m_dMatches[0].m_tRowID, 0 ) << "rowID" ;
-	ASSERT_EQ ( tOneRes.m_dMatches[0].m_iWeight, GetParam ()) << "weight" ;
+	ASSERT_EQ ( tOneRes.m_dMatches[0].m_iWeight, uParam) << "weight" ;
 
 	SafeDelete ( pSorter );
 	SafeDelete ( tQuery.m_pQueryParser );
@@ -338,8 +340,6 @@ TEST_P ( RTN, WeightBoundary )
 	SafeDelete ( pSrc );
 	});
 }
-
-INSTANTIATE_TEST_SUITE_P ( RT_N, RTN, ::testing::Values ( 1500, 1500, 1500, 1500, 1500 ) );
 
 
 TEST_F ( RT, RankerFactors )
@@ -395,7 +395,7 @@ TEST_F ( RT, RankerFactors )
 	auto pIndex = sphCreateIndexRT ( tSchema, "testrt", 128 * 1024, RT_INDEX_FILE_NAME, false );
 
 	pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
-	pIndex->SetDictionary ( sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt", false, 32, nullptr, sError ) );
+	pIndex->SetDictionary ( sphCreateDictionaryCRC ( tDictSettings, nullptr, pTok, "rt", false, 32, nullptr, sError ) );
 	pIndex->PostSetup ();
 	StrVec_t dWarnings;
 	Verify ( pIndex->Prealloc ( false, nullptr, dWarnings ) );
@@ -413,9 +413,9 @@ TEST_F ( RT, RankerFactors )
 
 		tDoc.m_dFields = pSrc->GetFields();
 		tDoc.m_tDoc.Combine ( pSrc->m_tDocInfo, iDynamic );
-		pIndex->AddDocument ( tDoc, false, sFilter, sError, sWarning, NULL );
+		pIndex->AddDocument ( tDoc, false, sFilter, sError, sWarning, nullptr );
 	}
-	pIndex->Commit ( NULL, NULL );
+	pIndex->Commit ( nullptr, nullptr );
 	pSrc->Disconnect ();
 
 	CSphQuery tQuery;

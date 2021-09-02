@@ -7487,7 +7487,7 @@ bool RtIndex_c::Update_DiskChunks ( AttrUpdateInc_t& tUpd, const DiskChunkSlice_
 		auto& pDiskChunk = dDiskChunks[iChunk];
 
 		// acquire fine-grain lock
-		SccRL_t rLock ( pDiskChunk->m_tLock );
+		SccWL_t wLock ( pDiskChunk->m_tLock );
 
 		int iRes = pDiskChunk->CastIdx().UpdateAttributes ( tUpd, bCritical, sError, sWarning );
 
@@ -7579,7 +7579,7 @@ int RtIndex_c::UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSph
 			continue;
 
 		auto* pSeg = const_cast<RtSegment_t*> ( (const RtSegment_t*)tGuard.m_dRamSegs[i] );
-		SccRL_t rLock ( pSeg->m_tLock );
+		SccWL_t wLock ( pSeg->m_tLock );
 
 		// point context to target segment
 		tCtx.m_pAttrPool = pSeg->m_dRows.begin();

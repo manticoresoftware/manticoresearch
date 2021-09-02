@@ -4062,12 +4062,12 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced )
 	if ( dSegments.IsEmpty() )
 		return true;
 
-	int64_t tmSaveWall = sphMicroTimer(); // all time including waiting
+	int64_t tmSaveWall = -sphMicroTimer(); // all time including waiting
 	int64_t tmSave; // only active time
 	MEMORY ( MEM_INDEX_RT );
 
-	int iChunk = m_tRtChunks.MakeChunkId();
-	auto sChunk = MakeChunkName ( iChunk );
+	int iChunkID = m_tRtChunks.MakeChunkId();
+	auto sChunk = MakeChunkName ( iChunkID );
 
 	// as we're going to switch fiber, we need to freeze reliable stat and m_iTID (as they could change)
 	ChunkStats_t tStats ( m_tStats, m_dFieldLensRam );
@@ -4085,7 +4085,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced )
 		auto fnFnameBuilder = GetIndexFilenameBuilder ();
 		StrVec_t dWarnings; // fixme!
 		CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder { fnFnameBuilder ? fnFnameBuilder ( m_sIndexName.cstr () ) : nullptr };
-		pNewChunk = PreallocDiskChunk ( sChunk.cstr (), iChunk, pFilenameBuilder.Ptr (), dWarnings, m_sLastError );
+		pNewChunk = PreallocDiskChunk ( sChunk.cstr (), iChunkID, pFilenameBuilder.Ptr (), dWarnings, m_sLastError );
 		tmSave += sphMicroTimer();
 	}
 
@@ -4165,7 +4165,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced )
 	tmSaveWall += m_tmSaved;
 
 	StringBuilder_c sInfo;
-	sInfo.Sprintf ( "rt: index %s: diskchunk %d(%d), segments %d %s saved in %.6D (%.6D) sec", m_sIndexName.cstr (), iChunk
+	sInfo.Sprintf ( "rt: index %s: diskchunk %d(%d), segments %d %s saved in %.6D (%.6D) sec", m_sIndexName.cstr (), iChunkID
 					, iDiskChunks, iSegments, bForced ? "forcibly" : "", tmSave, tmSaveWall );
 	sphInfo ( "%s", sInfo.cstr() );
 	Preread();

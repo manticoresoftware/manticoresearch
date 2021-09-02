@@ -144,7 +144,7 @@ rhel7:
     - if: $WHAT =~ /rhel7/
   variables:
     REPO_DIST_VER: "7"
-  image: registry.gitlab.com/manticoresearch/dev/centos7_cmake:320
+  image: registry.gitlab.com/manticoresearch/dev/centos7_clang:7
   cache:
     key: rhel7
     paths:
@@ -165,7 +165,7 @@ rhelsplit7:
   variables:
     XTRAFLAGS: "-DSPLIT_APPS=ON -DNOAPI=ON"
     REPO_DIST_VER: "7"
-  image: registry.gitlab.com/manticoresearch/dev/centos7_cmake:320
+  image: registry.gitlab.com/manticoresearch/dev/centos7_clang:7
   cache:
     key: rhel7
     paths:

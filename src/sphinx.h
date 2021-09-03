@@ -2806,12 +2806,14 @@ protected:
 	virtual bool		Update_WriteBlobRow ( UpdateContext_t & tCtx, CSphRowitem * pDocinfo, const BYTE * pBlob,
 			int iLength, int nBlobAttrs, const CSphAttrLocator & tBlobRowLoc, bool & bCritical, CSphString & sError ) = 0;
 
-	bool				Update_CheckAttributes ( const UpdateContext_t & tCtx, CSphString & sError );
-	static bool			Update_PrepareListOfUpdatedAttributes ( UpdateContext_t & tCtx, CSphString & sError );
+	static void			Update_PrepareListOfUpdatedAttributes ( UpdateContext_t & tCtx, CSphString & sError );
 	static bool			Update_InplaceJson ( const RowsToUpdate_t& dRows, UpdateContext_t & tCtx, CSphString & sError, bool bDryRun );
 	bool				Update_Blobs ( const RowsToUpdate_t& dRows, UpdateContext_t & tCtx, bool & bCritical, CSphString & sError );
 	static void			Update_Plain ( const RowsToUpdate_t& dRows, UpdateContext_t & tCtx );
 	static bool			Update_HandleJsonWarnings ( UpdateContext_t & tCtx, int iUpdated, CSphString & sWarning, CSphString & sError );
+
+public:
+	static bool			Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tSchema, CSphString & sError );
 };
 
 

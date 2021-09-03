@@ -270,6 +270,7 @@ static void SaveUpdate ( const CSphQuery & tQuery, CSphVector<BYTE> & dOut );
 
 static int LoadUpdate ( const BYTE * pBuf, int iLen, CSphQuery & tQuery );
 
+static bool ValidateUpdate ( const ReplicationCommand_t & tCmd, CSphString & sError  );
 
 static bool IsInetAddrFree ( DWORD uAddr, int iPort )
 {
@@ -1760,9 +1761,12 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 		return false;
 	}
 
+	bool bUpdate = ( tCmdCluster.m_eCommand==ReplicationCommand_e::UPDATE_API ||  tCmdCluster.m_eCommand==ReplicationCommand_e::UPDATE_QL || tCmdCluster.m_eCommand==ReplicationCommand_e::UPDATE_JSON );
+	if ( bUpdate && !ValidateUpdate ( tCmdCluster, sError ) )
+		return false;
+
 	assert ( (*ppCluster)->m_pProvider );
 	bool bTOI = false;
-	bool bUpdate = false;
 
 	// replicator check CRC of data - no need to check that at our side
 	int iKeysCount = tAcc.m_dCmd.GetLength() + tAcc.m_dAccumKlist.GetLength();
@@ -1832,7 +1836,6 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 		{
 			assert ( tCmd.m_pUpdateAPI );
 			const CSphAttrUpdate * pUpd = tCmd.m_pUpdateAPI;
-			bUpdate = true;
 
 			uQueryHash = sphFNV64 ( pUpd->m_dDocids.Begin(), (int) pUpd->m_dDocids.GetLengthBytes(), uQueryHash );
 			uQueryHash = sphFNV64 ( pUpd->m_dPool.Begin(), (int) pUpd->m_dPool.GetLengthBytes(), uQueryHash );
@@ -1847,7 +1850,6 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 			assert ( tCmd.m_pUpdateAPI );
 			assert ( tCmd.m_pUpdateCond );
 			const CSphAttrUpdate * pUpd = tCmd.m_pUpdateAPI;
-			bUpdate = true;
 
 			uQueryHash = sphFNV64 ( pUpd->m_dDocids.Begin(), (int) pUpd->m_dDocids.GetLengthBytes(), uQueryHash );
 			uQueryHash = sphFNV64 ( pUpd->m_dPool.Begin(), (int) pUpd->m_dPool.GetLengthBytes(), uQueryHash );
@@ -2039,17 +2041,30 @@ bool CommitMonitor_c::CommitTOI ( ServedDesc_t * pDesc, CSphString & sError ) EX
 	return true;
 }
 
-static bool UpdateAPI ( AttrUpdateArgs& tUpd, int & iUpdate )
+static bool DoUpdate ( AttrUpdateArgs & tUpd, int & iUpdate, bool bUpdateAPI )
 {
+	assert ( tUpd.m_pError );
+
 	if ( !tUpd.m_pDesc )
 	{
 		*tUpd.m_pError = "index not available";
 		return false;
 	}
 
-	bool bCritical = false;
-	iUpdate = tUpd.m_pDesc->m_pIndex->UpdateAttributes ( tUpd.m_pUpdate, bCritical, *tUpd.m_pError, *tUpd.m_pWarning );
-	return ( iUpdate>=0 );
+	if ( bUpdateAPI )
+	{
+		bool bCritical = false;
+		iUpdate = tUpd.m_pDesc->m_pIndex->UpdateAttributes ( tUpd.m_pUpdate, bCritical, *tUpd.m_pError, *tUpd.m_pWarning );
+		return ( iUpdate>=0 );
+	}
+
+	HandleMySqlExtendedUpdate ( tUpd );
+
+	if ( tUpd.m_pError->IsEmpty() )
+		iUpdate += tUpd.m_iAffected;
+
+	return ( tUpd.m_pError->IsEmpty() );
+
 }
 
 bool CommitMonitor_c::Update ( bool bCluster, CSphString & sError )
@@ -2081,7 +2096,7 @@ bool CommitMonitor_c::Update ( bool bCluster, CSphString & sError )
 	tUpd.m_pIndexName = &tCmd.m_sIndex;
 	tUpd.m_bJson = ( tCmd.m_eCommand==ReplicationCommand_e::UPDATE_JSON );
 
-	bool bUpdateAPI = tCmd.m_eCommand==ReplicationCommand_e::UPDATE_API;
+	bool bUpdateAPI = ( tCmd.m_eCommand==ReplicationCommand_e::UPDATE_API );
 	assert ( bUpdateAPI || tCmd.m_pUpdateCond );
 
 	// fixme! Provide fine-grain locking.
@@ -2092,24 +2107,38 @@ bool CommitMonitor_c::Update ( bool bCluster, CSphString & sError )
 	if ( tCmd.m_bBlobUpdate )
 	{
 		ServedDescWPtr_c tDesc ( pServed );
-		tUpd.m_pDesc = tDesc.Ptr ();
-		if ( bUpdateAPI )
-			return UpdateAPI ( tUpd, *m_pUpdated );
-
-		HandleMySqlExtendedUpdate ( tUpd );
-	} else {
+		tUpd.m_pDesc = tDesc.Ptr();
+		return DoUpdate ( tUpd, *m_pUpdated, bUpdateAPI );
+	} else
+	{
 		ServedDescRPtr_c tDesc ( pServed );
 		tUpd.m_pDesc = tDesc.Ptr ();
-		if ( bUpdateAPI )
-			return UpdateAPI ( tUpd, *m_pUpdated );
+		return DoUpdate ( tUpd, *m_pUpdated, bUpdateAPI );
+	}
+}
 
-		HandleMySqlExtendedUpdate ( tUpd );
+static bool ValidateUpdate ( const ReplicationCommand_t & tCmd, CSphString & sError  )
+{
+	ServedIndexRefPtr_c pServed = GetServed ( tCmd.m_sIndex );
+	if ( !pServed )
+	{
+		sError.SetSprintf ( "requires an existing index, %s", tCmd.m_sIndex.cstr() );
+		return false;
+	}
+	ServedDescRPtr_c tDesc ( pServed );
+	if ( !tDesc.Ptr () )
+	{
+		sError.SetSprintf ( "index not available, %s", tCmd.m_sIndex.cstr() );
+		return false;
 	}
 
-	if ( sError.IsEmpty() )
-		*m_pUpdated += tUpd.m_iAffected;
+	const ISphSchema & tSchema = tDesc->m_pIndex->GetMatchSchema();
 
-	return ( sError.IsEmpty() );
+	assert ( tCmd.m_pUpdateAPI );
+	if ( !IndexUpdateHelper_c::Update_CheckAttributes ( *tCmd.m_pUpdateAPI, tSchema, sError ) )
+		return false;
+
+	return true;
 }
 
 CommitMonitor_c::~CommitMonitor_c()

@@ -12116,45 +12116,16 @@ static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sInde
 }
 
 
-static bool CanRunUpdate ( AttrUpdateArgs & tArgs )
-{
-	assert ( tArgs.m_pIndex );
-	assert ( tArgs.m_pUpdate );
-
-	const CSphSchema & tSchema = tArgs.m_pIndex->GetMatchSchema();
-	for ( const auto & i : tArgs.m_pUpdate->m_dAttributes )
-	{
-		const CSphColumnInfo * pAttr = tSchema.GetAttr ( i.m_sName.cstr() );
-		if ( pAttr && pAttr->IsColumnar() )
-		{
-			tArgs.m_pError->SetSprintf ( "unable to update columnar attribute '%s'", i.m_sName.cstr() );
-			return false;
-		}
-	}
-
-	return true;
-}
-
-
 void HandleMySqlExtendedUpdate ( AttrUpdateArgs & tArgs )
 {
 	assert ( tArgs.m_pError );
 	assert ( tArgs.m_pWarning );
 	assert ( tArgs.m_pIndexName );
-
-	if ( !tArgs.m_pDesc )
-	{
-		*tArgs.m_pError = "index not available";
-		return;
-	}
-
+	assert ( tArgs.m_pDesc );
 	assert ( tArgs.m_pQuery );
 
 	SearchHandler_c tHandler ( 1, CreateQueryParser ( tArgs.m_bJson ), tArgs.m_pQuery->m_eQueryType, false );
 	tArgs.m_pIndex = tArgs.m_pDesc->m_pIndex;
-
-	if ( !CanRunUpdate(tArgs) )
-		return;
 
 	tHandler.m_dLocked.AddUnmanaged ( *tArgs.m_pIndexName, tArgs.m_pDesc );
 	tHandler.RunUpdates ( *tArgs.m_pQuery, *tArgs.m_pIndexName, &tArgs );

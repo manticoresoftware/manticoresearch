@@ -792,6 +792,9 @@ class DiskChunk_c final : public ISphRefcountedMT
 {
 	CSphIndex *		m_pIndex = nullptr;
 
+private:
+	explicit DiskChunk_c ( CSphIndex* pIndex ) : m_pIndex ( pIndex ) {}
+
 protected:
 	~DiskChunk_c () final
 	{
@@ -805,7 +808,7 @@ protected:
 	}
 
 public:
-	explicit DiskChunk_c ( CSphIndex* pIndex ) : m_pIndex ( pIndex ) {}
+	inline static CSphRefcountedPtr<const DiskChunk_c> make ( CSphIndex* pIndex ) { return CSphRefcountedPtr<const DiskChunk_c> { pIndex ? new DiskChunk_c ( pIndex ) : nullptr }; }
 	explicit operator CSphIndex* () const		{ return m_pIndex; }
 	CSphIndex & Idx() 					{ return *m_pIndex; }
 	CSphIndex & CastIdx () const		{ return *const_cast<CSphIndex *>(m_pIndex); } // const breakage!
@@ -4139,7 +4142,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced )
 	// now new disk chunk is loaded, kills applied - we ready to change global index state now.
 	RtWriter_c tNewSet ( m_tRtChunks );
 	tNewSet.InitDiskChunks ( RtWriter_c::copy );
-	tNewSet.m_pNewDiskChunks->Add ( ConstDiskChunkRefPtr_t ( new DiskChunk_c ( pNewChunk ) ) );
+	tNewSet.m_pNewDiskChunks->Add ( DiskChunk_c::make ( pNewChunk ) );
 	SaveMeta ( iTID, GetChunkIds ( *tNewSet.m_pNewDiskChunks ) );
 
 	Binlog::NotifyIndexFlush ( m_sIndexName.cstr(), iTID, false );
@@ -4355,7 +4358,7 @@ bool RtIndex_c::PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder, StrVe
 		int iChunkIndex = m_dChunkNames[iName];
 		CSphString sChunk;
 		sChunk.SetSprintf ( "%s.%d", m_sPath.cstr(), iChunkIndex );
-		ConstDiskChunkRefPtr_t pChunk { new DiskChunk_c ( PreallocDiskChunk ( sChunk.cstr(), iChunkIndex, pFilenameBuilder, dWarnings, m_sLastError ) ) };
+		auto pChunk = DiskChunk_c::make ( PreallocDiskChunk ( sChunk.cstr(), iChunkIndex, pFilenameBuilder, dWarnings, m_sLastError ) );
 		if ( !pChunk )
 			sphDie ( "%s", m_sLastError.cstr() );
 
@@ -7969,7 +7972,7 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex* pIndex, bool bTruncate, bool & bFat
 	// update disk chunk list
 	RtWriter_c tNewSet ( m_tRtChunks );
 	tNewSet.InitDiskChunks ( RtWriter_c::copy );
-	tNewSet.m_pNewDiskChunks->Add ( ConstDiskChunkRefPtr_t ( new DiskChunk_c ( pIndex ) ) );
+	tNewSet.m_pNewDiskChunks->Add ( DiskChunk_c::make ( pIndex ) );
 	tNewSet.Flush();
 
 	// resave header file
@@ -8227,7 +8230,7 @@ ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunks ( const char* szParentAction, 
 	sChunk.SetSprintf ( "%s.tmp", sFirst.cstr() );
 
 	StrVec_t dWarnings; // FIXME! report warnings
-	pChunk = new DiskChunk_c ( PreallocDiskChunk ( sChunk.cstr(), tChunkA.m_iChunk, pFilenameBuilder.Ptr(), dWarnings, sError, tChunkA.GetName() ) );
+	pChunk = DiskChunk_c::make ( PreallocDiskChunk ( sChunk.cstr(), tChunkA.m_iChunk, pFilenameBuilder.Ptr(), dWarnings, sError, tChunkA.GetName() ) );
 
 	if ( pChunk )
 		pChunk->m_bFinallyUnlink = true; // on destroy files will be deleted. Caller must explicitly reset this flag if chunk is usable

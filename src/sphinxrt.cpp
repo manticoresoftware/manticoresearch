@@ -1276,8 +1276,8 @@ private:
 
 	int							CompareWords ( const RtWord_t * pWord1, const RtWord_t * pWord2 ) const;
 
-	void						MergeAttributes ( const RtSegment_t & tSrcSeg, CSphVector<RowID_t> & dRowMap, RtAttrMergeContext_t & tCtx ) const;
-
+	template <typename TO_STATIC>
+	void						MergeAttributes ( const RtSegment_t & tSrcSeg, CSphVector<RowID_t> & dRowMap, TO_STATIC && fnToStatic, RtAttrMergeContext_t & tCtx ) const;
 	void						MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, const RtSegment_t & tSeg2, const CSphVector<RowID_t> & dRowMap1, const CSphVector<RowID_t> & dRowMap2 ) const;
 	RtSegment_t *				MergeTwoSegments ( const RtSegment_t * pA, const RtSegment_t * pB ) const;
 	static void					CopyWord ( RtSegment_t& tDstSeg, RtWord_t& tDstWord, RtDocWriter_c& tDstDoc, const RtSegment_t& tSrcSeg, const RtWord_t* pSrcWord, const CSphVector<RowID_t>& dRowMap );
@@ -1712,7 +1712,7 @@ bool RtIndex_c::AddDocument ( ISphHits * pHits, const InsertDocData_t & tDoc, bo
 	if ( pAcc )
 		pAcc->AddDocument ( pHits, tDoc, bReplace, m_tSchema.GetRowSize(), pStoredDoc );
 
-	return !pAcc;
+	return !!pAcc;
 }
 
 
@@ -2493,58 +2493,53 @@ void RtIndex_c::DeleteFieldFromDict ( RtSegment_t * pSeg, int iKillField )
 class RtLiveRows_c
 {
 public:
-	using Loc_t = struct { const CSphRowitem * m_pRow; RowID_t m_tRowID; };
-
 	class Iterator_c
 	{
-		const RtLiveRows_c& m_tOwner;
-		Loc_t m_tLoc;
-
 	public:
-		explicit Iterator_c ( const RtLiveRows_c& tOwner, bool bBegin )
+		Iterator_c ( const RtLiveRows_c & tOwner, bool bBegin )
 			: m_tOwner { tOwner }
-			, m_tLoc { bBegin ? tOwner.FirstAliveRow () : tOwner.EndRow() }
+			, m_tRowID { bBegin ? tOwner.FirstAliveRow () : tOwner.EndRow() }
 		{}
 
-		Loc_t operator*() { return m_tLoc; };
-		bool operator!= ( const Iterator_c & rhs ) const { return m_tLoc.m_pRow!=rhs.m_tLoc.m_pRow; }
+		RowID_t operator*()	{ return m_tRowID; };
+		bool operator!= ( const Iterator_c & rhs ) const { return m_tRowID!=rhs.m_tRowID; }
 
 		Iterator_c & operator++ ()
 		{
-			m_tLoc = m_tOwner.NextAliveRow ( m_tLoc );
+			m_tRowID = m_tOwner.NextAliveRow(m_tRowID);
 			return *this;
 		}
+		
+	private:
+		const RtLiveRows_c & m_tOwner;
+		RowID_t m_tRowID = 0;
 	};
+
+	RtLiveRows_c ( const RtSegment_t & tSeg )
+		: m_tRowIDMax ( tSeg.m_uRows )
+		, m_tDeadRowMap ( tSeg.m_tDeadRowMap )
+	{}
 
 	// c++11 style iteration
 	Iterator_c begin () const { return Iterator_c ( *this, true ); }
 	Iterator_c end() const { return Iterator_c ( *this, false ); }
 
-	RtLiveRows_c ( const RtSegment_t & tSeg, int iStride )
-		: m_pRow ( tSeg.m_dRows.Begin() )
-		, m_pRowMax ( tSeg.m_dRows.Begin() + tSeg.m_dRows.GetLength() )
-		, m_iStride ( iStride )
-		, m_tDeadRowMap ( tSeg.m_tDeadRowMap )
-	{}
-
 private:
-	Loc_t SkipDeadRows ( Loc_t tRow ) const
+	RowID_t		m_tRowID = 0;
+	RowID_t		m_tRowIDMax = 0;
+	const DeadRowMap_Ram_c & m_tDeadRowMap;
+
+	RowID_t SkipDeadRows ( RowID_t tRowID ) const
 	{
-		for ( ;tRow.m_pRow<m_pRowMax; tRow.m_pRow+= m_iStride, ++tRow.m_tRowID )
-			if ( !m_tDeadRowMap.IsSet ( tRow.m_tRowID ) )
-				break;
-		return tRow;
+		while ( tRowID<m_tRowIDMax && m_tDeadRowMap.IsSet(tRowID) )
+			tRowID++;
+
+		return tRowID;
 	}
 
-	Loc_t FirstAliveRow () const  { return SkipDeadRows ( { m_pRow, 0 } ); }
-	Loc_t EndRow () const { return { m_pRowMax, 0 }; }
-	Loc_t NextAliveRow ( Loc_t tRow ) const { return SkipDeadRows ( { tRow.m_pRow+m_iStride, tRow.m_tRowID+1 } ); }
-
-private:
-	const CSphRowitem *			m_pRow;
-	const CSphRowitem *			m_pRowMax;
-	const int					m_iStride;
-	const DeadRowMap_Ram_c &	m_tDeadRowMap;
+	RowID_t FirstAliveRow() const			{ return SkipDeadRows(m_tRowID); }
+	RowID_t EndRow() const					{ return m_tRowIDMax; }
+	RowID_t NextAliveRow ( RowID_t tRowID ) const { return SkipDeadRows ( tRowID+1 ); }
 };
 
 template <typename BLOOM_TRAITS>
@@ -2638,8 +2633,8 @@ void BuildSegmentInfixes ( RtSegment_t * pSeg, bool bHasMorphology, bool bKeywor
 	}
 }
 
-
-void RtIndex_c::MergeAttributes ( const RtSegment_t & tSrcSeg, CSphVector<RowID_t> & dRowMap, RtAttrMergeContext_t & tCtx ) const
+template <typename TO_STATIC>
+void RtIndex_c::MergeAttributes ( const RtSegment_t & tSrcSeg, CSphVector<RowID_t> & dRowMap, TO_STATIC && fnToStatic, RtAttrMergeContext_t & tCtx ) const
 {
 	// perform merging attrs in single thread - that eliminates concurrency with optimize
 	ScopedScheduler_c tSerialFiber { m_tRtChunks.SerialChunkAccess() };
@@ -2649,15 +2644,16 @@ void RtIndex_c::MergeAttributes ( const RtSegment_t & tSrcSeg, CSphVector<RowID_
 
 	const CSphColumnInfo * pBlobRowLocator = m_tSchema.GetAttr ( sphGetBlobLocatorName() );
 
-	for ( const auto& dRow : RtLiveRows_c ( tSrcSeg, m_iStride ) )
+	for ( auto tRowID : RtLiveRows_c(tSrcSeg) )
 	{
+		CSphRowitem * pRow = fnToStatic(tRowID);
 		auto pNewRow = tCtx.m_tDstSeg.m_dRows.AddN ( m_iStride );
-		memcpy ( pNewRow, dRow.m_pRow, m_iStride*sizeof(CSphRowitem) );
+		memcpy ( pNewRow, pRow, m_iStride*sizeof(CSphRowitem) );
 
 		if ( tCtx.m_iNumBlobs )
 		{
 			assert ( pBlobRowLocator ) ;
-			int64_t iOldOffset = sphGetRowAttr ( dRow.m_pRow , pBlobRowLocator->m_tLocator );
+			int64_t iOldOffset = sphGetRowAttr ( pRow , pBlobRowLocator->m_tLocator );
 			int64_t iNewOffset = sphCopyBlobRow ( tCtx.m_tDstSeg.m_dBlobs, tSrcSeg.m_dBlobs, iOldOffset, tCtx.m_iNumBlobs );
 			sphSetRowAttr ( pNewRow, pBlobRowLocator->m_tLocator, iNewOffset );
 		}
@@ -2665,14 +2661,14 @@ void RtIndex_c::MergeAttributes ( const RtSegment_t & tSrcSeg, CSphVector<RowID_
 		ARRAY_FOREACH ( i, dColumnarIterators )
 		{
 			auto & tIt = dColumnarIterators[i];
-			Verify ( AdvanceIterator ( tIt.first.get(), dRow.m_tRowID ) );
+			Verify ( AdvanceIterator ( tIt.first.get(), tRowID ) );
 			SetColumnarAttr ( i, tIt.second, tCtx.m_pColumnarBuilder, tIt.first.get(), dTmp );
 		}
 
 		if ( tCtx.m_tDstSeg.m_pDocstore )
-			tCtx.m_tDstSeg.m_pDocstore->AddPackedDoc ( tCtx.m_tResultRowID, tSrcSeg.m_pDocstore.Ptr(), dRow.m_tRowID );
+			tCtx.m_tDstSeg.m_pDocstore->AddPackedDoc ( tCtx.m_tResultRowID, tSrcSeg.m_pDocstore.Ptr(), tRowID );
 
-		dRowMap[dRow.m_tRowID] = tCtx.m_tResultRowID++;
+		dRowMap[tRowID] = tCtx.m_tResultRowID++;
 	}
 }
 
@@ -2782,13 +2778,17 @@ RtSegment_t* RtIndex_c::MergeTwoSegments ( const RtSegment_t* pA, const RtSegmen
 	{
 		SccRL_t rLock ( pA->m_tLock ); // ensure no update will break (resize) blob when we're merging
 		pA->m_bAttrsBusy.store ( true, std::memory_order_release );
-		MergeAttributes ( *pA, dRowMap1, tCtx );
+
+		auto fnToStatic = [pA, this]( RowID_t tRowID ){ return pA->m_dRows.Begin()+(int64_t)tRowID*m_iStride; };
+		MergeAttributes ( *pA, dRowMap1, fnToStatic, tCtx );
 	}
 
 	{
 		SccRL_t rLock ( pB->m_tLock ); // ensure no update will break (resize) blob when we're merging
 		pB->m_bAttrsBusy.store ( true, std::memory_order_release );
-		MergeAttributes ( *pB, dRowMap2, tCtx );
+
+		auto fnToStatic = [pB, this]( RowID_t tRowID ){ return pB->m_dRows.Begin()+(int64_t)tRowID*m_iStride; };
+		MergeAttributes ( *pB, dRowMap2, fnToStatic, tCtx );
 	}
 
 	assert ( tNextRowID<=INT_MAX );
@@ -3515,9 +3515,9 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 
 		auto dColumnarIterators = CreateAllColumnarIterators ( tSeg.m_pColumnar.Ptr(), m_tSchema );
 
-		for ( const auto & dRow : RtLiveRows_c ( tSeg, iStride ) )
+		for ( auto tRowID : RtLiveRows_c(tSeg) )
 		{
-			auto* pRow = dRow.m_pRow;
+			const CSphRowitem * pRow = tSeg.m_dRows.Begin() + (int64_t)tRowID*iStride;
 			tMinMaxBuilder.Collect(pRow);
 			if ( pBlobLocatorAttr )
 			{
@@ -3535,7 +3535,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 			ARRAY_FOREACH ( iIterator, dColumnarIterators )
 			{
 				auto & tIterator = dColumnarIterators[iIterator];
-				Verify ( AdvanceIterator ( tIterator.first.get(), dRow.m_tRowID ) );
+				Verify ( AdvanceIterator ( tIterator.first.get(), tRowID ) );
 				SetColumnarAttr ( iIterator, tIterator.second, pColumnarBuilder.Ptr(), tIterator.first.get(), dTmp );
 			}
 
@@ -3548,10 +3548,10 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 			if ( pDocstoreBuilder )
 			{
 				assert ( tSeg.m_pDocstore );
-				pDocstoreBuilder->AddDoc ( tNextRowID, tSeg.m_pDocstore->GetDoc ( dRow.m_tRowID, nullptr, -1, false ) );
+				pDocstoreBuilder->AddDoc ( tNextRowID, tSeg.m_pDocstore->GetDoc ( tRowID, nullptr, -1, false ) );
 			}
 
-			tCtx.m_dRowMaps[i][dRow.m_tRowID] = tNextRowID++;
+			tCtx.m_dRowMaps[i][tRowID] = tNextRowID++;
 		}
 	}
 
@@ -6672,10 +6672,10 @@ void PerformFullScan ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 		if ( tCtx.m_pFilter )
 			tCtx.m_pFilter->SetColumnar(pColumnar);
 
-		for (const auto& dRow : RtLiveRows_c ( *dRamChunks[iSeg], iStride ) )
+		for ( auto tRowID : RtLiveRows_c(tSeg) )
 		{
-			tMatch.m_tRowID = dRow.m_tRowID;
-			tMatch.m_pStatic = dRow.m_pRow;
+			tMatch.m_tRowID = tRowID;
+			tMatch.m_pStatic = tSeg.m_dRows.Begin() + (int64_t)tRowID*iStride;
 
 			tCtx.CalcFilter ( tMatch );
 			if ( tCtx.m_pFilter && !tCtx.m_pFilter->Eval ( tMatch ) )

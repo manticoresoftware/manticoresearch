@@ -206,7 +206,7 @@ public:
 	CSphScopedPtr<DocstoreRT_i>		m_pDocstore{nullptr};
 	CSphScopedPtr<ColumnarRT_i>		m_pColumnar{nullptr};
 
-							RtSegment_t ( DWORD uDocs );
+							explicit RtSegment_t ( DWORD uDocs );
 
 	int64_t					GetUsedRam() const;				// get cached ram usage counter
 	void					UpdateUsedRam() const;			// recalculate ram usage, update index ram counter

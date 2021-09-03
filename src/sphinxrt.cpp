@@ -772,14 +772,12 @@ struct ChunkStats_t
 
 struct RtAttrMergeContext_t
 {
-	RtSegment_t &					m_tDstSeg;
 	int								m_iNumBlobs;
 	RowID_t &						m_tResultRowID;
 	columnar::Builder_i *			m_pColumnarBuilder;
 
-	RtAttrMergeContext_t ( RtSegment_t & tDstSeg, int iNumBlobs, RowID_t & tResultRowID, columnar::Builder_i * pColumnarBuilder )
-		: m_tDstSeg ( tDstSeg )
-		, m_iNumBlobs ( iNumBlobs )
+	RtAttrMergeContext_t ( int iNumBlobs, RowID_t & tResultRowID, columnar::Builder_i * pColumnarBuilder )
+		: m_iNumBlobs ( iNumBlobs )
 		, m_tResultRowID ( tResultRowID )
 		, m_pColumnarBuilder ( pColumnarBuilder )
 	{}
@@ -827,7 +825,7 @@ template <typename CHUNK>
 class RefCountedVec_T final : public ISphRefcountedMT, public LazyVector_T<CHUNK>
 {
 protected:
-	~RefCountedVec_T () final {}
+	~RefCountedVec_T () final = default;
 
 public:
 	RefCountedVec_T() = default;
@@ -904,6 +902,8 @@ class RtData_c
 	RoledSchedulerSharedPtr_t	m_tSelectorGuard;		// serialize changing chunks and segs vec
 	RoledSchedulerSharedPtr_t	m_tSegmentMerger;		// fiber for merging RAM segments. FiberID=-2 for now
 //	FiberPool_c					m_dFibers;				// helpers to serialize update/change tasks
+	std::atomic<int>			m_iNextOp {1};
+	std::atomic<bool>			m_bSaveActive {false};
 
 	friend class RtWriter_c;
 
@@ -994,11 +994,23 @@ public:
 		return m_tSegmentMerger;
 	}
 
-	enum OpID_e : int
+	inline int GetNextOpTicket ()
 	{
-		SaveOp_e = -3,
-		MergeOp_e = -2,
-	};
+		auto iRes = m_iNextOp.fetch_add ( 1, std::memory_order_relaxed );
+		if ( !iRes ) // zero tag has special meaning, skip it
+			iRes = m_iNextOp.fetch_add ( 1, std::memory_order_relaxed );
+		return iRes;
+	}
+
+	inline void SetSaveActive ( bool bSave )
+	{
+		m_bSaveActive.store (bSave, std::memory_order_relaxed);
+	}
+
+	inline bool IsSaveActive() const
+	{
+		return m_bSaveActive.load ( std::memory_order_relaxed );
+	}
 };
 
 // helper for easier access to ConstRtData members
@@ -1283,11 +1295,10 @@ private:
 
 	int							CompareWords ( const RtWord_t * pWord1, const RtWord_t * pWord2 ) const;
 
-	template <typename TO_STATIC>
-	void						MergeAttributes ( const RtSegment_t & tSrcSeg, CSphVector<RowID_t> & dRowMap, TO_STATIC && fnToStatic, RtAttrMergeContext_t & tCtx ) const;
-	void						MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, const RtSegment_t & tSeg2, const CSphVector<RowID_t> & dRowMap1, const CSphVector<RowID_t> & dRowMap2 ) const;
+	CSphFixedVector<RowID_t>	MergeSegAttributes ( RtSegment_t& tDstSeg, const RtSegment_t & tSrcSeg, RtAttrMergeContext_t & tCtx ) const;
+	void						MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, const RtSegment_t & tSeg2, const VecTraits_T<RowID_t> & dRowMap1, const VecTraits_T<RowID_t> & dRowMap2 ) const;
 	RtSegment_t *				MergeTwoSegments ( const RtSegment_t * pA, const RtSegment_t * pB ) const;
-	static void					CopyWord ( RtSegment_t& tDstSeg, RtWord_t& tDstWord, RtDocWriter_c& tDstDoc, const RtSegment_t& tSrcSeg, const RtWord_t* pSrcWord, const CSphVector<RowID_t>& dRowMap );
+	static void					CopyWord ( RtSegment_t& tDstSeg, RtWord_t& tDstWord, RtDocWriter_c& tDstDoc, const RtSegment_t& tSrcSeg, const RtWord_t* pSrcWord, const VecTraits_T<RowID_t>& dRowMap );
 	void						UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t>& dUpdates, IndexSegment_c * pSeg ) override;
 
 	bool						UpdateAttributesInRamSegment ( const RowsToUpdate_t& dRows, UpdateContext_t& tCtx, bool& bCritical, CSphString& sError );
@@ -1303,7 +1314,7 @@ private:
 	void						SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_t & tStats ) const;
 	void						SaveDiskData ( const char * szFilename, const ConstRtSegmentSlice_t & tSegs, const ChunkStats_t & tStats ) const;
 	bool						SaveDiskChunk ( bool bForced ) REQUIRES ( m_tRtChunks.SerialChunkAccess () );
-	CSphIndex *					PreallocDiskChunk ( const char * szChunk, int iChunk, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError, const char * sName=nullptr ) const;
+	CSphIndex *					PreallocDiskChunk ( const char * sChunk, int iChunk, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError, const char * sName=nullptr ) const;
 	bool						LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes );
 	bool						SaveRamChunk ();
 
@@ -2360,7 +2371,7 @@ ReplicationCommand_t * RtAccum_t::AddCommand ( ReplicationCommand_e eCmd, const 
 	return pCmd;
 }
 
-void RtIndex_c::CopyWord ( RtSegment_t& tDstSeg, RtWord_t& tDstWord, RtDocWriter_c& tDstDoc, const RtSegment_t& tSrcSeg, const RtWord_t* pSrcWord, const CSphVector<RowID_t>& dRowMap )
+void RtIndex_c::CopyWord ( RtSegment_t& tDstSeg, RtWord_t& tDstWord, RtDocWriter_c& tDstDoc, const RtSegment_t& tSrcSeg, const RtWord_t* pSrcWord, const VecTraits_T<RowID_t>& dRowMap )
 {
 	RtDocReader_c tSrcDocs ( &tSrcSeg, *pSrcWord );
 	// copy docs
@@ -2508,7 +2519,7 @@ public:
 			, m_tRowID { bBegin ? tOwner.FirstAliveRow () : tOwner.EndRow() }
 		{}
 
-		RowID_t operator*()	{ return m_tRowID; };
+		RowID_t operator*()	const { return m_tRowID; };
 		bool operator!= ( const Iterator_c & rhs ) const { return m_tRowID!=rhs.m_tRowID; }
 
 		Iterator_c & operator++ ()
@@ -2522,14 +2533,14 @@ public:
 		RowID_t m_tRowID = 0;
 	};
 
-	RtLiveRows_c ( const RtSegment_t & tSeg )
+	explicit RtLiveRows_c ( const RtSegment_t & tSeg )
 		: m_tRowIDMax ( tSeg.m_uRows )
 		, m_tDeadRowMap ( tSeg.m_tDeadRowMap )
 	{}
 
 	// c++11 style iteration
-	Iterator_c begin () const { return Iterator_c ( *this, true ); }
-	Iterator_c end() const { return Iterator_c ( *this, false ); }
+	Iterator_c begin () const { return { *this, true }; }
+	Iterator_c end() const { return { *this, false }; }
 
 private:
 	RowID_t		m_tRowID = 0;
@@ -2539,7 +2550,7 @@ private:
 	RowID_t SkipDeadRows ( RowID_t tRowID ) const
 	{
 		while ( tRowID<m_tRowIDMax && m_tDeadRowMap.IsSet(tRowID) )
-			tRowID++;
+			++tRowID;
 
 		return tRowID;
 	}
@@ -2640,10 +2651,15 @@ void BuildSegmentInfixes ( RtSegment_t * pSeg, bool bHasMorphology, bool bKeywor
 	}
 }
 
-template <typename TO_STATIC>
-void RtIndex_c::MergeAttributes ( const RtSegment_t & tSrcSeg, CSphVector<RowID_t> & dRowMap, TO_STATIC && fnToStatic, RtAttrMergeContext_t & tCtx ) const
+CSphFixedVector<RowID_t> RtIndex_c::MergeSegAttributes ( RtSegment_t& tDstSeg, const RtSegment_t& tSrcSeg, RtAttrMergeContext_t& tCtx ) const REQUIRES ( tDstSeg.m_tLock )
 {
-	// perform merging attrs in single thread - that eliminates concurrency with optimize
+	CSphFixedVector<RowID_t> dRowMap { tSrcSeg.m_uRows };
+	dRowMap.Fill ( INVALID_ROWID );
+
+	// mark us busy - updates to this seg will be collected.
+	tSrcSeg.m_bAttrsBusy.store ( true, std::memory_order_release );
+
+	// perform merging attrs in single fiber - that eliminates concurrency with optimize
 	ScopedScheduler_c tSerialFiber { m_tRtChunks.SerialChunkAccess() };
 
 	auto dColumnarIterators = CreateAllColumnarIterators ( tSrcSeg.m_pColumnar.Ptr(), m_tSchema );
@@ -2651,17 +2667,20 @@ void RtIndex_c::MergeAttributes ( const RtSegment_t & tSrcSeg, CSphVector<RowID_
 
 	const CSphColumnInfo * pBlobRowLocator = m_tSchema.GetAttr ( sphGetBlobLocatorName() );
 
+	// ensure no update will break (resize) blob when we're merging
+	SccRL_t rLock ( tSrcSeg.m_tLock );
+
 	for ( auto tRowID : RtLiveRows_c(tSrcSeg) )
 	{
-		CSphRowitem * pRow = fnToStatic(tRowID);
-		auto pNewRow = tCtx.m_tDstSeg.m_dRows.AddN ( m_iStride );
+		CSphRowitem * pRow = tSrcSeg.m_dRows.Begin() + (int64_t)tRowID * m_iStride;
+		auto pNewRow = tDstSeg.m_dRows.AddN ( m_iStride );
 		memcpy ( pNewRow, pRow, m_iStride*sizeof(CSphRowitem) );
 
 		if ( tCtx.m_iNumBlobs )
 		{
 			assert ( pBlobRowLocator ) ;
 			int64_t iOldOffset = sphGetRowAttr ( pRow , pBlobRowLocator->m_tLocator );
-			int64_t iNewOffset = sphCopyBlobRow ( tCtx.m_tDstSeg.m_dBlobs, tSrcSeg.m_dBlobs, iOldOffset, tCtx.m_iNumBlobs );
+			int64_t iNewOffset = sphCopyBlobRow ( tDstSeg.m_dBlobs, tSrcSeg.m_dBlobs, iOldOffset, tCtx.m_iNumBlobs );
 			sphSetRowAttr ( pNewRow, pBlobRowLocator->m_tLocator, iNewOffset );
 		}
 
@@ -2672,11 +2691,12 @@ void RtIndex_c::MergeAttributes ( const RtSegment_t & tSrcSeg, CSphVector<RowID_
 			SetColumnarAttr ( i, tIt.second, tCtx.m_pColumnarBuilder, tIt.first.get(), dTmp );
 		}
 
-		if ( tCtx.m_tDstSeg.m_pDocstore )
-			tCtx.m_tDstSeg.m_pDocstore->AddPackedDoc ( tCtx.m_tResultRowID, tSrcSeg.m_pDocstore.Ptr(), tRowID );
+		if ( tDstSeg.m_pDocstore )
+			tDstSeg.m_pDocstore->AddPackedDoc ( tCtx.m_tResultRowID, tSrcSeg.m_pDocstore.Ptr(), tRowID );
 
 		dRowMap[tRowID] = tCtx.m_tResultRowID++;
 	}
+	return dRowMap;
 }
 
 
@@ -2702,7 +2722,7 @@ int RtIndex_c::CompareWords ( const RtWord_t * pWord1, const RtWord_t * pWord2 )
 
 
 void RtIndex_c::MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, const RtSegment_t & tSeg2,
-		const CSphVector<RowID_t> & dRowMap1, const CSphVector<RowID_t> & dRowMap2 ) const
+		const VecTraits_T<RowID_t> & dRowMap1, const VecTraits_T<RowID_t> & dRowMap2 ) const
 {
 	tSeg.m_dWords.Reserve ( Max ( tSeg1.m_dWords.GetLength(), tSeg2.m_dWords.GetLength() ) );
 	tSeg.m_dDocs.Reserve ( Max ( tSeg1.m_dDocs.GetLength(), tSeg2.m_dDocs.GetLength() ) );
@@ -2752,51 +2772,34 @@ void RtIndex_c::MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, c
 // killed after pass of merge attributes will survive, and need to be killed finally by separate killmulti
 RtSegment_t* RtIndex_c::MergeTwoSegments ( const RtSegment_t* pA, const RtSegment_t* pB ) const
 {
-	auto* pSeg = new RtSegment_t ( 0 );
-	FakeWL_t _ {pSeg->m_tLock};
-
-	if ( m_tSchema.HasStoredFields() )
-		pSeg->SetupDocstore ( &m_tSchema );
-
 	////////////////////
 	// merge attributes
 	////////////////////
 	RTLOG << "MergeTwoSegments invoked";
 
-	CSphVector<RowID_t> dRowMap1 ( pA->m_uRows );
-	CSphVector<RowID_t> dRowMap2 ( pB->m_uRows );
-	dRowMap1.Fill ( INVALID_ROWID );
-	dRowMap2.Fill ( INVALID_ROWID );
-
 	int nBlobAttrs = 0;
-	for ( int i = 0; i < m_tSchema.GetAttrsCount(); i++ )
+	for ( int i = 0; i < m_tSchema.GetAttrsCount(); ++i )
 		if ( sphIsBlobAttr ( m_tSchema.GetAttr(i) ) )
 			++nBlobAttrs;
 
 	RowID_t tNextRowID = 0;
 
 	CSphScopedPtr<ColumnarBuilderRT_i> pColumnarBuilder ( CreateColumnarBuilderRT(m_tSchema) );
-	RtAttrMergeContext_t tCtx ( *pSeg, nBlobAttrs, tNextRowID, pColumnarBuilder.Ptr() );
+	RtAttrMergeContext_t tCtx ( nBlobAttrs, tNextRowID, pColumnarBuilder.Ptr() );
 
-	// we might need less because of dupes, but we can not know yet
+
+	auto* pSeg = new RtSegment_t ( 0 );
+	FakeWL_t _ { pSeg->m_tLock }; // as pSeg is just created - we don't need real guarding and use fake lock to mute thread safety warnings
+
+	if ( m_tSchema.HasStoredFields() )
+		pSeg->SetupDocstore ( &m_tSchema );
+
+	// we might need less because of killed, but we can not know yet. Reserving more than necessary is strictly not desirable!
 	pSeg->m_dRows.Reserve ( m_iStride * Max ( pA->m_tAliveRows.load ( std::memory_order_relaxed ), pB->m_tAliveRows.load (std::memory_order_relaxed ) ) );
-	pSeg->m_dBlobs.Reserve ( Max ( pA->m_dBlobs.GetLength(), pB->m_dBlobs.GetLength() ) );
+	pSeg->m_dBlobs.Reserve ( [pA, pB]() NO_THREAD_SAFETY_ANALYSIS { return Max ( pA->m_dBlobs.GetLength(), pB->m_dBlobs.GetLength() ); }() );
 
-	{
-		SccRL_t rLock ( pA->m_tLock ); // ensure no update will break (resize) blob when we're merging
-		pA->m_bAttrsBusy.store ( true, std::memory_order_release );
-
-		auto fnToStatic = [pA, this]( RowID_t tRowID ){ return pA->m_dRows.Begin()+(int64_t)tRowID*m_iStride; };
-		MergeAttributes ( *pA, dRowMap1, fnToStatic, tCtx );
-	}
-
-	{
-		SccRL_t rLock ( pB->m_tLock ); // ensure no update will break (resize) blob when we're merging
-		pB->m_bAttrsBusy.store ( true, std::memory_order_release );
-
-		auto fnToStatic = [pB, this]( RowID_t tRowID ){ return pB->m_dRows.Begin()+(int64_t)tRowID*m_iStride; };
-		MergeAttributes ( *pB, dRowMap2, fnToStatic, tCtx );
-	}
+	CSphFixedVector<RowID_t> dRowMapA = MergeSegAttributes ( *pSeg, *pA, tCtx );
+	CSphFixedVector<RowID_t> dRowMapB = MergeSegAttributes ( *pSeg, *pB, tCtx );
 
 	assert ( tNextRowID<=INT_MAX );
 	pSeg->m_uRows = tNextRowID;
@@ -2815,7 +2818,7 @@ RtSegment_t* RtIndex_c::MergeTwoSegments ( const RtSegment_t* pA, const RtSegmen
 
 	assert ( pSeg->GetStride() == m_iStride );
 	pSeg->BuildDocID2RowIDMap ( m_tSchema );
-	MergeKeywords ( *pSeg, *pA, *pB, dRowMap1, dRowMap2 );
+	MergeKeywords ( *pSeg, *pA, *pB, dRowMapA, dRowMapB );
 
 	if ( m_bKeywordDict )
 		FixupSegmentCheckpoints ( pSeg );
@@ -3158,14 +3161,9 @@ void RtIndex_c::StartMergeSegments ( bool bHasNewSegment )
 
 		// collect all RAM segments not occupied by any op (only ops we know is 'merge segments' and 'save ram chunk')
 		LazyVector_T<ConstRtSegmentRefPtf_t> dSegments;
-		bool bSaveActive = false;
 		for ( const auto & dSeg : *m_tRtChunks.RamSegs () )
-		{
 			if ( !dSeg->m_iLocked )
 				dSegments.Add ( dSeg );
-			else if ( dSeg->m_iLocked == RtData_c::SaveOp_e )
-				bSaveActive = true;
-		}
 
 		// fixme! Now is old naive way used: if no active save, limit to SoftRamLimit,
 		// if saving op is in progress - use limit 10% of SoftRamLimit (aka doubleBufferLimit).
@@ -3173,7 +3171,7 @@ void RtIndex_c::StartMergeSegments ( bool bHasNewSegment )
 
 		CheckMerge_e eMergeAction { CheckMerge_e::NOMERGE };
 		if ( bHasNewSegment )
-			eMergeAction = CheckWeCanMerge ( dSegments, bSaveActive ? m_iDoubleBufferLimit : m_iSoftRamLimit );
+			eMergeAction = CheckWeCanMerge ( dSegments, m_tRtChunks.IsSaveActive() ? m_iDoubleBufferLimit : m_iSoftRamLimit );
 
 		RTLOG << "CheckWeCanMerge returned " << eMergeAction;
 
@@ -3185,7 +3183,7 @@ void RtIndex_c::StartMergeSegments ( bool bHasNewSegment )
 			return;
 		}
 
-		int iMergeOp = RtData_c::MergeOp_e;
+		int iMergeOp = m_tRtChunks.GetNextOpTicket();
 
 		RtSegmentRefPtf_t pMerged { nullptr };
 
@@ -3232,6 +3230,8 @@ void RtIndex_c::StartMergeSegments ( bool bHasNewSegment )
 
 		// merged might be killed during merge op
 		// as we run in serial fiber, there is no concurrency, and so, killing hooks of retired sources will not fire.
+		assert ( CoCurrentScheduler() == m_tRtChunks.SerialChunkAccess() );
+
 		if ( pMerged && !pMerged->m_tAliveRows.load ( std::memory_order_relaxed ) )
 			pMerged = nullptr;
 
@@ -3870,12 +3870,12 @@ void RtIndex_c::WriteCheckpoints ( SaveDiskDataContext_t & tCtx, CSphWriter & tW
 }
 
 
-bool RtIndex_c::WriteDeadRowMap ( SaveDiskDataContext_t & tContext, CSphString & sError ) // static
+bool RtIndex_c::WriteDeadRowMap ( SaveDiskDataContext_t & tCtx, CSphString & sError ) // static
 {
 	CSphString sName;
-	sName.SetSprintf ( "%s%s", tContext.m_szFilename, sphGetExt(SPH_EXT_SPM).cstr() );
+	sName.SetSprintf ( "%s%s", tCtx.m_szFilename, sphGetExt(SPH_EXT_SPM).cstr() );
 
-	return ::WriteDeadRowMap ( sName, tContext.m_iDocinfo, sError );
+	return ::WriteDeadRowMap ( sName, tCtx.m_iDocinfo, sError );
 }
 
 // SaveDiskChunk -> SaveDiskData
@@ -4038,7 +4038,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced )
 
 	RTLOG << "SaveDiskChunk( " << (bForced?"forced":"not forced") << ")";
 
-	int iSaveOp = RtData_c::SaveOp_e;
+	int iSaveOp = m_tRtChunks.GetNextOpTicket();
 
 	// if forced - wait all segments. Otherwise, can continue with subset of currently available segments
 	// note that segments may be locked by currently executing SaveDiskChunk. If so, we wait them finished and continue.
@@ -4063,6 +4063,9 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced )
 	RTLOG << "SaveDiskChunk process " << dSegments.GetLength() << " segments.";
 	if ( dSegments.IsEmpty() )
 		return true;
+
+	m_tRtChunks.SetSaveActive ( true );
+	auto tFinallySetSaveUnactive = AtScopeExit ( [this] { m_tRtChunks.SetSaveActive ( false ); } );
 
 	int64_t tmSaveWall = -sphMicroTimer(); // all time including waiting
 	int64_t tmSave; // only active time

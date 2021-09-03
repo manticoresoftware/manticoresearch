@@ -1140,9 +1140,9 @@ public:
 	int					ChunkIDByChunkIdx (int iChunkIdx) const;
 
 	// helpers
-	ConstDiskChunkRefPtr_t	MergeDiskChunks ( const char * szParentAction, ConstDiskChunkRefPtr_t dChunkA, ConstDiskChunkRefPtr_t dChunkB, CSphIndexProgress& tProgress, VecTraits_T<CSphFilterSettings> dFilters );
+	ConstDiskChunkRefPtr_t	MergeDiskChunks (  const char* szParentAction, const ConstDiskChunkRefPtr_t& pChunkA, const ConstDiskChunkRefPtr_t& pChunkB, CSphIndexProgress& tProgress, VecTraits_T<CSphFilterSettings> dFilters );
 	bool				PublishMergedChunks ( const char * szParentAction,std::function<bool ( int, DiskChunkVec_c & )> && fnPusher) REQUIRES ( m_tRtChunks.SerialChunkAccess () );
-	bool 				RenameOptimizedChunk ( ConstDiskChunkRefPtr_t pChunk, const char * szParentAction );
+	bool 				RenameOptimizedChunk ( const ConstDiskChunkRefPtr_t& pChunk, const char * szParentAction );
 	bool				SkipOrDrop ( int iChunk, const CSphIndex& dChunk, bool bCheckAlive );
 	void				ProcessDiskChunk ( int iChunk, VisitChunk_fn&& fnVisitor ) final;
 	template <typename VISITOR>
@@ -8191,40 +8191,30 @@ void RtIndex_c::DropDiskChunk ( int iChunkID )
 }
 
 // perform merge, preload result, rename to final chunk and return preallocated result scheduled to dispose
-ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunks ( const char* szParentAction, ConstDiskChunkRefPtr_t pChunkA, ConstDiskChunkRefPtr_t pChunkB, CSphIndexProgress& tProgress, VecTraits_T<CSphFilterSettings> dFilters )
+ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunks ( const char* szParentAction, const ConstDiskChunkRefPtr_t& pChunkA, const ConstDiskChunkRefPtr_t& pChunkB, CSphIndexProgress& tProgress, VecTraits_T<CSphFilterSettings> dFilters )
 {
 	CSphString sError;
-	auto& tMonitor = tProgress.GetMergeCb();
 
-	CSphIndex& tChunkA = pChunkA->CastIdx();	// non-const need to invoke 'merge'
-	const CSphIndex& tChunkB = pChunkB->Cidx(); // 2-d is enough const
+	const CSphIndex& tChunkA = pChunkA->Cidx();
+	const CSphIndex& tChunkB = pChunkB->Cidx();
 	CSphString sFirst = tChunkA.GetFilename();
 
 	// fixme! implicit dependency (merging creates file suffixed .tmp, that is implicit here.
 	CSphString sProcessed;
 	sProcessed.SetSprintf ( "%s.tmp", sFirst.cstr() );
 
-	ConstDiskChunkRefPtr_t pEmpty;
+	ConstDiskChunkRefPtr_t pChunk;
 
 	// note: klist for merged chunk will be attached during merge at the moment of copying alive rows.
-	if ( dFilters.IsEmpty() )
+	if ( !sphMerge ( &tChunkA, &tChunkB, dFilters, tProgress, sError ) )
 	{
-		if ( !sphMerge ( &tChunkA, &tChunkB, sError, tProgress, true ) )
-		{
-			sphWarning ( "rt %s: index %s: failed to merge %s (error %s)", szParentAction, m_sIndexName.cstr(), sFirst.cstr(), sError.cstr() );
-			return pEmpty;
-		}
-	} else {
-		if ( !tChunkA.Merge ( nullptr, dFilters, false, tProgress ) )
-		{
-			sphWarning ( "rt %s: index %s: failed to split %s", szParentAction, m_sIndexName.cstr(), sFirst.cstr() );
-			return pEmpty;
-		}
+		sphWarning ( "rt %s: index %s: failed to %s %s (error %s)", szParentAction, m_sIndexName.cstr(), dFilters.IsEmpty() ? "merge" : "split", sFirst.cstr(), sError.cstr() );
+		return pChunk;
 	}
 
 	// check forced exit after long operation
-	if ( tMonitor.NeedStop() )
-		return pEmpty;
+	if ( tProgress.GetMergeCb().NeedStop() )
+		return pChunk;
 
 	auto fnFnameBuilder = GetIndexFilenameBuilder();
 	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder { fnFnameBuilder ? fnFnameBuilder ( m_sIndexName.cstr() ) : nullptr };
@@ -8234,19 +8224,17 @@ ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunks ( const char* szParentAction, 
 	sChunk.SetSprintf ( "%s.tmp", sFirst.cstr() );
 
 	StrVec_t dWarnings; // FIXME! report warnings
-	ConstDiskChunkRefPtr_t pChunk { new DiskChunk_c ( PreallocDiskChunk ( sChunk.cstr(), tChunkA.m_iChunk, pFilenameBuilder.Ptr(), dWarnings, sError, tChunkA.GetName() ) ) };
+	pChunk = new DiskChunk_c ( PreallocDiskChunk ( sChunk.cstr(), tChunkA.m_iChunk, pFilenameBuilder.Ptr(), dWarnings, sError, tChunkA.GetName() ) );
 
-	if ( !pChunk )
-	{
+	if ( pChunk )
+		pChunk->m_bFinallyUnlink = true; // on destroy files will be deleted. Caller must explicitly reset this flag if chunk is usable
+	else
 		sphWarning ( "rt %s: index %s: failed to prealloc", szParentAction, m_sIndexName.cstr() );
-		return pEmpty;
-	}
 
-	pChunk->m_bFinallyUnlink = true; // on destroy files will be deleted
 	return pChunk;
 }
 
-bool RtIndex_c::RenameOptimizedChunk ( ConstDiskChunkRefPtr_t pChunk, const char* szParentAction )
+bool RtIndex_c::RenameOptimizedChunk ( const ConstDiskChunkRefPtr_t& pChunk, const char* szParentAction )
 {
 	if ( !pChunk )
 		return false;

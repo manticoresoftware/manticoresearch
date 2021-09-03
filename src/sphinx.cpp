@@ -1423,6 +1423,7 @@ public:
 	template <class QWORDDST, class QWORDSRC>
 	static bool			MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, VecTraits_T<RowID_t> dDstRows, VecTraits_T<RowID_t> dSrcRows, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphIndexProgress & tProgress);
 	static bool			DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, bool bSrcSettings, bool bSupressDstDocids );
+	ISphFilter *		CreateMergeFilters ( const VecTraits_T<CSphFilterSettings> & dSettings ) const;
 	template <class QWORD>
 	static bool			DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, int iKillField );
 
@@ -10732,23 +10733,19 @@ public:
 };
 
 
-static ISphFilter * CreateMergeFilters ( const VecTraits_T<CSphFilterSettings> & dSettings, const CSphSchema & tSchema, const BYTE * pBlobPool, columnar::Columnar_i * pColumnar )
+ISphFilter * CSphIndex_VLN::CreateMergeFilters ( const VecTraits_T<CSphFilterSettings> & dSettings ) const
 {
 	CSphString sError, sWarning;
 	ISphFilter * pResult = nullptr;
 	CreateFilterContext_t tCtx;
-	tCtx.m_pSchema = &tSchema;
-	tCtx.m_pBlobPool = pBlobPool;
+	tCtx.m_pSchema = &m_tSchema;
+	tCtx.m_pBlobPool = m_tBlobAttrs.GetReadPtr();
 
-	ARRAY_FOREACH ( i, dSettings )
-	{
-		ISphFilter * pFilter = sphCreateFilter ( dSettings[i], tCtx, sError, sWarning );
-		if ( pFilter )
-			pResult = sphJoinFilters ( pResult, pFilter );
-	}
+	for ( const auto& dSetting : dSettings )
+		pResult = sphJoinFilters ( pResult, sphCreateFilter ( dSetting, tCtx, sError, sWarning ) );
 
 	if ( pResult )
-		pResult->SetColumnar(pColumnar);
+		pResult->SetColumnar(m_pColumnar.Ptr());
 
 	return pResult;
 }
@@ -11101,7 +11098,7 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSet
 
 	// create filters
 	CSphScopedPtr<ISphFilter> pFilter(nullptr);
-	pFilter = CreateMergeFilters ( dFilters, m_tSchema, m_tBlobAttrs.GetWritePtr(), m_pColumnar.Ptr() );
+	pFilter = CreateMergeFilters ( dFilters );
 
 	return CSphIndex_VLN::DoMerge ( this, (const CSphIndex_VLN *)pSource, pFilter.Ptr(), m_sLastError, tProgress, false, bSupressDstDocids );
 }
@@ -11503,12 +11500,14 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 }
 
 
-bool sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc,	CSphString & sError, CSphIndexProgress & tProgress, bool bSrcSettings )
+bool sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, VecTraits_T<CSphFilterSettings> dFilters, CSphIndexProgress & tProgress, CSphString& sError )
 {
-	auto pDstIndex = ( const CSphIndex_VLN * ) pDst;
-	auto pSrcIndex = ( const CSphIndex_VLN * ) pSrc;
+	auto pDstIndex = (const CSphIndex_VLN*) pDst;
+	auto pSrcIndex = (const CSphIndex_VLN*) pSrc;
 
-	return CSphIndex_VLN::DoMerge ( pDstIndex, pSrcIndex, nullptr, sError, tProgress, bSrcSettings, false );
+//	CSphScopedPtr<ISphFilter> pFilter { pDstIndex->CreateMergeFilters ( dFilters ) };
+	std::unique_ptr<ISphFilter> pFilter { pDstIndex->CreateMergeFilters ( dFilters ) };
+	return CSphIndex_VLN::DoMerge ( pDstIndex, pSrcIndex, pFilter.get(), sError, tProgress, dFilters.IsEmpty(), false );
 }
 
 template < typename QWORD >

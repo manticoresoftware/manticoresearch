@@ -23706,13 +23706,13 @@ bool IndexFiles_c::ReadKlistTargets ( StrVec_t & dTargets, const char * szType )
 	return true;
 }
 
-volatile int &sphGetTFO ()
+volatile int &sphGetTFO () noexcept
 {
 	static int iTFO = 0;
 	return iTFO;
 }
 
-volatile bool& sphGetbCpuStat ()
+volatile bool& sphGetbCpuStat () noexcept
 {
 	static bool bCpuStat = false;
 	return bCpuStat;

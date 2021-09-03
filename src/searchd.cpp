@@ -19838,19 +19838,19 @@ int main ( int argc, char ** argv )
 }
 #endif
 
-volatile bool& sphGetGotSighup()
+volatile bool& sphGetGotSighup() noexcept
 {
 	static bool bGotSighup = false;
 	return bGotSighup;
 }
 
-volatile bool& sphGetGotSigusr1()
+volatile bool& sphGetGotSigusr1() noexcept
 {
 	static bool bGotSigusr1 = false;
 	return bGotSigusr1;
 }
 
-volatile bool & sphGetGotSigusr2 ()
+volatile bool & sphGetGotSigusr2 () noexcept
 {
 	static bool bGotSigusr2 = false;
 	return bGotSigusr2;

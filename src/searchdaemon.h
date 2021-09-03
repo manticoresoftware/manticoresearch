@@ -109,13 +109,9 @@
 // strict check, sphGetAddress will die with sphFatal() on failure
 #define GETADDR_STRICT	true
 
-// these defined in searchd.cpp
-void sphFatal( const char* sFmt, ... ) __attribute__ (( format ( printf, 1, 2 ))) NO_RETURN;
-void sphFatalLog( const char* sFmt, ... ) __attribute__ (( format ( printf, 1, 2 )));
-
-volatile bool& sphGetGotSighup();
-volatile bool& sphGetGotSigusr1();
-volatile bool& sphGetGotSigusr2();
+volatile bool& sphGetGotSighup() noexcept;
+volatile bool& sphGetGotSigusr1() noexcept;
+volatile bool& sphGetGotSigusr2() noexcept;
 
 /////////////////////////////////////////////////////////////////////////////
 // SOME SHARED GLOBAL VARIABLES

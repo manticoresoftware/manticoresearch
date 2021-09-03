@@ -3179,10 +3179,10 @@ const CSphVector<CharsetAlias_t> & GetCharsetAliases();
 
 extern CSphString g_sLemmatizerBase;
 
-volatile bool & sphGetbCpuStat ();
+volatile bool & sphGetbCpuStat () noexcept;
 
 // Access to global TFO settings
-volatile int& sphGetTFO();
+volatile int& sphGetTFO() noexcept;
 #define TFO_CONNECT 1
 #define TFO_LISTEN 2
 #define TFO_ABSENT (-1)

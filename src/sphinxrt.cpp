@@ -831,6 +831,7 @@ protected:
 
 public:
 	RefCountedVec_T() = default;
+	using BASE = LazyVector_T<CHUNK>;
 };
 
 using DiskChunkVec_c = RefCountedVec_T<ConstDiskChunkRefPtr_t>;
@@ -4459,8 +4460,10 @@ void RtIndex_c::Preread ()
 		pDiskChunk->CastIdx().Preread();
 }
 
-static bool CheckVectorLength ( int iLen, int64_t iSaneLen, const char * sAt, CSphString & sError )
+template<typename P>
+static bool CheckVectorLength ( int iLen, int64_t iMinLen, const char * sAt, CSphString & sError )
 {
+	auto iSaneLen = Min ( iMinLen, P::SANE_SIZE );
 	if ( iLen>=0 && iLen<iSaneLen )
 		return true;
 
@@ -4480,11 +4483,11 @@ static void SaveVector ( CSphWriter & tWriter, const VecTraits_T < T > & tVector
 
 template < typename T, typename P >
 static bool LoadVector ( CSphReader & tReader, CSphVector < T, P > & tVector,
-	int64_t iSaneLen, const char * sAt, CSphString & sError )
+	int64_t iMinLen, const char * sAt, CSphString & sError )
 {
 	STATIC_ASSERT ( IS_TRIVIALLY_COPYABLE(T), NON_TRIVIAL_VECTORS_ARE_UNSERIALIZABLE );
 	int iSize = tReader.GetDword();
-	if ( !CheckVectorLength ( iSize, iSaneLen, sAt, sError ) )
+	if ( !CheckVectorLength<P> ( iSize, iMinLen, sAt, sError ) )
 		return false;
 
 	tVector.Resize ( iSize );
@@ -4589,14 +4592,12 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes ) NO_THREAD_
 		return false;
 
 	int64_t iFileSize = rdChunk.GetFilesize();
-	int64_t iSaneVecSize = Min ( iFileSize, INT_MAX / 2 );
-	int64_t iSaneTightVecSize = Min ( iFileSize, int ( INT_MAX / 1.2f ) );
 
 	bool bHasMorphology = ( m_pDict && m_pDict->HasMorphology() ); // fresh and old-format index still has no dictionary at this point
 	rdChunk.GetDword ();
 
 	auto iSegmentCount = (int) rdChunk.GetDword();
-	if ( !CheckVectorLength ( iSegmentCount, iSaneVecSize, "ram-chunks", m_sLastError ) )
+	if ( !CheckVectorLength<RtSegVec_c::BASE> ( iSegmentCount, iFileSize, "ram-chunks", m_sLastError ) )
 		return false;
 
 	RtWriter_c tWriter ( m_tRtChunks );
@@ -4611,16 +4612,16 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes ) NO_THREAD_
 		pSeg->m_tAliveRows.store ( rdChunk.GetDword (), std::memory_order_relaxed );
 
 		rdChunk.GetDword ();
-		if ( !LoadVector ( rdChunk, pSeg->m_dWords, iSaneTightVecSize, "ram-words", m_sLastError ) )
+		if ( !LoadVector ( rdChunk, pSeg->m_dWords, iFileSize, "ram-words", m_sLastError ) )
 			return false;
 
-		if ( m_bKeywordDict && !LoadVector ( rdChunk, pSeg->m_dKeywordCheckpoints, iSaneVecSize, "ram-checkpoints", m_sLastError ) )
+		if ( m_bKeywordDict && !LoadVector ( rdChunk, pSeg->m_dKeywordCheckpoints, iFileSize, "ram-checkpoints", m_sLastError ) )
 			return false;
 
 		auto * pCheckpoints = (const char *)pSeg->m_dKeywordCheckpoints.Begin();
 
 		auto iCheckpointCount = (int) rdChunk.GetDword();
-		if ( !CheckVectorLength ( iCheckpointCount, iSaneVecSize, "ram-checkpoints", m_sLastError ) )
+		if ( !CheckVectorLength<decltype( pSeg->m_dWordCheckpoints)> ( iCheckpointCount, iFileSize, "ram-checkpoints", m_sLastError ) )
 			return false;
 
 		pSeg->m_dWordCheckpoints.Resize ( iCheckpointCount );
@@ -4634,18 +4635,18 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes ) NO_THREAD_
 				pSeg->m_dWordCheckpoints[i].m_uWordID = (SphWordID_t)uOff;
 		}
 
-		if ( !LoadVector ( rdChunk, pSeg->m_dDocs, iSaneTightVecSize, "ram-doclist", m_sLastError ) )
+		if ( !LoadVector ( rdChunk, pSeg->m_dDocs, iFileSize, "ram-doclist", m_sLastError ) )
 			return false;
 
-		if ( !LoadVector ( rdChunk, pSeg->m_dHits, iSaneTightVecSize, "ram-hitlist", m_sLastError ) )
+		if ( !LoadVector ( rdChunk, pSeg->m_dHits, iFileSize, "ram-hitlist", m_sLastError ) )
 			return false;
 
-		if ( !LoadVector ( rdChunk, pSeg->m_dRows, iSaneTightVecSize, "ram-attributes", m_sLastError ) )
+		if ( !LoadVector ( rdChunk, pSeg->m_dRows, iFileSize, "ram-attributes", m_sLastError ) )
 			return false;
 
 		pSeg->m_tDeadRowMap.Load ( uRows, rdChunk, m_sLastError );
 
-		if ( !LoadVector ( rdChunk, pSeg->m_dBlobs, iSaneTightVecSize, "ram-blobs", m_sLastError ) )
+		if ( !LoadVector ( rdChunk, pSeg->m_dBlobs, iFileSize, "ram-blobs", m_sLastError ) )
 			return false;
 
 		if ( uVersion>=15 && m_tSchema.HasStoredFields() )
@@ -4665,7 +4666,7 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes ) NO_THREAD_
 		}
 
 		// infixes
-		if ( !LoadVector ( rdChunk, pSeg->m_dInfixFilterCP, iSaneTightVecSize, "ram-infixes", m_sLastError ) )
+		if ( !LoadVector ( rdChunk, pSeg->m_dInfixFilterCP, iFileSize, "ram-infixes", m_sLastError ) )
 			return false;
 
 		if ( bRebuildInfixes )

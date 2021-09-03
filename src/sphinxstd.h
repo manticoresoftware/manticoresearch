@@ -1550,7 +1550,8 @@ public:
 class DefaultRelimit
 {
 public:
-	static const int MAGIC_INITIAL_LIMIT = 8;
+	static constexpr int64_t SANE_SIZE = INT_MAX / 2;
+	static constexpr int MAGIC_INITIAL_LIMIT = 8;
 	static inline int64_t Relimit ( int64_t iLimit, int64_t iNewLimit )
 	{
 		if ( !iLimit )
@@ -1569,7 +1570,9 @@ public:
 class TightRelimit : public DefaultRelimit
 {
 public:
-	static const int SLOW_GROW_TRESHOLD = 1024;
+	static constexpr float GROW = 1.2f;
+	static constexpr int64_t SANE_SIZE = (double)INT_MAX / GROW; // double, since INT_MAX is not convertible to float precisely
+	static constexpr int SLOW_GROW_TRESHOLD = 1024;
 	static inline int64_t Relimit ( int64_t iLimit, int64_t iNewLimit )
 	{
 		if ( !iLimit )
@@ -1581,7 +1584,7 @@ public:
 		}
 		while ( iLimit<iNewLimit )
 		{
-			iLimit = ( int ) ( (float)iLimit * 1.2f );
+			iLimit = ( int ) ( (float)iLimit * GROW );
 			assert ( iLimit>0 );
 		}
 		return iLimit;
@@ -1610,7 +1613,7 @@ public:
 	using BASE::GetLengthBytes;
 	using BASE::Slice;
 	using LIMIT::Relimit;
-
+	using LIMIT::SANE_SIZE;
 
 	/// ctor
 	Vector_T () = default;

@@ -3196,6 +3196,7 @@ public:
 	StringBuilder_c &	operator << ( float fVal );
 	StringBuilder_c &	operator << ( double fVal );
 	StringBuilder_c &	operator << ( void* pVal );
+	StringBuilder_c &	operator << ( bool bVal );
 
 	// support for sph::Sprintf - emulate POD 'char*'
 	inline StringBuilder_c &	operator ++() { GrowEnough ( 1 ); ++m_iUsed; return *this; }

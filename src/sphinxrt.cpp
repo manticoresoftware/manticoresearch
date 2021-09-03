@@ -3129,11 +3129,6 @@ CheckMerge_e CheckWeCanMerge ( LazyVector_T<ConstRtSegmentRefPtf_t>& dSegments, 
 	return ( iMaxLen > MAX_SEGMENT_VECTOR_LEN ) ? CheckMerge_e::FLUSH : CheckMerge_e::MERGE;
 }
 
-static StringBuilder_c & operator<< ( StringBuilder_c & dOut, bool bVal )
-{
-	return dOut << (bVal?"true":"false");
-}
-
 static StringBuilder_c & operator<< ( StringBuilder_c & dOut, CheckMerge_e eVal )
 {
 	switch ( eVal )

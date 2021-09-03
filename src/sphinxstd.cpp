@@ -2340,6 +2340,13 @@ StringBuilder_c & StringBuilder_c::operator<< ( void * pVal )
 	return *this;
 }
 
+StringBuilder_c& StringBuilder_c::operator<< ( bool bVal )
+{
+	if ( bVal )
+		return AppendChunk ( { "true", 4 } );
+	return AppendChunk ( { "false", 5 } );
+}
+
 void StringBuilder_c::Grow ( int iLen )
 {
 	assert ( m_iSize<m_iUsed + iLen + GROW_STEP );

@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 
+<requires><non-columnar/></requires>
+
 <name>update of blob attrs with filter by blob attrs</name>
 
 <config>

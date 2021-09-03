@@ -151,6 +151,8 @@ static CSphString		g_sShutdownToken;
 static int				g_iServerID = 0;
 static bool				g_bServerID = false;
 static bool				g_bJsonConfigLoadedOk = false;
+static auto&			g_iAutoOptimizeCutoffMultiplier = AutoOptimizeCutoffMultiplier();
+static constexpr bool	AUTOOPTIMIZE_NEEDS_VIP = false; // whether non-VIP can issue 'SET GLOBAL auto_optimize = X'
 
 static CSphVector<Listener_t>	g_dListeners;
 
@@ -13320,8 +13322,16 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 		} else if ( tStmt.m_sSetName=="max_threads_per_query" )
 		{
 			g_iDistThreads = tStmt.m_iSetValue; // that is not dangerous to allow everybody change the value
-		} else
+		} else if ( tStmt.m_sSetName=="auto_optimize")
 		{
+			if ( !AUTOOPTIMIZE_NEEDS_VIP || tSess.GetVip() )
+				g_iAutoOptimizeCutoffMultiplier = tStmt.m_iSetValue;
+			else
+			{
+				tOut.Error ( tStmt.m_sStmt, "Only VIP connections can change global auto_optimize value" );
+				return;
+			}
+		} else {
 			tOut.ErrorEx ( tStmt.m_sStmt, "Unknown system variable '%s'", tStmt.m_sSetName.cstr () );
 			return;
 		}
@@ -14249,6 +14259,7 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt, Se
 {
 	VectorLike dTable ( tStmt.m_sStringParam );
 	dTable.MatchTuplet ( "autocommit", tVars.m_bAutoCommit ? "1" : "0" );
+	dTable.MatchTupletf ( "auto_optimize", "%d", g_iAutoOptimizeCutoffMultiplier );
 	dTable.MatchTuplet ( "collation_connection", sphCollationToName ( session::Collation() ) );
 	dTable.MatchTuplet ( "query_log_format", g_eLogFormat==LOG_FORMAT_PLAIN ? "plain" : "sphinxql" );
 	dTable.MatchTuplet ( "log_level", LogLevelName ( g_eLogLevel ) );
@@ -14266,10 +14277,8 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt, Se
 	{
 		Uservar_e eType = tStmt.m_iIntParam==0 ? USERVAR_INT_SET : USERVAR_INT_SET_TMP;
 		IterateUservars ( [&dTable, eType] ( const NamedRefVectorPair_t &dVar ) {
-			if ( dVar.second.m_eType!=eType )
-				return;
-
-			dTable.MatchTupletf ( dVar.first.cstr(), "%d", dVar.second.m_pVal ? dVar.second.m_pVal->GetLength() : 0 );
+			if ( dVar.second.m_eType==eType )
+				dTable.MatchTupletf ( dVar.first.cstr(), "%d", dVar.second.m_pVal ? dVar.second.m_pVal->GetLength() : 0 );
 		});
 	}
 
@@ -18733,6 +18742,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 
 	AllowOnlyNot ( hSearchd.GetInt ( "not_terms_only_allowed", 0 )!=0 );
 	ConfigureDaemonLog ( hSearchd.GetStr ( "query_log_commands" ) );
+	g_iAutoOptimizeCutoffMultiplier = hSearchd.GetInt ( "auto_optimize", 1 );
 }
 
 // ServiceMain -> ConfigureAndPreload -> ConfigureAndPreloadIndex

@@ -924,6 +924,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "jobs_queue_size",		0, nullptr },
 	{ "not_terms_only_allowed",	0, nullptr },
 	{ "query_log_commands",		0, nullptr },
+	{ "auto_optimize",			0, nullptr },
 	{ NULL,						0, NULL }
 };
 

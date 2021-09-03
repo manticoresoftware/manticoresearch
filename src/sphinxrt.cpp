@@ -85,10 +85,16 @@ static auto&	g_bRTChangesAllowed		= RTChangesAllowed ();
 static bool g_bProgressiveMerge = true;
 
 //////////////////////////////////////////////////////////////////////////
-volatile bool &RTChangesAllowed ()
+volatile bool &RTChangesAllowed () noexcept
 {
 	static volatile bool bRTChangesAllowed = false;
 	return bRTChangesAllowed;
+}
+
+volatile int &AutoOptimizeCutoffMultiplier() noexcept
+{
+	static int iAutoOptimizeCutoffMultiplier = 1;
+	return iAutoOptimizeCutoffMultiplier;
 }
 
 // !COMMIT yes i am when debugging

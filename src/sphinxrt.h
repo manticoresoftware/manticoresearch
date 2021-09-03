@@ -382,6 +382,9 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 	bool bSame, CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError );
 
 // Get global flag of w-available RT
-volatile bool &RTChangesAllowed ();
+volatile bool &RTChangesAllowed () noexcept;
+
+// Get global flag of autooptimize
+volatile int & AutoOptimizeCutoffMultiplier() noexcept;
 
 #endif // _sphinxrt_

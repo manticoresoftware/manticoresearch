@@ -2962,8 +2962,7 @@ void RtIndex_c::UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & dUpda
 	{
 		AttrUpdateInc_t tUpdInc { std::move ( tUpdate.m_pUpdate ) };
 		UpdateContext_t tCtx ( tUpdInc, m_tSchema );
-		if ( !Update_PrepareListOfUpdatedAttributes ( tCtx, sError ) )
-			continue; // fixme! strange error, should be reported!
+		Update_PrepareListOfUpdatedAttributes ( tCtx, sError );
 
 		// actualize list of updates in context of new segment
 		const auto & dDocids = tUpdate.m_pUpdate->m_dDocids;
@@ -7566,11 +7565,10 @@ int RtIndex_c::UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSph
 	int iUpdated = tUpd.m_iAffected;
 
 	UpdateContext_t tCtx ( tUpd, m_tSchema );
-	if ( !Update_CheckAttributes ( tCtx, sError ) )
+	if ( !Update_CheckAttributes ( *tCtx.m_tUpd.m_pUpdate, tCtx.m_tSchema, sError ) )
 		return -1;
 
-	if ( !Update_PrepareListOfUpdatedAttributes ( tCtx, sError ) )
-		return -1;
+	Update_PrepareListOfUpdatedAttributes ( tCtx, sError );
 
 	auto dRamUpdateSets = Update_CollectRowPtrs ( tCtx, tGuard.m_dRamSegs );
 

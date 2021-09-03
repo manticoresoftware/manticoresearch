@@ -946,23 +946,67 @@ UpdateContext_t::UpdateContext_t ( AttrUpdateInc_t & tUpd, const ISphSchema & tS
 
 //////////////////////////////////////////////////////////////////////////
 
-bool IndexUpdateHelper_c::Update_CheckAttributes ( const UpdateContext_t & tCtx, CSphString & sError )
+bool IndexUpdateHelper_c::Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tSchema, CSphString & sError )
 {
-	for ( const auto & i : tCtx.m_tUpd.m_pUpdate->m_dAttributes )
+	for ( const auto & tUpdAttr : tUpd.m_dAttributes )
 	{
-		const CSphColumnInfo * pAttr = tCtx.m_tSchema.GetAttr ( i.m_sName.cstr() );
-		if ( pAttr && pAttr->IsColumnar() )
+		const CSphString & sUpdAttrName = tUpdAttr.m_sName;
+		int iUpdAttrId = tSchema.GetAttrIndex ( sUpdAttrName.cstr() );
+
+		// try to find JSON attribute with a field
+		if ( iUpdAttrId<0 )
 		{
-			sError.SetSprintf ( "unable to update columnar attribute '%s'", i.m_sName.cstr() );
+			CSphString sJsonCol;
+			if ( sphJsonNameSplit ( sUpdAttrName.cstr(), &sJsonCol ) )
+				iUpdAttrId = tSchema.GetAttrIndex ( sJsonCol.cstr() );
+		}
+
+		if ( iUpdAttrId<0 )
+		{
+			if ( tUpd.m_bIgnoreNonexistent )
+				continue;
+
+			sError.SetSprintf ( "attribute '%s' not found", sUpdAttrName.cstr() );
 			return false;
 		}
+
+		// forbid updates on non-int columns
+		const CSphColumnInfo & tCol = tSchema.GetAttr ( iUpdAttrId );
+		if ( !( tCol.m_eAttrType==SPH_ATTR_BOOL || tCol.m_eAttrType==SPH_ATTR_INTEGER || tCol.m_eAttrType==SPH_ATTR_TIMESTAMP
+			|| tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_STRING
+			|| tCol.m_eAttrType==SPH_ATTR_BIGINT || tCol.m_eAttrType==SPH_ATTR_FLOAT || tCol.m_eAttrType==SPH_ATTR_JSON ))
+		{
+			sError.SetSprintf ( "attribute '%s' can not be updated (must be boolean, integer, bigint, float, timestamp, string, MVA or JSON)", sUpdAttrName.cstr() );
+			return false;
+		}
+
+		bool bSrcMva = ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET );
+		bool bDstMva = ( tUpdAttr.m_eType==SPH_ATTR_UINT32SET || tUpdAttr.m_eType==SPH_ATTR_INT64SET );
+		if ( bSrcMva!=bDstMva )
+		{
+			sError.SetSprintf ( "attribute '%s' MVA flag mismatch", sUpdAttrName.cstr() );
+			return false;
+		}
+
+		if( tCol.m_eAttrType==SPH_ATTR_UINT32SET && tUpdAttr.m_eType==SPH_ATTR_INT64SET )
+		{
+			sError.SetSprintf ( "attribute '%s' MVA bits (dst=%d, src=%d) mismatch", sUpdAttrName.cstr(), tCol.m_eAttrType, tUpdAttr.m_eType );
+			return false;
+		}
+
+		if ( tCol.IsColumnar() )
+		{
+			sError.SetSprintf ( "unable to update columnar attribute '%s'", sUpdAttrName.cstr() );
+			return false;
+		}
+
 	}
 
 	return true;
 }
 
 
-bool IndexUpdateHelper_c::Update_PrepareListOfUpdatedAttributes ( UpdateContext_t & tCtx, CSphString & sError )
+void IndexUpdateHelper_c::Update_PrepareListOfUpdatedAttributes ( UpdateContext_t & tCtx, CSphString & sError )
 {
 	const auto & tUpd = *tCtx.m_tUpd.m_pUpdate;
 	ARRAY_FOREACH ( i, tUpd.m_dAttributes )
@@ -989,34 +1033,10 @@ bool IndexUpdateHelper_c::Update_PrepareListOfUpdatedAttributes ( UpdateContext_
 
 		if ( iUpdAttrId>=0 )
 		{
-			// forbid updates on non-int columns
 			const CSphColumnInfo & tCol = tCtx.m_tSchema.GetAttr(iUpdAttrId);
-			if ( !( tCol.m_eAttrType==SPH_ATTR_BOOL || tCol.m_eAttrType==SPH_ATTR_INTEGER || tCol.m_eAttrType==SPH_ATTR_TIMESTAMP
-				|| tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_STRING
-				|| tCol.m_eAttrType==SPH_ATTR_BIGINT || tCol.m_eAttrType==SPH_ATTR_FLOAT || tCol.m_eAttrType==SPH_ATTR_JSON ))
-			{
-				sError.SetSprintf ( "attribute '%s' can not be updated (must be boolean, integer, bigint, float, timestamp, string, MVA or JSON)", sUpdAttrName.cstr() );
-				return false;
-			}
-
-			bool bSrcMva = ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET );
-			bool bDstMva = ( eUpdAttrType==SPH_ATTR_UINT32SET || eUpdAttrType==SPH_ATTR_INT64SET );
-			if ( bSrcMva!=bDstMva )
-			{
-				sError.SetSprintf ( "attribute '%s' MVA flag mismatch", sUpdAttrName.cstr() );
-				return false;
-			}
 
 			switch ( tCol.m_eAttrType )
 			{
-			case SPH_ATTR_UINT32SET:
-				if ( eUpdAttrType==SPH_ATTR_INT64SET )
-				{
-					sError.SetSprintf ( "attribute '%s' MVA bits (dst=%d, src=%d) mismatch", sUpdAttrName.cstr(), tCol.m_eAttrType, eUpdAttrType );
-					return false;
-				}
-				break;
-
 			case SPH_ATTR_FLOAT:
 				if ( eUpdAttrType==SPH_ATTR_BIGINT )
 					tUpdAttr.m_eConversion = CONVERSION_BIGINT2FLOAT;
@@ -1040,12 +1060,10 @@ bool IndexUpdateHelper_c::Update_PrepareListOfUpdatedAttributes ( UpdateContext_
 			tCtx.m_dSchemaUpdateMask.BitSet(iUpdAttrId);
 			tCtx.m_bBlobUpdate |= sphIsBlobAttr(tCol);
 		}
-		else if ( tUpd.m_bIgnoreNonexistent )
-			continue;
 		else
 		{
-			sError.SetSprintf ( "attribute '%s' not found", sUpdAttrName.cstr() );
-			return false;
+			assert ( tUpd.m_bIgnoreNonexistent ); // should be handled by Update_CheckAttributes
+			continue;
 		}
 
 		// this is a hack
@@ -1060,8 +1078,6 @@ bool IndexUpdateHelper_c::Update_PrepareListOfUpdatedAttributes ( UpdateContext_
 			const_cast<CSphAttrUpdate &>(tUpd).m_dPool[i] = sphF2DW ( (float)tUpd.m_dPool[i] );
 		}
 	}
-
-	return true;
 }
 
 
@@ -7395,11 +7411,10 @@ bool CSphIndex_VLN::DoUpdateAttributes ( const RowsToUpdate_t& dRows, UpdateCont
 	tCtx.m_pAttrPool = m_tAttr.GetWritePtr ();
 	tCtx.m_pSegment = this;
 
-	if ( !Update_CheckAttributes ( tCtx, sError ) )
+	if ( !Update_CheckAttributes ( *tCtx.m_tUpd.m_pUpdate, tCtx.m_tSchema, sError ) )
 		return false;
 
-	if ( !Update_PrepareListOfUpdatedAttributes ( tCtx, sError ) )
-		return false;
+	Update_PrepareListOfUpdatedAttributes ( tCtx, sError );
 
 	// FIXME! FIXME! FIXME! overwriting just-freed blocks might hurt concurrent searchers;
 	// should implement a simplistic MVCC-style delayed-free to avoid that

@@ -13478,15 +13478,19 @@ void HandleMysqlOptimizeManual ( RowBuffer_i & tOut, const DebugCmd::DebugComman
 		return;
 	}
 
-	auto iFrom = tCmd.m_iPar1;
-	auto iTo = tCmd.m_iPar2;
+	OptimizeTask_t tTask;
+	tTask.m_eVerb = OptimizeTask_t::eMerge;
+	tTask.m_iFrom = (int)tCmd.m_iPar1;
+	tTask.m_iTo = (int)tCmd.m_iPar2;
+	tTask.m_bByOrder = !tCmd.bOpt ( "byid" );
+	tTask.m_iCutoff = (int)tCmd.iOpt("cutoff");
 
 	if ( tCmd.bOpt("sync") )
 	{
 		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( tCmd.iOpt("cutoff"), iFrom, iTo, nullptr, !tCmd.bOpt ( "byid" ) );
+			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( tTask );
 	} else
-		EnqueueForOptimize ( sIndex, tCmd.iOpt ( "cutoff" ), iFrom, iTo, nullptr, !tCmd.bOpt ( "byid" ) );
+		EnqueueForOptimize ( sIndex, tTask );
 	tOut.Ok();
 }
 
@@ -13501,14 +13505,17 @@ void HandleMysqlDropManual ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t 
 		return;
 	}
 
-	auto iChunk = tCmd.m_iPar1;
+	OptimizeTask_t tTask;
+	tTask.m_eVerb = OptimizeTask_t::eDrop;
+	tTask.m_iFrom = (int)tCmd.m_iPar1;
+	tTask.m_bByOrder = !tCmd.bOpt ( "byid" );
 
 	if ( tCmd.bOpt("sync") )
 	{
 		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( 0, iChunk, -1, nullptr, !tCmd.bOpt ( "byid" ) );
+			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( tTask );
 	} else
-		EnqueueForOptimize ( sIndex, 0, iChunk, -1, nullptr, !tCmd.bOpt ( "byid" ) );
+		EnqueueForOptimize ( sIndex, tTask );
 	tOut.Ok ();
 }
 
@@ -13522,15 +13529,17 @@ void HandleMysqlCompress ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & 
 		return;
 	}
 
-
-	auto iChunk = tCmd.m_iPar1;
+	OptimizeTask_t tTask;
+	tTask.m_eVerb = OptimizeTask_t::eCompress;
+	tTask.m_iFrom = (int) tCmd.m_iPar1;
+	tTask.m_bByOrder = !tCmd.bOpt ( "byid" );
 
 	if ( tCmd.bOpt("sync") )
 	{
 		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( 0, -1, iChunk, nullptr, !tCmd.bOpt ( "byid" ) );
+			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( tTask );
 	} else
-		EnqueueForOptimize ( sIndex, 1, iChunk, iChunk, nullptr, !tCmd.bOpt ( "byid" ) );
+		EnqueueForOptimize ( sIndex, tTask );
 	tOut.Ok();
 }
 
@@ -13549,15 +13558,6 @@ void HandleMysqlSplit ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCm
 		return;
 	}
 
-	auto* pRTIndex = static_cast<RtIndex_i *>( pIndex->m_pIndex );
-	if ( !pRTIndex )
-	{
-		tOut.Error ( tCmd.m_szStmt, "SPLIT requires an existing RT index" );
-		return;
-	}
-
-	auto iChunk = tCmd.m_iPar1;
-
 	bool bVarFound = false;
 	IterateUservars ( [&tCmd, &bVarFound] ( const NamedRefVectorPair_t & dVar ) {
 		if ( dVar.first == tCmd.m_sParam2
@@ -13572,11 +13572,19 @@ void HandleMysqlSplit ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCm
 		return;
 	}
 
+	OptimizeTask_t tTask;
+	tTask.m_eVerb = OptimizeTask_t::eSplit;
+	tTask.m_iFrom = (int)tCmd.m_iPar1;
+	tTask.m_sUvarFilter = tCmd.m_sParam2;
+	tTask.m_bByOrder = !tCmd.bOpt ( "byid" );
+
 	if ( tCmd.bOpt ( "sync" ) )
-		pRTIndex->Optimize ( -1, iChunk, iChunk, tCmd.m_sParam2.cstr(), !tCmd.bOpt ( "byid" ) );
-	else
-		EnqueueForOptimize ( sIndex, -1, iChunk, iChunk, tCmd.m_sParam2.cstr(), !tCmd.bOpt ( "byid" ) );
-	tOut.Ok ();
+	{
+		if ( pIndex->m_pIndex )
+			static_cast<RtIndex_i*> ( pIndex->m_pIndex )->Optimize ( tTask );
+	} else
+		EnqueueForOptimize ( sIndex, tTask );
+	tOut.Ok();
 }
 
 void HandleMysqlfiles ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCmd )
@@ -14008,17 +14016,17 @@ void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 		return;
 	}
 
-	tOut.Ok();
+	OptimizeTask_t tTask;
+	tTask.m_eVerb = OptimizeTask_t::eManualOptimize;
+	tTask.m_iCutoff = tStmt.m_tQuery.m_iCutoff;
 
 	if ( tStmt.m_tQuery.m_bSync )
 	{
 		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize(tStmt.m_tQuery.m_iCutoff,-1,-1,nullptr,true);
-
-		return;
-	}
-
-	EnqueueForOptimize ( tStmt.m_sIndex, tStmt.m_tQuery.m_iCutoff );
+			static_cast<RtIndex_i*> ( pIndex->m_pIndex )->Optimize ( tTask );
+	} else
+		EnqueueForOptimize ( tStmt.m_sIndex, tTask );
+	tOut.Ok();
 }
 
 // STMT_SELECT_SYSVAR: SELECT @@sysvar1 [ as alias] [@@sysvarN [ as alias]] [limit M]
@@ -19701,6 +19709,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		sphWarning ( "sphinxql_state flush disabled: %s", sError.cstr ());
 
 	ServeUserVars ();
+
+	ServeAutoOptimize();
 
 	if ( bForcedPreread )
 		Threads::CallCoroutine (DoPreread);

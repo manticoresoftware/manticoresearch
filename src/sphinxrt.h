@@ -47,6 +47,25 @@ struct InsertDocData_t
 	SphAttr_t							GetID() const;
 };
 
+struct OptimizeTask_t
+{
+	enum OptimizeVerb_e {
+		eManualOptimize,
+		eDrop,
+		eCompress,
+		eSplit,
+		eMerge,
+		eAutoOptimize,
+	};
+
+	OptimizeVerb_e m_eVerb;
+	int m_iCutoff	=	0;
+	int m_iFrom		=	-1;
+	int m_iTo		=	-1;
+	CSphString m_sUvarFilter;
+	bool m_bByOrder =	false;
+};
+
 /// RAM based updateable backend interface
 class RtIndex_i : public CSphIndexStub
 {
@@ -88,7 +107,7 @@ public:
 	/// truncate index (that is, kill all data)
 	virtual bool Truncate ( CSphString & sError ) = 0;
 
-	virtual void Optimize ( int iCutoff, int iFromID, int iToID, const char* szUvarFilter, bool ByOrder ) {}
+	virtual void Optimize ( OptimizeTask_t tTask ) {}
 
 	/// check settings vs current and return back tokenizer and dictionary in case of difference
 	virtual bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError ) const = 0;
@@ -386,5 +405,8 @@ volatile bool &RTChangesAllowed () noexcept;
 
 // Get global flag of autooptimize
 volatile int & AutoOptimizeCutoffMultiplier() noexcept;
+
+using EnqueueForOptimizeFnPtr = void (*) ( CSphString , OptimizeTask_t );
+volatile EnqueueForOptimizeFnPtr& EnqueueForOptimizeExecutor() noexcept;
 
 #endif // _sphinxrt_

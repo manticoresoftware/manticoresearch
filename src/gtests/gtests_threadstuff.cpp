@@ -453,3 +453,37 @@ TEST ( ThreadPool, DISABLED_strandr3 )
 	} );
 
 }
+
+TEST ( ThreadPool, CoroPromiceFutureConcept )
+{
+	using namespace Threads;
+	CallCoroutine ( [&] {
+	volatile int iData;
+	auto fnCoro = MakeCoroExecutor ( [&iData]() {
+		iData = 1;
+		CoYield();
+		iData = 2;
+		CoYield();
+		iData = 10;
+		CoYield();
+		iData = 16;
+	} );
+
+	auto fnCondition = [fnCoro = std::move ( fnCoro ), &iData] ( int& iData2 ) -> bool {
+		bool bRes = !fnCoro();
+		iData2 = iData;
+		return bRes;
+	};
+
+	int iCheck;
+	ASSERT_TRUE ( fnCondition ( iCheck ) );
+	ASSERT_EQ ( iCheck, 1 );
+	ASSERT_TRUE ( fnCondition ( iCheck ) );
+	ASSERT_EQ ( iCheck, 2 );
+	ASSERT_TRUE ( fnCondition ( iCheck ) );
+	ASSERT_EQ ( iCheck, 10 );
+	ASSERT_FALSE ( fnCondition ( iCheck ) );
+	ASSERT_EQ ( iCheck, 16 );
+	});
+}
+

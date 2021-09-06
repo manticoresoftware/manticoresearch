@@ -36,6 +36,7 @@
 #include "columnarrt.h"
 #include "columnarmisc.h"
 #include "sphinx_alter.h"
+#include "taskoptimize.h"
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -64,13 +65,15 @@ using namespace Threads;
 #define Verify(_expr) _expr
 #endif
 
-#define LOG_LEVEL_RTDIAG false
+#define LOG_LEVEL_RTRDIAG false
+#define LOG_LEVEL_RTDDIAG false
 #define LOG_LEVEL_RTDIAGV false
 #define LOG_LEVEL_RTDIAGVV false
 #define LOG_LEVEL_DEBUGV false
 #define LOG_COMPONENT_RTSEG __LINE__ << " " << CoCurrentScheduler()->Name() << " "
 
-#define RTLOG LOGINFO ( RTDIAG, RTSEG )
+#define RTRLOG LOGINFO ( RTRDIAG, RTSEG )
+#define RTDLOG LOGINFO ( RTDDIAG, RTSEG )
 #define RTLOGV LOGINFO ( RTDIAGV, RTSEG )
 #define RTLOGVV LOGINFO ( RTDIAGVV, RTSEG )
 
@@ -97,10 +100,23 @@ volatile int &AutoOptimizeCutoffMultiplier() noexcept
 	return iAutoOptimizeCutoffMultiplier;
 }
 
-// !COMMIT yes i am when debugging
-#ifndef NDEBUG
-#define PARANOID 1
-#endif
+static int GetDefaultCutoff()
+{
+	return sphCpuThreadsCount() * 2;
+}
+
+volatile EnqueueForOptimizeFnPtr& EnqueueForOptimizeExecutor() noexcept
+{
+	static EnqueueForOptimizeFnPtr EnqueueForOptimizeFn = nullptr;
+	return EnqueueForOptimizeFn;
+}
+
+void EnqueueForOptimizeWeak ( CSphString sIndex, OptimizeTask_t tTask )
+{
+	auto * EnqueueForOptimizeFn = EnqueueForOptimizeExecutor();
+	if (EnqueueForOptimizeFn)
+		EnqueueForOptimizeFn ( std::move ( sIndex ), std::move ( tTask ) );
+}
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -294,8 +310,6 @@ RtSegment_t::~RtSegment_t ()
 
 void RtSegment_t::UpdateUsedRam() const NO_THREAD_SAFETY_ANALYSIS
 {
-	FixupRAMCounter ( -m_iUsedRam );
-
 	int64_t iUsedRam = 0;
 	iUsedRam += m_dWords.AllocatedBytes();
 	iUsedRam += m_dDocs.AllocatedBytes();
@@ -306,9 +320,7 @@ void RtSegment_t::UpdateUsedRam() const NO_THREAD_SAFETY_ANALYSIS
 	iUsedRam += m_dInfixFilterCP.AllocatedBytes();
 	iUsedRam += m_pDocstore.Ptr() ? m_pDocstore->AllocatedBytes() : 0;
 	iUsedRam += m_pColumnar.Ptr() ? m_pColumnar->AllocatedBytes() : 0;
-
-	FixupRAMCounter ( iUsedRam-m_iUsedRam );
-	m_iUsedRam = iUsedRam;
+	FixupRAMCounter ( iUsedRam - std::exchange ( m_iUsedRam, iUsedRam ) );
 }
 
 
@@ -537,7 +549,6 @@ public:
 	{
 		if ( ++m_iWords==m_iWordsCheckpoint )
 		{
-			sphWarning("word writing, checkpoint added");
 			RtWordCheckpoint_t & tCheckpoint = m_dCheckpoints.Add();
 			if ( !m_bKeywordDict )
 				tCheckpoint.m_uWordID = tWord.m_uWordID;
@@ -1080,18 +1091,48 @@ public:
 	}
 };
 
-
-// fixme! retire...
-CSphVector<int> GetChunkIds ( const VecTraits_T<DiskChunkRefPtr_t> & dChunks, bool bIncludeRetired )
+template<typename INT>
+class Waitable_T
 {
-	CSphVector<int> dNames;
-	dChunks.for_each ( [&dNames, bIncludeRetired] ( const DiskChunkRefPtr_t & pIdx )
+	using EVENT = Threads::CoroMultiEvent_c;
+	EVENT m_tWaitableChanged;
+	std::atomic<INT> m_iValue {0};
+
+public:
+	Waitable_T() = default;
+	Waitable_T(Waitable_T&) = delete;
+	Waitable_T& operator= (const Waitable_T&) = delete;
+
+	void Inc()
 	{
-		if ( bIncludeRetired || !pIdx->m_bFinallyUnlink )
-			dNames.Add ( pIdx->Idx ().m_iChunk );
-	});
-	return dNames;
-}
+		m_iValue.fetch_add ( 1, std::memory_order_relaxed );
+		m_tWaitableChanged.SetEvent();
+	}
+
+	void Dec()
+	{
+		m_iValue.fetch_sub ( 1, std::memory_order_relaxed );
+		m_tWaitableChanged.SetEvent();
+	}
+
+	void SetValue ( INT iValue )
+	{
+		m_iValue.store ( iValue, std::memory_order_relaxed );
+		m_tWaitableChanged.SetEvent();
+	}
+
+	INT GetValue () const
+	{
+		return m_iValue.load ( std::memory_order_relaxed );
+	}
+
+	template<typename PRED>
+	void WaitFor ( PRED&& fnPred )
+	{
+		while ( !fnPred ( m_iValue.load ( std::memory_order_relaxed ) ) )
+			m_tWaitableChanged.WaitEvent();
+	}
+};
 
 CSphVector<int> GetChunkIds ( const VecTraits_T<DiskChunkRefPtr_t> & dChunks )
 {
@@ -1129,20 +1170,23 @@ public:
 	bool				ForceDiskChunk() final;
 	bool				AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, StrVec_t & dWarnings, CSphString & sError ) final;
 	bool				Truncate ( CSphString & sError ) final;
-	void				Optimize ( int iCutoff, int iFromID, int iToID, const char * szUvarFilter, bool bByOrder ) final;
-	void				CommonMerge ( std::function<bool ( int*, int*)>&& fnSelector, const char* szUvarFilter=nullptr );
+	bool				CheckValidateOptimizeParams ( OptimizeTask_t& tTask );
+	void				Optimize ( OptimizeTask_t tTask ) final;
+	void				CheckStartAutoOptimize ();
+	void				ClassicOptimize ();
+	void				CommonMerge ( std::function<bool ( OptimizeTask_t& )>&& fnSelector );
 	void				DropDiskChunk ( int iChunk );
-	bool				CompressOneChunk ( int iChunk );
+	bool				CompressOneChunk ( int iChunk, int& iAffected );
 	bool				MergeTwoChunks ( int iA, int iB );
-	bool				SplitOneChunk ( int iChunkID, const char* szUvarFilter );
-	bool				SplitOneChunkFast ( int iChunkID, const char * szUvarFilter, bool& bResult );
+	bool				SplitOneChunk ( int iChunkID, const char* szUvarFilter, int& iAffected );
+	bool				SplitOneChunkFast ( int iChunkID, const char * szUvarFilter, bool& bResult, int& iAffected );
 	int					ChunkIDByChunkIdx (int iChunkIdx) const;
 
 	// helpers
 	ConstDiskChunkRefPtr_t	MergeDiskChunks (  const char* szParentAction, const ConstDiskChunkRefPtr_t& pChunkA, const ConstDiskChunkRefPtr_t& pChunkB, CSphIndexProgress& tProgress, VecTraits_T<CSphFilterSettings> dFilters );
 	bool				PublishMergedChunks ( const char * szParentAction,std::function<bool ( int, DiskChunkVec_c & )> && fnPusher) REQUIRES ( m_tRtChunks.SerialChunkAccess () );
 	bool 				RenameOptimizedChunk ( const ConstDiskChunkRefPtr_t& pChunk, const char * szParentAction );
-	bool				SkipOrDrop ( int iChunk, const CSphIndex& dChunk, bool bCheckAlive );
+	bool				SkipOrDrop ( int iChunk, const CSphIndex& dChunk, bool bCheckAlive, int& iAffected );
 	void				ProcessDiskChunk ( int iChunk, VisitChunk_fn&& fnVisitor ) final;
 	template <typename VISITOR>
 	void				ProcessDiskChunkByID ( int iChunkID, VISITOR&& fnVisitor ) const;
@@ -1236,8 +1280,7 @@ private:
 	std::atomic<int64_t>		m_iRamChunksAllocatedRAM;
 
 	std::atomic<bool>			m_bOptimizeStop { false };
-	std::atomic<int>			m_iOptimizesRun {0};
-	Threads::CoroMultiEvent_c	m_tOptimizesRunChanged;
+	Waitable_T<int>				m_tOptimizeRuns;
 	friend class OptimizeGuard_c;
 
 	int64_t						m_iSoftRamLimit;
@@ -1275,7 +1318,7 @@ private:
 
 	int							CompareWords ( const RtWord_t * pWord1, const RtWord_t * pWord2 ) const;
 
-	CSphFixedVector<RowID_t>	MergeSegAttributes ( RtSegment_t& tDstSeg, const RtSegment_t & tSrcSeg, RtAttrMergeContext_t & tCtx ) const;
+	CSphFixedVector<RowID_t> CopyAttributesFromAliveDocs ( RtSegment_t& tDstSeg, const RtSegment_t & tSrcSeg, RtAttrMergeContext_t & tCtx ) const;
 	void						MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, const RtSegment_t & tSeg2, const VecTraits_T<RowID_t> & dRowMap1, const VecTraits_T<RowID_t> & dRowMap2 ) const;
 	RtSegment_t *				MergeTwoSegments ( const RtSegment_t * pA, const RtSegment_t * pB ) const;
 	static void					CopyWord ( RtSegment_t& tDstSeg, RtWord_t& tDstWord, RtDocWriter_c& tDstDoc, const RtSegment_t& tSrcSeg, const RtWord_t* pSrcWord, const VecTraits_T<RowID_t>& dRowMap );
@@ -2632,7 +2675,7 @@ void BuildSegmentInfixes ( RtSegment_t * pSeg, bool bHasMorphology, bool bKeywor
 	}
 }
 
-CSphFixedVector<RowID_t> RtIndex_c::MergeSegAttributes ( RtSegment_t& tDstSeg, const RtSegment_t& tSrcSeg, RtAttrMergeContext_t& tCtx ) const REQUIRES ( tDstSeg.m_tLock )
+CSphFixedVector<RowID_t> RtIndex_c::CopyAttributesFromAliveDocs ( RtSegment_t& tDstSeg, const RtSegment_t& tSrcSeg, RtAttrMergeContext_t& tCtx ) const REQUIRES ( tDstSeg.m_tLock )
 {
 	CSphFixedVector<RowID_t> dRowMap { tSrcSeg.m_uRows };
 	dRowMap.Fill ( INVALID_ROWID );
@@ -2756,7 +2799,7 @@ RtSegment_t* RtIndex_c::MergeTwoSegments ( const RtSegment_t* pA, const RtSegmen
 	////////////////////
 	// merge attributes
 	////////////////////
-	RTLOG << "MergeTwoSegments invoked";
+	RTRLOG << "MergeTwoSegments invoked";
 
 	int nBlobAttrs = 0;
 	for ( int i = 0; i < m_tSchema.GetAttrsCount(); ++i )
@@ -2768,7 +2811,6 @@ RtSegment_t* RtIndex_c::MergeTwoSegments ( const RtSegment_t* pA, const RtSegmen
 	CSphScopedPtr<ColumnarBuilderRT_i> pColumnarBuilder ( CreateColumnarBuilderRT(m_tSchema) );
 	RtAttrMergeContext_t tCtx ( nBlobAttrs, tNextRowID, pColumnarBuilder.Ptr() );
 
-
 	auto* pSeg = new RtSegment_t ( 0 );
 	FakeWL_t _ { pSeg->m_tLock }; // as pSeg is just created - we don't need real guarding and use fake lock to mute thread safety warnings
 
@@ -2779,8 +2821,8 @@ RtSegment_t* RtIndex_c::MergeTwoSegments ( const RtSegment_t* pA, const RtSegmen
 	pSeg->m_dRows.Reserve ( m_iStride * Max ( pA->m_tAliveRows.load ( std::memory_order_relaxed ), pB->m_tAliveRows.load (std::memory_order_relaxed ) ) );
 	pSeg->m_dBlobs.Reserve ( [pA, pB]() NO_THREAD_SAFETY_ANALYSIS { return Max ( pA->m_dBlobs.GetLength(), pB->m_dBlobs.GetLength() ); }() );
 
-	CSphFixedVector<RowID_t> dRowMapA = MergeSegAttributes ( *pSeg, *pA, tCtx );
-	CSphFixedVector<RowID_t> dRowMapB = MergeSegAttributes ( *pSeg, *pB, tCtx );
+	CSphFixedVector<RowID_t> dRowMapA = CopyAttributesFromAliveDocs ( *pSeg, *pA, tCtx );
+	CSphFixedVector<RowID_t> dRowMapB = CopyAttributesFromAliveDocs ( *pSeg, *pB, tCtx );
 
 	assert ( tNextRowID<=INT_MAX );
 	pSeg->m_uRows = tNextRowID;
@@ -2788,7 +2830,7 @@ RtSegment_t* RtIndex_c::MergeTwoSegments ( const RtSegment_t* pA, const RtSegmen
 	pSeg->m_tDeadRowMap.Reset ( pSeg->m_uRows );
 	pSeg->m_pColumnar = CreateColumnarRT ( m_tSchema, pColumnarBuilder.Ptr() );
 
-	RTLOG << "MergeTwoSegments: new seg has " << pSeg->m_uRows << " rows";
+	RTRLOG << "MergeTwoSegments: new seg has " << pSeg->m_uRows << " rows";
 
 	// merged segment might be completely killed by committed data
 	if ( !pSeg->m_uRows )
@@ -2882,7 +2924,7 @@ namespace GatherUpdates {
 }; // namespace
 
 
-bool RtIndex_c::UpdateAttributesInRamSegment ( const RowsToUpdate_t& dRows, UpdateContext_t& tCtx, bool& bCritical, CSphString& sError )
+bool RtIndex_c::UpdateAttributesInRamSegment ( const RowsToUpdate_t& dRows, UpdateContext_t& tCtx, bool& bCritical, CSphString& sError ) REQUIRES ( m_tRtChunks.SerialChunkAccess() )
 {
 	if ( tCtx.m_tUpd.m_pUpdate->m_bStrict )
 		if ( !Update_InplaceJson ( dRows, tCtx, sError, true ) )
@@ -3047,7 +3089,7 @@ enum class CheckMerge_e { MERGE, NOMERGE, FLUSH };
 CheckMerge_e CheckWeCanMerge ( std::pair<int, int>& tSmallest, const VecTraits_T<ConstRtSegmentRefPtf_t>& dSegments, int64_t iRamLimit ) NO_THREAD_SAFETY_ANALYSIS
 {
 	const int iSegs = dSegments.GetLength ();
-	RTLOG << "CheckWeCanMerge(" << dSegments.GetLength() << " segs, ram limit " << iRamLimit << " bytes)";
+	RTLOGV << "CheckWeCanMerge(" << dSegments.GetLength() << " segs, ram limit " << iRamLimit << " bytes)";
 
 	// enforce RAM usage limit
 	auto iRamLeft = iRamLimit - SegmentsGetUsedRam ( dSegments );
@@ -3073,12 +3115,12 @@ CheckMerge_e CheckWeCanMerge ( std::pair<int, int>& tSmallest, const VecTraits_T
 	int64_t iAlive = pA->m_tAliveRows.load ( std::memory_order_relaxed ) + pB->m_tAliveRows.load ( std::memory_order_relaxed );
 	DWORD uRows = pA->m_uRows + pB->m_uRows;
 
-	int64_t iEstimate=0;
-	int64_t iMaxLen=0;
+	int64_t iEstimatedMergedSize=0;
+	int64_t iMaxFutureVecLen=0;
 
 	// check whether we have enough RAM
 #define ESTIMATE( _v ) pA->_v.Relimit ( 0, ( (int64_t)pA->_v.GetLength() + pB->_v.GetLength() ) * iAlive / uRows )
-#define LOC_ESTIMATE( _v ) do { auto _t=ESTIMATE(_v); iEstimate+=_t; if ( iMaxLen<_t) iMaxLen=_t; } while (0)
+#define LOC_ESTIMATE( _v ) do { auto _t=ESTIMATE(_v); iEstimatedMergedSize+=_t; if ( iMaxFutureVecLen<_t) iMaxFutureVecLen=_t; } while (0)
 
 	LOC_ESTIMATE ( m_dWords );
 	LOC_ESTIMATE ( m_dDocs );
@@ -3090,9 +3132,9 @@ CheckMerge_e CheckWeCanMerge ( std::pair<int, int>& tSmallest, const VecTraits_T
 #undef LOC_ESTIMATE
 #undef ESTIMATE
 
-	if ( iEstimate > iRamLeft ) // can't merge anymore, dump if segments count limit's reached
+	if ( iEstimatedMergedSize > iRamLeft ) // can't merge anymore, dump if segments count limit's reached
 		return ( iSegs >= MAX_SEGMENTS ) ? CheckMerge_e::FLUSH : CheckMerge_e::NOMERGE;
-	return ( iMaxLen > MAX_SEGMENT_VECTOR_LEN ) ? CheckMerge_e::FLUSH : CheckMerge_e::MERGE;
+	return ( iMaxFutureVecLen > MAX_SEGMENT_VECTOR_LEN ) ? CheckMerge_e::FLUSH : CheckMerge_e::MERGE;
 }
 
 static StringBuilder_c & operator<< ( StringBuilder_c & dOut, CheckMerge_e eVal )
@@ -3115,7 +3157,7 @@ void RtIndex_c::StartMergeSegments ( bool bHasNewSegment )
 
 	m_bSegMergeQueued = true;
 
-	RTLOG << "StartMergeSegments(" << (bHasNewSegment?"with new":"no new") << ")";
+	RTLOGV << "StartMergeSegments(" << (bHasNewSegment?"with new":"no new") << ")";
 
 	// all the rest is postponed and will be executed aside of caller.
 	CoGo ( [this, bHasNewSegment]
@@ -3137,7 +3179,7 @@ void RtIndex_c::StartMergeSegments ( bool bHasNewSegment )
 		if ( bHasNewSegment )
 			eMergeAction = CheckWeCanMerge ( tSmallest, dSegments, m_tRtChunks.IsSaveActive() ? m_iDoubleBufferLimit : m_iSoftRamLimit );
 
-		RTLOG << "CheckWeCanMerge returned " << eMergeAction;
+		RTLOGV << "CheckWeCanMerge returned " << eMergeAction;
 
 		if ( eMergeAction == CheckMerge_e::FLUSH )
 		{
@@ -3147,7 +3189,7 @@ void RtIndex_c::StartMergeSegments ( bool bHasNewSegment )
 			return;
 		}
 
-		int iMergeOp = m_tRtChunks.GetNextOpTicket();
+		int iMergeOp = 0;
 
 		RtSegmentRefPtf_t pMerged { nullptr };
 
@@ -3157,6 +3199,7 @@ void RtIndex_c::StartMergeSegments ( bool bHasNewSegment )
 
 			ConstRtSegmentRefPtf_t pA = dSegments[tSmallest.first];
 			ConstRtSegmentRefPtf_t pB = dSegments[tSmallest.second];
+			iMergeOp = m_tRtChunks.GetNextOpTicket();
 			pA->m_iLocked = pB->m_iLocked = iMergeOp; // mark them as retiring.
 
 			// that will collect killed docIDs
@@ -3172,14 +3215,15 @@ void RtIndex_c::StartMergeSegments ( bool bHasNewSegment )
 
 			pA->SetKillHook ( pMerged );
 			pB->SetKillHook ( pMerged );
-			RTLOG << "after merge " << pMerged << ", has " << dKillOnMerge.m_dDocids.GetLength () << " killed";
+			RTLOGV << "after merge " << pMerged << ", has " << dKillOnMerge.m_dDocids.GetLength () << " killed";
 
+			// apply postponed kills and updates (if any)
 			if ( pMerged )
 			{
 				pMerged->KillMulti ( dKillOnMerge.m_dDocids );
 				if ( pMerged->m_tAliveRows.load ( std::memory_order_relaxed ) )
 				{
-					// some updates might be applied to pA and pB during the merge. Now it is time ti apply them also
+					// some updates might be applied to pA and pB during the merge. Now it is time to apply them also
 					// to the merged segment.
 					LazyVector_T<ConstRtSegmentRefPtf_t> dOld;
 					dOld.Add ( pA );
@@ -3200,29 +3244,29 @@ void RtIndex_c::StartMergeSegments ( bool bHasNewSegment )
 			pMerged = nullptr;
 
 		// we collect after merge, as some data might be changed during the merge
-		bool bHaveRetired = false;
 		for ( auto& pSeg : dSegments )
-			if ( pSeg->m_iLocked != iMergeOp && !pSeg->m_tAliveRows.load ( std::memory_order_relaxed ) )
+			if ( !pSeg->m_tAliveRows.load ( std::memory_order_relaxed ) )
 			{
-				bHaveRetired = true;
+				if ( !iMergeOp )
+					iMergeOp = m_tRtChunks.GetNextOpTicket();
 				pSeg->m_iLocked = iMergeOp;
 			}
 		dSegments.Reset ();
 
-		RtWriter_c tNewSet ( m_tRtChunks );
-		if ( pMerged || bHaveRetired )
-		{
-			tNewSet.InitRamSegs ( RtWriter_c::empty );
-			for ( const auto & pSeg : *m_tRtChunks.RamSegs() )
-				if ( pSeg->m_iLocked!=iMergeOp )
-					tNewSet.m_pNewRamSegs->Add ( pSeg );
-		}
-
-		if ( !pMerged )
+		// nothing merged, and also nothing killed - nothing to do, exit.
+		if ( !pMerged && !iMergeOp )
 			return;
 
-		tNewSet.m_pNewRamSegs->Add ( AdoptSegment ( pMerged ) );
-		RTLOG << "after merge " << tNewSet.m_pNewRamSegs->GetLength () << " segments on-board";
+		RtWriter_c tNewSet ( m_tRtChunks );
+		tNewSet.InitRamSegs ( RtWriter_c::empty );
+		for ( const auto & pSeg : *m_tRtChunks.RamSegs() )
+			if ( pSeg->m_iLocked!=iMergeOp )
+				tNewSet.m_pNewRamSegs->Add ( pSeg );
+
+		if ( pMerged )
+			tNewSet.m_pNewRamSegs->Add ( AdoptSegment ( pMerged ) );
+
+		RTRLOG << "after merge " << tNewSet.m_pNewRamSegs->GetLength () << " segments on-board";
 
 		// chain next step
 		StartMergeSegments ( true );
@@ -3251,7 +3295,7 @@ int RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const CSphVector<DocID_
 	// We're going to modify segments, so fall into serial fiber. From here no concurrent changes may happen
 	ScopedScheduler_c tSerialFiber { m_tRtChunks.SerialChunkAccess() };
 
-	RTLOG << "CommitReplayable";
+	RTLOGV << "CommitReplayable";
 
 	// first of all, binlog txn data for recovery
 	BinlogCommit ( pNewSeg, dAccKlist );
@@ -3801,7 +3845,7 @@ void RtIndex_c::SaveDiskData ( const char * szFilename, const ConstRtSegmentSlic
 {
 	CSphString sError; // FIXME!!! report collected (sError) errors
 
-	RTLOG << "SaveDiskData to " << szFilename << ", " << tSegs.GetLength() << " segments";
+	RTDLOG << "SaveDiskData to " << szFilename << ", " << tSegs.GetLength() << " segments";
 
 	SaveDiskDataContext_t tCtx ( szFilename, tSegs ); // only RAM segments here in game.
 	if ( m_tSettings.m_iMinInfixLen && m_pDict->GetSettings().m_bWordDict )
@@ -3953,7 +3997,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced )
 
 	assert ( CoCurrentScheduler() == m_tRtChunks.SerialChunkAccess () );
 
-	RTLOG << "SaveDiskChunk( " << (bForced?"forced":"not forced") << ")";
+	RTDLOG << "SaveDiskChunk( " << ( bForced ? "forced" : "not forced" ) << ")";
 
 	int iSaveOp = m_tRtChunks.GetNextOpTicket();
 
@@ -3972,12 +4016,12 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced )
 			pSeg->m_iLocked = iSaveOp;
 			if ( pSeg->m_tAliveRows.load ( std::memory_order_relaxed )!=0 )
 			{
-				dSegments.Add ( pSeg );
 				pSeg->SetKillHook ( &dKillOnSave );
+				dSegments.Add ( pSeg );
 			}
 		}
 
-	RTLOG << "SaveDiskChunk process " << dSegments.GetLength() << " segments.";
+	RTDLOG << "SaveDiskChunk process " << dSegments.GetLength() << " segments.";
 	if ( dSegments.IsEmpty() )
 		return true;
 
@@ -4055,7 +4099,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced )
 	}
 
 	int iDiskChunks;
-	// now new disk chunk is loaded, kills applied - we ready to change global index state now.
+	// now new disk chunk is loaded, kills and updates applied - we ready to change global index state now.
 	{
 		RtWriter_c tNewSet ( m_tRtChunks );
 		tNewSet.InitDiskChunks ( RtWriter_c::copy );
@@ -4092,6 +4136,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced )
 					, iDiskChunks, iSegments, bForced ? "forcibly" : "", tmSave, tmSaveWall );
 	sphInfo ( "%s", sInfo.cstr() );
 	Preread();
+	CheckStartAutoOptimize();
 	return true;
 }
 
@@ -7354,21 +7399,20 @@ CSphFixedVector<RowsToUpdateData_t> Update_CollectRowPtrs ( UpdateContext_t & tC
 	CSphFixedVector<RowsToUpdateData_t> dUpdateSets { tSegments.GetLength () };
 
 	// collect idxes of alive (not-yet-updated) rows
-	const auto & dDocids = tCtx.m_tUpd.m_pUpdate->m_dDocids;
-	ARRAY_CONSTFOREACH (i, dDocids)
-	if ( !tCtx.m_tUpd.m_dUpdated.BitGet ( i ) )
-		ARRAY_CONSTFOREACH ( j, tSegments )
-		{
-		auto pRow = tSegments[j]->FindAliveRow ( dDocids[i] );
-			if ( !pRow )
-				continue;
+	const auto& dDocids = tCtx.m_tUpd.m_pUpdate->m_dDocids;
+	ARRAY_CONSTFOREACH ( i, dDocids )
+		if ( !tCtx.m_tUpd.m_dUpdated.BitGet ( i ) )
+			ARRAY_CONSTFOREACH ( j, tSegments )
+			{
+				auto pRow = tSegments[j]->FindAliveRow ( dDocids[i] );
+				if ( !pRow )
+					continue;
 
-			auto& dUpd = dUpdateSets[j].Add ();
-			dUpd.m_pRow = pRow;
-			dUpd.m_iIdx = i;
-			assert ( dUpd.m_pRow );
-		}
-		return dUpdateSets;
+				auto& dUpd = dUpdateSets[j].Add();
+				dUpd.m_pRow = pRow;
+				dUpd.m_iIdx = i;
+			}
+	return dUpdateSets;
 }
 
 // when RAM segment is used in merge or saving to disk - it's data finally became merged into new segment or chunk,
@@ -7517,7 +7561,7 @@ int RtIndex_c::UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSph
 		// point context to target segment
 		tCtx.m_pAttrPool = pSeg->m_dRows.begin();
 		tCtx.m_pBlobPool = pSeg->m_dBlobs.begin();
-		tCtx.m_pSegment = const_cast<RtSegment_t*>(pSeg);
+		tCtx.m_pSegment = pSeg;
 		if ( !UpdateAttributesInRamSegment ( dRamUpdateSets[i], tCtx, bCritical, sError ) )
 			return -1;
 
@@ -8045,6 +8089,37 @@ static StringBuilder_c & operator<< ( StringBuilder_c & dOut, MergeCb_c::Event_e
 	}
 	return dOut;
 }
+
+static StringBuilder_c& operator<< ( StringBuilder_c& dOut, OptimizeTask_t::OptimizeVerb_e eVerb )
+{
+	switch ( eVerb )
+	{
+	case OptimizeTask_t::eManualOptimize: return dOut << "eManualOptimize";
+	case OptimizeTask_t::eDrop: return dOut << "eDrop";
+	case OptimizeTask_t::eCompress: return dOut << "eCompress";
+	case OptimizeTask_t::eSplit: return dOut << "eSplit";
+	case OptimizeTask_t::eMerge: return dOut << "eMerge";
+	case OptimizeTask_t::eAutoOptimize: return dOut << "eAutoOptimize";
+	default: dOut.Sprintf ( "eUnknown_", (int)eVerb );
+	}
+	return dOut;
+}
+
+static StringBuilder_c& operator<< ( StringBuilder_c& dOut, const OptimizeTask_t& tTask )
+{
+
+	switch ( tTask.m_eVerb )
+	{
+	case OptimizeTask_t::eManualOptimize: return dOut << "eManualOptimize, cutoff = " << tTask.m_iCutoff;
+	case OptimizeTask_t::eDrop: return dOut << "eDrop " << tTask.m_iFrom;
+	case OptimizeTask_t::eCompress: return dOut << "eCompress " << tTask.m_iFrom;
+	case OptimizeTask_t::eSplit: return dOut << "eSplit " << tTask.m_iFrom << " filtering with '" << tTask.m_sUvarFilter << "'";
+	case OptimizeTask_t::eMerge: return dOut << "eMerge from " << tTask.m_iFrom << " to " << tTask.m_iTo;
+	case OptimizeTask_t::eAutoOptimize: return dOut << "eAutoOptimize, cutoff = " << tTask.m_iCutoff;
+	default: return dOut << tTask.m_eVerb << " cutoff=" << tTask.m_iCutoff << " From=" << tTask.m_iFrom << " To=" << tTask.m_iTo << " VarFilter= '" << tTask.m_sUvarFilter << "' bByOrder=" << tTask.m_bByOrder;
+	}
+}
+
 //////////////////////////////////////////////////////////////////////////
 // OPTIMIZE
 //////////////////////////////////////////////////////////////////////////
@@ -8380,7 +8455,7 @@ Binlog::CheckTnxResult_t RtIndex_c::ReplayTxn (Binlog::Blop_e eOp,CSphReader& tR
 }
 
 
-bool RtIndex_c::SkipOrDrop ( int iChunkID, const CSphIndex& dChunk, bool bCheckAlive )
+bool RtIndex_c::SkipOrDrop ( int iChunkID, const CSphIndex& dChunk, bool bCheckAlive, int &iAffected )
 {
 	auto iTotalDocs = dChunk.GetStats().m_iTotalDocuments;
 	auto iAliveDocs = NumAliveDocs ( dChunk );
@@ -8390,6 +8465,7 @@ bool RtIndex_c::SkipOrDrop ( int iChunkID, const CSphIndex& dChunk, bool bCheckA
 	{
 		sphLogDebug ( "common merge - drop %d, all (" INT64_FMT ") killed", iChunkID, iTotalDocs );
 		DropDiskChunk ( iChunkID );
+		++iAffected;
 		return true;
 	}
 
@@ -8400,10 +8476,11 @@ bool RtIndex_c::SkipOrDrop ( int iChunkID, const CSphIndex& dChunk, bool bCheckA
 		return true;
 	}
 
+	++iAffected;
 	return false;
 }
 
-bool RtIndex_c::CompressOneChunk ( int iChunkID )
+bool RtIndex_c::CompressOneChunk ( int iChunkID, int& iAffected )
 {
 	auto pVictim = m_tRtChunks.DiskChunkByID ( iChunkID );
 	if ( !pVictim )
@@ -8412,7 +8489,7 @@ bool RtIndex_c::CompressOneChunk ( int iChunkID )
 		return false;
 	}
 	const CSphIndex& tVictim = pVictim->Cidx();
-	if ( SkipOrDrop ( iChunkID, tVictim, true ) )
+	if ( SkipOrDrop ( iChunkID, tVictim, true, iAffected ) )
 		return true;
 
 	sphLogDebug ( "compress %d (%d kb)", iChunkID, (int)( GetChunkSize ( tVictim ) / 1024 ) );
@@ -8463,16 +8540,17 @@ bool RtIndex_c::CompressOneChunk ( int iChunkID )
 	pCompressed->m_bFinallyUnlink = false;
 	SaveMeta();
 	Preread();
+	++iAffected;
 	return true;
 }
 
 // catch common cases where we can't work at all (erroneous settings, etc.), or can redirect to another action
-bool RtIndex_c::SplitOneChunkFast ( int iChunkID, const char* szUvarFilter, bool& bResult )
+bool RtIndex_c::SplitOneChunkFast ( int iChunkID, const char* szUvarFilter, bool& bResult, int& iAffected )
 {
 	if ( !szUvarFilter )
 	{
 		sphLogDebug ( "zero filter provided to split chunk %d, perform simple compress", iChunkID );
-		bResult = CompressOneChunk ( iChunkID );
+		bResult = CompressOneChunk ( iChunkID, iAffected );
 		return true;
 	}
 
@@ -8484,7 +8562,7 @@ bool RtIndex_c::SplitOneChunkFast ( int iChunkID, const char* szUvarFilter, bool
 		return true;
 	}
 	const CSphIndex& tVictim = pVictim->Cidx();
-	if ( SkipOrDrop ( iChunkID, tVictim, false ) )
+	if ( SkipOrDrop ( iChunkID, tVictim, false, iAffected ) )
 	{
 		bResult = true;
 		return true;
@@ -8517,10 +8595,10 @@ bool RtIndex_c::SplitOneChunkFast ( int iChunkID, const char* szUvarFilter, bool
 
 // compress iChunk with filter id by uservar include and exclude,
 // then replace original chunk with one of pieces, and insert second piece just after the first.
-bool RtIndex_c::SplitOneChunk ( int iChunkID, const char* szUvarFilter )
+bool RtIndex_c::SplitOneChunk ( int iChunkID, const char* szUvarFilter, int& iAffected )
 {
 	bool bResult;
-	if ( SplitOneChunkFast ( iChunkID, szUvarFilter, bResult ) )
+	if ( SplitOneChunkFast ( iChunkID, szUvarFilter, bResult, iAffected ) )
 		return bResult;
 
 	auto pVictim = m_tRtChunks.DiskChunkByID ( iChunkID );
@@ -8632,17 +8710,23 @@ bool RtIndex_c::SplitOneChunk ( int iChunkID, const char* szUvarFilter )
 	pChunkE->m_bFinallyUnlink = false;
 	SaveMeta();
 	Preread();
+	++iAffected;
 	return true;
 }
 
 bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID )
 {
 	auto pA = m_tRtChunks.DiskChunkByID ( iAID );
-	auto pB = m_tRtChunks.DiskChunkByID ( iBID );
-
-	if ( !pA || !pB )
+	if ( !pA )
 	{
-		sphWarning ( "rt optimize: index %s: merge chunks %d and %d failed, one or both chunk IDs are not valid!", m_sIndexName.cstr(), iAID, iBID );
+		sphWarning ( "rt optimize: index %s: merge chunks %d and %d failed, chunk ID %d is not valid!", m_sIndexName.cstr(), iAID, iBID, iAID );
+		return false;
+	}
+
+	auto pB = m_tRtChunks.DiskChunkByID ( iBID );
+	if ( !pB )
+	{
+		sphWarning ( "rt optimize: index %s: merge chunks %d and %d failed, chunk ID %d is not valid!", m_sIndexName.cstr(), iAID, iBID, iBID );
 		return false;
 	}
 
@@ -8717,174 +8801,237 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID )
 void RtIndex_c::StopOptimize()
 {
 	m_bOptimizeStop.store ( true, std::memory_order_release );
-	while ( m_iOptimizesRun.load(std::memory_order_relaxed)>0 )
-		m_tOptimizesRunChanged.WaitEvent();
+	m_tOptimizeRuns.WaitFor ( [] ( int i ) { return i <= 0; } );
 }
 
-void RtIndex_c::CommonMerge ( std::function<bool ( int*, int* )>&& fnSelector, const char* szUvarFilter )
+void RtIndex_c::CommonMerge ( std::function<bool ( OptimizeTask_t& )>&& fnSelector )
 {
-	int64_t tmStart = sphMicroTimer();
-	sphLogDebug( "rt optimize: index %s: optimization started",  m_sIndexName.cstr() );
-
 	if ( m_bOptimizeStop.load ( std::memory_order_acquire ) )
 		return;
 
-	m_iOptimizesRun.fetch_add ( 1 );
+	sphLogDebug ( "rt optimize: index %s: optimization started", m_sIndexName.cstr() );
 
+	int64_t tmStart = sphMicroTimer();
 	int iChunks = 0;
 
-	int iA = -1;
-	int iB = -1;
-
-	while ( fnSelector ( &iA, &iB ) && !sphInterrupted () && !m_bOptimizeStop )
 	{
-		assert ( iA!=-1 || iB!=-1 );
-		// note! iA and iB is disk chunk IDs, not order nums!
+		m_tOptimizeRuns.Inc();
+		auto tDeferDec = AtScopeExit ( [this] { m_tOptimizeRuns.Dec(); } );
 
-		if ( iB==-1 ) // merge iA to '-1' -> remove chunk iA
-			DropDiskChunk ( iA );
-
-		else if ( iA==-1 ) // merge -1 to iB -> simple compress (remove deads)
+		OptimizeTask_t tAction;
+		bool bBreak = false;
+		while ( fnSelector ( tAction ) && !sphInterrupted () && !m_bOptimizeStop && !bBreak )
 		{
-			if ( !CompressOneChunk ( iB ) ) // note, compress also may drop
+			RTDLOG << "CommonMerge step " << tAction;
+			switch ( tAction.m_eVerb )
+			{
+			case OptimizeTask_t::eDrop:
+				DropDiskChunk ( tAction.m_iFrom );
+				++iChunks;
 				break;
-		}
-
-		else if ( iA==iB ) // merge into self -> split by uservar filter
-		{
-			if ( !SplitOneChunk ( iB, szUvarFilter ) )
+			case OptimizeTask_t::eCompress:
+				if (!CompressOneChunk ( tAction.m_iFrom, iChunks ))
+					bBreak = true;
 				break;
+			case OptimizeTask_t::eSplit:
+				if (!SplitOneChunk ( tAction.m_iFrom, tAction.m_sUvarFilter.cstr(), iChunks ))
+					bBreak = true;
+				break;
+			default:
+				if ( !MergeTwoChunks(tAction.m_iFrom,tAction.m_iTo) )
+					bBreak = true;
+				++iChunks;
+			}
 		}
-
-		else if ( !MergeTwoChunks ( iA, iB ) )
-			break;
-
-		++iChunks;
 	}
-
-	m_iOptimizesRun.fetch_sub ( 1 );
-	m_tOptimizesRunChanged.SetEvent();
 
 	int64_t tmPass = sphMicroTimer() - tmStart;
 	int iDiskChunks = m_tRtChunks.GetDiskChunksCount();
 
 	if ( sphInterrupted() )
-	{
 		LogWarning ( "rt: index %s: optimization terminated chunk(s) %d ( left %d ) in %.3t", m_sIndexName.cstr(), iChunks, iDiskChunks, tmPass );
-	} else
-	{
+	else if ( iChunks > 0 )
 		LogInfo ( "rt: index %s: optimized %s chunk(s) %d ( left %d ) in %.3t", m_sIndexName.cstr(), g_bProgressiveMerge ? "progressive" : "regular", iChunks, iDiskChunks, tmPass );
-	}
 }
 
-void RtIndex_c::Optimize ( int iCutoff, int iFromID, int iToID, const char* szUvarFilter, bool bByOrder )
+bool RtIndex_c::CheckValidateOptimizeParams ( OptimizeTask_t& tTask )
 {
-	std::function<bool ( int*, int* )> fnSelector;
-	int iCompress = 0;
-	if ( !iCutoff )
-		iCutoff = sphCpuThreadsCount() * 2;
-
-//	sphInfo ( "rt: index %s: Optimize called with iCutoff=%d, iFromID=%d, iToID=%d, szUvarFilter=%s, bByOrder=%d", m_sIndexName.cstr(), iCutoff, iFromID, iToID, szUvarFilter, !!bByOrder );
-	if ( bByOrder )
+	auto iChunks = m_tRtChunks.GetDiskChunksCount();
+	switch ( tTask.m_eVerb )
 	{
-		auto iChunks = m_tRtChunks.GetDiskChunksCount();
-		if ( iFromID >= iChunks || iToID >= iChunks )
+	case OptimizeTask_t::eMerge:
+		if ( tTask.m_iTo >= iChunks || tTask.m_iTo < 0 )
 		{
-			sphWarning ( "rt: index %s: Optimize: provided chunk %d or %d is out of range [0..%d]", m_sIndexName.cstr(), iFromID, iToID, iChunks - 1 );
-			return;
+			sphWarning ( "rt: index %s: Optimize step: provided chunk %d is out of range [0..%d]", m_sIndexName.cstr(), tTask.m_iTo, iChunks - 1 );
+			return false;
 		}
+		if ( tTask.m_bByOrder )
+			tTask.m_iTo = ChunkIDByChunkIdx ( tTask.m_iTo );
+		if ( tTask.m_iTo < 0 )
+			return false;
+		// no break; check also m_iFrom param then
+	case OptimizeTask_t::eDrop:
+	case OptimizeTask_t::eCompress:
+	case OptimizeTask_t::eSplit:
+		if ( tTask.m_iFrom >= iChunks || tTask.m_iFrom < 0 )
+		{
+			sphWarning ( "rt: index %s: Optimize step: provided chunk %d is out of range [0..%d]", m_sIndexName.cstr(), tTask.m_iFrom, iChunks - 1 );
+			return false;
+		}
+		if ( tTask.m_bByOrder )
+			tTask.m_iFrom = ChunkIDByChunkIdx ( tTask.m_iFrom );
+		if ( tTask.m_iFrom < 0 )
+			return false;
+		break;
+	default:
+		break;
+	}
+	tTask.m_bByOrder=false;
+	return true;
+}
 
-		iFromID = ChunkIDByChunkIdx ( iFromID );
-		iToID = ChunkIDByChunkIdx ( iToID );
-//		sphInfo ( "rt: optimize: idx-from-id makes iFromID=%d and iToID=%d", iFromID, iToID);
+void RtIndex_c::Optimize ( OptimizeTask_t tTask )
+{
+	RTDLOG << "Optimize invoked with " << tTask;
+	if ( !CheckValidateOptimizeParams ( tTask ) )
+		return;
+
+	RTDLOG << "Optimize checked with " << tTask;
+
+	bool bProgressive = g_bProgressiveMerge;
+	switch ( tTask.m_eVerb ) // process all 'single' manual commands
+	{
+	case OptimizeTask_t::eMerge: case OptimizeTask_t::eDrop: case OptimizeTask_t::eCompress: case OptimizeTask_t::eSplit:
+		{
+			auto fnCoro = MakeCoroExecutor ( [this, &tTask]() { CoYield(); } ); // once yield - return tTask. Then end of the function - return false, finish optimize.
+			CommonMerge ( [&fnCoro, &tTask] ( OptimizeTask_t& tRes ) -> bool {
+				bool bRes = !fnCoro();
+				tRes = tTask;
+				return bRes;
+			} );
+		}
+		return;
+	case OptimizeTask_t::eAutoOptimize:
+		bProgressive = true;
+	default:
+		break;
 	}
 
-	// manual case: iFrom and iTo provided from outside, iCutoff is not in game
-	// both iFrom and iTo are ChunkIDs, NOT order chunk numbers!
-	if ( iFromID != -1 || iToID != -1 )
-		// 4 cases are in game:
-		// merge N into -1 = drop chunk N
-		// merge -1 into N = compress chunk N (i.e. wipe deads). If everything dead - will drop chunk.
-		// merge N into self = split chunk N (also filter must be provided)
-		// merge N into M = classical merge. N will be removed, M will be replaced by merged chunk.
-
-		fnSelector = [&iFromID, &iToID] ( int* piA, int* piB ) -> bool {
-			if ( iFromID < 0 && iToID < 0 )
-				return false;
-			*piA = iFromID;
-			*piB = iToID;
-			iFromID = iToID = -1; // that will stop us on the next iteration
-			return true;
-		};
-	else if ( g_bProgressiveMerge )
+	if ( m_tOptimizeRuns.GetValue() > 0 )
 	{
-		// How does this work:
-		// In order to minimize IO operations we merge chunks in order from the smallest to the largest to build a progression
-		// the timeline is: [older chunks], ..., A, A+1, ..., B, ..., [younger chunks]
-		// this also needs meta v.12 (chunk list with possible skips, instead of a base chunk + length as in meta v.11)
-		fnSelector = [this, iCutoff, &iCompress] ( int* piA, int* piB ) -> bool {
-			// take new snapshot on each iteration
-			auto pChunks = m_tRtChunks.DiskChunks();
-			if ( pChunks->IsEmpty() )
-				return false;
+		RTDLOG << "Escape optimize as " << m_tOptimizeRuns.GetValue() << " tasks is already running";
+		sphLogDebug ("Escape optimize as %d tasks is already running", m_tOptimizeRuns.GetValue() );
+		return;
+	}
 
-			// merge 'smallest' to 'smaller' and get 'merged' that names like 'A'+.tmp
-			// however 'merged' got placed at 'B' position and 'merged' renamed to 'B' name
+	if (!bProgressive)
+	{
+		RTDLOG << "Start ClassicOptimize()";
+		ClassicOptimize(); // fixme! retire, remove
+		return;
+	}
 
-			auto chA = GetNextSmallestChunkByID ( *pChunks, -1 );
-			if ( !chA.m_iSize ) // empty chunk - just remove
-			{
-				*piA = chA.m_iId;
-				*piB = -1;
-				return true;
-			}
+	auto fnCoro = MakeCoroExecutor ( [this,&tTask]() {
+	int iCutoff = tTask.m_iCutoff;
+	if ( !iCutoff )
+		iCutoff = GetDefaultCutoff();
 
-			// stop on cutoff for non-empty chunks
-			if ( pChunks->GetLength() <= iCutoff )
-			{
-				if ( iCompress >= pChunks->GetLength() )
-					return false;
+	while ( true )
+	{
+		auto pChunks = m_tRtChunks.DiskChunks();
+		if ( pChunks->GetLength() <= iCutoff )
+			break;
 
-				// optimize (wipe deletes) in the rest of the chunks
-				*piA = -1;
-				*piB = ChunkIDByChunkIdx ( iCompress );
-				++iCompress;
-				return true;
-			}
+		// merge 'smallest' to 'smaller' and get 'merged' that names like 'A'+.tmp
+		// however 'merged' got placed at 'B' position and 'merged' renamed to 'B' name
 
-			auto chB = GetNextSmallestChunkByID ( *pChunks, chA.m_iId );
+		auto chA = GetNextSmallestChunkByID ( *pChunks, -1 );
+		if ( !chA.m_iSize ) // empty chunk - just remove
+		{
+			RTDLOG << "Optimize: drop chunk " << chA.m_iId;
+			tTask.m_iFrom = chA.m_iId;
+			tTask.m_eVerb = OptimizeTask_t::eDrop;
+			CoYield();
+			continue;
+		}
 
-			if ( chA.m_iId < 0 || chB.m_iId < 0 )
-			{
-				sphWarning ( "Couldn't find smallest chunk" );
-				return false;
-			}
+		auto chB = GetNextSmallestChunkByID ( *pChunks, chA.m_iId );
+		if ( chA.m_iId < 0 || chB.m_iId < 0 )
+		{
+//			sphWarning ( "Couldn't find smallest chunk" );
+			break;
+		}
 
-			// we need to make sure that A is the oldest one
-			// indexes go from oldest to newest so A must go before B (A is always older than B)
-			// this is not required by bitmap killlists, but by some other stuff (like ALTER RECONFIGURE)
-			if ( chA.m_iId > chB.m_iId )
-				Swap ( chB, chA );
+		// we need to make sure that A is the oldest one
+		// indexes go from oldest to newest so A must go before B (A is always older than B)
+		// this is not required by bitmap killlists, but by some other stuff (like ALTER RECONFIGURE)
+		if ( chA.m_iId > chB.m_iId )
+			Swap ( chB, chA );
 
-			assert ( piA );
-			assert ( piB );
-			*piA = chA.m_iId;
-			*piB = chB.m_iId;
-			return true;
-		};
-	} else // classical (non-progressive) merge. Fixme! retire?
-		fnSelector = [this] ( int* piA, int* piB ) -> bool {
-			if ( m_tRtChunks.GetDiskChunksCount() < 2 )
-				return false;
+		RTDLOG << "Optimize: merge chunks " << chA.m_iId << " and " << chB.m_iId;
+		tTask.m_iFrom = chA.m_iId;
+		tTask.m_iTo = chB.m_iId;
+		tTask.m_eVerb = OptimizeTask_t::eMerge;
+		CoYield();
+	}
 
-			assert ( piA );
-			assert ( piB );
-			*piA = ChunkIDByChunkIdx ( 0 );
-			*piB = ChunkIDByChunkIdx ( 1 );
-			return true;
-		};
+	RTDLOG << "Optimize: start compressing pass for the rest of " << m_tRtChunks.GetDiskChunksCount() << " chunks.";
+	// optimize (wipe deletes) in the rest of the chunks
+	for ( int i = 0; i < m_tRtChunks.GetDiskChunksCount(); ++i )
+	{
+		tTask.m_iFrom = ChunkIDByChunkIdx ( i );
+		tTask.m_eVerb = OptimizeTask_t::eCompress;
+		RTDLOG << "Optimize: compress chunk " << tTask.m_iFrom << " (" << i << ")";
+		CoYield();
+	}
+	});
 
-	CommonMerge ( std::move ( fnSelector ), szUvarFilter );
+	CommonMerge ( [fnCoro = std::move ( fnCoro ), &tTask] ( OptimizeTask_t& tTask2 ) -> bool {
+		bool bRes = !fnCoro();
+		tTask2 = tTask;
+		return bRes;
+	} );
+}
+
+void RtIndex_c::ClassicOptimize ()
+{
+	OptimizeTask_t tTask;
+	auto fnCoro = MakeCoroExecutor ( [this,&tTask]() {
+		while ( m_tRtChunks.GetDiskChunksCount() >=2 )
+		{
+			tTask.m_iFrom = ChunkIDByChunkIdx ( 0 );
+			tTask.m_iTo = ChunkIDByChunkIdx ( 1 );
+			tTask.m_eVerb = OptimizeTask_t::eMerge;
+			CoYield();
+		}
+	});
+
+	CommonMerge ( [fnCoro = std::move ( fnCoro ), &tTask] ( OptimizeTask_t& tTask2 ) -> bool {
+		bool bRes = !fnCoro();
+		tTask2 = tTask;
+		return bRes;
+	} );
+}
+
+void RtIndex_c::CheckStartAutoOptimize()
+{
+	int iCutoff = AutoOptimizeCutoffMultiplier();
+	RTLOGV << "CheckStartAutoOptimize with cutoff=" << iCutoff;
+	if ( !iCutoff )
+		return;
+
+	iCutoff *= GetDefaultCutoff();
+
+	if ( m_tRtChunks.GetDiskChunksCount()<=iCutoff )
+		return;
+
+	OptimizeTask_t tTask;
+	tTask.m_eVerb = OptimizeTask_t::eAutoOptimize;
+	tTask.m_iCutoff = iCutoff;
+
+	RTDLOG << "EnqueueForOptimizeWeak for " << m_sIndexName << ", auto-optimize with cutoff " << iCutoff;
+
+	EnqueueForOptimizeWeak ( m_sIndexName, tTask );
 }
 
 

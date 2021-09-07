@@ -2320,9 +2320,9 @@ public:
 		if ( pDoc && iDocLen>0 && m_iLenDelim>0 && m_iCount!=0 )
 		{
 			if ( m_iCount>0 )
-				LeftSearch( pDoc, iDocLen, m_iCount, false, ppStr, &iLength );
+				LeftSearch ( pDoc, iDocLen, m_iCount, false, ppStr, &iLength );
 			else
-				RightSearch( pDoc, iDocLen, m_iCount, ppStr, &iLength );
+				RightSearch ( pDoc, iDocLen, m_iCount, ppStr, &iLength );
 		}
 
 		FreeDataPtr ( *m_pArg, pDoc );
@@ -3700,7 +3700,7 @@ const static TokhKeyVal_t g_dKeyValTokens[] = // no order is necessary, but crea
     	{ "lower",          FUNC_LOWER           },
 
 
-    { "last_insert_id",	FUNC_LAST_INSERT_ID	 },
+    	{ "last_insert_id",	FUNC_LAST_INSERT_ID	 },
 	{ "levenshtein",	FUNC_LEVENSHTEIN	 },
 
 	// other reserved (operators, columns, etc.)

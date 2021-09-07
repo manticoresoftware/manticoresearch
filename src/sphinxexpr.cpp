@@ -3582,7 +3582,7 @@ enum Tokh_e : BYTE
 
 	FUNC_SUBSTRING_INDEX,
 	FUNC_UPPER,
-    	FUNC_LOWER,
+	FUNC_LOWER,
 
 	FUNC_LAST_INSERT_ID,
 	FUNC_LEVENSHTEIN,
@@ -3696,11 +3696,10 @@ const static TokhKeyVal_t g_dKeyValTokens[] = // no order is necessary, but crea
 	{ "regex",			FUNC_REGEX			 },
 
 	{ "substring_index",FUNC_SUBSTRING_INDEX },
-    	{ "upper",          FUNC_UPPER           },
-    	{ "lower",          FUNC_LOWER           },
+	{ "upper",          FUNC_UPPER           },
+	{ "lower",          FUNC_LOWER           },
 
-
-    	{ "last_insert_id",	FUNC_LAST_INSERT_ID	 },
+	{ "last_insert_id",	FUNC_LAST_INSERT_ID	 },
 	{ "levenshtein",	FUNC_LEVENSHTEIN	 },
 
 	// other reserved (operators, columns, etc.)
@@ -3937,10 +3936,10 @@ static FuncDesc_t g_dFuncs[FUNC_FUNCS_COUNT] = // Keep same order as in Tokh_e
 	{  /*"regex",		*/		2,	TOK_FUNC,		/*FUNC_REGEX,			*/	SPH_ATTR_INTEGER },
 
 	{  /*"substring_index",*/	3,	TOK_FUNC,		/*FUNC_SUBSTRING_INDEX,	*/	SPH_ATTR_STRINGPTR },
-    	{  /*"upper",          */	1,	TOK_FUNC,		/*FUNC_UPPER,           */	SPH_ATTR_STRINGPTR },
-    	{  /*"lower",          */	1,	TOK_FUNC,		/*FUNC_LOWER,           */	SPH_ATTR_STRINGPTR },
+	{  /*"upper",          */	1,	TOK_FUNC,		/*FUNC_UPPER,           */	SPH_ATTR_STRINGPTR },
+	{  /*"lower",          */	1,	TOK_FUNC,		/*FUNC_LOWER,           */	SPH_ATTR_STRINGPTR },
 
-    	{  /*"last_insert_id",*/	0,	TOK_FUNC,		/*FUNC_LAST_INSERT_ID,	*/	SPH_ATTR_STRINGPTR },
+	{  /*"last_insert_id",*/	0,	TOK_FUNC,		/*FUNC_LAST_INSERT_ID,	*/	SPH_ATTR_STRINGPTR },
 	{ /*"levenshtein", */		-1,	TOK_FUNC,		/*FUNC_LEVENSHTEIN,		*/	SPH_ATTR_NONE },
 };
 

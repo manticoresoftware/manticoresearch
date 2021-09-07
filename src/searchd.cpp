@@ -18048,7 +18048,7 @@ void ShowHelp ()
 		"\n"
 		"Options are:\n"
 		"-h, --help\t\tdisplay this help message\n"
-		"-v\t\t\tdisplay version information\n"
+		"-v, --version\t\t\tdisplay version information\n"
 		"-c, --config <file>\tread configuration from specified file\n"
 		"\t\t\t(default is manticore.conf)\n"
 		"--stop\t\t\tsend SIGTERM to currently running searchd\n"
@@ -19193,8 +19193,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 		// handle no-arg options
 		OPT ( "-h", "--help" )		{ ShowHelp(); return 0; }
-		OPT ( "-?", "--?" )			{ ShowHelp(); return 0; }
-		OPT1 ( "-v" )				{ return 0; }
+		OPT ( "-?", "--?" )		{ ShowHelp(); return 0; }
+		OPT ( "-v", "--version" )	{ return 0; }
 		OPT1 ( "--console" )		{ g_bOptNoLock = true; g_bOptNoDetach = true; bTestMode = true; }
 		OPT1 ( "--stop" )			bOptStop = true;
 		OPT1 ( "--stopwait" )		{ bOptStop = true; bOptStopWait = true; }

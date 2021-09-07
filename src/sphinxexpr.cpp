@@ -2320,9 +2320,9 @@ public:
 		if ( pDoc && iDocLen>0 && m_iLenDelim>0 && m_iCount!=0 )
 		{
 			if ( m_iCount>0 )
-			        LeftSearch( pDoc, iDocLen, m_iCount, false, ppStr, &iLength );
+			    LeftSearch( pDoc, iDocLen, m_iCount, false, ppStr, &iLength );
 			else
-                    RightSearch( pDoc, iDocLen, m_iCount, ppStr, &iLength );
+                RightSearch( pDoc, iDocLen, m_iCount, ppStr, &iLength );
 		}
 
 		FreeDataPtr ( *m_pArg, pDoc );
@@ -3584,7 +3584,7 @@ enum Tokh_e : BYTE
 	FUNC_UPPER,
     FUNC_LOWER,
 
-    FUNC_LAST_INSERT_ID,
+	FUNC_LAST_INSERT_ID,
 	FUNC_LEVENSHTEIN,
 
 	FUNC_FUNCS_COUNT, // insert any new functions ABOVE this one
@@ -3940,7 +3940,7 @@ static FuncDesc_t g_dFuncs[FUNC_FUNCS_COUNT] = // Keep same order as in Tokh_e
     {  /*"upper",          */	1,	TOK_FUNC,		/*FUNC_UPPER,           */	SPH_ATTR_STRINGPTR },
     {  /*"lower",          */	1,	TOK_FUNC,		/*FUNC_LOWER,           */	SPH_ATTR_STRINGPTR },
 
-    { /*"last_insert_id",*/	0,	TOK_FUNC,		/*FUNC_LAST_INSERT_ID,	*/	SPH_ATTR_STRINGPTR },
+    {  /*"last_insert_id",*/	0,	TOK_FUNC,		/*FUNC_LAST_INSERT_ID,	*/	SPH_ATTR_STRINGPTR },
 	{ /*"levenshtein", */		-1,	TOK_FUNC,		/*FUNC_LEVENSHTEIN,		*/	SPH_ATTR_NONE },
 };
 

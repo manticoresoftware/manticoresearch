@@ -2,14 +2,12 @@
 
 <!-- example update -->
 
-UPDATE changes attribute values of existing documents in a specified index with new values. Note that you can't update contents of a fulltext field. If there's a need to change contents of a full-text field, use [REPLACE](../Updating_documents/REPLACE.md).
+UPDATE changes [row-wise](../Creating_an_index/Data_types.md#Row-wise-and-columnar-attribute-storages) attribute values of existing documents in a specified index with new values. Note that you can't update contents of a fulltext field or a columnar attribute. If there's such a need, use [REPLACE](../Updating_documents/REPLACE.md).
 
-Attribute updates are supported for RT, PQ and plain indexes. All attribute types can be updated.
+Attribute updates are supported for RT, PQ and plain indexes. All attribute types can be updated as long as they are stored in the [traditional row-wise storage](../Creating_an_index/Data_types.md#Row-wise-and-columnar-attribute-storages).
 
 
-Note that document id cannot be updated.
-:::
-
+**Note that document id cannot be updated.**
 
 <!-- intro -->
 ##### SQL:

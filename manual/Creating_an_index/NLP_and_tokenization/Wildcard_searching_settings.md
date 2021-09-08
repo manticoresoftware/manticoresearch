@@ -290,11 +290,11 @@ expand_keywords = {0|1|exact|star}
 
 Expands keywords with their exact forms (i.e. the forms of the keywords before applying any morphological modifications) and/or stars when possible. The supported values are:
 * 1 - expand to both the exact form and the form with the stars. `running` will become `(running | *running* | =running)`
-* `exact` - augment the keyword with only its exact form. `running` will beome `(running | =running)`
+* `exact` - augment the keyword with only its exact form. `running` will become `(running | =running)`
 * `star` - augment the keyword by adding `*` around it.  `running` will become `(running | *running*)`
 Optional, default is 0 (do not expand keywords).
 
-Queries against indexes with `expand_keywords` feature enabled are internally expanded as follows. If the index was built with prefix or infix indexing enabled, every keyword gets internally replaced with a disjunction of keyword itself and a respective prefix or infix (keyword  with stars). If the index was built with both stemming and [index_exact_words](../../Creating_an_index/NLP_and_tokenization/Morphology.md#index_exact_words)  enabled, exact form is also added. 
+Queries against indexes with `expand_keywords` feature enabled are internally expanded as follows: if the index was built with prefix or infix indexing enabled, every keyword gets internally replaced with a disjunction of the keyword itself and a respective prefix or infix (keyword  with stars). If the index was built with both stemming and [index_exact_words](../../Creating_an_index/NLP_and_tokenization/Morphology.md#index_exact_words) enabled, exact form is also added. 
 
 <!-- intro -->
 ##### SQL:

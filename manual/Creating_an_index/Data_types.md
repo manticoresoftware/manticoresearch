@@ -926,7 +926,7 @@ index products
 
 ## Boolean
 
-<!-- example for bigints  -->
+<!-- example for boolean  -->
 
 Declares a boolean attribute. It's equivalent to an integer attribute with bit count of 1.
 

@@ -16,34 +16,26 @@
 /////////////////////////////////////////////////////////////////////////////
 // index optimization
 /////////////////////////////////////////////////////////////////////////////
-struct OptimizeTask_t
+struct OptimizeJob_t
 {
-	int m_iFrom;
-	int m_iTo;
-	int m_iCutoff;
 	CSphString m_sIndex;
-	CSphString m_sFilter;
-	bool m_bByOrder;
+	OptimizeTask_t m_tTask;
 
-	OptimizeTask_t (CSphString sIndex, int iCutoff, int iFrom, int iTo, const char* szFilter, bool bByOrder)
-	: m_iFrom (iFrom)
-	, m_iTo (iTo)
-	, m_iCutoff (iCutoff)
-	, m_sIndex {std::move (sIndex)}
-	, m_sFilter ( szFilter )
-	, m_bByOrder ( bByOrder )
+	OptimizeJob_t ( CSphString sIndex, OptimizeTask_t tTask )
+		: m_sIndex { std::move ( sIndex ) }
+		, m_tTask { std::move ( tTask ) }
 	{}
 };
 
-void EnqueueForOptimize ( CSphString sIndex, int iCutoff, int iFrom, int iTo, const char* szUvarFilter, bool bByOrder )
+void EnqueueForOptimize ( CSphString sIndex, OptimizeTask_t tTask )
 {
 	static int iOptimizeTask = -1;
 	if ( iOptimizeTask<0 )
 		iOptimizeTask = TaskManager::RegisterGlobal ( "optimize",
 			[] ( void* pPayload ) // worker
 			{
-				CSphScopedPtr<OptimizeTask_t> pTask { (OptimizeTask_t *) pPayload };
-				auto pServed = GetServed ( pTask->m_sIndex );
+				CSphScopedPtr<OptimizeJob_t> pJob { (OptimizeJob_t *) pPayload };
+				auto pServed = GetServed ( pJob->m_sIndex );
 
 				if ( !pServed )
 					return;
@@ -57,12 +49,16 @@ void EnqueueForOptimize ( CSphString sIndex, int iCutoff, int iFrom, int iTo, co
 
 				// FIXME: MVA update would wait w-lock here for a very long time
 				assert ( dReadLocked->m_eType==IndexType_e::RT );
-				const char* szFilter = pTask->m_sFilter.IsEmpty() ? nullptr : pTask->m_sFilter.cstr();
-				static_cast<RtIndex_i*>( dReadLocked->m_pIndex )->Optimize (pTask->m_iCutoff, pTask->m_iFrom, pTask->m_iTo, szFilter, pTask->m_bByOrder);
+				static_cast<RtIndex_i*> ( dReadLocked->m_pIndex )->Optimize ( pJob->m_tTask );
 			},
 			[] ( void* pPayload ) // releaser
 			{
-				CSphScopedPtr<OptimizeTask_t> pTask { (OptimizeTask_t *) pPayload };
+				CSphScopedPtr<OptimizeJob_t> pTask { (OptimizeJob_t *) pPayload };
 			}, 1 );
-	TaskManager::StartJob ( iOptimizeTask, new OptimizeTask_t (std::move(sIndex), iCutoff, iFrom, iTo, szUvarFilter, bByOrder) );
+	TaskManager::StartJob ( iOptimizeTask, new OptimizeJob_t ( std::move ( sIndex ), std::move ( tTask ) ) );
+}
+
+void ServeAutoOptimize()
+{
+	EnqueueForOptimizeExecutor() = &EnqueueForOptimize;
 }

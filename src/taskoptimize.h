@@ -12,11 +12,11 @@
 /// @file taskoptimize.h
 /// On-demand index optimization
 
-#ifndef MANTICORE_TASKOPTIMIZE_H
-#define MANTICORE_TASKOPTIMIZE_H
+#pragma once
 
-#include "sphinxstd.h"
+#include "sphinxrt.h"
 
-void EnqueueForOptimize ( CSphString sIndex, int iCutoff = 0, int iFrom = -1, int iTo = -1, const char* szUvarFilter = nullptr, bool byOrder = true );
+void EnqueueForOptimize ( CSphString sIndex, OptimizeTask_t tTask );
 
-#endif //MANTICORE_TASKOPTIMIZE_H
+// link EnqueueForOptimize with rt indexes (using strong link requires task to be available in indexer/indextool/converter/whatever, but we want serve only from searchd)
+void ServeAutoOptimize();

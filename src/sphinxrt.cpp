@@ -825,6 +825,7 @@ public:
 	CSphIndex & CastIdx () const		{ return *const_cast<CSphIndex *>(m_pIndex); } // const breakage!
 	const CSphIndex & Cidx() const		{ return *m_pIndex; }
 
+	mutable std::atomic<bool>			m_bOptimizing { false };	// to protect from simultaneous optimizing one and same chunk
 	mutable bool						m_bFinallyUnlink = false; // unlink index files on destroy
 	mutable Threads::CoroRWLock_c 		m_tLock;        // fine-grain lock
 };
@@ -8156,6 +8157,8 @@ static ChunkAndSize_t GetNextSmallestChunkByID ( const DiskChunkVec_c& dDiskChun
 	int64_t iLastSize = INT64_MAX;
 	for ( const auto& pDiskChunk : dDiskChunks )
 	{
+		if ( pDiskChunk->m_bOptimizing.load(std::memory_order_relaxed) )
+			continue;
 		const CSphIndex& dDiskChunk = pDiskChunk->Cidx();
 		int64_t iSize = GetChunkSize ( dDiskChunk );
 		if ( iSize < iLastSize && iChunkID != dDiskChunk.m_iChunk )
@@ -8165,6 +8168,11 @@ static ChunkAndSize_t GetNextSmallestChunkByID ( const DiskChunkVec_c& dDiskChun
 		}
 	}
 	return { iRes, iLastSize };
+}
+
+static int GetNumOfOptimizingNow ( const DiskChunkVec_c& dDiskChunks )
+{
+	return (int)dDiskChunks.count_of ( [] ( auto& i ) { return i->m_bOptimizing.load ( std::memory_order_relaxed ); } );
 }
 
 int RtIndex_c::ChunkIDByChunkIdx ( int iChunkIdx ) const
@@ -8494,6 +8502,9 @@ bool RtIndex_c::CompressOneChunk ( int iChunkID, int& iAffected )
 
 	sphLogDebug ( "compress %d (%d kb)", iChunkID, (int)( GetChunkSize ( tVictim ) / 1024 ) );
 
+	pVictim->m_bOptimizing.store ( true, std::memory_order_relaxed );
+	auto tResetOptimizing = AtScopeExit ( [pVictim] { pVictim->m_bOptimizing.store ( false, std::memory_order_relaxed ); } );
+
 	// merge data to disk ( data is constant during that phase )
 	RTMergeCb_c tMonitor ( &m_bOptimizeStop, this );
 	CSphIndexProgress tProgress ( &tMonitor );
@@ -8605,6 +8616,9 @@ bool RtIndex_c::SplitOneChunk ( int iChunkID, const char* szUvarFilter, int& iAf
 	assert ( pVictim && "non-existent chunks should be already rejected by SplitOneChunkFast" );
 	CSphIndex& tVictim = pVictim->CastIdx(); // non-const need to invoke 'merge'
 	sphLogDebug ( "split %d (%d kb) with %s", iChunkID, (int)( GetChunkSize ( tVictim ) / 1024 ), szUvarFilter );
+
+	pVictim->m_bOptimizing.store ( true, std::memory_order_relaxed );
+	auto tResetOptimizing = AtScopeExit ( [pVictim] { pVictim->m_bOptimizing.store ( false, std::memory_order_relaxed ); } );
 
 	const UservarIntSet_c pUservar = Uservars ( szUvarFilter );
 	assert ( pUservar ); // detailed check already performed in splitOneChunkFast
@@ -8729,6 +8743,11 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID )
 		sphWarning ( "rt optimize: index %s: merge chunks %d and %d failed, chunk ID %d is not valid!", m_sIndexName.cstr(), iAID, iBID, iBID );
 		return false;
 	}
+
+	pA->m_bOptimizing.store ( true, std::memory_order_relaxed );
+	auto tResetOptimizingA = AtScopeExit ( [pA] { pA->m_bOptimizing.store ( false, std::memory_order_relaxed ); } );
+	pB->m_bOptimizing.store ( true, std::memory_order_relaxed );
+	auto tResetOptimizingB = AtScopeExit ( [pB] { pB->m_bOptimizing.store ( false, std::memory_order_relaxed ); } );
 
 	sphLogDebug ( "common merge - merging %d (%d kb) with %d (%d kb)",
 			iAID,
@@ -8869,6 +8888,11 @@ bool RtIndex_c::CheckValidateOptimizeParams ( OptimizeTask_t& tTask )
 			tTask.m_iTo = ChunkIDByChunkIdx ( tTask.m_iTo );
 		if ( tTask.m_iTo < 0 )
 			return false;
+		if ( m_tRtChunks.DiskChunkByID ( tTask.m_iTo )->m_bOptimizing.load ( std::memory_order_relaxed ) )
+		{
+			sphWarning ( "rt: index %s: Optimize step: provided chunk %d is now occupied in another optimize pass", m_sIndexName.cstr(), tTask.m_iTo );
+			return false;
+		}
 		// no break; check also m_iFrom param then
 	case OptimizeTask_t::eDrop:
 	case OptimizeTask_t::eCompress:
@@ -8882,6 +8906,11 @@ bool RtIndex_c::CheckValidateOptimizeParams ( OptimizeTask_t& tTask )
 			tTask.m_iFrom = ChunkIDByChunkIdx ( tTask.m_iFrom );
 		if ( tTask.m_iFrom < 0 )
 			return false;
+		if ( m_tRtChunks.DiskChunkByID ( tTask.m_iFrom )->m_bOptimizing.load ( std::memory_order_relaxed ) )
+		{
+			sphWarning ( "rt: index %s: Optimize step: provided chunk %d is now occupied in another optimize pass", m_sIndexName.cstr(), tTask.m_iFrom );
+			return false;
+		}
 		break;
 	default:
 		break;
@@ -8939,7 +8968,7 @@ void RtIndex_c::Optimize ( OptimizeTask_t tTask )
 	while ( true )
 	{
 		auto pChunks = m_tRtChunks.DiskChunks();
-		if ( pChunks->GetLength() <= iCutoff )
+		if ( ( pChunks->GetLength() - GetNumOfOptimizingNow ( *pChunks ) ) <= iCutoff )
 			break;
 
 		// merge 'smallest' to 'smaller' and get 'merged' that names like 'A'+.tmp

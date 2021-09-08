@@ -355,7 +355,7 @@ Value: **not specified** (default), target_index_name:kl, target_index_name:id, 
 columnar_attrs = id, attr1, attr2, attr3
 ```
 
-Specifies what attributes should be stored in [the columnar storage](https://github.com/manticoresoftware/columnar/) instead of the default row-wise storage.
+Specifies what attributes should be stored in [the columnar storage](../../Creating_an_index/Data_types.md#Row-wise-and-columnar-attribute-storages) instead of the default row-wise storage.
 
 `id` is also supported.
 
@@ -382,17 +382,17 @@ Read [more about data types here](../../Creating_an_index/Data_types.md).
 
 | Type | Equivalent in a configuration file | Notes | Aliases |
 | - | - | - | - |
-| text | rt_field  | Options: indexed, stored. Default - **both**. To keep text stored, but indexed specify "stored" only. To keep text indexed only specify only "indexed". At least one "text" field should be specified in an index | |
-| integer | rt_attr_uint	| integer	 | int, uint |
-| bigint | rt_attr_bigint	| big integer	 |   |
-| float | rt_attr_float   | float  |   |
-| multi | rt_attr_multi   | multi-integer |   |
-| multi64 | rt_attr_multi_64 | multi-bigint  |   |
-| bool | rt_attr_bool | boolean |   |
-| json | rt_attr_json | JSON |   |
-| string | rt_attr_string | string. Option: indexed - also index the strings in a full-text field with same name.   |   |
-| timestamp |	rt_attr_timestamp | timestamp  |   |
-| bit(n) | rt_attr_uint field_name:N | N is the max number of bits to keep  |   |
+| [text](../../Creating_an_index/Data_types.md#Text) | [rt_field](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_field)  | Options: indexed, stored. Default - **both**. To keep text stored, but indexed specify "stored" only. To keep text indexed only specify only "indexed". At least one "text" field should be specified in an index | string |
+| [integer](../../Creating_an_index/Data_types.md#Integer) | [rt_attr_uint](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_attr_uint)	| integer	 | int, uint |
+| [bigint](../../Creating_an_index/Data_types.md#Big-Integer) | [rt_attr_bigint](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_attr_bigint)	| big integer	 |   |
+| [float](../../Creating_an_index/Data_types.md#Float) | [rt_attr_float](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_attr_float)   | float  |   |
+| [multi](../../Creating_an_index/Data_types.md#Multi-value-integer-%28MVA%29) | [rt_attr_multi](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_attr_multi)   | multi-integer |   |
+| [multi64](../../Creating_an_index/Data_types.md#Multi-value-big-integer) | [rt_attr_multi_64](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_attr_multi_64) | multi-bigint  |   |
+| [bool](../../Creating_an_index/Data_types.md#Boolean) | [rt_attr_bool](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_attr_bool) | boolean |   |
+| [json](../../Creating_an_index/Data_types.md#JSON) | [rt_attr_json](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_attr_json) | JSON |   |
+| [string](../../Creating_an_index/Data_types.md#String) | [rt_attr_string](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_attr_string) | string. Option: indexed - also index the strings in a full-text field with same name.   |   |
+| [timestamp](../../Creating_an_index/Data_types.md#Timestamps) |	[rt_attr_timestamp](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_attr_timestamp) | timestamp  |   |
+| [bit(n)](../../Creating_an_index/Data_types.md#Integer) | [rt_attr_uint field_name:N](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_attr_uint) | N is the max number of bits to keep  |   |
 
 <!-- intro -->
 ##### Examples of creating a real-time index via CREATE TABLE
@@ -414,6 +414,22 @@ creates table "products" with three fields:
 <!-- end -->
 
 
+## Engine
+
+```ini
+create table ... engine='columnar';
+create table ... engine='rowwise';
+```
+
+Changes default [attribute storage](../../Creating_an_index/Data_types.md#Row-wise-and-columnar-attribute-storages) for all attributes in the index. Can be overridden by specifying `engine` [separately for each attribute](../../Creating_an_index/Data_types.md#How-to-switch-between-the-storages).
+
+See [columnar_attrs](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#columnar_attrs) on how to enable columnar storage for a plain index.
+
+Values:
+* columnar - enables columnar storage for all index attributes except for [json](../../Creating_an_index/Data_types.md#JSON)
+* **rowwise (default)** - doesn't change anything, i.e. makes Manticore use the traditional row-wise storage for the index
+
+
 # Other settings
 The following settings are similar for both real-time and plain index in either mode: whether specified in a configuration file or online via `CREATE` or `ALTER` command.
 
@@ -422,9 +438,9 @@ The following settings are similar for both real-time and plain index in either 
 ### Accessing index files
 Manticore uses two access modes to read index data - seek+read and mmap.
 
-In seek+read mode the server performs system call pread(2) to read document lists and keyword positions, i.e. `*.spd` and `*.spp` files. Internal read buffers are used to optimize reading. The size of these buffers can be tuned with options [read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) and [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits). There is also option [preopen](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#preopen) that allows to control how Manticore opens files at start.
+In seek+read mode the server performs system call `pread` to read document lists and keyword positions, i.e. `*.spd` and `*.spp` files. Internal read buffers are used to optimize reading. The size of these buffers can be tuned with options [read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) and [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits). There is also option [preopen](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#preopen) that allows to control how Manticore opens files at start.
 
-In the mmap access mode the search server just maps index's file into memory with mmap(2) system call and OS caches file contents by itself. Options [read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) and [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits) have no effect for corresponding files in this mode. The mmap reader can also lock index's data in memory via mlock(2) privileged call which prevents swapping out the cached data to disk by OS.
+In the mmap access mode the search server just maps index's file into memory with `mmap` system call and OS caches file contents by itself. Options [read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) and [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits) have no effect for corresponding files in this mode. The mmap reader can also lock index's data in memory via `mlock` privileged call which prevents swapping out the cached data to disk by OS.
 
 To control what access mode will be used **access_plain_attrs**, **access_blob_attrs**, **access_doclists** and **access_hitlists** options are available with the following values:
 
@@ -447,19 +463,27 @@ Here is a table which can help you select your desired mode:
 
 | index part |	keep it on disk |	keep it in memory |	cached in memory on server start | lock it in memory |
 | - | - | - | - | - |
-| plain attributes, skip lists, word lists, lookups, killed docs | 	mmap | mmap |	**mmap_preread** (default) | mlock |
-| string, multi-value attributes (MVA) and json attributes | mmap | mmap | **mmap_preread** (default) | mlock |
+| plain attributes in [row-wise](../../Creating_an_index/Data_types#Row-wise-and-columnar-attribute-storages) (non-columnar) storage, skip lists, word lists, lookups, killed docs | 	mmap | mmap |	**mmap_preread** (default) | mlock |
+| row-wise string, multi-value attributes (MVA) and json attributes | mmap | mmap | **mmap_preread** (default) | mlock |
+| [columnar](../../Creating_an_index/Data_types#Row-wise-and-columnar-attribute-storages) numeric, string and multi-value attributes | always  | only by means of OS  | no  | not supported |
 | doc lists | **file** (default) | mmap | no	| mlock |
 | hit lists | **file** (default) | mmap | no	| mlock |
 
 ##### The recommendations are:
 
-* If you want **the best search response time** and have enough memory - use mlock for attributes and for doclists/hitlists. Be aware mlock is a privileged system call and the user running searchd should have enough privileges.
-* If you **can't afford lower performance on start** and ready to wait longer on start until it's warmed up - use `--force-preread` If you want searchd to be able to restart faster - stay with mmap_preread
-* If you want to **save RAM** - do not use mlock, then your OS will decide what should be in memory at any given moment of time depending on what is read from disk more frequently
-* If search **performance doesn't matter** at all and you want to save maximum RAM - use access_doclists/access_hitlists=file and access_plain_attrs/access_blob_attrs=mmap
+* If you want **the best search response time** and have enough memory - use [row-wise](../../Creating_an_index/Data_types.md#Row-wise-and-columnar-attribute-storages) attributes and `mlock` for attributes and for doclists/hitlists
+* If you **can't afford lower performance on start** and are ready to wait longer on start until it's warmed up - use [--force-preread](../../Starting_the_server/Manually.md#searchd-command-line-options). If you want searchd to be able to restart faster - stay with `mmap_preread`
+* If you want to **save RAM**, but still have enough RAM for all the attributes - do not use `mlock`, then your OS will decide what should be in memory at any given moment of time depending on what is read from disk more frequently
+* If row-wise **attributes don't fit into RAM** - use [columnar attributes](../../Creating_an_index/Data_types.md#Row-wise-and-columnar-attribute-storages)
+* If full-text search **performance is not a priority** and you want to save RAM - use `access_doclists/access_hitlists=file`
 
-The default mode is to mmap and pre-read attributes and access doclists/hitlists directly from disk which provides decent search performance, optimal memory usage and faster searchd restart in most cases.
+The default mode is to:
+* mmap
+* preread non-columnar attributes
+* seek+read columnar attributes with no preread
+* seek+read doclists/hitlists with no preread
+
+which provides decent search performance, optimal memory usage and faster searchd restart in most cases.
 
 ### Other performance related settings
 

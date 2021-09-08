@@ -25,6 +25,7 @@ void					CheckColumnarStorage ( const CSphString & sFile, DWORD uNumRows, std::f
 bool			InitColumnar ( CSphString & sError );
 void			ShutdownColumnar();
 const char *	GetColumnarVersionStr();
+int				GetColumnarStorageVersion();
 bool			IsColumnarLibLoaded();
 
 #endif // _columnarlib_

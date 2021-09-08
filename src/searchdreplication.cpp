@@ -2891,7 +2891,7 @@ struct SyncSrc_t
 	BYTE * GetChunkHash ( int iFile, int iChunk ) const
 	{
 		assert ( iFile>=0 && iFile<m_dBaseNames.GetLength() );
-		assert ( iChunk>=0 && iChunk<m_dChunks[iFile].GetChunksCount() );
+		assert ( !m_dChunks[iFile].GetChunksCount() || ( iChunk>=0 && iChunk<m_dChunks[iFile].GetChunksCount() ) );
 		return m_dHashes.Begin() + ( m_dChunks[iFile].m_iHashStartItem + iChunk ) * HASH20_SIZE;
 	}
 };
@@ -4474,7 +4474,7 @@ static bool InitReader ( FileReader_t & tReader, StringBuilder_c & sErrors )
 		if ( !pDst->m_dNodeChunks.BitGet ( tChunk.m_iHashStartItem + iChunk ) )
 			break;
 	}
-	assert ( iChunk<iCount );
+	assert ( !iCount || iChunk<iCount );
 	assert ( !pDst->m_dNodeChunks.BitGet ( tChunk.m_iHashStartItem + iChunk ) );
 
 	tReader.m_tArgs.m_sRemoteFileName = pDst->m_dRemotePaths[iFile];

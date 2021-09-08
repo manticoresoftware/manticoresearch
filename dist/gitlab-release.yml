@@ -189,7 +189,7 @@ rhel8:
     - if: $WHAT =~ /rhel8/
   variables:
     REPO_DIST_VER: "8"
-  image: registry.gitlab.com/manticoresearch/dev/centos8_cmake:320
+  image: registry.gitlab.com/manticoresearch/dev/centos8_clang:11
   cache:
     key: rhel8
     paths:
@@ -209,7 +209,7 @@ stretch:
     - if: $WHAT==null
     - if: $WHAT=="all"
     - if: $WHAT =~ /stretch/
-  image: registry.gitlab.com/manticoresearch/dev/stretch_cmake:320
+  image: registry.gitlab.com/manticoresearch/dev/stretch_clang:12
   cache:
     key: stretch
     paths:
@@ -230,7 +230,7 @@ xenial:
     - if: $WHAT==null
     - if: $WHAT=="all"
     - if: $WHAT =~ /xenial/
-  image: registry.gitlab.com/manticoresearch/dev/xenial_cmake:320
+  image: registry.gitlab.com/manticoresearch/dev/xenial_clang:12
   cache:
     key: xenial
     paths:
@@ -251,7 +251,7 @@ bionic:
     - if: $WHAT==null
     - if: $WHAT=="all"
     - if: $WHAT =~ /bionic/
-  image: registry.gitlab.com/manticoresearch/dev/bionic_cmake:320
+  image: registry.gitlab.com/manticoresearch/dev/bionic_clang:12
   cache:
     key: bionic
     paths:
@@ -272,7 +272,7 @@ focal:
     - if: $WHAT==null
     - if: $WHAT=="all"
     - if: $WHAT =~ /focal/
-  image: registry.gitlab.com/manticoresearch/dev/focal_cmake:320
+  image: registry.gitlab.com/manticoresearch/dev/focal_clang:12
   cache:
     key: focal
     paths:
@@ -309,7 +309,7 @@ buster:
     - if: $WHAT==null
     - if: $WHAT=="all"
     - if: $WHAT =~ /buster/
-  image: registry.gitlab.com/manticoresearch/dev/buster_cmake:320
+  image: registry.gitlab.com/manticoresearch/dev/buster_clang:12
   cache:
     key: buster
     paths:

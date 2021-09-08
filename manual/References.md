@@ -92,7 +92,10 @@
 * [/pq/idx/search](Searching/Percolate_query.md) - Performs reverse search in a percolate index
 
 ### Common things
-* [Data types](Creating_an_index/Data_types.md)
+* [data types](Creating_an_index/Data_types.md)
+* [engine](Creating_an_index/Data_types.md#How-to-switch-between-the-storages)
+* [plain mode](Read_this_first.md#Real-time-mode-vs-plain-mode)
+* [real-time mode](Read_this_first.md#Real-time-mode-vs-plain-mode)
 
 ##### Common index settings
 * [access_plain_attrs](Server_settings/Searchd.md#access_plain_attrs)
@@ -150,13 +153,14 @@
 * [stopwords](Creating_an_index/NLP_and_tokenization/Ignoring_stop-words.md#stopwords)
 * [stopword_step](Creating_an_index/NLP_and_tokenization/Ignoring_stop-words.md#stopword_step)
 * [stopwords_unstemmed](Creating_an_index/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_unstemmed)
-* [stored_fields](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#stored_fields)
-* [stored_only_fields](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#stored_only_fields)
 * [type](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#type)
 * [wordforms](Creating_an_index/NLP_and_tokenization/Wordforms.md#wordforms)
 
 ##### Plain index settings
 * [source](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#source)
+* [stored_fields](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#stored_fields)
+* [stored_only_fields](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#stored_only_fields)
+* [columnar_attrs](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#columnar_attrs)
 
 ##### Distributed index settings
 * [local](Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md)

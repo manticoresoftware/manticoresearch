@@ -16,12 +16,14 @@ using CreateStorageReader_fn =	columnar::Columnar_i * (*) ( const std::string & 
 using CreateBuilder_fn =		columnar::Builder_i * (*) ( const columnar::Settings_t & tSettings, const columnar::Schema_t & tSchema, const std::string & sFile, std::string & sError );
 using CheckStorage_fn =			void (*) ( const std::string & sFilename, uint32_t uNumRows, std::function<void (const char*)> & fnError, std::function<void (const char*)> & fnProgress );
 using VersionStr_fn =			const char * (*)();
+using GetVersion_fn	=			int (*)();
 
 static void *					g_pColumnarLib = nullptr;
 static CreateStorageReader_fn	g_fnCreateColumnarStorage = nullptr;
 static CreateBuilder_fn 		g_fnCreateColumnarBuilder = nullptr;
 static CheckStorage_fn			g_fnCheckColumnarStorage = nullptr;
 static VersionStr_fn			g_fnVersionStr = nullptr;
+static GetVersion_fn			g_fnStorageVersion  = nullptr;
 
 /////////////////////////////////////////////////////////////////////
 
@@ -173,7 +175,6 @@ bool InitColumnar ( CSphString & sError )
 
 	sphLogDebug ( "dlopen(%s)=%p", sLibfile.cstr(), tHandle.Get() );
 
-	using GetVersion_fn = int (*)();
 	GetVersion_fn fnGetVersion;
 	if ( !LoadFunc ( fnGetVersion, tHandle.Get(), "GetColumnarLibVersion", sLibfile, sError ) )
 		return false;
@@ -189,6 +190,7 @@ bool InitColumnar ( CSphString & sError )
 	if ( !LoadFunc ( g_fnCreateColumnarBuilder, tHandle.Get(), "CreateColumnarBuilder", sLibfile, sError ) )		return false;
 	if ( !LoadFunc ( g_fnCheckColumnarStorage, tHandle.Get(), "CheckColumnarStorage", sLibfile, sError ) )			return false;
 	if ( !LoadFunc ( g_fnVersionStr, tHandle.Get(), "GetColumnarLibVersionStr", sLibfile, sError ) )				return false;
+	if ( !LoadFunc ( g_fnStorageVersion, tHandle.Get(), "GetColumnarStorageVersion", sLibfile, sError ) )			return false;
 
 	g_pColumnarLib = tHandle.Leak();
 
@@ -220,6 +222,16 @@ const char * GetColumnarVersionStr()
 
 	assert ( g_fnVersionStr );
 	return g_fnVersionStr();
+}
+
+
+int GetColumnarStorageVersion()
+{
+	if ( !IsColumnarLibLoaded() )
+		return -1;
+
+	assert ( g_fnStorageVersion );
+	return g_fnStorageVersion();
 }
 
 

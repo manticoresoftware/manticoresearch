@@ -74,8 +74,9 @@ More information on this topic can be found [here](../../Adding_data_from_extern
 #### Plain index files structure
 | Extension | Description |
 | - | - |
-|`.spa` | stores document attributes |
-|`.spb` | stores blob attributes: strings, MVA, json |
+|`.spa` | stores document attributes in [row-wise mode](../../Creating_an_index/Data_types#Row-wise-and-columnar-attribute-storages) |
+|`.spb` | stores blob attributes in [row-wise mode](../../Creating_an_index/Data_types#Row-wise-and-columnar-attribute-storages): strings, MVA, json |
+|`.spc` | stores document attributes in [columnar mode](../../Creating_an_index/Data_types#Row-wise-and-columnar-attribute-storages)  |
 |`.spd` | stores matching document ID lists for each word ID |
 |`.sph` | stores index header information |
 |`.sphi` | stores histograms of attribute values |
@@ -88,5 +89,5 @@ More information on this topic can be found [here](../../Adding_data_from_extern
 |`.spe` | stores skip-lists to speed up doc-list filtering |
 |`.spds` | stores document texts |
 |`.tmp*` |temporary files during index_settings_and_status |
-|`.new.sp*` | during indexing new version of the index is written by default in the same folder |
-|`.old.sp*` | after rotation previous version files are saved with .old extension |
+|`.new.sp*` | new version of a plain index before rotation |
+|`.old.sp*` | old version of a plain index after rotation |

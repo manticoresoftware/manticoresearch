@@ -5,7 +5,9 @@
 <!-- example ALTER -->
 
 ```sql
-ALTER TABLE index {ADD|DROP} COLUMN column_name [{INTEGER|INT|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON|STRING|TIMESTAMP|TEXT [INDEXED [ATTRIBUTE]]}]
+ALTER TABLE index ADD COLUMN column_name [{INTEGER|INT|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON|STRING|TIMESTAMP|TEXT [INDEXED [ATTRIBUTE]]}] [engine='columnar']
+
+ALTER TABLE index DROP COLUMN column_name
 ```
 
 It supports adding one field at a time for RT indexes. Supported data types are:
@@ -22,11 +24,12 @@ It supports adding one field at a time for RT indexes. Supported data types are:
 * `text indexed` / `string indexed` - full-text indexed field, indexed only (the original value is not stored in docstore)
 * `text indexed attribute` / `string indexed attribute` - fill text indexed field + string attribute (not storing the original value in docstore)
 * `text stored` / `string stored` - the value will be only stored in docstore, not full-text indexed, not a string attribute
+* adding `engine='columnar'` to any attribute (except for json) will make it stored in the [columnar storage](Creating_an_index/Data_types.md#Row-wise-and-columnar-attribute-storages)
 
 #### Important notes:
-* Querying an index is impossible (because of a write lock) while adding a column. 
-* Newly created attribute's values are set to 0. 
-* `ALTER` will not work for distributed indexes and indexes without any attributes. 
+* Querying an index is impossible (because of a write lock) while adding a column.
+* Newly created attribute's values are set to 0.
+* `ALTER` will not work for distributed indexes and indexes without any attributes.
 * `DROP COLUMN` will fail if an index has only one field.
 * When dropping a field which is both a full-text field and a string attribute the first `ALTER DROP` run drops the attribute, the second one drops the full-text field.
 
@@ -129,7 +132,7 @@ mysql> desc rt;
 ALTER RTINDEX index RECONFIGURE
 ```
 
-`ALTER` can also reconfigure an RT index in plain mode, so that new tokenization, morphology, and other text processing settings from the configuration file take effect on the newly INSERT-ed rows, while retaining the existing rows as they were. Internally, it forcibly saves the current RAM chunk as a new disk chunk, and adjusts the index header, so that the new rows are tokenized using the new rules. 
+`ALTER` can also reconfigure an RT index in [plain mode](Creating_an_index/Local_indexes.md#Defining-index-schema-in-config-%28Plain-mode%29), so that new tokenization, morphology and other text processing settings from the configuration file take effect on the newly INSERT-ed rows, while retaining the existing rows as they were. Internally, it forcibly saves the current RAM chunk as a new disk chunk and adjusts the index header, so that the new rows are tokenized using the new rules.
 
 <!-- request Example -->
 ```sql

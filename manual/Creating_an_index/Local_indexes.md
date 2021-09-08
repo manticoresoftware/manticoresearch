@@ -23,7 +23,7 @@ All index types are supported in this mode.
 ## Index types and modes
 
 
-| Index type  | RT mode  | plain mode  |
+| Index type  | RT mode  | Plain mode  |
 |-------------|----------|-------------|
 | Real-time   | yes      | yes         |
 | Plain       | no       | yes         |

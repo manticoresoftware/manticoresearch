@@ -4,15 +4,24 @@
 
 Manticore's data types can be split into full-text fields and attributes.
 
-Full-text fields are indexed and can be searched for keywords. They cannot be used in filtering, sorting or grouping. However, original document content can be retrieved and used in result set highlighting.
+### Full-text fields
 
-Full-text fields are represented by the `Text` data type. All the other data types are attributes.
+Full-text fields are:
+* indexed
+* can be searched for keywords
+* cannot be used for sorting or grouping
+* original document's content can be retrieved
+* original document's content can be used for highlighting
 
-Attributes are additional values associated with each document that can be used to perform additional filtering and sorting during search.
+Full-text fields are represented data type `text`. All the other data types are called "attributes".
 
-It is often desired to additionally process full-text search results based not only on matching document ID and its rank, but on a number of other per-document values as well. For instance, one might need to sort news search results by date and then relevance, or search through products within specified price range, or limit blog search to posts made by selected users, or group results by month. To do that efficiently, Manticore allows to attach a number of additional attributes to each document. It's then possible to use stored values to filter, sort, or group full-text matches.
+### Attributes
 
-Attributes, unlike the fields, are not full-text indexed. They are stored in the index, but it is not possible to search them as full-text.
+Attributes are non-full-text values associated with each document that can be used to perform non-full-text filtering, sorting and grouping during search.
+
+It is often desired to process full-text search results based not only on matching document ID and its rank, but on a number of other per-document values as well. For instance, one might need to sort news search results by date and then relevance, or search through products within specified price range, or limit blog search to posts made by selected users, or group results by month. To do that efficiently, Manticore enables not only full-text fields, but additional attributes to each document. It's then possible to use them to filter, sort, or group full-text matches or search only by attributes.
+
+The attributes, unlike full-text fields, are not full-text indexed. They are stored in the index, but it is not possible to search them as full-text.
 
 <!-- example attributes or fields -->
 
@@ -83,7 +92,7 @@ utilsApi.sql("mode=raw&query=CREATE TABLE forum(title text, content text, author
 
 <!-- request config -->
 
-```config
+```ini
 index forum
 {
 	type = rt
@@ -148,7 +157,7 @@ POST /search
 ```php
 $client->search([
         'index' => 'forum',
-        'query' => 
+        'query' =>
         [
             'match_all' => [],
             'bool' => [
@@ -214,6 +223,50 @@ searchRequest.setSort(new ArrayList<Object>(){{
 SearchResponse searchResponse = searchApi.search(searchRequest);
 ```
 <!-- end -->
+
+### Row-wise and columnar attribute storages
+
+Manticore supports two types of attribute storages:
+* row-wise - traditional storage available in Manticore Search out of the box
+* columnar - provided by [Manticore Columnar Library](https://github.com/manticoresoftware/columnar)
+
+As can be understood from their names, they store data differently. The traditional **row-wise storage**:
+* stores attributes uncompressed
+* all attributes of the same document are stored in one row close to each other
+* rows are stored one by one
+* accessing attributes is basically done by just multiplying rowid by stride (length of a single vector) and getting the requested attribute from the calculated memory location. It gives very low random access latency
+* attributes have to be in memory to get acceptable performance, otherwise due to the row-wise nature of the storage Manticore may have to read from disk too much unneded data which is in many cases suboptimal.
+
+With **the columnar storage**:
+* each attribute is stored independently from all other attributes in its separate "column"
+* storage is split into blocks of 65536 entries
+* the blocks are stored compressed. This often allows to store just a few distinct values instead of storing all of them like in the row-wise storage. High compression ratio allows to read from disk faster and makes the memory requirement much lower
+* when data is indexed, storage scheme is selected for each block independently. For example, if all values in a block are the same, it gets "const" storage and only one value is stored for the whole block. If there are less than 256 unique values per block, it gets "table" storage and stores indexes to a table of values instead of the values themselves
+* search in a block can be early rejected if it's clear the requested value is not present in the block.
+
+The columnar storage was designed to handle large data volume that does not fit into RAM, so the recommendations are:
+* if you have enough memory for all your attributes you will benefit from the row-wise storage
+* otherwise the columnar storage can still give you decent performance with much lower memory footprint which will allow you to store much more documents in your index
+
+### How to switch between the storages
+
+The traditional row-wise storage is default, so if you want everything to be stored in a row-wise fashion you don't need to do anything when you create an index.
+
+To enable the columnar storage you need to:
+* specify `engine='columnar'` in [CREATE TABLE](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Creating-a-real-time-index-online-via-CREATE-TABLE) to make all attributes of the index columnar. Then if you want to keep a specific attribute row-wise you need to add `engine='rowwise'` when you declare it. For example:
+```sql
+create table idx(title text, type int, price float engine='rowwise') engine='columnar'
+```
+* specify `engine='columnar'` for a specific attribute in `CREATE TABLE` to make it columnar. For example:
+```sql
+create table idx(title text, type int, price float engine='columnar');
+```
+or
+```sql
+create table idx(title text, type int, price float engine='columnar') engine='rowwise';
+```
+* in [plain mode](../Read_this_first.md#Real-time-mode-vs-plain-mode) you need to list attributes you want to be columnar in [columnar_attrs](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#columnar_attrs).
+
 
 Below is the list of data types supported by Manticore Search:
 
@@ -311,7 +364,7 @@ utilsApi.sql("mode=raw&query=CREATE TABLE products(title text)");
 
 <!-- request config -->
 
-```config
+```ini
 index products
 {
 	type = rt
@@ -390,7 +443,7 @@ utilsApi.sql("mode=raw&query=CREATE TABLE products(title text indexed)");
 
 <!-- request config -->
 
-```config
+```ini
 index products
 {
 	type = rt
@@ -534,7 +587,7 @@ utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, keys string)");
 
 <!-- request config -->
 
-```config
+```ini
 index products
 {
 	type = rt
@@ -615,7 +668,7 @@ utilsApi.sql("mode=raw&query=CREATE TABLE products ( title string attribute inde
 
 <!-- request config -->
 
-```config
+```ini
 index products
 {
 	type = rt
@@ -695,7 +748,7 @@ utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price int)");
 
 <!-- request config -->
 
-```config
+```ini
 index products
 {
 	type = rt
@@ -774,7 +827,7 @@ utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, flags bit(3), tag
 
 <!-- request config -->
 
-```config
+```ini
 index products
 {
 	type = rt
@@ -856,7 +909,7 @@ utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price bigint )");
 
 <!-- request config -->
 
-```config
+```ini
 index products
 {
 	type = rt
@@ -866,6 +919,87 @@ index products
 	stored_fields = title
 
 	rt_attr_bigint = type
+}
+```
+
+<!-- end -->
+
+## Boolean
+
+<!-- example for boolean  -->
+
+Declares a boolean attribute. It's equivalent to an integer attribute with bit count of 1.
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, sold bool );
+```
+<!-- intro -->
+##### HTTP:
+
+<!-- request HTTP -->
+
+```http
+POST /sql -d "mode=raw&query=CREATE TABLE products(title text, sold bool)"
+```
+
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
+    'title'=>['type'=>'text'],
+	'sold'=>['type'=>'bool']
+]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, sold bool )')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, sold bool )');
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request java -->
+
+```java
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, sold bool )");
+```
+
+<!-- intro -->
+##### config:
+
+<!-- request config -->
+
+```ini
+index products
+{
+	type = rt
+	path = products
+
+	rt_field = title
+	stored_fields = title
+
+	rt_attr_bool = sold
 }
 ```
 
@@ -937,7 +1071,7 @@ utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, date timestamp)")
 
 <!-- request config -->
 
-```config
+```ini
 index products
 {
 	type = rt
@@ -1019,7 +1153,7 @@ res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, coeff
 
 <!-- request config -->
 
-```config
+```ini
 index products
 {
 	type = rt
@@ -1174,7 +1308,7 @@ searchResponse = searchApi.search(searchRequest);
 
 <!-- example for creating json -->
 
-This data type allows storing JSON objects for schema-less data.
+This data type allows storing JSON objects for schema-less data. It is not supported by the columnar storage, but since you can combine the both storages in the same index you can have it stored in the traditional storage instead.
 
 <!-- intro -->
 ##### SQL:
@@ -1235,7 +1369,7 @@ utilsApi.sql'mode=raw&query=CREATE TABLE products(title text, data json)');
 
 <!-- request config -->
 
-```config
+```ini
 index products
 {
 	type = rt
@@ -1533,7 +1667,7 @@ utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, product_codes mul
 
 <!-- request config -->
 
-```config
+```ini
 index products
 {
 	type = rt
@@ -1909,7 +2043,7 @@ HashMap<String,Object> doc = new HashMap<String,Object>(){{
     put("title","first");
     put("product_codes",new int[] {4,2,1,3});
 }};
-newdoc.index("products").id(1L).setDoc(doc); 
+newdoc.index("products").id(1L).setDoc(doc);
 sqlresult = indexApi.insert(newdoc);
 Map<String,Object> query = new HashMap<String,Object>();
 query.put("match_all",null);
@@ -2004,7 +2138,7 @@ utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, values multi64))"
 
 <!-- request config -->
 
-```config
+```ini
 index products
 {
 	type = rt

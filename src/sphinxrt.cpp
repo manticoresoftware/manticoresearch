@@ -4322,7 +4322,7 @@ bool RtIndex_c::PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder, StrVe
 		sChunk.SetSprintf ( "%s.%d", m_sPath.cstr(), iChunkIndex );
 		auto pChunk = DiskChunk_c::make ( PreallocDiskChunk ( sChunk.cstr(), iChunkIndex, pFilenameBuilder, dWarnings, m_sLastError ) );
 		if ( !pChunk )
-			sphDie ( "%s", m_sLastError.cstr() );
+			return false;
 
 		auto* pIndex = (const CSphIndex*)*pChunk;
 
@@ -4395,14 +4395,22 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 
 	m_bPathStripped = bStripPath;
 
+	if ( m_tSchema.HasColumnarAttrs() && !IsColumnarLibLoaded() )
+	{
+		m_sLastError.SetSprintf ( "failed to load index with columnar attributes without columnar library" );
+		return false;
+	}
+
 	m_tRtChunks.InitWorkers();
 	ScopedScheduler_c tSerialFiber ( m_tRtChunks.SerialChunkAccess() );
+
+	m_bLoadRamPassedOk = false;
 
 	if ( !PreallocDiskChunks ( pFilenameBuilder, dWarnings ) )
 		return false;
 
 	// load ram chunk
-	bool bRamLoaded = LoadRamChunk ( uVersion, bRebuildInfixes );
+	m_bLoadRamPassedOk = LoadRamChunk ( uVersion, bRebuildInfixes );
 
 	// field lengths
 	ARRAY_FOREACH ( i, m_dFieldLens )
@@ -4412,7 +4420,7 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 	m_iSavedTID = m_iTID;
 	m_tmSaved = sphMicroTimer();
 
-	return bRamLoaded;
+	return m_bLoadRamPassedOk;
 }
 
 
@@ -4546,7 +4554,6 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes ) NO_THREAD_
 	if ( !sphIsReadable ( sChunk.cstr(), &m_sLastError ) )
 		return true;
 
-	m_bLoadRamPassedOk = false;
 	m_bHasFiles = true;
 
 	CSphAutoreader rdChunk;
@@ -4648,8 +4655,6 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes ) NO_THREAD_
 	// all done
 	if ( rdChunk.GetErrorFlag() )
 		return false;
-
-	m_bLoadRamPassedOk = true;
 	return true;
 }
 

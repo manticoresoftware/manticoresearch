@@ -416,12 +416,22 @@ bool IndexAlterHelper_c::Alter_AddRemoveColumnar ( bool bAdd, const ISphSchema &
 }
 
 
-bool IndexAlterHelper_c::Alter_AddRemoveFromSchema ( CSphSchema & tSchema, const CSphString & sAttrName, ESphAttr eAttrType, bool bColumnar, bool bAdd, CSphString & sError ) const
+bool IndexAlterHelper_c::Alter_AddRemoveFromSchema ( CSphSchema & tSchema, const CSphString & sAttrName, ESphAttr eAttrType, AttrEngine_e eEngine, bool bAdd, CSphString & sError ) const
 {
-	if ( bAdd && bColumnar && !IsColumnarLibLoaded() )
+	bool bColumnar = eEngine==AttrEngine_e::COLUMNAR;
+	if ( bAdd && bColumnar )
 	{
-		sError.SetSprintf ( "Unable to add a columnar attribute '%s': columnar library not loaded", sAttrName.cstr() );
-		return false;
+		if ( !IsColumnarLibLoaded() )
+		{
+			sError.SetSprintf ( "Unable to add columnar attribute '%s': columnar library not loaded", sAttrName.cstr() );
+			return false;
+		}
+
+		if ( eAttrType==SPH_ATTR_JSON )
+		{
+			sError.SetSprintf ( "Unable to add columnar attribute '%s': JSON attribute type is not supported in columnar storage", sAttrName.cstr() );
+			return false;
+		}
 	}
 
 	if ( bAdd )

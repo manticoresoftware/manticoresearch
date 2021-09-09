@@ -107,15 +107,18 @@ alter_col_type:
 	| text_or_string field_flag_list { $$.m_iValue = SPH_ATTR_STRING; $$.m_iType = $2.m_iType; }
 	;
 
-columnar_flag:
-	// empty
-	| TOK_COLUMNAR	{ pParser->m_pStmt->m_bColumnar = true; }
-	;
-
 alter:
-	TOK_ALTER TOK_TABLE ident TOK_ADD TOK_COLUMN ident alter_col_type columnar_flag
+	TOK_ALTER TOK_TABLE ident TOK_ADD TOK_COLUMN ident alter_col_type
 		{
 			if ( !pParser->SetupAlterTable ( $3, $6, $7 ) )
+			{
+			 	yyerror ( pParser, pParser->GetLastError() );
+	            YYERROR;
+			}
+		}
+	| TOK_ALTER TOK_TABLE ident TOK_ADD TOK_COLUMN ident alter_col_type TOK_ENGINE '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->SetupAlterTable ( $3, $6, $7, $10 ) )
 			{
 			 	yyerror ( pParser, pParser->GetLastError() );
 	            YYERROR;

@@ -105,7 +105,7 @@ CREATE TABLE `test_table` (
 <sphinxql>desc test</sphinxql>
 <sphinxql>select * from test</sphinxql>
 
-<sphinxql>alter table test add column new_property string columnar</sphinxql>
+<sphinxql>alter table test add column new_property string engine='columnar'</sphinxql>
 <sphinxql>desc test</sphinxql>
 <sphinxql>select * from test</sphinxql>
 
@@ -124,7 +124,7 @@ CREATE TABLE `test_table` (
 <sphinxql>desc test1</sphinxql>
 <sphinxql>select * from test1</sphinxql>
 
-<sphinxql>alter table test1 add column new_property string columnar</sphinxql>
+<sphinxql>alter table test1 add column new_property string engine='columnar'</sphinxql>
 <sphinxql>desc test1</sphinxql>
 <sphinxql>select * from test1</sphinxql>
 

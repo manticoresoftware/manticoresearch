@@ -1451,7 +1451,7 @@ public:
 	bool				SaveAttributes ( CSphString & sError ) const final;
 	DWORD				GetAttributeStatus () const final;
 
-	bool				AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, bool bColumnar, CSphString & sError ) final;
+	bool				AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, AttrEngine_e eEngine, CSphString & sError ) final;
 	bool				AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD uFieldFlags, CSphString & sError ) final;
 
 	void				FlushDeadRowMap ( bool bWaitComplete ) const final;
@@ -7627,10 +7627,15 @@ bool CSphIndex_VLN::AddRemoveColumnarAttr ( bool bAddAttr, const CSphString & sA
 }
 
 
-bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, bool bColumnar, CSphString & sError )
+bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, AttrEngine_e eEngine, CSphString & sError )
 {
+	// combine per-index and per-attribute engine settings
+	AttrEngine_e eAttrEngine = m_tSettings.m_eEngine;
+	if ( eEngine!=AttrEngine_e::DEFAULT )
+		eAttrEngine = eEngine;
+
 	CSphSchema tNewSchema = m_tSchema;
-	if ( !Alter_AddRemoveFromSchema ( tNewSchema, sAttrName, eAttrType, bColumnar, bAddAttr, sError ) )
+	if ( !Alter_AddRemoveFromSchema ( tNewSchema, sAttrName, eAttrType, eAttrEngine, bAddAttr, sError ) )
 		return false;
 
 	int iNewStride = tNewSchema.GetRowSize();
@@ -7694,9 +7699,7 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttr
 		return false;
 	}
 
-	if ( !bAddAttr )
-		bColumnar = m_tSchema.GetAttr ( sAttrName.cstr() )->IsColumnar();
-
+	bool bColumnar = bAddAttr ? tNewSchema.GetAttr ( sAttrName.cstr() )->IsColumnar() : m_tSchema.GetAttr ( sAttrName.cstr() )->IsColumnar();
 	if ( bColumnar )
 		AddRemoveColumnarAttr ( bAddAttr, sAttrName, eAttrType, m_tSchema, tNewSchema, sError );
 	else

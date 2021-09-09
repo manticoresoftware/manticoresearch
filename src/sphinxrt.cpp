@@ -1221,7 +1221,7 @@ public:
 	bool				SaveAttributes ( CSphString & sError ) const final;
 	DWORD				GetAttributeStatus () const final { return m_uDiskAttrStatus; }
 
-	bool				AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, bool bColumnar, CSphString & sError ) final;
+	bool				AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, AttrEngine_e eEngine, CSphString & sError ) final;
 	bool				AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD uFieldFlags, CSphString & sError ) final;
 
 	int					DebugCheck ( FILE * fp ) final;
@@ -7794,7 +7794,7 @@ void RtIndex_c::AlterSave ( bool bSaveRam )
 	QcacheDeleteIndex ( GetIndexId() );
 }
 
-bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, bool bColumnar, CSphString & sError )
+bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, AttrEngine_e eEngine, CSphString & sError )
 {
 	if ( !m_tRtChunks.DiskChunks()->IsEmpty() && !m_tSchema.GetAttrsCount() )
 	{
@@ -7816,26 +7816,28 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ES
 	// as we're in serial, here all index data exclusively belongs to us. No new commits, merges, flushes, etc. until
 	// we're finished.
 
+	// combine per-index and per-attribute engine settings
+	AttrEngine_e eAttrEngine = m_tSettings.m_eEngine;
+	if ( eEngine!=AttrEngine_e::DEFAULT )
+		eAttrEngine = eEngine;
+
 	CSphSchema tOldSchema = m_tSchema;
 	CSphSchema tNewSchema = m_tSchema;
-	if ( !Alter_AddRemoveFromSchema ( tNewSchema, sAttrName, eAttrType, bColumnar, bAdd, sError ) )
+	if ( !Alter_AddRemoveFromSchema ( tNewSchema, sAttrName, eAttrType, eAttrEngine, bAdd, sError ) )
 		return false;
 
 	m_tSchema = tNewSchema;
 	m_iStride = m_tSchema.GetRowSize();
-
 
 	RtGuard_t tGuard ( m_tRtChunks.RtData() );
 
 	// modify the in-memory data of disk chunks
 	// fixme: we can't rollback in-memory changes, so we just show errors here for now
 	for ( auto& pChunk : tGuard.m_dDiskChunks )
-		if ( !pChunk->CastIdx().AddRemoveAttribute ( bAdd, sAttrName, eAttrType, bColumnar, sError ) )
+		if ( !pChunk->CastIdx().AddRemoveAttribute ( bAdd, sAttrName, eAttrType, eEngine, sError ) )
 			sphWarning ( "%s attribute to %s.%d: %s", bAdd ? "adding" : "removing", m_sPath.cstr(), pChunk->Cidx().m_iChunk, sError.cstr() );
 
-	if ( !bAdd )
-		bColumnar = tOldSchema.GetAttr ( sAttrName.cstr() )->IsColumnar();
-
+	bool bColumnar = bAdd ? tNewSchema.GetAttr ( sAttrName.cstr() )->IsColumnar() : tOldSchema.GetAttr ( sAttrName.cstr() )->IsColumnar();
 	if ( bColumnar )
 	{
 		if ( !AddRemoveColumnarAttr ( tGuard, bAdd, sAttrName, eAttrType, tOldSchema, tNewSchema, sError ) )

@@ -127,7 +127,7 @@ bool DdlParser_c::CheckFieldFlags ( ESphAttr eAttrType, int iFlags, const CSphSt
 }
 
 
-bool DdlParser_c::SetupAlterTable  ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, const SqlNode_t & tType )
+bool DdlParser_c::SetupAlterTable  ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, const SqlNode_t & tType, AttrEngine_e eEngine )
 {
 	assert( m_pStmt );
 
@@ -138,8 +138,24 @@ bool DdlParser_c::SetupAlterTable  ( const SqlNode_t & tIndex, const SqlNode_t &
 	m_pStmt->m_sAlterAttr.ToLower();
 	m_pStmt->m_eAlterColType = (ESphAttr)tType.m_iValue;
 	m_pStmt->m_uFieldFlags = ConvertFlags(tType.m_iType);
+	m_pStmt->m_eEngine = eEngine;
 
 	return CheckFieldFlags ( m_pStmt->m_eAlterColType, tType.m_iType, m_pStmt->m_sAlterAttr, m_sError );
+}
+
+
+bool DdlParser_c::SetupAlterTable  ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, const SqlNode_t & tType, const SqlNode_t & tEngine )
+{
+	AttrEngine_e eEngine = AttrEngine_e::DEFAULT;
+
+	CSphString sEngine = ToStringUnescape(tEngine);
+	CSphString sEngineLowerCase = sEngine;
+	sEngineLowerCase.ToLower();
+
+	if ( !StrToAttrEngine ( eEngine, sEngineLowerCase, m_sError ) )
+		return false;
+
+	return SetupAlterTable ( tIndex, tAttr, tType, eEngine );
 }
 
 

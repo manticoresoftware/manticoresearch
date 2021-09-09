@@ -836,7 +836,7 @@ function RoundFloatValues ( &$values, $roundoff )
 }
 
 
-function JsonRsetFixup ( &$set )
+function JsonRsetFixup ( &$set, $columnar )
 {
 	if ( isset ( $set["rows"] ) )
 	{
@@ -861,7 +861,7 @@ function JsonRsetFixup ( &$set )
 		{
 			foreach ( $rows["data"] as &$entry )
 			{
-				if ( is_array($entry) && isset ( $entry["Properties"] ) && $entry["Properties"]=="columnar" )
+				if ( is_array($entry) && isset ( $entry["Properties"] ) && $entry["Properties"]=="columnar" && $columnar )
 					$entry["Properties"] = "";
 			}
 		}
@@ -870,7 +870,7 @@ function JsonRsetFixup ( &$set )
 }
 
 
-function SqlRsetFixup ( &$set )
+function SqlRsetFixup ( &$set, $columnar )
 {
 	if ( !isset ( $set["rows"] ) )
 		return;
@@ -887,13 +887,13 @@ function SqlRsetFixup ( &$set )
 		if ( $keys[0]!='Field' || $keys[1]!='Type' || $keys[2]!='Properties' )
 			return;
 
-		if ( $row['Properties']=='columnar' )
+		if ( $row['Properties']=='columnar' && $columnar )
 			$row['Properties'] = '';
 	}
 }
 
 
-function CompareResultSetFixup ( &$set, $roundoff, $variants_match )
+function CompareResultSetFixup ( &$set, $roundoff, $variants_match, $columnar )
 {
 	global $g_ignore_weights;
 
@@ -910,9 +910,9 @@ function CompareResultSetFixup ( &$set, $roundoff, $variants_match )
 
 	// fixup floats in json via http
 	if ( isset ( $set["http"] ) && $set["http"]==1 )
-		JsonRsetFixup ( $set );
+		JsonRsetFixup ( $set, $columnar );
 	else
-		SqlRsetFixup ( $set );
+		SqlRsetFixup ( $set, $columnar );
 
     // fixup sphinxql trim
     if ( isset ( $set['sphinxql'] ) )
@@ -2992,8 +2992,8 @@ class SphinxConfig
 		
 		$variants_match = $this->Requires("variant_match");
 
-		CompareResultSetFixup ( $set1, $roundoff, $variants_match );
-		CompareResultSetFixup ( $set2, $roundoff, $variants_match );
+		CompareResultSetFixup ( $set1, $roundoff, $variants_match, $this->IsColumnar() );
+		CompareResultSetFixup ( $set2, $roundoff, $variants_match, $this->IsColumnar() );
 
 		return $set1==$set2;
 	}

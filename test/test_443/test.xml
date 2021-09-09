@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>columnar attributes vs ALTER, part 2</name>
+
+<requires>
+<columnar/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+
+<sphqueries>
+
+<sphinxql>create table test ( title text ) engine='columnar'</sphinxql>
+<sphinxql>desc test</sphinxql>
+<sphinxql>alter table test add column new_property string</sphinxql>
+<sphinxql>desc test</sphinxql>
+<sphinxql>alter table test add column j json</sphinxql>
+<sphinxql>drop table test</sphinxql>
+
+</sphqueries>
+
+</test>

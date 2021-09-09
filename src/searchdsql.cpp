@@ -145,13 +145,16 @@ public:
 	bool			AddIntFilterLesser ( const SqlNode_t & tAttr, int64_t iVal, bool bHasEqual );
 	bool			AddUservarFilter ( const SqlNode_t & tCol, const SqlNode_t & tVar, bool bExclude );
 	void			AddGroupBy ( const SqlNode_t & tGroupBy );
-	bool			AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd );
 	CSphFilterSettings * AddFilter ( const SqlNode_t & tCol, ESphFilter eType );
 	bool			AddStringFilter ( const SqlNode_t & tCol, const SqlNode_t & tVal, bool bExclude );
 	CSphFilterSettings * AddValuesFilter ( const SqlNode_t & tCol ) { return AddFilter ( tCol, SPH_FILTER_VALUES ); }
 	bool			AddStringListFilter ( const SqlNode_t & tCol, SqlNode_t & tVal, StrList_e eType, bool bInverse=false );
 	bool			AddNullFilter ( const SqlNode_t & tCol, bool bEqualsNull );
 	void			AddHaving ();
+
+	bool			AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd );
+	void			AddDistinct ( SqlNode_t * pNewExpr );
+	bool			MaybeAddFacetDistinct();
 
 	void			FilterGroup ( SqlNode_t & tNode, SqlNode_t & tExpr );
 	void			FilterOr ( SqlNode_t & tNode, const SqlNode_t & tLeft, const SqlNode_t & tRight );
@@ -932,6 +935,31 @@ bool SqlParser_c::AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNod
 	return AddItem ( "@distinct", pStart, pEnd );
 }
 
+void SqlParser_c::AddDistinct ( SqlNode_t * pNewExpr )
+{
+	if ( !pNewExpr )
+	{
+		m_pQuery->m_sGroupDistinct = "id";
+	}
+	else
+	{
+		ToString ( m_pQuery->m_sGroupDistinct, *pNewExpr );
+		sphColumnToLowercase ( const_cast<char *>( m_pQuery->m_sGroupDistinct.cstr() ) );
+	}
+}
+
+bool SqlParser_c::MaybeAddFacetDistinct()
+{
+	if ( m_pQuery->m_sGroupDistinct.IsEmpty() )
+		return true;
+
+	CSphQueryItem & tItem = m_pQuery->m_dItems.Add();
+	tItem.m_sExpr = "@distinct";
+	tItem.m_eAggrFunc = SPH_AGGR_NONE;
+	tItem.m_sAlias.SetSprintf ( "count(distinct %s)", m_pQuery->m_sGroupDistinct.cstr() );
+	return SetNewSyntax();
+}
+
 bool SqlParser_c::AddSchemaItem ( YYSTYPE * pNode )
 {
 	assert ( m_pStmt );
@@ -1495,9 +1523,6 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 				tStmt.m_tQuery.m_sQuery = tHeadQuery.m_sQuery;
 				tStmt.m_tQuery.m_iMaxMatches = tHeadQuery.m_iMaxMatches;
 
-				// need to keep same wide result set schema
-				tStmt.m_tQuery.m_sGroupDistinct = tHeadQuery.m_sGroupDistinct;
-
 				// append filters
 				ARRAY_FOREACH ( k, tHeadQuery.m_dFilters )
 					tStmt.m_tQuery.m_dFilters.Add ( tHeadQuery.m_dFilters[k] );
@@ -1509,17 +1534,31 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 
 	if ( bGotFacet )
 	{
+		CSphString sDistinct;
+
 		// need to keep order of query items same as at select list however do not duplicate items
 		// that is why raw Vector.Uniq does not work here
 		CSphVector<QueryItemProxy_t> dSelectItems;
 		ARRAY_FOREACH ( i, dStmt )
 		{
-			ARRAY_FOREACH ( k, dStmt[i].m_tQuery.m_dItems )
+			CSphQuery & tQuery = dStmt[i].m_tQuery;
+			ARRAY_FOREACH ( k, tQuery.m_dItems )
 			{
 				QueryItemProxy_t & tItem = dSelectItems.Add();
-				tItem.m_pItem = dStmt[i].m_tQuery.m_dItems.Begin() + k;
+				tItem.m_pItem = tQuery.m_dItems.Begin() + k;
 				tItem.m_iIndex = dSelectItems.GetLength() - 1;
 				tItem.QueryItemHash();
+			}
+
+			if ( !tQuery.m_sGroupDistinct.IsEmpty() )
+			{
+				if ( !sDistinct.IsEmpty() && sDistinct!=tQuery.m_sGroupDistinct )
+				{
+					sError.SetSprintf ( "distinct for all FACET queries should be the same %s, query %d got %s", sDistinct.cstr(), i, tQuery.m_sGroupDistinct.cstr() );
+					return false;
+				}
+				if ( sDistinct.IsEmpty() )
+					sDistinct = tQuery.m_sGroupDistinct;
 			}
 		}
 		// got rid of duplicates
@@ -1553,7 +1592,17 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 					}
 				}
 			}
+
+			tStmt.m_tQuery.m_sGroupDistinct = sDistinct;
 		}
+	}
+
+	// need to keep same wide result set schema
+	if ( !bGotFacet && dStmt.GetLength()>1 )
+	{
+		const CSphString & sDistinct = dStmt[0].m_tQuery.m_sGroupDistinct;
+		for ( int i=1; i<dStmt.GetLength(); i++ )
+			dStmt[i].m_tQuery.m_sGroupDistinct = sDistinct;
 	}
 
 	return true;

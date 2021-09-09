@@ -243,7 +243,7 @@ ident_set_no_option:
 	| TOK_AVG | TOK_BEGIN | TOK_BETWEEN | TOK_BIGINT | TOK_CALL
 	| TOK_CHARACTER | TOK_CHUNK | TOK_CLUSTER | TOK_COLLATION | TOK_COLUMN | TOK_COMMIT
 	| TOK_COMMITTED | TOK_COUNT | TOK_CREATE | TOK_DATABASES | TOK_DELETE
-	| TOK_DESC | TOK_DESCRIBE  | TOK_DISTINCT  | TOK_DOUBLE
+	| TOK_DESC | TOK_DESCRIBE  | TOK_DOUBLE
 	| TOK_FLOAT | TOK_FLUSH | TOK_FOR| TOK_GLOBAL | TOK_GROUP
 	| TOK_GROUP_CONCAT | TOK_GROUPBY | TOK_HAVING | TOK_HOSTNAMES | TOK_INDEX | TOK_INDEXOF | TOK_INSERT
 	| TOK_INT | TOK_INTEGER | TOK_INTO | TOK_ISOLATION | TOK_LEVEL
@@ -1874,6 +1874,12 @@ strval:
 
 //////////////////////////////////////////////////////////////////////////
 
+opt_distinct_item:
+	// empty
+	| TOK_DISTINCT							{ pParser->AddDistinct ( nullptr ); }
+	| TOK_DISTINCT ident					{ pParser->AddDistinct ( &$2 ); }
+	;
+
 opt_facet_by_items_list:
 	// empty
 	| facet_by facet_items_list
@@ -1906,12 +1912,13 @@ facet_items_list:
 	;
 
 facet_stmt:
-	TOK_FACET facet_items_list opt_facet_by_items_list opt_order_clause opt_limit_clause
+	TOK_FACET facet_items_list opt_facet_by_items_list opt_distinct_item opt_order_clause opt_limit_clause
 		{
 			pParser->m_pStmt->m_eStmt = STMT_FACET;
 			if ( pParser->m_pQuery->m_sFacetBy.IsEmpty() )
 			{
 				pParser->m_pQuery->m_sFacetBy = pParser->m_pQuery->m_sGroupBy;
+				pParser->MaybeAddFacetDistinct();
 				pParser->AddCount ();
 			}
 		}

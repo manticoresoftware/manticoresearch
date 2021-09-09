@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>distinct at facet queries</name>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+}
+
+index test1
+{
+	type = rt
+	path			= <data_path/>/test1
+	rt_mem_limit = 128k
+	rt_field            = body
+	rt_attr_uint = gr1
+	rt_attr_uint = gr2
+}
+
+index test2
+{
+	type = rt
+	path			= <data_path/>/test2
+	rt_mem_limit = 128k
+	rt_field            = body
+	rt_attr_uint = gr1
+	rt_attr_uint = gr2
+}
+
+</config>
+
+<queries>
+
+<sphinxql>
+INSERT INTO test1 (id,gr1,gr2,body) VALUES ( 1, 1, 1, 'main' ), ( 2, 2, 1, 'main' );
+flush ramchunk test1;
+INSERT INTO test1 (id,gr1,gr2,body) VALUES ( 3, 1, 1, 'main' ), ( 4, 3, 1, 'main' );
+flush ramchunk test1;
+INSERT INTO test2 (id,gr1,gr2,body) VALUES ( 1, 1, 1, 'main' ), ( 2, 2, 1, 'main' );
+</sphinxql>
+
+<!-- distinct at facet of RT disk chunks -->
+<sphinxql>select * from test1 FACET gr1;</sphinxql>
+<sphinxql>select * from test1 FACET gr1 distinct;</sphinxql>
+<sphinxql>select * from test1 FACET gr1 distinct gr2;</sphinxql>
+
+<!-- distinct at facet of multiple local indexes -->
+<sphinxql>select * from test1,test2 FACET gr1;</sphinxql>
+<sphinxql>select * from test1,test2 FACET gr1 distinct;</sphinxql>
+
+</queries>
+
+</test>

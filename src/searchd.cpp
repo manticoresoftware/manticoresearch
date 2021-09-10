@@ -1490,11 +1490,19 @@ void DistributedIndex_t::InvalidateRtLike()
 {
 	m_bRtLike = false;
 	m_iRtLikeAge = -1;
+	m_pRtMadeFromDistrIndex = nullptr;
+}
+
+SharedPtr_t<CSphIndex>& DistributedIndex_t::ReturnCachedRt() const
+{
+	if ( m_iRtLikeAge != g_pLocalIndexes->GetGeneration() )
+		m_pRtMadeFromDistrIndex = nullptr;
+	return m_pRtMadeFromDistrIndex;
 }
 
 bool DistributedIndex_t::IsRtLike() const
 {
-	if ( m_iRtLikeAge==g_pLocalIndexes->GetGeneration() )
+	if ( m_iRtLikeAge == g_pLocalIndexes->GetGeneration() )
 		return m_bRtLike;
 
 	m_bRtLike = false;
@@ -5083,7 +5091,7 @@ protected:
 	CSphAttrUpdateEx *				m_pUpdates = nullptr;	///< holder for updates
 	CSphVector<DocID_t> *			m_pDelDocs = nullptr;	///< this query is for deleting
 
-	CSphScopedPtr<CSphIndex>		m_pRtMadeFromDistrIndex;	///< temporary short-living rt index, when query to distr made from same locals
+	SharedPtr_t<CSphIndex>			m_pRtMadeFromDistrIndex;	///< temporary short-living rt index, when query to distr made from same locals
 	CSphString						m_sRtMadeFromDistrIndex;
 
 	QueryProfile_c *				m_pProfile = nullptr;
@@ -5614,7 +5622,7 @@ CSphIndex* SearchHandler_c::CheckIndexSuitable ( const CSphString& sLocal, const
 	if ( !pServed )
 	{
 		if ( sLocal==m_sRtMadeFromDistrIndex )
-			return m_pRtMadeFromDistrIndex.Ptr();
+			return m_pRtMadeFromDistrIndex;
 
 		if ( szParent )
 			for ( auto & dFailureSet : dNFailuresSet )
@@ -6633,18 +6641,23 @@ bool SearchHandler_c::TryConvertDistrToRt ( const CSphString& sLocalDistr, bool 
 
 	if ( !m_pRtMadeFromDistrIndex )
 	{
-		CSphVector<CSphIndex*> dIndexSet;
-		for ( auto& dLocal : dFakeRT ) // since it is already swapped with m_dLocal
+		auto& pCachedRt = pDist->ReturnCachedRt();
+		if ( !pCachedRt )
 		{
-			const auto* pServed = m_dLocked.Get ( dLocal.m_sName );
-			assert ( pServed );
-			dIndexSet.Add ( pServed->m_pIndex );
+			CSphVector<CSphIndex*> dIndexSet;
+			for ( auto& dLocal : dFakeRT ) // since it is already swapped with m_dLocal
+			{
+				const auto* pServed = m_dLocked.Get ( dLocal.m_sName );
+				assert ( pServed );
+				dIndexSet.Add ( pServed->m_pIndex );
+			}
+			pCachedRt = MakeOneshotRt ( dIndexSet, sLocalDistr );
 		}
-		m_pRtMadeFromDistrIndex = MakeOneshotRt ( dIndexSet, sLocalDistr );
+		m_pRtMadeFromDistrIndex = pCachedRt;
 		m_sRtMadeFromDistrIndex = sLocalDistr;
 	}
 	if ( !bFullScan )
-		UpgradeOneshotToFT ( m_pRtMadeFromDistrIndex.Ptr() );
+		UpgradeOneshotToFT ( m_pRtMadeFromDistrIndex );
 	return true;
 }
 

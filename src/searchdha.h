@@ -699,7 +699,7 @@ struct DistributedIndex_t : public ServedStats_c, public ISphRefcountedMT
 	void ForEveryHost ( ProcessFunctor );
 
 	void InvalidateRtLike();
-	bool IsRtLike() const;
+	bool IsRtLike( StringBuilder_c& sExplanation ) const;
 	SharedPtr_t<CSphIndex>& ReturnCachedRt() const;
 
 private:
@@ -707,6 +707,7 @@ private:
 
 	mutable bool m_bRtLike			= false;		///< if index can serve as RT-index (i.e. - same-schema locals, no remotes)
 	mutable int m_iRtLikeAge		= -1;			///< generation when m_bRtLike was actualized (if different from generation of index hash - m_bRtLike is invalid and should be actualized).
+
 	mutable SharedPtr_t<CSphIndex>		m_pRtMadeFromDistrIndex;
 };
 

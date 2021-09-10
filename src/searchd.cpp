@@ -1500,32 +1500,46 @@ SharedPtr_t<CSphIndex>& DistributedIndex_t::ReturnCachedRt() const
 	return m_pRtMadeFromDistrIndex;
 }
 
-bool DistributedIndex_t::IsRtLike() const
+bool DistributedIndex_t::IsRtLike ( StringBuilder_c& sExplanation ) const
 {
 	if ( m_iRtLikeAge == g_pLocalIndexes->GetGeneration() )
 		return m_bRtLike;
 
+	sExplanation << "Age of index " << m_iRtLikeAge << ", age of hash " << g_pLocalIndexes->GetGeneration();
 	m_bRtLike = false;
+	m_pRtMadeFromDistrIndex = nullptr;
 	auto FinalizeAge = AtScopeExit ( [this] { m_iRtLikeAge = g_pLocalIndexes->GetGeneration(); } );
 
 	// should be no remotes
 	if ( !m_dAgents.IsEmpty() )
+	{
+		sExplanation << "has remotes";
 		return false;
+	}
 
 	// should contain >1 locals
 	if ( m_dLocal.GetLength()<=1 )
+	{
+		sExplanation << "local length is too less: " << m_dLocal.GetLength();
 		return false;
+	}
 
 	// all locals should exist and be plain
 	if ( m_dLocal.any_of ( [] ( CSphString& s ) { auto p = GetServed ( s ); return p ? ServedDescRPtr_c ( p )->m_eType != IndexType_e::PLAIN : true; } ) )
+	{
+		sExplanation << "One of locals doesn't exist, ot is not plain index";
 		return false;
+	}
 
 	// all locals should have one and same schema
 	const auto& tFirstSchema = ServedDescRPtr_c { GetServed ( m_dLocal.First() ) }->m_pIndex->GetMatchSchema();
 	CSphString sCmpError;
 	for ( int i=1; i<m_dLocal.GetLength(); ++i )
 		if ( !tFirstSchema.CompareTo ( ServedDescRPtr_c { GetServed ( m_dLocal[i] ) } -> m_pIndex->GetMatchSchema(), sCmpError ) )
+		{
+			sExplanation << "locals have different schemas";
 			return false;
+		}
 
 	m_bRtLike = true;
 	return true;
@@ -6625,9 +6639,15 @@ bool SearchHandler_c::TryConvertDistrToRt ( const CSphString& sLocalDistr, bool 
 	if ( sLocalDistr.IsEmpty() || sLocalDistr==m_sRtMadeFromDistrIndex )
 		return true;
 
+	StringBuilder_c sExplanation("; ");
 	auto pDist = GetDistr ( sLocalDistr );
-	if ( !pDist->IsRtLike() )
+	if ( !pDist->IsRtLike( sExplanation ) )
+	{
+#ifndef NDEBUG
+		sphWarning ("Conversion %s to rt failed on IsRtLike with reason %s", sLocalDistr.cstr(), sExplanation.cstr() );
+#endif
 		return false;
+	}
 
 	CSphVector<LocalIndex_t> dFakeRT;
 	auto& dRt = dFakeRT.Add();
@@ -6652,6 +6672,9 @@ bool SearchHandler_c::TryConvertDistrToRt ( const CSphString& sLocalDistr, bool 
 				dIndexSet.Add ( pServed->m_pIndex );
 			}
 			pCachedRt = MakeOneshotRt ( dIndexSet, sLocalDistr );
+#ifndef NDEBUG
+		sphWarning ("Oneshot rt from %s created", sLocalDistr.cstr() );
+#endif
 		}
 		m_pRtMadeFromDistrIndex = pCachedRt;
 		m_sRtMadeFromDistrIndex = sLocalDistr;

@@ -576,7 +576,7 @@ class SearchFailuresLog_c
 	CSphVector<SearchFailure_t>		m_dLog;
 
 public:
-	void Submit ( const char * sIndex, const char * sParentIndex , const char * sError )
+	void Submit ( const CSphString& sIndex, const char * sParentIndex , const char * sError )
 	{
 		SearchFailure_t & tEntry = m_dLog.Add ();
 		tEntry.m_sParentIndex = sParentIndex;
@@ -593,11 +593,6 @@ public:
 		tEntry.m_sParentIndex = sParentIndex;
 		tEntry.m_sIndex = sIndex;
 		tError.MoveTo ( tEntry.m_sError );
-	}
-
-	inline void Submit ( const CSphString & sIndex, const char * sParentIndex, const char * sError )
-	{
-		Submit ( sIndex.cstr(), sParentIndex, sError );
 	}
 
 	inline void Append ( const SearchFailuresLog_c& rhs )
@@ -5092,9 +5087,9 @@ private:
 	int								CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter*> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook ) const;
 
 	SphQueueSettings_t				MakeQueueSettings ( const CSphIndex * pIndex, int iMaxMatches, ISphExprHook * pHook ) const;
-	const ServedDesc_t *			CheckIndexSuitable ( const char * szLocal, const char * szParent, VecTraits_T<SearchFailuresLog_c> & dNFailuresSet ) const;
-	bool							CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt, SphQueueRes_t * pQueueRes, VecTraits_T<SearchFailuresLog_c> & dFlr, StrVec_t * pExtra, const ServedDesc_t * pServed,
-										const char * szLocal, const char * szParent, ISphExprHook * pHook );
+	CSphIndex *						CheckIndexSuitable ( const CSphString& sLocal, const char * szParent, VecTraits_T<SearchFailuresLog_c> & dNFailuresSet ) const;
+	bool							CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt, SphQueueRes_t * pQueueRes, VecTraits_T<SearchFailuresLog_c> & dFlr, StrVec_t * pExtra, const CSphIndex* pIndex,
+										const CSphString & sLocal, const char * szParent, ISphExprHook * pHook );
 };
 
 PubSearchHandler_c::PubSearchHandler_c ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster )
@@ -5572,14 +5567,14 @@ struct LocalSearchClone_t
 	}
 };
 
-const ServedDesc_t * SearchHandler_c::CheckIndexSuitable ( const char * szLocal, const char* szParent, VecTraits_T<SearchFailuresLog_c> & dNFailuresSet ) const
+CSphIndex* SearchHandler_c::CheckIndexSuitable ( const CSphString& sLocal, const char* szParent, VecTraits_T<SearchFailuresLog_c> & dNFailuresSet ) const
 {
-	const auto * pServed = m_dLocked.Get ( szLocal );
+	const auto * pServed = m_dLocked.Get ( sLocal );
 	if ( !pServed )
 	{
 		if ( szParent )
 			for ( auto & dFailureSet : dNFailuresSet )
-				dFailureSet.SubmitEx ( szParent, nullptr, "local index %s missing", szLocal );
+				dFailureSet.SubmitEx ( szParent, nullptr, "local index %s missing", sLocal.cstr() );
 
 		return nullptr;
 	}
@@ -5587,16 +5582,16 @@ const ServedDesc_t * SearchHandler_c::CheckIndexSuitable ( const char * szLocal,
 	if ( !ServedDesc_t::IsSelectable ( pServed ) )
 	{
 		for ( auto & dFailureSet : dNFailuresSet )
-			dFailureSet.SubmitEx ( szLocal, nullptr, "%s", "index is not suitable for select" );
+			dFailureSet.SubmitEx ( sLocal, nullptr, "%s", "index is not suitable for select" );
 
 		return nullptr;
 	}
-	return pServed;
+	return pServed->m_pIndex;
 }
 
 
-bool SearchHandler_c::CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt, SphQueueRes_t * pQueueRes, VecTraits_T<SearchFailuresLog_c> & dFlr, StrVec_t * pExtra, const ServedDesc_t * pServed,
-	const char * szLocal, const char * szParent, ISphExprHook * pHook )
+bool SearchHandler_c::CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt, SphQueueRes_t * pQueueRes, VecTraits_T<SearchFailuresLog_c> & dFlr, StrVec_t * pExtra, const CSphIndex* pIndex,
+	const CSphString & sLocal, const char * szParent, ISphExprHook * pHook )
 {
 	auto iQueries = dSrt.GetLength();
 	#if PARANOID
@@ -5605,13 +5600,13 @@ bool SearchHandler_c::CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt
 	#endif
 
 	CSphFixedVector<CSphString> dErrors ( iQueries );
-	int iValidSorters = CreateSorters ( pServed->m_pIndex, dSrt, dErrors, pExtra, *pQueueRes, pHook );
+	int iValidSorters = CreateSorters ( pIndex, dSrt, dErrors, pExtra, *pQueueRes, pHook );
 	if ( iValidSorters<dSrt.GetLength() )
 	{
 		ARRAY_FOREACH ( i, dErrors )
 		{
 			if ( !dErrors[i].IsEmpty () )
-				dFlr[i].Submit ( szLocal, szParent, dErrors[i].cstr () );
+				dFlr[i].Submit ( sLocal, szParent, dErrors[i].cstr () );
 		}
 	}
 
@@ -5705,7 +5700,7 @@ void SearchHandler_c::RunLocalSearches ()
 									 m_dLocal[iLocal].m_sName.scstr ());
 
 			const LocalIndex_t & dLocal = m_dLocal[iLocal];
-			const char * szLocal = dLocal.m_sName.cstr ();
+			const CSphString& sLocal = dLocal.m_sName;
 			const char * szParent = dLocal.m_sParentIndex.cstr ();
 			int iOrderTag = dLocal.m_iOrderTag;
 			int iIndexWeight = dLocal.m_iWeight;
@@ -5715,20 +5710,19 @@ void SearchHandler_c::RunLocalSearches ()
 			auto* pExtra = tCtx.m_pExtra;
 
 			// publish crash query index
-			GlobalCrashQueryGetRef().m_dIndex = FromSz ( szLocal );
+			GlobalCrashQueryGetRef().m_dIndex = FromStr ( sLocal );
 
 			// prepare and check the index
-			const auto * pServed = CheckIndexSuitable ( szLocal, szParent, dNFailuresSet );
-			if ( !pServed )
+			CSphIndex* pIndex = CheckIndexSuitable ( sLocal, szParent, dNFailuresSet );
+			if ( !pIndex )
 				continue;
 
-			assert ( pServed->m_pIndex );
-			tCtx.m_tHook.SetIndex ( pServed->m_pIndex );
+			tCtx.m_tHook.SetIndex ( pIndex );
 			tCtx.m_tHook.SetQueryType ( m_eQueryType );
 
 			// create sorters
 			SphQueueRes_t tQueueRes;
-			if ( !CreateValidSorters ( dSorters, &tQueueRes, dNFailuresSet, pExtra, pServed, szLocal, szParent, &tCtx.m_tHook ) )
+			if ( !CreateValidSorters ( dSorters, &tQueueRes, dNFailuresSet, pExtra, pIndex, sLocal, szParent, &tCtx.m_tHook ) )
 				continue;
 
 			// do the query
@@ -5747,9 +5741,9 @@ void SearchHandler_c::RunLocalSearches ()
 			tMqRes.m_pMeta = &tMqMeta;
 			dNAggrResults.First().m_tIOStats.Start ();
 			if ( m_bMultiQueue )
-				bResult = pServed->m_pIndex->MultiQuery ( tMqRes, m_dNQueries.First(), dSorters, tMultiArgs );
+				bResult = pIndex->MultiQuery ( tMqRes, m_dNQueries.First(), dSorters, tMultiArgs );
 			else
-				bResult = pServed->m_pIndex->MultiQueryEx ( iQueries, &m_dNQueries[0], &dNResults[0], &dSorters[0], tMultiArgs );
+				bResult = pIndex->MultiQueryEx ( iQueries, &m_dNQueries[0], &dNResults[0], &dSorters[0], tMultiArgs );
 			dNAggrResults.First ().m_tIOStats.Stop ();
 
 			iCpuTime += sphTaskCpuTimer ();
@@ -5782,7 +5776,7 @@ void SearchHandler_c::RunLocalSearches ()
 						tNRes.m_iCpuTime += tMqMeta.m_iCpuTime / iQueries;
 					} else if ( tNRes.m_iMultiplier==-1 ) // multiplier -1 means 'error'
 					{
-						dNFailuresSet[i].Submit ( szLocal, szParent, tNRes.m_sError.cstr() );
+						dNFailuresSet[i].Submit ( sLocal, szParent, tNRes.m_sError.cstr() );
 						continue;
 					}
 					++tNRes.m_iSuccesses;
@@ -5800,12 +5794,12 @@ void SearchHandler_c::RunLocalSearches ()
 					tNRes.AddResultset( pSorter, pDocstore, iOrderTag );
 
 					if ( !tNRes.m_sWarning.IsEmpty () )
-						dNFailuresSet[i].Submit ( szLocal, szParent, tNRes.m_sWarning.cstr () );
+						dNFailuresSet[i].Submit ( sLocal, szParent, tNRes.m_sWarning.cstr () );
 				}
 			} else
 				// failed, submit local (if not empty) or global error string
 				for ( int i = 0; i<iQueries; ++i )
-					dNFailuresSet[i].Submit ( szLocal, szParent, tMqMeta.m_sError.IsEmpty ()
+					dNFailuresSet[i].Submit ( sLocal, szParent, tMqMeta.m_sError.IsEmpty ()
 							? dNAggrResults[m_bMultiQueue ? 0 : i].m_sError.cstr ()
 							: tMqMeta.m_sError.cstr () );
 
@@ -6386,7 +6380,7 @@ void SearchHandler_c::CalcPerIndexStats ( const CSphVector<DistrServedByAgent_t>
 				{
 					tDistr.m_dStats[iQuery].m_uQueryTime += tStat.m_uQueryTime;
 					tDistr.m_dStats[iQuery].m_uFoundRows += tStat.m_uFoundRows;
-					tDistr.m_dStats[iQuery].m_iSuccesses++;
+					++tDistr.m_dStats[iQuery].m_iSuccesses;
 				}
 			}
 		}
@@ -6568,7 +6562,7 @@ DEFINE_RENDER ( QueryInfo_t )
 		dDst.m_pQuery = new CSphQuery ( *pQuery );
 }
 
-// one ore more queries against one and same set of indexes
+// one or more queries against one and same set of indexes
 void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 {
 	int iQueries = iEnd - iStart;
@@ -6736,11 +6730,11 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 					// copy errors or warnings
 					if ( !tRemoteResult.m_sError.IsEmpty() )
-						m_dNFailuresSet[iRes].SubmitEx ( tFirst.m_sIndexes.cstr(), nullptr,
+						m_dNFailuresSet[iRes].SubmitEx ( tFirst.m_sIndexes, nullptr,
 							"agent %s: remote query error: %s",
 							pAgent->m_tDesc.GetMyUrl().cstr(), tRemoteResult.m_sError.cstr() );
 					if ( !tRemoteResult.m_sWarning.IsEmpty() )
-						m_dNFailuresSet[iRes].SubmitEx ( tFirst.m_sIndexes.cstr(), nullptr,
+						m_dNFailuresSet[iRes].SubmitEx ( tFirst.m_sIndexes, nullptr,
 							"agent %s: remote query warning: %s",
 							pAgent->m_tDesc.GetMyUrl().cstr(), tRemoteResult.m_sWarning.cstr() );
 
@@ -10830,7 +10824,7 @@ bool DoGetKeywords ( const CSphString & sIndex, const CSphString & sQuery, const
 			if ( pServed->m_pIndex->GetKeywords ( dKeywordsLocal, sQuery.cstr(), tSettings, &sError ) )
 				dKeywords.Append ( dKeywordsLocal );
 			else
-				tFailureLog.SubmitEx ( sLocal.cstr (), sIndex.cstr (), "keyword extraction failed: %s", sError.cstr () );
+				tFailureLog.SubmitEx ( sLocal, sIndex.cstr (), "keyword extraction failed: %s", sError.cstr () );
 		}
 
 		// remote agents requests send off thread
@@ -10848,7 +10842,7 @@ bool DoGetKeywords ( const CSphString & sIndex, const CSphString & sQuery, const
 
 			for ( const AgentConn_t * pAgent : dAgents )
 				if ( !pAgent->m_bSuccess && !pAgent->m_sFailure.IsEmpty() )
-					tFailureLog.SubmitEx ( pAgent->m_tDesc.m_sIndexes.cstr(), sIndex.cstr(),
+					tFailureLog.SubmitEx ( pAgent->m_tDesc.m_sIndexes, sIndex.cstr(),
 						"agent %s: %s", pAgent->m_tDesc.GetMyUrl().cstr(), pAgent->m_sFailure.cstr() );
 		}
 
@@ -16797,7 +16791,7 @@ static void ConfigureLocalIndex ( ServedDesc_t * pIdx, const CSphConfigSection &
 }
 
 
-static void ConfigureDistributedIndex ( DistributedIndex_t & tIdx, const char * szIndexName, const CSphConfigSection & hIndex, StrVec_t * pWarnings=nullptr ) REQUIRES ( MainThread )
+static void ConfigureDistributedIndex ( DistributedIndex_t & tIdx, const char * szIndexName, const CSphConfigSection & hIndex, StrVec_t * pWarnings=nullptr )
 {
 	assert ( hIndex("type") && hIndex["type"]=="distributed" );
 
@@ -16908,7 +16902,7 @@ static void ConfigureDistributedIndex ( DistributedIndex_t & tIdx, const char * 
 //////////////////////////////////////////////////
 /// configure distributed index and add it to hash
 //////////////////////////////////////////////////
-static ESphAddIndex AddDistributedIndex ( const char * szIndexName, const CSphConfigSection & hIndex, CSphString & sError, StrVec_t * pWarnings=nullptr ) REQUIRES ( MainThread )
+static ESphAddIndex AddDistributedIndex ( const char * szIndexName, const CSphConfigSection & hIndex, CSphString & sError, StrVec_t * pWarnings=nullptr )
 {
 	DistributedIndexRefPtr_t pIdx ( new DistributedIndex_t );
 	ConfigureDistributedIndex ( *pIdx, szIndexName, hIndex, pWarnings );
@@ -17210,8 +17204,9 @@ static ESphAddIndex AddTemplateIndex ( const char * szIndexName, const CSphConfi
 	return ADD_SERVED;
 }
 
-// AddIndex() -> AddIndexMT() // from main thread
-// RemoteLoadIndex() -> LoadIndex() -> AddIndexMT() // only Percolate! From other threads
+// AddIndex() -> AddIndexMT() // from main thread. Rt and Pq
+// HandleCommandClusterPq() -> RemoteLoadIndex() -> LoadIndex() -> AddIndexMT() // only Percolate! From other threads
+// HandleMysqlCreateTable() -> CreateNewIndexInt() -> AddIndexMT()
 ESphAddIndex AddIndexMT ( GuardedHash_c & dPost, const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace, bool bMutableOpt, StrVec_t * pWarnings, CSphString & sError )
 {
 	switch ( TypeOfIndexConfig ( hIndex.GetStr ( "type", nullptr ) ) )

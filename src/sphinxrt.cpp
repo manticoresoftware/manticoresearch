@@ -801,10 +801,10 @@ struct SaveDiskDataContext_t;
 // kind of 'mini served_desc' inside index - manages state of one disk chunk
 class DiskChunk_c final : public ISphRefcountedMT
 {
-	CSphIndex *		m_pIndex = nullptr;
+	CSphIndex *		m_pIndex;
 
 private:
-	explicit DiskChunk_c ( CSphIndex* pIndex ) : m_pIndex ( pIndex ) {}
+	DiskChunk_c ( CSphIndex* pIndex ) : m_pIndex ( pIndex ) {}
 
 protected:
 	~DiskChunk_c () final
@@ -1414,7 +1414,8 @@ RtIndex_c::~RtIndex_c ()
 	if ( m_iLockFD>=0 )
 		::close ( m_iLockFD );
 
-	Binlog::NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, sphInterrupted () );
+	if ( bValid )
+		Binlog::NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, sphInterrupted () );
 
 	if ( m_bIndexDeleted )
 	{

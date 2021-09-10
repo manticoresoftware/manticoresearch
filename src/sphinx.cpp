@@ -3846,7 +3846,7 @@ void CSphTokenizerBase::WriteSynonyms ( CSphWriter & tWriter ) const
 void CSphTokenizerBase::CloneBase ( const CSphTokenizerBase * pFrom, ESphTokenizerClone eMode )
 {
 	m_eMode = eMode;
-	m_pExc = NULL;
+	m_pExc = nullptr;
 	if ( pFrom->m_pExc )
 	{
 		m_pExc = new ExceptionsTrie_c();
@@ -3891,8 +3891,8 @@ void CSphTokenizerBase::CloneBase ( const CSphTokenizerBase * pFrom, ESphTokeniz
 			// copy 3 KB of lowercaser chunk pointers, but do NOT copy the table data
 			SafeDeleteArray ( m_tLC.m_pData );
 			m_tLC.m_iChunks = 0;
-			m_tLC.m_pData = NULL;
-			for ( int i=0; i<CSphLowercaser::CHUNK_COUNT; i++ )
+			m_tLC.m_pData = nullptr;
+			for ( int i=0; i<CSphLowercaser::CHUNK_COUNT; ++i )
 				m_tLC.m_pChunk[i] = pFrom->m_tLC.m_pChunk[i];
 			break;
 		}

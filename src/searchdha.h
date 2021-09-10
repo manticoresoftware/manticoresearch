@@ -678,7 +678,7 @@ int PerformRemoteTasks ( VectorAgentConn_t &dRemotes, RequestBuilder_i * pQuery,
 /// distributed index
 struct DistributedIndex_t : public ServedStats_c, public ISphRefcountedMT
 {
-	CSphVector<MultiAgentDesc_c *> m_dAgents;	///< remote agents
+	CSphVector<MultiAgentDesc_c *> m_dAgents;		///< remote agents
 	StrVec_t m_dLocal;								///< local indexes
 	int m_iAgentConnectTimeoutMs		{ g_iAgentConnectTimeoutMs };	///< in msec
 	int m_iAgentQueryTimeoutMs		{ g_iAgentQueryTimeoutMs };	///< in msec

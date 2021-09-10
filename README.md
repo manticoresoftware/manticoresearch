@@ -5,7 +5,7 @@
 </p>
 
 <h1 align="center">
-  Manticore Search 3.6.0
+  Manticore Search 3.6.1 (release candidate)
 </h1>
 
 <h3 align="center">
@@ -21,12 +21,13 @@
 <p>&nbsp;</p>
 
 # Introduction
-Manticore Search is a database designed specifically for search, including full-text search. What differs it from other solutions is:
+Manticore Search is a multi-storage database designed specifically for search, including full-text search. What differs it from other solutions is:
 * Powerful and fast full-text searching which works fine for small and big datasets
 * Traditional row-wise storage for small, medium and big size datasets
-* Columnar storage support via [Manticore Columnar Library](https://github.com/manticoresoftware/columnar/) for super big datasets (much bigger than can be fit in RAM)
+* Columnar storage support via [Manticore Columnar Library](https://github.com/manticoresoftware/columnar/) for bigger datasets (much bigger than can be fit in RAM)
 * SQL-first: the native Manticore's syntax is SQL. It speaks SQL over HTTP and MySQL protocol (you can use your preferred mysql client)
-* JSON over HTTP: to provide more programmatic way to manage your data and schemas Manticore provides HTTP JSON protocol. Very similar to the one from Elasticsearch
+* Clients for [PHP](https://github.com/manticoresoftware/manticoresearch-php), [Python](https://github.com/manticoresoftware/manticoresearch-python), [Javascript](https://github.com/manticoresoftware/manticoresearch-javascript), [Java](https://github.com/manticoresoftware/manticoresearch-java), [Go](https://github.com/manticoresoftware/go-sdk)
+* JSON over HTTP: to provide more programmatic way to manage your data and schemas Manticore provides HTTP JSON protocol
 * Written fully in C++: starts fast, doesn't take much RAM, low-level optimizations give good performance
 * Real-time inserts: after INSERT is made the document can be read immediately
 * [Interactive courses](https://play.manticoresearch.com/) for easier learning
@@ -65,13 +66,16 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - Built-in load balancing
 * Security:
   - [https support](https://play.manticoresearch.com/https/)
+* Data storages:
+  - row-wise - requires more RAM, gives faster performance
+  - columnar - requires less RAM, still gives decent performance, but lower than the row-wise storage for some kinds of queries
+  - docstore - doesn't require RAM at all, but allows only fetching original value, not sorting/grouping/filtering
 * Data types:
   - full-text field - inverted index
-  - integer and float in-memory numeric fields
-  - in-memory "string" for fast filtering
+  - int, bigint and float numeric fields in row-wise and columnar fashion
+  - multi-value attributes (array)
+  - string and JSON
   - on-disk "[stored](https://play.manticoresearch.com/docstore/)" for key-value purpose
-  - JSON
-  - multi-value attributes
 * Integrations:
   - [Sync from MySQL and PostgreSQL](https://manual.manticoresearch.com/Creating_an_index/Local_indexes/Plain_index)
   - [Sync from XML](https://manual.manticoresearch.com/Adding_data_from_external_storages/Fetching_from_XML_streams#XML-file-format)

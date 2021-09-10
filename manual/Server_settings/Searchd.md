@@ -76,6 +76,32 @@ attr_flush_period = 900 # persist updates to disk every 15 minutes
 ```
 <!-- end -->
 
+### auto_optimize
+
+<!-- example conf auto_optimize -->
+Disables or throttles automatic [OPTIMIZE](../Securing_and_compacting_an_index/Compacting_an_index.md#OPTIMIZE-INDEX).
+
+Since Manticore 4 indexes compaction happens automatically. You can change it with help of searchd setting `auto_optimize` by setting it to:
+* 0 to disable automatic indexes compaction (you can still call `OPTIMIZE` manually)
+* 1 to enable it explicitly
+* N to enable it, but let OPTIMIZE start as soon as the number of disk chunks is greater than `# of CPU cores * 2 * N`
+
+Note turning `auto_optimize` on/off doesn't prevent you from running `OPTIMIZE` manually.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Disable -->
+```ini
+auto_optimize = 0 # disable automatic OPTIMIZE
+```
+
+<!-- request Throttle -->
+```ini
+auto_optimize = 2 # OPTIMIZE starts at 16 chunks (on 4 cpu cores server)
+```
+
+<!-- end -->
 
 ### binlog_flush
 
@@ -203,7 +229,7 @@ collation_server = utf8_ci
 ### data_dir
 
 <!-- example conf data_dir -->
-When specified, enables the [real-time mode](../Creating_an_index/Local_indexes.md#Online-schema-management-%28RT-mode%29) (imperative way of managing data schema). The value should be a path to the directory where you want to store all your indexes, binary log and everything else needed for the proper functioning of Manticore Search in this mode. 
+When specified, enables the [real-time mode](../Creating_an_index/Local_indexes.md#Online-schema-management-%28RT-mode%29) (imperative way of managing data schema). The value should be a path to the directory where you want to store all your indexes, binary log and everything else needed for the proper functioning of Manticore Search in this mode.
 Indexation of [plain indexes](../Creating_an_index/Local_indexes/Plain_index.md) is not allowed when the `data_dir` is specified. Read more about the difference between the RT mode and the plain mode in [this section](../Read_this_first.md#Real-time-index-vs-plain-index).
 
 <!-- intro -->

@@ -10,6 +10,7 @@
   * 16.04 LTS (Xenial)
   * 18.04 LTS (Bionic)
   * 20.04 LTS (Focal)
+  * 21.04 (Hirsute Hippo)
 
 * Mint
   * 19

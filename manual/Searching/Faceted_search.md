@@ -15,11 +15,10 @@ In Manticore Search there is an optimization that retains the result set of the 
 The facet values can come from an attribute, JSON property from a JSON attribute or expression. Facet values can be also aliased, however the **alias must be unique** across all result sets (main query results set and other facets results sets). The facet value is taken from the aggregated attribute/expression, but it can also come from another attribute/expression.
 
 ```sql
-FACET {expr_list} [BY {expr_list}] [DISTINCT {field}] [ORDER BY {expr | FACET()} {ASC | DESC}] [LIMIT [offset,] count]
+FACET {expr_list} [BY {expr_list} ] [DISTINCT {field_name}] [ORDER BY {expr | FACET()} {ASC | DESC}] [LIMIT [offset,] count]
 ```
 
-Multiple facet declarations need to be separated by an whitespace.
-
+Multiple facet declarations need to be separated with a whitespace.
 
 ### HTTP
 
@@ -116,7 +115,7 @@ SELECT *, price AS aprice FROM facetdemo LIMIT 10 FACET price LIMIT 10 FACET bra
 ```
 <!-- request HTTP -->
 
-``` json
+```json
 POST /search -d '
     {
      "index" : "facetdemo",
@@ -145,7 +144,7 @@ POST /search -d '
 
 <!-- response HTTP -->
 
-``` json
+```json
 {
   "took": 3,
   "timed_out": false,
@@ -227,7 +226,7 @@ POST /search -d '
 }
 ```
 <!-- request PHP -->
-``` php
+```php
 $index->setName('facetdemo');
 $search = $index->search('');
 $search->limit(5);
@@ -236,7 +235,7 @@ $search->facet('brand_id','group_brand_id');
 $results = $search->get();
 ```
 <!-- response PHP -->
-``` php
+```php
 Array
 (
     [price] => Array
@@ -304,11 +303,11 @@ Array
 )
 ```
 <!-- request Python -->
-``` python
+```python
 res =searchApi.search({"index":"facetdemo","query":{"match_all":{}},"limit":5,"aggs":{"group_property":{"terms":{"field":"price",}},"group_brand_id":{"terms":{"field":"brand_id"}}}})
 ```
 <!-- response Python -->
-``` python
+```python
 {'aggregations': {u'group_brand_id': {u'buckets': [{u'doc_count': 1019,
                                                     u'key': 10},
                                                    {u'doc_count': 954,
@@ -377,29 +376,28 @@ res =searchApi.search({"index":"facetdemo","query":{"match_all":{}},"limit":5,"a
 
 ```
 <!-- request Javascript -->
-``` javascript
+```javascript
 res =  await searchApi.search({"index":"facetdemo","query":{"match_all":{}},"limit":5,"aggs":{"group_property":{"terms":{"field":"price",}},"group_brand_id":{"terms":{"field":"brand_id"}}}});
 ```
 <!-- response Javascript -->
-``` javascript
+```javascript
 {"took":0,"timed_out":false,"hits":{"total":10000,"hits":[{"_id":"1","_score":1,"_source":{"price":197,"brand_id":10,"brand_name":"Brand Ten","categories":[10],"title":"Product Eight One","property":"Six"}},{"_id":"2","_score":1,"_source":{"price":671,"brand_id":6,"brand_name":"Brand Six","categories":[12,13,14],"title":"Product Nine Seven","property":"Four"}},{"_id":"3","_score":1,"_source":{"price":92,"brand_id":3,"brand_name":"Brand Three","categories":[13,14,15],"title":"Product Five Four","property":"Six"}},{"_id":"4","_score":1,"_source":{"price":713,"brand_id":10,"brand_name":"Brand Ten","categories":[11],"title":"Product Eight Nine","property":"Five"}},{"_id":"5","_score":1,"_source":{"price":805,"brand_id":7,"brand_name":"Brand Seven","categories":[11,12,13],"title":"Product Ten Three","property":"Two"}}]}}
 
 ```
-<!-- req
 <!-- request Java -->
-``` java
+```java
 aggs = new HashMap<String,Object>(){{
-    put("group_property", new HashMap<String,Object>(){{ 
-        put("sizes", new HashMap<String,Object>(){{ 
+    put("group_property", new HashMap<String,Object>(){{
+        put("sizes", new HashMap<String,Object>(){{
                 put("field","price");
-               
+
 
         }});
     }});
-    put("group_brand_id", new HashMap<String,Object>(){{ 
-        put("sizes", new HashMap<String,Object>(){{ 
+    put("group_brand_id", new HashMap<String,Object>(){{
+        put("sizes", new HashMap<String,Object>(){{
                 put("field","brand_id");
-               
+
 
         }});
     }});            
@@ -416,7 +414,7 @@ searchResponse = searchApi.search(searchRequest);
 
 ```
 <!-- response Java -->
-``` java
+```java
 class SearchResponse {
     took: 0
     timedOut: false
@@ -449,7 +447,7 @@ Data can be faceted by aggregating another attribute or expression. For example 
 SELECT * FROM facetdemo FACET brand_name by brand_id;
 ```
 
-<!-- response -->
+<!-- response SQL -->
 
 ```sql
 +------+-------+----------+---------------------+-------------+-------------+---------------------------------------+------------+
@@ -481,6 +479,71 @@ SELECT * FROM facetdemo FACET brand_name by brand_id;
 
 <!-- end -->
 
+<!-- example Distinct -->
+
+### Faceting without duplicates
+
+If you need to remove duplicates from the buckets FACET returns you can use `DISTINCT field_name` where `field_name` is the field by which you want to do the deduplication. It can be also `id` (and it is by default) if you make a FACET query against a distributed index and are not sure you have unique ids in the indexes (the indexes should local and have the same schema).
+
+If you have multiple FACET declarations in your query `field_name` should be the same in all of them.
+
+`DISTINCT` returns additional column `count(distinct ...)` before column `count(*)`, so you can get the both results without the need to make another query.
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+SELECT brand_name, property FROM facetdemo FACET brand_name distinct property;
+```
+
+<!-- response SQL -->
+
+```sql
++-------------+----------+
+| brand_name  | property |
++-------------+----------+
+| Brand Nine  | Four     |
+| Brand Ten   | Four     |
+| Brand One   | Five     |
+| Brand Seven | Nine     |
+| Brand Seven | Seven    |
+| Brand Three | Seven    |
+| Brand Nine  | Five     |
+| Brand Three | Eight    |
+| Brand Two   | Eight    |
+| Brand Six   | Eight    |
+| Brand Ten   | Four     |
+| Brand Ten   | Two      |
+| Brand Four  | Ten      |
+| Brand One   | Nine     |
+| Brand Four  | Eight    |
+| Brand Nine  | Seven    |
+| Brand Four  | Five     |
+| Brand Three | Four     |
+| Brand Four  | Two      |
+| Brand Four  | Eight    |
++-------------+----------+
+20 rows in set (0.00 sec)
+
++-------------+--------------------------+----------+
+| brand_name  | count(distinct property) | count(*) |
++-------------+--------------------------+----------+
+| Brand Nine  |                        3 |        3 |
+| Brand Ten   |                        2 |        3 |
+| Brand One   |                        2 |        2 |
+| Brand Seven |                        2 |        2 |
+| Brand Three |                        3 |        3 |
+| Brand Two   |                        1 |        1 |
+| Brand Six   |                        1 |        1 |
+| Brand Four  |                        4 |        5 |
++-------------+--------------------------+----------+
+8 rows in set (0.00 sec)
+```
+
+<!-- end -->
+
 <!-- example Expressions -->
 ### Facet over expressions
 
@@ -488,13 +551,13 @@ Facets can aggregate over expressions. A classic example is segmentation of pric
 
 <!-- request SQL -->
 
-``` sql
+```sql
 SELECT * FROM facetdemo FACET INTERVAL(price,200,400,600,800) AS price_range ;
 ```
 
 <!-- response SQL -->
 
-``` sql
+```sql
 +------+-------+----------+---------------------+-------------+-------------+---------------------------------------+------------+-------------+
 | id   | price | brand_id | title               | brand_name  | property    | j                                     | categories | price_range |
 +------+-------+----------+---------------------+-------------+-------------+---------------------------------------+------------+-------------+
@@ -610,7 +673,7 @@ POST /search -d '
 }
 ```
 <!-- request PHP -->
-``` php
+```php
 $index->setName('facetdemo');
 $search = $index->search('');
 $search->limit(5);
@@ -620,7 +683,7 @@ $results = $search->get();
 print_r($results->getFacets());
 ```
 <!-- response PHP -->
-``` php
+```php
 Array
 (
     [group_property] => Array
@@ -657,11 +720,11 @@ Array
 )
 ```
 <!-- request Python -->
-``` python
+```python
 res =searchApi.search({"index":"facetdemo","query":{"match_all":{}},"expressions":{"price_range":"INTERVAL(price,200,400,600,800)"},"aggs":{"group_property":{"terms":{"field":"price_range"}}}})
 ```
 <!-- response Python -->
-``` python
+```python
 {'aggregations': {u'group_brand_id': {u'buckets': [{u'doc_count': 1019,
                                                     u'key': 10},
                                                    {u'doc_count': 954,
@@ -730,26 +793,26 @@ res =searchApi.search({"index":"facetdemo","query":{"match_all":{}},"expressions
 ```
 
 <!-- request Javascript -->
-``` javascript
+```javascript
 res =  await searchApi.search({"index":"facetdemo","query":{"match_all":{}},"expressions":{"price_range":"INTERVAL(price,200,400,600,800)"},"aggs":{"group_property":{"terms":{"field":"price_range"}}}});
 ```
 <!-- response Javascript -->
-``` javascript
+```javascript
 {"took":0,"timed_out":false,"hits":{"total":10000,"hits":[{"_id":"1","_score":1,"_source":{"price":197,"brand_id":10,"brand_name":"Brand Ten","categories":[10],"title":"Product Eight One","property":"Six","price_range":0}},{"_id":"2","_score":1,"_source":{"price":671,"brand_id":6,"brand_name":"Brand Six","categories":[12,13,14],"title":"Product Nine Seven","property":"Four","price_range":3}},{"_id":"3","_score":1,"_source":{"price":92,"brand_id":3,"brand_name":"Brand Three","categories":[13,14,15],"title":"Product Five Four","property":"Six","price_range":0}},{"_id":"4","_score":1,"_source":{"price":713,"brand_id":10,"brand_name":"Brand Ten","categories":[11],"title":"Product Eight Nine","property":"Five","price_range":3}},{"_id":"5","_score":1,"_source":{"price":805,"brand_id":7,"brand_name":"Brand Seven","categories":[11,12,13],"title":"Product Ten Three","property":"Two","price_range":4}},{"_id":"6","_score":1,"_source":{"price":420,"brand_id":2,"brand_name":"Brand Two","categories":[10,11],"title":"Product Two One","property":"Six","price_range":2}},{"_id":"7","_score":1,"_source":{"price":412,"brand_id":9,"brand_name":"Brand Nine","categories":[10],"title":"Product Four Nine","property":"Eight","price_range":2}},{"_id":"8","_score":1,"_source":{"price":300,"brand_id":9,"brand_name":"Brand Nine","categories":[13,14,15],"title":"Product Eight Four","property":"Five","price_range":1}},{"_id":"9","_score":1,"_source":{"price":728,"brand_id":1,"brand_name":"Brand One","categories":[11],"title":"Product Nine Six","property":"Four","price_range":3}},{"_id":"10","_score":1,"_source":{"price":622,"brand_id":3,"brand_name":"Brand Three","categories":[10,11],"title":"Product Six Seven","property":"Two","price_range":3}},{"_id":"11","_score":1,"_source":{"price":462,"brand_id":5,"brand_name":"Brand Five","categories":[10,11],"title":"Product Ten Two","property":"Eight","price_range":2}},{"_id":"12","_score":1,"_source":{"price":939,"brand_id":7,"brand_name":"Brand Seven","categories":[12,13],"title":"Product Nine Seven","property":"Six","price_range":4}},{"_id":"13","_score":1,"_source":{"price":948,"brand_id":8,"brand_name":"Brand Eight","categories":[12],"title":"Product Ten One","property":"Six","price_range":4}},{"_id":"14","_score":1,"_source":{"price":900,"brand_id":9,"brand_name":"Brand Nine","categories":[12,13,14],"title":"Product Ten Nine","property":"Three","price_range":4}},{"_id":"15","_score":1,"_source":{"price":224,"brand_id":3,"brand_name":"Brand Three","categories":[13],"title":"Product Two Six","property":"Four","price_range":1}},{"_id":"16","_score":1,"_source":{"price":713,"brand_id":10,"brand_name":"Brand Ten","categories":[12],"title":"Product Two Four","property":"Six","price_range":3}},{"_id":"17","_score":1,"_source":{"price":510,"brand_id":2,"brand_name":"Brand Two","categories":[10],"title":"Product Ten Two","property":"Seven","price_range":2}},{"_id":"18","_score":1,"_source":{"price":702,"brand_id":10,"brand_name":"Brand Ten","categories":[12,13],"title":"Product Nine One","property":"Three","price_range":3}},{"_id":"19","_score":1,"_source":{"price":836,"brand_id":4,"brand_name":"Brand Four","categories":[10,11,12],"title":"Product Four Five","property":"Two","price_range":4}},{"_id":"20","_score":1,"_source":{"price":227,"brand_id":3,"brand_name":"Brand Three","categories":[12,13],"title":"Product Three Four","property":"Ten","price_range":1}}]}}
 ```
 
 <!-- request Java -->
-``` java
+```java
 searchRequest = new SearchRequest();
 expressions = new HashMap<String,Object>(){{
     put("price_range","INTERVAL(price,200,400,600,800)");
 }};
 searchRequest.setExpressions(expressions);
 aggs = new HashMap<String,Object>(){{
-    put("group_property", new HashMap<String,Object>(){{ 
-        put("sizes", new HashMap<String,Object>(){{ 
+    put("group_property", new HashMap<String,Object>(){{
+        put("sizes", new HashMap<String,Object>(){{
                 put("field","price_range");
-               
+
 
         }});
     }});
@@ -765,7 +828,7 @@ searchResponse = searchApi.search(searchRequest);
 
 ```
 <!-- response Java -->
-``` java
+```java
 class SearchResponse {
     took: 0
     timedOut: false
@@ -820,36 +883,6 @@ FACET price_range AS price_range,brand_name ORDER BY brand_name asc;
 |            1 | Brand Four  |      195 |
 ...
 ```
-<!-- end -->
-
-<!-- example Distinct -->
-### Facet with DISTINCT field
-
-Facets can aggregate and returns number of different values of the field in the group which may be absolutely different from the total count [DISTINCT](../Searching/Grouping.md#COUNT(DISTINCT-field)). By default DISTINCT field is document ID attribute but could be any attribute.
-
-<!-- request SQL -->
-
-```sql
-SELECT * FROM t1, t2 LIMIT 0 FACET price DISTINCT;
-```
-
-<!-- response SQL -->
-
-```sql
-Empty set (0.00 sec)
-
-+-------+--------------------+----------+
-| price | count(distinct id) | count(*) |
-+-------+--------------------+----------+
-|   306 |                  7 |        9 |
-|   400 |                 13 |       23 |
-...      
-|   229 |                  9 |       18 |
-|   595 |                 10 |       10 |
-+-------+--------------------+----------+
-20 rows in set (0.00 sec)
-```
-
 <!-- end -->
 
 <!-- example Ordering -->
@@ -1089,7 +1122,7 @@ POST /search -d '
 }
 ```
 <!-- request PHP -->
-``` php
+```php
 $index->setName('facetdemo');
 $search = $index->search('');
 $search->limit(5);
@@ -1099,7 +1132,7 @@ $results = $search->get();
 print_r($results->getFacets());
 ```
 <!-- response PHP -->
-``` php
+```php
 
 Array
 (
@@ -1138,11 +1171,11 @@ Array
 )
 ```
 <!-- request Python -->
-``` python
+```python
 res =searchApi.search({"index":"facetdemo","query":{"match_all":{}},"limit":5,"aggs":{"group_property":{"terms":{"field":"price","size":1,}},"group_brand_id":{"terms":{"field":"brand_id","size":3}}}})
 ```
 <!-- response Python -->
-``` python
+```python
 {'aggregations': {u'group_brand_id': {u'buckets': [{u'doc_count': 1019,
                                                     u'key': 10},
                                                    {u'doc_count': 954,
@@ -1198,32 +1231,32 @@ res =searchApi.search({"index":"facetdemo","query":{"match_all":{}},"limit":5,"a
  'took': 0}
 ```
 <!-- request Javascript -->
-``` javascript
+```javascript
 res =  await searchApi.search({"index":"facetdemo","query":{"match_all":{}},"limit":5,"aggs":{"group_property":{"terms":{"field":"price","size":1,}},"group_brand_id":{"terms":{"field":"brand_id","size":3}}}});
 ```
 <!-- response Javascript -->
-``` javascript
+```javascript
 {"took":0,"timed_out":false,"hits":{"total":10000,"hits":[{"_id":"1","_score":1,"_source":{"price":197,"brand_id":10,"brand_name":"Brand Ten","categories":[10],"title":"Product Eight One","property":"Six"}},{"_id":"2","_score":1,"_source":{"price":671,"brand_id":6,"brand_name":"Brand Six","categories":[12,13,14],"title":"Product Nine Seven","property":"Four"}},{"_id":"3","_score":1,"_source":{"price":92,"brand_id":3,"brand_name":"Brand Three","categories":[13,14,15],"title":"Product Five Four","property":"Six"}},{"_id":"4","_score":1,"_source":{"price":713,"brand_id":10,"brand_name":"Brand Ten","categories":[11],"title":"Product Eight Nine","property":"Five"}},{"_id":"5","_score":1,"_source":{"price":805,"brand_id":7,"brand_name":"Brand Seven","categories":[11,12,13],"title":"Product Ten Three","property":"Two"}}]}}
 
 ```
 
 <!-- request Java -->
-``` java
+```java
 searchRequest = new SearchRequest();
 aggs = new HashMap<String,Object>(){{
-    put("group_property", new HashMap<String,Object>(){{ 
-        put("sizes", new HashMap<String,Object>(){{ 
+    put("group_property", new HashMap<String,Object>(){{
+        put("sizes", new HashMap<String,Object>(){{
                 put("field","price");
                 put("size",1);
-               
+
 
         }});
     }});
-    put("group_brand_id", new HashMap<String,Object>(){{ 
-        put("sizes", new HashMap<String,Object>(){{ 
+    put("group_brand_id", new HashMap<String,Object>(){{
+        put("sizes", new HashMap<String,Object>(){{
                 put("field","brand_id");
                 put("size",3);
-               
+
 
         }});
     }});            
@@ -1237,7 +1270,7 @@ searchRequest.setAggs(aggs);
 searchResponse = searchApi.search(searchRequest);
 ```
 <!-- response Java -->
-``` java
+```java
 class SearchResponse {
     took: 0
     timedOut: false

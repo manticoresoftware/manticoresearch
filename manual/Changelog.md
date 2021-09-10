@@ -1,8 +1,106 @@
 # Changelog
 
-## Version 4.0.0, Sep ??? 2021
+## Version 4.0.2, Sep ??? 2021
 
-WIP
+### Major new features
+- **Full support of [Manticore Columnar Library](https://github.com/manticoresoftware/columnar)**. Previously Manticore Columnar Library was supported only for plain indexes. Now it's supported:
+  - in real-time indexes for `INSERT`, `REPLACE`, `DELETE`, `OPTIMIZE`
+  - in replication
+  - in `ALTER`
+  - in `indextool --check`
+- **Automatic indexes compaction** ([#478](https://github.com/manticoresoftware/manticoresearch/issues/478)). Finally you don't have to call OPTIMIZE manually or via a crontask or other kind of automation. Manticore now does it on your own.
+- **Chunk snapshots and locks system revamp**. These changes may be invisible from outside at first glance, but they improve the behaviour of many things happening in real-time indexes significantly. In a nutshell, previously most Manticore data manipulation operations relied on locks heavily, now we use disk chunk snapshots instead.
+
+  <details>
+
+  - read operations (e.g. SELECTs, replication) are performed with snapshots
+  - operations that just change internal index structure without modifying schema/documents (e.g. merging RAM segments, saving disk chunks, merging disk chunks) are performed with read-only snapshots and replace the existing chunks in the end
+  - UPDATEs and DELETEs are performed against existing chunks, but for the case of merging that may be happening the writes are collected and are then applied against the new chunks
+  - UPDATEs acquire an exclusive lock sequentially for every chunk. Merges acquire a shared lock when entering the stage of collecting attributes from the chunk. So at the same time only one (merge or update) operation has access to attributes of the chunk.
+  - when merging gets to the phase it needs attributes it sets a special flag. When UPDATE finishes it checks the flag and if it's set, the whole update is stored in a special collection. Finally when the merge finishes, it applies the updates set to the newborn disk chunk
+  - ALTER runs via an exclusive lock
+  - replication runs as a usual read operation, but in addition saves the attributes before SST and forbids updates during the SST
+
+  </details>
+
+- **[ALTER](Updating_index_schema.md) can add/remove a full-text field**. Previously it could only add/remove an attribute.
+
+### Minor changes
+<!-- example -->
+- Linux Mint and Ubuntu Hirsute Hippo are supported via [APT repository](Installation/Debian_and_Ubuntu#APT-repository)
+- faster update by id via HTTP in big indexes in some cases (depends on the ids distribution)
+
+<!-- intro -->
+#### 3.6.0
+
+<!-- request 3.6.0 -->
+```
+time curl -X POST -d '{"update":{"index":"idx","id":4611686018427387905,"doc":{"mode":0}}}' -H "Content-Type: application/x-ndjson" http://127.0.0.1:6358/json/bulk
+
+real    0m43.783s
+user    0m0.008s
+sys     0m0.007s
+```
+
+<!-- intro -->
+#### 4.0.2
+
+<!-- request 4.0.2 -->
+```
+time curl -X POST -d '{"update":{"index":"idx","id":4611686018427387905,"doc":{"mode":0}}}' -H "Content-Type: application/x-ndjson" http://127.0.0.1:6358/json/bulk
+
+real    0m0.006s
+user    0m0.004s
+sys     0m0.001s
+```
+<!-- end -->
+- [custom startup flags for systemd](Starting_the_server/Linux.md#Custom-startup-flags-using-systemd). Now you don't need to start searchd manually in case you need to run Manticore with some specific startup flag
+- new function [LEVENSHTEIN()](Functions/String_functions.md#LEVENSHTEIN%28%29) which calculates Levenshtein distance
+- added new [searchd startup flags](Starting_the_server/Manually.md#searchd-command-line-options) `--replay-flags=ignore-trx-errors` and `--replay-flags=ignore-all-errors` so one can still start searchd if the binlog is corrupted
+- [#621](https://github.com/manticoresoftware/manticoresearch/issues/621) - expose errors from RE2
+- more accurate [COUNT(DISTINCT)](Searching/Grouping.md#COUNT%28DISTINCT-field%29) for distributed indexes consisting of local plain indexes
+- [FACET DISTINCT](Searching/Faceted_search.md#Faceting-without-duplicates) to remove duplicates when you do faceted search
+
+### Breaking changes
+- the new version can read older indexes, but the older versions can't read Manticore 4's indexes
+- removed implicit sorting by id. Sort explicitly if required
+- `charset_table`'s default value changes from `0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451` to `non_cjk`
+- `OPTIMIZE` happens automatically. If you don't need it make sure to set `auto_optimize=0` in section `searchd` in the configuration file
+- [#616](https://github.com/manticoresoftware/manticoresearch/issues/616) `ondisk_attrs_default` were deprecated, now they are removed
+- for contributors: we now use Clang compiler for Linux builds as according to our tests it can build a faster Manticore Search and Manticore Columnar Library
+
+### Migration from Manticore 3
+- make sure you a stop Manticore 3 cleanly:
+  - no binlog files should be in `/var/lib/manticore/binlog/` (only `binlog.meta` should be in the directory)
+  - otherwise the indexes Manticore 4 can't reply binlogs for won't be run
+- the new version can read older indexes, but the older versions can't read Manticore 4's indexes, so make sure you make a backup if you want to be able to rollback the new version easily
+- if you run a replication cluster make sure you:
+  - stop all your nodes first cleanly
+  - and then start the node which was stopped last with `--new-cluster` (run tool `manticore_new_cluster` in Linux).
+  - read about [restarting a cluster](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md#Restarting-a-cluster) for more details
+
+### Bugfixes
+- Lots of replication issues have been fixed:
+  - [696f8649](https://github.com/manticoresoftware/manticoresearch/commit/696f8649535f2b5285b878c9581c0d2b1139ae09) - fixed crash during SST on joiner with active index; added sha1 verify at joiner node at writing file chunks to speed up index loading; added rotation of changed index files at joiner node on index load; added removal of index files at joiner node when active index gets replaced by a new index from donor node; added replication log points at donor node for sending files and chunks
+  - [b296c55a](https://github.com/manticoresoftware/manticoresearch/commit/b296c55af68314a8fc66f8b104e7301d673c3b68) - crash on JOIN CLUSTER in case the address is incorrect
+  - [418bf880](https://github.com/manticoresoftware/manticoresearch/commit/418bf880a5e05ffbb68f311a1c23006a9df3220e) - while initial replication of a large index the joining node could fail with `ERROR 1064 (42000): invalid GTID, (null)`, the donor could become unresponsive while another node was joining
+  - [6fd350d2](https://github.com/manticoresoftware/manticoresearch/commit/6fd350d28e4905211cf8a7298cbf7cdda101c83d) - hash could be calculated wrong for a big index which could result in replication failure
+  - [#615](https://github.com/manticoresoftware/manticoresearch/issues/615) - replication failed on cluster restart
+- [#574](https://github.com/manticoresoftware/manticoresearch/issues/574) - `indextool --help` doesn't display parameter `--rotate`
+- [#578](https://github.com/manticoresoftware/manticoresearch/issues/578) - searchd high CPU usage while idle after ca. a day
+- [#587](https://github.com/manticoresoftware/manticoresearch/issues/587) - flush .meta immediately
+- [#617](https://github.com/manticoresoftware/manticoresearch/issues/617) - manticore.json gets emptied
+- [#618](https://github.com/manticoresoftware/manticoresearch/issues/618) - searchd --stopwait fails under root. It also fixes systemctl behaviour (previously it was showing failure for ExecStop and didn't wait long enough for searchd to stop properly)
+- [#619](https://github.com/manticoresoftware/manticoresearch/issues/619) - INSERT/REPLACE/DELETE vs SHOW STATUS. `command_insert`, `command_replace` and others were showing wrong metrics
+- [#620](https://github.com/manticoresoftware/manticoresearch/issues/620) - `charset_table` for a plain index had a wrong default value
+- [8f753688](https://github.com/manticoresoftware/manticoresearch/commit/8f7536887d4b58a5bab5647fc067b2d0482c2038) - new disk chunks don't get mlocked
+- [#607](https://github.com/manticoresoftware/manticoresearch/issues/607) - Manticore cluster node crashes when unable to resolve a node by name
+- [#623](https://github.com/manticoresoftware/manticoresearch/issues/623) - replication of updated index can lead to undefined state
+- [ca03d228](https://github.com/manticoresoftware/manticoresearch/commit/ca03d2280c5197e9b311f0f03f551e3b702a8130) - indexer could hang on indexing a plain index source with a json attribute
+- [53c75305](https://github.com/manticoresoftware/manticoresearch/commit/53c753054558ff3f82c7af365273d32537c5338b) - fixed not equal expression filter at PQ index
+- [ccf94e02](https://github.com/manticoresoftware/manticoresearch/commit/ccf94e022ba6763d6286ab5bac767b6f6a846846) - fixed select windows at list queries above 1000 matches. `SELECT * FROM pq ORDER BY id desc LIMIT 1000 , 100 OPTION max_matches=1100` was not working previously
+- [a0483fe9](https://github.com/manticoresoftware/manticoresearch/commit/a0483fe9bef3c45dffe96f5df4f4382aee29c072) - HTTPS request to Manticore could cause warning like "max packet size(8388608) exceeded"
+
 
 ## Version 3.6.0, May 3rd 2021
 **Maintenance release before Manticore 4**

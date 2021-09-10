@@ -14,9 +14,9 @@ Note that without setting a path to the configuration file `searchd` will try to
 The options available to `searchd` in all operation systems are:
 
 * `--help` (`-h` for short) lists all of the parameters that can be called in your particular build of `searchd`.
-* `-v` show version information of your particular build of `searchd`.
-* `--config <file>` (`-c <file>` for short) tells `searchd` to use the given file as its configuration
-* `--stop` is used to asynchronously stop `searchd`, using the details of the PID file as specified in the Manticore configuration file, so you may also need to confirm to `searchd` which configuration file to use with the `--config` option. NB, calling `--stop` will also make sure that any updated attribute values changed in a plain index will be flushed to disk. Example:
+* `--version` (`-v` for short) shows Manticore Search version information.
+* `--config <file>` (`-c <file>` for short) tells `searchd` to use the given file as its configuration.
+* `--stop` is used to asynchronously stop `searchd`, using the details of the PID file as specified in the Manticore configuration file, so you may also need to confirm to `searchd` which configuration file to use with the `--config` option. Example:
 
 ```bash
 $ searchd --config /etc/manticoresearch/manticore.conf --stop

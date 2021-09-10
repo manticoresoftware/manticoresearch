@@ -46,7 +46,7 @@ HTTP supports currently a simple grouping that can retrieve the aggregate values
 }
 ```
 
-The normal query output returns the result set without grouping and can be hidden with `limit` (or `size`). 
+The normal query output returns the result set without grouping and can be hidden with `limit` (or `size`).
 The aggregation requires to set a `size` for the size of the result set group.  
 
 <!-- end -->
@@ -151,7 +151,7 @@ POST /search -d '
   "hits": {
     "total": 10000,
     "hits": [
-      
+
     ]
   },
   "release_year": {
@@ -296,14 +296,14 @@ res = await searchApi.search({"index":"films","limit":0,"aggs":{"release_year":{
 <!-- request Java -->
 ``` java
 HashMap<String,Object> aggs = new HashMap<String,Object>(){{
-    put("release_year", new HashMap<String,Object>(){{ 
-        put("terms", new HashMap<String,Object>(){{ 
+    put("release_year", new HashMap<String,Object>(){{
+        put("terms", new HashMap<String,Object>(){{
             put("field","release_year");
             put("size",100);
         }});
     }});
 }};
-       
+
 searchRequest = new SearchRequest();
 searchRequest.setIndex("films");        
 searchRequest.setLimit(0);
@@ -611,7 +611,7 @@ POST /search -d '
   "hits": {
     "total": 3,
     "hits": [
-      
+
     ]
   },
   "aggregations": {
@@ -705,14 +705,14 @@ res = await searchApi.search({"index":"shoes","limit":0,"aggs":{"sizes":{"terms"
 <!-- request Java -->
 ``` java
 HashMap<String,Object> aggs = new HashMap<String,Object>(){{
-    put("release_year", new HashMap<String,Object>(){{ 
-        put("terms", new HashMap<String,Object>(){{ 
+    put("release_year", new HashMap<String,Object>(){{
+        put("terms", new HashMap<String,Object>(){{
             put("field","release_year");
             put("size",100);
         }});
     }});
 }};
-       
+
 searchRequest = new SearchRequest();
 searchRequest.setIndex("films");        
 searchRequest.setLimit(0);
@@ -803,7 +803,7 @@ POST /search -d '
   "hits": {
     "total": 3,
     "hits": [
-      
+
     ]
   },
   "aggregations": {
@@ -879,14 +879,14 @@ res = await searchApi.search({"index":"products","limit":0,"aggs":{"color":{"ter
 <!-- request Java -->
 ``` java
 HashMap<String,Object> aggs = new HashMap<String,Object>(){{
-    put("color", new HashMap<String,Object>(){{ 
-        put("terms", new HashMap<String,Object>(){{ 
+    put("color", new HashMap<String,Object>(){{
+        put("terms", new HashMap<String,Object>(){{
             put("field","meta.color");
             put("size",100);
         }});
     }});
 }};
-       
+
 searchRequest = new SearchRequest();
 searchRequest.setIndex("products");        
 searchRequest.setLimit(0);
@@ -942,8 +942,7 @@ In the example you can see that if we GROUP BY major and show both `COUNT(*)` an
 
 There can be at most one `COUNT(DISTINCT)` per query.
 
-**`COUNT(DISTINCT)` against a distributed index or a real-time index consisting of multiple disk chunks may return inaccurate value.**
-
+**`COUNT(DISTINCT)` against a distributed index or a real-time index consisting of multiple disk chunks may return inaccurate results**, but the result should be accurate for a distributed index consisting of local plain indexes with the same schema.
 
 <!-- intro -->
 ##### Example:

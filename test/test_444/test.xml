@@ -92,6 +92,10 @@ select * from test facet gr;;
 select * from test facet gr distinct;;
 select * from test facet gr distinct tag;;
 
+<!-- distinct at facet BY of multiple local indexes -->
+select * from test1,test2 FACET gr2 by gr1;;
+select * from test1,test2 FACET gr2 by gr1 distinct;;
+
 <!-- count distinct at couple of plain-locals (that returns wrong result, as expected) -->
 select count (DISTINCT tag) a from main,delta group by gr;
 select * from main,delta facet gr;;

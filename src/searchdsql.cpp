@@ -953,10 +953,20 @@ bool SqlParser_c::MaybeAddFacetDistinct()
 	if ( m_pQuery->m_sGroupDistinct.IsEmpty() )
 		return true;
 
-	CSphQueryItem & tItem = m_pQuery->m_dItems.Add();
+	CSphQueryItem tItem;
 	tItem.m_sExpr = "@distinct";
 	tItem.m_eAggrFunc = SPH_AGGR_NONE;
 	tItem.m_sAlias.SetSprintf ( "count(distinct %s)", m_pQuery->m_sGroupDistinct.cstr() );
+
+	int iCountPos = m_pQuery->m_dItems.GetFirst ( [] ( const CSphQueryItem & tElem ) { return ( tElem.m_sExpr=="count(*)" ); });
+	if ( iCountPos==-1 )
+	{
+		yyerror ( this, "can not find COUNT clause" );
+		return false;
+	}
+
+	m_pQuery->m_dItems.Insert ( iCountPos, tItem );
+
 	return SetNewSyntax();
 }
 
@@ -1554,7 +1564,7 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 			{
 				if ( !sDistinct.IsEmpty() && sDistinct!=tQuery.m_sGroupDistinct )
 				{
-					sError.SetSprintf ( "distinct for all FACET queries should be the same %s, query %d got %s", sDistinct.cstr(), i, tQuery.m_sGroupDistinct.cstr() );
+					sError.SetSprintf ( "distinct field for all FACET queries should be the same '%s', query %d got '%s'", sDistinct.cstr(), i, tQuery.m_sGroupDistinct.cstr() );
 					return false;
 				}
 				if ( sDistinct.IsEmpty() )

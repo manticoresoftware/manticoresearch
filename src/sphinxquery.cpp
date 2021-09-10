@@ -4452,17 +4452,10 @@ void sphSetupQueryTokenizer ( ISphTokenizer * pTokenizer, bool bWildcards, bool 
 class QueryParserPlain_c : public QueryParser_i
 {
 public:
-	bool IsFullscan ( const CSphQuery & tQuery ) const override;
 	bool IsFullscan ( const XQQuery_t & tQuery ) const override;
 	bool ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const ISphTokenizer * pQueryTokenizer, const ISphTokenizer * pQueryTokenizerJson,
 		const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings ) const override;
 };
-
-
-bool QueryParserPlain_c::IsFullscan ( const CSphQuery & tQuery ) const
-{
-	return tQuery.m_sQuery.IsEmpty();
-}
 
 
 bool QueryParserPlain_c::IsFullscan ( const XQQuery_t & /*tQuery*/ ) const

@@ -896,6 +896,17 @@ public:
 	CSphRwlock * IndexesRWLock () const RETURN_CAPABILITY ( m_tIndexesRWLock )
 	{ return nullptr; }
 
+	int GetGeneration() const
+	{
+		return m_iGeneration.load ( std::memory_order_relaxed );
+	}
+
+	// call on changes of plain indexes (mandatory) and m.b. others - to keep m_bRtLike or distr indexes in sync
+	void NextGeneration()
+	{
+		m_iGeneration.fetch_add ( 1, std::memory_order_relaxed );
+	}
+
 private:
 	int GetLengthUnl () const REQUIRES_SHARED ( m_tIndexesRWLock );
 	void Rlock () const ACQUIRE_SHARED( m_tIndexesRWLock );
@@ -906,6 +917,7 @@ private:
 	mutable CSphRwlock m_tIndexesRWLock; // distinguishable name for catch possible warnings
 	RefCntHash_t m_hIndexes GUARDED_BY ( m_tIndexesRWLock );
 	AddOrReplaceHookFn m_pHook = nullptr;
+	std::atomic<int> m_iGeneration {0}; // increments on every hash change of plain idxes
 };
 
 // multi-threaded hash iterator

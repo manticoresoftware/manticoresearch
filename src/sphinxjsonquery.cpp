@@ -188,7 +188,6 @@ XQNode_t * QueryTreeBuilder_c::AddChildKeyword ( XQNode_t * pParent, const char 
 class QueryParserJson_c : public QueryParser_i
 {
 public:
-	bool	IsFullscan ( const CSphQuery & tQuery ) const final;
 	bool	IsFullscan ( const XQQuery_t & tQuery ) const final;
 	bool	ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery,
 		const ISphTokenizer * pQueryTokenizer, const ISphTokenizer * pQueryTokenizerJson,
@@ -205,13 +204,6 @@ private:
 
 	XQNode_t *		ConstructNode ( const JsonObj_c & tJson, QueryTreeBuilder_c & tBuilder ) const;
 };
-
-
-bool QueryParserJson_c::IsFullscan ( const CSphQuery & tQuery ) const
-{
-	// fixme: add more checks here
-	return tQuery.m_sQuery.IsEmpty();
-}
 
 
 bool QueryParserJson_c::IsFullscan ( const XQQuery_t & tQuery ) const

@@ -678,7 +678,7 @@ int PerformRemoteTasks ( VectorAgentConn_t &dRemotes, RequestBuilder_i * pQuery,
 /// distributed index
 struct DistributedIndex_t : public ServedStats_c, public ISphRefcountedMT
 {
-	CSphVector<MultiAgentDesc_c *> m_dAgents;	///< remote agents
+	CSphVector<MultiAgentDesc_c *> m_dAgents;		///< remote agents
 	StrVec_t m_dLocal;								///< local indexes
 	int m_iAgentConnectTimeoutMs		{ g_iAgentConnectTimeoutMs };	///< in msec
 	int m_iAgentQueryTimeoutMs		{ g_iAgentQueryTimeoutMs };	///< in msec
@@ -698,8 +698,17 @@ struct DistributedIndex_t : public ServedStats_c, public ISphRefcountedMT
 	// apply a function (non-const) to every single host in the hive
 	void ForEveryHost ( ProcessFunctor );
 
+	void InvalidateRtLike();
+	bool IsRtLike( StringBuilder_c& sExplanation ) const;
+	SharedPtr_t<CSphIndex>& ReturnCachedRt() const;
+
 private:
 	~DistributedIndex_t() override;
+
+	mutable bool m_bRtLike			= false;		///< if index can serve as RT-index (i.e. - same-schema locals, no remotes)
+	mutable int m_iRtLikeAge		= -1;			///< generation when m_bRtLike was actualized (if different from generation of index hash - m_bRtLike is invalid and should be actualized).
+
+	mutable SharedPtr_t<CSphIndex>		m_pRtMadeFromDistrIndex;
 };
 
 using DistributedIndexRefPtr_t = CSphRefcountedPtr<DistributedIndex_t>;

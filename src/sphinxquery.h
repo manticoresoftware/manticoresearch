@@ -290,8 +290,8 @@ class QueryParser_i
 {
 public:
 	QueryParser_i () = default;
-	virtual ~QueryParser_i () {}
-	virtual bool IsFullscan ( const CSphQuery & tQuery ) const = 0;
+	virtual ~QueryParser_i () = default;
+	virtual bool IsFullscan ( const CSphQuery & tQuery ) const { return tQuery.m_sQuery.IsEmpty(); };
 	virtual bool IsFullscan ( const XQQuery_t & tQuery ) const = 0;
 	virtual bool ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery,
 		const ISphTokenizer * pQueryTokenizer, const ISphTokenizer * pQueryTokenizerJson,

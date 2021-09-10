@@ -1486,6 +1486,43 @@ void DistributedIndex_t::ForEveryHost ( ProcessFunctor pFunc )
 			pFunc ( dHost );
 }
 
+void DistributedIndex_t::InvalidateRtLike()
+{
+	m_bRtLike = false;
+	m_iRtLikeAge = -1;
+}
+
+bool DistributedIndex_t::IsRtLike() const
+{
+	if ( m_iRtLikeAge==g_pLocalIndexes->GetGeneration() )
+		return m_bRtLike;
+
+	m_bRtLike = false;
+	auto FinalizeAge = AtScopeExit ( [this] { m_iRtLikeAge = g_pLocalIndexes->GetGeneration(); } );
+
+	// should be no remotes
+	if ( !m_dAgents.IsEmpty() )
+		return false;
+
+	// should contain >1 locals
+	if ( m_dLocal.GetLength()<=1 )
+		return false;
+
+	// all locals should exist and be plain
+	if ( m_dLocal.any_of ( [] ( CSphString& s ) { auto p = GetServed ( s ); return p ? ServedDescRPtr_c ( p )->m_eType != IndexType_e::PLAIN : true; } ) )
+		return false;
+
+	// all locals should have one and same schema
+	const auto& tFirstSchema = ServedDescRPtr_c { GetServed ( m_dLocal.First() ) }->m_pIndex->GetMatchSchema();
+	CSphString sCmpError;
+	for ( int i=1; i<m_dLocal.GetLength(); ++i )
+		if ( !tFirstSchema.CompareTo ( ServedDescRPtr_c { GetServed ( m_dLocal[i] ) } -> m_pIndex->GetMatchSchema(), sCmpError ) )
+			return false;
+
+	m_bRtLike = true;
+	return true;
+};
+
 DistributedIndex_t::~DistributedIndex_t ()
 {
 	sphLogDebugv ( "DistributedIndex_t %p removed", this );
@@ -5046,6 +5083,9 @@ protected:
 	CSphAttrUpdateEx *				m_pUpdates = nullptr;	///< holder for updates
 	CSphVector<DocID_t> *			m_pDelDocs = nullptr;	///< this query is for deleting
 
+	CSphScopedPtr<CSphIndex>		m_pRtMadeFromDistrIndex;	///< temporary short-living rt index, when query to distr made from same locals
+	CSphString						m_sRtMadeFromDistrIndex;
+
 	QueryProfile_c *				m_pProfile = nullptr;
 	QueryType_e						m_eQueryType {QUERY_API}; ///< queries from sphinxql require special handling
 	const QueryParser_i *			m_pQueryParser;	///< parser used for queries in this handler. e.g. plain or json-style
@@ -5078,7 +5118,7 @@ private:
 	bool							RLockInvokedIndexes();
 	void							UniqLocals ( VecTraits_T<LocalIndex_t>& dLocals );
 	void							RunActionQuery ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors ); ///< run delete/update
-	bool							BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_t & dRemotes, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent ); // fixme!
+	bool							BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_t & dRemotes, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent, CSphString& sOnlyDistr ); // fixme!
 	void							CalcTimeStats ( int64_t tmCpu, int64_t tmSubset, const CSphVector<DistrServedByAgent_t> & dDistrServedByAgent );
 	void							CalcPerIndexStats ( const CSphVector<DistrServedByAgent_t> & dDistrServedByAgent ) const;
 	void							CalcGlobalStats ( int64_t tmCpu, int64_t tmSubset, int64_t tmLocal, const CSphIOStats & tIO, const VecRefPtrsAgentConn_t & dRemotes ) const;
@@ -5090,6 +5130,7 @@ private:
 	CSphIndex *						CheckIndexSuitable ( const CSphString& sLocal, const char * szParent, VecTraits_T<SearchFailuresLog_c> & dNFailuresSet ) const;
 	bool							CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt, SphQueueRes_t * pQueueRes, VecTraits_T<SearchFailuresLog_c> & dFlr, StrVec_t * pExtra, const CSphIndex* pIndex,
 										const CSphString & sLocal, const char * szParent, ISphExprHook * pHook );
+	bool							TryConvertDistrToRt ( const CSphString& sLocalDistr, bool bFullScan );
 };
 
 PubSearchHandler_c::PubSearchHandler_c ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster )
@@ -5572,6 +5613,9 @@ CSphIndex* SearchHandler_c::CheckIndexSuitable ( const CSphString& sLocal, const
 	const auto * pServed = m_dLocked.Get ( sLocal );
 	if ( !pServed )
 	{
+		if ( sLocal==m_sRtMadeFromDistrIndex )
+			return m_pRtMadeFromDistrIndex.Ptr();
+
 		if ( szParent )
 			for ( auto & dFailureSet : dNFailuresSet )
 				dFailureSet.SubmitEx ( szParent, nullptr, "local index %s missing", sLocal.cstr() );
@@ -6366,6 +6410,8 @@ void SearchHandler_c::CalcPerIndexStats ( const CSphVector<DistrServedByAgent_t>
 		// a little of durty casting: from ServedDesc_t* to ServedIndex_c*
 		// in order to save statistics.
 		auto pServed = ( ServedIndex_c * ) m_dLocked.Get ( m_dLocal[iLocal].m_sName );
+		if ( !pServed && m_dLocal[iLocal].m_sName == m_sRtMadeFromDistrIndex && m_dLocal.GetLength() == 1 )
+			break;
 		for ( int iQuery=0; iQuery<iQueries; ++iQuery )
 		{
 			QueryStat_t & tStat = m_dQueryIndexStats[iLocal].m_dStats[iQuery];
@@ -6444,9 +6490,10 @@ static CSphVector<LocalIndex_t> CollectAllLocalIndexes ( const CSphVector<CSphNa
 }
 
 // returns true = real indexes, false = sysvar (i.e. only one 'index' named from @@)
-bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_t & dRemotes, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent )
+bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_t & dRemotes, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent, CSphString & sOnlyDistr )
 {
 	const CSphQuery & tQuery = m_dNQueries.First ();
+	assert ( sOnlyDistr.IsEmpty() );
 
 	if ( tQuery.m_sIndexes=="*" )
 	{
@@ -6539,6 +6586,9 @@ bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_
 		UniqLocals ( dLocals );
 	else
 		m_dLocal.SwapData ( dLocals );
+
+	if ( dIdxNames.GetLength()==1 && iDistCount==1 && dRemotes.IsEmpty() )
+		sOnlyDistr = dDistrServedByAgent.First().m_sIndex;
 	return !bSysVar;
 }
 
@@ -6560,6 +6610,42 @@ DEFINE_RENDER ( QueryInfo_t )
 	auto pQuery = tGuard.Protect ( tInfo.m_pHazardQuery );
 	if ( pQuery && session::Proto()!=Proto_e::MYSQL41 ) // cheat: for mysql query not used, so will not copy it then
 		dDst.m_pQuery = new CSphQuery ( *pQuery );
+}
+
+bool SearchHandler_c::TryConvertDistrToRt ( const CSphString& sLocalDistr, bool bFullScan )
+{
+	if ( sLocalDistr.IsEmpty() || sLocalDistr==m_sRtMadeFromDistrIndex )
+		return true;
+
+	auto pDist = GetDistr ( sLocalDistr );
+	if ( !pDist->IsRtLike() )
+		return false;
+
+	CSphVector<LocalIndex_t> dFakeRT;
+	auto& dRt = dFakeRT.Add();
+	dRt.m_sName = sLocalDistr;
+	dRt.m_iOrderTag = 0;
+	m_dLocal.for_each ( [&dRt] ( const LocalIndex_t& i ) { dRt.m_iMass += i.m_iMass; dRt.m_iWeight += i.m_iWeight; } );
+	m_dLocal.SwapData ( dFakeRT );
+
+	if ( m_sRtMadeFromDistrIndex != sLocalDistr )
+		m_pRtMadeFromDistrIndex = nullptr;
+
+	if ( !m_pRtMadeFromDistrIndex )
+	{
+		CSphVector<CSphIndex*> dIndexSet;
+		for ( auto& dLocal : dFakeRT ) // since it is already swapped with m_dLocal
+		{
+			const auto* pServed = m_dLocked.Get ( dLocal.m_sName );
+			assert ( pServed );
+			dIndexSet.Add ( pServed->m_pIndex );
+		}
+		m_pRtMadeFromDistrIndex = MakeOneshotRt ( dIndexSet, sLocalDistr );
+		m_sRtMadeFromDistrIndex = sLocalDistr;
+	}
+	if ( !bFullScan )
+		UpgradeOneshotToFT ( m_pRtMadeFromDistrIndex.Ptr() );
+	return true;
 }
 
 // one or more queries against one and same set of indexes
@@ -6587,6 +6673,9 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	const CSphQuery & tFirst = m_dNQueries.First();
 	m_dNAggrResults.Apply ( [] ( AggrResult_t & r ) { r.m_iSuccesses = 0; } );
 
+	bool bWithDistinct = !tFirst.m_sGroupDistinct.IsEmpty();
+	bool bIsFullScan = m_pQueryParser->IsFullscan ( tFirst );
+
 	if ( iQueries==1 && m_pProfile )
 	{
 		m_dNAggrResults.First().m_pProfile = m_pProfile;
@@ -6606,9 +6695,10 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	////////////////////////////
 	VecRefPtrsAgentConn_t dRemotes;
 	CSphVector<DistrServedByAgent_t> dDistrServedByAgent;
+	CSphString sOnlyLocalDistr;
 	int iDivideLimits = 1;
 
-	if ( BuildIndexList ( iDivideLimits, dRemotes, dDistrServedByAgent ) )
+	if ( BuildIndexList ( iDivideLimits, dRemotes, dDistrServedByAgent, sOnlyLocalDistr ) )
 	{
 		// process query to meta, as myindex.status, etc.
 		if ( !tFirst.m_dStringSubkeys.IsEmpty () )
@@ -6675,6 +6765,11 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	if ( m_dLocal.GetLength() )
 	{
 		SetupLocalDF();
+
+		// check if query is about distinct, and the only asked index is single distribute without remotes
+		if ( bWithDistinct )
+			TryConvertDistrToRt ( sOnlyLocalDistr, bIsFullScan ); // fixme! That is bool, m.b. warn if convertion not happened?
+
 		SwitchProfile ( m_pProfile, SPH_QSTATE_LOCAL_SEARCH );
 		m_bNeedDocIDs = m_dLocal.GetLength()+dRemotes.GetLength()>1;
 		tmLocal = -sphMicroTimer();
@@ -6795,7 +6890,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 			if ( !pAgent->m_bSuccess && !pAgent->m_sFailure.IsEmpty() )
 				for ( int j=0; j<iQueries; ++j )
-					m_dNFailuresSet[j].SubmitEx ( tFirst.m_sIndexes.cstr(), nullptr, "agent %s: %s",
+					m_dNFailuresSet[j].SubmitEx ( tFirst.m_sIndexes, nullptr, "agent %s: %s",
 						pAgent->m_tDesc.GetMyUrl().cstr(), pAgent->m_sFailure.cstr() );
 		}
 	}
@@ -14729,6 +14824,9 @@ static void AddAttrToIndex ( const SqlStmt_t & tStmt, const ServedDesc_t * pServ
 	}
 	else
 		pServed->m_pIndex->AddRemoveAttribute ( true, sAttrToAdd, tStmt.m_eAlterColType, tStmt.m_eEngine, sError );
+
+	if ( pServed->m_eType == IndexType_e::PLAIN )
+		g_pLocalIndexes->NextGeneration();
 }
 
 
@@ -16893,6 +16991,7 @@ static void ConfigureDistributedIndex ( DistributedIndex_t & tIdx, const char * 
 	}
 
 	bool bHaveHA = tIdx.m_dAgents.any_of ( [] ( MultiAgentDesc_c * ag ) { return ag->IsHA (); } );
+	tIdx.InvalidateRtLike();
 
 	// configure ha_strategy
 	if ( bSetHA && !bHaveHA )

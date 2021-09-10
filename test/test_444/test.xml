@@ -2,12 +2,49 @@
 <test>
 <name>distinct at facet queries</name>
 
-<skip_indexer/>
-
 <config>
+
+indexer
+{
+	mem_limit		= 16M
+}
+
 searchd
 {
 	<searchd_settings/>
+}
+
+source srcmain
+{
+	type			= mysql
+	<sql_settings/>
+	sql_attr_uint = tag
+	sql_attr_uint = gr
+	sql_query		= SELECT * FROM test_table WHERE document_id in (1,2)
+}
+
+source srcdelta : srcmain
+{
+	sql_query		= SELECT * FROM test_table WHERE document_id in (3,4)
+}
+
+index main
+{
+	source			= srcmain
+	path			= <data_path/>/main
+}
+
+index delta
+{
+	source			= srcdelta
+	path			= <data_path/>/delta
+}
+
+index test
+{
+	type = distributed
+	local = main
+	local = delta
 }
 
 index test1
@@ -33,24 +70,57 @@ index test2
 </config>
 
 <queries>
-
 <sphinxql>
 INSERT INTO test1 (id,gr1,gr2,body) VALUES ( 1, 1, 1, 'main' ), ( 2, 2, 1, 'main' );
 flush ramchunk test1;
 INSERT INTO test1 (id,gr1,gr2,body) VALUES ( 3, 1, 1, 'main' ), ( 4, 3, 1, 'main' );
 flush ramchunk test1;
 INSERT INTO test2 (id,gr1,gr2,body) VALUES ( 1, 1, 1, 'main' ), ( 2, 2, 1, 'main' );
-</sphinxql>
 
-<!-- distinct at facet of RT disk chunks -->
-<sphinxql>select * from test1 FACET gr1;</sphinxql>
-<sphinxql>select * from test1 FACET gr1 distinct;</sphinxql>
-<sphinxql>select * from test1 FACET gr1 distinct gr2;</sphinxql>
+<!-- distinct at facet of RT disk chunks. (double ;; is necessary in test since facet returns >1 resultsets) -->
+select * from test1 FACET gr1;;
+select * from test1 FACET gr1 distinct;;
+select * from test1 FACET gr1 distinct gr2;;
 
 <!-- distinct at facet of multiple local indexes -->
-<sphinxql>select * from test1,test2 FACET gr1;</sphinxql>
-<sphinxql>select * from test1,test2 FACET gr1 distinct;</sphinxql>
+select * from test1,test2 FACET gr1;;
+select * from test1,test2 FACET gr1 distinct;;
 
+<!-- count distinct at distr-of-plain-locals -->
+select count (DISTINCT tag) a from test group by gr;
+select * from test facet gr;;
+select * from test facet gr distinct;;
+select * from test facet gr distinct tag;;
+
+<!-- count distinct at couple of plain-locals (that returns wrong result, as expected) -->
+select count (DISTINCT tag) a from main,delta group by gr;
+select * from main,delta facet gr;;
+select * from main,delta facet gr distinct;;
+select * from main,delta facet gr distinct tag;;
+
+</sphinxql>
 </queries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`tag` int(11) NOT NULL default '0',
+	`gr` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 1, 1, 'main' ),
+( 2, 2, 1, 'main' ),
+( 3, 1, 1, 'main' ),
+( 4, 3, 1, 'main' )
+</db_insert>
 
 </test>

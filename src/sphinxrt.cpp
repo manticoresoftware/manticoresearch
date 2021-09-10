@@ -802,14 +802,15 @@ struct SaveDiskDataContext_t;
 class DiskChunk_c final : public ISphRefcountedMT
 {
 	CSphIndex *		m_pIndex;
+	bool			m_bOwned;
 
 private:
-	DiskChunk_c ( CSphIndex* pIndex ) : m_pIndex ( pIndex ) {}
+	DiskChunk_c ( CSphIndex* pIndex, bool bOwned ) : m_pIndex ( pIndex ), m_bOwned ( bOwned ) {}
 
 protected:
 	~DiskChunk_c () final
 	{
-		if ( !m_pIndex )
+		if ( !m_pIndex || !m_bOwned )
 			return;
 
 		CSphString sDeleted = m_pIndex->GetFilename ();
@@ -819,7 +820,8 @@ protected:
 	}
 
 public:
-	inline static CSphRefcountedPtr<const DiskChunk_c> make ( CSphIndex* pIndex ) { return CSphRefcountedPtr<const DiskChunk_c> { pIndex ? new DiskChunk_c ( pIndex ) : nullptr }; }
+	inline static CSphRefcountedPtr<const DiskChunk_c> make ( CSphIndex* pIndex ) { return CSphRefcountedPtr<const DiskChunk_c> { pIndex ? new DiskChunk_c ( pIndex, true ) : nullptr }; }
+	inline static CSphRefcountedPtr<const DiskChunk_c> wrap ( CSphIndex* pIndex ) { return CSphRefcountedPtr<const DiskChunk_c> { pIndex ? new DiskChunk_c ( pIndex, false ) : nullptr }; }
 	explicit operator CSphIndex* () const		{ return m_pIndex; }
 	CSphIndex & Idx() 					{ return *m_pIndex; }
 	CSphIndex & CastIdx () const		{ return *const_cast<CSphIndex *>(m_pIndex); } // const breakage!
@@ -1056,6 +1058,11 @@ public:
 		Threads::CheckAcquiredSched ( tOwner.SerialChunkAccess() );
 	}
 
+	enum eUnsafe { unsafe };
+	RtWriter_c ( RtData_c & tOwner, eUnsafe )
+		: m_tOwner ( tOwner )
+	{}
+
 	~RtWriter_c()
 	{
 		if ( !m_pNewDiskChunks && !m_pNewRamSegs )
@@ -1160,6 +1167,8 @@ public:
 						RtIndex_c ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict );
 						~RtIndex_c () final;
 
+	void				InitOneshotIndex ( const VecTraits_T<CSphIndex*>& dChunks );
+	void				InitDictionaryInOneshot ();
 	bool				AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt ) override;
 	virtual bool		AddDocument ( ISphHits * pHits, const InsertDocData_t & tDoc, bool bReplace, const DocstoreBuilder_i::Doc_t * pStoredDoc, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt );
 	bool				DeleteDocument ( const VecTraits_T<DocID_t> & dDocs, CSphString & sError, RtAccum_t * pAccExt ) final;
@@ -7863,6 +7872,50 @@ CSphString RtIndex_c::MakeChunkName ( int iChunkID )
 	return sChunk;
 }
 
+// make tiny ref index - grab chunks as disk chunks; no changes; no heavy initialization
+void RtIndex_c::InitOneshotIndex ( const VecTraits_T<CSphIndex*>& dChunks ) NO_THREAD_SAFETY_ANALYSIS
+{
+	ProhibitSave();
+	m_bLoadRamPassedOk = false;
+
+	auto pFirst = dChunks.First();
+
+	// copy tokenizer, dict, etc. settings from first chunk.
+	// fixme! There is no check about absent/non-compatible settings between grabbed plain and rt
+	m_tSettings = pFirst->GetSettings();
+	m_pTokenizer = pFirst->GetTokenizer()->Clone ( SPH_CLONE_QUERY );
+//	m_pDict = pFirst->GetDictionary()->Clone();
+
+	RtWriter_c tWriter { m_tRtChunks, RtWriter_c::unsafe };
+	tWriter.InitDiskChunks ( RtWriter_c::empty );
+	for ( CSphIndex* pIndex : dChunks )
+	{
+		assert ( pIndex );
+		auto pChunk = DiskChunk_c::wrap ( pIndex );
+		tWriter.m_pNewDiskChunks->Add ( pChunk );
+
+		m_tStats.m_iTotalBytes += pIndex->GetStats().m_iTotalBytes;
+		m_tStats.m_iTotalDocuments += pIndex->GetStats().m_iTotalDocuments;
+
+		// update field lengths
+		if ( m_tSchema.GetAttrId_FirstFieldLen()>=0 )
+		{
+			int64_t * pLens = pIndex->GetFieldLens();
+			if ( pLens )
+				for ( int i=0; i < pIndex->GetMatchSchema().GetFieldsCount(); ++i )
+					m_dFieldLensDisk[i] += pLens[i];
+		}
+	}
+}
+
+void RtIndex_c::InitDictionaryInOneshot () NO_THREAD_SAFETY_ANALYSIS
+{
+	if ( m_pDict )
+		return;
+
+	m_pDict = m_tRtChunks.DiskChunks()->operator[] (0)->Cidx().GetDictionary()->Clone();
+}
+
 // CSphinxqlSession::Execute->HandleMysqlAttach->AttachDiskIndex
 bool RtIndex_c::AttachDiskIndex ( CSphIndex* pIndex, bool bTruncate, bool & bFatal, StrVec_t & dWarnings, CSphString & sError )
 {
@@ -9609,6 +9662,24 @@ RtIndex_i * sphCreateIndexRT ( const CSphSchema & tSchema, const char * sIndexNa
 {
 	MEMORY ( MEM_INDEX_RT );
 	return new RtIndex_c ( tSchema, sIndexName, iRamSize, sPath, bKeywordDict );
+}
+
+RtIndex_i* MakeOneshotRt ( const VecTraits_T<CSphIndex*>& dChunks, const CSphString& sName )
+{
+	assert ( dChunks.GetLength() > 1 );
+	auto pIndex = dChunks.First();
+	const CSphSchema & tSchema = pIndex->GetMatchSchema();
+	bool bKeywordDict = pIndex->GetDictionary()->GetSettings().m_bWordDict;
+	auto pRtIndex = new RtIndex_c ( tSchema, sName.cstr(), 0, "", bKeywordDict );
+
+	pRtIndex->InitOneshotIndex ( dChunks );
+	return pRtIndex;
+}
+
+void UpgradeOneshotToFT ( CSphIndex* pIndex )
+{
+	auto* pRtIndex = (RtIndex_c*)pIndex;
+	pRtIndex->InitDictionaryInOneshot();
 }
 
 void sphRTInit ( const CSphConfigSection & hSearchd, bool bTestMode, const CSphConfigSection * pCommon )

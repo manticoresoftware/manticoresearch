@@ -18,7 +18,7 @@
 #define BINLOG_WRITE_BUFFER		(256*1024)
 #define BINLOG_AUTO_FLUSH		1000000 // 1 sec
 
-static const DWORD		BINLOG_VERSION = 10;
+static const DWORD		BINLOG_VERSION = 11;
 
 static const DWORD		BINLOG_HEADER_MAGIC = 0x4c425053;	/// magic 'SPBL' header that marks binlog file
 static const DWORD		BLOP_MAGIC = 0x214e5854;			/// magic 'TXN!' header that marks binlog entry

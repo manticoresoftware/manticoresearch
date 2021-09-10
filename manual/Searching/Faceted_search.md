@@ -15,7 +15,7 @@ In Manticore Search there is an optimization that retains the result set of the 
 The facet values can come from an attribute, JSON property from a JSON attribute or expression. Facet values can be also aliased, however the **alias must be unique** across all result sets (main query results set and other facets results sets). The facet value is taken from the aggregated attribute/expression, but it can also come from another attribute/expression.
 
 ```sql
-FACET {expr_list} [BY {expr_list}] [ORDER BY {expr | FACET()} {ASC | DESC}] [LIMIT [offset,] count]
+FACET {expr_list} [BY {expr_list}] [DISTINCT {field}] [ORDER BY {expr | FACET()} {ASC | DESC}] [LIMIT [offset,] count]
 ```
 
 Multiple facet declarations need to be separated by an whitespace.
@@ -820,6 +820,36 @@ FACET price_range AS price_range,brand_name ORDER BY brand_name asc;
 |            1 | Brand Four  |      195 |
 ...
 ```
+<!-- end -->
+
+<!-- example Distinct -->
+### Facet with DISTINCT field
+
+Facets can aggregate and returns number of different values of the field in the group which may be absolutely different from the total count [DISTINCT](../Searching/Grouping.md#COUNT(DISTINCT-field)). By default DISTINCT field is document ID attribute but could be any attribute.
+
+<!-- request SQL -->
+
+```sql
+SELECT * FROM t1, t2 LIMIT 0 FACET price DISTINCT;
+```
+
+<!-- response SQL -->
+
+```sql
+Empty set (0.00 sec)
+
++-------+--------------------+----------+
+| price | count(distinct id) | count(*) |
++-------+--------------------+----------+
+|   306 |                  7 |        9 |
+|   400 |                 13 |       23 |
+...      
+|   229 |                  9 |       18 |
+|   595 |                 10 |       10 |
++-------+--------------------+----------+
+20 rows in set (0.00 sec)
+```
+
 <!-- end -->
 
 <!-- example Ordering -->

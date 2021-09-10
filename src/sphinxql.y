@@ -1918,9 +1918,10 @@ facet_stmt:
 			if ( pParser->m_pQuery->m_sFacetBy.IsEmpty() )
 			{
 				pParser->m_pQuery->m_sFacetBy = pParser->m_pQuery->m_sGroupBy;
-				pParser->MaybeAddFacetDistinct();
 				pParser->AddCount ();
 			}
+			if ( !pParser->MaybeAddFacetDistinct() )
+				YYERROR;
 		}
 	;
 

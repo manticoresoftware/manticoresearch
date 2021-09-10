@@ -2,6 +2,10 @@
 <test>
 <name>distinct at facet queries</name>
 
+<requires>
+<non-rt/>
+</requires>
+
 <config>
 
 indexer

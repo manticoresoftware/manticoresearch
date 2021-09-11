@@ -1788,7 +1788,6 @@ void RtAccum_t::SetupDict ( const RtIndex_i * pIndex, CSphDict * pDict, bool bKe
 		if ( m_bKeywordDict )
 		{
 			m_pDict = m_pDictRt = sphCreateRtKeywordsDictionaryWrapper ( m_pDict, pIndex->NeedStoreWordID() );
-			SafeAddRef ( m_pDict ); // since m_pDict and m_pDictRt are DIFFERENT types, = works via CsphDict*
 		}
 	}
 }

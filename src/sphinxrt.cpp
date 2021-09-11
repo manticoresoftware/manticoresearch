@@ -9923,7 +9923,7 @@ uint64_t SchemaFNV ( const ISphSchema & tSchema )
 		const CSphColumnInfo & tAttr = tSchema.GetAttr ( i );
 		uHash = sphFNV64cont ( tAttr.m_sName.cstr(), uHash );
 		uHash = sphFNV64 ( &tAttr.m_eAttrType, sizeof( tAttr.m_eAttrType ), uHash );
-		uHash = sphFNV64 ( &tAttr.m_tLocator, sizeof( tAttr.m_tLocator ), uHash );
+		uHash = tAttr.m_tLocator.FNV ( uHash );
 	}
 
 	// fulltext fields

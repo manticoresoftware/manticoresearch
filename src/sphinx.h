@@ -983,6 +983,28 @@ struct CSphAttrLocator
 		m_bDynamic = true;
 	}
 
+	// just sphFNV64 (&loc,sizeof(loc)) isn't correct as members are not aligned
+	uint64_t FNV ( uint64_t uHash ) const
+	{
+		BYTE sBuf[sizeof ( CSphAttrLocator )];
+		auto* p = sBuf;
+		sphUnalignedWrite ( p, m_iBitOffset );
+		p += sizeof ( m_iBitOffset );
+		sphUnalignedWrite ( p, m_iBitCount );
+		p += sizeof ( m_iBitCount );
+		sphUnalignedWrite ( p, m_iBlobAttrId );
+		p += sizeof ( m_iBlobAttrId );
+		sphUnalignedWrite ( p, m_iBlobRowOffset );
+		p += sizeof ( m_iBlobRowOffset );
+		sphUnalignedWrite ( p, m_nBlobAttrs );
+		p += sizeof ( m_nBlobAttrs );
+		sphUnalignedWrite ( p, m_bDynamic );
+		p += sizeof ( m_bDynamic );
+
+		return sphFNV64 ( sBuf, (int)(p-sBuf), uHash );
+	}
+
+
 #ifndef NDEBUG
 	/// get last item touched by this attr (for debugging checks only)
 	int GetMaxRowitem () const

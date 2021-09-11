@@ -317,7 +317,6 @@ bool SortStateSetup_c::IsJsonAttr() const
 void SortStateSetup_c::SetupJsonAttr()
 {
 	const CSphColumnInfo & tAttr = m_tSchema.GetAttr(m_iAttr);
-	SafeAddRef ( tAttr.m_pExpr );	// addref since we're reusing an existing expression
 	m_tExtraExpr.m_pExpr = tAttr.m_pExpr;
 	m_tExtraExpr.m_tKey = JsonKey_t ( m_szTok, (int)strlen(m_szTok) );
 }

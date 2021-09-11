@@ -12929,7 +12929,7 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	if ( tArgs.m_bModifySorterSchemas )
 	{
 		SwitchProfile ( tMeta.m_pProfile, SPH_QSTATE_DYNAMIC );
-		PooledAttrsToPtrAttrs ( dSorters, m_tBlobAttrs.GetWritePtr(), m_pColumnar.Ptr() );
+		PooledAttrsToPtrAttrs ( dSorters, m_tBlobAttrs.GetReadPtr(), m_pColumnar.Ptr() );
 	}
 
 	// done

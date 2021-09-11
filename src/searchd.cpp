@@ -3655,7 +3655,10 @@ int OneResultset_t::FillFromSorter ( ISphMatchSorter * pQueue )
 void OneResultset_t::ClampAllMatches ()
 {
 	for ( auto& dMatch : m_dMatches )
+	{
 		m_tSchema.FreeDataPtrs ( dMatch );
+		dMatch.ResetDynamic();
+	}
 	m_dMatches.Reset();
 }
 
@@ -3665,14 +3668,16 @@ void OneResultset_t::ClampMatches ( int iLimit )
 
 	int iMatches = m_dMatches.GetLength ();
 	for ( int i = iLimit; i<iMatches; ++i )
+	{
 		m_tSchema.FreeDataPtrs ( m_dMatches[i] );
+		m_dMatches[i].ResetDynamic();
+	}
 	m_dMatches.Resize ( Min (iMatches, iLimit ) );
 }
 
 OneResultset_t::~OneResultset_t()
 {
-	for ( auto & dMatch : m_dMatches )
-		m_tSchema.FreeDataPtrs ( dMatch );
+	ClampAllMatches();
 }
 
 namespace { // static

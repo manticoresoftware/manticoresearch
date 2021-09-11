@@ -6232,7 +6232,6 @@ void QueueCreator_c::SetupRemapColJson ( CSphColumnInfo & tRemapCol, CSphMatchCo
 	if ( bFunc )
 	{
 		tRemapCol.m_pExpr = dExtraExprs[iStateAttr].m_pExpr;
-		tRemapCol.m_pExpr->AddRef();
 		tRemapCol.m_eAttrType = dExtraExprs[iStateAttr].m_eType;
 		tState.m_eKeypart[iStateAttr] = Attr2Keypart ( tRemapCol.m_eAttrType );
 	}

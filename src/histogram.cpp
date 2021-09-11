@@ -147,7 +147,7 @@ template <typename T>
 class HistogramStreamed_T : public Histogram_i
 {
 public:
-						HistogramStreamed_T ( const CSphString & sAttr, int iBins );
+						HistogramStreamed_T ( CSphString sAttr, int iBins );
 
     void				Insert ( SphAttr_t tAttrVal ) override;
     void				Finalize() override;
@@ -200,11 +200,12 @@ private:
 
 
 template<typename T>
-HistogramStreamed_T<T>::HistogramStreamed_T ( const CSphString & sAttr, int iBins )
-	: m_sAttr ( sAttr )
+HistogramStreamed_T<T>::HistogramStreamed_T ( CSphString sAttr, int iBins )
+	: m_sAttr ( std::move(sAttr) )
 	, m_iMaxBins ( iBins )
 	, m_dBuckets ( iBins * m_iKbufferFactor )
 {
+	m_dBuckets.ZeroVec();
 	UpdateMinMax();
 }
 
@@ -355,7 +356,8 @@ void HistogramStreamed_T<T>::Dump ( StringBuilder_c & tOut ) const
 template<typename T>
 void HistogramStreamed_T<T>::Push ( T tValue, int iCount )
 {
-	m_dBuckets[m_iSize] = { tValue, iCount };
+	m_dBuckets[m_iSize].m_tCentroid = tValue;
+	m_dBuckets[m_iSize].m_iCount = iCount;
 	m_iSize++;
 	m_uValues++;
 

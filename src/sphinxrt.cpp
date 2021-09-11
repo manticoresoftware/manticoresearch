@@ -1287,7 +1287,7 @@ private:
 
 	int							m_iStride;
 	uint64_t					m_uSchemaHash = 0;
-	std::atomic<int64_t>		m_iRamChunksAllocatedRAM;
+	std::atomic<int64_t>		m_iRamChunksAllocatedRAM { 0 };
 
 	std::atomic<bool>			m_bOptimizeStop { false };
 	Waitable_T<int>				m_tOptimizeRuns;

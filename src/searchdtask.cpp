@@ -390,15 +390,24 @@ private:
 		return pReadyQueue;
 	}
 
-	static void ProcessOneTask ( Task_t* pTask ) REQUIRES ( TaskThread )
+	enum Process_e { ePerform, eAbort };
+	static void ProcessOneTask ( Task_t* pTask, Process_e eAction ) REQUIRES ( TaskThread )
 	{
 		DebugT ( "ProcessOneTask(%p) -> %s", pTask, pTask->GetName () );
-		pTask->Action();
+		switch ( eAction )
+		{
+		case ePerform:
+			pTask->Action();
+			break;
+		case eAbort:
+			pTask->Abort();
+		}
+
 		SafeRelease ( pTask );
 	}
 
 	/// take current internal and external queues, parse it and process changes.
-	void ProcessEnqueuedTasks () REQUIRES ( TaskThread )
+	void ProcessEnqueuedTasks ( Process_e eAction ) REQUIRES ( TaskThread )
 	{
 		DebugT ( "ProcessEnqueuedTasks" );
 
@@ -422,7 +431,7 @@ private:
 		for ( auto* pTask : m_dInternalTasks )
 		{
 			DebugT ( "Start processing task %p", pTask );
-			ProcessOneTask ( pTask );
+			ProcessOneTask ( pTask, eAction );
 			DebugT ( "Finish processing task %p", pTask );
 		}
 		DebugT ( "All events processed" );
@@ -478,7 +487,7 @@ private:
 			DebugT ( "Aborted task (%p -> %p)", pScheduled, pScheduled->m_pTask.Ptr() );
 			SafeDelete ( pScheduled );
 		}
-		ProcessEnqueuedTasks();
+		ProcessEnqueuedTasks ( eAbort );
 	}
 
 	/// one event cycle.
@@ -487,7 +496,7 @@ private:
 	{
 		DebugT ( "---------------------------- EventTick()" );
 		do
-			ProcessEnqueuedTasks ();
+			ProcessEnqueuedTasks ( ePerform );
 		while ( HasTimeoutActions ());
 
 		int iMsec = ( m_iNextTimeoutUS>999 ) ? int(m_iNextTimeoutUS / 1000) : -1;

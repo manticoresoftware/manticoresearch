@@ -771,7 +771,9 @@ public:
 	explicit Strand_c ( Scheduler_i* pBackend, const char* szName=nullptr )
 		: m_szName { szName }
 		, m_pBackend { pBackend }
-	{}
+	{
+		LOGINFO ( TPLIFE, TP ) << "Strand_c created";
+	}
 
 	void Schedule ( Handler handler, bool bVip ) final
 	{
@@ -964,10 +966,12 @@ public:
 		ARRAY_FOREACH ( i, m_dThreads )
 			Threads::CreateQ ( &m_dThreads[i], [this,i] { loop (i); }, false, m_szName, i );
 		LOG ( DEBUG, TP ) << "thread pool created with threads: " << iThreadCount;
+		LOGINFO ( TPLIFE, TP ) << "thread pool created with threads: " << iThreadCount;
 	}
 
 	~ThreadPool_c () final
 	{
+		LOGINFO ( TPLIFE, TP ) << "thread pool destroying";
 		StopAll();
 		ScWL_t _ ( m_dChildGuard ); // that will keep children list if smbody still iterates over it
 	}
@@ -990,7 +994,7 @@ public:
 	Keeper_t KeepWorking () final
 	{
 		m_tService.work_started ();
-		return Keeper_t ( nullptr, [this] ( void * ) { m_tService.work_finished (); } );
+		return { nullptr, [this] ( void * ) { m_tService.work_finished (); } };
 	}
 
 	int WorkingThreads () const final
@@ -1017,9 +1021,11 @@ public:
 		m_dWork.reset ();
 		dLock.Unlock ();
 		LOG ( DEBUG, TP ) << "stopping thread pool";
+		LOGINFO ( TPLIFE, TP ) << "stopping thread pool";
 		for ( auto & dThread : m_dThreads )
 			Threads::Join ( &dThread );
 		LOG ( DEBUG, TP ) << "thread pool stopped";
+		LOGINFO ( TPLIFE, TP ) << "thread pool stopped";
 		m_dThreads.Resize ( 0 );
 	}
 };
@@ -1074,6 +1080,7 @@ public:
 		LOG ( DEBUG, TP ) << "stopping thread";
 		--m_iRunningAlones;
 		LOG ( DEBUG, TP ) << "thread stopped";
+		LOGINFO ( TPLIFE, TP ) << "AloneThread_c destroyed";
 	}
 
 	void Schedule ( Handler handler, bool bVip ) final
@@ -1084,7 +1091,7 @@ public:
 	Keeper_t KeepWorking () final
 	{
 		m_tService.work_started ();
-		return Keeper_t ( nullptr, [this] ( void * ) { m_tService.work_finished (); } );
+		return { nullptr, [this] ( void * ) { m_tService.work_finished (); } };
 	}
 
 	void StopAll () final {}

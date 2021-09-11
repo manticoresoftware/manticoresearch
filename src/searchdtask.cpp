@@ -42,6 +42,8 @@
 #define DebugM( ... ) DebugL(M, __VA_ARGS__)
 #define DebugX( ... ) DebugL(X, __VA_ARGS__)
 
+#define LOG_COMPONENT_TSK ""
+
 // period of idle, after which workers will finish.
 static int64_t IDLE_TIME_TO_FINISH = 600 * 1000000LL; // 10m
 
@@ -557,11 +559,13 @@ private:
 
 	void WorkerFunc () REQUIRES ( !TaskThread )
 	{
+		LOGINFO ( TPLIFE, TSK ) << "Task scheduler thread started";
 		m_pSchedulerThread = &Threads::MyThd ();
 		ScopedRole_c thLazy ( TaskThread );
 		DebugT ( "LazyJobs_c::WorkerFunc started" );
 		EventLoop ();
 		m_pSchedulerThread = nullptr;
+		LOGINFO ( TPLIFE, TSK ) << "Task scheduler thread finished";
 	}
 
 private:
@@ -621,6 +625,7 @@ private:
 		m_iIdleWorkers.fetch_sub ( 1, std::memory_order_relaxed );
 		ScWL_t _ { m_dWorkersLock };
 		m_dWorkers.Remove ( pWorker );
+		LOGINFO ( TPLIFE, TSK ) << "Task worker finished created";
 	}
 
 	// adds a worker, until limit exceeded.
@@ -648,6 +653,7 @@ private:
 
 	static void TheadPoolWorker () REQUIRES (!MtJobThread)
 	{
+		LOGINFO ( TPLIFE, TSK ) << "Task worker finished created";
 		DebugM ( "LazyJobs_c::TheadPoolWorker started" );
 		ScopedRole_c thMtThread ( MtJobThread );
 		LazyTasker ().JobLoop ( );

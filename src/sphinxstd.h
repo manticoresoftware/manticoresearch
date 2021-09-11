@@ -5833,6 +5833,9 @@ private:
 	if_const ( LOG_LEVEL_##Level ) \
 		LogMessage_t { SPH_LOG_INFO } << LOG_COMPONENT_##Component
 
+// flag to trace all threads creation/deletion (set to true and rebuild)
+#define LOG_LEVEL_TPLIFE false
+
 class LocMessages_c;
 class LocMessage_c
 {

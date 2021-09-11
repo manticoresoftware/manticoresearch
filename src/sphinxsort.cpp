@@ -4994,8 +4994,8 @@ private:
 	bool	SetupGroupbySettings ( bool bHasImplicitGrouping );
 	void	AssignOrderByToPresortStage ( const int * pAttrs, int iAttrCount );
 
-	void	ReplaceGroupbyStrWithExprs ( CSphMatchComparatorState & tState, CSphVector<ExtraSortExpr_t> & dExtraExprs, int iNumOldAttrs );
-	void	ReplaceStaticStringsWithExprs ( CSphMatchComparatorState & tState, CSphVector<ExtraSortExpr_t> & dExtraExprs );
+	void	ReplaceGroupbyStrWithExprs ( CSphMatchComparatorState & tState, int iNumOldAttrs );
+	void	ReplaceStaticStringsWithExprs ( CSphMatchComparatorState & tState );
 	void	ReplaceJsonWithExprs ( CSphMatchComparatorState & tState, CSphVector<ExtraSortExpr_t> & dExtraExprs );
 	void	AddColumnarExprsAsAttrs ( CSphMatchComparatorState & tState, CSphVector<ExtraSortExpr_t> & dExtraExprs );
 	void	RemapAttrs ( CSphMatchComparatorState & tState, CSphVector<ExtraSortExpr_t> & dExtraExprs );
@@ -5011,7 +5011,7 @@ private:
 	bool	AddColumnarAttributeExpressions();
 	void	CreateGrouperByAttr ( ESphAttr eType, const CSphColumnInfo & tGroupByAttr, bool & bGrouperUsesAttrs );
 	void	SelectStageForColumnarExpr ( CSphColumnInfo & tExprCol );
-	void	FetchDependencyChains ( const CSphColumnInfo & tExprCol, IntVec_t & dDependentCols );
+	void	FetchDependencyChains ( IntVec_t & dDependentCols );
 	void	PropagateEvalStage ( CSphColumnInfo & tExprCol, IntVec_t & dDependentCols );
 	bool	SetupDistinctAttr();
 	bool	PredictAggregates() const;
@@ -5686,7 +5686,7 @@ void QueueCreator_c::SelectStageForColumnarExpr ( CSphColumnInfo & tExprCol )
 }
 
 
-void QueueCreator_c::FetchDependencyChains ( const CSphColumnInfo & tExprCol, IntVec_t & dDependentCols )
+void QueueCreator_c::FetchDependencyChains ( IntVec_t & dDependentCols )
 {
 	ARRAY_FOREACH ( i, dDependentCols )
 	{
@@ -5888,7 +5888,7 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 				tExprCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dDependentCols );
 
 				SelectStageForColumnarExpr(tExprCol);
-				FetchDependencyChains ( tExprCol, dDependentCols );
+				FetchDependencyChains ( dDependentCols );
 				PropagateEvalStage ( tExprCol, dDependentCols );
 
 				break;
@@ -5907,7 +5907,7 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 		/// update aggregate dependencies (e.g. SELECT 1+attr f1, min(f1), ...)
 		CSphVector<int> dDependentCols;
 		tExprCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dDependentCols );
-		FetchDependencyChains ( tExprCol, dDependentCols );
+		FetchDependencyChains ( dDependentCols );
 
 		ARRAY_FOREACH ( j, dDependentCols )
 		{
@@ -6257,7 +6257,7 @@ const CSphColumnInfo * QueueCreator_c::GetGroupbyStr ( int iAttr, int iNumOldAtt
 }
 
 
-void QueueCreator_c::ReplaceGroupbyStrWithExprs ( CSphMatchComparatorState & tState, CSphVector<ExtraSortExpr_t> & dExtraExprs, int iNumOldAttrs )
+void QueueCreator_c::ReplaceGroupbyStrWithExprs ( CSphMatchComparatorState & tState, int iNumOldAttrs )
 {
 	assert ( m_pSorterSchema );
 	auto & tSorterSchema = *m_pSorterSchema.Ptr();
@@ -6306,7 +6306,7 @@ void QueueCreator_c::ReplaceGroupbyStrWithExprs ( CSphMatchComparatorState & tSt
 }
 
 
-void QueueCreator_c::ReplaceStaticStringsWithExprs ( CSphMatchComparatorState & tState, CSphVector<ExtraSortExpr_t> & dExtraExprs )
+void QueueCreator_c::ReplaceStaticStringsWithExprs ( CSphMatchComparatorState & tState )
 {
 	assert ( m_pSorterSchema );
 	auto & tSorterSchema = *m_pSorterSchema.Ptr();
@@ -6445,8 +6445,8 @@ void QueueCreator_c::RemapAttrs ( CSphMatchComparatorState & tState, CSphVector<
 	auto & tSorterSchema = *m_pSorterSchema.Ptr();
 	int iNumOldAttrs = tSorterSchema.GetAttrsCount();
 
-	ReplaceGroupbyStrWithExprs ( tState, dExtraExprs, iNumOldAttrs );
-	ReplaceStaticStringsWithExprs ( tState, dExtraExprs );
+	ReplaceGroupbyStrWithExprs ( tState, iNumOldAttrs );
+	ReplaceStaticStringsWithExprs ( tState );
 	ReplaceJsonWithExprs ( tState, dExtraExprs );
 	AddColumnarExprsAsAttrs ( tState, dExtraExprs );
 

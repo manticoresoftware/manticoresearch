@@ -16,6 +16,11 @@
 #include "searchdsql.h"
 #include "attribute.h"
 
+// hard-coded definitions to avoid probing (that is - to avoid confusing memcheck programs)
+// run searchd with --logdebug --console once, read values, then write them here and uncomment these lines
+//#define KNOWN_CREATE_SIZE 4208
+//#define KNOWN_EXPR_SIZE 48
+//#define KNOWN_FILTER_SIZE 400
 
 class StackMeasurer_c
 {
@@ -93,7 +98,7 @@ public:
 		return iDelta;
 	}
 
-	virtual ~StackMeasurer_c () {}
+	virtual ~StackMeasurer_c () = default;
 };
 
 /////////////////////////////////////////////////////////////////////
@@ -201,19 +206,40 @@ class EvalExprStackSize_c : public CreateExprStackSize_c
 
 void DetermineNodeItemStackSize()
 {
-	int iCreateSize, iEvalSize;
+	int iCreateSize=0;
+	int iEvalSize=0;
+
+	bool bRunNatively = !Threads::IsUnderValgrind();
+	bool bNeedCheck = true;
+#ifdef KNOWN_CREATE_SIZE
+	iCreateSize = KNOWN_CREATE_SIZE;
+	bNeedCheck = bRunNatively;
+#endif
+
+	if ( bNeedCheck )
 	{
 		CreateExprStackSize_c tCreateMeter;
-		iCreateSize = tCreateMeter.MockMeasureStack ( 5 );
+		auto iNewCreateSize = tCreateMeter.MockMeasureStack ( 5 );
+		if ( iCreateSize && iCreateSize < iNewCreateSize )
+			sphWarning ( "Compiled-in value KNOWN_CREATE_SIZE (%d) is less than measured (%d). Consider to fix the value!", iCreateSize, iNewCreateSize );
+		iCreateSize = iNewCreateSize;
 	}
 	sphLogDebug ( "expression stack for creation %d", iCreateSize );
 
 	// save the metric, as next measuring eval metric with deeper recursion may already use the value
 	SetExprNodeStackItemSize ( iCreateSize, 0 );
 
+#ifdef KNOWN_EXPR_SIZE
+	iEvalSize = KNOWN_EXPR_SIZE;
+	bNeedCheck = bRunNatively;
+#endif
+	if ( bNeedCheck )
 	{
 		EvalExprStackSize_c tEvalMeter;
-		iEvalSize = tEvalMeter.MockMeasureStack ( 20 );
+		auto iNewEvalSize = tEvalMeter.MockMeasureStack ( 20 );
+		if ( iEvalSize && iEvalSize < iNewEvalSize )
+			sphWarning ( "Compiled-in value KNOWN_EXPR_SIZE (%d) is less than measured (%d). Consider to fix the value!", iEvalSize, iNewEvalSize );
+		iEvalSize = iNewEvalSize;
 	}
 	sphLogDebug ( "expression stack for eval/deletion %d", iEvalSize );
 	SetExprNodeStackItemSize ( 0, iEvalSize );
@@ -277,8 +303,21 @@ protected:
 
 void DetermineFilterItemStackSize ()
 {
-	FilterCreationMeasureStack_c tCreateMeter;
-	int iDelta = tCreateMeter.MockMeasureStack ( 100 );
+	bool bNeedCheck = true;
+	int iDelta=0;
+#ifdef KNOWN_FILTER_SIZE
+	iDelta = KNOWN_FILTER_SIZE;
+	bNeedCheck = !Threads::IsUnderValgrind();
+#endif
+	if ( bNeedCheck )
+	{
+		FilterCreationMeasureStack_c tCreateMeter;
+		auto iNewDelta = tCreateMeter.MockMeasureStack ( 100 );
+		if ( iDelta && iDelta<iNewDelta )
+			sphWarning ( "Compiled-in value KNOWN_FILTER_SIZE (%d) is less then measured (%d). Consider to fix the value!", iDelta, iNewDelta );
+		iDelta = iNewDelta;
+	}
+
 	sphLogDebug ( "filter stack delta %d", iDelta );
 	SetFilterStackItemSize ( iDelta );
 }

@@ -13,22 +13,15 @@
 #include "task_info.h"
 #include <atomic>
 
+#ifdef HAVE_VALGRIND
 #define BOOST_USE_VALGRIND 1
-#ifndef NDEBUG
-#define BOOST_USE_VALGRIND 1
-#endif
-
-#ifdef BOOST_USE_VALGRIND
-#ifndef HAVE_VALGRIND
-#undef BOOST_USE_VALGRIND
-#endif
+#include <valgrind/valgrind.h>
+#else
+#define BOOST_USE_VALGRIND 0
 #endif
 
 #include <boost/context/detail/fcontext.hpp>
 
-#if BOOST_USE_VALGRIND
-#include <valgrind/valgrind.h>
-#endif
 
 #define LOG_LEVEL_DIAG false
 #define LOG_LEVEL_DEBUGV false
@@ -41,6 +34,15 @@ static const size_t STACK_ALIGN = 16; // stack align - let it be 16 bytes for co
 size_t AlignStackSize ( size_t iSize )
 {
 	return ( iSize+STACK_ALIGN-1 ) & ~( STACK_ALIGN-1 );
+}
+
+bool IsUnderValgrind()
+{
+#if BOOST_USE_VALGRIND
+	return !!RUNNING_ON_VALGRIND;
+#else
+	return false;
+#endif
 }
 
 // stack size - 128K

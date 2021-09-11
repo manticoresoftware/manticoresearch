@@ -198,6 +198,14 @@ add_library (lsearchd OBJECT searchdha.cpp http/http_parser.c searchdhttp.cpp
 target_sources (lsearchd PUBLIC ${SEARCHD_SRCS_TESTABLE} ${SEARCHD_H} ${SEARCHD_BISON} ${SEARCHD_FLEX})
 target_link_libraries (lsearchd PUBLIC lextra)
 
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND CMAKE_CXX_COMPILER_VERSION VERSION_EQUAL "12")
+	set_source_files_properties ( stackmock.cpp PROPERTIES COMPILE_DEFINITIONS_RELWITHDEBINFO "KNOWN_CREATE_SIZE=768;KNOWN_EXPR_SIZE=32;KNOWN_FILTER_SIZE=208" )
+	set_source_files_properties ( stackmock.cpp PROPERTIES COMPILE_DEFINITIONS_DEBUG "KNOWN_CREATE_SIZE=4208;KNOWN_EXPR_SIZE=48;KNOWN_FILTER_SIZE=400")
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_EQUAL "9.3")
+	set_source_files_properties ( stackmock.cpp PROPERTIES COMPILE_DEFINITIONS_RELWITHDEBINFO "KNOWN_CREATE_SIZE=16;KNOWN_EXPR_SIZE=48;KNOWN_FILTER_SIZE=240" )
+	set_source_files_properties ( stackmock.cpp PROPERTIES COMPILE_DEFINITIONS_DEBUG "KNOWN_CREATE_SIZE=256;KNOWN_EXPR_SIZE=48;KNOWN_FILTER_SIZE=272" )
+endif()
+
 if (WITH_ZLIB)
 	target_sources (lsearchd PRIVATE compressed_mysql.cpp)
 	target_link_libraries (lsearchd PRIVATE ZLIB::ZLIB)

@@ -44,6 +44,8 @@ bool CallCoroutineRes ( Predicate fnHandler );
 // It should NOT switch context (i.e. no yield/resume)
 void MockCallCoroutine ( VecTraits_T<BYTE> dStack, Handler fnHandler );
 
+bool IsUnderValgrind();
+
 // if iStack<0, just immediately invoke the handler (that is bypass)
 template<typename HANDLER>
 void CoContinue ( int iStack, HANDLER handler )

@@ -7883,7 +7883,7 @@ void RtIndex_c::InitOneshotIndex ( const VecTraits_T<CSphIndex*>& dChunks ) NO_T
 	// copy tokenizer, dict, etc. settings from first chunk.
 	// fixme! There is no check about absent/non-compatible settings between grabbed plain and rt
 	m_tSettings = pFirst->GetSettings();
-	m_pTokenizer = pFirst->GetTokenizer()->Clone ( SPH_CLONE_QUERY );
+	m_pTokenizer = pFirst->GetTokenizer()->Clone ( SPH_CLONE_INDEX );
 //	m_pDict = pFirst->GetDictionary()->Clone();
 
 	RtWriter_c tWriter { m_tRtChunks, RtWriter_c::unsafe };

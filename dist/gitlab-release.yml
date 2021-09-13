@@ -302,6 +302,14 @@ collect_focal:
     DISTRO: focal
   needs: [ focal, focalarm ]
 
+
+collect_hirsute:
+  extends: [ .collect_job ]
+  script: [ ~/upload_repo_deb.sh ]
+  variables:
+    DISTRO: hirsute
+  needs: [ focal ]
+
 buster:
   extends: [ .debian_based ]
   rules:

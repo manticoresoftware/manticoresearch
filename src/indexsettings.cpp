@@ -1520,7 +1520,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 	assert ( pDict );
 
 	CSphIndexSettings tSettings = pIndex->GetSettings ();
-	bool bNeedExact = ( pDict->HasMorphology() || pDict->GetWordformsFileInfos().GetLength() );
+	bool bNeedExact = ( pDict->HasMorphology() || pDict->GetWordformsFileInfos().GetLength() || pIndex->GetMutableSettings().m_iExpandKeywords );
 	if ( tSettings.m_bIndexExactWords && !bNeedExact )
 	{
 		tSettings.m_bIndexExactWords = false;

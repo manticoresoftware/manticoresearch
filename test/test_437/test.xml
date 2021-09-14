@@ -38,6 +38,16 @@ searchd
 	select * from test where match('*борисовск*');
 	drop table test;
 
-</sphinxql></queries>
+</sphinxql>
+
+<!-- regression expanded vs exact form-->
+<sphinxql>
+	create table test ( title text ) rt_mem_limit='1024M' index_exact_words='1'  expand_keywords='1' min_infix_len='3' charset_table='0..9, english, russian, _, U+0401->U+0435, U+0451->U+0435';
+	insert into test (title) values ('abcdef');
+	select * from test where match('=def');
+	drop table test;
+</sphinxql>
+
+</queries>
 
 </test>

@@ -7550,7 +7550,6 @@ int RtIndex_c::UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSph
 		return -1;
 	}
 
-	RtGuard_t tGuard ( m_tRtChunks.RtData() );
 	int iUpdated = tUpd.m_iAffected;
 
 	UpdateContext_t tCtx ( tUpd, m_tSchema );
@@ -7559,11 +7558,12 @@ int RtIndex_c::UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSph
 
 	Update_PrepareListOfUpdatedAttributes ( tCtx, sError );
 
-	auto dRamUpdateSets = Update_CollectRowPtrs ( tCtx, tGuard.m_dRamSegs );
-
 	// do update in serial fiber. That ensures no concurrency with set of chunks changing, however need to dispatch
 	// with changers themselves (merge segments, merge chunks, save disk chunks).
 	// fixme! Find another way (dedicated fiber?), as long op in serial fiber may pause another ops.
+	RtGuard_t tGuard ( m_tRtChunks.RtData() );
+	auto dRamUpdateSets = Update_CollectRowPtrs ( tCtx, tGuard.m_dRamSegs );
+
 	ScopedScheduler_c tSerialFiber ( m_tRtChunks.SerialChunkAccess() );
 	ARRAY_CONSTFOREACH ( i, dRamUpdateSets )
 	{

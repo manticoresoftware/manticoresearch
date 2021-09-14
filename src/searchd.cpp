@@ -13277,6 +13277,12 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 			break;
 		}
 
+		if ( tStmt.m_sSetName == "optimize_by_id" )
+		{
+			tSess.SetOptimizeById ( !!tStmt.m_iSetValue );
+			break;
+		}
+
 		if ( tStmt.m_sSetName=="max_threads_per_query" )
 		{
 			tSess.SetDistThreads ( tStmt.m_iSetValue );
@@ -13645,7 +13651,7 @@ void HandleMysqlOptimizeManual ( RowBuffer_i & tOut, const DebugCmd::DebugComman
 	tTask.m_eVerb = OptimizeTask_t::eMerge;
 	tTask.m_iFrom = (int)tCmd.m_iPar1;
 	tTask.m_iTo = (int)tCmd.m_iPar2;
-	tTask.m_bByOrder = !tCmd.bOpt ( "byid" );
+	tTask.m_bByOrder = !tCmd.bOpt ( "byid", session::Info().GetOptimizeById() );
 	tTask.m_iCutoff = (int)tCmd.iOpt("cutoff");
 
 	if ( tCmd.bOpt("sync") )
@@ -13671,7 +13677,7 @@ void HandleMysqlDropManual ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t 
 	OptimizeTask_t tTask;
 	tTask.m_eVerb = OptimizeTask_t::eDrop;
 	tTask.m_iFrom = (int)tCmd.m_iPar1;
-	tTask.m_bByOrder = !tCmd.bOpt ( "byid" );
+	tTask.m_bByOrder = !tCmd.bOpt ( "byid", session::Info().GetOptimizeById() );
 
 	if ( tCmd.bOpt("sync") )
 	{
@@ -13695,7 +13701,7 @@ void HandleMysqlCompress ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & 
 	OptimizeTask_t tTask;
 	tTask.m_eVerb = OptimizeTask_t::eCompress;
 	tTask.m_iFrom = (int) tCmd.m_iPar1;
-	tTask.m_bByOrder = !tCmd.bOpt ( "byid" );
+	tTask.m_bByOrder = !tCmd.bOpt ( "byid", session::Info().GetOptimizeById() );
 
 	if ( tCmd.bOpt("sync") )
 	{
@@ -13739,7 +13745,7 @@ void HandleMysqlSplit ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCm
 	tTask.m_eVerb = OptimizeTask_t::eSplit;
 	tTask.m_iFrom = (int)tCmd.m_iPar1;
 	tTask.m_sUvarFilter = tCmd.m_sParam2;
-	tTask.m_bByOrder = !tCmd.bOpt ( "byid" );
+	tTask.m_bByOrder = !tCmd.bOpt ( "byid", session::Info().GetOptimizeById() );
 
 	if ( tCmd.bOpt ( "sync" ) )
 	{

@@ -191,6 +191,7 @@ private:
 	CSphString m_sClientName; // set once before info is published and never changes. So, assume always mt-safe
 	bool m_bSsl = false;
 	bool m_bVip = false;
+	bool m_bOptimizeById = true;
 
 	// high level members - used as connection-wide globals
 	int m_iThrottlingPeriodMS = -1;
@@ -217,6 +218,9 @@ public:
 
 	void SetVip ( bool bVip ) { m_bVip = bVip; }
 	bool GetVip() const { return m_bVip; }
+
+	void SetOptimizeById ( bool bOptimizeById ) { m_bOptimizeById = bOptimizeById; }
+	bool GetOptimizeById() const { return m_bOptimizeById; }
 
 	void SetThrottlingPeriodMS ( int iThrottlingPeriodMS ) { m_iThrottlingPeriodMS = iThrottlingPeriodMS; }
 	int GetThrottlingPeriodMS() const { return m_iThrottlingPeriodMS; }

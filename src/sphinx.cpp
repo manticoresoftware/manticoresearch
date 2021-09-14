@@ -1584,7 +1584,7 @@ private:
 
 	static std::pair<DWORD,DWORD>		CreateRowMapsAndCountTotalDocs ( const CSphIndex_VLN* pSrcIndex, const CSphIndex_VLN* pDstIndex, CSphFixedVector<RowID_t>& dSrcRowMap, CSphFixedVector<RowID_t>& dDstRowMap, const ISphFilter* pFilter, bool bSupressDstDocids, MergeCb_c& tMonitor );
 	RowsToUpdateData_t			Update_CollectRowPtrs ( const UpdateContext_t & tCtx );
-	RowsToUpdate_t				Update_PrepareGatheredRowPtrs ( RowsToUpdate_t & dWRows, UpdateContext_t & tCtx );
+	RowsToUpdate_t				Update_PrepareGatheredRowPtrs ( RowsToUpdate_t & dWRows, const VecTraits_T<DocID_t>& dDocids );
 	bool						Update_WriteBlobRow ( UpdateContext_t & tCtx, CSphRowitem * pDocinfo, const BYTE * pBlob,
 										int iLength, int nBlobAttrs, const CSphAttrLocator & tBlobRowLoc, bool & bCritical, CSphString & sError ) override;
 	void						Update_MinMax ( const RowsToUpdate_t& dRows, const UpdateContext_t & tCtx );
@@ -7257,12 +7257,11 @@ RowsToUpdateData_t CSphIndex_VLN::Update_CollectRowPtrs ( const UpdateContext_t 
 }
 
 // We fill docinfo ptr for actual rows, and move out non-actual (the ones which doesn't point to existing document)
-// note, it actually chante (rearrange) rows!
-RowsToUpdate_t CSphIndex_VLN::Update_PrepareGatheredRowPtrs ( RowsToUpdate_t & dWRows, UpdateContext_t & tCtx )
+// note, it actually changes (rearranges) rows!
+RowsToUpdate_t CSphIndex_VLN::Update_PrepareGatheredRowPtrs ( RowsToUpdate_t & dWRows, const VecTraits_T<DocID_t>& dDocids )
 {
 	RowsToUpdate_t dRows = dWRows; // that is actually to indicate that we CHANGE contents inside dWRows, so it should be passed by non-const reference.
 
-	const auto & dDocids = tCtx.m_tUpd.m_pUpdate->m_dDocids;
 	dRows.Sort ( Lesser ( [&dDocids] ( auto& a, auto& b ) { return dDocids[a.m_iIdx]<dDocids[b.m_iIdx]; } ) );
 	LookupReaderIterator_c tLookupReader ( m_tDocidLookup.GetReadPtr() );
 
@@ -7483,7 +7482,7 @@ void CSphIndex_VLN::UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & d
 	{
 		AttrUpdateInc_t tUpdInc { tUpdate.m_pUpdate }; // dont move, keep update (need twice when split chunks)
 		UpdateContext_t tCtx ( tUpdInc, m_tSchema );
-		auto dRows = Update_PrepareGatheredRowPtrs ( tUpdate.m_dRowsToUpdate, tCtx );
+		RowsToUpdate_t dRows = Update_PrepareGatheredRowPtrs ( tUpdate.m_dRowsToUpdate, tCtx.m_tUpd.m_pUpdate->m_dDocids );
 		if ( !DoUpdateAttributes ( dRows, tCtx, bCritical, sError ) )
 		{
 			sphWarning ("UpdateAttributesOffline: %s", sError.cstr() );

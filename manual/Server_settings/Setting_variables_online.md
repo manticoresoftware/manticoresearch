@@ -69,7 +69,8 @@ This is very specific and 'hard' variable; filtered out messages will be just dr
 * `MAX_THREADS_PER_QUERY = <POSITIVE_INT_VALUE>` Redefines [max_threads_per_query](../Server_settings/Searchd.md#max_threads_per_query) in the runtime. As global it changes behaviour for all sessions. Value 0 means 'no limit'. If both per-session and the global variables are set, the per-session one has a higher priority.
 * `NET_WAIT = {-1 | 0 | POSITIVE_INT_VALUE}` Changes the [net_wait_tm](../Server_settings/Searchd.md#net_wait_tm) searchd settings value.
 * `cpustats= {1|0}` Turns on/off [cpu time tracking](../Starting_the_server/Manually.md#searchd-command-line-options).
-* `coredump= {1|0}` Tunes on/off saving a core file or a minidump of the server on crash. More details [here](../Starting_the_server/Manually.md#searchd-command-line-options).
+* `coredump= {1|0}` Turns on/off saving a core file or a minidump of the server on crash. More details [here](../Starting_the_server/Manually.md#searchd-command-line-options).
+* `pseudo_sharding = {1|0}` Turns on/off search [pseudo sharding](../Server_settings/Searchd.md#pseudo_sharding).
 
 Examples:
 

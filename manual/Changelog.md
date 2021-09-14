@@ -24,6 +24,7 @@
   </details>
 
 - **[ALTER](Updating_index_schema.md) can add/remove a full-text field**. Previously it could only add/remove an attribute.
+- **Experimental: pseudo sharding for full-scan queries** - allows to parallelize any non-full-text search query. Instead of preparing shards manually you can now just enable new option [searchd.pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) and expect up to `CPU cores` lower response time for non-full-text search queries.
 
 ### Minor changes
 <!-- example -->

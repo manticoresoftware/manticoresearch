@@ -101,6 +101,31 @@ index plain_inline
 	min_prefix_len = 1
 }
 
+index expanded_plain2
+{
+	source			= srctest
+	path			= <data_path/>/expanded-plain2
+	dict = keywords
+    
+	expand_keywords	= 1
+	min_infix_len = 3
+    index_exact_words = 1
+}
+
+index expanded_rt2
+{
+	type = rt
+	path			= <data_path/>/expanded-rt2
+	dict = keywords
+    
+	expand_keywords	= 1
+	min_infix_len = 3
+    index_exact_words = 1    
+    
+	rt_field = title
+	rt_attr_uint = idd	
+}
+
 </config>
 
 <queries>
@@ -130,6 +155,15 @@ index plain_inline
 	select * from expanded_plain where match ( 'run' );
 	show meta;
 </sphinxql>
+
+<!-- regression expanded vs exact form-->
+<sphinxql>select * from expanded_plain2 where match ( '=dog' )</sphinxql>
+<sphinxql>select * from expanded_plain2 where match ( '=dogs' )</sphinxql>
+<sphinxql>
+	insert into expanded_rt2 values ( 11,  'abcdef', 11 );
+	select * from expanded_rt2 where match ( '=def' );
+</sphinxql>
+    
 </queries>
 
 <db_create>

@@ -65,3 +65,13 @@ where `myUdf()` would be a UDF that fetches a document by its ID from some exter
 SELECT SUBSTRING_INDEX('www.w3schools.com', '.', 2) FROM test;
 SELECT SUBSTRING_INDEX(j.coord, ' ', 1) FROM test;
 ```
+
+### UPPER()
+`UPPER(string)` returns the uppercase value of the given string
+
+*   string - The original string. Can be a constant string or a string from a string/json attribute.
+
+```sql
+SELECT UPPER('hello-world') FROM test;
+SELECT UPPER(j.coord) FROM test;
+```

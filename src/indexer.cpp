@@ -1029,7 +1029,10 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		if ( !pDict )
 			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
-		bool bNeedExact = ( pDict->HasMorphology() || pDict->GetWordformsFileInfos().GetLength() );
+		MutableIndexSettings_c tMutableSettings;
+		tMutableSettings.Load ( hIndex, false, nullptr );
+
+		bool bNeedExact = ( pDict->HasMorphology() || pDict->GetWordformsFileInfos().GetLength() || tMutableSettings.m_iExpandKeywords );
 		if ( tSettings.m_bIndexExactWords && !bNeedExact )
 		{
 			tSettings.m_bIndexExactWords = false;

@@ -419,7 +419,7 @@ INSERT INTO name_table VALUES
 	SELECT bigint(timediff(now(),utc_timestamp())) % 15;
 
 	<!-- RAND() function, should be strictly deterministic (if called with arguments) -->
-	select id, rand()*0, rand(0), rand(1) as p, rand(2) as q, rand(id), rand(id+1) from test order by p asc, q asc;
+	select id, rand()*0, rand(0)*0, rand(1)*0 as p, rand(2)*0 as q, rand(id), rand(id+1) from test order by p asc, q asc;
 	select id, floor(1 + rand(id) * 4294967295) as rand from test order by rand asc;
 
 	<!-- filter by empty string -->

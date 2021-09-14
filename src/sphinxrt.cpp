@@ -37,6 +37,7 @@
 #include "columnarmisc.h"
 #include "sphinx_alter.h"
 #include "taskoptimize.h"
+#include "chunksearchctx.h"
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -2685,7 +2686,8 @@ void BuildSegmentInfixes ( RtSegment_t * pSeg, bool bHasMorphology, bool bKeywor
 	}
 }
 
-CSphFixedVector<RowID_t> RtIndex_c::CopyAttributesFromAliveDocs ( RtSegment_t& tDstSeg, const RtSegment_t& tSrcSeg, RtAttrMergeContext_t& tCtx ) const REQUIRES ( tDstSeg.m_tLock )
+
+CSphFixedVector<RowID_t> RtIndex_c::CopyAttributesFromAliveDocs ( RtSegment_t & tDstSeg, const RtSegment_t & tSrcSeg, RtAttrMergeContext_t & tCtx ) const REQUIRES ( tDstSeg.m_tLock )
 {
 	CSphFixedVector<RowID_t> dRowMap { tSrcSeg.m_uRows };
 	dRowMap.Fill ( INVALID_ROWID );
@@ -2821,7 +2823,7 @@ RtSegment_t* RtIndex_c::MergeTwoSegments ( const RtSegment_t* pA, const RtSegmen
 	CSphScopedPtr<ColumnarBuilderRT_i> pColumnarBuilder ( CreateColumnarBuilderRT(m_tSchema) );
 	RtAttrMergeContext_t tCtx ( nBlobAttrs, tNextRowID, pColumnarBuilder.Ptr() );
 
-	auto* pSeg = new RtSegment_t ( 0 );
+	auto * pSeg = new RtSegment_t (0);
 	FakeWL_t _ { pSeg->m_tLock }; // as pSeg is just created - we don't need real guarding and use fake lock to mute thread safety warnings
 
 	if ( m_tSchema.HasStoredFields() )
@@ -6324,107 +6326,8 @@ void SorterSchemaTransform_c::Transform ( ISphMatchSorter * pSorter, const RtGua
 	pSorter->TransformPooled2StandalonePtrs ( fnGetBlobPoolFromMatch, fnGetColumnarFromMatch );
 }
 
-namespace { // nameless namespace instead of 'static' modifier
 
-struct DiskChunkSearcherCtx_t
-{
-	using Sorters_t = VecTraits_T<ISphMatchSorter *>;
-
-	Sorters_t&			m_dSorters;
-	CSphQueryResultMeta&	m_tMeta;
-
-	DiskChunkSearcherCtx_t ( Sorters_t & dSorters, CSphQueryResultMeta & tMeta )
-		: m_dSorters ( dSorters )
-		, m_tMeta ( tMeta )
-	{}
-
-	// called from finalize.
-	void MergeChild ( DiskChunkSearcherCtx_t dChild ) const
-	{
-		// sorting results
-		ARRAY_CONSTFOREACH ( i, m_dSorters )
-			if ( dChild.m_dSorters[i] )
-				dChild.m_dSorters[i]->MoveTo ( m_dSorters[i] );
-
-		auto& dChildRes = dChild.m_tMeta;
-
-		// word statistics
-		if ( m_tMeta.m_hWordStats.GetLength ())
-			for ( auto & tStat : m_tMeta.m_hWordStats )
-			{
-				const auto * pDstStat = dChildRes.m_hWordStats ( tStat.first );
-				if ( pDstStat )
-					m_tMeta.AddStat ( tStat.first, pDstStat->first, pDstStat->second );
-			}
-		else
-			m_tMeta.m_hWordStats = dChildRes.m_hWordStats;
-
-		// other data (warnings, errors, etc.)
-		// errors
-		if ( !dChildRes.m_sError.IsEmpty ())
-			m_tMeta.m_sError = dChildRes.m_sError;
-
-		// warnings
-		if ( !dChildRes.m_sWarning.IsEmpty ())
-			m_tMeta.m_sWarning = dChildRes.m_sWarning;
-
-		// prediction counters
-		if ( m_tMeta.m_bHasPrediction )
-			m_tMeta.m_tStats.Add ( dChildRes.m_tStats );
-
-		// profiling
-		if ( dChildRes.m_pProfile )
-			m_tMeta.m_pProfile->AddMetric ( *dChildRes.m_pProfile );
-	}
-
-	inline bool IsClonable () const
-	{
-		return m_dSorters.all_of ( [] ( const ISphMatchSorter * p ) { return p->CanBeCloned (); } );
-	}
-};
-
-struct DiskChunkSearcherCloneCtx_t
-{
-	CSphVector<ISphMatchSorter *>	m_dSorters;
-	CSphQueryResultMeta				m_tMeta;
-
-	explicit DiskChunkSearcherCloneCtx_t ( const DiskChunkSearcherCtx_t& dParent )
-	{
-		m_dSorters.Resize ( dParent.m_dSorters.GetLength ());
-		ARRAY_FOREACH ( i, m_dSorters )
-			m_dSorters[i] = dParent.m_dSorters[i]->Clone ();
-
-		m_tMeta.m_bHasPrediction = dParent.m_tMeta.m_bHasPrediction;
-		if ( dParent.m_tMeta.m_pProfile )
-			m_tMeta.m_pProfile = new QueryProfile_c;
-	}
-
-	~DiskChunkSearcherCloneCtx_t()
-	{
-		m_dSorters.Apply ( [] ( ISphMatchSorter *& pSorter ) { SafeDelete ( pSorter ); } );
-		SafeDelete ( m_tMeta.m_pProfile );
-	}
-
-	explicit operator DiskChunkSearcherCtx_t()
-	{
-		return { m_dSorters, m_tMeta };
-	}
-};
-
-
-void QueryDiskChunks ( const CSphQuery & tQuery,
-		CSphQueryResultMeta& tResult,
-		const CSphMultiQueryArgs & tArgs,
-		const RtGuard_t& tGuard,
-		VecTraits_T<ISphMatchSorter *>& dSorters,
-		QueryProfile_c * pProfiler,
-		bool bGotLocalDF,
-		const SmallStringHash_T<int64_t> * pLocalDocs,
-		int64_t iTotalDocs,
-		const char * szIndexName,
-		SorterSchemaTransform_c & tSSTransform,
-		int64_t tmMaxTimer
-		)
+static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tResult, const CSphMultiQueryArgs & tArgs, const RtGuard_t & tGuard, VecTraits_T<ISphMatchSorter *> & dSorters, QueryProfile_c * pProfiler, bool bGotLocalDF, const SmallStringHash_T<int64_t> * pLocalDocs, int64_t iTotalDocs, const char * szIndexName, SorterSchemaTransform_c & tSSTransform, int64_t tmMaxTimer )
 {
 	// counter of tasks we will issue now
 	int iJobs = tGuard.m_dDiskChunks.GetLength();
@@ -6434,14 +6337,15 @@ void QueryDiskChunks ( const CSphQuery & tQuery,
 	assert ( !dSorters.IsEmpty () );
 
 	// the context
-	ClonableCtx_T<DiskChunkSearcherCtx_t, DiskChunkSearcherCloneCtx_t> dCtx { dSorters, tResult };
+	ClonableCtx_T<DiskChunkSearcherCtx_t, DiskChunkSearcherCloneCtx_t> tClonableCtx { dSorters, tResult };
 
 	auto iConcurrency = tQuery.m_iCouncurrency;
 	if ( !iConcurrency )
-		iConcurrency = GetEffectiveDistThreads ();
-	dCtx.LimitConcurrency ( iConcurrency );
+		iConcurrency = GetEffectiveDistThreads();
 
-	auto iStart = sphMicroTimer ();
+	tClonableCtx.LimitConcurrency ( iConcurrency );
+
+	auto iStart = sphMicroTimer();
 	sphLogDebugv ( "Started: " INT64_FMT, sphMicroTimer()-iStart );
 
 	// because disk chunk search within the loop will switch the profiler state
@@ -6449,13 +6353,13 @@ void QueryDiskChunks ( const CSphQuery & tQuery,
 
 	std::atomic<bool> bInterrupt {false};
 	std::atomic<int32_t> iCurChunk { iJobs-1 };
-	CoExecuteN ( dCtx.Concurrency ( iJobs ), [&]
+	CoExecuteN ( tClonableCtx.Concurrency ( iJobs ), [&]
 	{
 		auto iChunk = iCurChunk.fetch_sub ( 1, std::memory_order_acq_rel );
 		if ( iChunk<0 || bInterrupt )
 			return; // already nothing to do, early finish.
 
-		auto tCtx = dCtx.CloneNewContext ();
+		auto tCtx = tClonableCtx.CloneNewContext();
 		Threads::CoThrottler_c tThrottler ( session::ThrottlingPeriodMS () );
 		int iTick=1; // num of times coro rescheduled by throttler
 		while ( !bInterrupt ) // some earlier job met error; abort.
@@ -6465,7 +6369,7 @@ void QueryDiskChunks ( const CSphQuery & tQuery,
 			CSphQueryResultMeta tChunkMeta;
 			CSphQueryResult tChunkResult;
 			tChunkResult.m_pMeta = &tChunkMeta;
-			CSphQueryResultMeta& tThMeta = tCtx.m_tMeta;
+			CSphQueryResultMeta & tThMeta = tCtx.m_tMeta;
 			tChunkMeta.m_pProfile = tThMeta.m_pProfile;
 
 			CSphMultiQueryArgs tMultiArgs ( tArgs.m_iIndexWeight );
@@ -6496,7 +6400,10 @@ void QueryDiskChunks ( const CSphQuery & tQuery,
 				bInterrupt = true;
 			}
 
-			if ( bInterrupt && !tChunkMeta.m_sError.IsEmpty ())
+			if ( tThMeta.m_sWarning.IsEmpty() && !tChunkMeta.m_sWarning.IsEmpty() )
+				tThMeta.m_sWarning = tChunkMeta.m_sWarning;
+
+			if ( bInterrupt && !tChunkMeta.m_sError.IsEmpty() )
 				// FIXME? maybe handle this more gracefully (convert to a warning)?
 				tThMeta.m_sError = tChunkMeta.m_sError;
 
@@ -6505,17 +6412,17 @@ void QueryDiskChunks ( const CSphQuery & tQuery,
 				return; // all is done
 
 			// yield and reschedule every quant of time. It gives work to other tasks
-			if ( tThrottler.ThrottleAndKeepCrashQuery () )
+			if ( tThrottler.ThrottleAndKeepCrashQuery() )
 				// report current disk chunk processing
 				++iTick;
 		}
 	});
-	dCtx.Finalize();
+
+	tClonableCtx.Finalize();
 }
 
-void FinalExpressionCalculation( CSphQueryContext& tCtx,
-		const VecTraits_T<RtSegmentRefPtf_t>& dRamChunks,
-		VecTraits_T<ISphMatchSorter *>& dSorters )
+
+void FinalExpressionCalculation ( CSphQueryContext & tCtx, const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks, VecTraits_T<ISphMatchSorter *> & dSorters )
 {
 	if ( tCtx.m_dCalcFinal.IsEmpty() )
 		return;
@@ -6541,24 +6448,7 @@ void FinalExpressionCalculation( CSphQueryContext& tCtx,
 }
 
 // perform initial query transformations and expansion.
-int PrepareFTSearch ( const RtIndex_c * pThis,
-		bool bIsStarDict,
-		bool bKeywordDict,
-		int iExpandKeywords,
-		int iExpansionLimit,
-		const char * szModifiedQuery,
-		const CSphIndexSettings& tSettings,
-		const QueryParser_i * pQueryParser,
-		const CSphQuery& tQuery,
-		const CSphSchema & tSchema,
-		cRefCountedRefPtr_t pIndexData,
-		ISphTokenizer * pTokenizer,
-		ISphTokenizer * pQueryTokenizer,
-		CSphDict* pDict,
-		CSphQueryResultMeta& tMeta,
-		QueryProfile_c* pProfiler,
-		CSphScopedPayload* pPayloads,
-		XQQuery_t & tParsed )
+static int PrepareFTSearch ( const RtIndex_c * pThis, bool bIsStarDict, bool bKeywordDict, int iExpandKeywords, int iExpansionLimit, const char * szModifiedQuery, const CSphIndexSettings & tSettings, const QueryParser_i * pQueryParser, const CSphQuery & tQuery, const CSphSchema & tSchema, cRefCountedRefPtr_t pIndexData, ISphTokenizer * pTokenizer, ISphTokenizer * pQueryTokenizer, CSphDict * pDict, CSphQueryResultMeta & tMeta, QueryProfile_c * pProfiler, CSphScopedPayload * pPayloads, XQQuery_t & tParsed )
 {
 	// OPTIMIZE! make a lightweight clone here? and/or remove double clone?
 	TokenizerRefPtr_c pQueryTokenizerJson { pTokenizer };
@@ -6611,12 +6501,7 @@ int PrepareFTSearch ( const RtIndex_c * pThis,
 }
 
 
-bool SetupFilters ( const CSphQuery & tQuery,
-		const ISphSchema* pSchema,
-		bool bFullscan,
-		CSphQueryContext & tCtx,
-		CSphString& sError,
-		CSphString& sWarning )
+bool SetupFilters ( const CSphQuery & tQuery, const ISphSchema * pSchema, bool bFullscan, CSphQueryContext & tCtx, CSphString & sError, CSphString & sWarning )
 {
 	CreateFilterContext_t tFlx;
 	tFlx.m_pFilters = &tQuery.m_dFilters;
@@ -6629,15 +6514,7 @@ bool SetupFilters ( const CSphQuery & tQuery,
 }
 
 
-void PerformFullScan ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
-		int iMaxDynamicSize,
-		int iIndexWeight,
-		int iStride,
-		int iCutoff,
-		int64_t tmMaxTimer,
-		QueryProfile_c * pProfiler, CSphQueryContext& tCtx,
-		VecTraits_T<ISphMatchSorter*>& dSorters,
-		CSphString& sWarning )
+void PerformFullScan ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks, int iMaxDynamicSize, int iIndexWeight, int iStride, int iCutoff, int64_t tmMaxTimer, QueryProfile_c * pProfiler, CSphQueryContext & tCtx, VecTraits_T<ISphMatchSorter*> & dSorters, CSphString & sWarning )
 {
 	bool bRandomize = dSorters[0]->IsRandom();
 
@@ -6687,7 +6564,7 @@ void PerformFullScan ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 			tMatch.m_iTag = iSeg+1;
 
 			bool bNewMatch = false;
-			for ( auto* pSorter: dSorters )
+			for ( auto * pSorter: dSorters )
 				bNewMatch |= pSorter->Push ( tMatch );
 
 			// stringptr expressions should be duplicated (or taken over) at this point
@@ -6714,15 +6591,7 @@ void PerformFullScan ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 }
 
 
-bool DoFullScanQuery ( const RtSegVec_c& dRamChunks,
-		const ISphSchema& tMaxSorterSchema,
-		const CSphQuery& tQuery,
-		int iIndexWeight,
-		int iStride,
-		int64_t tmMaxTimer, QueryProfile_c* pProfiler,
-		CSphQueryContext& tCtx,
-		VecTraits_T<ISphMatchSorter*>& dSorters,
-		CSphQueryResultMeta& tMeta )
+static bool DoFullScanQuery ( const RtSegVec_c & dRamChunks, const ISphSchema & tMaxSorterSchema, const CSphQuery & tQuery, int iIndexWeight, int iStride, int64_t tmMaxTimer, QueryProfile_c * pProfiler, CSphQueryContext & tCtx, VecTraits_T<ISphMatchSorter*> & dSorters, CSphQueryResultMeta & tMeta )
 {
 	// probably redundant, but just in case
 	SwitchProfile ( pProfiler, SPH_QSTATE_INIT );
@@ -6748,13 +6617,7 @@ bool DoFullScanQuery ( const RtSegVec_c& dRamChunks,
 }
 
 
-void PerformFullTextSearch ( const RtSegVec_c& dRamChunks,
-		RtQwordSetup_t& tTermSetup,
-		ISphRanker* pRanker,
-		int iIndexWeight,
-		int iCutoff,
-		QueryProfile_c* pProfiler, CSphQueryContext& tCtx,
-		VecTraits_T<ISphMatchSorter*>& dSorters )
+static void PerformFullTextSearch ( const RtSegVec_c & dRamChunks, RtQwordSetup_t & tTermSetup, ISphRanker * pRanker, int iIndexWeight, int iCutoff, QueryProfile_c * pProfiler, CSphQueryContext & tCtx, VecTraits_T<ISphMatchSorter*> & dSorters )
 {
 	bool bRandomize = dSorters[0]->IsRandom();
 	// query matching
@@ -6848,20 +6711,8 @@ void PerformFullTextSearch ( const RtSegVec_c& dRamChunks,
 	}
 }
 
-bool DoFullTextSearch ( const RtSegVec_c& dRamChunks,
-		const ISphSchema& tMaxSorterSchema,
-		const CSphQuery& tQuery,
-		const char* szIndexName,
-		int iIndexWeight,
-		int iMatchPoolSize,
-		int iStackNeed,
-		RtQwordSetup_t& tTermSetup,
-		QueryProfile_c* pProfiler,
-		CSphQueryContext& tCtx,
-		VecTraits_T<ISphMatchSorter*>& dSorters,
-		XQQuery_t& tParsed,
-		CSphQueryResultMeta& tMeta,
-		ISphMatchSorter* pSorter )
+
+static bool DoFullTextSearch ( const RtSegVec_c & dRamChunks, const ISphSchema & tMaxSorterSchema, const CSphQuery & tQuery, const char * szIndexName, int iIndexWeight, int iMatchPoolSize, int iStackNeed, RtQwordSetup_t & tTermSetup, QueryProfile_c * pProfiler, CSphQueryContext & tCtx, VecTraits_T<ISphMatchSorter*> & dSorters, XQQuery_t & tParsed, CSphQueryResultMeta & tMeta, ISphMatchSorter * pSorter )
 {
 	// set zonespanlist settings
 	tParsed.m_bNeedSZlist = tQuery.m_bZSlist;
@@ -6967,13 +6818,10 @@ ConstRtData FilterReaderChunks ( ConstRtData tOrigin, const VecTraits_T<int64_t>
 	return { pConstChunks, pConstSegments };
 }
 
-} // nameless namespace
-
 // FIXME! missing MVA, index_exact_words support
 // FIXME? any chance to factor out common backend agnostic code?
 // FIXME? do we need to support pExtraFilters?
-bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery,
-		const VecTraits_T<ISphMatchSorter *> & dAllSorters, const CSphMultiQueryArgs & tArgs ) const
+bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dAllSorters, const CSphMultiQueryArgs & tArgs ) const
 {
 	// to avoid the checking of a ppSorters's element for NULL on every next step,
 	// just filter out all nulls right here
@@ -7066,8 +6914,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	SorterSchemaTransform_c tSSTransform ( dDiskChunks.GetLength() );
 
 	if ( !dDiskChunks.IsEmpty() )
-		QueryDiskChunks ( tQuery, tMeta, tArgs, tGuard, dSorters, pProfiler, bGotLocalDF, pLocalDocs, iTotalDocs,
-				m_sIndexName.cstr(), tSSTransform, tmMaxTimer );
+		QueryDiskChunks ( tQuery, tMeta, tArgs, tGuard, dSorters, pProfiler, bGotLocalDF, pLocalDocs, iTotalDocs, m_sIndexName.cstr(), tSSTransform, tmMaxTimer );
 
 	////////////////////
 	// search RAM chunk
@@ -7149,12 +6996,10 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	bool bFullscan = pQueryParser->IsFullscan ( tQuery ); // use this
 	// no need to create ranker, etc if there's no query
 	if ( !bFullscan )
-		iStackNeed = PrepareFTSearch (this, IsStarDict ( m_bKeywordDict ), m_bKeywordDict, m_tMutableSettings.m_iExpandKeywords, m_iExpansionLimit,
-			(const char *) sModifiedQuery, m_tSettings, pQueryParser, tQuery, m_tSchema, (cRefCountedRefPtr_t) tGuard.m_tSegmentsAndChunks.m_pSegs,
-			m_pTokenizer->Clone ( SPH_CLONE_QUERY ), pQueryTokenizer, pDict, tMeta, pProfiler,  &tPayloads, tParsed );
+		iStackNeed = PrepareFTSearch (this, IsStarDict ( m_bKeywordDict ), m_bKeywordDict, m_tMutableSettings.m_iExpandKeywords, m_iExpansionLimit, (const char *) sModifiedQuery, m_tSettings, pQueryParser, tQuery, m_tSchema, (cRefCountedRefPtr_t) tGuard.m_tSegmentsAndChunks.m_pSegs, m_pTokenizer->Clone ( SPH_CLONE_QUERY ), pQueryTokenizer, pDict, tMeta, pProfiler, &tPayloads, tParsed );
 
 	// empty index, empty result. Must be AFTER PrepareFTSearch, since it prepares list of words
-	if ( tGuard.m_dRamSegs.IsEmpty () )
+	if ( tGuard.m_dRamSegs.IsEmpty() )
 	{
 		for ( auto i : dSorters )
 			tSSTransform.Transform ( i, tGuard );
@@ -7169,12 +7014,9 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 
 	bool bResult;
 	if ( bFullscan || pQueryParser->IsFullscan ( tParsed ) )
-		bResult = DoFullScanQuery ( tGuard.m_dRamSegs, tMaxSorterSchema, tQuery, tArgs.m_iIndexWeight, m_iStride,
-				tmMaxTimer, pProfiler, tCtx, dSorters, tMeta );
+		bResult = DoFullScanQuery ( tGuard.m_dRamSegs, tMaxSorterSchema, tQuery, tArgs.m_iIndexWeight, m_iStride, tmMaxTimer, pProfiler, tCtx, dSorters, tMeta );
 	else
-		bResult = DoFullTextSearch ( tGuard.m_dRamSegs, tMaxSorterSchema, tQuery, m_sIndexName.cstr (),
-				tArgs.m_iIndexWeight, iMatchPoolSize, iStackNeed, tTermSetup, pProfiler, tCtx, dSorters,
-				tParsed, tMeta, dSorters.GetLength()==1 ? dSorters[0] : nullptr );
+		bResult = DoFullTextSearch ( tGuard.m_dRamSegs, tMaxSorterSchema, tQuery, m_sIndexName.cstr(), tArgs.m_iIndexWeight, iMatchPoolSize, iStackNeed, tTermSetup, pProfiler, tCtx, dSorters, tParsed, tMeta, dSorters.GetLength()==1 ? dSorters[0] : nullptr );
 
 	if (!bResult)
 		return false;

@@ -160,7 +160,7 @@ select id from facetdemo2 limit 0,1 facet brand_name,property by brand_id,proper
 select id from facetdemo2 limit 0,1 facet brand_id+1 by brand_id+2 order by count(*) asc; show meta like 'multiplier';
 select id from facetdemo2 limit 0,1 facet brand_id order by facet() asc; show meta like 'multiplier';
 select id from facetdemo2 limit 0,1 facet brand_id+1-1 order by facet() desc; show meta like 'multiplier';
-select id from facetdemo2 limit 0,1 facet categories facet j.x facet j.a; show meta like 'multiplier';
+select id from facetdemo2 limit 0,1 facet categories order by facet() desc facet j.x order by facet() desc facet j.a order by facet() asc; show meta like 'multiplier';
 select * from facetdemo2 where match ('one') limit 0,15 facet brand_name, brand_id by brand_id order by brand_id asc facet property order by count(*) desc facet interval(price,200,400,600,800) order by facet() asc; show meta;
 
 <!-- interval function for json fields -->

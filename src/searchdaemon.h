@@ -1140,7 +1140,7 @@ struct AggrResult_t final: CSphQueryResultMeta
 
 	int GetLength() const;
 	inline bool IsEmpty() const { return GetLength()==0; }
-	bool AddResultset ( ISphMatchSorter * pQueue, const DocstoreReader_i * pDocstore, int iTag );
+	bool AddResultset ( ISphMatchSorter * pQueue, const DocstoreReader_i * pDocstore, int iTag, int iCutoff );
 	void ClampMatches ( int iLimit );
 	void ClampAllMatches ();
 };
@@ -1155,6 +1155,7 @@ public:
 	void				RunQueries ();					///< run all queries, get all results
 	void				SetQuery ( int iQuery, const CSphQuery & tQuery, ISphTableFunc * pTableFunc );
 	void				SetProfile ( QueryProfile_c * pProfile );
+	void				SetStmt ( SqlStmt_t & tStmt );
 	AggrResult_t *		GetResult ( int iResult );
 
 private:

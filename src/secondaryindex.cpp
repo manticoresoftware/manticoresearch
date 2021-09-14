@@ -41,17 +41,18 @@ protected:
 	CSphFixedVector<RowID_t> m_dCollected {MAX_COLLECTED};
 };
 
-
-class RowidIterator_LookupValues_c : public SecondaryIndexIterator_c
+template <bool ROWID_LIMITS>
+class RowidIterator_LookupValues_T : public SecondaryIndexIterator_c
 {
 public:
-						RowidIterator_LookupValues_c ( const SphAttr_t * pValues, int nValues, const BYTE * pDocidLookup );
+						RowidIterator_LookupValues_T ( const SphAttr_t * pValues, int nValues, const BYTE * pDocidLookup, const RowIdBoundaries_t * pBoundaries = nullptr );
 
 	bool				HintRowID ( RowID_t tRowID ) override;
 	bool				GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock ) override;
 	int64_t				GetNumProcessed() const override;
 
 private:
+	RowIdBoundaries_t	m_tBoundaries;
 	int64_t				m_iProcessed {0};
 	LookupReaderIterator_c m_tLookupReader;
 	DocidListReader_c	m_tFilterReader;
@@ -62,11 +63,14 @@ private:
 	RowID_t				m_tLookupRowID {INVALID_ROWID};
 };
 
-
-RowidIterator_LookupValues_c::RowidIterator_LookupValues_c ( const SphAttr_t * pValues, int nValues, const BYTE * pDocidLookup )
+template <bool ROWID_LIMITS>
+RowidIterator_LookupValues_T<ROWID_LIMITS>::RowidIterator_LookupValues_T ( const SphAttr_t * pValues, int nValues, const BYTE * pDocidLookup, const RowIdBoundaries_t * pBoundaries )
 	: m_tLookupReader ( pDocidLookup )
 	, m_tFilterReader ( pValues, nValues )
 {
+	if ( pBoundaries )
+		m_tBoundaries = *pBoundaries;
+
 	// warmup
 	m_bHaveFilterDocs = m_tFilterReader.ReadDocID ( m_tFilterDocID );
 	m_bHaveLookupDocs = m_tLookupReader.Read ( m_tLookupDocID, m_tLookupRowID );
@@ -74,15 +78,15 @@ RowidIterator_LookupValues_c::RowidIterator_LookupValues_c ( const SphAttr_t * p
 	m_iProcessed += m_bHaveLookupDocs ? 1 : 0;
 }
 
-
-bool RowidIterator_LookupValues_c::HintRowID ( RowID_t tRowID )
+template <bool ROWID_LIMITS>
+bool RowidIterator_LookupValues_T<ROWID_LIMITS>::HintRowID ( RowID_t tRowID )
 {
 	// can't rewind lookup reader
 	return true;
 }
 
-
-bool RowidIterator_LookupValues_c::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
+template <bool ROWID_LIMITS>
+bool RowidIterator_LookupValues_T<ROWID_LIMITS>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
 {
 	RowID_t * pRowIdStart = m_dCollected.Begin();
 	RowID_t * pRowIdMax = pRowIdStart + m_dCollected.GetLength()-1;
@@ -104,7 +108,14 @@ bool RowidIterator_LookupValues_c::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBloc
 		{
 			// lookup reader can have duplicates; filter reader can't have duplicates
 			// advance only the lookup reader
-			*pRowID++ = m_tLookupRowID;
+			if ( ROWID_LIMITS )
+			{
+				if ( m_tLookupRowID>=m_tBoundaries.m_tMinRowID && m_tLookupRowID<=m_tBoundaries.m_tMaxRowID )
+					*pRowID++ = m_tLookupRowID;
+			}
+			else
+				*pRowID++ = m_tLookupRowID;
+
 			m_bHaveLookupDocs = m_tLookupReader.Read ( m_tLookupDocID, m_tLookupRowID );
 		}
 
@@ -114,51 +125,47 @@ bool RowidIterator_LookupValues_c::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBloc
 	return ReturnIteratorResult ( pRowID, pRowIdStart, dRowIdBlock );
 }
 
-
-int64_t	RowidIterator_LookupValues_c::GetNumProcessed() const
+template <bool ROWID_LIMITS>
+int64_t	RowidIterator_LookupValues_T<ROWID_LIMITS>::GetNumProcessed() const
 {
 	return m_iProcessed;
 }
 
 //////////////////////////////////////////////////////////////////////////
 
-template <bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT>
+template <bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT, bool ROWID_LIMITS>
 class RowidIterator_LookupRange_T : public SecondaryIndexIterator_c
 {
 public:
-						RowidIterator_LookupRange_T ( DocID_t tMinValue, DocID_t tMaxValue, const BYTE * pDocidLookup );
+						RowidIterator_LookupRange_T ( DocID_t tMinValue, DocID_t tMaxValue, const BYTE * pDocidLookup, const RowIdBoundaries_t * pBoundaries = nullptr );
 
-	bool				HintRowID ( RowID_t tRowID ) override;
+	bool				HintRowID ( RowID_t tRowID ) override { return true; } // can't rewind lookup reader
 	bool				GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock ) override;
-	int64_t				GetNumProcessed() const override;
+	int64_t				GetNumProcessed() const override { return m_iProcessed; }
 
 protected:
+	RowIdBoundaries_t	m_tBoundaries;
 	int64_t				m_iProcessed {0};
 	LookupReaderIterator_c m_tLookupReader;
 	DocID_t				m_tMinValue {0};
 	DocID_t				m_tMaxValue {0};
 };
 
-
-template <bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT>
-RowidIterator_LookupRange_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT>::RowidIterator_LookupRange_T ( DocID_t tMinValue, DocID_t tMaxValue, const BYTE * pDocidLookup )
+template <bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT, bool ROWID_LIMITS>
+RowidIterator_LookupRange_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT,ROWID_LIMITS>::RowidIterator_LookupRange_T ( DocID_t tMinValue, DocID_t tMaxValue, const BYTE * pDocidLookup, const RowIdBoundaries_t * pBoundaries )
 	: m_tLookupReader ( pDocidLookup )
 	, m_tMinValue ( tMinValue )
 	, m_tMaxValue ( tMaxValue )
 {
 	if_const ( !OPEN_LEFT )
 		m_tLookupReader.HintDocID ( tMinValue );
+
+	if ( pBoundaries )
+		m_tBoundaries = *pBoundaries;
 }
 
-template <bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT>
-bool RowidIterator_LookupRange_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT>::HintRowID ( RowID_t tRowID )
-{
-	// can't rewind lookup reader
-	return true;
-}
-
-template <bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT>
-bool RowidIterator_LookupRange_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
+template <bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT, bool ROWID_LIMITS>
+bool RowidIterator_LookupRange_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT,ROWID_LIMITS>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
 {
 	DocID_t tLookupDocID = 0;
 	RowID_t tLookupRowID = INVALID_ROWID;
@@ -177,29 +184,27 @@ bool RowidIterator_LookupRange_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGH
 		if ( !OPEN_RIGHT && ( tLookupDocID > m_tMaxValue || ( !HAS_EQUAL_MAX && tLookupDocID==m_tMaxValue ) ) )
 			return ReturnIteratorResult ( pRowID, pRowIdStart, dRowIdBlock );
 
-		*pRowID++ = tLookupRowID;
+		if ( ROWID_LIMITS )
+		{
+			if ( tLookupRowID >= m_tBoundaries.m_tMinRowID && tLookupRowID <= m_tBoundaries.m_tMaxRowID )
+				*pRowID++ = tLookupRowID;
+		}
+		else
+			*pRowID++ = tLookupRowID;
 	}
 
 	return ReturnIteratorResult ( pRowID, pRowIdStart, dRowIdBlock );
 }
 
-
-template <bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT>
-int64_t RowidIterator_LookupRange_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT>::GetNumProcessed() const
-{
-	return m_iProcessed;
-}
-
-
 //////////////////////////////////////////////////////////////////////////
 
-template <bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT>
-class RowidIterator_LookupRangeExclude_T : public RowidIterator_LookupRange_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT>
+template <bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT, bool ROWID_LIMITS>
+class RowidIterator_LookupRangeExclude_T : public RowidIterator_LookupRange_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT,ROWID_LIMITS>
 {
-	using BASE = RowidIterator_LookupRange_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT>;
+	using BASE = RowidIterator_LookupRange_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT,ROWID_LIMITS>;
 
 public:
-			RowidIterator_LookupRangeExclude_T ( DocID_t tMinValue, DocID_t tMaxValue, const BYTE * pDocidLookup );
+			RowidIterator_LookupRangeExclude_T ( DocID_t tMinValue, DocID_t tMaxValue, const BYTE * pDocidLookup, const RowIdBoundaries_t * pBoundaries );
 
 	bool	GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock ) override;
 
@@ -208,9 +213,9 @@ private:
 };
 
 
-template <bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT>
-RowidIterator_LookupRangeExclude_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT>::RowidIterator_LookupRangeExclude_T ( DocID_t tMinValue, DocID_t tMaxValue, const BYTE * pDocidLookup )
-	: RowidIterator_LookupRange_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT> ( tMinValue, tMaxValue, pDocidLookup )
+template <bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT, bool ROWID_LIMITS>
+RowidIterator_LookupRangeExclude_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT,ROWID_LIMITS>::RowidIterator_LookupRangeExclude_T ( DocID_t tMinValue, DocID_t tMaxValue, const BYTE * pDocidLookup, const RowIdBoundaries_t * pBoundaries )
+	: RowidIterator_LookupRange_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT,ROWID_LIMITS> ( tMinValue, tMaxValue, pDocidLookup, pBoundaries )
 {
 	if ( OPEN_LEFT && !OPEN_RIGHT )
 		this->m_tLookupReader.HintDocID ( this->m_tMaxValue );
@@ -219,8 +224,8 @@ RowidIterator_LookupRangeExclude_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RI
 }
 
 
-template <bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT>
-bool RowidIterator_LookupRangeExclude_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
+template <bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT, bool ROWID_LIMITS>
+bool RowidIterator_LookupRangeExclude_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT,ROWID_LIMITS>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
 {
 	if_const ( OPEN_LEFT && OPEN_RIGHT )
 		return false;
@@ -259,7 +264,13 @@ bool RowidIterator_LookupRangeExclude_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OP
 				continue;
 		}
 
-		*pRowID++ = tLookupRowID;
+		if ( ROWID_LIMITS )
+		{
+			if ( tLookupRowID>=BASE::m_tBoundaries.m_tMinRowID && tLookupRowID<=BASE::m_tBoundaries.m_tMaxRowID )
+				*pRowID++ = tLookupRowID;
+		}
+		else
+			*pRowID++ = tLookupRowID;
 	}
 
 	return ReturnIteratorResult ( pRowID, pRowIdStart, dRowIdBlock );
@@ -267,11 +278,34 @@ bool RowidIterator_LookupRangeExclude_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OP
 
 //////////////////////////////////////////////////////////////////////////
 
-template <typename T>
+static RowIdBlock_t DoRowIdFiltering ( const RowIdBlock_t & dRowIdBlock, const RowIdBoundaries_t & tBoundaries, CSphVector<RowID_t> & dCollected )
+{
+	RowID_t tMinSpanRowID = dRowIdBlock.First();
+	RowID_t tMaxSpanRowID = dRowIdBlock.Last();
+
+	if ( tMaxSpanRowID < tBoundaries.m_tMinRowID || tMinSpanRowID > tBoundaries.m_tMaxRowID )
+		return {};
+
+	dCollected.Resize ( dRowIdBlock.GetLength() );
+
+	RowID_t * pRowIdStart = dCollected.Begin();
+	RowID_t * pRowID = pRowIdStart;
+	for ( auto i : dRowIdBlock )
+	{
+		if ( i>=tBoundaries.m_tMinRowID && i<=tBoundaries.m_tMaxRowID )
+			*pRowID++ = i;
+	}
+
+	return { pRowIdStart, pRowID-pRowIdStart };
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+template <typename T, bool ROWID_LIMITS>
 class RowidIterator_Intersect_T : public SecondaryIndexIterator_c
 {
 public:
-				RowidIterator_Intersect_T ( T ** ppIterators, int iNumIterators );
+				RowidIterator_Intersect_T ( T ** ppIterators, int iNumIterators, const RowIdBoundaries_t * pBoundaries = nullptr );
 				~RowidIterator_Intersect_T() override;
 
 	bool		HintRowID ( RowID_t tRowID ) override;
@@ -282,10 +316,12 @@ private:
 	struct IteratorState_t
 	{
 		T *					m_pIterator = nullptr;
-		RowID_t				m_tMinRowID = INVALID_ROWID;
 
 		const RowID_t *		m_pRowID = nullptr;
 		const RowID_t *		m_pRowIDMax = nullptr;
+
+		RowIdBoundaries_t	m_tBoundaries;
+		CSphVector<RowID_t> m_dCollected;
 
 		FORCE_INLINE bool	RewindTo  ( RowID_t tRowID );
 		FORCE_INLINE bool	WarmupDocs();
@@ -298,10 +334,11 @@ private:
 	FORCE_INLINE bool	Advance ( int iIterator, RowID_t tRowID );
 };
 
-template <typename T>
-bool RowidIterator_Intersect_T<T>::IteratorState_t::WarmupDocs()
+template <typename T, bool ROWID_LIMITS>
+bool RowidIterator_Intersect_T<T,ROWID_LIMITS>::IteratorState_t::WarmupDocs()
 {
 	assert(m_pIterator);
+	assert ( !ROWID_LIMITS );	// we assume that underlying iterators do the filtering
 
 	RowIdBlock_t dRowIdBlock;
 	if ( !m_pIterator->GetNextRowIdBlock(dRowIdBlock) )
@@ -317,7 +354,35 @@ bool RowidIterator_Intersect_T<T>::IteratorState_t::WarmupDocs()
 }
 
 template <>
-bool RowidIterator_Intersect_T<columnar::BlockIterator_i>::IteratorState_t::WarmupDocs()
+bool RowidIterator_Intersect_T<columnar::BlockIterator_i,true>::IteratorState_t::WarmupDocs()
+{
+	assert(m_pIterator);
+
+	columnar::Span_T<uint32_t> dSpan;
+	if ( !m_pIterator->GetNextRowIdBlock(dSpan) )
+	{
+		m_pRowID = m_pRowIDMax = nullptr;
+		return false;
+	}
+
+	RowID_t tMinSpanRowID = dSpan.front();
+	RowID_t tMaxSpanRowID = dSpan.back();
+
+	RowIdBlock_t dRowIdBlock = { (RowID_t *)dSpan.begin(), (int64_t)dSpan.size() };
+
+	// we need additional filtering only on first and last blocks
+	// per-block filtering is performed inside MCL
+	if ( tMinSpanRowID < m_tBoundaries.m_tMinRowID || tMaxSpanRowID > m_tBoundaries.m_tMaxRowID )
+		dRowIdBlock = DoRowIdFiltering ( dRowIdBlock, m_tBoundaries, m_dCollected );
+
+	m_pRowID = (const RowID_t *)dRowIdBlock.begin();
+	m_pRowIDMax = (const RowID_t *)dRowIdBlock.end();
+
+	return true;
+}
+
+template <>
+bool RowidIterator_Intersect_T<columnar::BlockIterator_i,false>::IteratorState_t::WarmupDocs()
 {
 	assert(m_pIterator);
 
@@ -334,8 +399,8 @@ bool RowidIterator_Intersect_T<columnar::BlockIterator_i>::IteratorState_t::Warm
 	return true;
 }
 
-template <typename T>
-bool RowidIterator_Intersect_T<T>::IteratorState_t::WarmupDocs ( RowID_t tRowID )
+template <typename T, bool ROWID_LIMITS>
+bool RowidIterator_Intersect_T<T,ROWID_LIMITS>::IteratorState_t::WarmupDocs ( RowID_t tRowID )
 {
 	if ( !m_pIterator->HintRowID(tRowID) )
 		return false;
@@ -343,8 +408,8 @@ bool RowidIterator_Intersect_T<T>::IteratorState_t::WarmupDocs ( RowID_t tRowID 
 	return WarmupDocs();
 }
 
-template <typename T>
-bool RowidIterator_Intersect_T<T>::IteratorState_t::RewindTo ( RowID_t tRowID )
+template <typename T, bool ROWID_LIMITS>
+bool RowidIterator_Intersect_T<T,ROWID_LIMITS>::IteratorState_t::RewindTo ( RowID_t tRowID )
 {
 	if ( m_pRowID>=m_pRowIDMax || tRowID>*(m_pRowIDMax-1) )
 	{
@@ -373,34 +438,36 @@ bool RowidIterator_Intersect_T<T>::IteratorState_t::RewindTo ( RowID_t tRowID )
 	return true;
 }
 
-template<typename T>
-RowidIterator_Intersect_T<T>::RowidIterator_Intersect_T ( T ** ppIterators, int iNumIterators )
+template <typename T, bool ROWID_LIMITS>
+RowidIterator_Intersect_T<T,ROWID_LIMITS>::RowidIterator_Intersect_T ( T ** ppIterators, int iNumIterators, const RowIdBoundaries_t * pBoundaries )
 	: m_dIterators(iNumIterators)
 {
 	ARRAY_FOREACH ( i, m_dIterators )
 	{
 		auto & tIterator = m_dIterators[i];
 		tIterator.m_pIterator = ppIterators[i];
+		if ( pBoundaries )
+			tIterator.m_tBoundaries = *pBoundaries;
 	}
 
 	m_dIterators[0].WarmupDocs();
 }
 
-template<typename T>
-RowidIterator_Intersect_T<T>::~RowidIterator_Intersect_T()
+template <typename T, bool ROWID_LIMITS>
+RowidIterator_Intersect_T<T,ROWID_LIMITS>::~RowidIterator_Intersect_T()
 {
 	for ( auto & i : m_dIterators )
 		SafeDelete ( i.m_pIterator );
 }
 
-template<typename T>
-bool RowidIterator_Intersect_T<T>::HintRowID ( RowID_t tRowID )
+template <typename T, bool ROWID_LIMITS>
+bool RowidIterator_Intersect_T<T,ROWID_LIMITS>::HintRowID ( RowID_t tRowID )
 {
 	return m_dIterators[0].RewindTo(tRowID);
 }
 
-template<typename T>
-bool RowidIterator_Intersect_T<T>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
+template <typename T, bool ROWID_LIMITS>
+bool RowidIterator_Intersect_T<T,ROWID_LIMITS>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
 {
 	RowID_t * pRowIdStart = m_dCollected.Begin();
 	RowID_t * pRowIdMax = pRowIdStart + m_dCollected.GetLength()-1;
@@ -433,8 +500,8 @@ bool RowidIterator_Intersect_T<T>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBloc
 	return ReturnIteratorResult ( pRowID, pRowIdStart, dRowIdBlock );
 }
 
-template<typename T>
-bool RowidIterator_Intersect_T<T>::AdvanceIterators()
+template <typename T, bool ROWID_LIMITS>
+bool RowidIterator_Intersect_T<T,ROWID_LIMITS>::AdvanceIterators()
 {
 	IteratorState_t & tFirst = m_dIterators[0];
 	RowID_t tMaxRowID = *tFirst.m_pRowID;
@@ -463,8 +530,8 @@ bool RowidIterator_Intersect_T<T>::AdvanceIterators()
 	return true;
 }
 
-template<typename T>
-int64_t RowidIterator_Intersect_T<T>::GetNumProcessed() const
+template <typename T, bool ROWID_LIMITS>
+int64_t RowidIterator_Intersect_T<T,ROWID_LIMITS>::GetNumProcessed() const
 {
 	int64_t iTotal = 0;
 	for ( auto i : m_dIterators )
@@ -473,10 +540,13 @@ int64_t RowidIterator_Intersect_T<T>::GetNumProcessed() const
 	return iTotal;
 }
 
-class RowidIterator_Wrapper_c : public RowidIterator_i
+/////////////////////////////////////////////////////////////////////
+
+template <bool ROWID_LIMITS>
+class RowidIterator_Wrapper_T : public RowidIterator_i
 {
 public:
-			RowidIterator_Wrapper_c ( columnar::BlockIterator_i * pIterator ) : m_pIterator ( pIterator ) {}
+			RowidIterator_Wrapper_T ( columnar::BlockIterator_i * pIterator, const RowIdBoundaries_t * pBoundaries = nullptr );
 
 	bool	HintRowID ( RowID_t tRowID ) override { return m_pIterator->HintRowID(tRowID); }
 	bool	GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock ) override;
@@ -484,9 +554,42 @@ public:
 
 private:
 	CSphScopedPtr<columnar::BlockIterator_i> m_pIterator;
+	RowIdBoundaries_t	m_tBoundaries;
+	CSphVector<RowID_t>	m_dCollected;
 };
 
-bool RowidIterator_Wrapper_c::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
+template <bool ROWID_LIMITS>
+RowidIterator_Wrapper_T<ROWID_LIMITS>::RowidIterator_Wrapper_T ( columnar::BlockIterator_i * pIterator, const RowIdBoundaries_t * pBoundaries )
+	: m_pIterator ( pIterator )
+{
+	if ( pBoundaries )
+		m_tBoundaries = *pBoundaries;
+}
+
+template <>
+bool RowidIterator_Wrapper_T<true>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
+{
+	columnar::Span_T<uint32_t> dSpan;
+	if ( !m_pIterator->GetNextRowIdBlock(dSpan) )
+		return false;
+
+	dRowIdBlock = { (RowID_t *)dSpan.begin(), (int64_t)dSpan.size() };
+	if ( !dSpan.size() )
+		return true;
+
+	RowID_t tMinSpanRowID = dSpan.front();
+	RowID_t tMaxSpanRowID = dSpan.back();
+
+	// we need additional filtering only on first and last blocks
+	// per-block filtering is performed inside MCL
+	if ( tMinSpanRowID < m_tBoundaries.m_tMinRowID || tMaxSpanRowID > m_tBoundaries.m_tMaxRowID )
+		dRowIdBlock = DoRowIdFiltering ( dRowIdBlock, m_tBoundaries, m_dCollected );
+
+	return true;
+}
+
+template <>
+bool RowidIterator_Wrapper_T<false>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
 {
 	columnar::Span_T<uint32_t> dSpan;
 	if ( !m_pIterator->GetNextRowIdBlock(dSpan) )
@@ -498,39 +601,49 @@ bool RowidIterator_Wrapper_c::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
 
 //////////////////////////////////////////////////////////////////////////
 
-#define CREATE_ITERATOR_WITH_OPEN(ITERATOR,SETTINGS,MIN,MAX,LOOKUP) \
+#define CREATE_ITERATOR_WITH_OPEN(ITERATOR,SETTINGS,MIN,MAX,LOOKUP,BOUNDARIES) \
 { \
-	if ( SETTINGS.m_bOpenLeft ) \
+	int iIndex = ( SETTINGS.m_bHasEqualMin ? 16 : 0 )+ ( SETTINGS.m_bHasEqualMax ? 8 : 0 )+ ( SETTINGS.m_bOpenLeft ? 4 : 0 )+ ( SETTINGS.m_bOpenRight ? 2 : 0 ) + ( BOUNDARIES ? 1 : 0 ); \
+	switch ( iIndex ) \
 	{ \
-		if ( SETTINGS.m_bHasEqualMax ) \
-			return new ITERATOR<true,true,true,false>(MIN,MAX,LOOKUP); \
-		else \
-			return new ITERATOR<true,false,true,false>(MIN,MAX,LOOKUP); \
-	} else if ( SETTINGS.m_bOpenRight ) \
-	{ \
-		if ( SETTINGS.m_bHasEqualMin ) \
-			return new ITERATOR<true,true,false,true>(MIN,MAX,LOOKUP); \
-		else \
-			return new ITERATOR<false,true,false,true>(MIN,MAX,LOOKUP); \
-	} \
-	assert ( !SETTINGS.m_bOpenLeft && !SETTINGS.m_bOpenRight ); \
-	if ( SETTINGS.m_bHasEqualMin ) \
-	{ \
-		if ( SETTINGS.m_bHasEqualMax ) \
-			return new ITERATOR<true,true,false,false>(MIN,MAX,LOOKUP); \
-		else \
-			return new ITERATOR<true,false,false,false>(MIN,MAX,LOOKUP); \
-	} else \
-	{ \
-		if ( SETTINGS.m_bHasEqualMax ) \
-			return new ITERATOR<false,true,false,false>(MIN,MAX,LOOKUP); \
-		else \
-			return new ITERATOR<false,false,false,false>(MIN,MAX,LOOKUP); \
+	case 0:		return new ITERATOR<false,false,false,false,false>(MIN,MAX,LOOKUP,BOUNDARIES); \
+	case 1:		return new ITERATOR<false,false,false,false,true >(MIN,MAX,LOOKUP,BOUNDARIES); \
+	case 2:		return new ITERATOR<false,false,false,true, false>(MIN,MAX,LOOKUP,BOUNDARIES); \
+	case 3:		return new ITERATOR<false,false,false,true, true >(MIN,MAX,LOOKUP,BOUNDARIES); \
+	case 4:		return new ITERATOR<false,false,true, false,false>(MIN,MAX,LOOKUP,BOUNDARIES); \
+	case 5:		return new ITERATOR<false,false,true, false,true >(MIN,MAX,LOOKUP,BOUNDARIES); \
+	case 6:		return new ITERATOR<false,false,true, true, false>(MIN,MAX,LOOKUP,BOUNDARIES); \
+	case 7:		return new ITERATOR<false,false,true, true, true >(MIN,MAX,LOOKUP,BOUNDARIES); \
+	case 8:		return new ITERATOR<false,true, false,false,false>(MIN,MAX,LOOKUP,BOUNDARIES); \
+	case 9:		return new ITERATOR<false,true, false,false,true >(MIN,MAX,LOOKUP,BOUNDARIES); \
+	case 10:	return new ITERATOR<false,true, false,true, false>(MIN,MAX,LOOKUP,BOUNDARIES); \
+	case 11:	return new ITERATOR<false,true, false,true, true >(MIN,MAX,LOOKUP,BOUNDARIES); \
+	case 12:	return new ITERATOR<false,true, true, false,false>(MIN,MAX,LOOKUP,BOUNDARIES); \
+	case 13:	return new ITERATOR<false,true, true, false,true >(MIN,MAX,LOOKUP,BOUNDARIES); \
+	case 14:	return new ITERATOR<false,true, true, true, false>(MIN,MAX,LOOKUP,BOUNDARIES); \
+	case 15:	return new ITERATOR<false,true, true, true, true >(MIN,MAX,LOOKUP,BOUNDARIES); \
+	case 16:	return new ITERATOR<true, false,false,false,false>(MIN,MAX,LOOKUP,BOUNDARIES); \
+	case 17:	return new ITERATOR<true, false,false,false,true >(MIN,MAX,LOOKUP,BOUNDARIES); \
+	case 18:	return new ITERATOR<true, false,false,true, false>(MIN,MAX,LOOKUP,BOUNDARIES); \
+	case 19:	return new ITERATOR<true, false,false,true, true >(MIN,MAX,LOOKUP,BOUNDARIES); \
+	case 20:	return new ITERATOR<true, false,true, false,false>(MIN,MAX,LOOKUP,BOUNDARIES); \
+	case 21:	return new ITERATOR<true, false,true, false,true >(MIN,MAX,LOOKUP,BOUNDARIES); \
+	case 22:	return new ITERATOR<true, false,true, true, false>(MIN,MAX,LOOKUP,BOUNDARIES); \
+	case 23:	return new ITERATOR<true, false,true, true, true >(MIN,MAX,LOOKUP,BOUNDARIES); \
+	case 24:	return new ITERATOR<true, true, false,false,false>(MIN,MAX,LOOKUP,BOUNDARIES); \
+	case 25:	return new ITERATOR<true, true, false,false,true >(MIN,MAX,LOOKUP,BOUNDARIES); \
+	case 26:	return new ITERATOR<true, true, false,true, false>(MIN,MAX,LOOKUP,BOUNDARIES); \
+	case 27:	return new ITERATOR<true, true, false,true, true >(MIN,MAX,LOOKUP,BOUNDARIES); \
+	case 28:	return new ITERATOR<true, true, true, false,false>(MIN,MAX,LOOKUP,BOUNDARIES); \
+	case 29:	return new ITERATOR<true, true, true, false,true >(MIN,MAX,LOOKUP,BOUNDARIES); \
+	case 30:	return new ITERATOR<true, true, true, true, false>(MIN,MAX,LOOKUP,BOUNDARIES); \
+	case 31:	return new ITERATOR<true, true, true, true, true >(MIN,MAX,LOOKUP,BOUNDARIES); \
+	default:	assert ( 0 && "Internal error" ); return nullptr; \
 	} \
 }
 
 
-static RowidIterator_i * CreateIterator ( const CSphFilterSettings & tFilter, const BYTE * pDocidLookup )
+static RowidIterator_i * CreateIterator ( const CSphFilterSettings & tFilter, const BYTE * pDocidLookup, const RowIdBoundaries_t * pBoundaries )
 {
 	if ( !HaveIndex ( tFilter.m_sAttrName ) )
 		return nullptr;
@@ -538,16 +651,19 @@ static RowidIterator_i * CreateIterator ( const CSphFilterSettings & tFilter, co
 	switch ( tFilter.m_eType )
 	{
 	case SPH_FILTER_VALUES:
-		return new RowidIterator_LookupValues_c ( tFilter.GetValueArray(), tFilter.GetNumValues(), pDocidLookup );
+		if ( pBoundaries )
+			return new RowidIterator_LookupValues_T<true> ( tFilter.GetValueArray(), tFilter.GetNumValues(), pDocidLookup, pBoundaries );
+		else
+			return new RowidIterator_LookupValues_T<false> ( tFilter.GetValueArray(), tFilter.GetNumValues(), pDocidLookup );
 
 	case SPH_FILTER_RANGE:
 		if ( tFilter.m_bExclude )
 		{
-			CREATE_ITERATOR_WITH_OPEN ( RowidIterator_LookupRangeExclude_T, tFilter, tFilter.m_iMinValue, tFilter.m_iMaxValue, pDocidLookup );
+			CREATE_ITERATOR_WITH_OPEN ( RowidIterator_LookupRangeExclude_T, tFilter, tFilter.m_iMinValue, tFilter.m_iMaxValue, pDocidLookup, pBoundaries );
 		}
 		else
 		{
-			CREATE_ITERATOR_WITH_OPEN ( RowidIterator_LookupRange_T, tFilter, tFilter.m_iMinValue, tFilter.m_iMaxValue, pDocidLookup );
+			CREATE_ITERATOR_WITH_OPEN ( RowidIterator_LookupRange_T, tFilter, tFilter.m_iMinValue, tFilter.m_iMaxValue, pDocidLookup, pBoundaries );
 		}
 		
 	default:
@@ -666,7 +782,7 @@ static void SelectIterators ( const CSphVector<CSphFilterSettings> & dFilters, c
 	bool bHaveUseHint = false;
 	ARRAY_FOREACH_COND ( i, dHints, !bHaveUseHint )
 		bHaveUseHint = dHints[i].m_eHint==INDEX_HINT_USE;
-
+	
 	CSphVector<IndexWithEstimate_t> dSecondaryIndexes;
 	ARRAY_FOREACH ( i, dFilters )
 	{
@@ -741,8 +857,21 @@ static void SelectIterators ( const CSphVector<CSphFilterSettings> & dFilters, c
 }
 
 
-RowidIterator_i * CreateFilteredIterator ( const CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphFilterSettings> & dModifiedFilters, bool & bFiltersChanged, const CSphVector<FilterTreeItem_t> & dFilterTree,
-	const CSphVector<IndexHint_t> & dHints, const HistogramContainer_c & tHistograms, const BYTE * pDocidLookup )
+static bool UpdateModifiedFilters ( const CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphFilterSettings> & dModifiedFilters, CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes )
+{
+	dEnabledIndexes.Sort ( bind ( &SecondaryIndexInfo_t::m_iFilterId ) );
+	dModifiedFilters.Resize(0);
+	ARRAY_FOREACH ( i, dFilters )
+	{
+		if ( !dEnabledIndexes.any_of ( [i] ( const SecondaryIndexInfo_t & tInfo ) { return tInfo.m_iFilterId==i; } ) )
+			dModifiedFilters.Add ( dFilters[i] );
+	}
+
+	return dFilters.GetLength()!=dModifiedFilters.GetLength();
+}
+
+
+RowidIterator_i * CreateFilteredIterator ( const CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphFilterSettings> & dModifiedFilters, bool & bFiltersChanged, const CSphVector<FilterTreeItem_t> & dFilterTree, const CSphVector<IndexHint_t> & dHints, const HistogramContainer_c & tHistograms, const BYTE * pDocidLookup, uint32_t uTotalDocs )
 {
 	bFiltersChanged = false;
 
@@ -753,10 +882,22 @@ RowidIterator_i * CreateFilteredIterator ( const CSphVector<CSphFilterSettings> 
 	CSphVector<SecondaryIndexInfo_t> dEnabledIndexes;
 	SelectIterators ( dFilters, dHints, dEnabledIndexes, tHistograms );
 
+	const CSphFilterSettings * pRowIdFilter = nullptr;
+	for ( const auto & tFilter : dFilters )
+		if ( tFilter.m_sAttrName=="@rowid" )
+		{
+			pRowIdFilter = &tFilter;
+			break;
+		}
+
+	RowIdBoundaries_t tBoundaries;
+	if ( pRowIdFilter )
+		tBoundaries = GetFilterRowIdBoundaries ( *pRowIdFilter, uTotalDocs );
+
 	CSphVector<RowidIterator_i *> dIterators;
 	for ( auto & i : dEnabledIndexes )
 	{
-		RowidIterator_i * pIterator = CreateIterator ( dFilters[i.m_iFilterId], pDocidLookup );
+		RowidIterator_i * pIterator = CreateIterator ( dFilters[i.m_iFilterId], pDocidLookup, pRowIdFilter ? &tBoundaries : nullptr );
 		if ( pIterator )
 			dIterators.Add ( pIterator );
 	}
@@ -764,39 +905,40 @@ RowidIterator_i * CreateFilteredIterator ( const CSphVector<CSphFilterSettings> 
 	if ( !dIterators.GetLength() )
 		return nullptr;
 
-	dEnabledIndexes.Sort ( bind ( &SecondaryIndexInfo_t::m_iFilterId ) );
-	ARRAY_FOREACH ( i, dFilters )
-	{
-		if ( !dEnabledIndexes.any_of ( [i] ( const SecondaryIndexInfo_t & tInfo ) { return tInfo.m_iFilterId==i; } ) )
-			dModifiedFilters.Add ( dFilters[i] );
-	}
-
-	bFiltersChanged = dFilters.GetLength()!=dModifiedFilters.GetLength();
+	bFiltersChanged = UpdateModifiedFilters ( dFilters, dModifiedFilters, dEnabledIndexes );
 
 	if ( dIterators.GetLength()==1 )
 		return dIterators[0];
 
-	return new RowidIterator_Intersect_T<RowidIterator_i> ( dIterators.Begin(), dIterators.GetLength() );
+	return new RowidIterator_Intersect_T<RowidIterator_i,false> ( dIterators.Begin(), dIterators.GetLength() );
 }
 
 
-RowidIterator_i * CreateIteratorIntersect ( CSphVector<RowidIterator_i*> & dIterators )
+RowidIterator_i * CreateIteratorIntersect ( CSphVector<RowidIterator_i*> & dIterators, const RowIdBoundaries_t * pBoundaries )
 {
-	return new RowidIterator_Intersect_T<RowidIterator_i> ( dIterators.Begin(), dIterators.GetLength() );
+	if ( pBoundaries )
+		return new RowidIterator_Intersect_T<RowidIterator_i,true> ( dIterators.Begin(), dIterators.GetLength(), pBoundaries );
+	else
+		return new RowidIterator_Intersect_T<RowidIterator_i,false> ( dIterators.Begin(), dIterators.GetLength() );
 }
 
 
-RowidIterator_i * CreateIteratorWrapper ( columnar::BlockIterator_i * pIterator )
+RowidIterator_i * CreateIteratorWrapper ( columnar::BlockIterator_i * pIterator, const RowIdBoundaries_t * pBoundaries )
 {
-	return new RowidIterator_Wrapper_c(pIterator);
+	if ( pBoundaries )
+		return new RowidIterator_Wrapper_T<true> ( pIterator, pBoundaries );
+	else
+		return new RowidIterator_Wrapper_T<false> ( pIterator );
 }
 
 
-RowidIterator_i * CreateIteratorIntersect ( std::vector<columnar::BlockIterator_i *> & dIterators )
+RowidIterator_i * CreateIteratorIntersect ( std::vector<columnar::BlockIterator_i *> & dIterators, const RowIdBoundaries_t * pBoundaries )
 {
-	return new RowidIterator_Intersect_T<columnar::BlockIterator_i> ( &dIterators[0], (int)dIterators.size() );
+	if ( pBoundaries )
+		return new RowidIterator_Intersect_T<columnar::BlockIterator_i, true> ( &dIterators[0], (int)dIterators.size(), pBoundaries );
+	else
+		return new RowidIterator_Intersect_T<columnar::BlockIterator_i, false> ( &dIterators[0], (int)dIterators.size() );
 }
-
 
 //////////////////////////////////////////////////////////////////////////
 

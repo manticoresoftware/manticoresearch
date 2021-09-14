@@ -762,11 +762,9 @@ public:
 		// total need special care: just add two values and don't rely
 		// on result of moving, since it will be wrong
 		auto iTotal = dRhs.m_iTotal;
-		for ( auto iMatch : m_dIData )
-			dRhs.PushT ( m_dData[iMatch],
-				[] ( CSphMatch & tTrg, CSphMatch & tMatch ) {
-					Swap ( tTrg, tMatch );
-				});
+		for ( auto i : m_dIData )
+			dRhs.PushT ( m_dData[i], [] ( CSphMatch & tTrg, CSphMatch & tMatch ) { Swap ( tTrg, tMatch ); } );
+
 		dRhs.m_iTotal = m_iTotal + iTotal;
 	}
 
@@ -2056,8 +2054,6 @@ inline void IAggrFuncTraits<float>::SetValue ( CSphMatch & tRow, float val )
 	tRow.SetAttrFloat ( m_tLocator, val );
 }
 
-
-
 /// SUM() implementation
 template < typename T >
 class AggrSum_t final : public IAggrFuncTraits<T>
@@ -2071,7 +2067,6 @@ public:
 		this->SetValue ( tDst, this->GetValue(tDst)+this->GetValue(tSrc) );
 	}
 };
-
 
 /// AVG() implementation
 template < typename T >
@@ -2754,17 +2749,16 @@ public:
 
 	FWD_BASECTOR( BaseGroupSorter_c )
 
-	~BaseGroupSorter_c() override
-	{
-		for ( auto &pAggregate : m_dAggregates )
-			SafeDelete ( pAggregate );
-	}
+	~BaseGroupSorter_c() override { ResetAggregates(); }
 
 protected:
 	/// schema, aggregates setup
 	template <bool DISTINCT>
 	inline void SetupBaseGrouper ( ISphSchema * pSchema, const ESphSortKeyPart * pSortKeyPart = nullptr, const CSphAttrLocator * pAttrLocator=nullptr, CSphVector<IAggrFunc *>* pAvgs = nullptr )
 	{
+		m_tPregroup.ResetAttrs();
+		ResetAggregates();
+
 		m_tPregroup.SetSchema ( pSchema );
 		m_tPregroup.AddRaw ( m_tLocGroupby ); // @groupby
 		m_tPregroup.AddRaw ( m_tLocCount ); // @count
@@ -2876,6 +2870,15 @@ protected:
 	{
 		for ( auto * pAggregate : this->m_dAggregates )
 			pAggregate->Ungroup ( tMatch );
+	}
+
+private:
+	void ResetAggregates()
+	{
+		for ( auto & pAggregate : m_dAggregates )
+			SafeDelete ( pAggregate );
+
+		m_dAggregates.Resize(0);
 	}
 };
 
@@ -3241,10 +3244,8 @@ public:
 		// just push in heap order
 		// since we have grouped matches, it is not always possible to move them,
 		// so use plain push instead
-		auto iTotal = dRhs.m_iTotal;
 		for ( auto iMatch : this->m_dIData )
 			dRhs.PushGrouped ( m_dData[iMatch], false );
-		dRhs.m_iTotal = m_iTotal + iTotal;
 	}
 
 	void Finalize ( MatchProcessor_i & tProcessor, bool ) override
@@ -3614,14 +3615,13 @@ public:
 		, m_hGroup2Index ( tSettings.m_iMaxMatches*GROUPBY_FACTOR )
 		, m_iGLimit ( Min ( pQuery->m_iGroupbyLimit, m_iLimit ) )
 	{
-		assert ( m_iGLimit > 1 );
 #ifndef NDEBUG
 		DBG << "Created iruns = " << m_iruns << " ipushed = " << m_ipushed;
 #endif
 		this->m_dIData.Resize ( m_iSize ); // m_iLimit * GROUPBY_FACTOR
 	}
 
-	inline void SetGLimit ( int iGLimit )	{	m_iGLimit = Min ( iGLimit, m_iLimit ); }
+	inline void SetGLimit ( int iGLimit )	{ m_iGLimit = Min ( iGLimit, m_iLimit ); }
 	int GetLength() override				{ return Min ( m_iUsed, m_iLimit );	}
 
 	bool	Push ( const CSphMatch & tEntry ) override						{ return PushEx<false> ( tEntry, m_pGrouper->KeyFromMatch(tEntry), false ); }
@@ -4483,8 +4483,6 @@ public:
 		dRhs.CheckReplaceEntry ( m_tData );
 		if_const ( DISTINCT )
 			dRhs.UpdateDistinct ( m_tData );
-
-		dRhs.m_iTotal += m_iTotal;
 	}
 
 protected:
@@ -4818,7 +4816,7 @@ public:
 	void				FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) final;
 	void				Command ( ESphExprCommand eCmd, void * pArg ) final;
 	uint64_t			GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final;
-	ISphExpr *			Clone() const final { return new ExprGeodist_t; }
+	ISphExpr *			Clone() const final;
 
 protected:
 	CSphAttrLocator		m_tGeoLatLoc;
@@ -4904,6 +4902,7 @@ void ExprGeodist_t::Command ( ESphExprCommand eCmd, void * pArg )
 	}
 }
 
+
 uint64_t ExprGeodist_t::GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
 {
 	uint64_t uHash = sphCalcExprDepHash ( this, tSorterSchema, uPrevHash, bDisable );
@@ -4914,6 +4913,20 @@ uint64_t ExprGeodist_t::GetHash ( const ISphSchema & tSorterSchema, uint64_t uPr
 	uHash = sphFNV64 ( &m_fGeoAnchorLong, sizeof(m_fGeoAnchorLong), uHash );
 
 	return uHash;
+}
+
+
+ISphExpr * ExprGeodist_t::Clone() const
+{
+	auto * pClone = new ExprGeodist_t;
+	pClone->m_tGeoLatLoc = m_tGeoLatLoc;
+	pClone->m_tGeoLongLoc = m_tGeoLongLoc;
+	pClone->m_fGeoAnchorLat = m_fGeoAnchorLat;
+	pClone->m_fGeoAnchorLong = m_fGeoAnchorLong;
+	pClone->m_iLat = m_iLat;
+	pClone->m_iLon = m_iLon;
+
+	return pClone;
 }
 
 //////////////////////////////////////////////////////////////////////////

@@ -2717,6 +2717,7 @@ struct CSphMultiQueryArgs : public ISphNoncopyable
 	const SmallStringHash_T<int64_t> *		m_pLocalDocs = nullptr;
 	int64_t									m_iTotalDocs = 0;
 	bool									m_bModifySorterSchemas {true};
+	int										m_iSplit = 1;
 
 	CSphMultiQueryArgs ( int iIndexWeight );
 };

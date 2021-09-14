@@ -254,6 +254,8 @@ struct SqlStmt_t
 	// for opt_scope TOK_GLOBAL = 0, TOK_SESSION = 1.
 	int						m_iIntParam = -1;
 
+	int						m_iSplit = 0;
+
 	bool					m_bJson = false;
 	CSphString				m_sEndpoint;
 

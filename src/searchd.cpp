@@ -8200,7 +8200,7 @@ void UpdateRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOutp
 	{
 		tOut.SendUint64 ( tUpd.m_dDocids[iDoc] );
 
-		const DWORD * pPool = tUpd.m_dPool.Begin() + tUpd.m_dRowOffset[iDoc];
+		const DWORD* pPool = tUpd.m_dPool.Begin() + tUpd.GetRowOffset ( iDoc );
 		for ( const auto & i : tUpd.m_dAttributes )
 		{
 			DWORD uVal = *pPool++;

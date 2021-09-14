@@ -1590,7 +1590,6 @@ update:
 		one_index_opt_chunk TOK_SET update_items_list where_clause opt_option_clause opt_hint_clause
 			{
 				pParser->GenericStatement ( &$3 );
-				pParser->m_pStmt->m_pUpdate->m_dRowOffset.Add ( 0 );
 			}
 	;
 

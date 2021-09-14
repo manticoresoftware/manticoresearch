@@ -7450,7 +7450,7 @@ static void AddDerivedUpdate ( const RowsToUpdate_t & dRows, const UpdateContext
 	assert (pSegment);
 
 	auto& tNewDerivedUpdate = pSegment->m_dPostponedUpdates.Add();
-	tNewDerivedUpdate.m_pUpdate = tUpd.m_pUpdate;
+	tNewDerivedUpdate.m_pUpdate = MakeReusableUpdate ( tUpd.m_pUpdate );
 	tNewDerivedUpdate.m_dRowsToUpdate.Reserve (iRows);
 
 	// collect indexes of actually updated rows and docids
@@ -7535,7 +7535,7 @@ bool RtIndex_c::Update_WriteBlobRow ( UpdateContext_t & tCtx, CSphRowitem * pDoc
 int RtIndex_c::UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSphString & sError, CSphString & sWarning )
 {
 	const auto& tUpdc = *tUpd.m_pUpdate;
-	assert ( tUpdc.m_dDocids.GetLength()==tUpdc.m_dRowOffset.GetLength() );
+	assert ( tUpdc.m_dRowOffset.IsEmpty() || tUpdc.m_dDocids.GetLength()==tUpdc.m_dRowOffset.GetLength() );
 
 	if ( tUpdc.m_dDocids.IsEmpty()  || tUpd.AllApplied () )
 		return 0;

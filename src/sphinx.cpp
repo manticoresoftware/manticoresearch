@@ -1115,7 +1115,7 @@ bool IndexUpdateHelper_c::Update_InplaceJson ( const RowsToUpdate_t& dRows, Upda
 	for ( const auto & tRow : dRows )
 	{
 		int iUpd = tRow.m_iIdx;
-		int iPos = tUpd.m_dRowOffset[iUpd];
+		int iPos = tUpd.GetRowOffset ( iUpd );
 		ARRAY_CONSTFOREACH ( i, tUpd.m_dAttributes )
 		{
 			if ( !FitsInplaceJsonUpdate ( tCtx, i ) || !tCtx.m_dUpdatedAttrs[i].m_bExisting )
@@ -1221,7 +1221,7 @@ bool IndexUpdateHelper_c::Update_Blobs ( const RowsToUpdate_t& dRows, UpdateCont
 				return false;
 		}
 
-		int iPos = tUpd.m_dRowOffset[iUpd];
+		int iPos = tUpd.GetRowOffset ( iUpd );
 		ARRAY_CONSTFOREACH ( iCol, tUpd.m_dAttributes )
 		{
 			ESphAttr eAttr = tUpd.m_dAttributes[iCol].m_eType;
@@ -1301,7 +1301,7 @@ void IndexUpdateHelper_c::Update_Plain ( const RowsToUpdate_t& dRows, UpdateCont
 
 	for ( const auto & tRow : dRows )
 	{
-		int iPos = tUpd.m_dRowOffset[tRow.m_iIdx];
+		int iPos = tUpd.GetRowOffset ( tRow.m_iIdx );
 		ARRAY_CONSTFOREACH ( iCol, tUpd.m_dAttributes )
 		{
 			ESphAttr eAttr = tUpd.m_dAttributes[iCol].m_eType;
@@ -7437,7 +7437,7 @@ bool CSphIndex_VLN::DoUpdateAttributes ( const RowsToUpdate_t& dRows, UpdateCont
 
 int CSphIndex_VLN::UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSphString & sError, CSphString & sWarning )
 {
-	assert ( tUpd.m_pUpdate->m_dDocids.GetLength()==tUpd.m_pUpdate->m_dRowOffset.GetLength() );
+	assert ( tUpd.m_pUpdate->m_dRowOffset.IsEmpty() || tUpd.m_pUpdate->m_dDocids.GetLength()==tUpd.m_pUpdate->m_dRowOffset.GetLength() );
 
 	// check if we have to
 	if ( !m_iDocinfo || tUpd.m_pUpdate->m_dDocids.IsEmpty() )
@@ -7463,7 +7463,7 @@ int CSphIndex_VLN::UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, 
 	if ( m_bAttrsBusy.load ( std::memory_order_acquire ) )
 	{
 		auto& tNewUpdate = m_dPostponedUpdates.Add();
-		tNewUpdate.m_pUpdate = tUpd.m_pUpdate;
+		tNewUpdate.m_pUpdate = MakeReusableUpdate(tUpd.m_pUpdate);
 		tNewUpdate.m_dRowsToUpdate.SwapData ( dRowsToUpdate );
 	}
 

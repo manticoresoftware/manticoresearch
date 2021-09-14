@@ -2473,12 +2473,29 @@ struct CSphAttrUpdate
 	CSphVector<DWORD>				m_dPool;		///< update values pool
 	CSphVector<BYTE>				m_dBlobs;		///< update pool for blob attrs
 	CSphVector<DocID_t>				m_dDocids;		///< document IDs vector
-	CSphVector<int>					m_dRowOffset;	///< document row offsets in the pool (1 per doc, i.e. the length is the same as of m_dDocids)
+	CSphVector<int>					m_dRowOffset;	///< document row offsets in the pool (1 per doc, or empty, means 0 always)
 	bool							m_bIgnoreNonexistent = false;	///< whether to warn about non-existen attrs, or just silently ignore them
 	bool							m_bStrict = false;				///< whether to check for incompatible types first, or just ignore them
+	bool							m_bReusable = true;				///< whether update is standalone and never rewritten, or need deep-copy
+
+	inline int GetRowOffset (int i) const
+	{
+		return m_dRowOffset.IsEmpty() ? 0 : m_dRowOffset[i];
+	}
 };
 
 using AttrUpdateSharedPtr_t = SharedPtr_t<CSphAttrUpdate>;
+
+inline AttrUpdateSharedPtr_t MakeReusableUpdate ( AttrUpdateSharedPtr_t& pUpdate )
+{
+	if ( pUpdate->m_bReusable )
+		return pUpdate;
+
+	AttrUpdateSharedPtr_t pNewUpdate { new CSphAttrUpdate };
+	*pNewUpdate = *pUpdate;
+	pNewUpdate->m_bReusable = true;
+	return pNewUpdate;
+}
 
 struct AttrUpdateInc_t // for cascade (incremental) update
 {

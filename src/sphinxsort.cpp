@@ -1189,6 +1189,7 @@ CSphUpdateQueue::CSphUpdateQueue ( int iSize, CSphAttrUpdateEx * pUpdate, bool b
 	m_pWorkSet->m_bIgnoreNonexistent = m_bIgnoreNonexistent;
 	m_pWorkSet->m_bStrict			 = m_bStrict;
 	m_pWorkSet->m_dDocids.Resize ( 0 );
+	m_pWorkSet->m_bReusable = false;
 	m_pIndex	= pUpdate->m_pIndex;
 	m_pError	= pUpdate->m_pError;
 	m_pWarning	= pUpdate->m_pWarning;
@@ -1241,8 +1242,6 @@ void CSphUpdateQueue::DoUpdate()
 
 	int iMemoryNeed = (int) Min ( m_iCount, m_iTotal );
 	m_pWorkSet->m_dDocids.Reserve ( iMemoryNeed );
-	m_pWorkSet->m_dRowOffset.Resize ( iMemoryNeed );
-	m_pWorkSet->m_dRowOffset.Fill ( 0 );
 
 	DocID_t iLastId = 0;
 	MemoryReader_c tReader ( m_dDocid.Begin(), m_dDocid.GetLength() );
@@ -1266,8 +1265,6 @@ void CSphUpdateQueue::DoUpdate()
 
 void CSphUpdateQueue::Update()
 {
-	m_pWorkSet->m_dRowOffset.Resize ( m_pWorkSet->m_dDocids.GetLength() );
-
 	bool bCritical = false;
 	*m_pAffected += m_pIndex->UpdateAttributes ( m_pWorkSet, bCritical, *m_pError, *m_pWarning );
 	assert ( !bCritical ); // fixme! handle this

@@ -942,7 +942,6 @@ static bool ParseJsonUpdate ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_
 	CSphAttrUpdate & tUpd = *tStmt.m_pUpdate;
 
 	tStmt.m_eStmt = STMT_UPDATE;
-	tUpd.m_dRowOffset.Add ( 0 );
 
 	if ( !ParseUpdateDeleteQueries ( tRoot, tStmt, tDocId, sError ) )
 		return false;

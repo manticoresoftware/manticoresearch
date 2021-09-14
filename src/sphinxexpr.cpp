@@ -2557,22 +2557,23 @@ public:
     int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const final
     {
         const char * pDoc = nullptr;
-        int iDocLen = m_pArg->StringEval (tMatch, (const BYTE **)&pDoc);
+        int iDocLen = m_pArg->StringEval ( tMatch, (const BYTE **)&pDoc );
         int iLength = 0;
         *ppStr = nullptr;
 
         // create CSphVector and store the value
-        CSphVector< BYTE > dStrBuffer;
-		dStrBuffer.Append(pDoc, iDocLen);
+        CSphVector<BYTE> dStrBuffer;
+		dStrBuffer.Append ( pDoc, iDocLen );
 
-        unsigned char * pStrBeg = dStrBuffer.begin();
-        const unsigned char * pStrEnd = (pStrBeg + iDocLen);
+        BYTE * pStrBeg = dStrBuffer.begin();
+        const BYTE * pStrEnd = ( pStrBeg + iDocLen );
 
         if ( pDoc && iDocLen>0 )
         {
-            while( pStrBeg < pStrEnd ) {
+            while( pStrBeg<pStrEnd )
+			{
                 // convert the current character to its uppercase or lowercase version if it exists
-                DoCase( reinterpret_cast<char *>( pStrBeg ) );
+                DoCase ( (char *)pStrBeg );
                 pStrBeg++;
             }
         }
@@ -2594,7 +2595,7 @@ public:
 	{
 		float fVal = 0.f;
 		const char * pBuf = nullptr;
-		int  iLen = StringEval ( tMatch, (const BYTE **) &pBuf );
+		int  iLen = StringEval ( tMatch, (const BYTE **)&pBuf );
 
 		if ( iLen && pBuf )
 		{
@@ -2684,8 +2685,8 @@ public:
 private:
     void DoCase ( char * pString ) const;
 
-    Expr_Case_c ( const Expr_Case_c& rhs )
-		: m_pArg ( SafeClone (rhs.m_pArg) )
+    Expr_Case_c ( const Expr_Case_c & rhs )
+		: m_pArg ( SafeClone ( rhs.m_pArg ) )
     {}
 };
 
@@ -2693,14 +2694,14 @@ private:
 template<>
 void Expr_Case_c<true> :: DoCase ( char *pString ) const
 {
-	*pString = toupper(*pString);
+	*pString = toupper ( *pString );
 }
 
 // For lower() function
 template<>
 void Expr_Case_c<false> :: DoCase ( char *pString ) const
 {
-    *pString = tolower(*pString);
+    *pString = tolower ( *pString );
 }
 
 class Expr_Iterator_c : public Expr_JsonField_c
@@ -3765,19 +3766,19 @@ static Tokh_e TokHashLookup ( Str_t sKey )
     };
 
 	const static short dIndexes[] =
-            {
-                    -1, -1, -1, -1, -1, 78, -1, 12, 4, 75,
-                    5, 32, 22, 40, 10, 65, 38, 76, 6, 1,
-                    58, 39, -1, 42, 82, 31, 80, 28, -1, 70,
-                    23, 43, 36, 49, 83, 57, 51, 46, -1, 62,
-                    72, 77, 53, 30, 2, 59, 29, 35, 9, 33,
-                    11, 44, 21, 13, 63, 67, 68, 47, 17, 81,
-                    55, 27, 73, 69, 54, 15, 61, 52, 50, 56,
-                    41, 64, 48, 14, 8, 0, 34, 71, 37, 60,
-                    16, -1, 3, -1, -1, 25, 45, 66, 19, -1,
-                    -1, -1, -1, 20, 24, 7, 26, -1, -1, -1,
-                    -1, -1, -1, 79, 18, -1, -1, 74,
-            };
+    {
+            -1, -1, -1, -1, -1, 78, -1, 12, 4, 75,
+            5, 32, 22, 40, 10, 65, 38, 76, 6, 1,
+            58, 39, -1, 42, 82, 31, 80, 28, -1, 70,
+            23, 43, 36, 49, 83, 57, 51, 46, -1, 62,
+            72, 77, 53, 30, 2, 59, 29, 35, 9, 33,
+            11, 44, 21, 13, 63, 67, 68, 47, 17, 81,
+            55, 27, 73, 69, 54, 15, 61, 52, 50, 56,
+            41, 64, 48, 14, 8, 0, 34, 71, 37, 60,
+            16, -1, 3, -1, -1, 25, 45, 66, 19, -1,
+            -1, -1, -1, 20, 24, 7, 26, -1, -1, -1,
+            -1, -1, -1, 79, 18, -1, -1, 74,
+    };
 
 	auto * s = (const BYTE*) sKey.first;
 	auto iLen = sKey.second;
@@ -6991,9 +6992,9 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 						return new Expr_SubstringIndex_c ( dArgs[0], dArgs[1], dArgs[2] );
 
                     case FUNC_UPPER:
-                        return new Expr_Case_c<true> ( dArgs[0]);
+                        return new Expr_Case_c<true> ( dArgs[0] );
                     case FUNC_LOWER:
-                        return new Expr_Case_c<false> ( dArgs[0]);
+                        return new Expr_Case_c<false> ( dArgs[0] );
 
 					case FUNC_LAST_INSERT_ID: return new Expr_LastInsertID_c();
 					case FUNC_CURRENT_USER: {
@@ -9112,7 +9113,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 	case FUNC_MINUTE:
 	case FUNC_SECOND:
 		assert ( iArg>=0 );
-		if ( m_dNodes[iArg].m_eRetType!=SPH_ATTR_INTEGER && m_dNodes[iArg].m_eRetType!=SPH_ATTR_TIMESTAMP && m_dNodes[iArg].m_eRetType!=SPH_ATTR_BIGINT)
+		if ( m_dNodes[iArg].m_eRetType!=SPH_ATTR_INTEGER && m_dNodes[iArg].m_eRetType!=SPH_ATTR_TIMESTAMP && m_dNodes[iArg].m_eRetType!=SPH_ATTR_BIGINT )
 		{
 			m_sParserError.SetSprintf ( "%s() argument must be integer or timestamp", sFuncName );
 			return -1;
@@ -9211,24 +9212,10 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 		}
 		break;
     case FUNC_UPPER:
-        if ( dRetTypes.GetLength()!=1 )
-        {
-            m_sParserError.SetSprintf ( "%s() called with %d args, but 1 arg expected", sFuncName
-                    , dRetTypes.GetLength () );
-            return -1;
-        }
-
-        if ( dRetTypes[0]!=SPH_ATTR_STRING && dRetTypes[0]!=SPH_ATTR_STRINGPTR && dRetTypes[0]!=SPH_ATTR_JSON && dRetTypes[0]!=SPH_ATTR_JSON_FIELD )
-        {
-            m_sParserError.SetSprintf ( "%s() argument 1 must be string or json", sFuncName );
-            return -1;
-        }
-        break;
     case FUNC_LOWER:
         if ( dRetTypes.GetLength()!=1 )
         {
-            m_sParserError.SetSprintf ( "%s() called with %d args, but 1 arg expected", sFuncName
-                    , dRetTypes.GetLength () );
+            m_sParserError.SetSprintf ( "%s() called with %d args, but 1 arg expected", sFuncName, dRetTypes.GetLength () );
             return -1;
         }
 

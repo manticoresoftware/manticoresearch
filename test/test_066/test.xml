@@ -61,14 +61,14 @@ index test
 	select * from test.3;
 
 	set global @foo=(5,6);
-	debug split test 0 on @foo option sync=1;
-	select id,chunk_id,base_name,indexed_documents,killed_documents from test.status order by id asc;
-
 	debug split test 1 on @foo option sync=1;
 	select id,chunk_id,base_name,indexed_documents,killed_documents from test.status order by id asc;
 
+	debug split test 3 on @foo option sync=1;
+	select id,chunk_id,base_name,indexed_documents,killed_documents from test.status order by id asc;
+
 	debug split test 4 on @foo option sync=1;
-	select id,chunk_id,base_name,indexed_documents,killed_documents from test.status ofder by id asc;
+	select id,chunk_id,base_name,indexed_documents,killed_documents from test.status order by id asc;
 
 	select * from test.0;
 	select * from test.1;

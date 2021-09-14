@@ -1181,7 +1181,8 @@ public:
 	bool				ForceDiskChunk() final;
 	bool				AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, StrVec_t & dWarnings, CSphString & sError ) final;
 	bool				Truncate ( CSphString & sError ) final;
-	bool				CheckValidateOptimizeParams ( OptimizeTask_t& tTask );
+	bool				CheckValidateOptimizeParams ( OptimizeTask_t& tTask ) const;
+	bool				CheckValidateChunk ( int& iChunk, int iChunks, bool bByOrder ) const;
 	void				Optimize ( OptimizeTask_t tTask ) final;
 	void				CheckStartAutoOptimize ();
 	void				ClassicOptimize ();
@@ -8775,47 +8776,48 @@ void RtIndex_c::CommonMerge ( std::function<bool ( OptimizeTask_t& )>&& fnSelect
 		LogInfo ( "rt: index %s: optimized %s chunk(s) %d ( left %d ) in %.3t", m_sIndexName.cstr(), g_bProgressiveMerge ? "progressive" : "regular", iChunks, iDiskChunks, tmPass );
 }
 
-bool RtIndex_c::CheckValidateOptimizeParams ( OptimizeTask_t& tTask )
+bool RtIndex_c::CheckValidateChunk ( int& iChunk, int iChunks, bool bByOrder ) const
+{
+	if ( bByOrder )
+	{
+		if ( iChunk >= iChunks || iChunk < 0 )
+		{
+			sphWarning ( "rt: index %s: Optimize step: provided chunk %d is out of range [0..%d]", m_sIndexName.cstr(), iChunk, iChunks - 1 );
+			return false;
+		}
+		iChunk = ChunkIDByChunkIdx ( iChunk );
+	}
+	auto pChunk = m_tRtChunks.DiskChunkByID ( iChunk );
+	if ( !pChunk )
+	{
+		sphWarning ( "rt: index %s: Optimize step: provided chunk ID %d is invalid", m_sIndexName.cstr(), iChunk );
+		return false;
+	}
+
+	if ( pChunk->m_bOptimizing.load ( std::memory_order_relaxed ) )
+	{
+		sphWarning ( "rt: index %s: Optimize step: provided chunk %d is now occupied in another optimize operation", m_sIndexName.cstr(), iChunk );
+		return false;
+	}
+	return true;
+}
+
+bool RtIndex_c::CheckValidateOptimizeParams ( OptimizeTask_t& tTask ) const
 {
 	auto iChunks = m_tRtChunks.GetDiskChunksCount();
 	switch ( tTask.m_eVerb )
 	{
 	case OptimizeTask_t::eMerge:
-		if ( tTask.m_iTo >= iChunks || tTask.m_iTo < 0 )
-		{
-			sphWarning ( "rt: index %s: Optimize step: provided chunk %d is out of range [0..%d]", m_sIndexName.cstr(), tTask.m_iTo, iChunks - 1 );
+		if ( !CheckValidateChunk ( tTask.m_iTo, iChunks, tTask.m_bByOrder ) )
 			return false;
-		}
-		if ( tTask.m_bByOrder )
-			tTask.m_iTo = ChunkIDByChunkIdx ( tTask.m_iTo );
-		if ( tTask.m_iTo < 0 )
-			return false;
-		if ( m_tRtChunks.DiskChunkByID ( tTask.m_iTo )->m_bOptimizing.load ( std::memory_order_relaxed ) )
-		{
-			sphWarning ( "rt: index %s: Optimize step: provided chunk %d is now occupied in another optimize pass", m_sIndexName.cstr(), tTask.m_iTo );
-			return false;
-		}
+
 		// no break; check also m_iFrom param then
 	case OptimizeTask_t::eDrop:
 	case OptimizeTask_t::eCompress:
 	case OptimizeTask_t::eSplit:
-		if ( tTask.m_iFrom >= iChunks || tTask.m_iFrom < 0 )
-		{
-			sphWarning ( "rt: index %s: Optimize step: provided chunk %d is out of range [0..%d]", m_sIndexName.cstr(), tTask.m_iFrom, iChunks - 1 );
+		if ( !CheckValidateChunk ( tTask.m_iFrom, iChunks, tTask.m_bByOrder ) )
 			return false;
-		}
-		if ( tTask.m_bByOrder )
-			tTask.m_iFrom = ChunkIDByChunkIdx ( tTask.m_iFrom );
-		if ( tTask.m_iFrom < 0 )
-			return false;
-		if ( m_tRtChunks.DiskChunkByID ( tTask.m_iFrom )->m_bOptimizing.load ( std::memory_order_relaxed ) )
-		{
-			sphWarning ( "rt: index %s: Optimize step: provided chunk %d is now occupied in another optimize pass", m_sIndexName.cstr(), tTask.m_iFrom );
-			return false;
-		}
-		break;
-	default:
-		break;
+	default: break;
 	}
 	tTask.m_bByOrder=false;
 	return true;

@@ -112,7 +112,7 @@ bool XQParseHelper_c::ParseFields ( FieldMask_t & dFields, int & iMaxFieldPos, b
 	}
 	assert ( sphIsAlpha(*pPtr) ); // i think i'm paranoid
 
-								  // handle field specification
+	// handle field specification
 	if ( !bBlock )
 	{
 		// handle standalone field specification
@@ -1966,9 +1966,7 @@ CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSche
 }
 
 
-bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery,
-	const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict,
-	const CSphIndexSettings & tSettings )
+bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings )
 {
 	XQParser_t qp;
 	bool bRes = qp.Parse ( tParsed, sQuery, pQuery, pTokenizer, pSchema, pDict, tSettings );
@@ -4464,9 +4462,7 @@ bool QueryParserPlain_c::IsFullscan ( const XQQuery_t & /*tQuery*/ ) const
 }
 
 
-bool QueryParserPlain_c::ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery,
-	const ISphTokenizer * pQueryTokenizer, const ISphTokenizer *, const CSphSchema * pSchema,
-	CSphDict * pDict, const CSphIndexSettings & tSettings ) const
+bool QueryParserPlain_c::ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const ISphTokenizer * pQueryTokenizer, const ISphTokenizer *, const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings ) const
 {
 	return sphParseExtendedQuery ( tParsed, sQuery, pQuery, pQueryTokenizer, pSchema, pDict, tSettings );
 }

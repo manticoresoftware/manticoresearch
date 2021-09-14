@@ -220,8 +220,12 @@ void DetermineNodeItemStackSize()
 	{
 		CreateExprStackSize_c tCreateMeter;
 		auto iNewCreateSize = tCreateMeter.MockMeasureStack ( 5 );
+
+#ifdef NDEBUG
 		if ( iCreateSize && iCreateSize < iNewCreateSize )
 			sphWarning ( "Compiled-in value KNOWN_CREATE_SIZE (%d) is less than measured (%d). Consider to fix the value!", iCreateSize, iNewCreateSize );
+#endif
+
 		iCreateSize = iNewCreateSize;
 	}
 	sphLogDebug ( "expression stack for creation %d", iCreateSize );
@@ -237,8 +241,12 @@ void DetermineNodeItemStackSize()
 	{
 		EvalExprStackSize_c tEvalMeter;
 		auto iNewEvalSize = tEvalMeter.MockMeasureStack ( 20 );
+
+#ifdef NDEBUG
 		if ( iEvalSize && iEvalSize < iNewEvalSize )
 			sphWarning ( "Compiled-in value KNOWN_EXPR_SIZE (%d) is less than measured (%d). Consider to fix the value!", iEvalSize, iNewEvalSize );
+#endif
+
 		iEvalSize = iNewEvalSize;
 	}
 	sphLogDebug ( "expression stack for eval/deletion %d", iEvalSize );

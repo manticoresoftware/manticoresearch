@@ -81,6 +81,7 @@ struct CreateFilterContext_t
 	CSphVector<UservarIntSet_c>	m_dUserVals;
 
 	const HistogramContainer_c * m_pHistograms = nullptr;
+	int64_t						m_iTotalDocs = 0;
 
 	CreateFilterContext_t ( const ISphSchema * pSchema=nullptr )
 		: m_pSchema ( pSchema ) {}
@@ -299,5 +300,14 @@ struct MvaEvalAny_c
 		return dFilters.any_of ( [&]( const SphAttr_t & tFilter ) { return tFilter>=tBlockMin && tFilter<=tBlockMax; } );
 	}
 };
+
+
+struct RowIdBoundaries_t
+{
+	RowID_t m_tMinRowID = 0;
+	RowID_t m_tMaxRowID = INVALID_ROWID;
+};
+
+RowIdBoundaries_t GetFilterRowIdBoundaries ( const CSphFilterSettings & tFilter, RowID_t tTotalDocs );
 
 #endif // _sphinxfilter_

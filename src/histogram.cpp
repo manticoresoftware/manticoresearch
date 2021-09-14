@@ -785,7 +785,7 @@ bool HistogramContainer_c::Load ( const CSphString & sFile, CSphString & sError 
 		if ( !pHistogram->Load ( tReader, sError ) )
 			return false;
 
-		if ( !m_dHistogramHash.Add ( pHistogram.Ptr(), sAttr ) )
+		if ( !Add ( pHistogram.Ptr() ) )
 		{
 			sError.SetSprintf ( "duplicate histograms found in %s", sFile.cstr() );
 			return false;
@@ -821,6 +821,7 @@ void HistogramContainer_c::Remove ( const CSphString & sAttr )
 	if ( !pHistogram )
 		return;
 
+	m_dHistograms.RemoveValue(pHistogram);
 	SafeDelete ( pHistogram );
 	m_dHistogramHash.Delete(sAttr);
 }
@@ -836,11 +837,7 @@ Histogram_i * HistogramContainer_c::Get ( const CSphString & sAttr ) const
 DWORD HistogramContainer_c::GetNumValues() const
 {
 	// all histograms should have the same amount of values
-	m_dHistogramHash.IterateStart();
-	if ( !m_dHistogramHash.IterateNext() )
-		return 0;
-
-	return m_dHistogramHash.IterateGet()->GetNumValues();
+	return m_dHistograms[0]->GetNumValues();
 }
 
 //////////////////////////////////////////////////////////////////////////

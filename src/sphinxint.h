@@ -1736,8 +1736,6 @@ struct StoredToken_t
 	bool			m_bBlendedPart;
 };
 
-//////////////////////////////////////////////////////////////////////////
-
 void FillStoredTokenInfo ( StoredToken_t & tToken, const BYTE * sToken, ISphTokenizer * pTokenizer );
 
 struct RemapXSV_t
@@ -1859,8 +1857,7 @@ struct SchemaItemVariant_t
 using SchemaItemHash_c = OpenHash_T<SchemaItemVariant_t, uint64_t, HashFunc_Int64_t>;
 
 template <typename T>
-BYTE PrereadMapping ( const char * sIndexName, const char * sFor, bool bMlock, bool bOnDisk,
-	CSphBufferTrait<T> & tBuf )
+BYTE PrereadMapping ( const char * sIndexName, const char * sFor, bool bMlock, bool bOnDisk, CSphBufferTrait<T> & tBuf )
 {
 	static volatile BYTE g_uHash;
 	if ( bOnDisk || tBuf.IsEmpty() )
@@ -1885,8 +1882,7 @@ BYTE PrereadMapping ( const char * sIndexName, const char * sFor, bool bMlock, b
 
 // generally it should not work significantly slower than just PrereadMapping, since once page raised to mem
 // we iterate it much faster then raising itself, so the bottleneck should be in disk IO, not in mem iterations
-inline DWORD PrereadMappingCountingBits ( const char * sIndexName, const char * sFor, bool bMlock, bool bOnDisk,
-	CSphBufferTrait<DWORD> & tBuf )
+inline DWORD PrereadMappingCountingBits ( const char * sIndexName, const char * sFor, bool bMlock, bool bOnDisk, CSphBufferTrait<DWORD> & tBuf )
 {
 	DWORD uBits = 0;
 	tBuf.Apply ( [&uBits] ( DWORD uData ) { uBits += sphBitCount ( uData ); } );

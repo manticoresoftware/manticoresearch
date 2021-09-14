@@ -154,6 +154,8 @@ static bool				g_bJsonConfigLoadedOk = false;
 static auto&			g_iAutoOptimizeCutoffMultiplier = AutoOptimizeCutoffMultiplier();
 static constexpr bool	AUTOOPTIMIZE_NEEDS_VIP = false; // whether non-VIP can issue 'SET GLOBAL auto_optimize = X'
 
+static bool				g_bSplit = false;
+
 static CSphVector<Listener_t>	g_dListeners;
 
 static int				g_iQueryLogFile	= -1;
@@ -3607,7 +3609,7 @@ int AggrResult_t::GetLength () const
 	return iCount;
 }
 
-bool AggrResult_t::AddResultset ( ISphMatchSorter * pQueue, const DocstoreReader_i * pDocstore, int iTag )
+bool AggrResult_t::AddResultset ( ISphMatchSorter * pQueue, const DocstoreReader_i * pDocstore, int iTag, int iCutoff )
 {
 	assert ( pQueue );
 
@@ -3622,6 +3624,14 @@ bool AggrResult_t::AddResultset ( ISphMatchSorter * pQueue, const DocstoreReader
 	tOneRes.m_pDocstore = pDocstore;
 	tOneRes.m_iTag = iTag;
 	tOneRes.FillFromSorter ( pQueue );
+
+	// in MT case each thread has its own cutoff, so we have to enforce it again on the result set
+	if ( iCutoff>0 )
+	{
+		m_iTotalMatches = Min ( iCutoff, m_iTotalMatches );
+		tOneRes.ClampMatches(iCutoff);
+	}
+
 	return true;
 }
 
@@ -4752,8 +4762,8 @@ bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHave
 		Swap ( eQuerySort, tQueryCopy.m_eSort );
 
 		// second, apply inner limit now, before (!) reordering
-		for ( auto& dResult : tRes.m_dResults )
-			dResult.ClampMatches ( tQueryCopy.m_iLimit );
+		for ( auto & tResult : tRes.m_dResults )
+			tResult.ClampMatches ( tQueryCopy.m_iLimit );
 	}
 
 	// so we need to bring matches to the schema that the *sorter* wants
@@ -5188,6 +5198,12 @@ void PubSearchHandler_c::SetProfile ( QueryProfile_c * pProfile )
 	m_pImpl->SetProfile ( pProfile );
 }
 
+void PubSearchHandler_c::SetStmt ( SqlStmt_t & tStmt )
+{
+	assert ( m_pImpl );
+	m_pImpl->m_pStmt = &tStmt;
+}
+
 AggrResult_t * PubSearchHandler_c::GetResult ( int iResult )
 {
 	assert ( m_pImpl );
@@ -5454,8 +5470,8 @@ void SearchHandler_c::RunQueries()
 // final fixup
 void SearchHandler_c::OnRunFinished()
 {
-	for ( auto & dResult : m_dAggrResults )
-		dResult.m_iMatches = dResult.GetLength();
+	for ( auto & tResult : m_dAggrResults )
+		tResult.m_iMatches = tResult.GetLength();
 }
 
 SphQueueSettings_t SearchHandler_c::MakeQueueSettings ( const CSphIndex * pIndex, int iMaxMatches, ISphExprHook * pHook ) const
@@ -5661,8 +5677,7 @@ CSphIndex* SearchHandler_c::CheckIndexSuitable ( const CSphString& sLocal, const
 }
 
 
-bool SearchHandler_c::CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt, SphQueueRes_t * pQueueRes, VecTraits_T<SearchFailuresLog_c> & dFlr, StrVec_t * pExtra, const CSphIndex* pIndex,
-	const CSphString & sLocal, const char * szParent, ISphExprHook * pHook )
+bool SearchHandler_c::CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt, SphQueueRes_t * pQueueRes, VecTraits_T<SearchFailuresLog_c> & dFlr, StrVec_t * pExtra, const CSphIndex * pIndex, const CSphString & sLocal, const char * szParent, ISphExprHook * pHook )
 {
 	auto iQueries = dSrt.GetLength();
 	#if PARANOID
@@ -5684,6 +5699,19 @@ bool SearchHandler_c::CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt
 	m_bMultiQueue = pQueueRes->m_bAlowMulti;
 	return !!iValidSorters;
 }
+
+
+static int CalcSplit ( SqlStmt_t * pStmt )
+{
+	if ( pStmt && pStmt->m_iSplit )
+		return Max ( pStmt->m_iSplit, 1 );
+
+	if ( g_bSplit )
+		return g_iThreads;
+
+	return 1;
+}
+
 
 void SearchHandler_c::RunLocalSearches ()
 {
@@ -5806,6 +5834,8 @@ void SearchHandler_c::RunLocalSearches ()
 				tMultiArgs.m_iTotalDocs = m_iTotalDocs;
 			}
 
+			tMultiArgs.m_iSplit = CalcSplit(m_pStmt);
+
 			bool bResult = false;
 			CSphQueryResultMeta tMqMeta;
 			CSphQueryResult tMqRes;
@@ -5862,7 +5892,7 @@ void SearchHandler_c::RunLocalSearches ()
 					iTotalSuccesses.fetch_add ( 1, std::memory_order_relaxed );
 
 					// extract matches from sorter
-					tNRes.AddResultset( pSorter, pDocstore, iOrderTag );
+					tNRes.AddResultset( pSorter, pDocstore, iOrderTag, m_dNQueries[i].m_iCutoff );
 
 					if ( !tNRes.m_sWarning.IsEmpty () )
 						dNFailuresSet[i].Submit ( sLocal, szParent, tNRes.m_sWarning.cstr () );
@@ -13432,6 +13462,9 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 				tOut.Error ( tStmt.m_sStmt, "Only VIP connections can change global auto_optimize value" );
 				return;
 			}
+		} else if ( tStmt.m_sSetName=="pseudo_sharding")
+		{
+			g_bSplit = !!tStmt.m_iSetValue;
 		} else {
 			tOut.ErrorEx ( tStmt.m_sStmt, "Unknown system variable '%s'", tStmt.m_sSetName.cstr () );
 			return;
@@ -14382,6 +14415,8 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt, Se
 		tVars.m_dLastIds.Apply ( [&tBuf] ( int64_t iID ) { tBuf << iID; } );
 		return tBuf;
 	});
+	dTable.MatchTuplet ( "pseudo_sharding", g_bSplit ? "1" : "0" );
+
 	if ( tStmt.m_iIntParam>=0 ) // that is SHOW GLOBAL VARIABLES
 	{
 		Uservar_e eType = tStmt.m_iIntParam==0 ? USERVAR_INT_SET : USERVAR_INT_SET_TMP;
@@ -18857,6 +18892,8 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	AllowOnlyNot ( hSearchd.GetInt ( "not_terms_only_allowed", 0 )!=0 );
 	ConfigureDaemonLog ( hSearchd.GetStr ( "query_log_commands" ) );
 	g_iAutoOptimizeCutoffMultiplier = hSearchd.GetInt ( "auto_optimize", 1 );
+
+	g_bSplit = hSearchd.GetInt ( "pseudo_sharding", 0 )!=0;
 }
 
 // ServiceMain -> ConfigureAndPreload -> ConfigureAndPreloadIndex

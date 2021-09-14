@@ -434,7 +434,7 @@ public:
 	int			IntEval ( const CSphMatch & tMatch ) const override		{ return (int)FetchValue(tMatch); }
 	int64_t		Int64Eval ( const CSphMatch & tMatch ) const override	{ return FetchValue(tMatch); }
 	uint64_t	GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final;
-	ISphExpr *	Clone() const final { return new Expr_GetColumnarInt_c(m_sName); }
+	ISphExpr *	Clone() const override									{ return new Expr_GetColumnarInt_c(m_sName); }
 
 protected:
 	inline SphAttr_t FetchValue ( const CSphMatch & tMatch ) const;
@@ -466,6 +466,7 @@ public:
 	float	Eval ( const CSphMatch & tMatch ) const final		{ return sphDW2F ( (DWORD)FetchValue(tMatch) ); }
 	int		IntEval ( const CSphMatch & tMatch ) const final	{ return (int)sphDW2F ( (DWORD)FetchValue(tMatch) ); }
 	int64_t	Int64Eval ( const CSphMatch & tMatch ) const final	{ return (int64_t)sphDW2F ( (DWORD)FetchValue(tMatch) ); }
+	ISphExpr *	Clone() const final								{ return new Expr_GetColumnarFloat_c(m_sName); }
 };
 
 /////////////////////////////////////////////////////////////////////

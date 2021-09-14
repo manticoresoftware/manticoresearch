@@ -271,6 +271,39 @@ struct Filter_WeightRange: public IFilter_Range
 	}
 };
 
+
+class Filter_RowIdRange_c : public ISphFilter
+{
+public:
+	Filter_RowIdRange_c ( int64_t iTotalDocs, const CSphFilterSettings & tSettings )
+	{
+		m_tBoundaries = GetFilterRowIdBoundaries ( tSettings, iTotalDocs );
+	}
+
+	bool Eval ( const CSphMatch & tMatch ) const final
+	{
+		return tMatch.m_tRowID >= m_tBoundaries.m_tMinRowID && tMatch.m_tRowID <= m_tBoundaries.m_tMaxRowID;
+	}
+
+private:
+	RowIdBoundaries_t m_tBoundaries;
+};
+
+
+RowIdBoundaries_t GetFilterRowIdBoundaries ( const CSphFilterSettings & tFilter, RowID_t tTotalDocs )
+{
+	assert ( tFilter.m_eType==SPH_FILTER_RANGE );
+	assert ( tFilter.m_sAttrName=="@rowid" );
+
+	RowID_t tMin = tFilter.m_iMinValue;
+	RowID_t tMax = tFilter.m_iMaxValue;
+	double fDelta = (double)tTotalDocs / tMax;
+	RowID_t tMinRowID = RowID_t ( fDelta*tMin );
+	RowID_t tMaxRowID = (tMin==tMax-1) ? tTotalDocs-1 : RowID_t ( fDelta*(tMin+1) )-1;
+
+	return { tMinRowID, tMaxRowID };
+}
+
 //////////////////////////////////////////////////////////////////////////
 // MVA
 //////////////////////////////////////////////////////////////////////////
@@ -901,7 +934,7 @@ static inline ISphFilter * ReportError ( CSphString & sError, const char * sMess
 }
 
 
-static ISphFilter * CreateSpecialFilter ( const CSphString & sName, const CSphFilterSettings & tSettings, CSphString & sError )
+static ISphFilter * CreateSpecialFilter ( const CSphString & sName, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, CSphString & sError )
 {
 	if ( sName=="@weight" )
 	{
@@ -913,6 +946,9 @@ static ISphFilter * CreateSpecialFilter ( const CSphString & sName, const CSphFi
 			return ReportError ( sError, "unsupported filter type '%s' on @weight", tSettings.m_eType );
 		}
 	}
+
+	if ( sName=="@rowid" && tSettings.m_eType==SPH_FILTER_RANGE )
+		return new Filter_RowIdRange_c ( tCtx.m_iTotalDocs, tSettings );
 
 	return nullptr;
 }
@@ -1338,7 +1374,7 @@ static ISphFilter * TryToCreateJsonNullFilter ( ISphFilter * pFilter, const CSph
 }
 
 
-static bool TryToCreateSpecialFilter ( ISphFilter * & pFilter, const CSphFilterSettings & tSettings, bool bHaving, const CSphString & sAttrName, CSphString & sError )
+static bool TryToCreateSpecialFilter ( ISphFilter * & pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, bool bHaving, const CSphString & sAttrName, CSphString & sError )
 {
 	assert ( !pFilter );
 
@@ -1351,7 +1387,7 @@ static bool TryToCreateSpecialFilter ( ISphFilter * & pFilter, const CSphFilterS
 
 	if ( sAttrName.Begins("@") )
 	{
-		pFilter = CreateSpecialFilter ( sAttrName, tSettings, sError );
+		pFilter = CreateSpecialFilter ( sAttrName, tSettings, tCtx, sError );
 		if ( !pFilter && !sError.IsEmpty() )
 			return false;
 	}
@@ -1751,7 +1787,7 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 {
 	ISphFilter * pFilter = nullptr;
 
-	if ( !TryToCreateSpecialFilter ( pFilter, tSettings, bHaving, sAttrName, sError ) )
+	if ( !TryToCreateSpecialFilter ( pFilter, tSettings, tCtx, bHaving, sAttrName, sError ) )
 		return nullptr;
 
 	CommonFilterSettings_t tFixedSettings = (CommonFilterSettings_t)tSettings;

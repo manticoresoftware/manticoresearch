@@ -610,6 +610,7 @@ public:
 		int iQueries = ( 1 + m_tQuery.m_dAggs.GetLength() );
 
 		CSphScopedPtr<PubSearchHandler_c> tHandler { CreateMsearchHandler ( pQueryParser, m_eQueryType, m_tQuery )};
+		SetStmt ( *tHandler );
 
 		QueryProfile_c tProfile;
 		if ( m_bProfile )
@@ -651,6 +652,7 @@ protected:
 
 	virtual QueryParser_i * PreParseQuery() = 0;
 	virtual CSphString		EncodeResult ( const VecTraits_T<AggrResult_t *> & dRes, QueryProfile_c * pProfile ) = 0;
+	virtual void			SetStmt ( PubSearchHandler_c & tHandler ) {};
 };
 
 
@@ -662,6 +664,8 @@ public:
 	{}
 
 protected:
+	CSphVector<SqlStmt_t> m_dStmt;
+
 	QueryParser_i * PreParseQuery() override
 	{
 		const CSphString * pRawQl = m_tOptions ( "query" );
@@ -672,19 +676,18 @@ protected:
 		}
 
 		CSphString sError;
-		CSphVector<SqlStmt_t> dStmt;
-		if ( !sphParseSqlQuery ( pRawQl->cstr(), pRawQl->Length(), dStmt, sError, SPH_COLLATION_DEFAULT ) )
+		if ( !sphParseSqlQuery ( pRawQl->cstr(), pRawQl->Length(), m_dStmt, sError, SPH_COLLATION_DEFAULT ) )
 		{
 			ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
 			return nullptr;
 		}
 
-		( (CSphQuery &) m_tQuery ) = dStmt[0].m_tQuery;
-		if ( dStmt.GetLength()>1 )
+		( (CSphQuery &) m_tQuery ) = m_dStmt[0].m_tQuery;
+		if ( m_dStmt.GetLength()>1 )
 		{
 			ReportError ( "multiple queries not supported", SPH_HTTP_STATUS_501 );
 			return nullptr;
-		} else if ( dStmt[0].m_eStmt!=STMT_SELECT )
+		} else if ( m_dStmt[0].m_eStmt!=STMT_SELECT )
 		{
 			ReportError ( "only SELECT queries are supported", SPH_HTTP_STATUS_501 );
 			return nullptr;
@@ -698,6 +701,11 @@ protected:
 	CSphString EncodeResult ( const VecTraits_T<AggrResult_t *> & dRes, QueryProfile_c * pProfile ) override
 	{
 		return sphEncodeResultJson ( dRes, m_tQuery, pProfile );
+	}
+
+	void SetStmt ( PubSearchHandler_c & tHandler ) override
+	{
+		tHandler.SetStmt ( m_dStmt[0] );
 	}
 };
 

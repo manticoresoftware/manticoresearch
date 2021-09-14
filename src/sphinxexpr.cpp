@@ -6416,7 +6416,7 @@ public:
 
 	ISphExpr * Clone () const final
 	{
-		return new Expr_Levenshtein_c<PATTERN_STRING> ( m_pFirst.Ptr(), m_pSecond.Ptr(), m_tOpts );
+		return new Expr_Levenshtein_c<PATTERN_STRING> ( SafeClone ( m_pFirst.Ptr() ), SafeClone ( m_pSecond.Ptr() ), m_tOpts );
 	}
 
 private:

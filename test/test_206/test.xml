@@ -734,8 +734,8 @@ select id, j.uid from loc1 order by bigint(j.uid) asc;
 select id, j.uid as p from loc1 order by p asc;
 select id, j.uid as p from loc1 order by p desc;
 <!-- group by JSON array elements like for MVA -->
-select count(*), groupby() from arrays group by j.a;
-select count(*), groupby() from arrays group by j.t;
+select id, count(*), groupby() from arrays group by j.a order by count(*) asc;
+select id, count(*), groupby() from arrays group by j.t order by count(*) asc;
 select count(*) as p, groupby() as q from arrays group by j.t order by q asc, p desc;
 <!-- doesn't work, needs to be fixed -->
 <!--select count(*) as p, groupby() as q from loc1 group by j.uid order by q asc, p desc;-->

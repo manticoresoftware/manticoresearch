@@ -36,7 +36,7 @@ hello -world
 hello !world
 ```
 
-The negation operator enforces a rule for a word to not exist. 
+The negation operator enforces a rule for a word to not exist.
 
 Queries having **only** negations are **not** supported by default in Manticore Search. There's the server option [not_terms_only_allowed](../../Server_settings/Searchd.md#not_terms_only_allowed) to enable it.
 
@@ -134,23 +134,25 @@ raining =cats and =dogs
 ="exact phrase"
 ```
 
-Exact form keyword modifier will match the document only if the keyword occurred in exactly the specified form. The default behavior is to match the document if the stemmed keyword matches. For instance, "runs" query will match both the document that contains "runs" and the document that contains "running", because both forms stem to just "run" while `=runs` query will only match the first document. Exact form operator requires [index_exact_words](../../Creating_an_index/NLP_and_tokenization/Morphology.md#index_exact_words) option to be enabled.
- 
-This is a modifier that affects the keyword and thus can be used within operators such as phrase, proximity, and quorum operators. It is possible to apply an exact form modifier to the phrase operator. It's really just syntax sugar - it adds an exact form modifier to all terms contained within the phrase.
+Exact form keyword modifier will match the document only if the keyword occurred in exactly the specified form. The default behaviour is to match the document if the stemmed/lemmatized keyword matches. For instance, "runs" query will match both the document that contains "runs" and the document that contains "running", because both forms stem to just "run" while `=runs` query will only match the first document. Exact form operator requires [index_exact_words](../../Creating_an_index/NLP_and_tokenization/Morphology.md#index_exact_words) option to be enabled.
+
+Another use case is to avoid [expanding](../../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#expand_keywords) a keyword to its `*keyword*` form. I.e. with `index_exact_words=1` + `expand_keywords=1/star` `bcd` will find a document containing `abcde`, but `=bcd` will not.
+
+This is a modifier that affects the keyword and thus can be used within operators such as phrase, proximity, and quorum operators. It is possible to apply an exact form modifier to the phrase operator. In this case it internally adds the exact form modifier to all terms in the phrase.
 
 ### Wildcard operators
 
 ```sql
-nation* *nation* *national 
+nation* *nation* *national
 ```
 
 Requires [min_infix_len](../../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) for prefix (expansion in trail) and/or sufix (expansion in head). If only prefixing is wanted, [min_prefix_len](../../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len) can be used instead.
 
 The search will try to find all the expansions of the wildcarded tokens and each expansion is recorded as a matched hit. The number of expansions for a token can be controlled with [expansion_limit](../../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#expansion_limit) index setting. Wildcarded tokens can have a big impact on the query search time, especially when tokens have short length. In such cases is desired to use the expansion limit.
 
-The wildcard operator can  be automatically applied if [expand_keywords](../../Searching/Options.md#expand_keywords) index setting is used. 
+The wildcard operator can be automatically applied if [expand_keywords](../../Searching/Options.md#expand_keywords) index setting is used.
 
-In addition, inline wildcard operators are supported:
+In addition, the following inline wildcard operators are supported:
 
 * `?` can match any(one) character: `t?st` will match `test`, but not `teast`
 * `%` can match zero or one character : `tes%` will match `tes` or `test`, but not `testing`
@@ -191,7 +193,7 @@ You should also note how a (`one NEAR/7 two NEAR/7 three`) query using `NEAR` is
 ```sql
 Church NOTNEAR/3 street
 ```
-Operator `NOTNEAR` is a negative assertion. It matches the document when left argument exists and either there is no right argument in document or right argument is distance away from left matched argument's end. The distance is specified in words. The syntax is `NOTNEAR/N`, it is case-sensitive, and no spaces are allowed between the `NOTNEAR` keyword, the slash sign, and the distance value. Both arguments of this operator might be terms or any operators or group of operators. 
+Operator `NOTNEAR` is a negative assertion. It matches the document when left argument exists and either there is no right argument in document or right argument is distance away from left matched argument's end. The distance is specified in words. The syntax is `NOTNEAR/N`, it is case-sensitive, and no spaces are allowed between the `NOTNEAR` keyword, the slash sign, and the distance value. Both arguments of this operator might be terms or any operators or group of operators.
 
 ### SENTENCE and PARAGRAPH operators
 
@@ -203,7 +205,7 @@ all SENTENCE words SENTENCE "in one sentence"
 ```sql
 "Bill Gates" PARAGRAPH "Steve Jobs"
 ```
-`SENTENCE` and `PARAGRAPH` operators matches the document when both its arguments are within the same sentence or the same paragraph of text, respectively. The arguments can be either keywords, or phrases, or the instances of the same operator. 
+`SENTENCE` and `PARAGRAPH` operators matches the document when both its arguments are within the same sentence or the same paragraph of text, respectively. The arguments can be either keywords, or phrases, or the instances of the same operator.
 
 The order of the arguments within the sentence or paragraph does not matter. These operators only work on indexes built with [index_sp](../../Creating_an_index/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_sp) (sentence and paragraph indexing feature) enabled, and revert to a mere AND otherwise. Refer to the [index_sp](../../Creating_an_index/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_sp) directive documentation for the notes on what's considered a sentence and a paragraph.
 

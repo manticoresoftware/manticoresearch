@@ -21,7 +21,6 @@ The easiest way to install Manticore in Ubuntu/Debian/Mint is by using our APT r
 
 Install the repository:
 ```bash
-wget -qO - https://repo.manticoresearch.com/GPG-KEY-manticore | sudo apt-key add -
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
 sudo dpkg -i manticore-repo.noarch.deb
 sudo apt update
@@ -37,7 +36,6 @@ sudo apt install manticore manticore-columnar-lib
 ###### Development packages
 If you prefer "Nightly" (development) versions do:
 ```bash
-wget -qO - https://repo.manticoresearch.com/GPG-KEY-manticore | sudo apt-key add -
 wget https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb
 sudo dpkg -i manticore-dev-repo.noarch.deb
 sudo apt update

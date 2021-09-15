@@ -11,8 +11,7 @@ You can install and start Manticore easily in Ubuntu, Centos, Debian, Windows an
 <!-- request Ubuntu -->
 ```bash
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-dev-repo.noarch.deb
-sudo apt-key adv --fetch-keys 'http://repo.manticoresearch.com/GPG-KEY-manticore'
+sudo dpkg -i manticore-repo.noarch.deb
 sudo apt update
 sudo apt install manticore manticore-columnar-lib
 sudo systemctl start manticore
@@ -24,8 +23,7 @@ sudo systemctl start manticore
 <!-- request Debian -->
 ```bash
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-dev-repo.noarch.deb
-sudo apt-key adv --fetch-keys 'http://repo.manticoresearch.com/GPG-KEY-manticore'
+sudo dpkg -i manticore-repo.noarch.deb
 sudo apt update
 sudo apt install manticore manticore-columnar-lib
 sudo systemctl start manticore

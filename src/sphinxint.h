@@ -1126,6 +1126,9 @@ bool			AddFieldLens ( CSphSchema & tSchema, bool bDynamic, CSphString & sError )
 bool			LoadHitlessWords ( const CSphString & sHitlessFiles, ISphTokenizer * pTok, CSphDict * pDict, CSphVector<SphWordID_t> & dHitlessWords, CSphString & sError );
 void			GetSettingsFiles ( const ISphTokenizer * pTok, const CSphDict * pDict, const CSphIndexSettings & tSettings, const FilenameBuilder_i * pFilenameBuilder, StrVec_t & dFiles );
 
+/// json save/load
+void operator<< ( JsonEscapedBuilder& tOut, const CSphSchema& tSchema );
+
 /// Get current thread local index - internal do not use
 class RtIndex_i;
 RtIndex_i * sphGetCurrentIndexRT();

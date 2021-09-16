@@ -1433,6 +1433,8 @@ RtIndex_c::~RtIndex_c ()
 		CSphString sFile;
 		sFile.SetSprintf ( "%s.meta", m_sPath.cstr() );
 		::unlink ( sFile.cstr() );
+		sFile.SetSprintf ( "%s.json", m_sPath.cstr() );
+		::unlink ( sFile.cstr() );
 		sFile.SetSprintf ( "%s.ram", m_sPath.cstr() );
 		::unlink ( sFile.cstr() );
 		sFile.SetSprintf ( "%s%s", m_sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ).cstr() );
@@ -3931,14 +3933,28 @@ void RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )
 		return;
 
 	// write new meta
-	CSphString sMeta, sMetaNew;
+	CSphString sMeta, sMetaNew, sMetaJson;
 	sMeta.SetSprintf ( "%s.meta", m_sPath.cstr() );
 	sMetaNew.SetSprintf ( "%s.meta.new", m_sPath.cstr() );
+	sMetaJson.SetSprintf ( "%s.json", m_sPath.cstr() );
 
 	CSphString sError;
 	CSphWriter wrMeta;
 	if ( !wrMeta.OpenFile ( sMetaNew, sError ) )
 		sphDie ( "failed to serialize meta: %s", sError.cstr() ); // !COMMIT handle this gracefully
+
+	JsonEscapedBuilder sNewMeta;
+	sNewMeta.ObjectWBlock();
+
+	// human-readable sugar
+	sNewMeta.NamedString ( "meta_created_time_utc", sphCurrentUtcTime() );
+
+	sNewMeta.NamedVal ( "meta_version", META_VERSION );
+	sNewMeta.NamedVal ( "index_format_version", INDEX_FORMAT_VERSION );
+	sNewMeta.NamedVal ( "total_documents", m_tStats.m_iTotalDocuments );
+	sNewMeta.NamedVal ( "total_bytes", m_tStats.m_iTotalBytes );
+	sNewMeta.NamedVal ( "tid", iTID );
+
 	wrMeta.PutDword ( META_HEADER_MAGIC );
 	wrMeta.PutDword ( META_VERSION );
 	wrMeta.PutDword ( (DWORD)m_tStats.m_iTotalDocuments ); // FIXME? we don't expect over 4G docs per just 1 local index
@@ -3948,30 +3964,54 @@ void RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )
 	// meta v.4, save disk index format and settings, too
 	wrMeta.PutDword ( INDEX_FORMAT_VERSION );
 	WriteSchema ( wrMeta, m_tSchema );
+	sNewMeta.NamedVal ( "schema", m_tSchema );
+
 	SaveIndexSettings ( wrMeta, m_tSettings );
+	sNewMeta.NamedVal ( "index_settings", m_tSettings );
+
 	SaveTokenizerSettings ( wrMeta, m_pTokenizer, m_tSettings.m_iEmbeddedLimit );
+	sNewMeta.NamedVal ( "tokenizer_settings", m_pTokenizer );
+
 	SaveDictionarySettings ( wrMeta, m_pDict, m_bKeywordDict, m_tSettings.m_iEmbeddedLimit );
+	sNewMeta.Named ( "dictionary_settings" );
+	SaveDictionarySettings ( sNewMeta, m_pDict, m_bKeywordDict );
 
 	// meta v.5
 	wrMeta.PutDword ( m_iWordsCheckpoint );
+	sNewMeta.NamedVal ( "words_checkpoint", m_iWordsCheckpoint);
 
 	// meta v.7
 	wrMeta.PutDword ( m_iMaxCodepointLength );
 	wrMeta.PutByte ( BLOOM_PER_ENTRY_VALS_COUNT );
 	wrMeta.PutByte ( BLOOM_HASHES_COUNT );
+	sNewMeta.NamedValNonDefault ( "max_codepoint_length", m_iMaxCodepointLength );
+	sNewMeta.NamedValNonDefault ( "bloom_per_entry_vals_count", BLOOM_PER_ENTRY_VALS_COUNT, 8 );
+	sNewMeta.NamedValNonDefault ( "bloom_hashes_count",  BLOOM_HASHES_COUNT, 2 );
 
 	// meta v.11
 	CSphFieldFilterSettings tFieldFilterSettings;
 	if ( m_pFieldFilter.Ptr() )
+	{
 		m_pFieldFilter->GetSettings(tFieldFilterSettings);
+		sNewMeta.NamedVal ( "field_filter_settings", tFieldFilterSettings );
+	}
 	tFieldFilterSettings.Save(wrMeta);
 
 	// meta v.12
 	wrMeta.PutDword ( dChunkNames.GetLength () );
 	wrMeta.PutBytes ( dChunkNames.Begin(), dChunkNames.GetLengthBytes() );
+	{
+		sNewMeta.Named ( "chunk_names" );
+		auto _ = sNewMeta.Array();
+		for ( int i : dChunkNames)
+			sNewMeta << i;
+	}
 
 	// meta v.17+
 	wrMeta.PutOffset(m_iSoftRamLimit);
+	sNewMeta.NamedVal ( "soft_ram_limit", m_iSoftRamLimit );
+
+	sNewMeta.FinishBlocks();
 
 	wrMeta.CloseFile();
 
@@ -3981,6 +4021,14 @@ void RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )
 		sphWarning ( "%s", sError.cstr() );
 		return;
 	}
+
+	CSphWriter wrMetaJson;
+	if ( wrMetaJson.OpenFile ( sMetaJson, sError ) )
+	{
+		wrMetaJson.PutString ( (Str_t)sNewMeta );
+		wrMetaJson.CloseFile();
+	} else
+		sphWarning ( "failed to serialize meta to json: %s", sError.cstr() );
 
 	// rename
 	if ( sph::rename ( sMetaNew.cstr(), sMeta.cstr() ) )

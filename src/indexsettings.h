@@ -420,4 +420,12 @@ int ParseKeywordExpansion ( const char * sValue );
 void SaveMutableSettings ( const MutableIndexSettings_c & tSettings, const CSphString & sPath );
 FileAccess_e GetFileAccess (  const CSphConfigSection & hIndex, const char * sKey, bool bList, FileAccess_e eDefault );
 
+class JsonEscapedBuilder;
+
+void operator<< ( JsonEscapedBuilder& tOut, const CSphFieldFilterSettings& tFieldFilterSettings );
+void operator<< ( JsonEscapedBuilder& tOut, const CSphIndexSettings& tIndexSettings );
+void operator<< ( JsonEscapedBuilder& tOut, const ISphTokenizer* pTokenizer );
+
+void SaveDictionarySettings ( JsonEscapedBuilder& tOut, const CSphDict* pDict, bool bForceWordDict );
+
 #endif // _indexsettings_

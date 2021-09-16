@@ -8547,6 +8547,54 @@ void WriteSchema ( CSphWriter & fdInfo, const CSphSchema & tSchema )
 		WriteSchemaColumn ( fdInfo, tSchema.GetAttr(i) );
 }
 
+void operator<< ( JsonEscapedBuilder& tOut, const CSphAttrLocator& tLoc )
+{
+	auto _ = tOut.Object();
+	tOut.NamedVal ( "pos", tLoc.m_iBitOffset );
+	tOut.NamedVal ( "bits", tLoc.m_iBitCount );
+}
+
+namespace {
+
+void DumpFieldToJson ( JsonEscapedBuilder& tOut, const CSphColumnInfo& tCol )
+{
+	auto _ = tOut.Object();
+	tOut.NamedString ( "name", tCol.m_sName );
+	tOut.NamedValNonDefault ( "flags", tCol.m_uFieldFlags, (DWORD)CSphColumnInfo::FIELD_INDEXED );
+	tOut.NamedValNonDefault ( "payload", tCol.m_bPayload, false );
+}
+
+void DumpAttrToJson ( JsonEscapedBuilder& tOut, const CSphColumnInfo& tCol )
+{
+	auto _ = tOut.Object();
+	tOut.NamedString ( "name", tCol.m_sName );
+	tOut.NamedValNonDefault ( "flags", tCol.m_uAttrFlags, (DWORD)CSphColumnInfo::ATTR_NONE );
+	tOut.NamedValNonDefault ( "payload", tCol.m_bPayload, false );
+	tOut.NamedValNonDefault ( "engine", (DWORD)tCol.m_eEngine, (DWORD)AttrEngine_e::DEFAULT );
+	tOut.NamedVal ( "type", tCol.m_eAttrType );
+	tOut.NamedVal ( "locator", tCol.m_tLocator );
+}
+} // namespace
+
+void operator<< ( JsonEscapedBuilder& tOut, const CSphSchema& tSchema )
+{
+	auto _ = tOut.ObjectW();
+	if ( tSchema.GetFieldsCount() > 0 )
+	{
+		tOut.Named ( "fields" );
+		auto _ = tOut.ArrayW();
+		for ( int i = 0; i < tSchema.GetFieldsCount(); ++i )
+			DumpFieldToJson ( tOut, tSchema.GetField ( i ) );
+	}
+	if ( tSchema.GetAttrsCount() > 0 )
+	{
+		tOut.Named ( "attributes" );
+		auto _ = tOut.ArrayW();
+		for ( int i = 0; i < tSchema.GetAttrsCount(); ++i )
+			DumpAttrToJson ( tOut, tSchema.GetAttr ( i ) );
+	}
+}
+
 
 void SaveIndexSettings ( CSphWriter & tWriter, const CSphIndexSettings & tSettings )
 {
@@ -8577,6 +8625,34 @@ void SaveIndexSettings ( CSphWriter & tWriter, const CSphIndexSettings & tSettin
 	tWriter.PutDword ( (DWORD)tSettings.m_eEngine );
 }
 
+void operator<< ( JsonEscapedBuilder& tOut, const CSphIndexSettings& tSettings )
+{
+	auto _ = tOut.ObjectW();
+	tOut.NamedValNonDefault ( "min_prefix_len", tSettings.RawMinPrefixLen() );
+	tOut.NamedValNonDefault ( "min_infix_len", tSettings.m_iMinInfixLen );
+	tOut.NamedValNonDefault ( "max_substring_len", tSettings.m_iMaxSubstringLen );
+	tOut.NamedValNonDefault ( "strip_html", tSettings.m_bHtmlStrip, false );
+	tOut.NamedStringNonEmpty ( "html_index_attrs", tSettings.m_sHtmlIndexAttrs );
+	tOut.NamedStringNonEmpty ( "html_remove_elements", tSettings.m_sHtmlRemoveElements );
+	tOut.NamedValNonDefault ( "index_exact_words", tSettings.m_bIndexExactWords, false );
+	tOut.NamedValNonDefault ( "hitless", tSettings.m_eHitless, SPH_HITLESS_NONE );
+	tOut.NamedValNonDefault ( "hit_format", tSettings.m_eHitFormat, SPH_HIT_FORMAT_PLAIN );
+	tOut.NamedValNonDefault ( "index_sp", tSettings.m_bIndexSP, false );
+	tOut.NamedStringNonEmpty ( "zones", tSettings.m_sZones );
+	tOut.NamedValNonDefault ( "boundary_step", tSettings.m_iBoundaryStep );
+	tOut.NamedValNonDefault ( "stopword_step", tSettings.m_iStopwordStep, 1 );
+	tOut.NamedValNonDefault ( "overshort_step", tSettings.m_iOvershortStep, 1 );
+	tOut.NamedValNonDefault ( "embedded_limit", tSettings.m_iEmbeddedLimit );
+	tOut.NamedValNonDefault ( "bigram_index", tSettings.m_eBigramIndex, SPH_BIGRAM_NONE );
+	tOut.NamedStringNonEmpty ( "bigram_words", tSettings.m_sBigramWords );
+	tOut.NamedValNonDefault ( "index_field_lens", tSettings.m_bIndexFieldLens, false );
+	tOut.NamedValNonDefault ( "icu", (DWORD)tSettings.m_ePreprocessor, (DWORD)Preprocessor_e::NONE );
+	tOut.NamedStringNonEmpty ( "index_token_filter", tSettings.m_sIndexTokenFilter );
+	tOut.NamedValNonDefault ( "blob_update_space", tSettings.m_tBlobUpdateSpace );
+	tOut.NamedValNonDefault ( "skiplist_block_size", tSettings.m_iSkiplistBlockSize, 32 );
+	tOut.NamedStringNonEmpty ( "hitless_files", tSettings.m_sHitlessFiles );
+	tOut.NamedValNonDefault ( "engine", (DWORD)tSettings.m_eEngine, (DWORD)AttrEngine_e::DEFAULT );
+}
 
 void IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & tWriteHeader, CSphWriter & fdInfo, bool bForceWordDict, bool SkipEmbeddDict )
 {

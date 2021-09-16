@@ -708,6 +708,8 @@ PercolateIndex_c::~PercolateIndex_c ()
 		CSphString sFile;
 		sFile.SetSprintf ( "%s.meta", m_sFilename.cstr() );
 		::unlink ( sFile.cstr() );
+		sFile.SetSprintf ( "%s.json", m_sFilename.cstr() );
+		::unlink ( sFile.cstr() );
 		sFile.SetSprintf ( "%s%s", m_sFilename.cstr(), sphGetExt ( SPH_EXT_SETTINGS ).cstr() );
 		::unlink ( sFile.cstr() );
 	}
@@ -2405,6 +2407,8 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilename
 	return true;
 }
 
+void operator<< ( JsonEscapedBuilder& tOut, const StoredQueryDesc_t& tQuery );
+
 void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown )
 {
 	// sanity check
@@ -2412,9 +2416,10 @@ void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown
 		return;
 
 	// write new meta
-	CSphString sMeta, sMetaNew;
+	CSphString sMeta, sMetaNew, sMetaJson;
 	sMeta.SetSprintf ( "%s.meta", m_sFilename.cstr() );
 	sMetaNew.SetSprintf ( "%s.meta.new", m_sFilename.cstr() );
+	sMetaJson.SetSprintf ( "%s.json", m_sFilename.cstr() );
 
 	CSphString sError;
 	CSphWriter wrMeta;
@@ -2423,25 +2428,48 @@ void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown
 		sphWarning ( "failed to serialize meta: %s", sError.cstr() );
 		return;
 	}
+	JsonEscapedBuilder sNewMeta;
+	sNewMeta.ObjectWBlock();
 
 	wrMeta.PutDword ( META_HEADER_MAGIC );
 	wrMeta.PutDword ( META_VERSION );
 	wrMeta.PutDword ( INDEX_FORMAT_VERSION );
 
+	// human-readable sugar
+	sNewMeta.NamedString ( "meta_created_time_utc", sphCurrentUtcTime() );
+
+	sNewMeta.NamedVal ( "meta_version", META_VERSION );
+	sNewMeta.NamedVal ( "index_format_version", INDEX_FORMAT_VERSION );
+
 	WriteSchema ( wrMeta, m_tSchema );
+	sNewMeta.NamedVal ( "schema", m_tSchema );
 	SaveIndexSettings ( wrMeta, m_tSettings );
+	sNewMeta.NamedVal ( "index_settings", m_tSettings );
 	SaveTokenizerSettings ( wrMeta, m_pTokenizer, m_tSettings.m_iEmbeddedLimit );
+	sNewMeta.NamedVal ( "tokenizer_settings", m_pTokenizer );
 	SaveDictionarySettings ( wrMeta, m_pDict, false, m_tSettings.m_iEmbeddedLimit );
+	sNewMeta.Named ( "dictionary_settings");
+	SaveDictionarySettings ( sNewMeta, m_pDict, false );
 
 	// meta v.6
 	CSphFieldFilterSettings tFieldFilterSettings;
 	if ( m_pFieldFilter.Ptr() )
 		m_pFieldFilter->GetSettings(tFieldFilterSettings);
 	tFieldFilterSettings.Save(wrMeta);
+	sNewMeta.NamedVal ( "field_filter_settings", tFieldFilterSettings );
+
+	sNewMeta.NamedVal ( "tid", m_iTID );
 
 	wrMeta.PutDword ( dStored.GetLength() );
-	for ( const StoredQuery_t * pQuery : dStored )
-		SaveStoredQuery ( *pQuery, wrMeta );
+	{
+		sNewMeta.Named ( "pqs" );
+		auto _ = sNewMeta.ArrayW();
+		for ( const StoredQuery_t * pQuery : dStored )
+		{
+			SaveStoredQuery ( *pQuery, wrMeta );
+			sNewMeta << *pQuery;
+		}
+	}
 
 	wrMeta.PutOffset ( m_iTID );
 
@@ -2451,6 +2479,15 @@ void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown
 	m_tmSaved = sphMicroTimer();
 
 	wrMeta.CloseFile();
+
+	sNewMeta.FinishBlocks();
+	CSphWriter wrMetaJson;
+	if ( wrMetaJson.OpenFile ( sMetaJson, sError ) )
+	{
+		wrMetaJson.PutString ( (Str_t)sNewMeta );
+		wrMetaJson.CloseFile();
+	} else
+		sphWarning ( "failed to serialize meta to json: %s", sError.cstr() );
 
 	// rename
 	if ( sph::rename ( sMetaNew.cstr(), sMeta.cstr() ) )
@@ -3048,6 +3085,76 @@ void SaveStoredQuery ( const StoredQueryDesc_t & tQuery, WRITER & tWriter )
 		tWriter.ZipInt ( tItem.m_iRight );
 		tWriter.ZipInt ( tItem.m_iFilterItem );
 		tWriter.ZipInt ( tItem.m_bOr );
+	}
+}
+
+void operator<< ( JsonEscapedBuilder& tOut, const FilterTreeItem_t& tItem )
+{
+	auto _ = tOut.Object();
+	tOut.NamedValNonDefault ( "left", tItem.m_iLeft, -1 );
+	tOut.NamedValNonDefault ( "right", tItem.m_iRight, -1 );
+	tOut.NamedValNonDefault ( "item", tItem.m_iFilterItem, -1 );
+	tOut.NamedValNonDefault ( "or", tItem.m_bOr, false );
+}
+
+void operator<< ( JsonEscapedBuilder& tOut, const CSphFilterSettings& tFilter )
+{
+	auto _ = tOut.ObjectW();
+	tOut.NamedValNonDefault ( "type", tFilter.m_eType, SPH_FILTER_VALUES );
+	tOut.NamedStringNonEmpty ( "attr", tFilter.m_sAttrName );
+	if ( tFilter.m_eType==SPH_FILTER_FLOATRANGE )
+	{
+		tOut.NamedVal( "fmin", tFilter.m_fMinValue );
+		tOut.NamedVal ( "fmax", tFilter.m_fMaxValue );
+	} else if ( tFilter.m_eType== SPH_FILTER_RANGE )
+	{
+		tOut.NamedValNonDefault ( "min", tFilter.m_iMinValue, (SphAttr_t)LLONG_MIN );
+		tOut.NamedValNonDefault ( "max", tFilter.m_iMaxValue, (SphAttr_t)LLONG_MAX );
+	}
+	tOut.NamedValNonDefault ( "not", tFilter.m_bExclude, false );
+	tOut.NamedValNonDefault ( "eq_min", tFilter.m_bHasEqualMin, true );
+	tOut.NamedValNonDefault ( "eq_max", tFilter.m_bHasEqualMax, true );
+	tOut.NamedValNonDefault ( "open_left", tFilter.m_bOpenLeft, false );
+	tOut.NamedValNonDefault ( "open_right", tFilter.m_bOpenRight, false );
+	tOut.NamedValNonDefault ( "is_null", tFilter.m_bIsNull, false );
+	tOut.NamedValNonDefault ( "mva_func", tFilter.m_eMvaFunc, SPH_MVAFUNC_NONE );
+	if ( !tFilter.m_dValues.IsEmpty() )
+	{
+		tOut.Named ( "values" );
+		auto _ = tOut.ArrayW();
+		for ( const auto& tValue : tFilter.m_dValues )
+			tOut << tValue;
+	}
+	if ( !tFilter.m_dStrings.IsEmpty() )
+	{
+		tOut.Named ( "strings" );
+		auto _ = tOut.ArrayW();
+		for ( const auto& tValue : tFilter.m_dStrings )
+			tOut.FixupSpacedAndAppendEscaped (tValue.cstr());
+	}
+}
+
+void operator<< ( JsonEscapedBuilder& tOut, const StoredQueryDesc_t& tQuery )
+{
+	auto tRoot = tOut.ObjectW();
+	tOut.NamedVal ( "quid", tQuery.m_iQUID );
+	tOut.NamedValNonDefault ( "ql", tQuery.m_bQL, true );
+	tOut.NamedStringNonEmpty ( "query", tQuery.m_sQuery );
+	tOut.NamedStringNonEmpty ( "tags", tQuery.m_sTags );
+	if ( !tQuery.m_dFilters.IsEmpty() )
+	{
+		tOut.Named ( "filters" );
+		auto _ = tOut.ArrayW();
+		for ( const auto& tFilter : tQuery.m_dFilters )
+			tOut << tFilter;
+	}
+
+	if ( !tQuery.m_dFilterTree.IsEmpty() )
+	{
+		tOut.Named ( "filter_tree" );
+		auto _ = tOut.ArrayW();
+		for ( const auto& tItem : tQuery.m_dFilterTree )
+			tOut << tItem;
 	}
 }
 

@@ -1949,8 +1949,8 @@ public:
 	void RestoreCrashQuery () const;
 };
 
+int sphFormatCurrentTime ( char* sTimeBuf, int iBufLen );
 
-// atomic seek+read wrapper
-int sphPread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset );
+CSphString sphCurrentUtcTime ( );
 
 #endif // _sphinxint_

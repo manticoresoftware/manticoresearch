@@ -1227,13 +1227,15 @@ const char * CSphSource_SQL::SqlUnpackColumn ( int iFieldIndex, DWORD & uUnpacke
 			char * sResult = 0;
 			int iBufferOffset = 0;
 			int iResult;
+			DWORD iStreamLen = iPackedLen;
+			char *sStream = (char *) SqlColumnStream( iIndex, iStreamLen );
 
 			z_stream tStream;
 			tStream.zalloc = Z_NULL;
 			tStream.zfree = Z_NULL;
 			tStream.opaque = Z_NULL;
-			tStream.avail_in = iPackedLen;
-			tStream.next_in = (Bytef *)SqlColumn(iIndex);
+			tStream.avail_in = iStreamLen;
+			tStream.next_in = (Bytef *)sStream;
 
 			iResult = inflateInit ( &tStream );
 			if ( iResult!=Z_OK )
@@ -1264,6 +1266,7 @@ const char * CSphSource_SQL::SqlUnpackColumn ( int iFieldIndex, DWORD & uUnpacke
 				}
 			}
 
+			SqlColumnFreeStream( sStream );
 			inflateEnd ( &tStream );
 			return sResult;
 		}

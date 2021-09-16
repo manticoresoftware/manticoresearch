@@ -44,19 +44,21 @@ static const char * GET_POSTGRESQL_LIB ()
 	static decltype (&PQnfields) sph_PQnfields = nullptr;
 	static decltype (&PQfinish) sph_PQfinish = nullptr;
 	static decltype (&PQerrorMessage) sph_PQerrorMessage = nullptr;
+	static decltype (&PQunescapeBytea) sph_PQunescapeBytea = nullptr;
+	static decltype (&PQfreemem) sph_PQfreemem = nullptr;
 
 	static bool InitDynamicPosgresql ()
 	{
 		const char * sFuncs[] = {"PQgetvalue", "PQgetlength", "PQclear",
 				"PQsetdbLogin", "PQstatus", "PQsetClientEncoding", "PQexec",
 				"PQresultStatus", "PQntuples", "PQfname", "PQnfields",
-				"PQfinish", "PQerrorMessage" };
+				"PQfinish", "PQerrorMessage", "PQunescapeBytea", "PQfreemem" };
 
 		void ** pFuncs[] = {(void**)&sph_PQgetvalue, (void**)&sph_PQgetlength, (void**)&sph_PQclear,
 				(void**)&sph_PQsetdbLogin, (void**)&sph_PQstatus, (void**)&sph_PQsetClientEncoding,
 				(void**)&sph_PQexec, (void**)&sph_PQresultStatus, (void**)&sph_PQntuples,
 				(void**)&sph_PQfname, (void**)&sph_PQnfields, (void**)&sph_PQfinish,
-				(void**)&sph_PQerrorMessage};
+				(void**)&sph_PQerrorMessage, (void**)&sph_PQunescapeBytea, (void**)&sph_PQfreemem};
 
 		static CSphDynamicLibrary dLib ( GET_POSTGRESQL_LIB() );
 		return dLib.LoadSymbols ( sFuncs, pFuncs, sizeof ( pFuncs ) / sizeof ( void ** ) );
@@ -77,6 +79,8 @@ static const char * GET_POSTGRESQL_LIB ()
 	#define sph_PQnfields  PQnfields
 	#define sph_PQfinish  PQfinish
 	#define sph_PQerrorMessage  PQerrorMessage
+	#define sph_PQunescapeBytea  PQunescapeBytea;
+	#define sph_PQfreemem  PQfreemem;
 	#define InitDynamicPosgresql() (true)
 
 #endif
@@ -111,6 +115,8 @@ protected:
 	DWORD			SqlColumnLength ( int iIndex ) final;
 	const char *	SqlColumn ( int iIndex ) final;
 	const char *	SqlFieldName ( int iIndex ) final;
+	const char *	SqlColumnStream ( int iIndex, DWORD &iStreamLength ) final;
+	void			SqlColumnFreeStream (char *stream ) final;
 };
 
 CSphSourceParams_PgSQL::CSphSourceParams_PgSQL ()
@@ -122,7 +128,9 @@ CSphSourceParams_PgSQL::CSphSourceParams_PgSQL ()
 
 CSphSource_PgSQL::CSphSource_PgSQL ( const char * sName )
 	: CSphSource_SQL	( sName )
-{}
+{
+	m_bCanUnpack = true;
+}
 
 
 bool CSphSource_PgSQL::SqlIsError ()
@@ -301,6 +309,28 @@ bool CSphSource_PgSQL::SqlFetchRow ()
 DWORD CSphSource_PgSQL::SqlColumnLength ( int iIndex )
 {
 	return sph_PQgetlength ( m_pPgResult, m_iPgRow, iIndex );
+}
+
+
+const char * CSphSource_PgSQL::SqlColumnStream( int iIndex, DWORD &iStreamLength )
+{
+	const char * value = SqlColumn( iIndex );
+	size_t iUnpackedLength;
+	iStreamLength = 0;
+
+	if ( !value )
+		return NULL;
+
+	const char * sStream = (const char *) sph_PQunescapeBytea ( (const unsigned char *) value, &iUnpackedLength);
+	iStreamLength = (DWORD) iUnpackedLength;
+	return sStream;
+}
+
+
+void CSphSource_PgSQL::SqlColumnFreeStream( char *sStream )
+{
+	if ( sStream )
+		sph_PQfreemem( sStream );
 }
 
 // the fabrics

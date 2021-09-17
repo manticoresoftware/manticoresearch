@@ -337,7 +337,7 @@ Hostnames renew strategy. By default, IP addresses of agent host names are cache
 
 Defines how many "jobs" can be in the queue at the same time. Unlimited by default.
 
-In most cases "job" means one query to a single local index (plain index or a disk chunk of a real-time index), i.e. if you have a distributed index consisting of 2 local indexes or a real-time index which has 2 disk chunks a search query to either of them will mostly put 2 jobs to the queue and then the thread pool whose size is defined by [threads](../Server_settings/Searchd.md#threads) will process them, but in some cases if the query is too complex more jobs can be created. Changing this setting recommended when [max_connections](../Server_settings/Searchd.md#max_connections) and [thread](../Server_settings/Searchd.md#threads) are not enough to find a balance between the desired performance and load on the server.
+In most cases "job" means one query to a single local index (plain index or a disk chunk of a real-time index), i.e. if you have a distributed index consisting of 2 local indexes or a real-time index which has 2 disk chunks a search query to either of them will mostly put 2 jobs to the queue and then the thread pool whose size is defined by [threads](../Server_settings/Searchd.md#threads) will process them, but in some cases if the query is too complex more jobs can be created. Changing this setting is recommended when [max_connections](../Server_settings/Searchd.md#max_connections) and [threads](../Server_settings/Searchd.md#threads) are not enough to find a balance between the desired performance and load on the server.
 
 ### listen_backlog
 

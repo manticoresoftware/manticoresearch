@@ -70,6 +70,7 @@ sys     0m0.001s
 - `OPTIMIZE` happens automatically. If you don't need it make sure to set `auto_optimize=0` in section `searchd` in the configuration file
 - [#616](https://github.com/manticoresoftware/manticoresearch/issues/616) `ondisk_attrs_default` were deprecated, now they are removed
 - for contributors: we now use Clang compiler for Linux builds as according to our tests it can build a faster Manticore Search and Manticore Columnar Library
+- if [max_matches](Searching/Options.md#max_matches) is not specified in a search query it gets updated implicitly with the lowest needed value for the sake of performance of the new columnar storage. It can affect metric `total` in [SHOW META](Profiling_and_monitoring/SHOW_META.md#SHOW-META), but not `total_found` which is the actual number of found documents.
 
 ### Migration from Manticore 3
 - make sure you a stop Manticore 3 cleanly:

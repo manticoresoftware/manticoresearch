@@ -31,7 +31,6 @@ SELECT  ... FROM ...  [LIMIT row_count][ OFFSET offset]
   ...  
   "limit": 20,
   "offset": 0
-  }
 }
 {
   "index": "<index_name>",
@@ -39,7 +38,6 @@ SELECT  ... FROM ...  [LIMIT row_count][ OFFSET offset]
   ...  
   "size": 20,
   "from": 0
-  }
 }
 ```
 

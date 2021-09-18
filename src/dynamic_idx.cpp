@@ -279,14 +279,17 @@ public:
 		auto & tCol = GetNextCol ();
 		auto & tMatch = *m_pMatch;
 
-		if ( tCol.m_eAttrType!=SPH_ATTR_STRINGPTR )
-			tMatch.SetAttr ( tCol.m_tLocator, iUsec );
-		else
+		if ( tCol.m_eAttrType == SPH_ATTR_FLOAT )
+		{
+			auto fSec = (float)iUsec / 1000000.0f;
+			tMatch.SetAttr ( tCol.m_tLocator, sphF2DW ( fSec ) );
+		} else if ( tCol.m_eAttrType==SPH_ATTR_STRINGPTR )
 		{
 			StringBuilder_c sData;
 			sData << iUsec;
 			PutStr ( tCol, sData );
-		}
+		} else
+			tMatch.SetAttr ( tCol.m_tLocator, iUsec );
 	}
 
 	void PutNULL () override

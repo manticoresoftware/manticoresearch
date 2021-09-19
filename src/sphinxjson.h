@@ -251,6 +251,12 @@ public:
 		Base_T::FixupSpacedAndAppendEscaped ( szValue );
 	}
 
+	void NamedString ( const char* szName, Str_t sValue )
+	{
+		Named ( szName );
+		Base_T::FixupSpacedAndAppendEscaped ( sValue.first, sValue.second );
+	}
+
 	void NamedString ( const char* szName, const CSphString& sValue )
 	{
 		NamedString ( szName, sValue.cstr() );

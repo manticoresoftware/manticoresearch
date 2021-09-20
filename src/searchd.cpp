@@ -8558,7 +8558,11 @@ void BuildStatus ( VectorLike & dStatus )
 	dStatus.MatchTuplet ( "mysql_version", g_sMySQLVersion.cstr() );
 
 	for ( auto i=0; i<SEARCHD_COMMAND_TOTAL; ++i)
+	{
+		if ( i==SEARCHD_COMMAND_UNUSED_6 )
+			continue;
 		dStatus.MatchTupletf ( szCommand ( i ), "%l", g_tStats.m_iCommandCount[i].load ( std::memory_order_relaxed ) );
+	}
 
 	auto iConnects = g_tStats.m_iAgentConnectTFO.load ( std::memory_order_relaxed )
 			+g_tStats.m_iAgentConnect.load ( std::memory_order_relaxed );

@@ -101,9 +101,10 @@ volatile int &AutoOptimizeCutoffMultiplier() noexcept
 	return iAutoOptimizeCutoffMultiplier;
 }
 
-static int GetDefaultCutoff()
+volatile int &AutoOptimizeCutoff() noexcept
 {
-	return sphCpuThreadsCount() * 2;
+	static int iAutoOptimizeCutoff = sphCpuThreadsCount() * 2;
+	return iAutoOptimizeCutoff;
 }
 
 volatile EnqueueForOptimizeFnPtr& EnqueueForOptimizeExecutor() noexcept
@@ -8867,7 +8868,7 @@ void RtIndex_c::Optimize ( OptimizeTask_t tTask )
 	auto fnCoro = MakeCoroExecutor ( [this,&tTask]() {
 	int iCutoff = tTask.m_iCutoff;
 	if ( !iCutoff )
-		iCutoff = GetDefaultCutoff();
+		iCutoff = AutoOptimizeCutoff();
 
 	while ( true )
 	{
@@ -8953,7 +8954,7 @@ void RtIndex_c::CheckStartAutoOptimize()
 	if ( !iCutoff )
 		return;
 
-	iCutoff *= GetDefaultCutoff();
+	iCutoff *= AutoOptimizeCutoff();
 
 	if ( m_tRtChunks.GetDiskChunksCount()<=iCutoff )
 		return;

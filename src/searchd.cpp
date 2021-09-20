@@ -1502,7 +1502,7 @@ bool DistributedIndex_t::IsRtLike ( StringBuilder_c& sExplanation ) const
 	}
 
 	// all locals should exist and be plain
-	if ( m_dLocal.any_of ( [] ( CSphString& s ) { auto p = GetServed ( s ); return p ? ServedDescRPtr_c ( p )->m_eType != IndexType_e::PLAIN : true; } ) )
+	if ( m_dLocal.any_of ( [] ( const CSphString& s ) { auto p = GetServed ( s ); return p ? ServedDescRPtr_c ( p )->m_eType != IndexType_e::PLAIN : true; } ) )
 	{
 		sExplanation << "One of locals doesn't exist, ot is not plain index";
 		return false;

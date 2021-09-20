@@ -1077,6 +1077,49 @@ inline bool IsNull ( const ByteBlob_t & dBlob ) { return !dBlob.second; };
 inline bool IsFilled ( const ByteBlob_t & dBlob ) { return dBlob.first && dBlob.second>0; }
 inline bool IsValid ( const ByteBlob_t & dBlob ) { return IsNull ( dBlob ) || IsFilled ( dBlob ); };
 
+template <typename CONTAINER, typename FILTER>
+inline bool all_of ( const CONTAINER& dData, FILTER && cond ) NO_THREAD_SAFETY_ANALYSIS
+{
+	for ( const auto& dItem : dData )
+		if ( !cond ( dItem ) )
+			return false;
+	return true;
+}
+
+template <typename CONTAINER, typename FILTER>
+inline bool any_of ( const CONTAINER& dData, FILTER && cond ) NO_THREAD_SAFETY_ANALYSIS
+{
+	for ( const auto& dItem : dData )
+		if ( cond ( dItem ) )
+			return true;
+
+	return false;
+}
+
+template<typename CONTAINER, typename FILTER>
+inline bool none_of ( const CONTAINER& dData, FILTER && cond ) NO_THREAD_SAFETY_ANALYSIS
+{
+	return !any_of ( dData, std::forward<FILTER>(cond) );
+}
+
+template<typename CONTAINER, typename FILTER>
+inline int64_t count_of ( const CONTAINER& dData, FILTER&& cond ) NO_THREAD_SAFETY_ANALYSIS
+{
+	int64_t iRes = 0;
+	for ( const auto& dItem : dData )
+		if ( cond ( dItem ) )
+			++iRes;
+
+	return iRes;
+}
+
+template<typename CONTAINER, typename ACTION>
+void for_each ( CONTAINER& dData, ACTION&& tAction ) NO_THREAD_SAFETY_ANALYSIS
+{
+	for ( auto& dItem : dData )
+		tAction ( dItem );
+}
+
 /// buffer traits - provides generic ops over a typed blob (vector).
 /// just provide common operators; doesn't manage buffer anyway
 template < typename T > class VecTraits_T
@@ -1282,56 +1325,43 @@ public:
 
 	/// generic 'ARRAY_ALL'
 	template <typename FILTER>
-	inline bool all_of ( FILTER && cond ) const NO_THREAD_SAFETY_ANALYSIS
+	inline bool all_of ( FILTER && cond ) const
 	{
-		for ( int i = 0; i<m_iCount; ++i )
-			if ( !cond ( m_pData[i] ) )
-				return false;
-		return true;
+		return ::all_of ( *this, std::forward<FILTER> ( cond ) );
 	}
 
 	/// generic linear search - 'ARRAY_ANY' replace
 	/// see 'Contains()' below for examlpe of usage.
 	template <typename FILTER>
-	inline bool any_of ( FILTER && cond ) const NO_THREAD_SAFETY_ANALYSIS
+	inline bool any_of ( FILTER && cond ) const
 	{
-		for ( int i = 0; i<m_iCount; ++i )
-			if ( cond ( m_pData[i] ) )
-				return true;
-
-		return false;
+		return ::any_of ( *this, std::forward<FILTER> ( cond ) );
 	}
 
 	template <typename FILTER>
-	inline bool none_of ( FILTER && cond ) const NO_THREAD_SAFETY_ANALYSIS
+	inline bool none_of ( FILTER && cond ) const
 	{
 		return !any_of ( cond );
 	}
 
 	template<typename FILTER>
-	inline int64_t count_of ( FILTER&& cond ) const NO_THREAD_SAFETY_ANALYSIS
+	inline int64_t count_of ( FILTER&& cond ) const
 	{
-		int64_t iRes = 0;
-		for ( int64_t i = 0; i < m_iCount; ++i )
-			if ( cond ( m_pData[i] ) )
-				++iRes;
-
-		return iRes;
+		return ::count_of ( *this, std::forward<FILTER> ( cond ) );
 	}
 
 	/// Apply an action to every member
 	/// Apply ( [] (T& item) {...} );
 	template < typename ACTION >
-	void Apply( ACTION&& Verb ) const NO_THREAD_SAFETY_ANALYSIS
+	void Apply( ACTION&& Verb ) const
 	{
-		for ( int i = 0; i<m_iCount; ++i )
-			Verb ( m_pData[i] );
+		::for_each ( *this, std::forward<ACTION> ( Verb ) );
 	}
 
 	template < typename ACTION >
 	void for_each ( ACTION && tAction ) const
 	{
-		Apply(tAction);
+		::for_each ( *this, std::forward<ACTION> ( tAction ) );
 	}
 
 	/// generic linear search

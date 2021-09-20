@@ -1622,15 +1622,15 @@ bool RtIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphS
 			do
 				tDocID = UidShort ();
 			while ( tGuard.m_dRamSegs.any_of (
-					[tDocID] ( ConstRtSegmentRefPtf_t & p ) { return p->FindAliveRow ( tDocID ); } ) );
+					[tDocID] ( const ConstRtSegmentRefPtf_t & p ) { return p->FindAliveRow ( tDocID ); } ) );
 
 			tDoc.SetID ( tDocID );
 		} else
 		{
 			// docID was provided, but that is new insert and we need to check for duplicates
 			assert ( !bReplace && tDocID!=0 );
-			if ( tGuard.m_dRamSegs.any_of ( [tDocID] ( ConstRtSegmentRefPtf_t & p ) { return p->FindAliveRow ( tDocID ); })
-				|| tGuard.m_dDiskChunks.any_of ( [tDocID] ( ConstDiskChunkRefPtr_t & p ) { return p->Cidx().IsAlive(tDocID); }))
+			if ( tGuard.m_dRamSegs.any_of ( [tDocID] ( const ConstRtSegmentRefPtf_t & p ) { return p->FindAliveRow ( tDocID ); })
+				|| tGuard.m_dDiskChunks.any_of ( [tDocID] ( const ConstDiskChunkRefPtr_t & p ) { return p->Cidx().IsAlive(tDocID); }))
 			{
 				sError.SetSprintf ( "duplicate id '" INT64_FMT "'", tDocID );
 				return false; // already exists and not deleted; INSERT fails
@@ -4046,7 +4046,7 @@ void RtIndex_c::SaveMeta()
 // looks like spinlock, but actually we switch to parallel strand and back on every tick, so it should not burn CPU
 void RtIndex_c::WaitRAMSegmentsUnlocked () const
 {
-	while ( m_tRtChunks.RamSegs ()->any_of ( [] ( ConstRtSegmentRefPtf_t & a ) { return a->m_iLocked; } ) )
+	while ( m_tRtChunks.RamSegs ()->any_of ( [] ( const ConstRtSegmentRefPtf_t & a ) { return a->m_iLocked; } ) )
 		Threads::ScopedScheduler_c ( m_tRtChunks.MergeSegmentsWorker () );
 }
 

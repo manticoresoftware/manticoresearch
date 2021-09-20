@@ -23,32 +23,19 @@ source src
 	sql_attr_uint	= tm
 }
 
-source src_bigint
-{
-type			= mysql
-<sql_settings/>
-sql_query		= SELECT * FROM test_table_bigint
-sql_attr_bigint	= tm
-}
-
 index idx
 {
 	source			= src
 	path			= <data_path/>/main
 }
 
-index idx_bigint
-{
-source			= src_bigint
-path			= <data_path/>/main_bigint
-}
 </config>
 
 <queries>
-	<query mode="extended2" groupattr="tm" groupfunc="day" index="idx">aaaa</query>
-	<query mode="extended2" groupattr="tm" groupfunc="week" index="idx">aaaa</query>
-	<query mode="extended2" groupattr="tm" groupfunc="month" index="idx">aaaa</query>
-	<query mode="extended2" groupattr="tm" groupfunc="year" index="idx">aaaa</query>
+	<query mode="extended2" groupattr="tm" groupfunc="day">aaaa</query>
+	<query mode="extended2" groupattr="tm" groupfunc="week">aaaa</query>
+	<query mode="extended2" groupattr="tm" groupfunc="month">aaaa</query>
+	<query mode="extended2" groupattr="tm" groupfunc="year">aaaa</query>
 	<sphinxql>
 	select tm, day(tm) d from idx where match('aaaa') group by d;
 	select tm, month(tm) d from idx where match('aaaa') group by d;
@@ -66,26 +53,6 @@ path			= <data_path/>/main_bigint
 	select tm, year(tm) d from idx where match('aaaa') group by d;
 	select tm, yearmonth(tm) d from idx where match('aaaa') group by d;
 	select tm, yearmonthday(tm) d from idx where match('aaaa') group by d;
-
-	<!-- check for bigint values -->
-
-	set global grouping_in_utc=0;
-	show variables like 'grouping%';
-	select tm, day(tm) d from idx_bigint where match('aaaa') group by d;
-	select tm, month(tm) d from idx_bigint where match('aaaa') group by d;
-	select tm, year(tm) d from idx_bigint where match('aaaa') group by d;
-	select tm, yearmonth(tm) d from idx_bigint where match('aaaa') group by d;
-	select tm, yearmonthday(tm) d from idx_bigint where match('aaaa') group by d;
-
-	<!-- check whether settings works at all -->
-	set global grouping_in_utc=1;
-	show variables like 'grouping_in_utc';
-	<!-- check again -->
-	select tm, day(tm) d from idx_bigint where match('aaaa') group by d;
-	select tm, month(tm) d from idx_bigint where match('aaaa') group by d;
-	select tm, year(tm) d from idx_bigint where match('aaaa') group by d;
-	select tm, yearmonth(tm) d from idx_bigint where match('aaaa') group by d;
-	select tm, yearmonthday(tm) d from idx_bigint where match('aaaa') group by d;
 	</sphinxql>
 </queries>
 
@@ -98,27 +65,13 @@ CREATE TABLE test_table
 ) ENGINE=MYISAM
 </db_create>
 
-<db_create>
-CREATE TABLE test_table_bigint
-(
-	id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL,
-	tm BIGINT NOT NULL,
-	title TEXT NOT NULL
-) ENGINE=MYISAM
-</db_create>
-
 <db_insert>
 	<repeat count="24" vars="stamp" init="0">
 		<var name="vals"/>
 		<repeat count="365" vars="stamp" inc="3600"><var name="vals" delimiter=",">(0,<stamp/>,'aaaa')</var></repeat>
 		INSERT INTO test_table VALUES <vals/><db_insert/></repeat>
-	<repeat count="24" vars="stamp" init="22500115200">
-		<var name="vals"/>
-		<repeat count="89" vars="stamp" inc="3600"><var name="vals" delimiter=",">(0,<stamp/>,'aaaa')</var></repeat>
-		INSERT INTO test_table_bigint VALUES <vals/><db_insert/></repeat>
 </db_insert>
 
 <db_drop>DROP TABLE IF EXISTS test_table</db_drop>
-<db_drop>DROP TABLE IF EXISTS test_table_bigint</db_drop>
 
 </test>

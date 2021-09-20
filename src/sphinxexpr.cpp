@@ -3356,44 +3356,44 @@ DECLARE_TERNARY ( Expr_Mul3_c,	FIRST*SECOND*THIRD,					INTFIRST*INTSECOND*INTTHI
 
 #define DECLARE_TIMESTAMP(_classname,_expr) \
 	DECLARE_UNARY_TRAITS ( _classname ) \
-		float Eval ( const CSphMatch & tMatch ) const final { return (float)IntEval(tMatch); } \
-		int64_t Int64Eval ( const CSphMatch & tMatch ) const final { return IntEval(tMatch); } \
-		int IntEval ( const CSphMatch & tMatch ) const final \
+		float Eval ( const CSphMatch & tMatch ) const final { return (float)Int64Eval(tMatch); } \
+		int64_t Int64Eval ( const CSphMatch & tMatch ) const final \
 		{ \
 			time_t ts = (time_t)INT64FIRST;	\
 			struct tm s = {0}; \
 			localtime_r ( &ts, &s ); \
 			return _expr; \
 		} \
+		int IntEval ( const CSphMatch & tMatch ) const final { return (int)Int64Eval(tMatch); } \
 	};
 
-DECLARE_TIMESTAMP ( Expr_Day_c,				s.tm_mday )
-DECLARE_TIMESTAMP ( Expr_Month_c,			s.tm_mon+1 )
-DECLARE_TIMESTAMP ( Expr_Year_c,			s.tm_year+1900 )
-DECLARE_TIMESTAMP ( Expr_YearMonth_c,		(s.tm_year+1900)*100+s.tm_mon+1 )
-DECLARE_TIMESTAMP ( Expr_YearMonthDay_c,	(s.tm_year+1900)*10000+(s.tm_mon+1)*100+s.tm_mday )
-DECLARE_TIMESTAMP ( Expr_Hour_c, s.tm_hour )
-DECLARE_TIMESTAMP ( Expr_Minute_c, s.tm_min )
-DECLARE_TIMESTAMP ( Expr_Second_c, s.tm_sec )
+DECLARE_TIMESTAMP ( Expr_Day_c,				(int64_t)s.tm_mday )
+DECLARE_TIMESTAMP ( Expr_Month_c,			(int64_t)s.tm_mon + 1 )
+DECLARE_TIMESTAMP ( Expr_Year_c,			(int64_t)s.tm_year + 1900 )
+DECLARE_TIMESTAMP ( Expr_YearMonth_c,		((int64_t)s.tm_year + 1900) * 100 + (int64_t)s.tm_mon + 1 )
+DECLARE_TIMESTAMP ( Expr_YearMonthDay_c,	((int64_t)s.tm_year + 1900) * 10000 + ((int64_t)s.tm_mon + 1) * 100 + (int64_t)s.tm_mday )
+DECLARE_TIMESTAMP ( Expr_Hour_c,			(int64_t)s.tm_hour )
+DECLARE_TIMESTAMP ( Expr_Minute_c,			(int64_t)s.tm_min )
+DECLARE_TIMESTAMP ( Expr_Second_c,			(int64_t)s.tm_sec )
 
 #define DECLARE_TIMESTAMP_UTC( _classname, _expr ) \
 	DECLARE_UNARY_TRAITS ( _classname ) \
-		float Eval ( const CSphMatch & tMatch ) const final { return (float)IntEval(tMatch); } \
-		int64_t Int64Eval ( const CSphMatch & tMatch ) const final { return IntEval(tMatch); } \
-		int IntEval ( const CSphMatch & tMatch ) const final \
+		float Eval ( const CSphMatch & tMatch ) const final { return (float)Int64Eval(tMatch); } \
+		int64_t Int64Eval ( const CSphMatch & tMatch ) const final \
 		{ \
-			time_t ts = (time_t)INTFIRST;    \
+			time_t ts = (time_t)INT64FIRST;    \
 			struct tm s = {0}; \
 			gmtime_r ( &ts, &s ); \
 			return _expr; \
 		} \
+		int IntEval ( const CSphMatch & tMatch ) const final { return (int)Int64Eval(tMatch); } \
 	};
 
-DECLARE_TIMESTAMP_UTC ( Expr_Day_utc_c, s.tm_mday )
-DECLARE_TIMESTAMP_UTC ( Expr_Month_utc_c, s.tm_mon + 1 )
-DECLARE_TIMESTAMP_UTC ( Expr_Year_utc_c, s.tm_year + 1900 )
-DECLARE_TIMESTAMP_UTC ( Expr_YearMonth_utc_c, (s.tm_year + 1900) * 100 + s.tm_mon + 1 )
-DECLARE_TIMESTAMP_UTC ( Expr_YearMonthDay_utc_c, (s.tm_year + 1900) * 10000 + (s.tm_mon + 1) * 100 + s.tm_mday )
+DECLARE_TIMESTAMP_UTC ( Expr_Day_utc_c,				(int64_t)s.tm_mday )
+DECLARE_TIMESTAMP_UTC ( Expr_Month_utc_c,			(int64_t)s.tm_mon + 1 )
+DECLARE_TIMESTAMP_UTC ( Expr_Year_utc_c,			(int64_t)s.tm_year + 1900 )
+DECLARE_TIMESTAMP_UTC ( Expr_YearMonth_utc_c,		((int64_t)s.tm_year + 1900) * 100 + (int64_t)s.tm_mon + 1 )
+DECLARE_TIMESTAMP_UTC ( Expr_YearMonthDay_utc_c,	((int64_t)s.tm_year + 1900) * 10000 + ((int64_t)s.tm_mon + 1) * 100 + (int64_t)s.tm_mday )
 
 static bool g_bExprGroupingInUtc = false;
 
@@ -9126,7 +9126,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 		assert ( iArg>=0 );
 		if ( m_dNodes[iArg].m_eRetType!=SPH_ATTR_INTEGER && m_dNodes[iArg].m_eRetType!=SPH_ATTR_TIMESTAMP && m_dNodes[iArg].m_eRetType!=SPH_ATTR_BIGINT )
 		{
-			m_sParserError.SetSprintf ( "%s() argument must be integer or timestamp", sFuncName );
+			m_sParserError.SetSprintf ( "%s() argument must be integer, bigint or timestamp", sFuncName );
 			return -1;
 		}
 		break;

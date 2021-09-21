@@ -17058,6 +17058,7 @@ public:
 	void		LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer, bool bStripFile ) final;
 	void		LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) final;
 	void		WriteStopwords ( CSphWriter & tWriter ) const final;
+	void		WriteStopwords ( JsonEscapedBuilder & tOut ) const final;
 	bool		LoadWordforms ( const StrVec_t & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) final;
 	void		WriteWordforms ( CSphWriter & tWriter ) const final;
 	const CSphWordforms *	GetWordforms() final { return m_pWordforms; }
@@ -17896,6 +17897,17 @@ void CSphTemplateDictTraits::WriteStopwords ( CSphWriter & tWriter ) const
 	tWriter.PutDword ( (DWORD)m_iStopwords );
 	for ( int i = 0; i < m_iStopwords; ++i )
 		tWriter.ZipOffset ( m_pStopwords[i] );
+}
+
+void CSphTemplateDictTraits::WriteStopwords ( JsonEscapedBuilder& tOut ) const
+{
+	if ( !m_iStopwords )
+		return;
+
+	tOut.Named ( "stopwords_list" );
+	auto _ = tOut.Array();
+	for ( int i = 0; i < m_iStopwords; ++i )
+		tOut << cast2signed ( m_pStopwords[i] );
 }
 
 
@@ -20281,6 +20293,7 @@ public:
 	void LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer, bool bStripFile ) final { m_pBase->LoadStopwords ( sFiles, pTokenizer, bStripFile ); }
 	void LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) final { m_pBase->LoadStopwords ( dStopwords ); }
 	void WriteStopwords ( CSphWriter & tWriter ) const final { m_pBase->WriteStopwords ( tWriter ); }
+	void WriteStopwords ( JsonEscapedBuilder & tOut ) const final { m_pBase->WriteStopwords ( tOut ); }
 	bool LoadWordforms ( const StrVec_t & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) final
 		{ return m_pBase->LoadWordforms ( dFiles, pEmbedded, pTokenizer, sIndex ); }
 	void WriteWordforms ( CSphWriter & tWriter ) const final { m_pBase->WriteWordforms ( tWriter ); }

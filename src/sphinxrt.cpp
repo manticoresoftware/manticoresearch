@@ -3975,7 +3975,7 @@ void RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )
 
 	SaveDictionarySettings ( wrMeta, m_pDict, m_bKeywordDict, m_tSettings.m_iEmbeddedLimit );
 	sNewMeta.Named ( "dictionary_settings" );
-	SaveDictionarySettings ( sNewMeta, m_pDict, m_bKeywordDict );
+	SaveDictionarySettings ( sNewMeta, m_pDict, m_bKeywordDict, m_tSettings.m_iEmbeddedLimit );
 
 	// meta v.5
 	wrMeta.PutDword ( m_iWordsCheckpoint );

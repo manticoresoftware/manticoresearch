@@ -2449,8 +2449,8 @@ void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown
 	sNewMeta.Named ( "tokenizer_settings" );
 	SaveTokenizerSettings ( sNewMeta, m_pTokenizer, m_tSettings.m_iEmbeddedLimit );
 	SaveDictionarySettings ( wrMeta, m_pDict, false, m_tSettings.m_iEmbeddedLimit );
-	sNewMeta.Named ( "dictionary_settings");
-	SaveDictionarySettings ( sNewMeta, m_pDict, false );
+	sNewMeta.Named ( "dictionary_settings" );
+	SaveDictionarySettings ( sNewMeta, m_pDict, false, m_tSettings.m_iEmbeddedLimit );
 
 	// meta v.6
 	CSphFieldFilterSettings tFieldFilterSettings;

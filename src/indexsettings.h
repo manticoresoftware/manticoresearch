@@ -22,6 +22,16 @@
 typedef uint64_t SphWordID_t;
 STATIC_SIZE_ASSERT ( SphWordID_t, 8 );
 
+inline int64_t cast2signed ( SphWordID_t tVal )
+{
+	return *(int64_t*)&tVal;
+}
+
+inline SphWordID_t cast2wordid ( int64_t iVal )
+{
+	return *(SphWordID_t*)&iVal;
+}
+
 class CSphWriter;
 class CSphReader;
 class FilenameBuilder_i;
@@ -426,6 +436,6 @@ void operator<< ( JsonEscapedBuilder& tOut, const CSphFieldFilterSettings& tFiel
 void operator<< ( JsonEscapedBuilder& tOut, const CSphIndexSettings& tIndexSettings );
 
 void SaveTokenizerSettings ( JsonEscapedBuilder& tOut, const ISphTokenizer * pTokenizer, int iEmbeddedLimit );
-void SaveDictionarySettings ( JsonEscapedBuilder& tOut, const CSphDict* pDict, bool bForceWordDict );
+void SaveDictionarySettings ( JsonEscapedBuilder& tOut, const CSphDict* pDict, bool bForceWordDict, int iEmbeddedLimit );
 
 #endif // _indexsettings_

@@ -1382,7 +1382,7 @@ void SaveDictionarySettings ( CSphWriter & tWriter, const CSphDict * pDict, bool
 	tWriter.PutString ( pDict->GetMorphDataFingerprint() );
 }
 
-void SaveDictionarySettings ( JsonEscapedBuilder& tOut, const CSphDict* pDict, bool bForceWordDict )
+void SaveDictionarySettings ( JsonEscapedBuilder& tOut, const CSphDict* pDict, bool bForceWordDict, int iEmbeddedLimit )
 {
 	assert ( pDict );
 	auto _ = tOut.ObjectW();
@@ -1391,6 +1391,8 @@ void SaveDictionarySettings ( JsonEscapedBuilder& tOut, const CSphDict* pDict, b
 	tOut.NamedStringNonEmpty ( "morphology", tSettings.m_sMorphology );
 	tOut.NamedStringNonEmpty ( "morph_fields", tSettings.m_sMorphFields );
 	tOut.NamedStringNonEmpty ( "stopwords", tSettings.m_sStopwords );
+
+	SphOffset_t uTotalSize = 0;
 	const auto& dStopwordsInfos = pDict->GetStopwordsFileInfos();
 	if ( !dStopwordsInfos.IsEmpty() )
 	{
@@ -1402,8 +1404,14 @@ void SaveDictionarySettings ( JsonEscapedBuilder& tOut, const CSphDict* pDict, b
 				auto _ = tOut.Object();
 				tOut.NamedString ( "name", tInfo.m_sFilename );
 				tOut.NamedVal ( "info", tInfo );
+				uTotalSize += tInfo.m_uSize;
 			}
 	}
+
+	// embed only in case it allowed
+	if ( iEmbeddedLimit > 0 && uTotalSize <= (SphOffset_t)iEmbeddedLimit )
+		pDict->WriteStopwords ( tOut );
+
 	const auto& dWordformsInfos = pDict->GetWordformsFileInfos();
 	if ( !dWordformsInfos.IsEmpty() )
 	{

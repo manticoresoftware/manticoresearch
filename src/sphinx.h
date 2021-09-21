@@ -627,6 +627,7 @@ public:
 
 	/// write stopwords to a file
 	virtual void		WriteStopwords ( CSphWriter & tWriter ) const = 0;
+	virtual void		WriteStopwords ( JsonEscapedBuilder & tOut ) const = 0;
 
 	/// load wordforms from a given list of files
 	virtual bool		LoadWordforms ( const StrVec_t &, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) = 0;
@@ -729,6 +730,7 @@ public:
 	void		LoadStopwords ( const char *, const ISphTokenizer *, bool ) override {};
 	void		LoadStopwords ( const CSphVector<SphWordID_t> & ) override {};
 	void		WriteStopwords ( CSphWriter & ) const override {};
+	void		WriteStopwords ( JsonEscapedBuilder & ) const override {};
 	bool		LoadWordforms ( const StrVec_t &, const CSphEmbeddedFiles *, const ISphTokenizer *, const char * ) override { return false; };
 	void		WriteWordforms ( CSphWriter & ) const override {};
 	int			SetMorphology ( const char *, CSphString & ) override { return ST_OK; }

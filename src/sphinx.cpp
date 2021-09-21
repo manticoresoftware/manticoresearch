@@ -2311,6 +2311,8 @@ public:
 	bool			SetCaseFolding ( const char * sConfig, CSphString & sError ) final;
 	bool			LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, StrVec_t & dWarnings, CSphString & sError ) final;
 	void			WriteSynonyms ( CSphWriter & tWriter ) const final;
+	void 			WriteSynonyms ( JsonEscapedBuilder & tOut ) const final;
+
 	void			CloneBase ( const CSphTokenizerBase * pFrom, ESphTokenizerClone eMode );
 
 	const char *	GetTokenStart () const final	{ return (const char *) m_pTokenStart; }
@@ -3848,6 +3850,16 @@ void CSphTokenizerBase::WriteSynonyms ( CSphWriter & tWriter ) const
 		m_pExc->Export ( tWriter );
 	else
 		tWriter.PutDword ( 0 );
+}
+
+void CSphTokenizerBase::WriteSynonyms ( JsonEscapedBuilder & tOut ) const
+{
+	if ( !m_pExc )
+		return;
+
+	tOut.Named ( "synonyms" );
+	auto _ = tOut.ArrayW();
+	m_pExc->Export ( tOut );
 }
 
 

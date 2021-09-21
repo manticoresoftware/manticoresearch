@@ -1297,13 +1297,18 @@ void SaveTokenizerSettings ( CSphWriter & tWriter, const ISphTokenizer * pTokeni
 	tWriter.PutString ( tSettings.m_sBlendMode.cstr() );
 }
 
-void operator<< ( JsonEscapedBuilder& tOut, const ISphTokenizer* pTokenizer )
+void SaveTokenizerSettings ( JsonEscapedBuilder& tOut, const ISphTokenizer* pTokenizer, int iEmbeddedLimit )
 {
 	auto _ = tOut.ObjectW();
 	const CSphTokenizerSettings& tSettings = pTokenizer->GetSettings();
 	tOut.NamedVal ( "type", tSettings.m_iType );
 	tOut.NamedStringNonEmpty( "case_folding", tSettings.m_sCaseFolding );
 	tOut.NamedValNonDefault ( "min_word_len", tSettings.m_iMinWordLen, 1);
+
+	bool bEmbedSynonyms = ( iEmbeddedLimit>0 && pTokenizer->GetSynFileInfo ().m_uSize<=(SphOffset_t)iEmbeddedLimit );
+	if ( bEmbedSynonyms )
+		pTokenizer->WriteSynonyms ( tOut );
+
 	if ( !tSettings.m_sSynonymsFile.IsEmpty() )
 	{
 		tOut.NamedString ( "synonyms_file", tSettings.m_sSynonymsFile );

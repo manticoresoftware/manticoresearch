@@ -3970,7 +3970,8 @@ void RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )
 	sNewMeta.NamedVal ( "index_settings", m_tSettings );
 
 	SaveTokenizerSettings ( wrMeta, m_pTokenizer, m_tSettings.m_iEmbeddedLimit );
-	sNewMeta.NamedVal ( "tokenizer_settings", m_pTokenizer );
+	sNewMeta.Named ( "tokenizer_settings" );
+	SaveTokenizerSettings ( sNewMeta, m_pTokenizer, m_tSettings.m_iEmbeddedLimit );
 
 	SaveDictionarySettings ( wrMeta, m_pDict, m_bKeywordDict, m_tSettings.m_iEmbeddedLimit );
 	sNewMeta.Named ( "dictionary_settings" );

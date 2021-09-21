@@ -2446,7 +2446,8 @@ void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown
 	SaveIndexSettings ( wrMeta, m_tSettings );
 	sNewMeta.NamedVal ( "index_settings", m_tSettings );
 	SaveTokenizerSettings ( wrMeta, m_pTokenizer, m_tSettings.m_iEmbeddedLimit );
-	sNewMeta.NamedVal ( "tokenizer_settings", m_pTokenizer );
+	sNewMeta.Named ( "tokenizer_settings" );
+	SaveTokenizerSettings ( sNewMeta, m_pTokenizer, m_tSettings.m_iEmbeddedLimit );
 	SaveDictionarySettings ( wrMeta, m_pDict, false, m_tSettings.m_iEmbeddedLimit );
 	sNewMeta.Named ( "dictionary_settings");
 	SaveDictionarySettings ( sNewMeta, m_pDict, false );

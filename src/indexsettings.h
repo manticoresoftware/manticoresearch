@@ -424,8 +424,8 @@ class JsonEscapedBuilder;
 
 void operator<< ( JsonEscapedBuilder& tOut, const CSphFieldFilterSettings& tFieldFilterSettings );
 void operator<< ( JsonEscapedBuilder& tOut, const CSphIndexSettings& tIndexSettings );
-void operator<< ( JsonEscapedBuilder& tOut, const ISphTokenizer* pTokenizer );
 
+void SaveTokenizerSettings ( JsonEscapedBuilder& tOut, const ISphTokenizer * pTokenizer, int iEmbeddedLimit );
 void SaveDictionarySettings ( JsonEscapedBuilder& tOut, const CSphDict* pDict, bool bForceWordDict );
 
 #endif // _indexsettings_

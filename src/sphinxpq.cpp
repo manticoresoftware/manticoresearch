@@ -710,7 +710,7 @@ PercolateIndex_c::~PercolateIndex_c ()
 		::unlink ( sFile.cstr() );
 		sFile.SetSprintf ( "%s.json", m_sFilename.cstr() );
 		::unlink ( sFile.cstr() );
-		sFile.SetSprintf ( "%s%s", m_sFilename.cstr(), sphGetExt ( SPH_EXT_SETTINGS ).cstr() );
+		sFile.SetSprintf ( "%s%s", m_sFilename.cstr(), sphGetExt ( SPH_EXT_SETTINGS ) );
 		::unlink ( sFile.cstr() );
 	}
 }
@@ -2397,7 +2397,7 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilename
 	m_tStat.m_iTotalDocuments = uQueries;
 
 	CSphString sMutableFile;
-	sMutableFile.SetSprintf ( "%s%s", m_sFilename.cstr(), sphGetExt ( SPH_EXT_SETTINGS ).cstr() );
+	sMutableFile.SetSprintf ( "%s%s", m_sFilename.cstr(), sphGetExt ( SPH_EXT_SETTINGS ) );
 	if ( !m_tMutableSettings.Load ( sMutableFile.cstr(), m_sIndexName.cstr() ) )
 		return false;
 
@@ -2896,7 +2896,7 @@ void PercolateIndex_c::GetIndexFiles ( CSphVector<CSphString> & dFiles, const Fi
 	if ( m_tMutableSettings.NeedSave() ) // should be file already after post-setup
 	{
 		CSphString & sMutableSettings = dFiles.Add();
-		sMutableSettings.SetSprintf ( "%s%s", m_sFilename.cstr(), sphGetExt ( SPH_EXT_SETTINGS ).cstr() );
+		sMutableSettings.SetSprintf ( "%s%s", m_sFilename.cstr(), sphGetExt ( SPH_EXT_SETTINGS ) );
 	}
 }
 

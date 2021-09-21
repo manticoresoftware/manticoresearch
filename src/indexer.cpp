@@ -1438,7 +1438,7 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst, const CSphConf
 		// write klist with targets but without klist itself
 		// that will affect the order of index load on rotation, but no actual klist will be applied
 		CSphString sSrcKlist;
-		sSrcKlist.SetSprintf ( "%s.tmp%s", pSrc->GetFilename(), sphGetExt(SPH_EXT_SPK).cstr() );
+		sSrcKlist.SetSprintf ( "%s.tmp%s", pSrc->GetFilename(), sphGetExt(SPH_EXT_SPK) );
 		if ( !WriteKillList ( sSrcKlist, nullptr, 0, tTargets, sError ) )
 			sphDie ( "failed to modify klist target in index '%s': %s", sSrc, sError.cstr() );
 	}

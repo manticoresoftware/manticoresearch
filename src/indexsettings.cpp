@@ -2263,8 +2263,8 @@ void SaveMutableSettings ( const MutableIndexSettings_c & tSettings, const CSphS
 
 	CSphString sError;
 	CSphString sMutableNew, sMutable;
-	sMutableNew.SetSprintf ( "%s%s.new", sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ).cstr() );
-	sMutable.SetSprintf ( "%s%s", sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ).cstr() );
+	sMutableNew.SetSprintf ( "%s%s.new", sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ) );
+	sMutable.SetSprintf ( "%s%s", sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ) );
 
 	CSphWriter tWriter;
 	if ( !tWriter.OpenFile ( sMutableNew, sError ) )

@@ -555,7 +555,7 @@ struct CSphWordforms
 	bool						m_bHavePostMorphNF;
 	CSphVector <CSphStoredNF>	m_dNormalForms;
 	CSphMultiformContainer *	m_pMultiWordforms;
-	CSphOrderedHash < int, CSphString, CSphStrHashFunc, 1048576 >	m_dHash;
+	CSphOrderedHash < int, CSphString, CSphStrHashFunc, 1048576 >	m_hHash;
 
 	CSphWordforms ();
 	~CSphWordforms ();
@@ -582,9 +582,11 @@ struct DictHeader_t;
 class CSphDict : public ISphRefcountedMT
 {
 public:
-	static const int	ST_OK = 0;
-	static const int	ST_ERROR = 1;
-	static const int	ST_WARNING = 2;
+	enum ST_E : int {
+		ST_OK = 0,
+		ST_ERROR = 1,
+		ST_WARNING = 2,
+	};
 
 public:
 	/// Get word ID by word, "text" version
@@ -632,7 +634,7 @@ public:
 	virtual void		WriteWordforms ( CSphWriter & tWriter ) const = 0;
 
 	/// get wordforms
-	virtual const CSphWordforms *	GetWordforms() { return NULL; }
+	virtual const CSphWordforms *	GetWordforms() { return nullptr; }
 
 	/// disable wordforms processing
 	virtual void		DisableWordforms() {}
@@ -675,7 +677,7 @@ public:
 	virtual void			HitblockPatch ( CSphWordHit *, int ) const {}
 
 	/// resolve temporary hit block wide wordid (!) back to keyword
-	virtual const char *	HitblockGetKeyword ( SphWordID_t ) { return NULL; }
+	virtual const char *	HitblockGetKeyword ( SphWordID_t ) { return nullptr; }
 
 	/// check current memory usage
 	virtual int				HitblockGetMemUse () { return 0; }

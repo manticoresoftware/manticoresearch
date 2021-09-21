@@ -199,9 +199,10 @@ inline bool operator < ( const Word_t & a, const Word_t & b)
 class CSphStopwordBuilderDict final : public DictStub_c
 {
 protected:
-	~CSphStopwordBuilderDict() override {}
+	~CSphStopwordBuilderDict() final = default;
+
 public:
-						CSphStopwordBuilderDict () {}
+						CSphStopwordBuilderDict () = default;
 	void				Save ( const char * sOutput, int iTop, bool bFreqs );
 
 public:

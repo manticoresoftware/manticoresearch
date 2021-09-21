@@ -1355,7 +1355,7 @@ const CP * sphSearchCheckpointWrd ( const char * sWord, int iWordLen, bool bStar
 class ISphRtDictWraper : public CSphDict
 {
 protected:
-	~ISphRtDictWraper() override {}
+	~ISphRtDictWraper() override = default;
 public:
 	virtual const BYTE *	GetPackedKeywords () = 0;
 	virtual int				GetPackedLen () = 0;

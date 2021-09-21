@@ -1,6 +1,6 @@
 # Changelog
 
-## Version 4.0.2, Sep ??? 2021
+## Version 4.0.2, Sep 21 2021
 
 ### Major new features
 - **Full support of [Manticore Columnar Library](https://github.com/manticoresoftware/columnar)**. Previously Manticore Columnar Library was supported only for plain indexes. Now it's supported:
@@ -8,7 +8,7 @@
   - in replication
   - in `ALTER`
   - in `indextool --check`
-- **Automatic indexes compaction** ([#478](https://github.com/manticoresoftware/manticoresearch/issues/478)). Finally you don't have to call OPTIMIZE manually or via a crontask or other kind of automation. Manticore now does it on your own.
+- **Automatic indexes compaction** ([#478](https://github.com/manticoresoftware/manticoresearch/issues/478)). Finally you don't have to call OPTIMIZE manually or via a crontask or other kind of automation. Manticore now does it on your own. You can set default compaction threshold via [optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff).
 - **Chunk snapshots and locks system revamp**. These changes may be invisible from outside at first glance, but they improve the behaviour of many things happening in real-time indexes significantly. In a nutshell, previously most Manticore data manipulation operations relied on locks heavily, now we use disk chunk snapshots instead.
 
   <details>
@@ -24,7 +24,7 @@
   </details>
 
 - **[ALTER](Updating_index_schema.md) can add/remove a full-text field**. Previously it could only add/remove an attribute.
-- **Experimental: pseudo sharding for full-scan queries** - allows to parallelize any non-full-text search query. Instead of preparing shards manually you can now just enable new option [searchd.pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) and expect up to `CPU cores` lower response time for non-full-text search queries.
+- 🔬 **Experimental: pseudo sharding for full-scan queries** - allows to parallelize any non-full-text search query. Instead of preparing shards manually you can now just enable new option [searchd.pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) and expect up to `CPU cores` lower response time for non-full-text search queries. Note it can easily occupy all existing CPU cores, so if you care not only about latency, but throughput too - use it with caution.
 
 ### Minor changes
 <!-- example -->

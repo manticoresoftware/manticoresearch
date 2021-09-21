@@ -634,6 +634,7 @@ public:
 
 	/// write wordforms to a file
 	virtual void		WriteWordforms ( CSphWriter & tWriter ) const = 0;
+	virtual void		WriteWordforms ( JsonEscapedBuilder & tOut ) const = 0;
 
 	/// get wordforms
 	virtual const CSphWordforms *	GetWordforms() { return nullptr; }
@@ -733,6 +734,7 @@ public:
 	void		WriteStopwords ( JsonEscapedBuilder & ) const override {};
 	bool		LoadWordforms ( const StrVec_t &, const CSphEmbeddedFiles *, const ISphTokenizer *, const char * ) override { return false; };
 	void		WriteWordforms ( CSphWriter & ) const override {};
+	void		WriteWordforms ( JsonEscapedBuilder & ) const override {};
 	int			SetMorphology ( const char *, CSphString & ) override { return ST_OK; }
 	void		Setup ( const CSphDictSettings & tSettings ) override { m_tSettings = tSettings; };
 	const CSphDictSettings & GetSettings () const override { return m_tSettings; }

@@ -1412,6 +1412,7 @@ void SaveDictionarySettings ( JsonEscapedBuilder& tOut, const CSphDict* pDict, b
 	if ( iEmbeddedLimit > 0 && uTotalSize <= (SphOffset_t)iEmbeddedLimit )
 		pDict->WriteStopwords ( tOut );
 
+	uTotalSize = 0;
 	const auto& dWordformsInfos = pDict->GetWordformsFileInfos();
 	if ( !dWordformsInfos.IsEmpty() )
 	{
@@ -1425,9 +1426,14 @@ void SaveDictionarySettings ( JsonEscapedBuilder& tOut, const CSphDict* pDict, b
 				auto _ = tOut.Object();
 				tOut.NamedString ( "name", tSettings.m_dWordforms[i] ); // trick! tInfo.m_sFilename contains full path, but we need tSettings.m_dWordforms is stripped one
 				tOut.NamedVal ( "info", tInfo );
+				uTotalSize += tInfo.m_uSize;
 			}
 		}
 	}
+
+	// embed only in case it allowed
+	if ( iEmbeddedLimit > 0 && uTotalSize <= (SphOffset_t)iEmbeddedLimit )
+		pDict->WriteWordforms ( tOut );
 
 	tOut.NamedValNonDefault ( "min_stemming_len", tSettings.m_iMinStemmingLen, 1 );
 	tOut.NamedValNonDefault ( "word_dict", tSettings.m_bWordDict || bForceWordDict, true );

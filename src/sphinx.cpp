@@ -17061,6 +17061,7 @@ public:
 	void		WriteStopwords ( JsonEscapedBuilder & tOut ) const final;
 	bool		LoadWordforms ( const StrVec_t & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) final;
 	void		WriteWordforms ( CSphWriter & tWriter ) const final;
+	void		WriteWordforms ( JsonEscapedBuilder & tOut ) const final;
 	const CSphWordforms *	GetWordforms() final { return m_pWordforms; }
 	void		DisableWordforms() final { m_bDisableWordforms = true; }
 	int			SetMorphology ( const char * szMorph, CSphString & sMessage ) final;
@@ -18426,6 +18427,51 @@ void CSphTemplateDictTraits::WriteWordforms ( CSphWriter & tWriter ) const
 				sLine.SetSprintf ( "%s %s > %s", sKey.cstr(), sTokens.cstr(), sForms.cstr() );
 				tWriter.PutString ( sLine );
 			}
+		}
+	}
+}
+
+void CSphTemplateDictTraits::WriteWordforms ( JsonEscapedBuilder & tOut ) const
+{
+	if ( !m_pWordforms )
+		return;
+
+	bool bHaveData = ( m_pWordforms->m_hHash.GetLength() != 0 );
+
+	using HASHIT = std::pair<CSphString, CSphMultiforms*>;
+	auto * pMulti = m_pWordforms->m_pMultiWordforms; // shortcut
+	if ( pMulti )
+		bHaveData |= ::any_of ( pMulti->m_Hash, [] ( const HASHIT& tMF ) { return tMF.second && !tMF.second->m_pForms.IsEmpty(); } );
+
+	if ( !bHaveData )
+		return;
+
+	tOut.Named ( "word_forms" );
+	auto _ = tOut.ArrayW();
+
+	if ( m_pWordforms->m_hHash.GetLength() )
+		for ( const auto& tForm : m_pWordforms->m_hHash )
+		{
+			CSphString sLine;
+			sLine.SetSprintf ( "%s%s > %s", m_pWordforms->m_dNormalForms[tForm.second].m_bAfterMorphology ? "~" : "", tForm.first.cstr(), m_pWordforms->m_dNormalForms[tForm.second].m_sWord.cstr() );
+			tOut.FixupSpacedAndAppendEscaped ( sLine.cstr() );
+		}
+
+	if ( !pMulti )
+		return;
+
+	for ( const HASHIT& tForms : pMulti->m_Hash )
+	{
+		if ( !tForms.second )
+			continue;
+
+		for ( const CSphMultiform* pMF : tForms.second->m_pForms )
+		{
+			CSphString sLine, sTokens, sForms;
+			ConcatReportStrings ( pMF->m_dTokens, sTokens );
+			ConcatReportStrings ( pMF->m_dNormalForm, sForms );
+			sLine.SetSprintf ( "%s %s > %s", tForms.first.cstr(), sTokens.cstr(), sForms.cstr() );
+			tOut.FixupSpacedAndAppendEscaped ( sLine.cstr() );
 		}
 	}
 }
@@ -20297,6 +20343,7 @@ public:
 	bool LoadWordforms ( const StrVec_t & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) final
 		{ return m_pBase->LoadWordforms ( dFiles, pEmbedded, pTokenizer, sIndex ); }
 	void WriteWordforms ( CSphWriter & tWriter ) const final { m_pBase->WriteWordforms ( tWriter ); }
+	void WriteWordforms ( JsonEscapedBuilder & tOut ) const final { m_pBase->WriteWordforms ( tOut ); }
 	int SetMorphology ( const char * szMorph, CSphString & sMessage ) final { return m_pBase->SetMorphology ( szMorph, sMessage ); }
 	void Setup ( const CSphDictSettings & tSettings ) final { m_pBase->Setup ( tSettings ); }
 	const CSphDictSettings & GetSettings () const final { return m_pBase->GetSettings(); }

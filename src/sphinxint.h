@@ -954,6 +954,7 @@ public:
 	void		WriteStopwords ( JsonEscapedBuilder & tOut ) const final { m_pDict->WriteStopwords ( tOut ); }
 	bool		LoadWordforms ( const StrVec_t & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) final { return m_pDict->LoadWordforms ( dFiles, pEmbedded, pTokenizer, sIndex ); }
 	void		WriteWordforms ( CSphWriter & tWriter ) const final { m_pDict->WriteWordforms ( tWriter ); }
+	void		WriteWordforms ( JsonEscapedBuilder & tOut ) const final { m_pDict->WriteWordforms ( tOut ); }
 	int			SetMorphology ( const char * szMorph, CSphString & sMessage ) final { return m_pDict->SetMorphology ( szMorph, sMessage ); }
 
 	SphWordID_t	GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops ) final { return m_pDict->GetWordID ( pWord, iLen, bFilterStops ); }

@@ -196,7 +196,7 @@ inline bool operator < ( const Word_t & a, const Word_t & b)
 }
 
 
-class CSphStopwordBuilderDict : public CSphDict
+class CSphStopwordBuilderDict final : public DictStub_c
 {
 protected:
 	~CSphStopwordBuilderDict() override {}
@@ -207,22 +207,6 @@ public:
 public:
 	SphWordID_t	GetWordID ( BYTE * pWord ) final;
 	SphWordID_t	GetWordID ( const BYTE * pWord, int iLen, bool ) final;
-
-	void		LoadStopwords ( const char *, const ISphTokenizer *, bool ) final {}
-	void		LoadStopwords ( const CSphVector<SphWordID_t> & ) final {}
-	void		WriteStopwords ( CSphWriter & ) const final {}
-	bool		LoadWordforms ( const StrVec_t &, const CSphEmbeddedFiles *, const ISphTokenizer *, const char * ) final { return true; }
-	void		WriteWordforms ( CSphWriter & ) const final {}
-	int			SetMorphology ( const char *, CSphString & ) final { return ST_OK; }
-
-	void		Setup ( const CSphDictSettings & tSettings ) final { m_tSettings = tSettings; }
-	const CSphDictSettings & GetSettings () const final { return m_tSettings; }
-	const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () const final { return m_dSWFileInfos; }
-	const CSphVector <CSphSavedFile> & GetWordformsFileInfos () const final { return m_dWFFileInfos; }
-	const CSphMultiformContainer * GetMultiWordforms () const final { return nullptr; }
-	uint64_t		GetSettingsFNV () const final { return 0; }
-
-	bool IsStopWord ( const BYTE * ) const final { return false; }
 
 protected:
 	struct HashFunc_t

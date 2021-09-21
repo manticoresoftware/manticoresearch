@@ -17036,7 +17036,7 @@ bool CSphDict::DictIsError () const														{ return true; }
 // CRC32/64 DICTIONARIES
 /////////////////////////////////////////////////////////////////////////////
 
-struct CSphTemplateDictTraits : CSphDict
+struct CSphTemplateDictTraits : DictStub_c
 {
 	CSphTemplateDictTraits ();
 protected:
@@ -17053,11 +17053,6 @@ public:
 	int			SetMorphology ( const char * szMorph, CSphString & sMessage ) final;
 	bool		HasMorphology() const final;
 	void		ApplyStemmers ( BYTE * pWord ) const final;
-
-	void		Setup ( const CSphDictSettings & tSettings ) final { m_tSettings = tSettings; }
-	const CSphDictSettings & GetSettings () const final { return m_tSettings; }
-	const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () const final { return m_dSWFileInfos; }
-	const CSphVector <CSphSavedFile> & GetWordformsFileInfos () const final { return m_dWFFileInfos; }
 	const CSphMultiformContainer * GetMultiWordforms () const final;
 	uint64_t	GetSettingsFNV () const final;
 	static void			SweepWordformContainers ( const CSphVector<CSphSavedFile> & dFiles );
@@ -17084,10 +17079,6 @@ protected:
 
 private:
 	CSphWordforms *				m_pWordforms;
-	CSphVector<CSphSavedFile>	m_dSWFileInfos;
-	CSphVector<CSphSavedFile>	m_dWFFileInfos;
-	CSphDictSettings			m_tSettings;
-
 	static CSphVector<CSphWordforms*>		m_dWordformContainers;
 
 	CSphWordforms *		GetWordformContainer ( const CSphVector<CSphSavedFile> & dFileInfos, const StrVec_t * pEmbeddedWordforms, const ISphTokenizer * pTokenizer, const char * sIndex );

@@ -713,6 +713,31 @@ protected:
 	CSphString				m_sMorphFingerprint;
 };
 
+class DictStub_c : public CSphDict
+{
+protected:
+	CSphVector<CSphSavedFile>	m_dSWFileInfos;
+	CSphVector<CSphSavedFile>	m_dWFFileInfos;
+	CSphDictSettings			m_tSettings;
+
+public:
+	SphWordID_t GetWordID ( BYTE* ) override { return 0; }
+	SphWordID_t	GetWordID ( const BYTE *, int, bool ) override { return 0; };
+	void		LoadStopwords ( const char *, const ISphTokenizer *, bool ) override {};
+	void		LoadStopwords ( const CSphVector<SphWordID_t> & ) override {};
+	void		WriteStopwords ( CSphWriter & ) const override {};
+	bool		LoadWordforms ( const StrVec_t &, const CSphEmbeddedFiles *, const ISphTokenizer *, const char * ) override { return false; };
+	void		WriteWordforms ( CSphWriter & ) const override {};
+	int			SetMorphology ( const char *, CSphString & ) override { return ST_OK; }
+	void		Setup ( const CSphDictSettings & tSettings ) override { m_tSettings = tSettings; };
+	const CSphDictSettings & GetSettings () const override { return m_tSettings; }
+	const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () const override { return m_dSWFileInfos; }
+	const CSphVector <CSphSavedFile> & GetWordformsFileInfos () const override { return m_dWFFileInfos; }
+	const CSphMultiformContainer * GetMultiWordforms () const override { return nullptr;};
+	bool IsStopWord ( const BYTE * ) const override { return false; };
+	uint64_t		GetSettingsFNV () const override { return 0; };
+};
+
 using DictRefPtr_c = CSphRefcountedPtr<CSphDict>;
 
 /// returns pDict, if stateless. Or it's clone, if not

@@ -10637,6 +10637,8 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 		return;
 	}
 
+	GlobalCrashQueryGetRef().m_dIndex = FromStr ( tStmt.m_sIndex );
+
 	bool bPq = ( pServed->m_eType==IndexType_e::PERCOLATE );
 
 	auto * pIndex = (RtIndex_i *)pServed->m_pIndex;
@@ -12900,6 +12902,8 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * 
 		dErrors.Submit ( sName, sDistributed, sError.cstr() );
 		return 0;
 	}
+
+	GlobalCrashQueryGetRef().m_dIndex = FromStr ( sName );
 
 	RtAccum_t * pAccum = tAcc.GetAcc ( pIndex, sError );
 	if ( !sError.IsEmpty() )
@@ -15815,6 +15819,8 @@ public:
 				RtIndex_i * pIndex = m_tAcc.GetIndex();
 				if ( pIndex )
 				{
+					tCrashQuery.m_dIndex = FromStr ( pIndex->GetName() );
+
 					RtAccum_t * pAccum = m_tAcc.GetAcc ( pIndex, m_sError );
 					if ( !m_sError.IsEmpty() )
 					{

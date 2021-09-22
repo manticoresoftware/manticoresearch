@@ -88,12 +88,16 @@ static inline float logf ( float v )
 #if _WIN32
 void localtime_r ( const time_t * clock, struct tm * res )
 {
-	*res = *localtime ( clock );
+	tm * pRes = localtime ( clock );
+	if ( pRes )
+		*res = *pRes;
 }
 
 void gmtime_r ( const time_t * clock, struct tm * res )
 {
-	*res = *gmtime ( clock );
+	tm * pRes = gmtime ( clock );
+	if ( pRes )
+		*res = *pRes;
 }
 #endif
 

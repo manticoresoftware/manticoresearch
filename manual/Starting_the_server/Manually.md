@@ -49,11 +49,11 @@ $ searchd --console --pidfile
 $ searchd --config /etc/manticoresearch/manticore.conf --console
 ```
 * `--logdebug`, `--logreplication`, `--logdebugv`, and `--logdebugvv` options enable additional debug output in the server log. They differ by the logging verboseness level. These are debugging options, they pollute the log a lot, and thus they should *not* be normally enabled. (The normal use case for these is to enable them temporarily on request, to assist with some particularly complicated debugging session.)
-* `--iostats` is used in conjunction with the logging options (the `query_log` will need to have been activated in `manticore.conf`) to provide more detailed information on a per-query basis as to the input/output operations carried out in the course of that query, with a slight performance hit and of course bigger logs. The IO statistics don't include information about IO operations for attributes, as these are loaded with mmap(). To enable it you can start `searchd` so:
+* `--iostats` is used in conjunction with the logging options (the `query_log` will need to have been activated in `manticore.conf`) to provide more detailed information on a per-query basis as to the input/output operations carried out in the course of that query, with a slight performance hit and a little bit bigger logs. The IO statistics don't include information about IO operations for attributes, as these are loaded with mmap. To enable it you can start `searchd` so:
 ```bash
 $ searchd --config /etc/manticoresearch/manticore.conf --iostats
 ```
-* `--cpustats` is used to provide actual CPU time report (in addition to wall time) in both query log file (for every given query) and status report (aggregated). It depends on clock\_gettime() system call or fall back to less precise call on certain systems. You might start `searchd` thus:
+* `--cpustats` is used to provide actual CPU time report (in addition to wall time) in both query log file (for every given query) and status report (aggregated). It depends on `clock_gettime()` Linux system call or falls back to less precise call on certain systems. You might start `searchd` thus:
 ```bash
 $ searchd --config /etc/manticoresearch/manticore.conf --cpustats
 ```

@@ -6388,7 +6388,9 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 			bInterrupt = !tGuard.m_dDiskChunks[iChunk]->Cidx().MultiQuery ( tChunkResult, tQuery, dLocalSorters, tMultiArgs );
 
 			// check terms inconsistency among disk chunks
-			tCtx.m_tMeta.MergeWordStats ( tChunkMeta );
+			tThMeta.MergeWordStats ( tChunkMeta );
+
+			tThMeta.m_bHasPrediction |= tChunkMeta.m_bHasPrediction;
 
 			tSSTransform.Set ( iChunk, tChunkResult );
 

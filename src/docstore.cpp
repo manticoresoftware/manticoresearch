@@ -10,6 +10,7 @@
 
 #include "docstore.h"
 
+#include "lrucache.h"
 #include "fileio.h"
 #include "memio.h"
 #include "fileutils.h"
@@ -283,188 +284,54 @@ void DocstoreFields_c::Save ( CSphWriter & tWriter )
 
 //////////////////////////////////////////////////////////////////////////
 
-class BlockCache_c
+struct BlockData_t
 {
-public:
-	struct BlockData_t
+	BYTE	m_uFlags = 0;
+	DWORD	m_uNumDocs = 0;
+	BYTE *	m_pData = nullptr;
+	DWORD	m_uSize = 0;
+};
+
+
+struct HashKey_t
+{
+	DWORD		m_uUID;
+	SphOffset_t	m_tOffset;
+
+	bool operator == ( const HashKey_t & tKey ) const { return m_uUID==tKey.m_uUID && m_tOffset==tKey.m_tOffset; }
+};
+
+
+struct BlockUtil_t
+{
+	static DWORD GetHash ( const HashKey_t & tKey )
 	{
-		BYTE	m_uFlags = 0;
-		DWORD	m_uNumDocs = 0;
-		BYTE *	m_pData = nullptr;
-		DWORD	m_uSize = 0;
-	};
+		DWORD uCRC32 = sphCRC32 ( &tKey.m_uUID, sizeof(tKey.m_uUID) );
+		return sphCRC32 ( &tKey.m_tOffset, sizeof(tKey.m_tOffset), uCRC32 );
+	}
 
-							BlockCache_c ( int64_t iCacheSize );
-							~BlockCache_c();
+	static DWORD GetSize ( const BlockData_t & tValue )	{ return tValue.m_uSize; }
+	static void Reset ( BlockData_t & tValue )			{ SafeDeleteArray ( tValue.m_pData ); }
+};
 
-	bool					Find ( DWORD uUID, SphOffset_t tOffset, BlockData_t & tData );
-	bool					Add ( DWORD uUID, SphOffset_t tOffset, BlockData_t & tData );
-	void					Release ( DWORD uUID, SphOffset_t tOffset );
+
+class BlockCache_c : public LRUCache_T<HashKey_t, BlockData_t, BlockUtil_t>
+{
+	using BASE = LRUCache_T<HashKey_t, BlockData_t, BlockUtil_t>;
+	using BASE::BASE;
+
+public:
 	void					DeleteAll ( DWORD uUID );
 
 	static void				Init ( int64_t iCacheSize );
-	static void				Done();
-	static BlockCache_c *	Get();
+	static void				Done()	{ SafeDelete(m_pBlockCache); }
+	static BlockCache_c *	Get()	{ return m_pBlockCache; }
 
 private:
-	struct HashKey_t
-	{
-		DWORD		m_uUID;
-		SphOffset_t	m_tOffset;
-
-		bool operator == ( const HashKey_t & tKey ) const;
-		static DWORD Hash ( const HashKey_t & tKey );
-	};
-
-	struct LinkedBlock_t : BlockData_t
-	{
-		int				m_iRefcount = 0;
-		LinkedBlock_t *	m_pPrev = nullptr;
-		LinkedBlock_t *	m_pNext = nullptr;
-		HashKey_t		m_tKey;
-	};
-
 	static BlockCache_c *	m_pBlockCache;
-
-	LinkedBlock_t *			m_pHead = nullptr;
-	LinkedBlock_t *			m_pTail = nullptr;
-	int64_t					m_iCacheSize = 0;
-	int64_t					m_iMemUsed = 0;
-	CSphMutex				m_tLock;
-	CSphOrderedHash<LinkedBlock_t *, HashKey_t, HashKey_t, 32768> m_tHash;
-
-	void					MoveToHead ( LinkedBlock_t * pBlock );
-	void					Add ( LinkedBlock_t * pBlock );
-	void					Delete ( LinkedBlock_t * pBlock );
-	void					SweepUnused ( DWORD uSpaceNeeded );
-	bool					HaveSpaceFor ( DWORD uSpaceNeeded ) const;
 };
 
 BlockCache_c * BlockCache_c::m_pBlockCache = nullptr;
-
-
-bool BlockCache_c::HashKey_t::operator == ( const HashKey_t & tKey ) const
-{
-	return m_uUID==tKey.m_uUID && m_tOffset==tKey.m_tOffset;
-}
-
-
-DWORD BlockCache_c::HashKey_t::Hash ( const HashKey_t & tKey )
-{
-	DWORD uCRC32 = sphCRC32 ( &tKey.m_uUID, sizeof(tKey.m_uUID) );
-	return sphCRC32 ( &tKey.m_tOffset, sizeof(tKey.m_tOffset), uCRC32 );
-}
-
-
-BlockCache_c::BlockCache_c ( int64_t iCacheSize )
-	: m_iCacheSize ( iCacheSize )
-{}
-
-
-BlockCache_c::~BlockCache_c()
-{
-	LinkedBlock_t * pBlock = m_pHead;
-	while ( pBlock )
-	{
-		LinkedBlock_t * pToDelete = pBlock;
-		pBlock = pBlock->m_pNext;
-		Delete(pToDelete);
-	}
-}
-
-
-void BlockCache_c::MoveToHead ( LinkedBlock_t * pBlock )
-{
-	assert ( pBlock );
-
-	if ( pBlock==m_pHead )
-		return;
-
-	if ( m_pTail==pBlock )
-		m_pTail = pBlock->m_pPrev;
-
-	if ( pBlock->m_pPrev )
-		pBlock->m_pPrev->m_pNext = pBlock->m_pNext;
-
-	if ( pBlock->m_pNext )
-		pBlock->m_pNext->m_pPrev = pBlock->m_pPrev;
-
-	pBlock->m_pPrev = nullptr;
-	pBlock->m_pNext = m_pHead;
-	m_pHead->m_pPrev = pBlock;
-	m_pHead = pBlock;
-}
-
-
-void BlockCache_c::Add ( LinkedBlock_t * pBlock )
-{
-	pBlock->m_pNext = m_pHead;
-	if ( m_pHead )
-		m_pHead->m_pPrev = pBlock;
-
-	if ( !m_pTail )
-		m_pTail = pBlock;
-
-	m_pHead = pBlock;
-
-	Verify ( m_tHash.Add ( pBlock, pBlock->m_tKey ) );
-
-	m_iMemUsed += pBlock->m_uSize + sizeof(LinkedBlock_t);
-}
-
-
-void BlockCache_c::Delete ( LinkedBlock_t * pBlock )
-{
-	Verify ( m_tHash.Delete ( pBlock->m_tKey ) );
-
-	if ( m_pHead == pBlock )
-		m_pHead = pBlock->m_pNext;
-
-	if ( m_pTail==pBlock )
-		m_pTail = pBlock->m_pPrev;
-
-	if ( pBlock->m_pPrev )
-		pBlock->m_pPrev->m_pNext = pBlock->m_pNext;
-
-	if ( pBlock->m_pNext )
-		pBlock->m_pNext->m_pPrev = pBlock->m_pPrev;
-
-	m_iMemUsed -= pBlock->m_uSize + sizeof(LinkedBlock_t);
-	assert ( m_iMemUsed>=0 );
-
-	SafeDeleteArray ( pBlock->m_pData );
-	SafeDelete(pBlock);
-}
-
-
-bool BlockCache_c::Find ( DWORD uUID, SphOffset_t tOffset, BlockData_t & tData )
-{
-	ScopedMutex_t tLock(m_tLock);
-
-	LinkedBlock_t ** ppBlock = m_tHash ( { uUID, tOffset } );
-	if ( !ppBlock )
-		return false;
-
-	MoveToHead ( *ppBlock );
-	
-	(*ppBlock)->m_iRefcount++;
-	tData = *(BlockData_t*)(*ppBlock);
-	return true;
-}
-
-
-void BlockCache_c::Release ( DWORD uUID, SphOffset_t tOffset )
-{
-	ScopedMutex_t tLock(m_tLock);
-
-	LinkedBlock_t ** ppBlock = m_tHash ( { uUID, tOffset } );
-	assert(ppBlock);
-
-	LinkedBlock_t * pBlock = *ppBlock;
-	pBlock->m_iRefcount--;
-	assert ( pBlock->m_iRefcount>=0 );
-}
-
 
 void BlockCache_c::DeleteAll ( DWORD uUID )
 {
@@ -486,79 +353,11 @@ void BlockCache_c::DeleteAll ( DWORD uUID )
 }
 
 
-bool BlockCache_c::Add ( DWORD uUID, SphOffset_t tOffset, BlockData_t & tData )
-{
-	ScopedMutex_t tLock(m_tLock);
-
-	// if another thread managed to add a similar block while we were uncompressing ours, let it be
-	LinkedBlock_t ** ppBlock = m_tHash ( { uUID, tOffset } );
-	if ( ppBlock )
-		return false;
-
-	DWORD uSpaceNeeded = tData.m_uSize + sizeof(LinkedBlock_t);
-	if ( !HaveSpaceFor ( uSpaceNeeded ) )
-	{
-		DWORD MAX_BLOCK_SIZE = m_iCacheSize/64;
-		if ( uSpaceNeeded>MAX_BLOCK_SIZE )
-			return false;
-
-		SweepUnused ( uSpaceNeeded );
-		if ( !HaveSpaceFor ( uSpaceNeeded ) )
-			return false;
-	}
-
-	LinkedBlock_t * pBlock = new LinkedBlock_t;
-	*(BlockData_t*)pBlock = tData;
-	pBlock->m_iRefcount++;
-	pBlock->m_tKey = { uUID, tOffset };
-
-	Add ( pBlock );
-	return true;
-}
-
-
-void BlockCache_c::SweepUnused ( DWORD uSpaceNeeded )
-{
-	// least recently used blocks are the tail
-	LinkedBlock_t * pBlock = m_pTail;
-	while ( pBlock && !HaveSpaceFor ( uSpaceNeeded ) )
-	{
-		if ( !pBlock->m_iRefcount )
-		{
-			assert ( !pBlock->m_iRefcount );
-			LinkedBlock_t * pToDelete = pBlock;
-			pBlock = pBlock->m_pPrev;
-			Delete(pToDelete);
-		}
-		else
-			pBlock = pBlock->m_pPrev;
-	}
-}
-
-
-bool BlockCache_c::HaveSpaceFor ( DWORD uSpaceNeeded ) const
-{
-	return m_iMemUsed+uSpaceNeeded <= m_iCacheSize;
-}
-
-
 void BlockCache_c::Init ( int64_t iCacheSize )
 {
 	assert ( !m_pBlockCache );
 	if ( iCacheSize > 0 )
 		m_pBlockCache = new BlockCache_c(iCacheSize);
-}
-
-
-void BlockCache_c::Done()
-{
-	SafeDelete(m_pBlockCache);
-}
-
-
-BlockCache_c * BlockCache_c::Get()
-{
-	return m_pBlockCache;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -779,11 +578,10 @@ private:
 	void						ReadFromFile ( BYTE * pData, int iLength, SphOffset_t tOffset, int64_t iSessionId ) const;
 	DocstoreDoc_t				ReadDocFromSmallBlock ( const Block_t & tBlock, RowID_t tRowID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const;
 	DocstoreDoc_t				ReadDocFromBigBlock ( const Block_t & tBlock, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const;
-	BlockCache_c::BlockData_t	UncompressSmallBlock ( const Block_t & tBlock, int64_t iSessionId ) const;
-	BlockCache_c::BlockData_t	UncompressBigBlockField ( SphOffset_t tOffset, const FieldInfo_t & tInfo, int64_t iSessionId ) const;
+	BlockData_t					UncompressSmallBlock ( const Block_t & tBlock, int64_t iSessionId ) const;
+	BlockData_t					UncompressBigBlockField ( SphOffset_t tOffset, const FieldInfo_t & tInfo, int64_t iSessionId ) const;
 
-	bool						ProcessSmallBlockDoc ( RowID_t tCurDocRowID, RowID_t tRowID, const VecTraits_T<int> * pFieldIds, const CSphFixedVector<int> & dFieldInRset, bool bPack,
-		MemoryReader2_c & tReader, CSphBitvec & tEmptyFields, DocstoreDoc_t & tResult ) const;
+	bool						ProcessSmallBlockDoc ( RowID_t tCurDocRowID, RowID_t tRowID, const VecTraits_T<int> * pFieldIds, const CSphFixedVector<int> & dFieldInRset, bool bPack, MemoryReader2_c & tReader, CSphBitvec & tEmptyFields, DocstoreDoc_t & tResult ) const;
 	void						ProcessBigBlockField ( int iField, const FieldInfo_t & tInfo, int iFieldInRset, bool bPack, int64_t iSessionId, SphOffset_t & tOffset, DocstoreDoc_t & tResult ) const;
 };
 
@@ -933,7 +731,7 @@ struct ScopedBlock_t
 
 		BlockCache_c * pBlockCache = BlockCache_c::Get();
 		assert ( pBlockCache );
-		pBlockCache->Release ( m_uUID, m_tOffset );
+		pBlockCache->Release ( { m_uUID, m_tOffset } );
 	}
 };
 
@@ -955,9 +753,9 @@ void Docstore_c::ReadFromFile ( BYTE * pData, int iLength, SphOffset_t tOffset, 
 }
 
 
-BlockCache_c::BlockData_t Docstore_c::UncompressSmallBlock ( const Block_t & tBlock, int64_t iSessionId ) const
+BlockData_t Docstore_c::UncompressSmallBlock ( const Block_t & tBlock, int64_t iSessionId ) const
 {
-	BlockCache_c::BlockData_t tResult;
+	BlockData_t tResult;
 	CSphFixedVector<BYTE> dBlock ( tBlock.m_uSize );
 
 	ReadFromFile ( dBlock.Begin(), dBlock.GetLength(), tBlock.m_tOffset, iSessionId );
@@ -1035,12 +833,12 @@ DocstoreDoc_t Docstore_c::ReadDocFromSmallBlock ( const Block_t & tBlock, RowID_
 {
 	BlockCache_c * pBlockCache = BlockCache_c::Get();
 
-	BlockCache_c::BlockData_t tBlockData;
-	bool bFromCache = pBlockCache && pBlockCache->Find ( m_uUID, tBlock.m_tOffset, tBlockData );
+	BlockData_t tBlockData;
+	bool bFromCache = pBlockCache && pBlockCache->Find ( { m_uUID, tBlock.m_tOffset }, tBlockData );
 	if ( !bFromCache )
 	{
 		tBlockData = UncompressSmallBlock ( tBlock, iSessionId );
-		bFromCache = pBlockCache && pBlockCache->Add ( m_uUID, tBlock.m_tOffset, tBlockData );
+		bFromCache = pBlockCache && pBlockCache->Add ( { m_uUID, tBlock.m_tOffset }, tBlockData );
 	}
 
 	ScopedBlock_t tScopedBlock;
@@ -1073,9 +871,9 @@ DocstoreDoc_t Docstore_c::ReadDocFromSmallBlock ( const Block_t & tBlock, RowID_
 }
 
 
-BlockCache_c::BlockData_t Docstore_c::UncompressBigBlockField ( SphOffset_t tOffset, const FieldInfo_t & tInfo, int64_t iSessionId ) const
+BlockData_t Docstore_c::UncompressBigBlockField ( SphOffset_t tOffset, const FieldInfo_t & tInfo, int64_t iSessionId ) const
 {
-	BlockCache_c::BlockData_t tResult;
+	BlockData_t tResult;
 	bool bCompressed = !!( tInfo.m_uFlags & FIELD_FLAG_COMPRESSED );
 	DWORD uDataLen = bCompressed ? tInfo.m_uCompressedLen : tInfo.m_uUncompressedLen;
 
@@ -1113,12 +911,12 @@ void Docstore_c::ProcessBigBlockField ( int iField, const FieldInfo_t & tInfo, i
 
 	BlockCache_c * pBlockCache = BlockCache_c::Get();
 
-	BlockCache_c::BlockData_t tBlockData;
-	bool bFromCache = pBlockCache && pBlockCache->Find ( m_uUID, tOffset, tBlockData );
+	BlockData_t tBlockData;
+	bool bFromCache = pBlockCache && pBlockCache->Find ( { m_uUID, tOffset }, tBlockData );
 	if ( !bFromCache )
 	{
 		tBlockData = UncompressBigBlockField ( tOffset, tInfo, iSessionId );
-		bFromCache = pBlockCache && pBlockCache->Add ( m_uUID, tOffset, tBlockData );
+		bFromCache = pBlockCache && pBlockCache->Add ( { m_uUID, tOffset }, tBlockData );
 	}
 
 	ScopedBlock_t tScopedBlock;
@@ -2002,7 +1800,7 @@ void DocstoreChecker_c::CheckSmallBlock ( const Docstore_c::Block_t & tBlock )
 	m_tReader.GetBytes ( dBlock.Begin(), dBlock.GetLength() );
 
 	MemoryReader2_c tBlockReader ( dBlock.Begin(), dBlock.GetLength() );
-	BlockCache_c::BlockData_t tResult;
+	BlockData_t tResult;
 	tResult.m_uFlags = tBlockReader.GetByte();
 	tResult.m_uNumDocs = tBlockReader.UnzipInt();
 	tResult.m_uSize = tBlockReader.UnzipInt();
@@ -2054,7 +1852,7 @@ void DocstoreChecker_c::CheckBigBlockField ( const Docstore_c::FieldInfo_t & tIn
 
 	bool bCompressed = !!( tInfo.m_uFlags & FIELD_FLAG_COMPRESSED );
 	SphOffset_t tOffsetDelta = bCompressed ? tInfo.m_uCompressedLen : tInfo.m_uUncompressedLen;
-	BlockCache_c::BlockData_t tBlockData;
+	BlockData_t tBlockData;
 
 	CSphFixedVector<BYTE> dField ( tOffsetDelta );
 	m_tReader.SeekTo ( tOffset, 0 );

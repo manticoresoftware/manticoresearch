@@ -2466,33 +2466,34 @@ public:
 	}
 
 	/// copying ctor
-	CSphOrderedHash ( const CSphOrderedHash& rhs )
-	    : CSphOrderedHash ()
+	CSphOrderedHash ( const CSphOrderedHash & rhs )
+		: CSphOrderedHash ()
 	{
-		for ( rhs.IterateStart (); rhs.IterateNext (); )
-			Add ( rhs.IterateGet (), rhs.IterateGetKey ());
+		void * pIterator = nullptr;
+		while ( rhs.IterateNext ( &pIterator ) )
+			Add ( rhs.IterateGet ( &pIterator ), rhs.IterateGetKey ( &pIterator ) );
 	}
 
 	/// moving ctor
-	CSphOrderedHash ( CSphOrderedHash&& rhs ) noexcept
+	CSphOrderedHash ( CSphOrderedHash && rhs ) noexcept
 		: CSphOrderedHash ()
 	{
 		Swap(rhs);
 	}
 
-	void Swap ( CSphOrderedHash& rhs ) noexcept
+	void Swap ( CSphOrderedHash & rhs ) noexcept
 	{
-		HashEntry_t* dFoo[LENGTH];
-		memcpy ( dFoo, m_dHash, LENGTH * sizeof ( HashEntry_t* ));
-		memcpy ( m_dHash, rhs.m_dHash, LENGTH * sizeof ( HashEntry_t* ));
-		memcpy ( rhs.m_dHash, dFoo, LENGTH * sizeof ( HashEntry_t* ));
+		HashEntry_t * dFoo[LENGTH];
+		memcpy ( dFoo, m_dHash, LENGTH * sizeof ( HashEntry_t* ) );
+		memcpy ( m_dHash, rhs.m_dHash, LENGTH * sizeof ( HashEntry_t* ) );
+		memcpy ( rhs.m_dHash, dFoo, LENGTH * sizeof ( HashEntry_t* ) );
 		::Swap ( m_pFirstByOrder, rhs.m_pFirstByOrder );
 		::Swap ( m_pLastByOrder, rhs.m_pLastByOrder );
 		::Swap ( m_iLength, rhs.m_iLength );
 	}
 
 	/// copying & moving
-	CSphOrderedHash& operator= ( CSphOrderedHash rhs )
+	CSphOrderedHash & operator = ( CSphOrderedHash rhs )
 	{
 		Swap ( rhs );
 		return *this;

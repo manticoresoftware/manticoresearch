@@ -141,34 +141,142 @@ static inline bool WarmupDocs ( const ExtDoc_t * & pDocL, const ExtDoc_t * pDocR
 	return true;
 }
 
-
 //////////////////////////////////////////////////////////////////////////
 
 class ExtNode_c : public ExtNode_i
 {
 public:
-	static const int			MAX_HITS = 512;
+	static const int		MAX_HITS = 512;
 
-								ExtNode_c();
+							ExtNode_c();
 
-	virtual const ExtHit_t *	GetHits ( const ExtDoc_t * pDocs ) final;
-	void						DebugDump ( int iLevel ) override;
-	void 						SetAtomPos ( int iPos ) override;
-	int							GetAtomPos() const override;
-	void						SetQPosReverse();
+	const ExtHit_t *		GetHits ( const ExtDoc_t * pDocs ) override;
+	void					DebugDump ( int iLevel ) override;
+	void 					SetAtomPos ( int iPos ) override;
+	int						GetAtomPos() const override;
+	void					SetQPosReverse();
 
 protected:
-	ExtDoc_t					m_dDocs[MAX_BLOCK_DOCS];
-	CSphVector<ExtHit_t>		m_dHits;
-	bool						m_bQPosReverse {false};
-	int							m_iAtomPos {0};		///< we now need it on this level for tricks like expanded keywords within phrases
+	ExtDoc_t				m_dDocs[MAX_BLOCK_DOCS];
+	CSphVector<ExtHit_t>	m_dHits;
+	bool					m_bQPosReverse {false};
+	int						m_iAtomPos {0};		///< we now need it on this level for tricks like expanded keywords within phrases
 
-	virtual void				CollectHits ( const ExtDoc_t * pDocs ) = 0;
+	virtual void			CollectHits ( const ExtDoc_t * pDocs ) = 0;
 
-	inline const ExtDoc_t *		ReturnDocsChunk ( int iCount, const char * sNode, const char * sTerm=nullptr );
-	inline const ExtHit_t *		ReturnHitsChunk ( int iCount, const char * sNode, bool bReverse );
-	inline const ExtHit_t *		ReturnHits ( bool bReverse );
+	inline const ExtDoc_t *	ReturnDocsChunk ( int iCount, const char * sNode, const char * sTerm=nullptr );
+	inline const ExtHit_t *	ReturnHitsChunk ( int iCount, const char * sNode, bool bReverse );
+	inline const ExtHit_t *	ReturnHits ( bool bReverse );
 };
+
+//////////////////////////////////////////////////////////////////////////
+
+class ExtRowIdRange_c : public ExtNode_c
+{
+public:
+						ExtRowIdRange_c ( ExtNode_i * pNode, const RowIdBoundaries_t & tBoundaries );
+						~ExtRowIdRange_c() { SafeDelete(m_pNode); } 
+
+	const ExtDoc_t *	GetDocsChunk() override;
+	const ExtHit_t *	GetHits ( const ExtDoc_t * pDocs ) final { return m_pNode->GetHits(pDocs); }
+	void				Reset ( const ISphQwordSetup & tSetup ) final;
+	void				HintRowID ( RowID_t tRowID ) final				{ m_pNode->HintRowID(tRowID); }
+	int					GetQwords ( ExtQwordsHash_t & hQwords ) final	{ return m_pNode->GetQwords(hQwords); }
+	void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords ) final { m_pNode->SetQwordsIDF(hQwords); }
+	void				GetTerms ( const ExtQwordsHash_t & hQwords, CSphVector<TermPos_t> & dTermDupes ) const final { m_pNode->GetTerms ( hQwords, dTermDupes ); }
+	bool				GotHitless() final								{ return m_pNode->GotHitless(); }
+	uint64_t			GetWordID() const final							{ return m_pNode->GetWordID(); }
+
+protected:
+	void				CollectHits ( const ExtDoc_t * pDocs ) final	{ assert ( 0 && "ExtRowIdRange_c doesn't collect hits" ); }
+
+private:
+	ExtNode_i *			m_pNode = nullptr;
+	RowIdBoundaries_t	m_tBoundaries;
+
+	inline const ExtDoc_t * FilterHead ( const ExtDoc_t * pDocStart );
+	inline const ExtDoc_t * FilterTail ( const ExtDoc_t * pDocStart );
+};
+
+
+ExtRowIdRange_c::ExtRowIdRange_c ( ExtNode_i * pNode, const RowIdBoundaries_t & tBoundaries )
+	: m_pNode ( pNode )
+	, m_tBoundaries ( tBoundaries )
+{
+	assert(pNode);
+	pNode->HintRowID ( m_tBoundaries.m_tMinRowID );
+}
+
+
+const ExtDoc_t * ExtRowIdRange_c::GetDocsChunk()
+{
+	const ExtDoc_t * pDocs = m_pNode->GetDocsChunk();
+	if ( !pDocs )
+		return nullptr;
+
+	if (pDocs->m_tRowID<m_tBoundaries.m_tMinRowID )
+		return FilterHead(pDocs);
+
+	return FilterTail(pDocs);
+}
+
+
+void ExtRowIdRange_c::Reset ( const ISphQwordSetup & tSetup )
+{
+	m_pNode->Reset(tSetup);
+
+	// this node is stored as the original root node in the ranker and restored on Reset
+	// so no mem leak here
+	m_pNode = nullptr;
+}
+
+
+const ExtDoc_t * ExtRowIdRange_c::FilterHead ( const ExtDoc_t * pDocStart )
+{
+	const ExtDoc_t * pDoc = pDocStart;
+
+	// filter the whole chunk
+	while (true)
+	{
+		while ( pDoc->m_tRowID<m_tBoundaries.m_tMinRowID && pDoc->m_tRowID!=INVALID_ROWID )
+			pDoc++;
+
+		if ( pDoc->m_tRowID!=INVALID_ROWID )
+			break;
+
+		pDoc = m_pNode->GetDocsChunk();
+		if ( !pDoc )
+			return nullptr;
+	}
+
+	ExtDoc_t * pDstDoc = &m_dDocs[0];
+	while ( pDoc->m_tRowID<=m_tBoundaries.m_tMaxRowID && pDoc->m_tRowID!=INVALID_ROWID )
+		*pDstDoc++ = *pDoc++;
+
+	pDstDoc->m_tRowID = INVALID_ROWID;
+	return m_dDocs;
+}
+
+
+const ExtDoc_t * ExtRowIdRange_c::FilterTail ( const ExtDoc_t * pDocStart )
+{
+	const ExtDoc_t * pDoc = pDocStart;
+
+	// cut the tail
+	while ( pDoc->m_tRowID!=INVALID_ROWID )
+	{
+		if ( pDoc->m_tRowID>m_tBoundaries.m_tMaxRowID )
+		{
+			const_cast<ExtDoc_t *>(pDoc)->m_tRowID = INVALID_ROWID;	// hack to avoid copying the doclist
+			break;
+		}
+
+		pDoc++;
+	}
+
+	// signal the end if we stopped at the first doc
+	return pDoc==pDocStart ? nullptr : pDocStart;
+}
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -5888,6 +5996,11 @@ ExtNode_i * CSphQueryNodeCache::CreateProxy ( ExtNode_i * pChild, const XQNode_t
 }
 
 //////////////////////////////////////////////////////////////////////////
+
+ExtNode_i * CreateRowIdFilterNode ( ExtNode_i * pNode, const RowIdBoundaries_t & tBoundaries )
+{
+	return new ExtRowIdRange_c ( pNode, tBoundaries );
+}
 
 /// Immediately interrupt current operation
 void sphInterruptNow()

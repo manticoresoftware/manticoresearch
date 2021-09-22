@@ -26,6 +26,26 @@ bool operator < ( const SkiplistEntry_t & a, RowID_t b )	{ return a.m_tBaseRowID
 bool operator == ( const SkiplistEntry_t & a, RowID_t b )	{ return a.m_tBaseRowIDPlus1==b; }
 bool operator < ( RowID_t a, const SkiplistEntry_t & b )	{ return a<b.m_tBaseRowIDPlus1; }
 
+
+void SkipData_t::Read ( const BYTE * pSkips, const CSphDictEntry & tRes, int iDocs, int iSkipBlockSize )
+{
+	const BYTE * pSkip = pSkips + tRes.m_iSkiplistOffset;
+
+	m_dSkiplist.Add();
+	m_dSkiplist.Last().m_tBaseRowIDPlus1 = 0;
+	m_dSkiplist.Last().m_iOffset = tRes.m_iDoclistOffset;
+	m_dSkiplist.Last().m_iBaseHitlistPos = 0;
+
+	for ( int i=1; i < iDocs/iSkipBlockSize; i++ )
+	{
+		SkiplistEntry_t & t = m_dSkiplist.Add();
+		SkiplistEntry_t & p = m_dSkiplist [ m_dSkiplist.GetLength()-2 ];
+		t.m_tBaseRowIDPlus1 = p.m_tBaseRowIDPlus1 + iSkipBlockSize + sphUnzipInt(pSkip);
+		t.m_iOffset = p.m_iOffset + 4*iSkipBlockSize + sphUnzipOffset(pSkip);
+		t.m_iBaseHitlistPos = p.m_iBaseHitlistPos + sphUnzipOffset(pSkip);
+	}
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 #define SPH_TREE_DUMP			0
@@ -125,20 +145,21 @@ public:
 	// FIXME? hide and friend?
 	SphZoneHit_e				IsInZone ( int iZone, const ExtHit_t * pHit, int * pLastSpan ) override;
 	virtual const CSphIndex *	GetIndex() { return m_pIndex; }
-	const CSphQueryContext * GetCtx() const { return m_pCtx; }
+	const CSphQueryContext *	GetCtx() const { return m_pCtx; }
 
 public:
-	CSphMatch					m_dMatches[MAX_BLOCK_DOCS];	///< exposed for caller
+	CSphMatch					m_dMatches[MAX_BLOCK_DOCS];			///< exposed for caller
 	DWORD						m_uPayloadMask = 0;					///< exposed for ranker state functors
 	int							m_iQwords = 0;						///< exposed for ranker state functors
 	int							m_iMaxQpos = 0;						///< max in-query pos among all keywords, including dupes; for ranker state functors
 
 protected:
 	ExtNode_i *					m_pRoot = nullptr;
+	ExtNode_i *					m_pOriginalRoot = nullptr;			///< set if we replace the original root
 	const ExtDoc_t *			m_pDoclist = nullptr;
 	const ExtHit_t *			m_pHitlist = nullptr;
-	ExtDoc_t					m_dMyDocs[MAX_BLOCK_DOCS];		///< my local documents pool; for filtering
-	CSphMatch					m_dMyMatches[MAX_BLOCK_DOCS];	///< my local matches pool; for filtering
+	ExtDoc_t					m_dMyDocs[MAX_BLOCK_DOCS];			///< my local documents pool; for filtering
+	CSphMatch					m_dMyMatches[MAX_BLOCK_DOCS];		///< my local matches pool; for filtering
 	CSphMatch					m_tTestMatch;
 	const CSphIndex *			m_pIndex = nullptr;					///< this is he who'll do my filtering!
 	CSphQueryContext *			m_pCtx = nullptr;
@@ -158,6 +179,22 @@ protected:
 
 	void						CleanupZones ( RowID_t tMaxRowID );
 	void						UpdateQcache ( int iMatches );
+
+	bool ExtraDataImpl ( ExtraData_e eType, void ** ppResult ) override
+	{
+		if ( eType==EXTRA_SET_BOUNDARIES )
+		{
+			if ( !m_pRoot )
+				return true;
+
+			assert ( !m_pOriginalRoot );
+			m_pOriginalRoot = m_pRoot;
+			m_pRoot = CreateRowIdFilterNode ( m_pRoot, *(const RowIdBoundaries_t*)ppResult );
+			return true;
+		}
+
+		return false;
+	}
 };
 
 
@@ -213,10 +250,7 @@ public:
 template < typename STATE, bool USE_BM25 >
 class ExtRanker_State_T : public ExtRanker_T<USE_BM25>
 {
-protected:
-	STATE				m_tState;
-	const ExtHit_t *	m_pHitBase;
-	CSphVector<int>		m_dZonespans; // zonespanlists for my matches
+	using BASE = ExtRanker_T<USE_BM25>;
 
 public:
 					ExtRanker_State_T ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, bool bSkipQCache, bool bCollectHits = true );
@@ -227,15 +261,24 @@ public:
 		return m_tState.Init ( tCtx.m_iWeights, &tCtx.m_dWeights[0], this, sError, tCtx.m_uPackedFactorFlags );
 	}
 
+protected:
+	STATE				m_tState;
+	const ExtHit_t *	m_pHitBase;
+	CSphVector<int>		m_dZonespans; // zonespanlists for my matches
+
 private:
 	bool ExtraDataImpl ( ExtraData_e eType, void ** ppResult ) override
 	{
+		if ( BASE::ExtraDataImpl ( eType, ppResult ) )
+			return true;
+
 		switch ( eType )
 		{
 			case EXTRA_GET_DATA_ZONESPANS:
 				assert ( ppResult );
 				*ppResult = &m_dZonespans;
 				return true;
+
 			default:
 				return m_tState.ExtraData ( eType, ppResult );
 		}
@@ -643,6 +686,15 @@ void ExtRanker_c::Reset ( const ISphQwordSetup & tSetup )
 {
 	if ( m_pRoot )
 		m_pRoot->Reset ( tSetup );
+
+	if ( m_pOriginalRoot )
+	{
+		// restore the tree to its original state before switching to the next chunk
+		SafeDelete(m_pRoot);
+		m_pRoot = m_pOriginalRoot;
+		m_pOriginalRoot = nullptr;
+	}
+
 	ARRAY_FOREACH ( i, m_dZones )
 	{
 		m_dZoneStartTerm[i]->Reset ( tSetup );

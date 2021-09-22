@@ -3,10 +3,6 @@
 
 <name>bigint timestamp</name>
 
-<requires>
-<non-windows/>
-</requires>
-
 <config>
 indexer
 {
@@ -56,21 +52,17 @@ index test
 
 	set global grouping_in_utc=0;
 	show variables like 'grouping%';
-	select tm, day(tm) d from idx_bigint where match('aaaa') group by d;
-	select tm, month(tm) d from idx_bigint where match('aaaa') group by d;
-	select tm, year(tm) d from idx_bigint where match('aaaa') group by d;
-	select tm, yearmonth(tm) d from idx_bigint where match('aaaa') group by d;
-	select tm, yearmonthday(tm) d from idx_bigint where match('aaaa') group by d;
+	select id, year(tm) d from idx_bigint where match('aaaa') group by d WITHIN GROUP order by id desc order by id desc;
 
 	<!-- check whether settings works at all -->
 	set global grouping_in_utc=1;
 	show variables like 'grouping_in_utc';
 	<!-- check again -->
-	select tm, day(tm) d from idx_bigint where match('aaaa') group by d;
-	select tm, month(tm) d from idx_bigint where match('aaaa') group by d;
-	select tm, year(tm) d from idx_bigint where match('aaaa') group by d;
-	select tm, yearmonth(tm) d from idx_bigint where match('aaaa') group by d;
-	select tm, yearmonthday(tm) d from idx_bigint where match('aaaa') group by d;
+	select tm, day(tm) d from idx_bigint where match('aaaa') group by d WITHIN GROUP order by id desc order by id desc;
+	select tm, month(tm) d from idx_bigint where match('aaaa') group by d WITHIN GROUP order by id desc order by id desc;
+	select tm, year(tm) d from idx_bigint where match('aaaa') group by d WITHIN GROUP order by id desc order by id desc;
+	select tm, yearmonth(tm) d from idx_bigint where match('aaaa') group by d WITHIN GROUP order by id desc order by id desc;
+	select tm, yearmonthday(tm) d from idx_bigint where match('aaaa') group by d WITHIN GROUP order by id desc order by id desc;
     
 	<!-- BIGINT() for time functions -->
 	SELECT year(22496904880);
@@ -108,8 +100,7 @@ CREATE TABLE test_table
 INSERT INTO test_table ( id, aa, title ) VALUES
 ( 1, 2, 'dummy' ),
 ( 10, 3, 'ohai' ),
-( 11, 4, 'ohai2' ),
-( 21, 5, 'Orchard Terrace' )
+( 11, 4, 'ohai2' )
 </db_insert>
 
 <db_drop>DROP TABLE IF EXISTS test_table_bigint</db_drop>

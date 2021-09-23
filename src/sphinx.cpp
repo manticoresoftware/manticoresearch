@@ -8797,6 +8797,7 @@ bool IndexBuildDone ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & 
 	{
 		wrHeaderJson.PutString ( (Str_t)sJson );
 		wrHeaderJson.CloseFile();
+		assert ( bson::ValidateJson ( sJson.cstr(), &sError ) );
 		return true;
 	}
 

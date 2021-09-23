@@ -2487,6 +2487,7 @@ void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown
 	{
 		wrMetaJson.PutString ( (Str_t)sNewMeta );
 		wrMetaJson.CloseFile();
+		assert ( bson::ValidateJson ( sNewMeta.cstr(), &sError ) );
 	} else
 		sphWarning ( "failed to serialize meta to json: %s", sError.cstr() );
 

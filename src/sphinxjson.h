@@ -589,6 +589,15 @@ public:
 bool	JsonObjToBson ( JsonObj_c & tJSON, CSphVector<BYTE> &dData, bool bAutoconv, bool bToLowercase/*, StringBuilder_c &sMsg*/ );
 bool	cJsonToBson ( cJSON * pCJSON, CSphVector<BYTE> &dData, bool bAutoconv=false, bool bToLowercase = true /*, StringBuilder_c &sMsg */);
 
+enum class JsonParser_e
+{
+	BSON,
+	CJSON,
+};
+
+bool ValidateJson ( const char * sJson, JsonParser_e eParse, CSphString * pError=nullptr );
+bool ValidateJson ( const char* sJson, CSphString* pError=nullptr );
+
 
 // this are generic purpose serializer (bson as any object)
 class Assoc_c

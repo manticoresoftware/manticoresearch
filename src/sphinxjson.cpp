@@ -3242,6 +3242,48 @@ BsonContainer2_c::BsonContainer2_c ( const char * sJson, bool bAutoconv, bool bT
 	m_dData.first = pData;
 }
 
+static bool ValidateAsBson ( const char* szJson, CSphString* pError )
+{
+	CSphString sError;
+	if ( !pError )
+		pError = &sError;
+
+	CSphVector<BYTE> dBson;
+	CSphString sJson ( szJson );
+	return sphJsonParse ( dBson, (char*)sJson.cstr(), false, false, false, *pError );
+}
+
+static bool ValidateAsCjson ( const char* szJson )
+{
+	auto pCjson = cJSON_Parse ( szJson );
+	if ( !pCjson )
+		return false;
+
+	CSphVector<BYTE> dBson;
+	dBson.Reserve ( (int)strlen ( szJson ) );
+	bson::cJsonToBson ( pCjson, dBson, false, false );
+	cJSON_Delete ( pCjson );
+	return !dBson.IsEmpty();
+}
+
+bool bson::ValidateJson ( const char * szJson, JsonParser_e eParse, CSphString * pError )
+{
+	switch ( eParse )
+	{
+	case JsonParser_e::BSON:
+		return ValidateAsBson ( szJson, pError );
+
+	case JsonParser_e::CJSON:
+		return ValidateAsCjson ( szJson );
+	}
+}
+
+bool bson::ValidateJson ( const char* szJson, CSphString* pError )
+{
+	bool bRes = ValidateAsBson ( szJson, pError ) && ValidateAsCjson ( szJson );
+	return bRes;
+}
+
 // unused for now
 // bench, then m.b. throw out
 /*

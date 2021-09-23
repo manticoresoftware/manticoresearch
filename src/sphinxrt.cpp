@@ -3924,6 +3924,7 @@ void RtIndex_c::SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_
 	{
 		wrHeaderJson.PutString ( (Str_t)sJson );
 		wrHeaderJson.CloseFile();
+		assert ( bson::ValidateJson ( sJson.cstr(), &sError ) );
 	} else
 	{
 		sphWarning ( "failed to serialize header to json: %s", sError.cstr() );
@@ -4036,6 +4037,7 @@ void RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )
 	{
 		wrMetaJson.PutString ( (Str_t)sNewMeta );
 		wrMetaJson.CloseFile();
+		assert ( bson::ValidateJson ( sNewMeta.cstr(), &sError ) );
 	} else
 		sphWarning ( "failed to serialize meta to json: %s", sError.cstr() );
 

@@ -8513,16 +8513,16 @@ static void ReadSchemaField ( CSphReader & rdInfo, CSphColumnInfo & tCol, DWORD 
 }
 
 
-void ReadSchema ( CSphReader & rdInfo, CSphSchema & m_tSchema, DWORD uVersion )
+void ReadSchema ( CSphReader & rdInfo, CSphSchema & tSchema, DWORD uVersion )
 {
-	m_tSchema.Reset ();
+	tSchema.Reset ();
 
 	int iNumFields = rdInfo.GetDword();
 	for ( int i=0; i<iNumFields; i++ )
 	{
 		CSphColumnInfo tCol;
 		ReadSchemaField ( rdInfo, tCol, uVersion );
-		m_tSchema.AddField ( tCol );
+		tSchema.AddField ( tCol );
 	}
 
 	int iNumAttrs = rdInfo.GetDword();
@@ -8530,8 +8530,27 @@ void ReadSchema ( CSphReader & rdInfo, CSphSchema & m_tSchema, DWORD uVersion )
 	{
 		CSphColumnInfo tCol;
 		ReadSchemaColumn ( rdInfo, tCol, uVersion );
-		m_tSchema.AddAttr ( tCol, false );
+		tSchema.AddAttr ( tCol, false );
 	}
+}
+
+static void ReadLocatorJson ( bson::Bson_c tNode, CSphAttrLocator & tLoc )
+{
+	using namespace bson;
+	tLoc.m_iBitOffset = (int) Int ( tNode.ChildByName ( "pos" ) );
+	tLoc.m_iBitCount = (int) Int ( tNode.ChildByName ( "bits" ) );
+}
+
+static void ReadSchemaColumnJson ( bson::Bson_c tNode, CSphColumnInfo & tCol )
+{
+	using namespace bson;
+	tCol.m_sName = String ( tNode.ChildByName ( "name" ), "@emptyname" );
+	tCol.m_sName.ToLower();
+	tCol.m_uAttrFlags = (DWORD)Int ( tNode.ChildByName ( "flags" ), CSphColumnInfo::ATTR_NONE );
+	tCol.m_bPayload = Bool ( tNode.ChildByName ( "payload" ), false );
+	tCol.m_eEngine = (AttrEngine_e)Int ( tNode.ChildByName ( "engine" ), (DWORD)AttrEngine_e::DEFAULT );
+	tCol.m_eAttrType = (ESphAttr)Int ( tNode.ChildByName ( "type" ) );
+	ReadLocatorJson ( tNode.ChildByName ("locator"), tCol.m_tLocator );
 }
 
 

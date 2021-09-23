@@ -116,13 +116,9 @@ bool CSphSavedFile::Collect ( const char * szFilename, CSphString * pError )
 }
 
 
-void CSphSavedFile::Read ( CSphReader & tReader, const char * szFilename, bool bSharedStopwords, CSphString * sWarning )
+static void ReadSavedFile ( CSphSavedFile & tFile, const char * szFilename, bool bSharedStopwords, CSphString * sWarning )
 {
-	m_uSize = tReader.GetOffset ();
-	m_uCTime = tReader.GetOffset ();
-	m_uMTime = tReader.GetOffset ();
-	m_uCRC32 = tReader.GetDword ();
-	m_sFilename = szFilename;
+	tFile.m_sFilename = szFilename;
 
 	CSphString sName ( szFilename );
 
@@ -148,11 +144,31 @@ void CSphSavedFile::Read ( CSphReader & tReader, const char * szFilename, bool b
 			if ( !sphCalcFileCRC32 ( sName.cstr(), uMyCRC32 ) )
 				sWarning->SetSprintf ( "failed to calculate CRC32 for %s", sName.cstr() );
 			else
-				if ( uMyCRC32!=m_uCRC32 || tFileInfo.st_size!=m_uSize
-					|| tFileInfo.st_ctime!=m_uCTime || tFileInfo.st_mtime!=m_uMTime )
+				if ( uMyCRC32!=tFile.m_uCRC32 || tFileInfo.st_size!=tFile.m_uSize
+					|| tFileInfo.st_ctime!=tFile.m_uCTime || tFileInfo.st_mtime!=tFile.m_uMTime )
 					sWarning->SetSprintf ( "'%s' differs from the original", sName.cstr() );
 		}
 	}
+}
+
+void CSphSavedFile::Read ( CSphReader & tReader, const char * szFilename, bool bSharedStopwords, CSphString * sWarning )
+{
+	m_uSize = tReader.GetOffset ();
+	m_uCTime = tReader.GetOffset ();
+	m_uMTime = tReader.GetOffset ();
+	m_uCRC32 = tReader.GetDword ();
+	ReadSavedFile (*this, szFilename, bSharedStopwords, sWarning );
+}
+
+
+void CSphSavedFile::Read ( const bson::Bson_c& tNode, const char* szFilename, bool bSharedStopwords, CSphString* sWarning )
+{
+	using namespace bson;
+	m_uSize = Int ( tNode.ChildByName ( "size" ) );
+	m_uCTime = Int ( tNode.ChildByName ( "ctime" ) );
+	m_uMTime = Int ( tNode.ChildByName ( "mtime" ) );
+	m_uCRC32 = Int ( tNode.ChildByName ( "crc32" ) );
+	ReadSavedFile ( *this, szFilename, bSharedStopwords, sWarning );
 }
 
 //////////////////////////////////////////////////////////////////////////

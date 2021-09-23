@@ -3914,13 +3914,21 @@ void RtIndex_c::SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_
 	tWriteHeader.m_pFieldFilter = m_pFieldFilter;
 	tWriteHeader.m_pFieldLens = m_dFieldLens.Begin();
 
-	CSphWriter tWriter;
 	CSphString sName, sError;
-	sName.SetSprintf ( "%s%s", tCtx.m_szFilename, sphGetExt ( SPH_EXT_SPH ) );
-	if ( !tWriter.OpenFile ( sName.cstr (), sError ) )
-		return; // fixme! report error...
+	JsonEscapedBuilder sJson;
+	IndexWriteHeader ( tCtx, tWriteHeader, sJson, m_bKeywordDict, true );
 
-	IndexWriteHeader ( tCtx, tWriteHeader, tWriter, m_bKeywordDict, true );
+	sName.SetSprintf ( "%s%s", tCtx.m_szFilename, sphGetExt ( SPH_EXT_SPH ) );
+	CSphWriter wrHeaderJson;
+	if ( wrHeaderJson.OpenFile ( sName, sError ) )
+	{
+		wrHeaderJson.PutString ( (Str_t)sJson );
+		wrHeaderJson.CloseFile();
+	} else
+	{
+		sphWarning ( "failed to serialize header to json: %s", sError.cstr() );
+		return;
+	}
 }
 
 void RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )

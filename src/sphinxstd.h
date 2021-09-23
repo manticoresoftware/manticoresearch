@@ -2167,6 +2167,10 @@ protected:
 	using VecTraits_T<T>::m_iCount;
 
 public:
+
+	using POLICY_T = POLICY;
+	using STORE_T = STORE;
+
 	explicit CSphFixedVector ( int64_t iSize ) noexcept
 	{
 		m_iCount = iSize;

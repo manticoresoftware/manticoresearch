@@ -334,6 +334,41 @@ bool CSphTokenizerSettings::Load ( const FilenameBuilder_i * pFilenameBuilder, C
 	return true;
 }
 
+bool CSphTokenizerSettings::Load ( const FilenameBuilder_i* pFilenameBuilder, const bson::Bson_c& tNode, CSphEmbeddedFiles& tEmbeddedFiles, CSphString& sWarning )
+{
+	using namespace bson;
+	m_iType = (int)Int ( tNode.ChildByName ( "type" ) );
+	if ( m_iType != TOKENIZER_UTF8 && m_iType != TOKENIZER_NGRAM )
+	{
+		sWarning = "can't load an old index with SBCS tokenizer";
+		return false;
+	}
+
+	m_sCaseFolding = String ( tNode.ChildByName ( "case_folding" ) );
+	m_iMinWordLen = (int)Int ( tNode.ChildByName ( "min_word_len" ), 1 );
+	auto tSynonymsNode = tNode.ChildByName ( "synonyms" );
+	if ( !IsNullNode ( tSynonymsNode ) )
+		Bson_c ( tSynonymsNode ).ForEach ( [&tEmbeddedFiles] ( const NodeHandle_t& tNode ) {
+			tEmbeddedFiles.m_dSynonyms.Add ( String (tNode));
+		} );
+
+	m_sSynonymsFile = String ( tNode.ChildByName ( "synonyms_file" ) );
+	if ( !m_sSynonymsFile.IsEmpty() )
+	{
+		CSphString sFilePath = FormatPath ( m_sSynonymsFile, pFilenameBuilder );
+		tEmbeddedFiles.m_tSynonymFile.Read ( tNode.ChildByName ( "syn_file_info" ), sFilePath.cstr(), false, tEmbeddedFiles.m_bEmbeddedSynonyms ? nullptr : &sWarning );
+	}
+
+	m_sBoundary = String ( tNode.ChildByName ( "boundary" ) );
+	m_sIgnoreChars = String ( tNode.ChildByName ( "ignore_chars" ) );
+	m_iNgramLen = (int)Int ( tNode.ChildByName ( "ngram_len" ) );
+	m_sNgramChars = String ( tNode.ChildByName ( "ngram_chars" ) );
+	m_sBlendChars = String ( tNode.ChildByName ( "blend_chars" ) );
+	m_sBlendMode = String ( tNode.ChildByName ( "blend_mode" ) );
+
+	return true;
+}
+
 
 void CSphTokenizerSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const
 {
@@ -453,6 +488,52 @@ void CSphDictSettings::Load ( CSphReader & tReader, CSphEmbeddedFiles & tEmbedde
 
 	m_bStopwordsUnstemmed = ( tReader.GetByte()!=0 );
 	m_sMorphFingerprint = tReader.GetString();
+}
+
+
+void CSphDictSettings::Load ( const bson::Bson_c& tNode, CSphEmbeddedFiles& tEmbeddedFiles, CSphString& sWarning )
+{
+	using namespace bson;
+	m_sMorphology = String ( tNode.ChildByName ( "morphology" ) );
+	m_sMorphFields = String ( tNode.ChildByName ( "morph_fields" ) );
+	m_sStopwords = String ( tNode.ChildByName ( "stopwords" ) );
+
+
+	auto tStopwordsEmbedded = tNode.ChildByName ( "stopwords_list" );
+	tEmbeddedFiles.m_bEmbeddedStopwords = !IsNullNode ( tStopwordsEmbedded );
+	if ( tEmbeddedFiles.m_bEmbeddedStopwords )
+		Bson_c ( tStopwordsEmbedded ).ForEach ( [&tEmbeddedFiles] ( const NodeHandle_t& tNode ) {
+			tEmbeddedFiles.m_dStopwords.Add ( cast2wordid ( Int ( tNode ) ) );
+		} );
+
+	auto tWordformsEmbedded = tNode.ChildByName ( "word_forms" );
+	tEmbeddedFiles.m_bEmbeddedWordforms = !IsNullNode ( tWordformsEmbedded ); // fixme!
+	if ( tEmbeddedFiles.m_bEmbeddedWordforms )
+		Bson_c ( tWordformsEmbedded ).ForEach ( [&tEmbeddedFiles] ( const NodeHandle_t& tNode ) {
+			tEmbeddedFiles.m_dWordforms.Add ( String ( tNode ) );
+		} );
+
+
+	auto tStopwordsNode = tNode.ChildByName ( "stopwords_file_infos" );
+	if ( !IsNullNode ( tStopwordsNode ) )
+		Bson_c ( tStopwordsNode ).ForEach ( [&tEmbeddedFiles,&sWarning] ( const NodeHandle_t& tNode ) {
+			auto& tStopwordsFile = tEmbeddedFiles.m_dStopwordFiles.Add();
+			tStopwordsFile.Read ( Bson_c ( tNode ).ChildByName ( "info" ), String ( Bson_c ( tNode ).ChildByName ( "name" ) ).cstr(), true, tEmbeddedFiles.m_bEmbeddedStopwords ? nullptr : &sWarning );
+		} );
+
+	auto tWordformsFiles = tNode.ChildByName ( "wordforms_file_infos" );
+	if ( !IsNullNode ( tWordformsFiles ) )
+		Bson_c ( tWordformsFiles ).ForEach ( [&tEmbeddedFiles, &sWarning,this] ( const NodeHandle_t& tNode ) {
+			auto& dWordformsFileName = m_dWordforms.Add();
+			auto& tWordformsFile = tEmbeddedFiles.m_dWordformFiles.Add();
+			dWordformsFileName = String ( Bson_c ( tNode ).ChildByName ( "name" ) );
+			tWordformsFile.Read ( Bson_c ( tNode ).ChildByName ( "info" ), dWordformsFileName.cstr(), false, tEmbeddedFiles.m_bEmbeddedWordforms ? nullptr : &sWarning );
+		} );
+
+	m_iMinStemmingLen = (int)Int ( tNode.ChildByName ( "min_stemming_len" ), 1 );
+	m_bWordDict = Bool ( tNode.ChildByName ( "word_dict" ), true );
+	m_bStopwordsUnstemmed = Bool ( tNode.ChildByName ( "stopwords_unstemmed" ), false );
+	m_sMorphFingerprint = String ( tNode.ChildByName ( "morph_data_fingerprint" ) );
 }
 
 

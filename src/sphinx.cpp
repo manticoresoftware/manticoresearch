@@ -1408,6 +1408,7 @@ public:
 
 	int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer, CSphIndexProgress & tProgress ) final;
 
+	bool				LoadHeaderLegacy ( const char * sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
 	bool				LoadHeader ( const char * sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
 
 	void				DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool bConfig ) final;
@@ -8554,6 +8555,35 @@ static void ReadSchemaColumnJson ( bson::Bson_c tNode, CSphColumnInfo & tCol )
 }
 
 
+static void ReadSchemaFieldJson ( bson::Bson_c tNode, CSphColumnInfo & tCol )
+{
+	using namespace bson;
+	tCol.m_sName = String ( tNode.ChildByName ( "name" ) );
+	tCol.m_uFieldFlags = (DWORD)Int ( tNode.ChildByName ( "flags" ), CSphColumnInfo::FIELD_INDEXED );
+	tCol.m_bPayload = Bool ( tNode.ChildByName ( "payload" ) );
+}
+
+
+void ReadSchemaJson ( bson::Bson_c tNode, CSphSchema & tSchema )
+{
+	using namespace bson;
+	tSchema.Reset ();
+
+	Bson_c ( tNode.ChildByName ( "fields" ) ).ForEach ( [&tSchema] ( const NodeHandle_t& tNode )
+	{
+		CSphColumnInfo tCol;
+		ReadSchemaFieldJson ( tNode, tCol );
+		tSchema.AddField ( tCol );
+	} );
+
+	Bson_c ( tNode.ChildByName ( "attributes" ) ).ForEach ( [&tSchema] ( const NodeHandle_t& tNode )
+	{
+		CSphColumnInfo tCol;
+		ReadSchemaColumnJson ( tNode, tCol );
+		tSchema.AddAttr ( tCol, false );
+	} );
+}
+
 static void WriteSchemaField ( CSphWriter & fdInfo, const CSphColumnInfo & tCol )
 {
 	fdInfo.PutString ( tCol.m_sName );
@@ -8695,62 +8725,83 @@ void operator<< ( JsonEscapedBuilder& tOut, const CSphIndexSettings& tSettings )
 	tOut.NamedValNonDefault ( "engine", (DWORD)tSettings.m_eEngine, (DWORD)AttrEngine_e::DEFAULT );
 }
 
-void IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & tWriteHeader, CSphWriter & fdInfo, bool bForceWordDict, bool SkipEmbeddDict )
+void IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & tWriteHeader, JsonEscapedBuilder& sJson, bool bForceWordDict, bool SkipEmbeddDict )
 {
+	auto _ = sJson.ObjectW();
+
+	// human-readable sugar
+	sJson.NamedString ( "meta_created_time_utc", sphCurrentUtcTime() );
+
 	// version
-	fdInfo.PutDword ( INDEX_MAGIC_HEADER );
-	fdInfo.PutDword ( INDEX_FORMAT_VERSION );
+	sJson.NamedVal ( "index_format_version", INDEX_FORMAT_VERSION );
+
+	// index stats - json (put here to be similar with .meta)
+	sJson.NamedValNonDefault ( "total_documents", tBuildHeader.m_iTotalDocuments );
+	sJson.NamedValNonDefault ( "total_bytes", tBuildHeader.m_iTotalBytes );
 
 	// schema
-	WriteSchema ( fdInfo, *tWriteHeader.m_pSchema );
-
-	// wordlist checkpoints
-	fdInfo.PutOffset ( tBuildHeader.m_iDictCheckpointsOffset );
-	fdInfo.PutDword ( tBuildHeader.m_iDictCheckpoints );
-	fdInfo.PutByte ( (BYTE)tBuildHeader.m_iInfixCodepointBytes );
-	fdInfo.PutDword ( (DWORD)tBuildHeader.m_iInfixBlocksOffset );
-	fdInfo.PutDword ( tBuildHeader.m_iInfixBlocksWordsSize );
-
-	// index stats
-	fdInfo.PutDword ( (DWORD)tBuildHeader.m_iTotalDocuments ); // FIXME? we don't expect over 4G docs per just 1 local index
-	fdInfo.PutOffset ( tBuildHeader.m_iTotalBytes );
+	sJson.NamedVal ( "schema", *tWriteHeader.m_pSchema );
 
 	// index settings
-	SaveIndexSettings ( fdInfo, *tWriteHeader.m_pSettings );
+	sJson.NamedVal ( "index_settings", *tWriteHeader.m_pSettings );
 
 	// tokenizer info
 	assert ( tWriteHeader.m_pTokenizer );
-	SaveTokenizerSettings ( fdInfo, tWriteHeader.m_pTokenizer, tWriteHeader.m_pSettings->m_iEmbeddedLimit );
+	sJson.Named ( "tokenizer_settings" );
+	SaveTokenizerSettings ( sJson, tWriteHeader.m_pTokenizer, tWriteHeader.m_pSettings->m_iEmbeddedLimit );
 
 	// dictionary info
 	assert ( tWriteHeader.m_pDict );
-	SaveDictionarySettings ( fdInfo, tWriteHeader.m_pDict, bForceWordDict, SkipEmbeddDict ? 0 : tWriteHeader.m_pSettings->m_iEmbeddedLimit );
+	sJson.Named ( "dictionary_settings" );
+	SaveDictionarySettings ( sJson, tWriteHeader.m_pDict, bForceWordDict, SkipEmbeddDict ? 0 : tWriteHeader.m_pSettings->m_iEmbeddedLimit );
 
-	fdInfo.PutOffset ( tBuildHeader.m_iDocinfo );
-	fdInfo.PutOffset ( tBuildHeader.m_iDocinfoIndex );
-	fdInfo.PutOffset ( tBuildHeader.m_iMinMaxIndex );
+	// wordlist checkpoints - json
+	sJson.NamedValNonDefault ( "dict_checkpoints_offset", tBuildHeader.m_iDictCheckpointsOffset );
+	sJson.NamedValNonDefault ( "dict_checkpoints", tBuildHeader.m_iDictCheckpoints );
+	sJson.NamedValNonDefault ( "infix_codepoint_bytes", tBuildHeader.m_iInfixCodepointBytes );
+	sJson.NamedValNonDefault ( "infix_blocks_offset", tBuildHeader.m_iInfixBlocksOffset );
+	sJson.NamedValNonDefault ( "infix_block_words_size", tBuildHeader.m_iInfixBlocksWordsSize );
+
+	sJson.NamedValNonDefault ( "docinfo", tBuildHeader.m_iDocinfo );
+	sJson.NamedValNonDefault ( "docinfo_index", tBuildHeader.m_iDocinfoIndex );
+	sJson.NamedValNonDefault ( "min_max_index", tBuildHeader.m_iMinMaxIndex );
 
 	// field filter info
 	CSphFieldFilterSettings tFieldFilterSettings;
 	if ( tWriteHeader.m_pFieldFilter.Ptr() )
-		tWriteHeader.m_pFieldFilter->GetSettings(tFieldFilterSettings);
-	tFieldFilterSettings.Save(fdInfo);
+	{
+		tWriteHeader.m_pFieldFilter->GetSettings ( tFieldFilterSettings );
+		sJson.NamedVal ( "field_filter_settings", tFieldFilterSettings );
+	}
 
 	// average field lengths
 	if ( tWriteHeader.m_pSettings->m_bIndexFieldLens )
+	{
+		sJson.Named ( "index_fields_lens" );
+		auto _ = sJson.Array();
 		for ( int i=0; i < tWriteHeader.m_pSchema->GetFieldsCount(); ++i )
-			fdInfo.PutOffset ( tWriteHeader.m_pFieldLens[i] );
+		{
+			sJson << tWriteHeader.m_pFieldLens[i];
+		}
+	}
 }
 
 
 bool IndexBuildDone ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & tWriteHeader, const CSphString & sFileName, CSphString & sError )
 {
-	CSphWriter fdInfo;
-	if ( !fdInfo.OpenFile ( sFileName, sError ) )
-		return false;
+	JsonEscapedBuilder sJson;
+	IndexWriteHeader ( tBuildHeader, tWriteHeader, sJson, false );
 
-	IndexWriteHeader ( tBuildHeader, tWriteHeader, fdInfo, false );
-	return true;
+	CSphWriter wrHeaderJson;
+	if ( wrHeaderJson.OpenFile ( sFileName, sError ) )
+	{
+		wrHeaderJson.PutString ( (Str_t)sJson );
+		wrHeaderJson.CloseFile();
+		return true;
+	}
+
+	sphWarning ( "failed to serialize header to json: %s", sError.cstr() );
+	return false;
 }
 
 
@@ -13476,7 +13527,37 @@ void LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DW
 }
 
 
-bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning )
+void LoadIndexSettingsJson ( bson::Bson_c tNode, CSphIndexSettings & tSettings )
+{
+	using namespace bson;
+	tSettings.SetMinPrefixLen ( (int)Int ( tNode.ChildByName ( "min_prefix_len" ) ) );
+	tSettings.m_iMinInfixLen = (int)Int ( tNode.ChildByName ( "min_infix_len" ) );
+	tSettings.m_iMaxSubstringLen = (int)Int ( tNode.ChildByName ( "max_substring_len" ) );
+	tSettings.m_bHtmlStrip = Bool ( tNode.ChildByName ( "strip_html" ) );
+	tSettings.m_sHtmlIndexAttrs = String ( tNode.ChildByName ( "html_index_attrs" ) );
+	tSettings.m_sHtmlRemoveElements = String ( tNode.ChildByName ( "html_remove_elements" ) );
+	tSettings.m_bIndexExactWords = Bool ( tNode.ChildByName ( "index_exact_words" ) );
+	tSettings.m_eHitless = (ESphHitless)Int ( tNode.ChildByName ( "hitless" ), SPH_HITLESS_NONE );
+	tSettings.m_eHitFormat = (ESphHitFormat)Int ( tNode.ChildByName ( "hit_format" ), SPH_HIT_FORMAT_PLAIN );
+	tSettings.m_bIndexSP = Bool ( tNode.ChildByName ( "index_sp" ) );
+	tSettings.m_sZones = String ( tNode.ChildByName ( "zones" ) );
+	tSettings.m_iBoundaryStep = (int)Int ( tNode.ChildByName ( "boundary_step" ) );
+	tSettings.m_iStopwordStep = (int)Int ( tNode.ChildByName ( "stopword_step" ), 1 );
+	tSettings.m_iOvershortStep = (int)Int ( tNode.ChildByName ( "overshort_step" ), 1 );
+	tSettings.m_iEmbeddedLimit = (int)Int ( tNode.ChildByName ( "embedded_limit" ) );
+	tSettings.m_eBigramIndex = (ESphBigram)Int ( tNode.ChildByName ( "bigram_index" ), SPH_BIGRAM_NONE );
+	tSettings.m_sBigramWords = String ( tNode.ChildByName ( "bigram_words" ) );
+	tSettings.m_bIndexFieldLens = Bool ( tNode.ChildByName ( "index_field_lens" ) );
+	tSettings.m_ePreprocessor = (Preprocessor_e)Int ( tNode.ChildByName ( "icu" ), (DWORD)Preprocessor_e::NONE  );
+	tSettings.m_sIndexTokenFilter = String ( tNode.ChildByName ( "index_token_filter" ) );
+	tSettings.m_tBlobUpdateSpace = Int ( tNode.ChildByName ( "blob_update_space" ) );
+	tSettings.m_iSkiplistBlockSize = (int)Int ( tNode.ChildByName ( "skiplist_block_size" ), 32 );
+	tSettings.m_sHitlessFiles = String ( tNode.ChildByName ( "hitless_files" ) );
+	tSettings.m_eEngine = (AttrEngine_e)Int ( tNode.ChildByName ( "engine" ), (DWORD)AttrEngine_e::DEFAULT );
+}
+
+
+bool CSphIndex_VLN::LoadHeaderLegacy ( const char * sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning )
 {
 	const int MAX_HEADER_SIZE = 32768;
 	CSphFixedVector<BYTE> dCacheInfo ( MAX_HEADER_SIZE );
@@ -13616,6 +13697,154 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 		m_sLastError.SetSprintf ( "%s: failed to parse header (unexpected eof)", sHeaderName );
 
 	return !rdInfo.GetErrorFlag();
+}
+
+bool CSphIndex_VLN::LoadHeader ( const char* sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning )
+{
+	using namespace bson;
+
+	CSphVector<BYTE> dData;
+	if ( !sphJsonParse ( dData, sHeaderName, m_sLastError ) )
+		return false;
+
+	Bson_c tBson ( dData );
+	if ( tBson.IsEmpty() || !tBson.IsAssoc() )
+	{
+		m_sLastError = "Something wrong read from json header - it is either empty, either not root object.";
+		return false;
+	}
+
+	// version
+	m_uVersion = (DWORD)Int ( tBson.ChildByName ( "index_format_version" ) );
+	if ( m_uVersion<=1 || m_uVersion>INDEX_FORMAT_VERSION )
+	{
+		m_sLastError.SetSprintf ( "%s is v.%u, binary is v.%u", sHeaderName, m_uVersion, INDEX_FORMAT_VERSION );
+		return false;
+	}
+
+	// we don't support anything prior to v54
+	DWORD uMinFormatVer = 54;
+	if ( m_uVersion<uMinFormatVer )
+	{
+		m_sLastError.SetSprintf ( "indexes prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, sHeaderName, m_uVersion );
+		return false;
+	}
+
+	// index stats
+	m_tStats.m_iTotalDocuments = Int ( tBson.ChildByName ( "total_documents" ) );
+	m_tStats.m_iTotalBytes = Int ( tBson.ChildByName ( "total_bytes" ) );
+
+	// schema
+	ReadSchemaJson ( tBson.ChildByName ( "schema" ), m_tSchema );
+
+	// check schema for dupes
+	for ( int iAttr = 0; iAttr < m_tSchema.GetAttrsCount(); ++iAttr )
+	{
+		const CSphColumnInfo& tCol = m_tSchema.GetAttr ( iAttr );
+		for ( int i = 0; i < iAttr; ++i )
+			if ( m_tSchema.GetAttr ( i ).m_sName == tCol.m_sName )
+				sWarning.SetSprintf ( "duplicate attribute name: %s", tCol.m_sName.cstr() );
+	}
+
+	// index settings
+	LoadIndexSettingsJson ( tBson.ChildByName ( "index_settings" ), m_tSettings );
+
+	CSphTokenizerSettings tTokSettings;
+	// tokenizer stuff
+	if ( !tTokSettings.Load ( pFilenameBuilder, tBson.ChildByName ( "tokenizer_settings" ), tEmbeddedFiles, m_sLastError ) )
+		return false;
+
+	// dictionary stuff
+	CSphDictSettings tDictSettings;
+	tDictSettings.Load ( tBson.ChildByName ( "dictionary_settings" ), tEmbeddedFiles, sWarning );
+
+	// dictionary header (wordlist checkpoints, infix blocks, etc)
+	m_tWordlist.m_iDictCheckpointsOffset = Int ( tBson.ChildByName ( "dict_checkpoints_offset" ) );
+	m_tWordlist.m_iDictCheckpoints = (int)Int ( tBson.ChildByName ( "dict_checkpoints" ) );
+	m_tWordlist.m_iInfixCodepointBytes = (int)Int ( tBson.ChildByName ( "infix_codepoint_bytes" ) );
+	m_tWordlist.m_iInfixBlocksOffset = Int ( tBson.ChildByName ( "infix_blocks_offset" ) );
+	m_tWordlist.m_iInfixBlocksWordsSize = (int)Int ( tBson.ChildByName ( "infix_block_words_size" ) );
+
+	m_tWordlist.m_dCheckpoints.Reset ( m_tWordlist.m_iDictCheckpoints );
+
+	if ( bStripPath )
+	{
+		StripPath ( tTokSettings.m_sSynonymsFile );
+		for ( auto& i : tDictSettings.m_dWordforms )
+			StripPath ( i );
+	}
+
+	StrVec_t dWarnings;
+	TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tTokSettings, &tEmbeddedFiles, pFilenameBuilder, dWarnings, m_sLastError ) };
+	if ( !pTokenizer )
+		return false;
+
+	DictRefPtr_c pDict { tDictSettings.m_bWordDict
+		? sphCreateDictionaryKeywords ( tDictSettings, &tEmbeddedFiles, pTokenizer, m_sIndexName.cstr(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError )
+		: sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, pTokenizer, m_sIndexName.cstr(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError )};
+
+	if ( !pDict )
+		return false;
+
+	if ( tDictSettings.m_sMorphFingerprint!=pDict->GetMorphDataFingerprint() )
+		sWarning.SetSprintf ( "different lemmatizer dictionaries (index='%s', current='%s')",
+			tDictSettings.m_sMorphFingerprint.cstr(),
+			pDict->GetMorphDataFingerprint().cstr() );
+
+	SetDictionary ( pDict );
+
+	pTokenizer = ISphTokenizer::CreateMultiformFilter ( pTokenizer, pDict->GetMultiWordforms () );
+	SetTokenizer ( pTokenizer );
+	SetupQueryTokenizer();
+
+	// initialize AOT if needed
+	m_tSettings.m_uAotFilterMask = sphParseMorphAot ( tDictSettings.m_sMorphology.cstr() );
+
+	m_iDocinfo = Int ( tBson.ChildByName ( "docinfo" ) );
+	m_iDocinfoIndex = Int ( tBson.ChildByName ( "docinfo_index" ) );
+	m_iMinMaxIndex = Int ( tBson.ChildByName ( "min_max_index" ) );
+
+	FieldFilterRefPtr_c pFieldFilter;
+	auto tFieldFilterSettingsNode = tBson.ChildByName ( "field_filter_settings" );
+	if ( !IsNullNode(tFieldFilterSettingsNode) )
+	{
+		CSphFieldFilterSettings tFieldFilterSettings;
+		Bson_c ( tFieldFilterSettingsNode ).ForEach ( [&tFieldFilterSettings] ( const NodeHandle_t& tNode ) {
+			tFieldFilterSettings.m_dRegexps.Add ( String ( tNode ) );
+		} );
+
+		if ( !tFieldFilterSettings.m_dRegexps.IsEmpty() )
+			pFieldFilter = sphCreateRegexpFilter ( tFieldFilterSettings, m_sLastError );
+	}
+
+	if ( !sphSpawnFilterICU ( pFieldFilter, m_tSettings, tTokSettings, sHeaderName, m_sLastError ) )
+		return false;
+
+	SetFieldFilter ( pFieldFilter );
+
+	auto tIndexFieldsLenNode = tBson.ChildByName ( "index_fields_lens" );
+	if ( m_tSettings.m_bIndexFieldLens )
+	{
+		assert (!IsNullNode ( tIndexFieldsLenNode ));
+		m_dFieldLens.Reset ( m_tSchema.GetFieldsCount() );
+		int i = 0;
+		Bson_c ( tIndexFieldsLenNode ).ForEach ( [&i,this] ( const NodeHandle_t& tNode ) {
+			m_dFieldLens[i++] = Int ( tNode );
+		} );
+	}
+
+	// post-load stuff.. for now, bigrams
+	CSphIndexSettings & s = m_tSettings;
+	if ( s.m_eBigramIndex!=SPH_BIGRAM_NONE && s.m_eBigramIndex!=SPH_BIGRAM_ALL )
+	{
+		BYTE * pTok;
+		m_pTokenizer->SetBuffer ( (BYTE*)const_cast<char*> ( s.m_sBigramWords.cstr() ), s.m_sBigramWords.Length() );
+		while ( ( pTok = m_pTokenizer->GetToken() )!=nullptr )
+			s.m_dBigramWords.Add() = (const char*)pTok;
+		s.m_dBigramWords.Sort();
+	}
+
+	return true;
 }
 
 
@@ -14014,8 +14243,15 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 	CSphEmbeddedFiles tEmbeddedFiles;
 
 	// preload schema
-	if ( !LoadHeader ( GetIndexFileName(SPH_EXT_SPH).cstr(), bStripPath, tEmbeddedFiles, pFilenameBuilder, m_sLastWarning ) )
-		return false;
+	if ( !LoadHeader ( GetIndexFileName ( SPH_EXT_SPH ).cstr(), bStripPath, tEmbeddedFiles, pFilenameBuilder, m_sLastWarning ) )
+	{
+		sphWarning ( "Unable to load json! Will retry with plain legacy sph..." );
+		if ( !LoadHeaderLegacy ( GetIndexFileName ( SPH_EXT_SPH ).cstr(), bStripPath, tEmbeddedFiles, pFilenameBuilder, m_sLastWarning ) )
+		{
+			sphWarning ( "Unable to load header.." );
+			return false;
+		}
+	}
 
 	m_bIsEmpty = !m_iDocinfo;
 
@@ -24047,7 +24283,11 @@ bool IndexFiles_c::CheckHeader ( const char * sType )
 		return false;
 
 	// check magic header
-	const char * sMsg = CheckFmtMagic ( rdHeader.GetDword () );
+	auto uMagic = rdHeader.GetDword();
+	if ( dBuffer[0]=='{' ) // that is new style json header, no need to check further...
+		return true;
+
+	const char * sMsg = CheckFmtMagic ( uMagic );
 	if ( sMsg )
 	{
 		m_sLastError.SetSprintf ( sMsg, sPath.cstr() );

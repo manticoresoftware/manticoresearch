@@ -816,6 +816,25 @@ inline static int yylex ( YYSTYPE * lvalp, JsonParser_c * pParser )
 #include "bissphinxjson.c"
 #include "sphinxutils.h"
 
+bool sphJsonParse ( CSphVector<BYTE>& dData, const CSphString& sFileName, CSphString& sError )
+{
+	auto iFileSize = sphGetFileSize ( sFileName, &sError );
+	if ( iFileSize<0 )
+		return false;
+
+	CSphAutofile tFile;
+	if ( tFile.Open ( sFileName, SPH_O_READ, sError )<0 )
+		return false;
+
+	CSphFixedVector<char> dJsonText { iFileSize + 2 }; // +4 for zero-gap at the end
+	auto iRead = (int64_t)sphReadThrottled ( tFile.GetFD (), dJsonText.begin (), iFileSize );
+	if ( iRead!=iFileSize )
+		return false;
+
+	decltype ( dJsonText )::POLICY_T::Zero ( dJsonText.begin() + iFileSize, 2 );
+	return sphJsonParse ( dData, dJsonText.begin(), false, false, false, sError );
+}
+
 bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool bToLowercase, bool bCheckSize, CSphString & sError )
 {
 	StringBuilder_c sMsg;
@@ -2010,7 +2029,7 @@ bool bson::IsNumeric ( const NodeHandle_t &dNode )
 	return IsInt ( dNode ) || IsDouble ( dNode );
 }
 
-bool bson::Bool ( const NodeHandle_t &tLocator )
+bool bson::Bool ( const NodeHandle_t &tLocator, bool bDefault )
 {
 	switch ( tLocator.second )
 	{
@@ -2018,13 +2037,14 @@ bool bson::Bool ( const NodeHandle_t &tLocator )
 	case JSON_INT64: return !!Int ( tLocator );
 	case JSON_DOUBLE: return 0.0!=Double ( tLocator );
 	case JSON_TRUE: return true;
+	case JSON_FALSE: return false;
 		// fixme! Do we need also process here values like "True" (the string)?
 	default: break;
 	}
-	return false;
+	return bDefault;
 }
 
-int64_t bson::Int ( const NodeHandle_t &tLocator )
+int64_t bson::Int ( const NodeHandle_t &tLocator, int64_t iDefault )
 {
 	const BYTE * p = tLocator.first;
 	switch ( tLocator.second )
@@ -2050,10 +2070,10 @@ int64_t bson::Int ( const NodeHandle_t &tLocator )
 	}
 	default: break;
 	}
-	return 0;
+	return iDefault;
 }
 
-double bson::Double ( const NodeHandle_t &tLocator )
+double bson::Double ( const NodeHandle_t &tLocator, double fDefault )
 {
 	const BYTE * p = tLocator.first;
 	switch ( tLocator.second )
@@ -2079,13 +2099,13 @@ double bson::Double ( const NodeHandle_t &tLocator )
 	}
 	default: break;
 	}
-	return 0.0;
+	return fDefault;
 }
 
-CSphString bson::String ( const NodeHandle_t &tLocator )
+CSphString bson::String ( const NodeHandle_t &tLocator, CSphString sDefault )
 {
 	if ( tLocator.second!=JSON_STRING )
-		return "";
+		return sDefault;
 
 	auto dBlob = bson::RawBlob ( tLocator );
 	CSphString sResult;

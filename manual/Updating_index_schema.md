@@ -32,6 +32,7 @@ It supports adding one field at a time for RT indexes. Supported data types are:
 * `ALTER` will not work for distributed indexes and indexes without any attributes.
 * `DROP COLUMN` will fail if an index has only one field.
 * When dropping a field which is both a full-text field and a string attribute the first `ALTER DROP` drops the attribute, the second one drops the full-text field.
+* Adding/dropping full-text field is only supported in [RT mode](Read_this_first.md#Real-time-mode-vs-plain-mode).
 
 <!-- request Example -->
 ```sql

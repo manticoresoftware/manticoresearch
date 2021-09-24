@@ -841,7 +841,7 @@ When expression ranker is used, it is possible to expose the values of the calcu
 The function returns:
 
 * the values of document level factors (like bm25, field_mask, doc_word_count)
-* list with each field that returned a hit (like lcs, hit_count, word_count sum_idf, min_hit_pos etc.)
+* list with each field that returned a hit (like lcs, hit_count, word_count, sum_idf, min_hit_pos etc.)
 * list with each keyword from the query and their tf and idf values
 
 

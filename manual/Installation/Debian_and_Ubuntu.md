@@ -106,7 +106,6 @@ Here's how to install Python 3.9 and the Ukrainian lemmatizer on Debian and Ubun
 ```bash
 # install Manticore Search and UK lemmatizer from APT repository
 cd ~
-wget -qO - https://repo.manticoresearch.com/GPG-KEY-manticore | sudo apt-key add -
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
 sudo dpkg -i manticore-repo.noarch.deb
 sudo apt -y update

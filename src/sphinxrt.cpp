@@ -1285,7 +1285,7 @@ protected:
 
 private:
 	static const DWORD			META_HEADER_MAGIC	= 0x54525053;	///< my magic 'SPRT' header
-	static const DWORD			META_VERSION		= 19;			///< current version fixme! Also change version in indextool.cpp, and support the changes!
+	static const DWORD			META_VERSION		= 20;			///< current version. 20 as we now store meta in json fixme! Also change version in indextool.cpp, and support the changes!
 
 	int							m_iStride;
 	uint64_t					m_uSchemaHash = 0;
@@ -1343,6 +1343,8 @@ private:
 	void						RemoveFieldFromRamchunk ( const CSphString & sFieldName, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema );
 
 	bool						LoadMeta ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings );
+	bool						LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings );
+	bool						LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings );
 	bool						PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings );
 	void						SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames );
 	void						SaveMeta ();
@@ -1432,8 +1434,6 @@ RtIndex_c::~RtIndex_c ()
 	{
 		CSphString sFile;
 		sFile.SetSprintf ( "%s.meta", m_sPath.cstr() );
-		::unlink ( sFile.cstr() );
-		sFile.SetSprintf ( "%s.json", m_sPath.cstr() );
 		::unlink ( sFile.cstr() );
 		sFile.SetSprintf ( "%s.ram", m_sPath.cstr() );
 		::unlink ( sFile.cstr() );
@@ -3942,15 +3942,11 @@ void RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )
 		return;
 
 	// write new meta
-	CSphString sMeta, sMetaNew, sMetaJson;
+	CSphString sMeta, sMetaNew;
 	sMeta.SetSprintf ( "%s.meta", m_sPath.cstr() );
 	sMetaNew.SetSprintf ( "%s.meta.new", m_sPath.cstr() );
-	sMetaJson.SetSprintf ( "%s.json", m_sPath.cstr() );
 
 	CSphString sError;
-	CSphWriter wrMeta;
-	if ( !wrMeta.OpenFile ( sMetaNew, sError ) )
-		sphDie ( "failed to serialize meta: %s", sError.cstr() ); // !COMMIT handle this gracefully
 
 	JsonEscapedBuilder sNewMeta;
 	sNewMeta.ObjectWBlock();
@@ -3959,41 +3955,26 @@ void RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )
 	sNewMeta.NamedString ( "meta_created_time_utc", sphCurrentUtcTime() );
 
 	sNewMeta.NamedVal ( "meta_version", META_VERSION );
-	sNewMeta.NamedVal ( "index_format_version", INDEX_FORMAT_VERSION );
+//	sNewMeta.NamedVal ( "index_format_version", INDEX_FORMAT_VERSION );
 	sNewMeta.NamedVal ( "total_documents", m_tStats.m_iTotalDocuments );
 	sNewMeta.NamedVal ( "total_bytes", m_tStats.m_iTotalBytes );
 	sNewMeta.NamedVal ( "tid", iTID );
 
-	wrMeta.PutDword ( META_HEADER_MAGIC );
-	wrMeta.PutDword ( META_VERSION );
-	wrMeta.PutDword ( (DWORD)m_tStats.m_iTotalDocuments ); // FIXME? we don't expect over 4G docs per just 1 local index
-	wrMeta.PutOffset ( m_tStats.m_iTotalBytes ); // FIXME? need PutQword ideally
-	wrMeta.PutOffset ( iTID );
-
 	// meta v.4, save disk index format and settings, too
-	wrMeta.PutDword ( INDEX_FORMAT_VERSION );
-	WriteSchema ( wrMeta, m_tSchema );
 	sNewMeta.NamedVal ( "schema", m_tSchema );
 
-	SaveIndexSettings ( wrMeta, m_tSettings );
 	sNewMeta.NamedVal ( "index_settings", m_tSettings );
 
-	SaveTokenizerSettings ( wrMeta, m_pTokenizer, m_tSettings.m_iEmbeddedLimit );
 	sNewMeta.Named ( "tokenizer_settings" );
 	SaveTokenizerSettings ( sNewMeta, m_pTokenizer, m_tSettings.m_iEmbeddedLimit );
 
-	SaveDictionarySettings ( wrMeta, m_pDict, m_bKeywordDict, m_tSettings.m_iEmbeddedLimit );
 	sNewMeta.Named ( "dictionary_settings" );
 	SaveDictionarySettings ( sNewMeta, m_pDict, m_bKeywordDict, m_tSettings.m_iEmbeddedLimit );
 
 	// meta v.5
-	wrMeta.PutDword ( m_iWordsCheckpoint );
 	sNewMeta.NamedVal ( "words_checkpoint", m_iWordsCheckpoint);
 
 	// meta v.7
-	wrMeta.PutDword ( m_iMaxCodepointLength );
-	wrMeta.PutByte ( BLOOM_PER_ENTRY_VALS_COUNT );
-	wrMeta.PutByte ( BLOOM_HASHES_COUNT );
 	sNewMeta.NamedValNonDefault ( "max_codepoint_length", m_iMaxCodepointLength );
 	sNewMeta.NamedValNonDefault ( "bloom_per_entry_vals_count", BLOOM_PER_ENTRY_VALS_COUNT, 8 );
 	sNewMeta.NamedValNonDefault ( "bloom_hashes_count",  BLOOM_HASHES_COUNT, 2 );
@@ -4005,11 +3986,7 @@ void RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )
 		m_pFieldFilter->GetSettings(tFieldFilterSettings);
 		sNewMeta.NamedVal ( "field_filter_settings", tFieldFilterSettings );
 	}
-	tFieldFilterSettings.Save(wrMeta);
 
-	// meta v.12
-	wrMeta.PutDword ( dChunkNames.GetLength () );
-	wrMeta.PutBytes ( dChunkNames.Begin(), dChunkNames.GetLengthBytes() );
 	{
 		sNewMeta.Named ( "chunk_names" );
 		auto _ = sNewMeta.Array();
@@ -4018,28 +3995,20 @@ void RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )
 	}
 
 	// meta v.17+
-	wrMeta.PutOffset(m_iSoftRamLimit);
 	sNewMeta.NamedVal ( "soft_ram_limit", m_iSoftRamLimit );
-
 	sNewMeta.FinishBlocks();
 
-	wrMeta.CloseFile();
-
-	// no need to remove old but good meta in case new meta failed to save
-	if ( wrMeta.IsError() )
-	{
-		sphWarning ( "%s", sError.cstr() );
-		return;
-	}
 
 	CSphWriter wrMetaJson;
-	if ( wrMetaJson.OpenFile ( sMetaJson, sError ) )
+	if ( wrMetaJson.OpenFile ( sMetaNew, sError ) )
 	{
 		wrMetaJson.PutString ( (Str_t)sNewMeta );
 		wrMetaJson.CloseFile();
 		assert ( bson::ValidateJson ( sNewMeta.cstr(), &sError ) );
-	} else
+	} else {
 		sphWarning ( "failed to serialize meta to json: %s", sError.cstr() );
+		return;
+	}
 
 	// rename
 	if ( sph::rename ( sMetaNew.cstr(), sMeta.cstr() ) )
@@ -4241,16 +4210,10 @@ CSphIndex * RtIndex_c::PreallocDiskChunk ( const char * sChunk, int iChunk, File
 	return pDiskChunk.LeakPtr();
 }
 
-
-bool RtIndex_c::LoadMeta ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings )
+bool RtIndex_c::LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings )
 {
-	// check if we have a meta file (kinda-header)
 	CSphString sMeta;
 	sMeta.SetSprintf ( "%s.meta", m_sPath.cstr() );
-
-	// no readable meta? no disk part yet
-	if ( !sphIsReadable ( sMeta.cstr() ) )
-		return true;
 
 	// opened and locked, lets read
 	CSphAutoreader rdMeta;
@@ -4378,6 +4341,165 @@ bool RtIndex_c::LoadMeta ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath
 		m_iSoftRamLimit = rdMeta.GetOffset();
 
 	return true;
+}
+
+
+bool RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings )
+{
+
+	using namespace bson;
+
+	CSphString sMeta;
+	sMeta.SetSprintf ( "%s.meta", m_sPath.cstr() );
+
+	CSphVector<BYTE> dData;
+	if ( !sphJsonParse ( dData, sMeta, m_sLastError ) )
+		return false;
+
+	Bson_c tBson ( dData );
+	if ( tBson.IsEmpty() || !tBson.IsAssoc() )
+	{
+		m_sLastError = "Something wrong read from json meta - it is either empty, either not root object.";
+		return false;
+	}
+
+	// version
+	uVersion = (DWORD)Int ( tBson.ChildByName ( "meta_version" ) );
+	if ( uVersion == 0 || uVersion > META_VERSION )
+	{
+		m_sLastError.SetSprintf ( "%s is v.%u, binary is v.%u", sMeta.cstr(), uVersion, META_VERSION );
+		return false;
+	}
+
+	DWORD uMinFormatVer = 20;
+	if ( uVersion<uMinFormatVer )
+	{
+		m_sLastError.SetSprintf ( "indexes with meta prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, sMeta.cstr(), uVersion );
+		return false;
+	}
+
+	m_tStats.m_iTotalDocuments = Int ( tBson.ChildByName ( "total_documents" ) );
+	m_tStats.m_iTotalBytes = Int ( tBson.ChildByName ( "total_bytes" ) );
+	m_iTID = Int ( tBson.ChildByName ( "tid" ) );
+
+	// tricky bit
+	// we started saving settings into .meta from v.4 and up only
+	// and those reuse disk format version, aka INDEX_FORMAT_VERSION
+	// anyway, starting v.4, serialized settings take precedence over config
+	// so different chunks can't have different settings any more
+	CSphTokenizerSettings tTokenizerSettings;
+	CSphDictSettings tDictSettings;
+	CSphEmbeddedFiles tEmbeddedFiles;
+
+	// load them settings
+//	DWORD uSettingsVer = Int ( tBson.ChildByName ( "index_format_version" ) );
+	CSphSchema tSchema;
+	ReadSchemaJson ( tBson.ChildByName ( "schema" ), tSchema );
+	SetSchema ( tSchema );
+	LoadIndexSettingsJson ( tBson.ChildByName ( "index_settings" ), m_tSettings );
+	if ( !tTokenizerSettings.Load ( pFilenameBuilder, tBson.ChildByName ( "tokenizer_settings" ), tEmbeddedFiles, m_sLastError ) )
+		return false;
+
+	{
+		CSphString sWarning;
+		tDictSettings.Load ( tBson.ChildByName ( "dictionary_settings" ), tEmbeddedFiles, sWarning );
+		if ( !sWarning.IsEmpty() )
+			dWarnings.Add(sWarning);
+	}
+
+	m_bKeywordDict = tDictSettings.m_bWordDict;
+
+	// initialize AOT if needed
+	DWORD uPrevAot = m_tSettings.m_uAotFilterMask;
+	m_tSettings.m_uAotFilterMask = sphParseMorphAot ( tDictSettings.m_sMorphology.cstr() );
+	if ( m_tSettings.m_uAotFilterMask!=uPrevAot )
+	{
+		CSphString sWarning;
+		sWarning.SetSprintf ( "index '%s': morphology option changed from config has no effect, ignoring", m_sIndexName.cstr() );
+		dWarnings.Add(sWarning);
+	}
+
+	if ( bStripPath )
+	{
+		StripPath ( tTokenizerSettings.m_sSynonymsFile );
+		ARRAY_FOREACH ( i, tDictSettings.m_dWordforms )
+			StripPath ( tDictSettings.m_dWordforms[i] );
+	}
+
+	// recreate tokenizer
+	m_pTokenizer = ISphTokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, pFilenameBuilder, dWarnings, m_sLastError );
+	if ( !m_pTokenizer )
+		return false;
+
+	// recreate dictionary
+	m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, m_sIndexName.cstr(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError );
+	if ( !m_sLastError.IsEmpty() )
+		m_sLastError.SetSprintf ( "index '%s': %s", m_sIndexName.cstr(), m_sLastError.cstr() );
+
+	if ( !m_pDict )
+		return false;
+
+	if ( !m_sLastError.IsEmpty() )
+		dWarnings.Add(m_sLastError);
+
+	m_pTokenizer = ISphTokenizer::CreateMultiformFilter ( m_pTokenizer, m_pDict->GetMultiWordforms () );
+
+	m_iWordsCheckpoint = (int)Int ( tBson.ChildByName ( "words_checkpoint" ) );
+
+	// check that infixes definition changed - going to rebuild infixes
+	m_iMaxCodepointLength = (int)Int ( tBson.ChildByName ( "max_codepoint_length" ) );
+	int iBloomKeyLen = (int)Int ( tBson.ChildByName ( "bloom_per_entry_vals_count" ), 8 );
+	int iBloomHashesCount = (int)Int ( tBson.ChildByName ( "bloom_hashes_count" ), 2 );
+	bRebuildInfixes = ( iBloomKeyLen!=BLOOM_PER_ENTRY_VALS_COUNT || iBloomHashesCount!=BLOOM_HASHES_COUNT );
+
+	if ( bRebuildInfixes )
+	{
+		CSphString sWarning;
+		sWarning.SetSprintf ( "infix definition changed (from len=%d, hashes=%d to len=%d, hashes=%d) - rebuilding...",
+			(int)BLOOM_PER_ENTRY_VALS_COUNT, (int)BLOOM_HASHES_COUNT, iBloomKeyLen, iBloomHashesCount );
+		dWarnings.Add(sWarning);
+	}
+
+	FieldFilterRefPtr_c pFieldFilter;
+	auto tFieldFilterSettingsNode = tBson.ChildByName ( "field_filter_settings" );
+	if ( !IsNullNode ( tFieldFilterSettingsNode ) )
+	{
+		CSphFieldFilterSettings tFieldFilterSettings;
+		Bson_c ( tFieldFilterSettingsNode ).ForEach ( [&tFieldFilterSettings] ( const NodeHandle_t& tNode ) {
+			tFieldFilterSettings.m_dRegexps.Add ( String ( tNode ) );
+		} );
+
+		if ( !tFieldFilterSettings.m_dRegexps.IsEmpty() )
+			pFieldFilter = sphCreateRegexpFilter ( tFieldFilterSettings, m_sLastError );
+	}
+
+	if ( !sphSpawnFilterICU ( pFieldFilter, m_tSettings, tTokenizerSettings, sMeta.cstr(), m_sLastError ) )
+		return false;
+
+	SetFieldFilter ( pFieldFilter );
+
+	Bson_c tNamesVec { tBson.ChildByName ( "chunk_names" ) };
+	m_dChunkNames.Reset ( tNamesVec.CountValues() );
+	int iLastQ = 0;
+	tNamesVec.ForEach ( [&iLastQ, this] ( const NodeHandle_t& tNode ) { m_dChunkNames[iLastQ++] = (int)Int ( tNode ); });
+
+	m_iSoftRamLimit = Int ( tBson.ChildByName ( "soft_ram_limit" ) );
+	return true;
+}
+
+
+bool RtIndex_c::LoadMeta ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings )
+{
+	// check if we have a meta file (kinda-header)
+	CSphString sMeta;
+	sMeta.SetSprintf ( "%s.meta", m_sPath.cstr() );
+
+	// no readable meta? no disk part yet
+	if ( !sphIsReadable ( sMeta.cstr() ) )
+		return true;
+
+	return LoadMetaJson ( pFilenameBuilder, bStripPath, uVersion, bRebuildInfixes, dWarnings )
+		|| LoadMetaLegacy ( pFilenameBuilder, bStripPath, uVersion, bRebuildInfixes, dWarnings );
 }
 
 

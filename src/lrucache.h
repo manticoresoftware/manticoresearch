@@ -26,29 +26,32 @@ public:
 	bool	Add ( KEY tKey, const VALUE & tData );
 	void	Release ( KEY tKey );
 
+	template <typename COND>
+	void	Delete ( COND && fnCond );
+
 protected:
-	struct LinkedBlock_t
+	struct LinkedEntry_t
 	{
 		VALUE			m_tValue;
 		DWORD			m_uSize = 0;
 		int				m_iRefcount = 0;
-		LinkedBlock_t *	m_pPrev = nullptr;
-		LinkedBlock_t *	m_pNext = nullptr;
+		LinkedEntry_t *	m_pPrev = nullptr;
+		LinkedEntry_t *	m_pNext = nullptr;
 		KEY				m_tKey;
 	};
 
-	LinkedBlock_t *		m_pHead = nullptr;
-	LinkedBlock_t *		m_pTail = nullptr;
+	LinkedEntry_t *		m_pHead = nullptr;
+	LinkedEntry_t *		m_pTail = nullptr;
 	int64_t				m_iCacheSize = 0;
 	int64_t				m_iMemUsed = 0;
 	CSphMutex			m_tLock;
-	OpenHash_T<LinkedBlock_t *, KEY, HELPER> m_tHash;
+	OpenHash_T<LinkedEntry_t *, KEY, HELPER> m_tHash;
 
-	void	Delete ( LinkedBlock_t * pBlock );
+	void	Delete ( LinkedEntry_t * pEntry );
 
 private:
-	void	MoveToHead ( LinkedBlock_t * pBlock );
-	void	Add ( LinkedBlock_t * pBlock );
+	void	MoveToHead ( LinkedEntry_t * pEntry );
+	void	Add ( LinkedEntry_t * pEntry );
 	void	SweepUnused ( DWORD uSpaceNeeded );
 	bool	HaveSpaceFor ( DWORD uSpaceNeeded ) const;
 };
@@ -62,11 +65,11 @@ LRUCache_T<KEY,VALUE,HELPER>::LRUCache_T ( int64_t iCacheSize )
 template <typename KEY, typename VALUE, typename HELPER>
 LRUCache_T<KEY,VALUE,HELPER>::~LRUCache_T()
 {
-	LinkedBlock_t * pBlock = m_pHead;
-	while ( pBlock )
+	LinkedEntry_t * pEntry = m_pHead;
+	while ( pEntry )
 	{
-		LinkedBlock_t * pToDelete = pBlock;
-		pBlock = pBlock->m_pNext;
+		LinkedEntry_t * pToDelete = pEntry;
+		pEntry = pEntry->m_pNext;
 		Delete(pToDelete);
 	}
 }
@@ -76,14 +79,14 @@ bool LRUCache_T<KEY,VALUE,HELPER>::Find ( KEY tKey, VALUE & tData )
 {
 	ScopedMutex_t tLock(m_tLock);
 
-	LinkedBlock_t ** ppBlock = m_tHash.Find(tKey);
-	if ( !ppBlock )
+	LinkedEntry_t ** ppEntry = m_tHash.Find(tKey);
+	if ( !ppEntry )
 		return false;
 
-	MoveToHead ( *ppBlock );
+	MoveToHead ( *ppEntry );
 
-	(*ppBlock)->m_iRefcount++;
-	tData = (*ppBlock)->m_tValue;
+	(*ppEntry)->m_iRefcount++;
+	tData = (*ppEntry)->m_tValue;
 	return true;
 }
 
@@ -93,12 +96,12 @@ bool LRUCache_T<KEY,VALUE,HELPER>::Add ( KEY tKey, const VALUE & tData )
 	ScopedMutex_t tLock(m_tLock);
 
 	// if another thread managed to add a similar block while we were uncompressing ours, let it be
-	LinkedBlock_t ** ppBlock = m_tHash.Find(tKey);
-	if ( ppBlock )
+	LinkedEntry_t ** ppEntry = m_tHash.Find(tKey);
+	if ( ppEntry )
 		return false;
 
 	DWORD uSize = HELPER::GetSize(tData);
-	DWORD uSpaceNeeded = uSize + sizeof(LinkedBlock_t);
+	DWORD uSpaceNeeded = uSize + sizeof(LinkedEntry_t);
 	if ( !HaveSpaceFor ( uSpaceNeeded ) )
 	{
 		DWORD MAX_BLOCK_SIZE = m_iCacheSize/64;
@@ -110,13 +113,13 @@ bool LRUCache_T<KEY,VALUE,HELPER>::Add ( KEY tKey, const VALUE & tData )
 			return false;
 	}
 
-	LinkedBlock_t * pBlock = new LinkedBlock_t;
-	*(VALUE*)pBlock = tData;
-	pBlock->m_iRefcount++;
-	pBlock->m_tKey = tKey;
-	pBlock->m_uSize = uSize;
+	LinkedEntry_t * pEntry = new LinkedEntry_t;
+	*(VALUE*)pEntry = tData;
+	pEntry->m_iRefcount++;
+	pEntry->m_tKey = tKey;
+	pEntry->m_uSize = uSize;
 
-	Add ( pBlock );
+	Add ( pEntry );
 	return true;
 }
 
@@ -125,94 +128,116 @@ void LRUCache_T<KEY,VALUE,HELPER>::Release ( KEY tKey )
 {
 	ScopedMutex_t tLock(m_tLock);
 
-	LinkedBlock_t ** ppBlock = m_tHash.Find(tKey);
-	assert(ppBlock);
+	LinkedEntry_t ** ppEntry = m_tHash.Find(tKey);
+	assert(ppEntry);
 
-	LinkedBlock_t * pBlock = *ppBlock;
-	pBlock->m_iRefcount--;
-	assert ( pBlock->m_iRefcount>=0 );
+	LinkedEntry_t * pEntry = *ppEntry;
+	pEntry->m_iRefcount--;
+	assert ( pEntry->m_iRefcount>=0 );
 }
 
 template <typename KEY, typename VALUE, typename HELPER>
-void LRUCache_T<KEY,VALUE,HELPER>::MoveToHead ( LinkedBlock_t * pBlock )
+template <typename COND>
+void LRUCache_T<KEY,VALUE,HELPER>::Delete ( COND && fnCond )
 {
-	assert ( pBlock );
+	ScopedMutex_t tLock(m_tLock);
 
-	if ( pBlock==m_pHead )
+	LinkedEntry_t * pEntry = m_pHead;
+	while ( pEntry )
+	{
+		if ( fnCond ( pEntry->m_tKey) )
+		{
+			assert ( !pEntry->m_iRefcount );
+			LinkedEntry_t * pToDelete = pEntry;
+			pEntry = pEntry->m_pNext;
+			Delete(pToDelete);
+		}
+		else
+			pEntry = pEntry->m_pNext;
+	}
+}
+
+
+template <typename KEY, typename VALUE, typename HELPER>
+void LRUCache_T<KEY,VALUE,HELPER>::MoveToHead ( LinkedEntry_t * pEntry )
+{
+	assert ( pEntry );
+
+	if ( pEntry==m_pHead )
 		return;
 
-	if ( m_pTail==pBlock )
-		m_pTail = pBlock->m_pPrev;
+	if ( m_pTail==pEntry )
+		m_pTail = pEntry->m_pPrev;
 
-	if ( pBlock->m_pPrev )
-		pBlock->m_pPrev->m_pNext = pBlock->m_pNext;
+	if ( pEntry->m_pPrev )
+		pEntry->m_pPrev->m_pNext = pEntry->m_pNext;
 
-	if ( pBlock->m_pNext )
-		pBlock->m_pNext->m_pPrev = pBlock->m_pPrev;
+	if ( pEntry->m_pNext )
+		pEntry->m_pNext->m_pPrev = pEntry->m_pPrev;
 
-	pBlock->m_pPrev = nullptr;
-	pBlock->m_pNext = m_pHead;
-	m_pHead->m_pPrev = pBlock;
-	m_pHead = pBlock;
+	pEntry->m_pPrev = nullptr;
+	pEntry->m_pNext = m_pHead;
+	m_pHead->m_pPrev = pEntry;
+	m_pHead = pEntry;
 }
 
 template <typename KEY, typename VALUE, typename HELPER>
-void LRUCache_T<KEY,VALUE,HELPER>::Add ( LinkedBlock_t * pBlock )
+void LRUCache_T<KEY,VALUE,HELPER>::Add ( LinkedEntry_t * pEntry )
 {
-	pBlock->m_pNext = m_pHead;
+	pEntry->m_pNext = m_pHead;
 	if ( m_pHead )
-		m_pHead->m_pPrev = pBlock;
+		m_pHead->m_pPrev = pEntry;
 
 	if ( !m_pTail )
-		m_pTail = pBlock;
+		m_pTail = pEntry;
 
-	m_pHead = pBlock;
+	m_pHead = pEntry;
 
-	Verify ( m_tHash.Add ( pBlock->m_tKey, pBlock ) );
+	Verify ( m_tHash.Add ( pEntry->m_tKey, pEntry ) );
 
-	m_iMemUsed += pBlock->m_uSize + sizeof(LinkedBlock_t);
+	m_iMemUsed += pEntry->m_uSize + sizeof(LinkedEntry_t);
 }
 
 template <typename KEY, typename VALUE, typename HELPER>
-void LRUCache_T<KEY,VALUE,HELPER>::Delete ( LinkedBlock_t * pBlock )
+void LRUCache_T<KEY,VALUE,HELPER>::Delete ( LinkedEntry_t * pEntry )
 {
-	Verify ( m_tHash.Delete ( pBlock->m_tKey ) );
+	Verify ( m_tHash.Delete ( pEntry->m_tKey ) );
 
-	if ( m_pHead == pBlock )
-		m_pHead = pBlock->m_pNext;
+	if ( m_pHead == pEntry )
+		m_pHead = pEntry->m_pNext;
 
-	if ( m_pTail==pBlock )
-		m_pTail = pBlock->m_pPrev;
+	if ( m_pTail==pEntry )
+		m_pTail = pEntry->m_pPrev;
 
-	if ( pBlock->m_pPrev )
-		pBlock->m_pPrev->m_pNext = pBlock->m_pNext;
+	if ( pEntry->m_pPrev )
+		pEntry->m_pPrev->m_pNext = pEntry->m_pNext;
 
-	if ( pBlock->m_pNext )
-		pBlock->m_pNext->m_pPrev = pBlock->m_pPrev;
+	if ( pEntry->m_pNext )
+		pEntry->m_pNext->m_pPrev = pEntry->m_pPrev;
 
-	m_iMemUsed -= pBlock->m_uSize + sizeof(LinkedBlock_t);
+	m_iMemUsed -= pEntry->m_uSize + sizeof(LinkedEntry_t);
 	assert ( m_iMemUsed>=0 );
 
-	HELPER::Reset ( pBlock->m_tValue );
-	SafeDelete(pBlock);
+	HELPER::Reset ( pEntry->m_tValue );
+	SafeDelete(pEntry);
 }
 
 template <typename KEY, typename VALUE, typename HELPER>
 void LRUCache_T<KEY,VALUE,HELPER>::SweepUnused ( DWORD uSpaceNeeded )
 {
 	// least recently used blocks are the tail
-	LinkedBlock_t * pBlock = m_pTail;
-	while ( pBlock && !HaveSpaceFor ( uSpaceNeeded ) )
+	LinkedEntry_t * pEntry = m_pTail;
+	while ( pEntry && !HaveSpaceFor ( uSpaceNeeded ) )
 	{
-		if ( !pBlock->m_iRefcount )
+		if ( !pEntry->m_iRefcount )
 		{
-			assert ( !pBlock->m_iRefcount );
-			LinkedBlock_t * pToDelete = pBlock;
-			pBlock = pBlock->m_pPrev;
+			assert ( !pEntry->m_iRefcount );
+			LinkedEntry_t * pToDelete = pEntry;
+			pEntry = pEntry->m_pPrev;
 			Delete(pToDelete);
 		}
 		else
-			pBlock = pBlock->m_pPrev;
+			pEntry = pEntry->m_pPrev;
 	}
 }
 

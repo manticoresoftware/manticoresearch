@@ -295,10 +295,10 @@ struct BlockData_t
 
 struct HashKey_t
 {
-	DWORD		m_uUID;
+	int64_t		m_iIndexId;
 	SphOffset_t	m_tOffset;
 
-	bool operator == ( const HashKey_t & tKey ) const { return m_uUID==tKey.m_uUID && m_tOffset==tKey.m_tOffset; }
+	bool operator == ( const HashKey_t & tKey ) const { return m_iIndexId==tKey.m_iIndexId && m_tOffset==tKey.m_tOffset; }
 };
 
 
@@ -306,7 +306,7 @@ struct BlockUtil_t
 {
 	static DWORD GetHash ( const HashKey_t & tKey )
 	{
-		DWORD uCRC32 = sphCRC32 ( &tKey.m_uUID, sizeof(tKey.m_uUID) );
+		DWORD uCRC32 = sphCRC32 ( &tKey.m_iIndexId, sizeof(tKey.m_iIndexId) );
 		return sphCRC32 ( &tKey.m_tOffset, sizeof(tKey.m_tOffset), uCRC32 );
 	}
 
@@ -321,7 +321,7 @@ class BlockCache_c : public LRUCache_T<HashKey_t, BlockData_t, BlockUtil_t>
 	using BASE::BASE;
 
 public:
-	void					DeleteAll ( DWORD uUID );
+	void					DeleteAll ( int64_t iIndexId ) { BASE::Delete ( [iIndexId]( const HashKey_t & tKey ){ return tKey.m_iIndexId==iIndexId; } ); }
 
 	static void				Init ( int64_t iCacheSize );
 	static void				Done()	{ SafeDelete(m_pBlockCache); }
@@ -332,26 +332,6 @@ private:
 };
 
 BlockCache_c * BlockCache_c::m_pBlockCache = nullptr;
-
-void BlockCache_c::DeleteAll ( DWORD uUID )
-{
-	ScopedMutex_t tLock(m_tLock);
-
-	LinkedBlock_t * pBlock = m_pHead;
-	while ( pBlock )
-	{
-		if ( pBlock->m_tKey.m_uUID==uUID )
-		{
-			assert ( !pBlock->m_iRefcount );
-			LinkedBlock_t * pToDelete = pBlock;
-			pBlock = pBlock->m_pNext;
-			Delete(pToDelete);
-		}
-		else
-			pBlock = pBlock->m_pNext;
-	}
-}
-
 
 void BlockCache_c::Init ( int64_t iCacheSize )
 {
@@ -367,10 +347,10 @@ class DocstoreReaders_c
 public:
 						~DocstoreReaders_c();
 
-	void				CreateReader ( int64_t iSessionId, DWORD uDocstoreId, const CSphAutofile & tFile, DWORD uBlockSize );
-	CSphReader *		GetReader ( int64_t iSessionId, DWORD uDocstoreId );
+	void				CreateReader ( int64_t iSessionId, int64_t iIndexId, const CSphAutofile & tFile, DWORD uBlockSize );
+	CSphReader *		GetReader ( int64_t iSessionId, int64_t iIndexId );
 	void				DeleteBySessionId ( int64_t iSessionId );
-	void				DeleteByDocstoreId ( DWORD uDocstoreId );
+	void				DeleteByIndexId ( int64_t iIndexId );
 
 	static void					Init();
 	static void					Done();
@@ -379,8 +359,8 @@ public:
 private:
 	struct HashKey_t
 	{
-		int64_t		m_iSessionId;
-		DWORD		m_uDocstoreId;
+		int64_t	m_iSessionId;
+		int64_t	m_iIndexId;
 		
 		bool operator == ( const HashKey_t & tKey ) const;
 		static DWORD Hash ( const HashKey_t & tKey );
@@ -405,14 +385,14 @@ DocstoreReaders_c * DocstoreReaders_c::m_pReaders = nullptr;
 
 bool DocstoreReaders_c::HashKey_t::operator == ( const HashKey_t & tKey ) const
 {
-	return m_iSessionId==tKey.m_iSessionId && m_uDocstoreId==tKey.m_uDocstoreId;
+	return m_iSessionId==tKey.m_iSessionId && m_iIndexId==tKey.m_iIndexId;
 }
 
 
 DWORD DocstoreReaders_c::HashKey_t::Hash ( const HashKey_t & tKey )
 {
 	DWORD uCRC32 = sphCRC32 ( &tKey.m_iSessionId, sizeof(tKey.m_iSessionId) );
-	return sphCRC32 ( &tKey.m_uDocstoreId, sizeof(tKey.m_uDocstoreId), uCRC32 );
+	return sphCRC32 ( &tKey.m_iIndexId, sizeof(tKey.m_iIndexId), uCRC32 );
 }
 
 
@@ -423,11 +403,11 @@ DocstoreReaders_c::~DocstoreReaders_c()
 }
 
 
-void DocstoreReaders_c::CreateReader ( int64_t iSessionId, DWORD uDocstoreId, const CSphAutofile & tFile, DWORD uBlockSize )
+void DocstoreReaders_c::CreateReader ( int64_t iSessionId, int64_t iIndexId, const CSphAutofile & tFile, DWORD uBlockSize )
 {
 	ScopedMutex_t tLock(m_tLock);
 
-	if ( m_tHash ( { iSessionId, uDocstoreId } ) )
+	if ( m_tHash ( { iSessionId, iIndexId } ) )
 		return;
 
 	int iBufferSize = (int)uBlockSize*8;
@@ -443,15 +423,15 @@ void DocstoreReaders_c::CreateReader ( int64_t iSessionId, DWORD uDocstoreId, co
 	CSphReader * pReader = new CSphReader ( nullptr, iBufferSize );
 	pReader->SetFile(tFile);
 
-	Verify ( m_tHash.Add ( pReader, {iSessionId, uDocstoreId} ) );
+	Verify ( m_tHash.Add ( pReader, {iSessionId, iIndexId} ) );
 	m_iTotalReaderSize += iBufferSize;
 }
 
 
-CSphReader * DocstoreReaders_c::GetReader ( int64_t iSessionId, DWORD uDocstoreId )
+CSphReader * DocstoreReaders_c::GetReader ( int64_t iSessionId, int64_t iIndexId )
 {
 	ScopedMutex_t tLock(m_tLock);
-	CSphReader ** ppReader = m_tHash ( { iSessionId, uDocstoreId } );
+	CSphReader ** ppReader = m_tHash ( { iSessionId, iIndexId } );
 	return ppReader ? *ppReader : nullptr;
 }
 
@@ -481,14 +461,14 @@ void DocstoreReaders_c::DeleteBySessionId ( int64_t iSessionId )
 }
 
 
-void DocstoreReaders_c::DeleteByDocstoreId ( DWORD uDocstoreId )
+void DocstoreReaders_c::DeleteByIndexId ( int64_t iIndexId )
 {
 	ScopedMutex_t tLock(m_tLock);
 
 	// fixme: create a separate (faster) lookup?
 	CSphVector<std::pair<CSphReader*,HashKey_t>> dToDelete;
 	for ( auto& tDocstore : m_tHash )
-		if ( tDocstore.first.m_uDocstoreId==uDocstoreId )
+		if ( tDocstore.first.m_iIndexId==iIndexId )
 			dToDelete.Add ( { tDocstore.second, tDocstore.first } );
 
 	for ( const auto & i : dToDelete )
@@ -537,7 +517,7 @@ class Docstore_c : public Docstore_i, public DocstoreSettings_t
 	friend class DocstoreChecker_c;
 
 public:
-						Docstore_c ( const CSphString & sFilename );
+						Docstore_c ( int64_t iIndexId, const CSphString & sFilename );
 						~Docstore_c() override;
 
 	bool				Init ( CSphString & sError );
@@ -565,14 +545,12 @@ private:
 	};
 
 
-	DWORD						m_uUID = 0;
+	int64_t						m_iIndexId = 0;
 	CSphString					m_sFilename;
 	CSphAutofile				m_tFile;
 	CSphFixedVector<Block_t>	m_dBlocks{0};
 	CSphScopedPtr<Compressor_i> m_pCompressor{nullptr};
 	DocstoreFields_c			m_tFields;
-
-	static DWORD				m_uUIDGenerator;
 
 	const Block_t *				FindBlock ( RowID_t tRowID ) const;
 	void						ReadFromFile ( BYTE * pData, int iLength, SphOffset_t tOffset, int64_t iSessionId ) const;
@@ -586,25 +564,21 @@ private:
 };
 
 
-DWORD Docstore_c::m_uUIDGenerator = 0;
-
-
-Docstore_c::Docstore_c ( const CSphString & sFilename )
-	: m_sFilename ( sFilename )
-{
-	m_uUID = m_uUIDGenerator++;
-}
+Docstore_c::Docstore_c ( int64_t iIndexId, const CSphString & sFilename )
+	: m_iIndexId ( iIndexId )
+	, m_sFilename ( sFilename )
+{}
 
 
 Docstore_c::~Docstore_c ()
 {
 	BlockCache_c * pBlockCache = BlockCache_c::Get();
 	if ( pBlockCache )
-		pBlockCache->DeleteAll(m_uUID);
+		pBlockCache->DeleteAll(m_iIndexId);
 
 	DocstoreReaders_c * pReaders = DocstoreReaders_c::Get();
 	if ( pReaders )
-		pReaders->DeleteByDocstoreId(m_uUID);
+		pReaders->DeleteByIndexId(m_iIndexId);
 }
 
 
@@ -691,7 +665,7 @@ void Docstore_c::CreateReader ( int64_t iSessionId ) const
 {
 	DocstoreReaders_c * pReaders = DocstoreReaders_c::Get();
 	if ( pReaders )
-		pReaders->CreateReader ( iSessionId, m_uUID, m_tFile, m_uBlockSize );
+		pReaders->CreateReader ( iSessionId, m_iIndexId, m_tFile, m_uBlockSize );
 }
 
 
@@ -721,17 +695,17 @@ DocstoreDoc_t Docstore_c::GetDoc ( RowID_t tRowID, const VecTraits_T<int> * pFie
 
 struct ScopedBlock_t
 {
-	DWORD		m_uUID = UINT_MAX;
+	int64_t		m_iIndexId = INT64_MAX;
 	SphOffset_t	m_tOffset = 0;
 
 	~ScopedBlock_t()
 	{
-		if ( m_uUID==UINT_MAX )
+		if ( m_iIndexId==INT64_MAX )
 			return;
 
 		BlockCache_c * pBlockCache = BlockCache_c::Get();
 		assert ( pBlockCache );
-		pBlockCache->Release ( { m_uUID, m_tOffset } );
+		pBlockCache->Release ( { m_iIndexId, m_tOffset } );
 	}
 };
 
@@ -741,7 +715,7 @@ void Docstore_c::ReadFromFile ( BYTE * pData, int iLength, SphOffset_t tOffset, 
 	DocstoreReaders_c * pReaders = DocstoreReaders_c::Get();
 	CSphReader * pReader = nullptr;
 	if ( pReaders )
-		pReader = pReaders->GetReader ( iSessionId, m_uUID );
+		pReader = pReaders->GetReader ( iSessionId, m_iIndexId );
 
 	if ( pReader )
 	{
@@ -834,18 +808,18 @@ DocstoreDoc_t Docstore_c::ReadDocFromSmallBlock ( const Block_t & tBlock, RowID_
 	BlockCache_c * pBlockCache = BlockCache_c::Get();
 
 	BlockData_t tBlockData;
-	bool bFromCache = pBlockCache && pBlockCache->Find ( { m_uUID, tBlock.m_tOffset }, tBlockData );
+	bool bFromCache = pBlockCache && pBlockCache->Find ( { m_iIndexId, tBlock.m_tOffset }, tBlockData );
 	if ( !bFromCache )
 	{
 		tBlockData = UncompressSmallBlock ( tBlock, iSessionId );
-		bFromCache = pBlockCache && pBlockCache->Add ( { m_uUID, tBlock.m_tOffset }, tBlockData );
+		bFromCache = pBlockCache && pBlockCache->Add ( { m_iIndexId, tBlock.m_tOffset }, tBlockData );
 	}
 
 	ScopedBlock_t tScopedBlock;
 	CSphFixedVector<BYTE> tDataPtr {0};	// scoped array ptr
 	if ( bFromCache )
 	{
-		tScopedBlock.m_uUID = m_uUID;
+		tScopedBlock.m_iIndexId = m_iIndexId;
 		tScopedBlock.m_tOffset = tBlock.m_tOffset;
 	}
 	else
@@ -912,18 +886,18 @@ void Docstore_c::ProcessBigBlockField ( int iField, const FieldInfo_t & tInfo, i
 	BlockCache_c * pBlockCache = BlockCache_c::Get();
 
 	BlockData_t tBlockData;
-	bool bFromCache = pBlockCache && pBlockCache->Find ( { m_uUID, tOffset }, tBlockData );
+	bool bFromCache = pBlockCache && pBlockCache->Find ( { m_iIndexId, tOffset }, tBlockData );
 	if ( !bFromCache )
 	{
 		tBlockData = UncompressBigBlockField ( tOffset, tInfo, iSessionId );
-		bFromCache = pBlockCache && pBlockCache->Add ( { m_uUID, tOffset }, tBlockData );
+		bFromCache = pBlockCache && pBlockCache->Add ( { m_iIndexId, tOffset }, tBlockData );
 	}
 
 	ScopedBlock_t tScopedBlock;
 	CSphFixedVector<BYTE> tDataPtr {0};	// scoped array ptr
 	if ( bFromCache )
 	{
-		tScopedBlock.m_uUID = m_uUID;
+		tScopedBlock.m_iIndexId = m_iIndexId;
 		tScopedBlock.m_tOffset = tOffset;
 	}
 	else
@@ -1944,9 +1918,9 @@ void DocstoreChecker_c::CheckBlock ( const Docstore_c::Block_t & tBlock )
 
 //////////////////////////////////////////////////////////////////////////
 
-Docstore_i * CreateDocstore ( const CSphString & sFilename, CSphString & sError )
+Docstore_i * CreateDocstore ( int64_t iIndexId, const CSphString & sFilename, CSphString & sError )
 {
-	CSphScopedPtr<Docstore_c> pDocstore ( new Docstore_c(sFilename) );
+	CSphScopedPtr<Docstore_c> pDocstore ( new Docstore_c ( iIndexId, sFilename ) );
 	if ( !pDocstore->Init(sError) )
 		return nullptr;
 

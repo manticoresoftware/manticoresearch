@@ -311,15 +311,16 @@ template < bool INLINE_HITS, bool DISABLE_HITLIST_SEEK >
 class DiskIndexQword_c : public DiskIndexQwordTraits_c
 {
 public:
-	DiskIndexQword_c ( bool bUseMinibuffer, bool bExcluded )
+	DiskIndexQword_c ( bool bUseMinibuffer, bool bExcluded, int64_t iIndexId )
 		: DiskIndexQwordTraits_c ( bUseMinibuffer, bExcluded )
+		, m_iIndexId ( iIndexId )
 	{}
 
 	~DiskIndexQword_c()
 	{
 		if ( m_bSkipFromCache )
 		{
-			SkipCache_c::Get()->Release(m_uWordID);
+			SkipCache_c::Get()->Release ( { m_iIndexId, m_uWordID } );
 			m_pSkipData = nullptr;
 			m_bSkipFromCache = false;
 		}
@@ -519,15 +520,18 @@ private:
 		} else
 			m_tDoc.m_tRowID = INVALID_ROWID;
 	}
+
+private:
+	int64_t m_iIndexId = 0;
 };
 
 
 DiskIndexQwordTraits_c * sphCreateDiskIndexQword ( bool bInlineHits )
 {
 	if ( bInlineHits )
-		return new DiskIndexQword_c<true,false> ( false, false );
+		return new DiskIndexQword_c<true,false> ( false, false, 0 );
 
-	return new DiskIndexQword_c<false,false> ( false, false );
+	return new DiskIndexQword_c<false,false> ( false, false, 0 );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -566,9 +570,8 @@ class DiskPayloadQword_c : public DiskIndexQword_c<INLINE_HITS, false>
 	typedef DiskIndexQword_c<INLINE_HITS, false> BASE;
 
 public:
-	explicit DiskPayloadQword_c ( const DiskSubstringPayload_t * pPayload, bool bExcluded,
-		DataReaderFactory_c * pDoclist, DataReaderFactory_c * pHitlist )
-		: BASE ( true, bExcluded )
+	DiskPayloadQword_c ( const DiskSubstringPayload_t * pPayload, bool bExcluded, DataReaderFactory_c * pDoclist, DataReaderFactory_c * pHitlist, int64_t iIndexId )
+		: BASE ( true, bExcluded, iIndexId )
 	{
 		m_pPayload = pPayload;
 		this->m_iDocs = m_pPayload->m_iTotalDocs;
@@ -7016,6 +7019,67 @@ CSphMultiQueryArgs::CSphMultiQueryArgs ( int iIndexWeight )
 	assert ( iIndexWeight>0 );
 }
 
+/////////////////////////////////////////////////////////////////////
+
+struct SkipCacheKey_t
+{
+	int64_t		m_iIndexId;
+	SphWordID_t	m_tWordId;
+
+	bool operator == ( const SkipCacheKey_t & tKey ) const { return m_iIndexId==tKey.m_iIndexId && m_tWordId==tKey.m_tWordId; }
+};
+
+
+struct SkipCacheUtil_t
+{
+	static DWORD GetHash ( SkipCacheKey_t tKey )
+	{
+		DWORD uCRC32 = sphCRC32 ( &tKey.m_iIndexId, sizeof(tKey.m_iIndexId) );
+		return sphCRC32 ( &tKey.m_tWordId, sizeof(tKey.m_tWordId), uCRC32 );
+	}
+
+	static DWORD GetSize ( SkipData_t * pValue )	{ return pValue ? pValue->m_dSkiplist.GetLengthBytes() : 0; }
+	static void Reset ( SkipData_t * & pValue )		{ SafeDelete(pValue); }
+};
+
+
+class SkipCache_c : public LRUCache_T<SkipCacheKey_t, SkipData_t*, SkipCacheUtil_t>
+{
+	using BASE = LRUCache_T<SkipCacheKey_t, SkipData_t*, SkipCacheUtil_t>;
+	using BASE::BASE;
+
+public:
+	void					DeleteAll ( int64_t iIndexId ) { BASE::Delete ( [iIndexId]( const SkipCacheKey_t & tKey ){ return tKey.m_iIndexId==iIndexId; } ); }
+
+	static void				Init ( int64_t iCacheSize );
+	static void				Done()	{ SafeDelete(m_pSkipCache); }
+	static SkipCache_c *	Get()	{ return m_pSkipCache; }
+
+private:
+	static SkipCache_c *	m_pSkipCache;
+};
+
+SkipCache_c * SkipCache_c::m_pSkipCache = nullptr;
+
+
+void SkipCache_c::Init ( int64_t iCacheSize )
+{
+	assert ( !m_pSkipCache );
+	if ( iCacheSize > 0 )
+		m_pSkipCache = new SkipCache_c(iCacheSize);
+}
+
+
+void InitSkipCache ( int64_t iCacheSize )
+{
+	SkipCache_c::Init(iCacheSize);
+}
+
+
+void ShutdownSkipCache()
+{
+	SkipCache_c::Done();
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // INDEX
@@ -7036,6 +7100,10 @@ CSphIndex::CSphIndex ( const char * sIndexName, const char * sFilename )
 CSphIndex::~CSphIndex ()
 {
 	QcacheDeleteIndex ( m_iIndexId );
+
+	SkipCache_c * pSkipCache = SkipCache_c::Get();
+	if ( pSkipCache )
+		pSkipCache->DeleteAll(m_iIndexId);
 }
 
 
@@ -10908,8 +10976,7 @@ private:
 
 
 template < typename QWORDDST, typename QWORDSRC >
-bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, VecTraits_T<RowID_t> dDstRows, VecTraits_T<RowID_t> dSrcRows,
-	CSphHitBuilder * pHitBuilder, CSphString & sError, CSphIndexProgress & tProgress )
+bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, VecTraits_T<RowID_t> dDstRows, VecTraits_T<RowID_t> dSrcRows, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphIndexProgress & tProgress )
 {
 	auto& tMonitor = tProgress.GetMergeCb();
 	CSphAutofile tDummy;
@@ -10934,8 +11001,8 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 
 	/// setup qwords
 
-	QWORDDST tDstQword ( false, false );
-	QWORDSRC tSrcQword ( false, false );
+	QWORDDST tDstQword ( false, false, pDstIndex->GetIndexId() );
+	QWORDSRC tSrcQword ( false, false, pSrcIndex->GetIndexId() );
 
 	DataReaderFactoryPtr_c tSrcDocs {
 		NewProxyReader ( pSrcIndex->GetIndexFileName ( SPH_EXT_SPD ), sError,
@@ -11564,7 +11631,7 @@ bool CSphIndex_VLN::DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder *
 	pHitBuilder->HitReset();
 
 	/// setup qword
-	QWORD tQword ( false, false );
+	QWORD tQword ( false, false, pIndex->GetIndexId() );
 	DataReaderFactoryPtr_c tDocs {
 		NewProxyReader ( pIndex->GetIndexFileName ( SPH_EXT_SPD ), sError,
 			DataReaderFactory_c::DOCS, pIndex->m_tMutableSettings.m_tFileAccess.m_iReadBufferDocList, FileAccess_e::FILE )
@@ -13037,77 +13104,17 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 
 //////////////////////////////////////////////////////////////////////////////
 
-struct SkipCacheUtil_t
-{
-	static DWORD GetHash ( SphWordID_t tKey )
-	{
-		return DWORD(tKey) ^ DWORD(tKey>>32);
-	}
-
-	static DWORD GetSize ( SkipData_t * pValue )
-	{
-		return pValue ? pValue->m_dSkiplist.GetLengthBytes() : 0;
-	}
-
-	static void Reset ( SkipData_t * & pValue )
-	{
-		SafeDelete(pValue);
-	}
-};
-
-
-class SkipCache_c: public LRUCache_T<SphWordID_t, SkipData_t*, SkipCacheUtil_t>
-{
-	using BASE = LRUCache_T<SphWordID_t, SkipData_t*, SkipCacheUtil_t>;
-	using BASE::BASE;
-
-public:
-	static void				Init ( int64_t iCacheSize );
-	static void				Done()	{ SafeDelete(m_pSkipCache); }
-	static SkipCache_c *	Get()	{ return m_pSkipCache; }
-
-private:
-	static SkipCache_c *	m_pSkipCache;
-};
-
-SkipCache_c * SkipCache_c::m_pSkipCache = nullptr;
-
-
-void SkipCache_c::Init ( int64_t iCacheSize )
-{
-	assert ( !m_pSkipCache );
-	if ( iCacheSize > 0 )
-		m_pSkipCache = new SkipCache_c(iCacheSize);
-}
-
-
-void InitSkipCache ( int64_t iCacheSize )
-{
-	SkipCache_c::Init(iCacheSize);
-}
-
-
-void ShutdownSkipCache()
-{
-	SkipCache_c::Done();
-}
-
-//////////////////////////////////////////////////////////////////////////////
-
 ISphQword * DiskIndexQwordSetup_c::QwordSpawn ( const XQKeyword_t & tWord ) const
 {
 	if ( !tWord.m_pPayload )
 	{
-		WITH_QWORD ( m_pIndex, false, Qword, return new Qword ( tWord.m_bExpanded, tWord.m_bExcluded ) );
+		WITH_QWORD ( m_pIndex, false, Qword, return new Qword ( tWord.m_bExpanded, tWord.m_bExcluded, m_pIndex->GetIndexId() ) );
 	} else
 	{
 		if ( m_pIndex->GetSettings().m_eHitFormat==SPH_HIT_FORMAT_INLINE )
-		{
-			return new DiskPayloadQword_c<true> ( (const DiskSubstringPayload_t *)tWord.m_pPayload, tWord.m_bExcluded, m_pDoclist, m_pHitlist );
-		} else
-		{
-			return new DiskPayloadQword_c<false> ( (const DiskSubstringPayload_t *)tWord.m_pPayload, tWord.m_bExcluded, m_pDoclist, m_pHitlist );
-		}
+			return new DiskPayloadQword_c<true> ( (const DiskSubstringPayload_t *)tWord.m_pPayload, tWord.m_bExcluded, m_pDoclist, m_pHitlist, m_pIndex->GetIndexId() );
+		else
+			return new DiskPayloadQword_c<false> ( (const DiskSubstringPayload_t *)tWord.m_pPayload, tWord.m_bExcluded, m_pDoclist, m_pHitlist, m_pIndex->GetIndexId() );
 	}
 	return NULL;
 }
@@ -13250,12 +13257,12 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 			bool & bFromCache = tWord.m_bSkipFromCache;
 
 			SkipCache_c * pSkipCache = SkipCache_c::Get();
-			bFromCache = bNeedCache && pSkipCache && pSkipCache->Find ( tWord.m_uWordID, tWord.m_pSkipData );
+			bFromCache = bNeedCache && pSkipCache && pSkipCache->Find ( { m_pIndex->GetIndexId(), tWord.m_uWordID }, tWord.m_pSkipData );
 			if ( !bFromCache )
 			{
 				tWord.m_pSkipData = new SkipData_t;
 				tWord.m_pSkipData->Read ( m_pSkips, tRes, tWord.m_iDocs, m_iSkiplistBlockSize );
-				bFromCache = bNeedCache && pSkipCache && pSkipCache->Add ( tWord.m_uWordID, tWord.m_pSkipData );
+				bFromCache = bNeedCache && pSkipCache && pSkipCache->Add ( { m_pIndex->GetIndexId(), tWord.m_uWordID }, tWord.m_pSkipData );
 			}
 		}
 
@@ -13384,6 +13391,11 @@ void CSphIndex_VLN::Dealloc ()
 	m_uAttrsStatus = 0;
 
 	QcacheDeleteIndex ( m_iIndexId );
+
+	SkipCache_c * pSkipCache = SkipCache_c::Get();
+	if ( pSkipCache )
+		pSkipCache->DeleteAll(m_iIndexId);
+
 	m_iIndexId = m_tIdGenerator.fetch_add ( 1, std::memory_order_relaxed );
 }
 
@@ -13752,7 +13764,7 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 	tTermSetup.SetDict ( m_pDict );
 	tTermSetup.m_pIndex = this;
 
-	Qword tKeyword ( false, false );
+	Qword tKeyword ( false, false, m_iIndexId );
 	tKeyword.m_uWordID = uWordID;
 	tKeyword.m_sWord = sKeyword;
 	tKeyword.m_sDictWord = (const char *)sTok;
@@ -13937,7 +13949,7 @@ bool CSphIndex_VLN::PreallocDocstore()
 	if ( !m_tSchema.HasStoredFields() )
 		return true;
 
-	m_pDocstore = CreateDocstore ( GetIndexFileName(SPH_EXT_SPDS), m_sLastError );
+	m_pDocstore = CreateDocstore ( m_iIndexId, GetIndexFileName(SPH_EXT_SPDS), m_sLastError );
 
 	return !!m_pDocstore;
 }
@@ -14581,7 +14593,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	tTermSetup.SetDict ( pDict );
 	tTermSetup.m_pIndex = this;
 
-	Qword tQueryWord ( false, false );
+	Qword tQueryWord ( false, false, m_iIndexId );
 
 	if ( bFillOnly )
 	{
@@ -15557,11 +15569,11 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 	SwitchProfile ( pProfiler, SPH_QSTATE_INIT );
 
 	std::atomic<bool> bInterrupt {false};
-	std::atomic<int32_t> iCurChunk { iJobs-1 };
+	std::atomic<int32_t> iCurChunk { 0 };
 	Threads::CoExecuteN ( tClonableCtx.Concurrency ( iJobs ), [&]
 	{
-		auto iChunk = iCurChunk.fetch_sub ( 1, std::memory_order_acq_rel );
-		if ( iChunk<0 || bInterrupt )
+		auto iChunk = iCurChunk.fetch_add ( 1, std::memory_order_acq_rel );
+		if ( iChunk>=iJobs || bInterrupt )
 			return; // already nothing to do, early finish.
 
 		auto tCtx = tClonableCtx.CloneNewContext();
@@ -15578,7 +15590,7 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 			tChunkMeta.m_pProfile = tThMeta.m_pProfile;
 
 			CSphMultiQueryArgs tMultiArgs ( tArgs.m_iIndexWeight );
-			tMultiArgs.m_iTag = 1;
+			tMultiArgs.m_iTag = iChunk+1;
 			tMultiArgs.m_uPackedFactorFlags = tArgs.m_uPackedFactorFlags;
 			tMultiArgs.m_pLocalDocs = pLocalDocs;
 			tMultiArgs.m_iTotalDocs = iTotalDocs;
@@ -15596,7 +15608,7 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 			if ( tThMeta.m_bHasPrediction )
 				tThMeta.m_tStats.Add ( tChunkMeta.m_tStats );
 
-			if ( iChunk && tmMaxTimer>0 && sph::TimeExceeded ( tmMaxTimer ) )
+			if ( iChunk < iJobs-1 && tmMaxTimer>0 && sph::TimeExceeded ( tmMaxTimer ) )
 			{
 				tThMeta.m_sWarning = "query time exceeded max_query_time";
 				bInterrupt = true;
@@ -15609,8 +15621,8 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 				// FIXME? maybe handle this more gracefully (convert to a warning)?
 				tThMeta.m_sError = tChunkMeta.m_sError;
 
-			iChunk = iCurChunk.fetch_sub ( 1, std::memory_order_acq_rel );
-			if ( iChunk<0 || bInterrupt )
+			iChunk = iCurChunk.fetch_add ( 1, std::memory_order_acq_rel );
+			if ( iChunk>=iJobs || bInterrupt )
 				return; // all is done
 
 			// yield and reschedule every quant of time. It gives work to other tasks

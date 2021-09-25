@@ -3707,6 +3707,9 @@ void RemapResult ( AggrResult_t & dResult )
 
 	for ( auto & tRes : dResult.m_dResults )
 	{
+		if ( tRes.m_dMatches.IsEmpty() )
+			continue;
+
 		dMapFrom.Resize ( 0 );
 		dRowItems.Resize ( 0 );
 		CSphSchema & dSchema = tRes.m_tSchema;

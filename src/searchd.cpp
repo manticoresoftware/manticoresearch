@@ -5555,8 +5555,7 @@ struct LocalSearchRef_t
 	VecTraits_T<AggrResult_t>& m_dAggrResults;
 	VecTraits_T<CSphQueryResult>& m_dResults;
 
-	LocalSearchRef_t ( ExprHook_c & tHook, StrVec_t* pExtra, VecTraits_T<SearchFailuresLog_c> & dFailures,
-			VecTraits_T<AggrResult_t>& dAggrResults, VecTraits_T<CSphQueryResult>& dResults )
+	LocalSearchRef_t ( ExprHook_c & tHook, StrVec_t* pExtra, VecTraits_T<SearchFailuresLog_c> & dFailures, VecTraits_T<AggrResult_t> & dAggrResults, VecTraits_T<CSphQueryResult> & dResults )
 		: m_tHook ( tHook )
 		, m_pExtra ( pExtra )
 		, m_dFailuresSet ( dFailures )

@@ -6361,7 +6361,7 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 		if ( iChunk<0 || bInterrupt )
 			return; // already nothing to do, early finish.
 
-		auto tCtx = tClonableCtx.CloneNewContext();
+		auto tCtx = tClonableCtx.CloneNewContext ( &iChunk );
 		Threads::CoThrottler_c tThrottler ( session::ThrottlingPeriodMS () );
 		int iTick=1; // num of times coro rescheduled by throttler
 		while ( !bInterrupt ) // some earlier job met error; abort.

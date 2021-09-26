@@ -90,8 +90,7 @@ presence of shared `RE2` library in your system.
 segmentation. It is in game when morplology like `icu_chinese` in use.
 
 
-- **WITH_ICU_FORCE_STATIC** - download icu sources, compile them and link with them statically, so that final binaries will not depend on presence of shared `icu` library in your system. Also include icu data file into installation/distribution. Purpose of statically linked ICU - is to have the library of known version, so that behaviour is determined and not depends on any system libraries. You most probably would prefer to use system ICU instead, because it may be updated in time without need to recompile manticore daemon. In this case
-it is you need to explicitly disable this option. That will also save you some place occupied by icu data file (about 30M), as it will NOT be included into distribution then.
+- **WITH_ICU_FORCE_STATIC** - download icu sources, compile them and link with them statically, so that final binaries will not depend on presence of shared `icu` library in your system. Also include icu data file into installation/distribution. Purpose of statically linked ICU - is to have the library of known version, so that behaviour is determined and not depends on any system libraries. You most probably would prefer to use system ICU instead, because it may be updated in time without need to recompile manticore daemon. In this case you need to explicitly disable this option. That will also save you some place occupied by icu data file (about 30M), as it will NOT be included into distribution then.
 
 
 - **WITH_SSL** - used for support https, and also encrypted mysql connections to the daemon. System OpenSSL library will be linked to daemon. That implies, that OpenSSL will be required to start the daemon.

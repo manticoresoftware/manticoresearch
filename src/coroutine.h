@@ -222,7 +222,8 @@ template <typename REFCONTEXT, typename CONTEXT>
 class ClonableCtx_T
 {
 	REFCONTEXT m_dParentContext;
-	CSphFixedVector<Optional_T<std::pair<CONTEXT,int>> > m_dChildrenContexts {0};
+	CSphFixedVector<Optional_T<CONTEXT>> m_dChildrenContexts {0};
+	CSphFixedVector<int> m_dJobIds {0};
 
 	std::atomic<int> m_iTasks {0};	// each call to CloneNewContext() increases value
 	bool m_bDisabled = true;		// ctr with disabled (single-thread) working
@@ -235,12 +236,11 @@ public:
 		if ( !m_dParentContext.IsClonable() )
 			return;
 
-		int iContextes = NThreads()-1;
-		if ( !iContextes )
+		int iContexts = NThreads()-1;
+		if ( !iContexts )
 			return;
 
-		m_dChildrenContexts.Reset ( iContextes );
-		m_bDisabled = false;
+		Setup(iContexts);
 	}
 
 	void LimitConcurrency ( int iDistThreads )
@@ -249,12 +249,11 @@ public:
 		if ( !iDistThreads ) // 0 as for dist_threads means 'no limit'
 			return;
 
-		auto iContextes = iDistThreads-1; // one context is always clone-free
-		if ( m_dChildrenContexts.GetLength ()<=iContextes )
+		auto iContexts = iDistThreads-1; // one context is always clone-free
+		if ( m_dChildrenContexts.GetLength ()<=iContexts )
 			return; // nothing to align
 
-		m_bDisabled = iContextes==0;
-		m_dChildrenContexts.Reset ( iContextes );
+		Setup(iContexts);
 	}
 
 	~ClonableCtx_T()
@@ -269,21 +268,28 @@ public:
 		if ( m_bDisabled )
 			return m_dParentContext;
 
-		int iJobId = pJobId ? *pJobId : 0;
 		auto iMyIdx = m_iTasks.fetch_add ( 1, std::memory_order_acq_rel );
 		if ( !iMyIdx )
 			return m_dParentContext;
 
 		--iMyIdx; // make it back 0-based
 		auto & tCtx = m_dChildrenContexts[iMyIdx];
-		tCtx.emplace_once ( std::make_pair ( m_dParentContext, iJobId ) );
-		return (REFCONTEXT) m_dChildrenContexts[iMyIdx].get().first;
+		tCtx.emplace_once ( m_dParentContext );
+		m_dJobIds[iMyIdx] = pJobId ? *pJobId : 0;
+		return (REFCONTEXT) m_dChildrenContexts[iMyIdx].get();
 	}
 
 	// Num of parallel workers to complete iTasks jobs
 	inline int Concurrency ( int iTasks )
 	{
 		return Min ( m_dChildrenContexts.GetLength ()+1, iTasks ); // +1 since parent is also an extra context
+	}
+
+	void Setup ( int iContexts )
+	{
+		m_dChildrenContexts.Reset(iContexts);
+		m_dJobIds.Reset(iContexts);
+		m_bDisabled = !iContexts;
 	}
 
 	template <typename FNPROCESSOR>
@@ -298,13 +304,13 @@ public:
 		CSphVector<std::pair<int,int>> dOrder;
 		int iWorkThreads = m_iTasks-1;
 		for ( int i = 0; i<iWorkThreads; ++i )
-			dOrder.Add ( { i, m_dChildrenContexts[i].get().second } );
+			dOrder.Add ( { i, m_dJobIds[i] } );
 
 		dOrder.Sort ( ::bind ( &std::pair<int,int>::second ) );
 		for ( auto i : dOrder )
 		{
 			assert ( m_dChildrenContexts[i.first] );
-			auto tCtx = (REFCONTEXT)m_dChildrenContexts[i.first].get().first;
+			auto tCtx = (REFCONTEXT)m_dChildrenContexts[i.first].get();
 			fnProcess(tCtx);
 		}
 	}

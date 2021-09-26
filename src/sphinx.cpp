@@ -272,6 +272,68 @@ const char * sphGetRankerName ( ESphRankMode eRanker )
 
 //////////////////////////////////////////////////////////////////////////
 
+struct SkipCacheKey_t
+{
+	int64_t		m_iIndexId;
+	SphWordID_t	m_tWordId;
+
+	bool operator == ( const SkipCacheKey_t & tKey ) const { return m_iIndexId==tKey.m_iIndexId && m_tWordId==tKey.m_tWordId; }
+};
+
+
+struct SkipCacheUtil_t
+{
+	static DWORD GetHash ( SkipCacheKey_t tKey )
+	{
+		DWORD uCRC32 = sphCRC32 ( &tKey.m_iIndexId, sizeof(tKey.m_iIndexId) );
+		return sphCRC32 ( &tKey.m_tWordId, sizeof(tKey.m_tWordId), uCRC32 );
+	}
+
+	static DWORD GetSize ( SkipData_t * pValue )	{ return pValue ? pValue->m_dSkiplist.GetLengthBytes() : 0; }
+	static void Reset ( SkipData_t * & pValue )		{ SafeDelete(pValue); }
+};
+
+
+class SkipCache_c : public LRUCache_T<SkipCacheKey_t, SkipData_t*, SkipCacheUtil_t>
+{
+	using BASE = LRUCache_T<SkipCacheKey_t, SkipData_t*, SkipCacheUtil_t>;
+	using BASE::BASE;
+
+public:
+	void					DeleteAll ( int64_t iIndexId ) { BASE::Delete ( [iIndexId]( const SkipCacheKey_t & tKey ){ return tKey.m_iIndexId==iIndexId; } ); }
+
+	static void				Init ( int64_t iCacheSize );
+	static void				Done()	{ SafeDelete(m_pSkipCache); }
+	static SkipCache_c *	Get()	{ return m_pSkipCache; }
+
+private:
+	static SkipCache_c *	m_pSkipCache;
+};
+
+SkipCache_c * SkipCache_c::m_pSkipCache = nullptr;
+
+
+void SkipCache_c::Init ( int64_t iCacheSize )
+{
+	assert ( !m_pSkipCache );
+	if ( iCacheSize > 0 )
+		m_pSkipCache = new SkipCache_c(iCacheSize);
+}
+
+
+void InitSkipCache ( int64_t iCacheSize )
+{
+	SkipCache_c::Init(iCacheSize);
+}
+
+
+void ShutdownSkipCache()
+{
+	SkipCache_c::Done();
+}
+
+/////////////////////////////////////////////////////////////////////
+
 /// everything required to setup search term
 class DiskIndexQwordSetup_c : public ISphQwordSetup
 {
@@ -7017,68 +7079,6 @@ CSphMultiQueryArgs::CSphMultiQueryArgs ( int iIndexWeight )
 	: m_iIndexWeight ( iIndexWeight )
 {
 	assert ( iIndexWeight>0 );
-}
-
-/////////////////////////////////////////////////////////////////////
-
-struct SkipCacheKey_t
-{
-	int64_t		m_iIndexId;
-	SphWordID_t	m_tWordId;
-
-	bool operator == ( const SkipCacheKey_t & tKey ) const { return m_iIndexId==tKey.m_iIndexId && m_tWordId==tKey.m_tWordId; }
-};
-
-
-struct SkipCacheUtil_t
-{
-	static DWORD GetHash ( SkipCacheKey_t tKey )
-	{
-		DWORD uCRC32 = sphCRC32 ( &tKey.m_iIndexId, sizeof(tKey.m_iIndexId) );
-		return sphCRC32 ( &tKey.m_tWordId, sizeof(tKey.m_tWordId), uCRC32 );
-	}
-
-	static DWORD GetSize ( SkipData_t * pValue )	{ return pValue ? pValue->m_dSkiplist.GetLengthBytes() : 0; }
-	static void Reset ( SkipData_t * & pValue )		{ SafeDelete(pValue); }
-};
-
-
-class SkipCache_c : public LRUCache_T<SkipCacheKey_t, SkipData_t*, SkipCacheUtil_t>
-{
-	using BASE = LRUCache_T<SkipCacheKey_t, SkipData_t*, SkipCacheUtil_t>;
-	using BASE::BASE;
-
-public:
-	void					DeleteAll ( int64_t iIndexId ) { BASE::Delete ( [iIndexId]( const SkipCacheKey_t & tKey ){ return tKey.m_iIndexId==iIndexId; } ); }
-
-	static void				Init ( int64_t iCacheSize );
-	static void				Done()	{ SafeDelete(m_pSkipCache); }
-	static SkipCache_c *	Get()	{ return m_pSkipCache; }
-
-private:
-	static SkipCache_c *	m_pSkipCache;
-};
-
-SkipCache_c * SkipCache_c::m_pSkipCache = nullptr;
-
-
-void SkipCache_c::Init ( int64_t iCacheSize )
-{
-	assert ( !m_pSkipCache );
-	if ( iCacheSize > 0 )
-		m_pSkipCache = new SkipCache_c(iCacheSize);
-}
-
-
-void InitSkipCache ( int64_t iCacheSize )
-{
-	SkipCache_c::Init(iCacheSize);
-}
-
-
-void ShutdownSkipCache()
-{
-	SkipCache_c::Done();
 }
 
 /////////////////////////////////////////////////////////////////////////////

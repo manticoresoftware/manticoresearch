@@ -115,8 +115,8 @@ protected:
 	DWORD			SqlColumnLength ( int iIndex ) final;
 	const char *	SqlColumn ( int iIndex ) final;
 	const char *	SqlFieldName ( int iIndex ) final;
-	const char *	SqlColumnStream ( int iIndex, DWORD &iStreamLength ) final;
-	void			SqlColumnFreeStream (char *stream ) final;
+	const char *	SqlColumnStream ( int iIndex, DWORD &uStreamLength ) final;
+	void			SqlColumnReleaseStream (char *szStream ) final;
 };
 
 CSphSourceParams_PgSQL::CSphSourceParams_PgSQL ()
@@ -312,25 +312,25 @@ DWORD CSphSource_PgSQL::SqlColumnLength ( int iIndex )
 }
 
 
-const char * CSphSource_PgSQL::SqlColumnStream( int iIndex, DWORD &iStreamLength )
+const char * CSphSource_PgSQL::SqlColumnStream(int iIndex, DWORD &uStreamLength )
 {
-	const char * value = SqlColumn( iIndex );
+	const char * szValue = SqlColumn( iIndex );
 	size_t iUnpackedLength;
-	iStreamLength = 0;
+	uStreamLength = 0;
 
-	if ( !value )
+	if ( szValue == nullptr )
 		return NULL;
 
-	const char * sStream = (const char *) sph_PQunescapeBytea ( (const unsigned char *) value, &iUnpackedLength);
-	iStreamLength = (DWORD) iUnpackedLength;
-	return sStream;
+	auto szStream = (const char *) sph_PQunescapeBytea ( (const unsigned char *) szValue, &iUnpackedLength);
+	uStreamLength = (DWORD) iUnpackedLength;
+	return szStream;
 }
 
 
-void CSphSource_PgSQL::SqlColumnFreeStream( char *sStream )
+void CSphSource_PgSQL::SqlColumnReleaseStream( char *szStream )
 {
-	if ( sStream )
-		sph_PQfreemem( sStream );
+	if ( szStream )
+		sph_PQfreemem( szStream );
 }
 
 // the fabrics

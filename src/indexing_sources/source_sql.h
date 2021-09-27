@@ -150,7 +150,7 @@ protected:
 	virtual const char *	SqlColumn ( int iIndex ) = 0;
 	virtual const char *	SqlFieldName ( int iIndex ) = 0;
 	virtual const char *	SqlColumnStream ( int iIndex, DWORD &iStreamLength ) { iStreamLength = SqlColumnLength( iIndex ); return SqlColumn( iIndex ); }
-	virtual void			SqlColumnFreeStream ( char */*sStream*/ ) { }
+	virtual void			SqlColumnReleaseStream ( char *szStream ) { }
 
 	const char *	SqlUnpackColumn ( int iIndex, DWORD & uUnpackedLen, ESphUnpackFormat eFormat );
 	void			ReportUnpackError ( int iIndex, int iError );

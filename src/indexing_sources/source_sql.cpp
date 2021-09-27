@@ -1266,7 +1266,7 @@ const char * CSphSource_SQL::SqlUnpackColumn ( int iFieldIndex, DWORD & uUnpacke
 				}
 			}
 
-			SqlColumnFreeStream( sStream );
+			SqlColumnReleaseStream( sStream );
 			inflateEnd ( &tStream );
 			return sResult;
 		}

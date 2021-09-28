@@ -4953,6 +4953,7 @@ public:
 
 	CSphRsetSchema &	SorterSchema() const { return *m_pSorterSchema.Ptr(); }
 	bool				HasJson() const { return m_tGroupSorterSettings.m_bJson; }
+	bool				SetSchemaGroupQueue ( const CSphRsetSchema & tNewSchema );
 
 	/// creates proper queue for given query
 	/// may return NULL on error; in this case, error message is placed in sError
@@ -4984,7 +4985,6 @@ private:
 	bool						m_bHeadWOGroup;
 	bool						m_bGotDistinct;
 	bool						m_bExprsNeedDocids = false;
-	CSphFixedVector<bool>		m_dRemapped { CSphMatchComparatorState::MAX_ATTRS };
 
 	// for sorter to create pooled attributes
 	bool						m_bHaveStar = false;
@@ -5048,8 +5048,6 @@ QueueCreator_c::QueueCreator_c ( const SphQueueSettings_t & tSettings, const CSp
 
 	m_dMatchJsonExprs.Resize ( CSphMatchComparatorState::MAX_ATTRS );
 	m_dGroupJsonExprs.Resize ( CSphMatchComparatorState::MAX_ATTRS );
-
-	m_dRemapped.ZeroVec();
 }
 
 
@@ -6310,8 +6308,7 @@ void QueueCreator_c::ReplaceGroupbyStrWithExprs ( CSphMatchComparatorState & tSt
 		tState.m_eKeypart[i] = SPH_KEYPART_STRINGPTR;
 		tState.m_tLocator[i] = tSorterSchema.GetAttr(iRemap).m_tLocator;
 		tState.m_dAttrs[i] = iRemap;
-
-		m_dRemapped[i] = true;
+		tState.m_dRemapped.BitSet ( i );
 	}
 }
 
@@ -6323,7 +6320,7 @@ void QueueCreator_c::ReplaceStaticStringsWithExprs ( CSphMatchComparatorState & 
 
 	for ( int i = 0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
 	{
-		if ( m_dRemapped[i] )
+		if ( tState.m_dRemapped.BitGet ( i ) )
 			continue;
 
 		if ( tState.m_eKeypart[i]!=SPH_KEYPART_STRING )
@@ -6363,8 +6360,7 @@ void QueueCreator_c::ReplaceStaticStringsWithExprs ( CSphMatchComparatorState & 
 		tState.m_tLocator[i] = tSorterSchema.GetAttr ( iRemap ).m_tLocator;
 		tState.m_dAttrs[i] = iRemap;
 		tState.m_eKeypart[i] = SPH_KEYPART_STRINGPTR;
-
-		m_dRemapped[i] = true;
+		tState.m_dRemapped.BitSet ( i );
 	}
 }
 
@@ -6376,7 +6372,7 @@ void QueueCreator_c::ReplaceJsonWithExprs ( CSphMatchComparatorState & tState, C
 
 	for ( int i = 0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
 	{
-		if ( m_dRemapped[i] )
+		if ( tState.m_dRemapped.BitGet ( i ) )
 			continue;
 
 		if ( dExtraExprs[i].m_tKey.m_sKey.IsEmpty() )
@@ -6403,8 +6399,7 @@ void QueueCreator_c::ReplaceJsonWithExprs ( CSphMatchComparatorState & tState, C
 
 		tState.m_tLocator[i] = tSorterSchema.GetAttr(iRemap).m_tLocator;
 		tState.m_dAttrs[i] = iRemap;
-
-		m_dRemapped[i] = true;
+		tState.m_dRemapped.BitSet ( i );
 	}
 }
 
@@ -6416,7 +6411,7 @@ void QueueCreator_c::AddColumnarExprsAsAttrs ( CSphMatchComparatorState & tState
 
 	for ( int i = 0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
 	{
-		if ( m_dRemapped[i] )
+		if ( tState.m_dRemapped.BitGet ( i ) )
 			continue;
 
 		ISphExpr * pExpr = dExtraExprs[i].m_pExpr;
@@ -6439,8 +6434,7 @@ void QueueCreator_c::AddColumnarExprsAsAttrs ( CSphMatchComparatorState & tState
 		tState.m_tLocator[i] = tSorterSchema.GetAttr ( iRemap ).m_tLocator;
 		tState.m_dAttrs[i] = iRemap;
 		tState.m_eKeypart[i] = Attr2Keypart ( dExtraExprs[i].m_eType );
-
-		m_dRemapped[i] = true;
+		tState.m_dRemapped.BitSet ( i );
 	}
 }
 
@@ -6770,6 +6764,26 @@ ISphMatchSorter * QueueCreator_c::CreateQueue ()
 	return pTop;
 }
 
+static void ResetRemaps ( CSphMatchComparatorState & tState )
+{
+	for ( int i = 0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
+	{
+		if ( tState.m_dRemapped.BitGet ( i ) && tState.m_eKeypart[i]==SPH_KEYPART_STRINGPTR )
+			tState.m_dRemapped.BitClear ( i );
+	}
+}
+
+bool QueueCreator_c::SetSchemaGroupQueue ( const CSphRsetSchema & tNewSchema )
+{
+	// need to reissue remap but with existed attributes
+	ResetRemaps ( m_tStateMatch );
+	ResetRemaps ( m_tStateGroup );
+
+	*m_pSorterSchema.Ptr() = tNewSchema;
+
+	return SetupGroupQueue();
+}
+
 static ISphMatchSorter * CreateQueue ( QueueCreator_c & tCreator, SphQueueRes_t & tRes )
 {
 	ISphMatchSorter * pSorter = tCreator.CreateQueue ();
@@ -6951,13 +6965,12 @@ static void CreateMultiQueue ( RawVector_T<QueueCreator_c> & dCreators, const Sp
 		return;
 
 	// setup common schemas
-	for ( auto & tCreator : dCreators )
+	for ( QueueCreator_c & tCreator : dCreators )
 	{
 		if ( !tCreator.m_bCreate )
 			continue;
 
-		tCreator.SorterSchema() = tMultiSchema;
-		if ( !tCreator.SetupGroupQueue() )
+		if ( !tCreator.SetSchemaGroupQueue ( tMultiSchema ) )
 			tCreator.m_bCreate = false;
 	}
 }

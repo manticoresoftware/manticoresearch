@@ -43,6 +43,7 @@
 #include "binlog.h"
 #include "task_info.h"
 #include "chunksearchctx.h"
+#include "lrucache.h"
 
 #include <errno.h>
 #include <ctype.h>
@@ -271,6 +272,68 @@ const char * sphGetRankerName ( ESphRankMode eRanker )
 
 //////////////////////////////////////////////////////////////////////////
 
+struct SkipCacheKey_t
+{
+	int64_t		m_iIndexId;
+	SphWordID_t	m_tWordId;
+
+	bool operator == ( const SkipCacheKey_t & tKey ) const { return m_iIndexId==tKey.m_iIndexId && m_tWordId==tKey.m_tWordId; }
+};
+
+
+struct SkipCacheUtil_t
+{
+	static DWORD GetHash ( SkipCacheKey_t tKey )
+	{
+		DWORD uCRC32 = sphCRC32 ( &tKey.m_iIndexId, sizeof(tKey.m_iIndexId) );
+		return sphCRC32 ( &tKey.m_tWordId, sizeof(tKey.m_tWordId), uCRC32 );
+	}
+
+	static DWORD GetSize ( SkipData_t * pValue )	{ return pValue ? pValue->m_dSkiplist.GetLengthBytes() : 0; }
+	static void Reset ( SkipData_t * & pValue )		{ SafeDelete(pValue); }
+};
+
+
+class SkipCache_c : public LRUCache_T<SkipCacheKey_t, SkipData_t*, SkipCacheUtil_t>
+{
+	using BASE = LRUCache_T<SkipCacheKey_t, SkipData_t*, SkipCacheUtil_t>;
+	using BASE::BASE;
+
+public:
+	void					DeleteAll ( int64_t iIndexId ) { BASE::Delete ( [iIndexId]( const SkipCacheKey_t & tKey ){ return tKey.m_iIndexId==iIndexId; } ); }
+
+	static void				Init ( int64_t iCacheSize );
+	static void				Done()	{ SafeDelete(m_pSkipCache); }
+	static SkipCache_c *	Get()	{ return m_pSkipCache; }
+
+private:
+	static SkipCache_c *	m_pSkipCache;
+};
+
+SkipCache_c * SkipCache_c::m_pSkipCache = nullptr;
+
+
+void SkipCache_c::Init ( int64_t iCacheSize )
+{
+	assert ( !m_pSkipCache );
+	if ( iCacheSize > 0 )
+		m_pSkipCache = new SkipCache_c(iCacheSize);
+}
+
+
+void InitSkipCache ( int64_t iCacheSize )
+{
+	SkipCache_c::Init(iCacheSize);
+}
+
+
+void ShutdownSkipCache()
+{
+	SkipCache_c::Done();
+}
+
+/////////////////////////////////////////////////////////////////////
+
 /// everything required to setup search term
 class DiskIndexQwordSetup_c : public ISphQwordSetup
 {
@@ -310,9 +373,20 @@ template < bool INLINE_HITS, bool DISABLE_HITLIST_SEEK >
 class DiskIndexQword_c : public DiskIndexQwordTraits_c
 {
 public:
-	DiskIndexQword_c ( bool bUseMinibuffer, bool bExcluded )
+	DiskIndexQword_c ( bool bUseMinibuffer, bool bExcluded, int64_t iIndexId )
 		: DiskIndexQwordTraits_c ( bUseMinibuffer, bExcluded )
+		, m_iIndexId ( iIndexId )
 	{}
+
+	~DiskIndexQword_c()
+	{
+		if ( m_bSkipFromCache )
+		{
+			SkipCache_c::Get()->Release ( { m_iIndexId, m_uWordID } );
+			m_pSkipData = nullptr;
+			m_bSkipFromCache = false;
+		}
+	}
 
 	void Reset () final
 	{
@@ -367,19 +441,25 @@ public:
 		// first check if we're still inside the last block
 		if ( m_iSkipListBlock==-1 )
 		{
-			m_iSkipListBlock = FindSpan ( m_dSkiplist, tRowID );
+			if ( !m_pSkipData )
+				return true;
+
+			m_iSkipListBlock = FindSpan ( m_pSkipData->m_dSkiplist, tRowID );
 			if ( m_iSkipListBlock<0 )
 				return false;
 		}
 		else
 		{
-			if ( m_iSkipListBlock<m_dSkiplist.GetLength()-1 )
+			assert(m_pSkipData);
+			const auto & dSkiplist = m_pSkipData->m_dSkiplist;
+
+			if ( m_iSkipListBlock < dSkiplist.GetLength()-1 )
 			{
 				int iNextBlock = m_iSkipListBlock+1;
-				RowID_t tNextBlockRowID = m_dSkiplist[iNextBlock].m_tBaseRowIDPlus1;
+				RowID_t tNextBlockRowID = dSkiplist[iNextBlock].m_tBaseRowIDPlus1;
 				if ( tRowID>=tNextBlockRowID )
 				{
-					auto dSkips = VecTraits_T<SkiplistEntry_t> ( &m_dSkiplist[iNextBlock], m_dSkiplist.GetLength()-iNextBlock );
+					auto dSkips = VecTraits_T<SkiplistEntry_t> ( &dSkiplist[iNextBlock], dSkiplist.GetLength()-iNextBlock );
 					m_iSkipListBlock = FindSpan ( dSkips, tRowID );
 					if ( m_iSkipListBlock<0 )
 						return false;
@@ -391,7 +471,8 @@ public:
 				return false;
 		}
 
-		const SkiplistEntry_t & t = m_dSkiplist[m_iSkipListBlock];
+		assert(m_pSkipData);
+		const SkiplistEntry_t & t = m_pSkipData->m_dSkiplist[m_iSkipListBlock];
 		if ( t.m_iOffset<=m_rdDoclist->GetPos() )
 			return false;
 
@@ -501,15 +582,18 @@ private:
 		} else
 			m_tDoc.m_tRowID = INVALID_ROWID;
 	}
+
+private:
+	int64_t m_iIndexId = 0;
 };
 
 
 DiskIndexQwordTraits_c * sphCreateDiskIndexQword ( bool bInlineHits )
 {
 	if ( bInlineHits )
-		return new DiskIndexQword_c<true,false> ( false, false );
+		return new DiskIndexQword_c<true,false> ( false, false, 0 );
 
-	return new DiskIndexQword_c<false,false> ( false, false );
+	return new DiskIndexQword_c<false,false> ( false, false, 0 );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -548,9 +632,8 @@ class DiskPayloadQword_c : public DiskIndexQword_c<INLINE_HITS, false>
 	typedef DiskIndexQword_c<INLINE_HITS, false> BASE;
 
 public:
-	explicit DiskPayloadQword_c ( const DiskSubstringPayload_t * pPayload, bool bExcluded,
-		DataReaderFactory_c * pDoclist, DataReaderFactory_c * pHitlist )
-		: BASE ( true, bExcluded )
+	DiskPayloadQword_c ( const DiskSubstringPayload_t * pPayload, bool bExcluded, DataReaderFactory_c * pDoclist, DataReaderFactory_c * pHitlist, int64_t iIndexId )
+		: BASE ( true, bExcluded, iIndexId )
 	{
 		m_pPayload = pPayload;
 		this->m_iDocs = m_pPayload->m_iTotalDocs;
@@ -6998,7 +7081,6 @@ CSphMultiQueryArgs::CSphMultiQueryArgs ( int iIndexWeight )
 	assert ( iIndexWeight>0 );
 }
 
-
 /////////////////////////////////////////////////////////////////////////////
 // INDEX
 /////////////////////////////////////////////////////////////////////////////
@@ -7018,6 +7100,10 @@ CSphIndex::CSphIndex ( const char * sIndexName, const char * sFilename )
 CSphIndex::~CSphIndex ()
 {
 	QcacheDeleteIndex ( m_iIndexId );
+
+	SkipCache_c * pSkipCache = SkipCache_c::Get();
+	if ( pSkipCache )
+		pSkipCache->DeleteAll(m_iIndexId);
 }
 
 
@@ -10890,8 +10976,7 @@ private:
 
 
 template < typename QWORDDST, typename QWORDSRC >
-bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, VecTraits_T<RowID_t> dDstRows, VecTraits_T<RowID_t> dSrcRows,
-	CSphHitBuilder * pHitBuilder, CSphString & sError, CSphIndexProgress & tProgress )
+bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, VecTraits_T<RowID_t> dDstRows, VecTraits_T<RowID_t> dSrcRows, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphIndexProgress & tProgress )
 {
 	auto& tMonitor = tProgress.GetMergeCb();
 	CSphAutofile tDummy;
@@ -10916,8 +11001,8 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 
 	/// setup qwords
 
-	QWORDDST tDstQword ( false, false );
-	QWORDSRC tSrcQword ( false, false );
+	QWORDDST tDstQword ( false, false, pDstIndex->GetIndexId() );
+	QWORDSRC tSrcQword ( false, false, pSrcIndex->GetIndexId() );
 
 	DataReaderFactoryPtr_c tSrcDocs {
 		NewProxyReader ( pSrcIndex->GetIndexFileName ( SPH_EXT_SPD ), sError,
@@ -11546,7 +11631,7 @@ bool CSphIndex_VLN::DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder *
 	pHitBuilder->HitReset();
 
 	/// setup qword
-	QWORD tQword ( false, false );
+	QWORD tQword ( false, false, pIndex->GetIndexId() );
 	DataReaderFactoryPtr_c tDocs {
 		NewProxyReader ( pIndex->GetIndexFileName ( SPH_EXT_SPD ), sError,
 			DataReaderFactory_c::DOCS, pIndex->m_tMutableSettings.m_tFileAccess.m_iReadBufferDocList, FileAccess_e::FILE )
@@ -13023,16 +13108,13 @@ ISphQword * DiskIndexQwordSetup_c::QwordSpawn ( const XQKeyword_t & tWord ) cons
 {
 	if ( !tWord.m_pPayload )
 	{
-		WITH_QWORD ( m_pIndex, false, Qword, return new Qword ( tWord.m_bExpanded, tWord.m_bExcluded ) );
+		WITH_QWORD ( m_pIndex, false, Qword, return new Qword ( tWord.m_bExpanded, tWord.m_bExcluded, m_pIndex->GetIndexId() ) );
 	} else
 	{
 		if ( m_pIndex->GetSettings().m_eHitFormat==SPH_HIT_FORMAT_INLINE )
-		{
-			return new DiskPayloadQword_c<true> ( (const DiskSubstringPayload_t *)tWord.m_pPayload, tWord.m_bExcluded, m_pDoclist, m_pHitlist );
-		} else
-		{
-			return new DiskPayloadQword_c<false> ( (const DiskSubstringPayload_t *)tWord.m_pPayload, tWord.m_bExcluded, m_pDoclist, m_pHitlist );
-		}
+			return new DiskPayloadQword_c<true> ( (const DiskSubstringPayload_t *)tWord.m_pPayload, tWord.m_bExcluded, m_pDoclist, m_pHitlist, m_pIndex->GetIndexId() );
+		else
+			return new DiskPayloadQword_c<false> ( (const DiskSubstringPayload_t *)tWord.m_pPayload, tWord.m_bExcluded, m_pDoclist, m_pHitlist, m_pIndex->GetIndexId() );
 	}
 	return NULL;
 }
@@ -13165,24 +13247,22 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 		tWord.SetDocReader ( m_pDoclist );
 
 		// read in skiplist
-		// OPTIMIZE? maybe cache hot decompressed lists?
 		// OPTIMIZE? maybe add an option to decompress on preload instead?
 		if ( m_pSkips && tRes.m_iDocs>m_iSkiplistBlockSize )
 		{
-			const BYTE * pSkip = m_pSkips + tRes.m_iSkiplistOffset;
+			int iSkips = tRes.m_iDocs/m_iSkiplistBlockSize;
+			const int SMALL_SKIP_THRESH = 256;
+			bool bNeedCache = iSkips > SMALL_SKIP_THRESH;
 
-			tWord.m_dSkiplist.Add();
-			tWord.m_dSkiplist.Last().m_tBaseRowIDPlus1 = 0;
-			tWord.m_dSkiplist.Last().m_iOffset = tRes.m_iDoclistOffset;
-			tWord.m_dSkiplist.Last().m_iBaseHitlistPos = 0;
+			bool & bFromCache = tWord.m_bSkipFromCache;
 
-			for ( int i=1; i<( tWord.m_iDocs/m_iSkiplistBlockSize ); i++ )
+			SkipCache_c * pSkipCache = SkipCache_c::Get();
+			bFromCache = bNeedCache && pSkipCache && pSkipCache->Find ( { m_pIndex->GetIndexId(), tWord.m_uWordID }, tWord.m_pSkipData );
+			if ( !bFromCache )
 			{
-				SkiplistEntry_t & t = tWord.m_dSkiplist.Add();
-				SkiplistEntry_t & p = tWord.m_dSkiplist [ tWord.m_dSkiplist.GetLength()-2 ];
-				t.m_tBaseRowIDPlus1 = p.m_tBaseRowIDPlus1 + m_iSkiplistBlockSize + sphUnzipInt ( pSkip );
-				t.m_iOffset = p.m_iOffset + 4*m_iSkiplistBlockSize + sphUnzipOffset ( pSkip );
-				t.m_iBaseHitlistPos = p.m_iBaseHitlistPos + sphUnzipOffset ( pSkip );
+				tWord.m_pSkipData = new SkipData_t;
+				tWord.m_pSkipData->Read ( m_pSkips, tRes, tWord.m_iDocs, m_iSkiplistBlockSize );
+				bFromCache = bNeedCache && pSkipCache && pSkipCache->Add ( { m_pIndex->GetIndexId(), tWord.m_uWordID }, tWord.m_pSkipData );
 			}
 		}
 
@@ -13311,6 +13391,11 @@ void CSphIndex_VLN::Dealloc ()
 	m_uAttrsStatus = 0;
 
 	QcacheDeleteIndex ( m_iIndexId );
+
+	SkipCache_c * pSkipCache = SkipCache_c::Get();
+	if ( pSkipCache )
+		pSkipCache->DeleteAll(m_iIndexId);
+
 	m_iIndexId = m_tIdGenerator.fetch_add ( 1, std::memory_order_relaxed );
 }
 
@@ -13679,7 +13764,7 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 	tTermSetup.SetDict ( m_pDict );
 	tTermSetup.m_pIndex = this;
 
-	Qword tKeyword ( false, false );
+	Qword tKeyword ( false, false, m_iIndexId );
 	tKeyword.m_uWordID = uWordID;
 	tKeyword.m_sWord = sKeyword;
 	tKeyword.m_sDictWord = (const char *)sTok;
@@ -13864,7 +13949,7 @@ bool CSphIndex_VLN::PreallocDocstore()
 	if ( !m_tSchema.HasStoredFields() )
 		return true;
 
-	m_pDocstore = CreateDocstore ( GetIndexFileName(SPH_EXT_SPDS), m_sLastError );
+	m_pDocstore = CreateDocstore ( m_iIndexId, GetIndexFileName(SPH_EXT_SPDS), m_sLastError );
 
 	return !!m_pDocstore;
 }
@@ -14508,7 +14593,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	tTermSetup.SetDict ( pDict );
 	tTermSetup.m_pIndex = this;
 
-	Qword tQueryWord ( false, false );
+	Qword tQueryWord ( false, false, m_iIndexId );
 
 	if ( bFillOnly )
 	{
@@ -15484,14 +15569,14 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 	SwitchProfile ( pProfiler, SPH_QSTATE_INIT );
 
 	std::atomic<bool> bInterrupt {false};
-	std::atomic<int32_t> iCurChunk { iJobs-1 };
+	std::atomic<int32_t> iCurChunk { 0 };
 	Threads::CoExecuteN ( tClonableCtx.Concurrency ( iJobs ), [&]
 	{
-		auto iChunk = iCurChunk.fetch_sub ( 1, std::memory_order_acq_rel );
-		if ( iChunk<0 || bInterrupt )
+		auto iChunk = iCurChunk.fetch_add ( 1, std::memory_order_acq_rel );
+		if ( iChunk>=iJobs || bInterrupt )
 			return; // already nothing to do, early finish.
 
-		auto tCtx = tClonableCtx.CloneNewContext();
+		auto tCtx = tClonableCtx.CloneNewContext ( &iChunk );
 		Threads::CoThrottler_c tThrottler ( session::ThrottlingPeriodMS() );
 		int iTick=1; // num of times coro rescheduled by throttler
 		while ( !bInterrupt ) // some earlier job met error; abort.
@@ -15505,7 +15590,7 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 			tChunkMeta.m_pProfile = tThMeta.m_pProfile;
 
 			CSphMultiQueryArgs tMultiArgs ( tArgs.m_iIndexWeight );
-			tMultiArgs.m_iTag = 1;
+			tMultiArgs.m_iTag = iChunk+1;
 			tMultiArgs.m_uPackedFactorFlags = tArgs.m_uPackedFactorFlags;
 			tMultiArgs.m_pLocalDocs = pLocalDocs;
 			tMultiArgs.m_iTotalDocs = iTotalDocs;
@@ -15515,13 +15600,15 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 			SetupSplitFilter ( tQueryWithExtraFilter.m_dFilters.Add(), iChunk, iJobs );
 			bInterrupt = !pIndex->MultiQuery ( tChunkResult, tQueryWithExtraFilter, dLocalSorters, tMultiArgs );
 
-			// check terms inconsistency among disk chunks
-			tCtx.m_tMeta.MergeWordStats ( tChunkMeta );
+			if ( !iChunk )
+				tThMeta.MergeWordStats ( tChunkMeta );
+
+			tThMeta.m_bHasPrediction |= tChunkMeta.m_bHasPrediction;
 
 			if ( tThMeta.m_bHasPrediction )
 				tThMeta.m_tStats.Add ( tChunkMeta.m_tStats );
 
-			if ( iChunk && tmMaxTimer>0 && sph::TimeExceeded ( tmMaxTimer ) )
+			if ( iChunk < iJobs-1 && tmMaxTimer>0 && sph::TimeExceeded ( tmMaxTimer ) )
 			{
 				tThMeta.m_sWarning = "query time exceeded max_query_time";
 				bInterrupt = true;
@@ -15534,8 +15621,8 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 				// FIXME? maybe handle this more gracefully (convert to a warning)?
 				tThMeta.m_sError = tChunkMeta.m_sError;
 
-			iChunk = iCurChunk.fetch_sub ( 1, std::memory_order_acq_rel );
-			if ( iChunk<0 || bInterrupt )
+			iChunk = iCurChunk.fetch_add ( 1, std::memory_order_acq_rel );
+			if ( iChunk>=iJobs || bInterrupt )
 				return; // all is done
 
 			// yield and reschedule every quant of time. It gives work to other tasks
@@ -15593,7 +15680,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	assert ( pQueryParser );
 
 	const int SPLIT_THRESH = 1024;
-	if ( tArgs.m_iSplit>1 && pQueryParser->IsFullscan(tQuery) && m_iDocinfo>SPLIT_THRESH )
+	if ( tArgs.m_iSplit>1 && m_iDocinfo>SPLIT_THRESH )
 		return SplitQuery ( tResult, tQuery, dAllSorters, tArgs, tmMaxTimer );
 
 	MEMORY ( MEM_DISK_QUERY );
@@ -15900,6 +15987,31 @@ bool CSphIndex_VLN::CheckEarlyReject ( const CSphVector<CSphFilterSettings> & dF
 }
 
 
+static const CSphVector<CSphFilterSettings> * SetupRowIdBoundaries ( const CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphFilterSettings> & dModifiedFilters, RowID_t uTotalDocs, ISphRanker & tRanker )
+{
+	const CSphFilterSettings * pRowIdFilter = nullptr;
+	for ( auto & i : dFilters )
+		if ( i.m_sAttrName=="@rowid" )
+		{
+			pRowIdFilter = &i;
+			break;
+		}
+
+	if ( !pRowIdFilter )
+		return &dFilters;
+
+	RowIdBoundaries_t tBoundaries = GetFilterRowIdBoundaries ( *pRowIdFilter, uTotalDocs );
+	tRanker.ExtraData ( EXTRA_SET_BOUNDARIES, (void**)&tBoundaries );
+
+	dModifiedFilters.Resize(0);
+	for ( auto & i : dFilters )
+		if ( &i!=pRowIdFilter )
+			dModifiedFilters.Add(i);
+
+	return &dModifiedFilters;
+}
+
+
 bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult & tResult, const VecTraits_T<ISphMatchSorter *> & dSorters, const XQQuery_t & tXQ, CSphDict * pDict, const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache, int64_t tmMaxTimer ) const
 {
 	assert ( !tQuery.m_sQuery.IsEmpty() && tQuery.m_eMode!=SPH_MATCH_FULLSCAN ); // scans must go through MultiScan()
@@ -16027,9 +16139,12 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	if ( m_bIsEmpty )
 		return true;
 
+	CSphVector<CSphFilterSettings> dModifiedFilters;
+	const CSphVector<CSphFilterSettings> * pFilters = SetupRowIdBoundaries ( tQuery.m_dFilters, dModifiedFilters, RowID_t(m_iDocinfo), *pRanker );
+
 	// setup filters
  	CreateFilterContext_t tFlx;
-	tFlx.m_pFilters = &tQuery.m_dFilters;
+	tFlx.m_pFilters = pFilters;
 	tFlx.m_pFilterTree = &tQuery.m_dFilterTree;
 	tFlx.m_pSchema = &tMaxSorterSchema;
 	tFlx.m_pBlobPool = m_tBlobAttrs.GetWritePtr();
@@ -16041,7 +16156,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	if ( !tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning ) )
 		return false;
 
-	if ( CheckEarlyReject ( tQuery.m_dFilters, tCtx.m_pFilter, tQuery.m_eCollation, tMaxSorterSchema ) )
+	if ( CheckEarlyReject ( *pFilters, tCtx.m_pFilter, tQuery.m_eCollation, tMaxSorterSchema ) )
 	{
 		tMeta.m_iQueryTime += (int)( ( sphMicroTimer()-tmQueryStart )/1000 );
 		tMeta.m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
@@ -16152,8 +16267,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	tMeta.m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
 
 #if 0
-	printf ( "qtm %d, %d, %d, %d, %d\n", int(tmWall), tQueryStats.m_iFetchedDocs,
-		tQueryStats.m_iFetchedHits, tQueryStats.m_iSkips, dSorters[0]->GetTotalCount() );
+	printf ( "qtm %d, %d, %d, %d, %d\n", int(tmWall), tQueryStats.m_iFetchedDocs, tQueryStats.m_iFetchedHits, tQueryStats.m_iSkips, dSorters[0]->GetTotalCount() );
 #endif
 
 	SwitchProfile ( pProfile, eOldState );
@@ -21892,8 +22006,7 @@ const CSphSourceStats & CSphSource::GetStats ()
 }
 
 
-bool CSphSource::SetStripHTML ( const char * sExtractAttrs, const char * sRemoveElements,
-	bool bDetectParagraphs, const char * sZones, CSphString & sError )
+bool CSphSource::SetStripHTML ( const char * sExtractAttrs, const char * sRemoveElements, bool bDetectParagraphs, const char * sZones, CSphString & sError )
 {
 	if ( !m_pStripper )
 		m_pStripper = new CSphHTMLStripper ( true );

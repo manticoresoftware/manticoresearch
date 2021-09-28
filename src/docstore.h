@@ -110,7 +110,7 @@ private:
 };
 
 
-Docstore_i *		CreateDocstore ( const CSphString & sFilename, CSphString & sError );
+Docstore_i *		CreateDocstore ( int64_t iIndexId, const CSphString & sFilename, CSphString & sError );
 DocstoreBuilder_i * CreateDocstoreBuilder ( const CSphString & sFilename, const DocstoreSettings_t & tSettings, CSphString & sError );
 DocstoreRT_i *		CreateDocstoreRT();
 DocstoreFields_i *	CreateDocstoreFields();

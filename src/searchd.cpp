@@ -173,7 +173,8 @@ static int				g_iMaxFilters		= 256;
 static int				g_iMaxFilterValues	= 4096;
 static int				g_iMaxBatchQueries	= 32;
 
-static int				g_iDocstoreCache = 0;
+static int64_t			g_iDocstoreCache = 0;
+static int64_t			g_iSkipCache = 0;
 
 static auto &	g_iDistThreads		= getDistThreads();
 int				g_iAgentConnectTimeoutMs = 1000;
@@ -770,6 +771,9 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	SHUTINFO << "Shutdown docstore ...";
 	ShutdownDocstore();
+
+	SHUTINFO << "Shutdown skip cache ...";
+	ShutdownSkipCache();
 
 	SHUTINFO << "Shutdown wordforms ...";
 	sphShutdownWordforms ();
@@ -5551,8 +5555,7 @@ struct LocalSearchRef_t
 	VecTraits_T<AggrResult_t>& m_dAggrResults;
 	VecTraits_T<CSphQueryResult>& m_dResults;
 
-	LocalSearchRef_t ( ExprHook_c & tHook, StrVec_t* pExtra, VecTraits_T<SearchFailuresLog_c> & dFailures,
-			VecTraits_T<AggrResult_t>& dAggrResults, VecTraits_T<CSphQueryResult>& dResults )
+	LocalSearchRef_t ( ExprHook_c & tHook, StrVec_t* pExtra, VecTraits_T<SearchFailuresLog_c> & dFailures, VecTraits_T<AggrResult_t> & dAggrResults, VecTraits_T<CSphQueryResult> & dResults )
 		: m_tHook ( tHook )
 		, m_pExtra ( pExtra )
 		, m_dFailuresSet ( dFailures )
@@ -18844,7 +18847,8 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	if ( hSearchd("shutdown_timeout") )
 		g_iShutdownTimeoutUs = hSearchd.GetUsTime64S ( "shutdown_timeout", 3000000);
 
-	g_iDocstoreCache = hSearchd.GetSize ( "docstore_cache_size", 16777216 );
+	g_iDocstoreCache = hSearchd.GetSize64 ( "docstore_cache_size", 16777216 );
+	g_iSkipCache = hSearchd.GetSize64 ( "skiplist_cache_size", 67108864 );
 
 	if ( hSearchd.Exists ( "max_open_files" ) )
 	{
@@ -19793,6 +19797,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	Binlog::Configure ( hSearchd, bTestMode, uReplayFlags );
 	SetUidShort ( bTestMode );
 	InitDocstore ( g_iDocstoreCache );
+	InitSkipCache ( g_iSkipCache );
 	InitParserOption();
 
 	if ( bOptPIDFile )

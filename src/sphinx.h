@@ -3215,6 +3215,9 @@ int					GetUnhintedBuffer();
 /// check query for expressions
 bool				sphHasExpressions ( const CSphQuery & tQuery, const CSphSchema & tSchema );
 
+void				InitSkipCache ( int64_t iCacheSize );
+void				ShutdownSkipCache();
+
 const CSphVector<CharsetAlias_t> & GetCharsetAliases();
 
 //////////////////////////////////////////////////////////////////////////

@@ -2328,9 +2328,7 @@ public:
 		BStream_c dOut;
 		if ( !dDst.first )
 			dOut << dSrc;
-
-		// first byte is a mark: 0 means data packed, another is part of real string.
-		else if ( *dSrc.first && *dDst.first )
+		else if ( *dSrc.first && *dDst.first ) // first byte is a mark: 0 means data packed, another is part of real string.
 			AppendStringToString ( dOut, dDst, tDst.m_iTag, dSrc, tSrc.m_iTag );
 		else if ( *dSrc.first && !*dDst.first )
 			AppendBlobToString ( dOut, dSrc, tSrc.m_iTag, dDst, false );
@@ -2350,8 +2348,7 @@ public:
 private:
 
 	// merge two simple matches
-	static void AppendStringToString ( BStream_c& dOut, const ByteBlob_t& dInDst, int iTagDst,
-			const ByteBlob_t& dInSrc, int iTagSrc )
+	static void AppendStringToString ( BStream_c & dOut, const ByteBlob_t & dInDst, int iTagDst, const ByteBlob_t & dInSrc, int iTagSrc )
 	{
 		if ( iTagDst==iTagSrc ) // plain concat of 2 strings
 			dOut << dInDst << ',' << dInSrc;
@@ -2419,8 +2416,7 @@ private:
 	}
 
 	// merge string and blob. Last bool determines what will came first
-	static void AppendBlobToString ( BStream_c& dOut, const ByteBlob_t& dString, int iTagString,
-			ByteBlob_t dBlob, bool bStringFirst=true )
+	static void AppendBlobToString ( BStream_c & dOut, const ByteBlob_t & dString, int iTagString, ByteBlob_t dBlob, bool bStringFirst=true )
 	{
 		int iOut;
 		char cZero;
@@ -2438,22 +2434,26 @@ private:
 			dBlob >> iTagSrc >> dBlobSrc;
 			if ( bCopied )
 				dOut << iTagSrc << dBlobSrc;
-			else {
-				if ( !bCopied && iTagString > iTagSrc ) {
+			else
+			{
+				if ( !bCopied && iTagString > iTagSrc )
+				{
 					dOut << iTagString << dString.second << dString << iTagSrc << dBlobSrc;
 					++iOut;
 					bCopied = true;
-				} else if ( !bCopied && iTagString==iTagSrc ) {
+				} else if ( !bCopied && iTagString==iTagSrc )
+				{
 					dOut << iTagString << dString.second + dBlobSrc.GetLength() + 1;
 					if ( bStringFirst )
-						dOut << dString << ',' << ByteBlob_t ( dBlobSrc.begin (), dBlobSrc.GetLength () );
+						dOut << dString << ',' << ByteBlob_t ( dBlobSrc.begin(), dBlobSrc.GetLength() );
 					else
-						dOut << ByteBlob_t ( dBlobSrc.begin (), dBlobSrc.GetLength () ) << ',' << dString;
+						dOut << ByteBlob_t ( dBlobSrc.begin(), dBlobSrc.GetLength() ) << ',' << dString;
 					bCopied = true;
 				} else
 					dOut << iTagSrc << dBlobSrc;
 			}
 		}
+
 		if ( !bCopied )
 		{
 			dOut << iTagString << dString.second << dString;

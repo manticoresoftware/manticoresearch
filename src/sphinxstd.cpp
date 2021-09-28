@@ -15,6 +15,7 @@
 #include "sphinxutils.h"
 
 #include <math.h>
+#include <time.h>
 
 #if !_WIN32
 #include <sys/time.h> // for gettimeofday

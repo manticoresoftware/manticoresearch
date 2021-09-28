@@ -714,10 +714,9 @@ optimize_cutoff = 4
 ### persistent_connections_limit
 
 <!-- example conf persistent_connections_limit -->
-The maximum # of simultaneous persistent connections to remote [persistent agents](../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md). Each time connecting an agent defined under 'agent_persistent' we try to reuse an existing connection (if any), or connect and save the connection for future. However we can't hold unlimited # of such persistent connections, since each one holds a worker on agent size (and finally we'll receive the 'maxed out' error, when all of them are busy). This very directive limits the number. It affects the number of connections to each agent's host across all distributed indexes.
+The maximum # of simultaneous persistent connections to remote [persistent agents](../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md). Each time connecting an agent defined under `agent_persistent` we try to reuse existing connection (if any), or connect and save the connection for the future. However in some cases it makes sense to limit # of such persistent connections. This directive defines the number. It affects the number of connections to each agent's host across all distributed indexes.
 
-It is reasonable to set the value equal or less than [max_connections](../Server_settings/Searchd.md#max_connections) option of the agents.
-
+It is reasonable to set the value equal or less than [max_connections](../Server_settings/Searchd.md#max_connections) option of the agent's config.
 
 <!-- intro -->
 ##### Example:

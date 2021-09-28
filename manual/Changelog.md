@@ -61,7 +61,7 @@ sys     0m0.001s
 - [#621](https://github.com/manticoresoftware/manticoresearch/issues/621) - expose errors from RE2
 - more accurate [COUNT(DISTINCT)](Searching/Grouping.md#COUNT%28DISTINCT-field%29) for distributed indexes consisting of local plain indexes
 - [FACET DISTINCT](Searching/Faceted_search.md#Faceting-without-duplicates) to remove duplicates when you do faceted search
-- [exact form modified](Searching/Full_text_matching/Operators.md#Exact-form-modifier) doesn't require [morphology](Creating_an_index/NLP_and_tokenization/Morphology.md#morphology) now and works for indexes with [infix/prefix](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#Wildcard-searching-settings) search enabled
+- [exact form modifier](Searching/Full_text_matching/Operators.md#Exact-form-modifier) doesn't require [morphology](Creating_an_index/NLP_and_tokenization/Morphology.md#morphology) now and works for indexes with [infix/prefix](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#Wildcard-searching-settings) search enabled
 
 ### Breaking changes
 - the new version can read older indexes, but the older versions can't read Manticore 4's indexes

@@ -55,7 +55,7 @@ sudo systemctl start manticore
 
 <!-- request MacOS -->
 ```bash
-brew install manticoresearch
+brew install manticoresoftware/manticore/manticoresearch
 brew services start manticoresearch
 ```
 

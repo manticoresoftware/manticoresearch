@@ -2036,6 +2036,30 @@ ByteBlob_t CSphMatch::FetchAttrData ( const CSphAttrLocator & tLoc, const BYTE *
 	return sphUnpackPtrAttr ((const BYTE *) GetAttr ( tLoc ));
 }
 
+//////////////////////////////////////////////////////////////////////////
+
+RowTagged_t::RowTagged_t ( const CSphMatch & tMatch )
+{
+	m_tID = tMatch.m_tRowID;
+	m_iTag = tMatch.m_iTag;
+}
+
+RowTagged_t::RowTagged_t ( RowID_t tRowID, int iTag )
+{
+	m_tID = tRowID;
+	m_iTag = iTag;
+}
+
+bool RowTagged_t::operator== ( const RowTagged_t & tRow ) const
+{
+	return ( m_tID==tRow.m_tID && m_iTag==tRow.m_iTag );
+}
+
+bool RowTagged_t::operator!= ( const RowTagged_t & tRow ) const
+{
+	return !( *this==tRow );
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // TOKENIZING EXCEPTIONS
 /////////////////////////////////////////////////////////////////////////////
@@ -12373,6 +12397,11 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext& tCtx, const CSphQuery & tQ
 	QueryProfile_c * pProfile = tCtx.m_pProfile;
 	CSphScopedProfile tProf (pProfile, SPH_QSTATE_UNKNOWN);
 
+	if_const ( USE_FACTORS )
+	{
+		pRanker->ExtraData ( EXTRA_SET_MATCHTAG, (void**)&iTag );
+	}
+
 	int iCutoff = tQuery.m_iCutoff;
 	if ( iCutoff<=0 )
 		iCutoff = -1;
@@ -12430,8 +12459,8 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext& tCtx, const CSphQuery & tQ
 
 				if_const ( USE_FACTORS )
 				{
-					RowID_t tJustPushed = pSorter->GetJustPushed();
-					VecTraits_T<RowID_t> dJustPopped = pSorter->GetJustPopped();
+					RowTagged_t tJustPushed = pSorter->GetJustPushed();
+					VecTraits_T<RowTagged_t> dJustPopped = pSorter->GetJustPopped();
 					pRanker->ExtraData ( EXTRA_SET_MATCHPUSHED, (void**)&tJustPushed );
 					pRanker->ExtraData ( EXTRA_SET_MATCHPOPPED, (void**)&dJustPopped );
 				}

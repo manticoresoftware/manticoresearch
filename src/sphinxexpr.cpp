@@ -753,10 +753,11 @@ private:
 		if ( !m_pHash || !m_pHash->GetLength() )
 			return 0;
 
-		SphFactorHashEntry_t * pEntry = (*m_pHash)[ (int)( tMatch.m_tRowID % m_pHash->GetLength() ) ];
+		DWORD uKey = FactorPoolHash ( RowTagged_t ( tMatch ), m_pHash->GetLength() );
+		SphFactorHashEntry_t * pEntry = (*m_pHash)[ uKey ];
 		assert ( pEntry );
 
-		while ( pEntry && pEntry->m_tRowID!=tMatch.m_tRowID )
+		while ( pEntry && pEntry->m_tRow!=RowTagged_t ( tMatch ) )
 			pEntry = pEntry->m_pNext;
 
 		if ( !pEntry )
@@ -787,10 +788,11 @@ public:
 		if ( !m_pHash || !m_pHash->GetLength() )
 			return 0.0f;
 
-		SphFactorHashEntry_t * pEntry = (*m_pHash)[ (int)( tMatch.m_tRowID % m_pHash->GetLength() ) ];
+		DWORD uKey = FactorPoolHash ( RowTagged_t ( tMatch ), m_pHash->GetLength() );
+		SphFactorHashEntry_t * pEntry = (*m_pHash)[ uKey ];
 		assert ( pEntry );
 
-		while ( pEntry && pEntry->m_tRowID!=tMatch.m_tRowID )
+		while ( pEntry && pEntry->m_tRow!=RowTagged_t ( tMatch ) )
 			pEntry = pEntry->m_pNext;
 
 		if ( !pEntry )

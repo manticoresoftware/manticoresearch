@@ -6651,6 +6651,11 @@ static void PerformFullTextSearch ( const RtSegVec_c & dRamChunks, RtQwordSetup_
 		if ( tCtx.m_pFilter )
 			tCtx.m_pFilter->SetColumnar(pColumnar);
 
+		// storing segment in matches tag for finding strings attrs offset later, biased against default zero
+		int iTag = iSeg+1;
+		if ( tCtx.m_uPackedFactorFlags & SPH_FACTOR_ENABLE )
+			pRanker->ExtraData ( EXTRA_SET_MATCHTAG, (void**)&iTag );
+
 		pRanker->ExtraData ( EXTRA_SET_BLOBPOOL, (void**)&pBlobPool );
 
 		CSphMatch * pMatch = pRanker->GetMatchesBuffer();
@@ -6681,7 +6686,7 @@ static void PerformFullTextSearch ( const RtSegVec_c & dRamChunks, RtQwordSetup_
 				}
 
 				// storing segment in matches tag for finding strings attrs offset later, biased against default zero
-				tMatch.m_iTag = iSeg+1;
+				tMatch.m_iTag = iTag;
 
 				bool bNewMatch = false;
 				for ( auto* pSorter : dSorters )
@@ -6690,8 +6695,8 @@ static void PerformFullTextSearch ( const RtSegVec_c & dRamChunks, RtQwordSetup_
 
 					if ( tCtx.m_uPackedFactorFlags & SPH_FACTOR_ENABLE )
 					{
-						RowID_t tJustPushed = pSorter->GetJustPushed();
-						VecTraits_T<RowID_t> dJustPopped = pSorter->GetJustPopped();
+						RowTagged_t tJustPushed = pSorter->GetJustPushed();
+						VecTraits_T<RowTagged_t> dJustPopped = pSorter->GetJustPopped();
 						pRanker->ExtraData ( EXTRA_SET_MATCHPUSHED, (void**)&tJustPushed );
 						pRanker->ExtraData ( EXTRA_SET_MATCHPOPPED, (void**)&dJustPopped );
 					}

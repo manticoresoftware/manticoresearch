@@ -1300,6 +1300,19 @@ struct CSphSourceStats
 	}
 };
 
+struct RowTagged_t
+{
+	RowID_t m_tID { INVALID_ROWID };	///< document ID
+	int m_iTag {0};						///< index tag
+	
+	RowTagged_t() = default;
+	RowTagged_t ( const CSphMatch & tMatch );
+	RowTagged_t ( RowID_t tRowID, int iTag );
+
+	bool operator== ( const RowTagged_t & tRow ) const;
+	bool operator!= ( const RowTagged_t & tRow ) const;
+};
+
 //////////////////////////////////////////////////////////////////////////
 
 /// known multi-valued attr sources

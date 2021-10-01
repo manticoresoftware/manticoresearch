@@ -1806,9 +1806,9 @@ public:
 	void			Free ( BYTE * pPtr );
 	int				GetElementSize() const;
 	int				GetIntElementSize () const;
-	void			AddToHash ( RowID_t tRowID, BYTE * pPacked );
-	void			AddRef ( RowID_t tRowID );
-	void			Release ( RowID_t tRowID );
+	void			AddToHash ( const RowTagged_t & tRow, BYTE * pPacked );
+	void			AddRef ( const RowTagged_t & tRow );
+	void			Release ( const RowTagged_t & tRow );
 	void			Flush ();
 
 	bool			IsInitialized() const;
@@ -1820,8 +1820,7 @@ private:
 	CSphFixedVector<BYTE>	m_dPool { 0 };
 	SphFactorHash_t			m_dHash { 0 };
 	CSphFreeList			m_dFree;
-	SphFactorHashEntry_t * Find ( RowID_t tRowID ) const;
-	inline DWORD	HashFunc ( RowID_t tRowID ) const;
+	SphFactorHashEntry_t * Find ( const RowTagged_t & tRow ) const;
 	bool			FlushEntry ( SphFactorHashEntry_t * pEntry );
 };
 
@@ -1871,12 +1870,12 @@ int	FactorPool_c::GetElementSize() const
 }
 
 
-void FactorPool_c::AddToHash ( RowID_t tRowID, BYTE * pPacked )
+void FactorPool_c::AddToHash ( const RowTagged_t & tRow, BYTE * pPacked )
 {
 	auto * pNew = (SphFactorHashEntry_t *)(pPacked+m_iElementSize);
 	memset ( pNew, 0, sizeof(SphFactorHashEntry_t) );
 
-	DWORD uKey = HashFunc ( tRowID );
+	DWORD uKey = FactorPoolHash ( tRow, m_dHash.GetLength() );
 	if ( m_dHash[uKey] )
 	{
 		SphFactorHashEntry_t * pStart = m_dHash[uKey];
@@ -1886,20 +1885,20 @@ void FactorPool_c::AddToHash ( RowID_t tRowID, BYTE * pPacked )
 	}
 
 	pNew->m_pData = pPacked;
-	pNew->m_tRowID = tRowID;
+	pNew->m_tRow = tRow;
 	m_dHash[uKey] = pNew;
 }
 
 
-SphFactorHashEntry_t * FactorPool_c::Find ( RowID_t tRowID ) const
+SphFactorHashEntry_t * FactorPool_c::Find ( const RowTagged_t & tRow ) const
 {
-	DWORD uKey = HashFunc ( tRowID );
+	DWORD uKey = FactorPoolHash ( tRow, m_dHash.GetLength() );
 	if ( m_dHash[uKey] )
 	{
 		SphFactorHashEntry_t * pEntry = m_dHash[uKey];
 		while ( pEntry )
 		{
-			if ( pEntry->m_tRowID==tRowID )
+			if ( pEntry->m_tRow==tRow )
 				return pEntry;
 
 			pEntry = pEntry->m_pNext;
@@ -1910,30 +1909,30 @@ SphFactorHashEntry_t * FactorPool_c::Find ( RowID_t tRowID ) const
 }
 
 
-void FactorPool_c::AddRef ( RowID_t tRowID )
+void FactorPool_c::AddRef ( const RowTagged_t & tRow )
 {
-	if ( tRowID==INVALID_ROWID )
+	if ( tRow.m_tID==INVALID_ROWID )
 		return;
 
-	SphFactorHashEntry_t * pEntry = Find ( tRowID );
+	SphFactorHashEntry_t * pEntry = Find ( tRow );
 	if ( pEntry )
 		pEntry->m_iRefCount++;
 }
 
 
-void FactorPool_c::Release ( RowID_t tRowID )
+void FactorPool_c::Release ( const RowTagged_t & tRow )
 {
-	if ( tRowID==INVALID_ROWID )
+	if ( tRow.m_tID==INVALID_ROWID )
 		return;
 
-	SphFactorHashEntry_t * pEntry = Find ( tRowID );
+	SphFactorHashEntry_t * pEntry = Find ( tRow );
 	if ( pEntry )
 	{
 		pEntry->m_iRefCount--;
 		bool bHead = !pEntry->m_pPrev;
 		SphFactorHashEntry_t * pNext = pEntry->m_pNext;
 		if ( FlushEntry ( pEntry ) && bHead )
-			m_dHash [ HashFunc ( tRowID ) ] = pNext;
+			m_dHash [ FactorPoolHash ( tRow, m_dHash.GetLength() ) ] = pNext;
 	}
 }
 
@@ -1975,9 +1974,9 @@ void FactorPool_c::Flush()
 }
 
 
-inline DWORD FactorPool_c::HashFunc ( RowID_t tRowID ) const
+DWORD FactorPoolHash ( const RowTagged_t & tRow, int iLen )
 {
-	return (DWORD)( tRowID % m_dHash.GetLength() );
+	return (DWORD)( ( tRow.m_tID ^ tRow.m_iTag ) % iLen );
 }
 
 
@@ -2068,6 +2067,7 @@ public:
 
 	FactorPool_c 		m_tFactorPool;
 	int					m_iPoolMatchCapacity = 0;
+	int					m_iMatchTag = 0;
 
 	// per-query stuff
 	int					m_iMaxLCS = 0;
@@ -3861,11 +3861,11 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::ExtraDataImpl ( Extr
 			m_iPoolMatchCapacity += MAX_BLOCK_DOCS;
 			return true;
 		case EXTRA_SET_MATCHPUSHED:
-			m_tFactorPool.AddRef ( *(RowID_t*)ppResult );
+			m_tFactorPool.AddRef ( *(RowTagged_t*)ppResult );
 			return true;
 		case EXTRA_SET_MATCHPOPPED:
-			for ( RowID_t iRow : *(CSphTightVector<RowID_t> *) ppResult )
-				m_tFactorPool.Release ( iRow );
+			for ( const RowTagged_t & tRow : *(CSphTightVector<RowTagged_t> *) ppResult )
+				m_tFactorPool.Release ( tRow );
 			return true;
 		case EXTRA_GET_DATA_PACKEDFACTORS:
 			*ppResult = m_tFactorPool.GetHashPtr();
@@ -3880,6 +3880,9 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::ExtraDataImpl ( Extr
 				pState->m_tFieldLensLoc = m_tFieldLensLoc;
 				pState->m_iMaxQpos = m_iMaxQpos;
 			}
+			return true;
+		case EXTRA_SET_MATCHTAG:
+			m_iMatchTag = *(int*)ppResult;
 			return true;
 		default:
 			return false;
@@ -3912,7 +3915,7 @@ int RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Finalize ( const CSph
 		// pack factors
 		if ( !m_tFactorPool.IsInitialized() )
 			m_tFactorPool.Prealloc ( GetMaxPackedLength(), m_iPoolMatchCapacity );
-		m_tFactorPool.AddToHash ( tMatch.m_tRowID, PackFactors() );
+		m_tFactorPool.AddToHash ( RowTagged_t ( tMatch.m_tRowID, m_iMatchTag ), PackFactors() );
 	}
 
 	// compute expression

@@ -325,6 +325,17 @@ In plain mode rt_mem_limit can be changed using the following steps:
 * edit rt_mem_limit value in configuration
 * run `ALTER TABLE <index_name> RECONFIGURE`
 
+What you need to know:
+
+*- RT index is very similar to a distributed index of multiple local indexes. The local indexes are called "disk chunks"
+*- rt_mem_limit limits size of the RAM chunk
+*- RAM chunk inside also consists of multiple "plain" indexes, they are called segments
+*- RAM chunk does merging after each query, that's why it's more beneficial to do batch INSERTs of 100-5000 documents with 1 insert every second rather than 100-5000 inserts per second with 1 document (as CPU load is much lower with 1 large insert having many documents which increases throughoutput and lowers CPU load)
+*- merging larger segments take longer, that's why it may be suboptimal to have very large RAM chunk (and therefore rt_mem_limit)
+*- pseudo_sharding doesn't support RT indexes, it is designed to work with plain index which is not sharded. Normally an RT index after some time gets to the state when it has multiple disk chunks which by default is limited by # of CPU cores * 2. This is how manual OPTIMIZE works (leaves cpu cores * 2 disk chunks). Auto optimize (which is enabled by default since version 4.0.2) works the same way by default.
+*- searchd flushes RAM chunk to disk on shutdown and periodically. Flushing several gigabytes may be slow.
+*- the rule of thumb with rt_mem_limit if you know the final size of the index then rt_mem_limit = ~ final size / CPU_cores. You can always check your index file size and adjust this setting on the fly.
+
 ### Plain index settings:
 
 #### source

@@ -1704,7 +1704,7 @@ static void ShowHelp ()
 		"\n"
 		"Options are:\n"
 		"-h, --help\t\tdisplay this help message\n"
-		"-v\t\t\tdisplay version information\n"
+		"-v, --version\t\tdisplay version information\n"
 		"--config <file>\t\tread configuration from specified file\n"
 		"\t\t\t(default is manticore.conf)\n"
 		"--all\t\t\treindex all configured indexes\n"
@@ -1753,6 +1753,12 @@ int main ( int argc, char ** argv )
 	if ( argc==2 && ( !strcmp ( argv[1], "--help" ) || !strcmp ( argv[1], "-h" )))
 	{
 		ShowHelp();
+		return 0;
+	}
+
+	if ( argc==2 && ( !strcmp ( argv[1], "--version" ) || !strcmp ( argv[1], "-v" )))
+	{
+		ShowVersion();
 		return 0;
 	}
 

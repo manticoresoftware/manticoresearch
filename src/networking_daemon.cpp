@@ -473,14 +473,14 @@ void SockWrapper_c::Impl_c::NetLoopDestroying () REQUIRES ( NetPoollingThread )
 void SockWrapper_c::Impl_c::EngageWaiterAndYield ( int64_t tmTimeUntilUs )
 {
 	assert ( m_pNetLoop );
-	sphLogDebugv ( "CoYieldWith (m_iEvent=%u), timeout %d", m_uNetEvents, int(tmTimeUntilUs-sphMicroTimer ()) );
+	sphLogDebugv ( "Coro::YieldWith (m_iEvent=%u), timeout %d", m_uNetEvents, int(tmTimeUntilUs-sphMicroTimer ()) );
 	m_iTimeoutTimeUS = tmTimeUntilUs;
 	if ( !m_fnWakeFromPoll ) // must be set here, NOT in ctr (since m.b. constructed in different ctx)
 		m_fnWakeFromPoll = Threads::CurrentRestarter ();
 
 
 	// switch context (go to poll)
-	Threads::CoYieldWith ( [this] {
+	Threads::Coro::YieldWith ( [this] {
 		m_bEngaged.store ( true, std::memory_order_release );
 		m_pNetLoop->AddAction ( this );
 	});

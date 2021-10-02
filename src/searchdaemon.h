@@ -732,7 +732,7 @@ struct ServedDesc_t
 // create ServedDesc[R|W]Ptr_c instance to have actual access to the members.
 class ServedIndex_c : public ISphRefcountedMT, private ServedDesc_t, public ServedStats_c
 {
-	mutable Threads::CoroRWLock_c m_tLock;
+	mutable Threads::Coro::RWLock_c m_tLock;
 
 private:
 	friend class ServedDescRPtr_c;

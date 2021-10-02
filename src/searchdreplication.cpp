@@ -132,7 +132,7 @@ struct ReplicationCluster_t : public ClusterDesc_t
 	bool					IsPrimary() const { return ( m_iStatus==WSREP_VIEW_PRIMARY ); }
 
 private:
-	Threads::CoroEvent_c m_tStateChanged;
+	Threads::Coro::Event_c m_tStateChanged;
 	ClusterState_e m_eNodeState { ClusterState_e::CLOSED };
 };
 
@@ -1036,7 +1036,7 @@ static bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sErro
 
 	// let's start listening thread with proper provider set
 	auto pScheduler = MakeSingleThreadExecutor ( -1, sThName.cstr() );
-	Threads::CoGo ( [pRecvArgs,sIncoming] () mutable
+	Threads::Coro::Go ( [pRecvArgs,sIncoming] () mutable
 	{
 		// publish stuff in 'show threads'
 		auto pDisplayIncoming = new ReplInfo_t;
@@ -3853,7 +3853,7 @@ public:
 	}
 
 private:
-	Threads::CoroSpinlock_c m_tLock; // prevent writing to same file from multiple clients
+	Threads::Coro::Spinlock_c m_tLock; // prevent writing to same file from multiple clients
 
 	CSphScopedPtr<WriterWithHash_c> m_pWriter { nullptr };
 	CSphScopedPtr<CSphAutoreader> m_pReader { nullptr };
@@ -3979,7 +3979,7 @@ public:
 
 private:
 	CSphOrderedHash < RecvState_c, uint64_t, IdentityHash_fn, 64 > m_hStates GUARDED_BY (m_tLock);
-	Threads::CoroSpinlock_c m_tLock;
+	Threads::Coro::Spinlock_c m_tLock;
 };
 
 static StatesCache_c g_tRecvStates;

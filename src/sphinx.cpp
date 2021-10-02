@@ -15599,14 +15599,14 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 
 	std::atomic<bool> bInterrupt {false};
 	std::atomic<int32_t> iCurChunk { 0 };
-	Threads::CoExecuteN ( tClonableCtx.Concurrency ( iJobs ), [&]
+	Threads::Coro::ExecuteN ( tClonableCtx.Concurrency ( iJobs ), [&]
 	{
 		auto iChunk = iCurChunk.fetch_add ( 1, std::memory_order_acq_rel );
 		if ( iChunk>=iJobs || bInterrupt )
 			return; // already nothing to do, early finish.
 
 		auto tCtx = tClonableCtx.CloneNewContext ( &iChunk );
-		Threads::CoThrottler_c tThrottler ( session::ThrottlingPeriodMS() );
+		Threads::Coro::Throttler_c tThrottler ( session::ThrottlingPeriodMS() );
 		int iTick=1; // num of times coro rescheduled by throttler
 		while ( !bInterrupt ) // some earlier job met error; abort.
 		{
@@ -15791,7 +15791,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	if ( !iStackNeed  )
 		return false;
 
-	return Threads::CoContinueBool ( iStackNeed, [&] {
+	return Threads::Coro::ContinueBool ( iStackNeed, [&] {
 
 	// flag common subtrees
 	int iCommonSubtrees = 0;
@@ -15917,7 +15917,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 
 	// continue only if we have at least one non-failed
 	if ( bResult )
-		Threads::CoContinue ( iStackNeed, [&]
+		Threads::Coro::Continue ( iStackNeed, [&]
 	{
 		int iCommonSubtrees = 0;
 		if ( m_iMaxCachedDocs && m_iMaxCachedHits )

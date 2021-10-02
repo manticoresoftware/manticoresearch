@@ -1171,7 +1171,7 @@ protected:
 		// special deep-expression delete - take subexpr and release it from dedicated coro with increased stack.
 		auto pExpr = m_pFirst.Leak();
 		assert ( pExpr && pExpr->IsLast () );
-		Threads::CoContinue ( (int) iStackNeeded, [pExpr] { pExpr->Release(); } );
+		Threads::Coro::Continue ( (int) iStackNeeded, [pExpr] { pExpr->Release(); } );
 	}
 };
 
@@ -10042,7 +10042,7 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 
 	ISphExpr * pExpr = nullptr;
 
-	Threads::CoContinue ( iStackNeeded, [&] {
+	Threads::Coro::Continue ( iStackNeeded, [&] {
 
 	pExpr = Create ( pUsesWeight, sError );
 

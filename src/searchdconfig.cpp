@@ -29,7 +29,7 @@ static bool			g_bConfigless = false;
 
 using namespace Threads;
 
-static CoroSpinlock_c	g_tSaveInProgress;
+static Coro::Spinlock_c	g_tSaveInProgress;
 
 static CSphString GetPathForNewIndex ( const CSphString & sIndexName )
 {

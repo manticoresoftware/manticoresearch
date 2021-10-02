@@ -3838,7 +3838,7 @@ protected:
 	std::atomic<int> m_iSucceeded { 0 };	//< num of tasks finished successfully
 	std::atomic<int> m_iFinished { 0 };		//< num of tasks finished.
 	std::atomic<int> m_iTasks { 0 };		//< total num of tasks
-	Threads::CoroEvent_c m_tChanged;		//< the signaller
+	Threads::Coro::Event_c m_tChanged;		//< the signaller
 
 public:
 	void FeedTask ( bool bAdd ) final

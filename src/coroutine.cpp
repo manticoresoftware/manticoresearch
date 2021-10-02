@@ -228,6 +228,13 @@ class Worker_c
 	// operative stuff to be as near as possible
 	void * m_pCurrentTaskInfo = nullptr;
 	int64_t m_tmCpuTimeBase = 0; // add sphCpuTime() to this value to get truly cpu time ticks
+	uint64_t m_uId { InitWorkerID() };
+
+	static uint64_t InitWorkerID()
+	{
+		static std::atomic<uint64_t> uWorker { 0ULL };
+		return uWorker.fetch_add ( 1, std::memory_order_relaxed );
+	}
 
 	// RAII worker's keeper
 	struct CoroGuard_t
@@ -473,6 +480,16 @@ public:
 		return m_tmCpuTimeBase;
 	}
 
+	inline uint64_t UID() const noexcept
+	{
+		return m_uId;
+	}
+
+	inline int ID() const noexcept
+	{
+		return (int)m_uId;
+	}
+
 	inline static Worker_c* CurrentWorker() noexcept
 	{
 		return m_pTlsThis;
@@ -547,6 +564,11 @@ void Yield_ () noexcept
 void Reschedule() noexcept
 {
 	Worker()->Reschedule();
+}
+
+int ID() noexcept
+{
+	return Worker()->ID();
 }
 
 } // namespace Coro

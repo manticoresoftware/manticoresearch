@@ -1048,6 +1048,7 @@ int FullScanCollectingDocs ( PercolateMatchContext_t & tMatchCtx )
 	int iCountIdx = tMatchCtx.m_dDocsMatched.GetLength ();
 	tMatchCtx.m_dDocsMatched.Add ( 0 ); // placeholder for counter
 
+	FakeRL_t _ ( pSeg->m_tLock ); // that is s-t by design, don't need real lock
 	const CSphRowitem * pRow = pSeg->m_dRows.Begin ();
 	CSphMatch tDoc;
 	int iMatchesCount = 0;
@@ -1128,7 +1129,8 @@ void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_t & tMa
 	if ( !pStored->IsFullscan() && tMatchCtx.m_tReject.Filter ( pStored, tMatchCtx.m_bUtf8 ) )
 		return;
 
-	const RtSegment_t * pSeg = (const RtSegment_t *)tMatchCtx.m_pCtx->m_pIndexData;
+	const auto * pSeg = (const RtSegment_t *)tMatchCtx.m_pCtx->m_pIndexData;
+	FakeRL_t _ ( pSeg->m_tLock ); // that is s-t by design, don't need real lock
 	const BYTE * pBlobs = pSeg->m_dBlobs.Begin();
 
 	++tMatchCtx.m_iEarlyPassed;

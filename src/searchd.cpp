@@ -1222,7 +1222,7 @@ void SetSignalHandlers ( bool bAllowCtrlC=false ) REQUIRES ( MainThread )
 	stack_t ss;
 	ss.ss_sp = exception_handler_stack;
 	ss.ss_flags = 0;
-	ss.ss_size = SIGSTKSZ;
+	ss.ss_size = Max (SIGSTKSZ, 65536);
 	sigaltstack( &ss, 0 );
 	sa.sa_flags |= SA_ONSTACK;
 

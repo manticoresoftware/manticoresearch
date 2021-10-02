@@ -165,7 +165,7 @@ public:
 	}
 
 	// called once per coroutine, when it really has to process something
-	REFCONTEXT CloneNewContext ( int * pJobId = nullptr )
+	REFCONTEXT CloneNewContext ( const int * pJobId = nullptr )
 	{
 		if ( m_bDisabled )
 			return m_dParentContext;
@@ -288,6 +288,7 @@ void Yield_ () noexcept;
 
 void Reschedule() noexcept;
 
+int ID() noexcept;
 
 static const int tmDefaultThrotleTimeQuantumMs = 100; // default value, if nothing specified
 class Throttler_c

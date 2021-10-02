@@ -889,6 +889,11 @@ public:
 	{
 		return GetRunners ();
 	}
+
+	const char* Name() const override
+	{
+		return m_sName.cstr();
+	}
 };
 
 int AloneThread_c::m_iRunningAlones = 0;

@@ -1416,7 +1416,7 @@ struct PQInfo_t : public TaskInfo_t
 DEFINE_RENDER( PQInfo_t )
 {
 	auto & tInfo = *(const PQInfo_t *) pSrc;
-	dDst.m_sChain << (int) tInfo.m_eType << ":PQ ";
+	dDst.m_sChain << "PQ ";
 	if ( tInfo.m_iTotal )
 		dDst.m_sDescription.Sprintf ( "%d%% of %d:", tInfo.m_iCurrent * 100 / tInfo.m_iTotal, tInfo.m_iTotal );
 	else

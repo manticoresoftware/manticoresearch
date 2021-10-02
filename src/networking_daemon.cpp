@@ -97,7 +97,7 @@ static const char * NetloopStateName ( NetloopState_e eState )
 DEFINE_RENDER( ListenTaskInfo_t )
 {
 	auto & tInfo = *(ListenTaskInfo_t *) const_cast<void*>(pSrc);
-	dDst.m_sChain << (int) tInfo.m_eType << ":Listen ";
+	dDst.m_sChain << "Listen ";
 	dDst.m_sDescription << "tick: " << tInfo.m_uTick << " works: " << tInfo.m_uWorks << " state: " << NetloopStateName ( tInfo.m_eThdState );
 }
 

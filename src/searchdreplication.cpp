@@ -916,7 +916,7 @@ struct ReplInfo_t : public TaskInfo_t
 DEFINE_RENDER( ReplInfo_t )
 {
 	auto & tInfo = *(ReplInfo_t *) const_cast<void*>(pSrc);
-	dDst.m_sChain << (int) tInfo.m_eType << ":Repl ";
+	dDst.m_sChain << "Repl ";
 	dDst.m_sClientName << "wsrep" << tInfo.m_sIncoming.cstr();
 }
 
@@ -1085,10 +1085,27 @@ static bool CheckResult ( wsrep_status_t tRes, const wsrep_trx_meta_t & tMeta, c
 
 static std::atomic<int64_t> g_iConnID { 1 };
 
+// add 'RPL' flag - i.e., that we're working in replication
+struct RPLRep_t: public MiniTaskInfo_t
+{
+	DECLARE_RENDER ( RPLRep_t );
+};
+
+DEFINE_RENDER ( RPLRep_t )
+{
+	auto& tInfo = *(RPLRep_t*)const_cast<void*> ( pSrc );
+	dDst.m_sDescription.Sprintf ( "(RPL %.2T)", tInfo.m_tmStart );
+	dDst.m_sChain << "RPL ";
+}
+
+
 // replicate serialized data into cluster and call commit monitor along
 static bool Replicate ( int iKeysCount, const wsrep_key_t * pKeys, const wsrep_buf_t & tQueries, wsrep_t * pProvider, CommitMonitor_c & tMonitor, bool bUpdate, CSphString & sError )
 {
 	assert ( pProvider );
+
+	// just displays 'RPL' flag.
+	auto RPL = PublishTaskInfo ( new RPLRep_t );
 
 	int64_t iConnId = g_iConnID.fetch_add ( 1, std::memory_order_relaxed );
 

@@ -29,7 +29,7 @@ static bool			g_bConfigless = false;
 
 using namespace Threads;
 
-static Coro::Spinlock_c	g_tSaveInProgress;
+static Coro::Mutex_c	g_tSaveInProgress;
 
 static CSphString GetPathForNewIndex ( const CSphString & sIndexName )
 {
@@ -772,7 +772,7 @@ bool SaveConfigInt ( CSphString & sError )
 	return Threads::CallCoroutineRes ( [&sError]
 	{
 
-	ScopedCoroSpinlock_t tSaving ( g_tSaveInProgress );
+	ScopedCoroMutex_t tSaving ( g_tSaveInProgress );
 
 	if ( !ReplicationIsEnabled() && !IsConfigless() )
 		return true;

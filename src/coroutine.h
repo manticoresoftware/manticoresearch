@@ -15,6 +15,11 @@
 #include "mini_timer.h"
 #include <atomic>
 
+// note: we not yet link to boost::fiber, so just inclusion of some of it's header is enough.
+// Once we do link - add searching of that component into Cmake, than m.b. remove this comment as redundant
+#include <boost/fiber/detail/spinlock.hpp>
+#include "coro_waker.h"
+
 #define LOG_LEVEL_RESEARCH true
 #define LOG_COMPONENT_OBJ this << " "
 #define LOG_COMPONENT_COROEV LOG_COMPONENT_OBJ << m_szName << ": "
@@ -234,8 +239,6 @@ bool IsInsideCoroutine();
 namespace Coro
 {
 
-class Worker_c;
-
 Worker_c* CurrentWorker() noexcept;
 
 // start handler in coroutine, first-priority
@@ -373,23 +376,29 @@ public:
 // instead of real blocking it yield current coro, so, MUST be used only with coro context
 class CAPABILITY ( "mutex" ) RWLock_c: public ISphNoncopyable
 {
-	std::atomic<DWORD> m_uLock {0};
+	boost::fibers::detail::spinlock m_tWaitQueueSpinlock {};
+	WaitQueue_c m_tWaitRQueue {};
+	WaitQueue_c m_tWaitWQueue {};
+	DWORD m_uState { 0 }; // lower bit - w-locked, rest - N of r-locks with bias 2
+	bool m_bWpending { false };
 
 public:
+	RWLock_c() = default;
 	bool WriteLock() ACQUIRE();
-//	bool UpgradeLock () RELEASE() ACQUIRE();
 	bool ReadLock() ACQUIRE_SHARED();
 	bool Unlock() UNLOCK_FUNCTION();
 };
 
-class CAPABILITY ( "mutex" ) Spinlock_c : public ISphNoncopyable
+class CAPABILITY ( "mutex" ) Mutex_c: public ISphNoncopyable
 {
-	std::atomic<bool> m_bLocked { false };
-public:
+	boost::fibers::detail::spinlock m_tWaitQueueSpinlock {};
+	WaitQueue_c m_tWaitQueue {};
+	Worker_c* m_pOwner { nullptr };
 
-	~Spinlock_c ();
-	void Lock () ACQUIRE();
-	void Unlock () RELEASE();
+public:
+	Mutex_c() = default;
+	void Lock() ACQUIRE();
+	void Unlock() RELEASE();
 };
 
 } // namespace Coro
@@ -476,7 +485,7 @@ public:
 
 using SccRL_t = CSphScopedRLock_T<Coro::RWLock_c>;
 using SccWL_t = CSphScopedWLock_T<Coro::RWLock_c>;
-using ScopedCoroSpinlock_t = CSphScopedLock<Coro::Spinlock_c>;
+using ScopedCoroMutex_t = CSphScopedLock<Coro::Mutex_c>;
 
 // fake locks
 using FakeRL_t = FakeScopedRLock_T<Coro::RWLock_c>;

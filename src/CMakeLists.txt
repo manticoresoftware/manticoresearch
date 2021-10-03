@@ -79,9 +79,10 @@ endif()
 set (Boost_USE_MULTITHREADED ON)
 set (Boost_USE_STATIC_LIBS ON)
 find_package (Boost 1.61.0 REQUIRED COMPONENTS context)
+target_link_libraries ( lextra INTERFACE Boost::boost Boost::context )
 
-add_library (lmanticore_coro coroutine.cpp coroutine.h)
-target_link_libraries(lmanticore_coro PRIVATE Boost::context PUBLIC lextra)
+add_library (lmanticore_coro coroutine.cpp coroutine.h coro_waker.h)
+target_link_libraries(lmanticore_coro PUBLIC lextra )
 
 find_package (Valgrind QUIET)
 if (Valgrind_FOUND)
@@ -90,7 +91,6 @@ if (Valgrind_FOUND)
 endif()
 
 target_link_libraries (lmanticore PUBLIC lmanticore_coro)
-target_link_libraries (lmanticore PUBLIC Boost::boost lextra)
 
 set(LMANTICORE_BISON sphinxexpr.y sphinxselect.y sphinxquery.y sphinxjson.y)
 set(LMANTICORE_FLEX sphinxjson.l sphinxexpr.l)

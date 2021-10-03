@@ -229,6 +229,7 @@ class Worker_c
 	void * m_pCurrentTaskInfo = nullptr;
 	int64_t m_tmCpuTimeBase = 0; // add sphCpuTime() to this value to get truly cpu time ticks
 	uint64_t m_uId { InitWorkerID() };
+	std::atomic<size_t> m_iWakerEpoch { 0 };
 
 	static uint64_t InitWorkerID()
 	{
@@ -493,6 +494,27 @@ public:
 	inline static Worker_c* CurrentWorker() noexcept
 	{
 		return m_pTlsThis;
+	}
+
+	inline bool Wake ( const size_t iWakerEpoch ) noexcept
+	{
+		size_t iExpectedEpoch = m_iWakerEpoch.load ( std::memory_order_relaxed );
+		bool bLastWaker = m_iWakerEpoch.compare_exchange_strong ( iExpectedEpoch, iWakerEpoch + 1, std::memory_order_acq_rel );
+		if ( !bLastWaker ) {
+			// m_iWakerEpoch has been incremented before, so consider this wake
+			// operation as outdated and do nothing
+			return false;
+		}
+
+		assert ( CurrentWorker() != this );
+		Restart();
+		return true;
+	}
+
+	inline Waker_c CreateWaker() noexcept
+	{
+		// this operation makes all previously created wakers to be outdated
+		return { this, ++m_iWakerEpoch };
 	}
 };
 
@@ -895,158 +917,146 @@ void MultiEvent_c::WaitEvent()
 	std::atomic_thread_fence ( std::memory_order_release );
 }
 
-/*
- * Legend for m_uLock:
- * 1-st bit indicated w-lock pending, 2-nd - w-lock, others are the counter of acquired shared locks.
- * using low bits for flags ensures that counter will never touch them even on overflow.
-  *
- * Possible values:
- * 0x00 - totally unlocked.
- * 0x84 - 33 r-locks acquired, may acquire and release other shared locks.
- * 0x85 - 33 r-locks acquired, and w-lock is pending. Will NOT acquire more r-locks, just release existing.
- * 0x02 - w-lock acquired. May be only released.
- * 0x03 - w-lock acquired, another w-lock pending.
- *
- * Pending bit is set during w-lock acquiring. On success w-lock bit is set, and pending restored to previous state.
- * Releasing (unlock) never changes pending bit.
- *
- * When several w-locks enqueued, there is gaps between them when r-locks may steal the focus.
- *
- * Rlock may be transformed to wlock: we need to set pending bit, then wait when only one r-lock left. Then set
- * atomically exchange last counter of r-lock to w-lock
- *
- */
 
-// practice shows few numbers are more expressive then symbolic names in that case
-static const DWORD ux01 = 1; // w-lock pending
-static const DWORD ux02 = 2; // w-lock acquired
-static const DWORD ux04 = 4; // increment for r-lock to avoid touching w-lock
-static const DWORD ux03 = ( ux01 | ux02 ); // acquiring read-locks paused
-static const DWORD uxFC = ~ux03; // mask for pending and wlock flags (0xFFFFFFFC)
-static const DWORD uxFE = ~ux01; // mask for pending flag flag (0xFFFFFFFE)
-
-
-/* r-locking:
- * 1. reschedule until 'pending' and 'wlock' bits are zero
- * 2. increase N of readers */
-bool RWLock_c::ReadLock()
+bool Waker_c::Wake() const noexcept
 {
-	auto uPrevState = m_uLock.load ( std::memory_order_acquire ); // memory_order_acquire
-	do {
-		if ( uPrevState & ux03 ) // check only pending and wlock bits
-		{
-			assert ( IsInsideCoroutine() );
-			Worker()->Reschedule();
-		}
-		uPrevState &= uxFC;
-	} while ( !m_uLock.compare_exchange_weak ( uPrevState, uPrevState+ux04, std::memory_order_acq_rel ) );
-	assert ( ( uPrevState & uxFC )!=uxFC ); // hope, 30 bit is enough to count all re-entered r-locks.
-	return true;
-}
-
-/* w-locking:
- * 1. set 'pending' flag, that prohibits readers
- * 2. reschedule until all bits, ignoring 'pending' are zero
- * 3. If in check we found that 'pending' became unset, - reinstall it.
- * 4. append 'wlock' bit. Finally on acquire wlock bit is set, pending is inherited, others zero.
- */
-bool RWLock_c::WriteLock()
-{
-	// prohibit further readers; from setting pending bit they may only release but no more acquire.
-	auto uMyState = m_uLock.fetch_or ( ux01, std::memory_order_acq_rel );
-
-	// will leave w-lock bit set, and pending bit inherited from previous state
-	auto uTargetState = ( uMyState & ux01 ) | ux02; // will leave on success with this state written
-	uMyState |= ux01;
-
-	do {
-		if ( uMyState & uxFE ) // check all except pending bit
-		{
-			assert ( IsInsideCoroutine() );
-			Worker()->Reschedule(); // works like spin-lock, but that is ok for now
-		}
-
-		// if we're waiting after another w-lock, it releases pending bit
-		// we need to reinstall it in order to keep readers out. Target state is just pure 2-lock bit here.
-		if ( ( uMyState & ux01 )==0 )
-		{
-			uMyState = m_uLock.fetch_or ( ux01, std::memory_order_acq_rel );
-			uTargetState = ux02;
-			uMyState |= ux01;
-		}
-		uMyState &= ux01;
-	} while ( !m_uLock.compare_exchange_weak ( uMyState, uTargetState, std::memory_order_acq_rel ) );
-	return true;
-}
-
-/* r-lock to w-lock elevation.
- * 0. Check that w-lock is not acquired, and also r-locks are not empty (as we elevate from existing r-lock)
- * 1. set 'pending' flag, that prohibits readers.
- * 2. reschedule until we have only 1 reader ('pending' and 'wlocked' bits ignored)
- * 3. append 'wlock' bit. Finally on acquire wlock bit is set, pending is inherited, others zero.
- */
-/*
- * Elevation has one fundamental problem, that is why it is commented out as dangerous solution.
- * One (and only one!) reader is ok to elevate (that is why it is left here and not totally wiped out).
- * When more than one want to elevate concurrently from different threads - that by the fact means, they want
- * exclusive (write) lock, and they already step into acquiring it by holding shared (read) lock.
- * Such 'semi-exclusive' state is ill and means immediate deadlock on the waiting (i.e. all candidates waits until
- * shared lock released by all others, and such mutual waiting is dead).
- * Since it is hard to avoid concurrency, let's forget about elevation for a while or forever.
-bool Threads::CoroRWLock_c::UpgradeLock ()
-{
-	assert ( IsInsideCoroutine () );
-	// prohibit further readers; from setting pending bit they may only release but no more acquire.
-	auto uMyState = m_uLock.fetch_or ( ux01, std::memory_order_acq_rel );
-	auto uTargetState = ( uMyState & ux01 ) | ux02; // will leave on success with this state written
-	assert ( ( uMyState & ux02 )==0 ); // there no elevation possible from w-lock
-	assert ( ( uMyState & uxFC )!=0 ); // there no elevation possible from zero (must be r-lock already)
-	uMyState |= ux01;
-
-	do {
-		if ( ( uMyState & uxFC )>ux04 ) // check all except pending bit
-			CoWorker ()->Reschedule ();// works like spin-lock, but that is ok for now
-		uMyState = ux04 + ( uMyState & ux01 );
-	} while ( !m_uLock.compare_exchange_weak ( uMyState, uTargetState, std::memory_order_acq_rel ) );
-	return true;
-}
- */
-
-/* unlocking:
- * 1. If 'wlock' bit is set, reset it
- * 2. Otherwise decrease rlock counter.
- */
-bool RWLock_c::Unlock()
-{
-	auto uMyState = m_uLock.load ( std::memory_order_acquire );  // memory_order_acquire
-	if ( ( uMyState & uxFE )==ux02 ) // was w-locked, reset keeping only pending bit
-		m_uLock.fetch_and ( ux01, std::memory_order_acq_rel ); // released exclusive lock memory_order_release
-	else // was w-locked, decrease counter
-		m_uLock.fetch_sub ( ux04, std::memory_order_acq_rel ); // released shared lock memory_order_acq_rel
-	return true;
+	assert ( m_iEpoch > 0 );
+	assert ( m_pCtx );
+	return m_pCtx->Wake ( m_iEpoch );
 }
 
 
-Spinlock_c::~Spinlock_c ()
+void WaitQueue_c::SuspendAndWait ( boost::fibers::detail::spinlock_lock& tLock, Worker_c* pActive )
 {
-	assert ( !m_bLocked.load ( std::memory_order_relaxed ) );
+	WakerInQueue_c w { pActive->CreateWaker() };
+	m_Slist.push_back ( w );
+	// suspend this fiber
+	pActive->YieldWith ( [&tLock]() { tLock.unlock(); } );
+	assert ( !w.is_linked() );
 }
 
-void Spinlock_c::Lock()
+
+void WaitQueue_c::NotifyOne()
 {
-	while ( true )
-	{
-		bool bCurrent = false;
-		if ( m_bLocked.compare_exchange_weak ( bCurrent, true, std::memory_order_acquire ) )
+	while ( !m_Slist.empty() ) {
+		Waker_c& w = m_Slist.front();
+		m_Slist.pop_front();
+		if ( w.Wake() ) {
 			break;
-		assert ( Threads::IsInsideCoroutine() );
-		Worker ()->Reschedule ();
+		}
 	}
 }
 
-void Spinlock_c::Unlock()
+void WaitQueue_c::NotifyAll()
 {
-	m_bLocked.store ( false, std::memory_order_release );
+	while ( !m_Slist.empty() ) {
+		Waker_c& w = m_Slist.front();
+		m_Slist.pop_front();
+		w.Wake();
+	}
+}
+
+bool WaitQueue_c::Empty() const
+{
+	return m_Slist.empty();
+}
+
+
+// the mutex
+void Mutex_c::Lock()
+{
+	while ( true ) {
+		auto* pActiveWorker = Worker();
+		// store this fiber in order to be notified later
+		boost::fibers::detail::spinlock_lock tLock { m_tWaitQueueSpinlock };
+		assert ( pActiveWorker != m_pOwner );
+		if ( !m_pOwner ) {
+			m_pOwner = pActiveWorker;
+			return;
+		}
+
+		m_tWaitQueue.SuspendAndWait( tLock, pActiveWorker );
+	}
+}
+
+void Mutex_c::Unlock()
+{
+	auto* pActiveWorker = Worker();
+	boost::fibers::detail::spinlock_lock tLock { m_tWaitQueueSpinlock };
+	assert ( pActiveWorker == m_pOwner );
+	m_pOwner = nullptr;
+
+	m_tWaitQueue.NotifyOne();
+}
+
+// the shared mutex
+
+// practice shows few numbers are more expressive than symbolic names in that case
+static constexpr DWORD ux01 = 1;			   // w-lock acquired
+static constexpr DWORD ux02 = 2;			   // r-lock bias
+static constexpr DWORD uxFE = ~ux01;		   // mask for w-lock flag (0xFFFFFFFE)
+
+/* r-locking:
+ * 1. reschedule until w-bit is zero
+ * 2. increase N of readers */
+bool RWLock_c::ReadLock()
+{
+	while ( true ) {
+		// store this task in order to be resumed    later
+		boost::fibers::detail::spinlock_lock tLock { m_tWaitQueueSpinlock };
+		if ( !m_bWpending && !( m_uState & ux01 ) )
+		{
+			m_uState += ux02;
+			assert ( ( m_uState & uxFE ) != uxFE ); // hope, 31 bits is enough to count all acquired r-locks.
+			return true;
+		}
+
+		m_tWaitRQueue.SuspendAndWait ( tLock, Worker() );
+	}
+}
+
+/* w-locking:
+ * 1. set 'pending' flag. That means, mo more readers possible (i.e. we implement wlock-preferring)
+ * 2. suspend until lock is free, and wake acquiring w-lock and resetting 'pending' flag
+ */
+bool RWLock_c::WriteLock()
+{
+	while ( true ) {
+		boost::fibers::detail::spinlock_lock tLock { m_tWaitQueueSpinlock };
+		if ( !m_uState )
+		{
+			m_uState = ux01;
+			m_bWpending = false;
+			return true;
+		}
+
+		m_bWpending = true;
+		m_tWaitWQueue.SuspendAndWait ( tLock, Worker() );
+	}
+}
+
+/* unlocking:
+ * 1. Decrease r-locks, or reset w-lock
+ * 2. Resume one writer (if any), or all readers
+ */
+bool RWLock_c::Unlock()
+{
+	boost::fibers::detail::spinlock_lock tLock { m_tWaitQueueSpinlock };
+	assert ( m_uState >= ux01 );
+	if ( m_uState==ux01 ) // releasing w-lock
+		m_uState = 0;
+	else
+		m_uState -= ux02;
+
+	if ( m_uState )
+		return true;
+
+	// fixme! point of priority decision: on unlock, do we need to wake up next w-locker, or all r-lockers?
+	if ( !m_tWaitWQueue.Empty() )
+		m_tWaitWQueue.NotifyOne();
+	else
+		m_tWaitRQueue.NotifyAll();
+	return true;
 }
 
 } // namespace Coro

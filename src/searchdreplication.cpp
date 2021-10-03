@@ -3766,7 +3766,7 @@ public:
 
 	int Write ( int iFile, int iChunk, const void * pData, int64_t iSize, CSphString & sError )
 	{
-		Threads::ScopedCoroSpinlock_t tLock ( m_tLock );
+		Threads::ScopedCoroMutex_t tLock ( m_tLock );
 
 		assert ( m_pMerge.Ptr() );
 		if ( m_pMerge->m_iFile!=iFile )
@@ -3818,7 +3818,7 @@ public:
 
 	MergeState_t * Flush ( CSphString & sError )
 	{
-		Threads::ScopedCoroSpinlock_t tLock ( m_tLock );
+		Threads::ScopedCoroMutex_t tLock ( m_tLock );
 
 		assert ( m_pMerge.Ptr() );
 
@@ -3840,7 +3840,7 @@ public:
 	{
 		assert ( dFilesRef.GetLength()==tRes.m_pDst->m_dRemotePaths.GetLength() );
 
-		Threads::ScopedCoroSpinlock_t tLock ( m_tLock );
+		Threads::ScopedCoroMutex_t tLock ( m_tLock );
 
 		m_pMerge = new MergeState_t();
 		m_pMerge->m_bIndexActive = tRes.m_bIndexActive;
@@ -3853,7 +3853,7 @@ public:
 	}
 
 private:
-	Threads::Coro::Spinlock_c m_tLock; // prevent writing to same file from multiple clients
+	Threads::Coro::Mutex_c m_tLock; // prevent writing to same file from multiple clients
 
 	CSphScopedPtr<WriterWithHash_c> m_pWriter { nullptr };
 	CSphScopedPtr<CSphAutoreader> m_pReader { nullptr };
@@ -3957,7 +3957,7 @@ public:
 
 	RecvState_c & GetState ( uint64_t tWriterKey )
 	{
-		Threads::ScopedCoroSpinlock_t tLock ( m_tLock );
+		Threads::ScopedCoroMutex_t tLock ( m_tLock );
 		RecvState_c * pState = m_hStates ( tWriterKey );
 		if ( pState )
 			return *pState;
@@ -3967,19 +3967,19 @@ public:
 
 	void Free (  uint64_t tWriterKey )
 	{
-		Threads::ScopedCoroSpinlock_t tLock ( m_tLock );
+		Threads::ScopedCoroMutex_t tLock ( m_tLock );
 		m_hStates.Delete ( tWriterKey );
 	}
 
 	bool HasState ( uint64_t tWriterKey )
 	{
-		Threads::ScopedCoroSpinlock_t tLock ( m_tLock );
+		Threads::ScopedCoroMutex_t tLock ( m_tLock );
 		return m_hStates.Exists ( tWriterKey );
 	}
 
 private:
 	CSphOrderedHash < RecvState_c, uint64_t, IdentityHash_fn, 64 > m_hStates GUARDED_BY (m_tLock);
-	Threads::Coro::Spinlock_c m_tLock;
+	Threads::Coro::Mutex_c m_tLock;
 };
 
 static StatesCache_c g_tRecvStates;

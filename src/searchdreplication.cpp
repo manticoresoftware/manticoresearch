@@ -81,6 +81,9 @@ struct ReplicationCluster_t : public ClusterDesc_t
 	// replicator
 	wsrep_t *	m_pProvider = nullptr;
 
+	// serializer for replicator - guards for only one replication Op a time
+	Threads::Coro::Mutex_c m_tReplicationMutex;
+
 	// receiver thread
 	CSphAutoEvent	m_tWorkerFinished;
 	bool			m_bHasWorker = false;
@@ -1910,6 +1913,8 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 	wsrep_buf_t tQueries;
 	tQueries.ptr = dBufQueries.Begin();
 	tQueries.len = dBufQueries.GetLength();
+
+	Threads::ScopedCoroMutex_t _ { ( *ppCluster )->m_tReplicationMutex };
 
 	if ( !bTOI )
 		return Replicate ( iKeysCount, dKeys.Begin(), tQueries, (*ppCluster)->m_pProvider, tMonitor, bUpdate, sError );

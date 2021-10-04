@@ -12,6 +12,7 @@
 
 #include "threadutils.h"
 #include "sphinx.h"
+#include <boost/context/detail/prefetch.hpp>
 
 #if !_WIN32
 // UNIX-specific headers and calls
@@ -112,228 +113,8 @@ namespace logdetail {
 
 #define LOG_COMPONENT_MT "(" << GetOsThreadId() << ") " << logdetail::name() << ": "
 
-// list (FIFO queue) of operations to perform. Used in service queue.
-template<typename Operation>
-class OpQueue_T : public ISphNoncopyable
-{
-	Operation * m_pFront = nullptr; // The front of the queue.
-	Operation * m_pBack = nullptr; // The back of the queue.
-
-public:
-	// destroys all operations.
-	~OpQueue_T ()
-	{
-		while (Operation * pOp = m_pFront)
-		{
-			Pop ();
-			pOp->Destroy();
-		}
-	}
-
-	// Get the operation at the front of the queue.
-	Operation * Front ()
-	{
-		return m_pFront;
-	}
-
-	// Pop an operation from the front of the queue.
-	void Pop ()
-	{
-		if ( m_pFront )
-		{
-			auto * tmp = m_pFront;
-			m_pFront = tmp->m_pNext;
-			if ( !m_pFront )
-				m_pBack = nullptr;
-			tmp->m_pNext = nullptr;
-		}
-	}
-
-	// Push an operation on to the back of the queue.
-	void Push ( Operation * pOp )
-	{
-		pOp->m_pNext = nullptr;
-		if ( m_pBack )
-		{
-			m_pBack->m_pNext = pOp;
-			m_pBack = pOp;
-		} else
-			m_pFront = m_pBack = pOp;
-	}
-
-	// Push an operation on to the front of the queue.
-	void Push_front ( Operation * pOp )
-	{
-		if ( m_pFront )
-		{
-			pOp->m_pNext = m_pFront;
-			m_pFront = pOp;
-		} else
-		{
-			pOp->m_pNext = nullptr;
-			m_pFront = m_pBack = pOp;
-		}
-	}
-
-	// Push all operations from another queue on to the back of the queue. The
-	// source queue may contain operations of a derived type.
-	template<typename OtherOperation>
-	void Push ( OpQueue_T<OtherOperation> & rhs )
-	{
-		auto pRhsFront = rhs.m_pFront;
-		if ( pRhsFront )
-		{
-			if ( m_pBack )
-				m_pBack->m_pNext = pRhsFront;
-			else
-				m_pFront = pRhsFront;
-			m_pBack = rhs.m_pBack;
-			rhs.m_pFront = nullptr;
-			rhs.m_pBack = nullptr;
-		}
-	}
-
-	// Whether the queue is empty.
-	bool Empty () const
-	{
-		return m_pFront==nullptr;
-	}
-
-	// Test whether an operation is already enqueued.
-	bool IsEnqueued ( Operation * pOp ) const
-	{
-		return pOp->m_pNext || m_pBack==pOp;
-	}
-
-	// find elem (linear search), remove from list and destroy
-	void RemoveAndDestroy ( Operation * pOp )
-	{
-		if ( !pOp )
-			return;
-
-		if ( m_pFront==pOp )
-		{
-			m_pFront = pOp->m_pNext;
-		} else
-		{
-			for ( auto pCurOp = m_pFront; pCurOp!=nullptr; pCurOp = pCurOp->m_pNext )
-			{
-				if ( pCurOp->m_pNext==pOp )
-				{
-					pCurOp->m_pNext = pOp->m_pNext;
-					if ( !pCurOp->m_pNext )
-						m_pBack = pCurOp;
-					break;
-				}
-			}
-		}
-		if ( !m_pFront )
-			m_pBack = nullptr;
-		pOp->Destroy ();
-	}
-
-	class Iterator_c
-	{
-		Operation * m_pIterator = nullptr;
-	public:
-		explicit Iterator_c ( Operation * pIterator = nullptr ) : m_pIterator ( pIterator )
-		{}
-
-		Operation & operator* ()
-		{
-			return *m_pIterator;
-		}
-
-		Iterator_c & operator++ ()
-		{
-			m_pIterator = m_pIterator->m_pNext;
-			return *this;
-		}
-
-		bool operator!= ( const Iterator_c & rhs ) const
-		{
-			return m_pIterator!=rhs.m_pIterator;
-		}
-	};
-
-	// c++11 style iteration
-	Iterator_c begin () const
-	{
-		return Iterator_c ( m_pFront );
-	}
-
-	Iterator_c end () const
-	{
-		return Iterator_c();
-	}
-};
-
-// Base class for all operations. A function pointer is used instead of virtual
-// functions to avoid the associated overhead.
-class SchedulerOperation_t
-{
-protected:
-	using fnFuncType = void ( void*, SchedulerOperation_t* );
-	friend class OpQueue_T<SchedulerOperation_t>;
-
-private:
-	SchedulerOperation_t * m_pNext = nullptr;
-	fnFuncType * m_fnFunc;
-
-public:
-  void Complete( void* pOwner )
-  {
-	  m_fnFunc ( pOwner, this );
-  }
-
-  void Destroy()
-  {
-	  m_fnFunc ( nullptr, this );
-  }
-
-protected:
-	// protect ctr and dtr of this type
-	SchedulerOperation_t ( fnFuncType* fnFunc ) : m_fnFunc ( fnFunc ) {}
-	~SchedulerOperation_t () = default;
-};
-
-using OpSchedule_t = OpQueue_T<SchedulerOperation_t>;
-
-// actual operation which completes given Handler
-template <typename Handler>
-class CompletionHandler_c : public SchedulerOperation_t
-{
-	Handler m_Handler;
-
-public:
-	explicit CompletionHandler_c ( Handler h )
-		: SchedulerOperation_t ( &CompletionHandler_c::DoComplete )
-		, m_Handler ( static_cast<const Handler&> ( h )) // force copying
-	{}
-
-	static void DoComplete ( void * pOwner, SchedulerOperation_t * pBase )
-	{
-		// Take ownership of the handler object.
-		auto * pHandler = static_cast<CompletionHandler_c *>(pBase);
-
-		// make a copy of handler before upcall.
-		Handler dLocalHandler ( static_cast<const Handler &> ( pHandler->m_Handler ));
-
-		// deallocate before the upcall
-		SafeDelete ( pHandler );
-
-		// Make the upcall if required.
-		if ( pOwner )
-		{
-			Threads::JobTimer_t dTrack;
-			dLocalHandler();
-
-			// barrier ensures that no operations till here would be reordered below.
-			std::atomic_thread_fence ( std::memory_order_release );
-		}
-	}
-};
-
+using Operation_t = Threads::details::SchedulerOperation_t;
+using OpSchedule_t = Threads::details::OpQueue_T<Operation_t>;
 
 struct TaskServiceThreadInfo_t
 {
@@ -344,7 +125,7 @@ struct TaskServiceThreadInfo_t
 class TaskService_t
 {
 public:
-	using operation = SchedulerOperation_t;
+	using operation = Operation_t;
 };
 
 // Helper class to determine whether or not the current thread is inside an
@@ -424,19 +205,19 @@ private:
 template<typename Key, typename Value>
 thread_local typename CallStack_c<Key, Value>::Context_c* CallStack_c<Key,Value>::m_pTop = nullptr;
 
-struct Service_i
-{
-	virtual ~Service_i() {}
-	virtual void run() = 0;
-	virtual void reset() = 0;
-};
+//struct Service_i
+//{
+//	virtual ~Service_i() {}
+//	virtual void run() = 0;
+//	virtual void reset() = 0;
+//};
 
 #define LOG_LEVEL_WORKS false
 #define LOG_LEVEL_ST false
 
 /// performs tasks pushed with post() in one or many threads until they done.
 /// Naming convention of members is inherited from boost::asio as drop-in replacement.
-struct Service_t : public TaskService_t, public Service_i
+struct Service_t : public TaskService_t//, public Service_i
 {
 	std::atomic<long> m_iOutstandingWork {0};	/// count of unfinished works
 	mutable CSphMutex m_dMutex;					/// protect access to internal data
@@ -457,25 +238,33 @@ public:
 	explicit Service_t (bool bOneThread)
 	: m_bOneThread ( bOneThread ) {}
 
-	template<typename Handler>
-	void post ( Handler handler ) // post into secondary queue
+	inline void post_op ( Service_t::operation* pOp) // post into secondary queue
 	{
-		// Allocate and construct an operation to wrap the handler.
-		post_immediate_completion ( new CompletionHandler_c<Handler> ( std::move ( handler ) ), false );
+		post_immediate_completion ( pOp, false );
+	}
+
+	inline void defer_op ( Service_t::operation* pOp ) // post into primary queue
+	{
+		post_immediate_completion ( pOp, true );
 	}
 
 	template<typename Handler>
-	void defer ( Handler handler ) // post into primary queue
+	inline void post ( Handler handler ) // post into secondary queue
 	{
-		// Allocate and construct an operation to wrap the handler.
-		post_immediate_completion ( new CompletionHandler_c<Handler> ( std::move ( handler ) ), true );
+		post_op ( Threads::details::Handler2Op( std::move ( handler ) ) );
+	}
+
+	template<typename Handler>
+	inline void defer ( Handler handler ) // post into primary queue
+	{
+		defer_op ( Threads::details::Handler2Op( std::move ( handler ) ) );
 	}
 
 	template<typename Handler>
 	void post_continuationHandler ( Handler handler ) // try to execute immediately, or then post to primary queue
 	{
 		// Allocate and construct an operation to wrap the handler.
-		post_continuation ( new CompletionHandler_c<Handler> ( std::move ( handler ) ) );
+		post_continuation ( Threads::details::Handler2Op( std::move ( handler ) ) );
 	}
 
 	void post_continuation ( Service_t::operation * pOp )
@@ -519,7 +308,7 @@ public:
 		wake_one_thread_and_unlock ( dLock );
 	}
 
-	void run () NO_THREAD_SAFETY_ANALYSIS override
+	void run () NO_THREAD_SAFETY_ANALYSIS //override
 	{
 		LOG ( DETAIL, MT ) << "run " << m_iOutstandingWork << " st:" << !!m_bStopped;
 		if ( m_iOutstandingWork==0 )
@@ -566,6 +355,7 @@ public:
 			else
 				dLock.Unlock ();
 
+			boost::context::detail::prefetch_range ( pOp, sizeof ( Operation_t ) );
 			pOp->Complete (this);
 
 			LOG ( DETAIL, MT ) << "completed & unlocked";
@@ -601,7 +391,7 @@ public:
 		return m_bStopped;
 	}
 
-	void reset () override
+	void reset () //override
 	{
 		LOG ( DETAIL, MT ) << "reset stopped ";
 		ScopedMutex_t dLock ( m_dMutex );
@@ -705,13 +495,12 @@ class Strand_c final : public SchedulerWithBackend_i
 
 	friend class Invoker_c;
 
-	bool Enqueue ( Handler handler )
+	bool Enqueue ( Threads::details::SchedulerOperation_t* pOp )
 	{
 		ScopedMutex_t tLock ( m_dMutex );
 		if ( m_bShutdown )
 			return false;
 
-		auto * pOp = new CompletionHandler_c<Handler> ( std::move ( handler ) );
 		if ( m_bLocked )
 		{
 			m_OpWaitQueue.Push (pOp);
@@ -727,14 +516,14 @@ class Strand_c final : public SchedulerWithBackend_i
 	}
 
 	// try to execute immediately, or then post to primary queue
-	void PostContinuationToBackend ( Handler handler )
+	void PostContinuationToBackend ( Threads::details::SchedulerOperation_t* pOp )
 	{
 		// Add the function to the strand and schedule the strand if required.
 		if ( m_pBackend )
-			m_pBackend->ScheduleContinuation ( std::move(handler) );
+			m_pBackend->ScheduleContinuationOp ( pOp );
 	}
 
-	void PostContinuation ( Handler handler ) // try to execute immediately, or then post to primary queue
+	void PostContinuationImpl ( Threads::details::SchedulerOperation_t* pOp ) // try to execute immediately, or then post to primary queue
 	{
 		auto bThisThread = !!StrandCallStack_c::Contains ( this );
 		if ( bThisThread )
@@ -744,27 +533,27 @@ class Strand_c final : public SchedulerWithBackend_i
 
 			// barrier ensures that no operations till here would be reordered below.
 			std::atomic_thread_fence ( std::memory_order_acquire );
-			handler ();
+			pOp->Complete(pOp);
 			std::atomic_thread_fence ( std::memory_order_release );
 
 			LOG ( ST, ST ) << "strand PostContinuation performed without queuing";
 			return;
 		}
 
-		bool bFirst = Enqueue ( std::move ( handler ) );
+		bool bFirst = Enqueue ( pOp );
 
 		// Add the function to the strand and schedule the strand if required.
 		if ( bFirst )
 		{
 			Invoker_c tInvoker { this };
-			PostContinuationToBackend ( [t=std::move(tInvoker)] () mutable { t.run(); } );
+			PostContinuationToBackend ( Threads::details::Handler2Op ( [t = std::move ( tInvoker )]() mutable { t.run(); } ) );
 		}
 	}
 
 	void Kick()
 	{
 		Invoker_c tInvoker { this };
-		PostContinuationToBackend( [t = std::move ( tInvoker )] () mutable { t.run (); } );
+		PostContinuationToBackend ( Threads::details::Handler2Op ( [t = std::move ( tInvoker )]() mutable { t.run(); } ) );
 	}
 
 public:
@@ -775,10 +564,10 @@ public:
 		LOGINFO ( TPLIFE, TP ) << "Strand_c created";
 	}
 
-	void Schedule ( Handler handler, bool bVip ) final
+	void ScheduleOp ( Threads::details::SchedulerOperation_t* pOp, bool bVip ) final
 	{
 		LOG ( ST, ST ) << "Post";
-		bool bFirst = Enqueue ( std::move ( handler ) );
+		bool bFirst = Enqueue ( pOp );
 		if ( bFirst && m_pBackend )
 		{
 			LOG ( ST, ST ) << "Post scheduled invoker to backend";
@@ -788,10 +577,10 @@ public:
 		LOG ( ST, ST ) << "Post finished";
 	}
 
-	void ScheduleContinuation ( Handler handler ) final
+	void ScheduleContinuationOp ( Threads::details::SchedulerOperation_t* pOp ) final
 	{
 		LOG ( ST, ST ) << "ScheduleContinuation";
-		PostContinuation ( std::move ( handler ) );
+		PostContinuationImpl ( pOp );
 		LOG ( ST, ST ) << "Post finished";
 	}
 
@@ -866,7 +655,7 @@ void Strand_c::Invoker_c::run ()
 
 			Strand_c::Invoker_c tInvoker { *m_pThis };
 //			pOwner->Schedule ( [t=std::move(tInvoker)] () mutable { t.run (); }, true );
-			pOwner->PostContinuationToBackend ( [t = std::move ( tInvoker )] () mutable { t.run (); } );
+			pOwner->PostContinuationToBackend ( Threads::details::Handler2Op ( [t = std::move ( tInvoker )]() mutable { t.run(); } ) );
 		}
 	};
 
@@ -882,6 +671,7 @@ void Strand_c::Invoker_c::run ()
 		auto * pOp = m_pOwner->m_OpReadyQueue.Front ();
 		m_pOwner->m_OpReadyQueue.Pop ();
 		LOG ( ST, ST ) << "run op: " << pOp;
+		boost::context::detail::prefetch_range ( pOp, sizeof ( Operation_t ) );
 		pOp->Complete ( pOp );
 	}
 }
@@ -902,29 +692,27 @@ class ThreadPool_c final : public Worker_i
 	RwLock_t m_dChildGuard;
 	CSphVector<LowThreadDesc_t *> m_dChildren GUARDED_BY ( m_dChildGuard);
 
-	template<typename F>
-	void Post ( F && f, bool bVip = false ) // post to primary (vip) or secondary queue
+	void Post ( Threads::details::SchedulerOperation_t* pOp, bool bVip = false ) // post to primary (vip) or secondary queue
 	{
 		LOG ( DETAIL, TP ) << "Post " << bVip;
 		if ( bVip )
-			m_tService.defer ( std::forward<F> ( f ));
+			m_tService.defer_op ( pOp );
 		else
-			m_tService.post ( std::forward<F> ( f ));
+			m_tService.post_op ( pOp );
 		LOG ( DETAIL, TP ) << "Post finished";
 	}
 
-	template<typename F>
-	void PostContinuation ( F && f ) // 'very vip' - try to execute immediately, or post to the primary queue
+	void PostContinuation ( Threads::details::SchedulerOperation_t* pOp ) // 'very vip' - try to execute immediately, or post to the primary queue
 	{
 		LOG ( DETAIL, TP ) << "PostContinuation";
-		m_tService.post_continuationHandler( std::forward<F> ( f ));
+		m_tService.post_continuation ( pOp );
 		LOG ( DETAIL, TP ) << "Post finished";
 	}
 
-	Service_i & Service ()
-	{
-		return m_tService;
-	}
+//	Service_i & Service ()
+//	{
+//		return m_tService;
+//	}
 
 	void createWork ()
 	{
@@ -981,14 +769,14 @@ public:
 		m_dThreads.Reset();
 	}
 
-	void Schedule ( Handler handler, bool bVip ) final
+	void ScheduleOp ( Threads::details::SchedulerOperation_t* pOp, bool bVip ) final
 	{
-		Post ( std::move ( handler ), bVip );
+		Post ( pOp, bVip );
 	}
 
-	void ScheduleContinuation ( Handler handler ) final
+	void ScheduleContinuationOp ( Threads::details::SchedulerOperation_t* pOp ) final
 	{
-		PostContinuation ( std::move ( handler ) );
+		PostContinuation ( pOp );
 	}
 
 	Keeper_t KeepWorking () final
@@ -1038,14 +826,13 @@ class AloneThread_c final : public Worker_i
 	std::atomic<bool> m_bStarted {false};
 	static int m_iRunningAlones;
 
-	template<typename F>
-	void Post ( F && f, bool bVip=false ) // post to primary (vip) or secondary queue
+	void Post ( Service_t::operation* pOp, bool bVip=false ) // post to primary (vip) or secondary queue
 	{
 		LOG ( DETAIL, TP ) << "Post " << bVip;
 		if ( bVip )
-			m_tService.defer ( std::forward<F> ( f ) );
+			m_tService.defer_op ( pOp );
 		else
-			m_tService.post ( std::forward<F> ( f ));
+			m_tService.post_op ( pOp );
 		LOG ( DETAIL, TP ) << "Post finished";
 		if ( !m_bStarted )
 		{
@@ -1083,9 +870,9 @@ public:
 		LOGINFO ( TPLIFE, TP ) << "AloneThread_c destroyed";
 	}
 
-	void Schedule ( Handler handler, bool bVip ) final
+	void ScheduleOp ( Service_t::operation* pOp , bool bVip ) final
 	{
-		Post ( std::move ( handler ), bVip );
+		Post ( pOp, bVip );
 	}
 
 	Keeper_t KeepWorking () final
@@ -1101,6 +888,11 @@ public:
 	int Works () const final
 	{
 		return GetRunners ();
+	}
+
+	const char* Name() const override
+	{
+		return m_sName.cstr();
 	}
 };
 
@@ -1149,14 +941,14 @@ namespace {
 
 void searchd::AddShutdownCb ( Handler fnCb )
 {
-	auto pCb = ( new CompletionHandler_c<Handler> ( std::move ( fnCb ) ) );
+	auto pCb = Threads::details::Handler2Op ( std::move ( fnCb ) );
 	ScWL_t tGuard ( g_lShutdownGuard() );
 	g_dShutdownList().Push_front( pCb );
 }
 
 void searchd::AddOnForkCleanupCb ( Threads::Handler fnCb )
 {
-	auto pCb = ( new CompletionHandler_c<Handler> ( std::move ( fnCb ) ) );
+	auto pCb = Threads::details::Handler2Op ( std::move ( fnCb ) );
 	ScWL_t tGuard ( g_lShutdownGuard () );
 	g_dOnForkList ().Push_front ( pCb );
 }
@@ -1282,7 +1074,7 @@ class OperationsQueue_c::Impl_c
 public:
 	void AddOp ( Handler fnCb )
 	{
-		auto pCb = ( new CompletionHandler_c<Handler> ( std::move ( fnCb ) ) );
+		auto pCb = Threads::details::Handler2Op ( std::move ( fnCb ) );
 		ScopedMutex_t tGuard ( m_tQueueGuard );
 		m_tQueue.Push_front ( pCb );
 	}
@@ -1350,7 +1142,7 @@ bool OperationsQueue_c::IsEmpty() const
 
 namespace { // static
 
-	class IterationHandler_c : public SchedulerOperation_t
+class IterationHandler_c : public Threads::details::SchedulerOperation_t
 	{
 		ThreadIteratorFN m_Handler;
 
@@ -1618,7 +1410,7 @@ void Threads::JobFinished ( bool bIsDone )
 // to free local resources allocated by its main thread.
 void Threads::OnExitThread ( Threads::Handler fnHandle )
 {
-	auto pCb = ( new CompletionHandler_c<Handler> ( std::move(fnHandle) ) );
+	auto pCb = Threads::details::Handler2Op ( std::move ( fnHandle ) );
 	MyThreadContext().m_pThreadCleanup.Push_front ( pCb );
 }
 

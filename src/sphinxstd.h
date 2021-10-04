@@ -4851,16 +4851,17 @@ protected:
 	{}
 
 public:
-	inline void AddRef () const
+	inline void AddRef () const noexcept
 	{
-		m_iRefCount.fetch_add ( 1, std::memory_order_acquire );
+		m_iRefCount.fetch_add ( 1, std::memory_order_relaxed );
 	}
 
-	inline void Release () const
+	inline void Release () const noexcept
 	{
 		if ( m_iRefCount.fetch_sub ( 1, std::memory_order_release )==1 )
 		{
-			assert ( m_iRefCount.load ( std::memory_order_acquire )==0 );
+			std::atomic_thread_fence ( std::memory_order_acquire );
+			assert ( m_iRefCount.load ( std::memory_order_relaxed )==0 );
 			delete this;
 		}
 	}

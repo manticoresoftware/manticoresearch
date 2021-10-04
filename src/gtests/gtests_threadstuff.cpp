@@ -51,7 +51,7 @@ void Counter100c()
 	CallCoroutine ( [&] {
 	  auto dWaiter = DefferedContinuator();
 		for ( int i = 0; i < 100; ++i )
-			CoCo ( [&] {
+			Coro::Co ( [&] {
 				v.fetch_add(1,std::memory_order_relaxed);
 			},
 					dWaiter );
@@ -68,7 +68,7 @@ TEST ( ThreadPool, Counter100c )
 
 const char* SH()
 {
-	auto pSched = Threads::CoCurrentScheduler();
+	auto pSched = Threads::Coro::CurrentScheduler();
 	if (!pSched)
 		return "(null)";
 	return pSched->Name();
@@ -148,12 +148,12 @@ TEST ( ThreadPool, strandr2 )
 
 	Threads::CallCoroutine ( [&] {
 		auto dWaiter = DefferedRestarter ();
-		RoledSchedulerSharedPtr_t pRandr = Threads::MakeAloneScheduler ( CoCurrentScheduler () );
+		RoledSchedulerSharedPtr_t pRandr = Threads::MakeAloneScheduler ( Coro::CurrentScheduler () );
 		Threads::ScopedScheduler_c customtp { pRandr };
 		for ( int i = 0; i<NUMS; ++i )
 		{
 			// commenting out line below will cause test to fail.
-			CoCo ( [&,i] {
+			Coro::Co ( [&,i] {
 				sphSleepMsec ( sphRand () % NUMS );
 				dRes.Add ( i );
 			}, dWaiter );
@@ -169,7 +169,7 @@ TEST ( ThreadPool, strandr2 )
 	ASSERT_EQ ( dRes.GetLength (), NUMS );
 }
 
-// checks that strandr is re-enterable. I.e. that CoReschedule is NOT cause stack overflow.
+// checks that strandr is re-enterable. I.e. that Coro::Reschedule is NOT cause stack overflow.
 // DISABLED because it is manual, otherwise produce many noise
 TEST ( ThreadPool, DISABLED_strandr_reschedule )
 {
@@ -179,14 +179,14 @@ TEST ( ThreadPool, DISABLED_strandr_reschedule )
 	static const int NUMS = 700;
 
 	Threads::CallCoroutine ( [&] {
-		RoledSchedulerSharedPtr_t pRandr = Threads::MakeAloneScheduler ( CoCurrentScheduler () );
+		RoledSchedulerSharedPtr_t pRandr = Threads::MakeAloneScheduler ( Coro::CurrentScheduler () );
 		std::cout << "enter scoped\n";
 		{
 			Threads::ScopedScheduler_c customtp { pRandr };
 			std::cout << "scope entered\n";
 			for ( int j = 0; j<NUMS; ++j )
 			{
-				CoReschedule ();
+				Coro::Reschedule ();
 				std::cout << "rescheduled " << j << "\n";
 			}
 			std::cout << "done\n";
@@ -238,7 +238,7 @@ int getworker ( int N, thread_t* pthreads )
 	}
 	if ( !pthreads[iIdx].strandr )
 	{
-		pthreads[iIdx].strandr = MakeAloneScheduler ( CoCurrentScheduler (), names[iIdx] );
+		pthreads[iIdx].strandr = MakeAloneScheduler ( Coro::CurrentScheduler (), names[iIdx] );
 		std::cout << " new ";
 	}
 	std::cout << "give " << iIdx << ":" << iWorks << "\n";
@@ -255,7 +255,7 @@ void bind_resource ( int N, essence_t* presource, int iResource, thread_t * pthr
 			StringBuilder_c cout;
 			std::cout << SH () << " " << N << ": resource owner of " << iResource << " is fiber_" << resource.iOwner << ", wait...\n";
 			while ( resource.iOwner!=iWorker && resource.iOwner!=-1 )
-				Threads::CoReschedule ();
+				Threads::Coro::Reschedule ();
 			std::cout << SH () << " " << N << ": wait of " << iResource << " done, owner is fiber_" << resource.iOwner << ".\n";
 		}
 
@@ -326,13 +326,13 @@ TEST ( ThreadPool, DISABLED_strandr3 )
 
 	Threads::CallCoroutine ( [&] {
 		auto dWaiter = DefferedRestarter ();
-		RoledSchedulerSharedPtr_t pRandr = Threads::MakeAloneScheduler ( CoCurrentScheduler (),"SH" );
+		RoledSchedulerSharedPtr_t pRandr = Threads::MakeAloneScheduler ( Coro::CurrentScheduler (),"SH" );
 		std::cout << "started...\n";
 		int64_t iMaxTries = 0;
 
 		for ( int i=0; i<1000; ++i)
 		{
-			CoCo ( [&,i] {
+			Coro::Co ( [&,i] {
 
 				// select couple of resources (random)
 				auto a = ( sphRand () % NUMS );
@@ -375,7 +375,7 @@ TEST ( ThreadPool, DISABLED_strandr3 )
 
 								// backoff: schedule 2 tasks, each in the worker of each resource. When any fired,
 								// restart the loop.
-								// Other way is just CoReschedule(), but that will fire CPU core of dispatcher in wain.
+								// Other way is just Coro::Reschedule(), but that will fire CPU core of dispatcher in wain.
 								WaitForN ( 1, {
 									[t=workers[workera].strandr] { ScopedScheduler_c _ { t };},
 									[t=workers[workerb].strandr] { ScopedScheduler_c _ { t };}
@@ -461,11 +461,11 @@ TEST ( ThreadPool, CoroPromiceFutureConcept )
 	volatile int iData;
 	auto fnCoro = MakeCoroExecutor ( [&iData]() {
 		iData = 1;
-		CoYield();
+		Coro::Yield_();
 		iData = 2;
-		CoYield();
+		Coro::Yield_();
 		iData = 10;
-		CoYield();
+		Coro::Yield_();
 		iData = 16;
 	} );
 

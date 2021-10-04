@@ -60,8 +60,6 @@
 	#define ESHUTDOWN		WSAESHUTDOWN
 
 	#define ftruncate		_chsize
-	#define getpid			GetCurrentProcessId
-
 
 #else
 	// UNIX-specific headers and calls

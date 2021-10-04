@@ -946,12 +946,12 @@ void sphSrand ( DWORD uSeed )
 void sphAutoSrand ()
 {
 	// get timestamp
+	DWORD uPID;
 #if !_WIN32
 	struct timeval tv;
 	gettimeofday ( &tv, NULL );
+	uPID = getpid();
 #else
-	#define getpid() GetCurrentProcessId()
-
 	struct
 	{
 		time_t	tv_sec;
@@ -965,10 +965,11 @@ void sphAutoSrand ()
 	ts /= 10; // to microseconds
 	tv.tv_sec = (DWORD)(ts/1000000);
 	tv.tv_usec = (DWORD)(ts%1000000);
+	uPID = GetCurrentProcessId();
 #endif
 
 	// twist and shout
-	sphSrand ( sphRand() ^ DWORD(tv.tv_sec) ^ (DWORD(tv.tv_usec) + DWORD(getpid())) );
+	sphSrand ( sphRand() ^ DWORD(tv.tv_sec) ^ (DWORD(tv.tv_usec) + uPID) );
 }
 
 

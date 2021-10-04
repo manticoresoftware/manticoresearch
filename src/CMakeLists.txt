@@ -81,6 +81,13 @@ set (Boost_USE_STATIC_LIBS ON)
 find_package (Boost 1.61.0 REQUIRED COMPONENTS context)
 target_link_libraries ( lextra INTERFACE Boost::boost Boost::context )
 
+# Fixme! That is temporary solution - as we just use some headers of Boost::fiber, and that is available by default.
+# If we link with the lib, we should find_package for component fiber, and then link with it. *NOT* that is not necessary.
+# But Windows implicitly links with boost::fibers even if we just include some of that headers. That is why BOOST_ALL_NO_LIB
+# is poisoned into lextra interface - to avoid such behavior.
+# (we don't link with fiber since our custom build dockers doesn't include it, and they need to be rebuilt before)
+target_compile_definitions (lextra INTERFACE BOOST_ALL_NO_LIB=1)
+
 add_library (lmanticore_coro coroutine.cpp coroutine.h coro_waker.h)
 target_link_libraries(lmanticore_coro PUBLIC lextra )
 

@@ -25,7 +25,7 @@ void SetRtFlushPeriod ( int64_t iPeriod )
 // thread-safe stringset, internally guarded by rwlock
 class StringSetMT
 {
-	Threads::CoroRWLock_c m_dGuard;
+	Threads::Coro::RWLock_c m_dGuard;
 	sph::StringSet m_dSet GUARDED_BY ( m_dGuard );
 	volatile bool m_dDisabled = false;
 

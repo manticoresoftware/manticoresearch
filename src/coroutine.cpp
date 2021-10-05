@@ -186,17 +186,11 @@ struct CoroState_t
 {
 	enum ESTATE : DWORD
 	{
-		Entered_e = 1,	// if coro scheduled (and m.b. running) or not.
-		Done_e = 2,		// if set, will auto schedule again after yield
+		Running_e = 1,		// if coro scheduled (and m.b. running) or not.
+		Paused_e = 2,		// if set, will auto schedule again after yield
 	};
 
-	std::atomic<DWORD> m_uState {Entered_e};
-
-	bool IsDone ()
-	{
-		auto uState = m_uState.load ( std::memory_order_relaxed );
-		return ( uState & Done_e )!=0;
-	}
+	std::atomic<DWORD> m_uState { Running_e };
 
 	// reset some flags and return previous state
 	DWORD ResetFlags( DWORD uFlags )
@@ -213,8 +207,9 @@ struct CoroState_t
 
 #define LOG_COMPONENT_COROW "(" << m_tState.m_uState << ") "
 
+namespace Coro {
 
-class CoroWorker_c
+class Worker_c
 {
 	// our executor (thread pool, etc which provides Schedule(handler) method)
 	Scheduler_i * m_pScheduler = nullptr;
@@ -224,23 +219,31 @@ class CoroWorker_c
 	// our main execution coroutine
 	CoRoutine_c m_tCoroutine;
 	CoroState_t	m_tState;
-	Handler 	m_fnProceeder = nullptr;
+	Handler m_fnYieldWithProceeder = nullptr;
 
 	// chain nested workers via TLS
-	static thread_local CoroWorker_c * m_pTlsThis;
-	CoroWorker_c * m_pPreviousWorker = nullptr;
+	static thread_local Worker_c * m_pTlsThis;
+	Worker_c * m_pPreviousWorker = nullptr;
 
 	// operative stuff to be as near as possible
 	void * m_pCurrentTaskInfo = nullptr;
 	int64_t m_tmCpuTimeBase = 0; // add sphCpuTime() to this value to get truly cpu time ticks
+	uint64_t m_uId { InitWorkerID() };
+	std::atomic<size_t> m_iWakerEpoch { 0 };
+
+	static uint64_t InitWorkerID()
+	{
+		static std::atomic<uint64_t> uWorker { 0ULL };
+		return uWorker.fetch_add ( 1, std::memory_order_relaxed );
+	}
 
 	// RAII worker's keeper
 	struct CoroGuard_t
 	{
-		explicit CoroGuard_t ( CoroWorker_c * pWorker )
+		explicit CoroGuard_t ( Worker_c * pWorker )
 		{
-			pWorker->m_pPreviousWorker = CoroWorker_c::m_pTlsThis;
-			CoroWorker_c::m_pTlsThis = pWorker;
+			pWorker->m_pPreviousWorker = Worker_c::m_pTlsThis;
+			Worker_c::m_pTlsThis = pWorker;
 			pWorker->m_pCurrentTaskInfo =
 					MyThd ().m_pTaskInfo.exchange ( pWorker->m_pCurrentTaskInfo, std::memory_order_relaxed );
 			pWorker->m_tmCpuTimeBase -= sphCpuTimer();
@@ -248,17 +251,17 @@ class CoroWorker_c
 
 		~CoroGuard_t ()
 		{
-			auto pWork = CoroWorker_c::m_pTlsThis;
+			auto pWork = Worker_c::m_pTlsThis;
 			pWork->m_tmCpuTimeBase += sphCpuTimer ();
 			pWork->m_pCurrentTaskInfo = MyThd ().m_pTaskInfo.exchange ( pWork->m_pCurrentTaskInfo, std::memory_order_relaxed );
-			CoroWorker_c::m_pTlsThis = pWork->m_pPreviousWorker;
+			Worker_c::m_pTlsThis = pWork->m_pPreviousWorker;
 		}
 	};
 
 private:
 
-	// called from StartPrimary from CoGo - Multiserve, Sphinxql, replication recv
-	CoroWorker_c ( Handler fnHandler, Scheduler_i* pScheduler )
+	// called from StartPrimary from Coro::Go - Multiserve, Sphinxql, replication recv
+	Worker_c ( Handler fnHandler, Scheduler_i* pScheduler )
 		: m_pScheduler ( pScheduler )
 		, m_tKeepSchedulerAlive { pScheduler->KeepWorking () }
 		, m_tCoroutine { std::move (fnHandler), 0 }
@@ -267,9 +270,9 @@ private:
 		}
 
 	// from CallCoroutine - StartCall (blocking run);
-	// from CoCo - StartOther - all secondary parallel things in non-vip queue
-	// from Cocontinue - StartContinuation - same context, another stack, run as fast as possible
-	CoroWorker_c ( Handler fnHandler, Scheduler_i* pScheduler, Waiter_t tTracer, size_t iStack=0 )
+	// from Coro::Co - StartOther - all secondary parallel things in non-vip queue
+	// from Coro::Continue - StartContinuation - same context, another stack, run as fast as possible
+	Worker_c ( Handler fnHandler, Scheduler_i* pScheduler, Waiter_t tTracer, size_t iStack=0 )
 		: m_pScheduler ( pScheduler )
 		, m_tKeepSchedulerAlive { pScheduler->KeepWorking () }
 		, m_tTracer ( std::move(tTracer))
@@ -279,67 +282,70 @@ private:
 		}
 
 	// called solely for mocking - no scheduler, not possible to yield. Just provided stack and executor
-	CoroWorker_c ( Handler fnHandler, VecTraits_T<BYTE> dStack )
+	Worker_c ( Handler fnHandler, VecTraits_T<BYTE> dStack )
 		: m_tCoroutine { std::move ( fnHandler ), dStack }
 	{
 		assert ( !m_pScheduler );
 	}
 
-	void Run ()
-	{
-		if ( !Resume () )
-			ResetEnteredAndReschedule ();
-	}
-
-	void ResetEnteredAndReschedule ()
+	inline void ResetRunningAndReschedule () noexcept
 	{
 		auto uPrevState = m_tState.m_uState.load ( std::memory_order_relaxed );
 		do
-			if (( uPrevState & CoroState_t::Done_e )!=0 )
+			if ( uPrevState & CoroState_t::Paused_e )
 			{
-				LOG ( DIAG, COROW ) << "ResetEnteredAndReschedule schedule because done";
+				LOG ( DIAG, COROW ) << "ResetRunningAndReschedule schedule because done";
 				Schedule();
 				return;
 			}
-		while (!m_tState.m_uState.compare_exchange_weak (
-				uPrevState, uPrevState & ~CoroState_t::Entered_e, std::memory_order_relaxed ));
-		///^ lock-free primitive. If m_tState.m_uState==uPrevState here, write new value with unset Entered_e.
-		/// if not (another thread changed value before) - exec uPrevState=m_tState.m_uState and loop.
-		if ( m_fnProceeder )
-		{
-			Handler fnProceeder = nullptr;
-			Swap ( fnProceeder, m_fnProceeder );
-			fnProceeder();
-		}
+		while ( !m_tState.m_uState.compare_exchange_weak ( uPrevState, uPrevState & ~CoroState_t::Running_e, std::memory_order_relaxed ) );
+
+		if ( !m_fnYieldWithProceeder )
+			return;
+
+		Handler fnYieldWithProceeder = nullptr;
+		Swap ( fnYieldWithProceeder, m_fnYieldWithProceeder );
+
+		fnYieldWithProceeder();
 	}
 
-	void Schedule(bool bVip=true)
+	inline void Run() noexcept
 	{
-		LOG ( DEBUGV, COROW ) << "CoroWorker_c::Schedule (" << bVip << ", " << m_pScheduler << ")";
+		if ( Resume() ) // Resume() returns true when coro is finished
+			return;
+
+		ResetRunningAndReschedule();
+	}
+
+	inline void Schedule(bool bVip=true) noexcept
+	{
+		LOG ( DEBUGV, COROW ) << "Coro::Worker_c::Schedule (" << bVip << ", " << m_pScheduler << ")";
 		assert ( m_pScheduler );
 		m_pScheduler->Schedule ( [this] { Run (); }, bVip ); // true means 'vip', false - 'secondary'
 	}
 
-	void ScheduleContinuation ()
+	// continuation means, task is already started, and, if possible, should not be scheduled/paused.
+	// That means, it might be call immediately, without placing it to queue. In loop call it may cause stack overflow by recursion
+	inline void ScheduleContinuation () noexcept
 	{
-		LOG ( DEBUGV, COROW ) << "CoroWorker_c::ScheduleContinuation (" << m_pScheduler << ")";
+		LOG ( DEBUGV, COROW ) << "Coro::Worker_c::ScheduleContinuation (" << m_pScheduler << ")";
 		assert ( m_pScheduler );
 		m_pScheduler->ScheduleContinuation( [this] { Run (); } );
 	}
 
 public:
-	// invoked from CoGo - Multiserve, Sphinxql, replication recv. Schedule into primary queue.
+	// invoked from Coro::Go - Multiserve, Sphinxql, replication recv. Schedule into primary queue.
 	// Agnostic to parent's task info (if any). Should create and use it's own.
 	static void StartPrimary ( Handler fnHandler, Scheduler_i* pScheduler )
 	{
-		( new CoroWorker_c ( std::move ( fnHandler ), pScheduler ) )->Schedule ();
+		( new Worker_c ( std::move ( fnHandler ), pScheduler ) )->Schedule ();
 	}
 
-	// from CoCo -> all parallel tasks (snippets, local searches, pq, disk chunks). Schedule into secondary queue.
+	// from Coro::Co -> all parallel tasks (snippets, local searches, pq, disk chunks). Schedule into secondary queue.
 	// May refer to parent's task info as read-only. For changes has dedicated mini info, also can create and use it's own local.
 	static void StartOther ( Handler fnHandler, Scheduler_i * pScheduler, size_t iStack, Waiter_t tWait )
 	{
-		( new CoroWorker_c ( myinfo::OwnMini ( std::move ( fnHandler ) ), pScheduler, std::move ( tWait ), iStack ) )->Schedule ( false );
+		( new Worker_c ( myinfo::OwnMini ( std::move ( fnHandler ) ), pScheduler, std::move ( tWait ), iStack ) )->Schedule ( false );
 	}
 
 	// invoked from CallCoroutine -> ReplicationStart on daemon startup. Schedule into primary queue.
@@ -347,20 +353,20 @@ public:
 	// Parent thread at the moment blocked and may display info about it
 	static void StartCall ( Handler fnHandler, Scheduler_i* pScheduler, Waiter_t tWait )
 	{
-		( new CoroWorker_c ( myinfo::StickParent ( std::move ( fnHandler ) ), pScheduler, std::move ( tWait ) ) )->Schedule ();
+		( new Worker_c ( myinfo::StickParent ( std::move ( fnHandler ) ), pScheduler, std::move ( tWait ) ) )->Schedule ();
 	}
 
-	// from CoContinue -> all continuations (main purpose - continue with extended stack).
+	// from Coro::Continue -> all continuations (main purpose - continue with extended stack).
 	// Adopt parent's task info (if any), and may change it exclusively.
 	// Parent thread is not blocked and may freely switch to another tasks
 	static void StartContinuation ( Handler fnHandler, Scheduler_i * pScheduler, size_t iStack, Waiter_t tWait )
 	{
-		( new CoroWorker_c ( myinfo::StickParent ( std::move ( fnHandler ) ), pScheduler, std::move ( tWait ), iStack ) )->ScheduleContinuation ();
+		( new Worker_c ( myinfo::StickParent ( std::move ( fnHandler ) ), pScheduler, std::move ( tWait ), iStack ) )->ScheduleContinuation ();
 	}
 
 	static void MockRun ( Handler fnHandler, VecTraits_T<BYTE> dStack )
 	{
-		CoroWorker_c tAction ( std::move ( fnHandler ), dStack );
+		Worker_c tAction ( std::move ( fnHandler ), dStack );
 		auto pOldStack = Threads::TopOfStack ();
 		Threads::SetTopStack ( &dStack.Last() );
 		{
@@ -371,54 +377,54 @@ public:
 	}
 
 	// secondary context worker.
-	CoroWorker_c* MakeWorker ( Handler fnHandler ) const
+	Worker_c* MakeWorker ( Handler fnHandler ) const
 	{
-		return new CoroWorker_c ( myinfo::StickParent ( std::move ( fnHandler ) ), CurrentScheduler () );
+		return new Worker_c ( myinfo::StickParent ( std::move ( fnHandler ) ), CurrentScheduler () );
 	}
 
-	void Restart ()
+	inline void Restart () noexcept
 	{
-		if (( m_tState.SetFlags ( CoroState_t::Entered_e ) & CoroState_t::Entered_e )==0 )
+		if (( m_tState.SetFlags ( CoroState_t::Running_e ) & CoroState_t::Running_e )==0 )
 			Schedule ();
 	}
 
-	void RestartSecondary ()
+	inline void RestartSecondary () noexcept
 	{
-		if (( m_tState.SetFlags ( CoroState_t::Entered_e ) & CoroState_t::Entered_e )==0 )
+		if (( m_tState.SetFlags ( CoroState_t::Running_e ) & CoroState_t::Running_e )==0 )
 			Schedule (false);
 	}
 
-	void Continue () // continue previously run task. As continue calculation with extended stack
+	inline void Continue () noexcept // continue previously run task. As continue calculation with extended stack
 	{
-		if ( ( m_tState.SetFlags ( CoroState_t::Entered_e ) & CoroState_t::Entered_e )==0 )
+		if ( ( m_tState.SetFlags ( CoroState_t::Running_e ) & CoroState_t::Running_e )==0 )
 			ScheduleContinuation();
 	}
 
-	void Done()
+	inline void Pause() noexcept
 	{
-		if (( m_tState.SetFlags ( CoroState_t::Entered_e | CoroState_t::Done_e ) & CoroState_t::Entered_e )==0 )
+		if ( ( m_tState.SetFlags ( CoroState_t::Running_e | CoroState_t::Paused_e ) & CoroState_t::Running_e ) == 0 )
 			Schedule();
 	}
 
-	void Reschedule ()
+	inline void Reschedule () noexcept
 	{
-		Done();
+		Pause();
 		Yield_();
-		m_tState.ResetFlags ( CoroState_t::Done_e );
+		m_tState.ResetFlags ( CoroState_t::Paused_e );
 	}
 
-	void Yield_ ()
+	inline void Yield_ () noexcept
 	{
 		m_tCoroutine.Yield_ ();
 	}
 
-	void YieldWith ( Handler fnHandler )
+	inline void YieldWith ( Handler fnHandler ) noexcept
 	{
-		m_fnProceeder = std::move (fnHandler);
+		m_fnYieldWithProceeder = std::move (fnHandler);
 		Yield_ ();
 	}
 
-	void MoveTo ( Scheduler_i * pScheduler )
+	inline void MoveTo ( Scheduler_i * pScheduler ) noexcept
 	{
 		if ( m_pScheduler == pScheduler )
 			return; // nothing to do
@@ -427,7 +433,7 @@ public:
 		Reschedule();
 	}
 
-	bool Resume ()
+	inline bool Resume () noexcept
 	{
 		{
 			CoroGuard_t pThis (this);
@@ -441,89 +447,159 @@ public:
 		return false;
 	}
 
-	Handler SecondaryRestarter()
+	inline Handler SecondaryRestarter() noexcept
 	{
 		return [this] { RestartSecondary (); };
 	}
 
-	Handler Restarter ()
+	inline Handler Restarter () noexcept
 	{
 		return [this] { Restart (); };
 	}
 
-	Handler Continuator ()
+	inline Handler Continuator () noexcept
 	{
 		return [this] { Continue(); };
 	}
 
-	BYTE * GetTopOfStack () const
+	BYTE * GetTopOfStack () const noexcept
 	{
 		return m_tCoroutine.GetTopOfStack();
 	}
 
-	int GetStackSize () const
+	int GetStackSize () const noexcept
 	{
 		return m_tCoroutine.GetStackSize ();
 	}
 
-	Scheduler_i * CurrentScheduler() const
+	inline Scheduler_i * CurrentScheduler() const noexcept
 	{
 		return m_pScheduler;
 	}
 
-	int64_t GetCurrentCpuTimeBase() const
+	inline int64_t GetCurrentCpuTimeBase() const noexcept
 	{
 		return m_tmCpuTimeBase;
 	}
 
-	static CoroWorker_c* CurrentWorker()
+	inline uint64_t UID() const noexcept
+	{
+		return m_uId;
+	}
+
+	inline int ID() const noexcept
+	{
+		return (int)m_uId;
+	}
+
+	inline static Worker_c* CurrentWorker() noexcept
 	{
 		return m_pTlsThis;
 	}
+
+	inline bool Wake ( const size_t iWakerEpoch ) noexcept
+	{
+		size_t iExpectedEpoch = m_iWakerEpoch.load ( std::memory_order_relaxed );
+		bool bLastWaker = m_iWakerEpoch.compare_exchange_strong ( iExpectedEpoch, iWakerEpoch + 1, std::memory_order_acq_rel );
+		if ( !bLastWaker ) {
+			// m_iWakerEpoch has been incremented before, so consider this wake
+			// operation as outdated and do nothing
+			return false;
+		}
+
+		assert ( CurrentWorker() != this );
+		Restart();
+		return true;
+	}
+
+	inline Waker_c CreateWaker() noexcept
+	{
+		// this operation makes all previously created wakers to be outdated
+		return { this, ++m_iWakerEpoch };
+	}
 };
 
-thread_local CoroWorker_c * CoroWorker_c::m_pTlsThis = nullptr;
+thread_local Worker_c * Worker_c::m_pTlsThis = nullptr;
 
-static CoroWorker_c * CoWorker()
+Worker_c* CurrentWorker() noexcept
 {
-	auto pWorker = CoroWorker_c::CurrentWorker();
-	assert ( pWorker && "function must be called from inside coroutine");
+	return Worker_c::CurrentWorker();
+}
+
+Worker_c* Worker() noexcept
+{
+	auto pWorker = CurrentWorker();
+	assert ( pWorker && "function must be called from inside coroutine" );
 	return pWorker;
 }
 
 // start primary task
-void CoGo ( Handler fnHandler, Scheduler_i * pScheduler )
+void Go ( Handler fnHandler, Scheduler_i * pScheduler )
 {
 	if ( !pScheduler )
 		return;
 
 	assert ( pScheduler );
-	CoroWorker_c::StartPrimary ( std::move(fnHandler), pScheduler );
+	Worker_c::StartPrimary ( std::move(fnHandler), pScheduler );
 }
 
 // start secondary subtasks (parallell search, pq processing, etc)
-void CoCo ( Handler fnHandler, Waiter_t tSignaller)
+void Co ( Handler fnHandler, Waiter_t tSignaller)
 {
-	auto pScheduler = CoCurrentScheduler ();
+	auto pScheduler = CurrentScheduler ();
 	if ( !pScheduler )
 		pScheduler = GlobalWorkPool ();
 
 	assert ( pScheduler );
-	CoroWorker_c::StartOther ( std::move ( fnHandler ), pScheduler, 0, std::move ( tSignaller ) );
+	Worker_c::StartOther ( std::move ( fnHandler ), pScheduler, 0, std::move ( tSignaller ) );
 }
 
 // resize stack and continue as fast as possible (continuation task in same thread, or post to vip queue)
-void CoContinue ( Handler fnHandler, int iStack )
+void Continue ( Handler fnHandler, int iStack )
 {
-	auto pScheduler = CoCurrentScheduler();
+	auto pScheduler = CurrentScheduler();
 	if ( !pScheduler )
 		pScheduler = GlobalWorkPool ();
 
 	assert ( pScheduler );
 
 	auto dWaiter = DefferedContinuator ();
-	CoroWorker_c::StartContinuation( std::move ( fnHandler ), pScheduler, iStack, dWaiter );
+	Worker_c::StartContinuation( std::move ( fnHandler ), pScheduler, iStack, dWaiter );
 	WaitForDeffered ( std::move ( dWaiter ));
+}
+
+void YieldWith ( Handler fnHandler ) noexcept
+{
+	Worker ()->YieldWith ( std::move(fnHandler) );
+}
+
+// Move current task to another scheduler. Say, from netloop to worker, or from plain worker to vip, etc.
+void MoveTo ( Scheduler_i * pScheduler ) noexcept
+{
+	Worker ()->MoveTo ( pScheduler );
+}
+
+void Yield_ () noexcept
+{
+	Worker ()->Yield_();
+}
+
+void Reschedule() noexcept
+{
+	Worker()->Reschedule();
+}
+
+int ID() noexcept
+{
+	return Worker()->ID();
+}
+
+} // namespace Coro
+
+Resumer_fn MakeCoroExecutor ( Handler fnHandler )
+{
+	auto* pWorker = Coro::Worker ()->MakeWorker ( std::move ( fnHandler ) );
+	return [pWorker] () -> bool { return pWorker->Resume(); };
 }
 
 static void CallPlainCoroutine ( Handler fnHandler )
@@ -531,32 +607,32 @@ static void CallPlainCoroutine ( Handler fnHandler )
 	auto pScheduler = GlobalWorkPool ();
 	CSphAutoEvent tEvent;
 	auto dWaiter = Waiter_t ( nullptr, [&tEvent] ( void * ) { tEvent.SetEvent (); } );
-	CoroWorker_c::StartCall ( std::move ( fnHandler ), pScheduler, std::move(dWaiter) );
+	Coro::Worker_c::StartCall ( std::move ( fnHandler ), pScheduler, std::move(dWaiter) );
 	tEvent.WaitEvent ();
 }
 
 void MockCallCoroutine ( VecTraits_T<BYTE> dStack, Handler fnHandler )
 {
-	CoroWorker_c::MockRun ( std::move ( fnHandler ), dStack );
+	Coro::Worker_c::MockRun ( std::move ( fnHandler ), dStack );
 }
 
 // if called from coroutine - just makes continuation.
 // if called from plain thread (non-contexted) - creates coro, run and wait until it finished.
 void CallCoroutine ( Handler fnHandler )
 {
-	if ( !CoroWorker_c::CurrentWorker () )
+	if ( !Coro::Worker_c::CurrentWorker () )
 	{
 		CallPlainCoroutine(std::move(fnHandler));
 		return;
 	}
-	auto pScheduler = CoCurrentScheduler ();
+	auto pScheduler = Coro::CurrentScheduler ();
 	if ( !pScheduler )
 		pScheduler = GlobalWorkPool ();
 
 	assert ( pScheduler );
 
 	auto dWaiter = DefferedContinuator ();
-	CoroWorker_c::StartContinuation ( std::move ( fnHandler ), pScheduler, 0, dWaiter );
+	Coro::Worker_c::StartContinuation ( std::move ( fnHandler ), pScheduler, 0, dWaiter );
 	WaitForDeffered ( std::move ( dWaiter ) );
 }
 
@@ -567,58 +643,30 @@ bool CallCoroutineRes ( Predicate fnHandler )
 	return bResult;
 }
 
-void CoYieldWith ( Handler fnHandler )
-{
-	CoWorker ()->YieldWith ( std::move(fnHandler) );
-}
-
-// Move current task to another scheduler. Say, from netloop to worker, or from plain worker to vip, etc.
-void CoMoveTo ( Scheduler_i * pScheduler )
-{
-	CoWorker ()->MoveTo ( pScheduler );
-}
-
-void CoYield ()
-{
-	CoWorker ()->Yield_();
-}
-
-void CoReschedule()
-{
-	CoWorker()->Reschedule();
-}
-
-Resumer_fn MakeCoroExecutor ( Handler fnHandler )
-{
-	auto* pWorker = CoWorker ()->MakeWorker ( std::move ( fnHandler ) );
-	return [pWorker] () -> bool { return pWorker->Resume(); };
-}
-
-
 // Async schedule continuation.
 // Invoking handler will schedule continuation of yielded coroutine and return immediately.
 // Scheduled task ('goto continue...') will be pefromed by scheduler's worker (threadpool, etc.)
 // this pushes to primary queue
-Handler CurrentRestarter ()
+Handler CurrentRestarter () noexcept
 {
-	return CoWorker()->Restarter();
+	return Coro::Worker()->Restarter();
 }
 
 
-Waiter_t DefferedRestarter ()
+Waiter_t DefferedRestarter () noexcept
 {
-	return { nullptr, [fnProceed= CoWorker ()->SecondaryRestarter ()] ( void * ) { fnProceed (); }};
+	return { nullptr, [fnProceed= Coro::Worker ()->SecondaryRestarter ()] ( void * ) { fnProceed (); }};
 }
 
-Waiter_t DefferedContinuator ()
+Waiter_t DefferedContinuator () noexcept
 {
-	return { nullptr, [fnProceed = CoWorker ()->Continuator ()] ( void * ) { fnProceed (); }};
+	return { nullptr, [fnProceed = Coro::Worker ()->Continuator ()] ( void * ) { fnProceed (); }};
 }
 
-void WaitForDeffered ( Waiter_t&& dWaiter )
+void WaitForDeffered ( Waiter_t&& dWaiter ) noexcept
 {
 	// do nothing. Moved dWaiter will be released outside the coro after yield.
-	CoYieldWith ( [capturedWaiter = std::move ( dWaiter ) ] {} );
+	Coro::YieldWith ( [capturedWaiter = std::move ( dWaiter ) ] {} );
 }
 
 int WaitForN ( int iN, std::initializer_list<Handler> dTasks )
@@ -627,16 +675,16 @@ int WaitForN ( int iN, std::initializer_list<Handler> dTasks )
 	assert ( dTasks.size() > 0 && dTasks.size() >= iN && "num of tasks to wait must be non-zero, and not greater than trigger" );
 	int iRes = -1;
 
-	// need to store parentSched, since CoYieldWith executed _outside_ coroutine, so it has _no_ scheduler!
-	auto pParentSched = CoCurrentScheduler();
+	// need to store parentSched, since Coro::YieldWith executed _outside_ coroutine, so it has _no_ scheduler!
+	auto pParentSched = Coro::CurrentScheduler();
 
-	CoYieldWith ( [&iRes, &dTasks, iN, pParentSched, fnResumer = CurrentRestarter()] {
+	Coro::YieldWith ( [&iRes, &dTasks, iN, pParentSched, fnResumer = CurrentRestarter()] {
 		SharedPtr_t<std::atomic<int>> pCounter { new std::atomic<int> };
 		pCounter->store ( 0, std::memory_order_release );
 		int i = 0;
 		for ( const auto& fnHandler : dTasks )
 		{
-			CoGo ( [pCounter, fnResumer, &fnHandler, i, iN, &iRes] {
+			Coro::Go ( [pCounter, fnResumer, &fnHandler, i, iN, &iRes] {
 				fnHandler();
 				if ( pCounter->fetch_add ( 1, std::memory_order_acq_rel ) == iN - 1 )
 				{
@@ -650,11 +698,12 @@ int WaitForN ( int iN, std::initializer_list<Handler> dTasks )
 	} );
 	return iRes;
 }
+
 }
 
 const void * sphMyStack ()
 {
-	auto pWorker = Threads::CoroWorker_c::CurrentWorker ();
+	auto pWorker = Threads::Coro::Worker_c::CurrentWorker ();
 	if ( pWorker )
 		return pWorker->GetTopOfStack ();
 	return Threads::TopOfStack();
@@ -663,7 +712,7 @@ const void * sphMyStack ()
 
 int sphMyStackSize ()
 {
-	auto pWorker = Threads::CoroWorker_c::CurrentWorker ();
+	auto pWorker = Threads::Coro::Worker_c::CurrentWorker ();
 	if ( pWorker )
 		return pWorker->GetStackSize ();
 	return Threads::STACK_SIZE;
@@ -671,29 +720,42 @@ int sphMyStackSize ()
 
 int64_t sphTaskCpuTimer ()
 {
-	auto pWorker = Threads::CoroWorker_c::CurrentWorker ();
+	auto pWorker = Threads::Coro::Worker_c::CurrentWorker ();
 	if ( pWorker )
 		return pWorker->GetCurrentCpuTimeBase ()+sphCpuTimer ();
 
 	return sphCpuTimer();
 }
 
-Threads::Scheduler_i * Threads::CoCurrentScheduler ()
+namespace Threads {
+
+
+bool IsInsideCoroutine()
 {
-	auto pWorker = Threads::CoroWorker_c::CurrentWorker ();
+	// need safe function to call without coroutunes setup like in indexer
+	return ( Coro::Worker_c::CurrentWorker() != nullptr );
+}
+
+Scheduler_i* Coro::CurrentScheduler()
+{
+	auto pWorker = Coro::Worker_c::CurrentWorker();
 	if ( !pWorker )
 		return nullptr;
-	return pWorker->CurrentScheduler ();
+	return pWorker->CurrentScheduler();
 }
 
-int Threads::NThreads ( Scheduler_i * pScheduler )
+int NThreads()
 {
+	Scheduler_i* pScheduler = Coro::CurrentScheduler();
 	if ( !pScheduler )
-		pScheduler = GlobalWorkPool ();
-	return pScheduler->WorkingThreads ();
+		pScheduler = GlobalWorkPool();
+	return pScheduler->WorkingThreads();
 }
 
-void Threads::CoExecuteN ( int iConcurrency, Threads::Handler&& fnWorker )
+namespace Coro
+{
+
+void ExecuteN ( int iConcurrency, Threads::Handler&& fnWorker )
 {
 	if ( iConcurrency==1 )
 	{
@@ -707,14 +769,14 @@ void Threads::CoExecuteN ( int iConcurrency, Threads::Handler&& fnWorker )
 
 	auto dWaiter = DefferedRestarter ();
 	for ( int i = 1; i<iConcurrency; ++i )
-		CoCo ( Threads::WithCopiedCrashQuery ( fnWorker ), dWaiter );
+		Coro::Co ( Threads::WithCopiedCrashQuery ( fnWorker ), dWaiter );
 	myinfo::OwnMini ( fnWorker ) ();
 	WaitForDeffered ( std::move ( dWaiter ));
 }
 
-int Threads::CoThrottler_c::tmThrotleTimeQuantumMs = Threads::tmDefaultThrotleTimeQuantumMs;
+int Throttler_c::tmThrotleTimeQuantumMs = tmDefaultThrotleTimeQuantumMs;
 
-Threads::CoThrottler_c::CoThrottler_c ( int tmThrottlePeriodMs )
+Throttler_c::Throttler_c ( int tmThrottlePeriodMs )
 	: m_tmThrottlePeriodMs ( tmThrottlePeriodMs )
 {
 	if ( tmThrottlePeriodMs<0 )
@@ -724,19 +786,19 @@ Threads::CoThrottler_c::CoThrottler_c ( int tmThrottlePeriodMs )
 		m_tmNextThrottleTimestamp = m_dTimerGuard.MiniTimerEngage( m_tmThrottlePeriodMs );
 }
 
-bool Threads::CoThrottler_c::MaybeThrottle ()
+bool Throttler_c::MaybeThrottle ()
 {
 	if ( !m_tmThrottlePeriodMs || !sph::TimeExceeded ( m_tmNextThrottleTimestamp ) )
 		return false;
 
 	m_tmNextThrottleTimestamp = m_dTimerGuard.MiniTimerEngage ( m_tmThrottlePeriodMs );
 	auto iOldThread = MyThd ().m_iThreadID;
-	CoWorker ()->Reschedule ();
+	Coro::Worker ()->Reschedule ();
 	m_bSameThread = ( iOldThread==MyThd ().m_iThreadID );
 	return true;
 }
 
-bool Threads::CoThrottler_c::ThrottleAndKeepCrashQuery ()
+bool Throttler_c::ThrottleAndKeepCrashQuery ()
 {
 	if ( !m_tmThrottlePeriodMs || !sph::TimeExceeded ( m_tmNextThrottleTimestamp ) )
 		return false;
@@ -744,7 +806,7 @@ bool Threads::CoThrottler_c::ThrottleAndKeepCrashQuery ()
 	m_tmNextThrottleTimestamp = m_dTimerGuard.MiniTimerEngage ( m_tmThrottlePeriodMs );
 	CrashQueryKeeper_c _;
 	auto iOldThread = MyThd ().m_iThreadID;
-	CoWorker ()->Reschedule ();
+	Coro::Worker ()->Reschedule ();
 	m_bSameThread = ( iOldThread==MyThd ().m_iThreadID );
 	return true;
 }
@@ -753,10 +815,10 @@ inline void fnResume ( volatile void* pCtx )
 {
 	if (!pCtx)
 		return;
-	( (Threads::CoroWorker_c *) pCtx )->RestartSecondary ();
+	( (Threads::Coro::Worker_c *) pCtx )->RestartSecondary ();
 }
 
-Threads::CoroEvent_c::~CoroEvent_c ()
+Event_c::~Event_c ()
 {
 	// edge case: event destroyed being in wait state.
 	// Let's resume then.
@@ -766,7 +828,7 @@ Threads::CoroEvent_c::~CoroEvent_c ()
 
 // If 'waited' state detected, resume waiter.
 // else atomically set flag 'signaled'
-void Threads::CoroEvent_c::SetEvent()
+void Event_c::SetEvent()
 {
 	BYTE uState = m_uState.load ( std::memory_order_relaxed );
 	do
@@ -783,13 +845,13 @@ void Threads::CoroEvent_c::SetEvent()
 // if 'signaled' state detected, clean all flags and return.
 // else yield, then (out of coro) atomically set 'waited' flag, checking also 'signaled' flag again.
 // on resume clean all flags.
-void Threads::CoroEvent_c::WaitEvent()
+void Event_c::WaitEvent()
 {
 	if ( !( m_uState.load ( std::memory_order_relaxed ) & Signaled_e ) )
 	{
-		if ( m_pCtx!= CoWorker() )
-			m_pCtx = CoWorker();
-		CoYieldWith ( [this] {
+		if ( m_pCtx != Coro::Worker() )
+			m_pCtx = Coro::Worker();
+		YieldWith ( [this] {
 			BYTE uState = m_uState.load ( std::memory_order_relaxed );
 			do
 			{
@@ -806,7 +868,7 @@ void Threads::CoroEvent_c::WaitEvent()
 	std::atomic_thread_fence ( std::memory_order_release );
 }
 
-Threads::CoroMultiEvent_c::~CoroMultiEvent_c ()
+MultiEvent_c::~MultiEvent_c ()
 {
 	// edge case: event destroyed being in wait state.
 	// Let's resume then.
@@ -816,7 +878,7 @@ Threads::CoroMultiEvent_c::~CoroMultiEvent_c ()
 
 // If 'waited' state detected, resume waiter.
 // else atomically set flag 'signaled'
-void Threads::CoroMultiEvent_c::SetEvent()
+void MultiEvent_c::SetEvent()
 {
 	BYTE uState = m_uState.load ( std::memory_order_relaxed );
 	do
@@ -833,12 +895,12 @@ void Threads::CoroMultiEvent_c::SetEvent()
 // if 'signaled' state detected, clean all flags and return.
 // else yield, then (out of coro) atomically set 'waited' flag, checking also 'signaled' flag again.
 // on resume clean all flags.
-void Threads::CoroMultiEvent_c::WaitEvent()
+void MultiEvent_c::WaitEvent()
 {
 	if ( !( m_uState.load ( std::memory_order_relaxed ) & Signaled_e ) )
 	{
-		m_tOps.AddOp ( CoWorker()->SecondaryRestarter() );
-		CoYieldWith ( [this] {
+		m_tOps.AddOp ( Coro::Worker()->SecondaryRestarter() );
+		YieldWith ( [this] {
 			BYTE uState = m_uState.load ( std::memory_order_relaxed );
 			do
 			{
@@ -856,162 +918,147 @@ void Threads::CoroMultiEvent_c::WaitEvent()
 	std::atomic_thread_fence ( std::memory_order_release );
 }
 
-bool Threads::IsInsideCoroutine ()
+
+bool Waker_c::Wake() const noexcept
 {
-	// need safe function to call without coroutunes setup like in indexer
-	return ( CoroWorker_c::CurrentWorker()!=nullptr );
-}
-
-/*
- * Legend for m_uLock:
- * 1-st bit indicated w-lock pending, 2-nd - w-lock, others are the counter of acquired shared locks.
- * using low bits for flags ensures that counter will never touch them even on overflow.
-  *
- * Possible values:
- * 0x00 - totally unlocked.
- * 0x84 - 33 r-locks acquired, may acquire and release other shared locks.
- * 0x85 - 33 r-locks acquired, and w-lock is pending. Will NOT acquire more r-locks, just release existing.
- * 0x02 - w-lock acquired. May be only released.
- * 0x03 - w-lock acquired, another w-lock pending.
- *
- * Pending bit is set during w-lock acquiring. On success w-lock bit is set, and pending restored to previous state.
- * Releasing (unlock) never changes pending bit.
- *
- * When several w-locks enqueued, there is gaps between them when r-locks may steal the focus.
- *
- * Rlock may be transformed to wlock: we need to set pending bit, then wait when only one r-lock left. Then set
- * atomically exchange last counter of r-lock to w-lock
- *
- */
-
-// practice shows few numbers are more expressive then symbolic names in that case
-static const DWORD ux01 = 1; // w-lock pending
-static const DWORD ux02 = 2; // w-lock acquired
-static const DWORD ux04 = 4; // increment for r-lock to avoid touching w-lock
-static const DWORD ux03 = ( ux01 | ux02 ); // acquiring read-locks paused
-static const DWORD uxFC = ~ux03; // mask for pending and wlock flags (0xFFFFFFFC)
-static const DWORD uxFE = ~ux01; // mask for pending flag flag (0xFFFFFFFE)
-
-
-/* r-locking:
- * 1. reschedule until 'pending' and 'wlock' bits are zero
- * 2. increase N of readers */
-bool Threads::CoroRWLock_c::ReadLock ()
-{
-	auto uPrevState = m_uLock.load ( std::memory_order_acquire ); // memory_order_acquire
-	do {
-		if ( uPrevState & ux03 ) // check only pending and wlock bits
-		{
-			assert ( IsInsideCoroutine() );
-			CoWorker()->Reschedule();
-		}
-		uPrevState &= uxFC;
-	} while ( !m_uLock.compare_exchange_weak ( uPrevState, uPrevState+ux04, std::memory_order_acq_rel ) );
-	assert ( ( uPrevState & uxFC )!=uxFC ); // hope, 30 bit is enough to count all re-entered r-locks.
-	return true;
-}
-
-/* w-locking:
- * 1. set 'pending' flag, that prohibits readers
- * 2. reschedule until all bits, ignoring 'pending' are zero
- * 3. If in check we found that 'pending' became unset, - reinstall it.
- * 4. append 'wlock' bit. Finally on acquire wlock bit is set, pending is inherited, others zero.
- */
- bool Threads::CoroRWLock_c::WriteLock ()
-{
-	// prohibit further readers; from setting pending bit they may only release but no more acquire.
-	auto uMyState = m_uLock.fetch_or ( ux01, std::memory_order_acq_rel );
-
-	// will leave w-lock bit set, and pending bit inherited from previous state
-	auto uTargetState = ( uMyState & ux01 ) | ux02; // will leave on success with this state written
-	uMyState |= ux01;
-
-	do {
-		if ( uMyState & uxFE ) // check all except pending bit
-		{
-			assert ( IsInsideCoroutine() );
-			CoWorker()->Reschedule(); // works like spin-lock, but that is ok for now
-		}
-
-		// if we're waiting after another w-lock, it releases pending bit
-		// we need to reinstall it in order to keep readers out. Target state is just pure 2-lock bit here.
-		if ( ( uMyState & ux01 )==0 )
-		{
-			uMyState = m_uLock.fetch_or ( ux01, std::memory_order_acq_rel );
-			uTargetState = ux02;
-			uMyState |= ux01;
-		}
-		uMyState &= ux01;
-	} while ( !m_uLock.compare_exchange_weak ( uMyState, uTargetState, std::memory_order_acq_rel ) );
-	return true;
-}
-
-/* r-lock to w-lock elevation.
- * 0. Check that w-lock is not acquired, and also r-locks are not empty (as we elevate from existing r-lock)
- * 1. set 'pending' flag, that prohibits readers.
- * 2. reschedule until we have only 1 reader ('pending' and 'wlocked' bits ignored)
- * 3. append 'wlock' bit. Finally on acquire wlock bit is set, pending is inherited, others zero.
- */
-/*
- * Elevation has one fundamental problem, that is why it is commented out as dangerous solution.
- * One (and only one!) reader is ok to elevate (that is why it is left here and not totally wiped out).
- * When more than one want to elevate concurrently from different threads - that by the fact means, they want
- * exclusive (write) lock, and they already step into acquiring it by holding shared (read) lock.
- * Such 'semi-exclusive' state is ill and means immediate deadlock on the waiting (i.e. all candidates waits until
- * shared lock released by all others, and such mutual waiting is dead).
- * Since it is hard to avoid concurrency, let's forget about elevation for a while or forever.
-bool Threads::CoroRWLock_c::UpgradeLock ()
-{
-	assert ( IsInsideCoroutine () );
-	// prohibit further readers; from setting pending bit they may only release but no more acquire.
-	auto uMyState = m_uLock.fetch_or ( ux01, std::memory_order_acq_rel );
-	auto uTargetState = ( uMyState & ux01 ) | ux02; // will leave on success with this state written
-	assert ( ( uMyState & ux02 )==0 ); // there no elevation possible from w-lock
-	assert ( ( uMyState & uxFC )!=0 ); // there no elevation possible from zero (must be r-lock already)
-	uMyState |= ux01;
-
-	do {
-		if ( ( uMyState & uxFC )>ux04 ) // check all except pending bit
-			CoWorker ()->Reschedule ();// works like spin-lock, but that is ok for now
-		uMyState = ux04 + ( uMyState & ux01 );
-	} while ( !m_uLock.compare_exchange_weak ( uMyState, uTargetState, std::memory_order_acq_rel ) );
-	return true;
-}
- */
-
-/* unlocking:
- * 1. If 'wlock' bit is set, reset it
- * 2. Otherwise decrease rlock counter.
- */
-bool Threads::CoroRWLock_c::Unlock ()
-{
-	auto uMyState = m_uLock.load ( std::memory_order_acquire );  // memory_order_acquire
-	if ( ( uMyState & uxFE )==ux02 ) // was w-locked, reset keeping only pending bit
-		m_uLock.fetch_and ( ux01, std::memory_order_acq_rel ); // released exclusive lock memory_order_release
-	else // was w-locked, decrease counter
-		m_uLock.fetch_sub ( ux04, std::memory_order_acq_rel ); // released shared lock memory_order_acq_rel
-	return true;
+	assert ( m_iEpoch > 0 );
+	assert ( m_pCtx );
+	return m_pCtx->Wake ( m_iEpoch );
 }
 
 
-Threads::CoroSpinlock_c::~CoroSpinlock_c ()
+void WaitQueue_c::SuspendAndWait ( boost::fibers::detail::spinlock_lock& tLock, Worker_c* pActive )
 {
-	assert ( !m_bLocked.load ( std::memory_order_relaxed ) );
+	WakerInQueue_c w { pActive->CreateWaker() };
+	m_Slist.push_back ( w );
+	// suspend this fiber
+	pActive->YieldWith ( [&tLock]() { tLock.unlock(); } );
+	assert ( !w.is_linked() );
 }
 
-void Threads::CoroSpinlock_c::Lock()
+
+void WaitQueue_c::NotifyOne()
 {
-	while ( true )
-	{
-		bool bCurrent = false;
-		if ( m_bLocked.compare_exchange_weak ( bCurrent, true, std::memory_order_acquire ) )
+	while ( !m_Slist.empty() ) {
+		Waker_c& w = m_Slist.front();
+		m_Slist.pop_front();
+		if ( w.Wake() ) {
 			break;
-		assert ( Threads::IsInsideCoroutine() );
-		Threads::CoWorker ()->Reschedule ();
+		}
 	}
 }
 
-void Threads::CoroSpinlock_c::Unlock()
+void WaitQueue_c::NotifyAll()
 {
-	m_bLocked.store ( false, std::memory_order_release );
+	while ( !m_Slist.empty() ) {
+		Waker_c& w = m_Slist.front();
+		m_Slist.pop_front();
+		w.Wake();
+	}
 }
+
+bool WaitQueue_c::Empty() const
+{
+	return m_Slist.empty();
+}
+
+
+// the mutex
+void Mutex_c::Lock()
+{
+	while ( true ) {
+		auto* pActiveWorker = Worker();
+		// store this fiber in order to be notified later
+		boost::fibers::detail::spinlock_lock tLock { m_tWaitQueueSpinlock };
+		assert ( pActiveWorker != m_pOwner );
+		if ( !m_pOwner ) {
+			m_pOwner = pActiveWorker;
+			return;
+		}
+
+		m_tWaitQueue.SuspendAndWait( tLock, pActiveWorker );
+	}
+}
+
+void Mutex_c::Unlock()
+{
+	auto* pActiveWorker = Worker();
+	boost::fibers::detail::spinlock_lock tLock { m_tWaitQueueSpinlock };
+	assert ( pActiveWorker == m_pOwner );
+	m_pOwner = nullptr;
+
+	m_tWaitQueue.NotifyOne();
+}
+
+// the shared mutex
+
+// practice shows few numbers are more expressive than symbolic names in that case
+static constexpr DWORD ux01 = 1;			   // w-lock acquired
+static constexpr DWORD ux02 = 2;			   // r-lock bias
+static constexpr DWORD uxFE = ~ux01;		   // mask for w-lock flag (0xFFFFFFFE)
+
+/* r-locking:
+ * 1. reschedule until w-bit is zero
+ * 2. increase N of readers */
+bool RWLock_c::ReadLock()
+{
+	while ( true ) {
+		// store this task in order to be resumed    later
+		boost::fibers::detail::spinlock_lock tLock { m_tWaitQueueSpinlock };
+		if ( !m_bWpending && !( m_uState & ux01 ) )
+		{
+			m_uState += ux02;
+			assert ( ( m_uState & uxFE ) != uxFE ); // hope, 31 bits is enough to count all acquired r-locks.
+			return true;
+		}
+
+		m_tWaitRQueue.SuspendAndWait ( tLock, Worker() );
+	}
+}
+
+/* w-locking:
+ * 1. set 'pending' flag. That means, mo more readers possible (i.e. we implement wlock-preferring)
+ * 2. suspend until lock is free, and wake acquiring w-lock and resetting 'pending' flag
+ */
+bool RWLock_c::WriteLock()
+{
+	while ( true ) {
+		boost::fibers::detail::spinlock_lock tLock { m_tWaitQueueSpinlock };
+		if ( !m_uState )
+		{
+			m_uState = ux01;
+			m_bWpending = false;
+			return true;
+		}
+
+		m_bWpending = true;
+		m_tWaitWQueue.SuspendAndWait ( tLock, Worker() );
+	}
+}
+
+/* unlocking:
+ * 1. Decrease r-locks, or reset w-lock
+ * 2. Resume one writer (if any), or all readers
+ */
+bool RWLock_c::Unlock()
+{
+	boost::fibers::detail::spinlock_lock tLock { m_tWaitQueueSpinlock };
+	assert ( m_uState >= ux01 );
+	if ( m_uState==ux01 ) // releasing w-lock
+		m_uState = 0;
+	else
+		m_uState -= ux02;
+
+	if ( m_uState )
+		return true;
+
+	// fixme! point of priority decision: on unlock, do we need to wake up next w-locker, or all r-lockers?
+	if ( !m_tWaitWQueue.Empty() )
+		m_tWaitWQueue.NotifyOne();
+	else
+		m_tWaitRQueue.NotifyAll();
+	return true;
+}
+
+} // namespace Coro
+} // namespace Threads

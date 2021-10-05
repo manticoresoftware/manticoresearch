@@ -2,7 +2,7 @@
 
 There are 2 different approaches to deal with indexes in Manticore:
 ## Online schema management (RT mode)
-Real-time mode requires no index definition in the configuration file and [data_dir](../Server_settings/Searchd.md#data_dir) directive in `searchd` section. Index files are stored inside the data_dir.
+Real-time mode requires no index definition in the configuration file, but presence of [data_dir](../Server_settings/Searchd.md#data_dir) directive in `searchd` section is mandatory. Index files are stored inside the `data_dir`.
 
 Replication is available only in this mode.
 

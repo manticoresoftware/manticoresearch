@@ -753,10 +753,11 @@ private:
 		if ( !m_pHash || !m_pHash->GetLength() )
 			return 0;
 
-		SphFactorHashEntry_t * pEntry = (*m_pHash)[ (int)( tMatch.m_tRowID % m_pHash->GetLength() ) ];
+		DWORD uKey = FactorPoolHash ( RowTagged_t ( tMatch ), m_pHash->GetLength() );
+		SphFactorHashEntry_t * pEntry = (*m_pHash)[ uKey ];
 		assert ( pEntry );
 
-		while ( pEntry && pEntry->m_tRowID!=tMatch.m_tRowID )
+		while ( pEntry && pEntry->m_tRow!=RowTagged_t ( tMatch ) )
 			pEntry = pEntry->m_pNext;
 
 		if ( !pEntry )
@@ -787,10 +788,11 @@ public:
 		if ( !m_pHash || !m_pHash->GetLength() )
 			return 0.0f;
 
-		SphFactorHashEntry_t * pEntry = (*m_pHash)[ (int)( tMatch.m_tRowID % m_pHash->GetLength() ) ];
+		DWORD uKey = FactorPoolHash ( RowTagged_t ( tMatch ), m_pHash->GetLength() );
+		SphFactorHashEntry_t * pEntry = (*m_pHash)[ uKey ];
 		assert ( pEntry );
 
-		while ( pEntry && pEntry->m_tRowID!=tMatch.m_tRowID )
+		while ( pEntry && pEntry->m_tRow!=RowTagged_t ( tMatch ) )
 			pEntry = pEntry->m_pNext;
 
 		if ( !pEntry )
@@ -1169,7 +1171,7 @@ protected:
 		// special deep-expression delete - take subexpr and release it from dedicated coro with increased stack.
 		auto pExpr = m_pFirst.Leak();
 		assert ( pExpr && pExpr->IsLast () );
-		Threads::CoContinue ( (int) iStackNeeded, [pExpr] { pExpr->Release(); } );
+		Threads::Coro::Continue ( (int) iStackNeeded, [pExpr] { pExpr->Release(); } );
 	}
 };
 
@@ -2558,7 +2560,6 @@ public:
     {
         const char * pDoc = nullptr;
         int iDocLen = m_pArg->StringEval ( tMatch, (const BYTE **)&pDoc );
-        int iLength = 0;
         *ppStr = nullptr;
 
         // create CSphVector and store the value
@@ -3357,44 +3358,44 @@ DECLARE_TERNARY ( Expr_Mul3_c,	FIRST*SECOND*THIRD,					INTFIRST*INTSECOND*INTTHI
 
 #define DECLARE_TIMESTAMP(_classname,_expr) \
 	DECLARE_UNARY_TRAITS ( _classname ) \
-		float Eval ( const CSphMatch & tMatch ) const final { return (float)IntEval(tMatch); } \
-		int64_t Int64Eval ( const CSphMatch & tMatch ) const final { return IntEval(tMatch); } \
-		int IntEval ( const CSphMatch & tMatch ) const final \
+		float Eval ( const CSphMatch & tMatch ) const final { return (float)Int64Eval(tMatch); } \
+		int64_t Int64Eval ( const CSphMatch & tMatch ) const final \
 		{ \
 			time_t ts = (time_t)INT64FIRST;	\
 			struct tm s = {0}; \
 			localtime_r ( &ts, &s ); \
 			return _expr; \
 		} \
+		int IntEval ( const CSphMatch & tMatch ) const final { return (int)Int64Eval(tMatch); } \
 	};
 
-DECLARE_TIMESTAMP ( Expr_Day_c,				s.tm_mday )
-DECLARE_TIMESTAMP ( Expr_Month_c,			s.tm_mon+1 )
-DECLARE_TIMESTAMP ( Expr_Year_c,			s.tm_year+1900 )
-DECLARE_TIMESTAMP ( Expr_YearMonth_c,		(s.tm_year+1900)*100+s.tm_mon+1 )
-DECLARE_TIMESTAMP ( Expr_YearMonthDay_c,	(s.tm_year+1900)*10000+(s.tm_mon+1)*100+s.tm_mday )
-DECLARE_TIMESTAMP ( Expr_Hour_c, s.tm_hour )
-DECLARE_TIMESTAMP ( Expr_Minute_c, s.tm_min )
-DECLARE_TIMESTAMP ( Expr_Second_c, s.tm_sec )
+DECLARE_TIMESTAMP ( Expr_Day_c,				(int64_t)s.tm_mday )
+DECLARE_TIMESTAMP ( Expr_Month_c,			(int64_t)s.tm_mon + 1 )
+DECLARE_TIMESTAMP ( Expr_Year_c,			(int64_t)s.tm_year + 1900 )
+DECLARE_TIMESTAMP ( Expr_YearMonth_c,		((int64_t)s.tm_year + 1900) * 100 + (int64_t)s.tm_mon + 1 )
+DECLARE_TIMESTAMP ( Expr_YearMonthDay_c,	((int64_t)s.tm_year + 1900) * 10000 + ((int64_t)s.tm_mon + 1) * 100 + (int64_t)s.tm_mday )
+DECLARE_TIMESTAMP ( Expr_Hour_c,			(int64_t)s.tm_hour )
+DECLARE_TIMESTAMP ( Expr_Minute_c,			(int64_t)s.tm_min )
+DECLARE_TIMESTAMP ( Expr_Second_c,			(int64_t)s.tm_sec )
 
 #define DECLARE_TIMESTAMP_UTC( _classname, _expr ) \
 	DECLARE_UNARY_TRAITS ( _classname ) \
-		float Eval ( const CSphMatch & tMatch ) const final { return (float)IntEval(tMatch); } \
-		int64_t Int64Eval ( const CSphMatch & tMatch ) const final { return IntEval(tMatch); } \
-		int IntEval ( const CSphMatch & tMatch ) const final \
+		float Eval ( const CSphMatch & tMatch ) const final { return (float)Int64Eval(tMatch); } \
+		int64_t Int64Eval ( const CSphMatch & tMatch ) const final \
 		{ \
-			time_t ts = (time_t)INTFIRST;    \
+			time_t ts = (time_t)INT64FIRST;    \
 			struct tm s = {0}; \
 			gmtime_r ( &ts, &s ); \
 			return _expr; \
 		} \
+		int IntEval ( const CSphMatch & tMatch ) const final { return (int)Int64Eval(tMatch); } \
 	};
 
-DECLARE_TIMESTAMP_UTC ( Expr_Day_utc_c, s.tm_mday )
-DECLARE_TIMESTAMP_UTC ( Expr_Month_utc_c, s.tm_mon + 1 )
-DECLARE_TIMESTAMP_UTC ( Expr_Year_utc_c, s.tm_year + 1900 )
-DECLARE_TIMESTAMP_UTC ( Expr_YearMonth_utc_c, (s.tm_year + 1900) * 100 + s.tm_mon + 1 )
-DECLARE_TIMESTAMP_UTC ( Expr_YearMonthDay_utc_c, (s.tm_year + 1900) * 10000 + (s.tm_mon + 1) * 100 + s.tm_mday )
+DECLARE_TIMESTAMP_UTC ( Expr_Day_utc_c,				(int64_t)s.tm_mday )
+DECLARE_TIMESTAMP_UTC ( Expr_Month_utc_c,			(int64_t)s.tm_mon + 1 )
+DECLARE_TIMESTAMP_UTC ( Expr_Year_utc_c,			(int64_t)s.tm_year + 1900 )
+DECLARE_TIMESTAMP_UTC ( Expr_YearMonth_utc_c,		((int64_t)s.tm_year + 1900) * 100 + (int64_t)s.tm_mon + 1 )
+DECLARE_TIMESTAMP_UTC ( Expr_YearMonthDay_utc_c,	((int64_t)s.tm_year + 1900) * 10000 + ((int64_t)s.tm_mon + 1) * 100 + (int64_t)s.tm_mday )
 
 static bool g_bExprGroupingInUtc = false;
 
@@ -3566,6 +3567,8 @@ enum Tokh_e : BYTE
 	FUNC_REGEX,
 
 	FUNC_SUBSTRING_INDEX,
+	FUNC_UPPER,
+	FUNC_LOWER,
 
 	FUNC_LAST_INSERT_ID,
 	FUNC_LEVENSHTEIN,
@@ -3595,7 +3598,19 @@ enum Tokh_e : BYTE
 const static int dHash2Op[TOKH_TOKH_COUNT-TOKH_TOKH_OFFSET] = { TOK_COUNT, TOK_WEIGHT,
 		TOK_GROUPBY, TOK_DISTINCT, TOK_AND, TOK_OR, TOK_NOT, TOK_DIV, TOK_MOD, TOK_FOR, TOK_IS, TOK_NULL, };
 
-using TokhKeyVal_t = std::pair<const char*, Tokh_e>;
+struct TokhKeyVal_t
+{
+	const char * m_sName = nullptr;
+	Tokh_e m_eTok = TOKH_UNKNOWN;
+	int m_iLen = 0;
+
+	TokhKeyVal_t ( const char * sName, Tokh_e eTok )
+		: m_sName ( sName )
+		, m_eTok ( eTok )
+	{
+		m_iLen = (int)strlen ( m_sName );
+	}
+};
 
 const static TokhKeyVal_t g_dKeyValTokens[] = // no order is necessary, but created hash may depend from it a bit
 {
@@ -3679,6 +3694,8 @@ const static TokhKeyVal_t g_dKeyValTokens[] = // no order is necessary, but crea
 	{ "regex",			FUNC_REGEX			 },
 
 	{ "substring_index",FUNC_SUBSTRING_INDEX },
+	{ "upper",          FUNC_UPPER           },
+	{ "lower",          FUNC_LOWER           },
 
 	{ "last_insert_id",	FUNC_LAST_INSERT_ID	 },
 	{ "levenshtein",	FUNC_LEVENSHTEIN	 },
@@ -3733,49 +3750,48 @@ static Tokh_e TokHashLookup ( Str_t sKey )
 
 	const static BYTE dAsso[] = // values 66..91 (A..Z) copy from 98..123 (a..z),
     {
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118,  13, 118,
-		24,  11, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118,  44,  33,   9,   3,  16,
-		40,  51,  37,  27, 118, 118,   6,  15,   5,   7,
-		23,  28,  20,   4,   3,  31,  45,  45,  28,  22,
-		15, 118, 118, 118, 118,  10, 118,  44,  33,   9,
-		3,  16,  40,  51,  37,  27, 118, 118,   6,  15,
-		5,   7,  23,  28,  20,   4,   3,  31,  45,  45,
-		28,  22,  15, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
-		118, 118, 118, 118, 118, 118
-	};
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108,  16, 108,
+            38,   5, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 14,   5,   5, 0,  21,
+            38,  39,  50,  21, 108, 108,  14,  23, 2,  30,
+            12,  10,   9,   1,   0,  30,  50,  35, 34,  31,
+            7, 108, 108, 108, 108,  22, 108,  14,   5,   5,
+            0,  21,  38,  39,  50,  21, 108, 108,  14,  23,
+            2,  30,  12,  10,   9,   1,   0,  30,  50,  35,
+            34,  31,   7, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+            108, 108, 108, 108, 108, 108
+    };
 
 	const static short dIndexes[] =
-	{
-		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-		-1, -1, -1, 6, 76, -1, 12, 4, 73, -1,
-		5, 81, 22, 40, 78, 28, 38, 68, 23, 75,
-		58, 10, 65, 80, 31, 39, 29, 62, 36, -1,
-		42, 63, 21, 51, 30, 32, 2, 13, 70, 43,
-		15, 35, 53, 74, 48, 1, 47, 46, 49, 59,
-		44, 57, 16, 33, 54, 9, 56, 69, 34, 27,
-		37, 52, 3, 41, 24, 8, 55, 61, 50, -1,
-		67, 71, -1, 79, -1, 7, -1, 72, -1, -1,
-		17, 60, 20, 11, -1, -1, 77, -1, 0, -1,
-		19, -1, 45, 26, 66, -1, -1, -1, -1, 14,
-		-1, -1, 18, -1, -1, -1, 25, 64
-	};
+    {
+            -1, -1, -1, -1, -1, 78, -1, 12, 4, 75,
+            5, 32, 22, 40, 10, 65, 38, 76, 6, 1,
+            58, 39, -1, 42, 82, 31, 80, 28, -1, 70,
+            23, 43, 36, 49, 83, 57, 51, 46, -1, 62,
+            72, 77, 53, 30, 2, 59, 29, 35, 9, 33,
+            11, 44, 21, 13, 63, 67, 68, 47, 17, 81,
+            55, 27, 73, 69, 54, 15, 61, 52, 50, 56,
+            41, 64, 48, 14, 8, 0, 34, 71, 37, 60,
+            16, -1, 3, -1, -1, 25, 45, 66, 19, -1,
+            -1, -1, -1, 20, 24, 7, 26, -1, -1, -1,
+            -1, -1, -1, 79, 18, -1, -1, 74,
+    };
 
 	auto * s = (const BYTE*) sKey.first;
 	auto iLen = sKey.second;
@@ -3797,8 +3813,8 @@ static Tokh_e TokHashLookup ( Str_t sKey )
 		return TOKH_UNKNOWN;
 
 	auto iFunc = dIndexes[iHash];
-	if ( iFunc>=0 && strncasecmp ( g_dKeyValTokens[iFunc].first, sKey.first, iLen )==0 )
-		return g_dKeyValTokens[iFunc].second;
+	if ( iFunc>=0 && strncasecmp ( g_dKeyValTokens[iFunc].m_sName, sKey.first, iLen )==0 && g_dKeyValTokens[iFunc].m_iLen==iLen )
+		return g_dKeyValTokens[iFunc].m_eTok;
 	return TOKH_UNKNOWN;
 }
 
@@ -3807,18 +3823,18 @@ static int TokHashCheck()
 {
 	for ( const auto & kv : g_dKeyValTokens )
 	{
-		CSphString sKey ( kv.first );
+		CSphString sKey ( kv.m_sName );
 		sKey.ToLower ();
 		Str_t sKeyStr { sKey.cstr (), sKey.Length () };
 		auto uHash = TokHashLookup ( sKeyStr );
-		if ( uHash!=kv.second )
+		if ( uHash!=kv.m_eTok )
 			sphDie ( "INTERNAL ERROR: lookup for %s failed, got %d, expected %d, rebuild token hash", sKey.cstr ()
-					 , uHash, kv.second );
+					 , uHash, kv.m_eTok );
 		sKey.ToUpper ();
 		uHash = TokHashLookup ( sKeyStr );
-		if ( uHash!=kv.second )
+		if ( uHash!=kv.m_eTok )
 			sphDie ( "INTERNAL ERROR: lookup for %s failed, got %d, expected %d, rebuild token hash", sKey.cstr ()
-					 , uHash, kv.second );
+					 , uHash, kv.m_eTok );
 	}
 	if ( TokHashLookup ( { "A", 1 } )!=TOKH_UNKNOWN )
 		sphDie ( "INTERNAL ERROR: lookup for A() succeeded, rebuild token hash" );
@@ -3918,6 +3934,8 @@ static FuncDesc_t g_dFuncs[FUNC_FUNCS_COUNT] = // Keep same order as in Tokh_e
 	{  /*"regex",		*/		2,	TOK_FUNC,		/*FUNC_REGEX,			*/	SPH_ATTR_INTEGER },
 
 	{  /*"substring_index",*/	3,	TOK_FUNC,		/*FUNC_SUBSTRING_INDEX,	*/	SPH_ATTR_STRINGPTR },
+	{  /*"upper",          */	1,	TOK_FUNC,		/*FUNC_UPPER,           */	SPH_ATTR_STRINGPTR },
+	{  /*"lower",          */	1,	TOK_FUNC,		/*FUNC_LOWER,           */	SPH_ATTR_STRINGPTR },
 
 	{  /*"last_insert_id",*/	0,	TOK_FUNC,		/*FUNC_LAST_INSERT_ID,	*/	SPH_ATTR_STRINGPTR },
 	{ /*"levenshtein", */		-1,	TOK_FUNC,		/*FUNC_LEVENSHTEIN,		*/	SPH_ATTR_NONE },
@@ -3937,7 +3955,7 @@ static inline const char* FuncNameByHash ( int iFunc )
 		, "rankfactors", "packedfactors", "bm25f", "integer", "double", "length", "least", "greatest"
 		, "uint", "query", "curtime", "utc_time", "utc_timestamp", "timediff", "current_user"
 		, "connection_id", "all", "any", "indexof", "min_top_weight", "min_top_sortval", "atan2", "rand"
-		, "regex", "substring_index", "last_insert_id", "levenshtein" };
+		, "regex", "substring_index", "upper", "lower", "last_insert_id", "levenshtein" };
 
 	return dNames[iFunc];
 }
@@ -6986,6 +7004,11 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 					case FUNC_SUBSTRING_INDEX:
 						return new Expr_SubstringIndex_c ( dArgs[0], dArgs[1], dArgs[2] );
 
+                    case FUNC_UPPER:
+                        return new Expr_Case_c<true> ( dArgs[0] );
+                    case FUNC_LOWER:
+                        return new Expr_Case_c<false> ( dArgs[0] );
+
 					case FUNC_LAST_INSERT_ID: return new Expr_LastInsertID_c();
 					case FUNC_CURRENT_USER: {
 						auto sUser = CurrentUser();
@@ -9044,7 +9067,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 		bGotString |= dRetTypes[i]==SPH_ATTR_STRING;
 		bGotMva |= ( dRetTypes[i]==SPH_ATTR_UINT32SET || dRetTypes[i]==SPH_ATTR_INT64SET || dRetTypes[i]==SPH_ATTR_UINT32SET_PTR || dRetTypes[i]==SPH_ATTR_INT64SET_PTR );
 	}
-	if ( bGotString && !( eFunc==FUNC_LENGTH || eFunc==FUNC_TO_STRING || eFunc==FUNC_CONCAT || eFunc==FUNC_SUBSTRING_INDEX || eFunc==FUNC_CRC32 || eFunc==FUNC_EXIST || eFunc==FUNC_POLY2D || eFunc==FUNC_GEOPOLY2D || eFunc==FUNC_REGEX || eFunc==FUNC_LEVENSHTEIN ) )
+	if ( bGotString && !( eFunc==FUNC_LENGTH || eFunc==FUNC_TO_STRING || eFunc==FUNC_CONCAT || eFunc==FUNC_SUBSTRING_INDEX || eFunc==FUNC_UPPER  || eFunc ==FUNC_LOWER || eFunc==FUNC_CRC32 || eFunc==FUNC_EXIST || eFunc==FUNC_POLY2D || eFunc==FUNC_GEOPOLY2D || eFunc==FUNC_REGEX || eFunc==FUNC_LEVENSHTEIN ) )
 	{
 		m_sParserError.SetSprintf ( "%s() arguments can not be string", sFuncName );
 		return -1;
@@ -9105,7 +9128,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 		assert ( iArg>=0 );
 		if ( m_dNodes[iArg].m_eRetType!=SPH_ATTR_INTEGER && m_dNodes[iArg].m_eRetType!=SPH_ATTR_TIMESTAMP && m_dNodes[iArg].m_eRetType!=SPH_ATTR_BIGINT )
 		{
-			m_sParserError.SetSprintf ( "%s() argument must be integer or timestamp", sFuncName );
+			m_sParserError.SetSprintf ( "%s() argument must be integer, bigint or timestamp", sFuncName );
 			return -1;
 		}
 		break;
@@ -9201,6 +9224,20 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 			return -1;
 		}
 		break;
+    case FUNC_UPPER:
+    case FUNC_LOWER:
+        if ( dRetTypes.GetLength()!=1 )
+        {
+            m_sParserError.SetSprintf ( "%s() called with %d args, but 1 arg expected", sFuncName, dRetTypes.GetLength () );
+            return -1;
+        }
+
+        if ( dRetTypes[0]!=SPH_ATTR_STRING && dRetTypes[0]!=SPH_ATTR_STRINGPTR && dRetTypes[0]!=SPH_ATTR_JSON && dRetTypes[0]!=SPH_ATTR_JSON_FIELD )
+        {
+            m_sParserError.SetSprintf ( "%s() argument 1 must be string or json", sFuncName );
+            return -1;
+        }
+        break;
 	case FUNC_GEODIST: // check GEODIST args count, and that optional arg 5 is a map argument
 		if ( dRetTypes.GetLength ()>5 )
 		{
@@ -10005,7 +10042,7 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 
 	ISphExpr * pExpr = nullptr;
 
-	Threads::CoContinue ( iStackNeeded, [&] {
+	Threads::Coro::Continue ( iStackNeeded, [&] {
 
 	pExpr = Create ( pUsesWeight, sError );
 

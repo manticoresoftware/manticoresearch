@@ -1050,6 +1050,7 @@ int FullScanCollectingDocs ( PercolateMatchContext_t & tMatchCtx )
 	int iCountIdx = tMatchCtx.m_dDocsMatched.GetLength ();
 	tMatchCtx.m_dDocsMatched.Add ( 0 ); // placeholder for counter
 
+	FakeRL_t _ ( pSeg->m_tLock ); // that is s-t by design, don't need real lock
 	const CSphRowitem * pRow = pSeg->m_dRows.Begin ();
 	CSphMatch tDoc;
 	int iMatchesCount = 0;
@@ -1130,7 +1131,8 @@ void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_t & tMa
 	if ( !pStored->IsFullscan() && tMatchCtx.m_tReject.Filter ( pStored, tMatchCtx.m_bUtf8 ) )
 		return;
 
-	const RtSegment_t * pSeg = (const RtSegment_t *)tMatchCtx.m_pCtx->m_pIndexData;
+	const auto * pSeg = (const RtSegment_t *)tMatchCtx.m_pCtx->m_pIndexData;
+	FakeRL_t _ ( pSeg->m_tLock ); // that is s-t by design, don't need real lock
 	const BYTE * pBlobs = pSeg->m_dBlobs.Begin();
 
 	++tMatchCtx.m_iEarlyPassed;
@@ -1416,7 +1418,7 @@ struct PQInfo_t : public TaskInfo_t
 DEFINE_RENDER( PQInfo_t )
 {
 	auto & tInfo = *(const PQInfo_t *) pSrc;
-	dDst.m_sChain << (int) tInfo.m_eType << ":PQ ";
+	dDst.m_sChain << "PQ ";
 	if ( tInfo.m_iTotal )
 		dDst.m_sDescription.Sprintf ( "%d%% of %d:", tInfo.m_iCurrent * 100 / tInfo.m_iTotal, tInfo.m_iTotal );
 	else
@@ -1443,7 +1445,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 		tRes.m_tmSetup = sphMicroTimer ()+tRes.m_tmSetup;
 
 	std::atomic<int32_t> iCurJob {0};
-	CoExecuteN ( dCtx.Concurrency ( iJobs ), [&]
+	Coro::ExecuteN ( dCtx.Concurrency ( iJobs ), [&]
 	{
 		auto iJob = iCurJob.fetch_add ( 1, std::memory_order_acq_rel );
 		if ( iJob>=iJobs )
@@ -1452,7 +1454,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 		auto pInfo = PublishTaskInfo ( new PQInfo_t );
 		pInfo->m_iTotal = iJobs;
 		auto tCtx = dCtx.CloneNewContext ();
-		Threads::CoThrottler_c tThrottler ( session::ThrottlingPeriodMS () );
+		Threads::Coro::Throttler_c tThrottler ( session::ThrottlingPeriodMS () );
 		while (true)
 		{
 			pInfo->m_iCurrent = iJob;

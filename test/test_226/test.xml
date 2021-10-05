@@ -69,6 +69,23 @@ index facet_gr1
 	path              = <data_path/>/facet_gr1
 }
 
+source src_fs1
+{
+	type              = mysql
+	<sql_settings/>
+	sql_query         = SELECT * FROM table_fs1
+	sql_attr_string   = s_color
+	sql_attr_json     = j
+}
+
+
+index fs1
+{
+	source            = src_fs1
+	path              = <data_path/>/fs1
+}
+
+
 </config>
 
 <db_create>
@@ -108,6 +125,26 @@ insert into test_table (id,price,brand_id,title,brand_name,property,categories,j
 (18,413,3,'Product Eight Five','Brand Three','Four','(11,12,13)','{x:[11,12,13],a:["a11","a12","a13"]}'),
 (19,78,4,'Product Six Five','Brand Four','Two','(12)','{x:[12],a:["a12"]}'),
 (20,169,4,'Product Seven Six','Brand Four','Eight','(10,11)','{x:[10,11],a:["a10","a11"]}')
+</db_insert>
+
+<db_create>
+CREATE TABLE `table_fs1` (
+  `id` int(11),
+  `title` varchar(255),
+  `s_color` varchar(255),
+  `j` varchar(255)
+);
+</db_create>
+
+<db_drop>DROP TABLE IF EXISTS `table_fs1`;</db_drop>
+
+<db_insert>
+insert into table_fs1 (id,title,s_color,j) values
+(1,'Product 1', 'red', '{x:[13,14],color:"red"}'),
+(2,'Product 2', 'blue', '{x:[23,24],color:"blue"}'),
+(3,'Product 3', 'green', '{x:[33,34],color:"green"}'),
+(4,'Product 4', 'red', '{x:[43,44],color:"red"}'),
+(5,'Product 5', 'blue', '{x:[53,54],color:"blue"}')
 </db_insert>
 
 <queries><sphinxql>
@@ -203,7 +240,12 @@ select id, property from facetdemo2 facet property order by facet() desc;;
 
 <!-- regression crash on multiple same facet to JSON field -->
 select id, j from facetdemo facet categories facet j.x facet j.a facet j.x;;
-select id, j from facetdemo facet categories facet j.x facet j.a;
+select id, j from facetdemo facet categories facet j.x facet j.a;;
+
+<!-- regression crash on facet with order by JSON field or string -->
+select id, j, s_color from fs1 facet j.color order by j.color desc;;
+select id, j, s_color from fs1 facet j.color order by s_color desc;;
+select id, j, s_color from fs1 facet s_color order by j.color desc;;
 
 </sphinxql></queries>
 

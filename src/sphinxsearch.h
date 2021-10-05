@@ -43,6 +43,13 @@ bool operator < ( const SkiplistEntry_t & a, RowID_t b );
 bool operator == ( const SkiplistEntry_t & a, RowID_t b );
 bool operator < ( RowID_t a, const SkiplistEntry_t & b );
 
+struct SkipData_t
+{
+	CSphVector<SkiplistEntry_t> m_dSkiplist;
+
+	void Read ( const BYTE * pSkips, const CSphDictEntry & tRes, int iDocs, int iSkipBlockSize );
+};
+
 class RtIndex_c;
 struct RtGuard_t;
 
@@ -64,7 +71,9 @@ public:
 	int				m_iDocs = 0;	///< document count, from wordlist
 	int				m_iHits = 0;	///< hit count, from wordlist
 	bool			m_bHasHitlist = true;	///< hitlist presence flag
-	CSphVector<SkiplistEntry_t>	m_dSkiplist;	///< skiplist for quicker document list seeks
+
+	SkipData_t *	m_pSkipData = nullptr;
+	bool			m_bSkipFromCache = false;
 
 	// iterator state
 	FieldMask_t		m_dQwordFields;	///< current match fields
@@ -79,7 +88,12 @@ public:
 	{
 		m_dQwordFields.UnsetAll();
 	}
-	virtual ~ISphQword () {}
+
+	virtual ~ISphQword ()
+	{
+		assert ( !m_bSkipFromCache );
+		SafeDelete(m_pSkipData);
+	}
 
 	virtual RowID_t				AdvanceTo ( RowID_t tRowID );
 	virtual bool				HintRowID ( RowID_t ) { return false; }

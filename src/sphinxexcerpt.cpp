@@ -507,7 +507,7 @@ void SnippetBuilder_c::Impl_c::MarkHits ( const SnippetsDocIndex_c & tContainer,
 	if ( !iStackNeed )
 		return;
 
-	Threads::CoContinue ( iStackNeed, [&] {
+	Threads::Coro::Continue ( iStackNeed, [&] {
 
 	CSphScopedPtr<CSphHitMarker> pMarker ( CSphHitMarker::Create ( tXQQuery.m_pRoot, tQwordSetup ) );
 	if ( !pMarker.Ptr() )

@@ -1332,6 +1332,19 @@ struct CSphSourceStats
 	}
 };
 
+struct RowTagged_t
+{
+	RowID_t m_tID { INVALID_ROWID };	///< document ID
+	int m_iTag {0};						///< index tag
+	
+	RowTagged_t() = default;
+	RowTagged_t ( const CSphMatch & tMatch );
+	RowTagged_t ( RowID_t tRowID, int iTag );
+
+	bool operator== ( const RowTagged_t & tRow ) const;
+	bool operator!= ( const RowTagged_t & tRow ) const;
+};
+
 //////////////////////////////////////////////////////////////////////////
 
 /// known multi-valued attr sources
@@ -3246,6 +3259,9 @@ int					GetUnhintedBuffer();
 
 /// check query for expressions
 bool				sphHasExpressions ( const CSphQuery & tQuery, const CSphSchema & tSchema );
+
+void				InitSkipCache ( int64_t iCacheSize );
+void				ShutdownSkipCache();
 
 const CSphVector<CharsetAlias_t> & GetCharsetAliases();
 

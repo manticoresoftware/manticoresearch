@@ -114,11 +114,13 @@ enum ExtraData_e
 	EXTRA_SET_POOL_CAPACITY,
 	EXTRA_SET_MATCHPUSHED,
 	EXTRA_SET_MATCHPOPPED,
+	EXTRA_SET_MATCHTAG,
 
 	EXTRA_SET_RANKER_PLUGIN,
 	EXTRA_SET_RANKER_PLUGIN_OPTS,
 
-	EXTRA_GET_POOL_SIZE
+	EXTRA_GET_POOL_SIZE,
+	EXTRA_SET_BOUNDARIES
 };
 
 /// generic COM-like interface
@@ -754,7 +756,7 @@ public:
 
 struct SphFactorHashEntry_t
 {
-	RowID_t					m_tRowID;
+	RowTagged_t				m_tRow;
 	int						m_iRefCount;
 	BYTE *					m_pData;
 	SphFactorHashEntry_t *	m_pPrev;
@@ -762,6 +764,7 @@ struct SphFactorHashEntry_t
 };
 
 typedef CSphFixedVector<SphFactorHashEntry_t *> SphFactorHash_t;
+DWORD FactorPoolHash ( const RowTagged_t & tRow, int iLen );
 
 
 struct SphExtraDataRankerState_t

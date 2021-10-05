@@ -410,8 +410,8 @@ public:
 
 	int					GetMatchCapacity() const override { return m_iMatchCapacity; }
 
-	RowID_t				GetJustPushed() const override { return m_iJustPushed; }
-	VecTraits_T<RowID_t> GetJustPopped() const override { return m_dJustPopped; }
+	RowTagged_t					GetJustPushed() const override { return m_tJustPushed; }
+	VecTraits_T<RowTagged_t>	GetJustPopped() const override { return m_dJustPopped; }
 
 protected:
 	SharedPtr_t<ISphSchema>		m_pSchema;		///< sorter schema (adds dynamic attributes on top of index schema)
@@ -423,9 +423,9 @@ protected:
 	bool						m_bRandomize = false;
 	int64_t						m_iTotal = 0;
 
-	RowID_t						m_iJustPushed {INVALID_ROWID};
 	int							m_iMatchCapacity = 0;
-	CSphTightVector<RowID_t>	m_dJustPopped;
+	RowTagged_t						m_tJustPushed;
+	CSphTightVector<RowTagged_t>	m_dJustPopped;
 };
 
 
@@ -784,7 +784,7 @@ private:
 
 		if_const ( NOTIFICATIONS )
 		{
-			m_iJustPushed = INVALID_ROWID;
+			m_tJustPushed = RowTagged_t();
 			m_dJustPopped.Resize(0);
 		}
 
@@ -801,7 +801,7 @@ private:
 		PUSH ( Add(), std::forward<MATCH> ( tEntry ));
 
 		if_const ( NOTIFICATIONS )
-			m_iJustPushed = Last()->m_tRowID;
+			m_tJustPushed = RowTagged_t ( *Last() );
 
 		int iEntry = Used()-1;
 
@@ -835,9 +835,9 @@ private:
 			if_const ( NOTIFICATIONS )
 			{
 				if ( m_dJustPopped.IsEmpty () )
-					m_dJustPopped.Add (  m_dData[iJustRemoved] .m_tRowID );
+					m_dJustPopped.Add (  RowTagged_t ( m_dData[iJustRemoved] ) );
 				else
-					m_dJustPopped[0] =  m_dData[iJustRemoved] .m_tRowID;
+					m_dJustPopped[0] =  RowTagged_t ( m_dData[iJustRemoved] );
 			}
 
 			m_pSchema->FreeDataPtrs ( m_dData[iJustRemoved] );
@@ -1008,7 +1008,7 @@ private:
 	void FreeMatch ( int iMatch )
 	{
 		if_const ( NOTIFICATIONS )
-			m_dJustPopped.Add ( m_dData[iMatch].m_tRowID );
+			m_dJustPopped.Add ( RowTagged_t ( m_dData[iMatch] ) );
 		m_pSchema->FreeDataPtrs ( m_dData[iMatch] );
 	}
 
@@ -1083,7 +1083,7 @@ private:
 	{
 		if_const ( NOTIFICATIONS )
 		{
-			m_iJustPushed = INVALID_ROWID;
+			m_tJustPushed = RowTagged_t();
 			m_dJustPopped.Resize(0);
 		}
 
@@ -1098,7 +1098,7 @@ private:
 		PUSH ( Add(), std::forward<MATCH> ( tEntry ));
 
 		if_const ( NOTIFICATIONS )
-			m_iJustPushed = Last()->m_tRowID;
+			m_tJustPushed = RowTagged_t ( *Last() );
 
 		// do the initial sort once
 		if ( m_iTotal==m_iSize )
@@ -2328,9 +2328,7 @@ public:
 		BStream_c dOut;
 		if ( !dDst.first )
 			dOut << dSrc;
-
-		// first byte is a mark: 0 means data packed, another is part of real string.
-		else if ( *dSrc.first && *dDst.first )
+		else if ( *dSrc.first && *dDst.first ) // first byte is a mark: 0 means data packed, another is part of real string.
 			AppendStringToString ( dOut, dDst, tDst.m_iTag, dSrc, tSrc.m_iTag );
 		else if ( *dSrc.first && !*dDst.first )
 			AppendBlobToString ( dOut, dSrc, tSrc.m_iTag, dDst, false );
@@ -2350,8 +2348,7 @@ public:
 private:
 
 	// merge two simple matches
-	static void AppendStringToString ( BStream_c& dOut, const ByteBlob_t& dInDst, int iTagDst,
-			const ByteBlob_t& dInSrc, int iTagSrc )
+	static void AppendStringToString ( BStream_c & dOut, const ByteBlob_t & dInDst, int iTagDst, const ByteBlob_t & dInSrc, int iTagSrc )
 	{
 		if ( iTagDst==iTagSrc ) // plain concat of 2 strings
 			dOut << dInDst << ',' << dInSrc;
@@ -2419,8 +2416,7 @@ private:
 	}
 
 	// merge string and blob. Last bool determines what will came first
-	static void AppendBlobToString ( BStream_c& dOut, const ByteBlob_t& dString, int iTagString,
-			ByteBlob_t dBlob, bool bStringFirst=true )
+	static void AppendBlobToString ( BStream_c & dOut, const ByteBlob_t & dString, int iTagString, ByteBlob_t dBlob, bool bStringFirst=true )
 	{
 		int iOut;
 		char cZero;
@@ -2438,22 +2434,26 @@ private:
 			dBlob >> iTagSrc >> dBlobSrc;
 			if ( bCopied )
 				dOut << iTagSrc << dBlobSrc;
-			else {
-				if ( !bCopied && iTagString > iTagSrc ) {
+			else
+			{
+				if ( !bCopied && iTagString > iTagSrc )
+				{
 					dOut << iTagString << dString.second << dString << iTagSrc << dBlobSrc;
 					++iOut;
 					bCopied = true;
-				} else if ( !bCopied && iTagString==iTagSrc ) {
+				} else if ( !bCopied && iTagString==iTagSrc )
+				{
 					dOut << iTagString << dString.second + dBlobSrc.GetLength() + 1;
 					if ( bStringFirst )
-						dOut << dString << ',' << ByteBlob_t ( dBlobSrc.begin (), dBlobSrc.GetLength () );
+						dOut << dString << ',' << ByteBlob_t ( dBlobSrc.begin(), dBlobSrc.GetLength() );
 					else
-						dOut << ByteBlob_t ( dBlobSrc.begin (), dBlobSrc.GetLength () ) << ',' << dString;
+						dOut << ByteBlob_t ( dBlobSrc.begin(), dBlobSrc.GetLength() ) << ',' << dString;
 					bCopied = true;
 				} else
 					dOut << iTagSrc << dBlobSrc;
 			}
 		}
+
 		if ( !bCopied )
 		{
 			dOut << iTagString << dString.second << dString;
@@ -3096,7 +3096,7 @@ protected:
 	void FreeMatchPtrs ( int iMatch, bool bNotify=true )
 	{
 		if_const ( NOTIFICATIONS && bNotify )
-			m_dJustPopped.Add ( m_dData[iMatch].m_tRowID );
+			m_dJustPopped.Add ( RowTagged_t ( m_dData[iMatch] ) );
 		m_pSchema->FreeDataPtrs ( m_dData[iMatch] );
 
 		// on final pass we totally wipe match.
@@ -3167,7 +3167,7 @@ protected:
 	using CSphMatchQueueTraits::ResetAfterFlatten;
 
 	using MatchSorter_c::m_iTotal;
-	using MatchSorter_c::m_iJustPushed;
+	using MatchSorter_c::m_tJustPushed;
 	using MatchSorter_c::m_dJustPopped;
 	using MatchSorter_c::m_pSchema;
 
@@ -3280,8 +3280,8 @@ protected:
 		{
 			if_const ( NOTIFICATIONS )
 			{
-				m_iJustPushed = tEntry.m_tRowID;
-				this->m_dJustPopped.Add ( tGroup.m_tRowID );
+				m_tJustPushed = RowTagged_t ( tEntry );
+				this->m_dJustPopped.Add ( RowTagged_t ( tGroup ) );
 			}
 
 			// clone the low part of the match
@@ -3302,7 +3302,7 @@ protected:
 	{
 		if_const ( NOTIFICATIONS )
 		{
-			m_iJustPushed = INVALID_ROWID;
+			m_tJustPushed = RowTagged_t();
 			this->m_dJustPopped.Resize ( 0 );
 		}
 		auto & tLocCount = m_tLocCount;
@@ -3333,7 +3333,7 @@ protected:
 		m_pSchema->CloneMatch ( tNew, tEntry );
 
 		if_const ( NOTIFICATIONS )
-			m_iJustPushed = tNew.m_tRowID;
+			m_tJustPushed = RowTagged_t ( tNew );
 
 		if_const ( GROUPED )
 		{
@@ -3602,7 +3602,7 @@ protected:
 	using CSphMatchQueueTraits::m_dData;
 
 	using MatchSorter_c::m_iTotal;
-	using MatchSorter_c::m_iJustPushed;
+	using MatchSorter_c::m_tJustPushed;
 	using MatchSorter_c::m_pSchema;
 
 	int m_iStorageSolidFrom = 0; // edge from witch storage is not yet touched and need no chaining freelist
@@ -3782,7 +3782,7 @@ protected:
 
 		if_const ( NOTIFICATIONS )
 		{
-			m_iJustPushed = INVALID_ROWID;
+			m_tJustPushed = RowTagged_t();
 			this->m_dJustPopped.Resize ( 0 );
 		}
 
@@ -3816,7 +3816,7 @@ protected:
 			UpdateDistinct ( tNew, uGroupKey, GROUPED );
 
 		if_const ( NOTIFICATIONS )
-			m_iJustPushed = tNew.m_tRowID;
+			m_tJustPushed = RowTagged_t ( tNew );
 
 		this->m_dIData[iNew] = iNew; // new head - points to self (0-ring)
 		Verify ( m_hGroup2Index.Add ( uGroupKey, iNew ));
@@ -3905,7 +3905,7 @@ private:
 		CSphMatch & tNew = m_dData[iNew];
 		this->m_tPregroup.CloneWithoutAggrs ( tNew, tEntry );
 		if_const ( NOTIFICATIONS )
-			m_iJustPushed = tNew.m_tRowID;
+			m_tJustPushed = RowTagged_t ( tNew );
 
 		// put after the head
 		auto iPrevChain = this->m_dIData[iHead];
@@ -4514,8 +4514,8 @@ private:
 		{
 			if_const ( NOTIFICATIONS )
 			{
-				m_iJustPushed = tEntry.m_tRowID;
-				m_dJustPopped.Add ( m_tData.m_tRowID );
+				m_tJustPushed = RowTagged_t ( tEntry );
+				m_dJustPopped.Add ( RowTagged_t ( m_tData ) );
 			}
 			m_tPregroup.CloneKeepingAggrs ( m_tData, tEntry );
 		}
@@ -4538,7 +4538,7 @@ private:
 	{
 		if_const ( NOTIFICATIONS )
 		{
-			m_iJustPushed = INVALID_ROWID;
+			m_tJustPushed = RowTagged_t();
 			m_dJustPopped.Resize(0);
 		}
 
@@ -4576,7 +4576,7 @@ private:
 		m_pSchema->CloneMatch ( m_tData, tEntry );
 
 		if_const ( NOTIFICATIONS )
-			m_iJustPushed = m_tData.m_tRowID;
+			m_tJustPushed = RowTagged_t ( m_tData );
 
 		if_const ( !GROUPED )
 		{
@@ -4953,6 +4953,7 @@ public:
 
 	CSphRsetSchema &	SorterSchema() const { return *m_pSorterSchema.Ptr(); }
 	bool				HasJson() const { return m_tGroupSorterSettings.m_bJson; }
+	bool				SetSchemaGroupQueue ( const CSphRsetSchema & tNewSchema );
 
 	/// creates proper queue for given query
 	/// may return NULL on error; in this case, error message is placed in sError
@@ -4984,7 +4985,6 @@ private:
 	bool						m_bHeadWOGroup;
 	bool						m_bGotDistinct;
 	bool						m_bExprsNeedDocids = false;
-	CSphFixedVector<bool>		m_dRemapped { CSphMatchComparatorState::MAX_ATTRS };
 
 	// for sorter to create pooled attributes
 	bool						m_bHaveStar = false;
@@ -5048,8 +5048,6 @@ QueueCreator_c::QueueCreator_c ( const SphQueueSettings_t & tSettings, const CSp
 
 	m_dMatchJsonExprs.Resize ( CSphMatchComparatorState::MAX_ATTRS );
 	m_dGroupJsonExprs.Resize ( CSphMatchComparatorState::MAX_ATTRS );
-
-	m_dRemapped.ZeroVec();
 }
 
 
@@ -6310,8 +6308,7 @@ void QueueCreator_c::ReplaceGroupbyStrWithExprs ( CSphMatchComparatorState & tSt
 		tState.m_eKeypart[i] = SPH_KEYPART_STRINGPTR;
 		tState.m_tLocator[i] = tSorterSchema.GetAttr(iRemap).m_tLocator;
 		tState.m_dAttrs[i] = iRemap;
-
-		m_dRemapped[i] = true;
+		tState.m_dRemapped.BitSet ( i );
 	}
 }
 
@@ -6323,7 +6320,7 @@ void QueueCreator_c::ReplaceStaticStringsWithExprs ( CSphMatchComparatorState & 
 
 	for ( int i = 0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
 	{
-		if ( m_dRemapped[i] )
+		if ( tState.m_dRemapped.BitGet ( i ) )
 			continue;
 
 		if ( tState.m_eKeypart[i]!=SPH_KEYPART_STRING )
@@ -6363,8 +6360,7 @@ void QueueCreator_c::ReplaceStaticStringsWithExprs ( CSphMatchComparatorState & 
 		tState.m_tLocator[i] = tSorterSchema.GetAttr ( iRemap ).m_tLocator;
 		tState.m_dAttrs[i] = iRemap;
 		tState.m_eKeypart[i] = SPH_KEYPART_STRINGPTR;
-
-		m_dRemapped[i] = true;
+		tState.m_dRemapped.BitSet ( i );
 	}
 }
 
@@ -6376,7 +6372,7 @@ void QueueCreator_c::ReplaceJsonWithExprs ( CSphMatchComparatorState & tState, C
 
 	for ( int i = 0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
 	{
-		if ( m_dRemapped[i] )
+		if ( tState.m_dRemapped.BitGet ( i ) )
 			continue;
 
 		if ( dExtraExprs[i].m_tKey.m_sKey.IsEmpty() )
@@ -6403,8 +6399,7 @@ void QueueCreator_c::ReplaceJsonWithExprs ( CSphMatchComparatorState & tState, C
 
 		tState.m_tLocator[i] = tSorterSchema.GetAttr(iRemap).m_tLocator;
 		tState.m_dAttrs[i] = iRemap;
-
-		m_dRemapped[i] = true;
+		tState.m_dRemapped.BitSet ( i );
 	}
 }
 
@@ -6416,7 +6411,7 @@ void QueueCreator_c::AddColumnarExprsAsAttrs ( CSphMatchComparatorState & tState
 
 	for ( int i = 0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
 	{
-		if ( m_dRemapped[i] )
+		if ( tState.m_dRemapped.BitGet ( i ) )
 			continue;
 
 		ISphExpr * pExpr = dExtraExprs[i].m_pExpr;
@@ -6439,8 +6434,7 @@ void QueueCreator_c::AddColumnarExprsAsAttrs ( CSphMatchComparatorState & tState
 		tState.m_tLocator[i] = tSorterSchema.GetAttr ( iRemap ).m_tLocator;
 		tState.m_dAttrs[i] = iRemap;
 		tState.m_eKeypart[i] = Attr2Keypart ( dExtraExprs[i].m_eType );
-
-		m_dRemapped[i] = true;
+		tState.m_dRemapped.BitSet ( i );
 	}
 }
 
@@ -6770,6 +6764,26 @@ ISphMatchSorter * QueueCreator_c::CreateQueue ()
 	return pTop;
 }
 
+static void ResetRemaps ( CSphMatchComparatorState & tState )
+{
+	for ( int i = 0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
+	{
+		if ( tState.m_dRemapped.BitGet ( i ) && tState.m_eKeypart[i]==SPH_KEYPART_STRINGPTR )
+			tState.m_dRemapped.BitClear ( i );
+	}
+}
+
+bool QueueCreator_c::SetSchemaGroupQueue ( const CSphRsetSchema & tNewSchema )
+{
+	// need to reissue remap but with existed attributes
+	ResetRemaps ( m_tStateMatch );
+	ResetRemaps ( m_tStateGroup );
+
+	*m_pSorterSchema.Ptr() = tNewSchema;
+
+	return SetupGroupQueue();
+}
+
 static ISphMatchSorter * CreateQueue ( QueueCreator_c & tCreator, SphQueueRes_t & tRes )
 {
 	ISphMatchSorter * pSorter = tCreator.CreateQueue ();
@@ -6951,13 +6965,12 @@ static void CreateMultiQueue ( RawVector_T<QueueCreator_c> & dCreators, const Sp
 		return;
 
 	// setup common schemas
-	for ( auto & tCreator : dCreators )
+	for ( QueueCreator_c & tCreator : dCreators )
 	{
 		if ( !tCreator.m_bCreate )
 			continue;
 
-		tCreator.SorterSchema() = tMultiSchema;
-		if ( !tCreator.SetupGroupQueue() )
+		if ( !tCreator.SetSchemaGroupQueue ( tMultiSchema ) )
 			tCreator.m_bCreate = false;
 	}
 }

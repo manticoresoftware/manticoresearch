@@ -24,8 +24,6 @@ variables:
     - cmake --build . --target package
     - cmake -DSPLIT=1 .
     - cmake --build . --target package
-    - rm manticore-server-debuginfo*.rpm
-    - rm manticore-tools-debuginfo*.rpm
     - cp manticore*.rpm ..
   artifacts:
     paths:

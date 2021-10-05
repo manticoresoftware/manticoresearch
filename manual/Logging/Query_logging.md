@@ -1,4 +1,4 @@
-# Query logging 
+# Query logging
 
 
 Query logging can be enabled by setting `query_log` directive in searchd section of the configuration file
@@ -10,7 +10,7 @@ searchd {
 ...
 }
 ```
-Queries can also be sent to syslog by setting `syslog` instead of a file path. 
+Queries can also be sent to syslog by setting `syslog` instead of a file path.
 
 In this case all search queries will be sent to syslog daemon with `LOG_INFO` priority, prefixed with `[query]` instead of timestamp. Only `plain` log format is supported for syslog.
 
@@ -21,7 +21,7 @@ Two query log formats are supported. Plain text format is still the default one.
 
 The default text format is also harder (and sometimes impossible) to replay for benchmarking purposes. The `sphinxql` format alleviates that. It aims to be complete and re-playable, even though at the cost of brevity and readability.
 
-### Plain log format 
+### Plain log format
 
 
 By default, `searchd` logs all successfully executed search queries into a query log file. Here's an example:
@@ -33,7 +33,7 @@ By default, `searchd` logs all successfully executed search queries into a query
 
 This log format is as follows:
 
-```sql
+```
 [query-date] real-time wall-time [match-mode/filters-count/sort-mode total-matches (offset,limit) @groupby-attr] [index-name] query
 ```
 
@@ -49,7 +49,7 @@ Match mode can take one of the following values:
 *   "ext" for `SPH_MATCH_EXTENDED` mode;
 *   "ext2" for `SPH_MATCH_EXTENDED2` mode;
 *   "scan" if the full scan mode was used, either by being specified with `SPH_MATCH_FULLSCAN`
-    
+
 Sort mode can take one of the following values:
 
 *   "rel" for `SPH_SORT_RELEVANCE` mode;
@@ -60,17 +60,27 @@ Sort mode can take one of the following values:
 
 Note: the SPH* modes are specific to  SphinxAPI legacy interface. SQL and HTTP interface will log in most cases ext2 for matching mode and ext and rel for sorting modes.
 
-Additionally, if `searchd` was started with `--iostats`, there will be a block of data after where the index(es) searched are listed.
+If Manticore was started with `--iostats` (ot it was enabled via `SET GLOBAL iostats=1`) the corresponding metrics will be included in the log. Then a query log entry might take the form of:
 
-A query log entry might take the form of:
-
-```sql
-[Fri Jun 29 21:17:58 2007] 0.004 sec [all/0/rel 35254 (0,20)] [lj] [ios=6 kb=111.1 ms=0.5] test
+```
+[Fri Jun 29 21:17:58 2021] 0.004 sec [all/0/rel 35254 (0,20)] [lj] [ios=6 kb=111.1 ms=0.5] test
 ```
 
-This additional block is information regarding I/O operations in performing the search: the number of file I/O operations carried out, the amount of data in kilobytes read from the index files and time spent on I/O operations (although there is a background processing component, the bulk of this time is the I/O operation time).
+where:
+* ios - the number of file I/O operations carried out
+* kb - amount of data in kilobytes read from the index files
+* ioms - time spent on I/O operations
 
-### SQL log format 
+
+If Manticore was started with `--cpustats` (ot it was enabled via `SET GLOBAL cpustats=1`) metric `cpums` will be included in the log. The query log will then look like this:
+
+```
+[Fri Jun 29 21:17:58 2021] 0.004 sec [all/0/rel 35254 (0,20)] [lj] [ios=6 kb=111.1 ms=0.5 cpums=0.3] test
+```
+
+where `cpums` is time in milliseconds spent on CPU processing the query.
+
+### SQL log format
 
 SQL format can be enabled by searchd directive `query_log_format`:
 
@@ -109,7 +119,7 @@ Every request (including both SphinxAPI and SQL) request must result in exactly 
 
 ## Logging only slow queries
 
-By default all queries are logged. If it's desired to log only queries with execution times that exceed the specified 
+By default all queries are logged. If it's desired to log only queries with execution times that exceed the specified
 limit, the `query_log_min_msec` directive can be used:
 
  ```ini

@@ -12,7 +12,7 @@ The easiest way to install Manticore in RedHat/Centos is by using our YUM reposi
 
 Install the repository:
 ```bash
-sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
+sudo yum install http://repo.manticoresearch.com/manticore-repo.noarch.rpm
 ```
 
 Then install Manticore Search:
@@ -25,7 +25,7 @@ sudo yum install manticore manticore-columnar-lib
 If you prefer "Nightly" (development) versions do:
 
 ```bash
-sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
+sudo yum install http://repo.manticoresearch.com/manticore-repo.noarch.rpm
 sudo yum --enablerepo manticore-dev install manticore manticore-columnar-lib
 ```
 
@@ -55,7 +55,7 @@ Here's how to install Python 3.9 and the Ukrainian lemmatizer in Centos 7/8:
 
 ```bash
 # install Manticore Search and UK lemmatizer from YUM repository
-yum -y install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
+yum -y install http://repo.manticoresearch.com/manticore-repo.noarch.rpm
 yum -y install manticore manticore-lemmatizer-uk
 
 # install packages needed for building Python

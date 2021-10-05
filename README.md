@@ -5,7 +5,7 @@
 </p>
 
 <h1 align="center">
-  Manticore Search 3.6.1 (release candidate)
+  Manticore Search 4.0.2
 </h1>
 
 <h3 align="center">
@@ -126,7 +126,6 @@ sudo yum install manticore manticore-columnar-lib
 
 ### APT repo for Ubuntu/Debian/Mint
 ```
-wget -qO - https://repo.manticoresearch.com/GPG-KEY-manticore | sudo apt-key add -
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
 sudo dpkg -i manticore-repo.noarch.deb
 sudo apt update

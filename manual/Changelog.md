@@ -1,6 +1,6 @@
 # Changelog
 
-## Version 4.0.2, Sep ??? 2021
+## Version 4.0.2, Sep 21 2021
 
 ### Major new features
 - **Full support of [Manticore Columnar Library](https://github.com/manticoresoftware/columnar)**. Previously Manticore Columnar Library was supported only for plain indexes. Now it's supported:
@@ -8,7 +8,7 @@
   - in replication
   - in `ALTER`
   - in `indextool --check`
-- **Automatic indexes compaction** ([#478](https://github.com/manticoresoftware/manticoresearch/issues/478)). Finally you don't have to call OPTIMIZE manually or via a crontask or other kind of automation. Manticore now does it on your own.
+- **Automatic indexes compaction** ([#478](https://github.com/manticoresoftware/manticoresearch/issues/478)). Finally you don't have to call OPTIMIZE manually or via a crontask or other kind of automation. Manticore now does it on your own. You can set default compaction threshold via [optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff).
 - **Chunk snapshots and locks system revamp**. These changes may be invisible from outside at first glance, but they improve the behaviour of many things happening in real-time indexes significantly. In a nutshell, previously most Manticore data manipulation operations relied on locks heavily, now we use disk chunk snapshots instead.
 
   <details>
@@ -23,8 +23,8 @@
 
   </details>
 
-- **[ALTER](Updating_index_schema.md) can add/remove a full-text field**. Previously it could only add/remove an attribute.
-- **Experimental: pseudo sharding for full-scan queries** - allows to parallelize any non-full-text search query. Instead of preparing shards manually you can now just enable new option [searchd.pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) and expect up to `CPU cores` lower response time for non-full-text search queries.
+- **[ALTER](Updating_index_schema.md) can add/remove a full-text field** (in RT mode). Previously it could only add/remove an attribute.
+- 🔬 **Experimental: pseudo-sharding for full-scan queries** - allows to parallelize any non-full-text search query. Instead of preparing shards manually you can now just enable new option [searchd.pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) and expect up to `CPU cores` lower response time for non-full-text search queries. Note it can easily occupy all existing CPU cores, so if you care not only about latency, but throughput too - use it with caution.
 
 ### Minor changes
 <!-- example -->
@@ -61,6 +61,7 @@ sys     0m0.001s
 - [#621](https://github.com/manticoresoftware/manticoresearch/issues/621) - expose errors from RE2
 - more accurate [COUNT(DISTINCT)](Searching/Grouping.md#COUNT%28DISTINCT-field%29) for distributed indexes consisting of local plain indexes
 - [FACET DISTINCT](Searching/Faceted_search.md#Faceting-without-duplicates) to remove duplicates when you do faceted search
+- [exact form modifier](Searching/Full_text_matching/Operators.md#Exact-form-modifier) doesn't require [morphology](Creating_an_index/NLP_and_tokenization/Morphology.md#morphology) now and works for indexes with [infix/prefix](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#Wildcard-searching-settings) search enabled
 
 ### Breaking changes
 - the new version can read older indexes, but the older versions can't read Manticore 4's indexes
@@ -69,6 +70,7 @@ sys     0m0.001s
 - `OPTIMIZE` happens automatically. If you don't need it make sure to set `auto_optimize=0` in section `searchd` in the configuration file
 - [#616](https://github.com/manticoresoftware/manticoresearch/issues/616) `ondisk_attrs_default` were deprecated, now they are removed
 - for contributors: we now use Clang compiler for Linux builds as according to our tests it can build a faster Manticore Search and Manticore Columnar Library
+- if [max_matches](Searching/Options.md#max_matches) is not specified in a search query it gets updated implicitly with the lowest needed value for the sake of performance of the new columnar storage. It can affect metric `total` in [SHOW META](Profiling_and_monitoring/SHOW_META.md#SHOW-META), but not `total_found` which is the actual number of found documents.
 
 ### Migration from Manticore 3
 - make sure you a stop Manticore 3 cleanly:

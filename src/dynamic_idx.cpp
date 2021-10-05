@@ -153,7 +153,7 @@ public:
 			return false;
 		}
 
-		CoYield();
+		Coro::Yield_();
 		return true;
 	}
 
@@ -314,7 +314,7 @@ public:
 	// sends collected data, then reset
 	bool Commit() override
 	{
-		CoYield ();
+		Coro::Yield_ ();
 		return m_bHaveMoreMatches; // true for continue iteration, false to stop
 	}
 
@@ -323,7 +323,7 @@ public:
 	{
 		m_bHaveMoreMatches = false;
 		m_pMatch = nullptr; // that should stop any further feeding
-		CoYield (); // generally not need as eof is usually the last stmt, but if not it is safe
+		Coro::Yield_ (); // generally not need as eof is usually the last stmt, but if not it is safe
 	}
 
 	void Error ( const char * sStmt, const char * sError, MysqlErrors_e ) override
@@ -440,7 +440,7 @@ public:
 		}
 		PutString ( 3, "" );
 
-		CoYield ();
+		Coro::Yield_ ();
 	}
 
 	bool HeadEnd ( bool bMoreResults, int iWarns ) override
@@ -454,7 +454,7 @@ public:
 		// fixme!
 		m_bHaveMoreMatches = false;
 		m_pMatch = nullptr; // that should stop any further feeding
-		CoYield();
+		Coro::Yield_ ();
 		return false;
 	}
 

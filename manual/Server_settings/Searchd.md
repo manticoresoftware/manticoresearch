@@ -337,7 +337,7 @@ Hostnames renew strategy. By default, IP addresses of agent host names are cache
 
 Defines how many "jobs" can be in the queue at the same time. Unlimited by default.
 
-In most cases "job" means one query to a single local index (plain index or a disk chunk of a real-time index), i.e. if you have a distributed index consisting of 2 local indexes or a real-time index which has 2 disk chunks a search query to either of them will mostly put 2 jobs to the queue and then the thread pool whose size is defined by [threads](../Server_settings/Searchd.md#threads) will process them, but in some cases if the query is too complex more jobs can be created. Changing this setting recommended when [max_connections](../Server_settings/Searchd.md#max_connections) and [thread](../Server_settings/Searchd.md#threads) are not enough to find a balance between the desired performance and load on the server.
+In most cases "job" means one query to a single local index (plain index or a disk chunk of a real-time index), i.e. if you have a distributed index consisting of 2 local indexes or a real-time index which has 2 disk chunks a search query to either of them will mostly put 2 jobs to the queue and then the thread pool whose size is defined by [threads](../Server_settings/Searchd.md#threads) will process them, but in some cases if the query is too complex more jobs can be created. Changing this setting is recommended when [max_connections](../Server_settings/Searchd.md#max_connections) and [threads](../Server_settings/Searchd.md#threads) are not enough to find a balance between the desired performance and load on the server.
 
 ### listen_backlog
 
@@ -696,13 +696,27 @@ not_terms_only_allowed = 1
 ```
 <!-- end -->
 
+### optimize_cutoff
+
+<!-- example conf optimize_cutoff -->
+Sets default index compaction threshold. Read more here - [Number of optimized disk chunks](../Securing_and_compacting_an_index/Compacting_an_index.md#Number-of-optimized-disk-chunks). Can be overridden with per-query option [cutoff](../Securing_and_compacting_an_index/Compacting_an_index.md#Number-of-optimized-disk-chunks). Can be changed dynamically via [SET GLOBAL](../Server_settings/Setting_variables_online.md#SET).
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+optimize_cutoff = 4
+```
+<!-- end -->
+
 ### persistent_connections_limit
 
 <!-- example conf persistent_connections_limit -->
-The maximum # of simultaneous persistent connections to remote [persistent agents](../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md). Each time connecting agent defined under 'agent_persistent' we try to reuse xisting connection (if any), or connect and save the connection for the future. However we can't hold unlimited # of such persistent connections, since each one holds a worker on agent size (and finally we'll receive the 'maxed out' error, when all of them are busy). This very directive limits the number. It affects the num of connections to each agent's host, across all distributed indexes.
+The maximum # of simultaneous persistent connections to remote [persistent agents](../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md). Each time connecting an agent defined under `agent_persistent` we try to reuse existing connection (if any), or connect and save the connection for the future. However in some cases it makes sense to limit # of such persistent connections. This directive defines the number. It affects the number of connections to each agent's host across all distributed indexes.
 
-It is reasonable to set the value equal or less than [max_connections](../Server_settings/Searchd.md#max_connections) option of the agents.
-
+It is reasonable to set the value equal or less than [max_connections](../Server_settings/Searchd.md#max_connections) option of the agent's config.
 
 <!-- intro -->
 ##### Example:
@@ -806,7 +820,7 @@ preopen_indexes = 1
 ### pseudo_sharding
 
 <!-- example conf pseudo_sharding -->
-Enables pseudo sharding for non-full-text search queries. Any query which does sorting, grouping or filtering by attributes (non full-text fields) will be automatically parallelized to up to `searchd.threads` # of threads.
+Enables pseudo-sharding for non-full-text search queries. Any query which does sorting, grouping or filtering by attributes (non full-text fields) will be automatically parallelized to up to `searchd.threads` # of threads.
 
 Disabled by default.
 

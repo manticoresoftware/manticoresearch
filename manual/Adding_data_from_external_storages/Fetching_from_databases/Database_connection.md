@@ -1,6 +1,6 @@
 # Database connection
 
-The source definition must contain the settings of the connection, this includes the host,port, user credentials or specific settings of a driver. 
+The source definition must contain the settings of the connection, this includes the host,port, user credentials or specific settings of a driver.
 
 ## sql_host
 
@@ -37,7 +37,7 @@ sql_sock = /var/lib/mysql/mysql.sock
 
 #### mysql_connect_flags
 
-MySQL client connection flags. Optional, default value is 0 (do not set any flags). 
+MySQL client connection flags. Optional, default value is 0 (do not set any flags).
 
 This option must contain an integer value with the sum of the flags. The value will be passed to mysql_real_connect() verbatim. The flags are enumerated in mysql_com.h include file. Flags that are especially interesting in regard to indexing, with their respective values, are as follows:
 
@@ -63,10 +63,10 @@ mysql_connect_flags = 32 # enable compression
 unpack_mysqlcompress_maxsize = 1M
 ```
 
-Columns to unpack using MySQL `UNCOMPRESS()` algorithm. Multi-value, optional, default value is empty list of columns. 
+Columns to unpack using MySQL `UNCOMPRESS()` algorithm. Multi-value, optional, default value is empty list of columns.
 
 Columns specified using this directive will be unpacked by indexer using modified zlib algorithm used by MySQL `COMPRESS()` and `UNCOMPRESS()` functions. When indexing on a different box than the database, this lets you offload the database, and save on network traffic. The feature is only available if zlib and zlib-devel were both available during build time.
- 
+
 ```ini
 unpack_mysqlcompress = body_compressed
 unpack_mysqlcompress = description_compressed
@@ -83,13 +83,13 @@ unpack_zlib = col1
 unpack_zlib = col2
 ```
 
-Columns to unpack using zlib (aka deflate, aka gunzip). Multi-value, optional, default value is empty list of columns. Applies to SQL source types (`mysql`, `pgsql`, `mssql`) only.
+Columns to unpack using zlib (aka deflate, aka gunzip). Multi-value, optional, default value is empty list of columns. Applies to source type `mysql` only.
 
 Columns specified using this directive will be unpacked by `indexer` using standard zlib algorithm (called deflate and also implemented by `gunzip`). When indexing on a different box than the database, this lets you offload the database, and save on network traffic. The feature is only available if zlib and zlib-devel were both available during build time.
 
 ### MSSQL
 
-MS SQL Windows authentication flag. Whether to use currently logged in Windows account credentials for authentication when connecting to MS SQL Server. 
+MS SQL Windows authentication flag. Whether to use currently logged in Windows account credentials for authentication when connecting to MS SQL Server.
 
 ```ini
 mssql_winauth = 1

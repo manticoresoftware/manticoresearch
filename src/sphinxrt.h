@@ -209,7 +209,7 @@ struct RtSegment_t final : IndexSegment_c, ISphRefcountedMT
 {
 public:
 	mutable int						m_iLocked = 0;	// if segment currently used in an op
-	mutable Threads::CoroRWLock_c	m_tLock;		// fine-grain lock
+	mutable Threads::Coro::RWLock_c	m_tLock;		// fine-grain lock
 
 	CSphTightVector<BYTE>			m_dWords;
 	CSphVector<RtWordCheckpoint_t>	m_dWordCheckpoints;
@@ -408,6 +408,7 @@ volatile bool &RTChangesAllowed () noexcept;
 
 // Get global flag of autooptimize
 volatile int & AutoOptimizeCutoffMultiplier() noexcept;
+volatile int & AutoOptimizeCutoff() noexcept;
 
 using EnqueueForOptimizeFnPtr = void (*) ( CSphString , OptimizeTask_t );
 volatile EnqueueForOptimizeFnPtr& EnqueueForOptimizeExecutor() noexcept;

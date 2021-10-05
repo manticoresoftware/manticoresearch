@@ -117,8 +117,8 @@ public:
 
 	virtual int			GetMatchCapacity() const = 0;
 
-	virtual RowID_t		GetJustPushed() const = 0;
-	virtual VecTraits_T<RowID_t> GetJustPopped() const = 0;
+	virtual RowTagged_t					GetJustPushed() const = 0;
+	virtual VecTraits_T<RowTagged_t>	GetJustPopped() const = 0;
 };
 
 

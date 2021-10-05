@@ -6,14 +6,13 @@ On MacOS Manticore can be installed in two ways:
 
 Bottles are available for:
 
-* MacOS High Sierra
-* MacOS Mojave
+* MacOS Big Sur
 * MacOS Catalina
 
 On older versions of MacOS it will attempt to compile from sources automatically.
 
 ```bash
-brew install manticoresearch
+brew install manticoresoftware/manticore/manticoresearch
 ```
 
 For [indexing](../Creating_an_index/Local_indexes/Plain_index.md) the additional dependencies that can be installed using brew are `mysql@5.7`, `libpq`, `unixodbc`.
@@ -24,7 +23,7 @@ Afterwards you can start Manticore as a brew service:
 brew services start manticoresearch
 ```
 
-The configuration is located at `/usr/local/etc/manticore/manticore.conf`.
+The configuration is located at `/usr/local/etc/manticoresearch/manticore.conf`.
 
 ## From tarball with binaries
 

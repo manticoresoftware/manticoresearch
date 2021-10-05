@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test>
+
+<name>bigint timestamp</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	grouping_in_utc = 1
+}
+
+
+source src_bigint
+{
+    type			= mysql
+    <sql_settings/>
+    sql_query		= SELECT * FROM test_table_bigint
+    sql_attr_bigint	= tm
+}
+
+
+index idx_bigint
+{
+    source			= src_bigint
+    path			= <data_path/>/main_bigint
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT * FROM test_table
+	sql_attr_uint = aa
+}
+
+index test
+{
+	source	= test
+	path	= <data_path/>/test
+}
+</config>
+
+<queries>
+	<sphinxql>
+	<!-- check for bigint values -->
+
+	set global grouping_in_utc=0;
+	show variables like 'grouping%';
+	select id, year(tm) d from idx_bigint where match('aaaa') group by d WITHIN GROUP order by id desc order by id desc;
+
+	<!-- check whether settings works at all -->
+	set global grouping_in_utc=1;
+	show variables like 'grouping_in_utc';
+	<!-- check again -->
+	select tm, day(tm) d from idx_bigint where match('aaaa') group by d WITHIN GROUP order by id desc order by id desc;
+	select tm, month(tm) d from idx_bigint where match('aaaa') group by d WITHIN GROUP order by id desc order by id desc;
+	select tm, year(tm) d from idx_bigint where match('aaaa') group by d WITHIN GROUP order by id desc order by id desc;
+	select tm, yearmonth(tm) d from idx_bigint where match('aaaa') group by d WITHIN GROUP order by id desc order by id desc;
+	select tm, yearmonthday(tm) d from idx_bigint where match('aaaa') group by d WITHIN GROUP order by id desc order by id desc;
+    
+	<!-- BIGINT() for time functions -->
+	SELECT year(22496904880);
+	<!-- check BIGINT for day, month, year, yearmonth(), yearmonthday() and crash on localtime overflow -->
+	select id, 22496904880 + (id*500000000) as a, yearmonthday(a), yearmonth(a), year(a), month(a), day(a) from test;
+	</sphinxql>
+    
+</queries>
+
+<db_create>
+CREATE TABLE test_table_bigint
+(
+	id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL,
+	tm BIGINT NOT NULL,
+	title TEXT NOT NULL
+) ENGINE=MYISAM
+</db_create>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INT NOT NULL,
+	aa INT NOT NULL,
+	title VARCHAR(255) NOT NULL
+);
+</db_create>
+
+<db_insert>
+	<repeat count="24" vars="stamp" init="22500115200">
+		<var name="vals"/>
+		<repeat count="89" vars="stamp" inc="3600"><var name="vals" delimiter=",">(0,<stamp/>,'aaaa')</var></repeat>
+		INSERT INTO test_table_bigint VALUES <vals/><db_insert/></repeat>
+</db_insert>
+<db_insert>
+INSERT INTO test_table ( id, aa, title ) VALUES
+( 1, 2, 'dummy' ),
+( 10, 3, 'ohai' ),
+( 11, 4, 'ohai2' )
+</db_insert>
+
+<db_drop>DROP TABLE IF EXISTS test_table_bigint</db_drop>
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+
+</test>

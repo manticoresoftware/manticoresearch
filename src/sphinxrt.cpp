@@ -71,7 +71,7 @@ using namespace Threads;
 #define LOG_LEVEL_RTDIAGV false
 #define LOG_LEVEL_RTDIAGVV false
 #define LOG_LEVEL_DEBUGV false
-#define LOG_COMPONENT_RTSEG __LINE__ << " " << CoCurrentScheduler()->Name() << " "
+#define LOG_COMPONENT_RTSEG __LINE__ << " " << Coro::CurrentScheduler()->Name() << " "
 
 #define RTRLOG LOGINFO ( RTRDIAG, RTSEG )
 #define RTDLOG LOGINFO ( RTDDIAG, RTSEG )
@@ -101,9 +101,10 @@ volatile int &AutoOptimizeCutoffMultiplier() noexcept
 	return iAutoOptimizeCutoffMultiplier;
 }
 
-static int GetDefaultCutoff()
+volatile int &AutoOptimizeCutoff() noexcept
 {
-	return sphCpuThreadsCount() * 2;
+	static int iAutoOptimizeCutoff = sphCpuThreadsCount() * 2;
+	return iAutoOptimizeCutoff;
 }
 
 volatile EnqueueForOptimizeFnPtr& EnqueueForOptimizeExecutor() noexcept
@@ -830,7 +831,7 @@ public:
 
 	mutable std::atomic<bool>			m_bOptimizing { false };	// to protect from simultaneous optimizing one and same chunk
 	mutable bool						m_bFinallyUnlink = false; // unlink index files on destroy
-	mutable Threads::CoroRWLock_c 		m_tLock;        // fine-grain lock
+	mutable Threads::Coro::RWLock_c 		m_tLock;        // fine-grain lock
 };
 
 using DiskChunkRefPtr_t = CSphRefcountedPtr<DiskChunk_c>;
@@ -901,7 +902,7 @@ public:
 			if ( m_dFibers[iIdx].m_sName.IsEmpty () )
 				m_dFibers[iIdx].m_sName.SetSprintf ( "FP_%d", iIdx );
 
-			tSched = MakeAloneScheduler ( CoCurrentScheduler (), m_dFibers[iIdx].m_sName.cstr () );
+			tSched = MakeAloneScheduler ( Coro::CurrentScheduler (), m_dFibers[iIdx].m_sName.cstr () );
 		}
 		return tSched;
 	}
@@ -938,10 +939,10 @@ public:
 	void InitWorkers()
 	{
 		if ( !m_tSelectorGuard )
-			m_tSelectorGuard = MakeAloneScheduler ( CoCurrentScheduler(), "serial");
+			m_tSelectorGuard = MakeAloneScheduler ( Coro::CurrentScheduler(), "serial");
 
 		if ( !m_tSegmentMerger )
-			m_tSegmentMerger = MakeAloneScheduler ( CoCurrentScheduler (), "merger" );
+			m_tSegmentMerger = MakeAloneScheduler ( Coro::CurrentScheduler (), "merger" );
 	}
 
 	int MakeChunkId ()
@@ -1103,7 +1104,7 @@ public:
 template<typename INT>
 class Waitable_T
 {
-	using EVENT = Threads::CoroMultiEvent_c;
+	using EVENT = Threads::Coro::MultiEvent_c;
 	EVENT m_tWaitableChanged;
 	std::atomic<INT> m_iValue {0};
 
@@ -3061,7 +3062,7 @@ int RtIndex_c::ApplyKillList ( const CSphVector<DocID_t> & dAccKlist )
 	if ( dAccKlist.IsEmpty() )
 		return 0;
 
-	assert ( CoCurrentScheduler() == m_tRtChunks.SerialChunkAccess() );
+	assert ( Coro::CurrentScheduler() == m_tRtChunks.SerialChunkAccess() );
 
 	int iKilled = 0;
 	auto pChunks = m_tRtChunks.DiskChunks();
@@ -3175,7 +3176,7 @@ void RtIndex_c::StartMergeSegments ( bool bHasNewSegment )
 	RTLOGV << "StartMergeSegments(" << (bHasNewSegment?"with new":"no new") << ")";
 
 	// all the rest is postponed and will be executed aside of caller.
-	CoGo ( [this, bHasNewSegment]
+	Coro::Go ( [this, bHasNewSegment]
 	{
 		Threads::CheckRole_c _ ( m_tRtChunks.SerialChunkAccess () );
 
@@ -3253,7 +3254,7 @@ void RtIndex_c::StartMergeSegments ( bool bHasNewSegment )
 
 		// merged might be killed during merge op
 		// as we run in serial fiber, there is no concurrency, and so, killing hooks of retired sources will not fire.
-		assert ( CoCurrentScheduler() == m_tRtChunks.SerialChunkAccess() );
+		assert ( Coro::CurrentScheduler() == m_tRtChunks.SerialChunkAccess() );
 
 		if ( pMerged && !pMerged->m_tAliveRows.load ( std::memory_order_relaxed ) )
 			pMerged = nullptr;
@@ -4036,7 +4037,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced )
 	if ( m_eSaving.load(std::memory_order_relaxed) != WriteState_e::ENABLED ) // fixme! review, m.b. refactor
 		return true;
 
-	assert ( CoCurrentScheduler() == m_tRtChunks.SerialChunkAccess () );
+	assert ( Coro::CurrentScheduler() == m_tRtChunks.SerialChunkAccess () );
 
 	RTDLOG << "SaveDiskChunk( " << ( bForced ? "forced" : "not forced" ) << ")";
 
@@ -4083,7 +4084,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced )
 	{
 		// as separate subtask we 1-st flush segments to disk, and then load just flushed segment
 		// if forced, continue to work in the same fiber; otherwise split to merge fiber
-		ScopedScheduler_c tMergeFiber { bForced ? CoCurrentScheduler () : m_tRtChunks.MergeSegmentsWorker() };
+		ScopedScheduler_c tMergeFiber { bForced ? Coro::CurrentScheduler () : m_tRtChunks.MergeSegmentsWorker() };
 		tmSave = -sphMicroTimer();
 		SaveDiskData ( sChunk.cstr (), dSegments, tStats );
 		// fixme! process errors.
@@ -6535,14 +6536,14 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 
 	std::atomic<bool> bInterrupt {false};
 	std::atomic<int32_t> iCurChunk { iJobs-1 };
-	CoExecuteN ( tClonableCtx.Concurrency ( iJobs ), [&]
+	Coro::ExecuteN ( tClonableCtx.Concurrency ( iJobs ), [&]
 	{
 		auto iChunk = iCurChunk.fetch_sub ( 1, std::memory_order_acq_rel );
 		if ( iChunk<0 || bInterrupt )
 			return; // already nothing to do, early finish.
 
-		auto tCtx = tClonableCtx.CloneNewContext();
-		Threads::CoThrottler_c tThrottler ( session::ThrottlingPeriodMS () );
+		auto tCtx = tClonableCtx.CloneNewContext ( &iChunk );
+		Threads::Coro::Throttler_c tThrottler ( session::ThrottlingPeriodMS () );
 		int iTick=1; // num of times coro rescheduled by throttler
 		while ( !bInterrupt ) // some earlier job met error; abort.
 		{
@@ -6569,7 +6570,9 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 			bInterrupt = !tGuard.m_dDiskChunks[iChunk]->Cidx().MultiQuery ( tChunkResult, tQuery, dLocalSorters, tMultiArgs );
 
 			// check terms inconsistency among disk chunks
-			tCtx.m_tMeta.MergeWordStats ( tChunkMeta );
+			tThMeta.MergeWordStats ( tChunkMeta );
+
+			tThMeta.m_bHasPrediction |= tChunkMeta.m_bHasPrediction;
 
 			tSSTransform.Set ( iChunk, tChunkResult );
 
@@ -6829,6 +6832,11 @@ static void PerformFullTextSearch ( const RtSegVec_c & dRamChunks, RtQwordSetup_
 		if ( tCtx.m_pFilter )
 			tCtx.m_pFilter->SetColumnar(pColumnar);
 
+		// storing segment in matches tag for finding strings attrs offset later, biased against default zero
+		int iTag = iSeg+1;
+		if ( tCtx.m_uPackedFactorFlags & SPH_FACTOR_ENABLE )
+			pRanker->ExtraData ( EXTRA_SET_MATCHTAG, (void**)&iTag );
+
 		pRanker->ExtraData ( EXTRA_SET_BLOBPOOL, (void**)&pBlobPool );
 
 		CSphMatch * pMatch = pRanker->GetMatchesBuffer();
@@ -6859,7 +6867,7 @@ static void PerformFullTextSearch ( const RtSegVec_c & dRamChunks, RtQwordSetup_
 				}
 
 				// storing segment in matches tag for finding strings attrs offset later, biased against default zero
-				tMatch.m_iTag = iSeg+1;
+				tMatch.m_iTag = iTag;
 
 				bool bNewMatch = false;
 				for ( auto* pSorter : dSorters )
@@ -6868,8 +6876,8 @@ static void PerformFullTextSearch ( const RtSegVec_c & dRamChunks, RtQwordSetup_
 
 					if ( tCtx.m_uPackedFactorFlags & SPH_FACTOR_ENABLE )
 					{
-						RowID_t tJustPushed = pSorter->GetJustPushed();
-						VecTraits_T<RowID_t> dJustPopped = pSorter->GetJustPopped();
+						RowTagged_t tJustPushed = pSorter->GetJustPushed();
+						VecTraits_T<RowTagged_t> dJustPopped = pSorter->GetJustPopped();
 						pRanker->ExtraData ( EXTRA_SET_MATCHPUSHED, (void**)&tJustPushed );
 						pRanker->ExtraData ( EXTRA_SET_MATCHPOPPED, (void**)&dJustPopped );
 					}
@@ -6899,7 +6907,7 @@ static bool DoFullTextSearch ( const RtSegVec_c & dRamChunks, const ISphSchema &
 	// set zonespanlist settings
 	tParsed.m_bNeedSZlist = tQuery.m_bZSlist;
 
-	return Threads::CoContinueBool ( iStackNeed, [&] {
+	return Threads::Coro::ContinueBool ( iStackNeed, [&] {
 
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
@@ -9017,7 +9025,7 @@ void RtIndex_c::Optimize ( OptimizeTask_t tTask )
 	{
 	case OptimizeTask_t::eMerge: case OptimizeTask_t::eDrop: case OptimizeTask_t::eCompress: case OptimizeTask_t::eSplit:
 		{
-			auto fnCoro = MakeCoroExecutor ( [this, &tTask]() { CoYield(); } ); // once yield - return tTask. Then end of the function - return false, finish optimize.
+			auto fnCoro = MakeCoroExecutor ( [this, &tTask]() { Coro::Yield_(); } ); // once yield - return tTask. Then end of the function - return false, finish optimize.
 			CommonMerge ( [&fnCoro, &tTask] ( OptimizeTask_t& tRes ) -> bool {
 				bool bRes = !fnCoro();
 				tRes = tTask;
@@ -9048,7 +9056,7 @@ void RtIndex_c::Optimize ( OptimizeTask_t tTask )
 	auto fnCoro = MakeCoroExecutor ( [this,&tTask]() {
 	int iCutoff = tTask.m_iCutoff;
 	if ( !iCutoff )
-		iCutoff = GetDefaultCutoff();
+		iCutoff = AutoOptimizeCutoff();
 
 	while ( true )
 	{
@@ -9065,7 +9073,7 @@ void RtIndex_c::Optimize ( OptimizeTask_t tTask )
 			RTDLOG << "Optimize: drop chunk " << chA.m_iId;
 			tTask.m_iFrom = chA.m_iId;
 			tTask.m_eVerb = OptimizeTask_t::eDrop;
-			CoYield();
+			Coro::Yield_();
 			continue;
 		}
 
@@ -9086,7 +9094,7 @@ void RtIndex_c::Optimize ( OptimizeTask_t tTask )
 		tTask.m_iFrom = chA.m_iId;
 		tTask.m_iTo = chB.m_iId;
 		tTask.m_eVerb = OptimizeTask_t::eMerge;
-		CoYield();
+		Coro::Yield_();
 	}
 
 	RTDLOG << "Optimize: start compressing pass for the rest of " << m_tRtChunks.GetDiskChunksCount() << " chunks.";
@@ -9096,7 +9104,7 @@ void RtIndex_c::Optimize ( OptimizeTask_t tTask )
 		tTask.m_iFrom = ChunkIDByChunkIdx ( i );
 		tTask.m_eVerb = OptimizeTask_t::eCompress;
 		RTDLOG << "Optimize: compress chunk " << tTask.m_iFrom << " (" << i << ")";
-		CoYield();
+		Coro::Yield_();
 	}
 	});
 
@@ -9116,7 +9124,7 @@ void RtIndex_c::ClassicOptimize ()
 			tTask.m_iFrom = ChunkIDByChunkIdx ( 0 );
 			tTask.m_iTo = ChunkIDByChunkIdx ( 1 );
 			tTask.m_eVerb = OptimizeTask_t::eMerge;
-			CoYield();
+			Coro::Yield_();
 		}
 	});
 
@@ -9134,7 +9142,7 @@ void RtIndex_c::CheckStartAutoOptimize()
 	if ( !iCutoff )
 		return;
 
-	iCutoff *= GetDefaultCutoff();
+	iCutoff *= AutoOptimizeCutoff();
 
 	if ( m_tRtChunks.GetDiskChunksCount()<=iCutoff )
 		return;

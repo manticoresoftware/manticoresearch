@@ -1101,49 +1101,6 @@ public:
 	}
 };
 
-template<typename INT>
-class Waitable_T
-{
-	using EVENT = Threads::Coro::MultiEvent_c;
-	EVENT m_tWaitableChanged;
-	std::atomic<INT> m_iValue {0};
-
-public:
-	Waitable_T() = default;
-	Waitable_T(Waitable_T&) = delete;
-	Waitable_T& operator= (const Waitable_T&) = delete;
-
-	void Inc()
-	{
-		m_iValue.fetch_add ( 1, std::memory_order_relaxed );
-		m_tWaitableChanged.SetEvent();
-	}
-
-	void Dec()
-	{
-		m_iValue.fetch_sub ( 1, std::memory_order_relaxed );
-		m_tWaitableChanged.SetEvent();
-	}
-
-	void SetValue ( INT iValue )
-	{
-		m_iValue.store ( iValue, std::memory_order_relaxed );
-		m_tWaitableChanged.SetEvent();
-	}
-
-	INT GetValue () const
-	{
-		return m_iValue.load ( std::memory_order_relaxed );
-	}
-
-	template<typename PRED>
-	void WaitFor ( PRED&& fnPred )
-	{
-		while ( !fnPred ( m_iValue.load ( std::memory_order_relaxed ) ) )
-			m_tWaitableChanged.WaitEvent();
-	}
-};
-
 CSphVector<int> GetChunkIds ( const VecTraits_T<DiskChunkRefPtr_t> & dChunks )
 {
 	CSphVector<int> dIds;
@@ -1293,7 +1250,7 @@ private:
 	std::atomic<int64_t>		m_iRamChunksAllocatedRAM { 0 };
 
 	std::atomic<bool>			m_bOptimizeStop { false };
-	Waitable_T<int>				m_tOptimizeRuns;
+	Threads::Coro::Waitable_T<int>	m_tOptimizeRuns {0};
 	friend class OptimizeGuard_c;
 
 	int64_t						m_iSoftRamLimit;
@@ -8731,7 +8688,7 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID )
 void RtIndex_c::StopOptimize()
 {
 	m_bOptimizeStop.store ( true, std::memory_order_release );
-	m_tOptimizeRuns.WaitFor ( [] ( int i ) { return i <= 0; } );
+	m_tOptimizeRuns.Wait ( [] ( int i ) { return i <= 0; } );
 }
 
 void RtIndex_c::CommonMerge ( std::function<bool ( OptimizeTask_t& )>&& fnSelector )
@@ -8745,8 +8702,8 @@ void RtIndex_c::CommonMerge ( std::function<bool ( OptimizeTask_t& )>&& fnSelect
 	int iChunks = 0;
 
 	{
-		m_tOptimizeRuns.Inc();
-		auto tDeferDec = AtScopeExit ( [this] { m_tOptimizeRuns.Dec(); } );
+		m_tOptimizeRuns.ModifyValue ( [] ( int& i ) { ++i; } );
+		auto tDeferDec = AtScopeExit ( [this] { m_tOptimizeRuns.ModifyValueAndNotifyAll ( [] ( int& i ) { --i; } );} );
 
 		OptimizeTask_t tAction;
 		bool bBreak = false;

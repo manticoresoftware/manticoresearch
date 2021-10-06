@@ -932,7 +932,7 @@ void Mutex_c::Lock()
 
 void Mutex_c::Unlock()
 {
-	auto* pActiveWorker = Worker();
+	Debug (auto* pActiveWorker = Worker();)
 	boost::fibers::detail::spinlock_lock tLock { m_tWaitQueueSpinlock };
 	assert ( pActiveWorker == m_pOwner );
 	m_pOwner = nullptr;
@@ -958,7 +958,7 @@ void ConditionVariableAny_c::NotifyAll() noexcept
 // practice shows few numbers are more expressive than symbolic names in that case
 static constexpr DWORD ux01 = 1;			   // w-lock acquired
 static constexpr DWORD ux02 = 2;			   // r-lock bias
-static constexpr DWORD uxFE = ~ux01;		   // mask for w-lock flag (0xFFFFFFFE)
+Debug (static constexpr DWORD uxFE = ~ux01;)		   // mask for w-lock flag (0xFFFFFFFE)
 
 /* r-locking:
  * 1. reschedule until w-bit is zero

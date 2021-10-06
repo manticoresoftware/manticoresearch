@@ -57,6 +57,7 @@ using namespace Threads;
 
 #define RTDICT_CHECKPOINT_V5			48
 #define SPH_RT_DOUBLE_BUFFER_PERCENT	10
+constexpr int SIMULTANEOUS_SAVE_LIMIT			= 2; // how many save ops we allow a time
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -923,9 +924,9 @@ class RtData_c
 	mutable int					m_iMaxDiskChunkId = -1;
 	RoledSchedulerSharedPtr_t	m_tSelectorGuard;		// serialize changing chunks and segs vec
 	RoledSchedulerSharedPtr_t	m_tSegmentMerger;		// fiber for merging RAM segments. FiberID=-2 for now
+	RoledSchedulerSharedPtr_t	m_tChunkSaver;			// scheduler for disk manipulations.
 //	FiberPool_c					m_dFibers;				// helpers to serialize update/change tasks
 	std::atomic<int>			m_iNextOp {1};
-	std::atomic<int>			m_iSaveActive {0};
 
 	friend class RtWriter_c;
 
@@ -946,6 +947,9 @@ public:
 
 		if ( !m_tSegmentMerger )
 			m_tSegmentMerger = MakeAloneScheduler ( Coro::CurrentScheduler (), "merger" );
+
+		if ( !m_tChunkSaver )
+			m_tChunkSaver = WrapRawScheduler ( Coro::CurrentScheduler() );
 	}
 
 	int MakeChunkId ()
@@ -1020,22 +1024,17 @@ public:
 		return m_tSegmentMerger;
 	}
 
+	Threads::SchedRole SaveSegmentsWorker() const RETURN_CAPABILITY ( m_tChunkSaver )
+	{
+		return m_tChunkSaver;
+	}
+
 	inline int GetNextOpTicket ()
 	{
 		auto iRes = m_iNextOp.fetch_add ( 1, std::memory_order_relaxed );
 		if ( !iRes ) // zero tag has special meaning, skip it
 			iRes = m_iNextOp.fetch_add ( 1, std::memory_order_relaxed );
 		return iRes;
-	}
-
-	inline void SetSaveActive ( bool bSave )
-	{
-		m_iSaveActive.fetch_add ( bSave ? 1 : -1, std::memory_order_relaxed );
-	}
-
-	inline bool IsSaveActive() const
-	{
-		return !!m_iSaveActive.load ( std::memory_order_relaxed );
 	}
 };
 
@@ -1268,6 +1267,7 @@ private:
 	bool						m_bPathStripped = false;
 	RtData_c					m_tRtChunks;	// that is main set of disk chunks and RAM segments
 	bool						m_bSegMergeQueued GUARDED_BY ( m_tRtChunks.SerialChunkAccess() ) = false;
+	Coro::Waitable_T<CSphVector<int64_t>> m_tSaveTIDS { 0 }; // save operations performing now, and their TIDs
 	int							m_iLockFD = -1;
 
 	bool						m_bIndexDeleted = false;
@@ -3151,8 +3151,8 @@ void RtIndex_c::StartMergeSegments ( bool bHasNewSegment )
 			if ( !dSeg->m_iLocked )
 				dSegments.Add ( dSeg );
 
-		// fixme! Now is old naive way used: if no active save, limit to SoftRamLimit,
-		// if saving op is in progress - use limit 10% of SoftRamLimit (aka doubleBufferLimit).
+		// fixme! Now is old naive way used: if no active save, limit to RtMemLimit,
+		// if saving op is in progress - use limit SPH_RT_DOUBLE_BUFFER_PERCENT of RtMemLimit (aka doubleBufferLimit).
 		// todo: think about and m.b. implement another limits.
 
 		RTLOGV << "Totally we have " << m_tRtChunks.GetRamSegmentsCount() << " segments onboard.";
@@ -3160,7 +3160,7 @@ void RtIndex_c::StartMergeSegments ( bool bHasNewSegment )
 		std::pair<int,int> tSmallest;
 		CheckMerge_e eMergeAction { CheckMerge_e::NOMERGE };
 		if ( bHasNewSegment )
-			eMergeAction = CheckWeCanMerge ( tSmallest, dSegments, m_tRtChunks.IsSaveActive() ? m_iDoubleBufferLimit : m_iSoftRamLimit );
+			eMergeAction = CheckWeCanMerge ( tSmallest, dSegments, m_tSaveTIDS.GetValueRef().IsEmpty() ? m_iSoftRamLimit : m_iDoubleBufferLimit );
 
 		RTLOGV << "CheckWeCanMerge returned " << eMergeAction;
 
@@ -3968,6 +3968,7 @@ void RtIndex_c::SaveMeta()
 // looks like spinlock, but actually we switch to parallel strand and back on every tick, so it should not burn CPU
 void RtIndex_c::WaitRAMSegmentsUnlocked () const
 {
+	m_tSaveTIDS.WaitVoid ( [this] { return m_tSaveTIDS.GetValueRef().IsEmpty(); } );
 	while ( m_tRtChunks.RamSegs ()->any_of ( [] ( ConstRtSegmentRefPtf_t & a ) { return a->m_iLocked; } ) )
 		Threads::ScopedScheduler_c ( m_tRtChunks.MergeSegmentsWorker () );
 }
@@ -3990,6 +3991,8 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced )
 	if ( bForced )
 		WaitRAMSegmentsUnlocked ();
 
+	m_tSaveTIDS.WaitVoid ( [this] { return m_tSaveTIDS.GetValueRef().GetLength() < SIMULTANEOUS_SAVE_LIMIT; } );
+
 	// collect all non-occupied non-empty segments and lock them
 	KillAccum_t dKillOnSave;
 	LazyVector_T<ConstRtSegmentRefPtf_t> dSegments;
@@ -4008,8 +4011,9 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced )
 	if ( dSegments.IsEmpty() )
 		return true;
 
-	m_tRtChunks.SetSaveActive ( true );
-	auto tFinallySetSaveUnactive = AtScopeExit ( [this] { m_tRtChunks.SetSaveActive ( false ); } );
+	auto iTID = m_iTID;
+	m_tSaveTIDS.ModifyValue ( [iTID] ( CSphVector<int64_t>& dSaves ) { dSaves.Add ( iTID ); } );
+	auto tFinallySetSaveUnactive = AtScopeExit ( [this, iTID] { m_tSaveTIDS.ModifyValueAndNotifyAll ( [iTID] ( CSphVector<int64_t>& dSaves ) { dSaves.RemoveValueFromSorted ( iTID ); } ); } );
 
 	int64_t tmSaveWall = -sphMicroTimer(); // all time including waiting
 	int64_t tmSave; // only active time
@@ -4020,12 +4024,12 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced )
 
 	// as we're going to switch fiber, we need to freeze reliable stat and m_iTID (as they could change)
 	ChunkStats_t tStats ( m_tStats, m_dFieldLensRam );
-	auto iTID = m_iTID;
+
 	CSphIndex * pNewChunk = nullptr;
 	{
 		// as separate subtask we 1-st flush segments to disk, and then load just flushed segment
 		// if forced, continue to work in the same fiber; otherwise split to merge fiber
-		ScopedScheduler_c tMergeFiber { bForced ? Coro::CurrentScheduler () : m_tRtChunks.MergeSegmentsWorker() };
+		ScopedScheduler_c tSaveFiber { bForced ? Coro::CurrentScheduler () : m_tRtChunks.SaveSegmentsWorker() };
 		tmSave = -sphMicroTimer();
 		SaveDiskData ( sChunk.cstr (), dSegments, tStats );
 		// fixme! process errors.
@@ -4080,6 +4084,11 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced )
 			dNewFieldLensDisk[i] = m_dFieldLensDisk[i] + tStats.m_dFieldLens[i];
 		}
 	}
+
+	// here is pickpoint: if we save some chunks in parallel, here we *NEED* to be sure, that later is not published before older
+	// That is about binlog consistency: if we save trx 1-1000 and at the same time 1000-1010, last might finish faster, but it can't be committed immediately,
+	// as last highest trx will be 1010, and nobody knows, that actually 1-1000 are not yet safe.
+	m_tSaveTIDS.WaitVoid ( [this, iTID] { return m_tSaveTIDS.GetValueRef().First() == iTID; } );
 
 	int iDiskChunks;
 	// now new disk chunk is loaded, kills and updates applied - we ready to change global index state now.

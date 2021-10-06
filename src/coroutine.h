@@ -490,6 +490,11 @@ public:
 		return m_tValue;
 	}
 
+	const T& GetValueRef() const
+	{
+		return m_tValue;
+	}
+
 	inline void NotifyOne()
 	{
 		m_tCondVar.NotifyOne();

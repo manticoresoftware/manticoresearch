@@ -898,6 +898,41 @@ public:
 
 int AloneThread_c::m_iRunningAlones = 0;
 
+class ShedulerWrapper_c final : public Scheduler_i
+{
+	Scheduler_i*	m_pScheduler; // not owned
+
+public:
+	explicit ShedulerWrapper_c ( Scheduler_i* pScheduler ) noexcept
+		: m_pScheduler { pScheduler }
+	{}
+
+	void ScheduleOp ( details::SchedulerOperation_t* pOp, bool bVip ) final
+	{
+		m_pScheduler->ScheduleOp ( pOp, bVip );
+	}
+
+	void ScheduleContinuationOp ( details::SchedulerOperation_t* pOp ) final
+	{
+		m_pScheduler->ScheduleContinuationOp ( pOp );
+	}
+
+	Keeper_t KeepWorking() final
+	{
+		return m_pScheduler->KeepWorking();
+	};
+
+	int WorkingThreads() const final
+	{
+		return m_pScheduler->WorkingThreads();
+	};
+
+	const char* Name() const final
+	{
+		return m_pScheduler->Name();
+	}
+};
+
 
 WorkerSharedPtr_t MakeThreadPool ( size_t iThreadCount, const char* szName )
 {
@@ -915,6 +950,13 @@ SchedulerSharedPtr_t MakeAloneScheduler ( Scheduler_i* pBase, const char* szName
 {
 	return SchedulerSharedPtr_t { new Strand_c ( pBase, szName ) };
 }
+
+// wraps raw scheduler into shared-ptr (it will NOT delete the scheduler when destroyed!)
+SchedulerSharedPtr_t WrapRawScheduler ( Scheduler_i* pBase )
+{
+	return SchedulerSharedPtr_t { new ShedulerWrapper_c ( pBase ) };
+}
+
 
 } // namespace Threads
 

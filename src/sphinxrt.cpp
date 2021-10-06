@@ -1087,7 +1087,6 @@ public:
 		if ( m_pNewRamSegs )
 			m_tOwner.m_pSegments = m_pNewRamSegs.Leak();
 	}
-
 	enum Copy_e { copy };
 	enum Empty_e { empty };
 
@@ -1261,6 +1260,7 @@ private:
 	Threads::Coro::Waitable_T<int>	m_tOptimizeRuns {0};
 	friend class OptimizeGuard_c;
 
+	int64_t						m_iRtMemLimit;
 	int64_t						m_iSoftRamLimit;
 	int64_t						m_iDoubleBufferLimit;
 	CSphString					m_sPath;
@@ -1350,7 +1350,7 @@ private:
 	void 						WaitRAMSegmentsUnlocked () const REQUIRES ( m_tRtChunks.SerialChunkAccess () );
 	void						StartMergeSegments (bool bHasNewSegment) REQUIRES ( m_tRtChunks.SerialChunkAccess () );
 	bool						NeedStoreWordID () const override;
-	int64_t						GetMemLimit() const final { return m_iSoftRamLimit; }
+	int64_t						GetMemLimit() const final { return m_iRtMemLimit; }
 
 	void						DebugCheckRam ( DebugCheckError_c & tReporter );
 	int							DebugCheckDisk ( DebugCheckError_c & tReporter, FILE * fp );
@@ -3941,7 +3941,7 @@ void RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )
 	wrMeta.PutBytes ( dChunkNames.Begin(), dChunkNames.GetLengthBytes() );
 
 	// meta v.17+
-	wrMeta.PutOffset(m_iSoftRamLimit);
+	wrMeta.PutOffset ( m_iRtMemLimit );
 
 	wrMeta.CloseFile();
 
@@ -4295,7 +4295,7 @@ bool RtIndex_c::LoadMeta ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath
 	rdMeta.GetBytes ( m_dChunkNames.Begin(), iLen*sizeof(int) );
 
 	if ( uVersion>=17 )
-		m_iSoftRamLimit = rdMeta.GetOffset();
+		SetMemLimit ( rdMeta.GetOffset() );
 
 	return true;
 }
@@ -4761,8 +4761,8 @@ int RtIndex_c::DebugCheck ( FILE * fp )
 	if ( m_iStride!=m_tSchema.GetRowSize() )
 		tReporter.Fail ( "wrong attribute stride (current=%d, should_be=%d)", m_iStride, m_tSchema.GetRowSize() );
 
-	if ( m_iSoftRamLimit<=0 )
-		tReporter.Fail ( "wrong RAM limit (current=" INT64_FMT ")", m_iSoftRamLimit );
+	if ( m_iRtMemLimit<=0 )
+		tReporter.Fail ( "wrong RAM limit (current=" INT64_FMT ")", m_iRtMemLimit );
 
 	if ( m_iTID<0 )
 		tReporter.Fail ( "index TID < 0 (current=" INT64_FMT ")", m_iTID );
@@ -8973,7 +8973,7 @@ void RtIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 	pRes->m_iRamUse = sizeof( RtIndex_c ) + pRes->m_iRamChunkSize;
 	pRes->m_iRamRetired = m_iRamChunksAllocatedRAM.load(std::memory_order_relaxed) - iUsedRam;
 
-	pRes->m_iMemLimit = m_iSoftRamLimit;
+	pRes->m_iMemLimit = m_iRtMemLimit;
 
 	CSphString sError;
 	char sFile [ SPH_MAX_FILENAME_LEN ];
@@ -9769,6 +9769,7 @@ uint64_t SchemaFNV ( const ISphSchema & tSchema )
 
 void RtIndex_c::SetMemLimit ( int64_t iMemLimit )
 {
-	m_iSoftRamLimit = iMemLimit;
-	m_iDoubleBufferLimit = ( m_iSoftRamLimit * SPH_RT_DOUBLE_BUFFER_PERCENT ) / 100;
+	m_iRtMemLimit = iMemLimit;
+	m_iDoubleBufferLimit = ( m_iRtMemLimit * SPH_RT_DOUBLE_BUFFER_PERCENT ) / 100;
+	m_iSoftRamLimit = m_iRtMemLimit - m_iDoubleBufferLimit;
 }

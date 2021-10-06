@@ -73,7 +73,10 @@ using namespace Threads;
 #define LOG_LEVEL_DEBUGV false
 #define LOG_COMPONENT_RTSEG __LINE__ << " " << Coro::CurrentScheduler()->Name() << " "
 
+// used in start/merge RAM segments
 #define RTRLOG LOGINFO ( RTRDIAG, RTSEG )
+
+// used when logging disk save/optimize
 #define RTDLOG LOGINFO ( RTDDIAG, RTSEG )
 #define RTLOGV LOGINFO ( RTDIAGV, RTSEG )
 #define RTLOGVV LOGINFO ( RTDIAGVV, RTSEG )
@@ -988,6 +991,12 @@ public:
 	{
 		ScRL_t rLock ( m_tLock );
 		return m_pChunks->IsEmpty() && m_pSegments->IsEmpty();
+	}
+
+	int GetRamSegmentsCount() const
+	{
+		ScRL_t rLock ( m_tLock );
+		return m_pSegments->GetLength();
 	}
 
 	int GetDiskChunksCount () const
@@ -3060,10 +3069,11 @@ enum class CheckMerge_e { MERGE, NOMERGE, FLUSH };
 CheckMerge_e CheckWeCanMerge ( std::pair<int, int>& tSmallest, const VecTraits_T<ConstRtSegmentRefPtf_t>& dSegments, int64_t iRamLimit ) NO_THREAD_SAFETY_ANALYSIS
 {
 	const int iSegs = dSegments.GetLength ();
-	RTLOGV << "CheckWeCanMerge(" << dSegments.GetLength() << " segs, ram limit " << iRamLimit << " bytes)";
 
 	// enforce RAM usage limit
 	auto iRamLeft = iRamLimit - SegmentsGetUsedRam ( dSegments );
+
+	RTLOGV << "CheckWeCanMerge(" << dSegments.GetLength() << " segs, ram limit " << iRamLimit << " bytes, left " << iRamLeft << " bytes)";
 
 	// skip merging if no memory left
 	if ( iRamLeft<=0 )
@@ -3145,6 +3155,8 @@ void RtIndex_c::StartMergeSegments ( bool bHasNewSegment )
 		// if saving op is in progress - use limit 10% of SoftRamLimit (aka doubleBufferLimit).
 		// todo: think about and m.b. implement another limits.
 
+		RTLOGV << "Totally we have " << m_tRtChunks.GetRamSegmentsCount() << " segments onboard.";
+
 		std::pair<int,int> tSmallest;
 		CheckMerge_e eMergeAction { CheckMerge_e::NOMERGE };
 		if ( bHasNewSegment )
@@ -3186,7 +3198,7 @@ void RtIndex_c::StartMergeSegments ( bool bHasNewSegment )
 
 			pA->SetKillHook ( pMerged );
 			pB->SetKillHook ( pMerged );
-			RTLOGV << "after merge " << pMerged << ", has " << dKillOnMerge.m_dDocids.GetLength () << " killed";
+			RTLOGV << "after merge " << pMerged->m_tAliveRows << ", has " << dKillOnMerge.m_dDocids.GetLength () << " killed";
 
 			// apply postponed kills and updates (if any)
 			if ( pMerged )
@@ -3973,7 +3985,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced )
 	int iSaveOp = m_tRtChunks.GetNextOpTicket();
 
 	// if forced - wait all segments. Otherwise, can continue with subset of currently available segments
-	// note that segments may be locked by currently executing SaveDiskChunk. If so, we wait them finished and continue.
+	// note that segments may be locked by currently executing MergeSegments or SaveDiskChunk. If so, we wait them finished and continue.
 	// that will cause another disk chunk written right after just finished, since op is forced it is ok.
 	if ( bForced )
 		WaitRAMSegmentsUnlocked ();

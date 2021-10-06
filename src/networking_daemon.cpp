@@ -97,7 +97,7 @@ static const char * NetloopStateName ( NetloopState_e eState )
 DEFINE_RENDER( ListenTaskInfo_t )
 {
 	auto & tInfo = *(ListenTaskInfo_t *) const_cast<void*>(pSrc);
-	dDst.m_sChain << (int) tInfo.m_eType << ":Listen ";
+	dDst.m_sChain << "Listen ";
 	dDst.m_sDescription << "tick: " << tInfo.m_uTick << " works: " << tInfo.m_uWorks << " state: " << NetloopStateName ( tInfo.m_eThdState );
 }
 
@@ -473,14 +473,14 @@ void SockWrapper_c::Impl_c::NetLoopDestroying () REQUIRES ( NetPoollingThread )
 void SockWrapper_c::Impl_c::EngageWaiterAndYield ( int64_t tmTimeUntilUs )
 {
 	assert ( m_pNetLoop );
-	sphLogDebugv ( "CoYieldWith (m_iEvent=%u), timeout %d", m_uNetEvents, int(tmTimeUntilUs-sphMicroTimer ()) );
+	sphLogDebugv ( "Coro::YieldWith (m_iEvent=%u), timeout %d", m_uNetEvents, int(tmTimeUntilUs-sphMicroTimer ()) );
 	m_iTimeoutTimeUS = tmTimeUntilUs;
 	if ( !m_fnWakeFromPoll ) // must be set here, NOT in ctr (since m.b. constructed in different ctx)
 		m_fnWakeFromPoll = Threads::CurrentRestarter ();
 
 
 	// switch context (go to poll)
-	Threads::CoYieldWith ( [this] {
+	Threads::Coro::YieldWith ( [this] {
 		m_bEngaged.store ( true, std::memory_order_release );
 		m_pNetLoop->AddAction ( this );
 	});

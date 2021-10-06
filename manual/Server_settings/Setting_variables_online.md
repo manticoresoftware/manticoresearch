@@ -69,7 +69,7 @@ This is very specific and 'hard' variable; filtered out messages will be just dr
 * `IOSTATS = {0 | 1}` Enable or disable I/O operations (except for attributes) reporting in query log.
 * `CPUSTATS= {1|0}` Turns on/off [cpu time tracking](../Starting_the_server/Manually.md#searchd-command-line-options).
 * `COREDUMP= {1|0}` Turns on/off saving a core file or a minidump of the server on crash. More details [here](../Starting_the_server/Manually.md#searchd-command-line-options).
-* `PSEUDO_SHARDING = {1|0}` Turns on/off search [pseudo sharding](../Server_settings/Searchd.md#pseudo_sharding).
+* `PSEUDO_SHARDING = {1|0}` Turns on/off search [pseudo-sharding](../Server_settings/Searchd.md#pseudo_sharding).
 * `OPTIMIZE_CUTOFF = <value>` Sets default [index compaction threshold](../Server_settings/Searchd.md#optimize_cutoff)
 
 Examples:

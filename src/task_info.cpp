@@ -128,7 +128,7 @@ DEFINE_RENDER ( MiniTaskInfo_t )
 	dDst.m_tmStart.emplace_once ( tInfo.m_tmStart );
 	dDst.m_sCommand = tInfo.m_sCommand;
 	hazard::Guard_c tGuard;
-	dDst.m_sChain << (int) tInfo.m_eType << ":Mini ";
+	dDst.m_sChain << "Mini ";
 	auto pDescription = tGuard.Protect ( tInfo.m_pHazardDescription );
 	if ( pDescription )
 		dDst.m_sDescription << *pDescription;
@@ -159,7 +159,7 @@ DEFINE_RENDER ( ClientTaskInfo_t )
 	dDst.m_eTaskState = tInfo.m_eTaskState;
 	dDst.m_eProto = tInfo.m_eProto;
 	dDst.m_sProto << ProtoName ( tInfo.m_eProto );
-	dDst.m_sChain << (int) tInfo.m_eType << ":Client ";
+	dDst.m_sChain << "Conn ";
 	if ( tInfo.m_bSsl )
 		dDst.m_sProto << "ssl";
 }

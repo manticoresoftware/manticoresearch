@@ -1829,7 +1829,7 @@ bool LoadLemmatizerUk ( CSphString & sError )
 		// indexer does not have couroutunes
 		if ( Threads::IsInsideCoroutine() )
 		{
-			bLoaded = Threads::CoContinueBool ( g_iLemmatizerUkStackSize, [&sError]
+			bLoaded = Threads::Coro::ContinueBool ( g_iLemmatizerUkStackSize, [&sError]
 			{
 				return sphPluginCreate ( g_sLemmatizerUkLib.cstr(), PLUGIN_INDEX_TOKEN_FILTER, g_sLemmatizerFnName.cstr(), SPH_ATTR_NONE, true, sError );
 			});

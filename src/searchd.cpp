@@ -1222,7 +1222,7 @@ void SetSignalHandlers ( bool bAllowCtrlC=false ) REQUIRES ( MainThread )
 	stack_t ss;
 	ss.ss_sp = exception_handler_stack;
 	ss.ss_flags = 0;
-	ss.ss_size = SIGSTKSZ;
+	ss.ss_size = Max (SIGSTKSZ, 65536);
 	sigaltstack( &ss, 0 );
 	sa.sa_flags |= SA_ONSTACK;
 
@@ -5775,7 +5775,7 @@ void SearchHandler_c::RunLocalSearches ()
 	std::atomic<int32_t> iTotalSuccesses { 0 };
 	const auto iJobs = iNumLocals;
 	std::atomic<int32_t> iCurJob { 0 };
-	CoExecuteN ( dCtx.Concurrency ( iJobs ), [&]
+	Coro::ExecuteN ( dCtx.Concurrency ( iJobs ), [&]
 	{
 		auto iJob = iCurJob.load ( std::memory_order_relaxed );
 		if ( iJob>=iJobs )
@@ -5786,7 +5786,7 @@ void SearchHandler_c::RunLocalSearches ()
 		dSorters.ZeroVec ();
 
 		auto tCtx = dCtx.CloneNewContext();
-		Threads::CoThrottler_c tThrottler ( session::ThrottlingPeriodMS () );
+		Threads::Coro::Throttler_c tThrottler ( session::ThrottlingPeriodMS () );
 		while ( iJob<iJobs )
 		{
 			iJob = iCurJob.fetch_add ( 1, std::memory_order_acq_rel );
@@ -6669,7 +6669,7 @@ struct QueryInfo_t : public TaskInfo_t
 DEFINE_RENDER ( QueryInfo_t )
 {
 	auto & tInfo = *(QueryInfo_t *) pSrc;
-	dDst.m_sChain << (int) tInfo.m_eType << ":Query ";
+	dDst.m_sChain << "Query ";
 	hazard::Guard_c tGuard;
 	auto pQuery = tGuard.Protect ( tInfo.m_pHazardQuery );
 	if ( pQuery && session::Proto()!=Proto_e::MYSQL41 ) // cheat: for mysql query not used, so will not copy it then
@@ -7709,7 +7709,7 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 	dCtx.LimitConcurrency ( GetEffectiveDistThreads () );
 
 	std::atomic<int32_t> iCurJob { 0 };
-	CoExecuteN ( dCtx.Concurrency ( iJobs ), [&]
+	Coro::ExecuteN ( dCtx.Concurrency ( iJobs ), [&]
 	{
 		sphLogDebug ( "MakeSnippetsCoro Coro started" );
 		auto iJob = iCurJob.fetch_add ( 1, std::memory_order_acq_rel );
@@ -7717,7 +7717,7 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 			return; // already nothing to do, early finish.
 
 		auto tCtx = dCtx.CloneNewContext ();
-		Threads::CoThrottler_c tThrottler ( session::ThrottlingPeriodMS () );
+		Threads::Coro::Throttler_c tThrottler ( session::ThrottlingPeriodMS () );
 		while (true)
 		{
 			myinfo::SetThreadInfo ( "s %d:", iJob );
@@ -11928,7 +11928,19 @@ static std::pair<const char *, int> FormatInfo ( const PublicThreadDesc_t & tThd
 
 void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 {
-	tOut.HeadBegin ( 14 ); // 15 with chain
+	ThreadInfoFormat_e eFmt = THD_FORMAT_NATIVE;
+	bool bAll = false;
+	int iCols = -1;
+	if ( pStmt )
+	{
+		if ( pStmt->m_sThreadFormat == "sphinxql" )
+			eFmt = THD_FORMAT_SPHINXQL;
+		else if ( pStmt->m_sThreadFormat == "all" )
+			bAll = true;
+		iCols = pStmt->m_iThreadsCols;
+	}
+
+	tOut.HeadBegin ( bAll ? 15 : 14 ); // 15 with chain
 	tOut.HeadColumn ( "Tid", MYSQL_COL_LONG );
 	tOut.HeadColumn ( "Name" );
 	tOut.HeadColumn ( "Proto" );
@@ -11942,24 +11954,13 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	tOut.HeadColumn ( "Jobs done", MYSQL_COL_LONG );
 	tOut.HeadColumn ( "Last job took" );
 	tOut.HeadColumn ( "In idle" );
-//	tOut.HeadColumn ( "Chain" );
+	if ( bAll )
+		tOut.HeadColumn ( "Chain" );
 	tOut.HeadColumn ( "Info" );
 	if (!tOut.HeadEnd())
 		return;
 
 	QuotationEscapedBuilder tBuf;
-	ThreadInfoFormat_e eFmt = THD_FORMAT_NATIVE;
-	bool bAll = false;
-	int iCols = -1;
-
-	if ( pStmt )
-	{
-		if ( pStmt->m_sThreadFormat=="sphinxql" )
-			eFmt = THD_FORMAT_SPHINXQL;
-		else if ( pStmt->m_sThreadFormat=="all" )
-			bAll = true;
-		iCols = pStmt->m_iThreadsCols;
-	}
 
 //	sphLogDebug ( "^^ Show threads. Current info is %p", GetTaskInfo () );
 
@@ -11999,7 +12000,8 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 			tOut.PutTimestampAsString ( dThd.m_tmLastJobDoneTimeUS ); // idle for
 		}
 
-//		tOut.PutString ( dThd.m_sChain.cstr () ); // Chain
+		if ( bAll )
+			tOut.PutString ( dThd.m_sChain.cstr () ); // Chain
 		auto tInfo = FormatInfo ( dThd, eFmt, tBuf );
 		tOut.PutString ( tInfo.first, Min ( tInfo.second, iCols ) ); // Info m_pTaskInfo
 		if ( !tOut.Commit () )
@@ -13465,7 +13467,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 		} else if ( tStmt.m_sSetName=="throttling_period" )
 		{
 			if ( tSess.GetVip() )
-				Threads::CoThrottler_c::SetDefaultThrottlingPeriodMS ( tStmt.m_iSetValue );
+				Threads::Coro::Throttler_c::SetDefaultThrottlingPeriodMS ( tStmt.m_iSetValue );
 			else
 			{
 				tOut.Error ( tStmt.m_sStmt, "Only VIP connections can change global throttling_period value" );

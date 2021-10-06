@@ -447,8 +447,8 @@ public:
 template<typename T>
 class Waitable_T: ISphNoncopyable
 {
-	ConditionVariable_c m_tCondVar;
-	Mutex_c m_tMutex;
+	mutable ConditionVariable_c m_tCondVar;
+	mutable Mutex_c m_tMutex;
 	T m_tValue { 0 };
 
 public:
@@ -500,14 +500,14 @@ public:
 		m_tCondVar.NotifyAll();
 	}
 
-	void Wait ()
+	void Wait () const
 	{
 		ScopedMutex_t lk ( m_tMutex );
 		m_tCondVar.Wait ( lk );
 	}
 
 	template<typename PRED>
-	T Wait ( PRED&& fnPred )
+	T Wait ( PRED&& fnPred ) const
 	{
 		ScopedMutex_t lk ( m_tMutex );
 		m_tCondVar.Wait ( lk, [this, fnPred = std::forward<PRED> ( fnPred )]() { return fnPred ( m_tValue ); } );
@@ -515,7 +515,7 @@ public:
 	}
 
 	template<typename PRED>
-	void WaitVoid ( PRED&& fnPred )
+	void WaitVoid ( PRED&& fnPred ) const
 	{
 		ScopedMutex_t lk ( m_tMutex );
 		m_tCondVar.Wait ( lk, std::forward<PRED> ( fnPred ) );

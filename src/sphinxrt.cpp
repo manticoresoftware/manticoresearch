@@ -927,8 +927,14 @@ class RtData_c
 	RoledSchedulerSharedPtr_t	m_tChunkSaver;			// scheduler for disk manipulations.
 //	FiberPool_c					m_dFibers;				// helpers to serialize update/change tasks
 	std::atomic<int>			m_iNextOp {1};
+	Coro::Waitable_T<int>		m_tUnLockedSegments { 0 }; // how many segments are not participating in any locked ops (like merge, save to disk).
 
 	friend class RtWriter_c;
+
+	inline int GetUnlockedCountUnl() REQUIRES_SHARED (m_tLock)
+	{
+		return (int)m_pSegments->count_of ( [] ( auto& dSeg ) { return !dSeg->m_iLocked; } );
+	}
 
 public:
 	explicit RtData_c ()
@@ -1036,6 +1042,36 @@ public:
 			iRes = m_iNextOp.fetch_add ( 1, std::memory_order_relaxed );
 		return iRes;
 	}
+
+	inline void SetUnlockedCount ( int iCount )
+	{
+		if ( iCount==m_tUnLockedSegments.GetValue() )
+			return;
+		m_tUnLockedSegments.SetValue ( iCount );
+		m_tUnLockedSegments.NotifyAll();
+	}
+
+	inline void UpdateUnlockedCount ()
+	{
+		int iCount = 0;
+		{
+			ScRL_t rLock ( m_tLock );
+			iCount = GetUnlockedCountUnl();
+		}
+		SetUnlockedCount (iCount);
+	}
+
+	template<typename PRED>
+	int WaitUnlockedCountChanged ( PRED&& fnPred ) const
+	{
+		return m_tUnLockedSegments.Wait ( std::forward<PRED> ( fnPred ) );
+	}
+
+	template<typename PRED>
+	void WaitUnlockedCountChangedVoid ( PRED&& fnPred ) const
+	{
+		m_tUnLockedSegments.WaitVoid ( std::forward<PRED> ( fnPred ) );
+	}
 };
 
 // helper for easier access to ConstRtData members
@@ -1078,14 +1114,20 @@ public:
 		if ( !m_pNewDiskChunks && !m_pNewRamSegs )
 			return;
 
-		ScWL_t wLock ( m_tOwner.m_tLock );
+		int iUnlocked = 0;
+		{
+			ScWL_t wLock ( m_tOwner.m_tLock );
+			// use leak since we convert 'data*' to 'const data*' here.
+			if ( m_pNewDiskChunks )
+				m_tOwner.m_pChunks = m_pNewDiskChunks.Leak();
 
-		// use leak since we convert 'data*' to 'const data*' here.
-		if ( m_pNewDiskChunks )
-			m_tOwner.m_pChunks = m_pNewDiskChunks.Leak();
+			if ( !m_pNewRamSegs )
+				return;
 
-		if ( m_pNewRamSegs )
 			m_tOwner.m_pSegments = m_pNewRamSegs.Leak();
+			iUnlocked = m_tOwner.GetUnlockedCountUnl();
+		}
+		m_tOwner.SetUnlockedCount ( iUnlocked );
 	}
 	enum Copy_e { copy };
 	enum Empty_e { empty };
@@ -3151,6 +3193,8 @@ void RtIndex_c::StartMergeSegments ( bool bHasNewSegment )
 			if ( !dSeg->m_iLocked )
 				dSegments.Add ( dSeg );
 
+		m_tRtChunks.SetUnlockedCount ( dSegments.GetLength() );
+
 		// fixme! Now is old naive way used: if no active save, limit to RtMemLimit,
 		// if saving op is in progress - use limit SPH_RT_DOUBLE_BUFFER_PERCENT of RtMemLimit (aka doubleBufferLimit).
 		// todo: think about and m.b. implement another limits.
@@ -3184,6 +3228,7 @@ void RtIndex_c::StartMergeSegments ( bool bHasNewSegment )
 			ConstRtSegmentRefPtf_t pB = dSegments[tSmallest.second];
 			iMergeOp = m_tRtChunks.GetNextOpTicket();
 			pA->m_iLocked = pB->m_iLocked = iMergeOp; // mark them as retiring.
+			m_tRtChunks.SetUnlockedCount ( dSegments.GetLength()-2 );
 
 			// that will collect killed docIDs
 			KillAccum_t dKillOnMerge;
@@ -3274,6 +3319,8 @@ int RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const CSphVector<DocID_
 			for ( int j=0; j<iFields; ++j )
 				dLens[j] += sphGetRowAttr ( pNewSeg->GetDocinfoByRowID(i), m_tSchema.GetAttr ( j+iFirstFieldLenAttr ).m_tLocator );
 	}
+
+	m_tRtChunks.WaitUnlockedCountChanged ( [] ( int iVals ) { return iVals < MAX_SEGMENTS; } );
 
 	// We're going to modify segments, so fall into serial fiber. From here no concurrent changes may happen
 	ScopedScheduler_c tSerialFiber { m_tRtChunks.SerialChunkAccess() };
@@ -3969,8 +4016,7 @@ void RtIndex_c::SaveMeta()
 void RtIndex_c::WaitRAMSegmentsUnlocked () const
 {
 	m_tSaveTIDS.WaitVoid ( [this] { return m_tSaveTIDS.GetValueRef().IsEmpty(); } );
-	while ( m_tRtChunks.RamSegs ()->any_of ( [] ( ConstRtSegmentRefPtf_t & a ) { return a->m_iLocked; } ) )
-		Threads::ScopedScheduler_c ( m_tRtChunks.MergeSegmentsWorker () );
+	m_tRtChunks.WaitUnlockedCountChangedVoid ([this] { return m_tRtChunks.RamSegs()->none_of ( [] ( ConstRtSegmentRefPtf_t& a ) { return a->m_iLocked; } ); });
 }
 
 // i.e. create new disk chunk from ram segments
@@ -4006,6 +4052,8 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced )
 				dSegments.Add ( pSeg );
 			}
 		}
+
+	m_tRtChunks.UpdateUnlockedCount();
 
 	RTDLOG << "SaveDiskChunk process " << dSegments.GetLength() << " segments.";
 	if ( dSegments.IsEmpty() )

@@ -79,6 +79,7 @@ constexpr int64_t MAX_SEGMENT_VECTOR_LEN		= INT_MAX;
 
 #define LOG_LEVEL_RTRDIAG false
 #define LOG_LEVEL_RTDDIAG false
+#define LOG_LEVEL_RTSAVEDIAG false
 #define LOG_LEVEL_RTDIAGV false
 #define LOG_LEVEL_RTDIAGVV false
 #define LOG_LEVEL_DEBUGV false
@@ -89,6 +90,9 @@ constexpr int64_t MAX_SEGMENT_VECTOR_LEN		= INT_MAX;
 
 // used when logging disk save/optimize
 #define RTDLOG LOGINFO ( RTDDIAG, RTSEG )
+
+// ops for save RAM segments as disk chunk
+#define RTSAVELOG LOGINFO ( RTSAVEDIAG, RTSEG )
 #define RTLOGV LOGINFO ( RTDIAGV, RTSEG )
 #define RTLOGVV LOGINFO ( RTDIAGVV, RTSEG )
 
@@ -3897,7 +3901,7 @@ void RtIndex_c::SaveDiskData ( const char * szFilename, const ConstRtSegmentSlic
 {
 	CSphString sError; // FIXME!!! report collected (sError) errors
 
-	RTDLOG << "SaveDiskData to " << szFilename << ", " << tSegs.GetLength() << " segments";
+	RTSAVELOG << "SaveDiskData to " << szFilename << ", " << tSegs.GetLength() << " segments";
 
 	SaveDiskDataContext_t tCtx ( szFilename, tSegs ); // only RAM segments here in game.
 	if ( m_tSettings.m_iMinInfixLen && m_pDict->GetSettings().m_bWordDict )
@@ -4060,7 +4064,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tRtC
 
 	assert ( Coro::CurrentScheduler() == m_tRtChunks.SerialChunkAccess () );
 
-	RTDLOG << "SaveDiskChunk( " << ( bForced ? "forced" : "not forced" ) << ")";
+	RTSAVELOG << "SaveDiskChunk (" << ( bForced ? "forced" : "not forced" ) << ", " << ( bEmergent ? "emergent" : "not emergent" ) << ")";
 
 	int iSaveOp = m_tRtChunks.GetNextOpTicket();
 
@@ -4094,7 +4098,8 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tRtC
 
 	m_tRtChunks.UpdateUnlockedCount();
 
-	RTDLOG << "SaveDiskChunk process " << dSegments.GetLength() << " segments.";
+	RTSAVELOG << "SaveDiskChunk process " << dSegments.GetLength() << " segments. Active jobs " << m_tSaveTIDS.GetValueRef().GetLength() << ", op " << iSaveOp
+		<< " RAM visible+retired/locked/acquired " << iNotMyOpRAM + iMyOpRAM << "+" << m_iRamChunksAllocatedRAM.load ( std::memory_order_relaxed )- iNotMyOpRAM - iMyOpRAM << "/" << iNotMyOpRAM << "/" << iMyOpRAM;
 	if ( dSegments.IsEmpty() )
 		return true;
 
@@ -4218,6 +4223,10 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tRtC
 	// calculate DoubleBuf percent using current save/insert rate
 	auto iInserted = GetMemCount ( [iSaveOp] ( const auto* pSeg ) { return !pSeg->m_iLocked || pSeg->m_iLocked > iSaveOp; } );
 	RecalculateRateLimit ( iMyOpRAM, iInserted, bEmergent );
+
+	RTSAVELOG << sInfo.cstr() << ", op " << iSaveOp << " RAM saved/new " << iMyOpRAM << "/" << iInserted
+			<< " Insert ratio is " << m_fSaveRateLimit << " (soft ram limit " << m_iSoftRamLimit << ", rt mem limit " << m_iRtMemLimit << ")";
+
 	Preread();
 	CheckStartAutoOptimize();
 	return true;

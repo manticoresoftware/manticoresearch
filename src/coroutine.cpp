@@ -868,56 +868,6 @@ void Event_c::WaitEvent()
 	std::atomic_thread_fence ( std::memory_order_release );
 }
 
-MultiEvent_c::~MultiEvent_c ()
-{
-	// edge case: event destroyed being in wait state.
-	// Let's resume then.
-	if ( !m_tOps.IsEmpty() && (m_uState.load() & Waited_e)!=0 )
-		m_tOps.RunAll();
-}
-
-// If 'waited' state detected, resume waiter.
-// else atomically set flag 'signaled'
-void MultiEvent_c::SetEvent()
-{
-	BYTE uState = m_uState.load ( std::memory_order_relaxed );
-	do
-	{
-		if ( uState & Waited_e )
-		{
-			m_uState.store ( Signaled_e ); // memory_order_sec_cst - to ensure that next call will not resume again
-			m_tOps.RunAll();
-			return;
-		}
-	} while ( !m_uState.compare_exchange_weak ( uState, uState | Signaled_e, std::memory_order_relaxed ) );
-}
-
-// if 'signaled' state detected, clean all flags and return.
-// else yield, then (out of coro) atomically set 'waited' flag, checking also 'signaled' flag again.
-// on resume clean all flags.
-void MultiEvent_c::WaitEvent()
-{
-	if ( !( m_uState.load ( std::memory_order_relaxed ) & Signaled_e ) )
-	{
-		m_tOps.AddOp ( Coro::Worker()->SecondaryRestarter() );
-		YieldWith ( [this] {
-			BYTE uState = m_uState.load ( std::memory_order_relaxed );
-			do
-			{
-				if ( uState & Signaled_e )
-				{
-					m_tOps.RunAll();
-					return;
-				}
-			} while ( !m_uState.compare_exchange_weak ( uState, uState | Waited_e, std::memory_order_relaxed ) );
-		} );
-	}
-
-	m_tOps.RunAll();
-	m_uState.store ( 0, std::memory_order_relaxed );
-	std::atomic_thread_fence ( std::memory_order_release );
-}
-
 
 bool Waker_c::Wake() const noexcept
 {
@@ -982,7 +932,7 @@ void Mutex_c::Lock()
 
 void Mutex_c::Unlock()
 {
-	auto* pActiveWorker = Worker();
+	Debug (auto* pActiveWorker = Worker();)
 	boost::fibers::detail::spinlock_lock tLock { m_tWaitQueueSpinlock };
 	assert ( pActiveWorker == m_pOwner );
 	m_pOwner = nullptr;
@@ -990,12 +940,25 @@ void Mutex_c::Unlock()
 	m_tWaitQueue.NotifyOne();
 }
 
+// conditional variable
+void ConditionVariableAny_c::NotifyOne() noexcept
+{
+	boost::fibers::detail::spinlock_lock tLock { m_tWaitQueueSpinlock };
+	m_tWaitQueue.NotifyOne();
+}
+
+void ConditionVariableAny_c::NotifyAll() noexcept
+{
+	boost::fibers::detail::spinlock_lock tLock { m_tWaitQueueSpinlock };
+	m_tWaitQueue.NotifyAll();
+}
+
 // the shared mutex
 
 // practice shows few numbers are more expressive than symbolic names in that case
 static constexpr DWORD ux01 = 1;			   // w-lock acquired
 static constexpr DWORD ux02 = 2;			   // r-lock bias
-static constexpr DWORD uxFE = ~ux01;		   // mask for w-lock flag (0xFFFFFFFE)
+Debug (static constexpr DWORD uxFE = ~ux01;)		   // mask for w-lock flag (0xFFFFFFFE)
 
 /* r-locking:
  * 1. reschedule until w-bit is zero

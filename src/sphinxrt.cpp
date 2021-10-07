@@ -56,7 +56,18 @@ using namespace Threads;
 //////////////////////////////////////////////////////////////////////////
 
 #define RTDICT_CHECKPOINT_V5			48
-#define SPH_RT_DOUBLE_BUFFER_PERCENT	10
+
+// rt-segments tuning
+
+// rate limit for flushing RAM chunk as disk chunk. Rate applied to rt_mem_limit, calculated value used as limit, when we start flushing
+constexpr double INITIAL_SAVE_RATE_LIMIT		= 0.5;		///< we start rate limiting from this value.
+constexpr double MIN_SAVE_RATE_LIMIT			= 0.333333;	///< minimal rate limit. Calculated value will never be less that that bound
+constexpr double MAX_SAVE_RATE_LIMIT			= 0.95;		///< maximal rate limit. It most probably may be reached with very low insertion rate
+constexpr double SAVE_RATE_LIMIT_EMERGENCY_STEP	= 0.05;		///< emergency back-off.
+constexpr int SIMULTANEOUS_SAVE_LIMIT			= 2;		///< how many save ops we allow a time
+constexpr int MAX_SEGMENTS						= 32;
+constexpr int MAX_PROGRESSION_SEGMENT			= 8;
+constexpr int64_t MAX_SEGMENT_VECTOR_LEN		= INT_MAX;
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -68,13 +79,20 @@ using namespace Threads;
 
 #define LOG_LEVEL_RTRDIAG false
 #define LOG_LEVEL_RTDDIAG false
+#define LOG_LEVEL_RTSAVEDIAG false
 #define LOG_LEVEL_RTDIAGV false
 #define LOG_LEVEL_RTDIAGVV false
 #define LOG_LEVEL_DEBUGV false
 #define LOG_COMPONENT_RTSEG __LINE__ << " " << Coro::CurrentScheduler()->Name() << " "
 
+// used in start/merge RAM segments
 #define RTRLOG LOGINFO ( RTRDIAG, RTSEG )
+
+// used when logging disk save/optimize
 #define RTDLOG LOGINFO ( RTDDIAG, RTSEG )
+
+// ops for save RAM segments as disk chunk
+#define RTSAVELOG LOGINFO ( RTSAVEDIAG, RTSEG )
 #define RTLOGV LOGINFO ( RTDIAGV, RTSEG )
 #define RTLOGVV LOGINFO ( RTDIAGVV, RTSEG )
 
@@ -920,11 +938,17 @@ class RtData_c
 	mutable int					m_iMaxDiskChunkId = -1;
 	RoledSchedulerSharedPtr_t	m_tSelectorGuard;		// serialize changing chunks and segs vec
 	RoledSchedulerSharedPtr_t	m_tSegmentMerger;		// fiber for merging RAM segments. FiberID=-2 for now
+	RoledSchedulerSharedPtr_t	m_tChunkSaver;			// scheduler for disk manipulations.
 //	FiberPool_c					m_dFibers;				// helpers to serialize update/change tasks
 	std::atomic<int>			m_iNextOp {1};
-	std::atomic<int>			m_iSaveActive {0};
+	Coro::Waitable_T<int>		m_tUnLockedSegments { 0 }; // how many segments are not participating in any locked ops (like merge, save to disk).
 
 	friend class RtWriter_c;
+
+	inline int GetUnlockedCountUnl() REQUIRES_SHARED (m_tLock)
+	{
+		return (int)m_pSegments->count_of ( [] ( auto& dSeg ) { return !dSeg->m_iLocked; } );
+	}
 
 public:
 	explicit RtData_c ()
@@ -943,6 +967,9 @@ public:
 
 		if ( !m_tSegmentMerger )
 			m_tSegmentMerger = MakeAloneScheduler ( Coro::CurrentScheduler (), "merger" );
+
+		if ( !m_tChunkSaver )
+			m_tChunkSaver = WrapRawScheduler ( Coro::CurrentScheduler() );
 	}
 
 	int MakeChunkId ()
@@ -990,6 +1017,12 @@ public:
 		return m_pChunks->IsEmpty() && m_pSegments->IsEmpty();
 	}
 
+	int GetRamSegmentsCount() const
+	{
+		ScRL_t rLock ( m_tLock );
+		return m_pSegments->GetLength();
+	}
+
 	int GetDiskChunksCount () const
 	{
 		ScRL_t rLock ( m_tLock );
@@ -1011,6 +1044,11 @@ public:
 		return m_tSegmentMerger;
 	}
 
+	Threads::SchedRole SaveSegmentsWorker() const RETURN_CAPABILITY ( m_tChunkSaver )
+	{
+		return m_tChunkSaver;
+	}
+
 	inline int GetNextOpTicket ()
 	{
 		auto iRes = m_iNextOp.fetch_add ( 1, std::memory_order_relaxed );
@@ -1019,14 +1057,34 @@ public:
 		return iRes;
 	}
 
-	inline void SetSaveActive ( bool bSave )
+	inline void SetUnlockedCount ( int iCount )
 	{
-		m_iSaveActive.fetch_add ( bSave ? 1 : -1, std::memory_order_relaxed );
+		if ( iCount==m_tUnLockedSegments.GetValue() )
+			return;
+		m_tUnLockedSegments.SetValue ( iCount );
+		m_tUnLockedSegments.NotifyAll();
 	}
 
-	inline bool IsSaveActive() const
+	inline void UpdateUnlockedCount ()
 	{
-		return !!m_iSaveActive.load ( std::memory_order_relaxed );
+		int iCount = 0;
+		{
+			ScRL_t rLock ( m_tLock );
+			iCount = GetUnlockedCountUnl();
+		}
+		SetUnlockedCount (iCount);
+	}
+
+	template<typename PRED>
+	int WaitUnlockedCountChanged ( PRED&& fnPred ) const
+	{
+		return m_tUnLockedSegments.Wait ( std::forward<PRED> ( fnPred ) );
+	}
+
+	template<typename PRED>
+	void WaitUnlockedCountChangedVoid ( PRED&& fnPred ) const
+	{
+		m_tUnLockedSegments.WaitVoid ( std::forward<PRED> ( fnPred ) );
 	}
 };
 
@@ -1070,16 +1128,21 @@ public:
 		if ( !m_pNewDiskChunks && !m_pNewRamSegs )
 			return;
 
-		ScWL_t wLock ( m_tOwner.m_tLock );
+		int iUnlocked = 0;
+		{
+			ScWL_t wLock ( m_tOwner.m_tLock );
+			// use leak since we convert 'data*' to 'const data*' here.
+			if ( m_pNewDiskChunks )
+				m_tOwner.m_pChunks = m_pNewDiskChunks.Leak();
 
-		// use leak since we convert 'data*' to 'const data*' here.
-		if ( m_pNewDiskChunks )
-			m_tOwner.m_pChunks = m_pNewDiskChunks.Leak();
+			if ( !m_pNewRamSegs )
+				return;
 
-		if ( m_pNewRamSegs )
 			m_tOwner.m_pSegments = m_pNewRamSegs.Leak();
+			iUnlocked = m_tOwner.GetUnlockedCountUnl();
+		}
+		m_tOwner.SetUnlockedCount ( iUnlocked );
 	}
-
 	enum Copy_e { copy };
 	enum Empty_e { empty };
 
@@ -1098,49 +1161,6 @@ public:
 		InitDiskChunks ( empty );
 		for ( const auto & pChunk : *m_tOwner.DiskChunks() )
 			m_pNewDiskChunks->Add ( pChunk );
-	}
-};
-
-template<typename INT>
-class Waitable_T
-{
-	using EVENT = Threads::Coro::MultiEvent_c;
-	EVENT m_tWaitableChanged;
-	std::atomic<INT> m_iValue {0};
-
-public:
-	Waitable_T() = default;
-	Waitable_T(Waitable_T&) = delete;
-	Waitable_T& operator= (const Waitable_T&) = delete;
-
-	void Inc()
-	{
-		m_iValue.fetch_add ( 1, std::memory_order_relaxed );
-		m_tWaitableChanged.SetEvent();
-	}
-
-	void Dec()
-	{
-		m_iValue.fetch_sub ( 1, std::memory_order_relaxed );
-		m_tWaitableChanged.SetEvent();
-	}
-
-	void SetValue ( INT iValue )
-	{
-		m_iValue.store ( iValue, std::memory_order_relaxed );
-		m_tWaitableChanged.SetEvent();
-	}
-
-	INT GetValue () const
-	{
-		return m_iValue.load ( std::memory_order_relaxed );
-	}
-
-	template<typename PRED>
-	void WaitFor ( PRED&& fnPred )
-	{
-		while ( !fnPred ( m_iValue.load ( std::memory_order_relaxed ) ) )
-			m_tWaitableChanged.WaitEvent();
 	}
 };
 
@@ -1293,15 +1313,17 @@ private:
 	std::atomic<int64_t>		m_iRamChunksAllocatedRAM { 0 };
 
 	std::atomic<bool>			m_bOptimizeStop { false };
-	Waitable_T<int>				m_tOptimizeRuns;
+	Threads::Coro::Waitable_T<int>	m_tOptimizeRuns {0};
 	friend class OptimizeGuard_c;
 
+	int64_t						m_iRtMemLimit;
 	int64_t						m_iSoftRamLimit;
-	int64_t						m_iDoubleBufferLimit;
+	double						m_fSaveRateLimit { INITIAL_SAVE_RATE_LIMIT };
 	CSphString					m_sPath;
 	bool						m_bPathStripped = false;
 	RtData_c					m_tRtChunks;	// that is main set of disk chunks and RAM segments
 	bool						m_bSegMergeQueued GUARDED_BY ( m_tRtChunks.SerialChunkAccess() ) = false;
+	Coro::Waitable_T<CSphVector<int64_t>> m_tSaveTIDS { 0 }; // save operations performing now, and their TIDs
 	int							m_iLockFD = -1;
 
 	bool						m_bIndexDeleted = false;
@@ -1349,7 +1371,7 @@ private:
 	void						SaveMeta ();
 	void						SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_t & tStats ) const;
 	void						SaveDiskData ( const char * szFilename, const ConstRtSegmentSlice_t & tSegs, const ChunkStats_t & tStats ) const;
-	bool						SaveDiskChunk ( bool bForced ) REQUIRES ( m_tRtChunks.SerialChunkAccess () );
+	bool						SaveDiskChunk ( bool bForced, bool bEmergent=false ) REQUIRES ( m_tRtChunks.SerialChunkAccess () );
 	CSphIndex *					PreallocDiskChunk ( const char * sChunk, int iChunk, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError, const char * sName=nullptr ) const;
 	bool						LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes );
 	bool						SaveRamChunk ();
@@ -1384,7 +1406,10 @@ private:
 	void 						WaitRAMSegmentsUnlocked () const REQUIRES ( m_tRtChunks.SerialChunkAccess () );
 	void						StartMergeSegments (bool bHasNewSegment) REQUIRES ( m_tRtChunks.SerialChunkAccess () );
 	bool						NeedStoreWordID () const override;
-	int64_t						GetMemLimit() const final { return m_iSoftRamLimit; }
+	int64_t						GetMemLimit() const final { return m_iRtMemLimit; }
+
+	template<typename PRED>
+	int64_t						GetMemCount(PRED&& fnPred) const;
 
 	void						DebugCheckRam ( DebugCheckError_c & tReporter );
 	int							DebugCheckDisk ( DebugCheckError_c & tReporter, FILE * fp );
@@ -1392,6 +1417,7 @@ private:
 	void						SetSchema ( const CSphSchema & tSchema );
 
 	void						SetMemLimit ( int64_t iMemLimit );
+	void						RecalculateRateLimit ( int64_t iSaved, int64_t iInserted, bool bEmergent );
 	void						AlterSave ( bool bSaveRam );
 	void 						BinlogCommit ( RtSegment_t * pSeg, const CSphVector<DocID_t> & dKlist );
 	void						StopOptimize();
@@ -3095,22 +3121,23 @@ inline std::pair<int,int> Find2Minimums ( const VecTraits_T<ConstRtSegmentRefPtf
 	return { a, b };
 }
 
-constexpr int MAX_SEGMENTS = 32;
-constexpr int MAX_PROGRESSION_SEGMENT = 8;
-constexpr int64_t MAX_SEGMENT_VECTOR_LEN = INT_MAX;
-
-enum class CheckMerge_e { MERGE, NOMERGE, FLUSH };
-CheckMerge_e CheckWeCanMerge ( std::pair<int, int>& tSmallest, const VecTraits_T<ConstRtSegmentRefPtf_t>& dSegments, int64_t iRamLimit ) NO_THREAD_SAFETY_ANALYSIS
+enum class CheckMerge_e { MERGE, NOMERGE, FLUSH, FLUSH_EM };
+inline CheckMerge_e CheckWeCanMerge ( std::pair<int, int>& tSmallest, const VecTraits_T<ConstRtSegmentRefPtf_t>& dSegments, int64_t iHardRamLeft, int64_t iSoftRamLeft ) NO_THREAD_SAFETY_ANALYSIS
 {
 	const int iSegs = dSegments.GetLength ();
-	RTLOGV << "CheckWeCanMerge(" << dSegments.GetLength() << " segs, ram limit " << iRamLimit << " bytes)";
 
-	// enforce RAM usage limit
-	auto iRamLeft = iRamLimit - SegmentsGetUsedRam ( dSegments );
+	RTLOGV << "CheckWeCanMerge(" << dSegments.GetLength() << " segs, ram soft limit " << iSoftRamLeft << " bytes, ram hard limit " << iHardRamLeft << " bytes)";
+
+	auto eFLUSH = CheckMerge_e::FLUSH;
+	if ( iHardRamLeft<iSoftRamLeft )
+	{
+		iSoftRamLeft = iHardRamLeft;
+		eFLUSH = CheckMerge_e::FLUSH_EM; // emergency flush. I.e. hard limit reached
+	}
 
 	// skip merging if no memory left
-	if ( iRamLeft<=0 )
-		return CheckMerge_e::FLUSH;
+	if ( iSoftRamLeft <= 0 )
+		return eFLUSH;
 
 	// if N of segments is not so big - no merge need
 	if ( iSegs < ( MAX_SEGMENTS - MAX_PROGRESSION_SEGMENT ) )
@@ -3134,7 +3161,7 @@ CheckMerge_e CheckWeCanMerge ( std::pair<int, int>& tSmallest, const VecTraits_T
 
 	// check whether we have enough RAM
 #define ESTIMATE( _v ) pA->_v.Relimit ( 0, ( (int64_t)pA->_v.GetLength() + pB->_v.GetLength() ) * iAlive / uRows )
-#define LOC_ESTIMATE( _v ) do { auto _t=ESTIMATE(_v); iEstimatedMergedSize+=_t; if ( iMaxFutureVecLen<_t) iMaxFutureVecLen=_t; } while (0)
+#define LOC_ESTIMATE( _v ) do { auto _t=ESTIMATE(_v); iEstimatedMergedSize+=_t; if (iMaxFutureVecLen<_t) iMaxFutureVecLen=_t; } while (0)
 
 	LOC_ESTIMATE ( m_dWords );
 	LOC_ESTIMATE ( m_dDocs );
@@ -3146,9 +3173,9 @@ CheckMerge_e CheckWeCanMerge ( std::pair<int, int>& tSmallest, const VecTraits_T
 #undef LOC_ESTIMATE
 #undef ESTIMATE
 
-	if ( iEstimatedMergedSize > iRamLeft ) // can't merge anymore, dump if segments count limit's reached
-		return ( iSegs >= MAX_SEGMENTS ) ? CheckMerge_e::FLUSH : CheckMerge_e::NOMERGE;
-	return ( iMaxFutureVecLen > MAX_SEGMENT_VECTOR_LEN ) ? CheckMerge_e::FLUSH : CheckMerge_e::MERGE;
+	if ( iEstimatedMergedSize > iSoftRamLeft ) // can't merge anymore, dump if segments count limit's reached
+		return ( iSegs >= MAX_SEGMENTS ) ? eFLUSH : CheckMerge_e::NOMERGE;
+	return ( iMaxFutureVecLen > MAX_SEGMENT_VECTOR_LEN ) ? eFLUSH : CheckMerge_e::MERGE;
 }
 
 static StringBuilder_c & operator<< ( StringBuilder_c & dOut, CheckMerge_e eVal )
@@ -3158,20 +3185,19 @@ static StringBuilder_c & operator<< ( StringBuilder_c & dOut, CheckMerge_e eVal 
 	case CheckMerge_e::MERGE: return dOut << "MERGE";
 	case CheckMerge_e::NOMERGE: return dOut << "NOMERGE";
 	case CheckMerge_e::FLUSH: return dOut << "FLUSH";
+	case CheckMerge_e::FLUSH_EM: return dOut << "FLUSH_EM";
 	default: dOut.Sprintf ( "UNKNWN(%d)", (int)eVal );
 	}
 	return dOut;
 }
 
-void RtIndex_c::StartMergeSegments ( bool bHasNewSegment )
+void RtIndex_c::StartMergeSegments ( bool bHasNewSegment ) REQUIRES ( m_tRtChunks.SerialChunkAccess() )
 {
 	// protect from flood of calls
-	if ( m_bSegMergeQueued )
+	if ( std::exchange ( m_bSegMergeQueued, true ) )
 		return;
 
-	m_bSegMergeQueued = true;
-
-	RTLOGV << "StartMergeSegments(" << (bHasNewSegment?"with new":"no new") << ")";
+	RTLOGV << "StartMergeSegments (" << ( bHasNewSegment ? "with" : "no" ) << " new)";
 
 	// all the rest is postponed and will be executed aside of caller.
 	Coro::Go ( [this, bHasNewSegment]
@@ -3179,27 +3205,40 @@ void RtIndex_c::StartMergeSegments ( bool bHasNewSegment )
 		Threads::CheckRole_c _ ( m_tRtChunks.SerialChunkAccess () );
 
 		// collect all RAM segments not occupied by any op (only ops we know is 'merge segments' and 'save ram chunk')
+		int64_t iHardRamLeft { m_iRtMemLimit };
+		int64_t iSoftRamLeft { m_iSoftRamLimit };
 		LazyVector_T<ConstRtSegmentRefPtf_t> dSegments;
 		for ( const auto & dSeg : *m_tRtChunks.RamSegs () )
+		{
 			if ( !dSeg->m_iLocked )
+			{
 				dSegments.Add ( dSeg );
+				iSoftRamLeft -= dSeg->GetUsedRam();
+			}
+			iHardRamLeft -= dSeg->GetUsedRam();
+		}
 
-		// fixme! Now is old naive way used: if no active save, limit to SoftRamLimit,
-		// if saving op is in progress - use limit 10% of SoftRamLimit (aka doubleBufferLimit).
+		m_tRtChunks.SetUnlockedCount ( dSegments.GetLength() );
+
+		// fixme! Now is old naive way used: if no active save, limit to RtMemLimit,
+		// if saving op is in progress - use limit SPH_RT_DOUBLE_BUFFER_PERCENT of RtMemLimit (aka doubleBufferLimit).
 		// todo: think about and m.b. implement another limits.
+
+		RTLOGV << "Totally we have " << m_tRtChunks.GetRamSegmentsCount() << " segments onboard.";
 
 		std::pair<int,int> tSmallest;
 		CheckMerge_e eMergeAction { CheckMerge_e::NOMERGE };
 		if ( bHasNewSegment )
-			eMergeAction = CheckWeCanMerge ( tSmallest, dSegments, m_tRtChunks.IsSaveActive() ? m_iDoubleBufferLimit : m_iSoftRamLimit );
+			eMergeAction = CheckWeCanMerge ( tSmallest, dSegments, iHardRamLeft, iSoftRamLeft );
 
 		RTLOGV << "CheckWeCanMerge returned " << eMergeAction;
 
-		if ( eMergeAction == CheckMerge_e::FLUSH )
+		if ( eMergeAction == CheckMerge_e::FLUSH
+			|| eMergeAction == CheckMerge_e::FLUSH_EM )
 		{
 			m_bSegMergeQueued = false;
 			// here it might be no race, as we're in serial worker.
-			SaveDiskChunk ( false );
+			SaveDiskChunk ( false, eMergeAction == CheckMerge_e::FLUSH_EM );
 			return;
 		}
 
@@ -3215,6 +3254,7 @@ void RtIndex_c::StartMergeSegments ( bool bHasNewSegment )
 			ConstRtSegmentRefPtf_t pB = dSegments[tSmallest.second];
 			iMergeOp = m_tRtChunks.GetNextOpTicket();
 			pA->m_iLocked = pB->m_iLocked = iMergeOp; // mark them as retiring.
+			m_tRtChunks.SetUnlockedCount ( dSegments.GetLength()-2 );
 
 			// that will collect killed docIDs
 			KillAccum_t dKillOnMerge;
@@ -3229,7 +3269,7 @@ void RtIndex_c::StartMergeSegments ( bool bHasNewSegment )
 
 			pA->SetKillHook ( pMerged );
 			pB->SetKillHook ( pMerged );
-			RTLOGV << "after merge " << pMerged << ", has " << dKillOnMerge.m_dDocids.GetLength () << " killed";
+			RTLOGV << "after merge " << pMerged->m_tAliveRows << ", has " << dKillOnMerge.m_dDocids.GetLength () << " killed";
 
 			// apply postponed kills and updates (if any)
 			if ( pMerged )
@@ -3305,6 +3345,8 @@ int RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const CSphVector<DocID_
 			for ( int j=0; j<iFields; ++j )
 				dLens[j] += sphGetRowAttr ( pNewSeg->GetDocinfoByRowID(i), m_tSchema.GetAttr ( j+iFirstFieldLenAttr ).m_tLocator );
 	}
+
+	m_tRtChunks.WaitUnlockedCountChanged ( [] ( int iVals ) { return iVals < MAX_SEGMENTS; } );
 
 	// We're going to modify segments, so fall into serial fiber. From here no concurrent changes may happen
 	ScopedScheduler_c tSerialFiber { m_tRtChunks.SerialChunkAccess() };
@@ -3859,7 +3901,7 @@ void RtIndex_c::SaveDiskData ( const char * szFilename, const ConstRtSegmentSlic
 {
 	CSphString sError; // FIXME!!! report collected (sError) errors
 
-	RTDLOG << "SaveDiskData to " << szFilename << ", " << tSegs.GetLength() << " segments";
+	RTSAVELOG << "SaveDiskData to " << szFilename << ", " << tSegs.GetLength() << " segments";
 
 	SaveDiskDataContext_t tCtx ( szFilename, tSegs ); // only RAM segments here in game.
 	if ( m_tSettings.m_iMinInfixLen && m_pDict->GetSettings().m_bWordDict )
@@ -3972,7 +4014,7 @@ void RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )
 	wrMeta.PutBytes ( dChunkNames.Begin(), dChunkNames.GetLengthBytes() );
 
 	// meta v.17+
-	wrMeta.PutOffset(m_iSoftRamLimit);
+	wrMeta.PutOffset ( m_iRtMemLimit );
 
 	wrMeta.CloseFile();
 
@@ -3999,32 +4041,48 @@ void RtIndex_c::SaveMeta()
 // looks like spinlock, but actually we switch to parallel strand and back on every tick, so it should not burn CPU
 void RtIndex_c::WaitRAMSegmentsUnlocked () const
 {
-	while ( m_tRtChunks.RamSegs ()->any_of ( [] ( ConstRtSegmentRefPtf_t & a ) { return a->m_iLocked; } ) )
-		Threads::ScopedScheduler_c ( m_tRtChunks.MergeSegmentsWorker () );
+	m_tSaveTIDS.WaitVoid ( [this] { return m_tSaveTIDS.GetValueRef().IsEmpty(); } );
+	m_tRtChunks.WaitUnlockedCountChangedVoid ([this] { return m_tRtChunks.RamSegs()->none_of ( [] ( ConstRtSegmentRefPtf_t& a ) { return a->m_iLocked; } ); });
+}
+
+template<typename PRED>
+int64_t RtIndex_c::GetMemCount ( PRED&& fnPred ) const
+{
+	int64_t iTotal = 0;
+	for ( const RtSegment_t* pSeg : *m_tRtChunks.RamSegs() )
+		if ( fnPred ( pSeg ) )
+			iTotal += pSeg->GetUsedRam();
+
+	return iTotal;
 }
 
 // i.e. create new disk chunk from ram segments
-bool RtIndex_c::SaveDiskChunk ( bool bForced )
+bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tRtChunks.SerialChunkAccess() )
 {
 	if ( m_eSaving.load(std::memory_order_relaxed) != WriteState_e::ENABLED ) // fixme! review, m.b. refactor
 		return true;
 
 	assert ( Coro::CurrentScheduler() == m_tRtChunks.SerialChunkAccess () );
 
-	RTDLOG << "SaveDiskChunk( " << ( bForced ? "forced" : "not forced" ) << ")";
+	RTSAVELOG << "SaveDiskChunk (" << ( bForced ? "forced" : "not forced" ) << ", " << ( bEmergent ? "emergent" : "not emergent" ) << ")";
 
 	int iSaveOp = m_tRtChunks.GetNextOpTicket();
 
 	// if forced - wait all segments. Otherwise, can continue with subset of currently available segments
-	// note that segments may be locked by currently executing SaveDiskChunk. If so, we wait them finished and continue.
+	// note that segments may be locked by currently executing MergeSegments or SaveDiskChunk. If so, we wait them finished and continue.
 	// that will cause another disk chunk written right after just finished, since op is forced it is ok.
 	if ( bForced )
 		WaitRAMSegmentsUnlocked ();
 
+	m_tSaveTIDS.WaitVoid ( [this] { return m_tSaveTIDS.GetValueRef().GetLength() < SIMULTANEOUS_SAVE_LIMIT; } );
+
 	// collect all non-occupied non-empty segments and lock them
+	int64_t iNotMyOpRAM {0};
+	int64_t iMyOpRAM {0};
 	KillAccum_t dKillOnSave;
 	LazyVector_T<ConstRtSegmentRefPtf_t> dSegments;
 	for ( const auto & pSeg : *m_tRtChunks.RamSegs () )
+	{
 		if ( !pSeg->m_iLocked )
 		{
 			pSeg->m_iLocked = iSaveOp;
@@ -4032,15 +4090,22 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced )
 			{
 				pSeg->SetKillHook ( &dKillOnSave );
 				dSegments.Add ( pSeg );
+				iMyOpRAM += pSeg->GetUsedRam();
 			}
-		}
+		} else
+			iNotMyOpRAM += pSeg->GetUsedRam();
+	}
 
-	RTDLOG << "SaveDiskChunk process " << dSegments.GetLength() << " segments.";
+	m_tRtChunks.UpdateUnlockedCount();
+
+	RTSAVELOG << "SaveDiskChunk process " << dSegments.GetLength() << " segments. Active jobs " << m_tSaveTIDS.GetValueRef().GetLength() << ", op " << iSaveOp
+		<< " RAM visible+retired/locked/acquired " << iNotMyOpRAM + iMyOpRAM << "+" << m_iRamChunksAllocatedRAM.load ( std::memory_order_relaxed )- iNotMyOpRAM - iMyOpRAM << "/" << iNotMyOpRAM << "/" << iMyOpRAM;
 	if ( dSegments.IsEmpty() )
 		return true;
 
-	m_tRtChunks.SetSaveActive ( true );
-	auto tFinallySetSaveUnactive = AtScopeExit ( [this] { m_tRtChunks.SetSaveActive ( false ); } );
+	auto iTID = m_iTID;
+	m_tSaveTIDS.ModifyValue ( [iTID] ( CSphVector<int64_t>& dSaves ) { dSaves.Add ( iTID ); } );
+	auto tFinallySetSaveUnactive = AtScopeExit ( [this, iTID] { m_tSaveTIDS.ModifyValueAndNotifyAll ( [iTID] ( CSphVector<int64_t>& dSaves ) { dSaves.RemoveValueFromSorted ( iTID ); } ); } );
 
 	int64_t tmSaveWall = -sphMicroTimer(); // all time including waiting
 	int64_t tmSave; // only active time
@@ -4051,12 +4116,12 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced )
 
 	// as we're going to switch fiber, we need to freeze reliable stat and m_iTID (as they could change)
 	ChunkStats_t tStats ( m_tStats, m_dFieldLensRam );
-	auto iTID = m_iTID;
+
 	CSphIndex * pNewChunk = nullptr;
 	{
 		// as separate subtask we 1-st flush segments to disk, and then load just flushed segment
 		// if forced, continue to work in the same fiber; otherwise split to merge fiber
-		ScopedScheduler_c tMergeFiber { bForced ? Coro::CurrentScheduler () : m_tRtChunks.MergeSegmentsWorker() };
+		ScopedScheduler_c tSaveFiber { bForced ? Coro::CurrentScheduler () : m_tRtChunks.SaveSegmentsWorker() };
 		tmSave = -sphMicroTimer();
 		SaveDiskData ( sChunk.cstr (), dSegments, tStats );
 		// fixme! process errors.
@@ -4112,6 +4177,11 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced )
 		}
 	}
 
+	// here is pickpoint: if we save some chunks in parallel, here we *NEED* to be sure, that later is not published before older
+	// That is about binlog consistency: if we save trx 1-1000 and at the same time 1000-1010, last might finish faster, but it can't be committed immediately,
+	// as last highest trx will be 1010, and nobody knows, that actually 1-1000 are not yet safe.
+	m_tSaveTIDS.WaitVoid ( [this, iTID] { return m_tSaveTIDS.GetValueRef().First() == iTID; } );
+
 	int iDiskChunks;
 	// now new disk chunk is loaded, kills and updates applied - we ready to change global index state now.
 	{
@@ -4149,6 +4219,14 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced )
 	sInfo.Sprintf ( "rt: index %s: diskchunk %d(%d), segments %d %s saved in %.6D (%.6D) sec", m_sIndexName.cstr (), iChunkID
 					, iDiskChunks, iSegments, bForced ? "forcibly" : "", tmSave, tmSaveWall );
 	sphInfo ( "%s", sInfo.cstr() );
+
+	// calculate DoubleBuf percent using current save/insert rate
+	auto iInserted = GetMemCount ( [iSaveOp] ( const auto* pSeg ) { return !pSeg->m_iLocked || pSeg->m_iLocked > iSaveOp; } );
+	RecalculateRateLimit ( iMyOpRAM, iInserted, bEmergent );
+
+	RTSAVELOG << sInfo.cstr() << ", op " << iSaveOp << " RAM saved/new " << iMyOpRAM << "/" << iInserted
+			<< " Insert ratio is " << m_fSaveRateLimit << " (soft ram limit " << m_iSoftRamLimit << ", rt mem limit " << m_iRtMemLimit << ")";
+
 	Preread();
 	CheckStartAutoOptimize();
 	return true;
@@ -4317,7 +4395,7 @@ bool RtIndex_c::LoadMeta ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath
 	rdMeta.GetBytes ( m_dChunkNames.Begin(), iLen*sizeof(int) );
 
 	if ( uVersion>=17 )
-		m_iSoftRamLimit = rdMeta.GetOffset();
+		SetMemLimit ( rdMeta.GetOffset() );
 
 	return true;
 }
@@ -4783,8 +4861,8 @@ int RtIndex_c::DebugCheck ( FILE * fp )
 	if ( m_iStride!=m_tSchema.GetRowSize() )
 		tReporter.Fail ( "wrong attribute stride (current=%d, should_be=%d)", m_iStride, m_tSchema.GetRowSize() );
 
-	if ( m_iSoftRamLimit<=0 )
-		tReporter.Fail ( "wrong RAM limit (current=" INT64_FMT ")", m_iSoftRamLimit );
+	if ( m_iRtMemLimit<=0 )
+		tReporter.Fail ( "wrong RAM limit (current=" INT64_FMT ")", m_iRtMemLimit );
 
 	if ( m_iTID<0 )
 		tReporter.Fail ( "index TID < 0 (current=" INT64_FMT ")", m_iTID );
@@ -8731,7 +8809,7 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID )
 void RtIndex_c::StopOptimize()
 {
 	m_bOptimizeStop.store ( true, std::memory_order_release );
-	m_tOptimizeRuns.WaitFor ( [] ( int i ) { return i <= 0; } );
+	m_tOptimizeRuns.Wait ( [] ( int i ) { return i <= 0; } );
 }
 
 void RtIndex_c::CommonMerge ( std::function<bool ( OptimizeTask_t& )>&& fnSelector )
@@ -8745,8 +8823,8 @@ void RtIndex_c::CommonMerge ( std::function<bool ( OptimizeTask_t& )>&& fnSelect
 	int iChunks = 0;
 
 	{
-		m_tOptimizeRuns.Inc();
-		auto tDeferDec = AtScopeExit ( [this] { m_tOptimizeRuns.Dec(); } );
+		m_tOptimizeRuns.ModifyValue ( [] ( int& i ) { ++i; } );
+		auto tDeferDec = AtScopeExit ( [this] { m_tOptimizeRuns.ModifyValueAndNotifyAll ( [] ( int& i ) { --i; } );} );
 
 		OptimizeTask_t tAction;
 		bool bBreak = false;
@@ -8995,7 +9073,7 @@ void RtIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 	pRes->m_iRamUse = sizeof( RtIndex_c ) + pRes->m_iRamChunkSize;
 	pRes->m_iRamRetired = m_iRamChunksAllocatedRAM.load(std::memory_order_relaxed) - iUsedRam;
 
-	pRes->m_iMemLimit = m_iSoftRamLimit;
+	pRes->m_iMemLimit = m_iRtMemLimit;
 
 	CSphString sError;
 	char sFile [ SPH_MAX_FILENAME_LEN ];
@@ -9791,6 +9869,24 @@ uint64_t SchemaFNV ( const ISphSchema & tSchema )
 
 void RtIndex_c::SetMemLimit ( int64_t iMemLimit )
 {
-	m_iSoftRamLimit = iMemLimit;
-	m_iDoubleBufferLimit = ( m_iSoftRamLimit * SPH_RT_DOUBLE_BUFFER_PERCENT ) / 100;
+	m_iRtMemLimit = iMemLimit;
+	m_iSoftRamLimit = m_iRtMemLimit * m_fSaveRateLimit;
+}
+
+void RtIndex_c::RecalculateRateLimit ( int64_t iSaved, int64_t iInserted, bool bEmergent )
+{
+	if ( ( iSaved + iInserted ) > 0 )
+	{
+		auto fRate = (double)iSaved / ( iSaved + iInserted );
+		if ( bEmergent ) // emergent save happened
+		{
+			m_fSaveRateLimit -= SAVE_RATE_LIMIT_EMERGENCY_STEP;
+			m_fSaveRateLimit = Min ( m_fSaveRateLimit, fRate );
+		} else
+			m_fSaveRateLimit = fRate;
+	}
+
+	m_fSaveRateLimit = Min ( MAX_SAVE_RATE_LIMIT, m_fSaveRateLimit );
+	m_fSaveRateLimit = Max ( MIN_SAVE_RATE_LIMIT, m_fSaveRateLimit );
+	m_iSoftRamLimit = m_iRtMemLimit * m_fSaveRateLimit;
 }

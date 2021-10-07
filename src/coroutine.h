@@ -241,6 +241,9 @@ namespace Coro
 
 Worker_c* CurrentWorker() noexcept;
 
+// call CurrentWorker and assert it is not null
+Worker_c* Worker() noexcept;
+
 // start handler in coroutine, first-priority
 void Go ( Handler handler, Scheduler_i* pScheduler );
 
@@ -340,37 +343,22 @@ public:
 	}
 };
 
+// event is specially designed for netloop - here SetEvent doesn't require to be run from Coro, however WaitEvent does.
+// by that fact other kind of condvar is not suitable here.
 class Event_c
 {
-	enum ESTATE : BYTE
-	{
-		Signaled_e = 1, Waited_e = 2,
+	enum ESTATE : BYTE {
+		Signaled_e = 1,
+		Waited_e = 2,
 	};
 
 	volatile void* m_pCtx = nullptr;
-	volatile std::atomic<BYTE> m_uState {0};
+	volatile std::atomic<BYTE> m_uState { 0 };
 
 public:
 	~Event_c();
-	void SetEvent ();
-	void WaitEvent ();
-};
-
-// multi-event - more than one waiters possible, SetEvent fires all of them.
-class MultiEvent_c
-{
-	enum ESTATE : BYTE
-	{
-		Signaled_e = 1, Waited_e = 2,
-	};
-
-	OperationsQueue_c m_tOps;
-	volatile std::atomic<BYTE> m_uState {0};
-
-public:
-	~MultiEvent_c();
-	void SetEvent ();
-	void WaitEvent ();
+	void SetEvent();
+	void WaitEvent();
 };
 
 // instead of real blocking it yield current coro, so, MUST be used only with coro context
@@ -399,6 +387,144 @@ public:
 	Mutex_c() = default;
 	void Lock() ACQUIRE();
 	void Unlock() RELEASE();
+};
+
+using ScopedMutex_t = CSphScopedLock<Mutex_c>;
+
+// condition variable - simplified port from Boost::fibers (we don't use timered functions right now)
+class ConditionVariableAny_c: public ISphNoncopyable
+{
+	boost::fibers::detail::spinlock m_tWaitQueueSpinlock {};
+	WaitQueue_c m_tWaitQueue {};
+
+public:
+	ConditionVariableAny_c() = default;
+
+	~ConditionVariableAny_c()
+	{
+		assert ( m_tWaitQueue.Empty() );
+	}
+
+	void NotifyOne() noexcept;
+	void NotifyAll() noexcept;
+
+	template<typename LockType>
+	void Wait ( LockType& tMutex ) REQUIRES ( tMutex )
+	{
+		auto* pActiveWorker = Worker();
+		// atomically call tMutex.unlock() and block on current worker
+		// store this coro in waiting-queue
+		boost::fibers::detail::spinlock_lock tLock { m_tWaitQueueSpinlock };
+		tMutex.Unlock();
+		m_tWaitQueue.SuspendAndWait ( tLock, pActiveWorker );
+
+		// relock external again before returning
+		tMutex.Lock();
+	}
+
+	template<typename LockType, typename PRED>
+	void Wait ( LockType& tMutex, PRED fnPred ) REQUIRES ( tMutex )
+	{
+		while ( !fnPred() ) {
+			Wait ( tMutex );
+		}
+	}
+};
+
+class ConditionVariable_c: public ISphNoncopyable
+{
+	ConditionVariableAny_c m_tCnd;
+
+public:
+	ConditionVariable_c() = default;
+	void NotifyOne() noexcept { m_tCnd.NotifyOne(); }
+	void NotifyAll() noexcept { m_tCnd.NotifyAll(); }
+	void Wait ( ScopedMutex_t& lt ) REQUIRES (lt) { m_tCnd.Wait ( lt ); }
+	template<typename PRED> void Wait ( ScopedMutex_t& lt, PRED fnPred ) REQUIRES (lt) { m_tCnd.Wait ( lt, fnPred ); }
+};
+
+
+template<typename T>
+class Waitable_T: ISphNoncopyable
+{
+	mutable ConditionVariable_c m_tCondVar;
+	mutable Mutex_c m_tMutex;
+	T m_tValue { 0 };
+
+public:
+
+	template<typename... PARAMS>
+	explicit Waitable_T ( PARAMS&&... tParams )
+		: m_tValue ( std::forward<PARAMS> ( tParams )... )
+	{}
+
+	void SetValue ( T tValue )
+	{
+		ScopedMutex_t lk ( m_tMutex );
+		m_tValue = tValue;
+	}
+
+	template<typename MOD>
+	void ModifyValue ( MOD&& fnMod )
+	{
+		ScopedMutex_t lk ( m_tMutex );
+		fnMod ( m_tValue );
+	}
+
+	template<typename MOD>
+	void ModifyValueAndNotifyOne ( MOD&& fnMod )
+	{
+		ModifyValue ( std::forward<MOD> ( fnMod ) );
+		NotifyOne();
+	}
+
+	template<typename MOD>
+	void ModifyValueAndNotifyAll ( MOD&& fnMod )
+	{
+		ModifyValue ( std::forward<MOD> ( fnMod ) );
+		NotifyAll();
+	}
+
+	T GetValue() const
+	{
+		return m_tValue;
+	}
+
+	const T& GetValueRef() const
+	{
+		return m_tValue;
+	}
+
+	inline void NotifyOne()
+	{
+		m_tCondVar.NotifyOne();
+	}
+
+	inline void NotifyAll()
+	{
+		m_tCondVar.NotifyAll();
+	}
+
+	void Wait () const
+	{
+		ScopedMutex_t lk ( m_tMutex );
+		m_tCondVar.Wait ( lk );
+	}
+
+	template<typename PRED>
+	T Wait ( PRED&& fnPred ) const
+	{
+		ScopedMutex_t lk ( m_tMutex );
+		m_tCondVar.Wait ( lk, [this, fnPred = std::forward<PRED> ( fnPred )]() { return fnPred ( m_tValue ); } );
+		return m_tValue;
+	}
+
+	template<typename PRED>
+	void WaitVoid ( PRED&& fnPred ) const
+	{
+		ScopedMutex_t lk ( m_tMutex );
+		m_tCondVar.Wait ( lk, std::forward<PRED> ( fnPred ) );
+	}
 };
 
 } // namespace Coro
@@ -485,7 +611,7 @@ public:
 
 using SccRL_t = CSphScopedRLock_T<Coro::RWLock_c>;
 using SccWL_t = CSphScopedWLock_T<Coro::RWLock_c>;
-using ScopedCoroMutex_t = CSphScopedLock<Coro::Mutex_c>;
+using ScopedCoroMutex_t = Coro::ScopedMutex_t;
 
 // fake locks
 using FakeRL_t = FakeScopedRLock_T<Coro::RWLock_c>;

@@ -1627,10 +1627,10 @@ StoredQuery_i * PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, CS
 	DictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
 
 	if ( IsStarDict ( bWordDict ) )
-		SetupStarDict ( pDict, pTokenizer );
+		SetupStarDict ( pDict );
 
 	if ( m_tSettings.m_bIndexExactWords )
-		SetupExactDict ( pDict, pTokenizer );
+		SetupExactDict ( pDict );
 
 	if ( tArgs.m_bQL )
 		return CreateQuery ( tArgs, pTokenizer, pDict, sError );
@@ -2214,10 +2214,10 @@ void PercolateIndex_c::PostSetupUnl()
 	DictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
 
 	if ( IsStarDict ( bWordDict ) )
-		SetupStarDict ( pDict, pTokenizer );
+		SetupStarDict ( pDict );
 
 	if ( m_tSettings.m_bIndexExactWords )
-		SetupExactDict ( pDict, pTokenizer );
+		SetupExactDict ( pDict );
 
 	CSphString sHitlessFiles = m_tSettings.m_sHitlessFiles.cstr();
 	if ( GetIndexFilenameBuilder() )
@@ -2872,12 +2872,14 @@ Bson_t PercolateIndex_c::ExplainQuery ( const CSphString & sQuery ) const
 
 	TokenizerRefPtr_c pQueryTokenizer { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
 	sphSetupQueryTokenizer ( pQueryTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false );
+	SetupExactTokenizer ( pQueryTokenizer );
+	SetupStarTokenizer( pQueryTokenizer );
 
 	ExplainQueryArgs_t tArgs ( sQuery );
 	tArgs.m_pSchema = &GetInternalSchema();
 	tArgs.m_pDict = GetStatelessDict ( m_pDict );
-	SetupStarDict ( tArgs.m_pDict, pQueryTokenizer );
-	SetupExactDict ( tArgs.m_pDict, pQueryTokenizer );
+	SetupStarDict ( tArgs.m_pDict );
+	SetupExactDict ( tArgs.m_pDict );
 	if ( m_pFieldFilter )
 		tArgs.m_pFieldFilter = m_pFieldFilter->Clone();
 	tArgs.m_pSettings = &m_tSettings;

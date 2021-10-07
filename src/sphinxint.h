@@ -1026,7 +1026,7 @@ public:
 
 
 	bool					SetCaseFolding ( const char * sConfig, CSphString & sError ) override	{ return m_pTokenizer->SetCaseFolding ( sConfig, sError ); }
-	void					AddPlainChar ( char c ) override											{ m_pTokenizer->AddPlainChar ( c ); }
+	void					AddPlainChar ( char c ) override										{ m_pTokenizer->AddPlainChar ( c ); }
 	void					AddSpecials ( const char * sSpecials ) override							{ m_pTokenizer->AddSpecials ( sSpecials ); }
 	bool					SetIgnoreChars ( const char * sIgnored, CSphString & sError ) override	{ return m_pTokenizer->SetIgnoreChars ( sIgnored, sError ); }
 	bool					SetNgramChars ( const char * sConfig, CSphString & sError ) override		{ return m_pTokenizer->SetNgramChars ( sConfig, sError ); }

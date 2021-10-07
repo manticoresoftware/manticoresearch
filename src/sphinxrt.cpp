@@ -6266,22 +6266,29 @@ bool RtIndex_c::RtQwordSetup ( RtQword_t * pQword, int iSeg, const RtGuard_t& tG
 	return bFound;
 }
 
+void SetupExactDict ( DictRefPtr_c& pDict )
+{
+	pDict = new CSphDictExact ( pDict );
+}
 
-void SetupExactDict ( DictRefPtr_c &pDict, ISphTokenizer * pTokenizer, bool bAddSpecial )
+void SetupExactTokenizer ( ISphTokenizer* pTokenizer, bool bAddSpecial )
 {
 	assert ( pTokenizer );
 	pTokenizer->AddPlainChar ( '=' );
 	if ( bAddSpecial )
 		pTokenizer->AddSpecials ( "=" );
-	pDict = new CSphDictExact ( pDict );
 }
 
 
-void SetupStarDict ( DictRefPtr_c& pDict, ISphTokenizer * pTokenizer )
+void SetupStarDict ( DictRefPtr_c& pDict )
+{
+	pDict = new CSphDictStarV8 ( pDict, true );
+}
+
+void SetupStarTokenizer ( ISphTokenizer* pTokenizer )
 {
 	assert ( pTokenizer );
 	pTokenizer->AddPlainChar ( '*' );
-	pDict = new CSphDictStarV8 ( pDict, true );
 }
 
 class SphRtFinalMatchCalc_c : public MatchProcessor_i, ISphNoncopyable
@@ -6524,10 +6531,13 @@ void FinalExpressionCalculation ( CSphQueryContext & tCtx, const VecTraits_T<RtS
 }
 
 // perform initial query transformations and expansion.
-static int PrepareFTSearch ( const RtIndex_c * pThis, bool bIsStarDict, bool bKeywordDict, int iExpandKeywords, int iExpansionLimit, const char * szModifiedQuery, const CSphIndexSettings & tSettings, const QueryParser_i * pQueryParser, const CSphQuery & tQuery, const CSphSchema & tSchema, cRefCountedRefPtr_t pIndexData, ISphTokenizer * pTokenizer, ISphTokenizer * pQueryTokenizer, CSphDict * pDict, CSphQueryResultMeta & tMeta, QueryProfile_c * pProfiler, CSphScopedPayload * pPayloads, XQQuery_t & tParsed )
+static int PrepareFTSearch ( const RtIndex_c * pThis, bool bIsStarDict, bool bKeywordDict, int iExpandKeywords, int iExpansionLimit, const char * szModifiedQuery, const CSphIndexSettings & tSettings, const QueryParser_i * pQueryParser, const CSphQuery & tQuery, const CSphSchema & tSchema, cRefCountedRefPtr_t pIndexData, ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQueryResultMeta & tMeta, QueryProfile_c * pProfiler, CSphScopedPayload * pPayloads, XQQuery_t & tParsed )
 {
 	// OPTIMIZE! make a lightweight clone here? and/or remove double clone?
-	TokenizerRefPtr_c pQueryTokenizerJson { pTokenizer };
+	TokenizerRefPtr_c pQueryTokenizer { pTokenizer->Clone ( SPH_CLONE_QUERY ) };
+	sphSetupQueryTokenizer ( pQueryTokenizer, bIsStarDict, tSettings.m_bIndexExactWords, false );
+
+	TokenizerRefPtr_c pQueryTokenizerJson { pTokenizer->Clone ( SPH_CLONE_QUERY ) };
 	sphSetupQueryTokenizer ( pQueryTokenizerJson, bIsStarDict, tSettings.m_bIndexExactWords, true );
 
 	if ( !pQueryParser->ParseQuery ( tParsed, szModifiedQuery, &tQuery, pQueryTokenizer, pQueryTokenizerJson, &tSchema, pDict, tSettings ) )
@@ -6944,16 +6954,13 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	auto& dDiskChunks = tGuard.m_dDiskChunks;
 
 	// wrappers
-	TokenizerRefPtr_c pQueryTokenizer { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
-	sphSetupQueryTokenizer ( pQueryTokenizer, IsStarDict ( m_bKeywordDict ), m_tSettings.m_bIndexExactWords, false );
-
 	DictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
 
 	if ( m_bKeywordDict && IsStarDict ( m_bKeywordDict ) )
-		SetupStarDict ( pDict, pQueryTokenizer );
+		SetupStarDict ( pDict );
 
 	if ( m_tSettings.m_bIndexExactWords )
-		SetupExactDict ( pDict, pQueryTokenizer );
+		SetupExactDict ( pDict );
 
 	// calculate local idf for RT with disk chunks
 	// in case of local_idf set but no external hash no full-scan query and RT has disk chunks
@@ -7077,7 +7084,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	bool bFullscan = pQueryParser->IsFullscan ( tQuery ); // use this
 	// no need to create ranker, etc if there's no query
 	if ( !bFullscan )
-		iStackNeed = PrepareFTSearch (this, IsStarDict ( m_bKeywordDict ), m_bKeywordDict, m_tMutableSettings.m_iExpandKeywords, m_iExpansionLimit, (const char *) sModifiedQuery, m_tSettings, pQueryParser, tQuery, m_tSchema, (cRefCountedRefPtr_t) tGuard.m_tSegmentsAndChunks.m_pSegs, m_pTokenizer->Clone ( SPH_CLONE_QUERY ), pQueryTokenizer, pDict, tMeta, pProfiler, &tPayloads, tParsed );
+		iStackNeed = PrepareFTSearch (this, IsStarDict ( m_bKeywordDict ), m_bKeywordDict, m_tMutableSettings.m_iExpandKeywords, m_iExpansionLimit, (const char *) sModifiedQuery, m_tSettings, pQueryParser, tQuery, m_tSchema, (cRefCountedRefPtr_t) tGuard.m_tSegmentsAndChunks.m_pSegs, m_pTokenizer, pDict, tMeta, pProfiler, &tPayloads, tParsed );
 
 	// empty index, empty result. Must be AFTER PrepareFTSearch, since it prepares list of words
 	if ( tGuard.m_dRamSegs.IsEmpty() )
@@ -7204,14 +7211,16 @@ void RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 
 	if ( IsStarDict ( m_bKeywordDict ) )
 	{
+		SetupStarTokenizer ( pTokenizer );
 		if ( m_bKeywordDict )
-			SetupStarDict ( pDict, pTokenizer );
-		else
-			pTokenizer->AddPlainChar ( '*' );
+			SetupStarDict ( pDict );
 	}
 
 	if ( m_tSettings.m_bIndexExactWords )
-		SetupExactDict ( pDict, pTokenizer, false );
+	{
+		SetupExactTokenizer ( pTokenizer, false );
+		SetupExactDict ( pDict );
+	}
 
 	CSphVector<BYTE> dFiltered;
 	FieldFilterRefPtr_c pFieldFilter;
@@ -9546,10 +9555,12 @@ Bson_t RtIndex_c::ExplainQuery ( const CSphString & sQuery ) const
 
 	TokenizerRefPtr_c pQueryTokenizer { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
 	sphSetupQueryTokenizer ( pQueryTokenizer, IsStarDict ( m_bKeywordDict ), m_tSettings.m_bIndexExactWords, false );
+	SetupStarTokenizer ( pQueryTokenizer );
+	SetupExactTokenizer ( pQueryTokenizer );
 
 	tArgs.m_pDict = GetStatelessDict ( m_pDict );
-	SetupStarDict ( tArgs.m_pDict, pQueryTokenizer );
-	SetupExactDict ( tArgs.m_pDict, pQueryTokenizer );
+	SetupStarDict ( tArgs.m_pDict );
+	SetupExactDict ( tArgs.m_pDict );
 	if ( m_pFieldFilter )
 		tArgs.m_pFieldFilter = m_pFieldFilter->Clone();
 	tArgs.m_pSettings = &m_tSettings;

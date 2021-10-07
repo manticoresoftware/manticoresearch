@@ -395,9 +395,11 @@ void BuildSegmentInfixes ( RtSegment_t * pSeg, bool bHasMorphology, bool bKeywor
 bool ExtractInfixCheckpoints ( const char * sInfix, int iBytes, int iMaxCodepointLength, int iDictCpCount,
 	const CSphTightVector<uint64_t> &dFilter, CSphVector<DWORD> &dCheckpoints );
 
-void SetupExactDict ( DictRefPtr_c &pDict, ISphTokenizer * pTokenizer, bool bAddSpecial = true );
+void SetupExactDict ( DictRefPtr_c& pDict );
+void SetupExactTokenizer ( ISphTokenizer* pTokenizer, bool bAddSpecial = true );
 
-void SetupStarDict ( DictRefPtr_c &pDict, ISphTokenizer * pTokenizer );
+void SetupStarDict ( DictRefPtr_c& pDict );
+void SetupStarTokenizer ( ISphTokenizer* pTokenizer );
 
 bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const ISphFieldFilter * pFieldFilter,
 	const CSphIndexSettings & tIndexSettings, uint64_t uTokHash, uint64_t uDictHash, int iMaxCodepointLength, int64_t iMemLimit,

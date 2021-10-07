@@ -3980,17 +3980,17 @@ class CSphRefcountedPtr
 	using RAWTYPE = CSphRefcountedPtr<RAWT>;
 
 public:
-	explicit		CSphRefcountedPtr () = default;		///< default NULL wrapper construction (for vectors)
-	explicit		CSphRefcountedPtr ( T * pPtr ) : m_pPtr ( pPtr ) {}	///< construction from raw pointer, takes over ownership!
+	explicit		CSphRefcountedPtr () noexcept = default;		///< default NULL wrapper construction (for vectors)
+	explicit		CSphRefcountedPtr ( T * pPtr ) noexcept : m_pPtr ( pPtr ) {}	///< construction from raw pointer, takes over ownership!
 
-	CSphRefcountedPtr ( const CSphRefcountedPtr& rhs )
+	CSphRefcountedPtr ( const CSphRefcountedPtr& rhs ) noexcept
 		: m_pPtr ( rhs.m_pPtr )
 	{
 		SafeAddRef ( m_pPtr );
 	}
 
 	template <typename DERIVED>
-	explicit CSphRefcountedPtr ( const CSphRefcountedPtr<DERIVED> & rhs )
+	explicit CSphRefcountedPtr ( const CSphRefcountedPtr<DERIVED> & rhs ) noexcept
 			: m_pPtr ( rhs.Ptr() )
 	{
 		SafeAddRef ( m_pPtr );
@@ -4001,14 +4001,14 @@ public:
 		Swap(rhs);
 	}
 
-	CSphRefcountedPtr& operator= ( CSphRefcountedPtr rhs )
+	CSphRefcountedPtr& operator= ( CSphRefcountedPtr rhs ) noexcept
 	{
 		Swap(rhs);
 		return *this;
 	}
 
 	template<typename DERIVED>
-	CSphRefcountedPtr& operator= ( const CSphRefcountedPtr<DERIVED>& rhs )
+	CSphRefcountedPtr& operator= ( const CSphRefcountedPtr<DERIVED>& rhs ) noexcept
 	{
 		SafeRelease ( m_pPtr );
 		m_pPtr = rhs.Ptr();
@@ -4021,26 +4021,26 @@ public:
 		::Swap(m_pPtr, rhs.m_pPtr);
 	}
 
-	~CSphRefcountedPtr ()				{ SafeRelease ( m_pPtr ); }
+	~CSphRefcountedPtr ()				noexcept { SafeRelease ( m_pPtr ); }
 
-	T *	operator -> () const			{ return m_pPtr; }
-		explicit operator bool() const	{ return m_pPtr!=nullptr; }
-		operator T * () const			{ return m_pPtr; }
+	T *	operator -> () const noexcept	{ return m_pPtr; }
+		explicit operator bool() const noexcept	{ return m_pPtr!=nullptr; }
+		operator T * () const noexcept	{ return m_pPtr; }
 
 	// drop the ownership and reset pointer
-	inline T * Leak ()
+	inline T * Leak () noexcept
 	{
 		T * pRes = m_pPtr;
 		m_pPtr = nullptr;
 		return pRes;
 	}
 
-	T * Ptr() const { return m_pPtr; }
-	CT * CPtr () const { return m_pPtr; }
+	T * Ptr() const noexcept { return m_pPtr; }
+	CT * CPtr () const noexcept { return m_pPtr; }
 
 public:
 	/// assignment of a raw pointer, takes over ownership!
-	CSphRefcountedPtr& operator = ( T * pPtr )
+	CSphRefcountedPtr& operator = ( T * pPtr ) noexcept
 	{
 		SafeRelease ( m_pPtr );
 		m_pPtr = pPtr;

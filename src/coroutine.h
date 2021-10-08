@@ -464,6 +464,32 @@ public:
 		m_tValue = tValue;
 	}
 
+	void SetValueAndNotifyOne ( T tValue )
+	{
+		SetValue ( tValue );
+		NotifyOne();
+	}
+
+	void SetValueAndNotifyAll ( T tValue )
+	{
+		SetValue ( tValue );
+		NotifyAll();
+	}
+
+	void UpdateValueAndNotifyOne ( T tValue )
+	{
+		if ( tValue == GetValue() )
+			return;
+		SetValueAndNotifyOne ( tValue );
+	}
+
+	void UpdateValueAndNotifyAll ( T tValue )
+	{
+		if ( tValue == GetValue() )
+			return;
+		SetValueAndNotifyAll ( tValue );
+	}
+
 	template<typename MOD>
 	void ModifyValue ( MOD&& fnMod )
 	{

@@ -901,10 +901,12 @@ int AloneThread_c::m_iRunningAlones = 0;
 class ShedulerWrapper_c final : public Scheduler_i
 {
 	Scheduler_i*	m_pScheduler; // not owned
+	const char*		m_szName;
 
 public:
-	explicit ShedulerWrapper_c ( Scheduler_i* pScheduler ) noexcept
+	ShedulerWrapper_c ( Scheduler_i* pScheduler, const char* szName ) noexcept
 		: m_pScheduler { pScheduler }
+		, m_szName { szName }
 	{}
 
 	void ScheduleOp ( details::SchedulerOperation_t* pOp, bool bVip ) final
@@ -929,7 +931,7 @@ public:
 
 	const char* Name() const final
 	{
-		return m_pScheduler->Name();
+		return m_szName ? m_szName : m_pScheduler->Name();
 	}
 };
 
@@ -952,9 +954,9 @@ SchedulerSharedPtr_t MakeAloneScheduler ( Scheduler_i* pBase, const char* szName
 }
 
 // wraps raw scheduler into shared-ptr (it will NOT delete the scheduler when destroyed!)
-SchedulerSharedPtr_t WrapRawScheduler ( Scheduler_i* pBase )
+SchedulerSharedPtr_t WrapRawScheduler ( Scheduler_i* pBase, const char* szName )
 {
-	return SchedulerSharedPtr_t { new ShedulerWrapper_c ( pBase ) };
+	return SchedulerSharedPtr_t { new ShedulerWrapper_c ( pBase, szName ) };
 }
 
 

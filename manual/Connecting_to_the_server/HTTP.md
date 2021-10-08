@@ -49,7 +49,7 @@ Separate HTTP interface can be used to perform 'VIP' connections. A connection i
 searchd {
 ...
    listen = 127.0.0.1:9308
-   listen = 127.0.0.1:9318:_vip
+   listen = 127.0.0.1:9318:mysql_vip
 ...
 }
 ```

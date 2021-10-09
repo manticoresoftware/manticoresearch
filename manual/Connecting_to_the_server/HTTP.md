@@ -44,7 +44,7 @@ searchd {
 <!-- example VIP -->
 Separate HTTP interface can be used to perform 'VIP' connections. A connection in this case bypasses a thread pool and always forcibly creates a new dedicated thread. That's useful for managing Manticore Search in case of a severe overload when the server would either stall or not let you connect via a regular port otherwise.
 _vip is attached to proto in order to indicate that it should be served from dedicated connection in dedicated OS thread. In this case when '_vip' is used alone - it should be treaded as attached to default (empty) proto.
-[mysql_vip](MySQL_protocol.md#VIP-connection), in turn, indicates that it is mysql with _vip. That is not the same as just '_vip'.
+[mysql_vip](MySQL_protocol.md#VIP-connection), in turn, indicates that it is mysql with _vip. _vip is just a suffix for any kind of connection. The default one is API, the others are http, https and mysql. 
 
 <!-- request VIP -->
 ```ini

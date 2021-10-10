@@ -329,15 +329,17 @@ What you need to know:
 
 *- RT index is very similar to a distributed index of multiple local indexes. The local indexes are called "disk chunks"
 *- rt_mem_limit limits size of the RAM chunk
-*- RAM chunk internally is made of multiple indexes, called segments. While plain indexes are stored on disk as a single index, segments of ram chunks are special RAM-only 'indexes', which are automatically kept in sequence of 2x (by size), with some relaxed rules up to 24 chunks where they have no sequence. 
-When number of chunks is greater (24 to 32), segments must be sized in 2x progression, and periodical ram-segments merge is taking care of that. It is impossible to 'extract' one single segment as externally they're always part of one 'solid' RAM-chunk.
-Briefly - we have RAM-chunk + maybe some disk chunks. And disk chunk, in turn is exactly 'plain' index.
-*- Number of RAM chunks is defined by the amount of data in RT index and rt_mem_limit setting (which defines the size of RAM chunk). Ideally RAM chunks number should be more than 2 but slightly less than the number of CPUs
+*- The rule of thumb with rt_mem_limit is: If you know the final size of the index then rt_mem_limit = ~ final size / CPU_cores. You can always check your index file size and adjust this setting on the fly. For example to set RAM chunk size at 32 Mb by using `ALTER TABLE index_name rt_mem_limit='32M';`.
+*- RAM chunk internally is made of multiple indexes, called segments. While plain indexes are stored on disk as a single index, segments of RAM chunk are special RAM-only 'indexes', which are automatically kept in sequence of 2x (by size), with some relaxed rules of up to 24 segments where they have no sequence. 
+When number of segments is greater (24 to 32), segments are sized in 2x progression, and periodical ram-segments merge is taking care of that.
+There is always 1 RAM-chunk + maybe some disk chunks. And disk chunk, in turn is exactly 'plain' index.
+*- Merging larger segments take longer, that's why it may be suboptimal to have very large RAM chunk (and therefore rt_mem_limit). No merging at all can lead to huge amount of segments (which is an indicator of a problem). Too many segments is bad for search performance. Merging into single segment is good for search, but would would be a waste of CPU time. Up to 32 segments is good for both, search performance and merging speed.
+*- Number of disk chunks is defined by the amount of data in RT index and rt_mem_limit setting (which defines the size of RAM chunk). Ideally disk chunks number should be more than 2 but slightly less than the number of CPUs
 *- RAM chunk does merging after each query, that's why it's more beneficial to do batch INSERTs of 100-5000 documents with 1 insert every second rather than 100-5000 inserts per second with 1 document (as CPU load is much lower with 1 large insert having many documents which increases throughoutput and lowers CPU load)
-*- Merging larger segments take longer, that's why it may be suboptimal to have very large RAM chunk (and therefore rt_mem_limit)
 *- Pseudo_sharding doesn't support RT indexes, as it is mainly designed to work with plain index which is not sharded. Normally an RT index after some time gets to the state when it has multiple disk chunks which by default is limited by # of CPU cores * 2. Manual OPTIMIZE works exactly that way(leaves cpu cores * 2 disk chunks). Auto optimize (which is enabled by default since version 4.0.2) works the same way by default.
 *- Searchd flushes RAM chunk to disk on shutdown and periodically. Flushing several gigabytes may be slow.
-*- The rule of thumb with rt_mem_limit is: If you know the final size of the index then rt_mem_limit = ~ final size / CPU_cores. You can always check your index file size and adjust this setting on the fly. For example to set RAM chunk size at 32 Mb by using `ALTER TABLE index_name rt_mem_limit='32M';`.
+*- rt_mem_limit defines the size of area where RAM chunk is stored. RAM chunk data is not saved and but binlog is used as its backup in case of a crash or restart. Large rt_mem_limit + crash will either make you lose huge amount of data or you will experience long binlog replaying trying to recover the data which was in the RAM chunk.
+In a long run all live data will be flushed to disk chunks at some point, and those disk chunks will be auto-optimized to keep their number at 2x #CPU cores.
 
 ### Plain index settings:
 

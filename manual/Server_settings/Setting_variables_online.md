@@ -63,7 +63,6 @@ Known global server variables are:
 This is very specific and 'hard' variable; filtered out messages will be just dropped and not written into the log at all. Better just filter your log with something like 'grep', in this case you'll have at least full original log as backup.
 
 * `LOG_DEBUG_FILTER = <string value>` Filters out redundant log messages. If the value is set, then all logs with level > INFO (i.e., `DEBUG`, `DEBUGV`, etc.) will be compared with the string and output only in the case they starts with given value.
-* `COREDUMP = {0 | 1}` Enable or disable saving the core file or minidump on case of a crash.
 * `MAX_THREADS_PER_QUERY = <POSITIVE_INT_VALUE>` Redefines [max_threads_per_query](../Server_settings/Searchd.md#max_threads_per_query) in the runtime. As global it changes behaviour for all sessions. Value 0 means 'no limit'. If both per-session and the global variables are set, the per-session one has a higher priority.
 * `NET_WAIT = {-1 | 0 | POSITIVE_INT_VALUE}` Changes the [net_wait_tm](../Server_settings/Searchd.md#net_wait_tm) searchd settings value.
 * `IOSTATS = {0 | 1}` Enable or disable I/O operations (except for attributes) reporting in query log.

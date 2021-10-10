@@ -18,6 +18,7 @@
 #include "sphinxstem.h"
 #include "icu.h"
 #include "attribute.h"
+#include "indexfiles.h"
 
 #if !_WIN32
 	#include <glob.h>

@@ -18,6 +18,8 @@
 #include "sphinxrt.h"
 #include "killlist.h"
 #include "secondaryindex.h"
+#include "indexfiles.h"
+
 #include <time.h>
 
 static CSphString g_sDataDir;

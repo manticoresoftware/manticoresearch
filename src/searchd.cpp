@@ -40,6 +40,7 @@
 #include "sphinxql_debug.h"
 #include "stackmock.h"
 #include "binlog.h"
+#include "indexfiles.h"
 
 // services
 #include "taskping.h"

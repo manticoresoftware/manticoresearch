@@ -20,6 +20,7 @@
 #include "icu.h"
 #include <config_indexer.h>
 #include "source_sql.h"
+#include "indexfiles.h"
 
 #include <sys/stat.h>
 #include <sys/types.h>

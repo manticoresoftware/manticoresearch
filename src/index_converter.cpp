@@ -24,6 +24,7 @@
 #include "accumulator.h"
 #include "indexformat.h"
 #include "indexsettings.h"
+#include "indexfiles.h"
 
 namespace legacy
 {

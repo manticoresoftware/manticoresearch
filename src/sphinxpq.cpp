@@ -19,6 +19,7 @@
 #include "coroutine.h"
 #include "mini_timer.h"
 #include "binlog.h"
+#include "indexfiles.h"
 
 #include <atomic>
 

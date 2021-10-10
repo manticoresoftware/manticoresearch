@@ -21,6 +21,7 @@
 #include "icu.h"
 #include "fileutils.h"
 #include "threadutils.h"
+#include "indexfiles.h"
 
 #include <ctype.h>
 #include <fcntl.h>

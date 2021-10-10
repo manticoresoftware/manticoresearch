@@ -19,6 +19,7 @@
 #include "docstore.h"
 #include "conversion.h"
 #include "columnarlib.h"
+#include "indexfiles.h"
 
 
 DebugCheckError_c::DebugCheckError_c ( FILE * pFile )

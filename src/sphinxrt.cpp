@@ -38,6 +38,7 @@
 #include "sphinx_alter.h"
 #include "taskoptimize.h"
 #include "chunksearchctx.h"
+#include "indexfiles.h"
 
 #include <sys/stat.h>
 #include <fcntl.h>

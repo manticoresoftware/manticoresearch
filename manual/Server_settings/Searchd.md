@@ -887,7 +887,7 @@ Limit (in milliseconds) that prevents the query from being written to the query 
 ### query_log
 
 <!-- example conf query_log -->
-Query log file name. Optional, default is empty (do not log queries). All search queries will be logged in this file. The format is described in [Query logging](../Logging/Query_logging.md). In case of 'plain' format, you can use the 'syslog' as the path to the log file. In this case all search queries will be sent to syslog daemon with `LOG_INFO` priority, prefixed with '[query]' instead of timestamp. To use the syslog option the sphinx must be configured `-–with-syslog` on building.
+Query log file name. Optional, default is empty (do not log queries). All search queries (such as SELECT ... but not INSERT/REPLACE/UPDATE queries) will be logged in this file. The format is described in [Query logging](../Logging/Query_logging.md). In case of 'plain' format, you can use the 'syslog' as the path to the log file. In this case all search queries will be sent to syslog daemon with `LOG_INFO` priority, prefixed with '[query]' instead of timestamp. To use the syslog option the sphinx must be configured `-–with-syslog` on building.
 
 
 <!-- intro -->

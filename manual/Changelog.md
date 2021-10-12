@@ -103,6 +103,7 @@ sys     0m0.001s
 - [53c75305](https://github.com/manticoresoftware/manticoresearch/commit/53c753054558ff3f82c7af365273d32537c5338b) - fixed not equal expression filter at PQ index
 - [ccf94e02](https://github.com/manticoresoftware/manticoresearch/commit/ccf94e022ba6763d6286ab5bac767b6f6a846846) - fixed select windows at list queries above 1000 matches. `SELECT * FROM pq ORDER BY id desc LIMIT 1000 , 100 OPTION max_matches=1100` was not working previously
 - [a0483fe9](https://github.com/manticoresoftware/manticoresearch/commit/a0483fe9bef3c45dffe96f5df4f4382aee29c072) - HTTPS request to Manticore could cause warning like "max packet size(8388608) exceeded"
+- [#648](https://github.com/manticoresoftware/manticoresearch/issues/648) - Manticore 3 could hang after a few updates of string attributes
 
 
 ## Version 3.6.0, May 3rd 2021

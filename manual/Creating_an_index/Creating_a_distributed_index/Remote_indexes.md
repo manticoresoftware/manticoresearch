@@ -46,19 +46,19 @@ agent = address1:index-list[[ha_strategy=value] | [conn=value] | [blackhole=valu
 Example:
 
 ```ini
-# config on box2
+# config on box1
 # sharding an index over 3 servers
 agent = box2:9312:shard2
 agent = box3:9312:shard3
 
 # config on box2
 # sharding an index over 3 servers
-agent = box1:9312:shard2
+agent = box1:9312:shard1
 agent = box3:9312:shard3
 
 # config on box3
 # sharding an index over 3 servers
-agent = box1:9312:shard2
+agent = box1:9312:shard1
 agent = box2:9312:shard3
 
 # per agent options

@@ -803,8 +803,6 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "columnar_compression_uint32", 0, nullptr },
 	{ "columnar_compression_int64", 0, nullptr },
 	{ "columnar_subblock",		0, nullptr },
-	{ "columnar_subblock_mva",	0, nullptr },
-	{ "columnar_minmax_leaf",	0, nullptr },
 	{ nullptr,					0, nullptr }
 };
 

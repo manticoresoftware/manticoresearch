@@ -3682,10 +3682,11 @@ public:
 		if ( !GetLength() )
 			return;
 
-		if ( !m_bFinalized ) {
-			FinalizeChains ();
-			PrepareForExport ();
-			CountDistinct ();
+		if ( !m_bFinalized )
+		{
+			FinalizeChains();
+			PrepareForExport();
+			CountDistinct();
 		}
 
 		for ( auto iHead : m_dFinalizedHeads )
@@ -3729,10 +3730,11 @@ public:
 			return;
 		}
 
-		if ( !m_bFinalized ) {
-			FinalizeChains ();
-//			PrepareForExport (); // for moving we not need fine-finaled matches; just cleaned is enough
-			CountDistinct ();
+		if ( !m_bFinalized )
+		{
+			FinalizeChains();
+//			PrepareForExport(); // for moving we not need fine-finaled matches; just cleaned is enough
+			CountDistinct();
 		}
 
 		auto iTotal = dRhs.m_iTotal;
@@ -3886,11 +3888,12 @@ private:
 	}
 
 	// return length of the matches chain (-1 terminated)
-	int ChainLen(int iPos)
+	int ChainLen ( int iPos ) const
 	{
 		int iChainLen = 1;
 		for ( int i = this->m_dIData[iPos]; i!=iPos; i = this->m_dIData[i] )
 			++iChainLen;
+
 		return iChainLen;
 	}
 
@@ -4051,6 +4054,7 @@ private:
 	{
 		if ( m_bFinalized )
 			return;
+
 		m_bFinalized = true;
 
 		int64_t i = 0;
@@ -4086,9 +4090,11 @@ private:
 	{
 		VacuumTail ( &m_dFinalizedHeads.Last(), m_iLastGroupCutoff, Stage_e::FINAL );
 		auto dAggrs = GetAggregatesWithoutAvgs ();
-		for ( auto& iHead : m_dFinalizedHeads ) {
+		for ( auto& iHead : m_dFinalizedHeads )
+		{
 			for ( auto * pAggr : dAggrs )
 				pAggr->Finalize ( m_dData[iHead] );
+
 			PropagateAggregates ( iHead );
 			iHead = this->m_dIData[iHead]; // shift
 		}
@@ -4141,7 +4147,8 @@ private:
 		ARRAY_FOREACH ( i, m_dFinalizedHeads )
 			if ( iSoftLimit > iRetainMatches )
 				iRetainMatches += ChainLen ( m_dFinalizedHeads[i] );
-			else {
+			else
+			{
 				 // all quota exceeded, the rest just to be cut totally
 				auto iRemoved = DeleteChain ( m_dFinalizedHeads[i], eStage==Stage_e::COLLECT );
 				if_const ( DISTINCT )
@@ -4177,22 +4184,25 @@ private:
 			return dChain.GetLength();
 
 		// chain need to be shortened
-		if ( !dWorstTail.IsEmpty () )
+		if ( !dWorstTail.IsEmpty() )
 		{
 			BinaryPartitionTail ( dChain, iLimit );
 			dChain.Resize ( iLimit );
 		}
 
 		// sort if necessary and ensure last elem of chain is the worst one
-		if ( eStage==Stage_e::FINAL ) {
+		if ( eStage==Stage_e::FINAL )
+		{
 			dChain.Sort( m_tSubSorter ); // sorted in reverse order, so the worst match here is the last one.
 			iLimit = dChain.GetLength();
-		} else {
+		} else
+		{
 			assert ( dChain.GetLength ()==iLimit );
 			// not sorted, need to find worst match for new head
 			int iWorst = 0;
-			for (int i=1; i<iLimit; ++i) {
-				if ( m_tSubSorter.IsLess ( dChain[iWorst], dChain[i] ))
+			for (int i=1; i<iLimit; ++i)
+			{
+				if ( m_tSubSorter.IsLess ( dChain[iWorst], dChain[i] ) )
 					iWorst = i;
 			}
 			::Swap ( dChain[iWorst], dChain[iLimit-1] );
@@ -4201,9 +4211,15 @@ private:
 		auto iNewHead = dChain.Last ();
 
 		// move calculated aggregates to the new head
-		if ( iNewHead!=*pHead ) {
+		if ( iNewHead!=*pHead )
+		{
+			SphGroupKey_t uGroupKey = m_dData[*pHead].GetAttr ( m_tLocGroupby );
+			int * pHeadInHash = m_hGroup2Index.Find(uGroupKey);
+			assert(pHeadInHash);
+
 			this->m_tPregroup.MoveAggrs ( m_dData[iNewHead], m_dData[*pHead] );
 			*pHead = iNewHead;
+			*pHeadInHash = iNewHead;
 		}
 
 		// now we can safely free worst matches
@@ -4214,6 +4230,7 @@ private:
 		this->m_dIData[iNewHead] = dChain[0]; // head points to begin of chain
 		for ( int i = 0; i<iLimit-1; ++i ) // each elem points to the next, last again to head
 			this->m_dIData[dChain[i]] = dChain[i+1];
+
 		return iLimit;
 	}
 
@@ -4224,7 +4241,8 @@ private:
 		m_hGroup2Index.Delete ( uGroupKey );
 		int iNext = this->m_dIData[iPos];
 		FreeMatch ( iPos, bNotify );
-		for ( auto i = iNext; i!=iPos; i = iNext ) {
+		for ( auto i = iNext; i!=iPos; i = iNext )
+		{
 			iNext = this->m_dIData[i];
 			FreeMatch ( i, bNotify );
 		}

@@ -48,7 +48,7 @@ Note, that if you use [agent_mirrors](../Creating_an_index/Creating_a_distribute
 
 For example, if you have 10 mirrors, and set `agent_retry_count=5`, then server will retry up to 50 times, assuming average 5 tries per every of 10 mirrors. (in case of option `ha_strategy = roundrobin` it will be actually so).
 
-In the same time value provided as `retry_count` option of [agent](../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md) definition serves as absolute limit. Other words, `[retry_count=2]` option in agent definition means always at most 2 tries, no mean if you have 1 or 10 mirrors in a line.
+At the same time value provided as `retry_count` option of [agent](../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md) definition serves as absolute limit. In other words, `[retry_count=2]` option in agent definition means always at most 2 tries, no matter if you have 1 or 10 mirrors in a line.
 
 
 ### agent_retry_delay

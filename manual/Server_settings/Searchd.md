@@ -399,15 +399,16 @@ Adding suffix `_vip` to any protocol (for instance `mysql_vip` or `http_vip` or 
 
 ```ini
 listen = localhost
-listen = localhost:5000 # listen for remote agents and http/https requests on port 5000 at localhost
-listen = 192.168.0.1:5000
-listen = /var/run/sphinx.s
-listen = 9312
-listen = localhost:9306:mysql
-listen = 127.0.0.1:9308:http
-listen = 192.168.0.1:9320-9328:replication
-listen = 127.0.0.1:9443:https
-listen = 127.0.0.1:9312:sphinx
+listen = localhost:5000 # listen for remote agents (binary API) and http/https requests on port 5000 at localhost
+listen = 192.168.0.1:5000 # listen for remote agents (binary API) and http/https requests on port 5000 at 192.168.0.1
+listen = /var/run/manticore/manticore.s # listen for binary API requests on unix socket
+listen = /var/run/manticore/manticore.s:mysql # listen for mysql requests on unix socket
+listen = 9312 # listen for remote agents (binary API) and http/https requests on port 9312 on any interface
+listen = localhost:9306:mysql # listen for mysql requests on port 9306 at localhost
+listen = 127.0.0.1:9308:http # listen for http requests as well as connections from remote agents (and binary API) on port 9308 at localhost
+listen = 192.168.0.1:9320-9328:replication # listen for replication connections on ports 9320-9328 at 192.168.0.1
+listen = 127.0.0.1:9443:https # listen for https requests (not http) on port 9443 at 127.0.0.1
+listen = 127.0.0.1:9312:sphinx # listen for legacy Sphinx requests (e.g. from SphinxSE) on port 9312 at 127.0.0.1
 ```
 <!-- end -->
 

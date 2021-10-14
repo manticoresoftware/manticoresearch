@@ -1,0 +1,329 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>columnar packing</name>
+
+<requires>
+<columnar/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test255
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table limit 255
+	sql_field_string  = guid
+}
+
+source test256
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table limit 256
+	sql_field_string  = guid
+}
+
+index test255
+{
+	source 			= test255
+	path			= <data_path/>/test255
+	columnar_attrs 	= id, guid
+}
+
+index test256
+{
+	source 			= test256
+	path			= <data_path/>/test256
+	columnar_attrs 	= id, guid
+}
+</config>
+
+<db_create>
+CREATE TABLE `test_table` (
+  `id` int(11),
+  `guid` varchar(255)
+);
+</db_create>
+
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+
+<db_insert>insert into test_table (id,guid) values
+(  0,'constlen000'),
+(  1,'constlen001'),
+(  2,'constlen002'),
+(  3,'constlen003'),
+(  4,'constlen004'),
+(  5,'constlen005'),
+(  6,'constlen006'),
+(  7,'constlen007'),
+(  8,'constlen008'),
+(  9,'constlen009'),
+( 10,'constlen010'),
+( 11,'constlen011'),
+( 12,'constlen012'),
+( 13,'constlen013'),
+( 14,'constlen014'),
+( 15,'constlen015'),
+( 16,'constlen016'),
+( 17,'constlen017'),
+( 18,'constlen018'),
+( 19,'constlen019'),
+( 20,'constlen020'),
+( 21,'constlen021'),
+( 22,'constlen022'),
+( 23,'constlen023'),
+( 24,'constlen024'),
+( 25,'constlen025'),
+( 26,'constlen026'),
+( 27,'constlen027'),
+( 28,'constlen028'),
+( 29,'constlen029'),
+( 30,'constlen030'),
+( 31,'constlen031'),
+( 32,'constlen032'),
+( 33,'constlen033'),
+( 34,'constlen034'),
+( 35,'constlen035'),
+( 36,'constlen036'),
+( 37,'constlen037'),
+( 38,'constlen038'),
+( 39,'constlen039'),
+( 40,'constlen040'),
+( 41,'constlen041'),
+( 42,'constlen042'),
+( 43,'constlen043'),
+( 44,'constlen044'),
+( 45,'constlen045'),
+( 46,'constlen046'),
+( 47,'constlen047'),
+( 48,'constlen048'),
+( 49,'constlen049'),
+( 50,'constlen050'),
+( 51,'constlen051'),
+( 52,'constlen052'),
+( 53,'constlen053'),
+( 54,'constlen054'),
+( 55,'constlen055'),
+( 56,'constlen056'),
+( 57,'constlen057'),
+( 58,'constlen058'),
+( 59,'constlen059'),
+( 60,'constlen060'),
+( 61,'constlen061'),
+( 62,'constlen062'),
+( 63,'constlen063'),
+( 64,'constlen064'),
+( 65,'constlen065'),
+( 66,'constlen066'),
+( 67,'constlen067'),
+( 68,'constlen068'),
+( 69,'constlen069'),
+( 70,'constlen070'),
+( 71,'constlen071'),
+( 72,'constlen072'),
+( 73,'constlen073'),
+( 74,'constlen074'),
+( 75,'constlen075'),
+( 76,'constlen076'),
+( 77,'constlen077'),
+( 78,'constlen078'),
+( 79,'constlen079'),
+( 80,'constlen080'),
+( 81,'constlen081'),
+( 82,'constlen082'),
+( 83,'constlen083'),
+( 84,'constlen084'),
+( 85,'constlen085'),
+( 86,'constlen086'),
+( 87,'constlen087'),
+( 88,'constlen088'),
+( 89,'constlen089'),
+( 90,'constlen090'),
+( 91,'constlen091'),
+( 92,'constlen092'),
+( 93,'constlen093'),
+( 94,'constlen094'),
+( 95,'constlen095'),
+( 96,'constlen096'),
+( 97,'constlen097'),
+( 98,'constlen098'),
+( 99,'constlen099'),
+(100,'constlen100'),
+(101,'constlen101'),
+(102,'constlen102'),
+(103,'constlen103'),
+(104,'constlen104'),
+(105,'constlen105'),
+(106,'constlen106'),
+(107,'constlen107'),
+(108,'constlen108'),
+(109,'constlen109'),
+(110,'constlen110'),
+(111,'constlen111'),
+(112,'constlen112'),
+(113,'constlen113'),
+(114,'constlen114'),
+(115,'constlen115'),
+(116,'constlen116'),
+(117,'constlen117'),
+(118,'constlen118'),
+(119,'constlen119'),
+(120,'constlen120'),
+(121,'constlen121'),
+(122,'constlen122'),
+(123,'constlen123'),
+(124,'constlen124'),
+(125,'constlen125'),
+(126,'constlen126'),
+(127,'constlen127'),
+(128,'constlen128'),
+(129,'constlen129'),
+(130,'constlen130'),
+(131,'constlen131'),
+(132,'constlen132'),
+(133,'constlen133'),
+(134,'constlen134'),
+(135,'constlen135'),
+(136,'constlen136'),
+(137,'constlen137'),
+(138,'constlen138'),
+(139,'constlen139'),
+(140,'constlen140'),
+(141,'constlen141'),
+(142,'constlen142'),
+(143,'constlen143'),
+(144,'constlen144'),
+(145,'constlen145'),
+(146,'constlen146'),
+(147,'constlen147'),
+(148,'constlen148'),
+(149,'constlen149'),
+(150,'constlen150'),
+(151,'constlen151'),
+(152,'constlen152'),
+(153,'constlen153'),
+(154,'constlen154'),
+(155,'constlen155'),
+(156,'constlen156'),
+(157,'constlen157'),
+(158,'constlen158'),
+(159,'constlen159'),
+(160,'constlen160'),
+(161,'constlen161'),
+(162,'constlen162'),
+(163,'constlen163'),
+(164,'constlen164'),
+(165,'constlen165'),
+(166,'constlen166'),
+(167,'constlen167'),
+(168,'constlen168'),
+(169,'constlen169'),
+(170,'constlen170'),
+(171,'constlen171'),
+(172,'constlen172'),
+(173,'constlen173'),
+(174,'constlen174'),
+(175,'constlen175'),
+(176,'constlen176'),
+(177,'constlen177'),
+(178,'constlen178'),
+(179,'constlen179'),
+(180,'constlen180'),
+(181,'constlen181'),
+(182,'constlen182'),
+(183,'constlen183'),
+(184,'constlen184'),
+(185,'constlen185'),
+(186,'constlen186'),
+(187,'constlen187'),
+(188,'constlen188'),
+(189,'constlen189'),
+(190,'constlen190'),
+(191,'constlen191'),
+(192,'constlen192'),
+(193,'constlen193'),
+(194,'constlen194'),
+(195,'constlen195'),
+(196,'constlen196'),
+(197,'constlen197'),
+(198,'constlen198'),
+(199,'constlen199'),
+(200,'constlen200'),
+(201,'constlen201'),
+(202,'constlen202'),
+(203,'constlen203'),
+(204,'constlen204'),
+(205,'constlen205'),
+(206,'constlen206'),
+(207,'constlen207'),
+(208,'constlen208'),
+(209,'constlen209'),
+(210,'constlen210'),
+(211,'constlen211'),
+(212,'constlen212'),
+(213,'constlen213'),
+(214,'constlen214'),
+(215,'constlen215'),
+(216,'constlen216'),
+(217,'constlen217'),
+(218,'constlen218'),
+(219,'constlen219'),
+(220,'constlen200'),
+(221,'constlen201'),
+(222,'constlen202'),
+(223,'constlen203'),
+(224,'constlen204'),
+(225,'constlen205'),
+(226,'constlen206'),
+(227,'constlen207'),
+(228,'constlen208'),
+(229,'constlen209'),
+(230,'constlen210'),
+(231,'constlen211'),
+(232,'constlen212'),
+(233,'constlen213'),
+(234,'constlen214'),
+(235,'constlen215'),
+(236,'constlen216'),
+(237,'constlen217'),
+(238,'constlen218'),
+(239,'constlen219'),
+(240,'constlen200'),
+(241,'constlen201'),
+(242,'constlen202'),
+(243,'constlen203'),
+(244,'constlen204'),
+(245,'constlen205'),
+(246,'constlen206'),
+(247,'constlen207'),
+(248,'constlen208'),
+(249,'constlen209'),
+(250,'constlen210'),
+(251,'constlen211'),
+(252,'constlen212'),
+(253,'constlen213'),
+(254,'constlen214'),
+(255,'constlen215')
+</db_insert>
+
+<sphqueries>
+<sphinxql>select count(*) from test255</sphinxql>
+<sphinxql>select count(*) from test256</sphinxql>
+
+<sphinxql>select id,guid from test255</sphinxql>
+<sphinxql>select id,guid from test256</sphinxql>
+
+</sphqueries>
+
+</test>

@@ -5,7 +5,7 @@
 </p>
 
 <h1 align="center">
-  Manticore Search 4.0.2
+  Manticore Search 4.0.3
 </h1>
 
 <h3 align="center">

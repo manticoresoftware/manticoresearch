@@ -17,6 +17,7 @@
     * [In MacOS](Starting_the_server/MacOS.md)
 * [▪️ Creating an index](Creating_an_index.md)
     * [Data types](Creating_an_index/Data_types.md) 
+        * [Row-wise and columnar attribute storages](Creating_an_index/Data_types.md#Row-wise-and-columnar-attribute-storages)
     * [Creating a local index](Creating_an_index/Local_indexes.md) 
         * [✔ ️Real-time index](Creating_an_index/Local_indexes/Real-time_index.md)
         * [Plain index](Creating_an_index/Local_indexes/Plain_index.md)

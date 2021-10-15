@@ -34,13 +34,13 @@ In other words, you can point every single agent to one or more remote indexes, 
 All agents are searched in parallel. An index list is passed verbatim to the remote agent. How exactly that list is searched within the agent (ie. sequentially or in parallel too) depends solely on the agent configuration (ie. [threads](../../Server_settings/Searchd.md#threads) setting). Master has no remote control over that.
 
 The value can additionally enumerate per agent options such as:
-* [ha_strategy](../../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy) - random, roundrobin, nodeads, noerrors (replaces index-wide `ha_strategy` for particular agent)
-* `conn` - pconn, persistent (same as `agent_persistent` on index-wide declaration)
-* `blackhole` 0,1 (same as [agent_blackhole](../../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_blackhole) agent declaration)
+* [ha_strategy](../../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy) - `random`, `roundrobin`, `nodeads`, `noerrors` (replaces index-wide `ha_strategy` for particular agent)
+* `conn` - `pconn`, persistent (same as `agent_persistent` on index-wide declaration)
+* `blackhole` `0`,`1` (same as [agent_blackhole](../../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_blackhole) agent declaration)
 * `retry_count` - integer (same as [agent_retry_count](../../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_retry_count) , but the provided value will not be multiplied to the number of mirrors)
 
 ```ini
-agent = address1:index-list[[ha_strategy=value] | [conn=value] | [blackhole=value]]
+agent = address1:index-list[[ha_strategy=value, conn=value, blackhole=value]]
 ```
 
 Example:
@@ -64,8 +64,10 @@ agent = box2:9312:shard3
 # per agent options
 agent = box1:9312:shard1[ha_strategy=nodeads]
 agent = box2:9312:shard2[conn=pconn]
+agent = box2:9312:shard2[conn=pconn,ha_strategy=nodeads]
 agent = test:9312:any[blackhole=1]
 agent = test:9312|box2:9312|box3:9312:any2[retry_count=2]
+agent = test:9312|box2:9312:any2[retry_count=2,conn=pconn,ha_strategy=noerrors]
 ```
 
 ## agent_persistent

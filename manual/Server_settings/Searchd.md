@@ -656,7 +656,7 @@ Network client request read/write timeout, in seconds (or [special_suffixes](../
 <!-- request Example -->
 
 ```ini
-read_timeout = 1
+network_timeout = 10s
 ```
 <!-- end -->
 

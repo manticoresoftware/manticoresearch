@@ -59,7 +59,6 @@ CREATE TABLE `test_table` (
 <db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
 
 <db_insert>insert into test_table (id,guid) values
-(  0,'constlen000'),
 (  1,'constlen001'),
 (  2,'constlen002'),
 (  3,'constlen003'),
@@ -314,7 +313,8 @@ CREATE TABLE `test_table` (
 (252,'constlen212'),
 (253,'constlen213'),
 (254,'constlen214'),
-(255,'constlen215')
+(255,'constlen215'),
+(256,'constlen256')
 </db_insert>
 
 <sphqueries>

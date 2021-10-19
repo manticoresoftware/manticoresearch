@@ -19881,9 +19881,9 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 #endif
 
 	// replay last binlog
-	SmallStringHash_T<CSphIndex*> hIndexes;
-	Threads::CallCoroutine ([&hIndexes]
+	Threads::CallCoroutine ([]
 	{
+		SmallStringHash_T<CSphIndex*> hIndexes;
 		for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next(); ) // FIXME!!!
 		{
 			ServedDescRPtr_c pLocked ( it.Get () );
@@ -19892,7 +19892,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		}
 
 		Binlog::Replay ( hIndexes, DumpMemStat );
-		hIndexes.Reset();
 	} );
 
 	// no need to create another cluster on restart by watchdog resurrection

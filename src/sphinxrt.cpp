@@ -3331,7 +3331,16 @@ int RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const CSphVector<DocID_
 				dLens[j] += sphGetRowAttr ( pNewSeg->GetDocinfoByRowID(i), m_tSchema.GetAttr ( j+iFirstFieldLenAttr ).m_tLocator );
 	}
 
-	m_tUnLockedSegments.Wait ( [] ( int iVals ) { return iVals < MAX_SEGMENTS; } );
+	// for pure kills it is not necessary to wait, as it can't increase N of segments.
+	if ( pNewSeg )
+	{
+		if ( m_tUnLockedSegments.GetValue() >= MAX_SEGMENTS )
+		{
+			ScopedScheduler_c tSerialFiber { m_tWorkers.SerialChunkAccess() };
+			StartMergeSegments ( MergeSeg_e::NEWSEG );
+		}
+		m_tUnLockedSegments.Wait ( [] ( int iVals ) { return iVals < MAX_SEGMENTS; } );
+	}
 
 	// We're going to modify segments, so fall into serial fiber. From here no concurrent changes may happen
 	ScopedScheduler_c tSerialFiber { m_tWorkers.SerialChunkAccess() };

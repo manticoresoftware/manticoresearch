@@ -33,6 +33,26 @@ In other words, you can point every single agent to one or more remote indexes, 
 
 All agents are searched in parallel. An index list is passed verbatim to the remote agent. How exactly that list is searched within the agent (ie. sequentially or in parallel too) depends solely on the agent configuration (ie. [threads](../../Server_settings/Searchd.md#threads) setting). Master has no remote control over that.
 
+Agent executes a query without LIMIT option since each agent can have different indexes and it is a client responsibility to apply LIMIT. For this reason a query to an agent differs from the query from a client when viewing in the query logs. It can't be just a full copy of the original query in order to provide correct results in such a case:
+
+* We make SELECT ... LIMIT 10, 10 
+* We have 2 agents 
+* 2nd agent has just 10 documents
+
+If we just broadcast the original LIMIT 10, 10 query it will receive 0 documents from the 2nd agent, but LIMIT 10,10 should return documents 10-20 from the resulting set as you may not care about each agent in particular. That's why we need to send queries to agents with broader limits and the upper bound in this case is max_matches.
+`Example:
+
+Client will send this query:
+
+SELECT *, GEODIST(latitude, longitude, 52.40656, -1.51217, {in=degrees,out=m}) AS dist FROM postal_coords WHERE latitude BETWEEN 50.406559 AND 54.406559 AND longitude BETWEEN -3.512170 AND 0.487830 ORDER BY dist asc **LIMIT 0,10 OPTION max_matches=200**, retry_count=0, retry_delay=0;
+
+Agent will execute such query:
+
+SELECT *, GEODIST(latitude, longitude, 52.40656, -1.51217, {in=degrees,out=m}) AS dist FROM postal_coords WHERE latitude BETWEEN 50.406559 AND 54.406559 AND longitude BETWEEN -3.512170 AND 0.487830 ORDER BY dist asc **LIMIT 0,200 OPTION max_matches=200**, max_query_time=3000, retry_count=0, retry_delay=0;
+
+But a client will return just 10 results as it was instructed.
+`
+
 The value can additionally enumerate per agent options such as:
 * [ha_strategy](../../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy) - random, roundrobin, nodeads, noerrors (replaces index-wide `ha_strategy` for particular agent)
 * `conn` - pconn, persistent (same as `agent_persistent` on index-wide declaration)

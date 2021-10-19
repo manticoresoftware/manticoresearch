@@ -28,17 +28,17 @@ ha_strategy = random
 
 ### Adaptive randomized balancing
 
-The default simple random strategy does not take mirror status, error rate, and, most importantly, actual response latencies into account. So to accommodate for heterogeneous clusters and/or temporary spikes in agent node load, we have a group of balancing strategies that dynamically adjusts the probabilities based on the actual query latencies observed by the master.
+The default simple random strategy does not take mirror status, error rate and, most importantly, actual response latencies into account. So to accommodate for heterogeneous clusters and/or temporary spikes in agent node load, we have a group of balancing strategies that dynamically adjusts the probabilities based on the actual query latencies observed by the master.
 
 The adaptive strategies based on **latency-weighted probabilities** basically work as follows:
 
-* latency stats are accumulated, in blocks of ha_period_karma seconds;
-* once per karma period, latency-weighted probabilities get recomputed;
-* once per request (including ping requests), "dead or alive" flag is adjusted.
+* latency stats are accumulated in blocks of ha_period_karma seconds;
+* once per karma period latency-weighted probabilities get recomputed;
+* once per request (including ping requests) "dead or alive" flag is adjusted.
 
 Currently, we begin with equal probabilities (or percentages, for brevity), and on every step, scale them by the inverse of the latencies observed during the last "karma" period, and then renormalize them. For example, if during the first 60 seconds after the master startup 4 mirrors had latencies of 10, 5, 30, and 3 msec/query respectively, the first adjustment step would go as follow:
 
-* initial percentages: 0.25, 0.25, 0.25, 0.2%;
+* initial percentages: 0.25, 0.25, 0.25, 0.25;
 * observed latencies: 10 ms, 5 ms, 30 ms, 3 ms;
 * inverse latencies: 0.1, 0.2, 0.0333, 0.333;
 * scaled percentages: 0.025, 0.05, 0.008333, 0.0833;
@@ -49,6 +49,7 @@ Meaning that the 1st mirror would have a 15% chance of being chosen during the n
 The rationale here is, once the **observed latencies** stabilize, the **latency weighted probabilities** stabilize as well. So all these adjustment iterations are supposed to converge at a point where the average latencies are (roughly) equal over all mirrors.
 
 <!-- example conf balancing 2 -->
+#### nodeads
 Latency-weighted probabilities, but dead mirrors are excluded from the selection. "Dead" mirror is defined as a mirror that resulted in multiple hard errors (eg. network failure, or no answer, etc) in a row. 
 
 <!-- intro -->
@@ -61,6 +62,8 @@ ha_strategy = nodeads
 <!-- end -->
 
 <!-- example conf balancing 3 -->
+#### noerrors
+
 Latency-weighted probabilities, but mirrors with worse errors/success ratio are excluded from the selection.
 
 <!-- intro -->

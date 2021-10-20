@@ -99,7 +99,7 @@ agent_connect_timeout = 300
 
 `agent_connect_timeout` defines remote agent connection timeout. By default the value is assumed to be in milliseconds, but can have [another suffix](../../Server_settings/Special_suffixes.md)). Optional, default is 1000 (ie. 1 second).
 
-When connecting to remote agents, `searchd` will wait at most this much time for connect() call to complete successfully. If the timeout is reached but connect() does not complete, and `retries` are enabled, retry will be initiated.
+When connecting to remote agents, `searchd` will wait at most this much time to complete successfully. If the timeout is reached but the connection has not been established and `retries` are enabled, retry will be initiated.
 
 ## agent_query_timeout
 

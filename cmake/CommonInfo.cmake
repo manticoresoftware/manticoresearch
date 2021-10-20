@@ -23,7 +23,7 @@ set (CPACK_COMPONENT_CONVERTER_GROUP "converter")
 set (CPACK_COMPONENT_GROUP_CONVERTER_DISPLAY_NAME "Converter")
 set (CPACK_COMPONENT_CONVERTER_DISPLAY_NAME "CONVERTER application")
 set (CPACK_COMPONENT_CONVERTER_SUMMARY "${MANTICORESEARCH} index converter")
-set (CPACK_COMPONENT_CONVERTER_DESCRIPTION "${THIS_PKG} contains tool index_converted needed for converting indexes made prior version 3.0.")
+set (CPACK_COMPONENT_CONVERTER_DESCRIPTION "${THIS_PKG} contains tool index_converter needed for converting indexes made prior version 3.0.")
 
 # meta
 set(CPACK_COMPONENT_META_GROUP "main")

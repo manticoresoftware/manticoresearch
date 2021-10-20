@@ -41,6 +41,7 @@
 #include "stackmock.h"
 #include "binlog.h"
 #include "indexfiles.h"
+#include "digest_sha1.h"
 
 // services
 #include "taskping.h"

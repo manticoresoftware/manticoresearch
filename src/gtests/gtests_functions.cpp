@@ -19,6 +19,7 @@
 #include <cmath>
 #include "histogram.h"
 #include "conversion.h"
+#include "digest_sha1.h"
 
 // Miscelaneous short functional tests: TDigest, SpanSearch,
 // stringbuilder, CJson, TaggedHash, Log2

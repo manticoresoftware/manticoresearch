@@ -19,6 +19,8 @@
 #include "fileutils.h"
 #include <math.h>
 
+#include "digest_sha1.h"
+
 #if !HAVE_WSREP
 #include "replication/wsrep_api_stub.h"
 // it also populates header guard, so next including of 'normal' wsrep_api will break nothing
@@ -3801,7 +3803,7 @@ public:
 			m_pWriter = nullptr;
 			m_pReader = nullptr;
 
-			m_pWriter = new WriterWithHash_c ( nullptr, nullptr );
+			m_pWriter = new WriterWithHash_c;
 			if ( !m_pWriter->OpenFile ( m_pMerge->m_dFilesNew[iFile], m_sError ) )
 			{
 				sError = m_sError;

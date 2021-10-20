@@ -25,6 +25,7 @@
 #include "indexformat.h"
 #include "indexsettings.h"
 #include "indexfiles.h"
+#include "attrindex_builder.h"
 
 namespace legacy
 {

@@ -49,7 +49,8 @@ add_library(lmanticore STATIC sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sphin
 		task_info.cpp mini_timer.cpp fileio.cpp memio.cpp queryprofile.cpp columnarfilter.cpp columnargrouper.cpp
 		columnarlib.cpp collation.cpp fnv64.cpp histogram.cpp threads_detached.cpp hazard_pointer.cpp task_info.cpp
 		mini_timer.cpp dynamic_idx.cpp columnarrt.cpp columnarmisc.cpp exprtraits.cpp columnarexpr.cpp
-		sphinx_alter.cpp conversion.cpp columnarsort.cpp binlog.cpp chunksearchctx.cpp indexfiles.cpp)
+		sphinx_alter.cpp conversion.cpp columnarsort.cpp binlog.cpp chunksearchctx.cpp indexfiles.cpp
+		attrindex_builder.cpp )
 
 target_link_libraries (lmanticore PUBLIC lextra)
 
@@ -114,7 +115,7 @@ set ( HEADERS sphinxexcerpt.h sphinxfilter.h sphinxint.h sphinxjsonquery.h sphin
 		hazard_pointer.h task_info.h mini_timer.h collation.h fnv64.h histogram.h sortsetup.h dynamic_idx.h
 		indexsettings.h columnarlib.h fileio.h memio.h queryprofile.h columnarfilter.h columnargrouper.h fileutils.h
 		libutils.h conversion.h columnarsort.h sortcomp.h binlog_defs.h binlog.h ${MANTICORE_BINARY_DIR}/config/config.h
-		chunksearchctx.h lrucache.h indexfiles.h)
+		chunksearchctx.h lrucache.h indexfiles.h attrindex_builder.h)
 
 set ( SEARCHD_H searchdaemon.h searchdconfig.h searchdddl.h searchdexpr.h searchdha.h searchdreplication.h searchdsql.h
 		searchdtask.h task_info.h taskflushattrs.h taskflushbinlog.h taskflushmutable.h taskglobalidf.h

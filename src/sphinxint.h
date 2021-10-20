@@ -320,43 +320,6 @@ inline std::pair<DWORD,DWORD> MVA_BE ( const DWORD * pMva )
 #endif
 }
 
-// FIXME!!! for over INT_MAX attributes
-/// attr min-max builder
-class AttrIndexBuilder_c : ISphNoncopyable
-{
-public:
-	explicit	AttrIndexBuilder_c ( const CSphSchema & tSchema );
-				AttrIndexBuilder_c() = default;
-
-	void		Init ( const CSphSchema & tSchema );
-	void		Collect ( const CSphRowitem * pRow );
-	void		FinishCollect();
-	const CSphTightVector<CSphRowitem> & GetCollected() const;
-
-private:
-	CSphVector<CSphAttrLocator>	m_dIntAttrs;
-	CSphVector<CSphAttrLocator>	m_dFloatAttrs;
-
-	CSphVector<SphAttr_t>		m_dIntMin;
-	CSphVector<SphAttr_t>		m_dIntMax;
-	CSphVector<float>			m_dFloatMin;
-	CSphVector<float>			m_dFloatMax;
-
-	CSphVector<SphAttr_t>		m_dIntIndexMin;
-	CSphVector<SphAttr_t>		m_dIntIndexMax;
-	CSphVector<float>			m_dFloatIndexMin;
-	CSphVector<float>			m_dFloatIndexMax;
-
-	DWORD						m_uStride {0};
-	int							m_nLocalCollected {0};
-
-	CSphTightVector<CSphRowitem> m_dMinMaxRows;
-
-	void						ResetLocal();
-	void						FlushComputed();
-};
-
-
 class CSphFreeList
 {
 private:

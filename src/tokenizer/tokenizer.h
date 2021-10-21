@@ -33,7 +33,14 @@ enum ESphTokenizerClone
 {
 	SPH_CLONE_INDEX,				///< clone tokenizer and set indexing mode
 	SPH_CLONE_QUERY,				///< clone tokenizer and set querying mode
-	SPH_CLONE_QUERY_LIGHTWEIGHT		///< lightweight clone for querying (can parse, can NOT modify settings, shares pointers to the original lowercaser table)
+	SPH_CLONE_QUERY_WILD_EXACT_JSON,
+	SPH_CLONE_QUERY_WILD_EXACT,
+	SPH_CLONE_QUERY_WILD_JSON,
+	SPH_CLONE_QUERY_WILD,
+	SPH_CLONE_QUERY_EXACT_JSON,
+	SPH_CLONE_QUERY_EXACT,
+	SPH_CLONE_QUERY_,
+	SPH_CLONE,	///< just clone 'as is'
 };
 
 
@@ -180,8 +187,11 @@ public:
 	/// get settings hash
 	virtual uint64_t				GetSettingsFNV () const;
 
+	/// if I'm cloned in index, or any kind of query mode
+	virtual bool					IsQueryTok() const noexcept = 0;
+
 	/// get (readonly) lowercaser
-	const CSphLowercaser &			GetLowercaser() const { return m_tLC; }
+	const CSphLowercaser &			GetLowercaser() const { assert ( m_pLC ); return *m_pLC; }
 
 protected:
 	virtual bool					RemapCharacters ( const char * sConfig, DWORD uFlags, const char * sSource, bool bCanRemap, CSphString & sError );
@@ -195,7 +205,16 @@ protected:
 	static const BYTE				BLEND_TRIM_BOTH		= 8;
 	static const BYTE				BLEND_TRIM_ALL		= 16;
 
-	CSphLowercaser					m_tLC;						///< my lowercaser
+private:
+	LowercaserRefcountedConstPtr			m_pLC;						///< my lowercaser
+	mutable LowercaserRefcountedPtr			m_pStagingLC;				///< preparing my lowercaser.
+
+protected:
+	CSphLowercaser &				StagingLowercaser();
+	LowercaserRefcountedConstPtr	GetLC() const;
+	void							SetLC ( LowercaserRefcountedConstPtr rhs) ;
+
+protected:
 	int								m_iLastTokenLen = 0;		///< last token length, in codepoints
 	bool							m_bTokenBoundary = false;	///< last token boundary flag (true after boundary codepoint followed by separator)
 	bool							m_bBoundary = false;		///< boundary flag (true immediately after boundary codepoint)

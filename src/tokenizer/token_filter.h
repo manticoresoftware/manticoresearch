@@ -42,6 +42,8 @@ public:
 	bool					EnableSentenceIndexing ( CSphString & sError ) override					{ return m_pTokenizer->EnableSentenceIndexing ( sError ); }
 	bool					EnableZoneIndexing ( CSphString & sError ) override						{ return m_pTokenizer->EnableZoneIndexing ( sError ); }
 	int						SkipBlended () override													{ return m_pTokenizer->SkipBlended(); }
+	bool					IsQueryTok() const noexcept override									{ return m_pTokenizer->IsQueryTok(); }
+
 
 	int						GetCodepointLength ( int iCode ) const final		{ return m_pTokenizer->GetCodepointLength ( iCode ); }
 	int						GetMaxCodepointLength () const final				{ return m_pTokenizer->GetMaxCodepointLength(); }

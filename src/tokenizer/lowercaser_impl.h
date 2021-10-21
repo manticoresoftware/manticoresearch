@@ -26,4 +26,3 @@ enum : DWORD {
 	FLAG_CODEPOINT_IGNORE = 0x20000000UL,	// this codepoint is ignored
 	FLAG_CODEPOINT_BLEND = 0x40000000UL		// this codepoint is "blended" (indexed both as a character, and as a separator)
 };
-

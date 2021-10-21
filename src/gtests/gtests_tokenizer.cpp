@@ -121,7 +121,7 @@ TEST_F( TokenizerGtest, exceptions_more )
 		++iCur;
 	}
 
-	TokenizerRefPtr_c pQtok { m_pTokenizer->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT ) };
+	TokenizerRefPtr_c pQtok { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
 
 	pQtok->SetBuffer ( ( BYTE * ) "life:)", 7 );
 	ASSERT_STREQ ( ( char * ) pQtok->GetToken (), "life:)" );
@@ -685,8 +685,7 @@ protected:
 		ASSERT_TRUE ( pBase->LoadSynonyms ( g_sTmpfile, NULL, dWarnings, sError ) );
 		ASSERT_TRUE ( sError.IsEmpty() );
 
-		pTokenizer = pBase->Clone ( SPH_CLONE_QUERY );
-		sphSetupQueryTokenizer ( pTokenizer, true, false, false );
+		pTokenizer = sphCloneAndSetupQueryTokenizer ( pBase, true, false, false );
 
 		CSphDictSettings tDictSettings;
 		tDictSettings.m_bWordDict = false;

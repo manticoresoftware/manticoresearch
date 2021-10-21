@@ -130,7 +130,6 @@ protected:
 template<bool IS_QUERY>
 bool CSphTokenizer_UTF8Ngram<IS_QUERY>::SetNgramChars ( const char* sConfig, CSphString& sError )
 {
-	assert ( this->m_eMode != SPH_CLONE_QUERY_LIGHTWEIGHT );
 	return ISphTokenizer::RemapCharacters ( sConfig, FLAG_CODEPOINT_NGRAM | FLAG_CODEPOINT_SPECIAL, "ngram", true, sError ); // !COMMIT support other n-gram lengths than 1
 }
 
@@ -138,7 +137,6 @@ bool CSphTokenizer_UTF8Ngram<IS_QUERY>::SetNgramChars ( const char* sConfig, CSp
 template<bool IS_QUERY>
 void CSphTokenizer_UTF8Ngram<IS_QUERY>::SetNgramLen ( int iLen )
 {
-	assert ( this->m_eMode != SPH_CLONE_QUERY_LIGHTWEIGHT );
 	assert ( iLen > 0 );
 	m_iNgramLen = iLen;
 }

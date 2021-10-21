@@ -24,6 +24,7 @@ void CSphLowercaser::Reset()
 	m_pChunk[0] = m_dData.begin(); // chunk 0 must always be allocated, for utf-8 tokenizer shortcut to work
 	for ( int i = 1; i < CHUNK_COUNT; ++i )
 		m_pChunk[i] = nullptr;
+	InvalidateStoredClones();
 }
 
 void CSphLowercaser::SetRemap ( const CSphLowercaser* pLC )
@@ -37,6 +38,7 @@ void CSphLowercaser::SetRemap ( const CSphLowercaser* pLC )
 
 	for ( int i = 0; i < CHUNK_COUNT; ++i )
 		m_pChunk[i] = pLC->m_pChunk[i] ? pLC->m_pChunk[i] - pLC->m_dData.begin() + m_dData.begin() : nullptr;
+	InvalidateStoredClones();
 }
 
 void CSphLowercaser::AddChars ( const char* szChars, DWORD uFlags )
@@ -106,6 +108,7 @@ void CSphLowercaser::AddRemaps ( const VecTraits_T<CSphRemapRange>& dRemaps, DWO
 	}
 
 	// alloc new tables and copy, if necessary
+	bool bChanged = false;
 	if ( iNewChunks > m_iChunks )
 	{
 		CSphFixedVector<DWORD> dData { iNewChunks * CHUNK_SIZE };
@@ -121,6 +124,7 @@ void CSphLowercaser::AddRemaps ( const VecTraits_T<CSphRemapRange>& dRemaps, DWO
 			{
 				m_pChunk[i] = pChunk;
 				pChunk += CHUNK_SIZE;
+				bChanged = true;
 			}
 
 			// copy old data
@@ -144,9 +148,12 @@ void CSphLowercaser::AddRemaps ( const VecTraits_T<CSphRemapRange>& dRemaps, DWO
 			auto uNew = uRemapped | uFlags | ( uCodepoint & MASK_FLAGS );
 			if ( ( uCodepoint & MASK_CODEPOINT ) && ( uFlags & FLAG_CODEPOINT_SPECIAL ) )
 				uNew |= FLAG_CODEPOINT_DUAL;
+			bChanged |= uCodepoint!=uNew;
 			uCodepoint = uNew;
 		}
 	}
+	if ( bChanged )
+		InvalidateStoredClones();
 }
 
 
@@ -173,8 +180,65 @@ uint64_t CSphLowercaser::GetFNV() const noexcept
 	return sphFNV64 ( m_dData );
 }
 
-CSphLowercaser& CSphLowercaser::operator= ( const CSphLowercaser& rhs )
+void CSphLowercaser::InvalidateStoredClones() noexcept
 {
-	SetRemap ( &rhs );
-	return *this;
+	++m_iGeneration;
 }
+
+#define UPCLONESTART( name ) \
+void CSphLowercaser::Up##name##Clone () const noexcept \
+{ \
+	if ( m_iGeneration == m_i##name##Gen ) \
+		return;\
+	\
+    ScopedMutex_t _ { m_tLock }; \
+    if ( m_iGeneration == m_i##name##Gen ) \
+		return; \
+	LowercaserRefcountedPtr pLC { new CSphLowercaser }; \
+	pLC->SetRemap ( this );
+
+#define UPCLONEEND( name )  \
+	m_p##name##LC = pLC.Leak(); \
+	m_i##name##Gen = m_iGeneration; \
+}
+
+UPCLONESTART ( Query )
+	pLC->AddChars ( "\\", FLAG_CODEPOINT_SPECIAL );
+UPCLONEEND ( Query )
+
+UPCLONESTART ( QueryWildExactJson )
+	pLC->AddChars ( "*?%=" );
+	pLC->AddChars ( "\\", FLAG_CODEPOINT_SPECIAL );
+UPCLONEEND ( QueryWildExactJson )
+
+UPCLONESTART ( QueryWildExact )
+	pLC->AddChars ( "*?%=" );
+	pLC->AddChars ( "\\=()|-!@~\"/^$<", FLAG_CODEPOINT_SPECIAL );
+UPCLONEEND ( QueryWildExact )
+
+UPCLONESTART ( QueryWildJson )
+	pLC->AddChars ( "*?%" );
+	pLC->AddChars ( "\\", FLAG_CODEPOINT_SPECIAL );
+UPCLONEEND ( QueryWildJson )
+
+UPCLONESTART ( QueryWild )
+	pLC->AddChars ( "*?%" );
+	pLC->AddChars ( "\\()|-!@~\"/^$<", FLAG_CODEPOINT_SPECIAL );
+UPCLONEEND ( QueryWild )
+
+UPCLONESTART ( QueryExactJson )
+	pLC->AddChars ( "=" );
+	pLC->AddChars ( "\\", FLAG_CODEPOINT_SPECIAL );
+UPCLONEEND ( QueryExactJson )
+
+UPCLONESTART ( QueryExact )
+	pLC->AddChars ( "=" );
+	pLC->AddChars ( "\\=()|-!@~\"/^$<", FLAG_CODEPOINT_SPECIAL );
+UPCLONEEND ( QueryExact )
+
+UPCLONESTART ( Query_ )
+	pLC->AddChars ( "\\()|-!@~\"/^$<", FLAG_CODEPOINT_SPECIAL );
+UPCLONEEND ( Query_ )
+
+#undef UPCLONEEND
+#undef UPCLONESTART

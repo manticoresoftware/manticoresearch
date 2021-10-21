@@ -52,33 +52,10 @@ public:
 		return false;
 	}
 
-public:
-	// lightweight clones must impose a lockdown on some methods
-	// (specifically those that change the lowercaser data table)
-	void AddPlainChars ( const char* szChars ) final
+	bool IsQueryTok() const noexcept final
 	{
-		assert ( m_eMode != SPH_CLONE_QUERY_LIGHTWEIGHT );
-		ISphTokenizer::AddPlainChars ( szChars );
+		return m_eMode != SPH_CLONE_INDEX;
 	}
-
-	void AddSpecials ( const char* sSpecials ) final
-	{
-		assert ( m_eMode != SPH_CLONE_QUERY_LIGHTWEIGHT );
-		ISphTokenizer::AddSpecials ( sSpecials );
-	}
-
-	void Setup ( const CSphTokenizerSettings& tSettings ) final
-	{
-		assert ( m_eMode != SPH_CLONE_QUERY_LIGHTWEIGHT );
-		ISphTokenizer::Setup ( tSettings );
-	}
-
-	bool RemapCharacters ( const char* sConfig, DWORD uFlags, const char* sSource, bool bCanRemap, CSphString& sError ) final
-	{
-		assert ( m_eMode != SPH_CLONE_QUERY_LIGHTWEIGHT );
-		return ISphTokenizer::RemapCharacters ( sConfig, uFlags, sSource, bCanRemap, sError );
-	}
-
 protected:
 	~CSphTokenizerBase() override;
 

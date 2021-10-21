@@ -2466,11 +2466,8 @@ void CSphIndex::SetupQueryTokenizer()
 
 	// create and setup a master copy of query time tokenizer
 	// that we can then use to create lightweight clones
-	m_pQueryTokenizer = m_pTokenizer->Clone ( SPH_CLONE_QUERY );
-	sphSetupQueryTokenizer ( m_pQueryTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false );
-
-	m_pQueryTokenizerJson = m_pTokenizer->Clone ( SPH_CLONE_QUERY );
-	sphSetupQueryTokenizer ( m_pQueryTokenizerJson, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, true );
+	m_pQueryTokenizer = sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false );
+	m_pQueryTokenizerJson = sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, true );
 }
 
 
@@ -15950,7 +15947,8 @@ static int DecodeUtf8 ( const BYTE * sWord, int * pBuf )
 
 bool SuggestResult_t::SetWord ( const char * sWord, const ISphTokenizer * pTok, bool bUseLastWord )
 {
-	TokenizerRefPtr_c pTokenizer ( pTok->Clone ( SPH_CLONE_QUERY ) );
+	assert ( pTok->IsQueryTok() );
+	TokenizerRefPtr_c pTokenizer ( pTok->Clone ( SPH_CLONE ) );
 	pTokenizer->SetBuffer ( (BYTE *)const_cast<char*>(sWord), (int) strlen ( sWord ) );
 
 	const BYTE * pToken = pTokenizer->GetToken();

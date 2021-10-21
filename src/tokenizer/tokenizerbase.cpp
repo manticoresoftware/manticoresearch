@@ -115,25 +115,55 @@ void CSphTokenizerBase::CloneBase ( const CSphTokenizerBase* pFrom, ESphTokenize
 	m_bHasBlend = pFrom->m_bHasBlend;
 	m_uBlendVariants = pFrom->m_uBlendVariants;
 	m_bBlendSkipPure = pFrom->m_bBlendSkipPure;
-	m_bShortTokenFilter = ( eMode != SPH_CLONE_INDEX );
+	m_bShortTokenFilter = ( m_eMode != SPH_CLONE_INDEX );
 	m_bDetectSentences = pFrom->m_bDetectSentences;
 
 	// By default, we operate with read-only refcounted pointer to prepared lowercaser.
 	// Any changing operation uses special write-enabled pointer, which is null by default, and also forcibly reset to null if we clone the pointer, in order to protect clone from changes of parent.
 	// So, 'just clone' for querying is ok. Clone and add some additional symbols = full clone.
 
-	if ( eMode == pFrom->m_eMode )
+	if ( eMode == pFrom->m_eMode || eMode == SPH_CLONE )
 	{
 		SetLC ( pFrom->GetLC() );
+		m_eMode = pFrom->m_eMode;
 		return;
 	}
 
+	// assume clones are not compatible between each other. So, clone any kind of query possibly either from the same, either from index, but not from another kind of query.
 	assert ( pFrom->m_eMode == SPH_CLONE_INDEX );
 
-	if ( eMode == SPH_CLONE_QUERY )
-	{
-		SetLC ( pFrom->GetLC()->GetQueryLC() );
+	if ( eMode != SPH_CLONE_INDEX )
 		m_uBlendVariants = BLEND_TRIM_NONE;
+
+	switch ( eMode )
+	{
+	case SPH_CLONE_QUERY_WILD_EXACT_JSON:
+		SetLC ( pFrom->GetLC()->GetQueryWildExactJsonLC() );
+		break;
+	case SPH_CLONE_QUERY_WILD_EXACT:
+		SetLC ( pFrom->GetLC()->GetQueryWildExactLC() );
+		break;
+	case SPH_CLONE_QUERY_WILD_JSON:
+		SetLC ( pFrom->GetLC()->GetQueryWildJsonLC() );
+		break;
+	case SPH_CLONE_QUERY_WILD:
+		SetLC ( pFrom->GetLC()->GetQueryWildLC() );
+		break;
+	case SPH_CLONE_QUERY_EXACT_JSON:
+		SetLC ( pFrom->GetLC()->GetQueryExactJsonLC() );
+		break;
+	case SPH_CLONE_QUERY_EXACT:
+		SetLC ( pFrom->GetLC()->GetQueryExactLC() );
+		break;
+	case SPH_CLONE_QUERY_:
+		SetLC ( pFrom->GetLC()->GetQuery_LC() );
+		break;
+	case SPH_CLONE_QUERY:
+		SetLC ( pFrom->GetLC()->GetQueryLC() );
+		break;
+	case SPH_CLONE_INDEX:
+	default:
+		SetLC ( pFrom->GetLC() );
 	}
 }
 

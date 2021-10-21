@@ -1623,9 +1623,7 @@ StoredQuery_i * PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, CS
 
 	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
 
-	TokenizerRefPtr_c pTokenizer ( m_pTokenizer->Clone ( SPH_CLONE_QUERY ) );
-	sphSetupQueryTokenizer ( pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false );
-
+	TokenizerRefPtr_c pTokenizer ( sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false ) );
 	DictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
 
 	if ( IsStarDict ( bWordDict ) )
@@ -1637,8 +1635,7 @@ StoredQuery_i * PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, CS
 	if ( tArgs.m_bQL )
 		return CreateQuery ( tArgs, pTokenizer, pDict, sError );
 
-	TokenizerRefPtr_c pTokenizerJson ( m_pTokenizer->Clone ( SPH_CLONE_QUERY ));
-	sphSetupQueryTokenizer ( pTokenizerJson, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, true );
+	TokenizerRefPtr_c pTokenizerJson ( sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, true ) );
 	return CreateQuery ( tArgs, pTokenizerJson, pDict, sError );
 }
 
@@ -2207,11 +2204,8 @@ void PercolateIndex_c::PostSetupUnl()
 	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
 
 	// create queries
-	TokenizerRefPtr_c pTokenizer { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
-	sphSetupQueryTokenizer ( pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false );
-
-	TokenizerRefPtr_c pTokenizerJson { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
-	sphSetupQueryTokenizer ( pTokenizerJson, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, true );
+	TokenizerRefPtr_c pTokenizer { sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false ) };
+	TokenizerRefPtr_c pTokenizerJson { sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, true ) };
 
 	DictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
 
@@ -2872,8 +2866,7 @@ Bson_t PercolateIndex_c::ExplainQuery ( const CSphString & sQuery ) const
 
 	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
 
-	TokenizerRefPtr_c pQueryTokenizer { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
-	sphSetupQueryTokenizer ( pQueryTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false );
+	TokenizerRefPtr_c pQueryTokenizer { sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false ) };
 	SetupExactTokenizer ( pQueryTokenizer );
 	SetupStarTokenizer( pQueryTokenizer );
 

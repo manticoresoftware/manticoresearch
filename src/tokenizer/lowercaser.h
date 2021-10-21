@@ -32,7 +32,8 @@ class CSphLowercaser final: public ISphRefcountedMT
 	int m_iChunks = 0;							///< how much chunks are actually allocated
 	CSphFixedVector<DWORD> m_dData {0};			///< chunks themselves. 1Kb per chunk (256 DWORDs)
 	DWORD* m_pChunk[CHUNK_COUNT] { nullptr };	///< pointers to non-empty chunks. That is 6kB per table
-	int m_iGeneration = 0;						///< my generation. Each change increases generation
+	volatile int m_iGeneration = 0;				///< my generation. Each change increases generation
+	mutable CSphMutex	m_tLock;				///< protects moment of cache creation from concurrency
 
 	// with 32-bits pointers:
 	// 8 bits per chunk: 3Kb chunks, 1Kb page.   1 page = 4Kb,   2 pages = 5Kb,   3 pages = 6Kb,   4 pages = 7Kb,   5 pages = 8Kb
@@ -44,11 +45,6 @@ class CSphLowercaser final: public ISphRefcountedMT
 	// 10 bits per chunk: 1.5Kb chunks, 4Kb page. 1 page = 5.5Kb, 2 pages = 9.5Kb, 3 pages = 13.5Kb, 4 pages = 17.5Kb, 5 pages = 21.5Kb
 	// seems that for 64-bits using 9 bits per chunk is better with typical configurations; need to test!
 
-	// buffering stuff
-	mutable int 	m_iBufGeneration = -1;					///< matching generation. If differ from global generation - buffers need to be rebuilt before use
-	mutable LowercaserRefcountedConstPtr m_pQueryLC; // clone with "\\", FLAG_CODEPOINT_SPECIAL
-
-	void UpdateStoredQueryClone() const noexcept;
 	void InvalidateStoredClones() noexcept;
 
 protected:
@@ -73,9 +69,32 @@ public:
 	int GetMaxCodepointLength() const noexcept;
 	uint64_t GetFNV() const noexcept;
 
-public:
+	// buffering stuff. Returns such cached clone instead of full cloning
+#define LOWERCASE_CLONE( name ) \
+private: \
+	mutable volatile int m_i##name##Gen = -1;	\
+	mutable LowercaserRefcountedConstPtr m_p##name##LC; \
+	void Up##name##Clone() const noexcept;  \
+                                \
+public: \
+	inline LowercaserRefcountedConstPtr Get##name##LC() const noexcept \
+	{ \
+		Up##name##Clone(); \
+		assert ( m_p##name##LC ); \
+		return m_p##name##LC; \
+	}
 
-	LowercaserRefcountedConstPtr GetQueryLC() const noexcept;
+	LOWERCASE_CLONE ( Query )				// GetQueryLC 				- special "\\" (all the rest also imply that special)
+	LOWERCASE_CLONE ( QueryWildExactJson )	// GetQueryWildExactJsonLC	- "*?%="
+	LOWERCASE_CLONE ( QueryWildExact )		// GetQueryWildExactLC		- "*?%=" and specials "\\=()|-!@~"/^$<"
+	LOWERCASE_CLONE ( QueryWildJson )		// GetQueryWildJsonLC		- "*?%"
+	LOWERCASE_CLONE ( QueryWild )			// GetQueryWildLC			- "*?%" and specials "()|-!@~"/^$<"
+	LOWERCASE_CLONE ( QueryExactJson )		// GetQueryExactJsonLC		- "="
+	LOWERCASE_CLONE ( QueryExact )			// GetQueryExactLC			- "=" and specials "=()|-!@~"/^$<"
+//	LOWERCASE_CLONE ( QueryJson )			// the same as just 'Query'	- special "\\" - that is usual old cloned query
+	LOWERCASE_CLONE ( Query_ )				// GetQuery_LC				- specials "()|-!@~"/^$<"
+
+#undef LOWERCASE_CLONE
 };
 
 
@@ -87,11 +106,4 @@ inline int CSphLowercaser::ToLower ( int iCode ) const noexcept
 	if ( pChunk )
 		return (int)pChunk[iCode & CHUNK_MASK];
 	return 0;
-}
-
-inline LowercaserRefcountedConstPtr CSphLowercaser::GetQueryLC() const noexcept
-{
-	UpdateStoredQueryClone();
-	assert ( m_pQueryLC );
-	return m_pQueryLC;
 }

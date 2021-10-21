@@ -1723,7 +1723,8 @@ void XQParser_t::PhraseShiftQpos ( XQNode_t * pNode )
 bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings )
 {
 	// FIXME? might wanna verify somehow that pTokenizer has all the specials etc from sphSetupQueryTokenizer
-	TokenizerRefPtr_c pMyTokenizer { pTokenizer->Clone ( SPH_CLONE_QUERY ) };
+	assert ( pTokenizer->IsQueryTok() );
+	TokenizerRefPtr_c pMyTokenizer { pTokenizer->Clone ( SPH_CLONE ) };
 
 	// most outcomes are errors
 	SafeDelete ( tParsed.m_pRoot );
@@ -4427,22 +4428,31 @@ void sphOptimizeBoolean ( XQNode_t ** ppRoot, const ISphKeywordsStat * pKeywords
 }
 
 
-void sphSetupQueryTokenizer ( ISphTokenizer * pTokenizer, bool bWildcards, bool bExact, bool bJson )
+ISphTokenizer* sphCloneAndSetupQueryTokenizer ( const ISphTokenizer* pTokenizer, bool bWildcards, bool bExact, bool bJson )
 {
+	assert ( pTokenizer );
 	if ( bWildcards )
 	{
-		pTokenizer->AddPlainChars ( "*?%" );
+		if ( bExact )
+		{
+			if ( bJson )
+				return pTokenizer->Clone ( SPH_CLONE_QUERY_WILD_EXACT_JSON);
+			return pTokenizer->Clone ( SPH_CLONE_QUERY_WILD_EXACT );
+		}
+		if ( bJson )
+			return pTokenizer->Clone ( SPH_CLONE_QUERY_WILD_JSON );
+		return pTokenizer->Clone ( SPH_CLONE_QUERY_WILD );
 	}
+
 	if ( bExact )
 	{
-		pTokenizer->AddPlainChars ( "=" );
-		if (!bJson)
-			pTokenizer->AddSpecials ( "=()|-!@~\"/^$<" );
-	} else
-	{
-		if (!bJson)
-			pTokenizer->AddSpecials ( "()|-!@~\"/^$<" );
+		if ( bJson )
+			return pTokenizer->Clone ( SPH_CLONE_QUERY_EXACT_JSON );
+		return pTokenizer->Clone ( SPH_CLONE_QUERY_EXACT );
 	}
+	if ( bJson )
+		return pTokenizer->Clone ( SPH_CLONE_QUERY );
+	return pTokenizer->Clone ( SPH_CLONE_QUERY_ );
 }
 
 //////////////////////////////////////////////////////////////////////////

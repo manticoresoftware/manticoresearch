@@ -6538,11 +6538,8 @@ void FinalExpressionCalculation ( CSphQueryContext & tCtx, const VecTraits_T<RtS
 static int PrepareFTSearch ( const RtIndex_c * pThis, bool bIsStarDict, bool bKeywordDict, int iExpandKeywords, int iExpansionLimit, const char * szModifiedQuery, const CSphIndexSettings & tSettings, const QueryParser_i * pQueryParser, const CSphQuery & tQuery, const CSphSchema & tSchema, cRefCountedRefPtr_t pIndexData, ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQueryResultMeta & tMeta, QueryProfile_c * pProfiler, CSphScopedPayload * pPayloads, XQQuery_t & tParsed )
 {
 	// OPTIMIZE! make a lightweight clone here? and/or remove double clone?
-	TokenizerRefPtr_c pQueryTokenizer { pTokenizer->Clone ( SPH_CLONE_QUERY ) };
-	sphSetupQueryTokenizer ( pQueryTokenizer, bIsStarDict, tSettings.m_bIndexExactWords, false );
-
-	TokenizerRefPtr_c pQueryTokenizerJson { pTokenizer->Clone ( SPH_CLONE_QUERY ) };
-	sphSetupQueryTokenizer ( pQueryTokenizerJson, bIsStarDict, tSettings.m_bIndexExactWords, true );
+	TokenizerRefPtr_c pQueryTokenizer { sphCloneAndSetupQueryTokenizer ( pTokenizer, bIsStarDict, tSettings.m_bIndexExactWords, false ) };
+	TokenizerRefPtr_c pQueryTokenizerJson { sphCloneAndSetupQueryTokenizer ( pTokenizer, bIsStarDict, tSettings.m_bIndexExactWords, true ) };
 
 	if ( !pQueryParser->ParseQuery ( tParsed, szModifiedQuery, &tQuery, pQueryTokenizer, pQueryTokenizerJson, &tSchema, pDict, tSettings ) )
 	{
@@ -9557,8 +9554,7 @@ Bson_t RtIndex_c::ExplainQuery ( const CSphString & sQuery ) const
 	ExplainQueryArgs_t tArgs ( sQuery );
 	tArgs.m_pSchema = &GetMatchSchema();
 
-	TokenizerRefPtr_c pQueryTokenizer { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
-	sphSetupQueryTokenizer ( pQueryTokenizer, IsStarDict ( m_bKeywordDict ), m_tSettings.m_bIndexExactWords, false );
+	TokenizerRefPtr_c pQueryTokenizer { sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( m_bKeywordDict ), m_tSettings.m_bIndexExactWords, false ) };
 	SetupStarTokenizer ( pQueryTokenizer );
 	SetupExactTokenizer ( pQueryTokenizer );
 

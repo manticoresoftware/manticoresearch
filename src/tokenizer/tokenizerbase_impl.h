@@ -52,6 +52,10 @@ public:
 		return false;
 	}
 
+	bool IsQueryTok() const noexcept final
+	{
+		return m_eMode != SPH_CLONE_INDEX;
+	}
 protected:
 	~CSphTokenizerBase() override;
 

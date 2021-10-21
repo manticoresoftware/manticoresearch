@@ -180,19 +180,65 @@ uint64_t CSphLowercaser::GetFNV() const noexcept
 	return sphFNV64 ( m_dData );
 }
 
-void CSphLowercaser::UpdateStoredQueryClone () const noexcept
-{
-	if ( m_iGeneration == m_iBufGeneration )
-		return;
-
-	LowercaserRefcountedPtr pLCQ { new CSphLowercaser };
-	pLCQ->SetRemap ( this );
-	pLCQ->AddChars ( "\\", FLAG_CODEPOINT_SPECIAL );
-	m_pQueryLC = pLCQ.Leak();
-	m_iBufGeneration = m_iGeneration;
-}
-
 void CSphLowercaser::InvalidateStoredClones() noexcept
 {
 	++m_iGeneration;
 }
+
+#define UPCLONESTART( name ) \
+void CSphLowercaser::Up##name##Clone () const noexcept \
+{ \
+	if ( m_iGeneration == m_i##name##Gen ) \
+		return;\
+	\
+    ScopedMutex_t _ { m_tLock }; \
+    if ( m_iGeneration == m_i##name##Gen ) \
+		return; \
+	LowercaserRefcountedPtr pLC { new CSphLowercaser }; \
+	pLC->SetRemap ( this );
+
+#define UPCLONEEND( name )  \
+	m_p##name##LC = pLC.Leak(); \
+	m_i##name##Gen = m_iGeneration; \
+}
+
+UPCLONESTART ( Query )
+	pLC->AddChars ( "\\", FLAG_CODEPOINT_SPECIAL );
+UPCLONEEND ( Query )
+
+UPCLONESTART ( QueryWildExactJson )
+	pLC->AddChars ( "*?%=" );
+	pLC->AddChars ( "\\", FLAG_CODEPOINT_SPECIAL );
+UPCLONEEND ( QueryWildExactJson )
+
+UPCLONESTART ( QueryWildExact )
+	pLC->AddChars ( "*?%=" );
+	pLC->AddChars ( "\\=()|-!@~\"/^$<", FLAG_CODEPOINT_SPECIAL );
+UPCLONEEND ( QueryWildExact )
+
+UPCLONESTART ( QueryWildJson )
+	pLC->AddChars ( "*?%" );
+	pLC->AddChars ( "\\", FLAG_CODEPOINT_SPECIAL );
+UPCLONEEND ( QueryWildJson )
+
+UPCLONESTART ( QueryWild )
+	pLC->AddChars ( "*?%" );
+	pLC->AddChars ( "\\()|-!@~\"/^$<", FLAG_CODEPOINT_SPECIAL );
+UPCLONEEND ( QueryWild )
+
+UPCLONESTART ( QueryExactJson )
+	pLC->AddChars ( "=" );
+	pLC->AddChars ( "\\", FLAG_CODEPOINT_SPECIAL );
+UPCLONEEND ( QueryExactJson )
+
+UPCLONESTART ( QueryExact )
+	pLC->AddChars ( "=" );
+	pLC->AddChars ( "\\=()|-!@~\"/^$<", FLAG_CODEPOINT_SPECIAL );
+UPCLONEEND ( QueryExact )
+
+UPCLONESTART ( Query_ )
+	pLC->AddChars ( "\\()|-!@~\"/^$<", FLAG_CODEPOINT_SPECIAL );
+UPCLONEEND ( Query_ )
+
+#undef UPCLONEEND
+#undef UPCLONESTART

@@ -33,6 +33,14 @@ enum ESphTokenizerClone
 {
 	SPH_CLONE_INDEX,				///< clone tokenizer and set indexing mode
 	SPH_CLONE_QUERY,				///< clone tokenizer and set querying mode
+	SPH_CLONE_QUERY_WILD_EXACT_JSON,
+	SPH_CLONE_QUERY_WILD_EXACT,
+	SPH_CLONE_QUERY_WILD_JSON,
+	SPH_CLONE_QUERY_WILD,
+	SPH_CLONE_QUERY_EXACT_JSON,
+	SPH_CLONE_QUERY_EXACT,
+	SPH_CLONE_QUERY_,
+	SPH_CLONE,	///< just clone 'as is'
 };
 
 
@@ -178,6 +186,9 @@ public:
 
 	/// get settings hash
 	virtual uint64_t				GetSettingsFNV () const;
+
+	/// if I'm cloned in index, or any kind of query mode
+	virtual bool					IsQueryTok() const noexcept = 0;
 
 	/// get (readonly) lowercaser
 	const CSphLowercaser &			GetLowercaser() const { assert ( m_pLC ); return *m_pLC; }

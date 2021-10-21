@@ -15950,7 +15950,7 @@ static int DecodeUtf8 ( const BYTE * sWord, int * pBuf )
 
 bool SuggestResult_t::SetWord ( const char * sWord, const ISphTokenizer * pTok, bool bUseLastWord )
 {
-	TokenizerRefPtr_c pTokenizer ( pTok->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT ) );
+	TokenizerRefPtr_c pTokenizer ( pTok->Clone ( SPH_CLONE_QUERY ) );
 	pTokenizer->SetBuffer ( (BYTE *)const_cast<char*>(sWord), (int) strlen ( sWord ) );
 
 	const BYTE * pToken = pTokenizer->GetToken();

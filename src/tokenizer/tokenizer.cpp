@@ -59,21 +59,22 @@ bool ISphTokenizer::SetCaseFolding ( const char * sConfig, CSphString & sError )
 		}
 	}
 
-	m_tLC.Reset();
-	m_tLC.AddRemaps ( dRemaps, 0 );
+	auto& tLC = StagingLowercaser();
+	tLC.Reset ();
+	tLC.AddRemaps ( dRemaps );
 	return true;
 }
 
 
 void ISphTokenizer::AddPlainChars ( const char* szChars )
 {
-	m_tLC.AddChars ( szChars );
+	StagingLowercaser().AddChars ( szChars );
 }
 
 
 void ISphTokenizer::AddSpecials ( const char * sSpecials )
 {
-	m_tLC.AddChars ( sSpecials, FLAG_CODEPOINT_SPECIAL );
+	StagingLowercaser().AddChars ( sSpecials, FLAG_CODEPOINT_SPECIAL );
 }
 
 
@@ -82,10 +83,37 @@ void ISphTokenizer::Setup ( const CSphTokenizerSettings & tSettings )
 	m_tSettings = tSettings;
 }
 
+
+CSphLowercaser& ISphTokenizer::StagingLowercaser()
+{
+	if ( !m_pStagingLC )
+	{
+		LowercaserRefcountedPtr pLC { new CSphLowercaser };
+		if ( m_pLC )
+			pLC->SetRemap ( m_pLC );
+		m_pLC = m_pStagingLC = pLC.Leak();
+	}
+	return *m_pStagingLC;
+}
+
+
+LowercaserRefcountedConstPtr ISphTokenizer::GetLC() const
+{
+	assert ( m_pLC );
+	m_pStagingLC = nullptr;
+	return m_pLC;
+}
+
+void ISphTokenizer::SetLC ( LowercaserRefcountedConstPtr rhs )
+{
+	assert ( !m_pStagingLC && !m_pLC );
+	m_pLC = std::move ( rhs );
+}
+
 bool ISphTokenizer::AddSpecialsSPZ ( const char* sSpecials, const char* sDirective, CSphString& sError )
 {
 	for ( int i = 0; sSpecials[i]; ++i )
-		if ( m_tLC.ToLower ( sSpecials[i] ) & ( FLAG_CODEPOINT_NGRAM | FLAG_CODEPOINT_BOUNDARY | FLAG_CODEPOINT_IGNORE ) )
+		if ( m_pLC->ToLower ( sSpecials[i] ) & ( FLAG_CODEPOINT_NGRAM | FLAG_CODEPOINT_BOUNDARY | FLAG_CODEPOINT_IGNORE ) )
 		{
 			sError.SetSprintf ( "%s requires that character '%c' is not in ngram_chars, phrase_boundary, or ignore_chars", sDirective, sSpecials[i] );
 			return false;
@@ -115,7 +143,7 @@ bool ISphTokenizer::EnableZoneIndexing ( CSphString& sError )
 
 uint64_t ISphTokenizer::GetSettingsFNV() const
 {
-	uint64_t uHash = m_tLC.GetFNV();
+	uint64_t uHash = GetLowercaser().GetFNV();
 
 	DWORD uFlags = 0;
 	if ( m_bBlendSkipPure )
@@ -139,11 +167,11 @@ bool ISphTokenizer::RemapCharacters ( const char* sConfig, DWORD uFlags, const c
 	if ( !sphParseCharset ( sConfig, dRemaps, &sError ) )
 		return false;
 
-	if ( !m_tLC.CheckRemap ( sError, dRemaps, sSource, bCanRemap ) )
+	if ( !m_pLC->CheckRemap ( sError, dRemaps, sSource, bCanRemap ) )
 		return false;
 
 	// add mapping
-	m_tLC.AddRemaps ( dRemaps, uFlags );
+	StagingLowercaser().AddRemaps ( dRemaps, uFlags );
 	return true;
 }
 

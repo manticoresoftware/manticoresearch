@@ -31,7 +31,6 @@ CSphTokenizerBase::~CSphTokenizerBase()
 
 bool CSphTokenizerBase::SetCaseFolding ( const char* sConfig, CSphString& sError )
 {
-	assert ( m_eMode != SPH_CLONE_QUERY_LIGHTWEIGHT );
 	if ( m_pExc )
 	{
 		sError = "SetCaseFolding() must not be called after LoadSynonyms()";
@@ -44,7 +43,6 @@ bool CSphTokenizerBase::SetCaseFolding ( const char* sConfig, CSphString& sError
 
 bool CSphTokenizerBase::SetBlendChars ( const char* sConfig, CSphString& sError )
 {
-	assert ( m_eMode != SPH_CLONE_QUERY_LIGHTWEIGHT );
 	m_bHasBlend = ISphTokenizer::SetBlendChars ( sConfig, sError );
 	return m_bHasBlend;
 }
@@ -52,8 +50,6 @@ bool CSphTokenizerBase::SetBlendChars ( const char* sConfig, CSphString& sError 
 
 bool CSphTokenizerBase::LoadSynonyms ( const char* sFilename, const CSphEmbeddedFiles* pFiles, StrVec_t& dWarnings, CSphString& sError )
 {
-	assert ( m_eMode != SPH_CLONE_QUERY_LIGHTWEIGHT );
-
 	CSphString sWarning;
 	ExceptionsTrieGen_c g;
 	if ( pFiles )
@@ -112,7 +108,7 @@ void CSphTokenizerBase::CloneBase ( const CSphTokenizerBase* pFrom, ESphTokenize
 	m_pExc = nullptr;
 	if ( pFrom->m_pExc )
 	{
-		m_pExc = new ExceptionsTrie_c();
+		m_pExc = new ExceptionsTrie_c;
 		*m_pExc = *pFrom->m_pExc;
 	}
 	m_tSettings = pFrom->m_tSettings;
@@ -122,41 +118,22 @@ void CSphTokenizerBase::CloneBase ( const CSphTokenizerBase* pFrom, ESphTokenize
 	m_bShortTokenFilter = ( eMode != SPH_CLONE_INDEX );
 	m_bDetectSentences = pFrom->m_bDetectSentences;
 
-	switch ( eMode )
+	// By default, we operate with read-only refcounted pointer to prepared lowercaser.
+	// Any changing operation uses special write-enabled pointer, which is null by default, and also forcibly reset to null if we clone the pointer, in order to protect clone from changes of parent.
+	// So, 'just clone' for querying is ok. Clone and add some additional symbols = full clone.
+
+	if ( eMode == pFrom->m_eMode )
 	{
-		case SPH_CLONE_INDEX:
-			assert ( pFrom->m_eMode==SPH_CLONE_INDEX );
-			m_tLC = pFrom->m_tLC;
-			break;
+		SetLC ( pFrom->GetLC() );
+		return;
+	}
 
-		case SPH_CLONE_QUERY:
-		{
-			assert ( pFrom->m_eMode==SPH_CLONE_INDEX || pFrom->m_eMode==SPH_CLONE_QUERY );
-			m_tLC = pFrom->m_tLC;
+	assert ( pFrom->m_eMode == SPH_CLONE_INDEX );
 
-			CSphVector<CSphRemapRange> dRemaps;
-			CSphRemapRange Range;
-			Range.m_iStart = Range.m_iEnd = Range.m_iRemapStart = '\\';
-			dRemaps.Add ( Range );
-			m_tLC.AddRemaps ( dRemaps, FLAG_CODEPOINT_SPECIAL );
-
-			m_uBlendVariants = BLEND_TRIM_NONE;
-			break;
-		}
-
-		case SPH_CLONE_QUERY_LIGHTWEIGHT:
-		{
-			// FIXME? avoid double lightweight clones, too?
-			assert ( pFrom->m_eMode!=SPH_CLONE_INDEX );
-			assert ( pFrom->m_tLC.ToLower ( '\\' ) & FLAG_CODEPOINT_SPECIAL );
-
-			// lightweight tokenizer clone
-			// copy 3 KB of lowercaser chunk pointers, but do NOT copy the table data
-			m_tLC.m_iChunks = 0;
-			for ( int i=0; i<CSphLowercaser::CHUNK_COUNT; ++i )
-				m_tLC.m_pChunk[i] = pFrom->m_tLC.m_pChunk[i];
-			break;
-		}
+	if ( eMode == SPH_CLONE_QUERY )
+	{
+		SetLC ( pFrom->GetLC()->GetQueryLC() );
+		m_uBlendVariants = BLEND_TRIM_NONE;
 	}
 }
 

@@ -121,7 +121,7 @@ TEST_F( TokenizerGtest, exceptions_more )
 		++iCur;
 	}
 
-	TokenizerRefPtr_c pQtok { m_pTokenizer->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT ) };
+	TokenizerRefPtr_c pQtok { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
 
 	pQtok->SetBuffer ( ( BYTE * ) "life:)", 7 );
 	ASSERT_STREQ ( ( char * ) pQtok->GetToken (), "life:)" );

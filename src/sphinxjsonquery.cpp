@@ -224,7 +224,7 @@ bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, 
 		return false;
 	}
 
-	TokenizerRefPtr_c pMyJsonTokenizer { pQueryTokenizerJson->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT ) };
+	TokenizerRefPtr_c pMyJsonTokenizer { pQueryTokenizerJson->Clone ( SPH_CLONE_QUERY ) };
 	DictRefPtr_c pMyDict { GetStatelessDict ( pDict ) };
 
 	QueryTreeBuilder_c tBuilder ( pQuery, pQueryTokenizerQL, tSettings );

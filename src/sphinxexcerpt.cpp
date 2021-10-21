@@ -1384,7 +1384,7 @@ void SnippetBuilder_c::Impl_c::Setup ( const CSphIndex * pIndex, const SnippetQu
 	else
 		m_pTokenizer = pIndex->GetTokenizer()->Clone ( SPH_CLONE_INDEX );
 
-	m_pQueryTokenizer = pIndex->GetQueryTokenizer()->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT );
+	m_pQueryTokenizer = pIndex->GetQueryTokenizer()->Clone ( SPH_CLONE_QUERY );
 
 	// setup exact dictionary if needed
 	if ( tIndexSettings.m_bIndexExactWords )
@@ -1560,7 +1560,7 @@ SnippetBuilder_c::Impl_c::Impl_c ( const SnippetBuilder_c::Impl_c & rhs )
 		: m_pState { rhs.m_pState }
 {
 	m_pTokenizer = rhs.m_pTokenizer->Clone ( SPH_CLONE_INDEX );
-	m_pQueryTokenizer = rhs.m_pQueryTokenizer->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT );
+	m_pQueryTokenizer = rhs.m_pQueryTokenizer->Clone ( SPH_CLONE_QUERY );
 	m_pDict = GetStatelessDict ( rhs.m_pDict );
 	if ( rhs.m_pFieldFilter )
 		m_pFieldFilter = rhs.m_pFieldFilter->Clone ();

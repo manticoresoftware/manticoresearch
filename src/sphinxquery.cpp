@@ -1723,7 +1723,7 @@ void XQParser_t::PhraseShiftQpos ( XQNode_t * pNode )
 bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings )
 {
 	// FIXME? might wanna verify somehow that pTokenizer has all the specials etc from sphSetupQueryTokenizer
-	TokenizerRefPtr_c pMyTokenizer { pTokenizer->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT ) };
+	TokenizerRefPtr_c pMyTokenizer { pTokenizer->Clone ( SPH_CLONE_QUERY ) };
 
 	// most outcomes are errors
 	SafeDelete ( tParsed.m_pRoot );

@@ -64,6 +64,115 @@ void CSphIOStats::Add ( const CSphIOStats & b )
 	m_iWriteBytes += b.m_iWriteBytes;
 }
 
+void SafeClose ( int& iFD )
+{
+	if ( iFD >= 0 )
+		::close ( iFD );
+	iFD = -1;
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+#if _WIN32
+
+bool sphLockEx ( int iFile, bool bWait )
+{
+	HANDLE hHandle = (HANDLE)_get_osfhandle ( iFile );
+	if ( hHandle != INVALID_HANDLE_VALUE )
+	{
+		OVERLAPPED tOverlapped;
+		memset ( &tOverlapped, 0, sizeof ( tOverlapped ) );
+		return !!LockFileEx ( hHandle, LOCKFILE_EXCLUSIVE_LOCK | ( bWait ? 0 : LOCKFILE_FAIL_IMMEDIATELY ), 0, 1, 0, &tOverlapped );
+	}
+
+	return false;
+}
+
+void sphLockUn ( int iFile )
+{
+	HANDLE hHandle = (HANDLE)_get_osfhandle ( iFile );
+	if ( hHandle != INVALID_HANDLE_VALUE )
+	{
+		OVERLAPPED tOverlapped;
+		memset ( &tOverlapped, 0, sizeof ( tOverlapped ) );
+		UnlockFileEx ( hHandle, 0, 1, 0, &tOverlapped );
+	}
+}
+
+#else
+
+bool sphLockEx ( int iFile, bool bWait )
+{
+	struct flock tLock;
+	tLock.l_type = F_WRLCK;
+	tLock.l_whence = SEEK_SET;
+	tLock.l_start = 0;
+	tLock.l_len = 0;
+	if ( !bWait )
+		return ( fcntl ( iFile, F_SETLK, &tLock ) != -1 );
+
+#if HAVE_F_SETLKW
+	return ( fcntl ( iFile, F_SETLKW, &tLock ) != -1 );
+#else
+	for ( ;; )
+	{
+		int iResult = fcntl ( iFile, F_SETLK, &tLock ) if ( iResult != -1 ) return true;
+		if ( errno == EACCES || errno == EAGAIN )
+			sphSleepMsec ( 10 );
+		else
+			return false;
+	}
+#endif
+}
+
+
+void sphLockUn ( int iFile )
+{
+	struct flock tLock;
+	tLock.l_type = F_UNLCK;
+	tLock.l_whence = SEEK_SET;
+	tLock.l_start = 0;
+	tLock.l_len = 0;
+
+	if ( fcntl ( iFile, F_SETLK, &tLock ) == -1 )
+		sphWarning ( "sphLockUn: failed fcntl. Error: %d '%s'", errno, strerror ( errno ) );
+}
+#endif
+
+bool RawFileLock ( const CSphString& sFile, int& iLockFD, CSphString& sError )
+{
+	if ( iLockFD < 0 )
+	{
+		iLockFD = ::open ( sFile.cstr(), SPH_O_NEW, 0644 );
+		if ( iLockFD < 0 )
+		{
+			sError.SetSprintf ( "failed to open %s: %s", sFile.cstr(), strerrorm ( errno ) );
+			sphLogDebug ( "failed to open %s: %s", sFile.cstr(), strerrorm ( errno ) );
+			return false;
+		}
+	}
+
+	if ( !sphLockEx ( iLockFD, false ) )
+	{
+		sError.SetSprintf ( "failed to lock %s: %s", sFile.cstr(), strerrorm ( errno ) );
+		::close ( iLockFD );
+		iLockFD = -1;
+		return false;
+	}
+	sphLogDebug ( "lock %s success", sFile.cstr() );
+	return true;
+}
+
+void RawFileUnLock ( const CSphString& sFile, int& iLockFD )
+{
+	if ( iLockFD < 0 )
+		return;
+	sphLogDebug ( "File ID ok, closing lock FD %d, unlinking %s", iLockFD, sFile.cstr() );
+	sphLockUn ( iLockFD );
+	::close ( iLockFD );
+	::unlink ( sFile.cstr() );
+	iLockFD = -1;
+}
 
 //////////////////////////////////////////////////////////////////////////
 

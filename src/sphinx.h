@@ -77,24 +77,8 @@ DWORD			sphCRC32 ( const void * pString, int iLen, DWORD uPrevCRC );
 /// Fast check if our endianess is correct
 const char*		sphCheckEndian();
 
-/// try to obtain an exclusive lock on specified file
-/// bWait specifies whether to wait
-bool			sphLockEx ( int iFile, bool bWait );
-
-/// remove existing locks
-void			sphLockUn ( int iFile );
-
 /// millisecond-precision sleep
 void			sphSleepMsec ( int iMsec );
-
-/// set throttling options
-void			sphSetThrottling ( int iMaxIOps, int iMaxIOSize );
-
-/// write blob to file honoring throttling
-bool			sphWriteThrottled ( int iFD, const void* pBuf, int64_t iCount, const char* sName, CSphString& sError );
-
-/// read blob from file honoring throttling
-size_t			sphReadThrottled ( int iFD, void* pBuf, size_t iCount );
 
 /// immediately interrupt current query
 void			sphInterruptNow();

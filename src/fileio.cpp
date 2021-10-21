@@ -815,6 +815,115 @@ void CSphWriter::SeekTo ( SphOffset_t iPos, bool bTruncate )
 
 //////////////////////////////////////////////////////////////////////////
 
+static int g_iIOpsDelay = 0;
+static int g_iMaxIOSize = 0;
+static std::atomic<int64_t> g_tmNextIOTime { 0 };
+
+void sphSetThrottling ( int iMaxIOps, int iMaxIOSize )
+{
+	g_iIOpsDelay = iMaxIOps ? 1000000 / iMaxIOps : iMaxIOps;
+	g_iMaxIOSize = iMaxIOSize;
+}
+
+
+static inline void ThrottleSleep()
+{
+	if ( !g_iIOpsDelay )
+		return;
+
+	auto tmTimer = sphMicroTimer();
+	while ( tmTimer < g_tmNextIOTime.load ( std::memory_order_relaxed ) ) // m.b. >1 sleeps if another thread more lucky
+	{
+		sphSleepMsec ( (int)( g_tmNextIOTime.load ( std::memory_order_relaxed ) - tmTimer ) / 1000 );
+		tmTimer = sphMicroTimer();
+	}
+	g_tmNextIOTime.store ( tmTimer + g_iIOpsDelay, std::memory_order_relaxed );
+}
+
+
+bool sphWriteThrottled ( int iFD, const void* pBuf, int64_t iCount, const char* sName, CSphString& sError )
+{
+	if ( iCount <= 0 )
+		return true;
+
+	// by default, slice ios by at most 1 GB
+	int iChunkSize = ( 1UL << 30 );
+
+	// when there's a sane max_iosize (4K to 1GB), use it
+	if ( g_iMaxIOSize >= 4096 )
+		iChunkSize = Min ( iChunkSize, g_iMaxIOSize );
+
+	CSphIOStats* pIOStats = GetIOStats();
+
+	// while there's data, write it chunk by chunk
+	auto* p = (const BYTE*)pBuf;
+	while ( iCount )
+	{
+		// wait for a timely occasion
+		ThrottleSleep();
+
+		// write (and maybe time)
+		int64_t tmTimer = 0;
+		if ( pIOStats )
+			tmTimer = sphMicroTimer();
+
+		auto iToWrite = (int)Min ( iCount, iChunkSize );
+		int iWritten = ::write ( iFD, p, iToWrite );
+
+		if ( pIOStats )
+		{
+			pIOStats->m_iWriteTime += sphMicroTimer() - tmTimer;
+			pIOStats->m_iWriteOps++;
+			pIOStats->m_iWriteBytes += iWritten;
+		}
+		if ( sphInterrupted() && iWritten != iToWrite )
+		{
+			sError.SetSprintf ( "%s: write interrupted: %d of %d bytes written", sName, iWritten, iToWrite );
+			return false;
+		}
+
+		// success? rinse, repeat
+		if ( iWritten == iToWrite )
+		{
+			iCount -= iToWrite;
+			p += iToWrite;
+			continue;
+		}
+
+		// failure? report, bailout
+		if ( iWritten < 0 )
+			sError.SetSprintf ( "%s: write error: %s", sName, strerrorm ( errno ) );
+		else
+			sError.SetSprintf ( "%s: write error: %d of %d bytes written", sName, iWritten, iToWrite );
+		return false;
+	}
+	return true;
+}
+
+
+size_t sphReadThrottled ( int iFD, void* pBuf, size_t iCount )
+{
+	if ( iCount <= 0 )
+		return iCount;
+
+	auto iStep = g_iMaxIOSize ? Min ( iCount, (size_t)g_iMaxIOSize ) : iCount;
+	auto* p = (BYTE*)pBuf;
+	size_t nBytesToRead = iCount;
+	while ( iCount && !sphInterrupted() )
+	{
+		ThrottleSleep();
+		auto iChunk = (long)Min ( iCount, iStep );
+		auto iRead = sphRead ( iFD, p, iChunk );
+		p += iRead;
+		iCount -= iRead;
+		if ( iRead != iChunk )
+			break;
+	}
+	return nBytesToRead - iCount; // FIXME? we sure this is under 2gb?
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 #if _WIN32
 
 // atomic seek+read for Windows

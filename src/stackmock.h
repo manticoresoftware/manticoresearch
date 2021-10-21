@@ -12,7 +12,6 @@
 
 #pragma once
 
-#include "sphinx.h"
 #include "task_info.h"
 
 using StackSizeTuplet_t = std::pair<int,int>; // create, eval

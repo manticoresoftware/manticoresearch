@@ -13,8 +13,8 @@
 #ifndef _sphinxfilter_
 #define _sphinxfilter_
 
-#include "sphinx.h"
 #include "columnarlib.h"
+#include "sphinx.h"
 
 class ISphFilter : public columnar::BlockTester_i
 {

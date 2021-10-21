@@ -52,11 +52,11 @@ void TestRTInit ()
 
 #define RT_INDEX_FILE_NAME "test_temp"
 
-class MockTestDoc_c : public CSphSource_Document
+class MockTestDoc_c : public CSphSource
 {
 public:
 	explicit MockTestDoc_c ( const CSphSchema &tSchema, BYTE ** ppDocs, int iDocs, int iFields )
-		: CSphSource_Document ( "test_doc" )
+		: CSphSource ( "test_doc" )
 	{
 		m_tSchema = tSchema;
 		m_ppDocs = ppDocs;
@@ -127,7 +127,7 @@ public:
 };
 
 
-class MockDocRandomizer_c : public CSphSource_Document
+class MockDocRandomizer_c : public CSphSource
 {
 public:
 	static const int m_iMaxFields = 2;
@@ -138,7 +138,7 @@ public:
 	int m_dFieldLengths[m_iMaxFields];
 	int	m_iDocsCounter;
 
-	explicit MockDocRandomizer_c ( const CSphSchema & tSchema ) : CSphSource_Document ( "test_doc" )
+	explicit MockDocRandomizer_c ( const CSphSchema & tSchema ) : CSphSource ( "test_doc" )
 	{
 		m_tSchema = tSchema;
 		m_dMeasuredFields.Reserve(m_iMaxFields);
@@ -217,7 +217,7 @@ protected:
 		TestRTInit();
 		tDictSettings.m_bWordDict = false;
 
-		pTok = sphCreateUTF8Tokenizer ();
+		pTok = Tokenizer::Detail::CreateUTF8Tokenizer ();
 
 		tSrcSchema.Reset ();
 		tSrcSchema.AddField ( "title" );

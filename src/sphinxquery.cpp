@@ -10,11 +10,12 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinx.h"
 #include "sphinxquery.h"
 #include "sphinxutils.h"
 #include "sphinxplugin.h"
 #include <stdarg.h>
+
+#include "tokenizer/tokenizer.h"
 
 //////////////////////////////////////////////////////////////////////////
 // EXTENDED PARSER RELOADED
@@ -4430,15 +4431,13 @@ void sphSetupQueryTokenizer ( ISphTokenizer * pTokenizer, bool bWildcards, bool 
 {
 	if ( bWildcards )
 	{
-		pTokenizer->AddPlainChar ( '*' );
-		pTokenizer->AddPlainChar ( '?' );
-		pTokenizer->AddPlainChar ( '%' );
+		pTokenizer->AddPlainChars ( "*?%" );
 	}
 	if ( bExact )
 	{
-		pTokenizer->AddPlainChar ( '=' );
+		pTokenizer->AddPlainChars ( "=" );
 		if (!bJson)
-			pTokenizer->AddSpecials ( "()|-!@~\"/^$<=" );
+			pTokenizer->AddSpecials ( "=()|-!@~\"/^$<" );
 	} else
 	{
 		if (!bJson)

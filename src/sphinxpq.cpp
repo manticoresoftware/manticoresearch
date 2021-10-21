@@ -19,6 +19,8 @@
 #include "coroutine.h"
 #include "mini_timer.h"
 #include "binlog.h"
+#include "indexfiles.h"
+#include "tokenizer/tokenizer.h"
 
 #include <atomic>
 
@@ -359,7 +361,7 @@ static void QueryGetTerms ( const XQNode_t * pNode, CSphDict * pDict, DictMap_t 
 		if ( !iLen )
 			continue;
 
-		strncpy ( (char *)sTmp, tWord.m_sWord.cstr(), iLen );
+		memcpy ( (char *)sTmp, tWord.m_sWord.cstr(), iLen );
 		sTmp[iLen] = '\0';
 
 		SphWordID_t uWord = 0;
@@ -1627,10 +1629,10 @@ StoredQuery_i * PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, CS
 	DictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
 
 	if ( IsStarDict ( bWordDict ) )
-		SetupStarDict ( pDict, pTokenizer );
+		SetupStarDict ( pDict );
 
 	if ( m_tSettings.m_bIndexExactWords )
-		SetupExactDict ( pDict, pTokenizer );
+		SetupExactDict ( pDict );
 
 	if ( tArgs.m_bQL )
 		return CreateQuery ( tArgs, pTokenizer, pDict, sError );
@@ -2189,7 +2191,7 @@ void PercolateIndex_c::PostSetupUnl()
 
 	// FIXME!!! handle error
 	m_pTokenizerIndexing = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
-	TokenizerRefPtr_c pIndexing { ISphTokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError ) };
+	TokenizerRefPtr_c pIndexing { Tokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError ) };
 	if ( pIndexing )
 		m_pTokenizerIndexing = pIndexing;
 
@@ -2214,10 +2216,10 @@ void PercolateIndex_c::PostSetupUnl()
 	DictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
 
 	if ( IsStarDict ( bWordDict ) )
-		SetupStarDict ( pDict, pTokenizer );
+		SetupStarDict ( pDict );
 
 	if ( m_tSettings.m_bIndexExactWords )
-		SetupExactDict ( pDict, pTokenizer );
+		SetupExactDict ( pDict );
 
 	CSphString sHitlessFiles = m_tSettings.m_sHitlessFiles.cstr();
 	if ( GetIndexFilenameBuilder() )
@@ -2351,7 +2353,7 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilename
 	}
 
 	// recreate tokenizer
-	m_pTokenizer = ISphTokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, pFilenameBuilder, dWarnings, m_sLastError );
+	m_pTokenizer = Tokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, pFilenameBuilder, dWarnings, m_sLastError );
 	if ( !m_pTokenizer )
 		return false;
 
@@ -2363,7 +2365,7 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilename
 		return false;
 	}
 
-	m_pTokenizer = ISphTokenizer::CreateMultiformFilter ( m_pTokenizer, m_pDict->GetMultiWordforms () );
+	m_pTokenizer = Tokenizer::CreateMultiformFilter ( m_pTokenizer, m_pDict->GetMultiWordforms () );
 
 	// regexp and ICU
 	if ( uVersion>=6 )
@@ -2872,12 +2874,14 @@ Bson_t PercolateIndex_c::ExplainQuery ( const CSphString & sQuery ) const
 
 	TokenizerRefPtr_c pQueryTokenizer { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
 	sphSetupQueryTokenizer ( pQueryTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false );
+	SetupExactTokenizer ( pQueryTokenizer );
+	SetupStarTokenizer( pQueryTokenizer );
 
 	ExplainQueryArgs_t tArgs ( sQuery );
 	tArgs.m_pSchema = &GetInternalSchema();
 	tArgs.m_pDict = GetStatelessDict ( m_pDict );
-	SetupStarDict ( tArgs.m_pDict, pQueryTokenizer );
-	SetupExactDict ( tArgs.m_pDict, pQueryTokenizer );
+	SetupStarDict ( tArgs.m_pDict );
+	SetupExactDict ( tArgs.m_pDict );
 	if ( m_pFieldFilter )
 		tArgs.m_pFieldFilter = m_pFieldFilter->Clone();
 	tArgs.m_pSettings = &m_tSettings;

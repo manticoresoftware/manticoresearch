@@ -10,7 +10,6 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinx.h"
 #include "sphinxstd.h"
 #include "sphinxutils.h"
 #include "sphinxint.h"
@@ -18,7 +17,11 @@
 #include "sphinxrt.h"
 #include "killlist.h"
 #include "secondaryindex.h"
-#include <time.h>
+#include "indexfiles.h"
+#include "stripper/html_stripper.h"
+#include "tokenizer/charset_definition_parser.h"
+
+#include <ctime>
 
 static CSphString g_sDataDir;
 static bool g_bConfigless = false;
@@ -171,7 +174,7 @@ static void CharsetFold ( CSphIndex * pIndex, FILE * fp )
 	CSphVector<BYTE> sBuf1 ( 16384 );
 	CSphVector<BYTE> sBuf2 ( 16384 );
 
-	CSphLowercaser tLC = pIndex->GetTokenizer()->GetLowercaser();
+	const CSphLowercaser& tLC = pIndex->GetTokenizer()->GetLowercaser();
 
 #if _WIN32
 	setmode ( fileno(stdout), O_BINARY );

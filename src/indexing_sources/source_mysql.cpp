@@ -11,6 +11,11 @@
 //
 
 #include "source_mysql.h"
+
+#if _WIN32
+#include <winsock2.h>
+#endif
+
 #include <mysql.h>
 #include <config_indexer.h>
 

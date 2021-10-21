@@ -12,7 +12,7 @@
 
 #pragma once
 
-#include "sphinx.h"
+#include "sphinxdefs.h"
 
 DWORD 	sphToDword ( const char * s );
 int64_t sphToInt64 ( const char * szNumber, CSphString * pError=nullptr );

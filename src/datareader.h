@@ -11,7 +11,8 @@
 #ifndef _datareader_
 #define _datareader_
 
-#include "sphinx.h"
+#include "sphinxdefs.h"
+#include "indexsettings.h"
 
 #define READ_NO_SIZE_HINT 0
 

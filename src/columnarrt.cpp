@@ -12,6 +12,7 @@
 #include "fileio.h"
 #include "memio.h"
 #include "attribute.h"
+#include "schema/schema.h"
 
 template <typename T>
 static std::pair<T,T> GetLengthOffset ( const CSphVector<T> & dLengths, RowID_t tRowID )

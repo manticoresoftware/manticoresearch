@@ -23,7 +23,7 @@
 // - added "ef3ou3ala" verb form to the known patterns.
 //
 
-#include "sphinx.h"
+#include "sphinxstd.h"
 
 /// characters used in affix and word form patterns
 /// FIXME! not right on big-endian

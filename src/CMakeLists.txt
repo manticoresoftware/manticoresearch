@@ -19,6 +19,7 @@ message(STATUS "Inside directory src...")
 
 include (GetColumnar)
 target_link_libraries (lextra INTERFACE columnar::columnar_api)
+target_include_directories ( lextra INTERFACE ${CMAKE_CURRENT_SOURCE_DIR} )
 
 get_banner (CONFIGURE_FLAGS)
 infomsg ("${CONFIGURE_FLAGS}")
@@ -49,9 +50,22 @@ add_library(lmanticore STATIC sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sphin
 		task_info.cpp mini_timer.cpp fileio.cpp memio.cpp queryprofile.cpp columnarfilter.cpp columnargrouper.cpp
 		columnarlib.cpp collation.cpp fnv64.cpp histogram.cpp threads_detached.cpp hazard_pointer.cpp task_info.cpp
 		mini_timer.cpp dynamic_idx.cpp columnarrt.cpp columnarmisc.cpp exprtraits.cpp columnarexpr.cpp
-		sphinx_alter.cpp conversion.cpp columnarsort.cpp binlog.cpp chunksearchctx.cpp )
+		sphinx_alter.cpp columnarsort.cpp binlog.cpp chunksearchctx.cpp
+		indexfiles.cpp attrindex_builder.cpp queryfilter.cpp)
 
-target_link_libraries (lmanticore PUBLIC lextra)
+add_library ( conversion conversion.cpp )
+target_link_libraries ( conversion PUBLIC lextra )
+target_link_libraries ( lmanticore PUBLIC conversion )
+
+add_subdirectory ( stripper )
+target_link_libraries ( lmanticore PUBLIC stripper )
+
+add_subdirectory ( tokenizer )
+target_link_libraries ( lmanticore PUBLIC tokenizer )
+target_link_libraries ( lmanticore PUBLIC lextra )
+
+add_subdirectory ( schema )
+target_link_libraries ( lmanticore PUBLIC schema )
 
 add_library(lmanticore_icu icu.cpp)
 if (WITH_ICU)
@@ -67,8 +81,8 @@ if (WITH_RE2)
 	target_link_libraries (lmanticore PRIVATE re2::re2)
 endif ()
 
-add_subdirectory (indexing_sources)
-target_link_libraries (lmanticore PUBLIC common_includes)
+add_subdirectory ( indexing_sources )
+target_link_libraries ( lmanticore PUBLIC sourcedoc )
 
 if (WIN32)
 	target_sources (lmanticore PRIVATE libutils.cpp)
@@ -114,27 +128,16 @@ set ( HEADERS sphinxexcerpt.h sphinxfilter.h sphinxint.h sphinxjsonquery.h sphin
 		hazard_pointer.h task_info.h mini_timer.h collation.h fnv64.h histogram.h sortsetup.h dynamic_idx.h
 		indexsettings.h columnarlib.h fileio.h memio.h queryprofile.h columnarfilter.h columnargrouper.h fileutils.h
 		libutils.h conversion.h columnarsort.h sortcomp.h binlog_defs.h binlog.h ${MANTICORE_BINARY_DIR}/config/config.h
-		chunksearchctx.h lrucache.h )
+		chunksearchctx.h lrucache.h indexfiles.h attrindex_builder.h queryfilter.h)
 
 set ( SEARCHD_H searchdaemon.h searchdconfig.h searchdddl.h searchdexpr.h searchdha.h searchdreplication.h searchdsql.h
 		searchdtask.h task_info.h taskflushattrs.h taskflushbinlog.h taskflushmutable.h taskglobalidf.h
 		taskmalloctrim.h taskoptimize.h taskping.h taskpreread.h tasksavestate.h net_action_accept.h
 		netreceive_api.h netreceive_http.h netreceive_ql.h netstate_api.h networking_daemon.h optional.h query_status.h
-		compressed_mysql.h sphinxql_debug.h stackmock.h replication/wsrep_api_stub.h searchdssl.h )
+		compressed_mysql.h sphinxql_debug.h stackmock.h replication/wsrep_api_stub.h searchdssl.h digest_sha1.h)
 
 source_group ( "Grammar sources" FILES ${LMANTICORE_BISON} ${SEARCHD_BISON} )
 source_group ( "Lexer sources" FILES ${LMANTICORE_FLEX} ${SEARCHD_FLEX} )
-
-include ( genheader )
-
-# compile globalaliases.h
-set ( CHARSET_FILTER "charsets/*.txt" )
-set ( CHARSET_TEMPLATE "charsets/globalaliases.h.in" )
-hsnippetfolder ( "${CHARSET_FILTER}" "${CHARSET_TEMPLATE}" )
-
-# populate charset files for IDE
-file ( GLOB CHARSET_FILES "${CHARSET_FILTER}" )
-source_group ( "Charset sources" FILES ${CHARSET_FILES} ${CHARSET_TEMPLATE} )
 
 # add the extra targets in the case we want on-the-fly grammar compiler
 find_package (BISON REQUIRED)
@@ -202,7 +205,7 @@ add_library (lsearchd OBJECT searchdha.cpp http/http_parser.c searchdhttp.cpp
 		searchdsql.cpp searchdddl.cpp networking_daemon.cpp
 		netstate_api.cpp net_action_accept.cpp netreceive_api.cpp
 		netreceive_http.cpp netreceive_ql.cpp query_status.cpp
-		sphinxql_debug.cpp stackmock.cpp)
+		sphinxql_debug.cpp stackmock.cpp digest_sha1.cpp)
 target_sources (lsearchd PUBLIC ${SEARCHD_SRCS_TESTABLE} ${SEARCHD_H} ${SEARCHD_BISON} ${SEARCHD_FLEX})
 target_link_libraries (lsearchd PUBLIC lextra)
 

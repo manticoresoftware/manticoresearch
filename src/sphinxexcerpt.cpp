@@ -9,7 +9,6 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinx.h"
 #include "sphinxexcerpt.h"
 #include "sphinxutils.h"
 #include "sphinxsearch.h"
@@ -24,6 +23,8 @@
 #include "snippetstream.h"
 #include "snippetpassage.h"
 
+#include "stripper/html_stripper.h"
+#include "tokenizer/tokenizer.h"
 
 #include <math.h>
 

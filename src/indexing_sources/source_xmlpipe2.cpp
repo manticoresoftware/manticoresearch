@@ -126,7 +126,7 @@ static const char * GET_ICONV_LIB ()
 #endif
 
 /// XML pipe source implementation (v2)
-class CSphSource_XMLPipe2 final : public CSphSource_Document, public CSphSchemaConfigurator<CSphSource_XMLPipe2>
+class CSphSource_XMLPipe2 final : public CSphSource, public CSphSchemaConfigurator<CSphSource_XMLPipe2>
 {
 public:
 	explicit		CSphSource_XMLPipe2 ( const char * sName );
@@ -272,7 +272,7 @@ static int XMLCALL xmlUnknownEncoding ( void *, const XML_Char * name, XML_Encod
 #endif
 
 CSphSource_XMLPipe2::CSphSource_XMLPipe2 ( const char * sName )
-	: CSphSource_Document ( sName )
+	: CSphSource ( sName )
 {}
 
 

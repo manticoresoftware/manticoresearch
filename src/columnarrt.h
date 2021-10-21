@@ -11,7 +11,13 @@
 #ifndef _columnarrt_
 #define _columnarrt_
 
-#include "sphinx.h"
+#include <cstdint>
+#include "sphinxdefs.h"
+#include "sphinxstd.h"
+#include "columnarlib.h"
+#include "fileio.h"
+
+class CSphSchema;
 
 class ColumnarRT_i : public columnar::Columnar_i
 {

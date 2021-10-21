@@ -13,7 +13,7 @@
 #ifndef _memio_
 #define _memio_
 
-#include "sphinx.h"
+#include "sphinxstd.h"
 
 class MemoryReader_c
 {

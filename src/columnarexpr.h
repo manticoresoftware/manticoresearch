@@ -13,7 +13,8 @@
 #ifndef _columnarexpr_
 #define _columnarexpr_
 
-#include "sphinx.h"
+#include "sphinxdefs.h"
+#include "sphinxexpr.h"
 
 class ConstList_c;
 ISphExpr * CreateExpr_ColumnarMva32In ( const CSphString & sName, ConstList_c * pConsts );

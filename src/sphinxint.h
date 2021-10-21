@@ -13,7 +13,6 @@
 #ifndef _sphinxint_
 #define _sphinxint_
 
-#include "sphinx.h"
 #include "sphinxstd.h"
 #include "sphinxfilter.h"
 #include "sphinxquery.h"
@@ -22,6 +21,7 @@
 #include "sphinxjsonquery.h"
 #include "sphinxutils.h"
 #include "fileio.h"
+#include "match.h"
 
 #include <float.h>
 
@@ -45,15 +45,14 @@ inline const char * strerrorm ( int errnum )
 const DWORD		INDEX_MAGIC_HEADER			= 0x58485053;		///< my magic 'SPHX' header
 const DWORD		INDEX_FORMAT_VERSION		= 63;				///< my format version
 
-const char		MAGIC_SYNONYM_WHITESPACE	= 1;				// used internally in tokenizer only
-const char		MAGIC_CODE_SENTENCE			= 2;				// emitted from tokenizer on sentence boundary
-const char		MAGIC_CODE_PARAGRAPH		= 3;				// emitted from stripper (and passed via tokenizer) on paragraph boundary
-const char		MAGIC_CODE_ZONE				= 4;				// emitted from stripper (and passed via tokenizer) on zone boundary; followed by zero-terminated zone name
+const char		MAGIC_CODE_SENTENCE			= '\x02';				// emitted from tokenizer on sentence boundary
+const char		MAGIC_CODE_PARAGRAPH		= '\x03';				// emitted from stripper (and passed via tokenizer) on paragraph boundary
+const char		MAGIC_CODE_ZONE				= '\x04';				// emitted from stripper (and passed via tokenizer) on zone boundary; followed by zero-terminated zone name
 
-const char		MAGIC_WORD_HEAD				= 1;				// prepended to keyword by source, stored in (crc) dictionary
-const char		MAGIC_WORD_TAIL				= 1;				// appended to keyword by source, stored in (crc) dictionary
-const char		MAGIC_WORD_HEAD_NONSTEMMED	= 2;				// prepended to keyword by source, stored in dictionary
-const char		MAGIC_WORD_BIGRAM			= 3;				// used as a bigram (keyword pair) separator, stored in dictionary
+const char		MAGIC_WORD_HEAD				= '\x01';				// prepended to keyword by source, stored in (crc) dictionary
+const char		MAGIC_WORD_TAIL				= '\x01';				// appended to keyword by source, stored in (crc) dictionary
+const char		MAGIC_WORD_HEAD_NONSTEMMED	= '\x02';				// prepended to keyword by source, stored in dictionary
+const char		MAGIC_WORD_BIGRAM			= '\x03';				// used as a bigram (keyword pair) separator, stored in dictionary
 
 extern const char *		MAGIC_WORD_SENTENCE;	///< value is "\3sentence"
 extern const char *		MAGIC_WORD_PARAGRAPH;	///< value is "\3paragraph"
@@ -319,43 +318,6 @@ inline std::pair<DWORD,DWORD> MVA_BE ( const DWORD * pMva )
 	return {pMva[0], pMva[1]};
 #endif
 }
-
-// FIXME!!! for over INT_MAX attributes
-/// attr min-max builder
-class AttrIndexBuilder_c : ISphNoncopyable
-{
-public:
-	explicit	AttrIndexBuilder_c ( const CSphSchema & tSchema );
-				AttrIndexBuilder_c() = default;
-
-	void		Init ( const CSphSchema & tSchema );
-	void		Collect ( const CSphRowitem * pRow );
-	void		FinishCollect();
-	const CSphTightVector<CSphRowitem> & GetCollected() const;
-
-private:
-	CSphVector<CSphAttrLocator>	m_dIntAttrs;
-	CSphVector<CSphAttrLocator>	m_dFloatAttrs;
-
-	CSphVector<SphAttr_t>		m_dIntMin;
-	CSphVector<SphAttr_t>		m_dIntMax;
-	CSphVector<float>			m_dFloatMin;
-	CSphVector<float>			m_dFloatMax;
-
-	CSphVector<SphAttr_t>		m_dIntIndexMin;
-	CSphVector<SphAttr_t>		m_dIntIndexMax;
-	CSphVector<float>			m_dFloatIndexMin;
-	CSphVector<float>			m_dFloatIndexMax;
-
-	DWORD						m_uStride {0};
-	int							m_nLocalCollected {0};
-
-	CSphTightVector<CSphRowitem> m_dMinMaxRows;
-
-	void						ResetLocal();
-	void						FlushComputed();
-};
-
 
 class CSphFreeList
 {
@@ -1011,77 +973,8 @@ public:
 void RemoveDictSpecials ( CSphString & sWord );
 const CSphString & RemoveDictSpecials ( const CSphString & sWord, CSphString & sBuf );
 
-//////////////////////////////////////////////////////////////////////////
-// TOKEN FILTER
-//////////////////////////////////////////////////////////////////////////
-
-/// token filter base (boring proxy stuff)
-class CSphTokenFilter : public ISphTokenizer
-{
-protected:
-	TokenizerRefPtr_c		m_pTokenizer;
-
-public:
-	explicit						CSphTokenFilter ( ISphTokenizer * pTokenizer )					: m_pTokenizer ( pTokenizer ) {	SafeAddRef ( pTokenizer ); }
-
-
-	bool					SetCaseFolding ( const char * sConfig, CSphString & sError ) override	{ return m_pTokenizer->SetCaseFolding ( sConfig, sError ); }
-	void					AddPlainChar ( char c ) override											{ m_pTokenizer->AddPlainChar ( c ); }
-	void					AddSpecials ( const char * sSpecials ) override							{ m_pTokenizer->AddSpecials ( sSpecials ); }
-	bool					SetIgnoreChars ( const char * sIgnored, CSphString & sError ) override	{ return m_pTokenizer->SetIgnoreChars ( sIgnored, sError ); }
-	bool					SetNgramChars ( const char * sConfig, CSphString & sError ) override		{ return m_pTokenizer->SetNgramChars ( sConfig, sError ); }
-	void					SetNgramLen ( int iLen ) override										{ m_pTokenizer->SetNgramLen ( iLen ); }
-	bool					LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, StrVec_t & dWarnings, CSphString & sError ) override { return m_pTokenizer->LoadSynonyms ( sFilename, pFiles, dWarnings, sError ); }
-	void					WriteSynonyms ( CSphWriter & tWriter ) const final						{ return m_pTokenizer->WriteSynonyms ( tWriter ); }
-	bool					SetBoundary ( const char * sConfig, CSphString & sError ) override		{ return m_pTokenizer->SetBoundary ( sConfig, sError ); }
-	void					Setup ( const CSphTokenizerSettings & tSettings ) override				{ m_pTokenizer->Setup ( tSettings ); }
-	const CSphTokenizerSettings &	GetSettings () const override									{ return m_pTokenizer->GetSettings (); }
-	const CSphSavedFile &	GetSynFileInfo () const override										{ return m_pTokenizer->GetSynFileInfo (); }
-	bool					EnableSentenceIndexing ( CSphString & sError ) override					{ return m_pTokenizer->EnableSentenceIndexing ( sError ); }
-	bool					EnableZoneIndexing ( CSphString & sError ) override						{ return m_pTokenizer->EnableZoneIndexing ( sError ); }
-	int						SkipBlended () override													{ return m_pTokenizer->SkipBlended(); }
-
-	int						GetCodepointLength ( int iCode ) const final		{ return m_pTokenizer->GetCodepointLength ( iCode ); }
-	int						GetMaxCodepointLength () const final				{ return m_pTokenizer->GetMaxCodepointLength(); }
-
-	const char *			GetTokenStart () const override						{ return m_pTokenizer->GetTokenStart(); }
-	const char *			GetTokenEnd () const override						{ return m_pTokenizer->GetTokenEnd(); }
-	const char *			GetBufferPtr () const override						{ return m_pTokenizer->GetBufferPtr(); }
-	const char *			GetBufferEnd () const final							{ return m_pTokenizer->GetBufferEnd (); }
-	void					SetBufferPtr ( const char * sNewPtr ) override		{ m_pTokenizer->SetBufferPtr ( sNewPtr ); }
-	uint64_t				GetSettingsFNV () const override						{ return m_pTokenizer->GetSettingsFNV(); }
-
-	void					SetBuffer ( const BYTE * sBuffer, int iLength ) override	{ m_pTokenizer->SetBuffer ( sBuffer, iLength ); }
-	BYTE *					GetToken () override										{ return m_pTokenizer->GetToken(); }
-
-	bool					WasTokenMultiformDestination ( bool & bHead, int & iDestCount ) const override { return m_pTokenizer->WasTokenMultiformDestination ( bHead, iDestCount ); }
-};
 
 DWORD sphParseMorphAot ( const char * );
-
-struct CSphReconfigureSettings
-{
-	CSphTokenizerSettings	m_tTokenizer;
-	CSphDictSettings		m_tDict;
-	CSphIndexSettings		m_tIndex;
-	CSphFieldFilterSettings m_tFieldFilter;
-	CSphSchema				m_tSchema;
-	MutableIndexSettings_c	m_tMutableSettings;
-
-	bool					m_bChangeSchema = false;
-};
-
-struct CSphReconfigureSetup
-{
-	TokenizerRefPtr_c	m_pTokenizer;
-	DictRefPtr_c		m_pDict;
-	CSphIndexSettings	m_tIndex;
-	FieldFilterRefPtr_c	m_pFieldFilter;
-	CSphSchema			m_tSchema;
-	MutableIndexSettings_c	m_tMutableSettings;
-
-	bool				m_bChangeSchema = false;
-};
 
 uint64_t sphGetSettingsFNV ( const CSphIndexSettings & tSettings );
 uint64_t SchemaFNV ( const ISphSchema & tSchema );
@@ -1149,98 +1042,6 @@ int sphPutBytes ( VECTOR * pOut, const void * pData, int iLen )
 	pOut->Append ( pData, iLen );
 	return iOff;
 }
-
-enum ESphExt
-{
-	SPH_EXT_SPH,
-	SPH_EXT_SPA,
-	SPH_EXT_SPB,
-	SPH_EXT_SPC,
-	SPH_EXT_SPI,
-	SPH_EXT_SPD,
-	SPH_EXT_SPP,
-	SPH_EXT_SPK,
-	SPH_EXT_SPE,
-	SPH_EXT_SPM,
-	SPH_EXT_SPT,
-	SPH_EXT_SPHI,
-	SPH_EXT_SPDS,
-	SPH_EXT_SPL,
-	SPH_EXT_SETTINGS,
-
-	SPH_EXT_TOTAL
-};
-
-
-struct IndexFileExt_t
-{
-	ESphExt			m_eExt;
-	const char *	m_szExt;
-	DWORD			m_uMinVer;
-	bool			m_bOptional;
-	bool			m_bCopy;	// file needs to be copied
-	const char *	m_szDesc;
-};
-
-
-CSphVector<IndexFileExt_t>	sphGetExts();
-CSphString					sphGetExt ( ESphExt eExt );
-
-/// encapsulates all common actions over index files in general (copy/rename/delete etc.)
-class IndexFiles_c : public ISphNoncopyable
-{
-	DWORD		m_uVersion = INDEX_FORMAT_VERSION;
-	CSphString	m_sIndexName;	// used for information purposes (logs)
-	CSphString	m_sFilename;	// prefix (i.e. folder + index name, excluding extensions)
-	CSphString	m_sLastError;
-	bool		m_bFatal = false; // if fatal fail happened (unable to rename during rollback)
-	CSphString FullPath ( const char * sExt, const char * sSuffix = "", const char * sBase = nullptr );
-	inline void SetName ( CSphString sIndex ) { m_sIndexName = std::move(sIndex); }
-
-public:
-	IndexFiles_c() = default;
-	explicit IndexFiles_c ( CSphString sBase, const char* sIndex=nullptr, DWORD uVersion = INDEX_FORMAT_VERSION )
-		: m_uVersion ( uVersion )
-		, m_sFilename { std::move(sBase) }
-	{
-		if ( sIndex )
-			SetName ( sIndex );
-	}
-
-	inline void SetBase ( const CSphString & sNewBase )
-	{
-		m_sFilename = sNewBase;
-	}
-
-	inline const CSphString& GetBase() const { return m_sFilename; }
-
-	inline const char * ErrorMsg () const { return m_sLastError.cstr(); }
-	inline bool IsFatal() const { return m_bFatal; }
-
-	// read .sph and adopt index version from there.
-	bool CheckHeader ( const char * sType="" );
-
-	// read the beginning of .spk and parse killlist targets
-	bool ReadKlistTargets ( StrVec_t & dTargets, const char * sType="" );
-
-	DWORD GetVersion() const { return m_uVersion; }
-
-	// simple make decorated path, like '.old' -> /path/to/index.old
-	CSphString MakePath ( const char * sSuffix = "", const char * sBase = nullptr );
-
-	bool Rename ( const char * sFrom, const char * sTo );  // move files between different bases
-	bool Rollback ( const char * sBackup, const char * sPath ); // move from backup to path; fail is fatal
-	bool RenameSuffix ( const char * sFromSuffix, const char * sToSuffix="" );  // move files in base between two suffixes
-	bool RenameBase ( const char * sToBase );  // move files to different base
-	bool RenameLock ( const char * sTo, int & iLockFD ); // safely move lock file
-	bool RelocateToNew ( const char * sNewBase ); // relocate to new base and append '.new' suffix
-	bool RollbackSuff ( const char * sBackupSuffix, const char * sActiveSuffix="" ); // move from backup to active; fail is fatal
-	bool HasAllFiles ( const char * sType = "" ); // check that all necessary files are readable
-	void Unlink ( const char * sType = "" );
-
-	// if prev op fails with fatal error - log the message and terminate
-	CSphString FatalMsg(const char * sMsg=nullptr);
-};
 
 template<typename CP>
 inline int sphCheckpointCmpCrc ( SphWordID_t iWordID, const CP& tCP )
@@ -1557,19 +1358,6 @@ struct GetKeywordsSettings_t
 	bool	m_bSortByHits = false;
 };
 
-struct ISphQueryFilter
-{
-	TokenizerRefPtr_c		m_pTokenizer;
-	CSphDict *					m_pDict = nullptr;
-	const CSphIndexSettings *	m_pSettings = nullptr;
-	GetKeywordsSettings_t		m_tFoldSettings;
-
-	virtual ~ISphQueryFilter () {}
-
-	void GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const ExpansionContext_t & tCtx );
-	virtual void AddKeywordStats ( BYTE * sWord, const BYTE * sTokenized, int iQpos, CSphVector <CSphKeywordInfo> & dKeywords ) = 0;
-};
-
 XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx );
 void sphQueryExpandKeywords ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, int iExpandKeywords, bool bWordDict );
 inline int sphGetExpansionMagic ( int iDocs, int iHits )
@@ -1702,26 +1490,6 @@ inline int sphUtf8CharBytes ( BYTE uFirst )
 //////////////////////////////////////////////////////////////////////////
 
 /// parser to build lowercaser from textual config
-class CSphCharsetDefinitionParser
-{
-public:
-	bool				Parse ( const char * sConfig, CSphVector<CSphRemapRange> & dRanges );
-	const char *		GetLastError ();
-
-protected:
-	bool				m_bError = false;
-	char				m_sError [ 1024 ];
-	const char *		m_pCurrent = nullptr;
-
-	bool				Error ( const char * sMessage );
-	void				SkipSpaces ();
-	bool				IsEof ();
-	bool				CheckEof ();
-	int					HexDigit ( int c );
-	int					ParseCharsetCode ();
-	bool				AddRange ( const CSphRemapRange & tRange, CSphVector<CSphRemapRange> & dRanges );
-};
-
 
 struct StoredToken_t
 {
@@ -1763,88 +1531,6 @@ inline void FlipEndianess ( DWORD* pData )
 	a = pB[1];
 	pB[1] = pB[2];
 	pB[2] = a;
-};
-
-/// SHA1 digests
-static const int HASH20_SIZE = 20;
-static const int SHA1_SIZE = HASH20_SIZE;
-static const int SHA1_BUF_SIZE = 64;
-
-class SHA1_c
-{
-public:
-	SHA1_c & Init();
-	SHA1_c & Update ( const BYTE * pData, int iLen );
-	void Final ( BYTE digest[SHA1_SIZE] );
-
-private:
-	DWORD state[5], count[2];
-	BYTE buffer[SHA1_BUF_SIZE];
-
-	void Transform ( const BYTE buf[SHA1_BUF_SIZE] );
-};
-
-CSphString BinToHex ( const VecTraits_T<BYTE> & dHash );
-CSphString BinToHex ( const BYTE * pHash, int iLen );
-CSphString CalcSHA1 ( const void * pData, int iLen );
-bool CalcSHA1 ( const CSphString & sFileName, CSphString & sRes, CSphString & sError );
-
-// string and 20-bytes hash
-struct TaggedHash20_t
-{
-	CSphString m_sTagName;
-	BYTE m_dHashValue[HASH20_SIZE] = { 0 };
-
-	// by tag + hash
-	explicit TaggedHash20_t ( const char* sTag = nullptr, const BYTE* pHashValue = nullptr );
-
-	// convert to FIPS-180-1
-	CSphString ToFIPS() const;
-
-	// load from FIPS-180-1
-	int FromFIPS ( const char* sFIPS );
-
-	// compare with raw hash
-	bool operator== ( const BYTE * pRef ) const;
-
-	inline bool Empty() const { return *this==m_dZeroHash; }
-
-	// helper zero hash
-	static const BYTE m_dZeroHash[HASH20_SIZE];
-};
-
-// set of tagged hashes
-class HashCollection_c
-{
-	CSphVector<TaggedHash20_t> m_dHashes;
-public:
-	void AppendNewHash ( const char* sExt, const BYTE* pHash);
-
-	void /*REFACTOR*/ SaveSHA() {}
-
-};
-
-// file writer with hashing on-the-fly.
-class WriterWithHash_c : public CSphWriter
-{
-public:
-	WriterWithHash_c ( const char* sExt, HashCollection_c* pCollector );
-	~WriterWithHash_c () override;
-
-	virtual void Flush () override;
-	void CloseFile ();
-
-	// get resulting BLOB, is valid only after StopHashing()
-	const BYTE * GetHASHBlob () const;
-
-private:
-
-	HashCollection_c * m_pCollection;
-	const char * m_sExt;
-
-	SHA1_c * m_pHasher;
-	bool m_bHashDone = false;
-	BYTE m_dHashValue[HASH20_SIZE] = { 0 };
 };
 
 struct SchemaItemVariant_t

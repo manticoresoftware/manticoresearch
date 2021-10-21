@@ -13,10 +13,10 @@
 #ifndef _snippetfunctor_
 #define _snippetfunctor_
 
-#include "sphinx.h"
 #include "sphinxstd.h"
 #include "sphinxquery.h"
 #include "sphinxsearch.h"
+#include "sphinxdefs.h"
 
 struct TokenInfo_t
 {

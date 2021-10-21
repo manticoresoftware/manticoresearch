@@ -10,7 +10,6 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinx.h"
 #include "sphinxutils.h"
 #include "fileutils.h"
 #include "sphinxexcerpt.h"
@@ -40,6 +39,9 @@
 #include "sphinxql_debug.h"
 #include "stackmock.h"
 #include "binlog.h"
+#include "indexfiles.h"
+#include "digest_sha1.h"
+#include "tokenizer/charset_definition_parser.h"
 
 // services
 #include "taskping.h"

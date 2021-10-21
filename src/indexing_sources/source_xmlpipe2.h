@@ -12,7 +12,8 @@
 
 #pragma once
 
-#include "sphinx.h"
+#include "source_document.h"
+#include "sphinxutils.h"
 
 /// XMLPipe2 source fabric
 CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, FILE * pPipe, const char * szSourceName, int iMaxFieldLen, CSphString & sError );

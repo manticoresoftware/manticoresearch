@@ -239,7 +239,7 @@ enum ESphHitFormat
 };
 
 
-enum ESphBigram
+enum ESphBigram : BYTE
 {
 	SPH_BIGRAM_NONE			= 0,	///< no bigrams
 	SPH_BIGRAM_ALL			= 1,	///< index all word pairs

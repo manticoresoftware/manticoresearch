@@ -217,7 +217,7 @@ protected:
 		TestRTInit();
 		tDictSettings.m_bWordDict = false;
 
-		pTok = sphCreateUTF8Tokenizer ();
+		pTok = Tokenizer::Detail::CreateUTF8Tokenizer ();
 
 		tSrcSchema.Reset ();
 		tSrcSchema.AddField ( "title" );

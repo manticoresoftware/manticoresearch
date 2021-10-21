@@ -146,7 +146,7 @@ void BenchTokenizer ()
 	{
 		char * sData = LoadFile ( "./configure", &iBytes, true );
 
-		TokenizerRefPtr_c pTokenizer { sphCreateUTF8Tokenizer () };
+		TokenizerRefPtr_c pTokenizer { Tokenizer::Detail::CreateUTF8Tokenizer () };
 		// pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z", sError );
 		if ( iRun==2 )
 			pTokenizer->LoadSynonyms ( g_sTmpfile, NULL, dWarnings, sError );
@@ -160,7 +160,7 @@ void BenchTokenizer ()
 	char * sData = LoadFile ( "./utf8.txt", &iBytes, false );
 	if ( sData )
 	{
-		ISphTokenizer * pTokenizer = sphCreateUTF8Tokenizer ();
+		ISphTokenizer * pTokenizer = Tokenizer::Detail::CreateUTF8Tokenizer ();
 		printf ( "run 3: " );
 		BenchTokenizer ( pTokenizer, (BYTE*)sData, iBytes );
 	}
@@ -696,7 +696,7 @@ void BenchStemmer ()
 	printf ( "read %d bytes\n", iLen );
 	fclose ( fp );
 
-	TokenizerRefPtr_c pTok { sphCreateUTF8Tokenizer() };
+	TokenizerRefPtr_c pTok { Tokenizer::Detail::CreateUTF8Tokenizer() };
 	if ( !pTok->SetCaseFolding ( "A..Z->a..z, a..z", sError ) )
 		sphDie ( "oops: %s", sError.cstr() );
 

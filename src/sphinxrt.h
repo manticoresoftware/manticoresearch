@@ -22,9 +22,8 @@
 #include "docstore.h"
 #include "columnarrt.h"
 #include "coroutine.h"
+#include "tokenizer/tokenizer.h"
 
-struct CSphReconfigureSettings;
-struct CSphReconfigureSetup;
 class RtAccum_t;
 
 using VisitChunk_fn = std::function<void ( const CSphIndex* pIndex )>;
@@ -64,6 +63,30 @@ struct OptimizeTask_t
 	int m_iTo		=	-1;
 	CSphString m_sUvarFilter;
 	bool m_bByOrder =	false;
+};
+
+struct CSphReconfigureSettings
+{
+	CSphTokenizerSettings m_tTokenizer;
+	CSphDictSettings m_tDict;
+	CSphIndexSettings m_tIndex;
+	CSphFieldFilterSettings m_tFieldFilter;
+	CSphSchema m_tSchema;
+	MutableIndexSettings_c m_tMutableSettings;
+
+	bool m_bChangeSchema = false;
+};
+
+struct CSphReconfigureSetup
+{
+	TokenizerRefPtr_c m_pTokenizer;
+	DictRefPtr_c m_pDict;
+	CSphIndexSettings m_tIndex;
+	FieldFilterRefPtr_c m_pFieldFilter;
+	CSphSchema m_tSchema;
+	MutableIndexSettings_c m_tMutableSettings;
+
+	bool m_bChangeSchema = false;
 };
 
 /// RAM based updateable backend interface

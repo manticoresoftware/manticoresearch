@@ -11,6 +11,8 @@
 
 #include "sphinx.h"
 #include "sphinxutils.h"
+#include "tokenizer/charset_definition_parser.h"
+#include "tokenizer/lowercaser.h"
 
 #include <locale.h>
 
@@ -888,7 +890,7 @@ void CISpellAffix::LoadLocale ()
 					if ( sphParseCharset ( szBuffer, dRemaps ) )
 					{
 						m_bUseLowerCaser = true;
-						m_LowerCaser.AddRemaps ( dRemaps, 0 );
+						m_LowerCaser.AddRemaps ( dRemaps );
 					} else
 					{
 						printf ( "Failed to parse charset from '%s'\n", m_sCharsetFile.cstr() );

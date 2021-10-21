@@ -13,6 +13,7 @@
 #pragma once
 
 #include "sphinx.h"
+#include "tokenizer/tokenizer.h"
 
 struct CSphUnpackInfo
 {

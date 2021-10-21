@@ -19,6 +19,7 @@ message(STATUS "Inside directory src...")
 
 include (GetColumnar)
 target_link_libraries (lextra INTERFACE columnar::columnar_api)
+target_include_directories ( lextra INTERFACE ${CMAKE_CURRENT_SOURCE_DIR} )
 
 get_banner (CONFIGURE_FLAGS)
 infomsg ("${CONFIGURE_FLAGS}")
@@ -50,10 +51,14 @@ add_library(lmanticore STATIC sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sphin
 		columnarlib.cpp collation.cpp fnv64.cpp histogram.cpp threads_detached.cpp hazard_pointer.cpp task_info.cpp
 		mini_timer.cpp dynamic_idx.cpp columnarrt.cpp columnarmisc.cpp exprtraits.cpp columnarexpr.cpp
 		sphinx_alter.cpp conversion.cpp columnarsort.cpp binlog.cpp chunksearchctx.cpp indexfiles.cpp
-		attrindex_builder.cpp )
+		attrindex_builder.cpp queryfilter.cpp)
 
 add_subdirectory ( stripper )
 target_link_libraries ( lmanticore PUBLIC stripper )
+
+add_subdirectory ( tokenizer )
+target_link_libraries ( lmanticore PUBLIC tokenizer )
+target_link_libraries ( lmanticore PUBLIC lextra )
 
 add_library(lmanticore_icu icu.cpp)
 if (WITH_ICU)
@@ -116,7 +121,7 @@ set ( HEADERS sphinxexcerpt.h sphinxfilter.h sphinxint.h sphinxjsonquery.h sphin
 		hazard_pointer.h task_info.h mini_timer.h collation.h fnv64.h histogram.h sortsetup.h dynamic_idx.h
 		indexsettings.h columnarlib.h fileio.h memio.h queryprofile.h columnarfilter.h columnargrouper.h fileutils.h
 		libutils.h conversion.h columnarsort.h sortcomp.h binlog_defs.h binlog.h ${MANTICORE_BINARY_DIR}/config/config.h
-		chunksearchctx.h lrucache.h indexfiles.h attrindex_builder.h)
+		chunksearchctx.h lrucache.h indexfiles.h attrindex_builder.h queryfilter.h)
 
 set ( SEARCHD_H searchdaemon.h searchdconfig.h searchdddl.h searchdexpr.h searchdha.h searchdreplication.h searchdsql.h
 		searchdtask.h task_info.h taskflushattrs.h taskflushbinlog.h taskflushmutable.h taskglobalidf.h
@@ -126,17 +131,6 @@ set ( SEARCHD_H searchdaemon.h searchdconfig.h searchdddl.h searchdexpr.h search
 
 source_group ( "Grammar sources" FILES ${LMANTICORE_BISON} ${SEARCHD_BISON} )
 source_group ( "Lexer sources" FILES ${LMANTICORE_FLEX} ${SEARCHD_FLEX} )
-
-include ( genheader )
-
-# compile globalaliases.h
-set ( CHARSET_FILTER "charsets/*.txt" )
-set ( CHARSET_TEMPLATE "charsets/globalaliases.h.in" )
-hsnippetfolder ( "${CHARSET_FILTER}" "${CHARSET_TEMPLATE}" )
-
-# populate charset files for IDE
-file ( GLOB CHARSET_FILES "${CHARSET_FILTER}" )
-source_group ( "Charset sources" FILES ${CHARSET_FILES} ${CHARSET_TEMPLATE} )
 
 # add the extra targets in the case we want on-the-fly grammar compiler
 find_package (BISON REQUIRED)

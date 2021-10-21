@@ -45,15 +45,14 @@ inline const char * strerrorm ( int errnum )
 const DWORD		INDEX_MAGIC_HEADER			= 0x58485053;		///< my magic 'SPHX' header
 const DWORD		INDEX_FORMAT_VERSION		= 63;				///< my format version
 
-const char		MAGIC_SYNONYM_WHITESPACE	= 1;				// used internally in tokenizer only
-const char		MAGIC_CODE_SENTENCE			= 2;				// emitted from tokenizer on sentence boundary
-const char		MAGIC_CODE_PARAGRAPH		= 3;				// emitted from stripper (and passed via tokenizer) on paragraph boundary
-const char		MAGIC_CODE_ZONE				= 4;				// emitted from stripper (and passed via tokenizer) on zone boundary; followed by zero-terminated zone name
+const char		MAGIC_CODE_SENTENCE			= '\x02';				// emitted from tokenizer on sentence boundary
+const char		MAGIC_CODE_PARAGRAPH		= '\x03';				// emitted from stripper (and passed via tokenizer) on paragraph boundary
+const char		MAGIC_CODE_ZONE				= '\x04';				// emitted from stripper (and passed via tokenizer) on zone boundary; followed by zero-terminated zone name
 
-const char		MAGIC_WORD_HEAD				= 1;				// prepended to keyword by source, stored in (crc) dictionary
-const char		MAGIC_WORD_TAIL				= 1;				// appended to keyword by source, stored in (crc) dictionary
-const char		MAGIC_WORD_HEAD_NONSTEMMED	= 2;				// prepended to keyword by source, stored in dictionary
-const char		MAGIC_WORD_BIGRAM			= 3;				// used as a bigram (keyword pair) separator, stored in dictionary
+const char		MAGIC_WORD_HEAD				= '\x01';				// prepended to keyword by source, stored in (crc) dictionary
+const char		MAGIC_WORD_TAIL				= '\x01';				// appended to keyword by source, stored in (crc) dictionary
+const char		MAGIC_WORD_HEAD_NONSTEMMED	= '\x02';				// prepended to keyword by source, stored in dictionary
+const char		MAGIC_WORD_BIGRAM			= '\x03';				// used as a bigram (keyword pair) separator, stored in dictionary
 
 extern const char *		MAGIC_WORD_SENTENCE;	///< value is "\3sentence"
 extern const char *		MAGIC_WORD_PARAGRAPH;	///< value is "\3paragraph"
@@ -974,77 +973,8 @@ public:
 void RemoveDictSpecials ( CSphString & sWord );
 const CSphString & RemoveDictSpecials ( const CSphString & sWord, CSphString & sBuf );
 
-//////////////////////////////////////////////////////////////////////////
-// TOKEN FILTER
-//////////////////////////////////////////////////////////////////////////
-
-/// token filter base (boring proxy stuff)
-class CSphTokenFilter : public ISphTokenizer
-{
-protected:
-	TokenizerRefPtr_c		m_pTokenizer;
-
-public:
-	explicit						CSphTokenFilter ( ISphTokenizer * pTokenizer )					: m_pTokenizer ( pTokenizer ) {	SafeAddRef ( pTokenizer ); }
-
-
-	bool					SetCaseFolding ( const char * sConfig, CSphString & sError ) override	{ return m_pTokenizer->SetCaseFolding ( sConfig, sError ); }
-	void					AddPlainChar ( char c ) override										{ m_pTokenizer->AddPlainChar ( c ); }
-	void					AddSpecials ( const char * sSpecials ) override							{ m_pTokenizer->AddSpecials ( sSpecials ); }
-	bool					SetIgnoreChars ( const char * sIgnored, CSphString & sError ) override	{ return m_pTokenizer->SetIgnoreChars ( sIgnored, sError ); }
-	bool					SetNgramChars ( const char * sConfig, CSphString & sError ) override		{ return m_pTokenizer->SetNgramChars ( sConfig, sError ); }
-	void					SetNgramLen ( int iLen ) override										{ m_pTokenizer->SetNgramLen ( iLen ); }
-	bool					LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, StrVec_t & dWarnings, CSphString & sError ) override { return m_pTokenizer->LoadSynonyms ( sFilename, pFiles, dWarnings, sError ); }
-	void					WriteSynonyms ( CSphWriter & tWriter ) const final						{ return m_pTokenizer->WriteSynonyms ( tWriter ); }
-	bool					SetBoundary ( const char * sConfig, CSphString & sError ) override		{ return m_pTokenizer->SetBoundary ( sConfig, sError ); }
-	void					Setup ( const CSphTokenizerSettings & tSettings ) override				{ m_pTokenizer->Setup ( tSettings ); }
-	const CSphTokenizerSettings &	GetSettings () const override									{ return m_pTokenizer->GetSettings (); }
-	const CSphSavedFile &	GetSynFileInfo () const override										{ return m_pTokenizer->GetSynFileInfo (); }
-	bool					EnableSentenceIndexing ( CSphString & sError ) override					{ return m_pTokenizer->EnableSentenceIndexing ( sError ); }
-	bool					EnableZoneIndexing ( CSphString & sError ) override						{ return m_pTokenizer->EnableZoneIndexing ( sError ); }
-	int						SkipBlended () override													{ return m_pTokenizer->SkipBlended(); }
-
-	int						GetCodepointLength ( int iCode ) const final		{ return m_pTokenizer->GetCodepointLength ( iCode ); }
-	int						GetMaxCodepointLength () const final				{ return m_pTokenizer->GetMaxCodepointLength(); }
-
-	const char *			GetTokenStart () const override						{ return m_pTokenizer->GetTokenStart(); }
-	const char *			GetTokenEnd () const override						{ return m_pTokenizer->GetTokenEnd(); }
-	const char *			GetBufferPtr () const override						{ return m_pTokenizer->GetBufferPtr(); }
-	const char *			GetBufferEnd () const final							{ return m_pTokenizer->GetBufferEnd (); }
-	void					SetBufferPtr ( const char * sNewPtr ) override		{ m_pTokenizer->SetBufferPtr ( sNewPtr ); }
-	uint64_t				GetSettingsFNV () const override						{ return m_pTokenizer->GetSettingsFNV(); }
-
-	void					SetBuffer ( const BYTE * sBuffer, int iLength ) override	{ m_pTokenizer->SetBuffer ( sBuffer, iLength ); }
-	BYTE *					GetToken () override										{ return m_pTokenizer->GetToken(); }
-
-	bool					WasTokenMultiformDestination ( bool & bHead, int & iDestCount ) const override { return m_pTokenizer->WasTokenMultiformDestination ( bHead, iDestCount ); }
-};
 
 DWORD sphParseMorphAot ( const char * );
-
-struct CSphReconfigureSettings
-{
-	CSphTokenizerSettings	m_tTokenizer;
-	CSphDictSettings		m_tDict;
-	CSphIndexSettings		m_tIndex;
-	CSphFieldFilterSettings m_tFieldFilter;
-	CSphSchema				m_tSchema;
-	MutableIndexSettings_c	m_tMutableSettings;
-
-	bool					m_bChangeSchema = false;
-};
-
-struct CSphReconfigureSetup
-{
-	TokenizerRefPtr_c	m_pTokenizer;
-	DictRefPtr_c		m_pDict;
-	CSphIndexSettings	m_tIndex;
-	FieldFilterRefPtr_c	m_pFieldFilter;
-	CSphSchema			m_tSchema;
-	MutableIndexSettings_c	m_tMutableSettings;
-
-	bool				m_bChangeSchema = false;
-};
 
 uint64_t sphGetSettingsFNV ( const CSphIndexSettings & tSettings );
 uint64_t SchemaFNV ( const ISphSchema & tSchema );
@@ -1428,19 +1358,6 @@ struct GetKeywordsSettings_t
 	bool	m_bSortByHits = false;
 };
 
-struct ISphQueryFilter
-{
-	TokenizerRefPtr_c		m_pTokenizer;
-	CSphDict *					m_pDict = nullptr;
-	const CSphIndexSettings *	m_pSettings = nullptr;
-	GetKeywordsSettings_t		m_tFoldSettings;
-
-	virtual ~ISphQueryFilter () {}
-
-	void GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const ExpansionContext_t & tCtx );
-	virtual void AddKeywordStats ( BYTE * sWord, const BYTE * sTokenized, int iQpos, CSphVector <CSphKeywordInfo> & dKeywords ) = 0;
-};
-
 XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx );
 void sphQueryExpandKeywords ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, int iExpandKeywords, bool bWordDict );
 inline int sphGetExpansionMagic ( int iDocs, int iHits )
@@ -1573,26 +1490,6 @@ inline int sphUtf8CharBytes ( BYTE uFirst )
 //////////////////////////////////////////////////////////////////////////
 
 /// parser to build lowercaser from textual config
-class CSphCharsetDefinitionParser
-{
-public:
-	bool				Parse ( const char * sConfig, CSphVector<CSphRemapRange> & dRanges );
-	const char *		GetLastError ();
-
-protected:
-	bool				m_bError = false;
-	char				m_sError [ 1024 ];
-	const char *		m_pCurrent = nullptr;
-
-	bool				Error ( const char * sMessage );
-	void				SkipSpaces ();
-	bool				IsEof ();
-	bool				CheckEof ();
-	int					HexDigit ( int c );
-	int					ParseCharsetCode ();
-	bool				AddRange ( const CSphRemapRange & tRange, CSphVector<CSphRemapRange> & dRanges );
-};
-
 
 struct StoredToken_t
 {

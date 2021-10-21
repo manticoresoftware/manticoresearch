@@ -20,6 +20,7 @@
 #include "sphinxstem.h"
 #include "sphinxplugin.h"
 #include "coroutine.h"
+#include "tokenizer/token_filter.h"
 
 //////////////////////////////////////////////////////////////////////////
 // LEMMATIZER

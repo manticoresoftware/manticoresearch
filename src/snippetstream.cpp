@@ -14,6 +14,7 @@
 
 #include "sphinxint.h"
 #include "stripper/html_stripper.h"
+#include "tokenizer/tokenizer.h"
 
 #define UINT32_MASK 0xffffffffUL
 #define UINT16_MASK 0xffff

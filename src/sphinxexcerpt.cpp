@@ -25,7 +25,7 @@
 #include "snippetpassage.h"
 
 #include "stripper/html_stripper.h"
-
+#include "tokenizer/tokenizer.h"
 
 #include <math.h>
 

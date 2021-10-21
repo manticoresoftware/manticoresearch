@@ -21,6 +21,8 @@
 #include <config_indexer.h>
 #include "source_sql.h"
 #include "indexfiles.h"
+#include "tokenizer/charset_definition_parser.h"
+#include "tokenizer/tokenizer.h"
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -994,7 +996,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 
 	StrVec_t dWarnings;
 	CSphString sError;
-	TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tTokSettings, nullptr, nullptr, dWarnings, sError ) };
+	TokenizerRefPtr_c pTokenizer { Tokenizer::Create ( tTokSettings, nullptr, nullptr, dWarnings, sError ) };
 	if ( !pTokenizer )
 		sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
@@ -1017,7 +1019,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		// plugin filter
 		if ( !tSettings.m_sIndexTokenFilter.IsEmpty() )
 		{
-			pTokenizer = ISphTokenizer::CreatePluginFilter ( pTokenizer, tSettings.m_sIndexTokenFilter, sError );
+			pTokenizer = Tokenizer::CreatePluginFilter ( pTokenizer, tSettings.m_sIndexTokenFilter, sError );
 			// need token_filter that just passes init phase in case stopwords or wordforms will be loaded
 			if ( !pTokenizer )
 				sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
@@ -1046,10 +1048,10 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 			fprintf ( stdout, "WARNING: index '%s': dict=keywords and prefixes and morphology enabled, forcing index_exact_words=1\n", sIndexName );
 		}
 
-		pTokenizer = ISphTokenizer::CreateMultiformFilter ( pTokenizer, pDict->GetMultiWordforms () );
+		pTokenizer = Tokenizer::CreateMultiformFilter ( pTokenizer, pDict->GetMultiWordforms () );
 
 		// bigram filter
-		pTokenizer = ISphTokenizer::CreateBigramFilter ( pTokenizer, tSettings.m_eBigramIndex, tSettings.m_sBigramWords, sError );
+		pTokenizer = Tokenizer::CreateBigramFilter ( pTokenizer, tSettings.m_eBigramIndex, tSettings.m_sBigramWords, sError );
 		if ( !pTokenizer )
 			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 

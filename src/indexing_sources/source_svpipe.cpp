@@ -17,6 +17,7 @@
 #include "attribute.h"
 #include "sphinxint.h"
 #include "conversion.h"
+#include "tokenizer/tokenizer.h"
 
 class CSphSource_BaseSV : public CSphSource_Document, public CSphSchemaConfigurator<CSphSource_BaseSV>
 {

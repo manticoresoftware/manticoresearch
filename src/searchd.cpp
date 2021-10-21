@@ -42,6 +42,7 @@
 #include "binlog.h"
 #include "indexfiles.h"
 #include "digest_sha1.h"
+#include "tokenizer/charset_definition_parser.h"
 
 // services
 #include "taskping.h"

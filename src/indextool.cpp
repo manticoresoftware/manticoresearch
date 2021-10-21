@@ -20,6 +20,7 @@
 #include "secondaryindex.h"
 #include "indexfiles.h"
 #include "stripper/html_stripper.h"
+#include "tokenizer/charset_definition_parser.h"
 
 #include <ctime>
 
@@ -174,7 +175,7 @@ static void CharsetFold ( CSphIndex * pIndex, FILE * fp )
 	CSphVector<BYTE> sBuf1 ( 16384 );
 	CSphVector<BYTE> sBuf2 ( 16384 );
 
-	CSphLowercaser tLC = pIndex->GetTokenizer()->GetLowercaser();
+	const CSphLowercaser& tLC = pIndex->GetTokenizer()->GetLowercaser();
 
 #if _WIN32
 	setmode ( fileno(stdout), O_BINARY );

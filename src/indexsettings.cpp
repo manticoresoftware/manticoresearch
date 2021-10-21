@@ -19,6 +19,7 @@
 #include "icu.h"
 #include "attribute.h"
 #include "indexfiles.h"
+#include "tokenizer/tokenizer.h"
 
 #if !_WIN32
 	#include <glob.h>
@@ -1441,7 +1442,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		tSettings.Setup ( hIndex, sWarning );
 		AddWarning ( dWarnings, sWarning );
 
-		TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tSettings, nullptr, pFilenameBuilder, dWarnings, sError ) };
+		TokenizerRefPtr_c pTokenizer { Tokenizer::Create ( tSettings, nullptr, pFilenameBuilder, dWarnings, sError ) };
 		if ( !pTokenizer )
 			return false;
 
@@ -1467,7 +1468,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 	if ( bTokenizerSpawned )
 	{
 		TokenizerRefPtr_c pOldTokenizer { pIndex->LeakTokenizer () };
-		TokenizerRefPtr_c pMultiTokenizer { ISphTokenizer::CreateMultiformFilter ( pOldTokenizer, pIndex->GetDictionary ()->GetMultiWordforms () ) };
+		TokenizerRefPtr_c pMultiTokenizer { Tokenizer::CreateMultiformFilter ( pOldTokenizer, pIndex->GetDictionary ()->GetMultiWordforms () ) };
 		pIndex->SetTokenizer ( pMultiTokenizer );
 	}
 

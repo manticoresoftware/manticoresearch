@@ -14,6 +14,8 @@
 #define _fileio_
 
 #include "queryprofile.h"
+#include "sphinxstd.h"
+#include "sphinxdefs.h"
 
 /// file which closes automatically when going out of scope
 class CSphAutofile : ISphNoncopyable

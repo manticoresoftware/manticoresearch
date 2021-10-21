@@ -17,7 +17,6 @@
 
 #include "charset_definition_parser.h"
 #include "lowercaser_impl.h"
-#include "sphinx.h"
 
 
 

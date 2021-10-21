@@ -15,6 +15,7 @@
 #include "sphinxstd.h"
 #include "fileio.h"
 #include "fileutils.h"
+#include "indexsettings.h"
 
 //////////////////////////////////////////////////////////////////////////
 // SHA1 digests

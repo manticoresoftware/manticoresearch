@@ -13,8 +13,8 @@
 #ifndef _sphinxqcache_
 #define _sphinxqcache_
 
-#include "sphinx.h"
 #include "sphinxsearch.h"
+#include "sphinxstd.h"
 
 /// cached match is a simple {docid,weight} pair
 struct QcacheMatch_t

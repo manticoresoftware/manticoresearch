@@ -13,9 +13,7 @@
 #pragma once
 
 #include "tokenizer.h"
-
-//#include "sphinx.h"
-#define SPH_MAX_WORD_LEN 42 // so that any UTF-8 word fits 127 bytes
+#include "sphinxdefs.h"
 
 class ExceptionsTrie_c;
 

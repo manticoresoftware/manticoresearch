@@ -19,9 +19,9 @@
 #include "conversion.h"
 #include "tokenizer/tokenizer.h"
 
-class CSphSource_BaseSV : public CSphSource_Document, public CSphSchemaConfigurator<CSphSource_BaseSV>
+class CSphSource_BaseSV : public CSphSource, public CSphSchemaConfigurator<CSphSource_BaseSV>
 {
-	using BASE = CSphSource_Document;
+	using BASE = CSphSource;
 
 public:
 	explicit		CSphSource_BaseSV ( const char * sName );
@@ -127,7 +127,7 @@ CSphSource * sphCreateSourceCSVpipe ( const CSphConfigSection * pSource, FILE * 
 
 
 CSphSource_BaseSV::CSphSource_BaseSV ( const char * sName )
-	: CSphSource_Document ( sName )
+	: CSphSource ( sName )
 	{}
 
 

@@ -15,7 +15,6 @@
 #include <cfloat>
 #include <climits>
 
-#include "sphinx.h"
 #include "conversion.h"
 #include "sphinxint.h"
 

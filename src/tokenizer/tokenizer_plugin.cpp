@@ -12,7 +12,7 @@
 
 #include "token_filter.h"
 
-#include "sphinx.h"
+#include "schema/schema.h"
 #include "sphinxplugin.h"
 
 class PluginFilterTokenizer_c final: public CSphTokenFilter

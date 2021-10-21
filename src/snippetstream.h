@@ -13,7 +13,6 @@
 #ifndef _snippetstream_
 #define _snippetstream_
 
-#include "sphinx.h"
 #include "snippetfunctor.h"
 
 

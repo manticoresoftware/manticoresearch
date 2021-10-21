@@ -18,9 +18,7 @@
 #include "fileutils.h"
 #include "sphinxexpr.h"
 #include "columnarlib.h"
-
-typedef uint64_t SphWordID_t;
-STATIC_SIZE_ASSERT ( SphWordID_t, 8 );
+#include "sphinxdefs.h"
 
 class CSphWriter;
 class CSphReader;

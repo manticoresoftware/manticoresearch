@@ -13,7 +13,7 @@
 #include "tokenizerbase_impl.h"
 
 #include "lowercaser_impl.h"
-#include "sphinx.h"
+#include "sphinxdefs.h"
 #include "sphinxint.h"
 #include "exceptions_trie.h"
 #include "fileio.h"
@@ -106,7 +106,7 @@ void CSphTokenizerBase::WriteSynonyms ( CSphWriter& tWriter ) const
 		tWriter.PutDword ( 0 );
 }
 
-void CSphTokenizerBase::CloneBase ( const CSphTokenizerBase * pFrom, ESphTokenizerClone eMode )
+void CSphTokenizerBase::CloneBase ( const CSphTokenizerBase* pFrom, ESphTokenizerClone eMode )
 {
 	m_eMode = eMode;
 	m_pExc = nullptr;
@@ -119,7 +119,7 @@ void CSphTokenizerBase::CloneBase ( const CSphTokenizerBase * pFrom, ESphTokeniz
 	m_bHasBlend = pFrom->m_bHasBlend;
 	m_uBlendVariants = pFrom->m_uBlendVariants;
 	m_bBlendSkipPure = pFrom->m_bBlendSkipPure;
-	m_bShortTokenFilter = ( eMode!=SPH_CLONE_INDEX );
+	m_bShortTokenFilter = ( eMode != SPH_CLONE_INDEX );
 	m_bDetectSentences = pFrom->m_bDetectSentences;
 
 	switch ( eMode )

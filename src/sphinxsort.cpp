@@ -22,6 +22,7 @@
 #include "columnarsort.h"
 #include "sortcomp.h"
 #include "conversion.h"
+#include "schema/rset.h"
 
 #include <time.h>
 #include <math.h>

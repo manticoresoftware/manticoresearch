@@ -13,7 +13,6 @@
 #ifndef _sphinxint_
 #define _sphinxint_
 
-#include "sphinx.h"
 #include "sphinxstd.h"
 #include "sphinxfilter.h"
 #include "sphinxquery.h"
@@ -22,6 +21,7 @@
 #include "sphinxjsonquery.h"
 #include "sphinxutils.h"
 #include "fileio.h"
+#include "match.h"
 
 #include <float.h>
 

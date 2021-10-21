@@ -50,8 +50,12 @@ add_library(lmanticore STATIC sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sphin
 		task_info.cpp mini_timer.cpp fileio.cpp memio.cpp queryprofile.cpp columnarfilter.cpp columnargrouper.cpp
 		columnarlib.cpp collation.cpp fnv64.cpp histogram.cpp threads_detached.cpp hazard_pointer.cpp task_info.cpp
 		mini_timer.cpp dynamic_idx.cpp columnarrt.cpp columnarmisc.cpp exprtraits.cpp columnarexpr.cpp
-		sphinx_alter.cpp conversion.cpp columnarsort.cpp binlog.cpp chunksearchctx.cpp indexfiles.cpp
-		attrindex_builder.cpp queryfilter.cpp)
+		sphinx_alter.cpp columnarsort.cpp binlog.cpp chunksearchctx.cpp
+		indexfiles.cpp attrindex_builder.cpp queryfilter.cpp)
+
+add_library ( conversion conversion.cpp )
+target_link_libraries ( conversion PUBLIC lextra )
+target_link_libraries ( lmanticore PUBLIC conversion )
 
 add_subdirectory ( stripper )
 target_link_libraries ( lmanticore PUBLIC stripper )
@@ -59,6 +63,9 @@ target_link_libraries ( lmanticore PUBLIC stripper )
 add_subdirectory ( tokenizer )
 target_link_libraries ( lmanticore PUBLIC tokenizer )
 target_link_libraries ( lmanticore PUBLIC lextra )
+
+add_subdirectory ( schema )
+target_link_libraries ( lmanticore PUBLIC schema )
 
 add_library(lmanticore_icu icu.cpp)
 if (WITH_ICU)
@@ -74,8 +81,8 @@ if (WITH_RE2)
 	target_link_libraries (lmanticore PRIVATE re2::re2)
 endif ()
 
-add_subdirectory (indexing_sources)
-target_link_libraries (lmanticore PUBLIC common_includes)
+add_subdirectory ( indexing_sources )
+target_link_libraries ( lmanticore PUBLIC sourcedoc )
 
 if (WIN32)
 	target_sources (lmanticore PRIVATE libutils.cpp)

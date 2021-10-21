@@ -11,7 +11,13 @@
 #ifndef _attribute_
 #define _attribute_
 
-#include "sphinx.h"
+#include "sphinxdefs.h"
+#include "sphinxexpr.h"
+
+class CSphMatch;
+class ISphSchema;
+class CSphSchema;
+struct CSphAttrLocator;
 
 //////////////////////////////////////////////////////////////////////////
 // blob attributes

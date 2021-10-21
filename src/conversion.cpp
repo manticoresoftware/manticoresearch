@@ -12,8 +12,8 @@
 
 #include "conversion.h"
 
-#include <math.h>
-#include <float.h>
+#include <cmath>
+#include <cfloat>
 
 
 DWORD sphToDword ( const char * s )

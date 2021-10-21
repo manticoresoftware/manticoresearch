@@ -12,7 +12,7 @@
 
 #pragma once
 
-#include "sphinx.h"
+#include "sphinxstd.h"
 
 namespace DebugCmd {
 

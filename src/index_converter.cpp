@@ -10,7 +10,6 @@
 
 
 #include "sphinxstd.h"
-#include "sphinx.h"
 #include "fileutils.h"
 #include "sphinxutils.h"
 #include "sphinxint.h"

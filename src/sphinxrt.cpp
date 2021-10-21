@@ -1570,7 +1570,7 @@ int64_t RtIndex_c::GetLastFlushTimestamp() const
 // INDEXING
 //////////////////////////////////////////////////////////////////////////
 CSphSource_StringVector::CSphSource_StringVector ( const VecTraits_T<VecTraits_T<const char >> &dFields, const CSphSchema & tSchema )
-	: CSphSource_Document ( "$blobvector" )
+	: CSphSource ( "$blobvector" )
 {
 	m_tSchema = tSchema;
 	m_dFieldLengths.Reserve ( dFields.GetLength () );

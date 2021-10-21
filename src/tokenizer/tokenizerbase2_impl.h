@@ -14,7 +14,7 @@
 
 #include "tokenizerbase_impl.h"
 
-#include "sphinx.h"
+#include "sphinxdefs.h"
 #include "sphinxint.h"
 
 #include "lowercaser_impl.h"

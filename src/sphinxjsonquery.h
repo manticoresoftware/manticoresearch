@@ -11,8 +11,8 @@
 #ifndef _sphinxjsonquery_
 #define _sphinxjsonquery_
 
-#include "sphinx.h"
 #include "sphinxjson.h"
+#include "sphinx.h"
 
 class QueryParser_i;
 class StmtErrorReporter_i;

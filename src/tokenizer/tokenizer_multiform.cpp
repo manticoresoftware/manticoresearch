@@ -15,7 +15,7 @@
 #include "sphinxstd.h"
 
 #include "charset_definition_parser.h"
-#include "sphinx.h"
+#include "sphinxdefs.h"
 #include "multiform_container.h"
 
 struct StoredToken_t

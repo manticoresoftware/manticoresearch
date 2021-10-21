@@ -13,7 +13,6 @@
 #ifndef _sphinxrt_
 #define _sphinxrt_
 
-#include "sphinx.h"
 #include "sphinxutils.h"
 #include "sphinxstem.h"
 #include "sphinxint.h"
@@ -23,6 +22,7 @@
 #include "columnarrt.h"
 #include "coroutine.h"
 #include "tokenizer/tokenizer.h"
+#include "indexing_sources/source_document.h"
 
 class RtAccum_t;
 
@@ -337,7 +337,7 @@ public:
 
 ByteBlob_t GetHitsBlob ( const RtSegment_t* pSeg, const RtDoc_t* pDoc );
 
-class CSphSource_StringVector : public CSphSource_Document
+class CSphSource_StringVector : public CSphSource
 {
 public:
 	explicit			CSphSource_StringVector ( const VecTraits_T<VecTraits_T<const char >> &dFields, const CSphSchema &tSchema );

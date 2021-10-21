@@ -12,7 +12,11 @@
 
 #pragma once
 
-#include "sphinx.h"
+#include "sphinxstd.h"
+#include "sphinxdefs.h"
+
+class CSphSchema;
+struct CSphAttrLocator;
 
 // FIXME!!! for over INT_MAX attributes
 /// attr min-max builder

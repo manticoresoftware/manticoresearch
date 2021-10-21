@@ -19,7 +19,7 @@
 #include "attribute.h"
 #include "icu.h"
 #include <config_indexer.h>
-#include "source_sql.h"
+#include "indexing_sources/source_sql.h"
 #include "indexfiles.h"
 #include "tokenizer/charset_definition_parser.h"
 #include "tokenizer/tokenizer.h"
@@ -719,7 +719,7 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 
 
 #if WITH_POSTGRESQL
-#include "source_pgsql.h"
+#include "indexing_sources/source_pgsql.h"
 
 CSphSource * SpawnSourcePgSQL ( const CSphConfigSection & hSource, const char * sSourceName )
 {
@@ -737,7 +737,7 @@ CSphSource * SpawnSourcePgSQL ( const CSphConfigSection & hSource, const char * 
 
 
 #if WITH_MYSQL
-#include "source_mysql.h"
+#include "indexing_sources/source_mysql.h"
 
 CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * sSourceName )
 {
@@ -759,7 +759,7 @@ CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * 
 
 
 #if WITH_ODBC
-#include "source_odbc.h"
+#include "indexing_sources/source_odbc.h"
 
 CSphSource * SpawnSourceODBC ( const CSphConfigSection & hSource, const char * sSourceName )
 {
@@ -792,7 +792,7 @@ CSphSource * SpawnSourceMSSQL ( const CSphConfigSection & hSource, const char * 
 #endif // WITH_ODBC
 
 #if WITH_EXPAT
-#include "source_xmlpipe2.h"
+#include "indexing_sources/source_xmlpipe2.h"
 
 CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char * sSourceName )
 {
@@ -821,7 +821,7 @@ CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char 
 }
 #endif // WITH_EXPAT
 
-#include "source_svpipe.h"
+#include "indexing_sources/source_svpipe.h"
 CSphSource * SpawnSourceTSVPipe ( const CSphConfigSection & hSource, const char * sSourceName )
 {
 	assert ( hSource["type"]=="tsvpipe" );

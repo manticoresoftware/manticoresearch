@@ -13,13 +13,8 @@
 #include "token_filter.h"
 
 #include "sphinxstd.h"
-
-//#include "sphinx.h"
-#define SPH_MAX_WORD_LEN 42 // so that any UTF-8 word fits 127 bytes
-const int MAX_KEYWORD_BYTES = SPH_MAX_WORD_LEN * 3 + 4;
-
-//#include "sphinxint.h"
-const char MAGIC_WORD_BIGRAM = 3; // used as a bigram (keyword pair) separator, stored in dictionary
+#include "sphinxdefs.h"
+#include "sphinxint.h"
 
 
 /// token filter for bigram indexing

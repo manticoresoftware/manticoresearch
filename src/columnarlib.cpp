@@ -9,6 +9,7 @@
 //
 
 #include "columnarlib.h"
+#include "sphinxexpr.h"
 #include "sphinx.h"
 #include "libutils.h"
 

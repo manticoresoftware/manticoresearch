@@ -11,6 +11,8 @@
 #ifndef _docstore_
 #define _docstore_
 
+#include "sphinxstd.h"
+#include "sphinxdefs.h"
 #include "sphinx.h"
 
 class DocstoreAddField_i

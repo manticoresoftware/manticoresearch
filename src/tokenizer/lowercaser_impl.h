@@ -27,12 +27,3 @@ enum : DWORD {
 	FLAG_CODEPOINT_BLEND = 0x40000000UL		// this codepoint is "blended" (indexed both as a character, and as a separator)
 };
 
-inline int CSphLowercaser::ToLower ( int iCode ) const noexcept
-{
-	if ( iCode < 0 || iCode >= MAX_CODE )
-		return iCode;
-	register DWORD* pChunk = m_pChunk[iCode >> CHUNK_BITS];
-	if ( pChunk )
-		return (int)pChunk[iCode & CHUNK_MASK];
-	return 0;
-}

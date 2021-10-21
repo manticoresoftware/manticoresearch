@@ -52,7 +52,8 @@ add_library(lmanticore STATIC sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sphin
 		sphinx_alter.cpp conversion.cpp columnarsort.cpp binlog.cpp chunksearchctx.cpp indexfiles.cpp
 		attrindex_builder.cpp )
 
-target_link_libraries (lmanticore PUBLIC lextra)
+add_subdirectory ( stripper )
+target_link_libraries ( lmanticore PUBLIC stripper )
 
 add_library(lmanticore_icu icu.cpp)
 if (WITH_ICU)

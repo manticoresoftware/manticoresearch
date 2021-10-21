@@ -19,8 +19,9 @@
 #include "killlist.h"
 #include "secondaryindex.h"
 #include "indexfiles.h"
+#include "stripper/html_stripper.h"
 
-#include <time.h>
+#include <ctime>
 
 static CSphString g_sDataDir;
 static bool g_bConfigless = false;

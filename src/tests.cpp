@@ -18,6 +18,7 @@
 #include "sphinxint.h"
 #include "sphinxstem.h"
 #include "threadutils.h"
+#include "stripper/html_stripper.h"
 #include <cmath>
 
 #define SNOWBALL 0

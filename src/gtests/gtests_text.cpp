@@ -16,6 +16,7 @@
 #include "fileutils.h"
 #include "sphinxutils.h"
 #include "sphinxstem.h"
+#include "stripper/html_stripper.h"
 #include <cmath>
 
 

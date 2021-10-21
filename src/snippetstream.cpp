@@ -13,6 +13,7 @@
 #include "snippetstream.h"
 
 #include "sphinxint.h"
+#include "stripper/html_stripper.h"
 
 #define UINT32_MASK 0xffffffffUL
 #define UINT16_MASK 0xffff
@@ -811,7 +812,7 @@ void TokenizeDocument ( HitCollector_i & tFunctor, const CSphHTMLStripper * pStr
 
 		if ( bRetainHtml && *pTokenStart=='<' )
 		{
-			const CSphHTMLStripper::StripperTag_t * pTag = NULL;
+			const html_stripper::StripperTag_t * pTag = NULL;
 			const BYTE * sZoneName = NULL;
 			const char * pEndSPZ = NULL;
 			int iZoneNameLen = 0;

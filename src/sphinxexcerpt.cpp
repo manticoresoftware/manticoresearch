@@ -24,6 +24,8 @@
 #include "snippetstream.h"
 #include "snippetpassage.h"
 
+#include "stripper/html_stripper.h"
+
 
 #include <math.h>
 

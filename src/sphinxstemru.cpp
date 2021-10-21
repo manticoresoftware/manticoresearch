@@ -9,7 +9,7 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinx.h"
+#include "sphinxdefs.h" // for USE_LITTLE_ENDIAN
 #include <string.h>
 
 /////////////////////////////////////////////////////////////////////////////

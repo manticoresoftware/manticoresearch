@@ -10,7 +10,6 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinx.h"
 #include "sphinxutils.h"
 #include "fileutils.h"
 #include "sphinxexcerpt.h"

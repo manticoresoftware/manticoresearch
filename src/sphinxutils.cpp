@@ -13,7 +13,6 @@
 /// @file sphinxutils.cpp
 /// Implementations for Sphinx utilities shared classes.
 
-#include "sphinx.h"
 #include "sphinxutils.h"
 #include "sphinxint.h"
 #include "sphinxplugin.h"

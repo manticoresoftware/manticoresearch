@@ -10,9 +10,6 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinx.h"
-#include "sphinxint.h"
-#include "sphinxjson.h"
 #include "jsonqueryfilter.h"
 #include "attribute.h"
 #include "sphinxpq.h"

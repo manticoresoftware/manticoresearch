@@ -9,7 +9,6 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinx.h"
 #include "sphinxexcerpt.h"
 #include "sphinxutils.h"
 #include "sphinxsearch.h"

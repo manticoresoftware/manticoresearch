@@ -9,8 +9,7 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinx.h"
-#include "sphinxutils.h"
+#include "sphinxstd.h"
 #include "tokenizer/charset_definition_parser.h"
 #include "tokenizer/lowercaser.h"
 

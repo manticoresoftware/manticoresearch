@@ -14,8 +14,7 @@
 
 #if WITH_SSL
 #ifdef DAEMON
-#include "sphinx.h"
-#include "sphinxutils.h"
+#include "sphinxstd.h"
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/bio.h>

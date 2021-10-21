@@ -11,7 +11,6 @@
 //
 
 #include "threadutils.h"
-#include "sphinx.h"
 #include <boost/context/detail/prefetch.hpp>
 
 #if !_WIN32

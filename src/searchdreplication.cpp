@@ -9,7 +9,6 @@
 //
 
 
-#include "sphinx.h"
 #include "sphinxstd.h"
 #include "sphinxutils.h"
 #include "memio.h"

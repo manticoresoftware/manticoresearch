@@ -12,10 +12,12 @@
 
 #include "schema.h"
 
-#include "sphinx.h"
 #include "attribute.h"
 #include "rset.h"
 #include "match.h"
+
+// for sphCRC32
+#include "sphinx.h"
 
 //////////////////////////////////////////////////////////////////////////
 

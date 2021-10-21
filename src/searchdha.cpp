@@ -10,7 +10,6 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinx.h"
 #include "sphinxstd.h"
 #include "sphinxint.h"
 #include "searchdaemon.h"

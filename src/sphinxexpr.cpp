@@ -4970,13 +4970,6 @@ void ExprParser_t::MultiNEPass ( int iNode )
 	}
 }
 
-
-static StringBuilder_c & operator<< ( StringBuilder_c & dOut, Str_t sVal )
-{
-	dOut.AppendChunk (sVal);
-	return dOut;
-}
-
 static const char * TokName (int iTok, int iFunc)
 {
 	if ( iTok<256 )

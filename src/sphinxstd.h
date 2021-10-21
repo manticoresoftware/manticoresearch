@@ -3163,7 +3163,7 @@ public:
 
 	// get current build value
 	const char *		cstr() const { return m_szBuffer ? m_szBuffer : ""; }
-	explicit operator	CSphString() const { return CSphString (cstr()); }
+	explicit operator	CSphString() const { return { cstr() }; }
 
 	// move out (de-own) value
 	BYTE *				Leak();
@@ -3181,6 +3181,7 @@ public:
 	StringBuilder_c &	operator += ( const char * sText );
 	StringBuilder_c &	operator += ( const Str_t& sChunk );
 	StringBuilder_c &	operator << ( const VecTraits_T<char> &sText );
+	StringBuilder_c &	operator << ( const Str_t &sText );
 	StringBuilder_c &	operator << ( const char * sText ) { return *this += sText; }
 	StringBuilder_c &	operator << ( const CSphString &sText ) { return *this += sText.cstr (); }
 	StringBuilder_c &	operator << ( const CSphVariant &sText )	{ return *this += sText.cstr (); }

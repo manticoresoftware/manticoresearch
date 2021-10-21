@@ -2260,6 +2260,11 @@ StringBuilder_c & StringBuilder_c::operator<< ( const VecTraits_T<char> &sText )
 	return AppendChunk ( {sText.begin (), sText.GetLength ()} );
 }
 
+StringBuilder_c & StringBuilder_c::operator << ( const Str_t &sText )
+{
+	return AppendChunk ( sText );
+}
+
 StringBuilder_c& StringBuilder_c::operator << ( int iVal )
 {
 	InitAddPrefix();

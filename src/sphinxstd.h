@@ -2777,6 +2777,8 @@ public:
 	// hope this won't kill performance on a huge strings
 	void SetBinary ( const char * sValue, int iLen )
 	{
+		assert ( iLen >= 0 );
+		auto iLen_ = size_t ( iLen );
 		if ( Length ()<( iLen + SAFETY_GAP + 1 ) )
 		{
 			SafeFree ();
@@ -2785,7 +2787,7 @@ public:
 			else
 			{
 				m_sValue = new char [ 1+SAFETY_GAP+iLen ];
-				memcpy ( m_sValue, sValue, iLen );
+				memcpy ( m_sValue, sValue, iLen_ );
 				memset ( m_sValue+iLen, 0, 1+SAFETY_GAP );
 			}
 			return;
@@ -2793,7 +2795,7 @@ public:
 
 		if ( sValue && iLen )
 		{
-			memcpy ( m_sValue, sValue, iLen );
+			memcpy ( m_sValue, sValue, iLen_ );
 			memset ( m_sValue + iLen, 0, 1 + SAFETY_GAP );
 		} else
 		{

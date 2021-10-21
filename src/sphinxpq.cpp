@@ -361,7 +361,7 @@ static void QueryGetTerms ( const XQNode_t * pNode, CSphDict * pDict, DictMap_t 
 		if ( !iLen )
 			continue;
 
-		strncpy ( (char *)sTmp, tWord.m_sWord.cstr(), iLen );
+		memcpy ( (char *)sTmp, tWord.m_sWord.cstr(), iLen );
 		sTmp[iLen] = '\0';
 
 		SphWordID_t uWord = 0;

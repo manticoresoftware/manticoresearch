@@ -220,8 +220,6 @@ void WriterWithHash_c::CloseFile ()
 // TaggedHash20_t - string tag (filename) with 20-bytes binary hash
 //////////////////////////////////////////////////////////////////////////
 
-constexpr int HASHSTR_SIZE = HASH20_SIZE*2;
-
 const BYTE TaggedHash20_t::m_dZeroHash[HASH20_SIZE] = { 0 };
 
 // by tag + hash
@@ -272,8 +270,8 @@ int TaggedHash20_t::FromFIPS ( const char * sFIPS )
 	// 45f44fd2db02b08b4189abf21e90edd712c9616d *rt_full.ram\n
 	// i.e. 40 symbols hex hash in small letters, space, '*' and tag, finished by '\n'
 
-	assert ( sFIPS[HASHSTR_SIZE]==' ' && "broken FIPS - space expected after hash" );
-	assert ( sFIPS[HASHSTR_SIZE + 1]=='*' && "broken FIPS - * expected after hash and space" );
+	assert ( sFIPS[HASH20_SIZE * 2]==' ' && "broken FIPS - space expected after hash" );
+	assert ( sFIPS[HASH20_SIZE * 2 + 1]=='*' && "broken FIPS - * expected after hash and space" );
 
 	for ( auto i = 0; i<HASH20_SIZE; ++i )
 	{

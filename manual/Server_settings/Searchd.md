@@ -697,21 +697,6 @@ not_terms_only_allowed = 1
 ```
 <!-- end -->
 
-### optimize_cutoff
-
-<!-- example conf optimize_cutoff -->
-Sets default index compaction threshold. Read more here - [Number of optimized disk chunks](../Securing_and_compacting_an_index/Compacting_an_index.md#Number-of-optimized-disk-chunks). Can be overridden with per-query option [cutoff](../Securing_and_compacting_an_index/Compacting_an_index.md#Number-of-optimized-disk-chunks). Can be changed dynamically via [SET GLOBAL](../Server_settings/Setting_variables_online.md#SET).
-
-<!-- intro -->
-##### Example:
-
-<!-- request Example -->
-
-```ini
-optimize_cutoff = 4
-```
-<!-- end -->
-
 ### persistent_connections_limit
 
 <!-- example conf persistent_connections_limit -->

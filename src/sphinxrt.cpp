@@ -2991,7 +2991,7 @@ void RtIndex_c::UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & dUpda
 		Update_PrepareListOfUpdatedAttributes ( tCtx, sError );
 
 		// actualize list of updates in context of new segment
-		const auto & dDocids = tUpdate.m_pUpdate->m_dDocids;
+		const auto & dDocids = tUpdInc.m_pUpdate->m_dDocids;
 		ARRAY_FOREACH ( i, tUpdate.m_dRowsToUpdate )
 		{
 			auto& tRow = tUpdate.m_dRowsToUpdate[i];

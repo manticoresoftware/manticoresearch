@@ -1076,11 +1076,12 @@ void WipeGlobalSchedulerOnShutdownAndFork ()
 			pPool->DiscardOnFork ();
 	} );
 
-	searchd::AddShutdownCb ( [] {
-		WorkerSharedPtr_t& pPool = GlobalPoolSingletone ();
-		if ( pPool )
-			pPool->StopAll ();
-	} );
+//	searchd::AddShutdownCb ( [] {
+//		sphWarning ( "stop all pool threads" );
+//		WorkerSharedPtr_t& pPool = GlobalPoolSingletone ();
+//		if ( pPool )
+//			pPool->StopAll ();
+//	} );
 }
 
 void WipeSchedulerOnFork ( Threads::Worker_i* pWorker )

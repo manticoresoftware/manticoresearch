@@ -1086,7 +1086,6 @@ public:
 class WorkerSchedulers_c
 {
 	RoledSchedulerSharedPtr_t	m_tSerialChunkAccess;	  // serialize changing chunks and segs vec
-	RoledSchedulerSharedPtr_t	m_tSegmentMerger; // fiber for merging RAM segments. FiberID=-2 for now
 	RoledSchedulerSharedPtr_t	m_tChunkSaver;  // scheduler for disk manipulations.
 	std::atomic<int>			m_iNextOp { 1 };
 
@@ -1096,9 +1095,6 @@ public:
 		if ( !m_tSerialChunkAccess )
 			m_tSerialChunkAccess = MakeAloneScheduler ( Coro::CurrentScheduler(), "serial" );
 
-		if ( !m_tSegmentMerger )
-			m_tSegmentMerger = MakeAloneScheduler ( Coro::CurrentScheduler(), "merger" );
-
 		if ( !m_tChunkSaver )
 			m_tChunkSaver = WrapRawScheduler ( Coro::CurrentScheduler(), "saver" );
 	}
@@ -1106,11 +1102,6 @@ public:
 	Threads::SchedRole SerialChunkAccess() const RETURN_CAPABILITY ( m_tSerialChunkAccess )
 	{
 		return m_tSerialChunkAccess;
-	}
-
-	Threads::SchedRole MergeSegmentsWorker() const RETURN_CAPABILITY ( m_tSegmentMerger )
-	{
-		return m_tSegmentMerger;
 	}
 
 	Threads::SchedRole SaveSegmentsWorker() const RETURN_CAPABILITY ( m_tChunkSaver )
@@ -3249,35 +3240,17 @@ bool RtIndex_c::MergeSegmentsStep ( MergeSeg_e eVal ) REQUIRES ( m_tWorkers.Seri
 		iMergeOp = m_tWorkers.GetNextOpTicket();
 		pA->m_iLocked = pB->m_iLocked = iMergeOp; // mark them as retiring.
 
-		// that will collect killed docIDs
-		KillAccum_t dKillOnMerge;
-		pA->SetKillHook ( &dKillOnMerge );
-		pB->SetKillHook ( &dKillOnMerge );
+		pMerged = MergeTwoSegments ( pA, pB );
 
-		// we leave serial fiber, so kills may come there. They will be collected in dKillOnMerge.
+		if ( pMerged && pMerged->m_tAliveRows.load ( std::memory_order_relaxed ) )
 		{
-			ScopedScheduler_c _ { m_tWorkers.MergeSegmentsWorker() };
-			pMerged = MergeTwoSegments ( pA, pB );
-		}
-
-		pA->SetKillHook ( pMerged );
-		pB->SetKillHook ( pMerged );
-		RTLOGV << "after merge " << pMerged->m_tAliveRows << ", has " << dKillOnMerge.m_dDocids.GetLength() << " killed";
-
-		// apply postponed kills and updates (if any)
-		if ( pMerged )
-		{
-			pMerged->KillMulti ( dKillOnMerge.m_dDocids );
-			if ( pMerged->m_tAliveRows.load ( std::memory_order_relaxed ) )
-			{
-				// some updates might be applied to pA and pB during the merge. Now it is time to apply them also
-				// to the merged segment.
-				LazyVector_T<ConstRtSegmentRefPtf_t> dOld;
-				dOld.Add ( pA );
-				dOld.Add ( pB );
-				auto dUpdates = GatherUpdates::FromChunksOrSegments ( dOld );
-				UpdateAttributesOffline ( dUpdates, pMerged );
-			}
+			// some updates might be applied to pA and pB during the merge. Now it is time to apply them also
+			// to the merged segment.
+			LazyVector_T<ConstRtSegmentRefPtf_t> dOld;
+			dOld.Add ( pA );
+			dOld.Add ( pB );
+			auto dUpdates = GatherUpdates::FromChunksOrSegments ( dOld );
+			UpdateAttributesOffline ( dUpdates, pMerged );
 		}
 	}
 

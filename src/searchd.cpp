@@ -18494,10 +18494,9 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 			if ( g_bGotSigusr2 )
 			{
 				g_bGotSigusr2 = 0;
-				sphInfo ( "watchdog: got USR1, performing dump of child's stack" );
+				sphInfo ( "watchdog: got USR2, performing dump of child's stack" );
 				sphDumpGdb ( g_iLogFile, g_sNameBuf, g_sPid );
-			} else
-				sphInfo ( "watchdog: got error %d, %s", errno, strerrorm ( errno ));
+			}
 		}
 
 		if ( bShutdown || sphInterrupted() || g_pShared->m_bDaemonAtShutdown )

@@ -290,6 +290,6 @@ namespace Detached
 	void AloneShutdowncatch ();
 }
 
-#include "threadutils.inc"
+#include "threadutils_impl.h"
 
 #endif //MANTICORE_THREADUTILS_H

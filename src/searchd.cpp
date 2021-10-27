@@ -12287,7 +12287,7 @@ static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sInde
 	RtAccum_t tAcc ( false );
 	ReplicationCommand_t * pCmd = tAcc.AddCommand ( tStmt.m_bJson ? ReplicationCommand_e::UPDATE_JSON : ReplicationCommand_e::UPDATE_QL, tStmt.m_sCluster, sIndex );
 	assert ( pCmd );
-	pCmd->m_pUpdateAPI = tStmt.m_pUpdate;
+	pCmd->m_pUpdateAPI = tStmt.AttrUpdatePtr();
 	pCmd->m_bBlobUpdate = bBlobUpdate;
 	pCmd->m_pUpdateCond = &tStmt.m_tQuery;
 
@@ -12348,7 +12348,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	int iWarns = 0;
 
 	bool bBlobUpdate = false;
-	for ( const auto & i : tStmt.m_pUpdate->m_dAttributes )
+	for ( const auto & i : tStmt.AttrUpdate().m_dAttributes )
 	{
 		if ( i.m_sName==sphGetDocidName() )
 		{

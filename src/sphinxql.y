@@ -1602,11 +1602,11 @@ update_item:
 	ident '=' const_int
 		{
 			// it is performance-critical to forcibly inline this
-			pParser->m_pStmt->m_pUpdate->m_dPool.Add ( (DWORD)$3.m_iValue );
+			pParser->m_pStmt->AttrUpdate().m_dPool.Add ( (DWORD)$3.m_iValue );
 			DWORD uHi = (DWORD)( $3.m_iValue>>32 );
 			if ( uHi )
 			{
-				pParser->m_pStmt->m_pUpdate->m_dPool.Add ( uHi );
+				pParser->m_pStmt->AttrUpdate().m_dPool.Add ( uHi );
 				pParser->AddUpdatedAttr ( $1, SPH_ATTR_BIGINT );
 			} else
 			{
@@ -1616,7 +1616,7 @@ update_item:
 	| ident '=' const_float
 		{
 			// it is performance-critical to forcibly inline this
-			pParser->m_pStmt->m_pUpdate->m_dPool.Add ( sphF2DW ( $3.m_fValue ) );
+			pParser->m_pStmt->AttrUpdate().m_dPool.Add ( sphF2DW ( $3.m_fValue ) );
 			pParser->AddUpdatedAttr ( $1, SPH_ATTR_FLOAT );
 		}
 	| ident '=' '(' const_list ')'
@@ -1631,11 +1631,11 @@ update_item:
 	| json_expr '=' const_int // duplicate ident code (avoiding s/r conflict)
 		{
 			// it is performance-critical to forcibly inline this
-			pParser->m_pStmt->m_pUpdate->m_dPool.Add ( (DWORD)$3.m_iValue );
+			pParser->m_pStmt->AttrUpdate().m_dPool.Add ( (DWORD)$3.m_iValue );
 			DWORD uHi = (DWORD)( $3.m_iValue>>32 );
 			if ( uHi )
 			{
-				pParser->m_pStmt->m_pUpdate->m_dPool.Add ( uHi );
+				pParser->m_pStmt->AttrUpdate().m_dPool.Add ( uHi );
 				pParser->AddUpdatedAttr ( $1, SPH_ATTR_BIGINT );
 			} else
 			{
@@ -1645,7 +1645,7 @@ update_item:
 	| json_expr '=' const_float
 		{
 			// it is performance-critical to forcibly inline this
-			pParser->m_pStmt->m_pUpdate->m_dPool.Add ( sphF2DW ( $3.m_fValue ) );
+			pParser->m_pStmt->AttrUpdate().m_dPool.Add ( sphF2DW ( $3.m_fValue ) );
 			pParser->AddUpdatedAttr ( $1, SPH_ATTR_FLOAT );
 		}
 	| ident '=' TOK_QUOTED_STRING

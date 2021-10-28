@@ -12034,11 +12034,11 @@ void HandleMysqlFlushHostnames ( RowBuffer_i & tOut )
 		});
 
 
-	for ( hHosts.IterateStart (); hHosts.IterateNext(); )
+	for ( auto tHost : hHosts )
 	{
-		DWORD uRenew = sphGetAddress ( hHosts.IterateGetKey().cstr() );
+		DWORD uRenew = sphGetAddress ( tHost.first.cstr() );
 		if ( uRenew )
-			hHosts.IterateGet() = uRenew;
+			tHost.second = uRenew;
 	}
 
 	// copy back renew hosts to distributed agents.

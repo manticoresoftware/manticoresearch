@@ -652,7 +652,7 @@ DWORD sphGetAddress( const char* sHost, bool bFatal, bool bIP, CSphString * pFat
 		tHints.ai_flags = AI_NUMERICHOST;
 
 	int iResult = getaddrinfo( sHost, nullptr, &tHints, &pResult );
-	auto pOrigResult = pResult;
+	auto pResFree = AtScopeExit ( [pResult] { if (pResult) freeaddrinfo( pResult ); } );
 	if ( iResult!=0 || !pResult )
 	{
 		if ( pFatal )
@@ -683,7 +683,6 @@ DWORD sphGetAddress( const char* sHost, bool bFatal, bool bIP, CSphString * pFat
 		sphWarning( "multiple addresses found for '%s', using the first one (%s)", sHost, sBuf.cstr());
 	}
 
-	freeaddrinfo( pOrigResult );
 	return uAddr;
 }
 

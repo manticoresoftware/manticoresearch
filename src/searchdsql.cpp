@@ -19,7 +19,6 @@
 extern int g_iAgentQueryTimeoutMs;	// global (default). May be override by index-scope values, if one specified
 
 SqlStmt_t::SqlStmt_t()
-	: m_pUpdate { new CSphAttrUpdate }
 {
 	m_tQuery.m_eMode = SPH_MATCH_EXTENDED2; // only new and shiny matching and sorting
 	m_tQuery.m_eSort = SPH_SORT_EXTENDED;
@@ -1028,7 +1027,7 @@ void SqlParser_c::GenericStatement ( SqlNode_t * pNode )
 
 void SqlParser_c::AddUpdatedAttr ( const SqlNode_t & tName, ESphAttr eType ) const
 {
-	CSphAttrUpdate & tUpd = *m_pStmt->m_pUpdate;
+	CSphAttrUpdate & tUpd = m_pStmt->AttrUpdate();
 	CSphString sAttr;
 	TypedAttribute_t & tNew = tUpd.m_dAttributes.Add();
 	tNew.m_sName = ToString ( sAttr, tName ).ToLower();
@@ -1038,7 +1037,7 @@ void SqlParser_c::AddUpdatedAttr ( const SqlNode_t & tName, ESphAttr eType ) con
 
 void SqlParser_c::UpdateMVAAttr ( const SqlNode_t & tName, const SqlNode_t & dValues )
 {
-	CSphAttrUpdate & tUpd = *m_pStmt->m_pUpdate;
+	CSphAttrUpdate & tUpd = m_pStmt->AttrUpdate();
 	ESphAttr eType = SPH_ATTR_UINT32SET;
 
 	if ( dValues.m_pValues && dValues.m_pValues->GetLength()>0 )
@@ -1066,7 +1065,7 @@ void SqlParser_c::UpdateMVAAttr ( const SqlNode_t & tName, const SqlNode_t & dVa
 
 void SqlParser_c::UpdateStringAttr ( const SqlNode_t & tCol, const SqlNode_t & tStr )
 {
-	CSphAttrUpdate & tUpd = *m_pStmt->m_pUpdate;
+	CSphAttrUpdate & tUpd = m_pStmt->AttrUpdate();
 
 	auto sStr = ToStringUnescape ( tStr );
 

@@ -1086,7 +1086,6 @@ public:
 class WorkerSchedulers_c
 {
 	RoledSchedulerSharedPtr_t	m_tSerialChunkAccess;	  // serialize changing chunks and segs vec
-	RoledSchedulerSharedPtr_t	m_tSegmentMerger; // fiber for merging RAM segments. FiberID=-2 for now
 	RoledSchedulerSharedPtr_t	m_tChunkSaver;  // scheduler for disk manipulations.
 	std::atomic<int>			m_iNextOp { 1 };
 
@@ -1096,9 +1095,6 @@ public:
 		if ( !m_tSerialChunkAccess )
 			m_tSerialChunkAccess = MakeAloneScheduler ( Coro::CurrentScheduler(), "serial" );
 
-		if ( !m_tSegmentMerger )
-			m_tSegmentMerger = MakeAloneScheduler ( Coro::CurrentScheduler(), "merger" );
-
 		if ( !m_tChunkSaver )
 			m_tChunkSaver = WrapRawScheduler ( Coro::CurrentScheduler(), "saver" );
 	}
@@ -1106,11 +1102,6 @@ public:
 	Threads::SchedRole SerialChunkAccess() const RETURN_CAPABILITY ( m_tSerialChunkAccess )
 	{
 		return m_tSerialChunkAccess;
-	}
-
-	Threads::SchedRole MergeSegmentsWorker() const RETURN_CAPABILITY ( m_tSegmentMerger )
-	{
-		return m_tSegmentMerger;
 	}
 
 	Threads::SchedRole SaveSegmentsWorker() const RETURN_CAPABILITY ( m_tChunkSaver )
@@ -1145,10 +1136,12 @@ enum class WriteState_e : int
 	DISABLED,	// disabled, current stage must be completed first
 };
 
-enum class MergeSeg_e : BYTE {
-	NONE=0,  	// reschedule postponed
-	KILLED=1,  	// kill happened
-	NEWSEG=2, 	// insertion happened
+enum class MergeSeg_e : BYTE
+{
+	NONE	= 0,  	// idle
+	KILLED	= 1,  	// kill happened
+	NEWSEG	= 2, 	// insertion happened
+	EXIT 	= 4,	// shutdown and exit
 };
 
 class RtIndex_c final : public RtIndex_i, public ISphNoncopyable, public ISphWordlist, public ISphWordlistSuggest,
@@ -1297,8 +1290,8 @@ private:
 	RtData_c					m_tRtChunks;				// that is main set of disk chunks and RAM segments
 	WorkerSchedulers_c			m_tWorkers;
 	Coro::Waitable_T<int>		m_tUnLockedSegments { 0 }; // how many segments are not participating in any locked ops (like merge, save to disk).
-	MergeSeg_e					m_eSegMergeQueued GUARDED_BY ( m_tWorkers.SerialChunkAccess() ) { MergeSeg_e::NONE };
-	bool						m_bSegMergeWorking GUARDED_BY ( m_tWorkers.SerialChunkAccess() ) = false;
+	Coro::Waitable_T<MergeSeg_e> m_eSegMergeQueued { MergeSeg_e::NEWSEG };
+	Coro::Waitable_T<bool>		m_bSegMergeWorking { false };
 	Coro::Waitable_T<CSphVector<int64_t>> m_tSaveTIDS { 0 }; // save operations performing now, and their TIDs
 
 	bool						m_bIndexDeleted = false;
@@ -1379,7 +1372,10 @@ private:
 	CSphString					MakeChunkName(int iChunkID);
 	void						UnlinkRAMChunk ( const char * szInfo=nullptr );
 	void 						WaitRAMSegmentsUnlocked () const REQUIRES ( m_tWorkers.SerialChunkAccess() );
-	void						StartMergeSegments ( MergeSeg_e eMergeWhat ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
+	bool						MergeSegmentsStep( MergeSeg_e eVal ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
+	void						RunMergeSegmentsWorker();
+	void						StartMergeSegments ( MergeSeg_e eMergeWhat, bool bNotify=true ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
+	void						StopMergeSegmentsWorker();
 	bool						NeedStoreWordID () const override;
 	int64_t						GetMemLimit() const final { return m_iRtMemLimit; }
 
@@ -1425,6 +1421,7 @@ RtIndex_c::RtIndex_c ( const CSphSchema & tSchema, const char * sIndexName, int6
 
 RtIndex_c::~RtIndex_c ()
 {
+	StopMergeSegmentsWorker();
 	int64_t tmSave = sphMicroTimer();
 	bool bValid = m_pTokenizer && m_pDict && m_bLoadRamPassedOk;
 
@@ -3181,138 +3178,137 @@ static StringBuilder_c & operator<< ( StringBuilder_c & dOut, CheckMerge_e eVal 
 	return dOut;
 }
 
-void RtIndex_c::StartMergeSegments ( MergeSeg_e eMergeWhat ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
+void RtIndex_c::StartMergeSegments ( MergeSeg_e eMergeWhat, bool bNotify ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
 {
-	if ( m_eSegMergeQueued != MergeSeg_e::NEWSEG && eMergeWhat != MergeSeg_e::NONE )
-		m_eSegMergeQueued = eMergeWhat;
-
-	// protect from flood of calls
-	if ( m_eSegMergeQueued == MergeSeg_e::NONE || std::exchange ( m_bSegMergeWorking, true ) )
-		return;
-
-	RTLOGV << "StartMergeSegments (" << ( m_eSegMergeQueued == MergeSeg_e::NEWSEG ? "with" : "no" ) << " new)";
-
-	// all the rest is postponed and will be executed aside of caller.
-	Coro::Go ( [this]
+	m_eSegMergeQueued.ModifyValue ( [&eMergeWhat, &bNotify] ( MergeSeg_e& ePrevVal )
 	{
-		Threads::CheckRole_c _ ( m_tWorkers.SerialChunkAccess () );
-		bool bHasNewSegment = std::exchange ( m_eSegMergeQueued, MergeSeg_e::NONE ) == MergeSeg_e::NEWSEG;
-		auto tResetMergingState = AtScopeExit ( [this] () REQUIRES ( m_tWorkers.SerialChunkAccess() )
-		{
-			m_bSegMergeWorking = false;
-			if ( m_eSegMergeQueued != MergeSeg_e::NONE )
-				StartMergeSegments ( MergeSeg_e::NONE );
-		});
+		if ( ePrevVal == MergeSeg_e::EXIT )
+			bNotify = false;
+		else
+			ePrevVal = eMergeWhat;
+	});
 
-		// collect all RAM segments not occupied by any op (only ops we know is 'merge segments' and 'save ram chunk')
-		int64_t iHardRamLeft { m_iRtMemLimit };
-		int64_t iSoftRamLeft { m_iSoftRamLimit };
-		LazyVector_T<ConstRtSegmentRefPtf_t> dSegments;
-		for ( const auto & dSeg : *m_tRtChunks.RamSegs () )
+	if ( bNotify )
+		m_eSegMergeQueued.NotifyOne();
+}
+
+void RtIndex_c::StopMergeSegmentsWorker()
+{
+	m_eSegMergeQueued.SetValueAndNotifyOne ( MergeSeg_e::EXIT );
+	m_bSegMergeWorking.Wait ( [] ( bool bVal ) { return !bVal; } );
+}
+
+bool RtIndex_c::MergeSegmentsStep ( MergeSeg_e eVal ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
+{
+	// collect all RAM segments not occupied by any op (only ops we know is 'merge segments' and 'save ram chunk')
+	int64_t iHardRamLeft { m_iRtMemLimit };
+	int64_t iSoftRamLeft { m_iSoftRamLimit };
+	LazyVector_T<ConstRtSegmentRefPtf_t> dSegments;
+	for ( const auto& dSeg : *m_tRtChunks.RamSegs() )
+	{
+		if ( !dSeg->m_iLocked )
 		{
-			if ( !dSeg->m_iLocked )
-			{
-				dSegments.Add ( dSeg );
-				iSoftRamLeft -= dSeg->GetUsedRam();
-			}
-			iHardRamLeft -= dSeg->GetUsedRam();
+			dSegments.Add ( dSeg );
+			iSoftRamLeft -= dSeg->GetUsedRam();
 		}
+		iHardRamLeft -= dSeg->GetUsedRam();
+	}
 
-		RTLOGV << "Totally we have " << m_tRtChunks.GetRamSegmentsCount() << " segments onboard.";
+	RTLOGV << "Totally we have " << m_tRtChunks.GetRamSegmentsCount() << " segments onboard.";
 
-		std::pair<int,int> tSmallest;
-		CheckMerge_e eMergeAction { CheckMerge_e::NOMERGE };
-		if ( bHasNewSegment )
-			eMergeAction = CheckWeCanMerge ( tSmallest, dSegments, iHardRamLeft, iSoftRamLeft );
+	std::pair<int, int> tSmallest;
+	CheckMerge_e eMergeAction = ( eVal == MergeSeg_e::NEWSEG ) ? CheckWeCanMerge ( tSmallest, dSegments, iHardRamLeft, iSoftRamLeft ) : CheckMerge_e::NOMERGE;
+	RTLOGV << "CheckWeCanMerge returned " << eMergeAction;
 
-		RTLOGV << "CheckWeCanMerge returned " << eMergeAction;
+	if ( eMergeAction == CheckMerge_e::FLUSH || eMergeAction == CheckMerge_e::FLUSH_EM )
+	{
+		// here it might be no race, as we're in serial worker.
+		SaveDiskChunk ( false, eMergeAction == CheckMerge_e::FLUSH_EM );
+		return false; // exit into idle
+	}
 
-		if ( eMergeAction == CheckMerge_e::FLUSH || eMergeAction == CheckMerge_e::FLUSH_EM )
+	int iMergeOp = 0;
+
+	RtSegmentRefPtf_t pMerged { nullptr };
+
+	if ( eMergeAction == CheckMerge_e::MERGE )
+	{
+		assert ( dSegments.GetLength() >= 2 );
+
+		ConstRtSegmentRefPtf_t pA = dSegments[tSmallest.first];
+		ConstRtSegmentRefPtf_t pB = dSegments[tSmallest.second];
+		iMergeOp = m_tWorkers.GetNextOpTicket();
+		pA->m_iLocked = pB->m_iLocked = iMergeOp; // mark them as retiring.
+
+		pMerged = MergeTwoSegments ( pA, pB );
+
+		if ( pMerged && pMerged->m_tAliveRows.load ( std::memory_order_relaxed ) )
 		{
-			// here it might be no race, as we're in serial worker.
-			SaveDiskChunk ( false, eMergeAction == CheckMerge_e::FLUSH_EM );
-			return;
+			// some updates might be applied to pA and pB during the merge. Now it is time to apply them also
+			// to the merged segment.
+			LazyVector_T<ConstRtSegmentRefPtf_t> dOld;
+			dOld.Add ( pA );
+			dOld.Add ( pB );
+			auto dUpdates = GatherUpdates::FromChunksOrSegments ( dOld );
+			UpdateAttributesOffline ( dUpdates, pMerged );
 		}
+	}
 
-		int iMergeOp = 0;
+	// merged might be killed during merge op
+	// as we run in serial fiber, there is no concurrency, and so, killing hooks of retired sources will not fire.
+	assert ( Coro::CurrentScheduler() == m_tWorkers.SerialChunkAccess() );
 
-		RtSegmentRefPtf_t pMerged { nullptr };
+	if ( pMerged && !pMerged->m_tAliveRows.load ( std::memory_order_relaxed ) )
+		pMerged = nullptr;
 
-		if ( eMergeAction == CheckMerge_e::MERGE )
+	// we collect after merge, as some data might be changed during the merge
+	for ( auto& pSeg : dSegments )
+		if ( !pSeg->m_tAliveRows.load ( std::memory_order_relaxed ) )
 		{
-			assert ( dSegments.GetLength ()>=2 );
-
-			ConstRtSegmentRefPtf_t pA = dSegments[tSmallest.first];
-			ConstRtSegmentRefPtf_t pB = dSegments[tSmallest.second];
-			iMergeOp = m_tWorkers.GetNextOpTicket();
-			pA->m_iLocked = pB->m_iLocked = iMergeOp; // mark them as retiring.
-
-			// that will collect killed docIDs
-			KillAccum_t dKillOnMerge;
-			pA->SetKillHook ( &dKillOnMerge );
-			pB->SetKillHook ( &dKillOnMerge );
-
-			// we leave serial fiber, so kills may come there. They will be collected in dKillOnMerge.
-			{
-				ScopedScheduler_c _ { m_tWorkers.MergeSegmentsWorker () };
-				pMerged = MergeTwoSegments ( pA, pB );
-			}
-
-			pA->SetKillHook ( pMerged );
-			pB->SetKillHook ( pMerged );
-			RTLOGV << "after merge " << pMerged->m_tAliveRows << ", has " << dKillOnMerge.m_dDocids.GetLength () << " killed";
-
-			// apply postponed kills and updates (if any)
-			if ( pMerged )
-			{
-				pMerged->KillMulti ( dKillOnMerge.m_dDocids );
-				if ( pMerged->m_tAliveRows.load ( std::memory_order_relaxed ) )
-				{
-					// some updates might be applied to pA and pB during the merge. Now it is time to apply them also
-					// to the merged segment.
-					LazyVector_T<ConstRtSegmentRefPtf_t> dOld;
-					dOld.Add ( pA );
-					dOld.Add ( pB );
-					auto dUpdates = GatherUpdates::FromChunksOrSegments ( dOld );
-					UpdateAttributesOffline ( dUpdates, pMerged );
-				}
-			}
+			if ( !iMergeOp )
+				iMergeOp = m_tWorkers.GetNextOpTicket();
+			pSeg->m_iLocked = iMergeOp;
 		}
+	dSegments.Reset();
 
-		// merged might be killed during merge op
-		// as we run in serial fiber, there is no concurrency, and so, killing hooks of retired sources will not fire.
-		assert ( Coro::CurrentScheduler() == m_tWorkers.SerialChunkAccess() );
+	// nothing merged, and also nothing killed - nothing to do, exit into idle
+	if ( !pMerged && !iMergeOp )
+		return false;
 
-		if ( pMerged && !pMerged->m_tAliveRows.load ( std::memory_order_relaxed ) )
-			pMerged = nullptr;
+	auto tNewSet = RtWriter();
+	tNewSet.InitRamSegs ( RtWriter_c::empty );
+	for ( const auto& pSeg : *m_tRtChunks.RamSegs() )
+		if ( pSeg->m_iLocked != iMergeOp )
+			tNewSet.m_pNewRamSegs->Add ( pSeg );
 
-		// we collect after merge, as some data might be changed during the merge
-		for ( auto& pSeg : dSegments )
-			if ( !pSeg->m_tAliveRows.load ( std::memory_order_relaxed ) )
-			{
-				if ( !iMergeOp )
-					iMergeOp = m_tWorkers.GetNextOpTicket();
-				pSeg->m_iLocked = iMergeOp;
-			}
-		dSegments.Reset ();
+	if ( pMerged )
+		tNewSet.m_pNewRamSegs->Add ( AdoptSegment ( pMerged ) );
 
-		// nothing merged, and also nothing killed - nothing to do, exit.
-		if ( !pMerged && !iMergeOp )
-			return;
+	RTRLOG << "after merge " << tNewSet.m_pNewRamSegs->GetLength() << " segments on-board";
 
-		auto tNewSet = RtWriter();
-		tNewSet.InitRamSegs ( RtWriter_c::empty );
-		for ( const auto & pSeg : *m_tRtChunks.RamSegs() )
-			if ( pSeg->m_iLocked!=iMergeOp )
-				tNewSet.m_pNewRamSegs->Add ( pSeg );
+	// chain next step
+	return true;
+}
 
-		if ( pMerged )
-			tNewSet.m_pNewRamSegs->Add ( AdoptSegment ( pMerged ) );
+void RtIndex_c::RunMergeSegmentsWorker()
+{
+	Coro::Go ( [this]() REQUIRES ( m_tWorkers.SerialChunkAccess() )
+	{
+		m_bSegMergeWorking.SetValueAndNotifyOne ( true );
+			auto tResetSegMergeWorking = AtScopeExit ( [this] { m_bSegMergeWorking.SetValueAndNotifyOne ( false ); } );
 
-		RTRLOG << "after merge " << tNewSet.m_pNewRamSegs->GetLength () << " segments on-board";
+		while (true)
+		{
+			m_eSegMergeQueued.Wait ( [] ( MergeSeg_e eVal ) { return eVal != MergeSeg_e::NONE; } );
+			auto eVal = m_eSegMergeQueued.ExchangeValue ( MergeSeg_e::NONE );
 
-		// chain next step
-		m_eSegMergeQueued = MergeSeg_e::NEWSEG;
+			assert ( eVal != MergeSeg_e::NONE );
+			if ( eVal==MergeSeg_e::EXIT )
+				return;
+
+			if ( MergeSegmentsStep ( eVal ) )
+				StartMergeSegments ( MergeSeg_e::NEWSEG, false );
+		}
 	}, m_tWorkers.SerialChunkAccess() );
 }
 
@@ -3337,14 +3333,7 @@ int RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const CSphVector<DocID_
 
 	// for pure kills it is not necessary to wait, as it can't increase N of segments.
 	if ( pNewSeg )
-	{
-		if ( m_tUnLockedSegments.GetValue() >= MAX_SEGMENTS )
-		{
-			ScopedScheduler_c tSerialFiber { m_tWorkers.SerialChunkAccess() };
-			StartMergeSegments ( MergeSeg_e::NEWSEG );
-		}
 		m_tUnLockedSegments.Wait ( [] ( int iVals ) { return iVals < MAX_SEGMENTS; } );
-	}
 
 	// We're going to modify segments, so fall into serial fiber. From here no concurrent changes may happen
 	ScopedScheduler_c tSerialFiber { m_tWorkers.SerialChunkAccess() };
@@ -4509,6 +4498,7 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 	m_iSavedTID = m_iTID;
 	m_tmSaved = sphMicroTimer();
 
+	RunMergeSegmentsWorker();
 	return m_bLoadRamPassedOk;
 }
 

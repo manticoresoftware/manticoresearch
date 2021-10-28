@@ -757,12 +757,20 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 		if ( pIdx && pIdx->m_pIndex )
 			pIdx->m_pIndex->Unlock();
 	}
-	SHUTINFO << "Remove local indexes list ...";
-	SafeDelete ( g_pLocalIndexes );
 
-	// unlock Distr indexes automatically done by d-tr
-	SHUTINFO << "Remove distr indexes list ...";
-	SafeDelete ( g_pDistIndexes );
+	Threads::CallCoroutine ( [] {
+		SHUTINFO << "Remove local indexes list ...";
+		SafeDelete ( g_pLocalIndexes );
+
+		// unlock Distr indexes automatically done by d-tr
+		SHUTINFO << "Remove distr indexes list ...";
+		SafeDelete ( g_pDistIndexes );
+	} );
+
+	SHUTINFO << "Shutdown main work pool ...";
+	auto pPool = GlobalWorkPool();
+	if ( pPool )
+		pPool->StopAll();
 
 	// clear shut down of rt indexes + binlog
 	SHUTINFO << "Finish IO stats collecting ...";
@@ -12279,7 +12287,7 @@ static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sInde
 	RtAccum_t tAcc ( false );
 	ReplicationCommand_t * pCmd = tAcc.AddCommand ( tStmt.m_bJson ? ReplicationCommand_e::UPDATE_JSON : ReplicationCommand_e::UPDATE_QL, tStmt.m_sCluster, sIndex );
 	assert ( pCmd );
-	pCmd->m_pUpdateAPI = tStmt.m_pUpdate;
+	pCmd->m_pUpdateAPI = tStmt.AttrUpdatePtr();
 	pCmd->m_bBlobUpdate = bBlobUpdate;
 	pCmd->m_pUpdateCond = &tStmt.m_tQuery;
 
@@ -12340,7 +12348,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	int iWarns = 0;
 
 	bool bBlobUpdate = false;
-	for ( const auto & i : tStmt.m_pUpdate->m_dAttributes )
+	for ( const auto & i : tStmt.AttrUpdate().m_dAttributes )
 	{
 		if ( i.m_sName==sphGetDocidName() )
 		{
@@ -17556,7 +17564,7 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP ) REQUIRES ( MainThread
 	REQUIRES ( MainThread )
 {
 	// collect names of all existing local indexes as assumed for deletion
-	SmallStringHash_T<bool> dLocalToDelete;
+	SmallStringHash_T<ServedIndexRefPtr_c> dLocalToDelete;
 	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next (); )
 	{
 		// skip JSON indexes or indexes belong to cluster - no need to manage them
@@ -17564,13 +17572,13 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP ) REQUIRES ( MainThread
 		if ( ServedDesc_t::IsCluster ( pServed ) )
 			continue;
 
-		dLocalToDelete.Add ( true, it.GetName() );
+		dLocalToDelete.Add ( it.Get(), it.GetName() );
 	}
 
 	// collect names of all existing distr indexes as assumed for deletion
-	SmallStringHash_T<bool> dDistrToDelete;
+	SmallStringHash_T<DistributedIndexRefPtr_t> dDistrToDelete;
 	for ( RLockedDistrIt_c it ( g_pDistIndexes ); it.Next (); )
-		dDistrToDelete.Add ( true, it.GetName () );
+		dDistrToDelete.Add ( it.Get(), it.GetName () );
 
 	const CSphConfig &hConf = tCP.m_tConf;
 	if ( !hConf.Exists ("index") )
@@ -17640,12 +17648,12 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP ) REQUIRES ( MainThread
 
 			if ( bGotLocal && !bReplaceLocal )
 			{
-				dLocalToDelete[sIndexName] = false;
+				dLocalToDelete[sIndexName] = nullptr;
 				continue;
 			}
 			if ( bGotLocal && bReplaceLocal && eNewType==IndexType_e::TEMPLATE )
 			{
-				dLocalToDelete[sIndexName] = false;
+				dLocalToDelete[sIndexName] = nullptr;
 			}
 		}
 
@@ -17660,7 +17668,7 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP ) REQUIRES ( MainThread
 			else
 				sphWarning ( "index '%s': no valid local/remote indexes in distributed index; using last valid definition", sIndexName.cstr () );
 
-			dDistrToDelete[sIndexName] = false;
+			dDistrToDelete[sIndexName] = nullptr;
 			continue;
 		}
 
@@ -17683,17 +17691,17 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP ) REQUIRES ( MainThread
 			if ( pWlockedDisabled->m_eType==IndexType_e::PLAIN )
 				pWlockedDisabled->m_bOnlyNew = true;
 			if ( pDistrIndex )
-				dDistrToDelete[sIndexName] = false;
+				dDistrToDelete[sIndexName] = nullptr;
 		}
 	}
 
-	for ( dDistrToDelete.IterateStart (); dDistrToDelete.IterateNext ();)
-		if ( dDistrToDelete.IterateGet() )
-			g_pDistIndexes->Delete (dDistrToDelete.IterateGetKey ());
+	for ( const auto& tIdx : dDistrToDelete )
+		if ( tIdx.second )
+			g_pDistIndexes->Delete ( tIdx.first );
 
-	for ( dLocalToDelete.IterateStart (); dLocalToDelete.IterateNext (); )
-		if ( dLocalToDelete.IterateGet () )
-			g_pLocalIndexes->Delete ( dLocalToDelete.IterateGetKey () );
+	for ( const auto& tIdx : dLocalToDelete )
+		if ( tIdx.second )
+			g_pLocalIndexes->Delete ( tIdx.first );
 
 	InitPersistentPool();
 }
@@ -18486,10 +18494,9 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 			if ( g_bGotSigusr2 )
 			{
 				g_bGotSigusr2 = 0;
-				sphInfo ( "watchdog: got USR1, performing dump of child's stack" );
+				sphInfo ( "watchdog: got USR2, performing dump of child's stack" );
 				sphDumpGdb ( g_iLogFile, g_sNameBuf, g_sPid );
-			} else
-				sphInfo ( "watchdog: got error %d, %s", errno, strerrorm ( errno ));
+			}
 		}
 
 		if ( bShutdown || sphInterrupted() || g_pShared->m_bDaemonAtShutdown )

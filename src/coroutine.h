@@ -464,6 +464,12 @@ public:
 		m_tValue = tValue;
 	}
 
+	T ExchangeValue ( T tNewValue )
+	{
+		ScopedMutex_t lk ( m_tMutex );
+		return std::exchange ( m_tValue, tNewValue );
+	}
+
 	void SetValueAndNotifyOne ( T tValue )
 	{
 		SetValue ( tValue );

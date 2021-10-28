@@ -940,7 +940,7 @@ static bool ParseUpdateDeleteQueries ( const JsonObj_c & tRoot, SqlStmt_t & tStm
 
 static bool ParseJsonUpdate ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError )
 {
-	CSphAttrUpdate & tUpd = *tStmt.m_pUpdate;
+	CSphAttrUpdate & tUpd = tStmt.AttrUpdate();
 
 	tStmt.m_eStmt = STMT_UPDATE;
 

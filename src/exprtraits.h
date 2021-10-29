@@ -16,6 +16,7 @@
 #include "sphinxexpr.h"
 #include "sphinxfilter.h"
 #include "conversion.h"
+#include "match.h"
 
 #if _WIN32 && !defined(__clang__)
 #ifndef NDEBUG

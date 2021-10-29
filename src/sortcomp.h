@@ -13,7 +13,7 @@
 #ifndef _sortcomp_
 #define _sortcomp_
 
-#include "sphinx.h"
+#include "sphinxstd.h"
 
 class ISphMatchComparator : public ISphRefcountedMT
 {

@@ -13,13 +13,13 @@
 // Copyright (c) 2004-2014, Alexey Sokirko and others
 //
 
-#include "sphinx.h"
 #include "sphinxint.h"
 #include "fileutils.h"
 #include "sphinxutils.h"
 #include "sphinxstem.h"
 #include "sphinxplugin.h"
 #include "coroutine.h"
+#include "tokenizer/token_filter.h"
 
 //////////////////////////////////////////////////////////////////////////
 // LEMMATIZER

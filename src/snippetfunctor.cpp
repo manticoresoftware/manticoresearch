@@ -18,6 +18,7 @@
 #include "snippetindex.h"
 #include "snippetstream.h"
 #include "snippetpassage.h"
+#include "tokenizer/tokenizer.h"
 
 //////////////////////////////////////////////////////////////////////////
 

@@ -11,8 +11,8 @@
 #ifndef _histogram_
 #define _histogram_
 
-#include "sphinx.h"
 #include "columnarmisc.h"
+#include "sphinx.h"
 
 class CSphReader;
 class CSphWriter;

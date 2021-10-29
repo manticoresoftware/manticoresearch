@@ -11,7 +11,10 @@
 
 #include <benchmark/benchmark.h>
 
-#include "sphinx.h"
+#include "sphinxstd.h"
+#include "schema/locator.h"
+#include "schema/columninfo.h"
+#include "match.h"
 
 //////////////////////////////////////////////////////////////////////////
 static void BM_Locators ( benchmark::State & st )

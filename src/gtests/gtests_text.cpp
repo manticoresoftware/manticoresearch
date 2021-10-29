@@ -16,6 +16,7 @@
 #include "fileutils.h"
 #include "sphinxutils.h"
 #include "sphinxstem.h"
+#include "stripper/html_stripper.h"
 #include <cmath>
 
 
@@ -579,7 +580,7 @@ TEST ( Text, ArabicStemmer )
 }
 
 //////////////////////////////////////////////////////////////////////////
-#include "source_svpipe.h"
+#include "indexing_sources/source_svpipe.h"
 
 TEST ( Text, cvs_source )
 {
@@ -676,7 +677,7 @@ TEST ( Text, cvs_source )
 	ASSERT_TRUE ( tConf.Add ( CSphVariant ( "gid", 6 ), "csvpipe_attr_uint" ) );
 
 	// setup source
-	CSphSource_Document * pCSV = ( CSphSource_Document * ) sphCreateSourceCSVpipe ( &tConf, fp, "csv" );
+	CSphSource * pCSV = ( CSphSource * ) sphCreateSourceCSVpipe ( &tConf, fp, "csv" );
 	CSphString sError;
 	ASSERT_TRUE ( pCSV->Connect ( sError ) );
 	ASSERT_TRUE ( pCSV->IterateStart ( sError ) );
@@ -743,7 +744,7 @@ R"raw(<?xml version="1.0" encoding="utf-8"?>
 	CSphConfigSection tConf;
 
 	// setup source
-	auto * pSource = ( CSphSource_Document * ) sphCreateSourceXmlpipe2 ( &tConf, fp, "xml", 2*1024*1024, sError );
+	auto * pSource = ( CSphSource * ) sphCreateSourceXmlpipe2 ( &tConf, fp, "xml", 2*1024*1024, sError );
 	ASSERT_FALSE ( pSource->Connect ( sError ) );
 	ASSERT_STREQ ( sError.cstr(), sRes );
 

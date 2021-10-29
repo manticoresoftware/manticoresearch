@@ -10,7 +10,6 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinx.h"
 #include "sphinxexpr.h"
 #include "sphinxplugin.h"
 
@@ -4968,13 +4967,6 @@ void ExprParser_t::MultiNEPass ( int iNode )
 		if ( TransformInNE ( pRoot, pLeft, pRight ) )
 			return;
 	}
-}
-
-
-static StringBuilder_c & operator<< ( StringBuilder_c & dOut, Str_t sVal )
-{
-	dOut.AppendChunk (sVal);
-	return dOut;
 }
 
 static const char * TokName (int iTok, int iFunc)

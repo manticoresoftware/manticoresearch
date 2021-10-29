@@ -15,7 +15,6 @@
 #ifndef _accumulator_
 #define _accumulator_
 
-#include "sphinx.h"
 #include "sphinxint.h"
 
 struct StoredQueryDesc_t

@@ -23,13 +23,13 @@ set (CPACK_COMPONENT_CONVERTER_GROUP "converter")
 set (CPACK_COMPONENT_GROUP_CONVERTER_DISPLAY_NAME "Converter")
 set (CPACK_COMPONENT_CONVERTER_DISPLAY_NAME "CONVERTER application")
 set (CPACK_COMPONENT_CONVERTER_SUMMARY "${MANTICORESEARCH} index converter")
-set (CPACK_COMPONENT_CONVERTER_DESCRIPTION "${THIS_PKG} contains the tool for converting indexes made prior version 3.0.")
+set (CPACK_COMPONENT_CONVERTER_DESCRIPTION "${THIS_PKG} contains tool index_converter needed for converting indexes made prior version 3.0.")
 
 # meta
 set(CPACK_COMPONENT_META_GROUP "main")
 set(CPACK_COMPONENT_GROUP_META_DISPLAY_NAME "Virtual")
 set(CPACK_COMPONENT_META_DISPLAY_NAME "${PACKAGE_NAME} meta-package")
-set(CPACK_COMPONENT_META_DESCRIPTION "${THIS_PKG} is a group package that guarantee you have all is needed
+set(CPACK_COMPONENT_META_DESCRIPTION "${THIS_PKG} is a group package that guarantee you have all needed
 to run ${MANTICORESEARCH}.")
 
 # searchd daemon
@@ -37,19 +37,19 @@ set(CPACK_COMPONENT_APPLICATIONS_GROUP "main")
 set(CPACK_COMPONENT_GROUP_APLLICATIONS_DISPLAY_NAME "Server")
 set(CPACK_COMPONENT_APPLICATIONS_DISPLAY_NAME "${PACKAGE_NAME} service")
 set(CPACK_COMPONENT_APPLICATIONS_SUMMARY "${MANTICORESEARCH} server files")
-set(CPACK_COMPONENT_APPLICATIONS_DESCRIPTION "${THIS_PKG} contains the service daemon.")
+set(CPACK_COMPONENT_APPLICATIONS_DESCRIPTION "${THIS_PKG} contains Manticore Search daemon.")
 
 set (CPACK_COMPONENT_RUNTIME_GROUP "main")
 set (CPACK_COMPONENT_GROUP_RUNTIME_DISPLAY_NAME "Runtime")
 set (CPACK_COMPONENT_RUNTIME_DISPLAY_NAME "${PACKAGE_NAME} runtime")
 set (CPACK_COMPONENT_RUNTIME_SUMMARY "${MANTICORESEARCH} runtime libraries")
-set (CPACK_COMPONENT_RUNTIME_DESCRIPTION "${THIS_PKG} contains runtime libraries need to run the service daemon.")
+set (CPACK_COMPONENT_RUNTIME_DESCRIPTION "${THIS_PKG} contains runtime libraries needed to run Manticore Search daemon.")
 
 # icu data library
 set(CPACK_COMPONENT_ICUDATA_GROUP "main")
 set(CPACK_COMPONENT_ICUDATA_DISPLAY_NAME "ICU DAT file")
 set(CPACK_COMPONENT_ICUDATA_SUMMARY "${MANTICORESEARCH} ICU files")
-set(CPACK_COMPONENT_ICUDATA_DESCRIPTION "${THIS_PKG} contains the ICU DAT file. You need this package only if you use the ICU morphology.")
+set(CPACK_COMPONENT_ICUDATA_DESCRIPTION "${THIS_PKG} contains the ICU DAT file. You need this package only if you use ICU morphology.")
 
 # applications (indexes,indextool etc.)
 set(CPACK_COMPONENT_TOOLS_GROUP "main")
@@ -63,7 +63,7 @@ set(CPACK_COMPONENT_DEVEL_GROUP "main")
 set(CPACK_COMPONENT_DEVEL_DISPLAY_NAME "Development")
 set(CPACK_COMPONENT_GROUP_DEVEL_DISPLAY_NAME "Development files")
 set(CPACK_COMPONENT_DEVEL_SUMMARY "${MANTICORESEARCH} development headers")
-set(CPACK_COMPONENT_DEVEL_DESCRIPTION "${THIS_PKG} contains the headers for writing custom functions.")
+set(CPACK_COMPONENT_DEVEL_DESCRIPTION "${THIS_PKG} contains headers for writing custom functions.")
 
 # configurations
 set(CPACK_COMPONENT_CONFIG_GROUP "main")

@@ -10,7 +10,6 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinx.h"
 #include "sphinxint.h"
 #include "sphinxrt.h"
 #include "sphinxpq.h"
@@ -38,6 +37,7 @@
 #include "sphinx_alter.h"
 #include "taskoptimize.h"
 #include "chunksearchctx.h"
+#include "indexfiles.h"
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -51,12 +51,27 @@
 
 #endif
 
+#include "attrindex_builder.h"
+#include "tokenizer/tokenizer.h"
+#include "queryfilter.h"
+
 using namespace Threads;
 
 //////////////////////////////////////////////////////////////////////////
 
 #define RTDICT_CHECKPOINT_V5			48
-#define SPH_RT_DOUBLE_BUFFER_PERCENT	10
+
+// rt-segments tuning
+
+// rate limit for flushing RAM chunk as disk chunk. Rate applied to rt_mem_limit, calculated value used as limit, when we start flushing
+constexpr double INITIAL_SAVE_RATE_LIMIT		= 0.5;		///< we start rate limiting from this value.
+constexpr double MIN_SAVE_RATE_LIMIT			= 0.333333;	///< minimal rate limit. Calculated value will never be less that that bound
+constexpr double MAX_SAVE_RATE_LIMIT			= 0.95;		///< maximal rate limit. It most probably may be reached with very low insertion rate
+constexpr double SAVE_RATE_LIMIT_EMERGENCY_STEP	= 0.05;		///< emergency back-off.
+constexpr int SIMULTANEOUS_SAVE_LIMIT			= 2;		///< how many save ops we allow a time
+constexpr int MAX_SEGMENTS						= 32;
+constexpr int MAX_PROGRESSION_SEGMENT			= 8;
+constexpr int64_t MAX_SEGMENT_VECTOR_LEN		= INT_MAX;
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -68,13 +83,20 @@ using namespace Threads;
 
 #define LOG_LEVEL_RTRDIAG false
 #define LOG_LEVEL_RTDDIAG false
+#define LOG_LEVEL_RTSAVEDIAG false
 #define LOG_LEVEL_RTDIAGV false
 #define LOG_LEVEL_RTDIAGVV false
 #define LOG_LEVEL_DEBUGV false
 #define LOG_COMPONENT_RTSEG __LINE__ << " " << Coro::CurrentScheduler()->Name() << " "
 
+// used in start/merge RAM segments
 #define RTRLOG LOGINFO ( RTRDIAG, RTSEG )
+
+// used when logging disk save/optimize
 #define RTDLOG LOGINFO ( RTDDIAG, RTSEG )
+
+// ops for save RAM segments as disk chunk
+#define RTSAVELOG LOGINFO ( RTSAVEDIAG, RTSEG )
 #define RTLOGV LOGINFO ( RTDIAGV, RTSEG )
 #define RTLOGVV LOGINFO ( RTDIAGVV, RTSEG )
 
@@ -914,48 +936,20 @@ public:
 // * provides fiber workers for undependent processing
 class RtData_c
 {
-	mutable RwLock_t			m_tLock;	// guards access to vec of pointers, very short-term
+	mutable RwLock_t			m_tLock;	// very short-term
 	ConstDiskChunkVecRefPtr_t	m_pChunks GUARDED_BY ( m_tLock );
 	ConstRtSegVecRefPtr_t		m_pSegments GUARDED_BY ( m_tLock );
-	mutable int					m_iMaxDiskChunkId = -1;
-	RoledSchedulerSharedPtr_t	m_tSelectorGuard;		// serialize changing chunks and segs vec
-	RoledSchedulerSharedPtr_t	m_tSegmentMerger;		// fiber for merging RAM segments. FiberID=-2 for now
-//	FiberPool_c					m_dFibers;				// helpers to serialize update/change tasks
-	std::atomic<int>			m_iNextOp {1};
-	std::atomic<int>			m_iSaveActive {0};
 
 	friend class RtWriter_c;
 
 public:
-	explicit RtData_c ()
-//			: m_dFibers { 10 }
+	RtData_c ()
 	{
 		m_pChunks = new DiskChunkVec_c;
 		m_pSegments = new RtSegVec_c;
 	}
 
 	~RtData_c () = default;
-
-	void InitWorkers()
-	{
-		if ( !m_tSelectorGuard )
-			m_tSelectorGuard = MakeAloneScheduler ( Coro::CurrentScheduler(), "serial");
-
-		if ( !m_tSegmentMerger )
-			m_tSegmentMerger = MakeAloneScheduler ( Coro::CurrentScheduler (), "merger" );
-	}
-
-	int MakeChunkId ()
-	{
-		if ( m_iMaxDiskChunkId<0 )
-		{
-			int & iCh = m_iMaxDiskChunkId;
-			auto pChunks = DiskChunks();
-			pChunks->for_each ( [&iCh] ( ConstDiskChunkRefPtr_t & pIdx ) { iCh = Max ( iCh, pIdx->Cidx().m_iChunk ); } );
-		}
-		++m_iMaxDiskChunkId;
-		return m_iMaxDiskChunkId;
-	}
 
 	ConstDiskChunkRefPtr_t DiskChunkByID ( int iChunkID ) const
 	{
@@ -990,43 +984,16 @@ public:
 		return m_pChunks->IsEmpty() && m_pSegments->IsEmpty();
 	}
 
+	int GetRamSegmentsCount() const
+	{
+		ScRL_t rLock ( m_tLock );
+		return m_pSegments->GetLength();
+	}
+
 	int GetDiskChunksCount () const
 	{
 		ScRL_t rLock ( m_tLock );
 		return m_pChunks->GetLength ();
-	}
-
-	ConstRtData RtDataUnl () const REQUIRES ( SerialChunkAccess () ) NO_THREAD_SAFETY_ANALYSIS
-	{
-		return { m_pChunks, m_pSegments };
-	}
-
-	Threads::SchedRole SerialChunkAccess () const RETURN_CAPABILITY ( m_tSelectorGuard )
-	{
-		return m_tSelectorGuard;
-	}
-
-	Threads::SchedRole MergeSegmentsWorker () const RETURN_CAPABILITY ( m_tSegmentMerger )
-	{
-		return m_tSegmentMerger;
-	}
-
-	inline int GetNextOpTicket ()
-	{
-		auto iRes = m_iNextOp.fetch_add ( 1, std::memory_order_relaxed );
-		if ( !iRes ) // zero tag has special meaning, skip it
-			iRes = m_iNextOp.fetch_add ( 1, std::memory_order_relaxed );
-		return iRes;
-	}
-
-	inline void SetSaveActive ( bool bSave )
-	{
-		m_iSaveActive.fetch_add ( bSave ? 1 : -1, std::memory_order_relaxed );
-	}
-
-	inline bool IsSaveActive() const
-	{
-		return !!m_iSaveActive.load ( std::memory_order_relaxed );
 	}
 };
 
@@ -1038,6 +1005,7 @@ struct RtGuard_t
 	const DiskChunkVec_c &	m_dDiskChunks;
 	const RtSegVec_c &		m_dRamSegs;
 
+	RtGuard_t ( RtGuard_t&& ) noexcept = default;
 	explicit RtGuard_t ( ConstRtData tData )
 			: m_tSegmentsAndChunks { std::move ( tData ) }
 			, m_dDiskChunks { *m_tSegmentsAndChunks.m_pChunks }
@@ -1047,22 +1015,19 @@ struct RtGuard_t
 
 // created with null set of ram segments and disk chunks
 // on d-tr any not-null set will replace chunks and segments from the owner
-class RtWriter_c : ISphNoncopyable
+// Note, if you want to modify existing set, you NEED to guard some way period between reading old / writing modified
+class RtWriter_c
 {
 public:
 	RtData_c&					m_tOwner;
 	DiskChunkVecRefPtr_t		m_pNewDiskChunks;
 	RtSegVecRefPtr_t			m_pNewRamSegs;
+	Handler						m_fnOnRamSegsChanged;
 
-	explicit RtWriter_c ( RtData_c & tOwner ) REQUIRES ( tOwner.SerialChunkAccess () )
+	RtWriter_c ( RtWriter_c&& rhs ) noexcept = default;
+	RtWriter_c ( RtData_c & tOwner, Handler&& fnOnRamSegsChanged )
 		: m_tOwner ( tOwner )
-	{
-		Threads::CheckAcquiredSched ( tOwner.SerialChunkAccess() );
-	}
-
-	enum eUnsafe { unsafe };
-	RtWriter_c ( RtData_c & tOwner, eUnsafe )
-		: m_tOwner ( tOwner )
+		, m_fnOnRamSegsChanged { std::move ( fnOnRamSegsChanged ) }
 	{}
 
 	~RtWriter_c()
@@ -1070,16 +1035,19 @@ public:
 		if ( !m_pNewDiskChunks && !m_pNewRamSegs )
 			return;
 
-		ScWL_t wLock ( m_tOwner.m_tLock );
+		{
+			ScWL_t wLock ( m_tOwner.m_tLock );
+			// use leak since we convert 'data*' to 'const data*' here.
+			if ( m_pNewDiskChunks )
+				m_tOwner.m_pChunks = m_pNewDiskChunks.Leak();
 
-		// use leak since we convert 'data*' to 'const data*' here.
-		if ( m_pNewDiskChunks )
-			m_tOwner.m_pChunks = m_pNewDiskChunks.Leak();
+			if ( !m_pNewRamSegs )
+				return;
 
-		if ( m_pNewRamSegs )
 			m_tOwner.m_pSegments = m_pNewRamSegs.Leak();
+		}
+		m_fnOnRamSegsChanged();
 	}
-
 	enum Copy_e { copy };
 	enum Empty_e { empty };
 
@@ -1101,46 +1069,52 @@ public:
 	}
 };
 
-template<typename INT>
-class Waitable_T
+class ChunkID_c
 {
-	using EVENT = Threads::Coro::MultiEvent_c;
-	EVENT m_tWaitableChanged;
-	std::atomic<INT> m_iValue {0};
+	int m_iCh = -1;
 
 public:
-	Waitable_T() = default;
-	Waitable_T(Waitable_T&) = delete;
-	Waitable_T& operator= (const Waitable_T&) = delete;
-
-	void Inc()
+	int MakeChunkId ( const RtData_c& tData )
 	{
-		m_iValue.fetch_add ( 1, std::memory_order_relaxed );
-		m_tWaitableChanged.SetEvent();
+		if ( m_iCh < 0 )
+			tData.DiskChunks()->for_each ( [this] ( auto& pIdx ) { m_iCh = Max ( m_iCh, pIdx->Cidx().m_iChunk ); } );
+		++m_iCh;
+		return m_iCh;
+	}
+};
+
+class WorkerSchedulers_c
+{
+	RoledSchedulerSharedPtr_t	m_tSerialChunkAccess;	  // serialize changing chunks and segs vec
+	RoledSchedulerSharedPtr_t	m_tChunkSaver;  // scheduler for disk manipulations.
+	std::atomic<int>			m_iNextOp { 1 };
+
+public:
+	void InitWorkers()
+	{
+		if ( !m_tSerialChunkAccess )
+			m_tSerialChunkAccess = MakeAloneScheduler ( Coro::CurrentScheduler(), "serial" );
+
+		if ( !m_tChunkSaver )
+			m_tChunkSaver = WrapRawScheduler ( Coro::CurrentScheduler(), "saver" );
 	}
 
-	void Dec()
+	Threads::SchedRole SerialChunkAccess() const RETURN_CAPABILITY ( m_tSerialChunkAccess )
 	{
-		m_iValue.fetch_sub ( 1, std::memory_order_relaxed );
-		m_tWaitableChanged.SetEvent();
+		return m_tSerialChunkAccess;
 	}
 
-	void SetValue ( INT iValue )
+	Threads::SchedRole SaveSegmentsWorker() const RETURN_CAPABILITY ( m_tChunkSaver )
 	{
-		m_iValue.store ( iValue, std::memory_order_relaxed );
-		m_tWaitableChanged.SetEvent();
+		return m_tChunkSaver;
 	}
 
-	INT GetValue () const
+	inline int GetNextOpTicket()
 	{
-		return m_iValue.load ( std::memory_order_relaxed );
-	}
-
-	template<typename PRED>
-	void WaitFor ( PRED&& fnPred )
-	{
-		while ( !fnPred ( m_iValue.load ( std::memory_order_relaxed ) ) )
-			m_tWaitableChanged.WaitEvent();
+		auto iRes = m_iNextOp.fetch_add ( 1, std::memory_order_relaxed );
+		if ( !iRes ) // zero tag has special meaning, skip it
+			iRes = m_iNextOp.fetch_add ( 1, std::memory_order_relaxed );
+		return iRes;
 	}
 };
 
@@ -1162,6 +1136,14 @@ enum class WriteState_e : int
 	DISABLED,	// disabled, current stage must be completed first
 };
 
+enum class MergeSeg_e : BYTE
+{
+	NONE	= 0,  	// idle
+	KILLED	= 1,  	// kill happened
+	NEWSEG	= 2, 	// insertion happened
+	EXIT 	= 4,	// shutdown and exit
+};
+
 class RtIndex_c final : public RtIndex_i, public ISphNoncopyable, public ISphWordlist, public ISphWordlistSuggest,
 		public IndexUpdateHelper_c, public IndexAlterHelper_c, public DebugCheckHelper_c
 {
@@ -1171,6 +1153,7 @@ public:
 
 	void				InitOneshotIndex ( const VecTraits_T<CSphIndex*>& dChunks );
 	void				InitDictionaryInOneshot ();
+
 	bool				AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt ) override;
 	virtual bool		AddDocument ( ISphHits * pHits, const InsertDocData_t & tDoc, bool bReplace, const DocstoreBuilder_i::Doc_t * pStoredDoc, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt );
 	bool				DeleteDocument ( const VecTraits_T<DocID_t> & dDocs, CSphString & sError, RtAccum_t * pAccExt ) final;
@@ -1197,7 +1180,7 @@ public:
 
 	// helpers
 	ConstDiskChunkRefPtr_t	MergeDiskChunks (  const char* szParentAction, const ConstDiskChunkRefPtr_t& pChunkA, const ConstDiskChunkRefPtr_t& pChunkB, CSphIndexProgress& tProgress, VecTraits_T<CSphFilterSettings> dFilters );
-	bool				PublishMergedChunks ( const char * szParentAction,std::function<bool ( int, DiskChunkVec_c & )> && fnPusher) REQUIRES ( m_tRtChunks.SerialChunkAccess () );
+	bool				PublishMergedChunks ( const char * szParentAction,std::function<bool ( int, DiskChunkVec_c & )> && fnPusher) REQUIRES ( m_tWorkers.SerialChunkAccess() );
 	bool 				RenameOptimizedChunk ( const ConstDiskChunkRefPtr_t& pChunk, const char * szParentAction );
 	bool				SkipOrDrop ( int iChunk, const CSphIndex& dChunk, bool bCheckAlive, int& iAffected );
 	void				ProcessDiskChunk ( int iChunk, VisitChunk_fn&& fnVisitor ) final;
@@ -1293,16 +1276,23 @@ private:
 	std::atomic<int64_t>		m_iRamChunksAllocatedRAM { 0 };
 
 	std::atomic<bool>			m_bOptimizeStop { false };
-	Waitable_T<int>				m_tOptimizeRuns;
+	Threads::Coro::Waitable_T<int>	m_tOptimizeRuns {0};
 	friend class OptimizeGuard_c;
 
+	int64_t						m_iRtMemLimit;
 	int64_t						m_iSoftRamLimit;
-	int64_t						m_iDoubleBufferLimit;
+	double						m_fSaveRateLimit { INITIAL_SAVE_RATE_LIMIT };
 	CSphString					m_sPath;
 	bool						m_bPathStripped = false;
-	RtData_c					m_tRtChunks;	// that is main set of disk chunks and RAM segments
-	bool						m_bSegMergeQueued GUARDED_BY ( m_tRtChunks.SerialChunkAccess() ) = false;
 	int							m_iLockFD = -1;
+
+	ChunkID_c					m_tChunkID;
+	RtData_c					m_tRtChunks;				// that is main set of disk chunks and RAM segments
+	WorkerSchedulers_c			m_tWorkers;
+	Coro::Waitable_T<int>		m_tUnLockedSegments { 0 }; // how many segments are not participating in any locked ops (like merge, save to disk).
+	Coro::Waitable_T<MergeSeg_e> m_eSegMergeQueued { MergeSeg_e::NEWSEG };
+	Coro::Waitable_T<bool>		m_bSegMergeWorking { false };
+	Coro::Waitable_T<CSphVector<int64_t>> m_tSaveTIDS { 0 }; // save operations performing now, and their TIDs
 
 	bool						m_bIndexDeleted = false;
 
@@ -1331,7 +1321,7 @@ private:
 
 	int							CompareWords ( const RtWord_t * pWord1, const RtWord_t * pWord2 ) const;
 
-	CSphFixedVector<RowID_t> CopyAttributesFromAliveDocs ( RtSegment_t& tDstSeg, const RtSegment_t & tSrcSeg, RtAttrMergeContext_t & tCtx ) const;
+	CSphFixedVector<RowID_t>	CopyAttributesFromAliveDocs ( RtSegment_t& tDstSeg, const RtSegment_t & tSrcSeg, RtAttrMergeContext_t & tCtx ) const;
 	void						MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, const RtSegment_t & tSeg2, const VecTraits_T<RowID_t> & dRowMap1, const VecTraits_T<RowID_t> & dRowMap2 ) const;
 	RtSegment_t *				MergeTwoSegments ( const RtSegment_t * pA, const RtSegment_t * pB ) const;
 	static void					CopyWord ( RtSegment_t& tDstSeg, RtWord_t& tDstWord, RtDocWriter_c& tDstDoc, const RtSegment_t& tSrcSeg, const RtWord_t* pSrcWord, const VecTraits_T<RowID_t>& dRowMap );
@@ -1351,7 +1341,7 @@ private:
 	void						SaveMeta ();
 	void						SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_t & tStats ) const;
 	void						SaveDiskData ( const char * szFilename, const ConstRtSegmentSlice_t & tSegs, const ChunkStats_t & tStats ) const;
-	bool						SaveDiskChunk ( bool bForced ) REQUIRES ( m_tRtChunks.SerialChunkAccess () );
+	bool						SaveDiskChunk ( bool bForced, bool bEmergent=false ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
 	CSphIndex *					PreallocDiskChunk ( const char * sChunk, int iChunk, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError, const char * sName=nullptr ) const;
 	bool						LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes );
 	bool						SaveRamChunk ();
@@ -1370,7 +1360,7 @@ private:
 	bool						ReadNextWord ( SuggestResult_t & tRes, DictWord_t & tWord ) const final;
 
 	ConstRtSegmentRefPtf_t		AdoptSegment ( RtSegment_t * pNewSeg );
-	int							ApplyKillList ( const CSphVector<DocID_t> & dAccKlist ) REQUIRES ( m_tRtChunks.SerialChunkAccess () );
+	int							ApplyKillList ( const CSphVector<DocID_t> & dAccKlist ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
 
 	bool						AddRemoveColumnarAttr ( RtGuard_t & tGuard, bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError );
 	void						AddRemoveRowwiseAttr ( RtGuard_t & tGuard, bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError );
@@ -1383,10 +1373,16 @@ private:
 
 	CSphString					MakeChunkName(int iChunkID);
 	void						UnlinkRAMChunk ( const char * szInfo=nullptr );
-	void 						WaitRAMSegmentsUnlocked () const REQUIRES ( m_tRtChunks.SerialChunkAccess () );
-	void						StartMergeSegments (bool bHasNewSegment) REQUIRES ( m_tRtChunks.SerialChunkAccess () );
+	void 						WaitRAMSegmentsUnlocked () const REQUIRES ( m_tWorkers.SerialChunkAccess() );
+	bool						MergeSegmentsStep( MergeSeg_e eVal ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
+	void						RunMergeSegmentsWorker();
+	void						StartMergeSegments ( MergeSeg_e eMergeWhat, bool bNotify=true ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
+	void						StopMergeSegmentsWorker();
 	bool						NeedStoreWordID () const override;
-	int64_t						GetMemLimit() const final { return m_iSoftRamLimit; }
+	int64_t						GetMemLimit() const final { return m_iRtMemLimit; }
+
+	template<typename PRED>
+	int64_t						GetMemCount(PRED&& fnPred) const;
 
 	void						DebugCheckRam ( DebugCheckError_c & tReporter );
 	int							DebugCheckDisk ( DebugCheckError_c & tReporter, FILE * fp );
@@ -1394,9 +1390,20 @@ private:
 	void						SetSchema ( const CSphSchema & tSchema );
 
 	void						SetMemLimit ( int64_t iMemLimit );
+	void						RecalculateRateLimit ( int64_t iSaved, int64_t iInserted, bool bEmergent );
 	void						AlterSave ( bool bSaveRam );
 	void 						BinlogCommit ( RtSegment_t * pSeg, const CSphVector<DocID_t> & dKlist );
 	void						StopOptimize();
+	void						UpdateUnlockedCount();
+
+	// internal helpers/hooks
+	inline RtWriter_c			RtWriter() { return { m_tRtChunks, [this] { UpdateUnlockedCount(); } }; }
+
+	// set of my rt; suitable for any usage
+	inline RtGuard_t			RtGuard() const { return RtGuard_t { RtData() }; }
+
+	// my own, or external data, if any present
+	inline ConstRtData			RtData() const { return m_tRtChunks.RtData(); }
 };
 
 
@@ -1416,6 +1423,7 @@ RtIndex_c::RtIndex_c ( const CSphSchema & tSchema, const char * sIndexName, int6
 
 RtIndex_c::~RtIndex_c ()
 {
+	StopMergeSegmentsWorker();
 	int64_t tmSave = sphMicroTimer();
 	bool bValid = m_pTokenizer && m_pDict && m_bLoadRamPassedOk;
 
@@ -1448,6 +1456,11 @@ RtIndex_c::~RtIndex_c ()
 		sphInfo ( "rt: index %s: ramchunk saved in %d.%03d sec",
 			m_sIndexName.cstr(), (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
 	}
+}
+
+void RtIndex_c::UpdateUnlockedCount()
+{
+	m_tUnLockedSegments.UpdateValueAndNotifyAll ( (int)m_tRtChunks.RamSegs()->count_of ( [] ( auto& dSeg ) { return !dSeg->m_iLocked; } ) );
 }
 
 void RtIndex_c::ProcessDiskChunk ( int iChunk, VisitChunk_fn&& fnVisitor )
@@ -1519,7 +1532,7 @@ void RtIndex_c::ForceRamFlush ( const char* szReason )
 
 	int64_t tmSave = sphMicroTimer();
 
-	ScopedScheduler_c tSerialFiber ( m_tRtChunks.SerialChunkAccess() );
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 
 	int64_t iUsedRam = SegmentsGetUsedRam ( *m_tRtChunks.RamSegs() );
 	if ( !SaveRamChunk () )
@@ -1555,7 +1568,7 @@ int64_t RtIndex_c::GetLastFlushTimestamp() const
 // INDEXING
 //////////////////////////////////////////////////////////////////////////
 CSphSource_StringVector::CSphSource_StringVector ( const VecTraits_T<VecTraits_T<const char >> &dFields, const CSphSchema & tSchema )
-	: CSphSource_Document ( "$blobvector" )
+	: CSphSource ( "$blobvector" )
 {
 	m_tSchema = tSchema;
 	m_dFieldLengths.Reserve ( dFields.GetLength () );
@@ -1616,7 +1629,7 @@ bool RtIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphS
 	// here is only point related to current index - generate unique autoID, or check that provided is not duplicate.
 	if ( !tDocID || !bReplace )
 	{
-		RtGuard_t tGuard ( m_tRtChunks.RtData () );
+		auto tGuard = RtGuard();
 		if ( !tDocID ) // docID wasn't provided, need to generate autoID
 		{
 			bReplace = false; // with absent docID we effectively fall to plain 'insert' - nothing to kill
@@ -1658,7 +1671,7 @@ bool RtIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphS
 	// OPTIMIZE? do not create filter on each(!) INSERT
 	if ( !m_tSettings.m_sIndexTokenFilter.IsEmpty() )
 	{
-		tTokenizer = ISphTokenizer::CreatePluginFilter ( tTokenizer, m_tSettings.m_sIndexTokenFilter, sError );
+		tTokenizer = Tokenizer::CreatePluginFilter ( tTokenizer, m_tSettings.m_sIndexTokenFilter, sError );
 		if ( !tTokenizer )
 			return false;
 		if ( !tTokenizer->SetFilterSchema ( m_tSchema, sError ) )
@@ -2700,7 +2713,7 @@ CSphFixedVector<RowID_t> RtIndex_c::CopyAttributesFromAliveDocs ( RtSegment_t & 
 	tSrcSeg.m_bAttrsBusy.store ( true, std::memory_order_release );
 
 	// perform merging attrs in single fiber - that eliminates concurrency with optimize
-	ScopedScheduler_c tSerialFiber { m_tRtChunks.SerialChunkAccess() };
+	ScopedScheduler_c tSerialFiber { m_tWorkers.SerialChunkAccess() };
 
 	auto dColumnarIterators = CreateAllColumnarIterators ( tSrcSeg.m_pColumnar.Ptr(), m_tSchema );
 	CSphVector<int64_t> dTmp;
@@ -2940,7 +2953,7 @@ namespace GatherUpdates {
 }; // namespace
 
 
-bool RtIndex_c::UpdateAttributesInRamSegment ( const RowsToUpdate_t& dRows, UpdateContext_t& tCtx, bool& bCritical, CSphString& sError ) REQUIRES ( m_tRtChunks.SerialChunkAccess() )
+bool RtIndex_c::UpdateAttributesInRamSegment ( const RowsToUpdate_t& dRows, UpdateContext_t& tCtx, bool& bCritical, CSphString& sError ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
 {
 	if ( tCtx.m_tUpd.m_pUpdate->m_bStrict )
 		if ( !Update_InplaceJson ( dRows, tCtx, sError, true ) )
@@ -2977,7 +2990,7 @@ void RtIndex_c::UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & dUpda
 		Update_PrepareListOfUpdatedAttributes ( tCtx, sError );
 
 		// actualize list of updates in context of new segment
-		const auto & dDocids = tUpdate.m_pUpdate->m_dDocids;
+		const auto & dDocids = tUpdInc.m_pUpdate->m_dDocids;
 		ARRAY_FOREACH ( i, tUpdate.m_dRowsToUpdate )
 		{
 			auto& tRow = tUpdate.m_dRowsToUpdate[i];
@@ -3062,7 +3075,7 @@ int RtIndex_c::ApplyKillList ( const CSphVector<DocID_t> & dAccKlist )
 	if ( dAccKlist.IsEmpty() )
 		return 0;
 
-	assert ( Coro::CurrentScheduler() == m_tRtChunks.SerialChunkAccess() );
+	assert ( Coro::CurrentScheduler() == m_tWorkers.SerialChunkAccess() );
 
 	int iKilled = 0;
 	auto pChunks = m_tRtChunks.DiskChunks();
@@ -3097,22 +3110,23 @@ inline std::pair<int,int> Find2Minimums ( const VecTraits_T<ConstRtSegmentRefPtf
 	return { a, b };
 }
 
-constexpr int MAX_SEGMENTS = 32;
-constexpr int MAX_PROGRESSION_SEGMENT = 8;
-constexpr int64_t MAX_SEGMENT_VECTOR_LEN = INT_MAX;
-
-enum class CheckMerge_e { MERGE, NOMERGE, FLUSH };
-CheckMerge_e CheckWeCanMerge ( std::pair<int, int>& tSmallest, const VecTraits_T<ConstRtSegmentRefPtf_t>& dSegments, int64_t iRamLimit ) NO_THREAD_SAFETY_ANALYSIS
+enum class CheckMerge_e { MERGE, NOMERGE, FLUSH, FLUSH_EM };
+inline CheckMerge_e CheckWeCanMerge ( std::pair<int, int>& tSmallest, const VecTraits_T<ConstRtSegmentRefPtf_t>& dSegments, int64_t iHardRamLeft, int64_t iSoftRamLeft ) NO_THREAD_SAFETY_ANALYSIS
 {
 	const int iSegs = dSegments.GetLength ();
-	RTLOGV << "CheckWeCanMerge(" << dSegments.GetLength() << " segs, ram limit " << iRamLimit << " bytes)";
 
-	// enforce RAM usage limit
-	auto iRamLeft = iRamLimit - SegmentsGetUsedRam ( dSegments );
+	RTLOGV << "CheckWeCanMerge(" << dSegments.GetLength() << " segs, ram soft limit " << iSoftRamLeft << " bytes, ram hard limit " << iHardRamLeft << " bytes)";
+
+	auto eFLUSH = CheckMerge_e::FLUSH;
+	if ( iHardRamLeft<iSoftRamLeft )
+	{
+		iSoftRamLeft = iHardRamLeft;
+		eFLUSH = CheckMerge_e::FLUSH_EM; // emergency flush. I.e. hard limit reached
+	}
 
 	// skip merging if no memory left
-	if ( iRamLeft<=0 )
-		return CheckMerge_e::FLUSH;
+	if ( iSoftRamLeft <= 0 )
+		return eFLUSH;
 
 	// if N of segments is not so big - no merge need
 	if ( iSegs < ( MAX_SEGMENTS - MAX_PROGRESSION_SEGMENT ) )
@@ -3136,7 +3150,7 @@ CheckMerge_e CheckWeCanMerge ( std::pair<int, int>& tSmallest, const VecTraits_T
 
 	// check whether we have enough RAM
 #define ESTIMATE( _v ) pA->_v.Relimit ( 0, ( (int64_t)pA->_v.GetLength() + pB->_v.GetLength() ) * iAlive / uRows )
-#define LOC_ESTIMATE( _v ) do { auto _t=ESTIMATE(_v); iEstimatedMergedSize+=_t; if ( iMaxFutureVecLen<_t) iMaxFutureVecLen=_t; } while (0)
+#define LOC_ESTIMATE( _v ) do { auto _t=ESTIMATE(_v); iEstimatedMergedSize+=_t; if (iMaxFutureVecLen<_t) iMaxFutureVecLen=_t; } while (0)
 
 	LOC_ESTIMATE ( m_dWords );
 	LOC_ESTIMATE ( m_dDocs );
@@ -3148,9 +3162,9 @@ CheckMerge_e CheckWeCanMerge ( std::pair<int, int>& tSmallest, const VecTraits_T
 #undef LOC_ESTIMATE
 #undef ESTIMATE
 
-	if ( iEstimatedMergedSize > iRamLeft ) // can't merge anymore, dump if segments count limit's reached
-		return ( iSegs >= MAX_SEGMENTS ) ? CheckMerge_e::FLUSH : CheckMerge_e::NOMERGE;
-	return ( iMaxFutureVecLen > MAX_SEGMENT_VECTOR_LEN ) ? CheckMerge_e::FLUSH : CheckMerge_e::MERGE;
+	if ( iEstimatedMergedSize > iSoftRamLeft ) // can't merge anymore, dump if segments count limit's reached
+		return ( iSegs >= MAX_SEGMENTS ) ? eFLUSH : CheckMerge_e::NOMERGE;
+	return ( iMaxFutureVecLen > MAX_SEGMENT_VECTOR_LEN ) ? eFLUSH : CheckMerge_e::MERGE;
 }
 
 static StringBuilder_c & operator<< ( StringBuilder_c & dOut, CheckMerge_e eVal )
@@ -3160,133 +3174,144 @@ static StringBuilder_c & operator<< ( StringBuilder_c & dOut, CheckMerge_e eVal 
 	case CheckMerge_e::MERGE: return dOut << "MERGE";
 	case CheckMerge_e::NOMERGE: return dOut << "NOMERGE";
 	case CheckMerge_e::FLUSH: return dOut << "FLUSH";
+	case CheckMerge_e::FLUSH_EM: return dOut << "FLUSH_EM";
 	default: dOut.Sprintf ( "UNKNWN(%d)", (int)eVal );
 	}
 	return dOut;
 }
 
-void RtIndex_c::StartMergeSegments ( bool bHasNewSegment )
+void RtIndex_c::StartMergeSegments ( MergeSeg_e eMergeWhat, bool bNotify ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
 {
-	// protect from flood of calls
-	if ( m_bSegMergeQueued )
-		return;
-
-	m_bSegMergeQueued = true;
-
-	RTLOGV << "StartMergeSegments(" << (bHasNewSegment?"with new":"no new") << ")";
-
-	// all the rest is postponed and will be executed aside of caller.
-	Coro::Go ( [this, bHasNewSegment]
+	m_eSegMergeQueued.ModifyValue ( [&eMergeWhat, &bNotify] ( MergeSeg_e& ePrevVal )
 	{
-		Threads::CheckRole_c _ ( m_tRtChunks.SerialChunkAccess () );
+		if ( ePrevVal == MergeSeg_e::EXIT )
+			bNotify = false;
+		else
+			ePrevVal = eMergeWhat;
+	});
 
-		// collect all RAM segments not occupied by any op (only ops we know is 'merge segments' and 'save ram chunk')
-		LazyVector_T<ConstRtSegmentRefPtf_t> dSegments;
-		for ( const auto & dSeg : *m_tRtChunks.RamSegs () )
-			if ( !dSeg->m_iLocked )
-				dSegments.Add ( dSeg );
+	if ( bNotify )
+		m_eSegMergeQueued.NotifyOne();
+}
 
-		// fixme! Now is old naive way used: if no active save, limit to SoftRamLimit,
-		// if saving op is in progress - use limit 10% of SoftRamLimit (aka doubleBufferLimit).
-		// todo: think about and m.b. implement another limits.
+void RtIndex_c::StopMergeSegmentsWorker()
+{
+	m_eSegMergeQueued.SetValueAndNotifyOne ( MergeSeg_e::EXIT );
+	m_bSegMergeWorking.Wait ( [] ( bool bVal ) { return !bVal; } );
+}
 
-		std::pair<int,int> tSmallest;
-		CheckMerge_e eMergeAction { CheckMerge_e::NOMERGE };
-		if ( bHasNewSegment )
-			eMergeAction = CheckWeCanMerge ( tSmallest, dSegments, m_tRtChunks.IsSaveActive() ? m_iDoubleBufferLimit : m_iSoftRamLimit );
-
-		RTLOGV << "CheckWeCanMerge returned " << eMergeAction;
-
-		if ( eMergeAction == CheckMerge_e::FLUSH )
+bool RtIndex_c::MergeSegmentsStep ( MergeSeg_e eVal ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
+{
+	// collect all RAM segments not occupied by any op (only ops we know is 'merge segments' and 'save ram chunk')
+	int64_t iHardRamLeft { m_iRtMemLimit };
+	int64_t iSoftRamLeft { m_iSoftRamLimit };
+	LazyVector_T<ConstRtSegmentRefPtf_t> dSegments;
+	for ( const auto& dSeg : *m_tRtChunks.RamSegs() )
+	{
+		if ( !dSeg->m_iLocked )
 		{
-			m_bSegMergeQueued = false;
-			// here it might be no race, as we're in serial worker.
-			SaveDiskChunk ( false );
-			return;
+			dSegments.Add ( dSeg );
+			iSoftRamLeft -= dSeg->GetUsedRam();
 		}
+		iHardRamLeft -= dSeg->GetUsedRam();
+	}
 
-		int iMergeOp = 0;
+	RTLOGV << "Totally we have " << m_tRtChunks.GetRamSegmentsCount() << " segments onboard.";
 
-		RtSegmentRefPtf_t pMerged { nullptr };
+	std::pair<int, int> tSmallest;
+	CheckMerge_e eMergeAction = ( eVal == MergeSeg_e::NEWSEG ) ? CheckWeCanMerge ( tSmallest, dSegments, iHardRamLeft, iSoftRamLeft ) : CheckMerge_e::NOMERGE;
+	RTLOGV << "CheckWeCanMerge returned " << eMergeAction;
 
-		if ( eMergeAction == CheckMerge_e::MERGE )
+	if ( eMergeAction == CheckMerge_e::FLUSH || eMergeAction == CheckMerge_e::FLUSH_EM )
+	{
+		// here it might be no race, as we're in serial worker.
+		SaveDiskChunk ( false, eMergeAction == CheckMerge_e::FLUSH_EM );
+		return false; // exit into idle
+	}
+
+	int iMergeOp = 0;
+
+	RtSegmentRefPtf_t pMerged { nullptr };
+
+	if ( eMergeAction == CheckMerge_e::MERGE )
+	{
+		assert ( dSegments.GetLength() >= 2 );
+
+		ConstRtSegmentRefPtf_t pA = dSegments[tSmallest.first];
+		ConstRtSegmentRefPtf_t pB = dSegments[tSmallest.second];
+		iMergeOp = m_tWorkers.GetNextOpTicket();
+		pA->m_iLocked = pB->m_iLocked = iMergeOp; // mark them as retiring.
+
+		pMerged = MergeTwoSegments ( pA, pB );
+
+		if ( pMerged && pMerged->m_tAliveRows.load ( std::memory_order_relaxed ) )
 		{
-			assert ( dSegments.GetLength ()>=2 );
-
-			ConstRtSegmentRefPtf_t pA = dSegments[tSmallest.first];
-			ConstRtSegmentRefPtf_t pB = dSegments[tSmallest.second];
-			iMergeOp = m_tRtChunks.GetNextOpTicket();
-			pA->m_iLocked = pB->m_iLocked = iMergeOp; // mark them as retiring.
-
-			// that will collect killed docIDs
-			KillAccum_t dKillOnMerge;
-			pA->SetKillHook ( &dKillOnMerge );
-			pB->SetKillHook ( &dKillOnMerge );
-
-			// we leave serial fiber, so kills may come there. They will be collected in dKillOnMerge.
-			{
-				ScopedScheduler_c _ { m_tRtChunks.MergeSegmentsWorker () };
-				pMerged = MergeTwoSegments ( pA, pB );
-			}
-
-			pA->SetKillHook ( pMerged );
-			pB->SetKillHook ( pMerged );
-			RTLOGV << "after merge " << pMerged << ", has " << dKillOnMerge.m_dDocids.GetLength () << " killed";
-
-			// apply postponed kills and updates (if any)
-			if ( pMerged )
-			{
-				pMerged->KillMulti ( dKillOnMerge.m_dDocids );
-				if ( pMerged->m_tAliveRows.load ( std::memory_order_relaxed ) )
-				{
-					// some updates might be applied to pA and pB during the merge. Now it is time to apply them also
-					// to the merged segment.
-					LazyVector_T<ConstRtSegmentRefPtf_t> dOld;
-					dOld.Add ( pA );
-					dOld.Add ( pB );
-					auto dUpdates = GatherUpdates::FromChunksOrSegments ( dOld );
-					UpdateAttributesOffline ( dUpdates, pMerged );
-				}
-			}
+			// some updates might be applied to pA and pB during the merge. Now it is time to apply them also
+			// to the merged segment.
+			LazyVector_T<ConstRtSegmentRefPtf_t> dOld;
+			dOld.Add ( pA );
+			dOld.Add ( pB );
+			auto dUpdates = GatherUpdates::FromChunksOrSegments ( dOld );
+			UpdateAttributesOffline ( dUpdates, pMerged );
 		}
+	}
 
-		m_bSegMergeQueued = false;
+	// merged might be killed during merge op
+	// as we run in serial fiber, there is no concurrency, and so, killing hooks of retired sources will not fire.
+	assert ( Coro::CurrentScheduler() == m_tWorkers.SerialChunkAccess() );
 
-		// merged might be killed during merge op
-		// as we run in serial fiber, there is no concurrency, and so, killing hooks of retired sources will not fire.
-		assert ( Coro::CurrentScheduler() == m_tRtChunks.SerialChunkAccess() );
+	if ( pMerged && !pMerged->m_tAliveRows.load ( std::memory_order_relaxed ) )
+		pMerged = nullptr;
 
-		if ( pMerged && !pMerged->m_tAliveRows.load ( std::memory_order_relaxed ) )
-			pMerged = nullptr;
+	// we collect after merge, as some data might be changed during the merge
+	for ( auto& pSeg : dSegments )
+		if ( !pSeg->m_tAliveRows.load ( std::memory_order_relaxed ) )
+		{
+			if ( !iMergeOp )
+				iMergeOp = m_tWorkers.GetNextOpTicket();
+			pSeg->m_iLocked = iMergeOp;
+		}
+	dSegments.Reset();
 
-		// we collect after merge, as some data might be changed during the merge
-		for ( auto& pSeg : dSegments )
-			if ( !pSeg->m_tAliveRows.load ( std::memory_order_relaxed ) )
-			{
-				if ( !iMergeOp )
-					iMergeOp = m_tRtChunks.GetNextOpTicket();
-				pSeg->m_iLocked = iMergeOp;
-			}
-		dSegments.Reset ();
+	// nothing merged, and also nothing killed - nothing to do, exit into idle
+	if ( !pMerged && !iMergeOp )
+		return false;
 
-		// nothing merged, and also nothing killed - nothing to do, exit.
-		if ( !pMerged && !iMergeOp )
-			return;
+	auto tNewSet = RtWriter();
+	tNewSet.InitRamSegs ( RtWriter_c::empty );
+	for ( const auto& pSeg : *m_tRtChunks.RamSegs() )
+		if ( pSeg->m_iLocked != iMergeOp )
+			tNewSet.m_pNewRamSegs->Add ( pSeg );
 
-		RtWriter_c tNewSet ( m_tRtChunks );
-		tNewSet.InitRamSegs ( RtWriter_c::empty );
-		for ( const auto & pSeg : *m_tRtChunks.RamSegs() )
-			if ( pSeg->m_iLocked!=iMergeOp )
-				tNewSet.m_pNewRamSegs->Add ( pSeg );
+	if ( pMerged )
+		tNewSet.m_pNewRamSegs->Add ( AdoptSegment ( pMerged ) );
 
-		if ( pMerged )
-			tNewSet.m_pNewRamSegs->Add ( AdoptSegment ( pMerged ) );
+	RTRLOG << "after merge " << tNewSet.m_pNewRamSegs->GetLength() << " segments on-board";
 
-		RTRLOG << "after merge " << tNewSet.m_pNewRamSegs->GetLength () << " segments on-board";
+	// chain next step
+	return true;
+}
 
-		// chain next step
-		StartMergeSegments ( true );
-	}, m_tRtChunks.SerialChunkAccess () );
+void RtIndex_c::RunMergeSegmentsWorker()
+{
+	Coro::Go ( [this]() REQUIRES ( m_tWorkers.SerialChunkAccess() )
+	{
+		m_bSegMergeWorking.SetValueAndNotifyOne ( true );
+			auto tResetSegMergeWorking = AtScopeExit ( [this] { m_bSegMergeWorking.SetValueAndNotifyOne ( false ); } );
+
+		while (true)
+		{
+			m_eSegMergeQueued.Wait ( [] ( MergeSeg_e eVal ) { return eVal != MergeSeg_e::NONE; } );
+			auto eVal = m_eSegMergeQueued.ExchangeValue ( MergeSeg_e::NONE );
+
+			assert ( eVal != MergeSeg_e::NONE );
+			if ( eVal==MergeSeg_e::EXIT )
+				return;
+
+			if ( MergeSegmentsStep ( eVal ) )
+				StartMergeSegments ( MergeSeg_e::NEWSEG, false );
+		}
+	}, m_tWorkers.SerialChunkAccess() );
 }
 
 int RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const CSphVector<DocID_t> & dAccKlist ) REQUIRES_SHARED ( pNewSeg->m_tLock )
@@ -3308,8 +3333,12 @@ int RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const CSphVector<DocID_
 				dLens[j] += sphGetRowAttr ( pNewSeg->GetDocinfoByRowID(i), m_tSchema.GetAttr ( j+iFirstFieldLenAttr ).m_tLocator );
 	}
 
+	// for pure kills it is not necessary to wait, as it can't increase N of segments.
+	if ( pNewSeg )
+		m_tUnLockedSegments.Wait ( [] ( int iVals ) { return iVals < MAX_SEGMENTS; } );
+
 	// We're going to modify segments, so fall into serial fiber. From here no concurrent changes may happen
-	ScopedScheduler_c tSerialFiber { m_tRtChunks.SerialChunkAccess() };
+	ScopedScheduler_c tSerialFiber { m_tWorkers.SerialChunkAccess() };
 
 	RTLOGV << "CommitReplayable";
 
@@ -3322,7 +3351,7 @@ int RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const CSphVector<DocID_
 	// 2. Add new RAM-segment (if any). As we 1-st kill, then add - whole change is *not* atomic, ACID is broken here.
 	if ( pNewSeg )
 	{
-		RtWriter_c tNewState ( m_tRtChunks );
+		auto tNewState = RtWriter();
 		tNewState.InitRamSegs ( RtWriter_c::copy );
 		tNewState.m_pNewRamSegs->Add ( AdoptSegment ( pNewSeg ) );
 	}
@@ -3338,7 +3367,7 @@ int RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const CSphVector<DocID_
 		}
 
 	// backoff segments merging and m.b. saving disk chunk (that is not our deal, other worker will do it).
-	StartMergeSegments ( pNewSeg != nullptr );
+	StartMergeSegments ( pNewSeg ? MergeSeg_e::NEWSEG : MergeSeg_e::KILLED );
 
 	// tell about DELETE affected_rows
 	return iTotalKilled;
@@ -3388,7 +3417,7 @@ bool RtIndex_c::ForceDiskChunk()
 {
 	MEMORY ( MEM_INDEX_RT );
 
-	ScopedScheduler_c tSerialFiber ( m_tRtChunks.SerialChunkAccess() );
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 	return SaveDiskChunk ( true );
 }
 
@@ -3861,7 +3890,7 @@ void RtIndex_c::SaveDiskData ( const char * szFilename, const ConstRtSegmentSlic
 {
 	CSphString sError; // FIXME!!! report collected (sError) errors
 
-	RTDLOG << "SaveDiskData to " << szFilename << ", " << tSegs.GetLength() << " segments";
+	RTSAVELOG << "SaveDiskData to " << szFilename << ", " << tSegs.GetLength() << " segments";
 
 	SaveDiskDataContext_t tCtx ( szFilename, tSegs ); // only RAM segments here in game.
 	if ( m_tSettings.m_iMinInfixLen && m_pDict->GetSettings().m_bWordDict )
@@ -3996,7 +4025,7 @@ void RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )
 	}
 
 	// meta v.17+
-	sNewMeta.NamedVal ( "soft_ram_limit", m_iSoftRamLimit );
+	sNewMeta.NamedVal ( "soft_ram_limit", m_iRtMemLimit );
 	sNewMeta.FinishBlocks();
 
 
@@ -4027,32 +4056,48 @@ void RtIndex_c::SaveMeta()
 // looks like spinlock, but actually we switch to parallel strand and back on every tick, so it should not burn CPU
 void RtIndex_c::WaitRAMSegmentsUnlocked () const
 {
-	while ( m_tRtChunks.RamSegs ()->any_of ( [] ( const ConstRtSegmentRefPtf_t & a ) { return a->m_iLocked; } ) )
-		Threads::ScopedScheduler_c ( m_tRtChunks.MergeSegmentsWorker () );
+	m_tSaveTIDS.WaitVoid ( [this] { return m_tSaveTIDS.GetValueRef().IsEmpty(); } );
+	m_tUnLockedSegments.WaitVoid ( [this] { return m_tRtChunks.RamSegs()->none_of ( [] ( const ConstRtSegmentRefPtf_t& a ) { return a->m_iLocked; } ); });
+}
+
+template<typename PRED>
+int64_t RtIndex_c::GetMemCount ( PRED&& fnPred ) const
+{
+	int64_t iTotal = 0;
+	for ( const RtSegment_t* pSeg : *m_tRtChunks.RamSegs() )
+		if ( fnPred ( pSeg ) )
+			iTotal += pSeg->GetUsedRam();
+
+	return iTotal;
 }
 
 // i.e. create new disk chunk from ram segments
-bool RtIndex_c::SaveDiskChunk ( bool bForced )
+bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
 {
 	if ( m_eSaving.load(std::memory_order_relaxed) != WriteState_e::ENABLED ) // fixme! review, m.b. refactor
 		return true;
 
-	assert ( Coro::CurrentScheduler() == m_tRtChunks.SerialChunkAccess () );
+	assert ( Coro::CurrentScheduler() == m_tWorkers.SerialChunkAccess() );
 
-	RTDLOG << "SaveDiskChunk( " << ( bForced ? "forced" : "not forced" ) << ")";
+	RTSAVELOG << "SaveDiskChunk (" << ( bForced ? "forced" : "not forced" ) << ", " << ( bEmergent ? "emergent" : "not emergent" ) << ")";
 
-	int iSaveOp = m_tRtChunks.GetNextOpTicket();
+	int iSaveOp = m_tWorkers.GetNextOpTicket();
 
 	// if forced - wait all segments. Otherwise, can continue with subset of currently available segments
-	// note that segments may be locked by currently executing SaveDiskChunk. If so, we wait them finished and continue.
+	// note that segments may be locked by currently executing MergeSegments or SaveDiskChunk. If so, we wait them finished and continue.
 	// that will cause another disk chunk written right after just finished, since op is forced it is ok.
 	if ( bForced )
 		WaitRAMSegmentsUnlocked ();
 
+	m_tSaveTIDS.WaitVoid ( [this] { return m_tSaveTIDS.GetValueRef().GetLength() < SIMULTANEOUS_SAVE_LIMIT; } );
+
 	// collect all non-occupied non-empty segments and lock them
+	int64_t iNotMyOpRAM {0};
+	int64_t iMyOpRAM {0};
 	KillAccum_t dKillOnSave;
 	LazyVector_T<ConstRtSegmentRefPtf_t> dSegments;
 	for ( const auto & pSeg : *m_tRtChunks.RamSegs () )
+	{
 		if ( !pSeg->m_iLocked )
 		{
 			pSeg->m_iLocked = iSaveOp;
@@ -4060,31 +4105,38 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced )
 			{
 				pSeg->SetKillHook ( &dKillOnSave );
 				dSegments.Add ( pSeg );
+				iMyOpRAM += pSeg->GetUsedRam();
 			}
-		}
+		} else
+			iNotMyOpRAM += pSeg->GetUsedRam();
+	}
 
-	RTDLOG << "SaveDiskChunk process " << dSegments.GetLength() << " segments.";
+	UpdateUnlockedCount();
+
+	RTSAVELOG << "SaveDiskChunk process " << dSegments.GetLength() << " segments. Active jobs " << m_tSaveTIDS.GetValueRef().GetLength() << ", op " << iSaveOp
+		<< " RAM visible+retired/locked/acquired " << iNotMyOpRAM + iMyOpRAM << "+" << m_iRamChunksAllocatedRAM.load ( std::memory_order_relaxed )- iNotMyOpRAM - iMyOpRAM << "/" << iNotMyOpRAM << "/" << iMyOpRAM;
 	if ( dSegments.IsEmpty() )
 		return true;
 
-	m_tRtChunks.SetSaveActive ( true );
-	auto tFinallySetSaveUnactive = AtScopeExit ( [this] { m_tRtChunks.SetSaveActive ( false ); } );
+	auto iTID = m_iTID;
+	m_tSaveTIDS.ModifyValue ( [iTID] ( CSphVector<int64_t>& dSaves ) { dSaves.Add ( iTID ); } );
+	auto tFinallySetSaveUnactive = AtScopeExit ( [this, iTID] { m_tSaveTIDS.ModifyValueAndNotifyAll ( [iTID] ( CSphVector<int64_t>& dSaves ) { dSaves.RemoveValueFromSorted ( iTID ); } ); } );
 
 	int64_t tmSaveWall = -sphMicroTimer(); // all time including waiting
 	int64_t tmSave; // only active time
 	MEMORY ( MEM_INDEX_RT );
 
-	int iChunkID = m_tRtChunks.MakeChunkId();
+	int iChunkID = m_tChunkID.MakeChunkId ( m_tRtChunks );
 	auto sChunk = MakeChunkName ( iChunkID );
 
 	// as we're going to switch fiber, we need to freeze reliable stat and m_iTID (as they could change)
 	ChunkStats_t tStats ( m_tStats, m_dFieldLensRam );
-	auto iTID = m_iTID;
+
 	CSphIndex * pNewChunk = nullptr;
 	{
 		// as separate subtask we 1-st flush segments to disk, and then load just flushed segment
 		// if forced, continue to work in the same fiber; otherwise split to merge fiber
-		ScopedScheduler_c tMergeFiber { bForced ? Coro::CurrentScheduler () : m_tRtChunks.MergeSegmentsWorker() };
+		ScopedScheduler_c tSaveFiber { bForced ? Coro::CurrentScheduler () : m_tWorkers.SaveSegmentsWorker() };
 		tmSave = -sphMicroTimer();
 		SaveDiskData ( sChunk.cstr (), dSegments, tStats );
 		// fixme! process errors.
@@ -4140,10 +4192,15 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced )
 		}
 	}
 
+	// here is pickpoint: if we save some chunks in parallel, here we *NEED* to be sure, that later is not published before older
+	// That is about binlog consistency: if we save trx 1-1000 and at the same time 1000-1010, last might finish faster, but it can't be committed immediately,
+	// as last highest trx will be 1010, and nobody knows, that actually 1-1000 are not yet safe.
+	m_tSaveTIDS.WaitVoid ( [this, iTID] { return m_tSaveTIDS.GetValueRef().First() == iTID; } );
+
 	int iDiskChunks;
 	// now new disk chunk is loaded, kills and updates applied - we ready to change global index state now.
 	{
-		RtWriter_c tNewSet ( m_tRtChunks );
+		auto tNewSet = RtWriter();
 		tNewSet.InitDiskChunks ( RtWriter_c::copy );
 		tNewSet.m_pNewDiskChunks->Add ( DiskChunk_c::make ( pNewChunk ) );
 		SaveMeta ( iTID, GetChunkIds ( *tNewSet.m_pNewDiskChunks ) );
@@ -4177,6 +4234,14 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced )
 	sInfo.Sprintf ( "rt: index %s: diskchunk %d(%d), segments %d %s saved in %.6D (%.6D) sec", m_sIndexName.cstr (), iChunkID
 					, iDiskChunks, iSegments, bForced ? "forcibly" : "", tmSave, tmSaveWall );
 	sphInfo ( "%s", sInfo.cstr() );
+
+	// calculate DoubleBuf percent using current save/insert rate
+	auto iInserted = GetMemCount ( [iSaveOp] ( const auto* pSeg ) { return !pSeg->m_iLocked || pSeg->m_iLocked > iSaveOp; } );
+	RecalculateRateLimit ( iMyOpRAM, iInserted, bEmergent );
+
+	RTSAVELOG << sInfo.cstr() << ", op " << iSaveOp << " RAM saved/new " << iMyOpRAM << "/" << iInserted
+			<< " Insert ratio is " << m_fSaveRateLimit << " (soft ram limit " << m_iSoftRamLimit << ", rt mem limit " << m_iRtMemLimit << ")";
+
 	Preread();
 	CheckStartAutoOptimize();
 	return true;
@@ -4290,7 +4355,7 @@ bool RtIndex_c::LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuilder, bool bStr
 	}
 
 	// recreate tokenizer
-	m_pTokenizer = ISphTokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, pFilenameBuilder, dWarnings, m_sLastError );
+	m_pTokenizer = Tokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, pFilenameBuilder, dWarnings, m_sLastError );
 	if ( !m_pTokenizer )
 		return false;
 
@@ -4305,7 +4370,7 @@ bool RtIndex_c::LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuilder, bool bStr
 	if ( !m_sLastError.IsEmpty() )
 		dWarnings.Add(m_sLastError);
 
-	m_pTokenizer = ISphTokenizer::CreateMultiformFilter ( m_pTokenizer, m_pDict->GetMultiWordforms () );
+	m_pTokenizer = Tokenizer::CreateMultiformFilter ( m_pTokenizer, m_pDict->GetMultiWordforms () );
 
 	m_iWordsCheckpoint = rdMeta.GetDword();
 
@@ -4339,7 +4404,7 @@ bool RtIndex_c::LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuilder, bool bStr
 	rdMeta.GetBytes ( m_dChunkNames.Begin(), iLen*sizeof(int) );
 
 	if ( uVersion>=17 )
-		m_iSoftRamLimit = rdMeta.GetOffset();
+		SetMemLimit ( rdMeta.GetOffset() );
 
 	return true;
 }
@@ -4428,7 +4493,7 @@ bool RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder, bool bStrip
 	}
 
 	// recreate tokenizer
-	m_pTokenizer = ISphTokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, pFilenameBuilder, dWarnings, m_sLastError );
+	m_pTokenizer = Tokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, pFilenameBuilder, dWarnings, m_sLastError );
 	if ( !m_pTokenizer )
 		return false;
 
@@ -4443,7 +4508,7 @@ bool RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder, bool bStrip
 	if ( !m_sLastError.IsEmpty() )
 		dWarnings.Add(m_sLastError);
 
-	m_pTokenizer = ISphTokenizer::CreateMultiformFilter ( m_pTokenizer, m_pDict->GetMultiWordforms () );
+	m_pTokenizer = Tokenizer::CreateMultiformFilter ( m_pTokenizer, m_pDict->GetMultiWordforms () );
 
 	m_iWordsCheckpoint = (int)Int ( tBson.ChildByName ( "words_checkpoint" ) );
 
@@ -4484,7 +4549,7 @@ bool RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder, bool bStrip
 	int iLastQ = 0;
 	tNamesVec.ForEach ( [&iLastQ, this] ( const NodeHandle_t& tNode ) { m_dChunkNames[iLastQ++] = (int)Int ( tNode ); });
 
-	m_iSoftRamLimit = Int ( tBson.ChildByName ( "soft_ram_limit" ) );
+	SetMemLimit ( Int ( tBson.ChildByName ( "soft_ram_limit" ) ) );
 	return true;
 }
 
@@ -4507,7 +4572,7 @@ bool RtIndex_c::LoadMeta ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath
 bool RtIndex_c::PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings ) NO_THREAD_SAFETY_ANALYSIS
 {
 	// load disk chunks, if any
-	RtWriter_c tWriter { m_tRtChunks };
+	auto tWriter = RtWriter();
 	tWriter.InitDiskChunks ( RtWriter_c::empty );
 	ARRAY_FOREACH ( iName, m_dChunkNames )
 	{
@@ -4595,8 +4660,8 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 		return false;
 	}
 
-	m_tRtChunks.InitWorkers();
-	ScopedScheduler_c tSerialFiber ( m_tRtChunks.SerialChunkAccess() );
+	m_tWorkers.InitWorkers();
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 
 	m_bLoadRamPassedOk = false;
 
@@ -4614,6 +4679,7 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 	m_iSavedTID = m_iTID;
 	m_tmSaved = sphMicroTimer();
 
+	RunMergeSegmentsWorker();
 	return m_bLoadRamPassedOk;
 }
 
@@ -4763,7 +4829,7 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes ) NO_THREAD_
 	if ( !CheckVectorLength<RtSegVec_c::BASE> ( iSegmentCount, iFileSize, "ram-chunks", m_sLastError ) )
 		return false;
 
-	RtWriter_c tWriter ( m_tRtChunks );
+	auto tWriter = RtWriter();
 	tWriter.InitRamSegs ( RtWriter_c::empty );
 	for ( int i = 0; i < iSegmentCount; ++i )
 	{
@@ -4882,7 +4948,7 @@ void RtIndex_c::PostSetup()
 
 	// FIXME!!! handle error
 	m_pTokenizerIndexing = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
-	TokenizerRefPtr_c pIndexing { ISphTokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError ) };
+	TokenizerRefPtr_c pIndexing { Tokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError ) };
 	if ( pIndexing )
 		m_pTokenizerIndexing = pIndexing;
 
@@ -4964,8 +5030,8 @@ int RtIndex_c::DebugCheck ( FILE * fp )
 	if ( m_iStride!=m_tSchema.GetRowSize() )
 		tReporter.Fail ( "wrong attribute stride (current=%d, should_be=%d)", m_iStride, m_tSchema.GetRowSize() );
 
-	if ( m_iSoftRamLimit<=0 )
-		tReporter.Fail ( "wrong RAM limit (current=" INT64_FMT ")", m_iSoftRamLimit );
+	if ( m_iRtMemLimit<=0 )
+		tReporter.Fail ( "wrong RAM limit (current=" INT64_FMT ")", m_iRtMemLimit );
 
 	if ( m_iTID<0 )
 		tReporter.Fail ( "index TID < 0 (current=" INT64_FMT ")", m_iTID );
@@ -6242,7 +6308,7 @@ void RtIndex_c::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 
 void RtIndex_c::GetSuggest ( const SuggestArgs_t & tArgs, SuggestResult_t & tRes ) const
 {
-	RtGuard_t tGuard ( m_tRtChunks.RtData() );
+	auto tGuard = RtGuard();
 	const auto& dSegments = tGuard.m_dRamSegs;
 
 	// segments and disk chunks dictionaries produce duplicated entries
@@ -6375,22 +6441,29 @@ bool RtIndex_c::RtQwordSetup ( RtQword_t * pQword, int iSeg, const RtGuard_t& tG
 	return bFound;
 }
 
-
-void SetupExactDict ( DictRefPtr_c &pDict, ISphTokenizer * pTokenizer, bool bAddSpecial )
+void SetupExactDict ( DictRefPtr_c& pDict )
 {
-	assert ( pTokenizer );
-	pTokenizer->AddPlainChar ( '=' );
-	if ( bAddSpecial )
-		pTokenizer->AddSpecials ( "=" );
 	pDict = new CSphDictExact ( pDict );
 }
 
-
-void SetupStarDict ( DictRefPtr_c& pDict, ISphTokenizer * pTokenizer )
+void SetupExactTokenizer ( ISphTokenizer* pTokenizer, bool bAddSpecial )
 {
 	assert ( pTokenizer );
-	pTokenizer->AddPlainChar ( '*' );
+	pTokenizer->AddPlainChars ( "=" );
+	if ( bAddSpecial )
+		pTokenizer->AddSpecials ( "=" );
+}
+
+
+void SetupStarDict ( DictRefPtr_c& pDict )
+{
 	pDict = new CSphDictStarV8 ( pDict, true );
+}
+
+void SetupStarTokenizer ( ISphTokenizer* pTokenizer )
+{
+	assert ( pTokenizer );
+	pTokenizer->AddPlainChars ( "*" );
 }
 
 class SphRtFinalMatchCalc_c : public MatchProcessor_i, ISphNoncopyable
@@ -6633,11 +6706,11 @@ void FinalExpressionCalculation ( CSphQueryContext & tCtx, const VecTraits_T<RtS
 }
 
 // perform initial query transformations and expansion.
-static int PrepareFTSearch ( const RtIndex_c * pThis, bool bIsStarDict, bool bKeywordDict, int iExpandKeywords, int iExpansionLimit, const char * szModifiedQuery, const CSphIndexSettings & tSettings, const QueryParser_i * pQueryParser, const CSphQuery & tQuery, const CSphSchema & tSchema, cRefCountedRefPtr_t pIndexData, ISphTokenizer * pTokenizer, ISphTokenizer * pQueryTokenizer, CSphDict * pDict, CSphQueryResultMeta & tMeta, QueryProfile_c * pProfiler, CSphScopedPayload * pPayloads, XQQuery_t & tParsed )
+static int PrepareFTSearch ( const RtIndex_c * pThis, bool bIsStarDict, bool bKeywordDict, int iExpandKeywords, int iExpansionLimit, const char * szModifiedQuery, const CSphIndexSettings & tSettings, const QueryParser_i * pQueryParser, const CSphQuery & tQuery, const CSphSchema & tSchema, cRefCountedRefPtr_t pIndexData, ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQueryResultMeta & tMeta, QueryProfile_c * pProfiler, CSphScopedPayload * pPayloads, XQQuery_t & tParsed )
 {
 	// OPTIMIZE! make a lightweight clone here? and/or remove double clone?
-	TokenizerRefPtr_c pQueryTokenizerJson { pTokenizer };
-	sphSetupQueryTokenizer ( pQueryTokenizerJson, bIsStarDict, tSettings.m_bIndexExactWords, true );
+	TokenizerRefPtr_c pQueryTokenizer { sphCloneAndSetupQueryTokenizer ( pTokenizer, bIsStarDict, tSettings.m_bIndexExactWords, false ) };
+	TokenizerRefPtr_c pQueryTokenizerJson { sphCloneAndSetupQueryTokenizer ( pTokenizer, bIsStarDict, tSettings.m_bIndexExactWords, true ) };
 
 	if ( !pQueryParser->ParseQuery ( tParsed, szModifiedQuery, &tQuery, pQueryTokenizer, pQueryTokenizerJson, &tSchema, pDict, tSettings ) )
 	{
@@ -7042,7 +7115,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	// FIXME! eliminate this const breakage
 	const_cast<CSphQuery*> ( &tQuery )->m_eMode = SPH_MATCH_EXTENDED2;
 
-	auto tRtData = m_tRtChunks.RtData();
+	auto tRtData = RtData();
 
 	// debug hack (don't use ram chunk in debug modeling mode)
 	if_const( MODELING )
@@ -7053,16 +7126,13 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	auto& dDiskChunks = tGuard.m_dDiskChunks;
 
 	// wrappers
-	TokenizerRefPtr_c pQueryTokenizer { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
-	sphSetupQueryTokenizer ( pQueryTokenizer, IsStarDict ( m_bKeywordDict ), m_tSettings.m_bIndexExactWords, false );
-
 	DictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
 
 	if ( m_bKeywordDict && IsStarDict ( m_bKeywordDict ) )
-		SetupStarDict ( pDict, pQueryTokenizer );
+		SetupStarDict ( pDict );
 
 	if ( m_tSettings.m_bIndexExactWords )
-		SetupExactDict ( pDict, pQueryTokenizer );
+		SetupExactDict ( pDict );
 
 	// calculate local idf for RT with disk chunks
 	// in case of local_idf set but no external hash no full-scan query and RT has disk chunks
@@ -7186,7 +7256,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	bool bFullscan = pQueryParser->IsFullscan ( tQuery ); // use this
 	// no need to create ranker, etc if there's no query
 	if ( !bFullscan )
-		iStackNeed = PrepareFTSearch (this, IsStarDict ( m_bKeywordDict ), m_bKeywordDict, m_tMutableSettings.m_iExpandKeywords, m_iExpansionLimit, (const char *) sModifiedQuery, m_tSettings, pQueryParser, tQuery, m_tSchema, (cRefCountedRefPtr_t) tGuard.m_tSegmentsAndChunks.m_pSegs, m_pTokenizer->Clone ( SPH_CLONE_QUERY ), pQueryTokenizer, pDict, tMeta, pProfiler, &tPayloads, tParsed );
+		iStackNeed = PrepareFTSearch (this, IsStarDict ( m_bKeywordDict ), m_bKeywordDict, m_tMutableSettings.m_iExpandKeywords, m_iExpansionLimit, (const char *) sModifiedQuery, m_tSettings, pQueryParser, tQuery, m_tSchema, (cRefCountedRefPtr_t) tGuard.m_tSegmentsAndChunks.m_pSegs, m_pTokenizer, pDict, tMeta, pProfiler, &tPayloads, tParsed );
 
 	// empty index, empty result. Must be AFTER PrepareFTSearch, since it prepares list of words
 	if ( tGuard.m_dRamSegs.IsEmpty() )
@@ -7313,14 +7383,16 @@ void RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 
 	if ( IsStarDict ( m_bKeywordDict ) )
 	{
+		SetupStarTokenizer ( pTokenizer );
 		if ( m_bKeywordDict )
-			SetupStarDict ( pDict, pTokenizer );
-		else
-			pTokenizer->AddPlainChar ( '*' );
+			SetupStarDict ( pDict );
 	}
 
 	if ( m_tSettings.m_bIndexExactWords )
-		SetupExactDict ( pDict, pTokenizer, false );
+	{
+		SetupExactTokenizer ( pTokenizer, false );
+		SetupExactDict ( pDict );
+	}
 
 	CSphVector<BYTE> dFiltered;
 	FieldFilterRefPtr_c pFieldFilter;
@@ -7426,7 +7498,7 @@ void RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 
 bool RtIndex_c::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const char * sQuery, const GetKeywordsSettings_t & tSettings, CSphString * pError ) const
 {
-	RtGuard_t tGuard ( m_tRtChunks.RtData() );
+	auto tGuard = RtGuard();
 	DoGetKeywords ( dKeywords, sQuery, tSettings, false, pError, tGuard );
 	return true;
 }
@@ -7434,7 +7506,7 @@ bool RtIndex_c::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const cha
 
 bool RtIndex_c::FillKeywords ( CSphVector<CSphKeywordInfo> & dKeywords ) const
 {
-	RtGuard_t tGuard ( m_tRtChunks.RtData() );
+	auto tGuard = RtGuard();
 	DoGetKeywords ( dKeywords, nullptr, GetKeywordsSettings_t(), true, nullptr, tGuard );
 	return true;
 }
@@ -7593,10 +7665,10 @@ int RtIndex_c::UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSph
 	// do update in serial fiber. That ensures no concurrency with set of chunks changing, however need to dispatch
 	// with changers themselves (merge segments, merge chunks, save disk chunks).
 	// fixme! Find another way (dedicated fiber?), as long op in serial fiber may pause another ops.
-	RtGuard_t tGuard ( m_tRtChunks.RtData() );
+	auto tGuard = RtGuard();
 	auto dRamUpdateSets = Update_CollectRowPtrs ( tCtx, tGuard.m_dRamSegs );
 
-	ScopedScheduler_c tSerialFiber ( m_tRtChunks.SerialChunkAccess() );
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 	ARRAY_CONSTFOREACH ( i, dRamUpdateSets )
 	{
 		if ( dRamUpdateSets[i].IsEmpty() )
@@ -7791,7 +7863,7 @@ bool RtIndex_c::AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD
 	OptimizeGuard_c tStopOptimize ( *this );
 
 	// go to serial fiber.
-	ScopedScheduler_c tSerialFiber ( m_tRtChunks.SerialChunkAccess() );
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 
 	CSphSchema tOldSchema = m_tSchema;
 	CSphSchema tNewSchema = m_tSchema;
@@ -7801,7 +7873,7 @@ bool RtIndex_c::AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD
 
 	m_tSchema = tNewSchema;
 
-	RtGuard_t tGuard ( m_tRtChunks.RtData() );
+	auto tGuard = RtGuard();
 
 	// modify the in-memory data of disk chunks
 	// fixme: we can't rollback in-memory changes, so we just show errors here for now
@@ -7849,7 +7921,7 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ES
 	OptimizeGuard_c tStopOptimize ( *this );
 
 	// go to serial fiber.
-	ScopedScheduler_c tSerialFiber ( m_tRtChunks.SerialChunkAccess() );
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 
 	// wait all secondary service tasks (merge segments, save disk chunk) to finish and release all the segments.
 	WaitRAMSegmentsUnlocked();
@@ -7870,7 +7942,7 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ES
 	m_tSchema = tNewSchema;
 	m_iStride = m_tSchema.GetRowSize();
 
-	RtGuard_t tGuard ( m_tRtChunks.RtData() );
+	auto tGuard = RtGuard();
 
 	// modify the in-memory data of disk chunks
 	// fixme: we can't rollback in-memory changes, so we just show errors here for now
@@ -7915,9 +7987,8 @@ void RtIndex_c::InitOneshotIndex ( const VecTraits_T<CSphIndex*>& dChunks ) NO_T
 	// fixme! There is no check about absent/non-compatible settings between grabbed plain and rt
 	m_tSettings = pFirst->GetSettings();
 	m_pTokenizer = pFirst->GetTokenizer()->Clone ( SPH_CLONE_INDEX );
-//	m_pDict = pFirst->GetDictionary()->Clone();
 
-	RtWriter_c tWriter { m_tRtChunks, RtWriter_c::unsafe };
+	RtWriter_c tWriter { m_tRtChunks, [] {} };
 	tWriter.InitDiskChunks ( RtWriter_c::empty );
 	for ( CSphIndex* pIndex : dChunks )
 	{
@@ -7944,7 +8015,7 @@ void RtIndex_c::InitDictionaryInOneshot () NO_THREAD_SAFETY_ANALYSIS
 	if ( m_pDict )
 		return;
 
-	m_pDict = m_tRtChunks.DiskChunks()->operator[] (0)->Cidx().GetDictionary()->Clone();
+	SetDictionary ( RtGuard().m_dDiskChunks[0]->Cidx().GetDictionary()->Clone() );
 }
 
 // CSphinxqlSession::Execute->HandleMysqlAttach->AttachDiskIndex
@@ -7952,7 +8023,7 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex* pIndex, bool bTruncate, bool & bFat
 {
 	// from the next line we work in index simple scheduler. That made everything much simpler
 	// (no need to care about locks and order of access to ram segments and disk chunks)
-	ScopedScheduler_c tSerialFiber ( m_tRtChunks.SerialChunkAccess() );
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 
 	bFatal = false;
 
@@ -8005,7 +8076,7 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex* pIndex, bool bTruncate, bool & bFat
 	}
 
 	// rename that source index to our last chunk
-	int iChunk = m_tRtChunks.MakeChunkId();
+	int iChunk = m_tChunkID.MakeChunkId ( m_tRtChunks );
 	if ( !pIndex->Rename ( MakeChunkName ( iChunk ).cstr() ) )
 	{
 		sError.SetSprintf ( "ATTACH failed, %s", pIndex->GetLastError().cstr() );
@@ -8035,7 +8106,7 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex* pIndex, bool bTruncate, bool & bFat
 
 
 	{	// update disk chunk list
-		RtWriter_c tNewSet ( m_tRtChunks );
+		auto tNewSet = RtWriter();
 		tNewSet.InitDiskChunks ( RtWriter_c::copy );
 		tNewSet.m_pNewDiskChunks->Add ( DiskChunk_c::make ( pIndex ) );
 	}
@@ -8070,7 +8141,7 @@ bool RtIndex_c::Truncate ( CSphString& )
 	OptimizeGuard_c tStopOptimize ( *this );
 
 	// do truncate in serial fiber. As it is re-enterable, don't care if we already there.
-	ScopedScheduler_c tSerialFiber ( m_tRtChunks.SerialChunkAccess() );
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 
 	// update and save meta
 	// indicate 0 disk chunks, we are about to kill them anyway
@@ -8089,7 +8160,7 @@ bool RtIndex_c::Truncate ( CSphString& )
 
 	{
 		// remove all chunks and segments
-		RtWriter_c tChangeset ( m_tRtChunks );
+		auto tChangeset = RtWriter();
 		tChangeset.InitRamSegs ( RtWriter_c::empty );
 		tChangeset.InitDiskChunks ( RtWriter_c::empty );
 	}
@@ -8102,14 +8173,14 @@ bool RtIndex_c::Truncate ( CSphString& )
 void RtIndex_c::SetKillHookFor ( IndexSegment_c* pAccum, int iDiskChunkID ) const
 {
 	// that ensures no concurrency
-	ScopedScheduler_c tSerialFiber ( m_tRtChunks.SerialChunkAccess() );
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 	ProcessDiskChunkByID ( iDiskChunkID, [pAccum] ( const DiskChunk_c* p ) { p->Cidx().SetKillHook ( pAccum ); } );
 }
 
 void RtIndex_c::SetKillHookFor ( IndexSegment_c* pAccum, VecTraits_T<int> dDiskChunkIDs ) const
 {
 	// that ensures no concurrency
-	ScopedScheduler_c tSerialFiber ( m_tRtChunks.SerialChunkAccess() );
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 	ProcessDiskChunkByID ( dDiskChunkIDs, [pAccum] ( const DiskChunk_c* p ) { p->Cidx().SetKillHook ( pAccum ); } );
 }
 
@@ -8280,11 +8351,11 @@ void RtIndex_c::DropDiskChunk ( int iChunkID )
 	sphLogDebug( "rt optimize: index %s: drop disk chunk %d",  m_sIndexName.cstr(), iChunkID );
 
 	// work in serial fiber
-	ScopedScheduler_c tSerialFiber ( m_tRtChunks.SerialChunkAccess() );
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 	{
-		RtWriter_c tChangeset ( m_tRtChunks );
+		auto tChangeset = RtWriter();
 		tChangeset.InitDiskChunks ( RtWriter_c::empty );
-		auto pChunks = m_tRtChunks.RtDataUnl().m_pChunks;
+		auto pChunks = m_tRtChunks.RtData().m_pChunks;
 		for ( auto& pChunk : *pChunks )
 			if ( iChunkID == pChunk->Cidx().m_iChunk )
 				pChunk->m_bFinallyUnlink = true;
@@ -8345,7 +8416,7 @@ bool RtIndex_c::RenameOptimizedChunk ( const ConstDiskChunkRefPtr_t& pChunk, con
 
 	CSphIndex& tChunk = pChunk->CastIdx(); // const breakage is ok since we don't yet published the index
 	// prepare new chunk to publish
-	int iResID = m_tRtChunks.MakeChunkId();
+	int iResID = m_tChunkID.MakeChunkId ( m_tRtChunks );
 	auto sNewchunk = MakeChunkName ( iResID );
 	tChunk.m_iChunk = iResID;
 
@@ -8357,10 +8428,10 @@ bool RtIndex_c::RenameOptimizedChunk ( const ConstDiskChunkRefPtr_t& pChunk, con
 	return false;
 }
 
-bool RtIndex_c::PublishMergedChunks ( const char* szParentAction, std::function<bool ( int, DiskChunkVec_c& )>&& fnPusher ) REQUIRES ( m_tRtChunks.SerialChunkAccess() )
+bool RtIndex_c::PublishMergedChunks ( const char* szParentAction, std::function<bool ( int, DiskChunkVec_c& )>&& fnPusher ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
 {
 	bool bReplaced = false;
-	RtWriter_c tChangeset ( m_tRtChunks );
+	auto tChangeset = RtWriter();
 	tChangeset.InitDiskChunks ( RtWriter_c::empty );
 	for ( auto& pChunk : *m_tRtChunks.DiskChunks() )
 	{
@@ -8616,7 +8687,7 @@ bool RtIndex_c::CompressOneChunk ( int iChunkID, int& iAffected )
 	CSphIndex& tCompressed = pCompressed->CastIdx(); // const breakage is ok since we don't yet published the index
 
 	// going to modify list of chunks; so fall into serial fiber
-	ScopedScheduler_c tSerialFiber ( m_tRtChunks.SerialChunkAccess() );
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 
 	// reset kill hook explicitly to override default order of destruction
 	SetKillHookFor ( nullptr, iChunkID );
@@ -8775,7 +8846,7 @@ bool RtIndex_c::SplitOneChunk ( int iChunkID, const char* szUvarFilter, int& iAf
 		return false;
 
 	// going to modify list of chunks; so fall into serial fiber
-	ScopedScheduler_c tSerialFiber ( m_tRtChunks.SerialChunkAccess() );
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 
 	// reset kill hook explicitly to override default order of destruction
 	SetKillHookFor ( nullptr, iChunkID );
@@ -8869,7 +8940,7 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID )
 	CSphIndex& tMerged = pMerged->CastIdx(); // const breakage is ok since we don't yet published the index
 
 	// going to modify list of chunks; so fall into serial fiber
-	ScopedScheduler_c tSerialFiber ( m_tRtChunks.SerialChunkAccess() );
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 
 	// reset kill hook explicitly to override default order of destruction
 	SetKillHookFor ( nullptr, iAID );
@@ -8912,7 +8983,7 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID )
 void RtIndex_c::StopOptimize()
 {
 	m_bOptimizeStop.store ( true, std::memory_order_release );
-	m_tOptimizeRuns.WaitFor ( [] ( int i ) { return i <= 0; } );
+	m_tOptimizeRuns.Wait ( [] ( int i ) { return i <= 0; } );
 }
 
 void RtIndex_c::CommonMerge ( std::function<bool ( OptimizeTask_t& )>&& fnSelector )
@@ -8926,8 +8997,8 @@ void RtIndex_c::CommonMerge ( std::function<bool ( OptimizeTask_t& )>&& fnSelect
 	int iChunks = 0;
 
 	{
-		m_tOptimizeRuns.Inc();
-		auto tDeferDec = AtScopeExit ( [this] { m_tOptimizeRuns.Dec(); } );
+		m_tOptimizeRuns.ModifyValue ( [] ( int& i ) { ++i; } );
+		auto tDeferDec = AtScopeExit ( [this] { m_tOptimizeRuns.ModifyValueAndNotifyAll ( [] ( int& i ) { --i; } );} );
 
 		OptimizeTask_t tAction;
 		bool bBreak = false;
@@ -9167,7 +9238,7 @@ void RtIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 	if ( !pRes )
 		return;
 
-	RtGuard_t tGuard ( m_tRtChunks.RtData() );
+	auto tGuard = RtGuard();
 
 	int64_t iUsedRam = SegmentsGetUsedRam ( tGuard.m_dRamSegs );
 	pRes->m_iDead = SegmentsGetDeadRows ( tGuard.m_dRamSegs );
@@ -9176,7 +9247,7 @@ void RtIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 	pRes->m_iRamUse = sizeof( RtIndex_c ) + pRes->m_iRamChunkSize;
 	pRes->m_iRamRetired = m_iRamChunksAllocatedRAM.load(std::memory_order_relaxed) - iUsedRam;
 
-	pRes->m_iMemLimit = m_iSoftRamLimit;
+	pRes->m_iMemLimit = m_iRtMemLimit;
 
 	CSphString sError;
 	char sFile [ SPH_MAX_FILENAME_LEN ];
@@ -9224,7 +9295,7 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( sIndexName.cstr() ) : nullptr );
 
 	// FIXME!!! check missed embedded files
-	TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tSettings.m_tTokenizer, nullptr, pFilenameBuilder.Ptr(), dWarnings, sError ) };
+	TokenizerRefPtr_c pTokenizer { Tokenizer::Create ( tSettings.m_tTokenizer, nullptr, pFilenameBuilder.Ptr(), dWarnings, sError ) };
 	if ( !pTokenizer )
 	{
 		sError.SetSprintf ( "'%s' failed to create tokenizer, error '%s'", sIndexName.cstr(), sError.cstr() );
@@ -9240,7 +9311,7 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 	}
 
 	// multiforms right after dict
-	pTokenizer = ISphTokenizer::CreateMultiformFilter ( pTokenizer, tDict->GetMultiWordforms() );
+	pTokenizer = Tokenizer::CreateMultiformFilter ( pTokenizer, tDict->GetMultiWordforms() );
 
 	// bigram filter
 	if ( tSettings.m_tIndex.m_eBigramIndex!=SPH_BIGRAM_NONE && tSettings.m_tIndex.m_eBigramIndex!=SPH_BIGRAM_ALL )
@@ -9344,7 +9415,7 @@ bool RtIndex_c::IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconf
 bool RtIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 {
 	// strength single-fiber access (don't rely to upstream w-lock)
-	ScopedScheduler_c tSerialFiber ( m_tRtChunks.SerialChunkAccess() );
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 
 	if ( !ForceDiskChunk() )
 		return false;
@@ -9368,7 +9439,7 @@ bool RtIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 
 	// FIXME!!! handle error
 	m_pTokenizerIndexing = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
-	TokenizerRefPtr_c pIndexing { ISphTokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError ) };
+	TokenizerRefPtr_c pIndexing { Tokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError ) };
 	if ( pIndexing )
 		m_pTokenizerIndexing = pIndexing;
 
@@ -9462,7 +9533,7 @@ void RtIndex_c::GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameB
 		sMutableSettings.SetSprintf ( "%s%s", m_sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ) );
 	}
 
-	RtGuard_t tGuard ( m_tRtChunks.RtData() );
+	auto tGuard = RtGuard();
 	for ( const auto& pIndex : tGuard.m_dDiskChunks )
 		pIndex->Cidx().GetIndexFiles ( dFiles, pParentBuilder );
 
@@ -9558,7 +9629,7 @@ void RtIndex_c::CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const
 	}
 
 	{
-		RtGuard_t tGuard ( m_tRtChunks.RtData() );
+		auto tGuard = RtGuard();
 		tGuard.m_dDiskChunks.for_each ( [&] ( ConstDiskChunkRefPtr_t& p ) { p->Cidx().CollectFiles ( dFiles, dExt ); } );
 	}
 
@@ -9608,7 +9679,7 @@ void RtIndex_c::CreateReader ( int64_t iSessionId ) const
 {
 	// rt docstore doesn't need buffered readers
 	// but disk chunks need them
-	RtGuard_t tGuard ( m_tRtChunks.RtData() );
+	auto tGuard = RtGuard();
 
 	for ( const auto & i : tGuard.m_dDiskChunks )
 	{
@@ -9620,7 +9691,7 @@ void RtIndex_c::CreateReader ( int64_t iSessionId ) const
 
 bool RtIndex_c::GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const
 {
-	RtGuard_t tGuard ( m_tRtChunks.RtData() );
+	auto tGuard = RtGuard();
 
 	for ( const auto & i : tGuard.m_dRamSegs )
 	{
@@ -9654,12 +9725,13 @@ Bson_t RtIndex_c::ExplainQuery ( const CSphString & sQuery ) const
 	ExplainQueryArgs_t tArgs ( sQuery );
 	tArgs.m_pSchema = &GetMatchSchema();
 
-	TokenizerRefPtr_c pQueryTokenizer { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
-	sphSetupQueryTokenizer ( pQueryTokenizer, IsStarDict ( m_bKeywordDict ), m_tSettings.m_bIndexExactWords, false );
+	TokenizerRefPtr_c pQueryTokenizer { sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( m_bKeywordDict ), m_tSettings.m_bIndexExactWords, false ) };
+	SetupStarTokenizer ( pQueryTokenizer );
+	SetupExactTokenizer ( pQueryTokenizer );
 
 	tArgs.m_pDict = GetStatelessDict ( m_pDict );
-	SetupStarDict ( tArgs.m_pDict, pQueryTokenizer );
-	SetupExactDict ( tArgs.m_pDict, pQueryTokenizer );
+	SetupStarDict ( tArgs.m_pDict );
+	SetupExactDict ( tArgs.m_pDict );
 	if ( m_pFieldFilter )
 		tArgs.m_pFieldFilter = m_pFieldFilter->Clone();
 	tArgs.m_pSettings = &m_tSettings;
@@ -9669,7 +9741,7 @@ Bson_t RtIndex_c::ExplainQuery ( const CSphString & sQuery ) const
 	tArgs.m_iExpansionLimit = m_iExpansionLimit;
 	tArgs.m_bExpandPrefix = ( m_pDict->GetSettings().m_bWordDict && IsStarDict ( m_bKeywordDict ) );
 
-	RtGuard_t tGuard ( m_tRtChunks.RtData() );
+	auto tGuard = RtGuard();
 	tArgs.m_pIndexData = tGuard.m_tSegmentsAndChunks.m_pSegs;
 
 	return Explain ( tArgs );
@@ -9972,6 +10044,24 @@ uint64_t SchemaFNV ( const ISphSchema & tSchema )
 
 void RtIndex_c::SetMemLimit ( int64_t iMemLimit )
 {
-	m_iSoftRamLimit = iMemLimit;
-	m_iDoubleBufferLimit = ( m_iSoftRamLimit * SPH_RT_DOUBLE_BUFFER_PERCENT ) / 100;
+	m_iRtMemLimit = iMemLimit;
+	m_iSoftRamLimit = m_iRtMemLimit * m_fSaveRateLimit;
+}
+
+void RtIndex_c::RecalculateRateLimit ( int64_t iSaved, int64_t iInserted, bool bEmergent )
+{
+	if ( ( iSaved + iInserted ) > 0 )
+	{
+		auto fRate = (double)iSaved / ( iSaved + iInserted );
+		if ( bEmergent ) // emergent save happened
+		{
+			m_fSaveRateLimit -= SAVE_RATE_LIMIT_EMERGENCY_STEP;
+			m_fSaveRateLimit = Min ( m_fSaveRateLimit, fRate );
+		} else
+			m_fSaveRateLimit = fRate;
+	}
+
+	m_fSaveRateLimit = Min ( MAX_SAVE_RATE_LIMIT, m_fSaveRateLimit );
+	m_fSaveRateLimit = Max ( MIN_SAVE_RATE_LIMIT, m_fSaveRateLimit );
+	m_iSoftRamLimit = m_iRtMemLimit * m_fSaveRateLimit;
 }

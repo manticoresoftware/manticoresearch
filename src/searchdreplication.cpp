@@ -9,7 +9,6 @@
 //
 
 
-#include "sphinx.h"
 #include "sphinxstd.h"
 #include "sphinxutils.h"
 #include "memio.h"
@@ -18,6 +17,8 @@
 #include "accumulator.h"
 #include "fileutils.h"
 #include <math.h>
+
+#include "digest_sha1.h"
 
 #if !HAVE_WSREP
 #include "replication/wsrep_api_stub.h"
@@ -117,16 +118,13 @@ struct ReplicationCluster_t : public ClusterDesc_t
 	// state of node
 	void					SetNodeState ( ClusterState_e eNodeState )
 	{
-		m_eNodeState = eNodeState;
-		m_tStateChanged.SetEvent();
+		m_tNodeState.SetValue ( eNodeState );
+		m_tNodeState.NotifyAll();
 	}
-	ClusterState_e			GetNodeState() const { return m_eNodeState; }
+	ClusterState_e			GetNodeState() const { return m_tNodeState.GetValue(); }
 	ClusterState_e			WaitReady()
 	{
-		while ( m_eNodeState==ClusterState_e::CLOSED || m_eNodeState==ClusterState_e::JOINING || m_eNodeState==ClusterState_e::DONOR )
-			m_tStateChanged.WaitEvent();
-
-		return m_eNodeState;
+		return m_tNodeState.Wait ( [] ( ClusterState_e i ) { return i != ClusterState_e::CLOSED && i != ClusterState_e::JOINING && i != ClusterState_e::DONOR; } );
 	}
 	void					SetPrimary ( wsrep_view_status_t eStatus )
 	{
@@ -135,8 +133,7 @@ struct ReplicationCluster_t : public ClusterDesc_t
 	bool					IsPrimary() const { return ( m_iStatus==WSREP_VIEW_PRIMARY ); }
 
 private:
-	Threads::Coro::Event_c m_tStateChanged;
-	ClusterState_e m_eNodeState { ClusterState_e::CLOSED };
+	Threads::Coro::Waitable_T<ClusterState_e> m_tNodeState { ClusterState_e::CLOSED };
 };
 
 
@@ -3805,7 +3802,7 @@ public:
 			m_pWriter = nullptr;
 			m_pReader = nullptr;
 
-			m_pWriter = new WriterWithHash_c ( nullptr, nullptr );
+			m_pWriter = new WriterWithHash_c;
 			if ( !m_pWriter->OpenFile ( m_pMerge->m_dFilesNew[iFile], m_sError ) )
 			{
 				sError = m_sError;

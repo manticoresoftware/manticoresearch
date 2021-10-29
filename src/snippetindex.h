@@ -13,7 +13,6 @@
 #ifndef _snippetindex_
 #define _snippetindex_
 
-#include "sphinx.h"
 #include "sphinxquery.h"
 
 //////////////////////////////////////////////////////////////////////////

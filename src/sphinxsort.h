@@ -13,7 +13,6 @@
 #ifndef _sphinxsort_
 #define _sphinxsort_
 
-#include "sphinx.h"
 #include "sortsetup.h"
 
 namespace columnar

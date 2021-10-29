@@ -32,23 +32,23 @@ This directive lets you specify the default value of [access_hitlists](../Creati
 
 ### agent_connect_timeout
 
-Instance-wide defaults for [agent_connect_timeout](../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md) parameter. The last defined in distributed (network) indexes.
+Instance-wide default for [agent_connect_timeout](../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_connect_timeout) parameter.
 
 
 ### agent_query_timeout
 
-Instance-wide defaults for [agent_query_timeout](../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md) parameter. The last defined in distributed (network) indexes, or also may be overrided per-query using `OPTION` clause.
+Instance-wide defaults for [agent_query_timeout](../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_query_timeout) parameter. Can be overridden per-query using `OPTION agent_query_timeout=XXX` clause.
 
 
 ### agent_retry_count
 
-Integer, specifies how many times manticore will try to connect and query remote agents in distributed index before reporting fatal query error. Default is 0 (i.e. no retries). This value may be also specified on per-query basis using `OPTION retry_count=XXX` clause. If per-query option exists, it will override the one specified in config.
+Integer, specifies how many times manticore will try to connect and query remote agents in distributed index before reporting fatal query error. Default is 0 (i.e. no retries). This value may be also specified on per-query basis using `OPTION retry_count=XXX` clause. If the per-query option exists, it will override the one specified in config.
 
-Note, that if you use [agent_mirrors](../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md) in definition of your distributed index, then before every attempt of connect server will select different mirror, according to specified [ha_strategy](../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md) specified. In this case `agent_retry_count` will be aggregated for all mirrors in a set.
+Note, that if you use [agent mirrors](../Creating_a_cluster/Remote_nodes/Mirroring.md#Agent-mirrors) in definition of your distributed index, then before each connect attempt the server will select a different mirror, according to the selected [ha_strategy](../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy). In this case `agent_retry_count` will be aggregated for all mirrors in a set.
 
-For example, if you have 10 mirrors, and set `agent_retry_count=5`, then server will retry up to 50 times, assuming average 5 tries per every of 10 mirrors. (in case of option `ha_strategy = roundrobin` it will be actually so).
+For example, if you have 10 mirrors and have set `agent_retry_count=5`, then the server will retry up to 50 times, assuming average 5 tries per every of 10 mirrors (in case of option `ha_strategy = roundrobin` it will be actually so).
 
-In the same time value provided as `retry_count` option of [agent](../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md) definition serves as absolute limit. Other words, `[retry_count=2]` option in agent definition means always at most 2 tries, no mean if you have 1 or 10 mirrors in a line.
+At the same time the value provided as `retry_count` option of [agent](../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent) serves as an absolute limit. In other words, `[retry_count=2]` option in the agent definition means always at most 2 tries, no matter if you have 1 or 10 mirrors specified for the agent.
 
 
 ### agent_retry_delay
@@ -399,15 +399,16 @@ Adding suffix `_vip` to any protocol (for instance `mysql_vip` or `http_vip` or 
 
 ```ini
 listen = localhost
-listen = localhost:5000 # listen for remote agents and http/https requests on port 5000 at localhost
-listen = 192.168.0.1:5000
-listen = /var/run/sphinx.s
-listen = 9312
-listen = localhost:9306:mysql
-listen = 127.0.0.1:9308:http
-listen = 192.168.0.1:9320-9328:replication
-listen = 127.0.0.1:9443:https
-listen = 127.0.0.1:9312:sphinx
+listen = localhost:5000 # listen for remote agents (binary API) and http/https requests on port 5000 at localhost
+listen = 192.168.0.1:5000 # listen for remote agents (binary API) and http/https requests on port 5000 at 192.168.0.1
+listen = /var/run/manticore/manticore.s # listen for binary API requests on unix socket
+listen = /var/run/manticore/manticore.s:mysql # listen for mysql requests on unix socket
+listen = 9312 # listen for remote agents (binary API) and http/https requests on port 9312 on any interface
+listen = localhost:9306:mysql # listen for mysql requests on port 9306 at localhost
+listen = 127.0.0.1:9308:http # listen for http requests as well as connections from remote agents (and binary API) on port 9308 at localhost
+listen = 192.168.0.1:9320-9328:replication # listen for replication connections on ports 9320-9328 at 192.168.0.1
+listen = 127.0.0.1:9443:https # listen for https requests (not http) on port 9443 at 127.0.0.1
+listen = 127.0.0.1:9312:sphinx # listen for legacy Sphinx requests (e.g. from SphinxSE) on port 9312 at 127.0.0.1
 ```
 <!-- end -->
 
@@ -655,7 +656,7 @@ Network client request read/write timeout, in seconds (or [special_suffixes](../
 <!-- request Example -->
 
 ```ini
-read_timeout = 1
+network_timeout = 10s
 ```
 <!-- end -->
 
@@ -693,21 +694,6 @@ Whether to allow queries with only [negation](../Searching/Full_text_matching/Op
 
 ```ini
 not_terms_only_allowed = 1
-```
-<!-- end -->
-
-### optimize_cutoff
-
-<!-- example conf optimize_cutoff -->
-Sets default index compaction threshold. Read more here - [Number of optimized disk chunks](../Securing_and_compacting_an_index/Compacting_an_index.md#Number-of-optimized-disk-chunks). Can be overridden with per-query option [cutoff](../Securing_and_compacting_an_index/Compacting_an_index.md#Number-of-optimized-disk-chunks). Can be changed dynamically via [SET GLOBAL](../Server_settings/Setting_variables_online.md#SET).
-
-<!-- intro -->
-##### Example:
-
-<!-- request Example -->
-
-```ini
-optimize_cutoff = 4
 ```
 <!-- end -->
 

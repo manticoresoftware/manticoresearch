@@ -335,8 +335,6 @@ const char *	sphGetConfigFile ( const char * sHint = nullptr );
 /// load config file
 const char *	sphLoadConfig ( const char * sOptConfig, bool bQuiet, bool bIgnoreIndexes, CSphConfigParser & cp );
 
-bool			sphInitCharsetAliasTable ( CSphString & sError );
-
 enum ESphLogLevel : BYTE
 {
 	SPH_LOG_FATAL	= 0,

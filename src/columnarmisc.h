@@ -11,7 +11,9 @@
 #ifndef _columnarmisc_
 #define _columnarmisc_
 
-#include "sphinx.h"
+#include "columnarlib.h"
+#include "schema/locator.h"
+#include "sphinxexpr.h"
 
 using ScopedTypedIterator_t = std::pair<std::unique_ptr<columnar::Iterator_i>,ESphAttr>;
 

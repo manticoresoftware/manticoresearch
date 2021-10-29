@@ -16,6 +16,7 @@
 #include "sphinxsearch.h"
 #include "datareader.h"
 #include "fileutils.h"
+#include "indexing_sources/source_stats.h"
 
 const int	DOCLIST_HINT_THRESH = 256;
 const DWORD HITLESS_DOC_MASK = 0x7FFFFFFF;

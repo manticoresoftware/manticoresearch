@@ -13,8 +13,9 @@
 #ifndef _searchdexpr_
 #define _searchdexpr_
 
-#include "sphinx.h"
 #include "sphinxexpr.h"
+#include "sphinxdefs.h"
+class CSphIndex;
 
 /// searchd expression hook
 /// needed to implement functions that are builtin for searchd,

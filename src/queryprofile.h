@@ -13,7 +13,9 @@
 #ifndef _queryprofile_
 #define _queryprofile_
 
-#include "sphinx.h"
+#include "sphinxdefs.h"
+
+class CSphSchema;
 
 #define SPH_QUERY_STATES \
 	SPH_QUERY_STATE ( UNKNOWN,		"unknown" ) \

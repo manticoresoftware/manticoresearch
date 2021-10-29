@@ -2811,6 +2811,8 @@ public:
 	// hope this won't kill performance on a huge strings
 	void SetBinary ( const char * sValue, int iLen )
 	{
+		assert ( iLen >= 0 );
+		auto iLen_ = size_t ( iLen );
 		if ( Length ()<( iLen + SAFETY_GAP + 1 ) )
 		{
 			SafeFree ();
@@ -2819,7 +2821,7 @@ public:
 			else
 			{
 				m_sValue = new char [ 1+SAFETY_GAP+iLen ];
-				memcpy ( m_sValue, sValue, iLen );
+				memcpy ( m_sValue, sValue, iLen_ );
 				memset ( m_sValue+iLen, 0, 1+SAFETY_GAP );
 			}
 			return;
@@ -2827,7 +2829,7 @@ public:
 
 		if ( sValue && iLen )
 		{
-			memcpy ( m_sValue, sValue, iLen );
+			memcpy ( m_sValue, sValue, iLen_ );
 			memset ( m_sValue + iLen, 0, 1 + SAFETY_GAP );
 		} else
 		{
@@ -3197,7 +3199,7 @@ public:
 
 	// get current build value
 	const char *		cstr() const { return m_szBuffer ? m_szBuffer : ""; }
-	explicit operator	CSphString() const { return {cstr()}; }
+	explicit operator	CSphString() const { return { cstr() }; }
 	explicit operator	Str_t() const { return m_szBuffer ? Str_t { m_szBuffer, m_iUsed } : dEmptyStr; }
 
 	// move out (de-own) value
@@ -3216,6 +3218,7 @@ public:
 	StringBuilder_c &	operator += ( const char * sText );
 	StringBuilder_c &	operator += ( const Str_t& sChunk );
 	StringBuilder_c &	operator << ( const VecTraits_T<char> &sText );
+	StringBuilder_c &	operator << ( const Str_t &sText );
 	StringBuilder_c &	operator << ( const char * sText ) { return *this += sText; }
 	StringBuilder_c &	operator << ( const CSphString &sText ) { return *this += sText.cstr (); }
 	StringBuilder_c &	operator << ( const CSphVariant &sText )	{ return *this += sText.cstr (); }
@@ -4016,17 +4019,17 @@ class CSphRefcountedPtr
 	using RAWTYPE = CSphRefcountedPtr<RAWT>;
 
 public:
-	explicit		CSphRefcountedPtr () = default;		///< default NULL wrapper construction (for vectors)
-	explicit		CSphRefcountedPtr ( T * pPtr ) : m_pPtr ( pPtr ) {}	///< construction from raw pointer, takes over ownership!
+	explicit		CSphRefcountedPtr () noexcept = default;		///< default NULL wrapper construction (for vectors)
+	explicit		CSphRefcountedPtr ( T * pPtr ) noexcept : m_pPtr ( pPtr ) {}	///< construction from raw pointer, takes over ownership!
 
-	CSphRefcountedPtr ( const CSphRefcountedPtr& rhs )
+	CSphRefcountedPtr ( const CSphRefcountedPtr& rhs ) noexcept
 		: m_pPtr ( rhs.m_pPtr )
 	{
 		SafeAddRef ( m_pPtr );
 	}
 
 	template <typename DERIVED>
-	explicit CSphRefcountedPtr ( const CSphRefcountedPtr<DERIVED> & rhs )
+	explicit CSphRefcountedPtr ( const CSphRefcountedPtr<DERIVED> & rhs ) noexcept
 			: m_pPtr ( rhs.Ptr() )
 	{
 		SafeAddRef ( m_pPtr );
@@ -4037,14 +4040,14 @@ public:
 		Swap(rhs);
 	}
 
-	CSphRefcountedPtr& operator= ( CSphRefcountedPtr rhs )
+	CSphRefcountedPtr& operator= ( CSphRefcountedPtr rhs ) noexcept
 	{
 		Swap(rhs);
 		return *this;
 	}
 
 	template<typename DERIVED>
-	CSphRefcountedPtr& operator= ( const CSphRefcountedPtr<DERIVED>& rhs )
+	CSphRefcountedPtr& operator= ( const CSphRefcountedPtr<DERIVED>& rhs ) noexcept
 	{
 		SafeRelease ( m_pPtr );
 		m_pPtr = rhs.Ptr();
@@ -4057,26 +4060,26 @@ public:
 		::Swap(m_pPtr, rhs.m_pPtr);
 	}
 
-	~CSphRefcountedPtr ()				{ SafeRelease ( m_pPtr ); }
+	~CSphRefcountedPtr ()				noexcept { SafeRelease ( m_pPtr ); }
 
-	T *	operator -> () const			{ return m_pPtr; }
-		explicit operator bool() const	{ return m_pPtr!=nullptr; }
-		operator T * () const			{ return m_pPtr; }
+	T *	operator -> () const noexcept	{ return m_pPtr; }
+		explicit operator bool() const noexcept	{ return m_pPtr!=nullptr; }
+		operator T * () const noexcept	{ return m_pPtr; }
 
 	// drop the ownership and reset pointer
-	inline T * Leak ()
+	inline T * Leak () noexcept
 	{
 		T * pRes = m_pPtr;
 		m_pPtr = nullptr;
 		return pRes;
 	}
 
-	T * Ptr() const { return m_pPtr; }
-	CT * CPtr () const { return m_pPtr; }
+	T * Ptr() const noexcept { return m_pPtr; }
+	CT * CPtr () const noexcept { return m_pPtr; }
 
 public:
 	/// assignment of a raw pointer, takes over ownership!
-	CSphRefcountedPtr& operator = ( T * pPtr )
+	CSphRefcountedPtr& operator = ( T * pPtr ) noexcept
 	{
 		SafeRelease ( m_pPtr );
 		m_pPtr = pPtr;
@@ -4090,7 +4093,6 @@ protected:
 //////////////////////////////////////////////////////////////////////////
 
 void sphWarn ( const char *, ... ) __attribute__ ( ( format ( printf, 1, 2 ) ) );
-void SafeClose ( int & iFD );
 
 //////////////////////////////////////////////////////////////////////////
 /// system-agnostic wrappers for mmap

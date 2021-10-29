@@ -13,6 +13,7 @@
 #ifndef _sortsetup_
 #define _sortsetup_
 
+#include "match.h"
 #include "sphinx.h"
 
 /// match comparator state

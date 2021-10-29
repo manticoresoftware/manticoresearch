@@ -10,9 +10,10 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinx.h"
 #include "sphinxint.h"
 #include "icu.h"
+#include "tokenizer/charset_definition_parser.h"
+#include "tokenizer/tokenizer.h"
 
 #if WITH_ICU
 
@@ -159,14 +160,7 @@ bool ICUPreprocessor_c::Process ( const BYTE * pBuffer, int iLength, CSphVector<
 bool ICUPreprocessor_c::SetBlendChars ( const char * szBlendChars, CSphString & sError )
 {
 	m_sBlendChars = szBlendChars;
-	CSphCharsetDefinitionParser tParser;
-	if ( !tParser.Parse ( szBlendChars, m_dBlendChars ) )
-	{
-		sError = tParser.GetLastError();
-		return false;
-	}
-
-	return true;
+	return sphParseCharset ( szBlendChars, m_dBlendChars, &sError );
 }
 
 
@@ -390,7 +384,7 @@ bool sphCheckTokenizerICU ( CSphIndexSettings & tSettings, const CSphTokenizerSe
 		return true;
 
 	StrVec_t dWarnings;
-	TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tTokSettings, nullptr, nullptr, dWarnings, sError ) };
+	TokenizerRefPtr_c pTokenizer { Tokenizer::Create ( tTokSettings, nullptr, nullptr, dWarnings, sError ) };
 	if ( !pTokenizer.Ptr() )
 		return false;
 

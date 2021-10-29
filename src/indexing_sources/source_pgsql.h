@@ -12,7 +12,6 @@
 
 #pragma once
 
-#include "sphinx.h"
 #include "source_sql.h"
 
 /// PgSQL specific source params

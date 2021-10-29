@@ -10,7 +10,6 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinx.h"
 #include "sphinxint.h"
 #include "sphinxutils.h"
 
@@ -2302,6 +2301,11 @@ StringBuilder_c & StringBuilder_c::operator<< ( const VecTraits_T<char> &sText )
 		return *this;
 
 	return AppendChunk ( {sText.begin (), sText.GetLength ()} );
+}
+
+StringBuilder_c & StringBuilder_c::operator << ( const Str_t &sText )
+{
+	return AppendChunk ( sText );
 }
 
 StringBuilder_c& StringBuilder_c::operator << ( int iVal )

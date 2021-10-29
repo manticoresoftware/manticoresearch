@@ -115,7 +115,7 @@ using Keeper_t = SharedPtrCustom_t<void>;
 
 struct Scheduler_i
 {
-	virtual ~Scheduler_i() {}
+	virtual ~Scheduler_i() = default;
 
 	virtual void ScheduleOp ( Threads::details::SchedulerOperation_t* pOp, bool bVip ) = 0;
 	virtual void ScheduleContinuationOp ( Threads::details::SchedulerOperation_t* pOp ) // if task already started
@@ -168,6 +168,8 @@ WorkerSharedPtr_t MakeAloneThread ( size_t iOrderNum, const char* szName = "" );
 // Alone scheduler works on top of another scheduler and provides sequental execution of the tasks (each time only one
 // task may be performed, no concurrent execution). It also gives FIFO ordering of the tasks.
 SchedulerSharedPtr_t MakeAloneScheduler ( Scheduler_i* pBase, const char* szName = nullptr );
+
+SchedulerSharedPtr_t WrapRawScheduler ( Scheduler_i* pBase, const char* szName = nullptr );
 
 class OperationsQueue_c
 {
@@ -288,6 +290,6 @@ namespace Detached
 	void AloneShutdowncatch ();
 }
 
-#include "threadutils.inc"
+#include "threadutils_impl.h"
 
 #endif //MANTICORE_THREADUTILS_H

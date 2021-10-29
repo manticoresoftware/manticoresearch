@@ -1170,44 +1170,46 @@ const BYTE * sphJsonFieldFormat ( JsonEscapedBuilder & sOut, const BYTE * pData,
 
 		case JSON_STRING_VECTOR:
 			sOut.GrowEnough ( sphJsonUnpackInt ( &p ) );
-			sOut.ArrayBlock();
-			for ( int i= sphJsonUnpackInt ( &p ); i>0; --i )
-				p = JsonFormatStr ( sOut, p );
-			sOut.FinishBlock ( false );
+			{
+				auto _ = sOut.Array();
+				for ( int i = sphJsonUnpackInt ( &p ); i > 0; --i )
+					p = JsonFormatStr ( sOut, p );
+			}
 			break;
 
 		case JSON_INT32_VECTOR:
-			sOut.ArrayBlock();
-			for ( int i = sphJsonUnpackInt ( &p ); i>0; --i )
-				sOut.Sprintf ( "%d", sphJsonLoadInt ( &p ) );
-			sOut.FinishBlock ( false );
-		break;
-		case JSON_INT64_VECTOR:
-			sOut.ArrayBlock ();
-			for ( int i = sphJsonUnpackInt ( &p ); i>0; --i )
-				sOut.Sprintf ( "%l", sphJsonLoadBigint ( &p ) );
-			sOut.FinishBlock ( false );
-			break;
-		case JSON_DOUBLE_VECTOR:
-			sOut.ArrayBlock ();
-			for ( int i = sphJsonUnpackInt ( &p ); i>0; --i )
 			{
-				auto iLen = snprintf ( sDouble, szDouble, "%lf", sphQW2D ( sphJsonLoadBigint ( &p ) ) ); // NOLINT
-				sOut.AppendChunk ( {sDouble, iLen} );
+				auto _ = sOut.Array();
+				for ( int i = sphJsonUnpackInt ( &p ); i > 0; --i )
+					sOut.Sprintf ( "%d", sphJsonLoadInt ( &p ) );
+				break;
 			}
-			sOut.FinishBlock ( false );
-			break;
-
+		case JSON_INT64_VECTOR:
+			{
+				auto _ = sOut.Array();
+				for ( int i = sphJsonUnpackInt ( &p ); i > 0; --i )
+					sOut.Sprintf ( "%l", sphJsonLoadBigint ( &p ) );
+				break;
+			}
+		case JSON_DOUBLE_VECTOR:
+			{
+				auto _ = sOut.Array ();
+				for ( int i = sphJsonUnpackInt ( &p ); i>0; --i )
+				{
+					auto iLen = snprintf ( sDouble, szDouble, "%lf", sphQW2D ( sphJsonLoadBigint ( &p ) ) ); // NOLINT
+					sOut.AppendChunk ( {sDouble, iLen} );
+				}
+				break;
+			}
 		case JSON_MIXED_VECTOR:
 			{
-				sOut.ArrayBlock ();
+				auto _ = sOut.Array ();
 				sphJsonUnpackInt ( &p );
 				for ( int i = sphJsonUnpackInt ( &p ); i>0; --i )
 				{
 					auto eNode = ( ESphJsonType ) *p++;
 					p = sphJsonFieldFormat ( sOut, p, eNode, true );
 				}
-				sOut.FinishBlock ( false );
 				break;
 			}
 		case JSON_ROOT:

@@ -818,9 +818,9 @@ public:
 			ScopedComma_c tComma ( m_dBuf, ",", R"("columns":[)", "],\n", false );
 			for ( const ColumnNameType_t & tCol : m_dColumns )
 			{
-				ScopedComma_c tColBlock ( m_dBuf.Object() );
+				ScopedComma_c tColBlock ( m_dBuf.Object(true) );
 				m_dBuf.AppendName ( tCol.first.cstr() );
-				ScopedComma_c tTypeBlock ( m_dBuf.Object() );
+				ScopedComma_c tTypeBlock ( m_dBuf.Object(true) );
 				m_dBuf.AppendName ( "type" );
 				m_dBuf.FixupSpacedAndAppendEscaped ( GetTypeName ( tCol.second ) );
 			}

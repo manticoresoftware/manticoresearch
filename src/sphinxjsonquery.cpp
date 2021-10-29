@@ -1160,13 +1160,12 @@ static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t & tRe
 	case SPH_ATTR_UINT32SET_PTR:
 	case SPH_ATTR_INT64SET_PTR:
 	{
-		tOut.ArrayBlock ();
+		auto _ = tOut.Array ();
 		const auto * pMVA = ( const BYTE * ) tMatch.GetAttr ( tLoc );
 		if ( eAttrType==SPH_ATTR_UINT32SET_PTR )
 			PackedShortMVA2Json ( tOut, pMVA );
 		else
 			PackedWideMVA2Json ( tOut, pMVA );
-		tOut.FinishBlock(false);
 	}
 	break;
 

@@ -117,6 +117,7 @@ void AttrIndexBuilder_c::FinishCollect()
 
 	CSphRowitem * pMinAttrs = m_dMinMaxRows.AddN ( m_uStride*2 );
 	CSphRowitem * pMaxAttrs = pMinAttrs+m_uStride;
+	memset ( pMinAttrs, 0, sizeof(CSphRowitem) * m_uStride * 2 );
 
 	ARRAY_FOREACH ( i, m_dIntAttrs )
 	{
@@ -160,6 +161,7 @@ void AttrIndexBuilder_c::FlushComputed ()
 {
 	CSphRowitem * pMinAttrs = m_dMinMaxRows.AddN ( m_uStride*2 );
 	CSphRowitem * pMaxAttrs = pMinAttrs+m_uStride;
+	memset ( pMinAttrs, 0, sizeof ( CSphRowitem ) * m_uStride * 2 );
 
 	ARRAY_FOREACH ( i, m_dIntAttrs )
 	{

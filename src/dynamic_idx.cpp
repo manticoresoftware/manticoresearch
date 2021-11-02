@@ -153,7 +153,7 @@ public:
 			return false;
 		}
 
-		CoYield();
+		Coro::Yield_();
 		return true;
 	}
 
@@ -279,14 +279,17 @@ public:
 		auto & tCol = GetNextCol ();
 		auto & tMatch = *m_pMatch;
 
-		if ( tCol.m_eAttrType!=SPH_ATTR_STRINGPTR )
-			tMatch.SetAttr ( tCol.m_tLocator, iUsec );
-		else
+		if ( tCol.m_eAttrType == SPH_ATTR_FLOAT )
+		{
+			auto fSec = (float)iUsec / 1000000.0f;
+			tMatch.SetAttr ( tCol.m_tLocator, sphF2DW ( fSec ) );
+		} else if ( tCol.m_eAttrType==SPH_ATTR_STRINGPTR )
 		{
 			StringBuilder_c sData;
 			sData << iUsec;
 			PutStr ( tCol, sData );
-		}
+		} else
+			tMatch.SetAttr ( tCol.m_tLocator, iUsec );
 	}
 
 	void PutNULL () override
@@ -311,7 +314,7 @@ public:
 	// sends collected data, then reset
 	bool Commit() override
 	{
-		CoYield ();
+		Coro::Yield_ ();
 		return m_bHaveMoreMatches; // true for continue iteration, false to stop
 	}
 
@@ -320,7 +323,7 @@ public:
 	{
 		m_bHaveMoreMatches = false;
 		m_pMatch = nullptr; // that should stop any further feeding
-		CoYield (); // generally not need as eof is usually the last stmt, but if not it is safe
+		Coro::Yield_ (); // generally not need as eof is usually the last stmt, but if not it is safe
 	}
 
 	void Error ( const char * sStmt, const char * sError, MysqlErrors_e ) override
@@ -437,7 +440,7 @@ public:
 		}
 		PutString ( 3, "" );
 
-		CoYield ();
+		Coro::Yield_ ();
 	}
 
 	bool HeadEnd ( bool bMoreResults, int iWarns ) override
@@ -451,7 +454,7 @@ public:
 		// fixme!
 		m_bHaveMoreMatches = false;
 		m_pMatch = nullptr; // that should stop any further feeding
-		CoYield();
+		Coro::Yield_ ();
 		return false;
 	}
 

@@ -41,9 +41,9 @@ if not r:
 doc = [k for k in re.findall('(\w+)', r.group(1))]
 
 # load reserved keywords list from sources
-r = re.search('dReserved\[\]\s+=\s+\{(.*?)\}', load('sphinx.cpp'), re.MULTILINE + re.DOTALL)
+r = re.search('dReserved\[\]\s+=\s+\{(.*?)\}', load('schema/schema.cpp'), re.MULTILINE + re.DOTALL)
 if not r:
-	die('failed to extract reserved keywords from src/sphinx.cpp')
+	die('failed to extract reserved keywords from src/schema/schema.cpp')
 src = [k for k in re.findall('"(\w+)"', r.group(1))]
 
 

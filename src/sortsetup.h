@@ -13,6 +13,7 @@
 #ifndef _sortsetup_
 #define _sortsetup_
 
+#include "match.h"
 #include "sphinx.h"
 
 /// match comparator state
@@ -27,7 +28,7 @@ struct CSphMatchComparatorState
 	DWORD				m_uAttrDesc = 0;			///< sort order mask (if i-th bit is set, i-th attr order is DESC)
 	DWORD				m_iNow = 0;					///< timestamp (for timesegments sorting mode)
 	SphStringCmp_fn		m_fnStrCmp = nullptr;		///< string comparator
-
+	CSphBitvec			m_dRemapped { CSphMatchComparatorState::MAX_ATTRS };
 
 						CSphMatchComparatorState();
 

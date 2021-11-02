@@ -2466,33 +2466,34 @@ public:
 	}
 
 	/// copying ctor
-	CSphOrderedHash ( const CSphOrderedHash& rhs )
-	    : CSphOrderedHash ()
+	CSphOrderedHash ( const CSphOrderedHash & rhs )
+		: CSphOrderedHash ()
 	{
-		for ( rhs.IterateStart (); rhs.IterateNext (); )
-			Add ( rhs.IterateGet (), rhs.IterateGetKey ());
+		void * pIterator = nullptr;
+		while ( rhs.IterateNext ( &pIterator ) )
+			Add ( rhs.IterateGet ( &pIterator ), rhs.IterateGetKey ( &pIterator ) );
 	}
 
 	/// moving ctor
-	CSphOrderedHash ( CSphOrderedHash&& rhs ) noexcept
+	CSphOrderedHash ( CSphOrderedHash && rhs ) noexcept
 		: CSphOrderedHash ()
 	{
 		Swap(rhs);
 	}
 
-	void Swap ( CSphOrderedHash& rhs ) noexcept
+	void Swap ( CSphOrderedHash & rhs ) noexcept
 	{
-		HashEntry_t* dFoo[LENGTH];
-		memcpy ( dFoo, m_dHash, LENGTH * sizeof ( HashEntry_t* ));
-		memcpy ( m_dHash, rhs.m_dHash, LENGTH * sizeof ( HashEntry_t* ));
-		memcpy ( rhs.m_dHash, dFoo, LENGTH * sizeof ( HashEntry_t* ));
+		HashEntry_t * dFoo[LENGTH];
+		memcpy ( dFoo, m_dHash, LENGTH * sizeof ( HashEntry_t* ) );
+		memcpy ( m_dHash, rhs.m_dHash, LENGTH * sizeof ( HashEntry_t* ) );
+		memcpy ( rhs.m_dHash, dFoo, LENGTH * sizeof ( HashEntry_t* ) );
 		::Swap ( m_pFirstByOrder, rhs.m_pFirstByOrder );
 		::Swap ( m_pLastByOrder, rhs.m_pLastByOrder );
 		::Swap ( m_iLength, rhs.m_iLength );
 	}
 
 	/// copying & moving
-	CSphOrderedHash& operator= ( CSphOrderedHash rhs )
+	CSphOrderedHash & operator = ( CSphOrderedHash rhs )
 	{
 		Swap ( rhs );
 		return *this;
@@ -2776,6 +2777,8 @@ public:
 	// hope this won't kill performance on a huge strings
 	void SetBinary ( const char * sValue, int iLen )
 	{
+		assert ( iLen >= 0 );
+		auto iLen_ = size_t ( iLen );
 		if ( Length ()<( iLen + SAFETY_GAP + 1 ) )
 		{
 			SafeFree ();
@@ -2784,7 +2787,7 @@ public:
 			else
 			{
 				m_sValue = new char [ 1+SAFETY_GAP+iLen ];
-				memcpy ( m_sValue, sValue, iLen );
+				memcpy ( m_sValue, sValue, iLen_ );
 				memset ( m_sValue+iLen, 0, 1+SAFETY_GAP );
 			}
 			return;
@@ -2792,7 +2795,7 @@ public:
 
 		if ( sValue && iLen )
 		{
-			memcpy ( m_sValue, sValue, iLen );
+			memcpy ( m_sValue, sValue, iLen_ );
 			memset ( m_sValue + iLen, 0, 1 + SAFETY_GAP );
 		} else
 		{
@@ -3162,7 +3165,7 @@ public:
 
 	// get current build value
 	const char *		cstr() const { return m_szBuffer ? m_szBuffer : ""; }
-	explicit operator	CSphString() const { return CSphString (cstr()); }
+	explicit operator	CSphString() const { return { cstr() }; }
 
 	// move out (de-own) value
 	BYTE *				Leak();
@@ -3180,6 +3183,7 @@ public:
 	StringBuilder_c &	operator += ( const char * sText );
 	StringBuilder_c &	operator += ( const Str_t& sChunk );
 	StringBuilder_c &	operator << ( const VecTraits_T<char> &sText );
+	StringBuilder_c &	operator << ( const Str_t &sText );
 	StringBuilder_c &	operator << ( const char * sText ) { return *this += sText; }
 	StringBuilder_c &	operator << ( const CSphString &sText ) { return *this += sText.cstr (); }
 	StringBuilder_c &	operator << ( const CSphVariant &sText )	{ return *this += sText.cstr (); }
@@ -3979,17 +3983,17 @@ class CSphRefcountedPtr
 	using RAWTYPE = CSphRefcountedPtr<RAWT>;
 
 public:
-	explicit		CSphRefcountedPtr () = default;		///< default NULL wrapper construction (for vectors)
-	explicit		CSphRefcountedPtr ( T * pPtr ) : m_pPtr ( pPtr ) {}	///< construction from raw pointer, takes over ownership!
+	explicit		CSphRefcountedPtr () noexcept = default;		///< default NULL wrapper construction (for vectors)
+	explicit		CSphRefcountedPtr ( T * pPtr ) noexcept : m_pPtr ( pPtr ) {}	///< construction from raw pointer, takes over ownership!
 
-	CSphRefcountedPtr ( const CSphRefcountedPtr& rhs )
+	CSphRefcountedPtr ( const CSphRefcountedPtr& rhs ) noexcept
 		: m_pPtr ( rhs.m_pPtr )
 	{
 		SafeAddRef ( m_pPtr );
 	}
 
 	template <typename DERIVED>
-	explicit CSphRefcountedPtr ( const CSphRefcountedPtr<DERIVED> & rhs )
+	explicit CSphRefcountedPtr ( const CSphRefcountedPtr<DERIVED> & rhs ) noexcept
 			: m_pPtr ( rhs.Ptr() )
 	{
 		SafeAddRef ( m_pPtr );
@@ -4000,14 +4004,14 @@ public:
 		Swap(rhs);
 	}
 
-	CSphRefcountedPtr& operator= ( CSphRefcountedPtr rhs )
+	CSphRefcountedPtr& operator= ( CSphRefcountedPtr rhs ) noexcept
 	{
 		Swap(rhs);
 		return *this;
 	}
 
 	template<typename DERIVED>
-	CSphRefcountedPtr& operator= ( const CSphRefcountedPtr<DERIVED>& rhs )
+	CSphRefcountedPtr& operator= ( const CSphRefcountedPtr<DERIVED>& rhs ) noexcept
 	{
 		SafeRelease ( m_pPtr );
 		m_pPtr = rhs.Ptr();
@@ -4020,26 +4024,26 @@ public:
 		::Swap(m_pPtr, rhs.m_pPtr);
 	}
 
-	~CSphRefcountedPtr ()				{ SafeRelease ( m_pPtr ); }
+	~CSphRefcountedPtr ()				noexcept { SafeRelease ( m_pPtr ); }
 
-	T *	operator -> () const			{ return m_pPtr; }
-		explicit operator bool() const	{ return m_pPtr!=nullptr; }
-		operator T * () const			{ return m_pPtr; }
+	T *	operator -> () const noexcept	{ return m_pPtr; }
+		explicit operator bool() const noexcept	{ return m_pPtr!=nullptr; }
+		operator T * () const noexcept	{ return m_pPtr; }
 
 	// drop the ownership and reset pointer
-	inline T * Leak ()
+	inline T * Leak () noexcept
 	{
 		T * pRes = m_pPtr;
 		m_pPtr = nullptr;
 		return pRes;
 	}
 
-	T * Ptr() const { return m_pPtr; }
-	CT * CPtr () const { return m_pPtr; }
+	T * Ptr() const noexcept { return m_pPtr; }
+	CT * CPtr () const noexcept { return m_pPtr; }
 
 public:
 	/// assignment of a raw pointer, takes over ownership!
-	CSphRefcountedPtr& operator = ( T * pPtr )
+	CSphRefcountedPtr& operator = ( T * pPtr ) noexcept
 	{
 		SafeRelease ( m_pPtr );
 		m_pPtr = pPtr;
@@ -4053,7 +4057,6 @@ protected:
 //////////////////////////////////////////////////////////////////////////
 
 void sphWarn ( const char *, ... ) __attribute__ ( ( format ( printf, 1, 2 ) ) );
-void SafeClose ( int & iFD );
 
 //////////////////////////////////////////////////////////////////////////
 /// system-agnostic wrappers for mmap
@@ -4850,16 +4853,17 @@ protected:
 	{}
 
 public:
-	inline void AddRef () const
+	inline void AddRef () const noexcept
 	{
-		m_iRefCount.fetch_add ( 1, std::memory_order_acquire );
+		m_iRefCount.fetch_add ( 1, std::memory_order_relaxed );
 	}
 
-	inline void Release () const
+	inline void Release () const noexcept
 	{
 		if ( m_iRefCount.fetch_sub ( 1, std::memory_order_release )==1 )
 		{
-			assert ( m_iRefCount.load ( std::memory_order_acquire )==0 );
+			std::atomic_thread_fence ( std::memory_order_acquire );
+			assert ( m_iRefCount.load ( std::memory_order_relaxed )==0 );
 			delete this;
 		}
 	}

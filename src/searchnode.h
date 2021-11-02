@@ -12,7 +12,6 @@
 #ifndef _searchnode_
 #define _searchnode_
 
-#include "sphinx.h"
 #include "sphinxquery.h"
 
 
@@ -90,6 +89,8 @@ public:
 	virtual void				DebugDump ( int iLevel ) = 0;
 };
 
+struct RowIdBoundaries_t;
+ExtNode_i * CreateRowIdFilterNode ( ExtNode_i * pNode, const RowIdBoundaries_t & tBoundaries );
 
 class NodeCacheContainer_c;
 

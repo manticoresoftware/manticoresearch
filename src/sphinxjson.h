@@ -13,8 +13,9 @@
 #ifndef _sphinxjson_
 #define _sphinxjson_
 
-#include "sphinx.h"
 #include "sphinxutils.h"
+
+struct ISphExpr;
 
 /// supported JSON value types
 enum ESphJsonType : BYTE

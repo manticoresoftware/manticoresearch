@@ -13,6 +13,7 @@
 
 #include "sphinxjson.h"
 
+struct CSphQuery;
 
 struct LocationField_t
 {

@@ -13,7 +13,6 @@
 /// @file sphinxutils.cpp
 /// Implementations for Sphinx utilities shared classes.
 
-#include "sphinx.h"
 #include "sphinxutils.h"
 #include "sphinxint.h"
 #include "sphinxplugin.h"
@@ -21,6 +20,7 @@
 #include "icu.h"
 #include "fileutils.h"
 #include "threadutils.h"
+#include "indexfiles.h"
 
 #include <ctype.h>
 #include <fcntl.h>
@@ -803,8 +803,6 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "columnar_compression_uint32", 0, nullptr },
 	{ "columnar_compression_int64", 0, nullptr },
 	{ "columnar_subblock",		0, nullptr },
-	{ "columnar_subblock_mva",	0, nullptr },
-	{ "columnar_minmax_leaf",	0, nullptr },
 	{ nullptr,					0, nullptr }
 };
 
@@ -925,7 +923,8 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "not_terms_only_allowed",	0, nullptr },
 	{ "query_log_commands",		0, nullptr },
 	{ "auto_optimize",			0, nullptr },
-	{ "pseudo_sharding",			0, nullptr },
+	{ "pseudo_sharding",		0, nullptr },
+	{ "optimize_cutoff",		0, nullptr },
 	{ NULL,						0, NULL }
 };
 

@@ -74,7 +74,7 @@ const char * const CSphSource_SQL::MACRO_VALUES [ CSphSource_SQL::MACRO_COUNT ] 
 
 
 CSphSource_SQL::CSphSource_SQL ( const char * sName )
-	: CSphSource_Document	( sName )
+	: CSphSource	( sName )
 {
 }
 

@@ -10,7 +10,6 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinx.h"
 #include "sphinxstd.h"
 #include "sphinxint.h"
 #include "searchdaemon.h"
@@ -321,7 +320,9 @@ static bool ResolveAddress ( AgentDesc_t &tAgent, const WarnInfo_c & tInfo )
 	if ( tAgent.m_uAddr )
 		return true;
 
-	return tInfo.ErrSkip ( "failed to lookup host name '%s' (error=%s)", tAgent.m_sAddr.cstr (), sphSockError () );
+	tAgent.m_bNeedResolve = true;
+	tInfo.ErrSkip ( "failed to lookup host name '%s' (error=%s)", tAgent.m_sAddr.cstr (), sphSockError () );
+	return true;
 }
 
 /// Async resolving
@@ -3838,7 +3839,7 @@ protected:
 	std::atomic<int> m_iSucceeded { 0 };	//< num of tasks finished successfully
 	std::atomic<int> m_iFinished { 0 };		//< num of tasks finished.
 	std::atomic<int> m_iTasks { 0 };		//< total num of tasks
-	Threads::CoroEvent_c m_tChanged;		//< the signaller
+	Threads::Coro::Event_c m_tChanged;		//< the signaller
 
 public:
 	void FeedTask ( bool bAdd ) final

@@ -10,13 +10,12 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinx.h"
 #include "sphinxrt.h"
 #include "binlog.h"
 #include "sphinxutils.h"
 #include "sphinxsort.h"
 #include "searchdaemon.h"
-#include "source_mysql.h"
+#include "indexing_sources/source_mysql.h"
 
 #if HAVE_RTESTCONFIG_H
 #include "rtestconfig.h"
@@ -605,11 +604,11 @@ int main ( int argc, char ** argv )
 	CSphDictSettings tDictSettings;
 	tDictSettings.m_bWordDict = false;
 
-	TokenizerRefPtr_c pTok {sphCreateUTF8Tokenizer()};
+	TokenizerRefPtr_c pTok { Tokenizer::Detail::CreateUTF8Tokenizer() };
 	DictRefPtr_c pDict {sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt1", false, 32, nullptr, sError )};
 	auto * pSrc = SpawnSource ( "test1", hSources, pTok, pDict );
 
-	TokenizerRefPtr_c pTok2 {sphCreateUTF8Tokenizer()};
+	TokenizerRefPtr_c pTok2 { Tokenizer::Detail::CreateUTF8Tokenizer() };
 	DictRefPtr_c pDict2 {sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt2", false, 32, nullptr, sError )};
 	auto * pSrc2 = SpawnSource ( "test2", hSources, pTok2, pDict2 );
 

@@ -9,7 +9,6 @@
 //
 
 
-#include "sphinx.h"
 #include "sphinxstd.h"
 #include "sphinxutils.h"
 #include "memio.h"
@@ -18,6 +17,8 @@
 #include "accumulator.h"
 #include "fileutils.h"
 #include <math.h>
+
+#include "digest_sha1.h"
 
 #if !HAVE_WSREP
 #include "replication/wsrep_api_stub.h"
@@ -81,6 +82,9 @@ struct ReplicationCluster_t : public ClusterDesc_t
 	// replicator
 	wsrep_t *	m_pProvider = nullptr;
 
+	// serializer for replicator - guards for only one replication Op a time
+	Threads::Coro::Mutex_c m_tReplicationMutex;
+
 	// receiver thread
 	CSphAutoEvent	m_tWorkerFinished;
 	bool			m_bHasWorker = false;
@@ -114,16 +118,13 @@ struct ReplicationCluster_t : public ClusterDesc_t
 	// state of node
 	void					SetNodeState ( ClusterState_e eNodeState )
 	{
-		m_eNodeState = eNodeState;
-		m_tStateChanged.SetEvent();
+		m_tNodeState.SetValue ( eNodeState );
+		m_tNodeState.NotifyAll();
 	}
-	ClusterState_e			GetNodeState() const { return m_eNodeState; }
+	ClusterState_e			GetNodeState() const { return m_tNodeState.GetValue(); }
 	ClusterState_e			WaitReady()
 	{
-		while ( m_eNodeState==ClusterState_e::CLOSED || m_eNodeState==ClusterState_e::JOINING || m_eNodeState==ClusterState_e::DONOR )
-			m_tStateChanged.WaitEvent();
-
-		return m_eNodeState;
+		return m_tNodeState.Wait ( [] ( ClusterState_e i ) { return i != ClusterState_e::CLOSED && i != ClusterState_e::JOINING && i != ClusterState_e::DONOR; } );
 	}
 	void					SetPrimary ( wsrep_view_status_t eStatus )
 	{
@@ -132,8 +133,7 @@ struct ReplicationCluster_t : public ClusterDesc_t
 	bool					IsPrimary() const { return ( m_iStatus==WSREP_VIEW_PRIMARY ); }
 
 private:
-	Threads::CoroEvent_c m_tStateChanged;
-	ClusterState_e m_eNodeState { ClusterState_e::CLOSED };
+	Threads::Coro::Waitable_T<ClusterState_e> m_tNodeState { ClusterState_e::CLOSED };
 };
 
 
@@ -916,7 +916,7 @@ struct ReplInfo_t : public TaskInfo_t
 DEFINE_RENDER( ReplInfo_t )
 {
 	auto & tInfo = *(ReplInfo_t *) const_cast<void*>(pSrc);
-	dDst.m_sChain << (int) tInfo.m_eType << ":Repl ";
+	dDst.m_sChain << "Repl ";
 	dDst.m_sClientName << "wsrep" << tInfo.m_sIncoming.cstr();
 }
 
@@ -1036,7 +1036,7 @@ static bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sErro
 
 	// let's start listening thread with proper provider set
 	auto pScheduler = MakeSingleThreadExecutor ( -1, sThName.cstr() );
-	Threads::CoGo ( [pRecvArgs,sIncoming] () mutable
+	Threads::Coro::Go ( [pRecvArgs,sIncoming] () mutable
 	{
 		// publish stuff in 'show threads'
 		auto pDisplayIncoming = new ReplInfo_t;
@@ -1085,10 +1085,27 @@ static bool CheckResult ( wsrep_status_t tRes, const wsrep_trx_meta_t & tMeta, c
 
 static std::atomic<int64_t> g_iConnID { 1 };
 
+// add 'RPL' flag - i.e., that we're working in replication
+struct RPLRep_t: public MiniTaskInfo_t
+{
+	DECLARE_RENDER ( RPLRep_t );
+};
+
+DEFINE_RENDER ( RPLRep_t )
+{
+	auto& tInfo = *(RPLRep_t*)const_cast<void*> ( pSrc );
+	dDst.m_sDescription.Sprintf ( "(RPL %.2T)", tInfo.m_tmStart );
+	dDst.m_sChain << "RPL ";
+}
+
+
 // replicate serialized data into cluster and call commit monitor along
 static bool Replicate ( int iKeysCount, const wsrep_key_t * pKeys, const wsrep_buf_t & tQueries, wsrep_t * pProvider, CommitMonitor_c & tMonitor, bool bUpdate, CSphString & sError )
 {
 	assert ( pProvider );
+
+	// just displays 'RPL' flag.
+	auto RPL = PublishTaskInfo ( new RPLRep_t );
 
 	int64_t iConnId = g_iConnID.fetch_add ( 1, std::memory_order_relaxed );
 
@@ -1893,6 +1910,8 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 	wsrep_buf_t tQueries;
 	tQueries.ptr = dBufQueries.Begin();
 	tQueries.len = dBufQueries.GetLength();
+
+	Threads::ScopedCoroMutex_t _ { ( *ppCluster )->m_tReplicationMutex };
 
 	if ( !bTOI )
 		return Replicate ( iKeysCount, dKeys.Begin(), tQueries, (*ppCluster)->m_pProvider, tMonitor, bUpdate, sError );
@@ -3766,7 +3785,7 @@ public:
 
 	int Write ( int iFile, int iChunk, const void * pData, int64_t iSize, CSphString & sError )
 	{
-		Threads::ScopedCoroSpinlock_t tLock ( m_tLock );
+		Threads::ScopedCoroMutex_t tLock ( m_tLock );
 
 		assert ( m_pMerge.Ptr() );
 		if ( m_pMerge->m_iFile!=iFile )
@@ -3783,7 +3802,7 @@ public:
 			m_pWriter = nullptr;
 			m_pReader = nullptr;
 
-			m_pWriter = new WriterWithHash_c ( nullptr, nullptr );
+			m_pWriter = new WriterWithHash_c;
 			if ( !m_pWriter->OpenFile ( m_pMerge->m_dFilesNew[iFile], m_sError ) )
 			{
 				sError = m_sError;
@@ -3818,7 +3837,7 @@ public:
 
 	MergeState_t * Flush ( CSphString & sError )
 	{
-		Threads::ScopedCoroSpinlock_t tLock ( m_tLock );
+		Threads::ScopedCoroMutex_t tLock ( m_tLock );
 
 		assert ( m_pMerge.Ptr() );
 
@@ -3840,7 +3859,7 @@ public:
 	{
 		assert ( dFilesRef.GetLength()==tRes.m_pDst->m_dRemotePaths.GetLength() );
 
-		Threads::ScopedCoroSpinlock_t tLock ( m_tLock );
+		Threads::ScopedCoroMutex_t tLock ( m_tLock );
 
 		m_pMerge = new MergeState_t();
 		m_pMerge->m_bIndexActive = tRes.m_bIndexActive;
@@ -3853,7 +3872,7 @@ public:
 	}
 
 private:
-	Threads::CoroSpinlock_c m_tLock; // prevent writing to same file from multiple clients
+	Threads::Coro::Mutex_c m_tLock; // prevent writing to same file from multiple clients
 
 	CSphScopedPtr<WriterWithHash_c> m_pWriter { nullptr };
 	CSphScopedPtr<CSphAutoreader> m_pReader { nullptr };
@@ -3957,7 +3976,7 @@ public:
 
 	RecvState_c & GetState ( uint64_t tWriterKey )
 	{
-		Threads::ScopedCoroSpinlock_t tLock ( m_tLock );
+		Threads::ScopedCoroMutex_t tLock ( m_tLock );
 		RecvState_c * pState = m_hStates ( tWriterKey );
 		if ( pState )
 			return *pState;
@@ -3967,19 +3986,19 @@ public:
 
 	void Free (  uint64_t tWriterKey )
 	{
-		Threads::ScopedCoroSpinlock_t tLock ( m_tLock );
+		Threads::ScopedCoroMutex_t tLock ( m_tLock );
 		m_hStates.Delete ( tWriterKey );
 	}
 
 	bool HasState ( uint64_t tWriterKey )
 	{
-		Threads::ScopedCoroSpinlock_t tLock ( m_tLock );
+		Threads::ScopedCoroMutex_t tLock ( m_tLock );
 		return m_hStates.Exists ( tWriterKey );
 	}
 
 private:
 	CSphOrderedHash < RecvState_c, uint64_t, IdentityHash_fn, 64 > m_hStates GUARDED_BY (m_tLock);
-	Threads::CoroSpinlock_c m_tLock;
+	Threads::Coro::Mutex_c m_tLock;
 };
 
 static StatesCache_c g_tRecvStates;

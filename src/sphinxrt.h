@@ -13,7 +13,6 @@
 #ifndef _sphinxrt_
 #define _sphinxrt_
 
-#include "sphinx.h"
 #include "sphinxutils.h"
 #include "sphinxstem.h"
 #include "sphinxint.h"
@@ -22,9 +21,9 @@
 #include "docstore.h"
 #include "columnarrt.h"
 #include "coroutine.h"
+#include "tokenizer/tokenizer.h"
+#include "indexing_sources/source_document.h"
 
-struct CSphReconfigureSettings;
-struct CSphReconfigureSetup;
 class RtAccum_t;
 
 using VisitChunk_fn = std::function<void ( const CSphIndex* pIndex )>;
@@ -64,6 +63,30 @@ struct OptimizeTask_t
 	int m_iTo		=	-1;
 	CSphString m_sUvarFilter;
 	bool m_bByOrder =	false;
+};
+
+struct CSphReconfigureSettings
+{
+	CSphTokenizerSettings m_tTokenizer;
+	CSphDictSettings m_tDict;
+	CSphIndexSettings m_tIndex;
+	CSphFieldFilterSettings m_tFieldFilter;
+	CSphSchema m_tSchema;
+	MutableIndexSettings_c m_tMutableSettings;
+
+	bool m_bChangeSchema = false;
+};
+
+struct CSphReconfigureSetup
+{
+	TokenizerRefPtr_c m_pTokenizer;
+	DictRefPtr_c m_pDict;
+	CSphIndexSettings m_tIndex;
+	FieldFilterRefPtr_c m_pFieldFilter;
+	CSphSchema m_tSchema;
+	MutableIndexSettings_c m_tMutableSettings;
+
+	bool m_bChangeSchema = false;
 };
 
 /// RAM based updateable backend interface
@@ -209,7 +232,7 @@ struct RtSegment_t final : IndexSegment_c, ISphRefcountedMT
 {
 public:
 	mutable int						m_iLocked = 0;	// if segment currently used in an op
-	mutable Threads::CoroRWLock_c	m_tLock;		// fine-grain lock
+	mutable Threads::Coro::RWLock_c	m_tLock;		// fine-grain lock
 
 	CSphTightVector<BYTE>			m_dWords;
 	CSphVector<RtWordCheckpoint_t>	m_dWordCheckpoints;
@@ -314,7 +337,7 @@ public:
 
 ByteBlob_t GetHitsBlob ( const RtSegment_t* pSeg, const RtDoc_t* pDoc );
 
-class CSphSource_StringVector : public CSphSource_Document
+class CSphSource_StringVector : public CSphSource
 {
 public:
 	explicit			CSphSource_StringVector ( const VecTraits_T<VecTraits_T<const char >> &dFields, const CSphSchema &tSchema );
@@ -395,9 +418,11 @@ void BuildSegmentInfixes ( RtSegment_t * pSeg, bool bHasMorphology, bool bKeywor
 bool ExtractInfixCheckpoints ( const char * sInfix, int iBytes, int iMaxCodepointLength, int iDictCpCount,
 	const CSphTightVector<uint64_t> &dFilter, CSphVector<DWORD> &dCheckpoints );
 
-void SetupExactDict ( DictRefPtr_c &pDict, ISphTokenizer * pTokenizer, bool bAddSpecial = true );
+void SetupExactDict ( DictRefPtr_c& pDict );
+void SetupExactTokenizer ( ISphTokenizer* pTokenizer, bool bAddSpecial = true );
 
-void SetupStarDict ( DictRefPtr_c &pDict, ISphTokenizer * pTokenizer );
+void SetupStarDict ( DictRefPtr_c& pDict );
+void SetupStarTokenizer ( ISphTokenizer* pTokenizer );
 
 bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const ISphFieldFilter * pFieldFilter,
 	const CSphIndexSettings & tIndexSettings, uint64_t uTokHash, uint64_t uDictHash, int iMaxCodepointLength, int64_t iMemLimit,
@@ -408,6 +433,7 @@ volatile bool &RTChangesAllowed () noexcept;
 
 // Get global flag of autooptimize
 volatile int & AutoOptimizeCutoffMultiplier() noexcept;
+volatile int & AutoOptimizeCutoff() noexcept;
 
 using EnqueueForOptimizeFnPtr = void (*) ( CSphString , OptimizeTask_t );
 volatile EnqueueForOptimizeFnPtr& EnqueueForOptimizeExecutor() noexcept;

@@ -200,7 +200,7 @@ CmdNotice_t DebugCmd::dCommands[(BYTE) Cmd_e::INVALID_CMD] = {
 	{ NONE, "debug tasks", "display global tasks stat (use select from @@system.tasks instead)" },
 	{ NONE, "debug systhreads", "display task manager threads (use select from @@system.systhreads instead)" },
 	{ NONE, "debug sched", "display task manager schedule (use select from @@system.sched instead)" },
-	{ NONE, "debug merge <IDX> [chunk] <X> [into] [chunk] <Y> [option sync=1]",
+	{ NONE, "debug merge <IDX> [chunk] <X> [into] [chunk] <Y> [option sync=1,byid=0]",
 			"For RT index <IDX> merge disk chunk X into disk chunk Y" },
 	{ NONE, "debug drop [chunk] <X> [from] <IDX> [option sync=1]",
 			"For RT index <IDX> drop disk chunk X" },

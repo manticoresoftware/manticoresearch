@@ -12,7 +12,8 @@
 
 #pragma once
 
-#include "sphinx.h"
+#include "source_document.h"
+#include "sphinxutils.h"
 
 /// CSV/TSV pipe source fabric
 CSphSource * sphCreateSourceTSVpipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName );

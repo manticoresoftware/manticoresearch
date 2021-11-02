@@ -9,7 +9,6 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinx.h"
 #include "sphinxexcerpt.h"
 #include "sphinxutils.h"
 #include "sphinxsearch.h"
@@ -24,6 +23,8 @@
 #include "snippetstream.h"
 #include "snippetpassage.h"
 
+#include "stripper/html_stripper.h"
+#include "tokenizer/tokenizer.h"
 
 #include <math.h>
 
@@ -507,7 +508,7 @@ void SnippetBuilder_c::Impl_c::MarkHits ( const SnippetsDocIndex_c & tContainer,
 	if ( !iStackNeed )
 		return;
 
-	Threads::CoContinue ( iStackNeed, [&] {
+	Threads::Coro::Continue ( iStackNeed, [&] {
 
 	CSphScopedPtr<CSphHitMarker> pMarker ( CSphHitMarker::Create ( tXQQuery.m_pRoot, tQwordSetup ) );
 	if ( !pMarker.Ptr() )
@@ -1383,7 +1384,7 @@ void SnippetBuilder_c::Impl_c::Setup ( const CSphIndex * pIndex, const SnippetQu
 	else
 		m_pTokenizer = pIndex->GetTokenizer()->Clone ( SPH_CLONE_INDEX );
 
-	m_pQueryTokenizer = pIndex->GetQueryTokenizer()->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT );
+	m_pQueryTokenizer = pIndex->GetQueryTokenizer()->Clone ( SPH_CLONE );
 
 	// setup exact dictionary if needed
 	if ( tIndexSettings.m_bIndexExactWords )
@@ -1392,8 +1393,8 @@ void SnippetBuilder_c::Impl_c::Setup ( const CSphIndex * pIndex, const SnippetQu
 	if ( tSettings.m_bJsonQuery )
 	{
 		bool bWordDict = m_pDict->GetSettings().m_bWordDict;
-		m_pState->m_pTokenizerJson = pIndex->GetQueryTokenizer()->Clone ( SPH_CLONE_QUERY );
-		sphSetupQueryTokenizer ( m_pState->m_pTokenizerJson, pIndex->IsStarDict ( bWordDict ), tIndexSettings.m_bIndexExactWords, true );
+		// caveat: here we clone from Tokenizer, not from QueryTokenizer, as last was cloned as non-json, and so, includes different extra symbols.
+		m_pState->m_pTokenizerJson = sphCloneAndSetupQueryTokenizer ( pIndex->GetTokenizer(), pIndex->IsStarDict ( bWordDict ), tIndexSettings.m_bIndexExactWords, true );
 		m_pState->m_pQueryParser = sphCreateJsonQueryParser();
 	}
 	else
@@ -1558,8 +1559,8 @@ SnippetBuilder_c::Impl_c::Impl_c ()
 SnippetBuilder_c::Impl_c::Impl_c ( const SnippetBuilder_c::Impl_c & rhs )
 		: m_pState { rhs.m_pState }
 {
-	m_pTokenizer = rhs.m_pTokenizer->Clone ( SPH_CLONE_INDEX );
-	m_pQueryTokenizer = rhs.m_pQueryTokenizer->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT );
+	m_pTokenizer = rhs.m_pTokenizer->Clone ( SPH_CLONE );
+	m_pQueryTokenizer = rhs.m_pQueryTokenizer->Clone ( SPH_CLONE );
 	m_pDict = GetStatelessDict ( rhs.m_pDict );
 	if ( rhs.m_pFieldFilter )
 		m_pFieldFilter = rhs.m_pFieldFilter->Clone ();

@@ -19,6 +19,8 @@
 #include "coroutine.h"
 #include "mini_timer.h"
 #include "binlog.h"
+#include "indexfiles.h"
+#include "tokenizer/tokenizer.h"
 
 #include <atomic>
 
@@ -359,7 +361,7 @@ static void QueryGetTerms ( const XQNode_t * pNode, CSphDict * pDict, DictMap_t 
 		if ( !iLen )
 			continue;
 
-		strncpy ( (char *)sTmp, tWord.m_sWord.cstr(), iLen );
+		memcpy ( (char *)sTmp, tWord.m_sWord.cstr(), iLen );
 		sTmp[iLen] = '\0';
 
 		SphWordID_t uWord = 0;
@@ -1048,6 +1050,7 @@ int FullScanCollectingDocs ( PercolateMatchContext_t & tMatchCtx )
 	int iCountIdx = tMatchCtx.m_dDocsMatched.GetLength ();
 	tMatchCtx.m_dDocsMatched.Add ( 0 ); // placeholder for counter
 
+	FakeRL_t _ ( pSeg->m_tLock ); // that is s-t by design, don't need real lock
 	const CSphRowitem * pRow = pSeg->m_dRows.Begin ();
 	CSphMatch tDoc;
 	int iMatchesCount = 0;
@@ -1128,7 +1131,8 @@ void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_t & tMa
 	if ( !pStored->IsFullscan() && tMatchCtx.m_tReject.Filter ( pStored, tMatchCtx.m_bUtf8 ) )
 		return;
 
-	const RtSegment_t * pSeg = (const RtSegment_t *)tMatchCtx.m_pCtx->m_pIndexData;
+	const auto * pSeg = (const RtSegment_t *)tMatchCtx.m_pCtx->m_pIndexData;
+	FakeRL_t _ ( pSeg->m_tLock ); // that is s-t by design, don't need real lock
 	const BYTE * pBlobs = pSeg->m_dBlobs.Begin();
 
 	++tMatchCtx.m_iEarlyPassed;
@@ -1414,7 +1418,7 @@ struct PQInfo_t : public TaskInfo_t
 DEFINE_RENDER( PQInfo_t )
 {
 	auto & tInfo = *(const PQInfo_t *) pSrc;
-	dDst.m_sChain << (int) tInfo.m_eType << ":PQ ";
+	dDst.m_sChain << "PQ ";
 	if ( tInfo.m_iTotal )
 		dDst.m_sDescription.Sprintf ( "%d%% of %d:", tInfo.m_iCurrent * 100 / tInfo.m_iTotal, tInfo.m_iTotal );
 	else
@@ -1441,7 +1445,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 		tRes.m_tmSetup = sphMicroTimer ()+tRes.m_tmSetup;
 
 	std::atomic<int32_t> iCurJob {0};
-	CoExecuteN ( dCtx.Concurrency ( iJobs ), [&]
+	Coro::ExecuteN ( dCtx.Concurrency ( iJobs ), [&]
 	{
 		auto iJob = iCurJob.fetch_add ( 1, std::memory_order_acq_rel );
 		if ( iJob>=iJobs )
@@ -1450,7 +1454,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 		auto pInfo = PublishTaskInfo ( new PQInfo_t );
 		pInfo->m_iTotal = iJobs;
 		auto tCtx = dCtx.CloneNewContext ();
-		Threads::CoThrottler_c tThrottler ( session::ThrottlingPeriodMS () );
+		Threads::Coro::Throttler_c tThrottler ( session::ThrottlingPeriodMS () );
 		while (true)
 		{
 			pInfo->m_iCurrent = iJob;
@@ -1619,22 +1623,19 @@ StoredQuery_i * PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, CS
 
 	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
 
-	TokenizerRefPtr_c pTokenizer ( m_pTokenizer->Clone ( SPH_CLONE_QUERY ) );
-	sphSetupQueryTokenizer ( pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false );
-
+	TokenizerRefPtr_c pTokenizer ( sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false ) );
 	DictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
 
 	if ( IsStarDict ( bWordDict ) )
-		SetupStarDict ( pDict, pTokenizer );
+		SetupStarDict ( pDict );
 
 	if ( m_tSettings.m_bIndexExactWords )
-		SetupExactDict ( pDict, pTokenizer );
+		SetupExactDict ( pDict );
 
 	if ( tArgs.m_bQL )
 		return CreateQuery ( tArgs, pTokenizer, pDict, sError );
 
-	TokenizerRefPtr_c pTokenizerJson ( m_pTokenizer->Clone ( SPH_CLONE_QUERY ));
-	sphSetupQueryTokenizer ( pTokenizerJson, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, true );
+	TokenizerRefPtr_c pTokenizerJson ( sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, true ) );
 	return CreateQuery ( tArgs, pTokenizerJson, pDict, sError );
 }
 
@@ -2187,7 +2188,7 @@ void PercolateIndex_c::PostSetupUnl()
 
 	// FIXME!!! handle error
 	m_pTokenizerIndexing = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
-	TokenizerRefPtr_c pIndexing { ISphTokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError ) };
+	TokenizerRefPtr_c pIndexing { Tokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError ) };
 	if ( pIndexing )
 		m_pTokenizerIndexing = pIndexing;
 
@@ -2203,19 +2204,16 @@ void PercolateIndex_c::PostSetupUnl()
 	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
 
 	// create queries
-	TokenizerRefPtr_c pTokenizer { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
-	sphSetupQueryTokenizer ( pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false );
-
-	TokenizerRefPtr_c pTokenizerJson { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
-	sphSetupQueryTokenizer ( pTokenizerJson, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, true );
+	TokenizerRefPtr_c pTokenizer { sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false ) };
+	TokenizerRefPtr_c pTokenizerJson { sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, true ) };
 
 	DictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
 
 	if ( IsStarDict ( bWordDict ) )
-		SetupStarDict ( pDict, pTokenizer );
+		SetupStarDict ( pDict );
 
 	if ( m_tSettings.m_bIndexExactWords )
-		SetupExactDict ( pDict, pTokenizer );
+		SetupExactDict ( pDict );
 
 	CSphString sHitlessFiles = m_tSettings.m_sHitlessFiles.cstr();
 	if ( GetIndexFilenameBuilder() )
@@ -2349,7 +2347,7 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilename
 	}
 
 	// recreate tokenizer
-	m_pTokenizer = ISphTokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, pFilenameBuilder, dWarnings, m_sLastError );
+	m_pTokenizer = Tokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, pFilenameBuilder, dWarnings, m_sLastError );
 	if ( !m_pTokenizer )
 		return false;
 
@@ -2361,7 +2359,7 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilename
 		return false;
 	}
 
-	m_pTokenizer = ISphTokenizer::CreateMultiformFilter ( m_pTokenizer, m_pDict->GetMultiWordforms () );
+	m_pTokenizer = Tokenizer::CreateMultiformFilter ( m_pTokenizer, m_pDict->GetMultiWordforms () );
 
 	// regexp and ICU
 	if ( uVersion>=6 )
@@ -2868,14 +2866,15 @@ Bson_t PercolateIndex_c::ExplainQuery ( const CSphString & sQuery ) const
 
 	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
 
-	TokenizerRefPtr_c pQueryTokenizer { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
-	sphSetupQueryTokenizer ( pQueryTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false );
+	TokenizerRefPtr_c pQueryTokenizer { sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false ) };
+	SetupExactTokenizer ( pQueryTokenizer );
+	SetupStarTokenizer( pQueryTokenizer );
 
 	ExplainQueryArgs_t tArgs ( sQuery );
 	tArgs.m_pSchema = &GetInternalSchema();
 	tArgs.m_pDict = GetStatelessDict ( m_pDict );
-	SetupStarDict ( tArgs.m_pDict, pQueryTokenizer );
-	SetupExactDict ( tArgs.m_pDict, pQueryTokenizer );
+	SetupStarDict ( tArgs.m_pDict );
+	SetupExactDict ( tArgs.m_pDict );
 	if ( m_pFieldFilter )
 		tArgs.m_pFieldFilter = m_pFieldFilter->Clone();
 	tArgs.m_pSettings = &m_tSettings;

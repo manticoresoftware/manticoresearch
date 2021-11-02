@@ -9,6 +9,7 @@
 //
 
 #include "columnarmisc.h"
+#include "schema/schema.h"
 
 CSphVector<ScopedTypedIterator_t> CreateAllColumnarIterators ( const columnar::Columnar_i * pColumnar, const ISphSchema & tSchema )
 {

@@ -13,6 +13,7 @@
 #include "sphinxint.h"
 #include "sphinxjson.h"
 #include "indexcheck.h"
+#include "schema/locator.h"
 
 //////////////////////////////////////////////////////////////////////////
 // blob attributes

@@ -1980,7 +1980,7 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 			return false;
 
 		bool bOk = false;
-		Threads::CoContinue ( iStackNeeded, [&] { bOk = CreateFilterTree ( tCtx, sError, sWarning ); } );
+		Threads::Coro::Continue ( iStackNeeded, [&] { bOk = CreateFilterTree ( tCtx, sError, sWarning ); } );
 		return bOk;
 	}
 

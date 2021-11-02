@@ -13,13 +13,13 @@
 // Copyright (c) 2004-2014, Alexey Sokirko and others
 //
 
-#include "sphinx.h"
 #include "sphinxint.h"
 #include "fileutils.h"
 #include "sphinxutils.h"
 #include "sphinxstem.h"
 #include "sphinxplugin.h"
 #include "coroutine.h"
+#include "tokenizer/token_filter.h"
 
 //////////////////////////////////////////////////////////////////////////
 // LEMMATIZER
@@ -1829,7 +1829,7 @@ bool LoadLemmatizerUk ( CSphString & sError )
 		// indexer does not have couroutunes
 		if ( Threads::IsInsideCoroutine() )
 		{
-			bLoaded = Threads::CoContinueBool ( g_iLemmatizerUkStackSize, [&sError]
+			bLoaded = Threads::Coro::ContinueBool ( g_iLemmatizerUkStackSize, [&sError]
 			{
 				return sphPluginCreate ( g_sLemmatizerUkLib.cstr(), PLUGIN_INDEX_TOKEN_FILTER, g_sLemmatizerFnName.cstr(), SPH_ATTR_NONE, true, sError );
 			});

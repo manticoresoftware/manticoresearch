@@ -12,7 +12,6 @@
 
 #include <gtest/gtest.h>
 
-#include "sphinx.h"
 #include "sphinxfilter.h"
 #include "conversion.h"
 

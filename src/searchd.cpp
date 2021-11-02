@@ -10,7 +10,6 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinx.h"
 #include "sphinxutils.h"
 #include "fileutils.h"
 #include "sphinxexcerpt.h"
@@ -40,6 +39,9 @@
 #include "sphinxql_debug.h"
 #include "stackmock.h"
 #include "binlog.h"
+#include "indexfiles.h"
+#include "digest_sha1.h"
+#include "tokenizer/charset_definition_parser.h"
 
 // services
 #include "taskping.h"
@@ -152,6 +154,7 @@ static int				g_iServerID = 0;
 static bool				g_bServerID = false;
 static bool				g_bJsonConfigLoadedOk = false;
 static auto&			g_iAutoOptimizeCutoffMultiplier = AutoOptimizeCutoffMultiplier();
+static auto&			g_iAutoOptimizeCutoff = AutoOptimizeCutoff();
 static constexpr bool	AUTOOPTIMIZE_NEEDS_VIP = false; // whether non-VIP can issue 'SET GLOBAL auto_optimize = X'
 
 static bool				g_bSplit = false;
@@ -172,7 +175,8 @@ static int				g_iMaxFilters		= 256;
 static int				g_iMaxFilterValues	= 4096;
 static int				g_iMaxBatchQueries	= 32;
 
-static int				g_iDocstoreCache = 0;
+static int64_t			g_iDocstoreCache = 0;
+static int64_t			g_iSkipCache = 0;
 
 static auto &	g_iDistThreads		= getDistThreads();
 int				g_iAgentConnectTimeoutMs = 1000;
@@ -753,12 +757,20 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 		if ( pIdx && pIdx->m_pIndex )
 			pIdx->m_pIndex->Unlock();
 	}
-	SHUTINFO << "Remove local indexes list ...";
-	SafeDelete ( g_pLocalIndexes );
 
-	// unlock Distr indexes automatically done by d-tr
-	SHUTINFO << "Remove distr indexes list ...";
-	SafeDelete ( g_pDistIndexes );
+	Threads::CallCoroutine ( [] {
+		SHUTINFO << "Remove local indexes list ...";
+		SafeDelete ( g_pLocalIndexes );
+
+		// unlock Distr indexes automatically done by d-tr
+		SHUTINFO << "Remove distr indexes list ...";
+		SafeDelete ( g_pDistIndexes );
+	} );
+
+	SHUTINFO << "Shutdown main work pool ...";
+	auto pPool = GlobalWorkPool();
+	if ( pPool )
+		pPool->StopAll();
 
 	// clear shut down of rt indexes + binlog
 	SHUTINFO << "Finish IO stats collecting ...";
@@ -769,6 +781,9 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	SHUTINFO << "Shutdown docstore ...";
 	ShutdownDocstore();
+
+	SHUTINFO << "Shutdown skip cache ...";
+	ShutdownSkipCache();
 
 	SHUTINFO << "Shutdown wordforms ...";
 	sphShutdownWordforms ();
@@ -1217,7 +1232,7 @@ void SetSignalHandlers ( bool bAllowCtrlC=false ) REQUIRES ( MainThread )
 	stack_t ss;
 	ss.ss_sp = exception_handler_stack;
 	ss.ss_flags = 0;
-	ss.ss_size = SIGSTKSZ;
+	ss.ss_size = Max (SIGSTKSZ, 65536);
 	sigaltstack( &ss, 0 );
 	sa.sa_flags |= SA_ONSTACK;
 
@@ -3702,6 +3717,9 @@ void RemapResult ( AggrResult_t & dResult )
 
 	for ( auto & tRes : dResult.m_dResults )
 	{
+		if ( tRes.m_dMatches.IsEmpty() )
+			continue;
+
 		dMapFrom.Resize ( 0 );
 		dRowItems.Resize ( 0 );
 		CSphSchema & dSchema = tRes.m_tSchema;
@@ -5547,8 +5565,7 @@ struct LocalSearchRef_t
 	VecTraits_T<AggrResult_t>& m_dAggrResults;
 	VecTraits_T<CSphQueryResult>& m_dResults;
 
-	LocalSearchRef_t ( ExprHook_c & tHook, StrVec_t* pExtra, VecTraits_T<SearchFailuresLog_c> & dFailures,
-			VecTraits_T<AggrResult_t>& dAggrResults, VecTraits_T<CSphQueryResult>& dResults )
+	LocalSearchRef_t ( ExprHook_c & tHook, StrVec_t* pExtra, VecTraits_T<SearchFailuresLog_c> & dFailures, VecTraits_T<AggrResult_t> & dAggrResults, VecTraits_T<CSphQueryResult> & dResults )
 		: m_tHook ( tHook )
 		, m_pExtra ( pExtra )
 		, m_dFailuresSet ( dFailures )
@@ -5768,7 +5785,7 @@ void SearchHandler_c::RunLocalSearches ()
 	std::atomic<int32_t> iTotalSuccesses { 0 };
 	const auto iJobs = iNumLocals;
 	std::atomic<int32_t> iCurJob { 0 };
-	CoExecuteN ( dCtx.Concurrency ( iJobs ), [&]
+	Coro::ExecuteN ( dCtx.Concurrency ( iJobs ), [&]
 	{
 		auto iJob = iCurJob.load ( std::memory_order_relaxed );
 		if ( iJob>=iJobs )
@@ -5779,7 +5796,7 @@ void SearchHandler_c::RunLocalSearches ()
 		dSorters.ZeroVec ();
 
 		auto tCtx = dCtx.CloneNewContext();
-		Threads::CoThrottler_c tThrottler ( session::ThrottlingPeriodMS () );
+		Threads::Coro::Throttler_c tThrottler ( session::ThrottlingPeriodMS () );
 		while ( iJob<iJobs )
 		{
 			iJob = iCurJob.fetch_add ( 1, std::memory_order_acq_rel );
@@ -6662,7 +6679,7 @@ struct QueryInfo_t : public TaskInfo_t
 DEFINE_RENDER ( QueryInfo_t )
 {
 	auto & tInfo = *(QueryInfo_t *) pSrc;
-	dDst.m_sChain << (int) tInfo.m_eType << ":Query ";
+	dDst.m_sChain << "Query ";
 	hazard::Guard_c tGuard;
 	auto pQuery = tGuard.Protect ( tInfo.m_pHazardQuery );
 	if ( pQuery && session::Proto()!=Proto_e::MYSQL41 ) // cheat: for mysql query not used, so will not copy it then
@@ -7103,10 +7120,10 @@ bool IsMaxedOut ()
 		return false;
 
 	if ( g_iThdQueueMax!=0 )
-		return GlobalWorkPool()->Works() > g_iThdQueueMax;
+		return GlobalWorkPool()->Works() > g_iThdQueueMax; // that is "jobs_queue_size" param of searchd conf, "work_queue_length" in 'show status', or "Queue:" in 'status'
 
 	if ( g_iMaxConnection!=0 )
-		return myinfo::CountClients() > g_iMaxConnection;
+		return myinfo::CountClients() > g_iMaxConnection; // that is "max_connections" param of searchd.conf, "workers_clients" in 'show status', or "Clients:" in 'status'
 
 	return false;
 }
@@ -7702,7 +7719,7 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 	dCtx.LimitConcurrency ( GetEffectiveDistThreads () );
 
 	std::atomic<int32_t> iCurJob { 0 };
-	CoExecuteN ( dCtx.Concurrency ( iJobs ), [&]
+	Coro::ExecuteN ( dCtx.Concurrency ( iJobs ), [&]
 	{
 		sphLogDebug ( "MakeSnippetsCoro Coro started" );
 		auto iJob = iCurJob.fetch_add ( 1, std::memory_order_acq_rel );
@@ -7710,7 +7727,7 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 			return; // already nothing to do, early finish.
 
 		auto tCtx = dCtx.CloneNewContext ();
-		Threads::CoThrottler_c tThrottler ( session::ThrottlingPeriodMS () );
+		Threads::Coro::Throttler_c tThrottler ( session::ThrottlingPeriodMS () );
 		while (true)
 		{
 			myinfo::SetThreadInfo ( "s %d:", iJob );
@@ -8558,7 +8575,11 @@ void BuildStatus ( VectorLike & dStatus )
 	dStatus.MatchTuplet ( "mysql_version", g_sMySQLVersion.cstr() );
 
 	for ( auto i=0; i<SEARCHD_COMMAND_TOTAL; ++i)
+	{
+		if ( i==SEARCHD_COMMAND_UNUSED_6 )
+			continue;
 		dStatus.MatchTupletf ( szCommand ( i ), "%l", g_tStats.m_iCommandCount[i].load ( std::memory_order_relaxed ) );
+	}
 
 	auto iConnects = g_tStats.m_iAgentConnectTFO.load ( std::memory_order_relaxed )
 			+g_tStats.m_iAgentConnect.load ( std::memory_order_relaxed );
@@ -10632,6 +10653,8 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 		return;
 	}
 
+	GlobalCrashQueryGetRef().m_dIndex = FromStr ( tStmt.m_sIndex );
+
 	bool bPq = ( pServed->m_eType==IndexType_e::PERCOLATE );
 
 	auto * pIndex = (RtIndex_i *)pServed->m_pIndex;
@@ -11915,7 +11938,19 @@ static std::pair<const char *, int> FormatInfo ( const PublicThreadDesc_t & tThd
 
 void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 {
-	tOut.HeadBegin ( 14 ); // 15 with chain
+	ThreadInfoFormat_e eFmt = THD_FORMAT_NATIVE;
+	bool bAll = false;
+	int iCols = -1;
+	if ( pStmt )
+	{
+		if ( pStmt->m_sThreadFormat == "sphinxql" )
+			eFmt = THD_FORMAT_SPHINXQL;
+		else if ( pStmt->m_sThreadFormat == "all" )
+			bAll = true;
+		iCols = pStmt->m_iThreadsCols;
+	}
+
+	tOut.HeadBegin ( bAll ? 15 : 14 ); // 15 with chain
 	tOut.HeadColumn ( "Tid", MYSQL_COL_LONG );
 	tOut.HeadColumn ( "Name" );
 	tOut.HeadColumn ( "Proto" );
@@ -11929,24 +11964,13 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	tOut.HeadColumn ( "Jobs done", MYSQL_COL_LONG );
 	tOut.HeadColumn ( "Last job took" );
 	tOut.HeadColumn ( "In idle" );
-//	tOut.HeadColumn ( "Chain" );
+	if ( bAll )
+		tOut.HeadColumn ( "Chain" );
 	tOut.HeadColumn ( "Info" );
 	if (!tOut.HeadEnd())
 		return;
 
 	QuotationEscapedBuilder tBuf;
-	ThreadInfoFormat_e eFmt = THD_FORMAT_NATIVE;
-	bool bAll = false;
-	int iCols = -1;
-
-	if ( pStmt )
-	{
-		if ( pStmt->m_sThreadFormat=="sphinxql" )
-			eFmt = THD_FORMAT_SPHINXQL;
-		else if ( pStmt->m_sThreadFormat=="all" )
-			bAll = true;
-		iCols = pStmt->m_iThreadsCols;
-	}
 
 //	sphLogDebug ( "^^ Show threads. Current info is %p", GetTaskInfo () );
 
@@ -11986,7 +12010,8 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 			tOut.PutTimestampAsString ( dThd.m_tmLastJobDoneTimeUS ); // idle for
 		}
 
-//		tOut.PutString ( dThd.m_sChain.cstr () ); // Chain
+		if ( bAll )
+			tOut.PutString ( dThd.m_sChain.cstr () ); // Chain
 		auto tInfo = FormatInfo ( dThd, eFmt, tBuf );
 		tOut.PutString ( tInfo.first, Min ( tInfo.second, iCols ) ); // Info m_pTaskInfo
 		if ( !tOut.Commit () )
@@ -12009,11 +12034,11 @@ void HandleMysqlFlushHostnames ( RowBuffer_i & tOut )
 		});
 
 
-	for ( hHosts.IterateStart (); hHosts.IterateNext(); )
+	for ( auto tHost : hHosts )
 	{
-		DWORD uRenew = sphGetAddress ( hHosts.IterateGetKey().cstr() );
+		DWORD uRenew = sphGetAddress ( tHost.first.cstr() );
 		if ( uRenew )
-			hHosts.IterateGet() = uRenew;
+			tHost.second = uRenew;
 	}
 
 	// copy back renew hosts to distributed agents.
@@ -12262,7 +12287,7 @@ static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sInde
 	RtAccum_t tAcc ( false );
 	ReplicationCommand_t * pCmd = tAcc.AddCommand ( tStmt.m_bJson ? ReplicationCommand_e::UPDATE_JSON : ReplicationCommand_e::UPDATE_QL, tStmt.m_sCluster, sIndex );
 	assert ( pCmd );
-	pCmd->m_pUpdateAPI = tStmt.m_pUpdate;
+	pCmd->m_pUpdateAPI = tStmt.AttrUpdatePtr();
 	pCmd->m_bBlobUpdate = bBlobUpdate;
 	pCmd->m_pUpdateCond = &tStmt.m_tQuery;
 
@@ -12323,7 +12348,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	int iWarns = 0;
 
 	bool bBlobUpdate = false;
-	for ( const auto & i : tStmt.m_pUpdate->m_dAttributes )
+	for ( const auto & i : tStmt.AttrUpdate().m_dAttributes )
 	{
 		if ( i.m_sName==sphGetDocidName() )
 		{
@@ -12896,6 +12921,8 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * 
 		return 0;
 	}
 
+	GlobalCrashQueryGetRef().m_dIndex = FromStr ( sName );
+
 	RtAccum_t * pAccum = tAcc.GetAcc ( pIndex, sError );
 	if ( !sError.IsEmpty() )
 	{
@@ -13450,7 +13477,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 		} else if ( tStmt.m_sSetName=="throttling_period" )
 		{
 			if ( tSess.GetVip() )
-				Threads::CoThrottler_c::SetDefaultThrottlingPeriodMS ( tStmt.m_iSetValue );
+				Threads::Coro::Throttler_c::SetDefaultThrottlingPeriodMS ( tStmt.m_iSetValue );
 			else
 			{
 				tOut.Error ( tStmt.m_sStmt, "Only VIP connections can change global throttling_period value" );
@@ -13468,6 +13495,9 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 				tOut.Error ( tStmt.m_sStmt, "Only VIP connections can change global auto_optimize value" );
 				return;
 			}
+		} else if ( tStmt.m_sSetName=="optimize_cutoff")
+		{
+			g_iAutoOptimizeCutoff = tStmt.m_iSetValue;
 		} else if ( tStmt.m_sSetName=="pseudo_sharding")
 		{
 			g_bSplit = !!tStmt.m_iSetValue;
@@ -14408,6 +14438,7 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt, Se
 	VectorLike dTable ( tStmt.m_sStringParam );
 	dTable.MatchTuplet ( "autocommit", tVars.m_bAutoCommit ? "1" : "0" );
 	dTable.MatchTupletf ( "auto_optimize", "%d", g_iAutoOptimizeCutoffMultiplier );
+	dTable.MatchTupletf ( "optimize_cutoff", "%d", g_iAutoOptimizeCutoff );
 	dTable.MatchTuplet ( "collation_connection", sphCollationToName ( session::Collation() ) );
 	dTable.MatchTuplet ( "query_log_format", g_eLogFormat==LOG_FORMAT_PLAIN ? "plain" : "sphinxql" );
 	dTable.MatchTuplet ( "log_level", LogLevelName ( g_eLogLevel ) );
@@ -15806,6 +15837,8 @@ public:
 				RtIndex_i * pIndex = m_tAcc.GetIndex();
 				if ( pIndex )
 				{
+					tCrashQuery.m_dIndex = FromStr ( pIndex->GetName() );
+
 					RtAccum_t * pAccum = m_tAcc.GetAcc ( pIndex, m_sError );
 					if ( !m_sError.IsEmpty() )
 					{
@@ -17531,7 +17564,7 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP ) REQUIRES ( MainThread
 	REQUIRES ( MainThread )
 {
 	// collect names of all existing local indexes as assumed for deletion
-	SmallStringHash_T<bool> dLocalToDelete;
+	SmallStringHash_T<ServedIndexRefPtr_c> dLocalToDelete;
 	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next (); )
 	{
 		// skip JSON indexes or indexes belong to cluster - no need to manage them
@@ -17539,13 +17572,13 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP ) REQUIRES ( MainThread
 		if ( ServedDesc_t::IsCluster ( pServed ) )
 			continue;
 
-		dLocalToDelete.Add ( true, it.GetName() );
+		dLocalToDelete.Add ( it.Get(), it.GetName() );
 	}
 
 	// collect names of all existing distr indexes as assumed for deletion
-	SmallStringHash_T<bool> dDistrToDelete;
+	SmallStringHash_T<DistributedIndexRefPtr_t> dDistrToDelete;
 	for ( RLockedDistrIt_c it ( g_pDistIndexes ); it.Next (); )
-		dDistrToDelete.Add ( true, it.GetName () );
+		dDistrToDelete.Add ( it.Get(), it.GetName () );
 
 	const CSphConfig &hConf = tCP.m_tConf;
 	if ( !hConf.Exists ("index") )
@@ -17615,12 +17648,12 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP ) REQUIRES ( MainThread
 
 			if ( bGotLocal && !bReplaceLocal )
 			{
-				dLocalToDelete[sIndexName] = false;
+				dLocalToDelete[sIndexName] = nullptr;
 				continue;
 			}
 			if ( bGotLocal && bReplaceLocal && eNewType==IndexType_e::TEMPLATE )
 			{
-				dLocalToDelete[sIndexName] = false;
+				dLocalToDelete[sIndexName] = nullptr;
 			}
 		}
 
@@ -17635,7 +17668,7 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP ) REQUIRES ( MainThread
 			else
 				sphWarning ( "index '%s': no valid local/remote indexes in distributed index; using last valid definition", sIndexName.cstr () );
 
-			dDistrToDelete[sIndexName] = false;
+			dDistrToDelete[sIndexName] = nullptr;
 			continue;
 		}
 
@@ -17658,17 +17691,17 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP ) REQUIRES ( MainThread
 			if ( pWlockedDisabled->m_eType==IndexType_e::PLAIN )
 				pWlockedDisabled->m_bOnlyNew = true;
 			if ( pDistrIndex )
-				dDistrToDelete[sIndexName] = false;
+				dDistrToDelete[sIndexName] = nullptr;
 		}
 	}
 
-	for ( dDistrToDelete.IterateStart (); dDistrToDelete.IterateNext ();)
-		if ( dDistrToDelete.IterateGet() )
-			g_pDistIndexes->Delete (dDistrToDelete.IterateGetKey ());
+	for ( const auto& tIdx : dDistrToDelete )
+		if ( tIdx.second )
+			g_pDistIndexes->Delete ( tIdx.first );
 
-	for ( dLocalToDelete.IterateStart (); dLocalToDelete.IterateNext (); )
-		if ( dLocalToDelete.IterateGet () )
-			g_pLocalIndexes->Delete ( dLocalToDelete.IterateGetKey () );
+	for ( const auto& tIdx : dLocalToDelete )
+		if ( tIdx.second )
+			g_pLocalIndexes->Delete ( tIdx.first );
 
 	InitPersistentPool();
 }
@@ -18232,7 +18265,7 @@ void ShowHelp ()
 		"\n"
 		"Options are:\n"
 		"-h, --help\t\tdisplay this help message\n"
-		"-v, --version\t\t\tdisplay version information\n"
+		"-v, --version\t\tdisplay version information\n"
 		"-c, --config <file>\tread configuration from specified file\n"
 		"\t\t\t(default is manticore.conf)\n"
 		"--stop\t\t\tsend SIGTERM to currently running searchd\n"
@@ -18252,8 +18285,8 @@ void ShowHelp ()
 		"--replay-flags=<OPTIONS>\n"
 		"\t\t\textra binary log replay options (current options \n"
 		"\t\t\tare 'accept-desc-timestamp' and 'ignore-open-errors')\n"
-		"--new-cluster\t\tbootstraps a replication cluster with cluster restart protection\n"
-		"--new-cluster-force\t\tbootstraps a replication cluster without cluster restart protection\n"
+		"--new-cluster\tbootstraps a replication cluster with cluster restart protection\n"
+		"--new-cluster-force\tbootstraps a replication cluster without cluster restart protection\n"
 		"\n"
 		"Debugging options are:\n"
 		"--console\t\trun in console mode (do not fork, do not log to files)\n"
@@ -18461,10 +18494,9 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 			if ( g_bGotSigusr2 )
 			{
 				g_bGotSigusr2 = 0;
-				sphInfo ( "watchdog: got USR1, performing dump of child's stack" );
+				sphInfo ( "watchdog: got USR2, performing dump of child's stack" );
 				sphDumpGdb ( g_iLogFile, g_sNameBuf, g_sPid );
-			} else
-				sphInfo ( "watchdog: got error %d, %s", errno, strerrorm ( errno ));
+			}
 		}
 
 		if ( bShutdown || sphInterrupted() || g_pShared->m_bDaemonAtShutdown )
@@ -18826,7 +18858,8 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	if ( hSearchd("shutdown_timeout") )
 		g_iShutdownTimeoutUs = hSearchd.GetUsTime64S ( "shutdown_timeout", 3000000);
 
-	g_iDocstoreCache = hSearchd.GetSize ( "docstore_cache_size", 16777216 );
+	g_iDocstoreCache = hSearchd.GetSize64 ( "docstore_cache_size", 16777216 );
+	g_iSkipCache = hSearchd.GetSize64 ( "skiplist_cache_size", 67108864 );
 
 	if ( hSearchd.Exists ( "max_open_files" ) )
 	{
@@ -18898,6 +18931,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	AllowOnlyNot ( hSearchd.GetInt ( "not_terms_only_allowed", 0 )!=0 );
 	ConfigureDaemonLog ( hSearchd.GetStr ( "query_log_commands" ) );
 	g_iAutoOptimizeCutoffMultiplier = hSearchd.GetInt ( "auto_optimize", 1 );
+	g_iAutoOptimizeCutoff = hSearchd.GetInt ( "optimize_cutoff", g_iAutoOptimizeCutoff );
 
 	g_bSplit = hSearchd.GetInt ( "pseudo_sharding", 0 )!=0;
 }
@@ -19774,6 +19808,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	Binlog::Configure ( hSearchd, bTestMode, uReplayFlags );
 	SetUidShort ( bTestMode );
 	InitDocstore ( g_iDocstoreCache );
+	InitSkipCache ( g_iSkipCache );
 	InitParserOption();
 
 	if ( bOptPIDFile )
@@ -19855,9 +19890,9 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 #endif
 
 	// replay last binlog
-	SmallStringHash_T<CSphIndex*> hIndexes;
-	Threads::CallCoroutine ([&hIndexes]
+	Threads::CallCoroutine ([]
 	{
+		SmallStringHash_T<CSphIndex*> hIndexes;
 		for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next(); ) // FIXME!!!
 		{
 			ServedDescRPtr_c pLocked ( it.Get () );
@@ -19866,7 +19901,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		}
 
 		Binlog::Replay ( hIndexes, DumpMemStat );
-		hIndexes.Reset();
 	} );
 
 	// no need to create another cluster on restart by watchdog resurrection

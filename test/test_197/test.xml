@@ -104,12 +104,12 @@ INSERT INTO test_table (id, attr1, mva1, mva2, str1, str2, text, idx) VALUES
 
 <queries><sphinxql>
 select * from i1 where match ('some');
-select attr1, groupby() from i1 where match ('some') group by mva1;
-select attr1, groupby() from i1 where match ('some') group by mva2;
-select attr1, groupby() from ld where match ('some') group by mva1;
-select attr1, groupby() from ld where match ('some') group by mva2;
-select attr1, groupby() from dd where match ('some') group by mva1;
-select attr1, groupby() from dd where match ('some') group by mva2;
+select attr1, groupby() g from i1 where match ('some') group by mva1 order by g asc;
+select attr1, groupby() g from i1 where match ('some') group by mva2 order by g asc;
+select attr1, groupby() g from ld where match ('some') group by mva1 order by g asc;
+select attr1, groupby() g from ld where match ('some') group by mva2 order by g asc;
+select attr1, groupby() g from dd where match ('some') group by mva1 order by g asc;
+select attr1, groupby() g from dd where match ('some') group by mva2 order by g asc;
 select mva1, least(mva1), greatest(mva1) from i1;
 <!-- string groupby() -->
 select groupby() from i1 group by str1 order by str1 asc;

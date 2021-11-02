@@ -307,8 +307,8 @@ public:
 
 	int		GetMatchCapacity() const override								{ return m_pSorter->GetMatchCapacity(); }
 
-	RowID_t				GetJustPushed() const override						{ assert (0 && "Not supported" ); return 0; }
-	VecTraits_T<RowID_t> GetJustPopped() const override						{ assert (0 && "Not supported" ); return {}; }
+	RowTagged_t					GetJustPushed() const override						{ assert (0 && "Not supported" ); return RowTagged_t(); }
+	VecTraits_T<RowTagged_t>	GetJustPopped() const override						{ assert (0 && "Not supported" ); return {}; }
 
 private:
 	struct IteratorWithLocator_t

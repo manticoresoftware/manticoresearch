@@ -6,7 +6,7 @@ In the following example we'll assume we unpack the zip contents to folder `C:\M
 
 ```bat
 cd C:\Manticore
-unzip manticore-3.6.0-210504-96d61d8bf-release-x64-main.zip
+unzip manticore-4.0.2-210921-af497f245-releasex64-main.zip
 ```
 
 The zip comes with a sample configuration file in `manticore.conf.in`.

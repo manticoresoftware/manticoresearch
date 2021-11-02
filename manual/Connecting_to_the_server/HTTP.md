@@ -75,8 +75,7 @@ The response is in JSON format and contains hits information and time of executi
 
 <!-- request HTTP -->
 ```bash
-POST /sql --data-urlencode "query=select id,subject,author_id  from forum where match('@subject php manticore') group by
-author_id order by id desc limit 0,5"
+POST /sql --data-urlencode "query=select id,subject,author_id  from forum where match('@subject php manticore') group by author_id order by id desc limit 0,5"
 ```
 
 <!-- response HTTP -->

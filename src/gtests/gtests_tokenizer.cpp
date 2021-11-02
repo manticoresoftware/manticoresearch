@@ -13,6 +13,7 @@
 #include <gtest/gtest.h>
 
 #include "sphinxint.h"
+#include "tokenizer/tokenizer.h"
 
 // Miscelaneous tests of tokenizer
 
@@ -27,7 +28,7 @@ extern const char * g_sTmpfile;
 extern const char * g_sMagickTmpfile;
 extern const char * g_sMagic;
 
-class Tokenizer : public ::testing::Test
+class TokenizerGtest : public ::testing::Test
 {
 protected:
 
@@ -39,7 +40,7 @@ protected:
 		if ( !( uMode & TOK_NO_SHORT ) )
 			tSettings.m_iMinWordLen = 2;
 
-		TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tSettings, nullptr, nullptr, dWarnings, sError ) };
+		TokenizerRefPtr_c pTokenizer { Tokenizer::Create ( tSettings, nullptr, nullptr, dWarnings, sError ) };
 		if ( !( uMode & TOK_NO_DASH ) )
 		{
 			Verify ( pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z, U+80..U+FF", sError ) );
@@ -51,7 +52,7 @@ protected:
 		}
 		if ( uMode & TOK_EXCEPTIONS )
 		{
-			Verify ( pTokenizer->LoadSynonyms ( g_sMagickTmpfile, NULL, dWarnings, sError ) );
+			Verify ( pTokenizer->LoadSynonyms ( g_sMagickTmpfile, nullptr, dWarnings, sError ) );
 		}
 
 		// tricky little shit!
@@ -68,40 +69,40 @@ protected:
 	CSphString sError;
 };
 
-TEST_F( Tokenizer, exceptions_more )
+TEST_F( TokenizerGtest, exceptions_more )
 {
 	m_pTokenizer = CreateTestTokenizer ( TOK_EXCEPTIONS | TOK_NO_SHORT );
 	ASSERT_TRUE ( m_pTokenizer->SetBlendChars ( "+, U+23", sError ) );
 
 	const char * dTests[] =
 		{	// for completeness...
-			"AT&T!!!",									"AT&T", "!", "!", "!", NULL,		// exceptions vs specials
-			"U.S.AB U.S.A. U.S.B.U.S.D.U.S.U.S.A.F.",	"US", "ab", "USA", "USB", "USD", "US", "USAF", NULL,
-			"Y.M.C.A.",									"y", "m", "c", "a", NULL,
-			"B&E's",									"b", "e", "s", NULL,
+			"AT&T!!!",									"AT&T", "!", "!", "!", nullptr,		// exceptions vs specials
+			"U.S.AB U.S.A. U.S.B.U.S.D.U.S.U.S.A.F.",	"US", "ab", "USA", "USB", "USD", "US", "USAF", nullptr,
+			"Y.M.C.A.",									"y", "m", "c", "a", nullptr,
+			"B&E's",									"b", "e", "s", nullptr,
 
 			// exceptions vs spaces
-			"AT & T",									"AT & T", NULL,
-			"AT  &  T",									"AT & T", NULL,
-			"AT      &      T",							"AT & T", NULL,
-			"AT$&$T",									"at", "t", NULL,
+			"AT & T",									"AT & T", nullptr,
+			"AT  &  T",									"AT & T", nullptr,
+			"AT      &      T",							"AT & T", nullptr,
+			"AT$&$T",									"at", "t", nullptr,
 
 			// prefix fun
-			"U.S.A.X.",									"USA", "x", NULL,
-			"U.X.U.S.A.",								"u", "x", "USA", NULL,
+			"U.S.A.X.",									"USA", "x", nullptr,
+			"U.X.U.S.A.",								"u", "x", "USA", nullptr,
 
 			// exceptions vs blended
-			"#test this",								"#test", "test", "this", NULL,
-			"#test       this",							"#test", "test", "this", NULL,
-			"test#that",								"test#that", "test", "that", NULL,
-			"1+2",										"1+2", "1", "2", NULL,
-			"te.st#this",								"te", "st#this", "st", "this", NULL,
-			"U.boat",									"u", "boat", NULL,
+			"#test this",								"#test", "test", "this", nullptr,
+			"#test       this",							"#test", "test", "this", nullptr,
+			"test#that",								"test#that", "test", "that", nullptr,
+			"1+2",										"1+2", "1", "2", nullptr,
+			"te.st#this",								"te", "st#this", "st", "this", nullptr,
+			"U.boat",									"u", "boat", nullptr,
 
 			// regressions
-			";foo bar",									";", "foo", "bar", NULL,
+			";foo bar",									";", "foo", "bar", nullptr,
 
-			NULL
+			nullptr
 		};
 
 	for ( int iCur = 0; dTests[iCur]; )
@@ -116,11 +117,11 @@ TEST_F( Tokenizer, exceptions_more )
 			++iCur;
 		}
 
-		ASSERT_FALSE ( dTests[iCur] );
+		ASSERT_FALSE ( dTests[iCur] ) << "Failed for " << iCur;
 		++iCur;
 	}
 
-	TokenizerRefPtr_c pQtok { m_pTokenizer->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT ) };
+	TokenizerRefPtr_c pQtok { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
 
 	pQtok->SetBuffer ( ( BYTE * ) "life:)", 7 );
 	ASSERT_STREQ ( ( char * ) pQtok->GetToken (), "life:)" );
@@ -131,12 +132,12 @@ TEST_F( Tokenizer, exceptions_more )
 	ASSERT_FALSE ( pQtok->GetToken () );
 }
 
-TEST_F ( Tokenizer, special_blended )
+TEST_F ( TokenizerGtest, special_blended )
 {
 	pTokenizer = CreateTestTokenizer ( TOK_NO_DASH );
 	ASSERT_TRUE ( pTokenizer->SetBlendChars ( "., -", sError ) );
 	pTokenizer->AddSpecials ( "-" );
-	pTokenizer->AddPlainChar ( '=' );
+	pTokenizer->AddPlainChars ( "=" );
 	ASSERT_TRUE ( pTokenizer->SetBlendMode ( "trim_none, skip_pure", sError ) );
 
 	char sTest10[] = "hello =- =world";
@@ -146,9 +147,9 @@ TEST_F ( Tokenizer, special_blended )
 	ASSERT_STREQ ( ( const char * ) pTokenizer->GetToken (), "=world" );
 }
 
-TEST_F ( Tokenizer, noascii_case )
+TEST_F ( TokenizerGtest, noascii_case )
 {
-	pTokenizer = sphCreateUTF8Tokenizer ();
+	pTokenizer = Tokenizer::Detail::CreateUTF8Tokenizer ();
 	ASSERT_TRUE (
 		pTokenizer->SetCaseFolding ( "U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451", sError ) );
 	char sTest20[] = "abc \xD0\xBE\xD0\xBF\xD0\xB0\x58\xD1\x87\xD0\xB0 def";
@@ -158,15 +159,15 @@ TEST_F ( Tokenizer, noascii_case )
 	ASSERT_FALSE ( pTokenizer->GetToken () );
 }
 
-TEST_F ( Tokenizer, utf8_ngrams )
+TEST_F ( TokenizerGtest, utf8_ngrams )
 {
-	pTokenizer = sphCreateUTF8NgramTokenizer ();
+	pTokenizer = Tokenizer::Detail::CreateUTF8NgramTokenizer ();
 	ASSERT_FALSE ( pTokenizer->SetNgramChars ( "2..4", sError ) );
 	ASSERT_TRUE ( pTokenizer->SetCaseFolding ( "0..9, A..Z->a..z, _, a..z", sError ) );
 	ASSERT_TRUE ( pTokenizer->SetNgramChars ( "U+410..U+42F->U+430..U+44F, U+430..U+44F", sError ) );
 }
 
-TEST_F ( Tokenizer, utf8_4bytes_codepoints )
+TEST_F ( TokenizerGtest, utf8_4bytes_codepoints )
 {
 	BYTE sTest21[] = "\xF4\x80\x80\x80\x32\x34\x20";
 	BYTE sTest22[] = "\xEC\x97\xB0";
@@ -199,12 +200,12 @@ TEST_F ( Tokenizer, utf8_4bytes_codepoints )
 	SPH_UTF8_ENCODE ( pRes21, iCode22 );
 	ASSERT_FALSE ( memcmp ( sTest22, sRes21, sizeof ( sTest22 ) ) );
 
-	pTokenizer = sphCreateUTF8Tokenizer ();
+	pTokenizer = Tokenizer::Detail::CreateUTF8Tokenizer ();
 	pTokenizer->SetBuffer ( ( BYTE * ) sTest21, sizeof ( sTest21 ) );
 	ASSERT_STREQ ( ( const char * ) pTokenizer->GetToken (), "\xF4\x80\x80\x80\x32\x34" );
 }
 
-TEST_F ( Tokenizer, Sentence )
+TEST_F ( TokenizerGtest, Sentence )
 {
 	const char * SENTENCE = "\2"; // MUST be in sync with sphinx.cpp
 	const char * sTest[] =
@@ -230,7 +231,7 @@ TEST_F ( Tokenizer, Sentence )
 	tSettings.m_iMinWordLen = 1;
 
 	StrVec_t dWarnings;
-	pTokenizer = ISphTokenizer::Create ( tSettings, nullptr, nullptr, dWarnings, sError );
+	pTokenizer = Tokenizer::Create ( tSettings, nullptr, nullptr, dWarnings, sError );
 
 	ASSERT_TRUE ( pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z, U+80..U+FF", sError ) );
 //	ASSERT_TRUE ( pTok->SetBlendChars ( "., &", sError ) ); // NOLINT
@@ -256,12 +257,12 @@ TEST_F ( Tokenizer, Sentence )
 
 //////////////////////////////////////////////////////////////////////////
 
-class TokenizerBlended : public Tokenizer
+class TokenizerBlended : public TokenizerGtest
 {
 protected:
 	void SetUp () override
 	{
-		Tokenizer::SetUp ();
+		TokenizerGtest::SetUp ();
 		m_pTokenizer = CreateTestTokenizer ( 0 );
 		ASSERT_TRUE ( m_pTokenizer->SetBlendChars ( "., @", sError ) );
 		m_pTokenizer->AddSpecials ( "()!-\"@" );
@@ -374,13 +375,13 @@ TEST( UTF8LEN, Test2 )
 
 //////////////////////////////////////////////////////////////////////////
 
-class TokenizerP : public Tokenizer, public ::testing::WithParamInterface<DWORD>
+class TokenizerP : public TokenizerGtest, public ::testing::WithParamInterface<DWORD>
 {
 protected:
 	int iRun = 0;
 	void SetUp () override
 	{
-		Tokenizer::SetUp ();
+		TokenizerGtest::SetUp ();
 		iRun = GetParam();
 		m_pTokenizer = CreateTestTokenizer ( ( iRun>=2 ) ? TOK_EXCEPTIONS : 0 );
 	}
@@ -543,7 +544,7 @@ TEST_P ( TokenizerP, short_token_handling )
 	};
 
 	TokenizerRefPtr_c pShortTokenizer { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
-	pShortTokenizer->AddPlainChar ( '*' );
+	pShortTokenizer->AddPlainChars ( "*" );
 
 	CSphTokenizerSettings tSettings = pShortTokenizer->GetSettings ();
 	tSettings.m_iMinWordLen = 5;
@@ -661,12 +662,12 @@ static void CheckQuerySoftSpace ( const XQNode_t * pNode, const int * pQPos, int
 }
 
 
-class QueryParser : public Tokenizer
+class QueryParser : public TokenizerGtest
 {
 protected:
 	void TearDown () override
 	{
-		Tokenizer::TearDown ();
+		TokenizerGtest::TearDown ();
 	}
 
 	void SetUp () override
@@ -674,7 +675,7 @@ protected:
 		tSchema.AddField ( "title" );
 		tSchema.AddField ( "body" );
 
-		TokenizerRefPtr_c pBase ( sphCreateUTF8Tokenizer () );
+		TokenizerRefPtr_c pBase ( Tokenizer::Detail::CreateUTF8Tokenizer () );
 		CSphTokenizerSettings tTokenizerSetup;
 		tTokenizerSetup.m_iMinWordLen = 2;
 		tTokenizerSetup.m_sSynonymsFile = g_sTmpfile;
@@ -684,8 +685,7 @@ protected:
 		ASSERT_TRUE ( pBase->LoadSynonyms ( g_sTmpfile, NULL, dWarnings, sError ) );
 		ASSERT_TRUE ( sError.IsEmpty() );
 
-		pTokenizer = pBase->Clone ( SPH_CLONE_QUERY );
-		sphSetupQueryTokenizer ( pTokenizer, true, false, false );
+		pTokenizer = sphCloneAndSetupQueryTokenizer ( pBase, true, false, false );
 
 		CSphDictSettings tDictSettings;
 		tDictSettings.m_bWordDict = false;

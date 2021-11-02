@@ -58,7 +58,7 @@ SHOW STATUS [ LIKE pattern ]
 
 <!-- example show status -->
 
-`SHOW STATUS` is an SQL statement that displays a number of useful performance counters. IO and CPU counters will only be available if searchd was started with `--iostats` and `--cpustats` switches respectively.
+`SHOW STATUS` is an SQL statement that displays a number of useful performance counters. IO and CPU counters will only be available if searchd was started with `--iostats` and `--cpustats` switches respectively (or they were enabled via `SET GLOBAL iostats/cpustats=1`).
 
 <!-- intro -->
 ##### SQL:

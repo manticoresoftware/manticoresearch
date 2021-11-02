@@ -116,6 +116,21 @@ CSphString		sphGetCwd();
 // a tiny wrapper over ::read() which additionally performs IO stats update
 int64_t			sphRead ( int iFD, void * pBuf, size_t iCount );
 
+/// try to obtain an exclusive lock on specified file
+/// bWait specifies whether to wait
+bool			sphLockEx ( int iFile, bool bWait );
+
+/// remove existing locks
+void			sphLockUn ( int iFile );
+
+/// create and lock the file
+bool			RawFileLock ( const CSphString& sFile, int& iLockFD, CSphString& sError );
+
+/// unlock and unlink file
+void			RawFileUnLock ( const CSphString& sFile, int& iLockFD );
+
+void			SafeClose ( int& iFD );
+
 /// simple write wrapper
 /// simplifies partial write checks, and also supresses "fortified" glibc warnings
 bool			sphWrite ( int iFD, const void * pBuf, size_t iSize );

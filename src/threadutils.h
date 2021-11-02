@@ -49,6 +49,7 @@ const char* RelaxedProtoName ( Proto_e eProto );
 int GetOsThreadId ();
 
 namespace Threads {
+namespace details { class SchedulerOperation_t; }
 
 // most basic struct with details interested not only to thread itself, but also observable from outside
 // Describes just 'execution'. Used as is from main to handle detached threads on shutdown
@@ -114,11 +115,12 @@ using Keeper_t = SharedPtrCustom_t<void>;
 
 struct Scheduler_i
 {
-	virtual ~Scheduler_i() {}
-	virtual void Schedule ( Handler handler, bool bVip ) = 0;
-	virtual void ScheduleContinuation ( Handler handler ) // if task already started
+	virtual ~Scheduler_i() = default;
+
+	virtual void ScheduleOp ( Threads::details::SchedulerOperation_t* pOp, bool bVip ) = 0;
+	virtual void ScheduleContinuationOp ( Threads::details::SchedulerOperation_t* pOp ) // if task already started
 	{
-		Schedule ( std::move ( handler ), false );
+		ScheduleOp ( pOp, false );
 	}
 	// RAII keeper of scheduler (when it exists, scheduler will not finish). That is necessary, say, if the only work is
 	// paused and moved somewhere (for example, as cb in epoll polling). Without keeper scheduler then finish and it will
@@ -135,6 +137,12 @@ struct Scheduler_i
 	{
 		return "unnamed_sched";
 	}
+
+	template<typename HANDLER>
+	void Schedule ( HANDLER handler, bool bVip );
+
+	template<typename HANDLER>
+	void ScheduleContinuation ( HANDLER handler );
 };
 
 struct SchedulerWithBackend_i: public Scheduler_i
@@ -160,6 +168,8 @@ WorkerSharedPtr_t MakeAloneThread ( size_t iOrderNum, const char* szName = "" );
 // Alone scheduler works on top of another scheduler and provides sequental execution of the tasks (each time only one
 // task may be performed, no concurrent execution). It also gives FIFO ordering of the tasks.
 SchedulerSharedPtr_t MakeAloneScheduler ( Scheduler_i* pBase, const char* szName = nullptr );
+
+SchedulerSharedPtr_t WrapRawScheduler ( Scheduler_i* pBase, const char* szName = nullptr );
 
 class OperationsQueue_c
 {
@@ -280,5 +290,6 @@ namespace Detached
 	void AloneShutdowncatch ();
 }
 
+#include "threadutils_impl.h"
 
 #endif //MANTICORE_THREADUTILS_H

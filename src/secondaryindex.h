@@ -11,12 +11,20 @@
 #ifndef _secondaryindex_
 #define _secondaryindex_
 
-#include "sphinx.h"
 #include "sphinxstd.h"
+#include "sphinx.h"
+
 #include <math.h>
+#include <vector>
 
 
 using RowIdBlock_t = VecTraits_T<RowID_t>;
+
+
+namespace columnar
+{
+class BlockIterator_i;
+}
 
 class RowidIterator_i
 {

@@ -10,7 +10,6 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinx.h"
 #include "sphinxint.h"
 #include "sphinxutils.h"
 
@@ -946,12 +945,12 @@ void sphSrand ( DWORD uSeed )
 void sphAutoSrand ()
 {
 	// get timestamp
+	DWORD uPID;
 #if !_WIN32
 	struct timeval tv;
 	gettimeofday ( &tv, NULL );
+	uPID = getpid();
 #else
-	#define getpid() GetCurrentProcessId()
-
 	struct
 	{
 		time_t	tv_sec;
@@ -965,10 +964,11 @@ void sphAutoSrand ()
 	ts /= 10; // to microseconds
 	tv.tv_sec = (DWORD)(ts/1000000);
 	tv.tv_usec = (DWORD)(ts%1000000);
+	uPID = GetCurrentProcessId();
 #endif
 
 	// twist and shout
-	sphSrand ( sphRand() ^ DWORD(tv.tv_sec) ^ (DWORD(tv.tv_usec) + DWORD(getpid())) );
+	sphSrand ( sphRand() ^ DWORD(tv.tv_sec) ^ (DWORD(tv.tv_usec) + uPID) );
 }
 
 
@@ -2257,6 +2257,11 @@ StringBuilder_c & StringBuilder_c::operator<< ( const VecTraits_T<char> &sText )
 		return *this;
 
 	return AppendChunk ( {sText.begin (), sText.GetLength ()} );
+}
+
+StringBuilder_c & StringBuilder_c::operator << ( const Str_t &sText )
+{
+	return AppendChunk ( sText );
 }
 
 StringBuilder_c& StringBuilder_c::operator << ( int iVal )

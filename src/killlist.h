@@ -11,9 +11,8 @@
 #ifndef _killlist_
 #define _killlist_
 
-#include "sphinx.h"
 #include "fileutils.h"
-
+#include "sphinxdefs.h"
 
 class CSphReader;
 class CSphWriter;

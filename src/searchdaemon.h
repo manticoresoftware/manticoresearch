@@ -60,8 +60,6 @@
 	#define ESHUTDOWN		WSAESHUTDOWN
 
 	#define ftruncate		_chsize
-	#define getpid			GetCurrentProcessId
-
 
 #else
 	// UNIX-specific headers and calls
@@ -140,6 +138,7 @@ enum SearchdCommand_e : WORD
 	SEARCHD_COMMAND_KEYWORDS	= 3,
 	SEARCHD_COMMAND_PERSIST		= 4,
 	SEARCHD_COMMAND_STATUS		= 5,
+	SEARCHD_COMMAND_UNUSED_6	= 6,
 	SEARCHD_COMMAND_FLUSHATTRS	= 7,
 	SEARCHD_COMMAND_SPHINXQL	= 8,
 	SEARCHD_COMMAND_PING		= 9,
@@ -731,7 +730,7 @@ struct ServedDesc_t
 // create ServedDesc[R|W]Ptr_c instance to have actual access to the members.
 class ServedIndex_c : public ISphRefcountedMT, private ServedDesc_t, public ServedStats_c
 {
-	mutable Threads::CoroRWLock_c m_tLock;
+	mutable Threads::Coro::RWLock_c m_tLock;
 
 private:
 	friend class ServedDescRPtr_c;

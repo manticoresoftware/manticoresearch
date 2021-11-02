@@ -813,17 +813,9 @@ BYTE ** CSphSource_SQL::NextDocument ( bool & bEOF, CSphString & sError )
 	for ( int i=0; i<m_iPlainFieldsLength; i++ )
 	{
 		// get that field
-		#if WITH_ZLIB
-		if ( m_dUnpack[i]!=SPH_UNPACK_NONE )
-		{
-			DWORD uUnpackedLen = 0;
-			m_dFields[i] = (BYTE*) SqlUnpackColumn ( i, uUnpackedLen, m_dUnpack[i] );
-			m_dFieldLengths[i] = (int)uUnpackedLen;
-			continue;
-		}
-		#endif
-		m_dFields[i] = (BYTE*) const_cast<char*> ( SqlColumn ( m_tSchema.GetField(i).m_iIndex ) );
-		m_dFieldLengths[i] = SqlColumnLength ( m_tSchema.GetField(i).m_iIndex );
+		auto tCol = SqlUnpackColumn ( i, m_dUnpack[i] );
+		m_dFields[i] = (BYTE*)const_cast<char*> ( tCol.first );
+		m_dFieldLengths[i] = tCol.second;
 	}
 
 	m_dMvas.Resize ( m_tSchema.GetAttrsCount() );
@@ -1154,48 +1146,104 @@ void CSphSource_SQL::ReportUnpackError ( int iIndex, int iError )
 }
 
 
-#if !WITH_ZLIB
-
-const char * CSphSource_SQL::SqlUnpackColumn ( int iFieldIndex, DWORD & uUnpackedLen, ESphUnpackFormat )
+Str_t CSphSource_SQL::SqlColumnStream ( int iFieldIndex )
 {
-	int iIndex = m_tSchema.GetField(iFieldIndex).m_iIndex;
-	uUnpackedLen = SqlColumnLength(iIndex);
-	return SqlColumn(iIndex);
+	int iIndex = m_tSchema.GetField ( iFieldIndex ).m_iIndex;
+	Str_t tResult { SqlColumn ( iIndex ), SqlColumnLength ( iIndex ) };
+	if ( IsEmpty ( tResult ) )
+		tResult.first = nullptr;
+	return tResult;
 }
 
-#else
-
-const char * CSphSource_SQL::SqlUnpackColumn ( int iFieldIndex, DWORD & uUnpackedLen, ESphUnpackFormat eFormat )
+Str_t CSphSource_SQL::SqlCompressedColumnStream ( int iFieldIndex )
 {
-	int iIndex = m_tSchema.GetField(iFieldIndex).m_iIndex;
-	const char * pData = SqlColumn(iIndex);
+	return SqlColumnStream ( iFieldIndex );
+}
 
-	if ( pData==NULL )
-		return NULL;
+void CSphSource_SQL::SqlCompressedColumnReleaseStream ( Str_t /*tStream*/ )
+{
+}
 
-	int iPackedLen = SqlColumnLength(iIndex);
-	if ( iPackedLen<=0 )
-		return NULL;
+#if WITH_ZLIB
+namespace {
+Str_t UnpackZlib ( CSphVector<char>& tBuffer, Str_t tInputStream )
+{
+	Str_t tResult { nullptr, 0 };
+	uLong uBufferOffset = 0;
 
+	z_stream tStream;
+	tStream.zalloc = Z_NULL;
+	tStream.zfree = Z_NULL;
+	tStream.opaque = Z_NULL;
+	tStream.avail_in = tInputStream.second;
+	tStream.next_in = (Bytef*)tInputStream.first;
 
+	tResult.second = inflateInit ( &tStream );
+	if ( tResult.second != Z_OK )
+		return tResult;
+
+	while ( true )
+	{
+		tStream.next_out = (Bytef*)&tBuffer[static_cast<int64_t> ( uBufferOffset )];
+		tStream.avail_out = tBuffer.GetLength() - uBufferOffset - 1;
+		tResult.second = inflate ( &tStream, Z_NO_FLUSH );
+
+		if ( tResult.second == Z_OK )
+		{
+			assert ( tStream.avail_out == 0 );
+
+			tBuffer.Resize ( tBuffer.GetLength() * 2 );
+			uBufferOffset = tStream.total_out;
+			continue;
+		}
+
+		if ( tResult.second == Z_STREAM_END )
+		{
+			tBuffer[static_cast<int64_t> ( tStream.total_out )] = '\0';
+			tResult.first = &tBuffer[0];
+			tResult.second = static_cast<int>(tStream.total_out);
+		}
+		break;
+	}
+
+	inflateEnd ( &tStream );
+	return tResult;
+}
+}
+#endif
+
+Str_t CSphSource_SQL::SqlUnpackColumn ( int iFieldIndex, ESphUnpackFormat eFormat )
+{
+	int iIndex = m_tSchema.GetField ( iFieldIndex ).m_iIndex;
 	CSphVector<char> & tBuffer = m_dUnpackBuffers[iFieldIndex];
+	Str_t tResult { nullptr, 0 };
+
 	switch ( eFormat )
 	{
-		case SPH_UNPACK_MYSQL_COMPRESS:
+#if WITH_ZLIB
+	case SPH_UNPACK_ZLIB:
 		{
-			if ( iPackedLen<=4 )
+			auto tSqlCompressedStream = SqlCompressedColumnStream ( iFieldIndex );
+			auto _ = AtScopeExit ( [tSqlCompressedStream, this] { SqlCompressedColumnReleaseStream ( tSqlCompressedStream ); } );
+			tResult = UnpackZlib ( tBuffer, tSqlCompressedStream );
+		}
+		break;
+	case SPH_UNPACK_MYSQL_COMPRESS:
+		{
+			auto tSqlStream = SqlColumnStream ( iFieldIndex );
+			if ( tSqlStream.second <= 4 )
 			{
 				if ( !m_bUnpackFailed )
 				{
 					m_bUnpackFailed = true;
-					sphWarn ( "failed to unpack '%s', invalid column size (size=%d), rowid=%u", SqlFieldName(iIndex), iPackedLen, m_tDocInfo.m_tRowID );
+					sphWarn ( "failed to unpack '%s', invalid column size (size=%d), rowid=%u", SqlFieldName ( iIndex ), tSqlStream.second, m_tDocInfo.m_tRowID );
 				}
-				return NULL;
+				break;
 			}
 
-			unsigned long uSize = 0;
-			for ( int i=0; i<4; i++ )
-				uSize += ((unsigned long)((BYTE)pData[i])) << ( 8*i );
+			uLong uSize = 0;
+			for ( int i = 0; i < 4; ++i )
+				uSize += ( static_cast<uLong> ( (BYTE)tSqlStream.first[i] ) ) << ( 8 * i );
 			uSize &= 0x3FFFFFFF;
 
 			if ( uSize > m_tParams.m_uUnpackMemoryLimit )
@@ -1203,81 +1251,38 @@ const char * CSphSource_SQL::SqlUnpackColumn ( int iFieldIndex, DWORD & uUnpacke
 				if ( !m_bUnpackOverflow )
 				{
 					m_bUnpackOverflow = true;
-					sphWarn ( "failed to unpack '%s', column size limit exceeded (size=%d), rowid=%u", SqlFieldName(iIndex), (int)uSize, m_tDocInfo.m_tRowID );
+					sphWarn ( "failed to unpack '%s', column size limit exceeded (size=%d), rowid=%u", SqlFieldName ( iIndex ), (int)uSize, m_tDocInfo.m_tRowID );
 				}
-				return NULL;
+				break;
 			}
 
 			int iResult;
-			tBuffer.Resize ( uSize + 1 );
-			unsigned long uLen = iPackedLen-4;
-			iResult = uncompress ( (Bytef *)tBuffer.Begin(), &uSize, (Bytef *)pData + 4, uLen );
-			if ( iResult==Z_OK )
+			tBuffer.Resize ( static_cast<int64_t> ( uSize ) + 1 );
+			unsigned long uLen = tSqlStream.second - 4;
+			iResult = uncompress ( (Bytef*)tBuffer.Begin(), &uSize, (Bytef*)tSqlStream.first + 4, uLen );
+			if ( iResult == Z_OK )
 			{
-				uUnpackedLen = uSize;
-				tBuffer[uSize] = 0;
-				return &tBuffer[0];
+				tBuffer[static_cast<int64_t> ( uSize )] = 0;
+				tResult.first = &tBuffer[0];
+				tResult.second = static_cast<int> ( uSize );
 			} else
-				ReportUnpackError ( iIndex, iResult );
-			return NULL;
+				tResult.second = iResult;
 		}
-
-		case SPH_UNPACK_ZLIB:
-		{
-			char * sResult = 0;
-			int iBufferOffset = 0;
-			int iResult;
-			DWORD iStreamLen = iPackedLen;
-			char *sStream = (char *) SqlColumnStream( iIndex, iStreamLen );
-
-			z_stream tStream;
-			tStream.zalloc = Z_NULL;
-			tStream.zfree = Z_NULL;
-			tStream.opaque = Z_NULL;
-			tStream.avail_in = iStreamLen;
-			tStream.next_in = (Bytef *)sStream;
-
-			iResult = inflateInit ( &tStream );
-			if ( iResult!=Z_OK )
-				return NULL;
-
-			while (true)
-			{
-				tStream.next_out = (Bytef *)&tBuffer[iBufferOffset];
-				tStream.avail_out = tBuffer.GetLength() - iBufferOffset - 1;
-
-				iResult = inflate ( &tStream, Z_NO_FLUSH );
-				if ( iResult==Z_STREAM_END )
-				{
-					tBuffer [ tStream.total_out ] = 0;
-					uUnpackedLen = tStream.total_out;
-					sResult = &tBuffer[0];
-					break;
-				} else if ( iResult==Z_OK )
-				{
-					assert ( tStream.avail_out==0 );
-
-					tBuffer.Resize ( tBuffer.GetLength()*2 );
-					iBufferOffset = tStream.total_out;
-				} else
-				{
-					ReportUnpackError ( iIndex, iResult );
-					break;
-				}
-			}
-
-			SqlColumnReleaseStream( sStream );
-			inflateEnd ( &tStream );
-			return sResult;
-		}
-
-		case SPH_UNPACK_NONE:
-			return pData;
+		break;
+#endif
+	case SPH_UNPACK_NONE:
+	default:
+		tResult = SqlColumnStream ( iFieldIndex );
+		return tResult;
 	}
-	return NULL;
-}
-#endif // WITH_ZLIB
 
+	if ( !tResult.first )
+	{
+		ReportUnpackError ( iIndex, tResult.second );
+		tResult.second = 0;
+	}
+	return tResult;
+}
 
 struct CmpPairs_fn
 {

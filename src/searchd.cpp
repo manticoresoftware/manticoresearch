@@ -7120,10 +7120,10 @@ bool IsMaxedOut ()
 		return false;
 
 	if ( g_iThdQueueMax!=0 )
-		return GlobalWorkPool()->Works() > g_iThdQueueMax;
+		return GlobalWorkPool()->Works() > g_iThdQueueMax; // that is "jobs_queue_size" param of searchd conf, "work_queue_length" in 'show status', or "Queue:" in 'status'
 
 	if ( g_iMaxConnection!=0 )
-		return myinfo::CountClients() > g_iMaxConnection;
+		return myinfo::CountClients() > g_iMaxConnection; // that is "max_connections" param of searchd.conf, "workers_clients" in 'show status', or "Clients:" in 'status'
 
 	return false;
 }

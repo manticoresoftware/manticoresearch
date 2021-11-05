@@ -1458,7 +1458,8 @@ RtIndex_c::~RtIndex_c ()
 
 void RtIndex_c::UpdateUnlockedCount()
 {
-	m_tUnLockedSegments.UpdateValueAndNotifyAll ( (int)m_tRtChunks.RamSegs()->count_of ( [] ( auto& dSeg ) { return !dSeg->m_iLocked; } ) );
+	if ( !m_bDebugCheck )
+		m_tUnLockedSegments.UpdateValueAndNotifyAll ( (int)m_tRtChunks.RamSegs()->count_of ( [] ( auto& dSeg ) { return !dSeg->m_iLocked; } ) );
 }
 
 void RtIndex_c::ProcessDiskChunk ( int iChunk, VisitChunk_fn&& fnVisitor )
@@ -4462,8 +4463,6 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 	if ( !LoadMeta ( pFilenameBuilder, bStripPath, uVersion, bRebuildInfixes, dWarnings ) )
 		return false;
 
-	if ( m_bDebugCheck )
-		return true;
 
 	CSphString sMutableFile;
 	sMutableFile.SetSprintf ( "%s%s", m_sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ).cstr() );
@@ -4480,10 +4479,17 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 		return false;
 	}
 
+	m_bLoadRamPassedOk = false;
+
+	if ( m_bDebugCheck )
+	{
+		// load ram chunk
+		m_bLoadRamPassedOk = LoadRamChunk ( uVersion, bRebuildInfixes );
+		return m_bLoadRamPassedOk;
+	}
+
 	m_tWorkers.InitWorkers();
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
-
-	m_bLoadRamPassedOk = false;
 
 	if ( !PreallocDiskChunks ( pFilenameBuilder, dWarnings ) )
 		return false;
@@ -4866,7 +4872,7 @@ int RtIndex_c::DebugCheck ( FILE * fp )
 	tReporter.Msg ( "checking schema..." );
 	DebugCheckSchema ( m_tSchema, tReporter );
 
-	if ( m_iCheckChunk!=-1 )
+	if ( m_iCheckChunk==-1 )
 		DebugCheckRam ( tReporter );
 
 	int iFailsPlain = DebugCheckDisk ( tReporter, fp );

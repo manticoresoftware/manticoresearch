@@ -4924,6 +4924,7 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter ) NO_THREAD_SAFETY
 		BYTE sWord[SPH_MAX_KEYWORD_LEN+2], sLastWord[SPH_MAX_KEYWORD_LEN+2];
 		memset ( sWord, 0, sizeof(sWord) );
 		memset ( sLastWord, 0, sizeof(sLastWord) );
+		auto szWord = (const char*) ( sWord + 1 );
 
 		int iLastWordLen = 0, iWordLen = 0;
 
@@ -5070,7 +5071,7 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter ) NO_THREAD_SAFETY
 			{
 				sWord[sizeof(sWord)-1] = '\0';
 				tReporter.Fail ( "invalid docs/hits (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, docs=%u, hits=%u)",
-					iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, sWord+1, tWord.m_uDocs, tWord.m_uHits );
+					iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tWord.m_uDocs, tWord.m_uHits );
 			}
 
 			if ( bCheckpoint )
@@ -5090,19 +5091,19 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter ) NO_THREAD_SAFETY
 
 			if ( uPrevDocOffset && tWord.m_uDoc<=uPrevDocOffset )
 				tReporter.Fail ( "doclist offset decreased (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, doclist_offset=%u, prev_doclist_offset=%u)",
-					iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, sWord+1, tWord.m_uDoc, uPrevDocOffset );
+					iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tWord.m_uDoc, uPrevDocOffset );
 
 			// read doclist
 			auto uDocOffset = DWORD ( pCurDoc-tSegment.m_dDocs.Begin() );
 			if ( tWord.m_uDoc!=uDocOffset )
 			{
 				tReporter.Fail ( "unexpected doclist offset (wordid=" UINT64_FMT "(%s)(%d), doclist_offset=%u, expected_offset=%u)",
-					(uint64_t)tWord.m_uWordID, sWord+1, nWordsRead, tWord.m_uDoc, uDocOffset );
+					(uint64_t)tWord.m_uWordID, szWord, nWordsRead, tWord.m_uDoc, uDocOffset );
 
 				if ( uDocOffset>=(DWORD)tSegment.m_dDocs.GetLength() )
 				{
 					tReporter.Fail ( "doclist offset pointing past doclist (segment=%d, word=%d, read_word=%s, doclist_offset=%u, doclist_size=%d)",
-						iSegment, nWordsRead, sWord+1, uDocOffset, tSegment.m_dDocs.GetLength() );
+						iSegment, nWordsRead, szWord, uDocOffset, tSegment.m_dDocs.GetLength() );
 
 					nWordsRead++;
 					continue;
@@ -5123,7 +5124,7 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter ) NO_THREAD_SAFETY
 				if ( pIn>=pMaxDoc )
 				{
 					tReporter.Fail ( "reading past doclist end (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, doclist_offset=%u, doclist_size=%d)",
-						iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, sWord+1, uDocOffset, tSegment.m_dDocs.GetLength() );
+						iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, uDocOffset, tSegment.m_dDocs.GetLength() );
 					break;
 				}
 
@@ -5131,7 +5132,7 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter ) NO_THREAD_SAFETY
 				if ( pIn>=pMaxDoc )
 				{
 					tReporter.Fail ( "reading past doclist end (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, doclist_offset=%u, doclist_size=%d)",
-						iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, sWord+1, uDocOffset, tSegment.m_dDocs.GetLength() );
+						iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, uDocOffset, tSegment.m_dDocs.GetLength() );
 					break;
 				}
 
@@ -5139,7 +5140,7 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter ) NO_THREAD_SAFETY
 				if ( pIn>=pMaxDoc )
 				{
 					tReporter.Fail ( "reading past doclist end (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, doclist_offset=%u, doclist_size=%d)",
-						iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, sWord+1, uDocOffset, tSegment.m_dDocs.GetLength() );
+						iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, uDocOffset, tSegment.m_dDocs.GetLength() );
 					break;
 				}
 
@@ -5151,7 +5152,7 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter ) NO_THREAD_SAFETY
 					if ( pIn>=pMaxDoc )
 					{
 						tReporter.Fail ( "reading past doclist end (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, doclist_offset=%u, doclist_size=%d)",
-							iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, sWord+1, uDocOffset, tSegment.m_dDocs.GetLength() );
+							iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, uDocOffset, tSegment.m_dDocs.GetLength() );
 						break;
 					}
 
@@ -5159,7 +5160,7 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter ) NO_THREAD_SAFETY
 					if ( pIn>pMaxDoc )
 					{
 						tReporter.Fail ( "reading past doclist end (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, doclist_offset=%u, doclist_size=%d)",
-							iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, sWord+1, uDocOffset, tSegment.m_dDocs.GetLength() );
+							iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, uDocOffset, tSegment.m_dDocs.GetLength() );
 						break;
 					}
 
@@ -5170,7 +5171,7 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter ) NO_THREAD_SAFETY
 					if ( pIn>pMaxDoc )
 					{
 						tReporter.Fail ( "reading past doclist end (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, doclist_offset=%u, doclist_size=%d)",
-							iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, sWord+1, uDocOffset, tSegment.m_dDocs.GetLength() );
+							iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, uDocOffset, tSegment.m_dDocs.GetLength() );
 						break;
 					}
 				}
@@ -5180,11 +5181,11 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter ) NO_THREAD_SAFETY
 				if ( uDoc && tDoc.m_tRowID<=tPrevRowID )
 				{
 					tReporter.Fail ( "rowid decreased (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, rowid=%u, prev_rowid=%u)",
-						iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, sWord+1, tDoc.m_tRowID, tPrevRowID );
+						iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID, tPrevRowID );
 				}
 
 				if ( tDoc.m_tRowID>=tSegment.m_uRows )
-					tReporter.Fail ( "invalid rowid (segment=%d, word=%d, wordid=" UINT64_FMT ", rowid=%u)", iSegment, nWordsRead, tWord.m_uWordID, tDoc.m_tRowID );
+					tReporter.Fail ( "invalid rowid (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u)", iSegment, nWordsRead, tWord.m_uWordID, szWord, tDoc.m_tRowID );
 
 				if ( bEmbeddedHit )
 				{
@@ -5196,34 +5197,34 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter ) NO_THREAD_SAFETY
 
 					if ( iCounter!=1 || tDoc.m_uHits!=1 )
 					{
-						tReporter.Fail ( "embedded hit with multiple occurences in a document found (segment=%d, word=%d, wordid=" UINT64_FMT ", rowid=%u)",
-							iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, tDoc.m_tRowID );
+						tReporter.Fail ( "embedded hit with multiple occurences in a document found (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u)",
+							iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID );
 					}
 
 					if ( (int)uFieldId>m_tSchema.GetFieldsCount() || uFieldId>SPH_MAX_FIELDS )
 					{
-						tReporter.Fail ( "invalid field id in an embedded hit (segment=%d, word=%d, wordid=" UINT64_FMT ", rowid=%u, field_id=%u, total_fields=%d)",
-							iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, tDoc.m_tRowID, uFieldId, m_tSchema.GetFieldsCount() );
+						tReporter.Fail ( "invalid field id in an embedded hit (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u, field_id=%u, total_fields=%d)",
+							iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID, uFieldId, m_tSchema.GetFieldsCount() );
 					}
 
 					if ( !( tDoc.m_uDocFields & ( 1 << uFieldId ) ) )
 					{
-						tReporter.Fail ( "invalid field id: not in doclist mask (segment=%d, word=%d, wordid=" UINT64_FMT ", rowid=%u, field_id=%u, field_mask=%u)",
-							iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, tDoc.m_tRowID, uFieldId, tDoc.m_uDocFields );
+						tReporter.Fail ( "invalid field id: not in doclist mask (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u, field_id=%u, field_mask=%u)",
+							iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID, uFieldId, tDoc.m_uDocFields );
 					}
 				} else
 				{
 					auto uExpectedHitOffset = DWORD ( pCurHit-tSegment.m_dHits.Begin() );
 					if ( tDoc.m_uHit!=uExpectedHitOffset )
 					{
-						tReporter.Fail ( "unexpected hitlist offset (segment=%d, word=%d, wordid=" UINT64_FMT ", rowid=%u, offset=%u, expected_offset=%u",
-							iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, tDoc.m_tRowID, tDoc.m_uHit, uExpectedHitOffset );
+						tReporter.Fail ( "unexpected hitlist offset (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u, offset=%u, expected_offset=%u",
+							iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID, tDoc.m_uHit, uExpectedHitOffset );
 					}
 
 					if ( tDoc.m_uHit && tDoc.m_uHit<=uPrevHitOffset )
 					{
-						tReporter.Fail ( "hitlist offset decreased (segment=%d, word=%d, wordid=" UINT64_FMT ", rowid=%u, offset=%u, prev_offset=%u",
-							iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, tDoc.m_tRowID, tDoc.m_uHit, uPrevHitOffset );
+						tReporter.Fail ( "hitlist offset decreased (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u, offset=%u, prev_offset=%u",
+							iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID, tDoc.m_uHit, uPrevHitOffset );
 					}
 
 					// check hitlist
@@ -5237,7 +5238,7 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter ) NO_THREAD_SAFETY
 						uHitlistEntry += UnzipDword ( pCurHit );
 						if ( pCurHit>pMaxHit )
 						{
-							tReporter.Fail ( "reading past hitlist end (segment=%d, word=%d, wordid=" UINT64_FMT ", rowid=%u)", iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, tDoc.m_tRowID );
+							tReporter.Fail ( "reading past hitlist end (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u)", iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID );
 							break;
 						}
 
@@ -5247,14 +5248,14 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter ) NO_THREAD_SAFETY
 
 						if ( (int)uFieldId>m_tSchema.GetFieldsCount() || uFieldId>SPH_MAX_FIELDS )
 						{
-							tReporter.Fail ( "invalid field id in a hitlist (segment=%d, word=%d, wordid=" UINT64_FMT ", rowid=%u, field_id=%u, total_fields=%d)",
-								iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, tDoc.m_tRowID, uFieldId, m_tSchema.GetFieldsCount() );
+							tReporter.Fail ( "invalid field id in a hitlist (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u, field_id=%u, total_fields=%d)",
+								iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID, uFieldId, m_tSchema.GetFieldsCount() );
 						}
 
 						if ( !( tDoc.m_uDocFields & ( 1 << uFieldId ) ) )
 						{
-							tReporter.Fail ( "invalid field id: not in doclist mask (segment=%d, word=%d, wordid=" UINT64_FMT ", rowid=%u, field_id=%u, field_mask=%u)",
-								iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, tDoc.m_tRowID, uFieldId, tDoc.m_uDocFields );
+							tReporter.Fail ( "invalid field id: not in doclist mask (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u, field_id=%u, field_mask=%u)",
+								iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID, uFieldId, tDoc.m_uDocFields );
 						}
 
 						if ( uLastFieldId!=uFieldId )
@@ -5265,12 +5266,12 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter ) NO_THREAD_SAFETY
 
 						if ( uLastPosInField && uPosInField<=uLastPosInField )
 						{
-							tReporter.Fail ( "hit position in field decreased (segment=%d, word=%d, wordid=" UINT64_FMT ", rowid=%u, pos=%u, last_pos=%u)",
-								iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, tDoc.m_tRowID, uPosInField, uLastPosInField );
+							tReporter.Fail ( "hit position in field decreased (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u, pos=%u, last_pos=%u)",
+								iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID, uPosInField, uLastPosInField );
 						}
 
 						if ( bLastInField && bLastInFieldFound )
-							tReporter.Fail ( "duplicate last-in-field hit found (segment=%d, word=%d, wordid=" UINT64_FMT ", rowid=%u)", iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, tDoc.m_tRowID );
+							tReporter.Fail ( "duplicate last-in-field hit found (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u)", iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID );
 
 						uLastPosInField = uPosInField;
 						uLastFieldId = uFieldId;
@@ -5283,8 +5284,8 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter ) NO_THREAD_SAFETY
 				DWORD uAvailFieldMask = ( 1 << m_tSchema.GetFieldsCount() ) - 1;
 				if ( tDoc.m_uDocFields & ~uAvailFieldMask )
 				{
-					tReporter.Fail ( "wrong document field mask (segment=%d, word=%d, wordid=" UINT64_FMT ", rowid=%u, mask=%u, total_fields=%d",
-						iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, tDoc.m_tRowID, tDoc.m_uDocFields, m_tSchema.GetFieldsCount() );
+					tReporter.Fail ( "wrong document field mask (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u, mask=%u, total_fields=%d",
+						iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID, tDoc.m_uDocFields, m_tSchema.GetFieldsCount() );
 				}
 
 				tPrevRowID = tDoc.m_tRowID;

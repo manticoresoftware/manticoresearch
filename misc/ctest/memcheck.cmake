@@ -37,7 +37,9 @@ SET ( CTEST_START_WITH_EMPTY_BINARY_DIRECTORY TRUE )
 #ctest_empty_binary_directory(${CTEST_BINARY_DIRECTORY})
 
 #######################################################################
+if ($ENV{CDASH_UPLOAD})
 configure_file ("$ENV{CDASH_UPLOAD}" "${CTEST_BINARY_DIRECTORY}/CTestConfig.cmake" COPYONLY)
+endif()
 
 # configure memcheck
 SET ( WITH_MEMCHECK TRUE )

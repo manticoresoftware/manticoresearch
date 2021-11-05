@@ -3295,7 +3295,7 @@ void RtIndex_c::RunMergeSegmentsWorker()
 	Coro::Go ( [this]() REQUIRES ( m_tWorkers.SerialChunkAccess() )
 	{
 		m_bSegMergeWorking.SetValueAndNotifyOne ( true );
-			auto tResetSegMergeWorking = AtScopeExit ( [this] { m_bSegMergeWorking.SetValueAndNotifyOne ( false ); } );
+		auto tResetSegMergeWorking = AtScopeExit ( [this] { m_bSegMergeWorking.SetValueAndNotifyOne ( false ); } );
 
 		while (true)
 		{
@@ -4733,9 +4733,7 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes ) NO_THREAD_
 		m_dFieldLensRam[i] = rdChunk.GetOffset();
 
 	// all done
-	if ( rdChunk.GetErrorFlag() )
-		return false;
-	return true;
+	return !rdChunk.GetErrorFlag();
 }
 
 

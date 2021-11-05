@@ -21,6 +21,7 @@
 #include "columnarlib.h"
 #include "indexfiles.h"
 
+constexpr int FAILS_THRESH = 100;
 
 DebugCheckError_c::DebugCheckError_c ( FILE * pFile )
 	: m_pFile ( pFile )
@@ -45,7 +46,6 @@ void DebugCheckError_c::Msg ( const char * szFmt, ... )
 bool DebugCheckError_c::Fail ( const char * szFmt, ... )
 {
 	assert ( m_pFile );
-	const int FAILS_THRESH = 100;
 	if ( ++m_nFails>=FAILS_THRESH )
 		return false;
 

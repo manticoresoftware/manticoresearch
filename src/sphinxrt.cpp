@@ -5391,7 +5391,8 @@ void RtIndex_c::SetDebugCheck ( bool bCheckIdDups, int iCheckChunk )
 	m_bDebugCheck = true;
 	m_bCheckIdDups = bCheckIdDups;
 	m_iCheckChunk = iCheckChunk;
-	ProhibitSave();
+	if ( Threads::IsInsideCoroutine() )
+		ProhibitSave();
 }
 
 //////////////////////////////////////////////////////////////////////////

@@ -1375,7 +1375,7 @@ private:
 	bool						MergeSegmentsStep( MergeSeg_e eVal ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
 	void						RunMergeSegmentsWorker();
 	void						StartMergeSegments ( MergeSeg_e eMergeWhat, bool bNotify=true ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
-	void						StopMergeSegmentsWorker();
+	void						StopMergeSegmentsWorker() REQUIRES ( m_tWorkers.SerialChunkAccess() );
 	bool						NeedStoreWordID () const override;
 	int64_t						GetMemLimit() const final { return m_iRtMemLimit; }
 
@@ -1421,7 +1421,13 @@ RtIndex_c::RtIndex_c ( const CSphSchema & tSchema, const char * sIndexName, int6
 
 RtIndex_c::~RtIndex_c ()
 {
-	StopMergeSegmentsWorker();
+	{
+		// From serial worker resuming on Wait() will happen after whole merger coroutine finished.
+		ScopedScheduler_c tSerialFiber { m_tWorkers.SerialChunkAccess() };
+		StopMergeSegmentsWorker();
+		m_tSaveTIDS.WaitVoid ( [this] { return m_tSaveTIDS.GetValueRef().IsEmpty(); } );
+	}
+
 	int64_t tmSave = sphMicroTimer();
 	bool bValid = m_pTokenizer && m_pDict && m_bLoadRamPassedOk;
 
@@ -3193,7 +3199,7 @@ void RtIndex_c::StartMergeSegments ( MergeSeg_e eMergeWhat, bool bNotify ) REQUI
 		m_eSegMergeQueued.NotifyOne();
 }
 
-void RtIndex_c::StopMergeSegmentsWorker()
+void RtIndex_c::StopMergeSegmentsWorker() REQUIRES ( m_tWorkers.SerialChunkAccess() )
 {
 	m_eSegMergeQueued.SetValueAndNotifyOne ( MergeSeg_e::EXIT );
 	m_bSegMergeWorking.Wait ( [] ( bool bVal ) { return !bVal; } );

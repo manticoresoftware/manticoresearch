@@ -56,7 +56,7 @@ That's the only difference between them. Several options are supported for custo
 To show how it works let's create an index and add few documents into it.
 
 ```sql
-create table products(title text) min_infix_len='1';
+create table products(title text) min_infix_len='2';
 insert into products values (0,'Crossbody Bag with Tassel'), (0,'microfiber sheet set'), (0,'Pet Hair Remover Glove');
 ```
 <!-- example single -->

@@ -289,7 +289,7 @@ string|text [stored|attribute] [indexed]
 
 Specifying at least one property overrides all the default ones (see below), i.e. if you decide to use a custom combination of properties you need to list all the properties you want.
 
-**No properties specfied:**
+**No properties specified:**
 
 `string` and `text` are aliases, but if you don’t specify any properties they by default means different things:
 

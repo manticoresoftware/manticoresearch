@@ -162,4 +162,4 @@ CALL QSUGGEST('bagg with tasel', 'products', 1 as result_line);
 
 [This interactive course](https://play.manticoresearch.com/didyoumean/) demonstrates online how it works on a web page and provides different examples.
 
-![Typical flow with Manticore and a database](../didyoumean.png){.scale-0.5}
+![Typical flow with Manticore and a database](didyoumean.png){.scale-0.5}

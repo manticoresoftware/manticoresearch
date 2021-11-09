@@ -293,8 +293,8 @@ Specifying at least one property overrides all the default ones (see below), i.e
 
 `string` and `text` are aliases, but if you don’t specify any properties they by default means different things:
 
-* just `string` by default means `attribute` (see details [below](#Text)).
-* just `text` by default means `stored` + `indexed` (see details [below](#String)).
+* just `string` by default means `attribute` (see details [below](Data_types.md#Text)).
+* just `text` by default means `stored` + `indexed` (see details [below](Data_types.md#String)).
 
 ### Text
 

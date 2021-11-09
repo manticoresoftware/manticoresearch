@@ -72,6 +72,7 @@ constexpr int SIMULTANEOUS_SAVE_LIMIT			= 2;		///< how many save ops we allow a 
 constexpr int MAX_SEGMENTS						= 32;
 constexpr int MAX_PROGRESSION_SEGMENT			= 8;
 constexpr int64_t MAX_SEGMENT_VECTOR_LEN		= INT_MAX;
+constexpr int MAX_TOLERATE_LOAD_SEGMENTS		= MAX_SEGMENTS * ( SIMULTANEOUS_SAVE_LIMIT + 1 );	///< if on load N of segments exceedes this value - perform safe loading
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -1339,9 +1340,9 @@ private:
 	void						SaveMeta ();
 	void						SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_t & tStats ) const;
 	void						SaveDiskData ( const char * szFilename, const ConstRtSegmentSlice_t & tSegs, const ChunkStats_t & tStats ) const;
-	bool						SaveDiskChunk ( bool bForced, bool bEmergent=false ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
+	bool						SaveDiskChunk ( bool bForced, bool bEmergent=false, bool bBootstrap=false ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
 	CSphIndex *					PreallocDiskChunk ( const char * sChunk, int iChunk, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError, const char * sName=nullptr ) const;
-	bool						LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes );
+	bool						LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes, bool bFixup = true );
 	bool						SaveRamChunk ();
 
 	bool						WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sError ) const;
@@ -3116,6 +3117,38 @@ inline std::pair<int,int> Find2Minimums ( const VecTraits_T<ConstRtSegmentRefPtf
 }
 
 enum class CheckMerge_e { MERGE, NOMERGE, FLUSH, FLUSH_EM };
+inline CheckMerge_e CheckSegmentsPair ( std::pair<const RtSegment_t*, const RtSegment_t*> tPair, int64_t iRamLeft=INT64_MAX ) NO_THREAD_SAFETY_ANALYSIS
+{
+	const auto* pA = tPair.first;
+	const auto* pB = tPair.second;
+
+	int64_t iAlive = pA->m_tAliveRows.load ( std::memory_order_relaxed ) + pB->m_tAliveRows.load ( std::memory_order_relaxed );
+	DWORD uRows = pA->m_uRows + pB->m_uRows;
+
+	int64_t iEstimatedMergedSize=0;
+	int64_t iMaxFutureVecLen=0;
+
+	// check whether we have enough RAM
+#define ESTIMATE( _v ) pA->_v.Relimit ( 0, ( (int64_t)pA->_v.GetLength() + pB->_v.GetLength() ) * iAlive / uRows )
+#define LOC_ESTIMATE( _v ) do { auto _t=ESTIMATE(_v); iEstimatedMergedSize+=_t; if (iMaxFutureVecLen<_t) iMaxFutureVecLen=_t; } while (0)
+
+	LOC_ESTIMATE ( m_dWords );
+	LOC_ESTIMATE ( m_dDocs );
+	LOC_ESTIMATE ( m_dHits );
+	LOC_ESTIMATE ( m_dBlobs );
+	LOC_ESTIMATE ( m_dKeywordCheckpoints );
+	LOC_ESTIMATE ( m_dRows );
+
+#undef LOC_ESTIMATE
+#undef ESTIMATE
+
+	if ( iEstimatedMergedSize > iRamLeft )
+		return CheckMerge_e::NOMERGE;
+	if ( iMaxFutureVecLen > MAX_SEGMENT_VECTOR_LEN )
+		return CheckMerge_e::FLUSH;
+	return CheckMerge_e::MERGE;
+}
+
 inline CheckMerge_e CheckWeCanMerge ( std::pair<int, int>& tSmallest, const VecTraits_T<ConstRtSegmentRefPtf_t>& dSegments, int64_t iHardRamLeft, int64_t iSoftRamLeft ) NO_THREAD_SAFETY_ANALYSIS
 {
 	const int iSegs = dSegments.GetLength ();
@@ -3147,29 +3180,17 @@ inline CheckMerge_e CheckWeCanMerge ( std::pair<int, int>& tSmallest, const VecT
 	if ( pB->GetMergeFactor() > pA->GetMergeFactor() * 2 && iSegs<MAX_SEGMENTS )
 		return CheckMerge_e::NOMERGE;
 
-	int64_t iAlive = pA->m_tAliveRows.load ( std::memory_order_relaxed ) + pB->m_tAliveRows.load ( std::memory_order_relaxed );
-	DWORD uRows = pA->m_uRows + pB->m_uRows;
-
-	int64_t iEstimatedMergedSize=0;
-	int64_t iMaxFutureVecLen=0;
-
-	// check whether we have enough RAM
-#define ESTIMATE( _v ) pA->_v.Relimit ( 0, ( (int64_t)pA->_v.GetLength() + pB->_v.GetLength() ) * iAlive / uRows )
-#define LOC_ESTIMATE( _v ) do { auto _t=ESTIMATE(_v); iEstimatedMergedSize+=_t; if (iMaxFutureVecLen<_t) iMaxFutureVecLen=_t; } while (0)
-
-	LOC_ESTIMATE ( m_dWords );
-	LOC_ESTIMATE ( m_dDocs );
-	LOC_ESTIMATE ( m_dHits );
-	LOC_ESTIMATE ( m_dBlobs );
-	LOC_ESTIMATE ( m_dKeywordCheckpoints );
-	LOC_ESTIMATE ( m_dRows );
-
-#undef LOC_ESTIMATE
-#undef ESTIMATE
-
-	if ( iEstimatedMergedSize > iSoftRamLeft ) // can't merge anymore, dump if segments count limit's reached
+	auto eDecision = CheckSegmentsPair ( {pA, pB}, iSoftRamLeft );
+	switch ( eDecision )
+	{
+	case CheckMerge_e::NOMERGE:
 		return ( iSegs >= MAX_SEGMENTS ) ? eFLUSH : CheckMerge_e::NOMERGE;
-	return ( iMaxFutureVecLen > MAX_SEGMENT_VECTOR_LEN ) ? eFLUSH : CheckMerge_e::MERGE;
+	case CheckMerge_e::FLUSH:
+		return eFLUSH;
+	case CheckMerge_e::MERGE:
+	default:
+		return CheckMerge_e::MERGE;
+	}
 }
 
 static StringBuilder_c & operator<< ( StringBuilder_c & dOut, CheckMerge_e eVal )
@@ -4051,14 +4072,14 @@ int64_t RtIndex_c::GetMemCount ( PRED&& fnPred ) const
 }
 
 // i.e. create new disk chunk from ram segments
-bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
+bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
 {
 	if ( m_eSaving.load(std::memory_order_relaxed) != WriteState_e::ENABLED ) // fixme! review, m.b. refactor
-		return true;
+		return !bBootstrap;
 
 	assert ( Coro::CurrentScheduler() == m_tWorkers.SerialChunkAccess() );
 
-	RTSAVELOG << "SaveDiskChunk (" << ( bForced ? "forced" : "not forced" ) << ", " << ( bEmergent ? "emergent" : "not emergent" ) << ")";
+	RTSAVELOG << "SaveDiskChunk (" << ( bForced ? "forced, " : "not forced, " ) << ( bEmergent ? "emergent, " : "not emergent, " ) << ( bBootstrap ? "bootstrap" : "usual" ) << ")";
 
 	int iSaveOp = m_tWorkers.GetNextOpTicket();
 
@@ -4095,7 +4116,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 	RTSAVELOG << "SaveDiskChunk process " << dSegments.GetLength() << " segments. Active jobs " << m_tSaveTIDS.GetValueRef().GetLength() << ", op " << iSaveOp
 		<< " RAM visible+retired/locked/acquired " << iNotMyOpRAM + iMyOpRAM << "+" << m_iRamChunksAllocatedRAM.load ( std::memory_order_relaxed )- iNotMyOpRAM - iMyOpRAM << "/" << iNotMyOpRAM << "/" << iMyOpRAM;
 	if ( dSegments.IsEmpty() )
-		return true;
+		return !bBootstrap;
 
 	auto iTID = m_iTID;
 	m_tSaveTIDS.ModifyValue ( [iTID] ( CSphVector<int64_t>& dSaves ) { dSaves.Add ( iTID ); } );
@@ -4202,6 +4223,10 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 		iDiskChunks = tNewSet.m_pNewDiskChunks->GetLength();
 	}
 	// from this point all readers will see new state of the index.
+
+	// if saving caused from loading .ram - we're done (DON't need to abandon .ram file!)
+	if ( bBootstrap )
+		return true;
 
 	// abandon .ram file
 	UnlinkRAMChunk ( "SaveDiskChunk" );
@@ -4490,7 +4515,7 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 	if ( m_bDebugCheck )
 	{
 		// load ram chunk
-		m_bLoadRamPassedOk = LoadRamChunk ( uVersion, bRebuildInfixes );
+		m_bLoadRamPassedOk = LoadRamChunk ( uVersion, bRebuildInfixes, false );
 		return m_bLoadRamPassedOk;
 	}
 
@@ -4636,7 +4661,7 @@ bool RtIndex_c::SaveRamChunk ()
 }
 
 
-bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes ) NO_THREAD_SAFETY_ANALYSIS
+bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes, bool bFixup ) NO_THREAD_SAFETY_ANALYSIS
 {
 	MEMORY ( MEM_INDEX_RT );
 
@@ -4661,11 +4686,18 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes ) NO_THREAD_
 	if ( !CheckVectorLength<RtSegVec_c::BASE> ( iSegmentCount, iFileSize, "ram-chunks", m_sLastError ) )
 		return false;
 
+	CSphVector<RtSegmentRefPtf_t> dRawSegments;
+	bool bSafeLoad = bFixup && iSegmentCount > MAX_TOLERATE_LOAD_SEGMENTS;
+
+	if ( bSafeLoad )
+		sphWarning ( "RAM chunk has %d segments, need to be repaired...", iSegmentCount );
+	int iEmpty=0;
+	DWORD uAlive = 0;
+
 	auto tWriter = RtWriter();
 	tWriter.InitRamSegs ( RtWriter_c::empty );
 	for ( int i = 0; i < iSegmentCount; ++i )
 	{
-
 		DWORD uRows = rdChunk.GetDword();
 
 		RtSegmentRefPtf_t pSeg {new RtSegment_t ( uRows )};
@@ -4734,7 +4766,86 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes ) NO_THREAD_
 			BuildSegmentInfixes ( pSeg, bHasMorphology, m_bKeywordDict, m_tSettings.m_iMinInfixLen, m_iWordsCheckpoint, ( m_iMaxCodepointLength>1 ), m_tSettings.m_eHitless );
 
 		pSeg->BuildDocID2RowIDMap(m_tSchema);
-		tWriter.m_pNewRamSegs->Add ( AdoptSegment ( pSeg ) );
+		if ( bSafeLoad )
+		{
+			int64_t iAlive = pSeg ? pSeg->m_tAliveRows.load ( std::memory_order_relaxed ) : 0;
+			if ( iAlive )
+			{
+				uAlive += iAlive;
+ 				dRawSegments.Add ( pSeg );
+			} else // skip that dead guy...
+				++iEmpty;
+		} else
+			tWriter.m_pNewRamSegs->Add ( AdoptSegment ( pSeg ) );
+	}
+
+	if ( bSafeLoad )
+	{
+		iSegmentCount = dRawSegments.GetLength();
+		sphInfo ( "RAM chunk repairing %d segments (%d totally killed segments dropped)", iSegmentCount, iEmpty );
+
+		// ideal rt-chunk structure (model) - rows per segment, sorted desc.
+		// 1024 1024 1024 ... 1024 512 256 128  64
+		// |______ MAX_SEGMENTS _________________|
+		// ..                      |_PROGRESSION_|
+		//
+		// All 'progression' segments together have about same N of rows as one non-progression,
+		// we can consider that for same-sized segments we should distribute all rows over (MAX_SEGMENTS-1) segments
+		// Minimal segment, in turn, is 2^PROGRESSION times smaller than typical for distribution.
+		// For simplicity, let's run merge with stop on any of 2 criterias: enough rows in segments, and small enough total N of segments.
+		// In 'ideal' case we will end with exactly 24 (that is MAX_SEGMENTS - MAX_PROGRESSION_SEGMENT) of maximal size, and no progression.
+		// In 'real' case we most probably end with about 96 segments with different sizes, and they'll be finished to ideal 24..32 by usual route.
+
+		auto uTargetRows = uAlive / ( MAX_SEGMENTS - MAX_PROGRESSION_SEGMENT );
+
+		sphInfo ( "RAM chunk repairing of %d segments with %d rows. Achieve min segment with %d rows", iSegmentCount, uAlive, uTargetRows );
+		auto iAliveSegments = iSegmentCount;
+		CSphVector<int> dSegNums;
+		dSegNums.Reserve ( iAliveSegments );
+		dSegNums.Add ( 0 ); // that is for very first step
+		int iPass = 0;
+
+		while ( dRawSegments[dSegNums.First()]->m_tAliveRows.load ( std::memory_order_relaxed ) < uTargetRows && iAliveSegments >= MAX_TOLERATE_LOAD_SEGMENTS )
+		{
+			dSegNums.Resize ( iAliveSegments );
+			for ( int i = 0, j = 0; i < iSegmentCount; ++i )
+			{
+				if ( dRawSegments[i] )
+					dSegNums[j++] = i;
+			}
+			dSegNums.Sort ( Lesser ( [&dRawSegments] ( int a, int b ) { return dRawSegments[a]->m_tAliveRows.load ( std::memory_order_relaxed ) < dRawSegments[b]->m_tAliveRows.load ( std::memory_order_relaxed ); } ) );
+			bool bMergeHappened = false;
+			sphInfo ( "RAM chunk repairing pass %d (%d segments)", iPass+1, iAliveSegments );
+			for ( int i = 0, iMax = iAliveSegments - 1; i < iMax; i += 2 )
+			{
+				auto& pA = dRawSegments[dSegNums[i]];
+				auto& pB = dRawSegments[dSegNums[i+1]];
+				if ( pB->m_tAliveRows.load ( std::memory_order_relaxed ) >= uTargetRows )
+					break;
+
+				auto eDecision = CheckSegmentsPair ( { pA, pB } );
+				if ( eDecision == CheckMerge_e::MERGE )
+				{
+					RtSegmentRefPtf_t pMerged { MergeTwoSegments ( pA, pB ) };
+					assert ( pMerged );
+					pA = pMerged;
+					pB = nullptr;
+					--iAliveSegments;
+					bMergeHappened = true;
+				} // else Fixme! Case FLUSH
+			}
+
+			if ( !bMergeHappened ) // that could happen if it was no positive merge decision. For example, if all segments are huge and so can't be merged at all
+				break;
+			++iPass;
+		}
+		sphInfo ( "RAM chunk repairing: min segment %d achieved in %d passes; now %d segments left", uTargetRows, iPass, iAliveSegments );
+		for ( auto& pSeg : dRawSegments )
+			if ( pSeg )
+				tWriter.m_pNewRamSegs->Add ( AdoptSegment ( pSeg ) );
+
+		dRawSegments.Reset();
+		sphWarning ( "RAM chunk has %d segments after repairing. You need to flush this index, otherwise result could be LOST, and repairing will start again on daemon's restart", tWriter.m_pNewRamSegs->GetLength() );
 	}
 
 	// field lengths

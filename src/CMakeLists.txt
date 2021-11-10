@@ -205,9 +205,11 @@ add_library (lsearchd OBJECT searchdha.cpp http/http_parser.c searchdhttp.cpp
 		searchdsql.cpp searchdddl.cpp networking_daemon.cpp
 		netstate_api.cpp net_action_accept.cpp netreceive_api.cpp
 		netreceive_http.cpp netreceive_ql.cpp query_status.cpp
-		sphinxql_debug.cpp stackmock.cpp digest_sha1.cpp)
+		sphinxql_debug.cpp stackmock.cpp )
 target_sources (lsearchd PUBLIC ${SEARCHD_SRCS_TESTABLE} ${SEARCHD_H} ${SEARCHD_BISON} ${SEARCHD_FLEX})
-target_link_libraries (lsearchd PUBLIC lextra)
+add_library ( digest_sha1 digest_sha1.cpp )
+target_link_libraries ( digest_sha1 PRIVATE lextra )
+target_link_libraries ( lsearchd PUBLIC digest_sha1 lextra )
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND CMAKE_CXX_COMPILER_VERSION VERSION_EQUAL "12")
 	set_source_files_properties ( stackmock.cpp PROPERTIES COMPILE_DEFINITIONS_RELWITHDEBINFO "KNOWN_CREATE_SIZE=768;KNOWN_EXPR_SIZE=32;KNOWN_FILTER_SIZE=208" )
@@ -232,6 +234,7 @@ target_link_libraries (searchd_ssl PUBLIC lextra)
 if (WITH_SSL)
 	target_compile_definitions (searchd_ssl PRIVATE DAEMON)
 	target_link_libraries (searchd_ssl PRIVATE OpenSSL::SSL)
+	target_link_libraries (digest_sha1 PRIVATE OpenSSL::SSL)
 	target_compile_options (searchd_ssl PRIVATE "$<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wno-deprecated-declarations>")
 	include(CheckFunctionExists)
 	set(CMAKE_REQUIRED_LIBRARIES "OpenSSL::SSL")

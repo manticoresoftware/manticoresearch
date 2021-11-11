@@ -1405,6 +1405,8 @@ private:
 	inline ConstRtData			RtData() const { return m_tRtChunks.RtData(); }
 
 	void						DebugCheckRamSegment ( const RtSegment_t & tSegment, int iSegment, DebugCheckError_i & tReporter ) const;
+	void						SaveRamFieldLengths ( CSphWriter& wrChunk ) const;
+	void						SaveRamSegment ( const RtSegment_t* pSeg, CSphWriter& wrChunk ) const REQUIRES_SHARED ( pSeg->m_tLock );
 };
 
 
@@ -4586,6 +4588,51 @@ static bool LoadVector ( CSphReader & tReader, CSphVector < T, P > & tVector,
 	return true;
 }
 
+void RtIndex_c::SaveRamSegment ( const RtSegment_t* pSeg, CSphWriter& wrChunk ) const REQUIRES_SHARED ( pSeg->m_tLock )
+{
+	wrChunk.PutDword ( pSeg->m_uRows );
+	wrChunk.PutDword ( (DWORD)pSeg->m_tAliveRows.load ( std::memory_order_relaxed ) );
+	wrChunk.PutDword ( 0 );
+	SaveVector ( wrChunk, pSeg->m_dWords );
+	if ( m_bKeywordDict )
+		SaveVector ( wrChunk, pSeg->m_dKeywordCheckpoints );
+
+	auto pCheckpoints = (const char*)pSeg->m_dKeywordCheckpoints.Begin();
+	wrChunk.PutDword ( pSeg->m_dWordCheckpoints.GetLength() );
+	for ( const auto& dWordCheckpoint : pSeg->m_dWordCheckpoints )
+	{
+		wrChunk.PutOffset ( dWordCheckpoint.m_iOffset );
+		if ( m_bKeywordDict )
+			wrChunk.PutOffset ( dWordCheckpoint.m_sWord - pCheckpoints );
+		else
+			wrChunk.PutOffset ( dWordCheckpoint.m_uWordID );
+	}
+
+	SaveVector ( wrChunk, pSeg->m_dDocs );
+	SaveVector ( wrChunk, pSeg->m_dHits );
+	SaveVector ( wrChunk, pSeg->m_dRows );
+	pSeg->m_tDeadRowMap.Save ( wrChunk );
+	SaveVector ( wrChunk, pSeg->m_dBlobs );
+
+	if ( pSeg->m_pDocstore.Ptr() )
+		pSeg->m_pDocstore->Save ( wrChunk );
+
+	wrChunk.PutByte ( pSeg->m_pColumnar.Ptr() ? 1 : 0 );
+	if ( pSeg->m_pColumnar.Ptr() )
+		pSeg->m_pColumnar->Save ( wrChunk );
+
+	// infixes
+	SaveVector ( wrChunk, pSeg->m_dInfixFilterCP );
+}
+
+void RtIndex_c::SaveRamFieldLengths ( CSphWriter& wrChunk ) const
+{
+	// field lengths
+	wrChunk.PutDword ( m_tSchema.GetFieldsCount() );
+	for ( int i = 0; i < m_tSchema.GetFieldsCount(); ++i )
+		wrChunk.PutOffset ( m_dFieldLensRam[i] );
+}
+
 bool RtIndex_c::SaveRamChunk ()
 {
 	if ( m_eSaving.load ( std::memory_order_relaxed ) != WriteState_e::ENABLED )
@@ -4610,45 +4657,10 @@ bool RtIndex_c::SaveRamChunk ()
 	for ( const RtSegment_t * pSeg : dSegments )
 	{
 		SccRL_t rLock ( pSeg->m_tLock );
-		wrChunk.PutDword ( pSeg->m_uRows );
-		wrChunk.PutDword ( (DWORD)pSeg->m_tAliveRows.load ( std::memory_order_relaxed ) );
-		wrChunk.PutDword ( 0 );
-		SaveVector ( wrChunk, pSeg->m_dWords );
-		if ( m_bKeywordDict )
-			SaveVector ( wrChunk, pSeg->m_dKeywordCheckpoints );
-
-		auto pCheckpoints = (const char *)pSeg->m_dKeywordCheckpoints.Begin();
-		wrChunk.PutDword ( pSeg->m_dWordCheckpoints.GetLength() );
-		for ( const auto& dWordCheckpoint : pSeg->m_dWordCheckpoints )
-		{
-			wrChunk.PutOffset ( dWordCheckpoint.m_iOffset );
-			if ( m_bKeywordDict )
-				wrChunk.PutOffset ( dWordCheckpoint.m_sWord-pCheckpoints );
-			else
-				wrChunk.PutOffset ( dWordCheckpoint.m_uWordID );
-		}
-
-		SaveVector ( wrChunk, pSeg->m_dDocs );
-		SaveVector ( wrChunk, pSeg->m_dHits );
-		SaveVector ( wrChunk, pSeg->m_dRows );
-		pSeg->m_tDeadRowMap.Save ( wrChunk );
-		SaveVector ( wrChunk, pSeg->m_dBlobs );
-
-		if ( pSeg->m_pDocstore.Ptr() )
-			pSeg->m_pDocstore->Save(wrChunk);
-
-		wrChunk.PutByte ( pSeg->m_pColumnar.Ptr() ? 1 : 0 );
-		if ( pSeg->m_pColumnar.Ptr() )
-			pSeg->m_pColumnar->Save(wrChunk);
-
-		// infixes
-		SaveVector ( wrChunk, pSeg->m_dInfixFilterCP );
+		SaveRamSegment ( pSeg, wrChunk );
 	}
 
-	// field lengths
-	wrChunk.PutDword ( m_tSchema.GetFieldsCount() );
-	for ( int i=0; i < m_tSchema.GetFieldsCount(); ++i )
-		wrChunk.PutOffset ( m_dFieldLensRam[i] );
+	SaveRamFieldLengths ( wrChunk );
 
 	wrChunk.CloseFile();
 	if ( wrChunk.IsError() )

@@ -1407,6 +1407,7 @@ private:
 	void						DebugCheckRamSegment ( const RtSegment_t & tSegment, int iSegment, DebugCheckError_i & tReporter ) const;
 	void						SaveRamFieldLengths ( CSphWriter& wrChunk ) const;
 	void						SaveRamSegment ( const RtSegment_t* pSeg, CSphWriter& wrChunk ) const REQUIRES_SHARED ( pSeg->m_tLock );
+	void						WriteMeta ( int64_t iTID, const VecTraits_T<int>& dChunkNames, CSphWriter& wrMeta ) const;
 };
 
 
@@ -4001,10 +4002,31 @@ void RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )
 	CSphWriter wrMeta;
 	if ( !wrMeta.OpenFile ( sMetaNew, sError ) )
 		sphDie ( "failed to serialize meta: %s", sError.cstr() ); // !COMMIT handle this gracefully
+
+	WriteMeta ( iTID, dChunkNames, wrMeta );
+	wrMeta.CloseFile();
+
+	// no need to remove old but good meta in case new meta failed to save
+	if ( wrMeta.IsError() )
+	{
+		sphWarning ( "%s", sError.cstr() );
+		return;
+	}
+
+	// rename
+	if ( sph::rename ( sMetaNew.cstr(), sMeta.cstr() ) )
+		sphDie ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)",
+			sMetaNew.cstr(), sMeta.cstr(), errno, strerrorm(errno) ); // !COMMIT handle this gracefully
+
+	SaveMutableSettings ( m_tMutableSettings, m_sPath );
+}
+
+void RtIndex_c::WriteMeta ( int64_t iTID, const VecTraits_T<int>& dChunkNames, CSphWriter& wrMeta ) const
+{
 	wrMeta.PutDword ( META_HEADER_MAGIC );
 	wrMeta.PutDword ( META_VERSION );
 	wrMeta.PutDword ( (DWORD)m_tStats.m_iTotalDocuments ); // FIXME? we don't expect over 4G docs per just 1 local index
-	wrMeta.PutOffset ( m_tStats.m_iTotalBytes ); // FIXME? need PutQword ideally
+	wrMeta.PutOffset ( m_tStats.m_iTotalBytes );		   // FIXME? need PutQword ideally
 	wrMeta.PutOffset ( iTID );
 
 	// meta v.4, save disk index format and settings, too
@@ -4025,31 +4047,15 @@ void RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )
 	// meta v.11
 	CSphFieldFilterSettings tFieldFilterSettings;
 	if ( m_pFieldFilter.Ptr() )
-		m_pFieldFilter->GetSettings(tFieldFilterSettings);
-	tFieldFilterSettings.Save(wrMeta);
+		m_pFieldFilter->GetSettings ( tFieldFilterSettings );
+	tFieldFilterSettings.Save ( wrMeta );
 
 	// meta v.12
-	wrMeta.PutDword ( dChunkNames.GetLength () );
+	wrMeta.PutDword ( dChunkNames.GetLength() );
 	wrMeta.PutBytes ( dChunkNames.Begin(), dChunkNames.GetLengthBytes() );
 
 	// meta v.17+
 	wrMeta.PutOffset ( m_iRtMemLimit );
-
-	wrMeta.CloseFile();
-
-	// no need to remove old but good meta in case new meta failed to save
-	if ( wrMeta.IsError() )
-	{
-		sphWarning ( "%s", sError.cstr() );
-		return;
-	}
-
-	// rename
-	if ( sph::rename ( sMetaNew.cstr(), sMeta.cstr() ) )
-		sphDie ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)",
-			sMetaNew.cstr(), sMeta.cstr(), errno, strerrorm(errno) ); // !COMMIT handle this gracefully
-
-	SaveMutableSettings ( m_tMutableSettings, m_sPath );
 }
 
 void RtIndex_c::SaveMeta()

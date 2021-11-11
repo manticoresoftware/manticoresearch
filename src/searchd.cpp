@@ -19892,6 +19892,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	// replay last binlog
 	Threads::CallCoroutine ([]
 	{
+		auto _ = PublishSystemInfo ("replay binlog");
 		SmallStringHash_T<CSphIndex*> hIndexes;
 		for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next(); ) // FIXME!!!
 		{

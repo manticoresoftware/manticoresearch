@@ -451,7 +451,7 @@ void Binlog_c::NotifyIndexFlush ( const char * sIndexName, int64_t iTID, bool bS
 		// do unlink
 		CSphString sLog = MakeBinlogName ( m_sLogPath.cstr(), tLog.m_iExt );
 		if ( ::unlink ( sLog.cstr() ) )
-			sphWarning ( "binlog: failed to unlink %s: %s (remove it manually)", sLog.cstr(), strerrorm(errno) );
+			sphWarning ( "binlog: failed to unlink %s: %s", sLog.cstr(), strerrorm(errno) );
 
 		// we need to reset it, otherwise there might be leftover data after last Remove()
 		m_dLogFiles[iLog] = BinlogFileDesc_t();

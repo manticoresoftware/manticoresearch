@@ -1408,6 +1408,11 @@ private:
 	void						SaveRamFieldLengths ( CSphWriter& wrChunk ) const;
 	void						SaveRamSegment ( const RtSegment_t* pSeg, CSphWriter& wrChunk ) const REQUIRES_SHARED ( pSeg->m_tLock );
 	void						WriteMeta ( int64_t iTID, const VecTraits_T<int>& dChunkNames, CSphWriter& wrMeta ) const;
+
+	CSphString					MakeDamagedName ( const char* szSuffix ) const;
+	void						DumpSegments ( VecTraits_T<const RtSegment_t*> dSegments, const char* szSuffix ) const;
+	void						DumpSegment ( const RtSegment_t* pSeg ) const;
+	void						DumpMeta () const;
 };
 
 
@@ -5485,6 +5490,66 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_i & tReporter ) NO_THREAD_SAFETY
 		const RtSegment_t & tSegment = *dRamSegs[iSegment];
 		DebugCheckRamSegment ( tSegment, iSegment, tReporter );
 	}
+}
+
+CSphString RtIndex_c::MakeDamagedName ( const char* szSuffix ) const
+{
+	CSphString sChunk;
+	sChunk.SetSprintf ( "%s/damaged.%s.%d.%s", Binlog::GetPath().cstr(), m_sIndexName.cstr(), getpid(), szSuffix );
+	return sChunk;
+}
+
+void RtIndex_c::DumpSegments ( VecTraits_T<const RtSegment_t*> dSegments, const char* szSuffix ) const
+{
+	CSphString sLastError;
+	CSphString sChunk = MakeDamagedName( szSuffix );
+
+	CSphWriter wrChunk;
+	if ( !wrChunk.OpenFile ( sChunk, sLastError ) )
+	{
+		sphWarning ("Unable to open %s, error %s", sChunk.cstr(), sLastError.cstr() );
+		return;
+	}
+
+	wrChunk.PutDword ( 0 );
+	wrChunk.PutDword ( dSegments.GetLength() );
+
+	// no locks here, because it's only intended to be called from dtor
+	for ( const RtSegment_t* pSeg : dSegments )
+	{
+		SccRL_t rLock ( pSeg->m_tLock );
+		SaveRamSegment ( pSeg, wrChunk );
+	}
+
+	SaveRamFieldLengths ( wrChunk );
+	wrChunk.CloseFile();
+}
+
+void RtIndex_c::DumpSegment ( const RtSegment_t* pSeg ) const
+{
+	LazyVector_T<const RtSegment_t*> dSegments;
+	dSegments.Add ( pSeg );
+	DumpSegments ( dSegments, "ram" );
+}
+
+void RtIndex_c::DumpMeta () const
+{
+	CSphString sLastError;
+	CSphString sChunk = MakeDamagedName ( "meta" );
+
+	CSphWriter wrMeta;
+	if ( !wrMeta.OpenFile ( sChunk, sLastError ) )
+	{
+		sphWarning ( "Unable to open %s, error %s", sChunk.cstr(), sLastError.cstr() );
+		return;
+	}
+
+	WriteMeta ( m_iTID, { nullptr, 0 }, wrMeta );
+	wrMeta.CloseFile();
+
+	// write new meta
+	if ( wrMeta.IsError() )
+		sphWarning ( "%s", sLastError.cstr() );
 }
 
 

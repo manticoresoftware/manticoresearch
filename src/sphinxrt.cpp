@@ -1403,6 +1403,8 @@ private:
 
 	// my own, or external data, if any present
 	inline ConstRtData			RtData() const { return m_tRtChunks.RtData(); }
+
+	void						DebugCheckRamSegment ( const RtSegment_t & tSegment, int iSegment, DebugCheckError_i & tReporter ) const;
 };
 
 
@@ -4997,6 +4999,457 @@ int RtIndex_c::DebugCheck ( DebugCheckError_i& tReporter )
 	return int ( tReporter.GetNumFails() + iFailsPlain );
 }
 
+void RtIndex_c::DebugCheckRamSegment ( const RtSegment_t & tSegment, int iSegment, DebugCheckError_i & tReporter ) const NO_THREAD_SAFETY_ANALYSIS
+{
+	if ( !tSegment.m_uRows )
+	{
+		tReporter.Fail ( "empty RT segment (segment=%d)", iSegment );
+		return;
+	}
+
+	const BYTE * pCurWord = tSegment.m_dWords.Begin();
+	const BYTE * pMaxWord = pCurWord+tSegment.m_dWords.GetLength();
+	const BYTE * pCurDoc = tSegment.m_dDocs.Begin();
+	const BYTE * pMaxDoc = pCurDoc+tSegment.m_dDocs.GetLength();
+	const BYTE * pCurHit = tSegment.m_dHits.Begin();
+	const BYTE * pMaxHit = pCurHit+tSegment.m_dHits.GetLength();
+
+	CSphVector<RtWordCheckpoint_t> dRefCheckpoints;
+	int nWordsRead = 0;
+	int nCheckpointWords = 0;
+	int iCheckpointOffset = 0;
+	SphWordID_t uPrevWordID = 0;
+	DWORD uPrevDocOffset = 0;
+	DWORD uPrevHitOffset = 0;
+
+	RtWord_t tWord;
+	tWord.m_bHasHitlist = false;
+
+	BYTE sWord[SPH_MAX_KEYWORD_LEN+2], sLastWord[SPH_MAX_KEYWORD_LEN+2];
+	memset ( sWord, 0, sizeof(sWord) );
+	memset ( sLastWord, 0, sizeof(sLastWord) );
+	auto szWord = (const char*) ( sWord + 1 );
+
+	int iLastWordLen = 0, iWordLen = 0;
+
+	while ( pCurWord && pCurWord<pMaxWord )
+	{
+		bool bCheckpoint = ++nCheckpointWords==m_iWordsCheckpoint;
+		if ( bCheckpoint )
+		{
+			nCheckpointWords = 1;
+			iCheckpointOffset = int ( pCurWord - tSegment.m_dWords.Begin() );
+			tWord.m_uDoc = 0;
+			if ( !m_bKeywordDict )
+				tWord.m_uWordID = 0;
+		}
+
+		const BYTE * pIn = pCurWord;
+		if ( m_bKeywordDict )
+		{
+			BYTE iMatch, iDelta, uPacked;
+			uPacked = *pIn++;
+
+			if ( pIn>=pMaxWord )
+			{
+				tReporter.Fail ( "reading past wordlist end (segment=%d, word=%d)", iSegment, nWordsRead );
+				break;
+			}
+
+			if ( uPacked & 0x80 )
+			{
+				iDelta = ( ( uPacked>>4 ) & 7 ) + 1;
+				iMatch = uPacked & 15;
+			} else
+			{
+				iDelta = uPacked & 127;
+				iMatch = *pIn++;
+				if ( pIn>=pMaxWord )
+				{
+					tReporter.Fail ( "reading past wordlist end (segment=%d, word=%d)", iSegment, nWordsRead );
+					break;
+				}
+
+				if ( iDelta<=8 && iMatch<=15 )
+				{
+					sLastWord[sizeof(sLastWord)-1] = '\0';
+					tReporter.Fail ( "wrong word-delta (segment=%d, word=%d, last_word=%s, last_len=%d, match=%d, delta=%d)",
+						iSegment, nWordsRead, sLastWord+1, iLastWordLen, iMatch, iDelta );
+				}
+			}
+
+			if ( iMatch+iDelta>=(int)sizeof(sWord)-2 || iMatch>iLastWordLen )
+			{
+				sLastWord[sizeof(sLastWord)-1] = '\0';
+				tReporter.Fail ( "wrong word-delta (segment=%d, word=%d, last_word=%s, last_len=%d, match=%d, delta=%d)",
+					iSegment, nWordsRead, sLastWord+1, iLastWordLen, iMatch, iDelta );
+
+				pIn += iDelta;
+				if ( pIn>=pMaxWord )
+				{
+					tReporter.Fail ( "reading past wordlist end (segment=%d, word=%d)", iSegment, nWordsRead );
+					break;
+				}
+			} else
+			{
+				iWordLen = iMatch+iDelta;
+				sWord[0] = (BYTE)iWordLen;
+				memcpy ( sWord+1+iMatch, pIn, iDelta );
+				sWord[1+iWordLen] = 0;
+				pIn += iDelta;
+				if ( pIn>=pMaxWord )
+				{
+					tReporter.Fail ( "reading past wordlist end (segment=%d, word=%d)", iSegment, nWordsRead );
+					break;
+				}
+			}
+
+			auto iCalcWordLen = (int) strlen ( (const char *)sWord+1 );
+			if ( iWordLen!=iCalcWordLen )
+			{
+				sWord[sizeof(sWord)-1] = '\0';
+				tReporter.Fail ( "word length mismatch (segment=%d, word=%d, read_word=%s, read_len=%d, calc_len=%d)", iSegment, nWordsRead, sWord+1, iWordLen, iCalcWordLen );
+			}
+
+			if ( !iWordLen )
+				tReporter.Fail ( "empty word in word list (segment=%d, word=%d)", iSegment, nWordsRead );
+
+			const BYTE * pStr = sWord+1;
+			const BYTE * pStringStart = pStr;
+			while ( pStringStart-pStr < iWordLen )
+			{
+				if ( !*pStringStart )
+				{
+					CSphString sErrorStr;
+					sErrorStr.SetBinary ( (const char*)pStr, iWordLen );
+					tReporter.Fail ( "embedded zero in a word list string (segment=%d, offset=%u, string=%s)", iSegment, (DWORD)(pStringStart-pStr), sErrorStr.cstr() );
+				}
+
+				pStringStart++;
+			}
+
+			if ( iLastWordLen && iWordLen )
+			{
+				if ( sphDictCmpStrictly ( (const char *)sWord+1, iWordLen, (const char *)sLastWord+1, iLastWordLen )<=0 )
+				{
+					sWord[sizeof(sWord)-1] = '\0';
+					sLastWord[sizeof(sLastWord)-1] = '\0';
+					tReporter.Fail ( "word order decreased (segment=%d, word=%d, read_word=%s, last_word=%s)", iSegment, nWordsRead, sWord+1, sLastWord+1 );
+				}
+			}
+
+			memcpy ( sLastWord, sWord, iWordLen+2 );
+			iLastWordLen = iWordLen;
+		} else
+		{
+			tWord.m_uWordID += UnzipWordid ( pIn );
+			if ( pIn>=pMaxWord )
+				tReporter.Fail ( "reading past wordlist end (segment=%d, word=%d)", iSegment, nWordsRead );
+
+			if ( tWord.m_uWordID<=uPrevWordID )
+			{
+				tReporter.Fail ( "wordid decreased (segment=%d, word=%d, wordid=" UINT64_FMT ", previd=" UINT64_FMT ")", iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, (uint64_t)uPrevWordID );
+			}
+
+			uPrevWordID = tWord.m_uWordID;
+		}
+
+		UnzipDword ( &tWord.m_uDocs, pIn );
+		if ( pIn>=pMaxWord )
+		{
+			sWord[sizeof(sWord)-1] = '\0';
+			tReporter.Fail ( "invalid docs/hits (segment=%d, word=%d, read_word=%s, docs=%u, hits=%u)", iSegment, nWordsRead, sWord+1, tWord.m_uDocs, tWord.m_uHits );
+		}
+
+		UnzipDword ( &tWord.m_uHits, pIn );
+		if ( pIn>=pMaxWord )
+			tReporter.Fail ( "reading past wordlist end (segment=%d, word=%d)", iSegment, nWordsRead );
+
+		tWord.m_uDoc += UnzipDword ( pIn );
+		if ( pIn>pMaxWord )
+			tReporter.Fail ( "reading past wordlist end (segment=%d, word=%d)", iSegment, nWordsRead );
+
+		pCurWord = pIn;
+
+		if ( !tWord.m_uDocs || !tWord.m_uHits || tWord.m_uHits<tWord.m_uDocs )
+		{
+			sWord[sizeof(sWord)-1] = '\0';
+			tReporter.Fail ( "invalid docs/hits (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, docs=%u, hits=%u)",
+				iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tWord.m_uDocs, tWord.m_uHits );
+		}
+
+		if ( bCheckpoint )
+		{
+			RtWordCheckpoint_t & tCP = dRefCheckpoints.Add();
+			tCP.m_iOffset = iCheckpointOffset;
+
+			if ( m_bKeywordDict )
+			{
+				tCP.m_sWord = new char [sWord[0]+1];
+				memcpy ( (void *)tCP.m_sWord, sWord+1, sWord[0]+1 );
+			} else
+				tCP.m_uWordID = tWord.m_uWordID;
+		}
+
+		sWord[sizeof(sWord)-1] = '\0';
+
+		if ( uPrevDocOffset && tWord.m_uDoc<=uPrevDocOffset )
+			tReporter.Fail ( "doclist offset decreased (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, doclist_offset=%u, prev_doclist_offset=%u)",
+				iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tWord.m_uDoc, uPrevDocOffset );
+
+		// read doclist
+		auto uDocOffset = DWORD ( pCurDoc-tSegment.m_dDocs.Begin() );
+		if ( tWord.m_uDoc!=uDocOffset )
+		{
+			tReporter.Fail ( "unexpected doclist offset (wordid=" UINT64_FMT "(%s)(%d), doclist_offset=%u, expected_offset=%u)",
+				(uint64_t)tWord.m_uWordID, szWord, nWordsRead, tWord.m_uDoc, uDocOffset );
+
+			if ( uDocOffset>=(DWORD)tSegment.m_dDocs.GetLength() )
+			{
+				tReporter.Fail ( "doclist offset pointing past doclist (segment=%d, word=%d, read_word=%s, doclist_offset=%u, doclist_size=%d)",
+					iSegment, nWordsRead, szWord, uDocOffset, tSegment.m_dDocs.GetLength() );
+
+				nWordsRead++;
+				continue;
+			} else
+				pCurDoc = tSegment.m_dDocs.Begin()+uDocOffset;
+		}
+
+		// read all docs from doclist
+		RtDoc_t tDoc;
+		RowID_t tPrevRowID = INVALID_ROWID;
+
+		for ( DWORD uDoc=0; uDoc<tWord.m_uDocs && pCurDoc<pMaxDoc; uDoc++ )
+		{
+			bool bEmbeddedHit = false;
+			pIn = pCurDoc;
+
+			tDoc.m_tRowID += UnzipDword ( pIn );
+			if ( pIn>=pMaxDoc )
+			{
+				tReporter.Fail ( "reading past doclist end (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, doclist_offset=%u, doclist_size=%d)",
+					iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, uDocOffset, tSegment.m_dDocs.GetLength() );
+				break;
+			}
+
+			UnzipDword ( &tDoc.m_uDocFields, pIn );
+			if ( pIn>=pMaxDoc )
+			{
+				tReporter.Fail ( "reading past doclist end (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, doclist_offset=%u, doclist_size=%d)",
+					iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, uDocOffset, tSegment.m_dDocs.GetLength() );
+				break;
+			}
+
+			UnzipDword ( &tDoc.m_uHits, pIn );
+			if ( pIn>=pMaxDoc )
+			{
+				tReporter.Fail ( "reading past doclist end (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, doclist_offset=%u, doclist_size=%d)",
+					iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, uDocOffset, tSegment.m_dDocs.GetLength() );
+				break;
+			}
+
+			if ( tDoc.m_uHits==1 )
+			{
+				bEmbeddedHit = true;
+
+				auto a = UnzipDword ( pIn );
+				if ( pIn>=pMaxDoc )
+				{
+					tReporter.Fail ( "reading past doclist end (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, doclist_offset=%u, doclist_size=%d)",
+						iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, uDocOffset, tSegment.m_dDocs.GetLength() );
+					break;
+				}
+
+				auto b = UnzipDword ( pIn );
+				if ( pIn>pMaxDoc )
+				{
+					tReporter.Fail ( "reading past doclist end (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, doclist_offset=%u, doclist_size=%d)",
+						iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, uDocOffset, tSegment.m_dDocs.GetLength() );
+					break;
+				}
+
+				tDoc.m_uHit = HITMAN::Create ( b, a );
+			} else
+			{
+				UnzipDword ( &tDoc.m_uHit, pIn );
+				if ( pIn>pMaxDoc )
+				{
+					tReporter.Fail ( "reading past doclist end (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, doclist_offset=%u, doclist_size=%d)",
+						iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, uDocOffset, tSegment.m_dDocs.GetLength() );
+					break;
+				}
+			}
+
+			pCurDoc = pIn;
+
+			if ( uDoc && tDoc.m_tRowID<=tPrevRowID )
+			{
+				tReporter.Fail ( "rowid decreased (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, rowid=%u, prev_rowid=%u)",
+					iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID, tPrevRowID );
+			}
+
+			if ( tDoc.m_tRowID>=tSegment.m_uRows )
+				tReporter.Fail ( "invalid rowid (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u)", iSegment, nWordsRead, tWord.m_uWordID, szWord, tDoc.m_tRowID );
+
+			if ( bEmbeddedHit )
+			{
+				DWORD uFieldId = HITMAN::GetField ( tDoc.m_uHit );
+				DWORD uFieldMask = tDoc.m_uDocFields;
+				int iCounter = 0;
+				for ( ; uFieldMask; iCounter++ )
+					uFieldMask &= uFieldMask - 1;
+
+				if ( iCounter!=1 || tDoc.m_uHits!=1 )
+				{
+					tReporter.Fail ( "embedded hit with multiple occurences in a document found (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u)",
+						iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID );
+				}
+
+				if ( (int)uFieldId>m_tSchema.GetFieldsCount() || uFieldId>SPH_MAX_FIELDS )
+				{
+					tReporter.Fail ( "invalid field id in an embedded hit (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u, field_id=%u, total_fields=%d)",
+						iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID, uFieldId, m_tSchema.GetFieldsCount() );
+				}
+
+				if ( !( tDoc.m_uDocFields & ( 1 << uFieldId ) ) )
+				{
+					tReporter.Fail ( "invalid field id: not in doclist mask (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u, field_id=%u, field_mask=%u)",
+						iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID, uFieldId, tDoc.m_uDocFields );
+				}
+			} else
+			{
+				auto uExpectedHitOffset = DWORD ( pCurHit-tSegment.m_dHits.Begin() );
+				if ( tDoc.m_uHit!=uExpectedHitOffset )
+				{
+					tReporter.Fail ( "unexpected hitlist offset (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u, offset=%u, expected_offset=%u",
+						iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID, tDoc.m_uHit, uExpectedHitOffset );
+				}
+
+				if ( tDoc.m_uHit && tDoc.m_uHit<=uPrevHitOffset )
+				{
+					tReporter.Fail ( "hitlist offset decreased (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u, offset=%u, prev_offset=%u",
+						iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID, tDoc.m_uHit, uPrevHitOffset );
+				}
+
+				// check hitlist
+				DWORD uHitlistEntry = 0;
+				DWORD uLastPosInField = 0;
+				DWORD uLastFieldId = 0;
+				bool bLastInFieldFound = false;
+
+				for ( DWORD uHit = 0; uHit < tDoc.m_uHits && pCurHit; uHit++ )
+				{
+					uHitlistEntry += UnzipDword ( pCurHit );
+					if ( pCurHit>pMaxHit )
+					{
+						tReporter.Fail ( "reading past hitlist end (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u)", iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID );
+						break;
+					}
+
+					DWORD uPosInField = HITMAN::GetPos ( uHitlistEntry );
+					bool bLastInField = HITMAN::IsEnd ( uHitlistEntry );
+					DWORD uFieldId = HITMAN::GetField ( uHitlistEntry );
+
+					if ( (int)uFieldId>m_tSchema.GetFieldsCount() || uFieldId>SPH_MAX_FIELDS )
+					{
+						tReporter.Fail ( "invalid field id in a hitlist (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u, field_id=%u, total_fields=%d)",
+							iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID, uFieldId, m_tSchema.GetFieldsCount() );
+					}
+
+					if ( !( tDoc.m_uDocFields & ( 1 << uFieldId ) ) )
+					{
+						tReporter.Fail ( "invalid field id: not in doclist mask (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u, field_id=%u, field_mask=%u)",
+							iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID, uFieldId, tDoc.m_uDocFields );
+					}
+
+					if ( uLastFieldId!=uFieldId )
+					{
+						bLastInFieldFound = false;
+						uLastPosInField = 0;
+					}
+
+					if ( uLastPosInField && uPosInField<=uLastPosInField )
+					{
+						tReporter.Fail ( "hit position in field decreased (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u, pos=%u, last_pos=%u)",
+							iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID, uPosInField, uLastPosInField );
+					}
+
+					if ( bLastInField && bLastInFieldFound )
+						tReporter.Fail ( "duplicate last-in-field hit found (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u)", iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID );
+
+					uLastPosInField = uPosInField;
+					uLastFieldId = uFieldId;
+					bLastInFieldFound |= bLastInField;
+				}
+
+				uPrevHitOffset = tDoc.m_uHit;
+			}
+
+			DWORD uAvailFieldMask = ( 1 << m_tSchema.GetFieldsCount() ) - 1;
+			if ( tDoc.m_uDocFields & ~uAvailFieldMask )
+			{
+				tReporter.Fail ( "wrong document field mask (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u, mask=%u, total_fields=%d",
+					iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID, tDoc.m_uDocFields, m_tSchema.GetFieldsCount() );
+			}
+
+			tPrevRowID = tDoc.m_tRowID;
+		}
+
+		uPrevDocOffset = tWord.m_uDoc;
+		nWordsRead++;
+	}
+
+	if ( pCurDoc!=pMaxDoc )
+		tReporter.Fail ( "unused doclist entries found (segment=%d, doclist_size=%d)", iSegment, tSegment.m_dDocs.GetLength() );
+
+	if ( pCurHit!=pMaxHit )
+		tReporter.Fail ( "unused hitlist entries found (segment=%d, hitlist_size=%d)", iSegment, tSegment.m_dHits.GetLength() );
+
+	if ( dRefCheckpoints.GetLength()!=tSegment.m_dWordCheckpoints.GetLength() )
+		tReporter.Fail ( "word checkpoint count mismatch (read=%d, calc=%d)", tSegment.m_dWordCheckpoints.GetLength(), dRefCheckpoints.GetLength() );
+
+	for ( int i=0; i < Min ( dRefCheckpoints.GetLength(), tSegment.m_dWordCheckpoints.GetLength() ); i++ )
+	{
+		const RtWordCheckpoint_t & tRefCP = dRefCheckpoints[i];
+		const RtWordCheckpoint_t & tCP = tSegment.m_dWordCheckpoints[i];
+		const int iLen = m_bKeywordDict ? (const int) strlen ( tCP.m_sWord ) : 0;
+		if ( m_bKeywordDict && ( !tCP.m_sWord || ( !strlen ( tRefCP.m_sWord ) || !strlen ( tCP.m_sWord ) ) ) )
+		{
+			tReporter.Fail ( "empty word checkpoint %d ((segment=%d, read_word=%s, read_len=%u, readpos=%d, calc_word=%s, calc_len=%u, calcpos=%d)",
+				i, iSegment, tCP.m_sWord, (DWORD)strlen ( tCP.m_sWord ), tCP.m_iOffset,
+				tRefCP.m_sWord, (DWORD)strlen ( tRefCP.m_sWord ), tRefCP.m_iOffset );
+		} else if ( sphCheckpointCmpStrictly ( tCP.m_sWord, iLen, tCP.m_uWordID, m_bKeywordDict, tRefCP ) || tRefCP.m_iOffset!=tCP.m_iOffset )
+		{
+			if ( m_bKeywordDict )
+			{
+				tReporter.Fail ( "word checkpoint %d differs (segment=%d, read_word=%s, readpos=%d, calc_word=%s, calcpos=%d)",
+					i, iSegment, tCP.m_sWord, tCP.m_iOffset, tRefCP.m_sWord, tRefCP.m_iOffset );
+			} else
+			{
+				tReporter.Fail ( "word checkpoint %d differs (segment=%d, readid=" UINT64_FMT ", readpos=%d, calcid=" UINT64_FMT ", calcpos=%d)",
+					i, iSegment, (uint64_t)tCP.m_uWordID, tCP.m_iOffset, (int64_t)tRefCP.m_uWordID, tRefCP.m_iOffset );
+			}
+		}
+	}
+
+	if ( m_bKeywordDict )
+		ARRAY_FOREACH ( i, dRefCheckpoints )
+			SafeDeleteArray ( dRefCheckpoints[i].m_sWord );
+
+	dRefCheckpoints.Reset ();
+
+	MemoryDebugCheckReader_c tAttrs ( (const BYTE *)tSegment.m_dRows.begin(), (const BYTE *)tSegment.m_dRows.end() );
+	MemoryDebugCheckReader_c tBlobs ( tSegment.m_dBlobs.begin(), tSegment.m_dBlobs.end() );
+	DebugCheck_Attributes ( tAttrs, tBlobs, tSegment.m_uRows, 0, m_tSchema, tReporter );
+	DebugCheck_DeadRowMap ( tSegment.m_tDeadRowMap.GetLengthBytes(), tSegment.m_uRows, tReporter );
+
+	DWORD uCalcAliveRows = tSegment.m_tDeadRowMap.GetNumAlive();
+	if ( tSegment.m_tAliveRows.load(std::memory_order_relaxed)!=uCalcAliveRows )
+		tReporter.Fail ( "alive row count mismatch (segment=%d, expected=%u, current=%u)", iSegment, uCalcAliveRows,
+				tSegment.m_tAliveRows.load ( std::memory_order_relaxed ) );
+
+} // NOLINT function length
+
 void RtIndex_c::DebugCheckRam ( DebugCheckError_i & tReporter ) NO_THREAD_SAFETY_ANALYSIS
 {
 	auto pRamSegs = m_tRtChunks.RamSegs();
@@ -5012,455 +5465,10 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_i & tReporter ) NO_THREAD_SAFETY
 		}
 
 		const RtSegment_t & tSegment = *dRamSegs[iSegment];
-		if ( !tSegment.m_uRows )
-		{
-			tReporter.Fail ( "empty RT segment (segment=%d)", iSegment );
-			continue;
-		}
-
-		const BYTE * pCurWord = tSegment.m_dWords.Begin();
-		const BYTE * pMaxWord = pCurWord+tSegment.m_dWords.GetLength();
-		const BYTE * pCurDoc = tSegment.m_dDocs.Begin();
-		const BYTE * pMaxDoc = pCurDoc+tSegment.m_dDocs.GetLength();
-		const BYTE * pCurHit = tSegment.m_dHits.Begin();
-		const BYTE * pMaxHit = pCurHit+tSegment.m_dHits.GetLength();
-
-		CSphVector<RtWordCheckpoint_t> dRefCheckpoints;
-		int nWordsRead = 0;
-		int nCheckpointWords = 0;
-		int iCheckpointOffset = 0;
-		SphWordID_t uPrevWordID = 0;
-		DWORD uPrevDocOffset = 0;
-		DWORD uPrevHitOffset = 0;
-
-		RtWord_t tWord;
-		tWord.m_bHasHitlist = false;
-
-		BYTE sWord[SPH_MAX_KEYWORD_LEN+2], sLastWord[SPH_MAX_KEYWORD_LEN+2];
-		memset ( sWord, 0, sizeof(sWord) );
-		memset ( sLastWord, 0, sizeof(sLastWord) );
-		auto szWord = (const char*) ( sWord + 1 );
-
-		int iLastWordLen = 0, iWordLen = 0;
-
-		while ( pCurWord && pCurWord<pMaxWord )
-		{
-			bool bCheckpoint = ++nCheckpointWords==m_iWordsCheckpoint;
-			if ( bCheckpoint )
-			{
-				nCheckpointWords = 1;
-				iCheckpointOffset = int ( pCurWord - tSegment.m_dWords.Begin() );
-				tWord.m_uDoc = 0;
-				if ( !m_bKeywordDict )
-					tWord.m_uWordID = 0;
-			}
-
-			const BYTE * pIn = pCurWord;
-			if ( m_bKeywordDict )
-			{
-				BYTE iMatch, iDelta, uPacked;
-				uPacked = *pIn++;
-
-				if ( pIn>=pMaxWord )
-				{
-					tReporter.Fail ( "reading past wordlist end (segment=%d, word=%d)", iSegment, nWordsRead );
-					break;
-				}
-
-				if ( uPacked & 0x80 )
-				{
-					iDelta = ( ( uPacked>>4 ) & 7 ) + 1;
-					iMatch = uPacked & 15;
-				} else
-				{
-					iDelta = uPacked & 127;
-					iMatch = *pIn++;
-					if ( pIn>=pMaxWord )
-					{
-						tReporter.Fail ( "reading past wordlist end (segment=%d, word=%d)", iSegment, nWordsRead );
-						break;
-					}
-
-					if ( iDelta<=8 && iMatch<=15 )
-					{
-						sLastWord[sizeof(sLastWord)-1] = '\0';
-						tReporter.Fail ( "wrong word-delta (segment=%d, word=%d, last_word=%s, last_len=%d, match=%d, delta=%d)",
-							iSegment, nWordsRead, sLastWord+1, iLastWordLen, iMatch, iDelta );
-					}
-				}
-
-				if ( iMatch+iDelta>=(int)sizeof(sWord)-2 || iMatch>iLastWordLen )
-				{
-					sLastWord[sizeof(sLastWord)-1] = '\0';
-					tReporter.Fail ( "wrong word-delta (segment=%d, word=%d, last_word=%s, last_len=%d, match=%d, delta=%d)",
-						iSegment, nWordsRead, sLastWord+1, iLastWordLen, iMatch, iDelta );
-
-					pIn += iDelta;
-					if ( pIn>=pMaxWord )
-					{
-						tReporter.Fail ( "reading past wordlist end (segment=%d, word=%d)", iSegment, nWordsRead );
-						break;
-					}
-				} else
-				{
-					iWordLen = iMatch+iDelta;
-					sWord[0] = (BYTE)iWordLen;
-					memcpy ( sWord+1+iMatch, pIn, iDelta );
-					sWord[1+iWordLen] = 0;
-					pIn += iDelta;
-					if ( pIn>=pMaxWord )
-					{
-						tReporter.Fail ( "reading past wordlist end (segment=%d, word=%d)", iSegment, nWordsRead );
-						break;
-					}
-				}
-
-				auto iCalcWordLen = (int) strlen ( (const char *)sWord+1 );
-				if ( iWordLen!=iCalcWordLen )
-				{
-					sWord[sizeof(sWord)-1] = '\0';
-					tReporter.Fail ( "word length mismatch (segment=%d, word=%d, read_word=%s, read_len=%d, calc_len=%d)", iSegment, nWordsRead, sWord+1, iWordLen, iCalcWordLen );
-				}
-
-				if ( !iWordLen )
-					tReporter.Fail ( "empty word in word list (segment=%d, word=%d)", iSegment, nWordsRead );
-
-				const BYTE * pStr = sWord+1;
-				const BYTE * pStringStart = pStr;
-				while ( pStringStart-pStr < iWordLen )
-				{
-					if ( !*pStringStart )
-					{
-						CSphString sErrorStr;
-						sErrorStr.SetBinary ( (const char*)pStr, iWordLen );
-						tReporter.Fail ( "embedded zero in a word list string (segment=%d, offset=%u, string=%s)", iSegment, (DWORD)(pStringStart-pStr), sErrorStr.cstr() );
-					}
-
-					pStringStart++;
-				}
-
-				if ( iLastWordLen && iWordLen )
-				{
-					if ( sphDictCmpStrictly ( (const char *)sWord+1, iWordLen, (const char *)sLastWord+1, iLastWordLen )<=0 )
-					{
-						sWord[sizeof(sWord)-1] = '\0';
-						sLastWord[sizeof(sLastWord)-1] = '\0';
-						tReporter.Fail ( "word order decreased (segment=%d, word=%d, read_word=%s, last_word=%s)", iSegment, nWordsRead, sWord+1, sLastWord+1 );
-					}
-				}
-
-				memcpy ( sLastWord, sWord, iWordLen+2 );
-				iLastWordLen = iWordLen;
-			} else
-			{
-				tWord.m_uWordID += UnzipWordid ( pIn );
-				if ( pIn>=pMaxWord )
-					tReporter.Fail ( "reading past wordlist end (segment=%d, word=%d)", iSegment, nWordsRead );
-
-				if ( tWord.m_uWordID<=uPrevWordID )
-				{
-					tReporter.Fail ( "wordid decreased (segment=%d, word=%d, wordid=" UINT64_FMT ", previd=" UINT64_FMT ")", iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, (uint64_t)uPrevWordID );
-				}
-
-				uPrevWordID = tWord.m_uWordID;
-			}
-
-			UnzipDword ( &tWord.m_uDocs, pIn );
-			if ( pIn>=pMaxWord )
-			{
-				sWord[sizeof(sWord)-1] = '\0';
-				tReporter.Fail ( "invalid docs/hits (segment=%d, word=%d, read_word=%s, docs=%u, hits=%u)", iSegment, nWordsRead, sWord+1, tWord.m_uDocs, tWord.m_uHits );
-			}
-
-			UnzipDword ( &tWord.m_uHits, pIn );
-			if ( pIn>=pMaxWord )
-				tReporter.Fail ( "reading past wordlist end (segment=%d, word=%d)", iSegment, nWordsRead );
-
-			tWord.m_uDoc += UnzipDword ( pIn );
-			if ( pIn>pMaxWord )
-				tReporter.Fail ( "reading past wordlist end (segment=%d, word=%d)", iSegment, nWordsRead );
-
-			pCurWord = pIn;
-
-			if ( !tWord.m_uDocs || !tWord.m_uHits || tWord.m_uHits<tWord.m_uDocs )
-			{
-				sWord[sizeof(sWord)-1] = '\0';
-				tReporter.Fail ( "invalid docs/hits (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, docs=%u, hits=%u)",
-					iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tWord.m_uDocs, tWord.m_uHits );
-			}
-
-			if ( bCheckpoint )
-			{
-				RtWordCheckpoint_t & tCP = dRefCheckpoints.Add();
-				tCP.m_iOffset = iCheckpointOffset;
-
-				if ( m_bKeywordDict )
-				{
-					tCP.m_sWord = new char [sWord[0]+1];
-					memcpy ( (void *)tCP.m_sWord, sWord+1, sWord[0]+1 );
-				} else
-					tCP.m_uWordID = tWord.m_uWordID;
-			}
-
-			sWord[sizeof(sWord)-1] = '\0';
-
-			if ( uPrevDocOffset && tWord.m_uDoc<=uPrevDocOffset )
-				tReporter.Fail ( "doclist offset decreased (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, doclist_offset=%u, prev_doclist_offset=%u)",
-					iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tWord.m_uDoc, uPrevDocOffset );
-
-			// read doclist
-			auto uDocOffset = DWORD ( pCurDoc-tSegment.m_dDocs.Begin() );
-			if ( tWord.m_uDoc!=uDocOffset )
-			{
-				tReporter.Fail ( "unexpected doclist offset (wordid=" UINT64_FMT "(%s)(%d), doclist_offset=%u, expected_offset=%u)",
-					(uint64_t)tWord.m_uWordID, szWord, nWordsRead, tWord.m_uDoc, uDocOffset );
-
-				if ( uDocOffset>=(DWORD)tSegment.m_dDocs.GetLength() )
-				{
-					tReporter.Fail ( "doclist offset pointing past doclist (segment=%d, word=%d, read_word=%s, doclist_offset=%u, doclist_size=%d)",
-						iSegment, nWordsRead, szWord, uDocOffset, tSegment.m_dDocs.GetLength() );
-
-					nWordsRead++;
-					continue;
-				} else
-					pCurDoc = tSegment.m_dDocs.Begin()+uDocOffset;
-			}
-
-			// read all docs from doclist
-			RtDoc_t tDoc;
-			RowID_t tPrevRowID = INVALID_ROWID;
-
-			for ( DWORD uDoc=0; uDoc<tWord.m_uDocs && pCurDoc<pMaxDoc; uDoc++ )
-			{
-				bool bEmbeddedHit = false;
-				pIn = pCurDoc;
-
-				tDoc.m_tRowID += UnzipDword ( pIn );
-				if ( pIn>=pMaxDoc )
-				{
-					tReporter.Fail ( "reading past doclist end (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, doclist_offset=%u, doclist_size=%d)",
-						iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, uDocOffset, tSegment.m_dDocs.GetLength() );
-					break;
-				}
-
-				UnzipDword ( &tDoc.m_uDocFields, pIn );
-				if ( pIn>=pMaxDoc )
-				{
-					tReporter.Fail ( "reading past doclist end (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, doclist_offset=%u, doclist_size=%d)",
-						iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, uDocOffset, tSegment.m_dDocs.GetLength() );
-					break;
-				}
-
-				UnzipDword ( &tDoc.m_uHits, pIn );
-				if ( pIn>=pMaxDoc )
-				{
-					tReporter.Fail ( "reading past doclist end (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, doclist_offset=%u, doclist_size=%d)",
-						iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, uDocOffset, tSegment.m_dDocs.GetLength() );
-					break;
-				}
-
-				if ( tDoc.m_uHits==1 )
-				{
-					bEmbeddedHit = true;
-
-					auto a = UnzipDword ( pIn );
-					if ( pIn>=pMaxDoc )
-					{
-						tReporter.Fail ( "reading past doclist end (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, doclist_offset=%u, doclist_size=%d)",
-							iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, uDocOffset, tSegment.m_dDocs.GetLength() );
-						break;
-					}
-
-					auto b = UnzipDword ( pIn );
-					if ( pIn>pMaxDoc )
-					{
-						tReporter.Fail ( "reading past doclist end (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, doclist_offset=%u, doclist_size=%d)",
-							iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, uDocOffset, tSegment.m_dDocs.GetLength() );
-						break;
-					}
-
-					tDoc.m_uHit = HITMAN::Create ( b, a );
-				} else
-				{
-					UnzipDword ( &tDoc.m_uHit, pIn );
-					if ( pIn>pMaxDoc )
-					{
-						tReporter.Fail ( "reading past doclist end (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, doclist_offset=%u, doclist_size=%d)",
-							iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, uDocOffset, tSegment.m_dDocs.GetLength() );
-						break;
-					}
-				}
-
-				pCurDoc = pIn;
-
-				if ( uDoc && tDoc.m_tRowID<=tPrevRowID )
-				{
-					tReporter.Fail ( "rowid decreased (segment=%d, word=%d, read_wordid=" UINT64_FMT ", read_word=%s, rowid=%u, prev_rowid=%u)",
-						iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID, tPrevRowID );
-				}
-
-				if ( tDoc.m_tRowID>=tSegment.m_uRows )
-					tReporter.Fail ( "invalid rowid (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u)", iSegment, nWordsRead, tWord.m_uWordID, szWord, tDoc.m_tRowID );
-
-				if ( bEmbeddedHit )
-				{
-					DWORD uFieldId = HITMAN::GetField ( tDoc.m_uHit );
-					DWORD uFieldMask = tDoc.m_uDocFields;
-					int iCounter = 0;
-					for ( ; uFieldMask; iCounter++ )
-						uFieldMask &= uFieldMask - 1;
-
-					if ( iCounter!=1 || tDoc.m_uHits!=1 )
-					{
-						tReporter.Fail ( "embedded hit with multiple occurences in a document found (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u)",
-							iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID );
-					}
-
-					if ( (int)uFieldId>m_tSchema.GetFieldsCount() || uFieldId>SPH_MAX_FIELDS )
-					{
-						tReporter.Fail ( "invalid field id in an embedded hit (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u, field_id=%u, total_fields=%d)",
-							iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID, uFieldId, m_tSchema.GetFieldsCount() );
-					}
-
-					if ( !( tDoc.m_uDocFields & ( 1 << uFieldId ) ) )
-					{
-						tReporter.Fail ( "invalid field id: not in doclist mask (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u, field_id=%u, field_mask=%u)",
-							iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID, uFieldId, tDoc.m_uDocFields );
-					}
-				} else
-				{
-					auto uExpectedHitOffset = DWORD ( pCurHit-tSegment.m_dHits.Begin() );
-					if ( tDoc.m_uHit!=uExpectedHitOffset )
-					{
-						tReporter.Fail ( "unexpected hitlist offset (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u, offset=%u, expected_offset=%u",
-							iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID, tDoc.m_uHit, uExpectedHitOffset );
-					}
-
-					if ( tDoc.m_uHit && tDoc.m_uHit<=uPrevHitOffset )
-					{
-						tReporter.Fail ( "hitlist offset decreased (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u, offset=%u, prev_offset=%u",
-							iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID, tDoc.m_uHit, uPrevHitOffset );
-					}
-
-					// check hitlist
-					DWORD uHitlistEntry = 0;
-					DWORD uLastPosInField = 0;
-					DWORD uLastFieldId = 0;
-					bool bLastInFieldFound = false;
-
-					for ( DWORD uHit = 0; uHit < tDoc.m_uHits && pCurHit; uHit++ )
-					{
-						uHitlistEntry += UnzipDword ( pCurHit );
-						if ( pCurHit>pMaxHit )
-						{
-							tReporter.Fail ( "reading past hitlist end (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u)", iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID );
-							break;
-						}
-
-						DWORD uPosInField = HITMAN::GetPos ( uHitlistEntry );
-						bool bLastInField = HITMAN::IsEnd ( uHitlistEntry );
-						DWORD uFieldId = HITMAN::GetField ( uHitlistEntry );
-
-						if ( (int)uFieldId>m_tSchema.GetFieldsCount() || uFieldId>SPH_MAX_FIELDS )
-						{
-							tReporter.Fail ( "invalid field id in a hitlist (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u, field_id=%u, total_fields=%d)",
-								iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID, uFieldId, m_tSchema.GetFieldsCount() );
-						}
-
-						if ( !( tDoc.m_uDocFields & ( 1 << uFieldId ) ) )
-						{
-							tReporter.Fail ( "invalid field id: not in doclist mask (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u, field_id=%u, field_mask=%u)",
-								iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID, uFieldId, tDoc.m_uDocFields );
-						}
-
-						if ( uLastFieldId!=uFieldId )
-						{
-							bLastInFieldFound = false;
-							uLastPosInField = 0;
-						}
-
-						if ( uLastPosInField && uPosInField<=uLastPosInField )
-						{
-							tReporter.Fail ( "hit position in field decreased (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u, pos=%u, last_pos=%u)",
-								iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID, uPosInField, uLastPosInField );
-						}
-
-						if ( bLastInField && bLastInFieldFound )
-							tReporter.Fail ( "duplicate last-in-field hit found (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u)", iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID );
-
-						uLastPosInField = uPosInField;
-						uLastFieldId = uFieldId;
-						bLastInFieldFound |= bLastInField;
-					}
-
-					uPrevHitOffset = tDoc.m_uHit;
-				}
-
-				DWORD uAvailFieldMask = ( 1 << m_tSchema.GetFieldsCount() ) - 1;
-				if ( tDoc.m_uDocFields & ~uAvailFieldMask )
-				{
-					tReporter.Fail ( "wrong document field mask (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u, mask=%u, total_fields=%d",
-						iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, szWord, tDoc.m_tRowID, tDoc.m_uDocFields, m_tSchema.GetFieldsCount() );
-				}
-
-				tPrevRowID = tDoc.m_tRowID;
-			}
-
-			uPrevDocOffset = tWord.m_uDoc;
-			nWordsRead++;
-		}
-
-		if ( pCurDoc!=pMaxDoc )
-			tReporter.Fail ( "unused doclist entries found (segment=%d, doclist_size=%d)", iSegment, tSegment.m_dDocs.GetLength() );
-
-		if ( pCurHit!=pMaxHit )
-			tReporter.Fail ( "unused hitlist entries found (segment=%d, hitlist_size=%d)", iSegment, tSegment.m_dHits.GetLength() );
-
-		if ( dRefCheckpoints.GetLength()!=tSegment.m_dWordCheckpoints.GetLength() )
-			tReporter.Fail ( "word checkpoint count mismatch (read=%d, calc=%d)", tSegment.m_dWordCheckpoints.GetLength(), dRefCheckpoints.GetLength() );
-
-		for ( int i=0; i < Min ( dRefCheckpoints.GetLength(), tSegment.m_dWordCheckpoints.GetLength() ); i++ )
-		{
-			const RtWordCheckpoint_t & tRefCP = dRefCheckpoints[i];
-			const RtWordCheckpoint_t & tCP = tSegment.m_dWordCheckpoints[i];
-			const int iLen = m_bKeywordDict ? (const int) strlen ( tCP.m_sWord ) : 0;
-			if ( m_bKeywordDict && ( !tCP.m_sWord || ( !strlen ( tRefCP.m_sWord ) || !strlen ( tCP.m_sWord ) ) ) )
-			{
-				tReporter.Fail ( "empty word checkpoint %d ((segment=%d, read_word=%s, read_len=%u, readpos=%d, calc_word=%s, calc_len=%u, calcpos=%d)",
-					i, iSegment, tCP.m_sWord, (DWORD)strlen ( tCP.m_sWord ), tCP.m_iOffset,
-					tRefCP.m_sWord, (DWORD)strlen ( tRefCP.m_sWord ), tRefCP.m_iOffset );
-			} else if ( sphCheckpointCmpStrictly ( tCP.m_sWord, iLen, tCP.m_uWordID, m_bKeywordDict, tRefCP ) || tRefCP.m_iOffset!=tCP.m_iOffset )
-			{
-				if ( m_bKeywordDict )
-				{
-					tReporter.Fail ( "word checkpoint %d differs (segment=%d, read_word=%s, readpos=%d, calc_word=%s, calcpos=%d)",
-						i, iSegment, tCP.m_sWord, tCP.m_iOffset, tRefCP.m_sWord, tRefCP.m_iOffset );
-				} else
-				{
-					tReporter.Fail ( "word checkpoint %d differs (segment=%d, readid=" UINT64_FMT ", readpos=%d, calcid=" UINT64_FMT ", calcpos=%d)",
-						i, iSegment, (uint64_t)tCP.m_uWordID, tCP.m_iOffset, (int64_t)tRefCP.m_uWordID, tRefCP.m_iOffset );
-				}
-			}
-		}
-
-		if ( m_bKeywordDict )
-			ARRAY_FOREACH ( i, dRefCheckpoints )
-				SafeDeleteArray ( dRefCheckpoints[i].m_sWord );
-
-		dRefCheckpoints.Reset ();
-
-		MemoryDebugCheckReader_c tAttrs ( (const BYTE *)tSegment.m_dRows.begin(), (const BYTE *)tSegment.m_dRows.end() );
-		MemoryDebugCheckReader_c tBlobs ( tSegment.m_dBlobs.begin(), tSegment.m_dBlobs.end() );
-		DebugCheck_Attributes ( tAttrs, tBlobs, tSegment.m_uRows, 0, m_tSchema, tReporter );
-		DebugCheck_DeadRowMap ( tSegment.m_tDeadRowMap.GetLengthBytes(), tSegment.m_uRows, tReporter );
-
-		DWORD uCalcAliveRows = tSegment.m_tDeadRowMap.GetNumAlive();
-		if ( tSegment.m_tAliveRows.load(std::memory_order_relaxed)!=uCalcAliveRows )
-			tReporter.Fail ( "alive row count mismatch (segment=%d, expected=%u, current=%u)", iSegment, uCalcAliveRows,
-					tSegment.m_tAliveRows.load ( std::memory_order_relaxed ) );
+		DebugCheckRamSegment ( tSegment, iSegment, tReporter );
 	}
+}
 
-} // NOLINT function length
 
 int RtIndex_c::DebugCheckDisk ( DebugCheckError_i & tReporter )
 {

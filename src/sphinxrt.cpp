@@ -1413,6 +1413,8 @@ private:
 	void						DumpSegments ( VecTraits_T<const RtSegment_t*> dSegments, const char* szSuffix ) const;
 	void						DumpSegment ( const RtSegment_t* pSeg ) const;
 	void						DumpMeta () const;
+	void						DumpInsert ( const RtSegment_t* pNewSeg ) const;
+	void						DumpMerge ( const RtSegment_t* pA, const RtSegment_t* pB, const RtSegment_t* pNew ) const;
 };
 
 
@@ -5550,6 +5552,42 @@ void RtIndex_c::DumpMeta () const
 	// write new meta
 	if ( wrMeta.IsError() )
 		sphWarning ( "%s", sLastError.cstr() );
+}
+
+void RtIndex_c::DumpInsert ( const RtSegment_t* pNewSeg ) const
+{
+	CSphString sLastError;
+	CSphString sContent = MakeDamagedName ( "stmt" );
+
+	CSphWriter wrContent;
+	if ( !wrContent.OpenFile ( sContent, sLastError ) )
+	{
+		sphWarning ( "Unable to open %s, error %s", sContent.cstr(), sLastError.cstr() );
+		return;
+	}
+
+	auto tDescription = myinfo::UnsafeDescription();
+	wrContent.PutBytes(tDescription.first, tDescription.second);
+	wrContent.CloseFile();
+
+	// write new meta
+	if ( wrContent.IsError() )
+		sphWarning ( "%s", sLastError.cstr() );
+
+	DumpSegment ( pNewSeg );
+	DumpMeta();
+}
+
+void RtIndex_c::DumpMerge ( const RtSegment_t* pA, const RtSegment_t* pB, const RtSegment_t* pNew ) const
+{
+	LazyVector_T<const RtSegment_t*> dSegments;
+	dSegments.Add ( pA );
+	dSegments.Add ( pB );
+	DumpSegments ( dSegments, "origin.ram" );
+	dSegments.Reset();
+	dSegments.Add ( pNew );
+	DumpSegments ( dSegments, "ram" );
+	DumpMeta();
 }
 
 

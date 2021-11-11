@@ -116,6 +116,8 @@ public:
 	void	DoFlush ();
 	int64_t	NextFlushingTime() const;
 
+	CSphString GetLogPath() const;
+
 private:
 	struct BlopStartEnd_t
 	{
@@ -1099,6 +1101,11 @@ int Binlog_c::ReplayIndexID ( BinlogReader_c & tReader, const BinlogFileDesc_t &
 	return iVal;
 }
 
+CSphString Binlog_c::GetLogPath() const
+{
+	return m_sLogPath;
+}
+
 static const char* OpName ( Binlog::Blop_e eOp)
 {
 	switch (eOp)
@@ -1408,6 +1415,13 @@ void Binlog::NotifyIndexFlush ( const char * sIndexName, int64_t iTID, bool bShu
 		return;
 
 	g_pRtBinlog->NotifyIndexFlush ( sIndexName, iTID, bShutdown );
+}
+
+CSphString Binlog::GetPath()
+{
+	if ( g_pRtBinlog )
+		return g_pRtBinlog->GetLogPath();
+	return "";
 }
 
 

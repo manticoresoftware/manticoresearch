@@ -1220,7 +1220,7 @@ public:
 	bool				AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, AttrEngine_e eEngine, CSphString & sError ) final;
 	bool				AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD uFieldFlags, CSphString & sError ) final;
 
-	int					DebugCheck ( FILE * fp ) final;
+	int					DebugCheck ( DebugCheckError_i& ) final;
 #if _WIN32
 #pragma warning(pop)
 #endif
@@ -1383,8 +1383,8 @@ private:
 	template<typename PRED>
 	int64_t						GetMemCount(PRED&& fnPred) const;
 
-	void						DebugCheckRam ( DebugCheckError_c & tReporter );
-	int							DebugCheckDisk ( DebugCheckError_c & tReporter, FILE * fp );
+	void						DebugCheckRam ( DebugCheckError_i & tReporter );
+	int							DebugCheckDisk ( DebugCheckError_i & tReporter );
 
 	void						SetSchema ( const CSphSchema & tSchema );
 
@@ -4959,11 +4959,9 @@ struct MemoryDebugCheckReader_c : public DebugCheckReader_i
 	const BYTE * m_pCur = nullptr;
 };
 
-int RtIndex_c::DebugCheck ( FILE * fp )
+int RtIndex_c::DebugCheck ( DebugCheckError_i& tReporter )
 {
 	// FIXME! remove copypasted code from CSphIndex_VLN::DebugCheck
-
-	DebugCheckError_c tReporter(fp);
 
 	if ( m_iLockFD<0 && m_iCheckChunk==-1 )
 		sphWarning ( "failed to load RAM chunks, checking only %d disk chunks", m_dChunkNames.GetLength() );
@@ -4992,14 +4990,14 @@ int RtIndex_c::DebugCheck ( FILE * fp )
 	if ( m_iCheckChunk==-1 )
 		DebugCheckRam ( tReporter );
 
-	int iFailsPlain = DebugCheckDisk ( tReporter, fp );
+	int iFailsPlain = DebugCheckDisk ( tReporter );
 
 	tReporter.Done();
 
 	return int ( tReporter.GetNumFails() + iFailsPlain );
 }
 
-void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter ) NO_THREAD_SAFETY_ANALYSIS
+void RtIndex_c::DebugCheckRam ( DebugCheckError_i & tReporter ) NO_THREAD_SAFETY_ANALYSIS
 {
 	auto pRamSegs = m_tRtChunks.RamSegs();
 	auto& dRamSegs = *pRamSegs;
@@ -5464,7 +5462,7 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter ) NO_THREAD_SAFETY
 
 } // NOLINT function length
 
-int RtIndex_c::DebugCheckDisk ( DebugCheckError_c & tReporter, FILE * fp )
+int RtIndex_c::DebugCheckDisk ( DebugCheckError_i & tReporter )
 {
 	CreateFilenameBuilder_fn fnCreateFilenameBuilder = GetIndexFilenameBuilder();
 	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( m_sIndexName.cstr() ) : nullptr );
@@ -5494,7 +5492,7 @@ int RtIndex_c::DebugCheckDisk ( DebugCheckError_c & tReporter, FILE * fp )
 		CSphScopedPtr<CSphIndex> pIndex ( PreallocDiskChunk ( sChunk.cstr(), iChunk, pFilenameBuilder.Ptr(), dWarnings, m_sLastError ) );
 		if ( pIndex.Ptr() )
 		{
-			iFailsPlain += pIndex->DebugCheck ( fp );
+			iFailsPlain += pIndex->DebugCheck ( tReporter );
 		} else
 		{
 			tReporter.Fail ( "%s", m_sLastError.cstr() );

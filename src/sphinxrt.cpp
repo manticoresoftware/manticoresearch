@@ -1317,6 +1317,7 @@ private:
 	CSphVector<SphWordID_t>		m_dHitlessWords;
 
 	CSphScopedPtr<DocstoreFields_i> m_pDocstoreFields {nullptr};	// rt index doesn't have its own docstore, but it must keep all fields to get their ids for GetDoc
+	mutable int					m_iTrackFailedRamActions;
 
 	RtAccum_t *					CreateAccum ( RtAccum_t * pAccExt, CSphString & sError ) final;
 
@@ -1394,6 +1395,7 @@ private:
 	void 						BinlogCommit ( RtSegment_t * pSeg, const CSphVector<DocID_t> & dKlist );
 	void						StopOptimize();
 	void						UpdateUnlockedCount();
+	bool						CheckSegmentConsistency ( const RtSegment_t* pNewSeg, bool bSilent=true ) const;
 
 	// internal helpers/hooks
 	inline RtWriter_c			RtWriter() { return { m_tRtChunks, [this] { UpdateUnlockedCount(); } }; }
@@ -1409,10 +1411,10 @@ private:
 	void						SaveRamSegment ( const RtSegment_t* pSeg, CSphWriter& wrChunk ) const REQUIRES_SHARED ( pSeg->m_tLock );
 	void						WriteMeta ( int64_t iTID, const VecTraits_T<int>& dChunkNames, CSphWriter& wrMeta ) const;
 
-	CSphString					MakeDamagedName ( const char* szSuffix ) const;
-	void						DumpSegments ( VecTraits_T<const RtSegment_t*> dSegments, const char* szSuffix ) const;
-	void						DumpSegment ( const RtSegment_t* pSeg ) const;
-	void						DumpMeta () const;
+	CSphString					MakeDamagedName () const;
+	void						DumpSegments ( VecTraits_T<const RtSegment_t*> dSegments, const CSphString& sFile ) const;
+	void						DumpSegment ( const RtSegment_t* pSeg, const CSphString& sFile ) const;
+	void						DumpMeta ( const CSphString& sFile ) const;
 	void						DumpInsert ( const RtSegment_t* pNewSeg ) const;
 	void						DumpMerge ( const RtSegment_t* pA, const RtSegment_t* pB, const RtSegment_t* pNew ) const;
 };
@@ -1424,11 +1426,23 @@ RtIndex_c::RtIndex_c ( const CSphSchema & tSchema, const char * sIndexName, int6
 	, m_iSavedTID ( m_iTID )
 	, m_tmSaved ( sphMicroTimer() )
 	, m_bKeywordDict ( bKeywordDict )
+	, m_iTrackFailedRamActions {0}
 {
 	MEMORY ( MEM_INDEX_RT );
 
 	SetSchema ( tSchema );
 	SetMemLimit ( iRamSize );
+
+	const char* szEnv = getenv ( "MANTICORE_TRACK_RT_ERRORS" );
+	if ( szEnv )
+	{
+		char* szEnd = nullptr;
+		auto iTrack = strtol (szEnv, &szEnd, 10);
+		if ( *szEnd !='\0' )
+			sphWarning ("MANTICORE_TRACK_RT_ERRORS expects to be numeric. %s provided, failed to parse as numeric since %s", szEnv, szEnd );
+		m_iTrackFailedRamActions = iTrack;
+		sphInfo ( "MANTICORE_TRACK_RT_ERRORS env provided; up to %d insert/merge errors will be reported", m_iTrackFailedRamActions );
+	}
 }
 
 
@@ -2855,6 +2869,8 @@ RtSegment_t* RtIndex_c::MergeTwoSegments ( const RtSegment_t* pA, const RtSegmen
 
 	RowID_t tNextRowID = 0;
 
+	bool bBothConsistent = CheckSegmentConsistency ( pA ) && CheckSegmentConsistency ( pB );
+
 	CSphScopedPtr<ColumnarBuilderRT_i> pColumnarBuilder ( CreateColumnarBuilderRT(m_tSchema) );
 	RtAttrMergeContext_t tCtx ( nBlobAttrs, tNextRowID, pColumnarBuilder.Ptr() );
 
@@ -2897,6 +2913,9 @@ RtSegment_t* RtIndex_c::MergeTwoSegments ( const RtSegment_t* pA, const RtSegmen
 
 	assert ( pSeg->m_uRows );
 	assert ( pSeg->m_tAliveRows==pSeg->m_uRows );
+
+	if ( bBothConsistent && !CheckSegmentConsistency ( pSeg, false ) )
+		DumpMerge ( pA, pB, pSeg );
 
 	return pSeg;
 }
@@ -3370,6 +3389,9 @@ int RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const CSphVector<DocID_
 			for ( int j=0; j<iFields; ++j )
 				dLens[j] += sphGetRowAttr ( pNewSeg->GetDocinfoByRowID(i), m_tSchema.GetAttr ( j+iFirstFieldLenAttr ).m_tLocator );
 	}
+
+	if ( pNewSeg && !CheckSegmentConsistency ( pNewSeg, false ) )
+		DumpInsert ( pNewSeg );
 
 	// for pure kills it is not necessary to wait, as it can't increase N of segments.
 	if ( pNewSeg )
@@ -4793,9 +4815,12 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes, bool bFixup
 			BuildSegmentInfixes ( pSeg, bHasMorphology, m_bKeywordDict, m_tSettings.m_iMinInfixLen, m_iWordsCheckpoint, ( m_iMaxCodepointLength>1 ), m_tSettings.m_eHitless );
 
 		pSeg->BuildDocID2RowIDMap(m_tSchema);
+
+		CheckSegmentConsistency ( pSeg );
+
 		if ( bSafeLoad )
 		{
-			int64_t iAlive = pSeg ? pSeg->m_tAliveRows.load ( std::memory_order_relaxed ) : 0;
+			int64_t iAlive = pSeg->m_tAliveRows.load ( std::memory_order_relaxed );
 			if ( iAlive )
 			{
 				uAlive += iAlive;
@@ -4870,7 +4895,6 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes, bool bFixup
 		for ( auto& pSeg : dRawSegments )
 			if ( pSeg )
 				tWriter.m_pNewRamSegs->Add ( AdoptSegment ( pSeg ) );
-
 		dRawSegments.Reset();
 		sphWarning ( "RAM chunk has %d segments after repairing. You need to flush this index, otherwise result could be LOST, and repairing will start again on daemon's restart", tWriter.m_pNewRamSegs->GetLength() );
 	}
@@ -5494,22 +5518,56 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_i & tReporter ) NO_THREAD_SAFETY
 	}
 }
 
-CSphString RtIndex_c::MakeDamagedName ( const char* szSuffix ) const
+constexpr int FAILS_THRESH = 100;
+
+class DebugCheckInternal : public DebugCheckError_i
+{
+	int64_t m_iFails { 0 };
+	StringBuilder_c m_sMsg { "\n" };
+public:
+	bool Fail ( const char* szFmt, ... ) override;
+	void Msg ( const char* szFmt, ... ) override {};
+	void Progress ( const char* szFmt, ... ) override {};
+	void Done() override {};
+	int64_t GetNumFails() const override;
+
+	inline const char* cstr() const { return m_sMsg.cstr(); }
+};
+
+bool DebugCheckInternal::Fail ( const char* szFmt, ... )
+{
+	if ( ++m_iFails >= FAILS_THRESH )
+		return false;
+
+	va_list ap;
+	va_start ( ap, szFmt );
+	m_sMsg.vSprintf ( szFmt, ap );
+	va_end ( ap );
+	return false;
+}
+
+int64_t DebugCheckInternal::GetNumFails() const
+{
+	return m_iFails;
+}
+
+CSphString RtIndex_c::MakeDamagedName () const
 {
 	CSphString sChunk;
-	sChunk.SetSprintf ( "%s/damaged.%s.%d.%s", Binlog::GetPath().cstr(), m_sIndexName.cstr(), getpid(), szSuffix );
+	sChunk.SetSprintf ( "%s/damaged.%s.%d.%d", Binlog::GetPath().cstr(), m_sIndexName.cstr(), getpid(), m_iTrackFailedRamActions );
 	return sChunk;
 }
 
-void RtIndex_c::DumpSegments ( VecTraits_T<const RtSegment_t*> dSegments, const char* szSuffix ) const
+void RtIndex_c::DumpSegments ( VecTraits_T<const RtSegment_t*> dSegments, const CSphString& sFile ) const
 {
-	CSphString sLastError;
-	CSphString sChunk = MakeDamagedName( szSuffix );
+	if ( dSegments.IsEmpty() )
+		return;
 
+	CSphString sLastError;
 	CSphWriter wrChunk;
-	if ( !wrChunk.OpenFile ( sChunk, sLastError ) )
+	if ( !wrChunk.OpenFile ( sFile, sLastError ) )
 	{
-		sphWarning ("Unable to open %s, error %s", sChunk.cstr(), sLastError.cstr() );
+		sphWarning ("Unable to open %s, error %s", sFile.cstr(), sLastError.cstr() );
 		return;
 	}
 
@@ -5527,22 +5585,22 @@ void RtIndex_c::DumpSegments ( VecTraits_T<const RtSegment_t*> dSegments, const 
 	wrChunk.CloseFile();
 }
 
-void RtIndex_c::DumpSegment ( const RtSegment_t* pSeg ) const
+void RtIndex_c::DumpSegment ( const RtSegment_t* pSeg, const CSphString& sFile ) const
 {
+	assert ( pSeg );
 	LazyVector_T<const RtSegment_t*> dSegments;
 	dSegments.Add ( pSeg );
-	DumpSegments ( dSegments, "ram" );
+	DumpSegments ( dSegments, sFile );
 }
 
-void RtIndex_c::DumpMeta () const
+void RtIndex_c::DumpMeta ( const CSphString& sFile ) const
 {
 	CSphString sLastError;
-	CSphString sChunk = MakeDamagedName ( "meta" );
 
 	CSphWriter wrMeta;
-	if ( !wrMeta.OpenFile ( sChunk, sLastError ) )
+	if ( !wrMeta.OpenFile ( sFile, sLastError ) )
 	{
-		sphWarning ( "Unable to open %s, error %s", sChunk.cstr(), sLastError.cstr() );
+		sphWarning ( "Unable to open %s, error %s", sFile.cstr(), sLastError.cstr() );
 		return;
 	}
 
@@ -5556,40 +5614,87 @@ void RtIndex_c::DumpMeta () const
 
 void RtIndex_c::DumpInsert ( const RtSegment_t* pNewSeg ) const
 {
-	CSphString sLastError;
-	CSphString sContent = MakeDamagedName ( "stmt" );
-
-	CSphWriter wrContent;
-	if ( !wrContent.OpenFile ( sContent, sLastError ) )
-	{
-		sphWarning ( "Unable to open %s, error %s", sContent.cstr(), sLastError.cstr() );
+	if ( !pNewSeg || m_iTrackFailedRamActions <= 0 )
 		return;
-	}
 
 	auto tDescription = myinfo::UnsafeDescription();
-	wrContent.PutBytes(tDescription.first, tDescription.second);
+	if ( tDescription.second > 6 && !memcmp ( tDescription.first, "SYSTEM ", 7 ) )
+		return;
+
+	CSphString sLastError;
+	CSphString sBase = MakeDamagedName ();
+	CSphString sFile;
+	sFile.SetSprintf ( "%s.stmt", sBase.cstr() );
+
+	CSphWriter wrContent;
+	if ( !wrContent.OpenFile ( sFile, sLastError ) )
+	{
+		sphWarning ( "Unable to open %s, error %s", sFile.cstr(), sLastError.cstr() );
+		return;
+	}
+	wrContent.PutBytes ( tDescription.first, tDescription.second );
 	wrContent.CloseFile();
 
 	// write new meta
 	if ( wrContent.IsError() )
 		sphWarning ( "%s", sLastError.cstr() );
 
-	DumpSegment ( pNewSeg );
-	DumpMeta();
+	sFile.SetSprintf ( "%s.ram", sBase.cstr() );
+	DumpSegment ( pNewSeg, sFile );
+	sFile.SetSprintf ( "%s.meta", sBase.cstr() );
+	DumpMeta( sFile );
+	sphWarning ( "Damaged Insert saved as %s, files .stmt, .ram and .meta", sBase.cstr() );
+	--m_iTrackFailedRamActions;
 }
 
 void RtIndex_c::DumpMerge ( const RtSegment_t* pA, const RtSegment_t* pB, const RtSegment_t* pNew ) const
 {
+	if ( m_iTrackFailedRamActions <= 0 )
+		return;
+
 	LazyVector_T<const RtSegment_t*> dSegments;
-	dSegments.Add ( pA );
-	dSegments.Add ( pB );
-	DumpSegments ( dSegments, "origin.ram" );
+	if ( pA )
+		dSegments.Add ( pA );
+	if ( pB )
+		dSegments.Add ( pB );
+
+	CSphString sBase = MakeDamagedName();
+	CSphString sFile;
+	sFile.SetSprintf ( "%s.origin.ram", sBase.cstr() );
+
+	DumpSegments ( dSegments, sFile );
 	dSegments.Reset();
-	dSegments.Add ( pNew );
-	DumpSegments ( dSegments, "ram" );
-	DumpMeta();
+	if ( pNew )
+		dSegments.Add ( pNew );
+	sFile.SetSprintf ( "%s.ram", sBase.cstr() );
+	DumpSegments ( dSegments, sFile );
+	sFile.SetSprintf ( "%s.meta", sBase.cstr() );
+	DumpMeta(sFile);
+	sphWarning ( "Damaged Merge saved as %s, files .origin.ram, .ram and .meta", sBase.cstr() );
+	--m_iTrackFailedRamActions;
 }
 
+bool RtIndex_c::CheckSegmentConsistency ( const RtSegment_t* pNewSeg, bool bSilent ) const
+{
+	assert ( pNewSeg );
+	if ( m_iTrackFailedRamActions<=0 || pNewSeg->m_bConsistent )
+		return true;
+
+	DebugCheckInternal tChecker;
+	DebugCheckRamSegment ( *pNewSeg, 0, tChecker );
+	if ( !tChecker.GetNumFails() )
+	{
+		pNewSeg->m_bConsistent = true;
+		return true;
+	}
+
+	if ( !bSilent )
+	{
+		sphWarning ( "CheckSegmentConsistency returned %d errors", (int)tChecker.GetNumFails() );
+		sphWarning ( "%s", tChecker.cstr() );
+	}
+	return false;
+}
 
 int RtIndex_c::DebugCheckDisk ( DebugCheckError_i & tReporter )
 {

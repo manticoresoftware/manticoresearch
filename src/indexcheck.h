@@ -27,35 +27,26 @@ public:
 
 
 // simple error reporter for debug checks
-class DebugCheckError_c
+class DebugCheckError_i
 {
 public:
-			DebugCheckError_c ( FILE * pFile );
+	virtual ~DebugCheckError_i() = default;
 
-	bool	Fail ( const char * szFmt, ... );
-	void	Msg ( const char * szFmt, ... );
-	void	Progress ( const char * szFmt, ... );
-	void	Done();
-
-	void	SetSegment ( int iSegment );
-	int64_t	GetNumFails() const;
-
-private:
-	FILE *	m_pFile {nullptr};
-	bool	m_bProgress {false};
-	int64_t m_tStartTime {0};
-	int64_t	m_nFails {0};
-	int64_t	m_nFailsPrinted {0};
-	int		m_iSegment {-1};
+	virtual bool Fail ( const char* szFmt, ... ) = 0;
+	virtual void Msg ( const char* szFmt, ... ) = 0;
+	virtual void Progress ( const char* szFmt, ... ) = 0;
+	virtual void Done() = 0;
+	virtual int64_t GetNumFails() const = 0;
 };
 
+DebugCheckError_i* MakeDebugCheckError ( FILE* fp );
 
 // common code for debug checks in RT and disk indexes
 class DebugCheckHelper_c
 {
 protected:
-	void	DebugCheck_Attributes ( DebugCheckReader_i & tAttrs, DebugCheckReader_i & tBlobs, int64_t nRows, int64_t iMinMaxBytes, const CSphSchema & tSchema, DebugCheckError_c & tReporter ) const;
-	void	DebugCheck_DeadRowMap (  int64_t iSizeBytes, int64_t nRows, DebugCheckError_c & tReporter ) const;
+	void	DebugCheck_Attributes ( DebugCheckReader_i & tAttrs, DebugCheckReader_i & tBlobs, int64_t nRows, int64_t iMinMaxBytes, const CSphSchema & tSchema, DebugCheckError_i & tReporter ) const;
+	void	DebugCheck_DeadRowMap (  int64_t iSizeBytes, int64_t nRows, DebugCheckError_i & tReporter ) const;
 };
 
 
@@ -73,9 +64,9 @@ public:
 };
 
 
-DiskIndexChecker_i * CreateDiskIndexChecker ( CSphIndex & tIndex, DebugCheckError_c & tReporter );
+DiskIndexChecker_i * CreateDiskIndexChecker ( CSphIndex & tIndex, DebugCheckError_i & tReporter );
 
-void DebugCheckSchema ( const ISphSchema & tSchema, DebugCheckError_c & tReporter );
+void DebugCheckSchema ( const ISphSchema & tSchema, DebugCheckError_i & tReporter );
 bool DebugCheckSchema ( const ISphSchema & tSchema, CSphString & sError );
 bool SchemaConfigureCheckAttribute ( const CSphSchema & tSchema, const CSphColumnInfo & tCol, CSphString & sError );
 

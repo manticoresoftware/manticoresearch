@@ -20,6 +20,7 @@
 #include "indexfiles.h"
 #include "stripper/html_stripper.h"
 #include "tokenizer/charset_definition_parser.h"
+#include "indexcheck.h"
 
 #include <ctime>
 
@@ -1592,7 +1593,10 @@ int main ( int argc, char ** argv )
 
 		case IndextoolCmd_e::CHECK:
 			fprintf ( stdout, "checking index '%s'...\n", sIndex.cstr() );
-			iCheckErrno = pIndex->DebugCheck ( stdout );
+			{
+				SharedPtr_t<DebugCheckError_i> pReporter { MakeDebugCheckError ( stdout ) };
+				iCheckErrno = pIndex->DebugCheck ( *pReporter );
+			}
 			if ( iCheckErrno )
 				return iCheckErrno;
 			if ( bRotate )

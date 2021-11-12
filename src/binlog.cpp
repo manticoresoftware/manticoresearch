@@ -116,6 +116,8 @@ public:
 	void	DoFlush ();
 	int64_t	NextFlushingTime() const;
 
+	CSphString GetLogPath() const;
+
 private:
 	struct BlopStartEnd_t
 	{
@@ -451,7 +453,7 @@ void Binlog_c::NotifyIndexFlush ( const char * sIndexName, int64_t iTID, bool bS
 		// do unlink
 		CSphString sLog = MakeBinlogName ( m_sLogPath.cstr(), tLog.m_iExt );
 		if ( ::unlink ( sLog.cstr() ) )
-			sphWarning ( "binlog: failed to unlink %s: %s (remove it manually)", sLog.cstr(), strerrorm(errno) );
+			sphWarning ( "binlog: failed to unlink %s: %s", sLog.cstr(), strerrorm(errno) );
 
 		// we need to reset it, otherwise there might be leftover data after last Remove()
 		m_dLogFiles[iLog] = BinlogFileDesc_t();
@@ -1099,6 +1101,11 @@ int Binlog_c::ReplayIndexID ( BinlogReader_c & tReader, const BinlogFileDesc_t &
 	return iVal;
 }
 
+CSphString Binlog_c::GetLogPath() const
+{
+	return m_sLogPath;
+}
+
 static const char* OpName ( Binlog::Blop_e eOp)
 {
 	switch (eOp)
@@ -1408,6 +1415,13 @@ void Binlog::NotifyIndexFlush ( const char * sIndexName, int64_t iTID, bool bShu
 		return;
 
 	g_pRtBinlog->NotifyIndexFlush ( sIndexName, iTID, bShutdown );
+}
+
+CSphString Binlog::GetPath()
+{
+	if ( g_pRtBinlog )
+		return g_pRtBinlog->GetLogPath();
+	return "";
 }
 
 

@@ -68,4 +68,6 @@ namespace Binlog {
 	void CommitUpdateAttributes ( int64_t * pTID, const char * szIndexName, const CSphAttrUpdate & tUpd );
 
 	void NotifyIndexFlush ( const char * sIndexName, int64_t iTID, bool bShutdown );
+
+	CSphString GetPath();
 }

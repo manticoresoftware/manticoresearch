@@ -1603,13 +1603,13 @@ DocstoreSession_c::~DocstoreSession_c()
 class DocstoreChecker_c
 {
 public:
-						DocstoreChecker_c ( CSphAutoreader & tReader, DebugCheckError_c & tReporter, int64_t iRowsCount );
+						DocstoreChecker_c ( CSphAutoreader & tReader, DebugCheckError_i & tReporter, int64_t iRowsCount );
 
 	bool				Check();
 
 private:
 	CSphAutoreader &	m_tReader;
-	DebugCheckError_c &	m_tReporter;
+	DebugCheckError_i &	m_tReporter;
 	const char *		m_szFilename = nullptr;
 	DocstoreFields_c	m_tFields;
 	CSphScopedPtr<Compressor_i> m_pCompressor{nullptr};
@@ -1623,7 +1623,7 @@ private:
 };
 
 
-DocstoreChecker_c::DocstoreChecker_c ( CSphAutoreader & tReader, DebugCheckError_c & tReporter, int64_t iRowsCount )
+DocstoreChecker_c::DocstoreChecker_c ( CSphAutoreader & tReader, DebugCheckError_i & tReporter, int64_t iRowsCount )
 	: m_tReader ( tReader )
 	, m_tReporter ( tReporter )
 	, m_szFilename ( tReader.GetFilename().cstr() )
@@ -1964,7 +1964,7 @@ void ShutdownDocstore()
 }
 
 
-bool CheckDocstore ( CSphAutoreader & tReader, DebugCheckError_c & tReporter, int64_t iRowsCount )
+bool CheckDocstore ( CSphAutoreader & tReader, DebugCheckError_i & tReporter, int64_t iRowsCount )
 {
 	DocstoreChecker_c tChecker ( tReader, tReporter, iRowsCount );
 	return tChecker.Check();

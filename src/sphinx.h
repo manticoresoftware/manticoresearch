@@ -1224,6 +1224,7 @@ int GetReadBuffer ( int iBuf );
 class ISphMatchSorter;
 class CSphSource;
 struct CSphSourceStats;
+class DebugCheckError_i;
 
 /// generic fulltext index interface
 class CSphIndex : public ISphKeywordsStat, public IndexSegment_c, public DocstoreReader_i
@@ -1358,7 +1359,7 @@ public:
 	virtual void				DebugDumpDict ( FILE * fp ) = 0;
 
 	/// internal debugging hook, DO NOT USE
-	virtual int					DebugCheck ( FILE * fp ) = 0;
+	virtual int					DebugCheck ( DebugCheckError_i& ) = 0;
 	virtual void				SetDebugCheck ( bool bCheckIdDups, int iCheckChunk ) {}
 
 	/// getter for name
@@ -1463,7 +1464,7 @@ public:
 	void				DebugDumpHeader ( FILE *, const char *, bool ) override {}
 	void				DebugDumpDocids ( FILE * ) override {}
 	void				DebugDumpHitlist ( FILE * , const char * , bool ) override {}
-	int					DebugCheck ( FILE * ) override { return 0; }
+	int					DebugCheck ( DebugCheckError_i& ) override { return 0; }
 	void				DebugDumpDict ( FILE * ) override {}
 	Bson_t				ExplainQuery ( const CSphString & sQuery ) const override { return EmptyBson (); }
 

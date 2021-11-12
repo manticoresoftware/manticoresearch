@@ -1285,7 +1285,7 @@ public:
 	void				DebugDumpHitlist ( FILE * fp, const char * sKeyword, bool bID ) final;
 	void				DebugDumpDict ( FILE * fp ) final;
 	void				SetDebugCheck ( bool bCheckIdDups, int iCheckChunk ) final;
-	int					DebugCheck ( FILE * fp ) final;
+	int					DebugCheck ( DebugCheckError_i& ) final;
 	template <class Qword> void		DumpHitlist ( FILE * fp, const char * sKeyword, bool bID );
 
 	bool				Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings ) final;
@@ -11480,9 +11480,8 @@ size_t strnlen ( const char * s, size_t iMaxLen )
 #endif
 
 
-int CSphIndex_VLN::DebugCheck ( FILE * fp )
+int CSphIndex_VLN::DebugCheck ( DebugCheckError_i& tReporter )
 {
-	DebugCheckError_c tReporter(fp);
 	CSphScopedPtr<DiskIndexChecker_i> pIndexChecker ( CreateDiskIndexChecker ( *this, tReporter ) );
 
 	pIndexChecker->Setup ( m_iDocinfo, m_iDocinfoIndex, m_iMinMaxIndex, m_bCheckIdDups );

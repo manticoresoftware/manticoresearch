@@ -3088,7 +3088,7 @@ public:
 /// since order of calling 2 commas here is undefined (so, you may take "foo, bar", but may ", foobar" also).
 /// Use out << comma << "foo"; out << comma << "bar"; in the case
 using Str_t = std::pair<const char*, int>;
-const Str_t dEmptyStr = { "", 0 };
+const Str_t dEmptyStr { "", 0 };
 inline bool IsEmpty ( const Str_t & dBlob ) { return dBlob.second==0; }
 inline bool IsFilled ( const Str_t & dBlob ) { return dBlob.first && dBlob.second>0; }
 inline Str_t FromSz ( const char * szString ) { return { szString, (int) strlen ( szString ) }; }
@@ -3166,6 +3166,7 @@ public:
 	// get current build value
 	const char *		cstr() const { return m_szBuffer ? m_szBuffer : ""; }
 	explicit operator	CSphString() const { return { cstr() }; }
+	explicit operator	Str_t() const { return m_szBuffer ? Str_t { m_szBuffer, m_iUsed } : dEmptyStr; }
 
 	// move out (de-own) value
 	BYTE *				Leak();
@@ -3824,8 +3825,9 @@ public:
 		m_iLevel = tOwner.StartBlock ( sDel, sPref, sTerm );
 	}
 
-	ScopedComma_c ( StringBuilder_c & tOwner, const StrBlock_t & dBlock )
+	ScopedComma_c ( StringBuilder_c & tOwner, const StrBlock_t & dBlock, bool bAllowEmpty=true )
 		: m_pOwner ( &tOwner )
+		, m_bAllowEmpty ( bAllowEmpty )
 	{
 		m_iLevel = tOwner.StartBlock(dBlock);
 	}

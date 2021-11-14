@@ -727,11 +727,13 @@ JsonEscapedBuilder& operator<< ( JsonEscapedBuilder& tOut, MysqlColumnType_e eTy
 	return tOut;
 }
 
+const StrBlock_t dJsonObjCustom { { ",\n", 2 }, { "[", 1 }, { "]", 1 } }; // json object with custom formatting
+
 class JsonRowBuffer_c : public RowBuffer_i
 {
 public:
 	JsonRowBuffer_c () {
-		m_dBuf.StartBlock ( { { ",\n", 2 }, { "[", 1 }, { "]", 1 } } );
+		m_dBuf.StartBlock ( dJsonObjCustom );
 	}
 
 	void PutFloatAsString ( float fVal, const char * ) override

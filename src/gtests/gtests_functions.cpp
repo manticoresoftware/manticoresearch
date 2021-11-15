@@ -199,33 +199,32 @@ TEST ( functions, JsonEscapedBuilder_sugar )
 	JsonEscapedBuilder tOut;
 
 	// scoped name
+	tOut.ArrayBlock();
 	{
-		auto _ = tOut.Array();
 		auto tNamed = tOut.Named("test1");
 		tOut << "one" << "two";
 		tOut.AppendEscaped("blabla");
 	};
+	tOut.FinishBlock();
 	EXPECT_STREQ ( tOut.cstr (), "[\"test1\":onetwo\"blabla\"]" );
 
 	// scoped immediate name
 	tOut.Clear();
+	tOut.ArrayBlock();
 	{
-		auto _ = tOut.Array();
 		tOut.Named( "test1" ).Sink() << "one" << "two";
 		tOut.AppendEscaped( "blabla" );
 	};
+	tOut.FinishBlock();
 	EXPECT_STREQ ( tOut.cstr(), "[\"test1\":onetwo,\"blabla\"]" );
 
 	// block name
 	tOut.Clear();
-	{
-		auto _ = tOut.Array();
-		tOut.NamedBlock ( "test1" );
-		tOut << "one"
-			 << "two";
-		tOut.AppendEscaped ( "blabla" );
-		tOut.FinishBlock();
-	}
+	tOut.ArrayBlock();
+	tOut.NamedBlock( "test1" );
+	tOut << "one" << "two";
+	tOut.AppendEscaped( "blabla" );
+	tOut.FinishBlocks();
 	EXPECT_STREQ ( tOut.cstr(), "[\"test1\":onetwo\"blabla\"]" );
 
 	// scoped object
@@ -265,10 +264,9 @@ TEST ( functions, JsonEscapedBuilder_sugar )
 
 	// block array
 	tOut.Clear();
-	{
-		auto _ = tOut.Array();
-		tOut << 1 << 2 << 3 << 4;
-	}
+	tOut.ArrayBlock();
+	tOut << 1 << 2 << 3 << 4;
+	tOut.FinishBlocks();
 	EXPECT_STREQ ( tOut.cstr(), "[1,2,3,4]" );
 
 	// scoped immediate warray

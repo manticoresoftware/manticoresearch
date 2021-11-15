@@ -1170,46 +1170,44 @@ const BYTE * sphJsonFieldFormat ( JsonEscapedBuilder & sOut, const BYTE * pData,
 
 		case JSON_STRING_VECTOR:
 			sOut.GrowEnough ( sphJsonUnpackInt ( &p ) );
-			{
-				auto _ = sOut.Array();
-				for ( int i = sphJsonUnpackInt ( &p ); i > 0; --i )
-					p = JsonFormatStr ( sOut, p );
-			}
+			sOut.ArrayBlock();
+			for ( int i= sphJsonUnpackInt ( &p ); i>0; --i )
+				p = JsonFormatStr ( sOut, p );
+			sOut.FinishBlock ( false );
 			break;
 
 		case JSON_INT32_VECTOR:
-			{
-				auto _ = sOut.Array();
-				for ( int i = sphJsonUnpackInt ( &p ); i > 0; --i )
-					sOut.Sprintf ( "%d", sphJsonLoadInt ( &p ) );
-				break;
-			}
+			sOut.ArrayBlock();
+			for ( int i = sphJsonUnpackInt ( &p ); i>0; --i )
+				sOut.Sprintf ( "%d", sphJsonLoadInt ( &p ) );
+			sOut.FinishBlock ( false );
+		break;
 		case JSON_INT64_VECTOR:
-			{
-				auto _ = sOut.Array();
-				for ( int i = sphJsonUnpackInt ( &p ); i > 0; --i )
-					sOut.Sprintf ( "%l", sphJsonLoadBigint ( &p ) );
-				break;
-			}
+			sOut.ArrayBlock ();
+			for ( int i = sphJsonUnpackInt ( &p ); i>0; --i )
+				sOut.Sprintf ( "%l", sphJsonLoadBigint ( &p ) );
+			sOut.FinishBlock ( false );
+			break;
 		case JSON_DOUBLE_VECTOR:
+			sOut.ArrayBlock ();
+			for ( int i = sphJsonUnpackInt ( &p ); i>0; --i )
 			{
-				auto _ = sOut.Array ();
-				for ( int i = sphJsonUnpackInt ( &p ); i>0; --i )
-				{
-					auto iLen = snprintf ( sDouble, szDouble, "%lf", sphQW2D ( sphJsonLoadBigint ( &p ) ) ); // NOLINT
-					sOut.AppendChunk ( {sDouble, iLen} );
-				}
-				break;
+				auto iLen = snprintf ( sDouble, szDouble, "%lf", sphQW2D ( sphJsonLoadBigint ( &p ) ) ); // NOLINT
+				sOut.AppendChunk ( {sDouble, iLen} );
 			}
+			sOut.FinishBlock ( false );
+			break;
+
 		case JSON_MIXED_VECTOR:
 			{
-				auto _ = sOut.Array ();
+				sOut.ArrayBlock ();
 				sphJsonUnpackInt ( &p );
 				for ( int i = sphJsonUnpackInt ( &p ); i>0; --i )
 				{
 					auto eNode = ( ESphJsonType ) *p++;
 					p = sphJsonFieldFormat ( sOut, p, eNode, true );
 				}
+				sOut.FinishBlock ( false );
 				break;
 			}
 		case JSON_ROOT:

@@ -721,57 +721,54 @@ static const char * GetTypeName ( MysqlColumnType_e eType )
 	};
 }
 
-JsonEscapedBuilder& operator<< ( JsonEscapedBuilder& tOut, MysqlColumnType_e eType )
-{
-	tOut.FixupSpacedAndAppendEscaped ( GetTypeName ( eType ) );
-	return tOut;
-}
-
-const StrBlock_t dJsonObjCustom { { ",\n", 2 }, { "[", 1 }, { "]", 1 } }; // json object with custom formatting
-
 class JsonRowBuffer_c : public RowBuffer_i
 {
 public:
-	JsonRowBuffer_c () {
-		m_dBuf.StartBlock ( dJsonObjCustom );
-	}
+	JsonRowBuffer_c () {}
 
-	void PutFloatAsString ( float fVal, const char * ) override
+	void PutFloatAsString ( float fVal, const char * sFormat ) override
 	{
-		m_dBuf << fVal;
+		AddDataColumn();
+		m_dBuf.Appendf( "%f", fVal );
 	}
 
 	void PutNumAsString ( int64_t iVal ) override
 	{
-		m_dBuf << iVal;
+		AddDataColumn();
+		m_dBuf.Appendf( INT64_FMT, iVal );
 	}
 
 	void PutNumAsString ( uint64_t uVal ) override
 	{
-		m_dBuf << uVal;
+		AddDataColumn();
+		m_dBuf.Appendf( UINT64_FMT, uVal );
 	}
 
 	void PutNumAsString ( int iVal ) override
 	{
-		m_dBuf << iVal;
+		AddDataColumn();
+		m_dBuf.Appendf ( "%d", iVal );
 	}
 	
 	void PutNumAsString ( DWORD uVal ) override
 	{
-		m_dBuf << uVal;
+		AddDataColumn();
+		m_dBuf.Appendf ( "%u", uVal );
 	}
 
-	void PutArray ( const void * pBlob, int iLen, bool ) override
+	void PutArray ( const void * pBlob, int iLen, bool bSendEmpty ) override
 	{
-		if ( iLen < 0 )
-			m_dBuf.FixupSpacedAndAppendEscaped ( static_cast<const char*> ( pBlob ) );
-		else
-			m_dBuf.FixupSpacedAndAppendEscaped ( static_cast<const char*> ( pBlob ), iLen );
+		AddDataColumn();
+		m_dBuf.FixupSpacedAndAppendEscaped ( (const char*) pBlob, iLen );
 	}
 
 	void PutString ( const char * sMsg, int iLen=-1 ) override
 	{
-		PutArray( sMsg, iLen, false );
+		AddDataColumn();
+		if ( iLen<0 )
+			m_dBuf.FixupSpacedAndAppendEscaped ( sMsg );
+		else
+			m_dBuf.FixupSpacedAndAppendEscaped ( sMsg, iLen );
 	}
 
 	void PutMicrosec ( int64_t iUsec ) override
@@ -781,82 +778,108 @@ public:
 
 	void PutNULL() override
 	{
-		m_dBuf << "null";
+		AddDataColumn();
+		m_dBuf += "null";
 	}
 
 	bool Commit() override
 	{
-		m_dBuf.FinishBlock ( false );
-		m_dBuf.ArrayBlock();
-		++m_iTotalRows;
+		m_dBuf += "}";
+		m_iCol = 0;
+		m_iRow++;
 		return true;
 	}
 
 	void Eof ( bool bMoreResults , int iWarns ) override
 	{
-		m_dBuf.FinishBlock ( true ); // last doc, allow empty
-		m_dBuf.FinishBlock ( false ); // docs section
-		m_dBuf.NamedVal ( "total", m_iTotalRows );
-		m_dBuf.NamedString ( "error", "" );
-		m_dBuf.NamedString ( "warning", "" );
-		m_dBuf.FinishBlock ( false ); // root object
+		m_dBuf += "\n],\n";
 	}
 
 	void Error ( const char *, const char * sError, MysqlErrors_e iErr ) override
 	{
-		auto _ = m_dBuf.Object ( false );
-		m_dBuf.NamedVal ( "total", 0 );
-		m_dBuf.NamedString ( "error", sError );
-		m_dBuf.NamedString ( "warning", "" );
+		m_sError = sError;
 	}
 
 	void Ok ( int iAffectedRows, int iWarns, const char * sMessage, bool bMoreResults, int64_t iLastInsertId ) override
 	{
-		auto _ = m_dBuf.Object ( false );
-		m_dBuf.NamedVal ( "total", iAffectedRows );
-		m_dBuf.NamedString ( "error", "" );
-		m_dBuf.NamedString ( "warning", sMessage );
+		m_iTotalRows = iAffectedRows;
+		m_sWarning = sMessage;
 	}
 
-	void HeadBegin ( int iCols ) override
+	void HeadBegin ( int ) override
 	{
-		m_iExpectedColumns = iCols;
-		m_iTotalRows = 0;
-		m_dBuf.ObjectWBlock();
-		m_dBuf.Named ( "columns" );
-		m_dBuf.ArrayBlock();
+		m_dBuf.Clear();
+		m_dBuf += "{";
 	}
 
 	bool HeadEnd ( bool , int ) override
 	{
-		assert ( m_iExpectedColumns == 0 );
-		m_dBuf.FinishBlock(false);
-		m_dBuf.Named ( "data" );
-		m_dBuf.ArrayWBlock();
-		m_dBuf.ArrayBlock();
+		{
+			ScopedComma_c tComma ( m_dBuf, ",", R"("columns":[)", "],\n", false );
+			for ( const ColumnNameType_t & tCol : m_dColumns )
+			{
+				ScopedComma_c tColBlock ( m_dBuf.Object() );
+				m_dBuf.AppendName ( tCol.first.cstr() );
+				ScopedComma_c tTypeBlock ( m_dBuf.Object() );
+				m_dBuf.AppendName ( "type" );
+				m_dBuf.FixupSpacedAndAppendEscaped ( GetTypeName ( tCol.second ) );
+			}
+		}
+		
+		m_dBuf.AppendName ( "data" );
+		m_dBuf += "[\n";
 		return true;
 	}
 
-	void HeadColumn ( const char * szName, MysqlColumnType_e eType ) override
+	void HeadColumn ( const char * sName, MysqlColumnType_e eType ) override
 	{
-		--m_iExpectedColumns;
-		auto _ = m_dBuf.ObjectW(false);
-		m_dBuf.NamedString( "name", szName );
-		m_dBuf.NamedVal ( "type", eType );
+		m_dColumns.Add ( ColumnNameType_t { sName, eType } );
 	}
 
 	void Add ( BYTE ) override {}
 
 	const JsonEscapedBuilder & Finish()
 	{
-		m_dBuf.FinishBlocks();
+		if ( m_dBuf.IsEmpty() )
+			m_dBuf += "{\n";
+
+		m_dBuf.Appendf ( R"("total":%d)", m_iTotalRows );
+
+		m_dBuf += ",\n";
+		m_dBuf += R"("error":)";
+		m_dBuf.AppendEscapedWithComma ( m_sError.cstr () );
+
+		m_dBuf += ",\n";
+		m_dBuf += R"("warning":)";
+		m_dBuf.AppendEscapedWithComma ( m_sWarning.cstr () );
+
+		m_dBuf += "\n}";
+
 		return m_dBuf;
 	}
 
 private:
 	JsonEscapedBuilder m_dBuf;
-	int m_iExpectedColumns = 0;
+	CSphVector<ColumnNameType_t> m_dColumns;
+	int m_iCol = 0;
+	int m_iRow = 0;
+
+	CSphString m_sError;
+	CSphString m_sWarning;
 	int m_iTotalRows = 0;
+
+	void AddDataColumn()
+	{
+		if ( !m_iCol && m_iRow )
+			m_dBuf += ",\n";
+		if ( !m_iCol )
+			m_dBuf += "{";
+		if ( m_iCol )
+			m_dBuf += ", ";
+
+		m_dBuf.AppendName ( m_dColumns[m_iCol].first.cstr() );
+		m_iCol++;
+	}
 };
 
 static const char g_sBypassToken[] = "raw&query=";

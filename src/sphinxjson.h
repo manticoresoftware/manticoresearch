@@ -205,27 +205,27 @@ public:
 		Base_T::FixupSpacedAndAppendEscaped ( sName );
 		AppendRawChunk ( {":", 1} );
 		SkipNextComma ();
-		return { *this, nullptr };
+		return ScopedComma_c ( *this, nullptr );
 	}
 
-	ScopedComma_c Object ( bool bAllowEmpty = false )
+	ScopedComma_c Object ()
 	{
-		return { *this, dJsonObj, bAllowEmpty };
+		return ScopedComma_c ( *this, dJsonObj );
 	}
 
-	ScopedComma_c ObjectW ( bool bAllowEmpty = false )
+	ScopedComma_c ObjectW ()
 	{
-		return { *this, dJsonObjW, bAllowEmpty };
+		return ScopedComma_c ( *this, dJsonObjW );
 	}
 
-	ScopedComma_c Array ( bool bAllowEmpty = false )
+	ScopedComma_c Array ()
 	{
-		return { *this, dJsonArr, bAllowEmpty };
+		return ScopedComma_c ( *this, dJsonArr );
 	}
 
-	ScopedComma_c ArrayW ( bool bAllowEmpty = false )
+	ScopedComma_c ArrayW ()
 	{
-		return { *this, dJsonArrW, bAllowEmpty };
+		return ScopedComma_c ( *this, dJsonArrW );
 	}
 
 	int NamedBlock( const char* sName )
@@ -248,50 +248,14 @@ public:
 
 	int ArrayBlock()
 	{
-		return StartBlock ( dJsonArr );
+		return StartBlock( dJsonArr );
 	}
 
 	int ArrayWBlock()
 	{
-		return StartBlock ( dJsonArrW );
+		return StartBlock( dJsonArrW );
 	}
 
-	void NamedString ( const char* szName, const char* szValue )
-	{
-		Named ( szName );
-		Base_T::FixupSpacedAndAppendEscaped ( szValue );
-	}
-
-	void NamedString ( const char* szName, Str_t sValue )
-	{
-		Named ( szName );
-		Base_T::FixupSpacedAndAppendEscaped ( sValue.first, sValue.second );
-	}
-
-	void NamedString ( const char* szName, const CSphString& sValue )
-	{
-		NamedString ( szName, sValue.cstr() );
-	}
-
-	void NamedStringNonEmpty ( const char* szName, const CSphString& sValue )
-	{
-		if ( !sValue.IsEmpty() )
-			NamedString ( szName, sValue );
-	}
-
-	template<typename T>
-	void NamedVal ( const char* szName, T tValue )
-	{
-		Named ( szName );
-		*this << tValue;
-	}
-
-	template<typename T>
-	void NamedValNonDefault ( const char* szName, T tValue, T tDefault=0 )
-	{
-		if ( tValue != tDefault )
-			NamedVal ( szName, tValue );
-	}
 };
 
 /// parse JSON, convert it into SphinxBSON blob

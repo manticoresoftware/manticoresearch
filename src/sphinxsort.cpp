@@ -2755,7 +2755,7 @@ public:
 protected:
 	/// schema, aggregates setup
 	template <bool DISTINCT>
-	inline void SetupBaseGrouper ( ISphSchema * pSchema, const ESphSortKeyPart * pSortKeyPart = nullptr, const CSphAttrLocator * pAttrLocator=nullptr, CSphVector<IAggrFunc *>* pAvgs = nullptr )
+	inline void SetupBaseGrouper ( ISphSchema * pSchema, CSphVector<IAggrFunc *> * pAvgs = nullptr )
 	{
 		m_tPregroup.ResetAttrs();
 		ResetAggregates();
@@ -2802,20 +2802,8 @@ protected:
 					break;
 				}
 				// store avg to calculate these attributes prior to groups sort
-				if ( pAvgs && pSortKeyPart && pAttrLocator )
-					for ( int iState = 0; iState<CSphMatchComparatorState::MAX_ATTRS; ++iState )
-					{
-						auto eKeypart = pSortKeyPart[iState];
-						const auto & tLoc = pAttrLocator[iState];
-						if ( ( eKeypart==SPH_KEYPART_INT || eKeypart==SPH_KEYPART_FLOAT )
-							&& tLoc.m_bDynamic==tAttr.m_tLocator.m_bDynamic
-							&& tLoc.m_iBitOffset==tAttr.m_tLocator.m_iBitOffset
-							&& tLoc.m_iBitCount==tAttr.m_tLocator.m_iBitCount )
-						{
-							pAvgs->Add ( m_dAggregates.Last () );
-							break;
-						}
-					}
+				if ( pAvgs )
+					pAvgs->Add ( m_dAggregates.Last () );
 				break;
 
 			case SPH_AGGR_MIN:
@@ -2960,7 +2948,7 @@ public:
 		}
 
 		BASE::SetSchema ( pSchema, bRemapCmp );
-		SetupBaseGrouper<DISTINCT> ( pSchema, m_tGroupSorter.m_eKeypart, m_tGroupSorter.m_tLocator, &m_dAvgs );
+		SetupBaseGrouper<DISTINCT> ( pSchema, &m_dAvgs );
 	}
 
 	/// check if this sorter does groupby
@@ -3041,9 +3029,9 @@ protected:
 		}
 	}
 
-	inline void SetupBaseGrouperWrp ( ISphSchema * pSchema, const ESphSortKeyPart * pSortKeyPart = nullptr,	const CSphAttrLocator * pAttrLocator = nullptr, CSphVector<IAggrFunc *> * pAvgs = nullptr )
+	inline void SetupBaseGrouperWrp ( ISphSchema * pSchema, CSphVector<IAggrFunc *> * pAvgs )
 	{
-		SetupBaseGrouper<DISTINCT> ( pSchema, pSortKeyPart, pAttrLocator, pAvgs );
+		SetupBaseGrouper<DISTINCT> ( pSchema, pAvgs );
 	}
 
 	void CloneKBufferGroupSorter ( MYTYPE* pClone ) const
@@ -3064,8 +3052,7 @@ protected:
 
 		// complete SetSchema
 		pClone->m_dAvgs.Resize ( 0 );
-		pClone->SetupBaseGrouperWrp ( m_pSchema, pClone->m_tGroupSorter.m_eKeypart,
-				pClone->m_tGroupSorter.m_tLocator, &pClone->m_dAvgs );
+		pClone->SetupBaseGrouperWrp ( m_pSchema, &pClone->m_dAvgs );
 
 		// m_pGrouper also need to be cloned (otherwise SetBlobPool will cause races)
 		if ( m_pGrouper )
@@ -3742,7 +3729,10 @@ public:
 		for ( auto iHead : m_dFinalizedHeads )
 		{
 			auto uGroupKey = m_dData[iHead].GetAttr ( m_tLocGroupby );
-			dRhs.template PushEx<true> ( m_dData[iHead], uGroupKey, false, true );
+			// have to set bNewSet to true
+			// as need to falltrough at PushAlreadyHashed and update count and aggregates values for head match
+			// even uGroupKey match already exists
+			dRhs.template PushEx<true> ( m_dData[iHead], uGroupKey, true, true );
 			for ( int i = this->m_dIData[iHead]; i!=iHead; i = this->m_dIData[i] )
 				dRhs.template PushEx<false> ( m_dData[i], uGroupKey, false, true );
 			DeleteChain ( iHead, false );
@@ -4161,7 +4151,8 @@ private:
 		if_const ( DISTINCT )
 			RemoveDistinct ( dRemovedHeads );
 
-		CalcAvg ( Avg_e::UNGROUP );
+		if ( eStage==Stage_e::COLLECT )
+			CalcAvg ( Avg_e::UNGROUP );
 		m_iLastGroupCutoff = m_iGLimit+iSoftLimit-iRetainMatches;
 	}
 

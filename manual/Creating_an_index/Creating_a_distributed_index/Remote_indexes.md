@@ -155,7 +155,7 @@ client_timeout = 1h
 
 `listen_tfo` allows TCP_FASTOPEN flag for all listeners. By default it is managed by system, but may be explicitly switched off by setting to '0'.
 
-For general knowledge about TCP Fast Open extension you can visit Wikipedia. Shortly speaking, it allows to eliminate one TCP round-trip when establishing connection.
+For general knowledge about TCP Fast Open extension please consult with [Wikipedia](https://en.wikipedia.org/wiki/TCP_Fast_Open). Shortly speaking, it allows to eliminate one TCP round-trip when establishing connection.
 
 In practice using TFO in many situation may optimize client-agent network efficiency as if `agent_persistent` are in play, but without holding active connections, and also without limitation for the maximum num of connections.
 

@@ -859,7 +859,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "max_batch_queries",		0, NULL },
 	{ "subtree_docs_cache",		0, NULL },
 	{ "subtree_hits_cache",		0, NULL },
-	{ "workers",				0, NULL },
+	{ "workers",				KEY_DEPRECATED, "default value" },
 	{ "prefork",				KEY_HIDDEN, NULL },
 	{ "dist_threads",			KEY_DEPRECATED, "max_threads_per_query" },
 	{ "max_threads_per_query",	0, NULL },

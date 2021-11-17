@@ -3013,6 +3013,7 @@ protected:
 	GroupSorter_fn<COMPGROUP>	m_tGroupSorter;
 	SubGroupSorter_fn			m_tSubSorter;
 	CSphVector<IAggrFunc *>		m_dAvgs;
+	bool						m_bAvgFinal = false;
 	static const int			GROUPBY_FACTOR = 4;	///< allocate this times more storage when doing group-by (k, as in k-buffer)
 
 	/// finalize distinct counters
@@ -3138,6 +3139,7 @@ protected:
 	using KBufferGroupSorter::UpdateDistinct;
 	using KBufferGroupSorter::RemoveDistinct;
 	using KBufferGroupSorter::FreeMatchPtrs;
+	using KBufferGroupSorter::m_bAvgFinal;
 
 	using CSphGroupSorterSettings::m_tLocGroupby;
 	using CSphGroupSorterSettings::m_tLocCount;
@@ -3296,6 +3298,8 @@ protected:
 		auto & tLocCount = m_tLocCount;
 
 		m_bMatchesFinalized = false;
+		if_const ( HAS_AGGREGATES && m_bAvgFinal )
+			CalcAvg ( Avg_e::UNGROUP );
 
 		// if this group is already hashed, we only need to update the corresponding match
 		CSphMatch ** ppMatch = m_hGroup2Match.Find ( uGroupKey );
@@ -3350,6 +3354,8 @@ private:
 	{
 		if ( m_dAvgs.IsEmpty() )
 			return;
+
+		m_bAvgFinal = ( eGroup==Avg_e::FINALIZE );
 
 		if ( eGroup==Avg_e::FINALIZE )
 			for ( auto i : this->m_dIData )
@@ -3576,6 +3582,7 @@ protected:
 	using KBufferGroupSorter::FreeMatchPtrs;
 	using KBufferGroupSorter::UpdateDistinct;
 	using KBufferGroupSorter::RemoveDistinct;
+	using KBufferGroupSorter::m_bAvgFinal;
 
 	using CSphGroupSorterSettings::m_tLocGroupby;
 	using CSphGroupSorterSettings::m_tLocCount;
@@ -3780,6 +3787,8 @@ protected:
 		}
 
 		this->m_bFinalized = false;
+		if_const ( HAS_AGGREGATES && m_bAvgFinal )
+			CalcAvg ( Avg_e::UNGROUP );
 
 		// place elem into the set
 		auto iNew = AllocateMatch ();
@@ -3972,6 +3981,8 @@ private:
 	{
 		if ( this->m_dAvgs.IsEmpty() )
 			return;
+
+		m_bAvgFinal = ( eGroup==Avg_e::FINALIZE );
 
 		int64_t i = 0;
 		if ( eGroup==Avg_e::FINALIZE )

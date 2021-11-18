@@ -3562,7 +3562,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	for ( const auto & i : tCtx.m_tRamSegments )
 		tCtx.m_iTotalDocuments += i->m_tAliveRows.load ( std::memory_order_relaxed );
 
-	CSphFixedVector<DocidRowidPair_t> dLookup ( tCtx.m_iTotalDocuments );
+	CSphFixedVector<DocidRowidPair_t> dRawLookup ( tCtx.m_iTotalDocuments );
 
 	int iColumnarIdLoc = -1;
 	if ( m_tSchema.GetAttr(0).IsColumnar() )
@@ -3612,7 +3612,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 			ARRAY_FOREACH ( iHistogram, dAttrsForHistogram )
 				tHistograms.Insert ( iHistogram, dAttrsForHistogram[iHistogram].Get ( pRow, dColumnarIterators ) );
 
-			dLookup[tNextRowID] = { tDocID, tNextRowID };
+			dRawLookup[tNextRowID] = { tDocID, tNextRowID };
 			if ( pDocstoreBuilder )
 			{
 				assert ( tSeg.m_pDocstore );
@@ -3622,6 +3622,10 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 			tCtx.m_dRowMaps[i][tRowID] = tNextRowID++;
 		}
 	}
+
+	// rows could be killed during index save and tNextRowID could be less than tCtx.m_iTotalDocuments \ initial count
+	assert ( tNextRowID<=dRawLookup.GetLength() );
+	VecTraits_T<DocidRowidPair_t> dLookup ( dRawLookup.Begin(), tNextRowID );
 
 	std::string sErrorSTL;
 	if ( pColumnarBuilder.Ptr() && !pColumnarBuilder->Done(sErrorSTL) )
@@ -3641,7 +3645,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	if ( !WriteDocidLookup ( sSPT, dLookup, sError ) )
 		return false;
 
-	dLookup.Reset(0);
+	dRawLookup.Reset(0);
 
 	if ( !tHistograms.Save ( sSPHI, sError ) )
 		return false;

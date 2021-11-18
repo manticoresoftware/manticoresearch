@@ -734,7 +734,6 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	// shutdown replication,
 	// shutdown ssl,
 	// shutdown tick threads,
-	// shutdown alone tasks
 	SHUTINFO << "Invoke shutdown callbacks ...";
 	searchd::FireShutdownCbs ();
 
@@ -766,6 +765,9 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 		SHUTINFO << "Remove distr indexes list ...";
 		SafeDelete ( g_pDistIndexes );
 	} );
+
+	SHUTINFO << "Shutdown alone threads (if any) ...";
+	Detached::ShutdownAllAlones();
 
 	SHUTINFO << "Shutdown main work pool ...";
 	auto pPool = GlobalWorkPool();
@@ -19967,7 +19969,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 	// until no threads started, schedule stopping of alone threads to very bottom
 	WipeGlobalSchedulerOnShutdownAndFork();
-	Detached::AloneShutdowncatch ();
+	Detached::MakeAloneIteratorAvailable ();
 
 	// time for replication to sync with cluster
 	searchd::AddShutdownCb ( ReplicateClustersDelete );

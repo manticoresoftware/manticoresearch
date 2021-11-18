@@ -1094,10 +1094,10 @@ public:
 	void InitWorkers()
 	{
 		if ( !m_tSerialChunkAccess )
-			m_tSerialChunkAccess = MakeAloneScheduler ( Coro::CurrentScheduler(), "serial" );
+			m_tSerialChunkAccess = MakeAloneScheduler ( GlobalWorkPool(), "serial" );
 
 		if ( !m_tChunkSaver )
-			m_tChunkSaver = WrapRawScheduler ( Coro::CurrentScheduler(), "saver" );
+			m_tChunkSaver = WrapRawScheduler ( GlobalWorkPool(), "saver" );
 	}
 
 	Threads::SchedRole SerialChunkAccess() const RETURN_CAPABILITY ( m_tSerialChunkAccess )

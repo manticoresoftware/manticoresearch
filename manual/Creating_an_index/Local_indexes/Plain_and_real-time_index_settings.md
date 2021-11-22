@@ -326,13 +326,13 @@ In plain mode `rt_mem_limit` can be changed using the following steps:
 * While disk chunks are stored on disk, the segments of RAM chunk are special RAM-only "indexes".
 * Any transaction you make to a real-time index generates a new segment. RAM chunk segments are merged after each transaction commit. Therefore it is beneficial to do bulk INSERTs of hundreds/thousands documents rather than hundreds/thousands different inserts with 1 document to avoid the overhead from merging RAM chunk segments.
 * When the number of segments gets greater than 32, the segments get merged, so the count is not greater than 32.
-* RT index always has one RAM-chunk + maybe a few disk chunks.
+* RT index always has a single RAM-chunk (may be empty) and one or multiple disk chunks.
 * Merging larger segments take longer, that's why it may be suboptimal to have very large RAM chunk (and therefore `rt_mem_limit`).
-* Number of disk chunks depends on the amount of data in the index and `rt_mem_limit` setting
+* Number of disk chunks depends on the amount of data in the index and `rt_mem_limit` setting.
 * Searchd flushes RAM chunk to disk on shutdown and periodically according to [rt_flush_period](../../Server_settings/Searchd.md#rt_flush_period). Flushing several gigabytes to disk may take some time.
 * Large RAM chunk will put more pressure on the storage:
   - when flushing the RAM chunk to disk into the `.ram` file
-  - when the RAM chunk is full and is dumped to disk as a disk chunk
+  - when the RAM chunk is full and is dumped to disk as a disk chunk.
 * Until flushed RAM chunk is not persisted on disk and there's a [binary log](../../Logging/Binary_logging.md) as its backup in case of a sudden daemon shutdown. In this case the larger `rt_mem_limit` you have, the longer it will take to replay the binlog on start to recover the RAM chunk.
 
 ### Plain index settings:

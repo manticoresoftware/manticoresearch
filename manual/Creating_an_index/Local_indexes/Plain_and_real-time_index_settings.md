@@ -473,9 +473,9 @@ Here is a table which can help you select your desired mode:
 
 | index part |	keep it on disk |	keep it in memory |	cached in memory on server start | lock it in memory |
 | - | - | - | - | - |
-| plain attributes in [row-wise](../../Creating_an_index/Data_types#Row-wise-and-columnar-attribute-storages) (non-columnar) storage, skip lists, word lists, lookups, killed docs | 	mmap | mmap |	**mmap_preread** (default) | mlock |
+| plain attributes in [row-wise](../../Creating_an_index/Data_types.md#Row-wise-and-columnar-attribute-storages) (non-columnar) storage, skip lists, word lists, lookups, killed docs | 	mmap | mmap |	**mmap_preread** (default) | mlock |
 | row-wise string, multi-value attributes (MVA) and json attributes | mmap | mmap | **mmap_preread** (default) | mlock |
-| [columnar](../../Creating_an_index/Data_types#Row-wise-and-columnar-attribute-storages) numeric, string and multi-value attributes | always  | only by means of OS  | no  | not supported |
+| [columnar](../../Creating_an_index/Data_types.md#Row-wise-and-columnar-attribute-storages) numeric, string and multi-value attributes | always  | only by means of OS  | no  | not supported |
 | doc lists | **file** (default) | mmap | no	| mlock |
 | hit lists | **file** (default) | mmap | no	| mlock |
 

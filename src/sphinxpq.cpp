@@ -54,12 +54,20 @@ class SharedPQSlice_t : public VecTraits_T<const StoredQuerySharedPtr_t>
 {
 	using BASE_t = VecTraits_T<const StoredQuerySharedPtr_t>;
 	StoredQuerySharedPtrVecSharedPtr_t m_pBackend;
+	int64_t m_iGeneration {0};
 
 public:
-	explicit SharedPQSlice_t ( StoredQuerySharedPtrVecSharedPtr_t pBackend )
+	explicit SharedPQSlice_t ( StoredQuerySharedPtrVecSharedPtr_t pBackend, int64_t iGeneration=0 )
 		: BASE_t { *pBackend }
 		, m_pBackend { std::move(pBackend) }
+		, m_iGeneration ( iGeneration )
 	{}
+
+	SharedPQSlice_t () = default;
+	SharedPQSlice_t ( SharedPQSlice_t&& rhs ) = default;
+	SharedPQSlice_t& operator= ( SharedPQSlice_t&& rhs ) = default;
+
+	int64_t Generation() const { return m_iGeneration; };
 };
 
 static FileAccessSettings_t g_tDummyFASettings;
@@ -162,6 +170,7 @@ private:
 	void AddToStoredUnl ( StoredQuerySharedPtr_t tNew ) REQUIRES ( m_tLock );
 	void PostSetupUnl () REQUIRES ( m_tLock  );
 	SharedPQSlice_t GetStored () const EXCLUDES ( m_tLock );
+	SharedPQSlice_t GetStoredUnl () const REQUIRES_SHARED ( m_tLock );
 
 	void BinlogReconfigure ( CSphReconfigureSetup & tSetup );
 
@@ -1760,22 +1769,28 @@ void PercolateIndex_c::ReplayCommit ( StoredQuery_i * pQuery ) EXCLUDES ( m_tLoc
 
 	while (true)
 	{
-		int64_t iStoredGen;
 		StoredQuerySharedPtrVecSharedPtr_t pNewVec;
+		SharedPQSlice_t dElems;
+		int64_t iLimit;
 		int *pIdx = nullptr;
 		{
 			ScRL_t rLock ( m_tLock );
 			pIdx = m_hQueries.Find ( pStoredQuery->m_iQUID );
-			if ( pIdx )
-			{
-				pNewVec = MakeClone();
-				( *pNewVec )[*pIdx] = pStoredQuery;
-			}
-			iStoredGen = m_iGeneration;
+			dElems = GetStoredUnl();
+			iLimit = m_pQueries->GetLimit();
+		}
+
+		if ( pIdx ) // replace, need full copy
+		{
+			pNewVec = new CSphVector<StoredQuerySharedPtr_t>;
+			pNewVec->Reserve ( iLimit );
+			for ( auto& iElem : dElems )
+				pNewVec->Add ( iElem );
+			( *pNewVec )[*pIdx] = pStoredQuery;
 		}
 
 		ScWL_t wLock ( m_tLock );
-		if ( iStoredGen != m_iGeneration )
+		if ( dElems.Generation() != m_iGeneration )
 			continue;
 
 		if ( !pIdx ) // new entry; possible fast insert
@@ -1797,41 +1812,45 @@ int PercolateIndex_c::ReplayDeleteQueries ( const VecTraits_T<int64_t>& dQueries
 	int iDeleted = 0;
 	while ( true )
 	{
-		int64_t iStoredGen;
-		StoredQuerySharedPtrVecSharedPtr_t pReplacementVec;
+		SharedPQSlice_t dElems;
+		int64_t iLimit;
 		{
-			ScRL_t tWLockHash { m_tLock };
-			// fast reject if nothing to delete
+			ScRL_t rLock ( m_tLock );
+			dElems = GetStoredUnl();
+			iLimit = m_pQueries->GetLimit();
 			if ( !dQueries.any_of ( [this] ( int64_t iQuery ) REQUIRES_SHARED ( m_tLock ) { return m_hQueries.Find ( iQuery ); } ) )
 				return 0;
+		}
 
-			auto pNewVec = MakeClone ();
-			for ( int64_t iQuery : dQueries )
+		StoredQuerySharedPtrVecSharedPtr_t pNewVec { new CSphVector<StoredQuerySharedPtr_t> };
+		pNewVec->Reserve ( iLimit );
+		for ( auto& iElem : dElems )
+			pNewVec->Add ( iElem );
+
+		ScWL_t wLock ( m_tLock );
+		if ( dElems.Generation() != m_iGeneration )
+			continue;
+
+		for ( int64_t iQuery : dQueries )
+		{
+			auto *pIdx = m_hQueries.Find ( iQuery );
+			if ( pIdx )
 			{
-				auto *pIdx = m_hQueries.Find ( iQuery );
-				if ( pIdx )
-				{
-					auto iIdx = *pIdx;
-					m_hQueries.Delete ( iQuery );
-					if ( iQuery!=pNewVec->Last ()->m_iQUID )
-						*m_hQueries.Find ( pNewVec->Last()->m_iQUID ) = iIdx; // fixup to removeFast
-					pNewVec->RemoveFast ( iIdx );
-					++iDeleted;
-				}
-			};
-			pReplacementVec = std::move ( pNewVec );
-			iStoredGen = m_iGeneration;
+				auto iIdx = *pIdx;
+				m_hQueries.Delete ( iQuery );
+				if ( iQuery!=pNewVec->Last ()->m_iQUID )
+					*m_hQueries.Find ( pNewVec->Last()->m_iQUID ) = iIdx; // fixup to removeFast
+				pNewVec->RemoveFast ( iIdx );
+				++iDeleted;
+			}
 		}
 
 		assert ( iDeleted );
-		ScWL_t wLock ( m_tLock );
-		if ( iStoredGen != m_iGeneration )
-			continue;
 		Binlog::Commit ( Binlog::PQ_DELETE, &m_iTID, m_sIndexName.cstr(), true, [dQueries] ( CSphWriter& tWriter ) {
 			SaveDeleteQuery ( dQueries, nullptr, tWriter );
 		} );
 
-		m_pQueries = pReplacementVec;
+		m_pQueries = pNewVec;
 		++m_iGeneration;
 		m_tStat.m_iTotalDocuments -= iDeleted;
 		return iDeleted;
@@ -1849,40 +1868,46 @@ int PercolateIndex_c::ReplayDeleteQueries ( const char * sTags ) EXCLUDES ( m_tL
 	int iDeleted = 0;
 	while ( true )
 	{
-		int64_t iStoredGen;
-		StoredQuerySharedPtrVecSharedPtr_t pReplacementVec;
+		SharedPQSlice_t dElems;
+		int64_t iLimit;
 		{
-			ScRL_t tRLockHash { m_tLock };
-			auto pNewVec = MakeClone ();
-				for ( int iIdx=0; iIdx<pNewVec->GetLength(); ++iIdx )
-			{
-				const StoredQuery_t * pQuery = pNewVec->At ( iIdx );
-				if ( pQuery->m_dTags.IsEmpty() )
-					continue;
+			ScRL_t rLock ( m_tLock );
+			dElems = GetStoredUnl();
+			iLimit = m_pQueries->GetLimit();
+		}
 
-				if ( TagsMatched ( dTags, pQuery->m_dTags ) )
-				{
-					m_hQueries.Delete ( pQuery->m_iQUID );
-					if ( pQuery->m_iQUID!=pNewVec->Last ()->m_iQUID )
-						*m_hQueries.Find ( pNewVec->Last ()->m_iQUID ) = iIdx; // fixup to removeFast
-					pNewVec->RemoveFast ( iIdx );
-					--iIdx;
-					++iDeleted;
-				}
+		StoredQuerySharedPtrVecSharedPtr_t pNewVec { new CSphVector<StoredQuerySharedPtr_t> };
+		pNewVec->Reserve ( iLimit );
+		for ( auto& iElem : dElems )
+			pNewVec->Add ( iElem );
+
+		ScWL_t wLock ( m_tLock );
+		if ( dElems.Generation() != m_iGeneration )
+			continue;
+
+		for ( int iIdx=0; iIdx<pNewVec->GetLength(); ++iIdx )
+		{
+			const StoredQuery_t * pQuery = pNewVec->At ( iIdx );
+			if ( pQuery->m_dTags.IsEmpty() )
+				continue;
+
+			if ( TagsMatched ( dTags, pQuery->m_dTags ) )
+			{
+				m_hQueries.Delete ( pQuery->m_iQUID );
+				if ( pQuery->m_iQUID!=pNewVec->Last ()->m_iQUID )
+					*m_hQueries.Find ( pNewVec->Last ()->m_iQUID ) = iIdx; // fixup to removeFast
+				pNewVec->RemoveFast ( iIdx );
+				--iIdx;
+				++iDeleted;
 			}
-			pReplacementVec = std::move ( pNewVec );
-			iStoredGen = m_iGeneration;
 		}
 
 		if ( iDeleted )
 		{
-			ScWL_t wLock ( m_tLock );
-			if ( iStoredGen != m_iGeneration )
-				continue;
 			Binlog::Commit ( Binlog::PQ_DELETE, &m_iTID, m_sIndexName.cstr(), true, [sTags] ( CSphWriter& tWriter ) {
 				SaveDeleteQuery ( { nullptr, 0 }, sTags, tWriter );
 			} );
-			m_pQueries = pReplacementVec;
+			m_pQueries = pNewVec;
 			++m_iGeneration;
 			m_tStat.m_iTotalDocuments -= iDeleted;
 		}
@@ -2940,10 +2965,15 @@ void PercolateIndex_c::AddToStoredUnl ( StoredQuerySharedPtr_t tNew ) REQUIRES (
 }
 
 // immutable, unchangeable
-SharedPQSlice_t PercolateIndex_c::GetStored () const
+SharedPQSlice_t PercolateIndex_c::GetStoredUnl () const REQUIRES_SHARED ( m_tLock )
+{
+	return SharedPQSlice_t { m_pQueries, m_iGeneration };
+}
+
+SharedPQSlice_t PercolateIndex_c::GetStored () const EXCLUDES ( m_tLock )
 {
 	ScRL_t rLock ( m_tLock );
-	return SharedPQSlice_t { m_pQueries };
+	return GetStoredUnl();
 }
 
 //////////////////////////////////////////////////////////////////////////

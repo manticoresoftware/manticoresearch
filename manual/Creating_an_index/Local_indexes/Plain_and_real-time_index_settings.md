@@ -94,7 +94,7 @@ stored_fields = title, content
 
 By default when an index is defined in a configuration file, full-text fields' original content is not stored, but just indexed. If this option is set, values from the fields will be both indexed and stored.
 
-Value: comma separated list of **full-text** fields that should be stored. Default is empty (i.e. does not store original field text) for [Plain mode](../../Creating_an_index/Local_indexes.md#Defining-index-schema-in-config-%28Plain mode%29), but is enabled for every field for [RT mode](../../Creating_an_index/Local_indexes.md#Online-schema-management-%28RT-mode%29) as long as it's declared as just `text`.
+Value: comma separated list of **full-text** fields that should be stored. Default is empty (i.e. does not store original field text) for [Plain mode](../../Creating_an_index/Local_indexes.md#Defining-index-schema-in-config-%28Plain-mode%29), but is enabled for every field for [RT mode](../../Creating_an_index/Local_indexes.md#Online-schema-management-%28RT-mode%29) as long as it's declared as just `text`.
 
 Note, in case of a real-time index the fields listed in `stored_only_fields` should be also declared as [rt_field](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_field).
 
@@ -392,17 +392,17 @@ Read [more about data types here](../../Creating_an_index/Data_types.md).
 
 | Type | Equivalent in a configuration file | Notes | Aliases |
 | - | - | - | - |
-| [text](../../Creating_an_index/Data_types.md#Text) | [rt_field](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_field)  | Options: indexed, stored. Default - **both**. To keep text stored, but indexed specify "stored" only. To keep text indexed only specify only "indexed". At least one "text" field should be specified in an index | string |
-| [integer](../../Creating_an_index/Data_types.md#Integer) | [rt_attr_uint](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_attr_uint)	| integer	 | int, uint |
-| [bigint](../../Creating_an_index/Data_types.md#Big-Integer) | [rt_attr_bigint](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_attr_bigint)	| big integer	 |   |
-| [float](../../Creating_an_index/Data_types.md#Float) | [rt_attr_float](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_attr_float)   | float  |   |
-| [multi](../../Creating_an_index/Data_types.md#Multi-value-integer-%28MVA%29) | [rt_attr_multi](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_attr_multi)   | multi-integer |   |
-| [multi64](../../Creating_an_index/Data_types.md#Multi-value-big-integer) | [rt_attr_multi_64](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_attr_multi_64) | multi-bigint  |   |
-| [bool](../../Creating_an_index/Data_types.md#Boolean) | [rt_attr_bool](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_attr_bool) | boolean |   |
-| [json](../../Creating_an_index/Data_types.md#JSON) | [rt_attr_json](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_attr_json) | JSON |   |
-| [string](../../Creating_an_index/Data_types.md#String) | [rt_attr_string](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_attr_string) | string. Option: indexed - also index the strings in a full-text field with same name.   |   |
-| [timestamp](../../Creating_an_index/Data_types.md#Timestamps) |	[rt_attr_timestamp](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_attr_timestamp) | timestamp  |   |
-| [bit(n)](../../Creating_an_index/Data_types.md#Integer) | [rt_attr_uint field_name:N](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_attr_uint) | N is the max number of bits to keep  |   |
+| [text](../../Creating_an_index/Data_types.md#Text) | [rt_field](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_field)  | Options: indexed, stored. Default - **both**. To keep text stored, but indexed specify "stored" only. To keep text indexed only specify only "indexed". At least one "text" field should be specified in an index | string |
+| [integer](../../Creating_an_index/Data_types.md#Integer) | [rt_attr_uint](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_uint)	| integer	 | int, uint |
+| [bigint](../../Creating_an_index/Data_types.md#Big-Integer) | [rt_attr_bigint](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_bigint)	| big integer	 |   |
+| [float](../../Creating_an_index/Data_types.md#Float) | [rt_attr_float](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_float)   | float  |   |
+| [multi](../../Creating_an_index/Data_types.md#Multi-value-integer-%28MVA%29) | [rt_attr_multi](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_multi)   | multi-integer |   |
+| [multi64](../../Creating_an_index/Data_types.md#Multi-value-big-integer) | [rt_attr_multi_64](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_multi_64) | multi-bigint  |   |
+| [bool](../../Creating_an_index/Data_types.md#Boolean) | [rt_attr_bool](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_bool) | boolean |   |
+| [json](../../Creating_an_index/Data_types.md#JSON) | [rt_attr_json](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_json) | JSON |   |
+| [string](../../Creating_an_index/Data_types.md#String) | [rt_attr_string](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_string) | string. Option: indexed - also index the strings in a full-text field with same name.   |   |
+| [timestamp](../../Creating_an_index/Data_types.md#Timestamps) |	[rt_attr_timestamp](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_timestamp) | timestamp  |   |
+| [bit(n)](../../Creating_an_index/Data_types.md#Integer) | [rt_attr_uint field_name:N](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_uint) | N is the max number of bits to keep  |   |
 
 <!-- intro -->
 ##### Examples of creating a real-time index via CREATE TABLE

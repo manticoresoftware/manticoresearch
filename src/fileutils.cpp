@@ -254,11 +254,13 @@ void CSphSavedFile::Read ( CSphReader & tReader, const char * szFilename, bool b
 		{
 			DWORD uMyCRC32 = 0;
 			if ( !sphCalcFileCRC32 ( sName.cstr(), uMyCRC32 ) )
+			{
 				sWarning->SetSprintf ( "failed to calculate CRC32 for %s", sName.cstr() );
-			else
-				if ( uMyCRC32!=m_uCRC32 || tFileInfo.st_size!=m_uSize
-					|| tFileInfo.st_ctime!=m_uCTime || tFileInfo.st_mtime!=m_uMTime )
+			} else
+			{
+				if ( uMyCRC32!=m_uCRC32 || tFileInfo.st_size!=m_uSize )
 					sWarning->SetSprintf ( "'%s' differs from the original", sName.cstr() );
+			}
 		}
 	}
 }

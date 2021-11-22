@@ -75,16 +75,15 @@ public:
 	bool Commit ( int * pDeleted, RtAccum_t * pAccExt ) override;
 	void RollBack ( RtAccum_t * pAccExt ) override;
 
-	StoredQuery_i * CreateQuery ( PercolateQueryArgs_t & tArgs, CSphString & sError ) final
-		EXCLUDES ( m_tLockHash, m_tLock );
+	StoredQuery_i * CreateQuery ( PercolateQueryArgs_t & tArgs, CSphString & sError ) final EXCLUDES ( m_tLock );
 
 	bool Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings ) override;
-	void PostSetup() override EXCLUDES ( m_tLockHash, m_tLock );
+	void PostSetup() override EXCLUDES ( m_tLock );
 	RtAccum_t * CreateAccum ( RtAccum_t * pAccExt, CSphString & sError ) override;
 	ISphTokenizer * CloneIndexingTokenizer() const override { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
 	void SaveMeta ( bool bShutdown = false ) EXCLUDES ( m_tLock );
 	void SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown = false );
-	bool Truncate ( CSphString & ) override EXCLUDES ( m_tLockHash, m_tLock );
+	bool Truncate ( CSphString & ) override EXCLUDES ( m_tLock );
 
 	// RT index stub
 	bool MultiQuery ( CSphQueryResult &, const CSphQuery &, const VecTraits_T<ISphMatchSorter *> &, const CSphMultiQueryArgs & ) const override;
@@ -94,7 +93,7 @@ public:
 	bool ForceDiskChunk () override;
 	bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError ) const override;
 
-	bool Reconfigure ( CSphReconfigureSetup & tSetup ) override EXCLUDES ( m_tLockHash, m_tLock );
+	bool Reconfigure ( CSphReconfigureSetup & tSetup ) override EXCLUDES ( m_tLock );
 	void ProcessDiskChunk ( int, VisitChunk_fn&& ) final {};
 	int64_t GetLastFlushTimestamp() const override { return m_tmSaved; }
 
@@ -133,9 +132,9 @@ private:
 	bool							m_bIndexDeleted = false;
 
 	StoredQuerySharedPtrVecSharedPtr_t	m_pQueries GUARDED_BY ( m_tLock );
-	OpenHash_T< int, int64_t, HashFunc_Int64_t> m_hQueries GUARDED_BY ( m_tLockHash ); // QUID -> query
+	OpenHash_T< int, int64_t, HashFunc_Int64_t> m_hQueries GUARDED_BY ( m_tLock ); // QUID -> query
+	int64_t							m_iGeneration GUARDED_BY ( m_tLock ) { 0 }; // eliminate ABA race on insert/delete
 	mutable RwLock_t				m_tLock;
-	mutable CSphMutex				m_tLockHash;
 
 	CSphFixedVector<StoredQueryDesc_t>	m_dLoadedQueries { 0 }; // temporary, just descriptions
 	CSphSchema						m_tMatchSchema;
@@ -144,7 +143,7 @@ private:
 	void DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMatchResult_t & tRes );
 	bool MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter*>& dSorters,
 			const CSphMultiQueryArgs &tArgs ) const;
-	bool CanBeAdded ( PercolateQueryArgs_t& tArgs, CSphString& sError ) REQUIRES ( m_tLockHash );
+	bool CanBeAdded ( PercolateQueryArgs_t& tArgs, CSphString& sError ) const REQUIRES_SHARED ( m_tLock );
 	StoredQuery_i* CreateQuery ( PercolateQueryArgs_t& tArgs, const ISphTokenizer* pTokenizer, CSphDict* pDict,
 		  CSphString& sError );
 
@@ -152,17 +151,16 @@ public:
 	PercolateMatchContext_t * CreateMatchContext ( const RtSegment_t * pSeg, const SegmentReject_t &tReject );
 
 private:
-	int ReplayDeleteQueries ( const VecTraits_T<int64_t>& dQueries ) EXCLUDES ( m_tLockHash ) final;
-	int ReplayDeleteQueries ( const char * sTags ) EXCLUDES ( m_tLockHash ) final;
-	void ReplayCommit ( StoredQuery_i * pQuery ) EXCLUDES ( m_tLockHash, m_tLock ) final;
+	int ReplayDeleteQueries ( const VecTraits_T<int64_t>& dQueries ) EXCLUDES ( m_tLock ) final;
+	int ReplayDeleteQueries ( const char * sTags ) EXCLUDES ( m_tLock ) final;
+	void ReplayCommit ( StoredQuery_i * pQuery ) EXCLUDES ( m_tLock ) final;
 
 	void GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameBuilder_i * ) const override;
 	Bson_t ExplainQuery ( const CSphString & sQuery ) const final;
 
-	StoredQuerySharedPtrVecSharedPtr_t MakeClone () const EXCLUDES ( m_tLock );
-	StoredQuerySharedPtrVecSharedPtr_t MakeCloneUnl () const REQUIRES_SHARED ( m_tLock );
-	void AddToStoredUnl ( StoredQuerySharedPtr_t tNew ) REQUIRES ( m_tLockHash, m_tLock );
-	void PostSetupUnl () REQUIRES ( m_tLockHash, m_tLock  );
+	StoredQuerySharedPtrVecSharedPtr_t MakeClone () const REQUIRES_SHARED ( m_tLock );
+	void AddToStoredUnl ( StoredQuerySharedPtr_t tNew ) REQUIRES ( m_tLock );
+	void PostSetupUnl () REQUIRES ( m_tLock  );
 	SharedPQSlice_t GetStored () const EXCLUDES ( m_tLock );
 
 	void BinlogReconfigure ( CSphReconfigureSetup & tSetup );
@@ -1044,7 +1042,7 @@ int FullscanWithoutDocs ( PercolateMatchContext_t & tMatchCtx )
 int FullScanCollectingDocs ( PercolateMatchContext_t & tMatchCtx )
 {
 	const CSphIndex * pIndex = tMatchCtx.m_pTermSetup->m_pIndex;
-	const RtSegment_t * pSeg = (const RtSegment_t *) tMatchCtx.m_pCtx->m_pIndexData;
+	const auto * pSeg = (const RtSegment_t *) tMatchCtx.m_pCtx->m_pIndexData;
 	int iStride = tMatchCtx.m_tSchema.GetRowSize ();
 
 	int iCountIdx = tMatchCtx.m_dDocsMatched.GetLength ();
@@ -1105,7 +1103,7 @@ int FtMatchingCollectingDocs ( const StoredQuery_t * pStored, PercolateMatchCont
 	// reserve space for matched docs counter
 	tMatchCtx.m_dDocsMatched.Add ( iMatchesCount );
 
-	const RtSegment_t * pSeg = (const RtSegment_t *)tMatchCtx.m_pCtx->m_pIndexData;
+	const auto * pSeg = (const RtSegment_t *)tMatchCtx.m_pCtx->m_pIndexData;
 	const CSphMatch * pMatch = pRanker->GetMatchesBuffer();
 	for ( auto iMatches = pRanker->GetMatches (); iMatches!=0; iMatches = pRanker->GetMatches ())
 	{
@@ -1565,13 +1563,9 @@ void PercolateIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 
 	int64_t iRamUse = 0;
 	{
-		ScopedMutex_t tLockHash { m_tLockHash };
+		ScRL_t rLock { m_tLock };
 		iRamUse = m_hQueries.GetLengthBytes();
-	}
-	iRamUse += m_dHitlessWords.GetLengthBytes64() + m_dLoadedQueries.GetLengthBytes64();
-
-	{
-		ScRL_t rLock ( m_tLock );
+		iRamUse += m_dHitlessWords.GetLengthBytes64() + m_dLoadedQueries.GetLengthBytes64();
 		iRamUse = m_pQueries->GetLengthBytes64 ();
 		for ( auto & pItem : *m_pQueries )
 		{
@@ -1616,7 +1610,7 @@ StoredQuery_i * PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, CS
 	StoredQuery_i * pResult = nullptr;
 
 	{
-		ScopedMutex_t tLockHash {m_tLockHash};
+		ScRL_t tLockHash { m_tLock };
 		if ( !CanBeAdded ( tArgs, sError ))
 			return pResult;
 	}
@@ -1684,7 +1678,7 @@ static XQNode_t * FixExpanded ( XQNode_t * pNode, int iMinPrefix, int iMinInfix,
 	return pNode;
 }
 
-bool PercolateIndex_c::CanBeAdded ( PercolateQueryArgs_t& tArgs, CSphString& sError )
+bool PercolateIndex_c::CanBeAdded ( PercolateQueryArgs_t& tArgs, CSphString& sError ) const REQUIRES_SHARED ( m_tLock )
 {
 	if ( tArgs.m_iQUID )
 	{
@@ -1757,71 +1751,94 @@ StoredQuery_i * PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, co
 	return pStored;
 }
 
-void PercolateIndex_c::ReplayCommit ( StoredQuery_i * pQuery )
+void PercolateIndex_c::ReplayCommit ( StoredQuery_i * pQuery ) EXCLUDES ( m_tLock )
 {
 	Binlog::Commit ( Binlog::PQ_ADD, &m_iTID, m_sIndexName.cstr(), true, [pQuery] (CSphWriter& tWriter) {
 		SaveStoredQuery ( *pQuery, tWriter );
 	});
 	auto *pStoredQuery = (StoredQuery_t *) pQuery;
 
-	ScopedMutex_t tLockHash {m_tLockHash};
-
-	// fixme! m.b. better acquire w-lock immediately before change and not leave potentially long MakeClone
-	//  under exclusive lock here? However it affects only full replace, but anyway, might be optimized.
-	ScWL_t wLock ( m_tLock );
-
-	auto *pIdx = m_hQueries.Find ( pStoredQuery->m_iQUID );
-	if ( !pIdx ) // new entry; possible fast insert
+	while (true)
 	{
-		AddToStoredUnl ( StoredQuerySharedPtr_t ( pStoredQuery ));
-		m_tStat.m_iTotalDocuments++;
+		int64_t iStoredGen;
+		StoredQuerySharedPtrVecSharedPtr_t pNewVec;
+		int *pIdx = nullptr;
+		{
+			ScRL_t rLock ( m_tLock );
+			pIdx = m_hQueries.Find ( pStoredQuery->m_iQUID );
+			if ( pIdx )
+			{
+				pNewVec = MakeClone();
+				( *pNewVec )[*pIdx] = pStoredQuery;
+			}
+			iStoredGen = m_iGeneration;
+		}
+
+		ScWL_t wLock ( m_tLock );
+		if ( iStoredGen != m_iGeneration )
+			continue;
+
+		if ( !pIdx ) // new entry; possible fast insert
+		{
+			AddToStoredUnl ( StoredQuerySharedPtr_t ( pStoredQuery ) );
+			++m_tStat.m_iTotalDocuments;
+		} else
+		{
+			// entry exists; replace with full clone
+			m_pQueries = pNewVec;
+			++m_iGeneration;
+		}
 		return;
 	}
-
-	// entry exists; replace with full clone
-	auto pNewVec = MakeCloneUnl();
-	( *pNewVec )[*pIdx] = pStoredQuery;
-
-	m_pQueries = pNewVec;
 }
 
-int PercolateIndex_c::ReplayDeleteQueries ( const VecTraits_T<int64_t>& dQueries )
+int PercolateIndex_c::ReplayDeleteQueries ( const VecTraits_T<int64_t>& dQueries ) EXCLUDES ( m_tLock )
 {
 	int iDeleted = 0;
-	ScopedMutex_t tLockHash {m_tLockHash};
-
-	// fast reject if nothing to delete
-	if ( !dQueries.any_of ( [this] (int64_t iQuery) REQUIRES(m_tLockHash) { return m_hQueries.Find ( iQuery ); }))
-		return 0;
-
-	auto pNewVec = MakeClone ();
-	for ( int64_t iQuery : dQueries )
+	while ( true )
 	{
-		auto *pIdx = m_hQueries.Find ( iQuery );
-		if ( pIdx )
+		int64_t iStoredGen;
+		StoredQuerySharedPtrVecSharedPtr_t pReplacementVec;
 		{
-			auto iIdx = *pIdx;
-			m_hQueries.Delete ( iQuery );
-			if ( iQuery!=pNewVec->Last ()->m_iQUID )
-				*m_hQueries.Find ( pNewVec->Last()->m_iQUID ) = iIdx; // fixup to removeFast
-			pNewVec->RemoveFast ( iIdx );
-			++iDeleted;
+			ScRL_t tWLockHash { m_tLock };
+			// fast reject if nothing to delete
+			if ( !dQueries.any_of ( [this] ( int64_t iQuery ) REQUIRES_SHARED ( m_tLock ) { return m_hQueries.Find ( iQuery ); } ) )
+				return 0;
+
+			auto pNewVec = MakeClone ();
+			for ( int64_t iQuery : dQueries )
+			{
+				auto *pIdx = m_hQueries.Find ( iQuery );
+				if ( pIdx )
+				{
+					auto iIdx = *pIdx;
+					m_hQueries.Delete ( iQuery );
+					if ( iQuery!=pNewVec->Last ()->m_iQUID )
+						*m_hQueries.Find ( pNewVec->Last()->m_iQUID ) = iIdx; // fixup to removeFast
+					pNewVec->RemoveFast ( iIdx );
+					++iDeleted;
+				}
+			};
+			pReplacementVec = std::move ( pNewVec );
+			iStoredGen = m_iGeneration;
 		}
-	};
 
-	assert ( iDeleted );
-	Binlog::Commit ( Binlog::PQ_DELETE, &m_iTID, m_sIndexName.cstr(), true, [dQueries] (CSphWriter& tWriter) {
-		SaveDeleteQuery ( dQueries, nullptr, tWriter );
-	});
+		assert ( iDeleted );
+		ScWL_t wLock ( m_tLock );
+		if ( iStoredGen != m_iGeneration )
+			continue;
+		Binlog::Commit ( Binlog::PQ_DELETE, &m_iTID, m_sIndexName.cstr(), true, [dQueries] ( CSphWriter& tWriter ) {
+			SaveDeleteQuery ( dQueries, nullptr, tWriter );
+		} );
 
-	ScWL_t wLock ( m_tLock );
-	m_pQueries = pNewVec;
-	m_tStat.m_iTotalDocuments -= iDeleted;
-
-	return iDeleted;
+		m_pQueries = pReplacementVec;
+		++m_iGeneration;
+		m_tStat.m_iTotalDocuments -= iDeleted;
+		return iDeleted;
+	}
 }
 
-int PercolateIndex_c::ReplayDeleteQueries ( const char * sTags )
+int PercolateIndex_c::ReplayDeleteQueries ( const char * sTags ) EXCLUDES ( m_tLock )
 {
 	CSphVector<uint64_t> dTags;
 	PercolateTags ( sTags, dTags );
@@ -1830,38 +1847,47 @@ int PercolateIndex_c::ReplayDeleteQueries ( const char * sTags )
 		return 0;
 
 	int iDeleted = 0;
-	ScopedMutex_t tLockHash {m_tLockHash};
-	auto pNewVec = MakeClone ();
-
-	for ( int iIdx=0; iIdx<pNewVec->GetLength(); ++iIdx )
+	while ( true )
 	{
-		const StoredQuery_t * pQuery = pNewVec->At ( iIdx );
-		if ( pQuery->m_dTags.IsEmpty() )
-			continue;
-
-		if ( TagsMatched ( dTags, pQuery->m_dTags ) )
+		int64_t iStoredGen;
+		StoredQuerySharedPtrVecSharedPtr_t pReplacementVec;
 		{
-			m_hQueries.Delete ( pQuery->m_iQUID );
-			if ( pQuery->m_iQUID!=pNewVec->Last ()->m_iQUID )
-				*m_hQueries.Find ( pNewVec->Last ()->m_iQUID ) = iIdx; // fixup to removeFast
-			pNewVec->RemoveFast ( iIdx );
-			--iIdx;
-			++iDeleted;
+			ScRL_t tRLockHash { m_tLock };
+			auto pNewVec = MakeClone ();
+				for ( int iIdx=0; iIdx<pNewVec->GetLength(); ++iIdx )
+			{
+				const StoredQuery_t * pQuery = pNewVec->At ( iIdx );
+				if ( pQuery->m_dTags.IsEmpty() )
+					continue;
+
+				if ( TagsMatched ( dTags, pQuery->m_dTags ) )
+				{
+					m_hQueries.Delete ( pQuery->m_iQUID );
+					if ( pQuery->m_iQUID!=pNewVec->Last ()->m_iQUID )
+						*m_hQueries.Find ( pNewVec->Last ()->m_iQUID ) = iIdx; // fixup to removeFast
+					pNewVec->RemoveFast ( iIdx );
+					--iIdx;
+					++iDeleted;
+				}
+			}
+			pReplacementVec = std::move ( pNewVec );
+			iStoredGen = m_iGeneration;
 		}
-	}
-	if ( iDeleted )
-		Binlog::Commit ( Binlog::PQ_DELETE, &m_iTID, m_sIndexName.cstr(), true, [sTags] (CSphWriter& tWriter) {
-			SaveDeleteQuery ( { nullptr,0 }, sTags, tWriter );
-		});
 
-	if ( iDeleted )
-	{
-		ScWL_t wLock ( m_tLock );
-		m_pQueries = pNewVec;
-		m_tStat.m_iTotalDocuments -= iDeleted;
+		if ( iDeleted )
+		{
+			ScWL_t wLock ( m_tLock );
+			if ( iStoredGen != m_iGeneration )
+				continue;
+			Binlog::Commit ( Binlog::PQ_DELETE, &m_iTID, m_sIndexName.cstr(), true, [sTags] ( CSphWriter& tWriter ) {
+				SaveDeleteQuery ( { nullptr, 0 }, sTags, tWriter );
+			} );
+			m_pQueries = pReplacementVec;
+			++m_iGeneration;
+			m_tStat.m_iTotalDocuments -= iDeleted;
+		}
+		return iDeleted;
 	}
-
-	return iDeleted;
 }
 
 bool PercolateIndex_c::Commit ( int * pDeleted, RtAccum_t * pAccExt )
@@ -1909,7 +1935,7 @@ Binlog::CheckTnxResult_t PercolateIndex_c::ReplayTxn ( Binlog::Blop_e eOp,CSphRe
 	case Binlog::PQ_DELETE: return ReplayDelete(tReader, std::move(fnCanContinue));
 	default: assert (false && "unknown op provided to replay");
 	}
-	return Binlog::CheckTnxResult_t();
+	return {};
 }
 
 Binlog::CheckTnxResult_t PercolateIndex_c::ReplayAdd ( CSphReader& tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCanContinue )
@@ -2257,9 +2283,8 @@ void PercolateIndex_c::PostSetupUnl()
 
 }
 
-void PercolateIndex_c::PostSetup ()
+void PercolateIndex_c::PostSetup () EXCLUDES ( m_tLock )
 {
-	ScopedMutex_t tLockHash {m_tLockHash};
 	ScWL_t wLock ( m_tLock );
 	PostSetupUnl();
 }
@@ -2465,10 +2490,9 @@ void PercolateIndex_c::SaveMeta ( bool bShutdown )
 
 bool PercolateIndex_c::Truncate ( CSphString & sError )
 {
-	ScopedMutex_t tLockHash ( m_tLockHash );
-	m_hQueries.Reset ( 256 );
-
 	ScWL_t wLock ( m_tLock );
+
+	m_hQueries.Reset ( 256 );
 	m_pQueries = new CSphVector<StoredQuerySharedPtr_t>;
 
 	// update and save meta
@@ -2587,8 +2611,7 @@ bool PercolateIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 	m_iMaxCodepointLength = m_pTokenizer->GetMaxCodepointLength();
 	SetupQueryTokenizer();
 
-	ScopedMutex_t tLockHash (m_tLockHash); // ensure nothing will be changed during reconfigure pass.
-	ScWL_t wLock ( m_tLock );
+	ScWL_t wLock ( m_tLock ); // ensure nothing will be changed during reconfigure pass.
 
 	m_dLoadedQueries.Reset ( m_pQueries->GetLength() );
 	ARRAY_FOREACH ( i, m_dLoadedQueries )
@@ -2889,12 +2912,6 @@ Bson_t PercolateIndex_c::ExplainQuery ( const CSphString & sQuery ) const
 
 StoredQuerySharedPtrVecSharedPtr_t PercolateIndex_c::MakeClone () const
 {
-	ScRL_t rLock ( m_tLock );
-	return MakeCloneUnl();
-}
-
-StoredQuerySharedPtrVecSharedPtr_t PercolateIndex_c::MakeCloneUnl () const
-{
 	StoredQuerySharedPtrVecSharedPtr_t pNewVec {new CSphVector<StoredQuerySharedPtr_t>};
 	pNewVec->Reserve ( m_pQueries->GetLimit () );
 	for ( auto& tItem : *m_pQueries )
@@ -2903,21 +2920,23 @@ StoredQuerySharedPtrVecSharedPtr_t PercolateIndex_c::MakeCloneUnl () const
 }
 
 // if m_pQueries has a room - do fast lockfree add. Otherwise allocate new one and do slower add.
-void PercolateIndex_c::AddToStoredUnl ( StoredQuerySharedPtr_t tNew )
+void PercolateIndex_c::AddToStoredUnl ( StoredQuerySharedPtr_t tNew ) REQUIRES ( m_tLock )
 {
 	m_hQueries.Add ( tNew->m_iQUID, m_pQueries->GetLength ());
 	assert ( m_hQueries.Find ( tNew->m_iQUID ) && ( *m_hQueries.Find ( tNew->m_iQUID )==m_pQueries->GetLength ()));
 	if ( m_pQueries->GetLength() < m_pQueries->GetLimit() ) // fast add possible
 	{
 		m_pQueries->Add ( std::move ( tNew ) );
+		++m_iGeneration;
 		return;
 	}
 
 	// no room - perform full relimit
 	assert ( m_pQueries->GetLength () >= m_pQueries->GetLimit () );
-	auto pNewVec = MakeCloneUnl ();
+	auto pNewVec = MakeClone ();
 	pNewVec->Add ( std::move (tNew) );
 	m_pQueries = pNewVec;
+	++m_iGeneration;
 }
 
 // immutable, unchangeable

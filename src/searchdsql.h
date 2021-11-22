@@ -216,7 +216,9 @@ struct SqlStmt_t
 	StrVec_t				m_dCallStrings;
 
 	// UPDATE specific
-	AttrUpdateSharedPtr_t	m_pUpdate;
+private:
+	mutable AttrUpdateSharedPtr_t	m_pUpdate { nullptr }; // made private for lazy initialization
+public:
 	int						m_iListStart = -1; // < the position of start and end of index's definition in original query.
 	int						m_iListEnd = -1;
 
@@ -268,6 +270,20 @@ struct SqlStmt_t
 	bool AddSchemaItem ( const char * psName );
 	// check if the number of fields which would be inserted is in accordance to the given schema
 	bool CheckInsertIntegrity();
+
+	CSphAttrUpdate& AttrUpdate() const
+	{
+		if ( !m_pUpdate )
+			m_pUpdate =	new CSphAttrUpdate;
+		return *m_pUpdate;
+	}
+
+	AttrUpdateSharedPtr_t AttrUpdatePtr() const
+	{
+		if ( !m_pUpdate )
+			m_pUpdate = new CSphAttrUpdate;
+		return m_pUpdate;
+	}
 };
 
 

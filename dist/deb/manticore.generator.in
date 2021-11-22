@@ -68,6 +68,7 @@ KillSignal=SIGTERM
 SendSIGKILL=no
 LimitNOFILE=infinity
 LimitCORE=infinity
+LimitMEMLOCK=infinity
 Restart=on-failure
 TimeoutStartSec=infinity
 PIDFile=@CMAKE_INSTALL_FULL_RUNSTATEDIR@/manticore/searchd.pid

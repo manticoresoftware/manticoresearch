@@ -13,7 +13,10 @@
 #ifndef _sphinxstem_
 #define _sphinxstem_
 
-#include "sphinx.h"
+#include "sphinxstd.h"
+
+class ISphTokenizer;
+class CSphDict;
 
 /// initialize English stemmar
 void	stem_en_init ();

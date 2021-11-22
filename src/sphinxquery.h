@@ -13,6 +13,7 @@
 #ifndef _sphinxquery_
 #define _sphinxquery_
 
+#include "sphinxstd.h"
 #include "sphinx.h"
 
 //////////////////////////////////////////////////////////////////////////////
@@ -365,7 +366,7 @@ private:
 //////////////////////////////////////////////////////////////////////////////
 
 /// setup tokenizer for query parsing (ie. add all specials and whatnot)
-void	sphSetupQueryTokenizer ( ISphTokenizer * pTokenizer, bool bWildcards, bool bExact, bool bJson );
+ISphTokenizer* sphCloneAndSetupQueryTokenizer ( const ISphTokenizer* pTokenizer, bool bWildcards, bool bExact, bool bJson );
 
 // a wrapper for sphParseExtendedQuery
 QueryParser_i * sphCreatePlainQueryParser();

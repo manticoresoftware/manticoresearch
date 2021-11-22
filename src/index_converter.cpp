@@ -10,7 +10,6 @@
 
 
 #include "sphinxstd.h"
-#include "sphinx.h"
 #include "fileutils.h"
 #include "sphinxutils.h"
 #include "sphinxint.h"
@@ -24,6 +23,10 @@
 #include "accumulator.h"
 #include "indexformat.h"
 #include "indexsettings.h"
+#include "indexfiles.h"
+#include "attrindex_builder.h"
+#include "tokenizer/charset_definition_parser.h"
+#include "tokenizer/tokenizer.h"
 
 namespace legacy
 {
@@ -472,7 +475,7 @@ static int GetRowSize ( const CSphVector<CSphColumnInfo> & dAttrs )
 static bool SetupWordProcessors ( Index_t & tIndex, CSphString & sError )
 {
 	StrVec_t dWarnings;
-	TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tIndex.m_tTokSettings, &tIndex.m_tEmbeddedTok, nullptr, dWarnings, sError ) };
+	TokenizerRefPtr_c pTokenizer { Tokenizer::Create ( tIndex.m_tTokSettings, &tIndex.m_tEmbeddedTok, nullptr, dWarnings, sError ) };
 	if ( !pTokenizer )
 		return false;
 
@@ -484,7 +487,7 @@ static bool SetupWordProcessors ( Index_t & tIndex, CSphString & sError )
 		return false;
 	tIndex.m_pDict = pDict;
 
-	pTokenizer = ISphTokenizer::CreateMultiformFilter ( pTokenizer, tIndex.m_pDict->GetMultiWordforms () );
+	pTokenizer = Tokenizer::CreateMultiformFilter ( pTokenizer, tIndex.m_pDict->GetMultiWordforms () );
 
 	// initialize AOT if needed
 	tIndex.m_tSettings.m_uAotFilterMask = sphParseMorphAot ( tIndex.m_tDictSettings.m_sMorphology.cstr() );

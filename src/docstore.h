@@ -11,6 +11,8 @@
 #ifndef _docstore_
 #define _docstore_
 
+#include "sphinxstd.h"
+#include "sphinxdefs.h"
 #include "sphinx.h"
 
 class DocstoreAddField_i
@@ -118,9 +120,9 @@ DocstoreFields_i *	CreateDocstoreFields();
 void				InitDocstore ( int64_t iCacheSize );
 void				ShutdownDocstore();
 
-class DebugCheckError_c;
+class DebugCheckError_i;
 class CSphAutoreader;
-bool				CheckDocstore ( CSphAutoreader & tReader, DebugCheckError_c & tReporter, int64_t iRowsCount );
+bool				CheckDocstore ( CSphAutoreader & tReader, DebugCheckError_i & tReporter, int64_t iRowsCount );
 
 #endif
 

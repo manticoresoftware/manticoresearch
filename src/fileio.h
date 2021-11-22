@@ -14,6 +14,8 @@
 #define _fileio_
 
 #include "queryprofile.h"
+#include "sphinxstd.h"
+#include "sphinxdefs.h"
 
 /// file which closes automatically when going out of scope
 class CSphAutofile : ISphNoncopyable
@@ -206,5 +208,14 @@ bool SeekAndWarn ( int iFD, SphOffset_t iPos, const char * szWarnPrefix );
 
 // atomic seek+read wrapper
 int sphPread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset );
+
+/// set throttling options
+void sphSetThrottling ( int iMaxIOps, int iMaxIOSize );
+
+/// write blob to file honoring throttling
+bool sphWriteThrottled ( int iFD, const void* pBuf, int64_t iCount, const char* sName, CSphString& sError );
+
+/// read blob from file honoring throttling
+size_t sphReadThrottled ( int iFD, void* pBuf, size_t iCount );
 
 #endif // _sphinxint_

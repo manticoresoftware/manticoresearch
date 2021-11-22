@@ -39,10 +39,10 @@ size_t AlignStackSize ( size_t iSize )
 bool IsUnderValgrind()
 {
 #if BOOST_USE_VALGRIND
-	return !!RUNNING_ON_VALGRIND;
-#else
-	return false;
+	if (!!RUNNING_ON_VALGRIND)
+		return true;
 #endif
+	return !!getenv ( "NO_STACK_CALCULATION" );
 }
 
 // stack size - 128K

@@ -94,6 +94,15 @@ index idx_remote
 	agent_query_timeout		= 3000
 }
 
+index rt_1
+{
+	type 			= rt
+	path                    = <data_path/>/rt_1
+	rt_field 		= text
+	rt_attr_uint 		= tag
+	rt_attr_uint 		= gr
+}
+
 </config>
 
 <!-- name made especially non-regular to avoid syntax messing with usual indexes -->
@@ -127,6 +136,54 @@ select * from META:multi;
 		</repeat>
 	</repeat>
 </repeat>
+
+<!-- regression wrong counter and aggregate from different chunks of RT index-->
+<sphinxql>insert into rt_1(id,tag,gr) values(7,3,105)</sphinxql><sphinxql>flush ramchunk rt_1</sphinxql>
+<sphinxql>insert into rt_1(id,tag,gr) values(8,12,105)</sphinxql><sphinxql>flush ramchunk rt_1</sphinxql>
+<sphinxql>insert into rt_1(id,tag,gr) values(9,1,105)</sphinxql><sphinxql>flush ramchunk rt_1</sphinxql>
+<sphinxql>insert into rt_1(id,tag,gr) values(10,10,105)</sphinxql><sphinxql>flush ramchunk rt_1</sphinxql>
+<sphinxql>insert into rt_1(id,tag,gr) values(17,20,105)</sphinxql><sphinxql>flush ramchunk rt_1</sphinxql>
+<sphinxql>insert into rt_1(id,tag,gr) values(18,2,105)</sphinxql><sphinxql>flush ramchunk rt_1</sphinxql>
+<sphinxql>insert into rt_1(id,tag,gr) values(19,21,105)</sphinxql><sphinxql>flush ramchunk rt_1</sphinxql>
+<sphinxql>insert into rt_1(id,tag,gr) values(20,0,105)</sphinxql><sphinxql>flush ramchunk rt_1</sphinxql>
+<sphinxql>insert into rt_1(id,tag,gr) values(21,3,105)</sphinxql><sphinxql>flush ramchunk rt_1</sphinxql>
+
+<sphinxql>select id, gr, count(*) as c, sum(tag) as s from rt_1 GROUP 2 BY gr WITHIN GROUP ORDER BY id desc ORDER BY id DESC OPTION pseudo_sharding=0</sphinxql>
+<sphinxql>select id, gr, count(*) as c, sum(tag) as s from rt_1 GROUP 2 BY gr WITHIN GROUP ORDER BY id desc ORDER BY id DESC OPTION pseudo_sharding=5</sphinxql>
+<sphinxql>select id, gr, count(*) as c, avg(tag) as a, max(tag) as m from rt_1 GROUP 2 BY gr WITHIN GROUP ORDER BY id desc ORDER BY id DESC OPTION pseudo_sharding=5</sphinxql>
+
+<sphinxql>truncate rtindex rt_1</sphinxql>
+<sphinxql>insert into rt_1(id,tag,gr) values(7,3,105)</sphinxql><sphinxql>flush ramchunk rt_1</sphinxql>
+<sphinxql>insert into rt_1(id,tag,gr) values(8,12,101)</sphinxql><sphinxql>flush ramchunk rt_1</sphinxql>
+<sphinxql>insert into rt_1(id,tag,gr) values(9,1,103)</sphinxql><sphinxql>flush ramchunk rt_1</sphinxql>
+<sphinxql>insert into rt_1(id,tag,gr) values(10,10,105)</sphinxql><sphinxql>flush ramchunk rt_1</sphinxql>
+<sphinxql>insert into rt_1(id,tag,gr) values(17,20,104)</sphinxql><sphinxql>flush ramchunk rt_1</sphinxql>
+<sphinxql>insert into rt_1(id,tag,gr) values(18,2,101)</sphinxql><sphinxql>flush ramchunk rt_1</sphinxql>
+<sphinxql>insert into rt_1(id,tag,gr) values(19,21,104)</sphinxql><sphinxql>flush ramchunk rt_1</sphinxql>
+<sphinxql>insert into rt_1(id,tag,gr) values(20,0,105)</sphinxql><sphinxql>flush ramchunk rt_1</sphinxql>
+<sphinxql>insert into rt_1(id,tag,gr) values(21,3,101)</sphinxql><sphinxql>flush ramchunk rt_1</sphinxql>
+
+<sphinxql>select id, gr, count(*) as c, sum(tag) as s from rt_1 GROUP 2 BY gr WITHIN GROUP ORDER BY id desc ORDER BY id DESC OPTION pseudo_sharding=0</sphinxql>
+<sphinxql>select id, gr, count(*) as c, sum(tag) as s from rt_1 GROUP 2 BY gr WITHIN GROUP ORDER BY id desc ORDER BY id DESC OPTION pseudo_sharding=5</sphinxql>
+<sphinxql>select id, gr, count(*) as c, min(tag) as mi, max(tag) as ma from rt_1 GROUP 2 BY gr WITHIN GROUP ORDER BY id desc ORDER BY id DESC OPTION pseudo_sharding=5</sphinxql>
+<sphinxql>select id, gr, count(*) as c, sum(tag) s, avg(tag) a from rt_1 GROUP BY gr WITHIN GROUP ORDER BY id desc ORDER BY id DESC</sphinxql>
+<sphinxql>select id, gr, count(*) as c, sum(tag) s, avg(tag) a from rt_1 GROUP BY gr WITHIN GROUP ORDER BY id desc ORDER BY id DESC OPTION threads=5</sphinxql>
+
+<sphinxql>insert into rt_1(id,tag,gr) values(31,21,108), (32,33,108)</sphinxql><sphinxql>flush ramchunk rt_1</sphinxql>
+<sphinxql>select id, gr, count(*) as c, sum(tag) s, avg(tag) a from rt_1 GROUP BY gr WITHIN GROUP ORDER BY id desc ORDER BY id DESC OPTION pseudo_sharding=1, threads=5</sphinxql>
+<sphinxql>select id, gr+1, count(*) as c, sum(tag) s, avg(tag) a from rt_1 GROUP BY gr WITHIN GROUP ORDER BY id desc ORDER BY id DESC OPTION pseudo_sharding=1, threads=5</sphinxql>
+<sphinxql>select id, gr  , count(*) as c, sum(tag) s, avg(tag) a from rt_1 where gr in (103,108) GROUP BY gr WITHIN GROUP ORDER BY id desc ORDER BY id DESC OPTION pseudo_sharding=1, threads=5</sphinxql>
+<sphinxql>select id, gr+1, count(*) as c, sum(tag) s, avg(tag) a from rt_1 where gr in (103,108) GROUP BY gr WITHIN GROUP ORDER BY id desc ORDER BY id DESC OPTION pseudo_sharding=1, threads=5</sphinxql>
+<sphinxql>select id, gr+1, count(*) as c, sum(tag) s, avg(tag) a from rt_1 where gr in (103,108) GROUP BY gr WITHIN GROUP ORDER BY id desc ORDER BY id DESC OPTION pseudo_sharding=0, threads=1</sphinxql>
+
+<sphinxql>insert into rt_1(id,tag,gr) values(41,11,108), (42,13,108), (43,21,108)</sphinxql><sphinxql>flush ramchunk rt_1</sphinxql>
+<sphinxql>select id, gr  , count(*) as c, sum(tag) s, avg(tag) a from rt_1 GROUP BY gr WITHIN GROUP ORDER BY id desc ORDER BY id DESC OPTION pseudo_sharding=1, threads=5</sphinxql>
+<sphinxql>select id, gr+1, count(*) as c, sum(tag) s, avg(tag) a from rt_1  GROUP BY gr WITHIN GROUP ORDER BY id desc ORDER BY id DESC OPTION pseudo_sharding=1, threads=5</sphinxql>
+<sphinxql>select id, gr+1, count(*) as c, sum(tag) s, avg(tag) a from rt_1  GROUP BY gr WITHIN GROUP ORDER BY id desc ORDER BY id DESC OPTION pseudo_sharding=0, threads=1</sphinxql>
+
+<sphinxql>select id, gr  , count(*) as c, sum(tag) s, avg(tag) a from rt_1 GROUP 2 BY gr WITHIN GROUP ORDER BY id desc ORDER BY id DESC OPTION pseudo_sharding=1, threads=5</sphinxql>
+<sphinxql>select id, gr+1, count(*) as c, sum(tag) s, avg(tag) a from rt_1 GROUP 2 BY gr WITHIN GROUP ORDER BY id desc ORDER BY id DESC OPTION pseudo_sharding=1, threads=5</sphinxql>
+<sphinxql>select id, gr+1, count(*) as c, sum(tag) s, avg(tag) a from rt_1 GROUP 2 BY gr WITHIN GROUP ORDER BY id desc ORDER BY id DESC OPTION pseudo_sharding=0, threads=1</sphinxql>
 
 </queries>
 

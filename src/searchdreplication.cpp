@@ -9,7 +9,6 @@
 //
 
 
-#include "sphinx.h"
 #include "sphinxstd.h"
 #include "sphinxutils.h"
 #include "memio.h"
@@ -18,6 +17,8 @@
 #include "accumulator.h"
 #include "fileutils.h"
 #include <math.h>
+
+#include "digest_sha1.h"
 
 #if !HAVE_WSREP
 #include "replication/wsrep_api_stub.h"
@@ -3801,7 +3802,7 @@ public:
 			m_pWriter = nullptr;
 			m_pReader = nullptr;
 
-			m_pWriter = new WriterWithHash_c ( nullptr, nullptr );
+			m_pWriter = new WriterWithHash_c;
 			if ( !m_pWriter->OpenFile ( m_pMerge->m_dFilesNew[iFile], m_sError ) )
 			{
 				sError = m_sError;

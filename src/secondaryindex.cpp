@@ -1033,7 +1033,7 @@ CSphWriter & DocidLookupWriter_c::GetWriter()
 }
 
 
-bool WriteDocidLookup ( const CSphString & sFilename, const CSphFixedVector<DocidRowidPair_t> & dLookup, CSphString & sError )
+bool WriteDocidLookup ( const CSphString & sFilename, const VecTraits_T<DocidRowidPair_t> & dLookup, CSphString & sError )
 {
 	DocidLookupWriter_c tWriter ( dLookup.GetLength() );
 	if ( !tWriter.Open ( sFilename, sError ) )

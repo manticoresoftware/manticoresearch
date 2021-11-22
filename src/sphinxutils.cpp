@@ -13,7 +13,6 @@
 /// @file sphinxutils.cpp
 /// Implementations for Sphinx utilities shared classes.
 
-#include "sphinx.h"
 #include "sphinxutils.h"
 #include "sphinxint.h"
 #include "sphinxplugin.h"
@@ -21,6 +20,7 @@
 #include "icu.h"
 #include "fileutils.h"
 #include "threadutils.h"
+#include "indexfiles.h"
 
 #include <ctype.h>
 #include <fcntl.h>
@@ -859,7 +859,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "max_batch_queries",		0, NULL },
 	{ "subtree_docs_cache",		0, NULL },
 	{ "subtree_hits_cache",		0, NULL },
-	{ "workers",				0, NULL },
+	{ "workers",				KEY_DEPRECATED, "default value" },
 	{ "prefork",				KEY_HIDDEN, NULL },
 	{ "dist_threads",			KEY_DEPRECATED, "max_threads_per_query" },
 	{ "max_threads_per_query",	0, NULL },
@@ -923,7 +923,8 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "not_terms_only_allowed",	0, nullptr },
 	{ "query_log_commands",		0, nullptr },
 	{ "auto_optimize",			0, nullptr },
-	{ "pseudo_sharding",			0, nullptr },
+	{ "pseudo_sharding",		0, nullptr },
+	{ "optimize_cutoff",		0, nullptr },
 	{ NULL,						0, NULL }
 };
 

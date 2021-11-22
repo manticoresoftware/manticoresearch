@@ -10,7 +10,6 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinx.h"
 #include "sphinxstd.h"
 #include "sphinxint.h"
 #include "searchdaemon.h"
@@ -321,7 +320,9 @@ static bool ResolveAddress ( AgentDesc_t &tAgent, const WarnInfo_c & tInfo )
 	if ( tAgent.m_uAddr )
 		return true;
 
-	return tInfo.ErrSkip ( "failed to lookup host name '%s' (error=%s)", tAgent.m_sAddr.cstr (), sphSockError () );
+	tAgent.m_bNeedResolve = true;
+	tInfo.ErrSkip ( "failed to lookup host name '%s' (error=%s)", tAgent.m_sAddr.cstr (), sphSockError () );
+	return true;
 }
 
 /// Async resolving

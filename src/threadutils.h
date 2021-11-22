@@ -169,7 +169,7 @@ WorkerSharedPtr_t MakeAloneThread ( size_t iOrderNum, const char* szName = "" );
 // task may be performed, no concurrent execution). It also gives FIFO ordering of the tasks.
 SchedulerSharedPtr_t MakeAloneScheduler ( Scheduler_i* pBase, const char* szName = nullptr );
 
-SchedulerSharedPtr_t WrapRawScheduler ( Scheduler_i* pBase );
+SchedulerSharedPtr_t WrapRawScheduler ( Scheduler_i* pBase, const char* szName = nullptr );
 
 class OperationsQueue_c
 {
@@ -290,6 +290,6 @@ namespace Detached
 	void AloneShutdowncatch ();
 }
 
-#include "threadutils.inc"
+#include "threadutils_impl.h"
 
 #endif //MANTICORE_THREADUTILS_H

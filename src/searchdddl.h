@@ -13,7 +13,6 @@
 #ifndef _searchdddl_
 #define _searchdddl_
 
-#include "sphinx.h"
 #include "searchdsql.h"
 
 

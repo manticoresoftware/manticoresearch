@@ -11,7 +11,8 @@
 #ifndef _columnargrouper_
 #define _columnargrouper_
 
-#include "sphinx.h"
+#include "collation.h"
+struct CSphColumnInfo;
 
 class CSphGrouper;
 CSphGrouper * CreateGrouperColumnarInt ( const CSphColumnInfo & tAttr );

@@ -8,7 +8,7 @@
   - in replication
   - in `ALTER`
   - in `indextool --check`
-- **Automatic indexes compaction** ([#478](https://github.com/manticoresoftware/manticoresearch/issues/478)). Finally you don't have to call OPTIMIZE manually or via a crontask or other kind of automation. Manticore now does it on your own. You can set default compaction threshold via [optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff).
+- **Automatic indexes compaction** ([#478](https://github.com/manticoresoftware/manticoresearch/issues/478)). Finally you don't have to call OPTIMIZE manually or via a crontask or other kind of automation. Manticore now does it on your own. You can set default compaction threshold via [optimize_cutoff](../Server_settings/Setting_variables_online.md) global variable.
 - **Chunk snapshots and locks system revamp**. These changes may be invisible from outside at first glance, but they improve the behaviour of many things happening in real-time indexes significantly. In a nutshell, previously most Manticore data manipulation operations relied on locks heavily, now we use disk chunk snapshots instead.
 
   <details>

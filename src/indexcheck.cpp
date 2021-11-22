@@ -19,7 +19,29 @@
 #include "docstore.h"
 #include "conversion.h"
 #include "columnarlib.h"
+#include "indexfiles.h"
 
+constexpr int FAILS_THRESH = 100;
+
+class DebugCheckError_c final : public DebugCheckError_i
+{
+public:
+	DebugCheckError_c ( FILE* pFile );
+
+	bool Fail ( const char* szFmt, ... ) final;
+	void Msg ( const char* szFmt, ... ) final;
+	void Progress ( const char* szFmt, ... ) final;
+	void Done() final;
+
+	int64_t GetNumFails() const final;
+
+private:
+	FILE* m_pFile { nullptr };
+	bool m_bProgress { false };
+	int64_t m_tStartTime { 0 };
+	int64_t m_nFails { 0 };
+	int64_t m_nFailsPrinted { 0 };
+};
 
 DebugCheckError_c::DebugCheckError_c ( FILE * pFile )
 	: m_pFile ( pFile )
@@ -44,7 +66,6 @@ void DebugCheckError_c::Msg ( const char * szFmt, ... )
 bool DebugCheckError_c::Fail ( const char * szFmt, ... )
 {
 	assert ( m_pFile );
-	const int FAILS_THRESH = 100;
 	if ( ++m_nFails>=FAILS_THRESH )
 		return false;
 
@@ -52,8 +73,6 @@ bool DebugCheckError_c::Fail ( const char * szFmt, ... )
 	va_start ( ap, szFmt );
 	fprintf ( m_pFile, "FAILED, " );
 	vfprintf ( m_pFile, szFmt, ap );
-	if ( m_iSegment>=0 )
-		fprintf ( m_pFile, " (segment: %d)", m_iSegment );
 
 	fprintf ( m_pFile, "\n" );
 	va_end ( ap );
@@ -100,15 +119,14 @@ void DebugCheckError_c::Done()
 }
 
 
-void DebugCheckError_c::SetSegment ( int iSegment )
-{
-	m_iSegment = iSegment;
-}
-
-
 int64_t DebugCheckError_c::GetNumFails() const
 {
 	return m_nFails;
+}
+
+DebugCheckError_i* MakeDebugCheckError ( FILE* fp )
+{
+	return new DebugCheckError_c ( fp );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -148,7 +166,7 @@ private:
 };
 
 
-void DebugCheckHelper_c::DebugCheck_Attributes ( DebugCheckReader_i & tAttrs, DebugCheckReader_i & tBlobs, int64_t nRows, int64_t iMinMaxBytes, const CSphSchema & tSchema, DebugCheckError_c & tReporter ) const
+void DebugCheckHelper_c::DebugCheck_Attributes ( DebugCheckReader_i & tAttrs, DebugCheckReader_i & tBlobs, int64_t nRows, int64_t iMinMaxBytes, const CSphSchema & tSchema, DebugCheckError_i & tReporter ) const
 {
 	// empty?
 	if ( !tAttrs.GetLengthBytes() )
@@ -253,7 +271,7 @@ void DebugCheckHelper_c::DebugCheck_Attributes ( DebugCheckReader_i & tAttrs, De
 }
 
 
-void DebugCheckHelper_c::DebugCheck_DeadRowMap ( int64_t iSizeBytes, int64_t nRows, DebugCheckError_c & tReporter ) const
+void DebugCheckHelper_c::DebugCheck_DeadRowMap ( int64_t iSizeBytes, int64_t nRows, DebugCheckError_i & tReporter ) const
 {
 	tReporter.Msg ( "checking dead row map..." );
 
@@ -268,7 +286,7 @@ void DebugCheckHelper_c::DebugCheck_DeadRowMap ( int64_t iSizeBytes, int64_t nRo
 class DiskIndexChecker_c : public DiskIndexChecker_i, public DebugCheckHelper_c
 {
 public:
-			DiskIndexChecker_c ( CSphIndex & tIndex, DebugCheckError_c & tReporter );
+			DiskIndexChecker_c ( CSphIndex & tIndex, DebugCheckError_i & tReporter );
 
 	bool	OpenFiles ( CSphString & sError ) final;
 	void	Setup ( int64_t iNumRows, int64_t iDocinfoIndex, int64_t iMinMaxIndex, bool bCheckIdDups ) final;
@@ -288,7 +306,7 @@ private:
 	CSphAutoreader			m_tDocstoreReader;
 	CSphVector<SphWordID_t> m_dHitlessWords;
 
-	DebugCheckError_c &		m_tReporter;
+	DebugCheckError_i &		m_tReporter;
 
 	bool					m_bHasBlobs = false;
 	bool					m_bHasDocstore = false;
@@ -317,7 +335,7 @@ private:
 };
 
 
-DiskIndexChecker_c::DiskIndexChecker_c ( CSphIndex & tIndex, DebugCheckError_c & tReporter )
+DiskIndexChecker_c::DiskIndexChecker_c ( CSphIndex & tIndex, DebugCheckError_i & tReporter )
 	: m_tIndex ( tIndex )
 	, m_tReporter ( tReporter )
 {}
@@ -1354,7 +1372,7 @@ CSphString DiskIndexChecker_c::GetFilename ( ESphExt eExt ) const
 }
 
 
-DiskIndexChecker_i * CreateDiskIndexChecker ( CSphIndex & tIndex, DebugCheckError_c & tReporter )
+DiskIndexChecker_i * CreateDiskIndexChecker ( CSphIndex & tIndex, DebugCheckError_i & tReporter )
 {
 	return new DiskIndexChecker_c ( tIndex, tReporter );
 }
@@ -1432,7 +1450,7 @@ bool DebugCheckSchema ( const ISphSchema & tSchema, CSphString & sError )
 	}
 }
 
-void DebugCheckSchema ( const ISphSchema & tSchema, DebugCheckError_c & tReporter )
+void DebugCheckSchema ( const ISphSchema & tSchema, DebugCheckError_i & tReporter )
 {
 	DebugCheckSchema_T ( tSchema, tReporter );
 }

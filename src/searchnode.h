@@ -12,7 +12,6 @@
 #ifndef _searchnode_
 #define _searchnode_
 
-#include "sphinx.h"
 #include "sphinxquery.h"
 
 

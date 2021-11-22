@@ -11,7 +11,6 @@
 //
 
 #include "threadutils.h"
-#include "sphinx.h"
 #include <boost/context/detail/prefetch.hpp>
 
 #if !_WIN32
@@ -467,26 +466,67 @@ public:
 // It looks like 'single thread', but actual thread is provided from backend and may change.
 class Strand_c final : public SchedulerWithBackend_i
 {
-	const char* m_szName = nullptr;
-	// strand has no backend thread/threadpool and works over another scheduler.
-	Scheduler_i * m_pBackend;
+	struct StrandWorker_t final : public ISphRefcountedMT
+	{
+		CSphMutex m_dMutex;
+		bool m_bLocked GUARDED_BY ( m_dMutex ) = false;
+		OpSchedule_t m_OpWaitQueue GUARDED_BY ( m_dMutex );	/// The queue for the next run
+		OpSchedule_t m_OpReadyQueue;	/// The queue for current run
 
-	CSphMutex m_dMutex;
-	bool m_bLocked GUARDED_BY ( m_dMutex ) = false;
-	bool m_bShutdown = false;
-	OpSchedule_t m_OpReadyQueue;	/// The queue for current run
-	OpSchedule_t m_OpWaitQueue GUARDED_BY ( m_dMutex );	/// The queue for the next run
+		// strand has no backend thread/threadpool and works over another scheduler.
+		Scheduler_i* m_pBackend = nullptr;
+
+		inline bool Enqueue ( Threads::details::SchedulerOperation_t* pOp )
+		{
+			ScopedMutex_t tLock ( m_dMutex );
+			if ( m_bLocked )
+			{
+				m_OpWaitQueue.Push ( pOp );
+				LOG ( ST, ST ) << "		enqueued to wait queue, was locked " << pOp;
+				return false;
+			}
+
+			m_bLocked = true;
+			tLock.Unlock();
+			m_OpReadyQueue.Push ( pOp );
+			LOG ( ST, ST ) << "		enqueued to ready queue, locked " << pOp;
+			return true;
+		}
+
+		// try to execute immediately, or then post to primary queue
+		void PostContinuationToBackend ( Threads::details::SchedulerOperation_t* pOp ) const
+		{
+			// Add the function to the strand and schedule the strand if required.
+			if ( m_pBackend )
+				m_pBackend->ScheduleContinuationOp ( pOp );
+		}
+
+		inline Keeper_t KeepWorking() const
+		{
+			assert ( m_pBackend );
+			return m_pBackend->KeepWorking();
+		}
+
+	protected:
+		~StrandWorker_t() final = default;
+	};
+
+	using StrandWorkerPtr_t = CSphRefcountedPtr<StrandWorker_t>;
+
+	StrandWorkerPtr_t m_pWorker;
+	bool			m_bShutdown = false;
+	const char*		m_szName = nullptr;
 
 	// Per-thread call stack to track the state of each thread in the service.
-	using StrandCallStack_c = CallStack_c<Strand_c>;
+	using StrandCallStack_c = CallStack_c<StrandWorker_t>;
 
 	class Invoker_c
 	{
+		StrandWorkerPtr_t m_pOwner;
 		Keeper_t m_tParentKeeper;
-		Strand_c * m_pOwner;
 
 	public:
-		explicit Invoker_c( Strand_c* pRand );
+		explicit Invoker_c ( StrandWorkerPtr_t pRand );
 		Invoker_c ( const Invoker_c& rhs ) = default;
 		Invoker_c ( Invoker_c && rhs ) noexcept;
 		Invoker_c & operator= ( Invoker_c && rhs ) noexcept;
@@ -495,37 +535,17 @@ class Strand_c final : public SchedulerWithBackend_i
 
 	friend class Invoker_c;
 
-	bool Enqueue ( Threads::details::SchedulerOperation_t* pOp )
+	inline bool Enqueue ( Threads::details::SchedulerOperation_t* pOp )
 	{
-		ScopedMutex_t tLock ( m_dMutex );
 		if ( m_bShutdown )
 			return false;
-
-		if ( m_bLocked )
-		{
-			m_OpWaitQueue.Push (pOp);
-			LOG ( ST, ST ) << "		enqueued to wait queue, was locked " << pOp;
-			return false;
-		}
-
-		m_bLocked = true;
-		tLock.Unlock();
-		m_OpReadyQueue.Push(pOp);
-		LOG ( ST, ST ) << "		enqueued to ready queue, locked " << pOp;
-		return true;
-	}
-
-	// try to execute immediately, or then post to primary queue
-	void PostContinuationToBackend ( Threads::details::SchedulerOperation_t* pOp )
-	{
-		// Add the function to the strand and schedule the strand if required.
-		if ( m_pBackend )
-			m_pBackend->ScheduleContinuationOp ( pOp );
+		assert ( m_pWorker );
+		return m_pWorker->Enqueue ( pOp );
 	}
 
 	void PostContinuationImpl ( Threads::details::SchedulerOperation_t* pOp ) // try to execute immediately, or then post to primary queue
 	{
-		auto bThisThread = !!StrandCallStack_c::Contains ( this );
+		auto bThisThread = !!StrandCallStack_c::Contains ( m_pWorker );
 		if ( bThisThread )
 		{
 			LOG ( ST, ST ) << "PostContinuation fast in this thread";
@@ -545,22 +565,17 @@ class Strand_c final : public SchedulerWithBackend_i
 		// Add the function to the strand and schedule the strand if required.
 		if ( bFirst )
 		{
-			Invoker_c tInvoker { this };
-			PostContinuationToBackend ( Threads::details::Handler2Op ( [t = std::move ( tInvoker )]() mutable { t.run(); } ) );
+			Invoker_c tInvoker { m_pWorker };
+			m_pWorker->PostContinuationToBackend ( Threads::details::Handler2Op ( [t = std::move ( tInvoker )]() mutable { t.run(); } ) );
 		}
-	}
-
-	void Kick()
-	{
-		Invoker_c tInvoker { this };
-		PostContinuationToBackend ( Threads::details::Handler2Op ( [t = std::move ( tInvoker )]() mutable { t.run(); } ) );
 	}
 
 public:
 	explicit Strand_c ( Scheduler_i* pBackend, const char* szName=nullptr )
-		: m_szName { szName }
-		, m_pBackend { pBackend }
+		: m_pWorker { new StrandWorker_t }
+		, m_szName { szName }
 	{
+		m_pWorker->m_pBackend = pBackend;
 		LOGINFO ( TPLIFE, TP ) << "Strand_c created";
 	}
 
@@ -568,11 +583,11 @@ public:
 	{
 		LOG ( ST, ST ) << "Post";
 		bool bFirst = Enqueue ( pOp );
-		if ( bFirst && m_pBackend )
+		if ( bFirst && m_pWorker->m_pBackend )
 		{
 			LOG ( ST, ST ) << "Post scheduled invoker to backend";
-			Invoker_c tInvoker { this };
-			m_pBackend->Schedule ( [t=std::move(tInvoker)] () mutable { t.run (); }, bVip );
+			Invoker_c tInvoker { m_pWorker };
+			m_pWorker->m_pBackend->Schedule ( [t=std::move(tInvoker)] () mutable { t.run (); }, bVip );
 		}
 		LOG ( ST, ST ) << "Post finished";
 	}
@@ -586,33 +601,36 @@ public:
 
 	Keeper_t KeepWorking () final
 	{
-		assert ( m_pBackend );
-		return m_pBackend->KeepWorking();
+		assert ( m_pWorker );
+		return m_pWorker->KeepWorking();
 	}
 
 	bool SetBackend ( Scheduler_i* pBackend ) final
 	{
-		ScopedMutex_t tLock ( m_dMutex );
-		if ( m_bLocked )
+		assert ( m_pWorker );
+		ScopedMutex_t tLock ( m_pWorker->m_dMutex );
+		if ( m_pWorker->m_bLocked )
 		{
-			if ( m_pBackend ) // everything healthy and work, can't change right now
+			if ( m_pWorker->m_pBackend ) // everything healthy and work, can't change right now
 				return false;
 
-			assert ( !m_pBackend );
-			m_pBackend = pBackend;
-			Kick();
+			assert ( !m_pWorker->m_pBackend );
+			m_pWorker->m_pBackend = pBackend;
+			tLock.Unlock();
+			Invoker_c tInvoker { m_pWorker };
+			m_pWorker->PostContinuationToBackend ( Threads::details::Handler2Op ( [t = std::move ( tInvoker )]() mutable { t.run(); } ) );
 		}
 
-		m_pBackend = pBackend;
+		m_pWorker->m_pBackend = pBackend;
 		return true;
 	}
 
 	const char * Name () const final { return m_szName; }
 };
 
-Strand_c::Invoker_c::Invoker_c ( Strand_c * pRand )
-	: m_tParentKeeper { pRand->KeepWorking () }
-	, m_pOwner ( pRand )
+Strand_c::Invoker_c::Invoker_c ( StrandWorkerPtr_t pRand )
+	: m_pOwner { std::move(pRand) }
+	, m_tParentKeeper { m_pOwner->KeepWorking() }
 {}
 
 Strand_c::Invoker_c::Invoker_c ( Strand_c::Invoker_c && rhs ) noexcept
@@ -637,7 +655,7 @@ void Strand_c::Invoker_c::run ()
 		~OnInvokerFinished_t()
 		{
 			bool bMoreHandlers;
-			auto* pOwner = m_pThis->m_pOwner;
+			auto& pOwner = m_pThis->m_pOwner;
 			{
 				ScopedMutex_t tLock ( pOwner->m_dMutex );
 				pOwner->m_OpReadyQueue.Push ( pOwner->m_OpWaitQueue );
@@ -901,10 +919,12 @@ int AloneThread_c::m_iRunningAlones = 0;
 class ShedulerWrapper_c final : public Scheduler_i
 {
 	Scheduler_i*	m_pScheduler; // not owned
+	const char*		m_szName;
 
 public:
-	explicit ShedulerWrapper_c ( Scheduler_i* pScheduler ) noexcept
+	ShedulerWrapper_c ( Scheduler_i* pScheduler, const char* szName ) noexcept
 		: m_pScheduler { pScheduler }
+		, m_szName { szName }
 	{}
 
 	void ScheduleOp ( details::SchedulerOperation_t* pOp, bool bVip ) final
@@ -929,7 +949,7 @@ public:
 
 	const char* Name() const final
 	{
-		return m_pScheduler->Name();
+		return m_szName ? m_szName : m_pScheduler->Name();
 	}
 };
 
@@ -952,9 +972,9 @@ SchedulerSharedPtr_t MakeAloneScheduler ( Scheduler_i* pBase, const char* szName
 }
 
 // wraps raw scheduler into shared-ptr (it will NOT delete the scheduler when destroyed!)
-SchedulerSharedPtr_t WrapRawScheduler ( Scheduler_i* pBase )
+SchedulerSharedPtr_t WrapRawScheduler ( Scheduler_i* pBase, const char* szName )
 {
-	return SchedulerSharedPtr_t { new ShedulerWrapper_c ( pBase ) };
+	return SchedulerSharedPtr_t { new ShedulerWrapper_c ( pBase, szName ) };
 }
 
 
@@ -1075,11 +1095,12 @@ void WipeGlobalSchedulerOnShutdownAndFork ()
 			pPool->DiscardOnFork ();
 	} );
 
-	searchd::AddShutdownCb ( [] {
-		WorkerSharedPtr_t& pPool = GlobalPoolSingletone ();
-		if ( pPool )
-			pPool->StopAll ();
-	} );
+//	searchd::AddShutdownCb ( [] {
+//		sphWarning ( "stop all pool threads" );
+//		WorkerSharedPtr_t& pPool = GlobalPoolSingletone ();
+//		if ( pPool )
+//			pPool->StopAll ();
+//	} );
 }
 
 void WipeSchedulerOnFork ( Threads::Worker_i* pWorker )

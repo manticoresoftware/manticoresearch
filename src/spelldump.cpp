@@ -9,8 +9,9 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinx.h"
-#include "sphinxutils.h"
+#include "sphinxstd.h"
+#include "tokenizer/charset_definition_parser.h"
+#include "tokenizer/lowercaser.h"
 
 #include <locale.h>
 
@@ -448,8 +449,7 @@ private:
 	CSphString	m_sLocale;
 	CSphString	m_sCharsetFile;
 	bool		m_bCheckCrosses = false;
-	CSphLowercaser m_LowerCaser;
-	bool		m_bUseLowerCaser = false;
+	LowercaserRefcountedPtr m_pLowerCaser;
 	bool		m_bUseDictConversion = false;
 
 	bool		AddToCharset ( char * szRangeL, char * szRangeU );
@@ -502,9 +502,8 @@ bool CISpellAffix::Load ( const char * szFilename )
 	m_dRules.Reset ();
 	memset ( m_dCharset, 0, sizeof ( m_dCharset ) );
 	m_bFirstCaseConv = true;
-	m_bUseLowerCaser = false;
+	m_pLowerCaser = nullptr;
 	m_bUseDictConversion = false;
-	m_LowerCaser.Reset ();
 
 	FILE * pFile = fopen ( szFilename, "rt" );
 	if ( !pFile )
@@ -855,9 +854,9 @@ char CISpellAffix::ToLowerCase ( char cChar )
 		return m_dCharset [(BYTE) cChar] ? m_dCharset [(BYTE) cChar] : cChar;
 
 	// user-defined character mapping
-	if ( m_bUseLowerCaser )
+	if ( m_pLowerCaser )
 	{
-		auto cResult = (char)m_LowerCaser.ToLower ( (BYTE) cChar );
+		auto cResult = (char)m_pLowerCaser->ToLower ( (BYTE) cChar );
 		return cResult ? cResult : cChar;
 	}
 
@@ -887,8 +886,8 @@ void CISpellAffix::LoadLocale ()
 					CSphVector<CSphRemapRange> dRemaps;
 					if ( sphParseCharset ( szBuffer, dRemaps ) )
 					{
-						m_bUseLowerCaser = true;
-						m_LowerCaser.AddRemaps ( dRemaps, 0 );
+						m_pLowerCaser = new CSphLowercaser;
+						m_pLowerCaser->AddRemaps ( dRemaps );
 					} else
 					{
 						printf ( "Failed to parse charset from '%s'\n", m_sCharsetFile.cstr() );

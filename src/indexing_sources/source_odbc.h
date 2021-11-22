@@ -13,7 +13,6 @@
 
 #pragma once
 
-#include "sphinx.h"
 #include "source_sql.h"
 
 struct CSphSourceParams_ODBC: CSphSourceParams_SQL

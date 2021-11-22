@@ -12,7 +12,29 @@
 
 #pragma once
 
-#include "sphinx.h"
+#include "source_document.h"
+#include "sphinxstd.h"
+#include "tokenizer/tokenizer.h"
+#include "sphinxdefs.h"
+
+
+/// column unpack format
+enum ESphUnpackFormat
+{
+	SPH_UNPACK_NONE				= 0,
+	SPH_UNPACK_ZLIB				= 1,
+	SPH_UNPACK_MYSQL_COMPRESS	= 2
+};
+
+struct SqlQuotation_t : public BaseQuotation_t
+{
+	inline static bool IsEscapeChar ( char c )
+	{
+		return ( c=='\\' || c=='\'' || c=='\t' );
+	}
+};
+
+using SqlEscapedBuilder_c = EscapedStringBuilder_T<SqlQuotation_t>;
 
 struct CSphUnpackInfo
 {
@@ -72,7 +94,7 @@ struct CSphSourceParams_SQL
 
 /// generic SQL source
 /// multi-field plain-text documents fetched from given query
-struct CSphSource_SQL : CSphSource_Document
+struct CSphSource_SQL : CSphSource
 {
 	explicit			CSphSource_SQL ( const char * sName );
 						~CSphSource_SQL () override = default;
@@ -150,8 +172,12 @@ protected:
 	virtual const char *	SqlColumn ( int iIndex ) = 0;
 	virtual const char *	SqlFieldName ( int iIndex ) = 0;
 
-	const char *	SqlUnpackColumn ( int iIndex, DWORD & uUnpackedLen, ESphUnpackFormat eFormat );
-	void			ReportUnpackError ( int iIndex, int iError );
+	virtual Str_t			SqlCompressedColumnStream ( int iFieldIndex );
+	virtual void			SqlCompressedColumnReleaseStream ( Str_t tStream );
+
+	Str_t					SqlColumnStream ( int iFieldIndex );
+	Str_t					SqlUnpackColumn ( int iFieldIndex, ESphUnpackFormat eFormat );
+	void					ReportUnpackError ( int iIndex, int iError );
 
 	void DumpRowsHeader ();
 	void DumpRowsHeaderSphinxql ();
@@ -161,7 +187,7 @@ protected:
 
 	using TinyCol_t = std::pair<int,bool>; // int idx in sql resultset; bool whether it is string
 	CSphVector<TinyCol_t>	m_dDumpMap;
-	SqlEscapedBuilder_c			m_sCollectDump;
+	SqlEscapedBuilder_c		m_sCollectDump;
 	int 					m_iCutoutDumpSize = 100*1024;
 };
 

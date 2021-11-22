@@ -10,9 +10,6 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinx.h"
-#include "sphinxint.h"
-#include "sphinxjson.h"
 #include "jsonqueryfilter.h"
 #include "attribute.h"
 #include "sphinxpq.h"
@@ -1312,7 +1309,11 @@ bool sphLoopClientHttp ( const BYTE * pRequest, int iRequestLen, CSphVector<BYTE
 	}
 
 	ESphHttpEndpoint eEndpoint = tParser.GetEndpoint();
-	if ( !sphProcessHttpQuery ( eEndpoint, tParser.GetBody().cstr(), tParser.GetOptions(), dResult, true, tParser.GetRequestType() ) )
+
+	auto& sRawString = tParser.GetBody();
+	myinfo::SetDescription ( sRawString.cstr(), sRawString.Length() );
+
+	if ( !sphProcessHttpQuery ( eEndpoint, sRawString.cstr(), tParser.GetOptions(), dResult, true, tParser.GetRequestType() ) )
 	{
 		if ( eEndpoint==SPH_HTTP_ENDPOINT_INDEX )
 			HttpHandlerIndexPage ( dResult );

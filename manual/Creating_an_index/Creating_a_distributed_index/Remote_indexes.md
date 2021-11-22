@@ -31,27 +31,31 @@ In other words, you can point every single agent to one or more remote indexes, 
 * sharding over multiple agent servers, mirrored for HA/LB (High Availability and Load Balancing) purposes
 * sharding within localhost, to utilize multiple cores (however, it is simpler just to use multiple local indexes)
 
-All agents are searched in parallel. An index list is passed verbatim to the remote agent. How exactly that list is searched within the agent (ie. sequentially or in parallel too) depends solely on the agent configuration (ie. [threads](../../Server_settings/Searchd.md#threads) setting). Master has no remote control over that.
+All agents are searched in parallel. Index list is passed verbatim to the remote agent. How exactly that list is searched within the agent (ie. sequentially or in parallel too) depends solely on the agent configuration (see [threads](../../Server_settings/Searchd.md#threads) setting). The master has no remote control over that.
 
-Agent executes a query without LIMIT option since each agent can have different indexes and it is a client responsibility to apply LIMIT. For this reason a query to an agent differs from the query from a client when viewing in the query logs. It can't be just a full copy of the original query in order to provide correct results in such a case:
+Note, agent internally executes a query ignoring option `LIMIT`, since each agent can have different indexes and it is a client responsibility to apply the limit to the final result set. That's the reason why the query to a physical index differs from the query to a distributed index when viewing them in the query logs. It can't be just a full copy of the original query in order to provide correct results in such a case:
 
-* We make SELECT ... LIMIT 10, 10 
+* We make `SELECT ... LIMIT 10, 10`
 * We have 2 agents 
-* 2nd agent has just 10 documents
+* Second agent has just 10 documents
 
-If we just broadcast the original LIMIT 10, 10 query it will receive 0 documents from the 2nd agent, but LIMIT 10,10 should return documents 10-20 from the resulting set as you may not care about each agent in particular. That's why we need to send queries to agents with broader limits and the upper bound in this case is max_matches.
-`Example:
+If we just broadcast the original `LIMIT 10, 10` query it will receive 0 documents from the 2nd agent, but `LIMIT 10,10` should return documents 10-20 from the resulting set as you may not care about each agent in particular. That's why we need to send the query to the agents with broader limits and the upper bound in this case is `max_matches`.
 
-Client will send this query:
+For example, imagine we have table `dist` which refers to remote index `user`.
 
-SELECT *, GEODIST(latitude, longitude, 52.40656, -1.51217, {in=degrees,out=m}) AS dist FROM postal_coords WHERE latitude BETWEEN 50.406559 AND 54.406559 AND longitude BETWEEN -3.512170 AND 0.487830 ORDER BY dist asc **LIMIT 0,10 OPTION max_matches=200**, retry_count=0, retry_delay=0;
+Then if client sends this query:
 
-Agent will execute such query:
+```sql
+SELECT * FROM dist LIMIT 10,10;
+```
 
-SELECT *, GEODIST(latitude, longitude, 52.40656, -1.51217, {in=degrees,out=m}) AS dist FROM postal_coords WHERE latitude BETWEEN 50.406559 AND 54.406559 AND longitude BETWEEN -3.512170 AND 0.487830 ORDER BY dist asc **LIMIT 0,200 OPTION max_matches=200**, max_query_time=3000, retry_count=0, retry_delay=0;
+the query will be converted to:
 
-But a client will return just 10 results as it was instructed.
-`
+```sql
+SELECT * FROM user LIMIT 0,1000
+```
+
+and sent to the remote index `user`. `1000` here is the default `max_matches`. Once the distributed index receives the result it will apply `LIMIT 10,10` to it and return the requested 10 documents.
 
 The value can additionally enumerate per agent options such as:
 * [ha_strategy](../../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy) - `random`, `roundrobin`, `nodeads`, `noerrors` (replaces index-wide `ha_strategy` for particular agent)
@@ -68,12 +72,12 @@ Example:
 ```ini
 # config on box1
 # sharding an index over 3 servers
-agent = box2:9312:shard2
-agent = box3:9312:shard3
+agent = box2:9312:shard1
+agent = box3:9312:shard2
 
 # config on box2
 # sharding an index over 3 servers
-agent = box1:9312:shard1
+agent = box1:9312:shard2
 agent = box3:9312:shard3
 
 # config on box3

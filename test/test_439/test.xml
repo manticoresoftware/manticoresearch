@@ -71,6 +71,11 @@ searchd
 	insert into t values (1,'text','string');
 	select * from t;
 	drop table t;
+
+	create table idx(f text, columnar_integer_attribute_with_bitmask bit(1) engine='columnar');
+	desc idx;
+	show create table idx;
+	drop table idx;
 </sphinxql>
 </queries>
 

@@ -3180,11 +3180,14 @@ inline CheckMerge_e CheckSegmentsPair ( std::pair<const RtSegment_t*, const RtSe
 	return CheckMerge_e::MERGE;
 }
 
-inline CheckMerge_e CheckWeCanMerge ( std::pair<int, int>& tSmallest, const VecTraits_T<ConstRtSegmentRefPtf_t>& dSegments, int64_t iHardRamLeft, int64_t iSoftRamLeft ) NO_THREAD_SAFETY_ANALYSIS
+inline CheckMerge_e CheckWeCanMerge ( std::pair<int, int>& tSmallest, const VecTraits_T<ConstRtSegmentRefPtf_t>& dSegments, int64_t iHardRamLeft, int64_t iSoftRamLeft, bool bNewAdded ) NO_THREAD_SAFETY_ANALYSIS
 {
 	const int iSegs = dSegments.GetLength ();
 
 	RTLOGV << "CheckWeCanMerge(" << dSegments.GetLength() << " segs, ram soft limit " << iSoftRamLeft << " bytes, ram hard limit " << iHardRamLeft << " bytes)";
+
+	if ( !bNewAdded && iSegs < MAX_SEGMENTS )
+		return CheckMerge_e::NOMERGE;
 
 	auto eFLUSH = CheckMerge_e::FLUSH;
 	if ( iHardRamLeft<iSoftRamLeft )
@@ -3276,7 +3279,7 @@ bool RtIndex_c::MergeSegmentsStep ( MergeSeg_e eVal ) REQUIRES ( m_tWorkers.Seri
 	RTLOGV << "Totally we have " << m_tRtChunks.GetRamSegmentsCount() << " segments onboard.";
 
 	std::pair<int, int> tSmallest;
-	CheckMerge_e eMergeAction = ( eVal == MergeSeg_e::NEWSEG ) ? CheckWeCanMerge ( tSmallest, dSegments, iHardRamLeft, iSoftRamLeft ) : CheckMerge_e::NOMERGE;
+	auto eMergeAction = CheckWeCanMerge ( tSmallest, dSegments, iHardRamLeft, iSoftRamLeft, eVal == MergeSeg_e::NEWSEG );
 	RTLOGV << "CheckWeCanMerge returned " << eMergeAction;
 
 	if ( eMergeAction == CheckMerge_e::FLUSH || eMergeAction == CheckMerge_e::FLUSH_EM )

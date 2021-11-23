@@ -4280,7 +4280,6 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 	StringBuilder_c sInfo;
 	sInfo.Sprintf ( "rt: index %s: diskchunk %d(%d), segments %d %s saved in %.6D (%.6D) sec", m_sIndexName.cstr (), iChunkID
 					, iDiskChunks, iSegments, bForced ? "forcibly" : "", tmSave, tmSaveWall );
-	sphInfo ( "%s", sInfo.cstr() );
 
 	// calculate DoubleBuf percent using current save/insert rate
 	auto iInserted = GetMemCount ( [iSaveOp] ( const auto* pSeg ) { return !pSeg->m_iLocked || pSeg->m_iLocked > iSaveOp; } );
@@ -4288,6 +4287,10 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 
 	RTSAVELOG << sInfo.cstr() << ", op " << iSaveOp << " RAM saved/new " << iMyOpRAM << "/" << iInserted
 			<< " Insert ratio is " << m_fSaveRateLimit << " (soft ram limit " << m_iSoftRamLimit << ", rt mem limit " << m_iRtMemLimit << ")";
+
+	sInfo << ", RAM saved/new " << iMyOpRAM << "/" << iInserted << " ratio " << m_fSaveRateLimit << " (soft limit " << m_iSoftRamLimit << ", conf limit " << m_iRtMemLimit << ")";
+
+	sphInfo ( "%s", sInfo.cstr() );
 
 	Preread();
 	CheckStartAutoOptimize();
@@ -9427,6 +9430,7 @@ void RtIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 	pRes->m_iRamRetired = m_iRamChunksAllocatedRAM.load(std::memory_order_relaxed) - iUsedRam;
 
 	pRes->m_iMemLimit = m_iRtMemLimit;
+	pRes->m_fSaveRateLimit = m_fSaveRateLimit;
 
 	CSphString sError;
 	char sFile [ SPH_MAX_FILENAME_LEN ];

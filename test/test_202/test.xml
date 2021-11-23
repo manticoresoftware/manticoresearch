@@ -113,7 +113,7 @@ foreach ( $exts as $ext )
 	if ( file_exists ( $path ) )
 		print 'error';
 }
-$state = StartSearchd ('config.conf', 'error.txt', 'searchd.pid', $error);
+$state = StartSearchd ('config.conf', 'error.txt', 'searchd.pid', $error, array());
 
 
 $results[] = $query ( $client, 'plain3' );

@@ -2,7 +2,11 @@
 <test>
 
 <name>query cache work</name>
-<requires><non-rt/></requires>
+
+<requires>
+	<non-rt/>
+	<no_pseudo_sharding/>
+</requires>
 
 <config>
 indexer

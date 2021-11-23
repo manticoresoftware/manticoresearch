@@ -3,6 +3,10 @@
 
 <name>expressions, hashes, query cache</name>
 
+<requires>
+	<no_pseudo_sharding/>
+</requires>
+
 <config>
 indexer
 {

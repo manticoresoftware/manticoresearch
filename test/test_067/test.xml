@@ -3,7 +3,7 @@
 
 <name>aggregate functions</name>
 <requires>
-<variant_match />
+	<variant_match/>
 </requires>
 
 <num_agents>3</num_agents>

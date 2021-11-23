@@ -1261,6 +1261,7 @@ public:
 	int64_t						GetIndexId() const { return m_iIndexId; }
 	void						SetMutableSettings ( const MutableIndexSettings_c & tSettings );
 	const MutableIndexSettings_c & GetMutableSettings () const { return m_tMutableSettings; }
+	virtual int64_t				GetPseudoShardingMetric() const;
 
 public:
 	/// build index by indexing given sources
@@ -1539,6 +1540,8 @@ int					GetUnhintedBuffer();
 
 /// check query for expressions
 bool				sphHasExpressions ( const CSphQuery & tQuery, const CSphSchema & tSchema );
+
+void				SetPseudoShardingThresh ( int iThresh );
 
 void				InitSkipCache ( int64_t iCacheSize );
 void				ShutdownSkipCache();

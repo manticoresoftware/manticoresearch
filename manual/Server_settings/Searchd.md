@@ -806,9 +806,9 @@ preopen_indexes = 1
 ### pseudo_sharding
 
 <!-- example conf pseudo_sharding -->
-Enables pseudo-sharding for non-full-text search queries. Any query which does sorting, grouping or filtering by attributes (non full-text fields) will be automatically parallelized to up to `searchd.threads` # of threads.
+Enables pseudo-sharding for search queries. Any search query will be automatically parallelized to up to `searchd.threads` # of threads.
 
-Disabled by default.
+Enabled by default.
 
 <!-- intro -->
 ##### Example:

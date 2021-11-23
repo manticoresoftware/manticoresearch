@@ -6792,6 +6792,31 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 	// because disk chunk search within the loop will switch the profiler state
 	SwitchProfile ( pProfiler, SPH_QSTATE_INIT );
 
+	IntVec_t dSplits {iJobs};
+	dSplits.Fill(1);
+	if ( tArgs.m_iSplit>iJobs )
+	{
+		// we have more free threads than disk chunks; makes sense to apply pseudo_sharding
+		int iSingleSplit = 0;
+		int64_t iTotalMetric = 0;
+		CSphVector<int64_t> dMetrics { iJobs };
+		ARRAY_FOREACH ( i, dMetrics )
+		{
+			dMetrics[i] = tGuard.m_dDiskChunks[i]->Cidx().GetPseudoShardingMetric();
+			if ( dMetrics[i]>0 )
+				iTotalMetric += dMetrics[i];
+			else
+				iSingleSplit++;
+		}
+		
+		int iLeft = tArgs.m_iSplit - iSingleSplit;
+		assert(iLeft>=0);
+
+		ARRAY_FOREACH ( i, dSplits )
+			if ( dMetrics[i]>0 )
+				dSplits[i] = Max ( (int)round ( double ( dMetrics[i] ) / iTotalMetric * iLeft ), 1 );
+	}
+
 	std::atomic<bool> bInterrupt {false};
 	std::atomic<int32_t> iCurChunk { iJobs-1 };
 	Coro::ExecuteN ( tClonableCtx.Concurrency ( iJobs ), [&]
@@ -6820,6 +6845,7 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 			tMultiArgs.m_bLocalDF = bGotLocalDF;
 			tMultiArgs.m_pLocalDocs = pLocalDocs;
 			tMultiArgs.m_iTotalDocs = iTotalDocs;
+			tMultiArgs.m_iSplit = dSplits[iChunk];
 
 			// we use sorters in both disk chunks and ram chunks,
 			// that's why we don't want to move to a new schema before we searched ram chunks

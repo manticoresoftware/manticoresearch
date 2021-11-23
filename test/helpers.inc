@@ -573,7 +573,7 @@ function GetTmDelta()
 	return 10;
 }
 
-function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watchdog = false, $addr=false, $port=false )
+function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $requirements, $addr=false, $port=false )
 {
 	global $g_locals, $windows, $cygwin, $action_wait_timeout, $sd_address, $sd_port;
 
@@ -605,8 +605,14 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watch
 	}
 
 	$extra_params = '';
+	$use_watchdog = isset ($requirements["watchdog"]) && $requirements["watchdog"];
+	$no_pseudo_sharding = isset ($requirements["no_pseudo_sharding"]) && $requirements["no_pseudo_sharding"];
+
 	if ( !$use_watchdog )
 		$extra_params .= ' --test';
+
+	if ( !$no_pseudo_sharding )
+		$extra_params .= ' --force-pseudo-sharding';
 
 	if ( isset ( $g_locals['use_pool'] ) && $g_locals['use_pool'] )
 		$extra_params .= ' --test-thd-pool';
@@ -761,7 +767,7 @@ function RestartDaemon ($no_warnings=false)
 	$stop = StopWaitSearchd ('config.conf', 'searchd.pid');
 	$status = 'stop=' . ( $stop==0 ? 'ok' : 'error' ) . ', return code=' . $stop;
 
-	$start = StartSearchd ( 'config.conf', 'error.txt', 'searchd.pid', $error, false );
+	$start = StartSearchd ( 'config.conf', 'error.txt', 'searchd.pid', $error, array() );
 	if ( $start == 0 || $start == 2 )
 	{
 	    if ($no_warnings)
@@ -2489,7 +2495,7 @@ class SphinxConfig
                 case 'start-agent-no-warnings':
                 case 'start-agent':
                     $start = StartSearchd($daemon["config"], $daemon["error"], $daemon["pid"], $error,
-                        $daemon["watchdog"], $daemon["address"], $daemon["port"]);
+                        $daemon["requirements"], $daemon["address"], $daemon["port"]);
                     if ($start == 0 || $start == 2)
                     {
                         if ( $system_cmd==='start-agent-no-warnings' )
@@ -2657,6 +2663,18 @@ class SphinxConfig
             return !!$qinfo['hide'];
         return false;
     }
+
+	function GetSearchdRequirements()
+	{
+		$requirements = array();
+		if ( $this->Requires("no_pseudo_sharding") )
+			$requirements["no_pseudo_sharding"] = true;
+
+		if ( $this->Requires("watchdog") )
+			$requirements["watchdog"] = true;
+
+		return $requirements;
+	}
 
 	function RunQuery ( &$error, &$examples, $benchmark = false )
 	{
@@ -4438,12 +4456,12 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 		{
 
             $agents[0]["daemon"] = array ( "config"=>"config.conf", "error"=>"error.txt", "pid"=>$ss_pid_file,
-                "watchdog"=>$config->Requires ( "watchdog" ), "address"=>false, "port"=>false );
+                "requirements"=>$config->GetSearchdRequirements(), "address"=>false, "port"=>false );
 
 			if ( $sd_managed_searchd )
 				$searchd_ret = 0;
 			else
-				$searchd_ret = StartSearchd ( "config.conf", "error.txt", $ss_pid_file, $error, $config->Requires ( "watchdog" ) );
+				$searchd_ret = StartSearchd ( "config.conf", "error.txt", $ss_pid_file, $error, $config->GetSearchdRequirements() );
 			
 			$stop[scriptdir("config.conf")] = $ss_pid_file;
 
@@ -4478,12 +4496,12 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 					continue;
 
 				$agents[$i]["daemon"] = array ( "config"=>$config_file, "error"=>$error_agent, "pid"=>$pid_file,
-					"watchdog"=>$config->Requires ( "watchdog" ), "address"=>$config->AddressAPI(), "port"=>$config->Port() );
+					"requirements"=>$config->GetSearchdRequirements(), "address"=>$config->AddressAPI(), "port"=>$config->Port() );
 
                 if ( $sd_managed_searchd )
                     $searchd_ret = 0;
                 else
-                    $searchd_ret = StartSearchd ( $config_file, $error_agent, $pid_file, $error, $config->Requires ( "watchdog" ), $config->AddressAPI(), $config->Port() );
+                    $searchd_ret = StartSearchd ( $config_file, $error_agent, $pid_file, $error, $config->GetSearchdRequirements(), $config->AddressAPI(), $config->Port() );
 
 				if ( $searchd_ret == 1 )
 				{
@@ -4509,8 +4527,10 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 
         $config->ResetResults();
 
-		if ( !$config->IsQueryTest () ) {
-            if (!$config->RunCustomTest($error)) {
+		if ( !$config->IsQueryTest () )
+		{
+            if (!$config->RunCustomTest($error))
+			{
                 if (!HandleFailure($config, $report, "$error\n", $nfailed))
                     $log .= "\tsubtest $subtest: query error: $error\n";
                 continue;

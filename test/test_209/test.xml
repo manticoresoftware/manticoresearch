@@ -3,6 +3,10 @@
 
 <name>like operator</name>
 
+<requires>
+	<no_pseudo_sharding/>
+</requires>
+
 <config>
 indexer
 {

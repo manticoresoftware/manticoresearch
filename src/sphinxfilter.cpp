@@ -299,7 +299,15 @@ RowIdBoundaries_t GetFilterRowIdBoundaries ( const CSphFilterSettings & tFilter,
 	RowID_t tMax = tFilter.m_iMaxValue;
 	double fDelta = (double)tTotalDocs / tMax;
 	RowID_t tMinRowID = RowID_t ( fDelta*tMin );
-	RowID_t tMaxRowID = (tMin==tMax-1) ? tTotalDocs-1 : RowID_t ( fDelta*(tMin+1) )-1;
+	RowID_t tMaxRowID;
+	if ( tMin==tMax-1 )
+		tMaxRowID = tTotalDocs-1;
+	else
+	{
+		tMaxRowID = RowID_t ( fDelta*(tMin+1) );
+		if ( tMaxRowID>tMinRowID )
+			tMaxRowID--;
+	}
 
 	return { tMinRowID, tMaxRowID };
 }

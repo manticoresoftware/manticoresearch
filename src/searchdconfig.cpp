@@ -1173,8 +1173,6 @@ bool CreateNewIndexInt ( const CSphString & sIndex, const CreateTableSettings_t 
 	if ( eAdd==ADD_ERROR )
 		return false;
 
-	tCleanup.Ok();
-
 	if ( eAdd==ADD_DSBLED )
 	{
 		ServedIndexRefPtr_c pServed = GetServed ( sIndex, &dNotLoadedIndexes );
@@ -1187,6 +1185,8 @@ bool CreateNewIndexInt ( const CSphString & sIndex, const CreateTableSettings_t 
 
 		g_pLocalIndexes->AddOrReplace ( pServed, sIndex );
 	}
+
+	tCleanup.Ok();
 
 	if ( !SaveConfigInt(sError) )
 	{

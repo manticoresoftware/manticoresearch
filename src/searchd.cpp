@@ -13752,9 +13752,9 @@ void HandleMysqlOptimizeManual ( RowBuffer_i & tOut, const DebugCmd::DebugComman
 	if ( tCmd.bOpt("sync") )
 	{
 		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( tTask );
+			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( std::move ( tTask ) );
 	} else
-		EnqueueForOptimize ( sIndex, tTask );
+		EnqueueForOptimize ( sIndex, std::move ( tTask ) );
 	tOut.Ok();
 }
 
@@ -13777,9 +13777,9 @@ void HandleMysqlDropManual ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t 
 	if ( tCmd.bOpt("sync") )
 	{
 		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( tTask );
+			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( std::move ( tTask ) );
 	} else
-		EnqueueForOptimize ( sIndex, tTask );
+		EnqueueForOptimize ( sIndex, std::move ( tTask ) );
 	tOut.Ok ();
 }
 
@@ -13801,9 +13801,9 @@ void HandleMysqlCompress ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & 
 	if ( tCmd.bOpt("sync") )
 	{
 		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( tTask );
+			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( std::move ( tTask ) );
 	} else
-		EnqueueForOptimize ( sIndex, tTask );
+		EnqueueForOptimize ( sIndex, std::move ( tTask ) );
 	tOut.Ok();
 }
 
@@ -13845,9 +13845,9 @@ void HandleMysqlSplit ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCm
 	if ( tCmd.bOpt ( "sync" ) )
 	{
 		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i*> ( pIndex->m_pIndex )->Optimize ( tTask );
+			static_cast<RtIndex_i*> ( pIndex->m_pIndex )->Optimize ( std::move ( tTask ) );
 	} else
-		EnqueueForOptimize ( sIndex, tTask );
+		EnqueueForOptimize ( sIndex, std::move ( tTask ) );
 	tOut.Ok();
 }
 
@@ -14287,9 +14287,9 @@ void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	if ( tStmt.m_tQuery.m_bSync )
 	{
 		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i*> ( pIndex->m_pIndex )->Optimize ( tTask );
+			static_cast<RtIndex_i*> ( pIndex->m_pIndex )->Optimize ( std::move ( tTask ) );
 	} else
-		EnqueueForOptimize ( tStmt.m_sIndex, tTask );
+		EnqueueForOptimize ( tStmt.m_sIndex, std::move ( tTask ) );
 	tOut.Ok();
 }
 

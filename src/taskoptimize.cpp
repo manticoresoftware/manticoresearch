@@ -49,7 +49,7 @@ void EnqueueForOptimize ( CSphString sIndex, OptimizeTask_t tTask )
 
 				// FIXME: MVA update would wait w-lock here for a very long time
 				assert ( dReadLocked->m_eType==IndexType_e::RT );
-				static_cast<RtIndex_i*> ( dReadLocked->m_pIndex )->Optimize ( pJob->m_tTask );
+				static_cast<RtIndex_i*> ( dReadLocked->m_pIndex )->Optimize ( std::move ( pJob->m_tTask ) );
 			},
 			[] ( void* pPayload ) // releaser
 			{

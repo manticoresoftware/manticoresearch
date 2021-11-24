@@ -803,11 +803,30 @@ public:
 		PostContinuation ( pOp );
 	}
 
-	Keeper_t KeepWorking () final
+#define LOG_LEVEL_SERVICE_KEEP_MT false
+#if LOG_LEVEL_SERVICE_KEEP_MT
+	static intptr_t KeepWorkingID()
 	{
-		m_tService.work_started ();
-		return { nullptr, [this] ( void * ) { m_tService.work_finished (); } };
+		static std::atomic<intptr_t> uWorker { 0ULL };
+		return uWorker.fetch_add ( 1, std::memory_order_relaxed );
 	}
+
+	Keeper_t KeepWorking() final
+	{
+		m_tService.work_started();
+		auto kwid = KeepWorkingID();
+		LOGINFO ( SERVICE_KEEP_MT, MT ) << "KeepWorking " << kwid;
+		return { (void*)kwid, [this] ( void* kwid ) {
+					m_tService.work_finished (); // divided to lines for breakpoints
+					LOGINFO ( SERVICE_KEEP_MT, MT ) << "KeepWorking finished " << (intptr_t)kwid; } };
+	}
+#else
+	Keeper_t KeepWorking() final
+	{
+		m_tService.work_started();
+		return { nullptr, [this] ( void* ) { m_tService.work_finished(); } };
+	}
+#endif
 
 	int WorkingThreads () const final
 	{
@@ -899,21 +918,30 @@ public:
 		Post ( pOp, bVip );
 	}
 
+#define LOG_LEVEL_SERVICE_KEEP_ALONE false
+#if LOG_LEVEL_SERVICE_KEEP_ALONE
 	static intptr_t KeepWorkingID()
 	{
 		static std::atomic<intptr_t> uWorker { 0ULL };
 		return uWorker.fetch_add ( 1, std::memory_order_relaxed );
 	}
 
-	Keeper_t KeepWorking () final
+	Keeper_t KeepWorking() final
 	{
-		m_tService.work_started ();
+		m_tService.work_started();
 		auto kwid = KeepWorkingID();
-		LOG ( SERVICE, MT ) << "KeepWorking " << this << " " << kwid;
-		return { (void*)kwid, [this] ( void * kwid ) {
+		LOGINFO ( SERVICE_KEEP_ALONE, MT ) << "KeepWorking alone " << this << " " << kwid;
+		return { (void*)kwid, [this] ( void* kwid ) {
 					m_tService.work_finished (); // divided to lines for breakpoints
-					LOG ( SERVICE, MT ) << "KeepWorking finished" << this << " " << kwid; } };
+					LOGINFO ( SERVICE_KEEP_ALONE, MT ) << "KeepWorking alone inished " << this << " " << (intptr_t)kwid; } };
 	}
+#else
+	Keeper_t KeepWorking() final
+	{
+		m_tService.work_started();
+		return { nullptr, [this] ( void* ) { m_tService.work_finished(); } };
+	}
+#endif
 
 	void StopAll () final {}
 

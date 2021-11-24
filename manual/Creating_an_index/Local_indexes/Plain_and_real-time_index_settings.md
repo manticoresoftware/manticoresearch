@@ -311,7 +311,7 @@ The limit is pretty strict; RT index should never allocate more memory than itâ€
 
 The RAM chunk should be sized depending on the size of the data, rate of inserts/updates and hardware. A small `rt_mem_limit` and frequent insert/updates can lead to creation of many disk chunks, requiring more frequent optimizations of the index.
 
-In RT mode the RAM chunk size limit can be changed using `ALTER TABLE` . To set rt_mem_limit at 1 Gb for index 't' run a query `ALTER TABLE t rt_mem_limit='1G'`.
+In RT mode the RAM chunk size limit can be changed using `ALTER TABLE` . To set `rt_mem_limit` to 1 Gb for index 't' run query `ALTER TABLE t rt_mem_limit='1G'`.
 
 In plain mode `rt_mem_limit` can be changed using the following steps:
 

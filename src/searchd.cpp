@@ -18002,8 +18002,8 @@ static void DoGreedyRotation() REQUIRES ( MainThread )
 static void CheckRotate () REQUIRES ( MainThread ) EXCLUDES ( g_tRotateThreadMutex )
 {
 	// do we need to rotate now? If no sigHUP received, or if we are already rotating - no.
-	if ( !g_bNeedRotate || g_bInRotate || IsConfigless() )
-		return;
+//	if ( !g_bNeedRotate || g_bInRotate || IsConfigless() )
+//		return;
 
 	g_bInRotate = true; // ok, another rotation cycle just started
 	g_bNeedRotate = false; // which therefore clears any previous HUP signals
@@ -18635,7 +18635,8 @@ void TickHead () REQUIRES ( MainThread )
 	CheckSignals ();
 	CheckLeaks ();
 	CheckReopenLogs ();
-	Threads::CallCoroutine ( CheckRotate );
+	if ( g_bNeedRotate && !g_bInRotate && !IsConfigless() )
+		Threads::CallCoroutine ( CheckRotate );
 
 	sphInfo ( nullptr ); // flush dupes
 #if _WIN32

@@ -300,7 +300,7 @@ struct CmpHitPlain_fn
 	{
 		return 	( a.m_uWordID<b.m_uWordID ) ||
 			( a.m_uWordID==b.m_uWordID && a.m_tRowID<b.m_tRowID ) ||
-			( a.m_uWordID==b.m_uWordID && a.m_tRowID==b.m_tRowID && a.m_uWordPos<b.m_uWordPos );
+			( a.m_uWordID==b.m_uWordID && a.m_tRowID==b.m_tRowID && HITMAN::GetPosWithField ( a.m_uWordPos )<HITMAN::GetPosWithField ( b.m_uWordPos ) );
 	}
 };
 
@@ -316,7 +316,7 @@ struct CmpHitKeywords_fn
 		int iCmp = sphDictCmpStrictly ( (const char *)pPackedA+1, *pPackedA, (const char *)pPackedB+1, *pPackedB );
 		return 	( iCmp<0 ) ||
 			( iCmp==0 && a.m_tRowID<b.m_tRowID ) ||
-			( iCmp==0 && a.m_tRowID==b.m_tRowID && a.m_uWordPos<b.m_uWordPos );
+			( iCmp==0 && a.m_tRowID==b.m_tRowID && HITMAN::GetPosWithField ( a.m_uWordPos )<HITMAN::GetPosWithField( b.m_uWordPos ) );
 	}
 };
 
@@ -3043,6 +3043,47 @@ void RtIndex_c::UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & dUpda
 	}
 }
 
+static void CleanupHitDuplicates ( CSphTightVector<CSphWordHit> & dHits )
+{
+	if ( dHits.GetLength()<2 )
+		return;
+
+	int iSrc = 1, iDst = 1;
+	while ( iSrc<dHits.GetLength() )
+	{
+		CSphWordHit & tDst = dHits[iDst-1];
+		const CSphWordHit & tSrc = dHits[iSrc];
+
+		DWORD uDstPos = HITMAN::GetPosWithField ( tDst.m_uWordPos );
+		DWORD uSrcPos = HITMAN::GetPosWithField ( tSrc.m_uWordPos );
+		DWORD uDstField = HITMAN::GetField ( tDst.m_uWordPos );
+		DWORD uSrcField = HITMAN::GetField ( tSrc.m_uWordPos );
+		bool bDstEnd = HITMAN::IsEnd ( tDst.m_uWordPos );
+		bool bSrcEnd = HITMAN::IsEnd ( tSrc.m_uWordPos );
+
+		// check for pure duplicate and multiple tail hits
+		if ( tDst.m_tRowID==tSrc.m_tRowID && tDst.m_uWordID==tSrc.m_uWordID && ( uDstPos==uSrcPos || ( uDstField==uSrcField && bDstEnd ) ) )
+		{
+			if ( uDstPos==uSrcPos )
+			{
+				dHits[iDst] = dHits[iSrc];
+			} else if ( bDstEnd )
+			{
+				tDst.m_uWordPos = HITMAN::CreateSum ( tDst.m_uWordPos, 0 ); // reset field end flag
+				dHits[iDst] = dHits[iSrc];
+				iDst++;
+			}
+			iSrc++;
+
+		} else
+		{
+			dHits[iDst++] = dHits[iSrc++];
+		}
+	}
+	
+	dHits.Resize ( iDst );
+}
+
 bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAccExt )
 {
 	assert ( g_bRTChangesAllowed );
@@ -3064,6 +3105,7 @@ bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAccExt )
 	// segment might be NULL if we're only killing rows this txn
 	pAcc->CleanupDuplicates ( m_tSchema.GetRowSize() );
 	pAcc->Sort();
+	CleanupHitDuplicates ( pAcc->m_dAccum );
 
 	RtSegmentRefPtf_t pNewSeg { pAcc->CreateSegment ( m_tSchema.GetRowSize(), m_iWordsCheckpoint, m_tSettings.m_eHitless, m_dHitlessWords ) };
 	assert ( !pNewSeg || pNewSeg->m_uRows>0 );

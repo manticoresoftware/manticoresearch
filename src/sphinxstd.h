@@ -5806,6 +5806,11 @@ CSphString GET_GALERA_FULLPATH ();
 // this returns env LIB_MANTICORE_COLUMNAR, or GET_MANTICORE_MODULES()/lib_manticore_columnar.xx (xx=so or dll)
 CSphString GET_COLUMNAR_FULLPATH ();
 
+// return value of asked ENV, or default.
+// note, default determines the type which to return
+bool val_from_env ( const char* szEnvName, bool bDefault );
+int val_from_env ( const char* szEnvName, int iDefault );
+
 // fast diagnostic logging.
 // Being a macro, it will be optimized out by compiler when not in use
 enum ESphLogLevel : BYTE; // values are in sphinxutils.h

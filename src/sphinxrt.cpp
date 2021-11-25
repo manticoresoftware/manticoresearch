@@ -1435,13 +1435,9 @@ RtIndex_c::RtIndex_c ( const CSphSchema & tSchema, const char * sIndexName, int6
 	SetSchema ( tSchema );
 	SetMemLimit ( iRamSize );
 
-	const char* szEnv = getenv ( "MANTICORE_TRACK_RT_ERRORS" );
-	if ( szEnv )
+	auto iTrack = val_from_env ( "MANTICORE_TRACK_RT_ERRORS",-1 );
+	if ( iTrack>0 )
 	{
-		char* szEnd = nullptr;
-		auto iTrack = strtol (szEnv, &szEnd, 10);
-		if ( *szEnd !='\0' )
-			sphWarning ("MANTICORE_TRACK_RT_ERRORS expects to be numeric. %s provided, failed to parse as numeric since %s", szEnv, szEnd );
 		m_iTrackFailedRamActions = iTrack;
 		sphInfo ( "MANTICORE_TRACK_RT_ERRORS env provided; up to %d insert/merge errors will be reported", m_iTrackFailedRamActions );
 	}

@@ -842,7 +842,7 @@ DWORD HistogramContainer_c::GetNumValues() const
 
 //////////////////////////////////////////////////////////////////////////
 
-static bool CanCreateHistogram ( const CSphString sAttrName, ESphAttr eAttrType )
+static bool CanCreateHistogram ( const CSphString & sAttrName, ESphAttr eAttrType )
 {
 	if ( sphIsInternalAttr ( sAttrName ) )
 		return false;

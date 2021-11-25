@@ -3977,7 +3977,6 @@ void RtIndex_c::SaveDiskData ( const char * szFilename, const ConstRtSegmentSlic
 
 	WriteDocs ( tCtx, tWriterDict, sError );
 	WriteCheckpoints ( tCtx, tWriterDict );
-	WriteDeadRowMap ( tCtx, sError );
 
 	SaveDiskHeader ( tCtx, tStats );
 }

@@ -202,6 +202,7 @@ ThreadRole HandlerThread; // thread which serves clients
 
 static CSphString		g_sConfigFile;
 static bool				g_bCleanLoadedConfig = true; // whether to clean config when it parsed and no more necessary
+static bool				LOG_LEVEL_SHUTDOWN = val_from_env("MANTICORE_TRACK_DAEMON_SHUTDOWN",false); // verbose logging when daemon shutdown, ruled by this env variable
 
 #if _WIN32
 static bool				g_bSeamlessRotate	= false;
@@ -660,7 +661,6 @@ public:
 	}
 };
 
-#define LOG_LEVEL_SHUTDOWN false
 #define LOG_COMPONENT_SEARCHD __LINE__ << " "
 
 #define SHUTINFO LOGINFO (SHUTDOWN,SEARCHD)

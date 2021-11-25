@@ -1433,11 +1433,18 @@ bool GuardedHash_c::Contains( const CSphString& tKey ) const
 
 void GuardedHash_c::ReleaseAndClear()
 {
-	ScWL_t hHashWLock { m_tIndexesRWLock };
-	for ( m_hIndexes.IterateStart(); m_hIndexes.IterateNext(); ) SafeRelease ( m_hIndexes.IterateGet());
+	GuardedHash_c::RefCntHash_t tHash;
+	{
+		ScWL_t hHashWLock { m_tIndexesRWLock };
+		for ( auto& i : m_hIndexes )
+			tHash.Add ( i.second, i.first );
 
-	m_hIndexes.Reset();
-	NextGeneration();
+		m_hIndexes.Reset();
+		NextGeneration();
+	}
+
+	for ( auto& i : tHash )
+		SafeRelease ( i.second );
 }
 
 ISphRefcountedMT* GuardedHash_c::Get( const CSphString& tKey ) const

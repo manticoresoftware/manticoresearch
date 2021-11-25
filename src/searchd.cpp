@@ -758,12 +758,12 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	}
 
 	Threads::CallCoroutine ( [] {
-		SHUTINFO << "Remove local indexes list ...";
-		SafeDelete ( g_pLocalIndexes );
+		SHUTINFO << "Abandon local indexes list ...";
+		g_pLocalIndexes->ReleaseAndClear();
 
 		// unlock Distr indexes automatically done by d-tr
-		SHUTINFO << "Remove distr indexes list ...";
-		SafeDelete ( g_pDistIndexes );
+		SHUTINFO << "Abandon distr indexes list ...";
+		g_pDistIndexes->ReleaseAndClear();
 	} );
 
 	SHUTINFO << "Shutdown alone threads (if any) ...";
@@ -773,6 +773,12 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	auto pPool = GlobalWorkPool();
 	if ( pPool )
 		pPool->StopAll();
+
+	SHUTINFO << "Remove local indexes list ...";
+	SafeDelete ( g_pLocalIndexes );
+
+	SHUTINFO << "Remove distr indexes list ...";
+	SafeDelete ( g_pDistIndexes );
 
 	// clear shut down of rt indexes + binlog
 	SHUTINFO << "Finish IO stats collecting ...";

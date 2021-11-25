@@ -821,9 +821,9 @@ preopen_indexes = 1
 ### pseudo_sharding
 
 <!-- example conf pseudo_sharding -->
-Enables pseudo-sharding for search queries. Any search query will be automatically parallelized to up to `searchd.threads` # of threads.
+Enables pseudo-sharding for search queries to plain and real-time indexes. Any search query will be automatically parallelized to up to `searchd.threads` # of threads.
 
-Enabled by default.
+Disabled by default.
 
 <!-- intro -->
 ##### Example:

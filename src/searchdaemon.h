@@ -860,7 +860,7 @@ class GuardedHash_c : public ISphNoncopyable
 	using RefCntHash_t = SmallStringHash_T<ISphRefcountedMT *>;
 
 public:
-	GuardedHash_c ();
+	GuardedHash_c () = default;
 	~GuardedHash_c ();
 
 	// atomically try add an entry and adopt it
@@ -913,7 +913,7 @@ private:
 	void Unlock () const UNLOCK_FUNCTION ( m_tIndexesRWLock );
 
 private:
-	mutable CSphRwlock m_tIndexesRWLock; // distinguishable name for catch possible warnings
+	mutable RwLock_t m_tIndexesRWLock; // distinguishable name for catch possible warnings
 	RefCntHash_t m_hIndexes GUARDED_BY ( m_tIndexesRWLock );
 	AddOrReplaceHookFn m_pHook = nullptr;
 	std::atomic<int> m_iGeneration {0}; // increments on every hash change of plain idxes

@@ -1351,16 +1351,9 @@ ServedIndex_c::ServedIndex_c( const ServedDesc_t& tDesc )
 
 
 //////////////////////////////////////////////////////////////////////////
-GuardedHash_c::GuardedHash_c()
-{
-	if ( !m_tIndexesRWLock.Init())
-		sphDie( "failed to init hash indexes rwlock" );
-}
-
 GuardedHash_c::~GuardedHash_c()
 {
 	ReleaseAndClear();
-	Verify ( m_tIndexesRWLock.Done());
 }
 
 // atomically try add an entry and adopt it

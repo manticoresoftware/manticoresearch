@@ -124,6 +124,7 @@ public:
 	Binlog::CheckTnxResult_t ReplayTxn(Binlog::Blop_e eOp,CSphReader& tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCanContinue) override; // cb from binlog
 	Binlog::CheckTnxResult_t ReplayAdd(CSphReader& tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCanContinue);
 	Binlog::CheckTnxResult_t ReplayDelete(CSphReader& tReader, Binlog::CheckTxn_fn&& fnCanContinue);
+	Binlog::CheckTnxResult_t ReplayInsertAndDelete ( CSphReader& tReader, CSphString& sError, Binlog::CheckTxn_fn&& fnCanContinue );
 
 private:
 	static const DWORD				META_HEADER_MAGIC = 0x50535451;	///< magic 'PSTQ' header
@@ -159,9 +160,7 @@ public:
 	PercolateMatchContext_t * CreateMatchContext ( const RtSegment_t * pSeg, const SegmentReject_t &tReject );
 
 private:
-	int ReplayDeleteQueries ( const VecTraits_T<int64_t>& dQueries ) EXCLUDES ( m_tLock ) final;
-	int ReplayDeleteQueries ( const char * sTags ) EXCLUDES ( m_tLock ) final;
-	void ReplayCommit ( StoredQuery_i * pQuery ) EXCLUDES ( m_tLock ) final;
+	int ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQuery_i*>& dNewQueries, const VecTraits_T<int64_t>& dDeleteQueries, const VecTraits_T<uint64_t>& dDeleteTags ) EXCLUDES ( m_tLock );
 
 	void GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameBuilder_i * ) const override;
 	Bson_t ExplainQuery ( const CSphString & sQuery ) const final;
@@ -649,13 +648,13 @@ static void GetSuffixLocators ( const char * sWord, int iMaxCodepointLength, con
 	}
 }
 
-static void PercolateTags ( const char * sTags, CSphVector<uint64_t> & dTags )
+static void PercolateTags ( const char * szTags, CSphVector<uint64_t> & dTags )
 {
-	if ( !sTags || !*sTags )
+	if ( !szTags || !*szTags )
 		return;
 
 	StrVec_t dTagStrings;
-	sphSplit ( dTagStrings, sTags );
+	sphSplit ( dTagStrings, szTags );
 	if ( dTagStrings.IsEmpty() )
 		return;
 
@@ -665,7 +664,22 @@ static void PercolateTags ( const char * sTags, CSphVector<uint64_t> & dTags )
 	dTags.Uniq();
 }
 
-static bool TagsMatched ( const VecTraits_T<uint64_t>& dFilter, const VecTraits_T<uint64_t>& dQueryTags, bool bTagsEq=true )
+static void PercolateAppendTags ( const CSphString& sTags, CSphVector<uint64_t>& dTags )
+{
+	if ( sTags.IsEmpty() )
+		return;
+
+	StrVec_t dTagStrings;
+	sphSplit ( dTagStrings, sTags.cstr() );
+	if ( dTagStrings.IsEmpty() )
+		return;
+
+	dTags.ReserveGap ( dTagStrings.GetLength() );
+	for ( const auto& sTag : dTagStrings )
+		dTags.Add ( sphFNV64 ( sTag.cstr() ) );
+}
+
+static bool TagsMatched ( const VecTraits_T<uint64_t>& dFilter, const VecTraits_T<uint64_t>& dQueryTags )
 {
 	auto *pFilter = dFilter.begin();
 	auto *pQueryTags = dQueryTags.begin();
@@ -679,9 +693,9 @@ static bool TagsMatched ( const VecTraits_T<uint64_t>& dFilter, const VecTraits_
 		else if ( *pFilter<*pQueryTags )
 			++pFilter;
 		else if ( *pQueryTags==*pFilter )
-			return bTagsEq;
+			return true;
 	}
-	return !bTagsEq;
+	return false;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1760,157 +1774,166 @@ StoredQuery_i * PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, co
 	return pStored;
 }
 
-void PercolateIndex_c::ReplayCommit ( StoredQuery_i * pQuery ) EXCLUDES ( m_tLock )
+namespace {
+// wrap original queries vec, since we might retry more than once.
+// Also eliminate dupes, so that last one query with same quid win
+CSphVector<StoredQuerySharedPtr_t> UniqAndWrapQueries ( const VecTraits_T<StoredQuery_i*>& dNewQueries )
 {
-	Binlog::Commit ( Binlog::PQ_ADD, &m_iTID, m_sIndexName.cstr(), true, [pQuery] (CSphWriter& tWriter) {
-		SaveStoredQuery ( *pQuery, tWriter );
-	});
-	auto *pStoredQuery = (StoredQuery_t *) pQuery;
-
-	while (true)
+	CSphVector<StoredQuerySharedPtr_t> dNewSharedQueries;
+	dNewSharedQueries.Reserve ( dNewQueries.GetLength() );
+	OpenHash_T<int, int64_t, HashFunc_Int64_t> hQueries;
+	for ( StoredQuery_i* pQuery : dNewQueries )
 	{
-		StoredQuerySharedPtrVecSharedPtr_t pNewVec;
-		SharedPQSlice_t dElems;
-		int64_t iLimit;
-		int *pIdx = nullptr;
+		int* pIdx = hQueries.Find ( pQuery->m_iQUID );
+		StoredQuerySharedPtr_t tNew { (StoredQuery_t*)pQuery };
+		if ( !pIdx )
 		{
-			ScRL_t rLock ( m_tLock );
-			pIdx = m_hQueries.Find ( pStoredQuery->m_iQUID );
-			dElems = GetStoredUnl();
-			iLimit = m_pQueries->GetLimit();
-		}
-
-		if ( pIdx ) // replace, need full copy
-		{
-			pNewVec = new CSphVector<StoredQuerySharedPtr_t>;
-			pNewVec->Reserve ( iLimit );
-			for ( auto& iElem : dElems )
-				pNewVec->Add ( iElem );
-			( *pNewVec )[*pIdx] = pStoredQuery;
-		}
-
-		ScWL_t wLock ( m_tLock );
-		if ( dElems.Generation() != m_iGeneration )
-			continue;
-
-		if ( !pIdx ) // new entry; possible fast insert
-		{
-			AddToStoredUnl ( StoredQuerySharedPtr_t ( pStoredQuery ) );
-			++m_tStat.m_iTotalDocuments;
+			hQueries.Add ( pQuery->m_iQUID, dNewSharedQueries.GetLength() );
+			dNewSharedQueries.Add ( tNew );
 		} else
-		{
-			// entry exists; replace with full clone
-			m_pQueries = pNewVec;
-			++m_iGeneration;
-		}
-		return;
+			dNewSharedQueries[*pIdx] = tNew;
 	}
+	return dNewSharedQueries;
 }
+} // namespace
 
-int PercolateIndex_c::ReplayDeleteQueries ( const VecTraits_T<int64_t>& dQueries ) EXCLUDES ( m_tLock )
+
+int PercolateIndex_c::ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQuery_i*>& dNewQueries, const VecTraits_T<int64_t>& dDeleteQueries, const VecTraits_T<uint64_t>& dDeleteTags ) EXCLUDES ( m_tLock )
 {
-	int iDeleted = 0;
+	// wrap original queries vec, since we might retry more than once
+	auto dNewSharedQueries = UniqAndWrapQueries ( dNewQueries );
+
 	while ( true )
 	{
 		SharedPQSlice_t dElems;
-		int64_t iLimit;
+		int64_t iLimit = -1;
+
+		// will use this slice to actual deletion
+		VecTraits_T<int64_t> dAllToDelete = dDeleteQueries;
+
+		// collect deletes by tag
+		CSphVector<int64_t> dDeleteIdsAndTags;
+		if ( !dDeleteTags.IsEmpty() )
 		{
-			ScRL_t rLock ( m_tLock );
-			dElems = GetStoredUnl();
-			iLimit = m_pQueries->GetLimit();
-			if ( !dQueries.any_of ( [this] ( int64_t iQuery ) REQUIRES_SHARED ( m_tLock ) { return m_hQueries.Find ( iQuery ); } ) )
-				return 0;
-		}
-
-		StoredQuerySharedPtrVecSharedPtr_t pNewVec { new CSphVector<StoredQuerySharedPtr_t> };
-		pNewVec->Reserve ( iLimit );
-		for ( auto& iElem : dElems )
-			pNewVec->Add ( iElem );
-
-		ScWL_t wLock ( m_tLock );
-		if ( dElems.Generation() != m_iGeneration )
-			continue;
-
-		for ( int64_t iQuery : dQueries )
-		{
-			auto *pIdx = m_hQueries.Find ( iQuery );
-			if ( pIdx )
+			// for delete by tags we need snapshot of the current queries
 			{
-				auto iIdx = *pIdx;
-				m_hQueries.Delete ( iQuery );
-				if ( iQuery!=pNewVec->Last ()->m_iQUID )
-					*m_hQueries.Find ( pNewVec->Last()->m_iQUID ) = iIdx; // fixup to removeFast
-				pNewVec->RemoveFast ( iIdx );
-				++iDeleted;
+				ScRL_t rLock ( m_tLock );
+				dElems = GetStoredUnl();
+				iLimit = m_pQueries->GetLimit();
+			}
+
+			// collect all deletes from tags, to process them all uniform way then
+			for ( const StoredQuery_t* pQuery : dElems )
+				if ( !pQuery->m_dTags.IsEmpty() && TagsMatched ( dDeleteTags, pQuery->m_dTags ) )
+					dDeleteIdsAndTags.Add ( pQuery->m_iQUID );
+
+			if ( !dDeleteIdsAndTags.IsEmpty() )
+			{
+				dDeleteIdsAndTags.Append ( dDeleteQueries );
+				dDeleteIdsAndTags.Uniq();
+				dAllToDelete = dDeleteIdsAndTags;
 			}
 		}
 
-		assert ( iDeleted );
-		Binlog::Commit ( Binlog::PQ_DELETE, &m_iTID, m_sIndexName.cstr(), true, [dQueries] ( CSphWriter& tWriter ) {
-			SaveDeleteQuery ( dQueries, nullptr, tWriter );
-		} );
-
-		m_pQueries = pNewVec;
-		++m_iGeneration;
-		m_tStat.m_iTotalDocuments -= iDeleted;
-		return iDeleted;
-	}
-}
-
-int PercolateIndex_c::ReplayDeleteQueries ( const char * sTags ) EXCLUDES ( m_tLock )
-{
-	CSphVector<uint64_t> dTags;
-	PercolateTags ( sTags, dTags );
-
-	if ( dTags.IsEmpty() )
-		return 0;
-
-	int iDeleted = 0;
-	while ( true )
-	{
-		SharedPQSlice_t dElems;
-		int64_t iLimit;
+		// for both deletion and addition we need hash and snapshot
+		OpenHash_T<int, int64_t, HashFunc_Int64_t> hQueries { 0 };
 		{
 			ScRL_t rLock ( m_tLock );
-			dElems = GetStoredUnl();
-			iLimit = m_pQueries->GetLimit();
+			if ( iLimit<0 )
+			{
+				dElems = GetStoredUnl();
+				iLimit = m_pQueries->GetLimit();
+			} else if ( dElems.Generation() != m_iGeneration )
+				continue;
+			hQueries = m_hQueries;
 		}
 
-		StoredQuerySharedPtrVecSharedPtr_t pNewVec { new CSphVector<StoredQuerySharedPtr_t> };
-		pNewVec->Reserve ( iLimit );
-		for ( auto& iElem : dElems )
-			pNewVec->Add ( iElem );
+		StoredQuerySharedPtrVecSharedPtr_t pNewVec;
+		bool bWithFullClone = false;
+		int iDeleted = 0;
 
-		ScWL_t wLock ( m_tLock );
-		if ( dElems.Generation() != m_iGeneration )
-			continue;
-
-		for ( int iIdx=0; iIdx<pNewVec->GetLength(); ++iIdx )
+		// delete by id pass (deletes by tags are also collected here)
+		for ( int64_t iQuery : dAllToDelete )
 		{
-			const StoredQuery_t * pQuery = pNewVec->At ( iIdx );
-			if ( pQuery->m_dTags.IsEmpty() )
+			auto* pIdx = hQueries.Find ( iQuery );
+			if ( !pIdx )
 				continue;
 
-			if ( TagsMatched ( dTags, pQuery->m_dTags ) )
+			if ( !bWithFullClone ) // first virgin hit, need to make heavy full clone of the queries
 			{
-				m_hQueries.Delete ( pQuery->m_iQUID );
-				if ( pQuery->m_iQUID!=pNewVec->Last ()->m_iQUID )
-					*m_hQueries.Find ( pNewVec->Last ()->m_iQUID ) = iIdx; // fixup to removeFast
-				pNewVec->RemoveFast ( iIdx );
-				--iIdx;
-				++iDeleted;
+				bWithFullClone = true;
+				pNewVec = new CSphVector<StoredQuerySharedPtr_t>;
+				pNewVec->Reserve ( iLimit );
+				for ( auto& iElem : dElems )
+					pNewVec->Add ( iElem );
+			}
+			auto iIdx = *pIdx;
+			hQueries.Delete ( iQuery );
+			if ( iQuery != pNewVec->Last()->m_iQUID )
+				*hQueries.Find ( pNewVec->Last()->m_iQUID ) = iIdx; // fixup to removeFast
+			pNewVec->RemoveFast ( iIdx );
+			++iDeleted;
+		}
+
+		// insert/replace pass
+
+		// check whether we can insert fastest possible way, or need to modify snapshot and only then insert
+		if ( !bWithFullClone )
+		{
+			for ( const auto& pQuery : dNewSharedQueries )
+			{
+				if ( hQueries.Find ( pQuery->m_iQUID ) && !bWithFullClone )
+				{
+					bWithFullClone = true;
+					pNewVec = new CSphVector<StoredQuerySharedPtr_t>;
+					pNewVec->Reserve ( iLimit );
+					for ( auto& iElem : dElems )
+						pNewVec->Add ( iElem );
+					break;
+				}
 			}
 		}
 
-		if ( iDeleted )
+		// perform inserts into clone
+		int64_t iNewInserted = 0;
+		if ( bWithFullClone )
 		{
-			Binlog::Commit ( Binlog::PQ_DELETE, &m_iTID, m_sIndexName.cstr(), true, [sTags] ( CSphWriter& tWriter ) {
-				SaveDeleteQuery ( { nullptr, 0 }, sTags, tWriter );
-			} );
-			m_pQueries = pNewVec;
-			++m_iGeneration;
-			m_tStat.m_iTotalDocuments -= iDeleted;
+			for ( auto& pQuery : dNewSharedQueries )
+			{
+				int* pIdx = hQueries.Find ( pQuery->m_iQUID );
+				if ( !pIdx )
+				{
+					hQueries.Add ( pQuery->m_iQUID, pNewVec->GetLength() );
+					pNewVec->Add ( pQuery );
+					++iNewInserted;
+				} else
+					( *pNewVec )[*pIdx] = pQuery;
+			}
 		}
+
+		ScWL_t wLock ( m_tLock );
+		if ( dElems.Generation() != m_iGeneration )
+			continue;
+
+		if ( bWithFullClone )
+		{
+			m_pQueries = pNewVec;
+			m_hQueries.Swap ( hQueries );
+			++m_iGeneration;
+		} else {
+			for ( auto& pQuery : dNewSharedQueries )
+			{
+				assert ( !hQueries.Find ( pQuery->m_iQUID ) );
+				AddToStoredUnl ( pQuery );
+				++iNewInserted;
+			}
+		}
+
+		m_tStat.m_iTotalDocuments += iNewInserted - iDeleted;
+		Binlog::Commit ( Binlog::PQ_ADD_DELETE, &m_iTID, m_sIndexName.cstr(), true, [dNewQueries, dDeleteQueries, dDeleteTags] ( CSphWriter& tWriter ) {
+			SaveInsertDeleteQueries( dNewQueries, dDeleteQueries, dDeleteTags, tWriter );
+		} );
+
 		return iDeleted;
 	}
 }
@@ -1923,26 +1946,34 @@ bool PercolateIndex_c::Commit ( int * pDeleted, RtAccum_t * pAccExt )
 	if ( !pAcc )
 		return true;
 
-	int iDeleted = 0;
-	for ( ReplicationCommand_t * pCmd : pAcc->m_dCmd )
+	CSphVector<StoredQuery_i*> dNewQueries; // not owned
+	CSphVector<int64_t> dDeleteQueries;
+	CSphVector<uint64_t> dDeleteTags;
+
+	for ( ReplicationCommand_t* pCmd : pAcc->m_dCmd )
 	{
 		switch ( pCmd->m_eCommand )
 		{
 		case ReplicationCommand_e::PQUERY_ADD:
-			ReplayCommit ( pCmd->m_pStored.LeakPtr() );
+			dNewQueries.Add ( pCmd->m_pStored.LeakPtr() );
 			break;
 
 		case ReplicationCommand_e::PQUERY_DELETE:
 			if ( pCmd->m_dDeleteQueries.GetLength() )
-				iDeleted += ReplayDeleteQueries ( pCmd->m_dDeleteQueries );
+				dDeleteQueries.Append ( pCmd->m_dDeleteQueries );
 			else
-				iDeleted += ReplayDeleteQueries ( pCmd->m_sDeleteTags.cstr() );
+				PercolateAppendTags ( pCmd->m_sDeleteTags, dDeleteTags );
 			break;
 
 		default:
 			sphWarning ( "index %s: unsupported command %d", m_sIndexName.cstr(), (int)pCmd->m_eCommand );
 		}
 	}
+
+	dDeleteTags.Uniq();
+	dDeleteQueries.Uniq();
+
+	int iDeleted = ReplayInsertAndDeleteQueries ( dNewQueries, dDeleteQueries, dDeleteTags );
 
 	pAcc->Cleanup();
 
@@ -1958,6 +1989,7 @@ Binlog::CheckTnxResult_t PercolateIndex_c::ReplayTxn ( Binlog::Blop_e eOp,CSphRe
 	{
 	case Binlog::PQ_ADD: return ReplayAdd(tReader, sError, std::move(fnCanContinue));
 	case Binlog::PQ_DELETE: return ReplayDelete(tReader, std::move(fnCanContinue));
+	case Binlog::PQ_ADD_DELETE: return ReplayInsertAndDelete(tReader, sError, std::move(fnCanContinue));
 	default: assert (false && "unknown op provided to replay");
 	}
 	return {};
@@ -1984,7 +2016,12 @@ Binlog::CheckTnxResult_t PercolateIndex_c::ReplayAdd ( CSphReader& tReader, CSph
 			return tRes;
 		}
 
-		ReplayCommit ( pQuery );
+		// actually replay
+		CSphVector<int64_t> dDeleteQueries;
+		CSphVector<uint64_t> dDeleteTags;
+		CSphVector<StoredQuery_i*> dNewQueries;
+		dNewQueries.Add ( pQuery );
+		ReplayInsertAndDeleteQueries ( dNewQueries, dDeleteQueries, dDeleteTags );
 	}
 	return tRes;
 }
@@ -1998,15 +2035,55 @@ Binlog::CheckTnxResult_t PercolateIndex_c::ReplayDelete (CSphReader& tReader, Bi
 	Binlog::CheckTnxResult_t tRes = fnCanContinue();
 	if ( tRes.m_bValid && tRes.m_bApply )
 	{
+		CSphVector<StoredQuery_i*> dNewQueries;
+		CSphVector<uint64_t> dDeleteTags;
+		if ( dQueries.IsEmpty() )
+			PercolateAppendTags ( sTags, dDeleteTags );
+
 		// actually replay
-		if ( dQueries.GetLength() )
-			ReplayDeleteQueries ( dQueries );
-		else
-			ReplayDeleteQueries ( sTags.cstr() );
+		ReplayInsertAndDeleteQueries ( dNewQueries, dQueries, dDeleteTags );
 	}
 	return tRes;
 }
 
+Binlog::CheckTnxResult_t PercolateIndex_c::ReplayInsertAndDelete ( CSphReader& tReader, CSphString& sError, Binlog::CheckTxn_fn&& fnCanContinue )
+{
+	CSphVector<StoredQueryDesc_t> dNewQueriesDescs;
+	CSphVector<int64_t> dDeleteQueries;
+	CSphVector<uint64_t> dDeleteTags;
+
+	LoadInsertDeleteQueries( dNewQueriesDescs, dDeleteQueries, dDeleteTags, tReader );
+
+	Binlog::CheckTnxResult_t tRes = fnCanContinue();
+	if ( tRes.m_bValid && tRes.m_bApply )
+	{
+		CSphVector<StoredQuery_i*> dNewQueries; // not owned
+		dNewQueries.Reserve ( dNewQueries.GetLength() );
+
+		for ( StoredQueryDesc_t& tDesc : dNewQueriesDescs )
+		{
+			PercolateQueryArgs_t tArgs ( tDesc );
+			// at binlog query already passed replace checks
+			tArgs.m_bReplace = true;
+
+			// actually replay
+			StoredQuery_i* pQuery = CreateQuery ( tArgs, sError );
+			if ( !pQuery )
+			{
+				sError.SetSprintf ( "apply error, %s", sError.cstr() );
+				tRes = Binlog::CheckTnxResult_t();
+				for ( StoredQuery_i* pDelQuery : dNewQueries )
+					SafeDelete ( pDelQuery );
+				return tRes;
+			}
+			dNewQueries.Add ( pQuery );
+		}
+
+		// actually replay
+		ReplayInsertAndDeleteQueries ( dNewQueries, dDeleteQueries, dDeleteTags );
+	}
+	return tRes;
+}
 
 class PqMatchProcessor_c : public MatchProcessor_i, ISphNoncopyable
 {
@@ -3161,4 +3238,59 @@ void SaveDeleteQuery ( const VecTraits_T<int64_t>& dQueries, const char* sTags, 
 void SaveDeleteQuery ( const VecTraits_T<int64_t> & dQueries, const char * sTags, CSphWriter & tWriter )
 {
 	SaveDeleteQuery_T ( dQueries, sTags, tWriter );
+}
+
+template<typename READER>
+void LoadInsertDeleteQueries_T ( CSphVector<StoredQueryDesc_t>& dNewQueries, CSphVector<int64_t>& dDeleteQueries, CSphVector<uint64_t>& dDeleteTags, READER& tReader )
+{
+	dDeleteTags.Resize ( tReader.UnzipInt() );
+	ARRAY_FOREACH ( i, dDeleteTags )
+		dDeleteTags[i] = tReader.UnzipOffset();
+
+	dDeleteQueries.Resize ( tReader.UnzipInt() );
+	ARRAY_FOREACH ( i, dDeleteQueries )
+		dDeleteQueries[i] = tReader.UnzipOffset();
+
+	dNewQueries.Resize ( tReader.UnzipInt() );
+	ARRAY_FOREACH ( i, dNewQueries )
+		LoadStoredQuery ( PQ_META_VERSION_MAX, dNewQueries[i], tReader );
+}
+
+void LoadInsertDeleteQueries ( const BYTE* pData, int iLen, CSphVector<StoredQueryDesc_t>& dNewQueries, CSphVector<int64_t>& dDeleteQueries, CSphVector<uint64_t>& dDeleteTags )
+{
+	MemoryReader_c tReader ( pData, iLen );
+	LoadInsertDeleteQueries_T ( dNewQueries, dDeleteQueries, dDeleteTags, tReader );
+}
+
+void LoadInsertDeleteQueries ( CSphVector<StoredQueryDesc_t>& dNewQueries, CSphVector<int64_t>& dDeleteQueries, CSphVector<uint64_t>& dDeleteTags, CSphReader& tReader )
+{
+	LoadInsertDeleteQueries_T ( dNewQueries, dDeleteQueries, dDeleteTags, tReader );
+}
+
+template<typename WRITER>
+void SaveInsertDeleteQueries_T ( const VecTraits_T<StoredQuery_i*>& dNewQueries, const VecTraits_T<int64_t>& dDeleteQueries, const VecTraits_T<uint64_t>& dDeleteTags, WRITER& tWriter )
+{
+	tWriter.ZipInt ( dDeleteTags.GetLength() );
+	for ( uint64_t uTag : dDeleteTags )
+		tWriter.ZipOffset ( uTag );
+
+	tWriter.ZipInt ( dDeleteQueries.GetLength() );
+	for ( int64_t iQuery : dDeleteQueries )
+		tWriter.ZipOffset ( iQuery );
+
+	tWriter.ZipInt ( dNewQueries.GetLength() );
+	for ( StoredQuery_i* pQuery : dNewQueries )
+		SaveStoredQuery ( *pQuery, tWriter );
+
+}
+
+void SaveInsertDeleteQueries ( const VecTraits_T<StoredQuery_i*>& dNewQueries, const VecTraits_T<int64_t>& dDeleteQueries, const VecTraits_T<uint64_t>& dDeleteTags, CSphVector<BYTE>& dOut )
+{
+	MemoryWriter_c tWriter ( dOut );
+	SaveInsertDeleteQueries_T ( dNewQueries, dDeleteQueries, dDeleteTags, tWriter );
+}
+
+void SaveInsertDeleteQueries ( const VecTraits_T<StoredQuery_i*>& dNewQueries, const VecTraits_T<int64_t>& dDeleteQueries, const VecTraits_T<uint64_t>& dDeleteTags, CSphWriter& tWriter )
+{
+	SaveInsertDeleteQueries_T ( dNewQueries, dDeleteQueries, dDeleteTags, tWriter );
 }

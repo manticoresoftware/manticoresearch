@@ -18,8 +18,6 @@
 #define BINLOG_WRITE_BUFFER		(256*1024)
 #define BINLOG_AUTO_FLUSH		1000000 // 1 sec
 
-static const DWORD		BINLOG_VERSION = 11;
-
 static const DWORD		BINLOG_HEADER_MAGIC = 0x4c425053;	/// magic 'SPBL' header that marks binlog file
 static const DWORD		BLOP_MAGIC = 0x214e5854;			/// magic 'TXN!' header that marks binlog entry
 static const DWORD		BINLOG_META_MAGIC = 0x494c5053;		/// magic 'SPLI' header that marks binlog meta
@@ -926,6 +924,7 @@ int Binlog_c::ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, int
 			case RECONFIGURE:
 			case PQ_ADD:
 			case PQ_DELETE:
+			case PQ_ADD_DELETE:
 				bReplayOK = ReplayTxn ( Binlog::Blop_e(uOp), iBinlog, tReader );
 				break;
 
@@ -962,8 +961,9 @@ int Binlog_c::ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, int
 		}
 	}
 
-	sphInfo ( "binlog: replay stats: %d commits; %d updates, %d reconfigure; %d pq-add; %d pq-delete; %d indexes",
-		dTotal[COMMIT], dTotal[UPDATE_ATTRS], dTotal[RECONFIGURE], dTotal[PQ_ADD], dTotal[PQ_DELETE], dTotal[ADD_INDEX] );
+	sphInfo ( "binlog: replay stats: %d commits; %d updates, %d reconfigure; %d pq-add; %d pq-delete; %d pq-add-delete, %d indexes",
+		dTotal[COMMIT], dTotal[UPDATE_ATTRS], dTotal[RECONFIGURE], dTotal[PQ_ADD], dTotal[PQ_DELETE],
+			dTotal[PQ_ADD_DELETE], dTotal[ADD_INDEX] );
 	sphInfo ( "binlog: finished replaying %s; %d.%d MB in %d.%03d sec",
 		sLog.cstr(),
 		(int)(iFileSize/1048576), (int)((iFileSize*10/1048576)%10),
@@ -1114,6 +1114,7 @@ static const char* OpName ( Binlog::Blop_e eOp)
 		case Binlog::RECONFIGURE: return "reconfigure";
 		case Binlog::PQ_ADD: return "pq-add";
 		case Binlog::PQ_DELETE: return "pq-delete";
+		case Binlog::PQ_ADD_DELETE: return "pq-add-delete";
 		default: return "other";
 	}
 }

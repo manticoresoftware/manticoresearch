@@ -95,9 +95,6 @@ public:
 
 	bool	IsPQ() const override { return true; }
 
-	virtual int ReplayDeleteQueries ( const VecTraits_T<int64_t>& dQueries ) = 0;
-	virtual int ReplayDeleteQueries ( const char * sTags ) = 0;
-	virtual void ReplayCommit ( StoredQuery_i * pQuery ) = 0;
 };
 
 /// percolate query index factory
@@ -118,6 +115,10 @@ void LoadDeleteQuery ( const BYTE * pData, int iLen, CSphVector<int64_t> & dQuer
 void LoadDeleteQuery ( CSphVector<int64_t> & dQueries, CSphString & sTags, CSphReader & tReader );
 void SaveDeleteQuery ( const VecTraits_T<int64_t>& dQueries, const char * sTags, CSphVector<BYTE> & dOut );
 void SaveDeleteQuery ( const VecTraits_T<int64_t>& dQueries, const char * sTags, CSphWriter & tWriter );
+void LoadInsertDeleteQueries ( const BYTE* pData, int iLen, CSphVector<StoredQueryDesc_t>& dNewQueries, CSphVector<int64_t>& dDeleteQueries, CSphVector<uint64_t>& dDeleteTags );
+void LoadInsertDeleteQueries ( CSphVector<StoredQueryDesc_t>& dNewQueries, CSphVector<int64_t>& dDeleteQueries, CSphVector<uint64_t>& dDeleteTags, CSphReader& tReader );
+void SaveInsertDeleteQueries ( const VecTraits_T<StoredQuery_i*>& dNewQueries, const VecTraits_T<int64_t>& dDeleteQueries, const VecTraits_T<uint64_t>& dDeleteTags, CSphVector<BYTE>& dOut );
+void SaveInsertDeleteQueries ( const VecTraits_T<StoredQuery_i*>& dNewQueries, const VecTraits_T<int64_t>& dDeleteQueries, const VecTraits_T<uint64_t>& dDeleteTags, CSphWriter& tWriter );
 
 //////////////////////////////////////////////////////////////////////////
 

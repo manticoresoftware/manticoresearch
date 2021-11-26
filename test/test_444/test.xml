@@ -100,7 +100,7 @@ select * from test facet gr;;
 select * from test facet gr distinct;;
 select * from test facet gr distinct tag;;
 
-<!-- count distinct at couple of plain-locals (that returns wrong result, as expected) -->
+<!-- count distinct at couple of plain-locals -->
 select count (DISTINCT tag) a from main,delta group by gr;
 select * from main,delta facet gr;;
 select * from main,delta facet gr distinct;;

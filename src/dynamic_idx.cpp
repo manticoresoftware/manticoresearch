@@ -569,8 +569,8 @@ private:
 	}
 };
 
-bool GenericTableIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQuery,
-		const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs &tArgs ) const
+
+bool GenericTableIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const
 {
 	assert ( tArgs.m_iTag>=0 );
 	auto & tMeta = *tResult.m_pMeta;
@@ -679,7 +679,7 @@ bool GenericTableIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery
 	if ( tCtx.m_dCalcFinal.GetLength () )
 	{
 		DynMatchProcessor_c tFinal ( tArgs.m_iTag, tCtx );
-		dSorters.Apply ( [&tFinal] ( ISphMatchSorter * p ) { p->Finalize ( tFinal, false ); } );
+		dSorters.Apply ( [&] ( ISphMatchSorter * p ) { p->Finalize ( tFinal, false, tArgs.m_bFinalizeSorters ); } );
 	}
 
 	tMeta.m_iQueryTime += ( int ) ( ( sphMicroTimer () - tmQueryStart ) / 1000 );

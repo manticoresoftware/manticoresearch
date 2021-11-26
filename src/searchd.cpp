@@ -202,6 +202,7 @@ ThreadRole HandlerThread; // thread which serves clients
 
 static CSphString		g_sConfigFile;
 static bool				g_bCleanLoadedConfig = true; // whether to clean config when it parsed and no more necessary
+static bool				LOG_LEVEL_SHUTDOWN = val_from_env("MANTICORE_TRACK_DAEMON_SHUTDOWN",false); // verbose logging when daemon shutdown, ruled by this env variable
 
 #if _WIN32
 static bool				g_bSeamlessRotate	= false;
@@ -660,7 +661,6 @@ public:
 	}
 };
 
-#define LOG_LEVEL_SHUTDOWN false
 #define LOG_COMPONENT_SEARCHD __LINE__ << " "
 
 #define SHUTINFO LOGINFO (SHUTDOWN,SEARCHD)
@@ -734,7 +734,6 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	// shutdown replication,
 	// shutdown ssl,
 	// shutdown tick threads,
-	// shutdown alone tasks
 	SHUTINFO << "Invoke shutdown callbacks ...";
 	searchd::FireShutdownCbs ();
 
@@ -759,18 +758,27 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	}
 
 	Threads::CallCoroutine ( [] {
-		SHUTINFO << "Remove local indexes list ...";
-		SafeDelete ( g_pLocalIndexes );
+		SHUTINFO << "Abandon local indexes list ...";
+		g_pLocalIndexes->ReleaseAndClear();
 
 		// unlock Distr indexes automatically done by d-tr
-		SHUTINFO << "Remove distr indexes list ...";
-		SafeDelete ( g_pDistIndexes );
+		SHUTINFO << "Abandon distr indexes list ...";
+		g_pDistIndexes->ReleaseAndClear();
 	} );
+
+	SHUTINFO << "Shutdown alone threads (if any) ...";
+	Detached::ShutdownAllAlones();
 
 	SHUTINFO << "Shutdown main work pool ...";
 	auto pPool = GlobalWorkPool();
 	if ( pPool )
 		pPool->StopAll();
+
+	SHUTINFO << "Remove local indexes list ...";
+	SafeDelete ( g_pLocalIndexes );
+
+	SHUTINFO << "Remove distr indexes list ...";
+	SafeDelete ( g_pDistIndexes );
 
 	// clear shut down of rt indexes + binlog
 	SHUTINFO << "Finish IO stats collecting ...";
@@ -5182,10 +5190,10 @@ private:
 	int								CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter*> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook ) const;
 
 	SphQueueSettings_t				MakeQueueSettings ( const CSphIndex * pIndex, int iMaxMatches, ISphExprHook * pHook ) const;
-	CSphIndex *						CheckIndexSuitable ( const CSphString& sLocal, const char * szParent, VecTraits_T<SearchFailuresLog_c> & dNFailuresSet ) const;
-	bool							CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt, SphQueueRes_t * pQueueRes, VecTraits_T<SearchFailuresLog_c> & dFlr, StrVec_t * pExtra, const CSphIndex* pIndex,
-										const CSphString & sLocal, const char * szParent, ISphExprHook * pHook );
+	CSphIndex *						CheckIndexSuitable ( const CSphString& sLocal, const char * szParent, VecTraits_T<SearchFailuresLog_c> * pNFailuresSet ) const;
+	bool							CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt, SphQueueRes_t * pQueueRes, VecTraits_T<SearchFailuresLog_c> & dFlr, StrVec_t * pExtra, const CSphIndex* pIndex, const CSphString & sLocal, const char * szParent, ISphExprHook * pHook );
 	bool							TryConvertDistrToRt ( const CSphString& sLocalDistr, bool bFullScan );
+	void							CalcSplits ( int iConcurrency, CSphFixedVector<int> & dSplits );
 };
 
 PubSearchHandler_c::PubSearchHandler_c ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster )
@@ -5668,7 +5676,7 @@ struct LocalSearchClone_t
 	}
 };
 
-CSphIndex* SearchHandler_c::CheckIndexSuitable ( const CSphString& sLocal, const char* szParent, VecTraits_T<SearchFailuresLog_c> & dNFailuresSet ) const
+CSphIndex* SearchHandler_c::CheckIndexSuitable ( const CSphString& sLocal, const char* szParent, VecTraits_T<SearchFailuresLog_c> * pNFailuresSet ) const
 {
 	const auto * pServed = m_dLocked.Get ( sLocal );
 	if ( !pServed )
@@ -5676,20 +5684,24 @@ CSphIndex* SearchHandler_c::CheckIndexSuitable ( const CSphString& sLocal, const
 		if ( sLocal==m_sRtMadeFromDistrIndex )
 			return m_pRtMadeFromDistrIndex;
 
-		if ( szParent )
-			for ( auto & dFailureSet : dNFailuresSet )
-				dFailureSet.SubmitEx ( szParent, nullptr, "local index %s missing", sLocal.cstr() );
+		if ( szParent && pNFailuresSet )
+			for ( auto & tFailureSet : *pNFailuresSet )
+				tFailureSet.SubmitEx ( szParent, nullptr, "local index %s missing", sLocal.cstr() );
 
 		return nullptr;
 	}
 
 	if ( !ServedDesc_t::IsSelectable ( pServed ) )
 	{
-		for ( auto & dFailureSet : dNFailuresSet )
-			dFailureSet.SubmitEx ( sLocal, nullptr, "%s", "index is not suitable for select" );
+		if ( pNFailuresSet )
+		{
+			for ( auto & tFailureSet : *pNFailuresSet )
+				tFailureSet.SubmitEx ( sLocal, nullptr, "%s", "index is not suitable for select" );
+		}
 
 		return nullptr;
 	}
+
 	return pServed->m_pIndex;
 }
 
@@ -5718,15 +5730,70 @@ bool SearchHandler_c::CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt
 }
 
 
-static int CalcSplit ( SqlStmt_t * pStmt )
+void SearchHandler_c::CalcSplits ( int iConcurrency, CSphFixedVector<int> & dSplits )
 {
-	if ( pStmt && pStmt->m_iSplit )
-		return Max ( pStmt->m_iSplit, 1 );
+	// force same concurrency for each index through OPTION
+	if ( m_pStmt && m_pStmt->m_iSplit )
+	{
+		int iForceConcurrency = Max ( m_pStmt->m_iSplit, 1 );
+		for ( auto & i : dSplits )
+			i = iForceConcurrency;
 
-	if ( g_bSplit )
-		return g_iThreads;
+		return;
+	}
 
-	return 1;
+	// dSplits should already be initialized with 1s
+	if ( !g_bSplit )
+		return;
+
+	if ( !iConcurrency )
+		iConcurrency = g_iThreads;
+
+	struct SplitData_t
+	{
+		bool	m_bEnabled = false;
+		int64_t	m_iMetric = 0;
+	};
+
+	CSphFixedVector<SplitData_t> dSplitData { m_dLocal.GetLength() };
+
+	// FIXME! what about PQ?
+	int64_t iTotalMetric = 0;
+	int iSingleSplits = 0;
+	int iEnabled = 0;
+	ARRAY_FOREACH ( iLocal, m_dLocal )
+	{
+		const LocalIndex_t & tLocal = m_dLocal[iLocal];
+		CSphIndex * pIndex = CheckIndexSuitable ( tLocal.m_sName, tLocal.m_sParentIndex.cstr(), nullptr );
+		if ( !pIndex )
+			continue;
+
+		SplitData_t & tSplitData = dSplitData[iLocal];
+		int64_t iMetric = pIndex->GetPseudoShardingMetric();
+		if ( iMetric==-1 )
+		{
+			iSingleSplits++;
+			continue;
+		}
+
+		tSplitData.m_bEnabled = true;
+		tSplitData.m_iMetric = iMetric;
+		iTotalMetric += tSplitData.m_iMetric;
+		iEnabled++;
+	}
+
+	if ( iConcurrency>iSingleSplits+iEnabled )
+	{
+		int iLeft = iConcurrency-iSingleSplits;
+		ARRAY_FOREACH ( i, dSplitData )
+		{
+			const SplitData_t & tSplitData = dSplitData[i];
+			if ( !tSplitData.m_bEnabled )
+				continue;
+
+			dSplits[i] = Max ( (int)round ( double(tSplitData.m_iMetric) / iTotalMetric * iLeft ), 1 );
+		}
+	}
 }
 
 
@@ -5752,6 +5819,9 @@ void SearchHandler_c::RunLocalSearches ()
 		pMainExtra = &m_dExtraSchema;
 	}
 
+	CSphFixedVector<int> dSplits { iNumLocals };
+	dSplits.Fill(1);
+
 	CSphFixedVector<int> dOrder { iNumLocals };
 	for ( int i = 0; i<iNumLocals; ++i )
 		dOrder[i] = i;
@@ -5768,19 +5838,20 @@ void SearchHandler_c::RunLocalSearches ()
 
 //	sphWarning ( "iConcurrency: %d", iConcurrency );
 
-	// if run parallel - start in mass order, if single - in natural order
 	if ( !bSingle )
 	{
 //		sphWarning ( "Reordering..." );
+		// if run parallel - start in mass order, if single - in natural order
 		// set order by decreasing index mass (heaviest comes first). That is why 'less' implemented by '>'
 		dOrder.Sort ( Lesser ( [this] ( int a, int b ) {
 			return m_dLocal[a].m_iMass>m_dLocal[b].m_iMass;
 		} ) );
+
+		CalcSplits ( iConcurrency, dSplits );
 	}
 
 //	for ( int iOrder : dOrder )
 //		sphWarning ( "Sorted: %d, Order %d, mass %d", !!bSingle, iOrder, (int) m_dLocal[iOrder].m_iMass );
-
 
 	std::atomic<int32_t> iTotalSuccesses { 0 };
 	const auto iJobs = iNumLocals;
@@ -5829,7 +5900,7 @@ void SearchHandler_c::RunLocalSearches ()
 			GlobalCrashQueryGetRef().m_dIndex = FromStr ( sLocal );
 
 			// prepare and check the index
-			CSphIndex* pIndex = CheckIndexSuitable ( sLocal, szParent, dNFailuresSet );
+			CSphIndex* pIndex = CheckIndexSuitable ( sLocal, szParent, &dNFailuresSet );
 			if ( !pIndex )
 				continue;
 
@@ -5851,7 +5922,7 @@ void SearchHandler_c::RunLocalSearches ()
 				tMultiArgs.m_iTotalDocs = m_iTotalDocs;
 			}
 
-			tMultiArgs.m_iSplit = CalcSplit(m_pStmt);
+			tMultiArgs.m_iSplit = dSplits[iLocal];
 
 			bool bResult = false;
 			CSphQueryResultMeta tMqMeta;
@@ -13687,9 +13758,9 @@ void HandleMysqlOptimizeManual ( RowBuffer_i & tOut, const DebugCmd::DebugComman
 	if ( tCmd.bOpt("sync") )
 	{
 		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( tTask );
+			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( std::move ( tTask ) );
 	} else
-		EnqueueForOptimize ( sIndex, tTask );
+		EnqueueForOptimize ( sIndex, std::move ( tTask ) );
 	tOut.Ok();
 }
 
@@ -13712,9 +13783,9 @@ void HandleMysqlDropManual ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t 
 	if ( tCmd.bOpt("sync") )
 	{
 		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( tTask );
+			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( std::move ( tTask ) );
 	} else
-		EnqueueForOptimize ( sIndex, tTask );
+		EnqueueForOptimize ( sIndex, std::move ( tTask ) );
 	tOut.Ok ();
 }
 
@@ -13736,9 +13807,9 @@ void HandleMysqlCompress ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & 
 	if ( tCmd.bOpt("sync") )
 	{
 		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( tTask );
+			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( std::move ( tTask ) );
 	} else
-		EnqueueForOptimize ( sIndex, tTask );
+		EnqueueForOptimize ( sIndex, std::move ( tTask ) );
 	tOut.Ok();
 }
 
@@ -13780,9 +13851,9 @@ void HandleMysqlSplit ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCm
 	if ( tCmd.bOpt ( "sync" ) )
 	{
 		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i*> ( pIndex->m_pIndex )->Optimize ( tTask );
+			static_cast<RtIndex_i*> ( pIndex->m_pIndex )->Optimize ( std::move ( tTask ) );
 	} else
-		EnqueueForOptimize ( sIndex, tTask );
+		EnqueueForOptimize ( sIndex, std::move ( tTask ) );
 	tOut.Ok();
 }
 
@@ -14222,9 +14293,9 @@ void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	if ( tStmt.m_tQuery.m_bSync )
 	{
 		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i*> ( pIndex->m_pIndex )->Optimize ( tTask );
+			static_cast<RtIndex_i*> ( pIndex->m_pIndex )->Optimize ( std::move ( tTask ) );
 	} else
-		EnqueueForOptimize ( tStmt.m_sIndex, tTask );
+		EnqueueForOptimize ( tStmt.m_sIndex, std::move ( tTask ) );
 	tOut.Ok();
 }
 
@@ -14622,6 +14693,7 @@ static void AddDiskIndexStatus ( VectorLike & dStatus, const CSphIndex * pIndex,
 		dStatus.MatchTupletf ( "ram_chunk_segments_count", "%d", tStatus.m_iNumRamChunks );
 		dStatus.MatchTupletf ( "disk_chunks", "%d", tStatus.m_iNumChunks );
 		dStatus.MatchTupletf ( "mem_limit", "%l", tStatus.m_iMemLimit );
+		dStatus.MatchTupletf ( "mem_limit_rate", "%0.2F%%", PercentOf ( tStatus.m_fSaveRateLimit, 1.0, 2 ) );
 		dStatus.MatchTupletf ( "ram_bytes_retired", "%l", tStatus.m_iRamRetired );
 		dStatus.MatchTupletf ( "tid", "%l", tStatus.m_iTID );
 		dStatus.MatchTupletf ( "tid_saved", "%l", tStatus.m_iSavedTID );
@@ -17936,8 +18008,8 @@ static void DoGreedyRotation() REQUIRES ( MainThread )
 static void CheckRotate () REQUIRES ( MainThread ) EXCLUDES ( g_tRotateThreadMutex )
 {
 	// do we need to rotate now? If no sigHUP received, or if we are already rotating - no.
-	if ( !g_bNeedRotate || g_bInRotate || IsConfigless() )
-		return;
+//	if ( !g_bNeedRotate || g_bInRotate || IsConfigless() )
+//		return;
 
 	g_bInRotate = true; // ok, another rotation cycle just started
 	g_bNeedRotate = false; // which therefore clears any previous HUP signals
@@ -18569,7 +18641,8 @@ void TickHead () REQUIRES ( MainThread )
 	CheckSignals ();
 	CheckLeaks ();
 	CheckReopenLogs ();
-	Threads::CallCoroutine ( CheckRotate );
+	if ( g_bNeedRotate && !g_bInRotate && !IsConfigless() )
+		Threads::CallCoroutine ( CheckRotate );
 
 	sphInfo ( nullptr ); // flush dupes
 #if _WIN32
@@ -19398,6 +19471,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	bool			bForcedPreread = false;
 	bool			bNewCluster = false;
 	bool			bNewClusterForce = false;
+	bool			bForcePseudoSharding = false;
 	const char*		szCmdConfigFile = nullptr;
 
 	DWORD			uReplayFlags = 0;
@@ -19436,6 +19510,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		OPT1 ( "--safetrace" )		g_bSafeTrace = true;
 		OPT1 ( "--test" )			{ g_bWatchdog = false; bTestMode = true; } // internal option, do NOT document
 		OPT1 ( "--test-thd-pool" )	{ g_bWatchdog = false; bTestMode = true; } // internal option, do NOT document
+		OPT1 ( "--force-pseudo-sharding" ) { bForcePseudoSharding = true; } // internal option, do NOT document
 		OPT1 ( "--strip-path" )		g_bStripPath = true;
 		OPT1 ( "--vtune" )			g_bVtune = true;
 		OPT1 ( "--noqlog" )			bOptDebugQlog = false;
@@ -19739,6 +19814,9 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	if ( bTestMode ) // pass this flag here prior to index config
 		sphRTSetTestMode();
 
+	if ( bForcePseudoSharding )
+		SetPseudoShardingThresh(0);
+
 	StrVec_t dExactIndexes;
 	for ( const auto &dOptIndex : dOptIndexes )
 		sphSplit ( dExactIndexes, dOptIndex.cstr (), "," );
@@ -19966,7 +20044,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 	// until no threads started, schedule stopping of alone threads to very bottom
 	WipeGlobalSchedulerOnShutdownAndFork();
-	Detached::AloneShutdowncatch ();
+	Detached::MakeAloneIteratorAvailable ();
 
 	// time for replication to sync with cluster
 	searchd::AddShutdownCb ( ReplicateClustersDelete );

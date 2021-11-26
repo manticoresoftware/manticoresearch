@@ -102,6 +102,8 @@ int GetOsThreadId ()
 
 #define LOG_LEVEL_DEBUG false
 #define LOG_LEVEL_DETAIL false
+#define LOG_LEVEL_ALONE LOG_LEVEL_DETAIL
+//#define LOG_LEVEL_ALONE true
 
 namespace Threads {
 
@@ -213,6 +215,10 @@ thread_local typename CallStack_c<Key, Value>::Context_c* CallStack_c<Key,Value>
 
 #define LOG_LEVEL_WORKS false
 #define LOG_LEVEL_ST false
+#define LOG_LEVEL_SERVICE LOG_LEVEL_DETAIL
+//#define LOG_LEVEL_SERVICE true
+
+#define LOG_COMPONENT_SVC LOG_COMPONENT_MT << " [" << &m_iOutstandingWork << "]=" << m_iOutstandingWork
 
 /// performs tasks pushed with post() in one or many threads until they done.
 /// Naming convention of members is inherited from boost::asio as drop-in replacement.
@@ -273,13 +279,13 @@ public:
 		{
 			++pThisThread->m_iPrivateOutstandingWork;
 			pThisThread->m_dPrivateQueue.Push ( pOp );
-			LOG ( DETAIL, MT ) << "post this";
+			LOG ( SERVICE, SVC ) << "post this";
 			return;
 		}
 
 		work_started ();
 		ScopedMutex_t dLock ( m_dMutex );
-		LOG ( DETAIL, MT ) << "post";
+		LOG ( SERVICE, SVC ) << "post";
 		m_OpVipQueue.Push ( pOp );
 		wake_one_thread_and_unlock ( dLock );
 	}
@@ -293,13 +299,13 @@ public:
 			{
 				++pThisThread->m_iPrivateOutstandingWork;
 				pThisThread->m_dPrivateQueue.Push ( pOp );
-				LOG ( DETAIL, MT ) << "post this";
+				LOG ( SERVICE, SVC ) << "post this";
 				return;
 			}
 		}
 		work_started ();
 		ScopedMutex_t dLock ( m_dMutex );
-		LOG ( DETAIL, MT ) << "post";
+		LOG ( SERVICE, MT ) << "post";
 		if ( bVip )
 			m_OpVipQueue.Push ( pOp );
 		else
@@ -309,7 +315,7 @@ public:
 
 	void run () NO_THREAD_SAFETY_ANALYSIS //override
 	{
-		LOG ( DETAIL, MT ) << "run " << m_iOutstandingWork << " st:" << !!m_bStopped;
+		LOG ( SERVICE, SVC ) << "run " << m_iOutstandingWork << " st:" << !!m_bStopped;
 		if ( m_iOutstandingWork==0 )
 		{
 			LOG ( WORKS, MT ) << "run m_iOutstandingWork " << m_iOutstandingWork << " " << &m_iOutstandingWork<< " stop!";
@@ -336,7 +342,7 @@ public:
 	{
 		while ( !m_bStopped )
 		{
-			LOG ( DETAIL, MT ) << "locked " << dLock.Locked();
+			LOG ( SERVICE, MT ) << "locked " << dLock.Locked();
 			assert ( dLock.Locked ());
 			if ( queue_empty() )
 			{
@@ -357,7 +363,7 @@ public:
 			boost::context::detail::prefetch_range ( pOp, sizeof ( Operation_t ) );
 			pOp->Complete (this);
 
-			LOG ( DETAIL, MT ) << "completed & unlocked";
+			LOG ( SERVICE, MT ) << "completed & unlocked";
 			if ( this_thread.m_iPrivateOutstandingWork>1 )
 			{
 				m_iOutstandingWork += this_thread.m_iPrivateOutstandingWork-1;
@@ -379,7 +385,7 @@ public:
 
 	void stop()
 	{
-		LOG ( DETAIL, MT ) << "stop";
+		LOG ( SERVICE, SVC ) << "stop";
 		ScopedMutex_t dLock ( m_dMutex );
 		stop_all_threads ( dLock );
 	}
@@ -400,7 +406,7 @@ public:
 	// Notify that some work has started.
 	void work_started ()
 	{
-		LOG ( DETAIL, MT ) << "work_started from " << m_iOutstandingWork;
+		LOG ( SERVICE, SVC ) << "work_started from " << m_iOutstandingWork;
 		++m_iOutstandingWork;
 		LOG ( WORKS, MT ) << "work_started m_iOutstandingWork " << m_iOutstandingWork << " " << &m_iOutstandingWork;
 	}
@@ -408,7 +414,7 @@ public:
 	// Notify that some work has finished.
 	void work_finished ()
 	{
-		LOG ( DETAIL, MT ) << "work_finished " << m_iOutstandingWork;
+		LOG ( SERVICE, SVC ) << "work_finished to " << m_iOutstandingWork-1;
 		if ( --m_iOutstandingWork==0 )
 			stop ();
 
@@ -797,11 +803,30 @@ public:
 		PostContinuation ( pOp );
 	}
 
-	Keeper_t KeepWorking () final
+#define LOG_LEVEL_SERVICE_KEEP_MT false
+#if LOG_LEVEL_SERVICE_KEEP_MT
+	static intptr_t KeepWorkingID()
 	{
-		m_tService.work_started ();
-		return { nullptr, [this] ( void * ) { m_tService.work_finished (); } };
+		static std::atomic<intptr_t> uWorker { 0ULL };
+		return uWorker.fetch_add ( 1, std::memory_order_relaxed );
 	}
+
+	Keeper_t KeepWorking() final
+	{
+		m_tService.work_started();
+		auto kwid = KeepWorkingID();
+		LOGINFO ( SERVICE_KEEP_MT, MT ) << "KeepWorking " << kwid;
+		return { (void*)kwid, [this] ( void* kwid ) {
+					m_tService.work_finished (); // divided to lines for breakpoints
+					LOGINFO ( SERVICE_KEEP_MT, MT ) << "KeepWorking finished " << (intptr_t)kwid; } };
+	}
+#else
+	Keeper_t KeepWorking() final
+	{
+		m_tService.work_started();
+		return { nullptr, [this] ( void* ) { m_tService.work_finished(); } };
+	}
+#endif
 
 	int WorkingThreads () const final
 	{
@@ -893,11 +918,30 @@ public:
 		Post ( pOp, bVip );
 	}
 
-	Keeper_t KeepWorking () final
+#define LOG_LEVEL_SERVICE_KEEP_ALONE false
+#if LOG_LEVEL_SERVICE_KEEP_ALONE
+	static intptr_t KeepWorkingID()
 	{
-		m_tService.work_started ();
-		return { nullptr, [this] ( void * ) { m_tService.work_finished (); } };
+		static std::atomic<intptr_t> uWorker { 0ULL };
+		return uWorker.fetch_add ( 1, std::memory_order_relaxed );
 	}
+
+	Keeper_t KeepWorking() final
+	{
+		m_tService.work_started();
+		auto kwid = KeepWorkingID();
+		LOGINFO ( SERVICE_KEEP_ALONE, MT ) << "KeepWorking alone " << this << " " << kwid;
+		return { (void*)kwid, [this] ( void* kwid ) {
+					m_tService.work_finished (); // divided to lines for breakpoints
+					LOGINFO ( SERVICE_KEEP_ALONE, MT ) << "KeepWorking alone inished " << this << " " << (intptr_t)kwid; } };
+	}
+#else
+	Keeper_t KeepWorking() final
+	{
+		m_tService.work_started();
+		return { nullptr, [this] ( void* ) { m_tService.work_finished(); } };
+	}
+#endif
 
 	void StopAll () final {}
 

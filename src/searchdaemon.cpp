@@ -1351,16 +1351,9 @@ ServedIndex_c::ServedIndex_c( const ServedDesc_t& tDesc )
 
 
 //////////////////////////////////////////////////////////////////////////
-GuardedHash_c::GuardedHash_c()
-{
-	if ( !m_tIndexesRWLock.Init())
-		sphDie( "failed to init hash indexes rwlock" );
-}
-
 GuardedHash_c::~GuardedHash_c()
 {
 	ReleaseAndClear();
-	Verify ( m_tIndexesRWLock.Done());
 }
 
 // atomically try add an entry and adopt it
@@ -1440,11 +1433,18 @@ bool GuardedHash_c::Contains( const CSphString& tKey ) const
 
 void GuardedHash_c::ReleaseAndClear()
 {
-	ScWL_t hHashWLock { m_tIndexesRWLock };
-	for ( m_hIndexes.IterateStart(); m_hIndexes.IterateNext(); ) SafeRelease ( m_hIndexes.IterateGet());
+	GuardedHash_c::RefCntHash_t tHash;
+	{
+		ScWL_t hHashWLock { m_tIndexesRWLock };
+		for ( auto& i : m_hIndexes )
+			tHash.Add ( i.second, i.first );
 
-	m_hIndexes.Reset();
-	NextGeneration();
+		m_hIndexes.Reset();
+		NextGeneration();
+	}
+
+	for ( auto& i : tHash )
+		SafeRelease ( i.second );
 }
 
 ISphRefcountedMT* GuardedHash_c::Get( const CSphString& tKey ) const

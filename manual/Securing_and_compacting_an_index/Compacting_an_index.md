@@ -1,8 +1,8 @@
 # Compacting an index
 
-Over time, RT indexes can become fragmented into many disk chunks and/or tainted with deleted, but unpurged data, impacting search performance. When that happens, they can be optimized. Basically, the optimization pass merges together disk chunks pairs, purging off documents suppressed by K-list as it goes.
+Over time, RT indexes can become fragmented into many disk chunks and/or tainted with deleted, but unpurged data, impacting search performance. When that happens, they can be optimized. Basically, the optimization pass merges together disk chunks pairs, purging off documents suppressed previously by DELETEs.
 
-Starting from Manticore 4 it happens automaticaly by default, but you can also use the below commands to force index compaction.
+Starting Manticore 4 it happens [automaticaly by default](../Server_settings/Searchd.md#auto_optimize), but you can also use the below commands to force index compaction.
 
 ## OPTIMIZE INDEX
 
@@ -27,7 +27,7 @@ OPTIMIZE INDEX rt;
 
 <!-- example optimize_cutoff -->
 
-The optimize process reduces the disk chunks by default to a number equal with  `# of CPU cores * 2`.  The number of optimized disk chunks can be controlled with option `cutoff`.
+OPTIMIZE merges the RT index's disk chunks down to the number which equals to `# of CPU cores * 2` by default.  The number of optimized disk chunks can be controlled with option `cutoff`.
 
 There's also a server setting [optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff) for overriding the above threshold.
 
@@ -63,11 +63,9 @@ Optimize can be a lengthy and IO intensive process, so to limit the impact, all 
 
 The RT index being optimized stays online and available for both searching and updates at (almost) all times during the optimization. It gets locked for a very short time when a pair of disk chunks is merged successfully, to rename the old and the new files, and update the index header.
 
-**At the moment, OPTIMIZE needs to be issued manually, the indexes are not optimized automatically.** It will be changed in future releases.
-
 ### Optimizing clustered indexes
 
-As soon you don't have [auto_optimize](../Server_settings/Searchd.md#auto_optimize) disabled indexes are optimized automatically
+As long as you don't have [auto_optimize](../Server_settings/Searchd.md#auto_optimize) disabled indexes are optimized automatically
 
 In case you are experiencing unexpected SSTs or want indexes across all nodes of the cluster be binary identical you need to:
 1. Disable [auto_optimize](../Server_settings/Searchd.md#auto_optimize).
@@ -96,7 +94,7 @@ ALTER CLUSTER mycluster ADD myindex;
 When the index is added back, the new files created by the optimize process will be replicated to the other nodes in the cluster.
 Any changes made locally to the index on other nodes will be lost.
 
-Writes on the index should either be **stopped** or directed to the node were the optimize process is running.
+Writes on the index should either be **stopped** or directed to the node where the optimize process is running.
 Note that after the index is out of the cluster, writes must be made locally and the index name must not contain the cluster name as prefix (for SQL statements or cluster property for HTTP requests).
 As soon as the index is added back to the cluster, writes can be resumed. At this point the writes operations on the index must include (again) the cluster prefix (for SQL statements or cluster property for HTTP requests).
 Searches will be available as usual during the process on any of the nodes.

@@ -210,6 +210,7 @@ create_table_item:
 		 }
 	}
 	| ident TOK_BIT '(' TOK_CONST_INT ')'	{ pParser->AddCreateTableBitCol ( $1, $4.m_iValue ); }
+	| ident TOK_BIT '(' TOK_CONST_INT ')' TOK_ENGINE '=' TOK_QUOTED_STRING { pParser->AddCreateTableBitCol ( $1, $4.m_iValue, $8 ); }
 	;
 
 create_table_item_list:

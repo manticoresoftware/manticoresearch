@@ -697,6 +697,21 @@ not_terms_only_allowed = 1
 ```
 <!-- end -->
 
+### optimize_cutoff
+
+<!-- example conf optimize_cutoff -->
+Sets default index compaction threshold. Read more here - [Number of optimized disk chunks](../Securing_and_compacting_an_index/Compacting_an_index.md#Number-of-optimized-disk-chunks). Can be overridden with per-query option [cutoff](../Securing_and_compacting_an_index/Compacting_an_index.md#Number-of-optimized-disk-chunks). Can be changed dynamically via [SET GLOBAL](../Server_settings/Setting_variables_online.md#SET).
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+optimize_cutoff = 4
+```
+<!-- end -->
+
 ### persistent_connections_limit
 
 <!-- example conf persistent_connections_limit -->
@@ -806,7 +821,7 @@ preopen_indexes = 1
 ### pseudo_sharding
 
 <!-- example conf pseudo_sharding -->
-Enables pseudo-sharding for non-full-text search queries. Any query which does sorting, grouping or filtering by attributes (non full-text fields) will be automatically parallelized to up to `searchd.threads` # of threads.
+Enables pseudo-sharding for search queries to plain and real-time indexes. Any search query will be automatically parallelized to up to `searchd.threads` # of threads.
 
 Disabled by default.
 

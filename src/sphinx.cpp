@@ -129,6 +129,8 @@ static const int	MIN_READ_UNHINTED		= 1024;
 
 static int 			g_iReadUnhinted 		= DEFAULT_READ_UNHINTED;
 
+static int			g_iSplitThresh			= 8192;
+
 CSphString			g_sLemmatizerBase		= GET_FULL_SHARE_DIR ();
 
 // quick hack for indexer crash reporting
@@ -2534,6 +2536,13 @@ void CSphIndex::GetFieldFilterSettings ( CSphFieldFilterSettings & tSettings ) c
 void CSphIndex::SetMutableSettings ( const MutableIndexSettings_c & tSettings )
 {
 	m_tMutableSettings = tSettings;
+}
+
+
+int64_t CSphIndex::GetPseudoShardingMetric() const
+{
+	int64_t iTotalDocs = GetStats().m_iTotalDocuments;
+	return iTotalDocs > g_iSplitThresh ? iTotalDocs : -1;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -8260,6 +8269,34 @@ RowidIterator_i * CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, CSph
 }
 
 
+static RowIdBoundaries_t RemoveRowIdFilter ( CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, CSphVector<CSphFilterSettings> & dModifiedFilters, CSphQueryResultMeta & tMeta, int64_t iDocinfo, bool & bHaveRowidFilter )
+{
+	const CSphFilterSettings * pRowIdFilter = nullptr;
+	for ( const auto & tFilter : tCtx.m_tQuery.m_dFilters )
+		if ( tFilter.m_sAttrName=="@rowid" )
+		{
+			pRowIdFilter = &tFilter;
+			break;
+		}
+
+	bHaveRowidFilter = !!pRowIdFilter;
+
+	if ( !pRowIdFilter )
+		return { 0, RowID_t(iDocinfo)-1 };
+
+	dModifiedFilters.Resize(0);
+	for ( const auto & tFilter : tCtx.m_tQuery.m_dFilters )
+		if ( &tFilter!=pRowIdFilter )
+			dModifiedFilters.Add(tFilter);
+
+	SafeDelete ( tCtx.m_pFilter );
+	tFlx.m_pFilters = &dModifiedFilters;
+	tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning );
+
+	return GetFilterRowIdBoundaries ( *pRowIdFilter, RowID_t(iDocinfo) );
+}
+
+
 bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const
 {
 	assert ( tArgs.m_iTag>=0 );
@@ -8374,17 +8411,8 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	}
 	else
 	{
-		RowIdBoundaries_t tBoundaries = { 0, RowID_t(m_iDocinfo)-1 };
-		const CSphFilterSettings * pRowIdFilter = nullptr;
-		for ( const auto & tFilter : tQuery.m_dFilters )
-			if ( tFilter.m_sAttrName=="@rowid" )
-			{
-				pRowIdFilter = &tFilter;
-				break;
-			}
-
-		if ( pRowIdFilter )
-			tBoundaries = GetFilterRowIdBoundaries ( *pRowIdFilter, RowID_t(m_iDocinfo) );
+		bool bHaveRowidFilter = false;
+		RowIdBoundaries_t tBoundaries = RemoveRowIdFilter ( tCtx, tFlx, dModifiedFilters, tMeta, m_iDocinfo, bHaveRowidFilter );
 
 		bool bAllColumnar = tQuery.m_dFilters.all_of ( [this]( const CSphFilterSettings & tFilter ) {
 			const CSphColumnInfo * pCol = m_tSchema.GetAttr ( tFilter.m_sAttrName.cstr() );
@@ -8398,7 +8426,7 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 		}
 		else
 		{
-			if ( pRowIdFilter )
+			if ( bHaveRowidFilter )
 				ScanByBlocks<true> ( tCtx, tMeta, dSorters, tMatch, iCutoff, bRandomize, tArgs.m_iIndexWeight, tmMaxTimer, &tBoundaries );
 			else
 				ScanByBlocks<false> ( tCtx, tMeta, dSorters, tMatch, iCutoff, bRandomize, tArgs.m_iIndexWeight, tmMaxTimer );
@@ -10673,7 +10701,7 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 			tChunkMeta.m_pProfile = tThMeta.m_pProfile;
 
 			CSphMultiQueryArgs tMultiArgs ( tArgs.m_iIndexWeight );
-			tMultiArgs.m_iTag = iChunk+1;
+			tMultiArgs.m_iTag = tArgs.m_bModifySorterSchemas ? iChunk+1 : tArgs.m_iTag;
 			tMultiArgs.m_uPackedFactorFlags = tArgs.m_uPackedFactorFlags;
 			tMultiArgs.m_pLocalDocs = pLocalDocs;
 			tMultiArgs.m_iTotalDocs = iTotalDocs;
@@ -10729,8 +10757,8 @@ bool CSphIndex_VLN::SplitQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	dSorters.Reserve ( dAllSorters.GetLength() );
 	dAllSorters.Apply ([&dSorters] ( ISphMatchSorter* p ) { if ( p ) dSorters.Add(p); });
 
+	int iSplit = Max ( Min ( (int)m_tStats.m_iTotalDocuments, tArgs.m_iSplit ), 1 );
 	int64_t iTotalDocs = tArgs.m_iTotalDocs ? tArgs.m_iTotalDocs : m_tStats.m_iTotalDocuments;
-	int iSplit = Max ( Min ( (int)iTotalDocs, tArgs.m_iSplit ), 1 );
 	bool bOk = RunSplitQuery ( this, tQuery, *tResult.m_pMeta, dSorters, tArgs, pProfile, tArgs.m_pLocalDocs, iTotalDocs, m_sIndexName.cstr(), iSplit, tmMaxTimer );
 	if ( !bOk )
 		return false;
@@ -10762,8 +10790,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	const QueryParser_i * pQueryParser = tQuery.m_pQueryParser;
 	assert ( pQueryParser );
 
-	const int SPLIT_THRESH = 1024;
-	if ( tArgs.m_iSplit>1 && m_iDocinfo>SPLIT_THRESH )
+	if ( tArgs.m_iSplit>1 )
 		return SplitQuery ( tResult, tQuery, dAllSorters, tArgs, tmMaxTimer );
 
 	MEMORY ( MEM_DISK_QUERY );
@@ -15542,6 +15569,11 @@ void sphSetJsonOptions ( bool bStrict, bool bAutoconvNumbers, bool bKeynamesToLo
 	g_bJsonKeynamesToLowercase = bKeynamesToLowercase;
 }
 
+
+void SetPseudoShardingThresh ( int iThresh )
+{
+	g_iSplitThresh = iThresh;
+}
 
 //////////////////////////////////////////////////////////////////////////
 

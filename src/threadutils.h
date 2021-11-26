@@ -287,7 +287,9 @@ namespace Detached
 	void RemoveThread ( Threads::LowThreadDesc_t* pThread );
 
 	// schedule global watchdog to gracefully join alone threads on exit
-	void AloneShutdowncatch ();
+	void MakeAloneIteratorAvailable ();
+
+	void ShutdownAllAlones();
 }
 
 #include "threadutils_impl.h"

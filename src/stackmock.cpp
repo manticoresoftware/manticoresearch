@@ -321,8 +321,10 @@ void DetermineFilterItemStackSize ()
 	{
 		FilterCreationMeasureStack_c tCreateMeter;
 		auto iNewDelta = tCreateMeter.MockMeasureStack ( 100 );
+#ifdef NDEBUG
 		if ( iDelta && iDelta<iNewDelta )
 			sphWarning ( "Compiled-in value KNOWN_FILTER_SIZE (%d) is less then measured (%d). Consider to fix the value!", iDelta, iNewDelta );
+#endif
 		iDelta = iNewDelta;
 	}
 

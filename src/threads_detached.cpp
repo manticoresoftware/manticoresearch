@@ -41,7 +41,7 @@ void Iterate ( ThreadFN& fnHandler )
 // register shutdown action that will walk over list of running detached threads and send SIGTERM to each of them.
 // then wait until they're finished.
 // Also register iterations right now;
-void Detached::AloneShutdowncatch ()
+void Detached::MakeAloneIteratorAvailable ()
 {
 #ifndef NDEBUG
 	static bool bAlreadyInvoked = false;
@@ -53,54 +53,63 @@ void Detached::AloneShutdowncatch ()
 
 	// all about windows that we use pthread_kill right now.
 	// if analogue exists there, the limitation can be removed.
-#if !_WIN32
-	searchd::AddShutdownCb ( [&]
-	{
-		int iThreads;
-		{
-			ScRL_t _ ( g_dDetachedGuard () );
-			iThreads = g_dDetachedThreads().GetLength();
-		}
-		int iTurn = 1;
+//#if !_WIN32
+//	searchd::AddShutdownCb ( []
+//	{
+//		Detached::ShutdownAllAlones();
+//	});
+//#endif
+}
 
-		while ( iThreads>0 )
+void Detached::ShutdownAllAlones()
+{
+#if !_WIN32
+	int iThreads;
+	{
+		ScRL_t _ ( g_dDetachedGuard() );
+		iThreads = g_dDetachedThreads().GetLength();
+	}
+	int iTurn = 1;
+
+	while ( iThreads > 0 )
+	{
+		{
+			ScRL_t _ ( g_dDetachedGuard() );
+			sphWarning ( "ShutdownAllAlones will kill %d threads", iThreads );
+			for ( auto* pThread : g_dDetachedThreads() )
+			{
+				if ( pThread )
+				{
+					sphInfo ( "Kill thread '%s' with id %d, try %d",
+							pThread->m_sThreadName.cstr(),
+							pThread->m_iThreadID,
+							iTurn );
+					pthread_kill ( pThread->m_tThread, SIGTERM );
+				}
+			}
+		}
+
+		auto iStart = 0;
+		while ( true )
 		{
 			{
 				ScRL_t _ ( g_dDetachedGuard() );
-				sphWarning ( "AloneShutdowncatch will kill %d threads", iThreads );
-				for ( auto * pThread : g_dDetachedThreads () )
-				{
-					if ( pThread )
-					{
-						sphInfo ( "Kill thread '%s' with id %d, try %d",
-							pThread->m_sThreadName.cstr (), pThread->m_iThreadID, iTurn );
-						pthread_kill ( pThread->m_tThread, SIGTERM );
-					}
-				}
+				iThreads = g_dDetachedThreads().GetLength();
 			}
+			if ( iThreads <= 0 )
+				break;
 
-			auto iStart = 0;
-			while (true)
+			sphSleepMsec ( 50 );
+			iStart += 50;
+			if ( iStart >= 10000 ) // wait 10 seconds between tries
 			{
-				{
-					ScRL_t _ ( g_dDetachedGuard() );
-					iThreads = g_dDetachedThreads().GetLength ();
-				}
-				if ( iThreads<=0 )
-						break;
-
-				sphSleepMsec ( 50 );
-				iStart += 50;
-				if ( iStart>=10000 ) // wait 10 seconds between tries
-				{
-					sphWarning ( "AloneShutdowncatch catch still has %d alone threads", iThreads );
-					break;
-				}
+				sphWarning ( "ShutdownAllAlones catch still has %d alone threads", iThreads );
+				break;
 			}
-
-			++iTurn;
 		}
-	});
+
+		++iTurn;
+	}
 #endif
 }
 

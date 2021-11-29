@@ -5524,10 +5524,12 @@ public:
 			SetBlobPool( (const BYTE*)pArg);
 	}
 
-	uint64_t GetHash ( const ISphSchema &, uint64_t, bool & ) override
+	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) override
 	{
-		assert ( 0 && "remap expressions in filters" );
-		return 0;
+		EXPR_CLASS_NAME_NOCHECK("ExprSortStringAttrFixup_c");
+		uHash = sphFNV64 ( &m_tLocator, sizeof(m_tLocator), uHash );
+
+		return CALC_DEP_HASHES();
 	}
 
 	ISphExpr * Clone() const final
@@ -5651,10 +5653,13 @@ public:
 		}
 	}
 
-	uint64_t GetHash ( const ISphSchema &, uint64_t, bool & ) override
+	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) override
 	{
-		assert ( 0 && "remap expression in filters" );
-		return 0;
+		EXPR_CLASS_NAME_NOCHECK("ExprSortJson2StringPtr_c");
+		CALC_CHILD_HASH(m_pExpr);
+		uHash = sphFNV64 ( &m_tJsonCol, sizeof(m_tJsonCol), uHash );
+
+		return CALC_DEP_HASHES();
 	}
 
 	ISphExpr * Clone() const final

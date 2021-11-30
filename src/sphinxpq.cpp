@@ -1774,6 +1774,64 @@ StoredQuery_i * PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, co
 	return pStored;
 }
 
+template<typename READER>
+static void LoadInsertDeleteQueries_T ( CSphVector<StoredQueryDesc_t>& dNewQueries, CSphVector<int64_t>& dDeleteQueries, CSphVector<uint64_t>& dDeleteTags, READER& tReader )
+{
+	dDeleteTags.Resize ( tReader.UnzipInt() );
+	ARRAY_FOREACH ( i, dDeleteTags )
+		dDeleteTags[i] = tReader.UnzipOffset();
+
+	dDeleteQueries.Resize ( tReader.UnzipInt() );
+	ARRAY_FOREACH ( i, dDeleteQueries )
+		dDeleteQueries[i] = tReader.UnzipOffset();
+
+	dNewQueries.Resize ( tReader.UnzipInt() );
+	ARRAY_FOREACH ( i, dNewQueries )
+		LoadStoredQuery ( PQ_META_VERSION_MAX, dNewQueries[i], tReader );
+}
+
+
+static void LoadInsertDeleteQueries ( const BYTE* pData, int iLen, CSphVector<StoredQueryDesc_t>& dNewQueries, CSphVector<int64_t>& dDeleteQueries, CSphVector<uint64_t>& dDeleteTags )
+{
+	MemoryReader_c tReader ( pData, iLen );
+	LoadInsertDeleteQueries_T ( dNewQueries, dDeleteQueries, dDeleteTags, tReader );
+}
+
+
+static void LoadInsertDeleteQueries ( CSphVector<StoredQueryDesc_t>& dNewQueries, CSphVector<int64_t>& dDeleteQueries, CSphVector<uint64_t>& dDeleteTags, CSphReader& tReader )
+{
+	LoadInsertDeleteQueries_T ( dNewQueries, dDeleteQueries, dDeleteTags, tReader );
+}
+
+template<typename WRITER, typename QUERY>
+static void SaveInsertDeleteQueries_T ( const VecTraits_T<QUERY> & dNewQueries, const VecTraits_T<int64_t> & dDeleteQueries, const VecTraits_T<uint64_t> & dDeleteTags, WRITER & tWriter )
+{
+	tWriter.ZipInt ( dDeleteTags.GetLength() );
+	for ( uint64_t uTag : dDeleteTags )
+		tWriter.ZipOffset ( uTag );
+
+	tWriter.ZipInt ( dDeleteQueries.GetLength() );
+	for ( int64_t iQuery : dDeleteQueries )
+		tWriter.ZipOffset ( iQuery );
+
+	tWriter.ZipInt ( dNewQueries.GetLength() );
+	for ( StoredQuery_i* pQuery : dNewQueries )
+		SaveStoredQuery ( *pQuery, tWriter );
+}
+
+template<typename QUERY>
+static void SaveInsertDeleteQueries ( const VecTraits_T<QUERY> & dNewQueries, const VecTraits_T<int64_t> & dDeleteQueries, const VecTraits_T<uint64_t> & dDeleteTags, CSphVector<BYTE> & dOut )
+{
+	MemoryWriter_c tWriter ( dOut );
+	SaveInsertDeleteQueries_T ( dNewQueries, dDeleteQueries, dDeleteTags, tWriter );
+}
+
+template<typename QUERY>
+static void SaveInsertDeleteQueries ( const VecTraits_T<QUERY> & dNewQueries, const VecTraits_T<int64_t> & dDeleteQueries, const VecTraits_T<uint64_t> & dDeleteTags, CSphWriter & tWriter )
+{
+	SaveInsertDeleteQueries_T ( dNewQueries, dDeleteQueries, dDeleteTags, tWriter );
+}
+
 namespace {
 // wrap original queries vec, since we might retry more than once.
 // Also eliminate dupes, so that last one query with same quid win
@@ -1930,8 +1988,8 @@ int PercolateIndex_c::ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQue
 		}
 
 		m_tStat.m_iTotalDocuments += iNewInserted - iDeleted;
-		Binlog::Commit ( Binlog::PQ_ADD_DELETE, &m_iTID, m_sIndexName.cstr(), true, [dNewQueries, dDeleteQueries, dDeleteTags] ( CSphWriter& tWriter ) {
-			SaveInsertDeleteQueries( dNewQueries, dDeleteQueries, dDeleteTags, tWriter );
+		Binlog::Commit ( Binlog::PQ_ADD_DELETE, &m_iTID, m_sIndexName.cstr(), true, [&dNewSharedQueries, dDeleteQueries, dDeleteTags] ( CSphWriter& tWriter ) {
+			SaveInsertDeleteQueries ( dNewSharedQueries, dDeleteQueries, dDeleteTags, tWriter );
 		} );
 
 		return iDeleted;
@@ -3238,59 +3296,4 @@ void SaveDeleteQuery ( const VecTraits_T<int64_t>& dQueries, const char* sTags, 
 void SaveDeleteQuery ( const VecTraits_T<int64_t> & dQueries, const char * sTags, CSphWriter & tWriter )
 {
 	SaveDeleteQuery_T ( dQueries, sTags, tWriter );
-}
-
-template<typename READER>
-void LoadInsertDeleteQueries_T ( CSphVector<StoredQueryDesc_t>& dNewQueries, CSphVector<int64_t>& dDeleteQueries, CSphVector<uint64_t>& dDeleteTags, READER& tReader )
-{
-	dDeleteTags.Resize ( tReader.UnzipInt() );
-	ARRAY_FOREACH ( i, dDeleteTags )
-		dDeleteTags[i] = tReader.UnzipOffset();
-
-	dDeleteQueries.Resize ( tReader.UnzipInt() );
-	ARRAY_FOREACH ( i, dDeleteQueries )
-		dDeleteQueries[i] = tReader.UnzipOffset();
-
-	dNewQueries.Resize ( tReader.UnzipInt() );
-	ARRAY_FOREACH ( i, dNewQueries )
-		LoadStoredQuery ( PQ_META_VERSION_MAX, dNewQueries[i], tReader );
-}
-
-void LoadInsertDeleteQueries ( const BYTE* pData, int iLen, CSphVector<StoredQueryDesc_t>& dNewQueries, CSphVector<int64_t>& dDeleteQueries, CSphVector<uint64_t>& dDeleteTags )
-{
-	MemoryReader_c tReader ( pData, iLen );
-	LoadInsertDeleteQueries_T ( dNewQueries, dDeleteQueries, dDeleteTags, tReader );
-}
-
-void LoadInsertDeleteQueries ( CSphVector<StoredQueryDesc_t>& dNewQueries, CSphVector<int64_t>& dDeleteQueries, CSphVector<uint64_t>& dDeleteTags, CSphReader& tReader )
-{
-	LoadInsertDeleteQueries_T ( dNewQueries, dDeleteQueries, dDeleteTags, tReader );
-}
-
-template<typename WRITER>
-void SaveInsertDeleteQueries_T ( const VecTraits_T<StoredQuery_i*>& dNewQueries, const VecTraits_T<int64_t>& dDeleteQueries, const VecTraits_T<uint64_t>& dDeleteTags, WRITER& tWriter )
-{
-	tWriter.ZipInt ( dDeleteTags.GetLength() );
-	for ( uint64_t uTag : dDeleteTags )
-		tWriter.ZipOffset ( uTag );
-
-	tWriter.ZipInt ( dDeleteQueries.GetLength() );
-	for ( int64_t iQuery : dDeleteQueries )
-		tWriter.ZipOffset ( iQuery );
-
-	tWriter.ZipInt ( dNewQueries.GetLength() );
-	for ( StoredQuery_i* pQuery : dNewQueries )
-		SaveStoredQuery ( *pQuery, tWriter );
-
-}
-
-void SaveInsertDeleteQueries ( const VecTraits_T<StoredQuery_i*>& dNewQueries, const VecTraits_T<int64_t>& dDeleteQueries, const VecTraits_T<uint64_t>& dDeleteTags, CSphVector<BYTE>& dOut )
-{
-	MemoryWriter_c tWriter ( dOut );
-	SaveInsertDeleteQueries_T ( dNewQueries, dDeleteQueries, dDeleteTags, tWriter );
-}
-
-void SaveInsertDeleteQueries ( const VecTraits_T<StoredQuery_i*>& dNewQueries, const VecTraits_T<int64_t>& dDeleteQueries, const VecTraits_T<uint64_t>& dDeleteTags, CSphWriter& tWriter )
-{
-	SaveInsertDeleteQueries_T ( dNewQueries, dDeleteQueries, dDeleteTags, tWriter );
 }

@@ -94,7 +94,10 @@ ALTER CLUSTER mycluster ADD myindex;
 When the index is added back, the new files created by the optimize process will be replicated to the other nodes in the cluster.
 Any changes made locally to the index on other nodes will be lost.
 
-Writes on the index should either be **stopped** or directed to the node where the optimize process is running.
-Note that after the index is out of the cluster, writes must be made locally and the index name must not contain the cluster name as prefix (for SQL statements or cluster property for HTTP requests).
-As soon as the index is added back to the cluster, writes can be resumed. At this point the writes operations on the index must include (again) the cluster prefix (for SQL statements or cluster property for HTTP requests).
-Searches will be available as usual during the process on any of the nodes.
+Index data modifications (inserts, replaces, deletes, updates) should:
+1. either be **postponed**
+2. or directed to the node where the optimize process is running.
+
+Note, while the index is out of the cluster, insert/replace/delete/update commands should refer to it without cluster name prefix (for SQL statements or cluster property fin case of a HTTP JSON request), otherwise they will fail.
+As soon as the index is added back to the cluster, writes can be resumed. At this point write operations on the index must include the cluster name prefix again, or they will fail.
+Search operations are available as usual during the process on any of the nodes.

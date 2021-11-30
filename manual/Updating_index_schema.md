@@ -133,7 +133,7 @@ mysql> desc rt;
 ALTER RTINDEX index RECONFIGURE
 ```
 
-`ALTER` can also reconfigure an RT index in [plain mode](Creating_an_index/Local_indexes.md#Defining-index-schema-in-config-%28Plain-mode%29), so that new tokenization, morphology and other text processing settings from the configuration file take effect on the newly INSERT-ed rows, while retaining the existing rows as they were. Internally, it forcibly saves the current RAM chunk as a new disk chunk and adjusts the index header, so that the new rows are tokenized using the new rules.
+`ALTER` can also reconfigure an RT index in [plain mode](Creating_an_index/Local_indexes.md#Defining-index-schema-in-config-%28Plain-mode%29), so that new tokenization, morphology and other text processing settings from the configuration file take effect for new documents. Note, that the existing document will be left intact. Internally, it forcibly saves the current RAM chunk as a new disk chunk and adjusts the index header, so that new documents are tokenized using the updated full-text settings.
 
 <!-- request Example -->
 ```sql

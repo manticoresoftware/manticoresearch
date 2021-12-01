@@ -911,7 +911,7 @@ void sphDieRestart ( const char * sFmt, ... )
 	va_start ( ap, sFmt );
 	sphDieVa ( sFmt, ap );
 	va_end ( ap );
-	exit ( 2 ); // almost CRASH_EXIT
+	sphQuickExit ( 2 ); // almost CRASH_EXIT
 }
 
 void sphFatalVa ( const char * sFmt, va_list ap )

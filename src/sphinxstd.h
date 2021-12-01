@@ -495,6 +495,15 @@ void			sphFatalLog ( const char * sFmt, ... ) __attribute__ ( ( format ( printf,
 /// if callback returns false, sphDie() will not log to stdout
 void			sphSetDieCallback ( SphDieCallback_t pfDieCallback );
 
+/// similar as abort but closes FD
+/// not available on MacOS
+#if defined ( __APPLE__ )
+	#define sphQuickExit exit
+#else
+	#define sphQuickExit std::quick_exit
+#endif
+
+
 /// how much bits do we need for given int
 inline int sphLog2 ( uint64_t uValue )
 {

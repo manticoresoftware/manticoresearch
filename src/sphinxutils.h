@@ -402,7 +402,7 @@ namespace CustomLog {
 		#define CRASH_EXIT CRASH_EXIT_CORE
 	#else
 		// UNIX release build, just die
-		#define CRASH_EXIT { exit ( 2 ); }
+		#define CRASH_EXIT { sphQuickExit ( 2 ); }
 	#endif
 #else
 	#define CRASH_EXIT_CORE return EXCEPTION_CONTINUE_SEARCH

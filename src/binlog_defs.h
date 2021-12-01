@@ -14,6 +14,9 @@
 
 #include <functional>
 
+// up to 12: PQ_ADD_DELETE added
+constexpr unsigned int BINLOG_VERSION = 12;
+
 namespace Binlog {
 
 	/// Bin Log Operation
@@ -26,6 +29,7 @@ namespace Binlog {
 		RECONFIGURE		= 5,
 		PQ_ADD			= 6,
 		PQ_DELETE		= 7,
+		PQ_ADD_DELETE	= 8,
 
 		TOTAL
 	};

@@ -1385,7 +1385,7 @@ namespace sph {
 template < typename T >
 class DefaultStorage_T
 {
-protected:
+public:
 	inline static T * Allocate ( int64_t iLimit )
 	{
 		return new T[iLimit];
@@ -1412,7 +1412,7 @@ public:
 
 	LazyStorage_T() = default;
 	static const int iSTATICSIZE = STATICSIZE;
-protected:
+public:
 	inline T * Allocate ( int64_t iLimit )
 	{
 		if ( iLimit<=STATICSIZE )
@@ -1439,7 +1439,7 @@ template < typename T >
 class RawStorage_T
 {
 	using StorageType = typename std::aligned_storage<sizeof ( T ), alignof ( T )>::type;
-protected:
+public:
 	inline static T * Allocate ( int64_t iLimit )
 	{
 		return ( T * )new StorageType[iLimit];
@@ -5099,6 +5099,26 @@ public:
 	explicit OpenHash_T ( int64_t iSize=256 )
 	{
 		Reset ( iSize );
+	}
+
+	OpenHash_T ( const OpenHash_T& rhs )
+	{
+		m_iSize = rhs.m_iSize;
+		m_iUsed = rhs.m_iUsed;
+		m_iMaxUsed = rhs.m_iMaxUsed;
+		m_pHash = sph::RawStorage_T<Entry_t>::Allocate ( m_iSize );
+		sph::DefaultCopy_T<Entry_t>::CopyVoid ( m_pHash, rhs.m_pHash, m_iSize );
+	}
+
+	OpenHash_T ( OpenHash_T&& rhs ) noexcept
+	{
+		Swap ( rhs );
+	}
+
+	OpenHash_T& operator= ( OpenHash_T rhs ) noexcept
+	{
+		Swap ( rhs );
+		return *this;
 	}
 
 	~OpenHash_T()

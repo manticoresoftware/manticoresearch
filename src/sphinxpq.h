@@ -95,9 +95,6 @@ public:
 
 	bool	IsPQ() const override { return true; }
 
-	virtual int ReplayDeleteQueries ( const VecTraits_T<int64_t>& dQueries ) = 0;
-	virtual int ReplayDeleteQueries ( const char * sTags ) = 0;
-	virtual void ReplayCommit ( StoredQuery_i * pQuery ) = 0;
 };
 
 /// percolate query index factory

@@ -826,16 +826,21 @@ struct SaveDiskDataContext_t;
 // kind of 'mini served_desc' inside index - manages state of one disk chunk
 class DiskChunk_c final : public ISphRefcountedMT
 {
-	CSphIndex *		m_pIndex;
-	bool			m_bOwned;
+public:
+	mutable std::atomic<bool>			m_bOptimizing { false };	// to protect from simultaneous optimizing one and same chunk
+	mutable bool						m_bFinallyUnlink = false;	// unlink index files on destroy
+	mutable Threads::Coro::RWLock_c 	m_tLock;					// fine-grain lock
 
-private:
-	DiskChunk_c ( CSphIndex* pIndex, bool bOwned ) : m_pIndex ( pIndex ), m_bOwned ( bOwned ) {}
+	inline static CSphRefcountedPtr<const DiskChunk_c> make ( CSphIndex* pIndex ) { return CSphRefcountedPtr<const DiskChunk_c> { pIndex ? new DiskChunk_c(pIndex) : nullptr }; }
+	explicit operator CSphIndex* () const		{ return m_pIndex; }
+	CSphIndex & Idx() 					{ return *m_pIndex; }
+	CSphIndex & CastIdx () const		{ return *const_cast<CSphIndex *>(m_pIndex); } // const breakage!
+	const CSphIndex & Cidx() const		{ return *m_pIndex; }
 
 protected:
-	~DiskChunk_c () final
+	~DiskChunk_c() final
 	{
-		if ( !m_pIndex || !m_bOwned )
+		if ( !m_pIndex )
 			return;
 
 		CSphString sDeleted = m_pIndex->GetFilename ();
@@ -844,17 +849,10 @@ protected:
 			sphUnlinkIndex ( sDeleted.cstr (), true );
 	}
 
-public:
-	inline static CSphRefcountedPtr<const DiskChunk_c> make ( CSphIndex* pIndex ) { return CSphRefcountedPtr<const DiskChunk_c> { pIndex ? new DiskChunk_c ( pIndex, true ) : nullptr }; }
-	inline static CSphRefcountedPtr<const DiskChunk_c> wrap ( CSphIndex* pIndex ) { return CSphRefcountedPtr<const DiskChunk_c> { pIndex ? new DiskChunk_c ( pIndex, false ) : nullptr }; }
-	explicit operator CSphIndex* () const		{ return m_pIndex; }
-	CSphIndex & Idx() 					{ return *m_pIndex; }
-	CSphIndex & CastIdx () const		{ return *const_cast<CSphIndex *>(m_pIndex); } // const breakage!
-	const CSphIndex & Cidx() const		{ return *m_pIndex; }
+private:
+	CSphIndex *		m_pIndex;
 
-	mutable std::atomic<bool>			m_bOptimizing { false };	// to protect from simultaneous optimizing one and same chunk
-	mutable bool						m_bFinallyUnlink = false; // unlink index files on destroy
-	mutable Threads::Coro::RWLock_c 		m_tLock;        // fine-grain lock
+	DiskChunk_c ( CSphIndex * pIndex ) : m_pIndex ( pIndex ) {}
 };
 
 using DiskChunkRefPtr_t = CSphRefcountedPtr<DiskChunk_c>;
@@ -1151,9 +1149,6 @@ class RtIndex_c final : public RtIndex_i, public ISphNoncopyable, public ISphWor
 public:
 						RtIndex_c ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict );
 						~RtIndex_c () final;
-
-	void				InitOneshotIndex ( const VecTraits_T<CSphIndex*>& dChunks );
-	void				InitDictionaryInOneshot ();
 
 	bool				AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt ) override;
 	virtual bool		AddDocument ( ISphHits * pHits, const InsertDocData_t & tDoc, bool bReplace, const DocstoreBuilder_i::Doc_t * pStoredDoc, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt );
@@ -3059,7 +3054,6 @@ static void CleanupHitDuplicates ( CSphTightVector<CSphWordHit> & dHits )
 		DWORD uDstField = HITMAN::GetField ( tDst.m_uWordPos );
 		DWORD uSrcField = HITMAN::GetField ( tSrc.m_uWordPos );
 		bool bDstEnd = HITMAN::IsEnd ( tDst.m_uWordPos );
-		bool bSrcEnd = HITMAN::IsEnd ( tSrc.m_uWordPos );
 
 		// check for pure duplicate and multiple tail hits
 		if ( tDst.m_tRowID==tSrc.m_tRowID && tDst.m_uWordID==tSrc.m_uWordID && ( uDstPos==uSrcPos || ( uDstField==uSrcField && bDstEnd ) ) )
@@ -6745,7 +6739,7 @@ private:
 class SorterSchemaTransform_c
 {
 public:
-			explicit SorterSchemaTransform_c ( int iNumChunks ) { m_dDiskChunkData.Resize(iNumChunks); }
+			SorterSchemaTransform_c ( int iNumChunks, bool bFinalizeSorters );
 
 	void	Set ( int iChunk, const CSphQueryResult & tChunkResult ) { m_dDiskChunkData[iChunk].Set(tChunkResult); }
 	void	Transform ( ISphMatchSorter * pSorter, const RtGuard_t& tGuard );
@@ -6764,7 +6758,15 @@ private:
 	};
 
 	CSphVector<DiskChunkData_t>	m_dDiskChunkData;
+	bool						m_bFinalizeSorters = false;
 };
+
+
+SorterSchemaTransform_c::SorterSchemaTransform_c ( int iNumChunks, bool bFinalizeSorters )
+	: m_bFinalizeSorters ( bFinalizeSorters )
+{
+	m_dDiskChunkData.Resize(iNumChunks);
+}
 
 
 void SorterSchemaTransform_c::Transform ( ISphMatchSorter * pSorter, const RtGuard_t& tGuard )
@@ -6803,7 +6805,7 @@ void SorterSchemaTransform_c::Transform ( ISphMatchSorter * pSorter, const RtGua
 		return m_dDiskChunkData[iChunkId-nRamChunks].m_pColumnar;
 	};
 
-	pSorter->TransformPooled2StandalonePtrs ( fnGetBlobPoolFromMatch, fnGetColumnarFromMatch );
+	pSorter->TransformPooled2StandalonePtrs ( fnGetBlobPoolFromMatch, fnGetColumnarFromMatch, m_bFinalizeSorters );
 }
 
 
@@ -6930,7 +6932,7 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 }
 
 
-void FinalExpressionCalculation ( CSphQueryContext & tCtx, const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks, VecTraits_T<ISphMatchSorter *> & dSorters )
+void FinalExpressionCalculation ( CSphQueryContext & tCtx, const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks, VecTraits_T<ISphMatchSorter *> & dSorters, bool bFinalizeSorters )
 {
 	if ( tCtx.m_dCalcFinal.IsEmpty() )
 		return;
@@ -6951,7 +6953,7 @@ void FinalExpressionCalculation ( CSphQueryContext & tCtx, const VecTraits_T<RtS
 		tCtx.SetBlobPool ( dRamChunks[iSeg]->m_dBlobs.Begin() );
 		tCtx.SetColumnar ( dRamChunks[iSeg]->m_pColumnar.Ptr() );
 
-		dSorters.Apply ( [&tFinal] ( ISphMatchSorter * pTop ) { pTop->Finalize ( tFinal, false ); } );
+		dSorters.Apply ( [&] ( ISphMatchSorter * pTop ) { pTop->Finalize ( tFinal, false, bFinalizeSorters ); } );
 	}
 }
 
@@ -7099,7 +7101,7 @@ void PerformFullScan ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks, int iM
 }
 
 
-static bool DoFullScanQuery ( const RtSegVec_c & dRamChunks, const ISphSchema & tMaxSorterSchema, const CSphQuery & tQuery, int iIndexWeight, int iStride, int64_t tmMaxTimer, QueryProfile_c * pProfiler, CSphQueryContext & tCtx, VecTraits_T<ISphMatchSorter*> & dSorters, CSphQueryResultMeta & tMeta )
+static bool DoFullScanQuery ( const RtSegVec_c & dRamChunks, const ISphSchema & tMaxSorterSchema, const CSphQuery & tQuery, const CSphMultiQueryArgs & tArgs, int iStride, int64_t tmMaxTimer, QueryProfile_c * pProfiler, CSphQueryContext & tCtx, VecTraits_T<ISphMatchSorter*> & dSorters, CSphQueryResultMeta & tMeta )
 {
 	// probably redundant, but just in case
 	SwitchProfile ( pProfiler, SPH_QSTATE_INIT );
@@ -7117,10 +7119,10 @@ static bool DoFullScanQuery ( const RtSegVec_c & dRamChunks, const ISphSchema & 
 		if ( iCutoff<=0 )
 			iCutoff = -1;
 
-		PerformFullScan ( dRamChunks, tMaxSorterSchema.GetDynamicSize(), iIndexWeight, iStride, iCutoff, tmMaxTimer, pProfiler, tCtx, dSorters, tMeta.m_sWarning );
+		PerformFullScan ( dRamChunks, tMaxSorterSchema.GetDynamicSize(), tArgs.m_iIndexWeight, iStride, iCutoff, tmMaxTimer, pProfiler, tCtx, dSorters, tMeta.m_sWarning );
 	}
 
-	FinalExpressionCalculation ( tCtx, dRamChunks, dSorters );
+	FinalExpressionCalculation ( tCtx, dRamChunks, dSorters, tArgs.m_bFinalizeSorters );
 	return true;
 }
 
@@ -7225,7 +7227,7 @@ static void PerformFullTextSearch ( const RtSegVec_c & dRamChunks, RtQwordSetup_
 }
 
 
-static bool DoFullTextSearch ( const RtSegVec_c & dRamChunks, const ISphSchema & tMaxSorterSchema, const CSphQuery & tQuery, const char * szIndexName, int iIndexWeight, int iMatchPoolSize, int iStackNeed, RtQwordSetup_t & tTermSetup, QueryProfile_c * pProfiler, CSphQueryContext & tCtx, VecTraits_T<ISphMatchSorter*> & dSorters, XQQuery_t & tParsed, CSphQueryResultMeta & tMeta, ISphMatchSorter * pSorter )
+static bool DoFullTextSearch ( const RtSegVec_c & dRamChunks, const ISphSchema & tMaxSorterSchema, const CSphQuery & tQuery, const char * szIndexName, const CSphMultiQueryArgs & tArgs, int iMatchPoolSize, int iStackNeed, RtQwordSetup_t & tTermSetup, QueryProfile_c * pProfiler, CSphQueryContext & tCtx, VecTraits_T<ISphMatchSorter*> & dSorters, XQQuery_t & tParsed, CSphQueryResultMeta & tMeta, ISphMatchSorter * pSorter )
 {
 	// set zonespanlist settings
 	tParsed.m_bNeedSZlist = tQuery.m_bZSlist;
@@ -7267,10 +7269,10 @@ static bool DoFullTextSearch ( const RtSegVec_c & dRamChunks, const ISphSchema &
 		int iCutoff = tQuery.m_iCutoff;
 		if ( iCutoff<=0 )
 			iCutoff = -1;
-		PerformFullTextSearch ( dRamChunks, tTermSetup, pRanker.Ptr (), iIndexWeight, iCutoff, pProfiler, tCtx, dSorters );
+		PerformFullTextSearch ( dRamChunks, tTermSetup, pRanker.Ptr (), tArgs.m_iIndexWeight, iCutoff, pProfiler, tCtx, dSorters );
 	}
 
-	FinalExpressionCalculation ( tCtx, dRamChunks, dSorters );
+	FinalExpressionCalculation ( tCtx, dRamChunks, dSorters, tArgs.m_bFinalizeSorters );
 
 	//////////////////////
 	// copying match's attributes to external storage in result set
@@ -7421,7 +7423,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	if ( tQuery.m_uMaxQueryMsec>0 )
 		tmMaxTimer = dTimerGuard.MiniTimerEngage ( tQuery.m_uMaxQueryMsec ); // max_query_time
 
-	SorterSchemaTransform_c tSSTransform ( dDiskChunks.GetLength() );
+	SorterSchemaTransform_c tSSTransform ( dDiskChunks.GetLength(), tArgs.m_bFinalizeSorters );
 
 	if ( !dDiskChunks.IsEmpty() )
 		QueryDiskChunks ( tQuery, tMeta, tArgs, tGuard, dSorters, pProfiler, bGotLocalDF, pLocalDocs, iTotalDocs, m_sIndexName.cstr(), tSSTransform, tmMaxTimer );
@@ -7524,7 +7526,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 
 	bool bResult;
 	if ( bFullscan || pQueryParser->IsFullscan ( tParsed ) )
-		bResult = DoFullScanQuery ( tGuard.m_dRamSegs, tMaxSorterSchema, tQuery, tArgs.m_iIndexWeight, m_iStride, tmMaxTimer, pProfiler, tCtx, dSorters, tMeta );
+		bResult = DoFullScanQuery ( tGuard.m_dRamSegs, tMaxSorterSchema, tQuery, tArgs, m_iStride, tmMaxTimer, pProfiler, tCtx, dSorters, tMeta );
 	else
 		bResult = DoFullTextSearch ( tGuard.m_dRamSegs, tMaxSorterSchema, tQuery, m_sIndexName.cstr(), tArgs.m_iIndexWeight, iMatchPoolSize, iStackNeed, tTermSetup, pProfiler, tCtx, dSorters, tParsed, tMeta, dSorters.GetLength()==1 ? dSorters[0] : nullptr );
 
@@ -8223,49 +8225,6 @@ CSphString RtIndex_c::MakeChunkName ( int iChunkID )
 	CSphString sChunk;
 	sChunk.SetSprintf ( "%s.%d", m_sPath.cstr(), iChunkID );
 	return sChunk;
-}
-
-// make tiny ref index - grab chunks as disk chunks; no changes; no heavy initialization
-void RtIndex_c::InitOneshotIndex ( const VecTraits_T<CSphIndex*>& dChunks ) NO_THREAD_SAFETY_ANALYSIS
-{
-	ProhibitSave();
-	m_bLoadRamPassedOk = false;
-
-	auto pFirst = dChunks.First();
-
-	// copy tokenizer, dict, etc. settings from first chunk.
-	// fixme! There is no check about absent/non-compatible settings between grabbed plain and rt
-	m_tSettings = pFirst->GetSettings();
-	m_pTokenizer = pFirst->GetTokenizer()->Clone ( SPH_CLONE_INDEX );
-
-	RtWriter_c tWriter { m_tRtChunks, [] {} };
-	tWriter.InitDiskChunks ( RtWriter_c::empty );
-	for ( CSphIndex* pIndex : dChunks )
-	{
-		assert ( pIndex );
-		auto pChunk = DiskChunk_c::wrap ( pIndex );
-		tWriter.m_pNewDiskChunks->Add ( pChunk );
-
-		m_tStats.m_iTotalBytes += pIndex->GetStats().m_iTotalBytes;
-		m_tStats.m_iTotalDocuments += pIndex->GetStats().m_iTotalDocuments;
-
-		// update field lengths
-		if ( m_tSchema.GetAttrId_FirstFieldLen()>=0 )
-		{
-			int64_t * pLens = pIndex->GetFieldLens();
-			if ( pLens )
-				for ( int i=0; i < pIndex->GetMatchSchema().GetFieldsCount(); ++i )
-					m_dFieldLensDisk[i] += pLens[i];
-		}
-	}
-}
-
-void RtIndex_c::InitDictionaryInOneshot () NO_THREAD_SAFETY_ANALYSIS
-{
-	if ( m_pDict )
-		return;
-
-	SetDictionary ( RtGuard().m_dDiskChunks[0]->Cidx().GetDictionary()->Clone() );
 }
 
 // CSphinxqlSession::Execute->HandleMysqlAttach->AttachDiskIndex
@@ -9969,29 +9928,13 @@ RtIndex_i * sphGetCurrentIndexRT()
 	return nullptr;
 }
 
+
 RtIndex_i * sphCreateIndexRT ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict )
 {
 	MEMORY ( MEM_INDEX_RT );
 	return new RtIndex_c ( tSchema, sIndexName, iRamSize, sPath, bKeywordDict );
 }
 
-RtIndex_i* MakeOneshotRt ( const VecTraits_T<CSphIndex*>& dChunks, const CSphString& sName )
-{
-	assert ( dChunks.GetLength() > 1 );
-	auto pIndex = dChunks.First();
-	const CSphSchema & tSchema = pIndex->GetMatchSchema();
-	bool bKeywordDict = pIndex->GetDictionary()->GetSettings().m_bWordDict;
-	auto pRtIndex = new RtIndex_c ( tSchema, sName.cstr(), 0, "", bKeywordDict );
-
-	pRtIndex->InitOneshotIndex ( dChunks );
-	return pRtIndex;
-}
-
-void UpgradeOneshotToFT ( CSphIndex* pIndex )
-{
-	auto* pRtIndex = (RtIndex_c*)pIndex;
-	pRtIndex->InitDictionaryInOneshot();
-}
 
 void sphRTInit ( const CSphConfigSection & hSearchd, bool bTestMode, const CSphConfigSection * pCommon )
 {

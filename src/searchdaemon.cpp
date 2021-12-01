@@ -1367,7 +1367,6 @@ bool GuardedHash_c::AddUniq( ISphRefcountedMT* pValue, const CSphString& tKey )
 
 	pVal = pValue;
 	SafeAddRef ( pVal );
-	NextGeneration();
 	return true;
 }
 
@@ -1386,35 +1385,29 @@ void GuardedHash_c::AddOrReplace( ISphRefcountedMT* pValue, const CSphString& tK
 		Verify ( m_hIndexes.Add( pValue, tKey ));
 	}
 	SafeAddRef ( pValue );
-	NextGeneration();
 	if ( m_pHook )
 		m_pHook( pValue, tKey );
 }
 
-bool GuardedHash_c::Delete( const CSphString& tKey )
+bool GuardedHash_c::Delete ( const CSphString & sKey )
 {
 	ScWL_t hHashWLock { m_tIndexesRWLock };
-	ISphRefcountedMT** ppEntry = m_hIndexes( tKey );
+	ISphRefcountedMT** ppEntry = m_hIndexes(sKey);
 	// release entry - last owner will free it
 	if ( ppEntry ) SafeRelease( *ppEntry );
 
 	// remove from hash
-	auto bRes = m_hIndexes.Delete( tKey );
-	if ( bRes )
-		NextGeneration();
-	return bRes;
+	return m_hIndexes.Delete(sKey);
 }
 
-bool GuardedHash_c::DeleteIfNull( const CSphString& tKey )
+bool GuardedHash_c::DeleteIfNull ( const CSphString & sKey )
 {
 	ScWL_t hHashWLock { m_tIndexesRWLock };
-	ISphRefcountedMT** ppEntry = m_hIndexes( tKey );
+	ISphRefcountedMT** ppEntry = m_hIndexes(sKey);
 	if ( ppEntry && *ppEntry )
 		return false;
-	auto bRes = m_hIndexes.Delete ( tKey );
-	if ( bRes )
-		NextGeneration();
-	return bRes;
+
+	return m_hIndexes.Delete(sKey);
 }
 
 int GuardedHash_c::GetLength() const
@@ -1440,7 +1433,6 @@ void GuardedHash_c::ReleaseAndClear()
 			tHash.Add ( i.second, i.first );
 
 		m_hIndexes.Reset();
-		NextGeneration();
 	}
 
 	for ( auto& i : tHash )
@@ -1468,7 +1460,6 @@ ISphRefcountedMT* GuardedHash_c::TryAddThenGet( ISphRefcountedMT* pValue, const 
 	{
 		pVal = pValue;
 		SafeAddRef ( pVal );
-		NextGeneration();
 	}
 
 	SafeAddRef ( pVal );

@@ -320,6 +320,26 @@ collect_buster:
     DISTRO: buster
   needs: [ buster ]
 
+bullseye:
+  extends: [ .debian_based ]
+  rules:
+    - if: $WHAT=='$WHAT'
+    - if: $WHAT==null
+    - if: $WHAT=="all"
+    - if: $WHAT =~ /bullseye/
+  image: registry.gitlab.com/manticoresearch/dev/bullseye_clang:12
+  cache:
+    key: bullseye
+    paths:
+      - cache
+
+collect_bullseye:
+  extends: [ .collect_job ]
+  script: [ ~/upload_repo_deb.sh ]
+  variables:
+    DISTRO: bullseye
+  needs: [ bullseye ]
+
 build_docker:
   stage: deploy
   needs:

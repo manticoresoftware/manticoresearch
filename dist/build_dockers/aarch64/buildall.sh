@@ -1,6 +1,6 @@
 #!/bin/bash
 
-for distr in bionic buster centos7 centos8 focal stretch xenial; do
+for distr in bionic buster bullseye centos7 centos8 focal stretch xenial; do
     cd $distr
     # . build_base.sh
     . build.sh

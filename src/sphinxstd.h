@@ -1939,6 +1939,29 @@ public:
 		Shrink ( iLeft );
 	}
 
+	void MergeSorted ( const Vector_T<T> & dA, const Vector_T<T> & dB )
+	{
+		// fixme: add comparators
+		int iLenA = dA.GetLength();
+		int iLenB = dB.GetLength();
+		Resize ( iLenA+iLenB );
+
+		T * pA = dA.Begin();
+		T * pB = dB.Begin();
+		T * pRes = Begin();
+		const T * pMaxA = pA+iLenA;
+		const T * pMaxB = pB+iLenB;
+
+		while ( pA < pMaxA && pB < pMaxB )
+			*pRes++ = *pA < *pB ? *pA++ : *pB++;
+
+		while ( pA < pMaxA )
+			*pRes++ = *pA++;
+
+		while ( pB < pMaxB )
+			*pRes++ = *pB++;
+	}
+
 	/// copy + move
 	// if provided lvalue, it will be copied into rhs via copy ctr, then swapped to *this
 	// if provided rvalue, it will just pass to SwapData immediately.

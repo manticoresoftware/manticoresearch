@@ -179,11 +179,7 @@ void sphRTSetTestMode ();
 /// RT index factory
 RtIndex_i * sphCreateIndexRT ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict );
 
-RtIndex_i * MakeOneshotRt ( const VecTraits_T<CSphIndex*>& dChunks, const CSphString& sName );
-void UpgradeOneshotToFT ( CSphIndex* pIndex );
-
 typedef void ProgressCallbackSimple_t ();
-
 
 //////////////////////////////////////////////////////////////////////////
 

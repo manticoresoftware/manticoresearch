@@ -247,6 +247,8 @@ select id, j, s_color from fs1 facet j.color order by j.color desc;;
 select id, j, s_color from fs1 facet j.color order by s_color desc;;
 select id, j, s_color from fs1 facet s_color order by j.color desc;;
 
+<!-- group by JSON.field with string at select list vs multi-query -->
+select id, GROUPBY() as groupbystr, count(*) as c FROM facetdemo2 GROUP BY j['x'][0] ORDER BY groupbystr ASC; select id, GROUPBY() as groupbystr, count(*) as c FROM facetdemo2 GROUP BY j['a'][0] ORDER BY groupbystr ASC;
 </sphinxql></queries>
 
 </test>

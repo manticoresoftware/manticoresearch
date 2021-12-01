@@ -1063,7 +1063,8 @@ struct CSphMultiQueryArgs : public ISphNoncopyable
 	bool									m_bLocalDF = false;
 	const SmallStringHash_T<int64_t> *		m_pLocalDocs = nullptr;
 	int64_t									m_iTotalDocs = 0;
-	bool									m_bModifySorterSchemas {true};
+	bool									m_bModifySorterSchemas = true;
+	bool									m_bFinalizeSorters = true;
 	int										m_iSplit = 1;
 
 	CSphMultiQueryArgs ( int iIndexWeight );

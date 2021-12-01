@@ -27,7 +27,7 @@ void DiskChunkSearcherCtx_t::MergeChild ( DiskChunkSearcherCtx_t tChild ) const
 	// sorting results
 	ARRAY_CONSTFOREACH ( i, m_dSorters )
 		if ( tChild.m_dSorters[i] )
-			tChild.m_dSorters[i]->MoveTo ( m_dSorters[i] );
+			tChild.m_dSorters[i]->MoveTo ( m_dSorters[i], false );
 
 	auto & tChildRes = tChild.m_tMeta;
 

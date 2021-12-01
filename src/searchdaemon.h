@@ -892,19 +892,7 @@ public:
 	ISphRefcountedMT * TryAddThenGet ( ISphRefcountedMT * pValue, const CSphString &tKey ) EXCLUDES ( m_tIndexesRWLock );
 
 	// fake alias to private m_tLock to allow clang thread-safety analysis
-	CSphRwlock * IndexesRWLock () const RETURN_CAPABILITY ( m_tIndexesRWLock )
-	{ return nullptr; }
-
-	int GetGeneration() const
-	{
-		return m_iGeneration.load ( std::memory_order_relaxed );
-	}
-
-	// call on changes of plain indexes (mandatory) and m.b. others - to keep m_bRtLike or distr indexes in sync
-	void NextGeneration()
-	{
-		m_iGeneration.fetch_add ( 1, std::memory_order_relaxed );
-	}
+	CSphRwlock * IndexesRWLock () const RETURN_CAPABILITY ( m_tIndexesRWLock ) { return nullptr; }
 
 private:
 	int GetLengthUnl () const REQUIRES_SHARED ( m_tIndexesRWLock );
@@ -916,7 +904,6 @@ private:
 	mutable RwLock_t m_tIndexesRWLock; // distinguishable name for catch possible warnings
 	RefCntHash_t m_hIndexes GUARDED_BY ( m_tIndexesRWLock );
 	AddOrReplaceHookFn m_pHook = nullptr;
-	std::atomic<int> m_iGeneration {0}; // increments on every hash change of plain idxes
 };
 
 // multi-threaded hash iterator
@@ -1105,6 +1092,7 @@ struct OneResultset_t final : public DocstoreAndTag_t
 {
 	CSphSchema					m_tSchema;
 	CSphSwapVector<CSphMatch>	m_dMatches;
+	bool						m_bTagsAssigned = false;
 
 	int FillFromSorter ( ISphMatchSorter * pQueue );
 	void ClampMatches ( int iLimit );
@@ -1117,6 +1105,7 @@ inline void Swap ( OneResultset_t & a, OneResultset_t & b )
 {
 	a.m_tSchema.Swap( b.m_tSchema );
 	a.m_dMatches.SwapData ( b.m_dMatches );
+	Swap ( a.m_bTagsAssigned, b.m_bTagsAssigned );
 	Swap ( a.m_pDocstore, b.m_pDocstore );
 	Swap ( a.m_iTag, b.m_iTag );
 	Swap ( a.m_bTag, b.m_bTag );
@@ -1137,11 +1126,12 @@ struct AggrResult_t final: CSphQueryResultMeta
 	Debug (bool				m_bTagsCompacted = false;) // whether tags range is compact or has gaps
 	Debug (bool				m_bIdxByTag = false;) // if m_dResults[iTag].m_iTag==iTag is true for all results
 
-	int GetLength() const;
-	inline bool IsEmpty() const { return GetLength()==0; }
-	bool AddResultset ( ISphMatchSorter * pQueue, const DocstoreReader_i * pDocstore, int iTag, int iCutoff );
-	void ClampMatches ( int iLimit );
-	void ClampAllMatches ();
+	int				GetLength() const;
+	inline bool		IsEmpty() const { return GetLength()==0; }
+	bool			AddResultset ( ISphMatchSorter * pQueue, const DocstoreReader_i * pDocstore, int iTag, int iCutoff );
+	void			AddEmptyResultset ( const DocstoreReader_i * pDocstore, int iTag );
+	void			ClampMatches ( int iLimit );
+	void			ClampAllMatches();
 };
 
 class SearchHandler_c;

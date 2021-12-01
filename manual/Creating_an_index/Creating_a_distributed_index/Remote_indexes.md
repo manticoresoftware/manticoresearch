@@ -159,11 +159,11 @@ At the same time value provided as [retry_count](../../Searching/Options.md#retr
 
 ### agent_retry_delay
 
-`agent_retry_delay` integer, specifies the delay manticore rest before retrying to query a remote agent, if it fails. Value is in in milliseconds (or, may include time suffix). The value has sense only if non-zero `agent_retry_count` or non-zero per-query `OPTION retry_count` specified. Default is 500 (i.e., half a second). This value may be also specified on per-query basis using `OPTION retry_delay=XXX` clause. If per-query option exists, it will override the one specified in config.
+`agent_retry_delay` integer, specifies the delay manticore takes before retrying to query a remote agent, if it fails. The value is in in milliseconds (or may include time suffix). The value makes sense only if non-zero `agent_retry_count` or non-zero per-query `OPTION retry_count` specified. Default is 500 (half a second). This value may be also specified on per-query basis using `OPTION retry_delay=XXX` clause. If per-query option exists, it will override the one specified in config.
 
 ### client_timeout
 
-`client_timeout` defines maximum time to wait between requests when using persistent connections. It is in seconds, or may be written with time suffix. By default is 5 minutes.
+`client_timeout` defines maximum time to wait between requests when using persistent connections. It is in seconds, or may be written with time suffix. The default is 5 minutes.
 
 Example:
 

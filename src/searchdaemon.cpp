@@ -424,7 +424,7 @@ ListenerDesc_t ParseListener ( const char* sSpec, CSphString * pFatal )
 		} else
 		{
 			// host name on itself
-			tRes.m_uIP = sphGetAddress ( sSpec, GETADDR_STRICT, false, pFatal );
+			tRes.m_uIP = sphGetAddress ( sSpec, ( pFatal==nullptr ), false, pFatal );
 			if ( pFatal && !pFatal->IsEmpty() )
 				return g_tInvalidListener;
 		}
@@ -456,7 +456,7 @@ ListenerDesc_t ParseListener ( const char* sSpec, CSphString * pFatal )
 		tRes.m_uIP = htonl(INADDR_ANY);
 	} else
 	{
-		tRes.m_uIP = sphGetAddress ( dParts[0].cstr(), GETADDR_STRICT, false, pFatal );
+		tRes.m_uIP = sphGetAddress ( dParts[0].cstr(), ( pFatal==nullptr ), false, pFatal );
 		if ( pFatal && !pFatal->IsEmpty() )
 			return g_tInvalidListener;
 	}

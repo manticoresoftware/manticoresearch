@@ -253,7 +253,7 @@ static bool ClusterGetNodes ( const CSphString & sClusterNodes, const CSphString
 static bool RemoteClusterGetNodes ( const CSphString & sCluster, const CSphString & sGTID, CSphString & sError, CSphString & sNodes );
 
 // utility function to filter nodes list provided at string by specific protocol
-static void ClusterFilterNodes ( const CSphString & sSrcNodes, Proto_e eProto, CSphString & sDstNodes );
+static bool ClusterFilterNodes ( const CSphString & sSrcNodes, Proto_e eProto, CSphString & sDstNodes, CSphString & sError );
 
 // callback at remote node for CLUSTER_UPDATE_NODES to update nodes list at cluster from actual nodes list
 static bool RemoteClusterUpdateNodes ( const CSphString & sCluster, CSphString * pNodes, CSphString & sError );
@@ -2536,10 +2536,10 @@ void ReplicationStart ( const CSphConfigSection & hSearchd, const CSphVector<Lis
 	}
 
 	Threads::CallCoroutine ( [bNewCluster,bForce] () EXCLUDES ( g_tClustersLock ) {
-	CSphString sError;
 
 	for ( const ClusterDesc_t & tDesc : GetClustersInt() )
 	{
+		CSphString sError;
 		ReplicationArgs_t tArgs;
 		// global options
 		tArgs.m_bNewCluster = ( bNewCluster || bForce );
@@ -2557,11 +2557,16 @@ void ReplicationStart ( const CSphConfigSection & hSearchd, const CSphVector<Lis
 			CSphString sNodes;
 			if ( !ClusterGetNodes ( tDesc.m_sClusterNodes, tDesc.m_sName, "", sError, sNodes ) )
 			{
-				sphWarning ( "cluster '%s': no available nodes, replication is disabled, error: %s", tDesc.m_sName.cstr(), sError.cstr() );
+				sphWarning ( "cluster '%s': no available nodes (%s), replication is disabled, error: %s", tDesc.m_sName.cstr(), tDesc.m_sClusterNodes.cstr(), sError.cstr() );
 				continue;
 			}
 
-			ClusterFilterNodes ( sNodes, Proto_e::REPLICATION, tArgs.m_sNodes );
+			if ( !ClusterFilterNodes ( sNodes, Proto_e::REPLICATION, tArgs.m_sNodes, sError ) )
+			{
+				sphWarning ( "cluster '%s': invalid nodes '%s', replication is disabled, parse error: '%s'", tDesc.m_sName.cstr(), sNodes.cstr(), sError.cstr() );
+				continue;
+			}
+
 			if ( sNodes.IsEmpty() )
 			{
 				sphWarning ( "cluster '%s': no available nodes, replication is disabled", tDesc.m_sName.cstr() );
@@ -2727,11 +2732,15 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 	CSphString sNodes;
 	if ( !ClusterGetNodes ( pElem->m_sClusterNodes, pElem->m_sName, "", sError, sNodes ) )
 	{
-		sError.SetSprintf ( "cluster '%s', no nodes available, error '%s'", pElem->m_sName.cstr(), sError.cstr() );
+		sError.SetSprintf ( "cluster '%s', no nodes available(%s), error '%s'", pElem->m_sName.cstr(), pElem->m_sClusterNodes.cstr(), sError.cstr() );
 		return false;
 	}
 
-	ClusterFilterNodes ( sNodes, Proto_e::REPLICATION, tArgs.m_sNodes );
+	if ( !ClusterFilterNodes ( sNodes, Proto_e::REPLICATION, tArgs.m_sNodes, sError ) )
+	{
+		sError.SetSprintf ( "cluster '%s', invalid nodes(%s), error: %s", pElem->m_sName.cstr(), sNodes.cstr(), sError.cstr() );
+		return false;
+	}
 	if ( tArgs.m_sNodes.IsEmpty() )
 	{
 		sError.SetSprintf ( "cluster '%s', no nodes available", pElem->m_sName.cstr() );
@@ -3104,14 +3113,18 @@ struct ListenerProtocolIterator_t
 {
 	StringBuilder_c m_sNodes { "," };
 	Proto_e m_eProto;
+	CSphString * m_pError { nullptr };
 
-	explicit ListenerProtocolIterator_t ( Proto_e eProto )
+	ListenerProtocolIterator_t ( Proto_e eProto, CSphString * pError )
 		: m_eProto ( eProto )
+		, m_pError ( pError )
 	{}
 
 	bool SetNode ( const char * sListen )
 	{
-		ListenerDesc_t tListen = ParseListener ( sListen );
+		ListenerDesc_t tListen = ParseListener ( sListen, m_pError );
+		if ( tListen.m_eProto==Proto_e::UNKNOWN )
+			return false;
 
 		// filter out wrong protocol
 		if ( tListen.m_eProto!=m_eProto )
@@ -3127,11 +3140,13 @@ struct ListenerProtocolIterator_t
 };
 
 // utility function to filter nodes list provided at string by specific protocol
-void ClusterFilterNodes ( const CSphString & sSrcNodes, Proto_e eProto, CSphString & sDstNodes )
+bool ClusterFilterNodes ( const CSphString & sSrcNodes, Proto_e eProto, CSphString & sDstNodes, CSphString & sError )
 {
-	ListenerProtocolIterator_t tIt ( eProto );
+	ListenerProtocolIterator_t tIt ( eProto, &sError );
 	GetNodes_T ( sSrcNodes, tIt );
 	sDstNodes = tIt.m_sNodes.cstr();
+
+	return ( sError.IsEmpty() );
 }
 
 // base of API commands request and reply builders
@@ -5361,7 +5376,11 @@ bool RemoteClusterUpdateNodes ( const CSphString & sCluster, CSphString * pNodes
 	{
 		ReplicationCluster_t * pCluster = *ppCluster;
 		ScopedMutex_t tNodesLock ( (*ppCluster)->m_tViewNodesLock );
-		ClusterFilterNodes ( pCluster->m_sViewNodes, Proto_e::SPHINX, pCluster->m_sClusterNodes );
+		if ( !ClusterFilterNodes ( pCluster->m_sViewNodes, Proto_e::SPHINX, pCluster->m_sClusterNodes, sError ) )
+		{
+			sError.SetSprintf ( "cluster '%s', invalid nodes(%s), error: %s", sCluster.cstr(), pCluster->m_sViewNodes.cstr(), sError.cstr() );
+			return false;
+		}
 		if ( pNodes )
 			*pNodes = pCluster->m_sClusterNodes;
 	}

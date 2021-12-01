@@ -104,9 +104,6 @@
 #define SPH_ADDRPORT_SIZE        sizeof("000.000.000.000:00000")
 #define NETOUTBUF                8192
 
-// strict check, sphGetAddress will die with sphFatal() on failure
-#define GETADDR_STRICT	true
-
 volatile bool& sphGetGotSighup() noexcept;
 volatile bool& sphGetGotSigusr1() noexcept;
 volatile bool& sphGetGotSigusr2() noexcept;
@@ -284,7 +281,7 @@ int sphPoll( int iSock, int64_t tmTimeout, bool bWrite = false );
 /** \brief wrapper over getaddrinfo
 Invokes getaddrinfo for given host which perform name resolving (dns).
  \param[in] sHost the host name
- \param[in] bFatal whether failed resolving is fatal (false by default)
+ \param[in] bFatal whether failed resolving is fatal (false by default) - FIXME!!! true not used any more, refactor and remove that argument
  \param[in] bIP set true if sHost contains IP address (false by default)
  so no potentially lengthy network host address lockup necessary
  \return ipv4 address as DWORD, to be directly used as s_addr in connect(). */

@@ -145,6 +145,8 @@ select min(length(to_string(title))) from META:all;
 select max(length(to_string(title))) from META:all;
 
 select length(title) from META:all;
+
+select id,price from META:all where price=101;
 </sphinxql></queries>
 
 </test>

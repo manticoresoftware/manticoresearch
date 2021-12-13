@@ -1218,7 +1218,7 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 
 	const int L_STEPBACK	= 16;
 	const int L_TOKEN		= 64;
-	const int L_BUFFER		= 8192;
+	const int L_BUFFER		= 32768;
 
 	FILE * fp = nullptr;
 	if ( !pBuffer )

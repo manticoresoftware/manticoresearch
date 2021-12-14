@@ -5857,7 +5857,8 @@ public:
 			dResults[iQuery].AddResultset ( pLastSorter, m_dSorters[iQuery][0].m_pDocstore, m_dSorters[iQuery][0].m_iTag, m_dQueries[iQuery].m_iCutoff );
 
 			// we already assigned index/docstore tags to all matches; no need to do it again
-			dResults[iQuery].m_dResults[0].m_bTagsAssigned = true;
+			if ( dResults[iQuery].m_dResults.GetLength() )
+				dResults[iQuery].m_dResults[0].m_bTagsAssigned = true;
 
 			// add fake empty result sets (for tag->docstore lookup)
 			for ( int i = 1; i < m_dSorters[iQuery].GetLength(); i++ )

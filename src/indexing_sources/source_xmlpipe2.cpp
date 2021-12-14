@@ -123,6 +123,8 @@ static const char * GET_ICONV_LIB ()
 		#define sph_iconv_open iconv_open
 		#define InitDynamicIconv() (true)
 	#endif
+#else
+	#define InitDynamicIconv() (true)
 #endif
 
 /// XML pipe source implementation (v2)

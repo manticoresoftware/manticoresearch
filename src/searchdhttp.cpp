@@ -900,8 +900,7 @@ public:
 
 		JsonRowBuffer_c tOut;
 
-		SphinxqlSessionPublic tSession;
-		tSession.Execute ( FromStr ( sQuery ), tOut );
+		session::Execute ( FromStr ( sQuery ), tOut );
 
 		BuildReply ( tOut.Finish(), SPH_HTTP_STATUS_200 );
 
@@ -924,7 +923,7 @@ public:
 		{
 			sError.SetSprintf( "Error parsing json query: %s", sError.cstr() );
 			ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
-			return NULL;
+			return nullptr;
 		}
 
 		m_eQueryType = QUERY_JSON;
@@ -945,18 +944,16 @@ class HttpJsonInsertTraits_c
 protected:
 	bool ProcessInsert ( SqlStmt_t & tStmt, DocID_t tDocId, bool bReplace, JsonObj_c & tResult )
 	{
-		CSphSessionAccum tAcc;
-		CSphString sWarning;
 		HttpErrorReporter_c tReporter;
-		CSphVector<int64_t> dLastIds;
-		sphHandleMysqlInsert ( tReporter, tStmt, bReplace, true, sWarning, tAcc, dLastIds );
+		sphHandleMysqlInsert ( tReporter, tStmt );
 
 		if ( tReporter.IsError() )
 		{
 			tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), tReporter.GetError() );
 		} else
 		{
-			if ( dLastIds.GetLength() )
+			auto dLastIds = session::LastIds();
+			if ( !dLastIds.IsEmpty() )
 				tDocId = dLastIds[0];
 			tResult = sphEncodeInsertResultJson ( tStmt.m_sIndex.cstr(), bReplace, tDocId );
 		}
@@ -1007,8 +1004,7 @@ protected:
 	bool ProcessUpdate ( const char * szRawRequest, const SqlStmt_t & tStmt, DocID_t tDocId, JsonObj_c & tResult )
 	{
 		HttpErrorReporter_c tReporter;
-		CSphString sWarning;
-		sphHandleMysqlUpdate ( tReporter, tStmt, FromSz ( szRawRequest ), sWarning );
+		sphHandleMysqlUpdate ( tReporter, tStmt, FromSz ( szRawRequest ) );
 
 		if ( tReporter.IsError() )
 			tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), tReporter.GetError() );
@@ -1067,10 +1063,8 @@ class HttpJsonDeleteTraits_c
 protected:
 	bool ProcessDelete ( const char * szRawRequest, const SqlStmt_t & tStmt, DocID_t tDocId, JsonObj_c & tResult )
 	{
-		CSphSessionAccum tAcc;
 		HttpErrorReporter_c tReporter;
-		CSphString sWarning;
-		sphHandleMysqlDelete ( tReporter, tStmt, FromSz ( szRawRequest ), true, tAcc );
+		sphHandleMysqlDelete ( tReporter, tStmt, FromSz ( szRawRequest ) );
 
 		if ( tReporter.IsError() )
 			tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), tReporter.GetError() );

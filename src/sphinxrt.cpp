@@ -6867,7 +6867,7 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 			return; // already nothing to do, early finish.
 
 		auto tCtx = tClonableCtx.CloneNewContext ( &iChunk );
-		Threads::Coro::Throttler_c tThrottler ( session::ThrottlingPeriodMS () );
+		Threads::Coro::Throttler_c tThrottler ( session::GetThrottlingPeriodMS () );
 		int iTick=1; // num of times coro rescheduled by throttler
 		while ( !bInterrupt ) // some earlier job met error; abort.
 		{
@@ -8227,7 +8227,7 @@ CSphString RtIndex_c::MakeChunkName ( int iChunkID )
 	return sChunk;
 }
 
-// CSphinxqlSession::Execute->HandleMysqlAttach->AttachDiskIndex
+// ClientSession_c::Execute->HandleMysqlAttach->AttachDiskIndex
 bool RtIndex_c::AttachDiskIndex ( CSphIndex* pIndex, bool bTruncate, bool & bFatal, StrVec_t & dWarnings, CSphString & sError )
 {
 	// from the next line we work in index simple scheduler. That made everything much simpler

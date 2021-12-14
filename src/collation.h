@@ -62,5 +62,6 @@ SphStringCmp_fn GetStringCmpFunc ( ESphCollation eCollation );
 StrHashCalc_fn	GetStringHashCalcFunc ( ESphCollation eCollation );
 
 void sphCollationInit();
+volatile ESphCollation& GlobalCollation();
 
 #endif // _collation_

@@ -42,6 +42,7 @@
 #include "conversion.h"
 #include "binlog.h"
 #include "task_info.h"
+#include "client_task_info.h"
 #include "chunksearchctx.h"
 #include "lrucache.h"
 #include "indexfiles.h"
@@ -10688,7 +10689,7 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 			return; // already nothing to do, early finish.
 
 		auto tCtx = tClonableCtx.CloneNewContext ( &iChunk );
-		Threads::Coro::Throttler_c tThrottler ( session::ThrottlingPeriodMS() );
+		Threads::Coro::Throttler_c tThrottler ( session::GetThrottlingPeriodMS() );
 		int iTick=1; // num of times coro rescheduled by throttler
 		while ( !bInterrupt ) // some earlier job met error; abort.
 		{

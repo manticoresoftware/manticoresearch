@@ -1,0 +1,93 @@
+//
+// Copyright (c) 2021, Manticore Software LTD (https://manticoresearch.com)
+// All rights reserved
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU General Public License. You should have
+// received a copy of the GPL license along with this program; if you
+// did not, you can find it at http://www.gnu.org
+//
+
+#include "client_task_info.h"
+#include "client_session.h"
+
+DEFINE_RENDER ( ClientTaskInfo_t )
+{
+	auto& tInfo = *(ClientTaskInfo_t*)pSrc;
+
+	((MiniTaskInfo_t&)tInfo).RenderWithoutChain ( dDst );
+
+	dDst.m_sClientName << tInfo.m_sClientName;
+	if ( tInfo.m_bVip )
+		dDst.m_sClientName << "vip";
+	dDst.m_iConnID = tInfo.m_iConnID;
+	dDst.m_eTaskState = tInfo.m_eTaskState;
+	dDst.m_eProto = tInfo.m_eProto;
+	dDst.m_sProto << ProtoName ( tInfo.m_eProto );
+	dDst.m_sChain << "Conn ";
+	if ( tInfo.m_bSsl )
+		dDst.m_sProto << "ssl";
+}
+
+
+MiniTaskInfo_t* myinfo::HazardGetMini()
+{
+	return (MiniTaskInfo_t*)myinfo::HazardGetNode ( [] ( TaskInfo_t* pNode ) {
+		return pNode->m_eType == MiniTaskInfo_t::m_eTask || pNode->m_eType == ClientTaskInfo_t::m_eTask;
+	} );
+}
+
+
+ClientTaskInfo_t * HazardGetClient ()
+{
+	return (ClientTaskInfo_t *) myinfo::GetHazardTypedNode ( ClientTaskInfo_t::m_eTask );
+}
+
+ClientTaskInfo_t & ClientTaskInfo_t::Info ( bool bStrict )
+{
+	auto * pInfo = HazardGetClient();
+	if ( !pInfo )
+	{
+		static ClientTaskInfo_t tStub;
+		pInfo = &tStub;
+		if ( bStrict )
+			sphWarning ( "internal error: session::Info () invoked with empty tls!" );
+	}
+
+	return *pInfo;
+}
+
+void ClientTaskInfo_t::SetTaskState ( TaskState_e eState )
+{
+	m_eTaskState = eState;
+	m_tmStart = sphMicroTimer();
+}
+
+ClientSession_c* ClientTaskInfo_t::GetClientSession()
+{
+	if ( !m_pSession )
+		m_pSession = new ClientSession_c;
+	return m_pSession;
+}
+
+ClientTaskInfo_t::~ClientTaskInfo_t()
+{
+	SafeDelete ( m_pSession );
+}
+
+volatile int &getDistThreads ()
+{
+	static int iDistThreads = 0;
+	return iDistThreads;
+}
+
+int GetEffectiveDistThreads ()
+{
+	auto iSessionVal = ClientTaskInfo_t::Info().m_iDistThreads;
+	return iSessionVal ? iSessionVal : getDistThreads ();
+}
+
+CSphSessionAccum::~CSphSessionAccum()
+{
+	SafeDelete ( m_pAcc );
+}

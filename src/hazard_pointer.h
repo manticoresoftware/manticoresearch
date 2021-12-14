@@ -86,7 +86,7 @@ class ScopedPtr_T : ISphNoncopyable
 
 public:
 	///< default ctr (for vectors)
-	explicit ScopedPtr_T () {}
+	explicit ScopedPtr_T () = default;
 
 	/// construction from raw pointer
 	explicit ScopedPtr_T ( PTR pPtr )

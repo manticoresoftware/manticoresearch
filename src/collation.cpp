@@ -389,3 +389,9 @@ StrHashCalc_fn GetStringHashCalcFunc ( ESphCollation eCollation )
 	default:							return LibcCIHash_fn::Hash;
 	}
 }
+
+volatile ESphCollation& GlobalCollation()
+{
+	static ESphCollation eCollation = SPH_COLLATION_DEFAULT;
+	return eCollation;
+}

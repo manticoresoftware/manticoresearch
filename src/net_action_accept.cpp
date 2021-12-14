@@ -212,18 +212,18 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 			case Proto_e::HTTPS:
 			case Proto_e::HTTP :
 			{
-				Threads::Coro::Go ( [pBuf = std::move ( pBuf ), tConn, pInfo = pClientInfo.LeakPtr(), eProto ] () mutable
+				Threads::Coro::Go ( [pBuf = std::move ( pBuf ), tConn, _pInfo = pClientInfo.LeakPtr(), eProto ] () mutable
 					{
-						ScopedClientInfo_t __ { pInfo }; // make visible task info
+						ScopedClientInfo_t pInfo { _pInfo }; // make visible task info
 						MultiServe ( std::move ( pBuf ), tConn, eProto );
 					}, fnMakeScheduler () );
 				break;
 			}
 			case Proto_e::MYSQL41:
 			{
-				Threads::Coro::Go ( [pBuf = std::move ( pBuf ), pInfo = pClientInfo.LeakPtr () ] () mutable
+				Threads::Coro::Go ( [pBuf = std::move ( pBuf ), _pInfo = pClientInfo.LeakPtr () ] () mutable
 					{
-						ScopedClientInfo_t __ { pInfo }; // make visible task info
+						ScopedClientInfo_t pInfo { _pInfo }; // make visible task info
 						SqlServe ( std::move ( pBuf ) );
 					}, fnMakeScheduler () );
 				break;

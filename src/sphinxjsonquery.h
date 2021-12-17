@@ -47,6 +47,7 @@ JsonObj_c		sphEncodeInsertResultJson ( const char * szIndex, bool bReplace, DocI
 JsonObj_c		sphEncodeUpdateResultJson ( const char * szIndex, DocID_t tDocId, int iAffected );
 JsonObj_c 		sphEncodeDeleteResultJson ( const char * szIndex, DocID_t tDocId, int iAffected );
 JsonObj_c		sphEncodeInsertErrorJson ( const char * szIndex, const char * szError );
+JsonObj_c		sphEncodeTxnResultJson ( const char* szIndex, DocID_t tDocId, int iInserts, int iDeletes, int iUpdates );
 
 bool			sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings, bool bUpdate );
 

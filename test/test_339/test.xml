@@ -25,6 +25,16 @@ index test_rt
     rt_attr_uint = int_col
 	rt_attr_float = flt_col
 }
+
+index test2
+{
+    type = rt
+    path = <data_path/>/rt2
+    rt_field = title
+	rt_field = content
+    rt_attr_uint = int_col
+	rt_attr_float = flt_col
+}
 </config>
 
 <httpqueries>
@@ -68,6 +78,27 @@ index test_rt
 { "insert" : { "index" : "test_rt", "id" : 8, "doc": { "int_col" : 8, "flt_col" : 8.8, "content" : "bulk doc eight" } } }
 { "insert" : { "index" : "test_rt", "id" : 9, "doc": { "int_col" : 9, "flt_col" : 9.9, "content" : "bulk doc nine" } } }
 { "insert" : { "index" : "test_rt", "id" :10, "doc": { "int_col" :10, "flt_col" :10.10,"content" : "bulk doc ten" } } }
+</query>
+
+<!-- multibulk -->
+
+<query endpoint="json/bulk" content="application/x-ndjson">
+{ "insert" : { "index" : "test_rt", "id" : 11, "doc": { "int_col" : 1, "flt_col" : 1.1, "content" : "bulk doc one" } } }
+{ "replace" : { "index" : "test_rt", "id" : 2, "doc": { "int_col" : 2, "flt_col" : 2.2, "content" : "bulk doc two" } } }
+{ "delete" : { "index" : "test_rt", "id" : 3 } }
+</query>
+
+<query endpoint="json/bulk" content="application/x-ndjson">
+{ "insert" : { "index" : "test_rt", "id" : 21, "doc": { "int_col" : 1, "flt_col" : 1.1, "content" : "bulk doc one" } } }
+{ "insert" : { "index" : "test_rt", "id" : 22, "doc": { "int_col" : 2, "flt_col" : 2.2, "content" : "bulk doc two" } } }
+{ "insert" : { "index" : "test_rt", "id" : 23, "doc": { "int_col" : 3, "flt_col" : 3.3, "content" : "bulk doc three" } } }
+{ "insert" : { "index" : "test2", "id" : 24, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "bulk doc four" } } }
+{ "insert" : { "index" : "test2", "id" : 25, "doc": { "int_col" : 5, "flt_col" : 5.5, "content" : "bulk doc five" } } }
+{ "insert" : { "index" : "test_rt", "id" : 26, "doc": { "int_col" : 6, "flt_col" : 6.6, "content" : "bulk doc six" } } }
+{ "insert" : { "index" : "test_rt", "id" : 27, "doc": { "int_col" : 7, "flt_col" : 7.7, "content" : "bulk doc seven" } } }
+{ "insert" : { "index" : "test2", "id" : 28, "doc": { "int_col" : 8, "flt_col" : 8.8, "content" : "bulk doc eight" } } }
+{ "insert" : { "index" : "test2", "id" : 29, "doc": { "int_col" : 9, "flt_col" : 9.9, "content" : "bulk doc nine" } } }
+{ "insert" : { "index" : "test2", "id" : 30, "doc": { "int_col" :10, "flt_col" :10.10,"content" : "bulk doc ten" } } }
 </query>
 
 <query endpoint="json/search">{ "index": "test_rt", "query": { "match_all": {} }, "sort": [ "id" ] } }</query>

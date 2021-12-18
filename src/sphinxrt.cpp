@@ -8064,6 +8064,12 @@ void RtIndex_c::AddFieldToRamchunk ( const CSphString & sFieldName, DWORD uField
 	if ( !(uFieldFlags & CSphColumnInfo::FIELD_STORED) )
 		return;
 
+	if ( !m_pDocstoreFields )
+	{
+		CSphScopedPtr<DocstoreFields_i> pDocstoreFields { CreateDocstoreFields() };
+		m_pDocstoreFields.Swap ( pDocstoreFields );
+	}
+
 	assert ( m_pDocstoreFields.Ptr() );
 	m_pDocstoreFields->AddField ( sFieldName, DOCSTORE_TEXT );
 

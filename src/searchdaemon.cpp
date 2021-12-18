@@ -335,12 +335,25 @@ static bool ProtoByName ( CSphString sFullProto, ListenerDesc_t & tDesc, CSphStr
 			return false;
 	}
 
-	if ( dParts.GetLength()==1 )
+	if ( dParts.GetLength() == 1 )
 		return true;
 
-	if ( dParts.GetLength()==2 && dParts[1]=="vip" )
+	if ( dParts.GetLength() >= 2 )
 	{
-		tDesc.m_bVIP = true;
+		bool bOk = dParts.GetLength() == 2;
+		if ( dParts[1] == "vip" )
+			tDesc.m_bVIP = true;
+		else if ( dParts[1] == "readonly" )
+			tDesc.m_bReadOnly = true;
+		else
+			bOk = false;
+		if ( bOk )
+			return true;
+	}
+
+	if ( dParts.GetLength() == 3 && dParts[2] == "readonly" )
+	{
+		tDesc.m_bReadOnly = true;
 		return true;
 	}
 
@@ -359,6 +372,7 @@ ListenerDesc_t ParseListener ( const char* sSpec, CSphString * pFatal )
 	tRes.m_iPort = SPHINXAPI_PORT;
 	tRes.m_iPortsCount = 0;
 	tRes.m_bVIP = false;
+	tRes.m_bReadOnly = false;
 
 	// split by colon
 	auto dParts = sphSplit( sSpec, ":" ); // diff. parts are :-separated

@@ -210,6 +210,7 @@ struct ListenerDesc_t
 	int m_iPort = 0;
 	int m_iPortsCount = 0;
 	bool m_bVIP = false;
+	bool m_bReadOnly = false;
 };
 
 // 'like' matcher

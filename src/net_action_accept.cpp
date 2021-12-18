@@ -199,6 +199,7 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 		pClientInfo->SetClientName ( szClientName );
 		pClientInfo->SetConnID ( iConnID );
 		pClientInfo->SetVip ( m_tListener.m_bVIP );
+		pClientInfo->SetReadOnly( m_tListener.m_bReadOnly );
 
 		NetConnection_t tConn = { iClientSock, saStorage.ss_family };
 		SockWrapperPtr_c pSock ( new SockWrapper_c ( iClientSock, pClientNetLoop ) );

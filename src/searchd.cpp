@@ -1297,11 +1297,12 @@ int sphCreateInetSocket ( const ListenerDesc_t & tDesc ) REQUIRES ( MainThread )
 	char sAddress[SPH_ADDRESS_SIZE];
 	sphFormatIP ( sAddress, SPH_ADDRESS_SIZE, uAddr );
 	const char * sVip = tDesc.m_bVIP ? "VIP " : "";
+	const char * sRO = tDesc.m_bReadOnly ? "RO " : "";
 
 	if ( uAddr==htonl ( INADDR_ANY ) )
-		sphInfo ( "listening on all interfaces for %s%s, port=%d", sVip, RelaxedProtoName ( tDesc.m_eProto), iPort );
+		sphInfo ( "listening on all interfaces for %s%s%s, port=%d", sVip, sRO, RelaxedProtoName ( tDesc.m_eProto), iPort );
 	else
-		sphInfo ( "listening on %s:%d for %s%s", sAddress, iPort, sVip, RelaxedProtoName ( tDesc.m_eProto ) );
+		sphInfo ( "listening on %s:%d for %s%s%s", sAddress, iPort, sVip, sRO, RelaxedProtoName ( tDesc.m_eProto ) );
 
 	static struct sockaddr_in iaddr;
 	memset ( &iaddr, 0, sizeof(iaddr) );
@@ -1342,6 +1343,7 @@ ListenerDesc_t MakeAnyListener ( int iPort, Proto_e eProto=Proto_e::SPHINX )
 	tDesc.m_iPort = iPort;
 	tDesc.m_iPortsCount = 0;
 	tDesc.m_bVIP = false;
+	tDesc.m_bReadOnly = false;
 	return tDesc;
 }
 
@@ -1355,6 +1357,7 @@ bool AddGlobalListener ( const ListenerDesc_t& tDesc ) REQUIRES ( MainThread )
 	tListener.m_eProto = tDesc.m_eProto;
 	tListener.m_bTcp = true;
 	tListener.m_bVIP = tDesc.m_bVIP;
+	tListener.m_bReadOnly = tDesc.m_bReadOnly;
 
 #if !_WIN32
 	if ( !tDesc.m_sUnix.IsEmpty () )

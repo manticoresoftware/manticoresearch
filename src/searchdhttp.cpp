@@ -749,31 +749,37 @@ public:
 
 	void PutFloatAsString ( float fVal, const char * ) override
 	{
+		AddDataColumn();
 		m_dBuf << fVal;
 	}
 
 	void PutNumAsString ( int64_t iVal ) override
 	{
+		AddDataColumn();
 		m_dBuf << iVal;
 	}
 
 	void PutNumAsString ( uint64_t uVal ) override
 	{
+		AddDataColumn();
 		m_dBuf << uVal;
 	}
 
 	void PutNumAsString ( int iVal ) override
 	{
+		AddDataColumn();
 		m_dBuf << iVal;
 	}
 	
 	void PutNumAsString ( DWORD uVal ) override
 	{
+		AddDataColumn();
 		m_dBuf << uVal;
 	}
 
 	void PutArray ( const void * pBlob, int iLen, bool ) override
 	{
+		AddDataColumn();
 		if ( iLen < 0 )
 			m_dBuf.FixupSpacedAndAppendEscaped ( static_cast<const char*> ( pBlob ) );
 		else
@@ -792,14 +798,16 @@ public:
 
 	void PutNULL() override
 	{
+		AddDataColumn();
 		m_dBuf << "null";
 	}
 
 	bool Commit() override
 	{
-		m_dBuf.FinishBlock ( false );
-		m_dBuf.ArrayBlock();
+		m_dBuf.FinishBlock ( false ); // finish previous item
+		m_dBuf.ObjectBlock(); // start new item
 		++m_iTotalRows;
+		m_iCol = 0;
 		return true;
 	}
 
@@ -807,26 +815,20 @@ public:
 	{
 		m_dBuf.FinishBlock ( true ); // last doc, allow empty
 		m_dBuf.FinishBlock ( false ); // docs section
-		m_dBuf.NamedVal ( "total", m_iTotalRows );
-		m_dBuf.NamedString ( "error", "" );
-		m_dBuf.NamedString ( "warning", "" );
+		DataFinish ( m_iTotalRows, "", "" );
 		m_dBuf.FinishBlock ( false ); // root object
 	}
 
 	void Error ( const char *, const char * sError, MysqlErrors_e iErr ) override
 	{
 		auto _ = m_dBuf.Object ( false );
-		m_dBuf.NamedVal ( "total", 0 );
-		m_dBuf.NamedString ( "error", sError );
-		m_dBuf.NamedString ( "warning", "" );
+		DataFinish ( 0, sError, "" );
 	}
 
 	void Ok ( int iAffectedRows, int iWarns, const char * sMessage, bool bMoreResults, int64_t iLastInsertId ) override
 	{
 		auto _ = m_dBuf.Object ( false );
-		m_dBuf.NamedVal ( "total", iAffectedRows );
-		m_dBuf.NamedString ( "error", "" );
-		m_dBuf.NamedString ( "warning", sMessage );
+		DataFinish ( iAffectedRows, "", sMessage );
 	}
 
 	void HeadBegin ( int iCols ) override
@@ -844,16 +846,19 @@ public:
 		m_dBuf.FinishBlock(false);
 		m_dBuf.Named ( "data" );
 		m_dBuf.ArrayWBlock();
-		m_dBuf.ArrayBlock();
+		m_dBuf.ObjectBlock();
 		return true;
 	}
 
 	void HeadColumn ( const char * szName, MysqlColumnType_e eType ) override
 	{
-		--m_iExpectedColumns;
-		auto _ = m_dBuf.ObjectW(false);
-		m_dBuf.NamedString( "name", szName );
+		ColumnNameType_t tCol { szName, eType };
+		auto _ = m_dBuf.Object(false);
+		m_dBuf.AppendName ( tCol.first.cstr() );
+		auto tTypeBlock = m_dBuf.Object(false);
 		m_dBuf.NamedVal ( "type", eType );
+		m_dColumns.Add ( tCol );
+		--m_iExpectedColumns;
 	}
 
 	void Add ( BYTE ) override {}
@@ -866,8 +871,25 @@ public:
 
 private:
 	JsonEscapedBuilder m_dBuf;
+	CSphVector<ColumnNameType_t> m_dColumns;
 	int m_iExpectedColumns = 0;
 	int m_iTotalRows = 0;
+	int m_iCol = 0;
+
+	void AddDataColumn()
+	{
+		m_dBuf.AppendName ( m_dColumns[m_iCol].first.cstr() );
+		++m_iCol;
+	}
+
+	void DataFinish ( int iTotal, const char* szError, const char* szWarning )
+	{
+		m_dBuf.NamedVal ( "total", iTotal );
+		m_dBuf.NamedString ( "error", szError );
+		m_dBuf.NamedString ( "warning", szWarning );
+		m_iCol = 0;
+		m_dColumns.Reset();
+	}
 };
 
 static const char g_sBypassToken[] = "raw&query=";

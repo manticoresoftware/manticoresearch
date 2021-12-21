@@ -70,6 +70,7 @@ public:
 	static int				ParserUrl ( http_parser * pParser, const char * sAt, size_t iLen );
 	static int				ParserHeaderField ( http_parser * pParser, const char * sAt, size_t iLen );
 	static int				ParserHeaderValue ( http_parser * pParser, const char * sAt, size_t iLen );
+	static int				ParseHeaderCompleted ( http_parser * pParser );
 	static int				ParserBody ( http_parser * pParser, const char * sAt, size_t iLen );
 
 private:
@@ -92,6 +93,7 @@ bool HttpRequestParser_c::Parse ( const BYTE * pData, int iDataLen )
 	tParserSettings.on_url = HttpRequestParser_c::ParserUrl;
 	tParserSettings.on_header_field = HttpRequestParser_c::ParserHeaderField;
 	tParserSettings.on_header_value = HttpRequestParser_c::ParserHeaderValue;
+	tParserSettings.on_headers_complete = HttpRequestParser_c::ParseHeaderCompleted;
 	tParserSettings.on_body = HttpRequestParser_c::ParserBody;
 
 	http_parser tParser;
@@ -259,6 +261,15 @@ int HttpRequestParser_c::ParserHeaderValue ( http_parser * pParser, const char *
 	auto * pHttpParser = (HttpRequestParser_c *)pParser->data;
 	pHttpParser->m_hOptions.Add ( sVal, pHttpParser->m_sCurField );
 	pHttpParser->m_sCurField = "";
+	return 0;
+}
+
+int HttpRequestParser_c::ParseHeaderCompleted ( http_parser* pParser )
+{
+	// we're not support connection upgrade - so just reset upgrade flag, if detected.
+	// rfc7540 section-3.2 (for http/2) says, we just should continue as if no 'upgrade' header was found
+	if ( pParser->upgrade )
+		pParser->upgrade = 0;
 	return 0;
 }
 

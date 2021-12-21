@@ -60,6 +60,7 @@ public:
 	bool					ParseList ( const char * sAt, int iLen );
 
 	const CSphString &		GetBody() const { return m_sRawBody; }
+	Str_t					GetRawUrlQuery() const { return m_sRawUrlQuery; }
 	ESphHttpEndpoint		GetEndpoint() const { return m_eEndpoint; }
 	const OptionsHash_t &	GetOptions() const { return m_hOptions; }
 	const CSphString &		GetInvalidEndpoint() const { return m_sInvalidEndpoint; }
@@ -79,6 +80,7 @@ private:
 	ESphHttpEndpoint		m_eEndpoint {SPH_HTTP_ENDPOINT_TOTAL};
 	CSphString				m_sInvalidEndpoint;
 	CSphString				m_sRawBody;
+	Str_t					m_sRawUrlQuery { dEmptyStr };
 	CSphString				m_sCurField;
 	OptionsHash_t			m_hOptions;
 	CSphString				m_sEndpoint;
@@ -126,12 +128,12 @@ static int Char2Hex ( BYTE uChar )
 	return -1;
 }
 
-static void UriPercentReplace ( CSphString & sEntity, bool bAlsoPlus=true )
+static void UriPercentReplace ( const char* szEntity, bool bAlsoPlus=true )
 {
-	if ( sEntity.IsEmpty() )
+	if ( !szEntity || !*szEntity )
 		return;
 
-	char * pDst = const_cast<char *> ( sEntity.cstr() );
+	char* pDst = const_cast<char*> ( szEntity );
 	const char * pSrc = pDst;
 	char cPlus = bAlsoPlus ? ' ' : '+';
 	while ( *pSrc )
@@ -155,9 +157,15 @@ static void UriPercentReplace ( CSphString & sEntity, bool bAlsoPlus=true )
 	*pDst = '\0';
 }
 
+static void UriPercentReplace ( CSphString & sEntity, bool bAlsoPlus=true )
+{
+	return UriPercentReplace ( sEntity.cstr(), bAlsoPlus );
+}
+
 
 bool HttpRequestParser_c::ParseList ( const char * sAt, int iLen )
 {
+	m_sRawUrlQuery = { sAt, iLen };
 	const char * sCur = sAt;
 	const char * sEnd = sAt + iLen;
 	const char * sLast = sCur;
@@ -892,8 +900,6 @@ private:
 	}
 };
 
-static const char g_sBypassToken[] = "raw&query=";
-
 class HttpRawSqlHandler_c : public HttpHandler_c, public HttpOptionsTraits_c
 {
 public:
@@ -905,15 +911,16 @@ public:
 
 	bool Process () override
 	{
-		CSphString sQuery = m_sQuery + sizeof ( g_sBypassToken ) - 1;
-		CSphString sError;
+		Str_t dQuery = FromSz(m_sQuery);
+		if ( IsEmpty(dQuery) )
+		{
+			ReportError ( "query missing", SPH_HTTP_STATUS_400 );
+			return false;
+		}
 
 		JsonRowBuffer_c tOut;
-
-		session::Execute ( FromStr ( sQuery ), tOut );
-
+		session::Execute ( dQuery, tOut );
 		BuildReply ( tOut.Finish(), SPH_HTTP_STATUS_200 );
-
 		return true;
 	}
 };
@@ -1235,24 +1242,31 @@ private:
 };
 
 
-static HttpHandler_c * CreateHttpHandler ( ESphHttpEndpoint eEndpoint, const char * sQuery, const OptionsHash_t & tOptions, http_method eRequestType )
+static HttpHandler_c * CreateHttpHandler ( ESphHttpEndpoint eEndpoint, const char * sQuery, Str_t dRawUrlQuery, const OptionsHash_t & tOptions, http_method eRequestType )
 {
 	const CSphString * pRawSQL = nullptr;
 
 	switch ( eEndpoint )
 	{
 	case SPH_HTTP_ENDPOINT_SQL:
-		pRawSQL = tOptions ( "decoded_mode" );
-		if ( pRawSQL && pRawSQL->Begins ( g_sBypassToken ) ) // test for 'raw&query=...'
+		pRawSQL = tOptions ( "mode" );
+		if ( pRawSQL && *pRawSQL=="raw" )
 		{
-			if (!sQuery)
-				sQuery = pRawSQL->cstr ();
-			else
-				sQuery += sizeof ( "mode=" )-1;
+			auto pQuery = tOptions ( "query" );
+			sQuery = pQuery ? pQuery->cstr() : nullptr;
 			return new HttpRawSqlHandler_c ( sQuery, tOptions );
 		}
 		else
 			return new HttpSearchHandler_SQL_c ( sQuery, tOptions );
+
+	case SPH_HTTP_ENDPOINT_CLI:
+		if ( !sQuery )
+		{
+			sQuery = dRawUrlQuery.first;
+			const_cast<char*> ( sQuery )[dRawUrlQuery.second] = '\0'; // fixme! const breakage...
+			UriPercentReplace ( sQuery, false ); // fixme! const breakage...
+		}
+		return new HttpRawSqlHandler_c ( sQuery, tOptions );
 
 	case SPH_HTTP_ENDPOINT_JSON_SEARCH:
 		return new HttpHandler_JsonSearch_c ( sQuery, tOptions );
@@ -1283,9 +1297,9 @@ static HttpHandler_c * CreateHttpHandler ( ESphHttpEndpoint eEndpoint, const cha
 }
 
 
-static bool sphProcessHttpQuery ( ESphHttpEndpoint eEndpoint, const char * sQuery, const SmallStringHash_T<CSphString> & tOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType )
+static bool sphProcessHttpQuery ( ESphHttpEndpoint eEndpoint, const char * sQuery, Str_t dRawUrlQuery, const SmallStringHash_T<CSphString> & tOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType )
 {
-	CSphScopedPtr<HttpHandler_c> pHandler ( CreateHttpHandler ( eEndpoint, sQuery, tOptions, eRequestType ) );
+	CSphScopedPtr<HttpHandler_c> pHandler ( CreateHttpHandler ( eEndpoint, sQuery, dRawUrlQuery, tOptions, eRequestType ) );
 	if ( !pHandler )
 		return false;
 
@@ -1299,7 +1313,7 @@ static bool sphProcessHttpQuery ( ESphHttpEndpoint eEndpoint, const char * sQuer
 
 bool sphProcessHttpQueryNoResponce ( ESphHttpEndpoint eEndpoint, const char * sQuery, const SmallStringHash_T<CSphString> & tOptions, CSphVector<BYTE> & dResult )
 {
-	return sphProcessHttpQuery ( eEndpoint, sQuery, tOptions, dResult, false, HTTP_GET );
+	return sphProcessHttpQuery ( eEndpoint, sQuery, dEmptyStr, tOptions, dResult, false, HTTP_GET );
 }
 
 
@@ -1317,7 +1331,7 @@ bool sphLoopClientHttp ( const BYTE * pRequest, int iRequestLen, CSphVector<BYTE
 	auto& sRawString = tParser.GetBody();
 	myinfo::SetDescription ( sRawString.cstr(), sRawString.Length() );
 
-	if ( !sphProcessHttpQuery ( eEndpoint, sRawString.cstr(), tParser.GetOptions(), dResult, true, tParser.GetRequestType() ) )
+	if ( !sphProcessHttpQuery ( eEndpoint, sRawString.cstr(), tParser.GetRawUrlQuery(), tParser.GetOptions(), dResult, true, tParser.GetRequestType() ) )
 	{
 		if ( eEndpoint==SPH_HTTP_ENDPOINT_INDEX )
 			HttpHandlerIndexPage ( dResult );
@@ -1358,7 +1372,8 @@ static Endpoint_t g_dEndpoints[] =
 	{ "update",		"json/update" },
 	{ "delete",		"json/delete" },
 	{ "bulk",		"json/bulk" },
-	{ "pq",			"json/pq" }
+	{ "pq",			"json/pq" },
+	{ "cli",		nullptr }
 };
 
 STATIC_ASSERT ( sizeof(g_dEndpoints)/sizeof(g_dEndpoints[0])==SPH_HTTP_ENDPOINT_TOTAL, SPH_HTTP_ENDPOINT_SHOULD_BE_SAME_AS_SPH_HTTP_ENDPOINT_TOTAL );

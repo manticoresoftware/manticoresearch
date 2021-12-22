@@ -7230,6 +7230,34 @@ bool IsMaxedOut ()
 	return false;
 }
 
+bool IsReadOnly ()
+{
+	return session::GetReadOnly();
+}
+
+bool sphCheckWeCanModify()
+{
+	return !IsReadOnly();
+}
+
+bool sphCheckWeCanModify ( StmtErrorReporter_i& tOut )
+{
+	if ( sphCheckWeCanModify() )
+		return true;
+
+	tOut.Error ( "connection is read-only");
+	return false;
+}
+
+bool sphCheckWeCanModify ( const char* szStmt, RowBuffer_i& tOut )
+{
+	if ( sphCheckWeCanModify() )
+		return true;
+
+	tOut.Error ( szStmt, "connection is read-only" );
+	return false;
+}
+
 void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq )
 {
 	MEMORY ( MEM_API_SEARCH );
@@ -10727,6 +10755,9 @@ static bool InsertToPQ ( SqlStmt_t & tStmt, RtIndex_i * pIndex, RtAccum_t * pAcc
 
 void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt )
 {
+	if ( !sphCheckWeCanModify ( tOut ) )
+		return;
+
 	auto* pSession = session::GetClientSession();
 	pSession->FreezeLastMeta();
 	bool bReplace = ( tStmt.m_eStmt == STMT_REPLACE );
@@ -11813,6 +11844,9 @@ static void HandleMysqlCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 	SearchFailuresLog_c dErrors;
 	CSphString sError;
 
+	if ( !sphCheckWeCanModify ( tStmt.m_sStmt, tOut ) )
+		return;
+
 	if ( !IsConfigless() )
 	{
 		sError = "CREATE TABLE requires data_dir to be set in the config file";
@@ -11923,6 +11957,9 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 
 static void HandleMysqlDropTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
+	if ( !sphCheckWeCanModify ( tStmt.m_sStmt, tOut ) )
+		return;
+
 	CSphString sError;
 
 	if ( !IsConfigless() )
@@ -12420,6 +12457,9 @@ void HandleMySqlExtendedUpdate ( AttrUpdateArgs & tArgs )
 
 void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, Str_t sQuery )
 {
+	if ( !sphCheckWeCanModify ( tOut ) )
+		return;
+
 	auto* pSession = session::GetClientSession();
 	pSession->FreezeLastMeta();
 	auto& sWarning = pSession->m_tLastMeta.m_sWarning;
@@ -13094,6 +13134,9 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * 
 
 void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, Str_t sQuery )
 {
+	if ( !sphCheckWeCanModify ( tOut ) )
+		return;
+
 	auto* pSession = session::GetClientSession();
 	pSession->FreezeLastMeta();
 	bool bCommit = pSession->m_bAutoCommit && !pSession->m_bInTransaction;
@@ -13425,6 +13468,17 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 			break;
 		}
 
+		if ( tStmt.m_sSetName == "ro" )
+		{
+			if ( !tSess.GetVip() )
+			{
+				if (!sphCheckWeCanModify ( tStmt.m_sStmt, tOut ) )
+					return;
+			}
+			tSess.SetReadOnly ( !!tStmt.m_iSetValue );
+			break;
+		}
+
 		// move check here from bison parser. Only boolean allowed below.
 		if ( tStmt.m_iSetValue!=0 && tStmt.m_iSetValue!=1 )
 		{
@@ -13499,6 +13553,9 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 	}
 
 	case SET_GLOBAL_SVAR: // SET GLOBAL foo = iValue|'string'
+
+		if ( !tSess.GetVip() && !sphCheckWeCanModify ( tStmt.m_sStmt, tOut ) )
+			return;
 		// global server variable
 		if ( tStmt.m_sSetName=="query_log_format" )
 		{
@@ -13648,6 +13705,9 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 
 void HandleMysqlAttach ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
+	if ( !sphCheckWeCanModify ( tStmt.m_sStmt, tOut ) )
+		return;
+
 	const CSphString & sFrom = tStmt.m_sIndex;
 	const CSphString & sTo = tStmt.m_sStringParam;
 	bool bTruncate = ( tStmt.m_iIntParam==1 );
@@ -13780,6 +13840,9 @@ int GetLogFD ()
 
 void HandleMysqlOptimizeManual ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCmd )
 {
+	if ( !sphCheckWeCanModify ( "optimize", tOut ) )
+		return;
+
 	auto sIndex = tCmd.m_sParam;
 	ServedDescRPtr_c pIndex ( GetServed ( sIndex ) );
 	if ( !ServedDesc_t::IsMutable ( pIndex ) )
@@ -13807,6 +13870,9 @@ void HandleMysqlOptimizeManual ( RowBuffer_i & tOut, const DebugCmd::DebugComman
 // command 'drop [chunk] X [from] <IDX> [option...]'
 void HandleMysqlDropManual ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCmd )
 {
+	if ( !sphCheckWeCanModify ( "drop", tOut ) )
+		return;
+
 	auto sIndex = tCmd.m_sParam;
 	ServedDescRPtr_c pIndex ( GetServed ( sIndex ) );
 	if ( !ServedDesc_t::IsMutable ( pIndex ) )
@@ -13831,6 +13897,9 @@ void HandleMysqlDropManual ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t 
 
 void HandleMysqlCompress ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCmd )
 {
+	if ( !sphCheckWeCanModify ( "compress", tOut ) )
+		return;
+
 	auto sIndex = tCmd.m_sParam;
 	ServedDescRPtr_c pIndex ( GetServed ( sIndex ) );
 	if ( !ServedDesc_t::IsMutable ( pIndex ) )
@@ -13859,6 +13928,9 @@ void HandleMysqlCompress ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & 
 // uservar is tCmd.m_sParam2
 void HandleMysqlSplit ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCmd )
 {
+	if ( !sphCheckWeCanModify ( "split", tOut ) )
+		return;
+
 	// check index existance
 	auto sIndex = tCmd.m_sParam;
 	ServedDescRPtr_c pIndex ( GetServed ( sIndex ) );
@@ -14267,6 +14339,9 @@ static bool PrepareReconfigure ( const CSphString & sIndex, CSphReconfigureSetti
 
 void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
+	if ( !sphCheckWeCanModify ( tStmt.m_sStmt, tOut ) )
+		return;
+
 	bool bReconfigure = ( tStmt.m_iIntParam==1 );
 
 	CSphScopedPtr<ReplicationCommand_t> pCmd ( new ReplicationCommand_t() );
@@ -14319,6 +14394,9 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 
 void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
+	if ( !sphCheckWeCanModify ( tStmt.m_sStmt, tOut ) )
+		return;
+
 	ServedDescRPtr_c pIndex ( GetServed ( tStmt.m_sIndex ) );
 	if ( !ServedDesc_t::IsMutable ( pIndex ) )
 	{
@@ -14556,6 +14634,7 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt )
 		dTable.MatchTupletf ( "optimize_cutoff", "%d", g_iAutoOptimizeCutoff );
 		dTable.MatchTuplet ( "collation_connection", sphCollationToName ( session::GetCollation() ) );
 		dTable.MatchTuplet ( "query_log_format", g_eLogFormat==LOG_FORMAT_PLAIN ? "plain" : "sphinxql" );
+		dTable.MatchTuplet ( "session_read_only", session::GetReadOnly() ? "1" : "0" );
 		dTable.MatchTuplet ( "log_level", LogLevelName ( g_eLogLevel ) );
 		dTable.MatchTupletf ( "max_allowed_packet", "%d", g_iMaxPacketSize );
 		dTable.MatchTuplet ( "character_set_client", "utf8" );
@@ -15096,6 +15175,8 @@ static void RemoveAttrFromIndex ( const SqlStmt_t & tStmt, const ServedDesc_t * 
 
 static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, bool bAdd )
 {
+	if ( !sphCheckWeCanModify ( tStmt.m_sStmt, tOut ) )
+		return;
 	MEMORY ( MEM_SQL_ALTER );
 
 	SearchFailuresLog_c dErrors;
@@ -15229,6 +15310,9 @@ static bool PrepareReconfigure ( const CSphString & sIndex, CSphReconfigureSetti
 
 static void HandleMysqlReconfigure ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
+	if ( !sphCheckWeCanModify ( tStmt.m_sStmt, tOut ) )
+		return;
+
 	MEMORY ( MEM_SQL_ALTER );
 
 	if ( IsConfigless() )
@@ -15296,6 +15380,9 @@ static bool ApplyIndexKillList ( CSphIndex * pIndex, CSphString & sWarning, CSph
 // STMT_ALTER_KLIST_TARGET: ALTER TABLE index KILLLIST_TARGET = 'string'
 static void HandleMysqlAlterKlist ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
+	if ( !sphCheckWeCanModify ( tStmt.m_sStmt, tOut ) )
+		return;
+
 	MEMORY ( MEM_SQL_ALTER );
 
 	CSphString sError;
@@ -15394,6 +15481,9 @@ static bool SubstituteExternalIndexFiles ( const StrVec_t & dOldExternalFiles, c
 // STMT_ALTER_INDEX_SETTINGS: ALTER TABLE index [ident = 'string']*
 static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
+	if ( !sphCheckWeCanModify ( tStmt.m_sStmt, tOut ) )
+		return;
+
 	MEMORY ( MEM_SQL_ALTER );
 
 	CSphString sError;
@@ -15639,6 +15729,9 @@ void HandleMysqlExplain ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, bool bDot
 
 void HandleMysqlImportTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
+	if ( !sphCheckWeCanModify ( tStmt.m_sStmt, tOut ) )
+		return;
+
 	CSphString sError;
 
 	if ( !IsConfigless() )

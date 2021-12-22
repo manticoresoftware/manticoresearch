@@ -37,6 +37,7 @@ private:
 	CSphString m_sClientName; // set once before info is published and never changes. So, assume always mt-safeprivate:
 	bool m_bSsl = false;
 	bool m_bVip = false;
+	bool m_bReadOnly = false;
 
 	// session variables - doesn't participate in render, used as connection-wide globals
 public:
@@ -72,6 +73,9 @@ public:
 
 	void SetVip ( bool bVip ) { m_bVip = bVip; }
 	bool GetVip() const { return m_bVip; }
+
+	void SetReadOnly ( bool bReadOnly ) { m_bReadOnly = bReadOnly; }
+	bool GetReadOnly() const { return m_bReadOnly; }
 
 public:
 	void SetOptimizeById ( bool bOptimizeById ) { m_bOptimizeById = bOptimizeById; }
@@ -130,6 +134,9 @@ namespace session {
 
 	inline void SetVip ( bool bVip ) { ClientTaskInfo_t::Info().SetVip (bVip); }
 	inline bool GetVip() { return ClientTaskInfo_t::Info().GetVip(); }
+
+	inline void SetReadOnly ( bool bReadOnly ) { ClientTaskInfo_t::Info().SetReadOnly (bReadOnly); }
+	inline bool GetReadOnly() { return ClientTaskInfo_t::Info().GetReadOnly(); }
 
 	inline void SetOptimizeById ( bool bOptimizeById ) {  ClientTaskInfo_t::Info().SetOptimizeById ( bOptimizeById ); }
 	inline bool GetOptimizeById () { return ClientTaskInfo_t::Info().GetOptimizeById(); }

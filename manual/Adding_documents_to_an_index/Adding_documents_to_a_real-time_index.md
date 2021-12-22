@@ -345,19 +345,57 @@ POST /bulk
 {
   "items": [
     {
-      "insert": {
+      "bulk": {
         "_index": "products",
-        "_id": 1,
-        "created": true,
+        "_id": 2,
+        "created": 2,
+        "deleted": 2,
+        "updated": 0,
+        "result": "created",
+        "status": 201
+      }
+    }
+  ],
+  "errors": false
+}
+```
+
+Notice, bulk endpoint supports 'insert', 'replace', 'delete', and 'update' queries. Also notice, that you can direct operations to several different indexes, however transactions are possible only over single index, so if you specify more, manticore will collect operations directed to one index into single txn, and when index changes, it will commit collected and start new transaction over new index. 
+
+```json
+POST /bulk 
+-H "Content-Type: application/x-ndjson" -d '
+{"insert":{"index":"test1","id":21,"doc":{"int_col":1,"price":1.1,"title":"bulk doc one"}}}
+{"insert":{"index":"test1","id":22,"doc":{"int_col":2,"price":2.2,"title":"bulk doc two"}}}
+{"insert":{"index":"test1","id":23,"doc":{"int_col":3,"price":3.3,"title":"bulk doc three"}}}
+{"insert":{"index":"test2","id":24,"doc":{"int_col":4,"price":4.4,"title":"bulk doc four"}}}
+{"insert":{"index":"test2","id":25,"doc":{"int_col":5,"price":5.5,"title":"bulk doc five"}}}
+'
+```
+
+<!-- response HTTP -->
+
+```json
+{
+  "items": [
+    {
+      "bulk": {
+        "_index": "test1",
+        "_id": 23,
+        "created": 3,
+        "deleted": 0,
+        "updated": 0,
         "result": "created",
         "status": 201
       }
     },
     {
-      "insert": {
-        "_index": "products",
-        "_id": 2,
-        "created": true,
+      "bulk": {
+        "_index": "test2",
+        "_id": 25,
+        "created": 2,
+        "deleted": 0,
+        "updated": 0,
         "result": "created",
         "status": 201
       }

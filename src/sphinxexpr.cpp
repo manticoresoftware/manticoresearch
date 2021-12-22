@@ -20,7 +20,7 @@
 #include "docstore.h"
 #include "coroutine.h"
 #include "stackmock.h"
-#include "task_info.h"
+#include "client_task_info.h"
 #include "exprtraits.h"
 #include "columnarexpr.h"
 #include "conversion.h"
@@ -65,14 +65,14 @@ UservarIntSet_c Uservars ( const CSphString & sUservar )
 
 inline Str_t CurrentUser()
 {
-	if ( session::Vip () )
+	if ( session::GetVip () )
 		return { "VIP", 3 };
 	return { "Usual", 5 };
 }
 
 inline int ConnID ()
 {
-	return session::ConnID ();
+	return session::GetConnID ();
 }
 
 
@@ -1158,7 +1158,7 @@ protected:
 
 		auto iStackNeeded = sphGetStackUsed ();
 		auto iCurStackSize = sphMyStackSize ();
-		int iNeedInAdvance = session::DesiredStack ();
+		int iNeedInAdvance = session::GetDesiredStack ();
 		if ( iNeedInAdvance<=0 )
 			iStackNeeded = iCurStackSize * 2; // just from the fact that we're here, as ProxyFat is created by demand.
 		else
@@ -5249,7 +5249,7 @@ static CSphString UrlEncode ( const CSphString& sSource )
 /// optimize subtree
 void ExprParser_t::Optimize ( int iNode )
 {
-	auto eProfile = session::Profile();
+	auto eProfile = session::GetProfile();
 	if ( eProfile==Profile_e::DOTEXPR || eProfile==Profile_e::DOTEXPRURL )
 	{
 		// fixme! m.b. iteratively repeat while something changes?

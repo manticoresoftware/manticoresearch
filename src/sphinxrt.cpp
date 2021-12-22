@@ -1063,7 +1063,8 @@ public:
 	void InitDiskChunks ( Copy_e ) EXCLUDES ( m_tOwner.m_tLock )
 	{
 		InitDiskChunks ( empty );
-		for ( const auto & pChunk : *m_tOwner.DiskChunks() )
+		auto pChunks = m_tOwner.DiskChunks();
+		for ( const auto & pChunk : *pChunks )
 			m_pNewDiskChunks->Add ( pChunk );
 	}
 };
@@ -1567,7 +1568,8 @@ void RtIndex_c::ForceRamFlush ( const char* szReason )
 	}
 
 	SaveMeta();
-	m_tRtChunks.DiskChunks ()->for_each ( [] ( ConstDiskChunkRefPtr_t & pIdx ) { pIdx->Cidx().FlushDeadRowMap ( true ); } );
+	auto pChunks = m_tRtChunks.DiskChunks();
+	pChunks->for_each ( [] ( ConstDiskChunkRefPtr_t & pIdx ) { pIdx->Cidx().FlushDeadRowMap ( true ); } );
 	Binlog::NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, false );
 
 	int64_t iWasTID = m_iSavedTID;
@@ -4625,8 +4627,10 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 
 void RtIndex_c::Preread ()
 {
-	for ( auto& pDiskChunk : *m_tRtChunks.DiskChunks() )
-		pDiskChunk->CastIdx().Preread();
+	auto pChunks = m_tRtChunks.DiskChunks();
+	for ( auto& pChunk : *pChunks )
+		if (pChunk)
+			pChunk->CastIdx().Preread();
 }
 
 template<typename P>
@@ -6867,7 +6871,7 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 			return; // already nothing to do, early finish.
 
 		auto tCtx = tClonableCtx.CloneNewContext ( &iChunk );
-		Threads::Coro::Throttler_c tThrottler ( session::ThrottlingPeriodMS () );
+		Threads::Coro::Throttler_c tThrottler ( session::GetThrottlingPeriodMS () );
 		int iTick=1; // num of times coro rescheduled by throttler
 		while ( !bInterrupt ) // some earlier job met error; abort.
 		{
@@ -8064,6 +8068,12 @@ void RtIndex_c::AddFieldToRamchunk ( const CSphString & sFieldName, DWORD uField
 	if ( !(uFieldFlags & CSphColumnInfo::FIELD_STORED) )
 		return;
 
+	if ( !m_pDocstoreFields )
+	{
+		CSphScopedPtr<DocstoreFields_i> pDocstoreFields { CreateDocstoreFields() };
+		m_pDocstoreFields.Swap ( pDocstoreFields );
+	}
+
 	assert ( m_pDocstoreFields.Ptr() );
 	m_pDocstoreFields->AddField ( sFieldName, DOCSTORE_TEXT );
 
@@ -8227,7 +8237,7 @@ CSphString RtIndex_c::MakeChunkName ( int iChunkID )
 	return sChunk;
 }
 
-// CSphinxqlSession::Execute->HandleMysqlAttach->AttachDiskIndex
+// ClientSession_c::Execute->HandleMysqlAttach->AttachDiskIndex
 bool RtIndex_c::AttachDiskIndex ( CSphIndex* pIndex, bool bTruncate, bool & bFatal, StrVec_t & dWarnings, CSphString & sError )
 {
 	// from the next line we work in index simple scheduler. That made everything much simpler
@@ -8365,7 +8375,8 @@ bool RtIndex_c::Truncate ( CSphString& )
 	UnlinkRAMChunk ( "truncate" );
 
 	// kill all disk chunks files
-	m_tRtChunks.DiskChunks()->for_each ( [] ( ConstDiskChunkRefPtr_t& t ) { t->m_bFinallyUnlink = true; } );
+	auto pChunks = m_tRtChunks.DiskChunks();
+	pChunks->for_each ( [] ( ConstDiskChunkRefPtr_t& t ) { t->m_bFinallyUnlink = true; } );
 
 	{
 		// remove all chunks and segments
@@ -8646,7 +8657,8 @@ bool RtIndex_c::PublishMergedChunks ( const char* szParentAction, std::function<
 	bool bReplaced = false;
 	auto tChangeset = RtWriter();
 	tChangeset.InitDiskChunks ( RtWriter_c::empty );
-	for ( auto& pChunk : *m_tRtChunks.DiskChunks() )
+	auto pChunks = m_tRtChunks.DiskChunks();
+	for ( auto& pChunk : *pChunks )
 	{
 		if ( fnPusher ( pChunk->Cidx().m_iChunk, *tChangeset.m_pNewDiskChunks ) )
 			bReplaced = true;

@@ -95,6 +95,7 @@
 #include "sphinxint.h"
 #include "sphinxrt.h"
 #include "task_info.h"
+#include "client_task_info.h"
 #include "coroutine.h"
 #include "conversion.h"
 
@@ -209,6 +210,7 @@ struct ListenerDesc_t
 	int m_iPort = 0;
 	int m_iPortsCount = 0;
 	bool m_bVIP = false;
+	bool m_bReadOnly = false;
 };
 
 // 'like' matcher
@@ -1232,10 +1234,14 @@ enum ESphHttpEndpoint
 
 bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, ISphOutputBuffer & tOut );
 bool IsMaxedOut ();
+bool IsReadOnly ();
 void sphFormatFactors ( StringBuilder_c& dOut, const unsigned int * pFactors, bool bJson );
-void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool bReplace, bool bCommit, CSphString & sWarning, CSphSessionAccum & tAcc, CSphVector<int64_t> & dLastIds );
-void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, Str_t sQuery, CSphString & sWarning );
-void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, Str_t sQuery, bool bCommit, CSphSessionAccum & tAcc );
+void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt );
+void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, Str_t sQuery );
+void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, Str_t sQuery );
+bool sphCheckWeCanModify ();
+bool sphCheckWeCanModify ( StmtErrorReporter_i & tOut );
+bool sphCheckWeCanModify ( const char* szStmt, RowBuffer_i& tOut );
 
 bool				sphLoopClientHttp ( const BYTE * pRequest, int iRequestLen, CSphVector<BYTE> & dResult );
 bool				sphProcessHttpQueryNoResponce ( ESphHttpEndpoint eEndpoint, const char * sQuery, const SmallStringHash_T<CSphString> & tOptions, CSphVector<BYTE> & dResult );
@@ -1243,28 +1249,24 @@ void				sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, cons
 ESphHttpEndpoint	sphStrToHttpEndpoint ( const CSphString & sEndpoint );
 CSphString			sphHttpEndpointToStr ( ESphHttpEndpoint eEndpoint );
 
-bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength, InputBuffer_c & tBuf, ISphOutputBuffer & tOut, bool bManagePersist );
+void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength, InputBuffer_c & tBuf, ISphOutputBuffer & tOut );
 void HandleCommandPing ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq );
 
 void BuildStatusOneline ( StringBuilder_c& sOut );
 
-class CSphinxqlSession;
-class SphinxqlSessionPublic : public ISphNoncopyable
+namespace session
 {
-	CSphinxqlSession * m_pImpl;
+	bool IsAutoCommit ( const ClientSession_c* );
+	bool IsInTrans ( const ClientSession_c* );
 
-public:
-	SphinxqlSessionPublic();
-	~SphinxqlSessionPublic();
-
-	bool Execute ( Str_t sQuery, RowBuffer_i & tOut );
-	void SetFederatedUser ();
-	bool IsAutoCommit () const;
-	bool IsInTrans() const;
-
-	QueryProfile_c * StartProfiling ( ESphQueryState );
+	bool Execute ( Str_t sQuery, RowBuffer_i& tOut );
+	void SetFederatedUser();
+	bool IsAutoCommit();
+	bool IsInTrans();
+	QueryProfile_c* StartProfiling ( ESphQueryState );
 	void SaveLastProfile();
-};
+	VecTraits_T<int64_t> LastIds();
+}
 
 void LogSphinxqlError ( const char * sStmt, const char * sError );
 

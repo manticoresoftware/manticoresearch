@@ -2722,6 +2722,9 @@ const char * DoBacktrace ( int, int )
 }
 #endif
 
+#define BOOST_STACKTRACE_GNU_SOURCE_NOT_REQUIRED 1
+#include <boost/stacktrace.hpp>
+
 void sphBacktrace ( int iFD, bool bSafe )
 {
 	if ( iFD<0 )
@@ -2829,6 +2832,9 @@ void sphBacktrace ( int iFD, bool bSafe )
 		sphSafeInfo ( iFD, "%p", g_pBacktraceAddresses[i] );
 #endif // HAVE_BACKTRACE_SYMBOLS
 #endif // !HAVE_BACKTRACE
+
+	sphSafeInfo ( iFD, "Trying boost backtrace:" );
+	sphSafeInfo ( iFD, to_string ( boost::stacktrace::stacktrace() ).c_str() );
 
 	sphSafeInfo ( iFD, "-------------- backtrace ends here ---------------" );
 

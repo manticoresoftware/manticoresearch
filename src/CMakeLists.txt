@@ -48,9 +48,9 @@ add_library(lmanticore STATIC sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sphin
 		snippetstream.cpp snippetpassage.cpp threadutils.cpp sphinxversion.cpp indexcheck.cpp datareader.cpp
 		indexformat.cpp indexsettings.cpp fileutils.cpp threads_detached.cpp hazard_pointer.cpp
 		task_info.cpp mini_timer.cpp fileio.cpp memio.cpp queryprofile.cpp columnarfilter.cpp columnargrouper.cpp
-		columnarlib.cpp collation.cpp fnv64.cpp histogram.cpp threads_detached.cpp hazard_pointer.cpp task_info.cpp
+		columnarlib.cpp collation.cpp fnv64.cpp histogram.cpp threads_detached.cpp hazard_pointer.cpp
 		mini_timer.cpp dynamic_idx.cpp columnarrt.cpp columnarmisc.cpp exprtraits.cpp columnarexpr.cpp
-		sphinx_alter.cpp columnarsort.cpp binlog.cpp chunksearchctx.cpp
+		sphinx_alter.cpp columnarsort.cpp binlog.cpp chunksearchctx.cpp client_task_info.cpp
 		indexfiles.cpp attrindex_builder.cpp queryfilter.cpp)
 
 add_library ( conversion conversion.cpp )
@@ -131,10 +131,11 @@ set ( HEADERS sphinxexcerpt.h sphinxfilter.h sphinxint.h sphinxjsonquery.h sphin
 		chunksearchctx.h lrucache.h indexfiles.h attrindex_builder.h queryfilter.h)
 
 set ( SEARCHD_H searchdaemon.h searchdconfig.h searchdddl.h searchdexpr.h searchdha.h searchdreplication.h searchdsql.h
-		searchdtask.h task_info.h taskflushattrs.h taskflushbinlog.h taskflushmutable.h taskglobalidf.h
+		searchdtask.h client_task_info.h taskflushattrs.h taskflushbinlog.h taskflushmutable.h taskglobalidf.h
 		taskmalloctrim.h taskoptimize.h taskping.h taskpreread.h tasksavestate.h net_action_accept.h
 		netreceive_api.h netreceive_http.h netreceive_ql.h netstate_api.h networking_daemon.h optional.h query_status.h
-		compressed_mysql.h sphinxql_debug.h stackmock.h replication/wsrep_api_stub.h searchdssl.h digest_sha1.h)
+		compressed_mysql.h sphinxql_debug.h stackmock.h replication/wsrep_api_stub.h searchdssl.h digest_sha1.h
+		client_session.h)
 
 source_group ( "Grammar sources" FILES ${LMANTICORE_BISON} ${SEARCHD_BISON} )
 source_group ( "Lexer sources" FILES ${LMANTICORE_FLEX} ${SEARCHD_FLEX} )
@@ -211,12 +212,22 @@ add_library ( digest_sha1 digest_sha1.cpp )
 target_link_libraries ( digest_sha1 PRIVATE lextra )
 target_link_libraries ( lsearchd PUBLIC digest_sha1 lextra )
 
-if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND CMAKE_CXX_COMPILER_VERSION VERSION_EQUAL "12")
-	set_source_files_properties ( stackmock.cpp PROPERTIES COMPILE_DEFINITIONS_RELWITHDEBINFO "KNOWN_CREATE_SIZE=768;KNOWN_EXPR_SIZE=32;KNOWN_FILTER_SIZE=208" )
-	set_source_files_properties ( stackmock.cpp PROPERTIES COMPILE_DEFINITIONS_DEBUG "KNOWN_CREATE_SIZE=4208;KNOWN_EXPR_SIZE=48;KNOWN_FILTER_SIZE=400")
-elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_EQUAL "9.3")
-	set_source_files_properties ( stackmock.cpp PROPERTIES COMPILE_DEFINITIONS_RELWITHDEBINFO "KNOWN_CREATE_SIZE=16;KNOWN_EXPR_SIZE=48;KNOWN_FILTER_SIZE=240" )
-	set_source_files_properties ( stackmock.cpp PROPERTIES COMPILE_DEFINITIONS_DEBUG "KNOWN_CREATE_SIZE=256;KNOWN_EXPR_SIZE=48;KNOWN_FILTER_SIZE=272" )
+diag ( CMAKE_CXX_COMPILER_ID CMAKE_CXX_COMPILER_VERSION )
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+	if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+#		if (CMAKE_CXX_COMPILER_VERSION VERSION_EQUAL "12")
+		if (CMAKE_CXX_COMPILER_VERSION VERSION_EQUAL "12.0.1" OR CMAKE_CXX_COMPILER_VERSION VERSION_EQUAL "12")
+			diags("Select precalculated values for Clang 12.0.X on x86_64" )
+			set_source_files_properties ( stackmock.cpp PROPERTIES COMPILE_DEFINITIONS_RELWITHDEBINFO "KNOWN_CREATE_SIZE=768;KNOWN_EXPR_SIZE=32;KNOWN_FILTER_SIZE=208" )
+			set_source_files_properties ( stackmock.cpp PROPERTIES COMPILE_DEFINITIONS_DEBUG "KNOWN_CREATE_SIZE=4208;KNOWN_EXPR_SIZE=48;KNOWN_FILTER_SIZE=400")
+		endif()
+	elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+		if (CMAKE_CXX_COMPILER_VERSION VERSION_EQUAL "9.3")
+			diags ( "Select precalculated values for GCC 9.3 on x86_64" )
+			set_source_files_properties ( stackmock.cpp PROPERTIES COMPILE_DEFINITIONS_RELWITHDEBINFO "KNOWN_CREATE_SIZE=16;KNOWN_EXPR_SIZE=48;KNOWN_FILTER_SIZE=240" )
+			set_source_files_properties ( stackmock.cpp PROPERTIES COMPILE_DEFINITIONS_DEBUG "KNOWN_CREATE_SIZE=256;KNOWN_EXPR_SIZE=48;KNOWN_FILTER_SIZE=272" )
+		endif()
+	endif ()
 endif()
 
 if (WITH_ZLIB)

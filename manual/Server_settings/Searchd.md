@@ -442,7 +442,7 @@ So, all our improvements are stated around initially undefined statement: 'who s
 
 This setting allows TCP_FASTOPEN flag for all listeners. By default it is managed by system, but may be explicitly switched off by setting to '0'.
 
-For general knowledge about TCP Fast Open extension you can visit Wikipedia. Shortly speaking, it allows to eliminate one TCP round-trip when establishing connection.
+For general knowledge about TCP Fast Open extension please consult with [Wikipedia](https://en.wikipedia.org/wiki/TCP_Fast_Open). Shortly speaking, it allows to eliminate one TCP round-trip when establishing connection.
 
 In practice using TFO in many situation may optimize client-agent network efficiency as if [persistent agents](../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md) are in play, but without holding active connections, and also without limitation for the maximum num of connections.
 
@@ -697,6 +697,21 @@ not_terms_only_allowed = 1
 ```
 <!-- end -->
 
+### optimize_cutoff
+
+<!-- example conf optimize_cutoff -->
+Sets default index compaction threshold. Read more here - [Number of optimized disk chunks](../Securing_and_compacting_an_index/Compacting_an_index.md#Number-of-optimized-disk-chunks). Can be overridden with per-query option [cutoff](../Securing_and_compacting_an_index/Compacting_an_index.md#Number-of-optimized-disk-chunks). Can be changed dynamically via [SET GLOBAL](../Server_settings/Setting_variables_online.md#SET).
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+optimize_cutoff = 4
+```
+<!-- end -->
+
 ### persistent_connections_limit
 
 <!-- example conf persistent_connections_limit -->
@@ -806,7 +821,7 @@ preopen_indexes = 1
 ### pseudo_sharding
 
 <!-- example conf pseudo_sharding -->
-Enables pseudo-sharding for non-full-text search queries. Any query which does sorting, grouping or filtering by attributes (non full-text fields) will be automatically parallelized to up to `searchd.threads` # of threads.
+Enables pseudo-sharding for search queries to plain and real-time indexes. Any search query will be automatically parallelized to up to `searchd.threads` # of threads.
 
 Disabled by default.
 
@@ -873,7 +888,7 @@ Limit (in milliseconds) that prevents the query from being written to the query 
 ### query_log
 
 <!-- example conf query_log -->
-Query log file name. Optional, default is empty (do not log queries). All search queries will be logged in this file. The format is described in [Query logging](../Logging/Query_logging.md). In case of 'plain' format, you can use the 'syslog' as the path to the log file. In this case all search queries will be sent to syslog daemon with `LOG_INFO` priority, prefixed with '[query]' instead of timestamp. To use the syslog option the sphinx must be configured `-–with-syslog` on building.
+Query log file name. Optional, default is empty (do not log queries). All search queries (such as SELECT ... but not INSERT/REPLACE/UPDATE queries) will be logged in this file. The format is described in [Query logging](../Logging/Query_logging.md). In case of 'plain' format, you can use the 'syslog' as the path to the log file. In this case all search queries will be sent to syslog daemon with `LOG_INFO` priority, prefixed with '[query]' instead of timestamp. To use the syslog option the sphinx must be configured `-–with-syslog` on building.
 
 
 <!-- intro -->

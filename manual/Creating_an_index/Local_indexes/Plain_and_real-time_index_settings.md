@@ -94,7 +94,7 @@ stored_fields = title, content
 
 By default when an index is defined in a configuration file, full-text fields' original content is not stored, but just indexed. If this option is set, values from the fields will be both indexed and stored.
 
-Value: comma separated list of **full-text** fields that should be stored. Default is empty (i.e. does not store original field text) for [Plain mode](../../Creating_an_index/Local_indexes.md#Defining-index-schema-in-config-%28Plain mode%29), but is enabled for every field for [RT mode](../../Creating_an_index/Local_indexes.md#Online-schema-management-%28RT-mode%29) as long as it's declared as just `text`.
+Value: comma separated list of **full-text** fields that should be stored. Default is empty (i.e. does not store original field text) for [Plain mode](../../Creating_an_index/Local_indexes.md#Defining-index-schema-in-config-%28Plain-mode%29), but is enabled for every field for [RT mode](../../Creating_an_index/Local_indexes.md#Online-schema-management-%28RT-mode%29) as long as it's declared as just `text`.
 
 Note, in case of a real-time index the fields listed in `stored_only_fields` should be also declared as [rt_field](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_field).
 
@@ -305,25 +305,35 @@ rt_mem_limit = 512M
 
 RAM chunk size limit. Optional, default is 128M.
 
-RT index keeps some data in memory (so-called RAM chunk) and also maintains a number of on-disk indexes (so-called disk chunks). This directive lets you control the RAM chunk size. Once there’s too much data to keep in RAM, RT index will flush it to disk, activate a newly created disk chunk, and reset the RAM chunk.
+RT index keeps some data in memory ("RAM chunk") and also maintains a number of on-disk indexes ("disk chunks"). This directive lets you control the RAM chunk size. Once there’s too much data to keep in RAM, RT index will flush it to disk, activate a newly created disk chunk, and reset the RAM chunk.
 
 The limit is pretty strict; RT index should never allocate more memory than it’s limited to. The memory is not preallocated either, hence, specifying 512 MB limit and only inserting 3 MB of data should result in allocating 3 MB, not 512 MB.
 
-The RAM chunk should be sized depending on the size of the data, rate of inserts/updates and hardware. A small rt_mem_limit and frequent insert/updates can lead to creation of many disk chunks, requiring more frequent optimizations of the index.
+The RAM chunk should be sized depending on the size of the data, rate of inserts/updates and hardware. A small `rt_mem_limit` and frequent insert/updates can lead to creation of many disk chunks, requiring more frequent optimizations of the index.
 
-A large RAM chunk will put more pressure on the storage on two events:
+In RT mode the RAM chunk size limit can be changed using `ALTER TABLE` . To set `rt_mem_limit` to 1 Gb for index 't' run query `ALTER TABLE t rt_mem_limit='1G'`.
 
-* when flushing the RAM chunk to disk into the `ram` file
-* when it's full and is dumped as disk chunk
+In plain mode `rt_mem_limit` can be changed using the following steps:
 
-A large RAM chunk will also generate bigger binlogs. If the storage is slow this can translate into longer startup times in case of a recovery.
-
-In RT mode the RAM chunk size limit can be changed using `ALTER TABLE`.
-
-In plain mode rt_mem_limit can be changed using the following steps:
-
-* edit rt_mem_limit value in configuration
+* edit `rt_mem_limit` value in configuration
 * run `ALTER TABLE <index_name> RECONFIGURE`
+
+
+##### Important notes about RAM chunks
+
+* RT index is quite similar to a [distributed](../../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md#Creating-a-local-distributed-index) index consisting of multiple local indexes. The local indexes are called "disk chunks".
+* RAM chunk internally consists of multiple "segments". 
+* While disk chunks are stored on disk, the segments of RAM chunk are special RAM-only "indexes".
+* Any transaction you make to a real-time index generates a new segment. RAM chunk segments are merged after each transaction commit. Therefore it is beneficial to do bulk INSERTs of hundreds/thousands documents rather than hundreds/thousands different inserts with 1 document to avoid the overhead from merging RAM chunk segments.
+* When the number of segments gets greater than 32, the segments get merged, so the count is not greater than 32.
+* RT index always has a single RAM-chunk (may be empty) and one or multiple disk chunks.
+* Merging larger segments take longer, that's why it may be suboptimal to have very large RAM chunk (and therefore `rt_mem_limit`).
+* Number of disk chunks depends on the amount of data in the index and `rt_mem_limit` setting.
+* Searchd flushes RAM chunk to disk on shutdown and periodically according to [rt_flush_period](../../Server_settings/Searchd.md#rt_flush_period). Flushing several gigabytes to disk may take some time.
+* Large RAM chunk will put more pressure on the storage:
+  - when flushing the RAM chunk to disk into the `.ram` file
+  - when the RAM chunk is full and is dumped to disk as a disk chunk.
+* Until flushed RAM chunk is not persisted on disk and there's a [binary log](../../Logging/Binary_logging.md) as its backup in case of a sudden daemon shutdown. In this case the larger `rt_mem_limit` you have, the longer it will take to replay the binlog on start to recover the RAM chunk.
 
 ### Plain index settings:
 
@@ -382,17 +392,17 @@ Read [more about data types here](../../Creating_an_index/Data_types.md).
 
 | Type | Equivalent in a configuration file | Notes | Aliases |
 | - | - | - | - |
-| [text](../../Creating_an_index/Data_types.md#Text) | [rt_field](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_field)  | Options: indexed, stored. Default - **both**. To keep text stored, but indexed specify "stored" only. To keep text indexed only specify only "indexed". At least one "text" field should be specified in an index | string |
-| [integer](../../Creating_an_index/Data_types.md#Integer) | [rt_attr_uint](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_attr_uint)	| integer	 | int, uint |
-| [bigint](../../Creating_an_index/Data_types.md#Big-Integer) | [rt_attr_bigint](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_attr_bigint)	| big integer	 |   |
-| [float](../../Creating_an_index/Data_types.md#Float) | [rt_attr_float](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_attr_float)   | float  |   |
-| [multi](../../Creating_an_index/Data_types.md#Multi-value-integer-%28MVA%29) | [rt_attr_multi](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_attr_multi)   | multi-integer |   |
-| [multi64](../../Creating_an_index/Data_types.md#Multi-value-big-integer) | [rt_attr_multi_64](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_attr_multi_64) | multi-bigint  |   |
-| [bool](../../Creating_an_index/Data_types.md#Boolean) | [rt_attr_bool](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_attr_bool) | boolean |   |
-| [json](../../Creating_an_index/Data_types.md#JSON) | [rt_attr_json](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_attr_json) | JSON |   |
-| [string](../../Creating_an_index/Data_types.md#String) | [rt_attr_string](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_attr_string) | string. Option: indexed - also index the strings in a full-text field with same name.   |   |
-| [timestamp](../../Creating_an_index/Data_types.md#Timestamps) |	[rt_attr_timestamp](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_attr_timestamp) | timestamp  |   |
-| [bit(n)](../../Creating_an_index/Data_types.md#Integer) | [rt_attr_uint field_name:N](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#rt_attr_uint) | N is the max number of bits to keep  |   |
+| [text](../../Creating_an_index/Data_types.md#Text) | [rt_field](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_field)  | Options: indexed, stored. Default - **both**. To keep text stored, but indexed specify "stored" only. To keep text indexed only specify only "indexed". At least one "text" field should be specified in an index | string |
+| [integer](../../Creating_an_index/Data_types.md#Integer) | [rt_attr_uint](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_uint)	| integer	 | int, uint |
+| [bigint](../../Creating_an_index/Data_types.md#Big-Integer) | [rt_attr_bigint](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_bigint)	| big integer	 |   |
+| [float](../../Creating_an_index/Data_types.md#Float) | [rt_attr_float](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_float)   | float  |   |
+| [multi](../../Creating_an_index/Data_types.md#Multi-value-integer-%28MVA%29) | [rt_attr_multi](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_multi)   | multi-integer |   |
+| [multi64](../../Creating_an_index/Data_types.md#Multi-value-big-integer) | [rt_attr_multi_64](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_multi_64) | multi-bigint  |   |
+| [bool](../../Creating_an_index/Data_types.md#Boolean) | [rt_attr_bool](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_bool) | boolean |   |
+| [json](../../Creating_an_index/Data_types.md#JSON) | [rt_attr_json](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_json) | JSON |   |
+| [string](../../Creating_an_index/Data_types.md#String) | [rt_attr_string](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_string) | string. Option: indexed - also index the strings in a full-text field with same name.   |   |
+| [timestamp](../../Creating_an_index/Data_types.md#Timestamps) |	[rt_attr_timestamp](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_timestamp) | timestamp  |   |
+| [bit(n)](../../Creating_an_index/Data_types.md#Integer) | [rt_attr_uint field_name:N](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_uint) | N is the max number of bits to keep  |   |
 
 <!-- intro -->
 ##### Examples of creating a real-time index via CREATE TABLE
@@ -463,9 +473,9 @@ Here is a table which can help you select your desired mode:
 
 | index part |	keep it on disk |	keep it in memory |	cached in memory on server start | lock it in memory |
 | - | - | - | - | - |
-| plain attributes in [row-wise](../../Creating_an_index/Data_types#Row-wise-and-columnar-attribute-storages) (non-columnar) storage, skip lists, word lists, lookups, killed docs | 	mmap | mmap |	**mmap_preread** (default) | mlock |
+| plain attributes in [row-wise](../../Creating_an_index/Data_types.md#Row-wise-and-columnar-attribute-storages) (non-columnar) storage, skip lists, word lists, lookups, killed docs | 	mmap | mmap |	**mmap_preread** (default) | mlock |
 | row-wise string, multi-value attributes (MVA) and json attributes | mmap | mmap | **mmap_preread** (default) | mlock |
-| [columnar](../../Creating_an_index/Data_types#Row-wise-and-columnar-attribute-storages) numeric, string and multi-value attributes | always  | only by means of OS  | no  | not supported |
+| [columnar](../../Creating_an_index/Data_types.md#Row-wise-and-columnar-attribute-storages) numeric, string and multi-value attributes | always  | only by means of OS  | no  | not supported |
 | doc lists | **file** (default) | mmap | no	| mlock |
 | hit lists | **file** (default) | mmap | no	| mlock |
 

@@ -281,11 +281,11 @@ public:
 	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) override	{ assert ( 0 && "No batch push to proxy sorter" ); }
 
 	bool	IsGroupby() const override										{ return m_pSorter->IsGroupby(); }
-	bool	PushGrouped ( const CSphMatch & tEntry, bool bNewSet ) override	{ return m_pSorter->PushGrouped ( tEntry, bNewSet ); }
+	bool	PushGrouped ( const CSphMatch & tEntry, bool bNewSet, bool bUpdateDistinct ) override	{ return m_pSorter->PushGrouped ( tEntry, bNewSet, bUpdateDistinct ); }
 	int		GetLength () override;
-	void	Finalize ( MatchProcessor_i & tProcessor, bool bCallProcessInResultSetOrder ) override;
+	void	Finalize ( MatchProcessor_i & tProcessor, bool bCallProcessInResultSetOrder, bool bFinalizeMatches ) override;
 	int		Flatten ( CSphMatch * pTo ) override;
-	void	MoveTo ( ISphMatchSorter * pRhs ) override;
+	void	MoveTo ( ISphMatchSorter * pRhs, bool bCopyMeta ) override;
 
 	ISphMatchSorter * Clone() const override								{ return new ColumnarProxySorter_T<GENERIC,COMP,SINGLE> ( m_pSorter->Clone(), m_iSize, m_iFastPathAttrs ); }
 	void	CloneTo ( ISphMatchSorter * pTrg ) const override;
@@ -300,7 +300,7 @@ public:
 	int64_t	GetTotalCount() const override									{ return m_pSorter->GetTotalCount(); }
 
 	void	SetFilteredAttrs ( const sph::StringSet & hAttrs, bool bAddDocid ) override { m_pSorter->SetFilteredAttrs ( hAttrs, bAddDocid ); }
-	void	TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnBlobPoolFromMatch, GetColumnarFromMatch_fn fnGetColumnarFromMatch ) override;
+	void	TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnBlobPoolFromMatch, GetColumnarFromMatch_fn fnGetColumnarFromMatch, bool bFinalizeSorters ) override;
 
 	bool	IsRandom() const override 										{ return m_pSorter->IsRandom(); }
 	void	SetRandom ( bool bRandom ) override								{ m_pSorter->SetRandom(bRandom); }
@@ -477,11 +477,11 @@ void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::SetColumnar ( columnar::Columna
 }
 
 template <typename GENERIC, typename COMP, typename SINGLE>
-void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnBlobPoolFromMatch, GetColumnarFromMatch_fn fnGetColumnarFromMatch )
+void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnBlobPoolFromMatch, GetColumnarFromMatch_fn fnGetColumnarFromMatch, bool bFinalizeSorters )
 {
 	assert(m_pSorter);
 	PushCollectedToSorter();
-	m_pSorter->TransformPooled2StandalonePtrs ( fnBlobPoolFromMatch, fnGetColumnarFromMatch );
+	m_pSorter->TransformPooled2StandalonePtrs ( fnBlobPoolFromMatch, fnGetColumnarFromMatch, bFinalizeSorters );
 	m_pSchema = m_pSorter->GetSchema();
 }
 
@@ -505,11 +505,11 @@ bool ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::PushMatch ( const CSphMatch & t
 }
 
 template <typename GENERIC, typename COMP, typename SINGLE>
-void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::Finalize ( MatchProcessor_i & tProcessor, bool bCallProcessInResultSetOrder )
+void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::Finalize ( MatchProcessor_i & tProcessor, bool bCallProcessInResultSetOrder, bool bFinalizeMatches )
 {
 	assert(m_pSorter);
 	PushCollectedToSorter();
-	m_pSorter->Finalize ( tProcessor, bCallProcessInResultSetOrder );
+	m_pSorter->Finalize ( tProcessor, bCallProcessInResultSetOrder, bFinalizeMatches );
 }
 
 template <typename GENERIC, typename COMP, typename SINGLE>
@@ -521,7 +521,7 @@ int ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::Flatten ( CSphMatch * pTo )
 }
 
 template <typename GENERIC, typename COMP, typename SINGLE>
-void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::MoveTo ( ISphMatchSorter * pRhs )
+void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::MoveTo ( ISphMatchSorter * pRhs, bool bCopyMeta )
 {
 	// we assume that the rhs sorter is of the same type, i.e. proxy
 	auto pRhsProxy = (ColumnarProxySorter_T<GENERIC,COMP,SINGLE>*)pRhs;
@@ -529,7 +529,7 @@ void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::MoveTo ( ISphMatchSorter * pRhs
 	PushCollectedToSorter();
 	pRhsProxy->PushCollectedToSorter();
 
-	m_pSorter->MoveTo ( pRhsProxy->m_pSorter.Ptr() );
+	m_pSorter->MoveTo ( pRhsProxy->m_pSorter.Ptr(), bCopyMeta );
 }
 
 template <typename GENERIC, typename COMP, typename SINGLE>

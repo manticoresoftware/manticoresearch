@@ -17,21 +17,18 @@
 
 /// SHA1 digests
 static constexpr int HASH20_SIZE = 20;
-static constexpr int SHA1_SIZE = HASH20_SIZE;
-static constexpr int SHA1_BUF_SIZE = 64;
 
 class SHA1_c
 {
+	class Impl_c;
+	Impl_c* m_pImpl = nullptr;
+
 public:
-	SHA1_c & Init();
-	SHA1_c & Update ( const BYTE * pData, int iLen );
-	void Final ( BYTE digest[SHA1_SIZE] );
-
-private:
-	DWORD state[5], count[2];
-	BYTE buffer[SHA1_BUF_SIZE];
-
-	void Transform ( const BYTE buf[SHA1_BUF_SIZE] );
+	SHA1_c();
+	~SHA1_c();
+	void Init();
+	void Update ( const BYTE* pData, int iLen );
+	void Final ( BYTE digest[HASH20_SIZE] );
 };
 
 // string and 20-bytes hash

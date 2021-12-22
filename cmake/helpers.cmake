@@ -200,7 +200,7 @@ function ( GET_SONAME RAWLIB OUTVAR )
 			if (EXTNAME STREQUAL ".tbd")
 				return() # library is present in system by design, no need to unbind from it via dlopen at all.
 			endif()
-			execute_process ( COMMAND "${CMAKE_OBJDUMP}" -macho -dylib-id "${RAWLIB}"
+			execute_process ( COMMAND "${CMAKE_OBJDUMP}" --macho --dylib-id "${RAWLIB}"
 					WORKING_DIRECTORY "${SOURCE_DIR}"
 					RESULT_VARIABLE res
 					OUTPUT_VARIABLE _CONTENT

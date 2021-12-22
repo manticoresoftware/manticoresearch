@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>rt vs count distinct</name>
+
+<requires>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+<sphinxql>
+	create table a1 ( title text, tag integer );
+	insert into a1 values ( 1, 'a1_tag1', 1 );
+	insert into a1 values ( 2, 'a1_tag1', 1 );
+	insert into a1 values ( 3, 'a1_tag1', 1 );
+	insert into a1 values ( 4, 'a1_tag4', 4 );
+	insert into a1 values ( 5, 'a1_tag5', 5 );
+	insert into a1 values ( 6, 'a1_tag6', 6 );
+
+	create table a2 ( title text, tag integer );
+	insert into a2 values ( 1,  'a2_tag1', 1 );
+	insert into a2 values ( 10, 'a2_tag1', 1 );
+	insert into a2 values ( 11, 'a2_tag1', 1 );
+	insert into a2 values ( 2,  'a2_tag2', 2 );
+	insert into a2 values ( 3,  'a2_tag3', 3 );
+	insert into a2 values ( 4,  'a2_tag4', 4 );
+	insert into a2 values ( 5,  'a2_tag5', 5 );
+
+	create table a2b ( title text, huge bigint, tag integer, flt float );
+	insert into a2b values ( 1, 'a2b_tag1', 1, 0.0, 0 );
+	insert into a2b values ( 10,'a2b_tag1', 1, 0.0, 0 );
+	insert into a2b values ( 11,'a2b_tag1', 1, 0.0, 0 );
+	insert into a2b values ( 2, 'a2b_tag2', 2, 0.0, 0 );
+	insert into a2b values ( 3, 'a2b_tag3', 3, 0.0, 0 );
+	insert into a2b values ( 4, 'a2b_tag4', 4, 0.0, 0 );
+	insert into a2b values ( 5, 'a2b_tag5', 5, 0.0, 0 );
+
+	select * from a1 order by id asc;
+	select * from a2 order by id asc;
+	select * from a2b order by id asc;
+
+	select *, count(distinct id) from a1 group by tag order by id asc;
+	select *, count(distinct id) from a2 group by tag order by id asc;
+	select *, count(distinct id) from a2b group by tag order by id asc;
+
+	select *, count(distinct id) from a1,a2 group by tag order by id asc;
+
+	<!-- different schemas; results are incorrect (as expected) -->
+	select *, count(distinct id) from a1,a2b group by tag order by id asc;
+
+	create table distr type='distributed' local='a1' local='a2';
+	show create table distr;
+	select *, count(distinct id) from distr group by tag order by id asc;
+
+	drop table a1;
+	drop table a2;
+	drop table a2b;
+	drop table distr;
+</sphinxql>
+</queries>
+
+</test>

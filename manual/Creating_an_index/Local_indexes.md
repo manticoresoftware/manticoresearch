@@ -23,10 +23,10 @@ All index types are supported in this mode.
 ## Index types and modes
 
 
-| Index type  | RT mode  | Plain mode  |
-|-------------|----------|-------------|
-| Real-time   | yes      | yes         |
-| Plain       | no       | yes         |
-| Percolate   | yes      | yes         |
-| Distributed | yes      | yes         |
-| Template    | no       | yes         |
+| Index type  | RT mode        | Plain mode  |
+|-------------|----------------|-------------|
+| Real-time   | supported      | supported   |
+| Plain       | not supported  | supported   |
+| Percolate   | supported      | supported   |
+| Distributed | supported      | supported   |
+| Template    | not supported  | supported   |

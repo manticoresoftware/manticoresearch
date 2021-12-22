@@ -14,7 +14,6 @@ indexer
 searchd
 {
 	<searchd_settings/>
-    attr_update_reserve = 1024
 }
 
 source src_sql
@@ -30,6 +29,7 @@ index idx
 {
 	source			= src_sql
 	path			= <data_path/>/idx
+	attr_update_reserve = 1024
 }
 
 </config>

@@ -44,6 +44,8 @@ searchd {
 <!-- example VIP -->
 Separate HTTP interface can be used to perform 'VIP' connections. A connection in this case bypasses a thread pool and always forcibly creates a new dedicated thread. That's useful for managing Manticore Search in case of a severe overload when the server would either stall or not let you connect via a regular port otherwise.
 
+Read more about `listen` in [this section](../Server_settings/Searchd.md#listen).
+
 <!-- request VIP -->
 ```ini
 searchd {

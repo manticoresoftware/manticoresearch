@@ -734,6 +734,12 @@ TEST( functions, TaggedHash20_t )
 
 }
 
+TEST ( functions, SHA1_hashing )
+{
+	auto sData = FromSz ( "bla-bla-bla" );
+	auto sHash = CalcSHA1 ( sData.first, sData.second );
+	ASSERT_STREQ ( sHash.cstr(), "1d537ba3814495b5be2c8f6537e4bd6764fcc9b4");
+}
 
 
 //////////////////////////////////////////////////////////////////////////

@@ -182,7 +182,7 @@ for ( $i = 102; $i < 104; $i++)
 	usleep ( 50000 );
 	
 	$error = "";
-	$startSta = StartSearchd ( 'config.conf', 'error.txt', 'searchd.pid', $error );
+	$startSta = StartSearchd ( 'config.conf', 'error.txt', 'searchd.pid', $error, array() );
 	if ( $startSta == 0 || $startSta == 2 )
 	{
 		$results[] = "started=ok";

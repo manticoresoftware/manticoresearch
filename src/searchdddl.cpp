@@ -72,7 +72,7 @@ DdlParser_c::DdlParser_c ( CSphVector<SqlStmt_t> & dStmt )
 }
 
 
-void DdlParser_c::AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits )
+void DdlParser_c::AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits, AttrEngine_e eEngine )
 {
 	assert(m_pStmt);
 	CSphColumnInfo & tAttr = m_pStmt->m_tCreateTable.m_dAttrs.Add();
@@ -80,6 +80,7 @@ void DdlParser_c::AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits )
 	tAttr.m_sName.ToLower();
 	tAttr.m_eAttrType = SPH_ATTR_INTEGER;
 	tAttr.m_tLocator.m_iBitCount = iBits;
+	tAttr.m_eEngine = eEngine;
 }
 
 
@@ -216,15 +217,31 @@ bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t &
 bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t & tCol, const SqlNode_t & tEngine )
 {
 	AttrEngine_e eEngine = AttrEngine_e::DEFAULT;
+	if ( !ConvertToAttrEngine ( tEngine, eEngine ) )
+		return false;
 
+	return AddCreateTableCol ( tName, tCol, eEngine );
+}
+
+
+bool DdlParser_c::AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits, const SqlNode_t & tEngine )
+{
+	AttrEngine_e eEngine = AttrEngine_e::DEFAULT;
+	if ( !ConvertToAttrEngine ( tEngine, eEngine ) )
+		return false;
+
+	AddCreateTableBitCol ( tCol, iBits, eEngine );
+	return true;
+}
+
+
+bool DdlParser_c::ConvertToAttrEngine ( const SqlNode_t & tEngine, AttrEngine_e & eEngine )
+{
 	CSphString sEngine = ToStringUnescape(tEngine);
 	CSphString sEngineLowerCase = sEngine;
 	sEngineLowerCase.ToLower();
 
-	if ( !StrToAttrEngine ( eEngine, sEngineLowerCase, m_sError ) )
-		return false;
-
-	return AddCreateTableCol ( tName, tCol, eEngine );
+	return StrToAttrEngine ( eEngine, sEngineLowerCase, m_sError );
 }
 
 

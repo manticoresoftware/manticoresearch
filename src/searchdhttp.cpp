@@ -70,6 +70,7 @@ public:
 	static int				ParserUrl ( http_parser * pParser, const char * sAt, size_t iLen );
 	static int				ParserHeaderField ( http_parser * pParser, const char * sAt, size_t iLen );
 	static int				ParserHeaderValue ( http_parser * pParser, const char * sAt, size_t iLen );
+	static int				ParseHeaderCompleted ( http_parser * pParser );
 	static int				ParserBody ( http_parser * pParser, const char * sAt, size_t iLen );
 
 private:
@@ -92,6 +93,7 @@ bool HttpRequestParser_c::Parse ( const BYTE * pData, int iDataLen )
 	tParserSettings.on_url = HttpRequestParser_c::ParserUrl;
 	tParserSettings.on_header_field = HttpRequestParser_c::ParserHeaderField;
 	tParserSettings.on_header_value = HttpRequestParser_c::ParserHeaderValue;
+	tParserSettings.on_headers_complete = HttpRequestParser_c::ParseHeaderCompleted;
 	tParserSettings.on_body = HttpRequestParser_c::ParserBody;
 
 	http_parser tParser;
@@ -259,6 +261,15 @@ int HttpRequestParser_c::ParserHeaderValue ( http_parser * pParser, const char *
 	auto * pHttpParser = (HttpRequestParser_c *)pParser->data;
 	pHttpParser->m_hOptions.Add ( sVal, pHttpParser->m_sCurField );
 	pHttpParser->m_sCurField = "";
+	return 0;
+}
+
+int HttpRequestParser_c::ParseHeaderCompleted ( http_parser* pParser )
+{
+	// we're not support connection upgrade - so just reset upgrade flag, if detected.
+	// rfc7540 section-3.2 (for http/2) says, we just should continue as if no 'upgrade' header was found
+	if ( pParser->upgrade )
+		pParser->upgrade = 0;
 	return 0;
 }
 
@@ -900,8 +911,7 @@ public:
 
 		JsonRowBuffer_c tOut;
 
-		SphinxqlSessionPublic tSession;
-		tSession.Execute ( FromStr ( sQuery ), tOut );
+		session::Execute ( FromStr ( sQuery ), tOut );
 
 		BuildReply ( tOut.Finish(), SPH_HTTP_STATUS_200 );
 
@@ -924,7 +934,7 @@ public:
 		{
 			sError.SetSprintf( "Error parsing json query: %s", sError.cstr() );
 			ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
-			return NULL;
+			return nullptr;
 		}
 
 		m_eQueryType = QUERY_JSON;
@@ -945,18 +955,16 @@ class HttpJsonInsertTraits_c
 protected:
 	bool ProcessInsert ( SqlStmt_t & tStmt, DocID_t tDocId, bool bReplace, JsonObj_c & tResult )
 	{
-		CSphSessionAccum tAcc;
-		CSphString sWarning;
 		HttpErrorReporter_c tReporter;
-		CSphVector<int64_t> dLastIds;
-		sphHandleMysqlInsert ( tReporter, tStmt, bReplace, true, sWarning, tAcc, dLastIds );
+		sphHandleMysqlInsert ( tReporter, tStmt );
 
 		if ( tReporter.IsError() )
 		{
 			tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), tReporter.GetError() );
 		} else
 		{
-			if ( dLastIds.GetLength() )
+			auto dLastIds = session::LastIds();
+			if ( !dLastIds.IsEmpty() )
 				tDocId = dLastIds[0];
 			tResult = sphEncodeInsertResultJson ( tStmt.m_sIndex.cstr(), bReplace, tDocId );
 		}
@@ -1007,8 +1015,7 @@ protected:
 	bool ProcessUpdate ( const char * szRawRequest, const SqlStmt_t & tStmt, DocID_t tDocId, JsonObj_c & tResult )
 	{
 		HttpErrorReporter_c tReporter;
-		CSphString sWarning;
-		sphHandleMysqlUpdate ( tReporter, tStmt, FromSz ( szRawRequest ), sWarning );
+		sphHandleMysqlUpdate ( tReporter, tStmt, FromSz ( szRawRequest ) );
 
 		if ( tReporter.IsError() )
 			tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), tReporter.GetError() );
@@ -1067,10 +1074,8 @@ class HttpJsonDeleteTraits_c
 protected:
 	bool ProcessDelete ( const char * szRawRequest, const SqlStmt_t & tStmt, DocID_t tDocId, JsonObj_c & tResult )
 	{
-		CSphSessionAccum tAcc;
 		HttpErrorReporter_c tReporter;
-		CSphString sWarning;
-		sphHandleMysqlDelete ( tReporter, tStmt, FromSz ( szRawRequest ), true, tAcc );
+		sphHandleMysqlDelete ( tReporter, tStmt, FromSz ( szRawRequest ) );
 
 		if ( tReporter.IsError() )
 			tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), tReporter.GetError() );
@@ -1309,7 +1314,11 @@ bool sphLoopClientHttp ( const BYTE * pRequest, int iRequestLen, CSphVector<BYTE
 	}
 
 	ESphHttpEndpoint eEndpoint = tParser.GetEndpoint();
-	if ( !sphProcessHttpQuery ( eEndpoint, tParser.GetBody().cstr(), tParser.GetOptions(), dResult, true, tParser.GetRequestType() ) )
+
+	auto& sRawString = tParser.GetBody();
+	myinfo::SetDescription ( sRawString.cstr(), sRawString.Length() );
+
+	if ( !sphProcessHttpQuery ( eEndpoint, sRawString.cstr(), tParser.GetOptions(), dResult, true, tParser.GetRequestType() ) )
 	{
 		if ( eEndpoint==SPH_HTTP_ENDPOINT_INDEX )
 			HttpHandlerIndexPage ( dResult );

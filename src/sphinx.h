@@ -1082,6 +1082,7 @@ struct CSphIndexStatus
 	int64_t			m_iTID = 0;
 	int64_t			m_iSavedTID = 0;
 	int64_t 		m_iDead = 0;
+	double			m_fSaveRateLimit {0.0};	 // not used for plain. Part of m_iMemLimit to be achieved before flushing
 };
 
 
@@ -1093,7 +1094,8 @@ struct CSphMultiQueryArgs : public ISphNoncopyable
 	bool									m_bLocalDF = false;
 	const SmallStringHash_T<int64_t> *		m_pLocalDocs = nullptr;
 	int64_t									m_iTotalDocs = 0;
-	bool									m_bModifySorterSchemas {true};
+	bool									m_bModifySorterSchemas = true;
+	bool									m_bFinalizeSorters = true;
 	int										m_iSplit = 1;
 
 	CSphMultiQueryArgs ( int iIndexWeight );
@@ -1255,6 +1257,7 @@ int GetReadBuffer ( int iBuf );
 class ISphMatchSorter;
 class CSphSource;
 struct CSphSourceStats;
+class DebugCheckError_i;
 
 /// generic fulltext index interface
 class CSphIndex : public ISphKeywordsStat, public IndexSegment_c, public DocstoreReader_i
@@ -1290,6 +1293,7 @@ public:
 	int64_t						GetIndexId() const { return m_iIndexId; }
 	void						SetMutableSettings ( const MutableIndexSettings_c & tSettings );
 	const MutableIndexSettings_c & GetMutableSettings () const { return m_tMutableSettings; }
+	virtual int64_t				GetPseudoShardingMetric() const;
 
 public:
 	/// build index by indexing given sources
@@ -1389,7 +1393,7 @@ public:
 	virtual void				DebugDumpDict ( FILE * fp ) = 0;
 
 	/// internal debugging hook, DO NOT USE
-	virtual int					DebugCheck ( FILE * fp ) = 0;
+	virtual int					DebugCheck ( DebugCheckError_i& ) = 0;
 	virtual void				SetDebugCheck ( bool bCheckIdDups, int iCheckChunk ) {}
 
 	/// getter for name
@@ -1494,7 +1498,7 @@ public:
 	void				DebugDumpHeader ( FILE *, const char *, bool ) override {}
 	void				DebugDumpDocids ( FILE * ) override {}
 	void				DebugDumpHitlist ( FILE * , const char * , bool ) override {}
-	int					DebugCheck ( FILE * ) override { return 0; }
+	int					DebugCheck ( DebugCheckError_i& ) override { return 0; }
 	void				DebugDumpDict ( FILE * ) override {}
 	Bson_t				ExplainQuery ( const CSphString & sQuery ) const override { return EmptyBson (); }
 
@@ -1568,6 +1572,8 @@ int					GetUnhintedBuffer();
 
 /// check query for expressions
 bool				sphHasExpressions ( const CSphQuery & tQuery, const CSphSchema & tSchema );
+
+void				SetPseudoShardingThresh ( int iThresh );
 
 void				InitSkipCache ( int64_t iCacheSize );
 void				ShutdownSkipCache();

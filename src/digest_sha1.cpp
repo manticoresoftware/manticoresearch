@@ -17,6 +17,12 @@
 #include "fileutils.h"
 #include "indexsettings.h"
 
+
+#if WITH_SSL
+#define USE_SHA1_FROM_OPENSSL
+#include <openssl/evp.h>
+#endif
+
 //////////////////////////////////////////////////////////////////////////
 // SHA1 digests
 //////////////////////////////////////////////////////////////////////////
@@ -30,86 +36,145 @@
 // received a copy of the GPL license along with this program; if you
 // did not, you can find it at http://www.gnu.org/
 
-void SHA1_c::Transform ( const BYTE buf[64] )
+static constexpr int SHA1_SIZE = HASH20_SIZE;
+
+class SHA1_c::Impl_c
 {
-	DWORD a = state[0], b = state[1], c = state[2], d = state[3], e = state[4], block[16];
-	memset ( block, 0, sizeof ( block ) ); // initial conversion to big-endian units
-	for ( int i = 0; i<64; i++ )
-		block[i >> 2] += buf[i] << ( ( 3 - ( i & 3 ) ) * 8 );
-	for ( int i = 0; i<80; i++ ) // do hashing rounds
+public:
+#ifdef USE_SHA1_FROM_OPENSSL
+	void Init()
 	{
-#define LROT( value, bits ) ( ( (value) << (bits) ) | ( (value) >> ( 32-(bits) ) ) )
-		if ( i>=16 )
-			block[i & 15] = LROT (
-				block[( i + 13 ) & 15] ^ block[( i + 8 ) & 15] ^ block[( i + 2 ) & 15] ^ block[i & 15], 1 );
-
-		if ( i<20 )
-			e += ( ( b & ( c ^ d ) ) ^ d ) + 0x5A827999;
-		else if ( i<40 )
-			e += ( b ^ c ^ d ) + 0x6ED9EBA1;
-		else if ( i<60 )
-			e += ( ( ( b | c ) & d ) | ( b & c ) ) + 0x8F1BBCDC;
-		else
-			e += ( b ^ c ^ d ) + 0xCA62C1D6;
-
-		e += block[i & 15] + LROT ( a, 5 );
-		DWORD t = e;
-		e = d;
-		d = c;
-		c = LROT ( b, 30 );
-		b = a;
-		a = t;
+		m_dCtx = EVP_MD_CTX_create();
+		EVP_DigestInit_ex ( m_dCtx, EVP_sha1(), nullptr );
 	}
-	state[0] += a; // save state
-	state[1] += b;
-	state[2] += c;
-	state[3] += d;
-	state[4] += e;
-}
 
-SHA1_c & SHA1_c::Init()
-{
-	const DWORD dInit[5] = { 0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0 };
-	memcpy ( state, dInit, sizeof ( state ) );
-	count[0] = count[1] = 0;
-	return *this;
-}
-
-SHA1_c & SHA1_c::Update ( const BYTE * data, int len )
-{
-	int i, j = ( count[0] >> 3 ) & 63;
-	count[0] += ( len << 3 );
-	if ( count[0]<( DWORD ) ( len << 3 ) )
-		count[1]++;
-	count[1] += ( len >> 29 );
-	if ( ( j + len )>63 )
+	void Update ( const BYTE* data, int len )
 	{
-		i = 64 - j;
-		memcpy ( &buffer[j], data, i );
-		Transform ( buffer );
-		for ( ; i + 63<len; i += 64 )
-			Transform ( data + i );
-		j = 0;
-	} else
-		i = 0;
-	memcpy ( &buffer[j], &data[i], len - i );
-	return *this;
-}
+		EVP_DigestUpdate ( m_dCtx, data, len );
+	}
 
-void SHA1_c::Final ( BYTE digest[SHA1_SIZE] )
+	void Final ( BYTE digest[SHA1_SIZE] )
+	{
+		unsigned int uLen = SHA1_SIZE;
+		EVP_DigestFinal_ex ( m_dCtx, digest, &uLen );
+		EVP_MD_CTX_destroy ( m_dCtx );
+	}
+
+private:
+	EVP_MD_CTX* m_dCtx;
+
+#else
+	void Init()
+	{
+		const DWORD dInit[5] = { 0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0 };
+		memcpy ( state, dInit, sizeof ( state ) );
+		count[0] = count[1] = 0;
+	}
+
+	void Update ( const BYTE* data, int len )
+	{
+		int i, j = ( count[0] >> 3 ) & 63;
+		count[0] += ( len << 3 );
+		if ( count[0] < (DWORD)( len << 3 ) )
+			count[1]++;
+		count[1] += ( len >> 29 );
+		if ( ( j + len ) > 63 )
+		{
+			i = 64 - j;
+			memcpy ( &buffer[j], data, i );
+			Transform ( buffer );
+			for ( ; i + 63 < len; i += 64 )
+				Transform ( data + i );
+			j = 0;
+		} else
+			i = 0;
+		memcpy ( &buffer[j], &data[i], len - i );
+	}
+
+	void Final ( BYTE digest[SHA1_SIZE] )
+	{
+		BYTE finalcount[8];
+		for ( auto i = 0; i < 8; i++ )
+			finalcount[i] = (BYTE)( ( count[( i >= 4 ) ? 0 : 1] >> ( ( 3 - ( i & 3 ) ) * 8 ) )
+									& 255 ); // endian independent
+		Update ( (const BYTE*)"\200", 1 );	 // add padding
+		while ( ( count[0] & 504 ) != 448 )
+			Update ( (const BYTE*)"\0", 1 );
+		Update ( finalcount, 8 ); // should cause a SHA1_Transform()
+		for ( auto i = 0; i < SHA1_SIZE; i++ )
+			digest[i] = (BYTE)( ( state[i >> 2] >> ( ( 3 - ( i & 3 ) ) * 8 ) ) & 255 );
+	}
+
+private:
+	static constexpr int SHA1_BUF_SIZE = 64;
+
+	DWORD state[5], count[2];
+	BYTE buffer[SHA1_BUF_SIZE];
+
+	void Transform ( const BYTE buf[SHA1_BUF_SIZE] )
+	{
+		DWORD a = state[0], b = state[1], c = state[2], d = state[3], e = state[4], block[16];
+		memset ( block, 0, sizeof ( block ) ); // initial conversion to big-endian units
+		for ( int i = 0; i < 64; i++ )
+			block[i >> 2] += buf[i] << ( ( 3 - ( i & 3 ) ) * 8 );
+		for ( int i = 0; i < 80; i++ ) // do hashing rounds
+		{
+#define LROT( value, bits ) ( ( ( value ) << ( bits ) ) | ( ( value ) >> ( 32 - ( bits ) ) ) )
+			if ( i >= 16 )
+				block[i & 15] = LROT (
+						block[( i + 13 ) & 15] ^ block[( i + 8 ) & 15] ^ block[( i + 2 ) & 15] ^ block[i & 15], 1 );
+
+			if ( i < 20 )
+				e += ( ( b & ( c ^ d ) ) ^ d ) + 0x5A827999;
+			else if ( i < 40 )
+				e += ( b ^ c ^ d ) + 0x6ED9EBA1;
+			else if ( i < 60 )
+				e += ( ( ( b | c ) & d ) | ( b & c ) ) + 0x8F1BBCDC;
+			else
+				e += ( b ^ c ^ d ) + 0xCA62C1D6;
+
+			e += block[i & 15] + LROT ( a, 5 );
+			DWORD t = e;
+			e = d;
+			d = c;
+			c = LROT ( b, 30 );
+			b = a;
+			a = t;
+		}
+		state[0] += a; // save state
+		state[1] += b;
+		state[2] += c;
+		state[3] += d;
+		state[4] += e;
+	}
+#endif
+};
+
+
+SHA1_c::SHA1_c()
+	: m_pImpl { new Impl_c }
 {
-	BYTE finalcount[8];
-	for ( auto i = 0; i<8; i++ )
-		finalcount[i] = ( BYTE ) ( ( count[( i>=4 ) ? 0 : 1] >> ( ( 3 - ( i & 3 ) ) * 8 ) )
-			& 255 ); // endian independent
-	Update ( (const BYTE *) "\200", 1 ); // add padding
-	while ( ( count[0] & 504 )!=448 )
-		Update ( (const BYTE *) "\0", 1 );
-	Update ( finalcount, 8 ); // should cause a SHA1_Transform()
-	for ( auto i = 0; i<SHA1_SIZE; i++ )
-		digest[i] = ( BYTE ) ( ( state[i >> 2] >> ( ( 3 - ( i & 3 ) ) * 8 ) ) & 255 );
 }
 
+SHA1_c::~SHA1_c()
+{
+	SafeDelete ( m_pImpl );
+}
+
+void SHA1_c::Init()
+{
+	m_pImpl->Init();
+}
+
+void SHA1_c::Update ( const BYTE* pData, int iLen )
+{
+	m_pImpl->Update ( pData, iLen );
+}
+
+void SHA1_c::Final ( BYTE digest[HASH20_SIZE] )
+{
+	m_pImpl->Final ( digest );
+}
 
 CSphString BinToHex ( const BYTE * pHash, int iLen )
 {

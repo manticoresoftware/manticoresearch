@@ -258,7 +258,7 @@ class SqlRowBuffer_c : public RowBuffer_i, private LazyVector_T<BYTE>
 {
 	BYTE & m_uPacketID;
 	ISphOutputBuffer & m_tOut;
-	SphinxqlSessionPublic* m_pSession = nullptr;
+	ClientSession_c* m_pSession = nullptr;
 #ifndef NDEBUG
 	size_t m_iColumns = 0; // used for head/data columns num sanitize check
 #endif
@@ -339,22 +339,22 @@ class SqlRowBuffer_c : public RowBuffer_i, private LazyVector_T<BYTE>
 	{
 		if ( !m_pSession )
 			return true;
-		return m_pSession->IsAutoCommit();
+		return session::IsAutoCommit ( m_pSession );
 	}
 
 	bool IsInTrans () const
 	{
 		if ( !m_pSession )
 			return false;
-		return m_pSession->IsInTrans();
+		return session::IsInTrans ( m_pSession );
 	}
 
 public:
 
-	SqlRowBuffer_c ( BYTE * pPacketID, ISphOutputBuffer * pOut, SphinxqlSessionPublic * pSession )
+	SqlRowBuffer_c ( BYTE * pPacketID, ISphOutputBuffer * pOut )
 		: m_uPacketID ( *pPacketID )
 		, m_tOut ( *pOut )
-		, m_pSession ( pSession )
+		, m_pSession ( session::GetClientSession() )
 	{}
 
 	void PutFloatAsString ( float fVal, const char * sFormat ) override
@@ -582,10 +582,10 @@ inline bool UserWantsCompression ( const ByteBlob_t & tPacket )
 	return ( tPacket.first[0] & 0x20U)!=0;
 }
 
-bool LoopClientMySQL ( BYTE & uPacketID, SphinxqlSessionPublic & tSession, int iPacketLen,
+bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen,
 		QueryProfile_c * pProfile, AsyncNetBufferPtr_c pBuf )
 {
-	auto& tSess = session::Info ();
+	auto& tSess = session::Info();
 	assert ( pBuf );
 	auto& tIn = *(AsyncNetInputBuffer_c *) pBuf;
 	auto& tOut = *(NetGenericOutputBuffer_c *) pBuf;
@@ -607,13 +607,13 @@ bool LoopClientMySQL ( BYTE & uPacketID, SphinxqlSessionPublic & tSession, int i
 		case MYSQL_COM_PING:
 		case MYSQL_COM_INIT_DB:
 			// client wants a pong
-			SendMysqlOkPacket ( tOut, uPacketID, tSession.IsAutoCommit(), tSession.IsInTrans() );
+			SendMysqlOkPacket ( tOut, uPacketID, session::IsAutoCommit(), session::IsInTrans() );
 			break;
 
 		case MYSQL_COM_SET_OPTION:
 			// bMulti = ( tIn.GetWord()==MYSQL_OPTION_MULTI_STATEMENTS_ON ); // that's how we could double check and validate multi query
 			// server reporting success in response to COM_SET_OPTION and COM_DEBUG
-			SendMysqlEofPacket ( tOut, uPacketID, 0, false, tSession.IsAutoCommit (), tSession.IsInTrans() );
+			SendMysqlEofPacket ( tOut, uPacketID, 0, false, session::IsAutoCommit (), session::IsInTrans() );
 			break;
 
 		case MYSQL_COM_STATISTICS:
@@ -633,8 +633,8 @@ bool LoopClientMySQL ( BYTE & uPacketID, SphinxqlSessionPublic & tSession, int i
 			assert ( !tIn.GetError() );
 			sphLogDebugv ( "LoopClientMySQL command %d, '%s'", uMysqlCmd, myinfo::UnsafeDescription().first );
 			tSess.SetTaskState ( TaskState_e::QUERY );
-			SqlRowBuffer_c tRows ( &uPacketID, &tOut, &tSession );
-			bKeepProfile = tSession.Execute ( myinfo::UnsafeDescription(), tRows );
+			SqlRowBuffer_c tRows ( &uPacketID, &tOut );
+			bKeepProfile = session::Execute ( myinfo::UnsafeDescription(), tRows );
 		}
 		break;
 
@@ -663,7 +663,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, SphinxqlSessionPublic & tSession, int i
 	if ( pProfile )
 		pProfile->Stop();
 	if ( uMysqlCmd==MYSQL_COM_QUERY && bKeepProfile )
-		tSession.SaveLastProfile();
+		session::SaveLastProfile();
 	tOut.SetProfiler ( nullptr );
 	return true;
 }
@@ -675,11 +675,8 @@ void RunSingleSphinxqlCommand ( Str_t sCommand, ISphOutputBuffer & tOut )
 {
 	BYTE uDummy = 0;
 
-	// todo: move upper, if the session variables are also necessary in API access mode.
-	SphinxqlSessionPublic tSession; // FIXME!!! check that no accum related command used via API
-
-	SqlRowBuffer_c tRows ( &uDummy, &tOut, &tSession );
-	tSession.Execute ( sCommand, tRows );
+	SqlRowBuffer_c tRows ( &uDummy, &tOut );
+	session::Execute ( sCommand, tRows );
 }
 
 // add 'compressed' flag
@@ -757,10 +754,8 @@ void SqlServe ( AsyncNetBufferPtr_c pBuf )
 		return;
 	}
 
-	SphinxqlSessionPublic tSession; // session variables and state
 	bool bAuthed = false;
 	BYTE uPacketID = 1;
-	bool bKeepAlive;
 	int iPacketLen;
 	int iTimeoutS = -1;
 	do
@@ -784,7 +779,7 @@ void SqlServe ( AsyncNetBufferPtr_c pBuf )
 		sphLogDebugv ( "Receiving command... %d bytes in buf", tIn.HasBytes() );
 
 		// setup per-query profiling
-		auto pProfile = tSession.StartProfiling ( SPH_QSTATE_TOTAL );
+		auto pProfile = session::StartProfiling ( SPH_QSTATE_TOTAL );
 		if ( pProfile )
 			tOut.SetProfiler ( pProfile );
 
@@ -834,7 +829,7 @@ void SqlServe ( AsyncNetBufferPtr_c pBuf )
 			if ( !tSess.GetSsl() && UserWantsSSL( tAnswer) ) // want SSL
 			{
 				tSess.SetSsl ( MakeSecureLayer ( pBuf ) );
-				bKeepAlive = !tOut.GetError ();
+				tSess.SetPersistent( !tOut.GetError () );
 				continue; // next packet will be 'login' again, but received over SSL
 			}
 
@@ -848,9 +843,9 @@ void SqlServe ( AsyncNetBufferPtr_c pBuf )
 			}
 
 			if ( UsernameIsFEDERATED ( tAnswer ))
-				tSession.SetFederatedUser();
-			SendMysqlOkPacket ( tOut, uPacketID, tSession.IsAutoCommit(), tSession.IsInTrans ());
-			bKeepAlive = tOut.Flush ();
+				session::SetFederatedUser();
+			SendMysqlOkPacket ( tOut, uPacketID, session::IsAutoCommit(), session::IsInTrans ());
+			tSess.SetPersistent ( tOut.Flush () );
 			bAuthed = true;
 
 			if ( bCanCompression && UserWantsCompression ( tAnswer ) )
@@ -861,7 +856,6 @@ void SqlServe ( AsyncNetBufferPtr_c pBuf )
 			continue;
 		}
 
-		bKeepAlive = LoopClientMySQL ( uPacketID, tSession, iPacketLen, pProfile, pBuf )
-				&& !pCloseFlag->m_bClose;
-	} while ( bKeepAlive );
+		tSess.SetPersistent ( LoopClientMySQL ( uPacketID, iPacketLen, pProfile, pBuf ) && !pCloseFlag->m_bClose );
+	} while ( tSess.GetPersistent() );
 }

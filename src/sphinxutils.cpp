@@ -788,6 +788,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "read_buffer_hits",		0, nullptr },
 	{ "read_buffer_columnar",	0, nullptr },
 	{ "read_unhinted",			0, nullptr },
+	{ "attr_update_reserve",	0, nullptr },
 	{ "access_plain_attrs",		0, nullptr },
 	{ "access_blob_attrs",		0, nullptr },
 	{ "access_doclists",		0, nullptr },
@@ -845,7 +846,6 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "attr_flush_period",		0, NULL },
 	{ "max_packet_size",		0, NULL },
 	{ "mva_updates_pool",		KEY_REMOVED, NULL },
-	{ "attr_update_reserve",	0, NULL },
 	{ "max_filters",			0, NULL },
 	{ "max_filter_values",		0, NULL },
 	{ "max_open_files",			0, NULL },
@@ -859,7 +859,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "max_batch_queries",		0, NULL },
 	{ "subtree_docs_cache",		0, NULL },
 	{ "subtree_hits_cache",		0, NULL },
-	{ "workers",				0, NULL },
+	{ "workers",				KEY_DEPRECATED, "default value" },
 	{ "prefork",				KEY_HIDDEN, NULL },
 	{ "dist_threads",			KEY_DEPRECATED, "max_threads_per_query" },
 	{ "max_threads_per_query",	0, NULL },
@@ -923,7 +923,8 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "not_terms_only_allowed",	0, nullptr },
 	{ "query_log_commands",		0, nullptr },
 	{ "auto_optimize",			0, nullptr },
-	{ "pseudo_sharding",			0, nullptr },
+	{ "pseudo_sharding",		0, nullptr },
+	{ "optimize_cutoff",		0, nullptr },
 	{ NULL,						0, NULL }
 };
 
@@ -2721,6 +2722,9 @@ const char * DoBacktrace ( int, int )
 }
 #endif
 
+#define BOOST_STACKTRACE_GNU_SOURCE_NOT_REQUIRED 1
+#include <boost/stacktrace.hpp>
+
 void sphBacktrace ( int iFD, bool bSafe )
 {
 	if ( iFD<0 )
@@ -2828,6 +2832,9 @@ void sphBacktrace ( int iFD, bool bSafe )
 		sphSafeInfo ( iFD, "%p", g_pBacktraceAddresses[i] );
 #endif // HAVE_BACKTRACE_SYMBOLS
 #endif // !HAVE_BACKTRACE
+
+	sphSafeInfo ( iFD, "Trying boost backtrace:" );
+	sphSafeInfo ( iFD, to_string ( boost::stacktrace::stacktrace() ).c_str() );
 
 	sphSafeInfo ( iFD, "-------------- backtrace ends here ---------------" );
 

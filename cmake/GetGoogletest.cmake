@@ -1,7 +1,7 @@
 # Search prebuilt googletest. If nothing found - download, unpack, build and then search again
 # allow to get googletest from bundle also (instead of download)
 
-set(GTEST_GITHUB "https://github.com/google/googletest/archive/master.zip")
+set(GTEST_GITHUB "https://github.com/google/googletest/archive/main.zip")
 set(GTEST_ZIP "googletest-master.zip") # that is default filename if you download GTEST_GITHUB using browser
 set(GTEST_URL "${LIBS_BUNDLE}/${GTEST_ZIP}")
 
@@ -30,3 +30,4 @@ execute_process(COMMAND "${CMAKE_COMMAND}" --build . WORKING_DIRECTORY "${MANTIC
 # now it should find
 find_package(GTest CONFIG)
 trace(GTest::gmock_main)
+

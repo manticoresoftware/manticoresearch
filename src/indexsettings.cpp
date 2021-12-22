@@ -543,6 +543,7 @@ void CSphDictSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * 
 {
 	tOut.Add ( "dict",					m_bWordDict ? "keywords" : "crc", !m_bWordDict );
 	tOut.Add ( "morphology",			m_sMorphology,		!m_sMorphology.IsEmpty() );
+	tOut.Add ( "morphology_skip_fields",m_sMorphFields,		!m_sMorphFields.IsEmpty() );
 	tOut.Add ( "min_stemming_len",		m_iMinStemmingLen,	m_iMinStemmingLen>1 );
 	tOut.Add ( "stopwords_unstemmed",	1,					m_bStopwordsUnstemmed );
 

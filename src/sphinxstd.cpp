@@ -688,6 +688,27 @@ void operator delete [] ( void * pPtr ) throw ()
 
 static SphDieCallback_t g_pfDieCallback = nullptr;
 
+bool val_from_env ( const char* szEnvName, bool bDefault )
+{
+	if ( getenv ( szEnvName ) )
+		return true;
+	return bDefault;
+}
+
+int val_from_env ( const char* szEnvName, int iDefault )
+{
+	int iRes = iDefault;
+	const char* szEnv = getenv ( szEnvName );
+	if ( szEnv )
+	{
+		char* szEnd = nullptr;
+		iRes = strtol ( szEnv, &szEnd, 10 );
+		if ( *szEnd != '\0' )
+			sphWarning ( "%s expects to be numeric. %s provided, failed to parse as numeric since %s", szEnvName, szEnv, szEnd );
+	}
+	return iRes;
+}
+
 // absolute path from outside, as /usr/share/manticore, when prefix / or /usr. Or /usr/local/share/manticore if prefix /usr/local/
 const char * GET_FULL_SHARE_DIR()
 {
@@ -891,7 +912,7 @@ void sphDieRestart ( const char * sFmt, ... )
 	va_start ( ap, sFmt );
 	sphDieVa ( sFmt, ap );
 	va_end ( ap );
-	exit ( 2 ); // almost CRASH_EXIT
+	sphQuickExit ( 2 ); // almost CRASH_EXIT
 }
 
 void sphFatalVa ( const char * sFmt, va_list ap )

@@ -50,7 +50,7 @@ SELECT id, COUNT(*) FROM rt1;
 FLUSH RAMCHUNK rt1;
 
 SELECT id, groupby() g, count(*) c, mva FROM rt1 GROUP 3 BY mva ORDER BY id ASC;
-SELECT id, groupby() g, count(*) c, mva FROM rt1 GROUP BY mva ORDER BY id ASC;
+SELECT id, groupby() g, count(*) c, mva FROM rt1 GROUP BY mva ORDER BY id ASC, g ASC;
 SELECT id, j.parent[0] AS gr, groupby() g, count(*) as c, j FROM rt1 GROUP BY gr;
 SELECT id, groupby() g, count(*) c, gid FROM rt1 GROUP 3 BY gid ORDER BY id ASC;
 SELECT id, groupby() g, count(*) c, gid FROM rt1 GROUP BY gid ORDER BY id ASC;

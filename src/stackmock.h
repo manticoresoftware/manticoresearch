@@ -12,7 +12,7 @@
 
 #pragma once
 
-#include "task_info.h"
+#include "client_task_info.h"
 
 using StackSizeTuplet_t = std::pair<int,int>; // create, eval
 
@@ -54,8 +54,7 @@ bool EvalStackForTree ( const CSphVector<T> & dTree, int iStartNode, StackSizeTu
 	iStackNeeded = sphRoundUp( iStackNeeded, sphGetMemPageSize() ); // round up to memory page.
 
 	// in case we're in real query processing - propagate size of stack need for evaluations (only additional part)
-	auto& tSess = session::Info();
-	tSess.SetDesiredStack ( Max ( iMaxHeight * std::get<EVAL> ( tNodeStackSize ), tSess.GetDesiredStack() ));
+	session::ExpandDesiredStack ( iMaxHeight * std::get<EVAL> ( tNodeStackSize ));
 
 	return true;
 }

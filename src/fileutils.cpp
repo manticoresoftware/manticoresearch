@@ -250,11 +250,13 @@ static void ReadSavedFile ( CSphSavedFile & tFile, const char * szFilename, bool
 		{
 			DWORD uMyCRC32 = 0;
 			if ( !sphCalcFileCRC32 ( sName.cstr(), uMyCRC32 ) )
+			{
 				sWarning->SetSprintf ( "failed to calculate CRC32 for %s", sName.cstr() );
-			else
-				if ( uMyCRC32!=tFile.m_uCRC32 || tFileInfo.st_size!=tFile.m_uSize
-					|| tFileInfo.st_ctime!=tFile.m_uCTime || tFileInfo.st_mtime!=tFile.m_uMTime )
+			} else
+			{
+				if ( uMyCRC32!=tFile.m_uCRC32 || tFileInfo.st_size!=tFile.m_uSize )
 					sWarning->SetSprintf ( "'%s' differs from the original", sName.cstr() );
+			}
 		}
 	}
 }

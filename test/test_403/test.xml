@@ -68,6 +68,12 @@ create table test1 (title text) wordforms = '<this_test/>/wordform*.txt';
 show create table test1;
 drop table test1;
 
+create table test1(title text) charset_table='non_cjk #' stopwords='<this_test/>/stops.txt';
+show tables;
+create table test1(title text) charset_table='non_cjk' stopwords='<this_test/>/stops.txt';
+show tables;
+drop table test1;
+
 </sphinxql></queries>
 
 </test>

@@ -371,7 +371,7 @@ Expanded queries take naturally longer to complete, but can possibly improve the
 ##### expand_keywords is enabled
 <!-- request expand_keywords_enabled -->
 ```sql
-mysql> create table t(f text) min_infix_len='1' expand_keywords='1' morphology='stem_en';
+mysql> create table t(f text) min_infix_len='2' expand_keywords='1' morphology='stem_en';
 Query OK, 0 rows affected, 1 warning (0.00 sec)
 
 mysql> insert into t values(1,'running'),(2,'runs'),(3,'runsy');
@@ -390,7 +390,7 @@ mysql> select *, weight() from t where match('runs');
 mysql> drop table t;
 Query OK, 0 rows affected (0.01 sec)
 
-mysql> create table t(f text) min_infix_len='1' expand_keywords='exact' morphology='stem_en';
+mysql> create table t(f text) min_infix_len='2' expand_keywords='exact' morphology='stem_en';
 Query OK, 0 rows affected, 1 warning (0.00 sec)
 
 mysql> insert into t values(1,'running'),(2,'runs'),(3,'runsy');
@@ -412,7 +412,7 @@ mysql> select *, weight() from t where match('running');
 <!-- request expand_keywords_disabled -->
 
 ```sql
-mysql> create table t(f text) min_infix_len='1' morphology='stem_en';
+mysql> create table t(f text) min_infix_len='2' morphology='stem_en';
 Query OK, 0 rows affected, 1 warning (0.00 sec)
 
 mysql> insert into t values(1,'running'),(2,'runs'),(3,'runsy');
@@ -430,7 +430,7 @@ mysql> select *, weight() from t where match('runs');
 mysql> drop table t;
 Query OK, 0 rows affected (0.01 sec)
 
-mysql> create table t(f text) min_infix_len='1' morphology='stem_en';
+mysql> create table t(f text) min_infix_len='2' morphology='stem_en';
 Query OK, 0 rows affected, 1 warning (0.00 sec)
 
 mysql> insert into t values(1,'running'),(2,'runs'),(3,'runsy');

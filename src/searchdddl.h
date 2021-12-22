@@ -33,8 +33,11 @@ public:
 	const char * GetLastError() const { return m_sError.scstr(); }
 
 	bool	AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t & tCol, AttrEngine_e eEngine = AttrEngine_e::DEFAULT );
-	void	AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits );
 	bool	AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t & tCol, const SqlNode_t & tEngine );
+
+	void	AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits, AttrEngine_e eEngine = AttrEngine_e::DEFAULT );
+	bool	AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits, const SqlNode_t & tEngine );
+
 	void	AddCreateTableOption ( const SqlNode_t & tName, const SqlNode_t & tValue );
 	bool	SetupAlterTable  ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, const SqlNode_t & tType, AttrEngine_e eEngine = AttrEngine_e::DEFAULT );
 	bool	SetupAlterTable  ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, const SqlNode_t & tType, const SqlNode_t & tEngine );
@@ -47,6 +50,7 @@ private:
 	CSphString	m_sError;
 
 	void	AddField ( const CSphString & sName, DWORD uFlags );
+	bool	ConvertToAttrEngine ( const SqlNode_t & tEngine, AttrEngine_e & eEngine );
 	static bool CheckFieldFlags ( ESphAttr eAttrType, int iFlags, const CSphString & sName, CSphString & sError );
 };
 

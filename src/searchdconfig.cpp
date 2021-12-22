@@ -595,7 +595,7 @@ static bool ConfigWrite ( const CSphString & sConfigPath, const CSphVector<Clust
 	return true;
 }
 
-// CSphinxqlSession::Execute -> HandleMysqlImportTable -> AddExistingIndexInt -> PreloadIndex
+// ClientSession_c::Execute -> HandleMysqlImportTable -> AddExistingIndexInt -> PreloadIndex
 // ServiceMain -> ConfigureAndPreload -> ConfigureAndPreloadInt -> PreloadIndex
 static ESphAddIndex PreloadIndex ( const IndexDesc_t & tIndex, StrVec_t & dWarnings, CSphString & sError )
 {
@@ -1173,8 +1173,6 @@ bool CreateNewIndexInt ( const CSphString & sIndex, const CreateTableSettings_t 
 	if ( eAdd==ADD_ERROR )
 		return false;
 
-	tCleanup.Ok();
-
 	if ( eAdd==ADD_DSBLED )
 	{
 		ServedIndexRefPtr_c pServed = GetServed ( sIndex, &dNotLoadedIndexes );
@@ -1187,6 +1185,8 @@ bool CreateNewIndexInt ( const CSphString & sIndex, const CreateTableSettings_t 
 
 		g_pLocalIndexes->AddOrReplace ( pServed, sIndex );
 	}
+
+	tCleanup.Ok();
 
 	if ( !SaveConfigInt(sError) )
 	{
@@ -1238,7 +1238,7 @@ private:
 	bool		m_bOk = false;
 };
 
-// CSphinxqlSession::Execute -> HandleMysqlImportTable -> AddExistingIndexInt
+// ClientSession_c::Execute -> HandleMysqlImportTable -> AddExistingIndexInt
 bool AddExistingIndexInt ( const CSphString & sIndex, IndexType_e eType, StrVec_t & dWarnings, CSphString & sError )
 {
 	ScopedCleanup_c tCleanup(sIndex);

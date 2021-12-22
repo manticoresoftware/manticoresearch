@@ -31,7 +31,31 @@ In other words, you can point every single agent to one or more remote indexes, 
 * sharding over multiple agent servers, mirrored for HA/LB (High Availability and Load Balancing) purposes
 * sharding within localhost, to utilize multiple cores (however, it is simpler just to use multiple local indexes)
 
-All agents are searched in parallel. An index list is passed verbatim to the remote agent. How exactly that list is searched within the agent (ie. sequentially or in parallel too) depends solely on the agent configuration (ie. [threads](../../Server_settings/Searchd.md#threads) setting). Master has no remote control over that.
+All agents are searched in parallel. Index list is passed verbatim to the remote agent. How exactly that list is searched within the agent (ie. sequentially or in parallel too) depends solely on the agent configuration (see [threads](../../Server_settings/Searchd.md#threads) setting). The master has no remote control over that.
+
+Note, agent internally executes a query ignoring option `LIMIT`, since each agent can have different indexes and it is a client responsibility to apply the limit to the final result set. That's the reason why the query to a physical index differs from the query to a distributed index when viewing them in the query logs. It can't be just a full copy of the original query in order to provide correct results in such a case:
+
+* We make `SELECT ... LIMIT 10, 10`
+* We have 2 agents 
+* Second agent has just 10 documents
+
+If we just broadcast the original `LIMIT 10, 10` query it will receive 0 documents from the 2nd agent, but `LIMIT 10,10` should return documents 10-20 from the resulting set as you may not care about each agent in particular. That's why we need to send the query to the agents with broader limits and the upper bound in this case is `max_matches`.
+
+For example, imagine we have table `dist` which refers to remote index `user`.
+
+Then if client sends this query:
+
+```sql
+SELECT * FROM dist LIMIT 10,10;
+```
+
+the query will be converted to:
+
+```sql
+SELECT * FROM user LIMIT 0,1000
+```
+
+and sent to the remote index `user`. `1000` here is the default `max_matches`. Once the distributed index receives the result it will apply `LIMIT 10,10` to it and return the requested 10 documents.
 
 The value can additionally enumerate per agent options such as:
 * [ha_strategy](../../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy) - `random`, `roundrobin`, `nodeads`, `noerrors` (replaces index-wide `ha_strategy` for particular agent)
@@ -46,10 +70,10 @@ agent = address1:index-list[[ha_strategy=value, conn=value, blackhole=value]]
 Example:
 
 ```ini
-# config on box2
+# config on box1
 # sharding an index over 3 servers
-agent = box2:9312:shard2
-agent = box3:9312:shard3
+agent = box2:9312:shard1
+agent = box3:9312:shard2
 
 # config on box2
 # sharding an index over 3 servers
@@ -58,7 +82,7 @@ agent = box3:9312:shard3
 
 # config on box3
 # sharding an index over 3 servers
-agent = box1:9312:shard2
+agent = box1:9312:shard1
 agent = box2:9312:shard3
 
 # per agent options
@@ -135,11 +159,11 @@ At the same time value provided as [retry_count](../../Searching/Options.md#retr
 
 ### agent_retry_delay
 
-`agent_retry_delay` integer, specifies the delay manticore rest before retrying to query a remote agent, if it fails. Value is in in milliseconds (or, may include time suffix). The value has sense only if non-zero `agent_retry_count` or non-zero per-query `OPTION retry_count` specified. Default is 500 (i.e., half a second). This value may be also specified on per-query basis using `OPTION retry_delay=XXX` clause. If per-query option exists, it will override the one specified in config.
+`agent_retry_delay` integer, specifies the delay manticore takes before retrying to query a remote agent, if it fails. The value is in in milliseconds (or may include time suffix). The value makes sense only if non-zero `agent_retry_count` or non-zero per-query `OPTION retry_count` specified. Default is 500 (half a second). This value may be also specified on per-query basis using `OPTION retry_delay=XXX` clause. If per-query option exists, it will override the one specified in config.
 
 ### client_timeout
 
-`client_timeout` defines maximum time to wait between requests when using persistent connections. It is in seconds, or may be written with time suffix. By default is 5 minutes.
+`client_timeout` defines maximum time to wait between requests when using persistent connections. It is in seconds, or may be written with time suffix. The default is 5 minutes.
 
 Example:
 
@@ -155,7 +179,7 @@ client_timeout = 1h
 
 `listen_tfo` allows TCP_FASTOPEN flag for all listeners. By default it is managed by system, but may be explicitly switched off by setting to '0'.
 
-For general knowledge about TCP Fast Open extension you can visit Wikipedia. Shortly speaking, it allows to eliminate one TCP round-trip when establishing connection.
+For general knowledge about TCP Fast Open extension please consult with [Wikipedia](https://en.wikipedia.org/wiki/TCP_Fast_Open). Shortly speaking, it allows to eliminate one TCP round-trip when establishing connection.
 
 In practice using TFO in many situation may optimize client-agent network efficiency as if `agent_persistent` are in play, but without holding active connections, and also without limitation for the maximum num of connections.
 

@@ -25,7 +25,7 @@ target_link_libraries ( gmanticoretest
 		GTest::gmock_main
 		lmanticore
 		lsearchd
-		stub_ssl
+		searchd_ssl
 		source_svpipe )
 
 if (WITH_EXPAT)

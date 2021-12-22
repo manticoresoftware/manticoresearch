@@ -335,12 +335,25 @@ static bool ProtoByName ( CSphString sFullProto, ListenerDesc_t & tDesc, CSphStr
 			return false;
 	}
 
-	if ( dParts.GetLength()==1 )
+	if ( dParts.GetLength() == 1 )
 		return true;
 
-	if ( dParts.GetLength()==2 && dParts[1]=="vip" )
+	if ( dParts.GetLength() >= 2 )
 	{
-		tDesc.m_bVIP = true;
+		bool bOk = dParts.GetLength() == 2;
+		if ( dParts[1] == "vip" )
+			tDesc.m_bVIP = true;
+		else if ( dParts[1] == "readonly" )
+			tDesc.m_bReadOnly = true;
+		else
+			bOk = false;
+		if ( bOk )
+			return true;
+	}
+
+	if ( dParts.GetLength() == 3 && dParts[2] == "readonly" )
+	{
+		tDesc.m_bReadOnly = true;
 		return true;
 	}
 
@@ -359,6 +372,7 @@ ListenerDesc_t ParseListener ( const char* sSpec, CSphString * pFatal )
 	tRes.m_iPort = SPHINXAPI_PORT;
 	tRes.m_iPortsCount = 0;
 	tRes.m_bVIP = false;
+	tRes.m_bReadOnly = false;
 
 	// split by colon
 	auto dParts = sphSplit( sSpec, ":" ); // diff. parts are :-separated
@@ -424,7 +438,7 @@ ListenerDesc_t ParseListener ( const char* sSpec, CSphString * pFatal )
 		} else
 		{
 			// host name on itself
-			tRes.m_uIP = sphGetAddress ( sSpec, GETADDR_STRICT, false, pFatal );
+			tRes.m_uIP = sphGetAddress ( sSpec, ( pFatal==nullptr ), false, pFatal );
 			if ( pFatal && !pFatal->IsEmpty() )
 				return g_tInvalidListener;
 		}
@@ -456,7 +470,7 @@ ListenerDesc_t ParseListener ( const char* sSpec, CSphString * pFatal )
 		tRes.m_uIP = htonl(INADDR_ANY);
 	} else
 	{
-		tRes.m_uIP = sphGetAddress ( dParts[0].cstr(), GETADDR_STRICT, false, pFatal );
+		tRes.m_uIP = sphGetAddress ( dParts[0].cstr(), ( pFatal==nullptr ), false, pFatal );
 		if ( pFatal && !pFatal->IsEmpty() )
 			return g_tInvalidListener;
 	}
@@ -652,7 +666,7 @@ DWORD sphGetAddress( const char* sHost, bool bFatal, bool bIP, CSphString * pFat
 		tHints.ai_flags = AI_NUMERICHOST;
 
 	int iResult = getaddrinfo( sHost, nullptr, &tHints, &pResult );
-	auto pOrigResult = pResult;
+	auto pResFree = AtScopeExit ( [pResult] { if (pResult) freeaddrinfo( pResult ); } );
 	if ( iResult!=0 || !pResult )
 	{
 		if ( pFatal )
@@ -683,7 +697,6 @@ DWORD sphGetAddress( const char* sHost, bool bFatal, bool bIP, CSphString * pFat
 		sphWarning( "multiple addresses found for '%s', using the first one (%s)", sHost, sBuf.cstr());
 	}
 
-	freeaddrinfo( pOrigResult );
 	return uAddr;
 }
 
@@ -1352,16 +1365,9 @@ ServedIndex_c::ServedIndex_c( const ServedDesc_t& tDesc )
 
 
 //////////////////////////////////////////////////////////////////////////
-GuardedHash_c::GuardedHash_c()
-{
-	if ( !m_tIndexesRWLock.Init())
-		sphDie( "failed to init hash indexes rwlock" );
-}
-
 GuardedHash_c::~GuardedHash_c()
 {
 	ReleaseAndClear();
-	Verify ( m_tIndexesRWLock.Done());
 }
 
 // atomically try add an entry and adopt it
@@ -1375,7 +1381,6 @@ bool GuardedHash_c::AddUniq( ISphRefcountedMT* pValue, const CSphString& tKey )
 
 	pVal = pValue;
 	SafeAddRef ( pVal );
-	NextGeneration();
 	return true;
 }
 
@@ -1394,35 +1399,29 @@ void GuardedHash_c::AddOrReplace( ISphRefcountedMT* pValue, const CSphString& tK
 		Verify ( m_hIndexes.Add( pValue, tKey ));
 	}
 	SafeAddRef ( pValue );
-	NextGeneration();
 	if ( m_pHook )
 		m_pHook( pValue, tKey );
 }
 
-bool GuardedHash_c::Delete( const CSphString& tKey )
+bool GuardedHash_c::Delete ( const CSphString & sKey )
 {
 	ScWL_t hHashWLock { m_tIndexesRWLock };
-	ISphRefcountedMT** ppEntry = m_hIndexes( tKey );
+	ISphRefcountedMT** ppEntry = m_hIndexes(sKey);
 	// release entry - last owner will free it
 	if ( ppEntry ) SafeRelease( *ppEntry );
 
 	// remove from hash
-	auto bRes = m_hIndexes.Delete( tKey );
-	if ( bRes )
-		NextGeneration();
-	return bRes;
+	return m_hIndexes.Delete(sKey);
 }
 
-bool GuardedHash_c::DeleteIfNull( const CSphString& tKey )
+bool GuardedHash_c::DeleteIfNull ( const CSphString & sKey )
 {
 	ScWL_t hHashWLock { m_tIndexesRWLock };
-	ISphRefcountedMT** ppEntry = m_hIndexes( tKey );
+	ISphRefcountedMT** ppEntry = m_hIndexes(sKey);
 	if ( ppEntry && *ppEntry )
 		return false;
-	auto bRes = m_hIndexes.Delete ( tKey );
-	if ( bRes )
-		NextGeneration();
-	return bRes;
+
+	return m_hIndexes.Delete(sKey);
 }
 
 int GuardedHash_c::GetLength() const
@@ -1441,11 +1440,17 @@ bool GuardedHash_c::Contains( const CSphString& tKey ) const
 
 void GuardedHash_c::ReleaseAndClear()
 {
-	ScWL_t hHashWLock { m_tIndexesRWLock };
-	for ( m_hIndexes.IterateStart(); m_hIndexes.IterateNext(); ) SafeRelease ( m_hIndexes.IterateGet());
+	GuardedHash_c::RefCntHash_t tHash;
+	{
+		ScWL_t hHashWLock { m_tIndexesRWLock };
+		for ( auto& i : m_hIndexes )
+			tHash.Add ( i.second, i.first );
 
-	m_hIndexes.Reset();
-	NextGeneration();
+		m_hIndexes.Reset();
+	}
+
+	for ( auto& i : tHash )
+		SafeRelease ( i.second );
 }
 
 ISphRefcountedMT* GuardedHash_c::Get( const CSphString& tKey ) const
@@ -1469,7 +1474,6 @@ ISphRefcountedMT* GuardedHash_c::TryAddThenGet( ISphRefcountedMT* pValue, const 
 	{
 		pVal = pValue;
 		SafeAddRef ( pVal );
-		NextGeneration();
 	}
 
 	SafeAddRef ( pVal );

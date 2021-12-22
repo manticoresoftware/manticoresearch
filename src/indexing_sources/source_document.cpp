@@ -160,6 +160,7 @@ CSphSource::CSphSource ( const char * sName )
 CSphSource::~CSphSource()
 {
 	SafeDeleteArray ( m_pReadFileBuffer );
+	SafeDelete ( m_pStripper );
 }
 
 

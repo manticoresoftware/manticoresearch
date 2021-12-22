@@ -172,8 +172,12 @@ protected:
 	virtual const char *	SqlColumn ( int iIndex ) = 0;
 	virtual const char *	SqlFieldName ( int iIndex ) = 0;
 
-	const char *	SqlUnpackColumn ( int iIndex, DWORD & uUnpackedLen, ESphUnpackFormat eFormat );
-	void			ReportUnpackError ( int iIndex, int iError );
+	virtual Str_t			SqlCompressedColumnStream ( int iFieldIndex );
+	virtual void			SqlCompressedColumnReleaseStream ( Str_t tStream );
+
+	Str_t					SqlColumnStream ( int iFieldIndex );
+	Str_t					SqlUnpackColumn ( int iFieldIndex, ESphUnpackFormat eFormat );
+	void					ReportUnpackError ( int iIndex, int iError );
 
 	void DumpRowsHeader ();
 	void DumpRowsHeaderSphinxql ();

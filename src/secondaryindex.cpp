@@ -857,13 +857,14 @@ static void SelectIterators ( const CSphVector<CSphFilterSettings> & dFilters, c
 }
 
 
-static bool UpdateModifiedFilters ( const CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphFilterSettings> & dModifiedFilters, CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes )
+static bool UpdateModifiedFilters ( const CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphFilterSettings> & dModifiedFilters, CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, const CSphFilterSettings * pRowIdFilter )
 {
 	dEnabledIndexes.Sort ( bind ( &SecondaryIndexInfo_t::m_iFilterId ) );
 	dModifiedFilters.Resize(0);
 	ARRAY_FOREACH ( i, dFilters )
 	{
-		if ( !dEnabledIndexes.any_of ( [i] ( const SecondaryIndexInfo_t & tInfo ) { return tInfo.m_iFilterId==i; } ) )
+		// if we have a rowid filter, we assume that the iterator handles it. so we no longer need it
+		if ( !dEnabledIndexes.any_of ( [i] ( const SecondaryIndexInfo_t & tInfo ) { return tInfo.m_iFilterId==i; } ) && &dFilters[i]!=pRowIdFilter )
 			dModifiedFilters.Add ( dFilters[i] );
 	}
 
@@ -905,7 +906,7 @@ RowidIterator_i * CreateFilteredIterator ( const CSphVector<CSphFilterSettings> 
 	if ( !dIterators.GetLength() )
 		return nullptr;
 
-	bFiltersChanged = UpdateModifiedFilters ( dFilters, dModifiedFilters, dEnabledIndexes );
+	bFiltersChanged = UpdateModifiedFilters ( dFilters, dModifiedFilters, dEnabledIndexes, pRowIdFilter );
 
 	if ( dIterators.GetLength()==1 )
 		return dIterators[0];
@@ -1033,7 +1034,7 @@ CSphWriter & DocidLookupWriter_c::GetWriter()
 }
 
 
-bool WriteDocidLookup ( const CSphString & sFilename, const CSphFixedVector<DocidRowidPair_t> & dLookup, CSphString & sError )
+bool WriteDocidLookup ( const CSphString & sFilename, const VecTraits_T<DocidRowidPair_t> & dLookup, CSphString & sError )
 {
 	DocidLookupWriter_c tWriter ( dLookup.GetLength() );
 	if ( !tWriter.Open ( sFilename, sError ) )

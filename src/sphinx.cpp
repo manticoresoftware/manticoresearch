@@ -42,6 +42,7 @@
 #include "conversion.h"
 #include "binlog.h"
 #include "task_info.h"
+#include "client_task_info.h"
 #include "chunksearchctx.h"
 #include "lrucache.h"
 #include "indexfiles.h"
@@ -128,6 +129,8 @@ static const int	MIN_READ_BUFFER			= 8192;
 static const int	MIN_READ_UNHINTED		= 1024;
 
 static int 			g_iReadUnhinted 		= DEFAULT_READ_UNHINTED;
+
+static int			g_iSplitThresh			= 8192;
 
 CSphString			g_sLemmatizerBase		= GET_FULL_SHARE_DIR ();
 
@@ -1286,7 +1289,7 @@ public:
 	void				DebugDumpHitlist ( FILE * fp, const char * sKeyword, bool bID ) final;
 	void				DebugDumpDict ( FILE * fp ) final;
 	void				SetDebugCheck ( bool bCheckIdDups, int iCheckChunk ) final;
-	int					DebugCheck ( FILE * fp ) final;
+	int					DebugCheck ( DebugCheckError_i& ) final;
 	template <class Qword> void		DumpHitlist ( FILE * fp, const char * sKeyword, bool bID );
 
 	bool				Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings ) final;
@@ -2537,14 +2540,21 @@ void CSphIndex::SetMutableSettings ( const MutableIndexSettings_c & tSettings )
 	m_tMutableSettings = tSettings;
 }
 
+
+int64_t CSphIndex::GetPseudoShardingMetric() const
+{
+	int64_t iTotalDocs = GetStats().m_iTotalDocuments;
+	return iTotalDocs > g_iSplitThresh ? iTotalDocs : -1;
+}
+
 //////////////////////////////////////////////////////////////////////////
 
-static void PooledAttrsToPtrAttrs ( const VecTraits_T<ISphMatchSorter *> & dSorters, const BYTE * pBlobPool, columnar::Columnar_i * pColumnar )
+static void PooledAttrsToPtrAttrs ( const VecTraits_T<ISphMatchSorter *> & dSorters, const BYTE * pBlobPool, columnar::Columnar_i * pColumnar, bool bFinalizeMatches )
 {
 	dSorters.Apply ( [&] ( ISphMatchSorter * p )
 	{
 		if ( p )
-			p->TransformPooled2StandalonePtrs ( [pBlobPool] ( const CSphMatch * ) { return pBlobPool; }, [pColumnar] ( const CSphMatch * ) { return pColumnar; } );
+			p->TransformPooled2StandalonePtrs ( [pBlobPool] ( const CSphMatch * ) { return pBlobPool; }, [pColumnar] ( const CSphMatch * ) { return pColumnar; }, bFinalizeMatches );
 	});
 }
 
@@ -8407,6 +8417,34 @@ RowidIterator_i * CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, CSph
 }
 
 
+static RowIdBoundaries_t RemoveRowIdFilter ( CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, CSphVector<CSphFilterSettings> & dModifiedFilters, CSphQueryResultMeta & tMeta, int64_t iDocinfo, bool & bHaveRowidFilter )
+{
+	const CSphFilterSettings * pRowIdFilter = nullptr;
+	for ( const auto & tFilter : tCtx.m_tQuery.m_dFilters )
+		if ( tFilter.m_sAttrName=="@rowid" )
+		{
+			pRowIdFilter = &tFilter;
+			break;
+		}
+
+	bHaveRowidFilter = !!pRowIdFilter;
+
+	if ( !pRowIdFilter )
+		return { 0, RowID_t(iDocinfo)-1 };
+
+	dModifiedFilters.Resize(0);
+	for ( const auto & tFilter : tCtx.m_tQuery.m_dFilters )
+		if ( &tFilter!=pRowIdFilter )
+			dModifiedFilters.Add(tFilter);
+
+	SafeDelete ( tCtx.m_pFilter );
+	tFlx.m_pFilters = &dModifiedFilters;
+	tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning );
+
+	return GetFilterRowIdBoundaries ( *pRowIdFilter, RowID_t(iDocinfo) );
+}
+
+
 bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const
 {
 	assert ( tArgs.m_iTag>=0 );
@@ -8521,17 +8559,8 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	}
 	else
 	{
-		RowIdBoundaries_t tBoundaries = { 0, RowID_t(m_iDocinfo)-1 };
-		const CSphFilterSettings * pRowIdFilter = nullptr;
-		for ( const auto & tFilter : tQuery.m_dFilters )
-			if ( tFilter.m_sAttrName=="@rowid" )
-			{
-				pRowIdFilter = &tFilter;
-				break;
-			}
-
-		if ( pRowIdFilter )
-			tBoundaries = GetFilterRowIdBoundaries ( *pRowIdFilter, RowID_t(m_iDocinfo) );
+		bool bHaveRowidFilter = false;
+		RowIdBoundaries_t tBoundaries = RemoveRowIdFilter ( tCtx, tFlx, dModifiedFilters, tMeta, m_iDocinfo, bHaveRowidFilter );
 
 		bool bAllColumnar = tQuery.m_dFilters.all_of ( [this]( const CSphFilterSettings & tFilter ) {
 			const CSphColumnInfo * pCol = m_tSchema.GetAttr ( tFilter.m_sAttrName.cstr() );
@@ -8545,7 +8574,7 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 		}
 		else
 		{
-			if ( pRowIdFilter )
+			if ( bHaveRowidFilter )
 				ScanByBlocks<true> ( tCtx, tMeta, dSorters, tMatch, iCutoff, bRandomize, tArgs.m_iIndexWeight, tmMaxTimer, &tBoundaries );
 			else
 				ScanByBlocks<false> ( tCtx, tMeta, dSorters, tMatch, iCutoff, bRandomize, tArgs.m_iIndexWeight, tmMaxTimer );
@@ -8558,13 +8587,13 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	if ( tCtx.m_dCalcFinal.GetLength() )
 	{
 		SphFinalMatchCalc_t tFinal ( tArgs.m_iTag, tCtx );
-		dSorters.Apply ( [&tFinal] ( ISphMatchSorter * p ) { p->Finalize ( tFinal, false ); } );
+		dSorters.Apply ( [&] ( ISphMatchSorter * p ) { p->Finalize ( tFinal, false, tArgs.m_bFinalizeSorters ); } );
 	}
 
 	if ( tArgs.m_bModifySorterSchemas )
 	{
 		SwitchProfile ( tMeta.m_pProfile, SPH_QSTATE_DYNAMIC );
-		PooledAttrsToPtrAttrs ( dSorters, m_tBlobAttrs.GetReadPtr(), m_pColumnar.Ptr() );
+		PooledAttrsToPtrAttrs ( dSorters, m_tBlobAttrs.GetReadPtr(), m_pColumnar.Ptr(), tArgs.m_bFinalizeSorters );
 	}
 
 	// done
@@ -10992,7 +11021,7 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 			return; // already nothing to do, early finish.
 
 		auto tCtx = tClonableCtx.CloneNewContext ( &iChunk );
-		Threads::Coro::Throttler_c tThrottler ( session::ThrottlingPeriodMS() );
+		Threads::Coro::Throttler_c tThrottler ( session::GetThrottlingPeriodMS() );
 		int iTick=1; // num of times coro rescheduled by throttler
 		while ( !bInterrupt ) // some earlier job met error; abort.
 		{
@@ -11005,7 +11034,7 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 			tChunkMeta.m_pProfile = tThMeta.m_pProfile;
 
 			CSphMultiQueryArgs tMultiArgs ( tArgs.m_iIndexWeight );
-			tMultiArgs.m_iTag = iChunk+1;
+			tMultiArgs.m_iTag = tArgs.m_bModifySorterSchemas ? iChunk+1 : tArgs.m_iTag;
 			tMultiArgs.m_uPackedFactorFlags = tArgs.m_uPackedFactorFlags;
 			tMultiArgs.m_pLocalDocs = pLocalDocs;
 			tMultiArgs.m_iTotalDocs = iTotalDocs;
@@ -11061,8 +11090,8 @@ bool CSphIndex_VLN::SplitQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	dSorters.Reserve ( dAllSorters.GetLength() );
 	dAllSorters.Apply ([&dSorters] ( ISphMatchSorter* p ) { if ( p ) dSorters.Add(p); });
 
+	int iSplit = Max ( Min ( (int)m_tStats.m_iTotalDocuments, tArgs.m_iSplit ), 1 );
 	int64_t iTotalDocs = tArgs.m_iTotalDocs ? tArgs.m_iTotalDocs : m_tStats.m_iTotalDocuments;
-	int iSplit = Max ( Min ( (int)iTotalDocs, tArgs.m_iSplit ), 1 );
 	bool bOk = RunSplitQuery ( this, tQuery, *tResult.m_pMeta, dSorters, tArgs, pProfile, tArgs.m_pLocalDocs, iTotalDocs, m_sIndexName.cstr(), iSplit, tmMaxTimer );
 	if ( !bOk )
 		return false;
@@ -11074,7 +11103,7 @@ bool CSphIndex_VLN::SplitQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	if ( tArgs.m_bModifySorterSchemas )
 	{
 		SwitchProfile ( pProfile, SPH_QSTATE_DYNAMIC );
-		PooledAttrsToPtrAttrs ( dSorters, m_tBlobAttrs.GetWritePtr(), m_pColumnar.Ptr() );
+		PooledAttrsToPtrAttrs ( dSorters, m_tBlobAttrs.GetWritePtr(), m_pColumnar.Ptr(), tArgs.m_bFinalizeSorters );
 	}
 
 	return true;
@@ -11094,8 +11123,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	const QueryParser_i * pQueryParser = tQuery.m_pQueryParser;
 	assert ( pQueryParser );
 
-	const int SPLIT_THRESH = 1024;
-	if ( tArgs.m_iSplit>1 && m_iDocinfo>SPLIT_THRESH )
+	if ( tArgs.m_iSplit>1 )
 		return SplitQuery ( tResult, tQuery, dAllSorters, tArgs, tmMaxTimer );
 
 	MEMORY ( MEM_DISK_QUERY );
@@ -11192,7 +11220,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	if ( tArgs.m_bModifySorterSchemas )
 	{
 		SwitchProfile ( pProfile, SPH_QSTATE_DYNAMIC );
-		PooledAttrsToPtrAttrs ( dSorters, m_tBlobAttrs.GetWritePtr(), m_pColumnar.Ptr() );
+		PooledAttrsToPtrAttrs ( dSorters, m_tBlobAttrs.GetWritePtr(), m_pColumnar.Ptr(), tArgs.m_bFinalizeSorters );
 	}
 
 	return bResult;
@@ -11342,7 +11370,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 	if ( tArgs.m_bModifySorterSchemas )
 	{
 		SwitchProfile ( pResults[0].m_pMeta->m_pProfile, SPH_QSTATE_DYNAMIC );
-		PooledAttrsToPtrAttrs (  { ppSorters, iQueries }, m_tBlobAttrs.GetWritePtr(), m_pColumnar.Ptr() );
+		PooledAttrsToPtrAttrs (  { ppSorters, iQueries }, m_tBlobAttrs.GetWritePtr(), m_pColumnar.Ptr(), tArgs.m_bFinalizeSorters );
 	}
 
 	return bResult || bResultScan;
@@ -11667,7 +11695,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 			tCtx.m_dCalcFinal[i].m_pExpr->Command ( SPH_EXPR_GET_UDF, &bGotUDF );
 
 		SphFinalMatchCalc_t tFinal ( tArgs.m_iTag, tCtx );
-		dSorters.Apply ( [&] ( ISphMatchSorter * p ) { p->Finalize ( tFinal, bGotUDF ); } );
+		dSorters.Apply ( [&] ( ISphMatchSorter * p ) { p->Finalize ( tFinal, bGotUDF, tArgs.m_bFinalizeSorters ); } );
 	}
 
 	pRanker->FinalizeCache ( tMaxSorterSchema );
@@ -11812,9 +11840,8 @@ size_t strnlen ( const char * s, size_t iMaxLen )
 #endif
 
 
-int CSphIndex_VLN::DebugCheck ( FILE * fp )
+int CSphIndex_VLN::DebugCheck ( DebugCheckError_i& tReporter )
 {
-	DebugCheckError_c tReporter(fp);
 	CSphScopedPtr<DiskIndexChecker_i> pIndexChecker ( CreateDiskIndexChecker ( *this, tReporter ) );
 
 	pIndexChecker->Setup ( m_iDocinfo, m_iDocinfoIndex, m_iMinMaxIndex, m_bCheckIdDups );
@@ -15908,6 +15935,11 @@ void sphSetJsonOptions ( bool bStrict, bool bAutoconvNumbers, bool bKeynamesToLo
 	g_bJsonKeynamesToLowercase = bKeynamesToLowercase;
 }
 
+
+void SetPseudoShardingThresh ( int iThresh )
+{
+	g_iSplitThresh = iThresh;
+}
 
 //////////////////////////////////////////////////////////////////////////
 

@@ -495,6 +495,15 @@ void			sphFatalLog ( const char * sFmt, ... ) __attribute__ ( ( format ( printf,
 /// if callback returns false, sphDie() will not log to stdout
 void			sphSetDieCallback ( SphDieCallback_t pfDieCallback );
 
+/// similar as abort but closes FD
+/// not available on MacOS
+#if defined ( __APPLE__ )
+	#define sphQuickExit exit
+#else
+	#define sphQuickExit std::quick_exit
+#endif
+
+
 /// how much bits do we need for given int
 inline int sphLog2 ( uint64_t uValue )
 {
@@ -1415,7 +1424,7 @@ namespace sph {
 template < typename T >
 class DefaultStorage_T
 {
-protected:
+public:
 	inline static T * Allocate ( int64_t iLimit )
 	{
 		return new T[iLimit];
@@ -1442,7 +1451,7 @@ public:
 
 	LazyStorage_T() = default;
 	static const int iSTATICSIZE = STATICSIZE;
-protected:
+public:
 	inline T * Allocate ( int64_t iLimit )
 	{
 		if ( iLimit<=STATICSIZE )
@@ -1469,7 +1478,7 @@ template < typename T >
 class RawStorage_T
 {
 	using StorageType = typename std::aligned_storage<sizeof ( T ), alignof ( T )>::type;
-protected:
+public:
 	inline static T * Allocate ( int64_t iLimit )
 	{
 		return ( T * )new StorageType[iLimit];
@@ -1967,6 +1976,29 @@ public:
 		Sort ();
 		int64_t iLeft = sphUniq ( m_pData, m_iCount );
 		Shrink ( iLeft );
+	}
+
+	void MergeSorted ( const Vector_T<T> & dA, const Vector_T<T> & dB )
+	{
+		// fixme: add comparators
+		int iLenA = dA.GetLength();
+		int iLenB = dB.GetLength();
+		Resize ( iLenA+iLenB );
+
+		T * pA = dA.Begin();
+		T * pB = dB.Begin();
+		T * pRes = Begin();
+		const T * pMaxA = pA+iLenA;
+		const T * pMaxB = pB+iLenB;
+
+		while ( pA < pMaxA && pB < pMaxB )
+			*pRes++ = *pA < *pB ? *pA++ : *pB++;
+
+		while ( pA < pMaxA )
+			*pRes++ = *pA++;
+
+		while ( pB < pMaxB )
+			*pRes++ = *pB++;
 	}
 
 	/// copy + move
@@ -5114,6 +5146,26 @@ public:
 		Reset ( iSize );
 	}
 
+	OpenHash_T ( const OpenHash_T& rhs )
+	{
+		m_iSize = rhs.m_iSize;
+		m_iUsed = rhs.m_iUsed;
+		m_iMaxUsed = rhs.m_iMaxUsed;
+		m_pHash = sph::RawStorage_T<Entry_t>::Allocate ( m_iSize );
+		sph::DefaultCopy_T<Entry_t>::CopyVoid ( m_pHash, rhs.m_pHash, m_iSize );
+	}
+
+	OpenHash_T ( OpenHash_T&& rhs ) noexcept
+	{
+		Swap ( rhs );
+	}
+
+	OpenHash_T& operator= ( OpenHash_T rhs ) noexcept
+	{
+		Swap ( rhs );
+		return *this;
+	}
+
 	~OpenHash_T()
 	{
 		SafeDeleteArray ( m_pHash );
@@ -5841,6 +5893,11 @@ CSphString GET_GALERA_FULLPATH ();
 
 // this returns env LIB_MANTICORE_COLUMNAR, or GET_MANTICORE_MODULES()/lib_manticore_columnar.xx (xx=so or dll)
 CSphString GET_COLUMNAR_FULLPATH ();
+
+// return value of asked ENV, or default.
+// note, default determines the type which to return
+bool val_from_env ( const char* szEnvName, bool bDefault );
+int val_from_env ( const char* szEnvName, int iDefault );
 
 // fast diagnostic logging.
 // Being a macro, it will be optimized out by compiler when not in use

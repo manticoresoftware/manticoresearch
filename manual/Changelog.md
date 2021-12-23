@@ -103,7 +103,7 @@ sys	0m0.047s
 
 ### Bugfixes
 * ❗[Issue #650](https://github.com/manticoresoftware/manticoresearch/issues/650) Manticore 4.0.2 slower than Manticore 3.6.3. 4.0.2 was faster than previous versions in terms of bulk inserts, but significantly slower for single document inserts. It's been fixed in 4.2.0.
-* ❗[Commit 03be91e4](https://github.com/manticoresoftware/manticoresearch/commit/03be91e4f720a3f20bee0278dd8f0d44abd3ef0e22f4141bed1411c83684ae6e0bae832071cce3df) RT index could get corrupted under intensive REPLACE load, or it could crash
+* ❗[Commit 22f4141b](https://github.com/manticoresoftware/manticoresearch/commit/22f4141bed1411c83684ae6e0bae832071cce3df) RT index could get corrupted under intensive REPLACE load, or it could crash
 * [Commit 03be91e4](https://github.com/manticoresoftware/manticoresearch/commit/03be91e4f720a3f20bee0278dd8f0d44abd3ef0e) fixed average at merging groupers and group N sorter; fixed merge of aggregates
 * [Commit 2ea575d3](https://github.com/manticoresoftware/manticoresearch/commit/2ea575d34efe38661f14d858f2b552456f29fe42) `indextool --check` could crash
 * [Commit 7ec76d4a](https://github.com/manticoresoftware/manticoresearch/commit/7ec76d4abf01b5fca6f10a0000fe64d5d8e5fa52) RAM exhaustion issue caused by UPDATEs

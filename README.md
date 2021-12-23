@@ -5,7 +5,7 @@
 </p>
 
 <h1 align="center">
-  Manticore Search 4.0.3
+  Manticore Search 4.2.0
 </h1>
 
 <h3 align="center">
@@ -24,6 +24,7 @@
 Manticore Search is a multi-storage database designed specifically for search, including full-text search. What differs it from other solutions is:
 * Powerful and fast full-text searching which works fine for small and big datasets
 * Traditional row-wise storage for small, medium and big size datasets
+* Outstanding query parallelization capabilities that allow to fully utilize all your CPU cores to lower response time as much as possible
 * Columnar storage support via [Manticore Columnar Library](https://github.com/manticoresoftware/columnar/) for bigger datasets (much bigger than can be fit in RAM)
 * SQL-first: the native Manticore's syntax is SQL. It speaks SQL over HTTP and MySQL protocol (you can use your preferred mysql client)
 * Clients for [PHP](https://github.com/manticoresoftware/manticoresearch-php), [Python](https://github.com/manticoresoftware/manticoresearch-python), [Javascript](https://github.com/manticoresoftware/manticoresearch-javascript), [Java](https://github.com/manticoresoftware/manticoresearch-java), [Go](https://github.com/manticoresoftware/go-sdk)

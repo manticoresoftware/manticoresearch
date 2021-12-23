@@ -19,7 +19,7 @@ The following are the changes we are either working on now or are going to work 
 ### Major new features
 * **Pseudo-sharding support for real-time indexes and full-text queries**. In previous release we added limited pseudo sharding support. Starting from this version you can get all benefits of the pseudo sharding and your multi-core processor by just enabling [searchd.pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding). The coolest thing is that you don't need to do anything with your indexes or queries for that, just enable it and if you have free CPU it will be used to lower your response time. It supports plain and real-time indexes for full-text, filtering and analytical queries. For example, here is how enabling pseudo sharding can make most queries' **response time in average about 10x lower** on [Hacker news curated comments dataset](https://zenodo.org/record/45901/) multiplied 100 times (116 million docs in a plain index).
 
-![Pseudo shardig on vs off in 4.2.0](4.2.0_ps_on_vs_off.png)
+![Pseudo sharding on vs off in 4.2.0](4.2.0_ps_on_vs_off.png)
 
 * [**Debian Bullseye**](https://manticoresearch.com/downloads/) is now supported.
 

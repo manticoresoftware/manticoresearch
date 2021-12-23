@@ -152,7 +152,7 @@ sys	0m0.047s
 
 ### Minor changes
 <!-- example -->
-- Linux Mint and Ubuntu Hirsute Hippo are supported via [APT repository](Installation/Debian_and_Ubuntu#APT-repository)
+- Linux Mint and Ubuntu Hirsute Hippo are supported via [APT repository](Installation/Debian_and_Ubuntu.md#APT-repository)
 - faster update by id via HTTP in big indexes in some cases (depends on the ids distribution)
 - [671e65a2](https://github.com/manticoresoftware/lemmatizer-uk/commit/671e65a296800537123a3f8b324eeaa3f58b9632) - added caching to lemmatizer-uk
 
@@ -334,8 +334,8 @@ status of the query, not the server status
 * OPTIMIZE reduces disk chunks to a number of chunks ( default is `2* No. of cores`) instead of a single one. The optimal number of chunks can be controlled by [cutoff](Securing_and_compacting_an_index/Compacting_an_index.md#Number-of-optimized-disk-chunks) option.
 * NOT operator can be now used standalone. By default it is disabled since accidental single NOT queries can be slow. It can be enabled by setting new searchd directive [not_terms_only_allowed](Server_settings/Searchd.md#not_terms_only_allowed) to `0`.
 * New setting [max_threads_per_query](Server_settings/Searchd.md#max_threads_per_query) sets how many threads a query can use. If the directive is not set, a query can use threads up to the value of [threads](Server_settings/Searchd.md#threads).
-Per `SELECT` query the number of threads can be limited with [OPTION threads=N](Searching/Options.ms#threads) overriding the global `max_threads_per_query`.
-* Percolate indexes can be now be imported with [IMPORT TABLE](Adding_data_from_external_storages/Adding_data_from_indexes/Importing_index).
+Per `SELECT` query the number of threads can be limited with [OPTION threads=N](Searching/Options.md#threads) overriding the global `max_threads_per_query`.
+* Percolate indexes can be now be imported with [IMPORT TABLE](Adding_data_from_external_storages/Adding_data_from_indexes/Importing_index.md).
 * HTTP API `/search` receives basic support for [faceting](Searching/Faceted_search.md#HTTP)/[grouping](Searching/Grouping.md) by new query node `aggs`.
 
 ### Minor changes
@@ -1174,3 +1174,4 @@ Manticore Search is built using cmake and the minimum gcc version required for c
 
 ## Version 2.3.3, 06 July 2017
 * Manticore branding
+

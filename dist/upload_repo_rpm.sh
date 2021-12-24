@@ -30,5 +30,13 @@ for filename in *.rpm; do
     ~/sign_rpm.sh $GPG_SECRET $f
     curl -is --user "${REPO_USER}:${REPO_SECRET}" --upload-file $filename $REPO_IP/repository/$REPO_NAME/$DESTINATION/centos/$DISTRO/x86_64/$f \
     && echo "Uploaded $f to $REPO_NAME/$DESTINATION/centos/$DISTRO/x86_64"
+
+    cp $f /work/repomanager/repodata/repository/manticoresearch/$DESTINATION/centos/$DISTRO/x86_64/ && echo "Copied $f to $REPO_NAME/$DESTINATION/centos/$DISTRO/x86_64/"
+
+    if [ "$DESTINATION" = "dev" ]; then
+        /usr/bin/docker exec repo-generator /generator.sh -distro centos -version $DISTRO -dev
+      else
+        /usr/bin/docker exec repo-generator /generator.sh -distro centos -version $DISTRO
+    fi
   fi
 done

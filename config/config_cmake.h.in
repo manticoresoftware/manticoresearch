@@ -156,6 +156,9 @@
 /* define to use Zlib */
 #cmakedefine01 WITH_ZLIB
 
+/* define to use Zstd */
+#cmakedefine01 WITH_ZSTD
+
 /* default name of columnar shared library */
 #cmakedefine LIB_MANTICORE_COLUMNAR "${LIB_MANTICORE_COLUMNAR}"
 

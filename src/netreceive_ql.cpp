@@ -13,7 +13,8 @@
 #include "netreceive_ql.h"
 #include "coroutine.h"
 #include "searchdssl.h"
-#include "compressed_mysql.h"
+#include "compressed_zlib_mysql.h"
+#include "compressed_zstd_mysql.h"
 
 extern int g_iClientQlTimeoutS;    // sec
 extern volatile bool g_bMaintenance;
@@ -513,7 +514,7 @@ public:
 };
 
 // send MySQL wire protocol handshake packets
-void SendMysqlProtoHandshake ( ISphOutputBuffer& tOut, bool bSsl, bool bUseCompression, DWORD uConnID )
+void SendMysqlProtoHandshake ( ISphOutputBuffer& tOut, bool bSsl, bool bCanUseCompression, bool bCanUseZstdCompression, DWORD uConnID )
 {
 	// packed header here (packedID = 0)
 
@@ -529,27 +530,41 @@ void SendMysqlProtoHandshake ( ISphOutputBuffer& tOut, bool bSsl, bool bUseCompr
 
 	const BYTE uCapatibilities1stByte = 0x08; // Server capatibilities 1-st byte: CLIENT_CONNECT_WITH_DB
   	const BYTE uCapatibilities2ndByte = 0xC2; // server capabilities 2-nd byte: CLIENT_PROTOCOL_41 | CLIENT_SECURE_CONNECTION | INTERACTIVE_CLIENT
-
+	DWORD uCapabilities = 8UL /*CLIENT_CONNECT_WITH_DB*/
+						| 0x0200UL /*CLIENT_PROTOCOL_41*/
+						| 0x8000UL /*CLIENT_SECURE_CONNECTION, deprecated*/
+//						| 0x4000UL /*CLIENT_RESERVED, deprecated*/
+						| 0x00080000UL /*CLIENT_PLUGIN_AUTH*/
+						;
 	const char sHandshake3[] =	"\x21" // server language; let it be ut8_general_ci to make different clients happy
-		"\x02\x00" // server status AUTO_COMMIT
-		"\x08\x00" // server capabilities hi WORD; CLIENT_PLUGIN_AUTH
-		"\x15" // length of auth-plugin-data - 21 bytes
+		"\x02\x00"; // server status AUTO_COMMIT
+	const char sHandshake4[] =	"\x15" // length of auth-plugin-data - 21 bytes
 		"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" // unuzed 10 bytes
 		"\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x00" // auth-plugin-data-part-2 (12 bytes + zero) (for auth, 4.1+)
 		"mysql_native_password"; // auth plugin name. try to remove last z byte here...
 
 	int iLen = g_sMySQLVersion.Length()+1; // +1 for z-terminator
 
-	DWORD uHandshakeLen = 1 + iLen + 4 + sizeof(sHandshake2)-1 + 1 + 1 + sizeof(sHandshake3);
+	DWORD uHandshakeLen = 1 + iLen + 4 + sizeof(sHandshake2)-1 + 1 + 1 + sizeof(sHandshake3)-1 + 2 + sizeof ( sHandshake4 );
 	tOut.SendLSBDword ( uHandshakeLen & 0x00FFFFFFU );
 	tOut.SendByte( uHandshake1 );
 	tOut.SendBytes ( g_sMySQLVersion.scstr(), iLen );
 	tOut.SendLSBDword( uConnID );
 	tOut.SendBytes ( sHandshake2, sizeof ( sHandshake2 )-1 );
-	tOut.SendByte ( uCapatibilities1stByte | ( bUseCompression ? 0x20U : 0U ) );
-	// fixme! SSL capability must be set only if keys are valid!
-	tOut.SendByte ( uCapatibilities2ndByte | ( bSsl ? 8U : 0U ) );
-	tOut.SendBytes ( sHandshake3, sizeof ( sHandshake3 ) ); // incl. z-terminator
+
+	if (bCanUseCompression)
+		uCapabilities |= 0x20U; /* CLIENT_COMPRESS */
+
+	if (bCanUseZstdCompression)
+		uCapabilities |= ( 1UL << 26 ); /*	CLIENT_ZSTD_COMPRESSION_ALGORITHM */
+
+	if ( bSsl )	// fixme! SSL capability must be set only if keys are valid!
+		uCapabilities |= 0x0800UL; /*	CLIENT_SSL */
+
+	tOut.SendLSBWord ( uCapabilities & 0xFFFF );
+	tOut.SendBytes ( sHandshake3, sizeof ( sHandshake3 )-1 );
+	tOut.SendLSBWord ( uCapabilities >> 16 );
+	tOut.SendBytes ( sHandshake4, sizeof ( sHandshake4 ) ); // incl. z-terminator
 }
 
 const int MAX_PACKET_LEN = 0xffffffL; // 16777215 bytes, max low level packet size
@@ -572,14 +587,30 @@ inline bool UsernameIsFEDERATED ( const ByteBlob_t& tPacket )
 	return ( strncmp ( sFederated, sSrc, tPacket.second-(4+4+1+23) )==0 );
 }
 
+inline DWORD GetCapa ( const ByteBlob_t& tPacket )
+{
+	DWORD uRes = tPacket.first[0] + (tPacket.first[1]<<8) + (tPacket.first[2] << 16) + (tPacket.first[3] << 24);
+	return uRes;
+}
+
 inline bool UserWantsSSL ( const ByteBlob_t & tPacket )
 {
-	return ( tPacket.first[1] & 8 )!=0;
+	return ( GetCapa (tPacket) & 0x0800 )!=0;
 }
 
 inline bool UserWantsCompression ( const ByteBlob_t & tPacket )
 {
-	return ( tPacket.first[0] & 0x20U)!=0;
+	return ( GetCapa ( tPacket ) & 0x20U )!=0;
+}
+
+inline bool UserWantsZstdCompression ( const ByteBlob_t& tPacket )
+{
+	return ( GetCapa ( tPacket ) & ( 1UL << 26 ) ) != 0;
+}
+
+inline int UserWantsZstdCompressionLevel ( const ByteBlob_t& tPacket )
+{
+	return tPacket.first[tPacket.second-1];
 }
 
 bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen,
@@ -730,7 +761,8 @@ void SqlServe ( AsyncNetBufferPtr_c pBuf )
 
 	// set off query guard
 	GlobalCrashQueryGetRef ().m_eType = QUERY_SQL;
-	const bool bCanCompression = IsCompressionAvailable();
+	const bool bCanZlibCompression = IsZlibCompressionAvailable();
+	const bool bCanZstdCompression = IsZstdCompressionAvailable();
 
 	int iCID = tSess.GetConnID();
 	const char * sClientIP = tSess.szClientName();
@@ -744,7 +776,7 @@ void SqlServe ( AsyncNetBufferPtr_c pBuf )
 	// send handshake first
 	tSess.SetTaskState ( TaskState_e::HANDSHAKE );
 	sphLogDebugv ("Sending handshake...");
-	SendMysqlProtoHandshake ( tOut, CheckWeCanUseSSL (), bCanCompression, iCID );
+	SendMysqlProtoHandshake ( tOut, CheckWeCanUseSSL (), bCanZlibCompression, bCanZstdCompression, iCID );
 	tSess.SetTaskState ( TaskState_e::NET_WRITE );
 	if ( !tOut.Flush () )
 	{
@@ -848,9 +880,14 @@ void SqlServe ( AsyncNetBufferPtr_c pBuf )
 			tSess.SetPersistent ( tOut.Flush () );
 			bAuthed = true;
 
-			if ( bCanCompression && UserWantsCompression ( tAnswer ) )
+			if ( bCanZstdCompression && UserWantsZstdCompression ( tAnswer ) )
 			{
-				MakeMysqlCompressedLayer ( pBuf );
+				MakeZstdMysqlCompressedLayer ( pBuf, UserWantsZstdCompressionLevel ( tAnswer ) );
+				pCompressedFlag->m_bCompressed = true;
+			}
+			else if ( bCanZlibCompression && UserWantsCompression ( tAnswer ) )
+			{
+				MakeZlibMysqlCompressedLayer ( pBuf );
 				pCompressedFlag->m_bCompressed = true;
 			}
 			continue;

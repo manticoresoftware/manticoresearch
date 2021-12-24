@@ -12,15 +12,15 @@
 
 #include "networking_daemon.h"
 
-#if WITH_ZLIB
+#if WITH_ZSTD
 
-bool IsCompressionAvailable();
+bool IsZstdCompressionAvailable();
 
 // Replace pSource with it's compressed version.
 // Mysql proto will be wrapped into compressed.
-void MakeMysqlCompressedLayer ( AsyncNetBufferPtr_c & pSource );
+void MakeZstdMysqlCompressedLayer ( AsyncNetBufferPtr_c & pSource, int iLevel );
 
 #else
-inline bool IsCompressionAvailable() { return false; }
-inline void MakeMysqlCompressedLayer ( AsyncNetBufferPtr_c & pSource ) { };
+inline bool IsZstdCompressionAvailable() { return false; }
+inline void MakeZstdMysqlCompressedLayer ( AsyncNetBufferPtr_c & pSource, int iLevel ) { };
 #endif

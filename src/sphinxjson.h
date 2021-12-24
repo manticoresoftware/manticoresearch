@@ -205,27 +205,27 @@ public:
 		Base_T::FixupSpacedAndAppendEscaped ( sName );
 		AppendRawChunk ( {":", 1} );
 		SkipNextComma ();
-		return ScopedComma_c ( *this, nullptr );
+		return { *this, nullptr };
 	}
 
-	ScopedComma_c Object ()
+	ScopedComma_c Object ( bool bAllowEmpty = false )
 	{
-		return ScopedComma_c ( *this, dJsonObj );
+		return { *this, dJsonObj, bAllowEmpty };
 	}
 
-	ScopedComma_c ObjectW ()
+	ScopedComma_c ObjectW ( bool bAllowEmpty = false )
 	{
-		return ScopedComma_c ( *this, dJsonObjW );
+		return { *this, dJsonObjW, bAllowEmpty };
 	}
 
-	ScopedComma_c Array ()
+	ScopedComma_c Array ( bool bAllowEmpty = false )
 	{
-		return ScopedComma_c ( *this, dJsonArr );
+		return { *this, dJsonArr, bAllowEmpty };
 	}
 
-	ScopedComma_c ArrayW ()
+	ScopedComma_c ArrayW ( bool bAllowEmpty = false )
 	{
-		return ScopedComma_c ( *this, dJsonArrW );
+		return { *this, dJsonArrW, bAllowEmpty };
 	}
 
 	int NamedBlock( const char* sName )
@@ -246,16 +246,42 @@ public:
 		return StartBlock( dJsonObjW );
 	}
 
-	int ArrayBlock()
+	void NamedString ( const char* szName, const char* szValue )
 	{
-		return StartBlock( dJsonArr );
+		Named ( szName );
+		Base_T::FixupSpacedAndAppendEscaped ( szValue );
 	}
 
-	int ArrayWBlock()
+	void NamedString ( const char* szName, Str_t sValue )
 	{
-		return StartBlock( dJsonArrW );
+		Named ( szName );
+		Base_T::FixupSpacedAndAppendEscaped ( sValue.first, sValue.second );
 	}
 
+	void NamedString ( const char* szName, const CSphString& sValue )
+	{
+		NamedString ( szName, sValue.cstr() );
+	}
+
+	void NamedStringNonEmpty ( const char* szName, const CSphString& sValue )
+	{
+		if ( !sValue.IsEmpty() )
+			NamedString ( szName, sValue );
+	}
+
+	template<typename T>
+	void NamedVal ( const char* szName, T tValue )
+	{
+		Named ( szName );
+		*this << tValue;
+	}
+
+	template<typename T>
+	void NamedValNonDefault ( const char* szName, T tValue, T tDefault=0 )
+	{
+		if ( tValue != tDefault )
+			NamedVal ( szName, tValue );
+	}
 };
 
 /// parse JSON, convert it into SphinxBSON blob

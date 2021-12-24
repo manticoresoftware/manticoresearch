@@ -95,6 +95,12 @@
 			insert into tt (id, t, t1, t2 ) values (1,'foo','',''),(2, 'bar', 'bor',''), (3, 'baz', 'bor', 'bor');
 
 			desc tt;
+
+			<!-- alter add first docstored field -->
+			create table tfirst (f text indexed) type='rt';
+			alter table tfirst add column f2 text;
+			drop table tfirst;
+
 		</sphinxql>
 		<repeat var="fld" delimiter="/" variants="/@t /@t1 /@t2 "><repeat var="tok"  variants="foo bar baz bor">
 			<sphinxql>

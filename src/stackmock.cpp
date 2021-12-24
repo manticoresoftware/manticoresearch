@@ -148,6 +148,10 @@ class CreateExprStackSize_c : public StackMeasurer_c
 
 protected:
 	StringBuilder_c m_sExpr;
+
+public:
+	static int MockMeasure();
+	static void PublishValue (int iStack);
 };
 
 // measure stack for evaluate expression
@@ -202,56 +206,11 @@ class EvalExprStackSize_c : public CreateExprStackSize_c
 		if ( !tParams.m_bSuccess || !tParams.m_sError.IsEmpty () )
 			sphWarning ( "stack check expression error: %s", tParams.m_sError.cstr () );
 	}
+
+public:
+	static int MockMeasure();
+	static void PublishValue ( int iStack );
 };
-
-void DetermineNodeItemStackSize()
-{
-	int iCreateSize=0;
-	int iEvalSize=0;
-
-	bool bRunNatively = !Threads::IsUnderValgrind();
-	bool bNeedCheck = true;
-#ifdef KNOWN_CREATE_SIZE
-	iCreateSize = KNOWN_CREATE_SIZE;
-	bNeedCheck = bRunNatively;
-#endif
-
-	if ( bNeedCheck )
-	{
-		CreateExprStackSize_c tCreateMeter;
-		auto iNewCreateSize = tCreateMeter.MockMeasureStack ( 5 );
-
-#ifdef NDEBUG
-		if ( iCreateSize && iCreateSize < iNewCreateSize )
-			sphWarning ( "Compiled-in value KNOWN_CREATE_SIZE (%d) is less than measured (%d). Consider to fix the value!", iCreateSize, iNewCreateSize );
-#endif
-
-		iCreateSize = iNewCreateSize;
-	}
-	sphLogDebug ( "expression stack for creation %d", iCreateSize );
-
-	// save the metric, as next measuring eval metric with deeper recursion may already use the value
-	SetExprNodeStackItemSize ( iCreateSize, 0 );
-
-#ifdef KNOWN_EXPR_SIZE
-	iEvalSize = KNOWN_EXPR_SIZE;
-	bNeedCheck = bRunNatively;
-#endif
-	if ( bNeedCheck )
-	{
-		EvalExprStackSize_c tEvalMeter;
-		auto iNewEvalSize = tEvalMeter.MockMeasureStack ( 20 );
-
-#ifdef NDEBUG
-		if ( iEvalSize && iEvalSize < iNewEvalSize )
-			sphWarning ( "Compiled-in value KNOWN_EXPR_SIZE (%d) is less than measured (%d). Consider to fix the value!", iEvalSize, iNewEvalSize );
-#endif
-
-		iEvalSize = iNewEvalSize;
-	}
-	sphLogDebug ( "expression stack for eval/deletion %d", iEvalSize );
-	SetExprNodeStackItemSize ( 0, iEvalSize );
-}
 
 /////////////////////////////////////////////////////////////////////
 class FilterCreationMeasureStack_c : public StackMeasurer_c
@@ -307,27 +266,108 @@ class FilterCreationMeasureStack_c : public StackMeasurer_c
 
 protected:
 	StringBuilder_c m_sQuery;
+
+public:
+	static int MockMeasure();
+	static void PublishValue ( int iStack );
 };
+
+int CreateExprStackSize_c::MockMeasure()
+{
+	CreateExprStackSize_c tCreateMeter;
+	return tCreateMeter.MockMeasureStack ( 5 );
+}
+
+int EvalExprStackSize_c::MockMeasure()
+{
+	EvalExprStackSize_c tEvalMeter;
+	return tEvalMeter.MockMeasureStack ( 20 );
+}
+
+int FilterCreationMeasureStack_c::MockMeasure()
+{
+	FilterCreationMeasureStack_c tCreateMeter;
+	return tCreateMeter.MockMeasureStack ( 100 );
+}
+
+void CreateExprStackSize_c::PublishValue ( int iStack )
+{
+	SetExprNodeStackItemSize ( iStack, 0 );
+}
+
+void EvalExprStackSize_c::PublishValue ( int iStack )
+{
+	SetExprNodeStackItemSize ( 0, iStack );
+}
+
+void FilterCreationMeasureStack_c::PublishValue ( int iStack )
+{
+	SetFilterStackItemSize ( iStack );
+}
+
+
+template<typename MOCK, int COMPILEDVAL>
+void DetermineStackSize ( const char* szReport, const char* szEnv )
+{
+	int iSize = COMPILEDVAL;
+	int iNewSize = 0;
+	bool bMocked = false;
+	if ( !( COMPILEDVAL && Threads::IsUnderValgrind() ) )
+	{
+		StringBuilder_c sName;
+		sName << "MANTICORE_" << szEnv;
+		iNewSize = val_from_env ( sName.cstr(), 0 );
+
+		if ( !iNewSize )
+		{
+			iNewSize = MOCK::MockMeasure();
+			bMocked = true;
+
+#ifdef NDEBUG
+			if ( COMPILEDVAL && COMPILEDVAL < iNewSize )
+				sphWarning ( "Compiled-in value %s (%d) is less than measured (%d). Consider to fix the value!", szEnv, COMPILEDVAL, iNewSize );
+#endif
+		}
+		iSize = iNewSize;
+		if ( bMocked )
+			sphLogDebug ( "%s is %d. Consider to add env MANTICORE_%s=%d to store this value persistent for this binary", szReport, iSize, szEnv, iNewSize );
+		else
+			sphLogDebug ( "%s %d (from env MANTICORE_%s)", szReport, iSize, szEnv );
+	} else
+	{
+		sphLogDebug ( "%s is %d (compiled-in)", szReport, iSize );
+	}
+
+	MOCK::PublishValue ( iSize );
+}
+
+
+void DetermineNodeItemStackSize()
+{
+	// some values for x86_64: clang 12.0.1 relwithdebinfo = 768, debug = 4208. gcc 9.3 relwithdebinfo = 16, debug = 256
+#ifdef KNOWN_CREATE_SIZE
+	DetermineStackSize<CreateExprStackSize_c, KNOWN_CREATE_SIZE>
+#else
+	DetermineStackSize<CreateExprStackSize_c, 0>
+#endif
+			( "expression stack for creation", "KNOWN_CREATE_SIZE" );
+
+	// some values for x86_64: clang 12.0.1 relwithdebinfo = 32, debug = 48. gcc 9.3 relwithdebinfo = 48, debug = 48
+#ifdef KNOWN_EXPR_SIZE
+	DetermineStackSize<EvalExprStackSize_c, KNOWN_EXPR_SIZE>
+#else
+	DetermineStackSize<EvalExprStackSize_c, 0>
+#endif
+			( "expression stack for eval/deletion", "KNOWN_EXPR_SIZE" );
+}
 
 void DetermineFilterItemStackSize ()
 {
-	bool bNeedCheck = true;
-	int iDelta=0;
+	// some values for x86_64: clang 12.0.1 relwithdebinfo = 208, debug = 400. gcc 9.3 relwithdebinfo = 240, debug = 272
 #ifdef KNOWN_FILTER_SIZE
-	iDelta = KNOWN_FILTER_SIZE;
-	bNeedCheck = !Threads::IsUnderValgrind();
+	DetermineStackSize<FilterCreationMeasureStack_c, KNOWN_FILTER_SIZE>
+#else
+	DetermineStackSize<FilterCreationMeasureStack_c, 0>
 #endif
-	if ( bNeedCheck )
-	{
-		FilterCreationMeasureStack_c tCreateMeter;
-		auto iNewDelta = tCreateMeter.MockMeasureStack ( 100 );
-#ifdef NDEBUG
-		if ( iDelta && iDelta<iNewDelta )
-			sphWarning ( "Compiled-in value KNOWN_FILTER_SIZE (%d) is less then measured (%d). Consider to fix the value!", iDelta, iNewDelta );
-#endif
-		iDelta = iNewDelta;
-	}
-
-	sphLogDebug ( "filter stack delta %d", iDelta );
-	SetFilterStackItemSize ( iDelta );
+			( "filter stack delta", "KNOWN_FILTER_SIZE" );
 }

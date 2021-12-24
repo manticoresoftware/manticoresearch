@@ -27,6 +27,7 @@ struct Listener_t
 	bool				m_bTcp;
 	Proto_e				m_eProto;
 	bool				m_bVIP;
+	bool 				m_bReadOnly;
 };
 
 class CSphNetLoop;

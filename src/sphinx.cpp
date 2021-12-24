@@ -42,6 +42,7 @@
 #include "conversion.h"
 #include "binlog.h"
 #include "task_info.h"
+#include "client_task_info.h"
 #include "chunksearchctx.h"
 #include "lrucache.h"
 #include "indexfiles.h"
@@ -7943,7 +7944,9 @@ template <>
 bool RowIterator_T<false>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
 {
 	RowID_t * pRowIdStart = m_dCollected.Begin();
-	RowID_t * pRowIdMax = pRowIdStart + Min ( RowID_t(m_dCollected.GetLength()-1), m_tBoundaries.m_tMaxRowID-m_tRowID+1 );
+	int64_t iDelta = Min ( RowID_t(m_dCollected.GetLength()-1), int64_t(m_tBoundaries.m_tMaxRowID)-m_tRowID+1 );
+	assert ( iDelta>=0 );
+	RowID_t * pRowIdMax = pRowIdStart + iDelta;
 	RowID_t * pRowID = pRowIdStart;
 
 	// fixme! use sse?
@@ -7952,7 +7955,6 @@ bool RowIterator_T<false>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
 
 	return ReturnIteratorResult ( pRowID, pRowIdStart, dRowIdBlock );
 }
-
 
 // adds killlist filtering to a rowid iterator
 class RowIteratorAlive_c : public ISphNoncopyable
@@ -8414,10 +8416,11 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 		bool bHaveRowidFilter = false;
 		RowIdBoundaries_t tBoundaries = RemoveRowIdFilter ( tCtx, tFlx, dModifiedFilters, tMeta, m_iDocinfo, bHaveRowidFilter );
 
-		bool bAllColumnar = tQuery.m_dFilters.all_of ( [this]( const CSphFilterSettings & tFilter ) {
-			const CSphColumnInfo * pCol = m_tSchema.GetAttr ( tFilter.m_sAttrName.cstr() );
-			return pCol ? ( pCol->IsColumnar() || pCol->IsColumnarExpr() ) : false;
-		} );
+		bool bAllColumnar = dModifiedFilters.all_of ( [this]( const CSphFilterSettings & tFilter )
+							{
+								const CSphColumnInfo * pCol = m_tSchema.GetAttr ( tFilter.m_sAttrName.cstr() );
+								return pCol ? ( pCol->IsColumnar() || pCol->IsColumnarExpr() ) : false;
+							} );
 
 		if ( bAllColumnar )
 		{
@@ -10688,7 +10691,7 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 			return; // already nothing to do, early finish.
 
 		auto tCtx = tClonableCtx.CloneNewContext ( &iChunk );
-		Threads::Coro::Throttler_c tThrottler ( session::ThrottlingPeriodMS() );
+		Threads::Coro::Throttler_c tThrottler ( session::GetThrottlingPeriodMS() );
 		int iTick=1; // num of times coro rescheduled by throttler
 		while ( !bInterrupt ) // some earlier job met error; abort.
 		{

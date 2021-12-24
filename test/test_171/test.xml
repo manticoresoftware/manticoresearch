@@ -543,6 +543,10 @@ select count(distinct i1), count(*), i2, i1 from dist_mm group by i2 limit 5 opt
 
 <!-- master fails to merge FACET result sets with agent empty result -->
 SELECT mva1 FROM dist_facet1 ORDER BY id desc FACET mva1;;
+
+<!-- crash at count distinct with empty result set -->
+select id, count(distinct tag) d from idx1, idx2 where match ( 'missed' ) group by gr;
+
 </sphinxql></queries>
 
 <db_create>

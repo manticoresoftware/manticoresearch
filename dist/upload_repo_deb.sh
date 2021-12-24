@@ -10,6 +10,7 @@ if [ -z "${REPO_NAME}" ] || [ $REPO_NAME == '$REPO_NAME' ]; then
   REPO_NAME="manticoresearch"
 fi
 
+
 for filename in *deb; do
   if [ -f "$filename" ]; then
     if [ -z "${IS_RELEASE_DIGIT}" ]; then
@@ -24,17 +25,22 @@ for filename in *deb; do
     curl -is --user "${REPO_USER}:${REPO_SECRET}" -H "Content-Type: multipart/form-data" --data-binary "@./$filename" $REPO_IP/repository/manticoresearch_$DISTRO$SUFFIX/ \
     && echo "Uploaded $f to manticoresearch_$DISTRO$SUFFIX"
 
-    cp $f /work/repomanager/repodata/repository/manticoresearch_$DISTRO$SUFFIX/dists/bionic/main/binary-amd64/ && echo "Copied $f to manticoresearch_$DISTRO$SUFFIX"
 
     arch="amd"
-    if [ "${filename/$arch}" != "$arch" ] ; then
-      $arch="arm"
+    if [ "${filename/$arch}" = "$arch" ] ; then
+      arch="arm"
     fi
 
-    if [ -z $SUFFIX ]; then
-        /usr/bin/docker exec repo-generator /generator.sh -distro $DISTRO -dev -architecture $arch
+    echo -e "Copy $f to /work/repomanager/repodata/repository/manticoresearch_$DISTRO$SUFFIX/dists/$DISTRO/main/binary-${arch}64/";
+    cp $f /work/repomanager/repodata/repository/manticoresearch_$DISTRO$SUFFIX/dists/$DISTRO/main/binary-${arch}64/ && echo -e "Success"
+    echo -e "\n"
+
+    if [ ! -z $SUFFIX ]; then
+        /usr/bin/docker exec repo-generator /generator.sh -distro $DISTRO -architecture $arch -dev 1
       else
         /usr/bin/docker exec repo-generator /generator.sh -distro $DISTRO -architecture $arch
     fi
   fi
 done
+
+rm -rf *deb

@@ -122,6 +122,7 @@ sys	0m0.047s
 * [Issue #643](https://github.com/manticoresoftware/manticoresearch/issues/643) Manticore 4.0.2 does not accept connections after batch of inserts
 * [Issue #635](https://github.com/manticoresoftware/manticoresearch/issues/635) FACET query with ORDER BY JSON.field or string attribute could crash
 * [Issue #634](https://github.com/manticoresoftware/manticoresearch/issues/634) Crash SIGSEGV on query with packedfactors
+* [Commit 41657f15](https://github.com/manticoresoftware/manticoresearch/commits/41657f15f8fcf1e93cfad7f835bcf705d6e8349e) morphology_skip_fields was not supported by create table
 
 ## Version 4.0.2, Sep 21 2021
 

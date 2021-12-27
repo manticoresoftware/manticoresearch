@@ -1479,7 +1479,7 @@ private:
 	RowidIterator_i *			CreateColumnarAnalyzerOrPrefilter ( const CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphFilterSettings> & dModifiedFilters, bool & bFiltersChanged, const CSphVector<FilterTreeItem_t> & dFilterTree, const ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema, CSphString & sWarning ) const;
 
 	bool						SplitQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dAllSorters, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const;
-	RowidIterator_i *			SpawnIterators ( const CSphQuery & tQuery, CSphVector<CSphFilterSettings> & dModifiedFilters, bool & bFiltersChanged, const ISphFilter * pFilter, const ISphSchema & tMaxSorterSchema, CSphString & sWarning ) const;
+	RowidIterator_i *			SpawnIterators ( const CSphQuery & tQuery, CSphVector<CSphFilterSettings> & dModifiedFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta ) const;
 };
 
 class AttrMerger_c
@@ -8227,39 +8227,56 @@ RowidIterator_i * CSphIndex_VLN::CreateColumnarAnalyzerOrPrefilter ( const CSphV
 }
 
 
-static void UpdateSpawnedIterators ( bool bChanged, bool & bFiltersChanged, CSphVector<CSphFilterSettings> & dOriginalFilters, CSphVector<CSphFilterSettings> & dModifiedFilters, const CSphVector<CSphFilterSettings> * & pOriginalFilters, CSphVector<RowidIterator_i*> & dIterators, RowidIterator_i * pIterator )
+static void UpdateSpawnedIterators ( bool bChanged, bool & bRecreateFilters, CSphVector<CSphFilterSettings> & dOriginalFilters, CSphVector<CSphFilterSettings> & dModifiedFilters, const CSphVector<CSphFilterSettings> * & pOriginalFilters, CSphVector<RowidIterator_i*> & dIterators, RowidIterator_i * pIterator )
 {
 	if ( pIterator )
 		dIterators.Add(pIterator);
 
 	if ( bChanged )
 	{
-		bFiltersChanged = true;
+		bRecreateFilters = true;
 		dOriginalFilters = dModifiedFilters;
 		pOriginalFilters = &dOriginalFilters;
 	}
 }
 
 
-RowidIterator_i * CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, CSphVector<CSphFilterSettings> & dModifiedFilters, bool & bFiltersChanged, const ISphFilter * pFilter, const ISphSchema & tMaxSorterSchema, CSphString & sWarning ) const
+RowidIterator_i * CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, CSphVector<CSphFilterSettings> & dModifiedFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta ) const
 {
 	CSphVector<CSphFilterSettings> dOriginalFilters;
 	const CSphVector<CSphFilterSettings> * pOriginalFilters = &tQuery.m_dFilters;
 
 	CSphVector<RowidIterator_i*> dIterators;
+	bool bRecreateFilters = false;
 
 	// try to spawn an iterator from a secondary index
 	{
 		bool bChanged = false;
 		RowidIterator_i * pIterator = m_pHistograms ? CreateFilteredIterator ( *pOriginalFilters, dModifiedFilters, bChanged, tQuery.m_dFilterTree, tQuery.m_dIndexHints, *m_pHistograms, m_tDocidLookup.GetWritePtr(), RowID_t(m_iDocinfo) ) : nullptr;
-		UpdateSpawnedIterators ( bChanged, bFiltersChanged, dOriginalFilters, dModifiedFilters, pOriginalFilters, dIterators, pIterator );
+		UpdateSpawnedIterators ( bChanged, bRecreateFilters, dOriginalFilters, dModifiedFilters, pOriginalFilters, dIterators, pIterator );
 	}
 
 	// try to spawn analyzers or prefilters from columnar storage
 	{
+		// if we already created an iterator at prev stage, we need to recreate filters here, so we won't be doing unnecessary minmax eval
+		if ( bRecreateFilters && pOriginalFilters->GetLength() )
+		{
+			SafeDelete ( tCtx.m_pFilter );
+			tFlx.m_pFilters = &dModifiedFilters;
+			tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning );
+			bRecreateFilters = false;
+		}
+
 		bool bChanged = false;
-		RowidIterator_i * pIterator = CreateColumnarAnalyzerOrPrefilter ( *pOriginalFilters, dModifiedFilters, bChanged, tQuery.m_dFilterTree, pFilter, tQuery.m_eCollation, tMaxSorterSchema, sWarning );
-		UpdateSpawnedIterators ( bChanged, bFiltersChanged, dOriginalFilters, dModifiedFilters, pOriginalFilters, dIterators, pIterator );
+		RowidIterator_i * pIterator = CreateColumnarAnalyzerOrPrefilter ( *pOriginalFilters, dModifiedFilters, bChanged, tQuery.m_dFilterTree, tCtx.m_pFilter, tQuery.m_eCollation, tMaxSorterSchema, tMeta.m_sWarning );
+		UpdateSpawnedIterators ( bChanged, bRecreateFilters, dOriginalFilters, dModifiedFilters, pOriginalFilters, dIterators, pIterator );
+	}
+
+	if ( bRecreateFilters )
+	{
+		SafeDelete ( tCtx.m_pFilter );
+		tFlx.m_pFilters = &dModifiedFilters;
+		tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning );
 	}
 
 	switch ( dIterators.GetLength() )
@@ -8397,20 +8414,9 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 
 	// we don't modify the original filters because iterators may use some data from them (to avoid copying)
 	CSphVector<CSphFilterSettings> dModifiedFilters;
-	bool bFiltersChanged = false;
-	CSphScopedPtr<RowidIterator_i> pIterator ( SpawnIterators ( tQuery, dModifiedFilters, bFiltersChanged, tCtx.m_pFilter, tMaxSorterSchema, tMeta.m_sWarning ) );
+	CSphScopedPtr<RowidIterator_i> pIterator ( SpawnIterators ( tQuery, dModifiedFilters, tCtx, tFlx, tMaxSorterSchema, tMeta ) );
 	if ( pIterator )
-	{
-		// one or several filters got replaced by an iterator, need to re-create the remaining filters
-		if ( bFiltersChanged )
-		{
-			SafeDelete ( tCtx.m_pFilter );
-			tFlx.m_pFilters = &dModifiedFilters;
-			tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning );
-		}
-
 		RunFullscanOnIterator ( pIterator.Ptr(), tCtx, tMeta, dSorters, tMatch, iCutoff, bRandomize, tArgs.m_iIndexWeight, tmMaxTimer );
-	}
 	else
 	{
 		bool bHaveRowidFilter = false;

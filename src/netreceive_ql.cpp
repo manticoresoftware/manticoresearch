@@ -68,9 +68,12 @@ BYTE * MysqlPackInt ( BYTE * pOutput, int64_t iValue )
 // MYSQLD PRETENDER
 //////////////////////////////////////////////////////////////////////////
 
-#define SPH_MYSQL_FLAG_STATUS_IN_TRANS 1	// mysql.h: SERVER_STATUS_IN_TRANS
-#define SPH_MYSQL_FLAG_STATUS_AUTOCOMMIT 2	// mysql.h: SERVER_STATUS_AUTOCOMMIT
-#define SPH_MYSQL_FLAG_MORE_RESULTS 8		// mysql.h: SERVER_MORE_RESULTS_EXISTS
+struct MYSQL_FLAG
+{
+	static constexpr WORD STATUS_IN_TRANS = 1;		// mysql.h: SERVER_STATUS_IN_TRANS
+	static constexpr WORD STATUS_AUTOCOMMIT = 2;	// mysql.h: SERVER_STATUS_AUTOCOMMIT
+	static constexpr WORD MORE_RESULTS = 8;		// mysql.h: SERVER_MORE_RESULTS_EXISTS
+};
 
 // our copy of enum_field_types
 // we can't rely on mysql_com.h because it might be unavailable
@@ -103,7 +106,10 @@ BYTE * MysqlPackInt ( BYTE * pOutput, int64_t iValue )
 // MYSQL_TYPE_STRING = 254
 // MYSQL_TYPE_GEOMETRY = 255
 
-#define SPH_MYSQL_ERROR_MAX_LENGTH 512
+struct MYSQL_ERROR
+{
+	static constexpr int MAX_LENGTH = 512;
+};
 
 // our copy of enum_server_command
 // we can't rely on mysql_com.h because it might be unavailable
@@ -159,9 +165,9 @@ void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, const char 
 	auto iErrorLen = (int) strlen(sError);
 
 	// cut the error message to fix isseue with long message for popular clients
-	if ( iErrorLen>SPH_MYSQL_ERROR_MAX_LENGTH )
+	if ( iErrorLen>MYSQL_ERROR::MAX_LENGTH )
 	{
-		iErrorLen = SPH_MYSQL_ERROR_MAX_LENGTH;
+		iErrorLen = MYSQL_ERROR::MAX_LENGTH;
 		char * sErr = const_cast<char *>( sError );
 		sErr[iErrorLen-3] = '.';
 		sErr[iErrorLen-2] = '.';
@@ -198,18 +204,21 @@ void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, const char 
 
 void SendMysqlEofPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iWarns, bool bMoreResults, bool bAutoCommit, bool bIsInTrans )
 {
+	tOut.SendLSBDword ( ( uPacketID << 24 ) + 5 );
+	tOut.SendByte ( 0xfe );
+
 	if ( iWarns<0 ) iWarns = 0;
 	if ( iWarns>65535 ) iWarns = 65535;
-	if ( bMoreResults )
-		iWarns |= ( SPH_MYSQL_FLAG_MORE_RESULTS<<16 );
-	if ( bAutoCommit )
-		iWarns |= ( SPH_MYSQL_FLAG_STATUS_AUTOCOMMIT<<16 );
-	if ( bIsInTrans )
-		iWarns |= ( SPH_MYSQL_FLAG_STATUS_IN_TRANS<<16 );
+	tOut.SendLSBWord ( iWarns );
 
-	tOut.SendLSBDword ( (uPacketID<<24) + 5 );
-	tOut.SendByte ( 0xfe );
-	tOut.SendLSBDword ( iWarns ); // N warnings, 0 status
+	WORD uStatus = 0;
+	if ( bMoreResults )
+		uStatus |= MYSQL_FLAG::MORE_RESULTS;
+	if ( bAutoCommit )
+		uStatus |= MYSQL_FLAG::STATUS_AUTOCOMMIT;
+	if ( bIsInTrans )
+		uStatus |= MYSQL_FLAG::STATUS_IN_TRANS;
+	tOut.SendLSBWord ( uStatus );
 }
 
 
@@ -235,11 +244,11 @@ void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iAffectedR
 	DWORD uWarnStatus = ( iWarns<<16 );
 	// order of WORDs is opposite to EOF packet above
 	if ( bMoreResults )
-		uWarnStatus |= SPH_MYSQL_FLAG_MORE_RESULTS;
+		uWarnStatus |= MYSQL_FLAG::MORE_RESULTS;
 	if ( bAutoCommit )
-		uWarnStatus |= SPH_MYSQL_FLAG_STATUS_AUTOCOMMIT;
+		uWarnStatus |= MYSQL_FLAG::STATUS_AUTOCOMMIT;
 	if ( bIsInTrans )
-		uWarnStatus |= SPH_MYSQL_FLAG_STATUS_IN_TRANS;
+		uWarnStatus |= MYSQL_FLAG::STATUS_IN_TRANS;
 
 	tOut.SendLSBDword ( uWarnStatus );		// 0 status, N warnings
 	if ( sMessage )
@@ -513,6 +522,18 @@ public:
 	}
 };
 
+struct CLIENT
+{
+	static constexpr DWORD CONNECT_WITH_DB = 8;
+	static constexpr DWORD PROTOCOL_41 = 0x0200;
+	static constexpr DWORD SECURE_CONNECTION = 0x80000; // deprecated
+//	static constexpr DWORD RESERVED = 0x4000;
+	static constexpr DWORD PLUGIN_AUTH = 0x00080000;
+	static constexpr DWORD COMPRESS = 0x20;
+	static constexpr DWORD ZSTD_COMPRESSION_ALGORITHM = ( 1UL << 26 );
+	static constexpr DWORD SSL = 0x800;
+};
+
 // send MySQL wire protocol handshake packets
 void SendMysqlProtoHandshake ( ISphOutputBuffer& tOut, bool bSsl, bool bCanUseCompression, bool bCanUseZstdCompression, DWORD uConnID )
 {
@@ -528,13 +549,11 @@ void SendMysqlProtoHandshake ( ISphOutputBuffer& tOut, bool bSsl, bool bCanUseCo
 		"\x01\x02\x03\x04\x05\x06\x07\x08" // auth-plugin-data-part-1
 		"\x00"; // filler
 
-	const BYTE uCapatibilities1stByte = 0x08; // Server capatibilities 1-st byte: CLIENT_CONNECT_WITH_DB
-  	const BYTE uCapatibilities2ndByte = 0xC2; // server capabilities 2-nd byte: CLIENT_PROTOCOL_41 | CLIENT_SECURE_CONNECTION | INTERACTIVE_CLIENT
-	DWORD uCapabilities = 8UL /*CLIENT_CONNECT_WITH_DB*/
-						| 0x0200UL /*CLIENT_PROTOCOL_41*/
-						| 0x8000UL /*CLIENT_SECURE_CONNECTION, deprecated*/
-//						| 0x4000UL /*CLIENT_RESERVED, deprecated*/
-						| 0x00080000UL /*CLIENT_PLUGIN_AUTH*/
+	DWORD uCapabilities = CLIENT::CONNECT_WITH_DB
+						| CLIENT::PROTOCOL_41
+						| CLIENT::SECURE_CONNECTION // deprecated
+//						| CLIENT::RESERVED
+						| CLIENT::PLUGIN_AUTH
 						;
 	const char sHandshake3[] =	"\x21" // server language; let it be ut8_general_ci to make different clients happy
 		"\x02\x00"; // server status AUTO_COMMIT
@@ -553,13 +572,13 @@ void SendMysqlProtoHandshake ( ISphOutputBuffer& tOut, bool bSsl, bool bCanUseCo
 	tOut.SendBytes ( sHandshake2, sizeof ( sHandshake2 )-1 );
 
 	if (bCanUseCompression)
-		uCapabilities |= 0x20U; /* CLIENT_COMPRESS */
+		uCapabilities |= CLIENT::COMPRESS;
 
 	if (bCanUseZstdCompression)
-		uCapabilities |= ( 1UL << 26 ); /*	CLIENT_ZSTD_COMPRESSION_ALGORITHM */
+		uCapabilities |= CLIENT::ZSTD_COMPRESSION_ALGORITHM;
 
 	if ( bSsl )	// fixme! SSL capability must be set only if keys are valid!
-		uCapabilities |= 0x0800UL; /*	CLIENT_SSL */
+		uCapabilities |= CLIENT::SSL;
 
 	tOut.SendLSBWord ( uCapabilities & 0xFFFF );
 	tOut.SendBytes ( sHandshake3, sizeof ( sHandshake3 )-1 );
@@ -587,25 +606,19 @@ inline bool UsernameIsFEDERATED ( const ByteBlob_t& tPacket )
 	return ( strncmp ( sFederated, sSrc, tPacket.second-(4+4+1+23) )==0 );
 }
 
-inline DWORD GetCapa ( const ByteBlob_t& tPacket )
+inline bool UserWantsSSL ( DWORD uCapabilities )
 {
-	DWORD uRes = tPacket.first[0] + (tPacket.first[1]<<8) + (tPacket.first[2] << 16) + (tPacket.first[3] << 24);
-	return uRes;
+	return ( uCapabilities & CLIENT::SSL ) != 0;
 }
 
-inline bool UserWantsSSL ( const ByteBlob_t & tPacket )
+inline bool UserWantsCompression ( DWORD uCapabilities )
 {
-	return ( GetCapa (tPacket) & 0x0800 )!=0;
+	return ( uCapabilities & CLIENT::COMPRESS ) != 0;
 }
 
-inline bool UserWantsCompression ( const ByteBlob_t & tPacket )
+inline bool UserWantsZstdCompression ( DWORD uCapabilities )
 {
-	return ( GetCapa ( tPacket ) & 0x20U )!=0;
-}
-
-inline bool UserWantsZstdCompression ( const ByteBlob_t& tPacket )
-{
-	return ( GetCapa ( tPacket ) & ( 1UL << 26 ) ) != 0;
+	return ( uCapabilities & CLIENT::ZSTD_COMPRESSION_ALGORITHM ) != 0;
 }
 
 inline int UserWantsZstdCompressionLevel ( const ByteBlob_t& tPacket )
@@ -852,13 +865,14 @@ void SqlServe ( AsyncNetBufferPtr_c pBuf )
 		if ( !bAuthed )
 		{
 			tSess.SetTaskState ( TaskState_e::HANDSHAKE );
-			auto tAnswer = tIn.PopTail ( iPacketLen );
+			DWORD uClientCapabilities = tIn.GetLSBDword();
+			auto tAnswer = tIn.PopTail ( iPacketLen - sizeof ( DWORD ) );
 
 			// switch to ssl by demand.
 			// You need to set a bit in handshake (g_sMysqlHandshake) in order to suggest client such switching.
 			// Client set this desirable bit only if we say that 'we can' about it before.
 
-			if ( !tSess.GetSsl() && UserWantsSSL( tAnswer) ) // want SSL
+			if ( !tSess.GetSsl() && UserWantsSSL( uClientCapabilities ) ) // want SSL
 			{
 				tSess.SetSsl ( MakeSecureLayer ( pBuf ) );
 				tSess.SetPersistent( !tOut.GetError () );
@@ -880,12 +894,12 @@ void SqlServe ( AsyncNetBufferPtr_c pBuf )
 			tSess.SetPersistent ( tOut.Flush () );
 			bAuthed = true;
 
-			if ( bCanZstdCompression && UserWantsZstdCompression ( tAnswer ) )
+			if ( bCanZstdCompression && UserWantsZstdCompression ( uClientCapabilities ) )
 			{
 				MakeZstdMysqlCompressedLayer ( pBuf, UserWantsZstdCompressionLevel ( tAnswer ) );
 				pCompressedFlag->m_bCompressed = true;
 			}
-			else if ( bCanZlibCompression && UserWantsCompression ( tAnswer ) )
+			else if ( bCanZlibCompression && UserWantsCompression ( uClientCapabilities ) )
 			{
 				MakeZlibMysqlCompressedLayer ( pBuf );
 				pCompressedFlag->m_bCompressed = true;

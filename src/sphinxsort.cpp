@@ -5145,6 +5145,7 @@ private:
 	bool	PredictAggregates() const;
 	bool	ReplaceWithColumnarItem ( const CSphString & sAttr, ESphEvalStage eStage );
 	int		ReduceMaxMatches() const;
+	const CSphColumnInfo * GetAliasedColumnarAttr ( const CSphColumnInfo & tAttr );
 
 	ISphMatchSorter *	SpawnQueue();
 	ISphFilter *		CreateAggrFilter() const;
@@ -5166,6 +5167,19 @@ QueueCreator_c::QueueCreator_c ( const SphQueueSettings_t & tSettings, const CSp
 
 	m_dMatchJsonExprs.Resize ( CSphMatchComparatorState::MAX_ATTRS );
 	m_dGroupJsonExprs.Resize ( CSphMatchComparatorState::MAX_ATTRS );
+}
+
+
+const CSphColumnInfo * QueueCreator_c::GetAliasedColumnarAttr ( const CSphColumnInfo & tAttr )
+{
+	if ( !tAttr.IsColumnarExpr() )
+		return &tAttr;
+
+	CSphString sAliasedCol;
+	tAttr.m_pExpr->Command ( SPH_EXPR_GET_COLUMNAR_COL, &sAliasedCol );
+	const CSphColumnInfo * pAttr = m_pSorterSchema->GetAttr ( sAliasedCol.cstr() );
+	assert(pAttr);
+	return pAttr;
 }
 
 
@@ -5197,7 +5211,7 @@ void QueueCreator_c::CreateGrouperByAttr ( ESphAttr eType, const CSphColumnInfo 
 		// even if it is an expression, spawn a new one, because a specialized grouper works a lot faster because it doesn't allocate and store string in the match
 		if ( tGroupByAttr.IsColumnar() || tGroupByAttr.IsColumnarExpr() )
 		{
-			m_tGroupSorterSettings.m_pGrouper = CreateGrouperColumnarString ( tGroupByAttr, m_tQuery.m_eCollation );
+			m_tGroupSorterSettings.m_pGrouper = CreateGrouperColumnarString ( *GetAliasedColumnarAttr(tGroupByAttr), m_tQuery.m_eCollation );
 			bGrouperUsesAttrs = false;
 		}
 		else if ( tGroupByAttr.m_pExpr && !tGroupByAttr.m_pExpr->IsDataPtrAttr() )
@@ -5213,7 +5227,7 @@ void QueueCreator_c::CreateGrouperByAttr ( ESphAttr eType, const CSphColumnInfo 
 	case SPH_ATTR_INT64SET:
 		if ( tGroupByAttr.IsColumnar() || tGroupByAttr.IsColumnarExpr() )
 		{
-			m_tGroupSorterSettings.m_pGrouper = CreateGrouperColumnarMVA ( tGroupByAttr );
+			m_tGroupSorterSettings.m_pGrouper = CreateGrouperColumnarMVA ( *GetAliasedColumnarAttr(tGroupByAttr) );
 			bGrouperUsesAttrs = false;
 			break;
 		}
@@ -5228,7 +5242,7 @@ void QueueCreator_c::CreateGrouperByAttr ( ESphAttr eType, const CSphColumnInfo 
 	case SPH_ATTR_INT64SET_PTR:
 		if ( tGroupByAttr.IsColumnar() || tGroupByAttr.IsColumnarExpr() )
 		{
-			m_tGroupSorterSettings.m_pGrouper = CreateGrouperColumnarMVA ( tGroupByAttr );
+			m_tGroupSorterSettings.m_pGrouper = CreateGrouperColumnarMVA ( *GetAliasedColumnarAttr(tGroupByAttr) );
 			bGrouperUsesAttrs = false;
 		}
 		break;
@@ -5237,7 +5251,7 @@ void QueueCreator_c::CreateGrouperByAttr ( ESphAttr eType, const CSphColumnInfo 
 	case SPH_ATTR_BIGINT:
 		if ( tGroupByAttr.IsColumnar() || ( tGroupByAttr.IsColumnarExpr() && tGroupByAttr.m_eStage>SPH_EVAL_PREFILTER ) )
 		{
-			m_tGroupSorterSettings.m_pGrouper = CreateGrouperColumnarInt ( tGroupByAttr );
+			m_tGroupSorterSettings.m_pGrouper = CreateGrouperColumnarInt ( *GetAliasedColumnarAttr(tGroupByAttr) );
 			bGrouperUsesAttrs = false;
 		}
 		break;

@@ -942,7 +942,7 @@ In the example you can see that if we GROUP BY major and show both `COUNT(*)` an
 
 There can be at most one `COUNT(DISTINCT)` per query.
 
-**`COUNT(DISTINCT)` against a distributed index or a real-time index consisting of multiple disk chunks may return inaccurate results**, but the result should be accurate for a distributed index consisting of local plain indexes with the same schema.
+**`COUNT(DISTINCT)` against a distributed index or a real-time index consisting of multiple disk chunks may return inaccurate results**, but the result should be accurate for a distributed index consisting of local plain or real-time indexes with the same schema (identical set/order of fields, but may be different tokenization settings).
 
 <!-- intro -->
 ##### Example:

@@ -1573,6 +1573,22 @@ JsonObj_c sphEncodeInsertResultJson ( const char * szIndex, bool bReplace, DocID
 	return tObj;
 }
 
+JsonObj_c sphEncodeTxnResultJson ( const char* szIndex, DocID_t tDocId, int iInserts, int iDeletes, int iUpdates )
+{
+	JsonObj_c tObj;
+
+	tObj.AddStr ( "_index", szIndex );
+	tObj.AddInt ( "_id", tDocId );
+	tObj.AddInt ( "created", iInserts );
+	tObj.AddInt ( "deleted", iDeletes );
+	tObj.AddInt ( "updated", iUpdates );
+	bool bReplaced = (iInserts!=0 && iDeletes!=0);
+	tObj.AddStr ( "result", bReplaced ? "updated" : "created" );
+	tObj.AddInt ( "status", bReplaced ? 200 : 201 );
+
+	return tObj;
+}
+
 
 JsonObj_c sphEncodeUpdateResultJson ( const char * szIndex, DocID_t tDocId, int iAffected )
 {

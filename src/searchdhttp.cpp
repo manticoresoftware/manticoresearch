@@ -959,7 +959,7 @@ protected:
 class HttpJsonInsertTraits_c
 {
 protected:
-	bool ProcessInsert ( SqlStmt_t & tStmt, DocID_t tDocId, bool bReplace, JsonObj_c & tResult )
+	bool ProcessInsert ( SqlStmt_t & tStmt, DocID_t tDocId, JsonObj_c & tResult )
 	{
 		HttpErrorReporter_c tReporter;
 		sphHandleMysqlInsert ( tReporter, tStmt );
@@ -972,13 +972,53 @@ protected:
 			auto dLastIds = session::LastIds();
 			if ( !dLastIds.IsEmpty() )
 				tDocId = dLastIds[0];
-			tResult = sphEncodeInsertResultJson ( tStmt.m_sIndex.cstr(), bReplace, tDocId );
+			tResult = sphEncodeInsertResultJson ( tStmt.m_sIndex.cstr(), tStmt.m_eStmt == STMT_REPLACE, tDocId );
 		}
 
 		return !tReporter.IsError();
 	}
 };
 
+class HttpJsonTxnTraits_c
+{
+protected:
+	void ProcessBegin ( const CSphString& sIndex )
+	{
+		// for now - only local mutable indexes are suitable
+		{
+			ServedDescRPtr_c pIndex ( GetServed ( sIndex ) );
+			if ( !ServedDesc_t::IsMutable ( pIndex ) )
+				return;
+		}
+
+		HttpErrorReporter_c tReporter;
+		sphHandleMysqlBegin ( tReporter, FromStr (sIndex) );
+		m_iInserts = 0;
+		m_iUpdates = 0;
+	}
+
+	bool ProcessCommitRollback ( Str_t sIndex, DocID_t tDocId, JsonObj_c& tResult )
+	{
+		HttpErrorReporter_c tReporter;
+		sphHandleMysqlCommitRollback ( tReporter, sIndex, true );
+
+		if ( tReporter.IsError() )
+		{
+			tResult = sphEncodeInsertErrorJson ( sIndex.first, tReporter.GetError() );
+		} else
+		{
+			auto iDeletes = tReporter.GetAffectedRows();
+			auto dLastIds = session::LastIds();
+			if ( !dLastIds.IsEmpty() )
+				tDocId = dLastIds[0];
+			tResult = sphEncodeTxnResultJson ( sIndex.first, tDocId, m_iInserts, iDeletes, m_iUpdates );
+		}
+		return !tReporter.IsError();
+	}
+
+	int m_iInserts = 0;
+	int m_iUpdates = 0;
+};
 
 class HttpHandler_JsonInsert_c : public HttpHandler_c, public HttpJsonInsertTraits_c
 {
@@ -1002,7 +1042,7 @@ public:
 
 		tStmt.m_sEndpoint = sphHttpEndpointToStr ( m_bReplace ? SPH_HTTP_ENDPOINT_JSON_REPLACE : SPH_HTTP_ENDPOINT_JSON_INSERT );
 		JsonObj_c tResult = JsonNull;
-		bool bResult = ProcessInsert ( tStmt, tDocId, m_bReplace, tResult );
+		bool bResult = ProcessInsert ( tStmt, tDocId, tResult );
 
 		CSphString sResult = tResult.AsString();
 		BuildReply ( sResult, bResult ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_500 );
@@ -1017,6 +1057,8 @@ private:
 
 class HttpJsonUpdateTraits_c
 {
+	int m_iLastUpdated = 0;
+
 protected:
 	bool ProcessUpdate ( const char * szRawRequest, const SqlStmt_t & tStmt, DocID_t tDocId, JsonObj_c & tResult )
 	{
@@ -1028,7 +1070,14 @@ protected:
 		else
 			tResult = sphEncodeUpdateResultJson ( tStmt.m_sIndex.cstr(), tDocId, tReporter.GetAffectedRows() );
 
+		m_iLastUpdated = tReporter.GetAffectedRows();
+
 		return !tReporter.IsError();
+	}
+
+	int GetLastUpdated() const
+	{
+		return m_iLastUpdated;
 	}
 };
 
@@ -1114,7 +1163,7 @@ protected:
 };
 
 
-class HttpHandler_JsonBulk_c : public HttpHandler_c, public HttpOptionsTraits_c, public HttpJsonInsertTraits_c, public HttpJsonUpdateTraits_c, public HttpJsonDeleteTraits_c
+class HttpHandler_JsonBulk_c : public HttpHandler_c, public HttpOptionsTraits_c, public HttpJsonInsertTraits_c, public HttpJsonUpdateTraits_c, public HttpJsonDeleteTraits_c, public HttpJsonTxnTraits_c
 {
 public:
 	HttpHandler_JsonBulk_c ( const char * sQuery, const OptionsHash_t & tOptions )
@@ -1142,6 +1191,10 @@ public:
 		// fixme: we're modifying the original query at this point
 		char * p = const_cast<char*>(m_sQuery);
 
+		// originally we execute txn for single index
+		// if there is combo, we fall-back to query-by-query commits
+		CSphString sTxnIdx;
+		CSphString sStmt;
 		bool bResult = false;
 		while ( p && *p )
 		{
@@ -1159,7 +1212,6 @@ public:
 			SqlStmt_t tStmt;
 			tStmt.m_bJson = true;
 			DocID_t tDocId = 0;
-			CSphString sStmt;
 			CSphString sError;
 			CSphString sQuery;
 			if ( !sphParseJsonStatement ( szStmt, tStmt, sStmt, sQuery, tDocId, sError ) )
@@ -1172,16 +1224,38 @@ public:
 			JsonObj_c tResult = JsonNull;
 			bResult = false;
 
+			if ( sTxnIdx.IsEmpty() )
+			{
+				sTxnIdx = tStmt.m_sIndex;
+				ProcessBegin ( sTxnIdx );
+			}
+			else if ( session::IsInTrans() && sTxnIdx!=tStmt.m_sIndex )
+			{
+				assert ( !sTxnIdx.IsEmpty() );
+				// we should finish current txn, as we got another index
+				bResult = ProcessCommitRollback ( FromStr ( sTxnIdx ), tDocId, tResult );
+				sStmt = "bulk";
+				AddResult ( tItems, sStmt, tResult );
+				if ( !bResult )
+					break;
+				sTxnIdx = tStmt.m_sIndex;
+				ProcessBegin ( sTxnIdx );
+			}
+
 			switch ( tStmt.m_eStmt )
 			{
 			case STMT_INSERT:
 			case STMT_REPLACE:
-				bResult = ProcessInsert ( tStmt, tDocId, tStmt.m_eStmt==STMT_REPLACE, tResult );
+				bResult = ProcessInsert ( tStmt, tDocId, tResult );
+				if ( bResult )
+					++m_iInserts;
 				break;
 
 			case STMT_UPDATE:
 				tStmt.m_sEndpoint = sphHttpEndpointToStr ( SPH_HTTP_ENDPOINT_JSON_UPDATE );
 				bResult = ProcessUpdate ( sQuery.cstr(), tStmt, tDocId, tResult );
+				if ( bResult )
+					m_iUpdates += GetLastUpdated();
 				break;
 
 			case STMT_DELETE:
@@ -1194,7 +1268,8 @@ public:
 				return false;
 			}
 
-			AddResult ( tItems, sStmt, tResult );
+			if ( !bResult || !session::IsInTrans() )
+				AddResult ( tItems, sStmt, tResult );
 
 			// no further than the first error
 			if ( !bResult )
@@ -1202,6 +1277,16 @@ public:
 
 			while ( sphIsSpace(*p) )
 				p++;
+		}
+
+		if ( bResult && session::IsInTrans() )
+		{
+			assert ( !sTxnIdx.IsEmpty() );
+			// We're in txn - that is, nothing committed, and we should do it right now
+			JsonObj_c tResult;
+			bResult = ProcessCommitRollback ( FromStr ( sTxnIdx ), 0, tResult );
+			sStmt = "bulk";
+			AddResult ( tItems, sStmt, tResult );
 		}
 
 		tRoot.AddItem ( "items", tItems );

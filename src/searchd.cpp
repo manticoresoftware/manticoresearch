@@ -10756,6 +10756,59 @@ static bool InsertToPQ ( SqlStmt_t & tStmt, RtIndex_i * pIndex, RtAccum_t * pAcc
 	return true;
 }
 
+void sphHandleMysqlBegin ( StmtErrorReporter_i& tOut, Str_t sQuery )
+{
+	auto* pSession = session::GetClientSession();
+	auto& tAcc = pSession->m_tAcc;
+	auto& sError = pSession->m_sError;
+
+	MEMORY ( MEM_SQL_BEGIN );
+	RtIndex_i* pIndex = tAcc.GetIndex();
+	if ( pIndex )
+	{
+		RtAccum_t* pAccum = tAcc.GetAcc ( pIndex, sError );
+		if ( !sError.IsEmpty() )
+		{
+			tOut.Error ( sQuery.first, sError.cstr() );
+			return;
+		}
+		HandleCmdReplicate ( *pAccum, sError );
+	}
+	pSession->m_bInTransaction = true;
+	tOut.Ok ( 0 );
+}
+
+void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, bool bCommit )
+{
+	auto* pSession = session::GetClientSession();
+	auto& tAcc = pSession->m_tAcc;
+	auto& sError = pSession->m_sError;
+	auto& tCrashQuery = GlobalCrashQueryGetRef();
+
+	MEMORY ( MEM_SQL_COMMIT );
+	pSession->m_bInTransaction = false;
+	RtIndex_i* pIndex = tAcc.GetIndex();
+	int iDeleted = 0;
+	if ( pIndex )
+	{
+		tCrashQuery.m_dIndex = FromStr ( pIndex->GetName() );
+		RtAccum_t* pAccum = tAcc.GetAcc ( pIndex, sError );
+		if ( !sError.IsEmpty() )
+		{
+			tOut.Error ( sQuery.first, sError.cstr() );
+		}
+		if ( bCommit )
+		{
+			StatCountCommand ( SEARCHD_COMMAND_COMMIT );
+			HandleCmdReplicate ( *pAccum, sError, iDeleted );
+		} else
+		{
+			pIndex->RollBack ( pAccum );
+		}
+	}
+	tOut.Ok ( iDeleted );
+}
+
 void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt )
 {
 	if ( !sphCheckWeCanModify ( tOut ) )
@@ -15988,50 +16041,16 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	case STMT_BEGIN:
 		{
-			MEMORY ( MEM_SQL_BEGIN );
-
-			m_bInTransaction = true;
-			RtIndex_i * pIndex = m_tAcc.GetIndex();
-			if ( pIndex )
-			{
-				RtAccum_t * pAccum = m_tAcc.GetAcc ( pIndex, m_sError );
-				if ( !m_sError.IsEmpty() )
-				{
-					tOut.Error ( sQuery.first, m_sError.cstr() );
-					return true;
-				}
-				HandleCmdReplicate ( *pAccum, m_sError );
-			}
-			tOut.Ok();
+			StmtErrorReporter_c tErrorReporter ( tOut, pStmt->m_sStmt );
+			sphHandleMysqlBegin ( tErrorReporter, sQuery );
 			return true;
 		}
+
 	case STMT_COMMIT:
 	case STMT_ROLLBACK:
 		{
-			MEMORY ( MEM_SQL_COMMIT );
-
-			m_bInTransaction = false;
-			RtIndex_i * pIndex = m_tAcc.GetIndex();
-			if ( pIndex )
-			{
-				tCrashQuery.m_dIndex = FromStr ( pIndex->GetName() );
-
-				RtAccum_t * pAccum = m_tAcc.GetAcc ( pIndex, m_sError );
-				if ( !m_sError.IsEmpty() )
-				{
-					tOut.Error ( sQuery.first, m_sError.cstr() );
-					return true;
-				}
-				if ( eStmt==STMT_COMMIT )
-				{
-					StatCountCommand ( SEARCHD_COMMAND_COMMIT );
-					HandleCmdReplicate ( *pAccum, m_sError );
-				} else
-				{
-					pIndex->RollBack ( pAccum );
-				}
-			}
-			tOut.Ok();
+			StmtErrorReporter_c tErrorReporter ( tOut, pStmt->m_sStmt );
+			sphHandleMysqlCommitRollback ( tErrorReporter, sQuery, eStmt==STMT_COMMIT );
 			return true;
 		}
 	case STMT_CALL:
@@ -16361,6 +16380,16 @@ bool session::Execute ( Str_t sQuery, RowBuffer_i& tOut )
 void session::SetFederatedUser ()
 {
 	GetClientSession()->m_bFederatedUser = true;
+}
+
+void session::SetAutoCommit ( bool bAutoCommit )
+{
+	GetClientSession()->m_bAutoCommit = bAutoCommit;
+}
+
+void session::SetInTrans ( bool bInTrans )
+{
+	GetClientSession()->m_bInTransaction = bInTrans;
 }
 
 bool session::IsInTrans ()

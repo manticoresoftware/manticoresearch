@@ -1240,6 +1240,8 @@ void sphFormatFactors ( StringBuilder_c& dOut, const unsigned int * pFactors, bo
 void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt );
 void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, Str_t sQuery );
 void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, Str_t sQuery );
+void sphHandleMysqlBegin ( StmtErrorReporter_i& tOut, Str_t sQuery );
+void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, bool bCommit );
 bool sphCheckWeCanModify ();
 bool sphCheckWeCanModify ( StmtErrorReporter_i & tOut );
 bool sphCheckWeCanModify ( const char* szStmt, RowBuffer_i& tOut );
@@ -1262,6 +1264,8 @@ namespace session
 
 	bool Execute ( Str_t sQuery, RowBuffer_i& tOut );
 	void SetFederatedUser();
+	void SetAutoCommit ( bool bAutoCommit );
+	void SetInTrans ( bool bInTrans );
 	bool IsAutoCommit();
 	bool IsInTrans();
 	QueryProfile_c* StartProfiling ( ESphQueryState );

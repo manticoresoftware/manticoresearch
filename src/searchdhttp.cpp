@@ -60,6 +60,7 @@ public:
 	bool					ParseList ( const char * sAt, int iLen );
 
 	const CSphString &		GetBody() const { return m_sRawBody; }
+	Str_t					GetRawUrlQuery() const { return m_sRawUrlQuery; }
 	ESphHttpEndpoint		GetEndpoint() const { return m_eEndpoint; }
 	const OptionsHash_t &	GetOptions() const { return m_hOptions; }
 	const CSphString &		GetInvalidEndpoint() const { return m_sInvalidEndpoint; }
@@ -79,6 +80,7 @@ private:
 	ESphHttpEndpoint		m_eEndpoint {SPH_HTTP_ENDPOINT_TOTAL};
 	CSphString				m_sInvalidEndpoint;
 	CSphString				m_sRawBody;
+	Str_t					m_sRawUrlQuery { dEmptyStr };
 	CSphString				m_sCurField;
 	OptionsHash_t			m_hOptions;
 	CSphString				m_sEndpoint;
@@ -126,12 +128,12 @@ static int Char2Hex ( BYTE uChar )
 	return -1;
 }
 
-static void UriPercentReplace ( CSphString & sEntity, bool bAlsoPlus=true )
+static void UriPercentReplace ( const char* szEntity, bool bAlsoPlus=true )
 {
-	if ( sEntity.IsEmpty() )
+	if ( !szEntity || !*szEntity )
 		return;
 
-	char * pDst = const_cast<char *> ( sEntity.cstr() );
+	char* pDst = const_cast<char*> ( szEntity );
 	const char * pSrc = pDst;
 	char cPlus = bAlsoPlus ? ' ' : '+';
 	while ( *pSrc )
@@ -155,9 +157,15 @@ static void UriPercentReplace ( CSphString & sEntity, bool bAlsoPlus=true )
 	*pDst = '\0';
 }
 
+static void UriPercentReplace ( CSphString & sEntity, bool bAlsoPlus=true )
+{
+	return UriPercentReplace ( sEntity.cstr(), bAlsoPlus );
+}
+
 
 bool HttpRequestParser_c::ParseList ( const char * sAt, int iLen )
 {
+	m_sRawUrlQuery = { sAt, iLen };
 	const char * sCur = sAt;
 	const char * sEnd = sAt + iLen;
 	const char * sLast = sCur;
@@ -732,54 +740,63 @@ static const char * GetTypeName ( MysqlColumnType_e eType )
 	};
 }
 
+JsonEscapedBuilder& operator<< ( JsonEscapedBuilder& tOut, MysqlColumnType_e eType )
+{
+	tOut.FixupSpacedAndAppendEscaped ( GetTypeName ( eType ) );
+	return tOut;
+}
+
+const StrBlock_t dJsonObjCustom { { ",\n", 2 }, { "[", 1 }, { "]", 1 } }; // json object with custom formatting
+
 class JsonRowBuffer_c : public RowBuffer_i
 {
 public:
-	JsonRowBuffer_c () {}
+	JsonRowBuffer_c () {
+		m_dBuf.StartBlock ( dJsonObjCustom );
+	}
 
-	void PutFloatAsString ( float fVal, const char * sFormat ) override
+	void PutFloatAsString ( float fVal, const char * ) override
 	{
 		AddDataColumn();
-		m_dBuf.Appendf( "%f", fVal );
+		m_dBuf << fVal;
 	}
 
 	void PutNumAsString ( int64_t iVal ) override
 	{
 		AddDataColumn();
-		m_dBuf.Appendf( INT64_FMT, iVal );
+		m_dBuf << iVal;
 	}
 
 	void PutNumAsString ( uint64_t uVal ) override
 	{
 		AddDataColumn();
-		m_dBuf.Appendf( UINT64_FMT, uVal );
+		m_dBuf << uVal;
 	}
 
 	void PutNumAsString ( int iVal ) override
 	{
 		AddDataColumn();
-		m_dBuf.Appendf ( "%d", iVal );
+		m_dBuf << iVal;
 	}
 	
 	void PutNumAsString ( DWORD uVal ) override
 	{
 		AddDataColumn();
-		m_dBuf.Appendf ( "%u", uVal );
+		m_dBuf << uVal;
 	}
 
-	void PutArray ( const void * pBlob, int iLen, bool bSendEmpty ) override
+	void PutArray ( const void * pBlob, int iLen, bool ) override
 	{
 		AddDataColumn();
-		m_dBuf.FixupSpacedAndAppendEscaped ( (const char*) pBlob, iLen );
+		if ( iLen < 0 )
+			m_dBuf.FixupSpacedAndAppendEscaped ( static_cast<const char*> ( pBlob ) );
+		else
+			m_dBuf.FixupSpacedAndAppendEscaped ( static_cast<const char*> ( pBlob ), iLen );
 	}
 
 	void PutString ( const char * sMsg, int iLen=-1 ) override
 	{
-		AddDataColumn();
-		if ( iLen<0 )
-			m_dBuf.FixupSpacedAndAppendEscaped ( sMsg );
-		else
-			m_dBuf.FixupSpacedAndAppendEscaped ( sMsg, iLen );
+		PutArray( sMsg, iLen, false );
 	}
 
 	void PutMicrosec ( int64_t iUsec ) override
@@ -790,110 +807,98 @@ public:
 	void PutNULL() override
 	{
 		AddDataColumn();
-		m_dBuf += "null";
+		m_dBuf << "null";
 	}
 
 	bool Commit() override
 	{
-		m_dBuf += "}";
+		m_dBuf.FinishBlock ( false ); // finish previous item
+		m_dBuf.ObjectBlock(); // start new item
+		++m_iTotalRows;
 		m_iCol = 0;
-		m_iRow++;
 		return true;
 	}
 
 	void Eof ( bool bMoreResults , int iWarns ) override
 	{
-		m_dBuf += "\n],\n";
+		m_dBuf.FinishBlock ( true ); // last doc, allow empty
+		m_dBuf.FinishBlock ( false ); // docs section
+		DataFinish ( m_iTotalRows, "", "" );
+		m_dBuf.FinishBlock ( false ); // root object
 	}
 
 	void Error ( const char *, const char * sError, MysqlErrors_e iErr ) override
 	{
-		m_sError = sError;
+		auto _ = m_dBuf.Object ( false );
+		DataFinish ( 0, sError, "" );
 	}
 
 	void Ok ( int iAffectedRows, int iWarns, const char * sMessage, bool bMoreResults, int64_t iLastInsertId ) override
 	{
-		m_iTotalRows = iAffectedRows;
-		m_sWarning = sMessage;
+		auto _ = m_dBuf.Object ( false );
+		DataFinish ( iAffectedRows, "", sMessage );
 	}
 
-	void HeadBegin ( int ) override
+	void HeadBegin ( int iCols ) override
 	{
-		m_dBuf.Clear();
-		m_dBuf += "{";
+		m_iExpectedColumns = iCols;
+		m_iTotalRows = 0;
+		m_dBuf.ObjectWBlock();
+		m_dBuf.Named ( "columns" );
+		m_dBuf.ArrayBlock();
 	}
 
 	bool HeadEnd ( bool , int ) override
 	{
-		{
-			ScopedComma_c tComma ( m_dBuf, ",", R"("columns":[)", "],\n", false );
-			for ( const ColumnNameType_t & tCol : m_dColumns )
-			{
-				ScopedComma_c tColBlock ( m_dBuf.Object(true) );
-				m_dBuf.AppendName ( tCol.first.cstr() );
-				ScopedComma_c tTypeBlock ( m_dBuf.Object(true) );
-				m_dBuf.AppendName ( "type" );
-				m_dBuf.FixupSpacedAndAppendEscaped ( GetTypeName ( tCol.second ) );
-			}
-		}
-		
-		m_dBuf.AppendName ( "data" );
-		m_dBuf += "[\n";
+		assert ( m_iExpectedColumns == 0 );
+		m_dBuf.FinishBlock(false);
+		m_dBuf.Named ( "data" );
+		m_dBuf.ArrayWBlock();
+		m_dBuf.ObjectBlock();
 		return true;
 	}
 
-	void HeadColumn ( const char * sName, MysqlColumnType_e eType ) override
+	void HeadColumn ( const char * szName, MysqlColumnType_e eType ) override
 	{
-		m_dColumns.Add ( ColumnNameType_t { sName, eType } );
+		ColumnNameType_t tCol { szName, eType };
+		auto _ = m_dBuf.Object(false);
+		m_dBuf.AppendName ( tCol.first.cstr() );
+		auto tTypeBlock = m_dBuf.Object(false);
+		m_dBuf.NamedVal ( "type", eType );
+		m_dColumns.Add ( tCol );
+		--m_iExpectedColumns;
 	}
 
 	void Add ( BYTE ) override {}
 
 	const JsonEscapedBuilder & Finish()
 	{
-		if ( m_dBuf.IsEmpty() )
-			m_dBuf += "{\n";
-
-		m_dBuf.Appendf ( R"("total":%d)", m_iTotalRows );
-
-		m_dBuf += ",\n";
-		m_dBuf += R"("error":)";
-		m_dBuf.AppendEscapedWithComma ( m_sError.cstr () );
-
-		m_dBuf += ",\n";
-		m_dBuf += R"("warning":)";
-		m_dBuf.AppendEscapedWithComma ( m_sWarning.cstr () );
-
-		m_dBuf += "\n}";
-
+		m_dBuf.FinishBlocks();
 		return m_dBuf;
 	}
 
 private:
 	JsonEscapedBuilder m_dBuf;
 	CSphVector<ColumnNameType_t> m_dColumns;
-	int m_iCol = 0;
-	int m_iRow = 0;
-
-	CSphString m_sError;
-	CSphString m_sWarning;
+	int m_iExpectedColumns = 0;
 	int m_iTotalRows = 0;
+	int m_iCol = 0;
 
 	void AddDataColumn()
 	{
-		if ( !m_iCol && m_iRow )
-			m_dBuf += ",\n";
-		if ( !m_iCol )
-			m_dBuf += "{";
-		if ( m_iCol )
-			m_dBuf += ", ";
-
 		m_dBuf.AppendName ( m_dColumns[m_iCol].first.cstr() );
-		m_iCol++;
+		++m_iCol;
+	}
+
+	void DataFinish ( int iTotal, const char* szError, const char* szWarning )
+	{
+		m_dBuf.NamedVal ( "total", iTotal );
+		m_dBuf.NamedString ( "error", szError );
+		m_dBuf.NamedString ( "warning", szWarning );
+		m_iCol = 0;
+		m_dColumns.Reset();
 	}
 };
-
-static const char g_sBypassToken[] = "raw&query=";
 
 class HttpRawSqlHandler_c : public HttpHandler_c, public HttpOptionsTraits_c
 {
@@ -906,15 +911,16 @@ public:
 
 	bool Process () override
 	{
-		CSphString sQuery = m_sQuery + sizeof ( g_sBypassToken ) - 1;
-		CSphString sError;
+		Str_t dQuery = FromSz(m_sQuery);
+		if ( IsEmpty(dQuery) )
+		{
+			ReportError ( "query missing", SPH_HTTP_STATUS_400 );
+			return false;
+		}
 
 		JsonRowBuffer_c tOut;
-
-		session::Execute ( FromStr ( sQuery ), tOut );
-
+		session::Execute ( dQuery, tOut );
 		BuildReply ( tOut.Finish(), SPH_HTTP_STATUS_200 );
-
 		return true;
 	}
 };
@@ -1321,24 +1327,31 @@ private:
 };
 
 
-static HttpHandler_c * CreateHttpHandler ( ESphHttpEndpoint eEndpoint, const char * sQuery, const OptionsHash_t & tOptions, http_method eRequestType )
+static HttpHandler_c * CreateHttpHandler ( ESphHttpEndpoint eEndpoint, const char * sQuery, Str_t dRawUrlQuery, const OptionsHash_t & tOptions, http_method eRequestType )
 {
 	const CSphString * pRawSQL = nullptr;
 
 	switch ( eEndpoint )
 	{
 	case SPH_HTTP_ENDPOINT_SQL:
-		pRawSQL = tOptions ( "decoded_mode" );
-		if ( pRawSQL && pRawSQL->Begins ( g_sBypassToken ) ) // test for 'raw&query=...'
+		pRawSQL = tOptions ( "mode" );
+		if ( pRawSQL && *pRawSQL=="raw" )
 		{
-			if (!sQuery)
-				sQuery = pRawSQL->cstr ();
-			else
-				sQuery += sizeof ( "mode=" )-1;
+			auto pQuery = tOptions ( "query" );
+			sQuery = pQuery ? pQuery->cstr() : nullptr;
 			return new HttpRawSqlHandler_c ( sQuery, tOptions );
 		}
 		else
 			return new HttpSearchHandler_SQL_c ( sQuery, tOptions );
+
+	case SPH_HTTP_ENDPOINT_CLI:
+		if ( !sQuery )
+		{
+			sQuery = dRawUrlQuery.first;
+			const_cast<char*> ( sQuery )[dRawUrlQuery.second] = '\0'; // fixme! const breakage...
+			UriPercentReplace ( sQuery, false ); // fixme! const breakage...
+		}
+		return new HttpRawSqlHandler_c ( sQuery, tOptions );
 
 	case SPH_HTTP_ENDPOINT_JSON_SEARCH:
 		return new HttpHandler_JsonSearch_c ( sQuery, tOptions );
@@ -1369,9 +1382,9 @@ static HttpHandler_c * CreateHttpHandler ( ESphHttpEndpoint eEndpoint, const cha
 }
 
 
-static bool sphProcessHttpQuery ( ESphHttpEndpoint eEndpoint, const char * sQuery, const SmallStringHash_T<CSphString> & tOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType )
+static bool sphProcessHttpQuery ( ESphHttpEndpoint eEndpoint, const char * sQuery, Str_t dRawUrlQuery, const SmallStringHash_T<CSphString> & tOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType )
 {
-	CSphScopedPtr<HttpHandler_c> pHandler ( CreateHttpHandler ( eEndpoint, sQuery, tOptions, eRequestType ) );
+	CSphScopedPtr<HttpHandler_c> pHandler ( CreateHttpHandler ( eEndpoint, sQuery, dRawUrlQuery, tOptions, eRequestType ) );
 	if ( !pHandler )
 		return false;
 
@@ -1385,7 +1398,7 @@ static bool sphProcessHttpQuery ( ESphHttpEndpoint eEndpoint, const char * sQuer
 
 bool sphProcessHttpQueryNoResponce ( ESphHttpEndpoint eEndpoint, const char * sQuery, const SmallStringHash_T<CSphString> & tOptions, CSphVector<BYTE> & dResult )
 {
-	return sphProcessHttpQuery ( eEndpoint, sQuery, tOptions, dResult, false, HTTP_GET );
+	return sphProcessHttpQuery ( eEndpoint, sQuery, dEmptyStr, tOptions, dResult, false, HTTP_GET );
 }
 
 
@@ -1403,7 +1416,7 @@ bool sphLoopClientHttp ( const BYTE * pRequest, int iRequestLen, CSphVector<BYTE
 	auto& sRawString = tParser.GetBody();
 	myinfo::SetDescription ( sRawString.cstr(), sRawString.Length() );
 
-	if ( !sphProcessHttpQuery ( eEndpoint, sRawString.cstr(), tParser.GetOptions(), dResult, true, tParser.GetRequestType() ) )
+	if ( !sphProcessHttpQuery ( eEndpoint, sRawString.cstr(), tParser.GetRawUrlQuery(), tParser.GetOptions(), dResult, true, tParser.GetRequestType() ) )
 	{
 		if ( eEndpoint==SPH_HTTP_ENDPOINT_INDEX )
 			HttpHandlerIndexPage ( dResult );
@@ -1444,7 +1457,8 @@ static Endpoint_t g_dEndpoints[] =
 	{ "update",		"json/update" },
 	{ "delete",		"json/delete" },
 	{ "bulk",		"json/bulk" },
-	{ "pq",			"json/pq" }
+	{ "pq",			"json/pq" },
+	{ "cli",		nullptr }
 };
 
 STATIC_ASSERT ( sizeof(g_dEndpoints)/sizeof(g_dEndpoints[0])==SPH_HTTP_ENDPOINT_TOTAL, SPH_HTTP_ENDPOINT_SHOULD_BE_SAME_AS_SPH_HTTP_ENDPOINT_TOTAL );

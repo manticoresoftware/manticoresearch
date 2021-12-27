@@ -82,9 +82,16 @@ Two"}')
 <query endpoint="sql" method="post">query=select id,1+2 as a, packedfactors() from test where match('tes*') option ranker=expr('1')</query>
 <query endpoint="sql" method="get">query=select id,1+2 as a, packedfactors() from test where match('tes*') option ranker=expr('1')</query>
 
-<!-- expected to success since mode=raw -->
+<!-- expected to fail, since mode=raw now means only common output -->
 <query endpoint="sql" method="post">mode=raw&amp;query=select id,1+2 as a, packedfactors() from test where match('tes*') option ranker=expr('1')</query>
 <query endpoint="sql" method="post">mode=raw&amp;query=select id,1+2 as a, packedfactors({json=1}) from test where match('tes*') option ranker=expr('1')</query>
+<query endpoint="sql" method="post">mode=raw&amp;query=select * from test order by id asc limit 3;select id,j from test order by id desc limit 10</query>
+
+<!-- expected to success since cli doesn't need + escaping -->
+<query endpoint="cli" method="post">select id,1+2 as a, packedfactors() from test where match('tes*') option ranker=expr('1')</query>
+<query endpoint="cli" method="post">select id,1+2 as a, packedfactors({json=1}) from test where match('tes*') option ranker=expr('1')</query>
+<query endpoint="cli" method="post">select * from test order by id asc limit 3;select id,j from test order by id desc limit 10</query>
+
 <!-- any statement via mode=raw -->
 <query endpoint="sql" method="post">mode=raw&amp;query=desc test</query>
 <query endpoint="sql" method="post">mode=raw&amp;query=alter table test add column new1 integer</query>

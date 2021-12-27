@@ -246,6 +246,16 @@ public:
 		return StartBlock( dJsonObjW );
 	}
 
+	int ArrayBlock()
+	{
+		return StartBlock ( dJsonArr );
+	}
+
+	int ArrayWBlock()
+	{
+		return StartBlock ( dJsonArrW );
+	}
+
 	void NamedString ( const char* szName, const char* szValue )
 	{
 		Named ( szName );

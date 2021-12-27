@@ -239,7 +239,11 @@ if (WITH_ZLIB OR WITH_ZSTD)
 
 	if (WITH_ZSTD)
 		target_sources ( lsearchd PRIVATE compressed_zstd_mysql.cpp )
-		target_link_libraries ( lsearchd PRIVATE ZSTD::ZSTD )
+		if (DL_ZSTD)
+			target_link_libraries ( lsearchd PRIVATE ZSTD::ZSTD_ld )
+		else ()
+			target_link_libraries ( lsearchd PRIVATE ZSTD::ZSTD )
+		endif ()
 	endif ()
 endif ()
 

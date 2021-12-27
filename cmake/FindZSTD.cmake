@@ -25,10 +25,7 @@
 
 find_package ( PkgConfig )
 if (PKG_CONFIG_FOUND)
-	pkg_check_modules ( ZSTD IMPORTED_TARGET libzstd )
-	if (ZSTD_FOUND)
-		add_library ( ZSTD::ZSTD ALIAS PkgConfig::ZSTD )
-	endif()
-#	diag ( ZSTD_FOUND )
-#	trace (PkgConfig::ZSTD)
+	pkg_check_modules ( ZSTD libzstd )
+	include (helpers)
+	implib_pkgconfig (ZSTD ZSTD::ZSTD)
 endif()

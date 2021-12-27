@@ -221,8 +221,7 @@ with_menu (Jemalloc "Jemalloc" "alternative memory allocator implementation")
 with_menu (ZLIB "zlib" "for compressed data and networking")
 
 with_menu ( ZSTD "libzstd" "for compressed networking" )
-
-#find_package ( ZSTD )
+dl_package ( ZSTD "zstd" )
 
 # ODBC and it's dynamic linking
 with_menu (ODBC "ODBC/UnixODBC/iODBC" "for indexing MSSQL (windows) and generic ODBC sources with indexer")

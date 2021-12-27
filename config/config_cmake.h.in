@@ -158,6 +158,8 @@
 
 /* define to use Zstd */
 #cmakedefine01 WITH_ZSTD
+#cmakedefine01 DL_ZSTD
+#cmakedefine ZSTD_LIB "${ZSTD_LIB}"
 
 /* default name of columnar shared library */
 #cmakedefine LIB_MANTICORE_COLUMNAR "${LIB_MANTICORE_COLUMNAR}"

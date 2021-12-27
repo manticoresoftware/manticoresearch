@@ -18,7 +18,7 @@ Manticore was born in 2017 as a continuation of [Sphinx Search](https://github.c
   * [Text highlighting](Searching/Highlighting.md)
 
 #### Modern MPP architecture
-Modern MPP architecture provides outstanding query parallelization capabilities, that allow to fully utilize all your CPU cores to lower response time as much as possible.
+Modern MPP architecture and smart query parallelization capabilities allow to fully utilize all your CPU cores to lower response time as much as possible, when needed.
 
 #### Row-wise storage
 Traditional row-wise storage for small, medium and big size datasets.

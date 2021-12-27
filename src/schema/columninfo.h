@@ -21,55 +21,50 @@
 /// source column info
 struct CSphColumnInfo
 {
-	enum {
-		FIELD_NONE = 0,
-		FIELD_STORED = 1 << 0,
-		FIELD_INDEXED = 1 << 1,
-		FIELD_IS_ATTRIBUTE = 1 << 2, // internal flag used in 'alter'
+	enum
+	{
+		FIELD_NONE			= 0,
+		FIELD_STORED		= 1 << 0,
+		FIELD_INDEXED		= 1 << 1,
+		FIELD_IS_ATTRIBUTE	= 1 << 2, // internal flag used in 'alter'
 	};
 
-	enum {
-		ATTR_NONE = 0,
-		ATTR_COLUMNAR = 1 << 0,
+	enum
+	{
+		ATTR_NONE			= 0,
+		ATTR_COLUMNAR		= 1 << 0,
 		ATTR_COLUMNAR_HASHES = 1 << 1
 	};
 
-	CSphString m_sName;								 ///< column name
-	ESphAttr m_eAttrType;							 ///< attribute type
-	ESphWordpart m_eWordpart { SPH_WORDPART_WHOLE }; ///< wordpart processing type
-	bool m_bIndexed = false;						 ///< whether to index this column as fulltext field too
+	CSphString		m_sName;							///< column name
+	ESphAttr		m_eAttrType;						///< attribute type
+	ESphWordpart	m_eWordpart { SPH_WORDPART_WHOLE };	///< wordpart processing type
+	bool			m_bIndexed = false;					///< whether to index this column as fulltext field too
 
-	int m_iIndex = -1;			///< index into source result set (-1 for joined fields)
-	CSphAttrLocator m_tLocator; ///< attribute locator in the row
+	int				m_iIndex = -1;						///< index into source result set (-1 for joined fields)
+	CSphAttrLocator m_tLocator;							///< attribute locator in the row
 
-	ESphAttrSrc m_eSrc { SPH_ATTRSRC_NONE }; ///< attr source (for multi-valued attrs only)
-	CSphString m_sQuery;					 ///< query to retrieve values (for multi-valued attrs only)
-	CSphString m_sQueryRange;				 ///< query to retrieve range (for multi-valued attrs only)
+	ESphAttrSrc		m_eSrc { SPH_ATTRSRC_NONE };		///< attr source (for multi-valued attrs only)
+	CSphString		m_sQuery;							///< query to retrieve values (for multi-valued attrs only)
+	CSphString		m_sQueryRange;						///< query to retrieve range (for multi-valued attrs only)
 
-	ISphExprRefPtr_c m_pExpr;					///< evaluator for expression items
-	ESphAggrFunc m_eAggrFunc { SPH_AGGR_NONE }; ///< aggregate function on top of expression (for GROUP BY)
-	ESphEvalStage m_eStage { SPH_EVAL_STATIC }; ///< column evaluation stage (who and how computes this column)
-	bool m_bPayload = false;
-	bool m_bFilename = false;						///< column is a file name
-	bool m_bWeight = false;							///< is a weight column
-	DWORD m_uFieldFlags = FIELD_INDEXED;			///< stored/indexed/highlighted etc
-	DWORD m_uAttrFlags = ATTR_NONE;					///< attribute storage spec
-	AttrEngine_e m_eEngine = AttrEngine_e::DEFAULT; ///< used together with per-table engine specs to determine attribute storage
+	ISphExprRefPtr_c m_pExpr;							///< evaluator for expression items
+	ESphAggrFunc	m_eAggrFunc { SPH_AGGR_NONE };		///< aggregate function on top of expression (for GROUP BY)
+	ESphEvalStage	m_eStage { SPH_EVAL_STATIC };		///< column evaluation stage (who and how computes this column)
+	bool			m_bPayload = false;
+	bool			m_bFilename = false;				///< column is a file name
+	bool			m_bWeight = false;					///< is a weight column
+	DWORD			m_uFieldFlags = FIELD_INDEXED;		///< stored/indexed/highlighted etc
+	DWORD			m_uAttrFlags = ATTR_NONE;			///< attribute storage spec
+	AttrEngine_e	m_eEngine = AttrEngine_e::DEFAULT;	///< used together with per-table engine specs to determine attribute storage
 
-	WORD m_uNext = 0xFFFF; ///< next in linked list for hash in CSphSchema
+	WORD			m_uNext = 0xFFFF;					///< next in linked list for hash in CSphSchema
 
 	/// handy ctor
 	explicit CSphColumnInfo ( const char* sName = nullptr, ESphAttr eType = SPH_ATTR_NONE );
 
 	/// equality comparison checks name, type, and locator
-	bool operator== ( const CSphColumnInfo& rhs ) const
-	{
-		return m_sName == rhs.m_sName
-			&& m_eAttrType == rhs.m_eAttrType
-			&& m_tLocator.m_iBitCount == rhs.m_tLocator.m_iBitCount
-			&& m_tLocator.m_iBitOffset == rhs.m_tLocator.m_iBitOffset
-			&& m_tLocator.m_bDynamic == rhs.m_tLocator.m_bDynamic;
-	}
+	bool operator== ( const CSphColumnInfo & rhs ) const;
 
 	/// returns true if this column stores a pointer to data
 	bool IsDataPtr() const;

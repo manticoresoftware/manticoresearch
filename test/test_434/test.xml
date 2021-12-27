@@ -104,6 +104,9 @@ select id from test where kind!=43;
 select id from test where kind not in (13,23,33,43);
 select id from test where kind not in (23,33);
 
+<!-- aliased groupby -->
+select status g, count(*) c from test group by g order by c desc;
+
 </sphinxql></queries>
 
 </test>

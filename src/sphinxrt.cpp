@@ -457,7 +457,7 @@ void RtSegment_t::BuildDocID2RowIDMap ( const CSphSchema & tSchema )
 	else
 	{
 		std::string sError;
-		CSphScopedPtr<columnar::Iterator_i> pIt ( m_pColumnar->CreateIterator ( sphGetDocidName(), {}, sError ) );
+		CSphScopedPtr<columnar::Iterator_i> pIt ( m_pColumnar->CreateIterator ( sphGetDocidName(), {}, nullptr, sError ) );
 		assert ( pIt.Ptr() );
 		for ( RowID_t tRowID = 0; tRowID<m_uRows; tRowID++ )
 		{
@@ -2280,7 +2280,7 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 	CSphScopedPtr<columnar::Iterator_i> pColumnarIdIterator(nullptr);
 	if ( bColumnarId )
 	{
-		pColumnarIdIterator = pColumnar->CreateIterator ( sphGetDocidName(), {}, sError );
+		pColumnarIdIterator = pColumnar->CreateIterator ( sphGetDocidName(), {}, nullptr, sError );
 		assert ( pColumnarIdIterator.Ptr() );
 	}
 

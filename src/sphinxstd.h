@@ -3157,7 +3157,7 @@ using Str_t = std::pair<const char*, int>;
 const Str_t dEmptyStr { "", 0 };
 inline bool IsEmpty ( const Str_t & dBlob ) { return dBlob.second==0; }
 inline bool IsFilled ( const Str_t & dBlob ) { return dBlob.first && dBlob.second>0; }
-inline Str_t FromSz ( const char * szString ) { return { szString, (int) strlen ( szString ) }; }
+inline Str_t FromSz ( const char * szString ) { return { szString, szString ? (int) strlen ( szString ) : 0 }; }
 inline Str_t FromStr ( const CSphString& sString ) { return { sString.cstr(), (int) sString.Length() }; }
 
 class Comma_c

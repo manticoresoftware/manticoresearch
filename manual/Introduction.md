@@ -1,12 +1,11 @@
 # Introduction
 
-Manticore Search is a database designed specifically for search, including full-text search.
+Manticore Search is a multi-storage database designed specifically for search, including full-text search.
 
 Manticore was born in 2017 as a continuation of [Sphinx Search](https://github.com/sphinxsearch/sphinx). We took the best from Sphinx (C++ core and focus on low level data structures and fine-tuned algorithms), added a lot of new functionality, fixed hundreds of bugs, made it easier to use, kept it open source and made Manticore Search even more lightweight & extremely fast database for search.
 
-
 ## Our key features are:
-#### Powerful and fast full-text searching
+#### Powerful and fast full-text searching which works fine for small and big datasets
   * Over 20 [full-text operators](https://play.manticoresearch.com/fulltextintro/)<!--{target="_blank"}--> and over 20 ranking factors
   * Custom ranking
   * [Stemming](Creating_an_index/NLP_and_tokenization/Morphology.md)
@@ -17,6 +16,15 @@ Manticore was born in 2017 as a continuation of [Sphinx Search](https://github.c
   * [Advanced tokenization at character and word level](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md)
   * [Proper Chinese segmentation](Creating_an_index/NLP_and_tokenization/CJK.md)
   * [Text highlighting](Searching/Highlighting.md)
+
+#### Modern MPP architecture
+Modern MPP architecture and smart query parallelization capabilities allow to fully utilize all your CPU cores to lower response time as much as possible, when needed.
+
+#### Row-wise storage
+Traditional row-wise storage for small, medium and big size datasets.
+
+#### Column-oriented storage
+Columnar storage support via the [Manticore Columnar Library](https://github.com/manticoresoftware/columnar/) for bigger datasets (much bigger than can fit in RAM).
 
 #### SQL-first
 The native Manticore's syntax is SQL. It speaks SQL over HTTP and MySQL protocol. You can use your preferred mysql client to connect to Manticore Search server via SQL protocol in any programming language.
@@ -57,6 +65,7 @@ Manticore's possible applications are not limited by, but include:
   * [Full-text search](https://play.manticoresearch.com/fulltextintro/)
     * when used with small data volume you can benefit from powerful full-text search syntax and low RAM consumption (as little as 7-8 megabytes)
     * when used with big data you can benefit from Manticore's high availability capabilities and ability to serve very large indexes, each taking hundreds of gigabytes of RAM
+  * OLAP: using Manicore Search + [Manticore Columnar Library](https://github.com/manticoresoftware/columnar), you can handle terabytes of data on a single or multiple servers for data analysis
   * [Faceted search](https://play.manticoresearch.com/faceting/)
   * [Geo-spatial search](https://play.manticoresearch.com/geosearch/)
   * [Spell correction](https://play.manticoresearch.com/didyoumean/)

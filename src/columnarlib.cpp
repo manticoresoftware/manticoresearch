@@ -78,7 +78,7 @@ columnar::Builder_i * CreateColumnarBuilder ( const ISphSchema & tSchema, const 
 	columnar::Schema_t tColumnarSchema;
 	std::string sErrorSTL;
 
-	// convert our data types to columnars storage data types
+	// convert our data types to columnar storage data types
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);

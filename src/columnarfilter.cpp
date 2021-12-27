@@ -48,7 +48,7 @@ void ColumnarFilter_c::SetColumnar ( const columnar::Columnar_i * pColumnar )
 	}
 
 	std::string sError; // fixme! report errors
-	m_pIterator = pColumnar->CreateIterator ( m_sAttrName.cstr(), columnar::IteratorHints_t(), sError );
+	m_pIterator = pColumnar->CreateIterator ( m_sAttrName.cstr(), {}, nullptr, sError );
 	m_iColumnarCol = pColumnar->GetAttributeId ( m_sAttrName.cstr() );
 }
 
@@ -347,18 +347,19 @@ void Filter_StringColumnar_T<MULTI>::SetColumnar ( const columnar::Columnar_i * 
 	}
 
 	columnar::IteratorHints_t tHints;
+	columnar::IteratorCapabilities_t tCapabilities;
 	tHints.m_bNeedStringHashes = m_eCollation==SPH_COLLATION_DEFAULT;
 
 	std::string sError; // fixme! report errors
-	m_pIterator = pColumnar->CreateIterator ( m_sAttrName.cstr(), tHints, sError );
-	m_bHasHashes = m_pIterator.Ptr() && m_pIterator->HaveStringHashes();
+	m_pIterator = pColumnar->CreateIterator ( m_sAttrName.cstr(), tHints, &tCapabilities, sError );
+	m_bHasHashes = m_pIterator.Ptr() && tCapabilities.m_bStringHashes;
 }
 
 template <bool MULTI>
 uint64_t Filter_StringColumnar_T<MULTI>::GetStringHash() const
 {
 	if ( m_bHasHashes )
-		return m_pIterator->GetStringHash();
+		return m_pIterator->Get();
 
 	const BYTE * pStr = nullptr;
 	int iLen = m_pIterator->Get(pStr);

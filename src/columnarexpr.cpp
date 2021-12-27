@@ -69,7 +69,7 @@ void Expr_Columnar_MVAIn_T<T>::Command ( ESphExprCommand eCmd, void * pArg )
 		if ( pColumnar )
 		{
 			std::string sError; // FIXME! report errors
-			m_pIterator = pColumnar->CreateIterator ( m_sName.cstr(), columnar::IteratorHints_t(), sError );
+			m_pIterator = pColumnar->CreateIterator ( m_sName.cstr(), {}, nullptr, sError );
 		}
 	}
 }
@@ -163,11 +163,13 @@ void Expr_Columnar_StringIn_c::Command ( ESphExprCommand eCmd, void * pArg )
 		if ( pColumnar )
 		{
 			columnar::IteratorHints_t tHints;
+			columnar::IteratorCapabilities_t tCapabilities;
 			tHints.m_bNeedStringHashes = m_eCollation==SPH_COLLATION_DEFAULT;
 
 			std::string sError; // FIXME! report errors
-			m_pIterator = pColumnar->CreateIterator ( m_sName.cstr(), tHints, sError );
-			m_bHasHashes = tHints.m_bNeedStringHashes && m_pIterator.Ptr() && m_pIterator->HaveStringHashes();
+			m_pIterator = pColumnar->CreateIterator ( m_sName.cstr(), tHints, &tCapabilities, sError );
+			assert ( m_pIterator );
+			m_bHasHashes = tCapabilities.m_bStringHashes;
 		}
 	}
 }
@@ -195,7 +197,7 @@ Expr_Columnar_StringIn_c::Expr_Columnar_StringIn_c ( const Expr_Columnar_StringI
 uint64_t Expr_Columnar_StringIn_c::GetStringHash() const
 {
 	if ( m_bHasHashes )
-		return m_pIterator->GetStringHash();
+		return m_pIterator->Get();
 
 	const BYTE * pStr = nullptr;
 	int iLen = m_pIterator->Get(pStr);
@@ -242,7 +244,7 @@ void Expr_Columnar_StringLength_c::Command ( ESphExprCommand eCmd, void * pArg )
 		if ( pColumnar )
 		{
 			std::string sError; // FIXME! report errors
-			m_pIterator = pColumnar->CreateIterator ( m_sName.cstr(), columnar::IteratorHints_t(), sError );
+			m_pIterator = pColumnar->CreateIterator ( m_sName.cstr(), {}, nullptr, sError );
 		}
 	}
 }
@@ -407,7 +409,7 @@ void Expr_GetColumnar_Traits_c::Command ( ESphExprCommand eCmd, void * pArg )
 		if ( pColumnar )
 		{
 			std::string sError; // FIXME! report errors
-			m_pIterator = pColumnar->CreateIterator ( m_sName.cstr(), columnar::IteratorHints_t(), sError );
+			m_pIterator = pColumnar->CreateIterator ( m_sName.cstr(), {}, nullptr, sError );
 		}
 		else
 			m_pIterator.Reset();

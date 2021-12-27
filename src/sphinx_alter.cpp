@@ -380,7 +380,7 @@ bool IndexAlterHelper_c::Alter_AddRemoveColumnar ( bool bAdd, const ISphSchema &
 		}
 
 		assert(pColumnar);
-		columnar::Iterator_i * pIterator = pColumnar->CreateIterator ( tNewAttr.m_sName.cstr(), {}, sErrorSTL );
+		columnar::Iterator_i * pIterator = pColumnar->CreateIterator ( tNewAttr.m_sName.cstr(), {}, nullptr, sErrorSTL );
 		if ( !pIterator )
 		{
 			sError.SetSprintf ( "%s attribute to %s: %s", bAdd ? "adding" : "removing", sIndex.cstr(), sErrorSTL.c_str() );

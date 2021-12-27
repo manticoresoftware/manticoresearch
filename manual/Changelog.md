@@ -14,6 +14,20 @@ The following are the changes we are either working on now or are going to work 
 * New https://repo.manticoresearch.com/ backend => ease of use, safer place for packages.
 * FAQ site => community support.
 
+# Version X.X.X
+
+### Major new features
+* TODO
+
+### Minor changes
+* TODO
+
+### Breaking changes
+* TODO
+
+### Bugfixes
+* TODO
+
 ## Version 4.2.0, Dec 23 2021
 
 ### Major new features

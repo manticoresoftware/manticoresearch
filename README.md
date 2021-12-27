@@ -9,28 +9,28 @@
 </h1>
 
 <h3 align="center">
-  <a href="https://manticoresearch.com">Website</a> • 
-  <a href="http://bit.ly/2Q9uGj4">Downloads</a> • 
-  <a href="https://manual.manticoresearch.com">Docs</a> • 
-  <a href="https://play.manticoresearch.com">Courses</a> • 
-  <a href="https://forum.manticoresearch.com">Forum</a> • 
-  <a href="https://slack.manticoresearch.com">Chat</a> • 
+  <a href="https://manticoresearch.com">Website</a> •
+  <a href="http://bit.ly/2Q9uGj4">Downloads</a> •
+  <a href="https://manual.manticoresearch.com">Docs</a> •
+  <a href="https://play.manticoresearch.com">Courses</a> •
+  <a href="https://forum.manticoresearch.com">Forum</a> •
+  <a href="https://slack.manticoresearch.com">Chat</a> •
   <a href="https://twitter.com/manticoresearch">Twitter</a>
 </h3>
 
 <p>&nbsp;</p>
 
 # Introduction
-Manticore Search is a multi-storage database designed specifically for search, including full-text search. What differs it from other solutions is:
+Manticore Search is a multi-storage database designed specifically for search, including full-text search. What distinguishes it from other solutions is:
+* Modern MPP architecture provides outstanding query parallelization capabilities, that allow to fully utilize all your CPU cores to lower response time as much as possible
 * Powerful and fast full-text searching which works fine for small and big datasets
 * Traditional row-wise storage for small, medium and big size datasets
-* Outstanding query parallelization capabilities that allow to fully utilize all your CPU cores to lower response time as much as possible
-* Columnar storage support via [Manticore Columnar Library](https://github.com/manticoresoftware/columnar/) for bigger datasets (much bigger than can be fit in RAM)
-* SQL-first: the native Manticore's syntax is SQL. It speaks SQL over HTTP and MySQL protocol (you can use your preferred mysql client)
-* Clients for [PHP](https://github.com/manticoresoftware/manticoresearch-php), [Python](https://github.com/manticoresoftware/manticoresearch-python), [Javascript](https://github.com/manticoresoftware/manticoresearch-javascript), [Java](https://github.com/manticoresoftware/manticoresearch-java), [Go](https://github.com/manticoresoftware/go-sdk)
-* JSON over HTTP: to provide more programmatic way to manage your data and schemas Manticore provides HTTP JSON protocol
-* Written fully in C++: starts fast, doesn't take much RAM, low-level optimizations give good performance
-* Real-time inserts: after INSERT is made the document can be read immediately
+* Columnar storage support via the [Manticore Columnar Library](https://github.com/manticoresoftware/columnar/) for bigger datasets (much bigger than can fit in RAM)
+* SQL-first: Manticore's native syntax is SQL. It speaks SQL over HTTP and uses the MySQL protocol (you can use your preferred MySQL client)
+* Clients for [PHP](https://github.com/manticoresoftware/manticoresearch-php), [Python](https://github.com/manticoresoftware/manticoresearch-python), [JavaScript](https://github.com/manticoresoftware/manticoresearch-javascript), [Java](https://github.com/manticoresoftware/manticoresearch-java) and [Go](https://github.com/manticoresoftware/go-sdk)
+* JSON over HTTP: to provide a more programmatic way to manage your data and schemas, Manticore provides a HTTP JSON protocol
+* Written fully in C++: starts fast, doesn't take much RAM, and low-level optimizations provide good performance
+* Real-time inserts: after an INSERT is made, the document can be read immediately
 * [Interactive courses](https://play.manticoresearch.com/) for easier learning
 * Built-in replication and load balancing
 * Can sync from MySQL/PostgreSQL/ODBC/xml/csv out of the box
@@ -48,9 +48,9 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - [Rich filtering functionality](https://manual.manticoresearch.com/Searching/Full_text_matching/Operators)
   - [Faceted search](https://play.manticoresearch.com/faceting/)
   - [Geo-spatial search](https://play.manticoresearch.com/geosearch/)
-  - [Spell correction](https://play.manticoresearch.com/didyoumean/)
+  - [Spelling correction](https://play.manticoresearch.com/didyoumean/)
   - [Autocomplete](https://play.manticoresearch.com/simpleautocomplete/)
-  - Wide range of functions for filtering and data manipulation
+  - A wide range of functions for filtering and data manipulation
 * NLP:
   - [Stemming](https://manual.manticoresearch.com/Creating_an_index/NLP_and_tokenization/Morphology)
   - [Lemmatization](https://manual.manticoresearch.com/Creating_an_index/NLP_and_tokenization/Morphology)
@@ -68,8 +68,8 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
 * Security:
   - [https support](https://play.manticoresearch.com/https/)
 * Data storages:
-  - row-wise - requires more RAM, gives faster performance
-  - columnar - requires less RAM, still gives decent performance, but lower than the row-wise storage for some kinds of queries
+  - row-wise - requires more RAM, provides faster performance
+  - columnar - requires less RAM, still provides decent performance, but lower than the row-wise storage for some kinds of queries
   - docstore - doesn't require RAM at all, but allows only fetching original value, not sorting/grouping/filtering
 * Data types:
   - full-text field - inverted index
@@ -85,13 +85,13 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - [With MySQL via FEDERATED engine](https://manual.manticoresearch.com/Extensions/FEDERATED)
   - [ProxySQL](https://manticoresearch.com/2018/06/18/using-proxysql-to-route-inserts-in-a-distributed-realtime-index/)
   - [Manticore Columnar Library](https://github.com/manticoresoftware/columnar)
-  
+
 # Installation
 
 ### Docker
 Docker image is available on [Docker Hub](https://dockr.ly/33biV0U).
 
-To play with Manticore Search in Docker just run:
+To experiment with Manticore Search in Docker just run:
 
 ```
 docker run --name manticore --rm -d manticoresearch/manticore && docker exec -it manticore mysql -w && docker stop manticore
@@ -111,7 +111,7 @@ select highlight(), year from movies where match('days') facet year;
 select * from movies where match('google');
 ```
 
-When you exit from the mysql client it stops and removes the container, so use this way only for testing / sandboxing purposes. 
+When you exit from the MySQL client, it stops and removes the container, so use this way only for testing / sandboxing purposes.
 
 Read [the full instruction for the docker image](https://dockr.ly/33biV0U) for more details including our recommendations on running it in production.
 
@@ -165,7 +165,7 @@ Should your company require any help - we provide full-cycle services in the are
 
 # ❤️ How you can support Manticore Search
 
-Manticore Search is a GPLv2-licensed open source project with development made possible by support from our core team, contributors, and sponsors. Building premium open-source software is not easy. If you would like to make sure Manticore Search stays free here is how you can help the project:
+Manticore Search is a GPLv2-licensed Open Source project with development made possible by support from our core team, contributors, and sponsors. Building premium Open Source software is not easy. If you would like to make sure Manticore Search stays free, here is how you can help the project:
 
 * [Donation through PayPal](https://www.paypal.me/manticoresearch)
 * [Become our client and let us help you](https://manticoresearch.com/services)

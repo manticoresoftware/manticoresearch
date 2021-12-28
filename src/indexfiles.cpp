@@ -37,7 +37,7 @@ static IndexFileExt_t g_dIndexFilesExts[SPH_EXT_TOTAL] =
 };
 
 
-CSphString sphGetExt ( ESphExt eExt )
+const char* sphGetExt ( ESphExt eExt )
 {
 	if ( eExt<SPH_EXT_SPH || eExt>=SPH_EXT_TOTAL )
 		return "";
@@ -172,8 +172,8 @@ bool IndexFiles_c::RenameLock ( const char * sToSz, int &iLockFD )
 		return true;
 
 	m_bFatal = false;
-	auto sFrom = FullPath ( sphGetExt(SPH_EXT_SPL).cstr() );
-	auto sTo = FullPath ( sphGetExt(SPH_EXT_SPL).cstr(), "", sToSz );
+	auto sFrom = FullPath ( sphGetExt(SPH_EXT_SPL) );
+	auto sTo = FullPath ( sphGetExt(SPH_EXT_SPL), "", sToSz );
 
 #if !_WIN32
 	if ( !sph::rename ( sFrom.cstr (), sTo.cstr () ) )
@@ -249,7 +249,7 @@ bool IndexFiles_c::RollbackSuff ( const char * sBackupSuffix, const char * sActi
 
 bool IndexFiles_c::CheckHeader ( const char * sType )
 {
-	auto sPath = FullPath ( sphGetExt(SPH_EXT_SPH).cstr(), sType );
+	auto sPath = FullPath ( sphGetExt(SPH_EXT_SPH), sType );
 	BYTE dBuffer[8];
 
 	CSphAutoreader rdHeader ( dBuffer, sizeof ( dBuffer ) );
@@ -257,7 +257,11 @@ bool IndexFiles_c::CheckHeader ( const char * sType )
 		return false;
 
 	// check magic header
-	const char * sMsg = CheckFmtMagic ( rdHeader.GetDword () );
+	auto uMagic = rdHeader.GetDword();
+	if ( dBuffer[0] == '{' ) // that is new style json header, no need to check further...
+		return true;
+
+	const char* sMsg = CheckFmtMagic ( uMagic );
 	if ( sMsg )
 	{
 		m_sLastError.SetSprintf ( sMsg, sPath.cstr() );
@@ -278,7 +282,7 @@ bool IndexFiles_c::CheckHeader ( const char * sType )
 
 bool IndexFiles_c::ReadKlistTargets ( StrVec_t & dTargets, const char * szType )
 {
-	CSphString sPath = FullPath ( sphGetExt(SPH_EXT_SPK).cstr(), szType );
+	CSphString sPath = FullPath ( sphGetExt(SPH_EXT_SPK), szType );
 	if ( !sphIsReadable(sPath) )
 		return true;
 

@@ -15,6 +15,7 @@
 #include "sphinxstd.h"
 
 class CSphWriter;
+class JsonEscapedBuilder;
 
 class ExceptionsTrie_c
 {
@@ -53,10 +54,14 @@ public:
 				return *(int*)&p[n + 4 * i]; // FIXME? unaligned
 		return -1;
 	}
+
 	void Export ( CSphWriter& w ) const;
+	void Export ( JsonEscapedBuilder& tOut ) const;
 
 private:
-	void Export ( CSphWriter& w, CSphVector<BYTE>& dPrefix, int iNode, int* pCount ) const;
+//	void Export ( CSphWriter& w, CSphVector<BYTE>& dPrefix, int iNode, int* pCount ) const;
+	template<typename WRITER>
+	void Export ( WRITER&& W, CSphVector<BYTE>& dPrefix, int iNode, int* pCount ) const;
 };
 
 /// exceptions trie builder

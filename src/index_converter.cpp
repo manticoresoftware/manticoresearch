@@ -248,9 +248,9 @@ struct Index_t
 	{
 		CSphString sName;
 		if ( IsSeparateOutDir() )
-			sName.SetSprintf ( "%s%s", m_sPathOut.cstr(), sphGetExt(eExt).cstr() );
+			sName.SetSprintf ( "%s%s", m_sPathOut.cstr(), sphGetExt(eExt) );
 		else
-			sName.SetSprintf ( "%s.new%s", m_sPathOut.cstr(), sphGetExt(eExt).cstr() );
+			sName.SetSprintf ( "%s.new%s", m_sPathOut.cstr(), sphGetExt(eExt) );
 
 		return sName;
 	}

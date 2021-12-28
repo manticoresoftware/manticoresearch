@@ -297,6 +297,7 @@ public:
 /// parse JSON, convert it into SphinxBSON blob
 bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool bToLowercase, bool bCheckSize, CSphString & sError );
 bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool bToLowercase, bool bCheckSize, StringBuilder_c & sMsg );
+bool sphJsonParse ( CSphVector<BYTE> & dData, const CSphString& sFileName, CSphString & sError );
 
 /// convert SphinxBSON blob back to JSON document
 void sphJsonFormat ( JsonEscapedBuilder & dOut, const BYTE * pData );
@@ -461,10 +462,10 @@ bool IsDouble ( const NodeHandle_t & );
 bool IsNumeric ( const NodeHandle_t & );
 
 // access to values by locator
-bool Bool ( const NodeHandle_t& tLocator );
-int64_t Int ( const NodeHandle_t & tLocator );
-double Double ( const NodeHandle_t & tLocator );
-CSphString String ( const NodeHandle_t & tLocator );
+bool Bool ( const NodeHandle_t& tLocator, bool bDefault=false );
+int64_t Int ( const NodeHandle_t & tLocator, int64_t iDefault=0 );
+double Double ( const NodeHandle_t & tLocator, double fDefault=0.0 );
+CSphString String ( const NodeHandle_t & tLocator, CSphString sDefault="" );
 inline bool IsNullNode ( const NodeHandle_t & dNode ) { return dNode==nullnode; }
 
 // iterate over collection (without names).
@@ -598,6 +599,15 @@ public:
 
 bool	JsonObjToBson ( JsonObj_c & tJSON, CSphVector<BYTE> &dData, bool bAutoconv, bool bToLowercase/*, StringBuilder_c &sMsg*/ );
 bool	cJsonToBson ( cJSON * pCJSON, CSphVector<BYTE> &dData, bool bAutoconv=false, bool bToLowercase = true /*, StringBuilder_c &sMsg */);
+
+enum class JsonParser_e
+{
+	BSON,
+	CJSON,
+};
+
+bool ValidateJson ( const char * sJson, JsonParser_e eParse, CSphString * pError=nullptr );
+bool ValidateJson ( const char* sJson, CSphString* pError=nullptr );
 
 
 // this are generic purpose serializer (bson as any object)

@@ -181,6 +181,6 @@ struct WriteHeader_t
 	const int64_t *				m_pFieldLens;
 };
 
-void IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & tWriteHeader, CSphWriter & fdInfo, bool bForceWordDict, bool SkipEmbeddDict=false );
+void IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & tWriteHeader, JsonEscapedBuilder& sJson, bool bForceWordDict, bool SkipEmbeddDict=false );
 
 #endif // _indexformat_

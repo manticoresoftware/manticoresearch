@@ -1268,7 +1268,7 @@ protected:
 
 private:
 	static const DWORD			META_HEADER_MAGIC	= 0x54525053;	///< my magic 'SPRT' header
-	static const DWORD			META_VERSION		= 19;			///< current version fixme! Also change version in indextool.cpp, and support the changes!
+	static const DWORD			META_VERSION		= 20;			///< current version. 20 as we now store meta in json fixme! Also change version in indextool.cpp, and support the changes!
 
 	int							m_iStride;
 	uint64_t					m_uSchemaHash = 0;
@@ -1334,6 +1334,8 @@ private:
 	void						RemoveFieldFromRamchunk ( const CSphString & sFieldName, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema );
 
 	bool						LoadMeta ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings );
+	bool						LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings );
+	bool						LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings );
 	bool						PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings );
 	void						SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames );
 	void						SaveMeta ();
@@ -1471,7 +1473,7 @@ RtIndex_c::~RtIndex_c ()
 		::unlink ( sFile.cstr() );
 		sFile.SetSprintf ( "%s.ram", m_sPath.cstr() );
 		::unlink ( sFile.cstr() );
-		sFile.SetSprintf ( "%s%s", m_sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ).cstr() );
+		sFile.SetSprintf ( "%s%s", m_sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ) );
 		::unlink ( sFile.cstr() );
 	}
 
@@ -1663,15 +1665,15 @@ bool RtIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphS
 			do
 				tDocID = UidShort ();
 			while ( tGuard.m_dRamSegs.any_of (
-					[tDocID] ( ConstRtSegmentRefPtf_t & p ) { return p->FindAliveRow ( tDocID ); } ) );
+					[tDocID] ( const ConstRtSegmentRefPtf_t & p ) { return p->FindAliveRow ( tDocID ); } ) );
 
 			tDoc.SetID ( tDocID );
 		} else
 		{
 			// docID was provided, but that is new insert and we need to check for duplicates
 			assert ( !bReplace && tDocID!=0 );
-			if ( tGuard.m_dRamSegs.any_of ( [tDocID] ( ConstRtSegmentRefPtf_t & p ) { return p->FindAliveRow ( tDocID ); })
-				|| tGuard.m_dDiskChunks.any_of ( [tDocID] ( ConstDiskChunkRefPtr_t & p ) { return p->Cidx().IsAlive(tDocID); }))
+			if ( tGuard.m_dRamSegs.any_of ( [tDocID] ( const ConstRtSegmentRefPtf_t & p ) { return p->FindAliveRow ( tDocID ); })
+				|| tGuard.m_dDiskChunks.any_of ( [tDocID] ( const ConstDiskChunkRefPtr_t & p ) { return p->Cidx().IsAlive(tDocID); }))
 			{
 				sError.SetSprintf ( "duplicate id '" INT64_FMT "'", tDocID );
 				return false; // already exists and not deleted; INSERT fails
@@ -3076,7 +3078,7 @@ static void CleanupHitDuplicates ( CSphTightVector<CSphWordHit> & dHits )
 			dHits[iDst++] = dHits[iSrc++];
 		}
 	}
-	
+
 	dHits.Resize ( iDst );
 }
 
@@ -3554,12 +3556,12 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	CSphString sSPA, sSPB, sSPT, sSPHI, sSPDS, sSPC;
 	CSphWriter tWriterSPA;
 
-	sSPA.SetSprintf ( "%s%s",	tCtx.m_szFilename, sphGetExt(SPH_EXT_SPA).cstr() );
-	sSPB.SetSprintf ( "%s%s",	tCtx.m_szFilename, sphGetExt(SPH_EXT_SPB).cstr() );
-	sSPT.SetSprintf ( "%s%s",	tCtx.m_szFilename, sphGetExt(SPH_EXT_SPT).cstr() );
-	sSPHI.SetSprintf ( "%s%s",	tCtx.m_szFilename, sphGetExt(SPH_EXT_SPHI).cstr() );
-	sSPDS.SetSprintf ( "%s%s",	tCtx.m_szFilename, sphGetExt(SPH_EXT_SPDS).cstr() );
-	sSPC.SetSprintf ( "%s%s",	tCtx.m_szFilename, sphGetExt(SPH_EXT_SPC).cstr() );
+	sSPA.SetSprintf ( "%s%s",	tCtx.m_szFilename, sphGetExt(SPH_EXT_SPA) );
+	sSPB.SetSprintf ( "%s%s",	tCtx.m_szFilename, sphGetExt(SPH_EXT_SPB) );
+	sSPT.SetSprintf ( "%s%s",	tCtx.m_szFilename, sphGetExt(SPH_EXT_SPT) );
+	sSPHI.SetSprintf ( "%s%s",	tCtx.m_szFilename, sphGetExt(SPH_EXT_SPHI) );
+	sSPDS.SetSprintf ( "%s%s",	tCtx.m_szFilename, sphGetExt(SPH_EXT_SPDS) );
+	sSPC.SetSprintf ( "%s%s",	tCtx.m_szFilename, sphGetExt(SPH_EXT_SPC) );
 
 	if ( !tWriterSPA.OpenFile ( sSPA.cstr(), sError ) )
 		return false;
@@ -3711,15 +3713,15 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 	CSphWriter tWriterHits, tWriterDocs, tWriterSkips;
 
 	CSphString sName;
-	sName.SetSprintf ( "%s%s", tCtx.m_szFilename, sphGetExt(SPH_EXT_SPP).cstr() );
+	sName.SetSprintf ( "%s%s", tCtx.m_szFilename, sphGetExt(SPH_EXT_SPP) );
 	if ( !tWriterHits.OpenFile ( sName.cstr(), sError ) )
 		return false;
 
-	sName.SetSprintf ( "%s%s", tCtx.m_szFilename, sphGetExt(SPH_EXT_SPD).cstr() );
+	sName.SetSprintf ( "%s%s", tCtx.m_szFilename, sphGetExt(SPH_EXT_SPD) );
 	if ( !tWriterDocs.OpenFile ( sName.cstr(), sError ) )
 		return false;
 
-	sName.SetSprintf ( "%s%s", tCtx.m_szFilename, sphGetExt(SPH_EXT_SPE).cstr() );
+	sName.SetSprintf ( "%s%s", tCtx.m_szFilename, sphGetExt(SPH_EXT_SPE) );
 	if ( !tWriterSkips.OpenFile ( sName.cstr(), sError ) )
 		return false;
 
@@ -3982,7 +3984,7 @@ void RtIndex_c::WriteCheckpoints ( SaveDiskDataContext_t & tCtx, CSphWriter & tW
 bool RtIndex_c::WriteDeadRowMap ( SaveDiskDataContext_t & tCtx, CSphString & sError ) // static
 {
 	CSphString sName;
-	sName.SetSprintf ( "%s%s", tCtx.m_szFilename, sphGetExt(SPH_EXT_SPM).cstr() );
+	sName.SetSprintf ( "%s%s", tCtx.m_szFilename, sphGetExt(SPH_EXT_SPM) );
 
 	return ::WriteDeadRowMap ( sName, tCtx.m_iDocinfo, sError );
 }
@@ -4005,7 +4007,7 @@ void RtIndex_c::SaveDiskData ( const char * szFilename, const ConstRtSegmentSlic
 
 	CSphWriter tWriterDict;
 	CSphString sSPI;
-	sSPI.SetSprintf ( "%s%s", szFilename, sphGetExt ( SPH_EXT_SPI ).cstr() );
+	sSPI.SetSprintf ( "%s%s", szFilename, sphGetExt ( SPH_EXT_SPI ) );
 	tWriterDict.OpenFile ( sSPI.cstr(), sError );
 	tWriterDict.PutByte ( 1 );
 
@@ -4046,13 +4048,22 @@ void RtIndex_c::SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_
 	tWriteHeader.m_pFieldFilter = m_pFieldFilter;
 	tWriteHeader.m_pFieldLens = m_dFieldLens.Begin();
 
-	CSphWriter tWriter;
 	CSphString sName, sError;
-	sName.SetSprintf ( "%s%s", tCtx.m_szFilename, sphGetExt ( SPH_EXT_SPH ).cstr () );
-	if ( !tWriter.OpenFile ( sName.cstr (), sError ) )
-		return; // fixme! report error...
+	JsonEscapedBuilder sJson;
+	IndexWriteHeader ( tCtx, tWriteHeader, sJson, m_bKeywordDict, true );
 
-	IndexWriteHeader ( tCtx, tWriteHeader, tWriter, m_bKeywordDict, true );
+	sName.SetSprintf ( "%s%s", tCtx.m_szFilename, sphGetExt ( SPH_EXT_SPH ) );
+	CSphWriter wrHeaderJson;
+	if ( wrHeaderJson.OpenFile ( sName, sError ) )
+	{
+		wrHeaderJson.PutString ( (Str_t)sJson );
+		wrHeaderJson.CloseFile();
+		assert ( bson::ValidateJson ( sJson.cstr(), &sError ) );
+	} else
+	{
+		sphWarning ( "failed to serialize header to json: %s", sError.cstr() );
+		return;
+	}
 }
 
 void RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )
@@ -4070,9 +4081,10 @@ void RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )
 	sMetaNew.SetSprintf ( "%s.meta.new", m_sPath.cstr() );
 
 	CSphString sError;
+
 	CSphWriter wrMeta;
 	if ( !wrMeta.OpenFile ( sMetaNew, sError ) )
-		sphDie ( "failed to serialize meta: %s", sError.cstr() ); // !COMMIT handle this gracefully
+		sphDie ( "failed to open file for meta serialization: %s", sError.cstr() ); // !COMMIT handle this gracefully
 
 	WriteMeta ( iTID, dChunkNames, wrMeta );
 	wrMeta.CloseFile();
@@ -4094,39 +4106,58 @@ void RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )
 
 void RtIndex_c::WriteMeta ( int64_t iTID, const VecTraits_T<int>& dChunkNames, CSphWriter& wrMeta ) const
 {
-	wrMeta.PutDword ( META_HEADER_MAGIC );
-	wrMeta.PutDword ( META_VERSION );
-	wrMeta.PutDword ( (DWORD)m_tStats.m_iTotalDocuments ); // FIXME? we don't expect over 4G docs per just 1 local index
-	wrMeta.PutOffset ( m_tStats.m_iTotalBytes );		   // FIXME? need PutQword ideally
-	wrMeta.PutOffset ( iTID );
+	JsonEscapedBuilder sNewMeta;
+	sNewMeta.ObjectWBlock();
+
+	// human-readable sugar
+	sNewMeta.NamedString ( "meta_created_time_utc", sphCurrentUtcTime() );
+
+	sNewMeta.NamedVal ( "meta_version", META_VERSION );
+	//	sNewMeta.NamedVal ( "index_format_version", INDEX_FORMAT_VERSION );
+	sNewMeta.NamedVal ( "total_documents", m_tStats.m_iTotalDocuments );
+	sNewMeta.NamedVal ( "total_bytes", m_tStats.m_iTotalBytes );
+	sNewMeta.NamedVal ( "tid", iTID );
 
 	// meta v.4, save disk index format and settings, too
-	wrMeta.PutDword ( INDEX_FORMAT_VERSION );
-	WriteSchema ( wrMeta, m_tSchema );
-	SaveIndexSettings ( wrMeta, m_tSettings );
-	SaveTokenizerSettings ( wrMeta, m_pTokenizer, m_tSettings.m_iEmbeddedLimit );
-	SaveDictionarySettings ( wrMeta, m_pDict, m_bKeywordDict, m_tSettings.m_iEmbeddedLimit );
+	sNewMeta.NamedVal ( "schema", m_tSchema );
+
+	sNewMeta.NamedVal ( "index_settings", m_tSettings );
+
+	sNewMeta.Named ( "tokenizer_settings" );
+	SaveTokenizerSettings ( sNewMeta, m_pTokenizer, m_tSettings.m_iEmbeddedLimit );
+
+	sNewMeta.Named ( "dictionary_settings" );
+	SaveDictionarySettings ( sNewMeta, m_pDict, m_bKeywordDict, m_tSettings.m_iEmbeddedLimit );
 
 	// meta v.5
-	wrMeta.PutDword ( m_iWordsCheckpoint );
+	sNewMeta.NamedVal ( "words_checkpoint", m_iWordsCheckpoint);
 
 	// meta v.7
-	wrMeta.PutDword ( m_iMaxCodepointLength );
-	wrMeta.PutByte ( BLOOM_PER_ENTRY_VALS_COUNT );
-	wrMeta.PutByte ( BLOOM_HASHES_COUNT );
+	sNewMeta.NamedValNonDefault ( "max_codepoint_length", m_iMaxCodepointLength );
+	sNewMeta.NamedValNonDefault ( "bloom_per_entry_vals_count", BLOOM_PER_ENTRY_VALS_COUNT, 8 );
+	sNewMeta.NamedValNonDefault ( "bloom_hashes_count",  BLOOM_HASHES_COUNT, 2 );
 
 	// meta v.11
 	CSphFieldFilterSettings tFieldFilterSettings;
 	if ( m_pFieldFilter.Ptr() )
-		m_pFieldFilter->GetSettings ( tFieldFilterSettings );
-	tFieldFilterSettings.Save ( wrMeta );
+	{
+		m_pFieldFilter->GetSettings(tFieldFilterSettings);
+		sNewMeta.NamedVal ( "field_filter_settings", tFieldFilterSettings );
+	}
 
-	// meta v.12
-	wrMeta.PutDword ( dChunkNames.GetLength() );
-	wrMeta.PutBytes ( dChunkNames.Begin(), dChunkNames.GetLengthBytes() );
+	{
+		sNewMeta.Named ( "chunk_names" );
+		auto _ = sNewMeta.Array();
+		for ( int i : dChunkNames)
+			sNewMeta << i;
+	}
 
 	// meta v.17+
-	wrMeta.PutOffset ( m_iRtMemLimit );
+	sNewMeta.NamedVal ( "soft_ram_limit", m_iRtMemLimit );
+	sNewMeta.FinishBlocks();
+
+	wrMeta.PutString ( (Str_t)sNewMeta );
+	assert ( bson::ValidateJson ( sNewMeta.cstr() ) );
 }
 
 void RtIndex_c::SaveMeta()
@@ -4138,7 +4169,7 @@ void RtIndex_c::SaveMeta()
 void RtIndex_c::WaitRAMSegmentsUnlocked () const
 {
 	m_tSaveTIDS.WaitVoid ( [this] { return m_tSaveTIDS.GetValueRef().IsEmpty(); } );
-	m_tUnLockedSegments.WaitVoid ( [this] { return m_tRtChunks.RamSegs()->none_of ( [] ( ConstRtSegmentRefPtf_t& a ) { return a->m_iLocked; } ); });
+	m_tUnLockedSegments.WaitVoid ( [this] { return m_tRtChunks.RamSegs()->none_of ( [] ( const ConstRtSegmentRefPtf_t& a ) { return a->m_iLocked; } ); });
 }
 
 template<typename PRED>
@@ -4364,16 +4395,10 @@ CSphIndex * RtIndex_c::PreallocDiskChunk ( const char * sChunk, int iChunk, File
 	return pDiskChunk.LeakPtr();
 }
 
-
-bool RtIndex_c::LoadMeta ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings )
+bool RtIndex_c::LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings )
 {
-	// check if we have a meta file (kinda-header)
 	CSphString sMeta;
 	sMeta.SetSprintf ( "%s.meta", m_sPath.cstr() );
-
-	// no readable meta? no disk part yet
-	if ( !sphIsReadable ( sMeta.cstr() ) )
-		return true;
 
 	// opened and locked, lets read
 	CSphAutoreader rdMeta;
@@ -4504,6 +4529,165 @@ bool RtIndex_c::LoadMeta ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath
 }
 
 
+bool RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings )
+{
+
+	using namespace bson;
+
+	CSphString sMeta;
+	sMeta.SetSprintf ( "%s.meta", m_sPath.cstr() );
+
+	CSphVector<BYTE> dData;
+	if ( !sphJsonParse ( dData, sMeta, m_sLastError ) )
+		return false;
+
+	Bson_c tBson ( dData );
+	if ( tBson.IsEmpty() || !tBson.IsAssoc() )
+	{
+		m_sLastError = "Something wrong read from json meta - it is either empty, either not root object.";
+		return false;
+	}
+
+	// version
+	uVersion = (DWORD)Int ( tBson.ChildByName ( "meta_version" ) );
+	if ( uVersion == 0 || uVersion > META_VERSION )
+	{
+		m_sLastError.SetSprintf ( "%s is v.%u, binary is v.%u", sMeta.cstr(), uVersion, META_VERSION );
+		return false;
+	}
+
+	DWORD uMinFormatVer = 20;
+	if ( uVersion<uMinFormatVer )
+	{
+		m_sLastError.SetSprintf ( "indexes with meta prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, sMeta.cstr(), uVersion );
+		return false;
+	}
+
+	m_tStats.m_iTotalDocuments = Int ( tBson.ChildByName ( "total_documents" ) );
+	m_tStats.m_iTotalBytes = Int ( tBson.ChildByName ( "total_bytes" ) );
+	m_iTID = Int ( tBson.ChildByName ( "tid" ) );
+
+	// tricky bit
+	// we started saving settings into .meta from v.4 and up only
+	// and those reuse disk format version, aka INDEX_FORMAT_VERSION
+	// anyway, starting v.4, serialized settings take precedence over config
+	// so different chunks can't have different settings any more
+	CSphTokenizerSettings tTokenizerSettings;
+	CSphDictSettings tDictSettings;
+	CSphEmbeddedFiles tEmbeddedFiles;
+
+	// load them settings
+//	DWORD uSettingsVer = Int ( tBson.ChildByName ( "index_format_version" ) );
+	CSphSchema tSchema;
+	ReadSchemaJson ( tBson.ChildByName ( "schema" ), tSchema );
+	SetSchema ( tSchema );
+	LoadIndexSettingsJson ( tBson.ChildByName ( "index_settings" ), m_tSettings );
+	if ( !tTokenizerSettings.Load ( pFilenameBuilder, tBson.ChildByName ( "tokenizer_settings" ), tEmbeddedFiles, m_sLastError ) )
+		return false;
+
+	{
+		CSphString sWarning;
+		tDictSettings.Load ( tBson.ChildByName ( "dictionary_settings" ), tEmbeddedFiles, sWarning );
+		if ( !sWarning.IsEmpty() )
+			dWarnings.Add(sWarning);
+	}
+
+	m_bKeywordDict = tDictSettings.m_bWordDict;
+
+	// initialize AOT if needed
+	DWORD uPrevAot = m_tSettings.m_uAotFilterMask;
+	m_tSettings.m_uAotFilterMask = sphParseMorphAot ( tDictSettings.m_sMorphology.cstr() );
+	if ( m_tSettings.m_uAotFilterMask!=uPrevAot )
+	{
+		CSphString sWarning;
+		sWarning.SetSprintf ( "index '%s': morphology option changed from config has no effect, ignoring", m_sIndexName.cstr() );
+		dWarnings.Add(sWarning);
+	}
+
+	if ( bStripPath )
+	{
+		StripPath ( tTokenizerSettings.m_sSynonymsFile );
+		ARRAY_FOREACH ( i, tDictSettings.m_dWordforms )
+			StripPath ( tDictSettings.m_dWordforms[i] );
+	}
+
+	// recreate tokenizer
+	m_pTokenizer = Tokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, pFilenameBuilder, dWarnings, m_sLastError );
+	if ( !m_pTokenizer )
+		return false;
+
+	// recreate dictionary
+	m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, m_sIndexName.cstr(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError );
+	if ( !m_sLastError.IsEmpty() )
+		m_sLastError.SetSprintf ( "index '%s': %s", m_sIndexName.cstr(), m_sLastError.cstr() );
+
+	if ( !m_pDict )
+		return false;
+
+	if ( !m_sLastError.IsEmpty() )
+		dWarnings.Add(m_sLastError);
+
+	m_pTokenizer = Tokenizer::CreateMultiformFilter ( m_pTokenizer, m_pDict->GetMultiWordforms () );
+
+	m_iWordsCheckpoint = (int)Int ( tBson.ChildByName ( "words_checkpoint" ) );
+
+	// check that infixes definition changed - going to rebuild infixes
+	m_iMaxCodepointLength = (int)Int ( tBson.ChildByName ( "max_codepoint_length" ) );
+	int iBloomKeyLen = (int)Int ( tBson.ChildByName ( "bloom_per_entry_vals_count" ), 8 );
+	int iBloomHashesCount = (int)Int ( tBson.ChildByName ( "bloom_hashes_count" ), 2 );
+	bRebuildInfixes = ( iBloomKeyLen!=BLOOM_PER_ENTRY_VALS_COUNT || iBloomHashesCount!=BLOOM_HASHES_COUNT );
+
+	if ( bRebuildInfixes )
+	{
+		CSphString sWarning;
+		sWarning.SetSprintf ( "infix definition changed (from len=%d, hashes=%d to len=%d, hashes=%d) - rebuilding...",
+			(int)BLOOM_PER_ENTRY_VALS_COUNT, (int)BLOOM_HASHES_COUNT, iBloomKeyLen, iBloomHashesCount );
+		dWarnings.Add(sWarning);
+	}
+
+	FieldFilterRefPtr_c pFieldFilter;
+	auto tFieldFilterSettingsNode = tBson.ChildByName ( "field_filter_settings" );
+	if ( !IsNullNode ( tFieldFilterSettingsNode ) )
+	{
+		CSphFieldFilterSettings tFieldFilterSettings;
+		Bson_c ( tFieldFilterSettingsNode ).ForEach ( [&tFieldFilterSettings] ( const NodeHandle_t& tNode ) {
+			tFieldFilterSettings.m_dRegexps.Add ( String ( tNode ) );
+		} );
+
+		if ( !tFieldFilterSettings.m_dRegexps.IsEmpty() )
+			pFieldFilter = sphCreateRegexpFilter ( tFieldFilterSettings, m_sLastError );
+	}
+
+	if ( !sphSpawnFilterICU ( pFieldFilter, m_tSettings, tTokenizerSettings, sMeta.cstr(), m_sLastError ) )
+		return false;
+
+	SetFieldFilter ( pFieldFilter );
+
+	Bson_c tNamesVec { tBson.ChildByName ( "chunk_names" ) };
+	m_dChunkNames.Reset ( tNamesVec.CountValues() );
+	int iLastQ = 0;
+	tNamesVec.ForEach ( [&iLastQ, this] ( const NodeHandle_t& tNode ) { m_dChunkNames[iLastQ++] = (int)Int ( tNode ); });
+
+	SetMemLimit ( Int ( tBson.ChildByName ( "soft_ram_limit" ) ) );
+	return true;
+}
+
+
+bool RtIndex_c::LoadMeta ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings )
+{
+	// check if we have a meta file (kinda-header)
+	CSphString sMeta;
+	sMeta.SetSprintf ( "%s.meta", m_sPath.cstr() );
+
+	// no readable meta? no disk part yet
+	if ( !sphIsReadable ( sMeta.cstr() ) )
+		return true;
+
+	return LoadMetaJson ( pFilenameBuilder, bStripPath, uVersion, bRebuildInfixes, dWarnings )
+		|| LoadMetaLegacy ( pFilenameBuilder, bStripPath, uVersion, bRebuildInfixes, dWarnings );
+}
+
+
 bool RtIndex_c::PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings ) NO_THREAD_SAFETY_ANALYSIS
 {
 	// load disk chunks, if any
@@ -4580,7 +4764,7 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 
 
 	CSphString sMutableFile;
-	sMutableFile.SetSprintf ( "%s%s", m_sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ).cstr() );
+	sMutableFile.SetSprintf ( "%s%s", m_sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ) );
 	m_tMutableSettings.m_iMemLimit = m_iRtMemLimit; // to avoid overriding value from meta by default value, if no settings provided
 	if ( !m_tMutableSettings.Load ( sMutableFile.cstr(), m_sIndexName.cstr() ) )
 		return false;
@@ -6853,7 +7037,7 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 			else
 				iSingleSplit++;
 		}
-		
+
 		int iLeft = tArgs.m_iSplit - iSingleSplit;
 		assert(iLeft>=0);
 
@@ -9708,7 +9892,7 @@ void RtIndex_c::GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameB
 	if ( m_tMutableSettings.NeedSave() ) // should be file already after post-setup
 	{
 		CSphString & sMutableSettings = dFiles.Add();
-		sMutableSettings.SetSprintf ( "%s%s", m_sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ).cstr() );
+		sMutableSettings.SetSprintf ( "%s%s", m_sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ) );
 	}
 
 	auto tGuard = RtGuard();
@@ -9823,7 +10007,7 @@ void RtIndex_c::CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const
 		return;
 
 	// should be file already after post-setup
-	sPath.SetSprintf ( "%s%s", m_sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ).cstr() );
+	sPath.SetSprintf ( "%s%s", m_sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ) );
 	if ( sphIsReadable ( sPath ) )
 		dFiles.Add ( sPath );
 }

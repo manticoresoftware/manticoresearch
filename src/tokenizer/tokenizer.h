@@ -84,6 +84,7 @@ public:
 
 	/// write synonyms to file
 	virtual void					WriteSynonyms ( CSphWriter & tWriter ) const = 0;
+	virtual void 					WriteSynonyms ( JsonEscapedBuilder & tOut ) const = 0;
 
 	/// set phrase boundary chars
 	virtual bool					SetBoundary ( const char * sConfig, CSphString & sError );

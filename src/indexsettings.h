@@ -20,6 +20,16 @@
 #include "columnarlib.h"
 #include "sphinxdefs.h"
 
+inline int64_t cast2signed ( SphWordID_t tVal )
+{
+	return *(int64_t*)&tVal;
+}
+
+inline SphWordID_t cast2wordid ( int64_t iVal )
+{
+	return *(SphWordID_t*)&iVal;
+}
+
 class CSphWriter;
 class CSphReader;
 class FilenameBuilder_i;
@@ -50,6 +60,7 @@ struct CSphEmbeddedFiles
 
 class SettingsFormatter_c;
 struct SettingsFormatterState_t;
+namespace bson { class Bson_c; }
 
 class SettingsWriter_c
 {
@@ -77,6 +88,7 @@ public:
 
 	void			Setup ( const CSphConfigSection & hIndex, CSphString & sWarning );
 	bool			Load ( const FilenameBuilder_i * pFilenameBuilder, CSphReader & tReader, CSphEmbeddedFiles & tEmbeddedFiles, CSphString & sWarning );
+	bool			Load ( const FilenameBuilder_i* pFilenameBuilder, const bson::Bson_c& tNode, CSphEmbeddedFiles& tEmbeddedFiles, CSphString& sWarning );
 
 	void			DumpReadable ( SettingsFormatterState_t & tState, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder ) const override;
 	void			Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const override;
@@ -97,6 +109,7 @@ public:
 
 	void			Setup ( const CSphConfigSection & hIndex, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
 	void			Load ( CSphReader & tReader, CSphEmbeddedFiles & tEmbeddedFiles, CSphString & sWarning );
+	void			Load ( const bson::Bson_c& tNode, CSphEmbeddedFiles& tEmbeddedFiles, CSphString& sWarning );
 
 	void			DumpReadable ( SettingsFormatterState_t & tState, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder ) const override;
 	void			Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const override;
@@ -417,5 +430,13 @@ FileAccess_e ParseFileAccess ( CSphString sVal );
 int ParseKeywordExpansion ( const char * sValue );
 void SaveMutableSettings ( const MutableIndexSettings_c & tSettings, const CSphString & sPath );
 FileAccess_e GetFileAccess (  const CSphConfigSection & hIndex, const char * sKey, bool bList, FileAccess_e eDefault );
+
+class JsonEscapedBuilder;
+
+void operator<< ( JsonEscapedBuilder& tOut, const CSphFieldFilterSettings& tFieldFilterSettings );
+void operator<< ( JsonEscapedBuilder& tOut, const CSphIndexSettings& tIndexSettings );
+
+void SaveTokenizerSettings ( JsonEscapedBuilder& tOut, const ISphTokenizer * pTokenizer, int iEmbeddedLimit );
+void SaveDictionarySettings ( JsonEscapedBuilder& tOut, const CSphDict* pDict, bool bForceWordDict, int iEmbeddedLimit );
 
 #endif // _indexsettings_

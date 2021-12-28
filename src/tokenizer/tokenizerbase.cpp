@@ -102,6 +102,16 @@ void CSphTokenizerBase::WriteSynonyms ( CSphWriter& tWriter ) const
 		tWriter.PutDword ( 0 );
 }
 
+void CSphTokenizerBase::WriteSynonyms ( JsonEscapedBuilder & tOut ) const
+{
+	if ( !m_pExc )
+		return;
+
+	tOut.Named ( "synonyms" );
+	auto _ = tOut.ArrayW();
+	m_pExc->Export ( tOut );
+}
+
 void CSphTokenizerBase::CloneBase ( const CSphTokenizerBase* pFrom, ESphTokenizerClone eMode )
 {
 	m_eMode = eMode;

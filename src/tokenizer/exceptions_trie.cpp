@@ -15,6 +15,7 @@
 #include "sphinxstd.h"
 #include "fileio.h"
 #include "sphinxutils.h"
+#include "sphinxjson.h"
 
 /////////////////////////////////////////////////////////////////////////////
 // TOKENIZING EXCEPTIONS
@@ -31,7 +32,8 @@
 /// output mappings themselves are serialized just after the nodes,
 /// as plain old ASCIIZ strings
 
-void ExceptionsTrie_c::Export ( CSphWriter& w, CSphVector<BYTE>& dPrefix, int iNode, int* pCount ) const
+template<typename WRITER>
+void ExceptionsTrie_c::Export ( WRITER&& W, CSphVector<BYTE>& dPrefix, int iNode, int* pCount ) const
 {
 	assert ( iNode >= 0 && iNode < m_iMappings );
 	BYTE* p = &m_dData[iNode];
@@ -43,7 +45,7 @@ void ExceptionsTrie_c::Export ( CSphWriter& w, CSphVector<BYTE>& dPrefix, int iN
 		const char* sTo = (char*)&m_dData[iTo];
 		s.SetBinary ( (char*)dPrefix.Begin(), dPrefix.GetLength() );
 		s.SetSprintf ( "%s => %s\n", s.cstr(), sTo );
-		w.PutString ( s.cstr() );
+		W ( s.cstr() );
 		( *pCount )++;
 	}
 
@@ -55,20 +57,28 @@ void ExceptionsTrie_c::Export ( CSphWriter& w, CSphVector<BYTE>& dPrefix, int iN
 	for ( int i = 0; i < n; i++ )
 	{
 		dPrefix.Add ( p[i] );
-		Export ( w, dPrefix, *(int*)&p[n + 4 * i], pCount );
+		Export ( W, dPrefix, *(int*)&p[n + 4 * i], pCount );
 		dPrefix.Pop();
 	}
 }
 
-
-void ExceptionsTrie_c::Export ( CSphWriter& w ) const
+void ExceptionsTrie_c::Export ( CSphWriter & w ) const
 {
 	CSphVector<BYTE> dPrefix;
 	int iCount = 0;
 
 	w.PutDword ( m_iCount );
-	Export ( w, dPrefix, 0, &iCount );
-	assert ( iCount == m_iCount );
+	Export ( [&w] (const char* szLine) { w.PutString ( szLine ); }, dPrefix, 0, &iCount);
+	assert ( iCount==m_iCount );
+}
+
+void ExceptionsTrie_c::Export ( JsonEscapedBuilder & tOut ) const
+{
+	CSphVector<BYTE> dPrefix;
+	int iCount = 0;
+
+	Export ( [&tOut] (const char* szLine) { tOut.FixupSpacedAndAppendEscaped ( szLine ); }, dPrefix, 0, &iCount);
+	assert ( iCount==m_iCount );
 }
 
 /// intermediate exceptions trie node

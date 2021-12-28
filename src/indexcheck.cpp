@@ -1367,7 +1367,7 @@ void DiskIndexChecker_c::CheckDocstore()
 CSphString DiskIndexChecker_c::GetFilename ( ESphExt eExt ) const
 {
 	CSphString sRes;
-	sRes.SetSprintf ( "%s%s", m_tIndex.GetFilename(), sphGetExt(eExt).cstr() );
+	sRes.SetSprintf ( "%s%s", m_tIndex.GetFilename(), sphGetExt(eExt) );
 	return sRes;
 }
 

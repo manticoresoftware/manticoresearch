@@ -709,7 +709,7 @@ const char* CheckFmtMagic ( DWORD uHeader )
 		else
 			return "%s is invalid header file (too old index version?)";
 	}
-	return NULL;
+	return nullptr;
 }
 
 
@@ -1281,6 +1281,7 @@ public:
 
 	int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer, CSphIndexProgress & tProgress ) final;
 
+	bool				LoadHeaderLegacy ( const char * sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
 	bool				LoadHeader ( const char * sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
 
 	void				DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool bConfig ) final;
@@ -3396,7 +3397,7 @@ struct CmpHit_fn
 CSphString CSphIndex_VLN::GetIndexFileName ( ESphExt eExt, bool bTemp ) const
 {
 	CSphString sRes;
-	sRes.SetSprintf ( bTemp ? "%s.tmp%s" : "%s%s", m_sFilename.cstr(), sphGetExt(eExt).cstr() );
+	sRes.SetSprintf ( bTemp ? "%s.tmp%s" : "%s%s", m_sFilename.cstr(), sphGetExt(eExt) );
 	return sRes;
 }
 
@@ -3917,16 +3918,16 @@ static void ReadSchemaField ( CSphReader & rdInfo, CSphColumnInfo & tCol, DWORD 
 }
 
 
-void ReadSchema ( CSphReader & rdInfo, CSphSchema & m_tSchema, DWORD uVersion )
+void ReadSchema ( CSphReader & rdInfo, CSphSchema & tSchema, DWORD uVersion )
 {
-	m_tSchema.Reset ();
+	tSchema.Reset ();
 
 	int iNumFields = rdInfo.GetDword();
 	for ( int i=0; i<iNumFields; i++ )
 	{
 		CSphColumnInfo tCol;
 		ReadSchemaField ( rdInfo, tCol, uVersion );
-		m_tSchema.AddField ( tCol );
+		tSchema.AddField ( tCol );
 	}
 
 	int iNumAttrs = rdInfo.GetDword();
@@ -3934,10 +3935,58 @@ void ReadSchema ( CSphReader & rdInfo, CSphSchema & m_tSchema, DWORD uVersion )
 	{
 		CSphColumnInfo tCol;
 		ReadSchemaColumn ( rdInfo, tCol, uVersion );
-		m_tSchema.AddAttr ( tCol, false );
+		tSchema.AddAttr ( tCol, false );
 	}
 }
 
+static void ReadLocatorJson ( bson::Bson_c tNode, CSphAttrLocator & tLoc )
+{
+	using namespace bson;
+	tLoc.m_iBitOffset = (int) Int ( tNode.ChildByName ( "pos" ) );
+	tLoc.m_iBitCount = (int) Int ( tNode.ChildByName ( "bits" ) );
+}
+
+static void ReadSchemaColumnJson ( bson::Bson_c tNode, CSphColumnInfo & tCol )
+{
+	using namespace bson;
+	tCol.m_sName = String ( tNode.ChildByName ( "name" ), "@emptyname" );
+	tCol.m_sName.ToLower();
+	tCol.m_uAttrFlags = (DWORD)Int ( tNode.ChildByName ( "flags" ), CSphColumnInfo::ATTR_NONE );
+	tCol.m_bPayload = Bool ( tNode.ChildByName ( "payload" ), false );
+	tCol.m_eEngine = (AttrEngine_e)Int ( tNode.ChildByName ( "engine" ), (DWORD)AttrEngine_e::DEFAULT );
+	tCol.m_eAttrType = (ESphAttr)Int ( tNode.ChildByName ( "type" ) );
+	ReadLocatorJson ( tNode.ChildByName ("locator"), tCol.m_tLocator );
+}
+
+
+static void ReadSchemaFieldJson ( bson::Bson_c tNode, CSphColumnInfo & tCol )
+{
+	using namespace bson;
+	tCol.m_sName = String ( tNode.ChildByName ( "name" ) );
+	tCol.m_uFieldFlags = (DWORD)Int ( tNode.ChildByName ( "flags" ), CSphColumnInfo::FIELD_INDEXED );
+	tCol.m_bPayload = Bool ( tNode.ChildByName ( "payload" ) );
+}
+
+
+void ReadSchemaJson ( bson::Bson_c tNode, CSphSchema & tSchema )
+{
+	using namespace bson;
+	tSchema.Reset ();
+
+	Bson_c ( tNode.ChildByName ( "fields" ) ).ForEach ( [&tSchema] ( const NodeHandle_t& tNode )
+	{
+		CSphColumnInfo tCol;
+		ReadSchemaFieldJson ( tNode, tCol );
+		tSchema.AddField ( tCol );
+	} );
+
+	Bson_c ( tNode.ChildByName ( "attributes" ) ).ForEach ( [&tSchema] ( const NodeHandle_t& tNode )
+	{
+		CSphColumnInfo tCol;
+		ReadSchemaColumnJson ( tNode, tCol );
+		tSchema.AddAttr ( tCol, false );
+	} );
+}
 
 static void WriteSchemaField ( CSphWriter & fdInfo, const CSphColumnInfo & tCol )
 {
@@ -3973,6 +4022,54 @@ void WriteSchema ( CSphWriter & fdInfo, const CSphSchema & tSchema )
 		WriteSchemaColumn ( fdInfo, tSchema.GetAttr(i) );
 }
 
+void operator<< ( JsonEscapedBuilder& tOut, const CSphAttrLocator& tLoc )
+{
+	auto _ = tOut.Object();
+	tOut.NamedVal ( "pos", tLoc.m_iBitOffset );
+	tOut.NamedVal ( "bits", tLoc.m_iBitCount );
+}
+
+namespace {
+
+void DumpFieldToJson ( JsonEscapedBuilder& tOut, const CSphColumnInfo& tCol )
+{
+	auto _ = tOut.Object();
+	tOut.NamedString ( "name", tCol.m_sName );
+	tOut.NamedValNonDefault ( "flags", tCol.m_uFieldFlags, (DWORD)CSphColumnInfo::FIELD_INDEXED );
+	tOut.NamedValNonDefault ( "payload", tCol.m_bPayload, false );
+}
+
+void DumpAttrToJson ( JsonEscapedBuilder& tOut, const CSphColumnInfo& tCol )
+{
+	auto _ = tOut.Object();
+	tOut.NamedString ( "name", tCol.m_sName );
+	tOut.NamedValNonDefault ( "flags", tCol.m_uAttrFlags, (DWORD)CSphColumnInfo::ATTR_NONE );
+	tOut.NamedValNonDefault ( "payload", tCol.m_bPayload, false );
+	tOut.NamedValNonDefault ( "engine", (DWORD)tCol.m_eEngine, (DWORD)AttrEngine_e::DEFAULT );
+	tOut.NamedVal ( "type", tCol.m_eAttrType );
+	tOut.NamedVal ( "locator", tCol.m_tLocator );
+}
+} // namespace
+
+void operator<< ( JsonEscapedBuilder& tOut, const CSphSchema& tSchema )
+{
+	auto _ = tOut.ObjectW();
+	if ( tSchema.GetFieldsCount() > 0 )
+	{
+		tOut.Named ( "fields" );
+		auto _ = tOut.ArrayW();
+		for ( int i = 0; i < tSchema.GetFieldsCount(); ++i )
+			DumpFieldToJson ( tOut, tSchema.GetField ( i ) );
+	}
+	if ( tSchema.GetAttrsCount() > 0 )
+	{
+		tOut.Named ( "attributes" );
+		auto _ = tOut.ArrayW();
+		for ( int i = 0; i < tSchema.GetAttrsCount(); ++i )
+			DumpAttrToJson ( tOut, tSchema.GetAttr ( i ) );
+	}
+}
+
 
 void SaveIndexSettings ( CSphWriter & tWriter, const CSphIndexSettings & tSettings )
 {
@@ -4003,63 +4100,113 @@ void SaveIndexSettings ( CSphWriter & tWriter, const CSphIndexSettings & tSettin
 	tWriter.PutDword ( (DWORD)tSettings.m_eEngine );
 }
 
-
-void IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & tWriteHeader, CSphWriter & fdInfo, bool bForceWordDict, bool SkipEmbeddDict )
+void operator<< ( JsonEscapedBuilder& tOut, const CSphIndexSettings& tSettings )
 {
+	auto _ = tOut.ObjectW();
+	tOut.NamedValNonDefault ( "min_prefix_len", tSettings.RawMinPrefixLen() );
+	tOut.NamedValNonDefault ( "min_infix_len", tSettings.m_iMinInfixLen );
+	tOut.NamedValNonDefault ( "max_substring_len", tSettings.m_iMaxSubstringLen );
+	tOut.NamedValNonDefault ( "strip_html", tSettings.m_bHtmlStrip, false );
+	tOut.NamedStringNonEmpty ( "html_index_attrs", tSettings.m_sHtmlIndexAttrs );
+	tOut.NamedStringNonEmpty ( "html_remove_elements", tSettings.m_sHtmlRemoveElements );
+	tOut.NamedValNonDefault ( "index_exact_words", tSettings.m_bIndexExactWords, false );
+	tOut.NamedValNonDefault ( "hitless", tSettings.m_eHitless, SPH_HITLESS_NONE );
+	tOut.NamedValNonDefault ( "hit_format", tSettings.m_eHitFormat, SPH_HIT_FORMAT_PLAIN );
+	tOut.NamedValNonDefault ( "index_sp", tSettings.m_bIndexSP, false );
+	tOut.NamedStringNonEmpty ( "zones", tSettings.m_sZones );
+	tOut.NamedValNonDefault ( "boundary_step", tSettings.m_iBoundaryStep );
+	tOut.NamedValNonDefault ( "stopword_step", tSettings.m_iStopwordStep, 1 );
+	tOut.NamedValNonDefault ( "overshort_step", tSettings.m_iOvershortStep, 1 );
+	tOut.NamedValNonDefault ( "embedded_limit", tSettings.m_iEmbeddedLimit );
+	tOut.NamedValNonDefault ( "bigram_index", tSettings.m_eBigramIndex, SPH_BIGRAM_NONE );
+	tOut.NamedStringNonEmpty ( "bigram_words", tSettings.m_sBigramWords );
+	tOut.NamedValNonDefault ( "index_field_lens", tSettings.m_bIndexFieldLens, false );
+	tOut.NamedValNonDefault ( "icu", (DWORD)tSettings.m_ePreprocessor, (DWORD)Preprocessor_e::NONE );
+	tOut.NamedStringNonEmpty ( "index_token_filter", tSettings.m_sIndexTokenFilter );
+	tOut.NamedValNonDefault ( "blob_update_space", tSettings.m_tBlobUpdateSpace );
+	tOut.NamedValNonDefault ( "skiplist_block_size", tSettings.m_iSkiplistBlockSize, 32 );
+	tOut.NamedStringNonEmpty ( "hitless_files", tSettings.m_sHitlessFiles );
+	tOut.NamedValNonDefault ( "engine", (DWORD)tSettings.m_eEngine, (DWORD)AttrEngine_e::DEFAULT );
+}
+
+void IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & tWriteHeader, JsonEscapedBuilder& sJson, bool bForceWordDict, bool SkipEmbeddDict )
+{
+	auto _ = sJson.ObjectW();
+
+	// human-readable sugar
+	sJson.NamedString ( "meta_created_time_utc", sphCurrentUtcTime() );
+
 	// version
-	fdInfo.PutDword ( INDEX_MAGIC_HEADER );
-	fdInfo.PutDword ( INDEX_FORMAT_VERSION );
+	sJson.NamedVal ( "index_format_version", INDEX_FORMAT_VERSION );
+
+	// index stats - json (put here to be similar with .meta)
+	sJson.NamedValNonDefault ( "total_documents", tBuildHeader.m_iTotalDocuments );
+	sJson.NamedValNonDefault ( "total_bytes", tBuildHeader.m_iTotalBytes );
 
 	// schema
-	WriteSchema ( fdInfo, *tWriteHeader.m_pSchema );
-
-	// wordlist checkpoints
-	fdInfo.PutOffset ( tBuildHeader.m_iDictCheckpointsOffset );
-	fdInfo.PutDword ( tBuildHeader.m_iDictCheckpoints );
-	fdInfo.PutByte ( (BYTE)tBuildHeader.m_iInfixCodepointBytes );
-	fdInfo.PutDword ( (DWORD)tBuildHeader.m_iInfixBlocksOffset );
-	fdInfo.PutDword ( tBuildHeader.m_iInfixBlocksWordsSize );
-
-	// index stats
-	fdInfo.PutDword ( (DWORD)tBuildHeader.m_iTotalDocuments ); // FIXME? we don't expect over 4G docs per just 1 local index
-	fdInfo.PutOffset ( tBuildHeader.m_iTotalBytes );
+	sJson.NamedVal ( "schema", *tWriteHeader.m_pSchema );
 
 	// index settings
-	SaveIndexSettings ( fdInfo, *tWriteHeader.m_pSettings );
+	sJson.NamedVal ( "index_settings", *tWriteHeader.m_pSettings );
 
 	// tokenizer info
 	assert ( tWriteHeader.m_pTokenizer );
-	SaveTokenizerSettings ( fdInfo, tWriteHeader.m_pTokenizer, tWriteHeader.m_pSettings->m_iEmbeddedLimit );
+	sJson.Named ( "tokenizer_settings" );
+	SaveTokenizerSettings ( sJson, tWriteHeader.m_pTokenizer, tWriteHeader.m_pSettings->m_iEmbeddedLimit );
 
 	// dictionary info
 	assert ( tWriteHeader.m_pDict );
-	SaveDictionarySettings ( fdInfo, tWriteHeader.m_pDict, bForceWordDict, SkipEmbeddDict ? 0 : tWriteHeader.m_pSettings->m_iEmbeddedLimit );
+	sJson.Named ( "dictionary_settings" );
+	SaveDictionarySettings ( sJson, tWriteHeader.m_pDict, bForceWordDict, SkipEmbeddDict ? 0 : tWriteHeader.m_pSettings->m_iEmbeddedLimit );
 
-	fdInfo.PutOffset ( tBuildHeader.m_iDocinfo );
-	fdInfo.PutOffset ( tBuildHeader.m_iDocinfoIndex );
-	fdInfo.PutOffset ( tBuildHeader.m_iMinMaxIndex );
+	// wordlist checkpoints - json
+	sJson.NamedValNonDefault ( "dict_checkpoints_offset", tBuildHeader.m_iDictCheckpointsOffset );
+	sJson.NamedValNonDefault ( "dict_checkpoints", tBuildHeader.m_iDictCheckpoints );
+	sJson.NamedValNonDefault ( "infix_codepoint_bytes", tBuildHeader.m_iInfixCodepointBytes );
+	sJson.NamedValNonDefault ( "infix_blocks_offset", tBuildHeader.m_iInfixBlocksOffset );
+	sJson.NamedValNonDefault ( "infix_block_words_size", tBuildHeader.m_iInfixBlocksWordsSize );
+
+	sJson.NamedValNonDefault ( "docinfo", tBuildHeader.m_iDocinfo );
+	sJson.NamedValNonDefault ( "docinfo_index", tBuildHeader.m_iDocinfoIndex );
+	sJson.NamedValNonDefault ( "min_max_index", tBuildHeader.m_iMinMaxIndex );
 
 	// field filter info
 	CSphFieldFilterSettings tFieldFilterSettings;
 	if ( tWriteHeader.m_pFieldFilter.Ptr() )
-		tWriteHeader.m_pFieldFilter->GetSettings(tFieldFilterSettings);
-	tFieldFilterSettings.Save(fdInfo);
+	{
+		tWriteHeader.m_pFieldFilter->GetSettings ( tFieldFilterSettings );
+		sJson.NamedVal ( "field_filter_settings", tFieldFilterSettings );
+	}
 
 	// average field lengths
 	if ( tWriteHeader.m_pSettings->m_bIndexFieldLens )
+	{
+		sJson.Named ( "index_fields_lens" );
+		auto _ = sJson.Array();
 		for ( int i=0; i < tWriteHeader.m_pSchema->GetFieldsCount(); ++i )
-			fdInfo.PutOffset ( tWriteHeader.m_pFieldLens[i] );
+		{
+			sJson << tWriteHeader.m_pFieldLens[i];
+		}
+	}
 }
 
 
 bool IndexBuildDone ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & tWriteHeader, const CSphString & sFileName, CSphString & sError )
 {
-	CSphWriter fdInfo;
-	if ( !fdInfo.OpenFile ( sFileName, sError ) )
-		return false;
+	JsonEscapedBuilder sJson;
+	IndexWriteHeader ( tBuildHeader, tWriteHeader, sJson, false );
 
-	IndexWriteHeader ( tBuildHeader, tWriteHeader, fdInfo, false );
-	return true;
+	CSphWriter wrHeaderJson;
+	if ( wrHeaderJson.OpenFile ( sFileName, sError ) )
+	{
+		wrHeaderJson.PutString ( (Str_t)sJson );
+		wrHeaderJson.CloseFile();
+		assert ( bson::ValidateJson ( sJson.cstr(), &sError ) );
+		return true;
+	}
+
+	sphWarning ( "failed to serialize header to json: %s", sError.cstr() );
+	return false;
 }
 
 
@@ -8779,7 +8926,37 @@ void LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DW
 }
 
 
-bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning )
+void LoadIndexSettingsJson ( bson::Bson_c tNode, CSphIndexSettings & tSettings )
+{
+	using namespace bson;
+	tSettings.SetMinPrefixLen ( (int)Int ( tNode.ChildByName ( "min_prefix_len" ) ) );
+	tSettings.m_iMinInfixLen = (int)Int ( tNode.ChildByName ( "min_infix_len" ) );
+	tSettings.m_iMaxSubstringLen = (int)Int ( tNode.ChildByName ( "max_substring_len" ) );
+	tSettings.m_bHtmlStrip = Bool ( tNode.ChildByName ( "strip_html" ) );
+	tSettings.m_sHtmlIndexAttrs = String ( tNode.ChildByName ( "html_index_attrs" ) );
+	tSettings.m_sHtmlRemoveElements = String ( tNode.ChildByName ( "html_remove_elements" ) );
+	tSettings.m_bIndexExactWords = Bool ( tNode.ChildByName ( "index_exact_words" ) );
+	tSettings.m_eHitless = (ESphHitless)Int ( tNode.ChildByName ( "hitless" ), SPH_HITLESS_NONE );
+	tSettings.m_eHitFormat = (ESphHitFormat)Int ( tNode.ChildByName ( "hit_format" ), SPH_HIT_FORMAT_PLAIN );
+	tSettings.m_bIndexSP = Bool ( tNode.ChildByName ( "index_sp" ) );
+	tSettings.m_sZones = String ( tNode.ChildByName ( "zones" ) );
+	tSettings.m_iBoundaryStep = (int)Int ( tNode.ChildByName ( "boundary_step" ) );
+	tSettings.m_iStopwordStep = (int)Int ( tNode.ChildByName ( "stopword_step" ), 1 );
+	tSettings.m_iOvershortStep = (int)Int ( tNode.ChildByName ( "overshort_step" ), 1 );
+	tSettings.m_iEmbeddedLimit = (int)Int ( tNode.ChildByName ( "embedded_limit" ) );
+	tSettings.m_eBigramIndex = (ESphBigram)Int ( tNode.ChildByName ( "bigram_index" ), SPH_BIGRAM_NONE );
+	tSettings.m_sBigramWords = String ( tNode.ChildByName ( "bigram_words" ) );
+	tSettings.m_bIndexFieldLens = Bool ( tNode.ChildByName ( "index_field_lens" ) );
+	tSettings.m_ePreprocessor = (Preprocessor_e)Int ( tNode.ChildByName ( "icu" ), (DWORD)Preprocessor_e::NONE  );
+	tSettings.m_sIndexTokenFilter = String ( tNode.ChildByName ( "index_token_filter" ) );
+	tSettings.m_tBlobUpdateSpace = Int ( tNode.ChildByName ( "blob_update_space" ) );
+	tSettings.m_iSkiplistBlockSize = (int)Int ( tNode.ChildByName ( "skiplist_block_size" ), 32 );
+	tSettings.m_sHitlessFiles = String ( tNode.ChildByName ( "hitless_files" ) );
+	tSettings.m_eEngine = (AttrEngine_e)Int ( tNode.ChildByName ( "engine" ), (DWORD)AttrEngine_e::DEFAULT );
+}
+
+
+bool CSphIndex_VLN::LoadHeaderLegacy ( const char * sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning )
 {
 	const int MAX_HEADER_SIZE = 32768;
 	CSphFixedVector<BYTE> dCacheInfo ( MAX_HEADER_SIZE );
@@ -8919,6 +9096,154 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 		m_sLastError.SetSprintf ( "%s: failed to parse header (unexpected eof)", sHeaderName );
 
 	return !rdInfo.GetErrorFlag();
+}
+
+bool CSphIndex_VLN::LoadHeader ( const char* sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning )
+{
+	using namespace bson;
+
+	CSphVector<BYTE> dData;
+	if ( !sphJsonParse ( dData, sHeaderName, m_sLastError ) )
+		return false;
+
+	Bson_c tBson ( dData );
+	if ( tBson.IsEmpty() || !tBson.IsAssoc() )
+	{
+		m_sLastError = "Something wrong read from json header - it is either empty, either not root object.";
+		return false;
+	}
+
+	// version
+	m_uVersion = (DWORD)Int ( tBson.ChildByName ( "index_format_version" ) );
+	if ( m_uVersion<=1 || m_uVersion>INDEX_FORMAT_VERSION )
+	{
+		m_sLastError.SetSprintf ( "%s is v.%u, binary is v.%u", sHeaderName, m_uVersion, INDEX_FORMAT_VERSION );
+		return false;
+	}
+
+	// we don't support anything prior to v54
+	DWORD uMinFormatVer = 54;
+	if ( m_uVersion<uMinFormatVer )
+	{
+		m_sLastError.SetSprintf ( "indexes prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, sHeaderName, m_uVersion );
+		return false;
+	}
+
+	// index stats
+	m_tStats.m_iTotalDocuments = Int ( tBson.ChildByName ( "total_documents" ) );
+	m_tStats.m_iTotalBytes = Int ( tBson.ChildByName ( "total_bytes" ) );
+
+	// schema
+	ReadSchemaJson ( tBson.ChildByName ( "schema" ), m_tSchema );
+
+	// check schema for dupes
+	for ( int iAttr = 0; iAttr < m_tSchema.GetAttrsCount(); ++iAttr )
+	{
+		const CSphColumnInfo& tCol = m_tSchema.GetAttr ( iAttr );
+		for ( int i = 0; i < iAttr; ++i )
+			if ( m_tSchema.GetAttr ( i ).m_sName == tCol.m_sName )
+				sWarning.SetSprintf ( "duplicate attribute name: %s", tCol.m_sName.cstr() );
+	}
+
+	// index settings
+	LoadIndexSettingsJson ( tBson.ChildByName ( "index_settings" ), m_tSettings );
+
+	CSphTokenizerSettings tTokSettings;
+	// tokenizer stuff
+	if ( !tTokSettings.Load ( pFilenameBuilder, tBson.ChildByName ( "tokenizer_settings" ), tEmbeddedFiles, m_sLastError ) )
+		return false;
+
+	// dictionary stuff
+	CSphDictSettings tDictSettings;
+	tDictSettings.Load ( tBson.ChildByName ( "dictionary_settings" ), tEmbeddedFiles, sWarning );
+
+	// dictionary header (wordlist checkpoints, infix blocks, etc)
+	m_tWordlist.m_iDictCheckpointsOffset = Int ( tBson.ChildByName ( "dict_checkpoints_offset" ) );
+	m_tWordlist.m_iDictCheckpoints = (int)Int ( tBson.ChildByName ( "dict_checkpoints" ) );
+	m_tWordlist.m_iInfixCodepointBytes = (int)Int ( tBson.ChildByName ( "infix_codepoint_bytes" ) );
+	m_tWordlist.m_iInfixBlocksOffset = Int ( tBson.ChildByName ( "infix_blocks_offset" ) );
+	m_tWordlist.m_iInfixBlocksWordsSize = (int)Int ( tBson.ChildByName ( "infix_block_words_size" ) );
+
+	m_tWordlist.m_dCheckpoints.Reset ( m_tWordlist.m_iDictCheckpoints );
+
+	if ( bStripPath )
+	{
+		StripPath ( tTokSettings.m_sSynonymsFile );
+		for ( auto& i : tDictSettings.m_dWordforms )
+			StripPath ( i );
+	}
+
+	StrVec_t dWarnings;
+	TokenizerRefPtr_c pTokenizer { Tokenizer::Create ( tTokSettings, &tEmbeddedFiles, pFilenameBuilder, dWarnings, m_sLastError ) };
+	if ( !pTokenizer )
+		return false;
+
+	DictRefPtr_c pDict { tDictSettings.m_bWordDict
+		? sphCreateDictionaryKeywords ( tDictSettings, &tEmbeddedFiles, pTokenizer, m_sIndexName.cstr(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError )
+		: sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, pTokenizer, m_sIndexName.cstr(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError )};
+
+	if ( !pDict )
+		return false;
+
+	if ( tDictSettings.m_sMorphFingerprint!=pDict->GetMorphDataFingerprint() )
+		sWarning.SetSprintf ( "different lemmatizer dictionaries (index='%s', current='%s')",
+			tDictSettings.m_sMorphFingerprint.cstr(),
+			pDict->GetMorphDataFingerprint().cstr() );
+
+	SetDictionary ( pDict );
+
+	pTokenizer = Tokenizer::CreateMultiformFilter ( pTokenizer, pDict->GetMultiWordforms () );
+	SetTokenizer ( pTokenizer );
+	SetupQueryTokenizer();
+
+	// initialize AOT if needed
+	m_tSettings.m_uAotFilterMask = sphParseMorphAot ( tDictSettings.m_sMorphology.cstr() );
+
+	m_iDocinfo = Int ( tBson.ChildByName ( "docinfo" ) );
+	m_iDocinfoIndex = Int ( tBson.ChildByName ( "docinfo_index" ) );
+	m_iMinMaxIndex = Int ( tBson.ChildByName ( "min_max_index" ) );
+
+	FieldFilterRefPtr_c pFieldFilter;
+	auto tFieldFilterSettingsNode = tBson.ChildByName ( "field_filter_settings" );
+	if ( !IsNullNode(tFieldFilterSettingsNode) )
+	{
+		CSphFieldFilterSettings tFieldFilterSettings;
+		Bson_c ( tFieldFilterSettingsNode ).ForEach ( [&tFieldFilterSettings] ( const NodeHandle_t& tNode ) {
+			tFieldFilterSettings.m_dRegexps.Add ( String ( tNode ) );
+		} );
+
+		if ( !tFieldFilterSettings.m_dRegexps.IsEmpty() )
+			pFieldFilter = sphCreateRegexpFilter ( tFieldFilterSettings, m_sLastError );
+	}
+
+	if ( !sphSpawnFilterICU ( pFieldFilter, m_tSettings, tTokSettings, sHeaderName, m_sLastError ) )
+		return false;
+
+	SetFieldFilter ( pFieldFilter );
+
+	auto tIndexFieldsLenNode = tBson.ChildByName ( "index_fields_lens" );
+	if ( m_tSettings.m_bIndexFieldLens )
+	{
+		assert (!IsNullNode ( tIndexFieldsLenNode ));
+		m_dFieldLens.Reset ( m_tSchema.GetFieldsCount() );
+		int i = 0;
+		Bson_c ( tIndexFieldsLenNode ).ForEach ( [&i,this] ( const NodeHandle_t& tNode ) {
+			m_dFieldLens[i++] = Int ( tNode );
+		} );
+	}
+
+	// post-load stuff.. for now, bigrams
+	CSphIndexSettings & s = m_tSettings;
+	if ( s.m_eBigramIndex!=SPH_BIGRAM_NONE && s.m_eBigramIndex!=SPH_BIGRAM_ALL )
+	{
+		BYTE * pTok;
+		m_pTokenizer->SetBuffer ( (BYTE*)const_cast<char*> ( s.m_sBigramWords.cstr() ), s.m_sBigramWords.Length() );
+		while ( ( pTok = m_pTokenizer->GetToken() )!=nullptr )
+			s.m_dBigramWords.Add() = (const char*)pTok;
+		s.m_dBigramWords.Sort();
+	}
+
+	return true;
 }
 
 
@@ -9317,8 +9642,15 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 	CSphEmbeddedFiles tEmbeddedFiles;
 
 	// preload schema
-	if ( !LoadHeader ( GetIndexFileName(SPH_EXT_SPH).cstr(), bStripPath, tEmbeddedFiles, pFilenameBuilder, m_sLastWarning ) )
-		return false;
+	if ( !LoadHeader ( GetIndexFileName ( SPH_EXT_SPH ).cstr(), bStripPath, tEmbeddedFiles, pFilenameBuilder, m_sLastWarning ) )
+	{
+		sphWarning ( "Unable to load json! Will retry with plain legacy sph..." );
+		if ( !LoadHeaderLegacy ( GetIndexFileName ( SPH_EXT_SPH ).cstr(), bStripPath, tEmbeddedFiles, pFilenameBuilder, m_sLastWarning ) )
+		{
+			sphWarning ( "Unable to load header.." );
+			return false;
+		}
+	}
 
 	m_bIsEmpty = !m_iDocinfo;
 
@@ -11895,7 +12227,7 @@ bool CSphDict::DictIsError () const														{ return true; }
 // CRC32/64 DICTIONARIES
 /////////////////////////////////////////////////////////////////////////////
 
-struct CSphTemplateDictTraits : CSphDict
+struct CSphTemplateDictTraits : DictStub_c
 {
 	CSphTemplateDictTraits ();
 protected:
@@ -11905,18 +12237,15 @@ public:
 	void		LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer, bool bStripFile ) final;
 	void		LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) final;
 	void		WriteStopwords ( CSphWriter & tWriter ) const final;
+	void		WriteStopwords ( JsonEscapedBuilder & tOut ) const final;
 	bool		LoadWordforms ( const StrVec_t & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) final;
 	void		WriteWordforms ( CSphWriter & tWriter ) const final;
+	void		WriteWordforms ( JsonEscapedBuilder & tOut ) const final;
 	const CSphWordforms *	GetWordforms() final { return m_pWordforms; }
 	void		DisableWordforms() final { m_bDisableWordforms = true; }
 	int			SetMorphology ( const char * szMorph, CSphString & sMessage ) final;
 	bool		HasMorphology() const final;
 	void		ApplyStemmers ( BYTE * pWord ) const final;
-
-	void		Setup ( const CSphDictSettings & tSettings ) final { m_tSettings = tSettings; }
-	const CSphDictSettings & GetSettings () const final { return m_tSettings; }
-	const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () const final { return m_dSWFileInfos; }
-	const CSphVector <CSphSavedFile> & GetWordformsFileInfos () const final { return m_dWFFileInfos; }
 	const CSphMultiformContainer * GetMultiWordforms () const final;
 	uint64_t	GetSettingsFNV () const final;
 	static void			SweepWordformContainers ( const CSphVector<CSphSavedFile> & dFiles );
@@ -11943,10 +12272,6 @@ protected:
 
 private:
 	CSphWordforms *				m_pWordforms;
-	CSphVector<CSphSavedFile>	m_dSWFileInfos;
-	CSphVector<CSphSavedFile>	m_dWFFileInfos;
-	CSphDictSettings			m_tSettings;
-
 	static CSphVector<CSphWordforms*>		m_dWordformContainers;
 
 	CSphWordforms *		GetWordformContainer ( const CSphVector<CSphSavedFile> & dFileInfos, const StrVec_t * pEmbeddedWordforms, const ISphTokenizer * pTokenizer, const char * sIndex );
@@ -11972,7 +12297,7 @@ struct CSphDiskDictTraits : CSphTemplateDictTraits
 	void SetSkiplistBlockSize ( int iSize ) final { m_iSkiplistBlockSize=iSize; }
 
 protected:
-	~CSphDiskDictTraits () override {} // fixme! remove
+	~CSphDiskDictTraits () override = default; // fixme! remove
 
 protected:
 	CSphTightVector<CSphWordlistCheckpoint>	m_dCheckpoints;		///< checkpoint offsets
@@ -12078,7 +12403,7 @@ bool CSphWordforms::IsEqual ( const CSphVector<CSphSavedFile> & dFiles )
 
 bool CSphWordforms::ToNormalForm ( BYTE * pWord, bool bBefore, bool bOnlyCheck ) const
 {
-	int * pIndex = m_dHash ( (char *)pWord );
+	int * pIndex = m_hHash ( (char *)pWord );
 	if ( !pIndex )
 		return false;
 
@@ -12750,8 +13075,19 @@ void CSphTemplateDictTraits::LoadStopwords ( const CSphVector<SphWordID_t> & dSt
 void CSphTemplateDictTraits::WriteStopwords ( CSphWriter & tWriter ) const
 {
 	tWriter.PutDword ( (DWORD)m_iStopwords );
-	for ( int i = 0; i < m_iStopwords; i++ )
+	for ( int i = 0; i < m_iStopwords; ++i )
 		tWriter.ZipOffset ( m_pStopwords[i] );
+}
+
+void CSphTemplateDictTraits::WriteStopwords ( JsonEscapedBuilder& tOut ) const
+{
+	if ( !m_iStopwords )
+		return;
+
+	tOut.Named ( "stopwords_list" );
+	auto _ = tOut.Array();
+	for ( int i = 0; i < m_iStopwords; ++i )
+		tOut << cast2signed ( m_pStopwords[i] );
 }
 
 
@@ -12840,17 +13176,6 @@ CSphWordforms * CSphTemplateDictTraits::GetWordformContainer ( const CSphVector<
 }
 
 
-struct CmpMultiforms_fn
-{
-	inline bool IsLess ( const CSphMultiform * pA, const CSphMultiform * pB ) const
-	{
-		assert ( pA && pB );
-		if ( pA->m_iFileId==pB->m_iFileId )
-			return pA->m_dTokens.GetLength() > pB->m_dTokens.GetLength();
-
-		return pA->m_iFileId > pB->m_iFileId;
-	}
-};
 
 
 void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sBuffer, int iLen,
@@ -12868,8 +13193,8 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 	bool bStopwordsPresent = false;
 	bool bCommentedWholeLine = false;
 
-	BYTE * pFrom = NULL;
-	while ( ( pFrom = pTokenizer->GetToken () )!=NULL )
+	BYTE * pFrom = nullptr;
+	while ( ( pFrom = pTokenizer->GetToken () )!=nullptr )
 	{
 		if ( *pFrom=='#' )
 		{
@@ -12939,7 +13264,7 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 
 	// what if we have more than one word in the right part?
 	const BYTE * pDestToken;
-	while ( ( pDestToken = pTokenizer->GetToken() )!=NULL )
+	while ( ( pDestToken = pTokenizer->GetToken() )!=nullptr )
 	{
 		bool bStop = ( !GetWordID ( pDestToken, (int) strlen ( (const char*)pDestToken ), true ) );
 		if ( !bStop )
@@ -12973,7 +13298,7 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 			int iCode;
 			const BYTE * pBuf = (const BYTE *) dDestTokens[i].m_sForm.cstr();
 			while ( ( iCode = sphUTF8Decode ( pBuf ) )>0 && !bBlendedPresent )
-				bBlendedPresent = ( dBlended.BinarySearch ( iCode )!=NULL );
+				bBlendedPresent = ( dBlended.BinarySearch ( iCode )!=nullptr );
 		}
 
 	if ( bBlendedPresent )
@@ -12987,7 +13312,7 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 
 	if ( dTokens.GetLength()>1 || dDestTokens.GetLength()>1 )
 	{
-		CSphMultiform * pMultiWordform = new CSphMultiform;
+		auto * pMultiWordform = new CSphMultiform;
 		pMultiWordform->m_iFileId = iFileId;
 		pMultiWordform->m_dNormalForm.Resize ( dDestTokens.GetLength() );
 		ARRAY_FOREACH ( i, dDestTokens )
@@ -12999,12 +13324,12 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 		if ( !pContainer->m_pMultiWordforms )
 			pContainer->m_pMultiWordforms = new CSphMultiformContainer;
 
-		CSphMultiforms ** pWordforms = pContainer->m_pMultiWordforms->m_Hash ( dTokens[0] );
-		if ( pWordforms )
+		CSphMultiforms ** ppWordforms = pContainer->m_pMultiWordforms->m_Hash ( dTokens[0] );
+		if ( ppWordforms )
 		{
-			ARRAY_FOREACH ( iMultiform, (*pWordforms)->m_pForms )
+			auto * pWordforms = *ppWordforms;
+			for ( CSphMultiform *pStoredMF : pWordforms->m_pForms )
 			{
-				CSphMultiform * pStoredMF = (*pWordforms)->m_pForms[iMultiform];
 				if ( pStoredMF->m_dTokens.GetLength()==pMultiWordform->m_dTokens.GetLength() )
 				{
 					bool bSameTokens = true;
@@ -13034,20 +13359,23 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 
 			if ( pMultiWordform )
 			{
-				(*pWordforms)->m_pForms.Add ( pMultiWordform );
+				pWordforms->m_pForms.Add ( pMultiWordform );
 
 				// sort forms by files and length
 				// but do not sort if we're loading embedded
 				if ( iFileId>=0 )
-					(*pWordforms)->m_pForms.Sort ( CmpMultiforms_fn() );
+					pWordforms->m_pForms.Sort ( Lesser ( [] ( const CSphMultiform* pA, const CSphMultiform* pB ) {
+						assert ( pA && pB );
+						return ( pA->m_iFileId == pB->m_iFileId ) ? pA->m_dTokens.GetLength() > pB->m_dTokens.GetLength() : pA->m_iFileId > pB->m_iFileId;
+					} ) );
 
-				( *pWordforms )->m_iMinTokens = Min ( ( *pWordforms )->m_iMinTokens, pMultiWordform->m_dTokens.GetLength () );
-				( *pWordforms )->m_iMaxTokens = Max ( ( *pWordforms )->m_iMaxTokens, pMultiWordform->m_dTokens.GetLength () );
-				pContainer->m_pMultiWordforms->m_iMaxTokens = Max ( pContainer->m_pMultiWordforms->m_iMaxTokens, (*pWordforms)->m_iMaxTokens );
+				pWordforms->m_iMinTokens = Min ( pWordforms->m_iMinTokens, pMultiWordform->m_dTokens.GetLength () );
+				pWordforms->m_iMaxTokens = Max ( pWordforms->m_iMaxTokens, pMultiWordform->m_dTokens.GetLength () );
+				pContainer->m_pMultiWordforms->m_iMaxTokens = Max ( pContainer->m_pMultiWordforms->m_iMaxTokens, pWordforms->m_iMaxTokens );
 			}
 		} else
 		{
-			CSphMultiforms * pNewWordforms = new CSphMultiforms;
+			auto * pNewWordforms = new CSphMultiforms;
 			pNewWordforms->m_pForms.Add ( pMultiWordform );
 			pNewWordforms->m_iMinTokens = pMultiWordform->m_dTokens.GetLength ();
 			pNewWordforms->m_iMaxTokens = pMultiWordform->m_dTokens.GetLength ();
@@ -13057,7 +13385,7 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 
 		// let's add destination form to regular wordform to keep destination from being stemmed
 		// FIXME!!! handle multiple destination tokens and ~flag for wordforms
-		if ( !bAfterMorphology && dDestTokens.GetLength()==1 && !pContainer->m_dHash.Exists ( dDestTokens[0].m_sForm ) )
+		if ( !bAfterMorphology && dDestTokens.GetLength()==1 && !pContainer->m_hHash.Exists ( dDestTokens[0].m_sForm ) )
 		{
 			CSphStoredNF tStoredForm;
 			tStoredForm.m_sWord = dDestTokens[0].m_sForm;
@@ -13068,7 +13396,7 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 				|| pContainer->m_dNormalForms.Last().m_bAfterMorphology!=bAfterMorphology )
 				pContainer->m_dNormalForms.Add ( tStoredForm );
 
-			pContainer->m_dHash.Add ( pContainer->m_dNormalForms.GetLength()-1, dDestTokens[0].m_sForm );
+			pContainer->m_hHash.Add ( pContainer->m_dNormalForms.GetLength()-1, dDestTokens[0].m_sForm );
 		}
 	} else
 	{
@@ -13081,7 +13409,7 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 		}
 
 		// check wordform that source token is a new token or has same destination token
-		int * pRefTo = pContainer->m_dHash ( dTokens[0] );
+		int * pRefTo = pContainer->m_hHash ( dTokens[0] );
 		assert ( !pRefTo || ( *pRefTo>=0 && *pRefTo<pContainer->m_dNormalForms.GetLength() ) );
 		if ( pRefTo )
 		{
@@ -13108,7 +13436,7 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 				|| pContainer->m_dNormalForms.Last().m_bAfterMorphology!=bAfterMorphology)
 				pContainer->m_dNormalForms.Add ( tStoredForm );
 
-			pContainer->m_dHash.Add ( pContainer->m_dNormalForms.GetLength()-1, dTokens[0] );
+			pContainer->m_hHash.Add ( pContainer->m_dNormalForms.GetLength()-1, dTokens[0] );
 		}
 	}
 }
@@ -13118,7 +13446,7 @@ CSphWordforms * CSphTemplateDictTraits::LoadWordformContainer ( const CSphVector
 	const StrVec_t * pEmbeddedWordforms, const ISphTokenizer * pTokenizer, const char * sIndex )
 {
 	// allocate it
-	CSphWordforms * pContainer = new CSphWordforms();
+	auto * pContainer = new CSphWordforms();
 	pContainer->m_dFiles = dFileInfos;
 	pContainer->m_uTokenizerFNV = pTokenizer->GetSettingsFNV();
 	pContainer->m_sIndexName = sIndex;
@@ -13223,7 +13551,7 @@ bool CSphTemplateDictTraits::LoadWordforms ( const StrVec_t & dFiles, const CSph
 
 	SweepWordformContainers ( m_dWFFileInfos );
 
-	m_pWordforms = GetWordformContainer ( m_dWFFileInfos, pEmbedded ? &(pEmbedded->m_dWordforms) : NULL, pTokenizer, sIndex );
+	m_pWordforms = GetWordformContainer ( m_dWFFileInfos, pEmbedded ? &(pEmbedded->m_dWordforms) : nullptr, pTokenizer, sIndex );
 	if ( m_pWordforms )
 	{
 		m_pWordforms->m_iRefCount++;
@@ -13245,25 +13573,15 @@ void CSphTemplateDictTraits::WriteWordforms ( CSphWriter & tWriter ) const
 
 	int nMultiforms = 0;
 	if ( m_pWordforms->m_pMultiWordforms )
-	{
-		CSphMultiformContainer::CSphMultiformHash & tHash = m_pWordforms->m_pMultiWordforms->m_Hash;
-		tHash.IterateStart();
-		while ( tHash.IterateNext() )
-		{
-			CSphMultiforms * pMF = tHash.IterateGet();
-			nMultiforms += pMF ? pMF->m_pForms.GetLength() : 0;
-		}
-	}
+		for ( const auto& tMF : m_pWordforms->m_pMultiWordforms->m_Hash )
+			nMultiforms += tMF.second ? tMF.second->m_pForms.GetLength() : 0;
 
-	tWriter.PutDword ( m_pWordforms->m_dHash.GetLength()+nMultiforms );
-	m_pWordforms->m_dHash.IterateStart();
-	while ( m_pWordforms->m_dHash.IterateNext() )
+	tWriter.PutDword ( m_pWordforms->m_hHash.GetLength()+nMultiforms );
+	for ( const auto& tForm : m_pWordforms->m_hHash )
 	{
-		const CSphString & sKey = m_pWordforms->m_dHash.IterateGetKey();
-		int iIndex = m_pWordforms->m_dHash.IterateGet();
 		CSphString sLine;
-		sLine.SetSprintf ( "%s%s > %s", m_pWordforms->m_dNormalForms[iIndex].m_bAfterMorphology ? "~" : "",
-			sKey.cstr(), m_pWordforms->m_dNormalForms[iIndex].m_sWord.cstr() );
+		sLine.SetSprintf ( "%s%s > %s", m_pWordforms->m_dNormalForms[tForm.second].m_bAfterMorphology ? "~" : "",
+			tForm.first.cstr(), m_pWordforms->m_dNormalForms[tForm.second].m_sWord.cstr() );
 		tWriter.PutString ( sLine );
 	}
 
@@ -13287,6 +13605,51 @@ void CSphTemplateDictTraits::WriteWordforms ( CSphWriter & tWriter ) const
 				sLine.SetSprintf ( "%s %s > %s", sKey.cstr(), sTokens.cstr(), sForms.cstr() );
 				tWriter.PutString ( sLine );
 			}
+		}
+	}
+}
+
+void CSphTemplateDictTraits::WriteWordforms ( JsonEscapedBuilder & tOut ) const
+{
+	if ( !m_pWordforms )
+		return;
+
+	bool bHaveData = ( m_pWordforms->m_hHash.GetLength() != 0 );
+
+	using HASHIT = std::pair<CSphString, CSphMultiforms*>;
+	auto * pMulti = m_pWordforms->m_pMultiWordforms; // shortcut
+	if ( pMulti )
+		bHaveData |= ::any_of ( pMulti->m_Hash, [] ( const HASHIT& tMF ) { return tMF.second && !tMF.second->m_pForms.IsEmpty(); } );
+
+	if ( !bHaveData )
+		return;
+
+	tOut.Named ( "word_forms" );
+	auto _ = tOut.ArrayW();
+
+	if ( m_pWordforms->m_hHash.GetLength() )
+		for ( const auto& tForm : m_pWordforms->m_hHash )
+		{
+			CSphString sLine;
+			sLine.SetSprintf ( "%s%s > %s", m_pWordforms->m_dNormalForms[tForm.second].m_bAfterMorphology ? "~" : "", tForm.first.cstr(), m_pWordforms->m_dNormalForms[tForm.second].m_sWord.cstr() );
+			tOut.FixupSpacedAndAppendEscaped ( sLine.cstr() );
+		}
+
+	if ( !pMulti )
+		return;
+
+	for ( const HASHIT& tForms : pMulti->m_Hash )
+	{
+		if ( !tForms.second )
+			continue;
+
+		for ( const CSphMultiform* pMF : tForms.second->m_pForms )
+		{
+			CSphString sLine, sTokens, sForms;
+			ConcatReportStrings ( pMF->m_dTokens, sTokens );
+			ConcatReportStrings ( pMF->m_dNormalForm, sForms );
+			sLine.SetSprintf ( "%s %s > %s", tForms.first.cstr(), sTokens.cstr(), sForms.cstr() );
+			tOut.FixupSpacedAndAppendEscaped ( sLine.cstr() );
 		}
 	}
 }
@@ -15099,7 +15462,7 @@ private:
 	const bool				m_bStoreID = false;
 
 protected:
-	virtual ~CRtDictKeywords () final {} // fixme! remove
+	~CRtDictKeywords () final = default; // Is here since protected. fixme! remove
 
 public:
 	explicit CRtDictKeywords ( CSphDict * pBase, bool bStoreID )
@@ -15154,9 +15517,11 @@ public:
 	void LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer, bool bStripFile ) final { m_pBase->LoadStopwords ( sFiles, pTokenizer, bStripFile ); }
 	void LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) final { m_pBase->LoadStopwords ( dStopwords ); }
 	void WriteStopwords ( CSphWriter & tWriter ) const final { m_pBase->WriteStopwords ( tWriter ); }
+	void WriteStopwords ( JsonEscapedBuilder & tOut ) const final { m_pBase->WriteStopwords ( tOut ); }
 	bool LoadWordforms ( const StrVec_t & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) final
 		{ return m_pBase->LoadWordforms ( dFiles, pEmbedded, pTokenizer, sIndex ); }
 	void WriteWordforms ( CSphWriter & tWriter ) const final { m_pBase->WriteWordforms ( tWriter ); }
+	void WriteWordforms ( JsonEscapedBuilder & tOut ) const final { m_pBase->WriteWordforms ( tOut ); }
 	int SetMorphology ( const char * szMorph, CSphString & sMessage ) final { return m_pBase->SetMorphology ( szMorph, sMessage ); }
 	void Setup ( const CSphDictSettings & tSettings ) final { m_pBase->Setup ( tSettings ); }
 	const CSphDictSettings & GetSettings () const final { return m_pBase->GetSettings(); }
@@ -15164,7 +15529,7 @@ public:
 	const CSphVector <CSphSavedFile> & GetWordformsFileInfos () const final { return m_pBase->GetWordformsFileInfos(); }
 	const CSphMultiformContainer * GetMultiWordforms () const final { return m_pBase->GetMultiWordforms(); }
 	bool IsStopWord ( const BYTE * pWord ) const final { return m_pBase->IsStopWord ( pWord ); }
-	const char * GetLastWarning() const final { return m_iKeywordsOverrun ? m_sWarning.cstr() : NULL; }
+	const char * GetLastWarning() const final { return m_iKeywordsOverrun ? m_sWarning.cstr() : nullptr; }
 	void ResetWarning () final { m_iKeywordsOverrun = 0; }
 	uint64_t GetSettingsFNV () const final { return m_pBase->GetSettingsFNV(); }
 

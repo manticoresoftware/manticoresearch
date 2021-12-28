@@ -43,7 +43,7 @@ inline const char * strerrorm ( int errnum )
 //////////////////////////////////////////////////////////////////////////
 
 const DWORD		INDEX_MAGIC_HEADER			= 0x58485053;		///< my magic 'SPHX' header
-const DWORD		INDEX_FORMAT_VERSION		= 63;				///< my format version
+const DWORD		INDEX_FORMAT_VERSION		= 64;				///< bumped to 64 since header is now stored as json
 
 const char		MAGIC_CODE_SENTENCE			= '\x02';				// emitted from tokenizer on sentence boundary
 const char		MAGIC_CODE_PARAGRAPH		= '\x03';				// emitted from stripper (and passed via tokenizer) on paragraph boundary
@@ -916,8 +916,10 @@ public:
 	void		LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer, bool bStripFile ) final { m_pDict->LoadStopwords ( sFiles, pTokenizer, bStripFile ); }
 	void		LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) final { m_pDict->LoadStopwords ( dStopwords ); }
 	void		WriteStopwords ( CSphWriter & tWriter ) const final { m_pDict->WriteStopwords ( tWriter ); }
+	void		WriteStopwords ( JsonEscapedBuilder & tOut ) const final { m_pDict->WriteStopwords ( tOut ); }
 	bool		LoadWordforms ( const StrVec_t & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) final { return m_pDict->LoadWordforms ( dFiles, pEmbedded, pTokenizer, sIndex ); }
 	void		WriteWordforms ( CSphWriter & tWriter ) const final { m_pDict->WriteWordforms ( tWriter ); }
+	void		WriteWordforms ( JsonEscapedBuilder & tOut ) const final { m_pDict->WriteWordforms ( tOut ); }
 	int			SetMorphology ( const char * szMorph, CSphString & sMessage ) final { return m_pDict->SetMorphology ( szMorph, sMessage ); }
 
 	SphWordID_t	GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops ) final { return m_pDict->GetWordID ( pWord, iLen, bFilterStops ); }
@@ -1016,11 +1018,16 @@ void			sphUnlinkIndex ( const char * sName, bool bForce );
 
 void			WriteSchema ( CSphWriter & fdInfo, const CSphSchema & tSchema );
 void			ReadSchema ( CSphReader & rdInfo, CSphSchema & m_tSchema, DWORD uVersion );
+void			ReadSchemaJson ( bson::Bson_c tNode, CSphSchema & tSchema );
 void			SaveIndexSettings ( CSphWriter & tWriter, const CSphIndexSettings & tSettings );
 void			LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DWORD uVersion );
+void			LoadIndexSettingsJson ( bson::Bson_c tNode, CSphIndexSettings & tSettings );
 bool			AddFieldLens ( CSphSchema & tSchema, bool bDynamic, CSphString & sError );
 bool			LoadHitlessWords ( const CSphString & sHitlessFiles, ISphTokenizer * pTok, CSphDict * pDict, CSphVector<SphWordID_t> & dHitlessWords, CSphString & sError );
 void			GetSettingsFiles ( const ISphTokenizer * pTok, const CSphDict * pDict, const CSphIndexSettings & tSettings, const FilenameBuilder_i * pFilenameBuilder, StrVec_t & dFiles );
+
+/// json save/load
+void operator<< ( JsonEscapedBuilder& tOut, const CSphSchema& tSchema );
 
 /// Get current thread local index - internal do not use
 class RtIndex_i;
@@ -1156,7 +1163,7 @@ const CP * sphSearchCheckpointWrd ( const char * sWord, int iWordLen, bool bStar
 class ISphRtDictWraper : public CSphDict
 {
 protected:
-	~ISphRtDictWraper() override {}
+	~ISphRtDictWraper() override = default;
 public:
 	virtual const BYTE *	GetPackedKeywords () = 0;
 	virtual int				GetPackedLen () = 0;
@@ -1638,8 +1645,8 @@ public:
 	void RestoreCrashQuery () const;
 };
 
+int sphFormatCurrentTime ( char* sTimeBuf, int iBufLen );
 
-// atomic seek+read wrapper
-int sphPread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset );
+CSphString sphCurrentUtcTime ( );
 
 #endif // _sphinxint_

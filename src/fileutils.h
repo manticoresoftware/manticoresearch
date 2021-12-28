@@ -67,6 +67,7 @@ private:
 
 
 class CSphReader;
+namespace bson { class Bson_c; }
 
 struct CSphSavedFile
 {
@@ -77,7 +78,8 @@ struct CSphSavedFile
 	DWORD			m_uCRC32 = 0;
 
 	bool			Collect ( const char * szFilename, CSphString * pError=nullptr );
-	void			Read ( CSphReader & tReader, const char * szFilename, bool bSharedStopwords, CSphString * sWarning=nullptr );
+	void			Read ( CSphReader & tReader, const char * szFilename, bool bSharedStopwords, CSphString * sWarning = nullptr );
+	void			Read ( const bson::Bson_c& tNode, const char* szFilename, bool bSharedStopwords, CSphString* sWarning = nullptr );
 };
 
 

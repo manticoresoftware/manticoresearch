@@ -4,8 +4,7 @@
 By default Manticore is waiting for your connections on:
 
   * port 9306 for MySQL clients
-  * port 9308 for HTTP/HTTPS connections
-  * port 9312 for connections from other Manticore nodes and clients based on Manticore binary API
+  * port 9312 for HTTP/HTTPS, and connections from other Manticore nodes and clients based on Manticore binary API
 
 <!-- intro -->
 ##### Connect via MySQL:

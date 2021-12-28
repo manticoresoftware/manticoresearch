@@ -1322,6 +1322,18 @@ ListenerDesc_t MakeAnyListener ( int iPort, Proto_e eProto=Proto_e::SPHINX )
 	return tDesc;
 }
 
+ListenerDesc_t MakeLocalhostListener ( int iPort, Proto_e eProto )
+{
+	ListenerDesc_t tDesc;
+	tDesc.m_eProto = eProto;
+	tDesc.m_uIP = htonl ( INADDR_LOOPBACK );
+	tDesc.m_iPort = iPort;
+	tDesc.m_iPortsCount = 0;
+	tDesc.m_bVIP = false;
+	tDesc.m_bReadOnly = false;
+	return tDesc;
+}
+
 // add any listener we will serve by our own (i.e. NO galera's since it is not our deal)
 bool AddGlobalListener ( const ListenerDesc_t& tDesc ) REQUIRES ( MainThread )
 {
@@ -19876,8 +19888,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		// default is to listen on our two ports
 		if ( g_dListeners.IsEmpty() )
 		{
-			AddGlobalListener ( MakeAnyListener ( SPHINXAPI_PORT ) );
-			AddGlobalListener ( MakeAnyListener ( SPHINXQL_PORT, Proto_e::MYSQL41 ) );
+			AddGlobalListener ( MakeLocalhostListener ( SPHINXAPI_PORT, Proto_e::SPHINX ) );
+			AddGlobalListener ( MakeLocalhostListener ( SPHINXQL_PORT, Proto_e::MYSQL41 ) );
 		}
 	}
 

@@ -18,6 +18,8 @@ The following are the changes we are either working on now or are going to work 
 
 ### Major new features
 * [read-only mode](Security/SSL.md#Read-only-mode)
+* Changed behavior of REST /sql endpoint
+* Introduced /cli endpoint
 
 ### Minor changes
 * TODO

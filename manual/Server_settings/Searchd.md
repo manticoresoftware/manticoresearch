@@ -366,7 +366,7 @@ This setting lets you specify IP address and port, or Unix-domain socket path, t
 The general syntax for `listen` is:
 
 ```ini
-listen = ( address ":" port | port | path | address ":" port start - port end ) [ ":" protocol [ "_vip" ]]
+listen = ( address ":" port | port | path | address ":" port start - port end ) [ ":" protocol [ "_vip" ] [ "_readonly" ] ]
 ```
 
 You can specify:
@@ -391,6 +391,8 @@ You can also specify a protocol handler (listener) to be used for connections on
 * `sphinx` - legacy binary protocol. Used to serve connections from remote [SphinxSE](../Extensions/SphinxSE.md) clients. Some Sphinx API clients implementations (an example is the Java one) require the explicit declaration of the listener.
 
 Adding suffix `_vip` to any protocol (for instance `mysql_vip` or `http_vip` or just `_vip`) forces creating a dedicated thread for the connection to bypass different limitations. That's useful for node maintenance in case of a severe overload when the server would either stall or not let you connect via a regular port otherwise.
+
+Adding suffix `_readonly` to clients protocols (that is all, except `replication`) forces new connection to [read-only mode](../Security/SSL.md#Read-only-mode).
 
 <!-- intro -->
 ##### Example:

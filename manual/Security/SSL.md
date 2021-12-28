@@ -90,3 +90,22 @@ When your SSL config is not valid by any reason, which daemon detects by the fac
 * binary API connections (such as connections from old clients, or inter-daemons master-agent communication) are not secured
 * SSL for replication needs to be set up separately. However since SST stage of the replication is done by the binary API connection it is not secured too.
 * you still can use any external proxies (e.g. SSH tunnelling) which will secure your connections.
+
+# Read-only mode
+
+Read-only mode for connection disables all index and global modifications. So, all DDL statements, like 'create', 'drop', all kinds of 'alter', 'attach' are prohibited. Also, data modifications, as 'insert', 'replace', 'delete', 'update' and others prohibited. Service modifications, like 'optimize', debug 'split' and 'compress' are prohibited as well. And also changing daemon-wide settings via modifying global variables is prohibited.
+
+You still can perform all searching operations, generate snippets and call PQ queries. Also, you can modify local (connection-wide) settings.
+
+You can check, whether your current connection is read-only or not by
+executing `show variables like 'session_read_only'` statement. Value `1` means read-only, `0` - usual (not read-only).
+
+## Activation
+
+Default read-only state for incoming connection is ruled by '_readonly' suffix of the [listen](../Server_settings/Searchd.md#listen) definition. Also, read-only mode can be activated interactively over existing connection by executing `set ro=1` statement.
+
+## Deactivation
+
+If you're connected to 'vip' socket, you can execute `set ro=0`, and connection will switch to usual (not read-only) mode, where all modifications are allowed.
+
+For usual (non-VIP) connection escaping read-only mode is not possible. So, if you switched to that mode interactively - there is no way back, except reconnection. For 'readonly' and not 'vip' listeners there is no way to deactivate read-only mode.

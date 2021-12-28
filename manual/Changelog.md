@@ -17,7 +17,7 @@ The following are the changes we are either working on now or are going to work 
 # Version X.X.X
 
 ### Major new features
-* TODO
+* [read-only mode](Security/SSL.md#Read-only-mode)
 
 ### Minor changes
 * TODO

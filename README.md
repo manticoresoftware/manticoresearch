@@ -21,6 +21,10 @@
 <p>&nbsp;</p>
 
 # Introduction
+
+<span class="badge-geekswag">
+<a href="https://geekswag.co/collections/manticore-search" title="Get Our Merch"><img src="https://img.shields.io/badge/Geekswag-Get%20Our%20Merch-brightgreen" alt="Get a Merch donate button" /></a>
+
 Manticore Search is a multi-storage database designed specifically for search, including full-text search. What distinguishes it from other solutions is:
 * Modern MPP architecture and smart query parallelization capabilities allow to fully utilize all your CPU cores to lower response time as much as possible, when needed.
 * Powerful and fast full-text searching which works fine for small and big datasets

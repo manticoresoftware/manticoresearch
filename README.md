@@ -173,5 +173,4 @@ Manticore Search is a GPLv2-licensed Open Source project with development made p
 
 * [Donation through PayPal](https://www.paypal.me/manticoresearch)
 * [Become our client and let us help you](https://manticoresearch.com/services)
-
-[![Analytics](https://ga-beacon.appspot.com/UA-114439919-1/manticoresoftware/manticore/README.md?pixel&useReferer)](https://github.com/manticoresoftware/manticore)
+* [Buy our t-shirt or a mug](https://geekswag.co/collections/manticore-search)

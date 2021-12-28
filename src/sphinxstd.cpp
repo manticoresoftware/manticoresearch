@@ -879,6 +879,26 @@ bool mmunlock ( void * pMem, size_t uSize )
 
 #endif // _WIN32
 
+
+namespace
+{
+volatile bool& IsDied()
+{
+	static bool bDied = false;
+	return bDied;
+}
+} // namespace
+
+bool sphIsDied()
+{
+	return IsDied();
+}
+
+void sphSetDied()
+{
+	IsDied() = true;
+}
+
 void sphSetDieCallback ( SphDieCallback_t pfDieCallback )
 {
 	g_pfDieCallback = pfDieCallback;
@@ -889,6 +909,7 @@ void sphDieVa ( const char * sFmt, va_list ap )
 	// if there's no callback,
 	// or if callback returns true,
 	// log to stdout
+	sphSetDied();
 	if ( !g_pfDieCallback || g_pfDieCallback ( true, sFmt, ap ) )
 	{
 		char sBuf[1024];

@@ -495,6 +495,10 @@ void			sphFatalLog ( const char * sFmt, ... ) __attribute__ ( ( format ( printf,
 /// if callback returns false, sphDie() will not log to stdout
 void			sphSetDieCallback ( SphDieCallback_t pfDieCallback );
 
+bool			sphIsDied();
+
+void			sphSetDied();
+
 /// similar as abort but closes FD
 /// not available on MacOS
 #if defined ( __APPLE__ )

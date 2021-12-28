@@ -982,6 +982,7 @@ void CrashLogger::HandleCrash ( int sig ) NO_THREAD_SAFETY_ANALYSIS
 LONG WINAPI CrashLogger::HandleCrash ( EXCEPTION_POINTERS * pExc )
 #endif // !_WIN32
 {
+	sphSetDied();
 	if ( g_iLogFile<0 )
 	{
 		if ( g_bCoreDump )

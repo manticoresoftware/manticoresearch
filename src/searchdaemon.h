@@ -333,6 +333,16 @@ public:
 #endif
 	}
 
+	void SendLSBWord ( WORD v )
+	{
+#if USE_LITTLE_ENDIAN
+		SendT<WORD> ( v );
+#else
+		SendByte ( (BYTE)( v & 0xff ) );
+		SendByte ( (BYTE)( ( v >> 8 ) & 0xff ) );
+#endif
+	}
+
 	void SendUint64 ( uint64_t uValue )
 	{
 		SendT<DWORD> ( htonl ( (DWORD)( uValue>>32) ) );

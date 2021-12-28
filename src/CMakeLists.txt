@@ -134,8 +134,8 @@ set ( SEARCHD_H searchdaemon.h searchdconfig.h searchdddl.h searchdexpr.h search
 		searchdtask.h client_task_info.h taskflushattrs.h taskflushbinlog.h taskflushmutable.h taskglobalidf.h
 		taskmalloctrim.h taskoptimize.h taskping.h taskpreread.h tasksavestate.h net_action_accept.h
 		netreceive_api.h netreceive_http.h netreceive_ql.h netstate_api.h networking_daemon.h optional.h query_status.h
-		compressed_mysql.h sphinxql_debug.h stackmock.h replication/wsrep_api_stub.h searchdssl.h digest_sha1.h
-		client_session.h)
+		compressed_zlib_mysql.h sphinxql_debug.h stackmock.h replication/wsrep_api_stub.h searchdssl.h digest_sha1.h
+		client_session.h compressed_zstd_mysql.h)
 
 source_group ( "Grammar sources" FILES ${LMANTICORE_BISON} ${SEARCHD_BISON} )
 source_group ( "Lexer sources" FILES ${LMANTICORE_FLEX} ${SEARCHD_FLEX} )
@@ -230,10 +230,22 @@ if (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
 	endif ()
 endif()
 
-if (WITH_ZLIB)
-	target_sources (lsearchd PRIVATE compressed_mysql.cpp)
-	target_link_libraries (lsearchd PRIVATE ZLIB::ZLIB)
-endif()
+if (WITH_ZLIB OR WITH_ZSTD)
+	target_sources ( lsearchd PRIVATE compressed_mysql_layer.cpp compressed_mysql_layer.h)
+	if (WITH_ZLIB)
+		target_sources ( lsearchd PRIVATE compressed_zlib_mysql.cpp )
+		target_link_libraries (lsearchd PRIVATE ZLIB::ZLIB)
+	endif()
+
+	if (WITH_ZSTD)
+		target_sources ( lsearchd PRIVATE compressed_zstd_mysql.cpp )
+		if (DL_ZSTD)
+			target_link_libraries ( lsearchd PRIVATE ZSTD::ZSTD_ld )
+		else ()
+			target_link_libraries ( lsearchd PRIVATE ZSTD::ZSTD )
+		endif ()
+	endif ()
+endif ()
 
 # stub library for all except daemon - to avoid link with openssl
 add_library (stub_ssl searchdssl.cpp)

@@ -17,15 +17,14 @@ The following are the changes we are either working on now or are going to work 
 # Version X.X.X
 
 ### Major new features
-* [read-only mode](Security/SSL.md#Read-only-mode)
-* Changed behavior of REST /sql endpoint
-* Introduced /cli endpoint
+* [Read-only mode](Security/Read_only.md) for better security.
+* New `/cli` endpoint for running SQL queries over HTTP even easier
 
 ### Minor changes
 * TODO
 
 ### Breaking changes
-* TODO
+* Changed behaviour of REST `/sql` endpoint
 
 ### Bugfixes
 * TODO
@@ -1191,4 +1190,3 @@ Manticore Search is built using cmake and the minimum gcc version required for c
 
 ## Version 2.3.3, 06 July 2017
 * Manticore branding
-

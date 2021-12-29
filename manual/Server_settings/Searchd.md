@@ -390,9 +390,9 @@ You can also specify a protocol handler (listener) to be used for connections on
 * `https` - HTTPS protocol. Manticore will accept **only** HTTPS connections at this port. More details can be found in section [SSL](../Security/SSL.md).
 * `sphinx` - legacy binary protocol. Used to serve connections from remote [SphinxSE](../Extensions/SphinxSE.md) clients. Some Sphinx API clients implementations (an example is the Java one) require the explicit declaration of the listener.
 
-Adding suffix `_vip` to any protocol (for instance `mysql_vip` or `http_vip` or just `_vip`) forces creating a dedicated thread for the connection to bypass different limitations. That's useful for node maintenance in case of a severe overload when the server would either stall or not let you connect via a regular port otherwise.
+Adding suffix `_vip` to client protocols (that is all, except `replication`, for instance `mysql_vip` or `http_vip` or just `_vip`) forces creating a dedicated thread for the connection to bypass different limitations. That's useful for node maintenance in case of a severe overload when the server would either stall or not let you connect via a regular port otherwise.
 
-Adding suffix `_readonly` to clients protocols (that is all, except `replication`) forces new connection to [read-only mode](../Security/SSL.md#Read-only-mode).
+Suffix `_readonly` sets [read-only mode](../Security/Read_only.md) for the listener and limits it to accept only read queries.
 
 <!-- intro -->
 ##### Example:
@@ -407,6 +407,7 @@ listen = /var/run/manticore/manticore.s # listen for binary API requests on unix
 listen = /var/run/manticore/manticore.s:mysql # listen for mysql requests on unix socket
 listen = 9312 # listen for remote agents (binary API) and http/https requests on port 9312 on any interface
 listen = localhost:9306:mysql # listen for mysql requests on port 9306 at localhost
+listen = localhost:9307:mysql_readonly # listen for mysql requests on port 9307 at localhost and accept only read queries
 listen = 127.0.0.1:9308:http # listen for http requests as well as connections from remote agents (and binary API) on port 9308 at localhost
 listen = 192.168.0.1:9320-9328:replication # listen for replication connections on ports 9320-9328 at 192.168.0.1
 listen = 127.0.0.1:9443:https # listen for https requests (not http) on port 9443 at 127.0.0.1

@@ -98,7 +98,7 @@ Create a table:
 
 <!-- request HTTP -->
 ```json
-POST /sql -d 'mode=raw&query=CREATE TABLE testrt ( title text, content text, gid integer)'
+POST /cli -d 'CREATE TABLE testrt ( title text, content text, gid integer)'
 ```
 <!-- end -->
 <!-- example insert -->

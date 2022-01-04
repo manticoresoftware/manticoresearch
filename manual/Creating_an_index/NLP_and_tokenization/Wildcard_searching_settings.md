@@ -40,7 +40,7 @@ CREATE TABLE products(title text, price float) min_prefix_len = '3'
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) min_prefix_len = '3'"
 ```
 
@@ -136,7 +136,7 @@ CREATE TABLE products(title text, price float) min_infix_len = '3'
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) min_infix_len = '3'"
 ```
 
@@ -308,7 +308,7 @@ CREATE TABLE products(title text, price float) expand_keywords = '1'
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) expand_keywords = '1'"
 ```
 

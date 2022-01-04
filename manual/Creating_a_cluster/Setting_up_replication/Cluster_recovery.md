@@ -55,7 +55,7 @@ SET CLUSTER posts GLOBAL 'pc.bootstrap' = 1
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 SET CLUSTER posts GLOBAL 'pc.bootstrap' = 1
 "
 ```
@@ -91,7 +91,7 @@ SET CLUSTER posts GLOBAL 'pc.bootstrap' = 1
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 SET CLUSTER posts GLOBAL 'pc.bootstrap' = 1
 "
 ```

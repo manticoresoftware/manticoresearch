@@ -34,7 +34,7 @@ CREATE TABLE products(title text, price float) stopwords = '/usr/local/manticore
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) stopwords = '/usr/local/manticore/data/stopwords.txt stopwords-ru.txt stopwords-en.txt'"
 ```
 
@@ -157,7 +157,7 @@ CREATE TABLE products(title text, price float) stopwords = 'it'
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) stopwords = 'it'"
 ```
 
@@ -226,7 +226,7 @@ CREATE TABLE products(title text, price float) stopwords = 'en, it, ru'
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) stopwords = 'en, it, ru'"
 ```
 
@@ -301,7 +301,7 @@ CREATE TABLE products(title text, price float) stopwords = 'en' stopword_step = 
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) stopwords = 'en' stopword_step = '1'"
 ```
 
@@ -382,7 +382,7 @@ CREATE TABLE products(title text, price float) stopwords = 'en' stopwords_unstem
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) stopwords = 'en' stopwords_unstemmed = '1'"
 ```
 

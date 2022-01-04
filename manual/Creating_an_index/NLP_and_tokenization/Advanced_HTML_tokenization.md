@@ -35,7 +35,7 @@ CREATE TABLE products(title text, price float) html_strip = '1'
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) html_strip = '1'"
 ```
 
@@ -113,7 +113,7 @@ CREATE TABLE products(title text, price float) html_index_attrs = 'img=alt,title
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) html_index_attrs = 'img=alt,title; a=title;' html_strip = '1'"
 ```
 
@@ -195,7 +195,7 @@ CREATE TABLE products(title text, price float) html_remove_elements = 'style, sc
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) html_remove_elements = 'style, script' html_strip = '1'"
 ```
 
@@ -290,7 +290,7 @@ CREATE TABLE products(title text, price float) index_sp = '1' html_strip = '1'
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) index_sp = '1' html_strip = '1'"
 ```
 
@@ -375,7 +375,7 @@ CREATE TABLE products(title text, price float) index_zones = 'h, th, title' html
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) index_zones = 'h, th, title' html_strip = '1'"
 ```
 

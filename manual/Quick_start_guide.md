@@ -182,7 +182,7 @@ Query OK, 0 rows affected (0.02 sec)
 <!-- request HTTP -->
 
 ```bash
-POST /sql -d "mode=raw&query=create table products(title text, price float) morphology='stem_en'"
+POST /cli -d "create table products(title text, price float) morphology='stem_en'"
 ```
 
 <!-- response HTTP -->

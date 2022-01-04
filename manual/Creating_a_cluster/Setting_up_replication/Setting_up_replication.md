@@ -193,7 +193,7 @@ SET CLUSTER click_query GLOBAL 'pc.bootstrap' = 1
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 SET CLUSTER click_query GLOBAL 'pc.bootstrap' = 1
 "
 ```
@@ -220,7 +220,7 @@ SET CLUSTER posts GLOBAL 'pc.bootstrap' = 1
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 SET CLUSTER posts GLOBAL 'pc.bootstrap' = 1
 "
 ```
@@ -262,7 +262,7 @@ CREATE CLUSTER posts
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE CLUSTER posts
 "
 ```
@@ -321,10 +321,10 @@ ALTER CLUSTER posts ADD pq_clicks
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 ALTER CLUSTER posts ADD pq_title
 "
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 ALTER CLUSTER posts ADD pq_clicks
 "
 ```
@@ -397,7 +397,7 @@ JOIN CLUSTER posts AT '192.168.1.101:9312'
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 JOIN CLUSTER posts AT '192.168.1.101:9312'
 "
 ```

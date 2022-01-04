@@ -16,7 +16,7 @@ JOIN CLUSTER posts AT '10.12.1.35:9312'
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 JOIN CLUSTER posts AT '10.12.1.35:9312'
 "
 ```
@@ -92,7 +92,7 @@ JOIN CLUSTER click_query 'clicks_mirror1:9312;clicks_mirror2:9312;clicks_mirror3
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 JOIN CLUSTER click_query 'clicks_mirror1:9312;clicks_mirror2:9312;clicks_mirror3:9312' as nodes
 "
 ```

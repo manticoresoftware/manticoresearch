@@ -115,7 +115,7 @@ CREATE TABLE products(title text stored indexed, content text stored indexed, na
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text stored indexed, content text stored indexed, name text indexed, price float)"
 ```
 
@@ -377,12 +377,12 @@ Specifies what attributes should be stored in [the columnar storage](../../Creat
 ```sql
 CREATE TABLE [IF NOT EXISTS] name ( <field name> <field data type> [data type options] [, ...]) [table_options]
 ```
-##### CREATE TABLE via /sql HTTP endpoint
-Besides using `CREATE TABLE` via MySQL protocol using any MySQL client you can also create a table via HTTP if you use the /sql endpoint:
+##### CREATE TABLE via /cli HTTP endpoint
+Besides using `CREATE TABLE` via MySQL protocol using any MySQL client you can also create a table via HTTP if you use the `/cli` endpoint:
 
 ```http
-http[s]://manticore_host:port/sql
-POST: mode=raw&query=CREATE TABLE [IF NOT EXISTS] name ( <field name> <field data type> [data type options] [, ...]) [table_options]
+http[s]://manticore_host:port/cli
+POST: CREATE TABLE [IF NOT EXISTS] name ( <field name> <field data type> [data type options] [, ...]) [table_options]
 ```
 
 

@@ -27,7 +27,7 @@ Query OK, 0 rows affected (0.02 sec)
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=DROP TABLE products"
+POST /cli -d "DROP TABLE products"
 ```
 
 <!-- response HTTP -->
@@ -127,7 +127,7 @@ DROP TABLE IF EXISTS products;
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=DROP TABLE IF EXISTS products"
+POST /cli -d "DROP TABLE IF EXISTS products"
 ```
 
 <!-- intro -->

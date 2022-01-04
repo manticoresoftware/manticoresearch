@@ -18,7 +18,7 @@ ALTER CLUSTER click_query ADD clicks_daily_index
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 ALTER CLUSTER click_query ADD clicks_daily_index
 "
 ```
@@ -94,7 +94,7 @@ ALTER CLUSTER posts DROP weekly_index
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 ALTER CLUSTER posts DROP weekly_index
 "
 ```

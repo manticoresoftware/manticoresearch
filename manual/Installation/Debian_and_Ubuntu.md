@@ -54,7 +54,7 @@ $ sudo -u manticore indexer
 Manticore 3.5.4 13f8d08d@201211 release
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
-Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 
 Built by gcc/clang v 5.4.0,
 

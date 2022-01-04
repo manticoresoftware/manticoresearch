@@ -57,27 +57,17 @@ searchd {
 ```
 <!-- end -->
 
-## Connecting with cURL
-<!-- example CURL -->
-Performing a quick search is as easy as:
-
-<!-- request CURL -->
-```bash
-curl -sX POST http://localhost:9308/search -d ' {"index":"test","query":{"match":{"title":"keyword"}}}'
-```
-<!-- end -->
-
 ## SQL over HTTP
 <!-- example SQL_over_HTTP -->
-Endpoint `/sql` allows running an SQL [SELECT](../Searching/Full_text_matching/Basic_usage.md#SQL) query via HTTP JSON interface.
+Endpoint `/sql` allows running an **SQL [SELECT](../Searching/Full_text_matching/Basic_usage.md#SQL) query** via HTTP JSON interface.
 
-The query payload **must** be URL encoded, otherwise query statements with `=` (filtering or setting options) will result in an error.
+Query payload **must** be URL encoded, otherwise query statements with `=` (filtering or setting options) will result in an error.
 
-The response is in JSON format and contains hits information and time of execution. The response shares the same format as [json/search](../Searching/Full_text_matching/Basic_usage.md#HTTP) endpoint. Note, that since such schema, 'naked' `/sql` endpoint supports only single 'search' requests.
+It returns a JSON respons which contains hits information and execution time. The response has the same format as [json/search](../Searching/Full_text_matching/Basic_usage.md#HTTP) endpoint. Note, that `/sql` endpoint supports only single search requests. If you are looking for processing a multi-query see below.
 
 <!-- request HTTP -->
 ```bash
-POST /sql --data-urlencode "query=select id,subject,author_id  from forum where match('@subject php manticore') group by author_id order by id desc limit 0,5"
+POST /sql -d "query=select id,subject,author_id  from forum where match('@subject php manticore') group by author_id order by id desc limit 0,5"
 ```
 
 <!-- response HTTP -->
@@ -108,12 +98,12 @@ POST /sql --data-urlencode "query=select id,subject,author_id  from forum where 
 <!-- end -->
 
 <!-- example SQL_over_HTTP_2 -->
-`/sql` endpoint also has special 'raw' mode, where it allows to fire any valid sphinxql queries, and also multiple queries
-a time. Response format in that case is array of one or more resultsets, wrapped into json. 
+### /sql?mode=raw
+`/sql` endpoint also has a special mode **"raw"**, which allows to send **any valid sphinxql queries including multi-queries**. The returned value is a json array of one or more result sets.
 
 <!-- request HTTP -->
 ```bash
-POST /sql -d "mode=raw&query=desc test"
+POST /sql?mode=raw -d "query=desc%20test"
 ```
 
 <!-- response HTTP -->
@@ -177,25 +167,9 @@ POST /sql -d "mode=raw&query=desc test"
 ```
 <!-- end -->
 
-<!-- example SQL_over_HTTP_3 -->
-Notice caveat with '+' sign. That is part of urlencoding and usually get decoded into ' ' (space). So, it need special care. Query below might fail (depending from client), because it has '+' sign, which get url-decoded into space and finally fall into invalid query:
-
-<!-- request HTTP -->
-```bash
-POST /sql -d "mode=raw&query=select id,1+2 as a, packedfactors() from test where match('tes*') option ranker=expr('1')"
-```
-
-<!-- response HTTP -->
-```json
-{
-    "error": "query missing"
-}
-```
-<!-- end -->
-
-
 <!-- example SQL_over_HTTP_4 -->
-Also, for experimenting, we have special `/cli` endpoint. That is intended for fast experiments via console 'curl', or from browser line. Everything after `?` in request is just passed to sql engine. Also, '+' sign is not decoded to space, eliminating necessity of urlencoding it. Responce format is the same as for `/sql` in raw mode.
+### /cli
+While the `/sql` endpoint is useful to control Manticore programmatically from your application, there's also endpoint `/cli` which makes it eaiser to maintain a Manticore instance via curl or your browser manually. It accepts POST and GET HTTP methods. Everything after `/cli?` is taken by Manticore as is even if you don't escape it manually via curl or let the browser encode it automaticaly. The `+` sign is not decoded to space as well, eliminating the necessity of encoding it. The response format is the same as in the `/sql?mode=raw`.
 
 <!-- request HTTP -->
 
@@ -248,4 +222,9 @@ POST /cli -d "select id,1+2 as a, packedfactors() from test where match('tes*') 
   }
 ]
 ```
+
+<!-- request Browser -->
+
+![using /cli in browser](cli_browser.png)
+
 <!-- end -->

@@ -27,20 +27,20 @@ for filename in *deb; do
 
 
     arch="amd"
-    if [ "${filename/$arch}" = "$arch" ] ; then
+    if [[ ! $f == *"${arch}64"* ]]; then
       arch="arm"
     fi
 
     echo -e "Copy $f to /work/repomanager/repodata/repository/manticoresearch_$DISTRO$SUFFIX/dists/$DISTRO/main/binary-${arch}64/";
     cp $f /work/repomanager/repodata/repository/manticoresearch_$DISTRO$SUFFIX/dists/$DISTRO/main/binary-${arch}64/ && echo -e "Success"
     echo -e "\n"
-
-    if [ ! -z $SUFFIX ]; then
-        /usr/bin/docker exec repo-generator /generator.sh -distro $DISTRO -architecture $arch -dev 1
-      else
-        /usr/bin/docker exec repo-generator /generator.sh -distro $DISTRO -architecture $arch
-    fi
   fi
 done
+
+if [ ! -z $SUFFIX ]; then
+  /usr/bin/docker exec repo-generator /generator.sh -distro $DISTRO -architecture $arch -dev 1
+else
+  /usr/bin/docker exec repo-generator /generator.sh -distro $DISTRO -architecture $arch
+fi
 
 rm -rf *deb

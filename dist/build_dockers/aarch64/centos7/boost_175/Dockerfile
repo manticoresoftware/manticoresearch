@@ -11,3 +11,4 @@ RUN wget https://boostorg.jfrog.io/artifactory/main/release/1.${boostminorver}.0
 CMD []
 
 # docker build -t centos7_boost:175 .
+# ./b2 install --with-context --with-chrono  --with-coroutine --with-fiber --with-stacktrace --with-system --with-program_options

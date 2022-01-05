@@ -126,6 +126,94 @@ mysql> desc rt;
 
 <!-- end -->
 
+## Updating index FT settings in RT mode
+
+<!-- example ALTER FT -->
+
+```sql
+ALTER RTINDEX index ft_setting='value'[, ft_setting2='value']
+```
+
+You can also use `ALTER` to modify full-text settings of your index in [RT mode](Read_this_first.md#Real-time-mode-vs-plain-mode). Just remember that it doesn't affect existing documents, it only affects new ones. Take a look at the example where we:
+* create an index with a full-text field and `charset_table` that allows only 3 searchable characters: `a`, `b` and `c`.
+* then we insert document 'abcd' and find it by query `abcd`, the `d` just gets ignored since it's not in the `charset_table` array
+* then we understand, that we want `d` to be searchable too, so we add it with help of `ALTER`
+* but the same query `where match('abcd')` still says it searched by `abc`, because the existing document remembers previous contents of `charset_table`
+* then we add another document `abcd` and search by `abcd` again
+* now it finds the both documents and `show meta` says it used two keywords: `abc` (to find the old document) and `abcd` (for the new one).
+
+<!-- request Example -->
+```sql
+mysql> create table rt(title text) charset_table='a,b,c';
+
+mysql> insert into rt(title) values('abcd');
+
+mysql> select * from rt where match('abcd');
++---------------------+-------+
+| id                  | title |
++---------------------+-------+
+| 1514630637682688054 | abcd  |
++---------------------+-------+
+
+mysql> show meta;
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| total         | 1     |
+| total_found   | 1     |
+| time          | 0.000 |
+| keyword[0]    | abc   |
+| docs[0]       | 1     |
+| hits[0]       | 1     |
++---------------+-------+
+
+mysql> alter table rt charset_table='a,b,c,d';
+mysql> select * from rt where match('abcd');
++---------------------+-------+
+| id                  | title |
++---------------------+-------+
+| 1514630637682688054 | abcd  |
++---------------------+-------+
+
+mysql> show meta
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| total         | 1     |
+| total_found   | 1     |
+| time          | 0.000 |
+| keyword[0]    | abc   |
+| docs[0]       | 1     |
+| hits[0]       | 1     |
++---------------+-------+
+
+mysql> insert into rt(title) values('abcd');
+mysql> select * from rt where match('abcd');
++---------------------+-------+
+| id                  | title |
++---------------------+-------+
+| 1514630637682688055 | abcd  |
+| 1514630637682688054 | abcd  |
++---------------------+-------+
+
+mysql> show meta;
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| total         | 2     |
+| total_found   | 2     |
+| time          | 0.000 |
+| keyword[0]    | abc   |
+| docs[0]       | 1     |
+| hits[0]       | 1     |
+| keyword[1]    | abcd  |
+| docs[1]       | 1     |
+| hits[1]       | 1     |
++---------------+-------+
+```
+
+<!-- end -->
+
 ## Updating index FT settings in plain mode
 
 <!-- example ALTER RECONFIGURE -->

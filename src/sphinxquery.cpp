@@ -4258,7 +4258,7 @@ bool CSphTransformation::TransformExcessAndNot ()
 				XQNode_t * pGrand2Not = pGrand2AndNot->m_dChildren[1];
 
 				assert ( pGrand2Not->m_dChildren.GetLength()==1 );
-				XQNode_t * pNewOr = new XQNode_t ( XQLimitSpec_t() );
+				auto * pNewOr = new XQNode_t ( XQLimitSpec_t() );
 
 				pNewOr->SetOp ( SPH_QUERY_OR, pNot->m_dChildren );
 				pNewOr->m_dChildren.Add ( pGrand2Not->m_dChildren[0] );

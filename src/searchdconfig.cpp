@@ -106,7 +106,7 @@ static void MakeRelativePath ( CSphString & sPath )
 class FilenameBuilder_c : public FilenameBuilder_i
 {
 public:
-					FilenameBuilder_c ( const char * szIndex );
+					explicit FilenameBuilder_c ( const char * szIndex );
 
 	CSphString		GetFullPath ( const CSphString & sName ) const final;
 
@@ -918,7 +918,7 @@ static bool CopyExternalFiles ( const CSphString & sIndex, const CSphString & sN
 class ScopedFileCleanup_c
 {
 public:
-	ScopedFileCleanup_c ( const StrVec_t & dFiles )
+	explicit ScopedFileCleanup_c ( const StrVec_t & dFiles )
 		: m_dFiles ( dFiles )
 	{}
 
@@ -1121,7 +1121,7 @@ static void DeleteExtraIndexFiles ( CSphIndex * pIndex )
 }
 
 
-static void CleanupOnError ( const CSphString & sIndex, RtIndex_i * pRt )
+static void DeleteIndex ( const CSphString & sIndex, RtIndex_i * pRt )
 {
 	if ( !pRt )
 	{
@@ -1179,7 +1179,7 @@ bool CreateNewIndexInt ( const CSphString & sIndex, const CreateTableSettings_t 
 		ServedDescWPtr_c pDesc ( pServed );
 		if ( !PreallocNewIndex ( *pDesc, &hCfg, sIndex.cstr(), dWarnings, sError ) )
 		{
-			CleanupOnError ( sIndex, (RtIndex_i *)pDesc->m_pIndex );
+			DeleteIndex ( sIndex, (RtIndex_i *)pDesc->m_pIndex );
 			return false;
 		}
 
@@ -1194,10 +1194,10 @@ bool CreateNewIndexInt ( const CSphString & sIndex, const CreateTableSettings_t 
 		if ( pServed )
 		{
 			ServedDescWPtr_c pDesc(pServed);
-			CleanupOnError ( sIndex, (RtIndex_i *)pDesc->m_pIndex );
+			DeleteIndex ( sIndex, (RtIndex_i *)pDesc->m_pIndex );
 		}
 		else
-			CleanupOnError ( sIndex, nullptr );
+			DeleteIndex ( sIndex, nullptr );
 
 		return false;
 	}
@@ -1209,8 +1209,8 @@ bool CreateNewIndexInt ( const CSphString & sIndex, const CreateTableSettings_t 
 class ScopedCleanup_c
 {
 public:
-	ScopedCleanup_c ( const CSphString & sIndex )
-		: m_sIndex ( sIndex )
+	explicit ScopedCleanup_c ( CSphString sIndex )
+		: m_sIndex ( std::move ( sIndex ) )
 	{}
 
 	void Ok()
@@ -1229,7 +1229,7 @@ public:
 		if ( pServed )
 		{
 			ServedDescWPtr_c pDesc(pServed);
-			CleanupOnError ( m_sIndex, (RtIndex_i *)pDesc->m_pIndex );
+			DeleteIndex ( m_sIndex, (RtIndex_i *)pDesc->m_pIndex );
 		}
 	}
 
@@ -1241,7 +1241,7 @@ private:
 // ClientSession_c::Execute -> HandleMysqlImportTable -> AddExistingIndexInt
 bool AddExistingIndexInt ( const CSphString & sIndex, IndexType_e eType, StrVec_t & dWarnings, CSphString & sError )
 {
-	ScopedCleanup_c tCleanup(sIndex);
+	ScopedCleanup_c tCleanup ( sIndex );
 
 	IndexDesc_t tNewIndex;
 	tNewIndex.m_eType = eType;

@@ -34,13 +34,13 @@ for filename in *.rpm; do
     echo -e "Copy $f to /work/repomanager/repodata/repository/manticoresearch/$DESTINATION/centos/$DISTRO/x86_64/";
     cp $f /work/repomanager/repodata/repository/manticoresearch/$DESTINATION/centos/$DISTRO/x86_64/ && echo -e "Success"
     echo -e "\n"
-
-    if [ "$DESTINATION" = "dev" ]; then
-        /usr/bin/docker exec repo-generator /generator.sh -distro centos -version $DISTRO -dev 1
-      else
-        /usr/bin/docker exec repo-generator /generator.sh -distro centos -version $DISTRO
-    fi
   fi
 done
+
+if [ "$DESTINATION" = "dev" ]; then
+    /usr/bin/docker exec repo-generator /generator.sh -distro centos -version $DISTRO -dev 1
+  else
+    /usr/bin/docker exec repo-generator /generator.sh -distro centos -version $DISTRO
+fi
 
 rm -rf *.rpm

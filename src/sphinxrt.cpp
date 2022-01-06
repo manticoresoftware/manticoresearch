@@ -1393,7 +1393,7 @@ private:
 	void						RecalculateRateLimit ( int64_t iSaved, int64_t iInserted, bool bEmergent );
 	void						AlterSave ( bool bSaveRam );
 	void 						BinlogCommit ( RtSegment_t * pSeg, const CSphVector<DocID_t> & dKlist );
-	void						StopOptimize();
+	bool						StopOptimize();
 	void						UpdateUnlockedCount();
 	bool						CheckSegmentConsistency ( const RtSegment_t* pNewSeg, bool bSilent=true ) const;
 
@@ -8153,7 +8153,7 @@ bool RtIndex_c::SaveAttributes ( CSphString & sError ) const
 
 	const auto& pDiskChunks = m_tRtChunks.DiskChunks();
 
-	if ( pDiskChunks->IsEmpty() || ( m_eSaving.load ( std::memory_order_acquire ) == WriteState_e::DISCARD ) )
+	if ( pDiskChunks->IsEmpty() || ( m_eSaving.load ( std::memory_order_relaxed ) == WriteState_e::DISCARD ) )
 		return true;
 
 	for ( auto& pChunk : *pDiskChunks )
@@ -8174,14 +8174,13 @@ class OptimizeGuard_c : ISphNoncopyable
 public:
 	explicit OptimizeGuard_c ( RtIndex_c& tIndex )
 		: m_tIndex ( tIndex )
-		, m_bPreviousOptimizeState ( tIndex.m_bOptimizeStop.load ( std::memory_order_acquire ) )
 	{
-		m_tIndex.StopOptimize();
+		m_bPreviousOptimizeState = m_tIndex.StopOptimize();
 	}
 
 	~OptimizeGuard_c ()
 	{
-		m_tIndex.m_bOptimizeStop.store ( m_bPreviousOptimizeState, std::memory_order_release );
+		m_tIndex.m_bOptimizeStop.store ( m_bPreviousOptimizeState, std::memory_order_relaxed );
 	}
 };
 
@@ -9393,10 +9392,12 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected )
 	return true;
 }
 
-void RtIndex_c::StopOptimize()
+bool RtIndex_c::StopOptimize()
 {
-	m_bOptimizeStop.store ( true, std::memory_order_release );
+	auto bPrevOptimizeValue = m_bOptimizeStop.exchange ( true, std::memory_order_relaxed );
+	std::atomic_thread_fence ( std::memory_order_release ); // to be sure we go to Wait() _after_ m_bOptimizeStop is set to true.
 	m_tOptimizeRuns.Wait ( [] ( int i ) { return i <= 0; } );
+	return bPrevOptimizeValue;
 }
 
 
@@ -9462,7 +9463,7 @@ void RtIndex_c::Optimize ( OptimizeTask_t tTask )
 		return;
 	}
 
-	if ( m_bOptimizeStop.load ( std::memory_order_acquire ) )
+	if ( !MergeCanRun() )
 		return;
 
 	sphLogDebug ( "rt optimize: index %s: optimization started", m_sIndexName.cstr() );
@@ -9483,7 +9484,7 @@ void RtIndex_c::Optimize ( OptimizeTask_t tTask )
 
 bool RtIndex_c::MergeCanRun() const
 {
-	return !sphInterrupted() && !m_bOptimizeStop;
+	return !sphInterrupted() && !m_bOptimizeStop.load(std::memory_order_relaxed);
 }
 
 int RtIndex_c::ClassicOptimize ()
@@ -10016,12 +10017,14 @@ void RtIndex_c::ProhibitSave()
 {
 	StopOptimize();
 	m_eSaving.store ( WriteState_e::DISCARD, std::memory_order_relaxed );
+	std::atomic_thread_fence ( std::memory_order_release );
 }
 
 void RtIndex_c::EnableSave()
 {
 	m_eSaving.store ( WriteState_e::ENABLED, std::memory_order_relaxed );
-	m_bOptimizeStop = false;
+	m_bOptimizeStop.store ( false, std::memory_order_relaxed );
+	std::atomic_thread_fence ( std::memory_order_release );
 }
 
 // fixme! Review, if it still necessary, as SST locks everything itself.
@@ -10031,8 +10034,8 @@ void RtIndex_c::LockFileState ( CSphVector<CSphString>& dFiles )
 	ForceRamFlush ( "forced" );
 	CSphString sError;
 	SaveAttributes ( sError ); // fixme! report error, better discard whole locking
-	m_eSaving.store ( WriteState_e::DISABLED, std::memory_order_release );
-
+	m_eSaving.store ( WriteState_e::DISABLED, std::memory_order_relaxed );
+	std::atomic_thread_fence ( std::memory_order_release );
 	GetIndexFiles ( dFiles, nullptr );
 }
 

@@ -5,7 +5,7 @@ Manticore can replicate a write transaction (`INSERT`, `REPLACE`, `DELETE`, `TRU
 Manticore's replication is based on [Galera library](https://github.com/codership/galera) and features the following:
 
 * true multi-master - read and write to any node at any time
-* synchronous replication - no slave lag, no data is lost after a node crash
+* [virtually synchronous replication](https://galeracluster.com/library/documentation/overview.html) - no slave lag, no data is lost after a node crash
 * hot standby - no downtime during failover (since there is no failover)
 * tightly coupled - all the nodes hold the same state. No diverged data between nodes allowed
 * automatic node provisioning - no need to manually back up the database and restore it on a new node

@@ -48,7 +48,7 @@ We provide [interactive courses](https://play.manticoresearch.com/) for easier l
 Manticore is not fully ACID-compliant, but it supports isolated transactions for atomic changes and binary logging for safe writes.
 
 #### Built-in replication and load balancing
-Data can be distributed across servers and data-centers. Any Manticore Search node can be both a load balancer and a data node. Manticore implements synchronous multi-master [replication](https://play.manticoresearch.com/replication/) using [Galera library](https://galeracluster.com/) which guarantees consistency between all data nodes and no data loss.
+Data can be distributed across servers and data-centers. Any Manticore Search node can be both a load balancer and a data node. Manticore implements virtually synchronous multi-master [replication](https://play.manticoresearch.com/replication/) using [Galera library](https://galeracluster.com/) which guarantees consistency between all data nodes, no data loss and gives good replication performance.
 
 #### Can sync from MySQL/PostgreSQL/ODBC/xml/csv out of the box
 Manticore `indexer` tool and rich configuration syntax helps to sync existing data from MySQL, PostgreSQL, any database which speaks ODBC and any other technology which can generate a simple XML or CSV.

@@ -19,12 +19,19 @@ The following are the changes we are either working on now or are going to work 
 ### Major new features
 * [Read-only mode](Security/Read_only.md) for better security.
 * New `/cli` endpoint for running SQL queries over HTTP even easier
+* Really bulk INSERT/REPLACE/DELETE via JSON over HTTP
 
 ### Minor changes
 * TODO
 
 ### Breaking changes
-* Changed behaviour of REST `/sql` endpoint
+* **Changed behaviour of REST `/sql`** endpoint: `/sql?mode=raw` now requires escaping
+* **Index meta file format change**. The new version will convert older indexes automatically, but:
+  - you can get warning like `WARNING: ... syntax error, unexpected TOK_IDENT`
+  - you won't be able to run the index with previous Manticore versions, make sure you have a backup
+* **Format change** of the response of bulk INSERT/REPLACE/DELETE requests:
+  - previously each sub-query constituted a separate transaction and resulted in a separate response
+  - now the whole batch is considered a single transaction, which returns a single response
 
 ### Bugfixes
 * TODO

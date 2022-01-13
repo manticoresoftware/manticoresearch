@@ -2030,10 +2030,12 @@ private:
 	T ConvertBlobType ( const VecTraits_T<const BYTE> & dBlob ) const
 	{
 		int64_t iValue = 0;
-		if ( dBlob.GetLength()==4 )
-			iValue = *(const DWORD*)dBlob.Begin();
-		else
-			iValue = *(const int64_t*)dBlob.Begin();
+		switch ( dBlob.GetLength() )
+		{
+		case 4:	iValue = *(const DWORD*)dBlob.Begin(); break;
+		case 8: iValue = *(const int64_t*)dBlob.Begin(); break;
+		default: break;
+		}
 
 		return (T)iValue;
 	}

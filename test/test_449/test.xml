@@ -76,6 +76,13 @@ searchd
 	desc test;
 	show create table test;
 	drop table test;
+
+	create table col ( id, ft text, b bool ) engine='columnar';
+	insert into col (id,ft) values(0,'abc');
+	alter table col add column b2 bool;
+	insert into col (id,ft) values(0,'abc');
+	select * from col;
+	drop table col;
 </sphinxql>
 </queries>
 

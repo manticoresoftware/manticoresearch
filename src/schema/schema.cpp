@@ -444,22 +444,35 @@ int CSphSchema::GetCachedRowSize() const
 }
 
 
-void CSphSchema::SetupColumnarFlags ( const CSphSourceSettings& tSettings, StrVec_t* pWarnings )
+void CSphSchema::SetupColumnarFlags ( const CSphSourceSettings & tSettings, StrVec_t * pWarnings )
 {
+	bool bAllColumnar = false;
+	bool bAllRowwise = false;
+	bool bAllNoHashes = false;
+
 	SmallStringHash_T<int> hColumnar, hRowwise, hNoHashes;
-	for ( const auto& i : tSettings.m_dColumnarAttrs )
+	for ( const auto & i : tSettings.m_dColumnarAttrs )
+	{
+		bAllColumnar |= i=="*";	
 		hColumnar.Add ( 0, i );
+	}
 
-	for ( const auto& i : tSettings.m_dRowwiseAttrs )
+	for ( const auto & i : tSettings.m_dRowwiseAttrs )
+	{
+		bAllRowwise |= i=="*";	
 		hRowwise.Add ( 0, i );
+	}
 
-	for ( const auto& i : tSettings.m_dColumnarStringsNoHash )
+	for ( const auto & i : tSettings.m_dColumnarStringsNoHash )
+	{
+		bAllNoHashes |= i=="*";	
 		hNoHashes.Add ( 0, i );
+	}
 
 	bool bHaveColumnar = false;
 	for ( auto& tAttr : m_dAttrs )
 	{
-		if ( hColumnar.Exists ( tAttr.m_sName ) && hRowwise.Exists ( tAttr.m_sName ) )
+		if ( ( hColumnar.Exists ( tAttr.m_sName ) && hRowwise.Exists ( tAttr.m_sName ) ) || ( bAllColumnar && bAllRowwise ) ) 
 		{
 			if ( pWarnings )
 			{
@@ -474,18 +487,14 @@ void CSphSchema::SetupColumnarFlags ( const CSphSourceSettings& tSettings, StrVe
 		else
 		{
 			tAttr.m_eEngine = AttrEngine_e::DEFAULT;
-			if ( hColumnar.Exists ( tAttr.m_sName ) )
+			if ( bAllColumnar || hColumnar.Exists ( tAttr.m_sName ) )
 				tAttr.m_eEngine = AttrEngine_e::COLUMNAR;
 
-			if ( hRowwise.Exists ( tAttr.m_sName ) )
+			if ( bAllRowwise || hRowwise.Exists ( tAttr.m_sName ) )
 				tAttr.m_eEngine = AttrEngine_e::ROWWISE;
 		}
 
-		// combine per-index and per-attribute engine settings
-		AttrEngine_e eEngine = tSettings.m_eEngine;
-		if ( tAttr.m_eEngine != AttrEngine_e::DEFAULT )
-			eEngine = tAttr.m_eEngine;
-
+		AttrEngine_e eEngine = CombineEngines ( tSettings.m_eEngine, tAttr.m_eEngine );
 		if ( eEngine != AttrEngine_e::COLUMNAR )
 			continue;
 
@@ -504,7 +513,7 @@ void CSphSchema::SetupColumnarFlags ( const CSphSourceSettings& tSettings, StrVe
 		tAttr.m_uAttrFlags |= CSphColumnInfo::ATTR_COLUMNAR;
 
 		// set strings to have pre-generated hashes by default
-		if ( tAttr.m_eAttrType == SPH_ATTR_STRING && !hNoHashes.Exists ( tAttr.m_sName ) )
+		if ( tAttr.m_eAttrType==SPH_ATTR_STRING && !( bAllNoHashes || hNoHashes.Exists ( tAttr.m_sName ) ) )
 			tAttr.m_uAttrFlags |= CSphColumnInfo::ATTR_COLUMNAR_HASHES;
 
 		bHaveColumnar = true;
@@ -536,12 +545,38 @@ void CSphSchema::SetupFlags ( const CSphSourceSettings& tSettings, bool bPQ, Str
 
 	if ( !bPQ )
 		SetupColumnarFlags ( tSettings, pWarnings );
+
+	bool bAllNonStored = false;
+	SmallStringHash_T<int> hColumnarNonStored;
+	for ( const auto & i : tSettings.m_dColumnarNonStoredAttrs )
+	{
+		bAllNonStored |= i=="*";
+		hColumnarNonStored.Add ( 0, i );
+	}
+
+	int iNumColumnar = 0;
+	for ( auto & i : m_dAttrs )
+		if ( i.IsColumnar() && !( bAllNonStored || hColumnarNonStored.Exists ( i.m_sName ) ) )
+			iNumColumnar++;
+
+	if ( iNumColumnar>1 || ( iNumColumnar>0 && ( bAllNonStored || hColumnarNonStored.GetLength() ) ) )
+	{
+		for ( auto & i : m_dAttrs )
+			if ( i.IsColumnar() && !hColumnarNonStored.Exists ( i.m_sName ) )
+				i.m_uAttrFlags |= CSphColumnInfo::ATTR_STORED;
+	}
 }
 
 
 bool CSphSchema::HasStoredFields() const
 {
 	return m_dFields.any_of ( [] ( const CSphColumnInfo& tField ) { return tField.m_uFieldFlags & CSphColumnInfo::FIELD_STORED; } );
+}
+
+
+bool CSphSchema::HasStoredAttrs() const
+{
+	return m_dAttrs.any_of ( []( const CSphColumnInfo & tAttr ){ return tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED; } );
 }
 
 
@@ -560,4 +595,10 @@ bool CSphSchema::HasNonColumnarAttrs() const
 bool CSphSchema::IsFieldStored ( int iField ) const
 {
 	return !!( m_dFields[iField].m_uFieldFlags & CSphColumnInfo::FIELD_STORED );
+}
+
+
+bool CSphSchema::IsAttrStored ( int iAttr ) const
+{
+	return !!( m_dAttrs[iAttr].m_uAttrFlags & CSphColumnInfo::ATTR_STORED );
 }

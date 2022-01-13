@@ -1418,6 +1418,12 @@ static bool CanSpawnColumnarFilter ( int iAttr, const ISphSchema & tSchema )
 	if ( tCol.IsColumnarExpr() && tCol.m_eStage>SPH_EVAL_PREFILTER )
 		return true;
 
+	// we had a columnar expression in the select list that we wanted to evaluate at the final stage
+	// we replaced it with a stored expression
+	// now we want to create a columnar filter based on the original columnar attribute
+	if ( tCol.IsStoredExpr() )
+		return true;
+
 	return false;
 }
 

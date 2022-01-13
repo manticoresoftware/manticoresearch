@@ -13,9 +13,7 @@
 
 #include "sphinxfilter.h"
 
-ISphFilter * TryToCreateColumnarFilter ( int iAttr, const ISphSchema & tSchema, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, ESphCollation eCollation,
-	CSphString & sError, CSphString & sWarning );
-
-bool AddColumnarFilter ( std::vector<columnar::Filter_t> & dDst, const CSphFilterSettings & tSrc, ESphCollation eCollation, const ISphSchema & tSchema, CSphString & sWarning );
+ISphFilter *	TryToCreateColumnarFilter ( int iAttr, const ISphSchema & tSchema, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, ESphCollation eCollation, CSphString & sError, CSphString & sWarning );
+bool			AddColumnarFilter ( std::vector<columnar::Filter_t> & dDst, const CSphFilterSettings & tSrc, ESphCollation eCollation, const ISphSchema & tSchema, CSphString & sWarning );
 
 #endif // _columnarfilter_

@@ -147,6 +147,7 @@ enum QueryDebug_e
 	QUERY_DEBUG_NO_PAYLOAD = 1<<0
 };
 
+class Docstore_i;
 
 /// per-query search context
 /// everything that index needs to compute/create to process the query
@@ -206,8 +207,8 @@ public:
 	// note that RT index bind pools at segment searching, not at time it setups context
 	void	ExprCommand ( ESphExprCommand eCmd, void * pArg );
 	void	SetBlobPool ( const BYTE * pBlobPool );
-
 	void	SetColumnar ( const columnar::Columnar_i * pColumnar );
+	void	SetDocstore ( const Docstore_i * pDocstore, int64_t iDocstoreSessionId );
 
 	void	SetupExtraData ( ISphRanker * pRanker, ISphMatchSorter * pSorter );
 	void	ResetFilters();

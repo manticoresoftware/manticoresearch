@@ -799,6 +799,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "docstore_compression",	0, nullptr },
 	{ "docstore_compression_level",	0, nullptr },
 	{ "columnar_attrs",			0, nullptr },
+	{ "columnar_no_fast_fetch", 0, nullptr },
 	{ "rowwise_attrs",			0, nullptr },
 	{ "columnar_strings_no_hash", 0, nullptr },
 	{ "columnar_compression_uint32", 0, nullptr },

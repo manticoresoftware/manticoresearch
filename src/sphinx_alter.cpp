@@ -61,8 +61,9 @@ const CSphRowitem * CopyRowAttrByAttr ( const CSphRowitem * pDocinfo, DWORD * pT
 }
 
 
-void AddToSchema ( CSphSchema & tSchema, const CSphString & sAttrName, ESphAttr eAttrType, bool bColumnar, CSphString & sError )
+static void AddToSchema ( CSphSchema & tSchema, const CSphString & sAttrName, ESphAttr eAttrType, AttrEngine_e eEngine, DWORD uAttrFlags, CSphString & sError )
 {
+	bool bColumnar = !!(uAttrFlags & CSphColumnInfo::ATTR_COLUMNAR);
 	const CSphColumnInfo * pBlobLocator = tSchema.GetAttr ( sphGetBlobLocatorName() );
 
 	bool bBlob = sphIsBlobAttr(eAttrType);
@@ -78,7 +79,8 @@ void AddToSchema ( CSphSchema & tSchema, const CSphString & sAttrName, ESphAttr 
 	}
 
 	CSphColumnInfo tInfo ( sAttrName.cstr(), eAttrType );
-	tInfo.m_uAttrFlags |= bColumnar ? CSphColumnInfo::ATTR_COLUMNAR : 0;
+	tInfo.m_uAttrFlags = uAttrFlags;
+	tInfo.m_eEngine = eEngine;
 
 	if ( tSchema.GetAttrId_FirstFieldLen()!=-1 )
 	{
@@ -416,10 +418,9 @@ bool IndexAlterHelper_c::Alter_AddRemoveColumnar ( bool bAdd, const ISphSchema &
 }
 
 
-bool IndexAlterHelper_c::Alter_AddRemoveFromSchema ( CSphSchema & tSchema, const CSphString & sAttrName, ESphAttr eAttrType, AttrEngine_e eEngine, bool bAdd, CSphString & sError ) const
+bool IndexAlterHelper_c::Alter_AddRemoveFromSchema ( CSphSchema & tSchema, const CSphString & sAttrName, ESphAttr eAttrType, AttrEngine_e eEngine, DWORD uAttrFlags, bool bAdd, CSphString & sError ) const
 {
-	bool bColumnar = eEngine==AttrEngine_e::COLUMNAR;
-	if ( bAdd && bColumnar )
+	if ( bAdd && ( uAttrFlags & CSphColumnInfo::ATTR_COLUMNAR ) )
 	{
 		if ( !IsColumnarLibLoaded() )
 		{
@@ -436,7 +437,7 @@ bool IndexAlterHelper_c::Alter_AddRemoveFromSchema ( CSphSchema & tSchema, const
 
 	if ( bAdd )
 	{
-		AddToSchema ( tSchema, sAttrName, eAttrType, bColumnar, sError );
+		AddToSchema ( tSchema, sAttrName, eAttrType, eEngine, uAttrFlags, sError );
 		return true;
 	}
 
@@ -469,11 +470,12 @@ bool IndexAlterHelper_c::Alter_AddRemoveFieldFromSchema ( bool bAdd, CSphSchema 
 }
 
 
-void IndexAlterHelper_c::Alter_AddRemoveFieldFromDocstore ( DocstoreBuilder_i & tBuilder, const Docstore_i * pDocstore, DWORD uNumDocs, const CSphSchema & tNewSchema )
+void IndexAlterHelper_c::Alter_AddRemoveFromDocstore ( DocstoreBuilder_i & tBuilder, const Docstore_i * pDocstore, DWORD uNumDocs, const CSphSchema & tNewSchema )
 {
 	struct Field_t
 	{
 		CSphString	m_sName;
+		bool		m_bField = true;
 		int			m_iOldId = -1;
 		int			m_iRsetId = -1;
 	};
@@ -484,7 +486,15 @@ void IndexAlterHelper_c::Alter_AddRemoveFieldFromDocstore ( DocstoreBuilder_i & 
 		{
 			const CSphString & sName = tNewSchema.GetFieldName(i);
 			int iFieldId = pDocstore ? pDocstore->GetFieldId ( sName, DOCSTORE_TEXT ) : -1;
-			dStoredFields.Add ( { sName, iFieldId, -1 } );
+			dStoredFields.Add ( { sName, true, iFieldId, -1 } );
+		}
+
+	for ( int i = 0; i < tNewSchema.GetAttrsCount(); i++ )
+		if ( tNewSchema.IsAttrStored(i) )
+		{
+			const CSphString & sName = tNewSchema.GetAttr(i).m_sName;
+			int iFieldId = pDocstore ? pDocstore->GetFieldId ( sName, DOCSTORE_ATTR ) : -1;
+			dStoredFields.Add ( { sName, false, iFieldId, -1 } );
 		}
 
 	IntVec_t dStoredFieldIds;
@@ -496,7 +506,7 @@ void IndexAlterHelper_c::Alter_AddRemoveFieldFromDocstore ( DocstoreBuilder_i & 
 			dStoredFieldIds.Add ( i.m_iOldId );
 		}
 
-		tBuilder.AddField ( i.m_sName, DOCSTORE_TEXT );
+		tBuilder.AddField ( i.m_sName, i.m_bField ? DOCSTORE_TEXT : DOCSTORE_ATTR );
 	}
 
 	DocstoreDoc_t tOldDoc;

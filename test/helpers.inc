@@ -867,7 +867,7 @@ function JsonRsetFixup ( &$set, $columnar )
 		{
 			foreach ( $rows["data"] as &$entry )
 			{
-				if ( is_array($entry) && isset ( $entry["Properties"] ) && $entry["Properties"]=="columnar" && $columnar )
+				if ( is_array($entry) && isset ( $entry["Properties"] ) && ( $entry["Properties"]=="columnar" || $entry["Properties"]=="columnar stored" ) && $columnar )
 					$entry["Properties"] = "";
 			}
 		}
@@ -893,7 +893,7 @@ function SqlRsetFixup ( &$set, $columnar )
 		if ( $keys[0]!='Field' || $keys[1]!='Type' || $keys[2]!='Properties' )
 			return;
 
-		if ( $row['Properties']=='columnar' && $columnar )
+		if ( $columnar && ( $row['Properties']=='columnar' || $row['Properties']=='columnar stored' ) )
 			$row['Properties'] = '';
 	}
 }

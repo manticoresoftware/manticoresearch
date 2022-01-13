@@ -464,9 +464,9 @@ public:
 	ISphExpr *	Clone() const final;
 
 private:
-	DocstoreSession_c::Info_t	m_tSession;
-	CSphVector<int>				m_dFieldsToFetch;
-	bool						m_bFetchAllFields = false;
+	DocstoreSession_c::InfoDocID_t	m_tSession;
+	CSphVector<int>					m_dFieldsToFetch;
+	bool							m_bFetchAllFields = false;
 
 				Expr_Highlight_c ( const Expr_Highlight_c & rhs );
 
@@ -580,9 +580,9 @@ void Expr_Highlight_c::Command ( ESphExprCommand eCmd, void * pArg )
 {
 	Expr_HighlightTraits_c::Command ( eCmd, pArg );
 
-	if ( eCmd==SPH_EXPR_SET_DOCSTORE )
+	if ( eCmd==SPH_EXPR_SET_DOCSTORE_DOCID )
 	{
-		const DocstoreSession_c::Info_t & tSession = *(DocstoreSession_c::Info_t*)pArg;
+		const DocstoreSession_c::InfoDocID_t & tSession = *(DocstoreSession_c::InfoDocID_t*)pArg;
 		bool bMark = tSession.m_pDocstore!=m_tSession.m_pDocstore;
 		m_tSession = tSession;
 

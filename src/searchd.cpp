@@ -4247,12 +4247,12 @@ CSphVector<int> GetUniqueTagsWithDocstores ( const AggrResult_t & tRes, int iOff
 
 void SetupPostlimitExprs ( const DocstoreReader_i * pDocstore, const CSphColumnInfo * pCol, const char * sQuery, int64_t iDocstoreSessionId )
 {
-	DocstoreSession_c::Info_t tSessionInfo;
+	DocstoreSession_c::InfoDocID_t tSessionInfo;
 	tSessionInfo.m_pDocstore = pDocstore;
 	tSessionInfo.m_iSessionId = iDocstoreSessionId;
 
 	assert ( pCol && pCol->m_pExpr );
-	pCol->m_pExpr->Command ( SPH_EXPR_SET_DOCSTORE, &tSessionInfo ); // value is copied; no leak of pointer to local here.
+	pCol->m_pExpr->Command ( SPH_EXPR_SET_DOCSTORE_DOCID, &tSessionInfo ); // value is copied; no leak of pointer to local here.
 	pCol->m_pExpr->Command ( SPH_EXPR_SET_QUERY, (void *)sQuery);
 }
 
@@ -4260,20 +4260,32 @@ void SetupPostlimitExprs ( const DocstoreReader_i * pDocstore, const CSphColumnI
 void EvalPostlimitExprs ( CSphMatch & tMatch, const CSphColumnInfo * pCol )
 {
 	assert ( pCol && pCol->m_pExpr );
+
 	switch ( pCol->m_eAttrType )
 	{
-	case SPH_ATTR_INTEGER : tMatch.SetAttr ( pCol->m_tLocator, pCol->m_pExpr->IntEval ( tMatch ) ); break;
-	case SPH_ATTR_BIGINT: tMatch.SetAttr ( pCol->m_tLocator, pCol->m_pExpr->Int64Eval ( tMatch ) ); break;
+	case SPH_ATTR_TIMESTAMP:
+	case SPH_ATTR_INTEGER:
+	case SPH_ATTR_BOOL:
+		tMatch.SetAttr ( pCol->m_tLocator, pCol->m_pExpr->IntEval ( tMatch ) );
+		break;
+
+	case SPH_ATTR_BIGINT:
+		tMatch.SetAttr ( pCol->m_tLocator, pCol->m_pExpr->Int64Eval ( tMatch ) );
+		break;
+
 	case SPH_ATTR_STRINGPTR:
 		// FIXME! a potential leak of *previous* value?
-		tMatch.SetAttr ( pCol->m_tLocator, (SphAttr_t) pCol->m_pExpr->StringEvalPacked ( tMatch ) ); break;
-	default: tMatch.SetAttrFloat ( pCol->m_tLocator, pCol->m_pExpr->Eval ( tMatch ) );
+		tMatch.SetAttr ( pCol->m_tLocator, (SphAttr_t) pCol->m_pExpr->StringEvalPacked ( tMatch ) );
+		break;
+
+	default:
+		tMatch.SetAttrFloat ( pCol->m_tLocator, pCol->m_pExpr->Eval ( tMatch ) );
+		break;
 	}
 }
 
 // single resultset cunk, but has many tags
-void ProcessMultiPostlimit ( AggrResult_t & tRes, VecTraits_T<const CSphColumnInfo *> & dPostlimit, const char * sQuery,
-		int iOff, int iLim )
+void ProcessMultiPostlimit ( AggrResult_t & tRes, VecTraits_T<const CSphColumnInfo *> & dPostlimit, const char * sQuery, int iOff, int iLim )
 {
 	if ( dPostlimit.IsEmpty() )
 		return;
@@ -5454,8 +5466,7 @@ SphQueueSettings_t SearchHandler_c::MakeQueueSettings ( const CSphIndex * pIndex
 }
 
 
-int SearchHandler_c::CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes,
-	ISphExprHook * pHook ) const
+int SearchHandler_c::CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook ) const
 {
 	int iValidSorters = 0;
 
@@ -11660,7 +11671,17 @@ static void AddAttributeDesc ( VectorLike & dOut, const CSphColumnInfo & tAttr )
 		} else
 			dOut.Add ( sphTypeName ( tAttr.m_eAttrType ) );
 
-		dOut.Add ( tAttr.IsColumnar() ? "columnar" : "" );
+		StringBuilder_c sProps(" ");
+		if ( tAttr.IsColumnar() )
+			sProps << "columnar";
+
+		if ( tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED )
+			sProps << "fast_fetch";
+
+		if ( tAttr.IsColumnar() && tAttr.m_eAttrType==SPH_ATTR_STRING && !(tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_COLUMNAR_HASHES) )
+			sProps << "no_hash";
+
+		dOut.Add ( sProps.cstr() );
 	}
 }
 
@@ -11805,12 +11826,12 @@ void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	tOut.DataTable ( dTable );
 }
 
-
-static bool CheckAttrs ( const VecTraits_T<CSphColumnInfo> & dAttrs, CSphString & sError )
+template <typename T, typename GETNAME>
+static bool CheckAttrs ( const VecTraits_T<T> & dAttrs, GETNAME && fnGetName, CSphString & sError )
 {
 	ARRAY_FOREACH ( i, dAttrs )
 	{
-		const CSphString & sName = dAttrs[i].m_sName;
+		const CSphString & sName = fnGetName(dAttrs[i]);
 		if ( CSphSchema::IsReserved ( sName.cstr() ) || sphIsInternalAttr ( sName ) )
 		{
 			sError.SetSprintf ( "attribute name '%s' is a reserved keyword", sName.cstr() );
@@ -11818,7 +11839,7 @@ static bool CheckAttrs ( const VecTraits_T<CSphColumnInfo> & dAttrs, CSphString 
 		}
 
 		for ( int j = i+1; j < dAttrs.GetLength(); j++ )
-			if ( dAttrs[j].m_sName==sName )
+			if ( fnGetName(dAttrs[j])==sName )
 			{
 				sError.SetSprintf ( "duplicate attribute name '%s'", sName.cstr() );
 				return false;
@@ -11857,15 +11878,18 @@ static bool CheckCreateTable ( const SqlStmt_t & tStmt, CSphString & sError )
 	if ( !CheckExistingTables ( tStmt, sError ) )
 		return false;
 
-	if ( !CheckAttrs ( tStmt.m_tCreateTable.m_dAttrs, sError ) || !CheckAttrs ( tStmt.m_tCreateTable.m_dFields, sError ) )
+	if ( !CheckAttrs ( tStmt.m_tCreateTable.m_dAttrs, []( const CreateTableAttr_t & tAttr ) { return tAttr.m_tAttr.m_sName; }, sError ) )
+		return false;
+	
+	if ( !CheckAttrs ( tStmt.m_tCreateTable.m_dFields, []( const CSphColumnInfo & tAttr ) { return tAttr.m_sName; }, sError ) )
 		return false;
 
 	// cross-checks attrs and fields
 	for ( const auto & i : tStmt.m_tCreateTable.m_dAttrs )
 		for ( const auto & j : tStmt.m_tCreateTable.m_dFields )
-			if ( i.m_sName==j.m_sName && i.m_eAttrType!=SPH_ATTR_STRING )
+			if ( i.m_tAttr.m_sName==j.m_sName && i.m_tAttr.m_eAttrType!=SPH_ATTR_STRING )
 			{
-				sError.SetSprintf ( "duplicate attribute name '%s'", i.m_sName.cstr() );
+				sError.SetSprintf ( "duplicate attribute name '%s'", i.m_tAttr.m_sName.cstr() );
 				return false;
 			}
 
@@ -15173,10 +15197,10 @@ static void AddAttrToIndex ( const SqlStmt_t & tStmt, const ServedDesc_t * pServ
 	{
 		pServed->m_pIndex->AddRemoveField ( true, sAttrToAdd, tStmt.m_uFieldFlags, sError );
 		if ( bAttribute )
-			pServed->m_pIndex->AddRemoveAttribute ( true, sAttrToAdd, tStmt.m_eAlterColType, tStmt.m_eEngine, sError );
+			pServed->m_pIndex->AddRemoveAttribute ( true, sAttrToAdd, tStmt.m_eAlterColType, tStmt.m_eEngine, tStmt.m_uAttrFlags, sError );
 	}
 	else
-		pServed->m_pIndex->AddRemoveAttribute ( true, sAttrToAdd, tStmt.m_eAlterColType, tStmt.m_eEngine, sError );
+		pServed->m_pIndex->AddRemoveAttribute ( true, sAttrToAdd, tStmt.m_eAlterColType, tStmt.m_eEngine, tStmt.m_uAttrFlags, sError );
 }
 
 
@@ -15211,7 +15235,7 @@ static void RemoveAttrFromIndex ( const SqlStmt_t & tStmt, const ServedDesc_t * 
 	}
 
 	if ( bIsAttr )
-		pServed->m_pIndex->AddRemoveAttribute ( false, sAttrToRemove, pAttr->m_eAttrType, AttrEngine_e::DEFAULT, sError );
+		pServed->m_pIndex->AddRemoveAttribute ( false, sAttrToRemove, pAttr->m_eAttrType, AttrEngine_e::DEFAULT, 0, sError );
 	else
 		pServed->m_pIndex->AddRemoveField ( false, sAttrToRemove, 0, sError );
 }

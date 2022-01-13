@@ -9,6 +9,7 @@
 //
 
 #include "columnarlib.h"
+#include "sphinxutils.h"
 #include "sphinxexpr.h"
 #include "libutils.h"
 #include "schema/columninfo.h"

@@ -429,7 +429,7 @@ bool DiskIndexChecker_c::OpenFiles ( CSphString & sError )
 		m_bHasBlobs = true;
 	}
 
-	if ( m_uVersion>=57 && m_tSchema.HasStoredFields() )
+	if ( m_uVersion>=57 && ( m_tSchema.HasStoredFields() || m_tSchema.HasStoredAttrs() ) )
 	{
 		if ( !m_tDocstoreReader.Open ( GetFilename(SPH_EXT_SPDS).cstr(), sError ) )
 			return m_tReporter.Fail ( "unable to open docstore: %s", sError.cstr() );

@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>configless vs stored attrs</name>
+
+<requires>
+	<force-rt/>
+	<columnar/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+<sphinxql>
+	create table test ( title text, tag integer );
+	desc test;
+	show create table test;
+	drop table test;
+
+	create table test ( title text, tag integer ) engine='columnar';
+	desc test;
+	show create table test;
+	drop table test;
+
+	create table test ( title text, tag integer fast_fetch='0' ) engine='columnar';
+	desc test;
+	show create table test;
+	drop table test;
+
+	create table test ( title text, tag string ) engine='columnar';
+	desc test;
+	show create table test;
+	drop table test;
+
+	create table test ( title text, tag string fast_fetch='0' ) engine='columnar';
+	desc test;
+	show create table test;
+	drop table test;
+
+	create table test ( title text, tag string attribute fast_fetch='0' ) engine='columnar';
+	desc test;
+	show create table test;
+	drop table test;
+
+	create table test ( title text, tag integer fast_fetch='0' engine='columnar');
+	desc test;
+	show create table test;
+	drop table test;
+
+	create table test ( title text, tag string hash='0' fast_fetch='0' engine='columnar');
+	desc test;
+	show create table test;
+	drop table test;
+
+	create table test ( title text, tag integer hash='0' engine='columnar');
+
+	create table test ( id engine='columnar', title text );
+	desc test;
+	show create table test;
+	drop table test;
+
+	create table test ( id engine='columnar', tag integer engine='columnar', title text );
+	desc test;
+	show create table test;
+	drop table test;
+
+	create table test ( id engine='columnar' fast_fetch='0', tag integer engine='columnar', title text );
+	desc test;
+	show create table test;
+	drop table test;
+</sphinxql>
+</queries>
+
+</test>

@@ -1327,7 +1327,7 @@ public:
 	bool				SaveAttributes ( CSphString & sError ) const final;
 	DWORD				GetAttributeStatus () const final;
 
-	bool				AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, AttrEngine_e eEngine, CSphString & sError ) final;
+	bool				AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, AttrEngine_e eEngine, DWORD uAttrFlags, CSphString & sError ) final;
 	bool				AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD uFieldFlags, CSphString & sError ) final;
 
 	void				FlushDeadRowMap ( bool bWaitComplete ) const final;
@@ -1452,24 +1452,23 @@ private:
 
 	static std::pair<DWORD,DWORD>		CreateRowMapsAndCountTotalDocs ( const CSphIndex_VLN* pSrcIndex, const CSphIndex_VLN* pDstIndex, CSphFixedVector<RowID_t>& dSrcRowMap, CSphFixedVector<RowID_t>& dDstRowMap, const ISphFilter* pFilter, bool bSupressDstDocids, MergeCb_c& tMonitor );
 	RowsToUpdateData_t			Update_CollectRowPtrs ( const UpdateContext_t & tCtx );
-	RowsToUpdate_t				Update_PrepareGatheredRowPtrs ( RowsToUpdate_t & dWRows, const VecTraits_T<DocID_t>& dDocids );
-	bool						Update_WriteBlobRow ( UpdateContext_t & tCtx, CSphRowitem * pDocinfo, const BYTE * pBlob,
-										int iLength, int nBlobAttrs, const CSphAttrLocator & tBlobRowLoc, bool & bCritical, CSphString & sError ) override;
+	RowsToUpdate_t				Update_PrepareGatheredRowPtrs ( RowsToUpdate_t & dWRows, const VecTraits_T<DocID_t> & dDocids );
+	bool						Update_WriteBlobRow ( UpdateContext_t & tCtx, CSphRowitem * pDocinfo, const BYTE * pBlob, int iLength, int nBlobAttrs, const CSphAttrLocator & tBlobRowLoc, bool & bCritical, CSphString & sError ) override;
 	void						Update_MinMax ( const RowsToUpdate_t& dRows, const UpdateContext_t & tCtx );
 	bool						DoUpdateAttributes ( const RowsToUpdate_t& dRows, UpdateContext_t& tCtx, bool & bCritical, CSphString & sError );
 
 	bool						Alter_IsMinMax ( const CSphRowitem * pDocinfo, int iStride ) const override;
 	bool						AddRemoveColumnarAttr ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, const ISphSchema & tOldSchema, const ISphSchema & tNewSchema, CSphString & sError );
 	bool						DeleteFieldFromDict ( int iFieldId, BuildHeader_t & tBuildHeader, CSphString & sError );
-	bool						AddRemoveFieldFromDocstore ( const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError );
+	bool						AddRemoveFromDocstore ( const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError );
 
 	bool						Build_SetupInplace ( SphOffset_t & iHitsGap, int iHitsMax, int iFdHits ) const;
-	bool						Build_SetupDocstore ( CSphScopedPtr<DocstoreBuilder_i> & pDocstore );
+	bool						Build_SetupDocstore ( CSphScopedPtr<DocstoreBuilder_i> & pDocstore, CSphBitvec & dStoredFields, CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage );
 	bool						Build_SetupBlobBuilder ( CSphScopedPtr<BlobRowBuilder_i> & pBuilder );
 	bool						Build_SetupColumnar ( CSphScopedPtr<columnar::Builder_i> & pBuilder );
 	bool						Build_SetupHistograms ( CSphScopedPtr<HistogramContainer_c> & pContainer, CSphVector<std::pair<Histogram_i*,int>> & dHistograms );
 
-	void						Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, CSphSource * pSource );
+	void						Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, DocID_t tDocID, QueryMvaContainer_c & tMvaContainer, CSphSource & tSource, const CSphBitvec & dStoredFields, const CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage );
 	bool						Build_StoreBlobAttrs ( DocID_t tDocId, SphOffset_t & tOffset, BlobRowBuilder_i & tBlobRowBuilderconst, QueryMvaContainer_c & tMvaContainer, AttrSource_i & tSource, bool bForceSource );
 	void						Build_StoreColumnarAttrs ( DocID_t tDocId, columnar::Builder_i & tBuilder, CSphSource & tSource, QueryMvaContainer_c & tMvaContainer );
 	void						Build_StoreHistograms ( CSphVector<std::pair<Histogram_i*,int>> dHistograms, CSphSource & tSource );
@@ -3052,15 +3051,16 @@ bool CSphIndex_VLN::AddRemoveColumnarAttr ( bool bAddAttr, const CSphString & sA
 }
 
 
-bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, AttrEngine_e eEngine, CSphString & sError )
+bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, AttrEngine_e eEngine, DWORD uAttrFlags, CSphString & sError )
 {
-	// combine per-index and per-attribute engine settings
-	AttrEngine_e eAttrEngine = m_tSettings.m_eEngine;
-	if ( eEngine!=AttrEngine_e::DEFAULT )
-		eAttrEngine = eEngine;
+	AttrEngine_e eAttrEngine = CombineEngines ( m_tSettings.m_eEngine, eEngine );
+	if ( eAttrEngine==AttrEngine_e::COLUMNAR )
+		uAttrFlags |= CSphColumnInfo::ATTR_COLUMNAR;
+	else
+		uAttrFlags &= ~( CSphColumnInfo::ATTR_COLUMNAR_HASHES | CSphColumnInfo::ATTR_STORED );
 
 	CSphSchema tNewSchema = m_tSchema;
-	if ( !Alter_AddRemoveFromSchema ( tNewSchema, sAttrName, eAttrType, eAttrEngine, bAddAttr, sError ) )
+	if ( !Alter_AddRemoveFromSchema ( tNewSchema, sAttrName, eAttrType, eEngine, uAttrFlags, bAddAttr, sError ) )
 		return false;
 
 	int iNewStride = tNewSchema.GetRowSize();
@@ -3152,6 +3152,9 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttr
 		if ( !m_pHistograms->Save ( sSPHIfile, sError ) )
 			return false;
 	}
+
+	if ( !AddRemoveFromDocstore ( m_tSchema, tNewSchema, sError ) )
+		return false;
 
 	if ( tSPAWriter.IsError() )
 	{
@@ -5330,6 +5333,13 @@ void SetupDocstoreFields ( DocstoreAddField_i & tFields, const CSphSchema & tSch
 			iStored++;
 		}
 
+	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
+		if ( tSchema.IsAttrStored(i) )
+		{
+			tFields.AddField ( tSchema.GetAttr(i).m_sName, DOCSTORE_ATTR );
+			iStored++;
+		}
+
 	assert(iStored);
 }
 
@@ -5354,9 +5364,9 @@ bool CheckStoredFields ( const CSphSchema & tSchema, const CSphIndexSettings & t
 }
 
 
-bool CSphIndex_VLN::Build_SetupDocstore ( CSphScopedPtr<DocstoreBuilder_i> & pDocstore )
+bool CSphIndex_VLN::Build_SetupDocstore ( CSphScopedPtr<DocstoreBuilder_i> & pDocstore, CSphBitvec & dStoredFields, CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage )
 {
-	if ( !m_tSchema.HasStoredFields() )
+	if ( !m_tSchema.HasStoredFields() && !m_tSchema.HasStoredAttrs() )
 		return true;
 
 	DocstoreBuilder_i * pBuilder = CreateDocstoreBuilder ( GetIndexFileName(SPH_EXT_SPDS), GetSettings(), m_sLastError );
@@ -5364,6 +5374,19 @@ bool CSphIndex_VLN::Build_SetupDocstore ( CSphScopedPtr<DocstoreBuilder_i> & pDo
 		return false;
 
 	SetupDocstoreFields ( *pBuilder, m_tSchema );
+
+	dStoredFields.Init ( m_tSchema.GetFieldsCount() );
+	dStoredAttrs.Init ( m_tSchema.GetAttrsCount() );
+
+	for ( int i = 0; i < m_tSchema.GetFieldsCount(); i++ )
+		if ( pBuilder->GetFieldId ( m_tSchema.GetFieldName(i), DOCSTORE_TEXT )!=-1 )
+			dStoredFields.BitSet(i);
+
+	for ( int i = 0; i < m_tSchema.GetAttrsCount(); i++ )
+		if ( pBuilder->GetFieldId ( m_tSchema.GetAttr(i).m_sName, DOCSTORE_ATTR )!=-1 )
+			dStoredAttrs.BitSet(i);
+
+	dTmpDocstoreAttrStorage.Resize ( m_tSchema.GetAttrsCount() );
 
 	pDocstore = pBuilder;
 	return true;
@@ -5411,27 +5434,80 @@ bool CSphIndex_VLN::Build_SetupHistograms ( CSphScopedPtr<HistogramContainer_c> 
 }
 
 
-void CSphIndex_VLN::Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, CSphSource * pSource )
+static VecTraits_T<const BYTE> GetAttrForDocstore ( DocID_t tDocID, int iAttr, const CSphSchema & tSchema, QueryMvaContainer_c & tMvaContainer, CSphSource & tSource, CSphVector<BYTE> & dTmpStorage )
+{
+	const CSphColumnInfo & tAttr = tSchema.GetAttr(iAttr);
+
+	switch ( tAttr.m_eAttrType )
+	{
+	case SPH_ATTR_STRING:
+	{
+		const CSphString & sStrAttr = tSource.GetStrAttr(iAttr);
+		return { (const BYTE*)sStrAttr.cstr(), sStrAttr.Length() };
+	}
+
+	case SPH_ATTR_UINT32SET:
+	{
+		const CSphVector<int64_t> * pMva = FetchMVA ( tDocID, iAttr, tAttr, tMvaContainer, tSource, false );
+		dTmpStorage.Resize ( pMva->GetLength()*sizeof(DWORD) );
+		DWORD * pAttrs = (DWORD*)dTmpStorage.Begin();
+		for ( int iValue = 0; iValue < pMva->GetLength(); iValue++ )
+			pAttrs[iValue] = (DWORD)(*pMva)[iValue];
+
+		return dTmpStorage;
+	}
+
+	case SPH_ATTR_INT64SET:
+	{
+		const CSphVector<int64_t> * pMva = FetchMVA ( tDocID, iAttr, tAttr, tMvaContainer, tSource, false );
+		return { pMva ? (const BYTE*)pMva->Begin() : nullptr, pMva ? (int64_t)pMva->GetLengthBytes() : 0 };
+	}
+
+	case SPH_ATTR_BIGINT:
+	{
+		int64_t iValue = tSource.GetAttr(iAttr);
+		dTmpStorage.Resize ( sizeof(iValue) );
+		memcpy ( dTmpStorage.Begin(), &iValue, dTmpStorage.GetLength() );
+		return dTmpStorage;
+	}
+
+	default:
+		// assume 32-bit integer
+		uint32_t uValue = tSource.GetAttr(iAttr);
+		dTmpStorage.Resize ( sizeof(uValue) );
+		memcpy ( dTmpStorage.Begin(), &uValue, dTmpStorage.GetLength() );
+		return dTmpStorage;
+	}
+}
+
+
+void CSphIndex_VLN::Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, DocID_t tDocID, QueryMvaContainer_c & tMvaContainer, CSphSource & tSource, const CSphBitvec & dStoredFields, const CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage )
 {
 	if ( !pDocstoreBuilder )
 		return;
 
 	DocstoreBuilder_i::Doc_t tDoc;
-	pSource->GetDocFields ( tDoc.m_dFields );
+	tSource.GetDocFields ( tDoc.m_dFields );
 
 	assert ( tDoc.m_dFields.GetLength()==m_tSchema.GetFieldsCount() );
 
 	// filter out non-hl fields (should already be null)
 	int iField = 0;
-	for ( int i = 0; i < m_tSchema.GetFieldsCount(); i++ )
+	for ( int i = 0; i < dStoredFields.GetBits(); i++ )
 	{
-		if ( !m_tSchema.IsFieldStored(i) )
+		if ( !dStoredFields.BitGet(i) )
 			tDoc.m_dFields.Remove(iField);
 		else
 			iField++;
 	}
 
-	pDocstoreBuilder->AddDoc ( pSource->m_tDocInfo.m_tRowID, tDoc );
+	VecTraits_T<BYTE> * pAddedAttrs = tDoc.m_dFields.AddN ( dStoredAttrs.BitCount() );
+	int iAttr = 0;
+	for ( int i = 0; i < dStoredAttrs.GetBits(); i++ )
+		if ( dStoredAttrs.BitGet(i) )
+			pAddedAttrs[iAttr++] = GetAttrForDocstore ( tDocID, i, m_tSchema, tMvaContainer, tSource, dTmpDocstoreAttrStorage[i] );
+
+	pDocstoreBuilder->AddDoc ( tSource.m_tDocInfo.m_tRowID, tDoc );
 }
 
 
@@ -5590,7 +5666,9 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		return 0;
 
 	CSphScopedPtr<DocstoreBuilder_i> pDocstoreBuilder(nullptr);
-	if ( !Build_SetupDocstore(pDocstoreBuilder) )
+	CSphBitvec dStoredFields, dStoredAttrs;
+	CSphVector<CSphVector<BYTE>> dTmpDocstoreAttrStorage;
+	if ( !Build_SetupDocstore ( pDocstoreBuilder, dStoredFields, dStoredAttrs, dTmpDocstoreAttrStorage ) )
 		return 0;
 
 	CSphScopedPtr<HistogramContainer_c> pHistogramContainer(nullptr);
@@ -5773,7 +5851,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				nDocidLookupBlocks++;
 			}
 
-			Build_AddToDocstore ( pDocstoreBuilder.Ptr(), pSource );
+			Build_AddToDocstore ( pDocstoreBuilder.Ptr(), tDocID, tQueryMvaContainer, *pSource, dStoredFields, dStoredAttrs, dTmpDocstoreAttrStorage );
 
 			// go on, loop next document
 		}
@@ -7261,17 +7339,25 @@ bool CSphIndex_VLN::DeleteFieldFromDict ( int iFieldId, BuildHeader_t & tBuildHe
 }
 
 
-bool CSphIndex_VLN::AddRemoveFieldFromDocstore ( const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError )
+bool CSphIndex_VLN::AddRemoveFromDocstore ( const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError )
 {
 	int iOldNumStored = 0;
 	for ( int i = 0; i < tOldSchema.GetFieldsCount(); i++ )
 		if ( tOldSchema.IsFieldStored(i) )
 			iOldNumStored++;
 
+	for ( int i = 0; i < tOldSchema.GetAttrsCount(); i++ )
+		if ( tOldSchema.IsAttrStored(i) )
+			iOldNumStored++;
+
 	int iNewNumStored = 0;
 	for ( int i = 0; i < tNewSchema.GetFieldsCount(); i++ )
 		if ( tNewSchema.IsFieldStored(i) )
 			iNewNumStored++;
+
+	for ( int i = 0; i < tNewSchema.GetAttrsCount(); i++ )
+		if ( tNewSchema.IsAttrStored(i) )
+			iOldNumStored++;
 
 	if ( iOldNumStored==iNewNumStored )
 		return true;
@@ -7283,7 +7369,7 @@ bool CSphIndex_VLN::AddRemoveFieldFromDocstore ( const CSphSchema & tOldSchema, 
 		if ( !pDocstoreBuilder.Ptr() )
 			return false;
 
-		Alter_AddRemoveFieldFromDocstore ( *pDocstoreBuilder, m_pDocstore.Ptr(), (DWORD)m_iDocinfo, tNewSchema );
+		Alter_AddRemoveFromDocstore ( *pDocstoreBuilder, m_pDocstore.Ptr(), (DWORD)m_iDocinfo, tNewSchema );
 	}
 
 	if ( !JuggleFile ( SPH_EXT_SPDS, sError, !!iOldNumStored, !!iNewNumStored ) )
@@ -7316,7 +7402,7 @@ bool CSphIndex_VLN::AddRemoveField ( bool bAddField, const CSphString & sFieldNa
 	if ( !bAddField && !DeleteFieldFromDict ( iRemoveIdx, tBuildHeader, sError ) )
 		return false;
 
-	if ( !AddRemoveFieldFromDocstore ( tOldSchema, tNewSchema, sError ) )
+	if ( !AddRemoveFromDocstore ( tOldSchema, tNewSchema, sError ) )
 		return false;
 
 	CSphString sHeaderName = GetIndexFileName ( SPH_EXT_SPH, true );
@@ -7772,10 +7858,19 @@ void CSphQueryContext::SetBlobPool ( const BYTE * pBlobPool )
 }
 
 
-
 void CSphQueryContext::SetColumnar ( const columnar::Columnar_i * pColumnar )
 {
 	ExprCommand ( SPH_EXPR_SET_COLUMNAR, (void*)pColumnar );
+}
+
+
+void CSphQueryContext::SetDocstore ( const Docstore_i * pDocstore, int64_t iDocstoreSessionId )
+{
+	DocstoreSession_c::InfoRowID_t tSessionInfo;
+	tSessionInfo.m_pDocstore = pDocstore;
+	tSessionInfo.m_iSessionId = iDocstoreSessionId;
+
+	ExprCommand ( SPH_EXPR_SET_DOCSTORE_ROWID, &tSessionInfo );
 }
 
 
@@ -7973,15 +8068,33 @@ struct SphFinalMatchCalc_t final : MatchProcessor_i, ISphNoncopyable
 
 	void Process ( VecTraits_T<CSphMatch *> & dMatches ) final
 	{
-		// process items in column-wise order
-		for ( const auto & tItem : m_tCtx.m_dCalcFinal )
+		CSphVector<CSphQueryContext::CalcItem_t *> dColumnWise, dRowWise;
+
+		// process columnar items in column-wise order (and the rest in rowwise order)
+		for ( auto & i : m_tCtx.m_dCalcFinal )
+			if ( i.m_pExpr->IsColumnar() )
+				dColumnWise.Add(&i);
+			else
+				dRowWise.Add(&i);
+
+		for ( const auto & pItem : dColumnWise )
 			for ( auto & pMatch : dMatches )
 			{
 				assert(pMatch);
 				if ( pMatch->m_iTag>=0 )
 					continue;
 
-				m_tCtx.CalcItem ( *pMatch, tItem );
+				m_tCtx.CalcItem ( *pMatch, *pItem );
+			}
+
+		for ( auto & pMatch : dMatches )
+			for ( const auto & pItem : dRowWise )
+			{
+				assert(pMatch);
+				if ( pMatch->m_iTag>=0 )
+					continue;
+
+				m_tCtx.CalcItem ( *pMatch, *pItem );
 			}
 
 		for ( auto & pMatch : dMatches )
@@ -8333,7 +8446,7 @@ RowidIterator_i * CSphIndex_VLN::CreateColumnarAnalyzerOrPrefilter ( const CSphV
 	{
 		dFilterMap[i] = -1;
 		const CSphColumnInfo * pCol = tSchema.GetAttr ( dFilters[i].m_sAttrName.cstr() );
-		bool bColumnarFilter = pCol && ( pCol->IsColumnar() || pCol->IsColumnarExpr() );
+		bool bColumnarFilter = pCol && ( pCol->IsColumnar() || pCol->IsColumnarExpr() || pCol->IsStoredExpr() );
 		bool bRowIdFilter = dFilters[i].m_sAttrName=="@rowid";
 		if ( ( bColumnarFilter || bRowIdFilter )  && AddColumnarFilter ( dColumnarFilters, dFilters[i], eCollation, tSchema, sWarning ) )
 			dFilterMap[i] = (int)dColumnarFilters.size()-1;
@@ -8594,6 +8707,25 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	// do final expression calculations
 	if ( tCtx.m_dCalcFinal.GetLength() )
 	{
+		DocstoreSession_c tSession;
+		int64_t iSessionUID = tSession.GetUID();
+
+		// spawn buffered readers for the current session
+		// put them to a global hash
+		if ( m_pDocstore )
+			m_pDocstore->CreateReader ( iSessionUID );
+
+		DocstoreSession_c::InfoRowID_t tSessionInfo;
+		tSessionInfo.m_pDocstore = m_pDocstore.Ptr();
+		tSessionInfo.m_iSessionId = iSessionUID;
+
+		for ( auto & i : tCtx.m_dCalcFinal )
+		{
+			assert ( i.m_pExpr );
+			if ( m_pDocstore )
+				i.m_pExpr->Command ( SPH_EXPR_SET_DOCSTORE_ROWID, &tSessionInfo );
+		}
+
 		SphFinalMatchCalc_t tFinal ( tArgs.m_iTag, tCtx );
 		dSorters.Apply ( [&] ( ISphMatchSorter * p ) { p->Finalize ( tFinal, false, tArgs.m_bFinalizeSorters ); } );
 	}
@@ -9602,7 +9734,7 @@ bool CSphIndex_VLN::PreallocDocstore()
 	if ( m_uVersion<57 )
 		return true;
 
-	if ( !m_tSchema.HasStoredFields() )
+	if ( !m_tSchema.HasStoredFields() && !m_tSchema.HasStoredAttrs() )
 		return true;
 
 	m_pDocstore = CreateDocstore ( m_iIndexId, GetIndexFileName(SPH_EXT_SPDS), m_sLastError );
@@ -10353,6 +10485,7 @@ static void TransformQuorum ( XQNode_t ** ppNode )
 		pAnd->m_dWords.Add ( pNode->m_dWords[i] );
 		dArgs.Add ( pAnd );
 	}
+
 	pNode->m_dWords.Reset();
 	pNode->SetOp ( SPH_QUERY_OR, dArgs );
 }
@@ -11699,8 +11832,28 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 		// a) over the final, pre-limit result set
 		// b) in the final result set order
 		bool bGotUDF = false;
-		ARRAY_FOREACH_COND ( i, tCtx.m_dCalcFinal, !bGotUDF )
-			tCtx.m_dCalcFinal[i].m_pExpr->Command ( SPH_EXPR_GET_UDF, &bGotUDF );
+
+		DocstoreSession_c tSession;
+		int64_t iSessionUID = tSession.GetUID();
+
+		// spawn buffered readers for the current session
+		// put them to a global hash
+		if ( m_pDocstore )
+			m_pDocstore->CreateReader ( iSessionUID );
+
+		DocstoreSession_c::InfoRowID_t tSessionInfo;
+		tSessionInfo.m_pDocstore = m_pDocstore.Ptr();
+		tSessionInfo.m_iSessionId = iSessionUID;
+
+		for ( auto & i : tCtx.m_dCalcFinal )
+		{
+			assert ( i.m_pExpr );
+			if ( !bGotUDF )
+				i.m_pExpr->Command ( SPH_EXPR_GET_UDF, &bGotUDF );
+
+			if ( m_pDocstore )
+				i.m_pExpr->Command ( SPH_EXPR_SET_DOCSTORE_ROWID, &tSessionInfo );
+		}
 
 		SphFinalMatchCalc_t tFinal ( tArgs.m_iTag, tCtx );
 		dSorters.Apply ( [&] ( ISphMatchSorter * p ) { p->Finalize ( tFinal, bGotUDF, tArgs.m_bFinalizeSorters ); } );
@@ -12179,7 +12332,7 @@ void CSphIndex_VLN::CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const
 	if ( m_uVersion>=55 )
 		dFiles.Add ( GetIndexFileName ( SPH_EXT_SPHI ) );
 
-	if ( m_uVersion>=57 && m_tSchema.HasStoredFields() )
+	if ( m_uVersion>=57 && ( m_tSchema.HasStoredFields() || m_tSchema.HasStoredAttrs() ) )
 		dFiles.Add ( GetIndexFileName ( SPH_EXT_SPDS ) );
 
 	CSphString sPath = GetIndexFileName ( SPH_EXT_SPK );

@@ -993,7 +993,7 @@ bool CopyIndexFiles ( const CSphString & sIndex, const CSphString & sPathToIndex
 
 static bool CheckCreateTableSettings ( const CreateTableSettings_t & tCreateTable, CSphString & sError )
 {
-	static const char * dForbidden[] = { "path", "stored_fields", "stored_only_fields", "columnar_attrs", "rowwise_attrs", "rt_field", "embedded_limit" };
+	static const char * dForbidden[] = { "path", "stored_fields", "stored_only_fields", "columnar_attrs", "columnar_no_fast_fetch", "rowwise_attrs", "rt_field", "embedded_limit" };
 	static const char * dTypes[] = { "rt", "pq", "percolate", "distributed" };
 
 	for ( const auto & i : tCreateTable.m_dOpts )

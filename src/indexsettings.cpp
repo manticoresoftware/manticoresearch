@@ -705,7 +705,7 @@ void CSphIndexSettings::ParseStoredFields ( const CSphConfigSection & hIndex )
 
 bool CSphIndexSettings::ParseColumnarSettings ( const CSphConfigSection & hIndex, CSphString & sError )
 {
-	if ( ( hIndex.Exists("columnar_attrs") || hIndex.Exists("rowwise_attrs") || hIndex.Exists("engine") ) && !IsColumnarLibLoaded() )
+	if ( ( hIndex.Exists("columnar_attrs") || hIndex.Exists("columnar_no_fast_fetch") || hIndex.Exists("rowwise_attrs") || hIndex.Exists("engine") ) && !IsColumnarLibLoaded() )
 	{
 		sError = "columnar library not loaded";
 		return false;
@@ -723,6 +723,13 @@ bool CSphIndexSettings::ParseColumnarSettings ( const CSphConfigSection & hIndex
 		sAttrs.ToLower();
 		sphSplit ( m_dColumnarAttrs, sAttrs.cstr() );
 		m_dColumnarAttrs.Uniq();
+	}
+
+	{
+		CSphString sAttrs = hIndex.GetStr ( "columnar_no_fast_fetch" );
+		sAttrs.ToLower();
+		sphSplit ( m_dColumnarNonStoredAttrs, sAttrs.cstr() );
+		m_dColumnarNonStoredAttrs.Uniq();
 	}
 
 	{
@@ -1161,15 +1168,26 @@ void IndexSettingsContainer_c::SetupColumnarAttrs ( const CreateTableSettings_t 
 {
 	StringBuilder_c sColumnarAttrs(",");
 	StringBuilder_c sRowwiseAttrs(",");
-	if ( m_eEngine==AttrEngine_e::COLUMNAR )
-		sColumnarAttrs << sphGetDocidName();
+	StringBuilder_c sColumnarNonStored(",");
+	StringBuilder_c sColumnarStringsNoHash(",");
 
 	for ( const auto & i : tCreateTable.m_dAttrs )
 	{
-		if ( i.m_eEngine==AttrEngine_e::COLUMNAR )
-			sColumnarAttrs << i.m_sName;
-		else if ( i.m_eEngine==AttrEngine_e::ROWWISE )
-			sRowwiseAttrs << i.m_sName;
+		const CSphColumnInfo & tAttr = i.m_tAttr;
+
+		if ( tAttr.m_eEngine==AttrEngine_e::COLUMNAR )
+			sColumnarAttrs << tAttr.m_sName;
+		else if ( tAttr.m_eEngine==AttrEngine_e::ROWWISE )
+			sRowwiseAttrs << tAttr.m_sName;
+
+		if ( CombineEngines ( m_eEngine, tAttr.m_eEngine )==AttrEngine_e::COLUMNAR )
+		{
+			if ( !i.m_bFastFetch )
+				sColumnarNonStored << tAttr.m_sName;
+
+			if ( !i.m_bStringHash )
+				sColumnarStringsNoHash << tAttr.m_sName;
+		}
 	}
 
 	if ( sColumnarAttrs.GetLength() )
@@ -1177,6 +1195,12 @@ void IndexSettingsContainer_c::SetupColumnarAttrs ( const CreateTableSettings_t 
 
 	if ( sRowwiseAttrs.GetLength() )
 		Add ( "rowwise_attrs", sRowwiseAttrs.cstr() );
+
+	if ( sColumnarNonStored.GetLength() )
+		Add ( "columnar_no_fast_fetch", sColumnarNonStored.cstr() );
+
+	if ( sColumnarStringsNoHash.GetLength() )
+		Add ( "columnar_strings_no_hash", sColumnarStringsNoHash.cstr() );
 }
 
 
@@ -1206,17 +1230,21 @@ bool IndexSettingsContainer_c::Populate ( const CreateTableSettings_t & tCreateT
 
 	for ( const auto & i : tCreateTable.m_dAttrs )
 		for ( const auto & j : g_dRtTypedAttrs )
-			if ( i.m_eAttrType==j.m_eType )
+		{
+			const CSphColumnInfo & tAttr = i.m_tAttr;
+
+			if ( tAttr.m_eAttrType==j.m_eType )
 			{
 				CSphString sValue;
-				if ( i.m_eAttrType==SPH_ATTR_INTEGER && i.m_tLocator.m_iBitCount!=-1 )
-					sValue.SetSprintf ( "%s:%d", i.m_sName.cstr(), i.m_tLocator.m_iBitCount );
+				if ( tAttr.m_eAttrType==SPH_ATTR_INTEGER && tAttr.m_tLocator.m_iBitCount!=-1 )
+					sValue.SetSprintf ( "%s:%d", tAttr.m_sName.cstr(), tAttr.m_tLocator.m_iBitCount );
 				else
-					sValue = i.m_sName;
+					sValue = tAttr.m_sName;
 
 				Add ( j.m_szName, sValue );
 				break;
 			}
+		}
 
 	for ( const auto & i : tCreateTable.m_dOpts )
 		if ( !AddOption ( i.m_sName, i.m_sValue ) )
@@ -1769,6 +1797,23 @@ static void AddFieldSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tF
 }
 
 
+static void AddStorageSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr, const CSphIndex & tIndex, bool bField, int iNumColumnar )
+{
+	if ( !bField && tAttr.m_eAttrType==SPH_ATTR_STRING )
+		sRes << " attribute";
+
+	bool bColumnar = CombineEngines ( tIndex.GetSettings().m_eEngine, tAttr.m_eEngine )==AttrEngine_e::COLUMNAR;
+	if ( bColumnar )
+	{
+		if ( tAttr.m_eAttrType!=SPH_ATTR_JSON && !(tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED) && iNumColumnar>1 )
+			sRes << " fast_fetch='0'";
+
+		if ( tAttr.m_eAttrType==SPH_ATTR_STRING && !(tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_COLUMNAR_HASHES) )
+			sRes << " hash='0'";
+	}
+}
+
+
 static void AddEngineSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr )
 {
 	if ( tAttr.m_eEngine==AttrEngine_e::COLUMNAR )
@@ -1782,6 +1827,11 @@ CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex
 {
 	assert ( pIndex );
 
+	int iNumColumnar = 0;
+	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
+		if ( tSchema.GetAttr(i).IsColumnar() )
+			iNumColumnar++;
+
 	StringBuilder_c sRes;
 	sRes << "CREATE TABLE " << sName << " (\n";
 
@@ -1791,9 +1841,12 @@ CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
-		if ( sphIsInternalAttr ( tAttr.m_sName ) || tAttr.m_sName==sphGetDocidName() )
+		if ( sphIsInternalAttr ( tAttr.m_sName ) )
 			continue;
 
+		if ( tAttr.m_sName==sphGetDocidName() && ( tAttr.m_eEngine==AttrEngine_e::DEFAULT && ( !tAttr.IsColumnar() || (tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED ) ) ) )
+			continue;
+	
 		if ( bHasAttrs )
 			sRes << ",\n";
 
@@ -1805,8 +1858,14 @@ CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex
 			dExclude.Add(pField);
 		}
 		else
-			sRes << tAttr.m_sName << " " << GetAttrTypeName(tAttr);
+		{
+			if ( tAttr.m_sName==sphGetDocidName() )
+				sRes << tAttr.m_sName;
+			else
+				sRes << tAttr.m_sName << " " << GetAttrTypeName(tAttr);
+		}
 
+		AddStorageSettings ( sRes, tAttr, *pIndex, !!pField, iNumColumnar );
 		AddEngineSettings ( sRes, tAttr );
 
 		bHasAttrs = true;
@@ -2365,4 +2424,14 @@ void SaveMutableSettings ( const MutableIndexSettings_c & tSettings, const CSphS
 	if ( sph::rename ( sMutableNew.cstr(), sMutable.cstr() ) )
 		sphDie ( "failed to rename mutable settings(src=%s, dst=%s, errno=%d, error=%s)",
 			sMutableNew.cstr(), sMutable.cstr(), errno, strerrorm(errno) ); // !COMMIT handle this gracefully
+}
+
+
+AttrEngine_e CombineEngines ( AttrEngine_e eIndexEngine, AttrEngine_e eAttrEngine )
+{
+	AttrEngine_e eEngine = eIndexEngine;
+	if ( eAttrEngine!=AttrEngine_e::DEFAULT )
+		eEngine = eAttrEngine;
+
+	return eEngine;
 }

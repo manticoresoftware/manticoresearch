@@ -233,6 +233,7 @@ public:
 	ESphAttr				m_eAlterColType = SPH_ATTR_NONE;
 	AttrEngine_e			m_eEngine = AttrEngine_e::DEFAULT;
 	DWORD					m_uFieldFlags = 0;
+	DWORD					m_uAttrFlags = 0;
 
 	// CREATE TABLE specific
 	CreateTableSettings_t	m_tCreateTable;

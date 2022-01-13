@@ -59,7 +59,14 @@ bool CSphColumnInfo::IsColumnarExpr() const
 	return m_pExpr.Ptr() && m_pExpr->IsColumnar();
 }
 
-CSphString sphDumpAttr ( const CSphColumnInfo& tAttr )
+
+bool CSphColumnInfo::IsStoredExpr() const
+{
+	return m_pExpr.Ptr() && m_pExpr->IsStored();
+}
+
+
+CSphString sphDumpAttr ( const CSphColumnInfo & tAttr )
 {
 	CSphString sRes;
 	sRes.SetSprintf ( "%s %s:%d@%d", sphTypeName ( tAttr.m_eAttrType ), tAttr.m_sName.cstr(), tAttr.m_tLocator.m_iBitCount, tAttr.m_tLocator.m_iBitOffset );

@@ -14,6 +14,8 @@
 
 #include "helper.h"
 
+class CSphSourceSettings;
+
 /// plain good old schema
 /// container that actually holds and owns all the fields, columns, etc
 ///
@@ -113,9 +115,11 @@ public:
 	int						GetCachedRowSize() const;
 	void					SetupFlags ( const CSphSourceSettings & tSettings, bool bPQ, StrVec_t * pWarnings );
 	bool					HasStoredFields() const;
+	bool					HasStoredAttrs() const;
 	bool					HasColumnarAttrs() const;
 	bool					HasNonColumnarAttrs() const;
 	bool					IsFieldStored ( int iField ) const;
+	bool					IsAttrStored ( int iAttr ) const;
 
 private:
 	static const int			HASH_THRESH		= 32;

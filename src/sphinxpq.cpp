@@ -2593,7 +2593,7 @@ bool PercolateIndex_c::LoadMeta ( const CSphString& sMeta, bool bStripPath, File
 		return false;
 	}
 
-	DWORD uIndexVersion = (DWORD)Int ( tBson.ChildByName ( "index_format_version" ) );
+//	DWORD uIndexVersion = (DWORD)Int ( tBson.ChildByName ( "index_format_version" ) );
 
 	CSphTokenizerSettings tTokenizerSettings;
 	CSphDictSettings tDictSettings;

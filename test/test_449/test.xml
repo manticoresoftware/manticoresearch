@@ -83,6 +83,12 @@ searchd
 	insert into col (id,ft) values(0,'abc');
 	select * from col;
 	drop table col;
+
+	create table col(f text) engine='columnar';
+	alter table col add column i bit(3);
+	desc col;
+	show create table col;
+	drop table col;
 </sphinxql>
 </queries>
 

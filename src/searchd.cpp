@@ -43,6 +43,7 @@
 #include "digest_sha1.h"
 #include "tokenizer/charset_definition_parser.h"
 #include "client_session.h"
+#include "sphinx_alter.h"
 
 // services
 #include "taskping.h"
@@ -15193,14 +15194,21 @@ static void AddAttrToIndex ( const SqlStmt_t & tStmt, const ServedDesc_t * pServ
 		return;
 	}
 
+	AttrAddRemoveCtx_t tCtx;
+	tCtx.m_sName = sAttrToAdd;
+	tCtx.m_eType = tStmt.m_eAlterColType;
+	tCtx.m_iBits = tStmt.m_iBits;
+	tCtx.m_uFlags = tStmt.m_uAttrFlags;
+	tCtx.m_eEngine = tStmt.m_eEngine;
+
 	if ( bIndexed || bStored )
 	{
 		pServed->m_pIndex->AddRemoveField ( true, sAttrToAdd, tStmt.m_uFieldFlags, sError );
 		if ( bAttribute )
-			pServed->m_pIndex->AddRemoveAttribute ( true, sAttrToAdd, tStmt.m_eAlterColType, tStmt.m_eEngine, tStmt.m_uAttrFlags, sError );
+			pServed->m_pIndex->AddRemoveAttribute ( true, tCtx, sError );
 	}
 	else
-		pServed->m_pIndex->AddRemoveAttribute ( true, sAttrToAdd, tStmt.m_eAlterColType, tStmt.m_eEngine, tStmt.m_uAttrFlags, sError );
+		pServed->m_pIndex->AddRemoveAttribute ( true, tCtx, sError );
 }
 
 
@@ -15235,7 +15243,12 @@ static void RemoveAttrFromIndex ( const SqlStmt_t & tStmt, const ServedDesc_t * 
 	}
 
 	if ( bIsAttr )
-		pServed->m_pIndex->AddRemoveAttribute ( false, sAttrToRemove, pAttr->m_eAttrType, AttrEngine_e::DEFAULT, 0, sError );
+	{
+		AttrAddRemoveCtx_t tCtx;
+		tCtx.m_sName = sAttrToRemove;
+		tCtx.m_eType = pAttr->m_eAttrType;
+		pServed->m_pIndex->AddRemoveAttribute ( false, tCtx, sError );
+	}
 	else
 		pServed->m_pIndex->AddRemoveField ( false, sAttrToRemove, 0, sError );
 }

@@ -159,7 +159,7 @@ bool DdlParser_c::CheckFieldFlags ( ESphAttr eAttrType, int iFlags, const CSphSt
 }
 
 
-bool DdlParser_c::SetupAlterTable  ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, const SqlNode_t & tType )
+bool DdlParser_c::SetupAlterTable ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, ESphAttr eAttr, int iFieldFlags, int iBits )
 {
 	assert( m_pStmt );
 	ItemOptions_t tOpts = m_tItemOptions;
@@ -169,13 +169,20 @@ bool DdlParser_c::SetupAlterTable  ( const SqlNode_t & tIndex, const SqlNode_t &
 	ToString ( m_pStmt->m_sAlterAttr, tAttr );
 	m_pStmt->m_sIndex.ToLower();
 	m_pStmt->m_sAlterAttr.ToLower();
-	m_pStmt->m_eAlterColType = (ESphAttr)tType.m_iValue;
-	m_pStmt->m_uFieldFlags = ConvertFlags(tType.m_iType);
+	m_pStmt->m_eAlterColType = eAttr;
+	m_pStmt->m_uFieldFlags = ConvertFlags(iFieldFlags);
 	m_pStmt->m_uAttrFlags = m_tItemOptions.ToFlags();
 	m_pStmt->m_eEngine = tOpts.m_eEngine;
+	m_pStmt->m_iBits = iBits;
 	m_tItemOptions.Reset();
 
-	return CheckFieldFlags ( m_pStmt->m_eAlterColType, tType.m_iType, m_pStmt->m_sAlterAttr, tOpts, m_sError );
+	return CheckFieldFlags ( m_pStmt->m_eAlterColType, iFieldFlags, m_pStmt->m_sAlterAttr, tOpts, m_sError );
+}
+
+
+bool DdlParser_c::SetupAlterTable  ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, const SqlNode_t & tType )
+{
+	return SetupAlterTable ( tIndex, tAttr, (ESphAttr)tType.m_iValue, tType.m_iType );
 }
 
 

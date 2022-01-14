@@ -1257,6 +1257,7 @@ class ISphMatchSorter;
 class CSphSource;
 struct CSphSourceStats;
 class DebugCheckError_i;
+struct AttrAddRemoveCtx_t;
 
 /// generic fulltext index interface
 class CSphIndex : public ISphKeywordsStat, public IndexSegment_c, public DocstoreReader_i
@@ -1365,7 +1366,7 @@ public:
 
 	virtual DWORD				GetAttributeStatus () const = 0;
 
-	virtual bool				AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, AttrEngine_e eEngine, DWORD uAttrFlags, CSphString & sError ) = 0;
+	virtual bool				AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t & tCtx, CSphString & sError ) = 0;
 
 	virtual bool				AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD, CSphString & sError ) = 0;
 
@@ -1492,7 +1493,7 @@ public:
 	Binlog::CheckTnxResult_t ReplayTxn ( Binlog::Blop_e, CSphReader &, CSphString &, Binlog::CheckTxn_fn&& ) override { return {}; }
 	bool				SaveAttributes ( CSphString & ) const override { return true; }
 	DWORD				GetAttributeStatus () const override { return 0; }
-	bool				AddRemoveAttribute ( bool, const CSphString &, ESphAttr, AttrEngine_e, DWORD uAttrFlags, CSphString & ) override { return true; }
+	bool				AddRemoveAttribute ( bool, const AttrAddRemoveCtx_t & tCtx, CSphString & sError ) override { return true; }
 	bool				AddRemoveField ( bool, const CSphString &, DWORD, CSphString & ) override { return true; }
 	void				DebugDumpHeader ( FILE *, const char *, bool ) override {}
 	void				DebugDumpDocids ( FILE * ) override {}

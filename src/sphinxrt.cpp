@@ -1144,8 +1144,7 @@ enum class MergeSeg_e : BYTE
 	EXIT 	= 4,	// shutdown and exit
 };
 
-class RtIndex_c final : public RtIndex_i, public ISphNoncopyable, public ISphWordlist, public ISphWordlistSuggest,
-		public IndexUpdateHelper_c, public IndexAlterHelper_c, public DebugCheckHelper_c
+class RtIndex_c final : public RtIndex_i, public ISphNoncopyable, public ISphWordlist, public ISphWordlistSuggest, public IndexUpdateHelper_c, public IndexAlterHelper_c, public DebugCheckHelper_c
 {
 public:
 						RtIndex_c ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict );
@@ -1215,7 +1214,7 @@ public:
 	bool				SaveAttributes ( CSphString & sError ) const final;
 	DWORD				GetAttributeStatus () const final { return m_uDiskAttrStatus; }
 
-	bool				AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, AttrEngine_e eEngine, DWORD uAttrFlags, CSphString & sError ) final;
+	bool				AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx, CSphString & sError ) final;
 	bool				AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD uFieldFlags, CSphString & sError ) final;
 
 	int					DebugCheck ( DebugCheckError_i& ) final;
@@ -8487,7 +8486,7 @@ void RtIndex_c::AlterSave ( bool bSaveRam )
 	QcacheDeleteIndex ( GetIndexId() );
 }
 
-bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, AttrEngine_e eEngine, DWORD uAttrFlags, CSphString & sError )
+bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx, CSphString & sError )
 {
 	if ( !m_tRtChunks.DiskChunks()->IsEmpty() && !m_tSchema.GetAttrsCount() )
 	{
@@ -8509,15 +8508,16 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ES
 	// as we're in serial, here all index data exclusively belongs to us. No new commits, merges, flushes, etc. until
 	// we're finished.
 
-	AttrEngine_e eAttrEngine = CombineEngines ( m_tSettings.m_eEngine, eEngine );
+	AttrAddRemoveCtx_t tNewCtx = tCtx;
+	AttrEngine_e eAttrEngine = CombineEngines ( m_tSettings.m_eEngine, tCtx.m_eEngine );
 	if ( eAttrEngine==AttrEngine_e::COLUMNAR )
-		uAttrFlags |= CSphColumnInfo::ATTR_COLUMNAR;
+		tNewCtx.m_uFlags |= CSphColumnInfo::ATTR_COLUMNAR;
 	else
-		uAttrFlags &= ~( CSphColumnInfo::ATTR_COLUMNAR_HASHES | CSphColumnInfo::ATTR_STORED );
+		tNewCtx.m_uFlags &= ~( CSphColumnInfo::ATTR_COLUMNAR_HASHES | CSphColumnInfo::ATTR_STORED );
 
 	CSphSchema tOldSchema = m_tSchema;
 	CSphSchema tNewSchema = m_tSchema;
-	if ( !Alter_AddRemoveFromSchema ( tNewSchema, sAttrName, eAttrType, eEngine, uAttrFlags, bAdd, sError ) )
+	if ( !Alter_AddRemoveFromSchema ( tNewSchema, tNewCtx, bAdd, sError ) )
 		return false;
 
 	m_tSchema = tNewSchema;
@@ -8528,16 +8528,16 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ES
 	// modify the in-memory data of disk chunks
 	// fixme: we can't rollback in-memory changes, so we just show errors here for now
 	for ( auto& pChunk : tGuard.m_dDiskChunks )
-		if ( !pChunk->CastIdx().AddRemoveAttribute ( bAdd, sAttrName, eAttrType, eEngine, uAttrFlags, sError ) )
+		if ( !pChunk->CastIdx().AddRemoveAttribute ( bAdd, tNewCtx, sError ) )
 			sphWarning ( "%s attribute to %s.%d: %s", bAdd ? "adding" : "removing", m_sPath.cstr(), pChunk->Cidx().m_iChunk, sError.cstr() );
 
-	bool bColumnar = bAdd ? tNewSchema.GetAttr ( sAttrName.cstr() )->IsColumnar() : tOldSchema.GetAttr ( sAttrName.cstr() )->IsColumnar();
+	bool bColumnar = bAdd ? tNewSchema.GetAttr ( tNewCtx.m_sName.cstr() )->IsColumnar() : tOldSchema.GetAttr ( tNewCtx.m_sName.cstr() )->IsColumnar();
 	if ( bColumnar )
 	{
-		if ( !AddRemoveColumnarAttr ( tGuard, bAdd, sAttrName, eAttrType, tOldSchema, tNewSchema, sError ) )
+		if ( !AddRemoveColumnarAttr ( tGuard, bAdd, tNewCtx.m_sName, tNewCtx.m_eType, tOldSchema, tNewSchema, sError ) )
 			return false;
 	} else
-		AddRemoveRowwiseAttr ( tGuard, bAdd, sAttrName, eAttrType, tOldSchema, tNewSchema, sError );
+		AddRemoveRowwiseAttr ( tGuard, bAdd, tNewCtx.m_sName, tNewCtx.m_eType, tOldSchema, tNewSchema, sError );
 
 	AddRemoveFromRamDocstore ( tOldSchema, tNewSchema );
 

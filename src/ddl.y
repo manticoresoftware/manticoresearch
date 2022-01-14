@@ -123,6 +123,14 @@ alter:
 	            YYERROR;
 			}
 		}
+	| TOK_ALTER TOK_TABLE ident TOK_ADD TOK_COLUMN ident TOK_BIT '(' TOK_CONST_INT ')' item_option_list
+		{
+			if ( !pParser->SetupAlterTable ( $3, $6, SPH_ATTR_INTEGER, 0, $9.m_iValue ) )
+			{
+			 	yyerror ( pParser, pParser->GetLastError() );
+	            YYERROR;
+			}
+		}
 	| TOK_ALTER TOK_TABLE ident TOK_DROP TOK_COLUMN ident
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;

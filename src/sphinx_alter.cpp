@@ -61,12 +61,12 @@ const CSphRowitem * CopyRowAttrByAttr ( const CSphRowitem * pDocinfo, DWORD * pT
 }
 
 
-static void AddToSchema ( CSphSchema & tSchema, const CSphString & sAttrName, ESphAttr eAttrType, AttrEngine_e eEngine, DWORD uAttrFlags, CSphString & sError )
+static void AddToSchema ( CSphSchema & tSchema, const AttrAddRemoveCtx_t & tCtx, CSphString & sError )
 {
-	bool bColumnar = !!(uAttrFlags & CSphColumnInfo::ATTR_COLUMNAR);
+	bool bColumnar = !!(tCtx.m_uFlags & CSphColumnInfo::ATTR_COLUMNAR);
 	const CSphColumnInfo * pBlobLocator = tSchema.GetAttr ( sphGetBlobLocatorName() );
 
-	bool bBlob = sphIsBlobAttr(eAttrType);
+	bool bBlob = sphIsBlobAttr ( tCtx.m_eType );
 	bool bRebuild = false;
 	if ( bBlob && !bColumnar && !pBlobLocator )
 	{
@@ -78,9 +78,10 @@ static void AddToSchema ( CSphSchema & tSchema, const CSphString & sAttrName, ES
 		tSchema.InsertAttr ( 1, tCol, false );
 	}
 
-	CSphColumnInfo tInfo ( sAttrName.cstr(), eAttrType );
-	tInfo.m_uAttrFlags = uAttrFlags;
-	tInfo.m_eEngine = eEngine;
+	CSphColumnInfo tInfo ( tCtx.m_sName.cstr(), tCtx.m_eType );
+	tInfo.m_uAttrFlags			= tCtx.m_uFlags;
+	tInfo.m_eEngine				= tCtx.m_eEngine;
+	tInfo.m_tLocator.m_iBitCount = tCtx.m_iBits;
 
 	if ( tSchema.GetAttrId_FirstFieldLen()!=-1 )
 	{
@@ -418,30 +419,30 @@ bool IndexAlterHelper_c::Alter_AddRemoveColumnar ( bool bAdd, const ISphSchema &
 }
 
 
-bool IndexAlterHelper_c::Alter_AddRemoveFromSchema ( CSphSchema & tSchema, const CSphString & sAttrName, ESphAttr eAttrType, AttrEngine_e eEngine, DWORD uAttrFlags, bool bAdd, CSphString & sError ) const
+bool IndexAlterHelper_c::Alter_AddRemoveFromSchema ( CSphSchema & tSchema, const AttrAddRemoveCtx_t & tCtx, bool bAdd, CSphString & sError ) const
 {
-	if ( bAdd && ( uAttrFlags & CSphColumnInfo::ATTR_COLUMNAR ) )
+	if ( bAdd && ( tCtx.m_uFlags & CSphColumnInfo::ATTR_COLUMNAR ) )
 	{
 		if ( !IsColumnarLibLoaded() )
 		{
-			sError.SetSprintf ( "Unable to add columnar attribute '%s': columnar library not loaded", sAttrName.cstr() );
+			sError.SetSprintf ( "Unable to add columnar attribute '%s': columnar library not loaded", tCtx.m_sName.cstr() );
 			return false;
 		}
 
-		if ( eAttrType==SPH_ATTR_JSON )
+		if ( tCtx.m_eType==SPH_ATTR_JSON )
 		{
-			sError.SetSprintf ( "Unable to add columnar attribute '%s': JSON attribute type is not supported in columnar storage", sAttrName.cstr() );
+			sError.SetSprintf ( "Unable to add columnar attribute '%s': JSON attribute type is not supported in columnar storage", tCtx.m_sName.cstr() );
 			return false;
 		}
 	}
 
 	if ( bAdd )
 	{
-		AddToSchema ( tSchema, sAttrName, eAttrType, eEngine, uAttrFlags, sError );
+		AddToSchema ( tSchema, tCtx, sError );
 		return true;
 	}
 
-	return RemoveFromSchema ( tSchema, sAttrName, eAttrType, sError );
+	return RemoveFromSchema ( tSchema, tCtx.m_sName, tCtx.m_eType, sError );
 }
 
 

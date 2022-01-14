@@ -234,6 +234,7 @@ public:
 	AttrEngine_e			m_eEngine = AttrEngine_e::DEFAULT;
 	DWORD					m_uFieldFlags = 0;
 	DWORD					m_uAttrFlags = 0;
+	int						m_iBits = -1;
 
 	// CREATE TABLE specific
 	CreateTableSettings_t	m_tCreateTable;

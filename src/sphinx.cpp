@@ -1327,7 +1327,7 @@ public:
 	bool				SaveAttributes ( CSphString & sError ) const final;
 	DWORD				GetAttributeStatus () const final;
 
-	bool				AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, AttrEngine_e eEngine, DWORD uAttrFlags, CSphString & sError ) final;
+	bool				AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t & tCtx, CSphString & sError ) final;
 	bool				AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD uFieldFlags, CSphString & sError ) final;
 
 	void				FlushDeadRowMap ( bool bWaitComplete ) const final;
@@ -3051,16 +3051,17 @@ bool CSphIndex_VLN::AddRemoveColumnarAttr ( bool bAddAttr, const CSphString & sA
 }
 
 
-bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, AttrEngine_e eEngine, DWORD uAttrFlags, CSphString & sError )
+bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t & tCtx, CSphString & sError )
 {
-	AttrEngine_e eAttrEngine = CombineEngines ( m_tSettings.m_eEngine, eEngine );
+	AttrEngine_e eAttrEngine = CombineEngines ( m_tSettings.m_eEngine, tCtx.m_eEngine );
+	AttrAddRemoveCtx_t tNewCtx = tCtx;
 	if ( eAttrEngine==AttrEngine_e::COLUMNAR )
-		uAttrFlags |= CSphColumnInfo::ATTR_COLUMNAR;
+		tNewCtx.m_uFlags |= CSphColumnInfo::ATTR_COLUMNAR;
 	else
-		uAttrFlags &= ~( CSphColumnInfo::ATTR_COLUMNAR_HASHES | CSphColumnInfo::ATTR_STORED );
+		tNewCtx.m_uFlags &= ~( CSphColumnInfo::ATTR_COLUMNAR_HASHES | CSphColumnInfo::ATTR_STORED );
 
 	CSphSchema tNewSchema = m_tSchema;
-	if ( !Alter_AddRemoveFromSchema ( tNewSchema, sAttrName, eAttrType, eEngine, uAttrFlags, bAddAttr, sError ) )
+	if ( !Alter_AddRemoveFromSchema ( tNewSchema, tNewCtx, bAddAttr, sError ) )
 		return false;
 
 	int iNewStride = tNewSchema.GetRowSize();
@@ -3108,7 +3109,7 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttr
 	for ( int i = 0; i < tNewSchema.GetAttrsCount(); i++ )
 		bHaveBlobs |= sphIsBlobAttr ( tNewSchema.GetAttr(i) );
 
-	bool bBlob = sphIsBlobAttr ( eAttrType );
+	bool bBlob = sphIsBlobAttr ( tCtx.m_eType );
 	bool bBlobsModified = bBlob && ( bAddAttr || bHaveBlobs==bHadBlobs );
 	if ( bBlobsModified )
 	{
@@ -3124,20 +3125,20 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttr
 		return false;
 	}
 
-	bool bColumnar = bAddAttr ? tNewSchema.GetAttr ( sAttrName.cstr() )->IsColumnar() : m_tSchema.GetAttr ( sAttrName.cstr() )->IsColumnar();
+	bool bColumnar = bAddAttr ? tNewSchema.GetAttr ( tCtx.m_sName.cstr() )->IsColumnar() : m_tSchema.GetAttr ( tCtx.m_sName.cstr() )->IsColumnar();
 	if ( bColumnar )
-		AddRemoveColumnarAttr ( bAddAttr, sAttrName, eAttrType, m_tSchema, tNewSchema, sError );
+		AddRemoveColumnarAttr ( bAddAttr, tCtx.m_sName, tCtx.m_eType, m_tSchema, tNewSchema, sError );
 	else
 	{
 		int64_t iTotalRows = m_iDocinfo + (m_iDocinfoIndex+1)*2;
-		Alter_AddRemoveRowwiseAttr ( m_tSchema, tNewSchema, m_tAttr.GetWritePtr(), (DWORD)iTotalRows, m_tBlobAttrs.GetWritePtr(), *pSPAWriteWrapper, *pSPBWriteWrapper, bAddAttr, sAttrName );
+		Alter_AddRemoveRowwiseAttr ( m_tSchema, tNewSchema, m_tAttr.GetWritePtr(), (DWORD)iTotalRows, m_tBlobAttrs.GetWritePtr(), *pSPAWriteWrapper, *pSPBWriteWrapper, bAddAttr, tCtx.m_sName );
 	}
 
 	if ( m_pHistograms )
 	{
 		if ( bAddAttr )
 		{
-			Histogram_i * pNewHistogram = CreateHistogram ( sAttrName, eAttrType );
+			Histogram_i * pNewHistogram = CreateHistogram ( tCtx.m_sName, tCtx.m_eType );
 			if ( pNewHistogram )
 			{
 				for ( DWORD i = 0; i < m_iDocinfo; i++ )
@@ -3147,7 +3148,7 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttr
 			}
 		}
 		else
-			m_pHistograms->Remove ( sAttrName );
+			m_pHistograms->Remove ( tCtx.m_sName );
 
 		if ( !m_pHistograms->Save ( sSPHIfile, sError ) )
 			return false;

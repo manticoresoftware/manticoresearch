@@ -54,6 +54,7 @@ public:
 
 	void	AddCreateTableOption ( const SqlNode_t & tName, const SqlNode_t & tValue );
 	bool	SetupAlterTable  ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, const SqlNode_t & tType );
+	bool	SetupAlterTable ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, ESphAttr eAttr, int iFieldFlags, int iBits=-1 );
 
 	void	JoinClusterAt ( const SqlNode_t & tAt );
 

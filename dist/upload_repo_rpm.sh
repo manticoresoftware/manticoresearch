@@ -31,8 +31,8 @@ for filename in *.rpm; do
     curl -is --user "${REPO_USER}:${REPO_SECRET}" --upload-file $filename $REPO_IP/repository/$REPO_NAME/$DESTINATION/centos/$DISTRO/x86_64/$f \
     && echo "Uploaded $f to $REPO_NAME/$DESTINATION/centos/$DISTRO/x86_64"
 
-    echo -e "Copy $f to /work/repomanager/repodata/repository/manticoresearch/$DESTINATION/centos/$DISTRO/x86_64/";
-    cp $f /work/repomanager/repodata/repository/manticoresearch/$DESTINATION/centos/$DISTRO/x86_64/ && echo -e "Success"
+    echo -e "Copy $f to /mnt/repo_storage/manticoresearch/$DESTINATION/centos/$DISTRO/x86_64/";
+    cp $f /mnt/repo_storage/manticoresearch/$DESTINATION/centos/$DISTRO/x86_64/ && echo -e "Success"
     echo -e "\n"
   fi
 done

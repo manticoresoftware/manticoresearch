@@ -31,8 +31,8 @@ for filename in *deb; do
       arch="arm"
     fi
 
-    echo -e "Copy $f to /work/repomanager/repodata/repository/manticoresearch_$DISTRO$SUFFIX/dists/$DISTRO/main/binary-${arch}64/";
-    cp $f /work/repomanager/repodata/repository/manticoresearch_$DISTRO$SUFFIX/dists/$DISTRO/main/binary-${arch}64/ && echo -e "Success"
+    echo -e "Copy $f to /mnt/repo_storage/manticoresearch_$DISTRO$SUFFIX/dists/$DISTRO/main/binary-${arch}64/";
+    cp $f /mnt/repo_storage/manticoresearch_$DISTRO$SUFFIX/dists/$DISTRO/main/binary-${arch}64/ && echo -e "Success"
     echo -e "\n"
   fi
 done

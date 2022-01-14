@@ -22,8 +22,8 @@ for filename in *.zip; do
     curl -is --user "${REPO_USER}:${REPO_SECRET}" --upload-file $filename $REPO_IP/repository/manticoresearch_windows/$DESTINATION/x64/$f \
     && echo "Uploaded $f to manticoresearch_windows/$DESTINATION/x64"
 
-    echo -e "Copy $f to /work/repomanager/repodata/repository/manticoresearch_windows/$DESTINATION/x64/";
-    cp $f /work/repomanager/repodata/repository/manticoresearch_windows/$DESTINATION/x64/ && echo -e "Success"
+    echo -e "Copy $f to /mnt/repo_storage/manticoresearch_windows/$DESTINATION/x64/";
+    cp $f /mnt/repo_storage/manticoresearch_windows/$DESTINATION/x64/ && echo -e "Success"
     echo -e "\n"
 
   fi
@@ -36,8 +36,8 @@ for filename in *.gz; do
     curl -is --user "${REPO_USER}:${REPO_SECRET}" --upload-file $filename $REPO_IP/repository/manticoresearch_macos/$DESTINATION/$f \
     && echo "Uploaded $f to manticoresearch_macos/$DESTINATION"
 
-    echo -e "Copy $f to /work/repomanager/repodata/repository/manticoresearch_macos/$DESTINATION/";
-    cp $f /work/repomanager/repodata/repository/manticoresearch_macos/$DESTINATION/ && echo -e "Success"
+    echo -e "Copy $f to /mnt/repo_storage/manticoresearch_macos/$DESTINATION/";
+    cp $f /mnt/repo_storage/manticoresearch_macos/$DESTINATION/ && echo -e "Success"
     echo -e "\n"
 
   fi

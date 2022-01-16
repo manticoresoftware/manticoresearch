@@ -498,7 +498,7 @@ void CSphSchema::SetupColumnarFlags ( const CSphSourceSettings & tSettings, StrV
 		if ( eEngine != AttrEngine_e::COLUMNAR )
 			continue;
 
-		if ( tAttr.m_eAttrType == SPH_ATTR_JSON && pWarnings )
+		if ( tAttr.m_eAttrType==SPH_ATTR_JSON && pWarnings )
 		{
 			if ( pWarnings )
 			{
@@ -507,6 +507,7 @@ void CSphSchema::SetupColumnarFlags ( const CSphSourceSettings & tSettings, StrV
 				pWarnings->Add ( sWarning );
 			}
 
+			tAttr.m_uAttrFlags &= ~CSphColumnInfo::ATTR_COLUMNAR;
 			continue;
 		}
 

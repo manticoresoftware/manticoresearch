@@ -89,6 +89,14 @@ searchd
 	desc col;
 	show create table col;
 	drop table col;
+
+	create table col(id,f text,s string,j json) engine='columnar';
+	alter table col drop column s;
+	alter table col add column s string;
+	insert into col(s) values('abc');
+	select * from col;
+	select s from col;
+	drop table col;
 </sphinxql>
 </queries>
 

@@ -1684,6 +1684,7 @@ static void ProcessStoredAttrs ( DocstoreBuilder_i::Doc_t & tStoredDoc, const In
 			break;
 
 		case SPH_ATTR_JSON:
+			iStrAttr++;
 			if ( !bStored )
 				break;
 

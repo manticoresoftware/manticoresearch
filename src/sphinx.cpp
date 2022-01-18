@@ -9937,7 +9937,7 @@ static ESphEvalStage GetEarliestStage ( ESphEvalStage eStage, const CSphColumnIn
 	for ( const auto * pSchema : dSchemas )
 	{
 		const CSphColumnInfo * pCol = pSchema->GetAttr ( tIn.m_sName.cstr() );
-		if ( !pCol )
+		if ( !pCol || pCol->IsColumnar() )
 			continue;
 
 		eStage = Min ( eStage, pCol->m_eStage );
@@ -9947,8 +9947,7 @@ static ESphEvalStage GetEarliestStage ( ESphEvalStage eStage, const CSphColumnIn
 }
 
 
-bool CSphQueryContext::SetupCalc ( CSphQueryResultMeta & tMeta, const ISphSchema & tInSchema, const CSphSchema & tSchema, const BYTE * pBlobPool, const columnar::Columnar_i * pColumnar,
-	const CSphVector<const ISphSchema *> & dInSchemas )
+bool CSphQueryContext::SetupCalc ( CSphQueryResultMeta & tMeta, const ISphSchema & tInSchema, const CSphSchema & tSchema, const BYTE * pBlobPool, const columnar::Columnar_i * pColumnar, const CSphVector<const ISphSchema *> & dInSchemas )
 {
 	m_dCalcFilter.Resize(0);
 	m_dCalcSort.Resize(0);

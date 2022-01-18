@@ -2186,7 +2186,7 @@ class SphinxConfig
             return false;
         }
 
-        if ( property_exists ( $decoded_rows, 'took' ) )
+        if ( is_object($decoded_rows) && property_exists ( $decoded_rows, 'took' ) )
             unset ( $decoded_rows->took );
 
         // fixup floats in json

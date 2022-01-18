@@ -52,7 +52,9 @@ It can also be used to highlight text fetched from other sources using an UDF:
 SELECT id, SNIPPET(myUdf(id), 'my.query', 'limit=100') FROM myIndex WHERE MATCH('my.query')
 ```
 
-where `myUdf()` would be a UDF that fetches a document by its ID from some external storage. This enables applications to fetch the entire result set directly from Manticore in one query, without having to separately fetch the documents in the application and then send them back to Manticore for highlighting. `SNIPPET()` is a so-called "post limit" function, meaning that computing snippets is postponed not just until the entire final result set is ready, but even after the `LIMIT` clause is applied. For example, with a `LIMIT 20,10` clause, `SNIPPET()` will be called at most 10 times.  
+where `myUdf()` would be a UDF that fetches a document by its ID from some external storage. `SNIPPET()` is a "post limit" function, meaning that computing snippets is postponed not just until the entire final result set is ready, but even after the `LIMIT` clause is applied. For example, with a `LIMIT 20,10` clause, `SNIPPET()` will be called at most 10 times.
+
+Note, `SNIPPET()` doesn't support limiting by fields. Use [HIGHLIGHT()](../Searching/Highlighting.md#Highlighting-via-SQL) instead.
 
 ### SUBSTRING_INDEX()
 `SUBSTRING_INDEX(string, delimiter, number)` returns a substring of a string before a specified number of delimiter occurs

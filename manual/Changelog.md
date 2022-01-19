@@ -122,6 +122,7 @@ sys	0m0.047s
 * Binlog version was increased, binlog from previous version won't be replayed, so make sure you stop Manticore Search cleanly during upgrade: no binlog files should be in `/var/lib/manticore/binlog/` except `binlog.meta` after stopping the previous instance.
 * [Commit 3f659f36](https://github.com/manticoresoftware/manticoresearch/commit/3f659f36e87d99ee262205a8eae4663a255be630) new column "chain" in `show threads option format=all`. It shows stack of some task info tickets, most useful for profiling needs, so if you are parsing `show threads` output be aware of the new column.
 * `searchd.workers` was obsoleted since 3.5.0, now it's deprecated, if you still have it in your configuration file it will trigger a warning on start. Manticore Search will start, but with a warning.
+* If you use PHP and PDO to access Manticore you need to do `PDO::ATTR_EMULATE_PREPARES`
 
 ### Bugfixes
 * ❗[Issue #650](https://github.com/manticoresoftware/manticoresearch/issues/650) Manticore 4.0.2 slower than Manticore 3.6.3. 4.0.2 was faster than previous versions in terms of bulk inserts, but significantly slower for single document inserts. It's been fixed in 4.2.0.

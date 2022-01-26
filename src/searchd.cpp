@@ -19143,6 +19143,21 @@ static void ConfigureAndPreload ( const CSphConfig & hConf, const StrVec_t & dOp
 		}
 	}
 
+	// set index cluster name for check
+	for ( const ClusterDesc_t & tDesc : GetClustersInt() )
+	{
+		for ( const CSphString & sIndexName : tDesc.m_dIndexes )
+		{
+			auto tServed = GetServed ( sIndexName );
+			if ( !tServed )
+				continue;
+
+			ServedDescWPtr_c tIdxDesc ( tServed );
+			tIdxDesc->m_sCluster = tDesc.m_sName;
+		}
+	}
+	sphLogDebugRpl ( "%d clusters loaded from config", GetClustersInt().GetLength() );
+
 	tmLoad += sphMicroTimer();
 	if ( !iValidIndexes )
 		sphLogDebug ( "no valid indexes to serve" );

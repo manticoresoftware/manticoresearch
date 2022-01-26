@@ -159,6 +159,7 @@ public:
 	void			SetBufferSize ( int iBufferSize );	///< tune write cache size; must be called before OpenFile() or SetFile()
 
 	bool			OpenFile ( const CSphString & sName, CSphString & sError );
+	bool			OpenFile ( const CSphString & sName, int iOpenFlags, CSphString & sError );
 	void			SetFile ( CSphAutofile & tAuto, SphOffset_t * pSharedOffset, CSphString & sError );
 	void			CloseFile ( bool bTruncate = false );	///< note: calls Flush(), ie. IsError() might get true after this call
 	void			UnlinkFile (); /// some shit happened (outside) and the file is no more actual.

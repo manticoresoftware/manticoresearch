@@ -145,7 +145,7 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf )
 				sphWarning ( "ill-formed client request (command=%d, SEARCHD_COMMAND_TOTAL=%d)", eCommand,
 							 SEARCHD_COMMAND_TOTAL );
 
-			SendErrorReply ( tOut, "invalid command (code=%d, len=%d)", eCommand, iReplySize );
+			SendErrorReply ( tOut, "invalid %s (code=%d, len=%d)", ( bBadLength ? "length" : "command" ), eCommand, iReplySize );
 			tOut.Flush(); // no need to check return code since we anyway break
 			break;
 		}

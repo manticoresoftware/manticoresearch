@@ -229,7 +229,7 @@ static bool RemoteClusterDelete ( const CSphString & sCluster, CSphString & sErr
 static bool RemoteFileReserve ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSphString & sError );
 
 // command at remote node for CLUSTER_FILE_SEND to store data into file, data size and file offset defined by sender
-static bool RemoteFileStore ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSphString & sError );
+static void RemoteFileStore ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSphString & sError );
 
 // command at remote node for CLUSTER_INDEX_ADD_LOCAL to check sha1 of index file matched and load index into daemon
 static bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSphString & sError );
@@ -366,6 +366,7 @@ public:
 };
 
 static bool g_bReplicationEnabled = false;
+static bool g_bReplicationStarted = false;
 // incoming address guessed (false) or set via searchd.node_address
 static bool g_bHasIncoming = false;
 // incoming IP part of address set by searchd.node_address or took from listener
@@ -469,11 +470,17 @@ static const char * GetStatus ( wsrep_status_t tStatus )
 }
 
 // var args wrapper for log callback
-static void LoggerWrapper ( wsrep_log_level_t eLevel, const char * sFmt, ... )
+static void LoggerWrapper ( wsrep_log_level_t eLevel, const char * sFmt, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
+void LoggerWrapper ( wsrep_log_level_t eLevel, const char * sFmt, ... )
 {
 	ESphLogLevel eLevelDst = SPH_LOG_INFO;
 	switch ( eLevel )
 	{
+		// FIXME!!! add --logreplicationv daemon option to show galera debug messages in this mode
+		//case WSREP_LOG_INFO: eLevelDst = SPH_LOG_RPL_DEBUG;
+		//case WSREP_LOG_DEBUG: eLevelDst = SPH_LOG_RPL_DEBUG;
+		//	return;
+
 		case WSREP_LOG_FATAL: eLevelDst = SPH_LOG_FATAL; break;
 		case WSREP_LOG_ERROR: eLevelDst = SPH_LOG_FATAL; break;
 		case WSREP_LOG_WARN: eLevelDst = SPH_LOG_WARNING; break;
@@ -498,7 +505,7 @@ static void Logger_fn ( wsrep_log_level_t eLevel, const char * sMsg )
 	if ( g_eLogLevel<SPH_LOG_RPL_DEBUG && eLevel==WSREP_LOG_WARN && CheckNoWarning ( sMsg ) )
 		return;
 
-	LoggerWrapper ( eLevel, sMsg );
+	LoggerWrapper ( eLevel, "%s", sMsg );
 }
 
 // commands version (commands these got replicated via Galera)
@@ -956,13 +963,13 @@ static bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sErro
 
 	CSphString sIncoming;
 	sIncoming.SetSprintf ( "%s,%s:%d:replication", g_sIncomingProto.cstr(), g_sIncomingIP.cstr(), tArgs.m_iListenPort );
-	sphLogDebugRpl ( "node incoming '%s', listen '%s', nodes '%s', name '%s'", sIncoming.cstr(), tArgs.m_sListenAddr.cstr(), sConnectNodes.cstr(), sMyName.cstr() );
+	sphLogDebugRpl ( "node incoming '%s', listen '%s', nodes '%s', name '%s'", sIncoming.cstr(), tArgs.m_sListenAddr.cstr(), sConnectNodes.scstr(), sMyName.cstr() );
 	if ( g_eLogLevel>=SPH_LOG_RPL_DEBUG )
 	{
 		StringBuilder_c sIndexes ( "," );
 		for ( const CSphString & sIndex : tArgs.m_pCluster->m_dIndexes )
 			sIndexes += sIndex.cstr();
-		sphLogDebugRpl ( "cluster '%s', indexes '%s', nodes '%s'", tArgs.m_pCluster->m_sName.cstr(), sIndexes.cstr(), tArgs.m_pCluster->m_sClusterNodes.cstr() );
+		sphLogDebugRpl ( "cluster '%s', indexes '%s', nodes '%s'", tArgs.m_pCluster->m_sName.cstr(), sIndexes.cstr(), tArgs.m_pCluster->m_sClusterNodes.scstr() );
 	}
 
 	SharedPtr_t<ReceiverCtx_t> pRecvArgs { new ReceiverCtx_t() };
@@ -1759,7 +1766,11 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 
 	if ( !ppCluster )
 	{
-		sError.SetSprintf ( "unknown cluster '%s'", tCmdCluster.m_sCluster.cstr() );
+		if ( g_bReplicationStarted )
+			sError.SetSprintf ( "unknown cluster '%s'", tCmdCluster.m_sCluster.cstr() );
+		else
+			sError.SetSprintf ( "cluster '%s' is not ready, starting", tCmdCluster.m_sCluster.cstr() );
+
 		return false;
 	}
 	if ( !CheckClasterState ( eClusterState, bPrimary, tCmdCluster.m_sCluster, sError ) )
@@ -2522,6 +2533,35 @@ static void SetListener ( const CSphVector<ListenerDesc_t> & dListeners )
 	g_bReplicationEnabled = IsConfigless();
 }
 
+class ClusterIndexClearGuard_t
+{
+public:
+	explicit ClusterIndexClearGuard_t ( const VecTraits_T<CSphString> dIndexes )
+		: m_dIndexes ( dIndexes )
+	{
+	}
+
+	~ClusterIndexClearGuard_t()
+	{
+		if ( m_bCleanup )
+		{
+			CSphString sError;
+			CSphString sClusterEmpty;
+			for ( const CSphString & sIndexName : m_dIndexes )
+			{
+				if ( !SetIndexCluster ( sIndexName, sClusterEmpty, sError ) )
+					sphWarning ( "%s on removal index '%s' from a cluster", sError.cstr(), sIndexName.cstr() );
+			}
+		}
+	}
+
+	void SkipCleanup() { m_bCleanup = false; }
+
+private:
+	bool m_bCleanup { true };
+	const VecTraits_T<CSphString> m_dIndexes;
+};
+
 // start clusters on daemon start
 void ReplicationStart ( const CSphConfigSection & hSearchd, const CSphVector<ListenerDesc_t> & dListeners,
 	bool bNewCluster, bool bForce ) EXCLUDES ( g_tClustersLock )
@@ -2541,6 +2581,7 @@ void ReplicationStart ( const CSphConfigSection & hSearchd, const CSphVector<Lis
 	{
 		CSphString sError;
 		ReplicationArgs_t tArgs;
+		ClusterIndexClearGuard_t tClearIndexGuard ( tDesc.m_dIndexes );
 		// global options
 		tArgs.m_bNewCluster = ( bNewCluster || bForce );
 
@@ -2557,13 +2598,13 @@ void ReplicationStart ( const CSphConfigSection & hSearchd, const CSphVector<Lis
 			CSphString sNodes;
 			if ( !ClusterGetNodes ( tDesc.m_sClusterNodes, tDesc.m_sName, "", sError, sNodes ) )
 			{
-				sphWarning ( "cluster '%s': no available nodes (%s), replication is disabled, error: %s", tDesc.m_sName.cstr(), tDesc.m_sClusterNodes.cstr(), sError.cstr() );
+				sphWarning ( "cluster '%s': no available nodes (%s), replication is disabled, error: %s", tDesc.m_sName.cstr(), tDesc.m_sClusterNodes.scstr(), sError.cstr() );
 				continue;
 			}
 
 			if ( !ClusterFilterNodes ( sNodes, Proto_e::REPLICATION, tArgs.m_sNodes, sError ) )
 			{
-				sphWarning ( "cluster '%s': invalid nodes '%s', replication is disabled, parse error: '%s'", tDesc.m_sName.cstr(), sNodes.cstr(), sError.cstr() );
+				sphWarning ( "cluster '%s': invalid nodes '%s', replication is disabled, parse error: '%s'", tDesc.m_sName.cstr(), sNodes.scstr(), sError.cstr() );
 				continue;
 			}
 
@@ -2609,6 +2650,7 @@ void ReplicationStart ( const CSphConfigSection & hSearchd, const CSphVector<Lis
 		// check indexes valid
 		for ( const CSphString & sIndexName : tDesc.m_dIndexes )
 		{
+			// just check index exists and valid as cluster name was already set on daemon preload phase
 			if ( !SetIndexCluster ( sIndexName, pElem->m_sName, sError ) )
 			{
 				sphWarning ( "%s, removed from cluster '%s'", sError.cstr(), pElem->m_sName.cstr() );
@@ -2626,10 +2668,18 @@ void ReplicationStart ( const CSphConfigSection & hSearchd, const CSphVector<Lis
 
 		if ( !ReplicateClusterInit ( tArgs, sError ) )
 		{
-			sphLogFatal ( "%s", sError.cstr() );
+			sphLogFatal ( "'%s' cluster start error: %s", tDesc.m_sName.cstr(), sError.cstr() );
 			DeleteClusterByName ( tDesc.m_sName );
+		} else
+		{
+			tClearIndexGuard.SkipCleanup();
+			sphLogDebugRpl ( "'%s' cluster started with %d indexes", tDesc.m_sName.cstr(), tDesc.m_dIndexes.GetLength() );
 		}
-	}});
+	}
+	
+	g_bReplicationStarted = true;
+
+	});
 }
 
 // validate cluster option at SphinxQL statement
@@ -2732,7 +2782,7 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 	CSphString sNodes;
 	if ( !ClusterGetNodes ( pElem->m_sClusterNodes, pElem->m_sName, "", sError, sNodes ) )
 	{
-		sError.SetSprintf ( "cluster '%s', no nodes available(%s), error '%s'", pElem->m_sName.cstr(), pElem->m_sClusterNodes.cstr(), sError.cstr() );
+		sError.SetSprintf ( "cluster '%s', no nodes available(%s), error: %s", pElem->m_sName.cstr(), pElem->m_sClusterNodes.cstr(), sError.cstr() );
 		return false;
 	}
 
@@ -2906,8 +2956,10 @@ struct SyncSrc_t
 
 	CSphFixedVector<FileChunks_t> m_dChunks { 0 };
 	CSphFixedVector<BYTE> m_dHashes { 0 }; // hashes of all index files
-	int m_iMaxChunkBytes = 0; // max length bytes of file chunk hashed
-	int64_t m_tmTook = 0; // millli-second it took to read and hash all files, used for calc agent query timeout later
+	int64_t m_tmTimeout = 0; // millli-second it took to read and hash all files, used for calc agent query timeout later
+	int64_t m_tmTimeoutFile = 0; // max millli-second to read or hash files, used for calc agent query timeout later
+
+	int m_iBufferSize = 0;
 
 	BYTE * GetFileHash ( int iFile ) const
 	{
@@ -2928,6 +2980,15 @@ struct SyncDst_t
 {
 	CSphBitvec m_dNodeChunks;
 	CSphFixedVector<CSphString> m_dRemotePaths { 0 };
+	int64_t m_tmTimeout { 0 };
+	int64_t m_tmTimeoutFile { 0 };
+};
+
+enum class WriteResult_e : BYTE
+{
+	OK,
+	WRITE_FAILED,
+	VERIFY_FAILED
 };
 
 // reply from remote node
@@ -2937,7 +2998,58 @@ struct PQRemoteReply_t
 	const SyncDst_t * m_pSharedDst = nullptr;
 	bool m_bIndexActive = false;
 	CSphString m_sNodes;
-	int64_t m_iReplyPayload = -1;
+	int m_iFile = -1;
+	WriteResult_e m_eRes { WriteResult_e::WRITE_FAILED };
+	CSphString m_sWarning;
+};
+
+enum class FileOp_e : BYTE
+{
+	COPY_FILE,
+	COPY_BUFFER,
+	VERIFY_FILE
+};
+
+struct FileOp_t
+{
+	FileOp_e m_eOp { FileOp_e::COPY_FILE };
+	int64_t m_iOffFile { 0 };
+	int m_iOffBuf { 0 };
+	int64_t m_iSize { 0 };
+};
+
+static void GetArray ( CSphVector<FileOp_t> & dBuf, InputBuffer_c & tIn );
+static void SendArray ( const VecTraits_T<FileOp_t> & dBuf, ISphOutputBuffer & tOut );
+
+class SendBuf_c
+{
+public:
+	SendBuf_c() = default;
+	SendBuf_c ( BYTE * pData, int iSize )
+		: m_pData ( pData )
+		, m_iSize ( iSize )
+	{}
+
+	BYTE * DataBegin () const { return m_pData; }
+	int DataSize () const { return m_iSize; }
+	BYTE * Begin() const
+	{
+		int iOff = m_iSize - m_iLeft;
+		return m_pData + iOff;
+	}
+	int Used () const { return m_iSize - m_iLeft; }
+	void Use ( int iLen )
+	{
+		assert ( iLen<=m_iLeft );
+		m_iLeft -= iLen;
+	}
+	int Left () const { return m_iLeft; }
+	void Reset() { m_iLeft = m_iSize; }
+
+private:
+	BYTE * m_pData = nullptr;
+	int m_iSize = 0;
+	int m_iLeft = 0;
 };
 
 // query to remote node
@@ -2946,10 +3058,11 @@ struct PQRemoteData_t
 	CSphString	m_sIndex;			// local name of index
 
 	// file send args
-	BYTE * m_pSendBuff = nullptr;
-	int			m_iSendSize = 0;
+	SendBuf_c	m_tSendBuf;
 	int			m_iFile = 0;
-	int			m_iChunk = 0;
+	CSphVector<FileOp_t> m_dOps;
+	bool m_bSendFilesSuccess { false };
+	CSphString m_sMsg;
 
 	CSphString	m_sCluster;			// cluster name of index
 	IndexType_e	m_eIndex = IndexType_e::ERROR_;
@@ -2961,7 +3074,6 @@ struct PQRemoteData_t
 	CSphFixedVector<CSphString> m_dIndexes { 0 };	// index list received
 	SyncSrc_t * m_pChunks = nullptr;
 	CSphString m_sIndexFileName;
-	CSphString m_sRemoteFileName;
 };
 
 // interface implementation to work with our agents
@@ -3267,6 +3379,8 @@ public:
 		SendArray ( pDst->m_dRemotePaths, tOut );
 		tOut.SendInt ( pDst->m_dNodeChunks.GetBits() );
 		tOut.SendBytes ( pDst->m_dNodeChunks.Begin(), sizeof(DWORD) * pDst->m_dNodeChunks.GetSize() );
+		tOut.SendUint64 ( pDst->m_tmTimeout );
+		tOut.SendUint64 ( pDst->m_tmTimeoutFile );
 	}
 
 	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const final
@@ -3280,6 +3394,8 @@ public:
 		int iBits = tReq.GetInt();
 		pDst->m_dNodeChunks.Init ( iBits );
 		tReq.GetBytes ( pDst->m_dNodeChunks.Begin(), sizeof(DWORD) * pDst->m_dNodeChunks.GetSize() );
+		pDst->m_tmTimeout = tReq.GetUint64();
+		pDst->m_tmTimeoutFile = tReq.GetUint64();
 
 		return !tReq.GetError();
 	}
@@ -3299,34 +3415,41 @@ public:
 	{
 		const PQRemoteData_t & tCmd = GetReq ( tAgent );
 		tOut.SendUint64 ( tCmd.m_tWriterKey );
-		tOut.SendInt ( tCmd.m_iSendSize );
+		tOut.SendInt ( tCmd.m_tSendBuf.Used() );
 		tOut.SendInt ( tCmd.m_iFile );
-		tOut.SendInt ( tCmd.m_iChunk );
-		tOut.SendBytes ( tCmd.m_pSendBuff, tCmd.m_iSendSize );
+		tOut.SendBytes ( tCmd.m_tSendBuf.DataBegin(), tCmd.m_tSendBuf.Used() );
+		SendArray ( tCmd.m_dOps, tOut );
 	}
 
 	static void ParseCommand ( InputBuffer_c & tBuf, PQRemoteData_t & tCmd )
 	{
 		tCmd.m_tWriterKey = tBuf.GetUint64();
-		tCmd.m_iSendSize = tBuf.GetInt();
+		int iSize = tBuf.GetInt();
 		tCmd.m_iFile = tBuf.GetInt();
-		tCmd.m_iChunk = tBuf.GetInt();
-		const BYTE * pData = nullptr;
-		if ( tCmd.m_iSendSize )
-			tBuf.GetBytesZerocopy ( &pData, tCmd.m_iSendSize );
-		tCmd.m_pSendBuff = const_cast<BYTE *>(pData);
+		if ( iSize )
+		{
+			const BYTE * pData = nullptr;
+			tBuf.GetBytesZerocopy ( &pData, iSize );
+
+			tCmd.m_tSendBuf = SendBuf_c ( (BYTE *)pData, iSize );
+		}
+		GetArray ( tCmd.m_dOps, tBuf );
 	}
 
 	static void BuildReply ( const PQRemoteReply_t & tRes, ISphOutputBuffer & tOut )
 	{
 		auto tReply = APIAnswer ( tOut );
-		tOut.SendDword ( (int)tRes.m_iReplyPayload );
+		tOut.SendDword ( tRes.m_iFile );
+		tOut.SendByte ( (BYTE)tRes.m_eRes );
+		tOut.SendString ( tRes.m_sWarning.cstr() );
 	}
 
 	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const final
 	{
 		PQRemoteReply_t & tRes = GetRes ( tAgent );
-		tRes.m_iReplyPayload = tReq.GetDword();
+		tRes.m_iFile = tReq.GetDword();
+		tRes.m_eRes = (WriteResult_e)tReq.GetByte();
+		tRes.m_sWarning = tReq.GetString();
 		return !tReq.GetError();
 	}
 };
@@ -3346,6 +3469,7 @@ public:
 		tOut.SendString ( tCmd.m_sCluster.cstr() );
 		tOut.SendString ( tCmd.m_sIndex.cstr() );
 		tOut.SendByte ( (BYTE)tCmd.m_eIndex );
+		tOut.SendByte ( tCmd.m_bSendFilesSuccess );
 	}
 
 	static void ParseCommand ( InputBuffer_c & tBuf, PQRemoteData_t & tCmd )
@@ -3353,6 +3477,7 @@ public:
 		tCmd.m_sCluster = tBuf.GetString();
 		tCmd.m_sIndex = tBuf.GetString();
 		tCmd.m_eIndex = (IndexType_e)tBuf.GetByte();
+		tCmd.m_bSendFilesSuccess = !!tBuf.GetByte();
 	}
 
 	static void BuildReply ( const PQRemoteReply_t & tRes, ISphOutputBuffer & tOut )
@@ -3400,7 +3525,7 @@ static bool PerformRemoteTasks ( VectorAgentConn_t & dNodes, RequestBuilder_i & 
 	if ( !tTmp.IsEmpty() )
 		sError = tTmp.cstr();
 
-	return ( iFinished==iNodes && sError.IsEmpty() );
+	return ( iFinished==iNodes && tTmp.IsEmpty() );
 }
 
 // API command to remote node to get nodes it sees
@@ -3476,6 +3601,9 @@ public:
 
 static void ReportClusterError ( const CSphString & sCluster, const CSphString & sError )
 {
+	if ( sError.IsEmpty() )
+		return;
+
 	ScRL_t tLock ( g_tClustersLock );
 	ReplicationCluster_t ** ppCluster = g_hClusters ( sCluster );
 	if ( !ppCluster )
@@ -3530,9 +3658,10 @@ void HandleCommandClusterPq ( ISphOutputBuffer & tOut, WORD uCommandVer, InputBu
 		case CLUSTER_FILE_SEND:
 		{
 			PQRemoteFileSend_c::ParseCommand ( tBuf, tCmd );
-			bOk = RemoteFileStore ( tCmd, tRes, sError );
-			if ( bOk )
-				PQRemoteFileSend_c::BuildReply ( tRes, tOut );
+			RemoteFileStore ( tCmd, tRes, sError );
+			PQRemoteFileSend_c::BuildReply ( tRes, tOut );
+			bOk = true;
+
 		}
 		break;
 
@@ -3580,7 +3709,7 @@ void HandleCommandClusterPq ( ISphOutputBuffer & tOut, WORD uCommandVer, InputBu
 	}
 
 	if ( eClusterCmd!=CLUSTER_FILE_SEND || !bOk )
-		sphLogDebugRpl ( "remote cluster command %d, client %s - %s", (int)eClusterCmd, sClient, ( bOk ? "ok" : "error" ) );
+		sphLogDebugRpl ( "remote cluster command %d, client %s - %s %s", (int)eClusterCmd, sClient, ( bOk ? "ok" : "error" ), ( bOk ? "" : sError.cstr() ) );
 
 	if ( !bOk )
 	{
@@ -3769,7 +3898,7 @@ static bool SyncSigVerify ( const VecTraits_T<CSphString> & dFiles, const VecTra
 
 		if ( memcmp ( dHash, GetFileHash ( dHashes, iFile ), HASH20_SIZE )!=0 )
 		{
-			sError.SetSprintf ( "%s sha1 does not match, expected %s, got %s", sFileName.cstr(),
+			sError.SetSprintf ( "%s sha1 does not match, got %s, expected %s", sFileName.cstr(),
 				BinToHex ( dHash, HASH20_SIZE ).cstr(), BinToHex ( GetFileHash ( dHashes, iFile ), HASH20_SIZE ).cstr() );
 			return false;
 		}
@@ -3787,9 +3916,6 @@ struct MergeState_t
 	CSphFixedVector<CSphString> m_dFilesRef { 0 };
 	CSphFixedVector<FileChunks_t> m_dChunks { 0 };
 	CSphFixedVector<BYTE> m_dHashes { 0 };
-
-	int m_iFile = -1;
-	int m_iChunk = -1;
 };
 
 class RecvState_c
@@ -3798,56 +3924,39 @@ public:
 	RecvState_c() = default;
 	~RecvState_c() = default;
 
-	int Write ( int iFile, int iChunk, const void * pData, int64_t iSize, CSphString & sError )
+	WriteResult_e Write ( int iFile, const CSphVector<FileOp_t> & dOps, const VecTraits_T<BYTE> & dBuf, CSphString & sError )
 	{
 		Threads::ScopedCoroMutex_t tLock ( m_tLock );
 
 		assert ( m_pMerge.Ptr() );
-		if ( m_pMerge->m_iFile!=iFile )
+
+		if ( !SetFile ( iFile, false, sError ) )
+			return WriteResult_e::WRITE_FAILED;
+
+		for ( const auto & tOp : dOps )
 		{
-			// copy chunks from original
-			// - tail chunks on switching files
-			if ( !CopyChunksTail ( sError ) )
-				return -1;
-
-			// check hash of last writen file
-			if ( !VerifyHash ( sError ) )
-				return -1;
-
-			m_pWriter = nullptr;
-			m_pReader = nullptr;
-
-			m_pWriter = new WriterWithHash_c;
-			if ( !m_pWriter->OpenFile ( m_pMerge->m_dFilesNew[iFile], m_sError ) )
+			switch ( tOp.m_eOp )
 			{
-				sError = m_sError;
-				return -1;
-			}
+			case FileOp_e::COPY_FILE:
+				if ( !CmdCopyFile ( tOp.m_iOffFile, tOp.m_iSize, sError ) )
+					return WriteResult_e::WRITE_FAILED;
+				break;
 
-			if ( sphFileExists ( m_pMerge->m_dFilesRef[iFile].cstr(), nullptr ) )
-			{
-				m_pReader = new CSphAutoreader();
-				if ( !m_pReader->Open ( m_pMerge->m_dFilesRef[iFile], sError ) )
-					return -1;
-			}
+			case FileOp_e::COPY_BUFFER:
+				if ( !CmdCopyBuffer ( tOp.m_iOffFile, dBuf, tOp.m_iOffBuf, tOp.m_iSize, sError ) )
+					return WriteResult_e::WRITE_FAILED;
+				break;
 
-			m_pMerge->m_iFile = iFile;
-			m_pMerge->m_iChunk = -1;
+			case FileOp_e::VERIFY_FILE:
+				return CmdVerifyFile ( iFile, sError );
+
+			default:
+				sError.SetSprintf ( "unknown file %d operation %d", iFile, (int)tOp.m_eOp );
+				return WriteResult_e::WRITE_FAILED;
+			}
 		}
 
-		// copy chunks from original
-		if ( !CopyChunks ( iChunk, sError ) )
-			return -1;
-
-		assert ( iSize==m_pMerge->m_dChunks[iFile].GetChunkFileLength ( iChunk ) );
-		assert ( m_pWriter->GetPos()==m_pMerge->m_dChunks[iFile].GetChunkFileOffset ( iChunk ) );
-
-		int64_t iPos = m_pWriter->GetPos();
-		m_pWriter->PutBytes ( pData, iSize );
-
-		m_pMerge->m_iChunk = iChunk;
-
-		return ( m_pWriter->GetPos() - iPos );
+		return WriteResult_e::OK;
 	}
 
 	MergeState_t * Flush ( CSphString & sError )
@@ -3855,18 +3964,6 @@ public:
 		Threads::ScopedCoroMutex_t tLock ( m_tLock );
 
 		assert ( m_pMerge.Ptr() );
-
-		// copy chunks from original
-		// - tail chunks on switching files
-		if ( !CopyChunksTail ( sError ) )
-			return nullptr;
-
-		if ( !VerifyHash ( sError ) )
-			return nullptr;
-
-		m_pWriter = nullptr;
-		m_pReader = nullptr;
-
 		return m_pMerge.LeakPtr();
 	}
 
@@ -3894,65 +3991,123 @@ private:
 	CSphScopedPtr<MergeState_t> m_pMerge { nullptr };
 	CSphString m_sError; // writer need a string to put error message there
 
-	bool CopyChunks ( int iChunksEnd, CSphString & sError )
+	int m_iFile { -1 };
+	int m_bFileRestarted { false };
+
+
+	bool SetFile ( int iFile, bool bRestart, CSphString & sError )
 	{
-		if ( m_pMerge->m_iChunk+1>=iChunksEnd )
+		if ( !bRestart && m_iFile==iFile )
 			return true;
 
-		assert ( m_pWriter.Ptr() );
-		if ( !m_pReader.Ptr() )
+		if ( !bRestart && m_pWriter )
 		{
-			sError.SetSprintf( "chunks gap received %d -> %d but no local file %s to fill that gap", m_pMerge->m_iChunk, iChunksEnd, m_pMerge->m_dFilesRef[m_pMerge->m_iFile].cstr() );
+			sError.SetSprintf ( "active writer %s (%d), next  %s (%d)", GetFilename(), m_iFile, m_pMerge->m_dFilesNew[iFile].cstr(), iFile );
+			m_pWriter->CloseFile();
+		}
+
+		sphLogDebugRpl ( "switching disk file %s (%d>%d), restart %d", m_pMerge->m_dFilesNew[iFile].cstr(), m_iFile, iFile, (int)bRestart );
+		Close();
+		m_bFileRestarted = bRestart;
+		m_iFile = iFile;
+
+		int iOpenFlags = ( bRestart ? ( O_CREAT | O_RDWR | SPH_O_BINARY ) : SPH_O_NEW ); // need to keep already written data
+		CSphScopedPtr<WriterWithHash_c> pWriter ( new WriterWithHash_c );
+		if ( !pWriter->OpenFile ( m_pMerge->m_dFilesNew[iFile], iOpenFlags, m_sError ) )
+		{
+			sError = m_sError;
 			return false;
 		}
 
-		m_pMerge->m_iChunk++;
-
-		const FileChunks_t & tChunk = m_pMerge->m_dChunks[m_pMerge->m_iFile];
-
-		int64_t iOff = tChunk.GetChunkFileOffset ( m_pMerge->m_iChunk );
-
-		int64_t iChunksSize = 0;
-		if ( iChunksEnd==tChunk.GetChunksCount() )
-			iChunksSize = tChunk.m_iFileSize - iOff;
-		else
-			iChunksSize = tChunk.GetChunkFileOffset ( iChunksEnd ) - iOff;
-
-		m_pReader->SeekTo ( iOff, iChunksSize );
-
-		for ( int64_t iSize=0; iSize<iChunksSize; )
+		CSphScopedPtr<CSphAutoreader> pReader ( nullptr );
+		if ( sphFileExists ( m_pMerge->m_dFilesRef[iFile].cstr(), nullptr ) )
 		{
-			const BYTE * pData = nullptr;
-			int64_t iLeft = iChunksSize - iSize;
-			int iGot = m_pReader->GetBytesZerocopy ( &pData, iLeft );
-
-			if ( !iGot || m_pReader->GetErrorFlag() )
-			{
-				sError = m_pReader->GetErrorMessage();
+			pReader = new CSphAutoreader();
+			if ( !pReader->Open ( m_pMerge->m_dFilesRef[iFile], sError ) )
 				return false;
-			}
-
-			m_pWriter->PutBytes ( pData, iGot );
-			if ( m_pWriter->IsError() )
-			{
-				sError = m_sError.cstr();
-				return false;
-			}
-
-			iSize += iGot;
 		}
 
-		m_pMerge->m_iChunk = iChunksEnd;
+		m_pWriter.Swap ( pWriter );
+		m_pReader.Swap ( pReader );
 
 		return true;
 	}
 
-	bool VerifyHash ( CSphString & sError )
+	bool CmdCopyFile ( int64_t iOff, int64_t iSize, CSphString & sError )
 	{
-		if ( !m_pWriter.Ptr() )
-			return true;
+		if ( !CheckFiles ( true, iOff, sError ) )
+			return false;
 
-		assert ( m_pMerge->m_iFile>=0 && m_pMerge->m_iFile<m_pMerge->m_dFilesNew.GetLength() );
+		while ( iSize>0 )
+		{
+			const BYTE * pData = nullptr;
+			int64_t iRead = m_pReader->GetBytesZerocopy ( &pData, iSize );
+			if ( !iRead || m_pReader->GetErrorFlag() )
+			{
+				sError = m_pReader->GetErrorMessage();
+				return false;
+			}
+			m_pWriter->PutBytes ( pData, iRead );
+			if ( m_pWriter->IsError() )
+				return false;
+
+			iSize -= iRead;
+		}
+
+		return true;
+	}
+
+	bool CmdCopyBuffer ( int64_t iOffFile, const VecTraits_T<BYTE> & dBuf, int iOffBuf, int64_t iSize, CSphString & sError )
+	{
+		if ( !CheckFiles ( false, iOffFile, sError ) )
+			return false;
+
+		if ( iOffBuf+iSize>dBuf.GetLength() )
+		{
+			sError.SetSprintf ( "out of bounds buffer slice (offset %d, size %d, buffer size %d) on buffer copy %s (%d)", iOffBuf, (int)iSize, dBuf.GetLength(), GetFilename(), m_iFile );
+			return false;
+		}
+
+		m_pWriter->PutBytes ( dBuf.Begin() + iOffBuf, iSize );
+		return !m_pWriter->IsError();
+	}
+
+	WriteResult_e CmdVerifyFile ( int iFile, CSphString & sError )
+	{
+		if ( iFile!=m_iFile )
+		{
+			sError.SetSprintf ( "file mismatch, active writer %s (%d), verify  %s (%d)", GetFilename(), m_iFile, m_pMerge->m_dFilesNew[iFile].cstr(), iFile );
+			Close();
+			return WriteResult_e::VERIFY_FAILED;
+		}
+
+		// writer writes whole file from the beggining - data will be verified from writer hash
+		if ( m_pWriter && !m_bFileRestarted )
+		{
+			bool bVerifyOk = VerifyHashWriter ( sError );
+			Close();
+			return ( bVerifyOk ? WriteResult_e::OK : WriteResult_e::VERIFY_FAILED );
+		}
+
+		// no writer or writer got restarted from offset
+		// data should be verified from the disk file
+		iFile = m_iFile; // Close will invalidate m_iFile
+		sphLogDebugRpl ( "verify disk file %s (%d)", GetFilename(), iFile );
+		Close();
+
+		CSphFixedVector<CSphString> dFile ( 1 );
+		dFile[0] = m_pMerge->m_dFilesNew[iFile];
+		VecTraits_T<BYTE> dHash ( GetFileHash ( m_pMerge->m_dHashes, iFile ), HASH20_SIZE );
+
+		bool bVerifyOk = SyncSigVerify ( dFile, dHash, sError );
+
+		return ( bVerifyOk ? WriteResult_e::OK : WriteResult_e::VERIFY_FAILED );
+	}
+
+	bool VerifyHashWriter ( CSphString & sError )
+	{
+		assert ( m_pWriter.Ptr() );
+		assert ( m_iFile>=0 && m_iFile<m_pMerge->m_dFilesNew.GetLength() );
 
 		// flush data and finalize hash
 		m_pWriter->CloseFile();
@@ -3963,23 +4118,62 @@ private:
 		}
 
 		const BYTE * pHashWriten = m_pWriter->GetHASHBlob();
-		const BYTE * pHashDonor = GetFileHash ( m_pMerge->m_dHashes, m_pMerge->m_iFile );
-		if ( memcmp ( pHashWriten, pHashDonor, HASH20_SIZE )!=0 )
+		const BYTE * pHashDonor = GetFileHash ( m_pMerge->m_dHashes, m_iFile );
+
+		bool bVerifyOk = ( memcmp ( pHashWriten, pHashDonor, HASH20_SIZE )==0 );
+
+		if ( !bVerifyOk )
+			sError.SetSprintf ( "%s sha1 does not match, expected %s, got %s", m_pWriter->GetFilename().cstr(), BinToHex ( pHashDonor, HASH20_SIZE ).cstr(), BinToHex ( pHashWriten, HASH20_SIZE ).cstr() );
+
+		return bVerifyOk;
+	}
+
+	void Close ()
+	{
+		m_pWriter = nullptr;
+		m_pReader = nullptr;
+		m_iFile = -1;
+	}
+
+	bool CheckFiles ( bool bSeekReader, int64_t iOff, CSphString & sError )
+	{
+		if ( !m_pWriter )
 		{
-			sError.SetSprintf ( "%s sha1 does not match, expected %s, got %s", m_pWriter->GetFilename().cstr(),
-				BinToHex ( pHashDonor, HASH20_SIZE ).cstr(), BinToHex ( pHashWriten, HASH20_SIZE ).cstr() );
+			sError.SetSprintf ( "no active writer %p on data copy %s (%d)", m_pWriter.Ptr(), GetFilename(), m_iFile );
 			return false;
 		}
+
+		if ( bSeekReader && !m_pReader )
+		{
+			sError.SetSprintf ( "no reader %p on data copy %s (%d)", m_pReader.Ptr(), GetFilename(), m_iFile );
+			return false;
+		}
+
+		if ( m_pWriter->GetPos()!=iOff )
+		{
+			sphLogDebugRpl ( "file %s (%d) restarted at offset: " INT64_FMT ", writer offset: " INT64_FMT ", reader offset:" INT64_FMT , GetFilename(), m_iFile, iOff, (int64_t)m_pWriter->GetPos(), (int64_t)( m_pReader.Ptr() ? m_pReader->GetPos() : -1 ) );
+
+			if ( !SetFile ( m_iFile, true, sError ) )
+				return false;
+
+			if ( bSeekReader && !m_pReader )
+			{
+				sError.SetSprintf ( "no reader %p on data copy %s (%d)", m_pReader.Ptr(), GetFilename(), m_iFile );
+				return false;
+			}
+
+			m_pWriter->SeekTo ( iOff, false );
+		}
+	 
+		if ( bSeekReader && m_pReader->GetPos()!=iOff )
+			m_pReader->SeekTo ( iOff, 0 );
 
 		return true;
 	}
 
-	bool CopyChunksTail ( CSphString & sError )
+	const char * GetFilename () const
 	{
-		if ( m_pMerge->m_iFile==-1 )
-			return true;
-
-		return CopyChunks ( m_pMerge->m_dChunks[m_pMerge->m_iFile].GetChunksCount(), sError );
+		return ( ( m_iFile==-1 || !m_pMerge ) ? "" : m_pMerge->m_dFilesNew[m_iFile].cstr() );
 	}
 };
 
@@ -4054,6 +4248,7 @@ bool RemoteFileReserve ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CS
 {
 	sphLogDebugRpl ( "reserve index '%s'", tCmd.m_sIndex.cstr() );
 
+	int64_t tmStartReserve = sphMicroTimer();
 	CSphString sLocalIndexPath;
 
 	assert ( tCmd.m_pChunks );
@@ -4104,6 +4299,7 @@ bool RemoteFileReserve ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CS
 	tRes.m_pDst->m_dNodeChunks.Init ( iBits );
 
 	CSphVector<BYTE> dReadBuf;
+	int64_t tmTimeoutFile = 0;
 
 	// check file exists, same size and same hash
 	ARRAY_FOREACH ( iFile, tRes.m_pDst->m_dRemotePaths )
@@ -4125,10 +4321,13 @@ bool RemoteFileReserve ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CS
 			// check only in case size matched
 			if ( iLen==tFile.m_iFileSize )
 			{
+				int64_t tmReadStart = sphMicroTimer();
+
 				if ( !SyncSigCompare ( iFile, sFile, *tCmd.m_pChunks, tRes.m_pDst->m_dNodeChunks, dReadBuf, sError ) )
 					return false;
-				else
-					continue;
+
+				int64_t tmReadDelta = sphMicroTimer() - tmReadStart;
+				tmTimeoutFile = Max ( tmReadDelta, tmTimeoutFile );
 			}
 		}
 	}
@@ -4170,6 +4369,8 @@ bool RemoteFileReserve ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CS
 
 	tFilesCleanup.m_pFiles = nullptr;
 	tRes.m_pDst->m_dRemotePaths.SwapData ( dLocalPaths );
+	tRes.m_pDst->m_tmTimeoutFile = tmTimeoutFile / 1000;
+	tRes.m_pDst->m_tmTimeout = ( sphMicroTimer() - tmStartReserve ) / 1000;
 
 	assert ( !g_tRecvStates.HasState ( GetWriterKey ( tCmd.m_sCluster, tCmd.m_sIndex ) ) );
 
@@ -4179,17 +4380,21 @@ bool RemoteFileReserve ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CS
 }
 
 // command at remote node for CLUSTER_FILE_SEND to store data into file, data size and file offset defined by sender
-bool RemoteFileStore ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSphString & sError )
+void RemoteFileStore ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSphString & sError )
 {
 	assert ( g_tRecvStates.HasState ( tCmd.m_tWriterKey ) );
 
 	RecvState_c & tState = g_tRecvStates.GetState ( tCmd.m_tWriterKey );
-	int iSize = tState.Write ( tCmd.m_iFile, tCmd.m_iChunk, tCmd.m_pSendBuff, tCmd.m_iSendSize, sError );
-	if ( iSize<0 )
-		return false;
 
-	tRes.m_iReplyPayload = iSize;
-	return true;
+	VecTraits_T<BYTE> dBuf ( tCmd.m_tSendBuf.DataBegin(), tCmd.m_tSendBuf.DataSize() );
+	tRes.m_eRes = tState.Write ( tCmd.m_iFile, tCmd.m_dOps, dBuf, sError );
+	tRes.m_iFile = tCmd.m_iFile;
+
+	if ( tRes.m_eRes!=WriteResult_e::OK )
+	{
+		tRes.m_sWarning.SetSprintf ( "write finished %s (%d), file %d, operations %d", sError.cstr(), (int)tRes.m_eRes, tCmd.m_iFile, tCmd.m_dOps.GetLength() );
+		sphWarning ( "%s", tRes.m_sWarning.cstr() );
+	}
 }
 
 struct RollbackFilesGuard_t
@@ -4316,6 +4521,7 @@ bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSph
 		return false;
 
 	// verify whole index only in case debug replication
+#ifndef NDEBUG
 	//if ( g_eLogLevel>=SPH_LOG_RPL_DEBUG )
 	{
 		sphLogDebugRpl ( "verify index '%s' from %s", tCmd.m_sIndex.cstr(), pMerge->m_sIndexPath.cstr() );
@@ -4325,8 +4531,13 @@ bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSph
 		if ( !SyncSigVerify ( pMerge->m_dFilesRef, pMerge->m_dHashes, sError ) )
 			return false;
 	}
+#endif
 
-	sphLogDebugRpl ( "loading index '%s' into cluster '%s' from %s", tCmd.m_sIndex.cstr(), tCmd.m_sCluster.cstr(), pMerge->m_sIndexPath.cstr() );
+	sphLogDebugRpl ( "%s index '%s' into cluster '%s' from %s", ( tCmd.m_bSendFilesSuccess ? "loading" : "rolling-back" ), tCmd.m_sIndex.cstr(), tCmd.m_sCluster.cstr(), pMerge->m_sIndexPath.cstr() );
+
+	// rollback to old index files via RollbackFilesGuard_t
+	if ( !tCmd.m_bSendFilesSuccess )
+		return true;
 
 	FilesTrait_t tIndexFiles;
 
@@ -4370,30 +4581,37 @@ struct FileReader_t
 	const SyncSrc_t * m_pSyncSrc = nullptr;
 	const SyncDst_t * m_pSyncDst = nullptr;
 
-	int m_iFile = -1;
-	int m_iChunk = -1;
-	int m_bDone = false;
-
+	bool m_bDone = false;
+	bool m_bSuccess = false;
 	int m_iPackets = 1;
+
+	int m_iChunk { 0 };
+	int64_t m_iFilePos { 0 };
+	int m_iFileRetries { 0 };
 };
 
-static bool ReadChunk ( int iChunk, FileReader_t & tReader, StringBuilder_c & sErrors )
+static bool ReadChunk ( FileReader_t & tReader, int64_t iFileOff, int iSize, StringBuilder_c & sErrors )
 {
+	if ( !iSize )
+		return true;
+
 	assert ( tReader.m_pSyncSrc );
-	const SyncSrc_t * pSrc = tReader.m_pSyncSrc;
-	const FileChunks_t & tChunk = pSrc->m_dChunks[tReader.m_iFile];
+	assert ( tReader.m_tArgs.m_iFile>=0 && tReader.m_tArgs.m_iFile<tReader.m_pSyncSrc->m_dBaseNames.GetLength() );
 
-	int iSendSize = tChunk.GetChunkFileLength ( iChunk );
+	if ( tReader.m_tFile.GetFD()==-1 )
+	{
+		tReader.m_iFilePos = 0;
 
-	int64_t iFileOff = tChunk.GetChunkFileOffset ( iChunk );
-	tReader.m_tArgs.m_iSendSize = iSendSize;
-	tReader.m_tArgs.m_iChunk = iChunk;
-
-	bool bSeek = ( iChunk!=tReader.m_iChunk+1 );
-	tReader.m_iChunk = iChunk;
+		CSphString sReaderError;
+		if ( tReader.m_tFile.Open ( tReader.m_pSyncSrc->m_dIndexFiles[tReader.m_tArgs.m_iFile], SPH_O_READ, sReaderError, false )<0 )
+		{
+			sErrors += sReaderError.cstr();
+			return false;
+		}
+	}
 
 	// seek to new chunk
-	if ( bSeek )
+	if ( tReader.m_iFilePos!=iFileOff )
 	{
 		int64_t iNewPos = sphSeek ( tReader.m_tFile.GetFD(), iFileOff, SEEK_SET );
 		if ( iNewPos!=iFileOff )
@@ -4407,123 +4625,155 @@ static bool ReadChunk ( int iChunk, FileReader_t & tReader, StringBuilder_c & sE
 		}
 	}
 
+	SendBuf_c & tBuf = tReader.m_tArgs.m_tSendBuf;
+	assert ( iSize<=tBuf.Left() );
+
 	CSphString sReaderError;
-	if ( !tReader.m_tFile.Read ( tReader.m_tArgs.m_pSendBuff, iSendSize, sReaderError ) )
+	if ( !tReader.m_tFile.Read ( tBuf.Begin(), iSize, sReaderError ) )
 	{
 		sErrors += sReaderError.cstr();
 		return false;
 	}
+
+	tBuf.Use ( iSize );
+	tReader.m_iFilePos = iFileOff + iSize;
 
 	return true;
 }
 
-static bool Next ( FileReader_t & tReader, StringBuilder_c & sErrors )
+static int SendFindFile ( int iCurFile, int iFilesCount, const CSphBitvec & tNodeChunks )
 {
-	assert ( tReader.m_pSyncSrc );
-	assert ( tReader.m_pSyncDst );
-	assert ( !tReader.m_bDone );
-
-	const SyncSrc_t * pSrc = tReader.m_pSyncSrc;
-	const SyncDst_t * pDst = tReader.m_pSyncDst;
-
-	// search for next chunk in same file
-	const FileChunks_t & tChunk = pSrc->m_dChunks[tReader.m_iFile];
-	int iChunk = tReader.m_iChunk+1;
-	const int iCount = tChunk.GetChunksCount();
-	for ( ; iChunk<iCount; iChunk++ )
+	for ( ; iCurFile<iFilesCount; iCurFile++ )
 	{
-		if ( !pDst->m_dNodeChunks.BitGet ( tChunk.m_iHashStartItem + iChunk ) )
+		if ( !tNodeChunks.BitGet ( iCurFile ) )
 			break;
 	}
-	if ( iChunk<iCount )
-		return ReadChunk ( iChunk, tReader, sErrors );
 
-	// search for next file
-	const int iFiles = pSrc->m_dBaseNames.GetLength();
-	int iFile = tReader.m_iFile+1;
-	for ( ; iFile<iFiles; iFile++ )
-	{
-		if ( !pDst->m_dNodeChunks.BitGet ( iFile ) )
-			break;
-	}
-	tReader.m_iFile = iFile;
-	tReader.m_iChunk = -1;
-
-	// no more files left
-	if ( iFile==iFiles )
-	{
-		tReader.m_bDone = true;
-		return true;
-	}
-
-	// look for chunk in next file
-	tReader.m_tFile.Close();
-	CSphString sReaderError;
-	if ( tReader.m_tFile.Open ( pSrc->m_dIndexFiles[iFile], SPH_O_READ, sReaderError, false )<0 )
-	{
-		sErrors += sReaderError.cstr();
-		return false;
-	}
-	tReader.m_tArgs.m_sRemoteFileName = pDst->m_dRemotePaths[iFile];
-	tReader.m_tArgs.m_iFile = iFile;
-	sphLogDebugRpl ( "sending file %s to %s:%d, packets %d", tReader.m_tArgs.m_sRemoteFileName.cstr(), tReader.m_pAgentDesc->m_sAddr.cstr(), tReader.m_pAgentDesc->m_iPort, tReader.m_iPackets );
-
-	const FileChunks_t & tNewChunk = pSrc->m_dChunks[iFile];
-	int iNewChunk = 0;
-	const int iNewCount = tNewChunk.GetChunksCount();
-	for ( ; iNewChunk<iNewCount; iNewChunk++ )
-	{
-		if ( !pDst->m_dNodeChunks.BitGet ( tNewChunk.m_iHashStartItem + iNewChunk ) )
-			break;
-	}
-	assert ( !iNewCount || iNewChunk<iNewCount );
-	assert ( !pDst->m_dNodeChunks.BitGet ( tNewChunk.m_iHashStartItem + iNewChunk ) );
-	return ReadChunk ( iNewChunk, tReader, sErrors );
+	return iCurFile;
 }
 
-static bool InitReader ( FileReader_t & tReader, StringBuilder_c & sErrors )
+static int SendFindChunk ( int iCurChunk, const FileChunks_t & tChunk, const CSphBitvec & tNodeChunks )
+{
+	const int iChunks = tChunk.GetChunksCount();
+	for ( ; iCurChunk<iChunks; iCurChunk++ )
+	{
+		if ( !tNodeChunks.BitGet ( tChunk.m_iHashStartItem + iCurChunk ) )
+			break;
+	}
+
+	return iCurChunk;
+}
+
+static void LogFileSend ( const FileReader_t & tReader )
+{
+	sphLogDebugRpl ( "sending file %s (%d) to %s:%d, packets %d, timeout %d.%03d sec", tReader.m_pSyncSrc->m_dBaseNames[tReader.m_tArgs.m_iFile].cstr(), tReader.m_tArgs.m_iFile, tReader.m_pAgentDesc->m_sAddr.cstr(), tReader.m_pAgentDesc->m_iPort, tReader.m_iPackets, (int)( tReader.m_pSyncDst->m_tmTimeoutFile/1000 ), (int)( tReader.m_pSyncDst->m_tmTimeoutFile % 1000 ));
+}
+
+// add chunks copied from at joiner node along with data send from donor node
+static bool ReaderAddChunks ( FileReader_t & tReader, StringBuilder_c & sErrors )
 {
 	assert ( tReader.m_pSyncSrc );
 	assert ( tReader.m_pSyncDst );
+	assert ( tReader.m_tArgs.m_iFile<tReader.m_pSyncSrc->m_dBaseNames.GetLength() );
 
+	const FileChunks_t & tChunk = tReader.m_pSyncSrc->m_dChunks[tReader.m_tArgs.m_iFile];
+	auto & dOps = tReader.m_tArgs.m_dOps;
+
+	int iChunk = tReader.m_iChunk;
+	int iChunks = tChunk.GetChunksCount();
+	while ( iChunk<iChunks )
+	{
+		int iCopyChunk = SendFindChunk ( iChunk, tChunk, tReader.m_pSyncDst->m_dNodeChunks );
+		if ( iCopyChunk!=iChunk ) // copy data from joiner local file
+		{
+			FileOp_t & tOp = dOps.Add();
+			tOp.m_eOp = FileOp_e::COPY_FILE;
+			tOp.m_iOffFile = tChunk.GetChunkFileOffset ( iChunk );
+			if ( iCopyChunk<iChunks )
+				tOp.m_iSize = tChunk.GetChunkFileOffset ( iCopyChunk ) - tOp.m_iOffFile;
+			else
+				tOp.m_iSize = tChunk.m_iFileSize - tOp.m_iOffFile;
+		}
+
+		if ( iCopyChunk<iChunks )
+		{
+			FileOp_t tOp;
+			tOp.m_iOffFile = tChunk.GetChunkFileOffset ( iCopyChunk );
+			tOp.m_iSize = tChunk.GetChunkFileLength ( iCopyChunk );
+			tOp.m_iOffBuf = tReader.m_tArgs.m_tSendBuf.Used();
+			if ( tOp.m_iSize>tReader.m_tArgs.m_tSendBuf.Left() )
+			{
+				iChunk = iCopyChunk; // last chunk that was already processed
+				break;
+			}
+
+			if ( !ReadChunk ( tReader, tOp.m_iOffFile, tOp.m_iSize, sErrors ) )
+				return false;
+
+			tOp.m_eOp = FileOp_e::COPY_BUFFER;
+			dOps.Add ( tOp );
+		}
+
+		iChunk = iCopyChunk+1;
+	}
+
+	tReader.m_iChunk = iChunk;
+	if ( iChunk>=iChunks )
+		dOps.Add().m_eOp = FileOp_e::VERIFY_FILE;
+
+	return true;
+}
+
+static bool ReaderStartFile ( FileReader_t & tReader, int iFile, StringBuilder_c & sErrors )
+{
+	auto & dOps = tReader.m_tArgs.m_dOps;
+	dOps.Resize ( 0 );
+
+	assert ( tReader.m_pSyncSrc );
+	assert ( tReader.m_pSyncDst );
+	tReader.m_tArgs.m_iFile = SendFindFile ( iFile, tReader.m_pSyncSrc->m_dBaseNames.GetLength(), tReader.m_pSyncDst->m_dNodeChunks );
+	tReader.m_iChunk = 0;
+	tReader.m_tArgs.m_tSendBuf.Reset();
+
+	LogFileSend ( tReader );
+
+	return ReaderAddChunks ( tReader, sErrors );
+}
+
+static bool ReaderNext ( FileReader_t & tReader, StringBuilder_c & sErrors )
+{
+	if ( tReader.m_bDone )
+		return true;
+
+	assert ( tReader.m_pSyncSrc );
+	assert ( tReader.m_pSyncDst );
 	const SyncSrc_t * pSrc = tReader.m_pSyncSrc;
-	const SyncDst_t * pDst = tReader.m_pSyncDst;
 
 	const int iFiles = pSrc->m_dBaseNames.GetLength();
-	int iFile = 0;
-	for ( ; iFile<iFiles; iFile++ )
+	assert ( tReader.m_tArgs.m_iFile<iFiles );
+
+	auto & dOps = tReader.m_tArgs.m_dOps;
+	dOps.Resize ( 0 );
+	tReader.m_tArgs.m_tSendBuf.Reset();
+
+	// check for chunks left in last file that was already sent
+	if ( tReader.m_iChunk>=pSrc->m_dChunks[tReader.m_tArgs.m_iFile].GetChunksCount() )
 	{
-		if ( !pDst->m_dNodeChunks.BitGet ( iFile ) )
-			break;
+		tReader.m_tFile.Close();
+		tReader.m_iChunk = 0;
+		tReader.m_tArgs.m_iFile = SendFindFile ( tReader.m_tArgs.m_iFile + 1, iFiles, tReader.m_pSyncDst->m_dNodeChunks );
+		if ( tReader.m_tArgs.m_iFile==iFiles )
+		{
+			tReader.m_bDone = true;
+			tReader.m_bSuccess = true;
+			return true;
+		}
+
+		tReader.m_iFileRetries = g_iNodeRetry;
+		LogFileSend ( tReader );
 	}
-	assert ( !pDst->m_dNodeChunks.BitGet ( iFile ) );
-	tReader.m_iFile = iFile;
 
-	const FileChunks_t & tChunk = pSrc->m_dChunks[iFile];
-	int iChunk = 0;
-	const int iCount = tChunk.GetChunksCount();
-
-	for ( ; iChunk<iCount; iChunk++ )
-	{
-		if ( !pDst->m_dNodeChunks.BitGet ( tChunk.m_iHashStartItem + iChunk ) )
-			break;
-	}
-	assert ( !iCount || iChunk<iCount );
-	assert ( !pDst->m_dNodeChunks.BitGet ( tChunk.m_iHashStartItem + iChunk ) );
-
-	tReader.m_tArgs.m_sRemoteFileName = pDst->m_dRemotePaths[iFile];
-	tReader.m_tArgs.m_iFile = iFile;
-	tReader.m_tArgs.m_iChunk = iChunk;
-
-	CSphString sError;
-	if ( tReader.m_tFile.Open ( pSrc->m_dIndexFiles[iFile], SPH_O_READ, sError, false )<0 )
-	{
-		sErrors += sError.cstr();
-		return false;
-	}
-	sphLogDebugRpl ( "sending file %s to %s:%d, packets %d", tReader.m_tArgs.m_sRemoteFileName.cstr(), tReader.m_pAgentDesc->m_sAddr.cstr(), tReader.m_pAgentDesc->m_iPort, tReader.m_iPackets );
-
-	return ReadChunk ( iChunk, tReader, sErrors );
+	return ReaderAddChunks ( tReader, sErrors );
 }
 
 static void ReportSendStat ( const VecRefPtrs_t<AgentConn_t *> & dNodes, const CSphFixedVector<FileReader_t> & dReaders, const CSphString & sCluster, const CSphString & sIndex )
@@ -4547,13 +4797,56 @@ static void ReportSendStat ( const VecRefPtrs_t<AgentConn_t *> & dNodes, const C
 	sphLogDebugRpl ( "%s", tTmp.cstr() );
 }
 
+static void ReportErrorSendFile ( StringBuilder_c & tErrors, const char * sFmt, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
+void ReportErrorSendFile ( StringBuilder_c & tErrors, const char * sFmt, ... )
+{
+	CSphString sError;
+	va_list ap;
+	va_start ( ap, sFmt );
+	sError.SetSprintfVa ( sFmt, ap );
+	va_end ( ap );
+	
+	tErrors += sError.cstr();
+	sphLogDebugRpl ( "%s", sError.cstr() );
+}
+
+static void RetryFile ( FileReader_t & tReader, int iRemoteFile, bool bNetError, WriteResult_e eRes, StringBuilder_c & tErrors )
+{
+	assert ( tReader.m_tArgs.m_iFile>=0 && tReader.m_tArgs.m_iFile<tReader.m_pSyncSrc->m_dBaseNames.GetLength() );
+
+	// validate and report joiner errors
+	if ( !bNetError )
+	{
+		if ( eRes!=WriteResult_e::VERIFY_FAILED )
+		{
+			ReportErrorSendFile ( tErrors, "file %s (%d) write error at remote node to %s:%d, retry %d", tReader.m_pSyncSrc->m_dBaseNames[tReader.m_tArgs.m_iFile].cstr(), tReader.m_tArgs.m_iFile, tReader.m_pAgentDesc->m_sAddr.cstr(), tReader.m_pAgentDesc->m_iPort, tReader.m_iFileRetries );
+			tReader.m_bDone = true;
+			return;
+		}
+
+		if ( tReader.m_tArgs.m_iFile!=iRemoteFile )
+			ReportErrorSendFile ( tErrors, "retry file %s to %s:%d, file mismatch: reported %d, current %d", tReader.m_pSyncSrc->m_dBaseNames[tReader.m_tArgs.m_iFile].cstr(), tReader.m_pAgentDesc->m_sAddr.cstr(),tReader.m_pAgentDesc->m_iPort, iRemoteFile, tReader.m_tArgs.m_iFile );
+	}
+
+	tReader.m_iFileRetries--;
+	sphLogDebugRpl ( "sending file %s to %s:%d, retry %d", tReader.m_pSyncSrc->m_dBaseNames[tReader.m_tArgs.m_iFile].cstr(), tReader.m_pAgentDesc->m_sAddr.cstr(), tReader.m_pAgentDesc->m_iPort, tReader.m_iFileRetries );
+	if ( tReader.m_iFileRetries<=0 )
+	{
+		ReportErrorSendFile ( tErrors, "retry file %s to %s:%d, limit exceeded", tReader.m_pSyncSrc->m_dBaseNames[tReader.m_tArgs.m_iFile].cstr(), tReader.m_pAgentDesc->m_sAddr.cstr(), tReader.m_pAgentDesc->m_iPort );
+		tReader.m_bDone = true;
+		return;
+	}
+
+	tReader.m_bDone = !ReaderStartFile ( tReader, tReader.m_tArgs.m_iFile, tErrors );
+}
+
 // send file to multiple nodes by chunks as API command CLUSTER_FILE_SEND
 static bool SendFile ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteFileState_t> & dDesc, const CSphString & sCluster, const CSphString & sIndex, CSphString & sError )
 {
 	StringBuilder_c tErrors ( ";" );
 
 	// setup buffers
-	CSphFixedVector<BYTE> dReadBuf ( tSigSrc.m_iMaxChunkBytes * dDesc.GetLength() );
+	CSphFixedVector<BYTE> dReadBuf ( tSigSrc.m_iBufferSize * dDesc.GetLength() );
 	CSphFixedVector<FileReader_t> dReaders  ( dDesc.GetLength() );
 	uint64_t tWriterKey = GetWriterKey ( sCluster, sIndex );
 
@@ -4563,12 +4856,13 @@ static bool SendFile ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteFileSta
 		FileReader_t & tReader = dReaders[iNode];
 		tReader.m_tArgs.m_sCluster = sCluster;
 		tReader.m_pAgentDesc = dDesc[iNode].m_pAgentDesc;
-		tReader.m_tArgs.m_pSendBuff = dReadBuf.Begin() + tSigSrc.m_iMaxChunkBytes * iNode;
+		tReader.m_tArgs.m_tSendBuf = SendBuf_c ( dReadBuf.Begin() + tSigSrc.m_iBufferSize * iNode, tSigSrc.m_iBufferSize );
 		tReader.m_pSyncSrc = dDesc[iNode].m_pSyncSrc;
 		tReader.m_pSyncDst = dDesc[iNode].m_pSyncDst;
 		tReader.m_tArgs.m_tWriterKey = tWriterKey;
+		tReader.m_iFileRetries = g_iNodeRetry;
 
-		if ( !InitReader ( tReader, tErrors ) )
+		if ( !ReaderStartFile ( tReader, 0, tErrors ) )
 		{
 			sError = tErrors.cstr();
 			return false;
@@ -4581,7 +4875,7 @@ static bool SendFile ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteFileSta
 	VecRefPtrs_t<AgentConn_t *> dNodes;
 	dNodes.Resize ( dReaders.GetLength() );
 	ARRAY_FOREACH ( i, dReaders )
-		dNodes[i] = CreateAgent ( *dReaders[i].m_pAgentDesc, dReaders[i].m_tArgs, GetQueryTimeout() );
+		dNodes[i] = CreateAgent ( *dReaders[i].m_pAgentDesc, dReaders[i].m_tArgs, dReaders[i].m_pSyncDst->m_tmTimeoutFile );
 
 	// submit initial jobs
 	CSphRefcountedPtr<RemoteAgentsObserver_i> tReporter ( GetObserver() );
@@ -4610,23 +4904,22 @@ static bool SendFile ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteFileSta
 			if ( tReader.m_bDone )
 				continue;
 
-			bool bSendOk = ( PQRemoteBase_c::GetRes ( *pAgent ).m_iReplyPayload==tReader.m_tArgs.m_iSendSize );
+			const PQRemoteReply_t & tReply = PQRemoteBase_c::GetRes ( *pAgent );
+			bool bFileWritten = ( tReply.m_eRes==WriteResult_e::OK );
+			bool bNetError = ( !pAgent->m_sFailure.IsEmpty() );
 
 			// report errors first
-			if ( !pAgent->m_sFailure.IsEmpty() && !bSendOk )
-			{
-				tErrors.Appendf ( "'%s:%d' %s", pAgent->m_tDesc.m_sAddr.cstr(), pAgent->m_tDesc.m_iPort, pAgent->m_sFailure.cstr() );
-				tReader.m_bDone = true;
-				pAgent->m_sFailure = "";
-				continue;
-			}
-			if ( !pAgent->m_sFailure.IsEmpty() && bSendOk )
-			{
-				sphWarning ( "'%s:%d' %s", pAgent->m_tDesc.m_sAddr.cstr(), pAgent->m_tDesc.m_iPort, pAgent->m_sFailure.cstr() );
-				pAgent->m_sFailure = "";
-			}
+			if ( bNetError )
+				ReportErrorSendFile ( tErrors, "'%s:%d' %s", pAgent->m_tDesc.m_sAddr.cstr(), pAgent->m_tDesc.m_iPort, pAgent->m_sFailure.cstr() );
+			pAgent->m_sFailure = "";
+			if ( !tReply.m_sWarning.IsEmpty() )
+				ReportErrorSendFile ( tErrors, "'%s:%d' %s", pAgent->m_tDesc.m_sAddr.cstr(), pAgent->m_tDesc.m_iPort, tReply.m_sWarning.cstr() );
 
-			if ( !Next ( tReader, tErrors ) )
+			if ( !bFileWritten )
+			{
+				RetryFile ( tReader, tReply.m_iFile, bNetError, tReply.m_eRes, tErrors );
+
+			} else if ( !ReaderNext ( tReader, tErrors ) )
 			{
 				pAgent->m_bSuccess = false;
 				tReader.m_bDone = true;
@@ -4639,7 +4932,7 @@ static bool SendFile ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteFileSta
 			// remove agent from main vector
 			pAgent->Release();
 
-			AgentConn_t * pNextJob = CreateAgent ( *tReader.m_pAgentDesc, tReader.m_tArgs, GetQueryTimeout() );
+			AgentConn_t * pNextJob = CreateAgent ( *tReader.m_pAgentDesc, tReader.m_tArgs, tReader.m_pSyncDst->m_tmTimeoutFile );
 			dNodes[iAgent] = pNextJob;
 
 			dNewNode[0] = pNextJob;
@@ -4658,7 +4951,7 @@ static bool SendFile ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteFileSta
 
 	ReportSendStat ( dNodes, dReaders, sCluster, sIndex );
 
-	return true;
+	return dReaders.all_of ( [] ( const auto & tReader ) { return tReader.m_bSuccess; } );
 }
 
 static bool SyncSigBegin ( SyncSrc_t & tSync, CSphString & sError )
@@ -4669,7 +4962,8 @@ static bool SyncSigBegin ( SyncSrc_t & tSync, CSphString & sError )
 	tSync.m_dBaseNames.Reset ( iFiles );
 	tSync.m_dChunks.Reset ( iFiles );
 
-	const int iMinChunkBuf = Min ( g_iMaxPacketSize * 3 / 4, 8 * 1024 );
+	int iMaxChunkBytes = 0;
+	tSync.m_iBufferSize = g_iMaxPacketSize * 3 / 4;
 	int iHashes = iFiles;
 
 	for ( int i=0; i<iFiles; i++ )
@@ -4684,11 +4978,15 @@ static bool SyncSigBegin ( SyncSrc_t & tSync, CSphString & sError )
 		int64_t iFileSize = tIndexFile.GetSize();
 
 		// rsync uses sqrt ( iSize ) but that make too small buffers
-		int iChunkBytes = int ( iFileSize / 2000 );
+		const int iBlockMin = 2048;
+		int iChunkBytes = int ( sqrt ( iFileSize ) );
+		//int iChunkBytes = int ( iFileSize / iBlockMin ); // FIXME!!! sqrt ( iFileSize )
 		// no need too small chunks
-		iChunkBytes = Max ( iChunkBytes, iMinChunkBuf );
+		if ( iChunkBytes<iBlockMin )
+			iChunkBytes = iBlockMin;
 		if ( iFileSize<iChunkBytes )
 			iChunkBytes = (int)iFileSize;
+		iChunkBytes = Min ( iChunkBytes, tSync.m_iBufferSize );
 
 		FileChunks_t & tSlice = tSync.m_dChunks[i];
 		tSlice.m_iFileSize = iFileSize;
@@ -4696,7 +4994,7 @@ static bool SyncSigBegin ( SyncSrc_t & tSync, CSphString & sError )
 		tSlice.m_iHashStartItem = iHashes;
 
 		iHashes += tSlice.GetChunksCount();
-		tSync.m_iMaxChunkBytes = Max ( tSlice.m_iChunkBytes, tSync.m_iMaxChunkBytes );
+		iMaxChunkBytes = Max ( tSlice.m_iChunkBytes, iMaxChunkBytes );
 	}
 	tSync.m_dHashes.Reset ( iHashes * HASH20_SIZE );
 	tSync.m_dHashes.Fill ( 0 );
@@ -4704,11 +5002,13 @@ static bool SyncSigBegin ( SyncSrc_t & tSync, CSphString & sError )
 	SHA1_c tHashFile;
 	SHA1_c tHashChunk;
 
-	CSphFixedVector<BYTE> dReadBuf ( tSync.m_iMaxChunkBytes );
+	CSphFixedVector<BYTE> dReadBuf ( iMaxChunkBytes );
 	CSphAutofile tIndexFile;
 
 	for ( int iFile=0; iFile<iFiles; iFile++ )
 	{
+		int64_t tmStartFile = sphMicroTimer();
+
 		const CSphString & sFile = tSync.m_dIndexFiles[iFile];
 		if ( tIndexFile.Open ( sFile, SPH_O_READ, sError )<0 )
 			return false;
@@ -4739,9 +5039,12 @@ static bool SyncSigBegin ( SyncSrc_t & tSync, CSphString & sError )
 
 		tIndexFile.Close();
 		tHashFile.Final ( tSync.GetFileHash ( iFile ) );
+		
+		int64_t tmDeltaFile = ( sphMicroTimer() - tmStartFile ) / 1000;
+		tSync.m_tmTimeoutFile = Max ( tmDeltaFile, tSync.m_tmTimeoutFile );
 	}
 
-	tSync.m_tmTook = ( sphMicroTimer() - tmStart ) / 1000;
+	tSync.m_tmTimeout = Max ( ( sphMicroTimer() - tmStart ) / 1000, 300000 ); // long operation timeout but at least 5 minutes
 
 	return true;
 }
@@ -4808,7 +5111,7 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 
 	sphLogDebugRpl ( "calculated sha1 of index '%s', files %d, hashes %d", sIndex.cstr(), tSigSrc.m_dIndexFiles.GetLength(), tSigSrc.m_dHashes.GetLength() );
 
-	int64_t tmLongOpTimeout = GetQueryTimeout ( tSigSrc.m_tmTook * 3 ); // timeout = sha verify (of all index files) + preload (of all index files) +1 (for slow io)
+	int64_t tmLongOpTimeout = GetQueryTimeout ( tSigSrc.m_tmTimeout * 3 ); // timeout = sha verify (of all index files) + preload (of all index files) +1 (for slow io)
 
 	SendStatesGuard_t tStatesGuard;
 	CSphVector<RemoteFileState_t> dSendStates;
@@ -4853,8 +5156,10 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 				continue;
 			 }
 
-			 const SyncDst_t * pDst = tRes.m_pDst.LeakPtr();
+			 SyncDst_t * pDst = tRes.m_pDst.LeakPtr();
 			 tStatesGuard.m_dFree.Add ( pDst );
+			 tSigSrc.m_tmTimeout = Max ( tSigSrc.m_tmTimeout, pDst->m_tmTimeout );
+			 pDst->m_tmTimeoutFile = GetQueryTimeout ( Max ( tSigSrc.m_tmTimeoutFile, pDst->m_tmTimeoutFile ) * 3 );
 
 			 bool bFilesMatched = true;
 			 for ( int iFile=0; bFilesMatched && iFile<tSigSrc.m_dBaseNames.GetLength(); iFile++ )
@@ -4876,14 +5181,17 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 			dActivateIndexes.Add ( tRemoteState );
 		}
 	}
+	// recalculate timeout after nodes reports
+	tmLongOpTimeout = GetQueryTimeout ( tSigSrc.m_tmTimeout * 3 );
 
 	if ( !dSendStates.GetLength() && !dActivateIndexes.GetLength() )
 		return true;
 
 	sphLogDebugRpl ( "sending index '%s'", sIndex.cstr() );
 
-	if ( dSendStates.GetLength() && !SendFile ( tSigSrc, dSendStates, sCluster, sIndex, sError ) )
-		return false;
+	bool bSendOk = true;
+	if ( dSendStates.GetLength() )
+		bSendOk = SendFile ( tSigSrc, dSendStates, sCluster, sIndex, sError );
 
 	// allow index local write operations passed without replicator
 	tIndexSaveGuard.EnableSave();
@@ -4900,21 +5208,22 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 			tAgentData.m_sCluster = sCluster;
 			tAgentData.m_sIndex = sIndex;
 			tAgentData.m_eIndex = eType;
+			tAgentData.m_bSendFilesSuccess = bSendOk;
 
 			dNodes[i] = CreateAgent ( *tState.m_pAgentDesc, tAgentData, tmLongOpTimeout );
 			PQRemoteBase_c::GetRes ( *dNodes[i] ).m_pSharedDst = tState.m_pSyncDst;
 		}
 
-		sphLogDebugRpl ( "sent index '%s' loading to %d nodes with timeout %d.%03d sec", sIndex.cstr(), dNodes.GetLength(), (int)( tmLongOpTimeout/1000 ), (int)( tmLongOpTimeout%1000 ) );
+		sphLogDebugRpl ( "sent index '%s' %s to %d nodes with timeout %d.%03d sec", sIndex.cstr(), ( bSendOk ? "loading" : "rollback" ), dNodes.GetLength(), (int)( tmLongOpTimeout/1000 ), (int)( tmLongOpTimeout%1000 ) );
 
 		PQRemoteIndexAdd_c tReq;
 		if ( !PerformRemoteTasks ( dNodes, tReq, tReq, sError ) )
 			return false;
 
-		sphLogDebugRpl ( "remote index '%s' added", sIndex.cstr() );
+		sphLogDebugRpl ( "remote index '%s' %s", sIndex.cstr(), ( bSendOk ? "added" : "rolled-back" ) );
 	}
 
-	return true;
+	return bSendOk;
 }
 
 // cluster ALTER statement that adds index
@@ -5030,6 +5339,8 @@ void PQRemoteSynced_c::BuildCommand ( const AgentConn_t & tAgent, ISphOutputBuff
 	const PQRemoteData_t & tCmd = GetReq ( tAgent );
 	tOut.SendString ( tCmd.m_sCluster.cstr() );
 	tOut.SendString ( tCmd.m_sGTID.cstr() );
+	tOut.SendByte ( tCmd.m_bSendFilesSuccess );
+	tOut.SendString ( tCmd.m_sMsg.cstr() );
 	tOut.SendInt( tCmd.m_dIndexes.GetLength() );
 	for ( const CSphString & sIndex : tCmd.m_dIndexes )
 		tOut.SendString ( sIndex.cstr() );
@@ -5039,6 +5350,8 @@ void PQRemoteSynced_c::ParseCommand ( InputBuffer_c & tBuf, PQRemoteData_t & tCm
 {
 	tCmd.m_sCluster = tBuf.GetString();
 	tCmd.m_sGTID = tBuf.GetString();
+	tCmd.m_bSendFilesSuccess = !!tBuf.GetByte();
+	tCmd.m_sMsg = tBuf.GetString();
 	tCmd.m_dIndexes.Reset ( tBuf.GetInt() );
 	ARRAY_FOREACH ( i, tCmd.m_dIndexes )
 		tCmd.m_dIndexes[i] = tBuf.GetString();
@@ -5058,11 +5371,14 @@ bool PQRemoteSynced_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) con
 }
 
 // API command to remote node to issue cluster synced callback
-static bool SendClusterSynced ( const CSphString & sCluster, const CSphVector<CSphString> & dIndexes, const VecAgentDesc_t & dDesc, const char * sGTID, CSphString & sError )
+static bool SendClusterSynced ( const CSphString & sCluster, const CSphVector<CSphString> & dIndexes, const VecAgentDesc_t & dDesc, const char * sGTID, bool bSendFilesSuccess, const CSphString & sMsg, CSphString & sError )
 {
 	PQRemoteData_t tAgentData;
 	tAgentData.m_sCluster = sCluster;
 	tAgentData.m_sGTID = sGTID;
+	tAgentData.m_bSendFilesSuccess = bSendFilesSuccess;
+	if ( !bSendFilesSuccess )
+		tAgentData.m_sMsg = sMsg;
 	tAgentData.m_dIndexes.Reset ( dIndexes.GetLength() );
 	ARRAY_FOREACH ( i, dIndexes )
 		tAgentData.m_dIndexes[i] = dIndexes[i];
@@ -5092,7 +5408,7 @@ bool SendClusterIndexes ( const ReplicationCluster_t * pCluster, const CSphStrin
 	wsrep_gtid_print ( &tStateID, sGTID, sizeof(sGTID) );
 
 	if ( bBypass )
-		return SendClusterSynced ( pCluster->m_sName, pCluster->m_dIndexes, dDesc, sGTID, sError );
+		return SendClusterSynced ( pCluster->m_sName, pCluster->m_dIndexes, dDesc, sGTID, true, CSphString(), sError );
 
 	// keep index list
 	CSphFixedVector<CSphString> dIndexes ( 0 );
@@ -5110,12 +5426,13 @@ bool SendClusterIndexes ( const ReplicationCluster_t * pCluster, const CSphStrin
 			dIndexes[i] = (*ppCluster)->m_dIndexes[i];
 	}
 
-	bool bOk = true;
+	bool bSentOk = true;
 	for ( const CSphString & sIndex : dIndexes )
 	{
 		ServedIndexRefPtr_c pServed = GetServed ( sIndex );
 		if ( !pServed )
 		{
+			bSentOk = false;
 			sphWarning ( "unknown index '%s'", sIndex.cstr() );
 			continue;
 		}
@@ -5123,6 +5440,7 @@ bool SendClusterIndexes ( const ReplicationCluster_t * pCluster, const CSphStrin
 		ServedDescRPtr_c pIndexDesc ( pServed );
 		if ( pIndexDesc->m_eType!=IndexType_e::PERCOLATE && pIndexDesc->m_eType!=IndexType_e::RT )
 		{
+			bSentOk = false;
 			sphWarning ( "wrong type of index '%s'", sIndex.cstr() );
 			continue;
 		}
@@ -5130,7 +5448,7 @@ bool SendClusterIndexes ( const ReplicationCluster_t * pCluster, const CSphStrin
 		if ( !NodesReplicateIndex ( pCluster->m_sName, sIndex, dDesc, pIndexDesc, sError ) )
 		{
 			sphWarning ( "%s", sError.cstr() );
-			bOk = false;
+			bSentOk = false;
 			break;
 		}
 
@@ -5138,17 +5456,38 @@ bool SendClusterIndexes ( const ReplicationCluster_t * pCluster, const CSphStrin
 			sphWarning ( "%s", sError.cstr() );
 	}
 
-	bOk &= SendClusterSynced ( pCluster->m_sName, pCluster->m_dIndexes, dDesc, bOk ? sGTID : "" , sError );
+	CSphString sSyncError;
+	bool bSyncOk = SendClusterSynced ( pCluster->m_sName, pCluster->m_dIndexes, dDesc, sGTID, bSentOk, sError, sSyncError );
+
+	if ( !bSentOk )
+		return false;
+
+	if ( !bSyncOk )
+	{
+		if ( sError.IsEmpty() )
+			sError = sSyncError;
+		else
+			sError.SetSprintf ( "%s; %s", sError.cstr(), sSyncError.cstr() );
+		return false;
+	}
 	
-	return bOk;
+	return true;
 }
 
 // callback at remote node for CLUSTER_SYNCED to pick up received indexes then call Galera sst_received
 bool RemoteClusterSynced ( const PQRemoteData_t & tCmd, CSphString & sError ) EXCLUDES ( g_tClustersLock )
 {
-	sphLogDebugRpl ( "join sync %s, UID %s, indexes %d", tCmd.m_sCluster.cstr(), tCmd.m_sGTID.cstr(), tCmd.m_dIndexes.GetLength() );
+	sphLogDebugRpl ( "join sync %s, UID %s, sent %s, indexes %d, %s", tCmd.m_sCluster.cstr(), tCmd.m_sGTID.cstr(), ( tCmd.m_bSendFilesSuccess ? "ok" : "failed" ), tCmd.m_dIndexes.GetLength(), tCmd.m_sMsg.scstr() );
 
-	bool bValid = ( !tCmd.m_sGTID.IsEmpty() );
+	if ( !tCmd.m_bSendFilesSuccess )
+	{
+		if ( tCmd.m_sMsg.IsEmpty() )
+			sError = "donor failed to send files";
+		else
+			sError = tCmd.m_sMsg;
+	}
+
+	bool bValid = ( tCmd.m_bSendFilesSuccess && !tCmd.m_sGTID.IsEmpty() );
 	wsrep_gtid tGtid = WSREP_GTID_UNDEFINED;
 	
 	int iLen = wsrep_gtid_scan ( tCmd.m_sGTID.cstr(), tCmd.m_sGTID.Length(), &tGtid );
@@ -5434,6 +5773,34 @@ void GetArray ( CSphVector<CSphString> & dBuf, MemoryReader_c & tIn )
 		sVal = tIn.GetString();
 }
 
+void SendArray ( const VecTraits_T<FileOp_t> & dBuf, ISphOutputBuffer & tOut )
+{
+	tOut.SendInt ( dBuf.GetLength() );
+	for ( const FileOp_t & tItem : dBuf )
+	{
+		tOut.SendByte ( (BYTE)tItem.m_eOp );
+		tOut.SendUint64 ( tItem.m_iSize );
+		tOut.SendUint64 ( tItem.m_iOffFile );
+		tOut.SendDword ( tItem.m_iOffBuf );
+	}
+}
+
+
+void GetArray ( CSphVector<FileOp_t> & dBuf, InputBuffer_c & tIn )
+{
+	int iCount = tIn.GetDword();
+	if ( !iCount )
+		return;
+
+	dBuf.Resize ( iCount );
+	for ( FileOp_t & tItem : dBuf )
+	{
+		tItem.m_eOp = (FileOp_e)tIn.GetByte();
+		tItem.m_iSize = tIn.GetUint64();
+		tItem.m_iOffFile = tIn.GetUint64();
+		tItem.m_iOffBuf = tIn.GetDword();
+	}
+}
 
 void SaveUpdate ( const CSphAttrUpdate & tUpd, CSphVector<BYTE> & dOut )
 {

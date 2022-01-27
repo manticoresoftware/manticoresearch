@@ -23,7 +23,7 @@ To use replication in Manticore Search:
   - or [node_address](../../Server_settings/Searchd.md#node_address) with an accessible IP address
 * optionally you can set unique values for [server_id](../../Server_settings/Searchd.md#server_id) on each cluster node. If no value is set, the node will try to use the MAC address (or a random number if that fails) to generate the `server_id`.
 
-If there is no `replication` [listen](../../Server_settings/Searchd.md#listen) directive set Manticore will use the first two free ports in the range of 200 ports after thedefault protocol listening port for each created cluster. To set replication ports manually the [listen](../../Server_settings/Searchd.md#listen) directive (of `replication` type) port range should be defined and the address/port range pairs should not intersect between different nodes on the same server. As a rule of thumb, the port range should specify no less than two ports per cluster.
+If there is no `replication` [listen](../../Server_settings/Searchd.md#listen) directive set Manticore will use the first two free ports in the range of 200 ports after the default protocol listening port for each created cluster. To set replication ports manually the [listen](../../Server_settings/Searchd.md#listen) directive (of `replication` type) port range should be defined and the address/port range pairs should not intersect between different nodes on the same server. As a rule of thumb, the port range should specify no less than two ports per cluster.
 
 ## Replication cluster
 

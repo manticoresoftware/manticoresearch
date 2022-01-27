@@ -588,6 +588,12 @@ void CSphWriter::SetBufferSize ( int iBufferSize )
 
 bool CSphWriter::OpenFile ( const CSphString & sName, CSphString & sErrorBuffer )
 {
+	return OpenFile ( sName, SPH_O_NEW, sErrorBuffer );
+}
+
+
+bool CSphWriter::OpenFile ( const CSphString & sName, int iOpenFlags, CSphString & sErrorBuffer )
+{
 	assert ( !sName.IsEmpty() );
 	assert ( m_iFD<0 && "already open" );
 
@@ -598,7 +604,7 @@ bool CSphWriter::OpenFile ( const CSphString & sName, CSphString & sErrorBuffer 
 	if ( !m_pBuffer )
 		m_pBuffer = new BYTE [ m_iBufferSize ];
 
-	m_iFD = ::open ( m_sName.cstr(), SPH_O_NEW, 0644 );
+	m_iFD = ::open ( m_sName.cstr(), iOpenFlags, 0644 );
 	m_pPool = m_pBuffer;
 	m_iPoolUsed = 0;
 	m_iPos = 0;

@@ -542,6 +542,8 @@ bool ConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_t> & dC
 		iCluster++;
 	}
 
+	sphLogDebug ( "config loaded, indexes %d, clusters %d", dIndexes.GetLength(), dClusters.GetLength() );
+
 	return true;
 }
 
@@ -591,6 +593,8 @@ static bool ConfigWrite ( const CSphString & sConfigPath, const CSphVector<Clust
 	}
 
 	unlink ( sOld.cstr() );
+
+	sphLogDebug ( "config saved, indexes %d, clusters %d", dIndexes.GetLength(), dClusters.GetLength() );
 
 	return true;
 }

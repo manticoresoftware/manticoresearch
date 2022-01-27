@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -22,7 +22,9 @@
 #include "columnarsort.h"
 #include "sortcomp.h"
 #include "conversion.h"
+#include "docstore.h"
 #include "schema/rset.h"
+#include "aggregate.h"
 
 #include <time.h>
 #include <math.h>
@@ -2020,477 +2022,6 @@ struct CSphGroupSorterSettings
 };
 
 
-/// aggregate function interface
-class IAggrFunc
-{
-public:
-	virtual			~IAggrFunc() {}
-	virtual void	Ungroup ( CSphMatch & ) {}
-	virtual void	Update ( CSphMatch &, const CSphMatch &, bool bGrouped ) = 0;
-	virtual void	Finalize ( CSphMatch & ) {}
-};
-
-
-/// aggregate traits for different attribute types
-template < typename T >
-class IAggrFuncTraits : public IAggrFunc
-{
-public:
-	explicit		IAggrFuncTraits ( const CSphAttrLocator & tLocator ) : m_tLocator ( tLocator ) {}
-	T				GetValue ( const CSphMatch & tRow );
-	void			SetValue ( CSphMatch & tRow, T val );
-
-protected:
-	CSphAttrLocator	m_tLocator;
-};
-
-template<>
-inline DWORD IAggrFuncTraits<DWORD>::GetValue ( const CSphMatch & tRow )
-{
-	return (DWORD) tRow.GetAttr ( m_tLocator );
-}
-
-template<>
-inline void IAggrFuncTraits<DWORD>::SetValue ( CSphMatch & tRow, DWORD val )
-{
-	tRow.SetAttr ( m_tLocator, val );
-}
-
-template<>
-inline int64_t IAggrFuncTraits<int64_t>::GetValue ( const CSphMatch & tRow )
-{
-	return tRow.GetAttr ( m_tLocator );
-}
-
-template<>
-inline void IAggrFuncTraits<int64_t>::SetValue ( CSphMatch & tRow, int64_t val )
-{
-	tRow.SetAttr ( m_tLocator, val );
-}
-
-template<>
-inline float IAggrFuncTraits<float>::GetValue ( const CSphMatch & tRow )
-{
-	return tRow.GetAttrFloat ( m_tLocator );
-}
-
-template<>
-inline void IAggrFuncTraits<float>::SetValue ( CSphMatch & tRow, float val )
-{
-	tRow.SetAttrFloat ( m_tLocator, val );
-}
-
-/// SUM() implementation
-template < typename T >
-class AggrSum_t final : public IAggrFuncTraits<T>
-{
-public:
-	explicit AggrSum_t ( const CSphAttrLocator & tLoc ) : IAggrFuncTraits<T> ( tLoc )
-	{}
-
-	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool ) final
-	{
-		this->SetValue ( tDst, this->GetValue(tDst)+this->GetValue(tSrc) );
-	}
-};
-
-/// AVG() implementation
-template < typename T >
-class AggrAvg_t final : public IAggrFuncTraits<T>
-{
-	CSphAttrLocator m_tCountLoc;
-	using IAggrFuncTraits<T>::GetValue;
-	using IAggrFuncTraits<T>::SetValue;
-
-public:
-	AggrAvg_t ( const CSphAttrLocator & tLoc, const CSphAttrLocator & tCountLoc )
-		: IAggrFuncTraits<T> ( tLoc ), m_tCountLoc ( tCountLoc )
-	{}
-
-	void Ungroup ( CSphMatch & tDst ) final
-	{
-		SetValue ( tDst, T ( GetValue ( tDst ) * tDst.GetAttr ( m_tCountLoc ) ) );
-	}
-
-	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool bGrouped ) final
-	{
-		if ( bGrouped )
-			SetValue ( tDst, T ( GetValue ( tDst ) + GetValue ( tSrc ) * tSrc.GetAttr ( m_tCountLoc ) ) );
-		else
-			SetValue ( tDst, GetValue ( tDst ) + GetValue ( tSrc ) );
-	}
-
-	void Finalize ( CSphMatch & tDst ) final
-	{
-		auto uAttr = tDst.GetAttr ( m_tCountLoc );
-		if ( uAttr )
-			SetValue ( tDst, T ( GetValue ( tDst ) / uAttr ) );
-	}
-};
-
-
-/// MAX() implementation
-template < typename T >
-class AggrMax_t final : public IAggrFuncTraits<T>
-{
-public:
-	explicit AggrMax_t ( const CSphAttrLocator & tLoc ) : IAggrFuncTraits<T> ( tLoc )
-	{}
-
-	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool ) final
-	{
-		this->SetValue ( tDst, Max ( this->GetValue(tDst), this->GetValue(tSrc) ) );
-	}
-};
-
-
-/// MIN() implementation
-template < typename T >
-class AggrMin_t final : public IAggrFuncTraits<T>
-{
-public:
-	explicit AggrMin_t ( const CSphAttrLocator & tLoc ) : IAggrFuncTraits<T> ( tLoc )
-	{}
-
-	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool ) final
-	{
-		this->SetValue ( tDst, Min ( this->GetValue(tDst), this->GetValue(tSrc) ) );
-	}
-};
-
-/// GROUP_CONCAT
-
-/* What is that magic about?
- *
- * In simplest usecase - you have in group matches with 'foo', 'bar' -> group_concat produces 'foo,bar' - no magic.
- *
- * Make a bit complex: one and same sorter processes sequentaly several indexes (chunks), and collects group result.
- * In this case if 1-st chunk gives 'foo', 2-nd gives 'bar', you still can achieve 'foo,bar' naturally, no magic.
- *
- * A bit more complex: several sorters process cloud of chunks in parallel, then merge results.
- * Say, you have 3 chunks, giving 'foo', 'bar' and 'bazz'. Result you've expect is 'foo,bar,bazz'.
- * In parallel with, say, 2 sorters, one processed 1-st and 3-rd chunk, second - middle.
- * One gives you 'foo,bazz', second - 'bar'.
- *
- * What is to do on merge then?
- *
- * Simplest: just merge 'as is'. I.e., return 'foo,bazz,bar' despite the broken order.
- * However that is appropriate only in the narrow case when ordering is not requested. That is *NOT* our way.
- *
- * Each match came from a chunk is tagged with the order num of that chunk.
- * When we have matches from the same chunk, we just group them usual way with no magic, naturally concatenating strings.
- * If all the matches tagged same - we just achieve usual string out of the box, with no magic at all.
- * If into non-empty group came match with another tag, we use this model of blob:
- *
- * '\0', <N> <TAG1> <STRLEN1> chars1 <TAG2> <STRLEN2> chars2 ... <TAGN> <STRLEN> bytesN
- *
- * First \0 marks that the whole blob is special.
- * Each tagged string inside includes concatenated values of the matches from that tag.
- * For described foo-bar-baz in two sorters it will look like:
- *
- * '\0' 2 1 3 foo 3 4 bazz // in the 1-st sorter. 2 chunks, from tag 1 with len 3 'foo', from tag 3 with len 4 'bazz'
- * bar // in the 2-nd sorter. Simple plain 'bar' (tag is not saved here, it is still an attribute of the match itself).
- *
- * Then we can merge results, taking tag for value came from 2-nd sorter from that match itself.
- *
- * '\0' 3 1 3 foo 2 3 bar 3 4 bazz
- *
- * That finally deserializes into expected user string 'foo,bar,bazz'. So, target achieved.
- *
- * One optimization here is that we expect matches with monotonically changing tags. I.e., if we have processed chunk 1,
- * and stay on chunk 3 - then next match will never came with tag 1 or 2, as these numbers already passed.
- * So, no need to 'insert into middle', we always pushes new data to tail of the blob. That makes everything simpler.
- *
- */
-
-// helpers to blob serialization
-using BStream_c = TightPackedVec_T<BYTE>;
-
-static BStream_c & operator<< ( BStream_c & dOut, const ByteBlob_t & tData )
-{
-	dOut.Append ( tData.first, tData.second );
-	return dOut;
-}
-
-template <typename NUM>
-static BStream_c & operator<< ( BStream_c & dOut, NUM iNum )
-{
-	sphUnalignedWrite ( dOut.AddN ( sizeof ( NUM ) ), iNum );
-	return dOut;
-}
-
-// unused for now
-/*
-template<typename T>
-static BStream_c & operator<< ( BStream_c & dOut, const VecTraits_T<T> & tData )
-{
-	dOut << tData.GetLength ();
-	tData.Apply ( [&dOut] ( const T & tChunk ) { dOut << tChunk; } );
-	return dOut;
-}
-*/
-
-static BStream_c & operator<< ( BStream_c & dOut, const VecTraits_T<BYTE> & tData )
-{
-	return dOut << tData.GetLength () << ByteBlob_t { tData.begin(), tData.GetLength () };
-}
-
-// unused for now
-/*
-static BStream_c & operator<< ( BStream_c & dOut, const CSphString& sData )
-{
-	return dOut << VecTraits_T<BYTE> ( (BYTE*) const_cast<char*>( sData.cstr() ), sData.Length() );
-}
-
-static BStream_c & operator<< ( BStream_c & dOut, const StringBuilder_c & sData )
-{
-	return dOut << VecTraits_T<BYTE> ( (BYTE*) const_cast<char*>( sData.cstr() ), sData.GetLength () );
-}
-*/
-
-// helpers to de-serialize
-template<typename NUM>
-static ByteBlob_t & operator>> ( ByteBlob_t & dIn, NUM & iNum )
-{
-	assert ( dIn.first );
-	assert ( dIn.second>=(int)sizeof (NUM) );
-	iNum = sphUnalignedRead ( *(const NUM *) dIn.first );
-	dIn.first += sizeof ( NUM );
-	dIn.second -= sizeof ( NUM );
-	return dIn;
-}
-
-static ByteBlob_t & operator>> ( ByteBlob_t & dIn, ByteBlob_t & tData )
-{
-	assert ( dIn.first );
-	assert ( dIn.second>=tData.second );
-	tData.first = dIn.first;
-	dIn.first += tData.second;
-	dIn.second -= tData.second;
-	return dIn;
-}
-
-// unused for now
-/*template<typename T>
-static ByteBlob_t & operator>> ( ByteBlob_t & dIn, CSphVector<T> & tData )
-{
-	int iLen;
-	dIn >> iLen;
-	tData.Resize ( iLen );
-	tData.Apply ( [&dIn] ( T & tChunk ) { dIn >> tChunk; } );
-	return dIn;
-}
-*/
-
-static ByteBlob_t & operator>> ( ByteBlob_t & dIn, VecTraits_T<BYTE> & tData )
-{
-	int iLen;
-	dIn >> iLen;
-	ByteBlob_t tChunk { nullptr, iLen };
-	dIn >> tChunk;
-	tData = tChunk;
-	return dIn;
-}
-
-// The GROUP_CONCAT() implementation
-class AggrConcat_t final : public IAggrFunc
-{
-	CSphAttrLocator	m_tLoc;
-	using FixedVectorByte = CSphFixedVector<BYTE, sph::DefaultCopy_T<BYTE>, sph::CustomStorage_T<BYTE>>;
-
-public:
-	explicit AggrConcat_t ( const CSphColumnInfo & tCol )
-		: m_tLoc ( tCol.m_tLocator )
-	{
-		assert ( tCol.m_eAttrType==SPH_ATTR_STRINGPTR );
-		assert ( !m_tLoc.IsBlobAttr ()); // otherwise we will fail on fetching data!
-	}
-
-	// here we convert back to plain string
-	void Finalize ( CSphMatch & tMatch ) final
-	{
-		auto dSrc = tMatch.FetchAttrData ( m_tLoc, nullptr ); // expect serialized tagged strings
-
-		// empty match
-		if ( !dSrc.first )
-			return;
-
-		// already grouped match
-		if ( *dSrc.first )
-			return;
-
-		auto dBlob = dSrc;
-		int iSize, iTag, iFinalSize;
-		BStream_c dOut;
-		VecTraits_T<BYTE> dString;
-
-		BYTE uZero; dBlob >> uZero;
-		dBlob >> iSize;
-		iFinalSize = dBlob.second - ( iSize * 2 * sizeof ( int ) ) + iSize - 1 + 20; // -tag, -len, +commas-1, +packlen
-		dOut.Reserve ( iFinalSize );
-
-		for ( int i=0; i<iSize; ++i )
-		{
-			if ( i>0 ) dOut << ',';
-			dBlob >> iTag >> dString;
-			dOut << ByteBlob_t { dString.begin (), dString.GetLength () }; // write raw blob, without length
-		}
-
-		// release previous, write converted
-		sphDeallocatePacked ( sphPackedBlob ( dSrc ) );
-		sphPackPtrAttrInPlace ( dOut );
-		tMatch.SetAttr ( m_tLoc, (SphAttr_t) dOut.LeakData () );
-	}
-
-	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool ) final
-	{
-		ByteBlob_t dSrc = tSrc.FetchAttrData ( m_tLoc, nullptr ); // ok since it is NOT a blob attr
-		ByteBlob_t dDst = tDst.FetchAttrData ( m_tLoc, nullptr );
-
-		// empty source? kinda weird, but done!
-		if ( !dSrc.first || !dSrc.second )
-			return;
-
-		BStream_c dOut;
-		if ( !dDst.first )
-			dOut << dSrc;
-		else if ( *dSrc.first && *dDst.first ) // first byte is a mark: 0 means data packed, another is part of real string.
-			AppendStringToString ( dOut, dDst, tDst.m_iTag, dSrc, tSrc.m_iTag );
-		else if ( *dSrc.first && !*dDst.first )
-			AppendBlobToString ( dOut, dSrc, tSrc.m_iTag, dDst, false );
-		else if ( !*dSrc.first && *dDst.first )
-			AppendBlobToString ( dOut, dDst, tDst.m_iTag, dSrc, true );
-		else // if ( !*dSrc.first && !*dDst.first )
-			AppendBlobToBlob ( dOut, dDst, dSrc );
-
-		// Dispose previous packet
-		sphDeallocatePacked ( sphPackedBlob ( dDst ) );
-
-		// update saved data
-		sphPackPtrAttrInPlace (dOut);
-		tDst.SetAttr ( m_tLoc, (SphAttr_t) dOut.LeakData () );
-	}
-
-private:
-
-	// merge two simple matches
-	static void AppendStringToString ( BStream_c & dOut, const ByteBlob_t & dInDst, int iTagDst, const ByteBlob_t & dInSrc, int iTagSrc )
-	{
-		if ( iTagDst==iTagSrc ) // plain concat of 2 strings
-			dOut << dInDst << ',' << dInSrc;
-		else // produce complex match
-			dOut << '\0' << int(2)
-			<< iTagDst << dInDst.second << dInDst
-			<< iTagSrc << dInSrc.second << dInSrc;
-	}
-
-	static void WriteCount ( BStream_c& dOut, int iCount )
-	{
-		// update total num of elements
-		int iCurrentLen = dOut.GetLength ();
-		dOut.Resize ( 1 ); // since 1-st came '\0' mark
-		dOut << iCount;
-		dOut.Resize ( iCurrentLen );
-	}
-
-	// merge two complex matches
-	static void AppendBlobToBlob ( BStream_c& dOut, ByteBlob_t dInDst, ByteBlob_t dInSrc )
-	{
-		int iOut = 0;
-		dOut << '\0' << iOut; // mark of complex and placeholder to num of elems.
-
-		int iSizeSrc = 0, iSizeDst = 0, iTagSrc, iTagDst;
-		VecTraits_T<BYTE> dBlobSrc, dBlobDst;
-
-		// read num of elements in both matches
-		char cZero;
-		dInSrc >> cZero >> iSizeSrc;
-		assert ( cZero=='\0' );
-		dInDst >> cZero >> iSizeDst;
-		assert ( cZero=='\0' );
-
-		auto fnNextSrc = [&] { if (iSizeSrc<=0) iTagSrc = INT_MIN; else {dInSrc >> iTagSrc >> dBlobSrc; --iSizeSrc;} };
-		auto fnNextDst = [&] { if (iSizeDst<=0) iTagDst = INT_MIN; else {dInDst >> iTagDst >> dBlobDst; --iSizeDst;} };
-
-		// merge two matches
-		fnNextSrc ();
-		fnNextDst ();
-		while ( iTagSrc!=INT_MIN || iTagDst!=INT_MIN )
-		{
-			if ( iTagSrc < iTagDst ) {
-				dOut << iTagDst << dBlobDst;
-				fnNextDst();
-			} else if ( iTagDst < iTagSrc ) {
-				dOut << iTagSrc << dBlobSrc;
-				fnNextSrc();
-			} else {
-				assert ( iTagSrc!=INT_MAX || iTagDst!=INT_MAX );
-				dOut << iTagSrc;
-				if ( dBlobDst.IsEmpty() )
-					dOut << dBlobSrc;
-				else
-					dOut << dBlobDst.GetLength() + dBlobSrc.GetLength() + 1
-					<< ByteBlob_t ( dBlobDst.begin(), dBlobDst.GetLength() )
-					<< ',' << ByteBlob_t ( dBlobSrc.begin(), dBlobSrc.GetLength() );
-				fnNextSrc();
-				fnNextDst();
-			}
-			++iOut;
-		}
-
-		WriteCount ( dOut, iOut );
-	}
-
-	// merge string and blob. Last bool determines what will came first
-	static void AppendBlobToString ( BStream_c & dOut, const ByteBlob_t & dString, int iTagString, ByteBlob_t dBlob, bool bStringFirst=true )
-	{
-		int iOut;
-		char cZero;
-		dBlob >> cZero >> iOut;
-		assert ( cZero=='\0' );
-		dOut << cZero << iOut; // mark of complex and placeholder to num of elems.
-
-		int iTagSrc;
-		VecTraits_T<BYTE> dBlobSrc;
-		bool bCopied = false;
-
-		// copy elems looking for the place of new one
-		for ( int i=0, iOldLen=iOut; i<iOldLen; ++i)
-		{
-			dBlob >> iTagSrc >> dBlobSrc;
-			if ( bCopied )
-				dOut << iTagSrc << dBlobSrc;
-			else
-			{
-				if ( !bCopied && iTagString > iTagSrc )
-				{
-					dOut << iTagString << dString.second << dString << iTagSrc << dBlobSrc;
-					++iOut;
-					bCopied = true;
-				} else if ( !bCopied && iTagString==iTagSrc )
-				{
-					dOut << iTagString << dString.second + dBlobSrc.GetLength() + 1;
-					if ( bStringFirst )
-						dOut << dString << ',' << ByteBlob_t ( dBlobSrc.begin(), dBlobSrc.GetLength() );
-					else
-						dOut << ByteBlob_t ( dBlobSrc.begin(), dBlobSrc.GetLength() ) << ',' << dString;
-					bCopied = true;
-				} else
-					dOut << iTagSrc << dBlobSrc;
-			}
-		}
-
-		if ( !bCopied )
-		{
-			dOut << iTagString << dString.second << dString;
-			++iOut;
-		}
-
-		WriteCount ( dOut, iOut );
-	}
-};
-
-
 struct MatchCloner_t
 {
 private:
@@ -2763,24 +2294,29 @@ static void AddDistinctKeys ( const CSphMatch & tEntry, CSphAttrLocator & tDisti
 	}
 }
 
+
 class BaseGroupSorter_c : public BlobPool_c, protected CSphGroupSorterSettings
 {
 	using BASE = CSphGroupSorterSettings;
 
-protected:
-	MatchCloner_t			m_tPregroup;
-	CSphVector<IAggrFunc *>	m_dAggregates;
-
 public:
-
 	FWD_BASECTOR( BaseGroupSorter_c )
 
 	~BaseGroupSorter_c() override { ResetAggregates(); }
 
 protected:
+	MatchCloner_t			m_tPregroup;
+	CSphVector<AggrFunc_i *>	m_dAggregates;
+
+	void SetColumnar ( columnar::Columnar_i * pColumnar )
+	{
+		for ( auto i : m_dAggregates )
+			i->SetColumnar(pColumnar);
+	}
+
 	/// schema, aggregates setup
 	template <bool DISTINCT>
-	inline void SetupBaseGrouper ( ISphSchema * pSchema, CSphVector<IAggrFunc *> * pAvgs = nullptr )
+	inline void SetupBaseGrouper ( ISphSchema * pSchema, CSphVector<AggrFunc_i *> * pAvgs = nullptr )
 	{
 		m_tPregroup.ResetAttrs();
 		ResetAggregates();
@@ -2803,58 +2339,19 @@ protected:
 
 			switch ( tAttr.m_eAggrFunc )
 			{
-			case SPH_AGGR_SUM:
-				switch ( tAttr.m_eAttrType )
-				{
-				case SPH_ATTR_INTEGER: m_dAggregates.Add ( new AggrSum_t<DWORD> ( tAttr.m_tLocator ) ); break;
-				case SPH_ATTR_BIGINT: m_dAggregates.Add ( new AggrSum_t<int64_t> ( tAttr.m_tLocator ) ); break;
-				case SPH_ATTR_FLOAT: m_dAggregates.Add ( new AggrSum_t<float> ( tAttr.m_tLocator ) ); break;
-				default: assert ( 0 && "internal error: unhandled aggregate type" );
-					break;
-				}
-				break;
-
+			case SPH_AGGR_SUM:	m_dAggregates.Add ( CreateAggrSum(tAttr) );	break;
 			case SPH_AGGR_AVG:
-				switch ( tAttr.m_eAttrType )
-				{
-				case SPH_ATTR_INTEGER:
-					m_dAggregates.Add ( new AggrAvg_t<DWORD> ( tAttr.m_tLocator, m_tLocCount ) ); break;
-				case SPH_ATTR_BIGINT:
-					m_dAggregates.Add ( new AggrAvg_t<int64_t> ( tAttr.m_tLocator, m_tLocCount ) );break;
-				case SPH_ATTR_FLOAT:
-					m_dAggregates.Add ( new AggrAvg_t<float> ( tAttr.m_tLocator, m_tLocCount ) ); break;
-				default: assert ( 0 && "internal error: unhandled aggregate type" );
-					break;
-				}
+				m_dAggregates.Add ( CreateAggrAvg ( tAttr, m_tLocCount ) );
+
 				// store avg to calculate these attributes prior to groups sort
 				if ( pAvgs )
-					pAvgs->Add ( m_dAggregates.Last () );
+					pAvgs->Add ( m_dAggregates.Last() );
 				break;
 
-			case SPH_AGGR_MIN:
-				switch ( tAttr.m_eAttrType )
-				{
-				case SPH_ATTR_INTEGER: m_dAggregates.Add ( new AggrMin_t<DWORD> ( tAttr.m_tLocator ) ); break;
-				case SPH_ATTR_BIGINT: m_dAggregates.Add ( new AggrMin_t<int64_t> ( tAttr.m_tLocator ) ); break;
-				case SPH_ATTR_FLOAT: m_dAggregates.Add ( new AggrMin_t<float> ( tAttr.m_tLocator ) ); break;
-				default: assert ( 0 && "internal error: unhandled aggregate type" );
-					break;
-				}
-				break;
-
-			case SPH_AGGR_MAX:
-				switch ( tAttr.m_eAttrType )
-				{
-				case SPH_ATTR_INTEGER: m_dAggregates.Add ( new AggrMax_t<DWORD> ( tAttr.m_tLocator ) ); break;
-				case SPH_ATTR_BIGINT: m_dAggregates.Add ( new AggrMax_t<int64_t> ( tAttr.m_tLocator ) ); break;
-				case SPH_ATTR_FLOAT: m_dAggregates.Add ( new AggrMax_t<float> ( tAttr.m_tLocator ) ); break;
-				default: assert ( 0 && "internal error: unhandled aggregate type" );
-					break;
-				}
-				break;
-
+			case SPH_AGGR_MIN:	m_dAggregates.Add ( CreateAggrMin(tAttr) );	break;
+			case SPH_AGGR_MAX:	m_dAggregates.Add ( CreateAggrMax(tAttr) );	break;
 			case SPH_AGGR_CAT:
-				m_dAggregates.Add ( new AggrConcat_t ( tAttr ) );
+				m_dAggregates.Add ( CreateAggrConcat(tAttr) );
 				m_tPregroup.AddPtr ( tAttr.m_tLocator );
 				break;
 
@@ -2878,6 +2375,12 @@ protected:
 	{
 		for ( auto * pAggregate : this->m_dAggregates )
 			pAggregate->Update ( tDst, tSrc, bGrouped );
+	}
+
+	void AggrSetup ( CSphMatch & tDst, const CSphMatch & tSrc, bool bGrouped )
+	{
+		for ( auto * pAggregate : this->m_dAggregates )
+			pAggregate->Setup ( tDst, tSrc, bGrouped );
 	}
 
 	void AggrUngroup ( CSphMatch & tMatch )
@@ -2942,14 +2445,13 @@ class KBufferGroupSorter_T : public CSphMatchQueueTraits, protected BaseGroupSor
 	using BASE = CSphMatchQueueTraits;
 
 public:
-	/// ctor
 	KBufferGroupSorter_T ( const ISphMatchComparator * pComp, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings )
-			: CSphMatchQueueTraits ( tSettings.m_iMaxMatches*GROUPBY_FACTOR )
-			, BaseGroupSorter_c ( tSettings )
-			, m_eGroupBy ( pQuery->m_eGroupFunc )
-			, m_iLimit ( tSettings.m_iMaxMatches )
-			, m_tGroupSorter (*this)
-			, m_tSubSorter ( *this, pComp )
+		: CSphMatchQueueTraits ( tSettings.m_iMaxMatches*GROUPBY_FACTOR )
+		, BaseGroupSorter_c ( tSettings )
+		, m_eGroupBy ( pQuery->m_eGroupFunc )
+		, m_iLimit ( tSettings.m_iMaxMatches )
+		, m_tGroupSorter (*this)
+		, m_tSubSorter ( *this, pComp )
 	{
 		assert ( GROUPBY_FACTOR>1 );
 		assert ( !DISTINCT || tSettings.m_tDistinctAttr.m_iBitOffset>=0 );
@@ -2967,7 +2469,7 @@ public:
 			FixupLocators ( m_pSchema, pSchema );
 			m_tGroupSorter.FixupLocators ( m_pSchema, pSchema, bRemapCmp );
 			m_tPregroup.ResetAttrs ();
-			m_dAggregates.Apply ( [] ( IAggrFunc * pAggr ) { SafeDelete ( pAggr ); } );
+			m_dAggregates.Apply ( [] ( AggrFunc_i * pAggr ) { SafeDelete ( pAggr ); } );
 			m_dAggregates.Resize ( 0 );
 			m_dAvgs.Resize ( 0 );
 		}
@@ -2992,6 +2494,7 @@ public:
 	void SetColumnar ( columnar::Columnar_i * pColumnar ) final
 	{
 		CSphMatchQueueTraits::SetColumnar(pColumnar);
+		BaseGroupSorter_c::SetColumnar(pColumnar);
 		m_pGrouper->SetColumnar(pColumnar);
 	}
 
@@ -3037,7 +2540,7 @@ protected:
 	bool						m_bSortByDistinct = false;
 	GroupSorter_fn<COMPGROUP>	m_tGroupSorter;
 	SubGroupSorter_fn			m_tSubSorter;
-	CSphVector<IAggrFunc *>		m_dAvgs;
+	CSphVector<AggrFunc_i *>		m_dAvgs;
 	bool						m_bAvgFinal = false;
 	static const int			GROUPBY_FACTOR = 4;	///< allocate this times more storage when doing group-by (k, as in k-buffer)
 
@@ -3055,7 +2558,7 @@ protected:
 		}
 	}
 
-	inline void SetupBaseGrouperWrp ( ISphSchema * pSchema, CSphVector<IAggrFunc *> * pAvgs )
+	inline void SetupBaseGrouperWrp ( ISphSchema * pSchema, CSphVector<AggrFunc_i *> * pAvgs )
 	{
 		SetupBaseGrouper<DISTINCT> ( pSchema, pAvgs );
 	}
@@ -3095,9 +2598,9 @@ protected:
 		return pClone;
 	}
 
-	CSphVector<IAggrFunc *> GetAggregatesWithoutAvgs() const
+	CSphVector<AggrFunc_i *> GetAggregatesWithoutAvgs() const
 	{
-		CSphVector<IAggrFunc *> dAggrs;
+		CSphVector<AggrFunc_i *> dAggrs;
 		if ( m_dAggregates.GetLength ()!=m_dAvgs.GetLength ())
 		{
 			dAggrs = m_dAggregates;
@@ -3171,6 +2674,7 @@ protected:
 	using CSphGroupSorterSettings::m_tLocDistinct;
 
 	using BaseGroupSorter_c::EvalHAVING;
+	using BaseGroupSorter_c::AggrSetup;
 	using BaseGroupSorter_c::AggrUpdate;
 	using BaseGroupSorter_c::AggrUngroup;
 
@@ -3210,7 +2714,7 @@ public:
 		{
 			CSphMatch & tMatch = m_dData[iMatch];
 			if_const ( HAS_AGGREGATES )
-				dAggrs.Apply ( [&tMatch] ( IAggrFunc * pAggr ) { pAggr->Finalize ( tMatch ); } );
+				dAggrs.Apply ( [&tMatch] ( AggrFunc_i * pAggr ) { pAggr->Finalize ( tMatch ); } );
 
 			if ( !EvalHAVING ( tMatch ))
 			{
@@ -3372,6 +2876,9 @@ protected:
 		CSphMatch & tNew = Add();
 		m_pSchema->CloneMatch ( tNew, tEntry );
 
+		if_const ( HAS_AGGREGATES )
+			AggrSetup ( tNew, tEntry, GROUPED );
+
 		if_const ( NOTIFICATIONS )
 			m_tJustPushed = RowTagged_t ( tNew );
 
@@ -3407,10 +2914,10 @@ private:
 
 		if ( eGroup==Avg_e::FINALIZE )
 			for ( auto i : this->m_dIData )
-				m_dAvgs.Apply( [this,i] ( IAggrFunc * pAvg ) { pAvg->Finalize ( m_dData[i] ); } );
+				m_dAvgs.Apply( [this,i] ( AggrFunc_i * pAvg ) { pAvg->Finalize ( m_dData[i] ); } );
 		else
 			for ( auto i : this->m_dIData )
-				m_dAvgs.Apply ( [this,i] ( IAggrFunc * pAvg ) { pAvg->Ungroup ( m_dData[i] ); } );
+				m_dAvgs.Apply ( [this,i] ( AggrFunc_i * pAvg ) { pAvg->Ungroup ( m_dData[i] ); } );
 	}
 
 	/// finalize counted distinct values
@@ -4065,12 +3572,12 @@ private:
 		int64_t i = 0;
 		if ( eGroup==Avg_e::FINALIZE )
 			for ( auto tData = m_hGroup2Index.Iterate ( &i ); tData.second; tData = m_hGroup2Index.Iterate ( &i ))
-				m_dAvgs.Apply ( [this, &tData] ( IAggrFunc * pAvg ) {
+				m_dAvgs.Apply ( [this, &tData] ( AggrFunc_i * pAvg ) {
 					pAvg->Finalize ( m_dData[*tData.second] );
 				});
 		else
 			for ( auto tData = m_hGroup2Index.Iterate ( &i ); tData.second; tData = m_hGroup2Index.Iterate ( &i ))
-				m_dAvgs.Apply ( [this, &tData] ( IAggrFunc * pAvg ) {
+				m_dAvgs.Apply ( [this, &tData] ( AggrFunc_i * pAvg ) {
 					pAvg->Ungroup ( m_dData[*tData.second] );
 				});
 	}
@@ -4496,7 +4003,7 @@ public:
 		{
 			FixupLocators ( m_pSchema, pSchema );
 			m_tPregroup.ResetAttrs ();
-			m_dAggregates.Apply ( [] ( IAggrFunc * pAggr ) {SafeDelete ( pAggr ); } );
+			m_dAggregates.Apply ( [] ( AggrFunc_i * pAggr ) {SafeDelete ( pAggr ); } );
 			m_dAggregates.Resize ( 0 );
 		}
 
@@ -4506,6 +4013,12 @@ public:
 
 	bool	IsGroupby () const final { return true; }
 	void	SetBlobPool ( const BYTE * pBlobPool ) final { BlobPool_c::SetBlobPool ( pBlobPool ); }
+
+	void SetColumnar ( columnar::Columnar_i * pColumnar ) final
+	{
+		BASE::SetColumnar(pColumnar);
+		BaseGroupSorter_c::SetColumnar(pColumnar);
+	}
 
 	bool	Push ( const CSphMatch & tEntry ) final							{ return PushEx<false>(tEntry); }
 	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) final	{ assert ( 0 && "Not supported in grouping"); }
@@ -4610,20 +4123,10 @@ protected:
 	CSphVector<SphUngroupedValue_t>	m_dUniq;
 
 private:
-	inline void SetupBaseGrouperWrp ( ISphSchema * pSchema )
-	{
-		SetupBaseGrouper<DISTINCT> ( pSchema );
-	}
-
-	void AddCount ( const CSphMatch & tEntry )
-	{
-		m_tData.AddCounterAttr ( m_tLocCount, tEntry );
-	}
-
-	void UpdateAggregates ( const CSphMatch & tEntry, bool bGrouped = true )
-	{
-		AggrUpdate ( m_tData, tEntry, bGrouped );
-	}
+	inline void SetupBaseGrouperWrp ( ISphSchema * pSchema )	{ SetupBaseGrouper<DISTINCT> ( pSchema ); }
+	void	AddCount ( const CSphMatch & tEntry )				{ m_tData.AddCounterAttr ( m_tLocCount, tEntry ); }
+	void	UpdateAggregates ( const CSphMatch & tEntry, bool bGrouped = true ) { AggrUpdate ( m_tData, tEntry, bGrouped ); }
+	void	SetupAggregates ( const CSphMatch & tEntry, bool bGrouped = true )	{ AggrSetup ( m_tData, tEntry, bGrouped ); }
 
 	// if new entry is more relevant, update from it
 	void CheckReplaceEntry ( const CSphMatch & tEntry )
@@ -4692,6 +4195,10 @@ private:
 
 		// add first
 		m_pSchema->CloneMatch ( m_tData, tEntry );
+
+		// first-time aggregate setup
+		if_const ( HAS_AGGREGATES )
+			SetupAggregates ( tEntry, GROUPED );
 
 		if_const ( NOTIFICATIONS )
 			m_tJustPushed = RowTagged_t ( m_tData );
@@ -5145,6 +4652,10 @@ private:
 	bool	PredictAggregates() const;
 	bool	ReplaceWithColumnarItem ( const CSphString & sAttr, ESphEvalStage eStage );
 	int		ReduceMaxMatches() const;
+	bool	ConvertColumnarToDocstore();
+	const CSphColumnInfo * GetAliasedColumnarAttr ( const CSphColumnInfo & tAttr );
+	bool	SetupAggregateExpr ( CSphColumnInfo & tExprCol, const CSphString & sExpr, DWORD uQueryPackedFactorFlags );
+	bool	SetupColumnarAggregates ( CSphColumnInfo & tExprCol );
 
 	ISphMatchSorter *	SpawnQueue();
 	ISphFilter *		CreateAggrFilter() const;
@@ -5166,6 +4677,19 @@ QueueCreator_c::QueueCreator_c ( const SphQueueSettings_t & tSettings, const CSp
 
 	m_dMatchJsonExprs.Resize ( CSphMatchComparatorState::MAX_ATTRS );
 	m_dGroupJsonExprs.Resize ( CSphMatchComparatorState::MAX_ATTRS );
+}
+
+
+const CSphColumnInfo * QueueCreator_c::GetAliasedColumnarAttr ( const CSphColumnInfo & tAttr )
+{
+	if ( !tAttr.IsColumnarExpr() )
+		return &tAttr;
+
+	CSphString sAliasedCol;
+	tAttr.m_pExpr->Command ( SPH_EXPR_GET_COLUMNAR_COL, &sAliasedCol );
+	const CSphColumnInfo * pAttr = m_pSorterSchema->GetAttr ( sAliasedCol.cstr() );
+	assert(pAttr);
+	return pAttr;
 }
 
 
@@ -5197,7 +4721,7 @@ void QueueCreator_c::CreateGrouperByAttr ( ESphAttr eType, const CSphColumnInfo 
 		// even if it is an expression, spawn a new one, because a specialized grouper works a lot faster because it doesn't allocate and store string in the match
 		if ( tGroupByAttr.IsColumnar() || tGroupByAttr.IsColumnarExpr() )
 		{
-			m_tGroupSorterSettings.m_pGrouper = CreateGrouperColumnarString ( tGroupByAttr, m_tQuery.m_eCollation );
+			m_tGroupSorterSettings.m_pGrouper = CreateGrouperColumnarString ( *GetAliasedColumnarAttr(tGroupByAttr), m_tQuery.m_eCollation );
 			bGrouperUsesAttrs = false;
 		}
 		else if ( tGroupByAttr.m_pExpr && !tGroupByAttr.m_pExpr->IsDataPtrAttr() )
@@ -5213,7 +4737,7 @@ void QueueCreator_c::CreateGrouperByAttr ( ESphAttr eType, const CSphColumnInfo 
 	case SPH_ATTR_INT64SET:
 		if ( tGroupByAttr.IsColumnar() || tGroupByAttr.IsColumnarExpr() )
 		{
-			m_tGroupSorterSettings.m_pGrouper = CreateGrouperColumnarMVA ( tGroupByAttr );
+			m_tGroupSorterSettings.m_pGrouper = CreateGrouperColumnarMVA ( *GetAliasedColumnarAttr(tGroupByAttr) );
 			bGrouperUsesAttrs = false;
 			break;
 		}
@@ -5228,16 +4752,17 @@ void QueueCreator_c::CreateGrouperByAttr ( ESphAttr eType, const CSphColumnInfo 
 	case SPH_ATTR_INT64SET_PTR:
 		if ( tGroupByAttr.IsColumnar() || tGroupByAttr.IsColumnarExpr() )
 		{
-			m_tGroupSorterSettings.m_pGrouper = CreateGrouperColumnarMVA ( tGroupByAttr );
+			m_tGroupSorterSettings.m_pGrouper = CreateGrouperColumnarMVA ( *GetAliasedColumnarAttr(tGroupByAttr) );
 			bGrouperUsesAttrs = false;
 		}
 		break;
 
+	case SPH_ATTR_BOOL:
 	case SPH_ATTR_INTEGER:
 	case SPH_ATTR_BIGINT:
 		if ( tGroupByAttr.IsColumnar() || ( tGroupByAttr.IsColumnarExpr() && tGroupByAttr.m_eStage>SPH_EVAL_PREFILTER ) )
 		{
-			m_tGroupSorterSettings.m_pGrouper = CreateGrouperColumnarInt ( tGroupByAttr );
+			m_tGroupSorterSettings.m_pGrouper = CreateGrouperColumnarInt ( *GetAliasedColumnarAttr(tGroupByAttr) );
 			bGrouperUsesAttrs = false;
 		}
 		break;
@@ -5856,6 +5381,73 @@ void QueueCreator_c::PropagateEvalStage ( CSphColumnInfo & tExprCol, IntVec_t & 
 }
 
 
+bool QueueCreator_c::SetupAggregateExpr ( CSphColumnInfo & tExprCol, const CSphString & sExpr, DWORD uQueryPackedFactorFlags )
+{
+	switch ( tExprCol.m_eAggrFunc )
+	{
+	case SPH_AGGR_AVG:
+		// force AVG() to be computed in floats
+		tExprCol.m_eAttrType = SPH_ATTR_FLOAT;
+		tExprCol.m_tLocator.m_iBitCount = 32;
+		break;
+
+	case SPH_AGGR_CAT:
+		// force GROUP_CONCAT() to be computed as strings
+		tExprCol.m_eAttrType = SPH_ATTR_STRINGPTR;
+		tExprCol.m_tLocator.m_iBitCount = ROWITEMPTR_BITS;
+		break;
+
+	case SPH_AGGR_SUM:
+		if ( tExprCol.m_eAttrType==SPH_ATTR_BOOL )
+		{
+			tExprCol.m_eAttrType = SPH_ATTR_INTEGER;
+			tExprCol.m_tLocator.m_iBitCount = 32;
+		}
+		break;
+
+	default:
+		break;
+	}
+
+	// force explicit type conversion for JSON attributes
+	if ( tExprCol.m_eAggrFunc!=SPH_AGGR_NONE && tExprCol.m_eAttrType==SPH_ATTR_JSON_FIELD )
+		return Err ( "ambiguous attribute type '%s', use INTEGER(), BIGINT() or DOUBLE() conversion functions", sExpr.cstr() );
+
+	if ( uQueryPackedFactorFlags & SPH_FACTOR_JSON_OUT )
+		tExprCol.m_eAttrType = SPH_ATTR_FACTORS_JSON;
+
+	return true;
+}
+
+
+bool QueueCreator_c::SetupColumnarAggregates ( CSphColumnInfo & tExprCol )
+{
+	CSphVector<int> dDependentCols;
+	tExprCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dDependentCols );
+	FetchDependencyChains ( dDependentCols );
+
+	if ( !dDependentCols.GetLength() )
+		return tExprCol.IsColumnarExpr();
+
+	if ( dDependentCols.GetLength()==1 )
+	{
+		const CSphColumnInfo & tColumnarAttr = m_pSorterSchema->GetAttr ( dDependentCols[0] );
+		if ( tColumnarAttr.IsColumnarExpr() )
+		{
+			CSphString sColumnarCol;
+			tColumnarAttr.m_pExpr->Command ( SPH_EXPR_GET_COLUMNAR_COL, &sColumnarCol );
+
+			// let aggregate expression know that it is working with that columnar attribute
+			tExprCol.m_pExpr->Command ( SPH_EXPR_SET_COLUMNAR_COL, &sColumnarCol );
+
+			return true;
+		}
+	}
+
+	return false;
+}
+
+
 bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 {
 	assert ( m_pSorterSchema );
@@ -5973,26 +5565,8 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 	if ( bColumnar && iSorterAttr>=0 )
 		m_pSorterSchema->RemoveStaticAttr(iSorterAttr);
 
-	// force AVG() to be computed in floats
-	if ( tExprCol.m_eAggrFunc==SPH_AGGR_AVG )
-	{
-		tExprCol.m_eAttrType = SPH_ATTR_FLOAT;
-		tExprCol.m_tLocator.m_iBitCount = 32;
-	}
-
-	// force explicit type conversion for JSON attributes
-	if ( tExprCol.m_eAggrFunc!=SPH_AGGR_NONE && tExprCol.m_eAttrType==SPH_ATTR_JSON_FIELD )
-		return Err ( "ambiguous attribute type '%s', use INTEGER(), BIGINT() or DOUBLE() conversion functions", tItem.m_sExpr.cstr() );
-
-	if ( uQueryPackedFactorFlags & SPH_FACTOR_JSON_OUT )
-		tExprCol.m_eAttrType = SPH_ATTR_FACTORS_JSON;
-
-	// force GROUP_CONCAT() to be computed as strings
-	if ( tExprCol.m_eAggrFunc==SPH_AGGR_CAT )
-	{
-		tExprCol.m_eAttrType = SPH_ATTR_STRINGPTR;
-		tExprCol.m_tLocator.m_iBitCount = ROWITEMPTR_BITS;
-	}
+	if ( !SetupAggregateExpr ( tExprCol, tItem.m_sExpr, uQueryPackedFactorFlags ) )
+		return false;
 
 	// postpone aggregates, add non-aggregates
 	if ( tExprCol.m_eAggrFunc==SPH_AGGR_NONE )
@@ -6031,7 +5605,11 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 		m_pSorterSchema->AddAttr ( tExprCol, true );
 	} else // some aggregate
 	{
-		tExprCol.m_eStage = SPH_EVAL_PRESORT; // sorter expects computed expression
+		if ( SetupColumnarAggregates(tExprCol) )
+			tExprCol.m_eStage = SPH_EVAL_SORTER; // columnar aggregates have their own code path; no need to calculate them in presort
+		else
+			tExprCol.m_eStage = SPH_EVAL_PRESORT; // sorter expects computed expression
+
 		m_pSorterSchema->AddAttr ( tExprCol, true );
 		m_hExtra.Add ( tExprCol.m_sName );
 
@@ -6039,7 +5617,6 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 		CSphVector<int> dDependentCols;
 		tExprCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dDependentCols );
 		FetchDependencyChains ( dDependentCols );
-
 		ARRAY_FOREACH ( j, dDependentCols )
 		{
 			auto & tDep = const_cast < CSphColumnInfo & > ( m_pSorterSchema->GetAttr ( dDependentCols[j] ) );
@@ -6203,10 +5780,10 @@ bool QueueCreator_c::MaybeAddExpressionsFromSelectList ()
 
 	if ( m_bHaveStar )
 	{
-		if ( !AddStoredFieldExpressions() )
+		if ( !AddColumnarAttributeExpressions() )
 			return false;
 
-		if ( !AddColumnarAttributeExpressions() )
+		if ( !AddStoredFieldExpressions() )
 			return false;
 	}
 
@@ -6459,7 +6036,7 @@ void QueueCreator_c::ReplaceStaticStringsWithExprs ( CSphMatchComparatorState & 
 			
 			CSphColumnInfo tRemapCol ( sAttrName.cstr(), SPH_ATTR_STRINGPTR );
 			tRemapCol.m_eStage = SPH_EVAL_PRESORT;
-			tRemapCol.m_pExpr = CreateExpr_GetColumnarString(sAttrName);
+			tRemapCol.m_pExpr = CreateExpr_GetColumnarString ( sAttrName, tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED );
 			tSorterSchema.AddAttr ( tRemapCol, true );
 
 			iRemap = tSorterSchema.GetAttrIndex ( sAttrName.cstr() );
@@ -6841,10 +6418,45 @@ bool QueueCreator_c::SetupGroupQueue ()
 		&& SetGroupSorting ();
 }
 
+bool QueueCreator_c::ConvertColumnarToDocstore()
+{
+	// don't use docstore (need to try to keep schemas similar for multiquery to work)
+	if ( m_tQuery.m_bFacet || m_tQuery.m_bFacetHead )
+		return true;
+
+	// check for columnar attributes that have FINAL eval stage
+	// if we have more that 1 of such attributes (and they are also stored), we replace columnar expressions with columnar expressions
+	CSphVector<int> dStoredColumnar;
+	auto & tSchema = *m_pSorterSchema;
+	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
+	{
+		auto & tAttr = tSchema.GetAttr(i);
+		bool bStored = false;
+		bool bColumnar = tAttr.m_pExpr && tAttr.m_pExpr->IsColumnar(&bStored);
+		if ( bColumnar && bStored && tAttr.m_eStage==SPH_EVAL_FINAL )
+			dStoredColumnar.Add(i);
+	}
+
+	if ( dStoredColumnar.GetLength()<=1 )
+		return true;
+
+	for ( auto i : dStoredColumnar )
+	{
+		auto & tAttr = const_cast<CSphColumnInfo&>( tSchema.GetAttr(i) );
+
+		CSphString sColumnarAttrName;
+		tAttr.m_pExpr->Command ( SPH_EXPR_GET_COLUMNAR_COL, &sColumnarAttrName );
+		tAttr.m_pExpr = CreateExpr_GetStoredAttr ( sColumnarAttrName, tAttr.m_eAttrType );
+	}
+
+	return true;
+}
+
 bool QueueCreator_c::SetupQueue ()
 {
 	return SetupComputeQueue ()
-		&& SetupGroupQueue ();
+		&& SetupGroupQueue ()
+		&& ConvertColumnarToDocstore();
 }
 
 ISphMatchSorter * QueueCreator_c::CreateQueue ()

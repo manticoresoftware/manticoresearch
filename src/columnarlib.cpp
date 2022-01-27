@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2020-2021, Manticore Software LTD (http://manticoresearch.com)
+// Copyright (c) 2020-2022, Manticore Software LTD (http://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -9,6 +9,7 @@
 //
 
 #include "columnarlib.h"
+#include "sphinxutils.h"
 #include "sphinxexpr.h"
 #include "libutils.h"
 #include "schema/columninfo.h"
@@ -78,7 +79,7 @@ columnar::Builder_i * CreateColumnarBuilder ( const ISphSchema & tSchema, const 
 	columnar::Schema_t tColumnarSchema;
 	std::string sErrorSTL;
 
-	// convert our data types to columnars storage data types
+	// convert our data types to columnar storage data types
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);

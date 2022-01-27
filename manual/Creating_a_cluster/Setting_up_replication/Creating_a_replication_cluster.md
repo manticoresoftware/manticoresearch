@@ -20,13 +20,13 @@ CREATE CLUSTER click_query '/var/data/click_query/' as path, 'clicks_mirror1:931
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE CLUSTER posts
 "
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE CLUSTER click_query '/var/data/click_query/' as path
 "
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE CLUSTER click_query '/var/data/click_query/' as path, 'clicks_mirror1:9312,clicks_mirror2:9312,clicks_mirror3:9312' as nodes
 "
 ```

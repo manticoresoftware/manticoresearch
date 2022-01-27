@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -84,6 +84,7 @@ public:
 
 	/// write synonyms to file
 	virtual void					WriteSynonyms ( CSphWriter & tWriter ) const = 0;
+	virtual void 					WriteSynonyms ( JsonEscapedBuilder & tOut ) const = 0;
 
 	/// set phrase boundary chars
 	virtual bool					SetBoundary ( const char * sConfig, CSphString & sError );

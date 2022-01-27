@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticoreee
+// Copyright (c) 2017-2022, Manticoreee
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2021-2022, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -385,32 +385,6 @@ void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::SetSchema ( ISphSchema * pSchem
 {
 	m_pSorter->SetSchema ( pSchema, bRemapCmp );
 	DoSetSchema(pSchema);
-
-	m_pSchema = pSchema;
-	assert(m_pSchema);
-	m_iDynamicSize = m_pSchema->GetDynamicSize();
-#if NDEBUG
-	int iStride = m_iDynamicSize;
-#else
-	int iStride = m_iDynamicSize+1;
-#endif
-	m_dDynamic.Resize ( iStride*m_dData.GetLength() );
-	CSphRowitem * pDynamic = m_dDynamic.Begin();
-
-	CSphMatch tMatch;
-
-	// set the dynamic part to point to out buffer
-	for ( auto & i : m_dData )
-	{
-#if NDEBUG
-		i.m_pDynamic = pDynamic;
-#else
-		*pDynamic = m_iDynamicSize;
-		i.m_pDynamic = pDynamic+1;
-#endif
-
-		pDynamic += iStride;
-	}
 }
 
 template <typename GENERIC, typename COMP, typename SINGLE>
@@ -582,7 +556,7 @@ void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::SpawnIterators()
 			if ( m_iFastPathAttrs )
 				m_tState.m_dAttrs[i] = m_dIterators.GetLength();
 
-			m_dIterators.Add ( { std::unique_ptr<columnar::Iterator_i>(m_pColumnar->CreateIterator ( sAliasedCol.cstr(), {}, sError )), tAttr.m_tLocator } );
+			m_dIterators.Add ( { std::unique_ptr<columnar::Iterator_i>(m_pColumnar->CreateIterator ( sAliasedCol.cstr(), {}, nullptr, sError )), tAttr.m_tLocator } );
 			assert ( m_dIterators.Last().m_pIterator.get() );
 		}
 	}

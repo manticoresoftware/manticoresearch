@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -67,6 +67,7 @@ private:
 
 
 class CSphReader;
+namespace bson { class Bson_c; }
 
 struct CSphSavedFile
 {
@@ -77,7 +78,8 @@ struct CSphSavedFile
 	DWORD			m_uCRC32 = 0;
 
 	bool			Collect ( const char * szFilename, CSphString * pError=nullptr );
-	void			Read ( CSphReader & tReader, const char * szFilename, bool bSharedStopwords, CSphString * sWarning=nullptr );
+	void			Read ( CSphReader & tReader, const char * szFilename, bool bSharedStopwords, CSphString * sWarning = nullptr );
+	void			Read ( const bson::Bson_c& tNode, const char* szFilename, bool bSharedStopwords, CSphString* sWarning = nullptr );
 };
 
 

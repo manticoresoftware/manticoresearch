@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -128,7 +128,7 @@ struct CSphWordforms
 	bool						m_bHavePostMorphNF;
 	CSphVector <CSphStoredNF>	m_dNormalForms;
 	CSphMultiformContainer *	m_pMultiWordforms;
-	CSphOrderedHash < int, CSphString, CSphStrHashFunc, 1048576 >	m_dHash;
+	CSphOrderedHash < int, CSphString, CSphStrHashFunc, 1048576 >	m_hHash;
 
 	CSphWordforms ();
 	~CSphWordforms ();
@@ -155,9 +155,11 @@ struct DictHeader_t;
 class CSphDict : public ISphRefcountedMT
 {
 public:
-	static const int	ST_OK = 0;
-	static const int	ST_ERROR = 1;
-	static const int	ST_WARNING = 2;
+	enum ST_E : int {
+		ST_OK = 0,
+		ST_ERROR = 1,
+		ST_WARNING = 2,
+	};
 
 public:
 	/// Get word ID by word, "text" version
@@ -197,15 +199,17 @@ public:
 
 	/// write stopwords to a file
 	virtual void		WriteStopwords ( CSphWriter & tWriter ) const = 0;
+	virtual void		WriteStopwords ( JsonEscapedBuilder & tOut ) const = 0;
 
 	/// load wordforms from a given list of files
 	virtual bool		LoadWordforms ( const StrVec_t &, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) = 0;
 
 	/// write wordforms to a file
 	virtual void		WriteWordforms ( CSphWriter & tWriter ) const = 0;
+	virtual void		WriteWordforms ( JsonEscapedBuilder & tOut ) const = 0;
 
 	/// get wordforms
-	virtual const CSphWordforms *	GetWordforms() { return NULL; }
+	virtual const CSphWordforms *	GetWordforms() { return nullptr; }
 
 	/// disable wordforms processing
 	virtual void		DisableWordforms() {}
@@ -248,7 +252,7 @@ public:
 	virtual void			HitblockPatch ( CSphWordHit *, int ) const {}
 
 	/// resolve temporary hit block wide wordid (!) back to keyword
-	virtual const char *	HitblockGetKeyword ( SphWordID_t ) { return NULL; }
+	virtual const char *	HitblockGetKeyword ( SphWordID_t ) { return nullptr; }
 
 	/// check current memory usage
 	virtual int				HitblockGetMemUse () { return 0; }
@@ -284,6 +288,33 @@ public:
 
 protected:
 	CSphString				m_sMorphFingerprint;
+};
+
+class DictStub_c : public CSphDict
+{
+protected:
+	CSphVector<CSphSavedFile>	m_dSWFileInfos;
+	CSphVector<CSphSavedFile>	m_dWFFileInfos;
+	CSphDictSettings			m_tSettings;
+
+public:
+	SphWordID_t GetWordID ( BYTE* ) override { return 0; }
+	SphWordID_t	GetWordID ( const BYTE *, int, bool ) override { return 0; };
+	void		LoadStopwords ( const char *, const ISphTokenizer *, bool ) override {};
+	void		LoadStopwords ( const CSphVector<SphWordID_t> & ) override {};
+	void		WriteStopwords ( CSphWriter & ) const override {};
+	void		WriteStopwords ( JsonEscapedBuilder & ) const override {};
+	bool		LoadWordforms ( const StrVec_t &, const CSphEmbeddedFiles *, const ISphTokenizer *, const char * ) override { return false; };
+	void		WriteWordforms ( CSphWriter & ) const override {};
+	void		WriteWordforms ( JsonEscapedBuilder & ) const override {};
+	int			SetMorphology ( const char *, CSphString & ) override { return ST_OK; }
+	void		Setup ( const CSphDictSettings & tSettings ) override { m_tSettings = tSettings; };
+	const CSphDictSettings & GetSettings () const override { return m_tSettings; }
+	const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () const override { return m_dSWFileInfos; }
+	const CSphVector <CSphSavedFile> & GetWordformsFileInfos () const override { return m_dWFFileInfos; }
+	const CSphMultiformContainer * GetMultiWordforms () const override { return nullptr;};
+	bool IsStopWord ( const BYTE * ) const override { return false; };
+	uint64_t		GetSettingsFNV () const override { return 0; };
 };
 
 using DictRefPtr_c = CSphRefcountedPtr<CSphDict>;
@@ -1203,7 +1234,6 @@ struct DocstoreDoc_t
 	CSphVector<CSphVector<BYTE>> m_dFields;
 };
 
-
 // used to fetch documents from docstore by docids
 class DocstoreReader_i
 {
@@ -1227,6 +1257,7 @@ class ISphMatchSorter;
 class CSphSource;
 struct CSphSourceStats;
 class DebugCheckError_i;
+struct AttrAddRemoveCtx_t;
 
 /// generic fulltext index interface
 class CSphIndex : public ISphKeywordsStat, public IndexSegment_c, public DocstoreReader_i
@@ -1335,7 +1366,7 @@ public:
 
 	virtual DWORD				GetAttributeStatus () const = 0;
 
-	virtual bool				AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, AttrEngine_e eEngine, CSphString & sError ) = 0;
+	virtual bool				AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t & tCtx, CSphString & sError ) = 0;
 
 	virtual bool				AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD, CSphString & sError ) = 0;
 
@@ -1462,7 +1493,7 @@ public:
 	Binlog::CheckTnxResult_t ReplayTxn ( Binlog::Blop_e, CSphReader &, CSphString &, Binlog::CheckTxn_fn&& ) override { return {}; }
 	bool				SaveAttributes ( CSphString & ) const override { return true; }
 	DWORD				GetAttributeStatus () const override { return 0; }
-	bool				AddRemoveAttribute ( bool, const CSphString &, ESphAttr, AttrEngine_e, CSphString & ) override { return true; }
+	bool				AddRemoveAttribute ( bool, const AttrAddRemoveCtx_t & tCtx, CSphString & sError ) override { return true; }
 	bool				AddRemoveField ( bool, const CSphString &, DWORD, CSphString & ) override { return true; }
 	void				DebugDumpHeader ( FILE *, const char *, bool ) override {}
 	void				DebugDumpDocids ( FILE * ) override {}

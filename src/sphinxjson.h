@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2011-2016, Andrew Aksyonoff
 // Copyright (c) 2011-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -205,27 +205,27 @@ public:
 		Base_T::FixupSpacedAndAppendEscaped ( sName );
 		AppendRawChunk ( {":", 1} );
 		SkipNextComma ();
-		return ScopedComma_c ( *this, nullptr );
+		return { *this, nullptr };
 	}
 
-	ScopedComma_c Object ()
+	ScopedComma_c Object ( bool bAllowEmpty = false )
 	{
-		return ScopedComma_c ( *this, dJsonObj );
+		return { *this, dJsonObj, bAllowEmpty };
 	}
 
-	ScopedComma_c ObjectW ()
+	ScopedComma_c ObjectW ( bool bAllowEmpty = false )
 	{
-		return ScopedComma_c ( *this, dJsonObjW );
+		return { *this, dJsonObjW, bAllowEmpty };
 	}
 
-	ScopedComma_c Array ()
+	ScopedComma_c Array ( bool bAllowEmpty = false )
 	{
-		return ScopedComma_c ( *this, dJsonArr );
+		return { *this, dJsonArr, bAllowEmpty };
 	}
 
-	ScopedComma_c ArrayW ()
+	ScopedComma_c ArrayW ( bool bAllowEmpty = false )
 	{
-		return ScopedComma_c ( *this, dJsonArrW );
+		return { *this, dJsonArrW, bAllowEmpty };
 	}
 
 	int NamedBlock( const char* sName )
@@ -248,19 +248,56 @@ public:
 
 	int ArrayBlock()
 	{
-		return StartBlock( dJsonArr );
+		return StartBlock ( dJsonArr );
 	}
 
 	int ArrayWBlock()
 	{
-		return StartBlock( dJsonArrW );
+		return StartBlock ( dJsonArrW );
 	}
 
+	void NamedString ( const char* szName, const char* szValue )
+	{
+		Named ( szName );
+		Base_T::FixupSpacedAndAppendEscaped ( szValue );
+	}
+
+	void NamedString ( const char* szName, Str_t sValue )
+	{
+		Named ( szName );
+		Base_T::FixupSpacedAndAppendEscaped ( sValue.first, sValue.second );
+	}
+
+	void NamedString ( const char* szName, const CSphString& sValue )
+	{
+		NamedString ( szName, sValue.cstr() );
+	}
+
+	void NamedStringNonEmpty ( const char* szName, const CSphString& sValue )
+	{
+		if ( !sValue.IsEmpty() )
+			NamedString ( szName, sValue );
+	}
+
+	template<typename T>
+	void NamedVal ( const char* szName, T tValue )
+	{
+		Named ( szName );
+		*this << tValue;
+	}
+
+	template<typename T>
+	void NamedValNonDefault ( const char* szName, T tValue, T tDefault=0 )
+	{
+		if ( tValue != tDefault )
+			NamedVal ( szName, tValue );
+	}
 };
 
 /// parse JSON, convert it into SphinxBSON blob
 bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool bToLowercase, bool bCheckSize, CSphString & sError );
 bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool bToLowercase, bool bCheckSize, StringBuilder_c & sMsg );
+bool sphJsonParse ( CSphVector<BYTE> & dData, const CSphString& sFileName, CSphString & sError );
 
 /// convert SphinxBSON blob back to JSON document
 void sphJsonFormat ( JsonEscapedBuilder & dOut, const BYTE * pData );
@@ -425,10 +462,10 @@ bool IsDouble ( const NodeHandle_t & );
 bool IsNumeric ( const NodeHandle_t & );
 
 // access to values by locator
-bool Bool ( const NodeHandle_t& tLocator );
-int64_t Int ( const NodeHandle_t & tLocator );
-double Double ( const NodeHandle_t & tLocator );
-CSphString String ( const NodeHandle_t & tLocator );
+bool Bool ( const NodeHandle_t& tLocator, bool bDefault=false );
+int64_t Int ( const NodeHandle_t & tLocator, int64_t iDefault=0 );
+double Double ( const NodeHandle_t & tLocator, double fDefault=0.0 );
+CSphString String ( const NodeHandle_t & tLocator, CSphString sDefault="" );
 inline bool IsNullNode ( const NodeHandle_t & dNode ) { return dNode==nullnode; }
 
 // iterate over collection (without names).
@@ -562,6 +599,15 @@ public:
 
 bool	JsonObjToBson ( JsonObj_c & tJSON, CSphVector<BYTE> &dData, bool bAutoconv, bool bToLowercase/*, StringBuilder_c &sMsg*/ );
 bool	cJsonToBson ( cJSON * pCJSON, CSphVector<BYTE> &dData, bool bAutoconv=false, bool bToLowercase = true /*, StringBuilder_c &sMsg */);
+
+enum class JsonParser_e
+{
+	BSON,
+	CJSON,
+};
+
+bool ValidateJson ( const char * sJson, JsonParser_e eParse, CSphString * pError=nullptr );
+bool ValidateJson ( const char* sJson, CSphString* pError=nullptr );
 
 
 // this are generic purpose serializer (bson as any object)

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -1160,13 +1160,12 @@ static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t & tRe
 	case SPH_ATTR_UINT32SET_PTR:
 	case SPH_ATTR_INT64SET_PTR:
 	{
-		tOut.ArrayBlock ();
+		auto _ = tOut.Array ();
 		const auto * pMVA = ( const BYTE * ) tMatch.GetAttr ( tLoc );
 		if ( eAttrType==SPH_ATTR_UINT32SET_PTR )
 			PackedShortMVA2Json ( tOut, pMVA );
 		else
 			PackedWideMVA2Json ( tOut, pMVA );
-		tOut.FinishBlock(false);
 	}
 	break;
 
@@ -1570,6 +1569,22 @@ JsonObj_c sphEncodeInsertResultJson ( const char * szIndex, bool bReplace, DocID
 	tObj.AddBool ( "created", !bReplace );
 	tObj.AddStr ( "result", bReplace ? "updated" : "created" );
 	tObj.AddInt ( "status", bReplace ? 200 : 201 );
+
+	return tObj;
+}
+
+JsonObj_c sphEncodeTxnResultJson ( const char* szIndex, DocID_t tDocId, int iInserts, int iDeletes, int iUpdates )
+{
+	JsonObj_c tObj;
+
+	tObj.AddStr ( "_index", szIndex );
+	tObj.AddInt ( "_id", tDocId );
+	tObj.AddInt ( "created", iInserts );
+	tObj.AddInt ( "deleted", iDeletes );
+	tObj.AddInt ( "updated", iUpdates );
+	bool bReplaced = (iInserts!=0 && iDeletes!=0);
+	tObj.AddStr ( "result", bReplaced ? "updated" : "created" );
+	tObj.AddInt ( "status", bReplaced ? 200 : 201 );
 
 	return tObj;
 }

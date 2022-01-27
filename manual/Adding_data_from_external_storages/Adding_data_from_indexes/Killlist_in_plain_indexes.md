@@ -80,7 +80,7 @@ ALTER TABLE delta KILLLIST_TARGET='new_main_index:kl'
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 ALTER TABLE delta KILLLIST_TARGET='new_main_index:kl'"
 ```
 <!-- end -->

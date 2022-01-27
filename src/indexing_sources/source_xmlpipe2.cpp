@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021, Manticore Software LTD (http://manticoresearch.com)
+// Copyright (c) 2021-2022, Manticore Software LTD (http://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -123,6 +123,8 @@ static const char * GET_ICONV_LIB ()
 		#define sph_iconv_open iconv_open
 		#define InitDynamicIconv() (true)
 	#endif
+#else
+	#define InitDynamicIconv() (true)
 #endif
 
 /// XML pipe source implementation (v2)

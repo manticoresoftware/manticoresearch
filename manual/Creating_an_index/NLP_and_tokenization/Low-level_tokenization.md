@@ -81,7 +81,7 @@ CREATE TABLE products(title text, price float) charset_table = '0..9, A..Z->a..z
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'"
 ```
 
@@ -152,7 +152,7 @@ CREATE TABLE products(title text, price float) charset_table = '0..9, english, _
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) charset_table = '0..9, english, _'"
 ```
 
@@ -245,7 +245,7 @@ CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_l
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'"
 ```
 
@@ -340,7 +340,7 @@ CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'"
 ```
 
@@ -439,7 +439,7 @@ CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pur
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'"
 ```
 
@@ -516,7 +516,7 @@ CREATE TABLE products(title text, price float) min_word_len = '4'
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) min_word_len = '4'"
 ```
 
@@ -598,7 +598,7 @@ CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'"
 ```
 
@@ -678,7 +678,7 @@ CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' n
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'"
 ```
 
@@ -763,7 +763,7 @@ CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'"
 ```
 
@@ -833,7 +833,7 @@ CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'"
 ```
 
@@ -917,7 +917,7 @@ CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you,
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'"
 ```
 
@@ -997,7 +997,7 @@ CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you,
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'"
 ```
 
@@ -1087,7 +1087,7 @@ CREATE TABLE products(title text, price float) dict = 'keywords'
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) dict = 'keywords'"
 ```
 
@@ -1196,7 +1196,7 @@ CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticor
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'"
 ```
 
@@ -1282,7 +1282,7 @@ CREATE TABLE products(title text, price float) hitless_words = 'all'
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) hitless_words = 'all'"
 ```
 
@@ -1363,7 +1363,7 @@ CREATE TABLE products(title text, price float) index_field_lengths = '1'
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) index_field_lengths = '1'"
 ```
 
@@ -1437,7 +1437,7 @@ CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:c
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'"
 ```
 
@@ -1510,7 +1510,7 @@ CREATE TABLE products(title text, price float) overshort_step = '1'
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) overshort_step = '1'"
 ```
 
@@ -1590,7 +1590,7 @@ CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+202
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'"
 ```
 
@@ -1667,7 +1667,7 @@ CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phra
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'"
 ```
 
@@ -1753,7 +1753,7 @@ CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => co
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'"
 ```
 

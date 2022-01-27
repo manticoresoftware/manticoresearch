@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -28,9 +28,9 @@ ISphExpr * CreateExpr_ColumnarMva64Length ( const CSphString & sName );
 ISphExpr * CreateExpr_ColumnarMva32Aggr ( ISphExpr * pExpr, ESphAggrFunc eFunc );
 ISphExpr * CreateExpr_ColumnarMva64Aggr ( ISphExpr * pExpr, ESphAggrFunc eFunc );
 
-ISphExpr * CreateExpr_GetColumnarInt ( const CSphString & sName );
-ISphExpr * CreateExpr_GetColumnarFloat ( const CSphString & sName );
-ISphExpr * CreateExpr_GetColumnarString ( const CSphString & sName );
-ISphExpr * CreateExpr_GetColumnarMva ( const CSphString & sName );
+ISphExpr * CreateExpr_GetColumnarInt ( const CSphString & sName, bool bStored );
+ISphExpr * CreateExpr_GetColumnarFloat ( const CSphString & sName, bool bStored );
+ISphExpr * CreateExpr_GetColumnarString ( const CSphString & sName, bool bStored );
+ISphExpr * CreateExpr_GetColumnarMva ( const CSphString & sName, bool bStored );
 
 #endif // _columnarexpr_

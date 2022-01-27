@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (http://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (http://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -13,6 +13,8 @@
 #pragma once
 
 #include "helper.h"
+
+class CSphSourceSettings;
 
 /// plain good old schema
 /// container that actually holds and owns all the fields, columns, etc
@@ -113,9 +115,11 @@ public:
 	int						GetCachedRowSize() const;
 	void					SetupFlags ( const CSphSourceSettings & tSettings, bool bPQ, StrVec_t * pWarnings );
 	bool					HasStoredFields() const;
+	bool					HasStoredAttrs() const;
 	bool					HasColumnarAttrs() const;
 	bool					HasNonColumnarAttrs() const;
 	bool					IsFieldStored ( int iField ) const;
+	bool					IsAttrStored ( int iAttr ) const;
 
 private:
 	static const int			HASH_THRESH		= 32;

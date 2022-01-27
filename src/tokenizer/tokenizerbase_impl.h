@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (http://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (http://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -25,6 +25,7 @@ public:
 	bool SetCaseFolding ( const char* sConfig, CSphString& sError ) final;
 	bool LoadSynonyms ( const char* sFilename, const CSphEmbeddedFiles* pFiles, StrVec_t& dWarnings, CSphString& sError ) final;
 	void WriteSynonyms ( CSphWriter& tWriter ) const final;
+	void WriteSynonyms ( JsonEscapedBuilder & tOut ) const final;
 	void CloneBase ( const CSphTokenizerBase* pFrom, ESphTokenizerClone eMode );
 
 	const char* GetTokenStart() const final

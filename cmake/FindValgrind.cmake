@@ -13,7 +13,7 @@
 # imported interface target Valgrind::Valgrind with include also created
 #
 #=============================================================================
-# Copyright 2021, Manticore Software LTD (https://manticoresearch.com)
+# Copyright 2021-2022, Manticore Software LTD (https://manticoresearch.com)
 #
 # Distributed under the OSI-approved BSD License (the "License");
 # see accompanying file Copyright.txt for details.

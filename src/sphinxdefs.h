@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -301,7 +301,23 @@ enum DocstoreDataType_e
 {
 	DOCSTORE_TEXT,
 	DOCSTORE_BIN,
+	DOCSTORE_ATTR,
 	DOCSTORE_TOTAL
+};
+
+/// wordpart processing type
+enum ESphWordpart
+{
+	SPH_WORDPART_WHOLE		= 0,	///< whole-word
+	SPH_WORDPART_PREFIX		= 1,	///< prefix
+	SPH_WORDPART_INFIX		= 2		///< infix
+};
+
+enum class AttrEngine_e
+{
+	DEFAULT,
+	ROWWISE,
+	COLUMNAR
 };
 
 using Bson_t = CSphVector<BYTE>;

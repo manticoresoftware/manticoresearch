@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (http://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (http://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -95,6 +95,7 @@ void CSphSource::Setup ( const CSphSourceSettings & tSettings, StrVec_t * pWarni
 	m_dStoredFields = tSettings.m_dStoredFields;
 	m_dStoredOnlyFields = tSettings.m_dStoredOnlyFields;
 	m_dColumnarAttrs = tSettings.m_dColumnarAttrs;
+	m_dColumnarNonStoredAttrs = tSettings.m_dColumnarNonStoredAttrs;
 	m_dRowwiseAttrs = tSettings.m_dRowwiseAttrs;
 	m_dColumnarStringsNoHash = tSettings.m_dColumnarStringsNoHash;
 	m_bIndexFieldLens = tSettings.m_bIndexFieldLens;

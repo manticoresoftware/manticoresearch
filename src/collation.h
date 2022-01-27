@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -62,5 +62,6 @@ SphStringCmp_fn GetStringCmpFunc ( ESphCollation eCollation );
 StrHashCalc_fn	GetStringHashCalcFunc ( ESphCollation eCollation );
 
 void sphCollationInit();
+volatile ESphCollation& GlobalCollation();
 
 #endif // _collation_

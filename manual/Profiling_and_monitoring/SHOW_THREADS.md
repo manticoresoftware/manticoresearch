@@ -72,7 +72,7 @@ Thd efficiency: 0.00%
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=SHOW THREADS"
+POST /cli -d "SHOW THREADS"
 ```
 <!-- response HTTP -->
 ```json
@@ -612,7 +612,7 @@ Thd efficiency: 0.00%
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=SHOW THREADS OPTION columns=30"
+POST /cli -d "SHOW THREADS OPTION columns=30"
 ```
 <!-- response HTTP -->
 ```json

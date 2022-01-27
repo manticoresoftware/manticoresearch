@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -71,16 +71,15 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf )
 		return;
 	}
 
-	bool bPersist = false;
 	int iPconnIdleS = 0;
 
-	// main loop for one ore more commands (if persist)
+	// main loop for one or more commands (if persist)
 	do
 	{
 		if ( !tIn.HasBytes ())
 			tIn.DiscardProcessed ();
 
-		auto iTimeoutS = bPersist ? 1 : g_iReadTimeoutS; // default 1 vs 5 seconds
+		auto iTimeoutS = tSess.GetPersistent() ? 1 : g_iReadTimeoutS; // default 1 vs 5 seconds
 		sphLogDebugv ( "conn %s(%d): loop start with timeout %d", sClientIP, iCID, iTimeoutS );
 		tIn.SetTimeoutUS ( S2US * iTimeoutS );
 
@@ -90,7 +89,7 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf )
 		// currently, the only signal allowed to interrupt this read is SIGTERM
 		// letting SIGHUP interrupt causes trouble under query/rotation pressure
 		// see sphSockRead() and ReadFrom() for details
-		bool bCommand = tIn.ReadFrom ( 8, bPersist );
+		bool bCommand = tIn.ReadFrom ( 8, tSess.GetPersistent() );
 
 		if ( !bCommand )
 		{
@@ -102,7 +101,7 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf )
 			}
 
 			// on SIGHUP vs pconn, bail if a pconn was idle for 1 sec
-			if ( bPersist && sphSockPeekErrno ()==ETIMEDOUT )
+			if ( tSess.GetPersistent() && sphSockPeekErrno ()==ETIMEDOUT )
 			{
 				sphLogDebugv ( "conn %s(%d): persist + timeout condition", sClientIP, iCID );
 				if ( g_bGotSighup )
@@ -163,8 +162,8 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf )
 		tCrashQuery.m_uCMD = eCommand;
 		tCrashQuery.m_uVer = uVer;
 
-		// special process for 'ping' as immediate answer
-		if ( eCommand ==SEARCHD_COMMAND_PING )
+		// special process for 'ping' as immediate answer (before 'maxed out' check)
+		if ( eCommand == SEARCHD_COMMAND_PING )
 		{
 			HandleCommandPing ( tOut, uVer, tIn );
 			tOut.Flush(); // no need to check return code since we anyway break
@@ -183,10 +182,18 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf )
 			break;
 		}
 
-		bPersist |= LoopClientSphinx ( eCommand, uVer, iReplySize, tIn, tOut, false );
+		// persist is special command - no version, no answer expected, modifies persistent state - so process it here
+		if ( eCommand == SEARCHD_COMMAND_PERSIST )
+		{
+			auto bPersist = ( tIn.GetInt()!=0 );
+			sphLogDebugv ( "conn %s(%d): pconn is now %s", tSess.szClientName (), tSess.GetConnID(), bPersist ? "on" : "off" );
+			tSess.SetPersistent ( bPersist );
+		}
+		ExecuteApiCommand ( eCommand, uVer, iReplySize, tIn, tOut );
+
 		if ( !tOut.Flush () )
 			break;
-	} while (bPersist);
+	} while ( tSess.GetPersistent());
 
 	sphLogDebugv ( "conn %s(%d): exiting", sClientIP, iCID );
 }

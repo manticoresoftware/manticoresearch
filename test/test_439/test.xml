@@ -76,6 +76,11 @@ searchd
 	desc idx;
 	show create table idx;
 	drop table idx;
+
+	create table col(id, f text, j json engine='columnar');
+	show meta;
+	desc col;
+	drop table col;
 </sphinxql>
 </queries>
 

@@ -33,7 +33,7 @@ Query OK, 0 rows affected (0.02 sec)
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=TRUNCATE TABLE products"
+POST /cli -d "TRUNCATE TABLE products"
 ```
 
 <!-- response HTTP -->
@@ -133,7 +133,7 @@ Query OK, 0 rows affected (0.02 sec)
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=TRUNCATE TABLE products with reconfigure"
+POST /cli -d "TRUNCATE TABLE products with reconfigure"
 ```
 
 <!-- response HTTP -->

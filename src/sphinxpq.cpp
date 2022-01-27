@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -91,6 +91,8 @@ public:
 	ISphTokenizer * CloneIndexingTokenizer() const override { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
 	void SaveMeta ( bool bShutdown = false ) EXCLUDES ( m_tLock );
 	void SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown = false );
+	bool LoadMeta ( const CSphString& sMeta, bool bStripPath, FilenameBuilder_i* pFilenameBuilder, StrVec_t& dWarnings );
+	bool LoadMetaLegacy ( const CSphString& sMeta, bool bStripPath, FilenameBuilder_i* pFilenameBuilder, StrVec_t& dWarnings );
 	bool Truncate ( CSphString & ) override EXCLUDES ( m_tLock );
 
 	// RT index stub
@@ -128,7 +130,7 @@ public:
 
 private:
 	static const DWORD				META_HEADER_MAGIC = 0x50535451;	///< magic 'PSTQ' header
-	static const DWORD				META_VERSION = 8;				///< current version, new index format
+	static const DWORD				META_VERSION = 9;				///< META in json format
 
 	int								m_iLockFD = -1;
 	CSphSourceStats					m_tStat;
@@ -731,7 +733,7 @@ PercolateIndex_c::~PercolateIndex_c ()
 		CSphString sFile;
 		sFile.SetSprintf ( "%s.meta", m_sFilename.cstr() );
 		::unlink ( sFile.cstr() );
-		sFile.SetSprintf ( "%s%s", m_sFilename.cstr(), sphGetExt ( SPH_EXT_SETTINGS ).cstr() );
+		sFile.SetSprintf ( "%s%s", m_sFilename.cstr(), sphGetExt ( SPH_EXT_SETTINGS ) );
 		::unlink ( sFile.cstr() );
 	}
 }
@@ -1475,7 +1477,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 		auto pInfo = PublishTaskInfo ( new PQInfo_t );
 		pInfo->m_iTotal = iJobs;
 		auto tCtx = dCtx.CloneNewContext ();
-		Threads::Coro::Throttler_c tThrottler ( session::ThrottlingPeriodMS () );
+		Threads::Coro::Throttler_c tThrottler ( session::GetThrottlingPeriodMS () );
 		while (true)
 		{
 			pInfo->m_iCurrent = iJob;
@@ -2449,48 +2451,25 @@ void PercolateIndex_c::PostSetup () EXCLUDES ( m_tLock )
 	PostSetupUnl();
 }
 
-bool PercolateIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings )
+// load old-style (legacy) binary meta
+bool PercolateIndex_c::LoadMetaLegacy ( const CSphString& sMeta, bool bStripPath, FilenameBuilder_i* pFilenameBuilder, StrVec_t& dWarnings )
 {
-	CSphString sLock;
-	sLock.SetSprintf ( "%s.lock", m_sFilename.cstr() );
-	m_iLockFD = ::open ( sLock.cstr(), SPH_O_NEW, 0644 );
-	if ( m_iLockFD < 0 )
-	{
-		m_sLastError.SetSprintf ( "failed to open %s: %s", sLock.cstr(), strerrorm( errno ) );
-		return false;
-	}
-	if ( !sphLockEx ( m_iLockFD, false ) )
-	{
-		m_sLastError.SetSprintf ( "failed to lock %s: %s", sLock.cstr(), strerrorm( errno ) );
-		::close ( m_iLockFD );
-		return false;
-	}
-
 	/////////////
 	// load meta
 	/////////////
-
-	CSphString sMeta;
-	sMeta.SetSprintf ( "%s.meta", m_sFilename.cstr() );
-
-	// no readable meta? no disk part yet
-	if ( !sphIsReadable ( sMeta.cstr() ) )
-		return true;
-
-	m_bHasFiles = true;
 
 	// opened and locked, lets read
 	CSphAutoreader rdMeta;
 	if ( !rdMeta.Open ( sMeta, m_sLastError ) )
 		return false;
 
-	if ( rdMeta.GetDword()!=META_HEADER_MAGIC )
+	if ( rdMeta.GetDword() != META_HEADER_MAGIC )
 	{
 		m_sLastError.SetSprintf ( "invalid meta file %s", sMeta.cstr() );
 		return false;
 	}
 	DWORD uVersion = rdMeta.GetDword();
-	if ( uVersion==0 || uVersion>META_VERSION )
+	if ( uVersion == 0 || uVersion > META_VERSION )
 	{
 		m_sLastError.SetSprintf ( "%s is v.%u, binary is v.%u", sMeta.cstr(), uVersion, META_VERSION );
 		return false;
@@ -2498,7 +2477,7 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilename
 
 	// we don't support anything prior to v8
 	DWORD uMinFormatVer = 8;
-	if ( uVersion<uMinFormatVer )
+	if ( uVersion < uMinFormatVer )
 	{
 		m_sLastError.SetSprintf ( "indexes prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, m_sFilename.cstr(), uVersion );
 		return false;
@@ -2576,17 +2555,165 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilename
 	}
 
 	m_tStat.m_iTotalDocuments = uQueries;
+	m_iSavedTID = m_iTID;
+	return true;
+}
+
+void LoadStoredQueryJson ( StoredQueryDesc_t& tQuery, const bson::Bson_c& tNode );
+
+// load new (json) meta
+bool PercolateIndex_c::LoadMeta ( const CSphString& sMeta, bool bStripPath, FilenameBuilder_i* pFilenameBuilder, StrVec_t& dWarnings )
+{
+	using namespace bson;
+
+	CSphVector<BYTE> dData;
+	if ( !sphJsonParse ( dData, sMeta, m_sLastError ) )
+		return false;
+
+	Bson_c tBson ( dData );
+	if ( tBson.IsEmpty() || !tBson.IsAssoc() )
+	{
+		m_sLastError = "Something wrong read from json meta - it is either empty, either not root object.";
+		return false;
+	}
+
+	// version
+	DWORD uVersion = (DWORD)Int ( tBson.ChildByName ( "meta_version" ), 9 );
+	if ( uVersion == 0 || uVersion > META_VERSION )
+	{
+		m_sLastError.SetSprintf ( "%s is v.%u, binary is v.%u", sMeta.cstr(), uVersion, META_VERSION );
+		return false;
+	}
+
+	// we don't support anything prior to v8
+	DWORD uMinFormatVer = 9;
+	if ( uVersion < uMinFormatVer )
+	{
+		m_sLastError.SetSprintf ( "indexes prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, m_sFilename.cstr(), uVersion );
+		return false;
+	}
+
+//	DWORD uIndexVersion = (DWORD)Int ( tBson.ChildByName ( "index_format_version" ) );
+
+	CSphTokenizerSettings tTokenizerSettings;
+	CSphDictSettings tDictSettings;
+	CSphEmbeddedFiles tEmbeddedFiles;
+
+	// load settings
+	ReadSchemaJson ( tBson.ChildByName ( "schema" ), m_tSchema );
+	LoadIndexSettingsJson ( tBson.ChildByName ( "index_settings" ), m_tSettings );
+
+	if ( !tTokenizerSettings.Load ( pFilenameBuilder, tBson.ChildByName ( "tokenizer_settings"), tEmbeddedFiles, m_sLastError ) )
+		return false;
+
+	tDictSettings.Load ( tBson.ChildByName ( "dictionary_settings" ), tEmbeddedFiles, m_sLastWarning );
+
+	// initialize AOT if needed
+	DWORD uPrevAot = m_tSettings.m_uAotFilterMask;
+	m_tSettings.m_uAotFilterMask = sphParseMorphAot ( tDictSettings.m_sMorphology.cstr() );
+	if ( m_tSettings.m_uAotFilterMask != uPrevAot )
+		sphWarning ( "index '%s': morphology option changed from config has no effect, ignoring", m_sIndexName.cstr() );
+
+	if ( bStripPath )
+	{
+		StripPath ( tTokenizerSettings.m_sSynonymsFile );
+		ARRAY_FOREACH ( i, tDictSettings.m_dWordforms )
+			StripPath ( tDictSettings.m_dWordforms[i] );
+	}
+
+	// recreate tokenizer
+	m_pTokenizer = Tokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, pFilenameBuilder, dWarnings, m_sLastError );
+	if ( !m_pTokenizer )
+		return false;
+
+	// recreate dictionary
+	m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, m_sIndexName.cstr(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError );
+	if ( !m_pDict )
+	{
+		m_sLastError.SetSprintf ( "index '%s': %s", m_sIndexName.cstr(), m_sLastError.cstr() );
+		return false;
+	}
+
+	m_pTokenizer = Tokenizer::CreateMultiformFilter ( m_pTokenizer, m_pDict->GetMultiWordforms() );
+
+	// regexp and ICU
+	FieldFilterRefPtr_c pFieldFilter;
+	auto tFieldFilterSettingsNode = tBson.ChildByName ( "field_filter_settings" );
+	if ( !IsNullNode ( tFieldFilterSettingsNode ) )
+	{
+		CSphFieldFilterSettings tFieldFilterSettings;
+		Bson_c ( tFieldFilterSettingsNode ).ForEach ( [&tFieldFilterSettings] ( const NodeHandle_t& tNode ) {
+			tFieldFilterSettings.m_dRegexps.Add ( String ( tNode ) );
+		} );
+
+		if ( !tFieldFilterSettings.m_dRegexps.IsEmpty() )
+			pFieldFilter = sphCreateRegexpFilter ( tFieldFilterSettings, m_sLastError );
+	}
+
+	if ( !sphSpawnFilterICU ( pFieldFilter, m_tSettings, tTokenizerSettings, sMeta.cstr(), m_sLastError ) )
+		return false;
+
+	SetFieldFilter ( pFieldFilter );
+
+	m_iTID = Int ( tBson.ChildByName ( "tid" ) );
+
+	// queries
+	auto tQueriesNode = tBson.ChildByName ( "pqs" );
+	if ( !IsNullNode( tQueriesNode) )
+	{
+		Bson_c tQueriesVec { tQueriesNode };
+		m_dLoadedQueries.Reset ( tQueriesVec.CountValues() );
+		int iLastQ = 0;
+		tQueriesVec.ForEach ( [&iLastQ,this] ( const NodeHandle_t& tNode ) {
+			LoadStoredQueryJson ( m_dLoadedQueries[iLastQ++], tNode );
+		} );
+	}
+
+	m_tStat.m_iTotalDocuments = m_dLoadedQueries.GetLength();
+	m_iSavedTID = m_iTID;
+	return true;
+}
+
+
+bool PercolateIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings )
+{
+	CSphString sLock;
+	sLock.SetSprintf ( "%s.lock", m_sFilename.cstr() );
+	m_iLockFD = ::open ( sLock.cstr(), SPH_O_NEW, 0644 );
+	if ( m_iLockFD < 0 )
+	{
+		m_sLastError.SetSprintf ( "failed to open %s: %s", sLock.cstr(), strerrorm( errno ) );
+		return false;
+	}
+	if ( !sphLockEx ( m_iLockFD, false ) )
+	{
+		m_sLastError.SetSprintf ( "failed to lock %s: %s", sLock.cstr(), strerrorm( errno ) );
+		::close ( m_iLockFD );
+		return false;
+	}
+
+	CSphString sMeta;
+	sMeta.SetSprintf ( "%s.meta", m_sFilename.cstr() );
+
+	// no readable meta? no disk part yet
+	if ( !sphIsReadable ( sMeta.cstr() ) )
+		return true;
+
+	m_bHasFiles = true;
+
+	if ( !LoadMeta ( sMeta, bStripPath, pFilenameBuilder, dWarnings ) && !LoadMetaLegacy ( sMeta, bStripPath, pFilenameBuilder, dWarnings ) )
+		return false;
 
 	CSphString sMutableFile;
-	sMutableFile.SetSprintf ( "%s%s", m_sFilename.cstr(), sphGetExt ( SPH_EXT_SETTINGS ).cstr() );
+	sMutableFile.SetSprintf ( "%s%s", m_sFilename.cstr(), sphGetExt ( SPH_EXT_SETTINGS ) );
 	if ( !m_tMutableSettings.Load ( sMutableFile.cstr(), m_sIndexName.cstr() ) )
 		return false;
 
-	m_iSavedTID = m_iTID;
 	m_tmSaved = sphMicroTimer();
-
 	return true;
 }
+
+void operator<< ( JsonEscapedBuilder& tOut, const StoredQueryDesc_t& tQuery );
 
 void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown )
 {
@@ -2600,40 +2727,51 @@ void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown
 	sMetaNew.SetSprintf ( "%s.meta.new", m_sFilename.cstr() );
 
 	CSphString sError;
-	CSphWriter wrMeta;
-	if ( !wrMeta.OpenFile ( sMetaNew, sError ) )
-	{
-		sphWarning ( "failed to serialize meta: %s", sError.cstr() );
-		return;
-	}
+	JsonEscapedBuilder sNewMeta;
+	sNewMeta.ObjectWBlock();
 
-	wrMeta.PutDword ( META_HEADER_MAGIC );
-	wrMeta.PutDword ( META_VERSION );
-	wrMeta.PutDword ( INDEX_FORMAT_VERSION );
+	// human-readable sugar
+	sNewMeta.NamedString ( "meta_created_time_utc", sphCurrentUtcTime() );
+	sNewMeta.NamedVal ( "meta_version", META_VERSION );
+	sNewMeta.NamedVal ( "index_format_version", INDEX_FORMAT_VERSION );
 
-	WriteSchema ( wrMeta, m_tSchema );
-	SaveIndexSettings ( wrMeta, m_tSettings );
-	SaveTokenizerSettings ( wrMeta, m_pTokenizer, m_tSettings.m_iEmbeddedLimit );
-	SaveDictionarySettings ( wrMeta, m_pDict, false, m_tSettings.m_iEmbeddedLimit );
+	sNewMeta.NamedVal ( "schema", m_tSchema );
+	sNewMeta.NamedVal ( "index_settings", m_tSettings );
+	sNewMeta.Named ( "tokenizer_settings" );
+	SaveTokenizerSettings ( sNewMeta, m_pTokenizer, m_tSettings.m_iEmbeddedLimit );
+	sNewMeta.Named ( "dictionary_settings" );
+	SaveDictionarySettings ( sNewMeta, m_pDict, false, m_tSettings.m_iEmbeddedLimit );
 
 	// meta v.6
 	CSphFieldFilterSettings tFieldFilterSettings;
 	if ( m_pFieldFilter.Ptr() )
 		m_pFieldFilter->GetSettings(tFieldFilterSettings);
-	tFieldFilterSettings.Save(wrMeta);
+	sNewMeta.NamedVal ( "field_filter_settings", tFieldFilterSettings );
+	sNewMeta.NamedVal ( "tid", m_iTID );
 
-	wrMeta.PutDword ( dStored.GetLength() );
-	for ( const StoredQuery_t * pQuery : dStored )
-		SaveStoredQuery ( *pQuery, wrMeta );
-
-	wrMeta.PutOffset ( m_iTID );
+	{
+		sNewMeta.Named ( "pqs" );
+		auto _ = sNewMeta.ArrayW();
+		for ( const StoredQuery_t * pQuery : dStored )
+			sNewMeta << *pQuery;
+	}
 
 	Binlog::NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, bShutdown );
 
 	m_iSavedTID = m_iTID;
 	m_tmSaved = sphMicroTimer();
 
-	wrMeta.CloseFile();
+	sNewMeta.FinishBlocks();
+	CSphWriter wrMetaJson;
+	if ( wrMetaJson.OpenFile ( sMetaNew, sError ) )
+	{
+		wrMetaJson.PutString ( (Str_t)sNewMeta );
+		wrMetaJson.CloseFile();
+		assert ( bson::ValidateJson ( sNewMeta.cstr(), &sError ) );
+	} else {
+		sphWarning ( "failed to serialize meta: %s", sError.cstr() );
+		return;
+	}
 
 	// rename
 	if ( sph::rename ( sMetaNew.cstr(), sMeta.cstr() ) )
@@ -2742,6 +2880,7 @@ bool PercolateIndex_c::IsSameSettings ( CSphReconfigureSettings & tSettings, CSp
 		  bSameSchema, tSettings, tSetup, dWarnings, sError );
 }
 
+// fixme? Retire this, then SaveIndexSettings/SaveTokenizersettings/SaveDictionarySettings for plain CSphWriter, only json left
 void PercolateIndex_c::BinlogReconfigure ( CSphReconfigureSetup & tSetup )
 {
 	Binlog::Commit(Binlog::RECONFIGURE,&m_iTID,m_sIndexName.cstr(),false,[&tSetup] (CSphWriter& tWriter) {
@@ -3039,7 +3178,7 @@ void PercolateIndex_c::GetIndexFiles ( CSphVector<CSphString> & dFiles, const Fi
 	if ( m_tMutableSettings.NeedSave() ) // should be file already after post-setup
 	{
 		CSphString & sMutableSettings = dFiles.Add();
-		sMutableSettings.SetSprintf ( "%s%s", m_sFilename.cstr(), sphGetExt ( SPH_EXT_SETTINGS ).cstr() );
+		sMutableSettings.SetSprintf ( "%s%s", m_sFilename.cstr(), sphGetExt ( SPH_EXT_SETTINGS ) );
 	}
 }
 
@@ -3231,6 +3370,149 @@ void SaveStoredQuery ( const StoredQueryDesc_t & tQuery, WRITER & tWriter )
 		tWriter.ZipInt ( tItem.m_iRight );
 		tWriter.ZipInt ( tItem.m_iFilterItem );
 		tWriter.ZipInt ( tItem.m_bOr );
+	}
+}
+
+void operator<< ( JsonEscapedBuilder& tOut, const FilterTreeItem_t& tItem )
+{
+	auto _ = tOut.Object();
+	tOut.NamedValNonDefault ( "left", tItem.m_iLeft, -1 );
+	tOut.NamedValNonDefault ( "right", tItem.m_iRight, -1 );
+	tOut.NamedValNonDefault ( "item", tItem.m_iFilterItem, -1 );
+	tOut.NamedValNonDefault ( "or", tItem.m_bOr, false );
+}
+
+void operator<< ( JsonEscapedBuilder& tOut, const CSphFilterSettings& tFilter )
+{
+	auto _ = tOut.ObjectW();
+	tOut.NamedValNonDefault ( "type", tFilter.m_eType, SPH_FILTER_VALUES );
+	tOut.NamedStringNonEmpty ( "attr", tFilter.m_sAttrName );
+	if ( tFilter.m_eType==SPH_FILTER_FLOATRANGE )
+	{
+		tOut.NamedVal( "fmin", tFilter.m_fMinValue );
+		tOut.NamedVal ( "fmax", tFilter.m_fMaxValue );
+	} else if ( tFilter.m_eType== SPH_FILTER_RANGE )
+	{
+		tOut.NamedValNonDefault ( "min", tFilter.m_iMinValue, (SphAttr_t)LLONG_MIN );
+		tOut.NamedValNonDefault ( "max", tFilter.m_iMaxValue, (SphAttr_t)LLONG_MAX );
+	}
+	tOut.NamedValNonDefault ( "not", tFilter.m_bExclude, false );
+	tOut.NamedValNonDefault ( "eq_min", tFilter.m_bHasEqualMin, true );
+	tOut.NamedValNonDefault ( "eq_max", tFilter.m_bHasEqualMax, true );
+	tOut.NamedValNonDefault ( "open_left", tFilter.m_bOpenLeft, false );
+	tOut.NamedValNonDefault ( "open_right", tFilter.m_bOpenRight, false );
+	tOut.NamedValNonDefault ( "is_null", tFilter.m_bIsNull, false );
+	tOut.NamedValNonDefault ( "mva_func", tFilter.m_eMvaFunc, SPH_MVAFUNC_NONE );
+	if ( !tFilter.m_dValues.IsEmpty() )
+	{
+		tOut.Named ( "values" );
+		auto _ = tOut.ArrayW();
+		for ( const auto& tValue : tFilter.m_dValues )
+			tOut << tValue;
+	}
+	if ( !tFilter.m_dStrings.IsEmpty() )
+	{
+		tOut.Named ( "strings" );
+		auto _ = tOut.ArrayW();
+		for ( const auto& tValue : tFilter.m_dStrings )
+			tOut.FixupSpacedAndAppendEscaped (tValue.cstr());
+	}
+}
+
+void operator<< ( JsonEscapedBuilder& tOut, const StoredQueryDesc_t& tQuery )
+{
+	auto tRoot = tOut.ObjectW();
+	tOut.NamedVal ( "quid", tQuery.m_iQUID );
+	tOut.NamedValNonDefault ( "ql", tQuery.m_bQL, true );
+	tOut.NamedStringNonEmpty ( "query", tQuery.m_sQuery );
+	tOut.NamedStringNonEmpty ( "tags", tQuery.m_sTags );
+	if ( !tQuery.m_dFilters.IsEmpty() )
+	{
+		tOut.Named ( "filters" );
+		auto _ = tOut.ArrayW();
+		for ( const auto& tFilter : tQuery.m_dFilters )
+			tOut << tFilter;
+	}
+
+	if ( !tQuery.m_dFilterTree.IsEmpty() )
+	{
+		tOut.Named ( "filter_tree" );
+		auto _ = tOut.ArrayW();
+		for ( const auto& tItem : tQuery.m_dFilterTree )
+			tOut << tItem;
+	}
+}
+
+void LoadStoredFilterTreeItemJson ( FilterTreeItem_t& tItem, const bson::Bson_c& tNode )
+{
+	using namespace bson;
+	tItem.m_iLeft = (int)Int ( tNode.ChildByName ( "left" ), -1 );
+	tItem.m_iRight = (int)Int ( tNode.ChildByName ( "right" ), -1 );
+	tItem.m_iFilterItem = (int)Int ( tNode.ChildByName ( "item" ), -1 );
+	tItem.m_bOr = Bool ( tNode.ChildByName ( "or" ), false );
+}
+
+void LoadStoredFilterItemJson ( CSphFilterSettings& tFilter, const bson::Bson_c& tNode )
+{
+	using namespace bson;
+	tFilter.m_eType = (ESphFilter)Int ( tNode.ChildByName ( "type" ), SPH_FILTER_VALUES );
+	tFilter.m_sAttrName = String ( tNode.ChildByName ( "attr" ) );
+	if ( tFilter.m_eType == SPH_FILTER_FLOATRANGE )
+	{
+		tFilter.m_fMinValue = (float)Double ( tNode.ChildByName ( "fmin" ) );
+		tFilter.m_fMaxValue = (float)Double ( tNode.ChildByName ( "fmax" ) );
+	} else if ( tFilter.m_eType == SPH_FILTER_RANGE )
+	{
+		tFilter.m_iMinValue = Int ( tNode.ChildByName ( "min" ), (SphAttr_t)LLONG_MIN );
+		tFilter.m_iMaxValue = Int ( tNode.ChildByName ( "max" ), (SphAttr_t)LLONG_MAX );
+	}
+	tFilter.m_bExclude = Bool ( tNode.ChildByName ( "not" ), false );
+	tFilter.m_bHasEqualMin = Bool ( tNode.ChildByName ( "eq_min" ), true );
+	tFilter.m_bHasEqualMax = Bool ( tNode.ChildByName ( "eq_max" ), true );
+	tFilter.m_bOpenLeft = Bool ( tNode.ChildByName ( "open_left" ), false );
+	tFilter.m_bOpenRight = Bool ( tNode.ChildByName ( "open_right" ), false );
+	tFilter.m_bIsNull = Bool ( tNode.ChildByName ( "is_null" ), false );
+	tFilter.m_eMvaFunc = (ESphMvaFunc)Int ( tNode.ChildByName ( "mva_func" ), SPH_MVAFUNC_NONE );
+
+	auto tValuesNode = tNode.ChildByName ( "values" );
+	if ( !IsNullNode ( tValuesNode ) )
+		Bson_c ( tValuesNode ).ForEach ( [&tFilter] ( const NodeHandle_t& tNode ) {
+			tFilter.m_dValues.Add ( Int ( tNode ) );
+		} );
+
+	auto tStringsNode = tNode.ChildByName ( "strings" );
+	if ( !IsNullNode ( tStringsNode ) )
+		Bson_c ( tStringsNode ).ForEach ( [&tFilter] ( const NodeHandle_t& tNode ) {
+			tFilter.m_dStrings.Add ( String ( tNode ) );
+		} );
+}
+
+void LoadStoredQueryJson ( StoredQueryDesc_t& tQuery, const bson::Bson_c& tNode )
+{
+	using namespace bson;
+	assert ( tNode.IsAssoc() );
+
+	tQuery.m_iQUID = Int ( tNode.ChildByName ( "quid" ) );
+	tQuery.m_bQL = Bool ( tNode.ChildByName ( "ql" ), true );
+	tQuery.m_sQuery = String ( tNode.ChildByName ( "query" ) );
+	tQuery.m_sTags = String ( tNode.ChildByName ( "tags" ) );
+
+	auto tFiltersNode = tNode.ChildByName ( "filters" );
+	if ( !IsNullNode ( tFiltersNode ) )
+	{
+		Bson_c ( tFiltersNode ).ForEach ( [&tQuery] ( const NodeHandle_t& tNode ) {
+			CSphFilterSettings& tFilter = tQuery.m_dFilters.Add();
+			LoadStoredFilterItemJson ( tFilter, tNode );
+		} );
+	}
+
+	auto tFilterTreeNode = tNode.ChildByName ( "filter_tree" );
+	if ( !IsNullNode ( tFilterTreeNode ) )
+	{
+		Bson_c ( tFilterTreeNode ).ForEach ( [&tQuery] ( const NodeHandle_t& tNode ) {
+			FilterTreeItem_t& tFilter = tQuery.m_dFilterTree.Add();
+			LoadStoredFilterTreeItemJson ( tFilter, tNode );
+		} );
 	}
 }
 

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (http://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (http://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -100,6 +100,16 @@ void CSphTokenizerBase::WriteSynonyms ( CSphWriter& tWriter ) const
 		m_pExc->Export ( tWriter );
 	else
 		tWriter.PutDword ( 0 );
+}
+
+void CSphTokenizerBase::WriteSynonyms ( JsonEscapedBuilder & tOut ) const
+{
+	if ( !m_pExc )
+		return;
+
+	tOut.Named ( "synonyms" );
+	auto _ = tOut.ArrayW();
+	m_pExc->Export ( tOut );
 }
 
 void CSphTokenizerBase::CloneBase ( const CSphTokenizerBase* pFrom, ESphTokenizerClone eMode )

@@ -39,7 +39,7 @@ Query OK, 0 rows affected (0.00 sec)
 ##### Creating a percolate index via JSON over HTTP:
 
 ```json
-POST /sql -d "mode=raw&query=CREATE TABLE products(title text, meta json) type='pq'"
+POST /cli -d "CREATE TABLE products(title text, meta json) type='pq'"
 ```
 
 <!-- response HTTP -->

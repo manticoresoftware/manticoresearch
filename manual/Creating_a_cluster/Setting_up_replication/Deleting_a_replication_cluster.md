@@ -16,7 +16,7 @@ DELETE CLUSTER click_query
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=DELETE CLUSTER click_query"
+POST /cli -d "DELETE CLUSTER click_query"
 ```
 
 <!-- request PHP -->

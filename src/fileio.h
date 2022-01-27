@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (http://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (http://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -171,6 +171,7 @@ public:
 	void			PutOffset ( SphOffset_t uValue ) { PutBytes ( &uValue, sizeof(SphOffset_t) ); }
 	void			PutString ( const char * szString );
 	void			PutString ( const CSphString & sString );
+	void			PutString ( Str_t tString ) { PutBytes ( tString.first, tString.second ); };
 	void			Tag ( const char * sTag );
 
 	void			SeekTo ( SphOffset_t iPos, bool bTruncate = false );

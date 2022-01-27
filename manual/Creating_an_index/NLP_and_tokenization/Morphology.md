@@ -66,7 +66,7 @@ CREATE TABLE products(title text, price float) morphology = 'stem_en, libstemmer
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=CREATE TABLE products(title text, price float)  morphology = 'stem_en, libstemmer_sv'"
+POST /cli -d "CREATE TABLE products(title text, price float)  morphology = 'stem_en, libstemmer_sv'"
 ```
 
 <!-- request PHP -->
@@ -137,7 +137,7 @@ CREATE TABLE products(title text, name text, price float) morphology_skip_fields
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, name text, price float) morphology_skip_fields = 'name' morphology = 'stem_en'"
 ```
 
@@ -214,7 +214,7 @@ CREATE TABLE products(title text, price float) min_stemming_len = '4' morphology
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) min_stemming_len = '4' morphology = 'stem_en'"
 ```
 
@@ -291,7 +291,7 @@ CREATE TABLE products(title text, price float) index_exact_words = '1' morpholog
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) index_exact_words = '1' morphology = 'stem_en'"
 ```
 

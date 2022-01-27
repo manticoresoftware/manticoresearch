@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -599,7 +599,7 @@ static bool ConfigWrite ( const CSphString & sConfigPath, const CSphVector<Clust
 	return true;
 }
 
-// CSphinxqlSession::Execute -> HandleMysqlImportTable -> AddExistingIndexInt -> PreloadIndex
+// ClientSession_c::Execute -> HandleMysqlImportTable -> AddExistingIndexInt -> PreloadIndex
 // ServiceMain -> ConfigureAndPreload -> ConfigureAndPreloadInt -> PreloadIndex
 static ESphAddIndex PreloadIndex ( const IndexDesc_t & tIndex, StrVec_t & dWarnings, CSphString & sError )
 {
@@ -997,7 +997,7 @@ bool CopyIndexFiles ( const CSphString & sIndex, const CSphString & sPathToIndex
 
 static bool CheckCreateTableSettings ( const CreateTableSettings_t & tCreateTable, CSphString & sError )
 {
-	static const char * dForbidden[] = { "path", "stored_fields", "stored_only_fields", "columnar_attrs", "rowwise_attrs", "rt_field", "embedded_limit" };
+	static const char * dForbidden[] = { "path", "stored_fields", "stored_only_fields", "columnar_attrs", "columnar_no_fast_fetch", "rowwise_attrs", "rt_field", "embedded_limit" };
 	static const char * dTypes[] = { "rt", "pq", "percolate", "distributed" };
 
 	for ( const auto & i : tCreateTable.m_dOpts )
@@ -1242,7 +1242,7 @@ private:
 	bool		m_bOk = false;
 };
 
-// CSphinxqlSession::Execute -> HandleMysqlImportTable -> AddExistingIndexInt
+// ClientSession_c::Execute -> HandleMysqlImportTable -> AddExistingIndexInt
 bool AddExistingIndexInt ( const CSphString & sIndex, IndexType_e eType, StrVec_t & dWarnings, CSphString & sError )
 {
 	ScopedCleanup_c tCleanup(sIndex);

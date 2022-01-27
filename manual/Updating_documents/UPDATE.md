@@ -1149,9 +1149,9 @@ attr_update_reserve=size
 <!-- example attr_update_reserve -->
 `attr_update_reserve` is a per-index setting which sets the space to be reserved for blob attribute updates. Optional, default value is 128k.
 
-When blob attributes (MVAs, strings, JSON), are updated, their length may change. If the updated string (or MVA, or JSON) is shorter than the old one, it overwrites the old one in the .SPB file. But if the updated string is longer, updates are written to the end of the .SPB file. This file is memory mapped, that's why resizing it may be a rather slow process, depending on the OS implementation of memory mapped files.
+When blob attributes (MVAs, strings, JSON), are updated, their length may change. If the updated string (or MVA, or JSON) is shorter than the old one, it overwrites the old one in the `.spb` file. But if the updated string is longer, updates are written to the end of the `.spb` file. This file is memory mapped, that's why resizing it may be a rather slow process, depending on the OS implementation of memory mapped files.
 
-To avoid frequent resizes, you can specify the extra space to be reserved at the end of the .SPB file by using this option.
+To avoid frequent resizes, you can specify the extra space to be reserved at the end of the `.spb` file by using this option.
 
 
 <!-- intro -->
@@ -1166,7 +1166,7 @@ create table products(title text, price float) attr_update_reserve = '1M'
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 create table products(title text, price float) attr_update_reserve = '1M'"
 ```
 

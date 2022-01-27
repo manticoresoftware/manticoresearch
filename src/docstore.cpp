@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -18,6 +18,8 @@
 #include "indexcheck.h"
 #include "lz4/lz4.h"
 #include "lz4/lz4hc.h"
+#include "sphinxint.h"
+#include "exprtraits.h"
 
 enum BlockFlags_e : BYTE
 {
@@ -193,6 +195,15 @@ Compressor_i * CreateCompressor ( Compression_e eComp, int iCompressionLevel )
 }
 
 //////////////////////////////////////////////////////////////////////////
+
+static CSphString BuildCompoundName ( const CSphString & sName, DocstoreDataType_e eType )
+{
+	CSphString sCompound;
+	sCompound.SetSprintf ( "%d%s", eType, sName.cstr() );
+	return sCompound;
+}
+
+
 class DocstoreFields_c : public DocstoreFields_i
 {
 public:
@@ -215,17 +226,7 @@ public:
 private:
 	CSphVector<Field_t>			m_dFields;
 	SmallStringHash_T<int>		m_hFields;
-
-	CSphString		BuildCompoundName ( const CSphString & sName, DocstoreDataType_e eType ) const;
 };
-
-
-CSphString DocstoreFields_c::BuildCompoundName ( const CSphString & sName, DocstoreDataType_e eType ) const
-{
-	CSphString sCompound;
-	sCompound.SetSprintf ( "%d%s", eType, sName.cstr() );
-	return sCompound;
-}
 
 
 int DocstoreFields_c::AddField ( const CSphString & sName, DocstoreDataType_e eType )
@@ -990,8 +991,9 @@ public:
 	bool	Init ( CSphString & sError );
 
 	void	AddDoc ( RowID_t tRowID, const Doc_t & tDoc ) final;
-	int		AddField ( const CSphString & sName, DocstoreDataType_e eType ) final;
-	void	RemoveField ( const CSphString & sName, DocstoreDataType_e eType ) final;
+	int		AddField ( const CSphString & sName, DocstoreDataType_e eType ) final			{ return m_tFields.AddField ( sName, eType ); }
+	void	RemoveField ( const CSphString & sName, DocstoreDataType_e eType ) final		{ return m_tFields.RemoveField ( sName, eType ); }
+	int		GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const final	{ return m_tFields.GetFieldId ( sName, eType ); }
 	void	Finalize() final;
 
 private:
@@ -1077,18 +1079,6 @@ void DocstoreBuilder_c::AddDoc ( RowID_t tRowID, const Doc_t & tDoc )
 	}
 
 	m_uStoredLen += uLen;
-}
-
-
-int DocstoreBuilder_c::AddField ( const CSphString & sName, DocstoreDataType_e eType )
-{
-	return m_tFields.AddField ( sName, eType );
-}
-
-
-void DocstoreBuilder_c::RemoveField ( const CSphString & sName, DocstoreDataType_e eType )
-{
-	return m_tFields.RemoveField ( sName, eType );
 }
 
 
@@ -1918,6 +1908,187 @@ void DocstoreChecker_c::CheckBlock ( const Docstore_c::Block_t & tBlock )
 
 //////////////////////////////////////////////////////////////////////////
 
+template <bool POSTLIMIT>
+class Expr_GetStored_T : public ISphExpr
+{
+public:
+	Expr_GetStored_T ( CSphString sField, DocstoreDataType_e eDocstoreType, ESphAttr eAttrType )
+		: m_sField ( std::move(sField) )
+		, m_eDocstoreType ( eDocstoreType )
+		, m_eAttrType ( eAttrType )
+	{}
+
+	float Eval ( const CSphMatch & tMatch ) const final
+	{
+		assert ( m_eDocstoreType==DOCSTORE_ATTR );
+		assert ( m_eAttrType!=SPH_ATTR_STRING && m_eAttrType!=SPH_ATTR_UINT32SET && m_eAttrType!=SPH_ATTR_INT64SET && m_eAttrType!=SPH_ATTR_BIGINT );
+
+		DocstoreDoc_t tDoc;
+		VecTraits_T<const BYTE> tBlob = GetBlob ( tDoc, tMatch );
+		return *(const float*)tBlob.Begin();
+	}
+
+	int	IntEval ( const CSphMatch & tMatch ) const final
+	{
+		assert ( m_eDocstoreType==DOCSTORE_ATTR );
+
+		DocstoreDoc_t tDoc;
+		return ConvertBlobType<DWORD> ( GetBlob ( tDoc, tMatch ) );
+	}
+
+	int64_t	Int64Eval ( const CSphMatch & tMatch ) const final
+	{
+		assert ( m_eDocstoreType==DOCSTORE_ATTR );
+
+		DocstoreDoc_t tDoc;
+		if ( m_eAttrType==SPH_ATTR_UINT32SET_PTR || m_eAttrType==SPH_ATTR_INT64SET_PTR )
+			return (int64_t)sphPackPtrAttr ( GetBlob ( tDoc, tMatch ) );
+
+		return ConvertBlobType<int64_t> ( GetBlob ( tDoc, tMatch ) );
+	}
+
+	bool IsDataPtrAttr() const final	{ return sphIsBlobAttr(m_eAttrType); }
+	bool IsStored() const final			{ return !POSTLIMIT; }
+
+	int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const final
+	{
+		DocstoreDoc_t tDoc;
+		VecTraits_T<const BYTE> tRes = GetBlob ( tDoc, tMatch );
+		*ppStr = tDoc.m_dFields[0].LeakData();
+		return tRes.GetLength();
+	}
+
+	const BYTE * StringEvalPacked ( const CSphMatch & tMatch ) const final
+	{
+		return GetBlobPacked(tMatch);
+	}
+
+	void Command ( ESphExprCommand eCmd, void * pArg ) final
+	{
+		if ( eCmd!=SPH_EXPR_SET_DOCSTORE_DOCID )
+			return;
+
+		m_dFieldIds.Resize(0);
+		assert(pArg);
+		m_tSessionDocID = *(DocstoreSession_c::InfoDocID_t*)pArg;
+		assert ( m_tSessionDocID.m_pDocstore );
+		int iFieldId = m_tSessionDocID.m_pDocstore->GetFieldId ( m_sField.cstr(), m_eDocstoreType );
+		if ( iFieldId!=-1 )
+			m_dFieldIds.Add(iFieldId);
+	}
+
+	void FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) final {}
+
+	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
+	{
+		EXPR_CLASS_NAME("Expr_GetStored_c");
+		CALC_STR_HASH(m_sField, m_sField.Length());
+		CALC_POD_HASHES(m_dFieldIds);
+		return CALC_DEP_HASHES();
+	}
+
+	ISphExpr * Clone () const final
+	{
+		return new Expr_GetStored_T ( m_sField, m_eDocstoreType, m_eAttrType );
+	}
+
+private:
+	CSphString					m_sField;
+	DocstoreDataType_e			m_eDocstoreType = DOCSTORE_TEXT;
+	ESphAttr					m_eAttrType = SPH_ATTR_INTEGER;
+	CSphVector<int>				m_dFieldIds;
+
+	DocstoreSession_c::InfoRowID_t	m_tSessionRowID;
+	DocstoreSession_c::InfoDocID_t	m_tSessionDocID;
+
+	VecTraits_T<const BYTE>	GetBlob ( DocstoreDoc_t & tDoc, const CSphMatch & tMatch ) const
+	{
+		if ( !m_tSessionDocID.m_pDocstore || !m_dFieldIds.GetLength() )
+			return { nullptr, 0 };
+
+		DocID_t tDocID = sphGetDocID ( tMatch.m_pDynamic ? tMatch.m_pDynamic : tMatch.m_pStatic );
+		if ( m_tSessionDocID.m_pDocstore->GetDoc ( tDoc, tDocID, &m_dFieldIds, m_tSessionDocID.m_iSessionId, false ) )
+			return tDoc.m_dFields[0];
+
+		return { nullptr, 0 };
+	}
+
+	const BYTE * GetBlobPacked ( const CSphMatch & tMatch ) const
+	{
+		if ( !m_tSessionDocID.m_pDocstore || !m_dFieldIds.GetLength() )
+			return nullptr;
+
+		DocID_t tDocID = sphGetDocID ( tMatch.m_pDynamic ? tMatch.m_pDynamic : tMatch.m_pStatic );
+		DocstoreDoc_t tDoc;
+		if ( m_tSessionDocID.m_pDocstore->GetDoc ( tDoc, tDocID, &m_dFieldIds, m_tSessionDocID.m_iSessionId, true ) )
+			return tDoc.m_dFields[0].LeakData();
+
+		return nullptr;
+	}
+
+	template <typename T>
+	T ConvertBlobType ( const VecTraits_T<const BYTE> & dBlob ) const
+	{
+		int64_t iValue = 0;
+		switch ( dBlob.GetLength() )
+		{
+		case 4:	iValue = *(const DWORD*)dBlob.Begin(); break;
+		case 8: iValue = *(const int64_t*)dBlob.Begin(); break;
+		default: break;
+		}
+
+		return (T)iValue;
+	}
+};
+
+template <>
+void Expr_GetStored_T<false>::Command ( ESphExprCommand eCmd, void * pArg )
+{
+	switch ( eCmd )
+	{
+	case SPH_EXPR_GET_COLUMNAR_COL:
+		*(CSphString*)pArg = m_sField;
+		break;
+
+	case SPH_EXPR_SET_DOCSTORE_ROWID:
+	{
+		m_dFieldIds.Resize(0);
+		assert(pArg);
+		m_tSessionRowID = *(DocstoreSession_c::InfoRowID_t*)pArg;
+		assert ( m_tSessionRowID.m_pDocstore );
+		int iFieldId = m_tSessionRowID.m_pDocstore->GetFieldId ( m_sField.cstr(), m_eDocstoreType );
+		if ( iFieldId!=-1 )
+			m_dFieldIds.Add(iFieldId);
+	}
+	break;
+
+	default:
+		break;
+	}
+}
+
+template <>
+VecTraits_T<const BYTE>	Expr_GetStored_T<false>::GetBlob ( DocstoreDoc_t & tDoc, const CSphMatch & tMatch ) const
+{
+	if ( !m_tSessionRowID.m_pDocstore || !m_dFieldIds.GetLength() )
+		return { nullptr, 0 };
+
+	tDoc = m_tSessionRowID.m_pDocstore->GetDoc ( tMatch.m_tRowID, &m_dFieldIds, m_tSessionRowID.m_iSessionId, false );
+	return tDoc.m_dFields[0];
+}
+
+template <>
+const BYTE * Expr_GetStored_T<false>::GetBlobPacked ( const CSphMatch & tMatch ) const
+{
+	if ( !m_tSessionRowID.m_pDocstore || !m_dFieldIds.GetLength() )
+		return nullptr;
+
+	DocstoreDoc_t tDoc = m_tSessionRowID.m_pDocstore->GetDoc ( tMatch.m_tRowID, &m_dFieldIds, m_tSessionRowID.m_iSessionId, true );
+	return tDoc.m_dFields[0].LeakData();
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 Docstore_i * CreateDocstore ( int64_t iIndexId, const CSphString & sFilename, CSphString & sError )
 {
 	CSphScopedPtr<Docstore_c> pDocstore ( new Docstore_c ( iIndexId, sFilename ) );
@@ -1968,4 +2139,15 @@ bool CheckDocstore ( CSphAutoreader & tReader, DebugCheckError_i & tReporter, in
 {
 	DocstoreChecker_c tChecker ( tReader, tReporter, iRowsCount );
 	return tChecker.Check();
+}
+
+
+ISphExpr * CreateExpr_GetStoredField ( const CSphString & sName )
+{
+	return new Expr_GetStored_T<true> ( sName, DOCSTORE_TEXT, SPH_ATTR_STRING );
+}
+
+ISphExpr * CreateExpr_GetStoredAttr ( const CSphString & sName, ESphAttr eAttr )
+{
+	return new Expr_GetStored_T<false> ( sName, DOCSTORE_ATTR, eAttr );
 }

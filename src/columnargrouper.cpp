@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2020-2021, Manticore Software LTD (http://manticoresearch.com)
+// Copyright (c) 2020-2022, Manticore Software LTD (http://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -57,7 +57,7 @@ void GrouperColumnarInt_c::SetColumnar ( const columnar::Columnar_i * pColumnar 
 {
 	assert(pColumnar);
 	std::string sError; // fixme! report errors
-	m_pIterator = pColumnar->CreateIterator ( m_sAttrName.cstr(), columnar::IteratorHints_t(), sError );
+	m_pIterator = pColumnar->CreateIterator ( m_sAttrName.cstr(), {}, nullptr, sError );
 }
 
 
@@ -109,7 +109,7 @@ SphGroupKey_t GrouperColumnarString_T<HASH>::KeyFromMatch ( const CSphMatch & tM
 		return 0;
 
 	if ( m_bHasHashes )
-		return m_pIterator->GetStringHash();
+		return m_pIterator->Get();
 
 	const BYTE * pStr = nullptr;
 	int iLen = m_pIterator->Get(pStr);
@@ -124,11 +124,12 @@ void GrouperColumnarString_T<HASH>::SetColumnar ( const columnar::Columnar_i * p
 {
 	assert(pColumnar);
 	columnar::IteratorHints_t tHints;
+	columnar::IteratorCapabilities_t tCapabilities;
 	tHints.m_bNeedStringHashes = m_eCollation==SPH_COLLATION_DEFAULT;
 
 	std::string sError; // fixme! report errors
-	m_pIterator = pColumnar->CreateIterator ( m_sAttrName.cstr(), tHints, sError );
-	m_bHasHashes = tHints.m_bNeedStringHashes && m_pIterator.Ptr() && m_pIterator->HaveStringHashes();
+	m_pIterator = pColumnar->CreateIterator ( m_sAttrName.cstr(), tHints, &tCapabilities, sError );
+	m_bHasHashes = tCapabilities.m_bStringHashes;
 }
 
 template <typename HASH>
@@ -182,9 +183,8 @@ template <typename T>
 void GrouperColumnarMVA_T<T>::SetColumnar ( const columnar::Columnar_i * pColumnar )
 {
 	assert(pColumnar);
-	columnar::IteratorHints_t tHints;
 	std::string sError; // fixme! report errors
-	m_pIterator = pColumnar->CreateIterator ( m_sAttrName.cstr(), tHints, sError );
+	m_pIterator = pColumnar->CreateIterator ( m_sAttrName.cstr(), {}, nullptr, sError );
 }
 
 //////////////////////////////////////////////////////////////////////////

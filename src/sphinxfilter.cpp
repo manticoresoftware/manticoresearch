@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -1416,6 +1416,12 @@ static bool CanSpawnColumnarFilter ( int iAttr, const ISphSchema & tSchema )
 	// spawn special filter even if we have an expression in the column
 	// because the filter is (usually) faster
 	if ( tCol.IsColumnarExpr() && tCol.m_eStage>SPH_EVAL_PREFILTER )
+		return true;
+
+	// we had a columnar expression in the select list that we wanted to evaluate at the final stage
+	// we replaced it with a stored expression
+	// now we want to create a columnar filter based on the original columnar attribute
+	if ( tCol.IsStoredExpr() )
 		return true;
 
 	return false;

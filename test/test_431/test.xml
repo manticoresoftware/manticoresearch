@@ -43,6 +43,7 @@ index test_col
 	path			= <data_path/>/test_col
 
 	columnar_attrs 	= id, price, brand_id, title, brand_name, property
+	columnar_no_fast_fetch = title
 
     <dynamic>
       <variant>columnar_strings_no_hash = </variant>

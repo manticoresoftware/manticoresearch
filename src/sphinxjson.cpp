@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2011-2016, Andrew Aksyonoff
 // Copyright (c) 2011-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -816,6 +816,25 @@ inline static int yylex ( YYSTYPE * lvalp, JsonParser_c * pParser )
 #include "bissphinxjson.c"
 #include "sphinxutils.h"
 
+bool sphJsonParse ( CSphVector<BYTE>& dData, const CSphString& sFileName, CSphString& sError )
+{
+	auto iFileSize = sphGetFileSize ( sFileName, &sError );
+	if ( iFileSize<0 )
+		return false;
+
+	CSphAutofile tFile;
+	if ( tFile.Open ( sFileName, SPH_O_READ, sError )<0 )
+		return false;
+
+	CSphFixedVector<char> dJsonText { iFileSize + 2 }; // +4 for zero-gap at the end
+	auto iRead = (int64_t)sphReadThrottled ( tFile.GetFD (), dJsonText.begin (), iFileSize );
+	if ( iRead!=iFileSize )
+		return false;
+
+	decltype ( dJsonText )::POLICY_T::Zero ( dJsonText.begin() + iFileSize, 2 );
+	return sphJsonParse ( dData, dJsonText.begin(), false, false, false, sError );
+}
+
 bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool bToLowercase, bool bCheckSize, CSphString & sError )
 {
 	StringBuilder_c sMsg;
@@ -1170,44 +1189,46 @@ const BYTE * sphJsonFieldFormat ( JsonEscapedBuilder & sOut, const BYTE * pData,
 
 		case JSON_STRING_VECTOR:
 			sOut.GrowEnough ( sphJsonUnpackInt ( &p ) );
-			sOut.ArrayBlock();
-			for ( int i= sphJsonUnpackInt ( &p ); i>0; --i )
-				p = JsonFormatStr ( sOut, p );
-			sOut.FinishBlock ( false );
+			{
+				auto _ = sOut.Array();
+				for ( int i = sphJsonUnpackInt ( &p ); i > 0; --i )
+					p = JsonFormatStr ( sOut, p );
+			}
 			break;
 
 		case JSON_INT32_VECTOR:
-			sOut.ArrayBlock();
-			for ( int i = sphJsonUnpackInt ( &p ); i>0; --i )
-				sOut.Sprintf ( "%d", sphJsonLoadInt ( &p ) );
-			sOut.FinishBlock ( false );
-		break;
-		case JSON_INT64_VECTOR:
-			sOut.ArrayBlock ();
-			for ( int i = sphJsonUnpackInt ( &p ); i>0; --i )
-				sOut.Sprintf ( "%l", sphJsonLoadBigint ( &p ) );
-			sOut.FinishBlock ( false );
-			break;
-		case JSON_DOUBLE_VECTOR:
-			sOut.ArrayBlock ();
-			for ( int i = sphJsonUnpackInt ( &p ); i>0; --i )
 			{
-				auto iLen = snprintf ( sDouble, szDouble, "%lf", sphQW2D ( sphJsonLoadBigint ( &p ) ) ); // NOLINT
-				sOut.AppendChunk ( {sDouble, iLen} );
+				auto _ = sOut.Array();
+				for ( int i = sphJsonUnpackInt ( &p ); i > 0; --i )
+					sOut.Sprintf ( "%d", sphJsonLoadInt ( &p ) );
+				break;
 			}
-			sOut.FinishBlock ( false );
-			break;
-
+		case JSON_INT64_VECTOR:
+			{
+				auto _ = sOut.Array();
+				for ( int i = sphJsonUnpackInt ( &p ); i > 0; --i )
+					sOut.Sprintf ( "%l", sphJsonLoadBigint ( &p ) );
+				break;
+			}
+		case JSON_DOUBLE_VECTOR:
+			{
+				auto _ = sOut.Array ();
+				for ( int i = sphJsonUnpackInt ( &p ); i>0; --i )
+				{
+					auto iLen = snprintf ( sDouble, szDouble, "%lf", sphQW2D ( sphJsonLoadBigint ( &p ) ) ); // NOLINT
+					sOut.AppendChunk ( {sDouble, iLen} );
+				}
+				break;
+			}
 		case JSON_MIXED_VECTOR:
 			{
-				sOut.ArrayBlock ();
+				auto _ = sOut.Array ();
 				sphJsonUnpackInt ( &p );
 				for ( int i = sphJsonUnpackInt ( &p ); i>0; --i )
 				{
 					auto eNode = ( ESphJsonType ) *p++;
 					p = sphJsonFieldFormat ( sOut, p, eNode, true );
 				}
-				sOut.FinishBlock ( false );
 				break;
 			}
 		case JSON_ROOT:
@@ -2008,7 +2029,7 @@ bool bson::IsNumeric ( const NodeHandle_t &dNode )
 	return IsInt ( dNode ) || IsDouble ( dNode );
 }
 
-bool bson::Bool ( const NodeHandle_t &tLocator )
+bool bson::Bool ( const NodeHandle_t &tLocator, bool bDefault )
 {
 	switch ( tLocator.second )
 	{
@@ -2016,13 +2037,14 @@ bool bson::Bool ( const NodeHandle_t &tLocator )
 	case JSON_INT64: return !!Int ( tLocator );
 	case JSON_DOUBLE: return 0.0!=Double ( tLocator );
 	case JSON_TRUE: return true;
+	case JSON_FALSE: return false;
 		// fixme! Do we need also process here values like "True" (the string)?
 	default: break;
 	}
-	return false;
+	return bDefault;
 }
 
-int64_t bson::Int ( const NodeHandle_t &tLocator )
+int64_t bson::Int ( const NodeHandle_t &tLocator, int64_t iDefault )
 {
 	const BYTE * p = tLocator.first;
 	switch ( tLocator.second )
@@ -2048,10 +2070,10 @@ int64_t bson::Int ( const NodeHandle_t &tLocator )
 	}
 	default: break;
 	}
-	return 0;
+	return iDefault;
 }
 
-double bson::Double ( const NodeHandle_t &tLocator )
+double bson::Double ( const NodeHandle_t &tLocator, double fDefault )
 {
 	const BYTE * p = tLocator.first;
 	switch ( tLocator.second )
@@ -2077,13 +2099,13 @@ double bson::Double ( const NodeHandle_t &tLocator )
 	}
 	default: break;
 	}
-	return 0.0;
+	return fDefault;
 }
 
-CSphString bson::String ( const NodeHandle_t &tLocator )
+CSphString bson::String ( const NodeHandle_t &tLocator, CSphString sDefault )
 {
 	if ( tLocator.second!=JSON_STRING )
-		return "";
+		return sDefault;
 
 	auto dBlob = bson::RawBlob ( tLocator );
 	CSphString sResult;
@@ -3218,6 +3240,48 @@ BsonContainer2_c::BsonContainer2_c ( const char * sJson, bool bAutoconv, bool bT
 	const BYTE * pData = m_Bson.begin ();
 	m_dData.second = sphJsonFindFirst ( &pData );
 	m_dData.first = pData;
+}
+
+static bool ValidateAsBson ( const char* szJson, CSphString* pError )
+{
+	CSphString sError;
+	if ( !pError )
+		pError = &sError;
+
+	CSphVector<BYTE> dBson;
+	CSphString sJson ( szJson );
+	return sphJsonParse ( dBson, (char*)sJson.cstr(), false, false, false, *pError );
+}
+
+static bool ValidateAsCjson ( const char* szJson )
+{
+	auto pCjson = cJSON_Parse ( szJson );
+	if ( !pCjson )
+		return false;
+
+	CSphVector<BYTE> dBson;
+	dBson.Reserve ( (int)strlen ( szJson ) );
+	bson::cJsonToBson ( pCjson, dBson, false, false );
+	cJSON_Delete ( pCjson );
+	return !dBson.IsEmpty();
+}
+
+bool bson::ValidateJson ( const char * szJson, JsonParser_e eParse, CSphString * pError )
+{
+	switch ( eParse )
+	{
+	case JsonParser_e::BSON:
+		return ValidateAsBson ( szJson, pError );
+
+	case JsonParser_e::CJSON:
+		return ValidateAsCjson ( szJson );
+	}
+}
+
+bool bson::ValidateJson ( const char* szJson, CSphString* pError )
+{
+	bool bRes = ValidateAsBson ( szJson, pError ) && ValidateAsCjson ( szJson );
+	return bRes;
 }
 
 // unused for now

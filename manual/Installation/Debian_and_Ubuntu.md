@@ -21,7 +21,7 @@ The easiest way to install Manticore in Ubuntu/Debian/Mint is by using our APT r
 
 Install the repository:
 ```bash
-wget http://repo.manticoresearch.com/manticore-repo.noarch.deb
+wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
 sudo dpkg -i manticore-repo.noarch.deb
 sudo apt update
 ```
@@ -36,7 +36,7 @@ sudo apt install manticore manticore-columnar-lib
 ###### Development packages
 If you prefer "Nightly" (development) versions do:
 ```bash
-wget http://repo.manticoresearch.com/manticore-dev-repo.noarch.deb
+wget https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb
 sudo dpkg -i manticore-dev-repo.noarch.deb
 sudo apt update
 sudo apt install manticore manticore-columnar-lib
@@ -54,7 +54,7 @@ $ sudo -u manticore indexer
 Manticore 3.5.4 13f8d08d@201211 release
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
-Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 
 Built by gcc/clang v 5.4.0,
 
@@ -106,7 +106,7 @@ Here's how to install Python 3.9 and the Ukrainian lemmatizer on Debian and Ubun
 ```bash
 # install Manticore Search and UK lemmatizer from APT repository
 cd ~
-wget http://repo.manticoresearch.com/manticore-repo.noarch.deb
+wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
 sudo dpkg -i manticore-repo.noarch.deb
 sudo apt -y update
 sudo apt -y install manticore manticore-lemmatizer-uk

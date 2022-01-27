@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2018-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2018-2022, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -248,9 +248,9 @@ struct Index_t
 	{
 		CSphString sName;
 		if ( IsSeparateOutDir() )
-			sName.SetSprintf ( "%s%s", m_sPathOut.cstr(), sphGetExt(eExt).cstr() );
+			sName.SetSprintf ( "%s%s", m_sPathOut.cstr(), sphGetExt(eExt) );
 		else
-			sName.SetSprintf ( "%s.new%s", m_sPathOut.cstr(), sphGetExt(eExt).cstr() );
+			sName.SetSprintf ( "%s.new%s", m_sPathOut.cstr(), sphGetExt(eExt) );
 
 		return sName;
 	}

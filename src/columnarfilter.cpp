@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2020-2021, Manticore Software LTD (http://manticoresearch.com)
+// Copyright (c) 2020-2022, Manticore Software LTD (http://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -48,7 +48,7 @@ void ColumnarFilter_c::SetColumnar ( const columnar::Columnar_i * pColumnar )
 	}
 
 	std::string sError; // fixme! report errors
-	m_pIterator = pColumnar->CreateIterator ( m_sAttrName.cstr(), columnar::IteratorHints_t(), sError );
+	m_pIterator = pColumnar->CreateIterator ( m_sAttrName.cstr(), {}, nullptr, sError );
 	m_iColumnarCol = pColumnar->GetAttributeId ( m_sAttrName.cstr() );
 }
 
@@ -347,18 +347,19 @@ void Filter_StringColumnar_T<MULTI>::SetColumnar ( const columnar::Columnar_i * 
 	}
 
 	columnar::IteratorHints_t tHints;
+	columnar::IteratorCapabilities_t tCapabilities;
 	tHints.m_bNeedStringHashes = m_eCollation==SPH_COLLATION_DEFAULT;
 
 	std::string sError; // fixme! report errors
-	m_pIterator = pColumnar->CreateIterator ( m_sAttrName.cstr(), tHints, sError );
-	m_bHasHashes = m_pIterator.Ptr() && m_pIterator->HaveStringHashes();
+	m_pIterator = pColumnar->CreateIterator ( m_sAttrName.cstr(), tHints, &tCapabilities, sError );
+	m_bHasHashes = m_pIterator.Ptr() && tCapabilities.m_bStringHashes;
 }
 
 template <bool MULTI>
 uint64_t Filter_StringColumnar_T<MULTI>::GetStringHash() const
 {
 	if ( m_bHasHashes )
-		return m_pIterator->GetStringHash();
+		return m_pIterator->Get();
 
 	const BYTE * pStr = nullptr;
 	int iLen = m_pIterator->Get(pStr);
@@ -614,7 +615,7 @@ static CSphString GetAttributeName ( int iAttr, const ISphSchema & tSchema )
 	const CSphColumnInfo & tAttr = tSchema.GetAttr(iAttr);
 
 	// if it is a columnar expression working over an aliased attribute, fetch that attribute name
-	if ( tAttr.IsColumnarExpr() )
+	if ( tAttr.IsColumnarExpr() || tAttr.IsStoredExpr() )
 	{
 		CSphString sAliasedCol;
 		tAttr.m_pExpr->Command ( SPH_EXPR_GET_COLUMNAR_COL, &sAliasedCol );
@@ -689,22 +690,20 @@ static ISphFilter * CreateColumnarFilterPlain ( int iAttr, const ISphSchema & tS
 }
 
 
-ISphFilter * TryToCreateColumnarFilter ( int iAttr, const ISphSchema & tSchema, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, ESphCollation eCollation,
-	CSphString & sError, CSphString & sWarning )
+ISphFilter * TryToCreateColumnarFilter ( int iAttr, const ISphSchema & tSchema, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, ESphCollation eCollation, CSphString & sError, CSphString & sWarning )
 {
 	if ( iAttr<0 )
 		return nullptr;
 
 	const CSphColumnInfo & tAttr = tSchema.GetAttr(iAttr);
-	if ( !tAttr.IsColumnar() && !tAttr.IsColumnarExpr() )
+	if ( !tAttr.IsColumnar() && !tAttr.IsColumnarExpr() && !tAttr.IsStoredExpr() )
 		return nullptr;
 
 	// when we created a columnar expression, we removed it from PREFILTER stage
 	// that means that we have to create a specialized filter here because a generic expression filter will no longer work
 
 	bool bFound = false;
-	static const ESphAttr dSupportedTypes[] = { SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_TIMESTAMP, SPH_ATTR_BOOL, SPH_ATTR_FLOAT, SPH_ATTR_STRING, SPH_ATTR_STRINGPTR,
-		SPH_ATTR_UINT32SET, SPH_ATTR_UINT32SET_PTR, SPH_ATTR_INT64SET, SPH_ATTR_INT64SET_PTR };
+	static const ESphAttr dSupportedTypes[] = { SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_TIMESTAMP, SPH_ATTR_BOOL, SPH_ATTR_FLOAT, SPH_ATTR_STRING, SPH_ATTR_STRINGPTR, SPH_ATTR_UINT32SET, SPH_ATTR_UINT32SET_PTR, SPH_ATTR_INT64SET, SPH_ATTR_INT64SET_PTR };
 
 	for ( auto i : dSupportedTypes )
 		bFound |= tAttr.m_eAttrType==i;

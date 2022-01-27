@@ -45,7 +45,7 @@ SHOW STATUS
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 SHOW STATUS
 "
 ```

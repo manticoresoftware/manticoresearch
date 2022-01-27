@@ -16,7 +16,7 @@ ALTER CLUSTER posts UPDATE nodes
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 ALTER CLUSTER posts UPDATE nodes
 "
 ```

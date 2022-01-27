@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -95,6 +95,7 @@
 #include "sphinxint.h"
 #include "sphinxrt.h"
 #include "task_info.h"
+#include "client_task_info.h"
 #include "coroutine.h"
 #include "conversion.h"
 
@@ -209,6 +210,7 @@ struct ListenerDesc_t
 	int m_iPort = 0;
 	int m_iPortsCount = 0;
 	bool m_bVIP = false;
+	bool m_bReadOnly = false;
 };
 
 // 'like' matcher
@@ -328,6 +330,16 @@ public:
 		SendByte ( (BYTE)( (v>>8) & 0xff ) );
 		SendByte ( (BYTE)( (v>>16) & 0xff ) );
 		SendByte ( (BYTE)( (v>>24) & 0xff) );
+#endif
+	}
+
+	void SendLSBWord ( WORD v )
+	{
+#if USE_LITTLE_ENDIAN
+		SendT<WORD> ( v );
+#else
+		SendByte ( (BYTE)( v & 0xff ) );
+		SendByte ( (BYTE)( ( v >> 8 ) & 0xff ) );
 #endif
 	}
 
@@ -1226,16 +1238,23 @@ enum ESphHttpEndpoint
 	SPH_HTTP_ENDPOINT_JSON_DELETE,
 	SPH_HTTP_ENDPOINT_JSON_BULK,
 	SPH_HTTP_ENDPOINT_PQ,
+	SPH_HTTP_ENDPOINT_CLI,
 
 	SPH_HTTP_ENDPOINT_TOTAL
 };
 
 bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, ISphOutputBuffer & tOut );
 bool IsMaxedOut ();
+bool IsReadOnly ();
 void sphFormatFactors ( StringBuilder_c& dOut, const unsigned int * pFactors, bool bJson );
-void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool bReplace, bool bCommit, CSphString & sWarning, CSphSessionAccum & tAcc, CSphVector<int64_t> & dLastIds );
-void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, Str_t sQuery, CSphString & sWarning );
-void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, Str_t sQuery, bool bCommit, CSphSessionAccum & tAcc );
+void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt );
+void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, Str_t sQuery );
+void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, Str_t sQuery );
+void sphHandleMysqlBegin ( StmtErrorReporter_i& tOut, Str_t sQuery );
+void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, bool bCommit );
+bool sphCheckWeCanModify ();
+bool sphCheckWeCanModify ( StmtErrorReporter_i & tOut );
+bool sphCheckWeCanModify ( const char* szStmt, RowBuffer_i& tOut );
 
 bool				sphLoopClientHttp ( const BYTE * pRequest, int iRequestLen, CSphVector<BYTE> & dResult );
 bool				sphProcessHttpQueryNoResponce ( ESphHttpEndpoint eEndpoint, const char * sQuery, const SmallStringHash_T<CSphString> & tOptions, CSphVector<BYTE> & dResult );
@@ -1243,28 +1262,26 @@ void				sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, cons
 ESphHttpEndpoint	sphStrToHttpEndpoint ( const CSphString & sEndpoint );
 CSphString			sphHttpEndpointToStr ( ESphHttpEndpoint eEndpoint );
 
-bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength, InputBuffer_c & tBuf, ISphOutputBuffer & tOut, bool bManagePersist );
+void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength, InputBuffer_c & tBuf, ISphOutputBuffer & tOut );
 void HandleCommandPing ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq );
 
 void BuildStatusOneline ( StringBuilder_c& sOut );
 
-class CSphinxqlSession;
-class SphinxqlSessionPublic : public ISphNoncopyable
+namespace session
 {
-	CSphinxqlSession * m_pImpl;
+	bool IsAutoCommit ( const ClientSession_c* );
+	bool IsInTrans ( const ClientSession_c* );
 
-public:
-	SphinxqlSessionPublic();
-	~SphinxqlSessionPublic();
-
-	bool Execute ( Str_t sQuery, RowBuffer_i & tOut );
-	void SetFederatedUser ();
-	bool IsAutoCommit () const;
-	bool IsInTrans() const;
-
-	QueryProfile_c * StartProfiling ( ESphQueryState );
+	bool Execute ( Str_t sQuery, RowBuffer_i& tOut );
+	void SetFederatedUser();
+	void SetAutoCommit ( bool bAutoCommit );
+	void SetInTrans ( bool bInTrans );
+	bool IsAutoCommit();
+	bool IsInTrans();
+	QueryProfile_c* StartProfiling ( ESphQueryState );
 	void SaveLastProfile();
-};
+	VecTraits_T<int64_t> LastIds();
+}
 
 void LogSphinxqlError ( const char * sStmt, const char * sError );
 

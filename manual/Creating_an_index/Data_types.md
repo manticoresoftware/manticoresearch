@@ -40,7 +40,7 @@ CREATE TABLE forum(title text, content text, author_id int, forum_id int, post_d
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=CREATE TABLE forum(title text, content text, author_id int, forum_id int, post_date timestamp)"
+POST /cli -d "CREATE TABLE forum(title text, content text, author_id int, forum_id int, post_date timestamp)"
 ```
 
 <!-- intro -->
@@ -319,7 +319,7 @@ CREATE TABLE products(title text);
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=CREATE TABLE products(title text)"
+POST /cli -d "CREATE TABLE products(title text)"
 ```
 
 <!-- intro -->
@@ -397,7 +397,7 @@ CREATE TABLE products(title text indexed);
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=CREATE TABLE products(title text indexed)"
+POST /cli -d "CREATE TABLE products(title text indexed)"
 ```
 
 <!-- intro -->
@@ -541,7 +541,7 @@ CREATE TABLE products(title text, keys string);
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=CREATE TABLE products(title text, keys string)"
+POST /cli -d "CREATE TABLE products(title text, keys string)"
 ```
 
 <!-- intro -->
@@ -623,7 +623,7 @@ CREATE TABLE products ( title string attribute indexed );
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=CREATE TABLE products ( title string attribute indexed )"
+POST /cli -d "CREATE TABLE products ( title string attribute indexed )"
 ```
 
 <!-- intro -->
@@ -702,7 +702,7 @@ CREATE TABLE products(title text, price int);
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=CREATE TABLE products(title text, price int)"
+POST /cli -d "CREATE TABLE products(title text, price int)"
 ```
 
 <!-- intro -->
@@ -780,7 +780,7 @@ CREATE TABLE products(title text, flags bit(3), tags bit(2) );
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=CREATE TABLE products(title text, flags bit(3), tags bit(2))"
+POST /cli -d "CREATE TABLE products(title text, flags bit(3), tags bit(2))"
 ```
 
 <!-- intro -->
@@ -862,7 +862,7 @@ CREATE TABLE products(title text, price bigint );
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=CREATE TABLE products(title text, price bigint)"
+POST /cli -d "CREATE TABLE products(title text, price bigint)"
 ```
 
 <!-- intro -->
@@ -943,7 +943,7 @@ CREATE TABLE products(title text, sold bool );
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=CREATE TABLE products(title text, sold bool)"
+POST /cli -d "CREATE TABLE products(title text, sold bool)"
 ```
 
 <!-- intro -->
@@ -1024,7 +1024,7 @@ CREATE TABLE products(title text, date timestamp);
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=CREATE TABLE products(title text, date timestamp)"
+POST /cli -d "CREATE TABLE products(title text, date timestamp)"
 ```
 
 <!-- intro -->
@@ -1104,7 +1104,7 @@ CREATE TABLE products(title text, coeff float);
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=CREATE TABLE products(title text, coeff float)"
+POST /cli -d "CREATE TABLE products(title text, coeff float)"
 ```
 
 <!-- intro -->
@@ -1323,7 +1323,7 @@ CREATE TABLE products(title text, data json);
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=CREATE TABLE products(title text, data json)"
+POST /cli -d "CREATE TABLE products(title text, data json)"
 ```
 
 <!-- intro -->
@@ -1619,7 +1619,7 @@ CREATE TABLE products(title text, product_codes multi);
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=CREATE TABLE products(title text, product_codes multi)"
+POST /cli -d "CREATE TABLE products(title text, product_codes multi)"
 ```
 
 <!-- intro -->
@@ -2092,7 +2092,7 @@ CREATE TABLE products(title text, values multi64);
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=CREATE TABLE products(title text, values multi64)"
+POST /cli -d "CREATE TABLE products(title text, values multi64)"
 ```
 
 <!-- intro -->

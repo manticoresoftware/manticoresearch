@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -14,6 +14,7 @@
 #include "sphinxutils.h"
 
 #include <math.h>
+#include <time.h>
 
 #if !_WIN32
 #include <sys/time.h> // for gettimeofday
@@ -878,6 +879,26 @@ bool mmunlock ( void * pMem, size_t uSize )
 
 #endif // _WIN32
 
+
+namespace
+{
+volatile bool& IsDied()
+{
+	static bool bDied = false;
+	return bDied;
+}
+} // namespace
+
+bool sphIsDied()
+{
+	return IsDied();
+}
+
+void sphSetDied()
+{
+	IsDied() = true;
+}
+
 void sphSetDieCallback ( SphDieCallback_t pfDieCallback )
 {
 	g_pfDieCallback = pfDieCallback;
@@ -888,6 +909,7 @@ void sphDieVa ( const char * sFmt, va_list ap )
 	// if there's no callback,
 	// or if callback returns true,
 	// log to stdout
+	sphSetDied();
 	if ( !g_pfDieCallback || g_pfDieCallback ( true, sFmt, ap ) )
 	{
 		char sBuf[1024];
@@ -990,6 +1012,49 @@ void sphAutoSrand ()
 
 	// twist and shout
 	sphSrand ( sphRand() ^ DWORD(tv.tv_sec) ^ (DWORD(tv.tv_usec) + uPID) );
+}
+
+/// format current timestamp (for logging, or whatever)
+int sphFormatCurrentTime ( char * sTimeBuf, int iBufLen )
+{
+	int64_t iNow = sphMicroTimer ();
+	time_t ts = (time_t) ( iNow/1000000 ); // on some systems (eg. FreeBSD 6.2), tv.tv_sec has another type and we can't just pass it
+
+#if !_WIN32
+	struct tm tmp;
+	localtime_r ( &ts, &tmp );
+#else
+	struct tm tmp;
+	tmp = *localtime ( &ts );
+#endif
+
+	static const char * sWeekday[7] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+	static const char * sMonth[12] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+
+	return snprintf ( sTimeBuf, iBufLen, "%.3s %.3s%3d %.2d:%.2d:%.2d.%.3d %d",
+		sWeekday [ tmp.tm_wday ],
+		sMonth [ tmp.tm_mon ],
+		tmp.tm_mday, tmp.tm_hour,
+		tmp.tm_min, tmp.tm_sec, (int)((iNow%1000000)/1000),
+		1900+tmp.tm_year );
+}
+
+CSphString sphCurrentUtcTime ()
+{
+	int64_t iNow = sphMicroTimer ();
+	time_t ts = (time_t) ( iNow/1000000 ); // on some systems (eg. FreeBSD 6.2), tv.tv_sec has another type and we can't just pass it
+
+	struct tm tmp;
+	gmtime_r ( &ts, &tmp );
+//	localtime_r ( &ts, &tmp );
+
+	StringBuilder_c tOut;
+	tOut.Sprintf( "%.4d-%.2d-%.2dT%.2d:%.2d:%.2d.%.3d", // YYYY-MM-DDThh:mm:ss[.SSS]
+			1900 + tmp.tm_year, tmp.tm_mon+1, tmp.tm_mday,
+			tmp.tm_hour, tmp.tm_min, tmp.tm_sec, (int)( ( iNow % 1000000 ) / 1000 ));
+	CSphString sRes;
+	tOut.MoveTo(sRes);
+	return sRes;
 }
 
 

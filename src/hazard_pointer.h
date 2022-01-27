@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2021-2022, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -86,7 +86,7 @@ class ScopedPtr_T : ISphNoncopyable
 
 public:
 	///< default ctr (for vectors)
-	explicit ScopedPtr_T () {}
+	explicit ScopedPtr_T () = default;
 
 	/// construction from raw pointer
 	explicit ScopedPtr_T ( PTR pPtr )

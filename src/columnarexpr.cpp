@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -69,7 +69,7 @@ void Expr_Columnar_MVAIn_T<T>::Command ( ESphExprCommand eCmd, void * pArg )
 		if ( pColumnar )
 		{
 			std::string sError; // FIXME! report errors
-			m_pIterator = pColumnar->CreateIterator ( m_sName.cstr(), columnar::IteratorHints_t(), sError );
+			m_pIterator = pColumnar->CreateIterator ( m_sName.cstr(), {}, nullptr, sError );
 		}
 	}
 }
@@ -163,11 +163,13 @@ void Expr_Columnar_StringIn_c::Command ( ESphExprCommand eCmd, void * pArg )
 		if ( pColumnar )
 		{
 			columnar::IteratorHints_t tHints;
+			columnar::IteratorCapabilities_t tCapabilities;
 			tHints.m_bNeedStringHashes = m_eCollation==SPH_COLLATION_DEFAULT;
 
 			std::string sError; // FIXME! report errors
-			m_pIterator = pColumnar->CreateIterator ( m_sName.cstr(), tHints, sError );
-			m_bHasHashes = tHints.m_bNeedStringHashes && m_pIterator.Ptr() && m_pIterator->HaveStringHashes();
+			m_pIterator = pColumnar->CreateIterator ( m_sName.cstr(), tHints, &tCapabilities, sError );
+			assert ( m_pIterator );
+			m_bHasHashes = tCapabilities.m_bStringHashes;
 		}
 	}
 }
@@ -195,7 +197,7 @@ Expr_Columnar_StringIn_c::Expr_Columnar_StringIn_c ( const Expr_Columnar_StringI
 uint64_t Expr_Columnar_StringIn_c::GetStringHash() const
 {
 	if ( m_bHasHashes )
-		return m_pIterator->GetStringHash();
+		return m_pIterator->Get();
 
 	const BYTE * pStr = nullptr;
 	int iLen = m_pIterator->Get(pStr);
@@ -242,7 +244,7 @@ void Expr_Columnar_StringLength_c::Command ( ESphExprCommand eCmd, void * pArg )
 		if ( pColumnar )
 		{
 			std::string sError; // FIXME! report errors
-			m_pIterator = pColumnar->CreateIterator ( m_sName.cstr(), columnar::IteratorHints_t(), sError );
+			m_pIterator = pColumnar->CreateIterator ( m_sName.cstr(), {}, nullptr, sError );
 		}
 	}
 }
@@ -367,34 +369,47 @@ Expr_ColumnarMVAAggr_T<T>::Expr_ColumnarMVAAggr_T ( const Expr_ColumnarMVAAggr_T
 class Expr_GetColumnar_Traits_c : public ISphExpr
 {
 public:
-				Expr_GetColumnar_Traits_c ( const CSphString & sName );
+				Expr_GetColumnar_Traits_c ( const CSphString & sName, bool bStored );
 				Expr_GetColumnar_Traits_c ( const Expr_GetColumnar_Traits_c & rhs );
 
 	void		FixupLocator ( const ISphSchema * /*pOldSchema*/, const ISphSchema * /*pNewSchema*/ ) final {}
 	void		Command ( ESphExprCommand eCmd, void * pArg ) final;
-	bool		IsColumnar() const final { return true; }
+	bool		IsColumnar ( bool * pStored ) const final;
 
 protected:
 	CSphString	m_sName;
+	bool		m_bStored = false;
 	CSphScopedPtr<columnar::Iterator_i> m_pIterator {nullptr};
 
 	uint64_t CalcHash ( const char * szTag, const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
 	{
 		EXPR_CLASS_NAME_NOCHECK(szTag);
 		CALC_STR_HASH(m_sName, m_sName.Length());
+		CALC_POD_HASH(m_bStored);
 		return CALC_DEP_HASHES();
 	}
 };
 
 
-Expr_GetColumnar_Traits_c::Expr_GetColumnar_Traits_c ( const CSphString & sName )
+Expr_GetColumnar_Traits_c::Expr_GetColumnar_Traits_c ( const CSphString & sName, bool bStored )
 	: m_sName ( sName )
+	, m_bStored ( bStored )
 {}
 
 
 Expr_GetColumnar_Traits_c::Expr_GetColumnar_Traits_c ( const Expr_GetColumnar_Traits_c & rhs )
 	: m_sName ( rhs.m_sName )
+	, m_bStored ( rhs.m_bStored )
 {}
+
+
+bool Expr_GetColumnar_Traits_c::IsColumnar ( bool * pStored ) const
+{
+	if ( pStored )
+		*pStored = m_bStored;
+
+	return true;
+}
 
 
 void Expr_GetColumnar_Traits_c::Command ( ESphExprCommand eCmd, void * pArg )
@@ -407,7 +422,7 @@ void Expr_GetColumnar_Traits_c::Command ( ESphExprCommand eCmd, void * pArg )
 		if ( pColumnar )
 		{
 			std::string sError; // FIXME! report errors
-			m_pIterator = pColumnar->CreateIterator ( m_sName.cstr(), columnar::IteratorHints_t(), sError );
+			m_pIterator = pColumnar->CreateIterator ( m_sName.cstr(), {}, nullptr, sError );
 		}
 		else
 			m_pIterator.Reset();
@@ -434,7 +449,7 @@ public:
 	int			IntEval ( const CSphMatch & tMatch ) const override		{ return (int)FetchValue(tMatch); }
 	int64_t		Int64Eval ( const CSphMatch & tMatch ) const override	{ return FetchValue(tMatch); }
 	uint64_t	GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final;
-	ISphExpr *	Clone() const override									{ return new Expr_GetColumnarInt_c(m_sName); }
+	ISphExpr *	Clone() const override									{ return new Expr_GetColumnarInt_c ( m_sName, m_bStored ); }
 
 protected:
 	inline SphAttr_t FetchValue ( const CSphMatch & tMatch ) const;
@@ -466,7 +481,7 @@ public:
 	float	Eval ( const CSphMatch & tMatch ) const final		{ return sphDW2F ( (DWORD)FetchValue(tMatch) ); }
 	int		IntEval ( const CSphMatch & tMatch ) const final	{ return (int)sphDW2F ( (DWORD)FetchValue(tMatch) ); }
 	int64_t	Int64Eval ( const CSphMatch & tMatch ) const final	{ return (int64_t)sphDW2F ( (DWORD)FetchValue(tMatch) ); }
-	ISphExpr *	Clone() const final								{ return new Expr_GetColumnarFloat_c(m_sName); }
+	ISphExpr *	Clone() const final								{ return new Expr_GetColumnarFloat_c ( m_sName, m_bStored ); }
 };
 
 /////////////////////////////////////////////////////////////////////
@@ -481,7 +496,7 @@ public:
 	const BYTE *	StringEvalPacked ( const CSphMatch & tMatch ) const final;
 	int				StringLenEval ( const CSphMatch & tMatch ) const final;
 	uint64_t		GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final;
-	ISphExpr *		Clone() const final { return new Expr_GetColumnarString_c(m_sName); }
+	ISphExpr *		Clone() const final { return new Expr_GetColumnarString_c ( m_sName, m_bStored ); }
 };
 
 
@@ -529,7 +544,7 @@ public:
 	int64_t		Int64Eval ( const CSphMatch & tMatch ) const final;
 	ByteBlob_t	MvaEval ( const CSphMatch & tMatch ) const final;
 	uint64_t	GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final;
-	ISphExpr *	Clone() const final { return new Expr_GetColumnarMva_c(m_sName); }
+	ISphExpr *	Clone() const final { return new Expr_GetColumnarMva_c ( m_sName, m_bStored ); }
 };
 
 
@@ -574,7 +589,7 @@ ISphExpr * CreateExpr_ColumnarMva64Length ( const CSphString & sName )	{ return 
 ISphExpr * CreateExpr_ColumnarMva32Aggr ( ISphExpr * pExpr, ESphAggrFunc eFunc )	{ return new Expr_ColumnarMVAAggr_T<DWORD> ( pExpr, eFunc ); }
 ISphExpr * CreateExpr_ColumnarMva64Aggr ( ISphExpr * pExpr, ESphAggrFunc eFunc )	{ return new Expr_ColumnarMVAAggr_T<int64_t> ( pExpr, eFunc ); }
 
-ISphExpr * CreateExpr_GetColumnarInt ( const CSphString & sName )		{ return new Expr_GetColumnarInt_c(sName); }
-ISphExpr * CreateExpr_GetColumnarFloat ( const CSphString & sName )		{ return new Expr_GetColumnarFloat_c(sName); }
-ISphExpr * CreateExpr_GetColumnarString ( const CSphString & sName )	{ return new Expr_GetColumnarString_c(sName); }
-ISphExpr * CreateExpr_GetColumnarMva ( const CSphString & sName )		{ return new Expr_GetColumnarMva_c(sName); }
+ISphExpr * CreateExpr_GetColumnarInt ( const CSphString & sName, bool bStored )		{ return new Expr_GetColumnarInt_c ( sName, bStored ); }
+ISphExpr * CreateExpr_GetColumnarFloat ( const CSphString & sName, bool bStored )	{ return new Expr_GetColumnarFloat_c ( sName, bStored ); }
+ISphExpr * CreateExpr_GetColumnarString ( const CSphString & sName, bool bStored )	{ return new Expr_GetColumnarString_c ( sName, bStored ); }
+ISphExpr * CreateExpr_GetColumnarMva ( const CSphString & sName, bool bStored )		{ return new Expr_GetColumnarMva_c ( sName, bStored ); }

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -198,33 +198,18 @@ inline bool operator < ( const Word_t & a, const Word_t & b)
 }
 
 
-class CSphStopwordBuilderDict : public CSphDict
+class CSphStopwordBuilderDict final : public DictStub_c
 {
 protected:
-	~CSphStopwordBuilderDict() override {}
+	~CSphStopwordBuilderDict() final = default;
+
 public:
-						CSphStopwordBuilderDict () {}
+						CSphStopwordBuilderDict () = default;
 	void				Save ( const char * sOutput, int iTop, bool bFreqs );
 
 public:
 	SphWordID_t	GetWordID ( BYTE * pWord ) final;
 	SphWordID_t	GetWordID ( const BYTE * pWord, int iLen, bool ) final;
-
-	void		LoadStopwords ( const char *, const ISphTokenizer *, bool ) final {}
-	void		LoadStopwords ( const CSphVector<SphWordID_t> & ) final {}
-	void		WriteStopwords ( CSphWriter & ) const final {}
-	bool		LoadWordforms ( const StrVec_t &, const CSphEmbeddedFiles *, const ISphTokenizer *, const char * ) final { return true; }
-	void		WriteWordforms ( CSphWriter & ) const final {}
-	int			SetMorphology ( const char *, CSphString & ) final { return ST_OK; }
-
-	void		Setup ( const CSphDictSettings & tSettings ) final { m_tSettings = tSettings; }
-	const CSphDictSettings & GetSettings () const final { return m_tSettings; }
-	const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () const final { return m_dSWFileInfos; }
-	const CSphVector <CSphSavedFile> & GetWordformsFileInfos () const final { return m_dWFFileInfos; }
-	const CSphMultiformContainer * GetMultiWordforms () const final { return nullptr; }
-	uint64_t		GetSettingsFNV () const final { return 0; }
-
-	bool IsStopWord ( const BYTE * ) const final { return false; }
 
 protected:
 	struct HashFunc_t
@@ -1455,7 +1440,7 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst, const CSphConf
 		// write klist with targets but without klist itself
 		// that will affect the order of index load on rotation, but no actual klist will be applied
 		CSphString sSrcKlist;
-		sSrcKlist.SetSprintf ( "%s.tmp%s", pSrc->GetFilename(), sphGetExt(SPH_EXT_SPK).cstr() );
+		sSrcKlist.SetSprintf ( "%s.tmp%s", pSrc->GetFilename(), sphGetExt(SPH_EXT_SPK) );
 		if ( !WriteKillList ( sSrcKlist, nullptr, 0, tTargets, sError ) )
 			sphDie ( "failed to modify klist target in index '%s': %s", sSrc, sError.cstr() );
 	}

@@ -18,7 +18,7 @@ CREATE TABLE products(title text, price float) charset_table = 'cjk' morphology 
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) charset_table = 'cjk' morphology = 'icu_chinese'"
 ```
 
@@ -94,7 +94,7 @@ CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_l
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'"
 ```
 
@@ -169,7 +169,7 @@ CREATE TABLE products(title text, price float) charset_table = 'chinese' morphol
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) charset_table = 'chinese' morphology = 'icu_chinese' stopwords = 'zh'"
 ```
 <!-- intro -->

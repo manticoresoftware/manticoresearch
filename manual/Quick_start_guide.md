@@ -10,7 +10,7 @@ You can install and start Manticore easily in Ubuntu, Centos, Debian, Windows an
 
 <!-- request Ubuntu -->
 ```bash
-wget http://repo.manticoresearch.com/manticore-repo.noarch.deb
+wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
 sudo dpkg -i manticore-repo.noarch.deb
 sudo apt update
 sudo apt install manticore manticore-columnar-lib
@@ -22,7 +22,7 @@ sudo systemctl start manticore
 
 <!-- request Debian -->
 ```bash
-wget http://repo.manticoresearch.com/manticore-repo.noarch.deb
+wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
 sudo dpkg -i manticore-repo.noarch.deb
 sudo apt update
 sudo apt install manticore manticore-columnar-lib
@@ -34,7 +34,7 @@ sudo systemctl start manticore
 
 <!-- request Centos -->
 ```bash
-sudo yum install http://repo.manticoresearch.com/manticore-repo.noarch.rpm
+sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
 sudo yum install manticore manticore-columnar-lib
 sudo systemctl start manticore
 ```
@@ -182,7 +182,7 @@ Query OK, 0 rows affected (0.02 sec)
 <!-- request HTTP -->
 
 ```bash
-POST /sql -d "mode=raw&query=create table products(title text, price float) morphology='stem_en'"
+POST /cli -d "create table products(title text, price float) morphology='stem_en'"
 ```
 
 <!-- response HTTP -->

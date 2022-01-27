@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -49,7 +49,7 @@ struct IndexFileExt_t
 
 
 CSphVector<IndexFileExt_t>	sphGetExts();
-CSphString					sphGetExt ( ESphExt eExt );
+const char*					sphGetExt ( ESphExt eExt );
 
 /// encapsulates all common actions over index files in general (copy/rename/delete etc.)
 class IndexFiles_c : public ISphNoncopyable

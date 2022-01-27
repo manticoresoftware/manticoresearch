@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -47,6 +47,7 @@ JsonObj_c		sphEncodeInsertResultJson ( const char * szIndex, bool bReplace, DocI
 JsonObj_c		sphEncodeUpdateResultJson ( const char * szIndex, DocID_t tDocId, int iAffected );
 JsonObj_c 		sphEncodeDeleteResultJson ( const char * szIndex, DocID_t tDocId, int iAffected );
 JsonObj_c		sphEncodeInsertErrorJson ( const char * szIndex, const char * szError );
+JsonObj_c		sphEncodeTxnResultJson ( const char* szIndex, DocID_t tDocId, int iInserts, int iDeletes, int iUpdates );
 
 bool			sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings, bool bUpdate );
 

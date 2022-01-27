@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -27,6 +27,7 @@ struct Listener_t
 	bool				m_bTcp;
 	Proto_e				m_eProto;
 	bool				m_bVIP;
+	bool 				m_bReadOnly;
 };
 
 class CSphNetLoop;

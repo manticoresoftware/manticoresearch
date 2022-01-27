@@ -57,27 +57,17 @@ searchd {
 ```
 <!-- end -->
 
-## Connecting with cURL
-<!-- example CURL -->
-Performing a quick search is as easy as:
-
-<!-- request CURL -->
-```bash
-curl -sX POST http://localhost:9308/search -d ' {"index":"test","query":{"match":{"title":"keyword"}}}'
-```
-<!-- end -->
-
 ## SQL over HTTP
 <!-- example SQL_over_HTTP -->
-Endpoint `/sql` allows running an SQL [SELECT](../Searching/Full_text_matching/Basic_usage.md#SQL) query via HTTP JSON interface.
+Endpoint `/sql` allows running an **SQL [SELECT](../Searching/Full_text_matching/Basic_usage.md#SQL) query** via HTTP JSON interface.
 
-The query payload **must** be URL encoded, otherwise query statements with `=` (filtering or setting options) will result in an error.
+Query payload **must** be URL encoded, otherwise query statements with `=` (filtering or setting options) will result in an error.
 
-The response is in JSON format and contains hits information and time of execution. The response shares the same format as [json/search](../Searching/Full_text_matching/Basic_usage.md#HTTP) endpoint.
+It returns a JSON respons which contains hits information and execution time. The response has the same format as [json/search](../Searching/Full_text_matching/Basic_usage.md#HTTP) endpoint. Note, that `/sql` endpoint supports only single search requests. If you are looking for processing a multi-query see below.
 
 <!-- request HTTP -->
 ```bash
-POST /sql --data-urlencode "query=select id,subject,author_id  from forum where match('@subject php manticore') group by author_id order by id desc limit 0,5"
+POST /sql -d "query=select id,subject,author_id  from forum where match('@subject php manticore') group by author_id order by id desc limit 0,5"
 ```
 
 <!-- response HTTP -->
@@ -108,76 +98,133 @@ POST /sql --data-urlencode "query=select id,subject,author_id  from forum where 
 <!-- end -->
 
 <!-- example SQL_over_HTTP_2 -->
-For comfortable debugging in your browser you can set HTTP parameter `mode` to `raw`, and then the rest of the query after 'query=' will be passed inside without any substitutions/url decoding. Here's an example of how it can fail w/o the `mode=raw`:
+### /sql?mode=raw
+`/sql` endpoint also has a special mode **"raw"**, which allows to send **any valid sphinxql queries including multi-queries**. The returned value is a json array of one or more result sets.
 
 <!-- request HTTP -->
 ```bash
-POST /sql -d "query=select id,packedfactors() from movies where match('star') option ranker=expr('1')"
+POST /sql?mode=raw -d "query=desc%20test"
 ```
+
 <!-- response HTTP -->
 ```json
-{"error":"query missing"}
+[
+  {
+    "columns": [
+      {
+        "Field": {
+          "type": "string"
+        }
+      },
+      {
+        "Type": {
+          "type": "string"
+        }
+      },
+      {
+        "Properties": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Field": "id",
+        "Type": "bigint",
+        "Properties": ""
+      },
+      {
+        "Field": "title",
+        "Type": "text",
+        "Properties": "indexed"
+      },
+      {
+        "Field": "gid",
+        "Type": "uint",
+        "Properties": ""
+      },
+      {
+        "Field": "title",
+        "Type": "string",
+        "Properties": ""
+      },
+      {
+        "Field": "j",
+        "Type": "json",
+        "Properties": ""
+      },
+      {
+        "Field": "new1",
+        "Type": "uint",
+        "Properties": ""
+      }
+    ],
+    "total": 6,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 <!-- end -->
 
-<!-- example SQL_over_HTTP_3 -->
-Adding `mode=raw` fixes that:
+<!-- example SQL_over_HTTP_4 -->
+### /cli
+While the `/sql` endpoint is useful to control Manticore programmatically from your application, there's also endpoint `/cli` which makes it eaiser to maintain a Manticore instance via curl or your browser manually. It accepts POST and GET HTTP methods. Everything after `/cli?` is taken by Manticore as is even if you don't escape it manually via curl or let the browser encode it automaticaly. The `+` sign is not decoded to space as well, eliminating the necessity of encoding it. The response format is the same as in the `/sql?mode=raw`.
 
 <!-- request HTTP -->
+
 ```bash
-POST /sql -d "mode=raw&query=select id,packedfactors() from movies where match('star') option ranker=expr('1')"
+POST /cli -d "select id,1+2 as a, packedfactors() from test where match('tes*') option ranker=expr('1')"
 ```
 
 <!-- response HTTP -->
+
 ```json
-{
-  "took":0,
-  "timed_out":false,
-  "hits":{
-    "total":72,
-    "hits":[
+[
+  {
+    "columns": [
       {
-        "_id":"5",
-        "_score":1,
-        "_source":{
-          "packedfactors()":{
-            "bm25":612,
-            "bm25a":0.69104159,
-            "field_mask":32,
-            "doc_word_count":1,
-            "fields":[
-              {
-                "field":5,
-                "lcs":1,
-                "hit_count":1,
-                "word_count":1,
-                "tf_idf":0.24835411,
-                "min_idf":0.24835411,
-                "max_idf":0.24835411,
-                "sum_idf":0.24835411,
-                "min_hit_pos":1,
-                "min_best_span_pos":1,
-                "exact_hit":0,
-                "max_window_hits":1,
-                "min_gaps":0,
-                "exact_order":1,
-                "lccs":1,
-                "wlccs":0.24835411,
-                "atc":0.000000
-              }
-            ],
-            "words":[
-              {
-                "tf":1,
-                "idf":0.24835411
-              }
-            ]
-          }
+        "id": {
+          "type": "long long"
         }
       },
-...
-    ]
+      {
+        "a": {
+          "type": "long"
+        }
+      },
+      {
+        "packedfactors()": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 1,
+        "a": 3,
+        "packedfactors()": "bm25=616, bm25a=0.69689077, field_mask=1, doc_word_count=1, field0=(lcs=1, hit_count=1, word_count=1, tf_idf=0.25595802, min_idf=0.25595802, max_idf=0.25595802, sum_idf=0.25595802, min_hit_pos=1, min_best_span_pos=1, exact_hit=0, max_window_hits=1, min_gaps=0, exact_order=1, lccs=1, wlccs=0.25595802, atc=0.000000), word0=(tf=1, idf=0.25595802)"
+      },
+      {
+        "id": 2,
+        "a": 3,
+        "packedfactors()": "bm25=616, bm25a=0.69689077, field_mask=1, doc_word_count=1, field0=(lcs=1, hit_count=1, word_count=1, tf_idf=0.25595802, min_idf=0.25595802, max_idf=0.25595802, sum_idf=0.25595802, min_hit_pos=1, min_best_span_pos=1, exact_hit=0, max_window_hits=1, min_gaps=0, exact_order=1, lccs=1, wlccs=0.25595802, atc=0.000000), word0=(tf=1, idf=0.25595802)"
+      },
+      {
+        "id": 8,
+        "a": 3,
+        "packedfactors()": "bm25=616, bm25a=0.69689077, field_mask=1, doc_word_count=1, field0=(lcs=1, hit_count=1, word_count=1, tf_idf=0.25595802, min_idf=0.25595802, max_idf=0.25595802, sum_idf=0.25595802, min_hit_pos=2, min_best_span_pos=2, exact_hit=0, max_window_hits=1, min_gaps=0, exact_order=1, lccs=1, wlccs=0.25595802, atc=0.000000), word0=(tf=1, idf=0.25595802)"
+      }
+    ],
+    "total": 3,
+    "error": "",
+    "warning": ""
   }
-}
+]
 ```
+
+<!-- request Browser -->
+
+![using /cli in browser](cli_browser.png)
+
 <!-- end -->

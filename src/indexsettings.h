@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -19,6 +19,17 @@
 #include "sphinxexpr.h"
 #include "columnarlib.h"
 #include "sphinxdefs.h"
+#include "schema/columninfo.h"
+
+inline int64_t cast2signed ( SphWordID_t tVal )
+{
+	return *(int64_t*)&tVal;
+}
+
+inline SphWordID_t cast2wordid ( int64_t iVal )
+{
+	return *(SphWordID_t*)&iVal;
+}
 
 class CSphWriter;
 class CSphReader;
@@ -50,6 +61,7 @@ struct CSphEmbeddedFiles
 
 class SettingsFormatter_c;
 struct SettingsFormatterState_t;
+namespace bson { class Bson_c; }
 
 class SettingsWriter_c
 {
@@ -77,6 +89,7 @@ public:
 
 	void			Setup ( const CSphConfigSection & hIndex, CSphString & sWarning );
 	bool			Load ( const FilenameBuilder_i * pFilenameBuilder, CSphReader & tReader, CSphEmbeddedFiles & tEmbeddedFiles, CSphString & sWarning );
+	bool			Load ( const FilenameBuilder_i* pFilenameBuilder, const bson::Bson_c& tNode, CSphEmbeddedFiles& tEmbeddedFiles, CSphString& sWarning );
 
 	void			DumpReadable ( SettingsFormatterState_t & tState, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder ) const override;
 	void			Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const override;
@@ -97,6 +110,7 @@ public:
 
 	void			Setup ( const CSphConfigSection & hIndex, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
 	void			Load ( CSphReader & tReader, CSphEmbeddedFiles & tEmbeddedFiles, CSphString & sWarning );
+	void			Load ( const bson::Bson_c& tNode, CSphEmbeddedFiles& tEmbeddedFiles, CSphString& sWarning );
 
 	void			DumpReadable ( SettingsFormatterState_t & tState, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder ) const override;
 	void			Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const override;
@@ -139,22 +153,6 @@ public:
 	void			Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const override;
 };
 
-/// wordpart processing type
-enum ESphWordpart
-{
-	SPH_WORDPART_WHOLE		= 0,	///< whole-word
-	SPH_WORDPART_PREFIX		= 1,	///< prefix
-	SPH_WORDPART_INFIX		= 2		///< infix
-};
-
-
-enum class AttrEngine_e
-{
-	DEFAULT,
-	ROWWISE,
-	COLUMNAR
-};
-
 
 /// indexing-related source settings
 /// NOTE, newly added fields should be synced with CSphSource::Setup()
@@ -178,6 +176,7 @@ public:
 	AttrEngine_e m_eEngine = AttrEngine_e::DEFAULT;	///< attribute storage engine
 
 	StrVec_t m_dColumnarAttrs;			///< list of attributes to be placed in columnar store
+	StrVec_t m_dColumnarNonStoredAttrs;	///< list of columnar attributes that should be not added to document storage
 	StrVec_t m_dRowwiseAttrs;			///< list of attributes to NOT be placed in columnar store
 	StrVec_t m_dColumnarStringsNoHash;	///< list of columnar string attributes that don't need pregenerated hashes
 
@@ -349,11 +348,18 @@ const RtTypedAttr_t &	GetRtType ( int iType );
 
 bool					StrToAttrEngine ( AttrEngine_e & eEngine, const CSphString & sValue, CSphString & sError );
 
+struct CreateTableAttr_t
+{
+	CSphColumnInfo	m_tAttr;
+	bool			m_bFastFetch = true;
+	bool			m_bStringHash = true;
+};
+
 struct CreateTableSettings_t
 {
 	CSphString						m_sLike;
 	bool							m_bIfNotExists = false;
-	CSphVector<CSphColumnInfo>		m_dAttrs;
+	CSphVector<CreateTableAttr_t>	m_dAttrs;
 	CSphVector<CSphColumnInfo>		m_dFields;
 	CSphVector<NameValueStr_t>		m_dOpts;
 };
@@ -414,8 +420,18 @@ CreateFilenameBuilder_fn GetIndexFilenameBuilder();
 const char * FileAccessName ( FileAccess_e eValue );
 FileAccess_e ParseFileAccess ( CSphString sVal );
 
-int ParseKeywordExpansion ( const char * sValue );
-void SaveMutableSettings ( const MutableIndexSettings_c & tSettings, const CSphString & sPath );
+int			ParseKeywordExpansion ( const char * sValue );
+void		SaveMutableSettings ( const MutableIndexSettings_c & tSettings, const CSphString & sPath );
 FileAccess_e GetFileAccess (  const CSphConfigSection & hIndex, const char * sKey, bool bList, FileAccess_e eDefault );
+
+// combine per-index and per-attribute engine settings
+AttrEngine_e CombineEngines ( AttrEngine_e eIndexEngine, AttrEngine_e eAttrEngine );
+class JsonEscapedBuilder;
+
+void operator<< ( JsonEscapedBuilder& tOut, const CSphFieldFilterSettings& tFieldFilterSettings );
+void operator<< ( JsonEscapedBuilder& tOut, const CSphIndexSettings& tIndexSettings );
+
+void SaveTokenizerSettings ( JsonEscapedBuilder& tOut, const ISphTokenizer * pTokenizer, int iEmbeddedLimit );
+void SaveDictionarySettings ( JsonEscapedBuilder& tOut, const CSphDict* pDict, bool bForceWordDict, int iEmbeddedLimit );
 
 #endif // _indexsettings_

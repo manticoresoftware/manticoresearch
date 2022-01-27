@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -130,8 +130,6 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf )
 	auto& tOut = *(NetGenericOutputBuffer_c *) pBuf;
 	auto& tIn = *(AsyncNetInputBuffer_c *) pBuf;
 
-	bool bKeepAlive = false;
-
 	do
 	{
 		tIn.DiscardProcessed ( -1 ); // -1 means 'force flush'
@@ -175,13 +173,13 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf )
 
 		if ( sphLoopClientHttp ( tPacket.first, tPacket.second, dResult ) )
 		{
-			if ( !bKeepAlive )
+			if ( !tSess.GetPersistent() )
 				tIn.SetTimeoutUS ( S2US * g_iClientTimeoutS );
-			bKeepAlive = true;
+			tSess.SetPersistent(true);
 		} else {
-			if ( bKeepAlive )
+			if ( tSess.GetPersistent() )
 				tIn.SetTimeoutUS ( S2US * g_iReadTimeoutS );
-			bKeepAlive = false;
+			tSess.SetPersistent(false);
 		}
 
 		tIn.Terminate ( 0, uOldByte ); // return back prev byte
@@ -189,5 +187,5 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf )
 		tOut.SwapData (dResult);
 		if ( !tOut.Flush () )
 			break;
-	} while ( bKeepAlive );
+	} while ( tSess.GetPersistent() );
 }

@@ -28,7 +28,7 @@ Query OK, 0 rows affected (0.00 sec)
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=CREATE TABLE products(title text, price float)  morphology='stem_en'"
+POST /cli -d "CREATE TABLE products(title text, price float)  morphology='stem_en'"
 ```
 
 <!-- response HTTP -->

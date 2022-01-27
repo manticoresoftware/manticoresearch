@@ -63,7 +63,7 @@ CREATE TABLE products(title text, price float) exceptions = '/usr/local/manticor
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=
+POST /cli -d "
 CREATE TABLE products(title text, price float) exceptions = '/usr/local/manticore/data/exceptions.txt'"
 ```
 

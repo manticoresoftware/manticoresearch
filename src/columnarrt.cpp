@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021, Manticore Software LTD (http://manticoresearch.com)
+// Copyright (c) 2021-2022, Manticore Software LTD (http://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -80,9 +80,6 @@ public:
 	int			Get ( const uint8_t * & pData ) override { assert ( 0 && "Unsupported function" ); return 0; }
 	uint8_t *	GetPacked() override				{ assert ( 0 && "Unsupported function" ); return 0; }
 	int			GetLength() override				{ assert ( 0 && "Unsupported function" ); return 0; }
-
-	uint64_t	GetStringHash() override			{ assert ( 0 && "Unsupported function" ); return 0; }
-	bool		HaveStringHashes() const override	{ assert ( 0 && "Unsupported function" ); return false; }
 
 protected:
 	RowID_t		m_tRowID = INVALID_ROWID;
@@ -186,9 +183,6 @@ public:
 	int			Get ( const uint8_t * & pData ) override;
 	uint8_t *	GetPacked() override;
 	int			GetLength() override;
-
-	uint64_t	GetStringHash() override			{ return 0; }
-	bool		HaveStringHashes() const override	{ return false; }
 
 private:
 	const CSphVector<BYTE> &	m_dData;
@@ -506,7 +500,7 @@ public:
 					ColumnarRT_c() = default;
 					ColumnarRT_c ( const CSphSchema & tSchema, ColumnarBuilderRT_i * pBuilder, bool bTakeOwnership );
 
-	columnar::Iterator_i *						CreateIterator ( const std::string & sName, const columnar::IteratorHints_t & tHints, std::string & sError ) const override;
+	columnar::Iterator_i *						CreateIterator ( const std::string & sName, const columnar::IteratorHints_t & tHints, columnar::IteratorCapabilities_t * pCapabilities, std::string & sError ) const override;
 	std::vector<columnar::BlockIterator_i *>	CreateAnalyzerOrPrefilter ( const std::vector<columnar::Filter_t> & dFilters, std::vector<int> & dDeletedFilters, const columnar::BlockTester_i & tBlockTester ) const override { return {}; }
 
 	int				GetAttributeId ( const std::string & sName ) const override;
@@ -537,7 +531,7 @@ ColumnarRT_c::ColumnarRT_c ( const CSphSchema & tSchema, ColumnarBuilderRT_i * p
 }
 
 
-columnar::Iterator_i * ColumnarRT_c::CreateIterator ( const std::string & sName, const columnar::IteratorHints_t & tHints, std::string & sError ) const
+columnar::Iterator_i * ColumnarRT_c::CreateIterator ( const std::string & sName, const columnar::IteratorHints_t & tHints, columnar::IteratorCapabilities_t * pCapabilities, std::string & sError ) const
 {
 	auto * pFound = m_hAttrs ( sName.c_str() );
 	if ( !pFound )

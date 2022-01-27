@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -541,8 +541,8 @@ int SockWrapper_c::Impl_c::SockPollNetloop ( int64_t tmTimeUntilUs, bool bWrite 
 // as usual sphPoll - returns 1 on success, 0 on timeout, -1 on error.
 int SockWrapper_c::Impl_c::SockPoll ( int64_t tmTimeUntilUs, bool bWrite )
 {
-	session::Info().SetTaskState ( TaskState_e::NET_IDLE );
-	auto _ = AtScopeExit([bWrite] { session::Info ().SetTaskState ( bWrite ? TaskState_e::NET_WRITE : TaskState_e::NET_READ ); });
+	session::SetTaskState ( TaskState_e::NET_IDLE );
+	auto _ = AtScopeExit([bWrite] { session::SetTaskState ( bWrite ? TaskState_e::NET_WRITE : TaskState_e::NET_READ ); });
 	return m_pNetLoop ? SockPollNetloop ( tmTimeUntilUs, bWrite ) : SockPollClassic ( tmTimeUntilUs, bWrite );
 }
 

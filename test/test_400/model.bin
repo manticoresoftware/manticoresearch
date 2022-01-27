@@ -31,8 +31,8 @@ price float,
 title text
 ) charset_table='0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'";}}}i:71;a:2:{s:8:"sphinxql";s:16:"drop table test1";s:14:"total_affected";i:0;}i:72;a:2:{s:8:"sphinxql";s:40:"create table test1(title string indexed)";s:14:"total_affected";i:0;}i:73;a:3:{s:8:"sphinxql";s:23:"show create table test1";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:5:"Table";s:5:"test1";s:12:"Create Table";s:41:"CREATE TABLE test1 (
 title text indexed
-)";}}}i:74;a:2:{s:8:"sphinxql";s:16:"drop table test1";s:14:"total_affected";i:0;}i:75;a:2:{s:8:"sphinxql";s:56:"create table test1(title text, str_val string attribute)";s:14:"total_affected";i:0;}i:76;a:3:{s:8:"sphinxql";s:23:"show create table test1";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:5:"Table";s:5:"test1";s:12:"Create Table";s:49:"CREATE TABLE test1 (
-str_val string,
+)";}}}i:74;a:2:{s:8:"sphinxql";s:16:"drop table test1";s:14:"total_affected";i:0;}i:75;a:2:{s:8:"sphinxql";s:56:"create table test1(title text, str_val string attribute)";s:14:"total_affected";i:0;}i:76;a:3:{s:8:"sphinxql";s:23:"show create table test1";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:5:"Table";s:5:"test1";s:12:"Create Table";s:59:"CREATE TABLE test1 (
+str_val string attribute,
 title text
 )";}}}i:77;a:2:{s:8:"sphinxql";s:16:"drop table test1";s:14:"total_affected";i:0;}i:78;a:2:{s:8:"sphinxql";s:50:"create table test1(title string attribute indexed)";s:14:"total_affected";i:0;}i:79;a:3:{s:8:"sphinxql";s:23:"show create table test1";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:5:"Table";s:5:"test1";s:12:"Create Table";s:53:"CREATE TABLE test1 (
 title string attribute indexed

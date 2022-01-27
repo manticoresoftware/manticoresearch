@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -167,7 +167,7 @@ private:
 	ESphHitless m_eHitless = SPH_HITLESS_NONE;
 };
 
-class PercolateDictProxy_c : public CSphDict
+class PercolateDictProxy_c : public DictStub_c
 {
 	const DictMap_t * m_pDict = nullptr;
 	const bool m_bHasMorph = false;
@@ -195,26 +195,7 @@ public:
 	}
 
 	bool HasMorphology () const final { return m_bHasMorph; }
-
-	// not implemented
-	CSphDictSettings m_tDummySettings;
-	CSphVector<CSphSavedFile> m_tDummySF;
-
-	SphWordID_t GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops ) final { return 0; }
-	void LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) final {}
-	void LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer, bool bStripFile ) final {}
-	void WriteStopwords ( CSphWriter &tWriter ) const final {}
-	bool LoadWordforms ( const StrVec_t &, const CSphEmbeddedFiles * pEmbedded,
-		const ISphTokenizer * pTokenizer, const char * sIndex ) final { return false; }
-	void WriteWordforms ( CSphWriter &tWriter ) const final {}
-	int SetMorphology ( const char * szMorph, CSphString &sMessage ) final { return 0; }
 	void Setup ( const CSphDictSettings &tSettings ) final {}
-	const CSphDictSettings &GetSettings () const final { return m_tDummySettings; }
-	const CSphVector<CSphSavedFile> &GetStopwordsFileInfos () const final { return m_tDummySF; }
-	const CSphVector<CSphSavedFile> &GetWordformsFileInfos () const final { return m_tDummySF; }
-	const CSphMultiformContainer * GetMultiWordforms () const final { return nullptr; }
-	bool IsStopWord ( const BYTE * pWord ) const final { return false; }
-	uint64_t GetSettingsFNV () const final { return 0; }
 };
 
 struct PQMatchContextResult_t

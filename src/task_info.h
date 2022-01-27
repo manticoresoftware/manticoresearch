@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2021-2022, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -133,6 +133,12 @@ public:
 	ScopedInfo_T ( ScopedInfo_T && rhs ) noexcept
 	{
 		BASE::Swap ( rhs );
+		if ( m_eType!=rhs.m_eType)
+		{
+			internal_myinfo::RefCountInc ( rhs.m_eType );
+			internal_myinfo::RefCountDec ( m_eType );
+			m_eType = rhs.m_eType;
+		}
 	}
 
 	~ScopedInfo_T<TASKINFO> ()
@@ -157,6 +163,8 @@ struct MiniTaskInfo_t : public TaskInfo_t
 {
 	DECLARE_RENDER( MiniTaskInfo_t );
 
+	void RenderWithoutChain ( PublicThreadDesc_t& dDst );
+
 	int64_t m_tmStart = sphMicroTimer ();
 	const char *	m_sCommand = nullptr; // is always mt-safe since always set static const
 	hazard::ScopedPtr_t<const CSphString *> m_pHazardDescription;
@@ -168,103 +176,6 @@ using ScopedMiniInfo_t = ScopedInfo_T<MiniTaskInfo_t>;
 // create and publish info about system task (what before did ThreadSystem_t)
 // command = 'SYSTEM', description = 'SYSTEM sDescription'
 ScopedMiniInfo_t PublishSystemInfo ( const char * sDescription );
-
-enum Profile_e {
-	NONE,
-	PLAIN,
-	DOT,
-	DOTEXPR,
-	DOTEXPRURL,
-};
-
-volatile ESphCollation& GlobalCollation ();
-
-// client connection (session). Includes both state and settings.
-struct ClientTaskInfo_t : public MiniTaskInfo_t
-{
-	DECLARE_RENDER( ClientTaskInfo_t );
-
-private:
-	TaskState_e m_eTaskState = TaskState_e::UNKNOWN;
-	Proto_e m_eProto = Proto_e::UNKNOWN;
-	int m_iConnID = -1;
-	CSphString m_sClientName; // set once before info is published and never changes. So, assume always mt-safe
-	bool m_bSsl = false;
-	bool m_bVip = false;
-	bool m_bOptimizeById = true;
-
-	// high level members - used as connection-wide globals
-	int m_iThrottlingPeriodMS = -1;
-	int m_iDistThreads = 0;
-	int m_iDesiredStack = -1;
-	int m_iTimeoutS = -1;
-	ESphCollation m_eCollation { GlobalCollation () };
-	Profile_e		m_eProfile { Profile_e::NONE };
-
-public:
-
-	void SetTaskState ( TaskState_e eState );
-	TaskState_e GetTaskState() const { return m_eTaskState; }
-
-	// generic setters/getters. They're defined just to help keep multi-threading clean.
-	void SetProto ( Proto_e eProto ) { m_eProto = eProto; }
-	Proto_e GetProto() const { return m_eProto; }
-
-	void SetConnID ( int iConnID ) { m_iConnID = iConnID; }
-	int GetConnID() const { return m_iConnID; }
-
-	void SetSsl ( bool bSsl ) { m_bSsl = bSsl; }
-	bool GetSsl() const { return m_bSsl; }
-
-	void SetVip ( bool bVip ) { m_bVip = bVip; }
-	bool GetVip() const { return m_bVip; }
-
-	void SetOptimizeById ( bool bOptimizeById ) { m_bOptimizeById = bOptimizeById; }
-	bool GetOptimizeById() const { return m_bOptimizeById; }
-
-	void SetThrottlingPeriodMS ( int iThrottlingPeriodMS ) { m_iThrottlingPeriodMS = iThrottlingPeriodMS; }
-	int GetThrottlingPeriodMS() const { return m_iThrottlingPeriodMS; }
-
-	void SetDistThreads (int iDistThreads) { m_iDistThreads = iDistThreads; }
-	int GetDistThreads() const { return m_iDistThreads; }
-
-	void SetDesiredStack (int iDesiredStack) { m_iDesiredStack = iDesiredStack; }
-	int GetDesiredStack() const { return m_iDesiredStack; }
-
-	void SetTimeoutS ( int iTimeoutS ) { m_iTimeoutS = iTimeoutS; }
-	int GetTimeoutS() const { return m_iTimeoutS;}
-
-	void SetCollation ( ESphCollation eCollation ) { m_eCollation = eCollation; }
-	ESphCollation GetCollation() const { return m_eCollation; }
-
-	void SetClientName ( const char* szName ) { m_sClientName = szName; }
-	const char* szClientName() const { return m_sClientName.cstr(); }
-
-	void SetProfile ( Profile_e eProfile ) { m_eProfile = eProfile; }
-	Profile_e GetProfile() const { return m_eProfile; }
-	bool IsProfile () const { return m_eProfile!=Profile_e::NONE; }
-	bool IsDot () const { return m_eProfile==Profile_e::DOT; }
-};
-
-using ScopedClientInfo_t = ScopedInfo_T<ClientTaskInfo_t>;
-
-namespace session {
-
-	ClientTaskInfo_t & Info (bool bStrict=false);
-
-	// generic getters. If more then one assumed, consider to call Info() once and use ref instead of these 'globals'
-	inline int DistThreads () { return session::Info ().GetDistThreads (); }
-	inline int ThrottlingPeriodMS() { return session::Info ().GetThrottlingPeriodMS (); }
-	inline int DesiredStack () { return session::Info ().GetDesiredStack (); }
-	inline int TimeoutS () { return session::Info ().GetTimeoutS (); }
-	inline int ConnID () { return session::Info ().GetConnID (); }
-	inline bool Vip () { return session::Info ().GetVip (); }
-	inline bool Ssl () { return session::Info ().GetSsl(); }
-	inline Proto_e Proto () { return session::Info ().GetProto (); }
-	inline const char * szClientName () { return session::Info ().szClientName(); }
-	inline ESphCollation Collation () { return session::Info ().GetCollation (); }
-	inline Profile_e Profile () { return session::Info ().GetProfile (); }
-}
 
 namespace myinfo {
 
@@ -280,14 +191,6 @@ namespace myinfo {
 
 	// num of all tasks
 	int CountAll();
-
-	// num of client tasks
-	inline int CountClients ()
-	{
-		return Count ( ClientTaskInfo_t::m_eTask );
-	}
-
-	// access to thread-local fields (look first appropriate node of info chain)
 
 	// first ptr to node with type eType
 	TaskInfo_t * GetHazardTypedNode ( BYTE eType );
@@ -318,9 +221,18 @@ namespace myinfo {
 	// returns non-guarded ref to MiniTaskInfo_t::m_pHazardDescription (to be used in same scope as set functions)
 	Str_t UnsafeDescription ();
 
+	// expect that we own or live shorter than client info. So, called it 'hazard' because of it.
+	template<typename FILTER>
+	TaskInfo_t* HazardGetNode ( FILTER fnFilter )
+	{
+		auto pSrc = (TaskInfo_t*)Threads::MyThd().m_pTaskInfo.load ( std::memory_order_relaxed );
+		for ( ; pSrc; pSrc = (TaskInfo_t*)pSrc->m_pPrev.load ( std::memory_order_relaxed ) )
+			if ( fnFilter ( pSrc ) )
+				break;
+		return pSrc;
+	}
+
+	MiniTaskInfo_t* HazardGetMini();
+
 } // namespace myinfo
 
-volatile int &getDistThreads ();
-
-// provides daemon-wide global dist-threads, or task-local, if any exists, or 0 if none
-int GetEffectiveDistThreads ();

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -336,6 +336,41 @@ bool CSphTokenizerSettings::Load ( const FilenameBuilder_i * pFilenameBuilder, C
 	return true;
 }
 
+bool CSphTokenizerSettings::Load ( const FilenameBuilder_i* pFilenameBuilder, const bson::Bson_c& tNode, CSphEmbeddedFiles& tEmbeddedFiles, CSphString& sWarning )
+{
+	using namespace bson;
+	m_iType = (int)Int ( tNode.ChildByName ( "type" ) );
+	if ( m_iType != TOKENIZER_UTF8 && m_iType != TOKENIZER_NGRAM )
+	{
+		sWarning = "can't load an old index with SBCS tokenizer";
+		return false;
+	}
+
+	m_sCaseFolding = String ( tNode.ChildByName ( "case_folding" ) );
+	m_iMinWordLen = (int)Int ( tNode.ChildByName ( "min_word_len" ), 1 );
+	auto tSynonymsNode = tNode.ChildByName ( "synonyms" );
+	if ( !IsNullNode ( tSynonymsNode ) )
+		Bson_c ( tSynonymsNode ).ForEach ( [&tEmbeddedFiles] ( const NodeHandle_t& tNode ) {
+			tEmbeddedFiles.m_dSynonyms.Add ( String (tNode));
+		} );
+
+	m_sSynonymsFile = String ( tNode.ChildByName ( "synonyms_file" ) );
+	if ( !m_sSynonymsFile.IsEmpty() )
+	{
+		CSphString sFilePath = FormatPath ( m_sSynonymsFile, pFilenameBuilder );
+		tEmbeddedFiles.m_tSynonymFile.Read ( tNode.ChildByName ( "syn_file_info" ), sFilePath.cstr(), false, tEmbeddedFiles.m_bEmbeddedSynonyms ? nullptr : &sWarning );
+	}
+
+	m_sBoundary = String ( tNode.ChildByName ( "boundary" ) );
+	m_sIgnoreChars = String ( tNode.ChildByName ( "ignore_chars" ) );
+	m_iNgramLen = (int)Int ( tNode.ChildByName ( "ngram_len" ) );
+	m_sNgramChars = String ( tNode.ChildByName ( "ngram_chars" ) );
+	m_sBlendChars = String ( tNode.ChildByName ( "blend_chars" ) );
+	m_sBlendMode = String ( tNode.ChildByName ( "blend_mode" ) );
+
+	return true;
+}
+
 
 void CSphTokenizerSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const
 {
@@ -455,6 +490,52 @@ void CSphDictSettings::Load ( CSphReader & tReader, CSphEmbeddedFiles & tEmbedde
 
 	m_bStopwordsUnstemmed = ( tReader.GetByte()!=0 );
 	m_sMorphFingerprint = tReader.GetString();
+}
+
+
+void CSphDictSettings::Load ( const bson::Bson_c& tNode, CSphEmbeddedFiles& tEmbeddedFiles, CSphString& sWarning )
+{
+	using namespace bson;
+	m_sMorphology = String ( tNode.ChildByName ( "morphology" ) );
+	m_sMorphFields = String ( tNode.ChildByName ( "morph_fields" ) );
+	m_sStopwords = String ( tNode.ChildByName ( "stopwords" ) );
+
+
+	auto tStopwordsEmbedded = tNode.ChildByName ( "stopwords_list" );
+	tEmbeddedFiles.m_bEmbeddedStopwords = !IsNullNode ( tStopwordsEmbedded );
+	if ( tEmbeddedFiles.m_bEmbeddedStopwords )
+		Bson_c ( tStopwordsEmbedded ).ForEach ( [&tEmbeddedFiles] ( const NodeHandle_t& tNode ) {
+			tEmbeddedFiles.m_dStopwords.Add ( cast2wordid ( Int ( tNode ) ) );
+		} );
+
+	auto tWordformsEmbedded = tNode.ChildByName ( "word_forms" );
+	tEmbeddedFiles.m_bEmbeddedWordforms = !IsNullNode ( tWordformsEmbedded ); // fixme!
+	if ( tEmbeddedFiles.m_bEmbeddedWordforms )
+		Bson_c ( tWordformsEmbedded ).ForEach ( [&tEmbeddedFiles] ( const NodeHandle_t& tNode ) {
+			tEmbeddedFiles.m_dWordforms.Add ( String ( tNode ) );
+		} );
+
+
+	auto tStopwordsNode = tNode.ChildByName ( "stopwords_file_infos" );
+	if ( !IsNullNode ( tStopwordsNode ) )
+		Bson_c ( tStopwordsNode ).ForEach ( [&tEmbeddedFiles,&sWarning] ( const NodeHandle_t& tNode ) {
+			auto& tStopwordsFile = tEmbeddedFiles.m_dStopwordFiles.Add();
+			tStopwordsFile.Read ( Bson_c ( tNode ).ChildByName ( "info" ), String ( Bson_c ( tNode ).ChildByName ( "name" ) ).cstr(), true, tEmbeddedFiles.m_bEmbeddedStopwords ? nullptr : &sWarning );
+		} );
+
+	auto tWordformsFiles = tNode.ChildByName ( "wordforms_file_infos" );
+	if ( !IsNullNode ( tWordformsFiles ) )
+		Bson_c ( tWordformsFiles ).ForEach ( [&tEmbeddedFiles, &sWarning,this] ( const NodeHandle_t& tNode ) {
+			auto& dWordformsFileName = m_dWordforms.Add();
+			auto& tWordformsFile = tEmbeddedFiles.m_dWordformFiles.Add();
+			dWordformsFileName = String ( Bson_c ( tNode ).ChildByName ( "name" ) );
+			tWordformsFile.Read ( Bson_c ( tNode ).ChildByName ( "info" ), dWordformsFileName.cstr(), false, tEmbeddedFiles.m_bEmbeddedWordforms ? nullptr : &sWarning );
+		} );
+
+	m_iMinStemmingLen = (int)Int ( tNode.ChildByName ( "min_stemming_len" ), 1 );
+	m_bWordDict = Bool ( tNode.ChildByName ( "word_dict" ), true );
+	m_bStopwordsUnstemmed = Bool ( tNode.ChildByName ( "stopwords_unstemmed" ), false );
+	m_sMorphFingerprint = String ( tNode.ChildByName ( "morph_data_fingerprint" ) );
 }
 
 
@@ -624,7 +705,7 @@ void CSphIndexSettings::ParseStoredFields ( const CSphConfigSection & hIndex )
 
 bool CSphIndexSettings::ParseColumnarSettings ( const CSphConfigSection & hIndex, CSphString & sError )
 {
-	if ( ( hIndex.Exists("columnar_attrs") || hIndex.Exists("rowwise_attrs") || hIndex.Exists("engine") ) && !IsColumnarLibLoaded() )
+	if ( ( hIndex.Exists("columnar_attrs") || hIndex.Exists("columnar_no_fast_fetch") || hIndex.Exists("rowwise_attrs") || hIndex.Exists("engine") ) && !IsColumnarLibLoaded() )
 	{
 		sError = "columnar library not loaded";
 		return false;
@@ -642,6 +723,13 @@ bool CSphIndexSettings::ParseColumnarSettings ( const CSphConfigSection & hIndex
 		sAttrs.ToLower();
 		sphSplit ( m_dColumnarAttrs, sAttrs.cstr() );
 		m_dColumnarAttrs.Uniq();
+	}
+
+	{
+		CSphString sAttrs = hIndex.GetStr ( "columnar_no_fast_fetch" );
+		sAttrs.ToLower();
+		sphSplit ( m_dColumnarNonStoredAttrs, sAttrs.cstr() );
+		m_dColumnarNonStoredAttrs.Uniq();
 	}
 
 	{
@@ -1080,15 +1168,26 @@ void IndexSettingsContainer_c::SetupColumnarAttrs ( const CreateTableSettings_t 
 {
 	StringBuilder_c sColumnarAttrs(",");
 	StringBuilder_c sRowwiseAttrs(",");
-	if ( m_eEngine==AttrEngine_e::COLUMNAR )
-		sColumnarAttrs << sphGetDocidName();
+	StringBuilder_c sColumnarNonStored(",");
+	StringBuilder_c sColumnarStringsNoHash(",");
 
 	for ( const auto & i : tCreateTable.m_dAttrs )
 	{
-		if ( i.m_eEngine==AttrEngine_e::COLUMNAR )
-			sColumnarAttrs << i.m_sName;
-		else if ( i.m_eEngine==AttrEngine_e::ROWWISE )
-			sRowwiseAttrs << i.m_sName;
+		const CSphColumnInfo & tAttr = i.m_tAttr;
+
+		if ( tAttr.m_eEngine==AttrEngine_e::COLUMNAR )
+			sColumnarAttrs << tAttr.m_sName;
+		else if ( tAttr.m_eEngine==AttrEngine_e::ROWWISE )
+			sRowwiseAttrs << tAttr.m_sName;
+
+		if ( CombineEngines ( m_eEngine, tAttr.m_eEngine )==AttrEngine_e::COLUMNAR )
+		{
+			if ( !i.m_bFastFetch )
+				sColumnarNonStored << tAttr.m_sName;
+
+			if ( !i.m_bStringHash )
+				sColumnarStringsNoHash << tAttr.m_sName;
+		}
 	}
 
 	if ( sColumnarAttrs.GetLength() )
@@ -1096,6 +1195,12 @@ void IndexSettingsContainer_c::SetupColumnarAttrs ( const CreateTableSettings_t 
 
 	if ( sRowwiseAttrs.GetLength() )
 		Add ( "rowwise_attrs", sRowwiseAttrs.cstr() );
+
+	if ( sColumnarNonStored.GetLength() )
+		Add ( "columnar_no_fast_fetch", sColumnarNonStored.cstr() );
+
+	if ( sColumnarStringsNoHash.GetLength() )
+		Add ( "columnar_strings_no_hash", sColumnarStringsNoHash.cstr() );
 }
 
 
@@ -1125,17 +1230,21 @@ bool IndexSettingsContainer_c::Populate ( const CreateTableSettings_t & tCreateT
 
 	for ( const auto & i : tCreateTable.m_dAttrs )
 		for ( const auto & j : g_dRtTypedAttrs )
-			if ( i.m_eAttrType==j.m_eType )
+		{
+			const CSphColumnInfo & tAttr = i.m_tAttr;
+
+			if ( tAttr.m_eAttrType==j.m_eType )
 			{
 				CSphString sValue;
-				if ( i.m_eAttrType==SPH_ATTR_INTEGER && i.m_tLocator.m_iBitCount!=-1 )
-					sValue.SetSprintf ( "%s:%d", i.m_sName.cstr(), i.m_tLocator.m_iBitCount );
+				if ( tAttr.m_eAttrType==SPH_ATTR_INTEGER && tAttr.m_tLocator.m_iBitCount!=-1 )
+					sValue.SetSprintf ( "%s:%d", tAttr.m_sName.cstr(), tAttr.m_tLocator.m_iBitCount );
 				else
-					sValue = i.m_sName;
+					sValue = tAttr.m_sName;
 
 				Add ( j.m_szName, sValue );
 				break;
 			}
+		}
 
 	for ( const auto & i : tCreateTable.m_dOpts )
 		if ( !AddOption ( i.m_sName, i.m_sValue ) )
@@ -1263,6 +1372,14 @@ static void WriteFileInfo ( CSphWriter & tWriter, const CSphSavedFile & tInfo )
 	tWriter.PutDword ( tInfo.m_uCRC32 );
 }
 
+void operator<< ( JsonEscapedBuilder& tOut, const CSphSavedFile & tInfo )
+{
+	auto _ = tOut.Object ();
+	tOut.NamedValNonDefault ( "size", tInfo.m_uSize );
+	tOut.NamedValNonDefault ( "ctime", tInfo.m_uCTime );
+	tOut.NamedValNonDefault ( "mtime", tInfo.m_uMTime );
+	tOut.NamedValNonDefault ( "crc32", tInfo.m_uCRC32 );
+}
 
 /// gets called from and MUST be in sync with RtIndex_c::SaveDiskHeader()!
 /// note that SaveDiskHeader() occasionaly uses some PREVIOUS format version!
@@ -1288,6 +1405,38 @@ void SaveTokenizerSettings ( CSphWriter & tWriter, const ISphTokenizer * pTokeni
 	tWriter.PutString ( tSettings.m_sNgramChars.cstr() );
 	tWriter.PutString ( tSettings.m_sBlendChars.cstr() );
 	tWriter.PutString ( tSettings.m_sBlendMode.cstr() );
+}
+
+void SaveTokenizerSettings ( JsonEscapedBuilder& tOut, const ISphTokenizer* pTokenizer, int iEmbeddedLimit )
+{
+	auto _ = tOut.ObjectW();
+	const CSphTokenizerSettings& tSettings = pTokenizer->GetSettings();
+	tOut.NamedVal ( "type", tSettings.m_iType );
+	tOut.NamedStringNonEmpty( "case_folding", tSettings.m_sCaseFolding );
+	tOut.NamedValNonDefault ( "min_word_len", tSettings.m_iMinWordLen, 1);
+
+	bool bEmbedSynonyms = ( iEmbeddedLimit>0 && pTokenizer->GetSynFileInfo ().m_uSize<=(SphOffset_t)iEmbeddedLimit );
+	if ( bEmbedSynonyms )
+		pTokenizer->WriteSynonyms ( tOut );
+
+	if ( !tSettings.m_sSynonymsFile.IsEmpty() )
+	{
+		tOut.NamedString ( "synonyms_file", tSettings.m_sSynonymsFile );
+		tOut.NamedVal ( "syn_file_info", pTokenizer->GetSynFileInfo() );
+	}
+	tOut.NamedStringNonEmpty ( "boundary", tSettings.m_sBoundary );
+	tOut.NamedStringNonEmpty ( "ignore_chars", tSettings.m_sIgnoreChars );
+	tOut.NamedValNonDefault ( "ngram_len", tSettings.m_iNgramLen );
+	tOut.NamedStringNonEmpty ( "ngram_chars", tSettings.m_sNgramChars );
+	tOut.NamedStringNonEmpty ( "blend_chars", tSettings.m_sBlendChars );
+	tOut.NamedStringNonEmpty ( "blend_mode", tSettings.m_sBlendMode );
+}
+
+void operator<< ( JsonEscapedBuilder& tOut, const CSphFieldFilterSettings& tFieldFilterSettings )
+{
+	auto _ = tOut.Array();
+	for ( const auto& i : tFieldFilterSettings.m_dRegexps )
+		tOut.FixupSpacedAndAppendEscaped(i.cstr());
 }
 
 
@@ -1341,6 +1490,65 @@ void SaveDictionarySettings ( CSphWriter & tWriter, const CSphDict * pDict, bool
 	tWriter.PutByte ( tSettings.m_bWordDict || bForceWordDict );
 	tWriter.PutByte ( tSettings.m_bStopwordsUnstemmed );
 	tWriter.PutString ( pDict->GetMorphDataFingerprint() );
+}
+
+void SaveDictionarySettings ( JsonEscapedBuilder& tOut, const CSphDict* pDict, bool bForceWordDict, int iEmbeddedLimit )
+{
+	assert ( pDict );
+	auto _ = tOut.ObjectW();
+	const CSphDictSettings& tSettings = pDict->GetSettings();
+
+	tOut.NamedStringNonEmpty ( "morphology", tSettings.m_sMorphology );
+	tOut.NamedStringNonEmpty ( "morph_fields", tSettings.m_sMorphFields );
+	tOut.NamedStringNonEmpty ( "stopwords", tSettings.m_sStopwords );
+
+	SphOffset_t uTotalSize = 0;
+	const auto& dStopwordsInfos = pDict->GetStopwordsFileInfos();
+	if ( !dStopwordsInfos.IsEmpty() )
+	{
+		tOut.Named ( "stopwords_file_infos" );
+		auto _ = tOut.ArrayW();
+		for ( const auto& tInfo: dStopwordsInfos )
+			if ( !tInfo.m_sFilename.IsEmpty() )
+			{
+				auto _ = tOut.Object();
+				tOut.NamedString ( "name", tInfo.m_sFilename );
+				tOut.NamedVal ( "info", tInfo );
+				uTotalSize += tInfo.m_uSize;
+			}
+	}
+
+	// embed only in case it allowed
+	if ( iEmbeddedLimit > 0 && uTotalSize <= (SphOffset_t)iEmbeddedLimit )
+		pDict->WriteStopwords ( tOut );
+
+	uTotalSize = 0;
+	const auto& dWordformsInfos = pDict->GetWordformsFileInfos();
+	if ( !dWordformsInfos.IsEmpty() )
+	{
+		tOut.Named ( "wordforms_file_infos" );
+		auto _ = tOut.ArrayW();
+		ARRAY_FOREACH ( i, dWordformsInfos )
+		{
+			const auto& tInfo = dWordformsInfos[i];
+			if ( !tInfo.m_sFilename.IsEmpty() )
+			{
+				auto _ = tOut.Object();
+				tOut.NamedString ( "name", tSettings.m_dWordforms[i] ); // trick! tInfo.m_sFilename contains full path, but we need tSettings.m_dWordforms is stripped one
+				tOut.NamedVal ( "info", tInfo );
+				uTotalSize += tInfo.m_uSize;
+			}
+		}
+	}
+
+	// embed only in case it allowed
+	if ( iEmbeddedLimit > 0 && uTotalSize <= (SphOffset_t)iEmbeddedLimit )
+		pDict->WriteWordforms ( tOut );
+
+	tOut.NamedValNonDefault ( "min_stemming_len", tSettings.m_iMinStemmingLen, 1 );
+	tOut.NamedValNonDefault ( "word_dict", tSettings.m_bWordDict || bForceWordDict, true );
+	tOut.NamedValNonDefault ( "stopwords_unstemmed", tSettings.m_bStopwordsUnstemmed, false );
+	tOut.NamedStringNonEmpty ( "morph_data_fingerprint", pDict->GetMorphDataFingerprint() );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1589,6 +1797,23 @@ static void AddFieldSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tF
 }
 
 
+static void AddStorageSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr, const CSphIndex & tIndex, bool bField, int iNumColumnar )
+{
+	if ( !bField && tAttr.m_eAttrType==SPH_ATTR_STRING )
+		sRes << " attribute";
+
+	bool bColumnar = CombineEngines ( tIndex.GetSettings().m_eEngine, tAttr.m_eEngine )==AttrEngine_e::COLUMNAR;
+	if ( bColumnar )
+	{
+		if ( tAttr.m_eAttrType!=SPH_ATTR_JSON && !(tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED) && iNumColumnar>1 )
+			sRes << " fast_fetch='0'";
+
+		if ( tAttr.m_eAttrType==SPH_ATTR_STRING && !(tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_COLUMNAR_HASHES) )
+			sRes << " hash='0'";
+	}
+}
+
+
 static void AddEngineSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr )
 {
 	if ( tAttr.m_eEngine==AttrEngine_e::COLUMNAR )
@@ -1602,6 +1827,11 @@ CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex
 {
 	assert ( pIndex );
 
+	int iNumColumnar = 0;
+	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
+		if ( tSchema.GetAttr(i).IsColumnar() )
+			iNumColumnar++;
+
 	StringBuilder_c sRes;
 	sRes << "CREATE TABLE " << sName << " (\n";
 
@@ -1611,9 +1841,12 @@ CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
-		if ( sphIsInternalAttr ( tAttr.m_sName ) || tAttr.m_sName==sphGetDocidName() )
+		if ( sphIsInternalAttr ( tAttr.m_sName ) )
 			continue;
 
+		if ( tAttr.m_sName==sphGetDocidName() && ( tAttr.m_eEngine==AttrEngine_e::DEFAULT && ( !tAttr.IsColumnar() || (tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED ) ) ) )
+			continue;
+	
 		if ( bHasAttrs )
 			sRes << ",\n";
 
@@ -1625,8 +1858,14 @@ CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex
 			dExclude.Add(pField);
 		}
 		else
-			sRes << tAttr.m_sName << " " << GetAttrTypeName(tAttr);
+		{
+			if ( tAttr.m_sName==sphGetDocidName() )
+				sRes << tAttr.m_sName;
+			else
+				sRes << tAttr.m_sName << " " << GetAttrTypeName(tAttr);
+		}
 
+		AddStorageSettings ( sRes, tAttr, *pIndex, !!pField, iNumColumnar );
 		AddEngineSettings ( sRes, tAttr );
 
 		bHasAttrs = true;
@@ -2165,8 +2404,8 @@ void SaveMutableSettings ( const MutableIndexSettings_c & tSettings, const CSphS
 
 	CSphString sError;
 	CSphString sMutableNew, sMutable;
-	sMutableNew.SetSprintf ( "%s%s.new", sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ).cstr() );
-	sMutable.SetSprintf ( "%s%s", sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ).cstr() );
+	sMutableNew.SetSprintf ( "%s%s.new", sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ) );
+	sMutable.SetSprintf ( "%s%s", sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ) );
 
 	CSphWriter tWriter;
 	if ( !tWriter.OpenFile ( sMutableNew, sError ) )
@@ -2185,4 +2424,14 @@ void SaveMutableSettings ( const MutableIndexSettings_c & tSettings, const CSphS
 	if ( sph::rename ( sMutableNew.cstr(), sMutable.cstr() ) )
 		sphDie ( "failed to rename mutable settings(src=%s, dst=%s, errno=%d, error=%s)",
 			sMutableNew.cstr(), sMutable.cstr(), errno, strerrorm(errno) ); // !COMMIT handle this gracefully
+}
+
+
+AttrEngine_e CombineEngines ( AttrEngine_e eIndexEngine, AttrEngine_e eAttrEngine )
+{
+	AttrEngine_e eEngine = eIndexEngine;
+	if ( eAttrEngine!=AttrEngine_e::DEFAULT )
+		eEngine = eAttrEngine;
+
+	return eEngine;
 }

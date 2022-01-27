@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2021-2022, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -118,94 +118,24 @@ PublicThreadDesc_t GatherPublicTaskInfo ( const Threads::LowThreadDesc_t * pSrc,
 	return dDst;
 }
 
-
-// generic is empty
-DEFINE_RENDER ( TaskInfo_t ) {};
-
-DEFINE_RENDER ( MiniTaskInfo_t )
+TaskInfo_t* myinfo::HazardTaskInfo()
 {
-	auto & tInfo = *(MiniTaskInfo_t *) pSrc;
-	dDst.m_tmStart.emplace_once ( tInfo.m_tmStart );
-	dDst.m_sCommand = tInfo.m_sCommand;
-	hazard::Guard_c tGuard;
-	dDst.m_sChain << "Mini ";
-	auto pDescription = tGuard.Protect ( tInfo.m_pHazardDescription );
-	if ( pDescription )
-		dDst.m_sDescription << *pDescription;
+	return (TaskInfo_t*)Threads::MyThd().m_pTaskInfo.load ( std::memory_order_acquire );
 }
 
-DEFINE_RENDER ( ClientTaskInfo_t )
+TaskInfo_t* myinfo::GetHazardTypedNode ( BYTE eType )
 {
-	auto & tInfo = *(ClientTaskInfo_t *) pSrc;
-
-	// MiniTaskInfo_t::Render, but without chain
-	dDst.m_tmStart.emplace_once ( tInfo.m_tmStart );
-	dDst.m_sCommand = tInfo.m_sCommand;
-	hazard::Guard_c tGuard;
-	auto pDescription = tGuard.Protect ( tInfo.m_pHazardDescription );
-	if ( pDescription )
-	{
-		if ( dDst.m_iDescriptionLimit<0 ) // no limit
-			dDst.m_sDescription << *pDescription;
-		else
-			dDst.m_sDescription.AppendChunk( { pDescription->scstr(), Min ( tInfo.m_iDescriptionLen, dDst.m_iDescriptionLimit ) });
-	}
-
-	// Client render
-	dDst.m_sClientName << tInfo.m_sClientName;
-	if ( tInfo.m_bVip )
-		dDst.m_sClientName << "vip";
-	dDst.m_iConnID = tInfo.m_iConnID;
-	dDst.m_eTaskState = tInfo.m_eTaskState;
-	dDst.m_eProto = tInfo.m_eProto;
-	dDst.m_sProto << ProtoName ( tInfo.m_eProto );
-	dDst.m_sChain << "Conn ";
-	if ( tInfo.m_bSsl )
-		dDst.m_sProto << "ssl";
+	return HazardGetNode ( [eType] ( TaskInfo_t* pNode ) { return pNode->m_eType == eType; } );
 }
 
-// expect that we own or live shorter than client info. So, called it 'hazard' because of it.
-template <typename FILTER>
-TaskInfo_t * HazardGetNode ( FILTER fnFilter )
-{
-	auto pSrc = (TaskInfo_t *) Threads::MyThd ().m_pTaskInfo.load ( std::memory_order_relaxed );
-	for ( ; pSrc; pSrc = (TaskInfo_t *) pSrc->m_pPrev.load ( std::memory_order_relaxed ) )
-		if ( fnFilter ( pSrc ) )
-			break;
-	return pSrc;
-}
-
-MiniTaskInfo_t * HazardGetMini()
-{
-	return (MiniTaskInfo_t *) HazardGetNode ( [] ( TaskInfo_t * pNode ) {
-		return pNode->m_eType==MiniTaskInfo_t::m_eTask || pNode->m_eType==ClientTaskInfo_t::m_eTask;
-	} );
-}
-
-TaskInfo_t * myinfo::HazardTaskInfo ()
-{
-	return (TaskInfo_t *) Threads::MyThd ().m_pTaskInfo.load ( std::memory_order_acquire );
-}
-
-TaskInfo_t * myinfo::GetHazardTypedNode ( BYTE eType )
-{
-	return HazardGetNode (
-			[eType] ( TaskInfo_t * pNode ) { return pNode->m_eType==eType; } );
-}
-
-ClientTaskInfo_t * HazardGetClient ()
-{
-	return (ClientTaskInfo_t *) myinfo::GetHazardTypedNode ( ClientTaskInfo_t::m_eTask );
-}
 
 // bind current taskinfo content to handler
 Threads::Handler myinfo::StickParent ( Threads::Handler fnHandler )
 {
 	auto pParent = myinfo::HazardTaskInfo();
-	return [pParent, fnHandler=std::move(fnHandler)]
-	{
-		Threads::MyThd ().m_pTaskInfo.store ( pParent, std::memory_order_release );
-		fnHandler ();
+	return [pParent, fnHandler = std::move ( fnHandler )] {
+		Threads::MyThd().m_pTaskInfo.store ( pParent, std::memory_order_release );
+		fnHandler();
 	};
 }
 
@@ -213,26 +143,67 @@ Threads::Handler myinfo::StickParent ( Threads::Handler fnHandler )
 Threads::Handler myinfo::OwnMini ( Threads::Handler fnHandler )
 {
 	auto pParent = myinfo::HazardTaskInfo();
-	return [pParent, fnHandler=std::move(fnHandler)]
-	{
-		Threads::MyThd ().m_pTaskInfo.store ( pParent, std::memory_order_release );
+	return [pParent, fnHandler = std::move ( fnHandler )] {
+		Threads::MyThd().m_pTaskInfo.store ( pParent, std::memory_order_release );
 		ScopedMiniInfo_t _ ( new MiniTaskInfo_t );
-		fnHandler ();
+		fnHandler();
 	};
 }
 
-ClientTaskInfo_t & session::Info ( bool bStrict )
-{
-	auto * pInfo = HazardGetClient();
-	if ( !pInfo )
-	{
-		static ClientTaskInfo_t tStub;
-		pInfo = &tStub;
-		if ( bStrict )
-			sphWarning ( "internal error: session::Info () invoked with empty tls!" );
-	}
+// generic is empty
+DEFINE_RENDER ( TaskInfo_t ) {};
 
-	return *pInfo;
+void MiniTaskInfo_t::RenderWithoutChain ( PublicThreadDesc_t& dDst )
+{
+	dDst.m_tmStart.emplace_once ( m_tmStart );
+	dDst.m_sCommand = m_sCommand;
+	hazard::Guard_c tGuard;
+	auto pDescription = tGuard.Protect ( m_pHazardDescription );
+	if ( pDescription )
+	{
+		if ( dDst.m_iDescriptionLimit < 0 ) // no limit
+			dDst.m_sDescription << *pDescription;
+		else
+			dDst.m_sDescription.AppendChunk ( { pDescription->scstr(), Min ( m_iDescriptionLen, dDst.m_iDescriptionLimit ) } );
+	}
+}
+
+DEFINE_RENDER ( MiniTaskInfo_t )
+{
+	dDst.m_sChain << "Mini ";
+	auto& tInfo = *(MiniTaskInfo_t*)pSrc;
+	tInfo.RenderWithoutChain ( dDst );
+}
+
+void SetMiniDescription ( MiniTaskInfo_t * pNode, CSphString * pString, int iLen )
+{
+	assert ( pNode );
+	assert ( pString );
+
+	if ( pNode->m_iDescriptionLen>myinfo::HazardDescriptionSizeLimit )
+		pNode->m_pHazardDescription.RetireNow ( pString );
+	else
+		pNode->m_pHazardDescription = pString;
+
+	pNode->m_iDescriptionLen = iLen;
+	pNode->m_tmStart = sphMicroTimer();
+}
+
+void SetMiniDescription ( MiniTaskInfo_t * pNode, const char * sTemplate, ... )
+{
+	assert ( pNode );
+
+	StringBuilder_c sBuf;
+	va_list ap;
+	va_start ( ap, sTemplate );
+	sBuf.vSprintf ( sTemplate, ap );
+	va_end ( ap );
+
+	auto pString = new CSphString;
+	auto iLen = sBuf.GetLength();
+	sBuf.MoveTo ( *pString );
+
+	SetMiniDescription ( pNode, pString, iLen );
 }
 
 
@@ -243,13 +214,6 @@ void myinfo::SetCommand ( const char * sCommand )
 		pNode->m_sCommand = sCommand;
 	else
 		sphWarning ( "internal error: myinfo::SetCommand () invoked with empty tls!" );
-}
-
-
-void ClientTaskInfo_t::SetTaskState ( TaskState_e eState )
-{
-		m_eTaskState = eState;
-		m_tmStart = sphMicroTimer();
 }
 
 Str_t myinfo::UnsafeDescription ()
@@ -269,36 +233,6 @@ Str_t myinfo::UnsafeDescription ()
 	return dEmptyStr;
 }
 
-void SetMiniDescription ( MiniTaskInfo_t * pNode, CSphString * pString, int iLen )
-{
-	assert ( pNode );
-	assert ( pString );
-
-	if ( pNode->m_iDescriptionLen>myinfo::HazardDescriptionSizeLimit )
-		pNode->m_pHazardDescription.RetireNow ( pString );
-	else
-		pNode->m_pHazardDescription = pString;
-
-	pNode->m_iDescriptionLen = iLen;
-	pNode->m_tmStart = sphMicroTimer();
-}
-
-void SetMiniThreadInfo ( MiniTaskInfo_t * pNode, const char * sTemplate, ... )
-{
-	assert ( pNode );
-
-	StringBuilder_c sBuf;
-	va_list ap;
-	va_start ( ap, sTemplate );
-	sBuf.vSprintf ( sTemplate, ap );
-	va_end ( ap );
-
-	auto pString = new CSphString;
-	auto iLen = sBuf.GetLength();
-	sBuf.MoveTo ( *pString );
-
-	SetMiniDescription ( pNode, pString, iLen );
-}
 
 void myinfo::SetDescription ( CSphString sString, int iLen )
 {
@@ -335,33 +269,16 @@ void myinfo::SetThreadInfo ( const char * sTemplate, ... )
 	SetMiniDescription ( pNode, pString, iLen );
 }
 
+
 MiniTaskInfo_t * MakeSystemInfo ( const char * sDescription )
 {
 	auto pInfo = new MiniTaskInfo_t;
 	pInfo->m_sCommand = "SYSTEM";
-	SetMiniThreadInfo( pInfo, "SYSTEM %s", sDescription );
+	SetMiniDescription( pInfo, "SYSTEM %s", sDescription );
 	return pInfo;
 }
 
 ScopedMiniInfo_t PublishSystemInfo ( const char * sDescription )
 {
 	return ScopedMiniInfo_t ( MakeSystemInfo ( sDescription ) );
-}
-
-volatile int &getDistThreads ()
-{
-	static int iDistThreads = 0;
-	return iDistThreads;
-}
-
-int GetEffectiveDistThreads ()
-{
-	auto iSessionVal = session::DistThreads();
-	return iSessionVal ? iSessionVal : getDistThreads ();
-}
-
-volatile ESphCollation &GlobalCollation ()
-{
-	static ESphCollation eCollation = SPH_COLLATION_DEFAULT;
-	return eCollation;
 }

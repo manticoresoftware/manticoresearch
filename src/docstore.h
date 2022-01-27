@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -49,7 +49,7 @@ public:
 };
 
 
-class DocstoreBuilder_i : public DocstoreAddField_i
+class DocstoreBuilder_i : public DocstoreAddField_i, public DocstoreGetField_i
 {
 public:
 	struct Doc_t
@@ -93,11 +93,18 @@ public:
 class DocstoreSession_c
 {
 public:
-	struct Info_t
+	struct InfoDocID_t
 	{
 		const DocstoreReader_i *	m_pDocstore = nullptr;
 		int64_t						m_iSessionId = 0;
 	};
+
+	struct InfoRowID_t
+	{
+		const Docstore_i *			m_pDocstore = nullptr;
+		int64_t						m_iSessionId = 0;
+	};
+
 
 
 				DocstoreSession_c();
@@ -123,6 +130,9 @@ void				ShutdownDocstore();
 class DebugCheckError_i;
 class CSphAutoreader;
 bool				CheckDocstore ( CSphAutoreader & tReader, DebugCheckError_i & tReporter, int64_t iRowsCount );
+
+ISphExpr *			CreateExpr_GetStoredField ( const CSphString & sName );
+ISphExpr *			CreateExpr_GetStoredAttr ( const CSphString & sName, ESphAttr eAttr );
 
 #endif
 

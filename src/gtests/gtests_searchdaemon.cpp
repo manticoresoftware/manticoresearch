@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -980,6 +980,7 @@ bool operator==( const ListenerDesc_t& lhs, const ListenerDesc_t& rhs )
 {
 	return lhs.m_eProto==rhs.m_eProto
 	&& lhs.m_bVIP == rhs.m_bVIP
+	&& lhs.m_bReadOnly == rhs.m_bReadOnly
 	&& lhs.m_iPort == rhs.m_iPort
 	&& lhs.m_iPortsCount == rhs.m_iPortsCount
 	&& lhs.m_uIP == rhs.m_uIP

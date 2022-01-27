@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -28,30 +28,45 @@ public:
 		FLAG_ATTRIBUTE	= 1<<2
 	};
 
-			explicit DdlParser_c ( CSphVector<SqlStmt_t> & dStmt );
+	struct ItemOptions_t
+	{
+		AttrEngine_e	m_eEngine = AttrEngine_e::DEFAULT;
+		bool			m_bStringHash = true;
+		bool			m_bFastFetch = true;
+
+		bool			m_bHashOptionSet = false;
+
+		void			Reset();
+		DWORD			ToFlags() const;
+	};
+
+	explicit DdlParser_c ( CSphVector<SqlStmt_t> & dStmt );
 
 	const char * GetLastError() const { return m_sError.scstr(); }
 
-	bool	AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t & tCol, AttrEngine_e eEngine = AttrEngine_e::DEFAULT );
-	bool	AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t & tCol, const SqlNode_t & tEngine );
+	bool	AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t & tCol );
+	bool	AddCreateTableId ( const SqlNode_t & tName );
+	void	AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits );
 
-	void	AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits, AttrEngine_e eEngine = AttrEngine_e::DEFAULT );
-	bool	AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits, const SqlNode_t & tEngine );
+	bool	AddItemOptionEngine ( const SqlNode_t & tOption );
+	bool	AddItemOptionHash ( const SqlNode_t & tOption );
+	bool	AddItemOptionFastFetch ( const SqlNode_t & tOption );
 
 	void	AddCreateTableOption ( const SqlNode_t & tName, const SqlNode_t & tValue );
-	bool	SetupAlterTable  ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, const SqlNode_t & tType, AttrEngine_e eEngine = AttrEngine_e::DEFAULT );
-	bool	SetupAlterTable  ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, const SqlNode_t & tType, const SqlNode_t & tEngine );
+	bool	SetupAlterTable  ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, const SqlNode_t & tType );
+	bool	SetupAlterTable ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, ESphAttr eAttr, int iFieldFlags, int iBits=-1 );
 
 	void	JoinClusterAt ( const SqlNode_t & tAt );
 
 	void	AddInsval ( CSphVector<SqlInsert_t> & dVec, const SqlNode_t & tNode );
 
 private:
-	CSphString	m_sError;
+	CSphString		m_sError;
+	ItemOptions_t	m_tItemOptions;
 
 	void	AddField ( const CSphString & sName, DWORD uFlags );
 	bool	ConvertToAttrEngine ( const SqlNode_t & tEngine, AttrEngine_e & eEngine );
-	static bool CheckFieldFlags ( ESphAttr eAttrType, int iFlags, const CSphString & sName, CSphString & sError );
+	static bool CheckFieldFlags ( ESphAttr eAttrType, int iFlags, const CSphString & sName, const ItemOptions_t & tOpts, CSphString & sError );
 };
 
 bool ParseDdl ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CSphString & sError );

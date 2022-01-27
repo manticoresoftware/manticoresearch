@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -233,6 +233,8 @@ public:
 	ESphAttr				m_eAlterColType = SPH_ATTR_NONE;
 	AttrEngine_e			m_eEngine = AttrEngine_e::DEFAULT;
 	DWORD					m_uFieldFlags = 0;
+	DWORD					m_uAttrFlags = 0;
+	int						m_iBits = -1;
 
 	// CREATE TABLE specific
 	CreateTableSettings_t	m_tCreateTable;

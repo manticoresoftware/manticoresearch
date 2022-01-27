@@ -32,9 +32,11 @@
 %token	TOK_DROP
 %token	TOK_ENGINE
 %token	TOK_EXISTS
+%token	TOK_FAST_FETCH
 %token	TOK_FLOAT
 %token	TOK_FROM
 %token	TOK_FUNCTION
+%token	TOK_HASH
 %token	TOK_IF
 %token	TOK_IMPORT
 %token	TOK_INDEXED
@@ -90,9 +92,8 @@ text_or_string:
 	TOK_TEXT		{ $$.m_iType = ( DdlParser_c::FLAG_INDEXED | DdlParser_c::FLAG_STORED ); }
 	| TOK_STRING	{ $$.m_iType = DdlParser_c::FLAG_ATTRIBUTE; }
 	;
-//////////////////////////////////////////////////////////////////////////
 
-alter_col_type:
+attribute_type:
 	TOK_INTEGER 	{ $$.m_iValue = SPH_ATTR_INTEGER; }
 	| TOK_BIGINT	{ $$.m_iValue = SPH_ATTR_BIGINT; }
 	| TOK_FLOAT		{ $$.m_iValue = SPH_ATTR_FLOAT; }
@@ -103,12 +104,18 @@ alter_col_type:
 	| TOK_INT		{ $$.m_iValue = SPH_ATTR_INTEGER; }
 	| TOK_UINT		{ $$.m_iValue = SPH_ATTR_INTEGER; }
 	| TOK_TIMESTAMP	{ $$.m_iValue = SPH_ATTR_TIMESTAMP; }
-	| text_or_string 		{ $$.m_iValue = SPH_ATTR_STRING; }
-	| text_or_string field_flag_list { $$.m_iValue = SPH_ATTR_STRING; $$.m_iType = $2.m_iType; }
+	;
+	
+//////////////////////////////////////////////////////////////////////////
+
+alter_col_type:
+	attribute_type
+	| text_or_string 					{ $$.m_iValue = SPH_ATTR_STRING; }
+	| text_or_string field_flag_list 	{ $$.m_iValue = SPH_ATTR_STRING; $$.m_iType = $2.m_iType; }
 	;
 
 alter:
-	TOK_ALTER TOK_TABLE ident TOK_ADD TOK_COLUMN ident alter_col_type
+	TOK_ALTER TOK_TABLE ident TOK_ADD TOK_COLUMN ident alter_col_type item_option_list
 		{
 			if ( !pParser->SetupAlterTable ( $3, $6, $7 ) )
 			{
@@ -116,9 +123,9 @@ alter:
 	            YYERROR;
 			}
 		}
-	| TOK_ALTER TOK_TABLE ident TOK_ADD TOK_COLUMN ident alter_col_type TOK_ENGINE '=' TOK_QUOTED_STRING
+	| TOK_ALTER TOK_TABLE ident TOK_ADD TOK_COLUMN ident TOK_BIT '(' TOK_CONST_INT ')' item_option_list
 		{
-			if ( !pParser->SetupAlterTable ( $3, $6, $7, $10 ) )
+			if ( !pParser->SetupAlterTable ( $3, $6, SPH_ATTR_INTEGER, 0, $9.m_iValue ) )
 			{
 			 	yyerror ( pParser, pParser->GetLastError() );
 	            YYERROR;
@@ -192,25 +199,56 @@ field_flag_list:
 	| field_flag_list field_flag { $$.m_iType |= $2.m_iType; }
 	;
 
+item_option:
+	TOK_ENGINE '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionEngine ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+	        	YYERROR;
+			}
+		}
+	| TOK_HASH '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionHash ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+	        	YYERROR;
+			}
+		}
+	| TOK_FAST_FETCH '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionFastFetch ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
+	;
+
+item_option_list:
+	// empty
+	| item_option_list item_option
+	;
+
 create_table_item:
-	ident alter_col_type
+	ident alter_col_type item_option_list
 	{
 		if ( !pParser->AddCreateTableCol ( $1, $2 ) )
 		 {
 		 	yyerror ( pParser, pParser->GetLastError() );
             YYERROR;
 		 }
-	 }
-	| ident alter_col_type TOK_ENGINE '=' TOK_QUOTED_STRING
-	{
-		if ( !pParser->AddCreateTableCol ( $1, $2, $5 ) )
-		 {
-		 	yyerror ( pParser, pParser->GetLastError() );
-            YYERROR;
-		 }
 	}
-	| ident TOK_BIT '(' TOK_CONST_INT ')'	{ pParser->AddCreateTableBitCol ( $1, $4.m_iValue ); }
-	| ident TOK_BIT '(' TOK_CONST_INT ')' TOK_ENGINE '=' TOK_QUOTED_STRING { pParser->AddCreateTableBitCol ( $1, $4.m_iValue, $8 ); }
+	| ident item_option_list
+	{
+		if ( !pParser->AddCreateTableId ( $1 ) )
+		{
+			yyerror ( pParser, pParser->GetLastError() );
+			YYERROR;
+		}
+	}
+	| ident TOK_BIT '(' TOK_CONST_INT ')' item_option_list	{ pParser->AddCreateTableBitCol ( $1, $4.m_iValue ); }
 	;
 
 create_table_item_list:

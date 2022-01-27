@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -75,15 +75,17 @@ enum ESphEvalStage
 enum ESphExprCommand
 {
 	SPH_EXPR_SET_BLOB_POOL,
-	SPH_EXPR_SET_DOCSTORE,
+	SPH_EXPR_SET_DOCSTORE_ROWID,	///< interface to fetch docs by rowid (final stage)
+	SPH_EXPR_SET_DOCSTORE_DOCID,	///< interface to fetch docs by docid (postlimit stage)
 	SPH_EXPR_SET_QUERY,
 	SPH_EXPR_SET_EXTRA_DATA,
-	SPH_EXPR_GET_DEPENDENT_COLS, ///< used to determine proper evaluating stage
+	SPH_EXPR_GET_DEPENDENT_COLS,	///< used to determine proper evaluating stage
 	SPH_EXPR_UPDATE_DEPENDENT_COLS,
 	SPH_EXPR_GET_UDF,
 	SPH_EXPR_SET_COLUMNAR,
+	SPH_EXPR_SET_COLUMNAR_COL,
 	SPH_EXPR_GET_COLUMNAR_COL,
-	SPH_EXPR_SET_ITERATOR		///< set link between JsonIn expr and iterator
+	SPH_EXPR_SET_ITERATOR			///< set link between JsonIn expr and iterator
 };
 
 /// expression evaluator
@@ -127,7 +129,10 @@ public:
 	virtual bool IsArglist () const { return false; }
 
 	/// was this expression spawned in place of a columnar attr?
-	virtual bool IsColumnar() const { return false; }
+	virtual bool IsColumnar ( bool * pStored = nullptr ) const { return false; }
+
+	/// was this expression spawned in place of a columnar expression?
+	virtual bool IsStored() const { return false; }
 
 	/// check for stringptr subtype
 	virtual bool IsDataPtrAttr () const { return false; }

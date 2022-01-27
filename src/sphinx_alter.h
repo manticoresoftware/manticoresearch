@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -36,6 +36,15 @@ class CSphSchema;
 class Docstore_i;
 class DocstoreBuilder_i;
 
+struct AttrAddRemoveCtx_t
+{
+	CSphString		m_sName;
+	ESphAttr		m_eType;
+	int				m_iBits;
+	DWORD			m_uFlags;
+	AttrEngine_e	m_eEngine;
+};
+
 // common add/remove attribute/field code for both RT and plain indexes
 class IndexAlterHelper_c
 {
@@ -45,11 +54,11 @@ public:
 
 protected:
 	bool			Alter_AddRemoveRowwiseAttr ( const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, const CSphRowitem * pDocinfo, DWORD uNumRows, const BYTE * pBlobPool, WriteWrapper_c & tSPAWriter, WriteWrapper_c & tSPBWriter, bool bAddAttr, const CSphString & sAttrName );
-	bool 			Alter_AddRemoveFromSchema ( CSphSchema & tSchema, const CSphString & sAttrName, ESphAttr eAttrType, AttrEngine_e eEngine, bool bAdd, CSphString & sError ) const;
+	bool 			Alter_AddRemoveFromSchema ( CSphSchema & tSchema, const AttrAddRemoveCtx_t & tCtx, bool bAdd, CSphString & sError ) const;
 	bool			Alter_AddRemoveColumnar ( bool bAdd, const ISphSchema & tOldSchema, const ISphSchema & tNewSchema, columnar::Columnar_i * pColumnar, columnar::Builder_i * pBuilder, DWORD uRows, const CSphString & sIndex, CSphString & sError );
 	bool 			Alter_AddRemoveFieldFromSchema ( bool bAdd, CSphSchema & tSchema, const CSphString & sFieldName, DWORD uFieldFlags, CSphString & sError );
 
-	void			Alter_AddRemoveFieldFromDocstore ( DocstoreBuilder_i & tBuilder, const Docstore_i * pDocstore, DWORD uNumDocs, const CSphSchema & tNewSchema );
+	void			Alter_AddRemoveFromDocstore ( DocstoreBuilder_i & tBuilder, const Docstore_i * pDocstore, DWORD uNumDocs, const CSphSchema & tNewSchema );
 };
 
 

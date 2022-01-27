@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2021, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2022, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -494,6 +494,10 @@ void			sphFatalLog ( const char * sFmt, ... ) __attribute__ ( ( format ( printf,
 /// setup a callback function to call from sphDie() before exit
 /// if callback returns false, sphDie() will not log to stdout
 void			sphSetDieCallback ( SphDieCallback_t pfDieCallback );
+
+bool			sphIsDied();
+
+void			sphSetDied();
 
 /// similar as abort but closes FD
 /// not available on MacOS
@@ -1086,6 +1090,49 @@ inline bool IsNull ( const ByteBlob_t & dBlob ) { return !dBlob.second; };
 inline bool IsFilled ( const ByteBlob_t & dBlob ) { return dBlob.first && dBlob.second>0; }
 inline bool IsValid ( const ByteBlob_t & dBlob ) { return IsNull ( dBlob ) || IsFilled ( dBlob ); };
 
+template <typename CONTAINER, typename FILTER>
+inline bool all_of ( const CONTAINER& dData, FILTER && cond ) NO_THREAD_SAFETY_ANALYSIS
+{
+	for ( const auto& dItem : dData )
+		if ( !cond ( dItem ) )
+			return false;
+	return true;
+}
+
+template <typename CONTAINER, typename FILTER>
+inline bool any_of ( const CONTAINER& dData, FILTER && cond ) NO_THREAD_SAFETY_ANALYSIS
+{
+	for ( const auto& dItem : dData )
+		if ( cond ( dItem ) )
+			return true;
+
+	return false;
+}
+
+template<typename CONTAINER, typename FILTER>
+inline bool none_of ( const CONTAINER& dData, FILTER && cond ) NO_THREAD_SAFETY_ANALYSIS
+{
+	return !any_of ( dData, std::forward<FILTER>(cond) );
+}
+
+template<typename CONTAINER, typename FILTER>
+inline int64_t count_of ( const CONTAINER& dData, FILTER&& cond ) NO_THREAD_SAFETY_ANALYSIS
+{
+	int64_t iRes = 0;
+	for ( const auto& dItem : dData )
+		if ( cond ( dItem ) )
+			++iRes;
+
+	return iRes;
+}
+
+template<typename CONTAINER, typename ACTION>
+void for_each ( CONTAINER& dData, ACTION&& tAction ) NO_THREAD_SAFETY_ANALYSIS
+{
+	for ( auto& dItem : dData )
+		tAction ( dItem );
+}
+
 /// buffer traits - provides generic ops over a typed blob (vector).
 /// just provide common operators; doesn't manage buffer anyway
 template < typename T > class VecTraits_T
@@ -1291,56 +1338,43 @@ public:
 
 	/// generic 'ARRAY_ALL'
 	template <typename FILTER>
-	inline bool all_of ( FILTER && cond ) const NO_THREAD_SAFETY_ANALYSIS
+	inline bool all_of ( FILTER && cond ) const
 	{
-		for ( int i = 0; i<m_iCount; ++i )
-			if ( !cond ( m_pData[i] ) )
-				return false;
-		return true;
+		return ::all_of ( *this, std::forward<FILTER> ( cond ) );
 	}
 
 	/// generic linear search - 'ARRAY_ANY' replace
 	/// see 'Contains()' below for examlpe of usage.
 	template <typename FILTER>
-	inline bool any_of ( FILTER && cond ) const NO_THREAD_SAFETY_ANALYSIS
+	inline bool any_of ( FILTER && cond ) const
 	{
-		for ( int i = 0; i<m_iCount; ++i )
-			if ( cond ( m_pData[i] ) )
-				return true;
-
-		return false;
+		return ::any_of ( *this, std::forward<FILTER> ( cond ) );
 	}
 
 	template <typename FILTER>
-	inline bool none_of ( FILTER && cond ) const NO_THREAD_SAFETY_ANALYSIS
+	inline bool none_of ( FILTER && cond ) const
 	{
 		return !any_of ( cond );
 	}
 
 	template<typename FILTER>
-	inline int64_t count_of ( FILTER&& cond ) const NO_THREAD_SAFETY_ANALYSIS
+	inline int64_t count_of ( FILTER&& cond ) const
 	{
-		int64_t iRes = 0;
-		for ( int64_t i = 0; i < m_iCount; ++i )
-			if ( cond ( m_pData[i] ) )
-				++iRes;
-
-		return iRes;
+		return ::count_of ( *this, std::forward<FILTER> ( cond ) );
 	}
 
 	/// Apply an action to every member
 	/// Apply ( [] (T& item) {...} );
 	template < typename ACTION >
-	void Apply( ACTION&& Verb ) const NO_THREAD_SAFETY_ANALYSIS
+	void Apply( ACTION&& Verb ) const
 	{
-		for ( int i = 0; i<m_iCount; ++i )
-			Verb ( m_pData[i] );
+		::for_each ( *this, std::forward<ACTION> ( Verb ) );
 	}
 
 	template < typename ACTION >
 	void for_each ( ACTION && tAction ) const
 	{
-		Apply(tAction);
+		::for_each ( *this, std::forward<ACTION> ( tAction ) );
 	}
 
 	/// generic linear search
@@ -2169,6 +2203,10 @@ protected:
 	using VecTraits_T<T>::m_iCount;
 
 public:
+
+	using POLICY_T = POLICY;
+	using STORE_T = STORE;
+
 	explicit CSphFixedVector ( int64_t iSize ) noexcept
 	{
 		m_iCount = iSize;
@@ -3120,10 +3158,10 @@ public:
 /// since order of calling 2 commas here is undefined (so, you may take "foo, bar", but may ", foobar" also).
 /// Use out << comma << "foo"; out << comma << "bar"; in the case
 using Str_t = std::pair<const char*, int>;
-const Str_t dEmptyStr = { "", 0 };
+const Str_t dEmptyStr { "", 0 };
 inline bool IsEmpty ( const Str_t & dBlob ) { return dBlob.second==0; }
 inline bool IsFilled ( const Str_t & dBlob ) { return dBlob.first && dBlob.second>0; }
-inline Str_t FromSz ( const char * szString ) { return { szString, (int) strlen ( szString ) }; }
+inline Str_t FromSz ( const char * szString ) { return { szString, szString ? (int) strlen ( szString ) : 0 }; }
 inline Str_t FromStr ( const CSphString& sString ) { return { sString.cstr(), (int) sString.Length() }; }
 
 class Comma_c
@@ -3198,6 +3236,7 @@ public:
 	// get current build value
 	const char *		cstr() const { return m_szBuffer ? m_szBuffer : ""; }
 	explicit operator	CSphString() const { return { cstr() }; }
+	explicit operator	Str_t() const { return m_szBuffer ? Str_t { m_szBuffer, m_iUsed } : dEmptyStr; }
 
 	// move out (de-own) value
 	BYTE *				Leak();
@@ -3856,8 +3895,9 @@ public:
 		m_iLevel = tOwner.StartBlock ( sDel, sPref, sTerm );
 	}
 
-	ScopedComma_c ( StringBuilder_c & tOwner, const StrBlock_t & dBlock )
+	ScopedComma_c ( StringBuilder_c & tOwner, const StrBlock_t & dBlock, bool bAllowEmpty=true )
 		: m_pOwner ( &tOwner )
+		, m_bAllowEmpty ( bAllowEmpty )
 	{
 		m_iLevel = tOwner.StartBlock(dBlock);
 	}

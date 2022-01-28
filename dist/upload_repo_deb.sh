@@ -38,9 +38,11 @@ for filename in *deb; do
 done
 
 if [ ! -z $SUFFIX ]; then
-  /usr/bin/docker exec repo-generator /generator.sh -distro $DISTRO -architecture $arch -dev 1
+  /usr/bin/docker exec repo-generator /generator.sh -distro $DISTRO -architecture amd -dev 1
+  /usr/bin/docker exec repo-generator /generator.sh -distro $DISTRO -architecture arm -dev 1
 else
-  /usr/bin/docker exec repo-generator /generator.sh -distro $DISTRO -architecture $arch
+  /usr/bin/docker exec repo-generator /generator.sh -distro $DISTRO -architecture amd
+  /usr/bin/docker exec repo-generator /generator.sh -distro $DISTRO -architecture arm
 fi
 
 rm -rf *deb

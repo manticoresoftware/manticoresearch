@@ -50,6 +50,7 @@ public:
 	FORCE_INLINE SphAttr_t GetAttr ( const CSphAttrLocator & tLoc ) const;
 
 	float GetAttrFloat ( const CSphAttrLocator & tLoc ) const;
+	double GetAttrDouble ( const CSphAttrLocator & tLoc ) const;
 
 	/// integer setter
 	FORCE_INLINE void SetAttr ( const CSphAttrLocator & tLoc, SphAttr_t uValue ) const;
@@ -61,6 +62,7 @@ public:
 	void AddCounterAttr ( const CSphAttrLocator & tLoc, const CSphMatch& tValue ) const;
 
 	void SetAttrFloat ( const CSphAttrLocator & tLoc, float fValue ) const;
+	void SetAttrDouble ( const CSphAttrLocator & tLoc, double fValue ) const;
 
 	/// fetches blobs from both data ptr attrs and pooled blob attrs
 	ByteBlob_t FetchAttrData ( const CSphAttrLocator & tLoc, const BYTE * pPool ) const;

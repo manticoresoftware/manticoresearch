@@ -64,9 +64,23 @@ inline void AggrFunc_Traits_T<float>::SetValue ( CSphMatch & tRow, float val )
 	tRow.SetAttrFloat ( m_tLocator, val );
 }
 
+template<>
+inline double AggrFunc_Traits_T<double>::GetValue ( const CSphMatch & tRow )
+{
+	return tRow.GetAttrDouble ( m_tLocator );
+}
+
+template<>
+inline void AggrFunc_Traits_T<double>::SetValue ( CSphMatch & tRow, double val )
+{
+	tRow.SetAttrDouble ( m_tLocator, val );
+}
+
 template < typename T >
 class AggrColumnar_Traits_T : public AggrFunc_Traits_T<T>
 {
+	using BASE = AggrFunc_Traits_T<T>;
+
 public:
 	AggrColumnar_Traits_T ( const CSphAttrLocator & tLoc, const CSphString & sAttr )
 		: AggrFunc_Traits_T<T> ( tLoc )
@@ -84,9 +98,25 @@ public:
 			m_pIterator.Reset();
 	}
 
+	void Setup ( CSphMatch & tDst, const CSphMatch & tSrc, bool bMerge ) final
+	{
+		BASE::SetValue ( tDst, FetchValue ( tSrc, bMerge ) );
+	}
+
 protected:
 	CSphString m_sAttr;
 	CSphScopedPtr<columnar::Iterator_i> m_pIterator {nullptr};
+
+	inline T FetchValue ( const CSphMatch & tSrc, bool bMerge )
+	{
+		if ( bMerge )
+			return BASE::GetValue(tSrc);
+
+		if ( !m_pIterator.Ptr() || m_pIterator->AdvanceTo ( tSrc.m_tRowID ) != tSrc.m_tRowID )
+			return (T)0;
+
+		return (T)m_pIterator->Get();
+	}
 };
 
 /// SUM() implementation
@@ -100,7 +130,7 @@ public:
 	explicit AggrSum_T ( const CSphAttrLocator & tLoc ) : AggrFunc_Traits_T<T> ( tLoc )
 	{}
 
-	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool ) final
+	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool bGrouped, bool bMerge ) final
 	{
 		T tSrcValue = BASE::GetValue(tSrc);
 		T tDstValue = BASE::GetValue(tDst);
@@ -117,20 +147,9 @@ class AggrSumColumnar_T final : public AggrColumnar_Traits_T<T>
 	using BASE::BASE;
 
 public:
-	void Setup ( CSphMatch & tDst, const CSphMatch & tSrc, bool bGrouped ) final
+	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool bGrouped, bool bMerge ) final
 	{
-		if ( !BASE::m_pIterator.Ptr() || BASE::m_pIterator->AdvanceTo ( tSrc.m_tRowID ) != tSrc.m_tRowID )
-			return;
-
-		BASE::SetValue ( tDst, (T)BASE::m_pIterator->Get() );
-	}
-
-	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool ) final
-	{
-		if ( !BASE::m_pIterator.Ptr() || BASE::m_pIterator->AdvanceTo ( tSrc.m_tRowID ) != tSrc.m_tRowID )
-			return;
-
-		T tSrcValue = (T)BASE::m_pIterator->Get();
+		T tSrcValue = BASE::FetchValue ( tSrc, bMerge );
 		T tDstValue = BASE::GetValue(tDst);
 
 		if ( tSrcValue )
@@ -156,7 +175,7 @@ public:
 		SetValue ( tDst, T ( GetValue ( tDst ) * tDst.GetAttr ( m_tCountLoc ) ) );
 	}
 
-	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool bGrouped ) final
+	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool bGrouped, bool bMerge ) final
 	{
 		T tSrcValue = GetValue(tSrc);
 		T tDstValue = GetValue(tDst);
@@ -193,25 +212,9 @@ public:
 		SetValue ( tDst, T ( GetValue ( tDst ) * tDst.GetAttr ( m_tCountLoc ) ) );
 	}
 
-	void Setup ( CSphMatch & tDst, const CSphMatch & tSrc, bool bGrouped ) final
+	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool bGrouped, bool bMerge ) final
 	{
-		if ( !BASE::m_pIterator.Ptr() || BASE::m_pIterator->AdvanceTo ( tSrc.m_tRowID ) != tSrc.m_tRowID )
-			return;
-
-		T tSrcValue = (T)BASE::m_pIterator->Get();
-
-		if ( bGrouped )
-			SetValue ( tDst, T ( tSrcValue*tSrc.GetAttr(m_tCountLoc) ) );
-		else
-			SetValue ( tDst, tSrcValue );
-	}
-
-	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool bGrouped ) final
-	{
-		if ( !BASE::m_pIterator.Ptr() || BASE::m_pIterator->AdvanceTo ( tSrc.m_tRowID ) != tSrc.m_tRowID )
-			return;
-
-		T tSrcValue = (T)BASE::m_pIterator->Get();
+		T tSrcValue = BASE::FetchValue ( tSrc, bMerge );
 		T tDstValue = GetValue(tDst);
 
 		if ( bGrouped )
@@ -239,7 +242,7 @@ class AggrMax_T final : public AggrFunc_Traits_T<T>
 	using BASE::BASE;
 
 public:
-	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool ) final
+	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool bGrouped, bool bMerge ) final
 	{
 		T tSrcValue = BASE::GetValue(tSrc);
 		T tDstValue = BASE::GetValue(tDst);
@@ -255,20 +258,9 @@ class AggrMaxColumnar_T final : public AggrColumnar_Traits_T<T>
 	using BASE::BASE;
 
 public:
-	void Setup ( CSphMatch & tDst, const CSphMatch & tSrc, bool bGrouped ) final
+	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool bGrouped, bool bMerge ) final
 	{
-		if ( !BASE::m_pIterator.Ptr() || BASE::m_pIterator->AdvanceTo ( tSrc.m_tRowID ) != tSrc.m_tRowID )
-			return;
-
-		BASE::SetValue ( tDst, (T)BASE::m_pIterator->Get() );
-	}
-
-	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool ) final
-	{
-		if ( !BASE::m_pIterator.Ptr() || BASE::m_pIterator->AdvanceTo ( tSrc.m_tRowID ) != tSrc.m_tRowID )
-			return;
-
-		T tSrcValue = (T)BASE::m_pIterator->Get();
+		T tSrcValue = BASE::FetchValue ( tSrc, bMerge );
 		T tDstValue = BASE::GetValue(tDst);
 		if ( tSrcValue>tDstValue )
 			BASE::SetValue ( tDst, tSrcValue );
@@ -283,7 +275,7 @@ class AggrMin_T final : public AggrFunc_Traits_T<T>
 	using BASE::BASE;
 
 public:
-	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool ) final
+	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool bGrouped, bool bMerge ) final
 	{
 		T tSrcValue = BASE::GetValue(tSrc);
 		T tDstValue = BASE::GetValue(tDst);
@@ -299,20 +291,9 @@ class AggrMinColumnar_T final : public AggrColumnar_Traits_T<T>
 	using BASE::BASE;
 
 public:
-	void Setup ( CSphMatch & tDst, const CSphMatch & tSrc, bool bGrouped ) final
+	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool bGrouped, bool bMerge ) final
 	{
-		if ( !BASE::m_pIterator.Ptr() || BASE::m_pIterator->AdvanceTo ( tSrc.m_tRowID ) != tSrc.m_tRowID )
-			return;
-
-		BASE::SetValue ( tDst, (T)BASE::m_pIterator->Get() );
-	}
-
-	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool ) final
-	{
-		if ( !BASE::m_pIterator.Ptr() || BASE::m_pIterator->AdvanceTo ( tSrc.m_tRowID ) != tSrc.m_tRowID )
-			return;
-
-		T tSrcValue = (T)BASE::m_pIterator->Get();
+		T tSrcValue = BASE::FetchValue ( tSrc, bMerge );
 		T tDstValue = BASE::GetValue(tDst);
 		if ( tSrcValue<tDstValue )
 			BASE::SetValue ( tDst, tSrcValue );
@@ -504,7 +485,7 @@ public:
 		tMatch.SetAttr ( m_tLoc, (SphAttr_t) dOut.LeakData () );
 	}
 
-	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool ) final
+	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool bGrouped, bool bMerge ) final
 	{
 		ByteBlob_t dSrc = tSrc.FetchAttrData ( m_tLoc, nullptr ); // ok since it is NOT a blob attr
 		ByteBlob_t dDst = tDst.FetchAttrData ( m_tLoc, nullptr );
@@ -729,6 +710,12 @@ AggrFunc_i * CreateAggrAvg ( const CSphColumnInfo & tAttr, const CSphAttrLocator
 
 		return new AggrAvg_T<float> ( tAttr.m_tLocator, tCount );
 
+	case SPH_ATTR_DOUBLE:
+		if ( bColumnar )
+			return new AggrAvgColumnar_T<double> ( tAttr.m_tLocator, sColumnarCol, tCount );
+
+		return new AggrAvg_T<double> ( tAttr.m_tLocator, tCount );
+
 	default:
 		assert ( 0 && "internal error: unhandled aggregate type" );
 		return nullptr;
@@ -764,6 +751,12 @@ AggrFunc_i * CreateAggrMin ( const CSphColumnInfo & tAttr )
 
 		return new AggrMin_T<float> ( tAttr.m_tLocator );
 
+	case SPH_ATTR_DOUBLE:
+		if ( bColumnar )
+			return new AggrMinColumnar_T<double> ( tAttr.m_tLocator, sColumnarCol );
+
+		return new AggrMin_T<double> ( tAttr.m_tLocator );
+
 	default:
 		assert ( 0 && "internal error: unhandled aggregate type" );
 		return nullptr;
@@ -798,6 +791,12 @@ AggrFunc_i * CreateAggrMax ( const CSphColumnInfo & tAttr )
 			return new AggrMaxColumnar_T<float> ( tAttr.m_tLocator, sColumnarCol );
 
 		return new AggrMax_T<float> ( tAttr.m_tLocator );
+
+	case SPH_ATTR_DOUBLE:
+		if ( bColumnar )
+			return new AggrMaxColumnar_T<double> ( tAttr.m_tLocator, sColumnarCol );
+
+		return new AggrMax_T<double> ( tAttr.m_tLocator );
 
 	default:
 		assert ( 0 && "internal error: unhandled aggregate type" );

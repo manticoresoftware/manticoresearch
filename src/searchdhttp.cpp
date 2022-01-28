@@ -731,11 +731,12 @@ static const char * GetTypeName ( MysqlColumnType_e eType )
 {
 	switch ( eType )
 	{
-		case MYSQL_COL_DECIMAL: return "decimal";
-		case MYSQL_COL_LONG: return "long";
-		case MYSQL_COL_FLOAT: return "float";
-		case MYSQL_COL_LONGLONG: return "long long";
-		case MYSQL_COL_STRING: return "string";
+		case MYSQL_COL_DECIMAL:		return "decimal";
+		case MYSQL_COL_LONG:		return "long";
+		case MYSQL_COL_FLOAT:		return "float";
+		case MYSQL_COL_DOUBLE:		return "double";
+		case MYSQL_COL_LONGLONG:	return "long long";
+		case MYSQL_COL_STRING:		return "string";
 		default: return "unknown";
 	};
 }
@@ -751,11 +752,18 @@ const StrBlock_t dJsonObjCustom { { ",\n", 2 }, { "[", 1 }, { "]", 1 } }; // jso
 class JsonRowBuffer_c : public RowBuffer_i
 {
 public:
-	JsonRowBuffer_c () {
+	JsonRowBuffer_c()
+	{
 		m_dBuf.StartBlock ( dJsonObjCustom );
 	}
 
 	void PutFloatAsString ( float fVal, const char * ) override
+	{
+		AddDataColumn();
+		m_dBuf << fVal;
+	}
+
+	void PutDoubleAsString ( double fVal, const char * ) override
 	{
 		AddDataColumn();
 		m_dBuf << fVal;

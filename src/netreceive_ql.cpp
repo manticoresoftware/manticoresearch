@@ -320,6 +320,7 @@ class SqlRowBuffer_c : public RowBuffer_i, private LazyVector_T<BYTE>
 			break;
 		case MYSQL_COL_DECIMAL:
 		case MYSQL_COL_FLOAT:
+		case MYSQL_COL_DOUBLE:
 		case MYSQL_COL_LONGLONG: iColLen = 20;
 			break;
 		case MYSQL_COL_STRING: iColLen = 255;
@@ -374,6 +375,17 @@ public:
 		int iLen = sFormat
 			? snprintf (( char* ) pSize + 1, SPH_MAX_NUMERIC_STR - 1, sFormat, fVal )
 			: sph::PrintVarFloat (( char* ) pSize + 1, fVal );
+		*pSize = BYTE ( iLen );
+		AddN ( iLen + 1 );
+	}
+
+	void PutDoubleAsString ( double fVal, const char * szFormat ) override
+	{
+		ReserveGap ( SPH_MAX_NUMERIC_STR );
+		auto pSize = End();
+		int iLen = szFormat
+			? snprintf (( char* ) pSize + 1, SPH_MAX_NUMERIC_STR - 1, szFormat, fVal )
+			: sph::PrintVarDouble (( char* ) pSize + 1, fVal );
 		*pSize = BYTE ( iLen );
 		AddN ( iLen + 1 );
 	}

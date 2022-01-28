@@ -185,6 +185,8 @@ select * from META:multi;
 <sphinxql>select id, gr+1, count(*) as c, sum(tag) s, avg(tag) a from rt_1 GROUP 2 BY gr WITHIN GROUP ORDER BY id desc ORDER BY id DESC OPTION pseudo_sharding=1, threads=5</sphinxql>
 <sphinxql>select id, gr+1, count(*) as c, sum(tag) s, avg(tag) a from rt_1 GROUP 2 BY gr WITHIN GROUP ORDER BY id desc ORDER BY id DESC OPTION pseudo_sharding=0, threads=1</sphinxql>
 
+<sphinxql>select avg(tag) from rt_1</sphinxql>
+
 </queries>
 
 <db_create>

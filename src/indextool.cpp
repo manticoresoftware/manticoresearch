@@ -559,6 +559,7 @@ static const char * AttrType2Str ( ESphAttr eAttrType )
 	case SPH_ATTR_TIMESTAMP:		return "SPH_ATTR_TIMESTAMP";
 	case SPH_ATTR_BOOL:				return "SPH_ATTR_BOOL";
 	case SPH_ATTR_FLOAT:			return "SPH_ATTR_FLOAT";
+	case SPH_ATTR_DOUBLE:			return "SPH_ATTR_DOUBLE";
 	case SPH_ATTR_BIGINT:			return "SPH_ATTR_BIGINT";
 	case SPH_ATTR_STRING:			return "SPH_ATTR_STRING";
 	case SPH_ATTR_POLY2D:			return "SPH_ATTR_POLY2D";

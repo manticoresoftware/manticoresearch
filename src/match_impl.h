@@ -136,11 +136,24 @@ inline float CSphMatch::GetAttrFloat ( const CSphAttrLocator& tLoc ) const
 }
 
 
+inline double CSphMatch::GetAttrDouble ( const CSphAttrLocator & tLoc ) const
+{
+	return sphQW2D ( sphGetRowAttr ( tLoc.m_bDynamic ? m_pDynamic : m_pStatic, tLoc ) );
+}
+
+
 inline void CSphMatch::SetAttrFloat ( const CSphAttrLocator& tLoc, float fValue ) const
 {
 	assert ( tLoc.m_bDynamic );
 	assert ( tLoc.GetMaxRowitem() < (int)m_pDynamic[-1] );
 	sphSetRowAttr ( m_pDynamic, tLoc, sphF2DW ( fValue ) );
+}
+
+inline void CSphMatch::SetAttrDouble ( const CSphAttrLocator & tLoc, double fValue ) const
+{
+	assert ( tLoc.m_bDynamic );
+	assert ( tLoc.GetMaxRowitem() < (int)m_pDynamic[-1] );
+	sphSetRowAttr ( m_pDynamic, tLoc, sphD2QW ( fValue ) );
 }
 
 /// fetches blobs from both data ptr attrs and pooled blob attrs

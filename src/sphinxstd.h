@@ -3319,6 +3319,7 @@ public:
 	void NtoA ( DWORD uVal );
 	void NtoA ( int64_t iVal );
 	void FtoA ( float fVal );
+	void DtoA ( double fVal );
 
 protected:
 	static const BYTE GROW_STEP = 64; // how much to grow if no space left

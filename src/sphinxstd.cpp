@@ -2509,6 +2509,18 @@ void StringBuilder_c::FtoA ( float fVal )
 }
 
 
+void StringBuilder_c::DtoA ( double fVal )
+{
+	InitAddPrefix();
+
+	const int MAX_NUMERIC_STR = 64;
+	GrowEnough ( MAX_NUMERIC_STR+1 );
+
+	int iLen = sph::PrintVarDouble ( (char *) m_szBuffer + m_iUsed, fVal );
+	m_iUsed += iLen;
+	m_szBuffer[m_iUsed] = '\0';
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 StringBuilder_c::LazyComma_c::LazyComma_c ( const char * sDelim, const char * sPrefix, const char * sTerm )

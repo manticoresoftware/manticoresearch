@@ -72,7 +72,7 @@ public:
 	virtual void		Push ( const VecTraits_T<const CSphMatch> & dMatches ) = 0;
 
 	/// submit pre-grouped match. bNewSet indicates that the match begins the bunch of matches got from one source
-	virtual bool		PushGrouped ( const CSphMatch & tEntry, bool bNewSet, bool bUpdateDistinct ) = 0;
+	virtual bool		PushGrouped ( const CSphMatch & tEntry, bool bNewSet ) = 0;
 
 	/// get	rough entries count, due of aggregate filtering phase
 	virtual int			GetLength() = 0;

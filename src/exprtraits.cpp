@@ -27,6 +27,8 @@ bool IsNumeric ( ESphAttr eType )
 ESphAttr WidestType ( ESphAttr a, ESphAttr b )
 {
 	assert ( ( IsNumeric(a) && IsNumeric(b) ) || ( IsNumeric(a) && b==SPH_ATTR_JSON_FIELD ) || ( a==SPH_ATTR_JSON_FIELD && IsNumeric(b) ) );
+	if ( a==SPH_ATTR_DOUBLE || b==SPH_ATTR_DOUBLE )
+		return SPH_ATTR_DOUBLE;
 	if ( a==SPH_ATTR_FLOAT || b==SPH_ATTR_FLOAT )
 		return SPH_ATTR_FLOAT;
 	if ( a==SPH_ATTR_BIGINT || b==SPH_ATTR_BIGINT )

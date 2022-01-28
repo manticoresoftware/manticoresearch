@@ -89,6 +89,7 @@ public class SphinxClient
 	public final static int SPH_ATTR_FLOAT			= 5;
 	public final static int SPH_ATTR_BIGINT			= 6;
 	public final static int SPH_ATTR_STRING			= 7;
+	public final static int SPH_ATTR_DOUBLE			= 13;
 	public final static int SPH_ATTR_MULTI			= 0x40000001;
 	public final static int SPH_ATTR_MULTI64		= 0x40000002;
 

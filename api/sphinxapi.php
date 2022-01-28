@@ -100,6 +100,7 @@ define ( "SPH_ATTR_BOOL",			4 );
 define ( "SPH_ATTR_FLOAT",			5 );
 define ( "SPH_ATTR_BIGINT",			6 );
 define ( "SPH_ATTR_STRING",			7 );
+define ( "SPH_ATTR_DOUBLE",			13 );
 define ( "SPH_ATTR_FACTORS",			1001 );
 define ( "SPH_ATTR_MULTI",			0x40000001 );
 define ( "SPH_ATTR_MULTI64",			0x40000002 );
@@ -1407,6 +1408,15 @@ class SphinxClient
 					{
 						list(,$uval) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
 						list(,$fval) = unpack ( "f*", pack ( "L", $uval ) ); 
+						$attrvals[$attr] = $fval;
+						continue;
+					}
+
+					// handle double
+					if ( $type==SPH_ATTR_DOUBLE )
+					{
+						$uval = sphUnpackI64 ( substr ( $response, $p, 8 ) ); $p += 8;				
+						list(,$fval) = unpack ( "d*", pack ( "Q", $uval ) );
 						$attrvals[$attr] = $fval;
 						continue;
 					}

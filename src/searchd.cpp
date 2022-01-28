@@ -1900,6 +1900,10 @@ void SearchReplyParser_c::ParseMatch ( CSphMatch & tMatch, MemInputBuffer_c & tR
 			tMatch.SetAttr ( tAttr.m_tLocator, sphF2DW ( tReq.GetFloat() ) );
 			break;
 
+		case SPH_ATTR_DOUBLE:
+			tMatch.SetAttr ( tAttr.m_tLocator, sphD2QW ( tReq.GetDouble() ) );
+			break;
+
 		case SPH_ATTR_BIGINT:
 			tMatch.SetAttr ( tAttr.m_tLocator, tReq.GetUint64() );
 			break;
@@ -3434,9 +3438,15 @@ static void SendAttribute ( ISphOutputBuffer & tOut, const CSphMatch & tMatch, c
 	case SPH_ATTR_FLOAT:
 		tOut.SendFloat ( tMatch.GetAttrFloat(tLoc) );
 		break;
+
+	case SPH_ATTR_DOUBLE:
+		tOut.SendDouble ( tMatch.GetAttrDouble(tLoc) );
+		break;
+
 	case SPH_ATTR_BIGINT:
 		tOut.SendUint64 ( tMatch.GetAttr(tLoc) );
 		break;
+
 	default:
 		tOut.SendDword ( (DWORD)tMatch.GetAttr(tLoc) );
 		break;
@@ -4035,7 +4045,7 @@ int KillGroupbyDupes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, const Vec
 			if ( !tResult.m_bTagsAssigned )
 				tMatch.m_iTag = tResult.m_iTag; // that will link us back to docstore
 
-			if ( !pSorter->PushGrouped ( tMatch, i==0, true ) )  // groupby sorter does that automagically
+			if ( !pSorter->PushGrouped ( tMatch, i==0 ) )  // groupby sorter does that automagically
 				++iDupes;
 		}
 	}
@@ -4153,6 +4163,14 @@ struct GenericMatchSort_fn : public CSphMatchComparatorState
 			{
 				register float aa = a->GetAttrFloat ( m_tLocator[i] );
 				register float bb = b->GetAttrFloat ( m_tLocator[i] );
+				if ( aa==bb )
+					continue;
+				return ( ( m_uAttrDesc>>i ) & 1 ) ^ ( aa < bb );
+			}
+			case SPH_KEYPART_DOUBLE:
+			{
+				register double aa = a->GetAttrDouble ( m_tLocator[i] );
+				register double bb = b->GetAttrDouble ( m_tLocator[i] );
 				if ( aa==bb )
 					continue;
 				return ( ( m_uAttrDesc>>i ) & 1 ) ^ ( aa < bb );
@@ -12833,14 +12851,11 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 			{
 			case SPH_ATTR_INTEGER:
 			case SPH_ATTR_TIMESTAMP:
-			case SPH_ATTR_BOOL:
-				eType = MYSQL_COL_LONG; break;
-			case SPH_ATTR_FLOAT:
-				eType = MYSQL_COL_FLOAT; break;
-			case SPH_ATTR_BIGINT:
-				eType = MYSQL_COL_LONGLONG; break;
-			default:
-				break;
+			case SPH_ATTR_BOOL:		eType = MYSQL_COL_LONG; break;
+			case SPH_ATTR_FLOAT:	eType = MYSQL_COL_FLOAT; break;
+			case SPH_ATTR_DOUBLE:	eType = MYSQL_COL_DOUBLE; break;
+			case SPH_ATTR_BIGINT:	eType = MYSQL_COL_LONGLONG; break;
+			default: break;
 			}
 			dRows.HeadColumn ( tCol.m_sName.cstr(), eType );
 		}
@@ -12859,7 +12874,7 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 	const CSphSchema &tSchema = tRes.m_tSchema;
 	assert ( tRes.m_bSingle );
 	auto dMatches = tRes.m_dResults.First ().m_dMatches.Slice ( tRes.m_iOffset, tRes.m_iCount );
-	for ( const auto& tMatch : dMatches  )
+	for ( const auto & tMatch : dMatches  )
 	{
 		for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); ++i )
 		{
@@ -12887,6 +12902,10 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 
 			case SPH_ATTR_FLOAT:
 				dRows.PutFloatAsString ( tMatch.GetAttrFloat(tLoc) );
+				break;
+
+			case SPH_ATTR_DOUBLE:
+				dRows.PutDoubleAsString ( tMatch.GetAttrDouble(tLoc) );
 				break;
 
 			case SPH_ATTR_INT64SET_PTR:
@@ -14602,9 +14621,10 @@ void HandleMysqlSelectDual ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 			FreeDataPtr ( *pExpr, pStr );
 			break;
 		}
-		case SPH_ATTR_INTEGER: tOut.PutNumAsString ( pExpr->IntEval ( tMatch ) ); break;
-		case SPH_ATTR_BIGINT: tOut.PutNumAsString ( pExpr->Int64Eval ( tMatch ) ); break;
+		case SPH_ATTR_INTEGER:	tOut.PutNumAsString ( pExpr->IntEval ( tMatch ) ); break;
+		case SPH_ATTR_BIGINT:	tOut.PutNumAsString ( pExpr->Int64Eval ( tMatch ) ); break;
 		case SPH_ATTR_FLOAT:	tOut.PutFloatAsString ( pExpr->Eval ( tMatch ) ); break;
+		case SPH_ATTR_DOUBLE:	tOut.PutDoubleAsString ( pExpr->Eval ( tMatch ) ); break;
 		default:
 			tOut.PutNULL();
 			break;

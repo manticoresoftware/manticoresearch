@@ -3202,6 +3202,7 @@ class SphinxConfig
 				SPH_ATTR_ORDINAL => "ordinal",
 				SPH_ATTR_BOOL => "bool",
 				SPH_ATTR_FLOAT => "float",
+				SPH_ATTR_DOUBLE => "double",
 				SPH_ATTR_BIGINT => "bigint",
 				SPH_ATTR_STRING => "string",
 				SPH_ATTR_MULTI => "mva",

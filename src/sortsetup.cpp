@@ -126,6 +126,9 @@ static inline ESphSortKeyPart Attr2Keypart ( ESphAttr eType )
 		case SPH_ATTR_FLOAT:
 			return SPH_KEYPART_FLOAT;
 
+		case SPH_ATTR_DOUBLE:
+			return SPH_KEYPART_DOUBLE;
+
 		case SPH_ATTR_STRING:
 			return SPH_KEYPART_STRING;
 

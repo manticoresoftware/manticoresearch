@@ -97,6 +97,9 @@ Two"}')
 <query endpoint="sql" method="post">mode=raw&amp;query=alter table test add column new1 integer</query>
 <query endpoint="sql" method="post">mode=raw&amp;query=desc test</query>
 
+<query endpoint="sql" method="post">mode=raw&amp;query=select avg(id) x from test group by gid order by x desc</query>
+<query endpoint="sql" method="post">query=select%20avg%28id%29%20x%20from%20test%20group%20by%20gid%20order%20by%20x%20desc</query>
+
 </httpqueries>
 
 </test>

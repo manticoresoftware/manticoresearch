@@ -674,7 +674,7 @@ public:
 				m_iTotal++;
 	}
 
-	bool	PushGrouped ( const CSphMatch &, bool, bool ) final				{ assert(0); return false; }
+	bool	PushGrouped ( const CSphMatch &, bool ) final					{ assert(0); return false; }
 
 	/// store all entries into specified location in sorted order, and remove them from queue
 	int Flatten ( CSphMatch * pTo ) final
@@ -911,7 +911,7 @@ public:
 				m_iTotal++;
 	}
 
-	bool	PushGrouped ( const CSphMatch &, bool, bool ) final	{ assert(0); return false; }
+	bool	PushGrouped ( const CSphMatch &, bool ) final	{ assert(0); return false; }
 
 	/// store all entries into specified location in sorted order, and remove them from queue
 	int Flatten ( CSphMatch * pTo ) final
@@ -1152,7 +1152,7 @@ public:
 			else
 				m_iTotal++;
 	}
-	bool				PushGrouped ( const CSphMatch &, bool, bool ) final { assert(0); return false; }
+	bool				PushGrouped ( const CSphMatch &, bool ) final { assert(0); return false; }
 	int					Flatten ( CSphMatch * ) final;
 	void				SetSchema ( ISphSchema * pSchema, bool bRemapCmp ) final;
 	void				Finalize ( MatchProcessor_i & , bool, bool bFinalizeMatches ) final {}
@@ -1297,7 +1297,7 @@ public:
 				m_iTotal++;
 	}
 
-	bool				PushGrouped ( const CSphMatch &, bool, bool ) final { assert(0); return false; }
+	bool				PushGrouped ( const CSphMatch &, bool ) final { assert(0); return false; }
 	int					Flatten ( CSphMatch * ) final;
 	void				Finalize ( MatchProcessor_i &, bool, bool bFinalizeMatches ) final {}
 	bool				CanBeCloned() const final { return false; }
@@ -2371,16 +2371,16 @@ protected:
 		return !m_pAggrFilterTrait || m_pAggrFilterTrait->Eval ( tMatch );
 	}
 
-	void AggrUpdate ( CSphMatch & tDst, const CSphMatch & tSrc, bool bGrouped )
+	void AggrUpdate ( CSphMatch & tDst, const CSphMatch & tSrc, bool bGrouped, bool bMerge = false )
 	{
 		for ( auto * pAggregate : this->m_dAggregates )
-			pAggregate->Update ( tDst, tSrc, bGrouped );
+			pAggregate->Update ( tDst, tSrc, bGrouped, bMerge );
 	}
 
-	void AggrSetup ( CSphMatch & tDst, const CSphMatch & tSrc, bool bGrouped )
+	void AggrSetup ( CSphMatch & tDst, const CSphMatch & tSrc, bool bMerge = false )
 	{
 		for ( auto * pAggregate : this->m_dAggregates )
-			pAggregate->Setup ( tDst, tSrc, bGrouped );
+			pAggregate->Setup ( tDst, tSrc, bMerge );
 	}
 
 	void AggrUngroup ( CSphMatch & tMatch )
@@ -2540,7 +2540,7 @@ protected:
 	bool						m_bSortByDistinct = false;
 	GroupSorter_fn<COMPGROUP>	m_tGroupSorter;
 	SubGroupSorter_fn			m_tSubSorter;
-	CSphVector<AggrFunc_i *>		m_dAvgs;
+	CSphVector<AggrFunc_i *>	m_dAvgs;
 	bool						m_bAvgFinal = false;
 	static const int			GROUPBY_FACTOR = 4;	///< allocate this times more storage when doing group-by (k, as in k-buffer)
 
@@ -2699,7 +2699,7 @@ public:
 
 	bool	Push ( const CSphMatch & tEntry ) override						{ return PushEx<false> ( tEntry, m_pGrouper->KeyFromMatch(tEntry), false ); }
 	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) override	{ assert ( 0 && "Not supported in grouping"); }
-	bool	PushGrouped ( const CSphMatch & tEntry, bool, bool bUpdateDistinct ) override { return PushEx<true> ( tEntry, tEntry.GetAttr ( m_tLocGroupby ), false, nullptr, bUpdateDistinct ); }
+	bool	PushGrouped ( const CSphMatch & tEntry, bool ) override			{ return PushEx<true> ( tEntry, tEntry.GetAttr ( m_tLocGroupby ), false ); }
 	ISphMatchSorter * Clone() const override								{ return this->template CloneSorterT<MYTYPE>(); }
 
 	/// store all entries into specified location in sorted order, and remove them from queue
@@ -2741,7 +2741,7 @@ public:
 		return int ( pTo-pBegin );
 	}
 
-	// FIXME! test CSphKBufferGroupSorter
+
 	void MoveTo ( ISphMatchSorter * pRhs, bool bCopyMeta ) final
 	{
 		if ( !Used () )
@@ -2772,11 +2772,17 @@ public:
 		// we can do it later after all sorters are merged
 		FinalizeMatches ( !bCopyMeta );
 
+		dRhs.m_bUpdateDistinct = !bUniqUpdated;
+		dRhs.m_bMerge = true;
+
 		// just push in heap order
 		// since we have grouped matches, it is not always possible to move them,
 		// so use plain push instead
 		for ( auto iMatch : this->m_dIData )
-			dRhs.PushGrouped ( m_dData[iMatch], false, !bUniqUpdated );
+			dRhs.PushGrouped ( m_dData[iMatch], false );
+
+		dRhs.m_bUpdateDistinct = true;
+		dRhs.m_bMerge = false;
 	}
 
 	void Finalize ( MatchProcessor_i & tProcessor, bool, bool bFinalizeMatches ) override
@@ -2802,7 +2808,7 @@ public:
 	}
 
 protected:
-	bool PushIntoExistingGroup( CSphMatch & tGroup, const CSphMatch & tEntry, SphGroupKey_t uGroupKey, bool bGrouped, SphAttr_t * pAttr, bool bUpdateDistinct )
+	bool PushIntoExistingGroup( CSphMatch & tGroup, const CSphMatch & tEntry, SphGroupKey_t uGroupKey, bool bGrouped, SphAttr_t * pAttr )
 	{
 		assert ( tGroup.GetAttr ( m_tLocGroupby )==uGroupKey );
 		assert ( tGroup.m_pDynamic[-1]==tEntry.m_pDynamic[-1] );
@@ -2814,7 +2820,7 @@ protected:
 			tGroup.AddCounterScalar ( tLocCount, 1 );
 
 		if_const ( HAS_AGGREGATES )
-			AggrUpdate ( tGroup, tEntry, bGrouped );
+			AggrUpdate ( tGroup, tEntry, bGrouped, m_bMerge );
 
 		// if new entry is more relevant, update from it
 		if ( m_tSubSorter.MatchIsGreater ( tEntry, tGroup ) )
@@ -2832,7 +2838,7 @@ protected:
 		}
 
 		// submit actual distinct value
-		if ( DISTINCT && bUpdateDistinct )
+		if ( DISTINCT && m_bUpdateDistinct )
 			UpdateDistinct ( tEntry, uGroupKey, bGrouped );
 
 		return false; // since it is dupe
@@ -2840,7 +2846,7 @@ protected:
 
 	/// add entry to the queue
 	template <bool GROUPED>
-	FORCE_INLINE bool PushEx ( const CSphMatch & tEntry, const SphGroupKey_t uGroupKey, bool, SphAttr_t * pAttr=nullptr, bool bUpdateDistinct=true )
+	FORCE_INLINE bool PushEx ( const CSphMatch & tEntry, const SphGroupKey_t uGroupKey, bool, SphAttr_t * pAttr=nullptr )
 	{
 		if_const ( NOTIFICATIONS )
 		{
@@ -2860,7 +2866,7 @@ protected:
 			CSphMatch * pMatch = (*ppMatch);
 			assert ( pMatch );
 			assert ( pMatch->GetAttr ( m_tLocGroupby )==uGroupKey );
-			return PushIntoExistingGroup ( *pMatch, tEntry, uGroupKey, GROUPED, pAttr, bUpdateDistinct );
+			return PushIntoExistingGroup ( *pMatch, tEntry, uGroupKey, GROUPED, pAttr );
 		}
 
 		// submit actual distinct value
@@ -2877,7 +2883,7 @@ protected:
 		m_pSchema->CloneMatch ( tNew, tEntry );
 
 		if_const ( HAS_AGGREGATES )
-			AggrSetup ( tNew, tEntry, GROUPED );
+			AggrSetup ( tNew, tEntry, m_bMerge );
 
 		if_const ( NOTIFICATIONS )
 			m_tJustPushed = RowTagged_t ( tNew );
@@ -2891,7 +2897,7 @@ protected:
 		{
 			tNew.SetAttr ( m_tLocGroupby, uGroupKey );
 			tNew.SetAttr ( tLocCount, 1 );
-			if ( DISTINCT && bUpdateDistinct )
+			if ( DISTINCT && m_bUpdateDistinct )
 				tNew.SetAttr ( m_tLocDistinct, 0 );
 
 			if ( pAttr )
@@ -2905,6 +2911,9 @@ protected:
 
 private:
 	enum class Avg_e { FINALIZE, UNGROUP };
+	bool	m_bUpdateDistinct = true;
+	bool	m_bMerge = false;
+
 	void CalcAvg ( Avg_e eGroup )
 	{
 		if ( m_dAvgs.IsEmpty() )
@@ -3157,9 +3166,6 @@ protected:
 	using MatchSorter_c::m_tJustPushed;
 	using MatchSorter_c::m_pSchema;
 
-	int m_iStorageSolidFrom = 0; // edge from witch storage is not yet touched and need no chaining freelist
-	OpenHash_T<int, SphGroupKey_t> m_hGroup2Index; // used to quickly locate group for incoming match
-
 public:
 	/// ctor
 	CSphKBufferNGroupSorter ( const ISphMatchComparator * pComp, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings ) // FIXME! make k configurable
@@ -3178,7 +3184,7 @@ public:
 
 	bool	Push ( const CSphMatch & tEntry ) override						{ return PushEx<false> ( tEntry, m_pGrouper->KeyFromMatch(tEntry), false ); }
 	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) final	{ assert ( 0 && "Not supported in grouping"); }
-	bool	PushGrouped ( const CSphMatch & tEntry, bool bNewSet, bool bUpdateDistinct ) override	{ return PushEx<true> ( tEntry, tEntry.GetAttr ( m_tLocGroupby ), bNewSet, false, bUpdateDistinct ); }
+	bool	PushGrouped ( const CSphMatch & tEntry, bool bNewSet ) override	{ return PushEx<true> ( tEntry, tEntry.GetAttr ( m_tLocGroupby ), bNewSet ); }
 
 	/// store all entries into specified location in sorted order, and remove them from queue
 	int Flatten ( CSphMatch * pTo ) override
@@ -3311,6 +3317,9 @@ public:
 			CountDistinct();
 		}
 
+		dRhs.m_bUpdateDistinct = !bUniqUpdated;
+		dRhs.m_bMerge = true;
+
 		auto iTotal = dRhs.m_iTotal;
 		for ( auto iHead : m_dFinalizedHeads )
 		{
@@ -3319,17 +3328,23 @@ public:
 			// have to set bNewSet to true
 			// as need to falltrough at PushAlreadyHashed and update count and aggregates values for head match
 			// even uGroupKey match already exists
-			dRhs.template PushEx<true> ( m_dData[iHead], uGroupKey, true, true, !bUniqUpdated );
+			dRhs.template PushEx<true> ( m_dData[iHead], uGroupKey, true, true );
 			for ( int i = this->m_dIData[iHead]; i!=iHead; i = this->m_dIData[i] )
-				dRhs.template PushEx<false> ( m_dData[i], uGroupKey, false, true, !bUniqUpdated );
+				dRhs.template PushEx<false> ( m_dData[i], uGroupKey, false, true );
 
 			DeleteChain ( iHead, false );
 		}
+
+		dRhs.m_bUpdateDistinct = true;
+		dRhs.m_bMerge = false;
+
 		dRhs.m_iTotal = m_iTotal+iTotal;
 	}
 
-
 protected:
+	int m_iStorageSolidFrom = 0; // edge from witch storage is not yet touched and need no chaining freelist
+	OpenHash_T<int, SphGroupKey_t> m_hGroup2Index; // used to quickly locate group for incoming match
+
 	int				m_iGLimit;		///< limit per one group
 	SphGroupKey_t	m_uLastGroupKey = -1;	///< helps to determine in pushEx whether the new subgroup started
 	int				m_iFree = 0;			///< current insertion point
@@ -3352,7 +3367,7 @@ protected:
 	 * It hold all calculated stuff from agregates/group_concat until finalization.
 	 */
 	template <bool GROUPED>
-	bool PushEx ( const CSphMatch & tEntry, const SphGroupKey_t uGroupKey, bool bNewSet, bool bTailFinalized=false, bool bUpdateDistinct=true )
+	bool PushEx ( const CSphMatch & tEntry, const SphGroupKey_t uGroupKey, bool bNewSet, bool bTailFinalized=false )
 	{
 
 #ifndef NDEBUG
@@ -3378,7 +3393,7 @@ protected:
 		// if such group already hashed
 		int * pGroupIdx = m_hGroup2Index.Find ( uGroupKey );
 		if ( pGroupIdx )
-			return PushAlreadyHashed ( pGroupIdx, iNew, tEntry, uGroupKey, GROUPED, bNewSet, bTailFinalized, bUpdateDistinct );
+			return PushAlreadyHashed ( pGroupIdx, iNew, tEntry, uGroupKey, GROUPED, bNewSet, bTailFinalized );
 
 		// match came from MoveTo of another sorter, it is tail and it has no group here (m.b. it is already
 		// deleted during finalization as one of worst). Just discard the whole group in the case.
@@ -3395,7 +3410,7 @@ protected:
 
 
 		// submit actual distinct value in all cases
-		if ( DISTINCT && bUpdateDistinct )
+		if ( DISTINCT && m_bUpdateDistinct )
 			UpdateDistinct ( tNew, uGroupKey, GROUPED );
 
 		if_const ( NOTIFICATIONS )
@@ -3422,6 +3437,8 @@ protected:
 	}
 
 private:
+	bool	m_bUpdateDistinct = true;
+	bool	m_bMerge = false;
 
 	// surely give place for a match (do vacuum-cleaning, if there is no place)
 	inline int AllocateMatch ()
@@ -3504,7 +3521,7 @@ private:
 	 * If group is full, and new match is less then head, it will be early rejected.
 	 * In all other cases new match will be inserted into the group right after head
 	 */
-	bool PushAlreadyHashed ( int * pHead, int iNew, const CSphMatch & tEntry, const SphGroupKey_t uGroupKey, bool bGrouped, bool bNewSet, bool bTailFinalized, bool bUpdateDistinct )
+	bool PushAlreadyHashed ( int * pHead, int iNew, const CSphMatch & tEntry, const SphGroupKey_t uGroupKey, bool bGrouped, bool bNewSet, bool bTailFinalized )
 	{
 		int & iHead = *pHead;
 
@@ -3527,7 +3544,7 @@ private:
 
 		auto & tHeadMatch = m_dData[iHead];
 		// submit actual distinct value in all cases
-		if ( DISTINCT && bUpdateDistinct )
+		if ( DISTINCT && m_bUpdateDistinct )
 			UpdateDistinct ( tEntry, uGroupKey, bGrouped );
 
 		// update group-wide counters
@@ -3554,7 +3571,7 @@ private:
 		if_const ( HAS_AGGREGATES )
 		{
 			if ( bNewSet )
-				AggrUpdate ( tHeadMatch, tEntry, bGrouped );
+				AggrUpdate ( tHeadMatch, tEntry, bGrouped, m_bMerge );
 		}
 
 		// since it is dupe (i.e. such group is already pushed) - return false;
@@ -3883,7 +3900,7 @@ public:
 		return bRes;
 	}
 
-	bool PushGrouped ( const CSphMatch & tEntry, bool bNewSet, bool ) override
+	bool PushGrouped ( const CSphMatch & tEntry, bool bNewSet ) override
 	{
 		return BASE::template PushEx<true> ( tEntry, tEntry.GetAttr ( BASE::m_tLocGroupby ), bNewSet );
 	}
@@ -3944,7 +3961,7 @@ public:
 	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) final	{ assert ( 0 && "Not supported in grouping"); }
 
 	/// add pre-grouped entry to the queue
-	bool PushGrouped ( const CSphMatch & tEntry, bool bNewSet, bool ) override
+	bool PushGrouped ( const CSphMatch & tEntry, bool bNewSet ) override
 	{
 		// re-group it based on the group key
 		return BASE::template PushEx<true> ( tEntry, tEntry.GetAttr ( BASE::m_tLocGroupby ), bNewSet );
@@ -4022,7 +4039,7 @@ public:
 
 	bool	Push ( const CSphMatch & tEntry ) final							{ return PushEx<false>(tEntry); }
 	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) final	{ assert ( 0 && "Not supported in grouping"); }
-	bool	PushGrouped ( const CSphMatch & tEntry, bool, bool ) final		{ return PushEx<true>(tEntry); }
+	bool	PushGrouped ( const CSphMatch & tEntry, bool ) final		{ return PushEx<true>(tEntry); }
 
 	/// store all entries into specified location in sorted order, and remove them from queue
 	int Flatten ( CSphMatch * pTo ) final
@@ -4108,8 +4125,9 @@ public:
 		// we just can't add current count uniq to final; need to append m_dUniq instead,
 		// so that final flatten will calculate real uniq count.
 		dRhs.AddCount ( m_tData );
+
 		if_const ( HAS_AGGREGATES )
-			dRhs.UpdateAggregates ( m_tData );
+			dRhs.UpdateAggregates ( m_tData, false, true );
 
 		dRhs.CheckReplaceEntry ( m_tData );
 		if ( !bCopyMeta && DISTINCT )
@@ -4125,8 +4143,8 @@ protected:
 private:
 	inline void SetupBaseGrouperWrp ( ISphSchema * pSchema )	{ SetupBaseGrouper<DISTINCT> ( pSchema ); }
 	void	AddCount ( const CSphMatch & tEntry )				{ m_tData.AddCounterAttr ( m_tLocCount, tEntry ); }
-	void	UpdateAggregates ( const CSphMatch & tEntry, bool bGrouped = true ) { AggrUpdate ( m_tData, tEntry, bGrouped ); }
-	void	SetupAggregates ( const CSphMatch & tEntry, bool bGrouped = true )	{ AggrSetup ( m_tData, tEntry, bGrouped ); }
+	void	UpdateAggregates ( const CSphMatch & tEntry, bool bGrouped = true, bool bMerge = false ) { AggrUpdate ( m_tData, tEntry, bGrouped, bMerge ); }
+	void	SetupAggregates ( const CSphMatch & tEntry )		{ AggrSetup ( m_tData, tEntry ); }
 
 	// if new entry is more relevant, update from it
 	void CheckReplaceEntry ( const CSphMatch & tEntry )
@@ -4198,7 +4216,7 @@ private:
 
 		// first-time aggregate setup
 		if_const ( HAS_AGGREGATES )
-			SetupAggregates ( tEntry, GROUPED );
+			SetupAggregates(tEntry);
 
 		if_const ( NOTIFICATIONS )
 			m_tJustPushed = RowTagged_t ( m_tData );
@@ -4337,6 +4355,9 @@ static inline ESphSortKeyPart Attr2Keypart ( ESphAttr eType )
 	{
 		case SPH_ATTR_FLOAT:
 			return SPH_KEYPART_FLOAT;
+
+		case SPH_ATTR_DOUBLE:
+			return SPH_KEYPART_DOUBLE;
 
 		case SPH_ATTR_STRING:
 			return SPH_KEYPART_STRING;
@@ -5386,9 +5407,9 @@ bool QueueCreator_c::SetupAggregateExpr ( CSphColumnInfo & tExprCol, const CSphS
 	switch ( tExprCol.m_eAggrFunc )
 	{
 	case SPH_AGGR_AVG:
-		// force AVG() to be computed in floats
-		tExprCol.m_eAttrType = SPH_ATTR_FLOAT;
-		tExprCol.m_tLocator.m_iBitCount = 32;
+		// force AVG() to be computed in doubles
+		tExprCol.m_eAttrType = SPH_ATTR_DOUBLE;
+		tExprCol.m_tLocator.m_iBitCount = 64;
 		break;
 
 	case SPH_AGGR_CAT:

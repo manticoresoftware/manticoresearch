@@ -319,6 +319,7 @@ public:
 	void		SendDword ( DWORD iValue )		{ SendT<DWORD> ( htonl ( iValue ) ); }
 	void		SendWord ( WORD iValue )		{ SendT<WORD> ( htons ( iValue ) ); }
 	void		SendFloat ( float fValue )		{ SendT<DWORD> ( htonl ( sphF2DW ( fValue ) ) ); }
+	void		SendDouble ( double fValue )	{ SendUint64 ( sphD2QW(fValue) ); }
 	void		SendByte ( BYTE uValue )		{ SendT<BYTE> ( uValue ); }
 
 	void SendLSBDword ( DWORD v )
@@ -505,6 +506,7 @@ public:
 	uint64_t		GetUint64() { uint64_t uRes = GetDword(); return (uRes<<32)+GetDword(); }
 	BYTE			GetByte () { return GetT<BYTE> (); }
 	float			GetFloat () { return sphDW2F ( ntohl ( GetT<DWORD> () ) ); }
+	float			GetDouble () { return sphQW2D ( GetUint64() ); }
 	CSphString		GetString ();
 	CSphString		GetRawString ( int iLen );
 	bool			GetString ( CSphVector<BYTE> & dBuffer );
@@ -1363,7 +1365,8 @@ enum MysqlColumnType_e
 {
 	MYSQL_COL_DECIMAL	= 0,
 	MYSQL_COL_LONG		= 3,
-	MYSQL_COL_FLOAT	= 4,
+	MYSQL_COL_FLOAT		= 4,
+	MYSQL_COL_DOUBLE	= 5,
 	MYSQL_COL_LONGLONG	= 8,
 	MYSQL_COL_STRING	= 254
 };
@@ -1375,6 +1378,7 @@ public:
 	virtual ~RowBuffer_i() {}
 
 	virtual void PutFloatAsString ( float fVal, const char * sFormat=nullptr ) = 0;
+	virtual void PutDoubleAsString ( double fVal, const char * szFormat=nullptr ) = 0;
 
 	virtual void PutPercentAsString ( int64_t iVal, int64_t iBase )
 	{

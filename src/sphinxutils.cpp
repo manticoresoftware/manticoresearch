@@ -2413,6 +2413,15 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 		return iLen;
 	}
 
+	int PrintVarDouble ( char* sBuffer, double fVal )
+	{
+		int iLen = sprintf ( sBuffer, "%f", fVal );
+		auto fTest = strtod ( sBuffer, nullptr );
+		if ( fTest!=fVal )
+			return sprintf ( sBuffer, "%1.8f", fVal );
+		return iLen;
+	}
+
 	SmallStringHash_T<CSphString> ParseKeyValueStrings ( const char * sBuf )
 	{
 		SmallStringHash_T<CSphString> hRes;

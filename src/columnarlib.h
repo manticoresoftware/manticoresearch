@@ -13,8 +13,8 @@
 
 #include "sphinxstd.h"
 
-#include "columnar.h"
-#include "builder.h"
+#include "columnar/columnar.h"
+#include "columnar/builder.h"
 
 class ISphSchema;
 

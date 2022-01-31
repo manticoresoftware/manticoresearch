@@ -60,7 +60,7 @@ MS Windows build) will cause configuration to fail with error. Disabling of a fe
 disables it's investigation on the system, and disables their downloading/building, as it would be done for some external
 libs in case of implicit configuration.
 
-#### Confirutation flags and options
+#### Configuration flags and options
 
 - **USE_SYSLOG** - allows to use `syslog` in [query logging](Logging/Query_logging.md). 
 
@@ -335,8 +335,8 @@ There are two types of generators: single-config and multi-config.
 
 If you want to specify build type, but don't want to care about whether it is 'single' or 'multi' config generator - 
 just provide necessary keys in both places. I.e., configure with `-DCMAKE_BUILD_TYPE=Debug`, and then build with `--config Debug`.
-Just be sure that both values are same. If target builder is single-config, it will consume confirutation param.
-If it is multi-config, configuration param will be ignored, but correct build confirutation will then be selected by --config key.
+Just be sure that both values are same. If target builder is single-config, it will consume configuration param.
+If it is multi-config, configuration param will be ignored, but correct build configuration will then be selected by --config key.
 
 If you want RelWihtDebInfo (i.e. just build for production) and know you're on single-config platform (that is all, except Windows) - you can omit `--config` flag on cmake invocation. Default `CMAKE_BUILD_TYPE=RelWithDebInfo` will be configured then, and used.
 All the commands for 'building', 'installation' and 'building package' will become shorter then.

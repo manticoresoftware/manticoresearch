@@ -7,6 +7,9 @@ Reporting as much as possible about each bug is very important - because to fix 
 ### Bug-tracker
 We track bugs and feature requests in [Github](https://github.com/manticoresoftware/manticore/issues). Feel free to create a new ticket and describe your bug in details so both you and developers can save their time.
 
+### Documentation updates
+Updates to the documentation (what you are reading now) is also done on [Github](https://github.com/manticoresoftware/manticoresearch/tree/master/manual).
+
 ### Crashes
 Manticore is written in C++ - low level programming language allowing to speak to the computer with not so many intermediate layers for faster performance. The drawback of that is that in rare cases there is no way to handle a bug elegantly writing the error about it to a log and skipping processing the command which caused the problem. Instead of that the program can just crash which means it would stop completely and would have to be restarted.
 

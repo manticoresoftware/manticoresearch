@@ -317,6 +317,8 @@ public:
 	RowTagged_t					GetJustPushed() const override						{ assert (0 && "Not supported" ); return RowTagged_t(); }
 	VecTraits_T<RowTagged_t>	GetJustPopped() const override						{ assert (0 && "Not supported" ); return {}; }
 
+	void		SetMerge ( bool bMerge ) override							{}
+
 private:
 	struct IteratorWithLocator_t
 	{

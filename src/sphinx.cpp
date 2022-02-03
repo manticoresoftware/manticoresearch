@@ -9941,7 +9941,7 @@ static ESphEvalStage GetEarliestStage ( ESphEvalStage eStage, const CSphColumnIn
 	for ( const auto * pSchema : dSchemas )
 	{
 		const CSphColumnInfo * pCol = pSchema->GetAttr ( tIn.m_sName.cstr() );
-		if ( !pCol || pCol->IsColumnar() )
+		if ( !pCol || ( pCol->IsColumnar() && pCol->m_eStage==SPH_EVAL_STATIC ) )
 			continue;
 
 		eStage = Min ( eStage, pCol->m_eStage );

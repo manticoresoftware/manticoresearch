@@ -93,6 +93,7 @@ public:
 		{
 			std::string sError; // FIXME! report errors
 			m_pIterator = pColumnar->CreateIterator ( m_sAttr.cstr(), {}, nullptr, sError );
+			m_eType = pColumnar->GetType ( m_sAttr.cstr() );
 		}
 		else
 			m_pIterator.Reset();
@@ -104,7 +105,8 @@ public:
 	}
 
 protected:
-	CSphString m_sAttr;
+	CSphString				m_sAttr;
+	columnar::AttrType_e	m_eType = columnar::AttrType_e::NONE;
 	CSphScopedPtr<columnar::Iterator_i> m_pIterator {nullptr};
 
 	inline T FetchValue ( const CSphMatch & tSrc, bool bMerge )
@@ -114,6 +116,9 @@ protected:
 
 		if ( !m_pIterator.Ptr() || m_pIterator->AdvanceTo ( tSrc.m_tRowID ) != tSrc.m_tRowID )
 			return (T)0;
+
+		if ( m_eType==columnar::AttrType_e::FLOAT )
+			return (T)sphDW2F ( (DWORD)m_pIterator->Get() );
 
 		return (T)m_pIterator->Get();
 	}

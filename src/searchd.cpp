@@ -1897,11 +1897,11 @@ void SearchReplyParser_c::ParseMatch ( CSphMatch & tMatch, MemInputBuffer_c & tR
 			break;
 
 		case SPH_ATTR_FLOAT:
-			tMatch.SetAttr ( tAttr.m_tLocator, sphF2DW ( tReq.GetFloat() ) );
+			tMatch.SetAttrFloat ( tAttr.m_tLocator, tReq.GetFloat() );
 			break;
 
 		case SPH_ATTR_DOUBLE:
-			tMatch.SetAttr ( tAttr.m_tLocator, sphD2QW ( tReq.GetDouble() ) );
+			tMatch.SetAttrDouble ( tAttr.m_tLocator, tReq.GetDouble() );
 			break;
 
 		case SPH_ATTR_BIGINT:
@@ -3338,7 +3338,7 @@ static void SendMVA ( ISphOutputBuffer& tOut, const BYTE * pMVA, bool b64bit )
 }
 
 
-static ESphAttr FixupAttrForNetwork ( const CSphColumnInfo & tCol, WORD uMasterVer, bool bAgentMode )
+static ESphAttr FixupAttrForNetwork ( const CSphColumnInfo & tCol, int iVer, WORD uMasterVer, bool bAgentMode )
 {
 	bool bSendJson = ( bAgentMode && uMasterVer>=3 );
 	bool bSendJsonField = ( bAgentMode && uMasterVer>=4 );
@@ -3367,12 +3367,15 @@ static ESphAttr FixupAttrForNetwork ( const CSphColumnInfo & tCol, WORD uMasterV
 	case SPH_ATTR_JSON_FIELD_PTR:
 		return bSendJsonField ? SPH_ATTR_JSON_FIELD : SPH_ATTR_STRING;
 
+	case SPH_ATTR_DOUBLE:
+		return iVer<0x122 ? SPH_ATTR_FLOAT : SPH_ATTR_DOUBLE;
+
 	default: return tCol.m_eAttrType;
 	} 
 }
 
 
-static void SendSchema ( ISphOutputBuffer & tOut, const AggrResult_t & tRes, const CSphBitvec & tAttrsToSend, WORD uMasterVer, bool bAgentMode )
+static void SendSchema ( ISphOutputBuffer & tOut, const AggrResult_t & tRes, const CSphBitvec & tAttrsToSend, int iVer, WORD uMasterVer, bool bAgentMode )
 {
 	int iFieldsCount = tRes.m_tSchema.GetFieldsCount();
 	tOut.SendInt ( iFieldsCount );
@@ -3388,7 +3391,7 @@ static void SendSchema ( ISphOutputBuffer & tOut, const AggrResult_t & tRes, con
 		const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
 		tOut.SendString ( tCol.m_sName.cstr() );
 
-		ESphAttr eCol = FixupAttrForNetwork ( tCol, uMasterVer, bAgentMode );
+		ESphAttr eCol = FixupAttrForNetwork ( tCol, iVer, uMasterVer, bAgentMode );
 		tOut.SendDword ( (DWORD)eCol );
 	}
 }
@@ -3440,7 +3443,10 @@ static void SendAttribute ( ISphOutputBuffer & tOut, const CSphMatch & tMatch, c
 		break;
 
 	case SPH_ATTR_DOUBLE:
-		tOut.SendDouble ( tMatch.GetAttrDouble(tLoc) );
+		if ( iVer<0x122 )
+			tOut.SendFloat ( (float)tMatch.GetAttrDouble(tLoc) );
+		else
+			tOut.SendDouble ( tMatch.GetAttrDouble(tLoc) );
 		break;
 
 	case SPH_ATTR_BIGINT:
@@ -3484,7 +3490,7 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const AggrResult_t& tRes, b
 	sphGetAttrsToSend ( tRes.m_tSchema, bAgentMode, false, tAttrsToSend );
 
 	// send schema
-	SendSchema ( tOut, tRes, tAttrsToSend, uMasterVer, bAgentMode );
+	SendSchema ( tOut, tRes, tAttrsToSend, iVer, uMasterVer, bAgentMode );
 
 	// send matches
 	tOut.SendInt ( tRes.m_iCount );
@@ -4782,6 +4788,7 @@ bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHave
 		tQueueSettings.m_iMaxMatches = Min ( tQuery.m_iMaxMatches * tRes.m_dResults.GetLength(), tRes.GetLength() );
 	else
 		tQueueSettings.m_iMaxMatches = Min ( tQuery.m_iMaxMatches, tRes.GetLength() );
+
 	tQueueSettings.m_iMaxMatches = Max ( tQueueSettings.m_iMaxMatches, 1 );
 
 	SphQueueRes_t tQueueRes;
@@ -4796,6 +4803,8 @@ bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHave
 
 	if ( !pSorter )
 		return false;
+
+	pSorter->SetMerge(true);
 
 	// reset bAllEqual flag if sorter makes new attributes
 	if ( bAllEqual )
@@ -4910,8 +4919,7 @@ int GetMaxMatches ( int iQueryMaxMatches, const CSphIndex * pIndex )
 
 
 /// merges multiple result sets, remaps columns, does reorder for outer selects
-bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHaveLocals, const sph::StringSet & hExtraColumns, QueryProfile_c * pProfiler, const CSphFilterSettings * pAggrFilter, bool bForceRefItems,
-	bool bMaster )
+bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHaveLocals, const sph::StringSet & hExtraColumns, QueryProfile_c * pProfiler, const CSphFilterSettings * pAggrFilter, bool bForceRefItems, bool bMaster )
 {
 	bool bReturnZeroCount = !tRes.m_dZeroCount.IsEmpty();
 	bool bQueryFromAPI = tQuery.m_eQueryType==QUERY_API;
@@ -7346,7 +7354,6 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 	auto tReply = APIAnswer ( tOut, VER_COMMAND_SEARCH );
 	ARRAY_FOREACH ( i, tHandler.m_dQueries )
 		SendResult ( uVer, tOut, tHandler.m_dAggrResults[i], bAgentMode, tHandler.m_dQueries[i], uMasterVer );
-
 
 	int64_t iTotalPredictedTime = 0;
 	int64_t iTotalAgentPredictedTime = 0;

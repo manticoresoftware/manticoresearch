@@ -118,6 +118,11 @@ public:
 
 	virtual RowTagged_t					GetJustPushed() const = 0;
 	virtual VecTraits_T<RowTagged_t>	GetJustPopped() const = 0;
+
+	// tells the sorter whether we are working on a raw index and it can use columnar storage
+	// or it should use the values stored in the matches
+	// used by columnar aggregate functions
+	virtual void		SetMerge ( bool bMerge ) = 0;
 };
 
 

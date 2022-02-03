@@ -1,6 +1,6 @@
 include(update_bundle)
 
-set (COLUMNAR_ABI 13)
+set (COLUMNAR_ABI 14)
 set (COLUMNAR_REQUIRED_VER 1.${COLUMNAR_ABI} )
 
 # Note: we don't build, neither link with columnar. Only thing we expect to get is a few interface headers, aka 'columnar_api'.

@@ -842,6 +842,12 @@ function RoundFloatValues ( &$values, $roundoff )
 }
 
 
+function IsColumnarProperty ( $property )
+{
+	return $property=="columnar" || $property=="columnar fast_fetch" || $property=="columnar stored";
+}
+
+
 function JsonRsetFixup ( &$set, $columnar )
 {
 	if ( isset ( $set["rows"] ) )
@@ -867,7 +873,7 @@ function JsonRsetFixup ( &$set, $columnar )
 		{
 			foreach ( $rows["data"] as &$entry )
 			{
-				if ( is_array($entry) && isset ( $entry["Properties"] ) && ( $entry["Properties"]=="columnar" || $entry["Properties"]=="columnar stored" ) && $columnar )
+				if ( is_array($entry) && isset ( $entry["Properties"] ) && $columnar && IsColumnarProperty ( $entry["Properties"] ) )
 					$entry["Properties"] = "";
 			}
 		}
@@ -893,7 +899,7 @@ function SqlRsetFixup ( &$set, $columnar )
 		if ( $keys[0]!='Field' || $keys[1]!='Type' || $keys[2]!='Properties' )
 			return;
 
-		if ( $columnar && ( $row['Properties']=='columnar' || $row['Properties']=='columnar stored' ) )
+		if ( $columnar && IsColumnarProperty ( $row['Properties'] ) )
 			$row['Properties'] = '';
 	}
 }

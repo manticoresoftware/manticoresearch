@@ -771,6 +771,8 @@ public:
 		dRhs.m_iTotal = m_iTotal + iTotal;
 	}
 
+	void SetMerge ( bool bMerge ) final {}
+
 private:
 	InvCompareIndex_fn<COMP> m_fnComp;
 
@@ -997,6 +999,8 @@ public:
 		dRhs.m_iTotal = m_iTotal + iTotal;
 	}
 
+	void				SetMerge ( bool bMerge ) final {}
+
 protected:
 	CSphMatch *			m_pWorst = nullptr;
 	bool				m_bFinalized = false;
@@ -1159,6 +1163,7 @@ public:
 	bool				CanBeCloned() const final { return false; }
 	ISphMatchSorter *	Clone() const final { return nullptr; }
 	void				MoveTo ( ISphMatchSorter *, bool ) final {}
+	void				SetMerge ( bool bMerge ) final {}
 
 private:
 	AttrUpdateSharedPtr_t	m_pWorkSet;
@@ -1304,6 +1309,7 @@ public:
 	ISphMatchSorter *	Clone () const final { return nullptr; }
 	void				MoveTo ( ISphMatchSorter *, bool ) final {}
 	void				SetSchema ( ISphSchema * pSchema, bool bRemapCmp ) final;
+	void				SetMerge ( bool bMerge ) final {}
 
 private:
 	CSphVector<DocID_t> *	m_pValues;
@@ -2773,7 +2779,7 @@ public:
 		FinalizeMatches ( !bCopyMeta );
 
 		dRhs.m_bUpdateDistinct = !bUniqUpdated;
-		dRhs.m_bMerge = true;
+		dRhs.SetMerge(true);
 
 		// just push in heap order
 		// since we have grouped matches, it is not always possible to move them,
@@ -2782,7 +2788,7 @@ public:
 			dRhs.PushGrouped ( m_dData[iMatch], false );
 
 		dRhs.m_bUpdateDistinct = true;
-		dRhs.m_bMerge = false;
+		dRhs.SetMerge(false);
 	}
 
 	void Finalize ( MatchProcessor_i & tProcessor, bool, bool bFinalizeMatches ) override
@@ -2806,6 +2812,8 @@ public:
 		for ( auto iMatch : this->m_dIData )
 			tProcessor.Process ( &m_dData[iMatch] );
 	}
+
+	void SetMerge ( bool bMerge ) override { m_bMerge = bMerge; }
 
 protected:
 	bool PushIntoExistingGroup( CSphMatch & tGroup, const CSphMatch & tEntry, SphGroupKey_t uGroupKey, bool bGrouped, SphAttr_t * pAttr )
@@ -3318,7 +3326,7 @@ public:
 		}
 
 		dRhs.m_bUpdateDistinct = !bUniqUpdated;
-		dRhs.m_bMerge = true;
+		dRhs.SetMerge(true);
 
 		auto iTotal = dRhs.m_iTotal;
 		for ( auto iHead : m_dFinalizedHeads )
@@ -3336,10 +3344,12 @@ public:
 		}
 
 		dRhs.m_bUpdateDistinct = true;
-		dRhs.m_bMerge = false;
+		dRhs.SetMerge(false);
 
 		dRhs.m_iTotal = m_iTotal+iTotal;
 	}
+
+	void SetMerge ( bool bMerge ) override { m_bMerge = bMerge; }
 
 protected:
 	int m_iStorageSolidFrom = 0; // edge from witch storage is not yet touched and need no chaining freelist
@@ -4134,6 +4144,8 @@ public:
 			dRhs.UpdateDistinct ( m_tData );
 	}
 
+	void SetMerge ( bool bMerge ) override {}
+
 protected:
 	CSphMatch		m_tData;
 	bool			m_bDataInitialized = false;
@@ -4677,6 +4689,7 @@ private:
 	const CSphColumnInfo * GetAliasedColumnarAttr ( const CSphColumnInfo & tAttr );
 	bool	SetupAggregateExpr ( CSphColumnInfo & tExprCol, const CSphString & sExpr, DWORD uQueryPackedFactorFlags );
 	bool	SetupColumnarAggregates ( CSphColumnInfo & tExprCol );
+	void	UpdateAggregateDependencies ( CSphColumnInfo & tExprCol );
 
 	ISphMatchSorter *	SpawnQueue();
 	ISphFilter *		CreateAggrFilter() const;
@@ -5469,6 +5482,21 @@ bool QueueCreator_c::SetupColumnarAggregates ( CSphColumnInfo & tExprCol )
 }
 
 
+void QueueCreator_c::UpdateAggregateDependencies ( CSphColumnInfo & tExprCol )
+{
+	/// update aggregate dependencies (e.g. SELECT 1+attr f1, min(f1), ...)
+	CSphVector<int> dDependentCols;
+	tExprCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dDependentCols );
+	FetchDependencyChains ( dDependentCols );
+	ARRAY_FOREACH ( j, dDependentCols )
+	{
+		auto & tDep = const_cast < CSphColumnInfo & > ( m_pSorterSchema->GetAttr ( dDependentCols[j] ) );
+		if ( tDep.m_eStage>tExprCol.m_eStage )
+			tDep.m_eStage = tExprCol.m_eStage;
+	}
+}
+
+
 bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 {
 	assert ( m_pSorterSchema );
@@ -5626,24 +5654,16 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 		m_pSorterSchema->AddAttr ( tExprCol, true );
 	} else // some aggregate
 	{
-		if ( SetupColumnarAggregates(tExprCol) )
-			tExprCol.m_eStage = SPH_EVAL_SORTER; // columnar aggregates have their own code path; no need to calculate them in presort
-		else
-			tExprCol.m_eStage = SPH_EVAL_PRESORT; // sorter expects computed expression
+		bool bColumnarAggregate = SetupColumnarAggregates(tExprCol);
+
+		// columnar aggregates have their own code path; no need to calculate them in presort
+		tExprCol.m_eStage = bColumnarAggregate ? SPH_EVAL_SORTER : SPH_EVAL_PRESORT;
 
 		m_pSorterSchema->AddAttr ( tExprCol, true );
 		m_hExtra.Add ( tExprCol.m_sName );
 
-		/// update aggregate dependencies (e.g. SELECT 1+attr f1, min(f1), ...)
-		CSphVector<int> dDependentCols;
-		tExprCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dDependentCols );
-		FetchDependencyChains ( dDependentCols );
-		ARRAY_FOREACH ( j, dDependentCols )
-		{
-			auto & tDep = const_cast < CSphColumnInfo & > ( m_pSorterSchema->GetAttr ( dDependentCols[j] ) );
-			if ( tDep.m_eStage>tExprCol.m_eStage )
-				tDep.m_eStage = tExprCol.m_eStage;
-		}
+		if ( !bColumnarAggregate )
+			UpdateAggregateDependencies ( tExprCol );
 	}
 
 	m_hQueryDups.Add ( tExprCol.m_sName );

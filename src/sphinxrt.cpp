@@ -1192,8 +1192,8 @@ public:
 	void				SetKillHookFor ( IndexSegment_c* pAccum, VecTraits_T<int> dDiskChunkIDs ) const;
 
 	Binlog::CheckTnxResult_t ReplayTxn ( Binlog::Blop_e eOp,CSphReader& tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCanContinue ) override; // cb from binlog
-	Binlog::CheckTnxResult_t ReplayCommit ( CSphReader& tReader, Binlog::CheckTxn_fn&& fnCanContinue );
-	Binlog::CheckTnxResult_t ReplayReconfigure ( CSphReader& tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCanContinue );
+	Binlog::CheckTnxResult_t ReplayCommit ( CSphReader & tReader, CSphString & sError, Binlog::CheckTxn_fn && fnCanContinue );
+	Binlog::CheckTnxResult_t ReplayReconfigure ( CSphReader & tReader, CSphString & sError, Binlog::CheckTxn_fn && fnCanContinue );
 
 public:
 #if _WIN32
@@ -9051,7 +9051,15 @@ void RtIndex_c::BinlogCommit ( RtSegment_t * pSeg, const CSphVector<DocID_t> & d
 	});
 }
 
-Binlog::CheckTnxResult_t RtIndex_c::ReplayCommit ( CSphReader& tReader, Binlog::CheckTxn_fn&& fnCanContinue )
+
+static Binlog::CheckTnxResult_t Warn ( CSphString & sError, const CSphReader & tReader )
+{
+	sError = tReader.GetErrorMessage();
+	return {};
+}
+
+
+Binlog::CheckTnxResult_t RtIndex_c::ReplayCommit ( CSphReader & tReader, CSphString & sError, Binlog::CheckTxn_fn && fnCanContinue )
 {
 	CSphRefcountedPtr<RtSegment_t> pSeg;
 	CSphVector<DocID_t> dKlist;
@@ -9064,20 +9072,25 @@ Binlog::CheckTnxResult_t RtIndex_c::ReplayCommit ( CSphReader& tReader, Binlog::
 		pSeg->m_uRows = uRows;
 		pSeg->m_tAliveRows.store ( uRows, std::memory_order_relaxed );
 
-		Binlog::LoadVector ( tReader, pSeg->m_dWords );
+		if ( !Binlog::LoadVector ( tReader, pSeg->m_dWords ) ) return Warn ( sError, tReader );
 		pSeg->m_dWordCheckpoints.Resize ( (int) tReader.UnzipOffset() ); // FIXME! sanity check
 		ARRAY_FOREACH ( i, pSeg->m_dWordCheckpoints )
 		{
 			pSeg->m_dWordCheckpoints[i].m_iOffset = (int) tReader.UnzipOffset();
 			pSeg->m_dWordCheckpoints[i].m_uWordID = (SphWordID_t )tReader.UnzipOffset();
 		}
-		Binlog::LoadVector ( tReader, pSeg->m_dDocs );
-		Binlog::LoadVector ( tReader, pSeg->m_dHits );
-		Binlog::LoadVector ( tReader, pSeg->m_dRows );
-		Binlog::LoadVector ( tReader, pSeg->m_dBlobs );
-		Binlog::LoadVector ( tReader, pSeg->m_dKeywordCheckpoints );
+
+		if ( tReader.GetErrorFlag() ) return Warn ( sError, tReader );
+
+		if ( !Binlog::LoadVector ( tReader, pSeg->m_dDocs ) ) return Warn ( sError, tReader );
+		if ( !Binlog::LoadVector ( tReader, pSeg->m_dHits ) ) return Warn ( sError, tReader );
+		if ( !Binlog::LoadVector ( tReader, pSeg->m_dRows )  ) return Warn ( sError, tReader );
+		if ( !Binlog::LoadVector ( tReader, pSeg->m_dBlobs )  ) return Warn ( sError, tReader );
+		if ( !Binlog::LoadVector ( tReader, pSeg->m_dKeywordCheckpoints ) ) return Warn ( sError, tReader );
 
 		bool bHaveDocstore = !!tReader.GetByte();
+		if ( tReader.GetErrorFlag() ) return Warn ( sError, tReader );
+
 		if ( bHaveDocstore )
 		{
 			pSeg->SetupDocstore ( &(GetInternalSchema()) );
@@ -9086,22 +9099,20 @@ Binlog::CheckTnxResult_t RtIndex_c::ReplayCommit ( CSphReader& tReader, Binlog::
 		}
 
 		bool bHaveColumnar = !!tReader.GetByte();
+		if ( tReader.GetErrorFlag() ) return Warn ( sError, tReader );
+
 		if ( bHaveColumnar )
 		{
 			CSphString sError;
 			pSeg->m_pColumnar = CreateColumnarRT ( GetInternalSchema(), tReader, sError );
-
 			if ( !pSeg->m_pColumnar )
-			{
-				sphWarning ( "binlog: commit: columnar load error: %s",
-							 tReader.GetErrorMessage().cstr() );
-			}
+				return {};
 		}
 
 		pSeg->BuildDocID2RowIDMap ( GetInternalSchema() );
 	}
 
-	Binlog::LoadVector ( tReader, dKlist );
+	if ( !Binlog::LoadVector ( tReader, dKlist ) ) return Warn ( sError, tReader );
 
 	Binlog::CheckTnxResult_t tRes = fnCanContinue();
 	if ( tRes.m_bValid && tRes.m_bApply )
@@ -9161,12 +9172,12 @@ Binlog::CheckTnxResult_t RtIndex_c::ReplayReconfigure ( CSphReader& tReader, CSp
 	return tRes;
 }
 
-Binlog::CheckTnxResult_t RtIndex_c::ReplayTxn (Binlog::Blop_e eOp,CSphReader& tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCanContinue)
+Binlog::CheckTnxResult_t RtIndex_c::ReplayTxn ( Binlog::Blop_e eOp, CSphReader & tReader, CSphString & sError, Binlog::CheckTxn_fn && fnCanContinue )
 {
 	switch ( eOp )
 	{
-	case Binlog::COMMIT: return ReplayCommit(tReader, std::move(fnCanContinue));
-	case Binlog::RECONFIGURE: return ReplayReconfigure(tReader, sError, std::move(fnCanContinue));
+	case Binlog::COMMIT: return ReplayCommit ( tReader, sError, std::move(fnCanContinue) );
+	case Binlog::RECONFIGURE: return ReplayReconfigure ( tReader, sError, std::move(fnCanContinue) );
 	default: assert (false && "unknown op provided to replay");
 	}
 	return {};

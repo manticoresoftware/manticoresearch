@@ -335,8 +335,7 @@ void CSphReader::UpdateCache()
 	{
 		m_iBuffUsed = m_iBuffPos = 0;
 		m_bError = true;
-		m_sError.SetSprintf ( "pread error in %s: pos=" INT64_FMT ", len=%d, code=%d, msg=%s",
-			m_sFilename.cstr(), (int64_t)iNewPos, iReadLen, errno, strerror(errno) );
+		m_sError.SetSprintf ( "pread error in %s: pos=" INT64_FMT ", len=%d, code=%d, msg=%s", m_sFilename.cstr(), (int64_t)iNewPos, iReadLen, errno, strerror(errno) );
 		return;
 	}
 
@@ -352,7 +351,11 @@ int CSphReader::GetByte()
 	{
 		UpdateCache();
 		if ( m_iBuffPos>=m_iBuffUsed )
+		{
+			m_bError = true;
+			m_sError.SetSprintf ( "pread error in %s: pos=" INT64_FMT ", len=%d", m_sFilename.cstr(), (int64_t)m_iPos, 1 );
 			return 0; // unexpected io failure
+		}
 	}
 
 	assert ( m_iBuffPos<m_iBuffUsed );
@@ -380,6 +383,7 @@ void CSphReader::GetBytes ( void * pData, int iSize )
 			UpdateCache();
 			if ( !m_iBuffUsed )
 			{
+				m_sError.SetSprintf ( "pread error in %s: pos=" INT64_FMT ", len=%d, code=%d, msg=%s", m_sFilename.cstr(), (int64_t)m_iPos, iSize, errno, strerror(errno) );
 				memset ( pData, 0, iSize );
 				return; // unexpected io failure
 			}
@@ -403,6 +407,8 @@ void CSphReader::GetBytes ( void * pData, int iSize )
 		if ( iSize>m_iBuffUsed-m_iBuffPos )
 		{
 			memset ( pData, 0, iSize ); // unexpected io failure
+			m_bError = true;
+			m_sError.SetSprintf ( "pread error in %s: pos=" INT64_FMT ", len=%d", m_sFilename.cstr(), (int64_t)m_iPos, iSize );
 			return;
 		}
 	}

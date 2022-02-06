@@ -1147,10 +1147,12 @@ bool Binlog_c::ReplayUpdateAttributes ( int iBinlog, BinlogReader_c & tReader ) 
 		i.m_eType = (ESphAttr) tReader.UnzipOffset(); // safe, we'll crc check later
 	}
 
-	Binlog::LoadVector ( tReader, tUpd.m_dPool );
-	Binlog::LoadVector ( tReader, tUpd.m_dDocids );
-	Binlog::LoadVector ( tReader, tUpd.m_dRowOffset );
-	Binlog::LoadVector ( tReader, tUpd.m_dBlobs );
+	if ( tReader.GetErrorFlag() ) return false;
+
+	if ( !Binlog::LoadVector ( tReader, tUpd.m_dPool ) ) return false;
+	if ( !Binlog::LoadVector ( tReader, tUpd.m_dDocids ) ) return false;
+	if ( !Binlog::LoadVector ( tReader, tUpd.m_dRowOffset ) ) return false;
+	if ( !Binlog::LoadVector ( tReader, tUpd.m_dBlobs ) ) return false;
 
 	if (!PerformChecks ( "update", tIndex, iTID, iTxnPos, tmStamp, tReader ))
 		return false;
@@ -1184,11 +1186,15 @@ bool Binlog_c::ReplayTxn ( Binlog::Blop_e eOp, int iBinlog, BinlogReader_c & tRe
 	int iIdx = ReplayIndexID ( tReader, tLog, OpName (eOp) );
 	if ( iIdx==-1 )
 		return false;
+
 	BinlogIndexInfo_t & tIndex = tLog.m_dIndexInfos[iIdx];
 
 	// load transaction data
 	auto iTID = (int64_t) tReader.UnzipOffset();
 	auto tmStamp = (int64_t) tReader.UnzipOffset();
+
+	if ( !tIndex.m_pIndex )
+		return false;
 
 	CSphString sError;
 	CheckTnxResult_t tReplayed = tIndex.m_pIndex->ReplayTxn ( eOp, tReader, sError, [ eOp, iTxnPos, iTID, tmStamp, this, &tReader, &tIndex ] () {

@@ -2188,51 +2188,64 @@ struct FilesTrait_t
 	}
 };
 
+
 // load index into daemon from disk files for cluster use
 // in case index already exists prohibit it to save on index delete as disk files has fresh data received from remote node
-static bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIndexName, const CSphString & sCluster, FilesTrait_t & tIndexFiles, CSphString & sError )
+static bool LoadIndex ( const CSphString & sIndexPath, const CSphString & sIndexType, const CSphString & sIndexName, const CSphString & sCluster, FilesTrait_t & tIndexFiles, CSphString & sError )
 {
-	// delete existed index first, does not allow to save it's data that breaks sync'ed index files
-	// need a scope for RefRtr's to work
-	{
-		ServedIndexRefPtr_c pServedCur = GetServed ( sIndexName );
-		if ( pServedCur )
-		{
-			// we are only owner of that index and will free it after delete from hash
-			ServedDescWPtr_c pDesc ( pServedCur );
-			if ( ServedDesc_t::IsMutable ( pDesc ) )
-			{
-				auto * pIndex = (RtIndex_i*)pDesc->m_pIndex;
-				pIndex->ProhibitSave();
-				pIndex->GetIndexFiles ( tIndexFiles.m_dOld, nullptr );
-			}
+	CSphConfigSection hIndex;
+	hIndex.Add ( CSphVariant ( sIndexPath.cstr() ), "path" );
+	hIndex.Add ( CSphVariant ( sIndexType.cstr() ), "type" );
+	// dummy
+	hIndex.Add ( CSphVariant ( "text" ), "rt_field" );
+	hIndex.Add ( CSphVariant ( "gid" ), "rt_attr_uint" );
 
-			g_pLocalIndexes->Delete ( sIndexName );
+	ServedDescWPtr_c pOldIndex { GetServed ( sIndexName ) };
+	if ( pOldIndex )
+	{
+		if ( ServedDesc_t::IsMutable ( pOldIndex ) )
+		{
+			auto * pIndex = (RtIndex_i*)pOldIndex->m_pIndex;
+			pIndex->ProhibitSave();
 		}
+		pOldIndex->m_pIndex->GetIndexFiles ( tIndexFiles.m_dOld, nullptr );
+		SafeDelete ( pOldIndex->m_pIndex );
 	}
 
-	GuardedHash_c dNotLoadedIndexes;
-	ESphAddIndex eAdd = AddIndexMT ( dNotLoadedIndexes, sIndexName.cstr(), hIndex, false, true, nullptr, sError );
+	GuardedHash_c dLocalIndexes;
+	ESphAddIndex eAdd = AddIndexMT ( dLocalIndexes, sIndexName.cstr(), hIndex, true, true, nullptr, sError );
 	assert ( eAdd==ADD_DSBLED || eAdd==ADD_ERROR );
 
 	if ( eAdd!=ADD_DSBLED )
 		return false;
 
-	ServedIndexRefPtr_c pServed = GetServed ( sIndexName, &dNotLoadedIndexes );
-	ServedDescWPtr_c pDesc ( pServed );
-	pDesc->m_sCluster = sCluster;
+	ServedIndexRefPtr_c pNewServed = GetServed ( sIndexName, &dLocalIndexes );
+	ServedDescWPtr_c pNewIndex ( pNewServed );
 
 	StrVec_t dWarnings;
-	bool bPreload = PreallocNewIndex ( *pDesc, &hIndex, sIndexName.cstr(), dWarnings, sError );
+	bool bPreload = PreallocNewIndex ( *pNewIndex, &hIndex, sIndexName.cstr(), dWarnings, sError );
 	if ( !bPreload )
 		return false;
 
-	pDesc->m_pIndex->GetIndexFiles ( tIndexFiles.m_dRef, nullptr );
+	pNewIndex->m_pIndex->GetIndexFiles ( tIndexFiles.m_dRef, nullptr );
 	for ( const auto & i : dWarnings )
 		sphWarning ( "index '%s': %s", sIndexName.cstr(), i.cstr() );
 
-	// finally add the index to the hash of enabled.
-	g_pLocalIndexes->AddOrReplace ( pServed, sIndexName );
+	if ( pOldIndex )
+	{
+		pOldIndex->m_tSettings = pNewIndex->m_tSettings;
+		pOldIndex->m_tSettings.m_bPreopen = ( pNewIndex->m_tSettings.m_bPreopen || MutableIndexSettings_c::GetDefaults().m_bPreopen );
+		pOldIndex->m_sGlobalIDFPath = pNewIndex->m_sGlobalIDFPath;
+		pOldIndex->m_sCluster = sCluster;
+
+		Swap ( pOldIndex->m_pIndex, pNewIndex->m_pIndex );
+	} else
+	{
+		pNewIndex->m_sCluster = sCluster;
+		// finally add the index to the hash of enabled.
+		g_pLocalIndexes->AddOrReplace ( pNewServed, sIndexName );
+	}
+
 	return true;
 }
 
@@ -4541,13 +4554,7 @@ bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSph
 
 	FilesTrait_t tIndexFiles;
 
-	CSphConfigSection hIndex;
-	hIndex.Add ( CSphVariant ( pMerge->m_sIndexPath.cstr() ), "path" );
-	hIndex.Add ( CSphVariant ( sType.cstr() ), "type" );
-	// dummy
-	hIndex.Add ( CSphVariant ( "text" ), "rt_field" );
-	hIndex.Add ( CSphVariant ( "gid" ), "rt_attr_uint" );
-	if ( !LoadIndex ( hIndex, tCmd.m_sIndex, tCmd.m_sCluster, tIndexFiles, sError ) )
+	if ( !LoadIndex ( pMerge->m_sIndexPath, sType, tCmd.m_sIndex, tCmd.m_sCluster, tIndexFiles, sError ) )
 	{
 		sError.SetSprintf ( "failed to load index '%s': %s", tCmd.m_sIndex.cstr(), sError.cstr() );
 		return false;

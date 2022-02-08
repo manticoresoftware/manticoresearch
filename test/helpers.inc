@@ -848,6 +848,12 @@ function IsColumnarProperty ( $property )
 }
 
 
+function CompareColumns ( $a, $b )
+{
+	return strcmp ( array_key_first($a), array_key_first($b) );
+}
+
+
 function JsonRsetFixup ( &$set, $columnar )
 {
 	if ( isset ( $set["rows"] ) )
@@ -866,17 +872,30 @@ function JsonRsetFixup ( &$set, $columnar )
 		$set["rows"] = json_encode ( $rows );
 	}
 
-	if ( isset ( $set["http_endpoint"] ) && $set["http_endpoint"]=="sql" && isset ( $set["rows"] ) )
+	if ( isset ( $set["http_endpoint"] ) && ( $set["http_endpoint"]=="sql" || $set["http_endpoint"]=="cli" ) && isset ( $set["rows"] ) )
 	{
 		$rows = json_decode ( $set["rows"], 1 );
-		if ( isset ( $rows["data"] ) )
+		foreach	( $rows as &$row )
 		{
-			foreach ( $rows["data"] as &$entry )
+			if ( isset ( $row["data"] ) )
 			{
-				if ( is_array($entry) && isset ( $entry["Properties"] ) && $columnar && IsColumnarProperty ( $entry["Properties"] ) )
-					$entry["Properties"] = "";
+				foreach ( $row["data"] as &$entry )
+				{
+					if ( is_array($entry) && isset ( $entry["Properties"] ) && $columnar && IsColumnarProperty ( $entry["Properties"] ) )
+						$entry["Properties"] = "";
+				}
 			}
+
+			if ( isset ( $row["data"] ) && is_array($row["data"]) )
+			{
+				foreach ( $row["data"] as &$data_row )
+					ksort($data_row);
+			}
+
+			if ( isset ( $row["columns"] ) && is_array($row["columns"]) )
+				usort ( $row["columns"], "CompareColumns" );
 		}
+
 		$set["rows"] = json_encode ( $rows );
 	}
 }

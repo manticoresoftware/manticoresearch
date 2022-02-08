@@ -6690,7 +6690,7 @@ static void CreateMultiQueue ( RawVector_T<QueueCreator_c> & dCreators, const Sp
 		for ( int iCol=0; iCol<tSchema.GetAttrsCount(); ++iCol )
 		{
 			const CSphColumnInfo & tCol = tSchema.GetAttr ( iCol );
-			if ( !tCol.m_tLocator.m_bDynamic )
+			if ( !tCol.m_tLocator.m_bDynamic && !tCol.IsColumnar() )
 				continue;
 
 			if ( IsGroupbyMagic ( tCol.m_sName ) )
@@ -6713,16 +6713,24 @@ static void CreateMultiQueue ( RawVector_T<QueueCreator_c> & dCreators, const Sp
 					) )
 					continue;
 
-				// if attr or expr differs need to create regular sorters and issue search WO multi-query
-				tRes.m_bAlowMulti = false;
-				return;
+				// no need to add a new column but we need the same schema for the sorters
+				if ( tCol.IsColumnar() && pMultiCol->IsColumnarExpr() )
+				{
+					bHasMulti = true;
+					continue;
+				}
+
+				if ( !tCol.IsColumnarExpr() || !pMultiCol->IsColumnar() ) 				// need a new column
+				{
+					tRes.m_bAlowMulti = false; // if attr or expr differs need to create regular sorters and issue search WO multi-query
+					return;
+				}
 			}
 
 			bHasMulti = true;
 			tMultiSchema.AddAttr ( tCol, true );
 			if ( tCol.m_pExpr )
 				tCol.m_pExpr->FixupLocator ( &tSchema, &tMultiSchema );
-
 		}
 
 		iMinGroups = Min ( iMinGroups, iGroups );

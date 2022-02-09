@@ -850,7 +850,7 @@ function IsColumnarProperty ( $property )
 
 function CompareColumns ( $a, $b )
 {
-	return strcmp ( array_key_first($a), array_key_first($b) );
+	return strcmp ( array_keys($a)[0], array_keys($b)[0] );
 }
 
 

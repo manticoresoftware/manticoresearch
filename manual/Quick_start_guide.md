@@ -213,7 +213,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) morphology=\'stem_en\'')
+utilsApi.sql('create table products(title text, price float) morphology=\'stem_en\'')
 ```
 <!-- intro -->
 ##### Javascript:
@@ -221,7 +221,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) morp
 <!-- request Javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) morphology=\'stem_en\'');
+res = await utilsApi.sql('create table products(title text, price float) morphology=\'stem_en\'');
 ```
 
 <!-- intro -->
@@ -230,7 +230,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, price
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) morphology='stem_en'");
+utilsApi.sql("create table products(title text, price float) morphology='stem_en'");
 
 ```
 <!-- end -->

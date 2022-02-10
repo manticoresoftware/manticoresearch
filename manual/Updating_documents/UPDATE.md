@@ -1194,7 +1194,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) attr_update_reserve = \'1M\'')
+utilsApi.sql('create table products(title text, price float) attr_update_reserve = \'1M\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -1202,14 +1202,14 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) attr
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) attr_update_reserve = \'1M\'');
+res = await utilsApi.sql('create table products(title text, price float) attr_update_reserve = \'1M\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) attr_update_reserve = '1M'");
+utilsApi.sql("create table products(title text, price float) attr_update_reserve = '1M'");
 ```
 <!-- request CONFIG -->
 

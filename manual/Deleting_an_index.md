@@ -66,7 +66,7 @@ Array
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=DROP TABLE products')
+utilsApi.sql('DROP TABLE products')
 ```
 
 <!-- response Python -->
@@ -79,7 +79,7 @@ utilsApi.sql('mode=raw&query=DROP TABLE products')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=DROP TABLE products');
+res = await utilsApi.sql('DROP TABLE products');
 ```
 
 <!-- response javascript -->
@@ -92,7 +92,7 @@ res = await utilsApi.sql('mode=raw&query=DROP TABLE products');
 <!-- request Java -->
 
 ```java
-sqlresult = utilsApi.sql("mode=raw&query=DROP TABLE products");
+sqlresult = utilsApi.sql("DROP TABLE products");
 ```
 
 <!-- response Java -->
@@ -150,7 +150,7 @@ $client->indices()->drop($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=DROP TABLE IF EXISTS products')
+utilsApi.sql('DROP TABLE IF EXISTS products')
 ```
 
 <!-- response Python -->
@@ -163,7 +163,7 @@ utilsApi.sql('mode=raw&query=DROP TABLE IF EXISTS products')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=DROP TABLE IF EXISTS products');
+res = await utilsApi.sql('DROP TABLE IF EXISTS products');
 ```
 
 <!-- response javascript -->
@@ -176,7 +176,7 @@ res = await utilsApi.sql('mode=raw&query=DROP TABLE IF EXISTS products');
 <!-- request Java -->
 
 ```java
-sqlresult = utilsApi.sql("mode=raw&query=DROP TABLE IF EXISTS products");
+sqlresult = utilsApi.sql("DROP TABLE IF EXISTS products");
 ```
 
 <!-- response Java -->

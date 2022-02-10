@@ -283,7 +283,7 @@ $response = $client->cluster()->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE CLUSTER posts')
+utilsApi.sql('CREATE CLUSTER posts')
 ```
 <!-- intro -->
 ##### Javascript:
@@ -291,7 +291,7 @@ utilsApi.sql('mode=raw&query=CREATE CLUSTER posts')
 <!-- request Javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=CREATE CLUSTER posts');
+res = await utilsApi.sql('CREATE CLUSTER posts');
 ```
 
 <!-- intro -->
@@ -300,7 +300,7 @@ res = await utilsApi.sql('mode=raw&query=CREATE CLUSTER posts');
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=CREATE CLUSTER posts");
+utilsApi.sql("CREATE CLUSTER posts");
 
 ```
 <!-- end -->
@@ -358,8 +358,8 @@ $response = $client->cluster()->alter($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=ALTER CLUSTER posts ADD pq_title')
-utilsApi.sql('mode=raw&query=ALTER CLUSTER posts ADD pq_clicks')
+utilsApi.sql('ALTER CLUSTER posts ADD pq_title')
+utilsApi.sql('ALTER CLUSTER posts ADD pq_clicks')
 ```
 <!-- intro -->
 ##### Javascript:
@@ -367,8 +367,8 @@ utilsApi.sql('mode=raw&query=ALTER CLUSTER posts ADD pq_clicks')
 <!-- request Javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=ALTER CLUSTER posts ADD pq_title');
-res = await utilsApi.sql('mode=raw&query=ALTER CLUSTER posts ADD pq_clicks');
+res = await utilsApi.sql('ALTER CLUSTER posts ADD pq_title');
+res = await utilsApi.sql('ALTER CLUSTER posts ADD pq_clicks');
 ```
 
 <!-- intro -->
@@ -377,8 +377,8 @@ res = await utilsApi.sql('mode=raw&query=ALTER CLUSTER posts ADD pq_clicks');
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=ALTER CLUSTER posts ADD pq_title");
-utilsApi.sql("mode=raw&query=ALTER CLUSTER posts ADD pq_clicks");
+utilsApi.sql("ALTER CLUSTER posts ADD pq_title");
+utilsApi.sql("ALTER CLUSTER posts ADD pq_clicks");
 ```
 <!-- end -->
 
@@ -420,7 +420,7 @@ $response = $client->cluster->join($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=JOIN CLUSTER posts AT \'192.168.1.101:9312\'')
+utilsApi.sql('JOIN CLUSTER posts AT \'192.168.1.101:9312\'')
 ```
 <!-- intro -->
 ##### Javascript:
@@ -428,7 +428,7 @@ utilsApi.sql('mode=raw&query=JOIN CLUSTER posts AT \'192.168.1.101:9312\'')
 <!-- request Javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=JOIN CLUSTER posts AT \'192.168.1.101:9312\'');
+res = await utilsApi.sql('JOIN CLUSTER posts AT \'192.168.1.101:9312\'');
 ```
 
 <!-- intro -->
@@ -437,7 +437,7 @@ res = await utilsApi.sql('mode=raw&query=JOIN CLUSTER posts AT \'192.168.1.101:9
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=JOIN CLUSTER posts AT '192.168.1.101:9312'");
+utilsApi.sql("JOIN CLUSTER posts AT '192.168.1.101:9312'");
 
 ```
 <!-- end -->

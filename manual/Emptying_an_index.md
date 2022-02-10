@@ -69,7 +69,7 @@ Array(
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=TRUNCATE TABLE products')
+utilsApi.sql('TRUNCATE TABLE products')
 ```
 
 <!-- response Python -->
@@ -82,7 +82,7 @@ utilsApi.sql('mode=raw&query=TRUNCATE TABLE products')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=TRUNCATE TABLE products');
+res = await utilsApi.sql('TRUNCATE TABLE products');
 ```
 
 <!-- response javascript -->
@@ -96,7 +96,7 @@ res = await utilsApi.sql('mode=raw&query=TRUNCATE TABLE products');
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=TRUNCATE TABLE products");
+utilsApi.sql("TRUNCATE TABLE products");
 ```
 
 <!-- response Java -->
@@ -169,7 +169,7 @@ Array(
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=TRUNCATE TABLE products WITH RECONFIGURE')
+utilsApi.sql('TRUNCATE TABLE products WITH RECONFIGURE')
 ```
 
 <!-- response Python -->
@@ -182,7 +182,7 @@ utilsApi.sql('mode=raw&query=TRUNCATE TABLE products WITH RECONFIGURE')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=TRUNCATE TABLE products WITH RECONFIGURE');
+res = await utilsApi.sql('TRUNCATE TABLE products WITH RECONFIGURE');
 ```
 
 <!-- response javascript -->
@@ -196,7 +196,7 @@ res = await utilsApi.sql('mode=raw&query=TRUNCATE TABLE products WITH RECONFIGUR
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=TRUNCATE TABLE products WITH RECONFIGURE");
+utilsApi.sql("TRUNCATE TABLE products WITH RECONFIGURE");
 ```
 
 <!-- response Java -->

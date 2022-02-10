@@ -44,7 +44,7 @@ $response = $client->cluster()->alter($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=ALTER CLUSTER click_query ADD clicks_daily_index')
+utilsApi.sql('ALTER CLUSTER click_query ADD clicks_daily_index')
 ```
 
 <!-- response Python -->
@@ -57,7 +57,7 @@ utilsApi.sql('mode=raw&query=ALTER CLUSTER click_query ADD clicks_daily_index')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=ALTER CLUSTER click_query ADD clicks_daily_index');
+res = await utilsApi.sql('ALTER CLUSTER click_query ADD clicks_daily_index');
 ```
 
 <!-- response javascript -->
@@ -71,7 +71,7 @@ res = await utilsApi.sql('mode=raw&query=ALTER CLUSTER click_query ADD clicks_da
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=ALTER CLUSTER click_query ADD clicks_daily_index");
+utilsApi.sql("ALTER CLUSTER click_query ADD clicks_daily_index");
 ```
 
 <!-- end -->
@@ -118,7 +118,7 @@ $response = $client->cluster->alter($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=ALTER CLUSTER posts DROP weekly_index')
+utilsApi.sql('ALTER CLUSTER posts DROP weekly_index')
 ```
 
 <!-- response Python -->
@@ -131,7 +131,7 @@ utilsApi.sql('mode=raw&query=ALTER CLUSTER posts DROP weekly_index')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=ALTER CLUSTER posts DROP weekly_index');
+res = await utilsApi.sql('ALTER CLUSTER posts DROP weekly_index');
 ```
 
 <!-- response javascript -->
@@ -145,7 +145,7 @@ res = await utilsApi.sql('mode=raw&query=ALTER CLUSTER posts DROP weekly_index')
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=ALTER CLUSTER posts DROP weekly_index");
+utilsApi.sql("ALTER CLUSTER posts DROP weekly_index");
 ```
 
 <!-- end -->

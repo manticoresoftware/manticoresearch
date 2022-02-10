@@ -34,7 +34,7 @@ $response = $client->cluster()->delete($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=DELETE CLUSTER click_query')
+utilsApi.sql('DELETE CLUSTER click_query')
 ```
 
 <!-- response Python -->
@@ -47,7 +47,7 @@ utilsApi.sql('mode=raw&query=DELETE CLUSTER click_query')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=DELETE CLUSTER click_query');
+res = await utilsApi.sql('DELETE CLUSTER click_query');
 ```
 
 <!-- response javascript -->
@@ -61,6 +61,6 @@ res = await utilsApi.sql('mode=raw&query=DELETE CLUSTER click_query');
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=DELETE CLUSTER click_query");
+utilsApi.sql("DELETE CLUSTER click_query");
 ```
 <!-- end -->

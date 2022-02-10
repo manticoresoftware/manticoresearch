@@ -120,7 +120,7 @@ Array(
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=SHOW INDEX statistic STATUS')
+utilsApi.sql('SHOW INDEX statistic STATUS')
 ```
 <!-- response Python -->
 
@@ -156,7 +156,7 @@ utilsApi.sql('mode=raw&query=SHOW INDEX statistic STATUS')
 <!-- request Javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=SHOW INDEX statistic STATUS');
+res = await utilsApi.sql('SHOW INDEX statistic STATUS');
 ```
 <!-- response Javascript -->
 
@@ -192,7 +192,7 @@ res = await utilsApi.sql('mode=raw&query=SHOW INDEX statistic STATUS');
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=SHOW INDEX statistic STATUS");
+utilsApi.sql("SHOW INDEX statistic STATUS");
 
 ```
 <!-- response Java -->

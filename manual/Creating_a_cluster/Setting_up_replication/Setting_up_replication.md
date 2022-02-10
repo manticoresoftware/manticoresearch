@@ -1,8 +1,6 @@
 # Setting up replication
 
-Write transaction (any result of `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE`, `COMMIT`) can be replicated to other cluster nodes before the transaction is fully applied on the current node. Currently replication is supported:
-* for `percolate` and `rt` indexes,
-* in Linux. Windows and MacOS packages do not provide replication support.
+Write transaction (any result of `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE`, `COMMIT`) can be replicated to other cluster nodes before the transaction is fully applied on the current node. Currently replication is supported for `percolate` and `rt` indexes in Linux an MacOS. Manticore Search packages for Windows do not provide replication support.
 
 Manticore's replication is based on [Galera library](https://github.com/codership/galera) and features the following:
 
@@ -127,11 +125,11 @@ HashMap<String,Object> doc = new HashMap<String,Object>(){{
     put("title","Crossbody Bag with Tassel");
     put("price",19.85);
 }};
-newdoc.index("weekly_index").cluster("posts").id(1L).setDoc(doc); 
+newdoc.index("weekly_index").cluster("posts").id(1L).setDoc(doc);
 sqlresult = indexApi.insert(newdoc);
 
 DeleteDocumentRequest deleteRequest = new DeleteDocumentRequest();
-deleteRequest.index("weekly_index").cluster("posts").setId(1L); 
+deleteRequest.index("weekly_index").cluster("posts").setId(1L);
 indexApi.delete(deleteRequest);
 
 ```
@@ -506,10 +504,10 @@ InsertDocumentRequest newdoc = new InsertDocumentRequest();
 HashMap<String,Object> doc = new HashMap<String,Object>(){{
     put("title","test me");
 }};
-newdoc.index("pq_title").cluster("posts").id(3L).setDoc(doc); 
+newdoc.index("pq_title").cluster("posts").id(3L).setDoc(doc);
 sqlresult = indexApi.insert(newdoc);
 
- 
+
 
 ```
 <!-- end -->

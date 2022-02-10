@@ -1,8 +1,8 @@
-# Geo search 
+# Geo search
 
 One of the greatest features of Manticore Search is the ability to combine full-text searching with geo location. For example a retailer can offer a search where user looks for a product and the result set can tell which is the closest shop that has the product in stock so user can go in store and pick it up. A travel site can provide results based on a search limited to a certain area and results to be sorted by the distance from a point ('search museums near a hotel' for example).
 
-To perform geo searching, a document needs to contain pairs of latitude/longitude coordinates. The coordinates can be stored as float attributes. If the document has multiple locations, they can be embedded in a JSON object as float pairs.
+To perform geo searching, a document needs to contain pairs of latitude/longitude coordinates. The coordinates can be stored as float attributes. If the document has multiple locations, it may be convenient to use a json attribute to store coordinate pairs.
 
 ```ini
 index myrt

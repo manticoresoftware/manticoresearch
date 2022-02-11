@@ -372,7 +372,7 @@ listen = ( address ":" port | port | path | address ":" port start - port end ) 
 You can specify:
 * either an IP address (or hostname) and a port number
 * or just a port number
-* or Unix socket path
+* or Unix socket path (not supported on Windows)
 * or an IP address and ports range
 
 If you specify a port number, but not an address, `searchd` will listen on all network interfaces. Unix path is identified by a leading slash. Ports range could be set only for the replication protocol.
@@ -415,9 +415,13 @@ listen = 127.0.0.1:9312:sphinx # listen for legacy Sphinx requests (e.g. from Sp
 ```
 <!-- end -->
 
-There can be multiple `listen` directives, `searchd` will listen for client connections on all specified ports and sockets.  Default config provided in Manticore packages defines listening on ports **9308** and **9312** for connections from remote agents and non-mysql based clients and on port **9306** for MySQL connections. If no `listen` directives are found then the server will listen on port **9312** for connections from remote agents and non-mysql based clients and on port **9306** for MySQL connections.
+There can be multiple `listen` directives, `searchd` will listen for client connections on all specified ports and sockets.  Default config provided in Manticore packages defines listening on ports:
+* `9308` and `9312` for connections from remote agents and non-mysql based clients
+* and on port `9306` for MySQL connections.
 
-Unix-domain sockets are not supported on Windows.
+If you don't specify any `listen` in configuration at all Manticore will wait for connections on:
+* `127.0.0.1:9306` for MySQL clients
+* `127.0.0.1:9312` for HTTP/HTTPS, and connections from other Manticore nodes and clients based on Manticore binary API
 
 #### Listening on privileged ports
 

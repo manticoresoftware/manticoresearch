@@ -58,12 +58,22 @@ searchd {
 <!-- end -->
 
 ## SQL over HTTP
+
+Endpoints `/sql` and `/cli` allow running SQL queries via HTTP.
+
+* `/sql` accepts only SELECTs and returns response in HTTP JSON format. Parameter `query` should be url-encoded.
+* `/sql?mode=raw` accepts any SQL query and returns response in raw format similar to what you get via mysql. Parameter `query` should be url-encoded.
+* `/cli` accepts any SQL query and returns response in raw format similar to what you get via mysql. The query should not be url-encoded. This endpoint is to be used for doing manual actions via browser or command line http clients like `curl`.
+
+### /sql
+
 <!-- example SQL_over_HTTP -->
-Endpoint `/sql` allows running an **SQL [SELECT](../Searching/Full_text_matching/Basic_usage.md#SQL) query** via HTTP JSON interface.
+
+`/sql` accepts an **SQL [SELECT](../Searching/Full_text_matching/Basic_usage.md#SQL) query** via HTTP JSON interface.
 
 Query payload **must** be URL encoded, otherwise query statements with `=` (filtering or setting options) will result in an error.
 
-It returns a JSON respons which contains hits information and execution time. The response has the same format as [json/search](../Searching/Full_text_matching/Basic_usage.md#HTTP) endpoint. Note, that `/sql` endpoint supports only single search requests. If you are looking for processing a multi-query see below.
+It returns a JSON response which contains hits information and execution time. The response has the same format as [json/search](../Searching/Full_text_matching/Basic_usage.md#HTTP) endpoint. Note, that `/sql` endpoint supports only single search requests. If you are looking for processing a multi-query see below.
 
 <!-- request HTTP -->
 ```bash
@@ -99,6 +109,7 @@ POST /sql -d "query=select id,subject,author_id  from forum where match('@subjec
 
 <!-- example SQL_over_HTTP_2 -->
 ### /sql?mode=raw
+
 `/sql` endpoint also has a special mode **"raw"**, which allows to send **any valid sphinxql queries including multi-queries**. The returned value is a json array of one or more result sets.
 
 <!-- request HTTP -->

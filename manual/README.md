@@ -58,6 +58,7 @@
 * [✔ Connecting to the server](Connecting_to_the_server.md)
     * [MySQL protocol](Connecting_to_the_server/MySQL_protocol.md)
     * [HTTP](Connecting_to_the_server/HTTP.md)
+    * [SQL over HTTP](Connecting_to_the_server/HTTP.md#SQL-over-HTTP)
 * [▪️ Adding documents to an index]
     * [✔ ️Adding documents to a real-time index](Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md)
     * [Adding rules to a percolate index](Adding_documents_to_an_index/Adding_rules_to_a_percolate_index.md)

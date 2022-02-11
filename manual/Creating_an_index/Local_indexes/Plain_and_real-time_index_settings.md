@@ -362,10 +362,13 @@ Value: **not specified** (default), target_index_name:kl, target_index_name:id, 
 #### columnar_attrs
 
 ```ini
+columnar_attrs = *
 columnar_attrs = id, attr1, attr2, attr3
 ```
 
 Specifies what attributes should be stored in [the columnar storage](../../Creating_an_index/Data_types.md#Row-wise-and-columnar-attribute-storages) instead of the default row-wise storage.
+
+You can do `columnar_attrs = *` to store fields of all supported data types in the columnar storage. 
 
 `id` is also supported.
 

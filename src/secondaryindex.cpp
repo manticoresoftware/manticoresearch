@@ -775,7 +775,7 @@ static float CalcQueryCost ( const CSphVector<CSphFilterSettings> & dFilters, co
 }
 
 
-static void SelectIterators ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<IndexHint_t> & dHints, CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, const HistogramContainer_c & tHistograms )
+static float SelectIterators ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<IndexHint_t> & dHints, CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, const HistogramContainer_c & tHistograms )
 {
 	dEnabledIndexes.Resize(0);
 
@@ -820,7 +820,7 @@ static void SelectIterators ( const CSphVector<CSphFilterSettings> & dFilters, c
 
 	int nAvailableIndexes = dSecondaryIndexes.GetLength();
 	if ( !nAvailableIndexes )
-		return;
+		return FLT_MAX;
 
 	CSphBitvec dEnabled ( nAvailableIndexes );
 	CSphBitvec dBestEnabled ( nAvailableIndexes );
@@ -854,6 +854,8 @@ static void SelectIterators ( const CSphVector<CSphFilterSettings> & dFilters, c
 			SecondaryIndexInfo_t & tInfo = dEnabledIndexes.Add();
 			tInfo.m_iFilterId = dSecondaryIndexes[i].m_iFilterId;
 		}
+
+	return fBestCost;
 }
 
 
@@ -869,6 +871,15 @@ static bool UpdateModifiedFilters ( const CSphVector<CSphFilterSettings> & dFilt
 	}
 
 	return dFilters.GetLength()!=dModifiedFilters.GetLength();
+}
+
+
+float GetEnabledSecondaryIndexes ( CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree, const CSphVector<IndexHint_t> & dHints, const HistogramContainer_c & tHistograms )
+{
+	if ( dFilterTree.GetLength() )
+		return FLT_MAX;
+
+	return SelectIterators ( dFilters, dHints, dEnabledIndexes, tHistograms );
 }
 
 

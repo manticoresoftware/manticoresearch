@@ -1293,7 +1293,7 @@ public:
 	int64_t						GetIndexId() const { return m_iIndexId; }
 	void						SetMutableSettings ( const MutableIndexSettings_c & tSettings );
 	const MutableIndexSettings_c & GetMutableSettings () const { return m_tMutableSettings; }
-	virtual int64_t				GetPseudoShardingMetric() const;
+	virtual int64_t				GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries ) const;
 
 public:
 	/// build index by indexing given sources

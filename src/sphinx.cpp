@@ -1368,6 +1368,7 @@ public:
 	void				CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const final;
 
 	bool				CheckEarlyReject ( const CSphVector<CSphFilterSettings> & dFilters, ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema ) const;
+	int64_t				GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries ) const override;
 
 private:
 	static const int			MIN_WRITE_BUFFER		= 262144;	///< min write buffer size
@@ -2540,7 +2541,7 @@ void CSphIndex::SetMutableSettings ( const MutableIndexSettings_c & tSettings )
 }
 
 
-int64_t CSphIndex::GetPseudoShardingMetric() const
+int64_t CSphIndex::GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries ) const
 {
 	int64_t iTotalDocs = GetStats().m_iTotalDocuments;
 	return iTotalDocs > g_iSplitThresh ? iTotalDocs : -1;
@@ -2723,8 +2724,7 @@ RowsToUpdate_t CSphIndex_VLN::Update_PrepareGatheredRowPtrs ( RowsToUpdate_t & d
 }
 
 
-bool CSphIndex_VLN::Update_WriteBlobRow ( UpdateContext_t & tCtx, CSphRowitem * pDocinfo, const BYTE * pBlob,
-		int iLength, int nBlobAttrs, const CSphAttrLocator & tBlobRowLoc, bool & bCritical, CSphString & sError )
+bool CSphIndex_VLN::Update_WriteBlobRow ( UpdateContext_t & tCtx, CSphRowitem * pDocinfo, const BYTE * pBlob, int iLength, int nBlobAttrs, const CSphAttrLocator & tBlobRowLoc, bool & bCritical, CSphString & sError )
 {
 	BYTE * pExistingBlob = m_tBlobAttrs.GetWritePtr() + sphGetRowAttr ( pDocinfo, tBlobRowLoc );
 	DWORD uExistingBlobLen = sphGetBlobTotalLen ( pExistingBlob, nBlobAttrs );
@@ -3384,6 +3384,26 @@ int CSphIndex_VLN::KillMulti ( const VecTraits_T<DocID_t> & dKlist )
 	return iTotalKilled;
 }
 
+
+int64_t CSphIndex_VLN::GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries ) const
+{
+	bool bAllFast = true;
+	const float COST_THRESH = 0.5f;
+
+	for ( auto i : dQueries )
+	{
+		CSphVector<SecondaryIndexInfo_t> dEnabledIndexes;
+		float fCost = GetEnabledSecondaryIndexes ( dEnabledIndexes, i.m_dFilters, i.m_dFilterTree, i.m_dIndexHints, *m_pHistograms );
+
+		bool bFastQuery = i.m_sQuery.IsEmpty() && dEnabledIndexes.GetLength() && fCost<=COST_THRESH;
+		bAllFast &= bFastQuery;
+	}
+
+	if ( bAllFast )
+		return -1;
+
+	return CSphIndex::GetPseudoShardingMetric(dQueries);
+}
 
 /////////////////////////////////////////////////////////////////////////////
 

@@ -7142,7 +7142,7 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 		CSphVector<int64_t> dMetrics { iJobs };
 		ARRAY_FOREACH ( i, dMetrics )
 		{
-			dMetrics[i] = tGuard.m_dDiskChunks[i]->Cidx().GetPseudoShardingMetric();
+			dMetrics[i] = tGuard.m_dDiskChunks[i]->Cidx().GetPseudoShardingMetric ( VecTraits_T<const CSphQuery> ( &tQuery,1 ) );
 			if ( dMetrics[i]>0 )
 				iTotalMetric += dMetrics[i];
 			else

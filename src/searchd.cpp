@@ -5744,7 +5744,7 @@ void SearchHandler_c::CalcSplits ( int iConcurrency, CSphFixedVector<int> & dSpl
 			continue;
 
 		SplitData_t & tSplitData = dSplitData[iLocal];
-		int64_t iMetric = pIndex->GetPseudoShardingMetric();
+		int64_t iMetric = pIndex->GetPseudoShardingMetric ( m_dNQueries );
 		if ( iMetric==-1 )
 		{
 			iSingleSplits++;

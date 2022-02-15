@@ -2869,6 +2869,12 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 
 bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, CSphString & sError ) EXCLUDES ( g_tClustersLock )
 {
+	if ( !g_bReplicationStarted )
+	{
+		sError.SetSprintf ( "cluster '%s' is not ready, starting", sCluster.cstr() );
+		return false;
+	}
+
 	ReplicationArgs_t tArgs;
 	CSphScopedPtr<ReplicationCluster_t> pElem ( nullptr );
 	if ( !CheckClusterStatement ( sCluster, dNames, dValues, false, sError, pElem ) )
@@ -3780,6 +3786,11 @@ bool ClusterDelete ( const CSphString & sCluster, CSphString & sError, CSphStrin
 	CSphString sNodes;
 	{
 		ScRL_t tLock ( g_tClustersLock );
+		if ( !g_bReplicationStarted )
+		{
+			sError.SetSprintf ( "cluster '%s' is not ready, starting", sCluster.cstr() );
+			return false;
+		}
 		ReplicationCluster_t ** ppCluster = g_hClusters ( sCluster );
 		if ( !ppCluster )
 		{
@@ -5319,6 +5330,12 @@ bool ClusterAlter ( const CSphString & sCluster, const CSphString & sIndex, bool
 			sError.SetSprintf ( "index '%s' is not in cluster '%s'", sIndex.cstr(), sCluster.cstr() );
 			return false;
 		}
+	}
+
+	if ( !g_bReplicationStarted )
+	{
+		sError.SetSprintf ( "cluster '%s' is not ready, starting", sCluster.cstr() );
+		return false;
 	}
 
 	bool bOk = false;

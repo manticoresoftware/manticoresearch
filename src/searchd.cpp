@@ -10792,12 +10792,11 @@ void sphHandleMysqlBegin ( StmtErrorReporter_i& tOut, Str_t sQuery )
 	if ( pIndex )
 	{
 		RtAccum_t* pAccum = tAcc.GetAcc ( pIndex, sError );
-		if ( !sError.IsEmpty() )
+		if ( !sError.IsEmpty() || !HandleCmdReplicate ( *pAccum, sError ) )
 		{
 			tOut.Error ( sQuery.first, sError.cstr() );
 			return;
 		}
-		HandleCmdReplicate ( *pAccum, sError );
 	}
 	pSession->m_bInTransaction = true;
 	tOut.Ok ( 0 );
@@ -10821,11 +10820,16 @@ void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, boo
 		if ( !sError.IsEmpty() )
 		{
 			tOut.Error ( sQuery.first, sError.cstr() );
+			return;
 		}
 		if ( bCommit )
 		{
 			StatCountCommand ( SEARCHD_COMMAND_COMMIT );
-			HandleCmdReplicate ( *pAccum, sError, iDeleted );
+			if ( !HandleCmdReplicate ( *pAccum, sError, iDeleted ) )
+			{
+				tOut.Error ( sQuery.first, sError.cstr() );
+				return;
+			}
 		} else
 		{
 			pIndex->RollBack ( pAccum );
@@ -10997,8 +11001,15 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt )
 
 	// no errors so far
 	if ( bCommit )
-		HandleCmdReplicate ( *pAccum, sError );
-
+	{
+		if ( !HandleCmdReplicate ( *pAccum, sError ) )
+		{
+			pIndex->RollBack ( pAccum ); // clean up collected data
+			tOut.Error ( "%s", sError.cstr() );
+			return;
+		}
+	}
+	
 	int64_t iLastInsertId = 0;
 	if ( dLastIds.GetLength() )
 		iLastInsertId = dLastIds.Last();
@@ -13221,7 +13232,13 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * 
 	}
 
 	if ( bCommit )
-		HandleCmdReplicate ( *pAccum, sError, iAffected );
+	{
+		if ( !HandleCmdReplicate ( *pAccum, sError, iAffected ) )
+		{
+			dErrors.Submit ( sName, sDistributed, sError.cstr() );
+			return 0;
+		}
+	}
 
 	return iAffected;
 }
@@ -13596,13 +13613,10 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 				if ( pIndex )
 				{
 					RtAccum_t * pAccum = tAcc.GetAcc ( pIndex, sError );
-					if ( !sError.IsEmpty() )
+					if ( !sError.IsEmpty() || !HandleCmdReplicate ( *pAccum, sError ) )
 					{
 						tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 						return;
-					} else
-					{
-						HandleCmdReplicate ( *pAccum, sError );
 					}
 				}
 			}

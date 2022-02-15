@@ -2492,6 +2492,8 @@ static void SetListener ( const CSphVector<ListenerDesc_t> & dListeners )
 		tPorts.m_iCount = tListen.m_iPortsCount;
 		if ( ( tPorts.m_iCount%2 )!=0 )
 			tPorts.m_iCount--;
+
+		// can not use 0.0.0.0 due to Galera error at ReplicatorSMM::InitConfig::InitConfig
 		if ( tListen.m_uIP!=0 )
 		{
 			char sListenBuf [ SPH_ADDRESS_SIZE ];
@@ -2504,6 +2506,14 @@ static void SetListener ( const CSphVector<ListenerDesc_t> & dListeners )
 			{
 				sphWarning ( "multiple replication IP ('%s') found but only 1st IP '%s' used", sListenBuf, g_sListenReplicationIP.cstr() );
 			}
+		} else
+		{
+			if ( g_bHasIncoming )
+				g_sListenReplicationIP = g_sIncomingIP;
+			else
+				g_sListenReplicationIP = "127.0.0.1";
+
+			sphWarning ( "can not set '0.0.0.0' as Galera IP, '%s' used", g_sListenReplicationIP.cstr() );
 		}
 
 		bGotReplicationPorts = true;

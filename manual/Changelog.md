@@ -29,7 +29,7 @@ The following are the changes we are either working on now or are going to work 
 * **Index meta file format change**. The new version will convert older indexes automatically, but:
   - you can get warning like `WARNING: ... syntax error, unexpected TOK_IDENT`
   - you won't be able to run the index with previous Manticore versions, make sure you have a backup
-* **Format change** of the response of bulk INSERT/REPLACE/DELETE requests:
+* **Format change** of the response of `/bulk` INSERT/REPLACE/DELETE requests:
   - previously each sub-query constituted a separate transaction and resulted in a separate response
   - now the whole batch is considered a single transaction, which returns a single response
 

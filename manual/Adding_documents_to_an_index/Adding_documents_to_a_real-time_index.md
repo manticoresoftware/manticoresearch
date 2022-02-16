@@ -329,7 +329,7 @@ Expressions are not currently supported in `INSERT` and values should be explici
 <!-- intro -->
 ##### HTTP:
 <!-- request HTTP -->
-The syntax is in general the same as for [inserting a single document](../Quick_start_guide.md#Add-documents), just provide more lines one for each document and use `json/bulk` endpoint instead of `json/insert` and enclose each document into node "insert". Note that it also requires:
+The syntax is in general the same as for [inserting a single document](../Quick_start_guide.md#Add-documents), just provide more lines one for each document and use `/bulk` endpoint instead of `/insert` and enclose each document into node "insert". Note that it also requires:
 * Content-Type: application/x-ndjson
 * The data itself should be formatted as a newline-delimited json (NDJSON). Basically it means that each line should contain exactly one json statement and end with a newline \n and maybe \r.
 

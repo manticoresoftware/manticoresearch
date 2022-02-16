@@ -26,6 +26,12 @@ void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo>& dKeywords, cons
 	// FIXME!!! got rid of duplicated term stat and qword setup
 	while ( ( sWord = m_pTokenizer->GetToken() ) != NULL )
 	{
+		if ( tCtx.m_iCutoff!=-1 && dKeywords.GetLength()>=tCtx.m_iCutoff )
+		{
+			dKeywords.Add(); // fake keyword to let code know we're past cutoff
+			return;
+		}
+
 		const BYTE* sMultiform = m_pTokenizer->GetTokenizedMultiform();
 		strncpy ( (char*)sTokenized, sMultiform ? (const char*)sMultiform : (const char*)sWord, sizeof ( sTokenized ) - 1 );
 

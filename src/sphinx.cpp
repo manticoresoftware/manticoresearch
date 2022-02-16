@@ -1481,6 +1481,8 @@ private:
 
 	bool						SplitQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dAllSorters, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const;
 	RowidIterator_i *			SpawnIterators ( const CSphQuery & tQuery, CSphVector<CSphFilterSettings> & dModifiedFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta ) const;
+
+	bool						IsQueryFast ( const CSphQuery & tQuery ) const;
 };
 
 class AttrMerger_c
@@ -3385,6 +3387,39 @@ int CSphIndex_VLN::KillMulti ( const VecTraits_T<DocID_t> & dKlist )
 }
 
 
+bool CSphIndex_VLN::IsQueryFast ( const CSphQuery & tQuery ) const
+{
+	if ( m_pFieldFilter )
+		return false;
+
+	if ( !tQuery.m_sQueryTokenFilterName.IsEmpty() )
+		return false;
+
+	if ( m_tSettings.m_uAotFilterMask!=0 )
+		return false;
+
+	if ( m_tSettings.GetMinPrefixLen ( m_pDict->GetSettings().m_bWordDict )>0 )
+		return false;
+
+	if ( m_tSettings.m_iMinInfixLen>0 )
+		return false;
+
+	GetKeywordsSettings_t tSettings;
+	tSettings.m_bStats = true;
+	tSettings.m_iCutoff = 1;
+
+	CSphVector <CSphKeywordInfo> dKeywords;
+	if ( !GetKeywords ( dKeywords, tQuery.m_sQuery.cstr(), tSettings, nullptr ) )
+		return true;
+
+	if ( dKeywords.GetLength()>1 )
+		return false;
+
+	const int DOCS_THRESH = 1024;
+	return dKeywords[0].m_iDocs<=DOCS_THRESH;
+}
+
+
 int64_t CSphIndex_VLN::GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries ) const
 {
 	bool bAllFast = true;
@@ -3395,8 +3430,15 @@ int64_t CSphIndex_VLN::GetPseudoShardingMetric ( const VecTraits_T<const CSphQue
 		CSphVector<SecondaryIndexInfo_t> dEnabledIndexes;
 		float fCost = GetEnabledSecondaryIndexes ( dEnabledIndexes, i.m_dFilters, i.m_dFilterTree, i.m_dIndexHints, *m_pHistograms );
 
-		bool bFastQuery = i.m_sQuery.IsEmpty() && dEnabledIndexes.GetLength() && fCost<=COST_THRESH;
+		bool bFastQuery = false;
+		if ( i.m_sQuery.IsEmpty() )
+			bFastQuery = dEnabledIndexes.GetLength() && fCost<=COST_THRESH;
+		else
+			bFastQuery = IsQueryFast(i);
+
 		bAllFast &= bFastQuery;
+		if ( !bAllFast )
+			break;
 	}
 
 	if ( bAllFast )
@@ -10108,8 +10150,7 @@ void CSphIndex_VLN::SetupExactDict ( DictRefPtr_c &pDict ) const
 }
 
 
-bool CSphIndex_VLN::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
-	const char * szQuery, const GetKeywordsSettings_t & tSettings, CSphString * pError ) const
+bool CSphIndex_VLN::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, CSphString * pError ) const
 {
 	WITH_QWORD ( this, false, Qword, return DoGetKeywords<Qword> ( dKeywords, szQuery, tSettings, false, pError ) );
 	return false;
@@ -10160,8 +10201,7 @@ DWORD sphParseMorphAot ( const char * sMorphology )
 
 
 template < class Qword >
-bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
-	const char * szQuery, const GetKeywordsSettings_t & tSettings, bool bFillOnly, CSphString * pError ) const
+bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, bool bFillOnly, CSphString * pError ) const
 {
 	if ( !bFillOnly )
 		dKeywords.Resize ( 0 );
@@ -10262,6 +10302,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	tExpCtx.m_bHasExactForms = ( m_pDict->HasMorphology() || m_tSettings.m_bIndexExactWords );
 	tExpCtx.m_bMergeSingles = false;
 	tExpCtx.m_eHitless = m_tSettings.m_eHitless;
+	tExpCtx.m_iCutoff = tSettings.m_iCutoff;
 
 	pTokenizer->SetBuffer ( sModifiedQuery, (int) strlen ( (const char *)sModifiedQuery) );
 

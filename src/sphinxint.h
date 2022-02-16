@@ -1337,19 +1337,20 @@ private:
 
 struct ExpansionContext_t
 {
-	const ISphWordlist * m_pWordlist	= nullptr;
-	BYTE * m_pBuf						= nullptr;
-	CSphQueryResultMeta * m_pResult		= nullptr;
-	int m_iMinPrefixLen					= 0;
-	int m_iMinInfixLen					= 0;
-	int m_iExpansionLimit				= 0;
-	bool m_bHasExactForms				= false;
-	bool m_bMergeSingles				= false;
-	CSphScopedPayload * m_pPayloads		= nullptr;
-	ESphHitless m_eHitless				{SPH_HITLESS_NONE};
-	cRefCountedRefPtr_t	m_pIndexData;
+	const ISphWordlist *	m_pWordlist	= nullptr;
+	BYTE *					m_pBuf = nullptr;
+	CSphQueryResultMeta *	m_pResult = nullptr;
+	int						m_iMinPrefixLen = 0;
+	int						m_iMinInfixLen = 0;
+	int						m_iExpansionLimit = 0;
+	bool					m_bHasExactForms = false;
+	bool					m_bMergeSingles	= false;
+	CSphScopedPayload *		m_pPayloads = nullptr;
+	ESphHitless				m_eHitless {SPH_HITLESS_NONE};
+	int						m_iCutoff = -1;
+	cRefCountedRefPtr_t		m_pIndexData;
 
-	bool m_bOnlyTreeFix					= false;
+	bool					m_bOnlyTreeFix = false;
 };
 
 struct GetKeywordsSettings_t
@@ -1361,6 +1362,7 @@ struct GetKeywordsSettings_t
 	int		m_iExpansionLimit = 0;
 	bool	m_bSortByDocs = false;
 	bool	m_bSortByHits = false;
+	int		m_iCutoff = -1;
 };
 
 XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx );

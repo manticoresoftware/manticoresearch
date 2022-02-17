@@ -5,7 +5,7 @@ This is the simplest way to pass data to the indexer. It was created due to xmlp
 ## File format
 The first column in TSV/CSV file must be a document ID. The rest ones must mirror the declaration of fields and attributes in schema definition. Note that you don't need to declare the document ID in the schema, since it's always considered to be present, should be in the 1st column and needs to be a unique signed positive non-zero 64-bit integer.
 
-The difference between tsvpipe and csvpipe is delimiter and quoting rules. tsvpipe has tab character as hardcoded delimiter and has no quoting rules. csvpipe has option `csvpipe_delimiter` for delimiter with default value ',' and also has quoting rules, such as:
+The difference between tsvpipe and csvpipe is delimiter and quoting rules. tsvpipe has tab character as hardcoded delimiter and has no quoting rules. csvpipe has option `csvpipe_delimiter` for delimiter with default value `,` and also has quoting rules, such as:
 
 * any field may be quoted
 * fields containing a line-break, double-quote or commas should be quoted

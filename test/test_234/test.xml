@@ -91,6 +91,7 @@ Two"}')
 <query endpoint="cli" method="post">select id,1+2 as a, packedfactors() from test where match('tes*') option ranker=expr('1')</query>
 <query endpoint="cli" method="post">select id,1+2 as a, packedfactors({json=1}) from test where match('tes*') option ranker=expr('1')</query>
 <query endpoint="cli" method="post">select * from test order by id asc limit 3;select id,j from test order by id desc limit 10</query>
+<query endpoint="cli" method="post"/>
 
 <!-- any statement via mode=raw -->
 <query endpoint="sql" method="post">mode=raw&amp;query=desc test</query>

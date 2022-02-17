@@ -1353,7 +1353,7 @@ static HttpHandler_c * CreateHttpHandler ( ESphHttpEndpoint eEndpoint, const cha
 			return new HttpSearchHandler_SQL_c ( sQuery, tOptions );
 
 	case SPH_HTTP_ENDPOINT_CLI:
-		if ( !sQuery )
+		if ( !sQuery && !IsEmpty ( dRawUrlQuery ) )
 		{
 			sQuery = dRawUrlQuery.first;
 			const_cast<char*> ( sQuery )[dRawUrlQuery.second] = '\0'; // fixme! const breakage...

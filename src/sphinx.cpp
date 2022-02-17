@@ -6918,8 +6918,12 @@ bool AttrMerger_c::Prepare ( const CSphIndex_VLN* pSrcIndex, const CSphIndex_VLN
 			return false;
 
 		for ( int i = 0; i < pDstIndex->m_tSchema.GetFieldsCount(); ++i )
-			if ( pDstIndex->m_tSchema.IsFieldStored ( i ) )
-				m_pDocstoreBuilder->AddField ( pDstIndex->m_tSchema.GetFieldName ( i ), DOCSTORE_TEXT );
+			if ( pDstIndex->m_tSchema.IsFieldStored(i) )
+				m_pDocstoreBuilder->AddField ( pDstIndex->m_tSchema.GetFieldName(i), DOCSTORE_TEXT );
+
+		for ( int i = 0; i < pDstIndex->m_tSchema.GetAttrsCount(); ++i )
+			if ( pDstIndex->m_tSchema.IsAttrStored(i) )
+				m_pDocstoreBuilder->AddField ( pDstIndex->m_tSchema.GetAttr(i).m_sName, DOCSTORE_ATTR );
 	}
 
 	if ( pDstIndex->m_tSchema.HasColumnarAttrs() )

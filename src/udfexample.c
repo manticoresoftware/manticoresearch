@@ -142,7 +142,8 @@ DLLEXPORT sphinx_int64_t strtoint ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, ch
 	while ( len>0 && *s>='0' && *s<='9' )
 	{
 		res += *s - '0';
-		len--;
+		--len;
+		++s;
 	}
 
 	return res;

@@ -5290,13 +5290,7 @@ public:
 			case SPH_UDF_TYPE_UINT32:		*(DWORD*)&m_dArgvals[i] = m_dArgs[i]->IntEval ( tMatch ); break;
 			case SPH_UDF_TYPE_INT64:		m_dArgvals[i] = m_dArgs[i]->Int64Eval ( tMatch ); break;
 			case SPH_UDF_TYPE_FLOAT:		*(float*)&m_dArgvals[i] = m_dArgs[i]->Eval ( tMatch ); break;
-			case SPH_UDF_TYPE_STRING:
-			{
-				const char * szValue = tArgs.arg_values[i];
-				tArgs.str_lengths[i] = m_dArgs[i]->StringEval ( tMatch, (const BYTE**)&szValue );
-				break;
-			}
-
+			case SPH_UDF_TYPE_STRING:		tArgs.str_lengths[i] = m_dArgs[i]->StringEval ( tMatch, (const BYTE**)&tArgs.arg_values[i] ); break;
 			case SPH_UDF_TYPE_UINT32SET:
 			case SPH_UDF_TYPE_INT64SET:
 			{

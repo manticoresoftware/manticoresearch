@@ -113,6 +113,7 @@ public:
 	CSphVector<FilterTreeItem_t> m_dFilterTree;
 	CSphVector<int>	m_dFiltersPerStmt;
 	bool			m_bGotFilterOr = false;
+	bool 			m_bGotDDLClause = false;
 
 public:
 					SqlParser_c ( CSphVector<SqlStmt_t> & dStmt, ESphCollation eCollation, const char* szQuery, CSphString* pError );
@@ -1402,10 +1403,6 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 		return false;
 	}
 
-	// DDL is not supported in multi-statements anyway, so we only check the first statement
-	if ( IsDdlQuery ( sQuery, iLen ) )
-		return ParseDdl ( sQuery, iLen, dStmt, sError );
-
 	SqlParser_c tParser ( dStmt, eCollation, sQuery, &sError );
 
 	char * sEnd = const_cast<char *>( sQuery ) + iLen;
@@ -1426,6 +1423,9 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 	yylex_destroy ( tParser.m_pScanner );
 
 	dStmt.Pop(); // last query is always dummy
+
+	if ( tParser.m_bGotDDLClause )
+		return ParseDdl ( sQuery, iLen, dStmt, sError );
 
 	int iFilterStart = 0;
 	int iFilterCount = 0;

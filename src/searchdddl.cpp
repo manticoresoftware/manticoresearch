@@ -87,8 +87,11 @@ DWORD DdlParser_c::ItemOptions_t::ToFlags() const
 DdlParser_c::DdlParser_c ( CSphVector<SqlStmt_t> & dStmt, const char* szQuery, CSphString* pError )
 	: SqlParserTraits_c ( dStmt, szQuery, pError )
 {
-	assert ( m_dStmt.IsEmpty() );
-	PushQuery ();
+	if ( m_dStmt.IsEmpty() )
+		PushQuery ();
+	else
+		m_pStmt = &m_dStmt.Last();
+	assert ( m_dStmt.GetLength()==1 );
 }
 
 
@@ -380,31 +383,4 @@ bool ParseDdl ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CS
 	dStmt.Pop(); // last query is always dummy
 
 	return !iRes && !dStmt.IsEmpty();
-}
-
-
-static const char * g_szDDL[] = { "alter", "create", "drop", "join", "import" };
-
-bool IsDdlQuery ( const char * szQuery, int iLen )
-{
-	CSphString sQuery;
-	sQuery.SetBinary ( szQuery, iLen );
-
-	const char * p = sQuery.cstr();
-	while ( *p && ( sphIsSpace(*p) || *p==';' ) )
-		p++;
-
-	const char * pStart = p;
-	while ( *p && sphIsAlpha(*p) )
-		p++;
-
-	CSphString sStatement;
-	sStatement.SetBinary ( pStart, int ( p-pStart ) );
-	sStatement.ToLower();
-
-	for ( const auto & i : g_szDDL )
-		if ( sStatement==i )
-			return true;
-
-	return false;
 }

@@ -49,6 +49,7 @@
 %token	TOK_COUNT
 %token	TOK_CREATE
 %token	TOK_DATABASES
+%token	TOK_DDLCLAUSE
 %token	TOK_DEBUGCLAUSE
 %token	TOK_DELETE
 %token	TOK_DESC
@@ -216,6 +217,7 @@ statement:
 	| TOK_DEBUGCLAUSE	{ pParser->m_pStmt->m_eStmt = STMT_DEBUG; }
 	| delete_cluster
 	| explain_query
+	| TOK_DDLCLAUSE	{ pParser->m_bGotDDLClause = true; }
 	;
 
 //////////////////////////////////////////////////////////////////////////

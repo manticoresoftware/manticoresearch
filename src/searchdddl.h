@@ -70,6 +70,5 @@ private:
 };
 
 bool ParseDdl ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CSphString & sError );
-bool IsDdlQuery ( const char * szQuery, int iLen );
 
 #endif // _searchdddl_

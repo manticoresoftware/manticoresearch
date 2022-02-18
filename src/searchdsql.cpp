@@ -63,8 +63,10 @@ bool SqlStmt_t::CheckInsertIntegrity()
 
 //////////////////////////////////////////////////////////////////////////
 
-SqlParserTraits_c::SqlParserTraits_c ( CSphVector<SqlStmt_t> & dStmt )
-	: m_dStmt ( dStmt )
+SqlParserTraits_c::SqlParserTraits_c ( CSphVector<SqlStmt_t> & dStmt, const char* szQuery, CSphString* pError )
+	: m_pBuf ( szQuery )
+	, m_pParseError ( pError )
+	, m_dStmt ( dStmt )
 {}
 
 
@@ -113,7 +115,7 @@ public:
 	bool			m_bGotFilterOr = false;
 
 public:
-					SqlParser_c ( CSphVector<SqlStmt_t> & dStmt, ESphCollation eCollation );
+					SqlParser_c ( CSphVector<SqlStmt_t> & dStmt, ESphCollation eCollation, const char* szQuery, CSphString* pError );
 
 	void			PushQuery ();
 
@@ -250,11 +252,11 @@ static int yylex ( YYSTYPE * lvalp, SqlParser_c * pParser )
 
 //////////////////////////////////////////////////////////////////////////
 
-SqlParser_c::SqlParser_c ( CSphVector<SqlStmt_t> & dStmt, ESphCollation eCollation )
-	: SqlParserTraits_c ( dStmt )
+SqlParser_c::SqlParser_c ( CSphVector<SqlStmt_t> & dStmt, ESphCollation eCollation, const char* szQuery, CSphString* pError )
+	: SqlParserTraits_c ( dStmt, szQuery, pError )
 	, m_eCollation ( eCollation )
 {
-	assert ( !m_dStmt.GetLength() );
+	assert ( m_dStmt.IsEmpty() );
 	PushQuery ();
 }
 
@@ -1404,11 +1406,7 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 	if ( IsDdlQuery ( sQuery, iLen ) )
 		return ParseDdl ( sQuery, iLen, dStmt, sError );
 
-	SqlParser_c tParser ( dStmt, eCollation );
-	tParser.m_pBuf = sQuery;
-	tParser.m_pLastTokenStart = NULL;
-	tParser.m_pParseError = &sError;
-	tParser.m_eCollation = eCollation;
+	SqlParser_c tParser ( dStmt, eCollation, sQuery, &sError );
 
 	char * sEnd = const_cast<char *>( sQuery ) + iLen;
 	sEnd[0] = 0; // prepare for yy_scan_buffer
@@ -1458,7 +1456,7 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 			CSphString & sFunc = dStmt[iStmt].m_sTableFunc;
 			sFunc.ToUpper();
 
-			ISphTableFunc * pFunc = NULL;
+			ISphTableFunc * pFunc = nullptr;
 			if ( sFunc=="REMOVE_REPEATS" )
 				pFunc = CreateRemoveRepeats();
 
@@ -1476,9 +1474,9 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 		}
 
 		// validate filters
-		ARRAY_FOREACH ( i, tQuery.m_dFilters )
+		for ( const auto& tFilter : tQuery.m_dFilters )
 		{
-			const CSphString & sCol = tQuery.m_dFilters[i].m_sAttrName;
+			const CSphString & sCol = tFilter.m_sAttrName;
 			if ( !strcasecmp ( sCol.cstr(), "@count" ) || !strcasecmp ( sCol.cstr(), "count(*)" ) )
 			{
 				sError.SetSprintf ( "sphinxql: aggregates in 'where' clause prohibited, use 'HAVING'" );
@@ -1519,14 +1517,14 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 		const CSphQuery & tHeadQuery = tHeadStmt.m_tQuery;
 		if ( dStmt[i].m_eStmt==STMT_SELECT )
 		{
-			i++;
+			++i;
 			if ( i<dStmt.GetLength() && dStmt[i].m_eStmt==STMT_FACET )
 			{
 				bGotFacet = true;
 				const_cast<CSphQuery &>(tHeadQuery).m_bFacetHead = true;
 			}
 
-			for ( ; i<dStmt.GetLength() && dStmt[i].m_eStmt==STMT_FACET; i++ )
+			for ( ; i<dStmt.GetLength() && dStmt[i].m_eStmt==STMT_FACET; ++i )
 			{
 				SqlStmt_t & tStmt = dStmt[i];
 				tStmt.m_tQuery.m_bFacet = true;
@@ -1586,11 +1584,10 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 			dItems[i] = *dSelectItems[i].m_pItem;
 		}
 
-		ARRAY_FOREACH ( i, dStmt )
+		for ( SqlStmt_t& tStmt : dStmt )
 		{
-			SqlStmt_t & tStmt = dStmt[i];
 			// keep original items
-			tStmt.m_tQuery.m_dItems.SwapData ( dStmt[i].m_tQuery.m_dRefItems );
+			tStmt.m_tQuery.m_dItems.SwapData ( tStmt.m_tQuery.m_dRefItems );
 			tStmt.m_tQuery.m_dItems = dItems;
 
 			// for FACET strip off group by expression items
@@ -1654,11 +1651,7 @@ bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, co
 	int iLen = sBuf.GetLength();
 
 	CSphVector<SqlStmt_t> dStmt;
-	SqlParser_c tParser ( dStmt, eCollation );
-	tParser.m_pBuf = sBuf.cstr();
-	tParser.m_pLastTokenStart = nullptr;
-	tParser.m_pParseError = &sError;
-	tParser.m_eCollation = eCollation;
+	SqlParser_c tParser ( dStmt, eCollation, sBuf.cstr(), &sError );
 	tParser.m_sErrorHeader = "percolate filters:";
 
 	char * sEnd = const_cast<char *>( sBuf.cstr() ) + iLen;

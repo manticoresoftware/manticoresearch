@@ -40,7 +40,7 @@ public:
 		DWORD			ToFlags() const;
 	};
 
-	explicit DdlParser_c ( CSphVector<SqlStmt_t> & dStmt );
+	DdlParser_c ( CSphVector<SqlStmt_t>& dStmt, const char* szQuery, CSphString* pError );
 
 	const char * GetLastError() const { return m_sError.scstr(); }
 

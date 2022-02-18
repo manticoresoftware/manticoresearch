@@ -292,10 +292,10 @@ public:
 class SqlParserTraits_c : ISphNoncopyable
 {
 public:
+	const char *	m_pBuf;
+	CSphString *	m_pParseError;
 	void *			m_pScanner = nullptr;
-	const char *	m_pBuf = nullptr;
 	const char *	m_pLastTokenStart = nullptr;
-	CSphString *	m_pParseError = nullptr;
 	CSphQuery *		m_pQuery = nullptr;
 	SqlStmt_t *		m_pStmt = nullptr;
 	CSphString		m_sErrorHeader = "sphinxql:";
@@ -305,7 +305,7 @@ public:
 	CSphString		ToStringUnescape ( const SqlNode_t & tNode ) const;
 
 protected:
-					SqlParserTraits_c ( CSphVector<SqlStmt_t> &	dStmt );
+					SqlParserTraits_c ( CSphVector<SqlStmt_t> &	dStmt, const char* szQuery, CSphString* pError );
 
 	CSphVector<SqlStmt_t> &	m_dStmt;
 };

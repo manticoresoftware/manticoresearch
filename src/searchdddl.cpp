@@ -84,10 +84,10 @@ DWORD DdlParser_c::ItemOptions_t::ToFlags() const
 
 //////////////////////////////////////////////////////////////////////////
 
-DdlParser_c::DdlParser_c ( CSphVector<SqlStmt_t> & dStmt )
-	: SqlParserTraits_c ( dStmt )
+DdlParser_c::DdlParser_c ( CSphVector<SqlStmt_t> & dStmt, const char* szQuery, CSphString* pError )
+	: SqlParserTraits_c ( dStmt, szQuery, pError )
 {
-	assert ( !m_dStmt.GetLength() );
+	assert ( m_dStmt.IsEmpty() );
 	PushQuery ();
 }
 
@@ -358,10 +358,7 @@ bool ParseDdl ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CS
 		return false;
 	}
 
-	DdlParser_c tParser(dStmt);
-	tParser.m_pBuf = sQuery;
-	tParser.m_pLastTokenStart = NULL;
-	tParser.m_pParseError = &sError;
+	DdlParser_c tParser { dStmt, sQuery, &sError };
 
 	char * sEnd = const_cast<char *>( sQuery ) + iLen;
 	sEnd[0] = 0; // prepare for yy_scan_buffer
@@ -382,10 +379,7 @@ bool ParseDdl ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CS
 
 	dStmt.Pop(); // last query is always dummy
 
-	if ( iRes!=0 || !dStmt.GetLength() )
-		return false;
-
-	return true;
+	return !iRes && !dStmt.IsEmpty();
 }
 
 

@@ -185,11 +185,7 @@ That is very useful when building in prepared build systems, like docker contain
   option by explicitly specifying 'off' value.
 
 
-- **LIBS_BUNDLE** - path to a folder with different libraries. This is mostly relevant for Windows building, but may be
-  also helpful if you build quite often, in order to avoid downloading third-party sources each time. That path is never modified
-  by configuring script in default behaviour; you should put everything there by youself. When, say, we want support of stemmer -
-the sources will be downloaded from snowball homepage, then extracted, configured, built, etc. Originall source tarball (which is `libstemmer_c.tgz`) you may store to that folder. Next time you want to build from scratch, configure script looks first to the bundle,
-and if it found stemmer there, it will not download it again from internet.
+- **LIBS_BUNDLE** - path to a folder with different libraries. This is mostly relevant for Windows building, but may be also helpful if you have to build often in order to avoid downloading third-party sources each time. By default this path is never modified by the configuration script; you should put everything there manually. When, say, we want the support of stemmer - the sources will be downloaded from Snowball homepage, then extracted, configured, built, etc. Instead you can store the original source tarball (which is `libstemmer_c.tgz`) in this folder. Next time you want to build from scratch, the configuration script will first look up in the bundle, and if it finds the stemmer there, it will not download it again from the Internet.
 
 
 - **CACHEB** - path to a folder with stored builds of 3-rd party libraries. Usually features like galera, re2, icu, etc. first downloaded

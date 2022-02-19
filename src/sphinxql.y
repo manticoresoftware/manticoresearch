@@ -239,9 +239,8 @@ statement:
 /// *** ALL_IDENT_LIST ***
 
 
-ident_set_no_option:
-	TOK_IDENT
-	| TOK_AGENT | TOK_ALL | TOK_ANY | TOK_ASC | TOK_ATTACH | TOK_ATTRIBUTES
+reserved_no_option:
+	TOK_AGENT | TOK_ALL | TOK_ANY | TOK_ASC | TOK_ATTACH | TOK_ATTRIBUTES
 	| TOK_AVG | TOK_BEGIN | TOK_BETWEEN | TOK_BIGINT | TOK_CALL
 	| TOK_CHARACTER | TOK_CHUNK | TOK_CLUSTER | TOK_COLLATION | TOK_COLUMN | TOK_COMMIT
 	| TOK_COMMITTED | TOK_COUNT | TOK_CREATE | TOK_DATABASES | TOK_DELETE
@@ -260,22 +259,43 @@ ident_set_no_option:
 	| TOK_WARNINGS | TOK_WEIGHT | TOK_WHERE | TOK_WITH | TOK_WITHIN
 	;
 
+reserved_set_tail:
+    TOK_NAMES | TOK_TRANSACTION | TOK_COLLATE | TOK_BACKIDENT
+    ;
+
+reserved_set:
+	reserved_no_option | TOK_OPTION
+	;
+
+reserved_set_full:
+    reserved_set | reserved_set_tail
+    ;
+
+
 ident_set:
-	ident_set_no_option | TOK_OPTION
+	TOK_IDENT | reserved_set
 	;
 
 ident:
-	ident_set | TOK_NAMES | TOK_TRANSACTION | TOK_COLLATE | TOK_BACKIDENT
+	TOK_IDENT | reserved_set_full
 	;
 
 ident_no_option:
-	ident_set_no_option | TOK_NAMES | TOK_TRANSACTION | TOK_COLLATE | TOK_BACKIDENT
+	TOK_IDENT | reserved_no_option | reserved_set_tail
 	;
 
 /// *** ALL_IDENT_LIST_END ***
 // WARNING! line above is MANDATORY for consistency checking!
 //////////////////////////////////////////////////////////////////////////
 
+
+/// id of columns
+identcol:
+	ident
+	| identcol ':' ident {TRACK_BOUNDS ( $$, $1, $3 );}
+	;
+
+/// indexes
 identidx:
 	TOK_BACKIDENT
 	{
@@ -483,7 +503,7 @@ tablefunc_args_list:
 	;
 
 tablefunc_arg:
-	ident
+	identcol
 	| TOK_CONST_INT
 	;
 
@@ -554,8 +574,7 @@ select_item:
 
 opt_alias:
 	// empty
-	| ident								{ pParser->AliasLastItem ( &$1 ); }
-	| TOK_AS ident						{ pParser->AliasLastItem ( &$2 ); }
+	| opt_as identcol						{ pParser->AliasLastItem ( &$2 ); }
 	;
 
 select_expr:
@@ -567,12 +586,7 @@ select_expr:
 	| TOK_GROUP_CONCAT '(' expr ')'		{ pParser->AddItem ( &$3, SPH_AGGR_CAT, &$1, &$4 ); }
 	| TOK_COUNT '(' '*' ')'				{ if ( !pParser->AddItem ( "count(*)", &$1, &$4 ) ) YYERROR; }
 	| TOK_GROUPBY '(' ')'				{ if ( !pParser->AddItem ( "groupby()", &$1, &$3 ) ) YYERROR; }
-	| TOK_COUNT '(' TOK_DISTINCT ident')' 	{ if ( !pParser->AddDistinct ( &$4, &$1, &$5 ) ) YYERROR; }
-	;
-
-ident_list:
-	ident
-	| ident_list ',' ident				{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| TOK_COUNT '(' TOK_DISTINCT identcol')' 	{ if ( !pParser->AddDistinct ( &$4, &$1, &$5 ) ) YYERROR; }
 	;
 
 opt_where_clause:
@@ -871,7 +885,7 @@ filter_item:
 	;
 
 expr_ident:
-	ident
+	identcol
 	| TOK_ATIDENT
 		{
 			if ( !pParser->SetOldSyntax() )
@@ -903,8 +917,8 @@ expr_ident:
 	;
 
 mva_aggr:
-	TOK_ANY '(' ident ')'	{ $$ = $3; $$.m_iType = TOK_ANY; }
-	| TOK_ALL '(' ident ')'	{ $$ = $3; $$.m_iType = TOK_ALL; }
+	TOK_ANY '(' identcol ')'	{ $$ = $3; $$.m_iType = TOK_ANY; }
+	| TOK_ALL '(' identcol ')'	{ $$ = $3; $$.m_iType = TOK_ALL; }
 	;
 
 const_int:
@@ -1081,7 +1095,7 @@ option_item:
 			if ( !pParser->AddOption ( $1 ) )
 				YYERROR;
 		}
-	| ident_no_option '=' ident
+	| ident_no_option '=' identcol
 		{
 			if ( !pParser->AddOption ( $1, $3 ) )
 				YYERROR;
@@ -1097,7 +1111,7 @@ option_item:
 				YYERROR;
 			pParser->FreeNamedVec ( $4.m_iValue );
 		}
-	| ident_no_option '=' ident '(' TOK_QUOTED_STRING ')'
+	| ident_no_option '=' identcol '(' TOK_QUOTED_STRING ')'
 		{
 			if ( !pParser->AddOption ( $1, $3, $5 ) )
 				YYERROR;
@@ -1122,7 +1136,7 @@ named_const_list:
 	;
 
 named_const:
-	ident '=' const_int
+	identcol '=' const_int
 		{
 			$$ = $1;
 			$$.m_iValue = $3.m_iValue;
@@ -1138,17 +1152,21 @@ hint_list:
 	hint_item
 	| hint_list hint_item
 	;
+identidx_list:
+	ident
+	| identidx_list ',' ident				{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	;
 
 hint_item:
-	TOK_FORCE TOK_INDEX '(' ident_list ')'
+	TOK_FORCE TOK_INDEX '(' identidx_list ')'
 		{
 			pParser->AddIndexHint ( INDEX_HINT_FORCE, $4 );
 		}
-	| TOK_USE TOK_INDEX '(' ident_list ')'
+	| TOK_USE TOK_INDEX '(' identidx_list ')'
 		{
 			pParser->AddIndexHint ( INDEX_HINT_USE, $4 );
 		}
-	| TOK_IGNORE TOK_INDEX '(' ident_list ')'
+	| TOK_IGNORE TOK_INDEX '(' identidx_list ')'
 		{
 			pParser->AddIndexHint ( INDEX_HINT_IGNORE, $4 );
 		}
@@ -1158,7 +1176,7 @@ hint_item:
 //////////////////////////////////////////////////////////////////////////
 
 expr:
-	ident
+	identcol
 	| TOK_ATIDENT				{ if ( !pParser->SetOldSyntax() ) YYERROR; }
 	| TOK_CONST_INT
 	| TOK_CONST_FLOAT
@@ -1205,7 +1223,7 @@ function:
 	| TOK_MIN '(' expr ',' expr ')'	{ TRACK_BOUNDS ( $$, $1, $6 ); } // handle clash with aggregate functions
 	| TOK_MAX '(' expr ',' expr ')'	{ TRACK_BOUNDS ( $$, $1, $6 ); }
 	| TOK_WEIGHT '(' ')'			{ TRACK_BOUNDS ( $$, $1, $3 ); }
-	| json_aggr '(' expr TOK_FOR ident TOK_IN json_field ')' { TRACK_BOUNDS ( $$, $1, $8 ); }
+	| json_aggr '(' expr TOK_FOR identcol TOK_IN json_field ')' { TRACK_BOUNDS ( $$, $1, $8 ); }
 	| TOK_REMAP '(' expr ',' expr ',' '(' arglist ')' ',' '(' arglist ')' ')' { TRACK_BOUNDS ( $$, $1, $14 ); }
 	| TOK_RAND '(' ')'				{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	| TOK_RAND '(' arglist ')'		{ TRACK_BOUNDS ( $$, $1, $4 ); }
@@ -1235,14 +1253,14 @@ consthash:
 	;
 
 hash_key:
-	ident
+	identcol
 	| TOK_IN
 	| TOK_LIMIT
 	;
 
 hash_val:
 	const_int
-	| ident
+	| identcol
 	| TOK_QUOTED_STRING 
 	;
 
@@ -1444,7 +1462,7 @@ opt_column_list:
 	;
 
 column_ident:
-	ident
+	identcol
 	;
 
 column_list:
@@ -1601,7 +1619,7 @@ update_items_list:
 	;
 
 update_item:
-	ident '=' const_int
+	identcol '=' const_int
 		{
 			// it is performance-critical to forcibly inline this
 			pParser->m_pStmt->AttrUpdate().m_dPool.Add ( (DWORD)$3.m_iValue );
@@ -1615,17 +1633,17 @@ update_item:
 				pParser->AddUpdatedAttr ( $1, SPH_ATTR_INTEGER );
 			}
 		}
-	| ident '=' const_float
+	| identcol '=' const_float
 		{
 			// it is performance-critical to forcibly inline this
 			pParser->m_pStmt->AttrUpdate().m_dPool.Add ( sphF2DW ( $3.m_fValue ) );
 			pParser->AddUpdatedAttr ( $1, SPH_ATTR_FLOAT );
 		}
-	| ident '=' '(' const_list ')'
+	| identcol '=' '(' const_list ')'
 		{
 			pParser->UpdateMVAAttr ( $1, $4 );
 		}
-	| ident '=' '(' ')' // special case () means delete mva
+	| identcol '=' '(' ')' // special case () means delete mva
 		{
 			SqlNode_t tNoValues;
 			pParser->UpdateMVAAttr ( $1, tNoValues );
@@ -1650,7 +1668,7 @@ update_item:
 			pParser->m_pStmt->AttrUpdate().m_dPool.Add ( sphF2DW ( $3.m_fValue ) );
 			pParser->AddUpdatedAttr ( $1, SPH_ATTR_FLOAT );
 		}
-	| ident '=' TOK_QUOTED_STRING
+	| identcol '=' TOK_QUOTED_STRING
 		{
 			pParser->UpdateStringAttr ( $1, $3 );
 		}
@@ -1878,7 +1896,7 @@ strval:
 opt_distinct_item:
 	// empty
 	| TOK_DISTINCT							{ pParser->AddDistinct ( nullptr ); }
-	| TOK_DISTINCT ident					{ pParser->AddDistinct ( &$2 ); }
+	| TOK_DISTINCT identcol					{ pParser->AddDistinct ( &$2 ); }
 	;
 
 opt_facet_by_items_list:

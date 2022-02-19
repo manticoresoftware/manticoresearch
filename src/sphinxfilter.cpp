@@ -1558,7 +1558,8 @@ static bool ValuesAreSame ( const CSphVector<SphAttr_t> & dLeft, const CSphVecto
 
 using namespace boost::icl;
 
-static interval<int64_t>::type ConstructInterval ( const CSphFilterSettings & tFilter )
+template <typename T, typename RET>
+RET ConstructInterval ( const CSphFilterSettings & tFilter )
 {
 	assert ( !tFilter.m_bExclude );
 	
@@ -1566,26 +1567,44 @@ static interval<int64_t>::type ConstructInterval ( const CSphFilterSettings & tF
 	int64_t iMax = tFilter.m_iMaxValue;
 	bool bHasEqualMin = tFilter.m_bHasEqualMin;
 	bool bHasEqualMax = tFilter.m_bHasEqualMax;
+	float fMin = tFilter.m_fMinValue;
+	float fMax = tFilter.m_fMaxValue;
+	if ( std::is_floating_point<T>::value && tFilter.m_eType==SPH_FILTER_RANGE )
+	{
+		fMin = (float)iMin;
+		fMax = (float)iMax;
+	}
 
 	if ( tFilter.m_bOpenLeft )
 	{
 		iMin = INT64_MIN;
+		fMin = -FLT_MAX;
 		bHasEqualMin = true;
 	}
 
 	if ( tFilter.m_bOpenRight )
 	{
 		iMax = INT64_MAX;
+		fMax = FLT_MAX;
 		bHasEqualMax = true;
 	}
 
-	if ( bHasEqualMin && bHasEqualMax )	return interval<int64_t>::closed ( iMin, iMax );
-	if ( bHasEqualMin )					return interval<int64_t>::right_open ( iMin, iMax );
-	if ( bHasEqualMax )					return interval<int64_t>::left_open ( iMin, iMax );
+	if ( std::is_floating_point<T>::value )
+	{
+		if ( bHasEqualMin && bHasEqualMax )	return interval<T>::closed ( fMin, fMax );
+		if ( bHasEqualMin )					return interval<T>::right_open ( fMin, fMax );
+		if ( bHasEqualMax )					return interval<T>::left_open ( fMin, fMax );
 
-	return interval<int64_t>::open ( iMin, iMax );
+		return interval<T>::open ( fMin, fMax );
+	} else
+	{
+		if ( bHasEqualMin && bHasEqualMax )	return interval<T>::closed ( iMin, iMax );
+		if ( bHasEqualMin )					return interval<T>::right_open ( iMin, iMax );
+		if ( bHasEqualMax )					return interval<T>::left_open ( iMin, iMax );
+
+		return interval<T>::open ( iMin, iMax );
+	}
 }
-
 
 static void DeconstructInterval ( CSphFilterSettings & tFilter, const interval<int64_t>::type & tInterval )
 {
@@ -1594,23 +1613,44 @@ static void DeconstructInterval ( CSphFilterSettings & tFilter, const interval<i
 	tFilter.m_bHasEqualMin = tInterval.bounds() == interval_bounds::closed() || tInterval.bounds() == interval_bounds::right_open();
 	tFilter.m_bHasEqualMax = tInterval.bounds() == interval_bounds::closed() || tInterval.bounds() == interval_bounds::left_open();
 	tFilter.m_bOpenLeft = tInterval.lower()==INT64_MIN && tFilter.m_bHasEqualMin;
-	tFilter.m_bOpenRight = tInterval.lower()==INT64_MAX && tFilter.m_bHasEqualMax;
+	tFilter.m_bOpenRight = tInterval.upper()==INT64_MAX && tFilter.m_bHasEqualMax;
 }
 
-
-static bool CalcRangeMerge ( CSphFilterSettings & tLeft, const CSphFilterSettings & tRight )
+static void DeconstructInterval ( CSphFilterSettings & tFilter, const interval<float>::type & tInterval )
 {
-	auto tInterval1 = ConstructInterval(tLeft);
-	auto tInterval2 = ConstructInterval(tRight);
+	tFilter.m_fMinValue = tInterval.lower();
+	tFilter.m_fMaxValue = tInterval.upper();
+	tFilter.m_bHasEqualMin = tInterval.bounds() == interval_bounds::closed() || tInterval.bounds() == interval_bounds::right_open();
+	tFilter.m_bHasEqualMax = tInterval.bounds() == interval_bounds::closed() || tInterval.bounds() == interval_bounds::left_open();
+	tFilter.m_bOpenLeft = tInterval.lower()==-FLT_MAX && tFilter.m_bHasEqualMin;
+	tFilter.m_bOpenRight = tInterval.upper()==FLT_MAX && tFilter.m_bHasEqualMax;
+}
+
+template <typename T>
+bool CalcRangeMerge ( CSphFilterSettings & tLeft, const CSphFilterSettings & tRight )
+{
+	auto tInterval1 = ConstructInterval<T, typename interval<T>::type> ( tLeft );
+	auto tInterval2 = ConstructInterval<T, typename interval<T>::type> ( tRight );
 
 	auto tResult = tInterval1 & tInterval2;
 	if ( boost::icl::is_empty(tResult) )
 		return false;
 
 	DeconstructInterval ( tLeft, tResult );
+
+	if ( std::is_floating_point<T>::value && tLeft.m_eType!=tRight.m_eType )
+		tLeft.m_eType = SPH_FILTER_FLOATRANGE;
+
 	return true;
 }
 
+static bool CheckRangeMerge ( CSphFilterSettings & tLeft, const CSphFilterSettings & tRight )
+{
+	if ( tLeft.m_eType==SPH_FILTER_FLOATRANGE || tRight.m_eType==SPH_FILTER_FLOATRANGE )
+		return CalcRangeMerge<float> ( tLeft, tRight );
+	else
+		return CalcRangeMerge<int64_t> ( tLeft, tRight );
+}
 
 static bool AllInRange ( const CSphVector<int64_t> & dValues, const CSphFilterSettings & tFilter )
 {
@@ -1647,6 +1687,10 @@ static bool AllOutsideRange ( const CSphVector<int64_t> & dValues, const CSphFil
 	}
 }
 
+static bool IsRangeFilter ( const CSphFilterSettings & tFilter )
+{
+	return ( tFilter.m_eType==SPH_FILTER_RANGE || tFilter.m_eType==SPH_FILTER_FLOATRANGE );
+}
 
 static bool MergeFilters ( CSphFilterSettings & tLeft, const CSphFilterSettings & tRight, bool & bRemoveLeft, bool & bRejectIndex )
 {
@@ -1693,20 +1737,20 @@ static bool MergeFilters ( CSphFilterSettings & tLeft, const CSphFilterSettings 
 		}
 	}
 
-	if ( tLeft.m_eType==SPH_FILTER_RANGE )
+	if ( IsRangeFilter ( tLeft ) )
 	{
-		if ( tRight.m_eType==SPH_FILTER_RANGE )
+		if ( IsRangeFilter ( tRight ) )
 		{
 			if ( !tLeft.m_bExclude && !tRight.m_bExclude )
 			{
-				if ( !CalcRangeMerge ( tLeft, tRight ) )
+				if ( !CheckRangeMerge ( tLeft, tRight ) )
 					bRejectIndex = true;
 
 				return true;
 			}
 		}
 
-		if ( tRight.m_eType==SPH_FILTER_VALUES )
+		if ( tLeft.m_eType==SPH_FILTER_RANGE && tRight.m_eType==SPH_FILTER_VALUES )
 		{
 			// we have "range", new filter is "values"
 			if ( !tLeft.m_bExclude && !tRight.m_bExclude )
@@ -1751,7 +1795,7 @@ void OptimizeFilters ( CSphVector<CSphFilterSettings> & dFilters )
 
 		bool bOk = true;
 		for ( const auto & tFilter : dFilters )
-			if ( tFilter.m_sAttrName==i.first && ( tFilter.m_eType!=SPH_FILTER_VALUES && tFilter.m_eType!=SPH_FILTER_RANGE ) )
+			if ( tFilter.m_sAttrName==i.first && ( tFilter.m_eType!=SPH_FILTER_VALUES && tFilter.m_eType!=SPH_FILTER_RANGE && tFilter.m_eType!=SPH_FILTER_FLOATRANGE ) )
 			{
 				bOk = false;
 				break;

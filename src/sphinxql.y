@@ -758,22 +758,22 @@ filter_item:
 		}
 	| expr_ident '>' const_float
 		{
-			if ( !pParser->AddFloatRangeFilter ( $1, $3.m_fValue, FLT_MAX, false ) )
+			if ( !pParser->AddFloatFilterGreater ( $1, $3.m_fValue, false ) )
 				YYERROR;
 		}
 	| expr_ident '<' const_float
 		{
-			if ( !pParser->AddFloatRangeFilter ( $1, -FLT_MAX, $3.m_fValue, false ) )
+			if ( !pParser->AddFloatFilterLesser ( $1, $3.m_fValue, false ) )
 				YYERROR;
 		}
 	| expr_ident TOK_GTE const_float
 		{
-			if ( !pParser->AddFloatRangeFilter ( $1, $3.m_fValue, FLT_MAX, true ) )
+			if ( !pParser->AddFloatFilterGreater ( $1, $3.m_fValue, true ) )
 				YYERROR;
 		}
 	| expr_ident TOK_LTE const_float
 		{
-			if ( !pParser->AddFloatRangeFilter ( $1, -FLT_MAX, $3.m_fValue, true ) )
+			if ( !pParser->AddFloatFilterLesser ( $1, $3.m_fValue, true ) )
 				YYERROR;
 		}
 	| expr_ident '=' TOK_QUOTED_STRING

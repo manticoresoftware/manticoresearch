@@ -1925,7 +1925,7 @@ public:
 
 		DocstoreDoc_t tDoc;
 		VecTraits_T<const BYTE> tBlob = GetBlob ( tDoc, tMatch );
-		return *(const float*)tBlob.Begin();
+		return tBlob.Begin() ? *(const float*)tBlob.Begin() : 0.0f;
 	}
 
 	int	IntEval ( const CSphMatch & tMatch ) const final

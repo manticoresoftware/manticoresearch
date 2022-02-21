@@ -938,7 +938,7 @@ Several update operations can be performed in a single call using the `/bulk` en
 <!-- intro -->
 ##### HTTP:
 
-<!-- request HTTP -->
+<!-- request HTTP --Content-type=application/x-ndjson -->
 
 ```json
 POST /bulk

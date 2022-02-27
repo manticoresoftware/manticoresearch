@@ -8798,7 +8798,7 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 		}
 
 		SphFinalMatchCalc_t tFinal ( tArgs.m_iTag, tCtx );
-		dSorters.Apply ( [&] ( ISphMatchSorter * p ) { p->Finalize ( tFinal, false, tArgs.m_bFinalizeSorters ); } );
+		dSorters.Apply ( [&] ( ISphMatchSorter * p ) { p->Finalize ( tFinal, false, false ); } );
 	}
 
 	if ( tArgs.m_bModifySorterSchemas )

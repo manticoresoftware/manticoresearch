@@ -168,6 +168,16 @@ protected:
 							~CSphGrouper () override {} // =default causes bunch of errors building on wheezy
 };
 
+class DistinctFetcher_i : public ISphRefcountedMT
+{
+public:
+	virtual void			GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const = 0;
+	virtual void			SetBlobPool ( const BYTE * pBlobPool ) = 0;
+	virtual void			SetColumnar ( const columnar::Columnar_i * pColumnar ) = 0;
+	virtual void			FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) = 0;
+	virtual DistinctFetcher_i *	Clone() const = 0;
+};
+
 const char *	GetInternalAttrPrefix();
 int 			GetStringRemapCount ( const ISphSchema & tDstSchema, const ISphSchema & tSrcSchema );
 bool			IsSortStringInternal ( const CSphString & sColumnName );

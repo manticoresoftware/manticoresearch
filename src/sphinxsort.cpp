@@ -1812,6 +1812,226 @@ void GrouperMVA_T<T>::MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVect
 }
 
 /////////////////////////////////////////////////////////////////////////////
+
+template <typename MVA, typename ADDER>
+static void AddGroupedMVA ( ADDER && fnAdd, const ByteBlob_t& dRawMVA )
+{
+	VecTraits_T<MVA> dMvas {dRawMVA};
+	for ( auto & tValue : dMvas )
+		fnAdd ( sphUnalignedRead(tValue) );
+}
+
+template <typename PUSH>
+static bool PushJsonField ( int64_t iValue, const BYTE * pBlobPool, PUSH && fnPush )
+{
+	int iLen;
+	char szBuf[32];
+	SphGroupKey_t uGroupKey;
+
+	ESphJsonType eJson = sphJsonUnpackType ( iValue );
+	const BYTE * pValue = pBlobPool + sphJsonUnpackOffset ( iValue );
+
+	switch ( eJson )
+	{
+		case JSON_ROOT:
+		{
+			iLen = sphJsonNodeSize ( JSON_ROOT, pValue );
+			bool bEmpty = iLen==5; // mask and JSON_EOF
+			uGroupKey = bEmpty ? 0 : sphFNV64 ( pValue, iLen );
+			return fnPush ( bEmpty ? nullptr : &iValue, uGroupKey );
+		}
+
+		case JSON_STRING:
+		case JSON_OBJECT:
+		case JSON_MIXED_VECTOR:
+			iLen = sphJsonUnpackInt ( &pValue );
+			uGroupKey = ( iLen==1 && eJson!=JSON_STRING ) ? 0 : sphFNV64 ( pValue, iLen );
+			return fnPush ( ( iLen==1 && eJson!=JSON_STRING ) ? nullptr : &iValue, uGroupKey );
+
+		case JSON_STRING_VECTOR:
+		{
+			bool bRes = false;
+			sphJsonUnpackInt ( &pValue );
+			iLen = sphJsonUnpackInt ( &pValue );
+			for ( int i=0;i<iLen;i++ )
+			{
+				int64_t iNewValue = sphJsonPackTypeOffset ( JSON_STRING, pValue-pBlobPool );
+
+				int iStrLen = sphJsonUnpackInt ( &pValue );
+				uGroupKey = sphFNV64 ( pValue, iStrLen );
+				bRes |= fnPush ( &iNewValue, uGroupKey );
+				pValue += iStrLen;
+			}
+			return bRes;
+		}
+
+		case JSON_INT32:
+			return fnPush ( &iValue, sphFNV64 ( (BYTE*)FormatInt ( szBuf, (int)sphGetDword(pValue) ) ) );
+
+		case JSON_INT64:
+			return fnPush ( &iValue, sphFNV64 ( (BYTE*)FormatInt ( szBuf, (int)sphJsonLoadBigint ( &pValue ) ) ) );
+
+		case JSON_DOUBLE:
+			snprintf ( szBuf, sizeof(szBuf), "%f", sphQW2D ( sphJsonLoadBigint ( &pValue ) ) );
+			return fnPush ( &iValue, sphFNV64 ( (const BYTE*)szBuf ) );
+
+		case JSON_INT32_VECTOR:
+		{
+			bool bRes = false;
+			iLen = sphJsonUnpackInt ( &pValue );
+			auto p = (const int*)pValue;
+			for ( int i=0;i<iLen;i++ )
+			{
+				int64_t iPacked = sphJsonPackTypeOffset ( JSON_INT32, (const BYTE*)p-pBlobPool );
+				uGroupKey = *p++;
+				bRes |= fnPush ( &iPacked, uGroupKey );
+			}
+			return bRes;
+		}
+
+		case JSON_INT64_VECTOR:
+		case JSON_DOUBLE_VECTOR:
+		{
+			bool bRes = false;
+			iLen = sphJsonUnpackInt ( &pValue );
+			auto p = (const int64_t*)pValue;
+			ESphJsonType eType = eJson==JSON_INT64_VECTOR ? JSON_INT64 : JSON_DOUBLE;
+			for ( int i=0;i<iLen;i++ )
+			{
+				int64_t iPacked = sphJsonPackTypeOffset ( eType, (const BYTE*)p-pBlobPool );
+				uGroupKey = *p++;
+				bRes |= fnPush ( &iPacked, uGroupKey );
+			}
+			return bRes;
+		}
+
+		default:
+			uGroupKey = 0;
+			iValue = 0;
+			return fnPush ( &iValue, uGroupKey );
+	}
+}
+
+
+class DistinctFetcher_c : public DistinctFetcher_i
+{
+public:
+			DistinctFetcher_c ( const CSphAttrLocator & tLocator ) : m_tLocator(tLocator) {}
+
+	void	SetColumnar ( const columnar::Columnar_i * pColumnar ) override {}
+	void	SetBlobPool ( const BYTE * pBlobPool ) override {}
+	void	FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override { sphFixupLocator ( m_tLocator, pOldSchema, pNewSchema ); }
+
+protected:
+	CSphAttrLocator m_tLocator;
+};
+
+
+class DistinctFetcherBlob_c : public DistinctFetcher_c
+{
+	using DistinctFetcher_c::DistinctFetcher_c;
+
+public:
+	void	SetBlobPool ( const BYTE * pBlobPool ) override { m_pBlobPool = pBlobPool; }
+
+protected:
+	const BYTE * m_pBlobPool = nullptr;
+};
+
+
+class DistinctFetcherInt_c : public DistinctFetcher_c
+{
+	using DistinctFetcher_c::DistinctFetcher_c;
+
+public:
+	void	GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const override;
+	DistinctFetcher_i *	Clone() const override { return new DistinctFetcherInt_c(m_tLocator); }
+};
+
+
+void DistinctFetcherInt_c::GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const
+{
+	dKeys.Resize(1);
+	dKeys[0] = tMatch.GetAttr(m_tLocator);
+}
+
+
+class DistinctFetcherString_c : public DistinctFetcherBlob_c
+{
+	using DistinctFetcherBlob_c::DistinctFetcherBlob_c;
+
+public:
+	void	GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const override;
+	DistinctFetcher_i *	Clone() const override { return new DistinctFetcherString_c(m_tLocator); }
+};
+
+
+void DistinctFetcherString_c::GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const
+{
+	dKeys.Resize(1);
+	auto dBlob = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
+	dKeys[0] = (SphAttr_t) sphFNV64 ( dBlob );
+}
+
+
+class DistinctFetcherJsonField_c : public DistinctFetcherBlob_c
+{
+	using DistinctFetcherBlob_c::DistinctFetcherBlob_c;
+
+public:
+	void	GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const override;
+	DistinctFetcher_i *	Clone() const override { return new DistinctFetcherJsonField_c(m_tLocator); }
+};
+
+
+void DistinctFetcherJsonField_c::GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const
+{
+	dKeys.Resize(0);
+	PushJsonField ( tMatch.GetAttr(m_tLocator), m_pBlobPool, [&dKeys]( SphAttr_t * pAttr, SphGroupKey_t uGroupKey )
+		{
+			if ( uGroupKey )
+				dKeys.Add(uGroupKey);
+
+			return true;
+		} );
+}
+
+
+template<typename T>
+class DistinctFetcherMva_T : public DistinctFetcherBlob_c
+{
+	using DistinctFetcherBlob_c::DistinctFetcherBlob_c;
+
+public:
+	void	GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const override;
+	DistinctFetcher_i *	Clone() const override { return new DistinctFetcherMva_T(m_tLocator); }
+};
+
+template<typename T>
+void DistinctFetcherMva_T<T>::GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const
+{
+	dKeys.Resize(0);
+	AddGroupedMVA<T> ( [&dKeys]( SphAttr_t tAttr ){ dKeys.Add(tAttr); }, tMatch.FetchAttrData ( m_tLocator, m_pBlobPool ) );
+}
+
+
+static DistinctFetcher_i * CreateDistinctFetcher ( const CSphString & sName, const CSphAttrLocator & tLocator, ESphAttr eType )
+{
+	// fixme! what about json?
+	switch ( eType )
+	{
+	case SPH_ATTR_STRING:
+	case SPH_ATTR_STRINGPTR:		return new DistinctFetcherString_c(tLocator);
+	case SPH_ATTR_JSON_FIELD:		return new DistinctFetcherJsonField_c(tLocator);
+	case SPH_ATTR_UINT32SET:
+	case SPH_ATTR_UINT32SET_PTR:	return new DistinctFetcherMva_T<DWORD>(tLocator);
+	case SPH_ATTR_INT64SET:
+	case SPH_ATTR_INT64SET_PTR:		return new DistinctFetcherMva_T<int64_t>(tLocator);
+	default:						return new DistinctFetcherInt_c(tLocator);
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////
 /// (attrvalue,count) pair
 struct SphUngroupedValue_t : public std::pair<SphAttr_t,int>
 {
@@ -2006,12 +2226,11 @@ struct CSphGroupSorterSettings
 	CSphAttrLocator		m_tLocGroupby;		///< locator for @groupby
 	CSphAttrLocator		m_tLocCount;		///< locator for @count
 	CSphAttrLocator		m_tLocDistinct;		///< locator for @distinct
-	CSphAttrLocator		m_tDistinctAttr;	///< locator for attribute to compute count(distinct) for
 	CSphAttrLocator		m_tLocGroupbyStr;	///< locator for @groupbystr
 
-	ESphAttr			m_eDistinctAttr = SPH_ATTR_NONE;	///< type of attribute to compute count(distinct) for
 	bool				m_bDistinct = false;///< whether we need distinct
 	CSphRefcountedPtr<CSphGrouper>		m_pGrouper;///< group key calculator
+	CSphRefcountedPtr<DistinctFetcher_i> m_pDistinctFetcher;
 	bool				m_bImplicit = false;///< for queries with aggregate functions but without group by clause
 	SharedPtr_t<ISphFilter>	m_pAggrFilterTrait; ///< aggregate filter that got owned by grouper
 	bool				m_bJson = false;	///< whether we're grouping by Json attribute
@@ -2022,8 +2241,10 @@ struct CSphGroupSorterSettings
 		sphFixupLocator ( m_tLocGroupby, pOldSchema, pNewSchema );
 		sphFixupLocator ( m_tLocCount, pOldSchema, pNewSchema );
 		sphFixupLocator ( m_tLocDistinct, pOldSchema, pNewSchema );
-		sphFixupLocator ( m_tDistinctAttr, pOldSchema, pNewSchema );
 		sphFixupLocator ( m_tLocGroupbyStr, pOldSchema, pNewSchema );
+
+		if ( m_pDistinctFetcher )
+			m_pDistinctFetcher->FixupLocators ( pOldSchema, pNewSchema );
 	}
 };
 
@@ -2158,147 +2379,6 @@ public:
 		m_bPtrRowsCommited = true;
 	}
 };
-
-template <typename MVA, typename ADDER>
-static void AddGroupedMVA ( ADDER && fnAdd, const ByteBlob_t& dRawMVA )
-{
-	VecTraits_T<MVA> dMvas {dRawMVA};
-	for ( auto & tValue : dMvas )
-		fnAdd ( sphUnalignedRead(tValue) );
-}
-
-template <typename PUSH>
-bool PushJsonField ( int64_t iValue, const BYTE * pBlobPool, PUSH && fnPush )
-{
-	int iLen;
-	char szBuf[32];
-	SphGroupKey_t uGroupKey;
-
-	ESphJsonType eJson = sphJsonUnpackType ( iValue );
-	const BYTE * pValue = pBlobPool + sphJsonUnpackOffset ( iValue );
-
-	switch ( eJson )
-	{
-		case JSON_ROOT:
-		{
-			iLen = sphJsonNodeSize ( JSON_ROOT, pValue );
-			bool bEmpty = iLen==5; // mask and JSON_EOF
-			uGroupKey = bEmpty ? 0 : sphFNV64 ( pValue, iLen );
-			return fnPush ( bEmpty ? nullptr : &iValue, uGroupKey );
-		}
-
-		case JSON_STRING:
-		case JSON_OBJECT:
-		case JSON_MIXED_VECTOR:
-			iLen = sphJsonUnpackInt ( &pValue );
-			uGroupKey = ( iLen==1 && eJson!=JSON_STRING ) ? 0 : sphFNV64 ( pValue, iLen );
-			return fnPush ( ( iLen==1 && eJson!=JSON_STRING ) ? nullptr : &iValue, uGroupKey );
-
-		case JSON_STRING_VECTOR:
-		{
-			bool bRes = false;
-			sphJsonUnpackInt ( &pValue );
-			iLen = sphJsonUnpackInt ( &pValue );
-			for ( int i=0;i<iLen;i++ )
-			{
-				int64_t iNewValue = sphJsonPackTypeOffset ( JSON_STRING, pValue-pBlobPool );
-
-				int iStrLen = sphJsonUnpackInt ( &pValue );
-				uGroupKey = sphFNV64 ( pValue, iStrLen );
-				bRes |= fnPush ( &iNewValue, uGroupKey );
-				pValue += iStrLen;
-			}
-			return bRes;
-		}
-
-		case JSON_INT32:
-			return fnPush ( &iValue, sphFNV64 ( (BYTE*)FormatInt ( szBuf, (int)sphGetDword(pValue) ) ) );
-
-		case JSON_INT64:
-			return fnPush ( &iValue, sphFNV64 ( (BYTE*)FormatInt ( szBuf, (int)sphJsonLoadBigint ( &pValue ) ) ) );
-
-		case JSON_DOUBLE:
-			snprintf ( szBuf, sizeof(szBuf), "%f", sphQW2D ( sphJsonLoadBigint ( &pValue ) ) );
-			return fnPush ( &iValue, sphFNV64 ( (const BYTE*)szBuf ) );
-
-		case JSON_INT32_VECTOR:
-		{
-			bool bRes = false;
-			iLen = sphJsonUnpackInt ( &pValue );
-			auto p = (const int*)pValue;
-			for ( int i=0;i<iLen;i++ )
-			{
-				int64_t iPacked = sphJsonPackTypeOffset ( JSON_INT32, (const BYTE*)p-pBlobPool );
-				uGroupKey = *p++;
-				bRes |= fnPush ( &iPacked, uGroupKey );
-			}
-			return bRes;
-		}
-
-		case JSON_INT64_VECTOR:
-		case JSON_DOUBLE_VECTOR:
-		{
-			bool bRes = false;
-			iLen = sphJsonUnpackInt ( &pValue );
-			auto p = (const int64_t*)pValue;
-			ESphJsonType eType = eJson==JSON_INT64_VECTOR ? JSON_INT64 : JSON_DOUBLE;
-			for ( int i=0;i<iLen;i++ )
-			{
-				int64_t iPacked = sphJsonPackTypeOffset ( eType, (const BYTE*)p-pBlobPool );
-				uGroupKey = *p++;
-				bRes |= fnPush ( &iPacked, uGroupKey );
-			}
-			return bRes;
-		}
-
-		default:
-			uGroupKey = 0;
-			iValue = 0;
-			return fnPush ( &iValue, uGroupKey );
-	}
-}
-
-template <typename ADDER>
-static void AddDistinctKeys ( const CSphMatch & tEntry, CSphAttrLocator & tDistinctLoc, ESphAttr eDistinctAttr, const BYTE * pBlobPool, ADDER && fnAdd )
-{
-	switch ( eDistinctAttr )
-	{
-	case SPH_ATTR_STRING:
-	case SPH_ATTR_STRINGPTR: // fixme! also json?
-		{
-			auto dBlob = tEntry.FetchAttrData ( tDistinctLoc, pBlobPool );
-			auto tAttr = (SphAttr_t) sphFNV64 ( dBlob );
-			fnAdd ( tAttr );
-		}
-		break;
-
-	case SPH_ATTR_JSON_FIELD:
-		PushJsonField ( tEntry.GetAttr(tDistinctLoc), pBlobPool, [fnAdd]( SphAttr_t * pAttr, SphGroupKey_t uGroupKey )
-			{
-				if ( uGroupKey )
-					fnAdd(uGroupKey);
-
-				return true;
-			}
-		);
-		break;
-
-	case SPH_ATTR_UINT32SET:
-	case SPH_ATTR_UINT32SET_PTR:
-		AddGroupedMVA<DWORD> ( fnAdd, tEntry.FetchAttrData ( tDistinctLoc, pBlobPool ) );
-		break;
-
-	case SPH_ATTR_INT64SET:
-	case SPH_ATTR_INT64SET_PTR:
-		AddGroupedMVA<int64_t> ( fnAdd, tEntry.FetchAttrData ( tDistinctLoc, pBlobPool ) );
-		break;
-
-	// fixme! what about json?
-	default:
-		fnAdd ( tEntry.GetAttr ( tDistinctLoc ) );
-		break;
-	}
-}
 
 
 class BaseGroupSorter_c : public BlobPool_c, protected CSphGroupSorterSettings
@@ -2460,11 +2540,12 @@ public:
 		, m_tSubSorter ( *this, pComp )
 	{
 		assert ( GROUPBY_FACTOR>1 );
-		assert ( !DISTINCT || tSettings.m_tDistinctAttr.m_iBitOffset>=0 );
+		assert ( !DISTINCT || tSettings.m_pDistinctFetcher );
 		if_const ( NOTIFICATIONS )
 			m_dJustPopped.Reserve ( m_iSize );
 
 		m_pGrouper = tSettings.m_pGrouper;
+		m_pDistinctFetcher = tSettings.m_pDistinctFetcher;
 	}
 
 	/// schema setup
@@ -2495,6 +2576,8 @@ public:
 	{
 		BlobPool_c::SetBlobPool ( pBlobPool );
 		m_pGrouper->SetBlobPool ( pBlobPool );
+		if ( m_pDistinctFetcher )
+			m_pDistinctFetcher->SetBlobPool(pBlobPool);
 	}
 
 	void SetColumnar ( columnar::Columnar_i * pColumnar ) final
@@ -2502,6 +2585,8 @@ public:
 		CSphMatchQueueTraits::SetColumnar(pColumnar);
 		BaseGroupSorter_c::SetColumnar(pColumnar);
 		m_pGrouper->SetColumnar(pColumnar);
+		if ( m_pDistinctFetcher )
+			m_pDistinctFetcher->SetColumnar(pColumnar);
 	}
 
 	/// get entries count
@@ -2525,13 +2610,18 @@ public:
 		m_tGroupSorter.m_iNow = tState.m_iNow;
 
 		// check whether we sort by distinct
-		if_const ( DISTINCT && m_tDistinctAttr.m_iBitOffset>=0 )
-			for ( auto & tLocator : m_tGroupSorter.m_tLocator )
-				if ( tLocator.m_iBitOffset==m_tDistinctAttr.m_iBitOffset )
+		if_const ( DISTINCT )
+		{
+			const CSphColumnInfo * pDistinct = m_pSchema->GetAttr("@distinct");
+			assert(pDistinct);
+
+			for ( const auto & tLocator : m_tGroupSorter.m_tLocator )
+				if ( tLocator==pDistinct->m_tLocator )
 				{
 					m_bSortByDistinct = true;
 					break;
 				}
+		}
 	}
 
 	bool CanBeCloned () const final
@@ -2548,6 +2638,7 @@ protected:
 	SubGroupSorter_fn			m_tSubSorter;
 	CSphVector<AggrFunc_i *>	m_dAvgs;
 	bool						m_bAvgFinal = false;
+	CSphVector<SphAttr_t>		m_dDistictKeys;
 	static const int			GROUPBY_FACTOR = 4;	///< allocate this times more storage when doing group-by (k, as in k-buffer)
 
 	/// finalize distinct counters
@@ -2592,6 +2683,9 @@ protected:
 		// m_pGrouper also need to be cloned (otherwise SetBlobPool will cause races)
 		if ( m_pGrouper )
 			pClone->m_pGrouper = m_pGrouper->Clone ();
+
+		if ( m_pDistinctFetcher )
+			pClone->m_pDistinctFetcher = m_pDistinctFetcher->Clone ();
 	}
 
 	template<typename SORTER> SORTER * CloneSorterT () const
@@ -2632,8 +2726,11 @@ protected:
 	inline void UpdateDistinct ( const CSphMatch & tEntry, const SphGroupKey_t uGroupKey, bool bGrouped )
 	{
 		int iCount = bGrouped ? (int) tEntry.GetAttr ( m_tLocDistinct ) : 1;
-		AddDistinctKeys ( tEntry, m_tDistinctAttr, m_eDistinctAttr, GetBlobPool(),
-				[this, uGroupKey, iCount] ( SphAttr_t b ) { m_tUniq.Add ( {uGroupKey, b, iCount} ); });
+
+		assert(m_pDistinctFetcher);
+		m_pDistinctFetcher->GetKeys ( tEntry, this->m_dDistictKeys );
+		for ( auto i : this->m_dDistictKeys )
+			m_tUniq.Add ( {uGroupKey, i, iCount} );
 	}
 
 	void RemoveDistinct ( VecTraits_T<SphGroupKey_t>& dRemove )
@@ -4012,7 +4109,7 @@ public:
 	CSphImplicitGroupSorter ( const ISphMatchComparator * DEBUGARG(pComp), const CSphQuery *, const CSphGroupSorterSettings & tSettings )
 		: BaseGroupSorter_c ( tSettings )
 	{
-		assert ( !DISTINCT || tSettings.m_tDistinctAttr.m_iBitOffset>=0 );
+		assert ( !DISTINCT || tSettings.m_pDistinctFetcher );
 		assert ( !pComp );
 
 		if_const ( NOTIFICATIONS )
@@ -4021,6 +4118,8 @@ public:
 		if_const ( DISTINCT )
 			m_dUniq.Reserve ( 16384 );
 		m_iMatchCapacity = 1;
+
+		m_pDistinctFetcher = tSettings.m_pDistinctFetcher;
 	}
 
 	/// schema setup
@@ -4039,12 +4138,19 @@ public:
 	}
 
 	bool	IsGroupby () const final { return true; }
-	void	SetBlobPool ( const BYTE * pBlobPool ) final { BlobPool_c::SetBlobPool ( pBlobPool ); }
+	void	SetBlobPool ( const BYTE * pBlobPool ) final
+	{
+		BlobPool_c::SetBlobPool ( pBlobPool );
+		if ( m_pDistinctFetcher )
+			m_pDistinctFetcher->SetBlobPool(pBlobPool);
+	}
 
 	void SetColumnar ( columnar::Columnar_i * pColumnar ) final
 	{
 		BASE::SetColumnar(pColumnar);
 		BaseGroupSorter_c::SetColumnar(pColumnar);
+		if ( m_pDistinctFetcher )
+			m_pDistinctFetcher->SetColumnar(pColumnar);
 	}
 
 	bool	Push ( const CSphMatch & tEntry ) final							{ return PushEx<false>(tEntry); }
@@ -4105,6 +4211,8 @@ public:
 		auto pClone = new MYTYPE ( nullptr, nullptr, *this );
 		CloneTo ( pClone );
 		pClone->SetupBaseGrouperWrp (m_pSchema);
+		if ( m_pDistinctFetcher )
+			pClone->m_pDistinctFetcher = m_pDistinctFetcher->Clone();
 		return pClone;
 	}
 
@@ -4153,6 +4261,9 @@ protected:
 	CSphVector<SphUngroupedValue_t>	m_dUniq;
 
 private:
+	CSphVector<SphAttr_t> m_dDistictKeys;
+	CSphRefcountedPtr<DistinctFetcher_i> m_pDistinctFetcher;
+
 	inline void SetupBaseGrouperWrp ( ISphSchema * pSchema )	{ SetupBaseGrouper<DISTINCT> ( pSchema ); }
 	void	AddCount ( const CSphMatch & tEntry )				{ m_tData.AddCounterAttr ( m_tLocCount, tEntry ); }
 	void	UpdateAggregates ( const CSphMatch & tEntry, bool bGrouped = true, bool bMerge = false ) { AggrUpdate ( m_tData, tEntry, bGrouped, bMerge ); }
@@ -4179,8 +4290,10 @@ private:
 		if ( bGrouped )
 			iCount = (int) tEntry.GetAttr ( m_tLocDistinct );
 
-		AddDistinctKeys ( tEntry, m_tDistinctAttr, m_eDistinctAttr, GetBlobPool (), [this, iCount] ( SphAttr_t b )
-			{ this->m_dUniq.Add ( std::make_pair ( b, iCount ) ); } );
+		assert(m_pDistinctFetcher);
+		m_pDistinctFetcher->GetKeys ( tEntry, m_dDistictKeys );
+		for ( auto i : m_dDistictKeys )
+			this->m_dUniq.Add ( std::make_pair ( i, iCount ) );
 	}
 
 	/// add entry to the queue
@@ -4812,7 +4925,6 @@ void QueueCreator_c::CreateGrouperByAttr ( ESphAttr eType, const CSphColumnInfo 
 
 bool QueueCreator_c::SetupDistinctAttr()
 {
-	m_tGroupSorterSettings.m_tDistinctAttr.m_iBitOffset = -1;
 	if ( m_tQuery.m_sGroupDistinct.IsEmpty() )
 		return true;
 
@@ -4828,39 +4940,9 @@ bool QueueCreator_c::SetupDistinctAttr()
 		return Err ( "group-count-distinct attribute '%s' not found", m_tQuery.m_sGroupDistinct.cstr() );
 
 	if ( tDistinctAttr.IsColumnar() )
-	{
-		CSphColumnInfo tExprCol ( tDistinctAttr.m_sName.cstr(), SPH_ATTR_NONE );
-		DWORD uQueryPackedFactorFlags = SPH_FACTOR_DISABLE;
-		bool bHasZonespanlist = false;
-
-		ExprParseArgs_t tExprParseArgs;
-		tExprParseArgs.m_pAttrType = &tExprCol.m_eAttrType;
-		tExprParseArgs.m_pUsesWeight = &tExprCol.m_bWeight;
-		tExprParseArgs.m_pProfiler = m_tSettings.m_pProfiler;
-		tExprParseArgs.m_eCollation = m_tQuery.m_eCollation;
-		tExprParseArgs.m_pHook = m_tSettings.m_pHook;
-		tExprParseArgs.m_pZonespanlist = &bHasZonespanlist;
-		tExprParseArgs.m_pPackedFactorsFlags = &uQueryPackedFactorFlags;
-		tExprParseArgs.m_pEvalStage = &tExprCol.m_eStage;
-		tExprParseArgs.m_pStoredField = &tExprCol.m_uFieldFlags;
-		tExprParseArgs.m_pNeedDocIds = &m_bExprsNeedDocids;
-		tExprCol.m_pExpr = sphExprParse ( tExprCol.m_sName.cstr(), *m_pSorterSchema.Ptr (), m_sError, tExprParseArgs );
-		if ( !tExprCol.m_pExpr )
-			return Err ( "parse error: %s", m_sError.cstr() );
-
-		m_pSorterSchema->RemoveStaticAttr(iDistinct);
-		m_pSorterSchema->AddAttr ( tExprCol, true );
-		const CSphColumnInfo * pNewDistinctAttr = m_pSorterSchema->GetAttr ( tExprCol.m_sName.cstr() );
-		assert(pNewDistinctAttr);
-
-		m_tGroupSorterSettings.m_tDistinctAttr = pNewDistinctAttr->m_tLocator;
-		m_tGroupSorterSettings.m_eDistinctAttr = pNewDistinctAttr->m_eAttrType;
-	}
+		m_tGroupSorterSettings.m_pDistinctFetcher = CreateColumnarDistinctFetcher ( tDistinctAttr.m_sName, tDistinctAttr.m_eAttrType, m_tQuery.m_eCollation );
 	else
-	{
-		m_tGroupSorterSettings.m_tDistinctAttr = tDistinctAttr.m_tLocator;
-		m_tGroupSorterSettings.m_eDistinctAttr = tDistinctAttr.m_eAttrType;
-	}
+		m_tGroupSorterSettings.m_pDistinctFetcher = CreateDistinctFetcher ( tDistinctAttr.m_sName, tDistinctAttr.m_tLocator, tDistinctAttr.m_eAttrType );
 
 	return true;
 }
@@ -6357,7 +6439,7 @@ bool QueueCreator_c::AddGroupbyStuff ()
 
 	// or else, check in SetupGroupbySettings() would already fail
 	m_bGotGroupby = !m_tQuery.m_sGroupBy.IsEmpty () || m_tGroupSorterSettings.m_bImplicit;
-	m_bGotDistinct = ( m_tGroupSorterSettings.m_tDistinctAttr.m_iBitOffset>=0 );
+	m_bGotDistinct = !!m_tGroupSorterSettings.m_pDistinctFetcher;
 
 	if ( m_bHasGroupByExpr && !m_bGotGroupby )
 		return Err ( "GROUPBY() is allowed only in GROUP BY queries" );
@@ -6522,9 +6604,9 @@ ISphMatchSorter * QueueCreator_c::CreateQueue ()
 	}
 
 	assert ( pTop );
+	pTop->SetSchema ( m_pSorterSchema.LeakPtr(), false );
 	pTop->SetState ( m_tStateMatch );
 	pTop->SetGroupState ( m_tStateGroup );
-	pTop->SetSchema ( m_pSorterSchema.LeakPtr(), false );
 	pTop->SetRandom ( m_bRandomize );
 	if ( !m_bHaveStar && m_hQueryColumns.GetLength() )
 		pTop->SetFilteredAttrs ( m_hQueryColumns, m_tSettings.m_bNeedDocids || m_bExprsNeedDocids );

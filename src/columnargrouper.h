@@ -12,11 +12,14 @@
 #define _columnargrouper_
 
 #include "collation.h"
-struct CSphColumnInfo;
+#include "schema/columninfo.h"
 
 class CSphGrouper;
 CSphGrouper * CreateGrouperColumnarInt ( const CSphColumnInfo & tAttr );
 CSphGrouper * CreateGrouperColumnarString ( const CSphColumnInfo & tAttr, ESphCollation eCollation );
 CSphGrouper * CreateGrouperColumnarMVA ( const CSphColumnInfo & tAttr );
+
+class DistinctFetcher_i;
+DistinctFetcher_i * CreateColumnarDistinctFetcher ( const CSphString & sName, ESphAttr eType, ESphCollation eCollation );
 
 #endif // _columnargrouper_

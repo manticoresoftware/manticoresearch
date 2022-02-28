@@ -470,6 +470,9 @@ searchd [OPTIONS]
 * [--strip-path](Starting_the_server/Manually.md#searchd-command-line-options) - Strips path names from all the file names referenced from the index
 * [-v](Starting_the_server/Manually.md#searchd-command-line-options) - shows version information
 
+##### Searchd environment variables
+* [MANTICORE_TRACK_DAEMON_SHUTDOWN](Starting_the_server/Manually.md#Environment-variables) - enables detailed logging while searchd is shutting down
+
 ## [Indextool](Miscellaneous_tools.md#indextool)
 Miscellaneous index maintenance functionality useful for troubleshooting.
 ```bash

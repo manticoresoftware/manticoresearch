@@ -726,9 +726,15 @@ bool CSphIndexSettings::ParseColumnarSettings ( const CSphConfigSection & hIndex
 
 	{
 		CSphString sAttrs = hIndex.GetStr ( "columnar_attrs" );
+		sAttrs.Trim();
 		sAttrs.ToLower();
-		sphSplit ( m_dColumnarAttrs, sAttrs.cstr() );
-		m_dColumnarAttrs.Uniq();
+		if ( sAttrs=="*" )
+			m_dColumnarAttrs.Add("*");
+		else
+		{
+			sphSplit ( m_dColumnarAttrs, sAttrs.cstr() );
+			m_dColumnarAttrs.Uniq();
+		}
 	}
 
 	{

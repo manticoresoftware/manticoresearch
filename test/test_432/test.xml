@@ -24,6 +24,14 @@ source src1
 	xmlpipe_command = cat <this_test/>/data1.xml
 }
 
+source src_csv
+{
+    type = csvpipe
+    csvpipe_command = cat <this_test/>/data1.csv
+    csvpipe_field = f
+    csvpipe_attr_uint= a
+}
+
 index test
 {
 	source			= src1
@@ -38,6 +46,13 @@ index test2
 	columnar_attrs 	= id, title, gid
 }
 
+index test_csv
+{
+	source			= src_csv
+	path			= <data_path/>/test_csv
+	columnar_attrs 	= *
+}
+
 </config>
 
 <queries><sphinxql>
@@ -46,6 +61,8 @@ select * from test order by id asc;
 
 desc test2;
 select * from test2 order by id asc;
+
+desc test_csv;
 </sphinxql></queries>
 
 </test>

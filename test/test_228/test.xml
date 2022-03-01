@@ -4,9 +4,10 @@
 <name>Indexing of ODBC sources (mysql via ODBC connector)</name>
 
 <requires>
-<odbc/>
-<variant_match/>
-<non-rt/>
+	<odbc/>
+	<variant_match/>
+	<non-rt/>
+	<no_pseudo_sharding/>
 </requires>
 
 <config>

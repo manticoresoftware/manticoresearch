@@ -6041,7 +6041,10 @@ void SearchHandler_c::RunLocalSearches ()
 				tMultiArgs.m_iTotalDocs = m_iTotalDocs;
 			}
 
-			tMultiArgs.m_iSplit = dSplits[iLocal];
+			bool bCanBeCloned = dSorters.all_of ( []( auto * pSorter ){ return pSorter ? pSorter->CanBeCloned() : true; } );
+
+			// fixme: previous calculations are wrong; we are not splitting the query if we are using non-clonable sorters
+			tMultiArgs.m_iSplit = bCanBeCloned ? dSplits[iLocal] : 1;
 			tMultiArgs.m_bFinalizeSorters = !tGlobalSorters.NeedGlobalSorters();
 
 			bool bResult = false;

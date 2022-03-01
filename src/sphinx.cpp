@@ -3412,6 +3412,9 @@ bool CSphIndex_VLN::IsQueryFast ( const CSphQuery & tQuery ) const
 	if ( !GetKeywords ( dKeywords, tQuery.m_sQuery.cstr(), tSettings, nullptr ) )
 		return true;
 
+	if ( dKeywords.GetLength()<1 )
+		return true;
+
 	if ( dKeywords.GetLength()>1 )
 		return false;
 

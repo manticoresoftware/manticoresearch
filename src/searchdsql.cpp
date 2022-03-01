@@ -365,7 +365,6 @@ enum class Option_e : BYTE
 	TOKEN_FILTER_OPTIONS,
 	NOT_ONLY_ALLOWED,
 	STORE,
-	PSEUDO_SHARDING,
 
 	INVALID_OPTION
 };
@@ -379,7 +378,7 @@ void InitParserOption()
 		"idf", "ignore_nonexistent_columns", "ignore_nonexistent_indexes", "index_weights", "local_df", "low_priority",
 		"max_matches", "max_predicted_time", "max_query_time", "morphology", "rand_seed", "ranker", "retry_count",
 		"retry_delay", "reverse_scan", "sort_method", "strict", "sync", "threads", "token_filter", "token_filter_options",
-		"not_terms_only_allowed", "store", "pseudo_sharding" };
+		"not_terms_only_allowed", "store" };
 
 	for ( BYTE i = 0u; i<(BYTE) Option_e::INVALID_OPTION; ++i )
 		g_hParseOption.Add ( (Option_e) i, dOptions[i] );
@@ -411,7 +410,7 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 			Option_e::LOCAL_DF, Option_e::LOW_PRIORITY, Option_e::MAX_MATCHES, Option_e::MAX_PREDICTED_TIME,
 			Option_e::MAX_QUERY_TIME, Option_e::MORPHOLOGY, Option_e::RAND_SEED, Option_e::RANKER,
 			Option_e::RETRY_COUNT, Option_e::RETRY_DELAY, Option_e::REVERSE_SCAN, Option_e::SORT_METHOD,
-			Option_e::THREADS, Option_e::TOKEN_FILTER, Option_e::NOT_ONLY_ALLOWED, Option_e::PSEUDO_SHARDING };
+			Option_e::THREADS, Option_e::TOKEN_FILTER, Option_e::NOT_ONLY_ALLOWED };
 
 	static Option_e dInsertOptions[] = { Option_e::TOKEN_FILTER_OPTIONS };
 
@@ -733,10 +732,6 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 
 	case Option_e::NOT_ONLY_ALLOWED: //} else if ( sOpt=="not_terms_only_allowed" )
 		m_pQuery->m_bNotOnlyAllowed = ( tValue.m_iValue!=0 );
-		break;
-
-	case Option_e::PSEUDO_SHARDING: //} else if ( sOpt=="pseudo_sharding" )
-		m_pStmt->m_iSplit = tValue.m_iValue;
 		break;
 
 	case Option_e::STORE: //} else if ( sOpt=="store" )

@@ -159,7 +159,7 @@ static auto&			g_iAutoOptimizeCutoffMultiplier = AutoOptimizeCutoffMultiplier();
 static auto&			g_iAutoOptimizeCutoff = AutoOptimizeCutoff();
 static constexpr bool	AUTOOPTIMIZE_NEEDS_VIP = false; // whether non-VIP can issue 'SET GLOBAL auto_optimize = X'
 
-static bool				g_bSplit = false;
+static bool				g_bSplit = true;
 
 static CSphVector<Listener_t>	g_dListeners;
 
@@ -5707,16 +5707,6 @@ bool SearchHandler_c::CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt
 
 void SearchHandler_c::CalcSplits ( int iConcurrency, CSphFixedVector<int> & dSplits )
 {
-	// force same concurrency for each index through OPTION
-	if ( m_pStmt && m_pStmt->m_iSplit )
-	{
-		int iForceConcurrency = Max ( m_pStmt->m_iSplit, 1 );
-		for ( auto & i : dSplits )
-			i = iForceConcurrency;
-
-		return;
-	}
-
 	// dSplits should already be initialized with 1s
 	if ( !g_bSplit )
 		return;
@@ -19190,7 +19180,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	g_iAutoOptimizeCutoffMultiplier = hSearchd.GetInt ( "auto_optimize", 1 );
 	g_iAutoOptimizeCutoff = hSearchd.GetInt ( "optimize_cutoff", g_iAutoOptimizeCutoff );
 
-	g_bSplit = hSearchd.GetInt ( "pseudo_sharding", 0 )!=0;
+	g_bSplit = hSearchd.GetInt ( "pseudo_sharding", 1 )!=0;
 }
 
 // ServiceMain -> ConfigureAndPreload -> ConfigureAndPreloadIndex

@@ -692,9 +692,15 @@ void KillListTargets_c::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i *
 void CSphIndexSettings::ParseStoredFields ( const CSphConfigSection & hIndex )
 {
 	CSphString sFields = hIndex.GetStr ( "stored_fields" );
+	sFields.Trim();
 	sFields.ToLower();
-	sphSplit ( m_dStoredFields, sFields.cstr() );
-	m_dStoredFields.Uniq();
+	if ( sFields=="*" )
+		m_dStoredFields.Add("*");
+	else
+	{
+		sphSplit ( m_dStoredFields, sFields.cstr() );
+		m_dStoredFields.Uniq();
+	}
 
 	sFields = hIndex.GetStr ( "stored_only_fields" );
 	sFields.ToLower();

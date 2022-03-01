@@ -531,15 +531,26 @@ void CSphSchema::SetupColumnarFlags ( const CSphSourceSettings & tSettings, StrV
 }
 
 
-void CSphSchema::SetupFlags ( const CSphSourceSettings& tSettings, bool bPQ, StrVec_t* pWarnings )
+void CSphSchema::SetupFlags ( const CSphSourceSettings & tSettings, bool bPQ, StrVec_t * pWarnings )
 {
-	for ( auto& tSchemaField : m_dFields )
-	{
-		for ( const auto& sStored : tSettings.m_dStoredFields )
-			if ( tSchemaField.m_sName == sStored )
-				tSchemaField.m_uFieldFlags |= CSphColumnInfo::FIELD_STORED;
+	bool bAllFieldsStored = false;
+	for ( const auto & i : tSettings.m_dStoredFields )
+		bAllFieldsStored |= i=="*";
 
-		for ( const auto& sStoredOnly : tSettings.m_dStoredOnlyFields )
+	for ( auto & tSchemaField : m_dFields )
+	{
+		bool bFieldStored = bAllFieldsStored;
+		for ( const auto & sStored : tSettings.m_dStoredFields )
+			if ( !bFieldStored && tSchemaField.m_sName == sStored )
+			{
+				bFieldStored = true;
+				break;
+			}
+
+		if ( bFieldStored )
+			tSchemaField.m_uFieldFlags |= CSphColumnInfo::FIELD_STORED;
+
+		for ( const auto & sStoredOnly : tSettings.m_dStoredOnlyFields )
 			if ( tSchemaField.m_sName == sStoredOnly )
 				tSchemaField.m_uFieldFlags = CSphColumnInfo::FIELD_STORED;
 	}

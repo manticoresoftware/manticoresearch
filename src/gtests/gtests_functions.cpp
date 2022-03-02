@@ -1018,7 +1018,7 @@ TEST ( functions, OneshotAutoEvent )
 }
 
 // oneshot event - we can set it N times, but only once it waited, and then will block.
-TEST ( functions, DISABLED_OneshotAutoEventTimed )
+/*TEST ( functions, DISABLED_OneshotAutoEventTimed )
 {
 	tmNow=sphMicroTimer ();
 	SphThread_t th;
@@ -1044,7 +1044,7 @@ TEST ( functions, DISABLED_OneshotAutoEventTimed )
 	g_oneevent.SetEvent ();
 	sphSleepMsec ( 100 );
 	ASSERT_TRUE ( Threads::Join ( &th ) ) << "autoevent thread done";
-}
+}*/
 
 //////////////////////////////////////////////////////////////////////////
 

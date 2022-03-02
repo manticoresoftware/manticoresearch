@@ -268,7 +268,7 @@ static void DeleteUnlistedIn ( const StrVec_t& dFiles ) REQUIRES ( !g_tGlobalIDF
 	for ( auto& sKey : dUnlisted )
 	{
 		sphLogDebug ( "Unloading global IDF (%s)", sKey.cstr ());
-		SafeRelease ( g_hGlobalIDFs.IterateGet ());
+		SafeRelease ( g_hGlobalIDFs [ sKey ] );
 		g_hGlobalIDFs.Delete ( sKey );
 	}
 }

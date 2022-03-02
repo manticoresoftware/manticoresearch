@@ -1994,14 +1994,13 @@ int main ( int argc, char ** argv )
 			sphDie ( "failed to open %s: %s", sDumpRows.cstr(), strerrorm(errno) );
 	}
 
-	hConf["index"].IterateStart();
-	while ( hConf["index"].IterateNext() )
+	for ( auto& tIndex : hConf["index"] )
 	{
-		ARRAY_FOREACH ( j, dWildIndexes )
+		for ( const auto& tWildIndex : dWildIndexes )
 		{
-			if ( sphWildcardMatch ( hConf["index"].IterateGetKey().cstr(), dWildIndexes[j] ) )
+			if ( sphWildcardMatch ( tIndex.first.cstr(), tWildIndex ) )
 			{
-				dIndexes.Add ( hConf["index"].IterateGetKey().cstr() );
+				dIndexes.Add ( tIndex.first.cstr() );
 				// do not add index twice
 				break;
 			}
@@ -2036,10 +2035,9 @@ int main ( int argc, char ** argv )
 	} else if ( bIndexAll )
 	{
 		uint64_t tmRotated = sphMicroTimer();
-		hConf["index"].IterateStart ();
-		while ( hConf["index"].IterateNext() )
+		for ( const auto& tIndex : hConf["index"] )
 		{
-			bool bLastOk = DoIndex ( hConf["index"].IterateGet (), hConf["index"].IterateGetKey().cstr(), hConf["source"], fpDumpRows );
+			bool bLastOk = DoIndex ( tIndex.second, tIndex.first.cstr(), hConf["source"], fpDumpRows );
 			if ( bLastOk && ( sphMicroTimer() - tmRotated > ROTATE_MIN_INTERVAL ) && g_bSendHUP && SendRotate ( hConf, false ) )
 				tmRotated = sphMicroTimer();
 			if ( bLastOk )

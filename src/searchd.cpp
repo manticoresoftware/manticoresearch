@@ -11420,11 +11420,8 @@ void MergeKeywords ( CSphVector<CSphKeywordInfo> & dSrc )
 	}
 
 	dSrc.Resize ( 0 );
-	hWords.IterateStart();
-	while ( hWords.IterateNext() )
-	{
-		dSrc.Add ( hWords.IterateGet() );
-	}
+	for ( const auto& tWord : hWords )
+		dSrc.Add ( tWord.second );
 
 	sphSort ( dSrc.Begin(), dSrc.GetLength(), KeywordSorter_fn() );
 }
@@ -17929,12 +17926,12 @@ static void CalcRotationPriorities() REQUIRES ( MainThread, g_tRotateThreadMutex
 	}
 
 	// set priorities
-	for ( tIndexesToRotate.IterateStart (); tIndexesToRotate.IterateNext (); )
-		for ( const auto & i : tIndexesToRotate.IterateGet().m_dKilllistTargets )
+	for ( const auto& tIndexToRotate : tIndexesToRotate )
+		for ( const auto & i : tIndexToRotate.second.m_dKilllistTargets )
 		{
 			IndexWithPriority_t * pIdx = tIndexesToRotate(i);
 			if ( pIdx )
-				pIdx->m_nReferences++;
+				++pIdx->m_nReferences;
 		}
 
 	// start with the least-referenced index
@@ -17942,9 +17939,9 @@ static void CalcRotationPriorities() REQUIRES ( MainThread, g_tRotateThreadMutex
 	do
 	{
 		pMin = nullptr;
-		for ( tIndexesToRotate.IterateStart (); tIndexesToRotate.IterateNext (); )
+		for ( auto & tIndexToRotate : tIndexesToRotate )
 		{
-			IndexWithPriority_t & tIdx = tIndexesToRotate.IterateGet();
+			auto & tIdx = tIndexToRotate.second;
 			if ( tIdx.m_iPriority==-1 && ( !pMin || tIdx.m_nReferences<pMin->m_nReferences ) )
 				pMin = &tIdx;
 		}
@@ -17955,9 +17952,9 @@ static void CalcRotationPriorities() REQUIRES ( MainThread, g_tRotateThreadMutex
 	while ( pMin );
 	
 	// copy priorities to disabled indexes
-	for ( tIndexesToRotate.IterateStart (); tIndexesToRotate.IterateNext (); )
+	for ( const auto& tIndexToRotate : tIndexesToRotate )
 	{
-		const IndexWithPriority_t & tIdx = tIndexesToRotate.IterateGet();
+		const IndexWithPriority_t & tIdx = tIndexToRotate.second;
 		assert ( tIdx.m_iPriority>=0 );
 		ServedDescWPtr_c pDisabled ( GetDisabled ( tIdx.m_sIndex ) );
 		if ( pDisabled )
@@ -17990,12 +17987,12 @@ static void CheckIndexesForSeamless() REQUIRES ( MainThread )
 	{
 		sphWarning ( "internal error: non-empty queue on a rotation cycle start, got %d elements"
 			, dNotCapableForRotation.GetLength () );
-		for ( dNotCapableForRotation.IterateStart (); dNotCapableForRotation.IterateNext (); )
+		for ( const auto& tNotCapable : dNotCapableForRotation )
 		{
 			// need also to remove empty description from local index list
-			g_pLocalIndexes->DeleteIfNull ( dNotCapableForRotation.IterateGetKey() );
-			g_dPostIndexes.Delete ( dNotCapableForRotation.IterateGetKey() );
-			sphWarning ( "queue[] = %s", dNotCapableForRotation.IterateGetKey().cstr () );
+			g_pLocalIndexes->DeleteIfNull ( tNotCapable.first );
+			g_dPostIndexes.Delete ( tNotCapable.first );
+			sphWarning ( "queue[] = %s", tNotCapable.first.cstr () );
 		}
 	}
 
@@ -19176,11 +19173,10 @@ static void ConfigureAndPreload ( const CSphConfig & hConf, const StrVec_t & dOp
 
 	if ( hConf.Exists ( "index" ) )
 	{
-		hConf["index"].IterateStart ();
-		while ( hConf["index"].IterateNext() )
+		for ( const auto& tIndex : hConf["index"] )
 		{
-			const CSphConfigSection & hIndex = hConf["index"].IterateGet();
-			const char * sIndexName = hConf["index"].IterateGetKey().cstr();
+			const CSphConfigSection & hIndex = tIndex.second;
+			const char * sIndexName = tIndex.first.cstr();
 
 			if ( !dOptIndexes.IsEmpty() && !dOptIndexes.any_of ( [&] ( const CSphString &rhs )	{ return rhs.EqN ( sIndexName ); } ) )
 				continue;

@@ -235,16 +235,9 @@ void IterateUservars ( UservarFn&& fnSample )
 	{
 		ScRL_t rLock ( g_tUservarsMutex );
 		dUservars.Reserve ( g_hUservars.GetLength () );
-		g_hUservars.IterateStart ();
-		while ( g_hUservars.IterateNext () )
-		{
-			if ( !g_hUservars.IterateGet ().m_pVal->GetLength () )
-				continue;
-
-			auto & tPair = dUservars.Add ();
-			tPair.first = g_hUservars.IterateGetKey ();
-			tPair.second = g_hUservars.IterateGet ();
-		}
+		for ( const auto& tUservar : g_hUservars )
+			if ( !tUservar.second.m_pVal->IsEmpty () )
+				dUservars.Add ( tUservar );
 	}
 	dUservars.Sort ( ::bind ( &NamedRefVectorPair_t::first ) );
 	dUservars.for_each ( fnSample );

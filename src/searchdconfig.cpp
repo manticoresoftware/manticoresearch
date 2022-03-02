@@ -201,17 +201,15 @@ void ClusterOptions_t::Parse ( const CSphString & sOptions )
 CSphString ClusterOptions_t::AsStr ( bool bSave ) const
 {
 	StringBuilder_c tBuf ( ";" );
-	void * pIt = nullptr;
-	while ( m_hOptions.IterateNext ( &pIt ) )
+	for ( const auto& tOpt : m_hOptions )
 	{
 		// skip one time options on save
-		if ( bSave && m_hOptions.IterateGetKey ( &pIt )=="pc.bootstrap" )
+		if ( bSave && tOpt.first == "pc.bootstrap" )
 			continue;
 
-		tBuf.Appendf ( "%s=%s", m_hOptions.IterateGetKey ( &pIt ).cstr(), m_hOptions.IterateGet ( &pIt ).cstr() );
+		tBuf.Appendf ( "%s=%s", tOpt.first.cstr(), tOpt.second.cstr() );
 	}
-
-	return tBuf.cstr();
+	return (CSphString)tBuf;
 }
 
 //////////////////////////////////////////////////////////////////////////

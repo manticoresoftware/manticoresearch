@@ -7924,12 +7924,9 @@ void RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 			dKeywords.Resize ( 0 );
 			dKeywords.Reserve ( hKeywords.GetLength() );
 
-			hKeywords.IterateStart();
-			while ( hKeywords.IterateNext() )
-			{
-				const CSphKeywordInfo & tSrc = hKeywords.IterateGet();
-				dKeywords.Add ( tSrc );
-			}
+			for ( const auto& tKeyword : hKeywords )
+				dKeywords.Add ( tKeyword.second );
+
 			sphSort ( dKeywords.Begin(), dKeywords.GetLength(), bind ( &CSphKeywordInfo::m_iQpos ) );
 		}
 	}

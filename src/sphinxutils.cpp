@@ -1426,9 +1426,8 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 			tDest = m_tConf [ m_sSectionType ][ sToken ];
 
 			// mark all values in the target section as "to be overridden"
-			tDest.IterateStart ();
-			while ( tDest.IterateNext() )
-				tDest.IterateGet().m_bTag = true;
+			for ( auto& tVal : tDest )
+				tVal.second.m_bTag = true;
 
 			LOC_BACK();
 			eState = S_SEC;
@@ -3027,13 +3026,12 @@ void sphCheckDuplicatePaths ( const CSphConfig & hConf )
 		return;
 
 	CSphOrderedHash < CSphString, CSphString, CSphStrHashFunc, 256 > hPaths;
-	hConf["index"].IterateStart ();
-	while ( hConf["index"].IterateNext() )
+	for ( const auto& tVal : hConf["index"] )
 	{
-		CSphConfigSection & hIndex = hConf["index"].IterateGet ();
+		const CSphConfigSection & hIndex = tVal.second;
 		if ( hIndex ( "path" ) )
 		{
-			const CSphString & sIndex = hConf["index"].IterateGetKey ();
+			const CSphString & sIndex = tVal.first;
 			if ( hPaths ( hIndex["path"].strval() ) )
 				sphDie ( "duplicate paths: index '%s' has the same path as '%s'.\n", sIndex.cstr(), hPaths[hIndex["path"].strval()].cstr() );
 			hPaths.Add ( sIndex, hIndex["path"].strval() );

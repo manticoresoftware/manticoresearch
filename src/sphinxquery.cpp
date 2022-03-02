@@ -2054,9 +2054,8 @@ public:
 	// merge with another similar
 	void Merge ( const Associations_t& parents )
 	{
-		parents.IterateStart();
-		while ( parents.IterateNext() )
-			Associate2nd ( parents.IterateGetKey() );
+		for ( const auto& tAssoc : parents )
+			Associate2nd ( tAssoc.first );
 	}
 };
 
@@ -2183,10 +2182,9 @@ private:
 		if ( !m_hNodes.GetBits() )
 			return false; // there is totally no non-unique leaves
 		int iBit = 0;
-		m_hNodes.IterateStart();
-		while ( m_hNodes.IterateNext() )
-			if ( m_hNodes.IterateGet().GetLength() > 1 )
-				m_hBitOrders.Add ( iBit++, m_hNodes.IterateGetKey() );
+		for ( const auto& tNode : m_hNodes )
+			if ( tNode.second.GetLength() > 1 )
+				m_hBitOrders.Add ( iBit++, tNode.first );
 		assert ( m_hNodes.GetBits()==m_hBitOrders.GetLength() );
 		m_hNodes.Reset(); ///< since from now we don't need this data anymore
 		return true;
@@ -2239,21 +2237,17 @@ private:
 			}
 
 		// Round 2. Intersect again all collected intersection one-by-one - until zero.
-		void *p1=NULL, *p2;
-		uint64_t uMask1, uMask2;
-		while ( m_hInterSections.IterateNext ( &p1 ) )
+		for ( auto pIt1 = m_hInterSections.begin(); pIt1 != CAssociations_t::end(); ++pIt1 )
 		{
-			p2 = p1;
-			while ( m_hInterSections.IterateNext ( &p2 ) )
+			auto pIt2 = pIt1;
+			for ( ++pIt2; pIt2 != CAssociations_t::end(); ++pIt2 )
 			{
-				uMask1 = CAssociations_t::IterateGetKey ( &p1 );
-				uMask2 = CAssociations_t::IterateGetKey ( &p2 );
-				assert ( uMask1!=uMask2 );
-				uMask1 &= uMask2;
-				if ( uMask1 )
+				assert ( pIt1->first != pIt2->first );
+				auto uMask = pIt1->first & pIt2->first;
+				if ( uMask )
 				{
-					m_hInterSections.MergeAssociations ( CAssociations_t::IterateGet ( &p1 ), uMask1 );
-					m_hInterSections.MergeAssociations ( CAssociations_t::IterateGet ( &p2 ), uMask1 );
+					m_hInterSections.MergeAssociations ( pIt1->second, uMask );
+					m_hInterSections.MergeAssociations ( pIt2->second, uMask );
 				}
 			}
 		}
@@ -2265,9 +2259,8 @@ private:
 	{
 		CSphVector<BitAssociation_t> dSubnodes; // masks for our selected subnodes
 		dSubnodes.Reserve ( m_hInterSections.GetLength() );
-		m_hInterSections.IterateStart();
-		while ( m_hInterSections.IterateNext() )
-			dSubnodes.Add().Init( m_hInterSections.IterateGetKey(), &m_hInterSections.IterateGet() );
+		for ( const auto& tInterSection : m_hInterSections )
+			dSubnodes.Add().Init( tInterSection.first, & tInterSection.second );
 
 		// sort by weight descending (weight sorting is hold by operator <)
 		dSubnodes.RSort();
@@ -2355,12 +2348,11 @@ private:
 			{
 				if ( pOtherChildren )
 					pOtherChildren->m_dChildren.Reset();
-				hBranches.IterateStart();
-				while ( hBranches.IterateNext() )
+				for (  auto& tBranch : hBranches )
 				{
-					assert ( hBranches.IterateGet() );
-					hBranches.IterateGet()->m_dChildren.Reset();
-					SafeDelete ( hBranches.IterateGet() );
+					assert ( tBranch.second );
+					tBranch.second->m_dChildren.Reset();
+					SafeDelete ( tBranch.second );
 				}
 			} else
 			{
@@ -2371,16 +2363,15 @@ private:
 				if ( pOtherChildren )
 					pTree->m_dChildren.SwapData ( pOtherChildren->m_dChildren );
 
-				hBranches.IterateStart();
-				while ( hBranches.IterateNext() )
+				for ( auto& tBranch : hBranches )
 				{
-					if ( hBranches.IterateGet()->m_dChildren.GetLength()==1 )
+					if ( tBranch.second->m_dChildren.GetLength()==1 )
 					{
-						pTree->m_dChildren.Add ( hBranches.IterateGet()->m_dChildren[0] );
-						hBranches.IterateGet()->m_dChildren.Reset();
-						SafeDelete ( hBranches.IterateGet() );
+						pTree->m_dChildren.Add ( tBranch.second->m_dChildren[0] );
+						tBranch.second->m_dChildren.Reset();
+						SafeDelete ( tBranch.second );
 					} else
-						pTree->m_dChildren.Add ( hBranches.IterateGet() );
+						pTree->m_dChildren.Add ( tBranch.second );
 				}
 			}
 			SafeDelete ( pOtherChildren );
@@ -2535,10 +2526,9 @@ int sphMarkCommonSubtrees ( int iXQ, const XQQuery_t * pXQ )
 
 	// number marked subtrees and assign them order numbers.
 	int iOrder = 0;
-	hSubtrees.IterateStart();
-	while ( hSubtrees.IterateNext() )
-		if ( hSubtrees.IterateGet().m_bMarked )
-			hSubtrees.IterateGet().m_iOrder = iOrder++;
+	for ( auto& tSubtree : hSubtrees )
+		if ( tSubtree.second.m_bMarked )
+			tSubtree.second.m_iOrder = iOrder++;
 
 	// copy the flags and orders to original trees
 	for ( int i=0; i<iXQ; i++ )
@@ -2898,14 +2888,12 @@ bool CSphTransformation::CheckCommonNot ( const XQNode_t * pNode )
 bool CSphTransformation::TransformCommonNot ()
 {
 	bool bRecollect = false;
-	m_hSimilar.IterateStart();
-	while ( m_hSimilar.IterateNext () )
+	for ( auto& tSimSimilar : m_hSimilar )
 	{
-		m_hSimilar.IterateGet().IterateStart();
-		while ( m_hSimilar.IterateGet().IterateNext() )
+		for ( auto& tSimilar : tSimSimilar.second )
 		{
 			// Nodes with the same iFuzzyHash
-			CSphVector<XQNode_t *> & dSimilarNodes = m_hSimilar.IterateGet().IterateGet();
+			CSphVector<XQNode_t *> & dSimilarNodes = tSimilar.second;
 			if ( dSimilarNodes.GetLength()<2 )
 				continue;
 
@@ -3053,14 +3041,12 @@ bool CSphTransformation::CheckCommonCompoundNot ( const XQNode_t * pNode )
 bool CSphTransformation::TransformCommonCompoundNot ()
 {
 	bool bRecollect = false;
-	m_hSimilar.IterateStart();
-	while ( m_hSimilar.IterateNext () )
+	for ( auto& tSimSimilar : m_hSimilar )
 	{
-		m_hSimilar.IterateGet().IterateStart();
-		while ( m_hSimilar.IterateGet().IterateNext() )
+		for ( auto& tSimilar : tSimSimilar.second )
 		{
 			// Nodes with the same iFuzzyHash
-			CSphVector<XQNode_t *> & dSimilarNodes = m_hSimilar.IterateGet().IterateGet();
+			CSphVector<XQNode_t *> & dSimilarNodes = tSimilar.second;
 			if ( dSimilarNodes.GetLength()<2 )
 				continue;
 
@@ -3167,14 +3153,12 @@ bool CSphTransformation::CheckCommonSubTerm ( const XQNode_t * pNode )
 bool CSphTransformation::TransformCommonSubTerm ()
 {
 	bool bRecollect = false;
-	m_hSimilar.IterateStart();
-	while ( m_hSimilar.IterateNext () )
+	for ( auto& tSimSimilar : m_hSimilar )
 	{
-		m_hSimilar.IterateGet().IterateStart();
-		while ( m_hSimilar.IterateGet().IterateNext() )
+		for ( auto& tSimilar : tSimSimilar.second )
 		{
 			// Nodes with the same iFuzzyHash
-			CSphVector<XQNode_t *> & dX = m_hSimilar.IterateGet().IterateGet();
+			CSphVector<XQNode_t *> & dX = tSimilar.second;
 			if ( dX.GetLength()<2 )
 				continue;
 
@@ -3482,15 +3466,13 @@ static bool sphIsNodeStrongest ( const XQNode_t * pNode, const CSphVector<XQNode
 bool CSphTransformation::TransformCommonKeywords ()
 {
 	CSphVector <XQNode_t *> dPendingDel;
-	m_hSimilar.IterateStart();
-	while ( m_hSimilar.IterateNext () )
+	for ( auto& tSimSimilar : m_hSimilar )
 	{
 		BigramHash_t hBigrams;
-		m_hSimilar.IterateGet().IterateStart();
-		while ( m_hSimilar.IterateGet().IterateNext() )
+		for ( auto& tSimilar : tSimSimilar.second )
 		{
 			// Nodes with the same iFuzzyHash
-			CSphVector<XQNode_t *> & dPhrases = m_hSimilar.IterateGet().IterateGet();
+			CSphVector<XQNode_t *> & dPhrases = tSimilar.second;
 			if ( dPhrases.GetLength()<2 )
 				continue;
 
@@ -3602,14 +3584,12 @@ struct XQNodeAtomPos_fn
 bool CSphTransformation::TransformCommonPhrase ()
 {
 	bool bRecollect = false;
-	m_hSimilar.IterateStart();
-	while ( m_hSimilar.IterateNext () )
+	for ( auto& tSimSimilar : m_hSimilar )
 	{
-		m_hSimilar.IterateGet().IterateStart();
-		while ( m_hSimilar.IterateGet().IterateNext() )
+		for ( auto& tSimilar : tSimSimilar.second )
 		{
 			// Nodes with the same iFuzzyHash
-			CSphVector<XQNode_t *> & dNodes = m_hSimilar.IterateGet().IterateGet();
+			CSphVector<XQNode_t *> & dNodes = tSimilar.second;
 			if ( dNodes.GetLength()<2 )
 				continue;
 
@@ -3641,28 +3621,26 @@ bool CSphTransformation::TransformCommonPhrase ()
 
 			// 2nd step find minimum for each phrases group
 			CSphVector<CommonInfo_t> dCommon;
-			tBigramHead.IterateStart();
-			while ( tBigramHead.IterateNext() )
+			for ( auto& tBigram : tBigramHead )
 			{
 				// only phrases that share same words at head
-				if ( tBigramHead.IterateGet().GetLength()<2 )
+				if ( tBigram.second.GetLength()<2 )
 					continue;
 
 				CommonInfo_t & tElem = dCommon.Add();
-				tElem.m_pPhrases = &tBigramHead.IterateGet();
+				tElem.m_pPhrases = &tBigram.second;
 				tElem.m_iCommonLen = 2;
 				tElem.m_bHead = true;
 				tElem.m_bHasBetter = false;
 			}
-			tBigramTail.IterateStart();
-			while ( tBigramTail.IterateNext() )
+			for ( auto& tBigram : tBigramTail )
 			{
 				// only phrases that share same words at tail
-				if ( tBigramTail.IterateGet().GetLength()<2 )
+				if ( tBigram.second.GetLength()<2 )
 					continue;
 
 				CommonInfo_t & tElem = dCommon.Add();
-				tElem.m_pPhrases = &tBigramTail.IterateGet();
+				tElem.m_pPhrases = &tBigram.second;
 				tElem.m_iCommonLen = 2;
 				tElem.m_bHead = false;
 				tElem.m_bHasBetter = false;
@@ -3881,14 +3859,12 @@ bool CSphTransformation::CheckCommonAndNotFactor ( const XQNode_t * pNode )
 bool CSphTransformation::TransformCommonAndNotFactor ()
 {
 	bool bRecollect = false;
-	m_hSimilar.IterateStart();
-	while ( m_hSimilar.IterateNext () )
+	for ( auto& tSimSimilar : m_hSimilar )
 	{
-		m_hSimilar.IterateGet().IterateStart();
-		while ( m_hSimilar.IterateGet().IterateNext() )
+		for ( auto& tSimilar : tSimSimilar.second )
 		{
 			// Nodes with the same iFuzzyHash
-			CSphVector<XQNode_t *> & dSimilarNodes = m_hSimilar.IterateGet().IterateGet();
+			CSphVector<XQNode_t *> & dSimilarNodes = tSimilar.second;
 			if ( dSimilarNodes.GetLength()<2 )
 				continue;
 
@@ -3975,14 +3951,12 @@ bool CSphTransformation::CheckCommonOrNot ( const XQNode_t * pNode )
 bool CSphTransformation::TransformCommonOrNot ()
 {
 	bool bRecollect = false;
-	m_hSimilar.IterateStart();
-	while ( m_hSimilar.IterateNext () )
+	for ( auto& tSimSimilar : m_hSimilar )
 	{
-		m_hSimilar.IterateGet().IterateStart();
-		while ( m_hSimilar.IterateGet().IterateNext() )
+		for ( auto& tSimilar : tSimSimilar.second )
 		{
 			// Nodes with the same iFuzzyHash
-			CSphVector<XQNode_t *> & dSimilarNodes = m_hSimilar.IterateGet().IterateGet();
+			CSphVector<XQNode_t *> & dSimilarNodes = tSimilar.second;
 			if ( dSimilarNodes.GetLength()<2 )
 				continue;
 
@@ -4176,17 +4150,13 @@ bool CSphTransformation::TransformExcessBrackets ()
 {
 	bool bRecollect = false;
 	CSphOrderedHash<int, XQNode_t *, XQNodeHash_fn, 64> hDeleted;
-	m_hSimilar.IterateStart();
-	while ( m_hSimilar.IterateNext () )
+	for ( auto& tSimSimilar : m_hSimilar )
 	{
-		m_hSimilar.IterateGet().IterateStart();
-		while ( m_hSimilar.IterateGet().IterateNext() )
+		for ( auto& tSimilar : tSimSimilar.second )
 		{
 			// Nodes with the same iFuzzyHash
-			CSphVector<XQNode_t *> & dNodes = m_hSimilar.IterateGet().IterateGet();
-			ARRAY_FOREACH ( i, dNodes )
+			for ( XQNode_t* pNode : tSimilar.second )
 			{
-				XQNode_t * pNode = dNodes[i];
 				// node environment might be changed due prior nodes transformations
 				if ( !hDeleted.Exists ( pNode ) && CheckExcessBrackets ( pNode ) )
 				{
@@ -4233,17 +4203,13 @@ bool CSphTransformation::TransformExcessAndNot ()
 {
 	bool bRecollect = false;
 	CSphOrderedHash<int, XQNode_t *, XQNodeHash_fn, 64> hDeleted;
-	m_hSimilar.IterateStart();
-	while ( m_hSimilar.IterateNext () )
+	for ( auto& tSimSimilar : m_hSimilar )
 	{
-		m_hSimilar.IterateGet().IterateStart();
-		while ( m_hSimilar.IterateGet().IterateNext() )
+		for ( auto& tSimilar : tSimSimilar.second )
 		{
 			// Nodes with the same iFuzzyHash
-			CSphVector<XQNode_t *> & dNodes = m_hSimilar.IterateGet().IterateGet();
-			ARRAY_FOREACH ( i, dNodes )
+			for ( XQNode_t* pAnd : tSimilar.second )
 			{
-				XQNode_t * pAnd = dNodes[i];
 				XQNode_t * pParentAndNot = pAnd->m_pParent;
 
 				// node environment might be changed due prior nodes transformations

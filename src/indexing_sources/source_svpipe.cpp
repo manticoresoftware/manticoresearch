@@ -183,10 +183,9 @@ bool CSphSource_BaseSV::SetupPipe ( const CSphConfigSection & hSource, FILE * pP
 
 	// restore order for declared columns
 	CSphString sColumn;
-	hSource.IterateStart();
-	while ( hSource.IterateNext() )
+	for ( const auto& tVal : hSource )
 	{
-		const CSphVariant * pVal = &hSource.IterateGet();
+		const CSphVariant * pVal = &tVal.second;
 		while ( pVal )
 		{
 			sColumn = pVal->strval();
@@ -217,10 +216,9 @@ bool CSphSource_BaseSV::SetupPipe ( const CSphConfigSection & hSource, FILE * pP
 	assert ( pIdCol && pIdCol->m_iTag==-1 && pIdCol->m_iAttr==0 );
 	pIdCol->m_iTag = 0;
 
-	hSchema.IterateStart();
-	for ( int i=0; hSchema.IterateNext(); i++ )
-		if ( hSchema.IterateGet().m_iTag>=0 )
-			m_dRemap.Add ( hSchema.IterateGet() );
+	for ( const auto& tCol : hSchema )
+		if ( tCol.second.m_iTag>=0 )
+			m_dRemap.Add ( tCol.second );
 
 	m_dColumnsLen.Reset ( m_dRemap.GetLength() );
 

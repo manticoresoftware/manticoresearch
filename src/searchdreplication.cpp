@@ -1374,13 +1374,9 @@ static void DeleteClusterByName ( const CSphString& sCluster ) EXCLUDES ( g_tClu
 static void CollectClusterDesc ( CSphVector<ClusterDesc_t> & dClusters )
 {
 	dClusters.Reset();
-	void * pIt = nullptr;
 	ScRL_t tLock ( g_tClustersLock );
-	while ( g_hClusters.IterateNext ( &pIt ))
-	{
-		const ReplicationCluster_t * pCluster = g_hClusters.IterateGet ( &pIt );
-		dClusters.Add ( *pCluster );
-	}
+	for ( const auto& tCluster : g_hClusters )
+		dClusters.Add ( *tCluster.second );
 }
 
 
@@ -1400,9 +1396,8 @@ void ReplicationCollectClusters ( CSphVector<ClusterDesc_t> & dClusters )  EXCLU
 void ReplicateClustersStatus ( VectorLike & dStatus ) EXCLUDES ( g_tClustersLock )
 {
 	ScRL_t tLock ( g_tClustersLock );
-	void * pIt = nullptr;
-	while ( g_hClusters.IterateNext ( &pIt ) )
-		ReplicateClusterStats ( g_hClusters.IterateGet ( &pIt ), dStatus );
+	for ( const auto& tCluster : g_hClusters )
+		ReplicateClusterStats ( tCluster.second, dStatus );
 }
 
 static bool CheckLocalIndex ( const CSphString & sIndex, CSphString & sError )
@@ -2258,10 +2253,9 @@ static bool ReplicatedIndexes ( const CSphFixedVector<CSphString> & dIndexes, co
 
 		const ReplicationCluster_t * pCluster = *ppCluster;
 		// indexes should be new or from same cluster
-		void * pIt = nullptr;
-		while ( g_hClusters.IterateNext ( &pIt ) )
+		for ( const auto& tCluster : g_hClusters )
 		{
-			const ReplicationCluster_t * pOrigCluster = g_hClusters.IterateGet ( &pIt );
+			const ReplicationCluster_t * pOrigCluster = tCluster.second;
 			if ( pOrigCluster==pCluster )
 				continue;
 
@@ -2353,13 +2347,11 @@ static bool ClusterCheckPath ( const CSphString & sPath, const CSphString & sNam
 	}
 
 	ScRL_t tClusterRLock ( g_tClustersLock );
-	void * pIt = nullptr;
-	while ( g_hClusters.IterateNext ( &pIt ) )
+	for ( const auto& tCluster : g_hClusters )
 	{
-		const ReplicationCluster_t * pCluster = g_hClusters.IterateGet ( &pIt );
-		if ( sPath==pCluster->m_sPath )
+		if ( sPath == tCluster.second->m_sPath )
 		{
-			sError.SetSprintf ( "duplicate paths, cluster '%s' has the same path as '%s'", sName.cstr(), pCluster->m_sName.cstr() );
+			sError.SetSprintf ( "duplicate paths, cluster '%s' has the same path as '%s'", sName.cstr(), tCluster.second->m_sName.cstr() );
 			return false;
 		}
 	}

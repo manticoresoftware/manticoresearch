@@ -1615,10 +1615,10 @@ TEST ( functions, hashmap_iterations )
 		tHash.Add ( test.iVal, test.sKey );
 
 	auto i = 0;
-	for ( tHash.IterateStart (); tHash.IterateNext (); )
+	for ( const auto& tValue : tHash )
 	{
-		EXPECT_STREQ ( tHash.IterateGetKey ().cstr (), tstvalues[i].sKey );
-		EXPECT_EQ ( tHash.IterateGet (), tstvalues[i].iVal );
+		EXPECT_STREQ ( tValue.first.cstr (), tstvalues[i].sKey );
+		EXPECT_EQ ( tValue.second, tstvalues[i].iVal );
 		++i;
 	}
 

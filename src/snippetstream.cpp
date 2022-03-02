@@ -552,11 +552,10 @@ void CacheStreamer_c::Tokenize ( TokenFunctor_i & tFunctor )
 			if ( iZone!=-1 )
 			{
 				// fixme: it can be a lot faster
-				m_pZoneInfo->m_hZones.IterateStart();
-				while ( m_pZoneInfo->m_hZones.IterateNext () )
-					if ( m_pZoneInfo->m_hZones.IterateGet()==iZone )
+				for ( const auto& tZone : m_pZoneInfo->m_hZones )
+					if ( tZone.second==iZone )
 					{
-						szZoneName = m_pZoneInfo->m_hZones.IterateGetKey().cstr();
+						szZoneName = tZone.first.cstr();
 						break;
 					}
 			}

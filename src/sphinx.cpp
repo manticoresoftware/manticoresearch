@@ -12360,20 +12360,17 @@ CSphWordforms::CSphWordforms()
 
 CSphWordforms::~CSphWordforms()
 {
-	if ( m_pMultiWordforms )
+	if ( !m_pMultiWordforms )
+		return;
+
+	for ( auto& tForms : m_pMultiWordforms->m_Hash )
 	{
-		m_pMultiWordforms->m_Hash.IterateStart ();
-		while ( m_pMultiWordforms->m_Hash.IterateNext () )
-		{
-			CSphMultiforms * pWordforms = m_pMultiWordforms->m_Hash.IterateGet ();
-			ARRAY_FOREACH ( i, pWordforms->m_pForms )
-				SafeDelete ( pWordforms->m_pForms[i] );
-
-			SafeDelete ( pWordforms );
-		}
-
-		SafeDelete ( m_pMultiWordforms );
+		for ( auto* pForm : tForms.second->m_pForms )
+			SafeDelete (pForm);
+		SafeDelete ( tForms.second );
 	}
+
+	SafeDelete ( m_pMultiWordforms );
 }
 
 
@@ -13587,12 +13584,9 @@ void CSphTemplateDictTraits::WriteWordforms ( CSphWriter & tWriter ) const
 
 	if ( m_pWordforms->m_pMultiWordforms )
 	{
-		CSphMultiformContainer::CSphMultiformHash & tHash = m_pWordforms->m_pMultiWordforms->m_Hash;
-		tHash.IterateStart();
-		while ( tHash.IterateNext() )
+		for ( const auto& tMultiForm : m_pWordforms->m_pMultiWordforms->m_Hash )
 		{
-			const CSphString & sKey = tHash.IterateGetKey();
-			CSphMultiforms * pMF = tHash.IterateGet();
+			CSphMultiforms * pMF = tMultiForm.second;
 			if ( !pMF )
 				continue;
 
@@ -13602,7 +13596,7 @@ void CSphTemplateDictTraits::WriteWordforms ( CSphWriter & tWriter ) const
 				ConcatReportStrings ( pMF->m_pForms[i]->m_dTokens, sTokens );
 				ConcatReportStrings ( pMF->m_pForms[i]->m_dNormalForm, sForms );
 
-				sLine.SetSprintf ( "%s %s > %s", sKey.cstr(), sTokens.cstr(), sForms.cstr() );
+				sLine.SetSprintf ( "%s %s > %s", tMultiForm.first.cstr(), sTokens.cstr(), sForms.cstr() );
 				tWriter.PutString ( sLine );
 			}
 		}

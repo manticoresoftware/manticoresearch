@@ -1692,8 +1692,8 @@ static void FormatSnippetOpts ( const CSphString & sQuery, const SnippetQuerySet
 	{
 		sItem.StartBlock ( ",", "'", "'" );
 
-		for ( hFieldHash.IterateStart(); hFieldHash.IterateNext(); )
-			sItem << hFieldHash.IterateGetKey();
+		for ( const auto& tField : hFieldHash )
+			sItem << tField.first;
 
 		sItem.FinishBlock(false);
 	}

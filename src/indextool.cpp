@@ -885,19 +885,13 @@ static void ApplyKilllist ( IndexInfo_t & tTarget, const IndexInfo_t & tKiller, 
 
 static void ApplyKilllists ( CSphConfig & hConf )
 {
-	int nIndexes = 0;
-	hConf["index"].IterateStart();
-	while ( hConf["index"].IterateNext() )
-		nIndexes++;
-
-	CSphFixedVector<IndexInfo_t> dIndexes ( nIndexes );
+	CSphFixedVector<IndexInfo_t> dIndexes ( hConf["index"].GetLength() );
 
 	int iIndex = 0;
 
-	hConf["index"].IterateStart();
-	while ( hConf["index"].IterateNext() )
+	for ( auto& tIndex_ : hConf["index"] )
 	{
-		CSphConfigSection & hIndex = hConf["index"].IterateGet();
+		CSphConfigSection & hIndex = tIndex_.second;
 		if ( !hIndex("path") )
 			continue;
 
@@ -906,7 +900,7 @@ static void ApplyKilllists ( CSphConfig & hConf )
 			continue;
 
 		IndexInfo_t & tIndex = dIndexes[iIndex++];
-		tIndex.m_sName = hConf["index"].IterateGetKey().cstr();
+		tIndex.m_sName = tIndex_.first.cstr();
 		tIndex.m_sPath = hIndex["path"].cstr();
 
 		IndexFiles_c tIndexFiles ( tIndex.m_sPath, tIndex.m_sName.cstr () );
@@ -1412,18 +1406,16 @@ int main ( int argc, char ** argv )
 		fprintf ( stdout, "config valid\nchecking index(es) ... " );
 
 		bool bError = false;
-		// config parser made sure that index(es) present
-		const CSphConfigType & hIndexes = hConf ["index"];
 
-		hIndexes.IterateStart();
-		while ( hIndexes.IterateNext() )
+		// config parser made sure that index(es) present
+		for ( const auto& tIndex : hConf["index"] )
 		{
-			const CSphConfigSection & tIndex = hIndexes.IterateGet();
-			const CSphVariant * pPath = tIndex ( "path" );
+			const CSphConfigSection & hIndex = tIndex.second;
+			const CSphVariant * pPath = hIndex ( "path" );
 			if ( !pPath )
 				continue;
 
-			const CSphVariant * pType = tIndex ( "type" );
+			const CSphVariant * pType = hIndex ( "type" );
 			if ( pType && ( *pType=="rt" || *pType=="distributed" || *pType=="percolate" ) )
 				continue;
 
@@ -1435,9 +1427,9 @@ int main ( int argc, char ** argv )
 			{
 				// nice looking output
 				if ( !bError )
-					fprintf ( stdout, "\nmissed index(es): '%s'", hIndexes.IterateGetKey().cstr() );
+					fprintf ( stdout, "\nmissed index(es): '%s'", tIndex.first.cstr() );
 				else
-					fprintf ( stdout, ", '%s'", hIndexes.IterateGetKey().cstr() );
+					fprintf ( stdout, ", '%s'", tIndex.first.cstr() );
 
 				bError = true;
 			}

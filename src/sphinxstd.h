@@ -2539,9 +2539,8 @@ public:
 	CSphOrderedHash ( const CSphOrderedHash & rhs )
 		: CSphOrderedHash ()
 	{
-		void * pIterator = nullptr;
-		while ( rhs.IterateNext ( &pIterator ) )
-			Add ( rhs.IterateGet ( &pIterator ), rhs.IterateGetKey ( &pIterator ) );
+		for ( const auto& tData : rhs )
+			Add ( tData.second, tData.first );
 	}
 
 	/// moving ctor
@@ -2667,9 +2666,9 @@ public:
 		return Iterator_c(m_pFirstByOrder);
 	}
 
-	Iterator_c end() const
+	static Iterator_c end()
 	{
-		return Iterator_c(nullptr);
+		return Iterator_c { nullptr };
 	}
 
 

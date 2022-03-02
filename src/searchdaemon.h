@@ -623,7 +623,7 @@ public:
 	void				CalculateQueryStatsExact ( QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const EXCLUDES ( m_tStatsLock );
 #endif
 private:
-	mutable CSphRwlock m_tStatsLock;
+	mutable RwLock_t m_tStatsLock;
 	CSphScopedPtr<QueryStatContainer_i> m_pQueryStatRecords GUARDED_BY ( m_tStatsLock );
 
 #ifndef NDEBUG
@@ -760,7 +760,7 @@ public:
 	//ServedIndex_c ();
 
 	// fake alias to private m_tLock to allow clang thread-safety analysis
-	CSphRwlock * rwlock () const RETURN_CAPABILITY ( m_tLock )
+	RwLock_t * rwlock () const RETURN_CAPABILITY ( m_tLock )
 	{ return nullptr; }
 
 };
@@ -901,7 +901,7 @@ public:
 	ISphRefcountedMT * TryAddThenGet ( ISphRefcountedMT * pValue, const CSphString &tKey ) EXCLUDES ( m_tIndexesRWLock );
 
 	// fake alias to private m_tLock to allow clang thread-safety analysis
-	CSphRwlock * IndexesRWLock () const RETURN_CAPABILITY ( m_tIndexesRWLock ) { return nullptr; }
+	RwLock_t * IndexesRWLock () const RETURN_CAPABILITY ( m_tIndexesRWLock ) { return nullptr; }
 
 private:
 	int GetLengthUnl () const REQUIRES_SHARED ( m_tIndexesRWLock );

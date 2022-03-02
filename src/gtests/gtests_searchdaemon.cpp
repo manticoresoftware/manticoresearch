@@ -453,21 +453,16 @@ private:
 		Release();
 	}
 
-	mutable CSphRwlock m_tLock;
+	mutable RwLock_t m_tLock;
 
 protected:
 	// no manual deletion; lifetime managed by AddRef/Release()
-	virtual ~Handler_t ()
-	{
-		m_tLock.Done ();
-	}
+	virtual ~Handler_t () = default;
 
 public:
 	Handler_t ( int payload )
 		: Core_c { payload }
-	{
-		Verify ( m_tLock.Init () );
-	}
+	{}
 };
 
 

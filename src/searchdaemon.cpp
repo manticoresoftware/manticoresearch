@@ -1131,7 +1131,6 @@ ServedStats_c::ServedStats_c()
 	, m_pQueryStatRecordsExact { new QueryStatContainerExact_c }
 #endif
 {
-	Verify ( m_tStatsLock.Init( true ));
 	m_pQueryTimeDigest = sphCreateTDigest();
 	m_pRowsFoundDigest = sphCreateTDigest();
 	assert ( m_pQueryTimeDigest && m_pRowsFoundDigest );
@@ -1142,7 +1141,6 @@ ServedStats_c::~ServedStats_c()
 {
 	SafeDelete ( m_pRowsFoundDigest );
 	SafeDelete ( m_pQueryTimeDigest );
-	m_tStatsLock.Done();
 }
 
 void ServedStats_c::AddQueryStat( uint64_t uFoundRows, uint64_t uQueryTime )

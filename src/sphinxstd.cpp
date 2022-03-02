@@ -1410,11 +1410,13 @@ bool AutoEvent_T<true>::WaitEvent ( int iMsec )
 
 // Windows rwlock implementation
 
-CSphRwlock::CSphRwlock ()
-{}
+RwLock_t::RwLock_t ( bool bPreferWriter )
+{
+	Verify ( Init ( bPreferWriter ) );
+}
 
 
-bool CSphRwlock::Init ( bool )
+bool RwLock_t::Init ( bool )
 {
 	assert ( !m_bInitialized );
 	assert ( !m_hWriteMutex && !m_hReadEvent && !m_iReaders );
@@ -1435,7 +1437,7 @@ bool CSphRwlock::Init ( bool )
 }
 
 
-bool CSphRwlock::Done ()
+bool RwLock_t::Done ()
 {
 	if ( !m_bInitialized )
 		return true;
@@ -1454,7 +1456,7 @@ bool CSphRwlock::Done ()
 }
 
 
-bool CSphRwlock::ReadLock ()
+bool RwLock_t::ReadLock ()
 {
 	assert ( m_bInitialized );
 
@@ -1476,7 +1478,7 @@ bool CSphRwlock::ReadLock ()
 }
 
 
-bool CSphRwlock::WriteLock ()
+bool RwLock_t::WriteLock ()
 {
 	assert ( m_bInitialized );
 
@@ -1501,7 +1503,7 @@ bool CSphRwlock::WriteLock ()
 }
 
 
-bool CSphRwlock::Unlock ()
+bool RwLock_t::Unlock ()
 {
 	assert ( m_bInitialized );
 
@@ -1528,12 +1530,13 @@ bool CSphRwlock::Unlock ()
 
 // UNIX rwlock implementation (pthreads wrapper)
 
-CSphRwlock::CSphRwlock ()
+RwLock_t::RwLock_t ( bool bPreferWriter )
 {
 	m_pLock = new pthread_rwlock_t;
+	Verify ( Init ( bPreferWriter ) );
 }
 
-bool CSphRwlock::Init ( bool bPreferWriter )
+bool RwLock_t::Init ( bool bPreferWriter )
 {
 	assert ( !m_bInitialized );
 	assert ( m_pLock );
@@ -1571,7 +1574,7 @@ bool CSphRwlock::Init ( bool bPreferWriter )
 	return m_bInitialized;
 }
 
-bool CSphRwlock::Done ()
+bool RwLock_t::Done ()
 {
 	assert ( m_pLock );
 	if ( !m_bInitialized )
@@ -1581,7 +1584,7 @@ bool CSphRwlock::Done ()
 	return !m_bInitialized;
 }
 
-bool CSphRwlock::ReadLock ()
+bool RwLock_t::ReadLock ()
 {
 	assert ( m_bInitialized );
 	assert ( m_pLock );
@@ -1593,7 +1596,7 @@ bool CSphRwlock::ReadLock ()
 	return pthread_rwlock_rdlock ( m_pLock )==0;
 }
 
-bool CSphRwlock::WriteLock ()
+bool RwLock_t::WriteLock ()
 {
 	assert ( m_bInitialized );
 	assert ( m_pLock );
@@ -1605,7 +1608,7 @@ bool CSphRwlock::WriteLock ()
 	return pthread_rwlock_wrlock ( m_pLock )==0;
 }
 
-bool CSphRwlock::Unlock ()
+bool RwLock_t::Unlock ()
 {
 	assert ( m_bInitialized );
 	assert ( m_pLock );

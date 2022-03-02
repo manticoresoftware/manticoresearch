@@ -4527,26 +4527,24 @@ private:
 using ScopedMutex_t = CSphScopedLock<CSphMutex>;
 
 /// rwlock implementation
-class CAPABILITY ( "mutex" ) CSphRwlock : public ISphNoncopyable
+class CAPABILITY ( "mutex" ) RwLock_t : public ISphNoncopyable
 {
 public:
-	CSphRwlock ();
-	~CSphRwlock () {
+	explicit RwLock_t ( bool bPreferWriter = false );
+	~RwLock_t () {
+		Verify ( Done() );
 #if !_WIN32
 		SafeDelete ( m_pLock );
 		SafeDelete ( m_pWritePreferHelper );
 #endif
 	}
 
-	bool Init ( bool bPreferWriter=false );
-	bool Done ();
-
 	bool ReadLock () ACQUIRE_SHARED();
 	bool WriteLock () ACQUIRE();
 	bool Unlock () UNLOCK_FUNCTION();
 
 	// Just for clang negative capabilities.
-	const CSphRwlock &operator! () const { return *this; }
+	const RwLock_t &operator! () const { return *this; }
 
 private:
 	bool				m_bInitialized = false;
@@ -4558,30 +4556,15 @@ private:
 	pthread_rwlock_t	* m_pLock;
 	CSphMutex			* m_pWritePreferHelper = nullptr;
 #endif
-};
 
-// rwlock with auto init/done
-class RwLock_t : public CSphRwlock
-{
-public:
-	RwLock_t()
-	{
-		Verify ( Init());
-	}
-	~RwLock_t()
-	{
-		Verify ( Done());
-	}
-
-	explicit RwLock_t ( bool bPreferWriter )
-	{
-		Verify ( Init ( bPreferWriter ) );
-	}
+private:
+	bool Init ( bool bPreferWriter = false );
+	bool Done();
 };
 
 
 /// scoped shared (read) lock
-template<class LOCKED=CSphRwlock>
+template<class LOCKED = RwLock_t>
 class SCOPED_CAPABILITY CSphScopedRLock_T : ISphNoncopyable
 {
 public:
@@ -4603,7 +4586,7 @@ protected:
 };
 
 /// scoped exclusive (write) lock
-template<class LOCKED=CSphRwlock>
+template<class LOCKED = RwLock_t>
 class SCOPED_CAPABILITY CSphScopedWLock_T : ISphNoncopyable
 {
 public:
@@ -4625,7 +4608,7 @@ protected:
 };
 
 /// scoped shared (read) fake fake - do nothing, just mute warnings
-template<class LOCKED=CSphRwlock>
+template<class LOCKED = RwLock_t>
 struct SCOPED_CAPABILITY FakeScopedRLock_T : ISphNoncopyable
 {
 	explicit FakeScopedRLock_T ( LOCKED & tLock ) ACQUIRE_SHARED ( tLock ) {}
@@ -4633,7 +4616,7 @@ struct SCOPED_CAPABILITY FakeScopedRLock_T : ISphNoncopyable
 };
 
 /// scoped exclusive (write) fake lock - does nothing, just mute warnings
-template<class LOCKED=CSphRwlock>
+template<class LOCKED = RwLock_t>
 struct SCOPED_CAPABILITY FakeScopedWLock_T : ISphNoncopyable
 {
 	explicit FakeScopedWLock_T ( LOCKED & tLock ) ACQUIRE ( tLock ) EXCLUDES ( tLock ) {}
@@ -4641,7 +4624,7 @@ struct SCOPED_CAPABILITY FakeScopedWLock_T : ISphNoncopyable
 };
 
 /// scoped lock owner - unlock in dtr
-template <class LOCKED=CSphRwlock>
+template<class LOCKED = RwLock_t>
 class SCOPED_CAPABILITY ScopedUnlock_T : ISphNoncopyable
 {
 public:

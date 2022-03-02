@@ -828,7 +828,7 @@ TEST (functions, Mutex)
 //////////////////////////////////////////////////////////////////////////
 
 static int g_iRwlock;
-static CSphRwlock g_tRwlock;
+static RwLock_t g_tRwlock;
 
 void RwlockReader ( void * pArg )
 {
@@ -848,8 +848,6 @@ void RwlockWriter ( void * pArg )
 
 TEST ( functions, RWLock )
 {
-	ASSERT_TRUE ( g_tRwlock.Init () );
-
 	const int NPAIRS = 10;
 	SphThread_t dReaders[NPAIRS];
 	SphThread_t dWriters[NPAIRS];
@@ -869,7 +867,6 @@ TEST ( functions, RWLock )
 	}
 
 	ASSERT_EQ ( g_iRwlock, NPAIRS * ( 1 + NPAIRS ) / 2 );
-	ASSERT_TRUE ( g_tRwlock.Done () );
 
 	int iReadSum = 0;
 	for ( int i = 0; i<NPAIRS; i++ )

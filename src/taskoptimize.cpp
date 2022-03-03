@@ -36,7 +36,6 @@ void EnqueueForOptimize ( CSphString sIndex, OptimizeTask_t tTask )
 			{
 				CSphScopedPtr<OptimizeJob_t> pJob { (OptimizeJob_t *) pPayload };
 				auto pServed = GetServed ( pJob->m_sIndex );
-
 				if ( !pServed )
 					return;
 

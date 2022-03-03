@@ -1485,7 +1485,7 @@ void SendErrorReply ( ISphOutputBuffer & tOut, const char * sTemplate, ... )
 
 void DistributedIndex_t::GetAllHosts ( VectorAgentConn_t &dTarget ) const
 {
-	for ( const auto * pMultiAgent : m_dAgents )
+	for ( const auto& pMultiAgent : m_dAgents )
 		for ( const auto & dHost : *pMultiAgent )
 		{
 			auto * pAgent = new AgentConn_t;
@@ -5759,8 +5759,7 @@ public:
 		: m_dQueries ( dQueries )
 		, m_dSorters { dQueries.GetLength() }
 	{
-		int iValidIndexes = 0;
-		dIndexes.for_each ( [&]( CSphIndex * pIndex ){ if ( pIndex ) iValidIndexes++; } );
+		auto iValidIndexes = (int)dIndexes.count_of ( [&] ( const auto& pIndex ) { return pIndex; } );
 
 		m_bNeedGlobalSorters = iValidIndexes>1 && !dQueries.First().m_sGroupDistinct.IsEmpty();
 		if ( m_bNeedGlobalSorters )
@@ -5870,7 +5869,6 @@ private:
 	CSphVector<CSphVector<SorterData_t>>	m_dSorters;
 	bool									m_bNeedGlobalSorters = false;
 };
-
 
 void SearchHandler_c::RunLocalSearches ()
 {
@@ -6389,39 +6387,34 @@ bool SearchHandler_c::ParseIdxSubkeys ()
 	const auto & sVar = m_dLocal.First ().m_sName;
 	const auto & dSubkeys = m_dNQueries.First ().m_dStringSubkeys;
 
-	if ( !dSubkeys.IsEmpty () )
+	if ( dSubkeys.IsEmpty () )
+		return false;
+
+	bool bSchema = ( dSubkeys.GetLength()>1 && dSubkeys.Last ()==".table" );
+	TableFeeder_fn fnFeed;
+	if ( dSubkeys[0]==".table" ) // select .. idx.table
+		fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleMysqlDescribe ( *pBuf, m_pStmt ); };
+	else if ( dSubkeys[0]==".status" ) // select .. idx.status
+		fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleSelectIndexStatus ( *pBuf, m_pStmt ); };
+	else if ( dSubkeys[0]==".files" ) // select .. from idx.files
+		fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleSelectFiles ( *pBuf, m_pStmt ); };
+	else
+		return false;
+
+	ServedIndex_c* pIndex = nullptr;
+	if ( bSchema )
 	{
-		bool bSchema = ( dSubkeys.GetLength()>1 && dSubkeys.Last ()==".table" );
-		ServedIndex_c * pIndex = nullptr;
-		bool bValid = true;
-		TableFeeder_fn fnFeed;
-		if ( dSubkeys[0]==".table" ) // select .. idx.table
-			fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleMysqlDescribe ( *pBuf, m_pStmt ); };
-		else if ( dSubkeys[0]==".status" ) // select .. idx.status
-			fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleSelectIndexStatus ( *pBuf, m_pStmt ); };
-		else if ( dSubkeys[0]==".files" ) // select .. from idx.files
-			fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleSelectFiles ( *pBuf, m_pStmt ); };
-		else
-			bValid = false;
-
-		if ( bValid )
-		{
-			if ( bSchema )
-			{
-				m_dLocal.First ().m_sName.SetSprintf ( "%s%s.table", sVar.cstr (), dSubkeys[0].cstr () );
-				pIndex = MakeDynamicIndexSchema ( std::move ( fnFeed ) );
-			} else
-			{
-				m_dLocal.First ().m_sName.SetSprintf ( "%s%s", sVar.cstr (), dSubkeys[0].cstr () );
-				pIndex = MakeDynamicIndex ( std::move ( fnFeed ) );
-			}
-
-			m_dLocked.AddRLocked ( m_dLocal.First ().m_sName, pIndex );
-			SafeRelease ( pIndex );
-			return true;
-		}
+		m_dLocal.First ().m_sName.SetSprintf ( "%s%s.table", sVar.cstr (), dSubkeys[0].cstr () );
+		pIndex = MakeDynamicIndexSchema ( std::move ( fnFeed ) );
+	} else
+	{
+		m_dLocal.First ().m_sName.SetSprintf ( "%s%s", sVar.cstr (), dSubkeys[0].cstr () );
+		pIndex = MakeDynamicIndex ( std::move ( fnFeed ) );
 	}
-	return false;
+
+	m_dLocked.AddRLocked ( m_dLocal.First().m_sName, pIndex );
+	SafeRelease ( pIndex );
+	return true;
 }
 
 ////////////////////////////////////////////////////////////////
@@ -6518,8 +6511,7 @@ void SearchHandler_c::UniqLocals ( VecTraits_T<LocalIndex_t> & dLocals )
 
 	CSphVector<int> dOrder;
 	dOrder.Resize ( dLocals.GetLength() );
-	ARRAY_CONSTFOREACH(i, dOrder)
-		dOrder[i] = i;
+	dOrder.FillSeq();
 
 	dOrder.Sort ( Lesser ( [&dLocals] ( int a, int b )
 	{
@@ -6556,78 +6548,78 @@ void SearchHandler_c::CalcTimeStats ( int64_t tmCpu, int64_t tmSubset, const CSp
 			dResult.m_iRealQueryTime = (int)( tmSubset/1000/iQueries );
 			dResult.m_iCpuTime = tmCpu/iQueries;
 		}
-	} else
-	{
-		int64_t tmAccountedWall = 0;
-		int64_t tmAccountedCpu = 0;
-		for ( const auto & dResult : m_dNAggrResults )
-		{
-			tmAccountedWall += dResult.m_iQueryTime*1000;
-			assert ( ( dResult.m_iCpuTime==0 && dResult.m_iAgentCpuTime==0 ) ||	// all work was done in this thread
-				( dResult.m_iCpuTime>0 && dResult.m_iAgentCpuTime==0 ) ||		// children threads work
-				( dResult.m_iAgentCpuTime>0 && dResult.m_iCpuTime==0 ) );		// agents work
-			tmAccountedCpu += dResult.m_iCpuTime;
-			tmAccountedCpu += dResult.m_iAgentCpuTime;
-		}
-		// whether we had work done in children threads (dist_threads>1) or in agents
-		bool bExternalWork = tmAccountedCpu!=0;
-
-		int64_t tmDeltaWall = ( tmSubset - tmAccountedWall ) / iQueries;
-
-		for ( auto & dResult : m_dNAggrResults )
-		{
-			dResult.m_iQueryTime += (int)(tmDeltaWall/1000);
-			dResult.m_iRealQueryTime = (int)( tmSubset/1000/iQueries );
-			dResult.m_iCpuTime = tmCpu/iQueries;
-			if ( bExternalWork )
-				dResult.m_iCpuTime += tmAccountedCpu;
-		}
-
-		// correct per-index stats from agents
-		int iTotalSuccesses = 0;
-		for ( const auto & dResult : m_dNAggrResults )
-			iTotalSuccesses += dResult.m_iSuccesses;
-
-		int nValidDistrIndexes = 0;
-		for ( const auto &tDistrStat : dDistrServedByAgent )
-			for ( int i=0; i<iQueries; ++i )
-				if ( tDistrStat.m_dStats[i].m_iSuccesses )
-				{
-					++nValidDistrIndexes;
-					break;
-				}
-
-		if ( iTotalSuccesses && nValidDistrIndexes )
-			for ( auto &tDistrStat : dDistrServedByAgent )
-				for ( int i=0; i<iQueries; ++i )
-				{
-					QueryStat_t & tStat = tDistrStat.m_dStats[i];
-					int64_t tmDeltaWallAgent = ( tmSubset - tmAccountedWall ) * tStat.m_iSuccesses / ( iTotalSuccesses*nValidDistrIndexes );
-					tStat.m_uQueryTime += (int)(tmDeltaWallAgent/1000);
-				}
-
-		int nValidLocalIndexes = 0;
-		for ( const auto & dQueryIndexStat : m_dQueryIndexStats )
-			for ( int i=0; i<iQueries; ++i )
-				if ( dQueryIndexStat.m_dStats[i].m_iSuccesses )
-				{
-					++nValidLocalIndexes;
-					break;
-				}
-
-		if ( iTotalSuccesses && nValidLocalIndexes )
-			for ( auto &dQueryIndexStat : m_dQueryIndexStats )
-				for ( int i=0; i<iQueries; ++i )
-				{
-					QueryStat_t & tStat = dQueryIndexStat.m_dStats[i];
-					int64_t tmDeltaWallLocal = ( tmSubset - tmAccountedWall ) * tStat.m_iSuccesses / ( iTotalSuccesses*nValidLocalIndexes );
-					tStat.m_uQueryTime += (int)(tmDeltaWallLocal/1000);
-				}
-
-		// don't forget to add this to stats
-		if ( bExternalWork )
-			tmCpu += tmAccountedCpu;
+		return;
 	}
+
+	int64_t tmAccountedWall = 0;
+	int64_t tmAccountedCpu = 0;
+	for ( const auto & dResult : m_dNAggrResults )
+	{
+		tmAccountedWall += dResult.m_iQueryTime*1000;
+		assert ( ( dResult.m_iCpuTime==0 && dResult.m_iAgentCpuTime==0 ) ||	// all work was done in this thread
+			( dResult.m_iCpuTime>0 && dResult.m_iAgentCpuTime==0 ) ||		// children threads work
+			( dResult.m_iAgentCpuTime>0 && dResult.m_iCpuTime==0 ) );		// agents work
+		tmAccountedCpu += dResult.m_iCpuTime;
+		tmAccountedCpu += dResult.m_iAgentCpuTime;
+	}
+
+	// whether we had work done in children threads (dist_threads>1) or in agents
+	bool bExternalWork = tmAccountedCpu!=0;
+	int64_t tmDeltaWall = ( tmSubset - tmAccountedWall ) / iQueries;
+
+	for ( auto & dResult : m_dNAggrResults )
+	{
+		dResult.m_iQueryTime += (int)(tmDeltaWall/1000);
+		dResult.m_iRealQueryTime = (int)( tmSubset/1000/iQueries );
+		dResult.m_iCpuTime = tmCpu/iQueries;
+		if ( bExternalWork )
+			dResult.m_iCpuTime += tmAccountedCpu;
+	}
+
+	// correct per-index stats from agents
+	int iTotalSuccesses = 0;
+	for ( const auto & dResult : m_dNAggrResults )
+		iTotalSuccesses += dResult.m_iSuccesses;
+
+	int nValidDistrIndexes = 0;
+	for ( const auto &tDistrStat : dDistrServedByAgent )
+		for ( int i=0; i<iQueries; ++i )
+			if ( tDistrStat.m_dStats[i].m_iSuccesses )
+			{
+				++nValidDistrIndexes;
+				break;
+			}
+
+	if ( iTotalSuccesses && nValidDistrIndexes )
+		for ( auto &tDistrStat : dDistrServedByAgent )
+			for ( int i=0; i<iQueries; ++i )
+			{
+				QueryStat_t & tStat = tDistrStat.m_dStats[i];
+				int64_t tmDeltaWallAgent = ( tmSubset - tmAccountedWall ) * tStat.m_iSuccesses / ( iTotalSuccesses*nValidDistrIndexes );
+				tStat.m_uQueryTime += (int)(tmDeltaWallAgent/1000);
+			}
+
+	int nValidLocalIndexes = 0;
+	for ( const auto & dQueryIndexStat : m_dQueryIndexStats )
+		for ( int i=0; i<iQueries; ++i )
+			if ( dQueryIndexStat.m_dStats[i].m_iSuccesses )
+			{
+				++nValidLocalIndexes;
+				break;
+			}
+
+	if ( iTotalSuccesses && nValidLocalIndexes )
+		for ( auto &dQueryIndexStat : m_dQueryIndexStats )
+			for ( int i=0; i<iQueries; ++i )
+			{
+				QueryStat_t & tStat = dQueryIndexStat.m_dStats[i];
+				int64_t tmDeltaWallLocal = ( tmSubset - tmAccountedWall ) * tStat.m_iSuccesses / ( iTotalSuccesses*nValidLocalIndexes );
+				tStat.m_uQueryTime += (int)(tmDeltaWallLocal/1000);
+			}
+
+	// don't forget to add this to stats
+	if ( bExternalWork )
+		tmCpu += tmAccountedCpu;
 }
 
 
@@ -6647,7 +6639,6 @@ void SearchHandler_c::CalcPerIndexStats ( const CSphVector<DistrServedByAgent_t>
 				continue;
 
 			pServed->AddQueryStat ( tStat.m_uFoundRows, tStat.m_uQueryTime );
-
 			for ( auto &tDistr : dDistrServedByAgent )
 			{
 				if ( tDistr.m_dLocalNames.Contains ( m_dLocal[iLocal].m_sName ) )
@@ -11917,12 +11908,12 @@ static void HandleMysqlCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 }
 
 
-static const CSphSchema & GetSchemaForCreateTable ( CSphIndex * pIndex )
+static const CSphSchema & GetSchemaForCreateTable ( const CSphIndex * pIndex )
 {
 	assert ( pIndex );
 	assert ( pIndex->IsRT() || pIndex->IsPQ() );
 
-	return ((RtIndex_i*)pIndex)->GetInternalSchema();
+	return ((const RtIndex_i*)pIndex)->GetInternalSchema();
 }
 
 
@@ -16697,7 +16688,7 @@ bool RotateIndexGreedy ( ServedDesc_t & tWlockedIndex, const char * szIndex, CSp
 	sphLogDebug ( bReEnable ? "RotateIndexGreedy: re-enabling index" : "RotateIndexGreedy: new index is readable" );
 	if ( !tWlockedIndex.m_bOnlyNew )
 	{
-		if ( !dFiles.RenameSuffix ( "", ".old" ) )
+		if ( !dFiles.TryRenameSuffix ( "", ".old" ) )
 		{
 			if ( dFiles.IsFatal () )
 				sphFatal ( "%s", dFiles.FatalMsg ( "rotating" ).cstr () );
@@ -16711,7 +16702,7 @@ bool RotateIndexGreedy ( ServedDesc_t & tWlockedIndex, const char * szIndex, CSp
 	// rename new to current
 	if ( !bReEnable )
 	{
-		if ( !dFiles.RenameSuffix ( ".new" ) )
+		if ( !dFiles.TryRenameSuffix ( ".new", "" ) )
 		{
 			if ( dFiles.IsFatal () )
 				sphFatal ( "%s", dFiles.FatalMsg ( "rotating" ).cstr () );
@@ -16719,7 +16710,7 @@ bool RotateIndexGreedy ( ServedDesc_t & tWlockedIndex, const char * szIndex, CSp
 			// rollback old ones
 			if ( tWlockedIndex.m_bOnlyNew )
 				sError.SetSprintf ( "rotating index '%s': %s; using old index", szIndex, dFiles.ErrorMsg() );
-			else if ( !dFiles.RollbackSuff ( ".old" ) )
+			else if ( !dFiles.RenameSuffix ( ".old", "" ) )
 				sphFatal ( "%s", dFiles.FatalMsg ( "rotating" ).cstr () );
 			return false;
 		}
@@ -16743,9 +16734,9 @@ bool RotateIndexGreedy ( ServedDesc_t & tWlockedIndex, const char * szIndex, CSp
 		}
 		sphWarning ( "rotating index '%s': .new preload failed: %s", szIndex, tWlockedIndex.m_pIndex->GetLastError().cstr() );
 		// try to recover: rollback cur to .new, .old to cur.
-		if ( !dFiles.RollbackSuff ( "", ".new" ) )
+		if ( !dFiles.RenameSuffix ( "", ".new" ) )
 			sphFatal ( "%s", dFiles.FatalMsg ( "rotating" ).cstr () );
-		if ( !dFiles.RollbackSuff ( ".old" ) )
+		if ( !dFiles.RenameSuffix ( ".old", "" ) )
 			sphFatal ( "%s", dFiles.FatalMsg ( "rotating" ).cstr () );
 
 		sphLogDebug ( "RotateIndexGreedy: has recovered. Prealloc it." );
@@ -16914,7 +16905,7 @@ static bool RotateIndexMT ( ServedIndex_c* pIndex, const CSphString & sIndex, St
 	}
 
 	//////////////////
-	// load new index
+	/// load new index
 	//////////////////
 	sphInfo ( "rotating index '%s': started", sIndex.cstr() );
 
@@ -18104,7 +18095,7 @@ static void DoGreedyRotation() REQUIRES ( MainThread )
 }
 
 
-// ServiceMain() -> TickHead() -> CheckRotate()
+// ServiceMain() -> TickHead() -> [CallCoroutine] -> CheckRotate()
 static void CheckRotate () REQUIRES ( MainThread ) EXCLUDES ( g_tRotateThreadMutex )
 {
 	// do we need to rotate now? If no sigHUP received, or if we are already rotating - no.
@@ -18697,7 +18688,7 @@ void CheckSignals () REQUIRES ( MainThread )
 	{
 		sphInfo ( "caught SIGHUP (seamless=%d, in_rotate=%d, need_rotate=%d)", (int)g_bSeamlessRotate, (int)g_bInRotate, (int)g_bNeedRotate );
 		g_bNeedRotate = true;
-		g_bGotSighup = 0;
+		g_bGotSighup = false;
 	}
 
 	if ( sphInterrupted() )
@@ -18742,8 +18733,10 @@ void TickHead () REQUIRES ( MainThread )
 	CheckLeaks ();
 	CheckReopenLogs ();
 	if ( g_bNeedRotate && !g_bInRotate && !IsConfigless() )
-		Threads::CallCoroutine ( CheckRotate );
-
+		Threads::CallCoroutine ( [] {
+			ScopedRole_c thMain ( MainThread );
+			CheckRotate();
+		} );
 	sphInfo ( nullptr ); // flush dupes
 #if _WIN32
 	// at windows there is no signals that interrupt sleep
@@ -19489,7 +19482,7 @@ static void CheckSSL ()
 }
 
 
-int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
+int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 {
 	ScopedRole_c thMain (MainThread);
 	g_bLogTty = isatty ( g_iLogFile )!=0;

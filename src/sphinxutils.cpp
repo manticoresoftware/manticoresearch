@@ -3337,7 +3337,7 @@ namespace TlsMsg
 		if (!pContainer)
 		{
 			static StringBuilder_c sMsgs;
-			pContainer = &sMsgs;
+			pContainer = &sMsgs; // fixme! static is global, write it's address to thread-local just shares it...
 		}
 
 		if ( bDoClear )

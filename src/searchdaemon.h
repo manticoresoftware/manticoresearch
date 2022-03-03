@@ -614,7 +614,7 @@ class ServedStats_c
 {
 public:
 						ServedStats_c();
-	virtual				~ServedStats_c();
+	virtual				~ServedStats_c() = default;
 
 	void				AddQueryStat ( uint64_t uFoundRows, uint64_t uQueryTime ); //  REQUIRES ( !m_tStatsLock );
 						/// since mutex is internal,
@@ -630,8 +630,8 @@ private:
 	CSphScopedPtr<QueryStatContainer_i> m_pQueryStatRecordsExact GUARDED_BY ( m_tStatsLock );
 #endif
 
-	TDigest_i *			m_pQueryTimeDigest GUARDED_BY ( m_tStatsLock ) = nullptr;
-	TDigest_i *			m_pRowsFoundDigest GUARDED_BY ( m_tStatsLock ) = nullptr;
+	CSphScopedPtr<TDigest_i>	m_pQueryTimeDigest GUARDED_BY ( m_tStatsLock );
+	CSphScopedPtr<TDigest_i>	m_pRowsFoundDigest GUARDED_BY ( m_tStatsLock );
 
 	uint64_t			m_uTotalFoundRowsMin GUARDED_BY ( m_tStatsLock )= UINT64_MAX;
 	uint64_t			m_uTotalFoundRowsMax GUARDED_BY ( m_tStatsLock )= 0;
@@ -647,7 +647,7 @@ private:
 							QueryStatElement_t & tTimeResult, uint64_t uTimestamp, uint64_t uInterval, int iRecords );
 
 	void				DoStatCalcStats ( const QueryStatContainer_i * pContainer, QueryStats_t & tRowsFoundStats,
-							QueryStats_t & tQueryTimeStats ) const EXCLUDES ( m_tStatsLock );
+							QueryStats_t & tQueryTimeStats ) const REQUIRES_SHARED ( m_tStatsLock );
 };
 
 // calculate index mass based on status

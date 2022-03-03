@@ -1313,10 +1313,13 @@ public:
 	virtual void				Preread () = 0;
 
 	/// set new index base path
-	virtual void				SetBase ( const char * sNewBase ) = 0;
+	virtual void				SetBase ( CSphString sNewBase ) = 0;
 
 	/// set new index base path, and physically rename index files too
-	virtual bool				Rename ( const char * sNewBase ) = 0;
+	enum RenameResult_e { E_OK, E_FAIL, E_FATAL };
+	virtual RenameResult_e		RenameEx ( CSphString sNewBase ) = 0;
+
+	bool 						Rename ( CSphString sNewBase ) { return RenameEx (std::move(sNewBase))==E_OK; }
 
 	/// obtain exclusive lock on this index
 	virtual bool				Lock () = 0;
@@ -1373,7 +1376,7 @@ public:
 	virtual void				FlushDeadRowMap ( bool bWaitComplete ) const {}
 	virtual bool				LoadKillList ( CSphFixedVector<DocID_t> * pKillList, KillListTargets_c & tTargets, CSphString & sError ) const { return true; }
 	virtual bool				AlterKillListTarget ( KillListTargets_c & tTargets, CSphString & sError ) { return false; }
-	virtual void				KillExistingDocids ( CSphIndex * pTarget ) {}
+	virtual void				KillExistingDocids ( CSphIndex * pTarget ) const {}
 	virtual bool				IsAlive ( DocID_t tDocID ) const { return false; }
 
 	bool						GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const override { return false; }
@@ -1476,8 +1479,8 @@ public:
 	bool				Prealloc ( bool, FilenameBuilder_i *, StrVec_t & ) override { return false; }
 	void				Dealloc () override {}
 	void				Preread () override {}
-	void				SetBase ( const char * ) override {}
-	bool				Rename ( const char * ) override { return false; }
+	void				SetBase ( CSphString ) override {}
+	RenameResult_e		RenameEx ( CSphString ) override { return E_FAIL; }
 	bool				Lock () override { return true; }
 	void				Unlock () override {}
 	bool				EarlyReject ( CSphQueryContext * , CSphMatch & ) const override { return false; }

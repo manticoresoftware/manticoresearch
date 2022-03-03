@@ -2300,10 +2300,10 @@ void MutableIndexSettings_c::Combine ( const MutableIndexSettings_c & tOther )
 	}
 }
 
-static MutableIndexSettings_c g_tMutableDefaults;
 MutableIndexSettings_c & MutableIndexSettings_c::GetDefaults ()
 {
-	return g_tMutableDefaults;
+	static MutableIndexSettings_c tMutableDefaults;
+	return tMutableDefaults;
 }
 
 static bool FormatCond ( bool bNeedSave, const CSphBitvec & dLoaded, MutableName_e eName, bool bNotEq )
@@ -2311,7 +2311,7 @@ static bool FormatCond ( bool bNeedSave, const CSphBitvec & dLoaded, MutableName
 	return ( ( bNeedSave && dLoaded.BitGet ( (int)eName ) ) || ( !bNeedSave && bNotEq ) );
 }
 
-void MutableIndexSettings_c::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const
+void MutableIndexSettings_c::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * ) const
 {
 	const MutableIndexSettings_c & tDefaults = GetDefaults ();
 

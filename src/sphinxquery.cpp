@@ -2002,7 +2002,7 @@ bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const CSp
 
 /// Decides if given pTree is appropriate for caching or not. Currently we don't cache
 /// the end values (leafs).
-static bool IsAppropriate ( XQNode_t * pTree )
+static bool IsAppropriate ( const XQNode_t * pTree )
 {
 	if ( !pTree ) return false;
 
@@ -2016,23 +2016,19 @@ typedef CSphOrderedHash < DWORD, uint64_t, IdentityHash_fn, 128 > CDwordHash;
 // which contains the tree.
 class BitMask_t
 {
-	XQNode_t *		m_pTree;
-	uint64_t		m_uMask;
+	const XQNode_t *		m_pTree = nullptr;
+	uint64_t		m_uMask = 0ull;
 
 public:
-	BitMask_t ()
-		: m_pTree ( NULL )
-		, m_uMask ( 0ull )
-	{}
-
-	void Init ( XQNode_t * pTree, uint64_t uMask )
+	BitMask_t() = default;
+	BitMask_t ( const XQNode_t * pTree, uint64_t uMask )
 	{
 		m_pTree = pTree;
 		m_uMask = uMask;
 	}
 
 	inline uint64_t GetMask() const { return m_uMask; }
-	inline XQNode_t * GetTree() const { return m_pTree; }
+	inline const XQNode_t * GetTree() const { return m_pTree; }
 };
 
 // a list of unique values.
@@ -2115,12 +2111,12 @@ public:
 	CAssociations_t() : m_iBits ( 0 ) {}
 
 	// Add the given pTree into the list of pTrees, associated with given uHash
-	int Associate ( XQNode_t * pTree, uint64_t uHash )
+	int Associate ( const XQNode_t * pTree, uint64_t uHash )
 	{
 		if ( !Exists ( uHash ) )
 			Add ( Associations_t(), uHash );
 		if ( operator[]( uHash ).Associate2nd ( pTree->GetHash() ) )
-			m_iBits++;
+			++m_iBits;
 		return m_iBits;
 	}
 
@@ -2192,7 +2188,7 @@ private:
 
 	// recursively builds for every node the bitmaks
 	// of common nodes it has as children
-	void BuildBitmasks ( XQNode_t * pTree )
+	void BuildBitmasks ( const XQNode_t * pTree )
 	{
 		if ( !IsAppropriate ( pTree ) )
 			return;
@@ -2202,21 +2198,21 @@ private:
 			// calculate the bitmask
 			int iOrder;
 			uint64_t dMask = 0;
-			ARRAY_FOREACH ( i, pTree->m_dChildren )
+			for ( const XQNode_t* pChild : pTree->m_dChildren )
 			{
-				iOrder = GetBitOrder ( pTree->m_dChildren[i]->GetHash() );
+				iOrder = GetBitOrder ( pChild->GetHash() );
 				if ( iOrder>=0 )
 					dMask |= 1ull << iOrder;
 			}
 
 			// add the bitmask into the array
 			if ( dMask )
-				m_dBitmasks.Add().Init( pTree, dMask );
+				m_dBitmasks.Add ( { pTree, dMask } );
 		}
 
 		// recursively process all the children
-		ARRAY_FOREACH ( i, pTree->m_dChildren )
-			BuildBitmasks ( pTree->m_dChildren[i] );
+		for ( const XQNode_t* pChild : pTree->m_dChildren )
+			BuildBitmasks ( pChild );
 	}
 
 	// Collect all possible intersections of Bitmasks.
@@ -2225,7 +2221,7 @@ private:
 	{
 		// Round 1. Intersect all content of bitmasks one-by-one.
 		ARRAY_FOREACH ( i, m_dBitmasks )
-			for ( int j = i+1; j<m_dBitmasks.GetLength(); j++ )
+			for ( int j = i+1; j<m_dBitmasks.GetLength(); ++j )
 			{
 				// intersect one-by-one and group (grouping is done by nature of a hash)
 				uint64_t uMask = m_dBitmasks[i].GetMask() & m_dBitmasks[j].GetMask();
@@ -2297,7 +2293,7 @@ private:
 		{
 			// pBranch is for common subset of children, pOtherChildren is for the rest.
 			CSphOrderedHash < XQNode_t*, int, IdentityHash_fn, 64 > hBranches;
-			XQNode_t * pOtherChildren = NULL;
+			XQNode_t * pOtherChildren = nullptr;
 			int iBit;
 			int iOptimizations = 0;
 			ARRAY_FOREACH ( i, pTree->m_dChildren )
@@ -2325,7 +2321,7 @@ private:
 
 								// Count essential subtrees (with at least 2 children)
 								if ( pNode->m_dChildren.GetLength()==2 )
-									iOptimizations++;
+									++iOptimizations;
 							}
 							break;
 						}
@@ -2378,8 +2374,8 @@ private:
 		}
 
 		// recursively process all the children
-		ARRAY_FOREACH ( i, pTree->m_dChildren )
-			Reorganize ( pTree->m_dChildren[i] );
+		for ( XQNode_t* pChild : pTree->m_dChildren )
+			Reorganize ( pChild );
 	}
 
 public:
@@ -2418,31 +2414,25 @@ public:
 
 struct MarkedNode_t
 {
-	int			m_iCounter;
-	XQNode_t *	m_pTree;
-	bool		m_bMarked;
-	int			m_iOrder;
+	const XQNode_t*	m_pTree;
+	int			m_iCounter = 1;
+	bool		m_bMarked = false;
+	int			m_iOrder = 0;
 
-	explicit MarkedNode_t ( XQNode_t * pTree=NULL )
-		: m_iCounter ( 1 )
-		, m_pTree ( pTree )
-		, m_bMarked ( false )
-		, m_iOrder ( 0 )
+	explicit MarkedNode_t ( const XQNode_t * pTree=nullptr )
+		: m_pTree ( pTree )
 	{}
 
-	void MarkIt ( bool bMark )
+	inline void Mark()
 	{
-		// mark
-		if ( bMark )
-		{
-			m_iCounter++;
-			m_bMarked = true;
-			return;
-		}
+		++m_iCounter;
+		m_bMarked = true;
+	}
 
-		// unmark
+	inline void Unmark()
+	{
 		if ( m_bMarked && m_iCounter>1 )
-			m_iCounter--;
+			--m_iCounter;
 		if ( m_iCounter<2 )
 			m_bMarked = false;
 	}
@@ -2460,7 +2450,7 @@ struct XqTreeComparator_t
 };
 
 /// check hashes, then check subtrees, then flag
-static void FlagCommonSubtrees ( XQNode_t * pTree, CSubtreeHash & hSubTrees, XqTreeComparator_t & tCmp, bool bFlag, bool bMarkIt )
+static void FlagCommonSubtrees ( const XQNode_t * pTree, CSubtreeHash & hSubTrees, XqTreeComparator_t & tCmp, bool bFlag, bool bMark = false )
 {
 	if ( !IsAppropriate ( pTree ) )
 		return;
@@ -2470,25 +2460,25 @@ static void FlagCommonSubtrees ( XQNode_t * pTree, CSubtreeHash & hSubTrees, XqT
 	uint64_t iHash = pTree->GetHash();
 	if ( bFlag && hSubTrees.Exists ( iHash ) && tCmp.IsEqual ( hSubTrees [ iHash ].m_pTree, pTree ) )
 	{
-		hSubTrees[iHash].MarkIt ( true );
+		hSubTrees[iHash].Mark();
 
 		// we just add all the children but do NOT mark them as common
 		// so that only the subtree root is marked.
 		// also we unmark all the cases which were eaten by bigger trees
-		ARRAY_FOREACH ( i, pTree->m_dChildren )
-			if ( !hSubTrees.Exists ( pTree->m_dChildren[i]->GetHash() ) )
-				FlagCommonSubtrees ( pTree->m_dChildren[i], hSubTrees, tCmp, false, bMarkIt );
+		for ( const XQNode_t * pChild : pTree->m_dChildren )
+			if ( !hSubTrees.Exists ( pChild->GetHash() ) )
+				FlagCommonSubtrees ( pChild, hSubTrees, tCmp, false, bMark );
 			else
-				FlagCommonSubtrees ( pTree->m_dChildren[i], hSubTrees, tCmp, false, false );
+				FlagCommonSubtrees ( pChild, hSubTrees, tCmp, false );
 	} else
 	{
-		if ( !bMarkIt )
-			hSubTrees[iHash].MarkIt ( false );
-		else
+		if ( bMark )
 			hSubTrees.Add ( MarkedNode_t ( pTree ), iHash );
+		else
+			hSubTrees[iHash].Unmark();
 
-		ARRAY_FOREACH ( i, pTree->m_dChildren )
-			FlagCommonSubtrees ( pTree->m_dChildren[i], hSubTrees, tCmp, bFlag, bMarkIt );
+		for ( const XQNode_t* pChild : pTree->m_dChildren )
+			FlagCommonSubtrees ( pChild, hSubTrees, tCmp, bFlag, bMark );
 	}
 }
 
@@ -2503,8 +2493,8 @@ static void SignCommonSubtrees ( XQNode_t * pTree, const CSubtreeHash & hSubTree
 	if ( pCommon && pCommon->m_bMarked )
 		pTree->TagAsCommon ( pCommon->m_iOrder, pCommon->m_iCounter );
 
-	ARRAY_FOREACH ( i, pTree->m_dChildren )
-		SignCommonSubtrees ( pTree->m_dChildren[i], hSubTrees );
+	for ( XQNode_t* pChild : pTree->m_dChildren )
+		SignCommonSubtrees ( pChild, hSubTrees );
 }
 
 
@@ -2537,15 +2527,6 @@ int sphMarkCommonSubtrees ( int iXQ, const XQQuery_t * pXQ )
 	return iOrder;
 }
 
-struct CmpTermQPos_fn
-{
-	inline bool IsLess ( const XQKeyword_t * pA, const XQKeyword_t * pB ) const
-	{
-		assert ( pA && pB );
-		return ( pA->m_iAtomPos<pB->m_iAtomPos );
-	}
-};
-
 bool XqTreeComparator_t::IsEqual ( const XQNode_t * pNode1, const XQNode_t * pNode2 )
 {
 	// early out check to skip allocations
@@ -2567,8 +2548,8 @@ bool XqTreeComparator_t::IsEqual ( const XQNode_t * pNode1, const XQNode_t * pNo
 	if ( !m_dTerms1.GetLength() )
 		return true;
 
-	m_dTerms1.Sort ( CmpTermQPos_fn() );
-	m_dTerms2.Sort ( CmpTermQPos_fn() );
+	m_dTerms1.Sort ( Lesser ( [] ( const auto& l, const auto& r ) { return l->m_iAtomPos < r->m_iAtomPos; } ) );
+	m_dTerms2.Sort ( Lesser ( [] ( const auto& l, const auto& r ) { return l->m_iAtomPos < r->m_iAtomPos; } ) );
 
 	if ( m_dTerms1[0]->m_sWord!=m_dTerms2[0]->m_sWord )
 		return false;

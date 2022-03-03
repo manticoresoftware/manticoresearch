@@ -19,7 +19,7 @@ namespace sph {
 	class IDFer_c : public ISphRefcountedMT
 	{
 	protected:
-		~IDFer_c () override {}
+		~IDFer_c () override  = default;
 	public:
 		virtual float GetIDF ( const CSphString& sWord, int64_t iDocsLocal, bool bPlainIDF ) const = 0;
 	};

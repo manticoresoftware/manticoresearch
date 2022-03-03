@@ -33,11 +33,7 @@ public:
 	bool AddUniq ( const CSphString& sName ) EXCLUDES ( m_dGuard )
 	{
 		SccWL_t wLock ( m_dGuard );
-		if ( m_dSet[sName] )
-			return false;
-
-		m_dSet.Add ( sName );
-		return true;
+		return m_dSet.Add ( sName );
 	}
 
 	void Delete ( const CSphString& sName ) EXCLUDES ( m_dGuard )
@@ -67,8 +63,6 @@ public:
 };
 
 static StringSetMT g_Flushable;
-
-
 
 static void ScheduleFlushTask ( void* pName, int64_t iNextTimestamp=-1 )
 {

@@ -32,12 +32,12 @@ public:
 	void		CheckEnter ( int ) final {}
 	void		CheckExit ( int ) final {}
 
-	void		SetIndex ( CSphIndex * pIndex ) { m_pIndex = pIndex; }
+	void		SetIndex ( const CSphIndex * pIndex ) { m_pIndex = pIndex; }
 	void		SetProfiler ( QueryProfile_c * pProfiler ) { m_pProfiler = pProfiler; }
 	void		SetQueryType ( QueryType_e eType ) { m_eQueryType = eType; }
 
 private:
-	CSphIndex *			m_pIndex = nullptr; /// BLOODY HACK
+	const CSphIndex *			m_pIndex = nullptr; /// BLOODY HACK
 	QueryProfile_c *	m_pProfiler = nullptr;
 	QueryType_e			m_eQueryType = QUERY_API;
 };

@@ -1130,18 +1130,9 @@ ServedStats_c::ServedStats_c()
 #ifndef NDEBUG
 	, m_pQueryStatRecordsExact { new QueryStatContainerExact_c }
 #endif
-{
-	m_pQueryTimeDigest = sphCreateTDigest();
-	m_pRowsFoundDigest = sphCreateTDigest();
-	assert ( m_pQueryTimeDigest && m_pRowsFoundDigest );
-}
-
-
-ServedStats_c::~ServedStats_c()
-{
-	SafeDelete ( m_pRowsFoundDigest );
-	SafeDelete ( m_pQueryTimeDigest );
-}
+	, m_pQueryTimeDigest { sphCreateTDigest() }
+	, m_pRowsFoundDigest { sphCreateTDigest() }
+{}
 
 void ServedStats_c::AddQueryStat( uint64_t uFoundRows, uint64_t uQueryTime )
 {
@@ -1179,7 +1170,8 @@ static const uint64_t g_dStatsIntervals[] =
 
 void ServedStats_c::CalculateQueryStats( QueryStats_t& tRowsFoundStats, QueryStats_t& tQueryTimeStats ) const
 {
-	DoStatCalcStats( m_pQueryStatRecords.Ptr(), tRowsFoundStats, tQueryTimeStats );
+	ScRL_t rLock { m_tStatsLock };
+	DoStatCalcStats ( m_pQueryStatRecords.Ptr(), tRowsFoundStats, tQueryTimeStats );
 }
 
 
@@ -1187,7 +1179,8 @@ void ServedStats_c::CalculateQueryStats( QueryStats_t& tRowsFoundStats, QuerySta
 
 void ServedStats_c::CalculateQueryStatsExact( QueryStats_t& tRowsFoundStats, QueryStats_t& tQueryTimeStats ) const
 {
-	DoStatCalcStats( m_pQueryStatRecordsExact.Ptr(), tRowsFoundStats, tQueryTimeStats );
+	ScRL_t rLock { m_tStatsLock };
+	DoStatCalcStats ( m_pQueryStatRecordsExact.Ptr(), tRowsFoundStats, tQueryTimeStats );
 }
 
 #endif // !NDEBUG
@@ -1264,8 +1257,6 @@ void ServedStats_c::DoStatCalcStats( const QueryStatContainer_i* pContainer,
 	using namespace QueryStats;
 
 	auto uTimestamp = sphMicroTimer();
-
-	ScRL_t rLock( m_tStatsLock );
 
 	int iRecords = m_pQueryStatRecords->GetNumRecords();
 	for ( int i = INTERVAL_1MIN; i<=INTERVAL_15MIN; ++i )

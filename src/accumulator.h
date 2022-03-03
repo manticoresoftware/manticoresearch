@@ -127,7 +127,7 @@ public:
 	const BYTE *	GetPackedKeywords() const;
 	int				GetPackedLen() const;
 
-	bool			SetupDocstore ( RtIndex_i & tIndex, CSphString & sError );
+	bool			SetupDocstore ( const RtIndex_i & tIndex, CSphString & sError );
 
 private:
 	bool								m_bReplace = false;		///< insert or replace mode (affects CleanupDuplicates() behavior)

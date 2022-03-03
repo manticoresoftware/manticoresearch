@@ -689,7 +689,7 @@ bool GenericTableIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery
 
 ///////////////
 /// Index for data flow
-class DynamicIndex_c : public GenericTableIndex_c
+class DynamicIndex_c final: public GenericTableIndex_c
 {
 	mutable Feeder_c		m_tFeeder;
 	mutable bool m_bSchemaCreated = false;
@@ -700,6 +700,9 @@ public:
 	{}
 
 	const CSphSchema & GetMatchSchema () const final;
+
+protected:
+	~DynamicIndex_c() final = default;
 
 private:
 	void SetSorterStuff ( CSphMatch * pMatch ) const final;
@@ -736,7 +739,7 @@ const StringBuilder_c & DynamicIndex_c::GetErrors () const
 
 ///////////////
 /// Index for schema data flow
-class DynamicIndexSchema_c : public GenericTableIndex_c
+class DynamicIndexSchema_c final : public GenericTableIndex_c
 {
 	mutable FeederSchema_c		m_tFeeder;
 	mutable bool m_bSchemaCreated = false;
@@ -747,6 +750,9 @@ public:
 	{}
 
 	const CSphSchema & GetMatchSchema () const final;
+
+protected:
+	~DynamicIndexSchema_c() final = default;
 
 private:
 	void SetSorterStuff ( CSphMatch * pMatch ) const final;

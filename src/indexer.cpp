@@ -1245,7 +1245,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		if ( bOK && g_bRotate && g_bSendHUP )
 		{
 			sIndexPath.SetSprintf ( "%s.new", hIndex["path"].cstr() );
-			bOK = pIndex->Rename ( sIndexPath.cstr() );
+			bOK = pIndex->Rename ( sIndexPath );
 		}
 
 		if ( !bOK )
@@ -1292,22 +1292,16 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 
 static bool RenameIndexFiles ( const char * szPath, const char * szName, CSphIndex * pIndex, bool bRotate )
 {
-	char sFrom [ SPH_MAX_FILENAME_LEN ];
-	char sTo [ SPH_MAX_FILENAME_LEN ];
-
-	snprintf ( sFrom, sizeof(sFrom), "%s.tmp", szPath );
-	sFrom [ sizeof(sFrom)-1 ] = '\0';
+	StringBuilder_c sFrom, sTo;
+	sFrom << szPath << ".tmp";
+	sTo << szPath;
 	if ( bRotate )
-		snprintf ( sTo, sizeof(sTo), "%s.new", szPath );
-	else
-		snprintf ( sTo, sizeof(sTo), "%s", szPath );
+		sTo << ".new";
 
-	sTo [ sizeof(sTo)-1 ] = '\0';
-
-	pIndex->SetBase ( sFrom );
-	if ( !pIndex->Rename ( sTo ) )
+	pIndex->SetBase ( sFrom.cstr() );
+	if ( !pIndex->Rename ( sTo.cstr() ) )
 	{
-		fprintf ( stdout, "ERROR: index '%s': failed to rename '%s' to '%s': %s", szName, sFrom, sTo, pIndex->GetLastError().cstr() );
+		fprintf ( stdout, "ERROR: index '%s': failed to rename '%s' to '%s': %s", szName, sFrom.cstr(), sTo.cstr(), pIndex->GetLastError().cstr() );
 		return false;
 	}
 

@@ -1595,7 +1595,7 @@ int main ( int argc, char ** argv )
 			{
 				pIndex->Dealloc();
 				sNewIndex.SetSprintf ( "%s.new", hConf["index"][sIndex]["path"].cstr() );
-				if ( !pIndex->Rename ( sNewIndex.cstr() ) )
+				if ( !pIndex->Rename ( sNewIndex ) )
 					sphDie ( "index '%s': rotate failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
 			}
 			return 0;

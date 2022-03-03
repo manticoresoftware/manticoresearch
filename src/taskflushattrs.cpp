@@ -50,6 +50,7 @@ static Saved_e CheckSaveIndexes ()
 				eSaveState = Saved_e::NOT_ALL;
 			}
 		}
+
 	}
 	g_tFlush.m_iLastCheckFinishedTime = sphMicroTimer ();
 

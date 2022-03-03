@@ -1296,8 +1296,8 @@ public:
 	void				Dealloc () final;
 	void				Preread () final;
 
-	void				SetBase ( const char * sNewBase ) final;
-	bool				Rename ( const char * sNewBase ) final;
+	void				SetBase ( CSphString sNewBase ) final;
+	RenameResult_e		RenameEx ( CSphString sNewBase ) final;
 
 	bool				Lock () final;
 	void				Unlock () final;
@@ -1333,7 +1333,7 @@ public:
 	void				FlushDeadRowMap ( bool bWaitComplete ) const final;
 	bool				LoadKillList ( CSphFixedVector<DocID_t> * pKillList, KillListTargets_c & tTargets, CSphString & sError ) const final;
 	bool				AlterKillListTarget ( KillListTargets_c & tTargets, CSphString & sError ) final;
-	void				KillExistingDocids ( CSphIndex * pTarget ) final;
+	void				KillExistingDocids ( CSphIndex * pTarget ) const final;
 
 	bool				EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const final;
 
@@ -2525,7 +2525,7 @@ int CSphIndex::UpdateAttributes ( AttrUpdateSharedPtr_t pUpd, bool & bCritical, 
 CSphVector<SphAttr_t> CSphIndex::BuildDocList () const
 {
 	TlsMsg::Err(); // reset error
-	return CSphVector<SphAttr_t>();
+	return {};
 }
 
 void CSphIndex::GetFieldFilterSettings ( CSphFieldFilterSettings & tSettings ) const
@@ -3348,15 +3348,13 @@ bool CSphIndex_VLN::AlterKillListTarget ( KillListTargets_c & tTargets, CSphStri
 }
 
 
-void CSphIndex_VLN::KillExistingDocids ( CSphIndex * pTarget )
+void CSphIndex_VLN::KillExistingDocids ( CSphIndex * pTarget ) const
 {
 	// FIXME! collecting all docids is a waste of memory
-	LookupReaderIterator_c tLookup ( m_tDocidLookup.GetWritePtr() );
+	LookupReaderIterator_c tLookup ( m_tDocidLookup.GetReadPtr() );
 	CSphFixedVector<DocID_t> dKillList ( m_iDocinfo );
-	DocID_t tDocID;
-	DWORD uDocidIndex = 0;
-	while ( tLookup.ReadDocID(tDocID) )
-		dKillList[uDocidIndex++] = tDocID;
+	for ( auto& dKill : dKillList )
+		tLookup.ReadDocID ( dKill );
 
 	pTarget->KillMulti ( dKillList );
 }
@@ -9680,7 +9678,6 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 
 	// almost done
 	m_bPassedAlloc = true;
-
 	return true;
 }
 
@@ -9710,33 +9707,33 @@ void CSphIndex_VLN::Preread()
 	sphLogDebug ( "Preread successfully finished" );
 }
 
-void CSphIndex_VLN::SetBase ( const char * sNewBase )
+void CSphIndex_VLN::SetBase ( CSphString sNewBase )
 {
-	m_sFilename = sNewBase;
+	m_sFilename = std::move(sNewBase);
 }
 
 
-bool CSphIndex_VLN::Rename ( const char * sNewBase )
+CSphIndex::RenameResult_e CSphIndex_VLN::RenameEx ( CSphString sNewBase )
 {
 	if ( m_sFilename==sNewBase )
-		return true;
+		return E_OK;
 
 	IndexFiles_c dFiles ( m_sFilename, nullptr, m_uVersion );
-	if ( !dFiles.RenameBase ( sNewBase ) )
+	if ( !dFiles.TryRenameBase ( sNewBase ) )
 	{
 		m_sLastError = dFiles.ErrorMsg ();
-		return false;
+		return dFiles.IsFatal() ? E_FATAL : E_FAIL;
 	}
 
 	if ( !dFiles.RenameLock ( sNewBase, m_iLockFD ) )
 	{
 		m_sLastError = dFiles.ErrorMsg ();
-		return false;
+		return dFiles.IsFatal() ? E_FATAL : E_FAIL;
 	}
 
-	SetBase ( sNewBase );
+	SetBase ( std::move ( sNewBase ) );
 
-	return true;
+	return E_OK;
 }
 
 //////////////////////////////////////////////////////////////////////////

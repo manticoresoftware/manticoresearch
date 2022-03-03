@@ -1222,13 +1222,13 @@ bool AutoEvent_T<false>::WaitEvent ( int iMsec )
 
 // UNIX mutex implementation
 
-CSphMutex::CSphMutex()
+CSphMutex::CSphMutex() noexcept
 {
 	if ( pthread_mutex_init ( &m_tMutex, nullptr ) )
 		sphDie ( "pthread_mutex_init() failed %s", strerrorm ( errno ) );
 }
 
-CSphMutex::~CSphMutex()
+CSphMutex::~CSphMutex() noexcept
 {
 	if ( pthread_mutex_destroy ( &m_tMutex ) )
 		sphDie ( "pthread_mutex_destroy() failed %s", strerrorm ( errno ) );

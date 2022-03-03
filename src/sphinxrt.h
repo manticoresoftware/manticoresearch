@@ -141,7 +141,7 @@ public:
 
 	/// do something const with disk chunk (query settings, status, etc.)
 	/// hides internal disk chunks storage
-	virtual void ProcessDiskChunk ( int iChunk, VisitChunk_fn&& fnVisitor ) {};
+	virtual void ProcessDiskChunk ( int iChunk, VisitChunk_fn&& fnVisitor ) const {};
 
 	/// get disk chunk
 	virtual CSphIndex* GetDiskChunk ( int iChunk )

@@ -33,7 +33,7 @@ using namespace sph;
 class CSphGlobalIDF final : public IDFer_c
 {
 protected:
-	~CSphGlobalIDF() final {}
+	~CSphGlobalIDF() final = default;
 public:
 	bool Touch ( const CSphString& sFilename );
 	bool Preread ( const CSphString& sFilename, CSphString& sError );
@@ -282,7 +282,7 @@ void sph::UpdateGlobalIDFs ( const StrVec_t& dFiles )
 	CSphString sError;
 	ARRAY_FOREACH ( i, dFiles )
 	{
-		CSphString sPath = dFiles[i];
+		const auto& sPath = dFiles[i];
 		if ( !PrereadGlobalIDF ( sPath, sError ))
 			sphLogDebug ( "Could not load global IDF (%s): %s", sPath.cstr (), sError.cstr ());
 	}

@@ -2290,6 +2290,8 @@ class CSphOrderedHash
 {
 public:
 	using KeyValue_t = std::pair<KEY, T>;
+	using KEY_TYPE = KEY;
+	using VAL_TYPE = T;
 
 protected:
 	struct HashEntry_t : public KeyValue_t // key, data, owned by the hash
@@ -2425,7 +2427,7 @@ public:
 	}
 
 	/// add new entry
-	/// returns ref to just intersed or previously existed value
+	/// returns ref to just inserted or previously existed value
 	T & AddUnique ( const KEY & tKey )
 	{
 		// check if this key is already hashed
@@ -2574,6 +2576,12 @@ public:
 		return m_iLength;
 	}
 
+	/// emptiness
+	bool IsEmpty() const
+	{
+		return m_iLength == 0;
+	}
+
 public:
 	/// start iterating
 	void IterateStart () const
@@ -2649,6 +2657,12 @@ public:
 			return *this;
 		}
 
+		Iterator_c& operator--()
+		{
+			m_pIterator = m_pIterator->m_pPrevByOrder;
+			return *this;
+		}
+
 		bool operator== ( const Iterator_c& rhs ) const
 		{
 			return m_pIterator == rhs.m_pIterator;
@@ -2663,7 +2677,7 @@ public:
 	// c++11 style iteration
 	Iterator_c begin () const
 	{
-		return Iterator_c(m_pFirstByOrder);
+		return Iterator_c { m_pFirstByOrder };
 	}
 
 	static Iterator_c end()
@@ -3977,24 +3991,21 @@ class StringSet : private SmallStringHash_T<bool>
 {
 	using BASE = SmallStringHash_T<bool>;
 public:
-	inline void Add ( const CSphString& sKey )
+	inline bool Add ( const CSphString& sKey )
 	{
-		BASE::Add ( true, sKey );
-	}
-
-	inline void Delete ( const CSphString& sKey )
-	{
-		BASE::Delete ( sKey );
+		return BASE::Add ( true, sKey );
 	}
 
 	inline bool operator[] ( const CSphString& sKey ) const
 	{
-		if ( BASE::Exists ( sKey ) )
-			return BASE::operator[] ( sKey );
-		return false;
+		HashEntry_t* pEntry = FindByKey ( sKey );
+		return pEntry ? pEntry->second : false;
 	}
+
+	using BASE::Delete;
 	using BASE::Reset;
 	using BASE::GetLength;
+	using BASE::IsEmpty;
 
 	using BASE::begin;
 	using BASE::end;
@@ -4047,6 +4058,8 @@ protected:
 template < typename T >
 class CSphRefcountedPtr
 {
+public:
+	using ORIGTYPE = T;
 	using RAWT = typename std::remove_const<T>::type;
 	using CT = const T;
 	using TYPE = CSphRefcountedPtr<T>;
@@ -4084,9 +4097,9 @@ public:
 	template<typename DERIVED>
 	CSphRefcountedPtr& operator= ( const CSphRefcountedPtr<DERIVED>& rhs ) noexcept
 	{
+		SafeAddRef ( rhs.Ptr() );
 		SafeRelease ( m_pPtr );
 		m_pPtr = rhs.Ptr();
-		SafeAddRef ( m_pPtr );
 		return *this;
 	}
 
@@ -4104,9 +4117,7 @@ public:
 	// drop the ownership and reset pointer
 	inline T * Leak () noexcept
 	{
-		T * pRes = m_pPtr;
-		m_pPtr = nullptr;
-		return pRes;
+		return std::exchange ( m_pPtr, nullptr );
 	}
 
 	T * Ptr() const noexcept { return m_pPtr; }
@@ -4395,8 +4406,8 @@ class CAPABILITY ( "mutex" ) CSphMutex : public ISphNoncopyable
 {
 
 public:
-	CSphMutex ();
-	~CSphMutex ();
+	CSphMutex () noexcept;
+	~CSphMutex () noexcept;
 
 	bool Lock () ACQUIRE();
 	bool Unlock () RELEASE();
@@ -5005,10 +5016,10 @@ class SharedPtr_T
 	template <typename DELL, bool STATEFUL_DELETER = std::is_member_function_pointer<decltype ( &DELL::Delete )>::value>
 	struct SharedState_T : public REFCOUNTED
 	{
-		PTR m_pPtr = nullptr;
+		PTR m_pPtr { nullptr };
 		DELL m_fnDelete;
 
-		SharedState_T() = default;
+		SharedState_T() noexcept = default;
 
 		template<typename DEL>
 		explicit SharedState_T ( DEL&& fnDelete )
@@ -5018,15 +5029,13 @@ class SharedPtr_T
 		~SharedState_T() override
 		{
 			m_fnDelete.Delete((void*)m_pPtr);
-			m_pPtr = nullptr;
 		}
 	};
 
 	template <typename DELL>
 	struct SharedState_T<DELL, false> : public REFCOUNTED
 	{
-		PTR m_pPtr = nullptr;
-		SharedState_T() = default;
+		PTR m_pPtr { nullptr };
 		~SharedState_T()
 		{
 			DELL::Delete((void*)m_pPtr);
@@ -5084,7 +5093,7 @@ public:
 	/// assignment of a raw pointer
 	SharedPtr_T & operator = ( PTR pPtr )
 	{
-		m_tState = new SharedState_t();
+		m_tState = new SharedState_t;
 		m_tState->m_pPtr = pPtr;
 		return *this;
 	}

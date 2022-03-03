@@ -21,7 +21,7 @@ public:
 					MemoryReader_c ( const BYTE * pData, int iLen );
 					MemoryReader_c ( ByteBlob_t dData );
 
-	int				GetPos();
+	int				GetPos() const;
 	void			SetPos ( int iOff );
 	uint64_t		UnzipOffset();
 	DWORD			UnzipInt();
@@ -34,6 +34,7 @@ public:
 	uint64_t		GetUint64();
 	const BYTE *	Begin() const;
 	int				GetLength() const;
+	bool 			HasData() const;
 
 protected:
 	const BYTE *	m_pData = nullptr;

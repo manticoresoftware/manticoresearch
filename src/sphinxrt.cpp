@@ -1182,7 +1182,7 @@ public:
 	bool				PublishMergedChunks ( const char * szParentAction,std::function<bool ( int, DiskChunkVec_c & )> && fnPusher) REQUIRES ( m_tWorkers.SerialChunkAccess() );
 	bool 				RenameOptimizedChunk ( const ConstDiskChunkRefPtr_t& pChunk, const char * szParentAction );
 	bool				SkipOrDrop ( int iChunk, const CSphIndex& dChunk, bool bCheckAlive, int* pAffected = nullptr );
-	void				ProcessDiskChunk ( int iChunk, VisitChunk_fn&& fnVisitor ) final;
+	void				ProcessDiskChunk ( int iChunk, VisitChunk_fn&& fnVisitor ) const final;
 	template <typename VISITOR>
 	void				ProcessDiskChunkByID ( int iChunkID, VISITOR&& fnVisitor ) const;
 	template <typename VISITOR>
@@ -1491,7 +1491,7 @@ void RtIndex_c::UpdateUnlockedCount()
 		m_tUnLockedSegments.UpdateValueAndNotifyAll ( (int)m_tRtChunks.RamSegs()->count_of ( [] ( auto& dSeg ) { return !dSeg->m_iLocked; } ) );
 }
 
-void RtIndex_c::ProcessDiskChunk ( int iChunk, VisitChunk_fn&& fnVisitor )
+void RtIndex_c::ProcessDiskChunk ( int iChunk, VisitChunk_fn&& fnVisitor ) const
 {
 	auto pDiskChunks = m_tRtChunks.DiskChunks();
 	if ( iChunk < 0 || iChunk >= pDiskChunks->GetLength() )
@@ -1908,7 +1908,7 @@ void RtAccum_t::SetupDocstore()
 	SetupDocstoreFields ( *m_pDocstore.Ptr(), m_pIndex->GetInternalSchema() );
 }
 
-bool RtAccum_t::SetupDocstore ( RtIndex_i & tIndex, CSphString & sError )
+bool RtAccum_t::SetupDocstore ( const RtIndex_i & tIndex, CSphString & sError )
 {
 	const CSphSchema & tSchema = tIndex.GetInternalSchema();
 	if ( !m_pDocstore.Ptr() && !tSchema.HasStoredFields() )
@@ -4746,14 +4746,11 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 
 	if ( !sphLockEx ( m_iLockFD, false ) )
 	{
+		SafeClose ( m_iLockFD );
 		if ( !m_bDebugCheck )
 		{
 			m_sLastError.SetSprintf ( "failed to lock %s: %s", sLock.cstr(), strerrorm(errno) );
-			SafeClose ( m_iLockFD );
 			return false;
-		} else
-		{
-			SafeClose ( m_iLockFD );
 		}
 	}
 
@@ -4998,14 +4995,14 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes, bool bFixup
 			return false;
 
 		pSeg->m_dWordCheckpoints.Resize ( iCheckpointCount );
-		ARRAY_FOREACH ( i, pSeg->m_dWordCheckpoints )
+		for ( auto& tWordCheckpoint : pSeg->m_dWordCheckpoints )
 		{
-			pSeg->m_dWordCheckpoints[i].m_iOffset = (int)rdChunk.GetOffset();
+			tWordCheckpoint.m_iOffset = (int)rdChunk.GetOffset();
 			SphOffset_t uOff = rdChunk.GetOffset();
 			if ( m_bKeywordDict )
-				pSeg->m_dWordCheckpoints[i].m_sWord = pCheckpoints + uOff;
+				tWordCheckpoint.m_sWord = pCheckpoints + uOff;
 			else
-				pSeg->m_dWordCheckpoints[i].m_uWordID = (SphWordID_t)uOff;
+				tWordCheckpoint.m_uWordID = (SphWordID_t)uOff;
 		}
 
 		if ( !LoadVector ( rdChunk, pSeg->m_dDocs, iFileSize, "ram-doclist", m_sLastError ) )
@@ -8466,21 +8463,23 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex* pIndex, bool bTruncate, bool & bFat
 		}
 
 		if ( !m_tRtChunks.RamSegs()->IsEmpty() && !SaveDiskChunk ( true ) )
-		{
-			bFatal = true;
 			return false;
-		}
 
 		iTotalKilled = ApplyKillList ( dIndexDocs );
 	}
 
 	// rename that source index to our last chunk
 	int iChunk = m_tChunkID.MakeChunkId ( m_tRtChunks );
-	if ( !pIndex->Rename ( MakeChunkName ( iChunk ).cstr() ) )
+	auto eRenamed = pIndex->RenameEx ( MakeChunkName ( iChunk ) );
+	switch (eRenamed)
 	{
+	case E_FATAL: // not just failed, but also rollback wasn't success. Source index is damaged!
+		bFatal = true;
+		// no break;
+	case E_FAIL:
 		sError.SetSprintf ( "ATTACH failed, %s", pIndex->GetLastError().cstr() );
-		bFatal = !bEmptyRT; // as attach failed, but we applied k-list - index is not consistent now.
 		return false;
+	default: break;
 	}
 
 	// copy schema from new index
@@ -8502,7 +8501,6 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex* pIndex, bool bTruncate, bool & bFat
 	pIndex->m_iChunk = iChunk;
 
 	// FIXME? what about copying m_TID etc?
-
 
 	{	// update disk chunk list
 		auto tNewSet = RtWriter();
@@ -8825,7 +8823,7 @@ bool RtIndex_c::RenameOptimizedChunk ( const ConstDiskChunkRefPtr_t& pChunk, con
 	tChunk.m_iChunk = iResID;
 
 	// rename merged disk chunk to valid chunk name
-	if ( tChunk.Rename ( sNewchunk.cstr() ) )
+	if ( tChunk.Rename ( sNewchunk ) )
 		return true;
 
 	sphWarning ( "rt %s: index %s: processed to cur rename failed (%s)", szParentAction, m_sIndexName.cstr(), tChunk.GetLastError().cstr() );

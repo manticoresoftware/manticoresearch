@@ -36,8 +36,7 @@ public:
 	}
 
 private:
-	~PingBuilder_c () final
-	{}
+	~PingBuilder_c () final = default;
 
 private:
 	const int m_iSendCookie;

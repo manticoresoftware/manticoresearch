@@ -869,8 +869,8 @@ TEST ( functions, RWLock )
 	ASSERT_EQ ( g_iRwlock, NPAIRS * ( 1 + NPAIRS ) / 2 );
 
 	int iReadSum = 0;
-	for ( int i = 0; i<NPAIRS; i++ )
-		iReadSum += dRead[i];
+	for ( int i : dRead )
+		iReadSum += i;
 
 	RecordProperty ( "read_sum", iReadSum );
 }

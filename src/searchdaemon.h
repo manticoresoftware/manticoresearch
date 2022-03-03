@@ -1053,12 +1053,12 @@ bool PreallocNewIndex ( ServedDesc_t & tIdx, const CSphConfigSection * pConfig, 
 struct AttrUpdateArgs: public CSphAttrUpdateEx
 {
 	const CSphQuery* m_pQuery = nullptr;
-	const ServedDesc_t* m_pDesc = nullptr;
 	const CSphString* m_pIndexName = nullptr;
 	bool m_bJson = false;
 };
 
-void HandleMySqlExtendedUpdate( AttrUpdateArgs& tArgs );
+bool HandleUpdateAPI ( AttrUpdateArgs& tArgs, const ServedDesc_t* pDesc, int& iUpdate );
+void HandleMySqlExtendedUpdate ( AttrUpdateArgs& tArgs, const ServedDesc_t* pDesc, int& iUpdated );
 
 /////////////////////////////////////////////////////////////////////////////
 // SERVED INDEX DESCRIPTORS STUFF
@@ -1155,6 +1155,9 @@ public:
 	void				SetProfile ( QueryProfile_c * pProfile );
 	void				SetStmt ( SqlStmt_t & tStmt );
 	AggrResult_t *		GetResult ( int iResult );
+
+	void				PushIndex ( const CSphString& sIndex, const ServedDesc_t* pDesc );
+	void				RunCollect( const CSphQuery& tQuery, const CSphString& sIndex, CSphString* pErrors, CSphVector<BYTE>* pCollectedDocs );
 
 private:
 	SearchHandler_c *	m_pImpl = nullptr;

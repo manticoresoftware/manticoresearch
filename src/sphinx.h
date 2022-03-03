@@ -1535,8 +1535,7 @@ struct SphQueueSettings_t
 	const ISphSchema &			m_tSchema;
 	QueryProfile_c *			m_pProfiler;
 	bool						m_bComputeItems = false;
-	CSphAttrUpdateEx *			m_pUpdate = nullptr;
-	CSphVector<DocID_t> *		m_pCollection = nullptr;
+	CSphVector<BYTE> *			m_pCollection = nullptr;
 	ISphExprHook *				m_pHook = nullptr;
 	const CSphFilterSettings *	m_pAggrFilter = nullptr;
 	int							m_iMaxMatches = DEFAULT_MAX_MATCHES;

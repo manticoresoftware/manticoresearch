@@ -2051,30 +2051,21 @@ bool CommitMonitor_c::CommitTOI ( ServedDesc_t * pDesc, CSphString & sError ) EX
 	return true;
 }
 
-static bool DoUpdate ( AttrUpdateArgs & tUpd, int & iUpdate, bool bUpdateAPI )
+static bool DoUpdate ( AttrUpdateArgs & tUpd, const ServedDesc_t* pDesc, int& iUpdated, bool bUpdateAPI )
 {
-	assert ( tUpd.m_pError );
-
-	if ( !tUpd.m_pDesc )
-	{
-		*tUpd.m_pError = "index not available";
-		return false;
-	}
-
 	if ( bUpdateAPI )
 	{
-		bool bCritical = false;
-		iUpdate = tUpd.m_pDesc->m_pIndex->UpdateAttributes ( tUpd.m_pUpdate, bCritical, *tUpd.m_pError, *tUpd.m_pWarning );
-		return ( iUpdate>=0 );
+		bool bOk = HandleUpdateAPI ( tUpd, pDesc, iUpdated );
+		assert ( bOk ); // fixme! handle this
+		return ( iUpdated >= 0 );
 	}
 
-	HandleMySqlExtendedUpdate ( tUpd );
+	HandleMySqlExtendedUpdate ( tUpd, pDesc, iUpdated );
 
 	if ( tUpd.m_pError->IsEmpty() )
-		iUpdate += tUpd.m_iAffected;
+		iUpdated += tUpd.m_iAffected;
 
 	return ( tUpd.m_pError->IsEmpty() );
-
 }
 
 bool CommitMonitor_c::Update ( bool bCluster, CSphString & sError )
@@ -2117,13 +2108,11 @@ bool CommitMonitor_c::Update ( bool bCluster, CSphString & sError )
 	if ( tCmd.m_bBlobUpdate )
 	{
 		ServedDescWPtr_c tDesc ( pServed );
-		tUpd.m_pDesc = tDesc.Ptr();
-		return DoUpdate ( tUpd, *m_pUpdated, bUpdateAPI );
+		return DoUpdate ( tUpd, tDesc, *m_pUpdated, bUpdateAPI );
 	} else
 	{
 		ServedDescRPtr_c tDesc ( pServed );
-		tUpd.m_pDesc = tDesc.Ptr ();
-		return DoUpdate ( tUpd, *m_pUpdated, bUpdateAPI );
+		return DoUpdate ( tUpd, tDesc, *m_pUpdated, bUpdateAPI );
 	}
 }
 

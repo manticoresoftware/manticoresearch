@@ -180,6 +180,7 @@ using MetricsAndCountersRefPtr_t = CSphRefcountedPtr<MetricsAndCounters_t>;
 
 struct HostDashboard_t;
 using HostDashboardRefPtr_t = CSphRefcountedPtr<HostDashboard_t>;
+using cHostDashboardRefPtr_t = CSphRefcountedPtr<const HostDashboard_t>;
 
 /// generic descriptor of remote host
 struct HostDesc_t : ISphNoncopyable
@@ -257,7 +258,7 @@ private:
 class IPinger
 {
 public:
-	virtual void Subscribe ( HostDashboard_t* pHost ) = 0;
+	virtual void Subscribe ( HostDashboardRefPtr_t pHost ) = 0;
 	virtual ~IPinger() {}
 };
 
@@ -767,7 +768,7 @@ namespace Dashboard
 {
 	void LinkHost ( HostDesc_t& dHost ); ///< put host into global dashboard and init link to it
 	HostDashboardRefPtr_t FindAgent ( const CSphString& sAgent );
-	VecRefPtrs_t<HostDashboard_t*> GetActiveHosts ();
+	CSphVector<HostDashboardRefPtr_t> GetActiveHosts ();
 	void CleanupOrphaned ();
 }
 

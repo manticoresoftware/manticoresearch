@@ -262,7 +262,7 @@ void PersistentConnectionsPool_c::Shutdown ()
 
 void ClosePersistentSockets()
 {
-	Dashboard::GetActiveHosts().Apply ([] (HostDashboard_t * &pHost) { SafeDelete ( pHost->m_pPersPool ); });
+	Dashboard::GetActiveHosts().Apply ([] ( HostDashboardRefPtr_t& pHost) { SafeDelete ( pHost->m_pPersPool ); });
 }
 
 // check whether sURL contains plain ip-address, and so, m.b. no need to resolve it many times.
@@ -461,7 +461,7 @@ void SetGlobalPinger ( IPinger* pPinger )
 }
 
 // Subscribe hosts with just enabled pings (i.e. where iNeedPing is exactly 1, no more)
-static void PingCheckAdd ( HostDashboard_t* pHost )
+static void PingCheckAdd ( HostDashboardRefPtr_t pHost )
 {
 	if ( !g_pPinger )
 		return;
@@ -655,8 +655,8 @@ const AgentDesc_t &MultiAgentDesc_c::StDiscardDead ()
 
 	for (int i=0; i<GetLength(); ++i)
 	{
-		// no locks for g_pStats since we just reading, and read data is not critical.
-		const HostDashboard_t * pDash = m_pData[i].m_pDash;
+		// no locks for g_pStats since we're just reading, and read data is not critical.
+		const auto& pDash = m_pData[i].m_pDash;
 
 		HostMetricsSnapshot_t dMetricsSnapshot;
 		pDash->GetCollectedMetrics ( dMetricsSnapshot );// look at last 30..90 seconds.
@@ -1309,69 +1309,84 @@ AgentDesc_t &AgentDesc_t::CloneFrom ( const AgentDesc_t &rhs )
 namespace Dashboard
 {
 
-static RwLock_t g_tDashLock;
-static VecRefPtrs_t<HostDashboard_t*> g_dDashes GUARDED_BY( g_tDashLock );
+class Dashboard_c final
+{
+	mutable RwLock_t m_tDashLock; // short-term
+	CSphVector<HostDashboardRefPtr_t> m_dDashes GUARDED_BY ( m_tDashLock );
+
+private:
+	CSphVector<HostDashboardRefPtr_t> GetActiveHostsUnl() REQUIRES_SHARED ( m_tDashLock )
+	{
+		CSphVector<HostDashboardRefPtr_t> dRes;
+		for ( auto& pDash : m_dDashes )
+			if ( !pDash->IsLast() )
+				dRes.Add ( pDash );
+		return dRes;
+	}
+
+public:
+	void CleanupOrphaned()
+	{
+		ScWL_t tWguard ( m_tDashLock );
+		auto dNew = GetActiveHostsUnl();
+		m_dDashes.SwapData ( dNew );
+	}
+
+	// linear search, since very rare template of usage
+	HostDashboardRefPtr_t FindAgent ( const CSphString& sAgent )
+	{
+		ScRL_t tRguard ( m_tDashLock );
+		for ( auto& pDash : m_dDashes )
+			if ( !pDash->IsLast() && pDash->m_tHost.GetMyUrl() == sAgent )
+				return pDash;
+		return HostDashboardRefPtr_t(); // not found
+	}
+
+	void LinkHost ( HostDesc_t& dHost )
+	{
+		assert ( !dHost.m_pDash );
+		dHost.m_pDash = FindAgent ( dHost.GetMyUrl() );
+		if ( dHost.m_pDash )
+			return;
+
+		// nothing found existing; so create the new.
+		dHost.m_pDash = new HostDashboard_t ( dHost );
+		ScWL_t tWguard ( m_tDashLock );
+		m_dDashes.Add ( dHost.m_pDash );
+	}
+
+	CSphVector<HostDashboardRefPtr_t> GetActiveHosts()
+	{
+		ScRL_t tRguard ( m_tDashLock );
+		return GetActiveHostsUnl();
+	}
+};
+
+Dashboard_c& GDash()
+{
+	static Dashboard_c tDash;
+	return tDash;
+}
 
 void CleanupOrphaned ()
 {
-	ScWL_t tWguard ( g_tDashLock );
-	ARRAY_FOREACH ( i, g_dDashes )
-	{
-		auto pDash = g_dDashes[i];
-		if ( pDash->IsLast () )
-		{
-			g_dDashes.RemoveFast ( i-- ); // remove, and then step back
-			SafeRelease ( pDash );
-		}
-	}
+	GDash().CleanupOrphaned();
 }
 
 // Due to very rare template of usage, linear search is quite enough here
 HostDashboardRefPtr_t FindAgent ( const CSphString& sAgent )
-	{
-		ScRL_t tRguard ( g_tDashLock );
-		for ( auto* pDash : g_dDashes )
-		{
-			if ( pDash->IsLast ())
-				continue;
-
-			if ( pDash->m_tHost.GetMyUrl ()==sAgent )
-			{
-				pDash->AddRef ();
-				return HostDashboardRefPtr_t ( pDash );
-			}
-		}
-		return HostDashboardRefPtr_t (); // not found
-	}
+{
+	return GDash().FindAgent(sAgent);
+}
 
 void LinkHost ( HostDesc_t &dHost )
 {
-	assert ( !dHost.m_pDash );
-	dHost.m_pDash = FindAgent ( dHost.GetMyUrl() );
-	if ( dHost.m_pDash )
-		return;
-
-	// nothing found existing; so create the new.
-	dHost.m_pDash = new HostDashboard_t ( dHost );
-	ScWL_t tWguard ( g_tDashLock );
-	g_dDashes.Add ( dHost.m_pDash );
-	dHost.m_pDash->AddRef(); // one link here in vec, other returned with the host
+	GDash().LinkHost(dHost);
 }
 
-VecRefPtrs_t<HostDashboard_t*> GetActiveHosts ()
+CSphVector<HostDashboardRefPtr_t> GetActiveHosts ()
 {
-	VecRefPtrs_t<HostDashboard_t*> dAgents;
-	assert ( dAgents.IsEmpty ());
-	ScRL_t tRguard ( g_tDashLock );
-	for ( auto * pDash : g_dDashes )
-	{
-		if ( pDash->IsLast() )
-			continue;
-
-		pDash->AddRef ();
-		dAgents.Add ( pDash );
-	}
-	return dAgents;
+	return GDash().GetActiveHosts();
 }
 } // namespace Dashboard
 

@@ -8822,7 +8822,7 @@ void BuildStatusOneline ( StringBuilder_c & sOut )
 	sOut.Sprintf ( " Tasks/Th: %0.1F%", iTasks * 10 / iThreads );
 }
 
-void BuildOneAgentStatus ( VectorLike & dStatus, HostDashboard_t* pDash, const char * sPrefix="agent" )
+void BuildOneAgentStatus ( VectorLike & dStatus, HostDashboardRefPtr_t pDash, const char * sPrefix="agent" )
 {
 	assert ( pDash );
 	{
@@ -17699,7 +17699,7 @@ void InitPersistentPool()
 		return;
 	}
 
-	Dashboard::GetActiveHosts ().Apply ( [] ( HostDashboard_t *&pHost ) {
+	Dashboard::GetActiveHosts ().Apply ( [] ( HostDashboardRefPtr_t& pHost ) {
 		if ( !pHost->m_pPersPool )
 			pHost->m_pPersPool = new PersistentConnectionsPool_c;
 		pHost->m_pPersPool->ReInit ( g_iPersistentPoolSize );

@@ -19822,9 +19822,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	/////////////////////
 
 	sphInitCJson();
-	if ( LoadConfigInt ( hConf, g_sConfigFile, sError ) )
-		g_bJsonConfigLoadedOk = true;
-	else
+	if ( !LoadConfigInt ( hConf, g_sConfigFile, sError ) )
 		sphFatal ( "%s", sError.cstr() );
 
 	ConfigureSearchd ( hConf, bOptPIDFile, bTestMode );
@@ -20238,6 +20236,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	// time for replication to sync with cluster
 	searchd::AddShutdownCb ( ReplicateClustersDelete );
 	ReplicationStart ( hSearchd, dListenerDescs, bNewCluster, bNewClusterForce );
+
+	g_bJsonConfigLoadedOk = true;
 
 	// ready, steady, go
 	sphInfo ( "accepting connections" );

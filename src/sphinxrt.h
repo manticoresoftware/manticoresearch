@@ -177,7 +177,7 @@ bool sphRTSchemaConfigure ( const CSphVector<CSphColumnInfo> & dFields, const CS
 void sphRTSetTestMode ();
 
 /// RT index factory
-RtIndex_i * sphCreateIndexRT ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict );
+std::unique_ptr<RtIndex_i> sphCreateIndexRT ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict );
 
 typedef void ProgressCallbackSimple_t ();
 

@@ -630,7 +630,7 @@ int main ( int argc, char ** argv )
 	Binlog::Configure ( tRTConfig, true, 0 );
 	SmallStringHash_T< CSphIndex * > dTemp;
 	Binlog::Replay ( dTemp );
-	RtIndex_i * pIndex = sphCreateIndexRT ( tSchema, "testrt", 32*1024*1024, DATAFLD "dump", false );
+	auto pIndex = sphCreateIndexRT ( tSchema, "testrt", 32*1024*1024, DATAFLD "dump", false ).release();
 	pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
 	pIndex->SetDictionary ( pDict );
 	StrVec_t dWarnings;

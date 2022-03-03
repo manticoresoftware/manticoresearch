@@ -854,24 +854,24 @@ bool CopyExternalIndexFiles ( const StrVec_t & dFiles, const CSphString & sDestP
 }
 
 
-static CSphIndex * TryToPreallocRt ( const CSphString & sIndex, const CSphString & sNewIndexPath, StrVec_t & dWarnings, CSphString & sError )
+static std::unique_ptr<CSphIndex> TryToPreallocRt ( const CSphString & sIndex, const CSphString & sNewIndexPath, StrVec_t & dWarnings, CSphString & sError )
 {
 	CSphSchema tSchemaStub;
-	CSphScopedPtr<RtIndex_i> pRT ( sphCreateIndexRT ( tSchemaStub, sIndex.cstr(), 32*1024*1024, sNewIndexPath.cstr(), true ) );
+	auto pRT = sphCreateIndexRT ( tSchemaStub, sIndex.cstr(), 32*1024*1024, sNewIndexPath.cstr(), true );
 	if ( !pRT->Prealloc ( false, nullptr, dWarnings ) )
 	{
 		sError.SetSprintf ( "failed to prealloc: %s", pRT->GetLastError().cstr() );
 		return nullptr;
 	}
 
-	return pRT.LeakPtr();
+	return pRT;
 }
 
 
-static CSphIndex * TryToPreallocPq ( const CSphString & sIndex, const CSphString & sNewIndexPath, StrVec_t & dWarnings, CSphString & sError )
+static std::unique_ptr<CSphIndex> TryToPreallocPq ( const CSphString & sIndex, const CSphString & sNewIndexPath, StrVec_t & dWarnings, CSphString & sError )
 {
 	CSphSchema tSchemaStub;
-	CSphScopedPtr<PercolateIndex_i> pPQ ( CreateIndexPercolate ( tSchemaStub, sIndex.cstr(), sNewIndexPath.cstr() ) );
+	auto pPQ = CreateIndexPercolate ( tSchemaStub, sIndex.cstr(), sNewIndexPath.cstr() );
 	if ( !pPQ->Prealloc ( false, nullptr, dWarnings ) )
 	{
 		sError.SetSprintf ( "failed to prealloc: %s", pPQ->GetLastError().cstr() );
@@ -881,7 +881,7 @@ static CSphIndex * TryToPreallocPq ( const CSphString & sIndex, const CSphString
 	// FIXME! just Prealloc is not enough for PQ index to properly save meta on deallocation
 	pPQ->PostSetup();
 
-	return pPQ.LeakPtr();
+	return pPQ;
 }
 
 
@@ -890,7 +890,7 @@ static bool CopyExternalFiles ( const CSphString & sIndex, const CSphString & sN
 	bPQ = false;
 
 	CSphString sRtError, sPqError;
-	CSphScopedPtr<CSphIndex> pIndex ( TryToPreallocRt ( sIndex, sNewIndexPath, dWarnings, sRtError ) );
+	auto pIndex = TryToPreallocRt ( sIndex, sNewIndexPath, dWarnings, sRtError );
 	if ( !pIndex )
 	{
 		pIndex = TryToPreallocPq ( sIndex, sNewIndexPath, dWarnings, sPqError );

@@ -832,6 +832,7 @@ public:
 	mutable Threads::Coro::RWLock_c 	m_tLock;					// fine-grain lock
 
 	inline static CSphRefcountedPtr<const DiskChunk_c> make ( CSphIndex* pIndex ) { return CSphRefcountedPtr<const DiskChunk_c> { pIndex ? new DiskChunk_c(pIndex) : nullptr }; }
+	inline static CSphRefcountedPtr<const DiskChunk_c> make ( std::unique_ptr<CSphIndex> pIndex ) { return CSphRefcountedPtr<const DiskChunk_c> { pIndex ? new DiskChunk_c(std::move(pIndex)) : nullptr }; }
 	explicit operator CSphIndex* () const		{ return m_pIndex; }
 	CSphIndex & Idx() 					{ return *m_pIndex; }
 	CSphIndex & CastIdx () const		{ return *const_cast<CSphIndex *>(m_pIndex); } // const breakage!
@@ -853,6 +854,7 @@ private:
 	CSphIndex *		m_pIndex;
 
 	DiskChunk_c ( CSphIndex * pIndex ) : m_pIndex ( pIndex ) {}
+	DiskChunk_c ( std::unique_ptr<CSphIndex> pIndex ) : m_pIndex ( pIndex.release() ) {}
 };
 
 using DiskChunkRefPtr_t = CSphRefcountedPtr<DiskChunk_c>;
@@ -1342,7 +1344,7 @@ private:
 	void						SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_t & tStats ) const;
 	void						SaveDiskData ( const char * szFilename, const ConstRtSegmentSlice_t & tSegs, const ChunkStats_t & tStats ) const;
 	bool						SaveDiskChunk ( bool bForced, bool bEmergent=false, bool bBootstrap=false ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
-	CSphIndex *					PreallocDiskChunk ( const char * sChunk, int iChunk, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError, const char * sName=nullptr ) const;
+	std::unique_ptr<CSphIndex>	PreallocDiskChunk ( const char * sChunk, int iChunk, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError, const char * sName=nullptr ) const;
 	bool						LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes, bool bFixup = true );
 	bool						SaveRamChunk ();
 
@@ -4244,7 +4246,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 	// as we're going to switch fiber, we need to freeze reliable stat and m_iTID (as they could change)
 	ChunkStats_t tStats ( m_tStats, m_dFieldLensRam );
 
-	CSphIndex * pNewChunk = nullptr;
+	std::unique_ptr<CSphIndex> pNewChunk;
 	{
 		// as separate subtask we 1-st flush segments to disk, and then load just flushed segment
 		// if forced, continue to work in the same fiber; otherwise split to merge fiber
@@ -4283,7 +4285,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 	if ( !dUpdates.IsEmpty () )
 	{
 		RTLOGV << "SaveDiskChunk: apply postponed updates";
-		pNewChunk->UpdateAttributesOffline ( dUpdates, pNewChunk );
+		pNewChunk->UpdateAttributesOffline ( dUpdates, pNewChunk.get() );
 		dUpdates.Reset();
 	}
 
@@ -4314,7 +4316,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 	{
 		auto tNewSet = RtWriter();
 		tNewSet.InitDiskChunks ( RtWriter_c::copy );
-		tNewSet.m_pNewDiskChunks->Add ( DiskChunk_c::make ( pNewChunk ) );
+		tNewSet.m_pNewDiskChunks->Add ( DiskChunk_c::make ( std::move ( pNewChunk ) ) );
 		SaveMeta ( iTID, GetChunkIds ( *tNewSet.m_pNewDiskChunks ) );
 
 		Binlog::NotifyIndexFlush ( m_sIndexName.cstr(), iTID, false );
@@ -4366,12 +4368,12 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 	return true;
 }
 
-CSphIndex * RtIndex_c::PreallocDiskChunk ( const char * sChunk, int iChunk, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError, const char * sName ) const
+std::unique_ptr<CSphIndex> RtIndex_c::PreallocDiskChunk ( const char * sChunk, int iChunk, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError, const char * sName ) const
 {
 	MEMORY ( MEM_INDEX_DISK );
 
 	// !COMMIT handle errors gracefully instead of dying
-	CSphScopedPtr<CSphIndex> pDiskChunk { sphCreateIndexPhrase ( ( sName ? sName : sChunk ), sChunk ) };
+	auto pDiskChunk = sphCreateIndexPhrase ( ( sName ? sName : sChunk ), sChunk );
 	if ( !pDiskChunk )
 	{
 		sError.SetSprintf ( "disk chunk %s: alloc failed", sChunk );
@@ -4392,7 +4394,7 @@ CSphIndex * RtIndex_c::PreallocDiskChunk ( const char * sChunk, int iChunk, File
 		pDiskChunk = nullptr;
 	}
 
-	return pDiskChunk.LeakPtr();
+	return pDiskChunk;
 }
 
 bool RtIndex_c::LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings )
@@ -5951,8 +5953,8 @@ int RtIndex_c::DebugCheckDisk ( DebugCheckError_i & tReporter )
 		sChunk.SetSprintf ( "%s.%d", m_sPath.cstr(), iChunk );
 		tReporter.Msg ( "checking disk chunk, extension %d, %d(%d)...", dChunks[i], i, m_dChunkNames.GetLength() );
 
-		CSphScopedPtr<CSphIndex> pIndex ( PreallocDiskChunk ( sChunk.cstr(), iChunk, pFilenameBuilder.Ptr(), dWarnings, m_sLastError ) );
-		if ( pIndex.Ptr() )
+		auto pIndex = PreallocDiskChunk ( sChunk.cstr(), iChunk, pFilenameBuilder.Ptr(), dWarnings, m_sLastError );
+		if ( pIndex )
 		{
 			iFailsPlain += pIndex->DebugCheck ( tReporter );
 		} else
@@ -10123,10 +10125,10 @@ RtIndex_i * sphGetCurrentIndexRT()
 }
 
 
-RtIndex_i * sphCreateIndexRT ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict )
+std::unique_ptr<RtIndex_i> sphCreateIndexRT ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict )
 {
 	MEMORY ( MEM_INDEX_RT );
-	return new RtIndex_c ( tSchema, sIndexName, iRamSize, sPath, bKeywordDict );
+	return std::make_unique<RtIndex_c> ( tSchema, sIndexName, iRamSize, sPath, bKeywordDict );
 }
 
 

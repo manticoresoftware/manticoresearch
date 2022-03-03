@@ -98,7 +98,7 @@ public:
 };
 
 /// percolate query index factory
-PercolateIndex_i * CreateIndexPercolate ( const CSphSchema & tSchema, const char * sIndexName, const char * sPath );
+std::unique_ptr<PercolateIndex_i> CreateIndexPercolate ( const CSphSchema & tSchema, const char * sIndexName, const char * sPath );
 void FixPercolateSchema ( CSphSchema & tSchema );
 
 typedef const QueryParser_i * CreateQueryParser_fn ( bool bJson );

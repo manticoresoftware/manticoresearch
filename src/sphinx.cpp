@@ -782,9 +782,9 @@ bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 }
 
 
-CSphIndex * sphCreateIndexTemplate ( const char * szIndexName )
+std::unique_ptr<CSphIndex> sphCreateIndexTemplate ( const char * szIndexName )
 {
-	return new CSphTokenizerIndex(szIndexName);
+	return std::make_unique <CSphTokenizerIndex> (szIndexName);
 }
 
 Bson_t CSphTokenizerIndex::ExplainQuery ( const CSphString & sQuery ) const
@@ -2559,9 +2559,9 @@ static void PooledAttrsToPtrAttrs ( const VecTraits_T<ISphMatchSorter *> & dSort
 }
 
 
-CSphIndex * sphCreateIndexPhrase ( const char* szIndexName, const char * sFilename )
+std::unique_ptr<CSphIndex> sphCreateIndexPhrase ( const char* szIndexName, const char * sFilename )
 {
-	return new CSphIndex_VLN ( szIndexName, sFilename );
+	return std::make_unique<CSphIndex_VLN> ( szIndexName, sFilename );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -4968,8 +4968,8 @@ public:
 		CSphString sError;
 		StrVec_t dWarnings;
 
-		m_pIndex = (CSphIndex_VLN *)sphCreateIndexPhrase ( "keep-attrs", sKeepAttrs.cstr() );
-		ResetFileAccess ( m_pIndex.Ptr() );
+		m_pIndex = std::make_unique<CSphIndex_VLN> ( "keep-attrs", sKeepAttrs.cstr() );
+		ResetFileAccess ( m_pIndex.get() );
 
 		if ( !m_pIndex->Prealloc ( false, nullptr, dWarnings ) )
 		{
@@ -4978,21 +4978,21 @@ public:
 
 			sphWarn ( "unable to load 'keep-attrs' index (%s); ignoring --keep-attrs", sError.cstr() );
 
-			m_pIndex.Reset();
+			m_pIndex.reset();
 		} else
 		{
 			// check schema
 			if ( !tSchema.CompareTo ( m_pIndex->GetMatchSchema(), sError, false ) )
 			{
 				sphWarn ( "schemas are different (%s); ignoring --keep-attrs", sError.cstr() );
-				m_pIndex.Reset();
+				m_pIndex.reset();
 			}
 		}
 
 		for ( const auto & i : dWarnings )
 			sphWarn ( "%s", i.cstr() );
 
-		if ( m_pIndex.Ptr() )
+		if ( m_pIndex )
 		{
 			if ( dKeepAttrs.GetLength() )
 			{
@@ -5006,7 +5006,7 @@ public:
 					if ( iCol==-1 )
 					{
 						sphWarn ( "no attribute found '%s'; ignoring --keep-attrs", dKeepAttrs[i].cstr() );
-						m_pIndex.Reset();
+						m_pIndex.reset();
 						break;
 					}
 
@@ -5037,15 +5037,15 @@ public:
 			}
 		}
 
-		if ( m_pIndex.Ptr() )
+		if ( m_pIndex )
 			m_pIndex->Preread();
 
-		return ( m_pIndex.Ptr()!=nullptr );
+		return ( m_pIndex!=nullptr );
 	}
 
 	bool Keep ( DocID_t tDocid )
 	{
-		if ( !m_pIndex.Ptr() )
+		if ( !m_pIndex )
 			return false;
 
 		m_tDocid = tDocid;
@@ -5061,7 +5061,7 @@ public:
 
 	CSphVector<int64_t> * GetFieldMVA ( int iAttr ) override
 	{
-		if ( !m_pIndex.Ptr() || !m_pRow )
+		if ( !m_pIndex || !m_pRow )
 			return nullptr;
 
 		// fallback to indexed data
@@ -5096,7 +5096,7 @@ public:
 	/// returns string attributes for a given attribute
 	virtual const CSphString & GetStrAttr ( int iAttr ) override
 	{
-		if ( !m_pIndex.Ptr() || !m_pRow )
+		if ( !m_pIndex || !m_pRow )
 			return m_sEmpty;
 
 		// fallback to indexed data
@@ -5120,7 +5120,7 @@ public:
 
 	const CSphRowitem * GetRow ( CSphRowitem * pSrc )
 	{
-		if ( !m_pIndex.Ptr() || !m_pRow )
+		if ( !m_pIndex || !m_pRow )
 			return pSrc;
 
 		// keep only blob attributes
@@ -5154,11 +5154,11 @@ public:
 
 	void Reset()
 	{
-		m_pIndex.Reset();
+		m_pIndex.reset();
 	}
 
 private:
-	CSphScopedPtr<CSphIndex_VLN>	m_pIndex;
+	std::unique_ptr<CSphIndex_VLN>	m_pIndex;
 	CSphVector<CSphAttrLocator>		m_dLocPlain;
 	CSphBitvec						m_dLocMva;
 	CSphBitvec						m_dMvaField;

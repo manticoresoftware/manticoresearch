@@ -16900,7 +16900,7 @@ static bool RotateIndexMT ( ServedIndex_c* pIndex, const CSphString & sIndex, St
 
 	// create new index, copy some settings from existing one
 	ServedDesc_t tNewIndex;
-	tNewIndex.m_pIndex = sphCreateIndexPhrase ( sIndex.cstr (), nullptr );
+	tNewIndex.m_pIndex = sphCreateIndexPhrase ( sIndex.cstr (), nullptr ).release();
 	tNewIndex.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
 
 	IndexFiles_c dActivePath, dNewPath;
@@ -17445,24 +17445,26 @@ ESphAddIndex AddRTPercolate ( bool bRT, GuardedHash_c & dPost, const char * szIn
 	ServedDesc_t tIdx;
 	ConfigureLocalIndex ( &tIdx, hIndex, bMutableOpt, pWarnings );
 
+	std::unique_ptr<CSphIndex> pIdx;
 	if ( bRT )
 	{
-		tIdx.m_pIndex = sphCreateIndexRT ( tSchema, szIndexName, tIdx.m_tSettings.m_iMemLimit, hIndex["path"].cstr(), bWordDict );
+		pIdx = sphCreateIndexRT ( tSchema, szIndexName, tIdx.m_tSettings.m_iMemLimit, hIndex["path"].cstr(), bWordDict );
 		tIdx.m_eType = IndexType_e::RT;
 	} else
 	{
-		tIdx.m_pIndex = CreateIndexPercolate ( tSchema, szIndexName, hIndex["path"].cstr () );
+		pIdx = CreateIndexPercolate ( tSchema, szIndexName, hIndex["path"].cstr() );
 		tIdx.m_eType = IndexType_e::PERCOLATE;
 	}
 
 	tIdx.m_sIndexPath = hIndex["path"].strval ();
-	tIdx.m_pIndex->SetMutableSettings ( tIdx.m_tSettings );
-	tIdx.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
-	tIdx.m_pIndex->SetGlobalIDFPath ( tIdx.m_sGlobalIDFPath );
+	pIdx->SetMutableSettings ( tIdx.m_tSettings );
+	pIdx->m_iExpansionLimit = g_iExpansionLimit;
+	pIdx->SetGlobalIDFPath ( tIdx.m_sGlobalIDFPath );
 
-	tIdx.m_pIndex->Setup ( tSettings );
-	tIdx.m_pIndex->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
+	pIdx->Setup ( tSettings );
+	pIdx->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
 
+	tIdx.m_pIndex = pIdx.release();
 	// hash it
 	if ( AddLocallyServedIndex ( dPost, szIndexName, tIdx, bReplace, sError ) )
 		return ADD_DSBLED;
@@ -17495,11 +17497,12 @@ static ESphAddIndex AddPlainIndex ( const char * szIndexName, const CSphConfigSe
 
 	// try to create index
 	tIdx.m_sIndexPath = hIndex["path"].strval ();
-	tIdx.m_pIndex = sphCreateIndexPhrase ( szIndexName, tIdx.m_sIndexPath.cstr () );
-	tIdx.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
-	tIdx.m_pIndex->SetMutableSettings ( tIdx.m_tSettings );
-	tIdx.m_pIndex->SetGlobalIDFPath ( tIdx.m_sGlobalIDFPath );
-	tIdx.m_pIndex->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
+	auto pIdx = sphCreateIndexPhrase ( szIndexName, tIdx.m_sIndexPath.cstr() );
+	pIdx->m_iExpansionLimit = g_iExpansionLimit;
+	pIdx->SetMutableSettings ( tIdx.m_tSettings );
+	pIdx->SetGlobalIDFPath ( tIdx.m_sGlobalIDFPath );
+	pIdx->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
+	tIdx.m_pIndex = pIdx.release();
 
 	// done
 	if ( AddLocallyServedIndex ( g_dPostIndexes, szIndexName, tIdx, bReplace, sError ) )
@@ -17526,7 +17529,7 @@ static ESphAddIndex AddTemplateIndex ( const char * szIndexName, const CSphConfi
 	ConfigureLocalIndex ( &tIdx, hIndex, bMutableOpt, pWarnings );
 
 	// try to create index
-	tIdx.m_pIndex = sphCreateIndexTemplate ( szIndexName );
+	tIdx.m_pIndex = sphCreateIndexTemplate ( szIndexName ).release();
 	tIdx.m_pIndex->SetMutableSettings ( tIdx.m_tSettings );
 	tIdx.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
 

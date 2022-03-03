@@ -920,7 +920,7 @@ static void ApplyKilllists ( CSphConfig & hConf )
 
 		CSphString sError;
 		{
-			CSphScopedPtr<CSphIndex> pIndex ( sphCreateIndexPhrase ( nullptr, tIndex.m_sPath.cstr() ) );
+			auto pIndex = sphCreateIndexPhrase ( nullptr, tIndex.m_sPath.cstr() );
 			if ( !pIndex->LoadKillList ( &tIndex.m_dKilllist, tIndex.m_tTargets, sError ) )
 			{
 				fprintf ( stdout, "WARNING: unable to load kill-list for index %s: %s\n", tIndex.m_sName.cstr(), sError.cstr() );
@@ -1188,7 +1188,7 @@ static bool LoadJsonConfig ( CSphConfig & hConf, const CSphString & sConfigFile 
 	return true;
 }
 
-static CSphIndex * CreateIndex ( CSphConfig & hConf, const CSphString & sIndex, bool bDictKeywords, bool bRotate, CSphString & sError )
+static std::unique_ptr<CSphIndex> CreateIndex ( CSphConfig & hConf, const CSphString & sIndex, bool bDictKeywords, bool bRotate, CSphString & sError )
 {
 	// don't expect complete index declarations from indexes created with CREATE TABLE
 	bool bFromJson = !!hConf["index"][sIndex]("from_json");
@@ -1455,7 +1455,7 @@ int main ( int argc, char ** argv )
 	sphConfigureCommon ( hConf );
 
 	// common part for several commands, check and preload index
-	CSphIndex * pIndex = nullptr;
+	std::unique_ptr<CSphIndex> pIndex;
 	while ( !sIndex.IsEmpty() )
 	{
 		// check config
@@ -1486,7 +1486,7 @@ int main ( int argc, char ** argv )
 		if ( g_eCommand==IndextoolCmd_e::CHECK )
 			pIndex->SetDebugCheck ( bCheckIdDups, iCheckChunk );
 
-		PreallocIndex ( sIndex, bStripPath, pIndex );
+		PreallocIndex ( sIndex, bStripPath, pIndex.get() );
 
 		if ( g_eCommand==IndextoolCmd_e::MORPH )
 			break;
@@ -1610,7 +1610,7 @@ int main ( int argc, char ** argv )
 			break;
 
 		case IndextoolCmd_e::MORPH:
-			ApplyMorphology ( pIndex );
+			ApplyMorphology ( pIndex.get() );
 			break;
 
 		case IndextoolCmd_e::BUILDIDF:
@@ -1632,7 +1632,7 @@ int main ( int argc, char ** argv )
 					if ( !fp )
 						sphDie ( "failed to topen %s\n", sFoldFile.cstr() );
 				}
-				CharsetFold ( pIndex, fp );
+				CharsetFold ( pIndex.get(), fp );
 				if ( fp!=stdin )
 					fclose ( fp );
 			}

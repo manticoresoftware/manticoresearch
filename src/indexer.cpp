@@ -1210,7 +1210,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		sIndexPath.SetSprintf ( g_bRotate ? "%s.tmp" : "%s", hIndex["path"].cstr() );
 
 		// do index
-		CSphIndex * pIndex = sphCreateIndexPhrase ( sIndexName, sIndexPath.cstr() );
+		auto pIndex = sphCreateIndexPhrase ( sIndexName, sIndexPath.cstr() );
 		assert ( pIndex );
 
 		// check lock file
@@ -1255,8 +1255,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 			fprintf ( stdout, "WARNING: index '%s': %s.\n", sIndexName, pIndex->GetLastWarning().cstr() );
 
 		pIndex->Unlock ();
-
-		SafeDelete ( pIndex );
 	}
 
 	// trip report
@@ -1334,18 +1332,14 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst, const CSphConf
 	}
 
 	// do the merge
-	CSphIndex * pSrc = sphCreateIndexPhrase ( nullptr, hSrc["path"].cstr() );
-	CSphIndex * pDst = sphCreateIndexPhrase ( nullptr, hDst["path"].cstr() );
+	auto pSrc = sphCreateIndexPhrase ( nullptr, hSrc["path"].cstr() );
+	auto pDst = sphCreateIndexPhrase ( nullptr, hDst["path"].cstr() );
 	assert ( pSrc );
 	assert ( pDst );
-
-	CSphScopedPtr<CSphIndex> dSrcGuard ( pSrc );
-	CSphScopedPtr<CSphIndex> dDstGuard ( pDst );
-
 	{
 		StrVec_t dWarnings;
 		CSphString sError;
-		if ( !sphFixupIndexSettings ( pSrc, hSrc, false, nullptr, dWarnings, sError ) )
+		if ( !sphFixupIndexSettings ( pSrc.get(), hSrc, false, nullptr, dWarnings, sError ) )
 		{
 			fprintf ( stdout, "ERROR: index '%s': %s\n", sSrc, sError.cstr () );
 			return false;
@@ -1358,7 +1352,7 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst, const CSphConf
 	{
 		StrVec_t dWarnings;
 		CSphString sError;
-		if ( !sphFixupIndexSettings ( pDst, hDst, false, nullptr, dWarnings, sError ) )
+		if ( !sphFixupIndexSettings ( pDst.get(), hDst, false, nullptr, dWarnings, sError ) )
 		{
 			fprintf ( stdout, "ERROR: index '%s': %s\n", sDst, sError.cstr () );
 			return false;
@@ -1416,7 +1410,7 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst, const CSphConf
 	int64_t tmMergeTime = sphMicroTimer();
 
 	{
-		if ( !pDst->Merge ( pSrc, tPurge, true, tProgress ) )
+		if ( !pDst->Merge ( pSrc.get(), tPurge, true, tProgress ) )
 			sphDie ( "failed to merge index '%s' into index '%s': %s", sSrc, sDst, pDst->GetLastError().cstr() );
 
 		if ( !pDst->GetLastWarning().IsEmpty() )
@@ -1425,7 +1419,7 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst, const CSphConf
 
 	if ( bDropSrc )
 	{
-		if ( !pSrc->Merge ( pSrc, {}, true, tProgress ) )
+		if ( !pSrc->Merge ( pSrc.get(), {}, true, tProgress ) )
 			sphDie ( "failed to drop index '%s' : %s", sSrc, pSrc->GetLastError().cstr() );
 
 		if ( !pSrc->GetLastWarning().IsEmpty() )
@@ -1451,10 +1445,10 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst, const CSphConf
 	pDst->Unlock();
 
 	// pick up merge result
-	if ( !RenameIndexFiles ( hDst["path"].cstr(), sDst, pDst, bRotate ) )
+	if ( !RenameIndexFiles ( hDst["path"].cstr(), sDst, pDst.get(), bRotate ) )
 		return false;
 
-	if ( bDropSrc && !RenameIndexFiles ( hSrc["path"].cstr(), sSrc, pSrc, bRotate ) )
+	if ( bDropSrc && !RenameIndexFiles ( hSrc["path"].cstr(), sSrc, pSrc.get(), bRotate ) )
 		return false;
 
 	return true;

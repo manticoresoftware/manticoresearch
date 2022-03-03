@@ -1558,10 +1558,10 @@ struct SphQueueRes_t : public ISphNoncopyable
 /////////////////////////////////////////////////////////////////////////////
 
 /// create phrase fulltext index implementation
-CSphIndex *			sphCreateIndexPhrase ( const char* szIndexName, const char * sFilename );
+std::unique_ptr<CSphIndex>		sphCreateIndexPhrase ( const char* szIndexName, const char * sFilename );
 
 /// create template (tokenizer) index implementation
-CSphIndex *			sphCreateIndexTemplate ( const char * szIndexName );
+std::unique_ptr<CSphIndex>		sphCreateIndexTemplate ( const char * szIndexName );
 
 /// set JSON attribute indexing options
 /// bStrict is whether to stop indexing on error, or just ignore the attribute value

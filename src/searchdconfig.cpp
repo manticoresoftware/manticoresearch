@@ -597,6 +597,7 @@ static bool ConfigWrite ( const CSphString & sConfigPath, const CSphVector<Clust
 // ServiceMain -> ConfigureAndPreloadOnStartup -> ConfigureAndPreloadInt -> PreloadIndex
 static ESphAddIndex PreloadIndex ( const IndexDesc_t & tIndex, StrVec_t & dWarnings, CSphString & sError )
 {
+	assert ( IsConfigless() );
 	CSphConfigSection hIndex;
 	tIndex.Save(hIndex);
 
@@ -612,6 +613,7 @@ static ESphAddIndex PreloadIndex ( const IndexDesc_t & tIndex, StrVec_t & dWarni
 // ServiceMain -> ConfigureAndPreloadOnStartup -> ConfigureAndPreloadInt
 void ConfigureAndPreloadInt ( int & iValidIndexes, int & iCounter ) REQUIRES ( MainThread )
 {
+	assert ( IsConfigless() );
 	for ( const IndexDesc_t & tIndex : g_dCfgIndexes )
 	{
 		CSphString sError;
@@ -632,6 +634,8 @@ void ConfigureAndPreloadInt ( int & iValidIndexes, int & iCounter ) REQUIRES ( M
 // collect local indexes that should be saved into JSON config
 static void CollectLocalIndexesInt ( CSphVector<IndexDesc_t> & dIndexes )
 {
+	if ( !IsConfigless() )
+		return;
 	for ( RLockedServedIt_c tIt ( g_pLocalIndexes ); tIt.Next (); )
 	{
 		auto pServed = tIt.Get();
@@ -655,6 +659,9 @@ static void CollectLocalIndexesInt ( CSphVector<IndexDesc_t> & dIndexes )
 // collect distributed indexes that should be saved into JSON config
 static void CollectDistIndexesInt ( CSphVector<IndexDesc_t> & dIndexes )
 {
+	if ( !IsConfigless() )
+		return;
+
 	for ( RLockedDistrIt_c tIt ( g_pDistIndexes ); tIt.Next (); )
 	{
 		IndexDesc_t & tIndex = dIndexes.Add();
@@ -1121,6 +1128,7 @@ static void DeleteExtraIndexFiles ( CSphIndex * pIndex )
 
 static void DeleteIndex ( const CSphString & sIndex, RtIndex_i * pRt )
 {
+	assert ( IsConfigless() );
 	if ( !pRt )
 	{
 		g_pDistIndexes->Delete(sIndex);
@@ -1135,6 +1143,7 @@ static void DeleteIndex ( const CSphString & sIndex, RtIndex_i * pRt )
 
 bool CreateNewIndexInt ( const CSphString & sIndex, const CreateTableSettings_t & tCreateTable, StrVec_t & dWarnings, CSphString & sError )
 {
+	assert ( IsConfigless() );
 	if ( tCreateTable.m_bIfNotExists && g_pLocalIndexes->Contains(sIndex) )
 		return true;
 
@@ -1239,6 +1248,7 @@ private:
 // ClientSession_c::Execute -> HandleMysqlImportTable -> AddExistingIndexInt
 bool AddExistingIndexInt ( const CSphString & sIndex, IndexType_e eType, StrVec_t & dWarnings, CSphString & sError )
 {
+	assert ( IsConfigless() );
 	ScopedCleanup_c tCleanup ( sIndex );
 
 	IndexDesc_t tNewIndex;
@@ -1259,6 +1269,7 @@ bool AddExistingIndexInt ( const CSphString & sIndex, IndexType_e eType, StrVec_
 
 static bool DropDistrIndex ( const CSphString & sIndex, CSphString & sError )
 {
+	assert ( IsConfigless() );
 	auto pDistr = GetDistr(sIndex);
 	if ( !pDistr )
 	{
@@ -1274,6 +1285,7 @@ static bool DropDistrIndex ( const CSphString & sIndex, CSphString & sError )
 
 static bool DropLocalIndex ( const CSphString & sIndex, CSphString & sError )
 {
+	assert ( IsConfigless() );
 	auto pServed = GetServed(sIndex);
 	if ( !pServed )
 	{
@@ -1310,6 +1322,7 @@ static bool DropLocalIndex ( const CSphString & sIndex, CSphString & sError )
 
 bool DropIndexInt ( const CSphString & sIndex, bool bIfExists, CSphString & sError )
 {
+	assert ( IsConfigless() );
 	bool bLocal = !!GetServed(sIndex);
 	bool bDistr = !!GetDistr(sIndex);
 	if ( bDistr )

@@ -17718,6 +17718,7 @@ void InitPersistentPool()
 static void ReloadIndexSettings ( CSphConfigParser & tCP ) REQUIRES ( MainThread, g_tRotateConfigMutex )
 	REQUIRES ( MainThread )
 {
+	assert ( !IsConfigless() );
 	// collect names of all existing local indexes as assumed for deletion
 	SmallStringHash_T<ServedIndexRefPtr_c> dLocalToDelete;
 	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next (); )
@@ -18093,6 +18094,8 @@ static void CheckRotate () REQUIRES ( MainThread ) EXCLUDES ( g_tRotateThreadMut
 	// do we need to rotate now? If no sigHUP received, or if we are already rotating - no.
 //	if ( !g_bNeedRotate || g_bInRotate || IsConfigless() )
 //		return;
+
+	assert ( !IsConfigless() );
 
 	g_bInRotate = true; // ok, another rotation cycle just started
 	g_bNeedRotate = false; // which therefore clears any previous HUP signals
@@ -19158,6 +19161,7 @@ static void ConfigureAndPreloadOnStartup ( const CSphConfig & hConf, const StrVe
 
 	if ( hConf.Exists ( "index" ) )
 	{
+		assert ( !IsConfigless() );
 		for ( const auto& tIndex : hConf["index"] )
 		{
 			const CSphConfigSection & hIndex = tIndex.second;
@@ -19178,9 +19182,10 @@ static void ConfigureAndPreloadOnStartup ( const CSphConfig & hConf, const StrVe
 			iValidIndexes += ( eAdd!=ADD_ERROR ? 1 : 0 );
 			iCounter +=  ( eAdd==ADD_DSBLED ? 1 : 0 );
 		}
+	} else {
+		assert ( IsConfigless() );
+		ConfigureAndPreloadInt ( iValidIndexes, iCounter );
 	}
-
-	ConfigureAndPreloadInt ( iValidIndexes, iCounter );
 
 	// we don't have any more unprocessed disabled indexes during startup
 	g_dPostIndexes.ReleaseAndClear ();

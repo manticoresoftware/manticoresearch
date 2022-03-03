@@ -619,7 +619,7 @@ void ConfigureAndPreloadInt ( int & iValidIndexes, int & iCounter ) REQUIRES ( M
 		CSphString sError;
 		StrVec_t dWarnings;
 		ESphAddIndex eAdd = PreloadIndex ( tIndex, dWarnings, sError );
-		iValidIndexes += ( eAdd!=ADD_ERROR ? 1 : 0 );
+		iValidIndexes += ( eAdd==ADD_ERROR ? 0 : 1 );
 		iCounter += ( eAdd==ADD_DSBLED ? 1 : 0 );
 
 		for ( const auto & i : dWarnings )
@@ -1046,7 +1046,7 @@ CSphString BuildCreateTableDistr ( const CSphString & sName, const DistributedIn
 		sRes << sLocal.SetSprintf ( "local='%s'", i.cstr() );
 	}
 
-	for ( const auto & i : tDistr.m_dAgents )
+	for ( const auto& i : tDistr.m_dAgents )
 	{
 		CSphString sAgent;
 
@@ -1212,7 +1212,6 @@ bool CreateNewIndexInt ( const CSphString & sIndex, const CreateTableSettings_t 
 	return true;
 }
 
-
 class ScopedCleanup_c
 {
 public:
@@ -1259,7 +1258,7 @@ bool AddExistingIndexInt ( const CSphString & sIndex, IndexType_e eType, StrVec_
 	if ( PreloadIndex ( tNewIndex, dWarnings, sError )!=ADD_DSBLED )
 		return false;
 
-	if ( !SaveConfigInt(sError) )
+	if ( !SaveConfigInt ( sError ) )
 		return false;
 
 	tCleanup.Ok();

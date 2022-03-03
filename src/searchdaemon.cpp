@@ -1287,8 +1287,8 @@ ServedDesc_t::~ServedDesc_t()
 		m_pIndex->Dealloc();
 	if ( !m_sUnlink.IsEmpty())
 	{
-		sphLogDebug( "unlink %s", m_sUnlink.cstr());
-		sphUnlinkIndex( m_sUnlink.cstr(), false );
+		sphLogDebug ( "unlink %s", m_sUnlink.cstr() );
+		sphUnlinkIndex ( m_sUnlink.cstr(), false );
 	}
 	SafeDelete ( m_pIndex );
 }

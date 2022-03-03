@@ -487,6 +487,7 @@ static GuardedHash_c & g_MultiAgents()
 	return dGlobalHash;
 }
 
+// called from dtr of distr index. Make new snapshot with only actual multiagents, orphans will be removed.
 void MultiAgentDesc_c::CleanupOrphaned()
 {
 	// cleanup global
@@ -516,7 +517,7 @@ CSphString MultiAgentDesc_c::GetKey ( const CSphVector<AgentDesc_t *> &dTemplate
 	StringBuilder_c sKey;
 	for ( const auto* dHost : dTemplateHosts )
 		sKey << dHost->GetMyUrl () << ":" << dHost->m_sIndexes << "|";
-	sKey.Appendf ("[%d,%d,%d,%d,%d]",
+	sKey.Sprintf("[%d,%d,%d,%d,%d]",
 		tOpt.m_bBlackhole?1:0,
 		tOpt.m_bPersistent?1:0,
 		(int)tOpt.m_eStrategy,
@@ -529,7 +530,7 @@ MultiAgentDesc_c * MultiAgentDesc_c::GetAgent ( const CSphVector<AgentDesc_t*> &
 		const WarnInfo_c & tWarn ) NO_THREAD_SAFETY_ANALYSIS
 {
 	auto sKey = GetKey ( dHosts, tOpt );
-	auto &gHash = g_MultiAgents ();
+	auto& gHash = g_MultiAgents();
 
 	// if an elem exists, return it addreffed.
 	MultiAgentDescRefPtr_c pAgent ( ( MultiAgentDesc_c * ) gHash.Get ( sKey ) );
@@ -1268,15 +1269,16 @@ static bool ConfigureMirrorSet ( CSphVector<AgentDesc_t*> &tMirrors, AgentOption
 // different cases are tested in T_ConfigureMultiAgent, see gtests_searchdaemon.cpp
 MultiAgentDesc_c * ConfigureMultiAgent ( const char * szAgent, const char * szIndexName, AgentOptions_t tOptions, StrVec_t * pWarnings )
 {
+	MultiAgentDesc_c* pRes = nullptr;
 	CSphVector<AgentDesc_t *> tMirrors;
 	auto dFree = AtScopeExit ( [&tMirrors] { tMirrors.Apply( [] ( AgentDesc_t * pMirror ) { SafeDelete ( pMirror ); } ); } );
 
 	WarnInfo_c tWI ( szIndexName, szAgent, pWarnings );
 
-	if ( !ConfigureMirrorSet ( tMirrors, &tOptions, tWI ) )
-		return nullptr;
+	if ( ConfigureMirrorSet ( tMirrors, &tOptions, tWI ) )
+		pRes = MultiAgentDesc_c::GetAgent ( tMirrors, tOptions, tWI );
 
-	return MultiAgentDesc_c::GetAgent ( tMirrors, tOptions, tWI );
+	return pRes;
 }
 
 HostDesc_t &HostDesc_t::CloneFromHost ( const HostDesc_t &rhs )

@@ -41,12 +41,12 @@ static Saved_e CheckSaveIndexes ()
 	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next (); )
 	{
 		ServedDescRPtr_c pServed ( it.Get ());
-		if ( pServed && pServed->m_pIndex->GetAttributeStatus ())
+		if ( pServed && pServed->m_pIndex->GetAttributeStatus() )
 		{
 			bDirty = true;
-			if ( !pServed->m_pIndex->SaveAttributes ( sError ))
+			if ( !pServed->m_pIndex->SaveAttributes ( sError ) )
 			{
-				sphWarning ( "index %s: attrs save failed: %s", it.GetName ().cstr (), sError.cstr ());
+				sphWarning ( "index %s: attrs save failed: %s", it.GetName ().cstr(), sError.cstr() );
 				eSaveState = Saved_e::NOT_ALL;
 			}
 		}

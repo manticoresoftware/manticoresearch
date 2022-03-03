@@ -35,7 +35,7 @@ struct Uservar_t
 // create or update the variable
 void SetLocalUserVar ( const CSphString& sName, CSphVector<SphAttr_t>& dSetValues );
 
-void SetLocalTemporaryUserVar ( const CSphString & sName, VecTraits_T<DocID_t> & dSetValues );
+void SetLocalTemporaryUserVar ( const CSphString & sName, VecTraits_T<DocID_t>& dSetValues );
 
 // provide variable to outside
 void ServeUserVars();

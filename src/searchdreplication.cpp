@@ -176,7 +176,7 @@ public:
 	// commit for common commands
 	bool Commit ( CSphString & sError );
 	// commit for Total Order Isolation commands
-	bool CommitTOI ( ServedDesc_t * pDesc, CSphString & sError );
+	bool CommitTOI ( ServedDesc_t * pDesc, CSphString& sError );
 
 	// update with Total Order Isolation
 	bool Update ( bool bCluster, CSphString & sError );
@@ -187,8 +187,7 @@ private:
 	CSphString * m_pWarning = nullptr;
 	int * m_pUpdated = nullptr;
 
-	bool CommitNonEmptyCmds ( RtIndex_i* pIndex, const ReplicationCommand_t& tCmd, bool bOnlyTruncate,
-		CSphString& sError ) const;
+	bool CommitNonEmptyCmds ( RtIndex_i* pIndex, const ReplicationCommand_t& tCmd, bool bOnlyTruncate, CSphString& sError ) const;
 };
 
 // lock protects operations at g_hClusters
@@ -1468,7 +1467,6 @@ static bool EnableIndexWrite ( const CSphString & sIndex, CSphString & sError )
 
 	auto * pIndex = (RtIndex_i*)pDesc->m_pIndex;
 	pIndex->EnableSave();
-
 	return true;
 }
 
@@ -1526,7 +1524,6 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 			}
 
 			auto * pIndex = (PercolateIndex_i * )pDesc->m_pIndex;
-
 			StoredQueryDesc_t tPQ;
 			LoadStoredQuery ( pRequest, iRequestLen, tPQ );
 			sphLogDebugRpl ( "pq-add, index '%s', uid " INT64_FMT " query %s", pCmd->m_sIndex.cstr(), tPQ.m_iQUID, tPQ.m_sQuery.cstr() );
@@ -1712,10 +1709,7 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 		return false;
 	}
 
-	if ( !pIndex->Commit ( nullptr, &tAcc ) )
-		return false;
-
-	return true;
+	return pIndex->Commit ( nullptr, &tAcc );
 }
 
 // single point there all commands passed these might be replicated, even if no cluster
@@ -2131,13 +2125,10 @@ static bool ValidateUpdate ( const ReplicationCommand_t & tCmd, CSphString & sEr
 		return false;
 	}
 
-	const ISphSchema & tSchema = tDesc->m_pIndex->GetMatchSchema();
+	const ISphSchema& tSchema = tDesc->m_pIndex->GetMatchSchema();
 
 	assert ( tCmd.m_pUpdateAPI );
-	if ( !IndexUpdateHelper_c::Update_CheckAttributes ( *tCmd.m_pUpdateAPI, tSchema, sError ) )
-		return false;
-
-	return true;
+	return IndexUpdateHelper_c::Update_CheckAttributes ( *tCmd.m_pUpdateAPI, tSchema, sError );
 }
 
 CommitMonitor_c::~CommitMonitor_c()
@@ -2175,7 +2166,6 @@ static bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIn
 				pIndex->ProhibitSave();
 				pIndex->GetIndexFiles ( tIndexFiles.m_dOld, nullptr );
 			}
-
 			g_pLocalIndexes->Delete ( sIndexName );
 		}
 	}

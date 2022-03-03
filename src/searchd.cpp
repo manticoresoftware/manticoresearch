@@ -8712,7 +8712,7 @@ void BuildStatus ( VectorLike & dStatus )
 	for ( RLockedDistrIt_c it ( g_pDistIndexes ); it.Next (); )
 	{
 		const char * sIdx = it.GetName().cstr();
-		const auto &dAgents = it.Get ()->m_dAgents;
+		const auto& dAgents = it.Get ()->m_dAgents;
 		StringBuilder_c sKey;
 		ARRAY_FOREACH ( i, dAgents )
 		{
@@ -9985,7 +9985,7 @@ void PercolateMatchDocuments ( const BlobVec_t & dDocs, const PercolateOptions_t
 	CSphString sWarning, sError;
 
 	StrVec_t dLocalIndexes;
-	auto * pLocalIndexes = &dLocalIndexes;
+	const auto * pLocalIndexes = &dLocalIndexes;
 
 	VecRefPtrsAgentConn_t dAgents;
 	auto pDist = GetDistr ( sIndex );
@@ -12213,7 +12213,7 @@ void HandleMysqlFlushHostnames ( RowBuffer_i & tOut )
 
 	// copy back renew hosts to distributed agents.
 	// case when distr index list changed between collecting urls and applying them
-	// is safe, since we are iterate over the list again, and also apply
+	// is safe, since we are iterating over the list again, and also apply
 	// only existing hosts.
 	for ( RLockedDistrIt_c it ( g_pDistIndexes ); it.Next (); )
 		it.Get ()->ForEveryHost ( [&] ( AgentDesc_t &tDesc ) {
@@ -13078,9 +13078,9 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * 
 
 	const CSphString & sCluster = tStmt.m_sCluster;
 	const CSphString & sStore = tStmt.m_tQuery.m_sStore;
-	bool bNeedStore = !sStore.IsEmpty();
+	bool bOnlyStoreDocIDs = !sStore.IsEmpty();
 
-	if ( bNeedStore )
+	if ( bOnlyStoreDocIDs )
 		bCommit = false;
 
 	CSphString sError;
@@ -13120,7 +13120,7 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * 
 	// goto to percolate path with unlocked index
 	if ( pLocked->m_eType==IndexType_e::PERCOLATE )
 	{
-		if ( bNeedStore )
+		if ( bOnlyStoreDocIDs )
 		{
 			dErrors.Submit ( sName, sDistributed, "Storing del subset not implemented for PQ indexes" );
 			return 0;
@@ -13136,7 +13136,7 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * 
 		DocsCollector_c tCollector ( tStmt.m_tQuery, tStmt.m_bJson, sName, pLocked, &sError );
 		auto dDocs = tCollector.GetValuesSlice();
 
-		if ( !bNeedStore )
+		if ( !bOnlyStoreDocIDs )
 		{
 			if ( !pIndex->DeleteDocument ( dDocs, sError, pAccum ) )
 			{
@@ -13240,7 +13240,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 		}
 
 		// delete for remote agents
-		if ( !bStoreVar && dDistributed[iIdx] && dDistributed[iIdx]->m_dAgents.GetLength() )
+		if ( !bStoreVar && dDistributed[iIdx] && !dDistributed[iIdx]->m_dAgents.IsEmpty() )
 		{
 			const DistributedIndex_t * pDist = dDistributed[iIdx];
 			VecRefPtrsAgentConn_t dAgents;
@@ -14737,17 +14737,15 @@ static void AddFoundRowsStatsToOutput ( VectorLike & dStatus, const char * szPre
 }
 
 
-static void AddIndexQueryStats ( VectorLike & dStatus, const ServedStats_c * pStats )
+static void AddIndexQueryStats ( VectorLike & dStatus, const ServedStats_c& tStats )
 {
-	assert ( pStats );
-
 	QueryStats_t tQueryTimeStats, tRowsFoundStats;
-	pStats->CalculateQueryStats ( tRowsFoundStats, tQueryTimeStats );
+	tStats.CalculateQueryStats ( tRowsFoundStats, tQueryTimeStats );
 	AddQueryTimeStatsToOutput ( dStatus, "query_time", tQueryTimeStats );
 
 #ifndef NDEBUG
 	QueryStats_t tExactQueryTimeStats, tExactRowsFoundStats;
-	pStats->CalculateQueryStatsExact ( tExactQueryTimeStats, tExactRowsFoundStats );
+	tStats.CalculateQueryStatsExact ( tExactQueryTimeStats, tExactRowsFoundStats );
 	AddQueryTimeStatsToOutput ( dStatus, "exact_query_time", tQueryTimeStats );
 #endif
 
@@ -14848,7 +14846,7 @@ const char * szIndexType ( IndexType_e eType )
 	}
 }
 
-static void AddPlainIndexStatus ( RowBuffer_i & tOut, const ServedDesc_t * pLocked, const ServedStats_c * pStats,
+static void AddPlainIndexStatus ( RowBuffer_i & tOut, const ServedDesc_t * pLocked, const ServedStats_c& tStats,
 		bool bModeFederated, const CSphString & sName, const CSphString & sPattern )
 {
 	assert ( pLocked );
@@ -14864,7 +14862,7 @@ static void AddPlainIndexStatus ( RowBuffer_i & tOut, const ServedDesc_t * pLock
 	VectorLike dStatus ( sPattern );
 	dStatus.MatchTuplet ( "index_type", szIndexType ( pLocked->m_eType ) );
 	AddDiskIndexStatus ( dStatus, pIndex, ServedDesc_t::IsMutable ( pLocked ) );
-	AddIndexQueryStats ( dStatus, pStats );
+	AddIndexQueryStats ( dStatus, tStats );
 	tOut.DataTable ( dStatus );
 }
 
@@ -14883,7 +14881,7 @@ static void AddDistibutedIndexStatus ( RowBuffer_i & tOut, DistributedIndex_t * 
 
 	VectorLike dStatus ( sPattern );
 	dStatus.MatchTuplet( "index_type", "distributed" );
-	AddIndexQueryStats ( dStatus, pIndex );
+	AddIndexQueryStats ( dStatus, *pIndex );
 	tOut.DataTable ( dStatus );
 }
 
@@ -14919,7 +14917,7 @@ void HandleMysqlShowIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, b
 		}
 
 		if ( pIndex )
-			AddPlainIndexStatus ( tOut, pServed, (const ServedStats_c *) pServed, bFederatedUser, tStmt.m_sIndex, tStmt.m_sStringParam );
+			AddPlainIndexStatus ( tOut, pServed, *(const ServedStats_c *) pServed, bFederatedUser, tStmt.m_sIndex, tStmt.m_sStringParam );
 		else
 			tOut.Error ( tStmt.m_sStmt, "SHOW INDEX STATUS requires an existing index" );
 
@@ -14992,7 +14990,7 @@ void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 
 	if ( pIndex->IsRT () )
 	{
-		auto * pRtIndex = static_cast<RtIndex_i *>( pIndex );
+		auto* pRtIndex = static_cast<const RtIndex_i*>( pIndex );
 		int iChunk = 0;
 		bool bKeepIteration = true;
 		while ( bKeepIteration )
@@ -15051,8 +15049,8 @@ void HandleMysqlShowIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t & tStmt 
 		tOut.Eof ();
 	};
 
-	if ( iChunk>=0 && pIndex && pIndex->IsRT() )
-		static_cast<RtIndex_i *>( pIndex )->ProcessDiskChunk ( iChunk, fnShowSettings );
+	if ( iChunk >= 0 && pIndex && pIndex->IsRT() )
+		static_cast<const RtIndex_i*> ( pIndex )->ProcessDiskChunk ( iChunk, fnShowSettings );
 	else
 		fnShowSettings ( pIndex );
 }
@@ -15147,7 +15145,7 @@ static void AddAttrToIndex ( const SqlStmt_t & tStmt, const ServedDesc_t * pServ
 }
 
 
-static void RemoveAttrFromIndex ( const SqlStmt_t & tStmt, const ServedDesc_t * pServed, CSphString & sError )
+static void RemoveAttrFromIndex ( const SqlStmt_t& tStmt, const ServedDesc_t * pServed, CSphString & sError )
 {
 	CSphString sAttrToRemove = tStmt.m_sAlterAttr;
 	sAttrToRemove.ToLower();
@@ -15385,7 +15383,7 @@ static void HandleMysqlReconfigure ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 }
 
 
-static bool ApplyIndexKillList ( CSphIndex * pIndex, CSphString & sWarning, CSphString & sError, bool bShowMessage = false );
+static bool ApplyIndexKillList ( const CSphIndex * pIndex, CSphString & sWarning, CSphString & sError, bool bShowMessage = false );
 
 
 // STMT_ALTER_KLIST_TARGET: ALTER TABLE index KILLLIST_TARGET = 'string'
@@ -15627,8 +15625,8 @@ static void HandleMysqlShowPlan ( RowBuffer_i & tOut, const QueryProfile_c & p, 
 	tOut.Eof ( bMoreResultsFollow );
 }
 
-static bool RotateIndexMT ( ServedIndex_c* pIndex, const CSphString & sIndex, StrVec_t & dWarnings, CSphString & sError );
-static bool RotateIndexGreedy ( ServedDesc_t & tServed, const char * sIndex, CSphString & sError );
+static bool RotateIndexMT ( ServedIndex_c* pIndex, const CSphString& sIndex, StrVec_t& dWarnings, CSphString& sError );
+static bool RotateIndexGreedy ( ServedDesc_t & tServed, const char* sIndex, CSphString& sError );
 static void HandleMysqlReloadIndex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
 	CSphString sError;
@@ -16496,7 +16494,7 @@ bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dSt
 /////////////////////////////////////////////////////////////////////////////
 // INDEX ROTATION
 /////////////////////////////////////////////////////////////////////////////
-static bool ApplyIndexKillList ( CSphIndex * pIndex, CSphString & sWarning, CSphString & sError, bool bShowMessage )
+static bool ApplyIndexKillList ( const CSphIndex * pIndex, CSphString & sWarning, CSphString & sError, bool bShowMessage )
 {
 	CSphFixedVector<DocID_t> dKillList(0);
 	KillListTargets_c tTargets;
@@ -16836,7 +16834,7 @@ bool PreallocNewIndex ( ServedDesc_t & tIdx, const CSphConfigSection * pConfig, 
 	// try to lock it
 	if ( !g_bOptNoLock && !tIdx.m_pIndex->Lock () )
 	{
-		sError.SetSprintf ( "lock: %s", tIdx.m_pIndex->GetLastError().cstr() );
+		sError.SetSprintf ( "prealloc: %s", tIdx.m_pIndex->GetLastError().cstr() );
 		return false;
 	}
 
@@ -17118,7 +17116,7 @@ static void AbortRotation ( void* pIndexes )
 	g_bInRotate = false;
 }
 
-static void InvokeRotation() REQUIRES (MainThread)
+static void InvokeRotation() REQUIRES ( MainThread )
 {
 	assert ( g_dPostIndexes.GetLength () && "Rotation queue must be checked before invoking rotation!");
 
@@ -17263,7 +17261,6 @@ static ESphAddIndex AddDistributedIndex ( const char * szIndexName, const CSphCo
 	DistributedIndexRefPtr_t pIdx ( new DistributedIndex_t );
 	ConfigureDistributedIndex ( *pIdx, szIndexName, hIndex, pWarnings );
 
-	// finally, check and add distributed index to global table
 	if ( pIdx->IsEmpty () )
 	{
 		sError.SetSprintf ( "index '%s': no valid local/remote indexes in distributed index", szIndexName );
@@ -17403,14 +17400,13 @@ static bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSe
 	}
 
 	tSchema.SetupFlags ( tSettings, bPercolate, pWarnings );
-
 	return true;
 }
 
 ///////////////////////////////////////////////
 /// configure realtime index and add it to hash
 ///////////////////////////////////////////////
-ESphAddIndex AddRTPercolate ( bool bRT, GuardedHash_c & dPost, const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace, bool bMutableOpt, StrVec_t * pWarnings, CSphString & sError )
+ESphAddIndex AddRTPercolate ( bool bRT, GuardedHash_c & dPost, const char* szIndexName, const CSphConfigSection& hIndex, bool bReplace, bool bMutableOpt, StrVec_t* pWarnings, CSphString& sError )
 {
 	bool bWordDict = true;
 	if ( bRT )
@@ -17738,7 +17734,6 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP ) REQUIRES ( MainThread
 		const auto & sIndexName = dIndex.first;
 		const CSphConfigSection & hIndex = dIndex.second;
 		IndexType_e eNewType = TypeOfIndexConfig ( hIndex.GetStr ( "type", nullptr ) );
-
 		if ( eNewType==IndexType_e::ERROR_ )
 			continue;
 
@@ -17873,7 +17868,6 @@ static void SetIndexPriority ( IndexWithPriority_t & tIndex, int iPriority, cons
 	}
 }
 
-
 static void CalcRotationPriorities() REQUIRES ( MainThread, g_tRotateThreadMutex )
 {
 	SmallStringHash_T<IndexWithPriority_t> tIndexesToRotate;
@@ -17924,7 +17918,7 @@ static void CalcRotationPriorities() REQUIRES ( MainThread, g_tRotateThreadMutex
 			SetIndexPriority ( *pMin, 0, tIndexesToRotate );
 	}
 	while ( pMin );
-	
+
 	// copy priorities to disabled indexes
 	for ( const auto& tIndexToRotate : tIndexesToRotate )
 	{
@@ -19157,7 +19151,7 @@ static void ConfigureAndPreloadOnStartup ( const CSphConfig & hConf, const StrVe
 			const CSphConfigSection & hIndex = tIndex.second;
 			const char * sIndexName = tIndex.first.cstr();
 
-			if ( !dOptIndexes.IsEmpty() && !dOptIndexes.any_of ( [&] ( const CSphString &rhs )	{ return rhs.EqN ( sIndexName ); } ) )
+			if ( !dOptIndexes.IsEmpty() && !dOptIndexes.any_of ( [&] ( const CSphString &rhs ) { return rhs.EqN ( sIndexName ); } ) )
 				continue;
 
 			StrVec_t dWarnings;

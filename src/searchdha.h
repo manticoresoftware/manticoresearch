@@ -368,7 +368,7 @@ public:
 
 	CSphFixedVector<float> GetWeights () const REQUIRES ( !m_dWeightLock )
 	{
-		CSphScopedRLock tRguard ( m_dWeightLock );
+		ScRL_t tRguard ( m_dWeightLock );
 		CSphFixedVector<float> dResult { 0 };
 		dResult.CopyFrom ( m_dWeights );
 		return dResult;

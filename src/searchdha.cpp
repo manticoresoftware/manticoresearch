@@ -146,7 +146,7 @@ void HostDashboard_t::GetCollectedMetrics ( HostMetricsSnapshot_t& dResult, int 
 	MetricsAndCounters_t tAccum;
 	tAccum.Reset ();
 
-	CSphScopedRLock tRguard ( m_dMetricsLock );
+	ScRL_t tRguard ( m_dMetricsLock );
 	for ( ; iPeriods>0; --iPeriods, --uCurrentPeriod )
 		// it might be no queries at all in the fixed time
 		if ( m_dPeriodicMetrics[uCurrentPeriod % STATS_DASH_PERIODS].m_uPeriod==uCurrentPeriod )
@@ -613,7 +613,7 @@ const AgentDesc_t &MultiAgentDesc_c::RandAgent ()
 void MultiAgentDesc_c::ChooseWeightedRandAgent ( int * pBestAgent, CSphVector<int> & dCandidates )
 {
 	assert ( pBestAgent );
-	CSphScopedRLock tLock ( m_dWeightLock );
+	ScRL_t tLock ( m_dWeightLock );
 	auto fBound = m_dWeights[*pBestAgent];
 	auto fLimit = fBound;
 	for ( auto j : dCandidates )
@@ -668,7 +668,7 @@ const AgentDesc_t &MultiAgentDesc_c::StDiscardDead ()
 		else
 			dTimers[i] = 0;
 
-		CSphScopedRLock tRguard ( pDash->m_dMetricsLock );
+		ScRL_t tRguard ( pDash->m_dMetricsLock );
 		int64_t iThisErrARow = ( pDash->m_iErrorsARow<=iDeadThr ) ? 0 : pDash->m_iErrorsARow;
 
 		if ( iErrARow < 0 )
@@ -712,7 +712,7 @@ const AgentDesc_t &MultiAgentDesc_c::StDiscardDead ()
 	if ( g_eLogLevel>=SPH_LOG_VERBOSE_DEBUG )
 	{
 		const HostDashboard_t & dDash = *m_pData[iBestAgent].m_pDash;
-		CSphScopedRLock tRguard ( dDash.m_dMetricsLock );
+		ScRL_t tRguard ( dDash.m_dMetricsLock );
 		auto fAge = float ( dDash.m_iLastAnswerTime-dDash.m_iLastQueryTime ) / 1000.0f;
 		sphLogDebugv ("client=%s, HA selected %d node by weighted random, with best EaR ("
 						  INT64_FMT "), last answered in %.3f milliseconds, among %d candidates"
@@ -731,7 +731,7 @@ void MultiAgentDesc_c::CheckRecalculateWeights ( const CSphFixedVector<int64_t> 
 	CSphFixedVector<float> dWeights {0};
 
 	// since we'll update values anyway, acquire w-lock.
-	CSphScopedWLock tWguard ( m_dWeightLock );
+	ScWL_t tWguard ( m_dWeightLock );
 	dWeights.CopyFrom ( m_dWeights );
 	RebalanceWeights ( dTimers, dWeights );
 	if ( g_eLogLevel>=SPH_LOG_DEBUG )
@@ -841,7 +841,7 @@ const AgentDesc_t &MultiAgentDesc_c::StLowErrors ()
 	if ( g_eLogLevel>=SPH_LOG_VERBOSE_DEBUG )
 	{
 		const HostDashboard_t & dDash = *m_pData[iBestAgent].m_pDash;
-		CSphScopedRLock tRguard ( dDash.m_dMetricsLock );
+		ScRL_t tRguard ( dDash.m_dMetricsLock );
 		auto fAge = float ( dDash.m_iLastAnswerTime-dDash.m_iLastQueryTime ) / 1000.0f;
 		sphLogDebugv (
 			"client=%s, HA selected %d node by weighted random, "
@@ -934,7 +934,7 @@ static void agent_stats_inc ( AgentConn_t &tAgent, AgentStats_e iCountID )
 		tAgent.m_tDesc.m_pMetrics->m_dCounters[iCountID].fetch_add(1,std::memory_order_relaxed);
 
 	HostDashboard_t &tIndexDash = *tAgent.m_tDesc.m_pDash;
-	CSphScopedWLock tWguard ( tIndexDash.m_dMetricsLock );
+	ScWL_t tWguard ( tIndexDash.m_dMetricsLock );
 	MetricsAndCounters_t &tAgentMetrics = tIndexDash.GetCurrentMetrics ();
 	tAgentMetrics.m_dCounters[iCountID].fetch_add ( 1, std::memory_order_relaxed );;
 	if ( iCountID>=eNetworkNonCritical && iCountID<eMaxAgentStat )
@@ -962,7 +962,7 @@ static void track_processing_time ( AgentConn_t &tAgent )
 	assert ( tAgent.m_tDesc.m_pDash );
 	uint64_t uConnTime = ( uint64_t ) sphMicroTimer () - tAgent.m_iStartQuery;
 	{
-		CSphScopedWLock tWguard ( tAgent.m_tDesc.m_pDash->m_dMetricsLock );
+		ScWL_t tWguard ( tAgent.m_tDesc.m_pDash->m_dMetricsLock );
 		uint64_t * pMetrics = tAgent.m_tDesc.m_pDash->GetCurrentMetrics ().m_dMetrics;
 
 		++pMetrics[ehConnTries];
@@ -1314,7 +1314,7 @@ static VecRefPtrs_t<HostDashboard_t*> g_dDashes GUARDED_BY( g_tDashLock );
 
 void CleanupOrphaned ()
 {
-	CSphScopedWLock tWguard ( g_tDashLock );
+	ScWL_t tWguard ( g_tDashLock );
 	ARRAY_FOREACH ( i, g_dDashes )
 	{
 		auto pDash = g_dDashes[i];
@@ -1329,7 +1329,7 @@ void CleanupOrphaned ()
 // Due to very rare template of usage, linear search is quite enough here
 HostDashboardRefPtr_t FindAgent ( const CSphString& sAgent )
 	{
-		CSphScopedRLock tRguard ( g_tDashLock );
+		ScRL_t tRguard ( g_tDashLock );
 		for ( auto* pDash : g_dDashes )
 		{
 			if ( pDash->IsLast ())
@@ -1353,7 +1353,7 @@ void LinkHost ( HostDesc_t &dHost )
 
 	// nothing found existing; so create the new.
 	dHost.m_pDash = new HostDashboard_t ( dHost );
-	CSphScopedWLock tWguard ( g_tDashLock );
+	ScWL_t tWguard ( g_tDashLock );
 	g_dDashes.Add ( dHost.m_pDash );
 	dHost.m_pDash->AddRef(); // one link here in vec, other returned with the host
 }

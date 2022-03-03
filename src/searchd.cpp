@@ -8835,7 +8835,7 @@ void BuildOneAgentStatus ( VectorLike & dStatus, HostDashboard_t* pDash, const c
 {
 	assert ( pDash );
 	{
-		CSphScopedRLock tGuard ( pDash->m_dMetricsLock );
+		ScRL_t tGuard ( pDash->m_dMetricsLock );
 		if ( dStatus.MatchAddf ( "%s_hostname", sPrefix ) )
 			dStatus.Add ( pDash->m_tHost.GetMyUrl ().cstr () );
 

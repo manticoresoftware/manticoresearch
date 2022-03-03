@@ -4662,11 +4662,9 @@ protected:
 	LOCKED * m_pLock;
 };
 
-using CSphScopedRLock = CSphScopedRLock_T<>;
-using CSphScopedWLock = CSphScopedWLock_T<>;
 // shortcuts (original names sometimes looks too long)
-using ScRL_t = CSphScopedRLock;
-using ScWL_t = CSphScopedWLock;
+using ScRL_t = CSphScopedRLock_T<>;
+using ScWL_t = CSphScopedWLock_T<>;
 
 // perform any (function-defined) action on exit from a scope.
 template < typename ACTION >

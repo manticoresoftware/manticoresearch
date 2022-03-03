@@ -1424,7 +1424,7 @@ bool GuardedHash_c::DeleteIfNull ( const CSphString & sKey )
 
 int GuardedHash_c::GetLength() const
 {
-	CSphScopedRLock dRL { m_tIndexesRWLock };
+	ScRL_t dRL { m_tIndexesRWLock };
 	return GetLengthUnl();
 }
 

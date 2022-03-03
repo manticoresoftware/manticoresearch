@@ -96,7 +96,7 @@ bool		SaveConfigInt ( CSphString & sError );
 // read info about cluster and indexes from manticore.json and validate data
 bool		ConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_t> & dClusters, CSphVector<IndexDesc_t> & dIndexes, CSphString & sError );
 
-// load indexes got from internal config on daemon indexes preload (part of ConfigureAndPreload work done here)
+// load indexes got from internal config on daemon indexes preload (part of ConfigureAndPreloadOnStartup work done here)
 void		ConfigureAndPreloadInt ( int & iValidIndexes, int & iCounter );
 
 FilenameBuilder_i * CreateFilenameBuilder ( const char * szIndex );

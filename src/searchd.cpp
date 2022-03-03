@@ -17587,7 +17587,7 @@ ESphAddIndex AddIndexMT ( GuardedHash_c & dPost, const char * szIndexName, const
 	return ADD_ERROR;
 }
 
-// ServiceMain() -> ConfigureAndPreload() -> AddIndex()
+// ServiceMain() -> ConfigureAndPreloadOnStartup() -> AddIndex()
 // ServiceMain() -> TickHead() -> CheckRotate() -> ReloadIndexSettings() -> AddIndex()
 static ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace, bool bMutableOpt, StrVec_t * pWarnings, CSphString & sError ) REQUIRES ( MainThread )
 {
@@ -19091,8 +19091,8 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	g_bSplit = hSearchd.GetInt ( "pseudo_sharding", 0 )!=0;
 }
 
-// ServiceMain -> ConfigureAndPreload -> ConfigureAndPreloadIndex
-// ServiceMain -> ConfigureAndPreload -> ConfigureAndPreloadInt -> PreloadIndex -> ConfigureAndPreloadIndex
+// ServiceMain -> ConfigureAndPreloadOnStartup -> ConfigureAndPreloadIndex
+// ServiceMain -> ConfigureAndPreloadOnStartup -> ConfigureAndPreloadInt -> PreloadIndex -> ConfigureAndPreloadIndex
 // from any another thread:
 // ClientSession_c::Execute -> HandleMysqlImportTable -> AddExistingIndexInt -> PreloadIndex -> ConfigureAndPreloadIndex
 ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * sIndexName, StrVec_t & dWarnings, CSphString & sError )
@@ -19144,8 +19144,8 @@ ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const 
 }
 
 // invoked once on start from ServiceMain (actually it creates the hashes)
-// ServiceMain -> ConfigureAndPreload
-static void ConfigureAndPreload ( const CSphConfig & hConf, const StrVec_t & dOptIndexes ) REQUIRES (MainThread)
+// ServiceMain -> ConfigureAndPreloadOnStartup
+static void ConfigureAndPreloadOnStartup ( const CSphConfig & hConf, const StrVec_t & dOptIndexes ) REQUIRES (MainThread)
 {
 	int iCounter = 0;
 	int iValidIndexes = 0;
@@ -19906,7 +19906,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	Threads::CallCoroutine ( [&hConf, &dExactIndexes]
 	{
 		ScopedRole_c thMain ( MainThread );
-		ConfigureAndPreload ( hConf, dExactIndexes );
+		ConfigureAndPreloadOnStartup ( hConf, dExactIndexes );
 	} );
 
 	///////////

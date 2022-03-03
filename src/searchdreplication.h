@@ -60,6 +60,6 @@ void ReplicateClustersStatus ( VectorLike & dStatus );
 
 // validate that SphinxQL statement could be run for this cluster:index
 bool CheckIndexCluster ( const CSphString & sIndexName, const ServedDesc_t & tDesc, const CSphString & sStmtCluster, bool bHTTP, CSphString & sError );
-bool ClusterOperationProhibit ( const ServedDesc_t * pDesc, CSphString & sError, const char * sOp );
+Optional_T<CSphString> IsPartOfCluster ( const ServedDesc_t* pDesc );
 
 #endif // _searchdreplication_

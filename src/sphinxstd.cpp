@@ -1113,14 +1113,14 @@ bool sphIsLtLib()
 
 // Windows mutex implementation
 
-CSphMutex::CSphMutex ()
+CSphMutex::CSphMutex () noexcept
 {
 	m_tMutex = CreateMutex ( NULL, FALSE, NULL );
 	if ( !m_tMutex )
 		sphDie ( "CreateMutex() failed" );
 }
 
-CSphMutex::~CSphMutex ()
+CSphMutex::~CSphMutex () noexcept
 {
 	if ( CloseHandle ( m_tMutex )==FALSE )
 		sphDie ( "CloseHandle() failed" );

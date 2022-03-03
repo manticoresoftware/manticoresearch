@@ -57,7 +57,7 @@ void SetLocalUserVar ( const CSphString& sName, CSphVector<SphAttr_t>& dSetValue
 }
 
 // create or update the which is not to be saved to state (i.e. exists only during current session)
-void SetLocalTemporaryUserVar ( const CSphString & sName, VecTraits_T<DocID_t>& dDocids )
+void SetLocalTemporaryUserVar ( const CSphString & sName, VecTraits_T<DocID_t> dDocids )
 {
 	CSphVector<SphAttr_t> dSetValues;
 	dSetValues.Append ( dDocids ); // warn! explicit convert from DocID_t to SphAttr_t (as both are int64_t)

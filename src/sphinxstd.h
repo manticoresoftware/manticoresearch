@@ -2399,7 +2399,6 @@ public:
 
 		m_pFirstByOrder = nullptr;
 		m_pLastByOrder = nullptr;
-		m_pIterator = nullptr;
 		m_iLength = 0;
 	}
 
@@ -2505,10 +2504,6 @@ public:
 		else
 			m_pLastByOrder = pToDelete->m_pPrevByOrder;
 
-		// step the iterator one item back - to gracefully hold deletion in iteration cycle
-		if ( pToDelete==m_pIterator )
-			m_pIterator = pToDelete->m_pPrevByOrder;
-
 		SafeDelete ( pToDelete );
 		--m_iLength;
 
@@ -2583,61 +2578,6 @@ public:
 	}
 
 public:
-	/// start iterating
-	void IterateStart () const
-	{
-		m_pIterator = nullptr;
-	}
-
-	/// go to next existing entry
-	bool IterateNext () const
-	{
-		m_pIterator = m_pIterator ? m_pIterator->m_pNextByOrder : m_pFirstByOrder;
-		return m_pIterator!=nullptr;
-	}
-
-	/// get entry value
-	T & IterateGet () const
-	{
-		assert ( m_pIterator );
-		return m_pIterator->second;
-	}
-
-	/// get entry key
-	const KEY & IterateGetKey () const
-	{
-		assert ( m_pIterator );
-		return m_pIterator->first;
-	}
-
-	/// go to next existing entry in terms of external independed iterator
-	bool IterateNext ( void ** ppCookie ) const
-	{
-		auto ** ppIterator = reinterpret_cast < HashEntry_t** > ( ppCookie );
-		*ppIterator = ( *ppIterator ) ? ( *ppIterator )->m_pNextByOrder : m_pFirstByOrder;
-		return ( *ppIterator )!=nullptr;
-	}
-
-	/// get entry value in terms of external independed iterator
-	static T & IterateGet ( void ** ppCookie )
-	{
-		assert ( ppCookie );
-		auto ** ppIterator = reinterpret_cast < HashEntry_t** > ( ppCookie );
-		assert ( *ppIterator );
-		return ( *ppIterator )->second;
-	}
-
-	/// get entry key in terms of external independed iterator
-	static const KEY & IterateGetKey ( void ** ppCookie )
-	{
-		assert ( ppCookie );
-		auto ** ppIterator = reinterpret_cast < HashEntry_t** > ( ppCookie );
-		assert ( *ppIterator );
-		return ( *ppIterator )->first;
-	}
-
-public:
-
 	class Iterator_c
 	{
 		HashEntry_t* m_pIterator = nullptr;
@@ -2684,11 +2624,6 @@ public:
 	{
 		return Iterator_c { nullptr };
 	}
-
-
-private:
-	/// current iterator
-	mutable HashEntry_t *	m_pIterator = nullptr;
 };
 
 /// very popular and so, moved here
@@ -4067,7 +4002,7 @@ public:
 	using RAWTYPE = CSphRefcountedPtr<RAWT>;
 
 public:
-	explicit		CSphRefcountedPtr () noexcept = default;		///< default NULL wrapper construction (for vectors)
+					CSphRefcountedPtr () noexcept = default;		///< default NULL wrapper construction (for vectors)
 	explicit		CSphRefcountedPtr ( T * pPtr ) noexcept : m_pPtr ( pPtr ) {}	///< construction from raw pointer, takes over ownership!
 
 	CSphRefcountedPtr ( const CSphRefcountedPtr& rhs ) noexcept
@@ -4945,8 +4880,20 @@ private:
 	mutable std::atomic<long> m_iRefCount { 1 };
 };
 
-using RefCountedRefPtr_t = CSphRefcountedPtr<ISphRefcountedMT>;
-using cRefCountedRefPtr_t = CSphRefcountedPtr<const ISphRefcountedMT>;
+template <typename T> using RefCountedRefPtr_T = CSphRefcountedPtr<T>;
+template <typename T> using cRefCountedRefPtr_T = CSphRefcountedPtr<const T>;
+
+template<typename T>
+inline RefCountedRefPtr_T<T> ConstCastPtr ( cRefCountedRefPtr_T<T> rhs )
+{
+	auto* pRaw = const_cast<T*> ( rhs.Ptr() );
+	if ( pRaw )
+		pRaw->AddRef();
+	return RefCountedRefPtr_T<T> { pRaw };
+}
+
+using cRefCountedRefPtrGeneric_t = cRefCountedRefPtr_T<ISphRefcountedMT>;
+using RefCountedRefPtrGeneric_t = RefCountedRefPtr_T<ISphRefcountedMT>;
 
 template <class T>
 struct VecRefPtrs_t : public ISphNoncopyable, public CSphVector<T>

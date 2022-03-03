@@ -593,9 +593,9 @@ static bool ConfigWrite ( const CSphString & sConfigPath, const CSphVector<Clust
 	return true;
 }
 
-// ClientSession_c::Execute -> HandleMysqlImportTable -> AddExistingIndexInt -> PreloadIndex
-// ServiceMain -> ConfigureAndPreloadOnStartup -> ConfigureAndPreloadInt -> PreloadIndex
-static ESphAddIndex PreloadIndex ( const IndexDesc_t & tIndex, StrVec_t & dWarnings, CSphString & sError )
+// ClientSession_c::Execute -> HandleMysqlImportTable -> AddExistingIndexConfigless -> ConfiglessPreloadIndex
+// ServiceMain -> ConfigureAndPreload -> ConfigureAndPreloadConfiglessIndexes -> ConfiglessPreloadIndex
+static ESphAddIndex ConfiglessPreloadIndex ( const IndexDesc_t & tIndex, StrVec_t & dWarnings, CSphString & sError )
 {
 	assert ( IsConfigless() );
 	CSphConfigSection hIndex;
@@ -609,18 +609,19 @@ static ESphAddIndex PreloadIndex ( const IndexDesc_t & tIndex, StrVec_t & dWarni
 }
 
 
-// load indexes got from JSON config on daemon indexes preload (part of ConfigureAndPreloadOnStartup work done here)
-// ServiceMain -> ConfigureAndPreloadOnStartup -> ConfigureAndPreloadInt
-void ConfigureAndPreloadInt ( int & iValidIndexes, int & iCounter ) REQUIRES ( MainThread )
+// load indexes got from JSON config on daemon indexes preload (part of ConfigureAndPreload work done here)
+// ServiceMain -> ConfigureAndPreload -> ConfigureAndPreloadConfiglessIndexes
+void ConfigureAndPreloadConfiglessIndexes ( int & iValidIndexes, int & iCounter ) REQUIRES ( MainThread )
 {
+	// assume g_dCfgIndexes has all locals, then all distributed. Otherwise, distr with yet invisible local agents will fail to load!
 	assert ( IsConfigless() );
 	for ( const IndexDesc_t & tIndex : g_dCfgIndexes )
 	{
 		CSphString sError;
 		StrVec_t dWarnings;
-		ESphAddIndex eAdd = PreloadIndex ( tIndex, dWarnings, sError );
+		ESphAddIndex eAdd = ConfiglessPreloadIndex ( tIndex, dWarnings, sError );
 		iValidIndexes += ( eAdd==ADD_ERROR ? 0 : 1 );
-		iCounter += ( eAdd==ADD_DSBLED ? 1 : 0 );
+		iCounter += ( eAdd== ADD_NEEDLOAD ? 1 : 0 );
 
 		for ( const auto & i : dWarnings )
 			sphWarning ( "index '%s': %s", tIndex.m_sName.cstr(), i.cstr() );
@@ -636,22 +637,16 @@ static void CollectLocalIndexesInt ( CSphVector<IndexDesc_t> & dIndexes )
 {
 	if ( !IsConfigless() )
 		return;
-	for ( RLockedServedIt_c tIt ( g_pLocalIndexes ); tIt.Next (); )
+
+	assert ( g_pLocalIndexes );
+	ServedSnap_t hLocals = g_pLocalIndexes->GetHash();
+	for ( auto& tIt : *hLocals )
 	{
-		auto pServed = tIt.Get();
-		if ( !pServed )
-			continue;
-
-		ServedDescRPtr_c tDesc ( pServed );
-
-		bool bCollectIndex = IsConfigless();
-		if ( !bCollectIndex )
-			continue;
-
+		assert ( tIt.second );
 		IndexDesc_t & tIndex = dIndexes.Add();
-		tIndex.m_sName = tIt.GetName();
-		tIndex.m_sPath = tDesc->m_sIndexPath;
-		tIndex.m_eType = tDesc->m_eType;
+		tIndex.m_sName = tIt.first;
+		tIndex.m_sPath = tIt.second->m_sIndexPath;
+		tIndex.m_eType = tIt.second->m_eType;
 	}
 }
 
@@ -662,20 +657,23 @@ static void CollectDistIndexesInt ( CSphVector<IndexDesc_t> & dIndexes )
 	if ( !IsConfigless() )
 		return;
 
-	for ( RLockedDistrIt_c tIt ( g_pDistIndexes ); tIt.Next (); )
+	assert ( g_pDistIndexes );
+	auto pDistSnapshot = g_pDistIndexes->GetHash();
+	for ( auto& tIt : *pDistSnapshot )
 	{
 		IndexDesc_t & tIndex = dIndexes.Add();
-		tIndex.m_sName = tIt.GetName();
+		tIndex.m_sName = tIt.first;
 		tIndex.m_eType = IndexType_e::DISTR;
+		const auto& tIdx = *tIt.second;
 
-		tIndex.m_tDistr.m_dLocals				= tIt.Get()->m_dLocal;
-		tIndex.m_tDistr.m_iAgentConnectTimeout	= tIt.Get()->m_iAgentConnectTimeoutMs;
-		tIndex.m_tDistr.m_iAgentQueryTimeout	= tIt.Get()->m_iAgentQueryTimeoutMs;
-		tIndex.m_tDistr.m_iAgentRetryCount		= tIt.Get()->m_iAgentRetryCount;
-		tIndex.m_tDistr.m_bDivideRemoteRanges	= tIt.Get()->m_bDivideRemoteRanges;
-		tIndex.m_tDistr.m_sHaStrategy			= HAStrategyToStr ( tIt.Get()->m_eHaStrategy );
+		tIndex.m_tDistr.m_dLocals				= tIdx.m_dLocal;
+		tIndex.m_tDistr.m_iAgentConnectTimeout	= tIdx.m_iAgentConnectTimeoutMs;
+		tIndex.m_tDistr.m_iAgentQueryTimeout	= tIdx.m_iAgentQueryTimeoutMs;
+		tIndex.m_tDistr.m_iAgentRetryCount		= tIdx.m_iAgentRetryCount;
+		tIndex.m_tDistr.m_bDivideRemoteRanges	= tIdx.m_bDivideRemoteRanges;
+		tIndex.m_tDistr.m_sHaStrategy			= HAStrategyToStr ( tIdx.m_eHaStrategy );
 
-		for ( const auto & i : tIt.Get()->m_dAgents )
+		for ( const auto& i : tIdx.m_dAgents )
 		{
 			if ( !i || !i->GetLength() )
 				continue;
@@ -920,42 +918,14 @@ static bool CopyExternalFiles ( const CSphString & sIndex, const CSphString & sN
 }
 
 
-class ScopedFileCleanup_c
-{
-public:
-	explicit ScopedFileCleanup_c ( const StrVec_t & dFiles )
-		: m_dFiles ( dFiles )
-	{}
-
-	void Ok()
-	{
-		m_bOk = true;
-	}
-
-	~ScopedFileCleanup_c()
-	{
-		if ( m_bOk )
-			return;
-
-		for ( const auto & i : m_dFiles )
-			unlink ( i.cstr() );
-	}
-
-private:
-	const StrVec_t &	m_dFiles;
-	bool				m_bOk = false;
-};
-
-
-
 bool CopyIndexFiles ( const CSphString & sIndex, const CSphString & sPathToIndex, bool & bPQ, StrVec_t & dWarnings, CSphString & sError )
 {
 	CSphString sPath, sNewIndexPath;
 	if ( !PrepareDirForNewIndex ( sPath, sNewIndexPath, sIndex, sError ) )
 		return false;
 
-	StrVec_t dCopied;
-	ScopedFileCleanup_c tCleanup(dCopied);
+	StrVec_t dWipe;
+	auto tCleanup = AtScopeExit ( [&dWipe] { dWipe.for_each ( [] ( const auto& i ) { unlink ( i.cstr() ); } ); } );
 
 	CSphString sFind;
 	sFind.SetSprintf ( "%s.*", sPathToIndex.cstr() );
@@ -985,13 +955,13 @@ bool CopyIndexFiles ( const CSphString & sIndex, const CSphString & sPathToIndex
 		if ( !CopyFile ( i, sDest, sError ) )
 			return false;
 
-		dCopied.Add(sDest);
+		dWipe.Add(sDest);
 	}
 
-	if ( !CopyExternalFiles ( sIndex, sNewIndexPath, dCopied, bPQ, dWarnings, sError ) )
+	if ( !CopyExternalFiles ( sIndex, sNewIndexPath, dWipe, bPQ, dWarnings, sError ) )
 		return false;
 
-	tCleanup.Ok();
+	dWipe.Reset();
 	return true;
 }
 
@@ -1126,25 +1096,33 @@ static void DeleteExtraIndexFiles ( CSphIndex * pIndex )
 }
 
 
-static void DeleteIndex ( const CSphString & sIndex, RtIndex_i * pRt )
+static void DeleteRtIndex ( CSphIndex* pIdx )
 {
 	assert ( IsConfigless() );
-	if ( !pRt )
-	{
-		g_pDistIndexes->Delete(sIndex);
+	if ( !pIdx->IsRT() && !pIdx->IsPQ() )
 		return;
-	}
-
+	auto pRt = static_cast<RtIndex_i*> ( pIdx );
 	pRt->IndexDeleted();
-	DeleteExtraIndexFiles(pRt);
-	g_pLocalIndexes->Delete(sIndex);
+	DeleteExtraIndexFiles ( pRt );
+}
+
+static void RemoveAndDeleteRtIndex ( const CSphString& sIndex )
+{
+	assert ( IsConfigless() );
+	cServedIndexRefPtr_c pServed = GetServed ( sIndex );
+	if ( !pServed )
+		return;
+
+	WIdx_c pIdx { pServed };
+	DeleteRtIndex ( pIdx );
+	g_pLocalIndexes->Delete ( sIndex );
 }
 
 
-bool CreateNewIndexInt ( const CSphString & sIndex, const CreateTableSettings_t & tCreateTable, StrVec_t & dWarnings, CSphString & sError )
+bool CreateNewIndexConfigless ( const CSphString & sIndex, const CreateTableSettings_t & tCreateTable, StrVec_t & dWarnings, CSphString & sError )
 {
 	assert ( IsConfigless() );
-	if ( tCreateTable.m_bIfNotExists && g_pLocalIndexes->Contains(sIndex) )
+	if ( tCreateTable.m_bIfNotExists && IndexIsServed ( sIndex ) )
 		return true;
 
 	if ( !CheckCreateTableSettings ( tCreateTable, sError ) )
@@ -1157,60 +1135,59 @@ bool CreateNewIndexInt ( const CSphString & sIndex, const CreateTableSettings_t 
 		return false;
 	}
 
-	StrVec_t dCopied;
-	ScopedFileCleanup_c tCleanup(dCopied);
+	StrVec_t dWipe;
+	auto tCleanup = AtScopeExit ( [&dWipe] { dWipe.for_each ( [] ( const auto& i ) { unlink ( i.cstr() ); } ); } );
 
-	bool bDistributed = tSettingsContainer.Get("type")=="distributed";
-	if ( !bDistributed )
+	if ( tSettingsContainer.Get ( "type" ) != "distributed")
 	{
 		CSphString sPath, sIndexPath;
 		if ( !PrepareDirForNewIndex ( sPath, sIndexPath, sIndex, sError ) )
 			return false;
 
 		tSettingsContainer.Add ( "path", sIndexPath );
-		if ( !CopyExternalIndexFiles ( tSettingsContainer.GetFiles(), sPath, dCopied, sError ) )
+		if ( !CopyExternalIndexFiles ( tSettingsContainer.GetFiles(), sPath, dWipe, sError ) )
 			return false;
 	}
 
 	const CSphConfigSection & hCfg = tSettingsContainer.AsCfg();
 
-	GuardedHash_c dNotLoadedIndexes;
-	ESphAddIndex eAdd = AddIndexMT ( dNotLoadedIndexes, sIndex.cstr(), hCfg, false, true, &dWarnings, sError );
-	assert ( eAdd==ADD_DSBLED || eAdd==ADD_DISTR || eAdd==ADD_ERROR );
-	if ( eAdd==ADD_ERROR )
-		return false;
-
-	if ( eAdd==ADD_DSBLED )
+	ESphAddIndex eAdd;
+	ServedIndexRefPtr_c pDesc;
+	std::tie ( eAdd, pDesc ) = AddIndex ( sIndex.cstr(), hCfg, true, true, &dWarnings, sError );
+	switch ( eAdd )
 	{
-		ServedIndexRefPtr_c pServed = GetServed ( sIndex, &dNotLoadedIndexes );
-		ServedDescWPtr_c pDesc ( pServed );
-		if ( !PreallocNewIndex ( *pDesc, &hCfg, sIndex.cstr(), dWarnings, sError ) )
+	case ADD_ERROR: return false;
+	case ADD_NEEDLOAD:
 		{
-			DeleteIndex ( sIndex, (RtIndex_i *)pDesc->m_pIndex );
-			return false;
+			assert ( pDesc );
+			if ( !PreallocNewIndex ( *pDesc, &hCfg, sIndex.cstr(), dWarnings, sError ) )
+			{
+				DeleteRtIndex ( UnlockedHazardIdxFromServed ( *pDesc ) );
+				return false;
+			}
 		}
-
-		g_pLocalIndexes->AddOrReplace ( pServed, sIndex );
+		// no break
+	case ADD_SERVED:
+		g_pLocalIndexes->Add ( pDesc, sIndex );
+	case ADD_DISTR:
+	default:
+		break;
 	}
 
-	tCleanup.Ok();
-
-	if ( !SaveConfigInt(sError) )
+	if ( SaveConfigInt ( sError ) )
 	{
-		ServedIndexRefPtr_c pServed = GetServed(sIndex);
-		if ( pServed )
-		{
-			ServedDescWPtr_c pDesc(pServed);
-			DeleteIndex ( sIndex, (RtIndex_i *)pDesc->m_pIndex );
-		}
-		else
-			DeleteIndex ( sIndex, nullptr );
-
-		return false;
+		dWipe.Reset();
+		return true;
 	}
 
-	return true;
+	cServedIndexRefPtr_c pServed = GetServed ( sIndex );
+	if ( pServed )
+		RemoveAndDeleteRtIndex ( sIndex );
+	else
+		g_pDistIndexes->Delete ( sIndex );
+	return false;
 }
+
 
 class ScopedCleanup_c
 {
@@ -1226,17 +1203,10 @@ public:
 
 	~ScopedCleanup_c()
 	{
-		ReleaseAndClearDisabled();
-
 		if ( m_bOk )
 			return;
 
-		ServedIndexRefPtr_c pServed = GetServed(m_sIndex);
-		if ( pServed )
-		{
-			ServedDescWPtr_c pDesc(pServed);
-			DeleteIndex ( m_sIndex, (RtIndex_i *)pDesc->m_pIndex );
-		}
+		RemoveAndDeleteRtIndex ( m_sIndex );
 	}
 
 private:
@@ -1244,8 +1214,8 @@ private:
 	bool		m_bOk = false;
 };
 
-// ClientSession_c::Execute -> HandleMysqlImportTable -> AddExistingIndexInt
-bool AddExistingIndexInt ( const CSphString & sIndex, IndexType_e eType, StrVec_t & dWarnings, CSphString & sError )
+// ClientSession_c::Execute -> HandleMysqlImportTable -> AddExistingIndexConfigless
+bool AddExistingIndexConfigless ( const CSphString & sIndex, IndexType_e eType, StrVec_t & dWarnings, CSphString & sError )
 {
 	assert ( IsConfigless() );
 	ScopedCleanup_c tCleanup ( sIndex );
@@ -1255,7 +1225,7 @@ bool AddExistingIndexInt ( const CSphString & sIndex, IndexType_e eType, StrVec_
 	tNewIndex.m_sName = sIndex;
 	tNewIndex.m_sPath.SetSprintf ( "%s/%s", GetPathForNewIndex(sIndex).cstr(), sIndex.cstr() );
 
-	if ( PreloadIndex ( tNewIndex, dWarnings, sError )!=ADD_DSBLED )
+	if ( ConfiglessPreloadIndex ( tNewIndex, dWarnings, sError )!= ADD_NEEDLOAD )
 		return false;
 
 	if ( !SaveConfigInt ( sError ) )
@@ -1292,14 +1262,13 @@ static bool DropLocalIndex ( const CSphString & sIndex, CSphString & sError )
 		return false;
 	}
 
-	ServedDescWPtr_c pWptr(pServed); // write-lock
-	if ( ServedDesc_t::IsCluster(pWptr) )
+	if ( ServedDesc_t::IsCluster ( pServed ) )
 	{
 		sError.SetSprintf ( "DROP TABLE failed: unable to drop a cluster index '%s'", sIndex.cstr() );
 		return false;
 	}
 
-	auto * pRt = (RtIndex_i *)pWptr->m_pIndex;
+	WIdx_T<RtIndex_i*> pRt { pServed };
 	if ( !pRt )
 	{
 		sError.SetSprintf ( "DROP TABLE failed: unknown local index '%s'", sIndex.cstr() );
@@ -1309,10 +1278,7 @@ static bool DropLocalIndex ( const CSphString & sIndex, CSphString & sError )
 	if ( !pRt->Truncate(sError) )
 		return false;
 
-	pRt->IndexDeleted();
-
-	DeleteExtraIndexFiles(pRt);
-
+	DeleteRtIndex ( pRt );
 	g_pLocalIndexes->Delete(sIndex);
 
 	return true;
@@ -1351,4 +1317,15 @@ bool DropIndexInt ( const CSphString & sIndex, bool bIfExists, CSphString & sErr
 	}
 
 	return true;
+}
+
+//////////////////////////////////////////////////////////////////////////
+RunIdx_e IndexIsServed ( const CSphString& sName )
+{
+	if ( g_pLocalIndexes && g_pLocalIndexes->Contains ( sName ) )
+		return LOCAL;
+
+	if ( g_pDistIndexes && g_pDistIndexes->Contains ( sName ) )
+		return DISTR;
+	return NOTSERVED;
 }

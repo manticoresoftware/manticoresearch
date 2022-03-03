@@ -96,8 +96,8 @@ bool		SaveConfigInt ( CSphString & sError );
 // read info about cluster and indexes from manticore.json and validate data
 bool		ConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_t> & dClusters, CSphVector<IndexDesc_t> & dIndexes, CSphString & sError );
 
-// load indexes got from internal config on daemon indexes preload (part of ConfigureAndPreloadOnStartup work done here)
-void		ConfigureAndPreloadInt ( int & iValidIndexes, int & iCounter );
+// load indexes got from internal config on daemon indexes preload (part of ConfigureAndPreload work done here)
+void		ConfigureAndPreloadConfiglessIndexes ( int & iValidIndexes, int & iCounter );
 
 FilenameBuilder_i * CreateFilenameBuilder ( const char * szIndex );
 
@@ -109,10 +109,17 @@ const CSphVector<ClusterDesc_t> & GetClustersInt();
 struct DistributedIndex_t;
 CSphString	BuildCreateTableDistr ( const CSphString & sName, const DistributedIndex_t & tDistr );
 
-bool		CreateNewIndexInt ( const CSphString & sIndex, const CreateTableSettings_t & tCreateTable, StrVec_t & dWarnings, CSphString & sError );
-bool		AddExistingIndexInt ( const CSphString & sIndex, IndexType_e eType, StrVec_t & dWarnings, CSphString & sError );
+bool		CreateNewIndexConfigless ( const CSphString & sIndex, const CreateTableSettings_t & tCreateTable, StrVec_t & dWarnings, CSphString & sError );
+bool		AddExistingIndexConfigless ( const CSphString & sIndex, IndexType_e eType, StrVec_t & dWarnings, CSphString & sError );
 bool		DropIndexInt ( const CSphString & sIndex, bool bIfExists, CSphString & sError );
 bool		CopyExternalIndexFiles ( const StrVec_t & dFiles, const CSphString & sDestPath, StrVec_t & dCopied, CSphString & sError );
 bool		CopyIndexFiles ( const CSphString & sIndex, const CSphString & sPathToIndex, bool & bPQ, StrVec_t & dWarnings, CSphString & sError );
+
+enum RunIdx_e : int {
+	NOTSERVED = 0,
+	LOCAL,
+	DISTR,
+};
+RunIdx_e		IndexIsServed ( const CSphString& sName );
 
 #endif // _searchdconfig_

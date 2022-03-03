@@ -20,7 +20,7 @@ class DocsCollector_c::Impl_c
 	CSphVector<DocID_t>		m_dValues;
 	CSphVector<BYTE>		m_dCompressedDocids;
 	CSphScopedPtr<MemoryReader_c>	m_pCompressedReader;
-	int						m_iFastIdx;
+	int						m_iFastIdx = 0;
 	DocID_t					m_iLastId = -1;
 	bool					m_bFastPath = false;
 
@@ -42,7 +42,7 @@ class DocsCollector_c::Impl_c
 		return m_bFastPath;
 	}
 
-	void ProcessFull ( const CSphQuery& tQuery, bool bJson, const CSphString& sIndex, const ServedDesc_t* pDesc, CSphString* pError )
+	void ProcessFull ( const CSphQuery& tQuery, bool bJson, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError )
 	{
 		PubSearchHandler_c tHandler ( 1, CreateQueryParser ( bJson ), tQuery.m_eQueryType, false );
 		tHandler.PushIndex ( sIndex, pDesc );
@@ -88,7 +88,7 @@ class DocsCollector_c::Impl_c
 	}
 
 public:
-	Impl_c ( const CSphQuery& tQuery, bool bJson, const CSphString& sIndex, const ServedDesc_t* pDesc, CSphString* pError )
+	Impl_c ( const CSphQuery& tQuery, bool bJson, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError )
 	{
 		if ( !ProcessFast ( tQuery ) )
 			ProcessFull ( tQuery, bJson, sIndex, pDesc, pError );
@@ -124,7 +124,7 @@ public:
 };
 
 /// public iface
-DocsCollector_c::DocsCollector_c ( const CSphQuery& tQuery, bool bJson, const CSphString& sIndex, const ServedDesc_t* pDesc, CSphString* pError )
+DocsCollector_c::DocsCollector_c ( const CSphQuery& tQuery, bool bJson, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError )
 	: m_pImpl { new Impl_c ( tQuery, bJson, sIndex, pDesc, pError ) }
 {
 	assert ( m_pImpl );

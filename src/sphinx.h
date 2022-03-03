@@ -1316,10 +1316,10 @@ public:
 	virtual void				SetBase ( CSphString sNewBase ) = 0;
 
 	/// set new index base path, and physically rename index files too
-	enum RenameResult_e { E_OK, E_FAIL, E_FATAL };
+	enum RenameResult_e { RE_OK, RE_FAIL, RE_FATAL };
 	virtual RenameResult_e		RenameEx ( CSphString sNewBase ) = 0;
 
-	bool 						Rename ( CSphString sNewBase ) { return RenameEx (std::move(sNewBase))==E_OK; }
+	bool 						Rename ( CSphString sNewBase ) { return RenameEx (std::move(sNewBase))==RE_OK; }
 
 	/// obtain exclusive lock on this index
 	virtual bool				Lock () = 0;
@@ -1480,7 +1480,7 @@ public:
 	void				Dealloc () override {}
 	void				Preread () override {}
 	void				SetBase ( CSphString ) override {}
-	RenameResult_e		RenameEx ( CSphString ) override { return E_FAIL; }
+	RenameResult_e		RenameEx ( CSphString ) override { return RE_FAIL; }
 	bool				Lock () override { return true; }
 	void				Unlock () override {}
 	bool				EarlyReject ( CSphQueryContext * , CSphMatch & ) const override { return false; }

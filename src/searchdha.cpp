@@ -481,30 +481,57 @@ static void PingCheckAdd ( HostDashboardRefPtr_t pHost )
 // class also provides mirror choosing using different strategies
 /////////////////////////////////////////////////////////////////////////////
 
-static GuardedHash_c & g_MultiAgents()
+// global cache for sharing multiagents (i.e. several distr indexes with same multiagent will share one copy with all stats)
+struct GlobalMultiAgents_t
 {
-	static GuardedHash_c dGlobalHash;
+	using ReadOnlyAgentsHash_t = ReadOnlyHash_T<MultiAgentDesc_c>;
+	using WriteableAgentsHash_t = WriteableHash_T<MultiAgentDesc_c>;
+	using cRefCountedHashOfAgents_t = cRefCountedRefPtr_T<cRefCountedHashOfRefcnt_T<MultiAgentDesc_c>>;
+
+	mutable CSphMutex m_tMultiAgentsLock; // protects only changes of hash; reads are lock-free
+	ReadOnlyAgentsHash_t m_dGlobalHash GUARDED_BY ( m_tMultiAgentsLock );
+
+	WriteableAgentsHash_t MakeEmptyChanger () REQUIRES ( m_tMultiAgentsLock )
+	{
+		WriteableAgentsHash_t pRes { m_dGlobalHash };
+		pRes.InitEmptyHash();
+		return pRes;
+	}
+
+	WriteableAgentsHash_t MakeCopyChanger () REQUIRES ( m_tMultiAgentsLock )
+	{
+		WriteableAgentsHash_t pRes { m_dGlobalHash };
+		pRes.CopyOwnerHash();
+		return pRes;
+	}
+
+	cRefCountedHashOfAgents_t GetHash () const NO_THREAD_SAFETY_ANALYSIS
+	{
+		return m_dGlobalHash.GetHash();
+	}
+};
+
+static GlobalMultiAgents_t & g_MultiAgents()
+{
+	static GlobalMultiAgents_t dGlobalHash;
 	return dGlobalHash;
 }
 
 // called from dtr of distr index. Make new snapshot with only actual multiagents, orphans will be removed.
 void MultiAgentDesc_c::CleanupOrphaned()
 {
-	// cleanup global
-	auto &gAgents = g_MultiAgents ();
 	bool bNeedGC = false;
-	for ( WLockedHashIt_c it ( &gAgents ); it.Next (); )
+	auto& tAgents = g_MultiAgents();
 	{
-		auto pAgent = it.Get ();
-		if ( pAgent )
+		ScopedMutex_t tLock { tAgents.m_tMultiAgentsLock };
+		auto tChanger = tAgents.MakeEmptyChanger();
+		auto pHash = tChanger.m_tOwner.GetHash();
+		for ( const auto& tAgent : *pHash )
 		{
-			pAgent->Release (); // need release since it.Get() just made AddRef().
-			if ( pAgent->IsLast () )
-			{
-				it.Delete ();
-				SafeRelease ( pAgent );
+			if ( tAgent.second->IsLast() )
 				bNeedGC = true;
-			}
+			else
+				tChanger.m_pNewHash->Add ( tAgent.second, tAgent.first );
 		}
 	}
 	if ( bNeedGC )
@@ -526,23 +553,26 @@ CSphString MultiAgentDesc_c::GetKey ( const CSphVector<AgentDesc_t *> &dTemplate
 	return sKey.cstr();
 }
 
-MultiAgentDesc_c * MultiAgentDesc_c::GetAgent ( const CSphVector<AgentDesc_t*> & dHosts, const AgentOptions_t & tOpt,
-		const WarnInfo_c & tWarn ) NO_THREAD_SAFETY_ANALYSIS
+MultiAgentDescRefPtr_c MultiAgentDesc_c::GetAgent ( const CSphVector<AgentDesc_t*> & dHosts, const AgentOptions_t & tOpt, const WarnInfo_c & tWarn )
 {
 	auto sKey = GetKey ( dHosts, tOpt );
-	auto& gHash = g_MultiAgents();
-
-	// if an elem exists, return it addreffed.
-	MultiAgentDescRefPtr_c pAgent ( ( MultiAgentDesc_c * ) gHash.Get ( sKey ) );
-	if ( pAgent )
-		return pAgent.Leak();
+	auto& tAgents = g_MultiAgents();
+	{
+		auto pHash = tAgents.GetHash();
+		auto* pEntry = (*pHash) ( sKey );
+		if ( pEntry )
+			return ConstCastPtr ( *pEntry );
+	}
 
 	// create and init new agent
-	pAgent = new MultiAgentDesc_c;
+	MultiAgentDescRefPtr_c pAgent { new MultiAgentDesc_c };
 	if ( !pAgent->Init ( dHosts, tOpt, tWarn ) )
-		return nullptr;
+		return MultiAgentDescRefPtr_c();
 
-	return ( MultiAgentDesc_c * ) gHash.TryAddThenGet ( pAgent, sKey );
+	ScopedMutex_t tLock { tAgents.m_tMultiAgentsLock };
+	auto tChanger = tAgents.MakeCopyChanger();
+	tChanger.Add ( pAgent, sKey );
+	return pAgent;
 }
 
 bool MultiAgentDesc_c::Init ( const CSphVector<AgentDesc_t *> &dHosts,
@@ -1267,9 +1297,9 @@ static bool ConfigureMirrorSet ( CSphVector<AgentDesc_t*> &tMirrors, AgentOption
 }
 
 // different cases are tested in T_ConfigureMultiAgent, see gtests_searchdaemon.cpp
-MultiAgentDesc_c * ConfigureMultiAgent ( const char * szAgent, const char * szIndexName, AgentOptions_t tOptions, StrVec_t * pWarnings )
+MultiAgentDescRefPtr_c ConfigureMultiAgent ( const char * szAgent, const char * szIndexName, AgentOptions_t tOptions, StrVec_t * pWarnings )
 {
-	MultiAgentDesc_c* pRes = nullptr;
+	MultiAgentDescRefPtr_c pRes;
 	CSphVector<AgentDesc_t *> tMirrors;
 	auto dFree = AtScopeExit ( [&tMirrors] { tMirrors.Apply( [] ( AgentDesc_t * pMirror ) { SafeDelete ( pMirror ); } ); } );
 
@@ -2607,13 +2637,12 @@ bool AgentConn_t::CommitResult ()
 }
 
 
-void AgentConn_t::SetMultiAgent ( MultiAgentDesc_c * pAgent )
+void AgentConn_t::SetMultiAgent ( MultiAgentDescRefPtr_c pAgent )
 {
 	assert ( pAgent );
-	pAgent->AddRef ();
-	m_pMultiAgent = pAgent;
 	m_iMirrorsCount = pAgent->GetLength ();
 	m_iRetries = pAgent->GetRetryLimit ();
+	m_pMultiAgent = std::move ( pAgent );
 	m_bManyTries = m_iRetries>0;
 }
 

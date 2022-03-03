@@ -2084,7 +2084,7 @@ bool MutableIndexSettings_c::Load ( const char * sFileName, const char * sIndexN
 	JsonObj_c tPreopen = tParser.GetBoolItem ( "preopen", sError, true );
 	if ( tPreopen )
 	{
-		m_bPreopen = tPreopen.BoolVal();
+		m_bPreopen = tPreopen.BoolVal() || MutableIndexSettings_c::GetDefaults().m_bPreopen;
 		m_dLoaded.BitSet ( (int)MutableName_e::PREOPEN );
 	} else if ( !sError.IsEmpty() )
 	{
@@ -2143,7 +2143,7 @@ void MutableIndexSettings_c::Load ( const CSphConfigSection & hIndex, bool bNeed
 
 	if (  hIndex.Exists ( "preopen" )  )
 	{
-		m_bPreopen = ( hIndex.GetInt ( "preopen", 0 )!=0 );
+		m_bPreopen = hIndex.GetBool ( "preopen", false ) || MutableIndexSettings_c::GetDefaults().m_bPreopen;
 		m_dLoaded.BitSet ( (int)MutableName_e::PREOPEN );
 	}
 

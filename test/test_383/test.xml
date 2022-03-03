@@ -134,7 +134,7 @@ insert into test:rtc (title,mva1,gid,j1) values ('test 501', (521,522,523), 521,
 </sphinxql>
 
 <!-- request to node 2 -->
-<sphinxql d="2" system="wait-status" status="cluster_test_last_committed" wait_value="14"/>
+<sphinxql d="2" system="wait-status" status="cluster_test_last_committed" wait_value="13"/>
 <sphinxql d="2">
 	SELECT * FROM test:rt2;
 	SELECT * FROM test:rtc;
@@ -144,7 +144,7 @@ insert into test:rtc (title,mva1,gid,j1) values ('test 501', (521,522,523), 521,
 </sphinxql>
 
 <!-- request to node 1 -->
-<sphinxql d="1" system="wait-status" status="cluster_test_last_committed" wait_value="15"/>
+<sphinxql d="1" system="wait-status" status="cluster_test_last_committed" wait_value="14"/>
 <sphinxql d="1">
 	SELECT * FROM test:rtc;
 </sphinxql>
@@ -156,7 +156,7 @@ UPDATE test:rt1 SET mva10=(31,33) where id=3;
 insert into test:rt1 (id,title,mva1) values (601, 'test 201', (621,622));
 </sphinxql>
 <!-- request to node 1 -->
-<sphinxql d="1" system="wait-status" status="cluster_test_last_committed" wait_value="16" />
+<sphinxql d="1" system="wait-status" status="cluster_test_last_committed" wait_value="15" />
 <sphinxql d="1">
 SELECT * FROM test:rt1 order by id asc;
 </sphinxql>

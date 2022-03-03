@@ -20,8 +20,12 @@ class DocsCollector_c : public ISphNoncopyable
 	Impl_c* m_pImpl;
 
 public:
-	DocsCollector_c ( const CSphQuery& tQuery, bool bJson, const CSphString& sIndex, const ServedDesc_t* pDesc, CSphString* pError );
+	DocsCollector_c ( const CSphQuery& tQuery, bool bJson, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError );
 	~DocsCollector_c();
+
+	DocsCollector_c (DocsCollector_c&& rhs) noexcept
+		: m_pImpl ( std::exchange ( rhs.m_pImpl, nullptr ) )
+	{}
 
 	bool GetValuesChunk ( CSphVector<DocID_t>& dValues, int iValues );
 

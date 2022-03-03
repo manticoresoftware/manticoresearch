@@ -9500,8 +9500,8 @@ bool CSphIndex_VLN::PreallocWordlist()
 	if ( !sphIsReadable ( GetIndexFileName(SPH_EXT_SPI).cstr(), &m_sLastError ) )
 		return false;
 
-	// might be no dictionary at this point for old index format
-	bool bWordDict = m_pDict && m_pDict->GetSettings().m_bWordDict;
+	assert ( m_pDict );
+	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
 
 	// only checkpoint and wordlist infixes are actually read here; dictionary itself is just mapped
 	if ( !m_tWordlist.Preread ( GetIndexFileName(SPH_EXT_SPI), bWordDict, m_tSettings.m_iSkiplistBlockSize, m_sLastError ) )
@@ -9716,24 +9716,24 @@ void CSphIndex_VLN::SetBase ( CSphString sNewBase )
 CSphIndex::RenameResult_e CSphIndex_VLN::RenameEx ( CSphString sNewBase )
 {
 	if ( m_sFilename==sNewBase )
-		return E_OK;
+		return RE_OK;
 
 	IndexFiles_c dFiles ( m_sFilename, nullptr, m_uVersion );
 	if ( !dFiles.TryRenameBase ( sNewBase ) )
 	{
 		m_sLastError = dFiles.ErrorMsg ();
-		return dFiles.IsFatal() ? E_FATAL : E_FAIL;
+		return dFiles.IsFatal() ? RE_FATAL : RE_FAIL;
 	}
 
 	if ( !dFiles.RenameLock ( sNewBase, m_iLockFD ) )
 	{
 		m_sLastError = dFiles.ErrorMsg ();
-		return dFiles.IsFatal() ? E_FATAL : E_FAIL;
+		return dFiles.IsFatal() ? RE_FATAL : RE_FAIL;
 	}
 
 	SetBase ( std::move ( sNewBase ) );
 
-	return E_OK;
+	return RE_OK;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -15960,7 +15960,7 @@ int sphDictCmpStrictly ( const char * pStr1, int iLen1, const char * pStr2, int 
 }
 
 
-ISphWordlist::Args_t::Args_t ( bool bPayload, int iExpansionLimit, bool bHasExactForms, ESphHitless eHitless, cRefCountedRefPtr_t pIndexData )
+ISphWordlist::Args_t::Args_t ( bool bPayload, int iExpansionLimit, bool bHasExactForms, ESphHitless eHitless, cRefCountedRefPtrGeneric_t pIndexData )
 	: m_bPayload ( bPayload )
 	, m_iExpansionLimit ( iExpansionLimit )
 	, m_bHasExactForms ( bHasExactForms )

@@ -38,15 +38,17 @@ static Saved_e CheckSaveIndexes ()
 	CSphString sError;
 	auto eSaveState = Saved_e::ALL;
 	bool bDirty = false;
-	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next (); )
+	ServedSnap_t hLocals = g_pLocalIndexes->GetHash();
+	for ( auto& tIt : *hLocals )
 	{
-		ServedDescRPtr_c pServed ( it.Get ());
-		if ( pServed && pServed->m_pIndex->GetAttributeStatus() )
+		assert ( tIt.second );
+		RIdx_c pIdx { tIt.second };
+		if ( pIdx->GetAttributeStatus() )
 		{
 			bDirty = true;
-			if ( !pServed->m_pIndex->SaveAttributes ( sError ) )
+			if ( !pIdx->SaveAttributes ( sError ) )
 			{
-				sphWarning ( "index %s: attrs save failed: %s", it.GetName ().cstr(), sError.cstr() );
+				sphWarning ( "index %s: attrs save failed: %s", tIt.first.cstr(), sError.cstr() );
 				eSaveState = Saved_e::NOT_ALL;
 			}
 		}

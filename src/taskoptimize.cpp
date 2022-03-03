@@ -39,16 +39,12 @@ void EnqueueForOptimize ( CSphString sIndex, OptimizeTask_t tTask )
 				if ( !pServed )
 					return;
 
-				ServedDescRPtr_c dReadLocked ( pServed );
-				if ( !dReadLocked->m_pIndex )
-					return;
-
 				// want to track optimize only at work
 				auto pDesc = PublishSystemInfo ( "OPTIMIZE" );
 
 				// FIXME: MVA update would wait w-lock here for a very long time
-				assert ( dReadLocked->m_eType==IndexType_e::RT );
-				static_cast<RtIndex_i*> ( dReadLocked->m_pIndex )->Optimize ( std::move ( pJob->m_tTask ) );
+				assert ( pServed->m_eType==IndexType_e::RT );
+				RIdx_T<RtIndex_i*> ( pServed )->Optimize ( std::move ( pJob->m_tTask ) );
 			},
 			[] ( void* pPayload ) // releaser
 			{

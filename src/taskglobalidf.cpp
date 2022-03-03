@@ -27,9 +27,10 @@ static inline float logf ( float v )
 static void CheckRotateGlobalIDFs ( void* )
 {
 	CSphVector <CSphString> dFiles;
-	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next (); )
+	ServedSnap_t hLocals = g_pLocalIndexes->GetHash();
+	for ( auto& tIt : *hLocals )
 	{
-		ServedDescRPtr_c pIndex ( it.Get ());
+		auto pIndex = tIt.second;
 		if ( pIndex && !pIndex->m_sGlobalIDFPath.IsEmpty ())
 			dFiles.Add ( pIndex->m_sGlobalIDFPath );
 	}

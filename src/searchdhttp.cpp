@@ -1705,8 +1705,7 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString& sIndex, const Jso
 		{
 			RtAccum_t tAcc ( false );
 			tAcc.SetIndex ( pIndex );
-			ReplicationCommand_t * pCmd = tAcc.AddCommand ( ReplicationCommand_e::PQUERY_ADD );
-			pCmd->m_sIndex = sIndex;
+			ReplicationCommand_t * pCmd = tAcc.AddCommand ( ReplicationCommand_e::PQUERY_ADD, sIndex );
 			pCmd->m_pStored = pStored;
 			// refresh query's UID for reply as it might be auto-generated
 			iID = pStored->m_iQUID;
@@ -1746,8 +1745,7 @@ bool HttpHandlerPQ_c::ListQueries ( const CSphString & sIndex )
 bool HttpHandlerPQ_c::Delete ( const CSphString & sIndex, const JsonObj_c & tRoot )
 {
 	RtAccum_t tAcc ( false );
-	ReplicationCommand_t * pCmd = tAcc.AddCommand ( ReplicationCommand_e::PQUERY_DELETE );
-	pCmd->m_sIndex = sIndex;
+	ReplicationCommand_t * pCmd = tAcc.AddCommand ( ReplicationCommand_e::PQUERY_DELETE, sIndex );
 
 	CSphString sError;
 	JsonObj_c tTagsArray = tRoot.GetArrayItem ( "tags", sError, true );

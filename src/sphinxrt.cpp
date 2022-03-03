@@ -2432,23 +2432,23 @@ void RtAccum_t::ResetRowID()
 	m_tNextRowID=0;
 }
 
-ReplicationCommand_t * RtAccum_t::AddCommand ( ReplicationCommand_e eCmd )
+ReplicationCommand_t* MakeReplicationCommand ( ReplicationCommand_e eCommand, CSphString sIndex, CSphString sCluster )
 {
-	return AddCommand ( eCmd, CSphString(), CSphString() );
+	auto* pCmd = new ReplicationCommand_t();
+	pCmd->m_eCommand = eCommand;
+	pCmd->m_sCluster = std::move ( sCluster );
+	pCmd->m_sIndex = std::move ( sIndex );
+	return pCmd;
 }
 
-ReplicationCommand_t * RtAccum_t::AddCommand ( ReplicationCommand_e eCmd, const CSphString & sCluster, const CSphString & sIndex )
+ReplicationCommand_t * RtAccum_t::AddCommand ( ReplicationCommand_e eCmd, CSphString sIndex, CSphString sCluster )
 {
 	// all writes to RT index go as single command to serialize accumulator
-	if ( eCmd==ReplicationCommand_e::RT_TRX && m_dCmd.GetLength() && m_dCmd.Last()->m_eCommand==ReplicationCommand_e::RT_TRX )
+	if ( eCmd==ReplicationCommand_e::RT_TRX && !m_dCmd.IsEmpty() && m_dCmd.Last()->m_eCommand==ReplicationCommand_e::RT_TRX )
 		return m_dCmd.Last();
 
-	auto* pCmd = new ReplicationCommand_t ();
+	auto* pCmd = MakeReplicationCommand ( eCmd, std::move ( sIndex ), std::move ( sCluster ) );
 	m_dCmd.Add ( pCmd );
-	pCmd->m_eCommand = eCmd;
-	pCmd->m_sCluster = sCluster;
-	pCmd->m_sIndex = sIndex;
-
 	return pCmd;
 }
 

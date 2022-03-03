@@ -1479,9 +1479,7 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 
 	while ( tReader.GetPos()<iLen )
 	{
-		CSphScopedPtr<ReplicationCommand_t> pCmd ( new ReplicationCommand_t );
-
-		ReplicationCommand_e eCommand = (ReplicationCommand_e)tReader.GetWord();
+		auto eCommand = (ReplicationCommand_e)tReader.GetWord();
 		if ( eCommand<ReplicationCommand_e::PQUERY_ADD || eCommand>ReplicationCommand_e::TOTAL )
 		{
 			sphWarning ( "bad replication command %d", (int)eCommand );
@@ -1496,7 +1494,7 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 		}
 
 		CSphString sIndex = tReader.GetString();
-		int iRequestLen = tReader.GetDword();
+		auto iRequestLen = (int)tReader.GetDword();
 		if ( iRequestLen+tReader.GetPos()>iLen )
 		{
 			sphWarning ( "replication parse apply - out of buffer read %d+%d of %d", tReader.GetPos(), iRequestLen, iLen );
@@ -1506,9 +1504,7 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 		const BYTE * pRequest = pData + tReader.GetPos();
 		tReader.SetPos ( tReader.GetPos() + iRequestLen );
 
-		pCmd->m_eCommand = eCommand;
-		pCmd->m_sCluster = sCluster;
-		pCmd->m_sIndex = sIndex;
+		CSphScopedPtr<ReplicationCommand_t> pCmd { MakeReplicationCommand ( eCommand, sIndex, sCluster ) };
 		pCmd->m_bIsolated = bIsolated;
 
 		switch ( eCommand )
@@ -3675,7 +3671,7 @@ void ReplicationCluster_t::UpdateIndexHashes()
 static bool ClusterAlterDrop ( const CSphString & sCluster, const CSphString & sIndex, CSphString & sError )
 {
 	RtAccum_t tAcc { false };
-	tAcc.AddCommand ( ReplicationCommand_e::CLUSTER_ALTER_DROP, sCluster, sIndex );
+	tAcc.AddCommand ( ReplicationCommand_e::CLUSTER_ALTER_DROP, sIndex, sCluster );
 	return HandleCmdReplicate ( tAcc, sError );
 }
 
@@ -4961,7 +4957,7 @@ static bool ClusterAlterAdd ( const CSphString & sCluster, const CSphString & sI
 	}
 
 	RtAccum_t tAcc { false };
-	ReplicationCommand_t * pAddCmd = tAcc.AddCommand ( ReplicationCommand_e::CLUSTER_ALTER_ADD, sCluster, sIndex );
+	ReplicationCommand_t * pAddCmd = tAcc.AddCommand ( ReplicationCommand_e::CLUSTER_ALTER_ADD, sIndex, sCluster );
 	pAddCmd->m_bCheckIndex = false;
 
 	return HandleCmdReplicate ( tAcc, sError, nullptr, nullptr, nullptr, pIndexDesc.Ptr() );

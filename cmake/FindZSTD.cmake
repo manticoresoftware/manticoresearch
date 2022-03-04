@@ -23,9 +23,21 @@
 # See the License for more information.
 #=============================================================================
 
-find_package ( PkgConfig )
+find_package ( PkgConfig QUIET )
 if (PKG_CONFIG_FOUND)
-	pkg_check_modules ( ZSTD libzstd )
-	include (helpers)
-	implib_pkgconfig (ZSTD ZSTD::ZSTD)
-endif()
+	pkg_check_modules ( ZSTD QUIET libzstd )
+endif ()
+
+if (NOT ZSTD_FOUND)
+	find_path ( ZSTD_INCLUDE_DIRS NAMES "zstd.h" )
+	find_library ( ZSTD_LINK_LIBRARIES NAMES zstd libzstd NAMES_PER_DIR )
+endif ()
+
+mark_as_advanced ( ZSTD_LINK_LIBRARIES ZSTD_INCLUDE_DIRS )
+
+include ( FindPackageHandleStandardArgs )
+find_package_handle_standard_args ( ZSTD REQUIRED_VARS ZSTD_LINK_LIBRARIES )
+set_package_properties ( ZSTD PROPERTIES TYPE RUNTIME URL "https://github.com/facebook/zstd" )
+
+include ( helpers )
+implib_config ( ZSTD ZSTD::ZSTD )

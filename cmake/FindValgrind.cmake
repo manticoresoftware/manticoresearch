@@ -28,19 +28,23 @@
 # First check if include path was explicitly given.
 # If so, it has the maximum priority over any other possibilities
 
-find_path (VALGRIND_INCLUDE_DIR valgrind/valgrind.h
+find_package ( PkgConfig QUIET )
+if (PKG_CONFIG_FOUND)
+	pkg_check_modules ( Valgrind QUIET valgrind )
+endif ()
+
+if (NOT Valgrind_FOUND)
+	find_path ( Valgrind_INCLUDE_DIRS valgrind/valgrind.h
 		/usr/include
 		/usr/local/include
 		${VALGRIND_PREFIX}/include
 		$ENV{VALGRIND_PREFIX}/include
 		)
+endif ()
 
-mark_as_advanced (VALGRIND_INCLUDE_DIR)
+mark_as_advanced ( Valgrind_INCLUDE_DIRS )
 
 include ( FindPackageHandleStandardArgs )
-find_package_handle_standard_args (Valgrind REQUIRED_VARS VALGRIND_INCLUDE_DIR)
+find_package_handle_standard_args ( Valgrind REQUIRED_VARS Valgrind_INCLUDE_DIRS )
 
-if (Valgrind_FOUND AND NOT TARGET Valgrind::Valgrind)
-	add_library(Valgrind::Valgrind INTERFACE IMPORTED)
-	set_target_properties(Valgrind::Valgrind PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${VALGRIND_INCLUDE_DIR}")
-endif()
+implib_includes ( Valgrind Valgrind::Valgrind )

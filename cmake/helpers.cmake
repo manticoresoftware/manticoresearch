@@ -260,7 +260,7 @@ function (addruntime library)
 	set_property (TARGET RUNTIME APPEND PROPERTY LIBS "${library}")
 endfunction ()
 
-function (implib_pkgconfig prefix name)
+function ( implib_config prefix name)
 	if (${prefix}_FOUND AND NOT TARGET ${name})
 		add_library ( ${name} UNKNOWN IMPORTED )
 
@@ -282,6 +282,16 @@ function (implib_pkgconfig prefix name)
 		endif()
 	endif()
 endfunction()
+
+function ( implib_includes prefix name )
+	if (${prefix}_FOUND AND NOT TARGET ${name})
+		add_library ( ${name} INTERFACE IMPORTED )
+		if (${prefix}_INCLUDE_DIRS)
+			set_property ( TARGET ${name} PROPERTY
+					INTERFACE_INCLUDE_DIRECTORIES "${${prefix}_INCLUDE_DIRS}" )
+		endif ()
+	endif ()
+endfunction ()
 
 # helpers vars to shorten generate lines
 set ( CLANGCXX "$<COMPILE_LANG_AND_ID:CXX,Clang,AppleClang>" )

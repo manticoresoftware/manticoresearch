@@ -595,9 +595,8 @@ int main ( int argc, char ** argv )
 	Threads::Init();
 	Threads::PrepareMainThread ( &cTopOfMainStack );
 
-	CSphConfigParser cp;
-	CSphConfig &hConf = cp.m_tConf;
-	cp.Parse ("internal", rtestconfig);
+	CSphConfig hConf;
+	ParseConfig ( &hConf, "internal", rtestconfig );
 	const CSphConfigType &hSources = hConf["source"];
 
 	CSphString sError;

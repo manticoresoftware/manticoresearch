@@ -1906,9 +1906,7 @@ int main ( int argc, char ** argv )
 	if ( !sphInitCharsetAliasTable ( sError ) )
 		sphDie ( "failed to init charset alias table: %s", sError.cstr() );
 
-	CSphConfigParser cp;
-	CSphConfig & hConf = cp.m_tConf;
-	sOptConfig = sphLoadConfig ( sOptConfig, g_bQuiet, false, cp );
+	auto hConf = sphLoadConfig ( sOptConfig, g_bQuiet, false, &sOptConfig );
 
 	if ( !hConf ( "source" ) )
 		sphDie ( "no indexes found in config file '%s'", sOptConfig );

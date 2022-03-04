@@ -239,7 +239,7 @@ ReadOnlyDistrHash_c *						g_pDistIndexes = new ReadOnlyDistrHash_c ();	// distr
 // fixme! move all this stuff to dedicated file.
 
 static RwLock_t								g_tRotateConfigMutex;
-static CSphConfigParser g_pCfg GUARDED_BY ( g_tRotateConfigMutex );
+static CSphConfig							g_hCfg GUARDED_BY ( g_tRotateConfigMutex );
 static volatile bool						g_bNeedRotate = false;		// true if there were pending HUPs to handle (they could fly in during previous rotate)
 static volatile bool						g_bInRotate = false;		// true while we are rotating
 static volatile bool						g_bReloadForced = false;	// true in case reload issued via SphinxQL
@@ -15191,28 +15191,27 @@ static bool PrepareReconfigure ( const CSphString & sIndex, const CSphConfigSect
 
 static bool PrepareReconfigure ( const CSphString & sIndex, CSphReconfigureSettings & tSettings, CSphString & sError )
 {
-	CSphConfigParser tCfg;
-	if ( !tCfg.ReParse ( g_sConfigFile.cstr () ) )
+	CSphConfig hCfg;
+	if ( !ParseConfig ( &hCfg, g_sConfigFile.cstr () ) )
 	{
 		sError.SetSprintf ( "failed to parse config file '%s': %s; using previous settings", g_sConfigFile.cstr (), TlsMsg::szError() );
 		return false;
 	}
 
-	if ( !tCfg.m_tConf.Exists ( "index" ) )
+	if ( !hCfg.Exists ( "index" ) )
 	{
 		sError.SetSprintf ( "failed to find any index in config file '%s'; using previous settings", g_sConfigFile.cstr () );
 		return false;
 	}
 
-	const CSphConfig & hConf = tCfg.m_tConf;
-	if ( !hConf["index"].Exists ( sIndex ) )
+	if ( !hCfg["index"].Exists ( sIndex ) )
 	{
 		sError.SetSprintf ( "failed to find index '%s' in config file '%s'; using previous settings", sIndex.cstr(), g_sConfigFile.cstr () );
 		return false;
 	}
 
 	CSphString sWarning;
-	if ( !PrepareReconfigure ( sIndex, hConf["index"][sIndex], tSettings, sWarning, sError ) )
+	if ( !PrepareReconfigure ( sIndex, hCfg["index"][sIndex], tSettings, sWarning, sError ) )
 		return false;
 
 	return true;
@@ -16710,8 +16709,8 @@ static bool PreallocNewIndex ( ServedIndex_c & tIdx, const char * szIndexName, S
 	CSphConfigSection tIndexConfig;
 	{
 		ScRL_t dRLockConfig { g_tRotateConfigMutex };
-		if ( g_pCfg.m_tConf ( "index" ) )
-			pIndexConfig = g_pCfg.m_tConf["index"] ( szIndexName );
+		if ( g_hCfg ( "index" ) )
+			pIndexConfig = g_hCfg["index"] ( szIndexName );
 		if ( pIndexConfig )
 		{
 			tIndexConfig = *pIndexConfig;
@@ -17533,7 +17532,7 @@ static void DoGreedyRotation ( VecOfServed_c&& dDeferredIndexes ) REQUIRES ( Mai
 		{
 			sphWarning ( "greedy rotate (prealloc) mutable %s", sDeferredIndex.cstr() );
 
-			if ( PreallocNewIndex ( *pDeferredIndex, &g_pCfg.m_tConf["index"][sDeferredIndex], sDeferredIndex.cstr(), dWarnings, sError ) )
+			if ( PreallocNewIndex ( *pDeferredIndex, &g_hCfg["index"][sDeferredIndex], sDeferredIndex.cstr(), dWarnings, sError ) )
 				g_pLocalIndexes->AddOrReplace ( pDeferredIndex, sDeferredIndex );
 			else
 				sphWarning ( "index '%s': %s - NOT SERVING", sDeferredIndex.cstr(), sError.cstr() );
@@ -17548,7 +17547,7 @@ static void DoGreedyRotation ( VecOfServed_c&& dDeferredIndexes ) REQUIRES ( Mai
 			if ( !bOk )
 				sphWarning ( "index '%s': %s - NOT SERVING", sDeferredIndex.cstr(), sError.cstr() );
 
-			if ( !bSame && bOk && !sphFixupIndexSettings ( WIdx, g_pCfg.m_tConf["index"][sDeferredIndex], g_bStripPath, nullptr, dWarnings, sError ) )
+			if ( !bSame && bOk && !sphFixupIndexSettings ( WIdx, g_hCfg["index"][sDeferredIndex], g_bStripPath, nullptr, dWarnings, sError ) )
 			{
 				sphWarning ( "index '%s': %s - NOT SERVING", sDeferredIndex.cstr(), sError.cstr() );
 				bOk = false;
@@ -17596,9 +17595,9 @@ static void CheckRotate () REQUIRES ( MainThread ) EXCLUDES ( g_tRotateThreadMut
 		if ( LoadAndCheckConfig () || g_bReloadForced )
 		{
 			sphInfo( "Config changed (read %d chars)", g_dConfig.GetLength());
-			if ( !g_dConfig.IsEmpty() && g_pCfg.ReParse ( g_sConfigFile.cstr (), g_dConfig.begin ()))
+			if ( !g_dConfig.IsEmpty() && ParseConfig ( &g_hCfg, g_sConfigFile.cstr (), g_dConfig.begin ()))
 			{
-				ReloadIndexesFromConfig ( g_pCfg.m_tConf, hDeferredIndexes );
+				ReloadIndexesFromConfig ( g_hCfg, hDeferredIndexes );
 				bReloadHappened = true;
 			} else
 				sphWarning ( "failed to parse config file '%s': %s; using previous settings",
@@ -19156,11 +19155,12 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	sphInfo( "using config file '%s' (%d chars)...", g_sConfigFile.cstr(), g_dConfig.GetLength());
 	// do parse
 	// don't aqcuire wlock, since we're in single main thread here.
-	if ( !g_pCfg.Parse ( g_sConfigFile.scstr(), g_dConfig.begin() ) )
+	FakeScopedWLock_T<> wFakeLock { g_tRotateConfigMutex };
+	if ( !ParseConfig ( &g_hCfg, g_sConfigFile.scstr(), g_dConfig.begin() ) )
 		sphFatal ( "failed to parse config file '%s': %s", g_sConfigFile.cstr (), TlsMsg::szError() );
 	CleanLoadedConfig();
 
-	const CSphConfig & hConf = g_pCfg.m_tConf;
+	const CSphConfig& hConf = g_hCfg;
 
 	if ( !hConf.Exists ( "searchd" ) || !hConf["searchd"].Exists ( "searchd" ) )
 		sphFatal ( "'searchd' config section not found in '%s'", g_sConfigFile.cstr () );
@@ -19251,8 +19251,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		// reparse the config file
 		sphInfo ( "Reloading the config (%d chars)", g_dConfig.GetLength() );
 
-		// don't aqcuire wlock, since we're in single main thread here.
-		if ( !g_pCfg.ReParse ( g_sConfigFile.cstr (), g_dConfig.begin () ) )
+		// fake lock is acquired; no warnings will be fired
+		if ( !ParseConfig ( &g_hCfg, g_sConfigFile.cstr (), g_dConfig.begin () ) )
 			sphFatal ( "failed to parse config file '%s': %s", g_sConfigFile.cstr (), TlsMsg::szError() );
 
 		sphInfo ( "Reconfigure the daemon" );
@@ -19385,7 +19385,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		sphSplit ( dExactIndexes, dOptIndex.cstr (), "," );
 
 	SetPercolateQueryParserFactory ( PercolateQueryParserFactory );
-	Threads::CallCoroutine ( [&hConf, &dExactIndexes]
+	Threads::CallCoroutine ( [&hConf, &dExactIndexes]() REQUIRES_SHARED ( g_tRotateConfigMutex )
 	{
 		ScopedRole_c thMain ( MainThread );
 		ConfigureAndPreloadOnStartup ( hConf, dExactIndexes );

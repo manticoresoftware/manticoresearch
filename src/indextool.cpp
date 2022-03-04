@@ -1372,9 +1372,7 @@ int main ( int argc, char ** argv )
 	if ( !sphInitCharsetAliasTable ( sError ) )
 		sphDie ( "failed to init charset alias table: %s", sError.cstr() );
 
-	CSphConfigParser cp;
-	CSphConfig & hConf = cp.m_tConf;
-	sphLoadConfig ( sOptConfig, bQuiet, true, cp );
+	auto hConf = sphLoadConfig ( sOptConfig, bQuiet, true );
 
 	// can't reuse the code from searchdconfig, using a simplified version here
 	LoadJsonConfig ( hConf, sOptConfig );

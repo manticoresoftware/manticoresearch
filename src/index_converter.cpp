@@ -2579,17 +2579,16 @@ int main ( int argc, char ** argv )
 	if ( !sphInitCharsetAliasTable ( sError ) )
 		sphDie ( "failed to init charset alias table: %s", sError.cstr() );
 
-	CSphConfigParser tConfig;
 	const CSphConfigType * pIndexes = nullptr;
 	if ( !sConfig.IsEmpty() )
 	{
-		sphLoadConfig ( sConfig.cstr(), false, false, tConfig );
-		pIndexes = tConfig.m_tConf ( "index" );
+		CSphConfig hConfig = sphLoadConfig ( sConfig.cstr(), false, false );
+		pIndexes = hConfig ( "index" );
 
 		if ( ( bAll || !sIndexName.IsEmpty() ) && !pIndexes )
 			sphDie ( "no indexes found in config" );
 
-		sphConfigureCommon ( tConfig.m_tConf );
+		sphConfigureCommon ( hConfig );
 	}
 
 	int iConvertedCount = 0;

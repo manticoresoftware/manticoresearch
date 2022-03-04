@@ -295,36 +295,6 @@ using CSphConfigType = SmallStringHash_T < CSphConfigSection >;
 /// config (hash of section types)
 using CSphConfig = SmallStringHash_T < CSphConfigType >;
 
-/// simple config file
-class CSphConfigParser
-{
-public:
-	CSphConfig		m_tConf;
-
-public:
-	bool			Parse ( const char * sFileName, const char * pBuffer = nullptr );
-
-	// fail-save loading new config over existing.
-	bool			ReParse ( const char * sFileName, const char * pBuffer = nullptr );
-
-private:
-	CSphString		m_sFileName;
-	int				m_iLine = -1;
-	CSphString		m_sSectionType;
-	CSphString		m_sSectionName;
-
-	int					m_iWarnings = 0;
-	static const int	WARNS_THRESH	= 5;
-
-private:
-	bool			IsPlainSection ( const char * sKey );
-	bool			IsNamedSection ( const char * sKey );
-	bool			AddSection ( const char * sType, const char * sSection );
-	void			AddKey ( const char * sKey, char * sValue );
-	bool			ValidateKey ( const char * sKey );
-	char *			GetBufferString ( char * szDest, int iMax, const char * & szSource );
-};
-
 bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dResult, const char * sArgs=nullptr );
 
 /////////////////////////////////////////////////////////////////////////////
@@ -332,8 +302,11 @@ bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dRe
 /// Provided or default config file
 const char *	sphGetConfigFile ( const char * sHint = nullptr );
 
-/// load config file
-const char *	sphLoadConfig ( const char * sOptConfig, bool bQuiet, bool bIgnoreIndexes, CSphConfigParser & cp );
+/// load config file (will die inside if an error happened)
+CSphConfig		sphLoadConfig ( const char * sOptConfig, bool bQuiet, bool bIgnoreIndexes, const char ** ppActualConfig=nullptr );
+
+/// load config file into provided hConfig (on error hConfig is unchanged)
+bool			ParseConfig ( CSphConfig* pConfig, const char* sFileName, const char* pBuffer = nullptr );
 
 enum ESphLogLevel : BYTE
 {

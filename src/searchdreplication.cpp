@@ -1063,7 +1063,6 @@ static void ReplicateClusterDone ( ReplicationCluster_t * pCluster )
 		return;
 
 	auto pProvider = pCluster->m_pProvider;
-	pCluster->m_pProvider = nullptr;
 
 	if ( pProvider )
 		pProvider->disconnect ( pProvider );
@@ -1073,7 +1072,9 @@ static void ReplicateClusterDone ( ReplicationCluster_t * pCluster )
 	// to join. Thread will join after signal handler closes wsrep connection
 	pCluster->m_tWorkerFinished.WaitEvent ();
 
+	pCluster->m_pProvider = nullptr;
 	delete pCluster;
+
 	wsrep_unload ( pProvider );
 	sphLogDebug ( "ReplicateClusterDone finished, cluster deleted lib %p unloaded", pProvider );
 }

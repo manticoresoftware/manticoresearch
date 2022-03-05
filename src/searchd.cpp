@@ -17438,8 +17438,7 @@ static void IssuePlainOldRotation ( HashOfServed_c& hDeferred )
 
 // Reloading called always from same thread (so, for now not need to be th-safe for itself)
 // ServiceMain() -> TickHead() -> CheckRotate() -> ReloadConfigAndRotateIndexes().
-static void ReloadIndexesFromConfig ( const CSphConfig& hConf, HashOfServed_c& hDeferred ) REQUIRES ( MainThread, g_tRotateConfigMutex )
-	REQUIRES ( MainThread )
+static void ReloadIndexesFromConfig ( const CSphConfig& hConf, HashOfServed_c& hDeferred ) REQUIRES ( MainThread )
 {
 	assert ( !IsConfigless() );
 	if ( !hConf.Exists ("index") )
@@ -17656,17 +17655,22 @@ static void CheckRotate () REQUIRES ( MainThread ) EXCLUDES ( g_tRotateThreadMut
 	bool bReloadHappened = false;
 	HashOfServed_c hDeferredIndexes;
 	{
-		ScWL_t dRotateConfigMutexWlocked { g_tRotateConfigMutex };
 		if ( LoadAndCheckConfig () || g_bReloadForced )
 		{
 			sphInfo( "Config changed (read %d chars)", g_dConfig.GetLength());
-			if ( !g_dConfig.IsEmpty() && ParseConfig ( &g_hCfg, g_sConfigFile.cstr (), g_dConfig.begin ()))
+			if ( !g_dConfig.IsEmpty() )
 			{
-				ReloadIndexesFromConfig ( g_hCfg, hDeferredIndexes );
-				bReloadHappened = true;
-			} else
-				sphWarning ( "failed to parse config file '%s': %s; using previous settings",
-						g_sConfigFile.cstr (), TlsMsg::szError ());
+				{
+					ScWL_t dRotateConfigMutexWlocked { g_tRotateConfigMutex };
+					bReloadHappened = ParseConfig ( &g_hCfg, g_sConfigFile.cstr (), g_dConfig.begin ());
+				}
+				if ( bReloadHappened )
+				{
+					ScRL_t dRotateConfigMutexRlocked { g_tRotateConfigMutex };
+					ReloadIndexesFromConfig ( g_hCfg, hDeferredIndexes );
+				} else
+					sphWarning ( "failed to parse config file '%s': %s; using previous settings", g_sConfigFile.cstr(), TlsMsg::szError() );
+			}
 		}
 		CleanLoadedConfig();
 		g_bReloadForced = false;

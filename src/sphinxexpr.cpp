@@ -83,18 +83,37 @@ inline int ConnID ()
 struct ExprLocatorTraits_t
 {
 	CSphAttrLocator m_tLocator;
-	int m_iLocator; // used by SPH_EXPR_GET_DEPENDENT_COLS
+	int				m_iLocator; // used by SPH_EXPR_GET_DEPENDENT_COLS
+	CSphString		m_sColumnarAttr;
 
 	ExprLocatorTraits_t ( const CSphAttrLocator & tLocator, int iLocator ) : m_tLocator ( tLocator ), m_iLocator ( iLocator ) {}
 	virtual ~ExprLocatorTraits_t() = default;
 
 	virtual void HandleCommand ( ESphExprCommand eCmd, void * pArg )
 	{
-		if ( eCmd==SPH_EXPR_GET_DEPENDENT_COLS && m_iLocator!=-1 )
-			static_cast < CSphVector<int>* >(pArg)->Add ( m_iLocator );
+		switch ( eCmd )
+		{
+		case SPH_EXPR_GET_DEPENDENT_COLS:
+			if ( m_iLocator!=-1 )
+				static_cast < CSphVector<int>* >(pArg)->Add ( m_iLocator );
+			break;
 
-		if ( eCmd==SPH_EXPR_UPDATE_DEPENDENT_COLS && m_iLocator>=*static_cast<int*>(pArg) )
-			m_iLocator--;
+		case SPH_EXPR_UPDATE_DEPENDENT_COLS:
+			if ( m_iLocator>=*static_cast<int*>(pArg) )
+				m_iLocator--;
+			break;
+
+		case SPH_EXPR_SET_COLUMNAR_COL:
+			m_sColumnarAttr = *static_cast < CSphString* >(pArg);
+			break;
+
+		case SPH_EXPR_GET_COLUMNAR_COL:
+			*static_cast < CSphString* >(pArg) = m_sColumnarAttr;
+			break;
+
+		default:
+			break;
+		}
 	}
 
 	virtual void FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
@@ -364,90 +383,6 @@ public:
 
 private:
 	Expr_GetFactorsAttr_c ( const Expr_GetFactorsAttr_c& ) = default;
-};
-
-
-class Expr_GetField_c : public Expr_NoLocator_c
-{
-public:
-	explicit Expr_GetField_c ( CSphString sField )
-		: m_sField ( std::move (sField ) )
-	{}
-
-	float	Eval ( const CSphMatch & ) const final { assert(0); return 0; }
-	int		IntEval ( const CSphMatch & ) const final { assert(0); return 0; }
-	int64_t	Int64Eval ( const CSphMatch & ) const final { assert(0); return 0; }
-	bool	IsDataPtrAttr() const final { return true; }
-
-	int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const final
-	{
-		if ( !m_tSession.m_pDocstore || !m_dFieldIds.GetLength() )
-		{
-			*ppStr = nullptr;
-			return 0;
-		}
-
-		int iLen = 0;
-		DocID_t tDocID = sphGetDocID ( tMatch.m_pDynamic ? tMatch.m_pDynamic : tMatch.m_pStatic );
-		DocstoreDoc_t tDoc;
-		if ( m_tSession.m_pDocstore->GetDoc ( tDoc, tDocID, &m_dFieldIds, m_tSession.m_iSessionId, false ) )
-		{
-			iLen = tDoc.m_dFields[0].GetLength();
-			assert(iLen>=0);
-			*ppStr = tDoc.m_dFields[0].LeakData();
-		} else
-		{
-			ppStr = nullptr;
-		}
-		return iLen;
-	}
-
-	const BYTE * StringEvalPacked ( const CSphMatch & tMatch ) const final
-	{
-		if ( !m_tSession.m_pDocstore || !m_dFieldIds.GetLength() )
-			return nullptr;
-
-		DocID_t tDocID = sphGetDocID ( tMatch.m_pDynamic ? tMatch.m_pDynamic : tMatch.m_pStatic );
-		DocstoreDoc_t tDoc;
-		if ( m_tSession.m_pDocstore->GetDoc ( tDoc, tDocID, &m_dFieldIds, m_tSession.m_iSessionId, true ) )
-			return tDoc.m_dFields[0].LeakData();
-		else
-			return nullptr;
-	}
-
-	void Command ( ESphExprCommand eCmd, void * pArg ) final
-	{
-		if ( eCmd==SPH_EXPR_SET_DOCSTORE )
-		{
-			m_dFieldIds.Resize(0);
-			assert(pArg);
-			m_tSession = *(DocstoreSession_c::Info_t*)pArg;
-			assert ( m_tSession.m_pDocstore );
-			int iFieldId = m_tSession.m_pDocstore->GetFieldId ( m_sField.cstr(), DOCSTORE_TEXT );
-			if ( iFieldId!=-1 )
-				m_dFieldIds.Add(iFieldId);
-		}
-	}
-
-	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
-	{
-		EXPR_CLASS_NAME("Expr_GetField_c");
-		CALC_STR_HASH(m_sField, m_sField.Length());
-		CALC_POD_HASHES(m_dFieldIds);
-		return CALC_DEP_HASHES();
-	}
-
-	ISphExpr * Clone () const final
-	{
-		return new Expr_GetField_c ( *this );
-	}
-
-private:
-	CSphString					m_sField;
-	DocstoreSession_c::Info_t	m_tSession;
-	CSphVector<int>				m_dFieldIds;
-
-	Expr_GetField_c ( const Expr_GetField_c& rhs ) : m_sField ( rhs.m_sField ) {}
 };
 
 
@@ -1134,7 +1069,7 @@ public:
 
 	bool IsArglist () const final { return m_pFirst->IsArglist(); }
 
-	bool IsColumnar () const final { return m_pFirst->IsColumnar(); }
+	bool IsColumnar ( bool * pStored ) const final { return m_pFirst->IsColumnar(pStored); }
 
 	bool IsDataPtrAttr () const final { return m_pFirst->IsDataPtrAttr(); }
 
@@ -4160,6 +4095,12 @@ private:
 	ISphExpr *				CreateRegexNode ( ISphExpr * pAttr, ISphExpr * pString );
 	ISphExpr *				CreateConcatNode ( int iArgsNode, CSphVector<ISphExpr *> & dArgs );
 	ISphExpr *				CreateFieldNode ( int iField );
+
+	ISphExpr *				CreateColumnarIntNode ( int iAttr, ESphAttr eAttrType );
+	ISphExpr *				CreateColumnarFloatNode ( int iAttr );
+	ISphExpr *				CreateColumnarStringNode ( int iAttr );
+	ISphExpr *				CreateColumnarMvaNode ( int iAttr, ESphAttr eAttrType );
+
 	void					FixupIterators ( int iNode, const char * sKey, SphAttr_t * pAttr );
 	ISphExpr *				CreateLevenshteinNode ( ISphExpr * pPattern, ISphExpr * pAttr, ISphExpr * pOpts );
 
@@ -5349,13 +5290,7 @@ public:
 			case SPH_UDF_TYPE_UINT32:		*(DWORD*)&m_dArgvals[i] = m_dArgs[i]->IntEval ( tMatch ); break;
 			case SPH_UDF_TYPE_INT64:		m_dArgvals[i] = m_dArgs[i]->Int64Eval ( tMatch ); break;
 			case SPH_UDF_TYPE_FLOAT:		*(float*)&m_dArgvals[i] = m_dArgs[i]->Eval ( tMatch ); break;
-			case SPH_UDF_TYPE_STRING:
-			{
-				const char * szValue = tArgs.arg_values[i];
-				tArgs.str_lengths[i] = m_dArgs[i]->StringEval ( tMatch, (const BYTE**)&szValue );
-				break;
-			}
-
+			case SPH_UDF_TYPE_STRING:		tArgs.str_lengths[i] = m_dArgs[i]->StringEval ( tMatch, (const BYTE**)&tArgs.arg_values[i] ); break;
 			case SPH_UDF_TYPE_UINT32SET:
 			case SPH_UDF_TYPE_INT64SET:
 			{
@@ -5674,18 +5609,19 @@ ISphExpr * ExprParser_t::CreateExistNode ( const ExprNode_t & tNode )
 		}
 
 		bool bColumnar = tCol.IsColumnar();
+		bool bStored = tCol.m_uAttrFlags & CSphColumnInfo::ATTR_STORED;
 		const CSphAttrLocator & tLoc = tCol.m_tLocator;
 		if ( tNode.m_eRetType==SPH_ATTR_FLOAT )
 		{
 			if ( bColumnar )
-				return CreateExpr_GetColumnarFloat ( tCol.m_sName );
+				return CreateExpr_GetColumnarFloat ( tCol.m_sName, bStored );
 			else
 				return new Expr_GetFloat_c ( tLoc, iLoc );
 		}
 		else
 		{
 			if ( bColumnar )
-				return CreateExpr_GetColumnarInt ( tCol.m_sName );
+				return CreateExpr_GetColumnarInt ( tCol.m_sName, bStored );
 			else
 				return new Expr_GetInt_c ( tLoc, iLoc );
 		}
@@ -6538,7 +6474,35 @@ ISphExpr * ExprParser_t::CreateFieldNode ( int iField )
 		return nullptr;
 	}
 
-	return new Expr_GetField_c ( tField.m_sName );
+	return CreateExpr_GetStoredField ( tField.m_sName );
+}
+
+
+ISphExpr * ExprParser_t::CreateColumnarIntNode ( int iAttr, ESphAttr eAttrType )
+{
+	const CSphColumnInfo & tAttr = m_pSchema->GetAttr(iAttr);
+	return CreateExpr_GetColumnarInt ( tAttr.m_sName, tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED );
+}
+
+
+ISphExpr * ExprParser_t::CreateColumnarFloatNode ( int iAttr )
+{
+	const CSphColumnInfo & tAttr = m_pSchema->GetAttr(iAttr);
+	return CreateExpr_GetColumnarFloat ( tAttr.m_sName, tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED );
+}
+
+
+ISphExpr * ExprParser_t::CreateColumnarStringNode ( int iAttr )
+{
+	const CSphColumnInfo & tAttr = m_pSchema->GetAttr(iAttr);
+	return CreateExpr_GetColumnarString ( tAttr.m_sName, tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED );
+}
+
+
+ISphExpr * ExprParser_t::CreateColumnarMvaNode ( int iAttr, ESphAttr eAttrType )
+{
+	const CSphColumnInfo & tAttr = m_pSchema->GetAttr(iAttr);
+	return CreateExpr_GetColumnarMva ( tAttr.m_sName, tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -6750,14 +6714,14 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case TOK_ATTR_MVA32:	return new Expr_GetMva_c ( tNode.m_tLocator, tNode.m_iLocator );
 		case TOK_ATTR_FACTORS:	return new Expr_GetFactorsAttr_c ( tNode.m_tLocator, tNode.m_iLocator );
 
-		case TOK_COLUMNAR_INT:
-		case TOK_COLUMNAR_TIMESTAMP:
-		case TOK_COLUMNAR_BIGINT:
-		case TOK_COLUMNAR_BOOL:		return CreateExpr_GetColumnarInt ( m_pSchema->GetAttr(tNode.m_iLocator).m_sName );
-		case TOK_COLUMNAR_FLOAT:	return CreateExpr_GetColumnarFloat ( m_pSchema->GetAttr(tNode.m_iLocator).m_sName );
-		case TOK_COLUMNAR_STRING:	return CreateExpr_GetColumnarString ( m_pSchema->GetAttr(tNode.m_iLocator).m_sName );
-		case TOK_COLUMNAR_UINT32SET:
-		case TOK_COLUMNAR_INT64SET:	return CreateExpr_GetColumnarMva ( m_pSchema->GetAttr(tNode.m_iLocator).m_sName );
+		case TOK_COLUMNAR_INT:		return CreateColumnarIntNode ( tNode.m_iLocator, SPH_ATTR_INTEGER );
+		case TOK_COLUMNAR_TIMESTAMP:return CreateColumnarIntNode ( tNode.m_iLocator, SPH_ATTR_TIMESTAMP );
+		case TOK_COLUMNAR_BIGINT:	return CreateColumnarIntNode ( tNode.m_iLocator, SPH_ATTR_BIGINT );
+		case TOK_COLUMNAR_BOOL:		return CreateColumnarIntNode ( tNode.m_iLocator, SPH_ATTR_BOOL );
+		case TOK_COLUMNAR_FLOAT:	return CreateColumnarFloatNode ( tNode.m_iLocator );
+		case TOK_COLUMNAR_STRING:	return CreateColumnarStringNode ( tNode.m_iLocator );
+		case TOK_COLUMNAR_UINT32SET:return CreateColumnarMvaNode ( tNode.m_iLocator, SPH_ATTR_UINT32SET );
+		case TOK_COLUMNAR_INT64SET:	return CreateColumnarMvaNode ( tNode.m_iLocator, SPH_ATTR_INT64SET );
 
 		case TOK_FIELD:			return CreateFieldNode ( tNode.m_iLocator );
 

@@ -15,8 +15,8 @@
 #include "sphinxstd.h"
 
 #include "sphinxdefs.h"
-#include "indexsettings.h"
 #include "locator.h"
+#include "sphinxexpr.h"
 
 /// source column info
 struct CSphColumnInfo
@@ -31,13 +31,15 @@ struct CSphColumnInfo
 
 	enum
 	{
-		ATTR_NONE			= 0,
-		ATTR_COLUMNAR		= 1 << 0,
-		ATTR_COLUMNAR_HASHES = 1 << 1
+		ATTR_NONE				= 0,
+		ATTR_COLUMNAR			= 1 << 0,
+		ATTR_COLUMNAR_HASHES	= 1 << 1,
+		ATTR_STORED				= 1 << 2
 	};
 
 	CSphString		m_sName;							///< column name
 	ESphAttr		m_eAttrType;						///< attribute type
+
 	ESphWordpart	m_eWordpart { SPH_WORDPART_WHOLE };	///< wordpart processing type
 	bool			m_bIndexed = false;					///< whether to index this column as fulltext field too
 
@@ -61,7 +63,7 @@ struct CSphColumnInfo
 	WORD			m_uNext = 0xFFFF;					///< next in linked list for hash in CSphSchema
 
 	/// handy ctor
-	explicit CSphColumnInfo ( const char* sName = nullptr, ESphAttr eType = SPH_ATTR_NONE );
+	explicit CSphColumnInfo ( const char * sName = nullptr, ESphAttr eType = SPH_ATTR_NONE );
 
 	/// equality comparison checks name, type, and locator
 	bool operator== ( const CSphColumnInfo & rhs ) const;
@@ -72,6 +74,8 @@ struct CSphColumnInfo
 	bool IsColumnar() const;
 	bool HasStringHashes() const;
 	bool IsColumnarExpr() const;
+	bool IsStoredExpr() const;
 };
 
-CSphString sphDumpAttr ( const CSphColumnInfo& tAttr );
+
+CSphString sphDumpAttr ( const CSphColumnInfo & tAttr );

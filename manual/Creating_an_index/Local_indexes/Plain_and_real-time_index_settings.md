@@ -140,7 +140,7 @@ $index->create($params);
 ##### Python:
 <!-- request Python -->
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE products(title text stored indexed, content text stored indexed, name text indexed, price float)')
+utilsApi.sql('CREATE TABLE products(title text stored indexed, content text stored indexed, name text indexed, price float)')
 ```
 
 <!-- intro -->
@@ -148,14 +148,14 @@ utilsApi.sql('mode=raw&query=CREATE TABLE products(title text stored indexed, co
 
 <!-- request Javascript -->
 ```javascript
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text stored indexed, content text stored indexed, name text indexed, price float)');
+res = await utilsApi.sql('CREATE TABLE products(title text stored indexed, content text stored indexed, name text indexed, price float)');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE products(title text stored indexed, content text stored indexed, name text indexed, price float)");
+utilsApi.sql("CREATE TABLE products(title text stored indexed, content text stored indexed, name text indexed, price float)");
 ```
 
 <!-- request CONFIG -->
@@ -322,7 +322,7 @@ In plain mode `rt_mem_limit` can be changed using the following steps:
 ##### Important notes about RAM chunks
 
 * RT index is quite similar to a [distributed](../../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md#Creating-a-local-distributed-index) index consisting of multiple local indexes. The local indexes are called "disk chunks".
-* RAM chunk internally consists of multiple "segments". 
+* RAM chunk internally consists of multiple "segments".
 * While disk chunks are stored on disk, the segments of RAM chunk are special RAM-only "indexes".
 * Any transaction you make to a real-time index generates a new segment. RAM chunk segments are merged after each transaction commit. Therefore it is beneficial to do bulk INSERTs of hundreds/thousands documents rather than hundreds/thousands different inserts with 1 document to avoid the overhead from merging RAM chunk segments.
 * When the number of segments gets greater than 32, the segments get merged, so the count is not greater than 32.
@@ -362,10 +362,13 @@ Value: **not specified** (default), target_index_name:kl, target_index_name:id, 
 #### columnar_attrs
 
 ```ini
+columnar_attrs = *
 columnar_attrs = id, attr1, attr2, attr3
 ```
 
 Specifies what attributes should be stored in [the columnar storage](../../Creating_an_index/Data_types.md#Row-wise-and-columnar-attribute-storages) instead of the default row-wise storage.
+
+You can do `columnar_attrs = *` to store fields of all supported data types in the columnar storage.
 
 `id` is also supported.
 
@@ -377,14 +380,6 @@ Specifies what attributes should be stored in [the columnar storage](../../Creat
 ```sql
 CREATE TABLE [IF NOT EXISTS] name ( <field name> <field data type> [data type options] [, ...]) [table_options]
 ```
-##### CREATE TABLE via /cli HTTP endpoint
-Besides using `CREATE TABLE` via MySQL protocol using any MySQL client you can also create a table via HTTP if you use the `/cli` endpoint:
-
-```http
-http[s]://manticore_host:port/cli
-POST: CREATE TABLE [IF NOT EXISTS] name ( <field name> <field data type> [data type options] [, ...]) [table_options]
-```
-
 
 ##### Data types:
 

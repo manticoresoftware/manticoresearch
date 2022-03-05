@@ -85,7 +85,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) exceptions = \'/usr/local/manticore/data/exceptions.txt\'')
+utilsApi.sql('CREATE TABLE products(title text, price float) exceptions = \'/usr/local/manticore/data/exceptions.txt\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -93,14 +93,14 @@ utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) exce
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) exceptions = \'/usr/local/manticore/data/exceptions.txt\'');
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) exceptions = \'/usr/local/manticore/data/exceptions.txt\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) exceptions = '/usr/local/manticore/data/exceptions.txt'");
+utilsApi.sql("CREATE TABLE products(title text, price float) exceptions = '/usr/local/manticore/data/exceptions.txt'");
 ```
 <!-- request CONFIG -->
 

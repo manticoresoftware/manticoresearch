@@ -276,6 +276,7 @@ enum ESphSortKeyPart
 	SPH_KEYPART_WEIGHT,
 	SPH_KEYPART_INT,
 	SPH_KEYPART_FLOAT,
+	SPH_KEYPART_DOUBLE,
 	SPH_KEYPART_STRING,
 	SPH_KEYPART_STRINGPTR
 };
@@ -301,7 +302,23 @@ enum DocstoreDataType_e
 {
 	DOCSTORE_TEXT,
 	DOCSTORE_BIN,
+	DOCSTORE_ATTR,
 	DOCSTORE_TOTAL
+};
+
+/// wordpart processing type
+enum ESphWordpart
+{
+	SPH_WORDPART_WHOLE		= 0,	///< whole-word
+	SPH_WORDPART_PREFIX		= 1,	///< prefix
+	SPH_WORDPART_INFIX		= 2		///< infix
+};
+
+enum class AttrEngine_e
+{
+	DEFAULT,
+	ROWWISE,
+	COLUMNAR
 };
 
 using Bson_t = CSphVector<BYTE>;

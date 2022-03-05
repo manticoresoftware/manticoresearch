@@ -50,17 +50,11 @@ class Feeder_c : public RowBuffer_i
 		ESphAttr eType = SPH_ATTR_STRINGPTR;
 		switch ( uType )
 		{
-		case MYSQL_COL_LONGLONG :
-			eType = SPH_ATTR_BIGINT;
-			break;
-		case MYSQL_COL_LONG :
-			eType = SPH_ATTR_INTEGER;
-			break;
-		case MYSQL_COL_FLOAT :
-			eType = SPH_ATTR_FLOAT;
-			break;
-		default:
-			break;
+		case MYSQL_COL_LONGLONG:	eType = SPH_ATTR_BIGINT; break;
+		case MYSQL_COL_LONG:		eType = SPH_ATTR_INTEGER; break;
+		case MYSQL_COL_FLOAT:		eType = SPH_ATTR_FLOAT;	break;
+		case MYSQL_COL_DOUBLE:		eType = SPH_ATTR_DOUBLE; break;
+		default: break;
 		}
 		CSphString sName ( szName );
 		sName.ToLower();
@@ -162,11 +156,30 @@ public:
 	{
 		if ( !m_pMatch )
 			return;
+
 		auto & tCol = GetNextCol ();
 		auto & tMatch = *m_pMatch;
 		if ( tCol.m_eAttrType!=SPH_ATTR_STRINGPTR )
 			tMatch.SetAttrFloat ( tCol.m_tLocator, fVal );
-		else {
+		else
+		{
+			StringBuilder_c sData;
+			sData.Appendf ( "%f", fVal );
+			PutStr ( tCol, sData );
+		}
+	}
+
+	void PutDoubleAsString ( double fVal, const char * szFormat ) override
+	{
+		if ( !m_pMatch )
+			return;
+
+		auto & tCol = GetNextCol ();
+		auto & tMatch = *m_pMatch;
+		if ( tCol.m_eAttrType!=SPH_ATTR_STRINGPTR )
+			tMatch.SetAttrDouble ( tCol.m_tLocator, fVal );
+		else
+		{
 			StringBuilder_c sData;
 			sData.Appendf ( "%f", fVal );
 			PutStr ( tCol, sData );
@@ -425,18 +438,11 @@ public:
 		PutString ( 1, sName );
 		switch ( uType )
 		{
-			case MYSQL_COL_LONGLONG :
-				PutString ( 2, "bigint" );
-				break;
-			case MYSQL_COL_LONG :
-				PutString ( 2, "uint" );
-				break;
-			case MYSQL_COL_FLOAT :
-				PutString ( 2, "float" );
-				break;
-			default:
-				PutString ( 2, "string" );
-				break;
+			case MYSQL_COL_LONGLONG:	PutString ( 2, "bigint" ); break;
+			case MYSQL_COL_LONG:		PutString ( 2, "uint" ); break;
+			case MYSQL_COL_FLOAT:		PutString ( 2, "float" ); break;
+			case MYSQL_COL_DOUBLE:		PutString ( 2, "double" ); break;
+			default:					PutString ( 2, "string" ); break;
 		}
 		PutString ( 3, "" );
 
@@ -460,6 +466,7 @@ public:
 
 	// match constructing routines (empty for schema only)
 	void PutFloatAsString ( float fVal, const char * sFormat ) override {}
+	void PutDoubleAsString ( double fVal, const char * szFormat ) override {}
 	void PutPercentAsString ( int64_t iVal, int64_t iBase ) override {}
 	void PutNumAsString ( int64_t iVal ) override {}
 	void PutNumAsString ( uint64_t uVal ) override {}

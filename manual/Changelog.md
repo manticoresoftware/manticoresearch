@@ -19,12 +19,19 @@ The following are the changes we are either working on now or are going to work 
 ### Major new features
 * [Read-only mode](Security/Read_only.md) for better security.
 * New `/cli` endpoint for running SQL queries over HTTP even easier
+* Really bulk INSERT/REPLACE/DELETE via JSON over HTTP
 
 ### Minor changes
 * TODO
 
 ### Breaking changes
-* Changed behaviour of REST `/sql` endpoint
+* **Changed behaviour of REST `/sql`** endpoint: `/sql?mode=raw` now requires escaping
+* **Index meta file format change**. The new version will convert older indexes automatically, but:
+  - you can get warning like `WARNING: ... syntax error, unexpected TOK_IDENT`
+  - you won't be able to run the index with previous Manticore versions, make sure you have a backup
+* **Format change** of the response of `/bulk` INSERT/REPLACE/DELETE requests:
+  - previously each sub-query constituted a separate transaction and resulted in a separate response
+  - now the whole batch is considered a single transaction, which returns a single response
 
 ### Bugfixes
 * TODO
@@ -115,6 +122,7 @@ sys	0m0.047s
 * Binlog version was increased, binlog from previous version won't be replayed, so make sure you stop Manticore Search cleanly during upgrade: no binlog files should be in `/var/lib/manticore/binlog/` except `binlog.meta` after stopping the previous instance.
 * [Commit 3f659f36](https://github.com/manticoresoftware/manticoresearch/commit/3f659f36e87d99ee262205a8eae4663a255be630) new column "chain" in `show threads option format=all`. It shows stack of some task info tickets, most useful for profiling needs, so if you are parsing `show threads` output be aware of the new column.
 * `searchd.workers` was obsoleted since 3.5.0, now it's deprecated, if you still have it in your configuration file it will trigger a warning on start. Manticore Search will start, but with a warning.
+* If you use PHP and PDO to access Manticore you need to do `PDO::ATTR_EMULATE_PREPARES`
 
 ### Bugfixes
 * ❗[Issue #650](https://github.com/manticoresoftware/manticoresearch/issues/650) Manticore 4.0.2 slower than Manticore 3.6.3. 4.0.2 was faster than previous versions in terms of bulk inserts, but significantly slower for single document inserts. It's been fixed in 4.2.0.

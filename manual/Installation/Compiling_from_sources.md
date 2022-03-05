@@ -60,7 +60,7 @@ MS Windows build) will cause configuration to fail with error. Disabling of a fe
 disables it's investigation on the system, and disables their downloading/building, as it would be done for some external
 libs in case of implicit configuration.
 
-#### Confirutation flags and options
+#### Configuration flags and options
 
 - **USE_SYSLOG** - allows to use `syslog` in [query logging](Logging/Query_logging.md). 
 
@@ -185,11 +185,7 @@ That is very useful when building in prepared build systems, like docker contain
   option by explicitly specifying 'off' value.
 
 
-- **LIBS_BUNDLE** - path to a folder with different libraries. This is mostly relevant for Windows building, but may be
-  also helpful if you build quite often, in order to avoid downloading third-party sources each time. That path is never modified
-  by configuring script in default behaviour; you should put everything there by youself. When, say, we want support of stemmer -
-the sources will be downloaded from snowball homepage, then extracted, configured, built, etc. Originall source tarball (which is `libstemmer_c.tgz`) you may store to that folder. Next time you want to build from scratch, configure script looks first to the bundle,
-and if it found stemmer there, it will not download it again from internet.
+- **LIBS_BUNDLE** - path to a folder with different libraries. This is mostly relevant for Windows building, but may be also helpful if you have to build often in order to avoid downloading third-party sources each time. By default this path is never modified by the configuration script; you should put everything there manually. When, say, we want the support of stemmer - the sources will be downloaded from Snowball homepage, then extracted, configured, built, etc. Instead you can store the original source tarball (which is `libstemmer_c.tgz`) in this folder. Next time you want to build from scratch, the configuration script will first look up in the bundle, and if it finds the stemmer there, it will not download it again from the Internet.
 
 
 - **CACHEB** - path to a folder with stored builds of 3-rd party libraries. Usually features like galera, re2, icu, etc. first downloaded
@@ -335,8 +331,8 @@ There are two types of generators: single-config and multi-config.
 
 If you want to specify build type, but don't want to care about whether it is 'single' or 'multi' config generator - 
 just provide necessary keys in both places. I.e., configure with `-DCMAKE_BUILD_TYPE=Debug`, and then build with `--config Debug`.
-Just be sure that both values are same. If target builder is single-config, it will consume confirutation param.
-If it is multi-config, configuration param will be ignored, but correct build confirutation will then be selected by --config key.
+Just be sure that both values are same. If target builder is single-config, it will consume configuration param.
+If it is multi-config, configuration param will be ignored, but correct build configuration will then be selected by --config key.
 
 If you want RelWihtDebInfo (i.e. just build for production) and know you're on single-config platform (that is all, except Windows) - you can omit `--config` flag on cmake invocation. Default `CMAKE_BUILD_TYPE=RelWithDebInfo` will be configured then, and used.
 All the commands for 'building', 'installation' and 'building package' will become shorter then.

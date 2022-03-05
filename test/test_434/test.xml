@@ -107,6 +107,12 @@ select id from test where kind not in (23,33);
 <!-- aliased groupby -->
 select status g, count(*) c from test group by g order by c desc;
 
+<!-- aggregates over bool -->
+select avg(status) from test;
+select min(status) from test;
+select max(status) from test;
+select sum(status) from test;
+
 </sphinxql></queries>
 
 </test>

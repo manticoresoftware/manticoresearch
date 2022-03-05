@@ -320,6 +320,7 @@ class SqlRowBuffer_c : public RowBuffer_i, private LazyVector_T<BYTE>
 			break;
 		case MYSQL_COL_DECIMAL:
 		case MYSQL_COL_FLOAT:
+		case MYSQL_COL_DOUBLE:
 		case MYSQL_COL_LONGLONG: iColLen = 20;
 			break;
 		case MYSQL_COL_STRING: iColLen = 255;
@@ -374,6 +375,17 @@ public:
 		int iLen = sFormat
 			? snprintf (( char* ) pSize + 1, SPH_MAX_NUMERIC_STR - 1, sFormat, fVal )
 			: sph::PrintVarFloat (( char* ) pSize + 1, fVal );
+		*pSize = BYTE ( iLen );
+		AddN ( iLen + 1 );
+	}
+
+	void PutDoubleAsString ( double fVal, const char * szFormat ) override
+	{
+		ReserveGap ( SPH_MAX_NUMERIC_STR );
+		auto pSize = End();
+		int iLen = szFormat
+			? snprintf (( char* ) pSize + 1, SPH_MAX_NUMERIC_STR - 1, szFormat, fVal )
+			: sph::PrintVarDouble (( char* ) pSize + 1, fVal );
 		*pSize = BYTE ( iLen );
 		AddN ( iLen + 1 );
 	}
@@ -524,14 +536,16 @@ public:
 
 struct CLIENT
 {
+	// see https://dev.mysql.com/doc/dev/mysql-server/latest/group__group__cs__capabilities__flags.html for reference
+	// we use same non-consistent definitions to match the reference (i.e. some constants defined as decimals, some as (1UL << X). Just keep it for easier match with ref page).
 	static constexpr DWORD CONNECT_WITH_DB = 8;
-	static constexpr DWORD PROTOCOL_41 = 0x0200;
-	static constexpr DWORD SECURE_CONNECTION = 0x80000; // deprecated
-//	static constexpr DWORD RESERVED = 0x4000;
-	static constexpr DWORD PLUGIN_AUTH = 0x00080000;
-	static constexpr DWORD COMPRESS = 0x20;
+	static constexpr DWORD COMPRESS = 32;
+	static constexpr DWORD PROTOCOL_41 = 512;
+	static constexpr DWORD SSL = 2048;
+	static constexpr DWORD RESERVED = 16384; // DEPRECATED: Old flag for 4.1 protocol
+	static constexpr DWORD RESERVED2 = 32768; // DEPRECATED: Old flag for 4.1 authentication \ CLIENT_SECURE_CONNECTION.
+	static constexpr DWORD PLUGIN_AUTH = ( 1UL << 19 );
 	static constexpr DWORD ZSTD_COMPRESSION_ALGORITHM = ( 1UL << 26 );
-	static constexpr DWORD SSL = 0x800;
 };
 
 // send MySQL wire protocol handshake packets
@@ -551,7 +565,7 @@ void SendMysqlProtoHandshake ( ISphOutputBuffer& tOut, bool bSsl, bool bCanUseCo
 
 	DWORD uCapabilities = CLIENT::CONNECT_WITH_DB
 						| CLIENT::PROTOCOL_41
-						| CLIENT::SECURE_CONNECTION // deprecated
+						| CLIENT::RESERVED2 // deprecated
 //						| CLIENT::RESERVED
 						| CLIENT::PLUGIN_AUTH
 						;

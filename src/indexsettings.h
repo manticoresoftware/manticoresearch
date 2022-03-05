@@ -19,6 +19,7 @@
 #include "sphinxexpr.h"
 #include "columnarlib.h"
 #include "sphinxdefs.h"
+#include "schema/columninfo.h"
 
 inline int64_t cast2signed ( SphWordID_t tVal )
 {
@@ -152,22 +153,6 @@ public:
 	void			Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const override;
 };
 
-/// wordpart processing type
-enum ESphWordpart
-{
-	SPH_WORDPART_WHOLE		= 0,	///< whole-word
-	SPH_WORDPART_PREFIX		= 1,	///< prefix
-	SPH_WORDPART_INFIX		= 2		///< infix
-};
-
-
-enum class AttrEngine_e
-{
-	DEFAULT,
-	ROWWISE,
-	COLUMNAR
-};
-
 
 /// indexing-related source settings
 /// NOTE, newly added fields should be synced with CSphSource::Setup()
@@ -191,6 +176,7 @@ public:
 	AttrEngine_e m_eEngine = AttrEngine_e::DEFAULT;	///< attribute storage engine
 
 	StrVec_t m_dColumnarAttrs;			///< list of attributes to be placed in columnar store
+	StrVec_t m_dColumnarNonStoredAttrs;	///< list of columnar attributes that should be not added to document storage
 	StrVec_t m_dRowwiseAttrs;			///< list of attributes to NOT be placed in columnar store
 	StrVec_t m_dColumnarStringsNoHash;	///< list of columnar string attributes that don't need pregenerated hashes
 
@@ -362,11 +348,18 @@ const RtTypedAttr_t &	GetRtType ( int iType );
 
 bool					StrToAttrEngine ( AttrEngine_e & eEngine, const CSphString & sValue, CSphString & sError );
 
+struct CreateTableAttr_t
+{
+	CSphColumnInfo	m_tAttr;
+	bool			m_bFastFetch = true;
+	bool			m_bStringHash = true;
+};
+
 struct CreateTableSettings_t
 {
 	CSphString						m_sLike;
 	bool							m_bIfNotExists = false;
-	CSphVector<CSphColumnInfo>		m_dAttrs;
+	CSphVector<CreateTableAttr_t>	m_dAttrs;
 	CSphVector<CSphColumnInfo>		m_dFields;
 	CSphVector<NameValueStr_t>		m_dOpts;
 };
@@ -427,10 +420,12 @@ CreateFilenameBuilder_fn GetIndexFilenameBuilder();
 const char * FileAccessName ( FileAccess_e eValue );
 FileAccess_e ParseFileAccess ( CSphString sVal );
 
-int ParseKeywordExpansion ( const char * sValue );
-void SaveMutableSettings ( const MutableIndexSettings_c & tSettings, const CSphString & sPath );
+int			ParseKeywordExpansion ( const char * sValue );
+void		SaveMutableSettings ( const MutableIndexSettings_c & tSettings, const CSphString & sPath );
 FileAccess_e GetFileAccess (  const CSphConfigSection & hIndex, const char * sKey, bool bList, FileAccess_e eDefault );
 
+// combine per-index and per-attribute engine settings
+AttrEngine_e CombineEngines ( AttrEngine_e eIndexEngine, AttrEngine_e eAttrEngine );
 class JsonEscapedBuilder;
 
 void operator<< ( JsonEscapedBuilder& tOut, const CSphFieldFilterSettings& tFieldFilterSettings );

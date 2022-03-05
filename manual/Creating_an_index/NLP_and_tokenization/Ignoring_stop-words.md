@@ -56,7 +56,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) stopwords = \'/usr/local/manticore/data/stopwords.txt /usr/local/manticore/data/stopwords-ru.txt /usr/local/manticore/data/stopwords-en.txt\'')
+utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'/usr/local/manticore/data/stopwords.txt /usr/local/manticore/data/stopwords-ru.txt /usr/local/manticore/data/stopwords-en.txt\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -64,14 +64,14 @@ utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) stop
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) stopwords = \'/usr/local/manticore/data/stopwords.txt /usr/local/manticore/data/stopwords-ru.txt /usr/local/manticore/data/stopwords-en.txt\'');
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'/usr/local/manticore/data/stopwords.txt /usr/local/manticore/data/stopwords-ru.txt /usr/local/manticore/data/stopwords-en.txt\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) stopwords = '/usr/local/manticore/data/stopwords.txt /usr/local/manticore/data/stopwords-ru.txt /usr/local/manticore/data/stopwords-en.txt'");
+utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = '/usr/local/manticore/data/stopwords.txt /usr/local/manticore/data/stopwords-ru.txt /usr/local/manticore/data/stopwords-en.txt'");
 ```
 <!-- request CONFIG -->
 
@@ -179,7 +179,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) stopwords = \'it\'')
+utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'it\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -187,14 +187,14 @@ utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) stop
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) stopwords = \'it\'');
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'it\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) stopwords = 'it'");
+utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = 'it'");
 ```
 <!-- request CONFIG -->
 
@@ -248,7 +248,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) stopwords = \'en, it, ru\'')
+utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'en, it, ru\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -256,14 +256,14 @@ utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) stop
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) stopwords = \'en, it, ru\'');
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'en, it, ru\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) stopwords = 'en, it, ru'");
+utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = 'en, it, ru'");
 ```
 <!-- request CONFIG -->
 
@@ -324,7 +324,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) stopwords = \'en\' stopword_step = \'1\'')
+utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'en\' stopword_step = \'1\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -332,14 +332,14 @@ utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) stop
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) stopwords = \'en\' stopword_step = \'1\'');
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'en\' stopword_step = \'1\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) stopwords = \'en\' stopword_step = \'1\'");
+utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = \'en\' stopword_step = \'1\'");
 ```
 <!-- request CONFIG -->
 
@@ -405,7 +405,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) stopwords = \'en\' stopwords_unstemmed = \'1\'')
+utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'en\' stopwords_unstemmed = \'1\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -413,14 +413,14 @@ utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) stop
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) stopwords = \'en\' stopwords_unstemmed = \'1\'');
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'en\' stopwords_unstemmed = \'1\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) stopwords = \'en\' stopwords_unstemmed = \'1\'");
+utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = \'en\' stopwords_unstemmed = \'1\'");
 ```
 <!-- request CONFIG -->
 

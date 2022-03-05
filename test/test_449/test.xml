@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>configless vs stored attrs</name>
+
+<requires>
+	<force-rt/>
+	<columnar/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+<sphinxql>
+	create table test ( title text, tag integer );
+	desc test;
+	show create table test;
+	drop table test;
+
+	create table test ( title text, tag integer ) engine='columnar';
+	desc test;
+	show create table test;
+	drop table test;
+
+	create table test ( title text, tag integer fast_fetch='0' ) engine='columnar';
+	desc test;
+	show create table test;
+	drop table test;
+
+	create table test ( title text, tag string ) engine='columnar';
+	desc test;
+	show create table test;
+	drop table test;
+
+	create table test ( title text, tag string fast_fetch='0' ) engine='columnar';
+	desc test;
+	show create table test;
+	drop table test;
+
+	create table test ( title text, tag string attribute fast_fetch='0' ) engine='columnar';
+	desc test;
+	show create table test;
+	drop table test;
+
+	create table test ( title text, tag integer fast_fetch='0' engine='columnar');
+	desc test;
+	show create table test;
+	drop table test;
+
+	create table test ( title text, tag string hash='0' fast_fetch='0' engine='columnar');
+	desc test;
+	show create table test;
+	drop table test;
+
+	create table test ( title text, tag integer hash='0' engine='columnar');
+
+	create table test ( id engine='columnar', title text );
+	desc test;
+	show create table test;
+	drop table test;
+
+	create table test ( id engine='columnar', tag integer engine='columnar', title text );
+	desc test;
+	show create table test;
+	drop table test;
+
+	create table test ( id engine='columnar' fast_fetch='0', tag integer engine='columnar', title text );
+	desc test;
+	show create table test;
+	drop table test;
+
+	create table col ( id, ft text, b bool ) engine='columnar';
+	insert into col (id,ft) values(0,'abc');
+	alter table col add column b2 bool;
+	insert into col (id,ft) values(0,'abc');
+	select * from col;
+	drop table col;
+
+	create table col(f text) engine='columnar';
+	alter table col add column i bit(3);
+	desc col;
+	show create table col;
+	drop table col;
+
+	create table col(id,f text,s string,j json) engine='columnar';
+	alter table col drop column s;
+	alter table col add column s string;
+	insert into col(s) values('abc');
+	select * from col;
+	select s from col;
+	drop table col;
+</sphinxql>
+</queries>
+
+</test>

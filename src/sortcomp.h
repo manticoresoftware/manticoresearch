@@ -182,6 +182,13 @@ public:
 			SPH_TEST_PAIR ( aa, bb, _idx ) \
 			break; \
 		} \
+		case SPH_KEYPART_DOUBLE: \
+		{ \
+			register double aa = a.GetAttrDouble ( t.m_tLocator[_idx] ); \
+			register double bb = b.GetAttrDouble ( t.m_tLocator[_idx] ); \
+			SPH_TEST_PAIR ( aa, bb, _idx ) \
+			break; \
+		} \
 		case SPH_KEYPART_STRINGPTR: \
 		case SPH_KEYPART_STRING: \
 		{ \

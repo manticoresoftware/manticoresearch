@@ -38,7 +38,7 @@ $response = $client->cluster->join($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=JOIN CLUSTER posts AT \'10.12.1.35:9312\'')
+utilsApi.sql('JOIN CLUSTER posts AT \'10.12.1.35:9312\'')
 ```
 
 <!-- response Python -->
@@ -51,7 +51,7 @@ utilsApi.sql('mode=raw&query=JOIN CLUSTER posts AT \'10.12.1.35:9312\'')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=JOIN CLUSTER posts AT \'10.12.1.35:9312\'');
+res = await utilsApi.sql('JOIN CLUSTER posts AT \'10.12.1.35:9312\'');
 ```
 
 <!-- response javascript -->
@@ -65,7 +65,7 @@ res = await utilsApi.sql('mode=raw&query=JOIN CLUSTER posts AT \'10.12.1.35:9312
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=JOIN CLUSTER posts AT '10.12.1.35:9312'");
+utilsApi.sql("JOIN CLUSTER posts AT '10.12.1.35:9312'");
 ```
 <!-- end -->
 
@@ -114,7 +114,7 @@ $response = $client->cluster->join($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=JOIN CLUSTER click_query \'clicks_mirror1:9312;clicks_mirror2:9312;clicks_mirror3:9312\' as nodes')
+utilsApi.sql('JOIN CLUSTER click_query \'clicks_mirror1:9312;clicks_mirror2:9312;clicks_mirror3:9312\' as nodes')
 ```
 
 <!-- response Python -->
@@ -127,7 +127,7 @@ utilsApi.sql('mode=raw&query=JOIN CLUSTER click_query \'clicks_mirror1:9312;clic
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=JOIN CLUSTER click_query \'clicks_mirror1:9312;clicks_mirror2:9312;clicks_mirror3:9312\' as nodes');
+res = await utilsApi.sql('JOIN CLUSTER click_query \'clicks_mirror1:9312;clicks_mirror2:9312;clicks_mirror3:9312\' as nodes');
 ```
 
 <!-- response javascript -->
@@ -141,7 +141,7 @@ res = await utilsApi.sql('mode=raw&query=JOIN CLUSTER click_query \'clicks_mirro
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=JOIN CLUSTER click_query 'clicks_mirror1:9312;clicks_mirror2:9312;clicks_mirror3:9312' as nodes");
+utilsApi.sql("JOIN CLUSTER click_query 'clicks_mirror1:9312;clicks_mirror2:9312;clicks_mirror3:9312' as nodes");
 ```
 <!-- end -->
 

@@ -106,7 +106,7 @@ $response = $client->nodes()->status($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=SHOW STATUS')
+utilsApi.sql('SHOW STATUS')
 ```
 <!-- response Python -->
 
@@ -135,7 +135,7 @@ utilsApi.sql('mode=raw&query=SHOW STATUS')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=SHOW STATUS');
+res = await utilsApi.sql('SHOW STATUS');
 ```
 
 <!-- response Javascript -->
@@ -166,7 +166,7 @@ res = await utilsApi.sql('mode=raw&query=SHOW STATUS');
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=SHOW STATUS");
+utilsApi.sql("SHOW STATUS");
 ```
 <!-- response Java -->
 

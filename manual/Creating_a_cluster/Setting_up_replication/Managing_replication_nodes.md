@@ -39,7 +39,7 @@ $response = $client->cluster()->alter($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=ALTER CLUSTER posts UPDATE nodes')
+utilsApi.sql('ALTER CLUSTER posts UPDATE nodes')
 ```
 
 <!-- response Python -->
@@ -52,7 +52,7 @@ utilsApi.sql('mode=raw&query=ALTER CLUSTER posts UPDATE nodes')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=ALTER CLUSTER posts UPDATE nodes');
+res = await utilsApi.sql('ALTER CLUSTER posts UPDATE nodes');
 ```
 
 <!-- response javascript -->
@@ -66,7 +66,7 @@ res = await utilsApi.sql('mode=raw&query=ALTER CLUSTER posts UPDATE nodes');
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=ALTER CLUSTER posts UPDATE nodes");
+utilsApi.sql("ALTER CLUSTER posts UPDATE nodes");
 ```
 <!-- end -->
 

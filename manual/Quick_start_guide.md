@@ -10,7 +10,7 @@ You can install and start Manticore easily in Ubuntu, Centos, Debian, Windows an
 
 <!-- request Ubuntu -->
 ```bash
-wget http://repo.manticoresearch.com/manticore-repo.noarch.deb
+wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
 sudo dpkg -i manticore-repo.noarch.deb
 sudo apt update
 sudo apt install manticore manticore-columnar-lib
@@ -22,7 +22,7 @@ sudo systemctl start manticore
 
 <!-- request Debian -->
 ```bash
-wget http://repo.manticoresearch.com/manticore-repo.noarch.deb
+wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
 sudo dpkg -i manticore-repo.noarch.deb
 sudo apt update
 sudo apt install manticore manticore-columnar-lib
@@ -34,7 +34,7 @@ sudo systemctl start manticore
 
 <!-- request Centos -->
 ```bash
-sudo yum install http://repo.manticoresearch.com/manticore-repo.noarch.rpm
+sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
 sudo yum install manticore manticore-columnar-lib
 sudo systemctl start manticore
 ```
@@ -213,7 +213,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) morphology=\'stem_en\'')
+utilsApi.sql('create table products(title text, price float) morphology=\'stem_en\'')
 ```
 <!-- intro -->
 ##### Javascript:
@@ -221,7 +221,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) morp
 <!-- request Javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) morphology=\'stem_en\'');
+res = await utilsApi.sql('create table products(title text, price float) morphology=\'stem_en\'');
 ```
 
 <!-- intro -->
@@ -230,7 +230,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, price
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) morphology='stem_en'");
+utilsApi.sql("create table products(title text, price float) morphology='stem_en'");
 
 ```
 <!-- end -->

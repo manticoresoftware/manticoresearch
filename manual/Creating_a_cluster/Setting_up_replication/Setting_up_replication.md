@@ -1,11 +1,11 @@
 # Setting up replication
 
-Manticore can replicate a write transaction (`INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE`, etc) in an index to other nodes in the cluster. Currently percolate and rt indexes are supported. Only Linux packages and builds support replication, Windows and MacOS packages do not support replication.
+Write transaction (any result of `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE`, `COMMIT`) can be replicated to other cluster nodes before the transaction is fully applied on the current node. Currently replication is supported for `percolate` and `rt` indexes in Linux an MacOS. Manticore Search packages for Windows do not provide replication support.
 
 Manticore's replication is based on [Galera library](https://github.com/codership/galera) and features the following:
 
 * true multi-master - read and write to any node at any time
-* synchronous replication - no slave lag, no data is lost after a node crash
+* [virtually synchronous replication](https://galeracluster.com/library/documentation/overview.html) - no slave lag, no data is lost after a node crash
 * hot standby - no downtime during failover (since there is no failover)
 * tightly coupled - all the nodes hold the same state. No diverged data between nodes allowed
 * automatic node provisioning - no need to manually back up the database and restore it on a new node
@@ -18,21 +18,20 @@ To use replication in Manticore Search:
 * [data_dir](../../Server_settings/Searchd.md#data_dir) option should be set in section "searchd" of the configuration file. Replication is not supported in the plain mode
 * there should be either:
   - a [listen](../../Server_settings/Searchd.md#listen) directive specified (without specifying a protocol) containing an IP address accessible by other nodes
-  -  or [node_address](../../Server_settings/Searchd.md#node_address) with an accessible IP address
-* optionally set unique values for [server_id](../../Server_settings/Searchd.md#server_id) on each cluster node. If no value set, the node will try to use the MAC address (or a random number if that fails) to generate the server_id.
+  - or [node_address](../../Server_settings/Searchd.md#node_address) with an accessible IP address
+* optionally you can set unique values for [server_id](../../Server_settings/Searchd.md#server_id) on each cluster node. If no value is set, the node will try to use the MAC address (or a random number if that fails) to generate the `server_id`.
 
-If there is no replication [listen](../../Server_settings/Searchd.md#listen) directive set Manticore will use first couple of free ports in a range of 200 ports after the port at which the daemon is listening (default protocol) for each cluster created. For manual declaration of replication ports the [listen](../../Server_settings/Searchd.md#listen) directive
-port range should be defined and these "address - port range" pairs should be different for all Manticore instances on the same host. As a rule of thumb, the port range should specify no less than two ports per cluster.
+If there is no `replication` [listen](../../Server_settings/Searchd.md#listen) directive set Manticore will use the first two free ports in the range of 200 ports after the default protocol listening port for each created cluster. To set replication ports manually the [listen](../../Server_settings/Searchd.md#listen) directive (of `replication` type) port range should be defined and the address/port range pairs should not intersect between different nodes on the same server. As a rule of thumb, the port range should specify no less than two ports per cluster.
 
 ## Replication cluster
 
-Replication cluster is a set of nodes among which a write transaction gets replicated. Replication is configured on the per-index basis. One index can be assigned to only one cluster. There is no restriction on how many indexes a cluster may have. All transactions such as `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE` in any percolate index belonging to a cluster are replicated to all the other nodes in the cluster. Replication is multi-master, so writes to any particular node or to multiple nodes simultaneously work equally well.
+Replication cluster is a set of nodes among which a write transaction gets replicated. Replication is configured on per-index basis, meaning that one index can be assigned to only one cluster. There is no restriction on how many indexes a cluster can have. All transactions such as `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE` in any percolate or real-time index belonging to a cluster are replicated to all the other nodes in the cluster. Replication is multi-master, so writes to any particular node or to multiple nodes simultaneously work equally well.
 
 Replication cluster configuration options are:
 
 ### name
 
-Specifies a name for the cluster. Should be unique.
+Specifies cluster name. Should be unique.
 
 ### path
 
@@ -40,11 +39,11 @@ Data directory for a [write-set cache replication](https://galeracluster.com/lib
 
 ### nodes
 
-A list of address:port pairs for all the nodes in the cluster (comma separated). A node's API interface should be used for this option. It  can contain the current node's address too. This list is used to join a node to the cluster and rejoin it after restart.
+List of address:port pairs for all the nodes in the cluster (comma separated). Node's API interface should be used for this option. It can contain the current node's address too. This list is used to join a node to the cluster and rejoin it after restart.
 
 ### options
 
-Options passed directly to Galera replication plugin as described here [Galera Documentation Parameters](https://galeracluster.com/library/documentation/galera-parameters.html)
+Other options that are passed over directly to Galera replication plugin as described here [Galera Documentation Parameters](https://galeracluster.com/library/documentation/galera-parameters.html)
 
 ## Write statements
 
@@ -126,11 +125,11 @@ HashMap<String,Object> doc = new HashMap<String,Object>(){{
     put("title","Crossbody Bag with Tassel");
     put("price",19.85);
 }};
-newdoc.index("weekly_index").cluster("posts").id(1L).setDoc(doc); 
+newdoc.index("weekly_index").cluster("posts").id(1L).setDoc(doc);
 sqlresult = indexApi.insert(newdoc);
 
 DeleteDocumentRequest deleteRequest = new DeleteDocumentRequest();
-deleteRequest.index("weekly_index").cluster("posts").setId(1L); 
+deleteRequest.index("weekly_index").cluster("posts").setId(1L);
 indexApi.delete(deleteRequest);
 
 ```
@@ -282,7 +281,7 @@ $response = $client->cluster()->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE CLUSTER posts')
+utilsApi.sql('CREATE CLUSTER posts')
 ```
 <!-- intro -->
 ##### Javascript:
@@ -290,7 +289,7 @@ utilsApi.sql('mode=raw&query=CREATE CLUSTER posts')
 <!-- request Javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=CREATE CLUSTER posts');
+res = await utilsApi.sql('CREATE CLUSTER posts');
 ```
 
 <!-- intro -->
@@ -299,7 +298,7 @@ res = await utilsApi.sql('mode=raw&query=CREATE CLUSTER posts');
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=CREATE CLUSTER posts");
+utilsApi.sql("CREATE CLUSTER posts");
 
 ```
 <!-- end -->
@@ -357,8 +356,8 @@ $response = $client->cluster()->alter($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=ALTER CLUSTER posts ADD pq_title')
-utilsApi.sql('mode=raw&query=ALTER CLUSTER posts ADD pq_clicks')
+utilsApi.sql('ALTER CLUSTER posts ADD pq_title')
+utilsApi.sql('ALTER CLUSTER posts ADD pq_clicks')
 ```
 <!-- intro -->
 ##### Javascript:
@@ -366,8 +365,8 @@ utilsApi.sql('mode=raw&query=ALTER CLUSTER posts ADD pq_clicks')
 <!-- request Javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=ALTER CLUSTER posts ADD pq_title');
-res = await utilsApi.sql('mode=raw&query=ALTER CLUSTER posts ADD pq_clicks');
+res = await utilsApi.sql('ALTER CLUSTER posts ADD pq_title');
+res = await utilsApi.sql('ALTER CLUSTER posts ADD pq_clicks');
 ```
 
 <!-- intro -->
@@ -376,8 +375,8 @@ res = await utilsApi.sql('mode=raw&query=ALTER CLUSTER posts ADD pq_clicks');
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=ALTER CLUSTER posts ADD pq_title");
-utilsApi.sql("mode=raw&query=ALTER CLUSTER posts ADD pq_clicks");
+utilsApi.sql("ALTER CLUSTER posts ADD pq_title");
+utilsApi.sql("ALTER CLUSTER posts ADD pq_clicks");
 ```
 <!-- end -->
 
@@ -419,7 +418,7 @@ $response = $client->cluster->join($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=JOIN CLUSTER posts AT \'192.168.1.101:9312\'')
+utilsApi.sql('JOIN CLUSTER posts AT \'192.168.1.101:9312\'')
 ```
 <!-- intro -->
 ##### Javascript:
@@ -427,7 +426,7 @@ utilsApi.sql('mode=raw&query=JOIN CLUSTER posts AT \'192.168.1.101:9312\'')
 <!-- request Javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=JOIN CLUSTER posts AT \'192.168.1.101:9312\'');
+res = await utilsApi.sql('JOIN CLUSTER posts AT \'192.168.1.101:9312\'');
 ```
 
 <!-- intro -->
@@ -436,7 +435,7 @@ res = await utilsApi.sql('mode=raw&query=JOIN CLUSTER posts AT \'192.168.1.101:9
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=JOIN CLUSTER posts AT '192.168.1.101:9312'");
+utilsApi.sql("JOIN CLUSTER posts AT '192.168.1.101:9312'");
 
 ```
 <!-- end -->
@@ -505,10 +504,10 @@ InsertDocumentRequest newdoc = new InsertDocumentRequest();
 HashMap<String,Object> doc = new HashMap<String,Object>(){{
     put("title","test me");
 }};
-newdoc.index("pq_title").cluster("posts").id(3L).setDoc(doc); 
+newdoc.index("pq_title").cluster("posts").id(3L).setDoc(doc);
 sqlresult = indexApi.insert(newdoc);
 
- 
+
 
 ```
 <!-- end -->

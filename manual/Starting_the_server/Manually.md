@@ -117,3 +117,9 @@ C:\WINDOWS\system32> C:\Manticore\bin\searchd.exe --install
 * SIGTERM - Initiates a clean shutdown. New queries will not be handled, but queries that are already started will not be forcibly interrupted.
 * SIGHUP - Initiates indexes rotation. Depending on the value of [seamless_rotate](../Server_settings/Searchd.md#seamless_rotate) setting, new queries might be shortly stalled; clients will receive temporary errors.
 * SIGUSR1 - Forces reopen of searchd log and query log files, letting you implement log file rotation.
+
+## Environment variables
+
+* `MANTICORE_TRACK_DAEMON_SHUTDOWN=1` enables detailed logging while searchd is shutting down. It's useful in case of some shutdown problems:
+  - when Manticore shutdowns too long
+  - or when it freezes at shutdown

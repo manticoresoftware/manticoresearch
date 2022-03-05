@@ -37,7 +37,13 @@ FORCE_INLINE T ConvertType ( SphAttr_t tValue )
 }
 
 template <>
-FORCE_INLINE float ConvertType<float>( SphAttr_t tValue )
+FORCE_INLINE float ConvertType<float> ( SphAttr_t tValue )
 {
 	return sphDW2F ( (DWORD)tValue );
+}
+
+template <>
+FORCE_INLINE double ConvertType<double> ( SphAttr_t tValue )
+{
+	return sphQW2D ( (uint64_t)tValue );
 }

@@ -1153,6 +1153,10 @@ static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t & tRe
 		tOut.FtoA ( tMatch.GetAttrFloat(tLoc) );
 		break;
 
+	case SPH_ATTR_DOUBLE:
+		tOut.DtoA ( tMatch.GetAttrDouble(tLoc) );
+		break;
+
 	case SPH_ATTR_BOOL:
 		tOut << ( tMatch.GetAttr ( tLoc ) ? "true" : "false" );
 		break;

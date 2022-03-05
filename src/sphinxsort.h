@@ -72,7 +72,7 @@ public:
 	virtual void		Push ( const VecTraits_T<const CSphMatch> & dMatches ) = 0;
 
 	/// submit pre-grouped match. bNewSet indicates that the match begins the bunch of matches got from one source
-	virtual bool		PushGrouped ( const CSphMatch & tEntry, bool bNewSet, bool bUpdateDistinct ) = 0;
+	virtual bool		PushGrouped ( const CSphMatch & tEntry, bool bNewSet ) = 0;
 
 	/// get	rough entries count, due of aggregate filtering phase
 	virtual int			GetLength() = 0;
@@ -118,6 +118,11 @@ public:
 
 	virtual RowTagged_t					GetJustPushed() const = 0;
 	virtual VecTraits_T<RowTagged_t>	GetJustPopped() const = 0;
+
+	// tells the sorter whether we are working on a raw index and it can use columnar storage
+	// or it should use the values stored in the matches
+	// used by columnar aggregate functions
+	virtual void		SetMerge ( bool bMerge ) = 0;
 };
 
 
@@ -161,6 +166,16 @@ public:
 
 protected:
 							~CSphGrouper () override {} // =default causes bunch of errors building on wheezy
+};
+
+class DistinctFetcher_i : public ISphRefcountedMT
+{
+public:
+	virtual void			GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const = 0;
+	virtual void			SetBlobPool ( const BYTE * pBlobPool ) = 0;
+	virtual void			SetColumnar ( const columnar::Columnar_i * pColumnar ) = 0;
+	virtual void			FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) = 0;
+	virtual DistinctFetcher_i *	Clone() const = 0;
 };
 
 const char *	GetInternalAttrPrefix();

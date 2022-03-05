@@ -305,7 +305,7 @@ Array(
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=SHOW AGENT STATUS')
+utilsApi.sql('SHOW AGENT STATUS')
 ```
 <!-- response Python -->
 
@@ -372,7 +372,7 @@ utilsApi.sql('mode=raw&query=SHOW AGENT STATUS')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql("mode=raw&query=SHOW AGENT STATUS");
+res = await utilsApi.sql("SHOW AGENT STATUS");
 ```
 <!-- response javascript -->
 
@@ -440,7 +440,7 @@ res = await utilsApi.sql("mode=raw&query=SHOW AGENT STATUS");
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=SHOW AGENT STATUS");
+utilsApi.sql("SHOW AGENT STATUS");
 ```
 <!-- response Java -->
 
@@ -556,7 +556,7 @@ Array(
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=SHOW AGENT STATUS LIKE \'%5period%msec%\'')
+utilsApi.sql('SHOW AGENT STATUS LIKE \'%5period%msec%\'')
 ```
 <!-- response Python -->
 
@@ -577,7 +577,7 @@ utilsApi.sql('mode=raw&query=SHOW AGENT STATUS LIKE \'%5period%msec%\'')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql("mode=raw&query=SHOW AGENT STATUS LIKE \"%5period%msec%\"");
+res = await utilsApi.sql("SHOW AGENT STATUS LIKE \"%5period%msec%\"");
 ```
 <!-- response javascript -->
 
@@ -600,7 +600,7 @@ res = await utilsApi.sql("mode=raw&query=SHOW AGENT STATUS LIKE \"%5period%msec%
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=SHOW AGENT STATUS LIKE \"%5period%msec%\"");
+utilsApi.sql("SHOW AGENT STATUS LIKE \"%5period%msec%\"");
 ```
 <!-- response Java -->
 
@@ -686,7 +686,7 @@ Array(
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15periods%\'')
+utilsApi.sql('SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15periods%\'')
 ```
 <!-- response Python -->
 
@@ -715,7 +715,7 @@ utilsApi.sql('mode=raw&query=SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql("mode=raw&query=SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
+res = await utilsApi.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
 ```
 <!-- response javascript -->
 
@@ -745,7 +745,7 @@ res = await utilsApi.sql("mode=raw&query=SHOW AGENT \"192.168.0.202:6714\" STATU
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
+utilsApi.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
 ```
 <!-- response Java -->
 
@@ -841,7 +841,7 @@ Array(
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15periods%\'')
+utilsApi.sql('SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15periods%\'')
 ```
 <!-- response Python -->
 
@@ -873,7 +873,7 @@ utilsApi.sql('mode=raw&query=SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql("mode=raw&query=SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
+res = await utilsApi.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
 ```
 <!-- response javascript -->
 
@@ -906,7 +906,7 @@ res = await utilsApi.sql("mode=raw&query=SHOW AGENT \"192.168.0.202:6714\" STATU
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
+utilsApi.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
 ```
 <!-- response Java -->
 

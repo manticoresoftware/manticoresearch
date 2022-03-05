@@ -335,8 +335,7 @@ void CSphReader::UpdateCache()
 	{
 		m_iBuffUsed = m_iBuffPos = 0;
 		m_bError = true;
-		m_sError.SetSprintf ( "pread error in %s: pos=" INT64_FMT ", len=%d, code=%d, msg=%s",
-			m_sFilename.cstr(), (int64_t)iNewPos, iReadLen, errno, strerror(errno) );
+		m_sError.SetSprintf ( "pread error in %s: pos=" INT64_FMT ", len=%d, code=%d, msg=%s", m_sFilename.cstr(), (int64_t)iNewPos, iReadLen, errno, strerror(errno) );
 		return;
 	}
 
@@ -352,7 +351,11 @@ int CSphReader::GetByte()
 	{
 		UpdateCache();
 		if ( m_iBuffPos>=m_iBuffUsed )
+		{
+			m_bError = true;
+			m_sError.SetSprintf ( "pread error in %s: pos=" INT64_FMT ", len=%d", m_sFilename.cstr(), (int64_t)m_iPos, 1 );
 			return 0; // unexpected io failure
+		}
 	}
 
 	assert ( m_iBuffPos<m_iBuffUsed );
@@ -380,6 +383,7 @@ void CSphReader::GetBytes ( void * pData, int iSize )
 			UpdateCache();
 			if ( !m_iBuffUsed )
 			{
+				m_sError.SetSprintf ( "pread error in %s: pos=" INT64_FMT ", len=%d, code=%d, msg=%s", m_sFilename.cstr(), (int64_t)m_iPos, iSize, errno, strerror(errno) );
 				memset ( pData, 0, iSize );
 				return; // unexpected io failure
 			}
@@ -403,6 +407,8 @@ void CSphReader::GetBytes ( void * pData, int iSize )
 		if ( iSize>m_iBuffUsed-m_iBuffPos )
 		{
 			memset ( pData, 0, iSize ); // unexpected io failure
+			m_bError = true;
+			m_sError.SetSprintf ( "pread error in %s: pos=" INT64_FMT ", len=%d", m_sFilename.cstr(), (int64_t)m_iPos, iSize );
 			return;
 		}
 	}
@@ -588,6 +594,12 @@ void CSphWriter::SetBufferSize ( int iBufferSize )
 
 bool CSphWriter::OpenFile ( const CSphString & sName, CSphString & sErrorBuffer )
 {
+	return OpenFile ( sName, SPH_O_NEW, sErrorBuffer );
+}
+
+
+bool CSphWriter::OpenFile ( const CSphString & sName, int iOpenFlags, CSphString & sErrorBuffer )
+{
 	assert ( !sName.IsEmpty() );
 	assert ( m_iFD<0 && "already open" );
 
@@ -598,7 +610,7 @@ bool CSphWriter::OpenFile ( const CSphString & sName, CSphString & sErrorBuffer 
 	if ( !m_pBuffer )
 		m_pBuffer = new BYTE [ m_iBufferSize ];
 
-	m_iFD = ::open ( m_sName.cstr(), SPH_O_NEW, 0644 );
+	m_iFD = ::open ( m_sName.cstr(), iOpenFlags, 0644 );
 	m_pPool = m_pBuffer;
 	m_iPoolUsed = 0;
 	m_iPos = 0;

@@ -147,6 +147,7 @@ enum QueryDebug_e
 	QUERY_DEBUG_NO_PAYLOAD = 1<<0
 };
 
+class Docstore_i;
 
 /// per-query search context
 /// everything that index needs to compute/create to process the query
@@ -189,10 +190,7 @@ public:
 			~CSphQueryContext ();
 
 	void	BindWeights ( const CSphQuery & tQuery, const CSphSchema & tSchema, CSphString & sWarning );
-
-	bool	SetupCalc ( CSphQueryResultMeta & tMeta, const ISphSchema & tInSchema, const CSphSchema & tSchema, const BYTE * pBlobPool, const columnar::Columnar_i * pColumnar,
-				const CSphVector<const ISphSchema *> & dInSchemas );
-
+	bool	SetupCalc ( CSphQueryResultMeta & tMeta, const ISphSchema & tInSchema, const CSphSchema & tSchema, const BYTE * pBlobPool, const columnar::Columnar_i * pColumnar, const CSphVector<const ISphSchema *> & dInSchemas );
 	bool	CreateFilters ( CreateFilterContext_t &tCtx, CSphString &sError, CSphString &sWarning );
 
 	void	CalcFilter ( CSphMatch & tMatch ) const;
@@ -206,8 +204,8 @@ public:
 	// note that RT index bind pools at segment searching, not at time it setups context
 	void	ExprCommand ( ESphExprCommand eCmd, void * pArg );
 	void	SetBlobPool ( const BYTE * pBlobPool );
-
 	void	SetColumnar ( const columnar::Columnar_i * pColumnar );
+	void	SetDocstore ( const Docstore_i * pDocstore, int64_t iDocstoreSessionId );
 
 	void	SetupExtraData ( ISphRanker * pRanker, ISphMatchSorter * pSorter );
 	void	ResetFilters();
@@ -1349,9 +1347,10 @@ struct ExpansionContext_t
 	bool m_bMergeSingles				= false;
 	CSphScopedPayload * m_pPayloads		= nullptr;
 	ESphHitless m_eHitless				{SPH_HITLESS_NONE};
+	int m_iCutoff = -1;
 	cRefCountedRefPtrGeneric_t m_pIndexData;
 
-	bool m_bOnlyTreeFix					= false;
+	bool					m_bOnlyTreeFix = false;
 };
 
 struct GetKeywordsSettings_t
@@ -1363,6 +1362,7 @@ struct GetKeywordsSettings_t
 	int		m_iExpansionLimit = 0;
 	bool	m_bSortByDocs = false;
 	bool	m_bSortByHits = false;
+	int		m_iCutoff = -1;
 };
 
 XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx );

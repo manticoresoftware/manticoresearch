@@ -842,6 +842,18 @@ function RoundFloatValues ( &$values, $roundoff )
 }
 
 
+function IsColumnarProperty ( $property )
+{
+	return $property=="columnar" || $property=="columnar fast_fetch" || $property=="columnar stored";
+}
+
+
+function CompareColumns ( $a, $b )
+{
+	return strcmp ( array_keys($a)[0], array_keys($b)[0] );
+}
+
+
 function JsonRsetFixup ( &$set, $columnar )
 {
 	if ( isset ( $set["rows"] ) )
@@ -860,17 +872,30 @@ function JsonRsetFixup ( &$set, $columnar )
 		$set["rows"] = json_encode ( $rows );
 	}
 
-	if ( isset ( $set["http_endpoint"] ) && $set["http_endpoint"]=="sql" && isset ( $set["rows"] ) )
+	if ( isset ( $set["http_endpoint"] ) && ( $set["http_endpoint"]=="sql" || $set["http_endpoint"]=="cli" ) && isset ( $set["rows"] ) )
 	{
 		$rows = json_decode ( $set["rows"], 1 );
-		if ( isset ( $rows["data"] ) )
+		foreach	( $rows as &$row )
 		{
-			foreach ( $rows["data"] as &$entry )
+			if ( isset ( $row["data"] ) )
 			{
-				if ( is_array($entry) && isset ( $entry["Properties"] ) && $entry["Properties"]=="columnar" && $columnar )
-					$entry["Properties"] = "";
+				foreach ( $row["data"] as &$entry )
+				{
+					if ( is_array($entry) && isset ( $entry["Properties"] ) && $columnar && IsColumnarProperty ( $entry["Properties"] ) )
+						$entry["Properties"] = "";
+				}
 			}
+
+			if ( isset ( $row["data"] ) && is_array($row["data"]) )
+			{
+				foreach ( $row["data"] as &$data_row )
+					ksort($data_row);
+			}
+
+			if ( isset ( $row["columns"] ) && is_array($row["columns"]) )
+				usort ( $row["columns"], "CompareColumns" );
 		}
+
 		$set["rows"] = json_encode ( $rows );
 	}
 }
@@ -893,7 +918,7 @@ function SqlRsetFixup ( &$set, $columnar )
 		if ( $keys[0]!='Field' || $keys[1]!='Type' || $keys[2]!='Properties' )
 			return;
 
-		if ( $row['Properties']=='columnar' && $columnar )
+		if ( $columnar && IsColumnarProperty ( $row['Properties'] ) )
 			$row['Properties'] = '';
 	}
 }
@@ -2186,7 +2211,7 @@ class SphinxConfig
             return false;
         }
 
-        if ( property_exists ( $decoded_rows, 'took' ) )
+        if ( is_object($decoded_rows) && property_exists ( $decoded_rows, 'took' ) )
             unset ( $decoded_rows->took );
 
         // fixup floats in json
@@ -3231,6 +3256,7 @@ class SphinxConfig
 				SPH_ATTR_ORDINAL => "ordinal",
 				SPH_ATTR_BOOL => "bool",
 				SPH_ATTR_FLOAT => "float",
+				SPH_ATTR_DOUBLE => "double",
 				SPH_ATTR_BIGINT => "bigint",
 				SPH_ATTR_STRING => "string",
 				SPH_ATTR_MULTI => "mva",

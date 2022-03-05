@@ -42,7 +42,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) charset_table = \'cjk\' morphology = \'icu_chinese\'')
+utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'cjk\' morphology = \'icu_chinese\'')
 ```
 
 <!-- intro -->
@@ -51,7 +51,7 @@ utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) char
 <!-- request Javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) charset_table = \'cjk\' morphology = \'icu_chinese\'');
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'cjk\' morphology = \'icu_chinese\'');
 ```
 
 <!-- intro -->
@@ -60,7 +60,7 @@ res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) charset_table = 'cjk' morphology = 'icu_chinese'");
+utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'cjk' morphology = 'icu_chinese'");
 ```
 <!-- request CONFIG -->
 
@@ -119,7 +119,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) charset_table = \'non_cjk\' ngram_len = \'1\' ngram_chars = \'cjk\'')
+utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'non_cjk\' ngram_len = \'1\' ngram_chars = \'cjk\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -127,7 +127,7 @@ utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) char
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) charset_table = \'non_cjk\' ngram_len = \'1\' ngram_chars = \'cjk\'');
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'non_cjk\' ngram_len = \'1\' ngram_chars = \'cjk\'');
 ```
 <!-- intro -->
 ##### java:
@@ -135,7 +135,7 @@ res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'");
+utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'");
 ```
 <!-- request CONFIG -->
 
@@ -195,7 +195,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) charset_table = \'chinese\' morphology = \'icu_chinese\' stopwords = \'zh\'')
+utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'chinese\' morphology = \'icu_chinese\' stopwords = \'zh\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -203,7 +203,7 @@ utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) char
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) charset_table = \'chinese\' morphology = \'icu_chinese\' stopwords = \'zh\'');
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'chinese\' morphology = \'icu_chinese\' stopwords = \'zh\'');
 ```
 <!-- intro -->
 ##### java:
@@ -211,7 +211,7 @@ res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) charset_table = 'chinese' morphology = 'icu_chinese' stopwords = 'zh'");
+utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'chinese' morphology = 'icu_chinese' stopwords = 'zh'");
 ```
 
 

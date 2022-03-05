@@ -194,7 +194,7 @@ Python
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, color string) type=\'pq\'')
+utilsApi.sql('create table products(title text, color string) type=\'pq\'')
 indexApi.insert({"index" : "products", "doc" : {"query" : "@title bag" }})
 indexApi.insert({"index" : "products",  "doc" : {"query" : "@title shoes", "filters": "color='red'" }})
 indexApi.insert({"index" : "products",  "doc" : {"query" : "@title shoes","filters": "color IN ('blue', 'green')" }})
@@ -222,7 +222,7 @@ javascript
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, color string) type=\'pq\'');
+res = await utilsApi.sql('create table products(title text, color string) type=\'pq\'');
 res = indexApi.insert({"index" : "products", "doc" : {"query" : "@title bag" }});
 res = indexApi.insert({"index" : "products",  "doc" : {"query" : "@title shoes", "filters": "color='red'" }});
 res = indexApi.insert({"index" : "products",  "doc" : {"query" : "@title shoes","filters": "color IN ('blue', 'green')" }});
@@ -238,7 +238,7 @@ java
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, color string) type='pq'");
+utilsApi.sql("create table products(title text, color string) type='pq'");
 doc = new HashMap<String,Object>(){{
     put("query", "@title bag");
 }};

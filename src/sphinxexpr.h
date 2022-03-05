@@ -41,6 +41,7 @@ enum ESphAttr
 	SPH_ATTR_STRINGPTR	= 10,			///< string (binary, in-memory, stored as pointer to the zero-terminated string)
 	SPH_ATTR_TOKENCOUNT	= 11,			///< field token count, 32-bit integer
 	SPH_ATTR_JSON		= 12,			///< JSON subset; converted, packed, and stored as string
+	SPH_ATTR_DOUBLE		= 13,			///< floating point number (IEEE 64-bit)
 
 	SPH_ATTR_UINT32SET	= 0x40000001UL,	///< MVA, set of unsigned 32-bit integers
 	SPH_ATTR_INT64SET	= 0x40000002UL,	///< MVA, set of signed 64-bit integers
@@ -75,15 +76,17 @@ enum ESphEvalStage
 enum ESphExprCommand
 {
 	SPH_EXPR_SET_BLOB_POOL,
-	SPH_EXPR_SET_DOCSTORE,
+	SPH_EXPR_SET_DOCSTORE_ROWID,	///< interface to fetch docs by rowid (final stage)
+	SPH_EXPR_SET_DOCSTORE_DOCID,	///< interface to fetch docs by docid (postlimit stage)
 	SPH_EXPR_SET_QUERY,
 	SPH_EXPR_SET_EXTRA_DATA,
-	SPH_EXPR_GET_DEPENDENT_COLS, ///< used to determine proper evaluating stage
+	SPH_EXPR_GET_DEPENDENT_COLS,	///< used to determine proper evaluating stage
 	SPH_EXPR_UPDATE_DEPENDENT_COLS,
 	SPH_EXPR_GET_UDF,
 	SPH_EXPR_SET_COLUMNAR,
+	SPH_EXPR_SET_COLUMNAR_COL,
 	SPH_EXPR_GET_COLUMNAR_COL,
-	SPH_EXPR_SET_ITERATOR		///< set link between JsonIn expr and iterator
+	SPH_EXPR_SET_ITERATOR			///< set link between JsonIn expr and iterator
 };
 
 /// expression evaluator
@@ -127,7 +130,10 @@ public:
 	virtual bool IsArglist () const { return false; }
 
 	/// was this expression spawned in place of a columnar attr?
-	virtual bool IsColumnar() const { return false; }
+	virtual bool IsColumnar ( bool * pStored = nullptr ) const { return false; }
+
+	/// was this expression spawned in place of a columnar expression?
+	virtual bool IsStored() const { return false; }
 
 	/// check for stringptr subtype
 	virtual bool IsDataPtrAttr () const { return false; }

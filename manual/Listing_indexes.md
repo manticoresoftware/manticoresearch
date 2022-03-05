@@ -63,7 +63,7 @@ Array
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=SHOW TABLES')
+utilsApi.sql('SHOW TABLES')
 ```
 
 <!-- response Python -->
@@ -83,7 +83,7 @@ utilsApi.sql('mode=raw&query=SHOW TABLES')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=SHOW TABLES');
+res = await utilsApi.sql('SHOW TABLES');
 ```
 
 <!-- response javascript -->
@@ -97,7 +97,7 @@ res = await utilsApi.sql('mode=raw&query=SHOW TABLES');
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=SHOW TABLES")
+utilsApi.sql("SHOW TABLES")
 ```
 
 <!-- response Java -->
@@ -154,7 +154,7 @@ Array
 <!-- request Python -->
 
 ```python
-res = await utilsApi.sql('mode=raw&query=SHOW TABLES LIKE \'pro%\'');
+res = await utilsApi.sql('SHOW TABLES LIKE \'pro%\'');
 ```
 
 <!-- response Python -->
@@ -172,7 +172,7 @@ res = await utilsApi.sql('mode=raw&query=SHOW TABLES LIKE \'pro%\'');
 <!-- request javascript -->
 
 ```javascript
-utilsApi.sql('mode=raw&query=SHOW TABLES LIKE \'pro%\'')
+utilsApi.sql('SHOW TABLES LIKE \'pro%\'')
 ```
 
 <!-- response javascript -->
@@ -187,7 +187,7 @@ utilsApi.sql('mode=raw&query=SHOW TABLES LIKE \'pro%\'')
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=SHOW TABLES LIKE 'pro%'")
+utilsApi.sql("SHOW TABLES LIKE 'pro%'")
 ```
 
 <!-- response Java -->

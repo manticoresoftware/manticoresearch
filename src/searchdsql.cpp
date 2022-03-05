@@ -63,8 +63,10 @@ bool SqlStmt_t::CheckInsertIntegrity()
 
 //////////////////////////////////////////////////////////////////////////
 
-SqlParserTraits_c::SqlParserTraits_c ( CSphVector<SqlStmt_t> & dStmt )
-	: m_dStmt ( dStmt )
+SqlParserTraits_c::SqlParserTraits_c ( CSphVector<SqlStmt_t> & dStmt, const char* szQuery, CSphString* pError )
+	: m_pBuf ( szQuery )
+	, m_pParseError ( pError )
+	, m_dStmt ( dStmt )
 {}
 
 
@@ -111,9 +113,10 @@ public:
 	CSphVector<FilterTreeItem_t> m_dFilterTree;
 	CSphVector<int>	m_dFiltersPerStmt;
 	bool			m_bGotFilterOr = false;
+	bool 			m_bGotDDLClause = false;
 
 public:
-					SqlParser_c ( CSphVector<SqlStmt_t> & dStmt, ESphCollation eCollation );
+					SqlParser_c ( CSphVector<SqlStmt_t> & dStmt, ESphCollation eCollation, const char* szQuery, CSphString* pError );
 
 	void			PushQuery ();
 
@@ -139,6 +142,8 @@ public:
 	void			AddConst ( int iList, const SqlNode_t& tValue );
 	void			SetStatement ( const SqlNode_t & tName, SqlSet_e eSet );
 	bool			AddFloatRangeFilter ( const SqlNode_t & tAttr, float fMin, float fMax, bool bHasEqual, bool bExclude=false );
+	bool			AddFloatFilterGreater ( const SqlNode_t & tAttr, float fVal, bool bHasEqual );
+	bool			AddFloatFilterLesser ( const SqlNode_t & tAttr, float fVal, bool bHasEqual );
 	bool			AddIntRangeFilter ( const SqlNode_t & tAttr, int64_t iMin, int64_t iMax, bool bExclude );
 	bool			AddIntFilterGreater ( const SqlNode_t & tAttr, int64_t iVal, bool bHasEqual );
 	bool			AddIntFilterLesser ( const SqlNode_t & tAttr, int64_t iVal, bool bHasEqual );
@@ -250,11 +255,11 @@ static int yylex ( YYSTYPE * lvalp, SqlParser_c * pParser )
 
 //////////////////////////////////////////////////////////////////////////
 
-SqlParser_c::SqlParser_c ( CSphVector<SqlStmt_t> & dStmt, ESphCollation eCollation )
-	: SqlParserTraits_c ( dStmt )
+SqlParser_c::SqlParser_c ( CSphVector<SqlStmt_t> & dStmt, ESphCollation eCollation, const char* szQuery, CSphString* pError )
+	: SqlParserTraits_c ( dStmt, szQuery, pError )
 	, m_eCollation ( eCollation )
 {
-	assert ( !m_dStmt.GetLength() );
+	assert ( m_dStmt.IsEmpty() );
 	PushQuery ();
 }
 
@@ -360,7 +365,6 @@ enum class Option_e : BYTE
 	TOKEN_FILTER_OPTIONS,
 	NOT_ONLY_ALLOWED,
 	STORE,
-	PSEUDO_SHARDING,
 
 	INVALID_OPTION
 };
@@ -374,7 +378,7 @@ void InitParserOption()
 		"idf", "ignore_nonexistent_columns", "ignore_nonexistent_indexes", "index_weights", "local_df", "low_priority",
 		"max_matches", "max_predicted_time", "max_query_time", "morphology", "rand_seed", "ranker", "retry_count",
 		"retry_delay", "reverse_scan", "sort_method", "strict", "sync", "threads", "token_filter", "token_filter_options",
-		"not_terms_only_allowed", "store", "pseudo_sharding" };
+		"not_terms_only_allowed", "store" };
 
 	for ( BYTE i = 0u; i<(BYTE) Option_e::INVALID_OPTION; ++i )
 		g_hParseOption.Add ( (Option_e) i, dOptions[i] );
@@ -406,7 +410,7 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 			Option_e::LOCAL_DF, Option_e::LOW_PRIORITY, Option_e::MAX_MATCHES, Option_e::MAX_PREDICTED_TIME,
 			Option_e::MAX_QUERY_TIME, Option_e::MORPHOLOGY, Option_e::RAND_SEED, Option_e::RANKER,
 			Option_e::RETRY_COUNT, Option_e::RETRY_DELAY, Option_e::REVERSE_SCAN, Option_e::SORT_METHOD,
-			Option_e::THREADS, Option_e::TOKEN_FILTER, Option_e::NOT_ONLY_ALLOWED, Option_e::PSEUDO_SHARDING };
+			Option_e::THREADS, Option_e::TOKEN_FILTER, Option_e::NOT_ONLY_ALLOWED };
 
 	static Option_e dInsertOptions[] = { Option_e::TOKEN_FILTER_OPTIONS };
 
@@ -728,10 +732,6 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 
 	case Option_e::NOT_ONLY_ALLOWED: //} else if ( sOpt=="not_terms_only_allowed" )
 		m_pQuery->m_bNotOnlyAllowed = ( tValue.m_iValue!=0 );
-		break;
-
-	case Option_e::PSEUDO_SHARDING: //} else if ( sOpt=="pseudo_sharding" )
-		m_pStmt->m_iSplit = tValue.m_iValue;
 		break;
 
 	case Option_e::STORE: //} else if ( sOpt=="store" )
@@ -1113,6 +1113,34 @@ bool SqlParser_c::AddFloatRangeFilter ( const SqlNode_t & sAttr, float fMin, flo
 	return true;
 }
 
+bool SqlParser_c::AddFloatFilterGreater ( const SqlNode_t & tAttr, float fVal, bool bHasEqual )
+{
+	CSphFilterSettings * pFilter = AddFilter ( tAttr, SPH_FILTER_FLOATRANGE );
+	if ( !pFilter )
+		return false;
+
+	pFilter->m_fMaxValue = FLT_MAX;
+	pFilter->m_fMinValue = fVal;
+	pFilter->m_bHasEqualMin = bHasEqual;
+	pFilter->m_bOpenRight = true;
+
+	return true;
+}
+
+bool SqlParser_c::AddFloatFilterLesser ( const SqlNode_t & tAttr, float fVal, bool bHasEqual )
+{
+	CSphFilterSettings * pFilter = AddFilter ( tAttr, SPH_FILTER_FLOATRANGE );
+	if ( !pFilter )
+		return false;
+
+	pFilter->m_fMinValue = -FLT_MAX;
+	pFilter->m_fMaxValue = fVal;
+	pFilter->m_bHasEqualMax = bHasEqual;
+	pFilter->m_bOpenLeft = true;
+
+	return true;
+}
+
 bool SqlParser_c::AddIntRangeFilter ( const SqlNode_t & sAttr, int64_t iMin, int64_t iMax, bool bExclude )
 {
 	CSphFilterSettings * pFilter = AddFilter ( sAttr, SPH_FILTER_RANGE );
@@ -1400,15 +1428,7 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 		return false;
 	}
 
-	// DDL is not supported in multi-statements anyway, so we only check the first statement
-	if ( IsDdlQuery ( sQuery, iLen ) )
-		return ParseDdl ( sQuery, iLen, dStmt, sError );
-
-	SqlParser_c tParser ( dStmt, eCollation );
-	tParser.m_pBuf = sQuery;
-	tParser.m_pLastTokenStart = NULL;
-	tParser.m_pParseError = &sError;
-	tParser.m_eCollation = eCollation;
+	SqlParser_c tParser ( dStmt, eCollation, sQuery, &sError );
 
 	char * sEnd = const_cast<char *>( sQuery ) + iLen;
 	sEnd[0] = 0; // prepare for yy_scan_buffer
@@ -1428,6 +1448,9 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 	yylex_destroy ( tParser.m_pScanner );
 
 	dStmt.Pop(); // last query is always dummy
+
+	if ( tParser.m_bGotDDLClause )
+		return ParseDdl ( sQuery, iLen, dStmt, sError );
 
 	int iFilterStart = 0;
 	int iFilterCount = 0;
@@ -1458,7 +1481,7 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 			CSphString & sFunc = dStmt[iStmt].m_sTableFunc;
 			sFunc.ToUpper();
 
-			ISphTableFunc * pFunc = NULL;
+			ISphTableFunc * pFunc = nullptr;
 			if ( sFunc=="REMOVE_REPEATS" )
 				pFunc = CreateRemoveRepeats();
 
@@ -1476,9 +1499,9 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 		}
 
 		// validate filters
-		ARRAY_FOREACH ( i, tQuery.m_dFilters )
+		for ( const auto& tFilter : tQuery.m_dFilters )
 		{
-			const CSphString & sCol = tQuery.m_dFilters[i].m_sAttrName;
+			const CSphString & sCol = tFilter.m_sAttrName;
 			if ( !strcasecmp ( sCol.cstr(), "@count" ) || !strcasecmp ( sCol.cstr(), "count(*)" ) )
 			{
 				sError.SetSprintf ( "sphinxql: aggregates in 'where' clause prohibited, use 'HAVING'" );
@@ -1519,14 +1542,14 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 		const CSphQuery & tHeadQuery = tHeadStmt.m_tQuery;
 		if ( dStmt[i].m_eStmt==STMT_SELECT )
 		{
-			i++;
+			++i;
 			if ( i<dStmt.GetLength() && dStmt[i].m_eStmt==STMT_FACET )
 			{
 				bGotFacet = true;
 				const_cast<CSphQuery &>(tHeadQuery).m_bFacetHead = true;
 			}
 
-			for ( ; i<dStmt.GetLength() && dStmt[i].m_eStmt==STMT_FACET; i++ )
+			for ( ; i<dStmt.GetLength() && dStmt[i].m_eStmt==STMT_FACET; ++i )
 			{
 				SqlStmt_t & tStmt = dStmt[i];
 				tStmt.m_tQuery.m_bFacet = true;
@@ -1586,11 +1609,10 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 			dItems[i] = *dSelectItems[i].m_pItem;
 		}
 
-		ARRAY_FOREACH ( i, dStmt )
+		for ( SqlStmt_t& tStmt : dStmt )
 		{
-			SqlStmt_t & tStmt = dStmt[i];
 			// keep original items
-			tStmt.m_tQuery.m_dItems.SwapData ( dStmt[i].m_tQuery.m_dRefItems );
+			tStmt.m_tQuery.m_dItems.SwapData ( tStmt.m_tQuery.m_dRefItems );
 			tStmt.m_tQuery.m_dItems = dItems;
 
 			// for FACET strip off group by expression items
@@ -1654,11 +1676,7 @@ bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, co
 	int iLen = sBuf.GetLength();
 
 	CSphVector<SqlStmt_t> dStmt;
-	SqlParser_c tParser ( dStmt, eCollation );
-	tParser.m_pBuf = sBuf.cstr();
-	tParser.m_pLastTokenStart = nullptr;
-	tParser.m_pParseError = &sError;
-	tParser.m_eCollation = eCollation;
+	SqlParser_c tParser ( dStmt, eCollation, sBuf.cstr(), &sError );
 	tParser.m_sErrorHeader = "percolate filters:";
 
 	char * sEnd = const_cast<char *>( sBuf.cstr() ) + iLen;

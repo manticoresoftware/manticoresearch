@@ -731,11 +731,12 @@ static const char * GetTypeName ( MysqlColumnType_e eType )
 {
 	switch ( eType )
 	{
-		case MYSQL_COL_DECIMAL: return "decimal";
-		case MYSQL_COL_LONG: return "long";
-		case MYSQL_COL_FLOAT: return "float";
-		case MYSQL_COL_LONGLONG: return "long long";
-		case MYSQL_COL_STRING: return "string";
+		case MYSQL_COL_DECIMAL:		return "decimal";
+		case MYSQL_COL_LONG:		return "long";
+		case MYSQL_COL_FLOAT:		return "float";
+		case MYSQL_COL_DOUBLE:		return "double";
+		case MYSQL_COL_LONGLONG:	return "long long";
+		case MYSQL_COL_STRING:		return "string";
 		default: return "unknown";
 	};
 }
@@ -751,11 +752,18 @@ const StrBlock_t dJsonObjCustom { { ",\n", 2 }, { "[", 1 }, { "]", 1 } }; // jso
 class JsonRowBuffer_c : public RowBuffer_i
 {
 public:
-	JsonRowBuffer_c () {
+	JsonRowBuffer_c()
+	{
 		m_dBuf.StartBlock ( dJsonObjCustom );
 	}
 
 	void PutFloatAsString ( float fVal, const char * ) override
+	{
+		AddDataColumn();
+		m_dBuf << fVal;
+	}
+
+	void PutDoubleAsString ( double fVal, const char * ) override
 	{
 		AddDataColumn();
 		m_dBuf << fVal;
@@ -823,20 +831,22 @@ public:
 	{
 		m_dBuf.FinishBlock ( true ); // last doc, allow empty
 		m_dBuf.FinishBlock ( false ); // docs section
-		DataFinish ( m_iTotalRows, "", "" );
+		DataFinish ( m_iTotalRows, nullptr, nullptr );
 		m_dBuf.FinishBlock ( false ); // root object
 	}
 
-	void Error ( const char *, const char * sError, MysqlErrors_e iErr ) override
+	void Error ( const char *, const char * szError, MysqlErrors_e iErr ) override
 	{
 		auto _ = m_dBuf.Object ( false );
-		DataFinish ( 0, sError, "" );
+		DataFinish ( 0, szError, nullptr );
+		m_bError = true;
+		m_sError = szError;
 	}
 
 	void Ok ( int iAffectedRows, int iWarns, const char * sMessage, bool bMoreResults, int64_t iLastInsertId ) override
 	{
 		auto _ = m_dBuf.Object ( false );
-		DataFinish ( iAffectedRows, "", sMessage );
+		DataFinish ( iAffectedRows, nullptr, sMessage );
 	}
 
 	void HeadBegin ( int iCols ) override
@@ -877,12 +887,24 @@ public:
 		return m_dBuf;
 	}
 
+	bool IsError() const
+	{
+		return m_bError;
+	}
+
+	const char* GetErrorsz() const
+	{
+		return m_sError.scstr();
+	}
+
 private:
 	JsonEscapedBuilder m_dBuf;
 	CSphVector<ColumnNameType_t> m_dColumns;
 	int m_iExpectedColumns = 0;
 	int m_iTotalRows = 0;
 	int m_iCol = 0;
+	bool m_bError = false;
+	CSphString m_sError;
 
 	void AddDataColumn()
 	{
@@ -920,6 +942,11 @@ public:
 
 		JsonRowBuffer_c tOut;
 		session::Execute ( dQuery, tOut );
+		if ( tOut.IsError() )
+		{
+			ReportError (tOut.GetErrorsz(), SPH_HTTP_STATUS_500);
+			return false;
+		}
 		BuildReply ( tOut.Finish(), SPH_HTTP_STATUS_200 );
 		return true;
 	}
@@ -1345,7 +1372,7 @@ static HttpHandler_c * CreateHttpHandler ( ESphHttpEndpoint eEndpoint, const cha
 			return new HttpSearchHandler_SQL_c ( sQuery, tOptions );
 
 	case SPH_HTTP_ENDPOINT_CLI:
-		if ( !sQuery )
+		if ( !sQuery && !IsEmpty ( dRawUrlQuery ) )
 		{
 			sQuery = dRawUrlQuery.first;
 			const_cast<char*> ( sQuery )[dRawUrlQuery.second] = '\0'; // fixme! const breakage...

@@ -65,7 +65,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE forum(title text, content text, author_id int, forum_id int, post_date timestamp)')
+utilsApi.sql('CREATE TABLE forum(title text, content text, author_id int, forum_id int, post_date timestamp)')
 ```
 <!-- intro -->
 ##### Javascript:
@@ -73,7 +73,7 @@ utilsApi.sql('mode=raw&query=CREATE TABLE forum(title text, content text, author
 <!-- request Javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE forum(title text, content text, author_id int, forum_id int, post_date timestamp)');
+res = await utilsApi.sql('CREATE TABLE forum(title text, content text, author_id int, forum_id int, post_date timestamp)');
 ```
 
 <!-- intro -->
@@ -82,7 +82,7 @@ res = await utilsApi.sql('mode=raw&query=CREATE TABLE forum(title text, content 
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE forum(title text, content text, author_id int, forum_id int, post_date timestamp)");
+utilsApi.sql("CREATE TABLE forum(title text, content text, author_id int, forum_id int, post_date timestamp)");
 
 ```
 
@@ -341,7 +341,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE products(title text)')
+utilsApi.sql('CREATE TABLE products(title text)')
 ```
 <!-- intro -->
 ##### javascript:
@@ -349,7 +349,7 @@ utilsApi.sql('mode=raw&query=CREATE TABLE products(title text)')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text)');
+res = await utilsApi.sql('CREATE TABLE products(title text)');
 ```
 <!-- intro -->
 ##### java:
@@ -357,7 +357,7 @@ res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text)');
 <!-- request java -->
 
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE products(title text)");
+utilsApi.sql("CREATE TABLE products(title text)");
 ```
 <!-- intro -->
 ##### config:
@@ -418,7 +418,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE products(title text indexed)')
+utilsApi.sql('CREATE TABLE products(title text indexed)')
 ```
 <!-- intro -->
 ##### javascript:
@@ -426,7 +426,7 @@ utilsApi.sql('mode=raw&query=CREATE TABLE products(title text indexed)')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text indexed)');
+res = await utilsApi.sql('CREATE TABLE products(title text indexed)');
 ```
 
 <!-- intro -->
@@ -435,7 +435,7 @@ res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text indexe
 <!-- request java -->
 
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE products(title text indexed)");
+utilsApi.sql("CREATE TABLE products(title text indexed)");
 ```
 
 <!-- intro -->
@@ -517,7 +517,7 @@ res = await searchApi.search({"index":"products","query":{"match":{"title":"firs
 <!-- request java -->
 
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE products(title text indexed)");
+utilsApi.sql("CREATE TABLE products(title text indexed)");
 ```
 
 <!-- end -->
@@ -563,7 +563,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, keys string)')
+utilsApi.sql('CREATE TABLE products(title text, keys string)')
 ```
 <!-- intro -->
 ##### javascript:
@@ -571,7 +571,7 @@ utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, keys string)')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, keys string)');
+res = await utilsApi.sql('CREATE TABLE products(title text, keys string)');
 ```
 <!-- intro -->
 ##### java:
@@ -579,7 +579,7 @@ res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, keys 
 <!-- request java -->
 
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, keys string)");
+utilsApi.sql("CREATE TABLE products(title text, keys string)");
 ```
 
 <!-- intro -->
@@ -644,7 +644,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE products ( title string attribute indexed )')
+utilsApi.sql('CREATE TABLE products ( title string attribute indexed )')
 ```
 <!-- intro -->
 ##### javascript:
@@ -652,7 +652,7 @@ utilsApi.sql('mode=raw&query=CREATE TABLE products ( title string attribute inde
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE products ( title string attribute indexed )');
+res = await utilsApi.sql('CREATE TABLE products ( title string attribute indexed )');
 ```
 
 <!-- intro -->
@@ -661,7 +661,7 @@ res = await utilsApi.sql('mode=raw&query=CREATE TABLE products ( title string at
 <!-- request java -->
 
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE products ( title string attribute indexed )");
+utilsApi.sql("CREATE TABLE products ( title string attribute indexed )");
 ```
 <!-- intro -->
 ##### config:
@@ -725,7 +725,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price int)')
+utilsApi.sql('CREATE TABLE products(title text, price int)')
 ```
 <!-- intro -->
 ##### javascript:
@@ -733,7 +733,7 @@ utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price int)')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price int)');
+res = await utilsApi.sql('CREATE TABLE products(title text, price int)');
 ```
 <!-- intro -->
 ##### java:
@@ -741,7 +741,7 @@ res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price
 <!-- request java -->
 
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price int)");
+utilsApi.sql("CREATE TABLE products(title text, price int)");
 ```
 <!-- intro -->
 ##### config:
@@ -803,7 +803,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, flags bit(3), tags bit(2) ')
+utilsApi.sql('CREATE TABLE products(title text, flags bit(3), tags bit(2) ')
 ```
 <!-- intro -->
 ##### javascript:
@@ -811,7 +811,7 @@ utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, flags bit(3), tag
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, flags bit(3), tags bit(2) ');
+res = await utilsApi.sql('CREATE TABLE products(title text, flags bit(3), tags bit(2) ');
 ```
 <!-- intro -->
 ##### java:
@@ -819,7 +819,7 @@ res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, flags
 <!-- request java -->
 
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, flags bit(3), tags bit(2)");
+utilsApi.sql("CREATE TABLE products(title text, flags bit(3), tags bit(2)");
 ```
 
 <!-- intro -->
@@ -884,7 +884,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price bigint )')
+utilsApi.sql('CREATE TABLE products(title text, price bigint )')
 ```
 <!-- intro -->
 ##### javascript:
@@ -892,7 +892,7 @@ utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price bigint )')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price bigint )');
+res = await utilsApi.sql('CREATE TABLE products(title text, price bigint )');
 ```
 
 <!-- intro -->
@@ -901,7 +901,7 @@ res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price
 <!-- request java -->
 
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price bigint )");
+utilsApi.sql("CREATE TABLE products(title text, price bigint )");
 ```
 
 <!-- intro -->
@@ -965,7 +965,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, sold bool )')
+utilsApi.sql('CREATE TABLE products(title text, sold bool )')
 ```
 <!-- intro -->
 ##### javascript:
@@ -973,7 +973,7 @@ utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, sold bool )')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, sold bool )');
+res = await utilsApi.sql('CREATE TABLE products(title text, sold bool )');
 ```
 
 <!-- intro -->
@@ -982,7 +982,7 @@ res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, sold 
 <!-- request java -->
 
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, sold bool )");
+utilsApi.sql("CREATE TABLE products(title text, sold bool )");
 ```
 
 <!-- intro -->
@@ -1046,7 +1046,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, date timestamp)')
+utilsApi.sql('CREATE TABLE products(title text, date timestamp)')
 ```
 <!-- intro -->
 ##### javascript:
@@ -1054,7 +1054,7 @@ utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, date timestamp)')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, date timestamp)');
+res = await utilsApi.sql('CREATE TABLE products(title text, date timestamp)');
 ```
 
 <!-- intro -->
@@ -1063,7 +1063,7 @@ res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, date 
 <!-- request java -->
 
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, date timestamp)");
+utilsApi.sql("CREATE TABLE products(title text, date timestamp)");
 ```
 
 <!-- intro -->
@@ -1127,7 +1127,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, coeff float)')
+utilsApi.sql('CREATE TABLE products(title text, coeff float)')
 ```
 
 <!-- intro -->
@@ -1136,7 +1136,7 @@ utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, coeff float)')
 <!-- request java -->
 
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, coeff float)");
+utilsApi.sql("CREATE TABLE products(title text, coeff float)");
 ```
 <!-- intro -->
 ##### javascript:
@@ -1144,7 +1144,7 @@ utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, coeff float)");
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, coeff float)');
+res = await utilsApi.sql('CREATE TABLE products(title text, coeff float)');
 ```
 
 
@@ -1346,7 +1346,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, data json)')
+utilsApi.sql('CREATE TABLE products(title text, data json)')
 ```
 <!-- intro -->
 ##### javascript:
@@ -1354,7 +1354,7 @@ utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, data json)')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, data json)');
+res = await utilsApi.sql('CREATE TABLE products(title text, data json)');
 ```
 <!-- intro -->
 ##### java:
@@ -1362,7 +1362,7 @@ res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, data 
 <!-- request java -->
 
 ```java
-utilsApi.sql'mode=raw&query=CREATE TABLE products(title text, data json)');
+utilsApi.sql'CREATE TABLE products(title text, data json)');
 ```
 <!-- intro -->
 ##### config:
@@ -1642,7 +1642,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, product_codes multi)')
+utilsApi.sql('CREATE TABLE products(title text, product_codes multi)')
 ```
 <!-- intro -->
 ##### javascript:
@@ -1650,7 +1650,7 @@ utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, product_codes mul
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, product_codes multi)');
+res = await utilsApi.sql('CREATE TABLE products(title text, product_codes multi)');
 ```
 <!-- intro -->
 ##### java:
@@ -1658,7 +1658,7 @@ res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, produ
 <!-- request java -->
 
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, product_codes multi)");
+utilsApi.sql("CREATE TABLE products(title text, product_codes multi)");
 ```
 
 
@@ -2115,7 +2115,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, values multi64))')
+utilsApi.sql('CREATE TABLE products(title text, values multi64))')
 ```
 <!-- intro -->
 ##### javascript:
@@ -2123,7 +2123,7 @@ utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, values multi64))'
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, values multi64))');
+res = await utilsApi.sql('CREATE TABLE products(title text, values multi64))');
 ```
 <!-- intro -->
 ##### java:
@@ -2131,7 +2131,7 @@ res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, value
 <!-- request java -->
 
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, values multi64))");
+utilsApi.sql("CREATE TABLE products(title text, values multi64))");
 ```
 <!-- intro -->
 ##### config:

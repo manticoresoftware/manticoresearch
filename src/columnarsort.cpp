@@ -200,6 +200,13 @@ FORCE_INLINE bool CompareFloat_fn<5>::IsLess ( const CSphMatch & tMatchA, SphAtt
 			TEST_PAIR ( aa, bb, _idx ) \
 			break; \
 		} \
+		case SPH_KEYPART_DOUBLE: \
+		{ \
+			register double aa = sphQW2D ( dA[tState.m_dAttrs[_idx]] ); \
+			register double bb = sphQW2D ( dB[tState.m_dAttrs[_idx]] ); \
+			TEST_PAIR ( aa, bb, _idx ) \
+			break; \
+		} \
 		default: \
 			assert ( 0 && "Internal error" ); \
 			break; \
@@ -281,7 +288,7 @@ public:
 	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) override	{ assert ( 0 && "No batch push to proxy sorter" ); }
 
 	bool	IsGroupby() const override										{ return m_pSorter->IsGroupby(); }
-	bool	PushGrouped ( const CSphMatch & tEntry, bool bNewSet, bool bUpdateDistinct ) override	{ return m_pSorter->PushGrouped ( tEntry, bNewSet, bUpdateDistinct ); }
+	bool	PushGrouped ( const CSphMatch & tEntry, bool bNewSet ) override	{ return m_pSorter->PushGrouped ( tEntry, bNewSet ); }
 	int		GetLength () override;
 	void	Finalize ( MatchProcessor_i & tProcessor, bool bCallProcessInResultSetOrder, bool bFinalizeMatches ) override;
 	int		Flatten ( CSphMatch * pTo ) override;
@@ -309,6 +316,8 @@ public:
 
 	RowTagged_t					GetJustPushed() const override						{ assert (0 && "Not supported" ); return RowTagged_t(); }
 	VecTraits_T<RowTagged_t>	GetJustPopped() const override						{ assert (0 && "Not supported" ); return {}; }
+
+	void		SetMerge ( bool bMerge ) override							{}
 
 private:
 	struct IteratorWithLocator_t

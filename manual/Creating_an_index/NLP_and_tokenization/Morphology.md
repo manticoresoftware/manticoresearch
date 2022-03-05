@@ -87,7 +87,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) morphology = \'stem_en, libstemmer_sv\'')
+utilsApi.sql('CREATE TABLE products(title text, price float) morphology = \'stem_en, libstemmer_sv\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -95,14 +95,14 @@ utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) morp
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) morphology = \'stem_en, libstemmer_sv\'');
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) morphology = \'stem_en, libstemmer_sv\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) morphology = 'stem_en, libstemmer_sv'");
+utilsApi.sql("CREATE TABLE products(title text, price float) morphology = 'stem_en, libstemmer_sv'");
 ```
 <!-- request CONFIG -->
 
@@ -160,7 +160,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) morphology_skip_fields = \'name\' morphology = \'stem_en\'')
+utilsApi.sql('CREATE TABLE products(title text, price float) morphology_skip_fields = \'name\' morphology = \'stem_en\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -168,14 +168,14 @@ utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) morp
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) morphology_skip_fields = \'name\' morphology = \'stem_en\'');
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) morphology_skip_fields = \'name\' morphology = \'stem_en\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) morphology_skip_fields = 'name' morphology = 'stem_en'");
+utilsApi.sql("CREATE TABLE products(title text, price float) morphology_skip_fields = 'name' morphology = 'stem_en'");
 ```
 <!-- request CONFIG -->
 
@@ -238,7 +238,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) min_stemming_len = \'4\' morphology = \'stem_en\'')
+utilsApi.sql('CREATE TABLE products(title text, price float) min_stemming_len = \'4\' morphology = \'stem_en\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -246,14 +246,14 @@ utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) min_
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) min_stemming_len = \'4\' morphology = \'stem_en\'');
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) min_stemming_len = \'4\' morphology = \'stem_en\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) min_stemming_len = '4' morphology = 'stem_en'");
+utilsApi.sql("CREATE TABLE products(title text, price float) min_stemming_len = '4' morphology = 'stem_en'");
 ```
 <!-- request CONFIG -->
 
@@ -315,7 +315,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) index_exact_words = \'1\' morphology = \'stem_en\'')
+utilsApi.sql('CREATE TABLE products(title text, price float) index_exact_words = \'1\' morphology = \'stem_en\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -323,14 +323,14 @@ utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) inde
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) index_exact_words = \'1\' morphology = \'stem_en\'');
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) index_exact_words = \'1\' morphology = \'stem_en\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) index_exact_words = '1' morphology = 'stem_en'");
+utilsApi.sql("CREATE TABLE products(title text, price float) index_exact_words = '1' morphology = 'stem_en'");
 ```
 <!-- request CONFIG -->
 

@@ -233,6 +233,8 @@ public:
 	ESphAttr				m_eAlterColType = SPH_ATTR_NONE;
 	AttrEngine_e			m_eEngine = AttrEngine_e::DEFAULT;
 	DWORD					m_uFieldFlags = 0;
+	DWORD					m_uAttrFlags = 0;
+	int						m_iBits = -1;
 
 	// CREATE TABLE specific
 	CreateTableSettings_t	m_tCreateTable;
@@ -255,8 +257,6 @@ public:
 	// generic integer parameter, used in SHOW SETTINGS, default value -1
 	// for opt_scope TOK_GLOBAL = 0, TOK_SESSION = 1.
 	int						m_iIntParam = -1;
-
-	int						m_iSplit = 0;
 
 	bool					m_bJson = false;
 	CSphString				m_sEndpoint;
@@ -290,10 +290,10 @@ public:
 class SqlParserTraits_c : ISphNoncopyable
 {
 public:
+	const char *	m_pBuf;
+	CSphString *	m_pParseError;
 	void *			m_pScanner = nullptr;
-	const char *	m_pBuf = nullptr;
 	const char *	m_pLastTokenStart = nullptr;
-	CSphString *	m_pParseError = nullptr;
 	CSphQuery *		m_pQuery = nullptr;
 	SqlStmt_t *		m_pStmt = nullptr;
 	CSphString		m_sErrorHeader = "sphinxql:";
@@ -303,7 +303,7 @@ public:
 	CSphString		ToStringUnescape ( const SqlNode_t & tNode ) const;
 
 protected:
-					SqlParserTraits_c ( CSphVector<SqlStmt_t> &	dStmt );
+					SqlParserTraits_c ( CSphVector<SqlStmt_t> &	dStmt, const char* szQuery, CSphString* pError );
 
 	CSphVector<SqlStmt_t> &	m_dStmt;
 };

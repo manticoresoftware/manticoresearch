@@ -61,11 +61,12 @@ const CSphRowitem * CopyRowAttrByAttr ( const CSphRowitem * pDocinfo, DWORD * pT
 }
 
 
-void AddToSchema ( CSphSchema & tSchema, const CSphString & sAttrName, ESphAttr eAttrType, bool bColumnar, CSphString & sError )
+static void AddToSchema ( CSphSchema & tSchema, const AttrAddRemoveCtx_t & tCtx, CSphString & sError )
 {
+	bool bColumnar = !!(tCtx.m_uFlags & CSphColumnInfo::ATTR_COLUMNAR);
 	const CSphColumnInfo * pBlobLocator = tSchema.GetAttr ( sphGetBlobLocatorName() );
 
-	bool bBlob = sphIsBlobAttr(eAttrType);
+	bool bBlob = sphIsBlobAttr ( tCtx.m_eType );
 	bool bRebuild = false;
 	if ( bBlob && !bColumnar && !pBlobLocator )
 	{
@@ -77,8 +78,10 @@ void AddToSchema ( CSphSchema & tSchema, const CSphString & sAttrName, ESphAttr 
 		tSchema.InsertAttr ( 1, tCol, false );
 	}
 
-	CSphColumnInfo tInfo ( sAttrName.cstr(), eAttrType );
-	tInfo.m_uAttrFlags |= bColumnar ? CSphColumnInfo::ATTR_COLUMNAR : 0;
+	CSphColumnInfo tInfo ( tCtx.m_sName.cstr(), tCtx.m_eType );
+	tInfo.m_uAttrFlags			= tCtx.m_uFlags;
+	tInfo.m_eEngine				= tCtx.m_eEngine;
+	tInfo.m_tLocator.m_iBitCount = tCtx.m_iBits;
 
 	if ( tSchema.GetAttrId_FirstFieldLen()!=-1 )
 	{
@@ -416,31 +419,30 @@ bool IndexAlterHelper_c::Alter_AddRemoveColumnar ( bool bAdd, const ISphSchema &
 }
 
 
-bool IndexAlterHelper_c::Alter_AddRemoveFromSchema ( CSphSchema & tSchema, const CSphString & sAttrName, ESphAttr eAttrType, AttrEngine_e eEngine, bool bAdd, CSphString & sError ) const
+bool IndexAlterHelper_c::Alter_AddRemoveFromSchema ( CSphSchema & tSchema, const AttrAddRemoveCtx_t & tCtx, bool bAdd, CSphString & sError ) const
 {
-	bool bColumnar = eEngine==AttrEngine_e::COLUMNAR;
-	if ( bAdd && bColumnar )
+	if ( bAdd && ( tCtx.m_uFlags & CSphColumnInfo::ATTR_COLUMNAR ) )
 	{
 		if ( !IsColumnarLibLoaded() )
 		{
-			sError.SetSprintf ( "Unable to add columnar attribute '%s': columnar library not loaded", sAttrName.cstr() );
+			sError.SetSprintf ( "Unable to add columnar attribute '%s': columnar library not loaded", tCtx.m_sName.cstr() );
 			return false;
 		}
 
-		if ( eAttrType==SPH_ATTR_JSON )
+		if ( tCtx.m_eType==SPH_ATTR_JSON )
 		{
-			sError.SetSprintf ( "Unable to add columnar attribute '%s': JSON attribute type is not supported in columnar storage", sAttrName.cstr() );
+			sError.SetSprintf ( "Unable to add columnar attribute '%s': JSON attribute type is not supported in columnar storage", tCtx.m_sName.cstr() );
 			return false;
 		}
 	}
 
 	if ( bAdd )
 	{
-		AddToSchema ( tSchema, sAttrName, eAttrType, bColumnar, sError );
+		AddToSchema ( tSchema, tCtx, sError );
 		return true;
 	}
 
-	return RemoveFromSchema ( tSchema, sAttrName, eAttrType, sError );
+	return RemoveFromSchema ( tSchema, tCtx.m_sName, tCtx.m_eType, sError );
 }
 
 
@@ -469,11 +471,12 @@ bool IndexAlterHelper_c::Alter_AddRemoveFieldFromSchema ( bool bAdd, CSphSchema 
 }
 
 
-void IndexAlterHelper_c::Alter_AddRemoveFieldFromDocstore ( DocstoreBuilder_i & tBuilder, const Docstore_i * pDocstore, DWORD uNumDocs, const CSphSchema & tNewSchema )
+void IndexAlterHelper_c::Alter_AddRemoveFromDocstore ( DocstoreBuilder_i & tBuilder, const Docstore_i * pDocstore, DWORD uNumDocs, const CSphSchema & tNewSchema )
 {
 	struct Field_t
 	{
 		CSphString	m_sName;
+		bool		m_bField = true;
 		int			m_iOldId = -1;
 		int			m_iRsetId = -1;
 	};
@@ -484,7 +487,15 @@ void IndexAlterHelper_c::Alter_AddRemoveFieldFromDocstore ( DocstoreBuilder_i & 
 		{
 			const CSphString & sName = tNewSchema.GetFieldName(i);
 			int iFieldId = pDocstore ? pDocstore->GetFieldId ( sName, DOCSTORE_TEXT ) : -1;
-			dStoredFields.Add ( { sName, iFieldId, -1 } );
+			dStoredFields.Add ( { sName, true, iFieldId, -1 } );
+		}
+
+	for ( int i = 0; i < tNewSchema.GetAttrsCount(); i++ )
+		if ( tNewSchema.IsAttrStored(i) )
+		{
+			const CSphString & sName = tNewSchema.GetAttr(i).m_sName;
+			int iFieldId = pDocstore ? pDocstore->GetFieldId ( sName, DOCSTORE_ATTR ) : -1;
+			dStoredFields.Add ( { sName, false, iFieldId, -1 } );
 		}
 
 	IntVec_t dStoredFieldIds;
@@ -496,7 +507,7 @@ void IndexAlterHelper_c::Alter_AddRemoveFieldFromDocstore ( DocstoreBuilder_i & 
 			dStoredFieldIds.Add ( i.m_iOldId );
 		}
 
-		tBuilder.AddField ( i.m_sName, DOCSTORE_TEXT );
+		tBuilder.AddField ( i.m_sName, i.m_bField ? DOCSTORE_TEXT : DOCSTORE_ATTR );
 	}
 
 	DocstoreDoc_t tOldDoc;

@@ -9,6 +9,7 @@
 //
 
 #include "columnarlib.h"
+#include "sphinxutils.h"
 #include "sphinxexpr.h"
 #include "libutils.h"
 #include "schema/columninfo.h"
@@ -29,7 +30,7 @@ static GetVersion_fn			g_fnStorageVersion  = nullptr;
 
 /////////////////////////////////////////////////////////////////////
 
-static columnar::AttrType_e ToColumnarType ( ESphAttr eAttrType, int iBitCount )
+columnar::AttrType_e ToColumnarType ( ESphAttr eAttrType, int iBitCount )
 {
 	switch ( eAttrType )
 	{

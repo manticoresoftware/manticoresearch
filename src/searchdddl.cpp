@@ -64,23 +64,50 @@ static int yylex ( YYSTYPE * lvalp, DdlParser_c * pParser )
 
 //////////////////////////////////////////////////////////////////////////
 
-DdlParser_c::DdlParser_c ( CSphVector<SqlStmt_t> & dStmt )
-	: SqlParserTraits_c ( dStmt )
+void DdlParser_c::ItemOptions_t::Reset()
 {
-	assert ( !m_dStmt.GetLength() );
-	PushQuery ();
+	m_eEngine = AttrEngine_e::DEFAULT;
+	m_bStringHash = true;
+	m_bFastFetch = true;
+
+	m_bHashOptionSet = false;
 }
 
 
-void DdlParser_c::AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits, AttrEngine_e eEngine )
+DWORD DdlParser_c::ItemOptions_t::ToFlags() const
+{
+	DWORD uFlags = 0;
+	uFlags |= m_bStringHash ? CSphColumnInfo::ATTR_COLUMNAR_HASHES : 0;
+	uFlags |= m_bFastFetch ? CSphColumnInfo::ATTR_STORED : 0;
+	return uFlags;
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+DdlParser_c::DdlParser_c ( CSphVector<SqlStmt_t> & dStmt, const char* szQuery, CSphString* pError )
+	: SqlParserTraits_c ( dStmt, szQuery, pError )
+{
+	if ( m_dStmt.IsEmpty() )
+		PushQuery ();
+	else
+		m_pStmt = &m_dStmt.Last();
+	assert ( m_dStmt.GetLength()==1 );
+}
+
+
+void DdlParser_c::AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits )
 {
 	assert(m_pStmt);
-	CSphColumnInfo & tAttr = m_pStmt->m_tCreateTable.m_dAttrs.Add();
-	ToString ( tAttr.m_sName, tCol );
-	tAttr.m_sName.ToLower();
-	tAttr.m_eAttrType = SPH_ATTR_INTEGER;
-	tAttr.m_tLocator.m_iBitCount = iBits;
-	tAttr.m_eEngine = eEngine;
+	CreateTableAttr_t & tAttr = m_pStmt->m_tCreateTable.m_dAttrs.Add();
+	ToString ( tAttr.m_tAttr.m_sName, tCol );
+	tAttr.m_tAttr.m_sName.ToLower();
+	tAttr.m_tAttr.m_eAttrType = SPH_ATTR_INTEGER;
+	tAttr.m_tAttr.m_tLocator.m_iBitCount = iBits;
+	tAttr.m_tAttr.m_eEngine = m_tItemOptions.m_eEngine;
+	tAttr.m_bFastFetch = m_tItemOptions.m_bFastFetch;
+	tAttr.m_bStringHash	= m_tItemOptions.m_bStringHash;
+
+	m_tItemOptions.Reset();
 }
 
 
@@ -105,7 +132,7 @@ static DWORD ConvertFlags ( int iFlags )
 }
 
 
-bool DdlParser_c::CheckFieldFlags ( ESphAttr eAttrType, int iFlags, const CSphString & sName, CSphString & sError )
+bool DdlParser_c::CheckFieldFlags ( ESphAttr eAttrType, int iFlags, const CSphString & sName, const ItemOptions_t & tOpts, CSphString & sError )
 {
 	if ( eAttrType==SPH_ATTR_STRING )
 	{
@@ -119,8 +146,15 @@ bool DdlParser_c::CheckFieldFlags ( ESphAttr eAttrType, int iFlags, const CSphSt
 	{
 		if ( iFlags )
 		{
-			sError.SetSprintf ( "options 'attribute', 'stored', 'indexed' are not appliable to non-string column '%s'", sName.cstr() );
+			sError.SetSprintf ( "options 'attribute', 'stored', 'indexed' are not applicable to non-string column '%s'", sName.cstr() );
 			return false;
+		}
+
+		if ( tOpts.m_bHashOptionSet )
+		{
+			sError.SetSprintf ( "'hash' is applicable to columnar strings only (attempted to set for '%s')", sName.cstr() );
+			return false;
+
 		}
 	}
 
@@ -128,39 +162,34 @@ bool DdlParser_c::CheckFieldFlags ( ESphAttr eAttrType, int iFlags, const CSphSt
 }
 
 
-bool DdlParser_c::SetupAlterTable  ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, const SqlNode_t & tType, AttrEngine_e eEngine )
+bool DdlParser_c::SetupAlterTable ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, ESphAttr eAttr, int iFieldFlags, int iBits )
 {
 	assert( m_pStmt );
+	ItemOptions_t tOpts = m_tItemOptions;
 
 	m_pStmt->m_eStmt = STMT_ALTER_ADD;
 	ToString ( m_pStmt->m_sIndex, tIndex );
 	ToString ( m_pStmt->m_sAlterAttr, tAttr );
 	m_pStmt->m_sIndex.ToLower();
 	m_pStmt->m_sAlterAttr.ToLower();
-	m_pStmt->m_eAlterColType = (ESphAttr)tType.m_iValue;
-	m_pStmt->m_uFieldFlags = ConvertFlags(tType.m_iType);
-	m_pStmt->m_eEngine = eEngine;
+	m_pStmt->m_eAlterColType = eAttr;
+	m_pStmt->m_uFieldFlags = ConvertFlags(iFieldFlags);
+	m_pStmt->m_uAttrFlags = m_tItemOptions.ToFlags();
+	m_pStmt->m_eEngine = tOpts.m_eEngine;
+	m_pStmt->m_iBits = iBits;
+	m_tItemOptions.Reset();
 
-	return CheckFieldFlags ( m_pStmt->m_eAlterColType, tType.m_iType, m_pStmt->m_sAlterAttr, m_sError );
+	return CheckFieldFlags ( m_pStmt->m_eAlterColType, iFieldFlags, m_pStmt->m_sAlterAttr, tOpts, m_sError );
 }
 
 
-bool DdlParser_c::SetupAlterTable  ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, const SqlNode_t & tType, const SqlNode_t & tEngine )
+bool DdlParser_c::SetupAlterTable  ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, const SqlNode_t & tType )
 {
-	AttrEngine_e eEngine = AttrEngine_e::DEFAULT;
-
-	CSphString sEngine = ToStringUnescape(tEngine);
-	CSphString sEngineLowerCase = sEngine;
-	sEngineLowerCase.ToLower();
-
-	if ( !StrToAttrEngine ( eEngine, sEngineLowerCase, m_sError ) )
-		return false;
-
-	return SetupAlterTable ( tIndex, tAttr, tType, eEngine );
+	return SetupAlterTable ( tIndex, tAttr, (ESphAttr)tType.m_iValue, tType.m_iType );
 }
 
 
-bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t & tCol, AttrEngine_e eEngine )
+bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t & tCol )
 {
 	assert( m_pStmt );
 
@@ -171,15 +200,20 @@ bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t &
 	auto eAttrType = (ESphAttr) tCol.m_iValue;
 	auto iType = tCol.m_iType;
 
-	if ( !CheckFieldFlags ( eAttrType, iType, sName, m_sError ) )
+	ItemOptions_t tOpts = m_tItemOptions;
+	m_tItemOptions.Reset();
+
+	if ( !CheckFieldFlags ( eAttrType, iType, sName, tOpts, m_sError ) )
 		return false;
 
 	if ( eAttrType!=SPH_ATTR_STRING )
 	{
-		CSphColumnInfo & tAttr = m_pStmt->m_tCreateTable.m_dAttrs.Add();
-		tAttr.m_sName = sName;
-		tAttr.m_eAttrType = eAttrType;
-		tAttr.m_eEngine = eEngine;
+		CreateTableAttr_t & tAttr = m_pStmt->m_tCreateTable.m_dAttrs.Add();
+		tAttr.m_tAttr.m_sName		= sName;
+		tAttr.m_tAttr.m_eAttrType	= eAttrType;
+		tAttr.m_tAttr.m_eEngine		= tOpts.m_eEngine;
+		tAttr.m_bFastFetch			= tOpts.m_bFastFetch;
+		tAttr.m_bStringHash			= tOpts.m_bStringHash;
 		return true;
 	}
 
@@ -189,10 +223,12 @@ bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t &
 	if ( iType & FLAG_ATTRIBUTE )
 	{
 		// add attribute
-		CSphColumnInfo & tAttr = m_pStmt->m_tCreateTable.m_dAttrs.Add();
-		tAttr.m_sName = sName;
-		tAttr.m_eAttrType = SPH_ATTR_STRING;
-		tAttr.m_eEngine = eEngine;
+		CreateTableAttr_t & tAttr = m_pStmt->m_tCreateTable.m_dAttrs.Add();
+		tAttr.m_tAttr.m_sName		= sName;
+		tAttr.m_tAttr.m_eAttrType	= SPH_ATTR_STRING;
+		tAttr.m_tAttr.m_eEngine		= tOpts.m_eEngine;
+		tAttr.m_bFastFetch			= tOpts.m_bFastFetch;
+		tAttr.m_bStringHash			= tOpts.m_bStringHash;
 
 		if ( iType & FLAG_INDEXED )
 			AddField ( sName, CSphColumnInfo::FIELD_INDEXED );
@@ -214,23 +250,57 @@ bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t &
 }
 
 
-bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t & tCol, const SqlNode_t & tEngine )
+bool DdlParser_c::AddCreateTableId ( const SqlNode_t & tName )
 {
-	AttrEngine_e eEngine = AttrEngine_e::DEFAULT;
-	if ( !ConvertToAttrEngine ( tEngine, eEngine ) )
-		return false;
+	assert( m_pStmt );
 
-	return AddCreateTableCol ( tName, tCol, eEngine );
+	CSphString sName;
+	ToString ( sName, tName );
+	sName.ToLower();
+
+	ItemOptions_t tOpts = m_tItemOptions;
+	m_tItemOptions.Reset();
+
+	if ( sName!="id" )
+	{
+		m_sError.SetSprintf ( "expected 'id', got '%s'", sName.cstr() );
+		return false;
+	}
+
+	if ( tOpts.m_bHashOptionSet )
+	{
+		m_sError = "cannot set 'hash' option for 'id'";
+		return false;
+	}
+
+	CreateTableAttr_t & tAttr = m_pStmt->m_tCreateTable.m_dAttrs.Add();
+	tAttr.m_tAttr.m_sName		= sName;
+	tAttr.m_tAttr.m_eAttrType	= SPH_ATTR_BIGINT;
+	tAttr.m_tAttr.m_eEngine		= tOpts.m_eEngine;
+	tAttr.m_bFastFetch			= tOpts.m_bFastFetch;
+	return true;
 }
 
 
-bool DdlParser_c::AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits, const SqlNode_t & tEngine )
+bool DdlParser_c::AddItemOptionEngine ( const SqlNode_t & tOption )
 {
-	AttrEngine_e eEngine = AttrEngine_e::DEFAULT;
-	if ( !ConvertToAttrEngine ( tEngine, eEngine ) )
-		return false;
+	return ConvertToAttrEngine ( tOption, m_tItemOptions.m_eEngine );
+}
 
-	AddCreateTableBitCol ( tCol, iBits, eEngine );
+
+bool DdlParser_c::AddItemOptionHash ( const SqlNode_t & tOption )
+{
+	CSphString sValue = ToStringUnescape(tOption);
+	m_tItemOptions.m_bStringHash = !!strtoull ( sValue.cstr(), NULL, 10 );
+	m_tItemOptions.m_bHashOptionSet = true;
+	return true;
+}
+
+
+bool DdlParser_c::AddItemOptionFastFetch ( const SqlNode_t & tOption )
+{
+	CSphString sValue = ToStringUnescape(tOption);
+	m_tItemOptions.m_bFastFetch = !!strtoull ( sValue.cstr(), NULL, 10 );
 	return true;
 }
 
@@ -291,10 +361,7 @@ bool ParseDdl ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CS
 		return false;
 	}
 
-	DdlParser_c tParser(dStmt);
-	tParser.m_pBuf = sQuery;
-	tParser.m_pLastTokenStart = NULL;
-	tParser.m_pParseError = &sError;
+	DdlParser_c tParser { dStmt, sQuery, &sError };
 
 	char * sEnd = const_cast<char *>( sQuery ) + iLen;
 	sEnd[0] = 0; // prepare for yy_scan_buffer
@@ -315,35 +382,5 @@ bool ParseDdl ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CS
 
 	dStmt.Pop(); // last query is always dummy
 
-	if ( iRes!=0 || !dStmt.GetLength() )
-		return false;
-
-	return true;
-}
-
-
-static const char * g_szDDL[] = { "alter", "create", "drop", "join", "import" };
-
-bool IsDdlQuery ( const char * szQuery, int iLen )
-{
-	CSphString sQuery;
-	sQuery.SetBinary ( szQuery, iLen );
-
-	const char * p = sQuery.cstr();
-	while ( *p && ( sphIsSpace(*p) || *p==';' ) )
-		p++;
-
-	const char * pStart = p;
-	while ( *p && sphIsAlpha(*p) )
-		p++;
-
-	CSphString sStatement;
-	sStatement.SetBinary ( pStart, int ( p-pStart ) );
-	sStatement.ToLower();
-
-	for ( const auto & i : g_szDDL )
-		if ( sStatement==i )
-			return true;
-
-	return false;
+	return !iRes && !dStmt.IsEmpty();
 }

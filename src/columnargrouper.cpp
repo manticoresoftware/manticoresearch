@@ -214,3 +214,167 @@ CSphGrouper * CreateGrouperColumnarMVA ( const CSphColumnInfo & tAttr )
 
 	return new GrouperColumnarMVA_T<int64_t>(tAttr);
 }
+
+//////////////////////////////////////////////////////////////////////////
+
+class DistinctFetcherColumnar_c : public DistinctFetcher_i
+{
+public:
+			DistinctFetcherColumnar_c ( const CSphString & sName ) : m_sName(sName) {}
+
+	void	SetBlobPool ( const BYTE * pBlobPool ) override {}
+	void	FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override {}
+
+protected:
+	CSphString	m_sName;
+	CSphScopedPtr<columnar::Iterator_i>	m_pIterator {nullptr};
+};
+
+
+class DistinctFetcherColumnarInt_c : public DistinctFetcherColumnar_c
+{
+	using BASE = DistinctFetcherColumnar_c;
+	using BASE::BASE;
+
+public:
+	void	GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const override;
+	void	SetColumnar ( const columnar::Columnar_i * pColumnar ) override;
+	DistinctFetcher_i *	Clone() const override { return new DistinctFetcherColumnarInt_c(m_sName); }
+};
+
+
+void DistinctFetcherColumnarInt_c::GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const
+{
+	dKeys.Resize(0);
+
+	if ( !m_pIterator.Ptr() || m_pIterator->AdvanceTo ( tMatch.m_tRowID ) != tMatch.m_tRowID )
+		return;
+
+	dKeys.Add ( m_pIterator->Get() );
+}
+
+
+void DistinctFetcherColumnarInt_c::SetColumnar ( const columnar::Columnar_i * pColumnar )
+{
+	assert(pColumnar);
+	std::string sError; // fixme! report errors
+	m_pIterator = pColumnar->CreateIterator ( m_sName.cstr(), {}, nullptr, sError );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+template <typename T>
+class DistinctFetcherColumnarMva_T : public DistinctFetcherColumnar_c
+{
+	using BASE = DistinctFetcherColumnar_c;
+	using BASE::BASE;
+
+public:
+	void	GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const override;
+	void	SetColumnar ( const columnar::Columnar_i * pColumnar ) override;
+	DistinctFetcher_i *	Clone() const override { return new DistinctFetcherColumnarMva_T(m_sName); }
+};
+
+template <typename T>
+void DistinctFetcherColumnarMva_T<T>::GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const
+{
+	dKeys.Resize(0);
+
+	if ( !m_pIterator.Ptr() || m_pIterator->AdvanceTo ( tMatch.m_tRowID ) != tMatch.m_tRowID )
+		return;
+
+	const BYTE * pMVA = nullptr;
+	int iLen = m_pIterator->Get(pMVA);
+	int iNumValues = iLen/sizeof(T);
+	auto pValues = (const T*)pMVA;
+
+	dKeys.Resize(iNumValues);
+	for ( int i = 0; i < iNumValues; i++ )
+		dKeys[i] = (SphGroupKey_t)pValues[i];
+}
+
+template <typename T>
+void DistinctFetcherColumnarMva_T<T>::SetColumnar ( const columnar::Columnar_i * pColumnar )
+{
+	assert(pColumnar);
+	std::string sError; // fixme! report errors
+	m_pIterator = pColumnar->CreateIterator ( m_sName.cstr(), {}, nullptr, sError );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+template <typename HASH>
+class DistinctFetcherColumnarString_T : public DistinctFetcherColumnar_c, public HASH
+{
+	using BASE = DistinctFetcherColumnar_c;
+	using BASE::BASE;
+
+public:
+	void	GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const override;
+	void	SetColumnar ( const columnar::Columnar_i * pColumnar ) override;
+	DistinctFetcher_i *	Clone() const override { return new DistinctFetcherColumnarString_T<HASH>(m_sName); }
+
+private:
+	bool m_bHasHashes = false;
+};
+
+template <typename HASH>
+void DistinctFetcherColumnarString_T<HASH>::GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const
+{
+	dKeys.Resize(0);
+
+	if ( !m_pIterator.Ptr() || m_pIterator->AdvanceTo ( tMatch.m_tRowID ) != tMatch.m_tRowID )
+		return;
+
+	if ( m_bHasHashes )
+	{
+		dKeys.Add ( m_pIterator->Get() );
+		return;
+	}
+
+	const BYTE * pStr = nullptr;
+	int iLen = m_pIterator->Get(pStr);
+	if ( !iLen )
+	{
+		dKeys.Add(0);
+		return;
+	}
+
+	dKeys.Add ( HASH::Hash ( pStr, iLen ) );
+}
+
+template <typename HASH>
+void DistinctFetcherColumnarString_T<HASH>::SetColumnar ( const columnar::Columnar_i * pColumnar )
+{
+	assert(pColumnar);
+	columnar::IteratorHints_t tHints;
+	columnar::IteratorCapabilities_t tCapabilities;
+	tHints.m_bNeedStringHashes = true;
+
+	std::string sError; // fixme! report errors
+	m_pIterator = pColumnar->CreateIterator ( m_sName.cstr(), tHints, &tCapabilities, sError );
+	m_bHasHashes = tCapabilities.m_bStringHashes;
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+DistinctFetcher_i * CreateColumnarDistinctFetcher ( const CSphString & sName, ESphAttr eType, ESphCollation eCollation )
+{
+	switch ( eType )
+	{
+	case SPH_ATTR_STRING:
+		{
+			switch ( eCollation )
+			{
+			case SPH_COLLATION_UTF8_GENERAL_CI:	return new DistinctFetcherColumnarString_T<Utf8CIHash_fn>(sName);
+			case SPH_COLLATION_LIBC_CI:			return new DistinctFetcherColumnarString_T<LibcCIHash_fn>(sName);
+			case SPH_COLLATION_LIBC_CS:			return new DistinctFetcherColumnarString_T<LibcCSHash_fn>(sName);
+			default:							return new DistinctFetcherColumnarString_T<BinaryHash_fn>(sName);
+			}
+		}
+
+	case SPH_ATTR_UINT32SET:return new DistinctFetcherColumnarMva_T<DWORD>(sName);
+	case SPH_ATTR_INT64SET:	return new DistinctFetcherColumnarMva_T<int64_t>(sName);
+	default:				return new DistinctFetcherColumnarInt_c(sName);
+	}
+}

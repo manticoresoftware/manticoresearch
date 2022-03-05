@@ -62,4 +62,7 @@ void ReplicateClustersStatus ( VectorLike & dStatus );
 bool CheckIndexCluster ( const CSphString & sIndexName, const ServedDesc_t & tDesc, const CSphString & sStmtCluster, bool bHTTP, CSphString & sError );
 Optional_T<CSphString> IsPartOfCluster ( const ServedDesc_t* pDesc );
 
+// set cluster name into index desc for fast rejects
+bool SetIndexCluster ( const CSphString& sIndex, const CSphString& sCluster, CSphString * pError=nullptr );
+
 #endif // _searchdreplication_

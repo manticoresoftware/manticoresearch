@@ -56,16 +56,24 @@ public:
 	virtual void	Load ( CSphReader & tReader ) = 0;
 	virtual int64_t	AllocatedBytes() const = 0;
 
-	virtual columnar::Iterator_i * CreateIterator()	const = 0;
+	virtual columnar::Iterator_i *	CreateIterator() const = 0;
+	virtual columnar::AttrType_e	GetType() const = 0;
 };
 
 
 class ColumnarAttrRT_c : public ColumnarAttrRT_i
 {
 public:
+			ColumnarAttrRT_c ( ESphAttr eType ) : m_eType(eType) {}
+
 	void	AddDoc ( SphAttr_t tAttr ) override						{ assert ( 0 && "Unsupported type" ); }
 	void	AddDoc ( const BYTE * pData, int iLength ) override		{ assert ( 0 && "Unsupported type" ); }
 	void	AddDoc ( const int64_t * pData, int iLength	) override	{ assert ( 0 && "Unsupported type" ); }
+
+	columnar::AttrType_e GetType() const override { return ToColumnarType ( m_eType, ROWITEM_BITS ); }
+
+protected:
+	ESphAttr		m_eType = SPH_ATTR_NONE;
 };
 
 
@@ -131,7 +139,6 @@ public:
 
 private:
 	CSphVector<T>	m_dValues;
-	ESphAttr		m_eType = SPH_ATTR_NONE;
 	T				m_uMask = 0;
 
 	template <typename WRITER>
@@ -143,7 +150,7 @@ private:
 
 template<typename T>
 ColumnarAttr_Int_T<T>::ColumnarAttr_Int_T ( ESphAttr eType, int iBits )
-	: m_eType ( eType )
+	: ColumnarAttrRT_c(eType)
 	, m_uMask ( iBits==64 ? (T)0xFFFFFFFFFFFFFFFFULL : (T)( (1ULL<<iBits)-1 ) )
 {}
 
@@ -217,7 +224,7 @@ int ColumnarIterator_String_c::GetLength()
 class ColumnarAttr_String_c : public ColumnarAttrRT_c
 {
 public:
-			ColumnarAttr_String_c ( ESphAttr eType ) : m_eType ( eType ) {}
+			ColumnarAttr_String_c() : ColumnarAttrRT_c ( SPH_ATTR_STRING ) {}
 
 	void	AddDoc ( const BYTE * pData, int iLength ) override;
 
@@ -234,7 +241,6 @@ private:
 	CSphVector<BYTE>	m_dData;
 	CSphVector<int64_t>	m_dLengths;
 	int64_t				m_iTotalLength = 0;
-	ESphAttr			m_eType = SPH_ATTR_NONE;
 
 	template <typename WRITER>
 	void	SaveData ( WRITER & tWriter );
@@ -338,7 +344,7 @@ template <typename T>
 class ColumnarAttr_MVA_T : public ColumnarAttrRT_c
 {
 public:
-			ColumnarAttr_MVA_T ( ESphAttr eType ) : m_eType ( eType ) {}
+			ColumnarAttr_MVA_T ( ESphAttr eType ) : ColumnarAttrRT_c ( eType ) {}
 
 	void	AddDoc ( const int64_t * pData, int iLength ) override;
 
@@ -355,7 +361,6 @@ private:
 	CSphVector<T>		m_dData;
 	CSphVector<int>		m_dLengths;
 	int64_t				m_iTotalLength = 0;
-	ESphAttr			m_eType = SPH_ATTR_NONE;
 
 	template <typename WRITER>
 	void	SaveData ( WRITER & tWriter );
@@ -423,7 +428,7 @@ static ColumnarAttrRT_i * CreateColumnarAttrRT ( ESphAttr eType, int iBits )
 
 	case SPH_ATTR_BOOL:		return new ColumnarAttr_Int_T<BYTE> ( eType, 1 );
 	case SPH_ATTR_BIGINT:	return new ColumnarAttr_Int_T<int64_t> ( eType, iBits );
-	case SPH_ATTR_STRING:	return new ColumnarAttr_String_c(eType);
+	case SPH_ATTR_STRING:	return new ColumnarAttr_String_c;
 	case SPH_ATTR_UINT32SET:return new ColumnarAttr_MVA_T<DWORD>(eType);
 	case SPH_ATTR_INT64SET:	return new ColumnarAttr_MVA_T<int64_t>(eType);
 
@@ -504,6 +509,7 @@ public:
 	std::vector<columnar::BlockIterator_i *>	CreateAnalyzerOrPrefilter ( const std::vector<columnar::Filter_t> & dFilters, std::vector<int> & dDeletedFilters, const columnar::BlockTester_i & tBlockTester ) const override { return {}; }
 
 	int				GetAttributeId ( const std::string & sName ) const override;
+	columnar::AttrType_e GetType ( const std::string & sName ) const override;
 	bool			EarlyReject ( const std::vector<columnar::Filter_t> & dFilters, const columnar::BlockTester_i & tBlockTester ) const override { return false; }
 	bool			IsFilterDegenerate ( const columnar::Filter_t & tFilter ) const override { return false; }
 
@@ -545,6 +551,13 @@ int ColumnarRT_c::GetAttributeId ( const std::string & sName ) const
 {
 	auto * pFound = m_hAttrs ( sName.c_str() );
 	return pFound ? pFound->second : -1;
+}
+
+
+columnar::AttrType_e ColumnarRT_c::GetType ( const std::string & sName ) const
+{
+	auto * pFound = m_hAttrs ( sName.c_str() );
+	return pFound ? pFound->first->GetType() : columnar::AttrType_e::NONE;
 }
 
 

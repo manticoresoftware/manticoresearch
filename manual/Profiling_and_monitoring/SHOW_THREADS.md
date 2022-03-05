@@ -227,7 +227,7 @@ Array
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=SHOW THREADS')
+utilsApi.sql('SHOW THREADS')
 ```
 <!-- response Python -->
 
@@ -334,7 +334,7 @@ utilsApi.sql('mode=raw&query=SHOW THREADS')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=SHOW THREADS');
+res = await utilsApi.sql('SHOW THREADS');
 ```
 
 <!-- response Javascript -->
@@ -443,7 +443,7 @@ res = await utilsApi.sql('mode=raw&query=SHOW THREADS');
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=SHOW THREADS");
+utilsApi.sql("SHOW THREADS");
 ```
 <!-- response Java -->
 
@@ -767,7 +767,7 @@ Array
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=SHOW THREADS OPTION columns=30')
+utilsApi.sql('SHOW THREADS OPTION columns=30')
 ```
 <!-- response Python -->
 
@@ -874,7 +874,7 @@ utilsApi.sql('mode=raw&query=SHOW THREADS OPTION columns=30')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=SHOW THREADS OPTION columns=30');
+res = await utilsApi.sql('SHOW THREADS OPTION columns=30');
 ```
 
 <!-- response Javascript -->
@@ -983,7 +983,7 @@ res = await utilsApi.sql('mode=raw&query=SHOW THREADS OPTION columns=30');
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=SHOW THREADS OPTION columns=30");
+utilsApi.sql("SHOW THREADS OPTION columns=30");
 ```
 <!-- response Java -->
 

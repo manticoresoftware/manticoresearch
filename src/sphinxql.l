@@ -199,6 +199,7 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 "WITH"				{ YYSTOREBOUNDS; return TOK_WITH; }
 "WITHIN"			{ YYSTOREBOUNDS; return TOK_WITHIN; }
 ^"DEBUG"(?s:\ .*)?	{ return TOK_DEBUGCLAUSE; } // that is not reserved
+^(ALTER|CREATE|DROP|JOIN|IMPORT)(?s:\ .*)?            { return TOK_DDLCLAUSE; } // DDL is not supported in multi-statements anyway, so we only check the whole line
 
 "!="				{ YYSTOREBOUNDS; return TOK_NE; }
 "<>"				{ YYSTOREBOUNDS; return TOK_NE; }

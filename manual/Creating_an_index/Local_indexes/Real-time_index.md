@@ -58,7 +58,7 @@ $index->create([
 ##### Python:
 <!-- request Python -->
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE forum(title text, price float)')
+utilsApi.sql('CREATE TABLE forum(title text, price float)')
 ```
 
 <!-- intro -->
@@ -66,14 +66,14 @@ utilsApi.sql('mode=raw&query=CREATE TABLE forum(title text, price float)')
 
 <!-- request Javascript -->
 ```javascript
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE forum(title text, price float)');
+res = await utilsApi.sql('CREATE TABLE forum(title text, price float)');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE forum(title text, price float)");
+utilsApi.sql("CREATE TABLE forum(title text, price float)");
 ```
 
 <!-- intro -->

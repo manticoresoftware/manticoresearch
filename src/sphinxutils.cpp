@@ -799,6 +799,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "docstore_compression",	0, nullptr },
 	{ "docstore_compression_level",	0, nullptr },
 	{ "columnar_attrs",			0, nullptr },
+	{ "columnar_no_fast_fetch", 0, nullptr },
 	{ "rowwise_attrs",			0, nullptr },
 	{ "columnar_strings_no_hash", 0, nullptr },
 	{ "columnar_compression_uint32", 0, nullptr },
@@ -2438,6 +2439,15 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 	{
 		int iLen = sprintf ( sBuffer, "%f", fVal );
 		auto fTest = strtof ( sBuffer, nullptr );
+		if ( fTest!=fVal )
+			return sprintf ( sBuffer, "%1.8f", fVal );
+		return iLen;
+	}
+
+	int PrintVarDouble ( char* sBuffer, double fVal )
+	{
+		int iLen = sprintf ( sBuffer, "%f", fVal );
+		auto fTest = strtod ( sBuffer, nullptr );
 		if ( fTest!=fVal )
 			return sprintf ( sBuffer, "%1.8f", fVal );
 		return iLen;

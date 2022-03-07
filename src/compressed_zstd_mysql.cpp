@@ -48,7 +48,13 @@ static bool InitDynamicZstd()
 
 class ZstdCompressor
 {
-	int m_iLevel = ZSTD_CLEVEL_DEFAULT;
+	int m_iLevel =
+#ifdef ZSTD_CLEVEL_DEFAULT
+	ZSTD_CLEVEL_DEFAULT
+#else
+	3
+#endif
+	;
 	ZSTD_CCtx *m_pCtxCompress = nullptr;
 	ZSTD_DCtx *m_pCtxDecompress = nullptr;
 

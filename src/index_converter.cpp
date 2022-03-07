@@ -2579,23 +2579,22 @@ int main ( int argc, char ** argv )
 	if ( !sphInitCharsetAliasTable ( sError ) )
 		sphDie ( "failed to init charset alias table: %s", sError.cstr() );
 
-	CSphConfigParser tConfig;
 	const CSphConfigType * pIndexes = nullptr;
 	if ( !sConfig.IsEmpty() )
 	{
-		sphLoadConfig ( sConfig.cstr(), false, false, tConfig );
-		pIndexes = tConfig.m_tConf ( "index" );
+		CSphConfig hConfig = sphLoadConfig ( sConfig.cstr(), false, false );
+		pIndexes = hConfig ( "index" );
 
 		if ( ( bAll || !sIndexName.IsEmpty() ) && !pIndexes )
 			sphDie ( "no indexes found in config" );
 
-		sphConfigureCommon ( tConfig.m_tConf );
-		pIndexes->IterateStart();
+		sphConfigureCommon ( hConfig );
 	}
 
 	int iConvertedCount = 0;
 	int iIndexTotal = 0;
 	StrVec_t dNameParts;
+	auto pItt = pIndexes->begin();
 	while ( true )
 	{
 		if ( !bAll && iIndexTotal )
@@ -2603,10 +2602,11 @@ int main ( int argc, char ** argv )
 
 		if ( bAll )
 		{
-			if ( !pIndexes->IterateNext() )
+			++pItt;
+			if ( pItt==pIndexes->end() )
 				break;
 
-			sIndexName = pIndexes->IterateGetKey();
+			sIndexName = pItt->first;
 			tKlistTargets.m_dTargets.Resize(0);
 			sKlistTarget = "";
 		}
@@ -2624,7 +2624,7 @@ int main ( int argc, char ** argv )
 				continue;
 			}
 
-			const CSphConfigSection & tIndex = ( bAll ? pIndexes->IterateGet() : (*pIndexes)[sIndexName] );
+			const CSphConfigSection& tIndex = ( bAll ? pItt->second : ( *pIndexes )[sIndexName] );
 			if ( tIndex.Exists ( "type" ) )
 			{
 				const CSphString sType = tIndex.GetStr ( "type", NULL );

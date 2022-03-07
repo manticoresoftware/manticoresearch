@@ -22,10 +22,11 @@ static void PrereadFunc ( void* )
 	int64_t tmStart = sphMicroTimer ();
 
 	StrVec_t dIndexes;
-	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next (); )
+	ServedSnap_t hLocals = g_pLocalIndexes->GetHash();
+	for ( auto& tIt : *hLocals )
 	{
-		if ( it.Get ())
-			dIndexes.Add ( it.GetName ());
+		if ( tIt.second )
+			dIndexes.Add ( tIt.first );
 	}
 
 	sphInfo ( "prereading %d indexes", dIndexes.GetLength ());
@@ -38,18 +39,18 @@ static void PrereadFunc ( void* )
 		if ( !pServed )
 			continue;
 
-		ServedDescRPtr_c dReadLock ( pServed );
-		if ( dReadLock->m_eType==IndexType_e::TEMPLATE )
+		if ( pServed->m_eType==IndexType_e::TEMPLATE )
 			continue;
 
 		int64_t tmReading = sphMicroTimer ();
 
 		sphLogDebug ( "prereading index '%s'", sName.cstr ());
 
-		dReadLock->m_pIndex->Preread ();
-		ServedDesc_t::UpdateMass ( dReadLock );
-		if ( !dReadLock->m_pIndex->GetLastWarning ().IsEmpty ())
-			sphWarning ( "'%s' preread: %s", sName.cstr (), dReadLock->m_pIndex->GetLastWarning ().cstr ());
+		RWIdx_c pIdx {pServed};
+		pIdx->Preread ();
+		pServed->UpdateMass();
+		if ( !pIdx->GetLastWarning ().IsEmpty ())
+			sphWarning ( "'%s' preread: %s", sName.cstr (), pIdx->GetLastWarning ().cstr ());
 
 		int64_t tmReaded = sphMicroTimer () - tmReading;
 		sphLogDebug ( "prereaded index '%s' in %0.3f sec", sName.cstr (), float ( tmReaded ) / 1000000.0f );

@@ -828,7 +828,7 @@ TEST (functions, Mutex)
 //////////////////////////////////////////////////////////////////////////
 
 static int g_iRwlock;
-static CSphRwlock g_tRwlock;
+static RwLock_t g_tRwlock;
 
 void RwlockReader ( void * pArg )
 {
@@ -848,8 +848,6 @@ void RwlockWriter ( void * pArg )
 
 TEST ( functions, RWLock )
 {
-	ASSERT_TRUE ( g_tRwlock.Init () );
-
 	const int NPAIRS = 10;
 	SphThread_t dReaders[NPAIRS];
 	SphThread_t dWriters[NPAIRS];
@@ -869,11 +867,10 @@ TEST ( functions, RWLock )
 	}
 
 	ASSERT_EQ ( g_iRwlock, NPAIRS * ( 1 + NPAIRS ) / 2 );
-	ASSERT_TRUE ( g_tRwlock.Done () );
 
 	int iReadSum = 0;
-	for ( int i = 0; i<NPAIRS; i++ )
-		iReadSum += dRead[i];
+	for ( int i : dRead )
+		iReadSum += i;
 
 	RecordProperty ( "read_sum", iReadSum );
 }
@@ -1018,7 +1015,7 @@ TEST ( functions, OneshotAutoEvent )
 }
 
 // oneshot event - we can set it N times, but only once it waited, and then will block.
-TEST ( functions, DISABLED_OneshotAutoEventTimed )
+/*TEST ( functions, DISABLED_OneshotAutoEventTimed )
 {
 	tmNow=sphMicroTimer ();
 	SphThread_t th;
@@ -1044,7 +1041,7 @@ TEST ( functions, DISABLED_OneshotAutoEventTimed )
 	g_oneevent.SetEvent ();
 	sphSleepMsec ( 100 );
 	ASSERT_TRUE ( Threads::Join ( &th ) ) << "autoevent thread done";
-}
+}*/
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -1615,10 +1612,10 @@ TEST ( functions, hashmap_iterations )
 		tHash.Add ( test.iVal, test.sKey );
 
 	auto i = 0;
-	for ( tHash.IterateStart (); tHash.IterateNext (); )
+	for ( const auto& tValue : tHash )
 	{
-		EXPECT_STREQ ( tHash.IterateGetKey ().cstr (), tstvalues[i].sKey );
-		EXPECT_EQ ( tHash.IterateGet (), tstvalues[i].iVal );
+		EXPECT_STREQ ( tValue.first.cstr (), tstvalues[i].sKey );
+		EXPECT_EQ ( tValue.second, tstvalues[i].iVal );
 		++i;
 	}
 

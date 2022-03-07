@@ -7,7 +7,7 @@ Cpp11BracedListStyle: true
 ColumnLimit:     0
 IndentWidth:     4
 ConstructorInitializerIndentWidth: 4
-ContinuationIndentWidth: 8
+ContinuationIndentWidth: 4
 AccessModifierOffset: -4
 TabWidth:        4
 UseTab:          Always

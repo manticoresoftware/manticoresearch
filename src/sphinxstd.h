@@ -2290,6 +2290,8 @@ class CSphOrderedHash
 {
 public:
 	using KeyValue_t = std::pair<KEY, T>;
+	using KEY_TYPE = KEY;
+	using VAL_TYPE = T;
 
 protected:
 	struct HashEntry_t : public KeyValue_t // key, data, owned by the hash
@@ -2397,7 +2399,6 @@ public:
 
 		m_pFirstByOrder = nullptr;
 		m_pLastByOrder = nullptr;
-		m_pIterator = nullptr;
 		m_iLength = 0;
 	}
 
@@ -2425,7 +2426,7 @@ public:
 	}
 
 	/// add new entry
-	/// returns ref to just intersed or previously existed value
+	/// returns ref to just inserted or previously existed value
 	T & AddUnique ( const KEY & tKey )
 	{
 		// check if this key is already hashed
@@ -2503,10 +2504,6 @@ public:
 		else
 			m_pLastByOrder = pToDelete->m_pPrevByOrder;
 
-		// step the iterator one item back - to gracefully hold deletion in iteration cycle
-		if ( pToDelete==m_pIterator )
-			m_pIterator = pToDelete->m_pPrevByOrder;
-
 		SafeDelete ( pToDelete );
 		--m_iLength;
 
@@ -2539,9 +2536,8 @@ public:
 	CSphOrderedHash ( const CSphOrderedHash & rhs )
 		: CSphOrderedHash ()
 	{
-		void * pIterator = nullptr;
-		while ( rhs.IterateNext ( &pIterator ) )
-			Add ( rhs.IterateGet ( &pIterator ), rhs.IterateGetKey ( &pIterator ) );
+		for ( const auto& tData : rhs )
+			Add ( tData.second, tData.first );
 	}
 
 	/// moving ctor
@@ -2575,62 +2571,13 @@ public:
 		return m_iLength;
 	}
 
-public:
-	/// start iterating
-	void IterateStart () const
+	/// emptiness
+	bool IsEmpty() const
 	{
-		m_pIterator = nullptr;
-	}
-
-	/// go to next existing entry
-	bool IterateNext () const
-	{
-		m_pIterator = m_pIterator ? m_pIterator->m_pNextByOrder : m_pFirstByOrder;
-		return m_pIterator!=nullptr;
-	}
-
-	/// get entry value
-	T & IterateGet () const
-	{
-		assert ( m_pIterator );
-		return m_pIterator->second;
-	}
-
-	/// get entry key
-	const KEY & IterateGetKey () const
-	{
-		assert ( m_pIterator );
-		return m_pIterator->first;
-	}
-
-	/// go to next existing entry in terms of external independed iterator
-	bool IterateNext ( void ** ppCookie ) const
-	{
-		auto ** ppIterator = reinterpret_cast < HashEntry_t** > ( ppCookie );
-		*ppIterator = ( *ppIterator ) ? ( *ppIterator )->m_pNextByOrder : m_pFirstByOrder;
-		return ( *ppIterator )!=nullptr;
-	}
-
-	/// get entry value in terms of external independed iterator
-	static T & IterateGet ( void ** ppCookie )
-	{
-		assert ( ppCookie );
-		auto ** ppIterator = reinterpret_cast < HashEntry_t** > ( ppCookie );
-		assert ( *ppIterator );
-		return ( *ppIterator )->second;
-	}
-
-	/// get entry key in terms of external independed iterator
-	static const KEY & IterateGetKey ( void ** ppCookie )
-	{
-		assert ( ppCookie );
-		auto ** ppIterator = reinterpret_cast < HashEntry_t** > ( ppCookie );
-		assert ( *ppIterator );
-		return ( *ppIterator )->first;
+		return m_iLength == 0;
 	}
 
 public:
-
 	class Iterator_c
 	{
 		HashEntry_t* m_pIterator = nullptr;
@@ -2650,6 +2597,12 @@ public:
 			return *this;
 		}
 
+		Iterator_c& operator--()
+		{
+			m_pIterator = m_pIterator->m_pPrevByOrder;
+			return *this;
+		}
+
 		bool operator== ( const Iterator_c& rhs ) const
 		{
 			return m_pIterator == rhs.m_pIterator;
@@ -2664,18 +2617,13 @@ public:
 	// c++11 style iteration
 	Iterator_c begin () const
 	{
-		return Iterator_c(m_pFirstByOrder);
+		return Iterator_c { m_pFirstByOrder };
 	}
 
-	Iterator_c end() const
+	static Iterator_c end()
 	{
-		return Iterator_c(nullptr);
+		return Iterator_c { nullptr };
 	}
-
-
-private:
-	/// current iterator
-	mutable HashEntry_t *	m_pIterator = nullptr;
 };
 
 /// very popular and so, moved here
@@ -3979,24 +3927,21 @@ class StringSet : private SmallStringHash_T<bool>
 {
 	using BASE = SmallStringHash_T<bool>;
 public:
-	inline void Add ( const CSphString& sKey )
+	inline bool Add ( const CSphString& sKey )
 	{
-		BASE::Add ( true, sKey );
-	}
-
-	inline void Delete ( const CSphString& sKey )
-	{
-		BASE::Delete ( sKey );
+		return BASE::Add ( true, sKey );
 	}
 
 	inline bool operator[] ( const CSphString& sKey ) const
 	{
-		if ( BASE::Exists ( sKey ) )
-			return BASE::operator[] ( sKey );
-		return false;
+		HashEntry_t* pEntry = FindByKey ( sKey );
+		return pEntry ? pEntry->second : false;
 	}
+
+	using BASE::Delete;
 	using BASE::Reset;
 	using BASE::GetLength;
+	using BASE::IsEmpty;
 
 	using BASE::begin;
 	using BASE::end;
@@ -4049,6 +3994,8 @@ protected:
 template < typename T >
 class CSphRefcountedPtr
 {
+public:
+	using ORIGTYPE = T;
 	using RAWT = typename std::remove_const<T>::type;
 	using CT = const T;
 	using TYPE = CSphRefcountedPtr<T>;
@@ -4056,7 +4003,7 @@ class CSphRefcountedPtr
 	using RAWTYPE = CSphRefcountedPtr<RAWT>;
 
 public:
-	explicit		CSphRefcountedPtr () noexcept = default;		///< default NULL wrapper construction (for vectors)
+					CSphRefcountedPtr () noexcept = default;		///< default NULL wrapper construction (for vectors)
 	explicit		CSphRefcountedPtr ( T * pPtr ) noexcept : m_pPtr ( pPtr ) {}	///< construction from raw pointer, takes over ownership!
 
 	CSphRefcountedPtr ( const CSphRefcountedPtr& rhs ) noexcept
@@ -4086,9 +4033,9 @@ public:
 	template<typename DERIVED>
 	CSphRefcountedPtr& operator= ( const CSphRefcountedPtr<DERIVED>& rhs ) noexcept
 	{
+		SafeAddRef ( rhs.Ptr() );
 		SafeRelease ( m_pPtr );
 		m_pPtr = rhs.Ptr();
-		SafeAddRef ( m_pPtr );
 		return *this;
 	}
 
@@ -4106,9 +4053,7 @@ public:
 	// drop the ownership and reset pointer
 	inline T * Leak () noexcept
 	{
-		T * pRes = m_pPtr;
-		m_pPtr = nullptr;
-		return pRes;
+		return std::exchange ( m_pPtr, nullptr );
 	}
 
 	T * Ptr() const noexcept { return m_pPtr; }
@@ -4397,8 +4342,8 @@ class CAPABILITY ( "mutex" ) CSphMutex : public ISphNoncopyable
 {
 
 public:
-	CSphMutex ();
-	~CSphMutex ();
+	CSphMutex () noexcept;
+	~CSphMutex () noexcept;
 
 	bool Lock () ACQUIRE();
 	bool Unlock () RELEASE();
@@ -4529,26 +4474,24 @@ private:
 using ScopedMutex_t = CSphScopedLock<CSphMutex>;
 
 /// rwlock implementation
-class CAPABILITY ( "mutex" ) CSphRwlock : public ISphNoncopyable
+class CAPABILITY ( "mutex" ) RwLock_t : public ISphNoncopyable
 {
 public:
-	CSphRwlock ();
-	~CSphRwlock () {
+	explicit RwLock_t ( bool bPreferWriter = false );
+	~RwLock_t () {
+		Verify ( Done() );
 #if !_WIN32
 		SafeDelete ( m_pLock );
 		SafeDelete ( m_pWritePreferHelper );
 #endif
 	}
 
-	bool Init ( bool bPreferWriter=false );
-	bool Done ();
-
 	bool ReadLock () ACQUIRE_SHARED();
 	bool WriteLock () ACQUIRE();
 	bool Unlock () UNLOCK_FUNCTION();
 
 	// Just for clang negative capabilities.
-	const CSphRwlock &operator! () const { return *this; }
+	const RwLock_t &operator! () const { return *this; }
 
 private:
 	bool				m_bInitialized = false;
@@ -4560,30 +4503,15 @@ private:
 	pthread_rwlock_t	* m_pLock;
 	CSphMutex			* m_pWritePreferHelper = nullptr;
 #endif
-};
 
-// rwlock with auto init/done
-class RwLock_t : public CSphRwlock
-{
-public:
-	RwLock_t()
-	{
-		Verify ( Init());
-	}
-	~RwLock_t()
-	{
-		Verify ( Done());
-	}
-
-	explicit RwLock_t ( bool bPreferWriter )
-	{
-		Verify ( Init ( bPreferWriter ) );
-	}
+private:
+	bool Init ( bool bPreferWriter = false );
+	bool Done();
 };
 
 
 /// scoped shared (read) lock
-template<class LOCKED=CSphRwlock>
+template<class LOCKED = RwLock_t>
 class SCOPED_CAPABILITY CSphScopedRLock_T : ISphNoncopyable
 {
 public:
@@ -4605,7 +4533,7 @@ protected:
 };
 
 /// scoped exclusive (write) lock
-template<class LOCKED=CSphRwlock>
+template<class LOCKED = RwLock_t>
 class SCOPED_CAPABILITY CSphScopedWLock_T : ISphNoncopyable
 {
 public:
@@ -4627,7 +4555,7 @@ protected:
 };
 
 /// scoped shared (read) fake fake - do nothing, just mute warnings
-template<class LOCKED=CSphRwlock>
+template<class LOCKED = RwLock_t>
 struct SCOPED_CAPABILITY FakeScopedRLock_T : ISphNoncopyable
 {
 	explicit FakeScopedRLock_T ( LOCKED & tLock ) ACQUIRE_SHARED ( tLock ) {}
@@ -4635,7 +4563,7 @@ struct SCOPED_CAPABILITY FakeScopedRLock_T : ISphNoncopyable
 };
 
 /// scoped exclusive (write) fake lock - does nothing, just mute warnings
-template<class LOCKED=CSphRwlock>
+template<class LOCKED = RwLock_t>
 struct SCOPED_CAPABILITY FakeScopedWLock_T : ISphNoncopyable
 {
 	explicit FakeScopedWLock_T ( LOCKED & tLock ) ACQUIRE ( tLock ) EXCLUDES ( tLock ) {}
@@ -4643,7 +4571,7 @@ struct SCOPED_CAPABILITY FakeScopedWLock_T : ISphNoncopyable
 };
 
 /// scoped lock owner - unlock in dtr
-template <class LOCKED=CSphRwlock>
+template<class LOCKED = RwLock_t>
 class SCOPED_CAPABILITY ScopedUnlock_T : ISphNoncopyable
 {
 public:
@@ -4681,11 +4609,9 @@ protected:
 	LOCKED * m_pLock;
 };
 
-using CSphScopedRLock = CSphScopedRLock_T<>;
-using CSphScopedWLock = CSphScopedWLock_T<>;
 // shortcuts (original names sometimes looks too long)
-using ScRL_t = CSphScopedRLock;
-using ScWL_t = CSphScopedWLock;
+using ScRL_t = CSphScopedRLock_T<>;
+using ScWL_t = CSphScopedWLock_T<>;
 
 // perform any (function-defined) action on exit from a scope.
 template < typename ACTION >
@@ -4955,8 +4881,20 @@ private:
 	mutable std::atomic<long> m_iRefCount { 1 };
 };
 
-using RefCountedRefPtr_t = CSphRefcountedPtr<ISphRefcountedMT>;
-using cRefCountedRefPtr_t = CSphRefcountedPtr<const ISphRefcountedMT>;
+template <typename T> using RefCountedRefPtr_T = CSphRefcountedPtr<T>;
+template <typename T> using cRefCountedRefPtr_T = CSphRefcountedPtr<const T>;
+
+template<typename T>
+inline RefCountedRefPtr_T<T> ConstCastPtr ( cRefCountedRefPtr_T<T> rhs )
+{
+	auto* pRaw = const_cast<T*> ( rhs.Ptr() );
+	if ( pRaw )
+		pRaw->AddRef();
+	return RefCountedRefPtr_T<T> { pRaw };
+}
+
+using cRefCountedRefPtrGeneric_t = cRefCountedRefPtr_T<ISphRefcountedMT>;
+using RefCountedRefPtrGeneric_t = RefCountedRefPtr_T<ISphRefcountedMT>;
 
 template <class T>
 struct VecRefPtrs_t : public ISphNoncopyable, public CSphVector<T>
@@ -5026,10 +4964,10 @@ class SharedPtr_T
 	template <typename DELL, bool STATEFUL_DELETER = std::is_member_function_pointer<decltype ( &DELL::Delete )>::value>
 	struct SharedState_T : public REFCOUNTED
 	{
-		PTR m_pPtr = nullptr;
+		PTR m_pPtr { nullptr };
 		DELL m_fnDelete;
 
-		SharedState_T() = default;
+		SharedState_T() noexcept = default;
 
 		template<typename DEL>
 		explicit SharedState_T ( DEL&& fnDelete )
@@ -5039,15 +4977,13 @@ class SharedPtr_T
 		~SharedState_T() override
 		{
 			m_fnDelete.Delete((void*)m_pPtr);
-			m_pPtr = nullptr;
 		}
 	};
 
 	template <typename DELL>
 	struct SharedState_T<DELL, false> : public REFCOUNTED
 	{
-		PTR m_pPtr = nullptr;
-		SharedState_T() = default;
+		PTR m_pPtr { nullptr };
 		~SharedState_T()
 		{
 			DELL::Delete((void*)m_pPtr);
@@ -5105,7 +5041,7 @@ public:
 	/// assignment of a raw pointer
 	SharedPtr_T & operator = ( PTR pPtr )
 	{
-		m_tState = new SharedState_t();
+		m_tState = new SharedState_t;
 		m_tState->m_pPtr = pPtr;
 		return *this;
 	}

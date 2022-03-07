@@ -521,14 +521,13 @@ bool sphPluginReload ( const char * sName, CSphString & sError )
 	CSphVector<PluginDesc_c*> dPlugins;
 
 	bool bDlGlobal = false;
-	g_hPlugins.IterateStart();
-	while ( g_hPlugins.IterateNext() )
+	for ( const auto& tPlugin : g_hPlugins )
 	{
-		PluginDesc_c * v = g_hPlugins.IterateGet();
+		PluginDesc_c * v = tPlugin.second;
 		if ( v->GetLibName()==sName )
 		{
-			dKeys.Add ( g_hPlugins.IterateGetKey() );
-			dPlugins.Add ( g_hPlugins.IterateGet() );
+			dKeys.Add ( tPlugin.first );
+			dPlugins.Add ( v );
 			bDlGlobal = v->GetLib()->m_bDlGlobal;
 		}
 	}
@@ -663,11 +662,10 @@ static const char * UdfReturnType ( ESphAttr eType )
 void sphPluginSaveState ( CSphWriter & tWriter )
 {
 	ScopedMutex_t tLock ( g_tPluginMutex );
-	g_hPlugins.IterateStart();
-	while ( g_hPlugins.IterateNext() )
+	for ( const auto& tPlugin : g_hPlugins )
 	{
-		const PluginKey_t & k = g_hPlugins.IterateGetKey();
-		const PluginDesc_c * v = g_hPlugins.IterateGet();
+		const PluginKey_t & k = tPlugin.first;
+		const PluginDesc_c * v = tPlugin.second;
 
 		CSphString sBuf;
 		if ( k.m_eType==PLUGIN_FUNCTION )
@@ -722,11 +720,10 @@ void sphPluginList ( CSphVector<PluginInfo_t> & dResult )
 	if ( !g_bPluginsEnabled )
 		return;
 	ScopedMutex_t tLock ( g_tPluginMutex );
-	g_hPlugins.IterateStart();
-	while ( g_hPlugins.IterateNext() )
+	for ( const auto& tPlugin : g_hPlugins )
 	{
-		const PluginKey_t & k = g_hPlugins.IterateGetKey();
-		const PluginDesc_c *v = g_hPlugins.IterateGet();
+		const PluginKey_t & k = tPlugin.first;
+		const PluginDesc_c *v = tPlugin.second;
 
 		PluginInfo_t & p = dResult.Add();
 		p.m_eType = k.m_eType;

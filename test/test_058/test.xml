@@ -176,79 +176,47 @@ insert into test_table values
 insert into klist_table values (1);
 </db_insert>
 
-<custom_test><![CDATA[
+<queries>
+<sphinxql>
+	select *,weight() from index where match ('first');
+	select *,weight() from index where match ('one');
+	select *,weight() from loc1 where match ('second');select *,weight() from loc2 where match ('fifth');select *,weight() from loc3 where match ('third');
+	select *,weight() from expand where match ('a*');show meta;
+</sphinxql>
+<sphinxql d="mysql"> update test_table set mode=3 where id=1000; </sphinxql>
+<sphinxql system="run-indexer" params="--all --rotate" sleep="2" />
+<sphinxql>
+	select *,weight() from index where match ('first');
+	select *,weight() from index where match ('one');
+	select *,weight() from loc1 where match ('second');select *,weight() from loc2 where match ('fifth');select *,weight() from loc3 where match ('third');
+</sphinxql>
+<sphinxql d="mysql">update test_table set mode=2 where id=1000; </sphinxql>
+<sphinxql system="run-indexer" params="--all --rotate" sleep="2"/>
+<sphinxql>
+	select *,weight() from index where match ('first');
+	select *,weight() from index where match ('one');
+	select *,weight() from loc1 where match ('second');select *,weight() from loc2 where match ('fifth');select *,weight() from loc3 where match ('third');
+	select *,weight() from expand where match ('a*');show meta;
+</sphinxql>
 
-$query = function($client,$words) { //$query = create_function('$client,$words','
-$result = $client->Query ( $words, "index" );	if ( $result ) { unset ( $result["time"] ); return $result; } else return $client->GetLastError();
-}; //');
+<!-- regression keep-attrs vs rotate -->
+<query mode="update_int" index="i_attrs">{"attrs":["mode"],"values":{"1":[10],"3":[11]}}</query>
+<sphinxql>
+	select * from i_attrs;
+</sphinxql>
+<sphinxql system="run-indexer" params="i_attrs --rotate --keep-attrs" sleep="2"/>
+<sphinxql>
+	select * from i_attrs;
+</sphinxql>
 
-$mquery = function($client) { // $mquery = create_function('$client','
-$client->AddQuery ( "second", "loc1" );
-$client->AddQuery ( "fifth", "loc2" );
-$client->AddQuery ( "third", "loc3" );
-	
-$res = $client->RunQueries ();
-if ( !$res )
-	return $client->GetLastError();
-	
-$result = array ();
-for ( $i=0; $i<count($res); $i++ ) 
-{
-	unset ( $res[$i]["time"] );
-	$result[] = $res[$i];
-}
-return $result;
-}; // ');
+<!-- smart rotation order (following a chain of killlist_target) -->
+<sphinxql>select *,weight() from main where match ('first');</sphinxql>
+<sphinxql d="mysql">delete from klist_table where id=1;</sphinxql>
+<sphinxql system="run-indexer" params="main delta --rotate"/>
+<sphinxql d="mysql" sleep="2">insert into klist_table values (1);</sphinxql>
+<sphinxql>select *,weight() from main where match ('first');</sphinxql>
 
-$q1 = function($client,$words,$index)
-{
-	$result = $client->Query ( $words, $index );	if ( $result ) { unset ( $result["time"] ); return $result; } else return $client->GetLastError();
-};
-
-$results = array();
-$errors = '';
-
-$results[] = $query ( $client, 'first' );
-$results[] = $query ( $client, 'one' );
-$results[] = $mquery ( $client );
-$results[] = $q1 ( $client, 'a*', 'expand' );
-
-mysql_query ( 'update test_table set mode = 3 where id = 1000' );
-RunIndexer ( $errors, '--all --rotate' );
-sleep(2);
-
-$results[] = $query ( $client, 'first' );
-$results[] = $query ( $client, 'one' );
-$results[] = $mquery ( $client );
-
-mysql_query ( 'update test_table set mode = 2 where id = 1000' );
-RunIndexer ( $errors, '--all --rotate' );
-sleep(2);
-
-$results[] = $query ( $client, 'first' );
-$results[] = $query ( $client, 'one' );
-$results[] = $mquery ( $client );
-$results[] = $q1 ( $client, 'a*', 'expand' );
-
-// regression keep-attrs vs rotate
-$results[] = $client->UpdateAttributes ( 'i_attrs', array('mode'), array(1=>array(10),3=>array(11)) );
-$results[] = $q1 ( $client, '', 'i_attrs' );
-$results[] = 'updated flush tag - ' . $client->FlushAttributes();
-RunIndexer ( $errors, 'i_attrs --rotate --keep-attrs' );
-sleep(2);
-$results[] = $q1 ( $client, '', 'i_attrs' );
-
-// smart rotation order (following a chain of killlist_target)
-$results[] = $q1 ( $client, 'first', 'main' );
-mysql_query ( 'delete from klist_table where id=1' );
-RunIndexer ( $errors, 'main delta --rotate' );
-mysql_query ( 'insert into klist_table values (1)' );
-sleep(2);
-$results[] = $q1 ( $client, 'first', 'main' );
-
-// regression for indexer crashing on keep-attrs w/o rotate
-RunIndexer ( $errors, 'i_attrs --keep-attrs' );
-
-]]></custom_test>
-
+<!-- regression for indexer crashing on keep-attrs w/o rotate -->
+<sphinxql system="run-indexer" params="i_attrs --keep-attrs"/>
+</queries>
 </test>

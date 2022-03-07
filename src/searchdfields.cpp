@@ -153,7 +153,7 @@ bool GetIndexes ( const CSphString & sIndexes, CSphString & sError, StrVec_t & d
 			dLocal.Add ( sIndex );
 		} else
 		{
-			for ( auto * pAgent : pDist->m_dAgents )
+			for ( const auto& pAgent : pDist->m_dAgents )
 			{
 				auto * pConn = new AgentConn_t;
 				pConn->SetMultiAgent ( pAgent );
@@ -180,17 +180,10 @@ bool GetFieldFromLocal ( const CSphString & sIndexName, const FieldRequest_t & t
 		return false;
 	}
 
-	ServedDescRPtr_c pDesc ( pServed );
-	if ( !pDesc->m_pIndex )
-	{
-		tRes.m_sError.SetSprintf ( "missed index '%s'", sIndexName.cstr() );
-		return false;
-	}
-
 	auto& tRefCrashQuery = GlobalCrashQueryGetRef();
 	tRefCrashQuery.m_dIndex = { sIndexName.cstr(), sIndexName.Length() };
 
-	const CSphIndex * pIndex = pDesc->m_pIndex;
+	RIdx_c pIndex { pServed };
 	pIndex->CreateReader ( iSessionID );
 
 	// collect fieldids and remap as:

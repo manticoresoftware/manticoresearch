@@ -2150,14 +2150,13 @@ public:
 		CSphVector<WORD> dQueryPos;
 		dQueryPos.Reserve ( m_iMaxQpos+1 );
 
-		hQwords.IterateStart();
-		while ( hQwords.IterateNext() )
+		for ( const auto& tQword : hQwords )
 		{
 			// tricky bit
 			// for query_word_count, we only want to count keywords that are not (!) excluded by the query
 			// that is, in (aa NOT bb) case, we want a value of 1, not 2
 			// there might be tail excluded terms these not affected MaxQpos
-			ExtQword_t & dCur = hQwords.IterateGet();
+			const ExtQword_t & dCur = tQword.second;
 			const int iQueryPos = dCur.m_iQueryPos;
 			if ( dCur.m_bExcluded )
 				continue;
@@ -4353,13 +4352,11 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery & tQuery, 
 	int64_t iTotalDocuments = tCtx.m_iTotalDocs;
 
 	CSphVector<const ExtQword_t *> dWords;
-	dWords.Reserve ( hQwords.GetLength() );
+	dWords.Reserve ( iQwords );
 
-	hQwords.IterateStart ();
-	while ( hQwords.IterateNext() )
+	for ( auto& hQword : hQwords )
 	{
-		ExtQword_t & tWord = hQwords.IterateGet ();
-
+		ExtQword_t & tWord = hQword.second;
 		int64_t iTermDocs = tWord.m_iDocs;
 		// shared docs count
 		if ( tCtx.m_pLocalDocs )

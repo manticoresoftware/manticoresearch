@@ -21,7 +21,7 @@ static const int64_t FALLBACK_FLUSH_PERIOD = 10*1000*1000; // reschedule in 10s 
 
 /* this cb attached to local indexes hash table 'add-or-replace' function. It is called for all new arrived indexes,
  * and if it suitable for flushing (i.e. if it exists and is mutable), engages flushing task by timer for it.*/
-void HookSubscribeMutableFlush ( ISphRefcountedMT* pCounter, const CSphString& sName );
+void HookSubscribeMutableFlush ( const CSphString& sName );
 
 // set from param `rt_flush_period`, see conf_options_reference/searchd_program_configuration_options.html
 void SetRtFlushPeriod ( int64_t iPeriod );

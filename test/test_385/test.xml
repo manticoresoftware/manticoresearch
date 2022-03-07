@@ -70,6 +70,9 @@ ALTER CLUSTER test ADD rt1;
 	ALTER CLUSTER test ADD rt2;
 	replace into test:rt2 (id,title) values (20, 'testik'),  (30, 'restestik'),  (40, 'restok');
 </sphinxql>
+
+<!-- without waiting the status test is not stable (sometimes select * returns 0 results) -->
+<sphinxql d="1" system="wait-status" status="cluster_test_last_committed" wait_value="4"/>
 <sphinxql d="1">
 	SHOW INDEX rt2 SETTINGS;
 	SELECT * FROM test:rt2 where match ( 'tes' );

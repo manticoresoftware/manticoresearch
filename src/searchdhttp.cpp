@@ -507,16 +507,16 @@ protected:
 	}
 
 	// check whether given served index is exist and has requested type
-	bool CheckValid ( const ServedDesc_t* pServed, const CSphString& sIndex, IndexType_e eType )
+	bool CheckValid ( const ServedIndex_c* pServed, const CSphString& sIndex, IndexType_e eType )
 	{
 		if ( !pServed )
 		{
 			FormatError ( SPH_HTTP_STATUS_500, "no such index '%s'", sIndex.cstr () );
 			return false;
 		}
-		if ( pServed->m_eType!=eType || !pServed->m_pIndex )
+		if ( pServed->m_eType!=eType )
 		{
-			FormatError ( SPH_HTTP_STATUS_500, "index '%s' is not %s (enabled=%d)", sIndex.cstr(), GetTypeName ( eType ).cstr(), (int)(!!pServed->m_pIndex) );
+			FormatError ( SPH_HTTP_STATUS_500, "index '%s' is not %s", sIndex.cstr(), GetTypeName ( eType ).cstr() );
 			return false;
 		}
 		return true;
@@ -1013,7 +1013,7 @@ protected:
 	{
 		// for now - only local mutable indexes are suitable
 		{
-			ServedDescRPtr_c pIndex ( GetServed ( sIndex ) );
+			auto pIndex = GetServed ( sIndex );
 			if ( !ServedDesc_t::IsMutable ( pIndex ) )
 				return;
 		}
@@ -1693,11 +1693,11 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString& sIndex, const Jso
 	CSphVector<FilterTreeItem_t> dFilterTree;
 	if ( tFilters )
 	{
-		ServedDescRPtr_c pServed ( GetServed ( sIndex ));
+		auto pServed = GetServed ( sIndex );
 		if ( !CheckValid ( pServed, sIndex, IndexType_e::PERCOLATE ) )
 			return false;
 
-		auto pIndex = (PercolateIndex_i *)pServed->m_pIndex;
+		RIdx_T<const PercolateIndex_i*> pIndex { pServed };
 
 		if ( !PercolateParseFilters ( tFilters.SzVal(), SPH_COLLATION_UTF8_GENERAL_CI, pIndex->GetInternalSchema (), dFilters, dFilterTree, sError ) )
 		{
@@ -1713,11 +1713,11 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString& sIndex, const Jso
 	// scope for index lock
 	bool bOk = false;
 	{
-		ServedDescRPtr_c pServed ( GetServed ( sIndex ));
+		auto pServed = GetServed ( sIndex );
 		if ( !CheckValid ( pServed, sIndex, IndexType_e::PERCOLATE ))
 			return false;
 
-		auto pIndex = (PercolateIndex_i *)pServed->m_pIndex;
+		RIdx_T<PercolateIndex_i*> pIndex { pServed };
 
 		PercolateQueryArgs_t tArgs ( dFilters, dFilterTree );
 		tArgs.m_sQuery = sQuery;
@@ -1732,8 +1732,7 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString& sIndex, const Jso
 		{
 			RtAccum_t tAcc ( false );
 			tAcc.SetIndex ( pIndex );
-			ReplicationCommand_t * pCmd = tAcc.AddCommand ( ReplicationCommand_e::PQUERY_ADD );
-			pCmd->m_sIndex = sIndex;
+			ReplicationCommand_t * pCmd = tAcc.AddCommand ( ReplicationCommand_e::PQUERY_ADD, sIndex );
 			pCmd->m_pStored = pStored;
 			// refresh query's UID for reply as it might be auto-generated
 			iID = pStored->m_iQUID;
@@ -1773,8 +1772,7 @@ bool HttpHandlerPQ_c::ListQueries ( const CSphString & sIndex )
 bool HttpHandlerPQ_c::Delete ( const CSphString & sIndex, const JsonObj_c & tRoot )
 {
 	RtAccum_t tAcc ( false );
-	ReplicationCommand_t * pCmd = tAcc.AddCommand ( ReplicationCommand_e::PQUERY_DELETE );
-	pCmd->m_sIndex = sIndex;
+	ReplicationCommand_t * pCmd = tAcc.AddCommand ( ReplicationCommand_e::PQUERY_DELETE, sIndex );
 
 	CSphString sError;
 	JsonObj_c tTagsArray = tRoot.GetArrayItem ( "tags", sError, true );

@@ -36,20 +36,19 @@ public:
 	}
 
 private:
-	~PingBuilder_c () final
-	{}
+	~PingBuilder_c () final = default;
 
 private:
 	const int m_iSendCookie;
 	mutable int m_iReceivedCookie = 0;
 };
 
-void SchedulePing ( HostDashboard_t* pHost );
+void SchedulePing ( HostDashboardRefPtr_t pHost );
 
 static void PingWorker ( void* pCookie )
 {
 	auto pDesc = PublishSystemInfo ( "PING" );
-	CSphRefcountedPtr<HostDashboard_t> pHost (( HostDashboard_t* ) pCookie );
+	HostDashboardRefPtr_t pHost (( HostDashboard_t* ) pCookie );
 	if ( sphInterrupted () || pHost->m_iNeedPing<1 )
 		return;
 
@@ -57,7 +56,7 @@ static void PingWorker ( void* pCookie )
 	auto iNow = sphMicroTimer ();
 	if (( iEngage - 1000 )>iNow ) // more time to wait (round to 1ms); reschedule and return
 	{
-		SchedulePing ( pHost );
+		SchedulePing ( std::move(pHost) );
 		return;
 	}
 
@@ -81,11 +80,10 @@ static void PingWorker ( void* pCookie )
 
 static void PingAborter ( void* pCookie )
 {
-	auto* pHost = ( HostDashboard_t* ) pCookie;
-	SafeRelease ( pHost );
+	HostDashboardRefPtr_t { (HostDashboard_t*)pCookie }; // adopt and release
 }
 
-void SchedulePing ( HostDashboard_t* pHost )
+void SchedulePing ( HostDashboardRefPtr_t pHost )
 {
 	if ( !pHost )
 		return;
@@ -94,14 +92,14 @@ void SchedulePing ( HostDashboard_t* pHost )
 	if ( iPingTask<0 )
 		iPingTask = TaskManager::RegisterGlobal ( "Ping service", PingWorker, PingAborter );
 	assert ( iPingTask>=0 && "failed to create ping service task" );
-	SafeAddRef ( pHost );
-	TaskManager::ScheduleJob ( iPingTask, pHost->EngageTime (), pHost );
+	auto pHazardHost = pHost.Leak();
+	TaskManager::ScheduleJob ( iPingTask, pHazardHost->EngageTime (), pHazardHost );
 }
 
 class Pinger_c: public IPinger
 {
 public:
-	void Subscribe ( HostDashboard_t* pHost ) final
+	void Subscribe ( HostDashboardRefPtr_t pHost ) final
 	{
 		if ( !pHost )
 			return;

@@ -327,7 +327,7 @@ public:
 	bool NeedSave() const { return m_bNeedSave; }
 	bool HasSettings() const { return ( m_dLoaded.BitCount()>0 ); }
 
-	void Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const override;
+	void Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * ) const override;
 
 	void Combine ( const MutableIndexSettings_c & tOther );
 

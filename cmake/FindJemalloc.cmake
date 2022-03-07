@@ -29,27 +29,24 @@
 
 find_package (PkgConfig QUIET)
 
-pkg_check_modules (PC_JEMALLOC QUIET jemalloc)
+if (PKG_CONFIG_FOUND)
+	pkg_check_modules ( JEMALLOC QUIET jemalloc )
+	implib_config ( JEMALLOC Jemalloc::Jemalloc )
+endif ()
 
-# Look for the header file.
-find_path (JEMALLOC_INCLUDE_DIR NAMES "jemalloc/jemalloc.h" HINTS ${PC_JEMALLOC_INCLUDEDIR})
+if (NOT JEMALLOC_FOUND )
+	find_path ( JEMALLOC_INCLUDE_DIRS NAMES "jemalloc/jemalloc.h" )
+	find_library ( JEMALLOC_LINK_LIBRARIES NAMES jemalloc libjemalloc NAMES_PER_DIR )
+endif()
 
-# Look for the library.
-find_library (JEMALLOC_LIBRARY NAMES jemalloc libjemalloc NAMES_PER_DIR HINTS ${PC_JEMALLOC_LIBDIR})
-
-mark_as_advanced ( JEMALLOC_LIBRARY JEMALLOC_INCLUDE_DIR )
+mark_as_advanced ( JEMALLOC_LINK_LIBRARIES JEMALLOC_INCLUDE_DIRS )
 
 include (FindPackageHandleStandardArgs)
-find_package_handle_standard_args ( Jemalloc REQUIRED_VARS JEMALLOC_LIBRARY )
+find_package_handle_standard_args ( Jemalloc REQUIRED_VARS JEMALLOC_LINK_LIBRARIES )
 set_package_properties (Jemalloc PROPERTIES TYPE RUNTIME
 		DESCRIPTION "a general purpose malloc(3) implementation that emphasizes fragmentation avoidance and scalable concurrency support"
 		URL "http://jemalloc.net/"
 		)
 
-if (JEMALLOC_FOUND AND NOT TARGET Jemalloc::Jemalloc)
-	add_library (Jemalloc::Jemalloc UNKNOWN IMPORTED)
-	set_target_properties( Jemalloc::Jemalloc PROPERTIES IMPORTED_LOCATION "${JEMALLOC_LIBRARY}" )
-	if (JEMALLOC_INCLUDE_DIR)
-		target_include_directories(Jemalloc::Jemalloc INTERFACE "${JEMALLOC_INCLUDE_DIR}")
-	endif()
-endif ()
+include ( helpers )
+implib_config ( JEMALLOC Jemalloc::Jemalloc )

@@ -180,6 +180,7 @@ using MetricsAndCountersRefPtr_t = CSphRefcountedPtr<MetricsAndCounters_t>;
 
 struct HostDashboard_t;
 using HostDashboardRefPtr_t = CSphRefcountedPtr<HostDashboard_t>;
+using cHostDashboardRefPtr_t = CSphRefcountedPtr<const HostDashboard_t>;
 
 /// generic descriptor of remote host
 struct HostDesc_t : ISphNoncopyable
@@ -257,7 +258,7 @@ private:
 class IPinger
 {
 public:
-	virtual void Subscribe ( HostDashboard_t* pHost ) = 0;
+	virtual void Subscribe ( HostDashboardRefPtr_t pHost ) = 0;
 	virtual ~IPinger() {}
 };
 
@@ -327,6 +328,9 @@ private:
 };
 
 /// descriptor for set of agents (mirrors) (stored in a global hash)
+class MultiAgentDesc_c;
+using MultiAgentDescRefPtr_c = CSphRefcountedPtr<MultiAgentDesc_c>;
+using cMultiAgentDescRefPtr_c = CSphRefcountedPtr<const MultiAgentDesc_c>;
 class MultiAgentDesc_c final : public ISphRefcountedMT, public CSphFixedVector<AgentDesc_t>
 {
 	std::atomic<int>	m_iRRCounter {0};    /// round-robin counter
@@ -347,7 +351,7 @@ public:
 	{}
 
 	// configure using dTemplateHosts as source of urls/indexes
-	static MultiAgentDesc_c * GetAgent ( const CSphVector<AgentDesc_t *> & dTemplateHosts, const AgentOptions_t & tOpt, const WarnInfo_c & tWarn );
+	static MultiAgentDescRefPtr_c GetAgent ( const CSphVector<AgentDesc_t *> & dTemplateHosts, const AgentOptions_t & tOpt, const WarnInfo_c & tWarn );
 
 	// housekeeping: walk throw global hash and finally release all 1-refs agents
 	static void CleanupOrphaned();
@@ -368,7 +372,7 @@ public:
 
 	CSphFixedVector<float> GetWeights () const REQUIRES ( !m_dWeightLock )
 	{
-		CSphScopedRLock tRguard ( m_dWeightLock );
+		ScRL_t tRguard ( m_dWeightLock );
 		CSphFixedVector<float> dResult { 0 };
 		dResult.CopyFrom ( m_dWeights );
 		return dResult;
@@ -386,8 +390,6 @@ private:
 	static CSphString GetKey( const CSphVector<AgentDesc_t *> &dTemplateHosts, const AgentOptions_t &tOpt );
 	bool Init ( const CSphVector<AgentDesc_t *> &dTemplateHosts, const AgentOptions_t &tOpt, const WarnInfo_c & tWarn );
 };
-
-using MultiAgentDescRefPtr_c = CSphRefcountedPtr<MultiAgentDesc_c>;
 
 extern int g_iAgentRetryCount;
 extern int g_iAgentRetryDelayMs;
@@ -533,7 +535,7 @@ public:
 public:
 	AgentConn_t () = default;
 
-	void SetMultiAgent ( MultiAgentDesc_c * pMirror );
+	void SetMultiAgent ( MultiAgentDescRefPtr_c pMirror );
 	inline bool IsBlackhole () const { return m_tDesc.m_bBlackhole; }
 	inline bool InNetLoop() const { return m_bInNetLoop; }
 	inline void SetNetLoop ( bool bInNetLoop = true ) { m_bInNetLoop = bInNetLoop; }
@@ -676,15 +678,16 @@ int PerformRemoteTasks ( VectorAgentConn_t &dRemotes, RequestBuilder_i * pQuery,
 /////////////////////////////////////////////////////////////////////////////
 
 /// distributed index
-struct DistributedIndex_t : public ServedStats_c, public ISphRefcountedMT
+struct DistributedIndex_t : public ISphRefcountedMT
 {
-	CSphVector<MultiAgentDesc_c *> m_dAgents;		///< remote agents
+	CSphVector<MultiAgentDescRefPtr_c> m_dAgents;	///< remote agents
 	StrVec_t m_dLocal;								///< local indexes
-	int m_iAgentConnectTimeoutMs		{ g_iAgentConnectTimeoutMs };	///< in msec
-	int m_iAgentQueryTimeoutMs		{ g_iAgentQueryTimeoutMs };	///< in msec
+	int m_iAgentConnectTimeoutMs	{ g_iAgentConnectTimeoutMs };	///< in msec
+	int m_iAgentQueryTimeoutMs		{ g_iAgentQueryTimeoutMs };		///< in msec
 	int m_iAgentRetryCount			= 0;			///< overrides global one
 	bool m_bDivideRemoteRanges		= false;		///< whether we divide big range onto agents or not
 	HAStrategies_e m_eHaStrategy	= HA_DEFAULT;	///< how to select the best of my agents
+	mutable ServedStats_c			m_tStats;
 
 	// get hive of all index'es hosts (not agents, but hosts, i.e. all mirrors as simple vector)
 	void GetAllHosts ( VectorAgentConn_t &dTarget ) const;
@@ -694,11 +697,21 @@ struct DistributedIndex_t : public ServedStats_c, public ISphRefcountedMT
 		return m_dAgents.IsEmpty() && m_dLocal.IsEmpty();
 	}
 
-	using ProcessFunctor = std::function<void ( AgentDesc_t & )>;
-	// apply a function (non-const) to every single host in the hive
-	void ForEveryHost ( ProcessFunctor );
+	template<typename FUNC>
+	void ForEveryHost ( FUNC&& pFunc )
+	{
+		for ( auto& pAgent : m_dAgents )
+			for ( auto& dHost : *pAgent )
+				pFunc ( dHost );
+	}
 
-	SharedPtr_t<CSphIndex>& ReturnCachedRt() const;
+	template<typename FUNC>
+	void ForEveryHost ( FUNC&& pFunc ) const
+	{
+		for ( auto& pAgent : m_dAgents )
+			for ( auto& dHost : *pAgent )
+				pFunc ( dHost );
+	}
 
 private:
 	~DistributedIndex_t() override;
@@ -707,29 +720,15 @@ private:
 };
 
 using DistributedIndexRefPtr_t = CSphRefcountedPtr<DistributedIndex_t>;
+using cDistributedIndexRefPtr_t = CSphRefcountedPtr<const DistributedIndex_t>;
 
-class SCOPED_CAPABILITY RLockedDistrIt_c : public RLockedHashIt_c
+using ReadOnlyDistrHash_c = ReadOnlyHash_T<DistributedIndex_t>;
+using WriteableDistrHash_c = WriteableHash_T<DistributedIndex_t>;
+extern ReadOnlyDistrHash_c* g_pDistIndexes; // distributed indexes hash
+inline cDistributedIndexRefPtr_t GetDistr ( const CSphString& sName )
 {
-public:
-	explicit RLockedDistrIt_c ( const GuardedHash_c * pHash ) ACQUIRE_SHARED ( pHash->IndexesRWLock ()
-																				, m_pHash->IndexesRWLock () )
-		: RLockedHashIt_c ( pHash )
-	{}
-
-	~RLockedDistrIt_c () UNLOCK_FUNCTION() {}
-
-	DistributedIndexRefPtr_t Get () REQUIRES_SHARED ( m_pHash->IndexesRWLock () )
-	{
-		auto pDistr = ( DistributedIndex_t * ) RLockedHashIt_c::Get ().Leak();
-		return DistributedIndexRefPtr_t ( pDistr );
-	}
-};
-
-extern GuardedHash_c * g_pDistIndexes;	// distributed indexes hash
-
-inline DistributedIndexRefPtr_t GetDistr ( const CSphString &sName )
-{
-	return DistributedIndexRefPtr_t ( ( DistributedIndex_t * ) g_pDistIndexes->Get ( sName ) );
+	assert ( g_pDistIndexes );
+	return g_pDistIndexes->Get ( sName );
 }
 
 struct SearchdStats_t
@@ -767,7 +766,7 @@ namespace Dashboard
 {
 	void LinkHost ( HostDesc_t& dHost ); ///< put host into global dashboard and init link to it
 	HostDashboardRefPtr_t FindAgent ( const CSphString& sAgent );
-	VecRefPtrs_t<HostDashboard_t*> GetActiveHosts ();
+	CSphVector<HostDashboardRefPtr_t> GetActiveHosts ();
 	void CleanupOrphaned ();
 }
 
@@ -788,7 +787,7 @@ bool ParseAddressPort ( HostDesc_t & pAgent, const char ** ppLine, const WarnInf
 //! \param szIndexName - index we apply to
 //! \param tOptions - global options affecting agent
 //! \return configured multiagent, or null if failed
-MultiAgentDesc_c * ConfigureMultiAgent ( const char * szAgent, const char * szIndexName, AgentOptions_t tOptions, StrVec_t * pWarnings=nullptr );
+MultiAgentDescRefPtr_c ConfigureMultiAgent ( const char * szAgent, const char * szIndexName, AgentOptions_t tOptions, StrVec_t * pWarnings=nullptr );
 
 class RequestBuilder_i : public ISphNoncopyable
 {

@@ -964,6 +964,33 @@ static KeySection_t g_dConfigSections[] =
 };
 
 //////////////////////////////////////////////////////////////////////////
+/// simple config file
+class CSphConfigParser
+{
+public:
+	CSphConfig		m_tConf;
+
+public:
+	bool			Parse ( const char * sFileName, const char * pBuffer = nullptr );
+
+private:
+	CSphString		m_sFileName;
+	int				m_iLine = -1;
+	CSphString		m_sSectionType;
+	CSphString		m_sSectionName;
+
+	int					m_iWarnings = 0;
+	static const int	WARNS_THRESH	= 5;
+
+private:
+	bool			IsPlainSection ( const char * sKey );
+	bool			IsNamedSection ( const char * sKey );
+	bool			AddSection ( const char * sType, const char * sSection );
+	void			AddKey ( const char * sKey, char * sValue );
+	bool			ValidateKey ( const char * sKey );
+	char *			GetBufferString ( char * szDest, int iMax, const char * & szSource );
+};
+
 bool CSphConfigParser::IsPlainSection ( const char * sKey )
 {
 	assert ( sKey );
@@ -1202,16 +1229,6 @@ char * CSphConfigParser::GetBufferString ( char * szDest, int iMax, const char *
 	return szDest;
 }
 
-bool CSphConfigParser::ReParse ( const char * sFileName, const char * pBuffer )
-{
-	CSphConfig tOldConfig = m_tConf;
-	m_tConf.Reset();
-	if ( Parse ( sFileName, pBuffer ) )
-		return true;
-	m_tConf = tOldConfig;
-	return false;
-}
-
 bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 {
 	using namespace TlsMsg;
@@ -1427,9 +1444,8 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 			tDest = m_tConf [ m_sSectionType ][ sToken ];
 
 			// mark all values in the target section as "to be overridden"
-			tDest.IterateStart ();
-			while ( tDest.IterateNext() )
-				tDest.IterateGet().m_bTag = true;
+			for ( auto& tVal : tDest )
+				tVal.second.m_bTag = true;
 
 			LOC_BACK();
 			eState = S_SEC;
@@ -1495,7 +1511,19 @@ const char * sphGetConfigFile ( const char * sHint )
 	return nullptr;
 }
 
-const char * sphLoadConfig ( const char * sOptConfig, bool bQuiet, bool bIgnoreIndexes, CSphConfigParser & cp )
+bool ParseConfig ( CSphConfig* pConfig, const char* sFileName, const char* pBuffer )
+{
+	// load config
+	CSphConfigParser cp;
+	if ( !cp.Parse ( sFileName, pBuffer ) )
+		return false;
+
+	if ( pConfig )
+		*pConfig = cp.m_tConf;
+	return true;
+}
+
+CSphConfig sphLoadConfig ( const char * sOptConfig, bool bQuiet, bool bIgnoreIndexes, const char ** ppActualConfig )
 {
 	// fallback to defaults if there was no explicit config specified
 	sOptConfig = sphGetConfigFile ( sOptConfig );
@@ -1504,14 +1532,17 @@ const char * sphLoadConfig ( const char * sOptConfig, bool bQuiet, bool bIgnoreI
 		fprintf ( stdout, "using config file '%s'...\n", sOptConfig );
 
 	// load config
-	if ( !cp.Parse ( sOptConfig ) )
+	CSphConfig hConf;
+	if ( !ParseConfig ( &hConf, sOptConfig ) )
 		sphDie ( "failed to parse config file '%s': %s", sOptConfig, TlsMsg::szError() );
 
-	CSphConfig & hConf = cp.m_tConf;
 	if ( !bIgnoreIndexes && !hConf ( "index" ) )
 		sphDie ( "no indexes found in config file '%s'", sOptConfig );
 
-	return sOptConfig;
+	if ( ppActualConfig )
+		*ppActualConfig = sOptConfig;
+
+	return hConf;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -3037,13 +3068,12 @@ void sphCheckDuplicatePaths ( const CSphConfig & hConf )
 		return;
 
 	CSphOrderedHash < CSphString, CSphString, CSphStrHashFunc, 256 > hPaths;
-	hConf["index"].IterateStart ();
-	while ( hConf["index"].IterateNext() )
+	for ( const auto& tVal : hConf["index"] )
 	{
-		CSphConfigSection & hIndex = hConf["index"].IterateGet ();
+		const CSphConfigSection & hIndex = tVal.second;
 		if ( hIndex ( "path" ) )
 		{
-			const CSphString & sIndex = hConf["index"].IterateGetKey ();
+			const CSphString & sIndex = tVal.first;
 			if ( hPaths ( hIndex["path"].strval() ) )
 				sphDie ( "duplicate paths: index '%s' has the same path as '%s'.\n", sIndex.cstr(), hPaths[hIndex["path"].strval()].cstr() );
 			hPaths.Add ( sIndex, hIndex["path"].strval() );
@@ -3349,7 +3379,7 @@ namespace TlsMsg
 		if (!pContainer)
 		{
 			static StringBuilder_c sMsgs;
-			pContainer = &sMsgs;
+			pContainer = &sMsgs; // fixme! static is global, write it's address to thread-local just shares it...
 		}
 
 		if ( bDoClear )

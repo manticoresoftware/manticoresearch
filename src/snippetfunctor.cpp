@@ -1159,15 +1159,14 @@ void PassageHighlighter_c::EmitZoneName ( int iStart ) const
 	if ( iZone!=-1 )
 	{
 		int iParent = m_tZoneInfo.m_dZoneParent[iZone];
-		m_tZoneInfo.m_hZones.IterateStart();
-		while ( m_tZoneInfo.m_hZones.IterateNext() )
+		for ( const auto & tZone : m_tZoneInfo.m_hZones )
 		{
-			if ( m_tZoneInfo.m_hZones.IterateGet()!=iParent )
+			if ( tZone.second!=iParent )
 				continue;
 
 			assert ( m_pCurPassageText );
 			ResultEmit ( *m_pCurPassageText, "<", 1 );
-			ResultEmit ( *m_pCurPassageText, m_tZoneInfo.m_hZones.IterateGetKey().cstr(), m_tZoneInfo.m_hZones.IterateGetKey().Length() );
+			ResultEmit ( *m_pCurPassageText, tZone.first.cstr(), tZone.first.Length() );
 			ResultEmit ( *m_pCurPassageText, ">", 1 );
 			break;
 		}

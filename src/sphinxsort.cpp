@@ -1134,177 +1134,32 @@ private:
 };
 
 //////////////////////////////////////////////////////////////////////////
-/// collector for UPDATE statement
-class CSphUpdateQueue final : public MatchSorter_c, ISphNoncopyable
+
+/// collect list of matched DOCIDs in aside compressed blob
+/// (mainly used to collect docs in `DELETE... WHERE` statement)
+class CollectQueue_c final : public MatchSorter_c, ISphNoncopyable
 {
 	using BASE = MatchSorter_c;
 
 public:
-						CSphUpdateQueue ( int iSize, CSphAttrUpdateEx * pUpdate, bool bIgnoreNonexistent, bool bStrict );
+						CollectQueue_c ( int iSize, CSphVector<BYTE>& dCollectedValues );
 
-	bool				IsGroupby() const final { return false; }
-	int					GetLength () final { return ( m_iTotal ? m_iCount : 0 ); }
+	bool				IsGroupby () const final { return false; }
+	int					GetLength () final { return 0; } // that ensures, flatten() will never called;
 	bool				Push ( const CSphMatch& tEntry ) final
 	{
 		return PushMatch ( tEntry );
 	}
-	void Push ( const VecTraits_T<const CSphMatch>& dMatches ) final
-	{
-		for ( const auto& i : dMatches )
-			if ( i.m_tRowID != INVALID_ROWID )
-				PushMatch ( i );
-			else
-				m_iTotal++;
-	}
-	bool				PushGrouped ( const CSphMatch &, bool ) final { assert(0); return false; }
-	int					Flatten ( CSphMatch * ) final;
-	void				SetSchema ( ISphSchema * pSchema, bool bRemapCmp ) final;
-	void				Finalize ( MatchProcessor_i & , bool, bool bFinalizeMatches ) final {}
-	bool				CanBeCloned() const final { return false; }
-	ISphMatchSorter *	Clone() const final { return nullptr; }
-	void				MoveTo ( ISphMatchSorter *, bool ) final {}
-	void				SetMerge ( bool bMerge ) final {}
-
-private:
-	AttrUpdateSharedPtr_t	m_pWorkSet;
-	bool				m_bIgnoreNonexistent;
-	bool				m_bStrict;
-	CSphIndex *			m_pIndex;
-	CSphString *		m_pError;
-	CSphString *		m_pWarning;
-	int *				m_pAffected;
-
-	const int			m_iCount = 0;
-	DocID_t				m_iLastID = 0;
-	CSphVector<BYTE>	m_dDocid;
-	MemoryWriter_c		m_tWriter;
-	bool				m_bDocIdDynamic = false;
-
-	void				DoUpdate();
-	void				Update();
-
-	inline bool			PushMatch ( const CSphMatch& tEntry );
-};
-
-
-CSphUpdateQueue::CSphUpdateQueue ( int iSize, CSphAttrUpdateEx * pUpdate, bool bIgnoreNonexistent, bool bStrict )
-	: m_bIgnoreNonexistent ( bIgnoreNonexistent )
-	, m_bStrict ( bStrict )
-	, m_iCount ( iSize )
-	, m_tWriter ( m_dDocid )
-{
-	m_pWorkSet						 = pUpdate->m_pUpdate;
-	m_pWorkSet->m_bIgnoreNonexistent = m_bIgnoreNonexistent;
-	m_pWorkSet->m_bStrict			 = m_bStrict;
-	m_pWorkSet->m_dDocids.Resize ( 0 );
-	m_pWorkSet->m_bReusable = false;
-	m_pIndex	= pUpdate->m_pIndex;
-	m_pError	= pUpdate->m_pError;
-	m_pWarning	= pUpdate->m_pWarning;
-	m_pAffected = &pUpdate->m_iAffected;
-
-}
-
-
-/// add entry to the queue
-bool CSphUpdateQueue::PushMatch ( const CSphMatch & tEntry )
-{
-	++m_iTotal;
-
-	DocID_t iCurId = sphGetDocID ( m_bDocIdDynamic ? tEntry.m_pDynamic : tEntry.m_pStatic );
-	assert ( iCurId );
-
-	DocID_t iDelta = iCurId - m_iLastID;
-	m_iLastID = iCurId;
-
-	// do add
-	m_tWriter.ZipOffset ( iDelta );
-	return true;
-}
-
-/// final update pass
-int CSphUpdateQueue::Flatten ( CSphMatch * )
-{
-	DoUpdate();
-	m_iTotal = 0;
-	m_iLastID = 0;
-	m_dDocid.Resize ( 0 );
-	return 0;
-}
-
-
-void CSphUpdateQueue::SetSchema ( ISphSchema * pSchema, bool bRemapCmp )
-{
-	BASE::SetSchema ( pSchema, bRemapCmp );
-
-	const CSphColumnInfo * pDocId = pSchema->GetAttr ( sphGetDocidName() );
-	assert(pDocId);
-	m_bDocIdDynamic = pDocId->m_tLocator.m_bDynamic;
-}
-
-
-void CSphUpdateQueue::DoUpdate()
-{
-	if ( !m_iTotal )
-		return;
-
-	int iMemoryNeed = (int) Min ( m_iCount, m_iTotal );
-	m_pWorkSet->m_dDocids.Reserve ( iMemoryNeed );
-
-	DocID_t iLastId = 0;
-	MemoryReader_c tReader ( m_dDocid.Begin(), m_dDocid.GetLength() );
-
-	for ( int i=0; i<m_iTotal; i++ )
-	{
-		DocID_t iCur = iLastId + tReader.UnzipOffset();
-		iLastId = iCur;
-		m_pWorkSet->m_dDocids.Add ( iCur );
-
-		if ( ( ( i+1 )%m_iCount )!=0 )
-			continue;
-
-		Update();
-	}
-
-	if ( !m_pWorkSet->m_dDocids.IsEmpty() )
-		Update();
-}
-
-
-void CSphUpdateQueue::Update()
-{
-	bool bCritical = false;
-	*m_pAffected += m_pIndex->UpdateAttributes ( m_pWorkSet, bCritical, *m_pError, *m_pWarning );
-	assert ( !bCritical ); // fixme! handle this
-
-	m_pWorkSet->m_dDocids.Resize ( 0 );
-}
-
-//////////////////////////////////////////////////////////////////////////
-
-/// collect list of matched DOCIDs
-/// (mainly used to collect docs in `DELETE... WHERE` statement)
-class CSphCollectQueue final : public CSphMatchQueueTraits
-{
-	using BASE = CSphMatchQueueTraits;
-
-public:
-						CSphCollectQueue ( int iSize, CSphVector<DocID_t> * pValues );
-
-	bool				IsGroupby () const final { return false; }
-	bool				Push ( const CSphMatch & tEntry ) final							{ return PushMatch(tEntry); }
 	void				Push ( const VecTraits_T<const CSphMatch> & dMatches ) final
 	{
 		for ( const auto & i : dMatches )
 			if ( i.m_tRowID!=INVALID_ROWID )
 				PushMatch(i);
-			else
-				m_iTotal++;
 	}
 
 	bool				PushGrouped ( const CSphMatch &, bool ) final { assert(0); return false; }
-	int					Flatten ( CSphMatch * ) final;
-	void				Finalize ( MatchProcessor_i &, bool, bool bFinalizeMatches ) final {}
+	int					Flatten ( CSphMatch * ) final { return 0; }
+	void				Finalize ( MatchProcessor_i &, bool, bool ) final;
 	bool				CanBeCloned() const final { return false; }
 	ISphMatchSorter *	Clone () const final { return nullptr; }
 	void				MoveTo ( ISphMatchSorter *, bool ) final {}
@@ -1312,37 +1167,52 @@ public:
 	void				SetMerge ( bool bMerge ) final {}
 
 private:
-	CSphVector<DocID_t> *	m_pValues;
-	bool					m_bDocIdDynamic = false;
+	DocID_t						m_iLastID;
+	int							m_iMaxMatches;
+	CSphVector<DocID_t>			m_dUnsortedDocs;
+	MemoryWriter_c				m_tWriter;
+	bool						m_bDocIdDynamic = false;
 
 	inline bool			PushMatch ( const CSphMatch & tEntry );
+	inline void			ProcessPushed();
 };
 
 
-CSphCollectQueue::CSphCollectQueue ( int iSize, CSphVector<DocID_t> * pValues )
-	: CSphMatchQueueTraits ( 1 )
-	, m_pValues ( pValues )
+CollectQueue_c::CollectQueue_c ( int iSize, CSphVector<BYTE>& dCollectedValues )
+	: m_iLastID ( 0 )
+	, m_iMaxMatches ( iSize  )
+	, m_tWriter ( dCollectedValues )
+{}
+
+
+/// sort/uniq already collected and store them to writer
+void CollectQueue_c::ProcessPushed()
 {
-	m_pValues->Reserve ( iSize );
+	m_dUnsortedDocs.Uniq();
+	for ( auto& iCurId : m_dUnsortedDocs )
+		m_tWriter.ZipOffset ( iCurId - std::exchange ( m_iLastID, iCurId ) );
+	m_dUnsortedDocs.Resize ( 0 );
 }
 
 
-bool CSphCollectQueue::PushMatch ( const CSphMatch & tEntry )
+bool CollectQueue_c::PushMatch ( const CSphMatch & tEntry )
 {
-	++m_iTotal;
-	m_pValues->Add ( sphGetDocID ( m_bDocIdDynamic ? tEntry.m_pDynamic : tEntry.m_pStatic ) );
+	if ( m_dUnsortedDocs.GetLength() >= m_iMaxMatches && m_dUnsortedDocs.GetLength() == m_dUnsortedDocs.GetLimit() )
+		ProcessPushed();
+
+	m_dUnsortedDocs.Add ( sphGetDocID ( m_bDocIdDynamic ? tEntry.m_pDynamic : tEntry.m_pStatic ) );
 	return true;
 }
 
-
-int CSphCollectQueue::Flatten ( CSphMatch * )
+/// final update pass
+void CollectQueue_c::Finalize ( MatchProcessor_i&, bool, bool )
 {
-	m_iTotal = 0;
-	return 0;
+	ProcessPushed();
+	m_iLastID = 0;
 }
 
 
-void CSphCollectQueue::SetSchema ( ISphSchema * pSchema, bool bRemapCmp )
+void CollectQueue_c::SetSchema ( ISphSchema * pSchema, bool bRemapCmp )
 {
 	BASE::SetSchema ( pSchema, bRemapCmp );
 
@@ -5916,7 +5786,7 @@ bool QueueCreator_c::MaybeAddExpressionsFromSelectList ()
 
 bool QueueCreator_c::AddExpressionsForUpdates()
 {
-	if ( !m_tSettings.m_pUpdate && !m_tSettings.m_pCollection )
+	if ( !m_tSettings.m_pCollection )
 		return true;
 
 	const CSphColumnInfo * pOldDocId = m_pSorterSchema->GetAttr ( sphGetDocidName() );
@@ -6509,11 +6379,8 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 
 	if ( !m_bGotGroupby )
 	{
-		if ( m_tSettings.m_pUpdate )
-			return new CSphUpdateQueue ( m_tSettings.m_iMaxMatches, m_tSettings.m_pUpdate, m_tQuery.m_bIgnoreNonexistent, m_tQuery.m_bStrict );
-
 		if ( m_tSettings.m_pCollection )
-			return new CSphCollectQueue ( m_tSettings.m_iMaxMatches, m_tSettings.m_pCollection );
+			return new CollectQueue_c ( m_tSettings.m_iMaxMatches, *m_tSettings.m_pCollection );
 
 		int iMaxMatches = ReduceMaxMatches();
 		ISphMatchSorter * pResult = CreatePlainSorter ( m_eMatchFunc, m_tQuery.m_bSortKbuffer, iMaxMatches, bNeedFactors );

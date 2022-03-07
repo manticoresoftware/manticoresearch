@@ -76,18 +76,23 @@ CSphString IndexFiles_c::FatalMsg ( const char * sMsg )
 	return sFatalMsg;
 }
 
-CSphString IndexFiles_c::FullPath ( const char * sExt, const char* sSuffix, const char * sBase )
+CSphString IndexFiles_c::FullPath ( const char * szExt, const CSphString& sSuffix, const CSphString& sBase )
 {
-	CSphString sResult;
-	sResult.SetSprintf ( "%s%s%s", sBase ? sBase : m_sFilename.cstr (), sSuffix, sExt );
-	return sResult;
+	StringBuilder_c sResult;
+	sResult << (sBase.IsEmpty() ? m_sFilename : sBase) << sSuffix << szExt;
+	return sResult.cstr();
 }
 
-CSphString IndexFiles_c::MakePath ( const char * sSuffix, const char * sBase )
+CSphString IndexFiles_c::MakePath ( const char* szSuffix, const CSphString& sBase )
 {
-	CSphString sResult;
-	sResult.SetSprintf ( "%s%s", sBase ? sBase : m_sFilename.cstr (), sSuffix );
-	return sResult;
+	StringBuilder_c sResult;
+	sResult << sBase << szSuffix;
+	return sResult.cstr();
+}
+
+CSphString IndexFiles_c::MakePath ( const char * szSuffix )
+{
+	return MakePath ( szSuffix, m_sFilename );
 }
 
 bool IndexFiles_c::HasAllFiles ( const char * sType )
@@ -103,17 +108,17 @@ bool IndexFiles_c::HasAllFiles ( const char * sType )
 	return true;
 }
 
-void IndexFiles_c::Unlink ( const char * sType )
+void IndexFiles_c::Unlink ( const char * szType )
 {
 	for ( const auto &dExt : g_dIndexFilesExts )
 	{
-		auto sFile = FullPath ( dExt.m_szExt, sType );
+		auto sFile = FullPath ( dExt.m_szExt, szType );
 		if ( ::unlink ( sFile.cstr() ) && !dExt.m_bOptional )
 			sphWarning ( "unlink failed (file '%s', error '%s'", sFile.cstr (), strerrorm ( errno ) );
 	}
 }
 
-bool IndexFiles_c::Rename ( const char * sFromSz, const char * sToSz )  // move files between different bases
+bool IndexFiles_c::TryRename ( const CSphString& sFrom, const CSphString& sTo )  // move files between different bases
 {
 	m_bFatal = false;
 	bool bRenamed[SPH_EXT_TOTAL] = { false };
@@ -124,21 +129,21 @@ bool IndexFiles_c::Rename ( const char * sFromSz, const char * sToSz )  // move 
 		if ( m_uVersion<dExt.m_uMinVer || !dExt.m_bCopy )
 			continue;
 
-		auto sFrom = FullPath ( dExt.m_szExt, "", sFromSz );
-		auto sTo = FullPath ( dExt.m_szExt, "", sToSz );
+		auto sFullFrom = FullPath ( dExt.m_szExt, "", sFrom );
+		auto sFullTo = FullPath ( dExt.m_szExt, "", sTo );
 
 #if _WIN32
-		::unlink ( sTo.cstr() );
+		::unlink ( sFullTo.cstr() );
 		sphLogDebug ( "%s unlinked", sTo.cstr() );
 #endif
 
-		if ( sph::rename ( sFrom.cstr (), sTo.cstr () ) )
+		if ( sph::rename ( sFullFrom.cstr (), sFullTo.cstr () ) )
 		{
 			// this is no reason to fail if not necessary files missed.
 			if ( dExt.m_bOptional )
 				continue;
 
-			m_sLastError.SetSprintf ( "rename %s to %s failed: %s", sFrom.cstr (), sTo.cstr (), strerrorm ( errno ) );
+			m_sLastError.SetSprintf ( "rename %s to %s failed: %s", sFullFrom.cstr (), sFullTo.cstr (), strerrorm ( errno ) );
 			bAllOk = false;
 			break;
 		}
@@ -154,11 +159,11 @@ bool IndexFiles_c::Rename ( const char * sFromSz, const char * sToSz )  // move 
 			continue;
 
 		const auto & dExt = g_dIndexFilesExts[i];
-		auto sFrom = FullPath ( dExt.m_szExt, "", sToSz );
-		auto sTo = FullPath ( dExt.m_szExt, "", sFromSz );
-		if ( sph::rename ( sFrom.cstr (), sTo.cstr () ) )
+		auto sFullFrom = FullPath ( dExt.m_szExt, "", sTo );
+		auto sFullTo = FullPath ( dExt.m_szExt, "", sFrom );
+		if ( sph::rename ( sFullFrom.cstr (), sFullTo.cstr () ) )
 		{
-			sphLogDebug ( "rollback failure when renaming %s to %s", sFrom.cstr (), sTo.cstr () );
+			sphLogDebug ( "rollback failure when renaming %s to %s", sFullFrom.cstr (), sFullTo.cstr () );
 			m_bFatal = true;
 		}
 	}
@@ -166,21 +171,20 @@ bool IndexFiles_c::Rename ( const char * sFromSz, const char * sToSz )  // move 
 	return false;
 }
 
-bool IndexFiles_c::RenameLock ( const char * sToSz, int &iLockFD )
+bool IndexFiles_c::RenameLock ( const CSphString& sTo, int &iLockFD )
 {
 	if ( iLockFD<0 ) // no lock, no renaming need
 		return true;
 
 	m_bFatal = false;
-	auto sFrom = FullPath ( sphGetExt(SPH_EXT_SPL) );
-	auto sTo = FullPath ( sphGetExt(SPH_EXT_SPL), "", sToSz );
+	auto sFullFrom = FullPath ( sphGetExt(SPH_EXT_SPL) );
+	auto sFullTo = FullPath ( sphGetExt(SPH_EXT_SPL), "", sTo );
 
 #if !_WIN32
-	if ( !sph::rename ( sFrom.cstr (), sTo.cstr () ) )
+	if ( !sph::rename ( sFullFrom.cstr (), sFullTo.cstr () ) )
 		return true;
 
-	m_sLastError.SetSprintf ("failed to rename lock %s to %s, fd=%d, error %s (%d); ", sFrom.cstr(),
-				   sTo.cstr(), iLockFD, strerrorm ( errno ), errno );
+	m_sLastError.SetSprintf ("failed to rename lock %s to %s, fd=%d, error %s (%d); ", sFullFrom.cstr(), sFullTo.cstr(), iLockFD, strerrorm ( errno ), errno );
 
 	// that is renaming of only 1 file failed; no need to rollback.
 	m_bFatal = true;
@@ -189,37 +193,35 @@ bool IndexFiles_c::RenameLock ( const char * sToSz, int &iLockFD )
 #else
 	// on Windows - no direct rename. Lock new instead, release previous.
 	int iNewLock=-1;
-	if ( !RawFileLock ( sTo, iNewLock, m_sLastError ) )
+	if ( !RawFileLock ( sFullTo, iNewLock, m_sLastError ) )
 		return false;
 	auto iOldLock = iLockFD;
 	iLockFD = iNewLock;
-	RawFileUnLock ( sFrom, iOldLock );
+	RawFileUnLock ( sFullFrom, iOldLock );
 	return true;
 #endif
 }
 
 // move from backup to path using full (long) paths; fail is fatal
-bool IndexFiles_c::Rollback ( const char * sBackup, const char * sPath )
+bool IndexFiles_c::Rename ( const CSphString& sFrom, const CSphString& sTo )
 {
-	m_bFatal = false;
 	for ( const auto &dExt : g_dIndexFilesExts )
 	{
-		auto sFrom = FullPath ( dExt.m_szExt, "", sBackup );
-		auto sTo = FullPath ( dExt.m_szExt, "", sPath );
+		auto sFullFrom = FullPath ( dExt.m_szExt, "", sFrom );
+		auto sFullTo = FullPath ( dExt.m_szExt, "", sTo );
 
-		if ( !sphIsReadable ( sFrom ) )
+		if ( !sphIsReadable ( sFullFrom ) )
 		{
-			::unlink ( sTo.cstr () );
+			::unlink ( sFullTo.cstr () );
 			continue;
 		}
 #if _WIN32
-		::unlink ( sTo.cstr() );
-		sphLogDebug ( "%s unlinked", sTo.cstr() );
+		::unlink ( sFullTo.cstr() );
+		sphLogDebug ( "%s unlinked", sFullTo.cstr() );
 #endif
-		if ( sph::rename ( sFrom.cstr (), sTo.cstr () ) )
+		if ( sph::rename ( sFullFrom.cstr (), sFullTo.cstr () ) )
 		{
-			sphLogDebug ( "rollback rename %s to %s failed: %s", sFrom.cstr (), sTo.cstr (), strerrorm (	errno ) );
-			m_bFatal = true;
+			sphLogDebug ( "rename %s to %s failed: %s", sFullFrom.cstr (), sFullTo.cstr (), strerrorm ( errno ) );
 			return false;
 		}
 	}
@@ -227,24 +229,24 @@ bool IndexFiles_c::Rollback ( const char * sBackup, const char * sPath )
 }
 
 // move everything except not intended for copying.
-bool IndexFiles_c::RenameSuffix ( const char * sFromSuffix, const char * sToSuffix )
+bool IndexFiles_c::TryRenameSuffix ( const CSphString& sFromSuffix, const CSphString& sToSuffix )
 {
-	return Rename ( FullPath ( "", sFromSuffix ).cstr (), FullPath ( "", sToSuffix ).cstr () );
+	return TryRename ( FullPath ( "", sFromSuffix ), FullPath ( "", sToSuffix ) );
 }
 
-bool IndexFiles_c::RenameBase ( const char * sToBase )  // move files to different base
+bool IndexFiles_c::TryRenameBase ( const CSphString& sToBase )  // move files to different base
 {
-	return Rename ( FullPath ( "" ).cstr (), sToBase );
+	return TryRename ( FullPath ( "" ), sToBase );
 }
 
-bool IndexFiles_c::RelocateToNew ( const char * sNewBase )
+bool IndexFiles_c::RelocateToNew ( const CSphString& sNewBase )
 {
-	return Rollback( FullPath ( "", "", sNewBase ).cstr(), FullPath ( "", ".new" ).cstr() );
+	return Rename ( FullPath ( "", "", sNewBase ), FullPath ( "", ".new" ) );
 }
 
-bool IndexFiles_c::RollbackSuff ( const char * sBackupSuffix, const char * sActiveSuffix )
+bool IndexFiles_c::RenameSuffix ( const CSphString& sFrom, const CSphString& sTo )
 {
-	return Rollback ( FullPath ( "", sBackupSuffix ).cstr (), FullPath ( "", sActiveSuffix ).cstr () );
+	return Rename ( FullPath ( "", sFrom ), FullPath ( "", sTo ) );
 }
 
 bool IndexFiles_c::CheckHeader ( const char * sType )

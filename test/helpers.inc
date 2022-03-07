@@ -2438,6 +2438,12 @@ class SphinxConfig
         $skip_result = ArrVal ($attrs, 'skip',false);
         $ignore_rows = ArrVals ($attrs, 'ignore');
         $hide = ArrVals ($attrs, 'hide',false);
+        $params = ArrVal ( $attrs, "params");
+
+        // mysql_host - we direct query to host mysql server, NOT to searchd! (that is sometimes need for rotation)
+        $mysql_host = ($use_agent==="mysql");
+        if ($mysql_host)
+            $use_agent = 0;
 
 		// $query - array, 0 is data, 1 is attributes, 2 is 'is_http' bool.
 
@@ -2540,6 +2546,12 @@ class SphinxConfig
                     close_and_null_conn($connection);
                     $old_agent = -1;
                     break;
+                case 'run-indexer':
+                    RunIndexer ( $error, $params );
+                    if ($sleep_agent>0)
+                        Sleep ( $sleep_agent);
+                    $status = $params . ' ok.';
+                    break;
                 case 'wait-ready':
                     $ql = new QLClient();
                     $ql->SetConnection($connection);
@@ -2593,6 +2605,23 @@ class SphinxConfig
 	        $this->PickResult ( $query_result );
 			return true;
 		}
+
+        if ($mysql_host)
+        {
+            global $gl_conn;
+            if ( !LegacyConnectDB())
+                return FALSE;
+            @mysql_query ( $query );
+            @mysql_close();
+            $gl_conn = NULL;
+
+            if ($sleep_agent>0)
+                Sleep ( $sleep_agent);
+
+            $r = array("sphinxql"=>"/* " . $query . " => ok. */");
+            $this->PickResult ( $r );
+            return true;
+        }
 
 		if ( $query=="RECONNECT" )
 		{

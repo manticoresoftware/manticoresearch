@@ -718,9 +718,8 @@ HistogramContainer_c::~HistogramContainer_c()
 
 void HistogramContainer_c::Reset()
 {
-	m_dHistogramHash.IterateStart();
-	while ( m_dHistogramHash.IterateNext() )
-		SafeDelete ( m_dHistogramHash.IterateGet() );
+	for ( auto& tHistogram : m_dHistogramHash )
+		SafeDelete ( tHistogram.second );
 
 	m_dHistogramHash.Reset();
 	m_dHistograms.Resize(0);
@@ -735,10 +734,9 @@ bool HistogramContainer_c::Save ( const CSphString & sFile, CSphString & sError 
 
 	tWriter.PutDword ( m_dHistogramHash.GetLength() );
 
-	m_dHistogramHash.IterateStart();
-	while ( m_dHistogramHash.IterateNext() )
+	for ( auto& tHistogram : m_dHistogramHash )
 	{
-		Histogram_i * pHistogram = m_dHistogramHash.IterateGet();
+		Histogram_i * pHistogram = tHistogram.second;
 		assert ( pHistogram );
 		pHistogram->Finalize();
 		tWriter.PutString ( pHistogram->GetAttrName() );

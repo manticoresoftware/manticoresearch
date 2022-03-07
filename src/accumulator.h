@@ -78,6 +78,8 @@ struct ReplicationCommand_t
 	const CSphQuery * m_pUpdateCond = nullptr;
 };
 
+ReplicationCommand_t* MakeReplicationCommand ( ReplicationCommand_e eCommand, CSphString sIndex, CSphString sCluster = CSphString() );
+
 class RtIndex_i;
 class ColumnarBuilderRT_i;
 
@@ -118,8 +120,7 @@ public:
 	uint64_t		GetSchemaHash() const { return m_uSchemaHash; }
 
 	RtIndex_i *		GetIndex() const { return m_pIndex; }
-	ReplicationCommand_t * AddCommand ( ReplicationCommand_e eCmd );
-	ReplicationCommand_t * AddCommand ( ReplicationCommand_e eCmd, const CSphString & sCluster, const CSphString & sIndex );
+	ReplicationCommand_t * AddCommand ( ReplicationCommand_e eCmd, CSphString sIndex, CSphString sCluster = CSphString() );
 
 	void			LoadRtTrx ( const BYTE * pData, int iLen );
 	void			SaveRtTrx ( MemoryWriter_c & tWriter ) const;
@@ -127,7 +128,7 @@ public:
 	const BYTE *	GetPackedKeywords() const;
 	int				GetPackedLen() const;
 
-	bool			SetupDocstore ( RtIndex_i & tIndex, CSphString & sError );
+	bool			SetupDocstore ( const RtIndex_i & tIndex, CSphString & sError );
 
 private:
 	bool								m_bReplace = false;		///< insert or replace mode (affects CleanupDuplicates() behavior)

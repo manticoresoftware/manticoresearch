@@ -195,10 +195,10 @@ enum UpdateType_e
 
 enum ESphAddIndex
 {
-	ADD_ERROR	= 0, // wasn't added because of config or other error
-	ADD_DSBLED	= 1, // added into disabled hash (need to prealloc/preload, etc)
-	ADD_DISTR	= 2, // distributed
-	ADD_SERVED	= 3, // added and active (can be used in queries)
+	ADD_ERROR,		// wasn't added because of config or other error
+	ADD_NEEDLOAD,	// index is loaded, but need to prealloc/preload, etc.
+	ADD_DISTR, 		// distributed
+	ADD_SERVED,		// added and active (can be used in queries)
 //	ADD_CLUSTER	= 4,
 };
 
@@ -616,7 +616,7 @@ class ServedStats_c
 {
 public:
 						ServedStats_c();
-	virtual				~ServedStats_c();
+	virtual				~ServedStats_c() = default;
 
 	void				AddQueryStat ( uint64_t uFoundRows, uint64_t uQueryTime ); //  REQUIRES ( !m_tStatsLock );
 						/// since mutex is internal,
@@ -625,15 +625,15 @@ public:
 	void				CalculateQueryStatsExact ( QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const EXCLUDES ( m_tStatsLock );
 #endif
 private:
-	mutable CSphRwlock m_tStatsLock;
+	mutable RwLock_t m_tStatsLock;
 	CSphScopedPtr<QueryStatContainer_i> m_pQueryStatRecords GUARDED_BY ( m_tStatsLock );
 
 #ifndef NDEBUG
 	CSphScopedPtr<QueryStatContainer_i> m_pQueryStatRecordsExact GUARDED_BY ( m_tStatsLock );
 #endif
 
-	TDigest_i *			m_pQueryTimeDigest GUARDED_BY ( m_tStatsLock ) = nullptr;
-	TDigest_i *			m_pRowsFoundDigest GUARDED_BY ( m_tStatsLock ) = nullptr;
+	CSphScopedPtr<TDigest_i>	m_pQueryTimeDigest GUARDED_BY ( m_tStatsLock );
+	CSphScopedPtr<TDigest_i>	m_pRowsFoundDigest GUARDED_BY ( m_tStatsLock );
 
 	uint64_t			m_uTotalFoundRowsMin GUARDED_BY ( m_tStatsLock )= UINT64_MAX;
 	uint64_t			m_uTotalFoundRowsMax GUARDED_BY ( m_tStatsLock )= 0;
@@ -649,26 +649,48 @@ private:
 							QueryStatElement_t & tTimeResult, uint64_t uTimestamp, uint64_t uInterval, int iRecords );
 
 	void				DoStatCalcStats ( const QueryStatContainer_i * pContainer, QueryStats_t & tRowsFoundStats,
-							QueryStats_t & tQueryTimeStats ) const EXCLUDES ( m_tStatsLock );
+							QueryStats_t & tQueryTimeStats ) const REQUIRES_SHARED ( m_tStatsLock );
 };
 
 // calculate index mass based on status
 uint64_t CalculateMass ( const CSphIndexStatus & dStats );
 
-struct ServedDesc_t
+struct ServedDesc_t : public ISphRefcountedMT
 {
-	CSphIndex *	m_pIndex		= nullptr; ///< owned index; will be deleted in d-tr
+	IndexType_e m_eType = IndexType_e::PLAIN;
 	CSphString	m_sIndexPath;	///< current index path; independent but related to one in m_pIndex
-	CSphString	m_sNewPath;		///< when reloading because of config changed, it contains path to new index.
-	bool		m_bOnlyNew		= false; ///< load new clean index - no previous valid files, no .old backups possible, no way to serve if loading failed.
 	CSphString	m_sGlobalIDFPath;
-	int64_t		m_iMass			= 0; // relative weight (by access speed) of the index
-	int			m_iRotationPriority = 0;	// rotation priority (for proper rotation of indexes chained by killlist_target). 0==high priority
 	StrVec_t	m_dKilllistTargets;
-	mutable CSphString	m_sUnlink;
-	IndexType_e	m_eType			= IndexType_e::PLAIN;
+
 	CSphString	m_sCluster;
-	MutableIndexSettings_c m_tSettings = MutableIndexSettings_c::GetDefaults();
+	MutableIndexSettings_c m_tSettings { MutableIndexSettings_c::GetDefaults() };
+
+	ServedDesc_t() = default;
+	ServedDesc_t ( const ServedDesc_t& rhs )
+		: m_eType { rhs.m_eType }
+		, m_sIndexPath { rhs.m_sIndexPath }
+		, m_sGlobalIDFPath { rhs.m_sGlobalIDFPath }
+		, m_dKilllistTargets { rhs.m_dKilllistTargets }
+		, m_sCluster { rhs.m_sCluster }
+		, m_tSettings { rhs.m_tSettings }
+	{}
+
+	void Swap ( ServedDesc_t& rhs ) noexcept
+	{
+		::Swap ( m_eType, rhs.m_eType );
+		::Swap ( m_sIndexPath, rhs.m_sIndexPath );
+		::Swap ( m_sGlobalIDFPath, rhs.m_sGlobalIDFPath );
+		::Swap ( m_dKilllistTargets, rhs.m_dKilllistTargets );
+		::Swap ( m_sCluster, rhs.m_sCluster );
+		::Swap ( m_tSettings, rhs.m_tSettings );
+	}
+
+	ServedDesc_t ( ServedDesc_t&& rhs ) noexcept { Swap ( rhs ); }
+	ServedDesc_t& operator= ( ServedDesc_t rhs ) noexcept
+	{
+		Swap ( rhs );
+		return *this;
+	}
 
 	// statics instead of members below used to simultaneously check pointer for null also.
 
@@ -713,354 +735,440 @@ struct ServedDesc_t
 			|| pServed->m_eType==IndexType_e::RT
 			|| pServed->m_eType==IndexType_e::DISTR; // fixme! distrs not necessary ft.
 	}
-
-	// Update index mass for searching. Mass after preread typically will be less.
-	static void UpdateMass ( const ServedDesc_t* pServed )
-	{
-		if ( !pServed )
-			return;
-		CSphIndexStatus tStatus;
-		pServed->m_pIndex->GetStatus ( &tStatus );
-		// break const, since mass value is not critical for races
-		const_cast<ServedDesc_t *>(pServed)->m_iMass = CalculateMass ( tStatus );
-	}
-
-	// Update index mass for searching. Mass after preread typically will be less.
-	static uint64_t GetIndexMass ( const ServedDesc_t* pServed )
-	{
-		if ( !pServed )
-			return 0;
-		return pServed->m_iMass;
-	}
-
-	virtual                ~ServedDesc_t ();
 };
 
-// wrapped ServedDesc_t - to be served as pointers in containers
-// (fully block any access to internals)
-// create ServedDesc[R|W]Ptr_c instance to have actual access to the members.
-class ServedIndex_c : public ISphRefcountedMT, private ServedDesc_t, public ServedStats_c
+// wrap CSphIndex into refcounted, trace it finally unlink on dtr (if requested)
+class RunningIndex_c: public ISphRefcountedMT
 {
 	mutable Threads::Coro::RWLock_c m_tLock;
+	std::unique_ptr<CSphIndex> m_pIndex GUARDED_BY ( m_tLock ); ///< owned index; will be deleted in d-tr
+	mutable CSphString m_sUnlink;								///< set if we need to unlink the index on destroy.
 
-private:
-	friend class ServedDescRPtr_c;
-	friend class ServedDescWPtr_c;
+	~RunningIndex_c() override;
 
-	const ServedDesc_t * ReadLock () const ACQUIRE_SHARED( m_tLock );
-	ServedDesc_t * WriteLock () const ACQUIRE( m_tLock );
-	void Unlock () const UNLOCK_FUNCTION( m_tLock );
-//	void UpgradeLock() const RELEASE (m_tLock) ACQUIRE (m_tLock);
+	template<typename IDX> friend class RIdx_T;
+	template<typename IDX> friend class WIdx_T;
+	friend class ServedIndex_c;
 
-protected:
+public:
+	Threads::Coro::RWLock_c& Locker() const RETURN_CAPABILITY ( m_tLock )
+	{
+		return m_tLock;
+	}
+};
+
+using RunningIndexRefPtr_t = CSphRefcountedPtr<RunningIndex_c>;
+
+// wrapped ServedDesc_t - to be served as pointers in containers
+class ServedIndex_c : public ServedDesc_t
+{
+	mutable int64_t			m_iMass = 0;	// relative weight (by access speed) of the index
+
+	ServedIndex_c() = default;
+	friend CSphRefcountedPtr<ServedIndex_c> MakeServedIndex();
+	friend CSphIndex* UnlockedHazardIdxFromServed ( const ServedIndex_c& tServed );
+
 	// no manual deletion; lifetime managed by AddRef/Release()
 	~ServedIndex_c () override = default;
 
-public:
-
-	explicit ServedIndex_c ( const ServedDesc_t& tDesc );
-	//ServedIndex_c ();
-
-	// fake alias to private m_tLock to allow clang thread-safety analysis
-	CSphRwlock * rwlock () const RETURN_CAPABILITY ( m_tLock )
-	{ return nullptr; }
-
-};
-
-
-/// RAII shared reader for ServedDesc_t hidden in ServedIndex_c
-class SCOPED_CAPABILITY ServedDescRPtr_c : ISphNoncopyable
-{
-public:
-	ServedDescRPtr_c() = default;
-	// by default acquire read (shared) lock
-	explicit ServedDescRPtr_c ( const ServedIndex_c * pLock ) ACQUIRE_SHARED( pLock->m_tLock )
-		: m_pLock { pLock }
+	// available only to friends
+	inline CSphIndex* GetInternalIndexAvoidingLocks () const NO_THREAD_SAFETY_ANALYSIS
 	{
-		if ( m_pLock )
-			m_pCore = m_pLock->ReadLock();
-	}
-
-	/// unlock on going out of scope
-	~ServedDescRPtr_c () RELEASE ()
-	{
-		if ( m_pLock )
-			m_pLock->Unlock ();
+		if ( !m_pIndex )
+			return nullptr;
+		return m_pIndex->m_pIndex.get();
 	}
 
 public:
-	const ServedDesc_t * operator-> () const
-	{ return m_pCore; }
+	RunningIndexRefPtr_t m_pIndex;
+	mutable SharedPtr_t<ServedStats_c> m_pStats;
 
-	explicit operator bool () const
-	{ return m_pCore!=nullptr; }
+public:
+	// Update index mass for searching. Mass after preread typically will be less.
+	void UpdateMass () const;
 
-	operator const ServedDesc_t * () const
-	{ return m_pCore; }
+	// Get index mass
+	static uint64_t GetIndexMass ( const ServedIndex_c* pServed );
 
-	explicit operator const ServedStats_c * () const
-	{ return m_pLock; }
-
-	const ServedDesc_t * Ptr () const
-	{ return m_pCore; }
-
-/*	void UpgradeLock() const NO_THREAD_SAFETY_ANALYSIS
-	{
-		if ( m_pLock )
-			m_pLock->UpgradeLock();
-	} */
-
-private:
-	const ServedDesc_t * m_pCore = nullptr;
-	const ServedIndex_c * m_pLock = nullptr;
+	void SetIdx ( std::unique_ptr<CSphIndex>&& pIndex );
+	void SetIdxAndStatsFrom ( const ServedIndex_c& tIndex );
+	void SetStatsFrom ( const ServedIndex_c& tIndex );
+	void SetUnlink ( CSphString sUnlink ) const;
 };
 
+using cServedIndexRefPtr_c = CSphRefcountedPtr<const ServedIndex_c>;
+using ServedIndexRefPtr_c = CSphRefcountedPtr<ServedIndex_c>;
+ServedIndexRefPtr_c MakeServedIndex();
 
-/// RAII exclusive writer for ServedDesc_t hidden in ServedIndex_c
-class SCOPED_CAPABILITY ServedDescWPtr_c : ISphNoncopyable
+/// RAII shared reader for CSphIndex* hidden in ServedIndexRefPtr_c
+template<typename PIDX>
+class SCOPED_CAPABILITY RIdx_T : ISphNoncopyable
 {
+	const RunningIndex_c& m_tRunningIndex;
+	CSphRefcountedPtr<const ISphRefcountedMT> m_pServedKeeper;
+
 public:
-	ServedDescWPtr_c () = default;
+	// acquire read (shared) lock
+	explicit RIdx_T ( const cServedIndexRefPtr_c& pServed ) ACQUIRE_SHARED ( ( *pServed ).m_pIndex->Locker(), m_tRunningIndex.m_tLock )
+		: m_tRunningIndex { *pServed->m_pIndex }
+		, m_pServedKeeper { pServed }
+	{
+		assert ( pServed );
+		m_tRunningIndex.m_tLock.ReadLock();
+	}
+
+	~RIdx_T () RELEASE () { m_tRunningIndex.m_tLock.Unlock(); }
+
+	PIDX Ptr () const NO_THREAD_SAFETY_ANALYSIS { return static_cast<PIDX> ( m_tRunningIndex.m_pIndex.get() ); }
+	PIDX operator-> () const { return Ptr(); }
+	explicit operator bool () const NO_THREAD_SAFETY_ANALYSIS { return m_tRunningIndex.m_pIndex!=nullptr; }
+	operator PIDX () const { return Ptr(); }
+};
+
+using RIdx_c = RIdx_T<const CSphIndex*>;	// read-lock backend, and provide const access
+using RWIdx_c = RIdx_T<CSphIndex*>;			// read-lock backend, and provide non-const access (that is - for inserts, deletes, etc.)
+
+
+/// RAII exclusive writer for CSphIndex* hidden in ServedIndexRefPtr_c
+template<typename PIDX>
+class SCOPED_CAPABILITY WIdx_T : ISphNoncopyable
+{
+	RunningIndex_c& m_tRunningIndex;
+	CSphRefcountedPtr<const ISphRefcountedMT> m_pServedKeeper;
+
+public:
+	// acquire write (exclusive) lock
+	explicit WIdx_T ( const cServedIndexRefPtr_c& pServed ) ACQUIRE ( (*pServed).m_pIndex->Locker() ) ACQUIRE ( m_tRunningIndex.m_tLock )
+		: m_tRunningIndex { *pServed->m_pIndex }
+		, m_pServedKeeper { pServed }
+	{
+		assert ( pServed );
+		m_tRunningIndex.m_tLock.WriteLock();
+	}
 
 	// acquire write (exclusive) lock
-	explicit ServedDescWPtr_c ( const ServedIndex_c * pLock ) ACQUIRE ( pLock->m_tLock )
-		: m_pLock { pLock }
+	explicit WIdx_T ( const ServedIndexRefPtr_c& pServed ) ACQUIRE ( ( *pServed ).m_pIndex->Locker() ) ACQUIRE ( m_tRunningIndex.m_tLock )
+		: m_tRunningIndex { *pServed->m_pIndex }
+		, m_pServedKeeper { pServed }
 	{
-		if ( m_pLock )
-			m_pCore = m_pLock->WriteLock ();
+		assert ( pServed );
+		m_tRunningIndex.m_tLock.WriteLock();
 	}
 
-	/// unlock on going out of scope
-	~ServedDescWPtr_c () RELEASE ()
-	{
-		if ( m_pLock )
-			m_pLock->Unlock ();
-	}
+	~WIdx_T () RELEASE () { m_tRunningIndex.m_tLock.Unlock(); }
 
-public:
-	ServedDesc_t * operator-> () const
-	{ return m_pCore; }
-
-	explicit operator bool () const
-	{ return m_pCore!=nullptr; }
-
-	operator ServedDesc_t * () const
-	{ return m_pCore; }
-
-	explicit operator const ServedStats_c * () const
-	{ return m_pLock; }
-
-	ServedDesc_t * Ptr () const
-	{ return m_pCore; }
-
-private:
-	ServedDesc_t * m_pCore = nullptr;
-	const ServedIndex_c * m_pLock = nullptr;
+	PIDX Ptr() const NO_THREAD_SAFETY_ANALYSIS { return static_cast<PIDX> ( m_tRunningIndex.m_pIndex.get() ); }
+	PIDX operator-> () const { return Ptr(); }
+	explicit operator bool () const NO_THREAD_SAFETY_ANALYSIS { return m_tRunningIndex.m_pIndex!=nullptr; }
+	operator PIDX () const { return Ptr(); }
 };
 
+using WIdx_c = WIdx_T<CSphIndex*>;			// write-lock backend, and provide full access
 
-using ServedIndexRefPtr_c = CSphRefcountedPtr<ServedIndex_c>;
-
-using AddOrReplaceHookFn = std::function<void( ISphRefcountedMT*, const CSphString& )>;
-
-/// hash of ref-counted pointers, guarded by RW-lock
-class GuardedHash_c : public ISphNoncopyable
+/// Accessor to naked CSphIndex* hidden in ServedIndex_c. Doesn't use r/w lock, use only to work with free or pre-locked indexes!
+inline CSphIndex* UnlockedHazardIdxFromServed ( const ServedIndex_c& tServed )
 {
-	friend class RLockedHashIt_c;
-	friend class WLockedHashIt_c;
-	using RefCntHash_t = SmallStringHash_T<ISphRefcountedMT *>;
-
-public:
-	GuardedHash_c () = default;
-	~GuardedHash_c ();
-
-	// atomically try add an entry and adopt it
-	bool AddUniq ( ISphRefcountedMT * pEntry, const CSphString &tKey ) EXCLUDES ( m_tIndexesRWLock );
-
-	// atomically set new entry, then release previous, if not the same and is non-zero
-	void AddOrReplace ( ISphRefcountedMT * pEntry, const CSphString &tKey ) EXCLUDES ( m_tIndexesRWLock );
-
-	void SetAddOrReplaceHook( AddOrReplaceHookFn pHook )	{ m_pHook = std::move( pHook ); }
-
-	// release and delete from hash by key
-	bool Delete ( const CSphString &tKey ) EXCLUDES ( m_tIndexesRWLock );
-
-	// delete by key if item exists, but null
-	bool DeleteIfNull ( const CSphString &tKey ) EXCLUDES ( m_tIndexesRWLock );
-
-	int GetLength () const EXCLUDES ( m_tIndexesRWLock );
-
-	// check if value exists (even if it is nullptr)
-	bool Contains ( const CSphString &tKey ) const EXCLUDES ( m_tIndexesRWLock );
-
-	// reset the hash
-	void ReleaseAndClear () EXCLUDES ( m_tIndexesRWLock );
-
-	// returns addreffed value
-	ISphRefcountedMT * Get ( const CSphString &tKey ) const EXCLUDES ( m_tIndexesRWLock );
-
-	// if value not exist, addref and add it. Then act as Get (addref and return by key)
-	ISphRefcountedMT * TryAddThenGet ( ISphRefcountedMT * pValue, const CSphString &tKey ) EXCLUDES ( m_tIndexesRWLock );
-
-	// fake alias to private m_tLock to allow clang thread-safety analysis
-	CSphRwlock * IndexesRWLock () const RETURN_CAPABILITY ( m_tIndexesRWLock ) { return nullptr; }
-
-private:
-	int GetLengthUnl () const REQUIRES_SHARED ( m_tIndexesRWLock );
-	void Rlock () const ACQUIRE_SHARED( m_tIndexesRWLock );
-	void Wlock () const ACQUIRE ( m_tIndexesRWLock );
-	void Unlock () const UNLOCK_FUNCTION ( m_tIndexesRWLock );
-
-private:
-	mutable RwLock_t m_tIndexesRWLock; // distinguishable name for catch possible warnings
-	RefCntHash_t m_hIndexes GUARDED_BY ( m_tIndexesRWLock );
-	AddOrReplaceHookFn m_pHook = nullptr;
-};
-
-// multi-threaded hash iterator
-// iterates guarded hash, holding it's readlock
-// that is important, since accidental changing of the hash during iteration
-// may invalidate the iterator, and then cause crash.
-// each iterator has own iteration cookie, so several of them could work in parallel
-
-/* Usage example:
- * 	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next (); )
-	{
-		auto pIdx = it.Get(); // returns smart pointer to value, addrefed; autorelease on destroy
-		if ( !pIdx )
-			continue;
-		...
-		const CSphString &sIndex = it.GetName (); // returns key value
-	}
- */
-
-class SCOPED_CAPABILITY RLockedHashIt_c : public ISphNoncopyable
-{
-public:
-	using RefPtr_c = CSphRefcountedPtr<ISphRefcountedMT>;
-	explicit RLockedHashIt_c ( const GuardedHash_c * pHash ) ACQUIRE_SHARED ( pHash->m_tIndexesRWLock
-																		  , m_pHash->m_tIndexesRWLock )
-		: m_pHash ( pHash )
-	{ m_pHash->Rlock (); }
-
-	~RLockedHashIt_c () UNLOCK_FUNCTION ()
-	{
-		m_pHash->Unlock ();
-	}
-
-	bool Next () REQUIRES_SHARED ( m_pHash->m_tIndexesRWLock )
-	{ return m_pHash->m_hIndexes.IterateNext ( &m_pIterator ); }
-
-	RefPtr_c Get () REQUIRES_SHARED ( m_pHash->m_tIndexesRWLock )
-	{
-		assert ( m_pIterator );
-		auto pRes = GuardedHash_c::RefCntHash_t::IterateGet ( &m_pIterator );
-		if ( pRes )
-			pRes->AddRef ();
-		return RefPtr_c ( pRes );
-	}
-
-	const CSphString &GetName () REQUIRES_SHARED ( m_pHash->m_tIndexesRWLock )
-	{
-		assert ( m_pIterator );
-		return GuardedHash_c::RefCntHash_t::IterateGetKey ( &m_pIterator );
-	}
-
-protected:
-	const GuardedHash_c * m_pHash;
-	void * m_pIterator = nullptr;
-};
-
-// same as above, but wlocked due to delete() member.
-// since it holds exclusive, rlocked iterator will not co-exist.
-// also it uses hash's internal iteration to allow deletion (it is ok since it is exclusive).
-/* Usage example:
-	for ( WLockedHashIt_c it ( &gAgents ); it.Next (); )
-	{
-		auto pAgent = it.Get (); // returns smart pointer to value, addrefed; autorelease on destroy
-		if ( !pAgent )
-			continue;
-		...
-		it.Delete ();	// it is safe. Delete current item, move iterator back to previous.
-	}
- */
-class SCOPED_CAPABILITY WLockedHashIt_c : public ISphNoncopyable
-{
-public:
-	explicit WLockedHashIt_c ( GuardedHash_c * pHash ) ACQUIRE ( pHash->m_tIndexesRWLock
-																  , m_pHash->m_tIndexesRWLock )
-		: m_pHash ( pHash )
-	{
-		m_pHash->Wlock ();
-		m_pHash->m_hIndexes.IterateStart ();
-	}
-
-	~WLockedHashIt_c () UNLOCK_FUNCTION ()
-	{
-		m_pHash->Unlock ();
-	}
-
-	bool Next () REQUIRES_SHARED ( m_pHash->m_tIndexesRWLock )
-	{ return m_pHash->m_hIndexes.IterateNext (); }
-
-	ISphRefcountedMT * Get () REQUIRES_SHARED ( m_pHash->m_tIndexesRWLock )
-	{
-		auto pRes = m_pHash->m_hIndexes.IterateGet ();
-		if ( pRes )
-			pRes->AddRef ();
-		return pRes;
-	}
-
-	void Delete () REQUIRES ( m_pHash->m_tIndexesRWLock )
-	{
-		m_pHash->m_hIndexes.Delete ( m_pHash->m_hIndexes.IterateGetKey () );
-	}
-
-	const CSphString &GetName () REQUIRES_SHARED ( m_pHash->m_tIndexesRWLock )
-	{
-		return m_pHash->m_hIndexes.IterateGetKey ();
-	}
-
-protected:
-	GuardedHash_c * m_pHash;
-};
-
-class SCOPED_CAPABILITY RLockedServedIt_c : public RLockedHashIt_c
-{
-public:
-	explicit RLockedServedIt_c ( const GuardedHash_c * pHash ) ACQUIRE_SHARED ( pHash->IndexesRWLock(), m_pHash->IndexesRWLock() )
-		: RLockedHashIt_c ( pHash )
-	{}
-	~RLockedServedIt_c() UNLOCK_FUNCTION() {} // d-tr explicitly written because attr UNLOCK_FUNCTION().
-
-	ServedIndexRefPtr_c Get () REQUIRES_SHARED ( m_pHash->IndexesRWLock() )
-	{
-		auto pServed = ( ServedIndex_c * ) RLockedHashIt_c::Get ().Leak ();
-		return ServedIndexRefPtr_c ( pServed );
-	}
-};
-
-extern GuardedHash_c * g_pLocalIndexes;    // served (local) indexes hash
-inline ServedIndexRefPtr_c GetServed ( const CSphString &sName, GuardedHash_c * pHash = g_pLocalIndexes )
-{
-	return ServedIndexRefPtr_c ( ( ServedIndex_c * ) pHash->Get ( sName ) );
+	return tServed.GetInternalIndexAvoidingLocks();
 }
 
-void ReleaseAndClearDisabled();
+void LightClone ( ServedIndexRefPtr_c& pTarget, const cServedIndexRefPtr_c& pSource );
+void FullClone ( ServedIndexRefPtr_c& pTarget, const cServedIndexRefPtr_c& pSource );
+
+ServedIndexRefPtr_c MakeLightClone ( const cServedIndexRefPtr_c& pSource );
+ServedIndexRefPtr_c MakeFullClone ( const cServedIndexRefPtr_c& pSource );
+
+using AddOrReplaceHookFn = std::function<void( const CSphString& )>;
+
+template<typename T> using HashOfRefcnt_T = SmallStringHash_T<RefCountedRefPtr_T<T>>;
+template<typename T> using cHashOfRefcnt_T = SmallStringHash_T<cRefCountedRefPtr_T<T>>;
+
+template<typename T>
+class cRefCountedHashOfRefcnt_T final: public ISphRefcountedMT, public cHashOfRefcnt_T<T>
+{
+protected:
+	~cRefCountedHashOfRefcnt_T() final = default;
+};
+
+template<typename T = ISphRefcountedMT>
+class ReadOnlyHash_T
+{
+public:
+	using Hash_t = cRefCountedHashOfRefcnt_T<T>;
+	using cRefPtrHash_t = cRefCountedRefPtr_T<cRefCountedHashOfRefcnt_T<T>>;
+	using cRefCountedRefPtr_t = cRefCountedRefPtr_T<T>;
+	using RefCountedRefPtr_t = RefCountedRefPtr_T<T>;
+	using Snapshot_t = std::pair<cRefPtrHash_t, int64_t>;
+
+private:
+	mutable RwLock_t m_tLock; // should be very short-term
+	cRefPtrHash_t m_pHash GUARDED_BY ( m_tLock ) { new Hash_t };
+	int64_t m_iGeneration GUARDED_BY ( m_tLock ) { 0 }; // eliminate ABA race on insert/delete
+	AddOrReplaceHookFn m_pHook = nullptr;
+
+	template<typename TT> friend class WriteableHash_T;
+
+public:
+
+	Snapshot_t GetSnapshot() const
+	{
+		ScRL_t rLock ( m_tLock );
+		return { m_pHash, m_iGeneration };
+	}
+
+	cRefPtrHash_t GetHash() const
+	{
+		return GetSnapshot().first;
+	}
+
+	bool IsEmpty() const
+	{
+		ScRL_t rLock ( m_tLock );
+		return !m_pHash->GetLength();
+	}
+
+	int GetLength() const
+	{
+		ScRL_t rLock ( m_tLock );
+		return m_pHash->GetLength();
+	}
+
+	cRefCountedRefPtr_t Get ( const CSphString& sKey ) const
+	{
+		auto pSnap = GetHash();
+		auto* pEntry = ( *pSnap ) ( sKey );
+		if ( !pEntry )
+			return cRefCountedRefPtr_t {};
+		return *pEntry;
+	}
+
+	// check if hash contains an entry
+	bool Contains ( const CSphString& sKey ) const
+	{
+		return ( *GetHash() ) ( sKey ) != nullptr;
+	}
+
+	void SetAddOrReplaceHook ( AddOrReplaceHookFn pHook ) { m_pHook = std::move ( pHook ); }
+	bool Add ( RefCountedRefPtr_t pEntry, const CSphString & sKey );
+	void AddOrReplace ( RefCountedRefPtr_t pValue, const CSphString & sKey );
+	bool Replace ( RefCountedRefPtr_t pValue, const CSphString & sKey );
+	void Delete ( const CSphString &sKey );
+	void ReleaseAndClear ();
+};
+
+// created with null set of elems
+// on d-tr any not-null set will replace the owner
+// Note, if you want to modify existing set, you NEED to guard some way period between reading old / writing modified
+template<typename T>
+class WriteableHash_T
+{
+	using cRefCountedRefPtr_t = cRefCountedRefPtr_T<T>;
+	using RefCountedRefPtr_t = RefCountedRefPtr_T<T>;
+	using cRefCountedHashOfRefcnt_t = cRefCountedHashOfRefcnt_T<T>;
+	using ReadOnlyHash_t = ReadOnlyHash_T<T>;
+	using RefPtrHash_t = RefCountedRefPtr_T<cRefCountedHashOfRefcnt_t>;
+	using cRefPtrHash_t = cRefCountedRefPtr_T<cRefCountedHashOfRefcnt_t>;
+
+public:
+	ReadOnlyHash_t& m_tOwner;
+	RefPtrHash_t m_pNewHash;
+	int64_t m_iGeneration {-1}; // to be different from default read-only generation, which is 0.
+	Threads::Handler m_fnOnHashChanged;
+
+	WriteableHash_T ( WriteableHash_T&& rhs ) noexcept = default;
+	WriteableHash_T ( ReadOnlyHash_t& tOwner, Threads::Handler&& fnOnHashChanged )
+		: m_tOwner ( tOwner )
+		, m_fnOnHashChanged { std::move ( fnOnHashChanged ) }
+	{}
+	explicit WriteableHash_T ( ReadOnlyHash_t& tOwner ) noexcept
+		: m_tOwner ( tOwner )
+	{}
+
+	bool TryCommit ( bool bForce=false )
+	{
+		if ( !m_pNewHash )
+			return true;
+
+		{
+			cRefPtrHash_t VARIABLE_IS_NOT_USED hKeeper; // will grab previous hash, so that it will be released outside the lock block.
+			{
+				ScWL_t wLock ( m_tOwner.m_tLock );
+				if ( !bForce && m_iGeneration!=m_tOwner.m_iGeneration )
+					return false;
+				// use leak since we convert 'data*' to 'const data*' here.
+				hKeeper = std::exchange ( m_tOwner.m_pHash, m_pNewHash.Leak() );
+				++m_tOwner.m_iGeneration;
+				m_iGeneration = -1;
+			}
+		}
+		if ( m_fnOnHashChanged )
+			m_fnOnHashChanged();
+		return true;
+	}
+
+	~WriteableHash_T()
+	{
+		TryCommit ( true );
+	}
+
+	void ResetChanges() // undo all changes (will not commit/change owner anyway)
+	{
+		m_pNewHash = nullptr;
+		m_iGeneration = -1;
+	}
+
+	void InitEmptyHash () // init with empty - will wipe owner on commit
+	{
+		m_pNewHash = new cRefCountedHashOfRefcnt_t;
+		m_iGeneration = -1;
+	}
+
+	void CopyOwnerHash() EXCLUDES ( m_tOwner.m_tLock ) // init with copy of owner
+	{
+		InitEmptyHash ();
+		cRefPtrHash_t tHash;
+		std::tie ( tHash, m_iGeneration ) = m_tOwner.GetSnapshot();
+		for ( const auto& tElem : *tHash )
+			m_pNewHash->Add ( tElem.second, tElem.first );
+	}
+
+	bool Add ( cRefCountedRefPtr_t pEntry, const CSphString& sKey ) { return m_pNewHash->Add ( std::move(pEntry), sKey ); }
+	bool Add ( RefCountedRefPtr_t pEntry, const CSphString& sKey ) { return Add ( cRefCountedRefPtr_t { pEntry }, sKey ); }
+};
+
+
+template<typename T>
+bool ReadOnlyHash_T<T>::Add ( RefCountedRefPtr_t pEntry, const CSphString& sKey )
+{
+	bool bSuccess;
+	WriteableHash_T<T> tChanger { *this };
+	cRefCountedRefPtr_t pConstEntry { pEntry.Leak() };
+	do {
+		tChanger.CopyOwnerHash();
+		bSuccess = tChanger.m_pNewHash->Add ( pConstEntry, sKey );
+	} while ( !tChanger.TryCommit() );
+	return bSuccess;
+}
+
+template<typename T>
+void ReadOnlyHash_T<T>::AddOrReplace ( RefCountedRefPtr_t pValue, const CSphString& sKey )
+{
+	bool bSuitable = pValue;
+	WriteableHash_T<T> tChanger { *this };
+	cRefCountedRefPtr_t pConstValue { pValue.Leak() };
+	do {
+		tChanger.CopyOwnerHash();
+		auto* pEntry = ( *tChanger.m_pNewHash ) ( sKey );
+		if ( pEntry )
+			*pEntry = pConstValue;
+		else
+			Verify ( tChanger.m_pNewHash->Add ( pConstValue, sKey ) );
+	} while ( !tChanger.TryCommit() );
+	if ( bSuitable && m_pHook )
+		m_pHook ( sKey );
+}
+
+template<typename T>
+bool ReadOnlyHash_T<T>::Replace ( RefCountedRefPtr_t pValue, const CSphString& sKey )
+{
+	if ( !Contains ( sKey ) ) // short circuit check, will also check in clone later.
+		return false;
+
+	WriteableHash_T<T> tChanger { *this };
+	do {
+		tChanger.CopyOwnerHash();
+		auto* pEntry = ( *tChanger.m_pNewHash ) ( sKey );
+		if ( !pEntry )
+		{
+			tChanger.ResetChanges();
+			return false;
+		}
+		*pEntry = pValue;
+	} while ( !tChanger.TryCommit() );
+	return true;
+}
+
+template<typename T>
+void ReadOnlyHash_T<T>::Delete ( const CSphString& sKey )
+{
+	WriteableHash_T<T> tChanger { *this };
+	do {
+		tChanger.CopyOwnerHash();
+		if ( !tChanger.m_pNewHash->Delete ( sKey ) )
+			tChanger.ResetChanges();
+	} while ( !tChanger.TryCommit() );
+}
+
+template<typename T>
+void ReadOnlyHash_T<T>::ReleaseAndClear()
+{
+	WriteableHash_T<T> tChanger { *this };
+	tChanger.InitEmptyHash();
+}
+
+using HashOfServed_c = HashOfRefcnt_T<ServedIndex_c>;
+using VecOfServed_c = CSphVector<HashOfServed_c::KeyValue_t>;
+using ReadOnlyServedHash_c = ReadOnlyHash_T<ServedIndex_c>;
+using WriteableServedHash_c = WriteableHash_T<ServedIndex_c>;
+using ServedSnap_t = typename ReadOnlyServedHash_c::cRefPtrHash_t;
+
+extern ReadOnlyServedHash_c * g_pLocalIndexes;    // served (local) indexes hash
+inline cServedIndexRefPtr_c GetServed ( const CSphString &sName )
+{
+	return g_pLocalIndexes->Get ( sName );
+}
+
+class ServedClone_c: ISphNoncopyable
+{
+	cServedIndexRefPtr_c m_pSource;
+	ServedIndexRefPtr_c m_pTarget;
+
+	CSphString	m_sIndex;
+
+public:
+	explicit ServedClone_c ( cServedIndexRefPtr_c pOrigin )
+		: m_pSource { std::move ( pOrigin ) }
+	{}
+
+	cServedIndexRefPtr_c& Orig() { return m_pSource; }
+	ServedIndexRefPtr_c& CloneRef() { return m_pTarget; }
+	ServedIndexRefPtr_c& LightCloneOnce();
+	ServedIndexRefPtr_c& FullCloneOnce();
+};
+
+class HashedServedClone_c: public ServedClone_c
+{
+	CSphString m_sIndex;
+	ReadOnlyServedHash_c* m_pHash = nullptr;
+
+public:
+	HashedServedClone_c ( CSphString sIndex, ReadOnlyServedHash_c* pHash );
+	~HashedServedClone_c();
+};
+
+using ResultAndIndex_t = std::pair<ESphAddIndex, ServedIndexRefPtr_c>;
 
 ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * sIndexName, StrVec_t & dWarnings, CSphString & sError );
-ESphAddIndex AddIndexMT ( GuardedHash_c & dPost, const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace, bool bMutableOpt, StrVec_t * pWarnings, CSphString & sError );
-bool PreallocNewIndex ( ServedDesc_t & tIdx, const CSphConfigSection * pConfig, const char * szIndexName, StrVec_t & dWarnings, CSphString & sError );
+ResultAndIndex_t AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bCheckDupe, bool bMutableOpt, StrVec_t * pWarnings, CSphString & sError );
+bool PreallocNewIndex ( ServedIndex_c & tIdx, const CSphConfigSection * pConfig, const char * szIndexName, StrVec_t & dWarnings, CSphString & sError );
 
 struct AttrUpdateArgs: public CSphAttrUpdateEx
 {
 	const CSphQuery* m_pQuery = nullptr;
-	const ServedDesc_t* m_pDesc = nullptr;
 	const CSphString* m_pIndexName = nullptr;
 	bool m_bJson = false;
 };
 
-void HandleMySqlExtendedUpdate( AttrUpdateArgs& tArgs );
+bool HandleUpdateAPI ( AttrUpdateArgs& tArgs, CSphIndex* pIndex, int& iUpdate );
+void HandleMySqlExtendedUpdate ( AttrUpdateArgs& tArgs, const cServedIndexRefPtr_c& pDesc, int& iUpdated, bool bNeedWlock );
+
+enum class RotateFrom_e : BYTE;
+bool PreloadKlistTarget ( const ServedDesc_t& tServed, RotateFrom_e eFrom, StrVec_t& dKlistTarget );
+ServedIndexRefPtr_c MakeCloneForRotation ( const cServedIndexRefPtr_c& pSource, const CSphString& sIndex );
+
+void ConfigureDistributedIndex ( std::function<bool ( const CSphString& )>&& fnCheck, DistributedIndex_t& tIdx, const char* szIndexName, const CSphConfigSection& hIndex, StrVec_t* pWarnings = nullptr );
+void ConfigureLocalIndex ( ServedDesc_t* pIdx, const CSphConfigSection& hIndex, bool bMutableOpt, StrVec_t* pWarnings );
+
+volatile bool& sphGetSeamlessRotate() noexcept;
 
 /////////////////////////////////////////////////////////////////////////////
 // SERVED INDEX DESCRIPTORS STUFF
@@ -1157,6 +1265,9 @@ public:
 	void				SetProfile ( QueryProfile_c * pProfile );
 	void				SetStmt ( SqlStmt_t & tStmt );
 	AggrResult_t *		GetResult ( int iResult );
+
+	void				PushIndex ( const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc );
+	void				RunCollect( const CSphQuery& tQuery, const CSphString& sIndex, CSphString* pErrors, CSphVector<BYTE>* pCollectedDocs );
 
 private:
 	SearchHandler_c *	m_pImpl = nullptr;

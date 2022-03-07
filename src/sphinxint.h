@@ -1239,7 +1239,7 @@ struct SuggestResult_t
 	CSphVector<char>			m_dTrigrams;
 	// payload
 	void *						m_pWordReader = nullptr;
-	cRefCountedRefPtr_t			m_pSegments;
+	cRefCountedRefPtrGeneric_t	m_pSegments;
 	bool						m_bMergeWords = false;
 	// word
 	CSphString		m_sWord;
@@ -1302,9 +1302,9 @@ public:
 		ISphSubstringPayload *		m_pPayload;
 		int							m_iTotalDocs;
 		int							m_iTotalHits;
-		cRefCountedRefPtr_t			m_pIndexData;
+		cRefCountedRefPtrGeneric_t	m_pIndexData;
 
-		Args_t ( bool bPayload, int iExpansionLimit, bool bHasExactForms, ESphHitless eHitless, cRefCountedRefPtr_t pIndexData );
+		Args_t ( bool bPayload, int iExpansionLimit, bool bHasExactForms, ESphHitless eHitless, cRefCountedRefPtrGeneric_t pIndexData );
 		~Args_t ();
 		void AddExpanded ( const BYTE * sWord, int iLen, int iDocs, int iHits );
 		const char * GetWordExpanded ( int iIndex ) const;
@@ -1337,18 +1337,18 @@ private:
 
 struct ExpansionContext_t
 {
-	const ISphWordlist *	m_pWordlist	= nullptr;
-	BYTE *					m_pBuf = nullptr;
-	CSphQueryResultMeta *	m_pResult = nullptr;
-	int						m_iMinPrefixLen = 0;
-	int						m_iMinInfixLen = 0;
-	int						m_iExpansionLimit = 0;
-	bool					m_bHasExactForms = false;
-	bool					m_bMergeSingles	= false;
-	CSphScopedPayload *		m_pPayloads = nullptr;
-	ESphHitless				m_eHitless {SPH_HITLESS_NONE};
-	int						m_iCutoff = -1;
-	cRefCountedRefPtr_t		m_pIndexData;
+	const ISphWordlist * m_pWordlist	= nullptr;
+	BYTE * m_pBuf						= nullptr;
+	CSphQueryResultMeta * m_pResult		= nullptr;
+	int m_iMinPrefixLen					= 0;
+	int m_iMinInfixLen					= 0;
+	int m_iExpansionLimit				= 0;
+	bool m_bHasExactForms				= false;
+	bool m_bMergeSingles				= false;
+	CSphScopedPayload * m_pPayloads		= nullptr;
+	ESphHitless m_eHitless				{SPH_HITLESS_NONE};
+	int m_iCutoff = -1;
+	cRefCountedRefPtrGeneric_t m_pIndexData;
 
 	bool					m_bOnlyTreeFix = false;
 };

@@ -59,7 +59,7 @@ class IndexFiles_c : public ISphNoncopyable
 	CSphString	m_sFilename;	// prefix (i.e. folder + index name, excluding extensions)
 	CSphString	m_sLastError;
 	bool		m_bFatal = false; // if fatal fail happened (unable to rename during rollback)
-	CSphString FullPath ( const char * sExt, const char * sSuffix = "", const char * sBase = nullptr );
+	CSphString FullPath ( const char * szExt, const CSphString& sSuffix = "", const CSphString& sBase = "" );
 	inline void SetName ( CSphString sIndex ) { m_sIndexName = std::move(sIndex); }
 
 public:
@@ -72,9 +72,9 @@ public:
 			SetName ( sIndex );
 	}
 
-	inline void SetBase ( const CSphString & sNewBase )
+	inline void SetBase ( CSphString sNewBase )
 	{
-		m_sFilename = sNewBase;
+		m_sFilename = std::move(sNewBase);
 	}
 
 	inline const CSphString& GetBase() const { return m_sFilename; }
@@ -91,18 +91,19 @@ public:
 	DWORD GetVersion() const { return m_uVersion; }
 
 	// simple make decorated path, like '.old' -> /path/to/index.old
-	CSphString MakePath ( const char * sSuffix = "", const char * sBase = nullptr );
+	CSphString MakePath ( const char * szSuffix = "" );
+	static CSphString MakePath ( const char* szSuffix, const CSphString& sBase );
 
-	bool Rename ( const char * sFrom, const char * sTo );  // move files between different bases
-	bool Rollback ( const char * sBackup, const char * sPath ); // move from backup to path; fail is fatal
-	bool RenameSuffix ( const char * sFromSuffix, const char * sToSuffix="" );  // move files in base between two suffixes
-	bool RenameBase ( const char * sToBase );  // move files to different base
-	bool RenameLock ( const char * sTo, int & iLockFD ); // safely move lock file
-	bool RelocateToNew ( const char * sNewBase ); // relocate to new base and append '.new' suffix
-	bool RollbackSuff ( const char * sBackupSuffix, const char * sActiveSuffix="" ); // move from backup to active; fail is fatal
-	bool HasAllFiles ( const char * sType = "" ); // check that all necessary files are readable
-	void Unlink ( const char * sType = "" );
+	bool TryRename ( const CSphString& sFrom, const CSphString& sTo );  // move with auto backup and rollback
+	bool Rename ( const CSphString& sFrom, const CSphString& sTo ); // oneshot move without backups
+	bool TryRenameSuffix ( const CSphString& sFromSuffix, const CSphString& sToSuffix );  // move files in base between two suffixes
+	bool TryRenameBase ( const CSphString& sToBase );  // move files to different base
+	bool RenameLock ( const CSphString& sTo, int & iLockFD ); // safely move lock file
+	bool RelocateToNew ( const CSphString& sNewBase ); // relocate to new base and append '.new' suffix
+	bool RenameSuffix ( const CSphString& sFrom, const CSphString& sTo ); // move from backup to active; fail is fatal
+	bool HasAllFiles ( const char * szType = "" ); // check that all necessary files are readable
+	void Unlink ( const char * szType = "" );
 
 	// if prev op fails with fatal error - log the message and terminate
-	CSphString FatalMsg(const char * sMsg=nullptr);
+	CSphString FatalMsg(const char * szMsg=nullptr);
 };

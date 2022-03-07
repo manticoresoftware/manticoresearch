@@ -146,7 +146,7 @@ void HostDashboard_t::GetCollectedMetrics ( HostMetricsSnapshot_t& dResult, int 
 	MetricsAndCounters_t tAccum;
 	tAccum.Reset ();
 
-	CSphScopedRLock tRguard ( m_dMetricsLock );
+	ScRL_t tRguard ( m_dMetricsLock );
 	for ( ; iPeriods>0; --iPeriods, --uCurrentPeriod )
 		// it might be no queries at all in the fixed time
 		if ( m_dPeriodicMetrics[uCurrentPeriod % STATS_DASH_PERIODS].m_uPeriod==uCurrentPeriod )
@@ -262,7 +262,7 @@ void PersistentConnectionsPool_c::Shutdown ()
 
 void ClosePersistentSockets()
 {
-	Dashboard::GetActiveHosts().Apply ([] (HostDashboard_t * &pHost) { SafeDelete ( pHost->m_pPersPool ); });
+	Dashboard::GetActiveHosts().Apply ([] ( HostDashboardRefPtr_t& pHost) { SafeDelete ( pHost->m_pPersPool ); });
 }
 
 // check whether sURL contains plain ip-address, and so, m.b. no need to resolve it many times.
@@ -461,7 +461,7 @@ void SetGlobalPinger ( IPinger* pPinger )
 }
 
 // Subscribe hosts with just enabled pings (i.e. where iNeedPing is exactly 1, no more)
-static void PingCheckAdd ( HostDashboard_t* pHost )
+static void PingCheckAdd ( HostDashboardRefPtr_t pHost )
 {
 	if ( !g_pPinger )
 		return;
@@ -481,29 +481,57 @@ static void PingCheckAdd ( HostDashboard_t* pHost )
 // class also provides mirror choosing using different strategies
 /////////////////////////////////////////////////////////////////////////////
 
-static GuardedHash_c & g_MultiAgents()
+// global cache for sharing multiagents (i.e. several distr indexes with same multiagent will share one copy with all stats)
+struct GlobalMultiAgents_t
 {
-	static GuardedHash_c dGlobalHash;
+	using ReadOnlyAgentsHash_t = ReadOnlyHash_T<MultiAgentDesc_c>;
+	using WriteableAgentsHash_t = WriteableHash_T<MultiAgentDesc_c>;
+	using cRefCountedHashOfAgents_t = cRefCountedRefPtr_T<cRefCountedHashOfRefcnt_T<MultiAgentDesc_c>>;
+
+	mutable CSphMutex m_tMultiAgentsLock; // protects only changes of hash; reads are lock-free
+	ReadOnlyAgentsHash_t m_dGlobalHash GUARDED_BY ( m_tMultiAgentsLock );
+
+	WriteableAgentsHash_t MakeEmptyChanger () REQUIRES ( m_tMultiAgentsLock )
+	{
+		WriteableAgentsHash_t pRes { m_dGlobalHash };
+		pRes.InitEmptyHash();
+		return pRes;
+	}
+
+	WriteableAgentsHash_t MakeCopyChanger () REQUIRES ( m_tMultiAgentsLock )
+	{
+		WriteableAgentsHash_t pRes { m_dGlobalHash };
+		pRes.CopyOwnerHash();
+		return pRes;
+	}
+
+	cRefCountedHashOfAgents_t GetHash () const NO_THREAD_SAFETY_ANALYSIS
+	{
+		return m_dGlobalHash.GetHash();
+	}
+};
+
+static GlobalMultiAgents_t & g_MultiAgents()
+{
+	static GlobalMultiAgents_t dGlobalHash;
 	return dGlobalHash;
 }
 
+// called from dtr of distr index. Make new snapshot with only actual multiagents, orphans will be removed.
 void MultiAgentDesc_c::CleanupOrphaned()
 {
-	// cleanup global
-	auto &gAgents = g_MultiAgents ();
 	bool bNeedGC = false;
-	for ( WLockedHashIt_c it ( &gAgents ); it.Next (); )
+	auto& tAgents = g_MultiAgents();
 	{
-		auto pAgent = it.Get ();
-		if ( pAgent )
+		ScopedMutex_t tLock { tAgents.m_tMultiAgentsLock };
+		auto tChanger = tAgents.MakeEmptyChanger();
+		auto pHash = tChanger.m_tOwner.GetHash();
+		for ( const auto& tAgent : *pHash )
 		{
-			pAgent->Release (); // need release since it.Get() just made AddRef().
-			if ( pAgent->IsLast () )
-			{
-				it.Delete ();
-				SafeRelease ( pAgent );
+			if ( tAgent.second->IsLast() )
 				bNeedGC = true;
-			}
+			else
+				tChanger.m_pNewHash->Add ( tAgent.second, tAgent.first );
 		}
 	}
 	if ( bNeedGC )
@@ -516,7 +544,7 @@ CSphString MultiAgentDesc_c::GetKey ( const CSphVector<AgentDesc_t *> &dTemplate
 	StringBuilder_c sKey;
 	for ( const auto* dHost : dTemplateHosts )
 		sKey << dHost->GetMyUrl () << ":" << dHost->m_sIndexes << "|";
-	sKey.Appendf ("[%d,%d,%d,%d,%d]",
+	sKey.Sprintf("[%d,%d,%d,%d,%d]",
 		tOpt.m_bBlackhole?1:0,
 		tOpt.m_bPersistent?1:0,
 		(int)tOpt.m_eStrategy,
@@ -525,23 +553,26 @@ CSphString MultiAgentDesc_c::GetKey ( const CSphVector<AgentDesc_t *> &dTemplate
 	return sKey.cstr();
 }
 
-MultiAgentDesc_c * MultiAgentDesc_c::GetAgent ( const CSphVector<AgentDesc_t*> & dHosts, const AgentOptions_t & tOpt,
-		const WarnInfo_c & tWarn ) NO_THREAD_SAFETY_ANALYSIS
+MultiAgentDescRefPtr_c MultiAgentDesc_c::GetAgent ( const CSphVector<AgentDesc_t*> & dHosts, const AgentOptions_t & tOpt, const WarnInfo_c & tWarn )
 {
 	auto sKey = GetKey ( dHosts, tOpt );
-	auto &gHash = g_MultiAgents ();
-
-	// if an elem exists, return it addreffed.
-	MultiAgentDescRefPtr_c pAgent ( ( MultiAgentDesc_c * ) gHash.Get ( sKey ) );
-	if ( pAgent )
-		return pAgent.Leak();
+	auto& tAgents = g_MultiAgents();
+	{
+		auto pHash = tAgents.GetHash();
+		auto* pEntry = (*pHash) ( sKey );
+		if ( pEntry )
+			return ConstCastPtr ( *pEntry );
+	}
 
 	// create and init new agent
-	pAgent = new MultiAgentDesc_c;
+	MultiAgentDescRefPtr_c pAgent { new MultiAgentDesc_c };
 	if ( !pAgent->Init ( dHosts, tOpt, tWarn ) )
-		return nullptr;
+		return MultiAgentDescRefPtr_c();
 
-	return ( MultiAgentDesc_c * ) gHash.TryAddThenGet ( pAgent, sKey );
+	ScopedMutex_t tLock { tAgents.m_tMultiAgentsLock };
+	auto tChanger = tAgents.MakeCopyChanger();
+	tChanger.Add ( pAgent, sKey );
+	return pAgent;
 }
 
 bool MultiAgentDesc_c::Init ( const CSphVector<AgentDesc_t *> &dHosts,
@@ -613,7 +644,7 @@ const AgentDesc_t &MultiAgentDesc_c::RandAgent ()
 void MultiAgentDesc_c::ChooseWeightedRandAgent ( int * pBestAgent, CSphVector<int> & dCandidates )
 {
 	assert ( pBestAgent );
-	CSphScopedRLock tLock ( m_dWeightLock );
+	ScRL_t tLock ( m_dWeightLock );
 	auto fBound = m_dWeights[*pBestAgent];
 	auto fLimit = fBound;
 	for ( auto j : dCandidates )
@@ -655,8 +686,8 @@ const AgentDesc_t &MultiAgentDesc_c::StDiscardDead ()
 
 	for (int i=0; i<GetLength(); ++i)
 	{
-		// no locks for g_pStats since we just reading, and read data is not critical.
-		const HostDashboard_t * pDash = m_pData[i].m_pDash;
+		// no locks for g_pStats since we're just reading, and read data is not critical.
+		const auto& pDash = m_pData[i].m_pDash;
 
 		HostMetricsSnapshot_t dMetricsSnapshot;
 		pDash->GetCollectedMetrics ( dMetricsSnapshot );// look at last 30..90 seconds.
@@ -668,7 +699,7 @@ const AgentDesc_t &MultiAgentDesc_c::StDiscardDead ()
 		else
 			dTimers[i] = 0;
 
-		CSphScopedRLock tRguard ( pDash->m_dMetricsLock );
+		ScRL_t tRguard ( pDash->m_dMetricsLock );
 		int64_t iThisErrARow = ( pDash->m_iErrorsARow<=iDeadThr ) ? 0 : pDash->m_iErrorsARow;
 
 		if ( iErrARow < 0 )
@@ -712,7 +743,7 @@ const AgentDesc_t &MultiAgentDesc_c::StDiscardDead ()
 	if ( g_eLogLevel>=SPH_LOG_VERBOSE_DEBUG )
 	{
 		const HostDashboard_t & dDash = *m_pData[iBestAgent].m_pDash;
-		CSphScopedRLock tRguard ( dDash.m_dMetricsLock );
+		ScRL_t tRguard ( dDash.m_dMetricsLock );
 		auto fAge = float ( dDash.m_iLastAnswerTime-dDash.m_iLastQueryTime ) / 1000.0f;
 		sphLogDebugv ("client=%s, HA selected %d node by weighted random, with best EaR ("
 						  INT64_FMT "), last answered in %.3f milliseconds, among %d candidates"
@@ -731,7 +762,7 @@ void MultiAgentDesc_c::CheckRecalculateWeights ( const CSphFixedVector<int64_t> 
 	CSphFixedVector<float> dWeights {0};
 
 	// since we'll update values anyway, acquire w-lock.
-	CSphScopedWLock tWguard ( m_dWeightLock );
+	ScWL_t tWguard ( m_dWeightLock );
 	dWeights.CopyFrom ( m_dWeights );
 	RebalanceWeights ( dTimers, dWeights );
 	if ( g_eLogLevel>=SPH_LOG_DEBUG )
@@ -841,7 +872,7 @@ const AgentDesc_t &MultiAgentDesc_c::StLowErrors ()
 	if ( g_eLogLevel>=SPH_LOG_VERBOSE_DEBUG )
 	{
 		const HostDashboard_t & dDash = *m_pData[iBestAgent].m_pDash;
-		CSphScopedRLock tRguard ( dDash.m_dMetricsLock );
+		ScRL_t tRguard ( dDash.m_dMetricsLock );
 		auto fAge = float ( dDash.m_iLastAnswerTime-dDash.m_iLastQueryTime ) / 1000.0f;
 		sphLogDebugv (
 			"client=%s, HA selected %d node by weighted random, "
@@ -934,7 +965,7 @@ static void agent_stats_inc ( AgentConn_t &tAgent, AgentStats_e iCountID )
 		tAgent.m_tDesc.m_pMetrics->m_dCounters[iCountID].fetch_add(1,std::memory_order_relaxed);
 
 	HostDashboard_t &tIndexDash = *tAgent.m_tDesc.m_pDash;
-	CSphScopedWLock tWguard ( tIndexDash.m_dMetricsLock );
+	ScWL_t tWguard ( tIndexDash.m_dMetricsLock );
 	MetricsAndCounters_t &tAgentMetrics = tIndexDash.GetCurrentMetrics ();
 	tAgentMetrics.m_dCounters[iCountID].fetch_add ( 1, std::memory_order_relaxed );;
 	if ( iCountID>=eNetworkNonCritical && iCountID<eMaxAgentStat )
@@ -962,7 +993,7 @@ static void track_processing_time ( AgentConn_t &tAgent )
 	assert ( tAgent.m_tDesc.m_pDash );
 	uint64_t uConnTime = ( uint64_t ) sphMicroTimer () - tAgent.m_iStartQuery;
 	{
-		CSphScopedWLock tWguard ( tAgent.m_tDesc.m_pDash->m_dMetricsLock );
+		ScWL_t tWguard ( tAgent.m_tDesc.m_pDash->m_dMetricsLock );
 		uint64_t * pMetrics = tAgent.m_tDesc.m_pDash->GetCurrentMetrics ().m_dMetrics;
 
 		++pMetrics[ehConnTries];
@@ -1266,17 +1297,18 @@ static bool ConfigureMirrorSet ( CSphVector<AgentDesc_t*> &tMirrors, AgentOption
 }
 
 // different cases are tested in T_ConfigureMultiAgent, see gtests_searchdaemon.cpp
-MultiAgentDesc_c * ConfigureMultiAgent ( const char * szAgent, const char * szIndexName, AgentOptions_t tOptions, StrVec_t * pWarnings )
+MultiAgentDescRefPtr_c ConfigureMultiAgent ( const char * szAgent, const char * szIndexName, AgentOptions_t tOptions, StrVec_t * pWarnings )
 {
+	MultiAgentDescRefPtr_c pRes;
 	CSphVector<AgentDesc_t *> tMirrors;
 	auto dFree = AtScopeExit ( [&tMirrors] { tMirrors.Apply( [] ( AgentDesc_t * pMirror ) { SafeDelete ( pMirror ); } ); } );
 
 	WarnInfo_c tWI ( szIndexName, szAgent, pWarnings );
 
-	if ( !ConfigureMirrorSet ( tMirrors, &tOptions, tWI ) )
-		return nullptr;
+	if ( ConfigureMirrorSet ( tMirrors, &tOptions, tWI ) )
+		pRes = MultiAgentDesc_c::GetAgent ( tMirrors, tOptions, tWI );
 
-	return MultiAgentDesc_c::GetAgent ( tMirrors, tOptions, tWI );
+	return pRes;
 }
 
 HostDesc_t &HostDesc_t::CloneFromHost ( const HostDesc_t &rhs )
@@ -1309,69 +1341,84 @@ AgentDesc_t &AgentDesc_t::CloneFrom ( const AgentDesc_t &rhs )
 namespace Dashboard
 {
 
-static RwLock_t g_tDashLock;
-static VecRefPtrs_t<HostDashboard_t*> g_dDashes GUARDED_BY( g_tDashLock );
+class Dashboard_c final
+{
+	mutable RwLock_t m_tDashLock; // short-term
+	CSphVector<HostDashboardRefPtr_t> m_dDashes GUARDED_BY ( m_tDashLock );
+
+private:
+	CSphVector<HostDashboardRefPtr_t> GetActiveHostsUnl() REQUIRES_SHARED ( m_tDashLock )
+	{
+		CSphVector<HostDashboardRefPtr_t> dRes;
+		for ( auto& pDash : m_dDashes )
+			if ( !pDash->IsLast() )
+				dRes.Add ( pDash );
+		return dRes;
+	}
+
+public:
+	void CleanupOrphaned()
+	{
+		ScWL_t tWguard ( m_tDashLock );
+		auto dNew = GetActiveHostsUnl();
+		m_dDashes.SwapData ( dNew );
+	}
+
+	// linear search, since very rare template of usage
+	HostDashboardRefPtr_t FindAgent ( const CSphString& sAgent )
+	{
+		ScRL_t tRguard ( m_tDashLock );
+		for ( auto& pDash : m_dDashes )
+			if ( !pDash->IsLast() && pDash->m_tHost.GetMyUrl() == sAgent )
+				return pDash;
+		return HostDashboardRefPtr_t(); // not found
+	}
+
+	void LinkHost ( HostDesc_t& dHost )
+	{
+		assert ( !dHost.m_pDash );
+		dHost.m_pDash = FindAgent ( dHost.GetMyUrl() );
+		if ( dHost.m_pDash )
+			return;
+
+		// nothing found existing; so create the new.
+		dHost.m_pDash = new HostDashboard_t ( dHost );
+		ScWL_t tWguard ( m_tDashLock );
+		m_dDashes.Add ( dHost.m_pDash );
+	}
+
+	CSphVector<HostDashboardRefPtr_t> GetActiveHosts()
+	{
+		ScRL_t tRguard ( m_tDashLock );
+		return GetActiveHostsUnl();
+	}
+};
+
+Dashboard_c& GDash()
+{
+	static Dashboard_c tDash;
+	return tDash;
+}
 
 void CleanupOrphaned ()
 {
-	CSphScopedWLock tWguard ( g_tDashLock );
-	ARRAY_FOREACH ( i, g_dDashes )
-	{
-		auto pDash = g_dDashes[i];
-		if ( pDash->IsLast () )
-		{
-			g_dDashes.RemoveFast ( i-- ); // remove, and then step back
-			SafeRelease ( pDash );
-		}
-	}
+	GDash().CleanupOrphaned();
 }
 
 // Due to very rare template of usage, linear search is quite enough here
 HostDashboardRefPtr_t FindAgent ( const CSphString& sAgent )
-	{
-		CSphScopedRLock tRguard ( g_tDashLock );
-		for ( auto* pDash : g_dDashes )
-		{
-			if ( pDash->IsLast ())
-				continue;
-
-			if ( pDash->m_tHost.GetMyUrl ()==sAgent )
-			{
-				pDash->AddRef ();
-				return HostDashboardRefPtr_t ( pDash );
-			}
-		}
-		return HostDashboardRefPtr_t (); // not found
-	}
+{
+	return GDash().FindAgent(sAgent);
+}
 
 void LinkHost ( HostDesc_t &dHost )
 {
-	assert ( !dHost.m_pDash );
-	dHost.m_pDash = FindAgent ( dHost.GetMyUrl() );
-	if ( dHost.m_pDash )
-		return;
-
-	// nothing found existing; so create the new.
-	dHost.m_pDash = new HostDashboard_t ( dHost );
-	CSphScopedWLock tWguard ( g_tDashLock );
-	g_dDashes.Add ( dHost.m_pDash );
-	dHost.m_pDash->AddRef(); // one link here in vec, other returned with the host
+	GDash().LinkHost(dHost);
 }
 
-VecRefPtrs_t<HostDashboard_t*> GetActiveHosts ()
+CSphVector<HostDashboardRefPtr_t> GetActiveHosts ()
 {
-	VecRefPtrs_t<HostDashboard_t*> dAgents;
-	assert ( dAgents.IsEmpty ());
-	ScRL_t tRguard ( g_tDashLock );
-	for ( auto * pDash : g_dDashes )
-	{
-		if ( pDash->IsLast() )
-			continue;
-
-		pDash->AddRef ();
-		dAgents.Add ( pDash );
-	}
-	return dAgents;
+	return GDash().GetActiveHosts();
 }
 } // namespace Dashboard
 
@@ -2590,13 +2637,12 @@ bool AgentConn_t::CommitResult ()
 }
 
 
-void AgentConn_t::SetMultiAgent ( MultiAgentDesc_c * pAgent )
+void AgentConn_t::SetMultiAgent ( MultiAgentDescRefPtr_c pAgent )
 {
 	assert ( pAgent );
-	pAgent->AddRef ();
-	m_pMultiAgent = pAgent;
 	m_iMirrorsCount = pAgent->GetLength ();
 	m_iRetries = pAgent->GetRetryLimit ();
+	m_pMultiAgent = std::move ( pAgent );
 	m_bManyTries = m_iRetries>0;
 }
 

@@ -141,7 +141,7 @@ public:
 
 	/// do something const with disk chunk (query settings, status, etc.)
 	/// hides internal disk chunks storage
-	virtual void ProcessDiskChunk ( int iChunk, VisitChunk_fn&& fnVisitor ) {};
+	virtual void ProcessDiskChunk ( int iChunk, VisitChunk_fn&& fnVisitor ) const {};
 
 	/// get disk chunk
 	virtual CSphIndex* GetDiskChunk ( int iChunk )
@@ -173,11 +173,10 @@ public:
 class CSphConfigSection;
 void sphRTInit ( const CSphConfigSection & hSearchd, bool bTestMode, const CSphConfigSection * pCommon );
 bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSchema, const CSphIndexSettings & tSettings, CSphString & sError, bool bSkipValidation, bool bPQ );
-bool sphRTSchemaConfigure ( const CSphVector<CSphColumnInfo> & dFields, const CSphVector<CSphColumnInfo> & dAttrs, CSphSchema & tSchema, CSphString & sError, bool bSkipValidation );
 void sphRTSetTestMode ();
 
 /// RT index factory
-RtIndex_i * sphCreateIndexRT ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict );
+std::unique_ptr<RtIndex_i> sphCreateIndexRT ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict );
 
 typedef void ProgressCallbackSimple_t ();
 

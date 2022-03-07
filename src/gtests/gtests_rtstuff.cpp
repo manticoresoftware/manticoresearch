@@ -280,7 +280,7 @@ TEST_F ( RT, WeightBoundary )
 	for ( int i=0; i<tSrcSchema.GetAttrsCount(); i++ )
 		tSchema.AddAttr ( tSrcSchema.GetAttr(i), false );
 
-	RtIndex_i * pIndex = sphCreateIndexRT ( tSchema, "testrt", 32 * 1024 * 1024, RT_INDEX_FILE_NAME, false );
+	auto pIndex = sphCreateIndexRT ( tSchema, "testrt", 32 * 1024 * 1024, RT_INDEX_FILE_NAME, false );
 
 	// tricky bit
 	// index owns its tokenizer/dict pair, and MAY do whatever it wants
@@ -336,7 +336,6 @@ TEST_F ( RT, WeightBoundary )
 
 	SafeDelete ( pSorter );
 	SafeDelete ( tQuery.m_pQueryParser );
-	SafeDelete ( pIndex );
 	SafeDelete ( pSrc );
 	});
 }
@@ -530,7 +529,6 @@ TEST_F ( RT, RankerFactors )
 	}
 
 	SafeDelete ( tQuery.m_pQueryParser );
-	SafeDelete ( pIndex );
 	SafeDelete ( pSrc );
 	pTok = nullptr; // owned and deleted by index
 	});
@@ -578,7 +576,7 @@ TEST_F ( RT, SendVsMerge )
 	for ( int i=0; i<tSrcSchema.GetAttrsCount(); i++ )
 		tSchema.AddAttr ( tSrcSchema.GetAttr(i), false );
 
-	RtIndex_i * pIndex = sphCreateIndexRT ( tSchema, "testrt", 128 * 1024, RT_INDEX_FILE_NAME, false );
+	auto pIndex = sphCreateIndexRT ( tSchema, "testrt", 128 * 1024, RT_INDEX_FILE_NAME, false );
 
 	pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
 	pIndex->SetDictionary ( pDict );
@@ -647,7 +645,6 @@ TEST_F ( RT, SendVsMerge )
 
 	SafeDelete ( tQuery.m_pQueryParser );
 	SafeDelete ( pSorter );
-	SafeDelete ( pIndex );
 	SafeDelete ( pSrc );
 	pTok = nullptr; // owned and deleted by index
 	});

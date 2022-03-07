@@ -27,7 +27,7 @@ MemoryReader_c::MemoryReader_c ( ByteBlob_t dData )
 {}
 
 
-int MemoryReader_c::GetPos()
+int MemoryReader_c::GetPos() const
 {
 	return ( m_pCur - m_pData );
 }
@@ -117,6 +117,12 @@ int MemoryReader_c::GetLength() const
 {
 	return m_iLen;
 }
+
+bool MemoryReader_c::HasData() const
+{
+	return GetPos() < m_iLen;
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 

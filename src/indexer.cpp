@@ -1210,7 +1210,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		sIndexPath.SetSprintf ( g_bRotate ? "%s.tmp" : "%s", hIndex["path"].cstr() );
 
 		// do index
-		CSphIndex * pIndex = sphCreateIndexPhrase ( sIndexName, sIndexPath.cstr() );
+		auto pIndex = sphCreateIndexPhrase ( sIndexName, sIndexPath.cstr() );
 		assert ( pIndex );
 
 		// check lock file
@@ -1245,7 +1245,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		if ( bOK && g_bRotate && g_bSendHUP )
 		{
 			sIndexPath.SetSprintf ( "%s.new", hIndex["path"].cstr() );
-			bOK = pIndex->Rename ( sIndexPath.cstr() );
+			bOK = pIndex->Rename ( sIndexPath );
 		}
 
 		if ( !bOK )
@@ -1255,8 +1255,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 			fprintf ( stdout, "WARNING: index '%s': %s.\n", sIndexName, pIndex->GetLastWarning().cstr() );
 
 		pIndex->Unlock ();
-
-		SafeDelete ( pIndex );
 	}
 
 	// trip report
@@ -1292,22 +1290,16 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 
 static bool RenameIndexFiles ( const char * szPath, const char * szName, CSphIndex * pIndex, bool bRotate )
 {
-	char sFrom [ SPH_MAX_FILENAME_LEN ];
-	char sTo [ SPH_MAX_FILENAME_LEN ];
-
-	snprintf ( sFrom, sizeof(sFrom), "%s.tmp", szPath );
-	sFrom [ sizeof(sFrom)-1 ] = '\0';
+	StringBuilder_c sFrom, sTo;
+	sFrom << szPath << ".tmp";
+	sTo << szPath;
 	if ( bRotate )
-		snprintf ( sTo, sizeof(sTo), "%s.new", szPath );
-	else
-		snprintf ( sTo, sizeof(sTo), "%s", szPath );
+		sTo << ".new";
 
-	sTo [ sizeof(sTo)-1 ] = '\0';
-
-	pIndex->SetBase ( sFrom );
-	if ( !pIndex->Rename ( sTo ) )
+	pIndex->SetBase ( sFrom.cstr() );
+	if ( !pIndex->Rename ( sTo.cstr() ) )
 	{
-		fprintf ( stdout, "ERROR: index '%s': failed to rename '%s' to '%s': %s", szName, sFrom, sTo, pIndex->GetLastError().cstr() );
+		fprintf ( stdout, "ERROR: index '%s': failed to rename '%s' to '%s': %s", szName, sFrom.cstr(), sTo.cstr(), pIndex->GetLastError().cstr() );
 		return false;
 	}
 
@@ -1340,18 +1332,14 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst, const CSphConf
 	}
 
 	// do the merge
-	CSphIndex * pSrc = sphCreateIndexPhrase ( nullptr, hSrc["path"].cstr() );
-	CSphIndex * pDst = sphCreateIndexPhrase ( nullptr, hDst["path"].cstr() );
+	auto pSrc = sphCreateIndexPhrase ( nullptr, hSrc["path"].cstr() );
+	auto pDst = sphCreateIndexPhrase ( nullptr, hDst["path"].cstr() );
 	assert ( pSrc );
 	assert ( pDst );
-
-	CSphScopedPtr<CSphIndex> dSrcGuard ( pSrc );
-	CSphScopedPtr<CSphIndex> dDstGuard ( pDst );
-
 	{
 		StrVec_t dWarnings;
 		CSphString sError;
-		if ( !sphFixupIndexSettings ( pSrc, hSrc, false, nullptr, dWarnings, sError ) )
+		if ( !sphFixupIndexSettings ( pSrc.get(), hSrc, false, nullptr, dWarnings, sError ) )
 		{
 			fprintf ( stdout, "ERROR: index '%s': %s\n", sSrc, sError.cstr () );
 			return false;
@@ -1364,7 +1352,7 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst, const CSphConf
 	{
 		StrVec_t dWarnings;
 		CSphString sError;
-		if ( !sphFixupIndexSettings ( pDst, hDst, false, nullptr, dWarnings, sError ) )
+		if ( !sphFixupIndexSettings ( pDst.get(), hDst, false, nullptr, dWarnings, sError ) )
 		{
 			fprintf ( stdout, "ERROR: index '%s': %s\n", sDst, sError.cstr () );
 			return false;
@@ -1422,7 +1410,7 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst, const CSphConf
 	int64_t tmMergeTime = sphMicroTimer();
 
 	{
-		if ( !pDst->Merge ( pSrc, tPurge, true, tProgress ) )
+		if ( !pDst->Merge ( pSrc.get(), tPurge, true, tProgress ) )
 			sphDie ( "failed to merge index '%s' into index '%s': %s", sSrc, sDst, pDst->GetLastError().cstr() );
 
 		if ( !pDst->GetLastWarning().IsEmpty() )
@@ -1431,7 +1419,7 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst, const CSphConf
 
 	if ( bDropSrc )
 	{
-		if ( !pSrc->Merge ( pSrc, {}, true, tProgress ) )
+		if ( !pSrc->Merge ( pSrc.get(), {}, true, tProgress ) )
 			sphDie ( "failed to drop index '%s' : %s", sSrc, pSrc->GetLastError().cstr() );
 
 		if ( !pSrc->GetLastWarning().IsEmpty() )
@@ -1457,10 +1445,10 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst, const CSphConf
 	pDst->Unlock();
 
 	// pick up merge result
-	if ( !RenameIndexFiles ( hDst["path"].cstr(), sDst, pDst, bRotate ) )
+	if ( !RenameIndexFiles ( hDst["path"].cstr(), sDst, pDst.get(), bRotate ) )
 		return false;
 
-	if ( bDropSrc && !RenameIndexFiles ( hSrc["path"].cstr(), sSrc, pSrc, bRotate ) )
+	if ( bDropSrc && !RenameIndexFiles ( hSrc["path"].cstr(), sSrc, pSrc.get(), bRotate ) )
 		return false;
 
 	return true;
@@ -1918,9 +1906,7 @@ int main ( int argc, char ** argv )
 	if ( !sphInitCharsetAliasTable ( sError ) )
 		sphDie ( "failed to init charset alias table: %s", sError.cstr() );
 
-	CSphConfigParser cp;
-	CSphConfig & hConf = cp.m_tConf;
-	sOptConfig = sphLoadConfig ( sOptConfig, g_bQuiet, false, cp );
+	auto hConf = sphLoadConfig ( sOptConfig, g_bQuiet, false, &sOptConfig );
 
 	if ( !hConf ( "source" ) )
 		sphDie ( "no indexes found in config file '%s'", sOptConfig );
@@ -1994,14 +1980,13 @@ int main ( int argc, char ** argv )
 			sphDie ( "failed to open %s: %s", sDumpRows.cstr(), strerrorm(errno) );
 	}
 
-	hConf["index"].IterateStart();
-	while ( hConf["index"].IterateNext() )
+	for ( auto& tIndex : hConf["index"] )
 	{
-		ARRAY_FOREACH ( j, dWildIndexes )
+		for ( const auto& tWildIndex : dWildIndexes )
 		{
-			if ( sphWildcardMatch ( hConf["index"].IterateGetKey().cstr(), dWildIndexes[j] ) )
+			if ( sphWildcardMatch ( tIndex.first.cstr(), tWildIndex ) )
 			{
-				dIndexes.Add ( hConf["index"].IterateGetKey().cstr() );
+				dIndexes.Add ( tIndex.first.cstr() );
 				// do not add index twice
 				break;
 			}
@@ -2036,10 +2021,9 @@ int main ( int argc, char ** argv )
 	} else if ( bIndexAll )
 	{
 		uint64_t tmRotated = sphMicroTimer();
-		hConf["index"].IterateStart ();
-		while ( hConf["index"].IterateNext() )
+		for ( const auto& tIndex : hConf["index"] )
 		{
-			bool bLastOk = DoIndex ( hConf["index"].IterateGet (), hConf["index"].IterateGetKey().cstr(), hConf["source"], fpDumpRows );
+			bool bLastOk = DoIndex ( tIndex.second, tIndex.first.cstr(), hConf["source"], fpDumpRows );
 			if ( bLastOk && ( sphMicroTimer() - tmRotated > ROTATE_MIN_INTERVAL ) && g_bSendHUP && SendRotate ( hConf, false ) )
 				tmRotated = sphMicroTimer();
 			if ( bLastOk )

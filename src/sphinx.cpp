@@ -782,9 +782,9 @@ bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 }
 
 
-CSphIndex * sphCreateIndexTemplate ( const char * szIndexName )
+std::unique_ptr<CSphIndex> sphCreateIndexTemplate ( const char * szIndexName )
 {
-	return new CSphTokenizerIndex(szIndexName);
+	return std::make_unique <CSphTokenizerIndex> (szIndexName);
 }
 
 Bson_t CSphTokenizerIndex::ExplainQuery ( const CSphString & sQuery ) const
@@ -1296,8 +1296,8 @@ public:
 	void				Dealloc () final;
 	void				Preread () final;
 
-	void				SetBase ( const char * sNewBase ) final;
-	bool				Rename ( const char * sNewBase ) final;
+	void				SetBase ( CSphString sNewBase ) final;
+	RenameResult_e		RenameEx ( CSphString sNewBase ) final;
 
 	bool				Lock () final;
 	void				Unlock () final;
@@ -1333,7 +1333,7 @@ public:
 	void				FlushDeadRowMap ( bool bWaitComplete ) const final;
 	bool				LoadKillList ( CSphFixedVector<DocID_t> * pKillList, KillListTargets_c & tTargets, CSphString & sError ) const final;
 	bool				AlterKillListTarget ( KillListTargets_c & tTargets, CSphString & sError ) final;
-	void				KillExistingDocids ( CSphIndex * pTarget ) final;
+	void				KillExistingDocids ( CSphIndex * pTarget ) const final;
 
 	bool				EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const final;
 
@@ -2527,7 +2527,7 @@ int CSphIndex::UpdateAttributes ( AttrUpdateSharedPtr_t pUpd, bool & bCritical, 
 CSphVector<SphAttr_t> CSphIndex::BuildDocList () const
 {
 	TlsMsg::Err(); // reset error
-	return CSphVector<SphAttr_t>();
+	return {};
 }
 
 void CSphIndex::GetFieldFilterSettings ( CSphFieldFilterSettings & tSettings ) const
@@ -2561,9 +2561,9 @@ static void PooledAttrsToPtrAttrs ( const VecTraits_T<ISphMatchSorter *> & dSort
 }
 
 
-CSphIndex * sphCreateIndexPhrase ( const char* szIndexName, const char * sFilename )
+std::unique_ptr<CSphIndex> sphCreateIndexPhrase ( const char* szIndexName, const char * sFilename )
 {
-	return new CSphIndex_VLN ( szIndexName, sFilename );
+	return std::make_unique<CSphIndex_VLN> ( szIndexName, sFilename );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -3354,15 +3354,13 @@ bool CSphIndex_VLN::AlterKillListTarget ( KillListTargets_c & tTargets, CSphStri
 }
 
 
-void CSphIndex_VLN::KillExistingDocids ( CSphIndex * pTarget )
+void CSphIndex_VLN::KillExistingDocids ( CSphIndex * pTarget ) const
 {
 	// FIXME! collecting all docids is a waste of memory
-	LookupReaderIterator_c tLookup ( m_tDocidLookup.GetWritePtr() );
+	LookupReaderIterator_c tLookup ( m_tDocidLookup.GetReadPtr() );
 	CSphFixedVector<DocID_t> dKillList ( m_iDocinfo );
-	DocID_t tDocID;
-	DWORD uDocidIndex = 0;
-	while ( tLookup.ReadDocID(tDocID) )
-		dKillList[uDocidIndex++] = tDocID;
+	for ( auto& dKill : dKillList )
+		tLookup.ReadDocID ( dKill );
 
 	pTarget->KillMulti ( dKillList );
 }
@@ -5039,8 +5037,8 @@ public:
 		CSphString sError;
 		StrVec_t dWarnings;
 
-		m_pIndex = (CSphIndex_VLN *)sphCreateIndexPhrase ( "keep-attrs", sKeepAttrs.cstr() );
-		ResetFileAccess ( m_pIndex.Ptr() );
+		m_pIndex = std::make_unique<CSphIndex_VLN> ( "keep-attrs", sKeepAttrs.cstr() );
+		ResetFileAccess ( m_pIndex.get() );
 
 		if ( !m_pIndex->Prealloc ( false, nullptr, dWarnings ) )
 		{
@@ -5049,21 +5047,21 @@ public:
 
 			sphWarn ( "unable to load 'keep-attrs' index (%s); ignoring --keep-attrs", sError.cstr() );
 
-			m_pIndex.Reset();
+			m_pIndex.reset();
 		} else
 		{
 			// check schema
 			if ( !tSchema.CompareTo ( m_pIndex->GetMatchSchema(), sError, false ) )
 			{
 				sphWarn ( "schemas are different (%s); ignoring --keep-attrs", sError.cstr() );
-				m_pIndex.Reset();
+				m_pIndex.reset();
 			}
 		}
 
 		for ( const auto & i : dWarnings )
 			sphWarn ( "%s", i.cstr() );
 
-		if ( m_pIndex.Ptr() )
+		if ( m_pIndex )
 		{
 			if ( dKeepAttrs.GetLength() )
 			{
@@ -5077,7 +5075,7 @@ public:
 					if ( iCol==-1 )
 					{
 						sphWarn ( "no attribute found '%s'; ignoring --keep-attrs", dKeepAttrs[i].cstr() );
-						m_pIndex.Reset();
+						m_pIndex.reset();
 						break;
 					}
 
@@ -5108,15 +5106,15 @@ public:
 			}
 		}
 
-		if ( m_pIndex.Ptr() )
+		if ( m_pIndex )
 			m_pIndex->Preread();
 
-		return ( m_pIndex.Ptr()!=nullptr );
+		return ( m_pIndex!=nullptr );
 	}
 
 	bool Keep ( DocID_t tDocid )
 	{
-		if ( !m_pIndex.Ptr() )
+		if ( !m_pIndex )
 			return false;
 
 		m_tDocid = tDocid;
@@ -5132,7 +5130,7 @@ public:
 
 	CSphVector<int64_t> * GetFieldMVA ( int iAttr ) override
 	{
-		if ( !m_pIndex.Ptr() || !m_pRow )
+		if ( !m_pIndex || !m_pRow )
 			return nullptr;
 
 		// fallback to indexed data
@@ -5167,7 +5165,7 @@ public:
 	/// returns string attributes for a given attribute
 	virtual const CSphString & GetStrAttr ( int iAttr ) override
 	{
-		if ( !m_pIndex.Ptr() || !m_pRow )
+		if ( !m_pIndex || !m_pRow )
 			return m_sEmpty;
 
 		// fallback to indexed data
@@ -5191,7 +5189,7 @@ public:
 
 	const CSphRowitem * GetRow ( CSphRowitem * pSrc )
 	{
-		if ( !m_pIndex.Ptr() || !m_pRow )
+		if ( !m_pIndex || !m_pRow )
 			return pSrc;
 
 		// keep only blob attributes
@@ -5225,11 +5223,11 @@ public:
 
 	void Reset()
 	{
-		m_pIndex.Reset();
+		m_pIndex.reset();
 	}
 
 private:
-	CSphScopedPtr<CSphIndex_VLN>	m_pIndex;
+	std::unique_ptr<CSphIndex_VLN>	m_pIndex;
 	CSphVector<CSphAttrLocator>		m_dLocPlain;
 	CSphBitvec						m_dLocMva;
 	CSphBitvec						m_dMvaField;
@@ -9708,8 +9706,8 @@ bool CSphIndex_VLN::PreallocWordlist()
 	if ( !sphIsReadable ( GetIndexFileName(SPH_EXT_SPI).cstr(), &m_sLastError ) )
 		return false;
 
-	// might be no dictionary at this point for old index format
-	bool bWordDict = m_pDict && m_pDict->GetSettings().m_bWordDict;
+	assert ( m_pDict );
+	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
 
 	// only checkpoint and wordlist infixes are actually read here; dictionary itself is just mapped
 	if ( !m_tWordlist.Preread ( GetIndexFileName(SPH_EXT_SPI), bWordDict, m_tSettings.m_iSkiplistBlockSize, m_sLastError ) )
@@ -9886,7 +9884,6 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 
 	// almost done
 	m_bPassedAlloc = true;
-
 	return true;
 }
 
@@ -9916,33 +9913,33 @@ void CSphIndex_VLN::Preread()
 	sphLogDebug ( "Preread successfully finished" );
 }
 
-void CSphIndex_VLN::SetBase ( const char * sNewBase )
+void CSphIndex_VLN::SetBase ( CSphString sNewBase )
 {
-	m_sFilename = sNewBase;
+	m_sFilename = std::move(sNewBase);
 }
 
 
-bool CSphIndex_VLN::Rename ( const char * sNewBase )
+CSphIndex::RenameResult_e CSphIndex_VLN::RenameEx ( CSphString sNewBase )
 {
 	if ( m_sFilename==sNewBase )
-		return true;
+		return RE_OK;
 
 	IndexFiles_c dFiles ( m_sFilename, nullptr, m_uVersion );
-	if ( !dFiles.RenameBase ( sNewBase ) )
+	if ( !dFiles.TryRenameBase ( sNewBase ) )
 	{
 		m_sLastError = dFiles.ErrorMsg ();
-		return false;
+		return dFiles.IsFatal() ? RE_FATAL : RE_FAIL;
 	}
 
 	if ( !dFiles.RenameLock ( sNewBase, m_iLockFD ) )
 	{
 		m_sLastError = dFiles.ErrorMsg ();
-		return false;
+		return dFiles.IsFatal() ? RE_FATAL : RE_FAIL;
 	}
 
-	SetBase ( sNewBase );
+	SetBase ( std::move ( sNewBase ) );
 
-	return true;
+	return RE_OK;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -12585,20 +12582,17 @@ CSphWordforms::CSphWordforms()
 
 CSphWordforms::~CSphWordforms()
 {
-	if ( m_pMultiWordforms )
+	if ( !m_pMultiWordforms )
+		return;
+
+	for ( auto& tForms : m_pMultiWordforms->m_Hash )
 	{
-		m_pMultiWordforms->m_Hash.IterateStart ();
-		while ( m_pMultiWordforms->m_Hash.IterateNext () )
-		{
-			CSphMultiforms * pWordforms = m_pMultiWordforms->m_Hash.IterateGet ();
-			ARRAY_FOREACH ( i, pWordforms->m_pForms )
-				SafeDelete ( pWordforms->m_pForms[i] );
-
-			SafeDelete ( pWordforms );
-		}
-
-		SafeDelete ( m_pMultiWordforms );
+		for ( auto* pForm : tForms.second->m_pForms )
+			SafeDelete (pForm);
+		SafeDelete ( tForms.second );
 	}
+
+	SafeDelete ( m_pMultiWordforms );
 }
 
 
@@ -13812,12 +13806,9 @@ void CSphTemplateDictTraits::WriteWordforms ( CSphWriter & tWriter ) const
 
 	if ( m_pWordforms->m_pMultiWordforms )
 	{
-		CSphMultiformContainer::CSphMultiformHash & tHash = m_pWordforms->m_pMultiWordforms->m_Hash;
-		tHash.IterateStart();
-		while ( tHash.IterateNext() )
+		for ( const auto& tMultiForm : m_pWordforms->m_pMultiWordforms->m_Hash )
 		{
-			const CSphString & sKey = tHash.IterateGetKey();
-			CSphMultiforms * pMF = tHash.IterateGet();
+			CSphMultiforms * pMF = tMultiForm.second;
 			if ( !pMF )
 				continue;
 
@@ -13827,7 +13818,7 @@ void CSphTemplateDictTraits::WriteWordforms ( CSphWriter & tWriter ) const
 				ConcatReportStrings ( pMF->m_pForms[i]->m_dTokens, sTokens );
 				ConcatReportStrings ( pMF->m_pForms[i]->m_dNormalForm, sForms );
 
-				sLine.SetSprintf ( "%s %s > %s", sKey.cstr(), sTokens.cstr(), sForms.cstr() );
+				sLine.SetSprintf ( "%s %s > %s", tMultiForm.first.cstr(), sTokens.cstr(), sForms.cstr() );
 				tWriter.PutString ( sLine );
 			}
 		}
@@ -16194,7 +16185,7 @@ int sphDictCmpStrictly ( const char * pStr1, int iLen1, const char * pStr2, int 
 }
 
 
-ISphWordlist::Args_t::Args_t ( bool bPayload, int iExpansionLimit, bool bHasExactForms, ESphHitless eHitless, cRefCountedRefPtr_t pIndexData )
+ISphWordlist::Args_t::Args_t ( bool bPayload, int iExpansionLimit, bool bHasExactForms, ESphHitless eHitless, cRefCountedRefPtrGeneric_t pIndexData )
 	: m_bPayload ( bPayload )
 	, m_iExpansionLimit ( iExpansionLimit )
 	, m_bHasExactForms ( bHasExactForms )

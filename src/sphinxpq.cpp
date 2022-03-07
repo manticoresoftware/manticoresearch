@@ -104,7 +104,7 @@ public:
 	bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError ) const override;
 
 	bool Reconfigure ( CSphReconfigureSetup & tSetup ) override EXCLUDES ( m_tLock );
-	void ProcessDiskChunk ( int, VisitChunk_fn&& ) final {};
+	void ProcessDiskChunk ( int, VisitChunk_fn&& ) const final {};
 	int64_t GetLastFlushTimestamp() const override { return m_tmSaved; }
 
 	// plain index stub
@@ -186,10 +186,10 @@ private:
 #define PERCOLATE_WORDS_PER_CP 128
 
 /// percolate query index factory
-PercolateIndex_i * CreateIndexPercolate ( const CSphSchema & tSchema, const char * sIndexName, const char * sPath )
+std::unique_ptr<PercolateIndex_i> CreateIndexPercolate ( const CSphSchema & tSchema, const char * sIndexName, const char * sPath )
 {
 	MEMORY ( MEM_INDEX_RT );
-	return new PercolateIndex_c ( tSchema, sIndexName, sPath );
+	return std::make_unique<PercolateIndex_c> ( tSchema, sIndexName, sPath );
 }
 
 static SegmentReject_t SegmentGetRejects ( const RtSegment_t * pSeg, bool bBuildInfix, bool bUtf8, ESphHitless eHitless )

@@ -82,7 +82,7 @@ void Sleeper(int iMsec, const char* szName)
 
 // this test will NOT pass in single-thread (see gtests_globalstate.cpp, if iThreads<2).
 // that is because it uses ture sphSleepMsec, which effectively pauses single thread.
-TEST ( ThreadPool, DISABLED_WaitForN )
+/*TEST ( ThreadPool, DISABLED_WaitForN )
 {
 	using namespace Threads;
 	Threads::CallCoroutine ( [&] {
@@ -102,7 +102,7 @@ TEST ( ThreadPool, DISABLED_WaitForN )
 		ASSERT_EQ ( iIdx, 0 );
 		std::cout << "test finished, idx=" << iIdx;
 	});
-}
+}*/
 
 TEST ( ThreadPool, strandr )
 {
@@ -171,7 +171,7 @@ TEST ( ThreadPool, strandr2 )
 
 // checks that strandr is re-enterable. I.e. that Coro::Reschedule is NOT cause stack overflow.
 // DISABLED because it is manual, otherwise produce many noise
-TEST ( ThreadPool, DISABLED_strandr_reschedule )
+/*TEST ( ThreadPool, DISABLED_strandr_reschedule )
 {
 	using namespace Threads;
 	g_eLogLevel = SPH_LOG_VERBOSE_DEBUG;
@@ -193,7 +193,7 @@ TEST ( ThreadPool, DISABLED_strandr_reschedule )
 		}
 		std::cout << "strandr escaped\n";
 	});
-}
+}*/
 
 // from there it is prepatation to the next test...
 struct essence_t
@@ -317,7 +317,7 @@ int release_resource ( int N, essence_t* presource, int i )
  *
  * Test is generaly disabled since it is quire long, and also quite noisy. Undisable and run manually, if necessary!
  */
-TEST ( ThreadPool, DISABLED_strandr3 )
+/*TEST ( ThreadPool, DISABLED_strandr3 )
 {
 	using namespace Threads;
 
@@ -452,7 +452,7 @@ TEST ( ThreadPool, DISABLED_strandr3 )
 			ASSERT_EQ ( 0, worker.iWorks );
 	} );
 
-}
+}*/
 
 TEST ( ThreadPool, CoroPromiceFutureConcept )
 {

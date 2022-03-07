@@ -33,11 +33,7 @@ public:
 	bool AddUniq ( const CSphString& sName ) EXCLUDES ( m_dGuard )
 	{
 		SccWL_t wLock ( m_dGuard );
-		if ( m_dSet[sName] )
-			return false;
-
-		m_dSet.Add ( sName );
-		return true;
+		return m_dSet.Add ( sName );
 	}
 
 	void Delete ( const CSphString& sName ) EXCLUDES ( m_dGuard )
@@ -68,8 +64,6 @@ public:
 
 static StringSetMT g_Flushable;
 
-
-
 static void ScheduleFlushTask ( void* pName, int64_t iNextTimestamp=-1 )
 {
 	static int iRtFlushTask = -1;
@@ -93,19 +87,14 @@ static void ScheduleFlushTask ( void* pName, int64_t iNextTimestamp=-1 )
 					return;
 				}
 
-				ServedDescRPtr_c dRlocked ( pServed );
-				if ( !ServedDesc_t::IsMutable ( dRlocked ))
+				if ( !ServedDesc_t::IsMutable ( pServed ))
 				{
 					g_Flushable.Delete ( sName );
 					return;
 				}
 
-				auto* pRT = ( RtIndex_i* ) dRlocked->m_pIndex;
-				if ( !pRT )
-				{
-					g_Flushable.Delete ( sName );
-					return;
-				}
+				RIdx_T<RtIndex_i*> pRT { pServed };
+				assert ( pRT );
 
 				// check timeout, schedule or run immediately.
 				auto iLastTimestamp = pRT->GetLastFlushTimestamp ();
@@ -149,11 +138,8 @@ static void SubscribeFlushIndex ( CSphString sName )
 		ScheduleFlushTask ( sName.Leak ());
 };
 
-void HookSubscribeMutableFlush ( ISphRefcountedMT* pCounter, const CSphString& sName )
+void HookSubscribeMutableFlush ( const CSphString& sName )
 {
-	if ( !pCounter ) // skip added null (disabled) indexes
-		return;
-
 	SubscribeFlushIndex ( sName );
 }
 

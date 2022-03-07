@@ -1124,9 +1124,8 @@ int main ( int iArgs, char ** dArgs )
 	// output
 
 	CSphVector<const char *> dKeys;
-	tWordMap.IterateStart();
-	while ( tWordMap.IterateNext() )
-		dKeys.Add ( tWordMap.IterateGetKey().cstr() );
+	for ( const auto& tWord : tWordMap )
+		dKeys.Add ( tWord.first.cstr() );
 	dKeys.Sort ( WordLess() );
 
 	ARRAY_FOREACH ( iKey, dKeys )

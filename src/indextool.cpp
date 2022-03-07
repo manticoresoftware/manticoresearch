@@ -886,19 +886,13 @@ static void ApplyKilllist ( IndexInfo_t & tTarget, const IndexInfo_t & tKiller, 
 
 static void ApplyKilllists ( CSphConfig & hConf )
 {
-	int nIndexes = 0;
-	hConf["index"].IterateStart();
-	while ( hConf["index"].IterateNext() )
-		nIndexes++;
-
-	CSphFixedVector<IndexInfo_t> dIndexes ( nIndexes );
+	CSphFixedVector<IndexInfo_t> dIndexes ( hConf["index"].GetLength() );
 
 	int iIndex = 0;
 
-	hConf["index"].IterateStart();
-	while ( hConf["index"].IterateNext() )
+	for ( auto& tIndex_ : hConf["index"] )
 	{
-		CSphConfigSection & hIndex = hConf["index"].IterateGet();
+		CSphConfigSection & hIndex = tIndex_.second;
 		if ( !hIndex("path") )
 			continue;
 
@@ -907,7 +901,7 @@ static void ApplyKilllists ( CSphConfig & hConf )
 			continue;
 
 		IndexInfo_t & tIndex = dIndexes[iIndex++];
-		tIndex.m_sName = hConf["index"].IterateGetKey().cstr();
+		tIndex.m_sName = tIndex_.first.cstr();
 		tIndex.m_sPath = hIndex["path"].cstr();
 
 		IndexFiles_c tIndexFiles ( tIndex.m_sPath, tIndex.m_sName.cstr () );
@@ -927,7 +921,7 @@ static void ApplyKilllists ( CSphConfig & hConf )
 
 		CSphString sError;
 		{
-			CSphScopedPtr<CSphIndex> pIndex ( sphCreateIndexPhrase ( nullptr, tIndex.m_sPath.cstr() ) );
+			auto pIndex = sphCreateIndexPhrase ( nullptr, tIndex.m_sPath.cstr() );
 			if ( !pIndex->LoadKillList ( &tIndex.m_dKilllist, tIndex.m_tTargets, sError ) )
 			{
 				fprintf ( stdout, "WARNING: unable to load kill-list for index %s: %s\n", tIndex.m_sName.cstr(), sError.cstr() );
@@ -1195,7 +1189,7 @@ static bool LoadJsonConfig ( CSphConfig & hConf, const CSphString & sConfigFile 
 	return true;
 }
 
-static CSphIndex * CreateIndex ( CSphConfig & hConf, const CSphString & sIndex, bool bDictKeywords, bool bRotate, CSphString & sError )
+static std::unique_ptr<CSphIndex> CreateIndex ( CSphConfig & hConf, const CSphString & sIndex, bool bDictKeywords, bool bRotate, CSphString & sError )
 {
 	// don't expect complete index declarations from indexes created with CREATE TABLE
 	bool bFromJson = !!hConf["index"][sIndex]("from_json");
@@ -1379,9 +1373,7 @@ int main ( int argc, char ** argv )
 	if ( !sphInitCharsetAliasTable ( sError ) )
 		sphDie ( "failed to init charset alias table: %s", sError.cstr() );
 
-	CSphConfigParser cp;
-	CSphConfig & hConf = cp.m_tConf;
-	sphLoadConfig ( sOptConfig, bQuiet, true, cp );
+	auto hConf = sphLoadConfig ( sOptConfig, bQuiet, true );
 
 	// can't reuse the code from searchdconfig, using a simplified version here
 	LoadJsonConfig ( hConf, sOptConfig );
@@ -1413,18 +1405,16 @@ int main ( int argc, char ** argv )
 		fprintf ( stdout, "config valid\nchecking index(es) ... " );
 
 		bool bError = false;
-		// config parser made sure that index(es) present
-		const CSphConfigType & hIndexes = hConf ["index"];
 
-		hIndexes.IterateStart();
-		while ( hIndexes.IterateNext() )
+		// config parser made sure that index(es) present
+		for ( const auto& tIndex : hConf["index"] )
 		{
-			const CSphConfigSection & tIndex = hIndexes.IterateGet();
-			const CSphVariant * pPath = tIndex ( "path" );
+			const CSphConfigSection & hIndex = tIndex.second;
+			const CSphVariant * pPath = hIndex ( "path" );
 			if ( !pPath )
 				continue;
 
-			const CSphVariant * pType = tIndex ( "type" );
+			const CSphVariant * pType = hIndex ( "type" );
 			if ( pType && ( *pType=="rt" || *pType=="distributed" || *pType=="percolate" ) )
 				continue;
 
@@ -1436,9 +1426,9 @@ int main ( int argc, char ** argv )
 			{
 				// nice looking output
 				if ( !bError )
-					fprintf ( stdout, "\nmissed index(es): '%s'", hIndexes.IterateGetKey().cstr() );
+					fprintf ( stdout, "\nmissed index(es): '%s'", tIndex.first.cstr() );
 				else
-					fprintf ( stdout, ", '%s'", hIndexes.IterateGetKey().cstr() );
+					fprintf ( stdout, ", '%s'", tIndex.first.cstr() );
 
 				bError = true;
 			}
@@ -1464,7 +1454,7 @@ int main ( int argc, char ** argv )
 	sphConfigureCommon ( hConf );
 
 	// common part for several commands, check and preload index
-	CSphIndex * pIndex = nullptr;
+	std::unique_ptr<CSphIndex> pIndex;
 	while ( !sIndex.IsEmpty() )
 	{
 		// check config
@@ -1495,7 +1485,7 @@ int main ( int argc, char ** argv )
 		if ( g_eCommand==IndextoolCmd_e::CHECK )
 			pIndex->SetDebugCheck ( bCheckIdDups, iCheckChunk );
 
-		PreallocIndex ( sIndex, bStripPath, pIndex );
+		PreallocIndex ( sIndex, bStripPath, pIndex.get() );
 
 		if ( g_eCommand==IndextoolCmd_e::MORPH )
 			break;
@@ -1604,7 +1594,7 @@ int main ( int argc, char ** argv )
 			{
 				pIndex->Dealloc();
 				sNewIndex.SetSprintf ( "%s.new", hConf["index"][sIndex]["path"].cstr() );
-				if ( !pIndex->Rename ( sNewIndex.cstr() ) )
+				if ( !pIndex->Rename ( sNewIndex ) )
 					sphDie ( "index '%s': rotate failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
 			}
 			return 0;
@@ -1619,7 +1609,7 @@ int main ( int argc, char ** argv )
 			break;
 
 		case IndextoolCmd_e::MORPH:
-			ApplyMorphology ( pIndex );
+			ApplyMorphology ( pIndex.get() );
 			break;
 
 		case IndextoolCmd_e::BUILDIDF:
@@ -1641,7 +1631,7 @@ int main ( int argc, char ** argv )
 					if ( !fp )
 						sphDie ( "failed to topen %s\n", sFoldFile.cstr() );
 				}
-				CharsetFold ( pIndex, fp );
+				CharsetFold ( pIndex.get(), fp );
 				if ( fp!=stdin )
 					fclose ( fp );
 			}

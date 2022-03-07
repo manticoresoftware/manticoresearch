@@ -44,6 +44,9 @@
 #include "tokenizer/charset_definition_parser.h"
 #include "client_session.h"
 #include "sphinx_alter.h"
+#include "docs_collector.h"
+#include "index_rotator.h"
+#include "config_reloader.h"
 
 // services
 #include "taskping.h"
@@ -206,11 +209,7 @@ static CSphString		g_sConfigFile;
 static bool				g_bCleanLoadedConfig = true; // whether to clean config when it parsed and no more necessary
 static bool				LOG_LEVEL_SHUTDOWN = val_from_env("MANTICORE_TRACK_DAEMON_SHUTDOWN",false); // verbose logging when daemon shutdown, ruled by this env variable
 
-#if _WIN32
-static bool				g_bSeamlessRotate	= false;
-#else
-static bool				g_bSeamlessRotate	= true;
-#endif
+static auto&			g_bSeamlessRotate	= sphGetSeamlessRotate ();
 
 static bool				g_bIOStats		= false;
 static auto&			g_bCpuStats 	= sphGetbCpuStat ();
@@ -234,15 +233,14 @@ struct SharedData_t
 static SharedData_t* 		g_pShared = nullptr;
 volatile bool				g_bMaintenance = false;
 
-GuardedHash_c *								g_pLocalIndexes = new GuardedHash_c();	// served (local) indexes hash
-GuardedHash_c *								g_pDistIndexes = new GuardedHash_c ();    // distributed indexes hash
+ReadOnlyServedHash_c *						g_pLocalIndexes = new ReadOnlyServedHash_c();	// served (local) indexes hash
+ReadOnlyDistrHash_c *						g_pDistIndexes = new ReadOnlyDistrHash_c ();	// distributed indexes hash
 
 // this is internal deal of the daemon; don't expose it outside!
 // fixme! move all this stuff to dedicated file.
-static GuardedHash_c g_dPostIndexes; GUARDED_BY ( MainThread )// not yet ready (in process of loading/rotation) indexes
 
 static RwLock_t								g_tRotateConfigMutex;
-static CSphConfigParser g_pCfg GUARDED_BY ( g_tRotateConfigMutex );
+static CSphConfig							g_hCfg GUARDED_BY ( g_tRotateConfigMutex );
 static volatile bool						g_bNeedRotate = false;		// true if there were pending HUPs to handle (they could fly in during previous rotate)
 static volatile bool						g_bInRotate = false;		// true while we are rotating
 static volatile bool						g_bReloadForced = false;	// true in case reload issued via SphinxQL
@@ -278,18 +276,6 @@ static void ReleaseTTYFlag()
 {
 	if ( g_pShared )
 		g_pShared->m_bHaveTTY = true;
-}
-
-
-static ServedIndexRefPtr_c GetDisabled ( const CSphString& sName )
-{
-	return GetServed ( sName, &g_dPostIndexes );
-}
-
-
-void ReleaseAndClearDisabled()
-{
-	g_dPostIndexes.ReleaseAndClear();
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -727,11 +713,10 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	// unlock indexes and release locks if needed
 	SHUTINFO << "Unlock indexes ...";
-	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next(); )
 	{
-		auto pIdx = (const ServedDesc_t *) it.Get(); // breaks any access, but we're finishing, that's ok.
-		if ( pIdx && pIdx->m_pIndex )
-			pIdx->m_pIndex->Unlock();
+		ServedSnap_t hLocal = g_pLocalIndexes->GetHash();
+		for ( const auto& tIt : *hLocal )
+			RWIdx_c ( tIt.second )->Unlock();
 	}
 
 	Threads::CallCoroutine ( [] {
@@ -1486,7 +1471,7 @@ void SendErrorReply ( ISphOutputBuffer & tOut, const char * sTemplate, ... )
 
 void DistributedIndex_t::GetAllHosts ( VectorAgentConn_t &dTarget ) const
 {
-	for ( const auto * pMultiAgent : m_dAgents )
+	for ( const auto& pMultiAgent : m_dAgents )
 		for ( const auto & dHost : *pMultiAgent )
 		{
 			auto * pAgent = new AgentConn_t;
@@ -1497,22 +1482,12 @@ void DistributedIndex_t::GetAllHosts ( VectorAgentConn_t &dTarget ) const
 		}
 }
 
-
-void DistributedIndex_t::ForEveryHost ( ProcessFunctor pFunc )
-{
-	for ( auto * pAgent : m_dAgents )
-		for ( auto &dHost : *pAgent )
-			pFunc ( dHost );
-}
-
-
 DistributedIndex_t::~DistributedIndex_t ()
 {
 	sphLogDebugv ( "DistributedIndex_t %p removed", this );
-	for ( auto * pAgent : m_dAgents )
-		SafeRelease ( pAgent );
 
 	// cleanup global
+	m_dAgents.Reset();
 	MultiAgentDesc_c::CleanupOrphaned ();
 };
 
@@ -5064,33 +5039,25 @@ struct DistrServedByAgent_t : StatsPerQuery_t
 	StrVec_t						m_dLocalNames;
 };
 
-/// manage collection of pre-locked indexes (to avoid multilocks)
+/// manage collection of indexes (to keep them alive)
 /// Get(name) - returns an index from collection.
-/// AddRLocked(name) - add local idx to collection, read-locking it.
-/// AddUnmanaged(name,pidx) - add pre-locked idx, to make it available with Get()
-/// d-tr unlocks indexes added with AddRLockedIndex.
-class LockedCollection_c : public ISphNoncopyable
+/// AddUniqIndex(name) - add local idx to collection, addref is implied by design
+/// AddIndex(name,pidx) - add custom idx, to make it available with Get()
+class KeepCollection_c : public ISphNoncopyable
 {
-	SmallStringHash_T<ServedDescRPtr_c*> m_hUsed;
-	SmallStringHash_T<const ServedDesc_t*> 	m_hUnmanaged;
+	SmallStringHash_T<cServedIndexRefPtr_c> m_hIndexes;
+
 public:
-	~LockedCollection_c();
-	bool AddRLocked ( const CSphString &sName );
-	void AddRLocked ( const CSphString & sName, const ServedIndex_c * pIdx ) ;
-	void AddUnmanaged ( const CSphString &sName, const ServedDesc_t * pIdx );
+	// add from globally served
+	bool AddUniqIndex ( const CSphString& sName );
 
-	const ServedDesc_t * Get ( const CSphString &sName ) const;
+	// add custom
+	void AddIndex ( const CSphString& sName, cServedIndexRefPtr_c pIdx );
+
+	// use idx
+	cServedIndexRefPtr_c Get ( const CSphString &sName ) const;
 };
 
-
-struct LocalSearch_t
-{
-	int					m_iLocal;
-	ISphMatchSorter **	m_ppSorters;
-	CSphQueryResult **	m_ppResults;
-	bool				m_bResult;
-	int64_t				m_iMass;
-};
 
 class SearchHandler_c
 {
@@ -5099,8 +5066,7 @@ public:
 									~SearchHandler_c();
 
 	void							RunQueries ();					///< run all queries, get all results
-	void							RunUpdates ( const CSphQuery & tQuery, const CSphString & sIndex, CSphAttrUpdateEx * pUpdates ); ///< run Update command instead of Search
-	void							RunDeletes ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors, CSphVector<DocID_t> * pDelDocs );
+	void							RunCollect ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors, CSphVector<BYTE> * pCollectedDocs );
 	void							SetQuery ( int iQuery, const CSphQuery & tQuery, ISphTableFunc * pTableFunc );
 	void							SetQueryParser ( const QueryParser_i * pParser, QueryType_e eQueryType );
 	void							SetProfile ( QueryProfile_c * pProfile );
@@ -5113,7 +5079,7 @@ public:
 	CSphVector<StatsPerQuery_t>		m_dQueryIndexStats;				///< statistics for current query
 	CSphVector<SearchFailuresLog_c>	m_dFailuresSet;					///< failure logs for each query
 	CSphVector<CSphVector<int64_t>>	m_dAgentTimes;					///< per-agent time stats
-	LockedCollection_c				m_dLocked;						/// locked indexes
+	KeepCollection_c				m_dAcquired;					/// locked indexes
 	CSphFixedVector<ISphTableFunc *>	m_dTables;
 	SqlStmt_t *						m_pStmt = nullptr;				///< original (one) statement to take extra options
 
@@ -5127,8 +5093,7 @@ protected:
 	bool							m_bFacetQueue = false;	///< whether current subset is subject to facet-queue optimization
 	CSphVector<LocalIndex_t>		m_dLocal;				///< local indexes for the current subset
 	StrVec_t 						m_dExtraSchema;		 	///< the extra attrs for agents. One vec per index*threads
-	CSphAttrUpdateEx *				m_pUpdates = nullptr;	///< holder for updates
-	CSphVector<DocID_t> *			m_pDelDocs = nullptr;	///< this query is for deleting
+	CSphVector<BYTE> *				m_pCollectedDocs = nullptr;	///< this query is for deleting
 
 	QueryProfile_c *				m_pProfile = nullptr;
 	QueryType_e						m_eQueryType {QUERY_API}; ///< queries from sphinxql require special handling
@@ -5159,7 +5124,7 @@ private:
 	bool							ParseSysVar();
 	bool							ParseIdxSubkeys();
 	bool							CheckMultiQuery() const;
-	bool							RLockInvokedIndexes();
+	bool							AcquireInvokedIndexes();
 	void							UniqLocals ( VecTraits_T<LocalIndex_t>& dLocals );
 	void							RunActionQuery ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors ); ///< run delete/update
 	bool							BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_t & dRemotes, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent ); // fixme!
@@ -5171,7 +5136,7 @@ private:
 	int								CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter*> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook ) const;
 
 	SphQueueSettings_t				MakeQueueSettings ( const CSphIndex * pIndex, int iMaxMatches, ISphExprHook * pHook ) const;
-	CSphIndex *						CheckIndexSuitable ( const CSphString& sLocal, const char * szParent, VecTraits_T<SearchFailuresLog_c> * pNFailuresSet=nullptr ) const;
+	cServedIndexRefPtr_c			CheckIndexSelectable ( const CSphString& sLocal, const char * szParent, VecTraits_T<SearchFailuresLog_c> * pNFailuresSet=nullptr ) const;
 	bool							CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt, SphQueueRes_t * pQueueRes, VecTraits_T<SearchFailuresLog_c> & dFlr, StrVec_t * pExtra, const CSphIndex* pIndex, const CSphString & sLocal, const char * szParent, ISphExprHook * pHook );
 	void							CalcSplits ( int iConcurrency, CSphFixedVector<int> & dSplits );
 };
@@ -5214,6 +5179,18 @@ AggrResult_t * PubSearchHandler_c::GetResult ( int iResult )
 {
 	assert ( m_pImpl );
 	return m_pImpl->GetResult (iResult);
+}
+
+void PubSearchHandler_c::PushIndex ( const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc )
+{
+	assert ( m_pImpl );
+	m_pImpl->m_dAcquired.AddIndex ( sIndex, pDesc );
+}
+
+void PubSearchHandler_c::RunCollect ( const CSphQuery& tQuery, const CSphString& sIndex, CSphString* pErrors, CSphVector<BYTE>* pCollectedDocs )
+{
+	assert ( m_pImpl );
+	m_pImpl->RunCollect ( tQuery, sIndex, pErrors, pCollectedDocs );
 }
 
 
@@ -5314,67 +5291,38 @@ void SearchHandler_c::SetQueryParser ( const QueryParser_i * pParser, QueryType_
 	}
 }
 
-LockedCollection_c::~LockedCollection_c()
+bool KeepCollection_c::AddUniqIndex ( const CSphString & sName )
 {
-	for ( auto& tUsed : m_hUsed )
-		SafeDelete ( tUsed.second );
-}
-
-bool LockedCollection_c::AddRLocked ( const CSphString & sName )
-{
-	if ( m_hUsed.Exists ( sName ) || m_hUnmanaged.Exists ( sName ) )
+	if ( m_hIndexes.Exists ( sName ) )
 		return true;
 
-	auto pServed = GetServed ( sName );
-	if ( !pServed )
+	auto pIdx = GetServed ( sName );
+	if ( !pIdx )
 		return false;
 
-	m_hUsed.Add ( new ServedDescRPtr_c ( pServed ), sName );
+	m_hIndexes.Add ( std::move ( pIdx ), sName );
 	return true;
 }
 
-void LockedCollection_c::AddRLocked ( const CSphString & sName, const ServedIndex_c * pIdx )
+void KeepCollection_c::AddIndex ( const CSphString & sName, cServedIndexRefPtr_c pIdx )
 {
-	if ( m_hUsed.Exists ( sName ) || m_hUnmanaged.Exists ( sName ))
+	if ( m_hIndexes.Exists ( sName ) )
 		return;
 
-	m_hUsed.Add ( new ServedDescRPtr_c ( pIdx ), sName );
+	m_hIndexes.Add ( std::move ( pIdx ), sName );
 }
 
-void LockedCollection_c::AddUnmanaged ( const CSphString &sName, const ServedDesc_t * pIdx )
+cServedIndexRefPtr_c KeepCollection_c::Get ( const CSphString & sName ) const
 {
-	if ( m_hUsed.Exists ( sName ) || m_hUnmanaged.Exists ( sName ) )
-		return;
-
-	m_hUnmanaged.Add ( pIdx, sName );
+	auto * ppIndex = m_hIndexes ( sName );
+	assert ( ppIndex && "KeepCollection_c::Get called with absent key");
+	return *ppIndex;
 }
 
-
-const ServedDesc_t * LockedCollection_c::Get ( const CSphString & sName ) const
-{
-	auto * pppIndex = m_hUsed ( sName );
-	if ( pppIndex )
-		return **pppIndex;
-
-	auto * ppUnmanaged = m_hUnmanaged ( sName );
-	if ( ppUnmanaged )
-		return *ppUnmanaged;
-
-	return nullptr;
-}
-
-
-void SearchHandler_c::RunUpdates ( const CSphQuery & tQuery, const CSphString & sIndex,	CSphAttrUpdateEx * pUpdates )
+void SearchHandler_c::RunCollect ( const CSphQuery &tQuery, const CSphString &sIndex, CSphString * pErrors, CSphVector<BYTE> * pCollectedDocs )
 {
 	m_bQueryLog = false;
-	m_pUpdates = pUpdates;
-	RunActionQuery ( tQuery, sIndex, pUpdates->m_pError );
-}
-
-void SearchHandler_c::RunDeletes ( const CSphQuery &tQuery, const CSphString &sIndex, CSphString * pErrors, CSphVector<DocID_t> * pDelDocs )
-{
-	m_bQueryLog = false;
-	m_pDelDocs = pDelDocs;
+	m_pCollectedDocs = pCollectedDocs;
 	RunActionQuery ( tQuery, sIndex, pErrors );
 }
 
@@ -5484,8 +5432,7 @@ SphQueueSettings_t SearchHandler_c::MakeQueueSettings ( const CSphIndex * pIndex
 {
 	SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema (), m_pProfile );
 	tQueueSettings.m_bComputeItems = true;
-	tQueueSettings.m_pUpdate = m_pUpdates;
-	tQueueSettings.m_pCollection = m_pDelDocs;
+	tQueueSettings.m_pCollection = m_pCollectedDocs;
 	tQueueSettings.m_pHook = pHook;
 	tQueueSettings.m_iMaxMatches = GetMaxMatches ( iMaxMatches, pIndex );
 	tQueueSettings.m_bNeedDocids = m_bNeedDocIDs;	// need docids to merge results from indexes
@@ -5656,17 +5603,10 @@ struct LocalSearchClone_t
 };
 
 
-CSphIndex * SearchHandler_c::CheckIndexSuitable ( const CSphString & sLocal, const char * szParent, VecTraits_T<SearchFailuresLog_c> * pNFailuresSet ) const
+cServedIndexRefPtr_c SearchHandler_c::CheckIndexSelectable ( const CSphString & sLocal, const char * szParent, VecTraits_T<SearchFailuresLog_c> * pNFailuresSet ) const
 {
-	const auto * pServed = m_dLocked.Get ( sLocal );
-	if ( !pServed )
-	{
-		if ( szParent && pNFailuresSet )
-			for ( auto & dFailureSet : *pNFailuresSet )
-				dFailureSet.SubmitEx ( szParent, nullptr, "local index %s missing", sLocal.cstr() );
-
-		return nullptr;
-	}
+	const auto& pServed = m_dAcquired.Get ( sLocal );
+	assert ( pServed );
 
 	if ( !ServedDesc_t::IsSelectable ( pServed ) )
 	{
@@ -5674,10 +5614,10 @@ CSphIndex * SearchHandler_c::CheckIndexSuitable ( const CSphString & sLocal, con
 			for ( auto & dFailureSet : *pNFailuresSet )
 				dFailureSet.SubmitEx ( sLocal, nullptr, "%s", "index is not suitable for select" );
 
-		return nullptr;
+		return cServedIndexRefPtr_c{};
 	}
 
-	return pServed->m_pIndex;
+	return pServed;
 }
 
 
@@ -5729,12 +5669,12 @@ void SearchHandler_c::CalcSplits ( int iConcurrency, CSphFixedVector<int> & dSpl
 	ARRAY_FOREACH ( iLocal, m_dLocal )
 	{
 		const LocalIndex_t & tLocal = m_dLocal[iLocal];
-		CSphIndex * pIndex = CheckIndexSuitable ( tLocal.m_sName, tLocal.m_sParentIndex.cstr(), nullptr );
+		auto pIndex = CheckIndexSelectable ( tLocal.m_sName, tLocal.m_sParentIndex.cstr(), nullptr );
 		if ( !pIndex )
 			continue;
 
 		SplitData_t & tSplitData = dSplitData[iLocal];
-		int64_t iMetric = pIndex->GetPseudoShardingMetric ( m_dNQueries );
+		int64_t iMetric = RIdx_c ( pIndex )->GetPseudoShardingMetric ( m_dNQueries );
 		if ( iMetric==-1 )
 		{
 			iSingleSplits++;
@@ -5783,12 +5723,11 @@ private:
 class GlobalSorters_c
 {
 public:
-	GlobalSorters_c ( const VecTraits_T<CSphQuery> & dQueries, const CSphVector<CSphIndex *> & dIndexes )
+	GlobalSorters_c ( const VecTraits_T<CSphQuery> & dQueries, const CSphVector<cServedIndexRefPtr_c> & dIndexes )
 		: m_dQueries ( dQueries )
 		, m_dSorters { dQueries.GetLength() }
 	{
-		int iValidIndexes = 0;
-		dIndexes.for_each ( [&]( CSphIndex * pIndex ){ if ( pIndex ) iValidIndexes++; } );
+		auto iValidIndexes = (int)dIndexes.count_of ( [&] ( const auto& pIndex ) { return pIndex; } );
 
 		m_bNeedGlobalSorters = iValidIndexes>1 && !dQueries.First().m_sGroupDistinct.IsEmpty();
 		if ( m_bNeedGlobalSorters )
@@ -5802,12 +5741,12 @@ public:
 
 				if ( !pFirstSchema )
 				{
-					pFirstSchema = &i->GetMatchSchema();
+					pFirstSchema = &RIdx_c ( i )->GetMatchSchema();
 					continue;
 				}
 
 				CSphString sCmpError;
-				if ( !pFirstSchema->CompareTo ( i->GetMatchSchema(), sCmpError ) )
+				if ( !pFirstSchema->CompareTo ( RIdx_c ( i )->GetMatchSchema(), sCmpError ) )
 				{
 					m_bNeedGlobalSorters = false;
 					break;
@@ -5899,7 +5838,6 @@ private:
 	bool									m_bNeedGlobalSorters = false;
 };
 
-
 void SearchHandler_c::RunLocalSearches ()
 {
 	int64_t tmLocal = sphMicroTimer ();
@@ -5922,9 +5860,9 @@ void SearchHandler_c::RunLocalSearches ()
 		pMainExtra = &m_dExtraSchema;
 	}
 
-	CSphVector<CSphIndex *> dLocalIndexes;
-	for ( auto i : m_dLocal )
-		dLocalIndexes.Add ( CheckIndexSuitable ( i.m_sName, nullptr ) );
+	CSphVector<cServedIndexRefPtr_c> dLocalIndexes;
+	for ( const auto& i : m_dLocal )
+		dLocalIndexes.Add ( CheckIndexSelectable ( i.m_sName, nullptr ) );
 
 	GlobalSorters_c tGlobalSorters ( m_dNQueries, dLocalIndexes );
 
@@ -6009,44 +5947,49 @@ void SearchHandler_c::RunLocalSearches ()
 			GlobalCrashQueryGetRef().m_dIndex = FromStr ( sLocal );
 
 			// prepare and check the index
-			CSphIndex* pIndex = CheckIndexSuitable ( sLocal, szParent, &dNFailuresSet );
-			if ( !pIndex )
+			cServedIndexRefPtr_c pServed = CheckIndexSelectable ( sLocal, szParent, &dNFailuresSet );
+			if ( !pServed )
 				continue;
-
-			tCtx.m_tHook.SetIndex ( pIndex );
-			tCtx.m_tHook.SetQueryType ( m_eQueryType );
-
-			// create sorters
-			SphQueueRes_t tQueueRes;
-			if ( !CreateValidSorters ( dSorters, &tQueueRes, dNFailuresSet, pExtra, pIndex, sLocal, szParent, &tCtx.m_tHook ) )
-				continue;
-
-			// do the query
-			CSphMultiQueryArgs tMultiArgs ( iIndexWeight );
-			tMultiArgs.m_uPackedFactorFlags = tQueueRes.m_uPackedFactorFlags;
-			if ( m_bGotLocalDF )
-			{
-				tMultiArgs.m_bLocalDF = true;
-				tMultiArgs.m_pLocalDocs = &m_hLocalDocs;
-				tMultiArgs.m_iTotalDocs = m_iTotalDocs;
-			}
-
-			bool bCanBeCloned = dSorters.all_of ( []( auto * pSorter ){ return pSorter ? pSorter->CanBeCloned() : true; } );
-
-			// fixme: previous calculations are wrong; we are not splitting the query if we are using non-clonable sorters
-			tMultiArgs.m_iSplit = bCanBeCloned ? dSplits[iLocal] : 1;
-			tMultiArgs.m_bFinalizeSorters = !tGlobalSorters.NeedGlobalSorters();
 
 			bool bResult = false;
 			CSphQueryResultMeta tMqMeta;
 			CSphQueryResult tMqRes;
 			tMqRes.m_pMeta = &tMqMeta;
-			dNAggrResults.First().m_tIOStats.Start ();
-			if ( m_bMultiQueue )
-				bResult = pIndex->MultiQuery ( tMqRes, m_dNQueries.First(), dSorters, tMultiArgs );
-			else
-				bResult = pIndex->MultiQueryEx ( iQueries, &m_dNQueries[0], &dNResults[0], &dSorters[0], tMultiArgs );
-			dNAggrResults.First ().m_tIOStats.Stop ();
+
+			{	// scope for r-locking the index
+				RIdx_c pIndex { pServed };
+
+				tCtx.m_tHook.SetIndex ( pIndex );
+				tCtx.m_tHook.SetQueryType ( m_eQueryType );
+
+				// create sorters
+				SphQueueRes_t tQueueRes;
+				if ( !CreateValidSorters ( dSorters, &tQueueRes, dNFailuresSet, pExtra, pIndex, sLocal, szParent, &tCtx.m_tHook ) )
+					continue;
+
+				// do the query
+				CSphMultiQueryArgs tMultiArgs ( iIndexWeight );
+				tMultiArgs.m_uPackedFactorFlags = tQueueRes.m_uPackedFactorFlags;
+				if ( m_bGotLocalDF )
+				{
+					tMultiArgs.m_bLocalDF = true;
+					tMultiArgs.m_pLocalDocs = &m_hLocalDocs;
+					tMultiArgs.m_iTotalDocs = m_iTotalDocs;
+				}
+
+				bool bCanBeCloned = dSorters.all_of ( []( auto * pSorter ){ return pSorter ? pSorter->CanBeCloned() : true; } );
+
+				// fixme: previous calculations are wrong; we are not splitting the query if we are using non-clonable sorters
+				tMultiArgs.m_iSplit = bCanBeCloned ? dSplits[iLocal] : 1;
+				tMultiArgs.m_bFinalizeSorters = !tGlobalSorters.NeedGlobalSorters();
+
+				dNAggrResults.First().m_tIOStats.Start ();
+				if ( m_bMultiQueue )
+					bResult = pIndex->MultiQuery ( tMqRes, m_dNQueries.First(), dSorters, tMultiArgs );
+				else
+					bResult = pIndex->MultiQueryEx ( iQueries, &m_dNQueries[0], &dNResults[0], &dSorters[0], tMultiArgs );
+				dNAggrResults.First ().m_tIOStats.Stop ();
+			}
 
 			iCpuTime += sphTaskCpuTimer ();
 
@@ -6166,14 +6109,9 @@ bool SearchHandler_c::AllowsMulti() const
 	// if select lists do not contain any expressions we can optimize queries too
 	for ( const auto & dLocal : m_dLocal )
 	{
-		const auto * pServedIndex = m_dLocked.Get ( dLocal.m_sName );
-
-		// check that it exists
-		if ( !pServedIndex )
-			continue;
-
+		RIdx_c pServedIndex ( m_dAcquired.Get ( dLocal.m_sName ) );
 		// FIXME!!! compare expressions as m_pExpr->GetHash
-		const CSphSchema & tSchema = pServedIndex->m_pIndex->GetMatchSchema();
+		const CSphSchema & tSchema = pServedIndex->GetMatchSchema();
 		if ( m_dNQueries.any_of ( [&tSchema] ( const CSphQuery & tQ ) { return sphHasExpressions ( tQ, tSchema ); } ) )
 			return false;
 	}
@@ -6197,7 +6135,7 @@ void SearchHandler_c::SetupLocalDF ()
 	bool bGlobalIDF = true;
 	ARRAY_FOREACH_COND ( i, m_dLocal, bGlobalIDF )
 	{
-		ServedDescRPtr_c pDesc ( GetServed( m_dLocal[i].m_sName ) );
+		auto pDesc = GetServed( m_dLocal[i].m_sName );
 		bGlobalIDF = ( pDesc && !pDesc->m_sGlobalIDFPath.IsEmpty () );
 	}
 	// bail out on all indexes with global idf set
@@ -6241,15 +6179,12 @@ void SearchHandler_c::SetupLocalDF ()
 	dLocal.Resize ( 0 );
 	ARRAY_FOREACH ( i, m_dLocal )
 	{
-		const auto * pIndex = m_dLocked.Get ( m_dLocal[i].m_sName );
-		if ( !pIndex )
-			continue;
-
 		dLocal.Add();
 		dLocal.Last().m_iLocal = i;
 		// TODO: cache settingsFNV on index load
 		// FIXME!!! no need to count dictionary hash
-		dLocal.Last().m_uHash = pIndex->m_pIndex->GetTokenizer()->GetSettingsFNV() ^ pIndex->m_pIndex->GetDictionary()->GetSettingsFNV();
+		RIdx_c pIndex ( m_dAcquired.Get ( m_dLocal[i].m_sName ) );
+		dLocal.Last().m_uHash = pIndex->GetTokenizer()->GetSettingsFNV() ^ pIndex->GetDictionary()->GetSettingsFNV();
 	}
 	dLocal.Sort ( bind ( &IndexSettings_t::m_uHash ) );
 
@@ -6258,24 +6193,21 @@ void SearchHandler_c::SetupLocalDF ()
 	ARRAY_FOREACH ( i, dLocal )
 	{
 		int iLocalIndex = dLocal[i].m_iLocal;
-		const auto * pIndex = m_dLocked.Get ( m_dLocal[iLocalIndex].m_sName );
-		if ( !pIndex )
-			continue;
-
-		m_iTotalDocs += pIndex->m_pIndex->GetStats().m_iTotalDocuments;
+		RIdx_c pIndex ( m_dAcquired.Get ( m_dLocal[iLocalIndex].m_sName ) );
+		m_iTotalDocs += pIndex->GetStats().m_iTotalDocuments;
 
 		if ( i && dLocal[i].m_uHash==dLocal[i-1].m_uHash )
 		{
 			dKeywords.Apply ( [] ( CSphKeywordInfo & tKw ) { tKw.m_iDocs = 0; } );
 
 			// no need to tokenize query just fill docs count
-			pIndex->m_pIndex->FillKeywords ( dKeywords );
+			pIndex->FillKeywords ( dKeywords );
 		} else
 		{
 			GetKeywordsSettings_t tSettings;
 			tSettings.m_bStats = true;
 			dKeywords.Resize ( 0 );
-			pIndex->m_pIndex->GetKeywords ( dKeywords, dQuery.Begin(), tSettings, NULL );
+			pIndex->GetKeywords ( dKeywords, dQuery.Begin(), tSettings, NULL );
 
 			// FIXME!!! move duplicate removal to GetKeywords to do less QWord setup and dict searching
 			// custom uniq - got rid of word duplicates
@@ -6337,7 +6269,7 @@ uint64_t CalculateMass ( const CSphIndexStatus & dStats )
 
 static uint64_t GetIndexMass ( const CSphString & sName )
 {
-	return ServedDesc_t::GetIndexMass ( ServedDescRPtr_c ( GetServed ( sName ) ) );
+	return ServedIndex_c::GetIndexMass ( GetServed ( sName ) );
 }
 
 // declared to be used in ParseSysVar
@@ -6360,7 +6292,6 @@ bool SearchHandler_c::ParseSysVar ()
 		if ( !dSubkeys.IsEmpty () )
 		{
 			bool bSchema = ( dSubkeys.Last ()==".table" );
-			ServedIndex_c * pIndex = nullptr;
 			bool bValid = true;
 			TableFeeder_fn fnFeed;
 			if ( dSubkeys[0]==".threads" ) // select .. from @@system.threads
@@ -6391,6 +6322,7 @@ bool SearchHandler_c::ParseSysVar ()
 
 			if ( bValid )
 			{
+				cServedIndexRefPtr_c pIndex;
 				if ( bSchema )
 				{
 					m_dLocal.First ().m_sName.SetSprintf( "@@system.%s.table", dSubkeys[0].cstr() );
@@ -6400,8 +6332,7 @@ bool SearchHandler_c::ParseSysVar ()
 					m_dLocal.First ().m_sName.SetSprintf ( "@@system.%s", dSubkeys[0].cstr () );
 					pIndex = MakeDynamicIndex ( std::move ( fnFeed ) );
 				}
-				m_dLocked.AddRLocked ( m_dLocal.First ().m_sName, pIndex );
-				SafeRelease ( pIndex );
+				m_dAcquired.AddIndex ( m_dLocal.First ().m_sName, std::move (pIndex) );
 				return true;
 			}
 		}
@@ -6420,39 +6351,33 @@ bool SearchHandler_c::ParseIdxSubkeys ()
 	const auto & sVar = m_dLocal.First ().m_sName;
 	const auto & dSubkeys = m_dNQueries.First ().m_dStringSubkeys;
 
-	if ( !dSubkeys.IsEmpty () )
+	if ( dSubkeys.IsEmpty () )
+		return false;
+
+	bool bSchema = ( dSubkeys.GetLength()>1 && dSubkeys.Last ()==".table" );
+	TableFeeder_fn fnFeed;
+	if ( dSubkeys[0]==".table" ) // select .. idx.table
+		fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleMysqlDescribe ( *pBuf, m_pStmt ); };
+	else if ( dSubkeys[0]==".status" ) // select .. idx.status
+		fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleSelectIndexStatus ( *pBuf, m_pStmt ); };
+	else if ( dSubkeys[0]==".files" ) // select .. from idx.files
+		fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleSelectFiles ( *pBuf, m_pStmt ); };
+	else
+		return false;
+
+	cServedIndexRefPtr_c pIndex;
+	if ( bSchema )
 	{
-		bool bSchema = ( dSubkeys.GetLength()>1 && dSubkeys.Last ()==".table" );
-		ServedIndex_c * pIndex = nullptr;
-		bool bValid = true;
-		TableFeeder_fn fnFeed;
-		if ( dSubkeys[0]==".table" ) // select .. idx.table
-			fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleMysqlDescribe ( *pBuf, m_pStmt ); };
-		else if ( dSubkeys[0]==".status" ) // select .. idx.status
-			fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleSelectIndexStatus ( *pBuf, m_pStmt ); };
-		else if ( dSubkeys[0]==".files" ) // select .. from idx.files
-			fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleSelectFiles ( *pBuf, m_pStmt ); };
-		else
-			bValid = false;
-
-		if ( bValid )
-		{
-			if ( bSchema )
-			{
-				m_dLocal.First ().m_sName.SetSprintf ( "%s%s.table", sVar.cstr (), dSubkeys[0].cstr () );
-				pIndex = MakeDynamicIndexSchema ( std::move ( fnFeed ) );
-			} else
-			{
-				m_dLocal.First ().m_sName.SetSprintf ( "%s%s", sVar.cstr (), dSubkeys[0].cstr () );
-				pIndex = MakeDynamicIndex ( std::move ( fnFeed ) );
-			}
-
-			m_dLocked.AddRLocked ( m_dLocal.First ().m_sName, pIndex );
-			SafeRelease ( pIndex );
-			return true;
-		}
+		m_dLocal.First ().m_sName.SetSprintf ( "%s%s.table", sVar.cstr (), dSubkeys[0].cstr () );
+		pIndex = MakeDynamicIndexSchema ( std::move ( fnFeed ) );
+	} else
+	{
+		m_dLocal.First ().m_sName.SetSprintf ( "%s%s", sVar.cstr (), dSubkeys[0].cstr () );
+		pIndex = MakeDynamicIndex ( std::move ( fnFeed ) );
 	}
-	return false;
+
+	m_dAcquired.AddIndex ( m_dLocal.First().m_sName, std::move ( pIndex ) );
+	return true;
 }
 
 ////////////////////////////////////////////////////////////////
@@ -6512,13 +6437,13 @@ bool SearchHandler_c::CheckMultiQuery() const
 
 // lock local indexes invoked in query
 // Fails if an index is absent and this is not allowed
-bool SearchHandler_c::RLockInvokedIndexes()
+bool SearchHandler_c::AcquireInvokedIndexes()
 {
 	// if unexistent allowed, short flow
 	if ( m_dNQueries.First().m_bIgnoreNonexistentIndexes )
 	{
 		ARRAY_FOREACH ( i, m_dLocal )
-			if ( !m_dLocked.AddRLocked ( m_dLocal[i].m_sName ) )
+			if ( !m_dAcquired.AddUniqIndex ( m_dLocal[i].m_sName ) )
 				m_dLocal.Remove ( i-- );
 		return true;
 	}
@@ -6526,7 +6451,7 @@ bool SearchHandler_c::RLockInvokedIndexes()
 	// _build the list of non-existent
 	StringBuilder_c sFailed (", ");
 	for ( const auto & dLocal : m_dLocal )
-		if ( !m_dLocked.AddRLocked ( dLocal.m_sName ) )
+		if ( !m_dAcquired.AddUniqIndex ( dLocal.m_sName ) )
 			sFailed << dLocal.m_sName;
 
 	// no absent indexes, viola!
@@ -6549,8 +6474,7 @@ void SearchHandler_c::UniqLocals ( VecTraits_T<LocalIndex_t> & dLocals )
 
 	CSphVector<int> dOrder;
 	dOrder.Resize ( dLocals.GetLength() );
-	ARRAY_CONSTFOREACH(i, dOrder)
-		dOrder[i] = i;
+	dOrder.FillSeq();
 
 	dOrder.Sort ( Lesser ( [&dLocals] ( int a, int b )
 	{
@@ -6587,78 +6511,67 @@ void SearchHandler_c::CalcTimeStats ( int64_t tmCpu, int64_t tmSubset, const CSp
 			dResult.m_iRealQueryTime = (int)( tmSubset/1000/iQueries );
 			dResult.m_iCpuTime = tmCpu/iQueries;
 		}
-	} else
-	{
-		int64_t tmAccountedWall = 0;
-		int64_t tmAccountedCpu = 0;
-		for ( const auto & dResult : m_dNAggrResults )
-		{
-			tmAccountedWall += dResult.m_iQueryTime*1000;
-			assert ( ( dResult.m_iCpuTime==0 && dResult.m_iAgentCpuTime==0 ) ||	// all work was done in this thread
-				( dResult.m_iCpuTime>0 && dResult.m_iAgentCpuTime==0 ) ||		// children threads work
-				( dResult.m_iAgentCpuTime>0 && dResult.m_iCpuTime==0 ) );		// agents work
-			tmAccountedCpu += dResult.m_iCpuTime;
-			tmAccountedCpu += dResult.m_iAgentCpuTime;
-		}
-		// whether we had work done in children threads (dist_threads>1) or in agents
-		bool bExternalWork = tmAccountedCpu!=0;
-
-		int64_t tmDeltaWall = ( tmSubset - tmAccountedWall ) / iQueries;
-
-		for ( auto & dResult : m_dNAggrResults )
-		{
-			dResult.m_iQueryTime += (int)(tmDeltaWall/1000);
-			dResult.m_iRealQueryTime = (int)( tmSubset/1000/iQueries );
-			dResult.m_iCpuTime = tmCpu/iQueries;
-			if ( bExternalWork )
-				dResult.m_iCpuTime += tmAccountedCpu;
-		}
-
-		// correct per-index stats from agents
-		int iTotalSuccesses = 0;
-		for ( const auto & dResult : m_dNAggrResults )
-			iTotalSuccesses += dResult.m_iSuccesses;
-
-		int nValidDistrIndexes = 0;
-		for ( const auto &tDistrStat : dDistrServedByAgent )
-			for ( int i=0; i<iQueries; ++i )
-				if ( tDistrStat.m_dStats[i].m_iSuccesses )
-				{
-					++nValidDistrIndexes;
-					break;
-				}
-
-		if ( iTotalSuccesses && nValidDistrIndexes )
-			for ( auto &tDistrStat : dDistrServedByAgent )
-				for ( int i=0; i<iQueries; ++i )
-				{
-					QueryStat_t & tStat = tDistrStat.m_dStats[i];
-					int64_t tmDeltaWallAgent = ( tmSubset - tmAccountedWall ) * tStat.m_iSuccesses / ( iTotalSuccesses*nValidDistrIndexes );
-					tStat.m_uQueryTime += (int)(tmDeltaWallAgent/1000);
-				}
-
-		int nValidLocalIndexes = 0;
-		for ( const auto & dQueryIndexStat : m_dQueryIndexStats )
-			for ( int i=0; i<iQueries; ++i )
-				if ( dQueryIndexStat.m_dStats[i].m_iSuccesses )
-				{
-					++nValidLocalIndexes;
-					break;
-				}
-
-		if ( iTotalSuccesses && nValidLocalIndexes )
-			for ( auto &dQueryIndexStat : m_dQueryIndexStats )
-				for ( int i=0; i<iQueries; ++i )
-				{
-					QueryStat_t & tStat = dQueryIndexStat.m_dStats[i];
-					int64_t tmDeltaWallLocal = ( tmSubset - tmAccountedWall ) * tStat.m_iSuccesses / ( iTotalSuccesses*nValidLocalIndexes );
-					tStat.m_uQueryTime += (int)(tmDeltaWallLocal/1000);
-				}
-
-		// don't forget to add this to stats
-		if ( bExternalWork )
-			tmCpu += tmAccountedCpu;
+		return;
 	}
+
+	int64_t tmAccountedWall = 0;
+	int64_t tmAccountedCpu = 0;
+	for ( const auto & dResult : m_dNAggrResults )
+	{
+		tmAccountedWall += dResult.m_iQueryTime*1000;
+		assert ( ( dResult.m_iCpuTime==0 && dResult.m_iAgentCpuTime==0 ) ||	// all work was done in this thread
+			( dResult.m_iCpuTime>0 && dResult.m_iAgentCpuTime==0 ) ||		// children threads work
+			( dResult.m_iAgentCpuTime>0 && dResult.m_iCpuTime==0 ) );		// agents work
+		tmAccountedCpu += dResult.m_iCpuTime;
+		tmAccountedCpu += dResult.m_iAgentCpuTime;
+	}
+
+	// whether we had work done in children threads (dist_threads>1) or in agents
+	bool bExternalWork = tmAccountedCpu!=0;
+	int64_t tmDeltaWall = ( tmSubset - tmAccountedWall ) / iQueries;
+
+	for ( auto & dResult : m_dNAggrResults )
+	{
+		dResult.m_iQueryTime += (int)(tmDeltaWall/1000);
+		dResult.m_iRealQueryTime = (int)( tmSubset/1000/iQueries );
+		dResult.m_iCpuTime = tmCpu/iQueries;
+		if ( bExternalWork )
+			dResult.m_iCpuTime += tmAccountedCpu;
+	}
+
+	// don't forget to add this to stats
+	if ( bExternalWork )
+		tmCpu += tmAccountedCpu;
+
+	// correct per-index stats from agents
+	int iTotalSuccesses = 0;
+	for ( const auto & dResult : m_dNAggrResults )
+		iTotalSuccesses += dResult.m_iSuccesses;
+
+	if ( !iTotalSuccesses )
+		return;
+
+	int64_t tmDelta = tmSubset - tmAccountedWall;
+
+	auto nValidDistrIndexes = dDistrServedByAgent.count_of ( [] ( auto& t ) { return t.m_dStats.any_of ( [] ( auto& i ) { return i.m_iSuccesses; } ); } );
+	int64_t nDistrDivider = iTotalSuccesses * nValidDistrIndexes * 1000;
+	if ( nDistrDivider )
+		for ( auto &tDistrStat : dDistrServedByAgent )
+			for ( QueryStat_t& tStat : tDistrStat.m_dStats )
+			{
+				auto tmDeltaWallAgent = tmDelta * tStat.m_iSuccesses / nDistrDivider;
+				tStat.m_uQueryTime += (int)tmDeltaWallAgent;
+			}
+
+	auto nValidLocalIndexes = m_dQueryIndexStats.count_of ( [] ( auto& t ) { return t.m_dStats.any_of ( [] ( auto& i ) { return i.m_iSuccesses; } ); } );
+	int64_t nLocalDivider = iTotalSuccesses * nValidLocalIndexes * 1000;
+	if ( nLocalDivider )
+		for ( auto &dQueryIndexStat : m_dQueryIndexStats )
+			for ( QueryStat_t& tStat : dQueryIndexStat.m_dStats )
+			{
+				int64_t tmDeltaWallLocal = tmDelta * tStat.m_iSuccesses / nLocalDivider;
+				tStat.m_uQueryTime += (int)tmDeltaWallLocal;
+			}
 }
 
 
@@ -6668,17 +6581,14 @@ void SearchHandler_c::CalcPerIndexStats ( const CSphVector<DistrServedByAgent_t>
 	// calculate per-index stats
 	ARRAY_FOREACH ( iLocal, m_dLocal )
 	{
-		// a little of durty casting: from ServedDesc_t* to ServedIndex_c*
-		// in order to save statistics.
-		auto pServed = ( ServedIndex_c * ) m_dLocked.Get ( m_dLocal[iLocal].m_sName );
+		const auto& pServed = m_dAcquired.Get ( m_dLocal[iLocal].m_sName );
 		for ( int iQuery=0; iQuery<iQueries; ++iQuery )
 		{
 			QueryStat_t & tStat = m_dQueryIndexStats[iLocal].m_dStats[iQuery];
 			if ( !tStat.m_iSuccesses )
 				continue;
 
-			pServed->AddQueryStat ( tStat.m_uFoundRows, tStat.m_uQueryTime );
-
+			pServed->m_pStats->AddQueryStat ( tStat.m_uFoundRows, tStat.m_uQueryTime );
 			for ( auto &tDistr : dDistrServedByAgent )
 			{
 				if ( tDistr.m_dLocalNames.Contains ( m_dLocal[iLocal].m_sName ) )
@@ -6701,7 +6611,7 @@ void SearchHandler_c::CalcPerIndexStats ( const CSphVector<DistrServedByAgent_t>
 				if ( !tStat.m_iSuccesses )
 					continue;
 
-				pServedDistIndex->AddQueryStat ( tStat.m_uFoundRows, tStat.m_uQueryTime );
+				pServedDistIndex->m_tStats.AddQueryStat ( tStat.m_uFoundRows, tStat.m_uQueryTime );
 			}
 	}
 }
@@ -6735,15 +6645,16 @@ static CSphVector<LocalIndex_t> CollectAllLocalIndexes ( const CSphVector<CSphNa
 	CSphVector<LocalIndex_t> dIndexes;
 	int iOrderTag = 0;
 	// search through all local indexes
-	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next (); )
+	ServedSnap_t hLocal = g_pLocalIndexes->GetHash();
+	for ( auto& tIt : *hLocal )
 	{
-		if ( !it.Get () )
+		if ( !tIt.second ) // fixme! should never be...
 			continue;
 		auto & dLocal = dIndexes.Add ();
-		dLocal.m_sName = it.GetName ();
+		dLocal.m_sName = tIt.first;
 		dLocal.m_iOrderTag = iOrderTag++;
-		dLocal.m_iWeight = GetIndexWeight ( it.GetName (), dIndexWeights, 1 );
-		dLocal.m_iMass = ServedDescRPtr_c ( it.Get () )->m_iMass;
+		dLocal.m_iWeight = GetIndexWeight ( tIt.first, dIndexWeights, 1 );
+		dLocal.m_iMass = ServedIndex_c::GetIndexMass ( tIt.second );
 	}
 	return dIndexes;
 }
@@ -6797,7 +6708,7 @@ bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_
 			tDistrStat.m_dStats.Resize ( iQueries );
 			tDistrStat.m_dStats.ZeroVec();
 
-			for ( auto * pAgent : pDist->m_dAgents )
+			for ( const auto& pAgent : pDist->m_dAgents )
 			{
 				tDistrStat.m_dAgentIds.Add ( dRemotes.GetLength() );
 				auto * pConn = new AgentConn_t;
@@ -6922,7 +6833,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			// if apply subkeys ... else return
 			if ( !ParseIdxSubkeys () )
 				return;
-		} else if ( !RLockInvokedIndexes () ) // usual query processing
+		} else if ( !AcquireInvokedIndexes () ) // usual query processing
 			return;
 	} else
 	{
@@ -6933,7 +6844,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	}
 
 	// at this point m_dLocal contains list of valid local indexes (i.e., existing ones),
-	// and these indexes are also rlocked and available by calling m_dLocked.Get()
+	// and these indexes are also rlocked and available by calling m_dAcquired.Get()
 
 	// sanity check
 	if ( dRemotes.IsEmpty() && m_dLocal.IsEmpty() )
@@ -7752,11 +7663,11 @@ static int64_t GetSnippetDataSize ( const CSphVector<ExcerptQuery_t> &dSnippets 
 	return iSize;
 }
 
-static VecRefPtrsAgentConn_t GetDistrAgents ( DistributedIndex_t * pDist )
+static VecRefPtrsAgentConn_t GetDistrAgents ( const cDistributedIndexRefPtr_t& pDist )
 {
 	assert ( pDist );
 	VecRefPtrsAgentConn_t tRemotes;
-	for ( auto * pAgent : pDist->m_dAgents )
+	for ( const auto& pAgent : pDist->m_dAgents )
 	{
 		auto * pConn = new AgentConn_t;
 		pConn->SetMultiAgent ( pAgent );
@@ -7944,7 +7855,7 @@ static CSphVector<CSphVector<int>> DivideTasks ( const VecTraits_T<int> & dTasks
 // * dLocal subset is run on local host
 // * dRemote subset is send to each remote agent
 static void MakeRemoteScatteredSnippets ( CSphVector<ExcerptQuery_t> & dQueries,
-		DistributedIndex_t * pDist,
+		cDistributedIndexRefPtr_t pDist,
 		SnippetBuilder_c * pBuilder,
 		const SnippetQuerySettings_t & q,
 		const VecTraits_T<int>& dLocal,
@@ -7987,7 +7898,7 @@ static void MakeRemoteScatteredSnippets ( CSphVector<ExcerptQuery_t> & dQueries,
 // * divide set of sources among remotes and local host, balancing size.
 // * assume dPresent has indexes of monotonically decreasing sizes, that's need for balancing.
 static void MakeRemoteNonScatteredSnippets ( CSphVector<ExcerptQuery_t> & dQueries,
-		DistributedIndex_t * pDist,
+		cDistributedIndexRefPtr_t pDist,
 		SnippetBuilder_c * pBuilder,
 		const SnippetQuerySettings_t & q,
 		const VecTraits_T<int>& dPresent )
@@ -8074,14 +7985,14 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries,
 		sIndex = pDist->m_dLocal[0];
 	}
 
-	ServedDescRPtr_c pServed ( GetServed ( sIndex ) );
-	if ( !pServed || !pServed->m_pIndex )
+	auto pServed = GetServed ( sIndex );
+	if ( !pServed )
 	{
 		sError.SetSprintf ( "unknown local index '%s' in search request", sIndex.cstr() );
 		return false;
 	}
 
-	CSphIndex * pLocalIndex = pServed->m_pIndex;
+	RIdx_c pLocalIndex { pServed };
 	assert ( pLocalIndex );
 
 	///////////////////
@@ -8440,25 +8351,13 @@ void UpdateRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOutp
 	}
 }
 
-static void DoCommandUpdate ( const CSphString & sIndex, const char * sDistributed, AttrUpdateSharedPtr_t pUpd,
-	bool bBlobUpdate, int & iSuccesses, int & iUpdated, SearchFailuresLog_c & dFails, ServedIndexRefPtr_c & pServed )
+static void DoCommandUpdate ( const CSphString & sIndex, const CSphString& sCluster, const char * sDistributed, AttrUpdateSharedPtr_t pUpd,
+	bool bBlobUpdate, int & iSuccesses, int & iUpdated, SearchFailuresLog_c & dFails )
 {
-	CSphString sCluster;
-	{
-		ServedDescRPtr_c tDesc ( pServed );
-		if ( !tDesc )
-		{
-			dFails.Submit ( sIndex, sDistributed, "index not available" );
-			return;
-		}
-
-		sCluster = tDesc->m_sCluster;
-	}
-
 	int iUpd = 0;
 	CSphString sError, sWarning;
 	RtAccum_t tAcc ( false );
-	ReplicationCommand_t * pCmd = tAcc.AddCommand ( ReplicationCommand_e::UPDATE_API, sCluster, sIndex );
+	ReplicationCommand_t* pCmd = tAcc.AddCommand ( ReplicationCommand_e::UPDATE_API, sIndex, sCluster );
 	assert ( pCmd );
 	pCmd->m_pUpdateAPI = std::move(pUpd);
 	pCmd->m_bBlobUpdate = bBlobUpdate;
@@ -8654,7 +8553,7 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 		auto pLocal = GetServed ( sReqIndex );
 		if ( pLocal )
 		{
-			DoCommandUpdate ( sReqIndex, nullptr, pUpd, bBlobUpdate, iSuccesses, iUpdated, dFails, pLocal );
+			DoCommandUpdate ( sReqIndex, pLocal->m_sCluster, nullptr, pUpd, bBlobUpdate, iSuccesses, iUpdated, dFails );
 
 		} else if ( dDistributed[iIdx] )
 		{
@@ -8668,7 +8567,7 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 				if ( !pServed )
 					continue;
 
-				DoCommandUpdate ( sLocal, sReqIndex.cstr(), pUpd, bBlobUpdate, iSuccesses, iUpdated, dFails, pServed );
+				DoCommandUpdate ( sLocal, pServed->m_sCluster, sReqIndex.cstr(), pUpd, bBlobUpdate, iSuccesses, iUpdated, dFails );
 			}
 
 			// update remote agents
@@ -8746,14 +8645,17 @@ void BuildStatus ( VectorLike & dStatus )
 	dStatus.MatchTupletf ( "workers_clients", "%d", myinfo::CountClients () );
 	dStatus.MatchTupletf ( "work_queue_length", "%d", GlobalWorkPool ()->Works () );
 
-	for ( RLockedDistrIt_c it ( g_pDistIndexes ); it.Next (); )
+	assert ( g_pDistIndexes );
+	auto pDistSnapshot = g_pDistIndexes->GetHash();
+	for ( auto& tIt : *pDistSnapshot )
 	{
-		const char * sIdx = it.GetName().cstr();
-		const auto &dAgents = it.Get ()->m_dAgents;
+		const char * sIdx = tIt.first.cstr();
+		const auto& dAgents = tIt.second->m_dAgents;
 		StringBuilder_c sKey;
 		ARRAY_FOREACH ( i, dAgents )
 		{
-			MultiAgentDesc_c &dMultiAgent = *dAgents[i];
+			MultiAgentDescRefPtr_c pMultiAgent = dAgents[i];
+			MultiAgentDesc_c& dMultiAgent = *pMultiAgent;
 			ARRAY_FOREACH ( j, dMultiAgent )
 			{
 				const auto pMetrics = dMultiAgent[j].m_pMetrics;
@@ -8861,11 +8763,11 @@ void BuildStatusOneline ( StringBuilder_c & sOut )
 	sOut.Sprintf ( " Tasks/Th: %0.1F%", iTasks * 10 / iThreads );
 }
 
-void BuildOneAgentStatus ( VectorLike & dStatus, HostDashboard_t* pDash, const char * sPrefix="agent" )
+void BuildOneAgentStatus ( VectorLike & dStatus, HostDashboardRefPtr_t pDash, const char * sPrefix="agent" )
 {
 	assert ( pDash );
 	{
-		CSphScopedRLock tGuard ( pDash->m_dMetricsLock );
+		ScRL_t tGuard ( pDash->m_dMetricsLock );
 		if ( dStatus.MatchAddf ( "%s_hostname", sPrefix ) )
 			dStatus.Add ( pDash->m_tHost.GetMyUrl ().cstr () );
 
@@ -8938,7 +8840,8 @@ static bool BuildDistIndexStatus ( VectorLike & dStatus, const CSphString& sInde
 	CSphString sKey;
 	ARRAY_FOREACH ( i, pDistr->m_dAgents )
 	{
-		MultiAgentDesc_c & tAgents = *pDistr->m_dAgents[i];
+		MultiAgentDescRefPtr_c pAgents = pDistr->m_dAgents[i];
+		const MultiAgentDesc_c& tAgents = *pAgents;
 		if ( dStatus.MatchAddf ( "dstindex_%d_is_ha", i+1 ) )
 			dStatus.Add ( tAgents.IsHA()? "1": "0" );
 
@@ -9827,8 +9730,8 @@ static void PQLocalMatch ( const BlobVec_t & dDocs, const CSphString & sIndex, c
 		return;
 	}
 
-	ServedDescRPtr_c pServed ( GetServed ( sIndex ) );
-	if ( !pServed || !pServed->m_pIndex )
+	auto pServed = GetServed ( sIndex );
+	if ( !pServed )
 	{
 		sMsg.Err ( "unknown local index '%s' in search request", sIndex.cstr () );
 		return;
@@ -9840,7 +9743,7 @@ static void PQLocalMatch ( const BlobVec_t & dDocs, const CSphString & sIndex, c
 		return;
 	}
 
-	auto pIndex = ( PercolateIndex_i * ) pServed->m_pIndex;
+	RIdx_T<PercolateIndex_i*> pIndex { pServed };
 	RtAccum_t * pAccum = tAcc.GetAcc ( pIndex, sError );
 	sMsg.Err ( sError );
 
@@ -10022,13 +9925,13 @@ void PercolateMatchDocuments ( const BlobVec_t & dDocs, const PercolateOptions_t
 	CSphString sWarning, sError;
 
 	StrVec_t dLocalIndexes;
-	auto * pLocalIndexes = &dLocalIndexes;
+	const auto * pLocalIndexes = &dLocalIndexes;
 
 	VecRefPtrsAgentConn_t dAgents;
 	auto pDist = GetDistr ( sIndex );
 	if ( pDist )
 	{
-		for ( auto * pAgent : pDist->m_dAgents )
+		for ( const auto& pAgent : pDist->m_dAgents )
 		{
 			auto * pConn = new AgentConn_t;
 			pConn->SetMultiAgent ( pAgent );
@@ -10765,7 +10668,7 @@ static bool InsertToPQ ( SqlStmt_t & tStmt, RtIndex_i * pIndex, RtAccum_t * pAcc
 	StoredQuery_i * pStored = pQIndex->CreateQuery ( tArgs, sError );
 	if ( pStored )
 	{
-		auto * pCmd = pAccum->AddCommand ( ReplicationCommand_e::PQUERY_ADD, tStmt.m_sCluster, tStmt.m_sIndex );
+		auto * pCmd = pAccum->AddCommand ( ReplicationCommand_e::PQUERY_ADD, tStmt.m_sIndex, tStmt.m_sCluster );
 		pCmd->m_pStored  = pStored;
 
 		dIds.Add ( pStored->m_iQUID );
@@ -10848,16 +10751,10 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt )
 	MEMORY ( MEM_SQL_INSERT );
 
 	CSphString sError;
-	ServedDescRPtr_c pServed ( GetServed ( tStmt.m_sIndex ) );
-	if ( !pServed )
-	{
-		tOut.Error ( "no such local index '%s'", tStmt.m_sIndex.cstr() );
-		return;
-	}
-
+	auto pServed = GetServed ( tStmt.m_sIndex );
 	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
-		tOut.Error ( "index '%s' does not support INSERT", tStmt.m_sIndex.cstr ());
+		tOut.Error ( "index '%s' absent, or does not support INSERT", tStmt.m_sIndex.cstr ());
 		return;
 	}
 
@@ -10865,7 +10762,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt )
 
 	bool bPq = ( pServed->m_eType==IndexType_e::PERCOLATE );
 
-	auto * pIndex = (RtIndex_i *)pServed->m_pIndex;
+	RIdx_T<RtIndex_i*> pIndex { pServed };
 
 	// get schema, check values count
 	const CSphSchema & tSchema = pIndex->GetMatchSchema ();
@@ -10975,7 +10872,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt )
 			pIndex->AddDocument ( tConverter, bReplace, tStmt.m_sStringParam, sError, sWarning, pAccum );
 			dIds.Add ( tConverter.GetID() );
 
-			pAccum->AddCommand ( ReplicationCommand_e::RT_TRX, tStmt.m_sCluster, tStmt.m_sIndex );
+			pAccum->AddCommand ( ReplicationCommand_e::RT_TRX, tStmt.m_sIndex, tStmt.m_sCluster );
 		}
 
 		if ( !sError.IsEmpty() )
@@ -11002,7 +10899,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt )
 			return;
 		}
 	}
-	
+
 	int64_t iLastInsertId = 0;
 	if ( dLastIds.GetLength() )
 		iLastInsertId = dLastIds.Last();
@@ -11200,16 +11097,8 @@ bool DoGetKeywords ( const CSphString & sIndex, const CSphString & sQuery, const
 	bool bOk = false;
 	// just local plain or template index
 	if ( pLocal )
-	{
-		ServedDescRPtr_c pIndex ( pLocal );
-		if ( !pIndex->m_pIndex )
-		{
-			sError.SetSprintf ( "missed index '%s'", sIndex.cstr() );
-		} else
-		{
-			bOk = pIndex->m_pIndex->GetKeywords ( dKeywords, sQuery.cstr(), tSettings, &sError );
-		}
-	} else
+		bOk = RIdx_c(pLocal)->GetKeywords ( dKeywords, sQuery.cstr(), tSettings, &sError );
+	else
 	{
 		// FIXME!!! g_iDistThreads thread pool for locals.
 		// locals
@@ -11217,15 +11106,15 @@ bool DoGetKeywords ( const CSphString & sIndex, const CSphString & sQuery, const
 		CSphVector<CSphKeywordInfo> dKeywordsLocal;
 		for ( const CSphString &sLocal : dLocals )
 		{
-			ServedDescRPtr_c pServed ( GetServed ( sLocal ) );
-			if ( !pServed || !pServed->m_pIndex )
+			auto pServed = GetServed ( sLocal );
+			if ( !pServed )
 			{
 				tFailureLog.Submit ( sLocal.cstr(), sIndex.cstr(), "missed index" );
 				continue;
 			}
 
 			dKeywordsLocal.Resize(0);
-			if ( pServed->m_pIndex->GetKeywords ( dKeywordsLocal, sQuery.cstr(), tSettings, &sError ) )
+			if ( RIdx_c ( pServed )->GetKeywords ( dKeywordsLocal, sQuery.cstr(), tSettings, &sError ) )
 				dKeywords.Append ( dKeywordsLocal );
 			else
 				tFailureLog.SubmitEx ( sLocal, sIndex.cstr (), "keyword extraction failed: %s", sError.cstr () );
@@ -11461,11 +11350,8 @@ void MergeKeywords ( CSphVector<CSphKeywordInfo> & dSrc )
 	}
 
 	dSrc.Resize ( 0 );
-	hWords.IterateStart();
-	while ( hWords.IterateNext() )
-	{
-		dSrc.Add ( hWords.IterateGet() );
-	}
+	for ( const auto& tWord : hWords )
+		dSrc.Add ( tWord.second );
 
 	sphSort ( dSrc.Begin(), dSrc.GetLength(), KeywordSorter_fn() );
 }
@@ -11581,23 +11467,24 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 
 
 	{ // scope for ServedINdexPtr_c
-		ServedDescRPtr_c pServed ( GetServed ( tStmt.m_dInsertValues[1].m_sVal ) );
-		if ( !pServed || !pServed->m_pIndex )
+		auto pServed = GetServed ( tStmt.m_dInsertValues[1].m_sVal );
+		if ( !pServed )
 		{
 			sError.SetSprintf ( "no such index %s", tStmt.m_dInsertValues[1].m_sVal.cstr () );
 			tOut.Error ( tStmt.m_sStmt, sError.cstr () );
 			return;
 		}
-		if ( !pServed->m_pIndex->GetSettings().m_iMinInfixLen || !pServed->m_pIndex->GetDictionary()->GetSettings().m_bWordDict )
+		RIdx_c pIdx { pServed };
+		if ( !pIdx->GetSettings().m_iMinInfixLen || !pIdx->GetDictionary()->GetSettings().m_bWordDict )
 		{
 			sError.SetSprintf ( "suggests work only for keywords dictionary with infix enabled" );
 			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 			return;
 		}
 
-		if ( tRes.SetWord ( sWord, pServed->m_pIndex->GetQueryTokenizer(), tArgs.m_bQueryMode ) )
+		if ( tRes.SetWord ( sWord, pIdx->GetQueryTokenizer(), tArgs.m_bQueryMode ) )
 		{
-			pServed->m_pIndex->GetSuggest ( tArgs, tRes );
+			pIdx->GetSuggest ( tArgs, tRes );
 		}
 	}
 
@@ -11736,7 +11623,7 @@ void DescribeLocalSchema ( VectorLike & dOut, const CSphSchema & tSchema, bool b
 }
 
 
-void DescribeDistributedSchema ( VectorLike& dOut, DistributedIndex_t* pDistr )
+void DescribeDistributedSchema ( VectorLike& dOut, const cDistributedIndexRefPtr_t& pDistr )
 {
 	// result set header packet
 	dOut.SetColNames ( { "Agent", "Type" } );
@@ -11746,7 +11633,8 @@ void DescribeDistributedSchema ( VectorLike& dOut, DistributedIndex_t* pDistr )
 
 	ARRAY_CONSTFOREACH ( i, pDistr->m_dAgents )
 	{
-		const MultiAgentDesc_c & tMultiAgent = *pDistr->m_dAgents[i];
+		MultiAgentDescRefPtr_c pMultiAgent = pDistr->m_dAgents[i];
+		const MultiAgentDesc_c & tMultiAgent = *pMultiAgent;
 		if ( tMultiAgent.IsHA () )
 		{
 			int iNumMultiAgents = tMultiAgent.GetLength();
@@ -11774,11 +11662,11 @@ void HandleMysqlDescribe ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	auto & tStmt = *pStmt;
 	VectorLike dOut ( tStmt.m_sStringParam, 0 );
 
-	ServedDescRPtr_c pServed ( GetServed ( tStmt.m_sIndex ) );
-	if ( pServed && pServed->m_pIndex )
+	auto pServed = GetServed ( tStmt.m_sIndex );
+	if ( pServed )
 	{
 		// data
-		const CSphSchema *pSchema = &pServed->m_pIndex->GetMatchSchema ();
+		const CSphSchema *pSchema = &RIdx_c(pServed)->GetMatchSchema ();
 		bool bNeedInternal = false;
 
 		if ( tStmt.m_iIntParam==SqlInsert_t::TABLE ) // user wants internal schema instead
@@ -11789,8 +11677,8 @@ void HandleMysqlDescribe ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 
 		if ( bNeedInternal && ServedDesc_t::IsMutable ( pServed ) )
 		{
-			auto pRtIndex = (RtIndex_i*)pServed->m_pIndex;
-			pSchema = &pRtIndex->GetInternalSchema ();
+			RIdx_T<const RtIndex_i*> pRtIndex { pServed };
+			pSchema = &pRtIndex->GetInternalSchema();
 		}
 
 		const CSphSchema &tSchema = *pSchema;
@@ -11818,33 +11706,37 @@ void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	CSphVector<CSphNamedInt> dIndexes;
 
 	// collect local, rt, percolate
-	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next(); )
-		if ( it.Get() )
+	ServedSnap_t hLocal = g_pLocalIndexes->GetHash();
+	for ( const auto& tIt : *hLocal )
+	{
+		if ( !tIt.second )
+			continue;
+
+		switch ( tIt.second->m_eType )
 		{
-			ServedDescRPtr_c pIdx ( it.Get () );
-			switch ( pIdx->m_eType )
-			{
-				case IndexType_e::PLAIN:
-					dIndexes.Add ( CSphNamedInt ( it.GetName (), 0 ) );
-					break;
-				case IndexType_e::RT:
-					dIndexes.Add ( CSphNamedInt ( it.GetName (), 2 ) );
-					break;
-				case IndexType_e::PERCOLATE:
-					dIndexes.Add ( CSphNamedInt ( it.GetName (), 4 ) );
-					break;
-				case IndexType_e::TEMPLATE:
-					dIndexes.Add ( CSphNamedInt ( it.GetName (), 3 ) );
-					break;
-				default:
-					dIndexes.Add ( CSphNamedInt ( it.GetName (), 5 ) );
-			}
+			case IndexType_e::PLAIN:
+				dIndexes.Add ( CSphNamedInt ( tIt.first, 0 ) );
+				break;
+			case IndexType_e::RT:
+				dIndexes.Add ( CSphNamedInt ( tIt.first, 2 ) );
+				break;
+			case IndexType_e::PERCOLATE:
+				dIndexes.Add ( CSphNamedInt ( tIt.first, 4 ) );
+				break;
+			case IndexType_e::TEMPLATE:
+				dIndexes.Add ( CSphNamedInt ( tIt.first, 3 ) );
+				break;
+			default:
+				dIndexes.Add ( CSphNamedInt ( tIt.first, 5 ) );
 		}
+	}
 
 	// collect distributed
-	for ( RLockedDistrIt_c it ( g_pDistIndexes ); it.Next (); )
+	assert ( g_pDistIndexes );
+	auto pDistSnapshot = g_pDistIndexes->GetHash();
+	for ( auto& tIt : *pDistSnapshot )
 		// no need to check distr's it, iterating guarantees index existance.
-		dIndexes.Add ( CSphNamedInt ( it.GetName (), 1 ) );
+		dIndexes.Add ( CSphNamedInt ( tIt.first, 1 ) );
 
 	dIndexes.Sort ( Lesser ([] ( const CSphNamedInt & a, const CSphNamedInt & b)
 			{ return strcasecmp ( a.first.cstr (), b.first.cstr () )<0; }));
@@ -11910,7 +11802,7 @@ static bool CheckCreateTable ( const SqlStmt_t & tStmt, CSphString & sError )
 
 	if ( !CheckAttrs ( tStmt.m_tCreateTable.m_dAttrs, []( const CreateTableAttr_t & tAttr ) { return tAttr.m_tAttr.m_sName; }, sError ) )
 		return false;
-	
+
 	if ( !CheckAttrs ( tStmt.m_tCreateTable.m_dFields, []( const CSphColumnInfo & tAttr ) { return tAttr.m_sName; }, sError ) )
 		return false;
 
@@ -11960,7 +11852,7 @@ static void HandleMysqlCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 	}
 
 	StrVec_t dWarnings;
-	bool bCreatedOk = CreateNewIndexInt ( tStmt.m_sIndex, tStmt.m_tCreateTable, dWarnings, sError );
+	bool bCreatedOk = CreateNewIndexConfigless ( tStmt.m_sIndex, tStmt.m_tCreateTable, dWarnings, sError );
 	sWarning = ConcatWarnings(dWarnings);
 
 	if ( !bCreatedOk )
@@ -11974,12 +11866,12 @@ static void HandleMysqlCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 }
 
 
-static const CSphSchema & GetSchemaForCreateTable ( CSphIndex * pIndex )
+static const CSphSchema & GetSchemaForCreateTable ( const CSphIndex * pIndex )
 {
 	assert ( pIndex );
 	assert ( pIndex->IsRT() || pIndex->IsPQ() );
 
-	return ((RtIndex_i*)pIndex)->GetInternalSchema();
+	return ((const RtIndex_i*)pIndex)->GetInternalSchema();
 }
 
 
@@ -12012,26 +11904,33 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 	}
 
 	const CSphString & sLike = tStmt.m_tCreateTable.m_sLike;
-	ServedDescRPtr_c pServed(GetServed(sLike));
-	auto pDist = GetDistr(sLike);
-	if ( !pServed && !pDist )
+	CSphString sCreateTable;
+	switch ( IndexIsServed ( sLike ) )
 	{
+	case RunIdx_e::NOTSERVED:
 		sError.SetSprintf ( "index '%s': CREATE TABLE LIKE failed: no index '%s' found", tStmt.m_sIndex.cstr(), sLike.cstr() );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
-	}
-
-	if ( pServed && !pServed->m_pIndex->IsRT() && !pServed->m_pIndex->IsPQ() )
+	case RunIdx_e::LOCAL:
 	{
-		tOut.ErrorAbsent ( tStmt.m_sStmt, "index '%s' is not real-time or percolate", sError.cstr () );
-		return;
+		auto pServed = GetServed ( sLike );
+		assert ( pServed );
+		if ( !ServedDesc_t::IsMutable ( pServed ) )
+		{
+			tOut.ErrorAbsent ( tStmt.m_sStmt, "index '%s' is not real-time or percolate", sError.cstr() );
+			return;
+		}
+		RIdx_c pIdx { pServed };
+		sCreateTable = BuildCreateTableRt ( tStmt.m_sIndex, pIdx, GetSchemaForCreateTable ( pIdx ) );
+		break;
 	}
-
-	CSphString sCreateTable;
-	if ( pServed )
-		sCreateTable = BuildCreateTableRt ( tStmt.m_sIndex, pServed->m_pIndex, GetSchemaForCreateTable ( pServed->m_pIndex ) );
-	else
+	case RunIdx_e::DISTR:
+	{
+		auto pDist = GetDistr ( sLike );
 		sCreateTable = BuildCreateTableDistr ( tStmt.m_sIndex, *pDist );
+	}
+	default: break;
+	};
 
 	CSphVector<SqlStmt_t> dCreateTableStmts;
 	if ( !ParseDdl ( sCreateTable.cstr(), sCreateTable.Length(), dCreateTableStmts, sError ) )
@@ -12076,15 +11975,15 @@ static void HandleMysqlDropTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 
 void HandleMysqlShowCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
-	ServedDescRPtr_c pServed ( GetServed ( tStmt.m_sIndex ) );
+	auto pServed = GetServed ( tStmt.m_sIndex );
 	auto pDist = GetDistr ( tStmt.m_sIndex );
-	if ( ( !pServed || !pServed->m_pIndex ) && !pDist )
+	if ( !pServed && !pDist )
 	{
 		tOut.ErrorAbsent ( tStmt.m_sStmt, "no such index '%s'", tStmt.m_sIndex.cstr () );
 		return;
 	}
 
-	if ( pServed && !pServed->m_pIndex->IsRT() && !pServed->m_pIndex->IsPQ() )
+	if ( pServed && !ServedDesc_t::IsMutable ( pServed ) )
 	{
 		tOut.ErrorAbsent ( tStmt.m_sStmt, "index '%s' is not real-time or percolate", tStmt.m_sIndex.cstr () );
 		return;
@@ -12094,8 +11993,10 @@ void HandleMysqlShowCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	tOut.HeadTuplet ( "Table", "Create Table" );
 	CSphString sCreateTable;
 	if ( pServed )
-		sCreateTable = BuildCreateTableRt ( pServed->m_pIndex->GetName(), pServed->m_pIndex, GetSchemaForCreateTable ( pServed->m_pIndex ) );
-	else
+	{
+		RIdx_c pIdx { pServed };
+		sCreateTable = BuildCreateTableRt ( pIdx->GetName(), pIdx, GetSchemaForCreateTable ( pIdx ) );
+	} else
 		sCreateTable = BuildCreateTableDistr ( tStmt.m_sIndex, *pDist );
 
 	tOut.DataTuplet ( tStmt.m_sIndex.cstr(), sCreateTable.cstr() );
@@ -12260,9 +12161,10 @@ void HandleMysqlFlushHostnames ( RowBuffer_i & tOut )
 	SmallStringHash_T<DWORD> hHosts;
 
 	// Collect all urls from all distr indexes
-	for ( RLockedDistrIt_c it ( g_pDistIndexes ); it.Next (); )
-		it.Get ()->ForEveryHost ( [&] ( AgentDesc_t &tDesc )
-		{
+	assert ( g_pDistIndexes );
+	auto pDistSnapshot = g_pDistIndexes->GetHash();
+	for ( auto& tIt : *pDistSnapshot )
+		tIt.second->ForEveryHost ( [&] ( AgentDesc_t& tDesc ) {
 			if ( tDesc.m_bNeedResolve )
 				hHosts.Add ( tDesc.m_uAddr, tDesc.m_sAddr );
 		});
@@ -12277,10 +12179,10 @@ void HandleMysqlFlushHostnames ( RowBuffer_i & tOut )
 
 	// copy back renew hosts to distributed agents.
 	// case when distr index list changed between collecting urls and applying them
-	// is safe, since we are iterate over the list again, and also apply
+	// is safe, since we are iterating over the list again, and also apply
 	// only existing hosts.
-	for ( RLockedDistrIt_c it ( g_pDistIndexes ); it.Next (); )
-		it.Get ()->ForEveryHost ( [&] ( AgentDesc_t &tDesc ) {
+	for ( auto& tIt : *pDistSnapshot )
+		tIt.second->ForEveryHost ( [&] ( AgentDesc_t& tDesc ) {
 			if ( tDesc.m_bNeedResolve )
 			{
 				DWORD * pRenew = hHosts ( tDesc.m_sAddr );
@@ -12499,19 +12401,18 @@ void SphinxqlRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOu
 
 static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sIndex, const char * sDistributed,
 	bool bBlobUpdate, int & iSuccesses, int & iUpdated, SearchFailuresLog_c & dFails, CSphString & sWarning,
-	const ServedIndexRefPtr_c & tServed )
+	const cServedIndexRefPtr_c & pServed )
 {
 	CSphString sError;
 	// checks
 	{
-		ServedDescRPtr_c tDesc ( tServed );
-		if ( !tDesc )
+		if ( !pServed )
 		{
 			dFails.Submit ( sIndex, sDistributed, "index not available" );
 			return;
 		}
 
-		if ( !CheckIndexCluster ( sIndex, *tDesc, tStmt.m_sCluster, IsHttpStmt ( tStmt ), sError ) )
+		if ( !CheckIndexCluster ( sIndex, *pServed, tStmt.m_sCluster, IsHttpStmt ( tStmt ), sError ) )
 		{
 			dFails.Submit ( sIndex, sDistributed, sError.cstr() );
 			return;
@@ -12519,7 +12420,7 @@ static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sInde
 	}
 
 	RtAccum_t tAcc ( false );
-	ReplicationCommand_t * pCmd = tAcc.AddCommand ( tStmt.m_bJson ? ReplicationCommand_e::UPDATE_JSON : ReplicationCommand_e::UPDATE_QL, tStmt.m_sCluster, sIndex );
+	ReplicationCommand_t * pCmd = tAcc.AddCommand ( tStmt.m_bJson ? ReplicationCommand_e::UPDATE_JSON : ReplicationCommand_e::UPDATE_QL, sIndex, tStmt.m_sCluster );
 	assert ( pCmd );
 	pCmd->m_pUpdateAPI = tStmt.AttrUpdatePtr();
 	pCmd->m_bBlobUpdate = bBlobUpdate;
@@ -12536,22 +12437,57 @@ static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sInde
 	iSuccesses++;
 }
 
-
-void HandleMySqlExtendedUpdate ( AttrUpdateArgs & tArgs )
+bool HandleUpdateAPI ( AttrUpdateArgs& tArgs, CSphIndex* pIndex, int& iUpdate )
 {
-	assert ( tArgs.m_pError );
-	assert ( tArgs.m_pWarning );
-	assert ( tArgs.m_pIndexName );
-	assert ( tArgs.m_pDesc );
-	assert ( tArgs.m_pQuery );
-
-	SearchHandler_c tHandler ( 1, CreateQueryParser ( tArgs.m_bJson ), tArgs.m_pQuery->m_eQueryType, false );
-	tArgs.m_pIndex = tArgs.m_pDesc->m_pIndex;
-
-	tHandler.m_dLocked.AddUnmanaged ( *tArgs.m_pIndexName, tArgs.m_pDesc );
-	tHandler.RunUpdates ( *tArgs.m_pQuery, *tArgs.m_pIndexName, &tArgs );
+	bool bCritical = false;
+	iUpdate = pIndex->UpdateAttributes ( tArgs.m_pUpdate, bCritical, *tArgs.m_pError, *tArgs.m_pWarning );
+	return !bCritical;
 }
 
+namespace {
+DocsCollector_c InitUpdate( AttrUpdateArgs& tArgs, const cServedIndexRefPtr_c& pDesc )
+{
+	DocsCollector_c tCollector ( *tArgs.m_pQuery, tArgs.m_bJson, *tArgs.m_pIndexName, pDesc, tArgs.m_pError );
+	AttrUpdateSharedPtr_t& pUpdate = tArgs.m_pUpdate;
+	pUpdate->m_bReusable = false;
+	pUpdate->m_bIgnoreNonexistent = tArgs.m_pQuery->m_bIgnoreNonexistent;
+	pUpdate->m_bStrict = tArgs.m_pQuery->m_bStrict;
+	return tCollector;
+}
+
+template<typename RWLOCKED>
+void DoUpdate( DocsCollector_c& tCollector, AttrUpdateArgs& tArgs, RWLOCKED& rwLocked )
+{
+	AttrUpdateSharedPtr_t& pUpdate = tArgs.m_pUpdate;
+	while ( tCollector.GetValuesChunk ( pUpdate->m_dDocids, tArgs.m_pQuery->m_iMaxMatches ) )
+	{
+		int iChanged = 0;
+		Verify ( HandleUpdateAPI ( tArgs, rwLocked, iChanged ) ); // fixme! handle this
+		tArgs.m_iAffected += iChanged;
+	}
+}
+
+void UpdateWlocked ( AttrUpdateArgs& tArgs, const cServedIndexRefPtr_c& pDesc, int& iUpdated )
+{
+	// short-living r-lock m.b. acquired and released by collector when running query
+	auto tCollector = InitUpdate ( tArgs, pDesc );
+	WIdx_c wLocked { pDesc }; // exclusive lock for process of update. Note, between collecting and updating m.b. race! To eliminate it, need to trace index generation and recollect if it changed.
+	DoUpdate ( tCollector, tArgs, wLocked );
+}
+
+void UpdateRlocked ( AttrUpdateArgs& tArgs, const cServedIndexRefPtr_c& pDesc, int& iUpdated)
+{
+	// wide r-lock over whole update. r-locks acquired by collector should be re-enterable.
+	RWIdx_c rLocked { pDesc };
+	auto tCollector = InitUpdate ( tArgs, pDesc );
+	DoUpdate ( tCollector, tArgs, rLocked );
+}
+} // unnamed namespace
+
+void HandleMySqlExtendedUpdate ( AttrUpdateArgs& tArgs, const cServedIndexRefPtr_c& pDesc, int& iUpdated, bool bNeedWlock )
+{
+	return bNeedWlock ? UpdateWlocked ( tArgs, pDesc, iUpdated ) : UpdateRlocked ( tArgs, pDesc, iUpdated );
+}
 
 void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, Str_t sQuery )
 {
@@ -12885,7 +12821,7 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 	const CSphSchema &tSchema = tRes.m_tSchema;
 	assert ( tRes.m_bSingle );
 	auto dMatches = tRes.m_dResults.First ().m_dMatches.Slice ( tRes.m_iOffset, tRes.m_iCount );
-	for ( const auto & tMatch : dMatches  )
+	for ( const auto& tMatch : dMatches )
 	{
 		for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); ++i )
 		{
@@ -13087,143 +13023,127 @@ void HandleMysqlMeta ( RowBuffer_i & dRows, const SqlStmt_t & tStmt, const CSphQ
 	dRows.Eof ( bMoreResultsFollow );
 }
 
-static void PercolateDeleteDocuments ( const CSphString & sIndex, const CSphString & sCluster, const SqlStmt_t & tStmt, RtAccum_t & tAccum, CSphString & sError )
+static ReplicationCommand_t* MakePercolateDeleteDocumentsCommand ( CSphString sIndex, CSphString sCluster, const SqlStmt_t & tStmt, CSphString & sError )
 {
 	// prohibit double copy of filters
-	const CSphQuery & tQuery = tStmt.m_tQuery;
-	CSphScopedPtr<ReplicationCommand_t> pCmd ( new ReplicationCommand_t );
-	pCmd->m_eCommand = ReplicationCommand_e::PQUERY_DELETE;
-	pCmd->m_sIndex = sIndex;
-	pCmd->m_sCluster = sCluster;
-
-	if ( tQuery.m_dFilters.GetLength()>1 )
+	const CSphQuery& tQuery = tStmt.m_tQuery;
+	if ( tQuery.m_dFilters.IsEmpty() || tQuery.m_dFilters.GetLength() > 1 )
 	{
 		sError.SetSprintf ( "only single filter supported, got %d", tQuery.m_dFilters.GetLength() );
-		return;
+		return nullptr;
 	}
 
-	if ( tQuery.m_dFilters.GetLength() )
+	const CSphFilterSettings* pFilter = tQuery.m_dFilters.Begin();
+
+	CSphScopedPtr<ReplicationCommand_t> pCmd { MakeReplicationCommand ( ReplicationCommand_e::PQUERY_DELETE, std::move ( sIndex ), std::move ( sCluster ) ) };
+	if ( ( pFilter->m_bHasEqualMin || pFilter->m_bHasEqualMax ) && !pFilter->m_bExclude && pFilter->m_eType==SPH_FILTER_VALUES && ( pFilter->m_sAttrName=="@id" || pFilter->m_sAttrName=="id" || pFilter->m_sAttrName=="uid" ) )
 	{
-		const CSphFilterSettings * pFilter = tQuery.m_dFilters.Begin();
-		if ( ( pFilter->m_bHasEqualMin || pFilter->m_bHasEqualMax ) && !pFilter->m_bExclude && pFilter->m_eType==SPH_FILTER_VALUES
-			&& ( pFilter->m_sAttrName=="@id" || pFilter->m_sAttrName=="id" || pFilter->m_sAttrName=="uid" ) )
-		{
-			pCmd->m_dDeleteQueries.Reserve ( pFilter->GetNumValues() );
-			const SphAttr_t * pA = pFilter->GetValueArray();
-			for ( int i = 0; i < pFilter->GetNumValues(); ++i )
-				pCmd->m_dDeleteQueries.Add ( pA[i] );
-		} else if ( pFilter->m_eType==SPH_FILTER_STRING && pFilter->m_sAttrName=="tags" && pFilter->m_dStrings.GetLength() )
-		{
-			pCmd->m_sDeleteTags = pFilter->m_dStrings[0].cstr();
-		} else if ( pFilter->m_eType==SPH_FILTER_STRING_LIST && pFilter->m_sAttrName=="tags" && pFilter->m_dStrings.GetLength() )
-		{
-			StringBuilder_c tBuf;
-			tBuf.StartBlock ( "," );
-			for ( const CSphString & sVal : pFilter->m_dStrings )
-				tBuf << sVal;
-			tBuf.FinishBlock ();
-
-			pCmd->m_sDeleteTags = tBuf.cstr();
-		}
-		else
-		{
-			sError.SetSprintf ( "unsupported filter type %d, attribute '%s'", pFilter->m_eType, pFilter->m_sAttrName.cstr() );
-			return;
-		}
+		pCmd->m_dDeleteQueries.Reserve ( pFilter->GetNumValues() );
+		const SphAttr_t * pA = pFilter->GetValueArray();
+		for ( int i = 0; i < pFilter->GetNumValues(); ++i )
+			pCmd->m_dDeleteQueries.Add ( pA[i] );
+		return pCmd.LeakPtr();
 	}
 
-	tAccum.m_dCmd.Add ( pCmd.LeakPtr() );
+	if ( pFilter->m_eType==SPH_FILTER_STRING && pFilter->m_sAttrName=="tags" && !pFilter->m_dStrings.IsEmpty() )
+	{
+		pCmd->m_sDeleteTags = pFilter->m_dStrings[0];
+		return pCmd.LeakPtr();
+	}
+
+	if ( pFilter->m_eType==SPH_FILTER_STRING_LIST && pFilter->m_sAttrName=="tags" && !pFilter->m_dStrings.IsEmpty() )
+	{
+		StringBuilder_c tBuf ( "," );
+		pFilter->m_dStrings.for_each ( [&tBuf] ( const auto& sVal ) { tBuf << sVal; } );
+		tBuf.FinishBlocks ();
+		tBuf.MoveTo ( pCmd->m_sDeleteTags );
+		return pCmd.LeakPtr();
+	}
+
+	sError.SetSprintf ( "unsupported filter type %d, attribute '%s'", pFilter->m_eType, pFilter->m_sAttrName.cstr() );
+	return nullptr;
 }
 
 
 static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * sDistributed, const SqlStmt_t & tStmt,
-		VecTraits_T<DocID_t> dDocs, SearchFailuresLog_c & dErrors, bool bCommit, CSphSessionAccum & tAcc )
+		SearchFailuresLog_c & dErrors, bool bCommit, CSphSessionAccum & tAcc )
 {
 
 	const CSphString & sCluster = tStmt.m_sCluster;
 	const CSphString & sStore = tStmt.m_tQuery.m_sStore;
-	bool bNeedStore = !sStore.IsEmpty();
-
-	if ( bNeedStore )
-		bCommit = false;
+	bool bOnlyStoreDocIDs = !sStore.IsEmpty();
 
 	CSphString sError;
-
-	ServedDescRPtr_c pLocked ( GetServed ( sName ) );
-	if ( !pLocked || !pLocked->m_pIndex )
+	auto err = [&sName, &sDistributed, &sError, &dErrors] (const char* szErr = nullptr)
 	{
-		dErrors.Submit ( sName, sDistributed, "index not available" );
+		dErrors.Submit ( sName, sDistributed, szErr ? szErr : sError.cstr() );
 		return 0;
-	}
+	};
 
-	auto * pIndex = static_cast<RtIndex_i *> ( pLocked->m_pIndex );
-	if ( !ServedDesc_t::IsMutable ( pLocked ) )
-	{
-		sError.SetSprintf ( "does not support DELETE" );
-		dErrors.Submit ( sName, sDistributed, sError.cstr() );
-		return 0;
-	}
+	cServedIndexRefPtr_c pServed { GetServed ( sName ) };
+	if ( !ServedDesc_t::IsMutable ( pServed ) )
+		return err ( "index not available, or does not support DELETE" );
 
 	GlobalCrashQueryGetRef().m_dIndex = FromStr ( sName );
+	if ( !CheckIndexCluster ( sName, *pServed, sCluster, IsHttpStmt ( tStmt ), sError ) )
+		return err();
 
-	RtAccum_t * pAccum = tAcc.GetAcc ( pIndex, sError );
-	if ( !sError.IsEmpty() )
+	// process store to local variable instead of deletion (here we don't need any stuff like accum, txn, replication)
+	if ( bOnlyStoreDocIDs )
 	{
-		dErrors.Submit ( sName, sDistributed, sError.cstr() );
+		if ( pServed->m_eType == IndexType_e::PERCOLATE )
+			return err ( "Storing del subset not implemented for PQ indexes" );
+
+		assert ( sStore.Begins ( "@" ) );
+		DocsCollector_c dData { tStmt.m_tQuery, tStmt.m_bJson, sName, pServed, &sError };
+		auto dDocs = dData.GetValuesSlice();
+		if ( !sError.IsEmpty() )
+			return err();
+
+		SetLocalTemporaryUserVar ( sStore, dDocs );
 		return 0;
 	}
 
-	if ( !CheckIndexCluster ( sName, *pLocked, sCluster, IsHttpStmt ( tStmt ), sError ) )
-	{
-		dErrors.Submit ( sName, sDistributed, sError.cstr() );
-		return 0;
-	} 
 
-	int iAffected = 0;
+	RtAccum_t* pAccum = nullptr;
 
 	// goto to percolate path with unlocked index
-	if ( pLocked->m_eType==IndexType_e::PERCOLATE )
+	if ( pServed->m_eType==IndexType_e::PERCOLATE )
 	{
-		if ( bNeedStore )
-		{
-			dErrors.Submit ( sName, sDistributed, "Storing del subset not implemented for PQ indexes" );
-			return 0;
-		}
-		PercolateDeleteDocuments ( sName, sCluster, tStmt, *pAccum, sError );
+		ReplicationCommand_t* pCmd = MakePercolateDeleteDocumentsCommand ( sName, sCluster, tStmt, sError );
 		if ( !sError.IsEmpty() )
-		{
-			dErrors.Submit ( sName, sDistributed, sError.cstr() );
+			return err();
+
+		if ( !pCmd )
 			return 0;
-		}
+
+		pAccum = tAcc.GetAcc ( RIdx_T<RtIndex_i*> ( pServed ), sError );
+		if ( !sError.IsEmpty() )
+			return err();
+
+		assert ( pAccum );
+		pAccum->m_dCmd.Add ( pCmd );
 	} else
 	{
-		CSphScopedPtr<SearchHandler_c> pHandler ( nullptr );
-		CSphVector<DocID_t> dValues;
-		if ( dDocs.IsEmpty() ) // needs to be deleted via query
-		{
-			pHandler = new SearchHandler_c ( 1, CreateQueryParser ( tStmt.m_bJson ), tStmt.m_tQuery.m_eQueryType, false );
-			pHandler->m_dLocked.AddUnmanaged ( sName, pLocked );
-			pHandler->RunDeletes ( tStmt.m_tQuery, sName, &sError, &dValues );
-			dDocs = dValues;
-		}
+		DocsCollector_c dData { tStmt.m_tQuery, tStmt.m_bJson, sName, pServed, &sError};
+		auto dDocs = dData.GetValuesSlice();
+		if ( !sError.IsEmpty() )
+			return err();
 
-		if ( !bNeedStore )
-		{
-			if ( !pIndex->DeleteDocument ( dDocs, sError, pAccum ) )
-			{
-				dErrors.Submit ( sName, sDistributed, sError.cstr() );
-				return 0;
-			}
+		RIdx_T<RtIndex_i*> pRtIndex { pServed };
+		pAccum = tAcc.GetAcc ( pRtIndex, sError );
+		if ( !pRtIndex->DeleteDocument ( dDocs, sError, pAccum ) ) // assume dData is alive, as we use slice from internal vec
+			return err();
 
-			pAccum->AddCommand ( ReplicationCommand_e::RT_TRX, sCluster, sName );
-		} else
-		{
-			// no delete; just store collected dDocs to provided uservar
-			assert ( sStore.Begins ("@"));
-			SetLocalTemporaryUserVar ( sStore, dDocs );
-		}
+		pAccum = tAcc.GetAcc ( pRtIndex, sError );
+		if ( !sError.IsEmpty() )
+			return err();
+
+		assert ( pAccum );
+		pAccum->AddCommand ( ReplicationCommand_e::RT_TRX, sName, sCluster );
 	}
 
+	int iAffected = 0;
 	if ( bCommit )
 	{
 		if ( !HandleCmdReplicate ( *pAccum, sError, iAffected ) )
@@ -13290,19 +13210,6 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 		}
 	}
 
-	VecTraits_T<DocID_t> dDelDocs;
-
-	// now check the short path - if we have clauses 'id=smth' or 'id in (xx,yy)' or 'id in @uservar' - we know
-	// all the values list immediatelly and don't have to run the heavy query here.
-
-	if ( tQuery.m_sQuery.IsEmpty() && tQuery.m_dFilters.GetLength()==1 && !tQuery.m_dFilterTree.GetLength() )
-	{
-		const CSphFilterSettings* pFilter = tQuery.m_dFilters.Begin();
-		if ( ( pFilter->m_bHasEqualMin || pFilter->m_bHasEqualMax ) && pFilter->m_eType==SPH_FILTER_VALUES
-				&& ( pFilter->m_sAttrName=="@id" || pFilter->m_sAttrName=="id" ) && !pFilter->m_bExclude )
-			dDelDocs = { (DocID_t *) pFilter->GetValueArray (), pFilter->GetNumValues () };
-	}
-
 	// do delete
 	SearchFailuresLog_c dErrors;
 	int iAffected = 0;
@@ -13314,7 +13221,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 		bool bLocal = g_pLocalIndexes->Contains ( sName );
 		if ( bLocal )
 		{
-			iAffected += LocalIndexDoDeleteDocuments ( sName, nullptr, tStmt, dDelDocs, dErrors, bCommit, tAcc );
+			iAffected += LocalIndexDoDeleteDocuments ( sName, nullptr, tStmt, dErrors, bCommit, tAcc );
 		}
 		else if ( dDistributed[iIdx] )
 		{
@@ -13324,13 +13231,13 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 				bool bDistLocal = g_pLocalIndexes->Contains ( sLocal );
 				if ( bDistLocal )
 				{
-					iAffected += LocalIndexDoDeleteDocuments ( sLocal, sName.cstr(), tStmt, dDelDocs, dErrors, bCommit, tAcc );
+					iAffected += LocalIndexDoDeleteDocuments ( sLocal, sName.cstr(), tStmt, dErrors, bCommit, tAcc );
 				}
 			}
 		}
 
 		// delete for remote agents
-		if ( !bStoreVar && dDistributed[iIdx] && dDistributed[iIdx]->m_dAgents.GetLength() )
+		if ( !bStoreVar && dDistributed[iIdx] && !dDistributed[iIdx]->m_dAgents.IsEmpty() )
 		{
 			const DistributedIndex_t * pDist = dDistributed[iIdx];
 			VecRefPtrsAgentConn_t dAgents;
@@ -13818,64 +13725,53 @@ void HandleMysqlAttach ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString
 	auto pServedFrom = GetServed ( sFrom );
 	auto pServedTo = GetServed ( sTo );
 
-	// need just read lock for initial checks and prevent deadlock of attaching index to itself
+	bool bOk = false;
+	if ( !pServedFrom )
+		tOut.ErrorEx ( nullptr, "no such index '%s'", sFrom.cstr() );
+	else if ( pServedFrom->m_eType != IndexType_e::PLAIN )
+		tOut.Error ( tStmt.m_sStmt, "1st argument to ATTACH must be a plain index" );
+	else if ( !pServedTo )
+		tOut.ErrorEx ( nullptr, "no such index '%s'", sTo.cstr() );
+	else if ( pServedTo->m_eType!=IndexType_e::RT )
+		tOut.Error ( tStmt.m_sStmt, "2nd argument to ATTACH must be a RT index" );
+	else
+		bOk = true;
+	if (!bOk)
+		return;
+
+	// cluster does not implement ATTACH for now
+	auto tCluster = IsPartOfCluster ( pServedTo );
+	if ( tCluster )
 	{
-		ServedDescRPtr_c pFrom ( pServedFrom );
-		ServedDescRPtr_c pTo ( pServedTo ) ;
-
-		if ( !pFrom
-			|| !pTo
-			|| pFrom->m_eType!=IndexType_e::PLAIN
-			|| pTo->m_eType!=IndexType_e::RT )
-		{
-			if ( !pFrom )
-				tOut.ErrorEx ( nullptr, "no such index '%s'", sFrom.cstr() );
-			else if ( !pTo )
-				tOut.ErrorEx ( nullptr, "no such index '%s'", sTo.cstr() );
-			else if ( pFrom->m_eType!=IndexType_e::PLAIN )
-				tOut.Error ( tStmt.m_sStmt, "1st argument to ATTACH must be a plain index" );
-			else if ( pTo->m_eType!=IndexType_e::RT )
-				tOut.Error ( tStmt.m_sStmt, "2nd argument to ATTACH must be a RT index" );
-			return;
-		}
-
-		// cluster does not implement ATTACH for now
-		if ( ClusterOperationProhibit ( pTo, sError, "ATTACH" ) )
-		{
-			tOut.ErrorEx ( nullptr, "index %s: %s", sTo.cstr(), sError.cstr () );
-			return;
-		}
-	}
-
-	ServedDescWPtr_c pFrom ( pServedFrom ); // write-lock
-	ServedDescWPtr_c pTo ( pServedTo ) ; // write-lock
-
-	auto * pRtTo = ( RtIndex_i * ) pTo->m_pIndex;
-
-	bool bFatal = false;
-	StrVec_t dWarnings;
-	if ( !pRtTo->AttachDiskIndex ( pFrom->m_pIndex, bTruncate, bFatal, dWarnings, sError ) )
-	{
-		if ( bFatal )
-			g_pLocalIndexes->Delete(sFrom);
-
-		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
+		tOut.ErrorEx ( nullptr, "index %s is part of cluster %s, can not issue ATTACH", sTo.cstr(), tCluster->cstr(), sError.cstr () );
 		return;
 	}
 
-	sWarning = ConcatWarnings(dWarnings);
+	WIdx_T<RtIndex_i*> pRtTo { pServedTo };
+	WIdx_c pPlainFrom { pServedFrom };
 
-	// after a successfull Attach() RT index owns it
-	pFrom->m_pIndex = nullptr;
-	g_pLocalIndexes->Delete ( sFrom );
-	tOut.Ok();
+	bool bFatal = false;
+	StrVec_t dWarnings;
+	auto bAttached = pRtTo->AttachDiskIndex ( pPlainFrom, bTruncate, bFatal, dWarnings, sError );
+
+	sWarning = ConcatWarnings(dWarnings);
+	if ( bAttached || bFatal )
+		g_pLocalIndexes->Delete ( sFrom );
+
+	if ( bAttached )
+	{
+		pServedFrom.Leak(); // since index no more belong to us
+		tOut.Ok();
+	}
+	else
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 }
 
 
 void HandleMysqlFlushRtindex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
 	CSphString sError;
-	ServedDescRPtr_c pIndex ( GetServed ( tStmt.m_sIndex ) );
+	auto pIndex = GetServed ( tStmt.m_sIndex );
 
 	if ( !ServedDesc_t::IsMutable ( pIndex ) )
 	{
@@ -13883,22 +13779,21 @@ void HandleMysqlFlushRtindex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 		return;
 	}
 
-	auto * pRt = ( RtIndex_i * ) pIndex->m_pIndex;
-	pRt->ForceRamFlush("forced");
+	RIdx_T<RtIndex_i*> ( pIndex )->ForceRamFlush ( "forced" );
 	tOut.Ok();
 }
 
 
 void HandleMysqlFlushRamchunk ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
-	ServedDescRPtr_c pIndex ( GetServed ( tStmt.m_sIndex ) );
+	auto pIndex = GetServed ( tStmt.m_sIndex );
 	if ( !ServedDesc_t::IsMutable ( pIndex ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, "FLUSH RAMCHUNK requires an existing RT index" );
 		return;
 	}
 
-	auto * pRt = (RtIndex_i*)pIndex->m_pIndex;
+	RIdx_T<RtIndex_i*> pRt { pIndex };
 	if ( !pRt->ForceDiskChunk() )
 	{
 		CSphString sError;
@@ -13946,7 +13841,7 @@ void HandleMysqlOptimizeManual ( RowBuffer_i & tOut, const DebugCmd::DebugComman
 		return;
 
 	auto sIndex = tCmd.m_sParam;
-	ServedDescRPtr_c pIndex ( GetServed ( sIndex ) );
+	auto pIndex = GetServed ( sIndex );
 	if ( !ServedDesc_t::IsMutable ( pIndex ) )
 	{
 		tOut.Error ( tCmd.m_szStmt, "MERGE requires an existing RT index" );
@@ -13962,8 +13857,7 @@ void HandleMysqlOptimizeManual ( RowBuffer_i & tOut, const DebugCmd::DebugComman
 
 	if ( tCmd.bOpt("sync") )
 	{
-		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( std::move ( tTask ) );
+		RIdx_T<RtIndex_i*> ( pIndex )->Optimize ( std::move ( tTask ) );
 	} else
 		EnqueueForOptimize ( sIndex, std::move ( tTask ) );
 	tOut.Ok();
@@ -13976,7 +13870,7 @@ void HandleMysqlDropManual ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t 
 		return;
 
 	auto sIndex = tCmd.m_sParam;
-	ServedDescRPtr_c pIndex ( GetServed ( sIndex ) );
+	auto pIndex = GetServed ( sIndex );
 	if ( !ServedDesc_t::IsMutable ( pIndex ) )
 	{
 		tOut.Error ( tCmd.m_szStmt, "DROP requires an existing RT index" );
@@ -13990,8 +13884,7 @@ void HandleMysqlDropManual ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t 
 
 	if ( tCmd.bOpt("sync") )
 	{
-		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( std::move ( tTask ) );
+		RIdx_T<RtIndex_i*> ( pIndex )->Optimize ( std::move ( tTask ) );
 	} else
 		EnqueueForOptimize ( sIndex, std::move ( tTask ) );
 	tOut.Ok ();
@@ -14003,7 +13896,7 @@ void HandleMysqlCompress ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & 
 		return;
 
 	auto sIndex = tCmd.m_sParam;
-	ServedDescRPtr_c pIndex ( GetServed ( sIndex ) );
+	auto pIndex = GetServed ( sIndex );
 	if ( !ServedDesc_t::IsMutable ( pIndex ) )
 	{
 		tOut.Error ( tCmd.m_szStmt, "COMPRESS requires an existing RT index" );
@@ -14017,8 +13910,7 @@ void HandleMysqlCompress ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & 
 
 	if ( tCmd.bOpt("sync") )
 	{
-		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( std::move ( tTask ) );
+		RIdx_T<RtIndex_i*> ( pIndex )->Optimize ( std::move ( tTask ) );
 	} else
 		EnqueueForOptimize ( sIndex, std::move ( tTask ) );
 	tOut.Ok();
@@ -14035,7 +13927,7 @@ void HandleMysqlSplit ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCm
 
 	// check index existance
 	auto sIndex = tCmd.m_sParam;
-	ServedDescRPtr_c pIndex ( GetServed ( sIndex ) );
+	auto pIndex = GetServed ( sIndex );
 	if ( !ServedDesc_t::IsMutable ( pIndex ) )
 	{
 		tOut.Error ( tCmd.m_szStmt, "SPLIT requires an existing RT index" );
@@ -14064,8 +13956,7 @@ void HandleMysqlSplit ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCm
 
 	if ( tCmd.bOpt ( "sync" ) )
 	{
-		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i*> ( pIndex->m_pIndex )->Optimize ( std::move ( tTask ) );
+		RIdx_T<RtIndex_i*> ( pIndex )->Optimize ( std::move ( tTask ) );
 	} else
 		EnqueueForOptimize ( sIndex, std::move ( tTask ) );
 	tOut.Ok();
@@ -14074,7 +13965,7 @@ void HandleMysqlSplit ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCm
 void HandleMysqlfiles ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCmd )
 {
 	auto sIndex = tCmd.m_sParam;
-	ServedDescRPtr_c pIndex ( GetServed ( sIndex ) );
+	auto pIndex = GetServed ( sIndex );
 	if ( !ServedDesc_t::IsLocal ( pIndex ) )
 	{
 		tOut.Error ( tCmd.m_szStmt, "FILES requires an existing local index" );
@@ -14083,7 +13974,7 @@ void HandleMysqlfiles ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCm
 
 	StrVec_t dFiles;
 	StrVec_t dExt;
-	pIndex->m_pIndex->CollectFiles( dFiles, dExt );
+	RIdx_c ( pIndex )->CollectFiles ( dFiles, dExt );
 
 	VectorLike dOut ( 0 );
 	dOut.SetColNames ( { "file" } );
@@ -14120,7 +14011,7 @@ void HandleSelectFiles ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 		return;
 
 	const auto & tStmt = *pStmt;
-	ServedDescRPtr_c pServed ( GetServed ( tStmt.m_sIndex ) );
+	auto pServed = GetServed ( tStmt.m_sIndex );
 	if ( !ServedDesc_t::IsLocal ( pServed ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, "FILES requires an existing local index" );
@@ -14129,7 +14020,7 @@ void HandleSelectFiles ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 
 	StrVec_t dFiles;
 	StrVec_t dExt;
-	pServed->m_pIndex->CollectFiles ( dFiles, dExt );
+	RIdx_c ( pServed )->CollectFiles ( dFiles, dExt );
 
 	auto sFormat = pStmt->m_sThreadFormat;
 	if ( sFormat!="external" )
@@ -14446,7 +14337,7 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 
 	bool bReconfigure = ( tStmt.m_iIntParam==1 );
 
-	CSphScopedPtr<ReplicationCommand_t> pCmd ( new ReplicationCommand_t() );
+	CSphScopedPtr<ReplicationCommand_t> pCmd ( MakeReplicationCommand ( ReplicationCommand_e::TRUNCATE, tStmt.m_sIndex, tStmt.m_sCluster ) );
 	CSphString sError;
 	const CSphString & sIndex = tStmt.m_sIndex;
 
@@ -14465,7 +14356,7 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	// get an exclusive lock for operation
 	// but only read lock for check
 	{
-		ServedDescRPtr_c pIndex ( GetServed ( sIndex ) );
+		auto pIndex = GetServed ( sIndex );
 		if ( !ServedDesc_t::IsMutable ( pIndex ) )
 		{
 			tOut.Error ( tStmt.m_sStmt, "TRUNCATE RTINDEX requires an existing RT index" );
@@ -14478,10 +14369,6 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 			return;
 		}
 	}
-
-	pCmd->m_eCommand = ReplicationCommand_e::TRUNCATE;
-	pCmd->m_sIndex = sIndex;
-	pCmd->m_sCluster = tStmt.m_sCluster;
 
 	RtAccum_t tAcc ( false );
 	tAcc.m_dCmd.Add ( pCmd.LeakPtr() );
@@ -14499,7 +14386,7 @@ void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	if ( !sphCheckWeCanModify ( tStmt.m_sStmt, tOut ) )
 		return;
 
-	ServedDescRPtr_c pIndex ( GetServed ( tStmt.m_sIndex ) );
+	auto pIndex = GetServed ( tStmt.m_sIndex );
 	if ( !ServedDesc_t::IsMutable ( pIndex ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, "OPTIMIZE INDEX requires an existing RT index" );
@@ -14512,8 +14399,7 @@ void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 
 	if ( tStmt.m_tQuery.m_bSync )
 	{
-		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i*> ( pIndex->m_pIndex )->Optimize ( std::move ( tTask ) );
+		RIdx_T<RtIndex_i*> ( pIndex )->Optimize ( std::move ( tTask ) );
 	} else
 		EnqueueForOptimize ( tStmt.m_sIndex, std::move ( tTask ) );
 	tOut.Ok();
@@ -14829,17 +14715,15 @@ static void AddFoundRowsStatsToOutput ( VectorLike & dStatus, const char * szPre
 }
 
 
-static void AddIndexQueryStats ( VectorLike & dStatus, const ServedStats_c * pStats )
+static void AddIndexQueryStats ( VectorLike & dStatus, const ServedStats_c& tStats )
 {
-	assert ( pStats );
-
 	QueryStats_t tQueryTimeStats, tRowsFoundStats;
-	pStats->CalculateQueryStats ( tRowsFoundStats, tQueryTimeStats );
+	tStats.CalculateQueryStats ( tRowsFoundStats, tQueryTimeStats );
 	AddQueryTimeStatsToOutput ( dStatus, "query_time", tQueryTimeStats );
 
 #ifndef NDEBUG
 	QueryStats_t tExactQueryTimeStats, tExactRowsFoundStats;
-	pStats->CalculateQueryStatsExact ( tExactQueryTimeStats, tExactRowsFoundStats );
+	tStats.CalculateQueryStatsExact ( tExactQueryTimeStats, tExactRowsFoundStats );
 	AddQueryTimeStatsToOutput ( dStatus, "exact_query_time", tQueryTimeStats );
 #endif
 
@@ -14940,11 +14824,11 @@ const char * szIndexType ( IndexType_e eType )
 	}
 }
 
-static void AddPlainIndexStatus ( RowBuffer_i & tOut, const ServedDesc_t * pLocked, const ServedStats_c * pStats,
+static void AddPlainIndexStatus ( RowBuffer_i & tOut, const cServedIndexRefPtr_c& pServed, const ServedStats_c& tStats,
 		bool bModeFederated, const CSphString & sName, const CSphString & sPattern )
 {
-	assert ( pLocked );
-	CSphIndex * pIndex = pLocked->m_pIndex;
+	assert ( pServed );
+	RIdx_c pIndex { pServed };
 	assert ( pIndex );
 
 	if ( bModeFederated )
@@ -14954,14 +14838,14 @@ static void AddPlainIndexStatus ( RowBuffer_i & tOut, const ServedDesc_t * pLock
 	}
 
 	VectorLike dStatus ( sPattern );
-	dStatus.MatchTuplet ( "index_type", szIndexType ( pLocked->m_eType ) );
-	AddDiskIndexStatus ( dStatus, pIndex, ServedDesc_t::IsMutable ( pLocked ) );
-	AddIndexQueryStats ( dStatus, pStats );
+	dStatus.MatchTuplet ( "index_type", szIndexType ( pServed->m_eType ) );
+	AddDiskIndexStatus ( dStatus, pIndex, ServedDesc_t::IsMutable ( pServed ) );
+	AddIndexQueryStats ( dStatus, tStats );
 	tOut.DataTable ( dStatus );
 }
 
 
-static void AddDistibutedIndexStatus ( RowBuffer_i & tOut, DistributedIndex_t * pIndex, bool bFederatedUser, const CSphString & sName, const CSphString & sPattern )
+static void AddDistibutedIndexStatus ( RowBuffer_i & tOut, const cDistributedIndexRefPtr_t& pIndex, bool bFederatedUser, const CSphString & sName, const CSphString & sPattern )
 {
 	assert ( pIndex );
 
@@ -14975,7 +14859,7 @@ static void AddDistibutedIndexStatus ( RowBuffer_i & tOut, DistributedIndex_t * 
 
 	VectorLike dStatus ( sPattern );
 	dStatus.MatchTuplet( "index_type", "distributed" );
-	AddIndexQueryStats ( dStatus, pIndex );
+	AddIndexQueryStats ( dStatus, pIndex->m_tStats );
 	tOut.DataTable ( dStatus );
 }
 
@@ -14983,7 +14867,7 @@ static void AddDistibutedIndexStatus ( RowBuffer_i & tOut, DistributedIndex_t * 
 void HandleMysqlShowIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, bool bFederatedUser )
 {
 	CSphString sError;
-	ServedDescRPtr_c pServed ( GetServed ( tStmt.m_sIndex ));
+	auto pServed = GetServed ( tStmt.m_sIndex );
 
 	int iChunk = tStmt.m_iIntParam;
 	if ( tStmt.m_dIntSubkeys.GetLength ()>=1 )
@@ -14991,11 +14875,9 @@ void HandleMysqlShowIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, b
 
 	if ( pServed )
 	{
-		CSphIndex * pIndex = pServed->m_pIndex;
-
-		if ( iChunk>=0 && pIndex && pIndex->IsRT ())
+		if ( iChunk>=0 && pServed->m_eType == IndexType_e::RT )
 		{
-			static_cast<RtIndex_i *>( pIndex )->ProcessDiskChunk ( iChunk, [&tOut, &tStmt] (const CSphIndex* pIndex)
+			RIdx_T<const RtIndex_i*> ( pServed )->ProcessDiskChunk ( iChunk, [&tOut, &tStmt] ( const CSphIndex* pIndex )
 			{
 				if ( !pIndex )
 				{
@@ -15007,14 +14889,8 @@ void HandleMysqlShowIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, b
 				AddDiskIndexStatus ( dStatus, pIndex, false );
 				tOut.DataTable ( dStatus );
 			});
-			return;
-		}
-
-		if ( pIndex )
-			AddPlainIndexStatus ( tOut, pServed, (const ServedStats_c *) pServed, bFederatedUser, tStmt.m_sIndex, tStmt.m_sStringParam );
-		else
-			tOut.Error ( tStmt.m_sStmt, "SHOW INDEX STATUS requires an existing index" );
-
+		} else
+			AddPlainIndexStatus ( tOut, pServed, *pServed->m_pStats, bFederatedUser, tStmt.m_sIndex, tStmt.m_sStringParam );
 		return;
 	}
 
@@ -15067,7 +14943,7 @@ void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 		return;
 
 	const auto & tStmt = *pStmt;
-	ServedDescRPtr_c pServed ( GetServed ( tStmt.m_sIndex ) );
+	auto pServed = GetServed ( tStmt.m_sIndex );
 
 	if ( !ServedDesc_t::IsLocal ( pServed ) )
 	{
@@ -15075,16 +14951,10 @@ void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 		return;
 	}
 
-	CSphIndex * pIndex = pServed->m_pIndex;
-	if ( !pIndex )
-	{
-		tOut.Error ( tStmt.m_sStmt, "select INDEX.status requires an existing index" );
-		return;
-	}
-
+	RIdx_c pIndex { pServed };
 	if ( pIndex->IsRT () )
 	{
-		auto * pRtIndex = static_cast<RtIndex_i *>( pIndex );
+		auto* pRtIndex = static_cast<const RtIndex_i*> ( pIndex.Ptr() );
 		int iChunk = 0;
 		bool bKeepIteration = true;
 		while ( bKeepIteration )
@@ -15117,8 +14987,12 @@ void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 void HandleMysqlShowIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
 	CSphString sError;
-	ServedDescRPtr_c pServed ( GetServed ( tStmt.m_sIndex ) );
-	CSphIndex * pIndex = pServed ? pServed->m_pIndex : nullptr;
+	auto pServed = GetServed ( tStmt.m_sIndex );
+	if ( !pServed )
+	{
+		tOut.Error ( tStmt.m_sStmt, "SHOW INDEX SETTINGS requires an existing index" );
+		return;
+	}
 
 	int iChunk = tStmt.m_iIntParam;
 	if ( tStmt.m_dIntSubkeys.GetLength ()>=1 )
@@ -15126,12 +15000,6 @@ void HandleMysqlShowIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t & tStmt 
 
 	auto fnShowSettings = [&tOut, szStmt=tStmt.m_sStmt] ( const CSphIndex* pIndex )
 	{
-		if ( !pIndex )
-		{
-			tOut.Error ( szStmt, "SHOW INDEX SETTINGS requires an existing index" );
-			return;
-		}
-
 		if ( !tOut.HeadOfStrings ( { "Variable_name", "Value" } ) )
 			return;
 
@@ -15143,10 +15011,10 @@ void HandleMysqlShowIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t & tStmt 
 		tOut.Eof ();
 	};
 
-	if ( iChunk>=0 && pIndex && pIndex->IsRT() )
-		static_cast<RtIndex_i *>( pIndex )->ProcessDiskChunk ( iChunk, fnShowSettings );
+	if ( iChunk >= 0 && pServed->m_eType == IndexType_e::RT )
+		RIdx_T<const RtIndex_i*> ( pServed )->ProcessDiskChunk ( iChunk, fnShowSettings );
 	else
-		fnShowSettings ( pIndex );
+		fnShowSettings ( RIdx_c(pServed) );
 }
 
 
@@ -15198,7 +15066,7 @@ void HandleMysqlShowProfile ( RowBuffer_i & tOut, const QueryProfile_c & p, bool
 }
 
 
-static void AddAttrToIndex ( const SqlStmt_t & tStmt, const ServedDesc_t * pServed, CSphString & sError )
+static void AddAttrToIndex ( const SqlStmt_t & tStmt, CSphIndex * pIdx, CSphString & sError )
 {
 	CSphString sAttrToAdd = tStmt.m_sAlterAttr;
 	sAttrToAdd.ToLower();
@@ -15207,8 +15075,8 @@ static void AddAttrToIndex ( const SqlStmt_t & tStmt, const ServedDesc_t * pServ
 	bool bStored = tStmt.m_uFieldFlags & CSphColumnInfo::FIELD_STORED;
 	bool bAttribute = tStmt.m_uFieldFlags & CSphColumnInfo::FIELD_IS_ATTRIBUTE; // beware, m.b. true only for strings
 
-	bool bHasAttr = pServed->m_pIndex->GetMatchSchema ().GetAttr ( sAttrToAdd.cstr () );
-	bool bHasField = pServed->m_pIndex->GetMatchSchema ().GetFieldIndex ( sAttrToAdd.cstr () )!=-1;
+	bool bHasAttr = pIdx->GetMatchSchema ().GetAttr ( sAttrToAdd.cstr () );
+	bool bHasField = pIdx->GetMatchSchema ().GetFieldIndex ( sAttrToAdd.cstr () )!=-1;
 
 	if ( !bIndexed && bHasAttr )
 	{
@@ -15237,25 +15105,25 @@ static void AddAttrToIndex ( const SqlStmt_t & tStmt, const ServedDesc_t * pServ
 
 	if ( bIndexed || bStored )
 	{
-		pServed->m_pIndex->AddRemoveField ( true, sAttrToAdd, tStmt.m_uFieldFlags, sError );
+		pIdx->AddRemoveField ( true, sAttrToAdd, tStmt.m_uFieldFlags, sError );
 		if ( bAttribute )
-			pServed->m_pIndex->AddRemoveAttribute ( true, tCtx, sError );
+			pIdx->AddRemoveAttribute ( true, tCtx, sError );
 	}
 	else
-		pServed->m_pIndex->AddRemoveAttribute ( true, tCtx, sError );
+		pIdx->AddRemoveAttribute ( true, tCtx, sError );
 }
 
 
-static void RemoveAttrFromIndex ( const SqlStmt_t & tStmt, const ServedDesc_t * pServed, CSphString & sError )
+static void RemoveAttrFromIndex ( const SqlStmt_t& tStmt, CSphIndex* pIdx, CSphString& sError )
 {
 	CSphString sAttrToRemove = tStmt.m_sAlterAttr;
 	sAttrToRemove.ToLower();
 
 	bool bIsAttr = true;
-	const CSphColumnInfo * pAttr = pServed->m_pIndex->GetMatchSchema().GetAttr ( sAttrToRemove.cstr() );
+	const CSphColumnInfo * pAttr = pIdx->GetMatchSchema().GetAttr ( sAttrToRemove.cstr() );
 	if ( !pAttr )
 	{
-		pAttr = pServed->m_pIndex->GetMatchSchema ().GetField ( sAttrToRemove.cstr () );
+		pAttr = pIdx->GetMatchSchema ().GetField ( sAttrToRemove.cstr () );
 		if ( !pAttr )
 		{
 			sError.SetSprintf ( "attribute '%s' does not exist", sAttrToRemove.cstr() );
@@ -15270,7 +15138,7 @@ static void RemoveAttrFromIndex ( const SqlStmt_t & tStmt, const ServedDesc_t * 
 		return;
 	}
 
-	if ( bIsAttr && pServed->m_pIndex->GetMatchSchema().GetAttrsCount()==1 )
+	if ( bIsAttr && pIdx->GetMatchSchema().GetAttrsCount()==1 )
 	{
 		sError.SetSprintf ( "unable to remove last attribute '%s'", sAttrToRemove.cstr() );
 		return;
@@ -15281,10 +15149,10 @@ static void RemoveAttrFromIndex ( const SqlStmt_t & tStmt, const ServedDesc_t * 
 		AttrAddRemoveCtx_t tCtx;
 		tCtx.m_sName = sAttrToRemove;
 		tCtx.m_eType = pAttr->m_eAttrType;
-		pServed->m_pIndex->AddRemoveAttribute ( false, tCtx, sError );
+		pIdx->AddRemoveAttribute ( false, tCtx, sError );
 	}
 	else
-		pServed->m_pIndex->AddRemoveField ( false, sAttrToRemove, 0, sError );
+		pIdx->AddRemoveField ( false, sAttrToRemove, 0, sError );
 }
 
 
@@ -15324,28 +15192,27 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, bool
 
 	for ( const auto &sName : dNames )
 	{
-		auto pLocal = GetServed ( sName );
-		if ( !pLocal )
+		auto pServed = GetServed ( sName );
+		if ( !pServed )
 		{
 			dErrors.Submit ( sName, nullptr, "unknown local index in ALTER request" );
 			continue;
 		}
 
-		ServedDescWPtr_c pWriteLocked ( pLocal ); // write-lock
-
 		// cluster does not implement ALTER for now
-		if ( ClusterOperationProhibit ( pWriteLocked, sError, "ALTER" ) )
+		auto tCluster = IsPartOfCluster ( pServed );
+		if ( tCluster )
 		{
-			dErrors.Submit ( sName, nullptr, sError.cstr() );
+			dErrors.SubmitEx ( sName, nullptr, "is part of cluster %s, can not issue ALTER", tCluster->cstr() );
 			continue;
 		}
 
 		CSphString sAddError;
 
 		if ( bAdd )
-			AddAttrToIndex ( tStmt, pWriteLocked, sAddError );
+			AddAttrToIndex ( tStmt, WIdx_c ( pServed ), sAddError );
 		else
-			RemoveAttrFromIndex ( tStmt, pWriteLocked, sAddError );
+			RemoveAttrFromIndex ( tStmt, WIdx_c ( pServed ), sAddError );
 
 		if ( !sAddError.IsEmpty() )
 			dErrors.Submit ( sName, nullptr, sAddError.cstr() );
@@ -15386,40 +15253,33 @@ static bool PrepareReconfigure ( const CSphString & sIndex, const CSphConfigSect
 
 	tSettings.m_tSchema.SetupFlags ( tSettings.m_tIndex, false, nullptr );
 
-	if ( !CheckStoredFields ( tSettings.m_tSchema, tSettings.m_tIndex, sError ) )
-		return false;
-
-	return true;
+	return CheckStoredFields ( tSettings.m_tSchema, tSettings.m_tIndex, sError );
 }
 
 
 static bool PrepareReconfigure ( const CSphString & sIndex, CSphReconfigureSettings & tSettings, CSphString & sError )
 {
-	CSphConfigParser tCfg;
-	if ( !tCfg.ReParse ( g_sConfigFile.cstr () ) )
+	CSphConfig hCfg;
+	if ( !ParseConfig ( &hCfg, g_sConfigFile.cstr () ) )
 	{
 		sError.SetSprintf ( "failed to parse config file '%s': %s; using previous settings", g_sConfigFile.cstr (), TlsMsg::szError() );
 		return false;
 	}
 
-	if ( !tCfg.m_tConf.Exists ( "index" ) )
+	if ( !hCfg.Exists ( "index" ) )
 	{
 		sError.SetSprintf ( "failed to find any index in config file '%s'; using previous settings", g_sConfigFile.cstr () );
 		return false;
 	}
 
-	const CSphConfig & hConf = tCfg.m_tConf;
-	if ( !hConf["index"].Exists ( sIndex ) )
+	if ( !hCfg["index"].Exists ( sIndex ) )
 	{
 		sError.SetSprintf ( "failed to find index '%s' in config file '%s'; using previous settings", sIndex.cstr(), g_sConfigFile.cstr () );
 		return false;
 	}
 
 	CSphString sWarning;
-	if ( !PrepareReconfigure ( sIndex, hConf["index"][sIndex], tSettings, sWarning, sError ) )
-		return false;
-
-	return true;
+	return PrepareReconfigure ( sIndex, hCfg["index"][sIndex], tSettings, sWarning, sError );
 }
 
 
@@ -15448,40 +15308,23 @@ static void HandleMysqlReconfigure ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 	}
 
 	auto pServed = GetServed ( tStmt.m_sIndex );
-	if ( !pServed )
+	if ( !ServedDesc_t::IsMutable ( pServed ))
 	{
-		if ( g_pDistIndexes->Contains ( tStmt.m_sIndex ) )
-			sError.SetSprintf ( "ALTER is only supported for local (not distributed) indexes" );
-		else
-			sError.SetSprintf ( "index '%s' not found", tStmt.m_sIndex.cstr () );
-
-		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
-		return;
-	}
-
-	ServedDescWPtr_c dWLocked ( pServed );
-	if ( !ServedDesc_t::IsMutable ( dWLocked ))
-	{
-		sError.SetSprintf ( "'%s' does not support ALTER (enabled, not mutable)", sIndex.cstr() );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
+		tOut.ErrorEx ( tStmt.m_sStmt, "'%s' is absent, or does not support ALTER", sIndex.cstr() );
 		return;
 	}
 
 	StrVec_t dWarnings;
-	bool bSame = ( (const RtIndex_i *) dWLocked->m_pIndex )->IsSameSettings ( tSettings, tSetup, dWarnings, sError );
-	sWarning = ConcatWarnings(dWarnings);
-
-	if ( !bSame && sError.IsEmpty() )
+	WIdx_T<RtIndex_i*> pRT { pServed };
+	if ( !pRT->IsSameSettings ( tSettings, tSetup, dWarnings, sError ) && sError.IsEmpty() )
 	{
-		auto pRT = (RtIndex_i *) dWLocked->m_pIndex;
-		bool bOk = pRT->Reconfigure(tSetup);
-		if ( !bOk )
+		if ( !pRT->Reconfigure ( tSetup ) )
 		{
 			sError.SetSprintf ( "index '%s': reconfigure failed; INDEX UNUSABLE (%s)", tStmt.m_sIndex.cstr(), pRT->GetLastError().cstr() );
 			g_pLocalIndexes->Delete ( tStmt.m_sIndex );
 		}
 	}
-
+	sWarning = ConcatWarnings ( dWarnings );
 	if ( sError.IsEmpty() )
 		tOut.Ok ( 0, dWarnings.GetLength() );
 	else
@@ -15489,7 +15332,7 @@ static void HandleMysqlReconfigure ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 }
 
 
-static bool ApplyIndexKillList ( CSphIndex * pIndex, CSphString & sWarning, CSphString & sError, bool bShowMessage = false );
+static bool ApplyIndexKillList ( const CSphIndex * pIndex, CSphString & sWarning, CSphString & sError, bool bShowMessage = false );
 
 
 // STMT_ALTER_KLIST_TARGET: ALTER TABLE index KILLLIST_TARGET = 'string'
@@ -15510,8 +15353,6 @@ static void HandleMysqlAlterKlist ( RowBuffer_i & tOut, const SqlStmt_t & tStmt,
 	}
 
 	auto pServed = GetServed ( tStmt.m_sIndex.cstr () );
-	ServedDescWPtr_c pWriteLocked ( pServed );
-
 	if ( !pServed )
 	{
 		if ( g_pDistIndexes->Contains ( tStmt.m_sIndex ) )
@@ -15519,7 +15360,7 @@ static void HandleMysqlAlterKlist ( RowBuffer_i & tOut, const SqlStmt_t & tStmt,
 		else
 			sError.SetSprintf ( "index '%s' not found", tStmt.m_sIndex.cstr () );
 	}
-	else if ( ServedDesc_t::IsMutable ( pWriteLocked ) )
+	else if ( ServedDesc_t::IsMutable ( pServed ) )
 		sError.SetSprintf ( "'%s' does not support ALTER (real-time or percolate)", tStmt.m_sIndex.cstr () );
 
 	if ( !sError.IsEmpty () )
@@ -15528,14 +15369,15 @@ static void HandleMysqlAlterKlist ( RowBuffer_i & tOut, const SqlStmt_t & tStmt,
 		return;
 	}
 
-	if ( !pWriteLocked->m_pIndex->AlterKillListTarget ( tNewTargets, sError ) )
+	WIdx_c pIdx { pServed };
+	if ( !pIdx->AlterKillListTarget ( tNewTargets, sError ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
 	// apply killlist to new targets
-	if ( !ApplyIndexKillList ( pWriteLocked->m_pIndex, sWarning, sError ) )
+	if ( !ApplyIndexKillList ( pIdx, sWarning, sError ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
@@ -15610,29 +15452,16 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	}
 
 	auto pServed = GetServed ( tStmt.m_sIndex.cstr() );
-	if ( !pServed )
+	if ( !pServed || pServed->m_eType != IndexType_e::RT )
 	{
-		if ( g_pDistIndexes->Contains ( tStmt.m_sIndex ) )
-			sError.SetSprintf ( "ALTER is only supported for local (not distributed) indexes" );
-		else
-			sError.SetSprintf ( "index '%s' not found", tStmt.m_sIndex.cstr () );
-
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.ErrorEx ( tStmt.m_sStmt, "index '%s' is not found, or not real-time", tStmt.m_sIndex.cstr() );
 		return;
 	}
 
-	ServedDescWPtr_c pWriteLocked ( pServed );
-	if ( !pWriteLocked->m_pIndex->IsRT() )
-	{
-		sError.SetSprintf ( "index '%s' is not real-time", tStmt.m_sIndex.cstr() );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
-		return;
-	}
-
-	auto * pRtIndex = (RtIndex_i*)pWriteLocked->m_pIndex;
+	WIdx_T<RtIndex_i*> pRtIndex { pServed };
 
 	// get all table settings as a string
-	CSphString sCreateTable = BuildCreateTable ( pWriteLocked->m_pIndex->GetName(), pWriteLocked->m_pIndex, pRtIndex->GetInternalSchema() );
+	CSphString sCreateTable = BuildCreateTable ( pRtIndex->GetName(), pRtIndex, pRtIndex->GetInternalSchema() );
 
 	CSphVector<SqlStmt_t> dCreateTableStmts;
 	if ( !ParseDdl ( sCreateTable.cstr(), sCreateTable.Length(), dCreateTableStmts, sError ) )
@@ -15731,55 +15560,78 @@ static void HandleMysqlShowPlan ( RowBuffer_i & tOut, const QueryProfile_c & p, 
 	tOut.Eof ( bMoreResultsFollow );
 }
 
-static bool RotateIndexMT ( ServedIndex_c* pIndex, const CSphString & sIndex, StrVec_t & dWarnings, CSphString & sError );
-static bool RotateIndexGreedy ( ServedDesc_t & tServed, const char * sIndex, CSphString & sError );
+// for seamless we create new index and copy it's settings from previous definition. Indexes are NOT linked
+// for greedy we just make light clone (original index add-reffed).
+ServedIndexRefPtr_c MakeCloneForRotation ( const cServedIndexRefPtr_c& pSource, const CSphString& sIndex )
+{
+	assert ( pSource->m_eType == IndexType_e::PLAIN );
+	auto pRes = MakeServedIndex();
+	LightClone ( pRes, pSource );
+	if ( g_bSeamlessRotate )
+	{
+		pRes->SetStatsFrom ( *pSource );
+		auto pIdx = sphCreateIndexPhrase ( sIndex.cstr(), pRes->m_sIndexPath.cstr() );
+		pIdx->m_iExpansionLimit = g_iExpansionLimit;
+		pIdx->SetMutableSettings ( pRes->m_tSettings );
+		pIdx->SetGlobalIDFPath ( pRes->m_sGlobalIDFPath );
+		pIdx->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
+		pRes->SetIdx ( std::move ( pIdx ) );
+	} else
+		pRes->SetIdxAndStatsFrom ( *pSource );
+	return pRes;
+}
+
+static bool RotateIndexMT ( ServedIndexRefPtr_c& pNewServed, const CSphString& sIndex, StrVec_t& dWarnings, CSphString& sError );
+static bool RotateIndexGreedy ( const ServedIndex_c& tServed, const char* szIndex, CSphString& sError ) REQUIRES ( tServed.m_pIndex->Locker() );
+
 static void HandleMysqlReloadIndex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
 	CSphString sError;
-	auto pIndex = GetServed ( tStmt.m_sIndex );
-	if ( !pIndex )
+	cServedIndexRefPtr_c pServed = GetServed ( tStmt.m_sIndex );
+	if ( !pServed )
 	{
-		sError.SetSprintf ( "unknown local index '%s'", tStmt.m_sIndex.cstr() );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.ErrorEx ( tStmt.m_sStmt, "unknown local index '%s'", tStmt.m_sIndex.cstr() );
 		return;
 	}
 
+	if ( ServedDesc_t::IsMutable ( pServed ) )
 	{
-		ServedDescRPtr_c pServed ( pIndex );
-		if ( ServedDesc_t::IsMutable ( pServed ) )
-		{
-			sError.SetSprintf ( "can not reload real-time or percolate index" );
-			tOut.Error ( tStmt.m_sStmt, sError.cstr () );
-			return;
-		}
+		tOut.ErrorEx ( tStmt.m_sStmt, "can not reload real-time or percolate index" );
+		return;
+	}
 
-		if ( !tStmt.m_sStringParam.IsEmpty () )
+	if ( tStmt.m_sStringParam == pServed->m_sIndexPath )
+	{
+		tOut.ErrorEx ( tStmt.m_sStmt, "reload path should be different from current path" );
+		return;
+	}
+
+	if ( !tStmt.m_sStringParam.IsEmpty () )
+	{
+		// try move files from arbitrary path to current index path before rotate, if needed.
+		// fixme! what about concurrency? if 2 sessions simultaneously ask to rotate,
+		// or if we have unapplied rotates from indexer - seems that it will garbage .new files?
+		IndexFiles_c sIndexFiles ( pServed->m_sIndexPath );
+		if ( !sIndexFiles.RelocateToNew ( tStmt.m_sStringParam ) )
 		{
-			// try move files from arbitrary path to current index path before rotate, if needed.
-			// fixme! what about concurrency? if 2 sessions simultaneously ask to rotate,
-			// or if we have unapplied rotates from indexer - seems that it will garbage .new files?
-			IndexFiles_c sIndexFiles ( pServed->m_sIndexPath );
-			if ( !sIndexFiles.RelocateToNew ( tStmt.m_sStringParam.cstr () ) )
-			{
-				tOut.Error ( tStmt.m_sStmt, sIndexFiles.ErrorMsg () );
-				return;
-			}
+			tOut.Error ( tStmt.m_sStmt, sIndexFiles.ErrorMsg () );
+			return;
 		}
 	}
 
 	StrVec_t dWarnings;
 	if ( g_bSeamlessRotate )
 	{
-		if ( !RotateIndexMT ( pIndex, tStmt.m_sIndex, dWarnings, sError ) )
+		ServedIndexRefPtr_c pNewServed = MakeCloneForRotation ( pServed, tStmt.m_sIndex );
+		if ( !RotateIndexMT ( pNewServed, tStmt.m_sIndex, dWarnings, sError ) )
 		{
 			sphWarning ( "%s", sError.cstr() );
 			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 			return;
 		}
-	} else
-	{
-		ServedDescWPtr_c pServedWL( pIndex );
-		if ( !RotateIndexGreedy ( *pServedWL, tStmt.m_sIndex.cstr(), sError ) )
+	} else {
+		WIdx_c WLock { pServed };
+		if ( !RotateIndexGreedy ( *pServed, tStmt.m_sIndex.cstr(), sError ) )
 		{
 			sphWarning ( "%s", sError.cstr() );
 			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
@@ -15810,17 +15662,15 @@ void HandleMysqlExplain ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, bool bDot
 		return;
 	}
 
-	auto pIndex = GetServed ( tStmt.m_sIndex );
-	if ( !pIndex )
+	auto pServed = GetServed ( tStmt.m_sIndex );
+	if ( !pServed )
 	{
 		tOut.ErrorEx ( tStmt.m_sStmt, "unknown local index '%s'", tStmt.m_sIndex.cstr ());
 		return;
 	}
 
-	ServedDescRPtr_c pServed ( pIndex );
-
 	TlsMsg::Err (); // reset error
-	auto dPlan = pServed->m_pIndex->ExplainQuery ( tStmt.m_tQuery.m_sQuery );
+	auto dPlan = RIdx_c ( pServed )->ExplainQuery ( tStmt.m_tQuery.m_sQuery );
 	if ( TlsMsg::HasErr ())
 	{
 		tOut.Error ( tStmt.m_sStmt, TlsMsg::szError ());
@@ -15856,9 +15706,7 @@ void HandleMysqlImportTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphS
 		return;
 	}
 
-	auto pLocal = GetServed ( tStmt.m_sIndex );
-	auto pDist = GetDistr ( tStmt.m_sIndex );
-	if ( pLocal || pDist )
+	if ( IndexIsServed ( tStmt.m_sIndex ) )
 	{
 		sError.SetSprintf ( "index '%s' already exists", tStmt.m_sIndex.cstr() );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
@@ -15874,7 +15722,7 @@ void HandleMysqlImportTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphS
 		return;
 	}
 
-	if ( !AddExistingIndexInt ( tStmt.m_sIndex, bPQ ? IndexType_e::PERCOLATE : IndexType_e::RT, dWarnings, sError ) )
+	if ( !AddExistingIndexConfigless ( tStmt.m_sIndex, bPQ ? IndexType_e::PERCOLATE : IndexType_e::RT, dWarnings, sError ) )
 	{
 		sError.SetSprintf ( "unable to import index '%s': %s", tStmt.m_sIndex.cstr(), sError.cstr() );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
@@ -16600,7 +16448,7 @@ bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dSt
 /////////////////////////////////////////////////////////////////////////////
 // INDEX ROTATION
 /////////////////////////////////////////////////////////////////////////////
-static bool ApplyIndexKillList ( CSphIndex * pIndex, CSphString & sWarning, CSphString & sError, bool bShowMessage )
+static bool ApplyIndexKillList ( const CSphIndex * pIndex, CSphString & sWarning, CSphString & sError, bool bShowMessage )
 {
 	CSphFixedVector<DocID_t> dKillList(0);
 	KillListTargets_c tTargets;
@@ -16618,20 +16466,21 @@ static bool ApplyIndexKillList ( CSphIndex * pIndex, CSphString & sWarning, CSph
 		// just in case; otherwise we'll be rlocking an already rlocked index
 		if ( tIndex.m_sIndex==pIndex->GetName() )
 		{
-			sWarning.SetSprintf ( "index '%s': appying killlist to itself", tIndex.m_sIndex.cstr() );
+			sWarning.SetSprintf ( "index '%s': applying killlist to itself", tIndex.m_sIndex.cstr() );
 			continue;
 		}
 
-		ServedDescRPtr_c pTarget ( GetServed ( tIndex.m_sIndex ) );
-		if ( pTarget )
+		auto pServed = GetServed ( tIndex.m_sIndex );
+		if ( pServed )
 		{
+			RWIdx_c pTarget { pServed };
 			// kill the docids provided by sql_query_killlist and similar
 			if ( tIndex.m_uFlags & KillListTarget_t::USE_KLIST )
-				pTarget->m_pIndex->KillMulti ( dKillList );
+				pTarget->KillMulti ( dKillList );
 
 			// kill all the docids present in this index
 			if ( tIndex.m_uFlags & KillListTarget_t::USE_DOCIDS )
-				pIndex->KillExistingDocids ( pTarget->m_pIndex );
+				pIndex->KillExistingDocids ( pTarget );
 		}
 		else
 			sWarning.SetSprintf ( "index '%s' from killlist_target not found", tIndex.m_sIndex.cstr() );
@@ -16642,22 +16491,17 @@ static bool ApplyIndexKillList ( CSphIndex * pIndex, CSphString & sWarning, CSph
 
 
 // we don't rlock/wlock the index because we assume that we are being called from a place that already did that for us
-bool ApplyKillListsTo ( ServedDesc_t & tLockedServed, CSphString & sError )
+bool ApplyKillListsTo ( CSphIndex* pKillListTarget, CSphString & sError )
 {
-	CSphIndex * pKillListTarget = tLockedServed.m_pIndex;
-
 	KillListTargets_c tTargets;
 
-	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next(); )
+	ServedSnap_t hLocal = g_pLocalIndexes->GetHash();
+	for ( const auto& tIt : *hLocal )
 	{
-		if ( it.GetName ()==pKillListTarget->GetName () )
+		if ( tIt.first==pKillListTarget->GetName () || !tIt.second )
 			continue;
 
-		ServedDescRPtr_c tServedWithKlist ( it.Get () );
-		if ( !tServedWithKlist)
-			continue;
-
-		CSphIndex * pIndexWithKillList = tServedWithKlist->m_pIndex;
+		RWIdx_c pIndexWithKillList { tIt.second };
 		CSphFixedVector<DocID_t> dKillList(0);
 		tTargets.m_dTargets.Resize(0);
 		if ( !pIndexWithKillList->LoadKillList ( &dKillList, tTargets, sError ) )
@@ -16668,7 +16512,7 @@ bool ApplyKillListsTo ( ServedDesc_t & tLockedServed, CSphString & sError )
 
 		// if this index has 'our' index as its killlist_target, apply the killlist
 		for ( const auto & tIndex : tTargets.m_dTargets )
-			if ( tIndex.m_sIndex==tLockedServed.m_pIndex->GetName() )
+			if ( tIndex.m_sIndex== pKillListTarget->GetName() )
 			{
 				if ( tIndex.m_uFlags & KillListTarget_t::USE_KLIST )
 					pKillListTarget->KillMulti ( dKillList );
@@ -16682,18 +16526,7 @@ bool ApplyKillListsTo ( ServedDesc_t & tLockedServed, CSphString & sError )
 	return true;
 }
 
-
-enum class RotateFrom_e
-{
-	NONE,
-	NEW,		// move index from idx.new.ext into idx.ext
-	REENABLE,	// just load the index
-	PATH_NEW,	// move from some external path, idx.new.ext into idx.ext
-	PATH_COPY	// move from some external path to current path.
-};
-
-
-static bool PreloadKlistTarget ( const ServedDesc_t & tServed, RotateFrom_e eFrom, StrVec_t & dKlistTarget )
+bool PreloadKlistTarget ( const ServedDesc_t & tServed, RotateFrom_e eFrom, StrVec_t & dKlistTarget )
 {
 	switch ( eFrom )
 	{
@@ -16703,178 +16536,149 @@ static bool PreloadKlistTarget ( const ServedDesc_t & tServed, RotateFrom_e eFro
 	case RotateFrom_e::REENABLE:
 		return IndexFiles_c ( tServed.m_sIndexPath ).ReadKlistTargets ( dKlistTarget );
 
-	case RotateFrom_e::PATH_NEW:
-		return IndexFiles_c ( tServed.m_sNewPath ).ReadKlistTargets ( dKlistTarget, ".new" );
-
-	case RotateFrom_e::PATH_COPY:
-		return IndexFiles_c ( tServed.m_sNewPath ).ReadKlistTargets ( dKlistTarget );
-
 	default:
 		return false;
 	}
 }
 
-
-RotateFrom_e CheckIndexHeaderRotate ( const ServedDesc_t & tServed )
+static bool ApplyOthersKillListsToMe ( CSphIndex* pIndex, const char* szIndex, CSphString& sError )
 {
-	// check order:
-	// current_path/idx.new.sph		- rotation of current index
-	// current_path/idx.sph			- enable back current index
-	// new_path/idx.new.sph			- rotation of current index but with new path via indexer --rotate
-	// new_path/idx.sph				- rotation of current index but with new path via files copy
+	sphLogDebug ( "rotating index '%s': applying other indexes' killlists", szIndex );
 
-	if ( IndexFiles_c ( tServed.m_sIndexPath ).CheckHeader (".new") )
-		return RotateFrom_e::NEW;
-
-	if ( tServed.m_bOnlyNew && IndexFiles_c ( tServed.m_sIndexPath ).CheckHeader() )
-		return RotateFrom_e::REENABLE;
-
-	if ( tServed.m_sNewPath.IsEmpty () || tServed.m_sNewPath==tServed.m_sIndexPath )
-		return RotateFrom_e::NONE;
-
-	if ( IndexFiles_c ( tServed.m_sNewPath ).CheckHeader ( ".new" ) )
-		return RotateFrom_e::PATH_NEW;
-
-	if ( IndexFiles_c ( tServed.m_sNewPath ).CheckHeader () )
-		return RotateFrom_e::PATH_COPY;
-
-	return RotateFrom_e::NONE;
-}
-
-/// returns true if any version of the index (old or new one) has been preread
-bool RotateIndexGreedy ( ServedDesc_t & tWlockedIndex, const char * szIndex, CSphString & sError )
-{
-	sphLogDebug ( "RotateIndexGreedy for '%s' invoked", szIndex );
-	IndexFiles_c dFiles ( tWlockedIndex.m_sIndexPath, szIndex );
-	RotateFrom_e eRot = CheckIndexHeaderRotate ( tWlockedIndex );
-	bool bReEnable = ( eRot==RotateFrom_e::REENABLE );
-	if ( eRot==RotateFrom_e::PATH_NEW || eRot==RotateFrom_e::PATH_COPY )
+	// apply other indexes' killlists to THIS index
+	if ( !ApplyKillListsTo ( pIndex, sError ) )
 	{
-		sError.SetSprintf ( "rotating index '%s': cannot rotate from new path, switch to seamless_rotate=1; using old index", szIndex );
+		sphWarning ( "rotating index '%s': %s", szIndex, sError.cstr() );
 		return false;
 	}
 
-	const char * sFromSuffix = bReEnable ? "" : ".new";
-	if ( !dFiles.CheckHeader ( sFromSuffix ) )
+	sphLogDebug ( "rotating index '%s': applying other indexes' killlists... DONE", szIndex );
+	return true;
+}
+
+static bool ApplyMyKillListsToOthers ( const CSphIndex* pIndex, const char* szIndex, CSphString& sError )
+{
+	sphLogDebug ( "rotating index '%s': apply killlist from this index to other indexes (killlist_target)", szIndex );
+
+	// apply killlist from this index to other indexes (killlist_target)
+	// if this fails, only show a warning
+	CSphString sWarning;
+	if ( !ApplyIndexKillList ( pIndex, sWarning, sError ) )
+	{
+		return false;
+		sphWarning ( "rotating index '%s': %s", szIndex, sError.cstr() );
+	}
+
+	if ( sWarning.Length() )
+		sphWarning ( "rotating index '%s': %s", szIndex, sWarning.cstr() );
+
+	sphLogDebug ( "rotating index '%s': apply killlist from this index to other indexes (killlist_target)... DONE", szIndex );
+	return true;
+}
+
+bool ApplyKilllistsMyAndToMe ( CSphIndex* pIdx, const char* szIndex, CSphString& sError )
+{
+	return ApplyOthersKillListsToMe ( pIdx, szIndex, sError ) && ApplyMyKillListsToOthers ( pIdx, szIndex, sError );
+}
+
+// tServed here might be one of:
+// 1. Not yet served, and with .new ext. Need to be rotated, then loaded from scratch
+// 2. Not yet served, need to be loaded from scratch
+// 3. Served, but with now with .new. Need to be rotated, then loaded and and need to be rotated
+bool RotateIndexGreedy ( const ServedIndex_c& tServed, const char* szIndex, CSphString& sError )
+{
+	assert ( tServed.m_eType == IndexType_e::PLAIN );
+	sphLogDebug ( "RotateIndexGreedy for '%s' invoked", szIndex );
+	sphWarning ( "RotateIndexGreedy for '%s' invoked", szIndex );
+
+	//////////////////
+	/// bool RotateIndexFilesGreedy ( const ServedDesc_t& tServed, const char* szIndex, CSphString& sError )
+	//////////////////
+
+	IndexRotator_c tRotator ( tServed.m_sIndexPath, szIndex );
+	if ( !tRotator.ConfigureIfNeed() )
+		return false;
+
+	IndexFiles_c dFiles ( tRotator.GetNewBase(), szIndex );
+
+	if ( !dFiles.CheckHeader() )
 	{
 		// no files or wrong files - no rotation
 		sError = dFiles.ErrorMsg();
 		return false;
 	}
 
-	if ( !dFiles.HasAllFiles ( sFromSuffix ) )
+	if ( !dFiles.HasAllFiles() )
 	{
-		sphWarning ( "rotating index '%s': unreadable: %s; %s", szIndex, strerrorm ( errno ),
-			tWlockedIndex.m_bOnlyNew ? "NOT SERVING" : "using old index" );
+		sphWarning ( "rotating index '%s': unreadable: %s; abort roration", szIndex, strerrorm ( errno ) );
 		return false;
 	}
-	sphLogDebug ( bReEnable ? "RotateIndexGreedy: re-enabling index" : "RotateIndexGreedy: new index is readable" );
-	if ( !tWlockedIndex.m_bOnlyNew )
+
+	// do files rotation
+	if ( tRotator.NeedMoveFiles() )
 	{
-		if ( !dFiles.RenameSuffix ( "", ".old" ) )
+		try {
+			tRotator.BackupFilesIfNeed ();
+			tRotator.MoveFiles ();
+		} catch ( RotationError_c& eWhat )
 		{
-			if ( dFiles.IsFatal () )
-				sphFatal ( "%s", dFiles.FatalMsg ( "rotating" ).cstr () );
-			sError.SetSprintf ( "rotating index '%s': %s; using old index", szIndex, dFiles.ErrorMsg() );
+			sError = eWhat.sWhat();
+			if ( eWhat.IsFatal() )
+				sphFatal ( "%s", sError.cstr() ); // fixme! Do we really need to fatal? (adopted from prev version)
 			return false;
 		}
-		sphLogDebug ( "RotateIndexGreedy: Current index renamed to .old" );
 	}
 
-
-	// rename new to current
-	if ( !bReEnable )
-	{
-		if ( !dFiles.RenameSuffix ( ".new" ) )
-		{
-			if ( dFiles.IsFatal () )
-				sphFatal ( "%s", dFiles.FatalMsg ( "rotating" ).cstr () );
-
-			// rollback old ones
-			if ( tWlockedIndex.m_bOnlyNew )
-				sError.SetSprintf ( "rotating index '%s': %s; using old index", szIndex, dFiles.ErrorMsg() );
-			else if ( !dFiles.RollbackSuff ( ".old" ) )
-				sphFatal ( "%s", dFiles.FatalMsg ( "rotating" ).cstr () );
-			return false;
-		}
-
-		sphLogDebug ( "RotateIndexGreedy: New renamed to current" );
-	}
+	//////////////////
+	/// bool PreallocIndexGreedy ( const ServedDesc_t& tServed, CSphIndex* pIdx, const char* szIndex, CSphString& sError )
+	//////////////////
 
 	// try to use new index
-	TokenizerRefPtr_c	pTokenizer { tWlockedIndex.m_pIndex->LeakTokenizer () }; // FIXME! disable support of that old indexes and remove this bullshit
-	DictRefPtr_c		pDictionary { tWlockedIndex.m_pIndex->LeakDictionary () };
+	auto pIdx = UnlockedHazardIdxFromServed ( tServed ); // it should be locked, if necessary, before
 
-//	bool bRolledBack = false;
 	StrVec_t dWarnings;
-	bool bPreallocSuccess = tWlockedIndex.m_pIndex->Prealloc ( g_bStripPath, nullptr, dWarnings );
-	if ( !bPreallocSuccess )
+	if ( !pIdx->Prealloc ( g_bStripPath, nullptr, dWarnings ) )
 	{
-		if ( tWlockedIndex.m_bOnlyNew )
+		sphWarning ( "rotating index '%s': .new preload failed: %s", szIndex, pIdx->GetLastError().cstr() );
+		try {
+			if ( !tRotator.RollbackMovingFiles() )
+			{
+				sError.SetSprintf ( "rotating index '%s': .new prealloc failed: %s; NOT SERVING", szIndex, pIdx->GetLastError().cstr() );
+				return false;
+			}
+		} catch ( RotationError_c& eWhat )
 		{
-			sError.SetSprintf ( "rotating index '%s': .new prealloc failed: %s; NOT SERVING", szIndex, tWlockedIndex.m_pIndex->GetLastError().cstr() );
+			sError = eWhat.sWhat();
+			if ( eWhat.IsFatal() )
+				sphFatal ( "%s", sError.cstr() ); // fixme! Do we really need to fatal? (adopted from prev version)
+		}
+
+		sphLogDebug ( "PreallocIndexGreedy: has recovered. Prealloc it." );
+		if ( !pIdx->Prealloc ( g_bStripPath, nullptr, dWarnings ) )
+		{
+			sError.SetSprintf ( "rotating index '%s': .new preload failed; ROLLBACK FAILED; INDEX UNUSABLE", szIndex );
 			return false;
 		}
-		sphWarning ( "rotating index '%s': .new preload failed: %s", szIndex, tWlockedIndex.m_pIndex->GetLastError().cstr() );
-		// try to recover: rollback cur to .new, .old to cur.
-		if ( !dFiles.RollbackSuff ( "", ".new" ) )
-			sphFatal ( "%s", dFiles.FatalMsg ( "rotating" ).cstr () );
-		if ( !dFiles.RollbackSuff ( ".old" ) )
-			sphFatal ( "%s", dFiles.FatalMsg ( "rotating" ).cstr () );
-
-		sphLogDebug ( "RotateIndexGreedy: has recovered. Prealloc it." );
-		bPreallocSuccess = tWlockedIndex.m_pIndex->Prealloc ( g_bStripPath, nullptr, dWarnings );
-		if ( !bPreallocSuccess )
-			sError.SetSprintf ( "rotating index '%s': .new preload failed; ROLLBACK FAILED; INDEX UNUSABLE", szIndex );
-//		bRolledBack = true;
 	}
 
-	for ( const auto & i : dWarnings )
+	assert ( pIdx->GetTokenizer() && pIdx->GetDictionary() );
+
+	for ( const auto& i : dWarnings )
 		sphWarning ( "rotating index '%s': %s", szIndex, i.cstr() );
 
-	if ( !tWlockedIndex.m_pIndex->GetLastWarning().IsEmpty() )
-		sphWarning ( "rotating index '%s': %s", szIndex, tWlockedIndex.m_pIndex->GetLastWarning().cstr() );
-
-	if ( !tWlockedIndex.m_pIndex->GetTokenizer () )
-		tWlockedIndex.m_pIndex->SetTokenizer ( pTokenizer );
-
-	if ( !tWlockedIndex.m_pIndex->GetDictionary () )
-		tWlockedIndex.m_pIndex->SetDictionary ( pDictionary );
-
-//	if ( bRolledBack )
-//		return bPreallocSuccess;
+	if ( !pIdx->GetLastWarning().IsEmpty() )
+		sphWarning ( "rotating index '%s': %s", szIndex, pIdx->GetLastWarning().cstr() );
 
 	// unlink .old
-	if ( !tWlockedIndex.m_bOnlyNew && sphGetUnlinkOld ())
-	{
-		dFiles.Unlink (".old");
-		sphLogDebug ( "RotateIndexGreedy: the old index unlinked" );
-	}
+	tRotator.CleanBackup();
 
-	sphLogDebug ( "rotating index '%s': applying other indexes' killlists", szIndex );
-
-	// apply other indexes' killlists to THIS index
-	if ( !ApplyKillListsTo ( tWlockedIndex, sError ) )
+	// finalize
+	if ( !ApplyKilllistsMyAndToMe ( pIdx, szIndex, sError ) )
 		return false;
-
-	sphLogDebug ( "rotating index '%s': applying other indexes' killlists... DONE", szIndex );
-
-	sphLogDebug ( "rotating index '%s': apply killlist from this index to other indexes (killlist_target)", szIndex );
-
-	// apply killlist from this index to other indexes (killlist_target)
-	CSphString sWarning;
-	if ( !ApplyIndexKillList ( tWlockedIndex.m_pIndex, sWarning, sError ) )
-		return false;
-
-	if ( sWarning.Length() )
-		sphWarning ( "rotating index '%s': %s", szIndex, sWarning.cstr() );
-
-	sphLogDebug ( "rotating index '%s': apply killlist from this index to other indexes (killlist_target)... DONE", szIndex );
 
 	// uff. all done
-	tWlockedIndex.m_bOnlyNew = false;
 	sphInfo ( "rotating index '%s': success", szIndex );
-	return bPreallocSuccess;
+	return true;
 }
 
 void DumpMemStat ()
@@ -16919,44 +16723,59 @@ void CheckLeaks () REQUIRES ( MainThread )
 #endif
 }
 
-/// this gets called for every new physical index
-/// that is, local and RT indexes, but not distributed once
-bool PreallocNewIndex ( ServedDesc_t & tIdx, const CSphConfigSection * pConfig, const char * szIndexName, StrVec_t & dWarnings, CSphString & sError )
+bool LockIndex ( ServedIndex_c& tIdx, CSphIndex* pIdx, CSphString& sError )
 {
-	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( CreateFilenameBuilder(szIndexName) );
-	if ( !tIdx.m_pIndex->Prealloc ( g_bStripPath, pFilenameBuilder.Ptr(), dWarnings ) )
+	if ( !g_bOptNoLock && !pIdx->Lock() )
 	{
-		sError.SetSprintf ( "prealloc: %s", tIdx.m_pIndex->GetLastError().cstr() );
+		sError.SetSprintf ( "lock: %s", pIdx->GetLastError().cstr() );
 		return false;
 	}
 
-	// tricky bit
-	// fixup was initially intended for (very old) index formats that did not store dict/tokenizer settings
-	// however currently it also ends up configuring dict/tokenizer for fresh RT indexes!
-	// (and for existing RT indexes, settings get loaded during the Prealloc() call)
-	if ( pConfig && !sphFixupIndexSettings ( tIdx.m_pIndex, *pConfig, g_bStripPath, pFilenameBuilder.Ptr(), dWarnings, sError ) )
-		return false;
-
-	// try to lock it
-	if ( !g_bOptNoLock && !tIdx.m_pIndex->Lock () )
-	{
-		sError.SetSprintf ( "lock: %s", tIdx.m_pIndex->GetLastError().cstr() );
-		return false;
-	}
-
-	ServedDesc_t::UpdateMass( &tIdx );
+	tIdx.UpdateMass();
 	return true;
 }
 
+// tricky bit
+// fixup was initially intended for (very old) index formats that did not store dict/tokenizer settings
+// however currently it also ends up configuring dict/tokenizer for fresh RT indexes!
+// (and for existing RT indexes, settings get loaded during the Prealloc() call)
+bool FixupAndLockIndex ( ServedIndex_c& tIdx, CSphIndex* pIdx, const CSphConfigSection* pConfig, const char* szIndexName, StrVec_t& dWarnings, CSphString& sError )
+{
+	if ( pConfig )
+	{
+		CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( CreateFilenameBuilder ( szIndexName ) );
+		if ( !sphFixupIndexSettings ( pIdx, *pConfig, g_bStripPath, pFilenameBuilder.Ptr(), dWarnings, sError ) )
+			return false;
+	}
+
+	// try to lock it
+	return LockIndex ( tIdx, pIdx, sError );
+}
+
+/// this gets called for every new physical index
+/// that is, local and RT indexes, but not distributed one
+bool PreallocNewIndex ( ServedIndex_c & tIdx, const CSphConfigSection * pConfig, const char * szIndexName, StrVec_t & dWarnings, CSphString & sError )
+{
+	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( CreateFilenameBuilder(szIndexName) );
+	CSphIndex* pIdx = UnlockedHazardIdxFromServed ( tIdx );
+	assert (pIdx);
+	if ( !pIdx->Prealloc ( g_bStripPath, pFilenameBuilder.Ptr(), dWarnings ) )
+	{
+		sError.SetSprintf ( "prealloc: %s", pIdx->GetLastError().cstr() );
+		return false;
+	}
+	return FixupAndLockIndex ( tIdx, pIdx, pConfig, szIndexName, dWarnings, sError );
+}
+
 // same as above, but self-load config section for given index
-static bool PreallocNewIndex ( ServedDesc_t & tIdx, const char * szIndexName, StrVec_t & dWarnings, CSphString & sError ) REQUIRES ( !g_tRotateConfigMutex )
+static bool PreallocNewIndex ( ServedIndex_c & tIdx, const char * szIndexName, StrVec_t & dWarnings, CSphString & sError )
 {
 	const CSphConfigSection * pIndexConfig = nullptr;
 	CSphConfigSection tIndexConfig;
 	{
 		ScRL_t dRLockConfig { g_tRotateConfigMutex };
-		if ( g_pCfg.m_tConf ( "index" ) )
-			pIndexConfig = g_pCfg.m_tConf["index"] ( szIndexName );
+		if ( g_hCfg ( "index" ) )
+			pIndexConfig = g_hCfg["index"] ( szIndexName );
 		if ( pIndexConfig )
 		{
 			tIndexConfig = *pIndexConfig;
@@ -16967,247 +16786,126 @@ static bool PreallocNewIndex ( ServedDesc_t & tIdx, const char * szIndexName, St
 }
 
 static CSphMutex g_tRotateThreadMutex;
+
+static bool BackupIfNeedAndMove ( IndexRotator_c& tRotator, CSphIndex* pNewIndex, const CSphString& sIndex, CSphString& sError, CSphIndex* pOldIdx = nullptr,std::function<void ( CSphString )> fnClean = nullptr )
+	EXCLUDES ( MainThread ) REQUIRES ( g_tRotateThreadMutex )
+{
+	try {
+		tRotator.BackupIfNeed ( pOldIdx, std::move (fnClean ) );
+		tRotator.MoveIndex ( pNewIndex );
+	} catch ( RotationError_c& eWhat )
+	{
+		if ( eWhat.IsFatal() )
+			g_pLocalIndexes->Delete ( sIndex );
+		sError = eWhat.sWhat();
+		return false;
+	}
+	tRotator.CleanBackup();
+	return true;
+}
+
 // called either from MysqlReloadIndex, either from Rotation task (never from main thread).
-static bool RotateIndexMT ( ServedIndex_c* pIndex, const CSphString & sIndex, StrVec_t & dWarnings, CSphString & sError )
+bool RotateIndexMT ( ServedIndexRefPtr_c& pNewServed, const CSphString & sIndex, StrVec_t & dWarnings, CSphString & sError )
 	EXCLUDES ( MainThread, g_tRotateThreadMutex )
 {
+	assert ( pNewServed && pNewServed->m_eType == IndexType_e::PLAIN );
+
 	// only one rotation and reload thread allowed to prevent deadlocks
 	ScopedMutex_t tBlockRotations ( g_tRotateThreadMutex );
 
-	// get existing index. Look first to disabled hash.
-	SafeAddRef ( pIndex );
-	ServedIndexRefPtr_c pRotating { pIndex };
-	if ( !pRotating || !ServedDescRPtr_c(pRotating)->m_pIndex )
-	{
-		pRotating = GetServed ( sIndex );
-		if ( !pRotating )
-		{
-			sError.SetSprintf ( "rotating index '%s': internal error, index went AWOL", sIndex.cstr() );
-			return false;
-		}
-	}
-
-	//////////////////
-	// load new index
-	//////////////////
 	sphInfo ( "rotating index '%s': started", sIndex.cstr() );
-
-	// create new index, copy some settings from existing one
-	ServedDesc_t tNewIndex;
-	tNewIndex.m_pIndex = sphCreateIndexPhrase ( sIndex.cstr (), nullptr );
-	tNewIndex.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
-
-	IndexFiles_c dActivePath, dNewPath;
-	RotateFrom_e eRot = RotateFrom_e::NONE;
-	{
-		ServedDescRPtr_c pCurrentlyServed ( pRotating );
-		if ( !pCurrentlyServed->m_pIndex )
-		{
-			sError.SetSprintf ( "rotating index '%s': internal error, entry does not have an index", sIndex.cstr() );
-			return false;
-		}
-		// keep settings from current index description
-		tNewIndex.m_tSettings = pCurrentlyServed->m_tSettings;
-		tNewIndex.m_tSettings.m_bPreopen = ( pCurrentlyServed->m_tSettings.m_bPreopen || MutableIndexSettings_c::GetDefaults().m_bPreopen );
-		tNewIndex.m_sGlobalIDFPath = pCurrentlyServed->m_sGlobalIDFPath;
-
-		// set settings into index
-		tNewIndex.m_bOnlyNew = pCurrentlyServed->m_bOnlyNew;
-		tNewIndex.m_pIndex->SetGlobalIDFPath ( pCurrentlyServed->m_sGlobalIDFPath );
-		tNewIndex.m_pIndex->SetMutableSettings ( tNewIndex.m_tSettings );
-		dActivePath.SetBase ( pCurrentlyServed->m_sIndexPath );
-		dNewPath.SetBase ( pCurrentlyServed->m_sNewPath );
-		eRot = CheckIndexHeaderRotate ( *pCurrentlyServed );
-	}
-
-	if ( eRot==RotateFrom_e::NONE )
+	CSphIndex* pNewIndex = UnlockedHazardIdxFromServed ( *pNewServed );
+	IndexRotator_c tRotator ( pNewServed->m_sIndexPath, sIndex.cstr() );
+	if ( !tRotator.ConfigureIfNeed() )
 	{
 		sError.SetSprintf ( "nothing to rotate for index '%s'", sIndex.cstr() );
 		return false;
 	}
 
-	CSphString sPathTo;
-	switch ( eRot )
-	{
-	case RotateFrom_e::PATH_NEW: // move from new_path/idx.new.sph -> new_path/idx.sph
-		tNewIndex.m_pIndex->SetBase ( dNewPath.MakePath (".new").cstr() );
-		sPathTo = dNewPath.GetBase();
-		break;
-
-	case RotateFrom_e::PATH_COPY: // load from new_path/idx.sph
-		tNewIndex.m_pIndex->SetBase ( dNewPath.GetBase ().cstr() );
-		break;
-
-	case RotateFrom_e::REENABLE: // load from current_path/idx.sph
-		tNewIndex.m_pIndex->SetBase ( dActivePath.GetBase ().cstr() );
-		break;
-
-	//case RotateFrom_e::NEW:  // move from current_path/idx.new.sph -> current_path/idx.sph
-	default:
-		tNewIndex.m_pIndex->SetBase ( dActivePath.MakePath ( ".new" ).cstr () );
-		sPathTo = dActivePath.GetBase ();
-	}
-
+	//////////////////
+	/// load new index
+	//////////////////
+	pNewIndex->SetBase ( tRotator.GetNewBase() );
 	// prealloc enough RAM and lock new index
 	sphLogDebug ( "prealloc enough RAM and lock new index" );
 
-	if ( tNewIndex.m_bOnlyNew )
-	{
-		if ( !PreallocNewIndex ( tNewIndex, sIndex.cstr(), dWarnings, sError ) )
-			return false;
-	} else if ( !PreallocNewIndex ( tNewIndex, nullptr, sIndex.cstr(), dWarnings, sError ) )
+	if ( !PreallocNewIndex ( *pNewServed, sIndex.cstr(), dWarnings, sError ) )
 		return false;
 
-	tNewIndex.m_pIndex->Preread();
-	ServedDesc_t::UpdateMass ( &tNewIndex );
+	pNewIndex->Preread();
+	pNewServed->UpdateMass(); // that is second update, first was at the end of Prealloc, this one is to correct after preread
 
 	//////////////////////
-	// activate new index
+	/// activate new index
 	//////////////////////
 
 	sphLogDebug ( "activate new index" );
-
-	ServedDescRPtr_c pCurrentlyServed ( pRotating );
-
-	CSphIndex * pOld = pCurrentlyServed->m_pIndex;
-	CSphIndex * pNew = tNewIndex.m_pIndex;
-
-	bool bHaveBackup = false;
-	if ( !sPathTo.IsEmpty () )
+	if ( tRotator.NeedMoveFiles() )
 	{
-		if ( dActivePath.GetBase ()==sPathTo && !pCurrentlyServed->m_bOnlyNew && dActivePath.CheckHeader () )
+		bool bResult;
+		auto pOldServed = GetServed ( sIndex );
+		if ( pOldServed )
 		{
-			// moving to active path; need backup to .old!
-			bHaveBackup = pOld->Rename ( dActivePath.MakePath ( ".old" ).cstr () );
-			if ( !bHaveBackup )
-			{
-				sError.SetSprintf ( "rotating index '%s': cur to old rename failed: %s", sIndex.cstr ()
-									, pOld->GetLastError ().cstr () );
-				return false;
-			}
-		}
+			IndexFiles_c dActivePath { pOldServed->m_sIndexPath };
+			assert ( dActivePath.CheckHeader() );
+			assert ( dActivePath.HasAllFiles() );
 
-		if ( !pNew->Rename ( sPathTo.cstr() ) )
-		{
-			sError.SetSprintf ( "rotating index '%s': new to cur rename failed: %s", sIndex.cstr ()
-								, pNew->GetLastError ().cstr () );
-			if ( bHaveBackup )
-			{
-				if ( !pOld->Rename( dActivePath.GetBase ().cstr ()))
-				{
-					sError.SetSprintf ( "rotating index '%s': old to cur rename failed: %s; INDEX UNUSABLE"
-										, sIndex.cstr (), pOld->GetLastError ().cstr () );
-					g_pLocalIndexes->Delete ( sIndex );
-				}
-			}
+			bResult = BackupIfNeedAndMove ( tRotator, pNewIndex, sIndex, sError, WIdx_c { pOldServed }, [pOldServed] ( CSphString s ) { pOldServed->SetUnlink ( std::move(s) ); } );
+			pNewIndex->m_iTID = RIdx_c ( pOldServed )->m_iTID;
+		} else
+			bResult = BackupIfNeedAndMove ( tRotator, pNewIndex, sIndex, sError );
+		if ( !bResult )
 			return false;
-		}
-		if ( bHaveBackup )
-			pCurrentlyServed->m_sUnlink = dActivePath.MakePath ( ".old" );
 	}
 
-	sphLogDebug ( "rotating index '%s': applying other indexes' killlists", sIndex.cstr() );
-
-	// apply other indexes' killlists to THIS index
-	if ( !ApplyKillListsTo ( tNewIndex, sError ) )
+	if ( !ApplyKilllistsMyAndToMe ( pNewIndex, sIndex.cstr(), sError ) )
 		return false;
-
-	sphLogDebug ( "rotating index '%s': applying other indexes' killlists... DONE", sIndex.cstr() );
 
 	// all went fine; swap them
 	sphLogDebug ( "all went fine; swap them" );
-
-	pNew->m_iTID = pOld->m_iTID;
-	Binlog::NotifyIndexFlush ( sIndex.cstr(), pOld->m_iTID, false );
-
-	// set new index to hash
-	tNewIndex.m_sIndexPath = tNewIndex.m_pIndex->GetFilename();
-	g_pLocalIndexes->AddOrReplace ( RefCountedRefPtr_t ( new ServedIndex_c ( tNewIndex )), sIndex );
+	Binlog::NotifyIndexFlush ( sIndex.cstr(), pNewIndex->m_iTID, false );
+	g_pLocalIndexes->AddOrReplace ( pNewServed, sIndex );
 	sphInfo ( "rotating index '%s': success", sIndex.cstr() );
-	tNewIndex.m_pIndex = nullptr;
-
-	sphLogDebug ( "rotating index '%s': apply killlist from this index to other indexes (killlist_target)", sIndex.cstr() );
-
-	auto pServedForKlist = GetServed ( sIndex );
-	if ( pServedForKlist )
-	{
-		ServedDescRPtr_c pIndexForKlist ( pServedForKlist );
-
-		// apply killlist from this index to other indexes (killlist_target)
-		// if this fails, only show a warning
-		CSphString sWarning;
-		if ( !ApplyIndexKillList ( pIndexForKlist->m_pIndex, sWarning, sError ) )
-			sphWarning ( "rotating index '%s': %s", sIndex.cstr(), sError.cstr() );
-
-		if ( sWarning.Length() )
-			sphWarning ( "rotating index '%s': %s", sIndex.cstr(), sWarning.cstr() );
-
-		sphLogDebug ( "rotating index '%s': apply killlist from this index to other indexes (killlist_target)... DONE", sIndex.cstr() );
-	}
-
 	return true;
 }
 
-struct IndexForRotation_t
-{
-	int m_iPriority;
-	CSphString m_sIndex;
-	ServedIndexRefPtr_c m_pIndex;
-};
-
-static bool operator<( const IndexForRotation_t& dLeft, const IndexForRotation_t& dRight)
-{
-	return dLeft.m_iPriority < dRight.m_iPriority;
-}
-
-using VecIndexForRotation_t = CSphVector<IndexForRotation_t>;
-
 static void TaskRotation ( void* pRaw ) EXCLUDES ( MainThread )
 {
-	CSphScopedPtr<VecIndexForRotation_t> pUncompletedIndexes (( VecIndexForRotation_t* ) pRaw );
+	std::unique_ptr<VecOfServed_c> pDeferredIndexes { static_cast<VecOfServed_c*> ( pRaw ) };
 
 	// want to track rotation thread only at work
 	auto pDesc = PublishSystemInfo ( "ROTATION" );
 
-	for ( const auto & tIndex : *pUncompletedIndexes.Ptr() )
+	sphWarning ( "TaskRotation starts with %d deferred indexes", pDeferredIndexes->GetLength() );
+	for ( auto & tIndex : *pDeferredIndexes )
 	{
-		bool bMutable = false;
-		{ // rlock scope
-			ServedDescRPtr_c tLocked ( tIndex.m_pIndex );
-			bMutable = ServedDesc_t::IsMutable ( tLocked );
-			// cluster indexes got managed by different path
-			if ( ServedDesc_t::IsCluster ( tLocked ))
-			{
-				assert ( 0 && "Rotation of clusters MUST never happens!" );
-				return;
-			}
-		}
+		ServedIndexRefPtr_c& pReplacementServed = tIndex.second;
+		const CSphString& sIndex = tIndex.first;
+
+		// cluster indexes got managed by different path
+		assert ( !ServedDesc_t::IsCluster ( pReplacementServed ) && "Rotation of clusters MUST never happens!" );
 
 		// prealloc RT and percolate here
 		StrVec_t dWarnings;
 		CSphString sError;
-		if ( bMutable )
+		if ( ServedDesc_t::IsMutable ( pReplacementServed ) )
 		{
-			ServedDescWPtr_c wLocked( tIndex.m_pIndex );
-			if ( PreallocNewIndex ( *wLocked, tIndex.m_sIndex.cstr(), dWarnings, sError ) )
-			{
-				wLocked->m_bOnlyNew = false;
-				g_pLocalIndexes->AddOrReplace ( tIndex.m_pIndex, tIndex.m_sIndex );
-			} else
-			{
-				sphWarning ( "index '%s': %s", tIndex.m_sIndex.cstr(), sError.cstr() );
-				g_pLocalIndexes->DeleteIfNull ( tIndex.m_sIndex );
-			}
+			sphWarning ( "seamless rotate (prealloc) mutable index %s", sIndex.cstr() );
+			if ( PreallocNewIndex ( *pReplacementServed, sIndex.cstr(), dWarnings, sError ) )
+				g_pLocalIndexes->AddOrReplace ( pReplacementServed, sIndex );
+			else
+				sphWarning ( "index '%s': %s", sIndex.cstr(), sError.cstr() );
 		} else
 		{
-			if ( !RotateIndexMT ( tIndex.m_pIndex, tIndex.m_sIndex, dWarnings, sError ) )
-				sphWarning ( "index '%s': %s", tIndex.m_sIndex.cstr(), sError.cstr() );
+			sphWarning ( "seamless rotate local index %s", sIndex.cstr() );
+			if ( !RotateIndexMT ( pReplacementServed, sIndex, dWarnings, sError ) )
+				sphWarning ( "index '%s': %s", sIndex.cstr(), sError.cstr() );
 		}
 
 		for ( const auto & i : dWarnings )
-			sphWarning ( "index '%s': %s", tIndex.m_sIndex.cstr(), i.cstr() );
+			sphWarning ( "index '%s': %s", sIndex.cstr(), i.cstr() );
 
-		g_pDistIndexes->Delete ( tIndex.m_sIndex ); // postponed delete of same-named distributed (if any)
+		g_pDistIndexes->Delete ( sIndex ); // postponed delete of same-named distributed (if any)
 	}
 
 	g_bInRotate = false;
@@ -17217,41 +16915,30 @@ static void TaskRotation ( void* pRaw ) EXCLUDES ( MainThread )
 
 static void AbortRotation ( void* pIndexes )
 {
-	auto* pToDelete = ( VecIndexForRotation_t* ) pIndexes;
-	SafeDelete ( pToDelete );
+	std::unique_ptr<VecOfServed_c> pToDelete { static_cast<VecOfServed_c*> ( pIndexes ) };
 	g_bInRotate = false;
 }
 
-static void InvokeRotation() REQUIRES (MainThread)
+static void InvokeRotation ( VecOfServed_c&& dDeferredIndexes ) REQUIRES ( MainThread )
 {
-	assert ( g_dPostIndexes.GetLength () && "Rotation queue must be checked before invoking rotation!");
+	assert ( !dDeferredIndexes.IsEmpty () && "Rotation queue must be checked before invoking rotation!");
 
-	auto* pIndexesForRotation = new VecIndexForRotation_t;
-	for ( RLockedServedIt_c it ( &g_dPostIndexes ); it.Next (); )
-	{
-		ServedDescRPtr_c rLocked( it.Get());
-		pIndexesForRotation->Add( { rLocked->m_iRotationPriority, it.GetName(), it.Get() });
-	}
-	g_dPostIndexes.ReleaseAndClear ();
-
-	// sort the indexes by rotation priority
-	pIndexesForRotation->Sort();
+	auto pIndexesForRotation = std::make_unique<VecOfServed_c> ( std::move ( dDeferredIndexes ) );
 
 	static TaskID iRotationTask = -1;
 	if ( iRotationTask<0 )
 		iRotationTask = TaskManager::RegisterGlobal ("Rotation task", TaskRotation, AbortRotation, 1, 1);
 
-	TaskManager::StartJob ( iRotationTask, pIndexesForRotation );
+	TaskManager::StartJob ( iRotationTask, pIndexesForRotation.release() );
 }
 
-static void ConfigureLocalIndex ( ServedDesc_t * pIdx, const CSphConfigSection & hIndex, bool bMutableOpt, StrVec_t * pWarnings )
+void ConfigureLocalIndex ( ServedDesc_t * pIdx, const CSphConfigSection & hIndex, bool bMutableOpt, StrVec_t * pWarnings )
 {
 	pIdx->m_tSettings.Load ( hIndex, bMutableOpt, pWarnings );
 	pIdx->m_sGlobalIDFPath = hIndex.GetStr ( "global_idf" );
 }
 
-
-static void ConfigureDistributedIndex ( DistributedIndex_t & tIdx, const char * szIndexName, const CSphConfigSection & hIndex, StrVec_t * pWarnings=nullptr )
+void ConfigureDistributedIndex ( std::function<bool(const CSphString&)>&& fnCheck, DistributedIndex_t & tIdx, const char * szIndexName, const CSphConfigSection & hIndex, StrVec_t * pWarnings )
 {
 	assert ( hIndex("type") && hIndex["type"]=="distributed" );
 
@@ -17279,7 +16966,7 @@ static void ConfigureDistributedIndex ( DistributedIndex_t & tIdx, const char * 
 		sphSplit ( dLocs, pLocal->cstr(), " \t," );
 		for ( const auto & sLocal: dLocs )
 		{
-			if ( !g_pLocalIndexes->Contains ( sLocal ) )
+			if ( !fnCheck ( sLocal ) )
 			{
 				sphWarning ( "index '%s': no such local index '%s', SKIPPED", szIndexName, sLocal.cstr() );
 				continue;
@@ -17352,58 +17039,42 @@ static void ConfigureDistributedIndex ( DistributedIndex_t & tIdx, const char * 
 			tIdx.m_iAgentQueryTimeoutMs = hIndex.GetMsTimeMs ( "agent_query_timeout");
 	}
 
-	bool bHaveHA = tIdx.m_dAgents.any_of ( [] ( MultiAgentDesc_c * ag ) { return ag->IsHA (); } );
+	bool bHaveHA = tIdx.m_dAgents.any_of ( [] ( const auto& ag ) { return ag->IsHA (); } );
 
 	// configure ha_strategy
 	if ( bSetHA && !bHaveHA )
 		sphWarning ( "index '%s': ha_strategy defined, but no ha agents in the index", szIndexName );
 }
 
+ResultAndIndex_t tLoadError { ADD_ERROR, ServedIndexRefPtr_c() };
+
 //////////////////////////////////////////////////
 /// configure distributed index and add it to hash
 //////////////////////////////////////////////////
-static ESphAddIndex AddDistributedIndex ( const char * szIndexName, const CSphConfigSection & hIndex, CSphString & sError, StrVec_t * pWarnings=nullptr )
+// AddIndex -> AddDistributedIndex
+static ResultAndIndex_t AddDistributedIndex ( const char * szIndexName, const CSphConfigSection & hIndex, CSphString & sError, StrVec_t * pWarnings=nullptr )
 {
 	DistributedIndexRefPtr_t pIdx ( new DistributedIndex_t );
-	ConfigureDistributedIndex ( *pIdx, szIndexName, hIndex, pWarnings );
+	ConfigureDistributedIndex ( [] ( const auto& sIdx ) { return g_pLocalIndexes->Contains ( sIdx ); }, *pIdx, szIndexName, hIndex, pWarnings );
 
-	// finally, check and add distributed index to global table
 	if ( pIdx->IsEmpty () )
 	{
 		sError.SetSprintf ( "index '%s': no valid local/remote indexes in distributed index", szIndexName );
-		return ADD_ERROR;
+		return tLoadError;
 	}
 
-	if ( !g_pDistIndexes->AddUniq ( pIdx, szIndexName ) )
+	// finally, check and add distributed index to global table
+	if ( !g_pDistIndexes->Add ( pIdx, szIndexName ) )
 	{
 		sError.SetSprintf ( "index '%s': unable to add name (duplicate?)", szIndexName );
-		return ADD_ERROR;
+		return tLoadError;
 	}
 
-	return ADD_DISTR;
-}
-
-// hash any local index (plain, rt, etc.)
-static bool AddLocallyServedIndex ( GuardedHash_c& dPost, const CSphString& sIndexName, ServedDesc_t & tIdx, bool bReplace, CSphString & sError )
-{
-	assert ( tIdx.m_eType!=IndexType_e::TEMPLATE );
-
-	ServedIndexRefPtr_c pIdx ( new ServedIndex_c ( tIdx ) );
-	g_pLocalIndexes->AddUniq ( nullptr, sIndexName );
-	if ( !dPost.AddUniq ( pIdx, sIndexName ) )
-	{
-		sError = "internal error: hash add failed";
-		g_pLocalIndexes->DeleteIfNull ( sIndexName );
-		return false;
-	}
-
-	// leak pointer, so it's destructor won't delete it
-	tIdx.m_pIndex = nullptr;
-	return true;
+	return ResultAndIndex_t { ADD_DISTR, ServedIndexRefPtr_c() };
 }
 
 // common preconfiguration of mutable indexes
-static bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSettings, const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace, bool bWordDict, bool bPercolate, StrVec_t * pWarnings, CSphString & sError )
+static bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSettings, const char * szIndexName, const CSphConfigSection & hIndex, bool bWordDict, bool bPercolate, StrVec_t * pWarnings, CSphString & sError )
 {
 	// pick config settings
 	// they should be overriden later by Preload() if needed
@@ -17440,13 +17111,6 @@ static bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSe
 	if ( !hIndex ( "path" ) )
 	{
 		sphWarning ( "index '%s': path must be specified - NOT SERVING", szIndexName );
-		return false;
-	}
-
-	// check name
-	if ( !bReplace && g_pLocalIndexes->Contains ( szIndexName ) )
-	{
-		sphWarning ( "index '%s': duplicate name - NOT SERVING", szIndexName );
 		return false;
 	}
 
@@ -17507,14 +17171,13 @@ static bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSe
 	}
 
 	tSchema.SetupFlags ( tSettings, bPercolate, pWarnings );
-
 	return true;
 }
 
 ///////////////////////////////////////////////
-/// configure realtime index and add it to hash
+/// create, configure and load realtime index
 ///////////////////////////////////////////////
-ESphAddIndex AddRTPercolate ( bool bRT, GuardedHash_c & dPost, const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace, bool bMutableOpt, StrVec_t * pWarnings, CSphString & sError )
+static ResultAndIndex_t LoadRTPercolate ( bool bRT, const char* szIndexName, const CSphConfigSection& hIndex, bool bMutableOpt, StrVec_t* pWarnings, CSphString& sError )
 {
 	bool bWordDict = true;
 	if ( bRT )
@@ -17526,183 +17189,149 @@ ESphAddIndex AddRTPercolate ( bool bRT, GuardedHash_c & dPost, const char * szIn
 		else if ( sIndexType!="keywords" )
 		{
 			sError.SetSprintf ( "index '%s': unknown dict=%s; only 'keywords' or 'crc' values allowed", szIndexName, sIndexType.cstr() );
-			return ADD_ERROR;
+			return tLoadError;
 		}
 	}
 
 	CSphSchema tSchema ( szIndexName );
 	CSphIndexSettings tSettings;
-	if ( !ConfigureRTPercolate ( tSchema, tSettings, szIndexName, hIndex, bReplace, bWordDict, !bRT, pWarnings, sError ))
-		return ADD_ERROR;
+	if ( !ConfigureRTPercolate ( tSchema, tSettings, szIndexName, hIndex, bWordDict, !bRT, pWarnings, sError ))
+		return tLoadError;
 
 	// index
-	ServedDesc_t tIdx;
-	ConfigureLocalIndex ( &tIdx, hIndex, bMutableOpt, pWarnings );
+	auto pServed = MakeServedIndex();
+	ConfigureLocalIndex ( pServed, hIndex, bMutableOpt, pWarnings );
+	pServed->m_sIndexPath = hIndex["path"].strval();
 
+	std::unique_ptr<CSphIndex> pIdx;
 	if ( bRT )
 	{
-		tIdx.m_pIndex = sphCreateIndexRT ( tSchema, szIndexName, tIdx.m_tSettings.m_iMemLimit, hIndex["path"].cstr(), bWordDict );
-		tIdx.m_eType = IndexType_e::RT;
+		pIdx = sphCreateIndexRT ( tSchema, szIndexName, pServed->m_tSettings.m_iMemLimit, pServed->m_sIndexPath.cstr(), bWordDict );
+		pServed->m_eType = IndexType_e::RT;
 	} else
 	{
-		tIdx.m_pIndex = CreateIndexPercolate ( tSchema, szIndexName, hIndex["path"].cstr () );
-		tIdx.m_eType = IndexType_e::PERCOLATE;
+		pIdx = CreateIndexPercolate ( tSchema, szIndexName, pServed->m_sIndexPath.cstr() );
+		pServed->m_eType = IndexType_e::PERCOLATE;
 	}
 
-	tIdx.m_sIndexPath = hIndex["path"].strval ();
-	tIdx.m_pIndex->SetMutableSettings ( tIdx.m_tSettings );
-	tIdx.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
-	tIdx.m_pIndex->SetGlobalIDFPath ( tIdx.m_sGlobalIDFPath );
+	pServed->m_sIndexPath = hIndex["path"].strval ();
+	pIdx->SetMutableSettings ( pServed->m_tSettings );
+	pIdx->m_iExpansionLimit = g_iExpansionLimit;
+	pIdx->SetGlobalIDFPath ( pServed->m_sGlobalIDFPath );
 
-	tIdx.m_pIndex->Setup ( tSettings );
-	tIdx.m_pIndex->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
+	pIdx->Setup ( tSettings );
+	pIdx->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
 
-	// hash it
-	if ( AddLocallyServedIndex ( dPost, szIndexName, tIdx, bReplace, sError ) )
-		return ADD_DSBLED;
-	return ADD_ERROR;
+	pServed->SetIdx ( std::move ( pIdx ) );
+	return ResultAndIndex_t { ADD_NEEDLOAD, ServedIndexRefPtr_c { pServed.Leak() } }; // use Leak to avoid extra addref/release on copying
 }
 
 ////////////////////////////////////////////
-/// configure local index and add it to hash
+/// configure and load local index
 ////////////////////////////////////////////
-static ESphAddIndex AddPlainIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace, bool bMutableOpt, StrVec_t * pWarnings, CSphString & sError ) REQUIRES ( MainThread )
+static ResultAndIndex_t LoadPlainIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bMutableOpt, StrVec_t * pWarnings, CSphString & sError )
 {
-	ServedDesc_t tIdx;
-
 	// check path
 	if ( !hIndex.Exists ( "path" ) )
 	{
 		sError = "key 'path' not found";
-		return ADD_ERROR;
+		return tLoadError;
 	}
 
-	// check name
-	if ( !bReplace && g_pLocalIndexes->Contains ( szIndexName ) )
-	{
-		sError = "duplicate name";
-		return ADD_ERROR;
-	}
-
+	ServedIndexRefPtr_c pServed = MakeServedIndex();
+	pServed->m_eType = IndexType_e::PLAIN;
 	// configure memlocking, star
-	ConfigureLocalIndex ( &tIdx, hIndex, bMutableOpt, pWarnings );
+	ConfigureLocalIndex ( pServed, hIndex, bMutableOpt, pWarnings );
 
 	// try to create index
-	tIdx.m_sIndexPath = hIndex["path"].strval ();
-	tIdx.m_pIndex = sphCreateIndexPhrase ( szIndexName, tIdx.m_sIndexPath.cstr () );
-	tIdx.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
-	tIdx.m_pIndex->SetMutableSettings ( tIdx.m_tSettings );
-	tIdx.m_pIndex->SetGlobalIDFPath ( tIdx.m_sGlobalIDFPath );
-	tIdx.m_pIndex->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
-
-	// done
-	if ( AddLocallyServedIndex ( g_dPostIndexes, szIndexName, tIdx, bReplace, sError ) )
-		return ADD_DSBLED;
-	return ADD_ERROR;
+	pServed->m_sIndexPath = hIndex["path"].strval ();
+	auto pIdx = sphCreateIndexPhrase ( szIndexName, pServed->m_sIndexPath.cstr() );
+	pIdx->m_iExpansionLimit = g_iExpansionLimit;
+	pIdx->SetMutableSettings ( pServed->m_tSettings );
+	pIdx->SetGlobalIDFPath ( pServed->m_sGlobalIDFPath );
+	pIdx->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
+	pServed->SetIdx ( std::move ( pIdx ) );
+	return ResultAndIndex_t { ADD_NEEDLOAD, ServedIndexRefPtr_c { pServed.Leak() } };
 }
 
 ///////////////////////////////////////////////
-/// configure template index and add it to hash
+/// make and configure template index
 ///////////////////////////////////////////////
-static ESphAddIndex AddTemplateIndex ( const char * szIndexName, const CSphConfigSection &hIndex, bool bReplace, bool bMutableOpt, StrVec_t * pWarnings )
-	REQUIRES ( MainThread )
+static ResultAndIndex_t LoadTemplateIndex ( const char * szIndexName, const CSphConfigSection &hIndex, bool bMutableOpt, StrVec_t * pWarnings )
 {
-	ServedDesc_t tIdx;
-
-	// check name
-	if ( !bReplace && g_pLocalIndexes->Contains ( szIndexName ) )
-	{
-		sphWarning ( "index '%s': duplicate name - NOT SERVING", szIndexName );
-		return ADD_ERROR;
-	}
-
-	// configure memlocking, star
-	ConfigureLocalIndex ( &tIdx, hIndex, bMutableOpt, pWarnings );
-
-	// try to create index
-	tIdx.m_pIndex = sphCreateIndexTemplate ( szIndexName );
-	tIdx.m_pIndex->SetMutableSettings ( tIdx.m_tSettings );
-	tIdx.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
-
-	CSphIndexSettings s;
+	CSphIndexSettings tSettings;
 	CSphString sWarning, sError;
-	if ( !s.Setup ( hIndex, szIndexName, sWarning, sError ) )
+	if ( !tSettings.Setup ( hIndex, szIndexName, sWarning, sError ) )
 	{
 		sphWarning ( "failed to configure index %s: %s", szIndexName, sError.cstr () );
-		return ADD_ERROR;
+		return tLoadError;
 	}
 
 	if ( !sWarning.IsEmpty() )
 		sphWarning ( "ERROR: index '%s': %s - NOT SERVING", szIndexName, sWarning.cstr () );
 
-	tIdx.m_pIndex->Setup ( s );
+	auto pIdx = sphCreateIndexTemplate ( szIndexName );
+	pIdx->Setup ( tSettings );
+
+	auto pServed = MakeServedIndex();
+	pServed->m_eType = IndexType_e::TEMPLATE;
+
+	// configure memlocking, star
+	ConfigureLocalIndex ( pServed, hIndex, bMutableOpt, pWarnings );
+
+	pIdx->SetMutableSettings ( pServed->m_tSettings );
+	pIdx->m_iExpansionLimit = g_iExpansionLimit;
 
 	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( CreateFilenameBuilder(szIndexName) );
 	StrVec_t dWarnings;
-	if ( !sphFixupIndexSettings ( tIdx.m_pIndex, hIndex, g_bStripPath, pFilenameBuilder.Ptr(), dWarnings, sError ) )
+	if ( !sphFixupIndexSettings ( pIdx.get(), hIndex, g_bStripPath, pFilenameBuilder.Ptr(), dWarnings, sError ) )
 	{
 		sphWarning ( "index '%s': %s - NOT SERVING", szIndexName, sError.cstr () );
-		return ADD_ERROR;
+		return tLoadError;
 	}
 
 	for ( const auto & i : dWarnings )
 		sphWarning ( "index '%s': %s", szIndexName, i.cstr() );
 
-	tIdx.m_eType = IndexType_e::TEMPLATE;
-
-	// templates we either add, either replace depending on requiested action
+	// templates we either add, either replace depending on requested action
 	// at this point they are production-ready
-	ServedIndexRefPtr_c pIdx( new ServedIndex_c( tIdx ));
-	if ( bReplace )
-		g_pLocalIndexes->AddOrReplace( pIdx, szIndexName );
-	else if ( !g_pLocalIndexes->AddUniq( pIdx, szIndexName ))
-	{
-		sphWarning( "internal error: index '%s': hash add failed - NOT SERVING", szIndexName );
-		return ADD_ERROR;
-	}
-	tIdx.m_pIndex = nullptr; // leak pointer, so it's destructor won't delete it
-	return ADD_SERVED;
+	pServed->SetIdx ( std::move ( pIdx ) );
+	return ResultAndIndex_t { ADD_SERVED, ServedIndexRefPtr_c { pServed.Leak() } };
 }
 
-// AddIndex() -> AddIndexMT() // from main thread. Rt and Pq
-// HandleCommandClusterPq() -> RemoteLoadIndex() -> LoadIndex() -> AddIndexMT() // only Percolate! From other threads
-// HandleMysqlCreateTable() -> CreateNewIndexInt() -> AddIndexMT()
-ESphAddIndex AddIndexMT ( GuardedHash_c & dPost, const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace, bool bMutableOpt, StrVec_t * pWarnings, CSphString & sError )
+// HandleCommandClusterPq() -> RemoteLoadIndex() -> LoadIndex() -> AddIndex() // only Percolate! From other threads
+// HandleMysqlCreateTable() -> CreateNewIndexConfigless() -> AddIndex() // from other threads
+// ServiceMain() -> TickHead() -> CheckRotate() -> ReloadConfigAndRotateIndexes() -> AddIndex()
+// ConfigureAndPreloadIndex() -> AddIndex() // maybe from non-main thread!
+// 		ClientSession_c::Execute -> HandleMysqlImportTable -> AddExistingIndexConfigless -> ConfiglessPreloadIndex -> ConfigureAndPreloadIndex -> AddIndex
+ResultAndIndex_t AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bCheckDupe, bool bMutableOpt, StrVec_t * pWarnings, CSphString & sError )
 {
-	switch ( TypeOfIndexConfig ( hIndex.GetStr ( "type", nullptr ) ) )
+	// check name
+	if ( bCheckDupe && IndexIsServed ( szIndexName ) )
 	{
-		case IndexType_e::RT:		return AddRTPercolate ( true, dPost, szIndexName, hIndex, bReplace, bMutableOpt, pWarnings, sError );
-		case IndexType_e::PERCOLATE:return AddRTPercolate ( false, dPost, szIndexName, hIndex, bReplace, bMutableOpt, pWarnings, sError );
-		case IndexType_e::DISTR:	return AddDistributedIndex ( szIndexName, hIndex, sError, pWarnings );
-
-		default:; // shut up warnings
+		sphWarning ( "index '%s': duplicate name - NOT SERVING", szIndexName );
+		return tLoadError;
 	}
-	assert ( 0 && "AddIndexMT expects ONLY rt, percolate or distr");
-	return ADD_ERROR;
-}
 
-// ServiceMain() -> ConfigureAndPreload() -> AddIndex()
-// ServiceMain() -> TickHead() -> CheckRotate() -> ReloadIndexSettings() -> AddIndex()
-static ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace, bool bMutableOpt, StrVec_t * pWarnings, CSphString & sError ) REQUIRES ( MainThread )
-{
 	switch ( TypeOfIndexConfig ( hIndex.GetStr ( "type", nullptr )))
 	{
 		case IndexType_e::DISTR:
-			return AddDistributedIndex ( szIndexName, hIndex, sError );
+			return AddDistributedIndex ( szIndexName, hIndex, sError, pWarnings );
 		case IndexType_e::RT:
+			return LoadRTPercolate ( true, szIndexName, hIndex, bMutableOpt, pWarnings, sError );
 		case IndexType_e::PERCOLATE:
-			return AddIndexMT ( g_dPostIndexes, szIndexName, hIndex, bReplace, bMutableOpt, pWarnings, sError );
+			return LoadRTPercolate ( false, szIndexName, hIndex, bMutableOpt, pWarnings, sError );
 		case IndexType_e::TEMPLATE:
-			return AddTemplateIndex ( szIndexName, hIndex, bReplace, bMutableOpt, pWarnings );
+			return LoadTemplateIndex ( szIndexName, hIndex, bMutableOpt, pWarnings );
 		case IndexType_e::PLAIN:
-			return AddPlainIndex ( szIndexName, hIndex, bReplace, bMutableOpt, pWarnings, sError );
+			return LoadPlainIndex ( szIndexName, hIndex, bMutableOpt, pWarnings, sError );
 		case IndexType_e::ERROR_:
 		default:
 			break;
 	}
 
 	sphWarning ( "index '%s': unknown type '%s' - NOT SERVING", szIndexName, hIndex["type"].cstr() );
-	return ADD_ERROR;
+	return tLoadError;
 }
 
 // check if config changed, and also cache content into g_dConfig (will be used instead of one more config touching)
@@ -17793,162 +17422,42 @@ void InitPersistentPool()
 		return;
 	}
 
-	Dashboard::GetActiveHosts ().Apply ( [] ( HostDashboard_t *&pHost ) {
+	Dashboard::GetActiveHosts ().Apply ( [] ( HostDashboardRefPtr_t& pHost ) {
 		if ( !pHost->m_pPersPool )
 			pHost->m_pPersPool = new PersistentConnectionsPool_c;
 		pHost->m_pPersPool->ReInit ( g_iPersistentPoolSize );
 	} );
 }
 
-
-// refactor!
-// make possible changing of an index role. I.e., was template, became distr, as example.
-//
-// Reloading called always from same thread (so, for now not need to be th-safe for itself)
-// ServiceMain() -> TickHead() -> CheckRotate() -> ReloadIndexSettings().
-static void ReloadIndexSettings ( CSphConfigParser & tCP ) REQUIRES ( MainThread, g_tRotateConfigMutex )
-	REQUIRES ( MainThread )
+// special pass for 'simple' rotation (i.e. *.new to current)
+static void IssuePlainOldRotation ( HashOfServed_c& hDeferred )
 {
-	// collect names of all existing local indexes as assumed for deletion
-	SmallStringHash_T<ServedIndexRefPtr_c> dLocalToDelete;
-	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next (); )
-	{
-		// skip JSON indexes or indexes belong to cluster - no need to manage them
-		ServedDescRPtr_c pServed ( it.Get() );
-		if ( ServedDesc_t::IsCluster ( pServed ) )
-			continue;
+	ConfigReloader_c tReloader { hDeferred };
+	tReloader.IssuePlainOldRotation();
+}
 
-		dLocalToDelete.Add ( it.Get(), it.GetName() );
-	}
-
-	// collect names of all existing distr indexes as assumed for deletion
-	SmallStringHash_T<DistributedIndexRefPtr_t> dDistrToDelete;
-	for ( RLockedDistrIt_c it ( g_pDistIndexes ); it.Next (); )
-		dDistrToDelete.Add ( it.Get(), it.GetName () );
-
-	const CSphConfig &hConf = tCP.m_tConf;
+// Reloading called always from same thread (so, for now not need to be th-safe for itself)
+// ServiceMain() -> TickHead() -> CheckRotate() -> ReloadConfigAndRotateIndexes().
+static void ReloadIndexesFromConfig ( const CSphConfig& hConf, HashOfServed_c& hDeferred ) REQUIRES ( MainThread )
+{
+	assert ( !IsConfigless() );
 	if ( !hConf.Exists ("index") )
 	{
 		sphWarning ( "No indexes found in config came to rotation. Abort reloading");
 		return;
 	}
 
+	ConfigReloader_c tReloader { hDeferred };
 	for ( const auto& dIndex : hConf["index"] )
 	{
 		const auto & sIndexName = dIndex.first;
 		const CSphConfigSection & hIndex = dIndex.second;
 		IndexType_e eNewType = TypeOfIndexConfig ( hIndex.GetStr ( "type", nullptr ) );
-
 		if ( eNewType==IndexType_e::ERROR_ )
 			continue;
 
-		bool bReplaceLocal = false;
-		auto pServedIndex = GetServed ( sIndexName );
-		if ( pServedIndex )
-		{
-			bool bGotLocal = false;
-			bool bReconfigure = false;
-			// Rlock scope for settings compare
-			{
-				ServedDescRPtr_c pServedRLocked ( pServedIndex );
-				if ( pServedRLocked )
-				{
-					bGotLocal = true;
-					bReplaceLocal = ( eNewType!=pServedRLocked->m_eType );
-					if ( !bReplaceLocal )
-					{
-						ServedDesc_t tDesc;
-						ConfigureLocalIndex ( &tDesc, hIndex, false, nullptr );
-						bReconfigure = ( tDesc.m_tSettings.m_iExpandKeywords!=pServedRLocked->m_tSettings.m_iExpandKeywords ||
-							tDesc.m_tSettings.m_tFileAccess!=pServedRLocked->m_tSettings.m_tFileAccess ||
-							tDesc.m_tSettings.m_bPreopen!=pServedRLocked->m_tSettings.m_bPreopen ||
-							tDesc.m_sGlobalIDFPath!=pServedRLocked->m_sGlobalIDFPath );
-						bReconfigure |= ( pServedRLocked->m_eType!=IndexType_e::TEMPLATE
-								&& hIndex.Exists ( "path" )
-								&& hIndex["path"].strval ()!=pServedRLocked->m_sIndexPath );
-					}
-				}
-
-			}
-			// Wlock'ing only in case settings changed
-			if ( bReconfigure )
-			{
-				ServedDescWPtr_c pServedWLocked ( pServedIndex );
-				ConfigureLocalIndex ( pServedWLocked, hIndex, false, nullptr );
-				if ( pServedWLocked->m_eType!=IndexType_e::TEMPLATE
-					&& hIndex.Exists ( "path" )
-					&& hIndex["path"].strval ()!=pServedWLocked->m_sIndexPath )
-				{
-					pServedWLocked->m_sNewPath = hIndex["path"].strval ();
-
-					ServedDesc_t tDesc;
-					tDesc.m_sIndexPath = pServedWLocked->m_sIndexPath;
-					tDesc.m_sNewPath = pServedWLocked->m_sNewPath;
-					tDesc.m_eType = pServedWLocked->m_eType;
-					if ( !PreloadKlistTarget ( tDesc, CheckIndexHeaderRotate(tDesc), tDesc.m_dKilllistTargets ) )
-						tDesc.m_dKilllistTargets.Reset();
-
-					g_dPostIndexes.AddUniq ( RefCountedRefPtr_t ( new ServedIndex_c ( tDesc )), sIndexName );
-				}
-			}
-
-			if ( bGotLocal && !bReplaceLocal )
-			{
-				dLocalToDelete[sIndexName] = nullptr;
-				continue;
-			}
-			if ( bGotLocal && bReplaceLocal && eNewType==IndexType_e::TEMPLATE )
-			{
-				dLocalToDelete[sIndexName] = nullptr;
-			}
-		}
-
-		auto pDistrIndex = GetDistr ( sIndexName );
-		if ( pDistrIndex && eNewType==IndexType_e::DISTR )
-		{
-			DistributedIndexRefPtr_t ptrIdx ( new DistributedIndex_t );
-			ConfigureDistributedIndex ( *ptrIdx, sIndexName.cstr (), hIndex );
-
-			if ( !ptrIdx->IsEmpty () )
-				g_pDistIndexes->AddOrReplace ( ptrIdx, sIndexName );
-			else
-				sphWarning ( "index '%s': no valid local/remote indexes in distributed index; using last valid definition", sIndexName.cstr () );
-
-			dDistrToDelete[sIndexName] = nullptr;
-			continue;
-		}
-
-		// if index was distr and switched to local - it will be added into queue as local.
-		// if it was local and now distr - it is already added as distr.
-		// dupes will vanish with deletion pass then.
-
-		// fixme: report errors
-		CSphString sError;
-		ESphAddIndex eType = AddIndex ( sIndexName.cstr(), hIndex, bReplaceLocal, false, nullptr, sError );
-
-		// If we've added disabled index (i.e. one which need to be prealloced first)
-		// instead of existing distributed - we don't have to delete last right now,
-		// let rotate it later.
-		if ( eType==ADD_DSBLED )
-		{
-			auto pAddedIndex = GetDisabled ( sIndexName.cstr() );
-			assert ( pAddedIndex );
-			ServedDescWPtr_c pWlockedDisabled ( pAddedIndex );
-			if ( pWlockedDisabled->m_eType==IndexType_e::PLAIN )
-				pWlockedDisabled->m_bOnlyNew = true;
-			if ( pDistrIndex )
-				dDistrToDelete[sIndexName] = nullptr;
-		}
+		tReloader.LoadIndexFromConfig ( sIndexName, eNewType, hIndex );
 	}
-
-	for ( const auto& tIdx : dDistrToDelete )
-		if ( tIdx.second )
-			g_pDistIndexes->Delete ( tIdx.first );
-
-	for ( const auto& tIdx : dLocalToDelete )
-		if ( tIdx.second )
-			g_pLocalIndexes->Delete ( tIdx.first );
-
 	InitPersistentPool();
 }
 
@@ -17973,39 +17482,34 @@ static void SetIndexPriority ( IndexWithPriority_t & tIndex, int iPriority, cons
 	}
 }
 
-
-static void CalcRotationPriorities() REQUIRES ( MainThread, g_tRotateThreadMutex )
+static VecOfServed_c ConvertHashToPrioritySortedVec ( const HashOfServed_c& hDeferredIndexes ) REQUIRES ( MainThread, g_tRotateThreadMutex )
 {
 	SmallStringHash_T<IndexWithPriority_t> tIndexesToRotate;
+	VecOfServed_c dResult;
 
-	// don't need wlock since rotation thread is already waiting for g_tRotateThreadMutex
-	for ( RLockedServedIt_c it ( &g_dPostIndexes ); it.Next (); )
+	for ( const auto& it : hDeferredIndexes )
 	{
-		auto pIndex = it.Get();
-		assert(pIndex);
-
-		ServedDescRPtr_c pRlockedServedPtr(pIndex);
+		assert ( it.second );
 
 		// check for rt/percolate. they don't need killlist_target
-		if ( !ServedDesc_t::IsMutable ( pRlockedServedPtr ) && g_pLocalIndexes->Contains ( it.GetName() ) )
+		if ( !ServedDesc_t::IsMutable ( it.second ) && g_pLocalIndexes->Contains ( it.first ) )
 		{
-			ServedDescRPtr_c pDesc ( GetServed ( it.GetName() ) );
-
 			IndexWithPriority_t tToRotate;
-			tToRotate.m_sIndex = it.GetName();
-			tToRotate.m_dKilllistTargets = pRlockedServedPtr->m_dKilllistTargets;
-
-			tIndexesToRotate.Add ( tToRotate, it.GetName() );
+			tToRotate.m_sIndex = it.first;
+			tToRotate.m_dKilllistTargets = it.second->m_dKilllistTargets;
+			tIndexesToRotate.Add ( std::move ( tToRotate ), it.first );
 		}
-	}
+		else
+			dResult.Add ( { it.first, it.second } ); // out or priority - will be processed first.
+	};
 
 	// set priorities
-	for ( tIndexesToRotate.IterateStart (); tIndexesToRotate.IterateNext (); )
-		for ( const auto & i : tIndexesToRotate.IterateGet().m_dKilllistTargets )
+	for ( const auto& tIndexToRotate : tIndexesToRotate )
+		for ( const auto & i : tIndexToRotate.second.m_dKilllistTargets )
 		{
 			IndexWithPriority_t * pIdx = tIndexesToRotate(i);
 			if ( pIdx )
-				pIdx->m_nReferences++;
+				++pIdx->m_nReferences;
 		}
 
 	// start with the least-referenced index
@@ -18013,9 +17517,9 @@ static void CalcRotationPriorities() REQUIRES ( MainThread, g_tRotateThreadMutex
 	do
 	{
 		pMin = nullptr;
-		for ( tIndexesToRotate.IterateStart (); tIndexesToRotate.IterateNext (); )
+		for ( auto & tIndexToRotate : tIndexesToRotate )
 		{
-			IndexWithPriority_t & tIdx = tIndexesToRotate.IterateGet();
+			auto & tIdx = tIndexToRotate.second;
 			if ( tIdx.m_iPriority==-1 && ( !pMin || tIdx.m_nReferences<pMin->m_nReferences ) )
 				pMin = &tIdx;
 		}
@@ -18024,223 +17528,172 @@ static void CalcRotationPriorities() REQUIRES ( MainThread, g_tRotateThreadMutex
 			SetIndexPriority ( *pMin, 0, tIndexesToRotate );
 	}
 	while ( pMin );
-	
-	// copy priorities to disabled indexes
-	for ( tIndexesToRotate.IterateStart (); tIndexesToRotate.IterateNext (); )
-	{
-		const IndexWithPriority_t & tIdx = tIndexesToRotate.IterateGet();
-		assert ( tIdx.m_iPriority>=0 );
-		ServedDescWPtr_c pDisabled ( GetDisabled ( tIdx.m_sIndex ) );
-		if ( pDisabled )
-			pDisabled->m_iRotationPriority = tIdx.m_iPriority;
-	}
+
+	// collect and sort by priority processed indexes names
+	StrVec_t dSorted;
+	for ( auto& tIndexToRotate : tIndexesToRotate )
+		dSorted.Add ( tIndexToRotate.first );
+	dSorted.Sort ( Lesser ( [&tIndexesToRotate] ( auto a, auto b ) { return tIndexesToRotate[a].m_iPriority < tIndexesToRotate[a].m_iPriority; } ) );
+
+	// append priority names to non-prioritized
+	for ( const auto& sIdx : dSorted )
+		dResult.Add ( { sIdx, hDeferredIndexes[sIdx] } );
+
+	return dResult;
 }
 
-// ServiceMain() -> TickHead() -> CheckRotate() -> CheckIndexesForSeamless()
-static void CheckIndexesForSeamless() REQUIRES ( MainThread )
+// ServiceMain() -> TickHead() -> CheckRotate() -> CheckIndexesForSeamlessAndStartRotation()
+static void CheckIndexesForSeamlessAndStartRotation ( VecOfServed_c dDeferredIndexes ) REQUIRES ( MainThread )
 {
 	// check what indexes need to be rotated
-	SmallStringHash_T<bool> dNotCapableForRotation;
-	for ( RLockedServedIt_c it ( &g_dPostIndexes ); it.Next(); )
+	int iNotCapableForSeamlessRotation = 0;
+	ARRAY_FOREACH ( i, dDeferredIndexes )
 	{
-		ServedDescRPtr_c rLocked ( it.Get() );
-		const CSphString & sIndex = it.GetName ();
-		assert ( rLocked );
-		if ( !rLocked->m_pIndex )
-			continue;
+		const auto& sIdx = dDeferredIndexes[i].first;
+		auto* pIndex = dDeferredIndexes[i].second.Ptr();
+		assert ( pIndex );
 
-		if ( CheckIndexHeaderRotate(*rLocked)==RotateFrom_e::NONE && !ServedDesc_t::IsMutable (rLocked) )
+		if ( !ServedDesc_t::IsMutable ( pIndex ) && CheckIndexHeaderRotate(*pIndex)==RotateFrom_e::NONE )
 		{
-			dNotCapableForRotation.Add ( true, sIndex );
-			sphLogDebug ( "Index %s (%s) is not capable for seamless rotate. Skipping", sIndex.cstr ()
-				, rLocked->m_sIndexPath.cstr () );
+			++iNotCapableForSeamlessRotation;
+			sphWarning ( "queue[] = %s", sIdx.cstr() );
+			sphLogDebug ( "Index %s (%s) is not capable for seamless rotate. Skipping", sIdx.cstr ()
+				, pIndex->m_sIndexPath.cstr () );
+			dDeferredIndexes.Remove(i--);
 		}
 	}
 
-	if ( dNotCapableForRotation.GetLength () )
-	{
-		sphWarning ( "internal error: non-empty queue on a rotation cycle start, got %d elements"
-			, dNotCapableForRotation.GetLength () );
-		for ( dNotCapableForRotation.IterateStart (); dNotCapableForRotation.IterateNext (); )
-		{
-			// need also to remove empty description from local index list
-			g_pLocalIndexes->DeleteIfNull ( dNotCapableForRotation.IterateGetKey() );
-			g_dPostIndexes.Delete ( dNotCapableForRotation.IterateGetKey() );
-			sphWarning ( "queue[] = %s", dNotCapableForRotation.IterateGetKey().cstr () );
-		}
-	}
+	if ( iNotCapableForSeamlessRotation )
+		sphWarning ( "internal error: non-empty queue on a rotation cycle start, got %d elements", iNotCapableForSeamlessRotation );
 
-	if ( g_dPostIndexes.GetLength () )
+	if ( dDeferredIndexes.IsEmpty () )
 	{
-		InvokeRotation();
+		sphWarning ( "nothing to rotate after SIGHUP" );
+		g_bInRotate = false;
 		return;
 	}
 
-	sphWarning ( "nothing to rotate after SIGHUP" );
-	g_bInRotate = false;
+	InvokeRotation ( std::move ( dDeferredIndexes ) );
 }
 
-
-static void DoGreedyRotation() REQUIRES ( MainThread )
+// hDeferredIndexes includes both - fresh new, changed and 'just new to current' indexes.
+static void DoGreedyRotation ( VecOfServed_c&& dDeferredIndexes ) REQUIRES ( MainThread )
 {
 	assert ( !g_bSeamlessRotate );
 	ScRL_t tRotateConfigMutex { g_tRotateConfigMutex };
 
-	while ( g_dPostIndexes.GetLength() )
+	for ( auto& dDeferredIndex :  dDeferredIndexes )
 	{
-		CSphString sDisabledIndex, sError;
-		ServedIndexRefPtr_c pDisabledIndex ( nullptr );
+		const CSphString& sDeferredIndex = dDeferredIndex.first;
+		ServedIndexRefPtr_c& pDeferredIndex = dDeferredIndex.second;
+		assert ( pDeferredIndex );
 
-		// find the index with the best (least) rotation priority
-		int iMinPriority = INT_MAX;
-		for ( RLockedServedIt_c it ( &g_dPostIndexes ); it.Next(); )
+		CSphString sError;
+		StrVec_t dWarnings;
+
+		// prealloc RT and percolate here
+		if ( ServedDesc_t::IsMutable ( pDeferredIndex ) )
 		{
-			ServedDescRPtr_c rLocked(it.Get());
+			sphWarning ( "greedy rotate (prealloc) mutable %s", sDeferredIndex.cstr() );
 
-			if ( rLocked->m_iRotationPriority < iMinPriority )
+			if ( PreallocNewIndex ( *pDeferredIndex, &g_hCfg["index"][sDeferredIndex], sDeferredIndex.cstr(), dWarnings, sError ) )
+				g_pLocalIndexes->AddOrReplace ( pDeferredIndex, sDeferredIndex );
+			else
+				sphWarning ( "index '%s': %s - NOT SERVING", sDeferredIndex.cstr(), sError.cstr() );
+		}
+		else if ( pDeferredIndex->m_eType==IndexType_e::PLAIN )
+		{
+			sphWarning ( "greedy rotate local %s", sDeferredIndex.cstr() );
+			auto pRotating = GetServed ( sDeferredIndex );
+			bool bSame = pRotating && pRotating.Ptr() == pDeferredIndex.Ptr();
+			WIdx_c WIdx { pDeferredIndex };
+			bool bOk = RotateIndexGreedy ( *pDeferredIndex, sDeferredIndex.cstr(), sError );
+			if ( !bOk )
+				sphWarning ( "index '%s': %s - NOT SERVING", sDeferredIndex.cstr(), sError.cstr() );
+
+			if ( !bSame && bOk && !sphFixupIndexSettings ( WIdx, g_hCfg["index"][sDeferredIndex], g_bStripPath, nullptr, dWarnings, sError ) )
 			{
-				sDisabledIndex = it.GetName();
-				pDisabledIndex = it.Get();
-				iMinPriority = rLocked->m_iRotationPriority;
+				sphWarning ( "index '%s': %s - NOT SERVING", sDeferredIndex.cstr(), sError.cstr() );
+				bOk = false;
+			}
+
+			if ( bOk )
+			{
+				WIdx->Preread();
+				pDeferredIndex->UpdateMass();
+				g_pLocalIndexes->AddOrReplace ( pDeferredIndex, sDeferredIndex );
 			}
 		}
 
-		assert ( pDisabledIndex );
+		for ( const auto & i : dWarnings )
+			sphWarning ( "index '%s': %s", sDeferredIndex.cstr(), i.cstr() );
 
-		// special processing for plain old rotation cur.new.* -> cur.*
-		if ( !ServedDescRPtr_c( pDisabledIndex)->m_pIndex )
-		{
-			auto pRotating = GetServed ( sDisabledIndex );
-			assert ( pRotating );
-			ServedDescWPtr_c pWRotating ( pRotating );
-			assert ( pWRotating->m_eType==IndexType_e::PLAIN );
-			if ( !RotateIndexGreedy ( *pWRotating, sDisabledIndex.cstr(), sError ) )
-			{
-				sphWarning ( "%s", sError.cstr () );
-				g_pLocalIndexes->Delete ( sDisabledIndex );
-			}
-		}
-		else
-		{
-			ServedDescWPtr_c pWlockedServedDisabledPtr ( pDisabledIndex );
-
-			assert ( pWlockedServedDisabledPtr->m_pIndex );
-			assert ( g_pLocalIndexes->Contains ( sDisabledIndex ) );
-
-			StrVec_t dWarnings;
-
-			// prealloc RT and percolate here
-			if ( ServedDesc_t::IsMutable ( pWlockedServedDisabledPtr ) )
-			{
-				pWlockedServedDisabledPtr->m_bOnlyNew = false;
-				if ( PreallocNewIndex ( *pWlockedServedDisabledPtr, &g_pCfg.m_tConf["index"][sDisabledIndex], sDisabledIndex.cstr(), dWarnings, sError ) )
-					g_pLocalIndexes->AddOrReplace ( pDisabledIndex, sDisabledIndex );
-				else
-				{
-					sphWarning ( "index '%s': %s - NOT SERVING", sDisabledIndex.cstr(), sError.cstr() );
-					g_pLocalIndexes->DeleteIfNull ( sDisabledIndex );
-				}
-			}
-			else if ( pWlockedServedDisabledPtr->m_eType==IndexType_e::PLAIN )
-			{
-				bool bWasAdded = pWlockedServedDisabledPtr->m_bOnlyNew;
-				bool bOk = RotateIndexGreedy ( *pWlockedServedDisabledPtr, sDisabledIndex.cstr(), sError );
-				if ( !bOk )
-					sphWarning ( "index '%s': %s - NOT SERVING", sDisabledIndex.cstr(), sError.cstr() );
-
-				if ( bWasAdded && bOk && !sphFixupIndexSettings ( pWlockedServedDisabledPtr->m_pIndex, g_pCfg.m_tConf["index"][sDisabledIndex], g_bStripPath, nullptr, dWarnings, sError ) )
-				{
-					sphWarning ( "index '%s': %s - NOT SERVING", sDisabledIndex.cstr(), sError.cstr() );
-					bOk = false;
-				}
-
-				if ( bOk )
-				{
-					pWlockedServedDisabledPtr->m_pIndex->Preread();
-					ServedDesc_t::UpdateMass( pWlockedServedDisabledPtr );
-					g_pLocalIndexes->AddOrReplace ( pDisabledIndex, sDisabledIndex );
-				} else
-					g_pLocalIndexes->DeleteIfNull ( sDisabledIndex );
-			}
-
-			for ( const auto & i : dWarnings )
-				sphWarning ( "index '%s': %s", sDisabledIndex.cstr(), i.cstr() );
-		}
-
-		g_dPostIndexes.Delete ( sDisabledIndex );
-		g_pDistIndexes->Delete ( sDisabledIndex ); // postponed delete of same-named distributed (if any)
+		g_pDistIndexes->Delete ( sDeferredIndex ); // postponed delete of same-named distributed (if any)
 	}
 
-	g_dPostIndexes.ReleaseAndClear ();
+//	assert ( dDeferredIndexes.IsEmpty() );
 	g_bInRotate = false;
 	RotateGlobalIdf ();
 	sphInfo ( "rotating finished" );
 }
 
 
-// ServiceMain() -> TickHead() -> CheckRotate()
+// ServiceMain() -> TickHead() -> [CallCoroutine] -> CheckRotate()
 static void CheckRotate () REQUIRES ( MainThread ) EXCLUDES ( g_tRotateThreadMutex )
 {
 	// do we need to rotate now? If no sigHUP received, or if we are already rotating - no.
 //	if ( !g_bNeedRotate || g_bInRotate || IsConfigless() )
 //		return;
 
+	assert ( !IsConfigless() );
+
 	g_bInRotate = true; // ok, another rotation cycle just started
 	g_bNeedRotate = false; // which therefore clears any previous HUP signals
 
 	sphLogDebug ( "CheckRotate invoked" );
 
-	// fixme! disabled hash protected by g_bInRotate exclusion,
-	// what about more explicit protection?
-	g_dPostIndexes.ReleaseAndClear ();
+	bool bReloadHappened = false;
+	HashOfServed_c hDeferredIndexes;
 	{
-		ScWL_t dRotateConfigMutexWlocked { g_tRotateConfigMutex };
 		if ( LoadAndCheckConfig () || g_bReloadForced )
 		{
 			sphInfo( "Config changed (read %d chars)", g_dConfig.GetLength());
-			if ( !g_dConfig.IsEmpty() && g_pCfg.ReParse ( g_sConfigFile.cstr (), g_dConfig.begin ()))
-				ReloadIndexSettings ( g_pCfg );
-			else
-				sphWarning ( "failed to parse config file '%s': %s; using previous settings",
-						g_sConfigFile.cstr (), TlsMsg::szError ());
+			if ( !g_dConfig.IsEmpty() )
+			{
+				{
+					ScWL_t dRotateConfigMutexWlocked { g_tRotateConfigMutex };
+					bReloadHappened = ParseConfig ( &g_hCfg, g_sConfigFile.cstr (), g_dConfig.begin ());
+				}
+				if ( bReloadHappened )
+				{
+					ScRL_t dRotateConfigMutexRlocked { g_tRotateConfigMutex };
+					ReloadIndexesFromConfig ( g_hCfg, hDeferredIndexes );
+				} else
+					sphWarning ( "failed to parse config file '%s': %s; using previous settings", g_sConfigFile.cstr(), TlsMsg::szError() );
+			}
 		}
 		CleanLoadedConfig();
 		g_bReloadForced = false;
 	}
 
+	VecOfServed_c dDeferredIndexes;
 	{
 		// we want rotation thread to wait until we're done with our new rotation priorities
 		ScopedMutex_t tBlockRotations ( g_tRotateThreadMutex );
 
-		// special pass for 'simple' rotation (i.e. *.new to current)
-		for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next (); )
-		{
-			auto pIdx = it.Get();
-			if ( !pIdx )
-				continue;
-			ServedDescRPtr_c rLocked ( pIdx );
-			const CSphString & sIndex = it.GetName();
-			assert ( rLocked->m_pIndex );
-			if ( rLocked->m_eType==IndexType_e::PLAIN && CheckIndexHeaderRotate ( *rLocked )==RotateFrom_e::NEW )
-			{
-				ServedDesc_t tDesc;
-				tDesc.m_sIndexPath = rLocked->m_sIndexPath;
-				tDesc.m_sNewPath = rLocked->m_sNewPath;
-				tDesc.m_eType = rLocked->m_eType;
-				if ( !PreloadKlistTarget ( tDesc, RotateFrom_e::NEW, tDesc.m_dKilllistTargets ) )
-					tDesc.m_dKilllistTargets.Reset();
+		if ( !bReloadHappened )
+			IssuePlainOldRotation ( hDeferredIndexes );
 
-				g_dPostIndexes.AddUniq ( RefCountedRefPtr_t ( new ServedIndex_c ( tDesc )), sIndex );
-			}
-		}
-
-		CalcRotationPriorities();
+		dDeferredIndexes = ConvertHashToPrioritySortedVec ( hDeferredIndexes );
 	}
 
+	for ( const auto& s : dDeferredIndexes )
+		sphWarning ( "will rotate %s", s.first.cstr() );
+
 	if ( g_bSeamlessRotate )
-		CheckIndexesForSeamless();
+		CheckIndexesForSeamlessAndStartRotation ( std::move ( dDeferredIndexes ) );
 	else
-		DoGreedyRotation();
+		DoGreedyRotation ( std::move ( dDeferredIndexes ) );
 }
 
 
@@ -18771,7 +18224,7 @@ void CheckSignals () REQUIRES ( MainThread )
 	{
 		sphInfo ( "caught SIGHUP (seamless=%d, in_rotate=%d, need_rotate=%d)", (int)g_bSeamlessRotate, (int)g_bInRotate, (int)g_bNeedRotate );
 		g_bNeedRotate = true;
-		g_bGotSighup = 0;
+		g_bGotSighup = false;
 	}
 
 	if ( sphInterrupted() )
@@ -18816,8 +18269,10 @@ void TickHead () REQUIRES ( MainThread )
 	CheckLeaks ();
 	CheckReopenLogs ();
 	if ( g_bNeedRotate && !g_bInRotate && !IsConfigless() )
-		Threads::CallCoroutine ( CheckRotate );
-
+		Threads::CallCoroutine ( [] {
+			ScopedRole_c thMain ( MainThread );
+			CheckRotate();
+		} );
 	sphInfo ( nullptr ); // flush dupes
 #if _WIN32
 	// at windows there is no signals that interrupt sleep
@@ -19183,77 +18638,79 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	g_bSplit = hSearchd.GetInt ( "pseudo_sharding", 1 )!=0;
 }
 
-// ServiceMain -> ConfigureAndPreload -> ConfigureAndPreloadIndex
-// ServiceMain -> ConfigureAndPreload -> ConfigureAndPreloadInt -> PreloadIndex -> ConfigureAndPreloadIndex
+// load index which is not yet load, and publish it in served indexes.
+// ServiceMain -> ConfigureAndPreloadOnStartup -> ConfigureAndPreloadIndex
+// ServiceMain -> ConfigureAndPreloadOnStartup -> ConfigureAndPreloadConfiglessIndexes -> ConfiglessPreloadIndex -> ConfigureAndPreloadIndex
 // from any another thread:
-// ClientSession_c::Execute -> HandleMysqlImportTable -> AddExistingIndexInt -> PreloadIndex -> ConfigureAndPreloadIndex
+// ClientSession_c::Execute -> HandleMysqlImportTable -> AddExistingIndexConfigless -> ConfiglessPreloadIndex -> ConfigureAndPreloadIndex
 ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * sIndexName, StrVec_t & dWarnings, CSphString & sError )
 {
-	ESphAddIndex eAdd = AddIndex ( sIndexName, hIndex, false, false, nullptr, sError );
+	ESphAddIndex eAdd;
+	ServedIndexRefPtr_c pJustLoadedLocal;
+	std::tie ( eAdd, pJustLoadedLocal ) = AddIndex ( sIndexName, hIndex, true, false, nullptr, sError );
 
-	// local plain, rt, percolate added, but need to be at least prealloced before they could work.
-	if ( eAdd!=ADD_DSBLED )
-		return eAdd;
-
-	auto pHandle = GetDisabled ( sIndexName );
-	ServedDescWPtr_c pJustAddedLocalWl ( pHandle );
-
-	fprintf ( stdout, "precaching index '%s'\n", sIndexName );
-	fflush ( stdout );
-
-	IndexFiles_c dJustAddedFiles ( pJustAddedLocalWl->m_sIndexPath );
-	bool bPreloadOk = true;
-	if ( dJustAddedFiles.HasAllFiles ( ".new" ) )
+	// local plain, rt, percolate added, but need to be at least preallocated before they could work.
+	switch ( eAdd )
 	{
-		pJustAddedLocalWl->m_bOnlyNew = !dJustAddedFiles.HasAllFiles();
-		if ( RotateIndexGreedy ( *pJustAddedLocalWl, sIndexName, sError ) )
-		{
-			CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( CreateFilenameBuilder(sIndexName) );
-			bPreloadOk = sphFixupIndexSettings ( pJustAddedLocalWl->m_pIndex, hIndex, g_bStripPath, pFilenameBuilder.Ptr(), dWarnings, sError );
-		} else
-		{
-			pJustAddedLocalWl->m_bOnlyNew = false;
-			dWarnings.Add(sError);
-			bPreloadOk = PreallocNewIndex ( *pJustAddedLocalWl, &hIndex, sIndexName, dWarnings, sError );
-		}
-
-	} else
-		bPreloadOk = PreallocNewIndex ( *pJustAddedLocalWl, &hIndex, sIndexName, dWarnings, sError );
-
-	if ( !bPreloadOk )
+	case ADD_NEEDLOAD:
 	{
-		g_pLocalIndexes->DeleteIfNull ( sIndexName );
-		return ADD_ERROR;
+		assert ( pJustLoadedLocal );
+		fprintf ( stdout, "precaching index '%s'\n", sIndexName );
+		fflush ( stdout );
+
+		IndexFiles_c dJustAddedFiles ( pJustLoadedLocal->m_sIndexPath );
+
+		if ( dJustAddedFiles.HasAllFiles ( ".new" ) )
+		{
+			WIdx_c WFake { pJustLoadedLocal }; // as RotateIndexGreedy wants w-locked
+			if ( RotateIndexGreedy ( *pJustLoadedLocal, sIndexName, sError ) )
+			{
+				if ( !FixupAndLockIndex ( *pJustLoadedLocal, UnlockedHazardIdxFromServed ( *pJustLoadedLocal ), &hIndex, sIndexName, dWarnings, sError ) )
+					return ADD_ERROR;
+			} else
+			{
+				dWarnings.Add ( sError );
+				if ( !PreallocNewIndex ( *pJustLoadedLocal, &hIndex, sIndexName, dWarnings, sError ) )
+					return ADD_ERROR;
+			}
+		} else if ( !PreallocNewIndex ( *pJustLoadedLocal, &hIndex, sIndexName, dWarnings, sError ) )
+			return ADD_ERROR;
 	}
+	// no break
+	case ADD_SERVED:
+	{
+		// finally add the index to the hash of enabled.
+		g_pLocalIndexes->Add ( pJustLoadedLocal, sIndexName );
 
-	// finally add the index to the hash of enabled.
-	g_pLocalIndexes->AddOrReplace ( pHandle, sIndexName );
-
-	if ( !pJustAddedLocalWl->m_sGlobalIDFPath.IsEmpty() && !sph::PrereadGlobalIDF ( pJustAddedLocalWl->m_sGlobalIDFPath, sError ) )
-		dWarnings.Add ( "global IDF unavailable - IGNORING" );
-
+		if ( !pJustLoadedLocal->m_sGlobalIDFPath.IsEmpty() && !sph::PrereadGlobalIDF ( pJustLoadedLocal->m_sGlobalIDFPath, sError ) )
+			dWarnings.Add ( "global IDF unavailable - IGNORING" );
+	}
+	// no sense to break
+	case ADD_DISTR:
+	case ADD_ERROR:
+	default:
+		break;
+	}
 	return eAdd;
 }
 
 // invoked once on start from ServiceMain (actually it creates the hashes)
-// ServiceMain -> ConfigureAndPreload
-static void ConfigureAndPreload ( const CSphConfig & hConf, const StrVec_t & dOptIndexes ) REQUIRES (MainThread)
+// ServiceMain -> ConfigureAndPreloadOnStartup
+static void ConfigureAndPreloadOnStartup ( const CSphConfig & hConf, const StrVec_t & dOptIndexes ) REQUIRES (MainThread)
 {
 	int iCounter = 0;
 	int iValidIndexes = 0;
 	int64_t tmLoad = -sphMicroTimer();
 
-	g_dPostIndexes.ReleaseAndClear ();
-
 	if ( hConf.Exists ( "index" ) )
 	{
-		hConf["index"].IterateStart ();
-		while ( hConf["index"].IterateNext() )
+		assert ( !IsConfigless() );
+		for ( const auto& tIndex : hConf["index"] )
 		{
-			const CSphConfigSection & hIndex = hConf["index"].IterateGet();
-			const char * sIndexName = hConf["index"].IterateGetKey().cstr();
+			const CSphConfigSection & hIndex = tIndex.second;
+			const char * sIndexName = tIndex.first.cstr();
 
-			if ( !dOptIndexes.IsEmpty() && !dOptIndexes.any_of ( [&] ( const CSphString &rhs )	{ return rhs.EqN ( sIndexName ); } ) )
+			if ( !dOptIndexes.IsEmpty() && !dOptIndexes.any_of ( [&] ( const CSphString &rhs ) { return rhs.EqN ( sIndexName ); } ) )
 				continue;
 
 			StrVec_t dWarnings;
@@ -19266,25 +18723,25 @@ static void ConfigureAndPreload ( const CSphConfig & hConf, const StrVec_t & dOp
 				sphWarning ( "index '%s': %s - NOT SERVING", sIndexName, sError.cstr() );
 
 			iValidIndexes += ( eAdd!=ADD_ERROR ? 1 : 0 );
-			iCounter +=  ( eAdd==ADD_DSBLED ? 1 : 0 );
+			iCounter +=  ( eAdd== ADD_NEEDLOAD ? 1 : 0 );
 		}
+	} else {
+		assert ( IsConfigless() );
+		ConfigureAndPreloadConfiglessIndexes ( iValidIndexes, iCounter );
 	}
-
-	ConfigureAndPreloadInt ( iValidIndexes, iCounter );
-
-	// we don't have any more unprocessed disabled indexes during startup
-	g_dPostIndexes.ReleaseAndClear ();
 
 	InitPersistentPool();
 
-	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next(); )
+	ServedSnap_t hLocal = g_pLocalIndexes->GetHash();
+	for ( const auto& tIt : *hLocal )
 	{
-		ServedDescRPtr_c tServed ( it.Get () );
-		if ( tServed )
+		auto pServed = tIt.second;
+		if ( pServed )
 		{
 			CSphString sWarning, sError;
-			if ( !ApplyIndexKillList ( tServed->m_pIndex, sWarning, sError, true ) )
-				sphWarning ( "index '%s': error applying killlist: %s", tServed->m_pIndex->GetName(), sError.cstr() );
+			RIdx_c pIdx { pServed };
+			if ( !ApplyIndexKillList ( pIdx, sWarning, sError, true ) )
+				sphWarning ( "index '%s': error applying killlist: %s", pIdx->GetName(), sError.cstr() );
 
 			if ( sWarning.Length() )
 				sphWarning ( "%s", sWarning.cstr() );
@@ -19292,19 +18749,11 @@ static void ConfigureAndPreload ( const CSphConfig & hConf, const StrVec_t & dOp
 	}
 
 	// set index cluster name for check
-	for ( const ClusterDesc_t & tDesc : GetClustersInt() )
-	{
-		for ( const CSphString & sIndexName : tDesc.m_dIndexes )
-		{
-			auto tServed = GetServed ( sIndexName );
-			if ( !tServed )
-				continue;
-
-			ServedDescWPtr_c tIdxDesc ( tServed );
-			tIdxDesc->m_sCluster = tDesc.m_sName;
-		}
-	}
+	for ( const ClusterDesc_t & tClusterDesc : GetClustersInt() )
+		for ( const CSphString & sIndexName : tClusterDesc.m_dIndexes )
+			SetIndexCluster ( sIndexName, tClusterDesc.m_sName );
 	sphLogDebugRpl ( "%d clusters loaded from config", GetClustersInt().GetLength() );
+
 
 	tmLoad += sphMicroTimer();
 	if ( !iValidIndexes )
@@ -19579,7 +19028,7 @@ static void CheckSSL ()
 }
 
 
-int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
+int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 {
 	ScopedRole_c thMain (MainThread);
 	g_bLogTty = isatty ( g_iLogFile )!=0;
@@ -19782,11 +19231,12 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	sphInfo( "using config file '%s' (%d chars)...", g_sConfigFile.cstr(), g_dConfig.GetLength());
 	// do parse
 	// don't aqcuire wlock, since we're in single main thread here.
-	if ( !g_pCfg.Parse ( g_sConfigFile.scstr(), g_dConfig.begin() ) )
+	FakeScopedWLock_T<> wFakeLock { g_tRotateConfigMutex };
+	if ( !ParseConfig ( &g_hCfg, g_sConfigFile.scstr(), g_dConfig.begin() ) )
 		sphFatal ( "failed to parse config file '%s': %s", g_sConfigFile.cstr (), TlsMsg::szError() );
 	CleanLoadedConfig();
 
-	const CSphConfig & hConf = g_pCfg.m_tConf;
+	const CSphConfig& hConf = g_hCfg;
 
 	if ( !hConf.Exists ( "searchd" ) || !hConf["searchd"].Exists ( "searchd" ) )
 		sphFatal ( "'searchd' config section not found in '%s'", g_sConfigFile.cstr () );
@@ -19875,8 +19325,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		// reparse the config file
 		sphInfo ( "Reloading the config (%d chars)", g_dConfig.GetLength() );
 
-		// don't aqcuire wlock, since we're in single main thread here.
-		if ( !g_pCfg.ReParse ( g_sConfigFile.cstr (), g_dConfig.begin () ) )
+		// fake lock is acquired; no warnings will be fired
+		if ( !ParseConfig ( &g_hCfg, g_sConfigFile.cstr (), g_dConfig.begin () ) )
 			sphFatal ( "failed to parse config file '%s': %s", g_sConfigFile.cstr (), TlsMsg::szError() );
 
 		sphInfo ( "Reconfigure the daemon" );
@@ -20009,10 +19459,10 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		sphSplit ( dExactIndexes, dOptIndex.cstr (), "," );
 
 	SetPercolateQueryParserFactory ( PercolateQueryParserFactory );
-	Threads::CallCoroutine ( [&hConf, &dExactIndexes]
+	Threads::CallCoroutine ( [&hConf, &dExactIndexes]() REQUIRES_SHARED ( g_tRotateConfigMutex )
 	{
 		ScopedRole_c thMain ( MainThread );
-		ConfigureAndPreload ( hConf, dExactIndexes );
+		ConfigureAndPreloadOnStartup ( hConf, dExactIndexes );
 	} );
 
 	///////////
@@ -20108,17 +19558,19 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	if ( !g_bOptNoDetach && !bWatched && !g_bService )
 	{
 		// re-lock indexes
-		for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next(); )
+		ServedSnap_t hLocal = g_pLocalIndexes->GetHash();
+		for ( const auto& tIt : *hLocal )
 		{
-			sphWarning ( "Relocking %s", it.GetName ().cstr () );
-			ServedDescRPtr_c pServed ( it.Get() );
+			sphWarning ( "Relocking %s", tIt.first.cstr () );
+			auto pServed = tIt.second;
 			// obtain exclusive lock
 			if ( !pServed )
-				dFailed.Add ( it.GetName() );
-			else if ( !pServed->m_pIndex->Lock() )
+				dFailed.Add ( tIt.first );
+			RWIdx_c pIdx { pServed };
+			if ( !pIdx->Lock() )
 			{
-				sphWarning ( "index '%s': lock: %s; INDEX UNUSABLE", it.GetName ().cstr(), pServed->m_pIndex->GetLastError().cstr() );
-				dFailed.Add ( it.GetName());
+				sphWarning ( "index '%s': lock: %s; INDEX UNUSABLE", tIt.first.cstr(), pIdx->GetLastError().cstr() );
+				dFailed.Add ( tIt.first );
 			}
 		}
 		for ( const auto& sFailed : dFailed )
@@ -20159,11 +19611,11 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	{
 		auto _ = PublishSystemInfo ("replay binlog");
 		SmallStringHash_T<CSphIndex*> hIndexes;
-		for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next(); ) // FIXME!!!
+		ServedSnap_t hLocals = g_pLocalIndexes->GetHash();
+		for ( auto& tIt : *hLocals )
 		{
-			ServedDescRPtr_c pLocked ( it.Get () );
-			if ( pLocked )
-				hIndexes.Add ( pLocked->m_pIndex, it.GetName () );
+			if ( tIt.second )
+				hIndexes.Add ( RWIdx_c ( tIt.second ), tIt.first );
 		}
 
 		Binlog::Replay ( hIndexes, DumpMemStat );

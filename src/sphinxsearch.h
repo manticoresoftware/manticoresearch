@@ -223,7 +223,7 @@ struct ExplainQueryArgs_t
 	int m_iExpandKeywords = 0;
 	int m_iExpansionLimit = 0;
 	bool m_bExpandPrefix = false;
-	cRefCountedRefPtr_t m_pIndexData;
+	cRefCountedRefPtrGeneric_t m_pIndexData;
 
 	explicit ExplainQueryArgs_t ( const CSphString & sQuery )
 		: m_sQuery ( sQuery )

@@ -18,7 +18,7 @@
 using TableFeeder_fn = std::function<void ( RowBuffer_i* )>;
 
 // serve any generic table of columns as index with possibility to filter (full-scan)
-ServedIndex_c * MakeDynamicIndex ( TableFeeder_fn fnFeed );
+ServedIndexRefPtr_c MakeDynamicIndex ( TableFeeder_fn fnFeed );
 
 // schema of any generic table of columns as index with possibility to filter (full-scan)
-ServedIndex_c * MakeDynamicIndexSchema ( TableFeeder_fn fnFeed );
+ServedIndexRefPtr_c MakeDynamicIndexSchema ( TableFeeder_fn fnFeed );

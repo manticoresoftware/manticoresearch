@@ -107,11 +107,11 @@ CSphString SnippetQuerySettings_t::AsString() const
 	if ( m_bPackFields!=tDefault.m_bPackFields )			tOut.Appendf ( "pack_fields=%d",		m_bPackFields ? 1 : 0 );
 	if ( m_bLimitsPerField!=tDefault.m_bLimitsPerField )	tOut.Appendf ( "limits_per_field=%d",	m_bLimitsPerField ? 1 : 0 );
 
-	for ( m_hPerFieldLimits.IterateStart(); m_hPerFieldLimits.IterateNext(); )
+	for ( const auto& tPerFieldLimit: m_hPerFieldLimits )
 	{
 		CSphString sPrefix;
-		sPrefix.SetSprintf ( "__%s_", m_hPerFieldLimits.IterateGetKey().cstr() );
-		m_hPerFieldLimits.IterateGet().Format ( tOut, sPrefix.cstr() );
+		sPrefix.SetSprintf ( "__%s_", tPerFieldLimit.first.cstr() );
+		tPerFieldLimit.second.Format ( tOut, sPrefix.cstr() );
 	}
 
 	if ( m_uFilesMode!=tDefault.m_uFilesMode )

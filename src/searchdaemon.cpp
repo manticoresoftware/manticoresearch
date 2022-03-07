@@ -1130,20 +1130,9 @@ ServedStats_c::ServedStats_c()
 #ifndef NDEBUG
 	, m_pQueryStatRecordsExact { new QueryStatContainerExact_c }
 #endif
-{
-	Verify ( m_tStatsLock.Init( true ));
-	m_pQueryTimeDigest = sphCreateTDigest();
-	m_pRowsFoundDigest = sphCreateTDigest();
-	assert ( m_pQueryTimeDigest && m_pRowsFoundDigest );
-}
-
-
-ServedStats_c::~ServedStats_c()
-{
-	SafeDelete ( m_pRowsFoundDigest );
-	SafeDelete ( m_pQueryTimeDigest );
-	m_tStatsLock.Done();
-}
+	, m_pQueryTimeDigest { sphCreateTDigest() }
+	, m_pRowsFoundDigest { sphCreateTDigest() }
+{}
 
 void ServedStats_c::AddQueryStat( uint64_t uFoundRows, uint64_t uQueryTime )
 {
@@ -1181,7 +1170,8 @@ static const uint64_t g_dStatsIntervals[] =
 
 void ServedStats_c::CalculateQueryStats( QueryStats_t& tRowsFoundStats, QueryStats_t& tQueryTimeStats ) const
 {
-	DoStatCalcStats( m_pQueryStatRecords.Ptr(), tRowsFoundStats, tQueryTimeStats );
+	ScRL_t rLock { m_tStatsLock };
+	DoStatCalcStats ( m_pQueryStatRecords.Ptr(), tRowsFoundStats, tQueryTimeStats );
 }
 
 
@@ -1189,7 +1179,8 @@ void ServedStats_c::CalculateQueryStats( QueryStats_t& tRowsFoundStats, QuerySta
 
 void ServedStats_c::CalculateQueryStatsExact( QueryStats_t& tRowsFoundStats, QueryStats_t& tQueryTimeStats ) const
 {
-	DoStatCalcStats( m_pQueryStatRecordsExact.Ptr(), tRowsFoundStats, tQueryTimeStats );
+	ScRL_t rLock { m_tStatsLock };
+	DoStatCalcStats ( m_pQueryStatRecordsExact.Ptr(), tRowsFoundStats, tQueryTimeStats );
 }
 
 #endif // !NDEBUG
@@ -1267,8 +1258,6 @@ void ServedStats_c::DoStatCalcStats( const QueryStatContainer_i* pContainer,
 
 	auto uTimestamp = sphMicroTimer();
 
-	ScRL_t rLock( m_tStatsLock );
-
 	int iRecords = m_pQueryStatRecords->GetNumRecords();
 	for ( int i = INTERVAL_1MIN; i<=INTERVAL_15MIN; ++i )
 		CalcStatsForInterval( pContainer, tRowsFoundStats.m_dStats[i], tQueryTimeStats.m_dStats[i], uTimestamp,
@@ -1292,214 +1281,121 @@ void ServedStats_c::DoStatCalcStats( const QueryStatContainer_i* pContainer,
 }
 
 //////////////////////////////////////////////////////////////////////////
-ServedDesc_t::~ServedDesc_t()
+RunningIndex_c::~RunningIndex_c()
 {
 	if ( m_pIndex )
 		m_pIndex->Dealloc();
-	if ( !m_sUnlink.IsEmpty())
+	if ( !m_sUnlink.IsEmpty() )
 	{
-		sphLogDebug( "unlink %s", m_sUnlink.cstr());
-		sphUnlinkIndex( m_sUnlink.cstr(), false );
+		sphLogDebug ( "unlink %s", m_sUnlink.cstr() );
+		sphUnlinkIndex ( m_sUnlink.cstr(), false );
 	}
-	SafeDelete ( m_pIndex );
+}
+
+void ServedIndex_c::UpdateMass () const NO_THREAD_SAFETY_ANALYSIS
+{
+	CSphIndexStatus tStatus;
+	m_pIndex->m_pIndex->GetStatus ( &tStatus );
+	// break const, since mass value is not critical for races
+	m_iMass = (int) CalculateMass ( tStatus );
+}
+
+// Get index mass
+uint64_t ServedIndex_c::GetIndexMass ( const ServedIndex_c* pServed )
+{
+	return pServed ? pServed->m_iMass : 0;
+}
+
+void ServedIndex_c::SetIdx ( std::unique_ptr<CSphIndex>&& pIndex ) NO_THREAD_SAFETY_ANALYSIS
+{
+	assert ( !m_pIndex );
+	m_pIndex = new RunningIndex_c;
+	m_pIndex->m_pIndex = std::move ( pIndex );
+	if ( !m_pStats )
+		m_pStats = new ServedStats_c;
+}
+
+void ServedIndex_c::SetIdxAndStatsFrom ( const ServedIndex_c& tIndex ) NO_THREAD_SAFETY_ANALYSIS
+{
+	m_pIndex = tIndex.m_pIndex;
+	m_pStats = tIndex.m_pStats;
+}
+
+void ServedIndex_c::SetStatsFrom ( const ServedIndex_c& tIndex ) NO_THREAD_SAFETY_ANALYSIS
+{
+	m_pStats = tIndex.m_pStats;
+}
+
+void ServedIndex_c::SetUnlink ( CSphString sUnlink ) const
+{
+	if ( m_pIndex )
+		m_pIndex->m_sUnlink = std::move ( sUnlink );
+}
+
+void LightClone ( ServedIndexRefPtr_c& pTarget, const cServedIndexRefPtr_c& pSource )
+{
+	assert ( pTarget );
+	assert ( pSource );
+	auto& tDesc = (ServedDesc_t&)*pTarget;
+	tDesc = *pSource;
+}
+
+void FullClone ( ServedIndexRefPtr_c& pTarget, const cServedIndexRefPtr_c& pSource )
+{
+	LightClone ( pTarget, pSource );
+	pTarget->SetIdxAndStatsFrom ( *pSource );
 }
 
 //////////////////////////////////////////////////////////////////////////
-const ServedDesc_t* ServedIndex_c::ReadLock() const
+ServedIndexRefPtr_c& ServedClone_c::LightCloneOnce()
 {
-	AddRef();
-	if ( m_tLock.ReadLock())
-		sphLogDebugvv( "ReadLock %p", this );
-	else
-	{
-		sphLogDebug( "ReadLock %p failed", this );
-		assert ( false );
-	}
-	return ( const ServedDesc_t* ) this;
+	if ( !m_pTarget )
+		m_pTarget = MakeLightClone ( m_pSource );
+	return m_pTarget;
 }
 
-// want write lock to wipe out reader and not wait readers
-// but only for RT and PQ indexes as these operations are rare there
-ServedDesc_t* ServedIndex_c::WriteLock() const
+ServedIndexRefPtr_c& ServedClone_c::FullCloneOnce()
 {
-	AddRef();
-	sphLogDebugvv( "WriteLock %p wait", this );
-	if ( m_tLock.WriteLock())
-		sphLogDebugvv( "WriteLock %p", this );
-	else
-	{
-		sphLogDebug( "WriteLock %p failed", this );
-		assert ( false );
-	}
-	return ( ServedDesc_t* ) this;
+	if ( !m_pTarget )
+		m_pTarget = MakeFullClone ( m_pSource );
+	return m_pTarget;
 }
 
-void ServedIndex_c::Unlock() const
-{
-	if ( m_tLock.Unlock())
-		sphLogDebugvv( "Unlock %p", this );
-	else
-	{
-		sphLogDebug( "Unlock %p failed", this );
-		assert ( false );
-	}
-	Release();
-}
-/*
-void ServedIndex_c::UpgradeLock () const
-{
-	if ( m_tLock.UpgradeLock() )
-		sphLogDebugvv( "Lock %p upgraded to w-lock", this );
-	else
-	{
-		sphLogDebug( "Upgrade of lock %p failed", this );
-		assert ( false );
-	}
-}*/
+HashedServedClone_c::HashedServedClone_c ( CSphString sIndex, ReadOnlyServedHash_c* pHash )
+	: ServedClone_c { pHash->Get ( sIndex ) }
+	, m_sIndex { std::move ( sIndex ) }
+	, m_pHash { pHash }
+{}
 
-ServedIndex_c::ServedIndex_c( const ServedDesc_t& tDesc )
-//	: m_tLock( ServedDesc_t::IsMutable( &tDesc ))
+HashedServedClone_c::~HashedServedClone_c()
 {
-	*( ServedDesc_t* ) ( this ) = tDesc;
+	if ( !CloneRef() )
+		return;
+	m_pHash->Replace ( CloneRef(), m_sIndex );
 }
-
 
 //////////////////////////////////////////////////////////////////////////
-GuardedHash_c::~GuardedHash_c()
+
+ServedIndexRefPtr_c MakeServedIndex()
 {
-	ReleaseAndClear();
+	return ServedIndexRefPtr_c { new ServedIndex_c };
 }
 
-// atomically try add an entry and adopt it
-bool GuardedHash_c::AddUniq( ISphRefcountedMT* pValue, const CSphString& tKey )
+ServedIndexRefPtr_c MakeLightClone( const cServedIndexRefPtr_c& pSource )
 {
-	ScWL_t hHashWLock { m_tIndexesRWLock };
-	int iPrevSize = GetLengthUnl();
-	ISphRefcountedMT*& pVal = m_hIndexes.AddUnique( tKey );
-	if ( iPrevSize==GetLengthUnl())
-		return false;
-
-	pVal = pValue;
-	SafeAddRef ( pVal );
-	return true;
+	auto pRes = MakeServedIndex();
+	LightClone ( pRes, pSource );
+	return pRes;
 }
 
-// atomically set new entry, then release previous, if not the same and is non-zero
-void GuardedHash_c::AddOrReplace( ISphRefcountedMT* pValue, const CSphString& tKey )
+ServedIndexRefPtr_c MakeFullClone ( const cServedIndexRefPtr_c& pSource )
 {
-	ScWL_t hHashWLock { m_tIndexesRWLock };
-	// can not use AddUnique as new inserted item has no values
-	ISphRefcountedMT** ppEntry = m_hIndexes( tKey );
-	if ( ppEntry )
-	{
-		SafeRelease ( *ppEntry );
-		( *ppEntry ) = pValue;
-	} else
-	{
-		Verify ( m_hIndexes.Add( pValue, tKey ));
-	}
-	SafeAddRef ( pValue );
-	if ( m_pHook )
-		m_pHook( pValue, tKey );
+	auto pRes = MakeServedIndex();
+	FullClone ( pRes, pSource );
+	return pRes;
 }
 
-bool GuardedHash_c::Delete ( const CSphString & sKey )
-{
-	ScWL_t hHashWLock { m_tIndexesRWLock };
-	ISphRefcountedMT** ppEntry = m_hIndexes(sKey);
-	// release entry - last owner will free it
-	if ( ppEntry ) SafeRelease( *ppEntry );
-
-	// remove from hash
-	return m_hIndexes.Delete(sKey);
-}
-
-bool GuardedHash_c::DeleteIfNull ( const CSphString & sKey )
-{
-	ScWL_t hHashWLock { m_tIndexesRWLock };
-	ISphRefcountedMT** ppEntry = m_hIndexes(sKey);
-	if ( ppEntry && *ppEntry )
-		return false;
-
-	return m_hIndexes.Delete(sKey);
-}
-
-int GuardedHash_c::GetLength() const
-{
-	CSphScopedRLock dRL { m_tIndexesRWLock };
-	return GetLengthUnl();
-}
-
-// check if hash contains an entry
-bool GuardedHash_c::Contains( const CSphString& tKey ) const
-{
-	ScRL_t hHashRLock { m_tIndexesRWLock };
-	ISphRefcountedMT** ppEntry = m_hIndexes( tKey );
-	return ppEntry!=nullptr;
-}
-
-void GuardedHash_c::ReleaseAndClear()
-{
-	GuardedHash_c::RefCntHash_t tHash;
-	{
-		ScWL_t hHashWLock { m_tIndexesRWLock };
-		for ( auto& i : m_hIndexes )
-			tHash.Add ( i.second, i.first );
-
-		m_hIndexes.Reset();
-	}
-
-	for ( auto& i : tHash )
-		SafeRelease ( i.second );
-}
-
-ISphRefcountedMT* GuardedHash_c::Get( const CSphString& tKey ) const
-{
-	ScRL_t hHashRLock { m_tIndexesRWLock };
-	ISphRefcountedMT** ppEntry = m_hIndexes( tKey );
-	if ( !ppEntry )
-		return nullptr;
-	if ( !*ppEntry )
-		return nullptr;
-	( *ppEntry )->AddRef();
-	return *ppEntry;
-}
-
-ISphRefcountedMT* GuardedHash_c::TryAddThenGet( ISphRefcountedMT* pValue, const CSphString& tKey )
-{
-	ScWL_t hHashWLock { m_tIndexesRWLock };
-	int iPrevSize = GetLengthUnl();
-	ISphRefcountedMT*& pVal = m_hIndexes.AddUnique( tKey );
-	if ( iPrevSize<GetLengthUnl()) // value just inserted
-	{
-		pVal = pValue;
-		SafeAddRef ( pVal );
-	}
-
-	SafeAddRef ( pVal );
-	return pVal;
-}
-
-int GuardedHash_c::GetLengthUnl() const
-{
-	return m_hIndexes.GetLength();
-}
-
-void GuardedHash_c::Rlock() const
-{
-	Verify ( m_tIndexesRWLock.ReadLock());
-}
-
-void GuardedHash_c::Wlock() const
-{
-	Verify ( m_tIndexesRWLock.WriteLock());
-}
-
-void GuardedHash_c::Unlock() const
-{
-	Verify ( m_tIndexesRWLock.Unlock());
-}
-
+//////////////////////////////////////////////////////////////////////////
 
 CSphString GetMacAddress()
 {
@@ -1610,4 +1506,15 @@ CSphString GetMacAddress()
 #endif
 
 	return sMAC.cstr();
+}
+
+
+volatile bool& sphGetSeamlessRotate() noexcept
+{
+#if _WIN32
+	static bool bSeamlessRotate = false;
+#else
+	static bool bSeamlessRotate = true;
+#endif
+	return bSeamlessRotate;
 }

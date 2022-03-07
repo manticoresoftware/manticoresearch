@@ -33,7 +33,7 @@ using namespace sph;
 class CSphGlobalIDF final : public IDFer_c
 {
 protected:
-	~CSphGlobalIDF() final {}
+	~CSphGlobalIDF() final = default;
 public:
 	bool Touch ( const CSphString& sFilename );
 	bool Preread ( const CSphString& sFilename, CSphString& sError );
@@ -48,6 +48,8 @@ private:
 	CSphLargeBuffer<IDFWord_t> m_pWords;
 	CSphLargeBuffer<int64_t> m_pHash;
 };
+
+using CSphGlobalIDFRefPtr_c = CSphRefcountedPtr<CSphGlobalIDF>;
 
 // check if backend file was modified
 bool CSphGlobalIDF::Touch ( const CSphString& sFilename )
@@ -189,88 +191,121 @@ float CSphGlobalIDF::GetIDF ( const CSphString& sWord, int64_t iDocsLocal, bool 
 }
 
 /// global idf definitions hash
-static RwLock_t g_tGlobalIDFLock;
-static SmallStringHash_T<CSphGlobalIDF*> g_hGlobalIDFs GUARDED_BY ( g_tGlobalIDFLock );
-
-
-CSphGlobalIDF* DoPrereadIDF ( const CSphString& sPath, CSphString& sError )
+class cGlobalIDF
 {
-	auto* pNewIDF = new CSphGlobalIDF ();
+	mutable RwLock_t m_tLock;
+	SmallStringHash_T<CSphGlobalIDFRefPtr_c> m_hIDFs GUARDED_BY ( m_tLock );
+
+public:
+	bool LoadGlobalIDF ( const CSphString& sPath, CSphString& sError );
+	bool ReloadGlobalIDF ( const CSphString& sPath, CSphString& sError );
+	CSphGlobalIDFRefPtr_c* GetIDF ( const CSphString& sPath );
+	StrVec_t Collect() const;
+	void DeleteMany ( const StrVec_t& dFiles );
+	void Clear ();
+};
+
+cGlobalIDF& GetGlobalIDF()
+{
+	static cGlobalIDF tIDF;
+	return tIDF;
+}
+
+static CSphGlobalIDFRefPtr_c DoPrereadIDF ( const CSphString& sPath, CSphString& sError )
+{
+	CSphGlobalIDFRefPtr_c pNewIDF { new CSphGlobalIDF };
 	if ( !pNewIDF->Preread ( sPath, sError ))
-		SafeRelease ( pNewIDF );
+		pNewIDF = nullptr;
 	return pNewIDF;
 }
 
-bool LoadGlobalIDF ( const CSphString& sPath, CSphString& sError ) REQUIRES ( !g_tGlobalIDFLock )
+bool cGlobalIDF::LoadGlobalIDF ( const CSphString& sPath, CSphString& sError )
 {
 	sphLogDebug ( "Loading global IDF (%s)", sPath.cstr ());
-	auto* pGlobalIDF = DoPrereadIDF ( sPath, sError );
+	auto pGlobalIDF = DoPrereadIDF ( sPath, sError );
 	if ( !pGlobalIDF )
 		return false;
 
-	ScWL_t wLock ( g_tGlobalIDFLock );
-	if ( !g_hGlobalIDFs.Add ( pGlobalIDF, sPath ))
-		SafeRelease ( pGlobalIDF );
+	ScWL_t wLock ( m_tLock );
+	m_hIDFs.Add ( std::move (pGlobalIDF), sPath );
 	return true;
 }
 
-bool ReloadGlobalIDF ( const CSphString& sPath, CSphString& sError ) REQUIRES ( !g_tGlobalIDFLock )
+bool cGlobalIDF::ReloadGlobalIDF ( const CSphString& sPath, CSphString& sError )
 {
 	sphLogDebug ( "Reloading global IDF (%s)", sPath.cstr ());
-	auto* pGlobalIDF = DoPrereadIDF ( sPath, sError );
+	auto pGlobalIDF = DoPrereadIDF ( sPath, sError );
 	if ( !pGlobalIDF )
 		return false;
 
-	ScWL_t wLock ( g_tGlobalIDFLock );
-	auto* ppGlobalIDF = g_hGlobalIDFs ( sPath );
+	ScWL_t wLock ( m_tLock );
+	auto* ppGlobalIDF = m_hIDFs ( sPath );
 	if ( ppGlobalIDF )
-	{
-		CSphGlobalIDF* pOld = *ppGlobalIDF;
-		*ppGlobalIDF = pGlobalIDF;
-		SafeRelease ( pOld );
-	}
+		*ppGlobalIDF = std::exchange ( pGlobalIDF, nullptr );
 	return true;
 }
 
-
-bool sph::PrereadGlobalIDF ( const CSphString& sPath, CSphString& sError )
+CSphGlobalIDFRefPtr_c* cGlobalIDF::GetIDF ( const CSphString& sPath )
 {
-	CSphGlobalIDF** ppGlobalIDF = nullptr;
-	{
-		ScRL_t RLock ( g_tGlobalIDFLock );
-		ppGlobalIDF = g_hGlobalIDFs ( sPath );
-	}
-
-	if ( !ppGlobalIDF )
-		return LoadGlobalIDF ( sPath, sError );
-
-	if ( *ppGlobalIDF && ( *ppGlobalIDF )->Touch ( sPath ))
-		return ReloadGlobalIDF ( sPath, sError );
-
-	return true;
+	ScRL_t RLock ( m_tLock );
+	return m_hIDFs ( sPath );
 }
 
-// collect under r-lock (since 'contains' of vec uses linear search, avoid hard locking so
-static StrVec_t CollectUnlistedIn ( const StrVec_t& dFiles ) REQUIRES ( !g_tGlobalIDFLock )
+StrVec_t cGlobalIDF::Collect() const
 {
 	StrVec_t dCollection;
-	ScRL_t rLock ( g_tGlobalIDFLock );
-	for ( auto& dIdf : g_hGlobalIDFs )
-		if ( !dFiles.Contains ( dIdf.first ) )
-			dCollection.Add ( dIdf.first );
+	ScRL_t rLock ( m_tLock );
+	for ( auto& dIdf : m_hIDFs )
+		dCollection.Add ( dIdf.first );
 	return dCollection;
 }
 
-static void DeleteUnlistedIn ( const StrVec_t& dFiles ) REQUIRES ( !g_tGlobalIDFLock )
+void cGlobalIDF::DeleteMany ( const StrVec_t& dFiles )
+{
+	ScWL_t wLock ( m_tLock );
+	for ( const auto& sKey : dFiles )
+	{
+		sphLogDebug ( "Unloading global IDF (%s)", sKey.cstr() );
+		m_hIDFs.Delete ( sKey );
+	}
+}
+
+void cGlobalIDF::Clear()
+{
+	ScWL_t wLock ( m_tLock );
+	m_hIDFs.Reset();
+}
+
+bool sph::PrereadGlobalIDF ( const CSphString& sPath, CSphString& sError )
+{
+	auto& tGlobalIDF = GetGlobalIDF();
+	auto* ppGlobalIDF = tGlobalIDF.GetIDF(sPath);
+
+	if ( !ppGlobalIDF )
+		return tGlobalIDF.LoadGlobalIDF ( sPath, sError );
+
+	auto& pGlobalIDF = *ppGlobalIDF;
+
+	if ( pGlobalIDF && pGlobalIDF->Touch ( sPath ))
+		return tGlobalIDF.ReloadGlobalIDF ( sPath, sError );
+
+	return true;
+}
+
+static StrVec_t CollectUnlistedIn ( const StrVec_t& dFiles )
+{
+	StrVec_t dAllIDFs = GetGlobalIDF().Collect();
+	StrVec_t dCollection;
+	for ( const auto& sIdf : dAllIDFs )
+		if ( !dFiles.Contains ( sIdf ) )
+			dCollection.Add ( sIdf );
+	return dCollection;
+}
+
+static void DeleteUnlistedIn ( const StrVec_t& dFiles )
 {
 	auto dUnlisted = CollectUnlistedIn ( dFiles );
-	ScWL_t wLock ( g_tGlobalIDFLock );
-	for ( auto& sKey : dUnlisted )
-	{
-		sphLogDebug ( "Unloading global IDF (%s)", sKey.cstr ());
-		SafeRelease ( g_hGlobalIDFs.IterateGet ());
-		g_hGlobalIDFs.Delete ( sKey );
-	}
+	GetGlobalIDF().DeleteMany(dUnlisted);
 }
 
 void sph::UpdateGlobalIDFs ( const StrVec_t& dFiles )
@@ -282,7 +317,7 @@ void sph::UpdateGlobalIDFs ( const StrVec_t& dFiles )
 	CSphString sError;
 	ARRAY_FOREACH ( i, dFiles )
 	{
-		CSphString sPath = dFiles[i];
+		const auto& sPath = dFiles[i];
 		if ( !PrereadGlobalIDF ( sPath, sError ))
 			sphLogDebug ( "Could not load global IDF (%s): %s", sPath.cstr (), sError.cstr ());
 	}
@@ -290,16 +325,15 @@ void sph::UpdateGlobalIDFs ( const StrVec_t& dFiles )
 
 void sph::ShutdownGlobalIDFs ()
 {
-	DeleteUnlistedIn ( StrVec_t() );
+	StrVec_t dAllIDFs = GetGlobalIDF().Collect();
+	GetGlobalIDF().DeleteMany ( dAllIDFs );
 }
 
 IDFerRefPtr_c sph::GetIDFer ( const CSphString& IDFPath )
 {
-	IDFer_c* pResult = nullptr;
-	ScRL_t rLock ( g_tGlobalIDFLock );
-	auto* ppGlobalIDF = g_hGlobalIDFs ( IDFPath );
+	IDFerRefPtr_c pResult;
+	auto* ppGlobalIDF = GetGlobalIDF().GetIDF ( IDFPath );
 	if ( ppGlobalIDF )
 		pResult = *ppGlobalIDF;
-	SafeAddRef ( pResult );
-	return IDFerRefPtr_c ( pResult );
+	return pResult;
 }

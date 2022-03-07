@@ -2155,7 +2155,7 @@ bool MutableIndexSettings_c::Load ( const char * sFileName, const char * sIndexN
 	JsonObj_c tPreopen = tParser.GetBoolItem ( "preopen", sError, true );
 	if ( tPreopen )
 	{
-		m_bPreopen = tPreopen.BoolVal();
+		m_bPreopen = tPreopen.BoolVal() || MutableIndexSettings_c::GetDefaults().m_bPreopen;
 		m_dLoaded.BitSet ( (int)MutableName_e::PREOPEN );
 	} else if ( !sError.IsEmpty() )
 	{
@@ -2214,7 +2214,7 @@ void MutableIndexSettings_c::Load ( const CSphConfigSection & hIndex, bool bNeed
 
 	if (  hIndex.Exists ( "preopen" )  )
 	{
-		m_bPreopen = ( hIndex.GetInt ( "preopen", 0 )!=0 );
+		m_bPreopen = hIndex.GetBool ( "preopen", false ) || MutableIndexSettings_c::GetDefaults().m_bPreopen;
 		m_dLoaded.BitSet ( (int)MutableName_e::PREOPEN );
 	}
 
@@ -2371,10 +2371,10 @@ void MutableIndexSettings_c::Combine ( const MutableIndexSettings_c & tOther )
 	}
 }
 
-static MutableIndexSettings_c g_tMutableDefaults;
 MutableIndexSettings_c & MutableIndexSettings_c::GetDefaults ()
 {
-	return g_tMutableDefaults;
+	static MutableIndexSettings_c tMutableDefaults;
+	return tMutableDefaults;
 }
 
 static bool FormatCond ( bool bNeedSave, const CSphBitvec & dLoaded, MutableName_e eName, bool bNotEq )
@@ -2382,7 +2382,7 @@ static bool FormatCond ( bool bNeedSave, const CSphBitvec & dLoaded, MutableName
 	return ( ( bNeedSave && dLoaded.BitGet ( (int)eName ) ) || ( !bNeedSave && bNotEq ) );
 }
 
-void MutableIndexSettings_c::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const
+void MutableIndexSettings_c::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * ) const
 {
 	const MutableIndexSettings_c & tDefaults = GetDefaults ();
 

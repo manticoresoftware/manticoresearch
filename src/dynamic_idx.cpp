@@ -487,31 +487,12 @@ public:
 	void Add ( BYTE ) override {}
 };
 
-
-inline const ServedDesc_t& StaticDesc()
+class GenericTableIndex_c : public CSphIndexStub
 {
-	static ServedDesc_t tValue;
-	return tValue;
-}
-
-class GenericTableIndex_c : public ServedIndex_c, public CSphIndexStub
-{
-	CSphIndex**		m_ppIndex = nullptr;
-
 public:
 	GenericTableIndex_c ()
-		: ServedIndex_c { StaticDesc () }
-		, CSphIndexStub ( "dynamic", nullptr )
-	{
-		ServedDescWPtr_c pInternals ( this );
-		m_ppIndex = &pInternals->m_pIndex;
-		*m_ppIndex = this;
-	}
-
-	~GenericTableIndex_c() override
-	{
-		*m_ppIndex = nullptr;
-	}
+		: CSphIndexStub ( "dynamic", nullptr )
+	{}
 
 	bool				MultiQuery ( CSphQueryResult & , const CSphQuery & , const VecTraits_T<ISphMatchSorter *> &, const CSphMultiQueryArgs & ) const final;
 
@@ -696,7 +677,7 @@ bool GenericTableIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery
 
 ///////////////
 /// Index for data flow
-class DynamicIndex_c : public GenericTableIndex_c
+class DynamicIndex_c final: public GenericTableIndex_c
 {
 	mutable Feeder_c		m_tFeeder;
 	mutable bool m_bSchemaCreated = false;
@@ -707,6 +688,9 @@ public:
 	{}
 
 	const CSphSchema & GetMatchSchema () const final;
+
+protected:
+	~DynamicIndex_c() final = default;
 
 private:
 	void SetSorterStuff ( CSphMatch * pMatch ) const final;
@@ -743,7 +727,7 @@ const StringBuilder_c & DynamicIndex_c::GetErrors () const
 
 ///////////////
 /// Index for schema data flow
-class DynamicIndexSchema_c : public GenericTableIndex_c
+class DynamicIndexSchema_c final : public GenericTableIndex_c
 {
 	mutable FeederSchema_c		m_tFeeder;
 	mutable bool m_bSchemaCreated = false;
@@ -754,6 +738,9 @@ public:
 	{}
 
 	const CSphSchema & GetMatchSchema () const final;
+
+protected:
+	~DynamicIndexSchema_c() final = default;
 
 private:
 	void SetSorterStuff ( CSphMatch * pMatch ) const final;
@@ -788,13 +775,20 @@ const StringBuilder_c & DynamicIndexSchema_c::GetErrors () const
 	return m_tFeeder.m_sErrors;
 }
 
-/// external functions
-ServedIndex_c * MakeDynamicIndex ( TableFeeder_fn fnFeed )
+static ServedIndexRefPtr_c MakeServed ( CSphIndex* pIndex )
 {
-	return new DynamicIndex_c ( std::move ( fnFeed ) );
+	auto pServed = MakeServedIndex();
+	pServed->SetIdx ( std::unique_ptr<CSphIndex> ( pIndex ) );
+	return pServed;
 }
 
-ServedIndex_c * MakeDynamicIndexSchema ( TableFeeder_fn fnFeed )
+/// external functions
+ServedIndexRefPtr_c MakeDynamicIndex ( TableFeeder_fn fnFeed )
 {
-	return new DynamicIndexSchema_c ( std::move ( fnFeed ) );
+	return MakeServed ( new DynamicIndex_c ( std::move ( fnFeed ) ) );
+}
+
+ServedIndexRefPtr_c MakeDynamicIndexSchema ( TableFeeder_fn fnFeed )
+{
+	return MakeServed ( new DynamicIndexSchema_c ( std::move ( fnFeed ) ) );
 }

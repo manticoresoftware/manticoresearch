@@ -176,7 +176,7 @@ public:
 	// commit for common commands
 	bool Commit ( CSphString & sError );
 	// commit for Total Order Isolation commands
-	bool CommitTOI ( ServedDesc_t * pDesc, CSphString & sError );
+	bool CommitTOI ( ServedClone_c* pDesc, CSphString& sError );
 
 	// update with Total Order Isolation
 	bool Update ( bool bCluster, CSphString & sError );
@@ -187,8 +187,7 @@ private:
 	CSphString * m_pWarning = nullptr;
 	int * m_pUpdated = nullptr;
 
-	bool CommitNonEmptyCmds ( RtIndex_i* pIndex, const ReplicationCommand_t& tCmd, bool bOnlyTruncate,
-		CSphString& sError ) const;
+	bool CommitNonEmptyCmds ( RtIndex_i* pIndex, const ReplicationCommand_t& tCmd, bool bOnlyTruncate, CSphString& sError ) const;
 };
 
 // lock protects operations at g_hClusters
@@ -894,12 +893,11 @@ static int GetClusterMemLimit ( const StrVec_t & dIndexes )
 	int iIndexes = 0;
 	for ( const CSphString & sIndex : dIndexes )
 	{
-		ServedIndexRefPtr_c pServed = GetServed ( sIndex );
+		cServedIndexRefPtr_c pServed = GetServed ( sIndex );
 		if ( !pServed )
 			continue;
 
-		ServedDescRPtr_c pDesc ( pServed );
-		iMemLimit = Max ( iMemLimit, pDesc->m_tSettings.m_iMemLimit );
+		iMemLimit = Max ( iMemLimit, pServed->m_tSettings.m_iMemLimit );
 		iIndexes++;
 	}
 
@@ -1187,7 +1185,7 @@ static bool Replicate ( int iKeysCount, const wsrep_key_t * pKeys, const wsrep_b
 }
 
 // replicate serialized data into cluster in TotalOrderIsolation mode and call commit monitor along
-static bool ReplicateTOI ( int iKeysCount, const wsrep_key_t * pKeys, const wsrep_buf_t & tQueries, wsrep_t * pProvider, CommitMonitor_c & tMonitor, ServedDesc_t * pDesc, CSphString & sError )
+static bool ReplicateTOI ( int iKeysCount, const wsrep_key_t * pKeys, const wsrep_buf_t & tQueries, wsrep_t * pProvider, CommitMonitor_c & tMonitor, ServedClone_c * pDesc, CSphString & sError )
 {
 	assert ( pProvider );
 
@@ -1197,27 +1195,21 @@ static bool ReplicateTOI ( int iKeysCount, const wsrep_key_t * pKeys, const wsre
 	tLogMeta.gtid = WSREP_GTID_UNDEFINED;
 
 	wsrep_status_t tRes = pProvider->to_execute_start ( pProvider, iConnId, pKeys, iKeysCount, &tQueries, 1, &tLogMeta );
+	auto tFreeConn = AtScopeExit ( [pProvider,iConnId] { pProvider->free_connection ( pProvider, iConnId ); } ); // FIXME!!! move ThreadID and to net loop handler exit
+
 	bool bOk = CheckResult ( tRes, tLogMeta, "to_execute_start", sError );
+	sphLogDebugRpl ( "replicating TOI %s, seq " INT64_FMT, bOk ? "success" : "failed", (int64_t)tLogMeta.gtid.seqno );
 
-	sphLogDebugRpl ( "replicating TOI %d, seq " INT64_FMT, (int)bOk, (int64_t)tLogMeta.gtid.seqno );
+	if ( !bOk )
+		return false;
 
-	// FXIME!!! can not fail TOI transaction
-	if ( bOk )
-		tMonitor.CommitTOI ( pDesc, sError );
+	// FIXME!!! can not fail TOI transaction
+	tMonitor.CommitTOI ( pDesc, sError );
+	tRes = pProvider->to_execute_end ( pProvider, iConnId );
+	CheckResult ( tRes, tLogMeta, "to_execute_end", sError );
 
-	if ( bOk )
-	{
-
-		tRes = pProvider->to_execute_end ( pProvider, iConnId );
-		CheckResult ( tRes, tLogMeta, "to_execute_end", sError );
-
-		sphLogDebugRpl ( "%s seq " INT64_FMT, ( bOk ? "committed" : "rolled-back" ), (int64_t)tLogMeta.gtid.seqno );
-	}
-
-	// FIXME!!! move ThreadID and to net loop handler exit
-	pProvider->free_connection ( pProvider, iConnId );
-
-	return bOk;
+	sphLogDebugRpl ( "committed seq " INT64_FMT, (int64_t)tLogMeta.gtid.seqno );
+	return true;
 }
 
 // get cluster status variables (our and Galera)
@@ -1382,13 +1374,9 @@ static void DeleteClusterByName ( const CSphString& sCluster ) EXCLUDES ( g_tClu
 static void CollectClusterDesc ( CSphVector<ClusterDesc_t> & dClusters )
 {
 	dClusters.Reset();
-	void * pIt = nullptr;
 	ScRL_t tLock ( g_tClustersLock );
-	while ( g_hClusters.IterateNext ( &pIt ))
-	{
-		const ReplicationCluster_t * pCluster = g_hClusters.IterateGet ( &pIt );
-		dClusters.Add ( *pCluster );
-	}
+	for ( const auto& tCluster : g_hClusters )
+		dClusters.Add ( *tCluster.second );
 }
 
 
@@ -1408,22 +1396,20 @@ void ReplicationCollectClusters ( CSphVector<ClusterDesc_t> & dClusters )  EXCLU
 void ReplicateClustersStatus ( VectorLike & dStatus ) EXCLUDES ( g_tClustersLock )
 {
 	ScRL_t tLock ( g_tClustersLock );
-	void * pIt = nullptr;
-	while ( g_hClusters.IterateNext ( &pIt ) )
-		ReplicateClusterStats ( g_hClusters.IterateGet ( &pIt ), dStatus );
+	for ( const auto& tCluster : g_hClusters )
+		ReplicateClusterStats ( tCluster.second, dStatus );
 }
 
 static bool CheckLocalIndex ( const CSphString & sIndex, CSphString & sError )
 {
-	ServedIndexRefPtr_c pServed = GetServed ( sIndex );
+	cServedIndexRefPtr_c pServed = GetServed ( sIndex );
 	if ( !pServed )
 	{
 		sError.SetSprintf ( "unknown index '%s'", sIndex.cstr() );
 		return false;
 	}
 
-	ServedDescRPtr_c pDesc ( pServed );
-	if ( pDesc->m_eType!=IndexType_e::PERCOLATE && pDesc->m_eType!=IndexType_e::RT )
+	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
 		sError.SetSprintf ( "wrong type of index '%s'", sIndex.cstr() );
 		return false;
@@ -1433,30 +1419,21 @@ static bool CheckLocalIndex ( const CSphString & sIndex, CSphString & sError )
 }
 
 // set cluster name into index desc for fast rejects
-static bool SetIndexCluster ( const CSphString & sIndex, const CSphString & sCluster, CSphString & sError )
+bool SetIndexCluster ( const CSphString & sIndex, const CSphString & sCluster, CSphString * pError )
 {
-	ServedIndexRefPtr_c pServed = GetServed ( sIndex );
-	if ( !pServed )
+	cServedIndexRefPtr_c pServed = GetServed ( sIndex );
+	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
-		sError.SetSprintf ( "unknown index '%s'", sIndex.cstr() );
+		if ( pError )
+			pError->SetSprintf ( "unknown index, or wrong type of index '%s'", sIndex.cstr() );
 		return false;
 	}
 
-	bool bSetCluster = false;
+	if ( pServed->m_sCluster!=sCluster )
 	{
-		ServedDescRPtr_c pDesc ( pServed );
-		if ( pDesc->m_eType!=IndexType_e::PERCOLATE && pDesc->m_eType!=IndexType_e::RT )
-		{
-			sError.SetSprintf ( "wrong type of index '%s'", sIndex.cstr() );
-			return false;
-		}
-		bSetCluster = ( pDesc->m_sCluster!=sCluster );
-	}
-
-	if ( bSetCluster )
-	{
-		ServedDescWPtr_c pDesc ( pServed );
-		pDesc->m_sCluster = sCluster;
+		ServedIndexRefPtr_c pClone = MakeFullClone ( pServed );
+		pClone->m_sCluster = sCluster;
+		g_pLocalIndexes->Replace ( pClone, sIndex );
 	}
 
 	return true;
@@ -1465,23 +1442,14 @@ static bool SetIndexCluster ( const CSphString & sIndex, const CSphString & sClu
 // lock or unlock write operations to disk chunks of index
 static bool EnableIndexWrite ( const CSphString & sIndex, CSphString & sError )
 {
-	ServedIndexRefPtr_c pServed = GetServed ( sIndex );
-	if ( !pServed )
+	cServedIndexRefPtr_c pServed = GetServed ( sIndex );
+	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
-		sError.SetSprintf ( "unknown index '%s'", sIndex.cstr() );
+		sError.SetSprintf ( "unknown or wrong-typed index '%s'", sIndex.cstr() );
 		return false;
 	}
 
-	ServedDescRPtr_c pDesc ( pServed );
-	if ( !ServedDesc_t::IsMutable ( pDesc ) )
-	{
-		sError.SetSprintf ( "wrong type of index '%s'", sIndex.cstr() );
-		return false;
-	}
-
-	auto * pIndex = (RtIndex_i*)pDesc->m_pIndex;
-	pIndex->EnableSave();
-
+	RIdx_T<RtIndex_i*> ( pServed )->EnableSave();
 	return true;
 }
 
@@ -1492,9 +1460,7 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 
 	while ( tReader.GetPos()<iLen )
 	{
-		CSphScopedPtr<ReplicationCommand_t> pCmd ( new ReplicationCommand_t );
-
-		ReplicationCommand_e eCommand = (ReplicationCommand_e)tReader.GetWord();
+		auto eCommand = (ReplicationCommand_e)tReader.GetWord();
 		if ( eCommand<ReplicationCommand_e::PQUERY_ADD || eCommand>ReplicationCommand_e::TOTAL )
 		{
 			sphWarning ( "bad replication command %d", (int)eCommand );
@@ -1509,7 +1475,7 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 		}
 
 		CSphString sIndex = tReader.GetString();
-		int iRequestLen = tReader.GetDword();
+		auto iRequestLen = (int)tReader.GetDword();
 		if ( iRequestLen+tReader.GetPos()>iLen )
 		{
 			sphWarning ( "replication parse apply - out of buffer read %d+%d of %d", tReader.GetPos(), iRequestLen, iLen );
@@ -1519,30 +1485,25 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 		const BYTE * pRequest = pData + tReader.GetPos();
 		tReader.SetPos ( tReader.GetPos() + iRequestLen );
 
-		pCmd->m_eCommand = eCommand;
-		pCmd->m_sCluster = sCluster;
-		pCmd->m_sIndex = sIndex;
+		CSphScopedPtr<ReplicationCommand_t> pCmd { MakeReplicationCommand ( eCommand, sIndex, sCluster ) };
 		pCmd->m_bIsolated = bIsolated;
 
 		switch ( eCommand )
 		{
 		case ReplicationCommand_e::PQUERY_ADD:
 		{
-			ServedIndexRefPtr_c pServed = GetServed ( sIndex );
+			cServedIndexRefPtr_c pServed = GetServed ( sIndex );
 			if ( !pServed )
 			{
 				sphWarning ( "unknown index '%s' for replication, command %d", sIndex.cstr(), (int)eCommand );
 				return false;
 			}
 
-			ServedDescRPtr_c pDesc ( pServed );
-			if ( pDesc->m_eType!=IndexType_e::PERCOLATE )
+			if ( pServed->m_eType!=IndexType_e::PERCOLATE )
 			{
 				sphWarning ( "wrong type of index '%s' for replication, command %d", sIndex.cstr(), (int)eCommand );
 				return false;
 			}
-
-			auto * pIndex = (PercolateIndex_i * )pDesc->m_pIndex;
 
 			StoredQueryDesc_t tPQ;
 			LoadStoredQuery ( pRequest, iRequestLen, tPQ );
@@ -1551,7 +1512,7 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 			CSphString sError;
 			PercolateQueryArgs_t tArgs ( tPQ );
 			tArgs.m_bReplace = true;
-			pCmd->m_pStored = pIndex->CreateQuery ( tArgs, sError );
+			pCmd->m_pStored = RIdx_T<PercolateIndex_i*> ( pServed )->CreateQuery ( tArgs, sError );
 
 			if ( !pCmd->m_pStored )
 			{
@@ -1650,16 +1611,11 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 		bool bOk = false;
 		if ( tCmd.m_eCommand==ReplicationCommand_e::CLUSTER_ALTER_ADD )
 		{
-			ServedIndexRefPtr_c pServed = GetServed ( tCmd.m_sIndex );
-			if ( !pServed )
-				sError.SetSprintf ( "unknown index '%s'", tCmd.m_sIndex.cstr() );
-
-			ServedDescWPtr_c pDesc ( pServed );
-			if ( pDesc.Ptr() && pDesc->m_eType!=IndexType_e::PERCOLATE && pDesc->m_eType!=IndexType_e::RT )
+			HashedServedClone_c tMutableDesc { tCmd.m_sIndex, g_pLocalIndexes };
+			if ( !ServedDesc_t::IsMutable ( tMutableDesc.Orig() ) )
 				sError.SetSprintf ( "wrong type of index '%s'", tCmd.m_sIndex.cstr() );
-
-			if ( pDesc )
-				bOk = tCommit.CommitTOI ( pDesc.Ptr(), sError );
+			else
+				bOk = tCommit.CommitTOI ( &tMutableDesc, sError );
 		} else
 		{
 			bOk = tCommit.CommitTOI ( nullptr, sError );
@@ -1686,57 +1642,39 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 
 	}
 
-	ServedIndexRefPtr_c pServed = GetServed ( tCmd.m_sIndex );
-	if ( !pServed )
+	cServedIndexRefPtr_c pServed = GetServed ( tCmd.m_sIndex );
+	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
-		sphWarning ( "unknown index '%s' for replication, command %d", tCmd.m_sIndex.cstr(), (int)tCmd.m_eCommand );
+		sphWarning ( "wrong type of index '%s' for replication, command %d", tCmd.m_sIndex.cstr(), (int)tCmd.m_eCommand );
 		return false;
 	}
 
 	// special path with wlocked index for truncate
 	if ( tCmd.m_eCommand==ReplicationCommand_e::TRUNCATE )
 	{
-		ServedDescWPtr_c pWDesc ( pServed );
-		if ( pWDesc->m_eType!=IndexType_e::PERCOLATE && pWDesc->m_eType!=IndexType_e::RT )
-		{
-			sphWarning ( "wrong type of index '%s' for replication, command %d", tCmd.m_sIndex.cstr (),
-						 ( int ) tCmd.m_eCommand );
-			return false;
-		}
-		auto* pIndex = ( RtIndex_i* ) pWDesc->m_pIndex;
 		sphLogDebugRpl ( "truncate-commit, index '%s'", tCmd.m_sIndex.cstr ());
-		if ( !pIndex->Truncate ( sError ))
+		if ( !WIdx_T<RtIndex_i*> ( pServed )->Truncate ( sError ) )
 			sphWarning ( "%s", sError.cstr ());
 		return true;
 	}
 
-	ServedDescRPtr_c pRDesc ( pServed );
-	if ( pRDesc->m_eType!=IndexType_e::PERCOLATE && pRDesc->m_eType!=IndexType_e::RT )
-	{
-		sphWarning ( "wrong type of index '%s' for replication, command %d", tCmd.m_sIndex.cstr(), (int)tCmd.m_eCommand );
-		return false;
-	}
-
-	auto * pIndex = (RtIndex_i * ) pRDesc->m_pIndex;
 	assert ( tCmd.m_eCommand!=ReplicationCommand_e::TRUNCATE );
 	sphLogDebugRpl ( "commit, index '%s', uid " INT64_FMT ", queries %d, tags %s",
 		tCmd.m_sIndex.cstr(), ( tCmd.m_pStored ? tCmd.m_pStored->m_iQUID : int64_t(0) ),
 		tCmd.m_dDeleteQueries.GetLength(), tCmd.m_sDeleteTags.scstr() );
 
+	RIdx_T<RtIndex_i*> pIndex { pServed };
 	if ( !tAcc.SetupDocstore ( *pIndex, sError ) )
 	{
 		sphWarning ( "%s, index '%s', command %d", sError.cstr(), tCmd.m_sIndex.cstr(), (int)tCmd.m_eCommand );
 		return false;
 	}
 
-	if ( !pIndex->Commit ( nullptr, &tAcc ) )
-		return false;
-
-	return true;
+	return pIndex->Commit ( nullptr, &tAcc );
 }
 
 // single point there all commands passed these might be replicated, even if no cluster
-static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pDeletedCount, CSphString * pWarning, int * pUpdated, ServedDesc_t * pDesc ) EXCLUDES ( g_tClustersLock )
+static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pDeletedCount, CSphString * pWarning, int * pUpdated, ServedClone_c * pDesc ) EXCLUDES ( g_tClustersLock )
 {
 	CommitMonitor_c tMonitor ( tAcc, pDeletedCount, pWarning, pUpdated );
 
@@ -1979,19 +1917,10 @@ bool CommitMonitor_c::Commit ( CSphString& sError )
 	}
 
 	// truncate needs wlocked index
-	if ( bTruncate )
-	{
-		ServedDescWPtr_c wLocked ( pServed );
-		if ( ServedDesc_t::IsMutable ( wLocked ))
-			return CommitNonEmptyCmds (( RtIndex_i* ) wLocked->m_pIndex, tCmd, bOnlyTruncate, sError );
-
-		sError = "requires an existing RT or percolate index";
-		return false;
-	}
-
-	ServedDescRPtr_c rLocked ( pServed );
-	if ( ServedDesc_t::IsMutable ( rLocked ))
-		return CommitNonEmptyCmds (( RtIndex_i* ) rLocked->m_pIndex, tCmd, bOnlyTruncate, sError );
+	if ( ServedDesc_t::IsMutable ( pServed ))
+		return bTruncate
+			? CommitNonEmptyCmds ( WIdx_T<RtIndex_i*> ( pServed ), tCmd, bOnlyTruncate, sError )
+			: CommitNonEmptyCmds ( RIdx_T<RtIndex_i*> ( pServed ), tCmd, bOnlyTruncate, sError );
 
 	sError = "requires an existing RT or percolate index";
 	return false;
@@ -2019,7 +1948,7 @@ bool CommitMonitor_c::CommitNonEmptyCmds ( RtIndex_i* pIndex, const ReplicationC
 }
 
 // commit for Total Order Isolation commands
-bool CommitMonitor_c::CommitTOI ( ServedDesc_t * pDesc, CSphString & sError ) EXCLUDES ( g_tClustersLock )
+bool CommitMonitor_c::CommitTOI ( ServedClone_c * pDesc, CSphString & sError ) EXCLUDES ( g_tClustersLock )
 {
 	if ( m_tAcc.m_dCmd.IsEmpty() )
 	{
@@ -2048,8 +1977,8 @@ bool CommitMonitor_c::CommitTOI ( ServedDesc_t * pDesc, CSphString & sError ) EX
 	switch ( tCmd.m_eCommand )
 	{
 	case ReplicationCommand_e::CLUSTER_ALTER_ADD:
-		if ( pDesc->m_sCluster!=pCluster->m_sName )
-			pDesc->m_sCluster = pCluster->m_sName;
+		if ( pDesc->Orig()->m_sCluster!=pCluster->m_sName )
+			pDesc->FullCloneOnce()->m_sCluster = pCluster->m_sName;
 
 		pCluster->m_dIndexes.Add ( tCmd.m_sIndex );
 		pCluster->m_dIndexes.Uniq();
@@ -2057,7 +1986,7 @@ bool CommitMonitor_c::CommitTOI ( ServedDesc_t * pDesc, CSphString & sError ) EX
 		break;
 
 	case ReplicationCommand_e::CLUSTER_ALTER_DROP:
-		if ( !SetIndexCluster ( tCmd.m_sIndex, CSphString(), sError ) )
+		if ( !SetIndexCluster ( tCmd.m_sIndex, CSphString(), &sError ) )
 			return false;
 
 		pCluster->m_dIndexes.RemoveValue ( tCmd.m_sIndex );
@@ -2072,30 +2001,23 @@ bool CommitMonitor_c::CommitTOI ( ServedDesc_t * pDesc, CSphString & sError ) EX
 	return true;
 }
 
-static bool DoUpdate ( AttrUpdateArgs & tUpd, int & iUpdate, bool bUpdateAPI )
+static bool DoUpdate ( AttrUpdateArgs & tUpd, const cServedIndexRefPtr_c& pDesc, int& iUpdated, bool bUpdateAPI, bool bNeedWlock )
 {
-	assert ( tUpd.m_pError );
-
-	if ( !tUpd.m_pDesc )
-	{
-		*tUpd.m_pError = "index not available";
-		return false;
-	}
-
 	if ( bUpdateAPI )
 	{
-		bool bCritical = false;
-		iUpdate = tUpd.m_pDesc->m_pIndex->UpdateAttributes ( tUpd.m_pUpdate, bCritical, *tUpd.m_pError, *tUpd.m_pWarning );
-		return ( iUpdate>=0 );
+		bool bOk = bNeedWlock
+			? HandleUpdateAPI ( tUpd, WIdx_c ( pDesc ), iUpdated )
+			: HandleUpdateAPI ( tUpd, RWIdx_c ( pDesc ), iUpdated );
+		assert ( bOk ); // fixme! handle this
+		return ( iUpdated >= 0 );
 	}
 
-	HandleMySqlExtendedUpdate ( tUpd );
+	HandleMySqlExtendedUpdate ( tUpd, pDesc, iUpdated, bNeedWlock );
 
 	if ( tUpd.m_pError->IsEmpty() )
-		iUpdate += tUpd.m_iAffected;
+		iUpdated += tUpd.m_iAffected;
 
 	return ( tUpd.m_pError->IsEmpty() );
-
 }
 
 bool CommitMonitor_c::Update ( bool bCluster, CSphString & sError )
@@ -2108,7 +2030,7 @@ bool CommitMonitor_c::Update ( bool bCluster, CSphString & sError )
 
 	const ReplicationCommand_t & tCmd = *m_tAcc.m_dCmd[0];
 
-	ServedIndexRefPtr_c pServed = GetServed ( tCmd.m_sIndex );
+	cServedIndexRefPtr_c pServed { GetServed ( tCmd.m_sIndex ) };
 	if ( !pServed )
 	{
 		sError = "requires an existing index";
@@ -2130,46 +2052,22 @@ bool CommitMonitor_c::Update ( bool bCluster, CSphString & sError )
 	bool bUpdateAPI = ( tCmd.m_eCommand==ReplicationCommand_e::UPDATE_API );
 	assert ( bUpdateAPI || tCmd.m_pUpdateCond );
 
-	// fixme! Provide fine-grain locking.
-	// that is - we don't lock right now, but provide locking functor (which executes r-locking or w-locking) over internal index structures,
-	// NOT over index descriptor, as it owns nothing!
-	// that is no difference for solid (plain) indexes, but is important for complex (distributed, rt), as we can then acquire/release lock
-	// sequentally for different index parts (chunks, segments)
-	if ( tCmd.m_bBlobUpdate )
-	{
-		ServedDescWPtr_c tDesc ( pServed );
-		tUpd.m_pDesc = tDesc.Ptr();
-		return DoUpdate ( tUpd, *m_pUpdated, bUpdateAPI );
-	} else
-	{
-		ServedDescRPtr_c tDesc ( pServed );
-		tUpd.m_pDesc = tDesc.Ptr ();
-		return DoUpdate ( tUpd, *m_pUpdated, bUpdateAPI );
-	}
+	return DoUpdate ( tUpd, pServed, *m_pUpdated, bUpdateAPI, tCmd.m_bBlobUpdate );
 }
 
 static bool ValidateUpdate ( const ReplicationCommand_t & tCmd, CSphString & sError  )
 {
-	ServedIndexRefPtr_c pServed = GetServed ( tCmd.m_sIndex );
+	cServedIndexRefPtr_c pServed = GetServed ( tCmd.m_sIndex );
 	if ( !pServed )
 	{
 		sError.SetSprintf ( "requires an existing index, %s", tCmd.m_sIndex.cstr() );
 		return false;
 	}
-	ServedDescRPtr_c tDesc ( pServed );
-	if ( !tDesc.Ptr () )
-	{
-		sError.SetSprintf ( "index not available, %s", tCmd.m_sIndex.cstr() );
-		return false;
-	}
 
-	const ISphSchema & tSchema = tDesc->m_pIndex->GetMatchSchema();
+	const ISphSchema& tSchema = RIdx_c ( pServed )->GetMatchSchema();
 
 	assert ( tCmd.m_pUpdateAPI );
-	if ( !IndexUpdateHelper_c::Update_CheckAttributes ( *tCmd.m_pUpdateAPI, tSchema, sError ) )
-		return false;
-
-	return true;
+	return IndexUpdateHelper_c::Update_CheckAttributes ( *tCmd.m_pUpdateAPI, tSchema, sError );
 }
 
 CommitMonitor_c::~CommitMonitor_c()
@@ -2189,10 +2087,8 @@ struct FilesTrait_t
 	}
 };
 
-
-// load index into daemon from disk files for cluster use
-// in case index already exists prohibit it to save on index delete as disk files has fresh data received from remote node
-static bool LoadIndex ( const CSphString & sIndexPath, const CSphString & sIndexType, const CSphString & sIndexName, const CSphString & sCluster, FilesTrait_t & tIndexFiles, CSphString & sError )
+// load index from disk files for cluster use
+static ServedIndexRefPtr_c LoadNewIndex ( const CSphString& sIndexPath, const CSphString& sIndexType, const CSphString & sIndexName, const CSphString & sCluster, FilesTrait_t & tIndexFiles, CSphString & sError )
 {
 	CSphConfigSection hIndex;
 	hIndex.Add ( CSphVariant ( sIndexPath.cstr() ), "path" );
@@ -2201,52 +2097,55 @@ static bool LoadIndex ( const CSphString & sIndexPath, const CSphString & sIndex
 	hIndex.Add ( CSphVariant ( "text" ), "rt_field" );
 	hIndex.Add ( CSphVariant ( "gid" ), "rt_attr_uint" );
 
-	ServedDescWPtr_c pOldIndex { GetServed ( sIndexName ) };
-	if ( pOldIndex )
-	{
-		if ( ServedDesc_t::IsMutable ( pOldIndex ) )
-		{
-			auto * pIndex = (RtIndex_i*)pOldIndex->m_pIndex;
-			pIndex->ProhibitSave();
-		}
-		pOldIndex->m_pIndex->GetIndexFiles ( tIndexFiles.m_dOld, nullptr );
-		SafeDelete ( pOldIndex->m_pIndex );
-	}
+	ESphAddIndex eAdd;
+	ServedIndexRefPtr_c pNewServed, pResult;
+	std::tie ( eAdd, pNewServed ) = AddIndex ( sIndexName.cstr(), hIndex, false, true, nullptr, sError );
 
-	GuardedHash_c dLocalIndexes;
-	ESphAddIndex eAdd = AddIndexMT ( dLocalIndexes, sIndexName.cstr(), hIndex, true, true, nullptr, sError );
-	assert ( eAdd==ADD_DSBLED || eAdd==ADD_ERROR );
+	assert ( eAdd == ADD_NEEDLOAD || eAdd == ADD_ERROR );
+	if ( eAdd != ADD_NEEDLOAD )
+		return pResult;
 
-	if ( eAdd!=ADD_DSBLED )
-		return false;
-
-	ServedIndexRefPtr_c pNewServed = GetServed ( sIndexName, &dLocalIndexes );
-	ServedDescWPtr_c pNewIndex ( pNewServed );
+	assert ( pNewServed );
+	pNewServed->m_sCluster = sCluster;
 
 	StrVec_t dWarnings;
-	bool bPreload = PreallocNewIndex ( *pNewIndex, &hIndex, sIndexName.cstr(), dWarnings, sError );
-	if ( !bPreload )
-		return false;
+	bool bPrealloc = PreallocNewIndex ( *pNewServed, &hIndex, sIndexName.cstr(), dWarnings, sError );
+	if ( !bPrealloc )
+		return pResult;
 
-	pNewIndex->m_pIndex->GetIndexFiles ( tIndexFiles.m_dRef, nullptr );
+	UnlockedHazardIdxFromServed ( *pNewServed )->GetIndexFiles ( tIndexFiles.m_dRef, nullptr );
 	for ( const auto & i : dWarnings )
 		sphWarning ( "index '%s': %s", sIndexName.cstr(), i.cstr() );
 
-	if ( pOldIndex )
-	{
-		pOldIndex->m_tSettings = pNewIndex->m_tSettings;
-		pOldIndex->m_tSettings.m_bPreopen = ( pNewIndex->m_tSettings.m_bPreopen || MutableIndexSettings_c::GetDefaults().m_bPreopen );
-		pOldIndex->m_sGlobalIDFPath = pNewIndex->m_sGlobalIDFPath;
-		pOldIndex->m_sCluster = sCluster;
+	pResult = std::move (pNewServed);
+	return pResult;
+}
 
-		Swap ( pOldIndex->m_pIndex, pNewIndex->m_pIndex );
-	} else
+
+// load index into daemon
+// in case index already exists prohibit it to save on index delete as disk files has fresh data received from remote node
+static bool LoadIndex ( const CSphString& sIndexPath, const CSphString& sIndexType, const CSphString & sIndexName, const CSphString & sCluster, FilesTrait_t & tIndexFiles, CSphString & sError )
+{
+	cServedIndexRefPtr_c pOldIndex = GetServed ( sIndexName );
+	if ( ServedDesc_t::IsMutable ( pOldIndex ) )
 	{
-		pNewIndex->m_sCluster = sCluster;
-		// finally add the index to the hash of enabled.
-		g_pLocalIndexes->AddOrReplace ( pNewServed, sIndexName );
+		WIdx_T<RtIndex_i*> pIndex { pOldIndex };
+		pIndex->ProhibitSave();
+		pIndex->GetIndexFiles ( tIndexFiles.m_dOld, nullptr );
+
+		auto pNewIndex = LoadNewIndex ( sIndexPath, sIndexType, sIndexName, sCluster, tIndexFiles, sError );
+		if (!pNewIndex)
+			return false;
+
+		g_pLocalIndexes->Replace ( pNewIndex, sIndexName );
+		return true;
 	}
 
+	auto pNewIndex = LoadNewIndex ( sIndexPath, sIndexType, sIndexName, sCluster, tIndexFiles, sError );
+	if ( !pNewIndex )
+		return false;
+
+	g_pLocalIndexes->AddOrReplace ( pNewIndex, sIndexName );
 	return true;
 }
 
@@ -2283,10 +2182,9 @@ static bool ReplicatedIndexes ( const CSphFixedVector<CSphString> & dIndexes, co
 
 		const ReplicationCluster_t * pCluster = *ppCluster;
 		// indexes should be new or from same cluster
-		void * pIt = nullptr;
-		while ( g_hClusters.IterateNext ( &pIt ) )
+		for ( const auto& tCluster : g_hClusters )
 		{
-			const ReplicationCluster_t * pOrigCluster = g_hClusters.IterateGet ( &pIt );
+			const ReplicationCluster_t * pOrigCluster = tCluster.second;
 			if ( pOrigCluster==pCluster )
 				continue;
 
@@ -2303,7 +2201,7 @@ static bool ReplicatedIndexes ( const CSphFixedVector<CSphString> & dIndexes, co
 
 	bool bOk = true;
 	for ( const CSphString & sIndex : dIndexes )
-		bOk &= SetIndexCluster ( sIndex, sCluster, sError );
+		bOk &= SetIndexCluster ( sIndex, sCluster, &sError );
 
 	// need to enable back local index write
 	for ( const CSphString & sIndex : dIndexes )
@@ -2378,13 +2276,11 @@ static bool ClusterCheckPath ( const CSphString & sPath, const CSphString & sNam
 	}
 
 	ScRL_t tClusterRLock ( g_tClustersLock );
-	void * pIt = nullptr;
-	while ( g_hClusters.IterateNext ( &pIt ) )
+	for ( const auto& tCluster : g_hClusters )
 	{
-		const ReplicationCluster_t * pCluster = g_hClusters.IterateGet ( &pIt );
-		if ( sPath==pCluster->m_sPath )
+		if ( sPath == tCluster.second->m_sPath )
 		{
-			sError.SetSprintf ( "duplicate paths, cluster '%s' has the same path as '%s'", sName.cstr(), pCluster->m_sName.cstr() );
+			sError.SetSprintf ( "duplicate paths, cluster '%s' has the same path as '%s'", sName.cstr(), tCluster.second->m_sName.cstr() );
 			return false;
 		}
 	}
@@ -2573,7 +2469,7 @@ public:
 			CSphString sClusterEmpty;
 			for ( const CSphString & sIndexName : m_dIndexes )
 			{
-				if ( !SetIndexCluster ( sIndexName, sClusterEmpty, sError ) )
+				if ( !SetIndexCluster ( sIndexName, sClusterEmpty, &sError ) )
 					sphWarning ( "%s on removal index '%s' from a cluster", sError.cstr(), sIndexName.cstr() );
 			}
 		}
@@ -2675,7 +2571,7 @@ void ReplicationStart ( const CSphConfigSection & hSearchd, const CSphVector<Lis
 		for ( const CSphString & sIndexName : tDesc.m_dIndexes )
 		{
 			// just check index exists and valid as cluster name was already set on daemon preload phase
-			if ( !SetIndexCluster ( sIndexName, pElem->m_sName, sError ) )
+			if ( !SetIndexCluster ( sIndexName, pElem->m_sName, &sError ) )
 			{
 				sphWarning ( "%s, removed from cluster '%s'", sError.cstr(), pElem->m_sName.cstr() );
 				continue;
@@ -2700,7 +2596,7 @@ void ReplicationStart ( const CSphConfigSection & hSearchd, const CSphVector<Lis
 			sphLogDebugRpl ( "'%s' cluster started with %d indexes", tDesc.m_sName.cstr(), tDesc.m_dIndexes.GetLength() );
 		}
 	}
-	
+
 	g_bReplicationStarted = true;
 
 	});
@@ -3773,7 +3669,7 @@ bool RemoteClusterDelete ( const CSphString & sCluster, CSphString & sError ) EX
 
 		for ( const CSphString & sIndex : pCluster->m_dIndexes )
 		{
-			if ( !SetIndexCluster ( sIndex, CSphString(), sError ) )
+			if ( !SetIndexCluster ( sIndex, CSphString(), &sError ) )
 				return false;
 		}
 		pCluster->m_dIndexes.Reset();
@@ -3847,7 +3743,7 @@ void ReplicationCluster_t::UpdateIndexHashes()
 static bool ClusterAlterDrop ( const CSphString & sCluster, const CSphString & sIndex, CSphString & sError )
 {
 	RtAccum_t tAcc { false };
-	tAcc.AddCommand ( ReplicationCommand_e::CLUSTER_ALTER_DROP, sCluster, sIndex );
+	tAcc.AddCommand ( ReplicationCommand_e::CLUSTER_ALTER_DROP, sIndex, sCluster );
 	return HandleCmdReplicate ( tAcc, sError );
 }
 
@@ -4199,7 +4095,7 @@ private:
 
 			m_pWriter->SeekTo ( iOff, false );
 		}
-	 
+
 		if ( bSeekReader && m_pReader->GetPos()!=iOff )
 			m_pReader->SeekTo ( iOff, 0 );
 
@@ -4290,13 +4186,12 @@ bool RemoteFileReserve ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CS
 	assert ( tRes.m_pDst.Ptr() );
 	// use index path first
 	{
-		ServedIndexRefPtr_c pServed = GetServed ( tCmd.m_sIndex );
-		ServedDescRPtr_c pDesc ( pServed );
-		if ( ServedDesc_t::IsMutable ( pDesc ) )
+		cServedIndexRefPtr_c pServed = GetServed ( tCmd.m_sIndex );
+		if ( ServedDesc_t::IsMutable ( pServed ) )
 		{
 			tRes.m_bIndexActive = true;
-			sLocalIndexPath = pDesc->m_sIndexPath;
-			( (RtIndex_i *)pDesc->m_pIndex )->ProhibitSave();
+			sLocalIndexPath = pServed->m_sIndexPath;
+			RIdx_T<RtIndex_i*>(pServed)->ProhibitSave();
 		}
 	}
 
@@ -4834,7 +4729,7 @@ void ReportErrorSendFile ( StringBuilder_c & tErrors, const char * sFmt, ... )
 	va_start ( ap, sFmt );
 	sError.SetSprintfVa ( sFmt, ap );
 	va_end ( ap );
-	
+
 	tErrors += sError.cstr();
 	sphLogDebugRpl ( "%s", sError.cstr() );
 }
@@ -5068,7 +4963,7 @@ static bool SyncSigBegin ( SyncSrc_t & tSync, CSphString & sError )
 
 		tIndexFile.Close();
 		tHashFile.Final ( tSync.GetFileHash ( iFile ) );
-		
+
 		int64_t tmDeltaFile = ( sphMicroTimer() - tmStartFile ) / 1000;
 		tSync.m_tmTimeoutFile = Max ( tmDeltaFile, tSync.m_tmTimeoutFile );
 	}
@@ -5091,19 +4986,16 @@ struct SendStatesGuard_t : public ISphNoncopyable
 class IndexSaveGuard_t : public ISphNoncopyable
 {
 public:
-	explicit IndexSaveGuard_t ( const ServedDesc_t * pIndexDesc )
-		: m_pIndexDesc ( pIndexDesc )
+	explicit IndexSaveGuard_t ( cServedIndexRefPtr_c pIndexDesc )
+		: m_pServedIndex ( std::move ( pIndexDesc ) )
 	{}
 
 	void EnableSave()
 	{
-		if ( !m_pIndexDesc )
-			return;
+		if ( m_pServedIndex )
+			RIdx_T<RtIndex_i*>(m_pServedIndex)->EnableSave();
 
-		auto * pIndex = (RtIndex_i *)m_pIndexDesc->m_pIndex;
-		pIndex->EnableSave();
-
-		m_pIndexDesc = nullptr;
+		m_pServedIndex = nullptr;
 	}
 
 	~IndexSaveGuard_t()
@@ -5112,21 +5004,21 @@ public:
 	}
 
 private:
-	const ServedDesc_t * m_pIndexDesc = nullptr;
+	cServedIndexRefPtr_c m_pServedIndex;
 };
 
 // send local index to remote nodes via API
-static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString & sIndex, const VecAgentDesc_t & dDesc, const ServedDesc_t * pIndexDesc, CSphString & sError )
+static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString & sIndex, const VecAgentDesc_t & dDesc, const cServedIndexRefPtr_c& pServedIndex, CSphString & sError )
 {
 	assert ( dDesc.GetLength() );
 
 	CSphVector<CSphString> dIndexFiles;
-	IndexSaveGuard_t tIndexSaveGuard ( pIndexDesc );
-	auto * pIndex = (RtIndex_i *)pIndexDesc->m_pIndex;
+	IndexSaveGuard_t tIndexSaveGuard ( pServedIndex );
+	RIdx_T<RtIndex_i*> pIndex { pServedIndex };
 	pIndex->LockFileState ( dIndexFiles );
 
-	CSphString sIndexPath = pIndexDesc->m_sIndexPath;
-	IndexType_e eType = pIndexDesc->m_eType;
+	CSphString sIndexPath = pServedIndex->m_sIndexPath;
+	IndexType_e eType = pServedIndex->m_eType;
 
 	assert ( !sIndexPath.IsEmpty() );
 	assert ( dIndexFiles.GetLength() );
@@ -5278,18 +5170,10 @@ static bool ClusterAlterAdd ( const CSphString & sCluster, const CSphString & sI
 		}
 	}
 
-	ServedIndexRefPtr_c pServed = GetServed ( sIndex );
-	if ( !pServed )
+	cServedIndexRefPtr_c pServed = GetServed ( sIndex );
+	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
-		sError.SetSprintf ( "unknown index '%s'", sIndex.cstr() );
-		return false;
-	}
-
-	// alter add index should be valid
-	ServedDescWPtr_c pIndexDesc ( pServed );
-	if ( pIndexDesc->m_eType!=IndexType_e::PERCOLATE && pIndexDesc->m_eType!=IndexType_e::RT )
-	{
-		sError.SetSprintf ( "wrong type of index '%s'", sIndex.cstr() );
+		sError.SetSprintf ( "unknown or wrong index '%s'", sIndex.cstr() );
 		return false;
 	}
 
@@ -5299,7 +5183,7 @@ static bool ClusterAlterAdd ( const CSphString & sCluster, const CSphString & sI
 		VecAgentDesc_t dDesc;
 		GetNodes ( sNodes, dDesc );
 
-		if ( dDesc.GetLength() && !NodesReplicateIndex ( sCluster, sIndex, dDesc, pIndexDesc, sError ) )
+		if ( dDesc.GetLength() && !NodesReplicateIndex ( sCluster, sIndex, dDesc, pServed, sError ) )
 			return false;
 
 		if ( !sError.IsEmpty() )
@@ -5307,36 +5191,29 @@ static bool ClusterAlterAdd ( const CSphString & sCluster, const CSphString & sI
 	}
 
 	RtAccum_t tAcc { false };
-	ReplicationCommand_t * pAddCmd = tAcc.AddCommand ( ReplicationCommand_e::CLUSTER_ALTER_ADD, sCluster, sIndex );
+	ReplicationCommand_t * pAddCmd = tAcc.AddCommand ( ReplicationCommand_e::CLUSTER_ALTER_ADD, sIndex, sCluster );
 	pAddCmd->m_bCheckIndex = false;
-
-	return HandleCmdReplicate ( tAcc, sError, nullptr, nullptr, nullptr, pIndexDesc.Ptr() );
+	HashedServedClone_c tMutableDesc { sIndex, g_pLocalIndexes };
+	return HandleCmdReplicate ( tAcc, sError, nullptr, nullptr, nullptr, &tMutableDesc );
 }
 
 // cluster ALTER statement
 bool ClusterAlter ( const CSphString & sCluster, const CSphString & sIndex, bool bAdd, CSphString & sError, CSphString & sWarning )
 {
 	{
-		ServedIndexRefPtr_c pServed = GetServed ( sIndex );
-		if ( !pServed )
+		cServedIndexRefPtr_c pServed = GetServed ( sIndex );
+		if ( !ServedDesc_t::IsMutable ( pServed ) )
 		{
-			sError.SetSprintf ( "unknown index '%s'", sIndex.cstr() );
+			sError.SetSprintf ( "unknown or wrong type of index '%s'", sIndex.cstr() );
 			return false;
 		}
 
-		ServedDescRPtr_c pDesc ( pServed );
-		if ( pDesc->m_eType!=IndexType_e::PERCOLATE && pDesc->m_eType!=IndexType_e::RT )
+		if ( bAdd && !pServed->m_sCluster.IsEmpty() )
 		{
-			sError.SetSprintf ( "wrong type of index '%s'", sIndex.cstr() );
+			sError.SetSprintf ( "index '%s' is a part of cluster '%s'", sIndex.cstr(), pServed->m_sCluster.cstr() );
 			return false;
 		}
-
-		if ( bAdd && !pDesc->m_sCluster.IsEmpty() )
-		{
-			sError.SetSprintf ( "index '%s' is a part of cluster '%s'", sIndex.cstr(), pDesc->m_sCluster.cstr() );
-			return false;
-		}
-		if ( !bAdd && pDesc->m_sCluster.IsEmpty() )
+		if ( !bAdd && pServed->m_sCluster.IsEmpty() )
 		{
 			sError.SetSprintf ( "index '%s' is not in cluster '%s'", sIndex.cstr(), sCluster.cstr() );
 			return false;
@@ -5464,7 +5341,7 @@ bool SendClusterIndexes ( const ReplicationCluster_t * pCluster, const CSphStrin
 	bool bSentOk = true;
 	for ( const CSphString & sIndex : dIndexes )
 	{
-		ServedIndexRefPtr_c pServed = GetServed ( sIndex );
+		cServedIndexRefPtr_c pServed = GetServed ( sIndex );
 		if ( !pServed )
 		{
 			bSentOk = false;
@@ -5472,15 +5349,14 @@ bool SendClusterIndexes ( const ReplicationCluster_t * pCluster, const CSphStrin
 			continue;
 		}
 
-		ServedDescRPtr_c pIndexDesc ( pServed );
-		if ( pIndexDesc->m_eType!=IndexType_e::PERCOLATE && pIndexDesc->m_eType!=IndexType_e::RT )
+		if ( pServed->m_eType!=IndexType_e::PERCOLATE && pServed->m_eType!=IndexType_e::RT )
 		{
 			bSentOk = false;
 			sphWarning ( "wrong type of index '%s'", sIndex.cstr() );
 			continue;
 		}
 
-		if ( !NodesReplicateIndex ( pCluster->m_sName, sIndex, dDesc, pIndexDesc, sError ) )
+		if ( !NodesReplicateIndex ( pCluster->m_sName, sIndex, dDesc, pServed, sError ) )
 		{
 			sphWarning ( "%s", sError.cstr() );
 			bSentOk = false;
@@ -5580,13 +5456,13 @@ bool CheckIndexCluster ( const CSphString & sIndexName, const ServedDesc_t & tDe
 	return false;
 }
 
-bool ClusterOperationProhibit ( const ServedDesc_t * pDesc, CSphString & sError, const char * sOp )
+Optional_T<CSphString> IsPartOfCluster ( const ServedDesc_t * pDesc )
 {
-	if ( !pDesc || pDesc->m_sCluster.IsEmpty() )
-		return false;
-
-	sError.SetSprintf ( "is a part of cluster '%s', can not issue %s", pDesc->m_sCluster.cstr(), sOp );
-	return true;
+	Optional_T<CSphString> sResult;
+	assert ( pDesc );
+	if ( !pDesc->m_sCluster.IsEmpty() )
+		sResult.emplace ( pDesc->m_sCluster );
+	return sResult;
 }
 
 // command to all remote nodes at cluster to get actual nodes list

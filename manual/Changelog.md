@@ -20,6 +20,7 @@ The following are the changes we are either working on now or are going to work 
 * [Read-only mode](Security/Read_only.md) for better security.
 * New `/cli` endpoint for running SQL queries over HTTP even easier
 * Really bulk INSERT/REPLACE/DELETE via JSON over HTTP
+* Pseudo sharding enabled by default
 
 ### Minor changes
 * TODO

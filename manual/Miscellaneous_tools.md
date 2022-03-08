@@ -31,8 +31,9 @@ The commands are as follows:
 *   `--htmlstrip INDEXNAME` filters stdin using HTML stripper settings for a given index, and prints the filtering results to stdout. Note that the settings will be taken from sphinx.conf, and not the index header.
 *   `--mergeidf NODE1.idf [NODE2.idf ...] --out GLOBAL.idf` merge several .idf files into a single one. Additional parameter `-skip-uniq` will skip unique (df=1) words.
 *   `--morph INDEXNAME` applies morphology to the given stdin and prints the result to stdout.
-*   `--check INDEXNAME` checks the index data files for consistency errors that might be introduced either by bugs in `indexer` and/or hardware faults. `--check` also works on RT indexes, RAM and disk chunks.
-*   `--check-disk-chunk CHUNK_NAME` checks only specific disk chunk of RT index. Argument is the numeric extension of disk chunk of RT index.
+*   `--check INDEXNAME` checks the index data files for consistency errors that might be introduced either by bugs in `indexer` and/or hardware faults. `--check` also works on RT indexes, RAM and disk chunks. Additional options:
+    - `--check-id-dups` checks if there are duplicate ids
+    - `--check-disk-chunk CHUNK_NAME` checks only specific disk chunk of an RT index. The argument is a disk chunk numeric extension of the RT index to check.
 *   `--strip-path` strips the path names from all the file names referenced from the index (stopwords, wordforms, exceptions, etc). This is useful for checking indexes built on another machine with possibly different path layouts.
 *   `--rotate` works only with `--check` and defines whether to check index waiting for rotation, i.e. with .new extension. This is useful when you want to check your index before actually using it.
 *   `--apply-killlists` loads and applies kill-lists for all indexes listed in the config file. Changes are saved in .SPM files. Kill-list files (.SPK) are deleted. This can be useful if you want to move applying indexes from server startup to indexing stage.

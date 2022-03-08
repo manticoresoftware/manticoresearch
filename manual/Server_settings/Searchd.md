@@ -828,9 +828,17 @@ preopen_indexes = 1
 ### pseudo_sharding
 
 <!-- example conf pseudo_sharding -->
-Enables pseudo-sharding for search queries to plain and real-time indexes. Any search query will be automatically parallelized to up to `searchd.threads` # of threads.
+Enables pseudo-sharding for search queries to plain and real-time indexes, no matter if they are queried directly or through a distributed index. Any search query to a local index will be automatically parallelized to up to `searchd.threads` # of threads. 
 
-Disabled by default.
+Note that if your worker threads are already busy, because you have:
+* high query concurrency
+* physical sharding of any kind:
+  - distributed index of multiple plain/real-time indexes
+  - real-time index consisting of too many disk chunks
+
+then the pseudo-sharding may not bring any positive effect and in some cases can even cause slight throughput decrease. If you are looking for a higher throughput rather than lower latency it's recommended to disable it.
+
+Enabled by default.
 
 <!-- intro -->
 ##### Example:
@@ -838,7 +846,7 @@ Disabled by default.
 <!-- request Example -->
 
 ```ini
-pseudo_sharding = 1
+pseudo_sharding = 0
 ```
 <!-- end -->
 

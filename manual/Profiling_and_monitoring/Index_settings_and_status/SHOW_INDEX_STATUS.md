@@ -26,6 +26,7 @@ Displayed statistics include:
 * `ram_chunk_segments_count`: RAM chunk internally consists of segments, usually there are no more than 32 of them. This line shows the current count.
 * `disk_chunks`: number of disk chunks of the real-time index.
 * `mem_limit`: actual value of `rt_mem_limit` for the index.
+* `mem_limit_rate`: the rate after which the ram chunk will be flushed as a disk chunk, e.g. if `rt_mem_limit` is 128M and the rate is 50%, a new disk chunk will be saved as soon as the ram chunk exceeds 64M.
 * `ram_bytes_retired`: represents size of garbage in RAM chunks (for example, deleted or replaced documents not yet finally wiped away).
 * `tid` and `tid_saved`: represent the state of saving the index (real-time or percolate only). `tid` gets increased with each change (transaction). `tid_saved` shows max `tid` of the state saved in a RAM chunk in '<index>.ram' file. When the numbers are different, some changes exist only in RAM and also backed by binlog (if enabled). Performing 'flush rtindex' or scheduling periodical flushing causes these changes to be saved. After flushing the binlog gets cleared, and the `tid_saved` represents the actual new state.
 * `query_time_*`: query execution time statistics of last 1 minute, 5 minutes, 15 minutes and total since server start; the data is encapsulated as a JSON object which includes the number of queries and min, max, avg, 95 and 99 percentile values.
@@ -46,22 +47,23 @@ mysql> SHOW INDEX statistic STATUS;
 | Variable_name               | Value                                                                    |
 +-----------------------------+--------------------------------------------------------------------------+
 | index_type                  | rt                                                                       |
-| indexed_documents           | 923981                                                                   |
-| indexed_bytes               | 1181846688                                                               |
-| ram_bytes                   | 90453512                                                                 |
-| disk_bytes                  | 855544335                                                                |
-| disk_mapped                 | 848274223                                                                |
-| disk_mapped_cached          | 89686016                                                                 |
-| disk_mapped_doclists        | 490350852                                                                |
+| indexed_documents           | 146000                                                                   |
+| indexed_bytes               | 149504000                                                                |
+| ram_bytes                   | 87674788                                                                 |
+| disk_bytes                  | 1762811                                                                  |
+| disk_mapped                 | 794147                                                                   |
+| disk_mapped_cached          | 802816                                                                   |
+| disk_mapped_doclists        | 0                                                                        |
 | disk_mapped_cached_doclists | 0                                                                        |
-| disk_mapped_hitlists        | 207362625                                                                |
+| disk_mapped_hitlists        | 0                                                                        |
 | disk_mapped_cached_hitlists | 0                                                                        |
-| killed_documents            | 107                                                                      |
-| killed_rate                 | 0.01%                                                                    |
-| ram_chunk                   | 0                                                                        |
-| ram_chunk_segments_count    | 0                                                                        |
-| disk_chunks                 | 190                                                                      |
-| mem_limit                   | 524288                                                                   |
+| killed_documents            | 0                                                                        |
+| killed_rate                 | 0.00%                                                                    |
+| ram_chunk                   | 86865484                                                                 |
+| ram_chunk_segments_count    | 24                                                                       |
+| disk_chunks                 | 1                                                                        |
+| mem_limit                   | 134217728                                                                |
+| mem_limit_rate              | 95.00%                                                                   |
 | ram_bytes_retired           | 0                                                                        |
 | tid                         | 0                                                                        |
 | tid_saved                   | 0                                                                        |
@@ -69,16 +71,12 @@ mysql> SHOW INDEX statistic STATUS;
 | query_time_5min             | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
 | query_time_15min            | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
 | query_time_total            | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
-| exact_query_time_1min       | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
-| exact_query_time_5min       | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
-| exact_query_time_15min      | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
-| exact_query_time_total      | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
 | found_rows_1min             | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
 | found_rows_5min             | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
 | found_rows_15min            | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
 | found_rows_total            | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
 +-----------------------------+--------------------------------------------------------------------------+
-32 rows in set (0,03 sec)
+29 rows in set (0.00 sec)
 ```
 
 <!-- intro -->

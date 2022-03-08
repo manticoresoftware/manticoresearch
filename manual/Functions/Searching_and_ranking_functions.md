@@ -1,7 +1,7 @@
 # Searching and ranking functions
 
 ### BM25A()
-`BM25A(k1,b)` returns precise `BM25A()`. Requires `expr` ranker and `index_field_lengths` to be enabled. `k` and `b` parameters must be float.
+`BM25A(k1,b)` returns precise `BM25A()`. Requires ranker `expr` and enabled `index_field_lengths`. Parameters `k` and `b` must be float.
 
 ### BM25F()
 `BM25F(k1,b, {field=weight, ...})` returns precise `BM25F()` and `index_field_lengths` to be enabled. Requires `expr` ranker. `k` and `b` parameters must be float.

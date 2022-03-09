@@ -2745,18 +2745,18 @@ public:
 		return EqN ( t.cstr () );
 	}
 
-	CSphString ( const char * sString ) // NOLINT
+	CSphString ( const char * szString ) // NOLINT
 	{
-		if ( sString )
+		if ( szString )
 		{
-			if ( sString[0]=='\0' )
+			if ( szString[0]=='\0' )
 			{
 				m_sValue = EMPTY;
 			} else
 			{
-				auto iLen = (int) strlen(sString);
+				auto iLen = (int) strlen( szString);
 				m_sValue = new char [ iLen+SAFETY_GAP+1 ];
-				memcpy ( m_sValue, sString, iLen ); // NOLINT
+				memcpy ( m_sValue, szString, iLen ); // NOLINT
 				memset ( m_sValue+iLen, 0, SAFETY_GAP+1 );
 			}
 		}
@@ -3000,6 +3000,26 @@ public:
 inline void Swap ( CSphString & v1, CSphString & v2 )
 {
 	v1.Swap ( v2 );
+}
+
+/// directly make formatted string
+inline CSphString SphSprintfVa ( const char* sTemplate, va_list ap )
+{
+	CSphString sResult;
+	sResult.SetSprintfVa ( sTemplate, ap );
+	return sResult;
+}
+
+inline CSphString SphSprintf ( const char* sTemplate, ... )
+{
+	CSphString sResult;
+
+	va_list ap;
+	va_start ( ap, sTemplate );
+	sResult.SetSprintfVa ( sTemplate, ap );
+	va_end ( ap );
+
+	return sResult;
 }
 
 // commonly used vectors

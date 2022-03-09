@@ -1446,6 +1446,7 @@ RtIndex_c::RtIndex_c ( const CSphSchema & tSchema, const char * sIndexName, int6
 
 RtIndex_c::~RtIndex_c ()
 {
+	if ( IsInsideCoroutine())
 	{
 		// From serial worker resuming on Wait() will happen after whole merger coroutine finished.
 		ScopedScheduler_c tSerialFiber { m_tWorkers.SerialChunkAccess() };
@@ -6085,8 +6086,7 @@ void RtIndex_c::SetDebugCheck ( bool bCheckIdDups, int iCheckChunk )
 	m_bDebugCheck = true;
 	m_bCheckIdDups = bCheckIdDups;
 	m_iCheckChunk = iCheckChunk;
-	if ( Threads::IsInsideCoroutine() )
-		ProhibitSave();
+	ProhibitSave();
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -9539,7 +9539,8 @@ bool RtIndex_c::StopOptimize()
 {
 	auto bPrevOptimizeValue = m_bOptimizeStop.exchange ( true, std::memory_order_relaxed );
 	std::atomic_thread_fence ( std::memory_order_release ); // to be sure we go to Wait() _after_ m_bOptimizeStop is set to true.
-	m_tOptimizeRuns.Wait ( [] ( int i ) { return i <= 0; } );
+	if ( Threads::IsInsideCoroutine() )
+		m_tOptimizeRuns.Wait ( [] ( int i ) { return i <= 0; } );
 	return bPrevOptimizeValue;
 }
 

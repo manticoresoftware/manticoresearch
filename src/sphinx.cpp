@@ -9848,7 +9848,7 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 	// preload schema
 	if ( !LoadHeader ( GetIndexFileName ( SPH_EXT_SPH ).cstr(), bStripPath, tEmbeddedFiles, pFilenameBuilder, m_sLastWarning ) )
 	{
-		sphWarning ( "Unable to load json! Will retry with plain legacy sph..." );
+		sphInfo ( "Index header format is not json, will try it as binary..." );
 		if ( !LoadHeaderLegacy ( GetIndexFileName ( SPH_EXT_SPH ).cstr(), bStripPath, tEmbeddedFiles, pFilenameBuilder, m_sLastWarning ) )
 		{
 			sphWarning ( "Unable to load header.." );

@@ -1585,7 +1585,7 @@ int main ( int argc, char ** argv )
 		case IndextoolCmd_e::CHECK:
 			fprintf ( stdout, "checking index '%s'...\n", sIndex.cstr() );
 			{
-				SharedPtr_t<DebugCheckError_i> pReporter { MakeDebugCheckError ( stdout ) };
+				std::unique_ptr<DebugCheckError_i> pReporter { MakeDebugCheckError ( stdout ) };
 				iCheckErrno = pIndex->DebugCheck ( *pReporter );
 			}
 			if ( iCheckErrno )

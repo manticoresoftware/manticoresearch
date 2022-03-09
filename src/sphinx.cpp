@@ -12072,7 +12072,7 @@ size_t strnlen ( const char * s, size_t iMaxLen )
 
 int CSphIndex_VLN::DebugCheck ( DebugCheckError_i& tReporter )
 {
-	CSphScopedPtr<DiskIndexChecker_i> pIndexChecker ( CreateDiskIndexChecker ( *this, tReporter ) );
+	auto pIndexChecker = std::make_unique<DiskIndexChecker_c> ( *this, tReporter );
 
 	pIndexChecker->Setup ( m_iDocinfo, m_iDocinfoIndex, m_iMinMaxIndex, m_bCheckIdDups );
 
@@ -12080,14 +12080,14 @@ int CSphIndex_VLN::DebugCheck ( DebugCheckError_i& tReporter )
 	if ( !m_bPassedAlloc )
 		tReporter.Fail ( "index not preread" );
 
-	CSphString sError;
-	if ( !pIndexChecker->OpenFiles(sError) )
+	if ( !pIndexChecker->OpenFiles() )
 		return 1;
 
 	if ( !LoadHitlessWords ( m_tSettings.m_sHitlessFiles, m_pTokenizer, m_pDict, pIndexChecker->GetHitlessWords(), m_sLastError ) )
 		tReporter.Fail ( "unable to load hitless words: %s", m_sLastError.cstr() );
 
 	CSphSavedFile tStat;
+	CSphString sError;
 	const CSphTokenizerSettings & tTokenizerSettings = m_pTokenizer->GetSettings ();
 	if ( !tTokenizerSettings.m_sSynonymsFile.IsEmpty() && !tStat.Collect ( tTokenizerSettings.m_sSynonymsFile.cstr(), &sError ) )
 		tReporter.Fail ( "unable to open exceptions '%s': %s", tTokenizerSettings.m_sSynonymsFile.cstr(), sError.cstr() );

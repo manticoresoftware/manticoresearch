@@ -283,16 +283,42 @@ void DebugCheckHelper_c::DebugCheck_DeadRowMap ( int64_t iSizeBytes, int64_t nRo
 
 //////////////////////////////////////////////////////////////////////////
 
-class DiskIndexChecker_c : public DiskIndexChecker_i, public DebugCheckHelper_c
+class CheckError_c
+{
+	CSphString m_sWhat;
+
+public:
+	explicit CheckError_c ( const char* szWhat )
+		: m_sWhat { SphSprintf ("%s", szWhat ) }
+	{}
+
+	CheckError_c ( const char* szWhat, const CSphString& sError )
+		: m_sWhat { SphSprintf ( "%s: %s", szWhat, sError.scstr() ) }
+	{}
+
+	CheckError_c ( const char* szTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) )
+	{
+		va_list ap;
+		va_start ( ap, szTemplate );
+		m_sWhat.SetSprintfVa ( szTemplate, ap );
+		va_end ( ap );
+	}
+
+	const char* sWhat() const noexcept { return m_sWhat.scstr(); }
+};
+
+//////////////////////////////////////////////////////////////////////////
+
+class DiskIndexChecker_c::Impl_c : public DebugCheckHelper_c
 {
 public:
-			DiskIndexChecker_c ( CSphIndex & tIndex, DebugCheckError_i & tReporter );
+			Impl_c ( CSphIndex & tIndex, DebugCheckError_i & tReporter );
 
-	bool	OpenFiles ( CSphString & sError ) final;
-	void	Setup ( int64_t iNumRows, int64_t iDocinfoIndex, int64_t iMinMaxIndex, bool bCheckIdDups ) final;
-	CSphVector<SphWordID_t> & GetHitlessWords() final { return m_dHitlessWords; }
+	bool	OpenFiles ();
+	void	Setup ( int64_t iNumRows, int64_t iDocinfoIndex, int64_t iMinMaxIndex, bool bCheckIdDups );
+	CSphVector<SphWordID_t> & GetHitlessWords() { return m_dHitlessWords; }
 
-	void	Check() final;
+	void	Check();
 
 private:
 	CSphIndex &				m_tIndex;
@@ -329,19 +355,20 @@ private:
 	void	CheckDocids();
 	void	CheckDocstore();
 	void	CheckSchema();
-	
-	bool		ReadHeader ( CSphString & sError );
+
+	bool	ReadLegacyHeader ( CSphString& sError );
+	bool	ReadHeader ( CSphString& sError );
 	CSphString	GetFilename ( ESphExt eExt ) const;
 };
 
 
-DiskIndexChecker_c::DiskIndexChecker_c ( CSphIndex & tIndex, DebugCheckError_i & tReporter )
+DiskIndexChecker_c::Impl_c::Impl_c ( CSphIndex & tIndex, DebugCheckError_i & tReporter )
 	: m_tIndex ( tIndex )
 	, m_tReporter ( tReporter )
 {}
 
 
-bool DiskIndexChecker_c::ReadHeader ( CSphString & sError )
+bool DiskIndexChecker_c::Impl_c::ReadLegacyHeader ( CSphString& sError )
 {
 	CSphAutoreader tHeaderReader;
 	if ( !tHeaderReader.Open ( GetFilename(SPH_EXT_SPH), sError ) )
@@ -393,10 +420,79 @@ bool DiskIndexChecker_c::ReadHeader ( CSphString & sError )
 	return true;
 }
 
-
-bool DiskIndexChecker_c::OpenFiles ( CSphString & sError )
+bool DiskIndexChecker_c::Impl_c::ReadHeader ( CSphString& sError )
 {
-	if ( !ReadHeader(sError) )
+	bool bHeaderIsJson;
+	{
+		BYTE dBuffer[8];
+		CSphAutoreader tHeaderReader ( dBuffer, sizeof ( dBuffer ) );
+		if ( !tHeaderReader.Open ( GetFilename ( SPH_EXT_SPH ), sError ) )
+			return false;
+
+		tHeaderReader.GetDword();
+		bHeaderIsJson = dBuffer[0] == '{';
+	}
+
+	if ( !bHeaderIsJson ) // that is old style binary header
+		return ReadLegacyHeader ( sError );
+
+
+	auto sHeader = GetFilename ( SPH_EXT_SPH );
+	const char* szHeader = sHeader.scstr();
+	using namespace bson;
+
+	CSphVector<BYTE> dData;
+	if ( !sphJsonParse ( dData, GetFilename ( SPH_EXT_SPH ), sError ) )
+		return false;
+
+	Bson_c tBson ( dData );
+	if ( tBson.IsEmpty() || !tBson.IsAssoc() )
+	{
+		sError = "Something wrong read from json header - it is either empty, either not root object.";
+		return false;
+	}
+
+	// version
+	m_uVersion = (DWORD)Int ( tBson.ChildByName ( "index_format_version" ) );
+	if ( m_uVersion <= 1 || m_uVersion > INDEX_FORMAT_VERSION )
+	{
+		sError.SetSprintf ( "%s is v.%u, binary is v.%u", szHeader, m_uVersion, INDEX_FORMAT_VERSION );
+		return false;
+	}
+
+	// we don't support anything prior to v64 with json format
+	DWORD uMinFormatVer = 64;
+	if ( m_uVersion < uMinFormatVer )
+	{
+		sError.SetSprintf ( "indexes prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, szHeader, m_uVersion );
+		return false;
+	}
+
+	// schema
+	ReadSchemaJson ( tBson.ChildByName ( "schema" ), m_tSchema );
+
+	// dictionary header (wordlist checkpoints, infix blocks, etc)
+	m_tWordlist.m_iDictCheckpointsOffset = Int ( tBson.ChildByName ( "dict_checkpoints_offset" ) );
+	m_tWordlist.m_iDictCheckpoints = (int)Int ( tBson.ChildByName ( "dict_checkpoints" ) );
+	m_tWordlist.m_iInfixCodepointBytes = (int)Int ( tBson.ChildByName ( "infix_codepoint_bytes" ) );
+	m_tWordlist.m_iInfixBlocksOffset = Int ( tBson.ChildByName ( "infix_blocks_offset" ) );
+	m_tWordlist.m_iInfixBlocksWordsSize = (int)Int ( tBson.ChildByName ( "infix_block_words_size" ) );
+
+	m_tWordlist.m_dCheckpoints.Reset ( m_tWordlist.m_iDictCheckpoints );
+
+	if ( !m_tWordlist.Preread ( GetFilename ( SPH_EXT_SPI ).cstr(), m_tIndex.GetDictionary()->GetSettings().m_bWordDict, m_tIndex.GetSettings().m_iSkiplistBlockSize, sError ) )
+		return false;
+
+	// FIXME! add more header checks
+
+	return true;
+}
+
+
+bool DiskIndexChecker_c::Impl_c::OpenFiles ()
+{
+	CSphString sError;
+	if ( !ReadHeader ( sError ) )
 		return m_tReporter.Fail ( "error reading index header: %s", sError.cstr() );
 
 	if ( !m_tDictReader.Open ( GetFilename(SPH_EXT_SPI), sError ) )
@@ -443,7 +539,7 @@ bool DiskIndexChecker_c::OpenFiles ( CSphString & sError )
 }
 
 
-void DiskIndexChecker_c::Setup ( int64_t iNumRows, int64_t iDocinfoIndex, int64_t iMinMaxIndex, bool bCheckIdDups )
+void DiskIndexChecker_c::Impl_c::Setup ( int64_t iNumRows, int64_t iDocinfoIndex, int64_t iMinMaxIndex, bool bCheckIdDups )
 {
 	m_iNumRows = iNumRows;
 	m_iDocinfoIndex = iDocinfoIndex;
@@ -452,7 +548,7 @@ void DiskIndexChecker_c::Setup ( int64_t iNumRows, int64_t iDocinfoIndex, int64_
 }
 
 
-void DiskIndexChecker_c::Check()
+void DiskIndexChecker_c::Impl_c::Check()
 {
 	CheckSchema();
 	CheckDictionary();
@@ -471,7 +567,7 @@ void DiskIndexChecker_c::Check()
 }
 
 
-void DiskIndexChecker_c::CheckDictionary()
+void DiskIndexChecker_c::Impl_c::CheckDictionary()
 {
 	m_tReporter.Msg ( "checking dictionary..." );
 
@@ -694,7 +790,7 @@ void DiskIndexChecker_c::CheckDictionary()
 }
 
 
-void DiskIndexChecker_c::CheckDocs()
+void DiskIndexChecker_c::Impl_c::CheckDocs()
 {
 	const CSphIndexSettings & tIndexSettings = m_tIndex.GetSettings();
 
@@ -996,7 +1092,7 @@ void DiskIndexChecker_c::CheckDocs()
 }
 
 
-void DiskIndexChecker_c::CheckAttributes()
+void DiskIndexChecker_c::Impl_c::CheckAttributes()
 {
 	if ( !m_tSchema.HasNonColumnarAttrs() )
 		return;
@@ -1013,7 +1109,7 @@ void DiskIndexChecker_c::CheckAttributes()
 }
 
 
-void DiskIndexChecker_c::CheckKillList() const
+void DiskIndexChecker_c::Impl_c::CheckKillList() const
 {
 	m_tReporter.Msg ( "checking kill-list..." );
 
@@ -1073,7 +1169,7 @@ void DiskIndexChecker_c::CheckKillList() const
 }
 
 
-void DiskIndexChecker_c::CheckBlockIndex()
+void DiskIndexChecker_c::Impl_c::CheckBlockIndex()
 {
 	if ( !m_tSchema.HasNonColumnarAttrs() )
 		return;
@@ -1183,7 +1279,7 @@ void DiskIndexChecker_c::CheckBlockIndex()
 }
 
 
-void DiskIndexChecker_c::CheckColumnar()
+void DiskIndexChecker_c::Impl_c::CheckColumnar()
 {
 	if ( !m_tSchema.HasColumnarAttrs() )
 		return;
@@ -1196,7 +1292,7 @@ void DiskIndexChecker_c::CheckColumnar()
 }
 
 
-void DiskIndexChecker_c::CheckDocidLookup()
+void DiskIndexChecker_c::Impl_c::CheckDocidLookup()
 {
 	CSphString sError;
 	m_tReporter.Msg ( "checking doc-id lookup..." );
@@ -1326,7 +1422,7 @@ struct DocRow_fn
 };
 
 
-void DiskIndexChecker_c::CheckDocids()
+void DiskIndexChecker_c::Impl_c::CheckDocids()
 {
 	CSphString sError;
 	m_tReporter.Msg ( "checking docid douplicates ..." );
@@ -1353,7 +1449,7 @@ void DiskIndexChecker_c::CheckDocids()
 }
 
 
-void DiskIndexChecker_c::CheckDocstore()
+void DiskIndexChecker_c::Impl_c::CheckDocstore()
 {
 	if ( !m_bHasDocstore )
 		return;
@@ -1364,17 +1460,41 @@ void DiskIndexChecker_c::CheckDocstore()
 }
 
 
-CSphString DiskIndexChecker_c::GetFilename ( ESphExt eExt ) const
+CSphString DiskIndexChecker_c::Impl_c::GetFilename ( ESphExt eExt ) const
 {
 	CSphString sRes;
 	sRes.SetSprintf ( "%s%s", m_tIndex.GetFilename(), sphGetExt(eExt) );
 	return sRes;
 }
 
+/// public interface
+DiskIndexChecker_c::DiskIndexChecker_c ( CSphIndex& tIndex, DebugCheckError_i& tReporter )
+	: m_pImpl { new Impl_c { tIndex, tReporter } }
+{}
 
-DiskIndexChecker_i * CreateDiskIndexChecker ( CSphIndex & tIndex, DebugCheckError_i & tReporter )
+DiskIndexChecker_c::~DiskIndexChecker_c()
 {
-	return new DiskIndexChecker_c ( tIndex, tReporter );
+	SafeDelete ( m_pImpl );
+}
+
+bool DiskIndexChecker_c::OpenFiles ()
+{
+	return m_pImpl->OpenFiles();
+}
+
+void DiskIndexChecker_c::Setup ( int64_t iNumRows, int64_t iDocinfoIndex, int64_t iMinMaxIndex, bool bCheckIdDups )
+{
+	m_pImpl->Setup (iNumRows, iDocinfoIndex, iMinMaxIndex, bCheckIdDups );
+}
+
+CSphVector<SphWordID_t> & DiskIndexChecker_c::GetHitlessWords()
+{
+	return m_pImpl->GetHitlessWords();
+}
+
+void DiskIndexChecker_c::Check()
+{
+	m_pImpl->Check();
 }
 
 struct ColumnNameCmp_fn
@@ -1416,7 +1536,7 @@ void DebugCheckSchema_T ( const ISphSchema & tSchema, T & tReporter )
 	}
 }
 
-void DiskIndexChecker_c::CheckSchema()
+void DiskIndexChecker_c::Impl_c::CheckSchema()
 {
 	m_tReporter.Msg ( "checking schema..." );
 	DebugCheckSchema_T ( m_tSchema, m_tReporter );

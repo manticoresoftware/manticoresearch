@@ -51,20 +51,20 @@ protected:
 
 
 // disk index checker
-class DiskIndexChecker_i
+class DiskIndexChecker_c
 {
+	class Impl_c;
+	Impl_c* m_pImpl = nullptr;
+
 public:
-	virtual			~DiskIndexChecker_i() = default;
+			DiskIndexChecker_c ( CSphIndex& tIndex, DebugCheckError_i& tReporter );
+			~DiskIndexChecker_c();
 
-	virtual bool	OpenFiles ( CSphString & sError ) = 0;
-	virtual void	Setup ( int64_t iNumRows, int64_t iDocinfoIndex, int64_t iMinMaxIndex, bool bCheckIdDups ) = 0;
-	virtual CSphVector<SphWordID_t> & GetHitlessWords() = 0;
-
-	virtual void	Check() = 0;
+	bool	OpenFiles ();
+	void	Setup ( int64_t iNumRows, int64_t iDocinfoIndex, int64_t iMinMaxIndex, bool bCheckIdDups );
+	CSphVector<SphWordID_t> & GetHitlessWords();
+	void	Check();
 };
-
-
-DiskIndexChecker_i * CreateDiskIndexChecker ( CSphIndex & tIndex, DebugCheckError_i & tReporter );
 
 void DebugCheckSchema ( const ISphSchema & tSchema, DebugCheckError_i & tReporter );
 bool DebugCheckSchema ( const ISphSchema & tSchema, CSphString & sError );

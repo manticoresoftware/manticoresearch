@@ -709,6 +709,20 @@ int val_from_env ( const char* szEnvName, int iDefault )
 	return iRes;
 }
 
+DWORD dwval_from_env ( const char* szEnvName, DWORD uDefault )
+{
+	DWORD uRes = uDefault;
+	const char* szEnv = getenv ( szEnvName );
+	if ( szEnv )
+	{
+		char* szEnd = nullptr;
+		uRes = strtoul ( szEnv, &szEnd, 10 );
+		if ( *szEnd != '\0' )
+			sphWarning ( "%s expects to be numeric. %s provided, failed to parse as numeric since %s", szEnvName, szEnv, szEnd );
+	}
+	return uRes;
+}
+
 // absolute path from outside, as /usr/share/manticore, when prefix / or /usr. Or /usr/local/share/manticore if prefix /usr/local/
 const char * GET_FULL_SHARE_DIR()
 {

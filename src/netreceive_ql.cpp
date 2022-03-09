@@ -544,6 +544,8 @@ struct CLIENT
 	static constexpr DWORD SSL = 2048;
 	static constexpr DWORD RESERVED = 16384; // DEPRECATED: Old flag for 4.1 protocol
 	static constexpr DWORD RESERVED2 = 32768; // DEPRECATED: Old flag for 4.1 authentication \ CLIENT_SECURE_CONNECTION.
+	static constexpr DWORD MULTI_RESULTS = ( 1UL << 17 );
+	static constexpr DWORD PS_MULTI_RESULTS = ( 1UL << 18 );
 	static constexpr DWORD PLUGIN_AUTH = ( 1UL << 19 );
 	static constexpr DWORD ZSTD_COMPRESSION_ALGORITHM = ( 1UL << 26 );
 };
@@ -567,8 +569,10 @@ void SendMysqlProtoHandshake ( ISphOutputBuffer& tOut, bool bSsl, bool bCanUseCo
 						| CLIENT::PROTOCOL_41
 						| CLIENT::RESERVED2 // deprecated
 //						| CLIENT::RESERVED
+						| CLIENT::MULTI_RESULTS
 						| CLIENT::PLUGIN_AUTH
-						;
+						| dwval_from_env ( "MANTICORE_MYSQL_EXTRA_CAPABILITIES", 0 );
+
 	const char sHandshake3[] =	"\x21" // server language; let it be ut8_general_ci to make different clients happy
 		"\x02\x00"; // server status AUTO_COMMIT
 	const char sHandshake4[] =	"\x15" // length of auth-plugin-data - 21 bytes

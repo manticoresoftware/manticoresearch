@@ -5859,6 +5859,7 @@ CSphString GET_COLUMNAR_FULLPATH ();
 // note, default determines the type which to return
 bool val_from_env ( const char* szEnvName, bool bDefault );
 int val_from_env ( const char* szEnvName, int iDefault );
+DWORD dwval_from_env ( const char* szEnvName, DWORD uDefault );
 
 // fast diagnostic logging.
 // Being a macro, it will be optimized out by compiler when not in use

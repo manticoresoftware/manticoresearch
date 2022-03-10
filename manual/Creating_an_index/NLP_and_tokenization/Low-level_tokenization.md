@@ -42,21 +42,22 @@ charset_table = non_cjk, U+00E4, U+00C4->U+00E4, U+00F6, U+00D6->U+00F6, U+00FC,
 ```
 
 <!-- example charset_table -->
-Accepted characters array, with case folding rules. Optional, default values are latin and cyrillic characters.
+Accepted characters array, with case folding rules. Optional, default values are all characters of most non-CJK languages (`non_cjk`).
 
-charset_table is a main workhorse of Manticore tokenization process, the process of extracting keywords from document text or query text. It controls what characters are accepted as valid and what are not, and how the accepted characters should be transformed (eg. should the case be removed or not).
+`charset_table` is a main workhorse of Manticore tokenization process, the process of extracting keywords from document text or query text. It controls what characters are accepted as valid and what are not, and how the accepted characters should be transformed (e.g. should the case be removed or not).
 
-You can think of charset_table as of a big table or array that has a mapping for each and every of 100K+ characters in Unicode. By default, every character maps to 0, which means that it does not occur within keywords and should be treated as a separator. Once mentioned in the table, character is mapped to some other character (most frequently, either to itself or to a lowercase letter), and is treated as a valid keyword part.
+You can think of `charset_table` as of a big table or array that has a mapping for each and every of 100K+ characters in Unicode. By default, every character maps to 0, which means that it does not occur within keywords and should be treated as a separator. Once mentioned in the table, character is mapped to some other character (most frequently, either to itself or to a lowercase letter), and is treated as a valid keyword part.
 
 The expected value format is a comma-separated list of mappings. Two simplest mappings simply declare a character as valid, and map a single character to another single character, respectively. But specifying the whole table in such form would result in bloated and barely manageable specifications. So there are several syntax shortcuts that let you map ranges of characters at once. The complete list is as follows:
 
 * `A->a` - Single char mapping, declares source char 'A' as allowed to occur within keywords and maps it to destination char 'a' (but does *not* declare 'a' as allowed).
 * `A..Z->a..z` - Range mapping, declares all chars in source range as allowed and maps them to the destination range. Does *not* declare destination range as allowed. Also checks range's lengths (the lengths must be equal).
 * `a` - Stray char mapping, declares a character as allowed and maps it to itself. Equivalent to a->a single char mapping.
-* `a..z` - Stray range mapping, declares all characters in range as allowed and maps them to themselves. Equivalent to a..z->a..z range mapping.
-* `A..Z/2` - Checkerboard range map. Maps every pair of chars to the second char. More formally, declares odd characters in range as allowed and maps them to the even ones; also declares even characters as allowed and maps them to themselves. For instance, A..Z/2 is equivalent to A->B, B->B, C->D, D->D, ..., Y->Z, Z->Z. This mapping shortcut is helpful for a number of Unicode blocks where uppercase and lowercase letters go in such interleaved order instead of contiguous chunks.
+* `a..z` - Stray range mapping, declares all characters in range as allowed and maps them to themselves. Equivalent to `a..z->a..z` range mapping.
+* `A..Z/2` - Checkerboard range map. Maps every pair of chars to the second char. More formally, declares odd characters in range as allowed and maps them to the even ones; also declares even characters as allowed and maps them to themselves. For instance, `A..Z/2` is equivalent to `A->B, B->B, C->D, D->D, ..., Y->Z, Z->Z`. This mapping shortcut is helpful for a number of Unicode blocks where uppercase and lowercase letters go in such interleaved order instead of contiguous chunks.
 
-Control characters with codes from 0 to 32 are always treated as separators. Characters with codes 33 to 127, ie. 7-bit ASCII characters, can be used in the mappings as is. To avoid configuration file encoding issues, 8-bit ASCII characters and Unicode characters must be specified in `U+xxx` form, where `xxx` is hexadecimal codepoint number. This form can also be used for 7-bit ASCII characters to encode special ones: e.g. use U+2E to encode dot, U+2C to encode comma.
+Control characters with codes from 0 to 32 are always treated as separators. Characters with codes 33 to 127, i.e. 7-bit ASCII characters, can be used in the mappings as is. To avoid configuration file encoding issues, 8-bit ASCII characters and Unicode characters must be specified in `U+xxx` form, where `xxx` is hexadecimal codepoint number. This form can also be used for 7-bit ASCII characters to encode special ones: e.g. use `U+2E` to encode dot, `U+2C` to encode comma. The minimal accepted unicode character code is `U+0021`.
+
 
 You can redefine character mapping by specifying it again with another mapping. For example built-in array `non_cjk` includes characters `Ä` and `ä` and maps them both to ascii character `a` which may not work in some cases (e.g. for the German language). In this case you can redefine the characters so:
 

@@ -105,12 +105,6 @@ target_compile_definitions (lextra INTERFACE BOOST_ALL_NO_LIB=1)
 add_library (lmanticore_coro coroutine.cpp coroutine.h coro_waker.h)
 target_link_libraries(lmanticore_coro PUBLIC lextra )
 
-find_package (Valgrind QUIET)
-if (Valgrind_FOUND)
-	target_link_libraries (lmanticore_coro PRIVATE Valgrind::Valgrind)
-	target_compile_definitions (lmanticore_coro PRIVATE HAVE_VALGRIND=1)
-endif()
-
 target_link_libraries (lmanticore PUBLIC lmanticore_coro)
 
 set(LMANTICORE_BISON sphinxexpr.y sphinxselect.y sphinxquery.y sphinxjson.y)

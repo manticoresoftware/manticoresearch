@@ -116,7 +116,7 @@
 #cmakedefine HAVE_SYS_PRCTL_H ${HAVE_SYS_PRCTL_H}
 
 /* Define to 1 if you have valgrind headers (might be used in coroutines to mark mem as stack). */
-#cmakedefine HAVE_VALGRIND ${Valgrind_FOUND}
+#cmakedefine HAVE_VALGRIND_VALGRIND_H ${HAVE_VALGRIND_VALGRIND_H}
 
 /* define if mincore has unsigned 3-rd param */
 #cmakedefine HAVE_UNSIGNED_MINCORE ${HAVE_UNSIGNED_MINCORE}

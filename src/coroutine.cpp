@@ -13,7 +13,7 @@
 #include "task_info.h"
 #include <atomic>
 
-#ifdef HAVE_VALGRIND
+#ifdef HAVE_VALGRIND_VALGRIND_H
 #define BOOST_USE_VALGRIND 1
 #include <valgrind/valgrind.h>
 #else

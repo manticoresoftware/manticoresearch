@@ -26,6 +26,7 @@
 find_package ( PkgConfig QUIET )
 if (PKG_CONFIG_FOUND)
 	pkg_check_modules ( ZSTD QUIET libzstd )
+	mark_as_advanced(ZSTD_FOUND)
 endif ()
 
 if (NOT ZSTD_FOUND)

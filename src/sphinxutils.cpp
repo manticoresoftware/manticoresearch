@@ -40,7 +40,7 @@
 #include <glob.h>
 #endif
 
-#if HAVE_SYS_PRCTL_H
+#ifdef HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
 #endif
 

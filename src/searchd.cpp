@@ -14018,7 +14018,7 @@ void HandleSelectFiles ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	StrVec_t dExt;
 	RIdx_c ( pServed )->CollectFiles ( dFiles, dExt );
 
-	auto sFormat = pStmt->m_sThreadFormat;
+	auto sFormat = tStmt.m_sThreadFormat;
 	if ( sFormat!="external" )
 		ARRAY_CONSTFOREACH( i, dFiles )
 		{

@@ -97,10 +97,7 @@ ident:
 
 // commands 'debug shutdown', 'debug crash', 'debug token'
 shutdown_crash_token:
-	sh_cr_tok szparam opt_option_clause
-	{
-        	pParser->m_tCmd.m_sParam = pParser->StrFromBlob ($2);
-       	}
+	sh_cr_tok szparam opt_option_clause { pParser->m_tCmd.m_sParam = pParser->StrFromBlob ($2); }
 	;
 
 sh_cr_tok:

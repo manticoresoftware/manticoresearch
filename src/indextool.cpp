@@ -1482,8 +1482,7 @@ int main ( int argc, char ** argv )
 		if ( !pIndex )
 			sphDie ( "index '%s': failed to create (%s)", sIndex.cstr(), sError.cstr() );
 
-		if ( g_eCommand==IndextoolCmd_e::CHECK )
-			pIndex->SetDebugCheck ( bCheckIdDups, iCheckChunk );
+		pIndex->SetDebugCheck ( bCheckIdDups, iCheckChunk );
 
 		PreallocIndex ( sIndex, bStripPath, pIndex.get() );
 

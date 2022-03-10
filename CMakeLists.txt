@@ -214,6 +214,8 @@ win_install_c(OpenSSL SSL)
 
 trace (OpenSSL::Crypto)
 
+# Presence of Jemalloc headers
+check_include_file("jemalloc/jemalloc.h" HAVE_JEMALLOC_JEMALLOC_H)
 
 # Presence of Valgrind headers
 check_include_file("valgrind/valgrind.h" HAVE_VALGRIND_VALGRIND_H)

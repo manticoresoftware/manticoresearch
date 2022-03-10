@@ -403,6 +403,9 @@ void sphBacktrace ( EXCEPTION_POINTERS * pExc, const char * sFile );
 /// dummy call of backtrace to alloc internal structures and prevent deadlock at malloc on crash
 void sphBacktraceInit();
 
+/// calls actual (libc or jemalloc) malloc stats
+void sphMallocStats ( const char* szParams = nullptr );
+
 /// actualy dump of process sName with pid sPid and sink output to iFD
 /// (warning, that function uses fork!)
 bool sphDumpGdb ( int iFD, const char* sName, const char* sPid );

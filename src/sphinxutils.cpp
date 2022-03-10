@@ -46,6 +46,14 @@
 
 #include "libutils.h"
 
+#ifdef HAVE_MALLOC_H
+#include <malloc.h>
+#endif
+
+#ifdef HAVE_JEMALLOC_JEMALLOC_H
+#include <jemalloc/jemalloc.h>
+#endif
+
 //////////////////////////////////////////////////////////////////////////
 // STRING FUNCTIONS
 //////////////////////////////////////////////////////////////////////////
@@ -3042,6 +3050,33 @@ void sphBacktraceInit()
 
 #endif // _WIN32
 
+
+// if we configured with jemalloc headers, and determine that it's stats function is available - use it with param.
+// else check, if malloc_stats is available, and use it.
+// Otherwise just do nothing.
+void sphMallocStats ( const char* szParams )
+{
+#ifdef HAVE_JEMALLOC_JEMALLOC_H
+	// check that jemalloc is present
+	static bool bInitialized = false;
+
+	using MallocStats_FN = decltype ( &malloc_stats_print );
+	static MallocStats_FN fnJMallocStats = nullptr;
+	if (!bInitialized)
+	{
+#if HAVE_DLOPEN
+		fnJMallocStats = (MallocStats_FN) dlsym ( RTLD_DEFAULT, "malloc_stats_print" );
+#endif
+		bInitialized = true;
+	}
+	if (fnJMallocStats)
+		return ( *fnJMallocStats ) ( nullptr, nullptr, szParams );
+#endif
+
+#if HAVE_MALLOC_STATS
+	return malloc_stats();
+#endif
+}
 
 static bool g_bUnlinkOld = true;
 void sphSetUnlinkOld ( bool bUnlink )

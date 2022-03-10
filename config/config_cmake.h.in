@@ -118,6 +118,9 @@
 /* Define to 1 if you have valgrind headers (might be used in coroutines to mark mem as stack). */
 #cmakedefine HAVE_VALGRIND_VALGRIND_H ${HAVE_VALGRIND_VALGRIND_H}
 
+/* Define to 1 if you have jemalloc headers (might be used for debug malloc_stats). */
+#cmakedefine HAVE_JEMALLOC_JEMALLOC_H ${HAVE_JEMALLOC_JEMALLOC_H}
+
 /* define if mincore has unsigned 3-rd param */
 #cmakedefine HAVE_UNSIGNED_MINCORE ${HAVE_UNSIGNED_MINCORE}
 

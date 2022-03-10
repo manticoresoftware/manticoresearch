@@ -72,10 +72,6 @@ extern "C"
 #include <cmath>
 #include <ctime>
 
-#if HAVE_MALLOC_H
-#include <malloc.h>
-#endif
-
 #define SEARCHD_BACKLOG			5
 
 // don't shutdown on SIGKILL (debug purposes)
@@ -14138,13 +14134,14 @@ void HandleToken ( RowBuffer_i & tOut, const CSphString & sParam )
 }
 
 #if HAVE_MALLOC_STATS
-void HandleMallocStats ( RowBuffer_i & tOut )
+void HandleMallocStats ( RowBuffer_i & tOut, const CSphString& sParam )
 {
 	tOut.HeadTuplet ( "command", "result" );
 	// check where is stderr...
 	int iOldErr = ::dup ( STDERR_FILENO );
 	::dup2 ( GetLogFD (), STDERR_FILENO );
-	malloc_stats ();
+	sphMallocStats ( sParam.cstr() );
+	::close ( STDERR_FILENO );
 	::dup2 ( iOldErr, STDERR_FILENO );
 	::close ( iOldErr );
 	tOut.DataTuplet ( "malloc_stats", g_sLogFile.cstr () );
@@ -14283,7 +14280,7 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, Str_t sCommand )
 	switch ( tCmd.m_eCommand )
 	{
 #if HAVE_MALLOC_STATS
-	case Cmd_e::MALLOC_STATS: HandleMallocStats ( tOut ); return;
+	case Cmd_e::MALLOC_STATS: HandleMallocStats ( tOut, tCmd.m_sParam ); return;
 #endif
 
 #if HAVE_MALLOC_TRIM

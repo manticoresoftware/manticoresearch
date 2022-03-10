@@ -66,7 +66,7 @@ optsemicolon:
 
 debugcommand:
 	shutdown_crash_token
-	| TOK_MALSTATS	{ pParser->m_tCmd.m_eCommand = Cmd_e::MALLOC_STATS; }
+	| malstats		{ pParser->m_tCmd.m_eCommand = Cmd_e::MALLOC_STATS; }
 	| TOK_MALTRIM	{ pParser->m_tCmd.m_eCommand = Cmd_e::MALLOC_TRIM; }
 	| TOK_PROCDUMP  { pParser->m_tCmd.m_eCommand = Cmd_e::PROCDUMP; }
 	| TOK_CLOSE		{ pParser->m_tCmd.m_eCommand = Cmd_e::CLOSE; }
@@ -117,6 +117,15 @@ szparam_special:
 szparam:
 	TOK_QUOTED_STRING
 	| ident
+	;
+
+szparam_opt:
+	// empty
+	| szparam { pParser->m_tCmd.m_sParam = pParser->StrFromBlob ($1); }
+	;
+
+malstats:
+	TOK_MALSTATS szparam_opt
 	;
 
 // command 'setgdb on/off/status'

@@ -214,8 +214,6 @@ win_install_c(OpenSSL SSL)
 
 trace (OpenSSL::Crypto)
 
-# Support for Jemalloc
-with_menu (Jemalloc "Jemalloc" "alternative memory allocator implementation")
 
 # Presence of Valgrind headers
 check_include_file("valgrind/valgrind.h" HAVE_VALGRIND_VALGRIND_H)

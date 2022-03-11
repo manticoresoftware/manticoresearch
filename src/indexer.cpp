@@ -980,7 +980,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 
 	StrVec_t dWarnings;
 	CSphString sError;
-	TokenizerRefPtr_c pTokenizer { Tokenizer::Create ( tTokSettings, nullptr, nullptr, dWarnings, sError ) };
+	TokenizerRefPtr_c pTokenizer = Tokenizer::Create ( tTokSettings, nullptr, nullptr, dWarnings, sError );
 	if ( !pTokenizer )
 		sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
@@ -1041,7 +1041,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 
 		// aot filter
 		if ( tSettings.m_uAotFilterMask )
-			pTokenizer = sphAotCreateFilter ( pTokenizer, pDict, tSettings.m_bIndexExactWords, tSettings.m_uAotFilterMask );
+			sphAotTransformFilter ( pTokenizer, pDict, tSettings.m_bIndexExactWords, tSettings.m_uAotFilterMask );
 	}
 
 	FieldFilterRefPtr_c pFieldFilter;

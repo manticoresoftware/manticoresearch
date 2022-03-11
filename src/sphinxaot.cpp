@@ -1446,10 +1446,9 @@ protected:
 	const CSphWordforms *	m_pWordforms = nullptr;
 
 public:
-	CSphAotTokenizerTmpl ( ISphTokenizer * pTok, CSphDict * pDict, bool bIndexExact, int DEBUGARG(iLang) )
-		: CSphTokenFilter ( pTok )
+	CSphAotTokenizerTmpl ( TokenizerRefPtr_c pTok, CSphDict * pDict, bool bIndexExact, int DEBUGARG(iLang) )
+		: CSphTokenFilter ( std::move (pTok) )
 	{
-		assert ( pTok );
 		assert ( g_pLemmatizers[iLang] );
 		m_FindResults[0] = AOT_NOFORM;
 		if ( pDict )
@@ -1483,19 +1482,19 @@ public:
 class CSphAotTokenizerRu : public CSphAotTokenizerTmpl
 {
 public:
-	CSphAotTokenizerRu ( ISphTokenizer * pTok, CSphDict * pDict, bool bIndexExact )
-		: CSphAotTokenizerTmpl ( pTok, pDict, bIndexExact, AOT_RU )
+	CSphAotTokenizerRu ( TokenizerRefPtr_c pTok, CSphDict * pDict, bool bIndexExact )
+		: CSphAotTokenizerTmpl ( std::move (pTok), pDict, bIndexExact, AOT_RU )
 	{}
 
-	ISphTokenizer * Clone ( ESphTokenizerClone eMode ) const final
+	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const final
 	{
 		// this token filter must NOT be created as escaped
 		// it must only be used during indexing time, NEVER in searching time
 		assert ( eMode==SPH_CLONE_INDEX );
-		auto * pClone = new CSphAotTokenizerRu ( TokenizerRefPtr_c ( m_pTokenizer->Clone ( eMode ) ), NULL, m_bIndexExact );
+		auto * pClone = new CSphAotTokenizerRu ( m_pTokenizer->Clone ( eMode ), nullptr, m_bIndexExact );
 		if ( m_pWordforms )
 			pClone->m_pWordforms = m_pWordforms;
-		return pClone;
+		return TokenizerRefPtr_c { pClone };
 	}
 
 	BYTE * GetToken() final
@@ -1612,20 +1611,20 @@ class CSphAotTokenizer : public CSphAotTokenizerTmpl
 	AOT_LANGS		m_iLang;
 
 public:
-	CSphAotTokenizer ( ISphTokenizer * pTok, CSphDict * pDict, bool bIndexExact, int iLang )
-		: CSphAotTokenizerTmpl ( pTok, pDict, bIndexExact, iLang )
+	CSphAotTokenizer ( TokenizerRefPtr_c pTok, CSphDict * pDict, bool bIndexExact, int iLang )
+		: CSphAotTokenizerTmpl ( std::move (pTok), pDict, bIndexExact, iLang )
 		, m_iLang ( AOT_LANGS(iLang) )
 	{}
 
-	ISphTokenizer * Clone ( ESphTokenizerClone eMode ) const final
+	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const final
 	{
 		// this token filter must NOT be created as escaped
 		// it must only be used during indexing time, NEVER in searching time
 		assert ( eMode==SPH_CLONE_INDEX );
-		auto * pClone = new CSphAotTokenizer ( TokenizerRefPtr_c ( m_pTokenizer->Clone ( eMode ) ), nullptr, m_bIndexExact, m_iLang );
+		auto * pClone = new CSphAotTokenizer ( m_pTokenizer->Clone ( eMode ), nullptr, m_bIndexExact, m_iLang );
 		if ( m_pWordforms )
 			pClone->m_pWordforms = m_pWordforms;
-		return pClone;
+		return TokenizerRefPtr_c { pClone };
 	}
 
 	BYTE * GetToken() final
@@ -1774,15 +1773,14 @@ class TokenizerUk_c : public CSphAotTokenizerTmpl
 	LemmatizerUk_c m_tLemmatizer;
 
 public:
-	TokenizerUk_c ( ISphTokenizer * pTok, CSphDict * pDict, bool bIndexExact );
-	ISphTokenizer * Clone ( ESphTokenizerClone eMode ) const final;
+	TokenizerUk_c ( TokenizerRefPtr_c pTok, CSphDict * pDict, bool bIndexExact );
+	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const final;
 	BYTE * GetToken() final;
 };
 
-ISphTokenizer * sphAotCreateFilter ( ISphTokenizer * pTokenizer, CSphDict * pDict, bool bIndexExact, DWORD uLangMask )
+void sphAotTransformFilter ( TokenizerRefPtr_c& pTokenizer, CSphDict * pDict, bool bIndexExact, DWORD uLangMask )
 {
 	assert ( uLangMask!=0 );
-	CSphRefcountedPtr<ISphTokenizer> pDerivedTokenizer;
 	for ( int i=AOT_BEGIN; i<AOT_LENGTH; ++i )
 	{
 		if ( uLangMask & (1UL<<i) )
@@ -1790,18 +1788,16 @@ ISphTokenizer * sphAotCreateFilter ( ISphTokenizer * pTokenizer, CSphDict * pDic
 			switch ( i )
 			{
 			case AOT_RU:
-				pDerivedTokenizer = new CSphAotTokenizerRu ( pTokenizer, pDict, bIndexExact );
+				pTokenizer = new CSphAotTokenizerRu ( pTokenizer, pDict, bIndexExact );
 				break;
 			case AOT_UK:
-				pDerivedTokenizer = new TokenizerUk_c ( pTokenizer, pDict, bIndexExact );
+				pTokenizer = new TokenizerUk_c ( pTokenizer, pDict, bIndexExact );
 				break;
 			default:
-				pDerivedTokenizer = new CSphAotTokenizer ( pTokenizer, pDict, bIndexExact, i );
+				pTokenizer = new CSphAotTokenizer ( pTokenizer, pDict, bIndexExact, i );
 			}
-			pTokenizer = pDerivedTokenizer;
 		}
 	}
-	return pDerivedTokenizer.Leak();
 }
 
 
@@ -1949,20 +1945,20 @@ LemmatizerTrait_i * CreateLemmatizer ( int iLang )
 	return new LemmatizerUk_c();
 }
 
-TokenizerUk_c::TokenizerUk_c ( ISphTokenizer * pTok, CSphDict * pDict, bool bIndexExact )
-	: CSphAotTokenizerTmpl ( pTok, pDict, bIndexExact, AOT_UK )
+TokenizerUk_c::TokenizerUk_c ( TokenizerRefPtr_c pTok, CSphDict * pDict, bool bIndexExact )
+	: CSphAotTokenizerTmpl ( std::move (pTok), pDict, bIndexExact, AOT_UK )
 {
 }
 
-ISphTokenizer * TokenizerUk_c::Clone ( ESphTokenizerClone eMode ) const
+TokenizerRefPtr_c TokenizerUk_c::Clone ( ESphTokenizerClone eMode ) const
 {
 	// this token filter must NOT be created as escaped
 	// it must only be used during indexing time, NEVER in searching time
 	assert ( eMode==SPH_CLONE_INDEX );
-	auto * pClone = new TokenizerUk_c ( TokenizerRefPtr_c ( m_pTokenizer->Clone ( eMode ) ), NULL, m_bIndexExact );
+	auto * pClone = new TokenizerUk_c ( m_pTokenizer->Clone ( eMode ), nullptr, m_bIndexExact );
 	if ( m_pWordforms )
 		pClone->m_pWordforms = m_pWordforms;
-	return pClone;
+	return TokenizerRefPtr_c { pClone };
 }
 
 BYTE * TokenizerUk_c::GetToken()

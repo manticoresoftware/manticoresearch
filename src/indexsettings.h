@@ -401,7 +401,7 @@ class CSphDict;
 class ISphFieldFilter;
 class CSphIndex;
 
-void		SaveTokenizerSettings ( CSphWriter & tWriter, const ISphTokenizer * pTokenizer, int iEmbeddedLimit );
+void		SaveTokenizerSettings ( CSphWriter & tWriter, const TokenizerRefPtr_c& pTokenizer, int iEmbeddedLimit );
 void		SaveDictionarySettings ( CSphWriter & tWriter, const CSphDict * pDict, bool bForceWordDict, int iEmbeddedLimit );
 
 void		DumpSettings ( StringBuilder_c & tBuf, const CSphIndex & tIndex, FilenameBuilder_i * pFilenameBuilder );
@@ -431,7 +431,7 @@ class JsonEscapedBuilder;
 void operator<< ( JsonEscapedBuilder& tOut, const CSphFieldFilterSettings& tFieldFilterSettings );
 void operator<< ( JsonEscapedBuilder& tOut, const CSphIndexSettings& tIndexSettings );
 
-void SaveTokenizerSettings ( JsonEscapedBuilder& tOut, const ISphTokenizer * pTokenizer, int iEmbeddedLimit );
+void SaveTokenizerSettings ( JsonEscapedBuilder& tOut, const TokenizerRefPtr_c& pTokenizer, int iEmbeddedLimit );
 void SaveDictionarySettings ( JsonEscapedBuilder& tOut, const CSphDict* pDict, bool bForceWordDict, int iEmbeddedLimit );
 
 #endif // _indexsettings_

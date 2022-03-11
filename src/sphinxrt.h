@@ -152,7 +152,7 @@ public:
 	virtual RtAccum_t * CreateAccum ( RtAccum_t * pAccExt, CSphString & sError ) = 0;
 
 	// instead of cloning for each AddDocument() call we could just call this method and improve batch inserts speed
-	virtual ISphTokenizer * CloneIndexingTokenizer() const = 0;
+	virtual TokenizerRefPtr_c CloneIndexingTokenizer() const = 0;
 
 	// hint an index that it was deleted and should cleanup its files when destructed
 	virtual void IndexDeleted() = 0;
@@ -416,10 +416,10 @@ bool ExtractInfixCheckpoints ( const char * sInfix, int iBytes, int iMaxCodepoin
 	const CSphTightVector<uint64_t> &dFilter, CSphVector<DWORD> &dCheckpoints );
 
 void SetupExactDict ( DictRefPtr_c& pDict );
-void SetupExactTokenizer ( ISphTokenizer* pTokenizer, bool bAddSpecial = true );
+void SetupExactTokenizer ( const TokenizerRefPtr_c& pTokenizer, bool bAddSpecial = true );
 
 void SetupStarDict ( DictRefPtr_c& pDict );
-void SetupStarTokenizer ( ISphTokenizer* pTokenizer );
+void SetupStarTokenizer ( const TokenizerRefPtr_c& pTokenizer );
 
 bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const ISphFieldFilter * pFieldFilter,
 	const CSphIndexSettings & tIndexSettings, uint64_t uTokHash, uint64_t uDictHash, int iMaxCodepointLength, int64_t iMemLimit,

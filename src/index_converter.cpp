@@ -475,7 +475,7 @@ static int GetRowSize ( const CSphVector<CSphColumnInfo> & dAttrs )
 static bool SetupWordProcessors ( Index_t & tIndex, CSphString & sError )
 {
 	StrVec_t dWarnings;
-	TokenizerRefPtr_c pTokenizer { Tokenizer::Create ( tIndex.m_tTokSettings, &tIndex.m_tEmbeddedTok, nullptr, dWarnings, sError ) };
+	TokenizerRefPtr_c pTokenizer = Tokenizer::Create ( tIndex.m_tTokSettings, &tIndex.m_tEmbeddedTok, nullptr, dWarnings, sError );
 	if ( !pTokenizer )
 		return false;
 
@@ -493,7 +493,7 @@ static bool SetupWordProcessors ( Index_t & tIndex, CSphString & sError )
 	tIndex.m_tSettings.m_uAotFilterMask = sphParseMorphAot ( tIndex.m_tDictSettings.m_sMorphology.cstr() );
 	// aot filter
 	if ( tIndex.m_tSettings.m_uAotFilterMask )
-		pTokenizer = sphAotCreateFilter ( pTokenizer, tIndex.m_pDict, tIndex.m_tSettings.m_bIndexExactWords, tIndex.m_tSettings.m_uAotFilterMask );
+		sphAotTransformFilter ( pTokenizer, tIndex.m_pDict, tIndex.m_tSettings.m_bIndexExactWords, tIndex.m_tSettings.m_uAotFilterMask );
 	tIndex.m_pTokenizer = pTokenizer;
 
 	return true;

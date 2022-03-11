@@ -96,7 +96,7 @@ char * LoadFile ( const char * sName, int * pLen, bool bReportErrors )
 }
 
 
-void BenchTokenizer ( ISphTokenizer * pTokenizer, BYTE * sData, int iBytes )
+void BenchTokenizer ( const TokenizerRefPtr_c& pTokenizer, BYTE * sData, int iBytes )
 {
 	const int iPasses = 1000;
 	int iTokens = 0;
@@ -145,7 +145,7 @@ void BenchTokenizer ()
 	{
 		char * sData = LoadFile ( "./configure", &iBytes, true );
 
-		TokenizerRefPtr_c pTokenizer { Tokenizer::Detail::CreateUTF8Tokenizer () };
+		TokenizerRefPtr_c pTokenizer = Tokenizer::Detail::CreateUTF8Tokenizer ();
 		// pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z", sError );
 		if ( iRun==2 )
 			pTokenizer->LoadSynonyms ( g_sTmpfile, NULL, dWarnings, sError );
@@ -159,7 +159,7 @@ void BenchTokenizer ()
 	char * sData = LoadFile ( "./utf8.txt", &iBytes, false );
 	if ( sData )
 	{
-		ISphTokenizer * pTokenizer = Tokenizer::Detail::CreateUTF8Tokenizer ();
+		TokenizerRefPtr_c pTokenizer = Tokenizer::Detail::CreateUTF8Tokenizer ();
 		printf ( "run 3: " );
 		BenchTokenizer ( pTokenizer, (BYTE*)sData, iBytes );
 	}

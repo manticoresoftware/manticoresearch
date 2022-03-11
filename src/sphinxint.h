@@ -911,11 +911,11 @@ class CSphDictTraits : public CSphDict
 public:
 	explicit			CSphDictTraits ( CSphDict * pDict ) : m_pDict { pDict } { SafeAddRef ( pDict ); }
 
-	void		LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer, bool bStripFile ) final { m_pDict->LoadStopwords ( sFiles, pTokenizer, bStripFile ); }
+	void		LoadStopwords ( const char * sFiles, const TokenizerRefPtr_c& pTokenizer, bool bStripFile ) final { m_pDict->LoadStopwords ( sFiles, pTokenizer, bStripFile ); }
 	void		LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) final { m_pDict->LoadStopwords ( dStopwords ); }
 	void		WriteStopwords ( CSphWriter & tWriter ) const final { m_pDict->WriteStopwords ( tWriter ); }
 	void		WriteStopwords ( JsonEscapedBuilder & tOut ) const final { m_pDict->WriteStopwords ( tOut ); }
-	bool		LoadWordforms ( const StrVec_t & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) final { return m_pDict->LoadWordforms ( dFiles, pEmbedded, pTokenizer, sIndex ); }
+	bool		LoadWordforms ( const StrVec_t & dFiles, const CSphEmbeddedFiles * pEmbedded, const TokenizerRefPtr_c& pTokenizer, const char * sIndex ) final { return m_pDict->LoadWordforms ( dFiles, pEmbedded, pTokenizer, sIndex ); }
 	void		WriteWordforms ( CSphWriter & tWriter ) const final { m_pDict->WriteWordforms ( tWriter ); }
 	void		WriteWordforms ( JsonEscapedBuilder & tOut ) const final { m_pDict->WriteWordforms ( tOut ); }
 	int			SetMorphology ( const char * szMorph, CSphString & sMessage ) final { return m_pDict->SetMorphology ( szMorph, sMessage ); }
@@ -1021,8 +1021,8 @@ void			SaveIndexSettings ( CSphWriter & tWriter, const CSphIndexSettings & tSett
 void			LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DWORD uVersion );
 void			LoadIndexSettingsJson ( bson::Bson_c tNode, CSphIndexSettings & tSettings );
 bool			AddFieldLens ( CSphSchema & tSchema, bool bDynamic, CSphString & sError );
-bool			LoadHitlessWords ( const CSphString & sHitlessFiles, ISphTokenizer * pTok, CSphDict * pDict, CSphVector<SphWordID_t> & dHitlessWords, CSphString & sError );
-void			GetSettingsFiles ( const ISphTokenizer * pTok, const CSphDict * pDict, const CSphIndexSettings & tSettings, const FilenameBuilder_i * pFilenameBuilder, StrVec_t & dFiles );
+bool			LoadHitlessWords ( const CSphString & sHitlessFiles, const TokenizerRefPtr_c& pTok, CSphDict * pDict, CSphVector<SphWordID_t> & dHitlessWords, CSphString & sError );
+void			GetSettingsFiles ( const TokenizerRefPtr_c& pTok, const CSphDict * pDict, const CSphIndexSettings & tSettings, const FilenameBuilder_i * pFilenameBuilder, StrVec_t & dFiles );
 
 /// json save/load
 void operator<< ( JsonEscapedBuilder& tOut, const CSphSchema& tSchema );
@@ -1261,7 +1261,7 @@ struct SuggestResult_t
 		assert ( !m_pSegments );
 	}
 
-	bool SetWord ( const char * sWord, const ISphTokenizer * pTok, bool bUseLastWord );
+	bool SetWord ( const char * sWord, const TokenizerRefPtr_c& pTok, bool bUseLastWord );
 
 	void Flattern ( int iLimit );
 };
@@ -1513,8 +1513,6 @@ struct StoredToken_t
 	bool			m_bBlended;
 	bool			m_bBlendedPart;
 };
-
-void FillStoredTokenInfo ( StoredToken_t & tToken, const BYTE * sToken, ISphTokenizer * pTokenizer );
 
 struct RemapXSV_t
 {

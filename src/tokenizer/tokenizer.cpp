@@ -249,17 +249,18 @@ bool ISphTokenizer::SetBlendMode ( const char* sMode, CSphString& sError )
 	return true;
 }
 
-ISphTokenizer * Tokenizer::Create ( const CSphTokenizerSettings & tSettings, const CSphEmbeddedFiles * pFiles, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError )
+TokenizerRefPtr_c Tokenizer::Create ( const CSphTokenizerSettings & tSettings, const CSphEmbeddedFiles * pFiles, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError )
 {
+	TokenizerRefPtr_c pResult;
 	TokenizerRefPtr_c pTokenizer;
 
 	switch ( tSettings.m_iType )
 	{
-	case TOKENIZER_UTF8:	pTokenizer = Detail::CreateUTF8Tokenizer ( tSettings.m_sCaseFolding.IsEmpty() ); break;
-	case TOKENIZER_NGRAM:	pTokenizer = Detail::CreateUTF8NgramTokenizer ( tSettings.m_sCaseFolding.IsEmpty() ); break;
+	case TOKENIZER_UTF8:	pTokenizer = Tokenizer::Detail::CreateUTF8Tokenizer ( tSettings.m_sCaseFolding.IsEmpty() ); break;
+	case TOKENIZER_NGRAM:	pTokenizer = Tokenizer::Detail::CreateUTF8NgramTokenizer ( tSettings.m_sCaseFolding.IsEmpty() ); break;
 	default:
 		sError.SetSprintf ( "failed to create tokenizer (unknown charset type '%d')", tSettings.m_iType );
-		return nullptr;
+		return pResult;
 	}
 
 	pTokenizer->Setup ( tSettings );
@@ -267,7 +268,7 @@ ISphTokenizer * Tokenizer::Create ( const CSphTokenizerSettings & tSettings, con
 	if ( !tSettings.m_sCaseFolding.IsEmpty () && !pTokenizer->SetCaseFolding ( tSettings.m_sCaseFolding.cstr (), sError ) )
 	{
 		sError.SetSprintf ( "'charset_table': %s", sError.cstr() );
-		return nullptr;
+		return pResult;
 	}
 
 	CSphString sSynonymsFile = tSettings.m_sSynonymsFile;
@@ -279,32 +280,32 @@ ISphTokenizer * Tokenizer::Create ( const CSphTokenizerSettings & tSettings, con
 		if ( !pTokenizer->LoadSynonyms ( sSynonymsFile.cstr(), pFiles && pFiles->m_bEmbeddedSynonyms ? pFiles : nullptr, dWarnings, sError ) )
 		{
 			sError.SetSprintf ( "'synonyms': %s", sError.cstr() );
-			return nullptr;
+			return pResult;
 		}
 	}
 
 	if ( !tSettings.m_sBoundary.IsEmpty () && !pTokenizer->SetBoundary ( tSettings.m_sBoundary.cstr (), sError ) )
 	{
 		sError.SetSprintf ( "'phrase_boundary': %s", sError.cstr() );
-		return nullptr;
+		return pResult;
 	}
 
 	if ( !tSettings.m_sIgnoreChars.IsEmpty () && !pTokenizer->SetIgnoreChars ( tSettings.m_sIgnoreChars.cstr (), sError ) )
 	{
 		sError.SetSprintf ( "'ignore_chars': %s", sError.cstr() );
-		return nullptr;
+		return pResult;
 	}
 
 	if ( !tSettings.m_sBlendChars.IsEmpty () && !pTokenizer->SetBlendChars ( tSettings.m_sBlendChars.cstr (), sError ) )
 	{
 		sError.SetSprintf ( "'blend_chars': %s", sError.cstr() );
-		return nullptr;
+		return pResult;
 	}
 
 	if ( !pTokenizer->SetBlendMode ( tSettings.m_sBlendMode.cstr (), sError ) )
 	{
 		sError.SetSprintf ( "'blend_mode': %s", sError.cstr() );
-		return nullptr;
+		return pResult;
 	}
 
 	pTokenizer->SetNgramLen ( tSettings.m_iNgramLen );
@@ -312,9 +313,10 @@ ISphTokenizer * Tokenizer::Create ( const CSphTokenizerSettings & tSettings, con
 	if ( !tSettings.m_sNgramChars.IsEmpty () && !pTokenizer->SetNgramChars ( tSettings.m_sNgramChars.cstr (), sError ) )
 	{
 		sError.SetSprintf ( "'ngram_chars': %s", sError.cstr() );
-		return nullptr;
+		return pResult;
 	}
 
-	return pTokenizer.Leak ();
+	pResult = std::move (pTokenizer);
+	return pResult;
 }
 

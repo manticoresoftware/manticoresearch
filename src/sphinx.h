@@ -192,7 +192,7 @@ public:
 	virtual void		ApplyStemmers ( BYTE * ) const {}
 
 	/// load stopwords from given files
-	virtual void		LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer, bool bStripFile ) = 0;
+	virtual void		LoadStopwords ( const char * sFiles, const TokenizerRefPtr_c& pTokenizer, bool bStripFile ) = 0;
 
 	/// load stopwords from an array
 	virtual void		LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) = 0;
@@ -202,7 +202,7 @@ public:
 	virtual void		WriteStopwords ( JsonEscapedBuilder & tOut ) const = 0;
 
 	/// load wordforms from a given list of files
-	virtual bool		LoadWordforms ( const StrVec_t &, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) = 0;
+	virtual bool		LoadWordforms ( const StrVec_t &, const CSphEmbeddedFiles * pEmbedded, const TokenizerRefPtr_c& pTokenizer, const char * sIndex ) = 0;
 
 	/// write wordforms to a file
 	virtual void		WriteWordforms ( CSphWriter & tWriter ) const = 0;
@@ -300,11 +300,11 @@ protected:
 public:
 	SphWordID_t GetWordID ( BYTE* ) override { return 0; }
 	SphWordID_t	GetWordID ( const BYTE *, int, bool ) override { return 0; };
-	void		LoadStopwords ( const char *, const ISphTokenizer *, bool ) override {};
+	void		LoadStopwords ( const char *, const TokenizerRefPtr_c&, bool ) override {};
 	void		LoadStopwords ( const CSphVector<SphWordID_t> & ) override {};
 	void		WriteStopwords ( CSphWriter & ) const override {};
 	void		WriteStopwords ( JsonEscapedBuilder & ) const override {};
-	bool		LoadWordforms ( const StrVec_t &, const CSphEmbeddedFiles *, const ISphTokenizer *, const char * ) override { return false; };
+	bool		LoadWordforms ( const StrVec_t &, const CSphEmbeddedFiles *, const TokenizerRefPtr_c&, const char * ) override { return false; };
 	void		WriteWordforms ( CSphWriter & ) const override {};
 	void		WriteWordforms ( JsonEscapedBuilder & ) const override {};
 	int			SetMorphology ( const char *, CSphString & ) override { return ST_OK; }
@@ -323,13 +323,13 @@ using DictRefPtr_c = CSphRefcountedPtr<CSphDict>;
 CSphDict * GetStatelessDict ( CSphDict * pDict );
 
 /// traits dictionary factory (no storage, only tokenizing, lemmatizing, etc.)
-CSphDict * sphCreateDictionaryTemplate ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, bool bStripFile, FilenameBuilder_i * pFilenameBuilder, CSphString & sError );
+CSphDict * sphCreateDictionaryTemplate ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const TokenizerRefPtr_c& pTokenizer, const char * sIndex, bool bStripFile, FilenameBuilder_i * pFilenameBuilder, CSphString & sError );
 
 /// CRC32/FNV64 dictionary factory
-CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, bool bStripFile, int iSkiplistBlockSize, FilenameBuilder_i * pFilenameBuilder, CSphString & sError );
+CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const TokenizerRefPtr_c& pTokenizer, const char * sIndex, bool bStripFile, int iSkiplistBlockSize, FilenameBuilder_i * pFilenameBuilder, CSphString & sError );
 
 /// keyword-storing dictionary factory
-CSphDict * sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, bool bStripFile, int iSkiplistBlockSize, FilenameBuilder_i * pFilenameBuilder, CSphString & sError );
+CSphDict * sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const TokenizerRefPtr_c& pTokenizer, const char * sIndex, bool bStripFile, int iSkiplistBlockSize, FilenameBuilder_i * pFilenameBuilder, CSphString & sError );
 
 /// clear wordform cache
 void sphShutdownWordforms ();
@@ -1273,11 +1273,11 @@ public:
 	void						SetInplaceSettings ( int iHitGap, float fRelocFactor, float fWriteFactor );
 	void						SetFieldFilter ( ISphFieldFilter * pFilter );
 	const ISphFieldFilter *		GetFieldFilter() const { return m_pFieldFilter; }
-	void						SetTokenizer ( ISphTokenizer * pTokenizer );
+	void						SetTokenizer ( TokenizerRefPtr_c pTokenizer );
 	void						SetupQueryTokenizer();
-	const ISphTokenizer *		GetTokenizer () const { return m_pTokenizer; }
-	const ISphTokenizer *		GetQueryTokenizer () const { return m_pQueryTokenizer; }
-	ISphTokenizer *				LeakTokenizer ();
+	TokenizerRefPtr_c			GetTokenizer () const;
+	TokenizerRefPtr_c			GetQueryTokenizer () const;
+	TokenizerRefPtr_c			LeakTokenizer ();
 	void						SetDictionary ( CSphDict * pDict );
 	CSphDict *					GetDictionary () const { return m_pDict; }
 	CSphDict *					LeakDictionary ();
@@ -1288,7 +1288,7 @@ public:
 	virtual bool				IsRT() const { return false; }
 	virtual bool				IsPQ() const { return false; }
 	void						SetBinlog ( bool bBinlog ) { m_bBinlog = bBinlog; }
-	virtual int64_t *			GetFieldLens() const { return NULL; }
+	virtual int64_t *			GetFieldLens() const { return nullptr; }
 	virtual bool				IsStarDict ( bool bWordDict ) const;
 	int64_t						GetIndexId() const { return m_iIndexId; }
 	void						SetMutableSettings ( const MutableIndexSettings_c & tSettings );

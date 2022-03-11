@@ -346,17 +346,14 @@ void ShutdownSkipCache()
 class DiskIndexQwordSetup_c : public ISphQwordSetup
 {
 public:
-	DiskIndexQwordSetup_c ( DataReaderFactory_c * pDoclist, DataReaderFactory_c * pHitlist, const BYTE * pSkips, int iSkiplistBlockSize, bool bSetupReaders, RowID_t iRowsCount )
-		: m_pDoclist ( pDoclist )
-		, m_pHitlist ( pHitlist )
+	DiskIndexQwordSetup_c ( DataReaderFactoryPtr_c pDoclist, DataReaderFactoryPtr_c pHitlist, const BYTE * pSkips, int iSkiplistBlockSize, bool bSetupReaders, RowID_t iRowsCount )
+		: m_pDoclist ( std::move ( pDoclist ) )
+		, m_pHitlist ( std::move ( pHitlist ) )
 		, m_pSkips ( pSkips )
 		, m_iSkiplistBlockSize ( iSkiplistBlockSize )
 		, m_bSetupReaders ( bSetupReaders )
 		, m_iRowsCount ( iRowsCount )
-	{
-		SafeAddRef(pDoclist);
-		SafeAddRef(pHitlist);
-	}
+	{}
 
 	ISphQword *			QwordSpawn ( const XQKeyword_t & tWord ) const final;
 	bool				QwordSetup ( ISphQword * ) const final;
@@ -732,7 +729,7 @@ bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	if ( !szQuery || !szQuery[0] )
 		return true;
 
-	TokenizerRefPtr_c pTokenizer { m_pTokenizer->Clone ( SPH_CLONE_INDEX ) };
+	TokenizerRefPtr_c pTokenizer = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
 	pTokenizer->EnableTokenizedMultiformTracking ();
 
 	// need to support '*' and '=' but not the other specials
@@ -767,7 +764,7 @@ bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	pTokenizer->SetBuffer ( sModifiedQuery, (int) strlen ( (const char*)sModifiedQuery) );
 
 	CSphTemplateQueryFilter tAotFilter;
-	tAotFilter.m_pTokenizer = pTokenizer;
+	tAotFilter.m_pTokenizer = std::move ( pTokenizer );
 	tAotFilter.m_pDict = pDict;
 	tAotFilter.m_pSettings = &m_tSettings;
 	tAotFilter.m_tFoldSettings = tSettings;
@@ -792,7 +789,8 @@ Bson_t CSphTokenizerIndex::ExplainQuery ( const CSphString & sQuery ) const
 	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
 
 	WordlistStub_c tWordlist;
-	ExplainQueryArgs_t tArgs ( sQuery );
+	ExplainQueryArgs_t tArgs;
+	tArgs.m_szQuery = sQuery.cstr();
 	tArgs.m_pDict = GetStatelessDict ( m_pDict );
 	if ( IsStarDict ( bWordDict ) )
 		tArgs.m_pDict = new CSphDictStarV8 ( tArgs.m_pDict, m_tSettings.m_iMinInfixLen>0 );
@@ -2459,10 +2457,9 @@ void CSphIndex::SetFieldFilter ( ISphFieldFilter * pFieldFilter )
 }
 
 
-void CSphIndex::SetTokenizer ( ISphTokenizer * pTokenizer )
+void CSphIndex::SetTokenizer ( TokenizerRefPtr_c pTokenizer )
 {
-	SafeAddRef ( pTokenizer );
-	m_pTokenizer = pTokenizer;
+	m_pTokenizer = std::move ( pTokenizer );
 }
 
 
@@ -2476,10 +2473,19 @@ void CSphIndex::SetupQueryTokenizer()
 	m_pQueryTokenizerJson = sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, true );
 }
 
-
-ISphTokenizer *	CSphIndex::LeakTokenizer ()
+TokenizerRefPtr_c CSphIndex::GetTokenizer() const
 {
-	return m_pTokenizer.Leak();
+	return m_pTokenizer;
+}
+
+TokenizerRefPtr_c CSphIndex::GetQueryTokenizer() const
+{
+	return m_pQueryTokenizer;
+}
+
+TokenizerRefPtr_c	CSphIndex::LeakTokenizer ()
+{
+	return std::exchange ( m_pTokenizer, nullptr );
 }
 
 
@@ -3501,7 +3507,7 @@ void CSphIndex_VLN::GetIndexFiles ( CSphVector<CSphString> & dFiles, const Filen
 	GetSettingsFiles ( m_pTokenizer, m_pDict, GetSettings(), pFilenameBuilder, dFiles );
 }
 
-void GetSettingsFiles ( const ISphTokenizer * pTok, const CSphDict * pDict, const CSphIndexSettings & tSettings, const FilenameBuilder_i * pFilenameBuilder, StrVec_t & dFiles )
+void GetSettingsFiles ( const TokenizerRefPtr_c& pTok, const CSphDict * pDict, const CSphIndexSettings & tSettings, const FilenameBuilder_i * pFilenameBuilder, StrVec_t & dFiles )
 {
 	assert ( pTok );
 	assert ( pDict );
@@ -4717,7 +4723,7 @@ bool CSphIndex_VLN::RelocateBlock ( int iFile, BYTE * pBuffer, int iRelocationSi
 }
 
 
-bool LoadHitlessWords ( const CSphString & sHitlessFiles, ISphTokenizer * pTok, CSphDict * pDict, CSphVector<SphWordID_t> & dHitlessWords, CSphString & sError )
+bool LoadHitlessWords ( const CSphString & sHitlessFiles, const TokenizerRefPtr_c& pTok, CSphDict * pDict, CSphVector<SphWordID_t> & dHitlessWords, CSphString & sError )
 {
 	assert ( dHitlessWords.GetLength()==0 );
 
@@ -9230,7 +9236,7 @@ bool CSphIndex_VLN::LoadHeaderLegacy ( const char * sHeaderName, bool bStripPath
 		StripPath ( tTokSettings.m_sSynonymsFile );
 
 	StrVec_t dWarnings;
-	TokenizerRefPtr_c pTokenizer { Tokenizer::Create ( tTokSettings, &tEmbeddedFiles, pFilenameBuilder, dWarnings, m_sLastError ) };
+	TokenizerRefPtr_c pTokenizer = Tokenizer::Create ( tTokSettings, &tEmbeddedFiles, pFilenameBuilder, dWarnings, m_sLastError );
 	if ( !pTokenizer )
 		return false;
 
@@ -9378,7 +9384,7 @@ bool CSphIndex_VLN::LoadHeader ( const char* sHeaderName, bool bStripPath, CSphE
 	}
 
 	StrVec_t dWarnings;
-	TokenizerRefPtr_c pTokenizer { Tokenizer::Create ( tTokSettings, &tEmbeddedFiles, pFilenameBuilder, dWarnings, m_sLastError ) };
+	TokenizerRefPtr_c pTokenizer = Tokenizer::Create ( tTokSettings, &tEmbeddedFiles, pFilenameBuilder, dWarnings, m_sLastError );
 	if ( !pTokenizer )
 		return false;
 
@@ -10238,10 +10244,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 	// FIXME!!! missed bigram, add flags to fold blended parts, show expanded terms
 
 	// prepare for setup
-	DataReaderFactory_c * tDummy1 = nullptr;
-	DataReaderFactory_c * tDummy2 = nullptr;
-
-	DiskIndexQwordSetup_c tTermSetup ( tDummy1, tDummy2, m_tSkiplists.GetWritePtr(), m_tSettings.m_iSkiplistBlockSize, false, RowID_t(m_iDocinfo) );
+	DiskIndexQwordSetup_c tTermSetup ( DataReaderFactoryPtr_c{}, DataReaderFactoryPtr_c{}, m_tSkiplists.GetWritePtr(), m_tSettings.m_iSkiplistBlockSize, false, RowID_t(m_iDocinfo) );
 	tTermSetup.SetDict ( pDict );
 	tTermSetup.m_pIndex = this;
 
@@ -10276,7 +10279,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 
 	bool bWordDict = pDict->GetSettings ().m_bWordDict;
 
-	TokenizerRefPtr_c pTokenizer { m_pTokenizer->Clone ( SPH_CLONE_INDEX ) };
+	TokenizerRefPtr_c pTokenizer = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
 	pTokenizer->EnableTokenizedMultiformTracking ();
 
 	// need to support '*' and '=' but not the other specials
@@ -10286,13 +10289,15 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 	if ( m_tSettings.m_bIndexExactWords )
 		pTokenizer->AddPlainChars ( "=" );
 
+	pTokenizer->SetBuffer ( sModifiedQuery, (int)strlen ( (const char*)sModifiedQuery ) );
+
 	ExpansionContext_t tExpCtx;
 	// query defined options
 	tExpCtx.m_iExpansionLimit = ( tSettings.m_iExpansionLimit ? tSettings.m_iExpansionLimit : m_iExpansionLimit );
 	bool bExpandWildcards = ( bWordDict && IsStarDict ( bWordDict ) && !tSettings.m_bFoldWildcards );
 
 	CSphPlainQueryFilter tAotFilter;
-	tAotFilter.m_pTokenizer = pTokenizer;
+	tAotFilter.m_pTokenizer = std::move ( pTokenizer );
 	tAotFilter.m_pDict = pDict;
 	tAotFilter.m_pSettings = &m_tSettings;
 	tAotFilter.m_pTermSetup = &tTermSetup;
@@ -10307,8 +10312,6 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 	tExpCtx.m_bMergeSingles = false;
 	tExpCtx.m_eHitless = m_tSettings.m_eHitless;
 	tExpCtx.m_iCutoff = tSettings.m_iCutoff;
-
-	pTokenizer->SetBuffer ( sModifiedQuery, (int) strlen ( (const char *)sModifiedQuery) );
 
 	tAotFilter.GetKeywords ( dKeywords, tExpCtx );
 	return true;
@@ -12208,13 +12211,13 @@ Bson_t EmptyBson ()
 
 Bson_t Explain ( ExplainQueryArgs_t & tArgs )
 {
-	if ( tArgs.m_sQuery.IsEmpty() )
+	if ( !tArgs.m_szQuery )
 		return EmptyBson ();
 
 	CSphScopedPtr<QueryParser_i> pQueryParser ( sphCreatePlainQueryParser() );
 
 	CSphVector<BYTE> dFiltered;
-	const BYTE * sModifiedQuery = (const BYTE *)tArgs.m_sQuery.cstr();
+	const BYTE * sModifiedQuery = (const BYTE *)tArgs.m_szQuery;
 
 	if ( tArgs.m_pFieldFilter && sModifiedQuery )
 	{
@@ -12228,7 +12231,7 @@ Bson_t Explain ( ExplainQueryArgs_t & tArgs )
 	{
 		pSchema = &tSchema;
 		// need to fill up schema with fields from query
-		AddFields ( tArgs.m_sQuery.cstr(), tSchema );
+		AddFields ( tArgs.m_szQuery, tSchema );
 	}
 
 	XQQuery_t tParsed;
@@ -12276,7 +12279,8 @@ Bson_t Explain ( ExplainQueryArgs_t & tArgs )
 
 Bson_t CSphIndex_VLN::ExplainQuery ( const CSphString & sQuery ) const
 {
-	ExplainQueryArgs_t tArgs ( sQuery );
+	ExplainQueryArgs_t tArgs;
+	tArgs.m_szQuery = sQuery.cstr();
 	tArgs.m_pSchema = &GetMatchSchema();
 	tArgs.m_pDict = GetStatelessDict ( m_pDict );
 	SetupStarDict ( tArgs.m_pDict );
@@ -12456,11 +12460,11 @@ protected:
 				~CSphTemplateDictTraits () override;
 
 public:
-	void		LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer, bool bStripFile ) final;
+	void		LoadStopwords ( const char * sFiles, const TokenizerRefPtr_c& pTokenizer, bool bStripFile ) final;
 	void		LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) final;
 	void		WriteStopwords ( CSphWriter & tWriter ) const final;
 	void		WriteStopwords ( JsonEscapedBuilder & tOut ) const final;
-	bool		LoadWordforms ( const StrVec_t & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) final;
+	bool		LoadWordforms ( const StrVec_t & dFiles, const CSphEmbeddedFiles * pEmbedded, const TokenizerRefPtr_c& pTokenizer, const char * sIndex ) final;
 	void		WriteWordforms ( CSphWriter & tWriter ) const final;
 	void		WriteWordforms ( JsonEscapedBuilder & tOut ) const final;
 	const CSphWordforms *	GetWordforms() final { return m_pWordforms; }
@@ -12496,13 +12500,13 @@ private:
 	CSphWordforms *				m_pWordforms;
 	static CSphVector<CSphWordforms*>		m_dWordformContainers;
 
-	CSphWordforms *		GetWordformContainer ( const CSphVector<CSphSavedFile> & dFileInfos, const StrVec_t * pEmbeddedWordforms, const ISphTokenizer * pTokenizer, const char * sIndex );
-	CSphWordforms *		LoadWordformContainer ( const CSphVector<CSphSavedFile> & dFileInfos, const StrVec_t * pEmbeddedWordforms, const ISphTokenizer * pTokenizer, const char * sIndex );
+	CSphWordforms *		GetWordformContainer ( const CSphVector<CSphSavedFile> & dFileInfos, const StrVec_t * pEmbeddedWordforms, const TokenizerRefPtr_c& pTokenizer, const char * sIndex );
+	CSphWordforms *		LoadWordformContainer ( const CSphVector<CSphSavedFile> & dFileInfos, const StrVec_t * pEmbeddedWordforms, const TokenizerRefPtr_c& pTokenizer, const char * sIndex );
 
 	int					InitMorph ( const char * szMorph, int iLength, CSphString & sError );
 	int					AddMorph ( int iMorph ); ///< helper that always returns ST_OK
 	bool				StemById ( BYTE * pWord, int iStemmer ) const;
-	void				AddWordform ( CSphWordforms * pContainer, char * sBuffer, int iLen, ISphTokenizer * pTokenizer, const char * szFile, const CSphVector<int> & dBlended, int iFileId );
+	void				AddWordform ( CSphWordforms * pContainer, char * sBuffer, int iLen, const TokenizerRefPtr_c& pTokenizer, const char * szFile, const CSphVector<int> & dBlended, int iFileId );
 };
 
 CSphVector<CSphWordforms*> CSphTemplateDictTraits::m_dWordformContainers;
@@ -13163,7 +13167,7 @@ bool CSphDictTemplate::IsStopWord ( const BYTE * pWord ) const
 
 //////////////////////////////////////////////////////////////////////////
 
-void CSphTemplateDictTraits::LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer, bool bStripFile )
+void CSphTemplateDictTraits::LoadStopwords ( const char * sFiles, const TokenizerRefPtr_c& pTokenizer, bool bStripFile )
 {
 	assert ( !m_pStopwords );
 	assert ( !m_iStopwords );
@@ -13174,12 +13178,12 @@ void CSphTemplateDictTraits::LoadStopwords ( const char * sFiles, const ISphToke
 
 	m_dSWFileInfos.Resize ( 0 );
 
-	TokenizerRefPtr_c tTokenizer ( pTokenizer->Clone ( SPH_CLONE_INDEX ) );
+	TokenizerRefPtr_c pTokenizerClone = pTokenizer->Clone ( SPH_CLONE_INDEX );
 	CSphFixedVector<char> dList ( 1+(int)strlen(sFiles) );
 	strcpy ( dList.Begin(), sFiles ); // NOLINT
 
 	char * pCur = dList.Begin();
-	char * sName = NULL;
+	char * sName = nullptr;
 
 	CSphVector<SphWordID_t> dStop;
 
@@ -13253,8 +13257,8 @@ void CSphTemplateDictTraits::LoadStopwords ( const char * sFiles, const ISphToke
 		int iLength = (int)fread ( dBuffer.Begin(), 1, (size_t)st.st_size, fp );
 
 		BYTE * pToken;
-		tTokenizer->SetBuffer ( dBuffer.Begin(), iLength );
-		while ( ( pToken = tTokenizer->GetToken() )!=NULL )
+		pTokenizerClone->SetBuffer ( dBuffer.Begin(), iLength );
+		while ( ( pToken = pTokenizerClone->GetToken() )!=nullptr )
 			if ( m_tSettings.m_bStopwordsUnstemmed )
 				dStop.Add ( GetWordIDNonStemmed ( pToken ) );
 			else
@@ -13366,7 +13370,7 @@ static void ConcatReportStrings ( const CSphTightVector<CSphNormalForm> & dStrin
 }
 
 
-CSphWordforms * CSphTemplateDictTraits::GetWordformContainer ( const CSphVector<CSphSavedFile> & dFileInfos, const StrVec_t * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex )
+CSphWordforms * CSphTemplateDictTraits::GetWordformContainer ( const CSphVector<CSphSavedFile> & dFileInfos, const StrVec_t * pEmbedded, const TokenizerRefPtr_c& pTokenizer, const char * sIndex )
 {
 	uint64_t uTokenizerFNV = pTokenizer->GetSettingsFNV();
 	ARRAY_FOREACH ( i, m_dWordformContainers )
@@ -13397,8 +13401,7 @@ CSphWordforms * CSphTemplateDictTraits::GetWordformContainer ( const CSphVector<
 
 
 
-void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sBuffer, int iLen,
-	ISphTokenizer * pTokenizer, const char * szFile, const CSphVector<int> & dBlended, int iFileId )
+void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sBuffer, int iLen, const TokenizerRefPtr_c& pTokenizer, const char * szFile, const CSphVector<int> & dBlended, int iFileId )
 {
 	StrVec_t dTokens;
 
@@ -13662,7 +13665,7 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 
 
 CSphWordforms * CSphTemplateDictTraits::LoadWordformContainer ( const CSphVector<CSphSavedFile> & dFileInfos,
-	const StrVec_t * pEmbeddedWordforms, const ISphTokenizer * pTokenizer, const char * sIndex )
+	const StrVec_t * pEmbeddedWordforms, const TokenizerRefPtr_c& pTokenizer, const char * sIndex )
 {
 	// allocate it
 	auto * pContainer = new CSphWordforms();
@@ -13670,7 +13673,7 @@ CSphWordforms * CSphTemplateDictTraits::LoadWordformContainer ( const CSphVector
 	pContainer->m_uTokenizerFNV = pTokenizer->GetSettingsFNV();
 	pContainer->m_sIndexName = sIndex;
 
-	TokenizerRefPtr_c pMyTokenizer ( pTokenizer->Clone ( SPH_CLONE_INDEX ) );
+	TokenizerRefPtr_c pMyTokenizer = pTokenizer->Clone ( SPH_CLONE_INDEX );
 	const CSphTokenizerSettings & tSettings = pMyTokenizer->GetSettings();
 	CSphVector<int> dBlended;
 
@@ -13744,7 +13747,7 @@ CSphWordforms * CSphTemplateDictTraits::LoadWordformContainer ( const CSphVector
 }
 
 
-bool CSphTemplateDictTraits::LoadWordforms ( const StrVec_t & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex )
+bool CSphTemplateDictTraits::LoadWordforms ( const StrVec_t & dFiles, const CSphEmbeddedFiles * pEmbedded, const TokenizerRefPtr_c& pTokenizer, const char * sIndex )
 {
 	if ( pEmbedded )
 	{
@@ -15730,11 +15733,11 @@ public:
 		m_hKeywords.Reset();
 	}
 
-	void LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer, bool bStripFile ) final { m_pBase->LoadStopwords ( sFiles, pTokenizer, bStripFile ); }
+	void LoadStopwords ( const char * sFiles, const TokenizerRefPtr_c& pTokenizer, bool bStripFile ) final { m_pBase->LoadStopwords ( sFiles, pTokenizer, bStripFile ); }
 	void LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) final { m_pBase->LoadStopwords ( dStopwords ); }
 	void WriteStopwords ( CSphWriter & tWriter ) const final { m_pBase->WriteStopwords ( tWriter ); }
 	void WriteStopwords ( JsonEscapedBuilder & tOut ) const final { m_pBase->WriteStopwords ( tOut ); }
-	bool LoadWordforms ( const StrVec_t & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) final
+	bool LoadWordforms ( const StrVec_t & dFiles, const CSphEmbeddedFiles * pEmbedded, const TokenizerRefPtr_c& pTokenizer, const char * sIndex ) final
 		{ return m_pBase->LoadWordforms ( dFiles, pEmbedded, pTokenizer, sIndex ); }
 	void WriteWordforms ( CSphWriter & tWriter ) const final { m_pBase->WriteWordforms ( tWriter ); }
 	void WriteWordforms ( JsonEscapedBuilder & tOut ) const final { m_pBase->WriteWordforms ( tOut ); }
@@ -15809,7 +15812,7 @@ ISphRtDictWraper * sphCreateRtKeywordsDictionaryWrapper ( CSphDict * pBase, bool
 // DICTIONARY FACTORIES
 //////////////////////////////////////////////////////////////////////////
 
-static void SetupDictionary ( DictRefPtr_c & pDict, const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, bool bStripFile, FilenameBuilder_i * pFilenameBuilder, CSphString & sError )
+static void SetupDictionary ( DictRefPtr_c & pDict, const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const TokenizerRefPtr_c& pTokenizer, const char * sIndex, bool bStripFile, FilenameBuilder_i * pFilenameBuilder, CSphString & sError )
 {
 	assert ( pTokenizer );
 
@@ -15842,10 +15845,10 @@ static void SetupDictionary ( DictRefPtr_c & pDict, const CSphDictSettings & tSe
 			dWordformFiles[i] = pFilenameBuilder->GetFullPath ( tSettings.m_dWordforms[i] );
 	}
 
-	pDict->LoadWordforms ( pFilenameBuilder ? dWordformFiles : tSettings.m_dWordforms, pFiles && pFiles->m_bEmbeddedWordforms ? pFiles : NULL, pTokenizer, sIndex );
+	pDict->LoadWordforms ( pFilenameBuilder ? dWordformFiles : tSettings.m_dWordforms, pFiles && pFiles->m_bEmbeddedWordforms ? pFiles : nullptr, pTokenizer, sIndex );
 }
 
-CSphDict * sphCreateDictionaryTemplate ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, bool bStripFile,
+CSphDict * sphCreateDictionaryTemplate ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const TokenizerRefPtr_c& pTokenizer, const char * sIndex, bool bStripFile,
 	FilenameBuilder_i * pFilenameBuilder, CSphString & sError )
 {
 	DictRefPtr_c pDict { new CSphDictTemplate() };
@@ -15854,7 +15857,7 @@ CSphDict * sphCreateDictionaryTemplate ( const CSphDictSettings & tSettings, con
 }
 
 
-CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, bool bStripFile,
+CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const TokenizerRefPtr_c& pTokenizer, const char * sIndex, bool bStripFile,
 	int iSkiplistBlockSize, FilenameBuilder_i * pFilenameBuilder, CSphString & sError )
 {
 	DictRefPtr_c pDict { new CSphDictCRC<false> };
@@ -15866,7 +15869,7 @@ CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, const CS
 }
 
 
-CSphDict * sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, bool bStripFile,
+CSphDict * sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const TokenizerRefPtr_c& pTokenizer, const char * sIndex, bool bStripFile,
 	int iSkiplistBlockSize, FilenameBuilder_i * pFilenameBuilder, CSphString & sError )
 {
 	DictRefPtr_c pDict { new CSphDictKeywords() };
@@ -16566,14 +16569,13 @@ static int DecodeUtf8 ( const BYTE * sWord, int * pBuf )
 }
 
 
-bool SuggestResult_t::SetWord ( const char * sWord, const ISphTokenizer * pTok, bool bUseLastWord )
+bool SuggestResult_t::SetWord ( const char * sWord, const TokenizerRefPtr_c& pTok, bool bUseLastWord )
 {
 	assert ( pTok->IsQueryTok() );
-	TokenizerRefPtr_c pTokenizer ( pTok->Clone ( SPH_CLONE ) );
+	TokenizerRefPtr_c pTokenizer = pTok->Clone ( SPH_CLONE );
 	pTokenizer->SetBuffer ( (BYTE *)const_cast<char*>(sWord), (int) strlen ( sWord ) );
 
-	const BYTE * pToken = pTokenizer->GetToken();
-	for ( ; pToken!=NULL; )
+	for ( const BYTE* pToken = pTokenizer->GetToken(); pToken; pToken = pTokenizer->GetToken() )
 	{
 		m_sWord = (const char *)pToken;
 		if ( !bUseLastWord )
@@ -16581,7 +16583,6 @@ bool SuggestResult_t::SetWord ( const char * sWord, const ISphTokenizer * pTok, 
 
 		if ( pTokenizer->TokenIsBlended() )
 			pTokenizer->SkipBlended();
-		pToken = pTokenizer->GetToken();
 	}
 
 

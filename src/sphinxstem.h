@@ -16,12 +16,13 @@
 #include "sphinxstd.h"
 
 class ISphTokenizer;
+using TokenizerRefPtr_c = CSphRefcountedPtr<ISphTokenizer>;
 class CSphDict;
 
-/// initialize English stemmar
+/// initialize English stemmer
 void	stem_en_init ();
 
-/// initialize Russian stemmar
+/// initialize Russian stemmer
 void	stem_ru_init ();
 
 /// stem lowercase English word
@@ -88,7 +89,7 @@ const CSphNamedInt &	sphAotDictinfo ( int iLang );
 
 /// create token filter that returns all morphological hypotheses
 /// NOTE, takes over wordforms from pDict, in AOT case they must be handled by the fitler
-ISphTokenizer *		sphAotCreateFilter ( ISphTokenizer * pTokenizer, CSphDict * pDict, bool bIndexExact, DWORD uLangMask );
+void					sphAotTransformFilter ( TokenizerRefPtr_c& pTokenizer, CSphDict * pDict, bool bIndexExact, DWORD uLangMask );
 
 /// free lemmatizers on shutdown
 void	sphAotShutdown ();

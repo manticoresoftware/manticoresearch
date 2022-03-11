@@ -1395,7 +1395,7 @@ void operator<< ( JsonEscapedBuilder& tOut, const CSphSavedFile & tInfo )
 
 /// gets called from and MUST be in sync with RtIndex_c::SaveDiskHeader()!
 /// note that SaveDiskHeader() occasionaly uses some PREVIOUS format version!
-void SaveTokenizerSettings ( CSphWriter & tWriter, const ISphTokenizer * pTokenizer, int iEmbeddedLimit )
+void SaveTokenizerSettings ( CSphWriter & tWriter, const TokenizerRefPtr_c& pTokenizer, int iEmbeddedLimit )
 {
 	assert ( pTokenizer );
 
@@ -1419,7 +1419,7 @@ void SaveTokenizerSettings ( CSphWriter & tWriter, const ISphTokenizer * pTokeni
 	tWriter.PutString ( tSettings.m_sBlendMode.cstr() );
 }
 
-void SaveTokenizerSettings ( JsonEscapedBuilder& tOut, const ISphTokenizer* pTokenizer, int iEmbeddedLimit )
+void SaveTokenizerSettings ( JsonEscapedBuilder& tOut, const TokenizerRefPtr_c& pTokenizer, int iEmbeddedLimit )
 {
 	auto _ = tOut.ObjectW();
 	const CSphTokenizerSettings& tSettings = pTokenizer->GetSettings();
@@ -1583,8 +1583,9 @@ static void FormatAllSettings ( const CSphIndex & tIndex, SettingsFormatter_c & 
 
 	tKlistTargets.Format ( tFormatter, pFilenameBuilder );
 
-	if ( tIndex.GetTokenizer() )
-		tIndex.GetTokenizer()->GetSettings().Format ( tFormatter, pFilenameBuilder );
+	auto pTokenizer = tIndex.GetTokenizer();
+	if ( pTokenizer )
+		pTokenizer->GetSettings().Format ( tFormatter, pFilenameBuilder );
 
 	if ( tIndex.GetDictionary() )
 		tIndex.GetDictionary()->GetSettings().Format ( tFormatter, pFilenameBuilder );
@@ -1610,8 +1611,9 @@ void DumpReadable ( FILE * fp, const CSphIndex & tIndex, const CSphEmbeddedFiles
 
 	tKlistTargets.DumpReadable ( tState, tEmbeddedFiles, pFilenameBuilder );
 
-	if ( tIndex.GetTokenizer() )
-		tIndex.GetTokenizer()->GetSettings().DumpReadable ( tState, tEmbeddedFiles, pFilenameBuilder );
+	auto pTokenizer = tIndex.GetTokenizer();
+	if ( pTokenizer )
+		pTokenizer->GetSettings().DumpReadable ( tState, tEmbeddedFiles, pFilenameBuilder );
 
 	if ( tIndex.GetDictionary() )
 		tIndex.GetDictionary()->GetSettings().DumpReadable ( tState, tEmbeddedFiles, pFilenameBuilder );
@@ -1663,7 +1665,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		tSettings.Setup ( hIndex, sWarning );
 		AddWarning ( dWarnings, sWarning );
 
-		TokenizerRefPtr_c pTokenizer { Tokenizer::Create ( tSettings, nullptr, pFilenameBuilder, dWarnings, sError ) };
+		TokenizerRefPtr_c pTokenizer = Tokenizer::Create ( tSettings, nullptr, pFilenameBuilder, dWarnings, sError );
 		if ( !pTokenizer )
 			return false;
 
@@ -1688,8 +1690,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 
 	if ( bTokenizerSpawned )
 	{
-		TokenizerRefPtr_c pOldTokenizer { pIndex->LeakTokenizer () };
-		TokenizerRefPtr_c pMultiTokenizer { Tokenizer::CreateMultiformFilter ( pOldTokenizer, pIndex->GetDictionary ()->GetMultiWordforms () ) };
+		TokenizerRefPtr_c pMultiTokenizer = Tokenizer::CreateMultiformFilter ( pIndex->LeakTokenizer(), pIndex->GetDictionary ()->GetMultiWordforms () );
 		pIndex->SetTokenizer ( pMultiTokenizer );
 	}
 

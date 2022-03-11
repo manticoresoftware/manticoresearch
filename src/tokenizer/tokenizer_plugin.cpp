@@ -33,12 +33,11 @@ protected:
 	}
 
 public:
-	PluginFilterTokenizer_c ( ISphTokenizer* pTok, const PluginTokenFilter_c* pFilter, const char* sOptions )
-		: CSphTokenFilter ( pTok )
+	PluginFilterTokenizer_c ( TokenizerRefPtr_c pTok, const PluginTokenFilter_c* pFilter, const char* sOptions )
+		: CSphTokenFilter ( std::move (pTok) )
 		, m_pFilter ( pFilter )
 		, m_sOptions ( sOptions )
 	{
-		assert ( pTok );
 		assert ( m_pFilter );
 		m_pFilter->AddRef();
 		// FIXME!!! handle error in constructor \ move to setup?
@@ -46,10 +45,9 @@ public:
 		SetFilterSchema ( CSphSchema(), sError );
 	}
 
-	ISphTokenizer* Clone ( ESphTokenizerClone eMode ) const final
+	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const final
 	{
-		TokenizerRefPtr_c pTok { m_pTokenizer->Clone ( eMode ) };
-		return new PluginFilterTokenizer_c ( pTok, m_pFilter, m_sOptions.cstr() );
+		return TokenizerRefPtr_c { new PluginFilterTokenizer_c ( m_pTokenizer->Clone ( eMode ), m_pFilter, m_sOptions.cstr() ) };
 	}
 
 	bool SetFilterSchema ( const CSphSchema& s, CSphString& sError ) final
@@ -167,23 +165,22 @@ private:
 };
 
 
-ISphTokenizer* Tokenizer::CreatePluginFilter ( ISphTokenizer* pTokenizer, const CSphString& sSpec, CSphString& sError )
+TokenizerRefPtr_c Tokenizer::CreatePluginFilter ( TokenizerRefPtr_c pTokenizer, const CSphString& sSpec, CSphString& sError )
 {
+	TokenizerRefPtr_c pResult;
 	StrVec_t dPlugin; // dll, filtername, options
 	if ( !sphPluginParseSpec ( sSpec, dPlugin, sError ) )
-		return nullptr;
+		return pResult;
 
-	if ( !dPlugin.GetLength() )
-	{
-		SafeAddRef ( pTokenizer );
+	if ( dPlugin.IsEmpty() )
 		return pTokenizer;
-	}
 
 	CSphRefcountedPtr<PluginTokenFilter_c> p { (PluginTokenFilter_c*)sphPluginAcquire ( dPlugin[0].cstr(), PLUGIN_INDEX_TOKEN_FILTER, dPlugin[1].cstr(), sError ) };
 	if ( !p )
 	{
 		sError.SetSprintf ( "INTERNAL ERROR: plugin %s:%s loaded ok but lookup fails, error: %s", dPlugin[0].cstr(), dPlugin[1].cstr(), sError.cstr() );
-		return nullptr;
+		return pResult;
 	}
-	return new PluginFilterTokenizer_c ( pTokenizer, p, dPlugin[2].cstr() );
+	pResult = new PluginFilterTokenizer_c ( std::move ( pTokenizer ), p, dPlugin[2].cstr() );
+	return pResult;
 }

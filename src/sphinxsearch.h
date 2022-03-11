@@ -213,21 +213,17 @@ namespace sph
 
 struct ExplainQueryArgs_t
 {
-	const CSphString & m_sQuery;
+	const char *		m_szQuery = nullptr;
 	const CSphSchema *	m_pSchema = nullptr;
 	DictRefPtr_c		m_pDict;
 	FieldFilterRefPtr_c m_pFieldFilter;
 	const CSphIndexSettings * m_pSettings = nullptr;
-	const ISphTokenizer * m_pQueryTokenizer = nullptr;
+	TokenizerRefPtr_c m_pQueryTokenizer;
 	const ISphWordlist * m_pWordlist = nullptr;
 	int m_iExpandKeywords = 0;
 	int m_iExpansionLimit = 0;
 	bool m_bExpandPrefix = false;
 	cRefCountedRefPtrGeneric_t m_pIndexData;
-
-	explicit ExplainQueryArgs_t ( const CSphString & sQuery )
-		: m_sQuery ( sQuery )
-	{}
 };
 
 Bson_t Explain ( ExplainQueryArgs_t & tArgs );

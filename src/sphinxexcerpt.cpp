@@ -736,7 +736,7 @@ bool SnippetBuilder_c::Impl_c::DoHighlighting ( TextSource_i & tSource, SnippetR
 
 	// create query and hit lists container, parse query
 	SnippetsDocIndex_c tContainer ( *m_pState->m_pExtQuery.Ptr() );
-	tContainer.ParseQuery ( m_pQueryTokenizer, m_pDict, m_pState->m_eExtQuerySPZ );
+	tContainer.ParseQuery ( m_pDict, m_pState->m_eExtQuerySPZ );
 
 	ScopedStreamers_t tStreamers ( tSource.GetNumFields() );
 
@@ -1378,11 +1378,9 @@ void SnippetBuilder_c::Impl_c::Setup ( const CSphIndex * pIndex, const SnippetQu
 	const CSphIndexSettings & tIndexSettings = m_pState->m_pIndex->GetSettings();
 
 	// OPTIMIZE! do a lightweight indexing clone here
+	m_pTokenizer = pIndex->GetTokenizer()->Clone ( SPH_CLONE_INDEX );
 	if ( tIndexSettings.m_uAotFilterMask )
-		m_pTokenizer = sphAotCreateFilter ( TokenizerRefPtr_c ( pIndex->GetTokenizer()->Clone ( SPH_CLONE_INDEX ) ),
-				m_pDict, tIndexSettings.m_bIndexExactWords, tIndexSettings.m_uAotFilterMask );
-	else
-		m_pTokenizer = pIndex->GetTokenizer()->Clone ( SPH_CLONE_INDEX );
+		sphAotTransformFilter ( m_pTokenizer, m_pDict, tIndexSettings.m_bIndexExactWords, tIndexSettings.m_uAotFilterMask );
 
 	m_pQueryTokenizer = pIndex->GetQueryTokenizer()->Clone ( SPH_CLONE );
 

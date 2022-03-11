@@ -80,7 +80,7 @@ public:
 		: Tokenizer_UTF8_Base_c ( bDefaultCharset )
 	{}
 	BYTE* GetToken() override;
-	ISphTokenizer* Clone ( ESphTokenizerClone eMode ) const final;
+	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const final;
 };
 
 
@@ -99,7 +99,7 @@ BYTE* CSphTokenizer_UTF8<IS_QUERY>::GetToken()
 }
 
 template<bool IS_QUERY>
-ISphTokenizer* CSphTokenizer_UTF8<IS_QUERY>::Clone ( ESphTokenizerClone eMode ) const
+TokenizerRefPtr_c CSphTokenizer_UTF8<IS_QUERY>::Clone ( ESphTokenizerClone eMode ) const
 {
 	CSphTokenizerBase* pClone;
 	if ( eMode != SPH_CLONE_INDEX )
@@ -107,7 +107,7 @@ ISphTokenizer* CSphTokenizer_UTF8<IS_QUERY>::Clone ( ESphTokenizerClone eMode ) 
 	else
 		pClone = new CSphTokenizer_UTF8<false> ( false );
 	pClone->CloneBase ( this, eMode );
-	return pClone;
+	return TokenizerRefPtr_c {pClone};
 }
 
 /// UTF-8 tokenizer with n-grams
@@ -150,12 +150,12 @@ BYTE* CSphTokenizer_UTF8Ngram<IS_QUERY>::GetToken()
 	return CSphTokenizer_UTF8<IS_QUERY>::GetToken();
 }
 
-ISphTokenizer* Tokenizer::Detail::CreateUTF8Tokenizer ( bool bDefaultCharset )
+TokenizerRefPtr_c Tokenizer::Detail::CreateUTF8Tokenizer ( bool bDefaultCharset )
 {
-	return new CSphTokenizer_UTF8<false> ( bDefaultCharset );
+	return TokenizerRefPtr_c { new CSphTokenizer_UTF8<false> ( bDefaultCharset ) };
 }
 
-ISphTokenizer* Tokenizer::Detail::CreateUTF8NgramTokenizer ( bool bDefaultCharset )
+TokenizerRefPtr_c Tokenizer::Detail::CreateUTF8NgramTokenizer ( bool bDefaultCharset )
 {
-	return new CSphTokenizer_UTF8Ngram<false> ( bDefaultCharset );
+	return TokenizerRefPtr_c { new CSphTokenizer_UTF8Ngram<false> ( bDefaultCharset ) };
 }

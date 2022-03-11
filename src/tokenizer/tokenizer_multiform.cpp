@@ -34,7 +34,7 @@ struct StoredToken_t
 	bool m_bBlendedPart;
 };
 
-void FillStoredTokenInfo ( StoredToken_t& tToken, const BYTE* sToken, ISphTokenizer* pTokenizer )
+void FillStoredTokenInfo ( StoredToken_t& tToken, const BYTE* sToken, const TokenizerRefPtr_c& pTokenizer )
 {
 	assert ( sToken && pTokenizer );
 	strncpy ( (char*)tToken.m_sToken, (const char*)sToken, sizeof ( tToken.m_sToken ) - 1 );
@@ -56,7 +56,7 @@ class MultiformTokenizer: public CSphTokenFilter
 	using Base = CSphTokenFilter;
 
 public:
-	MultiformTokenizer ( ISphTokenizer* pTokenizer, const CSphMultiformContainer* pContainer );
+	MultiformTokenizer ( TokenizerRefPtr_c pTokenizer, const CSphMultiformContainer* pContainer );
 
 
 public:
@@ -97,7 +97,7 @@ public:
 	int SkipBlended() final;
 
 public:
-	ISphTokenizer* Clone ( ESphTokenizerClone eMode ) const final;
+	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const final;
 	const char* GetTokenStart() const final
 	{
 		return m_iStart < m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_szTokenStart : Base::GetTokenStart();
@@ -129,11 +129,11 @@ private:
 
 //////////////////////////////////////////////////////////////////////////
 
-MultiformTokenizer::MultiformTokenizer ( ISphTokenizer* pTokenizer, const CSphMultiformContainer* pContainer )
-	: CSphTokenFilter ( pTokenizer )
+MultiformTokenizer::MultiformTokenizer ( TokenizerRefPtr_c pTokenizer, const CSphMultiformContainer* pContainer )
+	: CSphTokenFilter ( std::move (pTokenizer) )
 	, m_pMultiWordforms ( pContainer )
 {
-	assert ( pTokenizer && pContainer );
+	assert ( pContainer );
 	m_dStoredTokens.Reserve ( pContainer->m_iMaxTokens + 6 ); // max form tokens + some blended tokens
 	m_sTokenizedMultiform[0] = '\0';
 }
@@ -182,7 +182,7 @@ BYTE* MultiformTokenizer::GetToken()
 		}
 	}
 
-	CSphMultiforms** pWordforms = NULL;
+	CSphMultiforms** pWordforms = nullptr;
 	int iTokensGot = 1;
 	bool bBlended = false;
 
@@ -324,10 +324,9 @@ BYTE* MultiformTokenizer::GetToken()
 }
 
 
-ISphTokenizer* MultiformTokenizer::Clone ( ESphTokenizerClone eMode ) const
+TokenizerRefPtr_c MultiformTokenizer::Clone ( ESphTokenizerClone eMode ) const
 {
-	TokenizerRefPtr_c pClone { m_pTokenizer->Clone ( eMode ) };
-	return Tokenizer::CreateMultiformFilter ( pClone, m_pMultiWordforms );
+	return Tokenizer::CreateMultiformFilter ( m_pTokenizer->Clone ( eMode ), m_pMultiWordforms );
 }
 
 
@@ -379,12 +378,10 @@ bool MultiformTokenizer::WasTokenMultiformDestination ( bool& bHead, int& iDestC
 	}
 }
 
-ISphTokenizer* Tokenizer::CreateMultiformFilter ( ISphTokenizer* pTokenizer, const CSphMultiformContainer* pContainer )
+TokenizerRefPtr_c Tokenizer::CreateMultiformFilter ( TokenizerRefPtr_c pTokenizer, const CSphMultiformContainer* pContainer )
 {
 	if ( !pContainer )
-	{
-		SafeAddRef ( pTokenizer );
 		return pTokenizer;
-	}
-	return new MultiformTokenizer ( pTokenizer, pContainer );
+
+	return TokenizerRefPtr_c { new MultiformTokenizer ( std::move ( pTokenizer ), pContainer ) };
 }

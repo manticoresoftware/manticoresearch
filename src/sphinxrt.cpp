@@ -1188,7 +1188,7 @@ public:
 	void				ProcessDiskChunkByID ( int iChunkID, VISITOR&& fnVisitor ) const;
 	template <typename VISITOR>
 	void				ProcessDiskChunkByID ( VecTraits_T<int> dChunkIDs, VISITOR&& fnVisitor ) const;
-	ISphTokenizer *		CloneIndexingTokenizer() const final { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
+	TokenizerRefPtr_c	CloneIndexingTokenizer() const final { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
 
 	void				SetKillHookFor ( IndexSegment_c* pAccum, int iDiskChunkID ) const;
 	void				SetKillHookFor ( IndexSegment_c* pAccum, VecTraits_T<int> dDiskChunkIDs ) const;
@@ -1799,7 +1799,7 @@ bool RtIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphS
 		}
 	}
 
-	TokenizerRefPtr_c tTokenizer { CloneIndexingTokenizer() };
+	TokenizerRefPtr_c tTokenizer = CloneIndexingTokenizer();
 
 	if (!tTokenizer)
 	{
@@ -1830,7 +1830,7 @@ bool RtIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphS
 
 	// OPTIMIZE? do not create filter on each(!) INSERT
 	if ( m_tSettings.m_uAotFilterMask )
-		tTokenizer = sphAotCreateFilter ( tTokenizer, m_pDict, m_tSettings.m_bIndexExactWords, m_tSettings.m_uAotFilterMask );
+		sphAotTransformFilter ( tTokenizer, m_pDict, m_tSettings.m_bIndexExactWords, m_tSettings.m_uAotFilterMask );
 
 	CSphSource_StringVector tSrc ( tDoc.m_dFields, m_tSchema );
 
@@ -1850,7 +1850,7 @@ bool RtIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphS
 		pFieldFilter = m_pFieldFilter->Clone();
 
 	tSrc.Setup ( m_tSettings, nullptr );
-	tSrc.SetTokenizer ( tTokenizer );
+	tSrc.SetTokenizer ( std::move ( tTokenizer ) );
 	tSrc.SetDict ( pAcc->m_pDict );
 	tSrc.SetFieldFilter ( pFieldFilter );
 	tSrc.SetMorphFields ( m_tMorphFields );
@@ -7016,7 +7016,7 @@ void SetupExactDict ( DictRefPtr_c& pDict )
 	pDict = new CSphDictExact ( pDict );
 }
 
-void SetupExactTokenizer ( ISphTokenizer* pTokenizer, bool bAddSpecial )
+void SetupExactTokenizer ( const TokenizerRefPtr_c& pTokenizer, bool bAddSpecial )
 {
 	assert ( pTokenizer );
 	pTokenizer->AddPlainChars ( "=" );
@@ -7030,7 +7030,7 @@ void SetupStarDict ( DictRefPtr_c& pDict )
 	pDict = new CSphDictStarV8 ( pDict, true );
 }
 
-void SetupStarTokenizer ( ISphTokenizer* pTokenizer )
+void SetupStarTokenizer ( const TokenizerRefPtr_c& pTokenizer )
 {
 	assert ( pTokenizer );
 	pTokenizer->AddPlainChars ( "*" );
@@ -7311,11 +7311,11 @@ void FinalExpressionCalculation ( CSphQueryContext & tCtx, const VecTraits_T<RtS
 }
 
 // perform initial query transformations and expansion.
-static int PrepareFTSearch ( const RtIndex_c * pThis, bool bIsStarDict, bool bKeywordDict, int iExpandKeywords, int iExpansionLimit, const char * szModifiedQuery, const CSphIndexSettings & tSettings, const QueryParser_i * pQueryParser, const CSphQuery & tQuery, const CSphSchema & tSchema, cRefCountedRefPtrGeneric_t pIndexData, ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQueryResultMeta & tMeta, QueryProfile_c * pProfiler, CSphScopedPayload * pPayloads, XQQuery_t & tParsed )
+static int PrepareFTSearch ( const RtIndex_c * pThis, bool bIsStarDict, bool bKeywordDict, int iExpandKeywords, int iExpansionLimit, const char * szModifiedQuery, const CSphIndexSettings & tSettings, const QueryParser_i * pQueryParser, const CSphQuery & tQuery, const CSphSchema & tSchema, cRefCountedRefPtrGeneric_t pIndexData, const TokenizerRefPtr_c& pTokenizer, CSphDict * pDict, CSphQueryResultMeta & tMeta, QueryProfile_c * pProfiler, CSphScopedPayload * pPayloads, XQQuery_t & tParsed )
 {
 	// OPTIMIZE! make a lightweight clone here? and/or remove double clone?
-	TokenizerRefPtr_c pQueryTokenizer { sphCloneAndSetupQueryTokenizer ( pTokenizer, bIsStarDict, tSettings.m_bIndexExactWords, false ) };
-	TokenizerRefPtr_c pQueryTokenizerJson { sphCloneAndSetupQueryTokenizer ( pTokenizer, bIsStarDict, tSettings.m_bIndexExactWords, true ) };
+	TokenizerRefPtr_c pQueryTokenizer = sphCloneAndSetupQueryTokenizer ( pTokenizer, bIsStarDict, tSettings.m_bIndexExactWords, false );
+	TokenizerRefPtr_c pQueryTokenizerJson = sphCloneAndSetupQueryTokenizer ( pTokenizer, bIsStarDict, tSettings.m_bIndexExactWords, true );
 
 	if ( !pQueryParser->ParseQuery ( tParsed, szModifiedQuery, &tQuery, pQueryTokenizer, pQueryTokenizerJson, &tSchema, pDict, tSettings ) )
 	{
@@ -7979,7 +7979,7 @@ void RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 
 	RtQword_t tQword;
 
-	TokenizerRefPtr_c pTokenizer { m_pTokenizer->Clone ( SPH_CLONE_INDEX ) };
+	TokenizerRefPtr_c pTokenizer = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
 	pTokenizer->EnableTokenizedMultiformTracking ();
 
 	// need to support '*' and '=' but not the other specials
@@ -8018,9 +8018,10 @@ void RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 		// query defined options
 		tExpCtx.m_iExpansionLimit = tSettings.m_iExpansionLimit ? tSettings.m_iExpansionLimit : m_iExpansionLimit;
 		bool bExpandWildcards = ( m_bKeywordDict && IsStarDict ( m_bKeywordDict ) && !tSettings.m_bFoldWildcards );
+		pTokenizer->SetBuffer ( sModifiedQuery, (int)strlen ( (const char*)sModifiedQuery ) );
 
 		CSphRtQueryFilter tAotFilter ( this, &tQword, tGuard.m_dRamSegs );
-		tAotFilter.m_pTokenizer = pTokenizer;
+		tAotFilter.m_pTokenizer = std::move ( pTokenizer );
 		tAotFilter.m_pDict = pDict;
 		tAotFilter.m_pSettings = &m_tSettings;
 		tAotFilter.m_tFoldSettings = tSettings;
@@ -8033,7 +8034,6 @@ void RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 		tExpCtx.m_bMergeSingles = false;
 		tExpCtx.m_pIndexData = tGuard.m_tSegmentsAndChunks.m_pSegs;
 
-		pTokenizer->SetBuffer ( sModifiedQuery, (int) strlen ( (const char*)sModifiedQuery ) );
 		tAotFilter.GetKeywords ( dKeywords, tExpCtx );
 	} else
 	{
@@ -9859,7 +9859,7 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( sIndexName.cstr() ) : nullptr );
 
 	// FIXME!!! check missed embedded files
-	TokenizerRefPtr_c pTokenizer { Tokenizer::Create ( tSettings.m_tTokenizer, nullptr, pFilenameBuilder.Ptr(), dWarnings, sError ) };
+	TokenizerRefPtr_c pTokenizer = Tokenizer::Create ( tSettings.m_tTokenizer, nullptr, pFilenameBuilder.Ptr(), dWarnings, sError );
 	if ( !pTokenizer )
 	{
 		sError.SetSprintf ( "'%s' failed to create tokenizer, error '%s'", sIndexName.cstr(), sError.cstr() );
@@ -10288,7 +10288,8 @@ int RtIndex_c::GetFieldId ( const CSphString & sName, DocstoreDataType_e eType )
 
 Bson_t RtIndex_c::ExplainQuery ( const CSphString & sQuery ) const
 {
-	ExplainQueryArgs_t tArgs ( sQuery );
+	ExplainQueryArgs_t tArgs;
+	tArgs.m_szQuery = sQuery.cstr();
 	tArgs.m_pSchema = &GetMatchSchema();
 
 	TokenizerRefPtr_c pQueryTokenizer { sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( m_bKeywordDict ), m_tSettings.m_bIndexExactWords, false ) };

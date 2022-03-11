@@ -48,10 +48,9 @@ protected:
 	CSphVector<BYTE> m_dWords;				 ///< case-folded, sorted bigram_freq_words
 
 public:
-	BigramTokenizer ( ISphTokenizer* pTok, ESphBigram eMode, StrVec_t& dWords )
-		: CSphTokenFilter ( pTok )
+	BigramTokenizer ( TokenizerRefPtr_c pTok, ESphBigram eMode, StrVec_t& dWords )
+		: CSphTokenFilter ( std::move (pTok) )
 	{
-		assert ( pTok );
 		assert ( eMode != SPH_BIGRAM_NONE );
 		assert ( eMode == SPH_BIGRAM_ALL || dWords.GetLength() );
 
@@ -87,8 +86,8 @@ public:
 		m_dWords.Add ( 0 );
 	}
 
-	BigramTokenizer ( ISphTokenizer* pTok, const BigramTokenizer* pBase )
-		: CSphTokenFilter ( pTok )
+	BigramTokenizer ( TokenizerRefPtr_c pTok, const BigramTokenizer* pBase )
+		: CSphTokenFilter ( std::move (pTok) )
 	{
 		m_sBuf[0] = 0;
 		m_eMode = pBase->m_eMode;
@@ -102,9 +101,9 @@ public:
 		}
 	}
 
-	ISphTokenizer* Clone ( ESphTokenizerClone eMode ) const final
+	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const final
 	{
-		return new BigramTokenizer ( TokenizerRefPtr_c ( m_pTokenizer->Clone ( eMode ) ), this );
+		return TokenizerRefPtr_c { new BigramTokenizer ( m_pTokenizer->Clone ( eMode ), this ) };
 	}
 
 
@@ -238,31 +237,29 @@ public:
 	}
 };
 
-ISphTokenizer* Tokenizer::CreateBigramFilter ( ISphTokenizer* pTokenizer, ESphBigram eBigramIndex, const CSphString& sBigramWords, CSphString& sError )
+TokenizerRefPtr_c Tokenizer::CreateBigramFilter ( TokenizerRefPtr_c pTokenizer, ESphBigram eBigramIndex, const CSphString& sBigramWords, CSphString& sError )
 {
 	assert ( pTokenizer );
 
+
 	if ( eBigramIndex == SPH_BIGRAM_NONE )
-	{
-		SafeAddRef ( pTokenizer );
 		return pTokenizer;
-	}
 
 	StrVec_t dFreq;
 	if ( eBigramIndex != SPH_BIGRAM_ALL )
 	{
-		const BYTE* pTok = NULL;
+		const BYTE* pTok;
 		pTokenizer->SetBuffer ( (const BYTE*)sBigramWords.cstr(), sBigramWords.Length() );
-		while ( ( pTok = pTokenizer->GetToken() ) != NULL )
+		while ( ( pTok = pTokenizer->GetToken() ) )
 			dFreq.Add ( (const char*)pTok );
 
 		if ( !dFreq.GetLength() )
 		{
-			SafeRelease ( pTokenizer );
 			sError.SetSprintf ( "bigram_freq_words does not contain any valid words" );
-			return NULL;
+			return TokenizerRefPtr_c{};
 		}
 	}
 
-	return new BigramTokenizer ( pTokenizer, eBigramIndex, dFreq );
+
+	return TokenizerRefPtr_c { new BigramTokenizer ( std::move ( pTokenizer ), eBigramIndex, dFreq ) };
 }

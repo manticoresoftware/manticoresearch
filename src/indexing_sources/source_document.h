@@ -89,7 +89,7 @@ public:
 	virtual void			SetFieldFilter ( ISphFieldFilter * pFilter );
 
 	/// set tokenizer
-	void					SetTokenizer ( ISphTokenizer * pTokenizer );
+	void					SetTokenizer ( TokenizerRefPtr_c pTokenizer );
 
 	/// set rows dump file
 	virtual void			SetDumpRows ( FILE * fpDumpRows ) { m_fpDumpRows = fpDumpRows; }

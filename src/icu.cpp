@@ -384,7 +384,7 @@ bool sphCheckTokenizerICU ( CSphIndexSettings & tSettings, const CSphTokenizerSe
 		return true;
 
 	StrVec_t dWarnings;
-	TokenizerRefPtr_c pTokenizer { Tokenizer::Create ( tTokSettings, nullptr, nullptr, dWarnings, sError ) };
+	TokenizerRefPtr_c pTokenizer = Tokenizer::Create ( tTokSettings, nullptr, nullptr, dWarnings, sError );
 	if ( !pTokenizer.Ptr() )
 		return false;
 

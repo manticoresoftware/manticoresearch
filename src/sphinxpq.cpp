@@ -88,7 +88,7 @@ public:
 	bool Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings ) override;
 	void PostSetup() override EXCLUDES ( m_tLock );
 	RtAccum_t * CreateAccum ( RtAccum_t * pAccExt, CSphString & sError ) override;
-	ISphTokenizer * CloneIndexingTokenizer() const override { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
+	TokenizerRefPtr_c CloneIndexingTokenizer() const override { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
 	void SaveMeta ( bool bShutdown = false ) EXCLUDES ( m_tLock );
 	void SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown = false );
 	bool LoadMeta ( const CSphString& sMeta, bool bStripPath, FilenameBuilder_i* pFilenameBuilder, StrVec_t& dWarnings );
@@ -155,7 +155,7 @@ private:
 	bool MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter*>& dSorters,
 			const CSphMultiQueryArgs &tArgs ) const;
 	bool CanBeAdded ( PercolateQueryArgs_t& tArgs, CSphString& sError ) const REQUIRES_SHARED ( m_tLock );
-	StoredQuery_i* CreateQuery ( PercolateQueryArgs_t& tArgs, const ISphTokenizer* pTokenizer, CSphDict* pDict,
+	StoredQuery_i* CreateQuery ( PercolateQueryArgs_t& tArgs, const TokenizerRefPtr_c& pTokenizer, CSphDict* pDict,
 		  CSphString& sError );
 
 public:
@@ -750,7 +750,7 @@ bool PercolateIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, cons
 	if ( !pAcc )
 		return false;
 
-	TokenizerRefPtr_c tTokenizer { CloneIndexingTokenizer () };
+	TokenizerRefPtr_c tTokenizer = CloneIndexingTokenizer ();
 	if ( !tTokenizer )
 	{
 		sError = GetLastError ();
@@ -769,7 +769,7 @@ bool PercolateIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, cons
 
 	// TODO: field filter \ token filter?
 	tSrc.Setup ( m_tSettings, nullptr );
-	tSrc.SetTokenizer ( tTokenizer );
+	tSrc.SetTokenizer ( std::move ( tTokenizer ) );
 	tSrc.SetDict ( pAcc->m_pDict );
 	tSrc.SetFieldFilter ( pFieldFilter );
 	if ( !tSrc.Connect ( m_sLastError ) )
@@ -1642,7 +1642,7 @@ StoredQuery_i * PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, CS
 
 	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
 
-	TokenizerRefPtr_c pTokenizer ( sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false ) );
+	TokenizerRefPtr_c pTokenizer = sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false );
 	DictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
 
 	if ( IsStarDict ( bWordDict ) )
@@ -1654,7 +1654,7 @@ StoredQuery_i * PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, CS
 	if ( tArgs.m_bQL )
 		return CreateQuery ( tArgs, pTokenizer, pDict, sError );
 
-	TokenizerRefPtr_c pTokenizerJson ( sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, true ) );
+	TokenizerRefPtr_c pTokenizerJson = sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, true );
 	return CreateQuery ( tArgs, pTokenizerJson, pDict, sError );
 }
 
@@ -1723,7 +1723,7 @@ bool PercolateIndex_c::CanBeAdded ( PercolateQueryArgs_t& tArgs, CSphString& sEr
 }
 
 
-StoredQuery_i * PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, const ISphTokenizer * pTokenizer, CSphDict * pDict, CSphString & sError )
+StoredQuery_i * PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, const TokenizerRefPtr_c& pTokenizer, CSphDict * pDict, CSphString & sError )
 {
 	const char * sQuery = tArgs.m_sQuery;
 	CSphVector<BYTE> dFiltered;
@@ -2376,13 +2376,12 @@ void PercolateIndex_c::PostSetupUnl()
 
 	// FIXME!!! handle error
 	m_pTokenizerIndexing = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
-	TokenizerRefPtr_c pIndexing { Tokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError ) };
+	TokenizerRefPtr_c pIndexing = Tokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError );
 	if ( pIndexing )
 		m_pTokenizerIndexing = pIndexing;
 
 	if ( m_tSettings.m_uAotFilterMask )
-		m_pTokenizerIndexing = sphAotCreateFilter ( m_pTokenizerIndexing, m_pDict, m_tSettings.m_bIndexExactWords
-										  , m_tSettings.m_uAotFilterMask );
+		sphAotTransformFilter ( m_pTokenizerIndexing, m_pDict, m_tSettings.m_bIndexExactWords, m_tSettings.m_uAotFilterMask );
 
 	// SPZ and zones setup
 	if ( ( m_tSettings.m_bIndexSP && !m_pTokenizerIndexing->EnableSentenceIndexing ( m_sLastError ) ) ||
@@ -2392,8 +2391,8 @@ void PercolateIndex_c::PostSetupUnl()
 	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
 
 	// create queries
-	TokenizerRefPtr_c pTokenizer { sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false ) };
-	TokenizerRefPtr_c pTokenizerJson { sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, true ) };
+	TokenizerRefPtr_c pTokenizer = sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false );
+	TokenizerRefPtr_c pTokenizerJson = sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, true );
 
 	DictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
 
@@ -2421,7 +2420,7 @@ void PercolateIndex_c::PostSetupUnl()
 	ARRAY_FOREACH ( i, m_dLoadedQueries )
 	{
 		const StoredQueryDesc_t & tQuery = m_dLoadedQueries[i];
-		const ISphTokenizer * pTok = tQuery.m_bQL ? pTokenizer : pTokenizerJson;
+		const TokenizerRefPtr_c& pTok = tQuery.m_bQL ? pTokenizer : pTokenizerJson;
 		PercolateQueryArgs_t tArgs ( tQuery );
 		if ( CanBeAdded ( tArgs, sError ) )
 		{
@@ -3188,11 +3187,12 @@ Bson_t PercolateIndex_c::ExplainQuery ( const CSphString & sQuery ) const
 
 	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
 
-	TokenizerRefPtr_c pQueryTokenizer { sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false ) };
+	TokenizerRefPtr_c pQueryTokenizer = sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false );
 	SetupExactTokenizer ( pQueryTokenizer );
 	SetupStarTokenizer( pQueryTokenizer );
 
-	ExplainQueryArgs_t tArgs ( sQuery );
+	ExplainQueryArgs_t tArgs;
+	tArgs.m_szQuery = sQuery.cstr();
 	tArgs.m_pSchema = &GetInternalSchema();
 	tArgs.m_pDict = GetStatelessDict ( m_pDict );
 	SetupStarDict ( tArgs.m_pDict );

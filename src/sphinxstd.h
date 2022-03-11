@@ -4025,6 +4025,7 @@ public:
 public:
 					CSphRefcountedPtr () noexcept = default;		///< default NULL wrapper construction (for vectors)
 	explicit		CSphRefcountedPtr ( T * pPtr ) noexcept : m_pPtr ( pPtr ) {}	///< construction from raw pointer, takes over ownership!
+					CSphRefcountedPtr ( std::nullptr_t ) noexcept {};
 
 	CSphRefcountedPtr ( const CSphRefcountedPtr& rhs ) noexcept
 		: m_pPtr ( rhs.m_pPtr )

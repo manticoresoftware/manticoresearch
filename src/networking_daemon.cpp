@@ -968,7 +968,7 @@ int AsyncNetInputBuffer_c::AppendData ( int iNeed, int iSpace, bool bIntr )
 		m_bError = true;
 		auto iErr = sphSockPeekErrno ();
 		m_bIntr = iErr==EINTR;
-		sphLogDebug ( "AsyncNetInputBuffer_c::AppendData: error %d (%s) return -1", iErr, strerrorm ( iErr ) );
+		sphLogDebugv ( "AsyncNetInputBuffer_c::AppendData: error %d (%s) return -1", iErr, strerrorm ( iErr ) );
 		return -1;
 	}
 

@@ -1285,6 +1285,7 @@ int sphCreateInetSocket ( const ListenerDesc_t & tDesc ) REQUIRES ( MainThread )
 			break;
 
 		sphInfo ( "bind() failed on %s, retrying...", sAddress );
+		sphLogDebug ( "bind() failed on %s:%d, error: %s", sAddress, iPort, sphSockError() );
 		sphSleepMsec ( 3000 );
 	} while ( --iTries>0 );
 	if ( iRes )

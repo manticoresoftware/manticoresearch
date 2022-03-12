@@ -1693,21 +1693,6 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 
 	pIndex->SetupQueryTokenizer();
 
-	if ( !pIndex->IsStripperInited () )
-	{
-		CSphIndexSettings tSettings = pIndex->GetSettings ();
-
-		if ( hIndex ( "html_strip" ) )
-		{
-			tSettings.m_bHtmlStrip = hIndex.GetInt ( "html_strip" )!=0;
-			tSettings.m_sHtmlIndexAttrs = hIndex.GetStr ( "html_index_attrs" );
-			tSettings.m_sHtmlRemoveElements = hIndex.GetStr ( "html_remove_elements" );
-		}
-		tSettings.m_sZones = hIndex.GetStr ( "index_zones" );
-
-		pIndex->Setup ( tSettings );
-	}
-
 	if ( !pIndex->GetFieldFilter() )
 	{
 		FieldFilterRefPtr_c pFieldFilter;

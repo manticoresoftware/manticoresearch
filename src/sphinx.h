@@ -1284,7 +1284,6 @@ public:
 	virtual void				SetKeepAttrs ( const CSphString & , const StrVec_t & ) {}
 	virtual void				Setup ( const CSphIndexSettings & tSettings );
 	const CSphIndexSettings &	GetSettings () const { return m_tSettings; }
-	bool						IsStripperInited () const { return m_bStripperInited; }
 	virtual bool				IsRT() const { return false; }
 	virtual bool				IsPQ() const { return false; }
 	void						SetBinlog ( bool bBinlog ) { m_bBinlog = bBinlog; }
@@ -1441,8 +1440,6 @@ protected:
 	float						m_fWriteFactor { 0.0f };
 
 	bool						m_bBinlog = true;
-
-	bool						m_bStripperInited = true;	///< was stripper initialized (old index version (<9) handling)
 
 protected:
 	CSphIndexSettings			m_tSettings;

@@ -1299,7 +1299,6 @@ public:
 
 	bool				Lock () final;
 	void				Unlock () final;
-	void				PostSetup() final {}
 
 	bool				MultiQuery ( CSphQueryResult & pResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const final;
 	bool				MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult* pResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const final;
@@ -2504,7 +2503,6 @@ CSphDict * CSphIndex::LeakDictionary ()
 
 void CSphIndex::Setup ( const CSphIndexSettings & tSettings )
 {
-	m_bStripperInited = true;
 	m_tSettings = tSettings;
 }
 
@@ -6786,56 +6784,29 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 
 bool CSphIndex_VLN::Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSettings> & dFilters, bool bSupressDstDocids, CSphIndexProgress& tProgress )
 {
-	// if no source provided - special pass. No preload/preread, just merge with filters
-	if ( pSource )
+	StrVec_t dWarnings;
+
+	ResetFileAccess ( this );
+	ResetFileAccess ( pSource );
+
+	if ( !Prealloc ( false, nullptr, dWarnings ) )
+		return false;
+	Preread();
+
+	if ( !pSource->Prealloc ( false, nullptr, dWarnings ) )
 	{
-		{
-			ResetFileAccess(this);
-
-			StrVec_t dWarnings;
-			if ( !Prealloc ( false, nullptr, dWarnings ) )
-				return false;
-
-			for ( const auto & i : dWarnings )
-				sphWarn ( "%s", i.cstr() );
-
-			Preread();
-		}
-
-		{
-			ResetFileAccess(pSource);
-
-			StrVec_t dWarnings;
-			if ( !pSource->Prealloc ( false, nullptr, dWarnings ) )
-			{
-				m_sLastError.SetSprintf ( "source index preload failed: %s", pSource->GetLastError().cstr() );
-				return false;
-			}
-
-			for ( const auto & i : dWarnings )
-				sphWarn ( "%s", i.cstr() );
-
-			pSource->Preread();
-		}
-	} else
-	{
-		if ( dFilters.IsEmpty() )
-		{
-			m_sLastError.SetSprintf ( "no source, no filters - nothing to merge" );
-			return false;
-		}
-		// prepare for self merging - no supress dst, source same as destination. Will apply klists/filters only.
-		bSupressDstDocids = false;
-		pSource = this;
+		m_sLastError.SetSprintf ( "source index preload failed: %s", pSource->GetLastError().cstr() );
+		return false;
 	}
+	pSource->Preread();
+
+	for ( const auto & i : dWarnings )
+		sphWarn ( "%s", i.cstr() );
 
 	// create filters
-	CSphScopedPtr<ISphFilter> pFilter(nullptr);
-	pFilter = CreateMergeFilters ( dFilters );
-
-	return CSphIndex_VLN::DoMerge ( this, (const CSphIndex_VLN *)pSource, pFilter.Ptr(), m_sLastError, tProgress, false, bSupressDstDocids );
+	std::unique_ptr<ISphFilter> pFilter { CreateMergeFilters ( dFilters ) };
+	return DoMerge ( this, (const CSphIndex_VLN *)pSource, pFilter.get(), m_sLastError, tProgress, false, bSupressDstDocids );
 }
-
 
 std::pair<DWORD,DWORD> CSphIndex_VLN::CreateRowMapsAndCountTotalDocs ( const CSphIndex_VLN* pSrcIndex, const CSphIndex_VLN* pDstIndex, CSphFixedVector<RowID_t>& dSrcRowMap, CSphFixedVector<RowID_t>& dDstRowMap, const ISphFilter* pFilter, bool bSupressDstDocids, MergeCb_c& tMonitor )
 {
@@ -7242,7 +7213,6 @@ bool sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, VecTraits_T<CSph
 	auto pDstIndex = (const CSphIndex_VLN*) pDst;
 	auto pSrcIndex = (const CSphIndex_VLN*) pSrc;
 
-//	CSphScopedPtr<ISphFilter> pFilter { pDstIndex->CreateMergeFilters ( dFilters ) };
 	std::unique_ptr<ISphFilter> pFilter { pDstIndex->CreateMergeFilters ( dFilters ) };
 	return CSphIndex_VLN::DoMerge ( pDstIndex, pSrcIndex, pFilter.get(), sError, tProgress, dFilters.IsEmpty(), false );
 }

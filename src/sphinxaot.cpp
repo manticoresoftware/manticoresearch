@@ -1758,7 +1758,7 @@ public:
 class LemmatizerUk_c : public LemmatizerTrait_i
 {
 	void * m_pUserdata = nullptr;
-	CSphRefcountedPtr<PluginTokenFilter_c> m_tPlugin;
+	PluginTokenFilterRefPtr_c m_tPlugin;
 
 public:
 	LemmatizerUk_c();
@@ -1847,7 +1847,7 @@ bool LoadLemmatizerUk ( CSphString & sError )
 
 LemmatizerUk_c::LemmatizerUk_c ()
 {
-	m_tPlugin = (PluginTokenFilter_c *) sphPluginGet ( PLUGIN_INDEX_TOKEN_FILTER, g_sLemmatizerFnName.cstr() );
+	m_tPlugin = PluginGet<PluginTokenFilter_c> ( PLUGIN_INDEX_TOKEN_FILTER, g_sLemmatizerFnName.cstr() );
 	if ( !m_tPlugin )
 		return;
 

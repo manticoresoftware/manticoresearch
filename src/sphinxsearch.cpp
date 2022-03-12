@@ -1729,7 +1729,6 @@ struct RankerState_Plugin_fn final : public ISphExtra
 		assert ( m_pPlugin );
 		if ( m_pPlugin->m_fnDeinit )
 			m_pPlugin->m_fnDeinit ( m_pData );
-		m_pPlugin->Release();
 	}
 
 	bool Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError, DWORD )
@@ -1780,14 +1779,14 @@ struct RankerState_Plugin_fn final : public ISphExtra
 
 private:
 	void *					m_pData = nullptr;
-	const PluginRanker_c *	m_pPlugin = nullptr;
+	PluginRankerRefPtr_c	m_pPlugin;
 	CSphString				m_sOptions;
 
 	bool ExtraDataImpl ( ExtraData_e eType, void ** ppResult ) final
 	{
 		switch ( eType )
 		{
-			case EXTRA_SET_RANKER_PLUGIN:		m_pPlugin = (const PluginRanker_c*)ppResult; break;
+			case EXTRA_SET_RANKER_PLUGIN:		m_pPlugin = *(PluginRankerRefPtr_c*)ppResult; break;
 			case EXTRA_SET_RANKER_PLUGIN_OPTS:	m_sOptions = (char*)ppResult; break;
 			default:							return false;
 		}
@@ -4322,12 +4321,12 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery & tQuery, 
 
 		case SPH_RANK_PLUGIN:
 			{
-				const auto * p = (const PluginRanker_c *) sphPluginGet ( PLUGIN_RANKER, tQuery.m_sUDRanker.cstr() );
+				auto p = PluginGet<PluginRanker_c> ( PLUGIN_RANKER, tQuery.m_sUDRanker.cstr() );
 				// might be a case for query to distributed index
 				if ( p )
 				{
 					pRanker = new ExtRanker_State_T < RankerState_Plugin_fn, true > ( tXQ, tTermSetup, bSkipQCache );
-					pRanker->ExtraData ( EXTRA_SET_RANKER_PLUGIN, (void**)p );
+					pRanker->ExtraData ( EXTRA_SET_RANKER_PLUGIN, (void**)&p );
 					pRanker->ExtraData ( EXTRA_SET_RANKER_PLUGIN_OPTS, (void**) tQuery.m_sUDRankerOpts.cstr() );
 				} else
 				{

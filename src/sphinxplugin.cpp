@@ -30,13 +30,19 @@ public:
 	int					m_iHashedPlugins;		///< how many active g_hPlugins entries reference this handle
 	bool				m_bDlGlobal = false;
 
-	explicit			PluginLib_c ( void * pHandle, const char * sName, bool bDlGlobal );
+						PluginLib_c ( void * pHandle, const char * sName, bool bDlGlobal );
 	const CSphString &	GetName() const { return m_sName; }
 	void *				GetHandle() const { return m_pHandle; }
 
 protected:
 						~PluginLib_c() final;
 };
+
+PluginLibRefPtr_c PluginDesc_c::GetLib() const
+{
+	return m_pLib;
+}
+
 
 /// plugin key
 struct PluginKey_t
@@ -75,9 +81,9 @@ const char * g_dPluginTypes[PLUGIN_TOTAL] = { "udf", "ranker", "index_token_filt
 static bool								g_bPluginsEnabled = false;	///< is there any plugin support at all?
 static CSphString						g_sPluginDir;
 static CSphMutex						g_tPluginMutex;				///< common plugin mutex (access to lib, func and ranker hashes)
-static SmallStringHash_T<PluginLib_c*>	g_hPluginLibs;				///< key is the filename (no path)
+static SmallStringHash_T<PluginLibRefPtr_c>	g_hPluginLibs GUARDED_BY ( g_tPluginMutex );			///< key is the filename (no path)
 
-static CSphOrderedHash<PluginDesc_c*, PluginKey_t, PluginKey_t, 256>	g_hPlugins;
+static CSphOrderedHash<PluginDescRefPtr_c, PluginKey_t, PluginKey_t, 256>	g_hPlugins GUARDED_BY ( g_tPluginMutex );
 
 
 //////////////////////////////////////////////////////////////////////////
@@ -102,17 +108,13 @@ PluginLib_c::~PluginLib_c()
 #endif
 }
 
-PluginDesc_c::PluginDesc_c ( PluginLib_c * pLib )
+PluginDesc_c::PluginDesc_c ( PluginLibRefPtr_c pLib )
 {
 	assert ( pLib );
-	m_pLib = pLib;
-	m_pLib->AddRef();
+	m_pLib = std::move (pLib);
 }
 
-PluginDesc_c::~PluginDesc_c()
-{
-	m_pLib->Release();
-}
+PluginDesc_c::~PluginDesc_c() {}
 
 const CSphString & PluginDesc_c::GetLibName() const
 {
@@ -255,7 +257,7 @@ void PluginLog ( const char * szMsg, int iLen )
 		sphWarning ( "PLUGIN: %.*s", (int) iLen, szMsg );
 }
 
-static bool PluginOnLoadLibrary ( const PluginLib_c * pLib, CSphString & sError )
+static bool PluginOnLoadLibrary ( const PluginLibRefPtr_c& pLib, CSphString & sError ) REQUIRES ( g_tPluginMutex )
 {
 	// library already loaded - no need to call plugin_load function
 	if ( g_hPluginLibs ( pLib->GetName() ) )
@@ -275,7 +277,7 @@ static bool PluginOnLoadLibrary ( const PluginLib_c * pLib, CSphString & sError 
 	return true;
 }
 
-static bool PluginOnUnloadLibrary ( const PluginLib_c * pLib, CSphString & sError )
+static bool PluginOnUnloadLibrary ( const PluginLibRefPtr_c& pLib, CSphString & sError )
 {
 	auto fnPluginUnload = (PluginLoad_fn) dlsym ( pLib->GetHandle(), "plugin_unload" );
 	if ( fnPluginUnload )
@@ -291,7 +293,7 @@ static bool PluginOnUnloadLibrary ( const PluginLib_c * pLib, CSphString & sErro
 	return true;
 }
 
-static PluginLib_c * LoadPluginLibrary ( const char * sLibName, CSphString & sError, bool bDlGlobal, bool bLinuxReload )
+static PluginLibRefPtr_c LoadPluginLibrary ( const char * sLibName, CSphString & sError, bool bDlGlobal, bool bLinuxReload )
 {
 
 	CSphString sTmpfile;
@@ -357,7 +359,7 @@ static PluginLib_c * LoadPluginLibrary ( const char * sLibName, CSphString & sEr
 		fnLogCb(PluginLog);
 	}
 
-	return new PluginLib_c ( pHandle, sLibName, bDlGlobal );
+	return PluginLibRefPtr_c { new PluginLib_c ( pHandle, sLibName, bDlGlobal ) };
 }
 #endif
 
@@ -415,25 +417,20 @@ bool sphPluginCreate ( const char * szLib, PluginType_e eType, const char * sNam
 	}
 
 	// lookup or load library
-	PluginLib_c * pLib = nullptr;
+	PluginLibRefPtr_c pLib;
 	if ( g_hPluginLibs ( sLib ) )
-	{
 		pLib = g_hPluginLibs [ sLib ];
-		pLib->AddRef();
-	} else
-	{
+	else
 		pLib = LoadPluginLibrary ( sLib.cstr(), sError, bDlGlobal, false );
-		if ( !pLib )
-			return false;
-	}
+
+	if ( !pLib )
+		return false;
+
 	assert ( pLib->GetHandle() );
 	if ( !PluginOnLoadLibrary ( pLib, sError ) )
-	{
-		pLib->Release();
 		return false;
-	}
 
-	PluginDesc_c * pPlugin = nullptr;
+	PluginDescRefPtr_c pPlugin;
 	const SymbolDesc_t * pSym = nullptr;
 	switch ( eType )
 	{
@@ -443,31 +440,22 @@ bool sphPluginCreate ( const char * szLib, PluginType_e eType, const char * sNam
 		case PLUGIN_FUNCTION:				pPlugin = new PluginUDF_c ( pLib, eUDFRetType ); pSym = g_dSymbolsUDF; break;
 		default:
 			sError.SetSprintf ( "INTERNAL ERROR: unknown plugin type %d in CreatePlugin()", (int)eType );
-			pLib->Release();
 			return false;
 	}
-
-	// release the refcount that this very function is holding
-	// or in other words, transfer the refcount to newly created plugin instance (it does its own addref)
-	pLib->Release();
 
 	if ( !PluginLoadSymbols ( pPlugin, pSym, pLib->GetHandle(), k.m_sName.cstr(), sError ) )
 	{
 		sError.SetSprintf ( "%s in %s", sError.cstr(), sLib.cstr() );
-		pPlugin->Release();
 		return false;
 	}
 
 	// add library if needed
 	if ( !g_hPluginLibs ( sLib ) )
-	{
 		Verify ( g_hPluginLibs.Add ( pLib, pLib->GetName() ) );
-		pLib->AddRef(); // the hash reference
-	}
 
 	// add function
 	Verify ( g_hPlugins.Add ( pPlugin, k ) );
-	pPlugin->GetLib()->m_iHashedPlugins++;
+	++pPlugin->GetLib()->m_iHashedPlugins;
 	return true;
 #endif // HAVE_DLOPEN
 }
@@ -482,25 +470,21 @@ bool sphPluginDrop ( PluginType_e eType, const char * sName, CSphString & sError
 	ScopedMutex_t tLock ( g_tPluginMutex );
 
 	PluginKey_t tKey ( eType, sName );
-	PluginDesc_c ** ppPlugin = g_hPlugins(tKey);
+	PluginDescRefPtr_c* ppPlugin = g_hPlugins(tKey);
 	if ( !ppPlugin || !*ppPlugin )
 	{
 		sError.SetSprintf ( "plugin '%s' does not exist", sName );
 		return false;
 	}
 
-	PluginDesc_c * pPlugin = *ppPlugin;
-	PluginLib_c * pLib = pPlugin->GetLib();
-
+	PluginLibRefPtr_c pLib = ( *ppPlugin )->GetLib();
 	Verify ( g_hPlugins.Delete(tKey) );
-	pPlugin->Release();
 
 	bool bUnloaded = true;
 	if ( --pLib->m_iHashedPlugins==0 )
 	{
 		bUnloaded = PluginOnUnloadLibrary ( pLib, sError );
 		g_hPluginLibs.Delete ( pLib->GetName() );
-		pLib->Release();
 	}
 
 	return bUnloaded;
@@ -518,12 +502,12 @@ bool sphPluginReload ( const char * sName, CSphString & sError )
 	ScopedMutex_t tLock ( g_tPluginMutex );
 
 	CSphVector<PluginKey_t> dKeys;
-	CSphVector<PluginDesc_c*> dPlugins;
+	CSphVector<PluginDescRefPtr_c> dPlugins;
 
 	bool bDlGlobal = false;
 	for ( const auto& tPlugin : g_hPlugins )
 	{
-		PluginDesc_c * v = tPlugin.second;
+		PluginDescRefPtr_c v = tPlugin.second;
 		if ( v->GetLibName()==sName )
 		{
 			dKeys.Add ( tPlugin.first );
@@ -540,19 +524,21 @@ bool sphPluginReload ( const char * sName, CSphString & sError )
 	}
 
 	// load new library and check every plugin
+	PluginLibRefPtr_c pNewLib = LoadPluginLibrary ( sName, sError, bDlGlobal,
 #if !_WIN32
-	PluginLib_c * pNewLib = LoadPluginLibrary ( sName, sError, bDlGlobal, true );
+		true
 #else
-	PluginLib_c * pNewLib = LoadPluginLibrary ( sName, sError, bDlGlobal, false );
+		false
 #endif
+				);
 	if ( !pNewLib )
 		return false;
 
 	// load all plugins
-	CSphVector<PluginDesc_c*> dNewPlugins;
+	CSphVector<PluginDescRefPtr_c> dNewPlugins;
 	ARRAY_FOREACH ( i, dPlugins )
 	{
-		PluginDesc_c * pDesc = nullptr;
+		PluginDescRefPtr_c pDesc;
 		const SymbolDesc_t * pSym = nullptr;
 		switch ( dKeys[i].m_eType )
 		{
@@ -566,52 +552,35 @@ bool sphPluginReload ( const char * sName, CSphString & sError )
 		}
 
 		if ( !PluginLoadSymbols ( pDesc, pSym, pNewLib->GetHandle(), dKeys[i].m_sName.cstr(), sError ) )
-		{
-			pDesc->Release();
 			break;
-		}
 
 		dNewPlugins.Add ( pDesc );
 	}
 
-	// we can now release the reference that this function was holding
-	pNewLib->Release();
-
 	// if there was a problem loading any of the plugins, time to fail
 	if ( dPlugins.GetLength()!=dNewPlugins.GetLength() )
 	{
-		ARRAY_FOREACH ( i, dNewPlugins )
-			dNewPlugins[i]->Release();
-
 		sError.SetSprintf ( "failed to import plugin %s: %s", dKeys [ dNewPlugins.GetLength() ].m_sName.cstr(), sError.cstr() );
 		return false;
 	}
 
 	// unregister and release the old references
-	PluginLib_c * pOldLib = dPlugins[0]->GetLib();
+	PluginLibRefPtr_c pOldLib = dPlugins[0]->GetLib();
 	ARRAY_FOREACH ( i, dPlugins )
 	{
 		assert ( dPlugins[i]->GetLib()==pOldLib );
 		Verify ( g_hPlugins.Delete ( dKeys[i] ) );
-		SafeRelease ( dPlugins[i] );
 	}
 	assert ( pOldLib->m_iHashedPlugins==dPlugins.GetLength() );
 	pOldLib->m_iHashedPlugins = 0;
 	PluginOnUnloadLibrary ( pOldLib, sError );
 	Verify ( g_hPluginLibs.Delete ( pOldLib->GetName() ) );
-	SafeRelease ( pOldLib );
 
 	if ( !PluginOnLoadLibrary ( pNewLib, sError ) )
-	{
-		ARRAY_FOREACH ( i, dNewPlugins )
-			dNewPlugins[i]->Release();
-
 		return false;
-	}
 
 	// register new references
 	g_hPluginLibs.Add ( pNewLib, pNewLib->GetName() );
-	pNewLib->AddRef(); // the hash reference
 
 	ARRAY_FOREACH ( i, dNewPlugins )
 		Verify ( g_hPlugins.Add ( dNewPlugins[i], dKeys[i] ) );
@@ -625,20 +594,20 @@ bool sphPluginReload ( const char * sName, CSphString & sError )
 }
 
 
-PluginDesc_c * sphPluginAcquire ( const char * szLib, PluginType_e eType, const char * szName, CSphString & sError )
+PluginDescRefPtr_c PluginAcquireDesc ( const char * szLib, PluginType_e eType, const char * szName, CSphString & sError )
 {
-	CSphRefcountedPtr<PluginDesc_c> pDesc { sphPluginGet ( eType, szName ) };
+	PluginDescRefPtr_c pDesc = PluginGetDesc ( eType, szName );
 	if ( !pDesc )
 	{
 		if ( !sphPluginCreate ( szLib, eType, szName, SPH_ATTR_NONE, false, sError ) )
 			return nullptr;
-		return sphPluginGet ( eType, szName );
+		return PluginGetDesc ( eType, szName );
 	}
 
 	CSphString sLib ( szLib );
 	sLib.ToLower();
 	if ( pDesc->GetLibName()==sLib )
-		return pDesc.Leak();
+		return pDesc;
 
 	sError.SetSprintf ( "unable to load plugin '%s' from '%s': it has already been loaded from library '%s'",
 		szName, sLib.cstr(), pDesc->GetLibName().cstr() );
@@ -665,12 +634,12 @@ void sphPluginSaveState ( CSphWriter & tWriter )
 	for ( const auto& tPlugin : g_hPlugins )
 	{
 		const PluginKey_t & k = tPlugin.first;
-		const PluginDesc_c * v = tPlugin.second;
+		const PluginDescRefPtr_c v = tPlugin.second;
 
 		CSphString sBuf;
 		if ( k.m_eType==PLUGIN_FUNCTION )
 			sBuf.SetSprintf ( "CREATE FUNCTION %s RETURNS %s SONAME '%s';\n", k.m_sName.cstr(),
-				UdfReturnType ( ((PluginUDF_c*)v)->m_eRetType ), v->GetLibName().cstr() );
+				UdfReturnType ( ((PluginUDF_c*)v.Ptr())->m_eRetType ), v->GetLibName().cstr() );
 		else
 			sBuf.SetSprintf ( "CREATE PLUGIN %s TYPE '%s' SONAME '%s';\n",
 				k.m_sName.cstr(), g_dPluginTypes[k.m_eType], v->GetLibName().cstr() );
@@ -695,22 +664,21 @@ bool sphPluginExists ( PluginType_e eType, const char * sName )
 		return false;
 	ScopedMutex_t tLock ( g_tPluginMutex );
 	PluginKey_t k ( eType, sName );
-	PluginDesc_c ** pp = g_hPlugins(k);
+	PluginDescRefPtr_c* pp = g_hPlugins(k);
 	return pp && *pp;
 }
 
 
-PluginDesc_c * sphPluginGet ( PluginType_e eType, const char * sName )
+PluginDescRefPtr_c PluginGetDesc ( PluginType_e eType, const char * sName )
 {
 	if ( !g_bPluginsEnabled )
 		return nullptr;
 
 	ScopedMutex_t tLock ( g_tPluginMutex );
 	PluginKey_t k ( eType, sName );
-	PluginDesc_c ** pp = g_hPlugins(k);
+	PluginDescRefPtr_c* pp = g_hPlugins(k);
 	if ( !pp || !*pp )
 		return nullptr;
-	(**pp).AddRef();
 	return *pp;
 }
 
@@ -723,7 +691,7 @@ void sphPluginList ( CSphVector<PluginInfo_t> & dResult )
 	for ( const auto& tPlugin : g_hPlugins )
 	{
 		const PluginKey_t & k = tPlugin.first;
-		const PluginDesc_c *v = tPlugin.second;
+		const PluginDescRefPtr_c v = tPlugin.second;
 
 		PluginInfo_t & p = dResult.Add();
 		p.m_eType = k.m_eType;
@@ -731,6 +699,23 @@ void sphPluginList ( CSphVector<PluginInfo_t> & dResult )
 		p.m_sLib = v->GetLibName().cstr();
 		p.m_iUsers = v->GetRefcount() - 1; // except the one reference from the hash itself
 		if ( p.m_eType==PLUGIN_FUNCTION )
-			p.m_sExtra = UdfReturnType ( ((PluginUDF_c*)v)->m_eRetType );
+			p.m_sExtra = UdfReturnType ( ((PluginUDF_c*)v.Ptr())->m_eRetType );
 	}
 }
+
+PluginUDF_c::PluginUDF_c ( PluginLibRefPtr_c pLib, ESphAttr eRetType )
+	: PluginDesc_c ( std::move ( pLib ) )
+	, m_eRetType ( eRetType )
+{}
+
+PluginRanker_c::PluginRanker_c ( PluginLibRefPtr_c pLib )
+	: PluginDesc_c ( std::move ( pLib ) )
+{}
+
+PluginTokenFilter_c::PluginTokenFilter_c ( PluginLibRefPtr_c pLib )
+	: PluginDesc_c ( std::move ( pLib ) )
+{}
+
+PluginQueryTokenFilter_c::PluginQueryTokenFilter_c ( PluginLibRefPtr_c pLib )
+	: PluginDesc_c ( std::move ( pLib ) )
+{}

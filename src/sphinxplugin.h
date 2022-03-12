@@ -57,6 +57,8 @@ typedef void			(*QueryTokenFilterDeinit_fn)	( void * userdata );
 
 /// forward refs
 class PluginLib_c;
+using PluginLibRefPtr_c = CSphRefcountedPtr<PluginLib_c>;
+
 class CSphWriter;
 
 /// plugin types
@@ -75,18 +77,20 @@ enum PluginType_e
 class PluginDesc_c : public ISphRefcountedMT
 {
 protected:
-	PluginLib_c *		m_pLib;			///< library descriptor (pointer to library hash value)
+	PluginLibRefPtr_c 	m_pLib;			///< library descriptor (pointer to library hash value)
 
 public:
-	explicit			PluginDesc_c ( PluginLib_c * pLib );
+	explicit			PluginDesc_c ( PluginLibRefPtr_c pLib );
 	virtual ESphAttr	GetUdfRetType() const { return SPH_ATTR_NONE; }
 
 	const CSphString &	GetLibName() const;
-	PluginLib_c *		GetLib() const { return m_pLib; }
+	PluginLibRefPtr_c	GetLib() const;
 
 protected:
 						~PluginDesc_c() override;
 };
+
+using PluginDescRefPtr_c = CSphRefcountedPtr<PluginDesc_c>;
 
 /// registered user-defined function descriptor
 class PluginUDF_c : public PluginDesc_c
@@ -97,13 +101,11 @@ public:
 	UdfDeinit_fn		m_fnDeinit = nullptr;	///< per-query deinit function, optional
 	void *				m_fnFunc = nullptr;		///< per-row worker function, mandatory
 
-	explicit PluginUDF_c ( PluginLib_c * pLib, ESphAttr eRetType )
-		: PluginDesc_c ( pLib )
-		, m_eRetType ( eRetType )
-	{}
-
+						PluginUDF_c ( PluginLibRefPtr_c pLib, ESphAttr eRetType );
 	ESphAttr			GetUdfRetType() const override { return m_eRetType; }
 };
+
+using PluginUDFRefPtr_c = CSphRefcountedPtr<PluginUDF_c>;
 
 /// registered user-defined ranker descriptor
 class PluginRanker_c : public PluginDesc_c
@@ -114,8 +116,10 @@ public:
 	RankerFinalize_fn	m_fnFinalize = nullptr;	///< per-document finalize function, mandatory
 	RankerDeinit_fn		m_fnDeinit = nullptr;	///< deinit function (called once when ranker is destroyed), optional
 
-	explicit			PluginRanker_c ( PluginLib_c * pLib ) : PluginDesc_c ( pLib ) {}
+	explicit			PluginRanker_c ( PluginLibRefPtr_c pLib );
 };
+
+using PluginRankerRefPtr_c = CSphRefcountedPtr<PluginRanker_c>;
 
 /// registered user-defined token filter descriptor
 class PluginTokenFilter_c : public PluginDesc_c
@@ -132,8 +136,10 @@ public:
 	TokenFilterIsBlended_fn		m_fnTokenIsBlended = nullptr;
 	TokenFilterIsBlendedPart_fn m_fnTokenIsBlendedPart = nullptr;
 
-	explicit					PluginTokenFilter_c ( PluginLib_c * pLib ) : PluginDesc_c ( pLib ) {}
+	explicit 						PluginTokenFilter_c ( PluginLibRefPtr_c pLib );
 };
+
+using PluginTokenFilterRefPtr_c = CSphRefcountedPtr<PluginTokenFilter_c>;
 
 /// registered user-defined token filter descriptor
 class PluginQueryTokenFilter_c : public PluginDesc_c
@@ -145,8 +151,10 @@ public:
 	QueryTokenFilterPushToken_fn	m_fnPushToken = nullptr;
 	QueryTokenFilterDeinit_fn		m_fnDeinit = nullptr;
 
-	explicit						PluginQueryTokenFilter_c ( PluginLib_c * pLib ) : PluginDesc_c ( pLib ) {}
+	explicit						PluginQueryTokenFilter_c ( PluginLibRefPtr_c pLib );
 };
+
+using PluginQueryTokenRefPtr_c = CSphRefcountedPtr<PluginQueryTokenFilter_c>;
 
 /// human readable plugin description (basically for SHOW PLUGINS)
 struct PluginInfo_t
@@ -187,12 +195,22 @@ bool sphPluginCreate ( const char * sLib, PluginType_e eType, const char * sName
 bool sphPluginCreate ( const char * sLib, PluginType_e eType, const char * sName, ESphAttr eUDFRetType, bool bDlGlobal, CSphString & sError );
 
 /// get plugin instance descriptor by name
-/// WARNING, increments users count, so non-NULL pointers you get back need to be Release()d
-PluginDesc_c * sphPluginGet ( PluginType_e eType, const char * sName );
+PluginDescRefPtr_c PluginGetDesc ( PluginType_e eType, const char * sName );
+
+template<typename PLUGIN>
+CSphRefcountedPtr<PLUGIN> PluginGet ( PluginType_e eType, const char* sName )
+{
+	return CSphRefcountedPtr<PLUGIN> { (PLUGIN*)PluginGetDesc ( eType, sName ).Leak() };
+}
 
 /// acquire plugin instance; get-or-create-and-get essentially
-/// WARNING, increments users count, so non-NULL pointers you get back need to be Release()d
-PluginDesc_c * sphPluginAcquire ( const char * sLib, PluginType_e eType, const char * sName, CSphString & sError );
+PluginDescRefPtr_c PluginAcquireDesc ( const char * sLib, PluginType_e eType, const char * sName, CSphString & sError );
+
+template <typename PLUGIN>
+CSphRefcountedPtr<PLUGIN> PluginAcquire ( const char* sLib, PluginType_e eType, const char* sName, CSphString& sError )
+{
+	return CSphRefcountedPtr<PLUGIN> { (PLUGIN*)PluginAcquireDesc ( sLib, eType, sName, sError ).Leak() };
+}
 
 /// drop plugin by name
 bool sphPluginDrop ( PluginType_e eType, const char * sName, CSphString & sError );

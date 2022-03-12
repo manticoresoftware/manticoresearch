@@ -300,6 +300,7 @@ public:
 };
 
 class PluginQueryTokenFilter_c;
+using PluginQueryTokenRefPtr_c = CSphRefcountedPtr<PluginQueryTokenFilter_c>;
 
 class XQParseHelper_c
 {
@@ -339,7 +340,7 @@ protected:
 	XQQuery_t *				m_pParsed {nullptr};
 	bool					m_bError {false};
 
-	const PluginQueryTokenFilter_c * m_pPlugin {nullptr};
+	PluginQueryTokenRefPtr_c m_pPlugin;
 	void *					m_pPluginData {nullptr};
 
 	int						m_iAtomPos {0};

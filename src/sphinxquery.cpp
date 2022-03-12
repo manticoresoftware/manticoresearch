@@ -1744,8 +1744,7 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 	if ( pQuery && !pQuery->m_sQueryTokenFilterName.IsEmpty() )
 	{
 		CSphString sError;
-		m_pPlugin = static_cast < PluginQueryTokenFilter_c * > ( sphPluginAcquire ( pQuery->m_sQueryTokenFilterLib.cstr(),
-			PLUGIN_QUERY_TOKEN_FILTER, pQuery->m_sQueryTokenFilterName.cstr(), tParsed.m_sParseError ) );
+		m_pPlugin = PluginAcquire<PluginQueryTokenFilter_c> ( pQuery->m_sQueryTokenFilterLib.cstr(), PLUGIN_QUERY_TOKEN_FILTER, pQuery->m_sQueryTokenFilterName.cstr(), tParsed.m_sParseError );
 		if ( !m_pPlugin )
 			return false;
 
@@ -1753,7 +1752,6 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 		if ( m_pPlugin->m_fnInit && m_pPlugin->m_fnInit ( &m_pPluginData, MAX_TOKEN_BYTES, pQuery->m_sQueryTokenFilterOpts.cstr(), szError )!=0 )
 		{
 			tParsed.m_sParseError = sError;
-			m_pPlugin->Release();
 			m_pPlugin = nullptr;
 			m_pPluginData = nullptr;
 			return false;
@@ -1768,7 +1766,7 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 	m_iQueryLen = sQuery ? (int) strlen(sQuery) : 0;
 	m_iPendingNulls = 0;
 	m_iPendingType = 0;
-	m_pRoot = NULL;
+	m_pRoot = nullptr;
 	m_bEmpty = true;
 	m_iOvershortStep = tSettings.m_iOvershortStep;
 
@@ -1780,9 +1778,8 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 		if ( m_pPlugin->m_fnDeinit )
 			m_pPlugin->m_fnDeinit ( m_pPluginData );
 
-		m_pPlugin->Release();
-		m_pPlugin = NULL;
-		m_pPluginData = NULL;
+		m_pPlugin = nullptr;
+		m_pPluginData = nullptr;
 	}
 
 	if ( ( iRes || !m_pParsed->m_sParseError.IsEmpty() ) && !m_bEmpty )

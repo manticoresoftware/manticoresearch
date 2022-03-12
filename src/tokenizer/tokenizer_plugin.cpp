@@ -163,22 +163,20 @@ private:
 };
 
 
-TokenizerRefPtr_c Tokenizer::CreatePluginFilter ( TokenizerRefPtr_c pTokenizer, const CSphString& sSpec, CSphString& sError )
+void Tokenizer::AddPluginFilterTo ( TokenizerRefPtr_c& pTokenizer, const CSphString& sSpec, CSphString& sError )
 {
-	TokenizerRefPtr_c pResult;
 	StrVec_t dPlugin; // dll, filtername, options
 	if ( !sphPluginParseSpec ( sSpec, dPlugin, sError ) )
-		return pResult;
+		return;
 
 	if ( dPlugin.IsEmpty() )
-		return pTokenizer;
+		return;
 
 	PluginTokenFilterRefPtr_c p = PluginAcquire<PluginTokenFilter_c> ( dPlugin[0].cstr(), PLUGIN_INDEX_TOKEN_FILTER, dPlugin[1].cstr(), sError );
 	if ( !p )
 	{
 		sError.SetSprintf ( "INTERNAL ERROR: plugin %s:%s loaded ok but lookup fails, error: %s", dPlugin[0].cstr(), dPlugin[1].cstr(), sError.cstr() );
-		return pResult;
+		return;
 	}
-	pResult = new PluginFilterTokenizer_c ( std::move ( pTokenizer ), p, dPlugin[2].cstr() );
-	return pResult;
+	pTokenizer = new PluginFilterTokenizer_c ( std::move ( pTokenizer ), std::move (p), dPlugin[2].cstr() );
 }

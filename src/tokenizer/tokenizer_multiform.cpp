@@ -326,7 +326,9 @@ BYTE* MultiformTokenizer::GetToken()
 
 TokenizerRefPtr_c MultiformTokenizer::Clone ( ESphTokenizerClone eMode ) const
 {
-	return Tokenizer::CreateMultiformFilter ( m_pTokenizer->Clone ( eMode ), m_pMultiWordforms );
+	auto pClone = m_pTokenizer->Clone ( eMode );
+	Tokenizer::AddToMultiformFilterTo ( pClone, m_pMultiWordforms );
+	return pClone;
 }
 
 
@@ -372,16 +374,12 @@ bool MultiformTokenizer::WasTokenMultiformDestination ( bool& bHead, int& iDestC
 		bHead = ( m_iOutputPending == 0 );
 		iDestCount = m_pCurrentForm->m_dNormalForm.GetLength();
 		return true;
-	} else
-	{
-		return false;
 	}
+	return false;
 }
 
-TokenizerRefPtr_c Tokenizer::CreateMultiformFilter ( TokenizerRefPtr_c pTokenizer, const CSphMultiformContainer* pContainer )
+void Tokenizer::AddToMultiformFilterTo ( TokenizerRefPtr_c& pTokenizer, const CSphMultiformContainer* pContainer )
 {
-	if ( !pContainer )
-		return pTokenizer;
-
-	return TokenizerRefPtr_c { new MultiformTokenizer ( std::move ( pTokenizer ), pContainer ) };
+	if ( pContainer )
+		pTokenizer = new MultiformTokenizer ( std::move ( pTokenizer ), pContainer );
 }

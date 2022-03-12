@@ -487,7 +487,7 @@ static bool SetupWordProcessors ( Index_t & tIndex, CSphString & sError )
 		return false;
 	tIndex.m_pDict = pDict;
 
-	pTokenizer = Tokenizer::CreateMultiformFilter ( pTokenizer, tIndex.m_pDict->GetMultiWordforms () );
+	Tokenizer::AddToMultiformFilterTo ( pTokenizer, tIndex.m_pDict->GetMultiWordforms () );
 
 	// initialize AOT if needed
 	tIndex.m_tSettings.m_uAotFilterMask = sphParseMorphAot ( tIndex.m_tDictSettings.m_sMorphology.cstr() );

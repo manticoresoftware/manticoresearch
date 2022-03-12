@@ -2376,9 +2376,7 @@ void PercolateIndex_c::PostSetupUnl()
 
 	// FIXME!!! handle error
 	m_pTokenizerIndexing = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
-	TokenizerRefPtr_c pIndexing = Tokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError );
-	if ( pIndexing )
-		m_pTokenizerIndexing = pIndexing;
+	Tokenizer::AddBigramFilterTo ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError );
 
 	if ( m_tSettings.m_uAotFilterMask )
 		sphAotTransformFilter ( m_pTokenizerIndexing, m_pDict, m_tSettings.m_bIndexExactWords, m_tSettings.m_uAotFilterMask );
@@ -2522,7 +2520,7 @@ bool PercolateIndex_c::LoadMetaLegacy ( const CSphString& sMeta, bool bStripPath
 		return false;
 	}
 
-	m_pTokenizer = Tokenizer::CreateMultiformFilter ( m_pTokenizer, m_pDict->GetMultiWordforms () );
+	Tokenizer::AddToMultiformFilterTo ( m_pTokenizer, m_pDict->GetMultiWordforms () );
 
 	// regexp and ICU
 	if ( uVersion>=6 )
@@ -2633,7 +2631,7 @@ bool PercolateIndex_c::LoadMeta ( const CSphString& sMeta, bool bStripPath, File
 		return false;
 	}
 
-	m_pTokenizer = Tokenizer::CreateMultiformFilter ( m_pTokenizer, m_pDict->GetMultiWordforms() );
+	Tokenizer::AddToMultiformFilterTo ( m_pTokenizer, m_pDict->GetMultiWordforms() );
 
 	// regexp and ICU
 	FieldFilterRefPtr_c pFieldFilter;

@@ -250,15 +250,15 @@ namespace Tokenizer {
 /// create a tokenizer using the given settings
 TokenizerRefPtr_c		Create ( const CSphTokenizerSettings & tSettings, const CSphEmbeddedFiles * pFiles, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError );
 
-/// create a token filter
-TokenizerRefPtr_c		CreateMultiformFilter ( TokenizerRefPtr_c pTokenizer, const CSphMultiformContainer * pContainer );
+/// add multiform filter upon given tokenizer
+void AddToMultiformFilterTo ( TokenizerRefPtr_c& pTokenizer, const CSphMultiformContainer* pContainer );
 
-/// create a token filter
-TokenizerRefPtr_c		CreateBigramFilter ( TokenizerRefPtr_c pTokenizer, ESphBigram eBigramIndex, const CSphString & sBigramWords, CSphString & sError );
+/// add bigram filter upon given tokenizer
+void AddBigramFilterTo ( TokenizerRefPtr_c& pTokenizer, ESphBigram eBigramIndex, const CSphString& sBigramWords, CSphString& sError );
 
 /// create a plugin filter
 /// sSspec is a library, name, and options specification string, eg "myplugins.dll:myfilter1:arg1=123"
-TokenizerRefPtr_c		CreatePluginFilter ( TokenizerRefPtr_c pTokenizer, const CSphString & sSpec, CSphString & sError );
+void AddPluginFilterTo ( TokenizerRefPtr_c& pTokenizer, const CSphString & sSpec, CSphString & sError );
 
 namespace Detail {
 

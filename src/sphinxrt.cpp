@@ -1818,8 +1818,8 @@ bool RtIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphS
 	// OPTIMIZE? do not create filter on each(!) INSERT
 	if ( !m_tSettings.m_sIndexTokenFilter.IsEmpty() )
 	{
-		tTokenizer = Tokenizer::CreatePluginFilter ( tTokenizer, m_tSettings.m_sIndexTokenFilter, sError );
-		if ( !tTokenizer )
+		Tokenizer::AddPluginFilterTo ( tTokenizer, m_tSettings.m_sIndexTokenFilter, sError );
+		if ( !sError.IsEmpty() )
 			return false;
 		if ( !tTokenizer->SetFilterSchema ( m_tSchema, sError ) )
 			return false;
@@ -4653,7 +4653,7 @@ bool RtIndex_c::LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuilder, bool bStr
 	if ( !m_sLastError.IsEmpty() )
 		dWarnings.Add(m_sLastError);
 
-	m_pTokenizer = Tokenizer::CreateMultiformFilter ( m_pTokenizer, m_pDict->GetMultiWordforms () );
+	Tokenizer::AddToMultiformFilterTo ( m_pTokenizer, m_pDict->GetMultiWordforms () );
 
 	m_iWordsCheckpoint = rdMeta.GetDword();
 
@@ -4791,7 +4791,7 @@ bool RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder, bool bStrip
 	if ( !m_sLastError.IsEmpty() )
 		dWarnings.Add(m_sLastError);
 
-	m_pTokenizer = Tokenizer::CreateMultiformFilter ( m_pTokenizer, m_pDict->GetMultiWordforms () );
+	Tokenizer::AddToMultiformFilterTo ( m_pTokenizer, m_pDict->GetMultiWordforms () );
 
 	m_iWordsCheckpoint = (int)Int ( tBson.ChildByName ( "words_checkpoint" ) );
 
@@ -5336,9 +5336,7 @@ void RtIndex_c::PostSetup()
 
 	// FIXME!!! handle error
 	m_pTokenizerIndexing = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
-	TokenizerRefPtr_c pIndexing { Tokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError ) };
-	if ( pIndexing )
-		m_pTokenizerIndexing = pIndexing;
+	Tokenizer::AddBigramFilterTo ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError );
 
 	const CSphDictSettings & tDictSettings = m_pDict->GetSettings();
 	if ( !ParseMorphFields ( tDictSettings.m_sMorphology, tDictSettings.m_sMorphFields, m_tSchema.GetFields(), m_tMorphFields, m_sLastError ) )
@@ -9875,7 +9873,7 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 	}
 
 	// multiforms right after dict
-	pTokenizer = Tokenizer::CreateMultiformFilter ( pTokenizer, tDict->GetMultiWordforms() );
+	Tokenizer::AddToMultiformFilterTo ( pTokenizer, tDict->GetMultiWordforms() );
 
 	// bigram filter
 	if ( tSettings.m_tIndex.m_eBigramIndex!=SPH_BIGRAM_NONE && tSettings.m_tIndex.m_eBigramIndex!=SPH_BIGRAM_ALL )
@@ -10003,9 +10001,7 @@ bool RtIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 
 	// FIXME!!! handle error
 	m_pTokenizerIndexing = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
-	TokenizerRefPtr_c pIndexing { Tokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError ) };
-	if ( pIndexing )
-		m_pTokenizerIndexing = pIndexing;
+	Tokenizer::AddBigramFilterTo ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError );
 
 	AlterSave ( false );
 

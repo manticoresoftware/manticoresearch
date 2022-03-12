@@ -1277,7 +1277,7 @@ public:
 	void						SetupQueryTokenizer();
 	TokenizerRefPtr_c			GetTokenizer () const;
 	TokenizerRefPtr_c			GetQueryTokenizer () const;
-	TokenizerRefPtr_c			LeakTokenizer ();
+	TokenizerRefPtr_c&			ModifyTokenizer ();
 	void						SetDictionary ( CSphDict * pDict );
 	CSphDict *					GetDictionary () const { return m_pDict; }
 	CSphDict *					LeakDictionary ();

@@ -2483,9 +2483,9 @@ TokenizerRefPtr_c CSphIndex::GetQueryTokenizer() const
 	return m_pQueryTokenizer;
 }
 
-TokenizerRefPtr_c	CSphIndex::LeakTokenizer ()
+TokenizerRefPtr_c&	CSphIndex::ModifyTokenizer ()
 {
-	return std::exchange ( m_pTokenizer, nullptr );
+	return m_pTokenizer;
 }
 
 
@@ -9264,7 +9264,7 @@ bool CSphIndex_VLN::LoadHeaderLegacy ( const char * sHeaderName, bool bStripPath
 
 	SetDictionary ( pDict );
 
-	pTokenizer = Tokenizer::CreateMultiformFilter ( pTokenizer, pDict->GetMultiWordforms () );
+	Tokenizer::AddToMultiformFilterTo ( pTokenizer, pDict->GetMultiWordforms () );
 	SetTokenizer ( pTokenizer );
 	SetupQueryTokenizer();
 
@@ -9402,7 +9402,7 @@ bool CSphIndex_VLN::LoadHeader ( const char* sHeaderName, bool bStripPath, CSphE
 
 	SetDictionary ( pDict );
 
-	pTokenizer = Tokenizer::CreateMultiformFilter ( pTokenizer, pDict->GetMultiWordforms () );
+	Tokenizer::AddToMultiformFilterTo ( pTokenizer, pDict->GetMultiWordforms () );
 	SetTokenizer ( pTokenizer );
 	SetupQueryTokenizer();
 

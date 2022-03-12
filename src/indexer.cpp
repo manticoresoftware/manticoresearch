@@ -1003,9 +1003,9 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		// plugin filter
 		if ( !tSettings.m_sIndexTokenFilter.IsEmpty() )
 		{
-			pTokenizer = Tokenizer::CreatePluginFilter ( pTokenizer, tSettings.m_sIndexTokenFilter, sError );
+			Tokenizer::AddPluginFilterTo ( pTokenizer, tSettings.m_sIndexTokenFilter, sError );
 			// need token_filter that just passes init phase in case stopwords or wordforms will be loaded
-			if ( !pTokenizer )
+			if ( !sError.IsEmpty() )
 				sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 		}
 
@@ -1032,11 +1032,11 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 			fprintf ( stdout, "WARNING: index '%s': dict=keywords and prefixes and morphology enabled, forcing index_exact_words=1\n", sIndexName );
 		}
 
-		pTokenizer = Tokenizer::CreateMultiformFilter ( pTokenizer, pDict->GetMultiWordforms () );
+		Tokenizer::AddToMultiformFilterTo ( pTokenizer, pDict->GetMultiWordforms () );
 
 		// bigram filter
-		pTokenizer = Tokenizer::CreateBigramFilter ( pTokenizer, tSettings.m_eBigramIndex, tSettings.m_sBigramWords, sError );
-		if ( !pTokenizer )
+		Tokenizer::AddBigramFilterTo ( pTokenizer, tSettings.m_eBigramIndex, tSettings.m_sBigramWords, sError );
+		if ( !sError.IsEmpty() )
 			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
 		// aot filter

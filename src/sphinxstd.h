@@ -4060,6 +4060,14 @@ public:
 		return *this;
 	}
 
+	template<typename DERIVED>
+	CSphRefcountedPtr& operator= ( CSphRefcountedPtr<DERIVED>&& rhs ) noexcept
+	{
+		SafeRelease ( m_pPtr );
+		m_pPtr = rhs.Leak();
+		return *this;
+	}
+
 	void Swap ( CSphRefcountedPtr& rhs ) noexcept
 	{
 		::Swap(m_pPtr, rhs.m_pPtr);

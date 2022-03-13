@@ -1343,6 +1343,67 @@ bool AddGlobalListener ( const ListenerDesc_t& tDesc ) REQUIRES ( MainThread )
 	return true;
 }
 
+struct ListenerPortRange_t
+{
+	DWORD m_uIP { 0 };
+	int m_iPort { 0 };
+	int m_iCount { 0 };
+
+	static inline bool IsLess ( const ListenerPortRange_t & tA, const ListenerPortRange_t & tB )
+	{
+		if ( tA.m_uIP==tB.m_uIP )
+			return ( tA.m_iPort<tB.m_iPort );
+
+		return ( tA.m_uIP<tB.m_uIP );
+	}
+
+	CSphString Dump () const
+	{
+		char sAddress[SPH_ADDRESS_SIZE];
+		sphFormatIP ( sAddress, SPH_ADDRESS_SIZE, m_uIP );
+
+		CSphString sRes;
+		if ( m_iCount )
+			sRes.SetSprintf ( "%s:%d-%d", sAddress, m_iPort, ( m_iPort+m_iCount-1 ) );
+		else
+			sRes.SetSprintf ( "%s:%d", sAddress, m_iPort );
+
+		return sRes;
+	}
+};
+
+
+static bool ValidateListenerRanges ( const VecTraits_T<ListenerDesc_t> & dListeners, CSphString & sError )
+{
+	CSphVector<ListenerPortRange_t> dPorts;
+	for ( const ListenerDesc_t & tDesc : dListeners )
+	{
+		if ( !tDesc.m_sUnix.IsEmpty() )
+			continue;
+
+		ListenerPortRange_t & tPort = dPorts.Add();
+		tPort.m_uIP = tDesc.m_uIP;
+		tPort.m_iPort = tDesc.m_iPort;
+		tPort.m_iCount = tDesc.m_iPortsCount;
+	}
+	dPorts.Sort ( ListenerPortRange_t() );
+
+	for ( int i=1; i<dPorts.GetLength(); i++ )
+	{
+		const ListenerPortRange_t & tPrev = dPorts[i-1];
+		const ListenerPortRange_t & tCur = dPorts[i];
+		if ( tPrev.m_uIP!=tCur.m_uIP )
+			continue;
+		if ( ( !tPrev.m_iCount && tPrev.m_iPort<tCur.m_iPort ) || ( tPrev.m_iCount && tPrev.m_iPort+tPrev.m_iCount-1<tCur.m_iPort ) )
+			continue;
+
+		sError.SetSprintf ( "invalid listener ports intersection %s -> %s", tPrev.Dump().cstr(), tCur.Dump().cstr() );
+		return false;
+	}
+
+	return true;
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // unpack Mysql Length-coded number
 static int MysqlUnpack ( InputBuffer_c & tReq, DWORD * pSize )
@@ -19425,6 +19486,9 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 			AddGlobalListener ( MakeLocalhostListener ( SPHINXQL_PORT, Proto_e::MYSQL41 ) );
 		}
 	}
+
+	if ( !ValidateListenerRanges ( dListenerDescs, sError ) )
+		sphFatal ( "%s", sError.cstr() );
 
 	SetServerSSLKeys ( hSearchd ( "ssl_cert" ), hSearchd ( "ssl_key" ), hSearchd ( "ssl_ca" ) );
 	CheckSSL();

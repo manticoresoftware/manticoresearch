@@ -2047,3 +2047,162 @@ BYTE * TokenizerUk_c::GetToken()
 		m_eTokenMorph = SPH_TOKEN_MORPH_GUESS;
 		return pToken;
 }
+
+
+namespace {
+XQNode_t* CloneKeyword ( const XQNode_t* pNode )
+{
+	assert ( pNode );
+
+	auto* pRes = new XQNode_t ( pNode->m_dSpec );
+	pRes->m_dWords = pNode->m_dWords;
+	return pRes;
+}
+
+/// create a node from a set of lemmas
+/// WARNING, tKeyword might or might not be pointing to pNode->m_dWords[0]
+/// Called from the daemon side (searchd) in time of query
+void TransformAotFilterKeyword ( XQNode_t * pNode, LemmatizerTrait_i * pLemmatizer, const XQKeyword_t & tKeyword, const CSphWordforms * pWordforms, const CSphIndexSettings & tSettings )
+{
+	assert ( pNode->m_dWords.GetLength()<=1 );
+	assert ( pNode->m_dChildren.GetLength()==0 );
+
+	XQNode_t * pExact = nullptr;
+	if ( pWordforms )
+	{
+		// do a copy, because patching in place is not an option
+		// short => longlonglong wordform mapping would crash
+		// OPTIMIZE? forms that are not found will (?) get looked up again in the dict
+		char sBuf [ MAX_KEYWORD_BYTES ];
+		strncpy ( sBuf, tKeyword.m_sWord.cstr(), sizeof(sBuf)-1 );
+		if ( pWordforms->ToNormalForm ( (BYTE*)sBuf, true, false ) )
+		{
+			if ( !pNode->m_dWords.GetLength() )
+				pNode->m_dWords.Add ( tKeyword );
+			pNode->m_dWords[0].m_sWord = sBuf;
+			pNode->m_dWords[0].m_bMorphed = true;
+			return;
+		}
+	}
+
+	StrVec_t dLemmas;
+	DWORD uLangMask = tSettings.m_uAotFilterMask;
+	for ( int i=AOT_BEGIN; i<AOT_LENGTH; ++i )
+	{
+		if ( uLangMask & (1UL<<i) )
+		{
+			if ( i==AOT_RU )
+				sphAotLemmatizeRu ( dLemmas, (const BYTE*)tKeyword.m_sWord.cstr() );
+			else if ( i==AOT_DE )
+				sphAotLemmatizeDe ( dLemmas, (const BYTE*)tKeyword.m_sWord.cstr() );
+			else if ( i==AOT_UK )
+				sphAotLemmatizeUk ( dLemmas, (const BYTE*)tKeyword.m_sWord.cstr(), pLemmatizer );
+			else
+				sphAotLemmatize ( dLemmas, (const BYTE*)tKeyword.m_sWord.cstr(), i );
+		}
+	}
+
+	// post-morph wordforms
+	if ( pWordforms && pWordforms->m_bHavePostMorphNF )
+	{
+		char sBuf [ MAX_KEYWORD_BYTES ];
+		ARRAY_FOREACH ( i, dLemmas )
+		{
+			strncpy ( sBuf, dLemmas[i].cstr(), sizeof(sBuf)-1 );
+			if ( pWordforms->ToNormalForm ( (BYTE*)sBuf, false, false ) )
+				dLemmas[i] = sBuf;
+		}
+	}
+
+	if ( dLemmas.GetLength() && tSettings.m_bIndexExactWords )
+	{
+		pExact = CloneKeyword ( pNode );
+		if ( !pExact->m_dWords.GetLength() )
+			pExact->m_dWords.Add ( tKeyword );
+
+		pExact->m_dWords[0].m_sWord.SetSprintf ( "=%s", tKeyword.m_sWord.cstr() );
+		pExact->m_pParent = pNode;
+	}
+
+	if ( !pExact && dLemmas.GetLength()<=1 )
+	{
+		// zero or one lemmas, update node in-place
+		if ( !pNode->m_dWords.GetLength() )
+			pNode->m_dWords.Add ( tKeyword );
+		if ( dLemmas.GetLength() )
+		{
+			pNode->m_dWords[0].m_sWord = dLemmas[0];
+			pNode->m_dWords[0].m_bMorphed = true;
+		}
+	} else
+	{
+		// multiple lemmas, create an OR node
+		pNode->SetOp ( SPH_QUERY_OR );
+		ARRAY_FOREACH ( i, dLemmas )
+		{
+			pNode->m_dChildren.Add ( new XQNode_t ( pNode->m_dSpec ) );
+			pNode->m_dChildren.Last()->m_pParent = pNode;
+			XQKeyword_t & tLemma = pNode->m_dChildren.Last()->m_dWords.Add();
+			tLemma.m_sWord = dLemmas[i];
+			tLemma.m_iAtomPos = tKeyword.m_iAtomPos;
+			tLemma.m_bFieldStart = tKeyword.m_bFieldStart;
+			tLemma.m_bFieldEnd = tKeyword.m_bFieldEnd;
+			tLemma.m_bMorphed = true;
+		}
+		pNode->m_dWords.Reset();
+		if ( pExact )
+			pNode->m_dChildren.Add ( pExact );
+	}
+}
+}// namespace
+
+/// AOT morph guesses transform
+/// replaces tokens with their respective morph guesses subtrees
+/// used in lemmatize_ru_all morphology processing mode that can generate multiple guesses
+/// in other modes, there is always exactly one morph guess, and the dictionary handles it
+/// Called from the daemon side (searchd)
+void TransformAotFilter ( XQNode_t * pNode, LemmatizerTrait_i * pLemmatizer, const CSphWordforms * pWordforms, const CSphIndexSettings & tSettings )
+{
+	if ( !pNode )
+		return;
+	// case one, regular operator (and empty nodes)
+	for ( XQNode_t* pChild : pNode->m_dChildren )
+		TransformAotFilter ( pChild, pLemmatizer, pWordforms, tSettings );
+	if ( pNode->m_dChildren.GetLength() || pNode->m_dWords.GetLength()==0 )
+		return;
+
+	// case two, operator on a bag of words
+	// FIXME? check phrase vs expand_keywords vs lemmatize_ru_all?
+	if ( pNode->m_dWords.GetLength()
+		&& ( pNode->GetOp()==SPH_QUERY_PHRASE || pNode->GetOp()==SPH_QUERY_PROXIMITY || pNode->GetOp()==SPH_QUERY_QUORUM ) )
+	{
+		assert ( pNode->m_dWords.GetLength() );
+
+		for ( XQKeyword_t& tWord : pNode->m_dWords )
+		{
+			auto * pNew = new XQNode_t ( pNode->m_dSpec );
+			pNew->m_pParent = pNode;
+			pNew->m_iAtomPos = tWord.m_iAtomPos;
+			pNode->m_dChildren.Add ( pNew );
+			TransformAotFilterKeyword ( pNew, pLemmatizer, tWord, pWordforms, tSettings );
+		}
+
+		pNode->m_dWords.Reset();
+		pNode->m_bVirtuallyPlain = true;
+		return;
+	}
+
+	// case three, plain old single keyword
+	assert ( pNode->m_dWords.GetLength()==1 );
+	TransformAotFilterKeyword ( pNode, pLemmatizer, pNode->m_dWords[0], pWordforms, tSettings );
+}
+
+void TransformAotFilter ( XQNode_t * pNode, const CSphWordforms * pWordforms, const CSphIndexSettings & tSettings )
+{
+	if ( !tSettings.m_uAotFilterMask )
+		return;
+
+	int iAotLang = ( tSettings.m_uAotFilterMask & ( 1<<AOT_UK ) ) ? AOT_UK : AOT_LENGTH;
+	CSphScopedPtr<LemmatizerTrait_i> tLemmatizer ( CreateLemmatizer ( iAotLang ) );
+	TransformAotFilter ( pNode, tLemmatizer.Ptr(), pWordforms, tSettings );
+}

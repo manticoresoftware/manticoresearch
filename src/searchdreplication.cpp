@@ -257,7 +257,7 @@ static bool RemoteClusterGetNodes ( const CSphString & sCluster, const CSphStrin
 static bool ClusterFilterNodes ( const CSphString & sSrcNodes, Proto_e eProto, CSphString & sDstNodes, CSphString & sError );
 
 // callback at remote node for CLUSTER_UPDATE_NODES to update nodes list at cluster from actual nodes list
-static bool RemoteClusterUpdateNodes ( const CSphString & sCluster, CSphString * pNodes, CSphString & sError );
+static bool RemoteClusterUpdateNodes ( const CSphString & sCluster, CSphString * pNodes, bool bSaveConf, CSphString & sError );
 
 static bool IsClusterCommand ( const RtAccum_t & tAcc );
 
@@ -968,7 +968,7 @@ static bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sErro
 		StringBuilder_c sIndexes ( "," );
 		for ( const CSphString & sIndex : tArgs.m_pCluster->m_dIndexes )
 			sIndexes += sIndex.cstr();
-		sphLogDebugRpl ( "cluster '%s', indexes '%s', nodes '%s'", tArgs.m_pCluster->m_sName.cstr(), sIndexes.cstr(), tArgs.m_pCluster->m_sClusterNodes.scstr() );
+		sphLogDebugRpl ( "cluster '%s', new %d, indexes '%s', nodes '%s'", tArgs.m_pCluster->m_sName.cstr(), (int)tArgs.m_bNewCluster, sIndexes.cstr(), tArgs.m_pCluster->m_sClusterNodes.scstr() );
 	}
 
 	SharedPtr_t<ReceiverCtx_t> pRecvArgs { new ReceiverCtx_t() };
@@ -3625,7 +3625,7 @@ void HandleCommandClusterPq ( ISphOutputBuffer & tOut, WORD uCommandVer, InputBu
 		case CLUSTER_UPDATE_NODES:
 		{
 			PQRemoteClusterUpdateNodes_c::ParseCommand ( tBuf, tCmd );
-			bOk = RemoteClusterUpdateNodes ( tCmd.m_sCluster, nullptr, sError );
+			bOk = RemoteClusterUpdateNodes ( tCmd.m_sCluster, nullptr, false, sError );
 			if ( bOk )
 				PQRemoteClusterUpdateNodes_c::BuildReply ( tOut );
 		}
@@ -5585,7 +5585,7 @@ bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdat
 	CSphString sNodes;
 
 	// local nodes update
-	bool bOk = RemoteClusterUpdateNodes ( sCluster, &sNodes, sError );
+	bool bOk = RemoteClusterUpdateNodes ( sCluster, &sNodes, true, sError );
 
 	// remote nodes update after locals updated
 	PQRemoteData_t tReqData;
@@ -5595,7 +5595,6 @@ bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdat
 	GetNodes ( sNodes, dNodes, tReqData );
 	PQRemoteClusterUpdateNodes_c tReq;
 	bool bRemoteOk = PerformRemoteTasks ( dNodes, tReq, tReq, sError );
-	bOk &= SaveConfigInt(sError);
 
 	if ( !bRemoteOk )
 	{
@@ -5612,7 +5611,7 @@ bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdat
 }
 
 // callback at remote node for CLUSTER_UPDATE_NODES to update nodes list at cluster from actual nodes list
-bool RemoteClusterUpdateNodes ( const CSphString & sCluster, CSphString * pNodes, CSphString & sError )
+bool RemoteClusterUpdateNodes ( const CSphString & sCluster, CSphString * pNodes, bool bSaveConf, CSphString & sError )
 	EXCLUDES ( g_tClustersLock )
 {
 	ScRL_t tLock ( g_tClustersLock );
@@ -5622,17 +5621,26 @@ bool RemoteClusterUpdateNodes ( const CSphString & sCluster, CSphString * pNodes
 		return false;
 	}
 
+	bool bClusterChanged = false;
 	{
 		ReplicationClusterPtr_t pCluster ( g_hClusters[sCluster] );
 		ScopedMutex_t tNodesLock ( pCluster->m_tViewNodesLock );
+
+		uint64_t uWasNodes = sphFNV64 ( pCluster->m_sClusterNodes.cstr() );
+
 		if ( !ClusterFilterNodes ( pCluster->m_sViewNodes, Proto_e::SPHINX, pCluster->m_sClusterNodes, sError ) )
 		{
 			sError.SetSprintf ( "cluster '%s', invalid nodes(%s), error: %s", sCluster.cstr(), pCluster->m_sViewNodes.cstr(), sError.cstr() );
 			return false;
 		}
+		bClusterChanged = ( uWasNodes!=sphFNV64 ( pCluster->m_sClusterNodes.cstr() ) );
 		if ( pNodes )
 			*pNodes = pCluster->m_sClusterNodes;
 	}
+
+	if ( bClusterChanged || bSaveConf )
+		return SaveConfigInt ( sError );
+
 	return true;
 }
 

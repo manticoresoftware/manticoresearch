@@ -1378,7 +1378,9 @@ static void CollectClusterDesc ( CSphVector<ClusterDesc_t> & dClusters )
 	ScRL_t tLock ( g_tClustersLock );
 	for ( const auto & tCluster : g_hClusters )
 	{
-		if ( tCluster.second->GetNodeState()!=ClusterState_e::JOINING )
+		// should save all clusters on start
+		// but skip cluster that just joining from user request
+		if ( !g_bReplicationStarted || ( tCluster.second->GetNodeState()!=ClusterState_e::JOINING ) )
 			dClusters.Add ( *tCluster.second );
 	}
 }

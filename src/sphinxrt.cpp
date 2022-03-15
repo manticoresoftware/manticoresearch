@@ -1486,6 +1486,9 @@ RtIndex_c::~RtIndex_c ()
 		sphInfo ( "rt: index %s: ramchunk saved in %d.%03d sec",
 			m_sIndexName.cstr(), (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
 	}
+
+	if ( !sphInterrupted() && bValid )
+		sphLogDebug ( "closed index %s, valid %d, deleted %d, time %d.%03d sec", m_sIndexName.cstr(), (int)bValid, (int)m_bIndexDeleted, (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
 }
 
 void RtIndex_c::UpdateUnlockedCount()

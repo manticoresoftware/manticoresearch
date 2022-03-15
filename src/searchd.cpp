@@ -12024,7 +12024,9 @@ static void HandleMysqlDropTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 		return;
 	}
 
-	if ( !DropIndexInt ( tStmt.m_sIndex.cstr(), tStmt.m_bIfExists, sError ) )
+	bool bDropped = DropIndexInt ( tStmt.m_sIndex.cstr(), tStmt.m_bIfExists, sError );
+	sphLogDebug ( "dropped table %s, ok %d, error %s", tStmt.m_sIndex.cstr(), (int)bDropped, sError.scstr() ); // FIXME!!! remove
+	if ( !bDropped )
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 	else
 		tOut.Ok();

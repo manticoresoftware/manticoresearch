@@ -131,12 +131,11 @@ public:
 
 	virtual ISphQword *					QwordSpawn ( const XQKeyword_t & tWord ) const = 0;
 	virtual bool						QwordSetup ( ISphQword * pQword ) const = 0;
-	inline void SetDict ( CSphDict * pDict )
+	inline void SetDict ( DictRefPtr_c pDict )
 	{
-		SafeAddRef ( pDict );
-		m_pDict = pDict;
+		m_pDict = std::move ( pDict );
 	}
-	inline CSphDict * Dict() const { return m_pDict; }
+	inline DictRefPtr_c Dict() const { return m_pDict; }
 
 	virtual ISphQword *					ScanSpawn() const = 0;
 };

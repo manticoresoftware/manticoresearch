@@ -1446,7 +1446,7 @@ protected:
 	const CSphWordforms *	m_pWordforms = nullptr;
 
 public:
-	CSphAotTokenizerTmpl ( TokenizerRefPtr_c pTok, CSphDict * pDict, bool bIndexExact, int DEBUGARG(iLang) )
+	CSphAotTokenizerTmpl ( TokenizerRefPtr_c pTok, const DictRefPtr_c& pDict, bool bIndexExact, int DEBUGARG(iLang) )
 		: CSphTokenFilter ( std::move (pTok) )
 	{
 		assert ( g_pLemmatizers[iLang] );
@@ -1482,7 +1482,7 @@ public:
 class CSphAotTokenizerRu : public CSphAotTokenizerTmpl
 {
 public:
-	CSphAotTokenizerRu ( TokenizerRefPtr_c pTok, CSphDict * pDict, bool bIndexExact )
+	CSphAotTokenizerRu ( TokenizerRefPtr_c pTok, const DictRefPtr_c& pDict, bool bIndexExact )
 		: CSphAotTokenizerTmpl ( std::move (pTok), pDict, bIndexExact, AOT_RU )
 	{}
 
@@ -1611,7 +1611,7 @@ class CSphAotTokenizer : public CSphAotTokenizerTmpl
 	AOT_LANGS		m_iLang;
 
 public:
-	CSphAotTokenizer ( TokenizerRefPtr_c pTok, CSphDict * pDict, bool bIndexExact, int iLang )
+	CSphAotTokenizer ( TokenizerRefPtr_c pTok, const DictRefPtr_c& pDict, bool bIndexExact, int iLang )
 		: CSphAotTokenizerTmpl ( std::move (pTok), pDict, bIndexExact, iLang )
 		, m_iLang ( AOT_LANGS(iLang) )
 	{}
@@ -1773,12 +1773,12 @@ class TokenizerUk_c : public CSphAotTokenizerTmpl
 	LemmatizerUk_c m_tLemmatizer;
 
 public:
-	TokenizerUk_c ( TokenizerRefPtr_c pTok, CSphDict * pDict, bool bIndexExact );
+	TokenizerUk_c ( TokenizerRefPtr_c pTok, const DictRefPtr_c& pDict, bool bIndexExact );
 	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const final;
 	BYTE * GetToken() final;
 };
 
-void sphAotTransformFilter ( TokenizerRefPtr_c& pTokenizer, CSphDict * pDict, bool bIndexExact, DWORD uLangMask )
+void sphAotTransformFilter ( TokenizerRefPtr_c& pTokenizer, const DictRefPtr_c& pDict, bool bIndexExact, DWORD uLangMask )
 {
 	assert ( uLangMask!=0 );
 	for ( int i=AOT_BEGIN; i<AOT_LENGTH; ++i )
@@ -1945,7 +1945,7 @@ LemmatizerTrait_i * CreateLemmatizer ( int iLang )
 	return new LemmatizerUk_c();
 }
 
-TokenizerUk_c::TokenizerUk_c ( TokenizerRefPtr_c pTok, CSphDict * pDict, bool bIndexExact )
+TokenizerUk_c::TokenizerUk_c ( TokenizerRefPtr_c pTok, const DictRefPtr_c& pDict, bool bIndexExact )
 	: CSphAotTokenizerTmpl ( std::move (pTok), pDict, bIndexExact, AOT_UK )
 {
 }

@@ -142,8 +142,7 @@ static void ApplyMorphology ( CSphIndex * pIndex )
 	dOutBuffer.Reserve ( dInBuffer.GetLength() );
 
 	TokenizerRefPtr_c pTokenizer = pIndex->GetTokenizer()->Clone ( SPH_CLONE_INDEX );
-	DictRefPtr_c pDict { pIndex->GetDictionary() };
-	SafeAddRef ( pDict );
+	DictRefPtr_c pDict = pIndex->GetDictionary();
 	BYTE * sBufferToDump = &dInBuffer[0];
 	if ( pTokenizer )
 	{

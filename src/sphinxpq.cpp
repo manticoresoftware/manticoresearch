@@ -155,8 +155,7 @@ private:
 	bool MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter*>& dSorters,
 			const CSphMultiQueryArgs &tArgs ) const;
 	bool CanBeAdded ( PercolateQueryArgs_t& tArgs, CSphString& sError ) const REQUIRES_SHARED ( m_tLock );
-	StoredQuery_i* CreateQuery ( PercolateQueryArgs_t& tArgs, const TokenizerRefPtr_c& pTokenizer, CSphDict* pDict,
-		  CSphString& sError );
+	StoredQuery_i* CreateQuery ( PercolateQueryArgs_t& tArgs, const TokenizerRefPtr_c& pTokenizer, const DictRefPtr_c& pDict, CSphString& sError );
 
 public:
 	PercolateMatchContext_t * CreateMatchContext ( const RtSegment_t * pSeg, const SegmentReject_t &tReject );
@@ -261,7 +260,7 @@ static SegmentReject_t SegmentGetRejects ( const RtSegment_t * pSeg, bool bBuild
 	return tReject;
 }
 
-static void DoQueryGetRejects ( const XQNode_t * pNode, CSphDict * pDict, CSphVector<uint64_t> & dRejectTerms, CSphFixedVector<uint64_t> & dRejectBloom, CSphVector<CSphString> & dSuffixes, bool & bOnlyTerms, bool bUtf8 )
+static void DoQueryGetRejects ( const XQNode_t * pNode, const DictRefPtr_c& pDict, CSphVector<uint64_t> & dRejectTerms, CSphFixedVector<uint64_t> & dRejectBloom, CSphVector<CSphString> & dSuffixes, bool & bOnlyTerms, bool bUtf8 )
 {
 	// FIXME!!! replace recursion to prevent stack overflow for large and complex queries
 	if ( pNode && !( pNode->GetOp()==SPH_QUERY_AND || pNode->GetOp()==SPH_QUERY_ANDNOT ) )
@@ -344,13 +343,13 @@ static void DoQueryGetRejects ( const XQNode_t * pNode, CSphDict * pDict, CSphVe
 		DoQueryGetRejects ( pNode->m_dChildren[i], pDict, dRejectTerms, dRejectBloom, dSuffixes, bOnlyTerms, bUtf8 );
 }
 
-static void QueryGetRejects ( const XQNode_t * pNode, CSphDict * pDict, CSphVector<uint64_t> & dRejectTerms, CSphFixedVector<uint64_t> & dRejectBloom, CSphVector<CSphString> & dSuffixes, bool & bOnlyTerms, bool bUtf8 )
+static void QueryGetRejects ( const XQNode_t * pNode, const DictRefPtr_c& pDict, CSphVector<uint64_t> & dRejectTerms, CSphFixedVector<uint64_t> & dRejectBloom, CSphVector<CSphString> & dSuffixes, bool & bOnlyTerms, bool bUtf8 )
 {
 	DoQueryGetRejects ( pNode, pDict, dRejectTerms, dRejectBloom, dSuffixes, bOnlyTerms, bUtf8 );
 	dRejectTerms.Uniq();
 }
 
-static void QueryGetTerms ( const XQNode_t * pNode, CSphDict * pDict, DictMap_t & hDict )
+static void QueryGetTerms ( const XQNode_t * pNode, const DictRefPtr_c& pDict, DictMap_t & hDict )
 {
 	if ( !pNode )
 		return;
@@ -1098,7 +1097,7 @@ int FullScanCollectingDocs ( PercolateMatchContext_t & tMatchCtx )
 // full-text search when no docs required
 int FtMatchingWithoutDocs ( const StoredQuery_t * pStored, PercolateMatchContext_t & tMatchCtx )
 {
-	tMatchCtx.m_tDictMap.SetMap ( pStored->m_hDict ); // set terms dictionary
+	tMatchCtx.m_pDictMap->SetMap ( pStored->m_hDict ); // set terms dictionary
 	CSphQueryResultMeta tTmpMeta;
 	CSphScopedPtr<ISphRanker> pRanker { sphCreateRanker ( *pStored->m_pXQ.Ptr(), tMatchCtx.m_tDummyQuery,
 			tTmpMeta, *tMatchCtx.m_pTermSetup.Ptr(), *tMatchCtx.m_pCtx.Ptr(), tMatchCtx.m_tSchema ) };
@@ -1115,7 +1114,7 @@ int FtMatchingWithoutDocs ( const StoredQuery_t * pStored, PercolateMatchContext
 // full-text search and collect docs
 int FtMatchingCollectingDocs ( const StoredQuery_t * pStored, PercolateMatchContext_t & tMatchCtx )
 {
-	tMatchCtx.m_tDictMap.SetMap ( pStored->m_hDict ); // set terms dictionary
+	tMatchCtx.m_pDictMap->SetMap ( pStored->m_hDict ); // set terms dictionary
 	CSphQueryResultMeta tTmpMeta;
 	CSphScopedPtr<ISphRanker> pRanker { sphCreateRanker ( *pStored->m_pXQ.Ptr(), tMatchCtx.m_tDummyQuery,
 			tTmpMeta, *tMatchCtx.m_pTermSetup.Ptr(), *tMatchCtx.m_pCtx.Ptr(), tMatchCtx.m_tSchema ) };
@@ -1643,7 +1642,7 @@ StoredQuery_i * PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, CS
 	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
 
 	TokenizerRefPtr_c pTokenizer = sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false );
-	DictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
+	DictRefPtr_c pDict = GetStatelessDict ( m_pDict );
 
 	if ( IsStarDict ( bWordDict ) )
 		SetupStarDict ( pDict );
@@ -1723,7 +1722,7 @@ bool PercolateIndex_c::CanBeAdded ( PercolateQueryArgs_t& tArgs, CSphString& sEr
 }
 
 
-StoredQuery_i * PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, const TokenizerRefPtr_c& pTokenizer, CSphDict * pDict, CSphString & sError )
+StoredQuery_i * PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, const TokenizerRefPtr_c& pTokenizer, const DictRefPtr_c& pDict, CSphString & sError )
 {
 	const char * sQuery = tArgs.m_sQuery;
 	CSphVector<BYTE> dFiltered;
@@ -2392,7 +2391,7 @@ void PercolateIndex_c::PostSetupUnl()
 	TokenizerRefPtr_c pTokenizer = sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false );
 	TokenizerRefPtr_c pTokenizerJson = sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, true );
 
-	DictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
+	DictRefPtr_c pDict = GetStatelessDict ( m_pDict );
 
 	if ( IsStarDict ( bWordDict ) )
 		SetupStarDict ( pDict );

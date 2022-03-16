@@ -1233,7 +1233,7 @@ public:
 	void				DoGetKeywords ( CSphVector<CSphKeywordInfo>& dKeywords, const char* sQuery, const GetKeywordsSettings_t& tSettings, bool bFillOnly, CSphString* pError, const RtGuard_t& tGuard ) const;
 	bool				GetKeywords ( CSphVector<CSphKeywordInfo>& dKeywords, const char* sQuery, const GetKeywordsSettings_t& tSettings, CSphString* pError ) const final;
 	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const final;
-	void				AddKeywordStats ( BYTE* sWord, const BYTE* sTokenized, CSphDict* pDict, bool bGetStats, int iQpos, RtQword_t* pQueryWord, CSphVector<CSphKeywordInfo>& dKeywords, const RtSegVec_c& dRamSegs ) const;
+	void				AddKeywordStats ( BYTE* sWord, const BYTE* sTokenized, const DictRefPtr_c& pDict, bool bGetStats, int iQpos, RtQword_t* pQueryWord, CSphVector<CSphKeywordInfo>& dKeywords, const RtSegVec_c& dRamSegs ) const;
 
 	bool				RtQwordSetup ( RtQword_t * pQword, int iSeg, const RtGuard_t& tGuard ) const;
 	bool				RtQwordSetupSegment ( RtQword_t* pQword, const RtSegment_t* pCurSeg, bool bSetup ) const;
@@ -1878,7 +1878,7 @@ bool RtIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphS
 }
 
 
-RtAccum_t * RtIndex_i::AcquireAccum ( CSphDict * pDict, RtAccum_t * pAcc, bool bWordDict, bool bSetTLS, CSphString * pError )
+RtAccum_t * RtIndex_i::AcquireAccum ( const DictRefPtr_c& pDict, RtAccum_t * pAcc, bool bWordDict, bool bSetTLS, CSphString * pError )
 {
 	if ( !pAcc )
 		pAcc = g_pTlsAccum;
@@ -1942,12 +1942,12 @@ RtAccum_t::~RtAccum_t()
 		SafeDelete ( m_dCmd[i] );
 }
 
-void RtAccum_t::SetupDict ( const RtIndex_i * pIndex, CSphDict * pDict, bool bKeywordDict )
+void RtAccum_t::SetupDict ( const RtIndex_i * pIndex, const DictRefPtr_c& pDict, bool bKeywordDict )
 {
-	if ( pIndex!=m_pIndex || pDict!=m_pRefDict || bKeywordDict!=m_bKeywordDict )
+	if ( pIndex!=m_pIndex || pDict.Ptr()!=m_pRefDict || bKeywordDict!=m_bKeywordDict )
 	{
 		m_bKeywordDict = bKeywordDict;
-		m_pRefDict = pDict;
+		m_pRefDict = pDict.Ptr();
 		m_pDict = GetStatelessDict ( pDict );
 		if ( m_bKeywordDict )
 		{
@@ -2007,7 +2007,7 @@ void RtAccum_t::Cleanup()
 	SetIndex ( nullptr );
 	m_uAccumDocs = 0;
 	m_dAccumKlist.Reset ();
-	
+
 	ARRAY_FOREACH ( i, m_dCmd )
 		SafeDelete ( m_dCmd[i] );
 
@@ -7309,7 +7309,7 @@ void FinalExpressionCalculation ( CSphQueryContext & tCtx, const VecTraits_T<RtS
 }
 
 // perform initial query transformations and expansion.
-static int PrepareFTSearch ( const RtIndex_c * pThis, bool bIsStarDict, bool bKeywordDict, int iExpandKeywords, int iExpansionLimit, const char * szModifiedQuery, const CSphIndexSettings & tSettings, const QueryParser_i * pQueryParser, const CSphQuery & tQuery, const CSphSchema & tSchema, cRefCountedRefPtrGeneric_t pIndexData, const TokenizerRefPtr_c& pTokenizer, CSphDict * pDict, CSphQueryResultMeta & tMeta, QueryProfile_c * pProfiler, CSphScopedPayload * pPayloads, XQQuery_t & tParsed )
+static int PrepareFTSearch ( const RtIndex_c * pThis, bool bIsStarDict, bool bKeywordDict, int iExpandKeywords, int iExpansionLimit, const char * szModifiedQuery, const CSphIndexSettings & tSettings, const QueryParser_i * pQueryParser, const CSphQuery & tQuery, const CSphSchema & tSchema, cRefCountedRefPtrGeneric_t pIndexData, const TokenizerRefPtr_c& pTokenizer, const DictRefPtr_c& pDict, CSphQueryResultMeta & tMeta, QueryProfile_c * pProfiler, CSphScopedPayload * pPayloads, XQQuery_t & tParsed )
 {
 	// OPTIMIZE! make a lightweight clone here? and/or remove double clone?
 	TokenizerRefPtr_c pQueryTokenizer = sphCloneAndSetupQueryTokenizer ( pTokenizer, bIsStarDict, tSettings.m_bIndexExactWords, false );
@@ -7729,7 +7729,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	auto& dDiskChunks = tGuard.m_dDiskChunks;
 
 	// wrappers
-	DictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
+	DictRefPtr_c pDict = GetStatelessDict ( m_pDict );
 
 	if ( m_bKeywordDict && IsStarDict ( m_bKeywordDict ) )
 		SetupStarDict ( pDict );
@@ -7903,7 +7903,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 }
 
 
-void RtIndex_c::AddKeywordStats ( BYTE * sWord, const BYTE * sTokenized, CSphDict * pDict, bool bGetStats, int iQpos, RtQword_t * pQueryWord, CSphVector <CSphKeywordInfo> & dKeywords, const RtSegVec_c& dRamSegs ) const
+void RtIndex_c::AddKeywordStats ( BYTE * sWord, const BYTE * sTokenized, const DictRefPtr_c& pDict, bool bGetStats, int iQpos, RtQword_t * pQueryWord, CSphVector <CSphKeywordInfo> & dKeywords, const RtSegVec_c& dRamSegs ) const
 {
 	assert ( !bGetStats || pQueryWord );
 
@@ -7982,7 +7982,7 @@ void RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 
 	// need to support '*' and '=' but not the other specials
 	// so m_pQueryTokenizer does not work for us, gotta clone and setup one manually
-	DictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
+	DictRefPtr_c pDict = GetStatelessDict ( m_pDict );
 
 	if ( IsStarDict ( m_bKeywordDict ) )
 	{
@@ -8020,7 +8020,7 @@ void RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 
 		CSphRtQueryFilter tAotFilter ( this, &tQword, tGuard.m_dRamSegs );
 		tAotFilter.m_pTokenizer = std::move ( pTokenizer );
-		tAotFilter.m_pDict = pDict;
+		tAotFilter.m_pDict = std::move ( pDict );
 		tAotFilter.m_pSettings = &m_tSettings;
 		tAotFilter.m_tFoldSettings = tSettings;
 		tAotFilter.m_tFoldSettings.m_bFoldWildcards = !bExpandWildcards;

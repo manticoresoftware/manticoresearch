@@ -73,7 +73,7 @@ public:
 							~CSphSource () override;
 
 	/// set dictionary
-	void					SetDict ( CSphDict * dict );
+	void					SetDict ( const DictRefPtr_c& dict );
 
 	/// set HTML stripping mode
 	///

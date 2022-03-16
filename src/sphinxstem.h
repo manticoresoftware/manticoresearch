@@ -18,6 +18,7 @@
 class ISphTokenizer;
 using TokenizerRefPtr_c = CSphRefcountedPtr<ISphTokenizer>;
 class CSphDict;
+using DictRefPtr_c = CSphRefcountedPtr<CSphDict>;
 
 /// initialize English stemmer
 void	stem_en_init ();
@@ -89,7 +90,7 @@ const CSphNamedInt &	sphAotDictinfo ( int iLang );
 
 /// create token filter that returns all morphological hypotheses
 /// NOTE, takes over wordforms from pDict, in AOT case they must be handled by the fitler
-void					sphAotTransformFilter ( TokenizerRefPtr_c& pTokenizer, CSphDict * pDict, bool bIndexExact, DWORD uLangMask );
+void					sphAotTransformFilter ( TokenizerRefPtr_c& pTokenizer, const DictRefPtr_c& pDict, bool bIndexExact, DWORD uLangMask );
 
 /// free lemmatizers on shutdown
 void	sphAotShutdown ();

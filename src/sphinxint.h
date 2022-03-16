@@ -909,7 +909,7 @@ struct LocatorPair_t
 class CSphDictTraits : public CSphDict
 {
 public:
-	explicit			CSphDictTraits ( CSphDict * pDict ) : m_pDict { pDict } { SafeAddRef ( pDict ); }
+	explicit			CSphDictTraits ( DictRefPtr_c pDict ) : m_pDict { std::move ( pDict ) } {}
 
 	void		LoadStopwords ( const char * sFiles, const TokenizerRefPtr_c& pTokenizer, bool bStripFile ) final { m_pDict->LoadStopwords ( sFiles, pTokenizer, bStripFile ); }
 	void		LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) final { m_pDict->LoadStopwords ( dStopwords ); }
@@ -943,7 +943,7 @@ protected:
 class CSphDictStar : public CSphDictTraits
 {
 public:
-	explicit	CSphDictStar ( CSphDict * pDict ) : CSphDictTraits ( pDict ) {}
+	explicit	CSphDictStar ( DictRefPtr_c pDict ) : CSphDictTraits ( std::move ( pDict ) ) {}
 
 	SphWordID_t	GetWordID ( BYTE * pWord ) override;
 	SphWordID_t	GetWordIDNonStemmed ( BYTE * pWord ) override;
@@ -955,7 +955,7 @@ class CSphDictStarV8 : public CSphDictStar
 {
 	bool m_bInfixes;
 public:
-	CSphDictStarV8 ( CSphDict * pDict, bool bInfixes ) : CSphDictStar ( pDict ), m_bInfixes ( bInfixes )
+	CSphDictStarV8 ( DictRefPtr_c pDict, bool bInfixes ) : CSphDictStar ( std::move ( pDict ) ), m_bInfixes ( bInfixes )
 	{}
 	SphWordID_t	GetWordID ( BYTE * pWord ) final;
 };
@@ -965,7 +965,7 @@ public:
 class CSphDictExact : public CSphDictTraits
 {
 public:
-	explicit CSphDictExact ( CSphDict * pDict ) : CSphDictTraits ( pDict ) {}
+	explicit CSphDictExact ( DictRefPtr_c pDict ) : CSphDictTraits ( std::move ( pDict ) ) {}
 	SphWordID_t	GetWordID ( BYTE * pWord ) final;
 	SphWordID_t GetWordIDNonStemmed ( BYTE * pWord ) final { return m_pDict->GetWordIDNonStemmed ( pWord ); }
 };
@@ -1021,8 +1021,8 @@ void			SaveIndexSettings ( CSphWriter & tWriter, const CSphIndexSettings & tSett
 void			LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DWORD uVersion );
 void			LoadIndexSettingsJson ( bson::Bson_c tNode, CSphIndexSettings & tSettings );
 bool			AddFieldLens ( CSphSchema & tSchema, bool bDynamic, CSphString & sError );
-bool			LoadHitlessWords ( const CSphString & sHitlessFiles, const TokenizerRefPtr_c& pTok, CSphDict * pDict, CSphVector<SphWordID_t> & dHitlessWords, CSphString & sError );
-void			GetSettingsFiles ( const TokenizerRefPtr_c& pTok, const CSphDict * pDict, const CSphIndexSettings & tSettings, const FilenameBuilder_i * pFilenameBuilder, StrVec_t & dFiles );
+bool			LoadHitlessWords ( const CSphString & sHitlessFiles, const TokenizerRefPtr_c& pTok, const DictRefPtr_c& pDict, CSphVector<SphWordID_t> & dHitlessWords, CSphString & sError );
+void			GetSettingsFiles ( const TokenizerRefPtr_c& pTok, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const FilenameBuilder_i * pFilenameBuilder, StrVec_t & dFiles );
 
 /// json save/load
 void operator<< ( JsonEscapedBuilder& tOut, const CSphSchema& tSchema );
@@ -1172,7 +1172,9 @@ public:
 	virtual void			ResetWarning() = 0;
 };
 
-ISphRtDictWraper * sphCreateRtKeywordsDictionaryWrapper ( CSphDict * pBase, bool bStoreID );
+using ISphRtDictWraperRefPtr_c = CSphRefcountedPtr<ISphRtDictWraper>;
+
+ISphRtDictWraperRefPtr_c sphCreateRtKeywordsDictionaryWrapper ( DictRefPtr_c pBase, bool bStoreID );
 
 struct SphExpanded_t
 {

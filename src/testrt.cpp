@@ -547,7 +547,7 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL &tParams, const CSphConfigSection
 }
 
 
-CSphSource_SQL * SpawnSource ( const char * sSourceName, const CSphConfigType &hSources, TokenizerRefPtr_c pTok, CSphDict * pDict )
+CSphSource_SQL * SpawnSource ( const char * sSourceName, const CSphConfigType &hSources, TokenizerRefPtr_c pTok, DictRefPtr_c pDict )
 {
 	const CSphConfigSection &hSource = hSources[sSourceName];
 

@@ -1174,7 +1174,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		CSphRefcountedPtr<CSphStopwordBuilderDict> tDict { new CSphStopwordBuilderDict };
 		ARRAY_FOREACH ( i, dSources )
 		{
-			dSources[i]->SetDict ( tDict );
+			dSources[i]->SetDict ( (DictRefPtr_c)tDict );
 			if ( !dSources[i]->Connect ( sError ) || !dSources[i]->IterateStart ( sError ) )
 			{
 				if ( !sError.IsEmpty() )

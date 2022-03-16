@@ -281,7 +281,7 @@ public:
 	virtual bool			HasState () const { return false; }
 
 	/// make a clone
-	virtual CSphDict *		Clone () const { return nullptr; }
+	virtual DictRefPtr_c	Clone () const { return nullptr; }
 
 	/// get settings hash
 	virtual uint64_t		GetSettingsFNV () const = 0;
@@ -320,16 +320,13 @@ public:
 using DictRefPtr_c = CSphRefcountedPtr<CSphDict>;
 
 /// returns pDict, if stateless. Or it's clone, if not
-CSphDict * GetStatelessDict ( CSphDict * pDict );
-
-/// traits dictionary factory (no storage, only tokenizing, lemmatizing, etc.)
-CSphDict * sphCreateDictionaryTemplate ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const TokenizerRefPtr_c& pTokenizer, const char * sIndex, bool bStripFile, FilenameBuilder_i * pFilenameBuilder, CSphString & sError );
+DictRefPtr_c GetStatelessDict ( const DictRefPtr_c& pDict );
 
 /// CRC32/FNV64 dictionary factory
-CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const TokenizerRefPtr_c& pTokenizer, const char * sIndex, bool bStripFile, int iSkiplistBlockSize, FilenameBuilder_i * pFilenameBuilder, CSphString & sError );
+DictRefPtr_c sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const TokenizerRefPtr_c& pTokenizer, const char * sIndex, bool bStripFile, int iSkiplistBlockSize, FilenameBuilder_i * pFilenameBuilder, CSphString & sError );
 
 /// keyword-storing dictionary factory
-CSphDict * sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const TokenizerRefPtr_c& pTokenizer, const char * sIndex, bool bStripFile, int iSkiplistBlockSize, FilenameBuilder_i * pFilenameBuilder, CSphString & sError );
+DictRefPtr_c sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const TokenizerRefPtr_c& pTokenizer, const char * sIndex, bool bStripFile, int iSkiplistBlockSize, FilenameBuilder_i * pFilenameBuilder, CSphString & sError );
 
 /// clear wordform cache
 void sphShutdownWordforms ();
@@ -1278,9 +1275,9 @@ public:
 	TokenizerRefPtr_c			GetTokenizer () const;
 	TokenizerRefPtr_c			GetQueryTokenizer () const;
 	TokenizerRefPtr_c&			ModifyTokenizer ();
-	void						SetDictionary ( CSphDict * pDict );
-	CSphDict *					GetDictionary () const { return m_pDict; }
-	CSphDict *					LeakDictionary ();
+	void						SetDictionary ( DictRefPtr_c pDict );
+	DictRefPtr_c				GetDictionary () const;
+	DictRefPtr_c				LeakDictionary ();
 	virtual void				SetKeepAttrs ( const CSphString & , const StrVec_t & ) {}
 	virtual void				Setup ( const CSphIndexSettings & tSettings );
 	const CSphIndexSettings &	GetSettings () const { return m_tSettings; }

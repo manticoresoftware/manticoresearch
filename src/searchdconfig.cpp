@@ -1066,7 +1066,7 @@ static void DeleteExtraIndexFiles ( CSphIndex * pIndex )
 	CSphString sPath = GetPathForNewIndex ( pIndex->GetName() );
 
 	auto pTokenizer = pIndex->GetTokenizer();
-	const CSphDict * pDict = pIndex->GetDictionary();
+	auto pDict = pIndex->GetDictionary();
 
 	if ( pTokenizer )
 	{

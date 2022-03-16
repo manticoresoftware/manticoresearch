@@ -97,13 +97,13 @@ public:
 
 	bool						m_bKeywordDict {true};
 	DictRefPtr_c				m_pDict;
-	CSphDict *					m_pRefDict = nullptr; // not owned, used only for ==-matching
+	const void *				m_pRefDict = nullptr; // not owned, used only for comparing via ==
 
 
 					explicit RtAccum_t ( bool bKeywordDict );
 					~RtAccum_t();
 
-	void			SetupDict ( const RtIndex_i * pIndex, CSphDict * pDict, bool bKeywordDict );
+	void			SetupDict ( const RtIndex_i * pIndex, const DictRefPtr_c& pDict, bool bKeywordDict );
 	void			Sort();
 
 	void			CleanupPart();
@@ -133,7 +133,7 @@ public:
 private:
 	bool								m_bReplace = false;		///< insert or replace mode (affects CleanupDuplicates() behavior)
 
-	CSphRefcountedPtr<ISphRtDictWraper>	m_pDictRt;
+	ISphRtDictWraperRefPtr_c			m_pDictRt;
 	CSphScopedPtr<BlobRowBuilder_i>		m_pBlobWriter {nullptr};
 	CSphScopedPtr<DocstoreRT_i>			m_pDocstore {nullptr};
 	CSphScopedPtr<ColumnarBuilderRT_i>	m_pColumnarBuilder {nullptr};

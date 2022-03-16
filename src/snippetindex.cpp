@@ -202,7 +202,7 @@ void TermRemoveDup ( CSphVector<T> & dTerms, CSphVector<int> & dRemovedQPos, con
 }
 
 
-void SnippetsDocIndex_c::ParseQuery ( CSphDict * pDict, DWORD eExtQuerySPZ )
+void SnippetsDocIndex_c::ParseQuery ( const DictRefPtr_c& pDict, DWORD eExtQuerySPZ )
 {
 	int iQPos = 0;
 
@@ -345,7 +345,7 @@ void SnippetsDocIndex_c::AddWordStar ( const char * sWord, int iLengthCP, int iQ
 }
 
 
-int SnippetsDocIndex_c::ExtractWords ( XQNode_t * pNode, CSphDict * pDict, int iQpos )
+int SnippetsDocIndex_c::ExtractWords ( XQNode_t * pNode, const DictRefPtr_c& pDict, int iQpos )
 {
 	if ( !pNode )
 		return iQpos;

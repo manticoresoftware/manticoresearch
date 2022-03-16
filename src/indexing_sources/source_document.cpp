@@ -15,10 +15,9 @@
 #include "tokenizer/tokenizer.h"
 #include "sphinxint.h"
 
-void CSphSource::SetDict ( CSphDict * pDict )
+void CSphSource::SetDict ( const DictRefPtr_c& pDict )
 {
 	assert ( pDict );
-	SafeAddRef ( pDict );
 	m_pDict = pDict;
 }
 

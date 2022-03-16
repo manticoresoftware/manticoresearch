@@ -1354,7 +1354,7 @@ void QueryHighlighter_c::CheckClose ( int iPos )
 class HitCollector_c : public TokenFunctorTraits_c, public virtual HitCollector_i
 {
 public:
-	HitCollector_c ( SnippetsDocIndex_c & tContainer, TokenizerRefPtr_c pTokenizer, CSphDict * pDict, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
+	HitCollector_c ( SnippetsDocIndex_c & tContainer, TokenizerRefPtr_c pTokenizer, DictRefPtr_c pDict, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
 		const char * szDoc, int iDocLen, int iField, CacheStreamer_i & tTokenContainer, CSphVector<ZonePacked_t> & dZones, FunctorZoneInfo_t & tZoneInfo, SnippetResult_t & tRes );
 
 protected:
@@ -1390,22 +1390,21 @@ private:
 };
 
 
-HitCollector_c::HitCollector_c ( SnippetsDocIndex_c & tContainer, TokenizerRefPtr_c pTokenizer, CSphDict * pDict, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
+HitCollector_c::HitCollector_c ( SnippetsDocIndex_c & tContainer, TokenizerRefPtr_c pTokenizer, DictRefPtr_c pDict, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
 	const char * szDoc, int iDocLen, int iField, CacheStreamer_i & tTokenContainer, CSphVector<ZonePacked_t> & dZones, FunctorZoneInfo_t & tZoneInfo, SnippetResult_t & tRes )
 	: TokenFunctorTraits_c ( std::move (pTokenizer), tQuery, tIndexSettings, szDoc, iDocLen, iField, tRes )
 	, m_tContainer ( tContainer )
 	, m_tTokenContainer ( tTokenContainer )
 	, m_dZones ( dZones )
 	, m_tZoneInfo ( tZoneInfo )
-	, m_pDict ( pDict )
+	, m_pDict ( std::move (pDict) )
 {
-	SafeAddRef(pDict);
-	assert(m_pDict);
+	assert ( m_pDict );
 
 	strncpy ( (char *)m_sTmpWord, MAGIC_WORD_SENTENCE, sizeof(m_sTmpWord)-1 );
-	m_uSentenceID = pDict->GetWordID ( m_sTmpWord );
+	m_uSentenceID = m_pDict->GetWordID ( m_sTmpWord );
 	strncpy ( (char *)m_sTmpWord, MAGIC_WORD_PARAGRAPH, sizeof(m_sTmpWord)-1 );
-	m_uParagraphID = pDict->GetWordID ( m_sTmpWord );
+	m_uParagraphID = m_pDict->GetWordID ( m_sTmpWord );
 	m_tContainer.SetupHits();
 
 	m_bCollectExtraZoneInfo = true;
@@ -1537,8 +1536,8 @@ TokenFunctor_i * CreatePassageHighlighter ( CSphVector<Passage_t*> & dPassages, 
 }
 
 
-HitCollector_i * CreateHitCollector ( SnippetsDocIndex_c & tContainer, TokenizerRefPtr_c pTokenizer, CSphDict * pDict, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
+HitCollector_i * CreateHitCollector ( SnippetsDocIndex_c & tContainer, TokenizerRefPtr_c pTokenizer, DictRefPtr_c pDict, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
 	const char * szDoc, int iDocLen, int iField, CacheStreamer_i & tTokenContainer, CSphVector<ZonePacked_t> & dZones, FunctorZoneInfo_t & tZoneInfo, SnippetResult_t & tRes )
 {
-	return new HitCollector_c ( tContainer, std::move ( pTokenizer ), pDict, tQuery, tIndexSettings, szDoc, iDocLen, iField, tTokenContainer, dZones, tZoneInfo, tRes );
+	return new HitCollector_c ( tContainer, std::move ( pTokenizer ), std::move (pDict), tQuery, tIndexSettings, szDoc, iDocLen, iField, tTokenContainer, dZones, tZoneInfo, tRes );
 }

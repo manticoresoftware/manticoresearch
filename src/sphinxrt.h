@@ -163,7 +163,7 @@ public:
 	
 	/// acquire thread-local indexing accumulator
 	/// returns NULL if another index already uses it in an open txn
-	RtAccum_t * AcquireAccum ( CSphDict * pDict, RtAccum_t * pAccExt=nullptr, bool bWordDict=true, bool bSetTLS = true, CSphString * sError=nullptr );
+	RtAccum_t * AcquireAccum ( const DictRefPtr_c& pDict, RtAccum_t * pAccExt=nullptr, bool bWordDict=true, bool bSetTLS = true, CSphString * sError=nullptr );
 
 	virtual bool	NeedStoreWordID () const = 0;
 	virtual	int64_t	GetMemLimit() const = 0;

@@ -17,16 +17,16 @@
 //////////////////////////////////////////////////////////////////////////
 
 /// dict wrapper for exact-word syntax
-class CSphDictExact: public CSphDictTraits
+class DictExact_c: public DictProxy_c
 {
 public:
-	explicit CSphDictExact ( DictRefPtr_c pDict )
-		: CSphDictTraits ( std::move (pDict) )
+	explicit DictExact_c ( DictRefPtr_c pDict )
+		: DictProxy_c ( std::move (pDict) )
 	{}
 	SphWordID_t GetWordID ( BYTE* pWord ) override;
 };
 
-SphWordID_t CSphDictExact::GetWordID ( BYTE* pWord )
+SphWordID_t DictExact_c::GetWordID ( BYTE* pWord )
 {
 	auto iLen = (int)strlen ( (const char*)pWord );
 	iLen = Min ( iLen, 16 + 3 * SPH_MAX_WORD_LEN - 1 );
@@ -46,5 +46,5 @@ SphWordID_t CSphDictExact::GetWordID ( BYTE* pWord )
 
 void SetupExactDict ( DictRefPtr_c& pDict )
 {
-	pDict = new CSphDictExact ( pDict );
+	pDict = new DictExact_c ( pDict );
 }

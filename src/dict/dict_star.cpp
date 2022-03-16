@@ -15,18 +15,18 @@
 #include "sphinxint.h"
 
 /// dict wrapper for star-syntax support in prefix-indexes
-class CSphDictStar: public CSphDictTraits
+class DictStar_c: public DictProxy_c
 {
 public:
-	explicit CSphDictStar ( DictRefPtr_c pDict )
-		: CSphDictTraits ( std::move (pDict) )
+	explicit DictStar_c ( DictRefPtr_c pDict )
+		: DictProxy_c ( std::move (pDict) )
 	{}
 
 	SphWordID_t GetWordID ( BYTE* pWord ) final;
 };
 
 
-SphWordID_t CSphDictStar::GetWordID ( BYTE* pWord )
+SphWordID_t DictStar_c::GetWordID ( BYTE* pWord )
 {
 	char sBuf[16 + 3 * SPH_MAX_WORD_LEN];
 	assert ( strlen ( (const char*)pWord ) < 16 + 3 * SPH_MAX_WORD_LEN );
@@ -63,5 +63,5 @@ SphWordID_t CSphDictStar::GetWordID ( BYTE* pWord )
 
 void SetupStarDictOld ( DictRefPtr_c& pDict )
 {
-	pDict = new CSphDictStar ( pDict );
+	pDict = new DictStar_c ( pDict );
 }

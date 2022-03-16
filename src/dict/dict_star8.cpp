@@ -15,19 +15,19 @@
 #include "sphinxint.h"
 
 /// star dict for index v.8+
-class CSphDictStarV8: public CSphDictTraits
+class DictStarV8_c: public DictProxy_c
 {
 	bool m_bInfixes;
 
 public:
-	CSphDictStarV8 ( DictRefPtr_c pDict, bool bInfixes )
-		: CSphDictTraits ( std::move (pDict) )
+	DictStarV8_c ( DictRefPtr_c pDict, bool bInfixes )
+		: DictProxy_c ( std::move (pDict) )
 		, m_bInfixes ( bInfixes )
 	{}
 	SphWordID_t GetWordID ( BYTE* pWord ) final;
 };
 
-SphWordID_t CSphDictStarV8::GetWordID ( BYTE* pWord )
+SphWordID_t DictStarV8_c::GetWordID ( BYTE* pWord )
 {
 	char sBuf[16 + 3 * SPH_MAX_WORD_LEN];
 
@@ -131,5 +131,5 @@ SphWordID_t CSphDictStarV8::GetWordID ( BYTE* pWord )
 
 void SetupStarDictV8( DictRefPtr_c& pDict, bool bInfixes )
 {
-	pDict = new CSphDictStarV8 ( pDict, bInfixes );
+	pDict = new DictStarV8_c ( pDict, bInfixes );
 }

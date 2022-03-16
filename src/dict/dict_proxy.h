@@ -15,10 +15,10 @@
 #include "dict_base.h"
 
 /// dict traits
-class CSphDictTraits: public CSphDict
+class DictProxy_c: public CSphDict
 {
 public:
-	explicit CSphDictTraits ( DictRefPtr_c pDict )
+	explicit DictProxy_c ( DictRefPtr_c pDict )
 		: m_pDict { std::move ( pDict ) }
 	{}
 

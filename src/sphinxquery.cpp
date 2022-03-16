@@ -16,6 +16,7 @@
 #include <stdarg.h>
 
 #include "tokenizer/tokenizer.h"
+#include "dict/dict_base.h"
 
 //////////////////////////////////////////////////////////////////////////
 // EXTENDED PARSER RELOADED

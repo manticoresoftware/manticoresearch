@@ -39,8 +39,7 @@ target_include_directories(generated_config INTERFACE "${MANTICORE_BINARY_DIR}/c
 target_link_libraries (lextra INTERFACE generated_config)
 
 # main bunch of sources (for libsphinx)
-add_library(lmanticore STATIC sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sphinxsoundex.cpp sphinxmetaphone.cpp
-		sphinxstemen.cpp sphinxstemru.cpp sphinxstemru.inl sphinxstemcz.cpp sphinxstemar.cpp sphinxutils.cpp
+add_library(lmanticore STATIC sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sphinxutils.cpp
 		sphinxstd.cpp sphinxsort.cpp sortsetup.cpp sphinxexpr.cpp sphinxfilter.cpp sphinxsearch.cpp sphinxrt.cpp
 		sphinxjson.cpp sphinxaot.cpp sphinxplugin.cpp sphinxudf.c sphinxqcache.cpp sphinxjsonquery.cpp
 		jsonqueryfilter.cpp attribute.cpp secondaryindex.cpp killlist.cpp searchnode.cpp json/cJSON.c sphinxpq.cpp
@@ -53,8 +52,13 @@ add_library(lmanticore STATIC sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sphin
 		sphinx_alter.cpp columnarsort.cpp binlog.cpp chunksearchctx.cpp client_task_info.cpp
 		indexfiles.cpp attrindex_builder.cpp queryfilter.cpp aggregate.cpp)
 
+add_library(lstem STATIC sphinxsoundex.cpp sphinxmetaphone.cpp sphinxstemen.cpp sphinxstemru.cpp sphinxstemru.inl
+		sphinxstemcz.cpp sphinxstemar.cpp )
+target_link_libraries(lstem PUBLIC lextra)
+
 add_library ( conversion conversion.cpp )
 target_link_libraries ( conversion PUBLIC lextra )
+
 target_link_libraries ( lmanticore PUBLIC conversion )
 
 add_subdirectory ( stripper )
@@ -66,6 +70,9 @@ target_link_libraries ( lmanticore PUBLIC lextra )
 
 add_subdirectory ( schema )
 target_link_libraries ( lmanticore PUBLIC schema )
+
+add_subdirectory ( dict )
+target_link_libraries ( lmanticore PUBLIC dict )
 
 add_library(lmanticore_icu icu.cpp)
 if (WITH_ICU)

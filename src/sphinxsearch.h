@@ -42,6 +42,7 @@ bool operator < ( const SkiplistEntry_t & a, RowID_t b );
 bool operator == ( const SkiplistEntry_t & a, RowID_t b );
 bool operator < ( RowID_t a, const SkiplistEntry_t & b );
 
+struct CSphDictEntry;
 struct SkipData_t
 {
 	CSphVector<SkiplistEntry_t> m_dSkiplist;

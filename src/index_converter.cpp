@@ -18,7 +18,6 @@
 #include "sphinxsearch.h"
 #include "secondaryindex.h"
 #include "histogram.h"
-#include "sphinxstem.h"
 #include "sphinxpq.h"
 #include "accumulator.h"
 #include "indexformat.h"

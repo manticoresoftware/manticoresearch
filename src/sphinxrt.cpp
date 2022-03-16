@@ -7009,23 +7009,12 @@ bool RtIndex_c::RtQwordSetup ( RtQword_t * pQword, int iSeg, const RtGuard_t& tG
 	return bFound;
 }
 
-void SetupExactDict ( DictRefPtr_c& pDict )
-{
-	pDict = new CSphDictExact ( pDict );
-}
-
 void SetupExactTokenizer ( const TokenizerRefPtr_c& pTokenizer, bool bAddSpecial )
 {
 	assert ( pTokenizer );
 	pTokenizer->AddPlainChars ( "=" );
 	if ( bAddSpecial )
 		pTokenizer->AddSpecials ( "=" );
-}
-
-
-void SetupStarDict ( DictRefPtr_c& pDict )
-{
-	pDict = new CSphDictStarV8 ( pDict, true );
 }
 
 void SetupStarTokenizer ( const TokenizerRefPtr_c& pTokenizer )
@@ -7732,7 +7721,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	DictRefPtr_c pDict = GetStatelessDict ( m_pDict );
 
 	if ( m_bKeywordDict && IsStarDict ( m_bKeywordDict ) )
-		SetupStarDict ( pDict );
+		SetupStarDictV8 ( pDict );
 
 	if ( m_tSettings.m_bIndexExactWords )
 		SetupExactDict ( pDict );
@@ -7988,7 +7977,7 @@ void RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 	{
 		SetupStarTokenizer ( pTokenizer );
 		if ( m_bKeywordDict )
-			SetupStarDict ( pDict );
+			SetupStarDictV8 ( pDict );
 	}
 
 	if ( m_tSettings.m_bIndexExactWords )
@@ -10293,7 +10282,7 @@ Bson_t RtIndex_c::ExplainQuery ( const CSphString & sQuery ) const
 	SetupExactTokenizer ( pQueryTokenizer );
 
 	tArgs.m_pDict = GetStatelessDict ( m_pDict );
-	SetupStarDict ( tArgs.m_pDict );
+	SetupStarDictV8 ( tArgs.m_pDict );
 	SetupExactDict ( tArgs.m_pDict );
 	if ( m_pFieldFilter )
 		tArgs.m_pFieldFilter = m_pFieldFilter->Clone();

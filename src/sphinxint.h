@@ -22,6 +22,7 @@
 #include "sphinxutils.h"
 #include "fileio.h"
 #include "match.h"
+#include "dict/dict_base.h"
 
 #include <float.h>
 
@@ -893,82 +894,6 @@ inline CSphString SqlUnescape ( const char * sEscaped, int iLen )
 //////////////////////////////////////////////////////////////////////////
 // DISK INDEX INTERNALS
 //////////////////////////////////////////////////////////////////////////
-
-/// locator pair, for RT string dynamization
-struct LocatorPair_t
-{
-	CSphAttrLocator m_tFrom;	///< source (static) locator
-	CSphAttrLocator m_tTo;		///< destination (dynamized) locator
-};
-
-//////////////////////////////////////////////////////////////////////////
-// DICTIONARY INTERNALS
-//////////////////////////////////////////////////////////////////////////
-
-/// dict traits
-class CSphDictTraits : public CSphDict
-{
-public:
-	explicit			CSphDictTraits ( DictRefPtr_c pDict ) : m_pDict { std::move ( pDict ) } {}
-
-	void		LoadStopwords ( const char * sFiles, const TokenizerRefPtr_c& pTokenizer, bool bStripFile ) final { m_pDict->LoadStopwords ( sFiles, pTokenizer, bStripFile ); }
-	void		LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) final { m_pDict->LoadStopwords ( dStopwords ); }
-	void		WriteStopwords ( CSphWriter & tWriter ) const final { m_pDict->WriteStopwords ( tWriter ); }
-	void		WriteStopwords ( JsonEscapedBuilder & tOut ) const final { m_pDict->WriteStopwords ( tOut ); }
-	bool		LoadWordforms ( const StrVec_t & dFiles, const CSphEmbeddedFiles * pEmbedded, const TokenizerRefPtr_c& pTokenizer, const char * sIndex ) final { return m_pDict->LoadWordforms ( dFiles, pEmbedded, pTokenizer, sIndex ); }
-	void		WriteWordforms ( CSphWriter & tWriter ) const final { m_pDict->WriteWordforms ( tWriter ); }
-	void		WriteWordforms ( JsonEscapedBuilder & tOut ) const final { m_pDict->WriteWordforms ( tOut ); }
-	int			SetMorphology ( const char * szMorph, CSphString & sMessage ) final { return m_pDict->SetMorphology ( szMorph, sMessage ); }
-
-	SphWordID_t	GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops ) final { return m_pDict->GetWordID ( pWord, iLen, bFilterStops ); }
-	SphWordID_t GetWordID ( BYTE * pWord ) override;
-	SphWordID_t	GetWordIDNonStemmed ( BYTE * pWord ) override { return m_pDict->GetWordIDNonStemmed ( pWord ); }
-
-	void		Setup ( const CSphDictSettings & ) final {}
-	const CSphDictSettings & GetSettings () const final { return m_pDict->GetSettings (); }
-	const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () const final { return m_pDict->GetStopwordsFileInfos (); }
-	const CSphVector <CSphSavedFile> & GetWordformsFileInfos () const final { return m_pDict->GetWordformsFileInfos (); }
-	const CSphMultiformContainer * GetMultiWordforms () const final { return m_pDict->GetMultiWordforms (); }
-	const CSphWordforms * GetWordforms () final { return m_pDict->GetWordforms(); }
-
-	bool		IsStopWord ( const BYTE * pWord ) const final { return m_pDict->IsStopWord ( pWord ); }
-	uint64_t	GetSettingsFNV () const final { return m_pDict->GetSettingsFNV(); }
-
-protected:
-	DictRefPtr_c	m_pDict;
-};
-
-
-/// dict wrapper for star-syntax support in prefix-indexes
-class CSphDictStar : public CSphDictTraits
-{
-public:
-	explicit	CSphDictStar ( DictRefPtr_c pDict ) : CSphDictTraits ( std::move ( pDict ) ) {}
-
-	SphWordID_t	GetWordID ( BYTE * pWord ) override;
-	SphWordID_t	GetWordIDNonStemmed ( BYTE * pWord ) override;
-};
-
-
-/// star dict for index v.8+
-class CSphDictStarV8 : public CSphDictStar
-{
-	bool m_bInfixes;
-public:
-	CSphDictStarV8 ( DictRefPtr_c pDict, bool bInfixes ) : CSphDictStar ( std::move ( pDict ) ), m_bInfixes ( bInfixes )
-	{}
-	SphWordID_t	GetWordID ( BYTE * pWord ) final;
-};
-
-
-/// dict wrapper for exact-word syntax
-class CSphDictExact : public CSphDictTraits
-{
-public:
-	explicit CSphDictExact ( DictRefPtr_c pDict ) : CSphDictTraits ( std::move ( pDict ) ) {}
-	SphWordID_t	GetWordID ( BYTE * pWord ) final;
-	SphWordID_t GetWordIDNonStemmed ( BYTE * pWord ) final { return m_pDict->GetWordIDNonStemmed ( pWord ); }
-};
 
 void RemoveDictSpecials ( CSphString & sWord );
 const CSphString & RemoveDictSpecials ( const CSphString & sWord, CSphString & sBuf );

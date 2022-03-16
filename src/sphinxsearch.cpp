@@ -17,6 +17,7 @@
 #include "sphinxqcache.h"
 #include "attribute.h"
 #include "conversion.h"
+#include "dict/dict_entry.h"
 
 #include <math.h>
 

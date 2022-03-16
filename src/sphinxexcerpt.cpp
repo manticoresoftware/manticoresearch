@@ -25,6 +25,7 @@
 
 #include "stripper/html_stripper.h"
 #include "tokenizer/tokenizer.h"
+#include "dict/dict_base.h"
 
 #include <math.h>
 
@@ -1386,7 +1387,7 @@ void SnippetBuilder_c::Impl_c::Setup ( const CSphIndex * pIndex, const SnippetQu
 
 	// setup exact dictionary if needed
 	if ( tIndexSettings.m_bIndexExactWords )
-		m_pDict = new CSphDictExact(m_pDict);
+		SetupExactDict ( m_pDict );
 
 	if ( tSettings.m_bJsonQuery )
 	{

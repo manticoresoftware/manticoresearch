@@ -15,11 +15,11 @@
 
 #include "sphinxint.h"
 #include "fileutils.h"
-#include "sphinxutils.h"
 #include "sphinxstem.h"
 #include "sphinxplugin.h"
 #include "coroutine.h"
 #include "tokenizer/token_filter.h"
+#include "dict/word_forms.h"
 
 //////////////////////////////////////////////////////////////////////////
 // LEMMATIZER

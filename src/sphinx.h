@@ -1041,7 +1041,7 @@ public:
 	const CSphString &			GetLastWarning() const { return m_sLastWarning; }
 	virtual const CSphSchema &	GetMatchSchema() const { return m_tSchema; }			///< match schema as returned in result set (possibly different from internal storage schema!)
 
-	void						SetInplaceSettings ( int iHitGap, float fRelocFactor, float fWriteFactor );
+	void						SetInplaceSettings ( int iHitGap, float fRelocFactor, float fWriteFactor ); // fixme! build only
 	void						SetFieldFilter ( ISphFieldFilter * pFilter );
 	const ISphFieldFilter *		GetFieldFilter() const { return m_pFieldFilter; }
 	void						SetTokenizer ( TokenizerRefPtr_c pTokenizer );
@@ -1052,7 +1052,7 @@ public:
 	void						SetDictionary ( DictRefPtr_c pDict );
 	DictRefPtr_c				GetDictionary () const;
 	DictRefPtr_c				LeakDictionary ();
-	virtual void				SetKeepAttrs ( const CSphString & , const StrVec_t & ) {}
+	virtual void				SetKeepAttrs ( const CSphString & , const StrVec_t & ) {} // fixme! build only
 	virtual void				Setup ( const CSphIndexSettings & tSettings );
 	const CSphIndexSettings &	GetSettings () const { return m_tSettings; }
 	virtual bool				IsRT() const { return false; }
@@ -1067,10 +1067,10 @@ public:
 
 public:
 	/// build index by indexing given sources
-	virtual int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer, CSphIndexProgress & ) = 0;
+	virtual int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer, CSphIndexProgress & ) = 0; // fixme! build only
 
 	/// build index by mering current index with given index
-	virtual bool				Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSettings> & dFilters, bool bSupressDstDocids, CSphIndexProgress & tProgress ) = 0;
+	virtual bool				Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSettings> & dFilters, bool bSupressDstDocids, CSphIndexProgress & tProgress ) = 0; // fixme! build only
 
 public:
 	/// check all data files, preload schema, and preallocate enough RAM to load memory-cached data
@@ -1205,10 +1205,10 @@ protected:
 	CSphString					m_sLastError;
 	CSphString					m_sLastWarning;
 
-	bool						m_bInplaceSettings = false;
-	int							m_iHitGap = 0;
-	float						m_fRelocFactor { 0.0f };
-	float						m_fWriteFactor { 0.0f };
+	bool						m_bInplaceSettings = false; // fixme! build only
+	int							m_iHitGap = 0; // fixme! build only
+	float						m_fRelocFactor { 0.0f }; // fixme! build only
+	float						m_fWriteFactor { 0.0f }; // fixme! build only
 
 	bool						m_bBinlog = true;
 

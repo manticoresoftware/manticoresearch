@@ -1173,7 +1173,7 @@ public:
 	explicit			CSphIndex_VLN ( const char * szIndexName, const char * szFilename );
 						~CSphIndex_VLN() override;
 
-	int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer, CSphIndexProgress & tProgress ) final;
+	int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer, CSphIndexProgress & tProgress ) final; // fixme! build only
 
 	bool				LoadHeaderLegacy ( const char * sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
 	bool				LoadHeader ( const char * sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
@@ -1203,7 +1203,7 @@ public:
 	bool 				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const final;
 	void				GetSuggest ( const SuggestArgs_t & tArgs, SuggestResult_t & tRes ) const final;
 
-	bool				Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSettings> & dFilters, bool bSupressDstDocids, CSphIndexProgress & tProgress ) final;
+	bool				Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSettings> & dFilters, bool bSupressDstDocids, CSphIndexProgress & tProgress ) final; // fixme! build only
 
 	template <class QWORDDST, class QWORDSRC>
 	static bool			MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, VecTraits_T<RowID_t> dDstRows, VecTraits_T<RowID_t> dSrcRows, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphIndexProgress & tProgress);
@@ -1271,9 +1271,9 @@ private:
 	// common stuff
 	int								m_iLockFD;
 	CSphSourceStats					m_tStats;			///< my stats
-	CSphFixedVector<int64_t>		m_dFieldLens;		///< total per-field lengths summed over entire indexed data, in tokens
-	CSphString						m_sKeepAttrs;		///< retain attributes of that index reindexing
-	StrVec_t						m_dKeepAttrs;
+	CSphFixedVector<int64_t>		m_dFieldLens;	///< total per-field lengths summed over entire indexed data, in tokens
+	CSphString						m_sKeepAttrs;			///< retain attributes of that index reindexing //fixme! build only
+	StrVec_t						m_dKeepAttrs;		// fixme! build only
 
 private:
 	int64_t						m_iDocinfo;				///< my docinfo cache size
@@ -1334,11 +1334,11 @@ private:
 	void						SetupStarDict ( DictRefPtr_c &pDict ) const;
 	void						SetupExactDict ( DictRefPtr_c &pDict ) const;
 
-	bool						RelocateBlock ( int iFile, BYTE * pBuffer, int iRelocationSize, SphOffset_t * pFileSize, CSphBin & dMinBin, SphOffset_t * pSharedOffset );
+	bool						RelocateBlock ( int iFile, BYTE * pBuffer, int iRelocationSize, SphOffset_t * pFileSize, CSphBin & dMinBin, SphOffset_t * pSharedOffset ); // build only
 
-	bool						SortDocidLookup ( int iFD, int nBlocks, int iMemoryLimit, int nLookupsInBlock, int nLookupsInLastBlock, CSphIndexProgress& tProgress );
+	bool						SortDocidLookup ( int iFD, int nBlocks, int iMemoryLimit, int nLookupsInBlock, int nLookupsInLastBlock, CSphIndexProgress& tProgress ); // build only
 
-	bool						CollectQueryMvas ( const CSphVector<CSphSource*> & dSources, QueryMvaContainer_c & tMvaContainer );
+	bool						CollectQueryMvas ( const CSphVector<CSphSource*> & dSources, QueryMvaContainer_c & tMvaContainer ); // build only
 
 private:
 	bool						JuggleFile ( ESphExt eExt, CSphString & sError, bool bNeedSrc=true, bool bNeedDst=true ) const;
@@ -1356,16 +1356,16 @@ private:
 	bool						DeleteFieldFromDict ( int iFieldId, BuildHeader_t & tBuildHeader, CSphString & sError );
 	bool						AddRemoveFromDocstore ( const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError );
 
-	bool						Build_SetupInplace ( SphOffset_t & iHitsGap, int iHitsMax, int iFdHits ) const;
-	bool						Build_SetupDocstore ( CSphScopedPtr<DocstoreBuilder_i> & pDocstore, CSphBitvec & dStoredFields, CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage );
-	bool						Build_SetupBlobBuilder ( CSphScopedPtr<BlobRowBuilder_i> & pBuilder );
-	bool						Build_SetupColumnar ( CSphScopedPtr<columnar::Builder_i> & pBuilder );
-	bool						Build_SetupHistograms ( CSphScopedPtr<HistogramContainer_c> & pContainer, CSphVector<std::pair<Histogram_i*,int>> & dHistograms );
+	bool						Build_SetupInplace ( SphOffset_t & iHitsGap, int iHitsMax, int iFdHits ) const; // fixme! build only
+	bool						Build_SetupDocstore ( CSphScopedPtr<DocstoreBuilder_i> & pDocstore, CSphBitvec & dStoredFields, CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage ); // fixme! build only
+	bool						Build_SetupBlobBuilder ( CSphScopedPtr<BlobRowBuilder_i> & pBuilder ); // fixme! build only
+	bool						Build_SetupColumnar ( CSphScopedPtr<columnar::Builder_i> & pBuilder ); // fixme! build only
+	bool						Build_SetupHistograms ( CSphScopedPtr<HistogramContainer_c> & pContainer, CSphVector<std::pair<Histogram_i*,int>> & dHistograms ); // fixme! build only
 
-	void						Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, DocID_t tDocID, QueryMvaContainer_c & tMvaContainer, CSphSource & tSource, const CSphBitvec & dStoredFields, const CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage );
-	bool						Build_StoreBlobAttrs ( DocID_t tDocId, SphOffset_t & tOffset, BlobRowBuilder_i & tBlobRowBuilderconst, QueryMvaContainer_c & tMvaContainer, AttrSource_i & tSource, bool bForceSource );
-	void						Build_StoreColumnarAttrs ( DocID_t tDocId, columnar::Builder_i & tBuilder, CSphSource & tSource, QueryMvaContainer_c & tMvaContainer );
-	void						Build_StoreHistograms ( CSphVector<std::pair<Histogram_i*,int>> dHistograms, CSphSource & tSource );
+	void						Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, DocID_t tDocID, QueryMvaContainer_c & tMvaContainer, CSphSource & tSource, const CSphBitvec & dStoredFields, const CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage ); // fixme! build only
+	bool						Build_StoreBlobAttrs ( DocID_t tDocId, SphOffset_t & tOffset, BlobRowBuilder_i & tBlobRowBuilderconst, QueryMvaContainer_c & tMvaContainer, AttrSource_i & tSource, bool bForceSource ); // fixme! build only
+	void						Build_StoreColumnarAttrs ( DocID_t tDocId, columnar::Builder_i & tBuilder, CSphSource & tSource, QueryMvaContainer_c & tMvaContainer ); // fixme! build only
+	void						Build_StoreHistograms ( CSphVector<std::pair<Histogram_i*,int>> dHistograms, CSphSource & tSource ); // fixme! build only
 
 	bool						SpawnReader ( DataReaderFactoryPtr_c & m_pFile, ESphExt eExt, DataReaderFactory_c::Kind_e eKind, int iBuffer, FileAccess_e eAccess );
 	bool						SpawnReaders();
@@ -1968,7 +1968,7 @@ CSphIndex::~CSphIndex ()
 }
 
 
-void CSphIndex::SetInplaceSettings ( int iHitGap, float fRelocFactor, float fWriteFactor )
+void CSphIndex::SetInplaceSettings ( int iHitGap, float fRelocFactor, float fWriteFactor ) // fixme! build only
 {
 	m_iHitGap = iHitGap;
 	m_fRelocFactor = fRelocFactor;
@@ -4092,14 +4092,14 @@ inline bool SPH_CMPAGGRHIT_LESS ( const AggregateHit_t & a, const AggregateHit_t
 
 
 /// hit priority queue entry
-struct CSphHitQueueEntry : public AggregateHit_t
+struct CSphHitQueueEntry : public AggregateHit_t // fixme! used for build
 {
 	int m_iBin;
 };
 
 
 /// hit priority queue
-struct CSphHitQueue
+struct CSphHitQueue // fixme! used for build
 {
 public:
 	CSphHitQueueEntry *		m_pData;
@@ -4194,7 +4194,7 @@ static const int MIN_KEYWORDS_DICT	= 4*1048576;	// FIXME! ideally must be in syn
 /////////////////////////////////////////////////////////////////////////////
 
 bool CSphIndex_VLN::RelocateBlock ( int iFile, BYTE * pBuffer, int iRelocationSize,
-	SphOffset_t * pFileSize, CSphBin & dMinBin, SphOffset_t * pSharedOffset )
+	SphOffset_t * pFileSize, CSphBin & dMinBin, SphOffset_t * pSharedOffset ) // build only
 {
 	assert ( pBuffer && pFileSize && pSharedOffset );
 
@@ -4814,7 +4814,7 @@ void WarnAboutKillList ( const CSphVector<DocID_t> & dKillList, const KillListTa
 }
 
 
-bool CSphIndex_VLN::SortDocidLookup ( int iFD, int nBlocks, int iMemoryLimit, int nLookupsInBlock, int nLookupsInLastBlock, CSphIndexProgress & tProgress )
+bool CSphIndex_VLN::SortDocidLookup ( int iFD, int nBlocks, int iMemoryLimit, int nLookupsInBlock, int nLookupsInLastBlock, CSphIndexProgress & tProgress ) // build only
 {
 	tProgress.PhaseBegin ( CSphIndexProgress::PHASE_LOOKUP );
 	assert (!tProgress.m_iDocids);
@@ -6312,7 +6312,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 	return true;
 }
 
-
+// called only from indexer
 bool CSphIndex_VLN::Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSettings> & dFilters, bool bSupressDstDocids, CSphIndexProgress& tProgress )
 {
 	StrVec_t dWarnings;

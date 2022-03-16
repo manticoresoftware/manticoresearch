@@ -3065,7 +3065,7 @@ public:
 	bool	CreateIndexFiles ( const char * sDocName, const char * sHitName, const char * sSkipName, bool bInplace, int iWriteBuffer, CSphAutofile & tHit, SphOffset_t * pSharedOffset );
 	void	HitReset ();
 
-	void	cidxHit ( CSphAggregateHit * pHit );
+	void	cidxHit ( AggregateHit_t * pHit );
 	bool	cidxDone ( int iMemLimit, int & iMinInfixLen, int iMaxCodepointLen, DictHeader_t * pDictHeader );
 	int		cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits );
 
@@ -3085,7 +3085,7 @@ private:
 	CSphWriter					m_wrSkiplist;			///< skiplist writer
 	CSphFixedVector<BYTE>		m_dWriteBuffer;			///< my write buffer (for temp files)
 
-	CSphAggregateHit			m_tLastHit;				///< hitlist entry
+	AggregateHit_t				m_tLastHit;				///< hitlist entry
 	Hitpos_t					m_iPrevHitPos {0};		///< previous hit position
 	bool						m_bGotFieldEnd = false;
 	BYTE						m_sLastKeyword [ MAX_KEYWORD_BYTES ];
@@ -3312,7 +3312,7 @@ static int strcmpp (const char* l, const char* r)
 	return strcmp ( l, r );
 }
 
-void CSphHitBuilder::cidxHit ( CSphAggregateHit * pHit )
+void CSphHitBuilder::cidxHit ( AggregateHit_t * pHit )
 {
 	assert (
 		( pHit->m_uWordID!=0 && pHit->m_iWordPos!=EMPTY_HIT && pHit->m_tRowID!=INVALID_ROWID ) || // it's either ok hit
@@ -4070,7 +4070,7 @@ int CSphHitBuilder::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits )
 /////////////////////////////////////////////////////////////////////////////
 
 // OPTIMIZE?
-inline bool SPH_CMPAGGRHIT_LESS ( const CSphAggregateHit & a, const CSphAggregateHit & b )
+inline bool SPH_CMPAGGRHIT_LESS ( const AggregateHit_t & a, const AggregateHit_t & b )
 {
 	if ( a.m_uWordID < b.m_uWordID )
 		return true;
@@ -4092,7 +4092,7 @@ inline bool SPH_CMPAGGRHIT_LESS ( const CSphAggregateHit & a, const CSphAggregat
 
 
 /// hit priority queue entry
-struct CSphHitQueueEntry : public CSphAggregateHit
+struct CSphHitQueueEntry : public AggregateHit_t
 {
 	int m_iBin;
 };
@@ -4123,7 +4123,7 @@ public:
 	}
 
 	/// add entry to the queue
-	void Push ( CSphAggregateHit & tHit, int iBin )
+	void Push ( AggregateHit_t & tHit, int iBin )
 	{
 		// check for overflow and do add
 		assert ( m_iUsed<m_iSize );
@@ -5706,7 +5706,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		SphOffset_t iHitFileSize = dBins[iLastBin].m_iFilePos + dBins [iLastBin].m_iFileLeft;
 
 		CSphHitQueue tQueue ( iRawBlocks );
-		CSphAggregateHit tHit;
+		AggregateHit_t tHit;
 
 		// initialize hitlist encoder state
 		tHitBuilder.HitReset();
@@ -5786,7 +5786,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		tProgress.PhaseEnd();
 		dBins.Reset ();
 
-		CSphAggregateHit tFlush;
+		AggregateHit_t tFlush;
 		tFlush.m_tRowID = INVALID_ROWID;
 		tFlush.m_uWordID = 0;
 		tFlush.m_sKeyword = NULL;
@@ -6096,7 +6096,7 @@ public:
 							const CSphIndex_VLN * pSourceIndex, const VecTraits_T<RowID_t>& dRows,
 							MergeCb_c & tMonitor )
 	{
-		CSphAggregateHit tHit;
+		AggregateHit_t tHit;
 		tHit.m_uWordID = iWordID;
 		tHit.m_sKeyword = sWord;
 		tHit.m_dFieldMask.UnsetAll();
@@ -6117,7 +6117,7 @@ public:
 	}
 
 	template < typename QWORD >
-	inline void TransferHits ( QWORD & tQword, CSphAggregateHit & tHit, const VecTraits_T<RowID_t> & dRows )
+	inline void TransferHits ( QWORD & tQword, AggregateHit_t & tHit, const VecTraits_T<RowID_t> & dRows )
 	{
 		assert ( tQword.m_bHasHitlist );
 		tHit.m_tRowID = dRows[tQword.m_tDoc.m_tRowID];
@@ -6253,7 +6253,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 			QwordIteration::PrepareQword<QWORDDST> ( tDstQword, tDstReader );
 			QwordIteration::PrepareQword<QWORDSRC> ( tSrcQword, tSrcReader );
 
-			CSphAggregateHit tHit;
+			AggregateHit_t tHit;
 			tHit.m_uWordID = tDstReader.m_uWordID; // !COMMIT m_sKeyword anyone?
 			tHit.m_sKeyword = tDstReader.GetWord();
 			tHit.m_dFieldMask.UnsetAll();
@@ -6711,7 +6711,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 		return false;
 
 	// finalize
-	CSphAggregateHit tFlush;
+	AggregateHit_t tFlush;
 	tFlush.m_tRowID = INVALID_ROWID;
 	tFlush.m_uWordID = 0;
 	tFlush.m_sKeyword = (const BYTE*)""; // tricky: assertion in cidxHit calls strcmp on this in case of empty index!
@@ -6794,7 +6794,7 @@ bool CSphIndex_VLN::DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder *
 		bool bHitless = !tWordsReader.m_bHasHitlist;
 		QwordIteration::PrepareQword ( tQword, tWordsReader );
 
-		CSphAggregateHit tHit;
+		AggregateHit_t tHit;
 		tHit.m_uWordID = tWordsReader.m_uWordID; // !COMMIT m_sKeyword anyone?
 		tHit.m_sKeyword = tWordsReader.GetWord();
 		tHit.m_dFieldMask.UnsetAll();
@@ -6874,7 +6874,7 @@ bool CSphIndex_VLN::DeleteFieldFromDict ( int iFieldId, BuildHeader_t & tBuildHe
 		return false;
 
 	// finalize
-	CSphAggregateHit tFlush;
+	AggregateHit_t tFlush;
 	tFlush.m_tRowID = INVALID_ROWID;
 	tFlush.m_uWordID = 0;
 	tFlush.m_sKeyword = (const BYTE*)""; // tricky: assertion in cidxHit calls strcmp on this in case of empty index!

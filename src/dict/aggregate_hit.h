@@ -16,7 +16,7 @@
 #include "sphinx.h"
 
 /// aggregated hit info
-struct CSphAggregateHit
+struct AggregateHit_t
 {
 	RowID_t m_tRowID { INVALID_ROWID }; ///< document ID
 	SphWordID_t m_uWordID { 0 };		///< word ID in current dictionary

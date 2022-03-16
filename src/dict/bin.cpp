@@ -234,7 +234,7 @@ SphOffset_t CSphBin::UnzipOffset()
 	return v;
 }
 
-int CSphBin::ReadHit ( CSphAggregateHit* pOut )
+int CSphBin::ReadHit ( AggregateHit_t* pOut )
 {
 	// expected EOB
 	if ( m_iDone )
@@ -243,7 +243,7 @@ int CSphBin::ReadHit ( CSphAggregateHit* pOut )
 		return 1;
 	}
 
-	CSphAggregateHit& tHit = m_tHit; // shortcut
+	AggregateHit_t& tHit = m_tHit; // shortcut
 	while ( true )
 	{
 		// SPH_MAX_WORD_LEN is now 42 only to keep ReadVLB() below

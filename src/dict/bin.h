@@ -51,7 +51,7 @@ protected:
 	bool m_bWordDict;
 	bool m_bError = false; // FIXME? sort of redundant, but states are a mess
 
-	CSphAggregateHit m_tHit;			///< currently decoded hit
+	AggregateHit_t m_tHit;				///< currently decoded hit
 	BYTE m_sKeyword[MAX_KEYWORD_BYTES]; ///< currently decoded hit keyword (in keywords dict mode)
 
 #ifndef NDEBUG
@@ -76,7 +76,7 @@ public:
 	SphWordID_t ReadVLB();
 	int ReadByte();
 	ESphBinRead ReadBytes ( void* pDest, int iBytes );
-	int ReadHit ( CSphAggregateHit* pOut );
+	int ReadHit ( AggregateHit_t* pOut );
 
 	DWORD UnzipInt();
 	SphOffset_t UnzipOffset();

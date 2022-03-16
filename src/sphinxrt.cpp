@@ -4965,6 +4965,10 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 	m_iSavedTID = m_iTID;
 	m_tmSaved = sphMicroTimer();
 
+	// neet to set m_iSoftRamLimit more than iUsedRam to prevent flush of disk chunk right after index load
+	int64_t iUsedRam = SegmentsGetUsedRam ( *m_tRtChunks.RamSegs() );
+	RecalculateRateLimit ( iUsedRam, 1, false );
+
 	RunMergeSegmentsWorker();
 	return m_bLoadRamPassedOk;
 }

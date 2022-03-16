@@ -13091,7 +13091,7 @@ void HandleMysqlMeta ( RowBuffer_i & dRows, const SqlStmt_t & tStmt, const CSphQ
 	dRows.Eof ( bMoreResultsFollow );
 }
 
-static ReplicationCommand_t* MakePercolateDeleteDocumentsCommand ( CSphString sIndex, CSphString sCluster, const SqlStmt_t & tStmt, CSphString & sError )
+static std::unique_ptr<ReplicationCommand_t> MakePercolateDeleteDocumentsCommand ( CSphString sIndex, CSphString sCluster, const SqlStmt_t & tStmt, CSphString & sError )
 {
 	// prohibit double copy of filters
 	const CSphQuery& tQuery = tStmt.m_tQuery;
@@ -13103,20 +13103,20 @@ static ReplicationCommand_t* MakePercolateDeleteDocumentsCommand ( CSphString sI
 
 	const CSphFilterSettings* pFilter = tQuery.m_dFilters.Begin();
 
-	CSphScopedPtr<ReplicationCommand_t> pCmd { MakeReplicationCommand ( ReplicationCommand_e::PQUERY_DELETE, std::move ( sIndex ), std::move ( sCluster ) ) };
+	auto pCmd = MakeReplicationCommand ( ReplicationCommand_e::PQUERY_DELETE, std::move ( sIndex ), std::move ( sCluster ) );
 	if ( ( pFilter->m_bHasEqualMin || pFilter->m_bHasEqualMax ) && !pFilter->m_bExclude && pFilter->m_eType==SPH_FILTER_VALUES && ( pFilter->m_sAttrName=="@id" || pFilter->m_sAttrName=="id" || pFilter->m_sAttrName=="uid" ) )
 	{
 		pCmd->m_dDeleteQueries.Reserve ( pFilter->GetNumValues() );
 		const SphAttr_t * pA = pFilter->GetValueArray();
 		for ( int i = 0; i < pFilter->GetNumValues(); ++i )
 			pCmd->m_dDeleteQueries.Add ( pA[i] );
-		return pCmd.LeakPtr();
+		return pCmd;
 	}
 
 	if ( pFilter->m_eType==SPH_FILTER_STRING && pFilter->m_sAttrName=="tags" && !pFilter->m_dStrings.IsEmpty() )
 	{
 		pCmd->m_sDeleteTags = pFilter->m_dStrings[0];
-		return pCmd.LeakPtr();
+		return pCmd;
 	}
 
 	if ( pFilter->m_eType==SPH_FILTER_STRING_LIST && pFilter->m_sAttrName=="tags" && !pFilter->m_dStrings.IsEmpty() )
@@ -13125,7 +13125,7 @@ static ReplicationCommand_t* MakePercolateDeleteDocumentsCommand ( CSphString sI
 		pFilter->m_dStrings.for_each ( [&tBuf] ( const auto& sVal ) { tBuf << sVal; } );
 		tBuf.FinishBlocks ();
 		tBuf.MoveTo ( pCmd->m_sDeleteTags );
-		return pCmd.LeakPtr();
+		return pCmd;
 	}
 
 	sError.SetSprintf ( "unsupported filter type %d, attribute '%s'", pFilter->m_eType, pFilter->m_sAttrName.cstr() );
@@ -13178,7 +13178,7 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * 
 	// goto to percolate path with unlocked index
 	if ( pServed->m_eType==IndexType_e::PERCOLATE )
 	{
-		ReplicationCommand_t* pCmd = MakePercolateDeleteDocumentsCommand ( sName, sCluster, tStmt, sError );
+		auto pCmd = MakePercolateDeleteDocumentsCommand ( sName, sCluster, tStmt, sError );
 		if ( !sError.IsEmpty() )
 			return err();
 
@@ -13190,7 +13190,7 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * 
 			return err();
 
 		assert ( pAccum );
-		pAccum->m_dCmd.Add ( pCmd );
+		pAccum->m_dCmd.Add ( std::move ( pCmd ) );
 	} else
 	{
 		DocsCollector_c dData { tStmt.m_tQuery, tStmt.m_bJson, sName, pServed, &sError};
@@ -14406,17 +14406,17 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 
 	bool bReconfigure = ( tStmt.m_iIntParam==1 );
 
-	CSphScopedPtr<ReplicationCommand_t> pCmd ( MakeReplicationCommand ( ReplicationCommand_e::TRUNCATE, tStmt.m_sIndex, tStmt.m_sCluster ) );
+	auto pCmd = MakeReplicationCommand ( ReplicationCommand_e::TRUNCATE, tStmt.m_sIndex, tStmt.m_sCluster );
 	CSphString sError;
 	const CSphString & sIndex = tStmt.m_sIndex;
 
 	if ( bReconfigure )
 	{
-		pCmd->m_tReconfigure = new CSphReconfigureSettings();
+		pCmd->m_tReconfigure = std::make_unique<CSphReconfigureSettings>();
 		pCmd->m_tReconfigure->m_bChangeSchema = true;
 	}
 
-	if ( bReconfigure && !PrepareReconfigure ( sIndex, *pCmd->m_tReconfigure.Ptr(), sError ) )
+	if ( bReconfigure && !PrepareReconfigure ( sIndex, *pCmd->m_tReconfigure, sError ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
 		return;
@@ -14440,7 +14440,7 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	}
 
 	RtAccum_t tAcc ( false );
-	tAcc.m_dCmd.Add ( pCmd.LeakPtr() );
+	tAcc.m_dCmd.Add ( std::move ( pCmd ) );
 
 	bool bRes = HandleCmdReplicate ( tAcc, sError );
 	if ( !bRes )
@@ -17320,7 +17320,7 @@ static ResultAndIndex_t LoadPlainIndex ( const char * szIndexName, const CSphCon
 	pIdx->SetGlobalIDFPath ( pServed->m_sGlobalIDFPath );
 	pIdx->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
 	pServed->SetIdx ( std::move ( pIdx ) );
-	return ResultAndIndex_t { ADD_NEEDLOAD, ServedIndexRefPtr_c { pServed.Leak() } };
+	return ResultAndIndex_t { ADD_NEEDLOAD, pServed };
 }
 
 ///////////////////////////////////////////////

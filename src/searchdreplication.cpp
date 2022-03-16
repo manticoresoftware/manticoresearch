@@ -1491,7 +1491,7 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 		const BYTE * pRequest = pData + tReader.GetPos();
 		tReader.SetPos ( tReader.GetPos() + iRequestLen );
 
-		CSphScopedPtr<ReplicationCommand_t> pCmd { MakeReplicationCommand ( eCommand, sIndex, sCluster ) };
+		auto pCmd = MakeReplicationCommand ( eCommand, sIndex, sCluster );
 		pCmd->m_bIsolated = bIsolated;
 
 		switch ( eCommand )
@@ -1577,7 +1577,7 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 			return false;
 		}
 
-		tAcc.m_dCmd.Add ( pCmd.LeakPtr() );
+		tAcc.m_dCmd.Add ( std::move ( pCmd ) );
 	}
 
 	if ( tReader.GetPos()==iLen )
@@ -1593,7 +1593,7 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 // callback for Galera commit_cb to commit replicated command
 bool HandleCmdReplicated ( RtAccum_t & tAcc )
 {
-	if ( !tAcc.m_dCmd.GetLength() )
+	if ( tAcc.m_dCmd.IsEmpty() )
 	{
 		sphWarning ( "empty accumulator" );
 		return false;
@@ -1721,7 +1721,7 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 	if ( !CheckClasterState ( eClusterState, bPrimary, tCmdCluster.m_sCluster, sError ) )
 		return false;
 
-	if ( tCmdCluster.m_eCommand==ReplicationCommand_e::TRUNCATE && tCmdCluster.m_tReconfigure.Ptr() )
+	if ( tCmdCluster.m_eCommand==ReplicationCommand_e::TRUNCATE && tCmdCluster.m_tReconfigure )
 	{
 		sError.SetSprintf ( "RECONFIGURE is not supported for a cluster index" );
 		return false;
@@ -1941,12 +1941,12 @@ bool CommitMonitor_c::CommitNonEmptyCmds ( RtIndex_i* pIndex, const ReplicationC
 	if ( !pIndex->Truncate ( sError ))
 		return false;
 
-	if ( !tCmd.m_tReconfigure.Ptr() )
+	if ( !tCmd.m_tReconfigure )
 		return true;
 
 	CSphReconfigureSetup tSetup;
 	StrVec_t dWarnings;
-	bool bSame = pIndex->IsSameSettings ( *tCmd.m_tReconfigure.Ptr (), tSetup, dWarnings, sError );
+	bool bSame = pIndex->IsSameSettings ( *tCmd.m_tReconfigure, tSetup, dWarnings, sError );
 	if ( !bSame && sError.IsEmpty() && !pIndex->Reconfigure ( tSetup ) )
 		return false;
 

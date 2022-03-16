@@ -66,7 +66,7 @@ struct ReplicationCommand_t
 	CSphString				m_sDeleteTags;
 
 	// truncate
-	CSphScopedPtr<CSphReconfigureSettings> m_tReconfigure { nullptr };
+	std::unique_ptr<CSphReconfigureSettings> m_tReconfigure;
 
 	// commit related
 	bool					m_bCheckIndex = true;
@@ -78,7 +78,7 @@ struct ReplicationCommand_t
 	const CSphQuery * m_pUpdateCond = nullptr;
 };
 
-ReplicationCommand_t* MakeReplicationCommand ( ReplicationCommand_e eCommand, CSphString sIndex, CSphString sCluster = CSphString() );
+std::unique_ptr<ReplicationCommand_t> MakeReplicationCommand ( ReplicationCommand_e eCommand, CSphString sIndex, CSphString sCluster = CSphString() );
 
 class RtIndex_i;
 class ColumnarBuilderRT_i;
@@ -93,7 +93,7 @@ public:
 	CSphVector<DocID_t>				m_dAccumKlist;
 	CSphTightVector<BYTE>			m_dBlobs;
 	CSphVector<DWORD>				m_dPerDocHitsCount;
-	CSphVector<ReplicationCommand_t *> m_dCmd;
+	CSphVector<std::unique_ptr<ReplicationCommand_t>> m_dCmd;
 
 	bool						m_bKeywordDict {true};
 	DictRefPtr_c				m_pDict;
@@ -101,7 +101,7 @@ public:
 
 
 					explicit RtAccum_t ( bool bKeywordDict );
-					~RtAccum_t();
+					~RtAccum_t() = default;
 
 	void			SetupDict ( const RtIndex_i * pIndex, CSphDict * pDict, bool bKeywordDict );
 	void			Sort();

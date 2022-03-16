@@ -2010,7 +2010,7 @@ bool PercolateIndex_c::Commit ( int * pDeleted, RtAccum_t * pAccExt )
 	CSphVector<int64_t> dDeleteQueries;
 	CSphVector<uint64_t> dDeleteTags;
 
-	for ( ReplicationCommand_t* pCmd : pAcc->m_dCmd )
+	for ( auto& pCmd : pAcc->m_dCmd )
 	{
 		switch ( pCmd->m_eCommand )
 		{

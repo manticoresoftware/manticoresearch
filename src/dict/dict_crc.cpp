@@ -40,7 +40,7 @@ bool DiskDictTraits_c::DictEnd ( DictHeader_t* pHeader, int, CSphString& sError 
 	return !m_wrDict.IsError();
 }
 
-void DiskDictTraits_c::DictEntry ( const CSphDictEntry& tEntry )
+void DiskDictTraits_c::DictEntry ( const DictEntry_t& tEntry )
 {
 	assert ( m_iSkiplistBlockSize > 0 );
 

@@ -265,8 +265,8 @@ private:
 	RowID_t						m_iRowsCount = INVALID_ROWID;
 
 private:
-	bool SetupWithWrd ( const DiskIndexQwordTraits_c& tWord, CSphDictEntry& tRes ) const;
-	bool SetupWithCrc ( const DiskIndexQwordTraits_c& tWord, CSphDictEntry& tRes ) const;
+	bool SetupWithWrd ( const DiskIndexQwordTraits_c& tWord, DictEntry_t& tRes ) const;
+	bool SetupWithCrc ( const DiskIndexQwordTraits_c& tWord, DictEntry_t& tRes ) const;
 };
 
 /// query word from the searcher's point of view
@@ -3100,7 +3100,7 @@ private:
 	FieldMask_t					m_dLastDocFields;		///< doclist entry
 	DWORD						m_uLastDocHits = 0;			///< doclist entry
 
-	CSphDictEntry				m_tWord;				///< dictionary entry
+	DictEntry_t					m_tWord;				///< dictionary entry
 
 	ESphHitFormat				m_eHitFormat;
 	ESphHitless					m_eHitless;
@@ -8179,7 +8179,7 @@ bool DiskIndexQwordSetup_c::QwordSetup ( ISphQword * pWord ) const
 	return pMyWord->Setup ( this );
 }
 
-bool DiskIndexQwordSetup_c::SetupWithWrd ( const DiskIndexQwordTraits_c& tWord, CSphDictEntry& tRes ) const
+bool DiskIndexQwordSetup_c::SetupWithWrd ( const DiskIndexQwordTraits_c& tWord, DictEntry_t& tRes ) const
 {
 	auto* pIndex = (CSphIndex_VLN*)const_cast<CSphIndex*> ( m_pIndex );
 	const char * sWord = tWord.m_sDictWord.cstr();
@@ -8237,7 +8237,7 @@ bool DiskIndexQwordSetup_c::SetupWithWrd ( const DiskIndexQwordTraits_c& tWord, 
 	return true;
 }
 
-bool DiskIndexQwordSetup_c::SetupWithCrc ( const DiskIndexQwordTraits_c& tWord, CSphDictEntry& tRes ) const
+bool DiskIndexQwordSetup_c::SetupWithCrc ( const DiskIndexQwordTraits_c& tWord, DictEntry_t& tRes ) const
 {
 	auto * pIndex = (CSphIndex_VLN *)const_cast<CSphIndex *>(m_pIndex);
 	const CSphWordlistCheckpoint * pCheckpoint = pIndex->m_tWordlist.FindCheckpointCrc ( tWord.m_uWordID );
@@ -8275,7 +8275,7 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 	if ( !pIndex->m_tWordlist.m_dCheckpoints.GetLength() )
 		return false;
 
-	CSphDictEntry tRes;
+	DictEntry_t tRes;
 	if ( pIndex->m_pDict->GetSettings().m_bWordDict )
 	{
 		if ( !SetupWithWrd ( tWord, tRes ) )
@@ -12727,7 +12727,7 @@ struct DictEntryDiskPayload_t
 		m_dWordBuf.Reserve ( 8096 );
 	}
 
-	void Add ( const CSphDictEntry& tWord, int iWordLen )
+	void Add ( const DictEntry_t & tWord, int iWordLen )
 	{
 		if ( !m_bPayload || !sphIsExpandedPayload ( tWord.m_iDocs, tWord.m_iHits ) ||
 			m_eHitless==SPH_HITLESS_ALL || ( m_eHitless==SPH_HITLESS_SOME && ( tWord.m_iDocs & HITLESS_DOC_FLAG )!=0 ) ) // FIXME!!! do we need hitless=some as payloads?

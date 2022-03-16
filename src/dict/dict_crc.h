@@ -25,7 +25,7 @@
 struct DiskDictTraits_c: TemplateDictTraits_c
 {
 	void DictBegin ( CSphAutofile& tTempDict, CSphAutofile& tDict, int iDictLimit ) override;
-	void DictEntry ( const CSphDictEntry& tEntry ) override;
+	void DictEntry ( const DictEntry_t& tEntry ) override;
 	void DictEndEntries ( SphOffset_t iDoclistOffset ) override;
 	bool DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphString& sError ) override;
 	bool DictIsError() const final { return m_wrDict.IsError(); }

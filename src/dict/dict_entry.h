@@ -16,7 +16,7 @@
 
 /// dictionary entry
 /// some of the fields might be unused depending on specific dictionary type
-struct CSphDictEntry
+struct DictEntry_t
 {
 	SphWordID_t m_uWordID = 0;		   ///< keyword id (for dict=crc)
 	const BYTE* m_sKeyword = nullptr;  ///< keyword text (for dict=keywords)

@@ -95,7 +95,7 @@ public:
 	void HitblockReset() final;
 
 	void DictBegin ( CSphAutofile& tTempDict, CSphAutofile& tDict, int iDictLimit ) final;
-	void DictEntry ( const CSphDictEntry& tEntry ) final;
+	void DictEntry ( const DictEntry_t& tEntry ) final;
 	void DictEndEntries ( SphOffset_t ) final {}
 	bool DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphString& sError ) final;
 
@@ -713,7 +713,7 @@ void CSphDictKeywords::DictFlush()
 	m_iMemUse = 0;
 }
 
-void CSphDictKeywords::DictEntry ( const CSphDictEntry& tEntry )
+void CSphDictKeywords::DictEntry ( const DictEntry_t& tEntry )
 {
 	// they say, this might just happen during merge
 	// FIXME! can we make merge avoid sending such keywords to dict and assert here?

@@ -27,7 +27,7 @@ bool operator == ( const SkiplistEntry_t & a, RowID_t b )	{ return a.m_tBaseRowI
 bool operator < ( RowID_t a, const SkiplistEntry_t & b )	{ return a<b.m_tBaseRowIDPlus1; }
 
 
-void SkipData_t::Read ( const BYTE * pSkips, const CSphDictEntry & tRes, int iDocs, int iSkipBlockSize )
+void SkipData_t::Read ( const BYTE * pSkips, const DictEntry_t & tRes, int iDocs, int iSkipBlockSize )
 {
 	const BYTE * pSkip = pSkips + tRes.m_iSkiplistOffset;
 

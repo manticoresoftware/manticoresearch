@@ -42,12 +42,12 @@ bool operator < ( const SkiplistEntry_t & a, RowID_t b );
 bool operator == ( const SkiplistEntry_t & a, RowID_t b );
 bool operator < ( RowID_t a, const SkiplistEntry_t & b );
 
-struct CSphDictEntry;
+struct DictEntry_t;
 struct SkipData_t
 {
 	CSphVector<SkiplistEntry_t> m_dSkiplist;
 
-	void Read ( const BYTE * pSkips, const CSphDictEntry & tRes, int iDocs, int iSkipBlockSize );
+	void Read ( const BYTE * pSkips, const DictEntry_t & tRes, int iDocs, int iSkipBlockSize );
 };
 
 class RtIndex_c;

@@ -23,7 +23,7 @@ struct CSphEmbeddedFiles;
 struct CSphWordforms;
 struct CSphMultiformContainer;
 struct DictHeader_t;
-struct CSphDictEntry;
+struct DictEntry_t;
 
 extern CSphString g_sLemmatizerBase;
 
@@ -145,7 +145,7 @@ public:
 	virtual void DictBegin ( CSphAutofile& tTempDict, CSphAutofile& tDict, int iDictLimit );
 
 	/// add next keyword entry to final dict
-	virtual void DictEntry ( const CSphDictEntry& tEntry );
+	virtual void DictEntry ( const DictEntry_t& tEntry );
 
 	/// flush last entry
 	virtual void DictEndEntries ( SphOffset_t iDoclistOffset );

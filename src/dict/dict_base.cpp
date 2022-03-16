@@ -17,7 +17,7 @@
 #include "tokenizer/tokenizer.h"
 
 void CSphDict::DictBegin ( CSphAutofile&, CSphAutofile&, int ) {}
-void CSphDict::DictEntry ( const CSphDictEntry& ) {}
+void CSphDict::DictEntry ( const DictEntry_t& ) {}
 void CSphDict::DictEndEntries ( SphOffset_t ) {}
 
 bool CSphDict::DictEnd ( DictHeader_t*, int, CSphString& )

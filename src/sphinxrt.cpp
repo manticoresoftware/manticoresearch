@@ -1341,8 +1341,8 @@ private:
 	bool						PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings );
 	void						SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames );
 	void						SaveMeta ();
-	void						SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_t & tStats ) const;
-	void						SaveDiskData ( const char * szFilename, const ConstRtSegmentSlice_t & tSegs, const ChunkStats_t & tStats ) const;
+	bool						SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_t & tStats, CSphString & sError ) const;
+	bool						SaveDiskData ( const char * szFilename, const ConstRtSegmentSlice_t & tSegs, const ChunkStats_t & tStats, CSphString & sError ) const;
 	bool						SaveDiskChunk ( bool bForced, bool bEmergent=false, bool bBootstrap=false ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
 	std::unique_ptr<CSphIndex>	PreallocDiskChunk ( const char * sChunk, int iChunk, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError, const char * sName=nullptr ) const;
 	bool						LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes, bool bFixup = true );
@@ -4103,32 +4103,66 @@ bool RtIndex_c::WriteDeadRowMap ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	return ::WriteDeadRowMap ( sName, tCtx.m_iDocinfo, sError );
 }
 
+struct FilesCleanup_t
+{
+	explicit FilesCleanup_t ( const char * sFilename )
+		: m_tFiles ( sFilename )
+	{
+	}
+
+	~FilesCleanup_t()
+	{
+		if ( m_bRemoveFiles )
+			m_tFiles.UnlinkExisted();
+	}
+
+	IndexFiles_c m_tFiles;
+	bool m_bRemoveFiles = true;
+};
+
 // SaveDiskChunk -> SaveDiskData
 // RO save RAM chunks from tSegs into new disk chunk (nothing added/released, just disk files created)
-void RtIndex_c::SaveDiskData ( const char * szFilename, const ConstRtSegmentSlice_t& tSegs, const ChunkStats_t & tStats ) const
+bool RtIndex_c::SaveDiskData ( const char * szFilename, const ConstRtSegmentSlice_t & tSegs, const ChunkStats_t & tStats, CSphString & sError ) const
 {
-	CSphString sError; // FIXME!!! report collected (sError) errors
-
 	RTSAVELOG << "SaveDiskData to " << szFilename << ", " << tSegs.GetLength() << " segments";
+
+	FilesCleanup_t tFiles ( szFilename );
+	sError = "";
 
 	SaveDiskDataContext_t tCtx ( szFilename, tSegs ); // only RAM segments here in game.
 	if ( m_tSettings.m_iMinInfixLen && m_pDict->GetSettings().m_bWordDict )
 		tCtx.m_pInfixer = sphCreateInfixBuilder ( m_pTokenizer->GetMaxCodepointLength(), &sError );
+	if ( !sError.IsEmpty() )
+		return false;
 
 	// fixme: handle errors
-	WriteAttributes ( tCtx, sError );
-	WriteDeadRowMap ( tCtx, sError );
+	if ( !WriteAttributes ( tCtx, sError ) )
+		return false;
+	if ( !WriteDeadRowMap ( tCtx, sError ) )
+		return false;
 
 	CSphWriter tWriterDict;
 	CSphString sSPI;
 	sSPI.SetSprintf ( "%s%s", szFilename, sphGetExt ( SPH_EXT_SPI ) );
-	tWriterDict.OpenFile ( sSPI.cstr(), sError );
+		
+	if ( !tWriterDict.OpenFile ( sSPI.cstr(), sError ) )
+		return false;
+
 	tWriterDict.PutByte ( 1 );
 
-	WriteDocs ( tCtx, tWriterDict, sError );
+	if ( !WriteDocs ( tCtx, tWriterDict, sError ) )
+		return false;
 	WriteCheckpoints ( tCtx, tWriterDict );
+		
+	tWriterDict.CloseFile();
+	if ( tWriterDict.IsError() )
+		return false;
 
-	SaveDiskHeader ( tCtx, tStats );
+	if ( !SaveDiskHeader ( tCtx, tStats, sError ) )
+		return false;
+
+	tFiles.m_bRemoveFiles = false;
+	return true;
 }
 
 
@@ -4142,7 +4176,7 @@ static void FixupIndexSettings ( CSphIndexSettings & tSettings )
 
 
 // SaveDiskChunk -> SaveDiskData -> SaveDiskHeader
-void RtIndex_c::SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_t & tStats ) const
+bool RtIndex_c::SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_t & tStats, CSphString & sError ) const
 {
 	tCtx.m_iDictCheckpoints = tCtx.m_dCheckpoints.GetLength ();
 	tCtx.m_iInfixCodepointBytes = ( m_tSettings.m_iMinInfixLen && m_pDict->GetSettings ().m_bWordDict )
@@ -4162,22 +4196,22 @@ void RtIndex_c::SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_
 	tWriteHeader.m_pFieldFilter = m_pFieldFilter;
 	tWriteHeader.m_pFieldLens = m_dFieldLens.Begin();
 
-	CSphString sName, sError;
+	CSphString sName;
 	JsonEscapedBuilder sJson;
 	IndexWriteHeader ( tCtx, tWriteHeader, sJson, m_bKeywordDict, true );
 
 	sName.SetSprintf ( "%s%s", tCtx.m_szFilename, sphGetExt ( SPH_EXT_SPH ) );
 	CSphWriter wrHeaderJson;
-	if ( wrHeaderJson.OpenFile ( sName, sError ) )
-	{
-		wrHeaderJson.PutString ( (Str_t)sJson );
-		wrHeaderJson.CloseFile();
-		assert ( bson::ValidateJson ( sJson.cstr(), &sError ) );
-	} else
-	{
-		sphWarning ( "failed to serialize header to json: %s", sError.cstr() );
-		return;
-	}
+	if ( !wrHeaderJson.OpenFile ( sName, sError ) )
+		return false;
+
+	wrHeaderJson.PutString ( (Str_t)sJson );
+	wrHeaderJson.CloseFile();
+	if ( wrHeaderJson.IsError() )
+		return false;
+
+	assert ( bson::ValidateJson ( sJson.cstr(), &sError ) );
+	return true;
 }
 
 void RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )
@@ -4359,20 +4393,36 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 	ChunkStats_t tStats ( m_tStats, m_dFieldLensRam );
 
 	std::unique_ptr<CSphIndex> pNewChunk;
+	while ( true )
 	{
 		// as separate subtask we 1-st flush segments to disk, and then load just flushed segment
 		// if forced, continue to work in the same fiber; otherwise split to merge fiber
 		ScopedScheduler_c tSaveFiber { bForced ? Coro::CurrentScheduler () : m_tWorkers.SaveSegmentsWorker() };
 		tmSave = -sphMicroTimer();
-		SaveDiskData ( sChunk.cstr (), dSegments, tStats );
-		// fixme! process errors.
+		if ( !SaveDiskData ( sChunk.cstr(), dSegments, tStats, m_sLastError ) )
+		{
+			sphWarning ( "rt: index %s failed to save disk chunk %s: %s", m_sIndexName.cstr(), sChunk.cstr(), m_sLastError.cstr() );
+			tmSave += sphMicroTimer();
+			break;
+		}
 
 		// bring new disk chunk online
 		auto fnFnameBuilder = GetIndexFilenameBuilder ();
-		StrVec_t dWarnings; // fixme!
+		StrVec_t dWarnings;
 		CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder { fnFnameBuilder ? fnFnameBuilder ( m_sIndexName.cstr () ) : nullptr };
 		pNewChunk = PreallocDiskChunk ( sChunk.cstr (), iChunkID, pFilenameBuilder.Ptr (), dWarnings, m_sLastError );
+
+		if ( !dWarnings.IsEmpty() )
+		{
+			StringBuilder_c sWarningLine ( "; " );
+			for ( const auto & sItem : dWarnings )
+				sWarningLine << sItem;
+
+			sphWarning ( "rt: index %s save disk chunk %s warnings: %s", m_sIndexName.cstr(), sChunk.cstr(), sWarningLine.cstr() );
+		}
+
 		tmSave += sphMicroTimer();
+		break;
 	}
 
 	// here we back into serial fiber. As we're switched, we can't rely on m_iTID and index stats anymore

@@ -118,6 +118,16 @@ void IndexFiles_c::Unlink ( const char * szType )
 	}
 }
 
+void IndexFiles_c::UnlinkExisted()
+{
+	for ( const auto & tExt : g_dIndexFilesExts )
+	{
+		auto sFile = FullPath ( tExt.m_szExt );
+		if ( sphIsReadable ( sFile.cstr() ) && ::unlink ( sFile.cstr() ) && !tExt.m_bOptional )
+			sphWarning ( "unlink failed (file '%s', error '%s'", sFile.cstr (), strerrorm ( errno ) );
+	}
+}
+
 bool IndexFiles_c::TryRename ( const CSphString& sFrom, const CSphString& sTo )  // move files between different bases
 {
 	m_bFatal = false;

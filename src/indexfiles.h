@@ -103,6 +103,7 @@ public:
 	bool RenameSuffix ( const CSphString& sFrom, const CSphString& sTo ); // move from backup to active; fail is fatal
 	bool HasAllFiles ( const char * szType = "" ); // check that all necessary files are readable
 	void Unlink ( const char * szType = "" );
+	void UnlinkExisted ();
 
 	// if prev op fails with fatal error - log the message and terminate
 	CSphString FatalMsg(const char * szMsg=nullptr);

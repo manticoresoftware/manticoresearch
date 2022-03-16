@@ -15723,7 +15723,7 @@ DictRefPtr_c GetStatelessDict ( const DictRefPtr_c& pDict )
 
 //////////////////////////////////////////////////////////////////////////
 ISphFieldFilter::ISphFieldFilter()
-	: m_pParent ( NULL )
+	: m_pParent ( nullptr )
 {
 }
 
@@ -16075,7 +16075,7 @@ struct DictEntryDiskPayload_t
 		m_dWordBuf.Reserve ( 8096 );
 	}
 
-	void Add ( const CSphDictEntry & tWord, int iWordLen )
+	void Add ( const CSphDictEntry& tWord, int iWordLen )
 	{
 		if ( !m_bPayload || !sphIsExpandedPayload ( tWord.m_iDocs, tWord.m_iHits ) ||
 			m_eHitless==SPH_HITLESS_ALL || ( m_eHitless==SPH_HITLESS_SOME && ( tWord.m_iDocs & HITLESS_DOC_FLAG )!=0 ) ) // FIXME!!! do we need hitless=some as payloads?

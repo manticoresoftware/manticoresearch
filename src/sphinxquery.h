@@ -334,8 +334,8 @@ protected:
 	static const int MAX_TOKEN_BYTES = 3*SPH_MAX_WORD_LEN + 16;
 
 	const CSphSchema *		m_pSchema {nullptr};
-	TokenizerRefPtr_c	m_pTokenizer;
-	DictRefPtr_c		m_pDict;
+	TokenizerRefPtr_c		m_pTokenizer;
+	DictRefPtr_c			m_pDict;
 	bool					m_bStopOnInvalid {true};
 	XQQuery_t *				m_pParsed {nullptr};
 	bool					m_bError {false};

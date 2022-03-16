@@ -218,8 +218,8 @@ struct PercolateMatchContext_t : public PQMatchContextResult_t
 
 	CSphRefcountedPtr<PercolateDictProxy_c> m_pDictMap;
 	CSphQuery m_tDummyQuery;
-	CSphScopedPtr <CSphQueryContext> m_pCtx { nullptr };
-	CSphScopedPtr <PercolateQwordSetup_c> m_pTermSetup { nullptr };
+	std::unique_ptr<CSphQueryContext> m_pCtx;
+	std::unique_ptr<PercolateQwordSetup_c> m_pTermSetup;
 
 	// const actually shared between all workers
 	const ISphSchema &m_tSchema;
@@ -235,16 +235,16 @@ struct PercolateMatchContext_t : public PQMatchContextResult_t
 		, m_bUtf8 ( iMaxCodepointLength>1 )
 	{
 		m_tDummyQuery.m_eRanker = SPH_RANK_NONE;
-		m_pCtx = new CSphQueryContext ( m_tDummyQuery );
+		m_pCtx = std::make_unique<CSphQueryContext> ( m_tDummyQuery );
 		m_pCtx->m_bSkipQCache = true;
 		// for lookups to work
 		m_pCtx->m_pIndexData = pSeg;
 
 		// setup search terms
-		m_pTermSetup = new PercolateQwordSetup_c ( pSeg, iMaxCodepointLength, eHitless );
+		m_pTermSetup = std::make_unique<PercolateQwordSetup_c> ( pSeg, iMaxCodepointLength, eHitless );
 		m_pTermSetup->SetDict ( (DictRefPtr_c)m_pDictMap );
 		m_pTermSetup->m_pIndex = pIndex;
-		m_pTermSetup->m_pCtx = m_pCtx.Ptr ();
+		m_pTermSetup->m_pCtx = m_pCtx.get ();
 		m_pTermSetup->m_bHasWideFields = bHasWideFields;
 	}
 };

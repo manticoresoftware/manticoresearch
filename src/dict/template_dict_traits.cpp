@@ -929,7 +929,7 @@ CSphWordforms* TemplateDictTraits_c::LoadWordformContainer ( const CSphVector<CS
 	const char* sIndex )
 {
 	// allocate it
-	auto* pContainer = new CSphWordforms();
+	auto pContainer = std::make_unique<CSphWordforms>();
 	pContainer->m_dFiles = dFileInfos;
 	pContainer->m_uTokenizerFNV = pTokenizer->GetSettingsFNV();
 	pContainer->m_sIndexName = sIndex;
@@ -941,30 +941,26 @@ CSphWordforms* TemplateDictTraits_c::LoadWordformContainer ( const CSphVector<CS
 	// get a list of blend chars and set add them to the tokenizer as simple chars
 	if ( tSettings.m_sBlendChars.Length() )
 	{
-		CSphVector<char> dNewCharset;
-		dNewCharset.Append ( tSettings.m_sCaseFolding.cstr(), tSettings.m_sCaseFolding.Length() );
+		StringBuilder_c sNewCharset;
+		sNewCharset << tSettings.m_sCaseFolding;
 
 		CSphVector<CSphRemapRange> dRemaps;
 		if ( sphParseCharset ( tSettings.m_sBlendChars.cstr(), dRemaps ) )
-			ARRAY_FOREACH ( i, dRemaps )
-				for ( int j = dRemaps[i].m_iStart; j <= dRemaps[i].m_iEnd; ++j )
+			for ( const auto& dRemap : dRemaps )
+				for ( int j = dRemap.m_iStart; j <= dRemap.m_iEnd; ++j )
 				{
-					dNewCharset.Add ( ',' );
-					dNewCharset.Add ( ' ' );
-					dNewCharset.Add ( char ( j ) );
+					sNewCharset << ", " << (char)j;
 					dBlended.Add ( j );
 				}
-
-		dNewCharset.Add ( 0 );
 
 		// sort dBlended for binary search
 		dBlended.Sort();
 
 		CSphString sError;
-		pMyTokenizer->SetCaseFolding ( dNewCharset.Begin(), sError );
+		pMyTokenizer->SetCaseFolding ( sNewCharset.cstr(), sError );
 
 		// disable blend chars
-		pMyTokenizer->SetBlendChars ( NULL, sError );
+		pMyTokenizer->SetBlendChars ( nullptr, sError );
 	}
 
 	// add wordform-specific specials
@@ -981,7 +977,7 @@ CSphWordforms* TemplateDictTraits_c::LoadWordformContainer ( const CSphVector<CS
 		ConcatReportStrings ( dFilenames, sAllFiles );
 
 		for ( auto& sWordForm : ( *pEmbeddedWordforms ) )
-			AddWordform ( pContainer, const_cast<char*> ( sWordForm.cstr() ), sWordForm.Length(), pMyTokenizer, sAllFiles.cstr(), dBlended, -1 );
+			AddWordform ( pContainer.get(), const_cast<char*> ( sWordForm.cstr() ), sWordForm.Length(), pMyTokenizer, sAllFiles.cstr(), dBlended, -1 );
 	} else
 	{
 		char sBuffer[6 * SPH_MAX_WORD_LEN + 512]; // enough to hold 2 UTF-8 words, plus some whitespace overhead
@@ -994,17 +990,16 @@ CSphWordforms* TemplateDictTraits_c::LoadWordformContainer ( const CSphVector<CS
 			if ( !rdWordforms.Open ( szFile, sError ) )
 			{
 				sphWarning ( "index '%s': %s", sIndex, sError.cstr() );
-				SafeDelete ( pContainer );
 				return nullptr;
 			}
 
 			int iLen;
 			while ( ( iLen = rdWordforms.GetLine ( sBuffer, sizeof ( sBuffer ) ) ) >= 0 )
-				AddWordform ( pContainer, sBuffer, iLen, pMyTokenizer, szFile, dBlended, i );
+				AddWordform ( pContainer.get(), sBuffer, iLen, pMyTokenizer, szFile, dBlended, i );
 		}
 	}
 
-	return pContainer;
+	return pContainer.release();
 }
 
 
@@ -1019,13 +1014,13 @@ bool TemplateDictTraits_c::LoadWordforms ( const StrVec_t& dFiles, const CSphEmb
 	{
 		m_dWFFileInfos.Reserve ( dFiles.GetLength() );
 		CSphSavedFile tFile;
-		ARRAY_FOREACH ( i, dFiles )
-			if ( !dFiles[i].IsEmpty() )
+		for ( const auto& sFile : dFiles )
+			if ( !sFile.IsEmpty() )
 			{
-				if ( tFile.Collect ( dFiles[i].cstr() ) )
+				if ( tFile.Collect ( sFile.cstr() ) )
 					m_dWFFileInfos.Add ( tFile );
 				else
-					sphWarning ( "index '%s': wordforms file '%s' not found", sIndex, dFiles[i].cstr() );
+					sphWarning ( "index '%s': wordforms file '%s' not found", sIndex, sFile.cstr() );
 			}
 	}
 

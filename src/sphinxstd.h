@@ -3224,6 +3224,7 @@ public:
 	StringBuilder_c &	operator << ( const VecTraits_T<char> &sText );
 	StringBuilder_c &	operator << ( const Str_t &sText );
 	StringBuilder_c &	operator << ( const char * sText ) { return *this += sText; }
+	StringBuilder_c &	operator << ( char cChar ) { return *this += {&cChar,1}; }
 	StringBuilder_c &	operator << ( const CSphString &sText ) { return *this += sText.cstr (); }
 	StringBuilder_c &	operator << ( const CSphVariant &sText )	{ return *this += sText.cstr (); }
 	StringBuilder_c &	operator << ( Comma_c& dComma ) { return *this += dComma; }

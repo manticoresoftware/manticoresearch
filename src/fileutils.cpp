@@ -299,15 +299,13 @@ bool sphCalcFileCRC32 ( const char * szFilename, DWORD & uCRC32 )
 	DWORD crc = ~((DWORD)0);
 
 	const int BUFFER_SIZE = 131072;
-	static BYTE * pBuffer = NULL;
-	if ( !pBuffer )
-		pBuffer = new BYTE [ BUFFER_SIZE ];
+	CSphFixedVector<BYTE> dBuffer (BUFFER_SIZE);
 
 	int iBytesRead;
-	while ( ( iBytesRead = (int) fread ( pBuffer, 1, BUFFER_SIZE, pFile ) )!=0 )
+	while ( ( iBytesRead = (int) fread ( dBuffer.begin(), 1, BUFFER_SIZE, pFile ) )!=0 )
 	{
 		for ( int i=0; i<iBytesRead; i++ )
-			crc = (crc >> 8) ^ g_dSphinxCRC32 [ (crc ^ pBuffer[i]) & 0xff ];
+			crc = (crc >> 8) ^ g_dSphinxCRC32 [ (crc ^ dBuffer[i]) & 0xff ];
 	}
 
 	fclose ( pFile );

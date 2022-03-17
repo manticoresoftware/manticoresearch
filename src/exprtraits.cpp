@@ -41,9 +41,14 @@ ESphAttr WidestType ( ESphAttr a, ESphAttr b )
 
 uint64_t sphCalcLocatorHash ( const CSphAttrLocator & tLoc, uint64_t uPrevHash )
 {
-	uint64_t uHash = sphFNV64 ( &tLoc.m_bDynamic, sizeof(tLoc.m_bDynamic), uPrevHash );
-	uHash = sphFNV64 ( &tLoc.m_iBitCount, sizeof(tLoc.m_iBitCount), uHash );
-	return sphFNV64 ( &tLoc.m_iBitOffset, sizeof(tLoc.m_iBitOffset), uHash );
+	auto uHash = uPrevHash;
+	CALC_POD_HASH ( tLoc.m_iBitOffset );
+	CALC_POD_HASH ( tLoc.m_iBitCount );
+	CALC_POD_HASH ( tLoc.m_iBlobAttrId );
+	CALC_POD_HASH ( tLoc.m_iBlobRowOffset );
+	CALC_POD_HASH ( tLoc.m_nBlobAttrs );
+	CALC_POD_HASH ( tLoc.m_bDynamic );
+	return uHash;
 }
 
 

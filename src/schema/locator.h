@@ -25,6 +25,8 @@ struct CSphAttrLocator
 	int				m_nBlobAttrs	= 0;
 	bool			m_bDynamic		= true;
 
+	// todo: don't forget to update sphCalcLocatorHash when adding fields!
+
 	CSphAttrLocator () = default;
 
 	explicit CSphAttrLocator ( int iBitOffset, int iBitCount=ROWITEM_BITS );

@@ -35,7 +35,7 @@ bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, CSphString & sW
 void ReplicateClustersDelete();
 
 // start clusters on daemon start
-void ReplicationStart ( const CSphConfigSection & hSearchd, const CSphVector<ListenerDesc_t> & dListeners, bool bNewCluster, bool bForce );
+void ReplicationStart ( const CSphConfigSection & hSearchd, CSphVector<ListenerDesc_t> dListeners, bool bNewCluster, bool bForce );
 
 // cluster joins to existed nodes
 bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, bool bUpdateNodes, CSphString & sError );

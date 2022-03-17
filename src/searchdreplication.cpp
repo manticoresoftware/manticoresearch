@@ -1617,7 +1617,7 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 		bool bOk = false;
 		if ( tCmd.m_eCommand==ReplicationCommand_e::CLUSTER_ALTER_ADD )
 		{
-			HashedServedClone_c tMutableDesc { tCmd.m_sIndex, g_pLocalIndexes };
+			HashedServedClone_c tMutableDesc { tCmd.m_sIndex, g_pLocalIndexes.get() };
 			if ( !ServedDesc_t::IsMutable ( tMutableDesc.Orig() ) )
 				sError.SetSprintf ( "wrong type of index '%s'", tCmd.m_sIndex.cstr() );
 			else
@@ -2486,7 +2486,7 @@ private:
 };
 
 // start clusters on daemon start
-void ReplicationStart ( const CSphConfigSection & hSearchd, const CSphVector<ListenerDesc_t> & dListeners,
+void ReplicationStart ( const CSphConfigSection & hSearchd, CSphVector<ListenerDesc_t> dListeners,
 	bool bNewCluster, bool bForce ) EXCLUDES ( g_tClustersLock )
 {
 	SetListener ( dListeners );
@@ -5195,7 +5195,7 @@ static bool ClusterAlterAdd ( const CSphString & sCluster, const CSphString & sI
 	RtAccum_t tAcc { false };
 	ReplicationCommand_t * pAddCmd = tAcc.AddCommand ( ReplicationCommand_e::CLUSTER_ALTER_ADD, sIndex, sCluster );
 	pAddCmd->m_bCheckIndex = false;
-	HashedServedClone_c tMutableDesc { sIndex, g_pLocalIndexes };
+	HashedServedClone_c tMutableDesc { sIndex, g_pLocalIndexes.get() };
 	return HandleCmdReplicate ( tAcc, sError, nullptr, nullptr, nullptr, &tMutableDesc );
 }
 

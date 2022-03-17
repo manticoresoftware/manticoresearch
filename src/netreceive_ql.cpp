@@ -645,7 +645,7 @@ inline int UserWantsZstdCompressionLevel ( const ByteBlob_t& tPacket )
 }
 
 bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen,
-		QueryProfile_c * pProfile, AsyncNetBufferPtr_c pBuf )
+		QueryProfile_c * pProfile, AsyncNetBuffer_c* pBuf )
 {
 	auto& tSess = session::Info();
 	assert ( pBuf );
@@ -776,7 +776,7 @@ void DebugClose ()
 }
 
 // main sphinxql server
-void SqlServe ( AsyncNetBufferPtr_c pBuf )
+void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 {
 	auto& tSess = session::Info();
 	// to close current connection from inside
@@ -799,8 +799,8 @@ void SqlServe ( AsyncNetBufferPtr_c pBuf )
 	const char * sClientIP = tSess.szClientName();
 
 	// fixme! durty macros to transparently substitute pBuf on the fly (to ssl, compressed, whatever)
-	#define tOut (*(NetGenericOutputBuffer_c*)pBuf)
-	#define tIn (*(AsyncNetInputBuffer_c*)pBuf)
+	#define tOut (*(NetGenericOutputBuffer_c*)pBuf.get())
+	#define tIn (*(AsyncNetInputBuffer_c*)pBuf.get())
 
 	/// mysql is pro-active, we NEED to send handshake before client send us something.
 	/// So, no passive probing possible.
@@ -925,6 +925,6 @@ void SqlServe ( AsyncNetBufferPtr_c pBuf )
 			continue;
 		}
 
-		tSess.SetPersistent ( LoopClientMySQL ( uPacketID, iPacketLen, pProfile, pBuf ) && !pCloseFlag->m_bClose );
+		tSess.SetPersistent ( LoopClientMySQL ( uPacketID, iPacketLen, pProfile, pBuf.get() ) && !pCloseFlag->m_bClose );
 	} while ( tSess.GetPersistent() );
 }

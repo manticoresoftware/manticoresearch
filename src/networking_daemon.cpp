@@ -610,7 +610,6 @@ SockWrapper_c::~SockWrapper_c ()
 
 int64_t SockWrapper_c::SockSend ( const char * pData, int64_t iLen )
 {
-	assert ( m_pImpl );
 	return m_pImpl->SockSend ( pData, iLen );
 }
 
@@ -1071,12 +1070,12 @@ BYTE AsyncNetInputBuffer_c::Terminate ( int iPos, BYTE uNewVal )
 /////////////////////////////////////////////////////////////////////////////
 class AsyncBufferedSocket_c final : public AsyncNetBuffer_c
 {
-	SockWrapperPtr_c m_pSocket;
+	std::unique_ptr<SockWrapper_c> m_pSocket;
 
 	int ReadFromBackend ( int iNeed, int iHaveSpace, bool bIntr ) final
 	{
 		assert ( iNeed<=iHaveSpace );
-		return SyncSockRead ( m_pSocket, AddN ( 0 ), iNeed, iHaveSpace, bIntr );
+		return SyncSockRead ( m_pSocket.get(), AddN ( 0 ), iNeed, iHaveSpace, bIntr );
 	}
 
 	bool SendBuffer ( const VecTraits_T<BYTE> & dData ) final
@@ -1085,7 +1084,7 @@ class AsyncBufferedSocket_c final : public AsyncNetBuffer_c
 		if ( dData.IsEmpty () )
 			return true; // nothing to send
 		CSphScopedProfile tProf ( m_pProfile, SPH_QSTATE_NET_WRITE );
-		if ( SyncSend ( m_pSocket, (const char *) m_dBuf.begin (), m_dBuf.GetLength64 () ) )
+		if ( SyncSend ( m_pSocket.get(), (const char *) m_dBuf.begin (), m_dBuf.GetLength64 () ) )
 			return true;
 
 		NetGenericOutputBuffer_c::m_bError = true;
@@ -1093,10 +1092,9 @@ class AsyncBufferedSocket_c final : public AsyncNetBuffer_c
 	}
 
 public:
-	explicit AsyncBufferedSocket_c ( SockWrapperPtr_c pSock )
+	explicit AsyncBufferedSocket_c ( std::unique_ptr<SockWrapper_c> pSock )
 		: m_pSocket ( std::move ( pSock ) )
-	{
-	}
+	{}
 
 	void SetWTimeoutUS ( int64_t iTimeoutUS ) final { m_pSocket->SetWTimeoutUS ( iTimeoutUS ); }
 	int64_t GetWTimeoutUS () const final { return m_pSocket->GetWTimeoutUS (); }
@@ -1106,7 +1104,7 @@ public:
 };
 
 // main fabric
-AsyncNetBufferPtr_c MakeAsyncNetBuffer ( SockWrapperPtr_c pSock )
+std::unique_ptr<AsyncNetBuffer_c> MakeAsyncNetBuffer ( std::unique_ptr<SockWrapper_c> pSock )
 {
-	return AsyncNetBufferPtr_c ( new AsyncBufferedSocket_c ( std::move ( pSock )));
+	return std::make_unique<AsyncBufferedSocket_c> ( std::move ( pSock ) );
 }

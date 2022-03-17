@@ -61,7 +61,7 @@ void SetTcpNodelay ( NetConnection_t tConn )
 		sphSetSockNodelay ( tConn.first );
 }
 
-void MultiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t tConn, Proto_e eProto )
+void MultiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf, NetConnection_t tConn, Proto_e eProto )
 {
 	auto& tSess = session::Info();
 	tSess.SetProto ( eProto ); // set initially provided proto, then m.b. switch to another by multi, if possible
@@ -202,8 +202,7 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 		pClientInfo->SetReadOnly( m_tListener.m_bReadOnly );
 
 		NetConnection_t tConn = { iClientSock, saStorage.ss_family };
-		SockWrapperPtr_c pSock ( new SockWrapper_c ( iClientSock, pClientNetLoop ) );
-		auto pBuf = MakeAsyncNetBuffer ( std::move ( pSock ) );
+		auto pBuf = MakeAsyncNetBuffer ( std::make_unique<SockWrapper_c> ( iClientSock, pClientNetLoop ) );
 
 		auto eProto = m_tListener.m_eProto;
 		switch ( eProto )
@@ -213,19 +212,19 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 			case Proto_e::HTTPS:
 			case Proto_e::HTTP :
 			{
-				Threads::Coro::Go ( [pBuf = std::move ( pBuf ), tConn, _pInfo = pClientInfo.LeakPtr(), eProto ] () mutable
+				Threads::Coro::Go ( [pRawBuf = pBuf.release(), tConn, _pInfo = pClientInfo.LeakPtr(), eProto ] () mutable
 					{
 						ScopedClientInfo_t pInfo { _pInfo }; // make visible task info
-						MultiServe ( std::move ( pBuf ), tConn, eProto );
+						MultiServe ( std::unique_ptr<AsyncNetBuffer_c> ( pRawBuf ), tConn, eProto );
 					}, fnMakeScheduler () );
 				break;
 			}
 			case Proto_e::MYSQL41:
 			{
-				Threads::Coro::Go ( [pBuf = std::move ( pBuf ), _pInfo = pClientInfo.LeakPtr () ] () mutable
+				Threads::Coro::Go ( [pRawBuf = pBuf.release(), _pInfo = pClientInfo.LeakPtr () ] () mutable
 					{
 						ScopedClientInfo_t pInfo { _pInfo }; // make visible task info
-						SqlServe ( std::move ( pBuf ) );
+						SqlServe ( std::unique_ptr<AsyncNetBuffer_c> ( pRawBuf ) );
 					}, fnMakeScheduler () );
 				break;
 			}
@@ -243,19 +242,15 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 
 NetActionAccept_c::NetActionAccept_c ( const Listener_t & tListener )
 	: ISphNetAction ( tListener.m_iSock )
-	, m_pImpl ( new Impl_c ( tListener ))
+	, m_pImpl ( std::make_unique<Impl_c> ( tListener ) )
 {
 	m_uNetEvents = NetPollEvent_t::READ;
 }
 
-NetActionAccept_c::~NetActionAccept_c ()
-{
-	SafeDelete ( m_pImpl );
-}
+NetActionAccept_c::~NetActionAccept_c () = default;
 
 void NetActionAccept_c::Process ( DWORD uGotEvents, CSphNetLoop * pLoop )
 {
-	assert ( m_pImpl );
 	m_pImpl->ProcessAccept ( uGotEvents, pLoop );
 }
 

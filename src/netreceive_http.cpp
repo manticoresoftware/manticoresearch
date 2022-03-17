@@ -80,7 +80,7 @@ struct HttpHeaderStreamParser_t
 	}
 };
 
-void HttpServe ( AsyncNetBufferPtr_c pBuf )
+void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 {
 	auto& tSess = session::Info();
 
@@ -108,7 +108,7 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf )
 	{
 		CSphVector<BYTE> dResult;
 		sphHttpErrorReply ( dResult, SPH_HTTP_STATUS_400, "The plain HTTP request was sent to HTTPS port" );
-		auto & tOut = *(NetGenericOutputBuffer_c *) pBuf;
+		auto & tOut = *(NetGenericOutputBuffer_c *) pBuf.get();
 		tOut.SwapData ( dResult );
 		tOut.Flush (); // no need to check return code since we break anyway
 		return;
@@ -127,8 +127,8 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf )
 	if ( bHeNeedSSL )
 		tSess.SetSsl ( MakeSecureLayer ( pBuf ) );
 
-	auto& tOut = *(NetGenericOutputBuffer_c *) pBuf;
-	auto& tIn = *(AsyncNetInputBuffer_c *) pBuf;
+	auto& tOut = *(NetGenericOutputBuffer_c *) pBuf.get();
+	auto& tIn = *(AsyncNetInputBuffer_c *) pBuf.get();
 
 	do
 	{

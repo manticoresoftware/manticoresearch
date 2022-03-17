@@ -17,7 +17,7 @@ extern volatile bool g_bMaintenance;
 static auto & g_bGotSighup = sphGetGotSighup ();    // we just received SIGHUP; need to log
 
 // mostly repeats HandleClientSphinx
-void ApiServe ( AsyncNetBufferPtr_c pBuf )
+void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 {
 	auto& tSess = session::Info();
 	// non-vip connections in maintainance should be already rejected on accept
@@ -31,8 +31,8 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf )
 	const char * sClientIP = tSess.szClientName();
 
 	// needed to check permission to turn maintenance mode on/off
-	auto& tOut = *(NetGenericOutputBuffer_c *) pBuf;
-	auto& tIn = *(AsyncNetInputBuffer_c *) pBuf;
+	auto& tOut = *(NetGenericOutputBuffer_c *) pBuf.get();
+	auto& tIn = *(AsyncNetInputBuffer_c *) pBuf.get();
 
 	// send handshake
 	tSess.SetTaskState ( TaskState_e::HANDSHAKE );

@@ -783,7 +783,7 @@ void TemplateDictTraits_c::AddWordform ( CSphWordforms* pContainer, char* sBuffe
 
 	if ( dTokens.GetLength() > 1 || dDestTokens.GetLength() > 1 )
 	{
-		auto* pMultiWordform = new CSphMultiform;
+		auto pMultiWordform = std::make_unique<CSphMultiform>();
 		pMultiWordform->m_iFileId = iFileId;
 		pMultiWordform->m_dNormalForm.Resize ( dDestTokens.GetLength() );
 		ARRAY_FOREACH ( i, dDestTokens )
@@ -827,7 +827,7 @@ void TemplateDictTraits_c::AddWordform ( CSphWordforms* pContainer, char* sBuffe
 
 						pStoredMF->m_iFileId = iFileId;
 
-						SafeDelete ( pMultiWordform );
+						pMultiWordform.reset();
 						break; // otherwise, we crash next turn
 					}
 				}
@@ -835,7 +835,9 @@ void TemplateDictTraits_c::AddWordform ( CSphWordforms* pContainer, char* sBuffe
 
 			if ( pMultiWordform )
 			{
-				pWordforms->m_pForms.Add ( pMultiWordform );
+				pWordforms->m_iMinTokens = Min ( pWordforms->m_iMinTokens, pMultiWordform->m_dTokens.GetLength() );
+				pWordforms->m_iMaxTokens = Max ( pWordforms->m_iMaxTokens, pMultiWordform->m_dTokens.GetLength() );
+				pWordforms->m_pForms.Add ( pMultiWordform.release() );
 
 				// sort forms by files and length
 				// but do not sort if we're loading embedded
@@ -845,18 +847,16 @@ void TemplateDictTraits_c::AddWordform ( CSphWordforms* pContainer, char* sBuffe
 						return ( pA->m_iFileId == pB->m_iFileId ) ? pA->m_dTokens.GetLength() > pB->m_dTokens.GetLength() : pA->m_iFileId > pB->m_iFileId;
 					} ) );
 
-				pWordforms->m_iMinTokens = Min ( pWordforms->m_iMinTokens, pMultiWordform->m_dTokens.GetLength() );
-				pWordforms->m_iMaxTokens = Max ( pWordforms->m_iMaxTokens, pMultiWordform->m_dTokens.GetLength() );
 				pContainer->m_pMultiWordforms->m_iMaxTokens = Max ( pContainer->m_pMultiWordforms->m_iMaxTokens, pWordforms->m_iMaxTokens );
 			}
 		} else
 		{
-			auto* pNewWordforms = new CSphMultiforms;
-			pNewWordforms->m_pForms.Add ( pMultiWordform );
+			auto pNewWordforms = std::make_unique<CSphMultiforms>();
 			pNewWordforms->m_iMinTokens = pMultiWordform->m_dTokens.GetLength();
 			pNewWordforms->m_iMaxTokens = pMultiWordform->m_dTokens.GetLength();
+			pNewWordforms->m_pForms.Add ( pMultiWordform.release() );
 			pContainer->m_pMultiWordforms->m_iMaxTokens = Max ( pContainer->m_pMultiWordforms->m_iMaxTokens, pNewWordforms->m_iMaxTokens );
-			pContainer->m_pMultiWordforms->m_Hash.Add ( pNewWordforms, dTokens[0] );
+			pContainer->m_pMultiWordforms->m_Hash.Add ( pNewWordforms.release(), dTokens[0] );
 		}
 
 		// let's add destination form to regular wordform to keep destination from being stemmed

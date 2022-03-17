@@ -743,6 +743,7 @@ class RunningIndex_c: public ISphRefcountedMT
 	mutable Threads::Coro::RWLock_c m_tLock;
 	std::unique_ptr<CSphIndex> m_pIndex GUARDED_BY ( m_tLock ); ///< owned index; will be deleted in d-tr
 	mutable CSphString m_sUnlink;								///< set if we need to unlink the index on destroy.
+	bool m_bLeaked = false;										///< avoid destroying index on dtr (say, if it's ownership changed due to Attach() )
 
 	~RunningIndex_c() override;
 
@@ -791,6 +792,7 @@ public:
 	static uint64_t GetIndexMass ( const ServedIndex_c* pServed );
 
 	void SetIdx ( std::unique_ptr<CSphIndex>&& pIndex );
+	void ReleaseIdx () const;
 	void SetIdxAndStatsFrom ( const ServedIndex_c& tIndex );
 	void SetStatsFrom ( const ServedIndex_c& tIndex );
 	void SetUnlink ( CSphString sUnlink ) const;

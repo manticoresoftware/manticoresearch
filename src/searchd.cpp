@@ -13828,7 +13828,7 @@ void HandleMysqlAttach ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString
 
 	if ( bAttached )
 	{
-		pServedFrom.Leak(); // since index no more belong to us
+		pServedFrom->ReleaseIdx(); // since index no more belong to us
 		tOut.Ok();
 	}
 	else

@@ -110,10 +110,10 @@ the proper way to work witn MS SQL sources, so indexing of `MSSQL` also implies 
 - **ODBC_LIB** - name of ODBC library file. Indexer will try to load that file when you want to index ODBC source. That option is written automatically from available ODBC shared library investigation. You can also override that name on runtime, providing environment variable `ODBC_LIB` with proper path to alternative library before running indexer.
 
 
-- **WITH_EXPAT** - used by indexer to support indexing xmlpile sources.
+- **WITH_EXPAT** - used by indexer to support indexing xmlpipe sources.
 - **DL_EXPAT** - don't link with EXPAT library. If EXPAT is linked, but not available, you can't start `indexer` tool
-  even if you want to index something not related to xmlpile. This option asks indexer to load the library in runtime only
-  when you want to deal with xmlpile source.
+  even if you want to index something not related to xmlpipe. This option asks indexer to load the library in runtime only
+  when you want to deal with xmlpipe source.
 - **EXPAT_LIB** - name of EXPAT library file. Indexer will try to load that file when you want to index xmlpipe source. That
   option is written automatically from available EXPAT shared library investigation. You can also override that name on
   runtime, providing environment variable `EXPAT_LIB` with proper path to alternative library before running indexer.
@@ -121,8 +121,8 @@ the proper way to work witn MS SQL sources, so indexing of `MSSQL` also implies 
 
 - **WITH_ICONV** - for support different encodings when indexing xmlpipe sources with indexer.
 - **DL_ICONV** - don't link with iconv library. If iconv is linked, but not available, you can't start `indexer` tool
-    even if you want to index something not related to xmlpile. This option asks indexer to load the library in runtime
-    only when you want to deal with xmlpile source.
+    even if you want to index something not related to xmlpipe. This option asks indexer to load the library in runtime
+    only when you want to deal with xmlpipe source.
 - **ICONV_LIB** - name of iconv library file. Indexer will try to load that file when you want to index xmlpipe source.
   That option is written automatically from available iconv shared library investigation. You can also override that
   name on runtime, providing environment variable `ICONV_LIB` with proper path to alternative library before running

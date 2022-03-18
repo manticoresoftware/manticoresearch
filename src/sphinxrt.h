@@ -244,7 +244,7 @@ public:
 	OpenHash_T<RowID_t, DocID_t>	m_tDocIDtoRowID;		///< speeds up docid-rowid lookups
 	DeadRowMap_Ram_c				m_tDeadRowMap;
 	std::unique_ptr<DocstoreRT_i>	m_pDocstore;
-	CSphScopedPtr<ColumnarRT_i>		m_pColumnar{nullptr};
+	std::unique_ptr<ColumnarRT_i>	m_pColumnar;
 
 	mutable bool					m_bConsistent{false};
 

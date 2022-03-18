@@ -136,7 +136,7 @@ private:
 	ISphRtDictWraperRefPtr_c			m_pDictRt;
 	CSphScopedPtr<BlobRowBuilder_i>		m_pBlobWriter {nullptr};
 	std::unique_ptr<DocstoreRT_i>		m_pDocstore {nullptr};
-	CSphScopedPtr<ColumnarBuilderRT_i>	m_pColumnarBuilder {nullptr};
+	std::unique_ptr<ColumnarBuilderRT_i>	m_pColumnarBuilder {nullptr};
 	RowID_t								m_tNextRowID = 0;
 	CSphFixedVector<BYTE>				m_dPackedKeywords { 0 };
 	uint64_t							m_uSchemaHash = 0;

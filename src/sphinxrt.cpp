@@ -344,7 +344,7 @@ void RtSegment_t::UpdateUsedRam() const NO_THREAD_SAFETY_ANALYSIS
 	iUsedRam += m_dRows.AllocatedBytes();
 	iUsedRam += m_dInfixFilterCP.AllocatedBytes();
 	iUsedRam += m_pDocstore ? m_pDocstore->AllocatedBytes() : 0;
-	iUsedRam += m_pColumnar.Ptr() ? m_pColumnar->AllocatedBytes() : 0;
+	iUsedRam += m_pColumnar ? m_pColumnar->AllocatedBytes() : 0;
 	FixupRAMCounter ( iUsedRam - std::exchange ( m_iUsedRam, iUsedRam ) );
 }
 
@@ -1991,7 +1991,7 @@ void RtAccum_t::CleanupPart()
 {
 	m_dAccumRows.Resize(0);
 	m_dBlobs.Resize(0);
-	m_pColumnarBuilder.Reset();
+	m_pColumnarBuilder.reset();
 	m_dPerDocHitsCount.Resize(0);
 	m_dAccum.Resize(0);
 	m_pDocstore.reset();
@@ -2348,7 +2348,7 @@ RtSegment_t * RtAccum_t::CreateSegment ( int iRowSize, int iWordsCheckpoint, ESp
 	if ( m_pColumnarBuilder )
 	{
 		assert(m_pIndex);
-		pSeg->m_pColumnar = CreateColumnarRT ( m_pIndex->GetInternalSchema(), m_pColumnarBuilder.Ptr() );
+		pSeg->m_pColumnar = CreateColumnarRT ( m_pIndex->GetInternalSchema(), m_pColumnarBuilder.get() );
 	}
 
 	pSeg->BuildDocID2RowIDMap ( m_pIndex->GetInternalSchema() );
@@ -2391,7 +2391,7 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 	bool bColumnarId = tSchema.GetAttr(0).IsColumnar();
 
 	// create temporary columnar accessor; don't take ownership of built attributes
-	CSphScopedPtr<columnar::Columnar_i> pColumnar ( CreateColumnarRT ( m_pIndex->GetInternalSchema(), m_pColumnarBuilder.Ptr(), false ) );
+	auto pColumnar = CreateColumnarRT ( m_pIndex->GetInternalSchema(), m_pColumnarBuilder.get(), false );
 
 	std::string sError;
 	CSphScopedPtr<columnar::Iterator_i> pColumnarIdIterator(nullptr);
@@ -2532,7 +2532,7 @@ void RtAccum_t::SetIndex ( RtIndex_i * pIndex )
 		m_pBlobWriter = sphCreateBlobRowBuilder ( tSchema, m_dBlobs );
 
 	if ( !m_pColumnarBuilder )
-		m_pColumnarBuilder = CreateColumnarBuilderRT(tSchema);
+		m_pColumnarBuilder = CreateColumnarBuilderRT ( tSchema );
 
 	m_uSchemaHash = pIndex->GetSchemaHash();
 }
@@ -2861,7 +2861,7 @@ CSphFixedVector<RowID_t> RtIndex_c::CopyAttributesFromAliveDocs ( RtSegment_t & 
 	// perform merging attrs in single fiber - that eliminates concurrency with optimize
 	ScopedScheduler_c tSerialFiber { m_tWorkers.SerialChunkAccess() };
 
-	auto dColumnarIterators = CreateAllColumnarIterators ( tSrcSeg.m_pColumnar.Ptr(), m_tSchema );
+	auto dColumnarIterators = CreateAllColumnarIterators ( tSrcSeg.m_pColumnar.get(), m_tSchema );
 	CSphVector<int64_t> dTmp;
 
 	const CSphColumnInfo * pBlobRowLocator = m_tSchema.GetAttr ( sphGetBlobLocatorName() );
@@ -2985,8 +2985,8 @@ RtSegment_t* RtIndex_c::MergeTwoSegments ( const RtSegment_t* pA, const RtSegmen
 
 	bool bBothConsistent = CheckSegmentConsistency ( pA ) && CheckSegmentConsistency ( pB );
 
-	CSphScopedPtr<ColumnarBuilderRT_i> pColumnarBuilder ( CreateColumnarBuilderRT(m_tSchema) );
-	RtAttrMergeContext_t tCtx ( nBlobAttrs, tNextRowID, pColumnarBuilder.Ptr() );
+	auto pColumnarBuilder = CreateColumnarBuilderRT(m_tSchema);
+	RtAttrMergeContext_t tCtx ( nBlobAttrs, tNextRowID, pColumnarBuilder.get() );
 
 	auto * pSeg = new RtSegment_t (0);
 	FakeWL_t _ { pSeg->m_tLock }; // as pSeg is just created - we don't need real guarding and use fake lock to mute thread safety warnings
@@ -3005,7 +3005,7 @@ RtSegment_t* RtIndex_c::MergeTwoSegments ( const RtSegment_t* pA, const RtSegmen
 	pSeg->m_uRows = tNextRowID;
 	pSeg->m_tAliveRows.store ( pSeg->m_uRows, std::memory_order_relaxed );
 	pSeg->m_tDeadRowMap.Reset ( pSeg->m_uRows );
-	pSeg->m_pColumnar = CreateColumnarRT ( m_tSchema, pColumnarBuilder.Ptr() );
+	pSeg->m_pColumnar = CreateColumnarRT ( m_tSchema, pColumnarBuilder.get() );
 
 	RTRLOG << "MergeTwoSegments: new seg has " << pSeg->m_uRows << " rows";
 
@@ -3736,7 +3736,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 		SccRL_t rLock ( tSeg.m_tLock );
 		tSeg.m_bAttrsBusy.store ( true, std::memory_order_release );
 
-		auto dColumnarIterators = CreateAllColumnarIterators ( tSeg.m_pColumnar.Ptr(), m_tSchema );
+		auto dColumnarIterators = CreateAllColumnarIterators ( tSeg.m_pColumnar.get(), m_tSchema );
 
 		for ( auto tRowID : RtLiveRows_c(tSeg) )
 		{
@@ -5048,8 +5048,8 @@ void RtIndex_c::SaveRamSegment ( const RtSegment_t* pSeg, CSphWriter& wrChunk ) 
 	if ( pSeg->m_pDocstore )
 		pSeg->m_pDocstore->Save ( wrChunk );
 
-	wrChunk.PutByte ( pSeg->m_pColumnar.Ptr() ? 1 : 0 );
-	if ( pSeg->m_pColumnar.Ptr() )
+	wrChunk.PutByte ( pSeg->m_pColumnar ? 1 : 0 );
+	if ( pSeg->m_pColumnar )
 		pSeg->m_pColumnar->Save ( wrChunk );
 
 	// infixes
@@ -7137,7 +7137,7 @@ void SorterSchemaTransform_c::Transform ( ISphMatchSorter * pSorter, const RtGua
 		int nRamChunks = tGuard.m_dRamSegs.GetLength ();
 		int iChunkId = pMatch->m_iTag-1;
 		if ( iChunkId<nRamChunks )
-			return tGuard.m_dRamSegs[iChunkId]->m_pColumnar.Ptr();
+			return tGuard.m_dRamSegs[iChunkId]->m_pColumnar.get();
 
 		return m_dDiskChunkData[iChunkId-nRamChunks].m_pColumnar;
 	};
@@ -7288,7 +7288,7 @@ void FinalExpressionCalculation ( CSphQueryContext & tCtx, const VecTraits_T<RtS
 		// set blob pool for string on_sort expression fix up
 		SccRL_t rLock ( dRamChunks[iSeg]->m_tLock );
 		tCtx.SetBlobPool ( dRamChunks[iSeg]->m_dBlobs.Begin() );
-		tCtx.SetColumnar ( dRamChunks[iSeg]->m_pColumnar.Ptr() );
+		tCtx.SetColumnar ( dRamChunks[iSeg]->m_pColumnar.get() );
 		tCtx.SetDocstore ( dRamChunks[iSeg]->m_pDocstore.get(), -1 );	// no need to create session/readers for RT segments
 
 		dSorters.Apply ( [&] ( ISphMatchSorter * pTop ) { pTop->Finalize ( tFinal, false, bFinalizeSorters ); } );
@@ -7383,7 +7383,7 @@ void PerformFullScan ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks, int iM
 		for ( auto * pSorter : dSorters )
 			pSorter->SetBlobPool(pBlobs);
 
-		auto pColumnar = tSeg.m_pColumnar.Ptr();
+		auto pColumnar = tSeg.m_pColumnar.get();
 		tCtx.SetColumnar(pColumnar);
 		for ( auto * pSorter : dSorters )
 			pSorter->SetColumnar(pColumnar);
@@ -7487,7 +7487,7 @@ static void PerformFullTextSearch ( const RtSegVec_c & dRamChunks, RtQwordSetup_
 		for ( auto * pSorter : dSorters )
 			pSorter->SetBlobPool ( pBlobPool );
 
-		auto pColumnar = pSeg->m_pColumnar.Ptr();
+		auto pColumnar = pSeg->m_pColumnar.get();
 		tCtx.SetColumnar(pColumnar);
 		for ( auto * pSorter : dSorters )
 			pSorter->SetColumnar(pColumnar);
@@ -8339,12 +8339,12 @@ bool RtIndex_c::AddRemoveColumnarAttr ( RtGuard_t & tGuard, bool bAdd, const CSp
 	{
 		auto* pSeg = const_cast<RtSegment_t*> ( pConstSeg.Ptr() );
 		assert ( pSeg );
-		CSphScopedPtr<ColumnarBuilderRT_i> pBuilder ( CreateColumnarBuilderRT ( tNewSchema ) );
+		auto pBuilder = CreateColumnarBuilderRT ( tNewSchema );
 
-		if ( !Alter_AddRemoveColumnar ( bAdd, tOldSchema, tNewSchema, pSeg->m_pColumnar.Ptr(), pBuilder.Ptr(), pSeg->m_uRows, m_sPath, sError ) )
+		if ( !Alter_AddRemoveColumnar ( bAdd, tOldSchema, tNewSchema, pSeg->m_pColumnar.get(), pBuilder.get(), pSeg->m_uRows, m_sPath, sError ) )
 			return false;
 
-		pSeg->m_pColumnar = CreateColumnarRT ( tNewSchema, pBuilder.Ptr() );
+		pSeg->m_pColumnar = CreateColumnarRT ( tNewSchema, pBuilder.get() );
 		pSeg->UpdateUsedRam();
 	}
 
@@ -9074,8 +9074,8 @@ void RtIndex_c::BinlogCommit ( RtSegment_t * pSeg, const CSphVector<DocID_t> & d
 			if ( pSeg->m_pDocstore )
 				pSeg->m_pDocstore->Save(tWriter);
 
-			tWriter.PutByte ( pSeg->m_pColumnar.Ptr() ? 1 : 0 );
-			if ( pSeg->m_pColumnar.Ptr() )
+			tWriter.PutByte ( pSeg->m_pColumnar ? 1 : 0 );
+			if ( pSeg->m_pColumnar )
 				pSeg->m_pColumnar->Save(tWriter);
 		}
 
@@ -10485,7 +10485,7 @@ void RtAccum_t::LoadRtTrx ( const BYTE * pData, int iLen )
 	}
 
 	if ( tReader.GetByte() )
-		m_pColumnarBuilder = CreateColumnarBuilderRT(tReader);
+		m_pColumnarBuilder = CreateColumnarBuilderRT ( tReader );
 
 	// delete
 	m_dAccumKlist.Resize ( tReader.GetDword() );
@@ -10522,8 +10522,8 @@ void RtAccum_t::SaveRtTrx ( MemoryWriter_c & tWriter ) const
 	if ( m_pDocstore )
 		m_pDocstore->Save(tWriter);
 
-	tWriter.PutByte ( m_pColumnarBuilder.Ptr()!=nullptr );
-	if ( m_pColumnarBuilder.Ptr() )
+	tWriter.PutByte ( m_pColumnarBuilder!=nullptr );
+	if ( m_pColumnarBuilder )
 		m_pColumnarBuilder->Save(tWriter);
 
 	// delete

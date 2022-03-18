@@ -751,9 +751,6 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	SHUTINFO << "Shutdown skip cache ...";
 	ShutdownSkipCache();
 
-	SHUTINFO << "Shutdown wordforms ...";
-	sphShutdownWordforms ();
-
 	SHUTINFO << "Shutdown global IDFs ...";
 	sph::ShutdownGlobalIDFs ();
 
@@ -783,6 +780,13 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	SHUTINFO << "Shutdown hazard pointers ...";
 	hazard::Shutdown ();
+
+	// wordforms till there might be referenced from accum (rt-index), which, in turn, is part of client session.
+	// so, shutdown them before will probably fail.
+	// after hazard shutdown, all sessions are surely done, so wordforms is good to be destroyed at this point.
+	SHUTINFO << "Shutdown wordforms ...";
+	sphShutdownWordforms();
+
 	sphInfo ( "shutdown daemon version '%s' ...", g_sStatusVersion.cstr() );
 	sphInfo ( "shutdown complete" );
 

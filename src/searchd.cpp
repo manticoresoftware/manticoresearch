@@ -10723,13 +10723,12 @@ static bool InsertToPQ ( SqlStmt_t & tStmt, RtIndex_i * pIndex, RtAccum_t * pAcc
 
 	// add query
 	auto * pQIndex = (PercolateIndex_i *)pIndex;
-	StoredQuery_i * pStored = pQIndex->CreateQuery ( tArgs, sError );
+	auto pStored = pQIndex->CreateQuery ( tArgs, sError );
 	if ( pStored )
 	{
 		auto * pCmd = pAccum->AddCommand ( ReplicationCommand_e::PQUERY_ADD, tStmt.m_sIndex, tStmt.m_sCluster );
-		pCmd->m_pStored  = pStored;
-
 		dIds.Add ( pStored->m_iQUID );
+		pCmd->m_pStored = std::move ( pStored );
 	}
 
 	return true;

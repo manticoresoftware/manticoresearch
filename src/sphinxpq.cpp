@@ -83,7 +83,7 @@ public:
 	bool Commit ( int * pDeleted, RtAccum_t * pAccExt ) override;
 	void RollBack ( RtAccum_t * pAccExt ) override;
 
-	StoredQuery_i * CreateQuery ( PercolateQueryArgs_t & tArgs, CSphString & sError ) final EXCLUDES ( m_tLock );
+	std::unique_ptr<StoredQuery_i> CreateQuery ( PercolateQueryArgs_t & tArgs, CSphString & sError ) final EXCLUDES ( m_tLock );
 
 	bool Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings ) override;
 	void PostSetup() override EXCLUDES ( m_tLock );
@@ -155,7 +155,7 @@ private:
 	bool MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter*>& dSorters,
 			const CSphMultiQueryArgs &tArgs ) const;
 	bool CanBeAdded ( PercolateQueryArgs_t& tArgs, CSphString& sError ) const REQUIRES_SHARED ( m_tLock );
-	StoredQuery_i* CreateQuery ( PercolateQueryArgs_t& tArgs, const TokenizerRefPtr_c& pTokenizer, const DictRefPtr_c& pDict, CSphString& sError );
+	std::unique_ptr<StoredQuery_i> CreateQuery ( PercolateQueryArgs_t& tArgs, const TokenizerRefPtr_c& pTokenizer, const DictRefPtr_c& pDict, CSphString& sError );
 
 public:
 	PercolateMatchContext_t * CreateMatchContext ( const RtSegment_t * pSeg, const SegmentReject_t &tReject );
@@ -1629,14 +1629,12 @@ void PercolateIndex_c::CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const
 		dFiles.Add ( sPath );
 }
 
-StoredQuery_i * PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, CSphString & sError )
+std::unique_ptr<StoredQuery_i> PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, CSphString & sError )
 {
-	StoredQuery_i * pResult = nullptr;
-
 	{
 		ScRL_t tLockHash { m_tLock };
 		if ( !CanBeAdded ( tArgs, sError ))
-			return pResult;
+			return nullptr;
 	}
 
 	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
@@ -1722,7 +1720,7 @@ bool PercolateIndex_c::CanBeAdded ( PercolateQueryArgs_t& tArgs, CSphString& sEr
 }
 
 
-StoredQuery_i * PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, const TokenizerRefPtr_c& pTokenizer, const DictRefPtr_c& pDict, CSphString & sError )
+std::unique_ptr<StoredQuery_i> PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, const TokenizerRefPtr_c& pTokenizer, const DictRefPtr_c& pDict, CSphString & sError )
 {
 	const char * sQuery = tArgs.m_sQuery;
 	CSphVector<BYTE> dFiltered;
@@ -1759,7 +1757,7 @@ StoredQuery_i * PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, co
 	if ( m_tSettings.GetMinPrefixLen ( bWordDict )>0 || m_tSettings.m_iMinInfixLen>0 )
 		tParsed->m_pRoot = FixExpanded ( tParsed->m_pRoot, m_tSettings.GetMinPrefixLen ( bWordDict ), m_tSettings.m_iMinInfixLen, ( pDict->HasMorphology () || m_tSettings.m_bIndexExactWords ) );
 
-	auto *pStored = new StoredQuery_t;
+	auto pStored = std::make_unique<StoredQuery_t>();
 	pStored->m_pXQ = tParsed.LeakPtr();
 	pStored->m_bOnlyTerms = true;
 	pStored->m_sQuery = sQuery;
@@ -2013,7 +2011,7 @@ bool PercolateIndex_c::Commit ( int * pDeleted, RtAccum_t * pAccExt )
 		switch ( pCmd->m_eCommand )
 		{
 		case ReplicationCommand_e::PQUERY_ADD:
-			dNewQueries.Add ( pCmd->m_pStored.LeakPtr() );
+			dNewQueries.Add ( pCmd->m_pStored.release() );
 			break;
 
 		case ReplicationCommand_e::PQUERY_DELETE:
@@ -2066,7 +2064,7 @@ Binlog::CheckTnxResult_t PercolateIndex_c::ReplayAdd ( CSphReader& tReader, CSph
 		tArgs.m_bReplace = true;
 
 		// actually replay
-		StoredQuery_i * pQuery = CreateQuery ( tArgs, sError );
+		auto pQuery = CreateQuery ( tArgs, sError );
 		if ( !pQuery )
 		{
 			sError.SetSprintf ( "apply error, %s", sError.cstr() );
@@ -2078,7 +2076,7 @@ Binlog::CheckTnxResult_t PercolateIndex_c::ReplayAdd ( CSphReader& tReader, CSph
 		CSphVector<int64_t> dDeleteQueries;
 		CSphVector<uint64_t> dDeleteTags;
 		CSphVector<StoredQuery_i*> dNewQueries;
-		dNewQueries.Add ( pQuery );
+		dNewQueries.Add ( pQuery.release() );
 		ReplayInsertAndDeleteQueries ( dNewQueries, dDeleteQueries, dDeleteTags );
 	}
 	return tRes;
@@ -2125,7 +2123,7 @@ Binlog::CheckTnxResult_t PercolateIndex_c::ReplayInsertAndDelete ( CSphReader& t
 			tArgs.m_bReplace = true;
 
 			// actually replay
-			StoredQuery_i* pQuery = CreateQuery ( tArgs, sError );
+			auto pQuery = CreateQuery ( tArgs, sError );
 			if ( !pQuery )
 			{
 				sError.SetSprintf ( "apply error, %s", sError.cstr() );
@@ -2134,7 +2132,7 @@ Binlog::CheckTnxResult_t PercolateIndex_c::ReplayInsertAndDelete ( CSphReader& t
 					SafeDelete ( pDelQuery );
 				return tRes;
 			}
-			dNewQueries.Add ( pQuery );
+			dNewQueries.Add ( pQuery.release() );
 		}
 
 		// actually replay
@@ -2420,13 +2418,13 @@ void PercolateIndex_c::PostSetupUnl()
 		PercolateQueryArgs_t tArgs ( tQuery );
 		if ( CanBeAdded ( tArgs, sError ) )
 		{
-			auto* pQuery = CreateQuery ( tArgs, pTok, pDict, sError );
+			auto pQuery = CreateQuery ( tArgs, pTok, pDict, sError );
 			if ( pQuery )
 			{
 				// as a new (not replace), query it will be anyway added to the tail.
 				// so, we may reserve ref in the hash, and then occupy it with the query.
 				assert ( !tArgs.m_bReplace );
-				AddToStoredUnl ( StoredQuerySharedPtr_t ((StoredQuery_t *) pQuery ));
+				AddToStoredUnl ( StoredQuerySharedPtr_t ((StoredQuery_t *) pQuery.release() ));
 				continue;
 			}
 		}

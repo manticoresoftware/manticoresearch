@@ -91,7 +91,7 @@ public:
 	PercolateIndex_i ( const char * sIndexName, const char * sFileName ) : RtIndex_i ( sIndexName, sFileName ) {}
 	virtual bool	MatchDocuments ( RtAccum_t * pAccExt, PercolateMatchResult_t & tResult ) = 0;
 
-	virtual StoredQuery_i * CreateQuery ( PercolateQueryArgs_t & tArgs, CSphString & sError ) = 0;
+	virtual std::unique_ptr<StoredQuery_i> CreateQuery ( PercolateQueryArgs_t & tArgs, CSphString & sError ) = 0;
 
 	bool	IsPQ() const override { return true; }
 

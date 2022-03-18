@@ -59,7 +59,7 @@ struct ReplicationCommand_t
 	CSphString				m_sCluster;
 
 	// add
-	CSphScopedPtr<StoredQuery_i> m_pStored { nullptr };
+	std::unique_ptr<StoredQuery_i> m_pStored;
 
 	// delete
 	CSphVector<int64_t>		m_dDeleteQueries;

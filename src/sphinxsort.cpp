@@ -5527,6 +5527,7 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 	CSphColumnInfo tExprCol ( tItem.m_sAlias.cstr(), SPH_ATTR_NONE );
 	DWORD uQueryPackedFactorFlags = SPH_FACTOR_DISABLE;
 	bool bHasZonespanlist = false;
+	bool bExprsNeedDocids = false;
 
 	ExprParseArgs_t tExprParseArgs;
 	tExprParseArgs.m_pAttrType = &tExprCol.m_eAttrType;
@@ -5538,7 +5539,7 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 	tExprParseArgs.m_pPackedFactorsFlags = &uQueryPackedFactorFlags;
 	tExprParseArgs.m_pEvalStage = &tExprCol.m_eStage;
 	tExprParseArgs.m_pStoredField = &tExprCol.m_uFieldFlags;
-	tExprParseArgs.m_pNeedDocIds = &m_bExprsNeedDocids;
+	tExprParseArgs.m_pNeedDocIds = &bExprsNeedDocids;
 
 	// tricky bit
 	// GROUP_CONCAT() adds an implicit TO_STRING() conversion on top of its argument
@@ -5558,6 +5559,7 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 
 	m_uPackedFactorFlags |= uQueryPackedFactorFlags;
 	m_bZonespanlist |= bHasZonespanlist;
+	m_bExprsNeedDocids |= bExprsNeedDocids;
 	tExprCol.m_eAggrFunc = tItem.m_eAggrFunc;
 	if ( !tExprCol.m_pExpr )
 		return Err ( "parse error: %s", m_sError.cstr() );

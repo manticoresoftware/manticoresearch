@@ -1793,7 +1793,6 @@ class SphinxConfig
         if (@$res["index_weights"] )
             @$res["index_weights"] = ParseIndexWeights ( $res["index_weights"]);
         TouchVal ($res,"roundoff");
-//        TouchVal ($res,"expect_error");
 //        TouchVal ($res,"tag");
 //        TouchVal ($res,"cutoff");
 //        TouchVal ($res,"limits");
@@ -2688,6 +2687,7 @@ class SphinxConfig
 						$query_result["sphinxql"]="$query";
 					else
 						$query_result["sphinxql"]=($resultset_num<count($parts)?"$parts[$resultset_num] ":"")."/* result ".($resultset_num+1)." of previous multistatement */";
+
 					++$resultset_num;
 					$this->PickResult($query_result);
 					$erroneousquery = ($resultset_num<count($parts)?"$parts[$resultset_num] ":"")."/* result ".($resultset_num+1)." of previous multistatement */";
@@ -2890,7 +2890,7 @@ class SphinxConfig
                             $this->PickResult ( $result );
 						}
 					}
-					else if ( @$qinfo["expect_error"] && !$cl->IsConnectError() )
+					else if ( !$cl->IsConnectError() )
 					{
 						$bOk = true;
                         $this->PickResult ( array (
@@ -3324,23 +3324,6 @@ class SphinxConfig
 					continue;
 				}
 
-				// fetch and format fields from db by default
-				if ( $idcol )
-				{
-					if ( $this->IsNeedDB() )
-						$query_res = $this->_connection->query ( "select * from test_table where $idcol = $doc_id" );
-					else
-						$query_res = false;
-					if ( $query_res )
-					{
-						$row = $query_res->fetch_assoc ();
-						if ( $row )
-							foreach ( $row as $col_name => $col_content )
-								if ( array_search ( $col_name, $result["fields"] )!==false )
-									$str .= " $col_name=\"$col_content\"";
-					}
-				}
-
 				// format attrs
 				foreach ( $docinfo["attrs"] as $attr=>$val )
 				{
@@ -3351,6 +3334,7 @@ class SphinxConfig
 			}
 			$str .= "\n\n";
 		}
+
 		return $str . "\n";
 	}
 

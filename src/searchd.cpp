@@ -3371,7 +3371,7 @@ static void SendMVA ( ISphOutputBuffer& tOut, const BYTE * pMVA, bool b64bit )
 }
 
 
-static ESphAttr FixupAttrForNetwork ( const CSphColumnInfo & tCol, int iVer, WORD uMasterVer, bool bAgentMode )
+static ESphAttr FixupAttrForNetwork ( const CSphColumnInfo & tCol, const CSphSchema & tSchema, int iVer, WORD uMasterVer, bool bAgentMode )
 {
 	bool bSendJson = ( bAgentMode && uMasterVer>=3 );
 	bool bSendJsonField = ( bAgentMode && uMasterVer>=4 );
@@ -3386,7 +3386,10 @@ static ESphAttr FixupAttrForNetwork ( const CSphColumnInfo & tCol, int iVer, WOR
 
 	case SPH_ATTR_STRINGPTR:
 	{
-		if ( bAgentMode && uMasterVer>=18 && ( tCol.m_uFieldFlags & CSphColumnInfo::FIELD_STORED ) )
+		auto pField = tSchema.GetField ( tCol.m_sName.cstr() );
+		bool bStored = ( pField && ( pField->m_uFieldFlags & CSphColumnInfo::FIELD_STORED ) ) || ( tCol.m_uFieldFlags & CSphColumnInfo::FIELD_STORED );
+
+		if ( bAgentMode && uMasterVer>=18 && bStored )
 			return SPH_ATTR_STORED_FIELD;
 		else
 			return SPH_ATTR_STRING;
@@ -3424,7 +3427,7 @@ static void SendSchema ( ISphOutputBuffer & tOut, const AggrResult_t & tRes, con
 		const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
 		tOut.SendString ( tCol.m_sName.cstr() );
 
-		ESphAttr eCol = FixupAttrForNetwork ( tCol, iVer, uMasterVer, bAgentMode );
+		ESphAttr eCol = FixupAttrForNetwork ( tCol, tRes.m_tSchema, iVer, uMasterVer, bAgentMode );
 		tOut.SendDword ( (DWORD)eCol );
 	}
 }
@@ -4055,7 +4058,9 @@ int KillPlainDupes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, const VecTr
 		{
 			CSphMatch & tMatch = pMin->m_tResult.m_dMatches[pMin->m_iIdx];
 			auto iTag = tMatch.m_iTag;	// as we may use tag for ordering
-			tMatch.m_iTag = pMin->m_tResult.m_iTag; // that will link us back to docstore
+			if ( !pMin->m_tResult.m_bTagsAssigned )
+				tMatch.m_iTag = pMin->m_tResult.m_iTag; // that will link us back to docstore
+
 			pSorter->Push ( tMatch );
 			tMatch.m_iTag = iTag;	// restore tag
 			tPrevDocID = tDocID;
@@ -4371,6 +4376,9 @@ void ProcessMultiPostlimit ( AggrResult_t & tRes, VecTraits_T<const CSphColumnIn
 	for ( auto & dMatch : dMatches )
 	{
 		int iTag = dMatch.m_iTag;
+		if ( tRes.m_dResults[iTag].m_bTag )
+			continue; // remote match; everything should be precalculated
+
 		auto * pDocstore = tRes.m_dResults[iTag].Docstore ();
 		assert ( iTag<tRes.m_dResults.GetLength () );
 

@@ -11,7 +11,7 @@ a:1:{i:0;a:42:{i:0;a:2:{s:8:"sphinxql";s:151:"insert into test_rt values (1, '1s
       ]
     }
   }
-}";s:4:"rows";s:265:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"1","_score":1511,"_source":{"int_col":11,"flt_col":1.1,"attr_lat":51,"attr_lon":0,"str_col":"str1"}},{"_id":"2","_score":1511,"_source":{"int_col":12,"flt_col":1.2,"attr_lat":46,"attr_lon":2,"str_col":"str2"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:7;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:182:"{
+}";s:4:"rows";s:440:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"1","_score":1511,"_source":{"int_col":11,"flt_col":1.1,"attr_lat":51,"attr_lon":0,"str_col":"str1","content":"Trevize glanced now and then at Bliss`s face, which seemed entirely concentrated on Bander."}},{"_id":"2","_score":1511,"_source":{"int_col":12,"flt_col":1.2,"attr_lat":46,"attr_lon":2,"str_col":"str2","content":"Trevize had grown quite certain he knew what was going on."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:7;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:182:"{
   "index":"test_rt",
   "query":
   {
@@ -24,7 +24,7 @@ a:1:{i:0;a:42:{i:0;a:2:{s:8:"sphinxql";s:151:"insert into test_rt values (1, '1s
       ]
     }
   }
-}";s:4:"rows";s:211:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"2","_score":1511,"_source":{"int_col":12,"flt_col":1.2,"str_col":"str2"}},{"_id":"1","_score":1511,"_source":{"int_col":11,"flt_col":1.1,"str_col":"str1"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:8;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:180:"{
+}";s:4:"rows";s:414:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"2","_score":1511,"_source":{"int_col":12,"flt_col":1.2,"str_col":"str2","title":"2nd","content":"Trevize had grown quite certain he knew what was going on."}},{"_id":"1","_score":1511,"_source":{"int_col":11,"flt_col":1.1,"str_col":"str1","title":"1st","content":"Trevize glanced now and then at Bliss's face, which seemed entirely concentrated on Bander."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:8;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:180:"{
   "index":"test1",
   "query":
   {
@@ -37,7 +37,7 @@ a:1:{i:0;a:42:{i:0;a:2:{s:8:"sphinxql";s:151:"insert into test_rt values (1, '1s
       ]
     }
   }
-}";s:4:"rows";s:377:"{"timed_out":false,"hits":{"total":3,"hits":[{"_id":"5","_score":2528,"_source":{"int_col":15,"flt_col":1.5,"attr_lat":41,"attr_lon":12,"str_col":"str5"}},{"_id":"4","_score":1537,"_source":{"int_col":14,"flt_col":1.4,"attr_lat":39,"attr_lon":22,"str_col":"str4"}},{"_id":"6","_score":1511,"_source":{"int_col":16,"flt_col":1.6,"attr_lat":61,"attr_lon":11,"str_col":"str6"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:9;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:182:"{
+}";s:4:"rows";s:726:"{"timed_out":false,"hits":{"total":3,"hits":[{"_id":"5","_score":2528,"_source":{"int_col":15,"flt_col":1.5,"attr_lat":41,"attr_lon":12,"str_col":"str5","content":"To speak to its fellow-Solarians would be, to it, unpleasant, and what communication there must be would be forced, and never spontaneous."}},{"_id":"4","_score":1537,"_source":{"int_col":14,"flt_col":1.4,"attr_lat":39,"attr_lon":22,"str_col":"str4","content":"There was no way it could speak to robots on a basis of intellectual equality, and certainly not to animals."}},{"_id":"6","_score":1511,"_source":{"int_col":16,"flt_col":1.6,"attr_lat":61,"attr_lon":11,"str_col":"str6","content":"No wonder, Trevize thought, it was indulging itself in this way."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:9;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:182:"{
   "index":"test_rt",
   "query":
   {
@@ -50,7 +50,7 @@ a:1:{i:0;a:42:{i:0;a:2:{s:8:"sphinxql";s:151:"insert into test_rt values (1, '1s
       ]
     }
   }
-}";s:4:"rows";s:293:"{"timed_out":false,"hits":{"total":3,"hits":[{"_id":"5","_score":2528,"_source":{"int_col":15,"flt_col":1.5,"str_col":"str5"}},{"_id":"4","_score":1537,"_source":{"int_col":14,"flt_col":1.4,"str_col":"str4"}},{"_id":"6","_score":1511,"_source":{"int_col":16,"flt_col":1.6,"str_col":"str6"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:10;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:190:"{
+}";s:4:"rows";s:684:"{"timed_out":false,"hits":{"total":3,"hits":[{"_id":"5","_score":2528,"_source":{"int_col":15,"flt_col":1.5,"str_col":"str5","title":"5th","content":"To speak to its fellow-Solarians would be, to it, unpleasant, and what communication there must be would be forced, and never spontaneous."}},{"_id":"4","_score":1537,"_source":{"int_col":14,"flt_col":1.4,"str_col":"str4","title":"4th","content":"There was no way it could speak to robots on a basis of intellectual equality, and certainly not to animals."}},{"_id":"6","_score":1511,"_source":{"int_col":16,"flt_col":1.6,"str_col":"str6","title":"6th","content":"No wonder, Trevize thought, it was indulging itself in this way."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:10;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:190:"{
   "index":"test1",
   "query":
   {
@@ -63,7 +63,7 @@ a:1:{i:0;a:42:{i:0;a:2:{s:8:"sphinxql";s:151:"insert into test_rt values (1, '1s
       ]
     }
   }
-}";s:4:"rows";s:157:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"5","_score":2528,"_source":{"int_col":15,"flt_col":1.5,"attr_lat":41,"attr_lon":12,"str_col":"str5"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:11;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:192:"{
+}";s:4:"rows";s:308:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"5","_score":2528,"_source":{"int_col":15,"flt_col":1.5,"attr_lat":41,"attr_lon":12,"str_col":"str5","content":"To speak to its fellow-Solarians would be, to it, unpleasant, and what communication there must be would be forced, and never spontaneous."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:11;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:192:"{
   "index":"test_rt",
   "query":
   {
@@ -76,7 +76,7 @@ a:1:{i:0;a:42:{i:0;a:2:{s:8:"sphinxql";s:151:"insert into test_rt values (1, '1s
       ]
     }
   }
-}";s:4:"rows";s:129:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"5","_score":2528,"_source":{"int_col":15,"flt_col":1.5,"str_col":"str5"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:12;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:181:"{
+}";s:4:"rows";s:294:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"5","_score":2528,"_source":{"int_col":15,"flt_col":1.5,"str_col":"str5","title":"5th","content":"To speak to its fellow-Solarians would be, to it, unpleasant, and what communication there must be would be forced, and never spontaneous."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:12;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:181:"{
   "index":"test1",
   "query":
   {
@@ -89,7 +89,7 @@ a:1:{i:0;a:42:{i:0;a:2:{s:8:"sphinxql";s:151:"insert into test_rt values (1, '1s
       ]
     }
   }
-}";s:4:"rows";s:377:"{"timed_out":false,"hits":{"total":3,"hits":[{"_id":"5","_score":2528,"_source":{"int_col":15,"flt_col":1.5,"attr_lat":41,"attr_lon":12,"str_col":"str5"}},{"_id":"4","_score":1537,"_source":{"int_col":14,"flt_col":1.4,"attr_lat":39,"attr_lon":22,"str_col":"str4"}},{"_id":"6","_score":1511,"_source":{"int_col":16,"flt_col":1.6,"attr_lat":61,"attr_lon":11,"str_col":"str6"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:13;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:183:"{
+}";s:4:"rows";s:726:"{"timed_out":false,"hits":{"total":3,"hits":[{"_id":"5","_score":2528,"_source":{"int_col":15,"flt_col":1.5,"attr_lat":41,"attr_lon":12,"str_col":"str5","content":"To speak to its fellow-Solarians would be, to it, unpleasant, and what communication there must be would be forced, and never spontaneous."}},{"_id":"4","_score":1537,"_source":{"int_col":14,"flt_col":1.4,"attr_lat":39,"attr_lon":22,"str_col":"str4","content":"There was no way it could speak to robots on a basis of intellectual equality, and certainly not to animals."}},{"_id":"6","_score":1511,"_source":{"int_col":16,"flt_col":1.6,"attr_lat":61,"attr_lon":11,"str_col":"str6","content":"No wonder, Trevize thought, it was indulging itself in this way."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:13;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:183:"{
   "index":"test_rt",
   "query":
   {
@@ -102,7 +102,7 @@ a:1:{i:0;a:42:{i:0;a:2:{s:8:"sphinxql";s:151:"insert into test_rt values (1, '1s
       ]
     }
   }
-}";s:4:"rows";s:293:"{"timed_out":false,"hits":{"total":3,"hits":[{"_id":"5","_score":2528,"_source":{"int_col":15,"flt_col":1.5,"str_col":"str5"}},{"_id":"4","_score":1537,"_source":{"int_col":14,"flt_col":1.4,"str_col":"str4"}},{"_id":"6","_score":1511,"_source":{"int_col":16,"flt_col":1.6,"str_col":"str6"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:14;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:181:"{
+}";s:4:"rows";s:684:"{"timed_out":false,"hits":{"total":3,"hits":[{"_id":"5","_score":2528,"_source":{"int_col":15,"flt_col":1.5,"str_col":"str5","title":"5th","content":"To speak to its fellow-Solarians would be, to it, unpleasant, and what communication there must be would be forced, and never spontaneous."}},{"_id":"4","_score":1537,"_source":{"int_col":14,"flt_col":1.4,"str_col":"str4","title":"4th","content":"There was no way it could speak to robots on a basis of intellectual equality, and certainly not to animals."}},{"_id":"6","_score":1511,"_source":{"int_col":16,"flt_col":1.6,"str_col":"str6","title":"6th","content":"No wonder, Trevize thought, it was indulging itself in this way."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:14;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:181:"{
   "index":"test1",
   "query":
   {
@@ -115,7 +115,7 @@ a:1:{i:0;a:42:{i:0;a:2:{s:8:"sphinxql";s:151:"insert into test_rt values (1, '1s
       ]
     }
   }
-}";s:4:"rows";s:485:"{"timed_out":false,"hits":{"total":4,"hits":[{"_id":"4","_score":1537,"_source":{"int_col":14,"flt_col":1.4,"attr_lat":39,"attr_lon":22,"str_col":"str4"}},{"_id":"1","_score":1511,"_source":{"int_col":11,"flt_col":1.1,"attr_lat":51,"attr_lon":0,"str_col":"str1"}},{"_id":"2","_score":1511,"_source":{"int_col":12,"flt_col":1.2,"attr_lat":46,"attr_lon":2,"str_col":"str2"}},{"_id":"3","_score":1511,"_source":{"int_col":13,"flt_col":1.3,"attr_lat":51,"attr_lon":18,"str_col":"str3"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:15;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:183:"{
+}";s:4:"rows";s:875:"{"timed_out":false,"hits":{"total":4,"hits":[{"_id":"4","_score":1537,"_source":{"int_col":14,"flt_col":1.4,"attr_lat":39,"attr_lon":22,"str_col":"str4","content":"There was no way it could speak to robots on a basis of intellectual equality, and certainly not to animals."}},{"_id":"1","_score":1511,"_source":{"int_col":11,"flt_col":1.1,"attr_lat":51,"attr_lon":0,"str_col":"str1","content":"Trevize glanced now and then at Bliss`s face, which seemed entirely concentrated on Bander."}},{"_id":"2","_score":1511,"_source":{"int_col":12,"flt_col":1.2,"attr_lat":46,"attr_lon":2,"str_col":"str2","content":"Trevize had grown quite certain he knew what was going on."}},{"_id":"3","_score":1511,"_source":{"int_col":13,"flt_col":1.3,"attr_lat":51,"attr_lon":18,"str_col":"str3","content":"Bander, despite its paean to freedom, found this unique opportunity irresistible."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:15;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:183:"{
   "index":"test_rt",
   "query":
   {
@@ -128,7 +128,7 @@ a:1:{i:0;a:42:{i:0;a:2:{s:8:"sphinxql";s:151:"insert into test_rt values (1, '1s
       ]
     }
   }
-}";s:4:"rows";s:375:"{"timed_out":false,"hits":{"total":4,"hits":[{"_id":"4","_score":1537,"_source":{"int_col":14,"flt_col":1.4,"str_col":"str4"}},{"_id":"3","_score":1511,"_source":{"int_col":13,"flt_col":1.3,"str_col":"str3"}},{"_id":"2","_score":1511,"_source":{"int_col":12,"flt_col":1.2,"str_col":"str2"}},{"_id":"1","_score":1511,"_source":{"int_col":11,"flt_col":1.1,"str_col":"str1"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:16;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:191:"{
+}";s:4:"rows";s:821:"{"timed_out":false,"hits":{"total":4,"hits":[{"_id":"4","_score":1537,"_source":{"int_col":14,"flt_col":1.4,"str_col":"str4","title":"4th","content":"There was no way it could speak to robots on a basis of intellectual equality, and certainly not to animals."}},{"_id":"3","_score":1511,"_source":{"int_col":13,"flt_col":1.3,"str_col":"str3","title":"3rd","content":"Bander, despite its paean to freedom, found this unique opportunity irresistible."}},{"_id":"2","_score":1511,"_source":{"int_col":12,"flt_col":1.2,"str_col":"str2","title":"2nd","content":"Trevize had grown quite certain he knew what was going on."}},{"_id":"1","_score":1511,"_source":{"int_col":11,"flt_col":1.1,"str_col":"str1","title":"1st","content":"Trevize glanced now and then at Bliss's face, which seemed entirely concentrated on Bander."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:16;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:191:"{
   "index":"test1",
   "query":
   {
@@ -141,7 +141,7 @@ a:1:{i:0;a:42:{i:0;a:2:{s:8:"sphinxql";s:151:"insert into test_rt values (1, '1s
       ]
     }
   }
-}";s:4:"rows";s:266:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"2","_score":1511,"_source":{"int_col":12,"flt_col":1.2,"attr_lat":46,"attr_lon":2,"str_col":"str2"}},{"_id":"3","_score":1511,"_source":{"int_col":13,"flt_col":1.3,"attr_lat":51,"attr_lon":18,"str_col":"str3"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:17;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:193:"{
+}";s:4:"rows";s:431:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"2","_score":1511,"_source":{"int_col":12,"flt_col":1.2,"attr_lat":46,"attr_lon":2,"str_col":"str2","content":"Trevize had grown quite certain he knew what was going on."}},{"_id":"3","_score":1511,"_source":{"int_col":13,"flt_col":1.3,"attr_lat":51,"attr_lon":18,"str_col":"str3","content":"Bander, despite its paean to freedom, found this unique opportunity irresistible."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:17;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:193:"{
   "index":"test_rt",
   "query":
   {
@@ -154,7 +154,7 @@ a:1:{i:0;a:42:{i:0;a:2:{s:8:"sphinxql";s:151:"insert into test_rt values (1, '1s
       ]
     }
   }
-}";s:4:"rows";s:211:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"3","_score":1511,"_source":{"int_col":13,"flt_col":1.3,"str_col":"str3"}},{"_id":"2","_score":1511,"_source":{"int_col":12,"flt_col":1.2,"str_col":"str2"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:18;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:155:"{
+}";s:4:"rows";s:404:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"3","_score":1511,"_source":{"int_col":13,"flt_col":1.3,"str_col":"str3","title":"3rd","content":"Bander, despite its paean to freedom, found this unique opportunity irresistible."}},{"_id":"2","_score":1511,"_source":{"int_col":12,"flt_col":1.2,"str_col":"str2","title":"2nd","content":"Trevize had grown quite certain he knew what was going on."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:18;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:155:"{
   "index":"test1",
   "query":
   {
@@ -166,7 +166,7 @@ a:1:{i:0;a:42:{i:0;a:2:{s:8:"sphinxql";s:151:"insert into test_rt values (1, '1s
       ]
     }
   }
-}";s:4:"rows";s:260:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"2","_score":1,"_source":{"int_col":12,"flt_col":1.2,"attr_lat":46,"attr_lon":2,"str_col":"str2"}},{"_id":"3","_score":1,"_source":{"int_col":13,"flt_col":1.3,"attr_lat":51,"attr_lon":18,"str_col":"str3"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:19;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:157:"{
+}";s:4:"rows";s:425:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"2","_score":1,"_source":{"int_col":12,"flt_col":1.2,"attr_lat":46,"attr_lon":2,"str_col":"str2","content":"Trevize had grown quite certain he knew what was going on."}},{"_id":"3","_score":1,"_source":{"int_col":13,"flt_col":1.3,"attr_lat":51,"attr_lon":18,"str_col":"str3","content":"Bander, despite its paean to freedom, found this unique opportunity irresistible."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:19;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:157:"{
   "index":"test_rt",
   "query":
   {
@@ -178,19 +178,19 @@ a:1:{i:0;a:42:{i:0;a:2:{s:8:"sphinxql";s:151:"insert into test_rt values (1, '1s
       ]
     }
   }
-}";s:4:"rows";s:205:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"3","_score":1,"_source":{"int_col":13,"flt_col":1.3,"str_col":"str3"}},{"_id":"2","_score":1,"_source":{"int_col":12,"flt_col":1.2,"str_col":"str2"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:20;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:83:"{
+}";s:4:"rows";s:398:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"3","_score":1,"_source":{"int_col":13,"flt_col":1.3,"str_col":"str3","title":"3rd","content":"Bander, despite its paean to freedom, found this unique opportunity irresistible."}},{"_id":"2","_score":1,"_source":{"int_col":12,"flt_col":1.2,"str_col":"str2","title":"2nd","content":"Trevize had grown quite certain he knew what was going on."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:20;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:83:"{
   "index":"test1",
   "query":
   {
     "range": { "int_col": { "lte": 11 } }
   }
-}";s:4:"rows";s:153:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.1,"attr_lat":51,"attr_lon":0,"str_col":"str1"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:21;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:85:"{
+}";s:4:"rows";s:257:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.1,"attr_lat":51,"attr_lon":0,"str_col":"str1","content":"Trevize glanced now and then at Bliss`s face, which seemed entirely concentrated on Bander."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:21;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:85:"{
   "index":"test_rt",
   "query":
   {
     "range": { "int_col": { "lte": 11 } }
   }
-}";s:4:"rows";s:126:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.1,"str_col":"str1"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:22;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:145:"{
+}";s:4:"rows";s:244:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.1,"str_col":"str1","title":"1st","content":"Trevize glanced now and then at Bliss's face, which seemed entirely concentrated on Bander."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:22;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:145:"{
   "index":"test1",
   "query":
   {
@@ -202,7 +202,7 @@ a:1:{i:0;a:42:{i:0;a:2:{s:8:"sphinxql";s:151:"insert into test_rt values (1, '1s
       ]
     }
   }
-}";s:4:"rows";s:153:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.1,"attr_lat":51,"attr_lon":0,"str_col":"str1"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:23;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:147:"{
+}";s:4:"rows";s:257:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.1,"attr_lat":51,"attr_lon":0,"str_col":"str1","content":"Trevize glanced now and then at Bliss`s face, which seemed entirely concentrated on Bander."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:23;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:147:"{
   "index":"test_rt",
   "query":
   {
@@ -214,7 +214,7 @@ a:1:{i:0;a:42:{i:0;a:2:{s:8:"sphinxql";s:151:"insert into test_rt values (1, '1s
       ]
     }
   }
-}";s:4:"rows";s:126:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.1,"str_col":"str1"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:24;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:168:"{
+}";s:4:"rows";s:244:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.1,"str_col":"str1","title":"1st","content":"Trevize glanced now and then at Bliss's face, which seemed entirely concentrated on Bander."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:24;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:168:"{
   "index":"test1",
   "query":
   {
@@ -227,7 +227,7 @@ a:1:{i:0;a:42:{i:0;a:2:{s:8:"sphinxql";s:151:"insert into test_rt values (1, '1s
       ]
     }
   }
-}";s:4:"rows";s:153:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.1,"attr_lat":51,"attr_lon":0,"str_col":"str1"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:25;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:170:"{
+}";s:4:"rows";s:257:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.1,"attr_lat":51,"attr_lon":0,"str_col":"str1","content":"Trevize glanced now and then at Bliss`s face, which seemed entirely concentrated on Bander."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:25;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:170:"{
   "index":"test_rt",
   "query":
   {
@@ -240,7 +240,7 @@ a:1:{i:0;a:42:{i:0;a:2:{s:8:"sphinxql";s:151:"insert into test_rt values (1, '1s
       ]
     }
   }
-}";s:4:"rows";s:126:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.1,"str_col":"str1"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:26;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:194:"{
+}";s:4:"rows";s:244:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.1,"str_col":"str1","title":"1st","content":"Trevize glanced now and then at Bliss's face, which seemed entirely concentrated on Bander."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:26;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:194:"{
   "index":"test1",
   "query":
   {
@@ -253,7 +253,7 @@ a:1:{i:0;a:42:{i:0;a:2:{s:8:"sphinxql";s:151:"insert into test_rt values (1, '1s
       ]
     }
   }
-}";s:4:"rows";s:153:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"2","_score":1,"_source":{"int_col":12,"flt_col":1.2,"attr_lat":46,"attr_lon":2,"str_col":"str2"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:27;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:196:"{
+}";s:4:"rows";s:224:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"2","_score":1,"_source":{"int_col":12,"flt_col":1.2,"attr_lat":46,"attr_lon":2,"str_col":"str2","content":"Trevize had grown quite certain he knew what was going on."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:27;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:196:"{
   "index":"test_rt",
   "query":
   {
@@ -266,7 +266,7 @@ a:1:{i:0;a:42:{i:0;a:2:{s:8:"sphinxql";s:151:"insert into test_rt values (1, '1s
       ]
     }
   }
-}";s:4:"rows";s:126:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"2","_score":1,"_source":{"int_col":12,"flt_col":1.2,"str_col":"str2"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:28;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:190:"{
+}";s:4:"rows";s:211:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"2","_score":1,"_source":{"int_col":12,"flt_col":1.2,"str_col":"str2","title":"2nd","content":"Trevize had grown quite certain he knew what was going on."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:28;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:190:"{
   "index":"test1",
   "query":
   {
@@ -279,7 +279,7 @@ a:1:{i:0;a:42:{i:0;a:2:{s:8:"sphinxql";s:151:"insert into test_rt values (1, '1s
       ]
     }
   }
-}";s:4:"rows";s:368:"{"timed_out":false,"hits":{"total":3,"hits":[{"_id":"4","_score":1,"_source":{"int_col":14,"flt_col":1.4,"attr_lat":39,"attr_lon":22,"str_col":"str4"}},{"_id":"5","_score":1,"_source":{"int_col":15,"flt_col":1.5,"attr_lat":41,"attr_lon":12,"str_col":"str5"}},{"_id":"6","_score":1,"_source":{"int_col":16,"flt_col":1.6,"attr_lat":61,"attr_lon":11,"str_col":"str6"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:29;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:192:"{
+}";s:4:"rows";s:717:"{"timed_out":false,"hits":{"total":3,"hits":[{"_id":"4","_score":1,"_source":{"int_col":14,"flt_col":1.4,"attr_lat":39,"attr_lon":22,"str_col":"str4","content":"There was no way it could speak to robots on a basis of intellectual equality, and certainly not to animals."}},{"_id":"5","_score":1,"_source":{"int_col":15,"flt_col":1.5,"attr_lat":41,"attr_lon":12,"str_col":"str5","content":"To speak to its fellow-Solarians would be, to it, unpleasant, and what communication there must be would be forced, and never spontaneous."}},{"_id":"6","_score":1,"_source":{"int_col":16,"flt_col":1.6,"attr_lat":61,"attr_lon":11,"str_col":"str6","content":"No wonder, Trevize thought, it was indulging itself in this way."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:29;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:192:"{
   "index":"test_rt",
   "query":
   {
@@ -292,7 +292,7 @@ a:1:{i:0;a:42:{i:0;a:2:{s:8:"sphinxql";s:151:"insert into test_rt values (1, '1s
       ]
     }
   }
-}";s:4:"rows";s:284:"{"timed_out":false,"hits":{"total":3,"hits":[{"_id":"5","_score":1,"_source":{"int_col":15,"flt_col":1.5,"str_col":"str5"}},{"_id":"6","_score":1,"_source":{"int_col":16,"flt_col":1.6,"str_col":"str6"}},{"_id":"4","_score":1,"_source":{"int_col":14,"flt_col":1.4,"str_col":"str4"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:30;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:192:"{
+}";s:4:"rows";s:675:"{"timed_out":false,"hits":{"total":3,"hits":[{"_id":"5","_score":1,"_source":{"int_col":15,"flt_col":1.5,"str_col":"str5","title":"5th","content":"To speak to its fellow-Solarians would be, to it, unpleasant, and what communication there must be would be forced, and never spontaneous."}},{"_id":"6","_score":1,"_source":{"int_col":16,"flt_col":1.6,"str_col":"str6","title":"6th","content":"No wonder, Trevize thought, it was indulging itself in this way."}},{"_id":"4","_score":1,"_source":{"int_col":14,"flt_col":1.4,"str_col":"str4","title":"4th","content":"There was no way it could speak to robots on a basis of intellectual equality, and certainly not to animals."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:30;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:192:"{
   "index":"test1",
   "query":
   {
@@ -305,7 +305,7 @@ a:1:{i:0;a:42:{i:0;a:2:{s:8:"sphinxql";s:151:"insert into test_rt values (1, '1s
       ]
     }
   }
-}";s:4:"rows";s:261:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"3","_score":1,"_source":{"int_col":13,"flt_col":1.3,"attr_lat":51,"attr_lon":18,"str_col":"str3"}},{"_id":"4","_score":1,"_source":{"int_col":14,"flt_col":1.4,"attr_lat":39,"attr_lon":22,"str_col":"str4"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:31;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:194:"{
+}";s:4:"rows";s:476:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"3","_score":1,"_source":{"int_col":13,"flt_col":1.3,"attr_lat":51,"attr_lon":18,"str_col":"str3","content":"Bander, despite its paean to freedom, found this unique opportunity irresistible."}},{"_id":"4","_score":1,"_source":{"int_col":14,"flt_col":1.4,"attr_lat":39,"attr_lon":22,"str_col":"str4","content":"There was no way it could speak to robots on a basis of intellectual equality, and certainly not to animals."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:31;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:194:"{
   "index":"test_rt",
   "query":
   {
@@ -318,31 +318,31 @@ a:1:{i:0;a:42:{i:0;a:2:{s:8:"sphinxql";s:151:"insert into test_rt values (1, '1s
       ]
     }
   }
-}";s:4:"rows";s:205:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"4","_score":1,"_source":{"int_col":14,"flt_col":1.4,"str_col":"str4"}},{"_id":"3","_score":1,"_source":{"int_col":13,"flt_col":1.3,"str_col":"str3"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:32;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:70:"{
+}";s:4:"rows";s:448:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"4","_score":1,"_source":{"int_col":14,"flt_col":1.4,"str_col":"str4","title":"4th","content":"There was no way it could speak to robots on a basis of intellectual equality, and certainly not to animals."}},{"_id":"3","_score":1,"_source":{"int_col":13,"flt_col":1.3,"str_col":"str3","title":"3rd","content":"Bander, despite its paean to freedom, found this unique opportunity irresistible."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:32;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:70:"{
   "index":"test1",
   "query":
   {
 	"equals": { "int_col": 12 }
   }
-}";s:4:"rows";s:153:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"2","_score":1,"_source":{"int_col":12,"flt_col":1.2,"attr_lat":46,"attr_lon":2,"str_col":"str2"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:33;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:72:"{
+}";s:4:"rows";s:224:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"2","_score":1,"_source":{"int_col":12,"flt_col":1.2,"attr_lat":46,"attr_lon":2,"str_col":"str2","content":"Trevize had grown quite certain he knew what was going on."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:33;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:72:"{
   "index":"test_rt",
   "query":
   {
 	"equals": { "int_col": 12 }
   }
-}";s:4:"rows";s:126:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"2","_score":1,"_source":{"int_col":12,"flt_col":1.2,"str_col":"str2"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:34;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:74:"{
+}";s:4:"rows";s:211:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"2","_score":1,"_source":{"int_col":12,"flt_col":1.2,"str_col":"str2","title":"2nd","content":"Trevize had grown quite certain he knew what was going on."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:34;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:74:"{
   "index":"test1",
   "query":
   {
 	"equals": { "str_col": "str6" }
   }
-}";s:4:"rows";s:154:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"6","_score":1,"_source":{"int_col":16,"flt_col":1.6,"attr_lat":61,"attr_lon":11,"str_col":"str6"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:35;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:76:"{
+}";s:4:"rows";s:231:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"6","_score":1,"_source":{"int_col":16,"flt_col":1.6,"attr_lat":61,"attr_lon":11,"str_col":"str6","content":"No wonder, Trevize thought, it was indulging itself in this way."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:35;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:76:"{
   "index":"test_rt",
   "query":
   {
 	"equals": { "str_col": "str6" }
   }
-}";s:4:"rows";s:126:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"6","_score":1,"_source":{"int_col":16,"flt_col":1.6,"str_col":"str6"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:36;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:172:"{
+}";s:4:"rows";s:217:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"6","_score":1,"_source":{"int_col":16,"flt_col":1.6,"str_col":"str6","title":"6th","content":"No wonder, Trevize thought, it was indulging itself in this way."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:36;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:172:"{
   "index":"test1",
   "query":
   {
@@ -355,7 +355,7 @@ a:1:{i:0;a:42:{i:0;a:2:{s:8:"sphinxql";s:151:"insert into test_rt values (1, '1s
       ]
     }
   }
-}";s:4:"rows";s:260:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.1,"attr_lat":51,"attr_lon":0,"str_col":"str1"}},{"_id":"3","_score":1,"_source":{"int_col":13,"flt_col":1.3,"attr_lat":51,"attr_lon":18,"str_col":"str3"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:37;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:174:"{
+}";s:4:"rows";s:458:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.1,"attr_lat":51,"attr_lon":0,"str_col":"str1","content":"Trevize glanced now and then at Bliss`s face, which seemed entirely concentrated on Bander."}},{"_id":"3","_score":1,"_source":{"int_col":13,"flt_col":1.3,"attr_lat":51,"attr_lon":18,"str_col":"str3","content":"Bander, despite its paean to freedom, found this unique opportunity irresistible."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:37;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:174:"{
   "index":"test_rt",
   "query":
   {
@@ -368,28 +368,28 @@ a:1:{i:0;a:42:{i:0;a:2:{s:8:"sphinxql";s:151:"insert into test_rt values (1, '1s
       ]
     }
   }
-}";s:4:"rows";s:205:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"3","_score":1,"_source":{"int_col":13,"flt_col":1.3,"str_col":"str3"}},{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.1,"str_col":"str1"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:38;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:74:"{
+}";s:4:"rows";s:431:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"3","_score":1,"_source":{"int_col":13,"flt_col":1.3,"str_col":"str3","title":"3rd","content":"Bander, despite its paean to freedom, found this unique opportunity irresistible."}},{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.1,"str_col":"str1","title":"1st","content":"Trevize glanced now and then at Bliss's face, which seemed entirely concentrated on Bander."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:38;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:74:"{
   "index":"test1",
   "query":
   {
     "in": { "int_col": [11,13] }
   }
-}";s:4:"rows";s:260:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.1,"attr_lat":51,"attr_lon":0,"str_col":"str1"}},{"_id":"3","_score":1,"_source":{"int_col":13,"flt_col":1.3,"attr_lat":51,"attr_lon":18,"str_col":"str3"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:39;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:76:"{
+}";s:4:"rows";s:458:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.1,"attr_lat":51,"attr_lon":0,"str_col":"str1","content":"Trevize glanced now and then at Bliss`s face, which seemed entirely concentrated on Bander."}},{"_id":"3","_score":1,"_source":{"int_col":13,"flt_col":1.3,"attr_lat":51,"attr_lon":18,"str_col":"str3","content":"Bander, despite its paean to freedom, found this unique opportunity irresistible."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:39;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:76:"{
   "index":"test_rt",
   "query":
   {
     "in": { "int_col": [11,13] }
   }
-}";s:4:"rows";s:205:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"3","_score":1,"_source":{"int_col":13,"flt_col":1.3,"str_col":"str3"}},{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.1,"str_col":"str1"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:40;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:82:"{
+}";s:4:"rows";s:431:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"3","_score":1,"_source":{"int_col":13,"flt_col":1.3,"str_col":"str3","title":"3rd","content":"Bander, despite its paean to freedom, found this unique opportunity irresistible."}},{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.1,"str_col":"str1","title":"1st","content":"Trevize glanced now and then at Bliss's face, which seemed entirely concentrated on Bander."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:40;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:82:"{
   "index":"test1",
   "query":
   {
     "in": { "str_col": ["str4","str5"] }
   }
-}";s:4:"rows";s:261:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"4","_score":1,"_source":{"int_col":14,"flt_col":1.4,"attr_lat":39,"attr_lon":22,"str_col":"str4"}},{"_id":"5","_score":1,"_source":{"int_col":15,"flt_col":1.5,"attr_lat":41,"attr_lon":12,"str_col":"str5"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:41;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:84:"{
+}";s:4:"rows";s:533:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"4","_score":1,"_source":{"int_col":14,"flt_col":1.4,"attr_lat":39,"attr_lon":22,"str_col":"str4","content":"There was no way it could speak to robots on a basis of intellectual equality, and certainly not to animals."}},{"_id":"5","_score":1,"_source":{"int_col":15,"flt_col":1.5,"attr_lat":41,"attr_lon":12,"str_col":"str5","content":"To speak to its fellow-Solarians would be, to it, unpleasant, and what communication there must be would be forced, and never spontaneous."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:41;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:84:"{
   "index":"test_rt",
   "query":
   {
     "in": { "str_col": ["str4","str5"] }
   }
-}";s:4:"rows";s:205:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"5","_score":1,"_source":{"int_col":15,"flt_col":1.5,"str_col":"str5"}},{"_id":"4","_score":1,"_source":{"int_col":14,"flt_col":1.4,"str_col":"str4"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}}}
+}";s:4:"rows";s:505:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"5","_score":1,"_source":{"int_col":15,"flt_col":1.5,"str_col":"str5","title":"5th","content":"To speak to its fellow-Solarians would be, to it, unpleasant, and what communication there must be would be forced, and never spontaneous."}},{"_id":"4","_score":1,"_source":{"int_col":14,"flt_col":1.4,"str_col":"str4","title":"4th","content":"There was no way it could speak to robots on a basis of intellectual equality, and certainly not to animals."}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}}}

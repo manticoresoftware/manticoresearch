@@ -197,10 +197,10 @@ INSERT INTO test_table VALUES
 	<query mode="extended2" index="test">"ddd @eee fff@ggg@hhh"</query>
 	<query mode="extended2" index="test">"fff@ggg@hhh iii@ kkk"</query>
 
-	<query mode="extended2" expect_error="1" index="test">@</query>
+	<query mode="extended2" index="test">@</query>
 	<query mode="extended2" index="test">\@</query>
 
-	<query mode="extended2" expect_error="1" index="test">@eee kkk</query>
+	<query mode="extended2" index="test">@eee kkk</query>
 	<query mode="extended2" index="test">\@eee kkk</query>
 
 	<query mode="extended2" index="test">aaa\*ccc</query>

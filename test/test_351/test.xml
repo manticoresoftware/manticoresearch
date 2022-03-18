@@ -24,6 +24,7 @@ index test_rt
     rt_field = title
     rt_attr_uint = gid
 	rt_attr_string = dummy
+	stored_fields =
 }
 </config>
 

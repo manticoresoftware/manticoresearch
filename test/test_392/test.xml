@@ -56,6 +56,7 @@ index test1_nostored
 {
 	source			= test1
 	path			= <data_path/>/test1_nostored
+	stored_fields	=
 }
 
 source test1s

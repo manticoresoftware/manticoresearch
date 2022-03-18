@@ -542,6 +542,10 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 				break;
 			}
 
+		for ( auto & tJoined : m_tParams.m_dJoinedFields )
+			if ( tJoined.m_sName==sName )
+				LOC_ERROR ( "joined field '%s' has the same name as a fulltext field", sName );
+		
 		if ( !i )
 		{
 			// id column coming from sql may have another name
@@ -638,7 +642,10 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 	if ( !AddAutoAttrs ( sError ) )
 		return false;
 
-	m_tSchema.SetupFlags ( *this, false, nullptr );
+	StrVec_t dWarnings;
+	m_tSchema.SetupFlags ( *this, false, &dWarnings );
+	for ( const auto & i : dWarnings )
+		sphWarn ( "%s", i.cstr() );
 
 	// check it
 	if ( m_tSchema.GetFieldsCount()>SPH_MAX_FIELDS )

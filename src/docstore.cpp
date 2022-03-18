@@ -1981,7 +1981,7 @@ public:
 
 	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
 	{
-		EXPR_CLASS_NAME("Expr_GetStored_c");
+		EXPR_CLASS_NAME("Expr_GetStored_T");
 		CALC_STR_HASH(m_sField, m_sField.Length());
 		CALC_POD_HASHES(m_dFieldIds);
 		return CALC_DEP_HASHES();

@@ -48,7 +48,7 @@ source test_kw
 	<sql_settings/>
 
 	sql_query				= select 1 id, 'of me' text, 11 idd UNION select 2 id, 'of me' text, 11 idd UNION select 3 id, 'of me' text, 11 idd UNION select 4 id, 'of me' text, 11 idd
-	sql_joined_field		= text from query; select id , text from test_kw_joined
+	sql_joined_field		= joined_text from query; select id , text from test_kw_joined
 	sql_attr_uint			= idd
 }
 

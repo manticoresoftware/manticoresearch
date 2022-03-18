@@ -12313,7 +12313,7 @@ public:
 	void				GetSettings ( CSphFieldFilterSettings & tSettings ) const final;
 	std::unique_ptr<ISphFieldFilter>	Clone() const final;
 
-	bool				AddRegExp ( const char * sRegExp, CSphString & sError );
+	void				AddRegExp ( const char * sRegExp, StringBuilder_c & sErrors );
 
 private:
 	struct RegExp_t
@@ -12331,8 +12331,10 @@ private:
 CSphFieldRegExps::CSphFieldRegExps ( const StrVec_t &dRegexps, CSphString &sError )
 	: m_bCloned ( false )
 {
+	StringBuilder_c sErrors (", ");
 	for ( const auto &sRegexp : dRegexps )
-		AddRegExp ( sRegexp.cstr (), sError );
+		AddRegExp ( sRegexp.cstr (), sErrors );
+	sErrors.MoveTo ( sError );
 }
 
 
@@ -12378,25 +12380,24 @@ void CSphFieldRegExps::GetSettings ( CSphFieldFilterSettings & tSettings ) const
 }
 
 
-bool CSphFieldRegExps::AddRegExp ( const char * sRegExp, CSphString & sError )
+void CSphFieldRegExps::AddRegExp ( const char * sRegExp, StringBuilder_c & sErrors )
 {
 	if ( m_bCloned )
-		return false;
+		return;
 
 	const char sSplitter [] = "=>";
 	const char * sSplit = strstr ( sRegExp, sSplitter );
 	if ( !sSplit )
 	{
-		sError = "mapping token (=>) not found";
-		return false;
+		sErrors << "mapping token (=>) not found";
+		return;
 	} else if ( strstr ( sSplit + strlen ( sSplitter ), sSplitter ) )
 	{
-		sError = "mapping token (=>) found more than once";
-		return false;
+		sErrors << "mapping token (=>) found more than once";
+		return;
 	}
 
-	m_dRegexps.Resize ( m_dRegexps.GetLength () + 1 );
-	RegExp_t & tRegExp = m_dRegexps.Last();
+	RegExp_t tRegExp;
 	tRegExp.m_sFrom.SetBinary ( sRegExp, int ( sSplit-sRegExp ) );
 	tRegExp.m_sTo = sSplit + strlen ( sSplitter );
 	tRegExp.m_sFrom.Trim();
@@ -12404,18 +12405,16 @@ bool CSphFieldRegExps::AddRegExp ( const char * sRegExp, CSphString & sError )
 
 	RE2::Options tOptions;
 	tOptions.set_encoding ( RE2::Options::Encoding::EncodingUTF8 );
-	tRegExp.m_pRE2 = new RE2 ( tRegExp.m_sFrom.cstr(), tOptions );
+	auto pRE2 = std::make_unique<RE2> ( tRegExp.m_sFrom.cstr(), tOptions );
 
 	std::string sRE2Error;
-	if ( !tRegExp.m_pRE2->CheckRewriteString ( tRegExp.m_sTo.cstr(), &sRE2Error ) )
+	if ( !pRE2->CheckRewriteString ( tRegExp.m_sTo.cstr(), &sRE2Error ) )
 	{
-		sError.SetSprintf ( "\"%s => %s\" is not a valid mapping: %s", tRegExp.m_sFrom.cstr(), tRegExp.m_sTo.cstr(), sRE2Error.c_str() );
-		SafeDelete ( tRegExp.m_pRE2 );
-		m_dRegexps.Remove ( m_dRegexps.GetLength() - 1 );
-		return false;
+		sErrors.Sprintf( "\"%s => %s\" is not a valid mapping: %s", tRegExp.m_sFrom.cstr(), tRegExp.m_sTo.cstr(), sRE2Error.c_str() );
+		return;
 	}
-
-	return true;
+	tRegExp.m_pRE2 = pRE2.release();
+	m_dRegexps.Add ( std::move ( tRegExp ) );
 }
 
 

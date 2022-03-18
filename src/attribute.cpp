@@ -455,35 +455,35 @@ BlobRowBuilder_MemUpdate_c::BlobRowBuilder_MemUpdate_c ( const ISphSchema & tSch
 
 //////////////////////////////////////////////////////////////////////////
 
-BlobRowBuilder_i * sphCreateBlobRowBuilder ( const ISphSchema & tSchema, const CSphString & sFile, SphOffset_t tSpaceForUpdates, CSphString & sError )
+std::unique_ptr<BlobRowBuilder_i> sphCreateBlobRowBuilder ( const ISphSchema & tSchema, const CSphString & sFile, SphOffset_t tSpaceForUpdates, CSphString & sError )
 {
-	BlobRowBuilder_File_c * pBuilder = new BlobRowBuilder_File_c ( tSchema, tSpaceForUpdates, false );
+	auto pBuilder = std::make_unique<BlobRowBuilder_File_c> ( tSchema, tSpaceForUpdates, false );
 	if ( !pBuilder->Setup ( sFile, sError ) )
-		SafeDelete ( pBuilder );
+		pBuilder = nullptr;
 
 	return pBuilder;
 }
 
 
-BlobRowBuilder_i *	sphCreateBlobRowJsonBuilder ( const ISphSchema & tSchema, const CSphString & sFile, SphOffset_t tSpaceForUpdates, CSphString & sError )
+std::unique_ptr<BlobRowBuilder_i> sphCreateBlobRowJsonBuilder ( const ISphSchema & tSchema, const CSphString & sFile, SphOffset_t tSpaceForUpdates, CSphString & sError )
 {
-	BlobRowBuilder_File_c * pBuilder = new BlobRowBuilder_File_c ( tSchema, tSpaceForUpdates, true );
+	auto pBuilder = std::make_unique<BlobRowBuilder_File_c> ( tSchema, tSpaceForUpdates, true );
 	if ( !pBuilder->Setup ( sFile, sError ) )
-		SafeDelete ( pBuilder );
+		pBuilder = nullptr;
 
 	return pBuilder;
 }
 
 
-BlobRowBuilder_i * sphCreateBlobRowBuilder ( const ISphSchema & tSchema, CSphTightVector<BYTE> & dPool )
+std::unique_ptr<BlobRowBuilder_i> sphCreateBlobRowBuilder ( const ISphSchema & tSchema, CSphTightVector<BYTE> & dPool )
 {
-	return new BlobRowBuilder_Mem_c ( tSchema, dPool );
+	return std::make_unique<BlobRowBuilder_Mem_c> ( tSchema, dPool );
 }
 
 
-BlobRowBuilder_i * sphCreateBlobRowBuilderUpdate ( const ISphSchema & tSchema, CSphTightVector<BYTE> & dPool, const CSphBitvec & dAttrsUpdated )
+std::unique_ptr<BlobRowBuilder_i> sphCreateBlobRowBuilderUpdate ( const ISphSchema & tSchema, CSphTightVector<BYTE> & dPool, const CSphBitvec & dAttrsUpdated )
 {
-	return new BlobRowBuilder_MemUpdate_c ( tSchema, dPool, dAttrsUpdated );
+	return std::make_unique<BlobRowBuilder_MemUpdate_c> ( tSchema, dPool, dAttrsUpdated );
 }
 
 //////////////////////////////////////////////////////////////////////////

@@ -1067,17 +1067,17 @@ bool ConverterPlain_t::WriteAttributes ( Index_t & tIndex, CSphString & sError )
 	const CSphColumnInfo * pBlobLocatorAttr = m_tSchema.GetAttr ( sphGetBlobLocatorName() );
 	AttrIndexBuilder_c tMinMaxBuilder ( m_tSchema );
 
-	CSphScopedPtr<BlobRowBuilder_i> pBlobRowBuilder(nullptr);
+	std::unique_ptr<BlobRowBuilder_i> pBlobRowBuilder;
 	if ( pBlobLocatorAttr )
 	{
 		pBlobRowBuilder = sphCreateBlobRowJsonBuilder ( m_tSchema, sSPB, tIndex.m_tSettings.m_tBlobUpdateSpace, sError );
-		if ( !pBlobRowBuilder.Ptr() )
+		if ( !pBlobRowBuilder )
 			return false;
 	}
 
 	RowID_t tNextRowID = 0;
 	int iStride = m_tSchema.GetRowSize();
-	AttrConverter_t tConv ( tIndex, m_tSchema, pBlobRowBuilder.Ptr() );
+	AttrConverter_t tConv ( tIndex, m_tSchema, pBlobRowBuilder.get() );
 	CSphRowitem * pRow = nullptr;
 	while ( ( pRow = tConv.NextRow() )!=nullptr )
 	{
@@ -1107,7 +1107,7 @@ bool ConverterPlain_t::WriteAttributes ( Index_t & tIndex, CSphString & sError )
 		tNextRowID++;
 	}
 
-	if ( pBlobRowBuilder.Ptr() && !pBlobRowBuilder->Done ( sError ) )
+	if ( pBlobRowBuilder && !pBlobRowBuilder->Done ( sError ) )
 		return false;		
 
 	tMinMaxBuilder.FinishCollect();

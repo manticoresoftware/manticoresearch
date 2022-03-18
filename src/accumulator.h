@@ -134,7 +134,7 @@ private:
 	bool								m_bReplace = false;		///< insert or replace mode (affects CleanupDuplicates() behavior)
 
 	ISphRtDictWraperRefPtr_c			m_pDictRt;
-	CSphScopedPtr<BlobRowBuilder_i>		m_pBlobWriter {nullptr};
+	std::unique_ptr<BlobRowBuilder_i>	m_pBlobWriter;
 	std::unique_ptr<DocstoreRT_i>		m_pDocstore {nullptr};
 	std::unique_ptr<ColumnarBuilderRT_i>	m_pColumnarBuilder {nullptr};
 	RowID_t								m_tNextRowID = 0;

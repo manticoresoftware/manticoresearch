@@ -967,7 +967,7 @@ bool IndexUpdateHelper_c::Update_Blobs ( const RowsToUpdate_t& dRows, UpdateCont
 		return true;
 
 	CSphTightVector<BYTE> tBlobPool;
-	CSphScopedPtr<BlobRowBuilder_i> pBlobRowBuilder ( sphCreateBlobRowBuilderUpdate ( tCtx.m_tSchema, tBlobPool, tCtx.m_dSchemaUpdateMask ) );
+	std::unique_ptr<BlobRowBuilder_i> pBlobRowBuilder = sphCreateBlobRowBuilderUpdate ( tCtx.m_tSchema, tBlobPool, tCtx.m_dSchemaUpdateMask );
 
 	const CSphColumnInfo * pBlobLocator = tCtx.m_tSchema.GetAttr ( sphGetBlobLocatorName() );
 
@@ -1322,7 +1322,7 @@ private:
 
 	bool						Build_SetupInplace ( SphOffset_t & iHitsGap, int iHitsMax, int iFdHits ) const; // fixme! build only
 	bool						Build_SetupDocstore ( std::unique_ptr<DocstoreBuilder_i> & pDocstore, CSphBitvec & dStoredFields, CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage ); // fixme! build only
-	bool						Build_SetupBlobBuilder ( CSphScopedPtr<BlobRowBuilder_i> & pBuilder ); // fixme! build only
+	bool						Build_SetupBlobBuilder ( std::unique_ptr<BlobRowBuilder_i> & pBuilder ); // fixme! build only
 	bool						Build_SetupColumnar ( std::unique_ptr<columnar::Builder_i> & pBuilder ); // fixme! build only
 	bool						Build_SetupHistograms ( CSphScopedPtr<HistogramContainer_c> & pContainer, CSphVector<std::pair<Histogram_i*,int>> & dHistograms ); // fixme! build only
 
@@ -1349,7 +1349,7 @@ class AttrMerger_c
 	CSphVector<PlainOrColumnar_t>			m_dAttrsForHistogram;
 	CSphFixedVector<DocidRowidPair_t> 		m_dDocidLookup {0};
 	CSphWriter								m_tWriterSPA;
-	BlobRowBuilder_i * 						m_pBlobRowBuilder = nullptr;
+	std::unique_ptr<BlobRowBuilder_i>		m_pBlobRowBuilder;
 	std::unique_ptr<DocstoreBuilder_i>		m_pDocstoreBuilder;
 	std::unique_ptr<columnar::Builder_i>	m_pColumnarBuilder;
 	RowID_t									m_tResultRowID = 0;
@@ -1369,11 +1369,6 @@ public:
 		, m_sError ( sError)
 		, m_iTotalDocs ( iTotalDocs )
 	{}
-
-	~AttrMerger_c()
-	{
-		SafeDelete ( m_pBlobRowBuilder );
-	}
 
 	bool Prepare ( const CSphIndex_VLN* pSrcIndex, const CSphIndex_VLN* pDstIndex );
 	bool CopyAttributes ( const CSphIndex_VLN& tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive );
@@ -4942,13 +4937,13 @@ bool CSphIndex_VLN::Build_SetupDocstore ( std::unique_ptr<DocstoreBuilder_i> & p
 }
 
 
-bool CSphIndex_VLN::Build_SetupBlobBuilder ( CSphScopedPtr<BlobRowBuilder_i> & pBuilder )
+bool CSphIndex_VLN::Build_SetupBlobBuilder ( std::unique_ptr<BlobRowBuilder_i> & pBuilder )
 {
 	if ( !m_tSchema.HasBlobAttrs() )
 		return true;
 
 	pBuilder = sphCreateBlobRowBuilder ( m_tSchema, GetIndexFileName ( SPH_EXT_SPB, true ), m_tSettings.m_tBlobUpdateSpace, m_sLastError );
-	return !!pBuilder.Ptr();
+	return !!pBuilder;
 }
 
 
@@ -5206,7 +5201,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	if ( fdLock.GetFD()<0 || fdHits.GetFD()<0 )
 		return 0;
 
-	CSphScopedPtr<BlobRowBuilder_i> pBlobRowBuilder(nullptr);
+	std::unique_ptr<BlobRowBuilder_i> pBlobRowBuilder;
 	if ( !Build_SetupBlobBuilder(pBlobRowBuilder) )
 		return 0;
 
@@ -5300,13 +5295,13 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			g_iIndexerCurrentHits = pHits-dHits.Begin();
 
 			// store mva, strings and JSON blobs
-			if ( pBlobRowBuilder.Ptr() )
+			if ( pBlobRowBuilder )
 			{
 				AttrSource_i * pBlobSource = pSource;
 				if ( bKeepRow )
 					pBlobSource = &tPrevAttrs;
 				SphOffset_t tBlobOffset = 0;
-				if ( !Build_StoreBlobAttrs ( tDocID, tBlobOffset, *pBlobRowBuilder.Ptr(), tQueryMvaContainer, *pBlobSource, bKeepRow ) )
+				if ( !Build_StoreBlobAttrs ( tDocID, tBlobOffset, *pBlobRowBuilder, tQueryMvaContainer, *pBlobSource, bKeepRow ) )
 					return 0;
 
 				pSource->m_tDocInfo.SetAttr ( pBlobLocatorAttr->m_tLocator, tBlobOffset );
@@ -5533,7 +5528,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		}
 	}
 
-	if ( pBlobRowBuilder.Ptr() && !pBlobRowBuilder->Done(m_sLastError) )
+	if ( pBlobRowBuilder && !pBlobRowBuilder->Done(m_sLastError) )
 		return 0;
 
 	std::string sError;

@@ -2523,7 +2523,7 @@ void RtAccum_t::GrabLastWarning ( CSphString & sWarning )
 void RtAccum_t::SetIndex ( RtIndex_i * pIndex )
 {
 	m_pIndex = pIndex;
-	m_pBlobWriter.Reset();
+	m_pBlobWriter.reset();
 	if ( !pIndex )
 		return;
 		
@@ -3683,7 +3683,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	const CSphColumnInfo * pBlobLocatorAttr = m_tSchema.GetAttr ( sphGetBlobLocatorName() );
 	AttrIndexBuilder_c tMinMaxBuilder(m_tSchema);
 
-	CSphScopedPtr<BlobRowBuilder_i> pBlobRowBuilder(nullptr);
+	std::unique_ptr<BlobRowBuilder_i> pBlobRowBuilder;
 	if ( pBlobLocatorAttr )
 	{
 		pBlobRowBuilder = sphCreateBlobRowBuilder ( m_tSchema, sSPB, m_tSettings.m_tBlobUpdateSpace, sError );

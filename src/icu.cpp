@@ -58,8 +58,6 @@ static void ConfigureICU()
 class ICUPreprocessor_c
 {
 public:
-							~ICUPreprocessor_c();
-
 	bool					Init ( CSphString & sError );
 	bool					Process ( const BYTE * pBuffer, int iLength, CSphVector<BYTE> & dOut, bool bQuery );
 	bool					SetBlendChars ( const char * szBlendChars, CSphString & sError );
@@ -68,7 +66,7 @@ protected:
 	CSphString				m_sBlendChars;
 
 private:
-	icu::BreakIterator *	m_pBreakIterator {nullptr};
+	std::unique_ptr<icu::BreakIterator>	m_pBreakIterator;
 	const BYTE *			m_pBuffer {nullptr};
 	int						m_iBoundaryIndex {0};
 	int						m_iPrevBoundary {0};
@@ -88,12 +86,6 @@ private:
 };
 
 
-ICUPreprocessor_c::~ICUPreprocessor_c()
-{
-	SafeDelete(m_pBreakIterator);
-}
-
-
 bool ICUPreprocessor_c::Init ( CSphString & sError )
 {
 	ConfigureICU();
@@ -101,7 +93,7 @@ bool ICUPreprocessor_c::Init ( CSphString & sError )
 	assert ( !m_pBreakIterator );
 
 	UErrorCode tStatus = U_ZERO_ERROR;
-	m_pBreakIterator = icu::BreakIterator::createWordInstance ( icu::Locale::getChinese(), tStatus );
+	m_pBreakIterator = std::unique_ptr<icu::BreakIterator> { icu::BreakIterator::createWordInstance ( icu::Locale::getChinese(), tStatus ) };
 	if ( U_FAILURE(tStatus) )
 	{
 		sError.SetSprintf( "Unable to initialize ICU break iterator: %s", u_errorName(tStatus) );

@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>configless rt idx without ft fields</name>
+
+<requires>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<metaindex name='META:all'>
+    <index>test1</index>
+    <index>test2</index>
+    <index>test3</index>
+</metaindex>
+
+<queries>
+<sphinxql>
+    CREATE TABLE test1(idd int);
+    CREATE TABLE test2(str string attribute);
+    CREATE TABLE test3(str string stored);
+
+    show tables;
+    desc META:all;
+
+    <!-- initial test -->
+    INSERT INTO test1(idd) values (1);
+    INSERT INTO test2(str) values ('bla');
+    INSERT INTO test3(str) values ('bla');
+    SELECT * FROM META:all;
+</sphinxql>
+
+<!-- more data (cause ram segments merging) -->
+<repeat count="32">
+    <sphinxql skip="1">
+        INSERT INTO test1(idd) values (1);
+        INSERT INTO test2(str) values ('bla');
+        INSERT INTO test3(str) values ('bla');
+    </sphinxql>
+</repeat>
+
+<sphinxql>
+    show index META:all status like 'ram_chunk_segments_count';
+    SELECT * FROM META:all order by id asc;
+    select count(*) from META:all;
+    flush ramchunk META:all;
+    SELECT * FROM META:all order by id asc;
+    select count(*) from META:all;
+    show index META:all status like 'disk_chunks';
+</sphinxql>
+
+    <!-- more data (cause ram segments merging) -->
+    <repeat count="32">
+        <sphinxql skip="1">
+            INSERT INTO test1(idd) values (1);
+            INSERT INTO test2(str) values ('bla');
+            INSERT INTO test3(str) values ('bla');
+        </sphinxql>
+    </repeat>
+
+<sphinxql>
+
+    <!-- one more disk chunk -->
+    flush ramchunk META:all;
+    show index META:all status like 'disk_chunks';
+    select count(*) from META:all;
+
+    <!-- merge disk chunks -->
+    debug merge META:all 0 1 option sync=1;
+    show index META:all status like 'disk_chunks';
+    select count(*) from META:all;
+
+    <!-- final check -->
+    SELECT * FROM META:all order by id asc;
+
+    <!-- cleanup -->
+    drop table META:all;
+</sphinxql>
+</queries>
+
+</test>

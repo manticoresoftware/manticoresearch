@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>rt idx without ft fields</name>
+
+<requires>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+index test1
+{
+	type = rt
+	path =<data_path/>/test1
+
+	rt_attr_uint = idd
+}
+
+index test2
+{
+	type = rt
+	path =<data_path/>/test2
+
+	rt_attr_string = str
+}
+
+index test3
+{
+	type = rt
+	path =<data_path/>/test3
+
+    rt_field = str
+    stored_only_fields = str
+}
+
+searchd
+{
+	<searchd_Settings/>
+}
+</config>
+
+<metaindex name='META:all'>
+    <index>test1</index>
+    <index>test2</index>
+    <index>test3</index>
+</metaindex>
+
+<queries>
+<sphinxql>
+    show tables;
+    desc META:all;
+
+    <!-- initial test -->
+    INSERT INTO test1(idd) values (1);
+    INSERT INTO test2(str) values ('bla');
+    INSERT INTO test3(str) values ('bla');
+    SELECT * FROM META:all;
+</sphinxql>
+
+<!-- more data (cause ram segments merging) -->
+<repeat count="32">
+    <sphinxql skip="1">
+        INSERT INTO test1(idd) values (1);
+        INSERT INTO test2(str) values ('bla');
+        INSERT INTO test3(str) values ('bla');
+    </sphinxql>
+</repeat>
+
+<sphinxql>
+    show index META:all status like 'ram_chunk_segments_count';
+    SELECT * FROM META:all order by id asc;
+    select count(*) from META:all;
+    flush ramchunk META:all;
+    SELECT * FROM META:all order by id asc;
+    select count(*) from META:all;
+    show index META:all status like 'disk_chunks';
+</sphinxql>
+
+    <!-- more data (cause ram segments merging) -->
+    <repeat count="32">
+        <sphinxql skip="1">
+            INSERT INTO test1(idd) values (1);
+            INSERT INTO test2(str) values ('bla');
+            INSERT INTO test3(str) values ('bla');
+        </sphinxql>
+    </repeat>
+
+<sphinxql>
+
+    <!-- one more disk chunk -->
+    flush ramchunk META:all;
+    show index META:all status like 'disk_chunks';
+    select count(*) from META:all;
+
+    <!-- merge disk chunks -->
+    debug merge META:all 0 1 option sync=1;
+    show index META:all status like 'disk_chunks';
+    select count(*) from META:all;
+
+    <!-- final check -->
+    SELECT * FROM META:all order by id asc;
+</sphinxql>
+</queries>
+
+</test>

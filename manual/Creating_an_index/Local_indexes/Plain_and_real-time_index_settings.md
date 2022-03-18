@@ -204,7 +204,7 @@ rt_field = subject
 
 Full-text fields to be indexed. The names must be unique. The order is preserved; and so field values in `INSERT` statements without an explicit list of inserted columns will have to be in the same order as configured.
 
-Value: at least one full-text field should be specified in an index, multiple records allowed.
+Full-text field declaration. Multi-value, optional.
 
 #### rt_attr_uint
 

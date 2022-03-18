@@ -457,11 +457,11 @@ void RtSegment_t::BuildDocID2RowIDMap ( const CSphSchema & tSchema )
 	else
 	{
 		std::string sError;
-		CSphScopedPtr<columnar::Iterator_i> pIt ( m_pColumnar->CreateIterator ( sphGetDocidName(), {}, nullptr, sError ) );
-		assert ( pIt.Ptr() );
+		auto pIt = CreateIterator ( m_pColumnar.get(), sphGetDocidName(), sError );
+		assert ( pIt );
 		for ( RowID_t tRowID = 0; tRowID<m_uRows; tRowID++ )
 		{
-			Verify ( AdvanceIterator ( pIt.Ptr(), tRowID ) );
+			Verify ( AdvanceIterator ( pIt.get(), tRowID ) );
 			m_tDocIDtoRowID.Add ( pIt->Get(), tRowID );
 		}
 	}
@@ -3701,11 +3701,11 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 		SetupDocstoreFields ( *pDocstoreBuilder, m_tSchema );
 	}
 
-	CSphScopedPtr<columnar::Builder_i> pColumnarBuilder(nullptr);
+	std::unique_ptr<columnar::Builder_i> pColumnarBuilder;
 	if ( m_tSchema.HasColumnarAttrs() )
 	{
 		pColumnarBuilder = CreateColumnarBuilder ( m_tSchema, m_tSettings, sSPC, sError );
-		if ( !pColumnarBuilder.Ptr() )
+		if ( !pColumnarBuilder )
 			return false;
 	}
 
@@ -3759,7 +3759,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 			{
 				auto & tIterator = dColumnarIterators[iIterator];
 				Verify ( AdvanceIterator ( tIterator.first.get(), tRowID ) );
-				SetColumnarAttr ( iIterator, tIterator.second, pColumnarBuilder.Ptr(), tIterator.first.get(), dTmp );
+				SetColumnarAttr ( iIterator, tIterator.second, pColumnarBuilder.get(), tIterator.first.get(), dTmp );
 			}
 
 			tDocID = iColumnarIdLoc>=0 ? dColumnarIterators[iColumnarIdLoc].first->Get() : sphGetDocID(pRow);
@@ -3783,7 +3783,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	VecTraits_T<DocidRowidPair_t> dLookup ( dRawLookup.Begin(), tNextRowID );
 
 	std::string sErrorSTL;
-	if ( pColumnarBuilder.Ptr() && !pColumnarBuilder->Done(sErrorSTL) )
+	if ( pColumnarBuilder && !pColumnarBuilder->Done(sErrorSTL) )
 	{
 		sError = sErrorSTL.c_str();
 		return false;

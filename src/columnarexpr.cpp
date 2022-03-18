@@ -30,7 +30,7 @@ public:
 	ISphExpr *	Clone() const final { return new Expr_Columnar_MVAIn_T ( *this ); }
 
 private:
-	CSphScopedPtr<columnar::Iterator_i> m_pIterator {nullptr};
+	std::unique_ptr<columnar::Iterator_i> m_pIterator;
 	CSphString	m_sName;
 
 				Expr_Columnar_MVAIn_T ( const Expr_Columnar_MVAIn_T & rhs );
@@ -48,7 +48,7 @@ Expr_Columnar_MVAIn_T<T>::Expr_Columnar_MVAIn_T ( const CSphString & sName, Cons
 template <typename T>
 int Expr_Columnar_MVAIn_T<T>::IntEval ( const CSphMatch & tMatch ) const
 {
-	if ( m_pIterator.Ptr() && m_pIterator->AdvanceTo ( tMatch.m_tRowID ) == tMatch.m_tRowID )
+	if ( m_pIterator && m_pIterator->AdvanceTo ( tMatch.m_tRowID ) == tMatch.m_tRowID )
 	{
 		const uint8_t * pData = nullptr;
 		int iLen = m_pIterator->Get(pData);
@@ -69,7 +69,7 @@ void Expr_Columnar_MVAIn_T<T>::Command ( ESphExprCommand eCmd, void * pArg )
 		if ( pColumnar )
 		{
 			std::string sError; // FIXME! report errors
-			m_pIterator = pColumnar->CreateIterator ( m_sName.cstr(), {}, nullptr, sError );
+			m_pIterator = CreateIterator ( pColumnar, m_sName.cstr(), sError );
 		}
 	}
 }

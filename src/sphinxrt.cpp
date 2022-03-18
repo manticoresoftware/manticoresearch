@@ -1844,15 +1844,12 @@ bool RtIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphS
 	if ( m_tSettings.m_bHtmlStrip && !tSrc.SetStripHTML ( m_tSettings.m_sHtmlIndexAttrs.cstr(), m_tSettings.m_sHtmlRemoveElements.cstr(), m_tSettings.m_bIndexSP, m_tSettings.m_sZones.cstr(), sError ) )
 		return false;
 
-	// OPTIMIZE? do not clone filters on each INSERT
-	FieldFilterRefPtr_c pFieldFilter;
-	if ( m_pFieldFilter )
-		pFieldFilter = m_pFieldFilter->Clone();
-
 	tSrc.Setup ( m_tSettings, nullptr );
 	tSrc.SetTokenizer ( std::move ( tTokenizer ) );
 	tSrc.SetDict ( pAcc->m_pDict );
-	tSrc.SetFieldFilter ( pFieldFilter );
+	// OPTIMIZE? do not clone filters on each INSERT
+	if ( m_pFieldFilter )
+		tSrc.SetFieldFilter ( m_pFieldFilter->Clone() );
 	tSrc.SetMorphFields ( m_tMorphFields );
 	if ( !tSrc.Connect ( m_sLastError ) )
 		return false;
@@ -4183,7 +4180,7 @@ bool RtIndex_c::SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_
 	tWriteHeader.m_pSchema = &m_tSchema;
 	tWriteHeader.m_pTokenizer = m_pTokenizer;
 	tWriteHeader.m_pDict = m_pDict;
-	tWriteHeader.m_pFieldFilter = m_pFieldFilter;
+	tWriteHeader.m_pFieldFilter = m_pFieldFilter.get();
 	tWriteHeader.m_pFieldLens = m_dFieldLens.Begin();
 
 	CSphString sName;
@@ -4277,7 +4274,7 @@ void RtIndex_c::WriteMeta ( int64_t iTID, const VecTraits_T<int>& dChunkNames, C
 
 	// meta v.11
 	CSphFieldFilterSettings tFieldFilterSettings;
-	if ( m_pFieldFilter.Ptr() )
+	if ( m_pFieldFilter )
 	{
 		m_pFieldFilter->GetSettings(tFieldFilterSettings);
 		sNewMeta.NamedVal ( "field_filter_settings", tFieldFilterSettings );
@@ -4661,7 +4658,7 @@ bool RtIndex_c::LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuilder, bool bStr
 		dWarnings.Add(sWarning);
 	}
 
-	FieldFilterRefPtr_c pFieldFilter;
+	std::unique_ptr<ISphFieldFilter> pFieldFilter;
 	CSphFieldFilterSettings tFieldFilterSettings;
 	tFieldFilterSettings.Load(rdMeta);
 	if ( tFieldFilterSettings.m_dRegexps.GetLength() )
@@ -4670,7 +4667,7 @@ bool RtIndex_c::LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuilder, bool bStr
 	if ( !sphSpawnFilterICU ( pFieldFilter, m_tSettings, tTokenizerSettings, sMeta.cstr(), m_sLastError ) )
 		return false;
 
-	SetFieldFilter ( pFieldFilter );
+	SetFieldFilter ( std::move ( pFieldFilter ) );
 
 	int iLen = (int)rdMeta.GetDword();
 	m_dChunkNames.Reset ( iLen );
@@ -4799,7 +4796,7 @@ bool RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder, bool bStrip
 		dWarnings.Add(sWarning);
 	}
 
-	FieldFilterRefPtr_c pFieldFilter;
+	std::unique_ptr<ISphFieldFilter> pFieldFilter;
 	auto tFieldFilterSettingsNode = tBson.ChildByName ( "field_filter_settings" );
 	if ( !IsNullNode ( tFieldFilterSettingsNode ) )
 	{
@@ -4815,7 +4812,7 @@ bool RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder, bool bStrip
 	if ( !sphSpawnFilterICU ( pFieldFilter, m_tSettings, tTokenizerSettings, sMeta.cstr(), m_sLastError ) )
 		return false;
 
-	SetFieldFilter ( pFieldFilter );
+	SetFieldFilter ( std::move ( pFieldFilter ) );
 
 	Bson_c tNamesVec { tBson.ChildByName ( "chunk_names" ) };
 	m_dChunkNames.Reset ( tNamesVec.CountValues() );
@@ -7808,13 +7805,8 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	CSphVector<BYTE> dFiltered;
 	const BYTE * sModifiedQuery = (const BYTE *)tQuery.m_sQuery.cstr();
 
-	FieldFilterRefPtr_c pFieldFilter;
-	if ( m_pFieldFilter && sModifiedQuery )
-	{
-		pFieldFilter = m_pFieldFilter->Clone();
-		if ( pFieldFilter && pFieldFilter->Apply ( sModifiedQuery, dFiltered, true ) )
-			sModifiedQuery = dFiltered.Begin();
-	}
+	if ( m_pFieldFilter && sModifiedQuery && m_pFieldFilter->Clone()->Apply ( sModifiedQuery, dFiltered, true ) )
+		sModifiedQuery = dFiltered.Begin();
 
 	// parse query
 	SwitchProfile ( pProfiler, SPH_QSTATE_PARSE );
@@ -7975,14 +7967,9 @@ void RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 	}
 
 	CSphVector<BYTE> dFiltered;
-	FieldFilterRefPtr_c pFieldFilter;
 	const BYTE * sModifiedQuery = (const BYTE *)sQuery;
-	if ( m_pFieldFilter && sQuery )
-	{
-		pFieldFilter = m_pFieldFilter->Clone();
-		if ( pFieldFilter && pFieldFilter->Apply ( sModifiedQuery, dFiltered, true ) )
-			sModifiedQuery = dFiltered.Begin();
-	}
+	if ( m_pFieldFilter && sQuery && m_pFieldFilter->Clone()->Apply ( sModifiedQuery, dFiltered, true ) )
+		sModifiedQuery = dFiltered.Begin();
 
 	// FIXME!!! missing bigram
 
@@ -9868,9 +9855,6 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 	if ( tDict->GetSettings().m_bWordDict && tDict->HasMorphology() && bIsStarDict && !tSettings.m_tIndex.m_bIndexExactWords )
 		tSettings.m_tIndex.m_bIndexExactWords = true;
 
-	// field filter
-	FieldFilterRefPtr_c tFieldFilter;
-
 	// re filter
 	bool bReFilterSame = true;
 	CSphFieldFilterSettings tFieldFilterSettings;
@@ -9895,6 +9879,9 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 
 		bReFilterSame = ( uMyFF==uNewFF );
 	}
+
+	// field filter
+	std::unique_ptr<ISphFieldFilter> tFieldFilter;
 
 	if ( !bReFilterSame && tSettings.m_tFieldFilter.m_dRegexps.GetLength () )
 	{
@@ -9925,7 +9912,7 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 		tSetup.m_pTokenizer = pTokenizer.Leak();
 		tSetup.m_pDict = tDict.Leak();
 		tSetup.m_tIndex = tSettings.m_tIndex;
-		tSetup.m_pFieldFilter = tFieldFilter.Leak();
+		tSetup.m_pFieldFilter = std::move ( tFieldFilter );
 		tSetup.m_tMutableSettings = tSettings.m_tMutableSettings;
 		return false;
 	}
@@ -9944,7 +9931,7 @@ bool RtIndex_c::IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconf
 		bSame = false;
 	}
 
-	return CreateReconfigure ( m_sIndexName, IsStarDict ( m_bKeywordDict ), m_pFieldFilter, m_tSettings, m_pTokenizer->GetSettingsFNV(), m_pDict->GetSettingsFNV(), m_pTokenizer->GetMaxCodepointLength(),
+	return CreateReconfigure ( m_sIndexName, IsStarDict ( m_bKeywordDict ), m_pFieldFilter.get(), m_tSettings, m_pTokenizer->GetSettingsFNV(), m_pDict->GetSettingsFNV(), m_pTokenizer->GetMaxCodepointLength(),
 		GetMemLimit(), bSame, tSettings, tSetup, dWarnings, sError );
 }
 
@@ -9968,7 +9955,7 @@ bool RtIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 	Setup ( tSetup.m_tIndex );
 	SetTokenizer ( tSetup.m_pTokenizer );
 	SetDictionary ( tSetup.m_pDict );
-	SetFieldFilter ( tSetup.m_pFieldFilter );
+	SetFieldFilter ( std::move ( tSetup.m_pFieldFilter ) );
 
 	m_iMaxCodepointLength = m_pTokenizer->GetMaxCodepointLength();
 	SetupQueryTokenizer();

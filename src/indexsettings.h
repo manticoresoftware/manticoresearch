@@ -398,7 +398,6 @@ private:
 
 class ISphTokenizer;
 class CSphDict;
-class ISphFieldFilter;
 class CSphIndex;
 
 void		SaveTokenizerSettings ( CSphWriter & tWriter, const TokenizerRefPtr_c& pTokenizer, int iEmbeddedLimit );

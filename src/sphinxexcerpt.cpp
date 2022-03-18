@@ -402,7 +402,7 @@ private:
 	TokenizerRefPtr_c				m_pTokenizer;
 	TokenizerRefPtr_c				m_pQueryTokenizer;
 	DictRefPtr_c					m_pDict;
-	FieldFilterRefPtr_c				m_pFieldFilter;
+	std::unique_ptr<ISphFieldFilter>	m_pFieldFilter;
 
 	bool							CheckSettings ( TextSource_i * pSource, CSphString & sError ) const;
 	const CSphHTMLStripper *		GetStripperForText() const;
@@ -1171,7 +1171,7 @@ bool SnippetBuilder_c::Impl_c::Build ( TextSource_i * pSource, SnippetResult_t &
 		return false;
 
 	assert ( pSource );
-	if ( !pSource->PrepareText ( m_pFieldFilter, GetStripperForText(), tRes.m_sError ) )
+	if ( !pSource->PrepareText ( m_pFieldFilter.get(), GetStripperForText(), tRes.m_sError ) )
 		return false;
  
 	assert ( pSource );
@@ -1417,11 +1417,8 @@ bool SnippetBuilder_c::Impl_c::SetQuery ( const CSphString & sQuery, bool bIgnor
 
 	CSphVector<BYTE> dFiltered;
 	const BYTE * szModifiedQuery = (const BYTE *)sQuery.cstr();
-	if ( m_pFieldFilter && szModifiedQuery )
-	{
-		if ( m_pFieldFilter->Apply ( szModifiedQuery, dFiltered, true ) )
-			szModifiedQuery = dFiltered.Begin();
-	}
+	if ( m_pFieldFilter && szModifiedQuery && m_pFieldFilter->Apply ( szModifiedQuery, dFiltered, true ) )
+		szModifiedQuery = dFiltered.Begin();
 
 	m_pState->m_pExtQuery.Reset();
 	m_pState->m_pExtQuery = new XQQuery_t;

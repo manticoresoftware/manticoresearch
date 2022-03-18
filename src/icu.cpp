@@ -284,12 +284,19 @@ bool ICUPreprocessor_c::IsBlendChar ( int iCode ) const
 //////////////////////////////////////////////////////////////////////////
 class FieldFilterICU_c : public ISphFieldFilter, public ICUPreprocessor_c
 {
+	std::unique_ptr<ISphFieldFilter> m_pParent;
+
 public:
 	int				Apply ( const BYTE * sField, int iLength, CSphVector<BYTE> & dStorage, bool bQuery ) final;
 	void			GetSettings ( CSphFieldFilterSettings & tSettings ) const final;
-	ISphFieldFilter * Clone() const final;
+	std::unique_ptr<ISphFieldFilter> Clone() const final;
+	void SetParent ( std::unique_ptr<ISphFieldFilter> pParent );
 };
 
+void FieldFilterICU_c::SetParent ( std::unique_ptr<ISphFieldFilter> pParent )
+{
+	m_pParent = std::move ( pParent );
+}
 
 int FieldFilterICU_c::Apply ( const BYTE * sField, int iLength, CSphVector<BYTE> & dStorage, bool bQuery )
 {
@@ -332,35 +339,29 @@ void FieldFilterICU_c::GetSettings ( CSphFieldFilterSettings & tSettings ) const
 }
 
 
-ISphFieldFilter * FieldFilterICU_c::Clone() const
+std::unique_ptr<ISphFieldFilter> FieldFilterICU_c::Clone() const
 {
-	FieldFilterRefPtr_c pClonedParent { m_pParent ? m_pParent->Clone () : nullptr };
+	std::unique_ptr<ISphFieldFilter> pClonedParent { m_pParent ? m_pParent->Clone () : nullptr };
 
 	CSphString sError;
-	ISphFieldFilter * pFilter = sphCreateFilterICU ( pClonedParent, m_sBlendChars.cstr(), sError );
+	auto pFilter = sphCreateFilterICU ( std::move (pClonedParent), m_sBlendChars.cstr(), sError );
 	if ( !pFilter )
 		sphWarning ( "ICU filter clone error '%s'", sError.cstr() );
 
 	return pFilter;
 }
 
-ISphFieldFilter * sphCreateFilterICU ( ISphFieldFilter * pParent, const char * szBlendChars, CSphString & sError )
+std::unique_ptr<ISphFieldFilter> sphCreateFilterICU ( std::unique_ptr<ISphFieldFilter> pParent, const char * szBlendChars, CSphString & sError )
 {
-	CSphRefcountedPtr<FieldFilterICU_c> pFilter { new FieldFilterICU_c };
+	auto pFilter = std::make_unique<FieldFilterICU_c>();
 	if ( !pFilter->Init ( sError ) )
-	{
-		SafeAddRef ( pParent )
 		return pParent;
-	}
 
 	if ( szBlendChars && *szBlendChars && !pFilter->SetBlendChars ( szBlendChars, sError ) )
-	{
-		SafeAddRef ( pParent );
 		return pParent;
-	}
 
-	pFilter->SetParent ( pParent );
-	return pFilter.Leak ();
+	pFilter->SetParent ( std::move ( pParent ) );
+	return pFilter;
 }
 
 
@@ -413,28 +414,27 @@ bool sphCheckTokenizerICU ( CSphIndexSettings & tSettings, const CSphTokenizerSe
 }
 
 
-bool sphSpawnFilterICU ( FieldFilterRefPtr_c & pFieldFilter, const CSphIndexSettings & m_tSettings,	const CSphTokenizerSettings & tTokSettings, const char * szIndex, CSphString & sError )
+bool sphSpawnFilterICU ( std::unique_ptr<ISphFieldFilter> & pFieldFilter, const CSphIndexSettings & m_tSettings, const CSphTokenizerSettings & tTokSettings, const char * szIndex, CSphString & sError )
 {
 	if ( m_tSettings.m_ePreprocessor==Preprocessor_e::NONE )
 		return true;
 
-	FieldFilterRefPtr_c pFilterICU { sphCreateFilterICU ( pFieldFilter, tTokSettings.m_sBlendChars.cstr(), sError ) };
+	auto pFilterICU = sphCreateFilterICU ( std::move ( pFieldFilter ), tTokSettings.m_sBlendChars.cstr(), sError );
 	if ( !sError.IsEmpty() )
 	{
 		sError.SetSprintf ( "index '%s': Error initializing ICU: %s", szIndex, sError.cstr() );
 		return false;
 	}
 
-	pFieldFilter = pFilterICU;
+	pFieldFilter = std::move ( pFilterICU );
 	return true;
 }
 
 #else
 
 
-ISphFieldFilter * sphCreateFilterICU ( ISphFieldFilter * pParent, CSphString & )
+std::unique_ptr<ISphFieldFilter> sphCreateFilterICU ( std::unique_ptr<ISphFieldFilter> pParent, CSphString & )
 {
-	SafeAddRef ( pParent );
 	return pParent;
 }
 
@@ -458,7 +458,7 @@ bool sphCheckTokenizerICU ( CSphIndexSettings &, const CSphTokenizerSettings &, 
 }
 
 
-bool sphSpawnFilterICU ( FieldFilterRefPtr_c &, const CSphIndexSettings &, const CSphTokenizerSettings &, const char *, CSphString & )
+bool sphSpawnFilterICU ( std::unique_ptr<ISphFieldFilter> &, const CSphIndexSettings &, const CSphTokenizerSettings &, const char *, CSphString & )
 {
 	return true;
 }

@@ -646,14 +646,9 @@ bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	dKeywords.Resize ( 0 );
 
 	CSphVector<BYTE> dFiltered;
-	FieldFilterRefPtr_c pFieldFilter;
 	const BYTE * sModifiedQuery = (const BYTE *)szQuery;
-	if ( m_pFieldFilter && szQuery )
-	{
-		pFieldFilter = m_pFieldFilter->Clone();
-		if ( pFieldFilter && pFieldFilter->Apply ( sModifiedQuery, dFiltered, true ) )
-			sModifiedQuery = dFiltered.Begin();
-	}
+	if ( m_pFieldFilter && szQuery && m_pFieldFilter->Clone()->Apply ( sModifiedQuery, dFiltered, true ) )
+		sModifiedQuery = dFiltered.Begin();
 
 	pTokenizer->SetBuffer ( sModifiedQuery, (int) strlen ( (const char*)sModifiedQuery) );
 
@@ -1933,10 +1928,9 @@ void CSphIndex::SetInplaceSettings ( int iHitGap, float fRelocFactor, float fWri
 }
 
 
-void CSphIndex::SetFieldFilter ( ISphFieldFilter * pFieldFilter )
+void CSphIndex::SetFieldFilter ( std::unique_ptr<ISphFieldFilter> pFieldFilter )
 {
-	SafeAddRef ( pFieldFilter );
-	m_pFieldFilter = pFieldFilter;
+	m_pFieldFilter = std::move ( pFieldFilter );
 }
 
 
@@ -2563,7 +2557,7 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 	tWriteHeader.m_pSchema = &tNewSchema;
 	tWriteHeader.m_pTokenizer = m_pTokenizer;
 	tWriteHeader.m_pDict = m_pDict;
-	tWriteHeader.m_pFieldFilter = m_pFieldFilter;
+	tWriteHeader.m_pFieldFilter = m_pFieldFilter.get();
 	tWriteHeader.m_pFieldLens = m_dFieldLens.Begin();
 
 	// save the header
@@ -3719,7 +3713,7 @@ void IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHeader_t 
 
 	// field filter info
 	CSphFieldFilterSettings tFieldFilterSettings;
-	if ( tWriteHeader.m_pFieldFilter.Ptr() )
+	if ( tWriteHeader.m_pFieldFilter )
 	{
 		tWriteHeader.m_pFieldFilter->GetSettings ( tFieldFilterSettings );
 		sJson.NamedVal ( "field_filter_settings", tFieldFilterSettings );
@@ -5763,7 +5757,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	tWriteHeader.m_pSchema = &m_tSchema;
 	tWriteHeader.m_pTokenizer = m_pTokenizer;
 	tWriteHeader.m_pDict = m_pDict;
-	tWriteHeader.m_pFieldFilter = m_pFieldFilter;
+	tWriteHeader.m_pFieldFilter = m_pFieldFilter.get();
 	tWriteHeader.m_pFieldLens = m_dFieldLens.Begin();
 
 	// we're done
@@ -6675,7 +6669,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	tWriteHeader.m_pSchema = &pSettings->m_tSchema;
 	tWriteHeader.m_pTokenizer = pSettings->m_pTokenizer;
 	tWriteHeader.m_pDict = pSettings->m_pDict;
-	tWriteHeader.m_pFieldFilter = pSettings->m_pFieldFilter;
+	tWriteHeader.m_pFieldFilter = pSettings->m_pFieldFilter.get();
 	tWriteHeader.m_pFieldLens = pSettings->m_dFieldLens.Begin();
 
 	IndexBuildDone ( tBuildHeader, tWriteHeader, sHeaderName, sError );
@@ -6931,7 +6925,7 @@ bool CSphIndex_VLN::AddRemoveField ( bool bAddField, const CSphString & sFieldNa
 	tWriteHeader.m_pSchema = &tNewSchema;
 	tWriteHeader.m_pTokenizer = m_pTokenizer;
 	tWriteHeader.m_pDict = m_pDict;
-	tWriteHeader.m_pFieldFilter = m_pFieldFilter;
+	tWriteHeader.m_pFieldFilter = m_pFieldFilter.get();
 	tWriteHeader.m_pFieldLens = m_dFieldLens.Begin ();
 
 	// save the header
@@ -8545,7 +8539,7 @@ bool CSphIndex_VLN::LoadHeaderLegacy ( const char * sHeaderName, bool bStripPath
 	m_iDocinfoIndex = rdInfo.GetOffset ();
 	m_iMinMaxIndex = rdInfo.GetOffset ();
 
-	FieldFilterRefPtr_c pFieldFilter;
+	std::unique_ptr<ISphFieldFilter> pFieldFilter;
 	CSphFieldFilterSettings tFieldFilterSettings;
 	tFieldFilterSettings.Load(rdInfo);
 	if ( tFieldFilterSettings.m_dRegexps.GetLength() )
@@ -8554,7 +8548,7 @@ bool CSphIndex_VLN::LoadHeaderLegacy ( const char * sHeaderName, bool bStripPath
 	if ( !sphSpawnFilterICU ( pFieldFilter, m_tSettings, tTokSettings, sHeaderName, m_sLastError ) )
 		return false;
 
-	SetFieldFilter ( pFieldFilter );
+	SetFieldFilter ( std::move ( pFieldFilter ) );
 
 	if ( m_tSettings.m_bIndexFieldLens )
 		for ( int i=0; i < m_tSchema.GetFieldsCount(); i++ )
@@ -8683,7 +8677,7 @@ bool CSphIndex_VLN::LoadHeader ( const char* sHeaderName, bool bStripPath, CSphE
 	m_iDocinfoIndex = Int ( tBson.ChildByName ( "docinfo_index" ) );
 	m_iMinMaxIndex = Int ( tBson.ChildByName ( "min_max_index" ) );
 
-	FieldFilterRefPtr_c pFieldFilter;
+	std::unique_ptr<ISphFieldFilter> pFieldFilter;
 	auto tFieldFilterSettingsNode = tBson.ChildByName ( "field_filter_settings" );
 	if ( !IsNullNode(tFieldFilterSettingsNode) )
 	{
@@ -8699,7 +8693,7 @@ bool CSphIndex_VLN::LoadHeader ( const char* sHeaderName, bool bStripPath, CSphE
 	if ( !sphSpawnFilterICU ( pFieldFilter, m_tSettings, tTokSettings, sHeaderName, m_sLastError ) )
 		return false;
 
-	SetFieldFilter ( pFieldFilter );
+	SetFieldFilter ( std::move ( pFieldFilter ) );
 
 	auto tIndexFieldsLenNode = tBson.ChildByName ( "index_fields_lens" );
 	if ( m_tSettings.m_bIndexFieldLens )
@@ -9502,14 +9496,9 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 	SetupExactDict ( pDict );
 
 	CSphVector<BYTE> dFiltered;
-	FieldFilterRefPtr_c pFieldFilter;
 	const BYTE * sModifiedQuery = (const BYTE *)szQuery;
-	if ( m_pFieldFilter && szQuery )
-	{
-		pFieldFilter = m_pFieldFilter->Clone();
-		if ( pFieldFilter && pFieldFilter->Apply ( sModifiedQuery, dFiltered, true ) )
-			sModifiedQuery = dFiltered.Begin();
-	}
+	if ( m_pFieldFilter && szQuery && m_pFieldFilter->Clone()->Apply ( sModifiedQuery, dFiltered, true ) )
+		sModifiedQuery = dFiltered.Begin();
 
 	// FIXME!!! missed bigram, add flags to fold blended parts, show expanded terms
 
@@ -10488,13 +10477,8 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	CSphVector<BYTE> dFiltered;
 	const BYTE * sModifiedQuery = (const BYTE *)tQuery.m_sQuery.cstr();
 
-	FieldFilterRefPtr_c pFieldFilter;
-	if ( m_pFieldFilter && sModifiedQuery )
-	{
-		pFieldFilter = m_pFieldFilter->Clone();
-		if ( pFieldFilter && pFieldFilter->Apply ( sModifiedQuery, dFiltered, true ) )
-			sModifiedQuery = dFiltered.Begin();
-	}
+	if ( m_pFieldFilter && sModifiedQuery && m_pFieldFilter->Clone()->Apply ( sModifiedQuery, dFiltered, true ) )
+		sModifiedQuery = dFiltered.Begin();
 
 	// parse query
 	SwitchProfile ( pProfile, SPH_QSTATE_PARSE );
@@ -11341,11 +11325,8 @@ Bson_t Explain ( ExplainQueryArgs_t & tArgs )
 	CSphVector<BYTE> dFiltered;
 	const BYTE * sModifiedQuery = (const BYTE *)tArgs.m_szQuery;
 
-	if ( tArgs.m_pFieldFilter && sModifiedQuery )
-	{
-		if ( tArgs.m_pFieldFilter->Apply ( sModifiedQuery, dFiltered, true ) )
-			sModifiedQuery = dFiltered.Begin();
-	}
+	if ( tArgs.m_pFieldFilter && sModifiedQuery && tArgs.m_pFieldFilter->Apply ( sModifiedQuery, dFiltered, true ) )
+		sModifiedQuery = dFiltered.Begin();
 
 	CSphSchema tSchema;
 	const CSphSchema * pSchema = tArgs.m_pSchema;
@@ -11484,7 +11465,7 @@ bool CSphIndex_VLN::CopyExternalFiles ( int iPostfix, StrVec_t & dCopied )
 	tWriteHeader.m_pSchema = &m_tSchema;
 	tWriteHeader.m_pTokenizer = m_pTokenizer;
 	tWriteHeader.m_pDict = m_pDict;
-	tWriteHeader.m_pFieldFilter = m_pFieldFilter;
+	tWriteHeader.m_pFieldFilter = m_pFieldFilter.get();
 	tWriteHeader.m_pFieldLens = m_dFieldLens.Begin();
 
 	// save the header
@@ -12319,38 +12300,18 @@ const CSphSourceStats& GetStubStats()
 }
 
 //////////////////////////////////////////////////////////////////////////
-ISphFieldFilter::ISphFieldFilter()
-	: m_pParent ( nullptr )
-{
-}
-
-
-ISphFieldFilter::~ISphFieldFilter()
-{
-	SafeRelease ( m_pParent );
-}
-
-
-void ISphFieldFilter::SetParent ( ISphFieldFilter * pParent )
-{
-	SafeAddRef ( pParent );
-	SafeRelease ( m_pParent );
-	m_pParent = pParent;
-}
-
 
 #if WITH_RE2
 class CSphFieldRegExps : public ISphFieldFilter
 {
-protected:
-	~CSphFieldRegExps() override;
 public:
 						CSphFieldRegExps () = default;
 						CSphFieldRegExps ( const StrVec_t& m_dRegexps, CSphString &	sError );
+						~CSphFieldRegExps() override;
 
 	int					Apply ( const BYTE * sField, int iLength, CSphVector<BYTE> & dStorage, bool ) final;
 	void				GetSettings ( CSphFieldFilterSettings & tSettings ) const final;
-	ISphFieldFilter *	Clone() const final;
+	std::unique_ptr<ISphFieldFilter>	Clone() const final;
 
 	bool				AddRegExp ( const char * sRegExp, CSphString & sError );
 
@@ -12458,9 +12419,9 @@ bool CSphFieldRegExps::AddRegExp ( const char * sRegExp, CSphString & sError )
 }
 
 
-ISphFieldFilter * CSphFieldRegExps::Clone() const
+std::unique_ptr<ISphFieldFilter> CSphFieldRegExps::Clone() const
 {
-	auto * pCloned = new CSphFieldRegExps;
+	auto pCloned = std::make_unique<CSphFieldRegExps>();
 	pCloned->m_dRegexps = m_dRegexps;
 
 	return pCloned;
@@ -12469,12 +12430,12 @@ ISphFieldFilter * CSphFieldRegExps::Clone() const
 
 
 #if WITH_RE2
-ISphFieldFilter * sphCreateRegexpFilter ( const CSphFieldFilterSettings & tFilterSettings, CSphString & sError )
+std::unique_ptr<ISphFieldFilter> sphCreateRegexpFilter ( const CSphFieldFilterSettings & tFilterSettings, CSphString & sError )
 {
-	return new CSphFieldRegExps ( tFilterSettings.m_dRegexps, sError );
+	return std::make_unique<CSphFieldRegExps> ( tFilterSettings.m_dRegexps, sError );
 }
 #else
-ISphFieldFilter * sphCreateRegexpFilter ( const CSphFieldFilterSettings &, CSphString & )
+std::unique_ptr<ISphFieldFilter> sphCreateRegexpFilter ( const CSphFieldFilterSettings &, CSphString & )
 {
 	return nullptr;
 }

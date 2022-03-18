@@ -762,15 +762,12 @@ bool PercolateIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, cons
 			m_tSettings.m_bIndexSP, m_tSettings.m_sZones.cstr(), sError ) )
 		return false;
 
-	FieldFilterRefPtr_c pFieldFilter;
-	if ( m_pFieldFilter )
-		pFieldFilter = m_pFieldFilter->Clone();
-
 	// TODO: field filter \ token filter?
 	tSrc.Setup ( m_tSettings, nullptr );
 	tSrc.SetTokenizer ( std::move ( tTokenizer ) );
 	tSrc.SetDict ( pAcc->m_pDict );
-	tSrc.SetFieldFilter ( pFieldFilter );
+	if ( m_pFieldFilter )
+		tSrc.SetFieldFilter ( m_pFieldFilter->Clone() );
 	if ( !tSrc.Connect ( m_sLastError ) )
 		return false;
 
@@ -1724,12 +1721,8 @@ std::unique_ptr<StoredQuery_i> PercolateIndex_c::CreateQuery ( PercolateQueryArg
 {
 	const char * sQuery = tArgs.m_sQuery;
 	CSphVector<BYTE> dFiltered;
-	if ( m_pFieldFilter && sQuery )
-	{
-		FieldFilterRefPtr_c pFieldFilter { m_pFieldFilter->Clone() };
-		if ( pFieldFilter && pFieldFilter->Apply ( sQuery, dFiltered, true ) )
-			sQuery = (const char *)dFiltered.Begin();
-	}
+	if ( m_pFieldFilter && sQuery && m_pFieldFilter->Clone()->Apply ( sQuery, dFiltered, true ) )
+		sQuery = (const char *)dFiltered.Begin();
 
 	CSphScopedPtr<XQQuery_t> tParsed ( new XQQuery_t() );
 	CSphScopedPtr<const QueryParser_i> tParser ( g_pCreateQueryParser ( !tArgs.m_bQL ) );
@@ -2513,7 +2506,7 @@ bool PercolateIndex_c::LoadMetaLegacy ( const CSphString& sMeta, bool bStripPath
 	// regexp and ICU
 	if ( uVersion>=6 )
 	{
-		FieldFilterRefPtr_c pFieldFilter;
+		std::unique_ptr<ISphFieldFilter> pFieldFilter;
 		CSphFieldFilterSettings tFieldFilterSettings;
 		tFieldFilterSettings.Load(rdMeta);
 		if ( tFieldFilterSettings.m_dRegexps.GetLength() )
@@ -2522,7 +2515,7 @@ bool PercolateIndex_c::LoadMetaLegacy ( const CSphString& sMeta, bool bStripPath
 		if ( !sphSpawnFilterICU ( pFieldFilter, m_tSettings, tTokenizerSettings, sMeta.cstr(), m_sLastError ) )
 			return false;
 
-		SetFieldFilter ( pFieldFilter );
+		SetFieldFilter ( std::move ( pFieldFilter ) );
 	}
 
 	// queries
@@ -2622,7 +2615,7 @@ bool PercolateIndex_c::LoadMeta ( const CSphString& sMeta, bool bStripPath, File
 	Tokenizer::AddToMultiformFilterTo ( m_pTokenizer, m_pDict->GetMultiWordforms() );
 
 	// regexp and ICU
-	FieldFilterRefPtr_c pFieldFilter;
+	std::unique_ptr<ISphFieldFilter> pFieldFilter;
 	auto tFieldFilterSettingsNode = tBson.ChildByName ( "field_filter_settings" );
 	if ( !IsNullNode ( tFieldFilterSettingsNode ) )
 	{
@@ -2638,7 +2631,7 @@ bool PercolateIndex_c::LoadMeta ( const CSphString& sMeta, bool bStripPath, File
 	if ( !sphSpawnFilterICU ( pFieldFilter, m_tSettings, tTokenizerSettings, sMeta.cstr(), m_sLastError ) )
 		return false;
 
-	SetFieldFilter ( pFieldFilter );
+	SetFieldFilter ( std::move ( pFieldFilter ) );
 
 	m_iTID = Int ( tBson.ChildByName ( "tid" ) );
 
@@ -2729,7 +2722,7 @@ void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown
 
 	// meta v.6
 	CSphFieldFilterSettings tFieldFilterSettings;
-	if ( m_pFieldFilter.Ptr() )
+	if ( m_pFieldFilter )
 		m_pFieldFilter->GetSettings(tFieldFilterSettings);
 	sNewMeta.NamedVal ( "field_filter_settings", tFieldFilterSettings );
 	sNewMeta.NamedVal ( "tid", m_iTID );
@@ -2860,7 +2853,7 @@ bool PercolateIndex_c::IsSameSettings ( CSphReconfigureSettings & tSettings, CSp
 	CSphString sTmp;
 	bool bSameSchema = m_tSchema.CompareTo ( tSettings.m_tSchema, sTmp, false );
 
-	return CreateReconfigure ( m_sIndexName, IsStarDict ( m_pDict->GetSettings().m_bWordDict ), m_pFieldFilter, m_tSettings, m_pTokenizer->GetSettingsFNV(),
+	return CreateReconfigure ( m_sIndexName, IsStarDict ( m_pDict->GetSettings().m_bWordDict ), m_pFieldFilter.get(), m_tSettings, m_pTokenizer->GetSettingsFNV(),
 		  m_pDict->GetSettingsFNV(), m_pTokenizer->GetMaxCodepointLength(), GetMemLimit(),
 		  bSameSchema, tSettings, tSetup, dWarnings, sError );
 }
@@ -2875,7 +2868,7 @@ void PercolateIndex_c::BinlogReconfigure ( CSphReconfigureSetup & tSetup )
 		SaveDictionarySettings ( tWriter, tSetup.m_pDict, false, 0 );
 
 		CSphFieldFilterSettings tFieldFilterSettings;
-		if ( tSetup.m_pFieldFilter.Ptr() )
+		if ( tSetup.m_pFieldFilter )
 			tSetup.m_pFieldFilter->GetSettings(tFieldFilterSettings);
 		tFieldFilterSettings.Save(tWriter);
 	});
@@ -2890,7 +2883,7 @@ bool PercolateIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 	Setup ( tSetup.m_tIndex );
 	SetTokenizer ( tSetup.m_pTokenizer );
 	SetDictionary ( tSetup.m_pDict );
-	SetFieldFilter ( tSetup.m_pFieldFilter );
+	SetFieldFilter ( std::move ( tSetup.m_pFieldFilter ) );
 
 	m_iMaxCodepointLength = m_pTokenizer->GetMaxCodepointLength();
 	SetupQueryTokenizer();

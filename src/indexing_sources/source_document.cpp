@@ -49,10 +49,9 @@ bool CSphSource::SetStripHTML ( const char * sExtractAttrs, const char * sRemove
 }
 
 
-void CSphSource::SetFieldFilter ( ISphFieldFilter * pFilter )
+void CSphSource::SetFieldFilter ( std::unique_ptr<ISphFieldFilter> pFilter )
 {
-	SafeAddRef ( pFilter );
-	m_pFieldFilter = pFilter;
+	m_pFieldFilter = std::move ( pFilter );
 }
 
 void CSphSource::SetTokenizer ( TokenizerRefPtr_c pTokenizer )

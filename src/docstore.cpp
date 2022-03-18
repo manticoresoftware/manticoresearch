@@ -986,7 +986,7 @@ DocstoreBuilder_i::Doc_t::Doc_t ( const DocstoreDoc_t & tDoc )
 class DocstoreBuilder_c : public DocstoreBuilder_i, public DocstoreSettings_t
 {
 public:
-			DocstoreBuilder_c ( const CSphString & sFilename, const DocstoreSettings_t & tSettings );
+			DocstoreBuilder_c ( CSphString sFilename, const DocstoreSettings_t & tSettings );
 
 	bool	Init ( CSphString & sError );
 
@@ -1031,8 +1031,8 @@ private:
 };
 
 
-DocstoreBuilder_c::DocstoreBuilder_c ( const CSphString & sFilename, const DocstoreSettings_t & tSettings )
-	: m_sFilename ( sFilename )
+DocstoreBuilder_c::DocstoreBuilder_c ( CSphString sFilename, const DocstoreSettings_t & tSettings )
+	: m_sFilename ( std::move (sFilename) )
 	, m_tHeaderWriter ( m_dHeader )
 {
 	*(DocstoreSettings_t*)this = tSettings;
@@ -2089,35 +2089,35 @@ const BYTE * Expr_GetStored_T<false>::GetBlobPacked ( const CSphMatch & tMatch )
 
 //////////////////////////////////////////////////////////////////////////
 
-Docstore_i * CreateDocstore ( int64_t iIndexId, const CSphString & sFilename, CSphString & sError )
+std::unique_ptr<Docstore_i> CreateDocstore ( int64_t iIndexId, const CSphString & sFilename, CSphString & sError )
 {
-	CSphScopedPtr<Docstore_c> pDocstore ( new Docstore_c ( iIndexId, sFilename ) );
+	auto pDocstore = std::make_unique<Docstore_c>( iIndexId, sFilename );
 	if ( !pDocstore->Init(sError) )
 		return nullptr;
 
-	return pDocstore.LeakPtr();
+	return pDocstore;
 }
 
 
-DocstoreBuilder_i * CreateDocstoreBuilder ( const CSphString & sFilename, const DocstoreSettings_t & tSettings, CSphString & sError )
+std::unique_ptr<DocstoreBuilder_i> CreateDocstoreBuilder ( const CSphString & sFilename, const DocstoreSettings_t & tSettings, CSphString & sError )
 {
-	CSphScopedPtr<DocstoreBuilder_c> pBuilder ( new DocstoreBuilder_c ( sFilename, tSettings ) );
+	auto pBuilder = std::make_unique<DocstoreBuilder_c>( sFilename, tSettings );
 	if ( !pBuilder->Init(sError) )
 		return nullptr;
 
-	return pBuilder.LeakPtr();
+	return pBuilder;
 }
 
 
-DocstoreRT_i * CreateDocstoreRT()
+std::unique_ptr<DocstoreRT_i> CreateDocstoreRT()
 {
-	return new DocstoreRT_c;
+	return std::make_unique<DocstoreRT_c>();
 }
 
 
-DocstoreFields_i * CreateDocstoreFields()
+std::unique_ptr<DocstoreFields_i> CreateDocstoreFields()
 {
-	return new DocstoreFields_c;
+	return std::make_unique<DocstoreFields_c>();
 }
 
 

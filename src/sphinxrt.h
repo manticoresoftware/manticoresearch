@@ -243,7 +243,7 @@ public:
 	std::atomic<int64_t> *			m_pRAMCounter = nullptr;///< external RAM counter
 	OpenHash_T<RowID_t, DocID_t>	m_tDocIDtoRowID;		///< speeds up docid-rowid lookups
 	DeadRowMap_Ram_c				m_tDeadRowMap;
-	CSphScopedPtr<DocstoreRT_i>		m_pDocstore{nullptr};
+	std::unique_ptr<DocstoreRT_i>	m_pDocstore;
 	CSphScopedPtr<ColumnarRT_i>		m_pColumnar{nullptr};
 
 	mutable bool					m_bConsistent{false};

@@ -343,7 +343,7 @@ void RtSegment_t::UpdateUsedRam() const NO_THREAD_SAFETY_ANALYSIS
 	iUsedRam += m_dKeywordCheckpoints.AllocatedBytes();
 	iUsedRam += m_dRows.AllocatedBytes();
 	iUsedRam += m_dInfixFilterCP.AllocatedBytes();
-	iUsedRam += m_pDocstore.Ptr() ? m_pDocstore->AllocatedBytes() : 0;
+	iUsedRam += m_pDocstore ? m_pDocstore->AllocatedBytes() : 0;
 	iUsedRam += m_pColumnar.Ptr() ? m_pColumnar->AllocatedBytes() : 0;
 	FixupRAMCounter ( iUsedRam - std::exchange ( m_iUsedRam, iUsedRam ) );
 }
@@ -1315,7 +1315,7 @@ private:
 	CSphBitvec					m_tMorphFields;
 	CSphVector<SphWordID_t>		m_dHitlessWords;
 
-	CSphScopedPtr<DocstoreFields_i> m_pDocstoreFields {nullptr};	// rt index doesn't have its own docstore, but it must keep all fields to get their ids for GetDoc
+	std::unique_ptr<DocstoreFields_i> m_pDocstoreFields;	// rt index doesn't have its own docstore, but it must keep all fields to get their ids for GetDoc
 	mutable int					m_iTrackFailedRamActions;
 
 	RtAccum_t *					CreateAccum ( RtAccum_t * pAccExt, CSphString & sError ) final;
@@ -1994,7 +1994,7 @@ void RtAccum_t::CleanupPart()
 	m_pColumnarBuilder.Reset();
 	m_dPerDocHitsCount.Resize(0);
 	m_dAccum.Resize(0);
-	m_pDocstore.Reset();
+	m_pDocstore.reset();
 
 	ResetDict();
 	ResetRowID();
@@ -2017,26 +2017,26 @@ void RtAccum_t::Cleanup()
 
 void RtAccum_t::SetupDocstore()
 {
-	if ( m_pDocstore.Ptr() )
+	if ( m_pDocstore )
 		return;
 
 	m_pDocstore = CreateDocstoreRT();
-	assert ( m_pDocstore.Ptr() );
-	SetupDocstoreFields ( *m_pDocstore.Ptr(), m_pIndex->GetInternalSchema() );
+	assert ( m_pDocstore );
+	SetupDocstoreFields ( *m_pDocstore, m_pIndex->GetInternalSchema() );
 }
 
 bool RtAccum_t::SetupDocstore ( const RtIndex_i & tIndex, CSphString & sError )
 {
 	const CSphSchema & tSchema = tIndex.GetInternalSchema();
-	if ( !m_pDocstore.Ptr() && !tSchema.HasStoredFields() && !tSchema.HasStoredAttrs() )
+	if ( !m_pDocstore && !tSchema.HasStoredFields() && !tSchema.HasStoredAttrs() )
 		return true;
 
 	// might be a case when replicated trx was wo docstore but index has docstore
-	if ( !m_pDocstore.Ptr() )
+	if ( !m_pDocstore )
 		m_pDocstore = CreateDocstoreRT();
 
-	assert ( m_pDocstore.Ptr() );
-	SetupDocstoreFields ( *m_pDocstore.Ptr(), tSchema );
+	assert ( m_pDocstore );
+	SetupDocstoreFields ( *m_pDocstore, tSchema );
 	return m_pDocstore->CheckFieldsLoaded ( sError );
 }
 
@@ -2343,7 +2343,7 @@ RtSegment_t * RtAccum_t::CreateSegment ( int iRowSize, int iWordsCheckpoint, ESp
 	pSeg->m_tAliveRows.store ( m_uAccumDocs, std::memory_order_relaxed );
 	pSeg->m_dRows.SwapData(m_dAccumRows);
 	pSeg->m_dBlobs.SwapData(m_dBlobs);
-	pSeg->m_pDocstore.Swap(m_pDocstore);
+	std::swap ( pSeg->m_pDocstore, m_pDocstore );
 
 	if ( m_pColumnarBuilder )
 	{
@@ -2891,7 +2891,7 @@ CSphFixedVector<RowID_t> RtIndex_c::CopyAttributesFromAliveDocs ( RtSegment_t & 
 		}
 
 		if ( tDstSeg.m_pDocstore )
-			tDstSeg.m_pDocstore->AddPackedDoc ( tCtx.m_tResultRowID, tSrcSeg.m_pDocstore.Ptr(), tRowID );
+			tDstSeg.m_pDocstore->AddPackedDoc ( tCtx.m_tResultRowID, tSrcSeg.m_pDocstore.get(), tRowID );
 
 		dRowMap[tRowID] = tCtx.m_tResultRowID++;
 	}
@@ -3691,7 +3691,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 			return false;
 	}
 
-	CSphScopedPtr<DocstoreBuilder_i> pDocstoreBuilder(nullptr);
+	std::unique_ptr<DocstoreBuilder_i> pDocstoreBuilder;
 	if ( m_tSchema.HasStoredFields() || m_tSchema.HasStoredAttrs() )
 	{
 		pDocstoreBuilder = CreateDocstoreBuilder ( sSPDS, m_tSettings, sError );
@@ -5045,7 +5045,7 @@ void RtIndex_c::SaveRamSegment ( const RtSegment_t* pSeg, CSphWriter& wrChunk ) 
 	pSeg->m_tDeadRowMap.Save ( wrChunk );
 	SaveVector ( wrChunk, pSeg->m_dBlobs );
 
-	if ( pSeg->m_pDocstore.Ptr() )
+	if ( pSeg->m_pDocstore )
 		pSeg->m_pDocstore->Save ( wrChunk );
 
 	wrChunk.PutByte ( pSeg->m_pColumnar.Ptr() ? 1 : 0 );
@@ -5190,8 +5190,8 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes, bool bFixup
 		if ( uVersion>=15 && ( m_tSchema.HasStoredFields() || m_tSchema.HasStoredAttrs() ) )
 		{
 			pSeg->m_pDocstore = CreateDocstoreRT();
-			SetupDocstoreFields ( *pSeg->m_pDocstore.Ptr(), m_tSchema );
-			assert ( pSeg->m_pDocstore.Ptr() );
+			SetupDocstoreFields ( *pSeg->m_pDocstore, m_tSchema );
+			assert ( pSeg->m_pDocstore );
 			if ( !pSeg->m_pDocstore->Load ( rdChunk ) )
 				return false;
 		}
@@ -5311,15 +5311,13 @@ void RtIndex_c::PostSetup()
 {
 	RtIndex_i::PostSetup();
 
-	CSphScopedPtr<DocstoreFields_i> pDocstoreFields;
+	std::unique_ptr<DocstoreFields_i> pDocstoreFields;
 	if ( m_tSchema.HasStoredFields() || m_tSchema.HasStoredAttrs() )
 	{
 		pDocstoreFields = CreateDocstoreFields();
-		SetupDocstoreFields ( *pDocstoreFields.Ptr(), m_tSchema );
+		SetupDocstoreFields ( *pDocstoreFields, m_tSchema );
 	}
-	m_pDocstoreFields.Swap ( pDocstoreFields );
-	pDocstoreFields = nullptr;
-
+	m_pDocstoreFields = std::move ( pDocstoreFields );
 	m_iMaxCodepointLength = m_pTokenizer->GetMaxCodepointLength();
 
 	// bigram filter
@@ -7291,7 +7289,7 @@ void FinalExpressionCalculation ( CSphQueryContext & tCtx, const VecTraits_T<RtS
 		SccRL_t rLock ( dRamChunks[iSeg]->m_tLock );
 		tCtx.SetBlobPool ( dRamChunks[iSeg]->m_dBlobs.Begin() );
 		tCtx.SetColumnar ( dRamChunks[iSeg]->m_pColumnar.Ptr() );
-		tCtx.SetDocstore ( dRamChunks[iSeg]->m_pDocstore.Ptr(), -1 );	// no need to create session/readers for RT segments
+		tCtx.SetDocstore ( dRamChunks[iSeg]->m_pDocstore.get(), -1 );	// no need to create session/readers for RT segments
 
 		dSorters.Apply ( [&] ( ISphMatchSorter * pTop ) { pTop->Finalize ( tFinal, false, bFinalizeSorters ); } );
 	}
@@ -8401,12 +8399,9 @@ void RtIndex_c::AddFieldToRamchunk ( const CSphString & sFieldName, DWORD uField
 		return;
 
 	if ( !m_pDocstoreFields )
-	{
-		CSphScopedPtr<DocstoreFields_i> pDocstoreFields { CreateDocstoreFields() };
-		m_pDocstoreFields.Swap ( pDocstoreFields );
-	}
+		m_pDocstoreFields = CreateDocstoreFields();
 
-	assert ( m_pDocstoreFields.Ptr() );
+	assert ( m_pDocstoreFields );
 	m_pDocstoreFields->AddField ( sFieldName, DOCSTORE_TEXT );
 	AddRemoveFromRamDocstore ( tOldSchema, tNewSchema );
 }
@@ -8443,12 +8438,12 @@ void RtIndex_c::AddRemoveFromRamDocstore ( const CSphSchema & tOldSchema, const 
 		auto * pSeg = const_cast<RtSegment_t*> ( pConstSeg.Ptr() );
 
 		if ( bLastStored )
-			pSeg->m_pDocstore.Reset();
+			pSeg->m_pDocstore.reset();
 		else
 		{
-			CSphScopedPtr<DocstoreRT_i> pNewDocstore ( CreateDocstoreRT() );
-			Alter_AddRemoveFromDocstore ( *pNewDocstore, pSeg->m_pDocstore.Ptr(), pSeg->m_uRows, tNewSchema );
-			pSeg->m_pDocstore.Swap(pNewDocstore);
+			auto pNewDocstore = CreateDocstoreRT();
+			Alter_AddRemoveFromDocstore ( *pNewDocstore, pSeg->m_pDocstore.get(), pSeg->m_uRows, tNewSchema );
+			pSeg->m_pDocstore = std::move ( pNewDocstore );
 		}
 
 		pSeg->UpdateUsedRam();
@@ -8458,7 +8453,7 @@ void RtIndex_c::AddRemoveFromRamDocstore ( const CSphSchema & tOldSchema, const 
 
 void RtIndex_c::RemoveFieldFromRamchunk ( const CSphString & sFieldName, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema )
 {
-	if ( m_pDocstoreFields.Ptr() && m_pDocstoreFields->GetFieldId ( sFieldName, DOCSTORE_TEXT )!=-1 )
+	if ( m_pDocstoreFields && m_pDocstoreFields->GetFieldId ( sFieldName, DOCSTORE_TEXT )!=-1 )
 		m_pDocstoreFields->RemoveField ( sFieldName, DOCSTORE_TEXT );
 
 	int iFieldId = tOldSchema.GetFieldIndex ( sFieldName.cstr () );
@@ -9075,8 +9070,8 @@ void RtIndex_c::BinlogCommit ( RtSegment_t * pSeg, const CSphVector<DocID_t> & d
 			Binlog::SaveVector ( tWriter, pSeg->m_dBlobs );
 			Binlog::SaveVector ( tWriter, pSeg->m_dKeywordCheckpoints );
 
-			tWriter.PutByte ( pSeg->m_pDocstore.Ptr() ? 1 : 0 );
-			if ( pSeg->m_pDocstore.Ptr() )
+			tWriter.PutByte ( pSeg->m_pDocstore ? 1 : 0 );
+			if ( pSeg->m_pDocstore )
 				pSeg->m_pDocstore->Save(tWriter);
 
 			tWriter.PutByte ( pSeg->m_pColumnar.Ptr() ? 1 : 0 );
@@ -9131,7 +9126,7 @@ Binlog::CheckTnxResult_t RtIndex_c::ReplayCommit ( CSphReader & tReader, CSphStr
 		if ( bHaveDocstore )
 		{
 			pSeg->SetupDocstore ( &(GetInternalSchema()) );
-			assert ( pSeg->m_pDocstore.Ptr() );
+			assert ( pSeg->m_pDocstore );
 			Verify ( pSeg->m_pDocstore->Load(tReader) );
 		}
 
@@ -10246,7 +10241,7 @@ bool RtIndex_c::GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T
 
 	for ( const auto & i : tGuard.m_dRamSegs )
 	{
-		assert ( i && i->m_pDocstore.Ptr() );
+		assert ( i && i->m_pDocstore );
 		RowID_t tRowID = i->GetRowidByDocid(tDocID);
 		if ( tRowID==INVALID_ROWID || i->m_tDeadRowMap.IsSet(tRowID) )
 			continue;
@@ -10268,7 +10263,7 @@ bool RtIndex_c::GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T
 
 int RtIndex_c::GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const
 {
-	return m_pDocstoreFields.Ptr() ? m_pDocstoreFields->GetFieldId ( sName, eType ) : -1;
+	return m_pDocstoreFields ? m_pDocstoreFields->GetFieldId ( sName, eType ) : -1;
 }
 
 Bson_t RtIndex_c::ExplainQuery ( const CSphString & sQuery ) const
@@ -10483,9 +10478,9 @@ void RtAccum_t::LoadRtTrx ( const BYTE * pData, int iLen )
 
 	if ( tReader.GetByte() )
 	{
-		if ( !m_pDocstore.Ptr() )
+		if ( !m_pDocstore )
 			m_pDocstore = CreateDocstoreRT();
-		assert ( m_pDocstore.Ptr() );
+		assert ( m_pDocstore );
 		m_pDocstore->Load(tReader);
 	}
 
@@ -10523,8 +10518,8 @@ void RtAccum_t::SaveRtTrx ( MemoryWriter_c & tWriter ) const
 	tWriter.PutDword ( iLen );
 	if ( iLen )
 		tWriter.PutBytes ( m_pDictRt->GetPackedKeywords(), iLen );
-	tWriter.PutByte ( m_pDocstore.Ptr()!=nullptr );
-	if ( m_pDocstore.Ptr() )
+	tWriter.PutByte ( m_pDocstore!=nullptr );
+	if ( m_pDocstore )
 		m_pDocstore->Save(tWriter);
 
 	tWriter.PutByte ( m_pColumnarBuilder.Ptr()!=nullptr );
@@ -10545,7 +10540,7 @@ void RtIndex_c::SetSchema ( const CSphSchema & tSchema )
 	if ( m_tSchema.HasStoredFields() || m_tSchema.HasStoredAttrs() )
 	{
 		m_pDocstoreFields = CreateDocstoreFields();
-		SetupDocstoreFields ( *m_pDocstoreFields.Ptr(), m_tSchema );
+		SetupDocstoreFields ( *m_pDocstoreFields.get(), m_tSchema );
 	}
 
 	ARRAY_FOREACH ( i, m_dFieldLens )

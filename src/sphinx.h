@@ -1051,7 +1051,6 @@ public:
 	TokenizerRefPtr_c&			ModifyTokenizer ();
 	void						SetDictionary ( DictRefPtr_c pDict );
 	DictRefPtr_c				GetDictionary () const;
-	DictRefPtr_c				LeakDictionary ();
 	virtual void				SetKeepAttrs ( const CSphString & , const StrVec_t & ) {} // fixme! build only
 	virtual void				Setup ( const CSphIndexSettings & tSettings );
 	const CSphIndexSettings &	GetSettings () const { return m_tSettings; }

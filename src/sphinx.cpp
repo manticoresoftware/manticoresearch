@@ -1292,7 +1292,7 @@ private:
 	CSphMappedBuffer<BYTE>		m_tDocidLookup;		///< speeds up docid-rowid lookups + used for applying killlist on startup
 	LookupReader_c				m_tLookupReader;	///< used by getrowidbydocid
 
-	CSphScopedPtr<Docstore_i> 	m_pDocstore {nullptr};
+	std::unique_ptr<Docstore_i>	m_pDocstore;
 	CSphScopedPtr<columnar::Columnar_i> m_pColumnar {nullptr};
 
 	DWORD						m_uVersion;				///< data files version
@@ -1357,7 +1357,7 @@ private:
 	bool						AddRemoveFromDocstore ( const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError );
 
 	bool						Build_SetupInplace ( SphOffset_t & iHitsGap, int iHitsMax, int iFdHits ) const; // fixme! build only
-	bool						Build_SetupDocstore ( CSphScopedPtr<DocstoreBuilder_i> & pDocstore, CSphBitvec & dStoredFields, CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage ); // fixme! build only
+	bool						Build_SetupDocstore ( std::unique_ptr<DocstoreBuilder_i> & pDocstore, CSphBitvec & dStoredFields, CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage ); // fixme! build only
 	bool						Build_SetupBlobBuilder ( CSphScopedPtr<BlobRowBuilder_i> & pBuilder ); // fixme! build only
 	bool						Build_SetupColumnar ( CSphScopedPtr<columnar::Builder_i> & pBuilder ); // fixme! build only
 	bool						Build_SetupHistograms ( CSphScopedPtr<HistogramContainer_c> & pContainer, CSphVector<std::pair<Histogram_i*,int>> & dHistograms ); // fixme! build only
@@ -1380,20 +1380,20 @@ private:
 
 class AttrMerger_c
 {
-	AttrIndexBuilder_c				m_tMinMax;
-	HistogramContainer_c			m_tHistograms;
-	CSphVector<PlainOrColumnar_t>	m_dAttrsForHistogram;
-	CSphFixedVector<DocidRowidPair_t> m_dDocidLookup {0};
-	CSphWriter						m_tWriterSPA;
-	BlobRowBuilder_i * 				m_pBlobRowBuilder = nullptr;
-	DocstoreBuilder_i * 			m_pDocstoreBuilder = nullptr;
-	columnar::Builder_i *			m_pColumnarBuilder = nullptr;
-	RowID_t							m_tResultRowID = 0;
-	int64_t							m_iTotalBytes = 0;
+	AttrIndexBuilder_c						m_tMinMax;
+	HistogramContainer_c					m_tHistograms;
+	CSphVector<PlainOrColumnar_t>			m_dAttrsForHistogram;
+	CSphFixedVector<DocidRowidPair_t> 		m_dDocidLookup {0};
+	CSphWriter								m_tWriterSPA;
+	BlobRowBuilder_i * 						m_pBlobRowBuilder = nullptr;
+	std::unique_ptr<DocstoreBuilder_i>		m_pDocstoreBuilder;
+	columnar::Builder_i *					m_pColumnarBuilder = nullptr;
+	RowID_t									m_tResultRowID = 0;
+	int64_t									m_iTotalBytes = 0;
 
-	MergeCb_c & 					m_tMonitor;
-	CSphString &					m_sError;
-	int64_t							m_iTotalDocs;
+	MergeCb_c & 							m_tMonitor;
+	CSphString &							m_sError;
+	int64_t									m_iTotalDocs;
 
 private:
 	bool CopyPureColumnarAttributes ( const CSphIndex_VLN& tIndex, const VecTraits_T<RowID_t>& dRowMap );
@@ -1404,13 +1404,11 @@ public:
 		: m_tMonitor ( tMonitor )
 		, m_sError ( sError)
 		, m_iTotalDocs ( iTotalDocs )
-	{
-	}
+	{}
 
 	~AttrMerger_c()
 	{
 		SafeDelete ( m_pColumnarBuilder );
-		SafeDelete ( m_pDocstoreBuilder );
 		SafeDelete ( m_pBlobRowBuilder );
 	}
 
@@ -1888,7 +1886,7 @@ int ExpandKeywords ( int iIndexOpt, QueryOption_e eQueryOpt, const CSphIndexSett
 		iOpt = iIndexOpt;
 	else if ( eQueryOpt==QUERY_OPT_MORPH_NONE )
 		iOpt = KWE_MORPH_NONE;
-	 else
+	else
 		iOpt = ( eQueryOpt==QUERY_OPT_ENABLED ? KWE_ENABLED : KWE_DISABLED );
 
 	if ( ( iOpt & KWE_STAR )==KWE_STAR && tSettings.m_iMinInfixLen<=0 && tSettings.GetMinPrefixLen ( bWordDict )<=0 )
@@ -2026,13 +2024,6 @@ DictRefPtr_c CSphIndex::GetDictionary() const
 	return m_pDict;
 }
 
-
-DictRefPtr_c CSphIndex::LeakDictionary ()
-{
-	return std::exchange (m_pDict, nullptr);
-}
-
-
 void CSphIndex::Setup ( const CSphIndexSettings & tSettings )
 {
 	m_tSettings = tSettings;
@@ -2114,7 +2105,7 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * szIndexName, const char * szFilename
 
 	m_iDocinfo = 0;
 	m_iDocinfoIndex = 0;
-	m_pDocinfoIndex = NULL;
+	m_pDocinfoIndex = nullptr;
 
 	m_uVersion = INDEX_FORMAT_VERSION;
 	m_bPassedRead = false;
@@ -4963,12 +4954,12 @@ bool CheckStoredFields ( const CSphSchema & tSchema, const CSphIndexSettings & t
 }
 
 
-bool CSphIndex_VLN::Build_SetupDocstore ( CSphScopedPtr<DocstoreBuilder_i> & pDocstore, CSphBitvec & dStoredFields, CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage )
+bool CSphIndex_VLN::Build_SetupDocstore ( std::unique_ptr<DocstoreBuilder_i> & pDocstore, CSphBitvec & dStoredFields, CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage )
 {
 	if ( !m_tSchema.HasStoredFields() && !m_tSchema.HasStoredAttrs() )
 		return true;
 
-	DocstoreBuilder_i * pBuilder = CreateDocstoreBuilder ( GetIndexFileName(SPH_EXT_SPDS), GetSettings(), m_sLastError );
+	auto pBuilder = CreateDocstoreBuilder ( GetIndexFileName(SPH_EXT_SPDS), GetSettings(), m_sLastError );
 	if ( !pBuilder )
 		return false;
 
@@ -4987,7 +4978,7 @@ bool CSphIndex_VLN::Build_SetupDocstore ( CSphScopedPtr<DocstoreBuilder_i> & pDo
 
 	dTmpDocstoreAttrStorage.Resize ( m_tSchema.GetAttrsCount() );
 
-	pDocstore = pBuilder;
+	pDocstore = std::move ( pBuilder );
 	return true;
 }
 
@@ -5264,7 +5255,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	if ( !Build_SetupColumnar(pColumnarBuilder) )
 		return 0;
 
-	CSphScopedPtr<DocstoreBuilder_i> pDocstoreBuilder(nullptr);
+	std::unique_ptr<DocstoreBuilder_i> pDocstoreBuilder;
 	CSphBitvec dStoredFields, dStoredAttrs;
 	CSphVector<CSphVector<BYTE>> dTmpDocstoreAttrStorage;
 	if ( !Build_SetupDocstore ( pDocstoreBuilder, dStoredFields, dStoredAttrs, dTmpDocstoreAttrStorage ) )
@@ -5450,7 +5441,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				nDocidLookupBlocks++;
 			}
 
-			Build_AddToDocstore ( pDocstoreBuilder.Ptr(), tDocID, tQueryMvaContainer, *pSource, dStoredFields, dStoredAttrs, dTmpDocstoreAttrStorage );
+			Build_AddToDocstore ( pDocstoreBuilder.get(), tDocID, tQueryMvaContainer, *pSource, dStoredFields, dStoredAttrs, dTmpDocstoreAttrStorage );
 
 			// go on, loop next document
 		}
@@ -5630,7 +5621,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	if ( !WriteKillList ( GetIndexFileName(SPH_EXT_SPK), dKillList.Begin(), dKillList.GetLength(), m_tSettings.m_tKlistTargets, m_sLastError ) )
 		return 0;
 
-	if ( pDocstoreBuilder.Ptr() )
+	if ( pDocstoreBuilder )
 		pDocstoreBuilder->Finalize();
 
 	WarnAboutKillList ( dKillList, m_tSettings.m_tKlistTargets );
@@ -6937,20 +6928,20 @@ bool CSphIndex_VLN::AddRemoveFromDocstore ( const CSphSchema & tOldSchema, const
 	if ( iOldNumStored==iNewNumStored )
 		return true;
 
-	CSphScopedPtr<DocstoreBuilder_i> pDocstoreBuilder(nullptr);
+	std::unique_ptr<DocstoreBuilder_i> pDocstoreBuilder;
 	if ( iNewNumStored )
 	{
 		pDocstoreBuilder = CreateDocstoreBuilder ( GetIndexFileName ( SPH_EXT_SPDS, true ), m_pDocstore->GetDocstoreSettings(), sError );
-		if ( !pDocstoreBuilder.Ptr() )
+		if ( !pDocstoreBuilder )
 			return false;
 
-		Alter_AddRemoveFromDocstore ( *pDocstoreBuilder, m_pDocstore.Ptr(), (DWORD)m_iDocinfo, tNewSchema );
+		Alter_AddRemoveFromDocstore ( *pDocstoreBuilder, m_pDocstore.get(), (DWORD)m_iDocinfo, tNewSchema );
 	}
 
 	if ( !JuggleFile ( SPH_EXT_SPDS, sError, !!iOldNumStored, !!iNewNumStored ) )
 		return false;
 
-	m_pDocstore.Reset();
+	m_pDocstore.reset();
 	PreallocDocstore();
 
 	return true;
@@ -8119,7 +8110,7 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 			m_pDocstore->CreateReader ( iSessionUID );
 
 		DocstoreSession_c::InfoRowID_t tSessionInfo;
-		tSessionInfo.m_pDocstore = m_pDocstore.Ptr();
+		tSessionInfo.m_pDocstore = m_pDocstore.get();
 		tSessionInfo.m_iSessionId = iSessionUID;
 
 		for ( auto & i : tCtx.m_dCalcFinal )
@@ -8141,7 +8132,7 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 
 	// done
 	tResult.m_pBlobPool = m_tBlobAttrs.GetWritePtr();
-	tResult.m_pDocstore = m_pDocstore.Ptr() ? this : nullptr;
+	tResult.m_pDocstore = m_pDocstore ? this : nullptr;
 	tResult.m_pColumnar = m_pColumnar.Ptr();
 
 	tMeta.m_iQueryTime += (int)( ( sphMicroTimer()-tmQueryStart )/1000 );
@@ -8394,7 +8385,7 @@ void CSphIndex_VLN::Dealloc ()
 	m_tWordlist.Reset ();
 	m_tDeadRowMap.Dealloc();
 	m_tDocidLookup.Reset();
-	m_pDocstore.Reset();
+	m_pDocstore.reset();
 
 	m_iDocinfo = 0;
 	m_iMinMaxIndex = 0;
@@ -10487,7 +10478,7 @@ bool CSphIndex_VLN::SplitQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 		return false;
 
 	tResult.m_pBlobPool = m_tBlobAttrs.GetWritePtr();
-	tResult.m_pDocstore = m_pDocstore.Ptr() ? this : nullptr;
+	tResult.m_pDocstore = m_pDocstore ? this : nullptr;
 	tResult.m_pColumnar = m_pColumnar.Ptr();
 
 	if ( tArgs.m_bModifySorterSchemas )
@@ -11091,7 +11082,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 			m_pDocstore->CreateReader ( iSessionUID );
 
 		DocstoreSession_c::InfoRowID_t tSessionInfo;
-		tSessionInfo.m_pDocstore = m_pDocstore.Ptr();
+		tSessionInfo.m_pDocstore = m_pDocstore.get();
 		tSessionInfo.m_iSessionId = iSessionUID;
 
 		for ( auto & i : tCtx.m_dCalcFinal )
@@ -11111,7 +11102,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	pRanker->FinalizeCache ( tMaxSorterSchema );
 
 	tResult.m_pBlobPool = m_tBlobAttrs.GetWritePtr();
-	tResult.m_pDocstore = m_pDocstore.Ptr() ? this : nullptr;
+	tResult.m_pDocstore = m_pDocstore ? this : nullptr;
 	tResult.m_pColumnar = m_pColumnar.Ptr();
 
 	// query timer
@@ -11137,7 +11128,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 
 void CSphIndex_VLN::CreateReader ( int64_t iSessionId ) const
 {
-	if ( !m_pDocstore.Ptr() )
+	if ( !m_pDocstore )
 		return;
 
 	m_pDocstore->CreateReader(iSessionId);
@@ -11146,7 +11137,7 @@ void CSphIndex_VLN::CreateReader ( int64_t iSessionId ) const
 
 bool CSphIndex_VLN::GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const
 {
-	if ( !m_pDocstore.Ptr() )
+	if ( !m_pDocstore )
 		return false;
 
 	RowID_t tRowID = GetRowidByDocid ( tDocID );
@@ -11160,7 +11151,7 @@ bool CSphIndex_VLN::GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTrai
 
 int CSphIndex_VLN::GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const
 {
-	if ( !m_pDocstore.Ptr() )
+	if ( !m_pDocstore )
 		return -1;
 
 	return m_pDocstore->GetFieldId ( sName, eType );

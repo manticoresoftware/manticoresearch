@@ -6834,7 +6834,7 @@ DEFINE_RENDER ( QueryInfo_t )
 	hazard::Guard_c tGuard;
 	auto pQuery = tGuard.Protect ( tInfo.m_pHazardQuery );
 	if ( pQuery && session::GetProto()!=Proto_e::MYSQL41 ) // cheat: for mysql query not used, so will not copy it then
-		dDst.m_pQuery = new CSphQuery ( *pQuery );
+		dDst.m_pQuery = std::make_unique<CSphQuery> ( *pQuery );
 }
 
 // one or more queries against one and same set of indexes
@@ -12115,7 +12115,7 @@ static std::pair<const char *, int> FormatInfo ( const PublicThreadDesc_t & tThd
 		if ( tThd.m_pQuery )
 		{
 			tBuf.Clear();
-			FormatSphinxql ( *tThd.m_pQuery.Ptr(), 0, tBuf );
+			FormatSphinxql ( *tThd.m_pQuery, 0, tBuf );
 			bGotQuery = true;
 		}
 
@@ -17106,8 +17106,6 @@ void ConfigureDistributedIndex ( std::function<bool(const CSphString&)>&& fnChec
 		sphWarning ( "index '%s': ha_strategy defined, but no ha agents in the index", szIndexName );
 }
 
-ResultAndIndex_t tLoadError { ADD_ERROR, ServedIndexRefPtr_c() };
-
 //////////////////////////////////////////////////
 /// configure distributed index and add it to hash
 //////////////////////////////////////////////////
@@ -17120,17 +17118,17 @@ static ResultAndIndex_t AddDistributedIndex ( const char * szIndexName, const CS
 	if ( pIdx->IsEmpty () )
 	{
 		sError.SetSprintf ( "index '%s': no valid local/remote indexes in distributed index", szIndexName );
-		return tLoadError;
+		return { ADD_ERROR, nullptr };
 	}
 
 	// finally, check and add distributed index to global table
 	if ( !g_pDistIndexes->Add ( pIdx, szIndexName ) )
 	{
 		sError.SetSprintf ( "index '%s': unable to add name (duplicate?)", szIndexName );
-		return tLoadError;
+		return { ADD_ERROR, nullptr };
 	}
 
-	return ResultAndIndex_t { ADD_DISTR, ServedIndexRefPtr_c() };
+	return ResultAndIndex_t { ADD_DISTR, nullptr };
 }
 
 // common preconfiguration of mutable indexes
@@ -17249,14 +17247,14 @@ static ResultAndIndex_t LoadRTPercolate ( bool bRT, const char* szIndexName, con
 		else if ( sIndexType!="keywords" )
 		{
 			sError.SetSprintf ( "index '%s': unknown dict=%s; only 'keywords' or 'crc' values allowed", szIndexName, sIndexType.cstr() );
-			return tLoadError;
+			return { ADD_ERROR, nullptr };
 		}
 	}
 
 	CSphSchema tSchema ( szIndexName );
 	CSphIndexSettings tSettings;
 	if ( !ConfigureRTPercolate ( tSchema, tSettings, szIndexName, hIndex, bWordDict, !bRT, pWarnings, sError ))
-		return tLoadError;
+		return { ADD_ERROR, nullptr };
 
 	// index
 	auto pServed = MakeServedIndex();
@@ -17283,7 +17281,7 @@ static ResultAndIndex_t LoadRTPercolate ( bool bRT, const char* szIndexName, con
 	pIdx->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
 
 	pServed->SetIdx ( std::move ( pIdx ) );
-	return ResultAndIndex_t { ADD_NEEDLOAD, ServedIndexRefPtr_c { pServed.Leak() } }; // use Leak to avoid extra addref/release on copying
+	return ResultAndIndex_t { ADD_NEEDLOAD, std::move ( pServed ) }; // use Leak to avoid extra addref/release on copying
 }
 
 ////////////////////////////////////////////
@@ -17295,7 +17293,7 @@ static ResultAndIndex_t LoadPlainIndex ( const char * szIndexName, const CSphCon
 	if ( !hIndex.Exists ( "path" ) )
 	{
 		sError = "key 'path' not found";
-		return tLoadError;
+		return { ADD_ERROR, nullptr };
 	}
 
 	ServedIndexRefPtr_c pServed = MakeServedIndex();
@@ -17311,7 +17309,7 @@ static ResultAndIndex_t LoadPlainIndex ( const char * szIndexName, const CSphCon
 	pIdx->SetGlobalIDFPath ( pServed->m_sGlobalIDFPath );
 	pIdx->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
 	pServed->SetIdx ( std::move ( pIdx ) );
-	return ResultAndIndex_t { ADD_NEEDLOAD, ServedIndexRefPtr_c { pServed.Leak() } };
+	return ResultAndIndex_t { ADD_NEEDLOAD, pServed };
 }
 
 ///////////////////////////////////////////////
@@ -17324,7 +17322,7 @@ static ResultAndIndex_t LoadTemplateIndex ( const char * szIndexName, const CSph
 	if ( !tSettings.Setup ( hIndex, szIndexName, sWarning, sError ) )
 	{
 		sphWarning ( "failed to configure index %s: %s", szIndexName, sError.cstr () );
-		return tLoadError;
+		return { ADD_ERROR, nullptr };
 	}
 
 	if ( !sWarning.IsEmpty() )
@@ -17347,7 +17345,7 @@ static ResultAndIndex_t LoadTemplateIndex ( const char * szIndexName, const CSph
 	if ( !sphFixupIndexSettings ( pIdx.get(), hIndex, g_bStripPath, pFilenameBuilder.Ptr(), dWarnings, sError ) )
 	{
 		sphWarning ( "index '%s': %s - NOT SERVING", szIndexName, sError.cstr () );
-		return tLoadError;
+		return { ADD_ERROR, nullptr };
 	}
 
 	for ( const auto & i : dWarnings )
@@ -17356,7 +17354,7 @@ static ResultAndIndex_t LoadTemplateIndex ( const char * szIndexName, const CSph
 	// templates we either add, either replace depending on requested action
 	// at this point they are production-ready
 	pServed->SetIdx ( std::move ( pIdx ) );
-	return ResultAndIndex_t { ADD_SERVED, ServedIndexRefPtr_c { pServed.Leak() } };
+	return ResultAndIndex_t { ADD_SERVED, std::move ( pServed ) };
 }
 
 // HandleCommandClusterPq() -> RemoteLoadIndex() -> LoadIndex() -> AddIndex() // only Percolate! From other threads
@@ -17370,7 +17368,7 @@ ResultAndIndex_t AddIndex ( const char * szIndexName, const CSphConfigSection & 
 	if ( bCheckDupe && IndexIsServed ( szIndexName ) )
 	{
 		sphWarning ( "index '%s': duplicate name - NOT SERVING", szIndexName );
-		return tLoadError;
+		return { ADD_ERROR, nullptr };
 	}
 
 	switch ( TypeOfIndexConfig ( hIndex.GetStr ( "type", nullptr )))
@@ -17391,7 +17389,7 @@ ResultAndIndex_t AddIndex ( const char * szIndexName, const CSphConfigSection & 
 	}
 
 	sphWarning ( "index '%s': unknown type '%s' - NOT SERVING", szIndexName, hIndex["type"].cstr() );
-	return tLoadError;
+	return { ADD_ERROR, nullptr };
 }
 
 // check if config changed, and also cache content into g_dConfig (will be used instead of one more config touching)

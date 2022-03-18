@@ -1171,7 +1171,7 @@ static const uint64_t g_dStatsIntervals[] =
 void ServedStats_c::CalculateQueryStats( QueryStats_t& tRowsFoundStats, QueryStats_t& tQueryTimeStats ) const
 {
 	ScRL_t rLock { m_tStatsLock };
-	DoStatCalcStats ( m_pQueryStatRecords.Ptr(), tRowsFoundStats, tQueryTimeStats );
+	DoStatCalcStats ( m_pQueryStatRecords.get(), tRowsFoundStats, tQueryTimeStats );
 }
 
 
@@ -1180,7 +1180,7 @@ void ServedStats_c::CalculateQueryStats( QueryStats_t& tRowsFoundStats, QuerySta
 void ServedStats_c::CalculateQueryStatsExact( QueryStats_t& tRowsFoundStats, QueryStats_t& tQueryTimeStats ) const
 {
 	ScRL_t rLock { m_tStatsLock };
-	DoStatCalcStats ( m_pQueryStatRecordsExact.Ptr(), tRowsFoundStats, tQueryTimeStats );
+	DoStatCalcStats ( m_pQueryStatRecordsExact.get(), tRowsFoundStats, tQueryTimeStats );
 }
 
 #endif // !NDEBUG

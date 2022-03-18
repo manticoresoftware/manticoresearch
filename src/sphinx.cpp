@@ -512,12 +512,14 @@ while(0)
 #define HITLESS_DOC_FLAG 0x80000000
 
 
+// duplicated in sphinxformat.cpp
 struct Slice64_t
 {
 	uint64_t	m_uOff;
 	int			m_iLen;
 };
 
+// duplicated in sphinxformat.cpp
 struct DiskSubstringPayload_t : public ISphSubstringPayload
 {
 	explicit DiskSubstringPayload_t ( int iDoclists )
@@ -586,8 +588,6 @@ private:
 
 //////////////////////////////////////////////////////////////////////////
 
-class CSphHitBuilder;
-
 const char* CheckFmtMagic ( DWORD uHeader )
 {
 	if ( uHeader!=INDEX_MAGIC_HEADER )
@@ -616,8 +616,6 @@ public:
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & tSettings, CSphString * ) const final ;
 	Bson_t				ExplainQuery ( const CSphString & sQuery ) const final;
 };
-
-
 
 bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, CSphString * ) const
 {
@@ -1111,41 +1109,6 @@ void IndexUpdateHelper_c::Update_Plain ( const RowsToUpdate_t& dRows, UpdateCont
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
-
-struct FileDebugCheckReader_c final : public DebugCheckReader_i
-{
-	FileDebugCheckReader_c ( CSphAutoreader * pReader )
-		: m_pReader ( pReader )
-	{}
-	~FileDebugCheckReader_c () final
-	{}
-	int64_t GetLengthBytes () final
-	{
-		return ( m_pReader ? m_pReader->GetFilesize() : 0 );
-	}
-	bool GetBytes ( void * pData, int iSize ) final
-	{
-		if ( !m_pReader )
-			return false;
-
-		m_pReader->GetBytes ( pData, iSize );
-		return !m_pReader->GetErrorFlag();
-	}
-
-	bool SeekTo ( int64_t iOff, int iHint ) final
-	{
-		if ( !m_pReader )
-			return false;
-
-		m_pReader->SeekTo ( iOff, iHint );
-		return !m_pReader->GetErrorFlag();
-	}
-
-	CSphAutoreader * m_pReader = nullptr;
-};
-
-
 class QueryMvaContainer_c
 {
 public:
@@ -1158,6 +1121,7 @@ public:
 	}
 };
 
+class CSphHitBuilder;
 
 /// this is my actual VLN-compressed phrase index implementation
 class CSphIndex_VLN : public CSphIndex, public IndexUpdateHelper_c, public IndexAlterHelper_c, public DebugCheckHelper_c
@@ -1196,7 +1160,7 @@ public:
 	bool				Lock () final;
 	void				Unlock () final;
 
-	bool				MultiQuery ( CSphQueryResult & pResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const final;
+	bool				MultiQuery ( CSphQueryResult& tResult, const CSphQuery& tQuery, const VecTraits_T<ISphMatchSorter*>& dAllSorters, const CSphMultiQueryArgs& tArgs ) const final;
 	bool				MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult* pResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const final;
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, CSphString * pError ) const final;
 	template <class Qword> bool		DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, bool bFillOnly, CSphString * pError ) const;
@@ -1321,7 +1285,7 @@ private:
 	void						ScanByBlocks ( const CSphQueryContext & tCtx, CSphQueryResultMeta & tMeta, const VecTraits_T<ISphMatchSorter *> & dSorters, CSphMatch & tMatch, int iCutoff, bool bRandomize, int iIndexWeight, int64_t tmMaxTimer, const RowIdBoundaries_t * pBoundaries = nullptr ) const;
 	void						RunFullscanOnAttrs ( const RowIdBoundaries_t & tBoundaries, const CSphQueryContext & tCtx, CSphQueryResultMeta & tMeta, const VecTraits_T<ISphMatchSorter *> & dSorters, CSphMatch & tMatch, int iCutoff, bool bRandomize, int iIndexWeight, int64_t tmMaxTimer, bool & bStop ) const;
 	void						RunFullscanOnIterator ( RowidIterator_i * pIterator, const CSphQueryContext & tCtx, CSphQueryResultMeta & tMeta, const VecTraits_T<ISphMatchSorter *> & dSorters, CSphMatch & tMatch, int iCutoff, bool bRandomize, int iIndexWeight, int64_t tmMaxTimer ) const;
-	bool						MultiScan ( CSphQueryResult & tResult, const CSphQuery & dQuery, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const;
+	bool						MultiScan ( CSphQueryResult& tResult, const CSphQuery& tQuery, const VecTraits_T<ISphMatchSorter*>& dSorters, const CSphMultiQueryArgs& tArgs, int64_t tmMaxTimer ) const;
 
 	template<bool USE_KLIST, bool RANDOMIZE, bool USE_FACTORS>
 	void						MatchExtended ( CSphQueryContext & tCtx, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *>& dSorters, ISphRanker * pRanker, int iTag, int iIndexWeight ) const;
@@ -2617,8 +2581,8 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 	tSPAWriter.SetBufferSize ( 524288 );
 	tSPBWriter.SetBufferSize ( 524288 );
 
-	CSphScopedPtr<WriteWrapper_c> pSPAWriteWrapper ( CreateWriteWrapperDisk(tSPAWriter) );
-	CSphScopedPtr<WriteWrapper_c> pSPBWriteWrapper ( CreateWriteWrapperDisk(tSPBWriter) );
+	std::unique_ptr<WriteWrapper_c> pSPAWriteWrapper { CreateWriteWrapperDisk(tSPAWriter) };
+	std::unique_ptr<WriteWrapper_c> pSPBWriteWrapper { CreateWriteWrapperDisk(tSPBWriter) };
 
 	CSphString sSPAfile = GetIndexFileName ( SPH_EXT_SPA, true );
 	CSphString sSPBfile = GetIndexFileName ( SPH_EXT_SPB, true );
@@ -2949,7 +2913,7 @@ int64_t CSphIndex_VLN::GetPseudoShardingMetric ( const VecTraits_T<const CSphQue
 	bool bAllFast = true;
 	const float COST_THRESH = 0.5f;
 
-	for ( auto i : dQueries )
+	for ( const auto& i : dQueries )
 	{
 		CSphVector<SecondaryIndexInfo_t> dEnabledIndexes;
 		float fCost = GetEnabledSecondaryIndexes ( dEnabledIndexes, i.m_dFilters, i.m_dFilterTree, i.m_dIndexHints, *m_pHistograms );
@@ -2975,7 +2939,7 @@ int64_t CSphIndex_VLN::GetPseudoShardingMetric ( const VecTraits_T<const CSphQue
 
 struct CmpHit_fn
 {
-	inline bool IsLess ( const CSphWordHit & a, const CSphWordHit & b ) const
+	inline static bool IsLess ( const CSphWordHit & a, const CSphWordHit & b )
 	{
 		return ( a.m_uWordID<b.m_uWordID ) ||
 				( a.m_uWordID==b.m_uWordID && a.m_tRowID<b.m_tRowID ) ||
@@ -3014,11 +2978,11 @@ void CSphIndex_VLN::GetIndexFiles ( CSphVector<CSphString> & dFiles, const Filen
 	}
 
 	// might be pFilenameBuilder from parent RT index
-	CSphScopedPtr<const FilenameBuilder_i> pFilename ( nullptr );
+	std::unique_ptr<FilenameBuilder_i> pFilename;
 	if ( !pFilenameBuilder && GetIndexFilenameBuilder() )
 	{
-		pFilename = GetIndexFilenameBuilder() ( m_sIndexName.cstr() );
-		pFilenameBuilder = pFilename.Ptr();
+		pFilename = std::unique_ptr<FilenameBuilder_i> { GetIndexFilenameBuilder() ( m_sIndexName.cstr() ) };
+		pFilenameBuilder = pFilename.get();
 	}
 
 	GetSettingsFiles ( m_pTokenizer, m_pDict, GetSettings(), pFilenameBuilder, dFiles );

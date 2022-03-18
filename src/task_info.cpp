@@ -72,7 +72,7 @@ void PublicThreadDesc_t::Swap ( PublicThreadDesc_t & rhs )
 	::Swap ( m_sDescription, rhs.m_sDescription );
 	::Swap ( m_sProto, rhs.m_sProto );
 	::Swap ( m_tmConnect, rhs.m_tmConnect );
-	m_pQuery.Swap ( rhs.m_pQuery );
+	::Swap ( m_pQuery, rhs.m_pQuery );
 	::Swap ( m_sCommand, rhs.m_sCommand );
 	::Swap ( m_iConnID, rhs.m_iConnID );
 	::Swap ( m_eProto, rhs.m_eProto );

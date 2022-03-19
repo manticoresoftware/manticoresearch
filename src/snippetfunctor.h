@@ -80,19 +80,19 @@ public:
 };
 
 
-TokenFunctor_i * CreateDocStartHighlighter ( ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits, const CSphIndexSettings & tIndexSettings,
+TokenFunctor_i * CreateDocStartHighlighter ( TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits, const CSphIndexSettings & tIndexSettings,
 	const char * szDoc, int iDocLen, int iField, int & iResultCP, SnippetResult_t & tRes );
 
-TokenFunctor_i * CreateQueryHighlighter ( ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen,
+TokenFunctor_i * CreateQueryHighlighter ( TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen,
 	const CSphVector<SphHitMark_t> & dHits, int iField, SnippetResult_t & tRes );
 
-TokenFunctor_i * CreatePassageExtractor ( const SnippetsDocIndex_c & tContainer, PassageContext_t & tContext, ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits,
+TokenFunctor_i * CreatePassageExtractor ( const SnippetsDocIndex_c & tContainer, PassageContext_t & tContext, TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits,
 	const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, const CSphVector<SphHitMark_t> & dHits, int iField, SnippetResult_t & tRes );
 
-TokenFunctor_i * CreatePassageHighlighter ( CSphVector<Passage_t*> & dPassages, ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
+TokenFunctor_i * CreatePassageHighlighter ( CSphVector<Passage_t*> & dPassages, TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
 	const char * szDoc, int iDocLen, const CSphVector<SphHitMark_t> & dHits, const FunctorZoneInfo_t & tZoneInfo, int iField, SnippetResult_t & tRes );
 
-HitCollector_i * CreateHitCollector ( SnippetsDocIndex_c & tContainer, ISphTokenizer * pTokenizer, CSphDict * pDict, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
+HitCollector_i * CreateHitCollector ( SnippetsDocIndex_c & tContainer, TokenizerRefPtr_c pTokenizer, DictRefPtr_c pDict, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
 	const char * szDoc, int iDocLen, int iField, CacheStreamer_i & tTokenContainer, CSphVector<ZonePacked_t> & dZones, FunctorZoneInfo_t & tZoneInfo, SnippetResult_t & tRes );
 
 #endif // _snippetfunctor_

@@ -343,8 +343,8 @@ void RtSegment_t::UpdateUsedRam() const NO_THREAD_SAFETY_ANALYSIS
 	iUsedRam += m_dKeywordCheckpoints.AllocatedBytes();
 	iUsedRam += m_dRows.AllocatedBytes();
 	iUsedRam += m_dInfixFilterCP.AllocatedBytes();
-	iUsedRam += m_pDocstore.Ptr() ? m_pDocstore->AllocatedBytes() : 0;
-	iUsedRam += m_pColumnar.Ptr() ? m_pColumnar->AllocatedBytes() : 0;
+	iUsedRam += m_pDocstore ? m_pDocstore->AllocatedBytes() : 0;
+	iUsedRam += m_pColumnar ? m_pColumnar->AllocatedBytes() : 0;
 	FixupRAMCounter ( iUsedRam - std::exchange ( m_iUsedRam, iUsedRam ) );
 }
 
@@ -457,11 +457,11 @@ void RtSegment_t::BuildDocID2RowIDMap ( const CSphSchema & tSchema )
 	else
 	{
 		std::string sError;
-		CSphScopedPtr<columnar::Iterator_i> pIt ( m_pColumnar->CreateIterator ( sphGetDocidName(), {}, nullptr, sError ) );
-		assert ( pIt.Ptr() );
+		auto pIt = CreateIterator ( m_pColumnar.get(), sphGetDocidName(), sError );
+		assert ( pIt );
 		for ( RowID_t tRowID = 0; tRowID<m_uRows; tRowID++ )
 		{
-			Verify ( AdvanceIterator ( pIt.Ptr(), tRowID ) );
+			Verify ( AdvanceIterator ( pIt.get(), tRowID ) );
 			m_tDocIDtoRowID.Add ( pIt->Get(), tRowID );
 		}
 	}
@@ -1188,7 +1188,7 @@ public:
 	void				ProcessDiskChunkByID ( int iChunkID, VISITOR&& fnVisitor ) const;
 	template <typename VISITOR>
 	void				ProcessDiskChunkByID ( VecTraits_T<int> dChunkIDs, VISITOR&& fnVisitor ) const;
-	ISphTokenizer *		CloneIndexingTokenizer() const final { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
+	TokenizerRefPtr_c	CloneIndexingTokenizer() const final { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
 
 	void				SetKillHookFor ( IndexSegment_c* pAccum, int iDiskChunkID ) const;
 	void				SetKillHookFor ( IndexSegment_c* pAccum, VecTraits_T<int> dDiskChunkIDs ) const;
@@ -1233,7 +1233,7 @@ public:
 	void				DoGetKeywords ( CSphVector<CSphKeywordInfo>& dKeywords, const char* sQuery, const GetKeywordsSettings_t& tSettings, bool bFillOnly, CSphString* pError, const RtGuard_t& tGuard ) const;
 	bool				GetKeywords ( CSphVector<CSphKeywordInfo>& dKeywords, const char* sQuery, const GetKeywordsSettings_t& tSettings, CSphString* pError ) const final;
 	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const final;
-	void				AddKeywordStats ( BYTE* sWord, const BYTE* sTokenized, CSphDict* pDict, bool bGetStats, int iQpos, RtQword_t* pQueryWord, CSphVector<CSphKeywordInfo>& dKeywords, const RtSegVec_c& dRamSegs ) const;
+	void				AddKeywordStats ( BYTE* sWord, const BYTE* sTokenized, const DictRefPtr_c& pDict, bool bGetStats, int iQpos, RtQword_t* pQueryWord, CSphVector<CSphKeywordInfo>& dKeywords, const RtSegVec_c& dRamSegs ) const;
 
 	bool				RtQwordSetup ( RtQword_t * pQword, int iSeg, const RtGuard_t& tGuard ) const;
 	bool				RtQwordSetupSegment ( RtQword_t* pQword, const RtSegment_t* pCurSeg, bool bSetup ) const;
@@ -1315,7 +1315,7 @@ private:
 	CSphBitvec					m_tMorphFields;
 	CSphVector<SphWordID_t>		m_dHitlessWords;
 
-	CSphScopedPtr<DocstoreFields_i> m_pDocstoreFields {nullptr};	// rt index doesn't have its own docstore, but it must keep all fields to get their ids for GetDoc
+	std::unique_ptr<DocstoreFields_i> m_pDocstoreFields;	// rt index doesn't have its own docstore, but it must keep all fields to get their ids for GetDoc
 	mutable int					m_iTrackFailedRamActions;
 
 	RtAccum_t *					CreateAccum ( RtAccum_t * pAccExt, CSphString & sError ) final;
@@ -1799,7 +1799,7 @@ bool RtIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphS
 		}
 	}
 
-	TokenizerRefPtr_c tTokenizer { CloneIndexingTokenizer() };
+	TokenizerRefPtr_c tTokenizer = CloneIndexingTokenizer();
 
 	if (!tTokenizer)
 	{
@@ -1818,8 +1818,8 @@ bool RtIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphS
 	// OPTIMIZE? do not create filter on each(!) INSERT
 	if ( !m_tSettings.m_sIndexTokenFilter.IsEmpty() )
 	{
-		tTokenizer = Tokenizer::CreatePluginFilter ( tTokenizer, m_tSettings.m_sIndexTokenFilter, sError );
-		if ( !tTokenizer )
+		Tokenizer::AddPluginFilterTo ( tTokenizer, m_tSettings.m_sIndexTokenFilter, sError );
+		if ( !sError.IsEmpty() )
 			return false;
 		if ( !tTokenizer->SetFilterSchema ( m_tSchema, sError ) )
 			return false;
@@ -1830,7 +1830,7 @@ bool RtIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphS
 
 	// OPTIMIZE? do not create filter on each(!) INSERT
 	if ( m_tSettings.m_uAotFilterMask )
-		tTokenizer = sphAotCreateFilter ( tTokenizer, m_pDict, m_tSettings.m_bIndexExactWords, m_tSettings.m_uAotFilterMask );
+		sphAotTransformFilter ( tTokenizer, m_pDict, m_tSettings.m_bIndexExactWords, m_tSettings.m_uAotFilterMask );
 
 	CSphSource_StringVector tSrc ( tDoc.m_dFields, m_tSchema );
 
@@ -1850,7 +1850,7 @@ bool RtIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphS
 		pFieldFilter = m_pFieldFilter->Clone();
 
 	tSrc.Setup ( m_tSettings, nullptr );
-	tSrc.SetTokenizer ( tTokenizer );
+	tSrc.SetTokenizer ( std::move ( tTokenizer ) );
 	tSrc.SetDict ( pAcc->m_pDict );
 	tSrc.SetFieldFilter ( pFieldFilter );
 	tSrc.SetMorphFields ( m_tMorphFields );
@@ -1878,7 +1878,7 @@ bool RtIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphS
 }
 
 
-RtAccum_t * RtIndex_i::AcquireAccum ( CSphDict * pDict, RtAccum_t * pAcc, bool bWordDict, bool bSetTLS, CSphString * pError )
+RtAccum_t * RtIndex_i::AcquireAccum ( const DictRefPtr_c& pDict, RtAccum_t * pAcc, bool bWordDict, bool bSetTLS, CSphString * pError )
 {
 	if ( !pAcc )
 		pAcc = g_pTlsAccum;
@@ -1936,12 +1936,12 @@ RtAccum_t::RtAccum_t ( bool bKeywordDict )
 	: m_bKeywordDict ( bKeywordDict )
 {}
 
-void RtAccum_t::SetupDict ( const RtIndex_i * pIndex, CSphDict * pDict, bool bKeywordDict )
+void RtAccum_t::SetupDict ( const RtIndex_i * pIndex, const DictRefPtr_c& pDict, bool bKeywordDict )
 {
-	if ( pIndex!=m_pIndex || pDict!=m_pRefDict || bKeywordDict!=m_bKeywordDict )
+	if ( pIndex!=m_pIndex || pDict.Ptr()!=m_pRefDict || bKeywordDict!=m_bKeywordDict )
 	{
 		m_bKeywordDict = bKeywordDict;
-		m_pRefDict = pDict;
+		m_pRefDict = pDict.Ptr();
 		m_pDict = GetStatelessDict ( pDict );
 		if ( m_bKeywordDict )
 		{
@@ -1985,10 +1985,10 @@ void RtAccum_t::CleanupPart()
 {
 	m_dAccumRows.Resize(0);
 	m_dBlobs.Resize(0);
-	m_pColumnarBuilder.Reset();
+	m_pColumnarBuilder.reset();
 	m_dPerDocHitsCount.Resize(0);
 	m_dAccum.Resize(0);
-	m_pDocstore.Reset();
+	m_pDocstore.reset();
 
 	ResetDict();
 	ResetRowID();
@@ -2008,26 +2008,26 @@ void RtAccum_t::Cleanup()
 
 void RtAccum_t::SetupDocstore()
 {
-	if ( m_pDocstore.Ptr() )
+	if ( m_pDocstore )
 		return;
 
 	m_pDocstore = CreateDocstoreRT();
-	assert ( m_pDocstore.Ptr() );
-	SetupDocstoreFields ( *m_pDocstore.Ptr(), m_pIndex->GetInternalSchema() );
+	assert ( m_pDocstore );
+	SetupDocstoreFields ( *m_pDocstore, m_pIndex->GetInternalSchema() );
 }
 
 bool RtAccum_t::SetupDocstore ( const RtIndex_i & tIndex, CSphString & sError )
 {
 	const CSphSchema & tSchema = tIndex.GetInternalSchema();
-	if ( !m_pDocstore.Ptr() && !tSchema.HasStoredFields() && !tSchema.HasStoredAttrs() )
+	if ( !m_pDocstore && !tSchema.HasStoredFields() && !tSchema.HasStoredAttrs() )
 		return true;
 
 	// might be a case when replicated trx was wo docstore but index has docstore
-	if ( !m_pDocstore.Ptr() )
+	if ( !m_pDocstore )
 		m_pDocstore = CreateDocstoreRT();
 
-	assert ( m_pDocstore.Ptr() );
-	SetupDocstoreFields ( *m_pDocstore.Ptr(), tSchema );
+	assert ( m_pDocstore );
+	SetupDocstoreFields ( *m_pDocstore, tSchema );
 	return m_pDocstore->CheckFieldsLoaded ( sError );
 }
 
@@ -2334,12 +2334,12 @@ RtSegment_t * RtAccum_t::CreateSegment ( int iRowSize, int iWordsCheckpoint, ESp
 	pSeg->m_tAliveRows.store ( m_uAccumDocs, std::memory_order_relaxed );
 	pSeg->m_dRows.SwapData(m_dAccumRows);
 	pSeg->m_dBlobs.SwapData(m_dBlobs);
-	pSeg->m_pDocstore.Swap(m_pDocstore);
+	std::swap ( pSeg->m_pDocstore, m_pDocstore );
 
 	if ( m_pColumnarBuilder )
 	{
 		assert(m_pIndex);
-		pSeg->m_pColumnar = CreateColumnarRT ( m_pIndex->GetInternalSchema(), m_pColumnarBuilder.Ptr() );
+		pSeg->m_pColumnar = CreateColumnarRT ( m_pIndex->GetInternalSchema(), m_pColumnarBuilder.get() );
 	}
 
 	pSeg->BuildDocID2RowIDMap ( m_pIndex->GetInternalSchema() );
@@ -2382,7 +2382,7 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 	bool bColumnarId = tSchema.GetAttr(0).IsColumnar();
 
 	// create temporary columnar accessor; don't take ownership of built attributes
-	CSphScopedPtr<columnar::Columnar_i> pColumnar ( CreateColumnarRT ( m_pIndex->GetInternalSchema(), m_pColumnarBuilder.Ptr(), false ) );
+	auto pColumnar = CreateColumnarRT ( m_pIndex->GetInternalSchema(), m_pColumnarBuilder.get(), false );
 
 	std::string sError;
 	CSphScopedPtr<columnar::Iterator_i> pColumnarIdIterator(nullptr);
@@ -2514,7 +2514,7 @@ void RtAccum_t::GrabLastWarning ( CSphString & sWarning )
 void RtAccum_t::SetIndex ( RtIndex_i * pIndex )
 {
 	m_pIndex = pIndex;
-	m_pBlobWriter.Reset();
+	m_pBlobWriter.reset();
 	if ( !pIndex )
 		return;
 		
@@ -2523,7 +2523,7 @@ void RtAccum_t::SetIndex ( RtIndex_i * pIndex )
 		m_pBlobWriter = sphCreateBlobRowBuilder ( tSchema, m_dBlobs );
 
 	if ( !m_pColumnarBuilder )
-		m_pColumnarBuilder = CreateColumnarBuilderRT(tSchema);
+		m_pColumnarBuilder = CreateColumnarBuilderRT ( tSchema );
 
 	m_uSchemaHash = pIndex->GetSchemaHash();
 }
@@ -2851,7 +2851,7 @@ CSphFixedVector<RowID_t> RtIndex_c::CopyAttributesFromAliveDocs ( RtSegment_t & 
 	// perform merging attrs in single fiber - that eliminates concurrency with optimize
 	ScopedScheduler_c tSerialFiber { m_tWorkers.SerialChunkAccess() };
 
-	auto dColumnarIterators = CreateAllColumnarIterators ( tSrcSeg.m_pColumnar.Ptr(), m_tSchema );
+	auto dColumnarIterators = CreateAllColumnarIterators ( tSrcSeg.m_pColumnar.get(), m_tSchema );
 	CSphVector<int64_t> dTmp;
 
 	const CSphColumnInfo * pBlobRowLocator = m_tSchema.GetAttr ( sphGetBlobLocatorName() );
@@ -2881,7 +2881,7 @@ CSphFixedVector<RowID_t> RtIndex_c::CopyAttributesFromAliveDocs ( RtSegment_t & 
 		}
 
 		if ( tDstSeg.m_pDocstore )
-			tDstSeg.m_pDocstore->AddPackedDoc ( tCtx.m_tResultRowID, tSrcSeg.m_pDocstore.Ptr(), tRowID );
+			tDstSeg.m_pDocstore->AddPackedDoc ( tCtx.m_tResultRowID, tSrcSeg.m_pDocstore.get(), tRowID );
 
 		dRowMap[tRowID] = tCtx.m_tResultRowID++;
 	}
@@ -2975,8 +2975,8 @@ RtSegment_t* RtIndex_c::MergeTwoSegments ( const RtSegment_t* pA, const RtSegmen
 
 	bool bBothConsistent = CheckSegmentConsistency ( pA ) && CheckSegmentConsistency ( pB );
 
-	CSphScopedPtr<ColumnarBuilderRT_i> pColumnarBuilder ( CreateColumnarBuilderRT(m_tSchema) );
-	RtAttrMergeContext_t tCtx ( nBlobAttrs, tNextRowID, pColumnarBuilder.Ptr() );
+	auto pColumnarBuilder = CreateColumnarBuilderRT(m_tSchema);
+	RtAttrMergeContext_t tCtx ( nBlobAttrs, tNextRowID, pColumnarBuilder.get() );
 
 	auto * pSeg = new RtSegment_t (0);
 	FakeWL_t _ { pSeg->m_tLock }; // as pSeg is just created - we don't need real guarding and use fake lock to mute thread safety warnings
@@ -2995,7 +2995,7 @@ RtSegment_t* RtIndex_c::MergeTwoSegments ( const RtSegment_t* pA, const RtSegmen
 	pSeg->m_uRows = tNextRowID;
 	pSeg->m_tAliveRows.store ( pSeg->m_uRows, std::memory_order_relaxed );
 	pSeg->m_tDeadRowMap.Reset ( pSeg->m_uRows );
-	pSeg->m_pColumnar = CreateColumnarRT ( m_tSchema, pColumnarBuilder.Ptr() );
+	pSeg->m_pColumnar = CreateColumnarRT ( m_tSchema, pColumnarBuilder.get() );
 
 	RTRLOG << "MergeTwoSegments: new seg has " << pSeg->m_uRows << " rows";
 
@@ -3673,7 +3673,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	const CSphColumnInfo * pBlobLocatorAttr = m_tSchema.GetAttr ( sphGetBlobLocatorName() );
 	AttrIndexBuilder_c tMinMaxBuilder(m_tSchema);
 
-	CSphScopedPtr<BlobRowBuilder_i> pBlobRowBuilder(nullptr);
+	std::unique_ptr<BlobRowBuilder_i> pBlobRowBuilder;
 	if ( pBlobLocatorAttr )
 	{
 		pBlobRowBuilder = sphCreateBlobRowBuilder ( m_tSchema, sSPB, m_tSettings.m_tBlobUpdateSpace, sError );
@@ -3681,7 +3681,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 			return false;
 	}
 
-	CSphScopedPtr<DocstoreBuilder_i> pDocstoreBuilder(nullptr);
+	std::unique_ptr<DocstoreBuilder_i> pDocstoreBuilder;
 	if ( m_tSchema.HasStoredFields() || m_tSchema.HasStoredAttrs() )
 	{
 		pDocstoreBuilder = CreateDocstoreBuilder ( sSPDS, m_tSettings, sError );
@@ -3691,11 +3691,11 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 		SetupDocstoreFields ( *pDocstoreBuilder, m_tSchema );
 	}
 
-	CSphScopedPtr<columnar::Builder_i> pColumnarBuilder(nullptr);
+	std::unique_ptr<columnar::Builder_i> pColumnarBuilder;
 	if ( m_tSchema.HasColumnarAttrs() )
 	{
 		pColumnarBuilder = CreateColumnarBuilder ( m_tSchema, m_tSettings, sSPC, sError );
-		if ( !pColumnarBuilder.Ptr() )
+		if ( !pColumnarBuilder )
 			return false;
 	}
 
@@ -3726,7 +3726,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 		SccRL_t rLock ( tSeg.m_tLock );
 		tSeg.m_bAttrsBusy.store ( true, std::memory_order_release );
 
-		auto dColumnarIterators = CreateAllColumnarIterators ( tSeg.m_pColumnar.Ptr(), m_tSchema );
+		auto dColumnarIterators = CreateAllColumnarIterators ( tSeg.m_pColumnar.get(), m_tSchema );
 
 		for ( auto tRowID : RtLiveRows_c(tSeg) )
 		{
@@ -3749,7 +3749,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 			{
 				auto & tIterator = dColumnarIterators[iIterator];
 				Verify ( AdvanceIterator ( tIterator.first.get(), tRowID ) );
-				SetColumnarAttr ( iIterator, tIterator.second, pColumnarBuilder.Ptr(), tIterator.first.get(), dTmp );
+				SetColumnarAttr ( iIterator, tIterator.second, pColumnarBuilder.get(), tIterator.first.get(), dTmp );
 			}
 
 			tDocID = iColumnarIdLoc>=0 ? dColumnarIterators[iColumnarIdLoc].first->Get() : sphGetDocID(pRow);
@@ -3773,7 +3773,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	VecTraits_T<DocidRowidPair_t> dLookup ( dRawLookup.Begin(), tNextRowID );
 
 	std::string sErrorSTL;
-	if ( pColumnarBuilder.Ptr() && !pColumnarBuilder->Done(sErrorSTL) )
+	if ( pColumnarBuilder && !pColumnarBuilder->Done(sErrorSTL) )
 	{
 		sError = sErrorSTL.c_str();
 		return false;
@@ -4643,7 +4643,7 @@ bool RtIndex_c::LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuilder, bool bStr
 	if ( !m_sLastError.IsEmpty() )
 		dWarnings.Add(m_sLastError);
 
-	m_pTokenizer = Tokenizer::CreateMultiformFilter ( m_pTokenizer, m_pDict->GetMultiWordforms () );
+	Tokenizer::AddToMultiformFilterTo ( m_pTokenizer, m_pDict->GetMultiWordforms () );
 
 	m_iWordsCheckpoint = rdMeta.GetDword();
 
@@ -4781,7 +4781,7 @@ bool RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder, bool bStrip
 	if ( !m_sLastError.IsEmpty() )
 		dWarnings.Add(m_sLastError);
 
-	m_pTokenizer = Tokenizer::CreateMultiformFilter ( m_pTokenizer, m_pDict->GetMultiWordforms () );
+	Tokenizer::AddToMultiformFilterTo ( m_pTokenizer, m_pDict->GetMultiWordforms () );
 
 	m_iWordsCheckpoint = (int)Int ( tBson.ChildByName ( "words_checkpoint" ) );
 
@@ -5035,11 +5035,11 @@ void RtIndex_c::SaveRamSegment ( const RtSegment_t* pSeg, CSphWriter& wrChunk ) 
 	pSeg->m_tDeadRowMap.Save ( wrChunk );
 	SaveVector ( wrChunk, pSeg->m_dBlobs );
 
-	if ( pSeg->m_pDocstore.Ptr() )
+	if ( pSeg->m_pDocstore )
 		pSeg->m_pDocstore->Save ( wrChunk );
 
-	wrChunk.PutByte ( pSeg->m_pColumnar.Ptr() ? 1 : 0 );
-	if ( pSeg->m_pColumnar.Ptr() )
+	wrChunk.PutByte ( pSeg->m_pColumnar ? 1 : 0 );
+	if ( pSeg->m_pColumnar )
 		pSeg->m_pColumnar->Save ( wrChunk );
 
 	// infixes
@@ -5180,8 +5180,8 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes, bool bFixup
 		if ( uVersion>=15 && ( m_tSchema.HasStoredFields() || m_tSchema.HasStoredAttrs() ) )
 		{
 			pSeg->m_pDocstore = CreateDocstoreRT();
-			SetupDocstoreFields ( *pSeg->m_pDocstore.Ptr(), m_tSchema );
-			assert ( pSeg->m_pDocstore.Ptr() );
+			SetupDocstoreFields ( *pSeg->m_pDocstore, m_tSchema );
+			assert ( pSeg->m_pDocstore );
 			if ( !pSeg->m_pDocstore->Load ( rdChunk ) )
 				return false;
 		}
@@ -5301,15 +5301,13 @@ void RtIndex_c::PostSetup()
 {
 	RtIndex_i::PostSetup();
 
-	CSphScopedPtr<DocstoreFields_i> pDocstoreFields;
+	std::unique_ptr<DocstoreFields_i> pDocstoreFields;
 	if ( m_tSchema.HasStoredFields() || m_tSchema.HasStoredAttrs() )
 	{
 		pDocstoreFields = CreateDocstoreFields();
-		SetupDocstoreFields ( *pDocstoreFields.Ptr(), m_tSchema );
+		SetupDocstoreFields ( *pDocstoreFields, m_tSchema );
 	}
-	m_pDocstoreFields.Swap ( pDocstoreFields );
-	pDocstoreFields = nullptr;
-
+	m_pDocstoreFields = std::move ( pDocstoreFields );
 	m_iMaxCodepointLength = m_pTokenizer->GetMaxCodepointLength();
 
 	// bigram filter
@@ -5326,9 +5324,7 @@ void RtIndex_c::PostSetup()
 
 	// FIXME!!! handle error
 	m_pTokenizerIndexing = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
-	TokenizerRefPtr_c pIndexing { Tokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError ) };
-	if ( pIndexing )
-		m_pTokenizerIndexing = pIndexing;
+	Tokenizer::AddBigramFilterTo ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError );
 
 	const CSphDictSettings & tDictSettings = m_pDict->GetSettings();
 	if ( !ParseMorphFields ( tDictSettings.m_sMorphology, tDictSettings.m_sMorphFields, m_tSchema.GetFields(), m_tMorphFields, m_sLastError ) )
@@ -7001,12 +6997,7 @@ bool RtIndex_c::RtQwordSetup ( RtQword_t * pQword, int iSeg, const RtGuard_t& tG
 	return bFound;
 }
 
-void SetupExactDict ( DictRefPtr_c& pDict )
-{
-	pDict = new CSphDictExact ( pDict );
-}
-
-void SetupExactTokenizer ( ISphTokenizer* pTokenizer, bool bAddSpecial )
+void SetupExactTokenizer ( const TokenizerRefPtr_c& pTokenizer, bool bAddSpecial )
 {
 	assert ( pTokenizer );
 	pTokenizer->AddPlainChars ( "=" );
@@ -7014,13 +7005,7 @@ void SetupExactTokenizer ( ISphTokenizer* pTokenizer, bool bAddSpecial )
 		pTokenizer->AddSpecials ( "=" );
 }
 
-
-void SetupStarDict ( DictRefPtr_c& pDict )
-{
-	pDict = new CSphDictStarV8 ( pDict, true );
-}
-
-void SetupStarTokenizer ( ISphTokenizer* pTokenizer )
+void SetupStarTokenizer ( const TokenizerRefPtr_c& pTokenizer )
 {
 	assert ( pTokenizer );
 	pTokenizer->AddPlainChars ( "*" );
@@ -7142,7 +7127,7 @@ void SorterSchemaTransform_c::Transform ( ISphMatchSorter * pSorter, const RtGua
 		int nRamChunks = tGuard.m_dRamSegs.GetLength ();
 		int iChunkId = pMatch->m_iTag-1;
 		if ( iChunkId<nRamChunks )
-			return tGuard.m_dRamSegs[iChunkId]->m_pColumnar.Ptr();
+			return tGuard.m_dRamSegs[iChunkId]->m_pColumnar.get();
 
 		return m_dDiskChunkData[iChunkId-nRamChunks].m_pColumnar;
 	};
@@ -7293,19 +7278,19 @@ void FinalExpressionCalculation ( CSphQueryContext & tCtx, const VecTraits_T<RtS
 		// set blob pool for string on_sort expression fix up
 		SccRL_t rLock ( dRamChunks[iSeg]->m_tLock );
 		tCtx.SetBlobPool ( dRamChunks[iSeg]->m_dBlobs.Begin() );
-		tCtx.SetColumnar ( dRamChunks[iSeg]->m_pColumnar.Ptr() );
-		tCtx.SetDocstore ( dRamChunks[iSeg]->m_pDocstore.Ptr(), -1 );	// no need to create session/readers for RT segments
+		tCtx.SetColumnar ( dRamChunks[iSeg]->m_pColumnar.get() );
+		tCtx.SetDocstore ( dRamChunks[iSeg]->m_pDocstore.get(), -1 );	// no need to create session/readers for RT segments
 
 		dSorters.Apply ( [&] ( ISphMatchSorter * pTop ) { pTop->Finalize ( tFinal, false, bFinalizeSorters ); } );
 	}
 }
 
 // perform initial query transformations and expansion.
-static int PrepareFTSearch ( const RtIndex_c * pThis, bool bIsStarDict, bool bKeywordDict, int iExpandKeywords, int iExpansionLimit, const char * szModifiedQuery, const CSphIndexSettings & tSettings, const QueryParser_i * pQueryParser, const CSphQuery & tQuery, const CSphSchema & tSchema, cRefCountedRefPtrGeneric_t pIndexData, ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQueryResultMeta & tMeta, QueryProfile_c * pProfiler, CSphScopedPayload * pPayloads, XQQuery_t & tParsed )
+static int PrepareFTSearch ( const RtIndex_c * pThis, bool bIsStarDict, bool bKeywordDict, int iExpandKeywords, int iExpansionLimit, const char * szModifiedQuery, const CSphIndexSettings & tSettings, const QueryParser_i * pQueryParser, const CSphQuery & tQuery, const CSphSchema & tSchema, cRefCountedRefPtrGeneric_t pIndexData, const TokenizerRefPtr_c& pTokenizer, const DictRefPtr_c& pDict, CSphQueryResultMeta & tMeta, QueryProfile_c * pProfiler, CSphScopedPayload * pPayloads, XQQuery_t & tParsed )
 {
 	// OPTIMIZE! make a lightweight clone here? and/or remove double clone?
-	TokenizerRefPtr_c pQueryTokenizer { sphCloneAndSetupQueryTokenizer ( pTokenizer, bIsStarDict, tSettings.m_bIndexExactWords, false ) };
-	TokenizerRefPtr_c pQueryTokenizerJson { sphCloneAndSetupQueryTokenizer ( pTokenizer, bIsStarDict, tSettings.m_bIndexExactWords, true ) };
+	TokenizerRefPtr_c pQueryTokenizer = sphCloneAndSetupQueryTokenizer ( pTokenizer, bIsStarDict, tSettings.m_bIndexExactWords, false );
+	TokenizerRefPtr_c pQueryTokenizerJson = sphCloneAndSetupQueryTokenizer ( pTokenizer, bIsStarDict, tSettings.m_bIndexExactWords, true );
 
 	if ( !pQueryParser->ParseQuery ( tParsed, szModifiedQuery, &tQuery, pQueryTokenizer, pQueryTokenizerJson, &tSchema, pDict, tSettings ) )
 	{
@@ -7388,7 +7373,7 @@ void PerformFullScan ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks, int iM
 		for ( auto * pSorter : dSorters )
 			pSorter->SetBlobPool(pBlobs);
 
-		auto pColumnar = tSeg.m_pColumnar.Ptr();
+		auto pColumnar = tSeg.m_pColumnar.get();
 		tCtx.SetColumnar(pColumnar);
 		for ( auto * pSorter : dSorters )
 			pSorter->SetColumnar(pColumnar);
@@ -7492,7 +7477,7 @@ static void PerformFullTextSearch ( const RtSegVec_c & dRamChunks, RtQwordSetup_
 		for ( auto * pSorter : dSorters )
 			pSorter->SetBlobPool ( pBlobPool );
 
-		auto pColumnar = pSeg->m_pColumnar.Ptr();
+		auto pColumnar = pSeg->m_pColumnar.get();
 		tCtx.SetColumnar(pColumnar);
 		for ( auto * pSorter : dSorters )
 			pSorter->SetColumnar(pColumnar);
@@ -7721,10 +7706,10 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	auto& dDiskChunks = tGuard.m_dDiskChunks;
 
 	// wrappers
-	DictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
+	DictRefPtr_c pDict = GetStatelessDict ( m_pDict );
 
 	if ( m_bKeywordDict && IsStarDict ( m_bKeywordDict ) )
-		SetupStarDict ( pDict );
+		SetupStarDictV8 ( pDict );
 
 	if ( m_tSettings.m_bIndexExactWords )
 		SetupExactDict ( pDict );
@@ -7895,7 +7880,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 }
 
 
-void RtIndex_c::AddKeywordStats ( BYTE * sWord, const BYTE * sTokenized, CSphDict * pDict, bool bGetStats, int iQpos, RtQword_t * pQueryWord, CSphVector <CSphKeywordInfo> & dKeywords, const RtSegVec_c& dRamSegs ) const
+void RtIndex_c::AddKeywordStats ( BYTE * sWord, const BYTE * sTokenized, const DictRefPtr_c& pDict, bool bGetStats, int iQpos, RtQword_t * pQueryWord, CSphVector <CSphKeywordInfo> & dKeywords, const RtSegVec_c& dRamSegs ) const
 {
 	assert ( !bGetStats || pQueryWord );
 
@@ -7969,18 +7954,18 @@ void RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 
 	RtQword_t tQword;
 
-	TokenizerRefPtr_c pTokenizer { m_pTokenizer->Clone ( SPH_CLONE_INDEX ) };
+	TokenizerRefPtr_c pTokenizer = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
 	pTokenizer->EnableTokenizedMultiformTracking ();
 
 	// need to support '*' and '=' but not the other specials
 	// so m_pQueryTokenizer does not work for us, gotta clone and setup one manually
-	DictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
+	DictRefPtr_c pDict = GetStatelessDict ( m_pDict );
 
 	if ( IsStarDict ( m_bKeywordDict ) )
 	{
 		SetupStarTokenizer ( pTokenizer );
 		if ( m_bKeywordDict )
-			SetupStarDict ( pDict );
+			SetupStarDictV8 ( pDict );
 	}
 
 	if ( m_tSettings.m_bIndexExactWords )
@@ -8008,10 +7993,11 @@ void RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 		// query defined options
 		tExpCtx.m_iExpansionLimit = tSettings.m_iExpansionLimit ? tSettings.m_iExpansionLimit : m_iExpansionLimit;
 		bool bExpandWildcards = ( m_bKeywordDict && IsStarDict ( m_bKeywordDict ) && !tSettings.m_bFoldWildcards );
+		pTokenizer->SetBuffer ( sModifiedQuery, (int)strlen ( (const char*)sModifiedQuery ) );
 
 		CSphRtQueryFilter tAotFilter ( this, &tQword, tGuard.m_dRamSegs );
-		tAotFilter.m_pTokenizer = pTokenizer;
-		tAotFilter.m_pDict = pDict;
+		tAotFilter.m_pTokenizer = std::move ( pTokenizer );
+		tAotFilter.m_pDict = std::move ( pDict );
 		tAotFilter.m_pSettings = &m_tSettings;
 		tAotFilter.m_tFoldSettings = tSettings;
 		tAotFilter.m_tFoldSettings.m_bFoldWildcards = !bExpandWildcards;
@@ -8023,7 +8009,6 @@ void RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 		tExpCtx.m_bMergeSingles = false;
 		tExpCtx.m_pIndexData = tGuard.m_tSegmentsAndChunks.m_pSegs;
 
-		pTokenizer->SetBuffer ( sModifiedQuery, (int) strlen ( (const char*)sModifiedQuery ) );
 		tAotFilter.GetKeywords ( dKeywords, tExpCtx );
 	} else
 	{
@@ -8344,12 +8329,12 @@ bool RtIndex_c::AddRemoveColumnarAttr ( RtGuard_t & tGuard, bool bAdd, const CSp
 	{
 		auto* pSeg = const_cast<RtSegment_t*> ( pConstSeg.Ptr() );
 		assert ( pSeg );
-		CSphScopedPtr<ColumnarBuilderRT_i> pBuilder ( CreateColumnarBuilderRT ( tNewSchema ) );
+		auto pBuilder = CreateColumnarBuilderRT ( tNewSchema );
 
-		if ( !Alter_AddRemoveColumnar ( bAdd, tOldSchema, tNewSchema, pSeg->m_pColumnar.Ptr(), pBuilder.Ptr(), pSeg->m_uRows, m_sPath, sError ) )
+		if ( !Alter_AddRemoveColumnar ( bAdd, tOldSchema, tNewSchema, pSeg->m_pColumnar.get(), pBuilder.get(), pSeg->m_uRows, m_sPath, sError ) )
 			return false;
 
-		pSeg->m_pColumnar = CreateColumnarRT ( tNewSchema, pBuilder.Ptr() );
+		pSeg->m_pColumnar = CreateColumnarRT ( tNewSchema, pBuilder.get() );
 		pSeg->UpdateUsedRam();
 	}
 
@@ -8404,12 +8389,9 @@ void RtIndex_c::AddFieldToRamchunk ( const CSphString & sFieldName, DWORD uField
 		return;
 
 	if ( !m_pDocstoreFields )
-	{
-		CSphScopedPtr<DocstoreFields_i> pDocstoreFields { CreateDocstoreFields() };
-		m_pDocstoreFields.Swap ( pDocstoreFields );
-	}
+		m_pDocstoreFields = CreateDocstoreFields();
 
-	assert ( m_pDocstoreFields.Ptr() );
+	assert ( m_pDocstoreFields );
 	m_pDocstoreFields->AddField ( sFieldName, DOCSTORE_TEXT );
 	AddRemoveFromRamDocstore ( tOldSchema, tNewSchema );
 }
@@ -8446,12 +8428,12 @@ void RtIndex_c::AddRemoveFromRamDocstore ( const CSphSchema & tOldSchema, const 
 		auto * pSeg = const_cast<RtSegment_t*> ( pConstSeg.Ptr() );
 
 		if ( bLastStored )
-			pSeg->m_pDocstore.Reset();
+			pSeg->m_pDocstore.reset();
 		else
 		{
-			CSphScopedPtr<DocstoreRT_i> pNewDocstore ( CreateDocstoreRT() );
-			Alter_AddRemoveFromDocstore ( *pNewDocstore, pSeg->m_pDocstore.Ptr(), pSeg->m_uRows, tNewSchema );
-			pSeg->m_pDocstore.Swap(pNewDocstore);
+			auto pNewDocstore = CreateDocstoreRT();
+			Alter_AddRemoveFromDocstore ( *pNewDocstore, pSeg->m_pDocstore.get(), pSeg->m_uRows, tNewSchema );
+			pSeg->m_pDocstore = std::move ( pNewDocstore );
 		}
 
 		pSeg->UpdateUsedRam();
@@ -8461,7 +8443,7 @@ void RtIndex_c::AddRemoveFromRamDocstore ( const CSphSchema & tOldSchema, const 
 
 void RtIndex_c::RemoveFieldFromRamchunk ( const CSphString & sFieldName, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema )
 {
-	if ( m_pDocstoreFields.Ptr() && m_pDocstoreFields->GetFieldId ( sFieldName, DOCSTORE_TEXT )!=-1 )
+	if ( m_pDocstoreFields && m_pDocstoreFields->GetFieldId ( sFieldName, DOCSTORE_TEXT )!=-1 )
 		m_pDocstoreFields->RemoveField ( sFieldName, DOCSTORE_TEXT );
 
 	int iFieldId = tOldSchema.GetFieldIndex ( sFieldName.cstr () );
@@ -9078,12 +9060,12 @@ void RtIndex_c::BinlogCommit ( RtSegment_t * pSeg, const CSphVector<DocID_t> & d
 			Binlog::SaveVector ( tWriter, pSeg->m_dBlobs );
 			Binlog::SaveVector ( tWriter, pSeg->m_dKeywordCheckpoints );
 
-			tWriter.PutByte ( pSeg->m_pDocstore.Ptr() ? 1 : 0 );
-			if ( pSeg->m_pDocstore.Ptr() )
+			tWriter.PutByte ( pSeg->m_pDocstore ? 1 : 0 );
+			if ( pSeg->m_pDocstore )
 				pSeg->m_pDocstore->Save(tWriter);
 
-			tWriter.PutByte ( pSeg->m_pColumnar.Ptr() ? 1 : 0 );
-			if ( pSeg->m_pColumnar.Ptr() )
+			tWriter.PutByte ( pSeg->m_pColumnar ? 1 : 0 );
+			if ( pSeg->m_pColumnar )
 				pSeg->m_pColumnar->Save(tWriter);
 		}
 
@@ -9134,7 +9116,7 @@ Binlog::CheckTnxResult_t RtIndex_c::ReplayCommit ( CSphReader & tReader, CSphStr
 		if ( bHaveDocstore )
 		{
 			pSeg->SetupDocstore ( &(GetInternalSchema()) );
-			assert ( pSeg->m_pDocstore.Ptr() );
+			assert ( pSeg->m_pDocstore );
 			Verify ( pSeg->m_pDocstore->Load(tReader) );
 		}
 
@@ -9849,7 +9831,7 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( sIndexName.cstr() ) : nullptr );
 
 	// FIXME!!! check missed embedded files
-	TokenizerRefPtr_c pTokenizer { Tokenizer::Create ( tSettings.m_tTokenizer, nullptr, pFilenameBuilder.Ptr(), dWarnings, sError ) };
+	TokenizerRefPtr_c pTokenizer = Tokenizer::Create ( tSettings.m_tTokenizer, nullptr, pFilenameBuilder.Ptr(), dWarnings, sError );
 	if ( !pTokenizer )
 	{
 		sError.SetSprintf ( "'%s' failed to create tokenizer, error '%s'", sIndexName.cstr(), sError.cstr() );
@@ -9865,7 +9847,7 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 	}
 
 	// multiforms right after dict
-	pTokenizer = Tokenizer::CreateMultiformFilter ( pTokenizer, tDict->GetMultiWordforms() );
+	Tokenizer::AddToMultiformFilterTo ( pTokenizer, tDict->GetMultiWordforms() );
 
 	// bigram filter
 	if ( tSettings.m_tIndex.m_eBigramIndex!=SPH_BIGRAM_NONE && tSettings.m_tIndex.m_eBigramIndex!=SPH_BIGRAM_ALL )
@@ -9993,9 +9975,7 @@ bool RtIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 
 	// FIXME!!! handle error
 	m_pTokenizerIndexing = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
-	TokenizerRefPtr_c pIndexing { Tokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError ) };
-	if ( pIndexing )
-		m_pTokenizerIndexing = pIndexing;
+	Tokenizer::AddBigramFilterTo ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError );
 
 	AlterSave ( false );
 
@@ -10251,7 +10231,7 @@ bool RtIndex_c::GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T
 
 	for ( const auto & i : tGuard.m_dRamSegs )
 	{
-		assert ( i && i->m_pDocstore.Ptr() );
+		assert ( i && i->m_pDocstore );
 		RowID_t tRowID = i->GetRowidByDocid(tDocID);
 		if ( tRowID==INVALID_ROWID || i->m_tDeadRowMap.IsSet(tRowID) )
 			continue;
@@ -10273,12 +10253,13 @@ bool RtIndex_c::GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T
 
 int RtIndex_c::GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const
 {
-	return m_pDocstoreFields.Ptr() ? m_pDocstoreFields->GetFieldId ( sName, eType ) : -1;
+	return m_pDocstoreFields ? m_pDocstoreFields->GetFieldId ( sName, eType ) : -1;
 }
 
 Bson_t RtIndex_c::ExplainQuery ( const CSphString & sQuery ) const
 {
-	ExplainQueryArgs_t tArgs ( sQuery );
+	ExplainQueryArgs_t tArgs;
+	tArgs.m_szQuery = sQuery.cstr();
 	tArgs.m_pSchema = &GetMatchSchema();
 
 	TokenizerRefPtr_c pQueryTokenizer { sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( m_bKeywordDict ), m_tSettings.m_bIndexExactWords, false ) };
@@ -10286,7 +10267,7 @@ Bson_t RtIndex_c::ExplainQuery ( const CSphString & sQuery ) const
 	SetupExactTokenizer ( pQueryTokenizer );
 
 	tArgs.m_pDict = GetStatelessDict ( m_pDict );
-	SetupStarDict ( tArgs.m_pDict );
+	SetupStarDictV8 ( tArgs.m_pDict );
 	SetupExactDict ( tArgs.m_pDict );
 	if ( m_pFieldFilter )
 		tArgs.m_pFieldFilter = m_pFieldFilter->Clone();
@@ -10487,14 +10468,14 @@ void RtAccum_t::LoadRtTrx ( const BYTE * pData, int iLen )
 
 	if ( tReader.GetByte() )
 	{
-		if ( !m_pDocstore.Ptr() )
+		if ( !m_pDocstore )
 			m_pDocstore = CreateDocstoreRT();
-		assert ( m_pDocstore.Ptr() );
+		assert ( m_pDocstore );
 		m_pDocstore->Load(tReader);
 	}
 
 	if ( tReader.GetByte() )
-		m_pColumnarBuilder = CreateColumnarBuilderRT(tReader);
+		m_pColumnarBuilder = CreateColumnarBuilderRT ( tReader );
 
 	// delete
 	m_dAccumKlist.Resize ( tReader.GetDword() );
@@ -10527,12 +10508,12 @@ void RtAccum_t::SaveRtTrx ( MemoryWriter_c & tWriter ) const
 	tWriter.PutDword ( iLen );
 	if ( iLen )
 		tWriter.PutBytes ( m_pDictRt->GetPackedKeywords(), iLen );
-	tWriter.PutByte ( m_pDocstore.Ptr()!=nullptr );
-	if ( m_pDocstore.Ptr() )
+	tWriter.PutByte ( m_pDocstore!=nullptr );
+	if ( m_pDocstore )
 		m_pDocstore->Save(tWriter);
 
-	tWriter.PutByte ( m_pColumnarBuilder.Ptr()!=nullptr );
-	if ( m_pColumnarBuilder.Ptr() )
+	tWriter.PutByte ( m_pColumnarBuilder!=nullptr );
+	if ( m_pColumnarBuilder )
 		m_pColumnarBuilder->Save(tWriter);
 
 	// delete
@@ -10549,7 +10530,7 @@ void RtIndex_c::SetSchema ( const CSphSchema & tSchema )
 	if ( m_tSchema.HasStoredFields() || m_tSchema.HasStoredAttrs() )
 	{
 		m_pDocstoreFields = CreateDocstoreFields();
-		SetupDocstoreFields ( *m_pDocstoreFields.Ptr(), m_tSchema );
+		SetupDocstoreFields ( *m_pDocstoreFields.get(), m_tSchema );
 	}
 
 	ARRAY_FOREACH ( i, m_dFieldLens )

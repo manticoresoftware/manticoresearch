@@ -68,7 +68,7 @@ public:
 	static ExtNode_i *			Create ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, bool bUseBM25 );
 	static ExtNode_i *			Create ( const XQKeyword_t & tWord, const XQNode_t * pNode, const ISphQwordSetup & tSetup, bool bUseBM25 );
 	static ExtNode_i *			Create ( ISphQword * pQword, const XQNode_t * pNode, const ISphQwordSetup & tSetup, bool bUseBM25 );
-	static ExtNode_i *			Create ( const XQKeyword_t & tWord, const ISphQwordSetup & tSetup, CSphDict * pZonesDict, bool bUseBM25 );
+	static ExtNode_i *			Create ( const XQKeyword_t & tWord, const ISphQwordSetup & tSetup, DictRefPtr_c pZonesDict, bool bUseBM25 );
 
 	virtual void				Reset ( const ISphQwordSetup & tSetup ) = 0;
 	virtual void				HintRowID ( RowID_t tRowID ) = 0;

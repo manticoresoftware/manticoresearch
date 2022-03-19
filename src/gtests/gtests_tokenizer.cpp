@@ -31,8 +31,7 @@ extern const char * g_sMagic;
 class TokenizerGtest : public ::testing::Test
 {
 protected:
-
-	ISphTokenizer * CreateTestTokenizer ( DWORD uMode )
+	TokenizerRefPtr_c CreateTestTokenizer ( DWORD uMode )
 	{
 		StrVec_t dWarnings;
 		CSphString sError;
@@ -40,7 +39,7 @@ protected:
 		if ( !( uMode & TOK_NO_SHORT ) )
 			tSettings.m_iMinWordLen = 2;
 
-		TokenizerRefPtr_c pTokenizer { Tokenizer::Create ( tSettings, nullptr, nullptr, dWarnings, sError ) };
+		TokenizerRefPtr_c pTokenizer = Tokenizer::Create ( tSettings, nullptr, nullptr, dWarnings, sError );
 		if ( !( uMode & TOK_NO_DASH ) )
 		{
 			Verify ( pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z, U+80..U+FF", sError ) );
@@ -60,8 +59,7 @@ protected:
 		// the official way is to Clone() an indexing mode one, so we do that
 		// however, Clone() adds backslash as a special
 		// and that must be done *after* SetCaseFolding, otherwise it's not special any more
-		ISphTokenizer * pTokenizer1 = pTokenizer->Clone ( SPH_CLONE_QUERY );
-		return pTokenizer1;
+		return pTokenizer->Clone ( SPH_CLONE_QUERY );
 	}
 
 	TokenizerRefPtr_c m_pTokenizer;
@@ -121,7 +119,7 @@ TEST_F( TokenizerGtest, exceptions_more )
 		++iCur;
 	}
 
-	TokenizerRefPtr_c pQtok { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
+	TokenizerRefPtr_c pQtok = m_pTokenizer->Clone ( SPH_CLONE_QUERY );
 
 	pQtok->SetBuffer ( ( BYTE * ) "life:)", 7 );
 	ASSERT_STREQ ( ( char * ) pQtok->GetToken (), "life:)" );
@@ -543,7 +541,7 @@ TEST_P ( TokenizerP, short_token_handling )
 		NULL
 	};
 
-	TokenizerRefPtr_c pShortTokenizer { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
+	TokenizerRefPtr_c pShortTokenizer = m_pTokenizer->Clone ( SPH_CLONE_QUERY );
 	pShortTokenizer->AddPlainChars ( "*" );
 
 	CSphTokenizerSettings tSettings = pShortTokenizer->GetSettings ();
@@ -675,7 +673,7 @@ protected:
 		tSchema.AddField ( "title" );
 		tSchema.AddField ( "body" );
 
-		TokenizerRefPtr_c pBase ( Tokenizer::Detail::CreateUTF8Tokenizer () );
+		TokenizerRefPtr_c pBase = Tokenizer::Detail::CreateUTF8Tokenizer ();
 		CSphTokenizerSettings tTokenizerSetup;
 		tTokenizerSetup.m_iMinWordLen = 2;
 		tTokenizerSetup.m_sSynonymsFile = g_sTmpfile;

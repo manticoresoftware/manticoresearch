@@ -15,11 +15,11 @@
 
 #include "sphinxint.h"
 #include "fileutils.h"
-#include "sphinxutils.h"
 #include "sphinxstem.h"
 #include "sphinxplugin.h"
 #include "coroutine.h"
 #include "tokenizer/token_filter.h"
+#include "dict/word_forms.h"
 
 //////////////////////////////////////////////////////////////////////////
 // LEMMATIZER
@@ -1446,10 +1446,9 @@ protected:
 	const CSphWordforms *	m_pWordforms = nullptr;
 
 public:
-	CSphAotTokenizerTmpl ( ISphTokenizer * pTok, CSphDict * pDict, bool bIndexExact, int DEBUGARG(iLang) )
-		: CSphTokenFilter ( pTok )
+	CSphAotTokenizerTmpl ( TokenizerRefPtr_c pTok, const DictRefPtr_c& pDict, bool bIndexExact, int DEBUGARG(iLang) )
+		: CSphTokenFilter ( std::move (pTok) )
 	{
-		assert ( pTok );
 		assert ( g_pLemmatizers[iLang] );
 		m_FindResults[0] = AOT_NOFORM;
 		if ( pDict )
@@ -1483,19 +1482,19 @@ public:
 class CSphAotTokenizerRu : public CSphAotTokenizerTmpl
 {
 public:
-	CSphAotTokenizerRu ( ISphTokenizer * pTok, CSphDict * pDict, bool bIndexExact )
-		: CSphAotTokenizerTmpl ( pTok, pDict, bIndexExact, AOT_RU )
+	CSphAotTokenizerRu ( TokenizerRefPtr_c pTok, const DictRefPtr_c& pDict, bool bIndexExact )
+		: CSphAotTokenizerTmpl ( std::move (pTok), pDict, bIndexExact, AOT_RU )
 	{}
 
-	ISphTokenizer * Clone ( ESphTokenizerClone eMode ) const final
+	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const final
 	{
 		// this token filter must NOT be created as escaped
 		// it must only be used during indexing time, NEVER in searching time
 		assert ( eMode==SPH_CLONE_INDEX );
-		auto * pClone = new CSphAotTokenizerRu ( TokenizerRefPtr_c ( m_pTokenizer->Clone ( eMode ) ), NULL, m_bIndexExact );
+		auto * pClone = new CSphAotTokenizerRu ( m_pTokenizer->Clone ( eMode ), nullptr, m_bIndexExact );
 		if ( m_pWordforms )
 			pClone->m_pWordforms = m_pWordforms;
-		return pClone;
+		return TokenizerRefPtr_c { pClone };
 	}
 
 	BYTE * GetToken() final
@@ -1612,20 +1611,20 @@ class CSphAotTokenizer : public CSphAotTokenizerTmpl
 	AOT_LANGS		m_iLang;
 
 public:
-	CSphAotTokenizer ( ISphTokenizer * pTok, CSphDict * pDict, bool bIndexExact, int iLang )
-		: CSphAotTokenizerTmpl ( pTok, pDict, bIndexExact, iLang )
+	CSphAotTokenizer ( TokenizerRefPtr_c pTok, const DictRefPtr_c& pDict, bool bIndexExact, int iLang )
+		: CSphAotTokenizerTmpl ( std::move (pTok), pDict, bIndexExact, iLang )
 		, m_iLang ( AOT_LANGS(iLang) )
 	{}
 
-	ISphTokenizer * Clone ( ESphTokenizerClone eMode ) const final
+	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const final
 	{
 		// this token filter must NOT be created as escaped
 		// it must only be used during indexing time, NEVER in searching time
 		assert ( eMode==SPH_CLONE_INDEX );
-		auto * pClone = new CSphAotTokenizer ( TokenizerRefPtr_c ( m_pTokenizer->Clone ( eMode ) ), nullptr, m_bIndexExact, m_iLang );
+		auto * pClone = new CSphAotTokenizer ( m_pTokenizer->Clone ( eMode ), nullptr, m_bIndexExact, m_iLang );
 		if ( m_pWordforms )
 			pClone->m_pWordforms = m_pWordforms;
-		return pClone;
+		return TokenizerRefPtr_c { pClone };
 	}
 
 	BYTE * GetToken() final
@@ -1759,7 +1758,7 @@ public:
 class LemmatizerUk_c : public LemmatizerTrait_i
 {
 	void * m_pUserdata = nullptr;
-	CSphRefcountedPtr<PluginTokenFilter_c> m_tPlugin;
+	PluginTokenFilterRefPtr_c m_tPlugin;
 
 public:
 	LemmatizerUk_c();
@@ -1774,15 +1773,14 @@ class TokenizerUk_c : public CSphAotTokenizerTmpl
 	LemmatizerUk_c m_tLemmatizer;
 
 public:
-	TokenizerUk_c ( ISphTokenizer * pTok, CSphDict * pDict, bool bIndexExact );
-	ISphTokenizer * Clone ( ESphTokenizerClone eMode ) const final;
+	TokenizerUk_c ( TokenizerRefPtr_c pTok, const DictRefPtr_c& pDict, bool bIndexExact );
+	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const final;
 	BYTE * GetToken() final;
 };
 
-ISphTokenizer * sphAotCreateFilter ( ISphTokenizer * pTokenizer, CSphDict * pDict, bool bIndexExact, DWORD uLangMask )
+void sphAotTransformFilter ( TokenizerRefPtr_c& pTokenizer, const DictRefPtr_c& pDict, bool bIndexExact, DWORD uLangMask )
 {
 	assert ( uLangMask!=0 );
-	CSphRefcountedPtr<ISphTokenizer> pDerivedTokenizer;
 	for ( int i=AOT_BEGIN; i<AOT_LENGTH; ++i )
 	{
 		if ( uLangMask & (1UL<<i) )
@@ -1790,18 +1788,16 @@ ISphTokenizer * sphAotCreateFilter ( ISphTokenizer * pTokenizer, CSphDict * pDic
 			switch ( i )
 			{
 			case AOT_RU:
-				pDerivedTokenizer = new CSphAotTokenizerRu ( pTokenizer, pDict, bIndexExact );
+				pTokenizer = new CSphAotTokenizerRu ( pTokenizer, pDict, bIndexExact );
 				break;
 			case AOT_UK:
-				pDerivedTokenizer = new TokenizerUk_c ( pTokenizer, pDict, bIndexExact );
+				pTokenizer = new TokenizerUk_c ( pTokenizer, pDict, bIndexExact );
 				break;
 			default:
-				pDerivedTokenizer = new CSphAotTokenizer ( pTokenizer, pDict, bIndexExact, i );
+				pTokenizer = new CSphAotTokenizer ( pTokenizer, pDict, bIndexExact, i );
 			}
-			pTokenizer = pDerivedTokenizer;
 		}
 	}
-	return pDerivedTokenizer.Leak();
 }
 
 
@@ -1851,7 +1847,7 @@ bool LoadLemmatizerUk ( CSphString & sError )
 
 LemmatizerUk_c::LemmatizerUk_c ()
 {
-	m_tPlugin = (PluginTokenFilter_c *) sphPluginGet ( PLUGIN_INDEX_TOKEN_FILTER, g_sLemmatizerFnName.cstr() );
+	m_tPlugin = PluginGet<PluginTokenFilter_c> ( PLUGIN_INDEX_TOKEN_FILTER, g_sLemmatizerFnName.cstr() );
 	if ( !m_tPlugin )
 		return;
 
@@ -1949,20 +1945,20 @@ LemmatizerTrait_i * CreateLemmatizer ( int iLang )
 	return new LemmatizerUk_c();
 }
 
-TokenizerUk_c::TokenizerUk_c ( ISphTokenizer * pTok, CSphDict * pDict, bool bIndexExact )
-	: CSphAotTokenizerTmpl ( pTok, pDict, bIndexExact, AOT_UK )
+TokenizerUk_c::TokenizerUk_c ( TokenizerRefPtr_c pTok, const DictRefPtr_c& pDict, bool bIndexExact )
+	: CSphAotTokenizerTmpl ( std::move (pTok), pDict, bIndexExact, AOT_UK )
 {
 }
 
-ISphTokenizer * TokenizerUk_c::Clone ( ESphTokenizerClone eMode ) const
+TokenizerRefPtr_c TokenizerUk_c::Clone ( ESphTokenizerClone eMode ) const
 {
 	// this token filter must NOT be created as escaped
 	// it must only be used during indexing time, NEVER in searching time
 	assert ( eMode==SPH_CLONE_INDEX );
-	auto * pClone = new TokenizerUk_c ( TokenizerRefPtr_c ( m_pTokenizer->Clone ( eMode ) ), NULL, m_bIndexExact );
+	auto * pClone = new TokenizerUk_c ( m_pTokenizer->Clone ( eMode ), nullptr, m_bIndexExact );
 	if ( m_pWordforms )
 		pClone->m_pWordforms = m_pWordforms;
-	return pClone;
+	return TokenizerRefPtr_c { pClone };
 }
 
 BYTE * TokenizerUk_c::GetToken()
@@ -2050,4 +2046,163 @@ BYTE * TokenizerUk_c::GetToken()
 
 		m_eTokenMorph = SPH_TOKEN_MORPH_GUESS;
 		return pToken;
+}
+
+
+namespace {
+XQNode_t* CloneKeyword ( const XQNode_t* pNode )
+{
+	assert ( pNode );
+
+	auto* pRes = new XQNode_t ( pNode->m_dSpec );
+	pRes->m_dWords = pNode->m_dWords;
+	return pRes;
+}
+
+/// create a node from a set of lemmas
+/// WARNING, tKeyword might or might not be pointing to pNode->m_dWords[0]
+/// Called from the daemon side (searchd) in time of query
+void TransformAotFilterKeyword ( XQNode_t * pNode, LemmatizerTrait_i * pLemmatizer, const XQKeyword_t & tKeyword, const CSphWordforms * pWordforms, const CSphIndexSettings & tSettings )
+{
+	assert ( pNode->m_dWords.GetLength()<=1 );
+	assert ( pNode->m_dChildren.GetLength()==0 );
+
+	XQNode_t * pExact = nullptr;
+	if ( pWordforms )
+	{
+		// do a copy, because patching in place is not an option
+		// short => longlonglong wordform mapping would crash
+		// OPTIMIZE? forms that are not found will (?) get looked up again in the dict
+		char sBuf [ MAX_KEYWORD_BYTES ];
+		strncpy ( sBuf, tKeyword.m_sWord.cstr(), sizeof(sBuf)-1 );
+		if ( pWordforms->ToNormalForm ( (BYTE*)sBuf, true, false ) )
+		{
+			if ( !pNode->m_dWords.GetLength() )
+				pNode->m_dWords.Add ( tKeyword );
+			pNode->m_dWords[0].m_sWord = sBuf;
+			pNode->m_dWords[0].m_bMorphed = true;
+			return;
+		}
+	}
+
+	StrVec_t dLemmas;
+	DWORD uLangMask = tSettings.m_uAotFilterMask;
+	for ( int i=AOT_BEGIN; i<AOT_LENGTH; ++i )
+	{
+		if ( uLangMask & (1UL<<i) )
+		{
+			if ( i==AOT_RU )
+				sphAotLemmatizeRu ( dLemmas, (const BYTE*)tKeyword.m_sWord.cstr() );
+			else if ( i==AOT_DE )
+				sphAotLemmatizeDe ( dLemmas, (const BYTE*)tKeyword.m_sWord.cstr() );
+			else if ( i==AOT_UK )
+				sphAotLemmatizeUk ( dLemmas, (const BYTE*)tKeyword.m_sWord.cstr(), pLemmatizer );
+			else
+				sphAotLemmatize ( dLemmas, (const BYTE*)tKeyword.m_sWord.cstr(), i );
+		}
+	}
+
+	// post-morph wordforms
+	if ( pWordforms && pWordforms->m_bHavePostMorphNF )
+	{
+		char sBuf [ MAX_KEYWORD_BYTES ];
+		ARRAY_FOREACH ( i, dLemmas )
+		{
+			strncpy ( sBuf, dLemmas[i].cstr(), sizeof(sBuf)-1 );
+			if ( pWordforms->ToNormalForm ( (BYTE*)sBuf, false, false ) )
+				dLemmas[i] = sBuf;
+		}
+	}
+
+	if ( dLemmas.GetLength() && tSettings.m_bIndexExactWords )
+	{
+		pExact = CloneKeyword ( pNode );
+		if ( !pExact->m_dWords.GetLength() )
+			pExact->m_dWords.Add ( tKeyword );
+
+		pExact->m_dWords[0].m_sWord.SetSprintf ( "=%s", tKeyword.m_sWord.cstr() );
+		pExact->m_pParent = pNode;
+	}
+
+	if ( !pExact && dLemmas.GetLength()<=1 )
+	{
+		// zero or one lemmas, update node in-place
+		if ( !pNode->m_dWords.GetLength() )
+			pNode->m_dWords.Add ( tKeyword );
+		if ( dLemmas.GetLength() )
+		{
+			pNode->m_dWords[0].m_sWord = dLemmas[0];
+			pNode->m_dWords[0].m_bMorphed = true;
+		}
+	} else
+	{
+		// multiple lemmas, create an OR node
+		pNode->SetOp ( SPH_QUERY_OR );
+		ARRAY_FOREACH ( i, dLemmas )
+		{
+			pNode->m_dChildren.Add ( new XQNode_t ( pNode->m_dSpec ) );
+			pNode->m_dChildren.Last()->m_pParent = pNode;
+			XQKeyword_t & tLemma = pNode->m_dChildren.Last()->m_dWords.Add();
+			tLemma.m_sWord = dLemmas[i];
+			tLemma.m_iAtomPos = tKeyword.m_iAtomPos;
+			tLemma.m_bFieldStart = tKeyword.m_bFieldStart;
+			tLemma.m_bFieldEnd = tKeyword.m_bFieldEnd;
+			tLemma.m_bMorphed = true;
+		}
+		pNode->m_dWords.Reset();
+		if ( pExact )
+			pNode->m_dChildren.Add ( pExact );
+	}
+}
+}// namespace
+
+/// AOT morph guesses transform
+/// replaces tokens with their respective morph guesses subtrees
+/// used in lemmatize_ru_all morphology processing mode that can generate multiple guesses
+/// in other modes, there is always exactly one morph guess, and the dictionary handles it
+/// Called from the daemon side (searchd)
+void TransformAotFilter ( XQNode_t * pNode, LemmatizerTrait_i * pLemmatizer, const CSphWordforms * pWordforms, const CSphIndexSettings & tSettings )
+{
+	if ( !pNode )
+		return;
+	// case one, regular operator (and empty nodes)
+	for ( XQNode_t* pChild : pNode->m_dChildren )
+		TransformAotFilter ( pChild, pLemmatizer, pWordforms, tSettings );
+	if ( pNode->m_dChildren.GetLength() || pNode->m_dWords.GetLength()==0 )
+		return;
+
+	// case two, operator on a bag of words
+	// FIXME? check phrase vs expand_keywords vs lemmatize_ru_all?
+	if ( pNode->m_dWords.GetLength()
+		&& ( pNode->GetOp()==SPH_QUERY_PHRASE || pNode->GetOp()==SPH_QUERY_PROXIMITY || pNode->GetOp()==SPH_QUERY_QUORUM ) )
+	{
+		assert ( pNode->m_dWords.GetLength() );
+
+		for ( XQKeyword_t& tWord : pNode->m_dWords )
+		{
+			auto * pNew = new XQNode_t ( pNode->m_dSpec );
+			pNew->m_pParent = pNode;
+			pNew->m_iAtomPos = tWord.m_iAtomPos;
+			pNode->m_dChildren.Add ( pNew );
+			TransformAotFilterKeyword ( pNew, pLemmatizer, tWord, pWordforms, tSettings );
+		}
+
+		pNode->m_dWords.Reset();
+		pNode->m_bVirtuallyPlain = true;
+		return;
+	}
+
+	// case three, plain old single keyword
+	assert ( pNode->m_dWords.GetLength()==1 );
+	TransformAotFilterKeyword ( pNode, pLemmatizer, pNode->m_dWords[0], pWordforms, tSettings );
+}
+
+void TransformAotFilter ( XQNode_t * pNode, const CSphWordforms * pWordforms, const CSphIndexSettings & tSettings )
+{
+	if ( !tSettings.m_uAotFilterMask )
+		return;
+
+	int iAotLang = ( tSettings.m_uAotFilterMask & ( 1<<AOT_UK ) ) ? AOT_UK : AOT_LENGTH;
+	CSphScopedPtr<LemmatizerTrait_i> tLemmatizer ( CreateLemmatizer ( iAotLang ) );
+	TransformAotFilter ( pNode, tLemmatizer.Ptr(), pWordforms, tSettings );
 }

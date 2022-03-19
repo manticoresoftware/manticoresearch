@@ -980,7 +980,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 
 	StrVec_t dWarnings;
 	CSphString sError;
-	TokenizerRefPtr_c pTokenizer { Tokenizer::Create ( tTokSettings, nullptr, nullptr, dWarnings, sError ) };
+	TokenizerRefPtr_c pTokenizer = Tokenizer::Create ( tTokSettings, nullptr, nullptr, dWarnings, sError );
 	if ( !pTokenizer )
 		sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
@@ -1003,9 +1003,9 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		// plugin filter
 		if ( !tSettings.m_sIndexTokenFilter.IsEmpty() )
 		{
-			pTokenizer = Tokenizer::CreatePluginFilter ( pTokenizer, tSettings.m_sIndexTokenFilter, sError );
+			Tokenizer::AddPluginFilterTo ( pTokenizer, tSettings.m_sIndexTokenFilter, sError );
 			// need token_filter that just passes init phase in case stopwords or wordforms will be loaded
-			if ( !pTokenizer )
+			if ( !sError.IsEmpty() )
 				sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 		}
 
@@ -1032,16 +1032,16 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 			fprintf ( stdout, "WARNING: index '%s': dict=keywords and prefixes and morphology enabled, forcing index_exact_words=1\n", sIndexName );
 		}
 
-		pTokenizer = Tokenizer::CreateMultiformFilter ( pTokenizer, pDict->GetMultiWordforms () );
+		Tokenizer::AddToMultiformFilterTo ( pTokenizer, pDict->GetMultiWordforms () );
 
 		// bigram filter
-		pTokenizer = Tokenizer::CreateBigramFilter ( pTokenizer, tSettings.m_eBigramIndex, tSettings.m_sBigramWords, sError );
-		if ( !pTokenizer )
+		Tokenizer::AddBigramFilterTo ( pTokenizer, tSettings.m_eBigramIndex, tSettings.m_sBigramWords, sError );
+		if ( !sError.IsEmpty() )
 			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
 		// aot filter
 		if ( tSettings.m_uAotFilterMask )
-			pTokenizer = sphAotCreateFilter ( pTokenizer, pDict, tSettings.m_bIndexExactWords, tSettings.m_uAotFilterMask );
+			sphAotTransformFilter ( pTokenizer, pDict, tSettings.m_bIndexExactWords, tSettings.m_uAotFilterMask );
 	}
 
 	FieldFilterRefPtr_c pFieldFilter;
@@ -1174,7 +1174,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		CSphRefcountedPtr<CSphStopwordBuilderDict> tDict { new CSphStopwordBuilderDict };
 		ARRAY_FOREACH ( i, dSources )
 		{
-			dSources[i]->SetDict ( tDict );
+			dSources[i]->SetDict ( (DictRefPtr_c)tDict );
 			if ( !dSources[i]->Connect ( sError ) || !dSources[i]->IterateStart ( sError ) )
 			{
 				if ( !sError.IsEmpty() )

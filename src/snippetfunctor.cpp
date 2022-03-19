@@ -222,25 +222,24 @@ protected:
 	int							m_iSeparatorLen;
 	int							m_iField = 0;
 
-			TokenFunctorTraits_c ( ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, int iField, SnippetResult_t & tRes );
+			TokenFunctorTraits_c ( TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, int iField, SnippetResult_t & tRes );
 
 	void	ResultEmit ( CSphVector<BYTE> & dBuf, const char * pSrc, int iLen, bool bHasPassageMacro=false, int iPassageId=0, const char * pPost=nullptr, int iPostLen=0 ) const;
 	void	EmitPassageSeparator ( CSphVector<BYTE> & dBuf );
 };
 
 
-TokenFunctorTraits_c::TokenFunctorTraits_c ( ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, int iField, SnippetResult_t & tRes )
+TokenFunctorTraits_c::TokenFunctorTraits_c ( TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, int iField, SnippetResult_t & tRes )
 	: m_tResult ( tRes )
 	, m_tQuery ( tQuery )
 	, m_tIndexSettings ( tIndexSettings )
 	, m_dResult ( m_tResult.m_dFields[iField].m_dPassages[0].m_dText )
-	, m_pTokenizer ( pTokenizer )
+	, m_pTokenizer ( std::move (pTokenizer) )
 	, m_szDocBuffer ( szDoc )
 	, m_iDocLen ( iDocLen )
 	, m_iField ( iField )
 
 {
-	SafeAddRef(pTokenizer);
 	assert(m_pTokenizer);
 	m_pTokenizer->SetBuffer ( (BYTE*)const_cast<char*>(szDoc), m_iDocLen );
 	m_pDoc = m_pTokenizer->GetBufferPtr();
@@ -301,7 +300,7 @@ void HitTraits_c::RewindHits ( DWORD uTokPos, int iField )
 class DocStartHighlighter_c : public TokenFunctorTraits_c
 {
 public:
-			DocStartHighlighter_c ( ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits, const CSphIndexSettings & tIndexSettings, const char * szDoc,
+			DocStartHighlighter_c ( TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits, const CSphIndexSettings & tIndexSettings, const char * szDoc,
 				int iDocLen, int iField, int & iResultCP, SnippetResult_t & tRes );
 
 	bool	OnToken ( const TokenInfo_t & tTok, const CSphVector<SphWordID_t> &, const CSphVector<int> * ) final;
@@ -322,9 +321,9 @@ private:
 };
 
 
-DocStartHighlighter_c::DocStartHighlighter_c ( ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits, const CSphIndexSettings & tIndexSettings, const char * szDoc,
+DocStartHighlighter_c::DocStartHighlighter_c ( TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits, const CSphIndexSettings & tIndexSettings, const char * szDoc,
 	int iDocLen, int iField, int & iResultCP, SnippetResult_t & tRes )
-	: TokenFunctorTraits_c ( pTokenizer, tQuery, tIndexSettings, szDoc, iDocLen, iField, tRes )
+	: TokenFunctorTraits_c ( std::move ( pTokenizer ), tQuery, tIndexSettings, szDoc, iDocLen, iField, tRes )
 	, m_tLimits ( tLimits )
 	, m_iResultLenCP ( iResultCP )
 {
@@ -410,7 +409,7 @@ void DocStartHighlighter_c::CollectStartSpaces()
 class PassageExtractor_c : public TokenFunctorTraits_c, public HitTraits_c
 {
 public:
-				PassageExtractor_c ( const SnippetsDocIndex_c & tContainer, PassageContext_t & tPassageContext, ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits,
+				PassageExtractor_c ( const SnippetsDocIndex_c & tContainer, PassageContext_t & tPassageContext, TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits,
 					const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, const CSphVector<SphHitMark_t> & dHits, int iField, SnippetResult_t & tRes );
 
 protected:
@@ -456,9 +455,9 @@ private:
 };
 
 
-PassageExtractor_c::PassageExtractor_c ( const SnippetsDocIndex_c & tContainer, PassageContext_t & tPassageContext, ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits,
+PassageExtractor_c::PassageExtractor_c ( const SnippetsDocIndex_c & tContainer, PassageContext_t & tPassageContext, TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits,
 	const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, const CSphVector<SphHitMark_t> & dHits, int iField, SnippetResult_t & tRes )
-	: TokenFunctorTraits_c ( pTokenizer, tQuery, tIndexSettings, szDoc, iDocLen, iField, tRes )
+	: TokenFunctorTraits_c ( std::move (pTokenizer), tQuery, tIndexSettings, szDoc, iDocLen, iField, tRes )
 	, HitTraits_c ( dHits )
 	, m_tContainer ( tContainer )
 	, m_tLimits ( tLimits )
@@ -1029,7 +1028,7 @@ protected:
 class PassageHighlighter_c : public TokenFunctorTraits_c, public BeforeAfterTraits_c, public HitTraits_c
 {
 public:
-			PassageHighlighter_c ( CSphVector<Passage_t*> & dPassages, ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen,
+			PassageHighlighter_c ( CSphVector<Passage_t*> & dPassages, TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen,
 				const CSphVector<SphHitMark_t> & dHits, const FunctorZoneInfo_t & tZoneInfo, int iField, SnippetResult_t & tRes );
 
 protected:
@@ -1060,9 +1059,9 @@ private:
 };
 
 
-PassageHighlighter_c::PassageHighlighter_c ( CSphVector<Passage_t*> & dPassages, ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen,
+PassageHighlighter_c::PassageHighlighter_c ( CSphVector<Passage_t*> & dPassages, TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen,
 	const CSphVector<SphHitMark_t> & dHits, const FunctorZoneInfo_t & tZoneInfo, int iField, SnippetResult_t & tRes )
-	: TokenFunctorTraits_c ( pTokenizer, tQuery, tIndexSettings, szDoc, iDocLen, iField, tRes )
+	: TokenFunctorTraits_c ( std::move (pTokenizer), tQuery, tIndexSettings, szDoc, iDocLen, iField, tRes )
 	, BeforeAfterTraits_c(tQuery)
 	, HitTraits_c(dHits)
 	, m_dPassages ( dPassages )
@@ -1243,7 +1242,7 @@ void PassageHighlighter_c::CheckClose ( int iPos )
 class QueryHighlighter_c : public TokenFunctorTraits_c, public BeforeAfterTraits_c, public HitTraits_c
 {
 public:
-	QueryHighlighter_c ( ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
+	QueryHighlighter_c ( TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
 		const char * szDoc, int iDocLen, const CSphVector<SphHitMark_t> & dHits, int iField, SnippetResult_t & tRes );
 
 protected:
@@ -1263,9 +1262,9 @@ private:
 };
 
 
-QueryHighlighter_c::QueryHighlighter_c ( ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
+QueryHighlighter_c::QueryHighlighter_c ( TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
 	const char * szDoc, int iDocLen, const CSphVector<SphHitMark_t> & dHits, int iField, SnippetResult_t & tRes )
-	: TokenFunctorTraits_c ( pTokenizer, tQuery, tIndexSettings, szDoc, iDocLen, iField, tRes )
+	: TokenFunctorTraits_c ( std::move (pTokenizer), tQuery, tIndexSettings, szDoc, iDocLen, iField, tRes )
 	, BeforeAfterTraits_c(tQuery)
 	, HitTraits_c(dHits)
 {
@@ -1355,7 +1354,7 @@ void QueryHighlighter_c::CheckClose ( int iPos )
 class HitCollector_c : public TokenFunctorTraits_c, public virtual HitCollector_i
 {
 public:
-	HitCollector_c ( SnippetsDocIndex_c & tContainer, ISphTokenizer * pTokenizer, CSphDict * pDict, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
+	HitCollector_c ( SnippetsDocIndex_c & tContainer, TokenizerRefPtr_c pTokenizer, DictRefPtr_c pDict, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
 		const char * szDoc, int iDocLen, int iField, CacheStreamer_i & tTokenContainer, CSphVector<ZonePacked_t> & dZones, FunctorZoneInfo_t & tZoneInfo, SnippetResult_t & tRes );
 
 protected:
@@ -1391,22 +1390,21 @@ private:
 };
 
 
-HitCollector_c::HitCollector_c ( SnippetsDocIndex_c & tContainer, ISphTokenizer * pTokenizer, CSphDict * pDict, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
+HitCollector_c::HitCollector_c ( SnippetsDocIndex_c & tContainer, TokenizerRefPtr_c pTokenizer, DictRefPtr_c pDict, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
 	const char * szDoc, int iDocLen, int iField, CacheStreamer_i & tTokenContainer, CSphVector<ZonePacked_t> & dZones, FunctorZoneInfo_t & tZoneInfo, SnippetResult_t & tRes )
-	: TokenFunctorTraits_c ( pTokenizer, tQuery, tIndexSettings, szDoc, iDocLen, iField, tRes )
+	: TokenFunctorTraits_c ( std::move (pTokenizer), tQuery, tIndexSettings, szDoc, iDocLen, iField, tRes )
 	, m_tContainer ( tContainer )
 	, m_tTokenContainer ( tTokenContainer )
 	, m_dZones ( dZones )
 	, m_tZoneInfo ( tZoneInfo )
-	, m_pDict ( pDict )
+	, m_pDict ( std::move (pDict) )
 {
-	SafeAddRef(pDict);
-	assert(m_pDict);
+	assert ( m_pDict );
 
 	strncpy ( (char *)m_sTmpWord, MAGIC_WORD_SENTENCE, sizeof(m_sTmpWord)-1 );
-	m_uSentenceID = pDict->GetWordID ( m_sTmpWord );
+	m_uSentenceID = m_pDict->GetWordID ( m_sTmpWord );
 	strncpy ( (char *)m_sTmpWord, MAGIC_WORD_PARAGRAPH, sizeof(m_sTmpWord)-1 );
-	m_uParagraphID = pDict->GetWordID ( m_sTmpWord );
+	m_uParagraphID = m_pDict->GetWordID ( m_sTmpWord );
 	m_tContainer.SetupHits();
 
 	m_bCollectExtraZoneInfo = true;
@@ -1510,36 +1508,36 @@ void HitCollector_c::OnTail ( int iStart, int iLen, int iBoundary )
 
 //////////////////////////////////////////////////////////////////////////
 
-TokenFunctor_i * CreateDocStartHighlighter ( ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits, const CSphIndexSettings & tIndexSettings, const char * szDoc,
+TokenFunctor_i * CreateDocStartHighlighter ( TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits, const CSphIndexSettings & tIndexSettings, const char * szDoc,
 	int iDocLen, int iField, int & iResultCP, SnippetResult_t & tRes )
 {
-	return new DocStartHighlighter_c ( pTokenizer, tQuery, tLimits, tIndexSettings, szDoc, iDocLen, iField, iResultCP, tRes );
+	return new DocStartHighlighter_c ( std::move ( pTokenizer ), tQuery, tLimits, tIndexSettings, szDoc, iDocLen, iField, iResultCP, tRes );
 }
 
 
-TokenFunctor_i * CreateQueryHighlighter ( ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen,
+TokenFunctor_i * CreateQueryHighlighter ( TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen,
 	const CSphVector<SphHitMark_t> & dHits, int iField, SnippetResult_t & tRes )
 {
-	return new QueryHighlighter_c ( pTokenizer, tQuery, tIndexSettings, szDoc, iDocLen, dHits, iField, tRes );
+	return new QueryHighlighter_c ( std::move ( pTokenizer ), tQuery, tIndexSettings, szDoc, iDocLen, dHits, iField, tRes );
 }
 
 
-TokenFunctor_i * CreatePassageExtractor ( const SnippetsDocIndex_c & tContainer, PassageContext_t & tContext, ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits,
+TokenFunctor_i * CreatePassageExtractor ( const SnippetsDocIndex_c & tContainer, PassageContext_t & tContext, TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits,
 	const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, const CSphVector<SphHitMark_t> & dHits, int iField, SnippetResult_t & tRes )
 {
-	return new PassageExtractor_c ( tContainer, tContext, pTokenizer, tQuery, tLimits, tIndexSettings, szDoc, iDocLen, dHits, iField, tRes );
+	return new PassageExtractor_c ( tContainer, tContext, std::move ( pTokenizer ), tQuery, tLimits, tIndexSettings, szDoc, iDocLen, dHits, iField, tRes );
 }
 
 
-TokenFunctor_i * CreatePassageHighlighter ( CSphVector<Passage_t*> & dPassages, ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
+TokenFunctor_i * CreatePassageHighlighter ( CSphVector<Passage_t*> & dPassages, TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
 	const char * szDoc, int iDocLen, const CSphVector<SphHitMark_t> & dHits, const FunctorZoneInfo_t & tZoneInfo, int iField, SnippetResult_t & tRes )
 {
-	return new PassageHighlighter_c ( dPassages, pTokenizer, tQuery, tIndexSettings, szDoc, iDocLen, dHits, tZoneInfo, iField, tRes );
+	return new PassageHighlighter_c ( dPassages, std::move ( pTokenizer ), tQuery, tIndexSettings, szDoc, iDocLen, dHits, tZoneInfo, iField, tRes );
 }
 
 
-HitCollector_i * CreateHitCollector ( SnippetsDocIndex_c & tContainer, ISphTokenizer * pTokenizer, CSphDict * pDict, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
+HitCollector_i * CreateHitCollector ( SnippetsDocIndex_c & tContainer, TokenizerRefPtr_c pTokenizer, DictRefPtr_c pDict, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
 	const char * szDoc, int iDocLen, int iField, CacheStreamer_i & tTokenContainer, CSphVector<ZonePacked_t> & dZones, FunctorZoneInfo_t & tZoneInfo, SnippetResult_t & tRes )
 {
-	return new HitCollector_c ( tContainer, pTokenizer, pDict, tQuery, tIndexSettings, szDoc, iDocLen, iField, tTokenContainer, dZones, tZoneInfo, tRes );
+	return new HitCollector_c ( tContainer, std::move ( pTokenizer ), std::move (pDict), tQuery, tIndexSettings, szDoc, iDocLen, iField, tTokenContainer, dZones, tZoneInfo, tRes );
 }

@@ -626,14 +626,14 @@ public:
 #endif
 private:
 	mutable RwLock_t m_tStatsLock;
-	CSphScopedPtr<QueryStatContainer_i> m_pQueryStatRecords GUARDED_BY ( m_tStatsLock );
+	std::unique_ptr<QueryStatContainer_i> m_pQueryStatRecords GUARDED_BY ( m_tStatsLock );
 
 #ifndef NDEBUG
-	CSphScopedPtr<QueryStatContainer_i> m_pQueryStatRecordsExact GUARDED_BY ( m_tStatsLock );
+	std::unique_ptr<QueryStatContainer_i> m_pQueryStatRecordsExact GUARDED_BY ( m_tStatsLock );
 #endif
 
-	CSphScopedPtr<TDigest_i>	m_pQueryTimeDigest GUARDED_BY ( m_tStatsLock );
-	CSphScopedPtr<TDigest_i>	m_pRowsFoundDigest GUARDED_BY ( m_tStatsLock );
+	std::unique_ptr<TDigest_i>	m_pQueryTimeDigest GUARDED_BY ( m_tStatsLock );
+	std::unique_ptr<TDigest_i>	m_pRowsFoundDigest GUARDED_BY ( m_tStatsLock );
 
 	uint64_t			m_uTotalFoundRowsMin GUARDED_BY ( m_tStatsLock )= UINT64_MAX;
 	uint64_t			m_uTotalFoundRowsMax GUARDED_BY ( m_tStatsLock )= 0;

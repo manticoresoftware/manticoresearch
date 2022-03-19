@@ -28,7 +28,7 @@ public:
 private:
 	ESphAttr							m_eAttrType = SPH_ATTR_INTEGER;
 	CSphString							m_sAttrName;
-	CSphScopedPtr<columnar::Iterator_i>	m_pIterator {nullptr};
+	std::unique_ptr<columnar::Iterator_i>	m_pIterator;
 };
 
 
@@ -46,7 +46,7 @@ GrouperColumnarInt_c::GrouperColumnarInt_c ( const GrouperColumnarInt_c & rhs )
 
 SphGroupKey_t GrouperColumnarInt_c::KeyFromMatch ( const CSphMatch & tMatch ) const
 {
-	if ( m_pIterator.Ptr() && m_pIterator->AdvanceTo ( tMatch.m_tRowID ) == tMatch.m_tRowID )
+	if ( m_pIterator && m_pIterator->AdvanceTo ( tMatch.m_tRowID ) == tMatch.m_tRowID )
 		return m_pIterator->Get();
 
 	return SphGroupKey_t(0);
@@ -57,7 +57,7 @@ void GrouperColumnarInt_c::SetColumnar ( const columnar::Columnar_i * pColumnar 
 {
 	assert(pColumnar);
 	std::string sError; // fixme! report errors
-	m_pIterator = pColumnar->CreateIterator ( m_sAttrName.cstr(), {}, nullptr, sError );
+	m_pIterator = CreateIterator ( pColumnar, m_sAttrName.cstr(), sError );
 }
 
 

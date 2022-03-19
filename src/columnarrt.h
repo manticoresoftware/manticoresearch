@@ -39,16 +39,16 @@ public:
 };
 
 // used in accumulator. loads whole storage (no schema to save memory)
-ColumnarBuilderRT_i *	CreateColumnarBuilderRT ( MemoryReader_c & tReader );
+std::unique_ptr<ColumnarBuilderRT_i>	CreateColumnarBuilderRT ( MemoryReader_c& tReader );
 
 // create an empty builder, create storage from schema
-ColumnarBuilderRT_i *	CreateColumnarBuilderRT ( const CSphSchema & tSchema );
+std::unique_ptr<ColumnarBuilderRT_i>	CreateColumnarBuilderRT ( const CSphSchema & tSchema );
 
 // initialize columnar from accumulator; setup schema
 // columnar reader can either take ownership of attributes in columnar builder (and remove them from builder) or not
-ColumnarRT_i *			CreateColumnarRT ( const CSphSchema & tSchema, ColumnarBuilderRT_i * pBuilder, bool bTakeOwnership=true );
+std::unique_ptr<ColumnarRT_i>			CreateColumnarRT ( const CSphSchema & tSchema, ColumnarBuilderRT_i * pBuilder, bool bTakeOwnership=true );
 
 // used by ram segments and binlog
-ColumnarRT_i *			CreateColumnarRT ( const CSphSchema & tSchema, CSphReader & tReader, CSphString & sError );
+std::unique_ptr<ColumnarRT_i>			CreateColumnarRT ( const CSphSchema & tSchema, CSphReader & tReader, CSphString & sError );
 
 #endif // _columnarrt_

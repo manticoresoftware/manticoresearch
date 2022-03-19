@@ -59,7 +59,7 @@ struct PublicThreadDesc_t
 
 	int 				m_iDescriptionLimit = -1;	///< cb flag when collecting info with columns=N, avoid copy huge descriptions then
 	int64_t				m_tmConnect		= -1; ///< when did the client connect?
-	CSphScopedPtr<CSphQuery>	m_pQuery {nullptr}; /// currently running query, if not sphinxql
+	std::unique_ptr<CSphQuery>	m_pQuery; /// currently running query, if not sphinxql
 	const char*			m_sCommand		= nullptr;	/// simple static SYSTEM, SELECT, UPDATE, etc. Used in show threads, crash dumping
 	int					m_iConnID		= -1; ///< current conn-id for this thread. For logging and tracking in mysql
 

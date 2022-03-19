@@ -1772,7 +1772,7 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 		{
 		case ReplicationCommand_e::PQUERY_ADD:
 			assert ( tCmd.m_pStored );
-			SaveStoredQuery ( *tCmd.m_pStored.Ptr(), dBufQueries );
+			SaveStoredQuery ( *tCmd.m_pStored, dBufQueries );
 
 			uQueryHash = sphFNV64 ( &tCmd.m_pStored->m_iQUID, sizeof(tCmd.m_pStored->m_iQUID), uQueryHash );
 			break;

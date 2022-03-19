@@ -3385,7 +3385,7 @@ static void * UdfMalloc ( int iLen )
 /// UDF call site
 struct UdfCall_t
 {
-	const PluginUDF_c *	m_pUdf = nullptr;
+	PluginUDFRefPtr_c	m_pUdf;
 	SPH_UDF_INIT		m_tInit;
 	SPH_UDF_ARGS		m_tArgs;
 	CSphVector<int>		m_dArgs2Free; // these args should be freed explicitly
@@ -3404,7 +3404,6 @@ struct UdfCall_t
 
 	~UdfCall_t ()
 	{
-		SafeRelease ( m_pUdf );
 		SafeDeleteArray ( m_tArgs.arg_types );
 		SafeDeleteArray ( m_tArgs.arg_values );
 		SafeDeleteArray ( m_tArgs.arg_names );
@@ -4395,12 +4394,12 @@ int ExprParser_t::ProcessRawToken ( const char * sToken, int iLen, YYSTYPE * lva
 	}
 
 	// check for UDF
-	auto * pUdf = (const PluginUDF_c *) sphPluginGet ( PLUGIN_FUNCTION, sTok.cstr() );
+	auto pUdf = PluginGet<PluginUDF_c> ( PLUGIN_FUNCTION, sTok.cstr() );
 	if ( pUdf )
 	{
 		lvalp->iNode = m_dUdfCalls.GetLength();
 		m_dUdfCalls.Add ( new UdfCall_t() );
-		m_dUdfCalls.Last()->m_pUdf = pUdf;
+		m_dUdfCalls.Last()->m_pUdf = std::move ( pUdf );
 		return TOK_UDF;
 	}
 
@@ -5442,6 +5441,7 @@ public:
 		: Expr_Udf_c ( pCall, pProfiler )
 	{
 		assert ( pCall->m_pUdf->m_eRetType==SPH_ATTR_FLOAT );
+		m_pFn = (UdfDouble_fn)m_pCall->m_pUdf->m_fnFunc;
 	}
 
 	float Eval ( const CSphMatch & tMatch ) const final
@@ -5451,8 +5451,8 @@ public:
 
 		CSphScopedProfile tProf ( m_pProfiler, SPH_QSTATE_EVAL_UDF );
 		FillArgs ( tMatch );
-		auto pFn = (UdfDouble_fn) m_pCall->m_pUdf->m_fnFunc;
-		auto fRes = (float) pFn ( &m_pCall->m_tInit, &m_pCall->m_tArgs, &m_bError );
+		assert ( m_pFn == m_pCall->m_pUdf->m_fnFunc );
+		auto fRes = (float)m_pFn ( &m_pCall->m_tInit, &m_pCall->m_tArgs, &m_bError );
 		FreeArgs();
 		return fRes;
 	}
@@ -5467,6 +5467,7 @@ public:
 
 private:
 	Expr_UdfFloat_c ( const Expr_UdfFloat_c& ) = default;
+	UdfDouble_fn m_pFn; // to avoid dereference on each Eval() call
 };
 
 

@@ -48,7 +48,6 @@ public:
 	virtual DocstoreSettings_t	GetDocstoreSettings() const = 0;
 };
 
-
 class DocstoreBuilder_i : public DocstoreAddField_i, public DocstoreGetField_i
 {
 public:
@@ -64,7 +63,6 @@ public:
 	virtual void	AddDoc ( RowID_t tRowID, const Doc_t & tDoc ) = 0;
 	virtual void	Finalize() = 0;
 };
-
 
 class CSphReader;
 class CSphWriter;
@@ -119,10 +117,10 @@ private:
 };
 
 
-Docstore_i *		CreateDocstore ( int64_t iIndexId, const CSphString & sFilename, CSphString & sError );
-DocstoreBuilder_i * CreateDocstoreBuilder ( const CSphString & sFilename, const DocstoreSettings_t & tSettings, CSphString & sError );
-DocstoreRT_i *		CreateDocstoreRT();
-DocstoreFields_i *	CreateDocstoreFields();
+std::unique_ptr<Docstore_i>		CreateDocstore ( int64_t iIndexId, const CSphString & sFilename, CSphString & sError );
+std::unique_ptr<DocstoreBuilder_i> CreateDocstoreBuilder ( const CSphString & sFilename, const DocstoreSettings_t & tSettings, CSphString & sError );
+std::unique_ptr<DocstoreRT_i>		CreateDocstoreRT();
+std::unique_ptr<DocstoreFields_i>	CreateDocstoreFields();
 
 void				InitDocstore ( int64_t iCacheSize );
 void				ShutdownDocstore();

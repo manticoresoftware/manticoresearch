@@ -152,7 +152,7 @@ public:
 	virtual RtAccum_t * CreateAccum ( RtAccum_t * pAccExt, CSphString & sError ) = 0;
 
 	// instead of cloning for each AddDocument() call we could just call this method and improve batch inserts speed
-	virtual ISphTokenizer * CloneIndexingTokenizer() const = 0;
+	virtual TokenizerRefPtr_c CloneIndexingTokenizer() const = 0;
 
 	// hint an index that it was deleted and should cleanup its files when destructed
 	virtual void IndexDeleted() = 0;
@@ -163,7 +163,7 @@ public:
 	
 	/// acquire thread-local indexing accumulator
 	/// returns NULL if another index already uses it in an open txn
-	RtAccum_t * AcquireAccum ( CSphDict * pDict, RtAccum_t * pAccExt=nullptr, bool bWordDict=true, bool bSetTLS = true, CSphString * sError=nullptr );
+	RtAccum_t * AcquireAccum ( const DictRefPtr_c& pDict, RtAccum_t * pAccExt=nullptr, bool bWordDict=true, bool bSetTLS = true, CSphString * sError=nullptr );
 
 	virtual bool	NeedStoreWordID () const = 0;
 	virtual	int64_t	GetMemLimit() const = 0;
@@ -243,8 +243,8 @@ public:
 	std::atomic<int64_t> *			m_pRAMCounter = nullptr;///< external RAM counter
 	OpenHash_T<RowID_t, DocID_t>	m_tDocIDtoRowID;		///< speeds up docid-rowid lookups
 	DeadRowMap_Ram_c				m_tDeadRowMap;
-	CSphScopedPtr<DocstoreRT_i>		m_pDocstore{nullptr};
-	CSphScopedPtr<ColumnarRT_i>		m_pColumnar{nullptr};
+	std::unique_ptr<DocstoreRT_i>	m_pDocstore;
+	std::unique_ptr<ColumnarRT_i>	m_pColumnar;
 
 	mutable bool					m_bConsistent{false};
 
@@ -415,11 +415,8 @@ void BuildSegmentInfixes ( RtSegment_t * pSeg, bool bHasMorphology, bool bKeywor
 bool ExtractInfixCheckpoints ( const char * sInfix, int iBytes, int iMaxCodepointLength, int iDictCpCount,
 	const CSphTightVector<uint64_t> &dFilter, CSphVector<DWORD> &dCheckpoints );
 
-void SetupExactDict ( DictRefPtr_c& pDict );
-void SetupExactTokenizer ( ISphTokenizer* pTokenizer, bool bAddSpecial = true );
-
-void SetupStarDict ( DictRefPtr_c& pDict );
-void SetupStarTokenizer ( ISphTokenizer* pTokenizer );
+void SetupExactTokenizer ( const TokenizerRefPtr_c& pTokenizer, bool bAddSpecial = true );
+void SetupStarTokenizer ( const TokenizerRefPtr_c& pTokenizer );
 
 bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const ISphFieldFilter * pFieldFilter,
 	const CSphIndexSettings & tIndexSettings, uint64_t uTokHash, uint64_t uDictHash, int iMaxCodepointLength, int64_t iMemLimit,

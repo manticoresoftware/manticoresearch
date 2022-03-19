@@ -27,7 +27,7 @@ static const char * g_szOrder = "_@order_";
 class QueryTreeBuilder_c : public XQParseHelper_c
 {
 public:
-					QueryTreeBuilder_c ( const CSphQuery * pQuery, const ISphTokenizer * pQueryTokenizerQL, const CSphIndexSettings & tSettings );
+					QueryTreeBuilder_c ( const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizerQL, const CSphIndexSettings & tSettings );
 
 	void			CollectKeywords ( const char * szStr, XQNode_t * pNode, const XQLimitSpec_t & tLimitSpec );
 
@@ -37,22 +37,22 @@ public:
 
 	XQNode_t *		CreateNode ( XQLimitSpec_t & tLimitSpec );
 
-	const ISphTokenizer *		GetQLTokenizer() { return m_pQueryTokenizerQL; }
+	const TokenizerRefPtr_c &	GetQLTokenizer() { return m_pQueryTokenizerQL; }
 	const CSphIndexSettings &	GetIndexSettings() { return m_tSettings; }
 	const CSphQuery *			GetQuery() { return m_pQuery; }
 
 private:
 	const CSphQuery *			m_pQuery {nullptr};
-	const ISphTokenizer *		m_pQueryTokenizerQL {nullptr};
+	const TokenizerRefPtr_c		m_pQueryTokenizerQL;
 	const CSphIndexSettings &	m_tSettings;
 
 	XQNode_t *		AddChildKeyword ( XQNode_t * pParent, const char * szKeyword, int iSkippedPosBeforeToken, const XQLimitSpec_t & tLimitSpec );
 };
 
 
-QueryTreeBuilder_c::QueryTreeBuilder_c ( const CSphQuery * pQuery, const ISphTokenizer * pQueryTokenizerQL, const CSphIndexSettings & tSettings )
+QueryTreeBuilder_c::QueryTreeBuilder_c ( const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizerQL, const CSphIndexSettings & tSettings )
 	: m_pQuery ( pQuery )
-	, m_pQueryTokenizerQL ( pQueryTokenizerQL )
+	, m_pQueryTokenizerQL ( std::move (pQueryTokenizerQL) )
 	, m_tSettings ( tSettings )
 {}
 
@@ -190,8 +190,8 @@ class QueryParserJson_c : public QueryParser_i
 public:
 	bool	IsFullscan ( const XQQuery_t & tQuery ) const final;
 	bool	ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery,
-		const ISphTokenizer * pQueryTokenizer, const ISphTokenizer * pQueryTokenizerJson,
-		const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings ) const final;
+		TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c pQueryTokenizerJson,
+		const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings ) const final;
 
 private:
 	XQNode_t *		ConstructMatchNode ( const JsonObj_c & tJson, bool bPhrase, QueryTreeBuilder_c & tBuilder ) const;
@@ -212,7 +212,7 @@ bool QueryParserJson_c::IsFullscan ( const XQQuery_t & tQuery ) const
 }
 
 
-bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, const CSphQuery * pQuery, const ISphTokenizer * pQueryTokenizerQL, const ISphTokenizer * pQueryTokenizerJson, const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings ) const
+bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizerQL, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings ) const
 {
 	JsonObj_c tRoot ( szQuery );
 
@@ -225,11 +225,10 @@ bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, 
 	}
 
 	assert ( pQueryTokenizerJson->IsQueryTok() );
-	TokenizerRefPtr_c pMyJsonTokenizer { pQueryTokenizerJson->Clone ( SPH_CLONE ) };
-	DictRefPtr_c pMyDict { GetStatelessDict ( pDict ) };
+	DictRefPtr_c pMyDict = GetStatelessDict ( pDict );
 
-	QueryTreeBuilder_c tBuilder ( pQuery, pQueryTokenizerQL, tSettings );
-	tBuilder.Setup ( pSchema, pMyJsonTokenizer, pMyDict, &tParsed, tSettings );
+	QueryTreeBuilder_c tBuilder ( pQuery, std::move ( pQueryTokenizerQL ), tSettings );
+	tBuilder.Setup ( pSchema, pQueryTokenizerJson->Clone ( SPH_CLONE ), pMyDict, &tParsed, tSettings );
 
 	tParsed.m_pRoot = ConstructNode ( tRoot[0], tBuilder );
 	if ( tBuilder.IsError() )

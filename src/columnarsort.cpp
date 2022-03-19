@@ -336,7 +336,7 @@ private:
 	CSphFixedVector<int64_t>	m_dValues{0};
 
 	columnar::Columnar_i *		m_pColumnar = nullptr;
-	CSphScopedPtr<ISphMatchSorter> m_pSorter;
+	std::unique_ptr<ISphMatchSorter> m_pSorter;
 	const ISphSchema *			m_pSchema = nullptr;
 	CSphMatch *					m_pCurMatch = nullptr;
 	CSphMatch *					m_pEndMatch = nullptr;
@@ -512,7 +512,7 @@ void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::MoveTo ( ISphMatchSorter * pRhs
 	PushCollectedToSorter();
 	pRhsProxy->PushCollectedToSorter();
 
-	m_pSorter->MoveTo ( pRhsProxy->m_pSorter.Ptr(), bCopyMeta );
+	m_pSorter->MoveTo ( pRhsProxy->m_pSorter.get(), bCopyMeta );
 }
 
 template <typename GENERIC, typename COMP, typename SINGLE>

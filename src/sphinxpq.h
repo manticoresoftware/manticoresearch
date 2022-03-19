@@ -91,7 +91,7 @@ public:
 	PercolateIndex_i ( const char * sIndexName, const char * sFileName ) : RtIndex_i ( sIndexName, sFileName ) {}
 	virtual bool	MatchDocuments ( RtAccum_t * pAccExt, PercolateMatchResult_t & tResult ) = 0;
 
-	virtual StoredQuery_i * CreateQuery ( PercolateQueryArgs_t & tArgs, CSphString & sError ) = 0;
+	virtual std::unique_ptr<StoredQuery_i> CreateQuery ( PercolateQueryArgs_t & tArgs, CSphString & sError ) = 0;
 
 	bool	IsPQ() const override { return true; }
 
@@ -171,12 +171,12 @@ class PercolateDictProxy_c : public DictStub_c
 {
 	const DictMap_t * m_pDict = nullptr;
 	const bool m_bHasMorph = false;
-	DictRefPtr_c m_pDictMorph { nullptr };
+	DictRefPtr_c m_pDictMorph;
 
 public:
-	explicit PercolateDictProxy_c ( bool bHasMorph, CSphDict * pDictMorph )
+	explicit PercolateDictProxy_c ( bool bHasMorph, DictRefPtr_c pDictMorph )
 		: m_bHasMorph ( bHasMorph )
-		, m_pDictMorph ( pDictMorph )
+		, m_pDictMorph ( std::move (pDictMorph) )
 	{
 	}
 
@@ -216,10 +216,10 @@ struct PercolateMatchContext_t : public PQMatchContextResult_t
 	bool m_bGetFilters = false;
 	bool m_bVerbose = false;
 
-	PercolateDictProxy_c m_tDictMap;
+	CSphRefcountedPtr<PercolateDictProxy_c> m_pDictMap;
 	CSphQuery m_tDummyQuery;
-	CSphScopedPtr <CSphQueryContext> m_pCtx { nullptr };
-	CSphScopedPtr <PercolateQwordSetup_c> m_pTermSetup { nullptr };
+	std::unique_ptr<CSphQueryContext> m_pCtx;
+	std::unique_ptr<PercolateQwordSetup_c> m_pTermSetup;
 
 	// const actually shared between all workers
 	const ISphSchema &m_tSchema;
@@ -227,25 +227,24 @@ struct PercolateMatchContext_t : public PQMatchContextResult_t
 	const bool m_bUtf8 = false;
 	Warner_c m_dMsg;
 
-	PercolateMatchContext_t ( const RtSegment_t * pSeg, int iMaxCodepointLength, bool bHasMorph,
-			CSphDict * pDictMorph, const PercolateIndex_i * pIndex, const ISphSchema & tSchema,
+	PercolateMatchContext_t ( const RtSegment_t * pSeg, int iMaxCodepointLength, bool bHasMorph, DictRefPtr_c pDictMorph, const PercolateIndex_i * pIndex, const ISphSchema & tSchema,
 			const SegmentReject_t & tReject, ESphHitless eHitless, bool bHasWideFields )
-		: m_tDictMap ( bHasMorph, pDictMorph )
+		: m_pDictMap { new PercolateDictProxy_c ( bHasMorph, std::move (pDictMorph) ) }
 		, m_tSchema ( tSchema )
 		, m_tReject ( tReject )
 		, m_bUtf8 ( iMaxCodepointLength>1 )
 	{
 		m_tDummyQuery.m_eRanker = SPH_RANK_NONE;
-		m_pCtx = new CSphQueryContext ( m_tDummyQuery );
+		m_pCtx = std::make_unique<CSphQueryContext> ( m_tDummyQuery );
 		m_pCtx->m_bSkipQCache = true;
 		// for lookups to work
 		m_pCtx->m_pIndexData = pSeg;
 
 		// setup search terms
-		m_pTermSetup = new PercolateQwordSetup_c ( pSeg, iMaxCodepointLength, eHitless );
-		m_pTermSetup->SetDict ( &m_tDictMap );
+		m_pTermSetup = std::make_unique<PercolateQwordSetup_c> ( pSeg, iMaxCodepointLength, eHitless );
+		m_pTermSetup->SetDict ( (DictRefPtr_c)m_pDictMap );
 		m_pTermSetup->m_pIndex = pIndex;
-		m_pTermSetup->m_pCtx = m_pCtx.Ptr ();
+		m_pTermSetup->m_pCtx = m_pCtx.get ();
 		m_pTermSetup->m_bHasWideFields = bHasWideFields;
 	}
 };

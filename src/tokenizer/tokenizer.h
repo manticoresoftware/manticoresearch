@@ -168,7 +168,7 @@ public:
 
 public:
 	/// spawn a clone of my own
-	virtual ISphTokenizer *			Clone ( ESphTokenizerClone eMode ) const = 0;
+	virtual TokenizerRefPtr_c		Clone ( ESphTokenizerClone eMode ) const = 0;
 
 	/// start buffer point of last token
 	virtual const char *			GetTokenStart () const = 0;
@@ -248,25 +248,25 @@ using TokenizerRefPtr_c = CSphRefcountedPtr<ISphTokenizer>;
 namespace Tokenizer {
 
 /// create a tokenizer using the given settings
-ISphTokenizer *			Create ( const CSphTokenizerSettings & tSettings, const CSphEmbeddedFiles * pFiles, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError );
+TokenizerRefPtr_c		Create ( const CSphTokenizerSettings & tSettings, const CSphEmbeddedFiles * pFiles, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError );
 
-/// create a token filter
-ISphTokenizer *			CreateMultiformFilter ( ISphTokenizer * pTokenizer, const CSphMultiformContainer * pContainer );
+/// add multiform filter upon given tokenizer
+void AddToMultiformFilterTo ( TokenizerRefPtr_c& pTokenizer, const CSphMultiformContainer* pContainer );
 
-/// create a token filter
-ISphTokenizer *			CreateBigramFilter ( ISphTokenizer * pTokenizer, ESphBigram eBigramIndex, const CSphString & sBigramWords, CSphString & sError );
+/// add bigram filter upon given tokenizer
+void AddBigramFilterTo ( TokenizerRefPtr_c& pTokenizer, ESphBigram eBigramIndex, const CSphString& sBigramWords, CSphString& sError );
 
 /// create a plugin filter
 /// sSspec is a library, name, and options specification string, eg "myplugins.dll:myfilter1:arg1=123"
-ISphTokenizer *			CreatePluginFilter ( ISphTokenizer * pTokenizer, const CSphString & sSpec, CSphString & sError );
+void AddPluginFilterTo ( TokenizerRefPtr_c& pTokenizer, const CSphString & sSpec, CSphString & sError );
 
 namespace Detail {
 
 	/// create UTF-8 tokenizer
-	ISphTokenizer* CreateUTF8Tokenizer ( bool bDefaultCharset = true );
+	TokenizerRefPtr_c CreateUTF8Tokenizer ( bool bDefaultCharset = true );
 
 	/// create UTF-8 tokenizer with n-grams support (for CJK n-gram indexing)
-	ISphTokenizer* CreateUTF8NgramTokenizer ( bool bDefaultCharset = true );
+	TokenizerRefPtr_c CreateUTF8NgramTokenizer ( bool bDefaultCharset = true );
 
 } // namespace Detail
 } // namespace Tokenizer

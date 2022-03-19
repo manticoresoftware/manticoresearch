@@ -18,7 +18,6 @@
 #include "sphinxsearch.h"
 #include "secondaryindex.h"
 #include "histogram.h"
-#include "sphinxstem.h"
 #include "sphinxpq.h"
 #include "accumulator.h"
 #include "indexformat.h"
@@ -475,7 +474,7 @@ static int GetRowSize ( const CSphVector<CSphColumnInfo> & dAttrs )
 static bool SetupWordProcessors ( Index_t & tIndex, CSphString & sError )
 {
 	StrVec_t dWarnings;
-	TokenizerRefPtr_c pTokenizer { Tokenizer::Create ( tIndex.m_tTokSettings, &tIndex.m_tEmbeddedTok, nullptr, dWarnings, sError ) };
+	TokenizerRefPtr_c pTokenizer = Tokenizer::Create ( tIndex.m_tTokSettings, &tIndex.m_tEmbeddedTok, nullptr, dWarnings, sError );
 	if ( !pTokenizer )
 		return false;
 
@@ -487,13 +486,13 @@ static bool SetupWordProcessors ( Index_t & tIndex, CSphString & sError )
 		return false;
 	tIndex.m_pDict = pDict;
 
-	pTokenizer = Tokenizer::CreateMultiformFilter ( pTokenizer, tIndex.m_pDict->GetMultiWordforms () );
+	Tokenizer::AddToMultiformFilterTo ( pTokenizer, tIndex.m_pDict->GetMultiWordforms () );
 
 	// initialize AOT if needed
 	tIndex.m_tSettings.m_uAotFilterMask = sphParseMorphAot ( tIndex.m_tDictSettings.m_sMorphology.cstr() );
 	// aot filter
 	if ( tIndex.m_tSettings.m_uAotFilterMask )
-		pTokenizer = sphAotCreateFilter ( pTokenizer, tIndex.m_pDict, tIndex.m_tSettings.m_bIndexExactWords, tIndex.m_tSettings.m_uAotFilterMask );
+		sphAotTransformFilter ( pTokenizer, tIndex.m_pDict, tIndex.m_tSettings.m_bIndexExactWords, tIndex.m_tSettings.m_uAotFilterMask );
 	tIndex.m_pTokenizer = pTokenizer;
 
 	return true;
@@ -1068,17 +1067,17 @@ bool ConverterPlain_t::WriteAttributes ( Index_t & tIndex, CSphString & sError )
 	const CSphColumnInfo * pBlobLocatorAttr = m_tSchema.GetAttr ( sphGetBlobLocatorName() );
 	AttrIndexBuilder_c tMinMaxBuilder ( m_tSchema );
 
-	CSphScopedPtr<BlobRowBuilder_i> pBlobRowBuilder(nullptr);
+	std::unique_ptr<BlobRowBuilder_i> pBlobRowBuilder;
 	if ( pBlobLocatorAttr )
 	{
 		pBlobRowBuilder = sphCreateBlobRowJsonBuilder ( m_tSchema, sSPB, tIndex.m_tSettings.m_tBlobUpdateSpace, sError );
-		if ( !pBlobRowBuilder.Ptr() )
+		if ( !pBlobRowBuilder )
 			return false;
 	}
 
 	RowID_t tNextRowID = 0;
 	int iStride = m_tSchema.GetRowSize();
-	AttrConverter_t tConv ( tIndex, m_tSchema, pBlobRowBuilder.Ptr() );
+	AttrConverter_t tConv ( tIndex, m_tSchema, pBlobRowBuilder.get() );
 	CSphRowitem * pRow = nullptr;
 	while ( ( pRow = tConv.NextRow() )!=nullptr )
 	{
@@ -1108,7 +1107,7 @@ bool ConverterPlain_t::WriteAttributes ( Index_t & tIndex, CSphString & sError )
 		tNextRowID++;
 	}
 
-	if ( pBlobRowBuilder.Ptr() && !pBlobRowBuilder->Done ( sError ) )
+	if ( pBlobRowBuilder && !pBlobRowBuilder->Done ( sError ) )
 		return false;		
 
 	tMinMaxBuilder.FinishCollect();

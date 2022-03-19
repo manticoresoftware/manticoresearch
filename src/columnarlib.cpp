@@ -51,7 +51,7 @@ columnar::AttrType_e ToColumnarType ( ESphAttr eAttrType, int iBitCount )
 }
 
 
-columnar::Columnar_i * CreateColumnarStorageReader ( const CSphString & sFile, DWORD uNumDocs, CSphString & sError )
+std::unique_ptr<columnar::Columnar_i> CreateColumnarStorageReader ( const CSphString & sFile, DWORD uNumDocs, CSphString & sError )
 {
 	if ( !IsColumnarLibLoaded() )
 	{
@@ -61,7 +61,7 @@ columnar::Columnar_i * CreateColumnarStorageReader ( const CSphString & sFile, D
 
 	std::string sErrorSTL;
 	assert ( g_fnCreateColumnarStorage );
-	columnar::Columnar_i * pColumnar = g_fnCreateColumnarStorage ( sFile.cstr(), uNumDocs, sErrorSTL );
+	std::unique_ptr<columnar::Columnar_i> pColumnar { g_fnCreateColumnarStorage ( sFile.cstr(), uNumDocs, sErrorSTL ) };
 	if ( !pColumnar )
 		sError = sErrorSTL.c_str();
 
@@ -69,7 +69,7 @@ columnar::Columnar_i * CreateColumnarStorageReader ( const CSphString & sFile, D
 }
 
 
-columnar::Builder_i * CreateColumnarBuilder ( const ISphSchema & tSchema, const columnar::Settings_t & tSettings, const CSphString & sFilename, CSphString & sError )
+std::unique_ptr<columnar::Builder_i> CreateColumnarBuilder ( const ISphSchema & tSchema, const columnar::Settings_t & tSettings, const CSphString & sFilename, CSphString & sError )
 {
 	if ( !IsColumnarLibLoaded() )
 	{
@@ -101,7 +101,7 @@ columnar::Builder_i * CreateColumnarBuilder ( const ISphSchema & tSchema, const 
 		return nullptr;
 
 	assert ( g_fnCreateColumnarBuilder );
-	columnar::Builder_i * pBuilder = g_fnCreateColumnarBuilder ( tSettings, tColumnarSchema, sFilename.cstr(), sErrorSTL );
+	std::unique_ptr<columnar::Builder_i> pBuilder { g_fnCreateColumnarBuilder ( tSettings, tColumnarSchema, sFilename.cstr(), sErrorSTL ) };
 	if ( !pBuilder )
 		sError = sErrorSTL.c_str();
 

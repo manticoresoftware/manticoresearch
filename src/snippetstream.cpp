@@ -643,7 +643,7 @@ CacheStreamer_i * CreateCacheStreamer ( int iDocLen )
 
 void TokenizeDocument ( HitCollector_i & tFunctor, const CSphHTMLStripper * pStripper, DWORD iSPZ )
 {
-	TokenizerRefPtr_c pTokenizer { tFunctor.GetTokenizer() };
+	TokenizerRefPtr_c pTokenizer = tFunctor.GetTokenizer();
 	DictRefPtr_c & pDict = tFunctor.GetDict();
 
 	const char * pStartPtr = pTokenizer->GetBufferPtr ();

@@ -160,7 +160,7 @@ struct DictEntryDiskPayload_t
 		m_dWordBuf.Reserve ( 8096 );
 	}
 
-	void Add ( const CSphDictEntry & tWord, int iWordLen )
+	void Add ( const DictEntry_t & tWord, int iWordLen )
 	{
 		if ( !m_bPayload || !sphIsExpandedPayload ( tWord.m_iDocs, tWord.m_iHits ) ||
 			m_eHitless==SPH_HITLESS_ALL || ( m_eHitless==SPH_HITLESS_SOME && ( tWord.m_iDocs & HITLESS_DOC_FLAG )!=0 ) ) // FIXME!!! do we need hitless=some as payloads?
@@ -433,7 +433,7 @@ const CSphWordlistCheckpoint * CWordlist::FindCheckpointWrd ( const char* sWord,
 }
 
 
-bool CWordlist::GetWord ( const BYTE * pBuf, SphWordID_t iWordID, CSphDictEntry & tWord ) const
+bool CWordlist::GetWord ( const BYTE * pBuf, SphWordID_t iWordID, DictEntry_t & tWord ) const
 {
 	SphWordID_t iLastID = 0;
 	SphOffset_t uLastOff = 0;

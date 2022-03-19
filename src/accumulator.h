@@ -59,7 +59,7 @@ struct ReplicationCommand_t
 	CSphString				m_sCluster;
 
 	// add
-	CSphScopedPtr<StoredQuery_i> m_pStored { nullptr };
+	std::unique_ptr<StoredQuery_i> m_pStored;
 
 	// delete
 	CSphVector<int64_t>		m_dDeleteQueries;
@@ -97,13 +97,13 @@ public:
 
 	bool						m_bKeywordDict {true};
 	DictRefPtr_c				m_pDict;
-	CSphDict *					m_pRefDict = nullptr; // not owned, used only for ==-matching
+	const void *				m_pRefDict = nullptr; // not owned, used only for comparing via ==
 
 
 					explicit RtAccum_t ( bool bKeywordDict );
 					~RtAccum_t() = default;
 
-	void			SetupDict ( const RtIndex_i * pIndex, CSphDict * pDict, bool bKeywordDict );
+	void			SetupDict ( const RtIndex_i * pIndex, const DictRefPtr_c& pDict, bool bKeywordDict );
 	void			Sort();
 
 	void			CleanupPart();
@@ -133,10 +133,10 @@ public:
 private:
 	bool								m_bReplace = false;		///< insert or replace mode (affects CleanupDuplicates() behavior)
 
-	CSphRefcountedPtr<ISphRtDictWraper>	m_pDictRt;
-	CSphScopedPtr<BlobRowBuilder_i>		m_pBlobWriter {nullptr};
-	CSphScopedPtr<DocstoreRT_i>			m_pDocstore {nullptr};
-	CSphScopedPtr<ColumnarBuilderRT_i>	m_pColumnarBuilder {nullptr};
+	ISphRtDictWraperRefPtr_c			m_pDictRt;
+	std::unique_ptr<BlobRowBuilder_i>	m_pBlobWriter;
+	std::unique_ptr<DocstoreRT_i>		m_pDocstore {nullptr};
+	std::unique_ptr<ColumnarBuilderRT_i>	m_pColumnarBuilder {nullptr};
 	RowID_t								m_tNextRowID = 0;
 	CSphFixedVector<BYTE>				m_dPackedKeywords { 0 };
 	uint64_t							m_uSchemaHash = 0;

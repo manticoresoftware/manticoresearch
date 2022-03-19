@@ -295,11 +295,12 @@ public:
 	virtual bool IsFullscan ( const CSphQuery & tQuery ) const { return tQuery.m_sQuery.IsEmpty(); };
 	virtual bool IsFullscan ( const XQQuery_t & tQuery ) const = 0;
 	virtual bool ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery,
-		const ISphTokenizer * pQueryTokenizer, const ISphTokenizer * pQueryTokenizerJson,
-		const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings ) const = 0;
+		TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c pQueryTokenizerJson,
+		const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings ) const = 0;
 };
 
 class PluginQueryTokenFilter_c;
+using PluginQueryTokenRefPtr_c = CSphRefcountedPtr<PluginQueryTokenFilter_c>;
 
 class XQParseHelper_c
 {
@@ -311,13 +312,13 @@ public:
 	bool			AddField ( FieldMask_t & dFields, const char * szField, int iLen );
 	bool			ParseFields ( FieldMask_t & dFields, int & iMaxFieldPos, bool & bIgnore );
 
-	void			Setup ( const CSphSchema * pSchema, ISphTokenizer * pTokenizer, CSphDict * pDict, XQQuery_t * pXQQuery, const CSphIndexSettings & tSettings );
+	void			Setup ( const CSphSchema * pSchema, TokenizerRefPtr_c pTokenizer, DictRefPtr_c pDict, XQQuery_t * pXQQuery, const CSphIndexSettings & tSettings );
 	bool			Error ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
 	void			Warning ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
 	XQNode_t *		FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & tLimitSpec, bool bOnlyNotAllowed );
 
 	const CSphSchema * GetSchema() const { return m_pSchema; }
-	CSphDict *		GetDict() { return m_pDict; }
+	DictRefPtr_c&	GetDict() { return m_pDict; }
 	
 	bool			IsError() { return m_bError; }
 	virtual void	Cleanup();
@@ -333,13 +334,13 @@ protected:
 	static const int MAX_TOKEN_BYTES = 3*SPH_MAX_WORD_LEN + 16;
 
 	const CSphSchema *		m_pSchema {nullptr};
-	TokenizerRefPtr_c	m_pTokenizer;
-	DictRefPtr_c		m_pDict;
+	TokenizerRefPtr_c		m_pTokenizer;
+	DictRefPtr_c			m_pDict;
 	bool					m_bStopOnInvalid {true};
 	XQQuery_t *				m_pParsed {nullptr};
 	bool					m_bError {false};
 
-	const PluginQueryTokenFilter_c * m_pPlugin {nullptr};
+	PluginQueryTokenRefPtr_c m_pPlugin;
 	void *					m_pPluginData {nullptr};
 
 	int						m_iAtomPos {0};
@@ -366,7 +367,7 @@ private:
 //////////////////////////////////////////////////////////////////////////////
 
 /// setup tokenizer for query parsing (ie. add all specials and whatnot)
-ISphTokenizer* sphCloneAndSetupQueryTokenizer ( const ISphTokenizer* pTokenizer, bool bWildcards, bool bExact, bool bJson );
+TokenizerRefPtr_c sphCloneAndSetupQueryTokenizer ( const TokenizerRefPtr_c& pTokenizer, bool bWildcards, bool bExact, bool bJson );
 
 // a wrapper for sphParseExtendedQuery
 QueryParser_i * sphCreatePlainQueryParser();
@@ -378,7 +379,7 @@ QueryParser_i * sphCreatePlainQueryParser();
 /// a) we do not always have an actual real index class, and
 /// b) might need to tweak stuff even we do
 /// FIXME! remove either pQuery or sQuery
-bool	sphParseExtendedQuery ( XQQuery_t & tQuery, const char * sQuery, const CSphQuery * pQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings );
+bool	sphParseExtendedQuery ( XQQuery_t & tQuery, const char * sQuery, const CSphQuery * pQuery, const TokenizerRefPtr_c& pTokenizer, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings );
 
 // perform boolean optimization on tree
 void	sphOptimizeBoolean ( XQNode_t ** pXQ, const ISphKeywordsStat * pKeywords );

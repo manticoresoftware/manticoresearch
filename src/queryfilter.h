@@ -19,7 +19,7 @@
 struct ISphQueryFilter
 {
 	TokenizerRefPtr_c m_pTokenizer;
-	CSphDict* m_pDict = nullptr;
+	DictRefPtr_c m_pDict;
 	const CSphIndexSettings* m_pSettings = nullptr;
 	GetKeywordsSettings_t m_tFoldSettings;
 

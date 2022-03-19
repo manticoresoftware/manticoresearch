@@ -610,37 +610,37 @@ bool ColumnarRT_c::Load ( CSphReader & tReader, const CSphSchema & tSchema, CSph
 
 /////////////////////////////////////////////////////////////////////
 
-ColumnarBuilderRT_i * CreateColumnarBuilderRT ( MemoryReader_c & tReader )
+std::unique_ptr<ColumnarBuilderRT_i> CreateColumnarBuilderRT ( MemoryReader_c & tReader )
 {
-	CSphScopedPtr<ColumnarBuilderRT_c> pBuilder ( new ColumnarBuilderRT_c );
+	auto pBuilder = std::make_unique<ColumnarBuilderRT_c>();
 	pBuilder->Load(tReader);
-	return pBuilder.LeakPtr();
+	return pBuilder;
 }
 
 
-ColumnarBuilderRT_i * CreateColumnarBuilderRT ( const CSphSchema & tSchema )
+std::unique_ptr<ColumnarBuilderRT_i> CreateColumnarBuilderRT ( const CSphSchema & tSchema )
 {
 	if ( !tSchema.HasColumnarAttrs() )
 		return nullptr;
 
-	return new ColumnarBuilderRT_c(tSchema);
+	return std::make_unique<ColumnarBuilderRT_c> ( tSchema );
 }
 
 
-ColumnarRT_i * CreateColumnarRT ( const CSphSchema & tSchema, ColumnarBuilderRT_i * pBuilder, bool bTakeOwnership )
+std::unique_ptr<ColumnarRT_i> CreateColumnarRT ( const CSphSchema & tSchema, ColumnarBuilderRT_i * pBuilder, bool bTakeOwnership )
 {
 	if ( !pBuilder )
 		return nullptr;
 
-	return new ColumnarRT_c ( tSchema, pBuilder, bTakeOwnership );
+	return std::make_unique<ColumnarRT_c> ( tSchema, pBuilder, bTakeOwnership );
 }
 
 
-ColumnarRT_i * CreateColumnarRT ( const CSphSchema & tSchema, CSphReader & tReader, CSphString & sError )
+std::unique_ptr<ColumnarRT_i> CreateColumnarRT ( const CSphSchema & tSchema, CSphReader & tReader, CSphString & sError )
 {
-	CSphScopedPtr<ColumnarRT_c> pColumnar ( new ColumnarRT_c );
+	auto pColumnar = std::make_unique<ColumnarRT_c>();
 	if ( !pColumnar->Load ( tReader, tSchema, sError ) )
 		return nullptr;
 
-	return pColumnar.LeakPtr();
+	return pColumnar;
 }

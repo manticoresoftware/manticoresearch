@@ -17,6 +17,7 @@
 #include "datareader.h"
 #include "fileutils.h"
 #include "indexing_sources/source_stats.h"
+#include "dict/dict_entry.h"
 
 const int	DOCLIST_HINT_THRESH = 256;
 const DWORD HITLESS_DOC_MASK = 0x7FFFFFFF;
@@ -111,7 +112,7 @@ public:
 
 	const CSphWordlistCheckpoint *		FindCheckpointCrc ( SphWordID_t iWordID ) const;
 	const CSphWordlistCheckpoint *		FindCheckpointWrd ( const char * sWord, int iWordLen, bool bStarMode ) const;
-	bool								GetWord ( const BYTE * pBuf, SphWordID_t iWordID, CSphDictEntry & tWord ) const;
+	bool								GetWord ( const BYTE * pBuf, SphWordID_t iWordID, DictEntry_t & tWord ) const;
 
 	const BYTE *						AcquireDict ( const CSphWordlistCheckpoint * pCheckpoint ) const;
 	void								GetPrefixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const override;
@@ -137,7 +138,7 @@ private:
 
 
 /// dict=keywords block reader
-class KeywordsBlockReader_c : public CSphDictEntry
+class KeywordsBlockReader_c : public DictEntry_t
 {
 public:
 					KeywordsBlockReader_c ( const BYTE * pBuf, int iSkiplistBlockSize );

@@ -202,11 +202,11 @@ void TermRemoveDup ( CSphVector<T> & dTerms, CSphVector<int> & dRemovedQPos, con
 }
 
 
-void SnippetsDocIndex_c::ParseQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, DWORD eExtQuerySPZ )
+void SnippetsDocIndex_c::ParseQuery ( const DictRefPtr_c& pDict, DWORD eExtQuerySPZ )
 {
 	int iQPos = 0;
 
-	iQPos = ExtractWords ( m_tQuery.m_pRoot, pTokenizer, pDict, iQPos );
+	iQPos = ExtractWords ( m_tQuery.m_pRoot, pDict, iQPos );
 
 	if ( eExtQuerySPZ & SPH_SPZ_SENTENCE )
 	{
@@ -345,7 +345,7 @@ void SnippetsDocIndex_c::AddWordStar ( const char * sWord, int iLengthCP, int iQ
 }
 
 
-int SnippetsDocIndex_c::ExtractWords ( XQNode_t * pNode, ISphTokenizer * pTokenizer, CSphDict * pDict, int iQpos )
+int SnippetsDocIndex_c::ExtractWords ( XQNode_t * pNode, const DictRefPtr_c& pDict, int iQpos )
 {
 	if ( !pNode )
 		return iQpos;
@@ -372,7 +372,7 @@ int SnippetsDocIndex_c::ExtractWords ( XQNode_t * pNode, ISphTokenizer * pTokeni
 	}
 
 	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		iQpos = ExtractWords ( pNode->m_dChildren[i], pTokenizer, pDict, iQpos );
+		iQpos = ExtractWords ( pNode->m_dChildren[i], pDict, iQpos );
 
 	return iQpos;
 }

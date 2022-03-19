@@ -547,7 +547,7 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL &tParams, const CSphConfigSection
 }
 
 
-CSphSource_SQL * SpawnSource ( const char * sSourceName, const CSphConfigType &hSources, ISphTokenizer * pTok, CSphDict * pDict )
+CSphSource_SQL * SpawnSource ( const char * sSourceName, const CSphConfigType &hSources, TokenizerRefPtr_c pTok, DictRefPtr_c pDict )
 {
 	const CSphConfigSection &hSource = hSources[sSourceName];
 
@@ -555,7 +555,7 @@ CSphSource_SQL * SpawnSource ( const char * sSourceName, const CSphConfigType &h
 
 	CSphSourceParams_MySQL tParams;
 	if ( !SqlParamsConfigure ( tParams, hSource, sSourceName ) )
-		return NULL;
+		return nullptr;
 
 	LOC_GETS ( tParams.m_sUsock, "sql_sock" );
 	LOC_GETI ( tParams.m_iFlags, "mysql_connect_flags" );
@@ -567,7 +567,7 @@ CSphSource_SQL * SpawnSource ( const char * sSourceName, const CSphConfigType &h
 	auto * pSrc = CreateSourceMysql ( tParams, "sSourceName" );
 	if (!pSrc)
 		sphDie ( "setup failed" );
-	pSrc->SetTokenizer ( pTok );
+	pSrc->SetTokenizer ( std::move ( pTok ) );
 	pSrc->SetDict ( pDict );
 
 	SetupIndexing ( pSrc );
@@ -603,7 +603,7 @@ int main ( int argc, char ** argv )
 	CSphDictSettings tDictSettings;
 	tDictSettings.m_bWordDict = false;
 
-	TokenizerRefPtr_c pTok { Tokenizer::Detail::CreateUTF8Tokenizer() };
+	TokenizerRefPtr_c pTok = Tokenizer::Detail::CreateUTF8Tokenizer();
 	DictRefPtr_c pDict {sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt1", false, 32, nullptr, sError )};
 	auto * pSrc = SpawnSource ( "test1", hSources, pTok, pDict );
 

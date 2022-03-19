@@ -1394,7 +1394,7 @@ void operator<< ( JsonEscapedBuilder& tOut, const CSphSavedFile & tInfo )
 
 /// gets called from and MUST be in sync with RtIndex_c::SaveDiskHeader()!
 /// note that SaveDiskHeader() occasionaly uses some PREVIOUS format version!
-void SaveTokenizerSettings ( CSphWriter & tWriter, const ISphTokenizer * pTokenizer, int iEmbeddedLimit )
+void SaveTokenizerSettings ( CSphWriter & tWriter, const TokenizerRefPtr_c& pTokenizer, int iEmbeddedLimit )
 {
 	assert ( pTokenizer );
 
@@ -1418,7 +1418,7 @@ void SaveTokenizerSettings ( CSphWriter & tWriter, const ISphTokenizer * pTokeni
 	tWriter.PutString ( tSettings.m_sBlendMode.cstr() );
 }
 
-void SaveTokenizerSettings ( JsonEscapedBuilder& tOut, const ISphTokenizer* pTokenizer, int iEmbeddedLimit )
+void SaveTokenizerSettings ( JsonEscapedBuilder& tOut, const TokenizerRefPtr_c& pTokenizer, int iEmbeddedLimit )
 {
 	auto _ = tOut.ObjectW();
 	const CSphTokenizerSettings& tSettings = pTokenizer->GetSettings();
@@ -1453,7 +1453,7 @@ void operator<< ( JsonEscapedBuilder& tOut, const CSphFieldFilterSettings& tFiel
 
 /// gets called from and MUST be in sync with RtIndex_c::SaveDiskHeader()!
 /// note that SaveDiskHeader() occasionaly uses some PREVIOUS format version!
-void SaveDictionarySettings ( CSphWriter & tWriter, const CSphDict * pDict, bool bForceWordDict, int iEmbeddedLimit )
+void SaveDictionarySettings ( CSphWriter & tWriter, const DictRefPtr_c& pDict, bool bForceWordDict, int iEmbeddedLimit )
 {
 	assert ( pDict );
 	const CSphDictSettings & tSettings = pDict->GetSettings ();
@@ -1503,7 +1503,7 @@ void SaveDictionarySettings ( CSphWriter & tWriter, const CSphDict * pDict, bool
 	tWriter.PutString ( pDict->GetMorphDataFingerprint() );
 }
 
-void SaveDictionarySettings ( JsonEscapedBuilder& tOut, const CSphDict* pDict, bool bForceWordDict, int iEmbeddedLimit )
+void SaveDictionarySettings ( JsonEscapedBuilder& tOut, const DictRefPtr_c& pDict, bool bForceWordDict, int iEmbeddedLimit )
 {
 	assert ( pDict );
 	auto _ = tOut.ObjectW();
@@ -1582,11 +1582,13 @@ static void FormatAllSettings ( const CSphIndex & tIndex, SettingsFormatter_c & 
 
 	tKlistTargets.Format ( tFormatter, pFilenameBuilder );
 
-	if ( tIndex.GetTokenizer() )
-		tIndex.GetTokenizer()->GetSettings().Format ( tFormatter, pFilenameBuilder );
+	auto pTokenizer = tIndex.GetTokenizer();
+	if ( pTokenizer )
+		pTokenizer->GetSettings().Format ( tFormatter, pFilenameBuilder );
 
-	if ( tIndex.GetDictionary() )
-		tIndex.GetDictionary()->GetSettings().Format ( tFormatter, pFilenameBuilder );
+	auto pDict = tIndex.GetDictionary();
+	if ( pDict )
+		pDict->GetSettings().Format ( tFormatter, pFilenameBuilder );
 
 	tIndex.GetMutableSettings().Format ( tFormatter, pFilenameBuilder );
 }
@@ -1609,11 +1611,13 @@ void DumpReadable ( FILE * fp, const CSphIndex & tIndex, const CSphEmbeddedFiles
 
 	tKlistTargets.DumpReadable ( tState, tEmbeddedFiles, pFilenameBuilder );
 
-	if ( tIndex.GetTokenizer() )
-		tIndex.GetTokenizer()->GetSettings().DumpReadable ( tState, tEmbeddedFiles, pFilenameBuilder );
+	auto pTokenizer = tIndex.GetTokenizer();
+	if ( pTokenizer )
+		pTokenizer->GetSettings().DumpReadable ( tState, tEmbeddedFiles, pFilenameBuilder );
 
-	if ( tIndex.GetDictionary() )
-		tIndex.GetDictionary()->GetSettings().DumpReadable ( tState, tEmbeddedFiles, pFilenameBuilder );
+	auto pDict = tIndex.GetDictionary();
+	if ( pDict )
+		pDict->GetSettings().DumpReadable ( tState, tEmbeddedFiles, pFilenameBuilder );
 
 	tIndex.GetMutableSettings().m_tFileAccess.DumpReadable ( tState, tEmbeddedFiles, pFilenameBuilder );
 }
@@ -1662,7 +1666,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		tSettings.Setup ( hIndex, sWarning );
 		AddWarning ( dWarnings, sWarning );
 
-		TokenizerRefPtr_c pTokenizer { Tokenizer::Create ( tSettings, nullptr, pFilenameBuilder, dWarnings, sError ) };
+		TokenizerRefPtr_c pTokenizer = Tokenizer::Create ( tSettings, nullptr, pFilenameBuilder, dWarnings, sError );
 		if ( !pTokenizer )
 			return false;
 
@@ -1672,42 +1676,22 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 
 	if ( !pIndex->GetDictionary () )
 	{
-		DictRefPtr_c pDict;
 		CSphDictSettings tSettings;
 		CSphString sWarning;
 		tSettings.Setup ( hIndex, pFilenameBuilder, sWarning );
 		AddWarning ( dWarnings, sWarning );
 
-		pDict = sphCreateDictionaryCRC ( tSettings, nullptr, pIndex->GetTokenizer (), pIndex->GetName(), bStripPath, pIndex->GetSettings().m_iSkiplistBlockSize, pFilenameBuilder, sError );
+		DictRefPtr_c pDict = sphCreateDictionaryCRC ( tSettings, nullptr, pIndex->GetTokenizer (), pIndex->GetName(), bStripPath, pIndex->GetSettings().m_iSkiplistBlockSize, pFilenameBuilder, sError );
 		if ( !pDict )
 			return false;
 
-		pIndex->SetDictionary ( pDict );
+		pIndex->SetDictionary ( std::move ( pDict ) );
 	}
 
 	if ( bTokenizerSpawned )
-	{
-		TokenizerRefPtr_c pOldTokenizer { pIndex->LeakTokenizer () };
-		TokenizerRefPtr_c pMultiTokenizer { Tokenizer::CreateMultiformFilter ( pOldTokenizer, pIndex->GetDictionary ()->GetMultiWordforms () ) };
-		pIndex->SetTokenizer ( pMultiTokenizer );
-	}
+		Tokenizer::AddToMultiformFilterTo ( pIndex->ModifyTokenizer(), pIndex->GetDictionary ()->GetMultiWordforms () );
 
 	pIndex->SetupQueryTokenizer();
-
-	if ( !pIndex->IsStripperInited () )
-	{
-		CSphIndexSettings tSettings = pIndex->GetSettings ();
-
-		if ( hIndex ( "html_strip" ) )
-		{
-			tSettings.m_bHtmlStrip = hIndex.GetInt ( "html_strip" )!=0;
-			tSettings.m_sHtmlIndexAttrs = hIndex.GetStr ( "html_index_attrs" );
-			tSettings.m_sHtmlRemoveElements = hIndex.GetStr ( "html_remove_elements" );
-		}
-		tSettings.m_sZones = hIndex.GetStr ( "index_zones" );
-
-		pIndex->Setup ( tSettings );
-	}
 
 	if ( !pIndex->GetFieldFilter() )
 	{
@@ -1735,8 +1719,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 
 	// exact words fixup, needed for RT indexes
 	// cloned from indexer, remove somehow?
-	DictRefPtr_c pDict { pIndex->GetDictionary() };
-	SafeAddRef ( pDict );
+	DictRefPtr_c pDict = pIndex->GetDictionary();
 	assert ( pDict );
 
 	CSphIndexSettings tSettings = pIndex->GetSettings ();

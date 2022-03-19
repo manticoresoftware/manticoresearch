@@ -42,11 +42,12 @@ bool operator < ( const SkiplistEntry_t & a, RowID_t b );
 bool operator == ( const SkiplistEntry_t & a, RowID_t b );
 bool operator < ( RowID_t a, const SkiplistEntry_t & b );
 
+struct DictEntry_t;
 struct SkipData_t
 {
 	CSphVector<SkiplistEntry_t> m_dSkiplist;
 
-	void Read ( const BYTE * pSkips, const CSphDictEntry & tRes, int iDocs, int iSkipBlockSize );
+	void Read ( const BYTE * pSkips, const DictEntry_t & tRes, int iDocs, int iSkipBlockSize );
 };
 
 class RtIndex_c;
@@ -131,12 +132,11 @@ public:
 
 	virtual ISphQword *					QwordSpawn ( const XQKeyword_t & tWord ) const = 0;
 	virtual bool						QwordSetup ( ISphQword * pQword ) const = 0;
-	inline void SetDict ( CSphDict * pDict )
+	inline void SetDict ( DictRefPtr_c pDict )
 	{
-		SafeAddRef ( pDict );
-		m_pDict = pDict;
+		m_pDict = std::move ( pDict );
 	}
-	inline CSphDict * Dict() const { return m_pDict; }
+	inline DictRefPtr_c Dict() const { return m_pDict; }
 
 	virtual ISphQword *					ScanSpawn() const = 0;
 };
@@ -213,21 +213,17 @@ namespace sph
 
 struct ExplainQueryArgs_t
 {
-	const CSphString & m_sQuery;
+	const char *		m_szQuery = nullptr;
 	const CSphSchema *	m_pSchema = nullptr;
 	DictRefPtr_c		m_pDict;
 	FieldFilterRefPtr_c m_pFieldFilter;
 	const CSphIndexSettings * m_pSettings = nullptr;
-	const ISphTokenizer * m_pQueryTokenizer = nullptr;
+	TokenizerRefPtr_c m_pQueryTokenizer;
 	const ISphWordlist * m_pWordlist = nullptr;
 	int m_iExpandKeywords = 0;
 	int m_iExpansionLimit = 0;
 	bool m_bExpandPrefix = false;
 	cRefCountedRefPtrGeneric_t m_pIndexData;
-
-	explicit ExplainQueryArgs_t ( const CSphString & sQuery )
-		: m_sQuery ( sQuery )
-	{}
 };
 
 Bson_t Explain ( ExplainQueryArgs_t & tArgs );

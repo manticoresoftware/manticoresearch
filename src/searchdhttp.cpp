@@ -1727,15 +1727,15 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString& sIndex, const Jso
 		tArgs.m_bQL = bQueryQL;
 
 		// add query
-		StoredQuery_i * pStored = pIndex->CreateQuery ( tArgs, sError );
+		auto pStored = pIndex->CreateQuery ( tArgs, sError );
 		if ( pStored )
 		{
 			RtAccum_t tAcc ( false );
 			tAcc.SetIndex ( pIndex );
 			ReplicationCommand_t * pCmd = tAcc.AddCommand ( ReplicationCommand_e::PQUERY_ADD, sIndex );
-			pCmd->m_pStored = pStored;
 			// refresh query's UID for reply as it might be auto-generated
 			iID = pStored->m_iQUID;
+			pCmd->m_pStored = std::move ( pStored );
 
 			bOk = HandleCmdReplicate ( tAcc, sError );
 		}

@@ -15,10 +15,9 @@
 #include "tokenizer/tokenizer.h"
 #include "sphinxint.h"
 
-void CSphSource::SetDict ( CSphDict * pDict )
+void CSphSource::SetDict ( const DictRefPtr_c& pDict )
 {
 	assert ( pDict );
-	SafeAddRef ( pDict );
 	m_pDict = pDict;
 }
 
@@ -56,11 +55,10 @@ void CSphSource::SetFieldFilter ( ISphFieldFilter * pFilter )
 	m_pFieldFilter = pFilter;
 }
 
-void CSphSource::SetTokenizer ( ISphTokenizer * pTokenizer )
+void CSphSource::SetTokenizer ( TokenizerRefPtr_c pTokenizer )
 {
 	assert ( pTokenizer );
-	SafeAddRef ( pTokenizer );
-	m_pTokenizer = pTokenizer;
+	m_pTokenizer = std::move ( pTokenizer );
 }
 
 
@@ -508,7 +506,7 @@ bool CSphSource::BuildZoneHits ( RowID_t tRowID, BYTE uCode )
 }
 
 // track blended start and reset on not blended token
-static int TrackBlendedStart ( const ISphTokenizer * pTokenizer, int iBlendedHitsStart, int iHitsCount )
+static int TrackBlendedStart ( const TokenizerRefPtr_c& pTokenizer, int iBlendedHitsStart, int iHitsCount )
 {
 	if ( pTokenizer->TokenIsBlended() )
 		return iHitsCount;

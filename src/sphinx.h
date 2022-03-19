@@ -91,52 +91,9 @@ bool			sphInterrupted();
 struct CSphMultiformContainer;
 class CSphWriter;
 
-/////////////////////////////////////////////////////////////////////////////
-// DICTIONARIES
-/////////////////////////////////////////////////////////////////////////////
-
-/// dictionary entry
-/// some of the fields might be unused depending on specific dictionary type
-struct CSphDictEntry
-{
-	SphWordID_t		m_uWordID = 0;			///< keyword id (for dict=crc)
-	const BYTE *	m_sKeyword = nullptr;	///< keyword text (for dict=keywords)
-	int				m_iDocs = 0;			///< number of matching documents
-	int				m_iHits = 0;			///< number of occurrences
-	SphOffset_t		m_iDoclistOffset = 0;	///< absolute document list offset (into .spd)
-	SphOffset_t		m_iDoclistLength = 0;	///< document list length in bytes
-	SphOffset_t		m_iSkiplistOffset = 0;	///< absolute skiplist offset (into .spe)
-	int				m_iDoclistHint = 0;		///< raw document list length hint value (0..255 range, 1 byte)
-};
-
-
-/// stored normal form
-struct CSphStoredNF
-{
-	CSphString					m_sWord;
-	bool						m_bAfterMorphology;
-};
-
 
 /// wordforms container
-struct CSphWordforms
-{
-	int							m_iRefCount;
-	CSphVector<CSphSavedFile>	m_dFiles;
-	uint64_t					m_uTokenizerFNV;
-	CSphString					m_sIndexName;
-	bool						m_bHavePostMorphNF;
-	CSphVector <CSphStoredNF>	m_dNormalForms;
-	CSphMultiformContainer *	m_pMultiWordforms;
-	CSphOrderedHash < int, CSphString, CSphStrHashFunc, 1048576 >	m_hHash;
-
-	CSphWordforms ();
-	~CSphWordforms ();
-
-	bool						IsEqual ( const CSphVector<CSphSavedFile> & dFiles );
-	bool						ToNormalForm ( BYTE * pWord, bool bBefore, bool bOnlyCheck ) const;
-};
-
+struct CSphWordforms;
 
 // converts stopword/wordform/exception file paths for configless mode
 class FilenameBuilder_i
@@ -147,192 +104,6 @@ public:
 	virtual CSphString	GetFullPath ( const CSphString & sName ) const = 0;
 };
 
-
-/// abstract word dictionary interface
-struct CSphWordHit;
-class CSphAutofile;
-struct DictHeader_t;
-class CSphDict : public ISphRefcountedMT
-{
-public:
-	enum ST_E : int {
-		ST_OK = 0,
-		ST_ERROR = 1,
-		ST_WARNING = 2,
-	};
-
-public:
-	/// Get word ID by word, "text" version
-	/// may apply stemming and modify word inplace
-	/// modified word may become bigger than the original one, so make sure you have enough space in buffer which is pointer by pWord
-	/// a general practice is to use char[3*SPH_MAX_WORD_LEN+4] as a buffer
-	/// returns 0 for stopwords
-	virtual SphWordID_t	GetWordID ( BYTE * pWord ) = 0;
-
-	/// get word ID by word, "text" version
-	/// may apply stemming and modify word inplace
-	/// accepts words with already prepended MAGIC_WORD_HEAD
-	/// appends MAGIC_WORD_TAIL
-	/// returns 0 for stopwords
-	virtual SphWordID_t	GetWordIDWithMarkers ( BYTE * pWord ) { return GetWordID ( pWord ); }
-
-	/// get word ID by word, "text" version
-	/// does NOT apply stemming
-	/// accepts words with already prepended MAGIC_WORD_HEAD_NONSTEMMED
-	/// returns 0 for stopwords
-	virtual SphWordID_t	GetWordIDNonStemmed ( BYTE * pWord ) { return GetWordID ( pWord ); }
-
-	/// get word ID by word, "binary" version
-	/// only used with prefix/infix indexing
-	/// must not apply stemming and modify anything
-	/// filters stopwords on request
-	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops ) = 0;
-
-	/// apply stemmers to the given word
-	virtual void		ApplyStemmers ( BYTE * ) const {}
-
-	/// load stopwords from given files
-	virtual void		LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer, bool bStripFile ) = 0;
-
-	/// load stopwords from an array
-	virtual void		LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) = 0;
-
-	/// write stopwords to a file
-	virtual void		WriteStopwords ( CSphWriter & tWriter ) const = 0;
-	virtual void		WriteStopwords ( JsonEscapedBuilder & tOut ) const = 0;
-
-	/// load wordforms from a given list of files
-	virtual bool		LoadWordforms ( const StrVec_t &, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) = 0;
-
-	/// write wordforms to a file
-	virtual void		WriteWordforms ( CSphWriter & tWriter ) const = 0;
-	virtual void		WriteWordforms ( JsonEscapedBuilder & tOut ) const = 0;
-
-	/// get wordforms
-	virtual const CSphWordforms *	GetWordforms() { return nullptr; }
-
-	/// disable wordforms processing
-	virtual void		DisableWordforms() {}
-
-	/// set morphology
-	/// returns 0 on success, 1 on hard error, 2 on a warning (see ST_xxx constants)
-	virtual int			SetMorphology ( const char * szMorph, CSphString & sMessage ) = 0;
-
-	/// are there any morphological processors?
-	virtual bool		HasMorphology () const { return false; }
-
-	/// morphological data fingerprint (lemmatizer filenames and crc32s)
-	virtual const CSphString &	GetMorphDataFingerprint () const { return m_sMorphFingerprint; }
-
-	/// setup dictionary using settings
-	virtual void		Setup ( const CSphDictSettings & tSettings ) = 0;
-
-	/// get dictionary settings
-	virtual const CSphDictSettings & GetSettings () const = 0;
-
-	/// stopwords file infos
-	virtual const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () const = 0;
-
-	/// wordforms file infos
-	virtual const CSphVector <CSphSavedFile> & GetWordformsFileInfos () const = 0;
-
-	/// get multiwordforms
-	virtual const CSphMultiformContainer * GetMultiWordforms () const = 0;
-
-	/// check what given word is stopword
-	virtual bool IsStopWord ( const BYTE * pWord ) const = 0;
-
-public:
-	virtual void			SetSkiplistBlockSize ( int iSize ) {}
-
-	/// enable actually collecting keywords (needed for stopwords/wordforms loading)
-	virtual void			HitblockBegin () {}
-
-	/// callback to let dictionary do hit block post-processing
-	virtual void			HitblockPatch ( CSphWordHit *, int ) const {}
-
-	/// resolve temporary hit block wide wordid (!) back to keyword
-	virtual const char *	HitblockGetKeyword ( SphWordID_t ) { return nullptr; }
-
-	/// check current memory usage
-	virtual int				HitblockGetMemUse () { return 0; }
-
-	/// hit block dismissed
-	virtual void			HitblockReset () {}
-
-public:
-	/// begin creating dictionary file, setup any needed internal structures
-	virtual void			DictBegin ( CSphAutofile & tTempDict, CSphAutofile & tDict, int iDictLimit );
-
-	/// add next keyword entry to final dict
-	virtual void			DictEntry ( const CSphDictEntry & tEntry );
-
-	/// flush last entry
-	virtual void			DictEndEntries ( SphOffset_t iDoclistOffset );
-
-	/// end indexing, store dictionary and checkpoints
-	virtual bool			DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphString & sError );
-
-	/// check whether there were any errors during indexing
-	virtual bool			DictIsError () const;
-
-public:
-	/// check whether this dict is stateful (when it comes to lookups)
-	virtual bool			HasState () const { return false; }
-
-	/// make a clone
-	virtual CSphDict *		Clone () const { return nullptr; }
-
-	/// get settings hash
-	virtual uint64_t		GetSettingsFNV () const = 0;
-
-protected:
-	CSphString				m_sMorphFingerprint;
-};
-
-class DictStub_c : public CSphDict
-{
-protected:
-	CSphVector<CSphSavedFile>	m_dSWFileInfos;
-	CSphVector<CSphSavedFile>	m_dWFFileInfos;
-	CSphDictSettings			m_tSettings;
-
-public:
-	SphWordID_t GetWordID ( BYTE* ) override { return 0; }
-	SphWordID_t	GetWordID ( const BYTE *, int, bool ) override { return 0; };
-	void		LoadStopwords ( const char *, const ISphTokenizer *, bool ) override {};
-	void		LoadStopwords ( const CSphVector<SphWordID_t> & ) override {};
-	void		WriteStopwords ( CSphWriter & ) const override {};
-	void		WriteStopwords ( JsonEscapedBuilder & ) const override {};
-	bool		LoadWordforms ( const StrVec_t &, const CSphEmbeddedFiles *, const ISphTokenizer *, const char * ) override { return false; };
-	void		WriteWordforms ( CSphWriter & ) const override {};
-	void		WriteWordforms ( JsonEscapedBuilder & ) const override {};
-	int			SetMorphology ( const char *, CSphString & ) override { return ST_OK; }
-	void		Setup ( const CSphDictSettings & tSettings ) override { m_tSettings = tSettings; };
-	const CSphDictSettings & GetSettings () const override { return m_tSettings; }
-	const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () const override { return m_dSWFileInfos; }
-	const CSphVector <CSphSavedFile> & GetWordformsFileInfos () const override { return m_dWFFileInfos; }
-	const CSphMultiformContainer * GetMultiWordforms () const override { return nullptr;};
-	bool IsStopWord ( const BYTE * ) const override { return false; };
-	uint64_t		GetSettingsFNV () const override { return 0; };
-};
-
-using DictRefPtr_c = CSphRefcountedPtr<CSphDict>;
-
-/// returns pDict, if stateless. Or it's clone, if not
-CSphDict * GetStatelessDict ( CSphDict * pDict );
-
-/// traits dictionary factory (no storage, only tokenizing, lemmatizing, etc.)
-CSphDict * sphCreateDictionaryTemplate ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, bool bStripFile, FilenameBuilder_i * pFilenameBuilder, CSphString & sError );
-
-/// CRC32/FNV64 dictionary factory
-CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, bool bStripFile, int iSkiplistBlockSize, FilenameBuilder_i * pFilenameBuilder, CSphString & sError );
-
-/// keyword-storing dictionary factory
-CSphDict * sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, bool bStripFile, int iSkiplistBlockSize, FilenameBuilder_i * pFilenameBuilder, CSphString & sError );
-
-/// clear wordform cache
-void sphShutdownWordforms ();
 
 /////////////////////////////////////////////////////////////////////////////
 // DATASOURCES
@@ -1270,25 +1041,23 @@ public:
 	const CSphString &			GetLastWarning() const { return m_sLastWarning; }
 	virtual const CSphSchema &	GetMatchSchema() const { return m_tSchema; }			///< match schema as returned in result set (possibly different from internal storage schema!)
 
-	void						SetInplaceSettings ( int iHitGap, float fRelocFactor, float fWriteFactor );
+	void						SetInplaceSettings ( int iHitGap, float fRelocFactor, float fWriteFactor ); // fixme! build only
 	void						SetFieldFilter ( ISphFieldFilter * pFilter );
 	const ISphFieldFilter *		GetFieldFilter() const { return m_pFieldFilter; }
-	void						SetTokenizer ( ISphTokenizer * pTokenizer );
+	void						SetTokenizer ( TokenizerRefPtr_c pTokenizer );
 	void						SetupQueryTokenizer();
-	const ISphTokenizer *		GetTokenizer () const { return m_pTokenizer; }
-	const ISphTokenizer *		GetQueryTokenizer () const { return m_pQueryTokenizer; }
-	ISphTokenizer *				LeakTokenizer ();
-	void						SetDictionary ( CSphDict * pDict );
-	CSphDict *					GetDictionary () const { return m_pDict; }
-	CSphDict *					LeakDictionary ();
-	virtual void				SetKeepAttrs ( const CSphString & , const StrVec_t & ) {}
+	TokenizerRefPtr_c			GetTokenizer () const;
+	TokenizerRefPtr_c			GetQueryTokenizer () const;
+	TokenizerRefPtr_c&			ModifyTokenizer ();
+	void						SetDictionary ( DictRefPtr_c pDict );
+	DictRefPtr_c				GetDictionary () const;
+	virtual void				SetKeepAttrs ( const CSphString & , const StrVec_t & ) {} // fixme! build only
 	virtual void				Setup ( const CSphIndexSettings & tSettings );
 	const CSphIndexSettings &	GetSettings () const { return m_tSettings; }
-	bool						IsStripperInited () const { return m_bStripperInited; }
 	virtual bool				IsRT() const { return false; }
 	virtual bool				IsPQ() const { return false; }
 	void						SetBinlog ( bool bBinlog ) { m_bBinlog = bBinlog; }
-	virtual int64_t *			GetFieldLens() const { return NULL; }
+	virtual int64_t *			GetFieldLens() const { return nullptr; }
 	virtual bool				IsStarDict ( bool bWordDict ) const;
 	int64_t						GetIndexId() const { return m_iIndexId; }
 	void						SetMutableSettings ( const MutableIndexSettings_c & tSettings );
@@ -1297,10 +1066,10 @@ public:
 
 public:
 	/// build index by indexing given sources
-	virtual int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer, CSphIndexProgress & ) = 0;
+	virtual int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer, CSphIndexProgress & ) = 0; // fixme! build only
 
 	/// build index by mering current index with given index
-	virtual bool				Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSettings> & dFilters, bool bSupressDstDocids, CSphIndexProgress & tProgress ) = 0;
+	virtual bool				Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSettings> & dFilters, bool bSupressDstDocids, CSphIndexProgress & tProgress ) = 0; // fixme! build only
 
 public:
 	/// check all data files, preload schema, and preallocate enough RAM to load memory-cached data
@@ -1435,14 +1204,12 @@ protected:
 	CSphString					m_sLastError;
 	CSphString					m_sLastWarning;
 
-	bool						m_bInplaceSettings = false;
-	int							m_iHitGap = 0;
-	float						m_fRelocFactor { 0.0f };
-	float						m_fWriteFactor { 0.0f };
+	bool						m_bInplaceSettings = false; // fixme! build only
+	int							m_iHitGap = 0; // fixme! build only
+	float						m_fRelocFactor { 0.0f }; // fixme! build only
+	float						m_fWriteFactor { 0.0f }; // fixme! build only
 
 	bool						m_bBinlog = true;
-
-	bool						m_bStripperInited = true;	///< was stripper initialized (old index version (<9) handling)
 
 protected:
 	CSphIndexSettings			m_tSettings;
@@ -1581,8 +1348,6 @@ void				InitSkipCache ( int64_t iCacheSize );
 void				ShutdownSkipCache();
 
 //////////////////////////////////////////////////////////////////////////
-
-extern CSphString g_sLemmatizerBase;
 
 volatile bool & sphGetbCpuStat () noexcept;
 

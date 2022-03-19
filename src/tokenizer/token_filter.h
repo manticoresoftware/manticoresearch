@@ -26,7 +26,7 @@ protected:
 	TokenizerRefPtr_c		m_pTokenizer;
 
 public:
-	explicit				CSphTokenFilter ( ISphTokenizer * pTokenizer )							: m_pTokenizer ( pTokenizer ) {	SafeAddRef ( pTokenizer ); }
+	explicit				CSphTokenFilter ( TokenizerRefPtr_c pTokenizer )						: m_pTokenizer { std::move ( pTokenizer ) } {}
 	bool					SetCaseFolding ( const char * sConfig, CSphString & sError ) override	{ return m_pTokenizer->SetCaseFolding ( sConfig, sError ); }
 	void					AddPlainChars ( const char * szChars ) override							{ m_pTokenizer->AddPlainChars ( szChars ); }
 	void					AddSpecials ( const char * sSpecials ) override							{ m_pTokenizer->AddSpecials ( sSpecials ); }

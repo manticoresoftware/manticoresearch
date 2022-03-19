@@ -18,7 +18,7 @@
 class PluginFilterTokenizer_c final: public CSphTokenFilter
 {
 protected:
-	const PluginTokenFilter_c* m_pFilter; ///< plugin descriptor
+	PluginTokenFilterRefPtr_c m_pFilter;  ///< plugin descriptor
 	CSphString m_sOptions;				  ///< options string for the plugin init()
 	void* m_pUserdata = nullptr;		  ///< userdata returned from by the plugin init()
 	bool m_bGotExtra = false;			  ///< are we looping through extra tokens?
@@ -29,27 +29,23 @@ protected:
 	{
 		if ( m_pFilter->m_fnDeinit )
 			m_pFilter->m_fnDeinit ( m_pUserdata );
-		m_pFilter->Release();
 	}
 
 public:
-	PluginFilterTokenizer_c ( ISphTokenizer* pTok, const PluginTokenFilter_c* pFilter, const char* sOptions )
-		: CSphTokenFilter ( pTok )
-		, m_pFilter ( pFilter )
+	PluginFilterTokenizer_c ( TokenizerRefPtr_c pTok, PluginTokenFilterRefPtr_c pFilter, const char* sOptions )
+		: CSphTokenFilter ( std::move (pTok) )
+		, m_pFilter ( std::move ( pFilter ) )
 		, m_sOptions ( sOptions )
 	{
-		assert ( pTok );
 		assert ( m_pFilter );
-		m_pFilter->AddRef();
 		// FIXME!!! handle error in constructor \ move to setup?
 		CSphString sError;
 		SetFilterSchema ( CSphSchema(), sError );
 	}
 
-	ISphTokenizer* Clone ( ESphTokenizerClone eMode ) const final
+	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const final
 	{
-		TokenizerRefPtr_c pTok { m_pTokenizer->Clone ( eMode ) };
-		return new PluginFilterTokenizer_c ( pTok, m_pFilter, m_sOptions.cstr() );
+		return TokenizerRefPtr_c { new PluginFilterTokenizer_c ( m_pTokenizer->Clone ( eMode ), m_pFilter, m_sOptions.cstr() ) };
 	}
 
 	bool SetFilterSchema ( const CSphSchema& s, CSphString& sError ) final
@@ -167,23 +163,20 @@ private:
 };
 
 
-ISphTokenizer* Tokenizer::CreatePluginFilter ( ISphTokenizer* pTokenizer, const CSphString& sSpec, CSphString& sError )
+void Tokenizer::AddPluginFilterTo ( TokenizerRefPtr_c& pTokenizer, const CSphString& sSpec, CSphString& sError )
 {
 	StrVec_t dPlugin; // dll, filtername, options
 	if ( !sphPluginParseSpec ( sSpec, dPlugin, sError ) )
-		return nullptr;
+		return;
 
-	if ( !dPlugin.GetLength() )
-	{
-		SafeAddRef ( pTokenizer );
-		return pTokenizer;
-	}
+	if ( dPlugin.IsEmpty() )
+		return;
 
-	CSphRefcountedPtr<PluginTokenFilter_c> p { (PluginTokenFilter_c*)sphPluginAcquire ( dPlugin[0].cstr(), PLUGIN_INDEX_TOKEN_FILTER, dPlugin[1].cstr(), sError ) };
+	PluginTokenFilterRefPtr_c p = PluginAcquire<PluginTokenFilter_c> ( dPlugin[0].cstr(), PLUGIN_INDEX_TOKEN_FILTER, dPlugin[1].cstr(), sError );
 	if ( !p )
 	{
 		sError.SetSprintf ( "INTERNAL ERROR: plugin %s:%s loaded ok but lookup fails, error: %s", dPlugin[0].cstr(), dPlugin[1].cstr(), sError.cstr() );
-		return nullptr;
+		return;
 	}
-	return new PluginFilterTokenizer_c ( pTokenizer, p, dPlugin[2].cstr() );
+	pTokenizer = new PluginFilterTokenizer_c ( std::move ( pTokenizer ), std::move (p), dPlugin[2].cstr() );
 }

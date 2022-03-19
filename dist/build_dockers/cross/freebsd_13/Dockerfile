@@ -1,4 +1,4 @@
-FROM focal_cmake:322
+FROM registry.gitlab.com/manticoresearch/dev/base_cmake:322
 
 ADD sysroot_fbsd_13.tar.xz /cross/freebsd/sysroot/x86_64
 

@@ -22,4 +22,4 @@ RUN add-apt-repository "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-12 m
 
 CMD []
 
-# docker build -t focal_clang:12 -t registry.gitlab.com/manticoresearch/dev/focal_clang:12 .
+# docker build -t base_clang:12 -t registry.gitlab.com/manticoresearch/dev/base_clang:12 .

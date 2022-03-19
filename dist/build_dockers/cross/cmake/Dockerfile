@@ -1,4 +1,4 @@
-FROM focal_clang:12
+FROM registry.gitlab.com/manticoresearch/dev/base_clang:12
 
 # update stuff that may exipre.
 RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
@@ -14,4 +14,4 @@ ENV PATH $PATH:/cmake-${cmakesuff}-x86_64/bin
 
 CMD []
 
-# docker build -t focal_cmake:322 -t registry.gitlab.com/manticoresearch/dev/focal_cmake:322 .
+# docker build -t base_cmake:322 -t registry.gitlab.com/manticoresearch/dev/base_cmake:322 .

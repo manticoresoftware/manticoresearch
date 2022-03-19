@@ -19,7 +19,7 @@ static const int MIN_COMPRESS_LENGTH = 50;
 class MysqlCompressedSocket_c : public AsyncNetBuffer_c
 {
 protected:
-	AsyncNetBufferPtr_c m_pFrontend;
+	std::unique_ptr<AsyncNetBuffer_c> m_pFrontend;
 	AsyncNetInputBuffer_c& m_tIn;
 	NetGenericOutputBuffer_c& m_tOut;
 	BYTE m_uPackedID = 0;
@@ -28,7 +28,7 @@ protected:
 	void SendLSBSmallDword ( DWORD uValue );
 
 public:
-	explicit MysqlCompressedSocket_c ( AsyncNetBufferPtr_c pFrontend );
+	explicit MysqlCompressedSocket_c ( std::unique_ptr<AsyncNetBuffer_c> pFrontend );
 	void SetWTimeoutUS ( int64_t iTimeoutUS ) final;
 	int64_t GetWTimeoutUS() const final;
 	void SetTimeoutUS ( int64_t iTimeoutUS ) final;
@@ -101,7 +101,7 @@ protected:
 	}
 
 public:
-	explicit MysqlCompressedSocket_T ( AsyncNetBufferPtr_c pFrontend )
+	explicit MysqlCompressedSocket_T ( std::unique_ptr<AsyncNetBuffer_c> pFrontend )
 		: MysqlCompressedSocket_c ( std::move ( pFrontend ) )
 	{}
 

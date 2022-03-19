@@ -389,7 +389,7 @@ void TemplateDictTraits_c::ApplyStemmers ( BYTE* pWord ) const
 
 const CSphMultiformContainer* TemplateDictTraits_c::GetMultiWordforms() const
 {
-	return m_pWordforms ? m_pWordforms->m_pMultiWordforms : nullptr;
+	return m_pWordforms ? m_pWordforms->m_pMultiWordforms.get() : nullptr;
 }
 
 uint64_t TemplateDictTraits_c::GetSettingsFNV() const
@@ -622,24 +622,19 @@ void TemplateDictTraits_c::SweepWordformContainers ( const CSphVector<CSphSavedF
 CSphWordforms* TemplateDictTraits_c::GetWordformContainer ( const CSphVector<CSphSavedFile>& dFileInfos, const StrVec_t* pEmbedded, const TokenizerRefPtr_c& pTokenizer, const char* sIndex )
 {
 	uint64_t uTokenizerFNV = pTokenizer->GetSettingsFNV();
-	ARRAY_FOREACH ( i, m_dWordformContainers )
-		if ( m_dWordformContainers[i]->IsEqual ( dFileInfos ) )
+	for ( CSphWordforms *pContainer : m_dWordformContainers )
+		if ( pContainer->IsEqual ( dFileInfos ) )
 		{
-			CSphWordforms* pContainer = m_dWordformContainers[i];
 			if ( uTokenizerFNV == pContainer->m_uTokenizerFNV )
 				return pContainer;
 
 			CSphTightVector<CSphString> dErrorReport;
-			ARRAY_FOREACH ( j, dFileInfos )
-				dErrorReport.Add ( dFileInfos[j].m_sFilename );
+			for ( const auto& j : dFileInfos )
+				dErrorReport.Add ( j.m_sFilename );
 
 			CSphString sAllFiles;
 			ConcatReportStrings ( dErrorReport, sAllFiles );
-			sphWarning ( "index '%s': wordforms file '%s' is shared with index '%s', "
-						 "but tokenizer settings are different",
-				sIndex,
-				sAllFiles.cstr(),
-				pContainer->m_sIndexName.cstr() );
+			sphWarning ( "index '%s': wordforms file '%s' is shared with index '%s', but tokenizer settings are different",	sIndex,	sAllFiles.cstr(), pContainer->m_sIndexName.cstr() );
 		}
 
 	CSphWordforms* pContainer = LoadWordformContainer ( dFileInfos, pEmbedded, pTokenizer, sIndex );
@@ -783,7 +778,7 @@ void TemplateDictTraits_c::AddWordform ( CSphWordforms* pContainer, char* sBuffe
 
 	if ( dTokens.GetLength() > 1 || dDestTokens.GetLength() > 1 )
 	{
-		auto* pMultiWordform = new CSphMultiform;
+		auto pMultiWordform = std::make_unique<CSphMultiform>();
 		pMultiWordform->m_iFileId = iFileId;
 		pMultiWordform->m_dNormalForm.Resize ( dDestTokens.GetLength() );
 		ARRAY_FOREACH ( i, dDestTokens )
@@ -793,13 +788,13 @@ void TemplateDictTraits_c::AddWordform ( CSphWordforms* pContainer, char* sBuffe
 			pMultiWordform->m_dTokens.Add ( dTokens[i] );
 
 		if ( !pContainer->m_pMultiWordforms )
-			pContainer->m_pMultiWordforms = new CSphMultiformContainer;
+			pContainer->m_pMultiWordforms = std::make_unique<CSphMultiformContainer>();
 
 		CSphMultiforms** ppWordforms = pContainer->m_pMultiWordforms->m_Hash ( dTokens[0] );
 		if ( ppWordforms )
 		{
 			auto* pWordforms = *ppWordforms;
-			for ( CSphMultiform* pStoredMF : pWordforms->m_pForms )
+			for ( const auto& pStoredMF : pWordforms->m_pForms )
 			{
 				if ( pStoredMF->m_dTokens.GetLength() == pMultiWordform->m_dTokens.GetLength() )
 				{
@@ -827,7 +822,7 @@ void TemplateDictTraits_c::AddWordform ( CSphWordforms* pContainer, char* sBuffe
 
 						pStoredMF->m_iFileId = iFileId;
 
-						SafeDelete ( pMultiWordform );
+						pMultiWordform.reset();
 						break; // otherwise, we crash next turn
 					}
 				}
@@ -835,7 +830,9 @@ void TemplateDictTraits_c::AddWordform ( CSphWordforms* pContainer, char* sBuffe
 
 			if ( pMultiWordform )
 			{
-				pWordforms->m_pForms.Add ( pMultiWordform );
+				pWordforms->m_iMinTokens = Min ( pWordforms->m_iMinTokens, pMultiWordform->m_dTokens.GetLength() );
+				pWordforms->m_iMaxTokens = Max ( pWordforms->m_iMaxTokens, pMultiWordform->m_dTokens.GetLength() );
+				pWordforms->m_pForms.Add ( pMultiWordform.release() );
 
 				// sort forms by files and length
 				// but do not sort if we're loading embedded
@@ -845,18 +842,16 @@ void TemplateDictTraits_c::AddWordform ( CSphWordforms* pContainer, char* sBuffe
 						return ( pA->m_iFileId == pB->m_iFileId ) ? pA->m_dTokens.GetLength() > pB->m_dTokens.GetLength() : pA->m_iFileId > pB->m_iFileId;
 					} ) );
 
-				pWordforms->m_iMinTokens = Min ( pWordforms->m_iMinTokens, pMultiWordform->m_dTokens.GetLength() );
-				pWordforms->m_iMaxTokens = Max ( pWordforms->m_iMaxTokens, pMultiWordform->m_dTokens.GetLength() );
 				pContainer->m_pMultiWordforms->m_iMaxTokens = Max ( pContainer->m_pMultiWordforms->m_iMaxTokens, pWordforms->m_iMaxTokens );
 			}
 		} else
 		{
-			auto* pNewWordforms = new CSphMultiforms;
-			pNewWordforms->m_pForms.Add ( pMultiWordform );
+			auto pNewWordforms = std::make_unique<CSphMultiforms>();
 			pNewWordforms->m_iMinTokens = pMultiWordform->m_dTokens.GetLength();
 			pNewWordforms->m_iMaxTokens = pMultiWordform->m_dTokens.GetLength();
+			pNewWordforms->m_pForms.Add ( pMultiWordform.release() );
 			pContainer->m_pMultiWordforms->m_iMaxTokens = Max ( pContainer->m_pMultiWordforms->m_iMaxTokens, pNewWordforms->m_iMaxTokens );
-			pContainer->m_pMultiWordforms->m_Hash.Add ( pNewWordforms, dTokens[0] );
+			pContainer->m_pMultiWordforms->m_Hash.Add ( pNewWordforms.release(), dTokens[0] );
 		}
 
 		// let's add destination form to regular wordform to keep destination from being stemmed
@@ -923,13 +918,10 @@ void TemplateDictTraits_c::AddWordform ( CSphWordforms* pContainer, char* sBuffe
 }
 
 
-CSphWordforms* TemplateDictTraits_c::LoadWordformContainer ( const CSphVector<CSphSavedFile>& dFileInfos,
-	const StrVec_t* pEmbeddedWordforms,
-	const TokenizerRefPtr_c& pTokenizer,
-	const char* sIndex )
+CSphWordforms* TemplateDictTraits_c::LoadWordformContainer ( const CSphVector<CSphSavedFile>& dFileInfos, const StrVec_t* pEmbeddedWordforms, const TokenizerRefPtr_c& pTokenizer, const char* sIndex )
 {
 	// allocate it
-	auto* pContainer = new CSphWordforms();
+	auto pContainer = std::make_unique<CSphWordforms>();
 	pContainer->m_dFiles = dFileInfos;
 	pContainer->m_uTokenizerFNV = pTokenizer->GetSettingsFNV();
 	pContainer->m_sIndexName = sIndex;
@@ -941,30 +933,26 @@ CSphWordforms* TemplateDictTraits_c::LoadWordformContainer ( const CSphVector<CS
 	// get a list of blend chars and set add them to the tokenizer as simple chars
 	if ( tSettings.m_sBlendChars.Length() )
 	{
-		CSphVector<char> dNewCharset;
-		dNewCharset.Append ( tSettings.m_sCaseFolding.cstr(), tSettings.m_sCaseFolding.Length() );
+		StringBuilder_c sNewCharset;
+		sNewCharset << tSettings.m_sCaseFolding;
 
 		CSphVector<CSphRemapRange> dRemaps;
 		if ( sphParseCharset ( tSettings.m_sBlendChars.cstr(), dRemaps ) )
-			ARRAY_FOREACH ( i, dRemaps )
-				for ( int j = dRemaps[i].m_iStart; j <= dRemaps[i].m_iEnd; ++j )
+			for ( const auto& dRemap : dRemaps )
+				for ( int j = dRemap.m_iStart; j <= dRemap.m_iEnd; ++j )
 				{
-					dNewCharset.Add ( ',' );
-					dNewCharset.Add ( ' ' );
-					dNewCharset.Add ( char ( j ) );
+					sNewCharset << ", " << (char)j;
 					dBlended.Add ( j );
 				}
-
-		dNewCharset.Add ( 0 );
 
 		// sort dBlended for binary search
 		dBlended.Sort();
 
 		CSphString sError;
-		pMyTokenizer->SetCaseFolding ( dNewCharset.Begin(), sError );
+		pMyTokenizer->SetCaseFolding ( sNewCharset.cstr(), sError );
 
 		// disable blend chars
-		pMyTokenizer->SetBlendChars ( NULL, sError );
+		pMyTokenizer->SetBlendChars ( nullptr, sError );
 	}
 
 	// add wordform-specific specials
@@ -981,7 +969,7 @@ CSphWordforms* TemplateDictTraits_c::LoadWordformContainer ( const CSphVector<CS
 		ConcatReportStrings ( dFilenames, sAllFiles );
 
 		for ( auto& sWordForm : ( *pEmbeddedWordforms ) )
-			AddWordform ( pContainer, const_cast<char*> ( sWordForm.cstr() ), sWordForm.Length(), pMyTokenizer, sAllFiles.cstr(), dBlended, -1 );
+			AddWordform ( pContainer.get(), const_cast<char*> ( sWordForm.cstr() ), sWordForm.Length(), pMyTokenizer, sAllFiles.cstr(), dBlended, -1 );
 	} else
 	{
 		char sBuffer[6 * SPH_MAX_WORD_LEN + 512]; // enough to hold 2 UTF-8 words, plus some whitespace overhead
@@ -994,17 +982,16 @@ CSphWordforms* TemplateDictTraits_c::LoadWordformContainer ( const CSphVector<CS
 			if ( !rdWordforms.Open ( szFile, sError ) )
 			{
 				sphWarning ( "index '%s': %s", sIndex, sError.cstr() );
-				SafeDelete ( pContainer );
 				return nullptr;
 			}
 
 			int iLen;
 			while ( ( iLen = rdWordforms.GetLine ( sBuffer, sizeof ( sBuffer ) ) ) >= 0 )
-				AddWordform ( pContainer, sBuffer, iLen, pMyTokenizer, szFile, dBlended, i );
+				AddWordform ( pContainer.get(), sBuffer, iLen, pMyTokenizer, szFile, dBlended, i );
 		}
 	}
 
-	return pContainer;
+	return pContainer.release();
 }
 
 
@@ -1019,13 +1006,13 @@ bool TemplateDictTraits_c::LoadWordforms ( const StrVec_t& dFiles, const CSphEmb
 	{
 		m_dWFFileInfos.Reserve ( dFiles.GetLength() );
 		CSphSavedFile tFile;
-		ARRAY_FOREACH ( i, dFiles )
-			if ( !dFiles[i].IsEmpty() )
+		for ( const auto& sFile : dFiles )
+			if ( !sFile.IsEmpty() )
 			{
-				if ( tFile.Collect ( dFiles[i].cstr() ) )
+				if ( tFile.Collect ( sFile.cstr() ) )
 					m_dWFFileInfos.Add ( tFile );
 				else
-					sphWarning ( "index '%s': wordforms file '%s' not found", sIndex, dFiles[i].cstr() );
+					sphWarning ( "index '%s': wordforms file '%s' not found", sIndex, sFile.cstr() );
 			}
 	}
 
@@ -1037,7 +1024,7 @@ bool TemplateDictTraits_c::LoadWordforms ( const StrVec_t& dFiles, const CSphEmb
 	m_pWordforms = GetWordformContainer ( m_dWFFileInfos, pEmbedded ? &( pEmbedded->m_dWordforms ) : nullptr, pTokenizer, sIndex );
 	if ( m_pWordforms )
 	{
-		m_pWordforms->m_iRefCount++;
+		++m_pWordforms->m_iRefCount;
 		if ( m_pWordforms->m_bHavePostMorphNF && !m_dMorph.GetLength() )
 			sphWarning ( "index '%s': wordforms contain post-morphology normal forms, but no morphology was specified", sIndex );
 	}
@@ -1075,11 +1062,11 @@ void TemplateDictTraits_c::WriteWordforms ( CSphWriter& tWriter ) const
 			if ( !pMF )
 				continue;
 
-			ARRAY_FOREACH ( i, pMF->m_pForms )
+			for ( const auto& i : pMF->m_pForms )
 			{
 				CSphString sLine, sTokens, sForms;
-				ConcatReportStrings ( pMF->m_pForms[i]->m_dTokens, sTokens );
-				ConcatReportStrings ( pMF->m_pForms[i]->m_dNormalForm, sForms );
+				ConcatReportStrings ( i->m_dTokens, sTokens );
+				ConcatReportStrings ( i->m_dNormalForm, sForms );
 
 				sLine.SetSprintf ( "%s %s > %s", tMultiForm.first.cstr(), sTokens.cstr(), sForms.cstr() );
 				tWriter.PutString ( sLine );
@@ -1096,7 +1083,7 @@ void TemplateDictTraits_c::WriteWordforms ( JsonEscapedBuilder& tOut ) const
 	bool bHaveData = ( m_pWordforms->m_hHash.GetLength() != 0 );
 
 	using HASHIT = std::pair<CSphString, CSphMultiforms*>;
-	auto* pMulti = m_pWordforms->m_pMultiWordforms; // shortcut
+	auto& pMulti = m_pWordforms->m_pMultiWordforms; // shortcut
 	if ( pMulti )
 		bHaveData |= ::any_of ( pMulti->m_Hash, [] ( const HASHIT& tMF ) { return tMF.second && !tMF.second->m_pForms.IsEmpty(); } );
 

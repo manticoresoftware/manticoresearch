@@ -309,10 +309,10 @@ struct RowTagged_t
 class CSphHTMLStripper;
 
 /// field filter
-class ISphFieldFilter : public ISphRefcountedMT
+class ISphFieldFilter
 {
 public:
-								ISphFieldFilter();
+	virtual						~ISphFieldFilter() = default;
 
 	virtual	int					Apply ( const BYTE * sField, int iLength, CSphVector<BYTE> & dStorage, bool bQuery ) = 0;
 	int							Apply ( const void* szField, CSphVector<BYTE>& dStorage, bool bQuery )
@@ -325,24 +325,14 @@ public:
 		return Apply ( sField.first, sField.second, dStorage, bQuery );
 	}
 	virtual	void				GetSettings ( CSphFieldFilterSettings & tSettings ) const = 0;
-	virtual ISphFieldFilter *	Clone() const = 0;
-
-	void						SetParent ( ISphFieldFilter * pParent );
-
-protected:
-	ISphFieldFilter *			m_pParent = nullptr;
-
-								~ISphFieldFilter () override;
+	virtual std::unique_ptr<ISphFieldFilter>	Clone() const = 0;
 };
 
-using FieldFilterRefPtr_c = CSphRefcountedPtr<ISphFieldFilter>;
-
-
 /// create a regexp field filter
-ISphFieldFilter * sphCreateRegexpFilter ( const CSphFieldFilterSettings & tFilterSettings, CSphString & sError );
+std::unique_ptr<ISphFieldFilter> sphCreateRegexpFilter ( const CSphFieldFilterSettings & tFilterSettings, CSphString & sError );
 
 /// create an ICU field filter
-ISphFieldFilter * sphCreateFilterICU ( ISphFieldFilter * pParent, const char * szBlendChars, CSphString & sError );
+std::unique_ptr<ISphFieldFilter> sphCreateFilterICU ( std::unique_ptr<ISphFieldFilter> pParent, const char * szBlendChars, CSphString & sError );
 
 /////////////////////////////////////////////////////////////////////////////
 // SEARCH QUERIES
@@ -1042,8 +1032,8 @@ public:
 	virtual const CSphSchema &	GetMatchSchema() const { return m_tSchema; }			///< match schema as returned in result set (possibly different from internal storage schema!)
 
 	void						SetInplaceSettings ( int iHitGap, float fRelocFactor, float fWriteFactor ); // fixme! build only
-	void						SetFieldFilter ( ISphFieldFilter * pFilter );
-	const ISphFieldFilter *		GetFieldFilter() const { return m_pFieldFilter; }
+	void						SetFieldFilter ( std::unique_ptr<ISphFieldFilter> pFilter );
+	const ISphFieldFilter *		GetFieldFilter() const { return m_pFieldFilter.get(); }
 	void						SetTokenizer ( TokenizerRefPtr_c pTokenizer );
 	void						SetupQueryTokenizer();
 	TokenizerRefPtr_c			GetTokenizer () const;
@@ -1215,7 +1205,7 @@ protected:
 	CSphIndexSettings			m_tSettings;
 	MutableIndexSettings_c		m_tMutableSettings;
 
-	FieldFilterRefPtr_c		m_pFieldFilter;
+	std::unique_ptr<ISphFieldFilter>		m_pFieldFilter;
 	TokenizerRefPtr_c		m_pTokenizer;
 	TokenizerRefPtr_c		m_pQueryTokenizer;
 	TokenizerRefPtr_c		m_pQueryTokenizerJson;

@@ -19,6 +19,8 @@
 #include <openssl/err.h>
 #include <openssl/bio.h>
 
+#include <memory>
+
 static CSphString g_sSslCert;
 static CSphString g_sSslKey;
 static CSphString g_sSslCa;
@@ -257,12 +259,12 @@ bool CheckWeCanUseSSL ( CSphString * pError )
 // translates AsyncNetBuffer_c to openSSL BIO calls.
 class BioAsyncNetAdapter_c
 {
-	AsyncNetBufferPtr_c m_pBackend;
+	std::unique_ptr<AsyncNetBuffer_c> m_pBackend;
 	NetGenericOutputBuffer_c& m_tOut;
 	AsyncNetInputBuffer_c& m_tIn;
 
 public:
-	explicit BioAsyncNetAdapter_c ( AsyncNetBufferPtr_c pSource )
+	explicit BioAsyncNetAdapter_c ( std::unique_ptr<AsyncNetBuffer_c> pSource )
 		: m_pBackend ( std::move (pSource) )
 		, m_tOut ( *m_pBackend )
 		, m_tIn ( *m_pBackend )
@@ -439,7 +441,7 @@ static BIO_METHOD * BIO_s_coroAsync ( bool bDestroy )
 	return pMethod;
 }
 
-static BIO * BIO_new_coroAsync ( AsyncNetBufferPtr_c pSource )
+static BIO * BIO_new_coroAsync ( std::unique_ptr<AsyncNetBuffer_c> pSource )
 {
 	auto pBio = BIO_new ( BIO_s_coroAsync ());
 	BIO_set_data ( pBio, new BioAsyncNetAdapter_c ( std::move ( pSource ) ) );
@@ -528,7 +530,7 @@ public:
 	}
 };
 
-bool MakeSecureLayer ( AsyncNetBufferPtr_c& pSource )
+bool MakeSecureLayer ( std::unique_ptr<AsyncNetBuffer_c>& pSource )
 {
 	auto pCtx = GetReadySslCtx();
 	if ( !pCtx )
@@ -542,7 +544,7 @@ bool MakeSecureLayer ( AsyncNetBufferPtr_c& pSource )
 	BIO_get_ssl ( pFrontEnd, &pSSL );
 	SSL_set_mode ( pSSL, SSL_MODE_AUTO_RETRY );
 	BIO_push ( pFrontEnd, BIO_new_coroAsync ( std::move ( pSource ) ) );
-	pSource = new AsyncSSBufferedSocket_c ( std::move ( pFrontEnd ) );
+	pSource = std::make_unique<AsyncSSBufferedSocket_c> ( std::move ( pFrontEnd ) );
 	return true;
 }
 #else
@@ -555,7 +557,7 @@ bool CheckWeCanUseSSL ( CSphString * pError )
 		*pError="daemon built without SSL support";
 	return false;
 }
-bool MakeSecureLayer ( AsyncNetBufferPtr_c & ) { return false; }
+bool MakeSecureLayer ( std::unique_ptr<AsyncNetBuffer_c> & ) { return false; }
 
 #endif
 #endif

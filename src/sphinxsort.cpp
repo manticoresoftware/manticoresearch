@@ -5168,7 +5168,9 @@ public:
 	{
 		EXPR_CLASS_NAME_NOCHECK("ExprSortJson2StringPtr_c");
 		CALC_CHILD_HASH(m_pExpr);
-		uHash = sphFNV64 ( &m_tJsonCol, sizeof(m_tJsonCol), uHash );
+
+		// uHash = sphFNV64 ( &m_tJsonCol, sizeof ( m_tJsonCol ), uHash );	//< that is wrong! Locator may have padding uninitialized data, valgrind will warn!
+		uHash = sphCalcLocatorHash ( m_tJsonCol, uHash );					//< that is right, only menaningful fields processed without padding.
 
 		return CALC_DEP_HASHES();
 	}

@@ -104,9 +104,9 @@ bool IsZstdCompressionAvailable()
 	return InitDynamicZstd();
 }
 
-void MakeZstdMysqlCompressedLayer ( AsyncNetBufferPtr_c& pSource, int iLevel )
+void MakeZstdMysqlCompressedLayer ( std::unique_ptr<AsyncNetBuffer_c>& pSource, int iLevel )
 {
-	auto pCompressed = new MysqlCompressedSocket_T<ZstdCompressor> ( pSource );
+	auto pCompressed = std::make_unique<MysqlCompressedSocket_T<ZstdCompressor>> ( std::move ( pSource ) );
 	pCompressed->SetLevel ( iLevel );
-	pSource = pCompressed;
+	pSource = std::move ( pCompressed );
 }

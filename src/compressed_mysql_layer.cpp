@@ -34,7 +34,7 @@ void MysqlCompressedSocket_c::SendLSBSmallDword ( DWORD uValue )
 #endif
 }
 
-MysqlCompressedSocket_c::MysqlCompressedSocket_c ( AsyncNetBufferPtr_c pFrontend )
+MysqlCompressedSocket_c::MysqlCompressedSocket_c ( std::unique_ptr<AsyncNetBuffer_c> pFrontend )
 	: m_pFrontend ( std::move ( pFrontend ) )
 	, m_tIn ( *m_pFrontend )
 	, m_tOut ( *m_pFrontend )

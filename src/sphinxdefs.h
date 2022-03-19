@@ -108,7 +108,6 @@ using ISphHits = CSphVector<CSphWordHit>;
 
 /// field filter
 class ISphFieldFilter;
-using FieldFilterRefPtr_c = CSphRefcountedPtr<ISphFieldFilter>;
 
 class ISphTokenizer;
 using TokenizerRefPtr_c = CSphRefcountedPtr<ISphTokenizer>;

@@ -1113,7 +1113,7 @@ using ReadOnlyServedHash_c = ReadOnlyHash_T<ServedIndex_c>;
 using WriteableServedHash_c = WriteableHash_T<ServedIndex_c>;
 using ServedSnap_t = typename ReadOnlyServedHash_c::cRefPtrHash_t;
 
-extern ReadOnlyServedHash_c * g_pLocalIndexes;    // served (local) indexes hash
+extern std::unique_ptr<ReadOnlyServedHash_c> g_pLocalIndexes;    // served (local) indexes hash
 inline cServedIndexRefPtr_c GetServed ( const CSphString &sName )
 {
 	return g_pLocalIndexes->Get ( sName );

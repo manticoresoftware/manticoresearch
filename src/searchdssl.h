@@ -28,7 +28,7 @@
 
 	// Replace pSource with it's SSL version.
 	// any data not consumed from original source will be considered as part of ssl handshake.
-	bool MakeSecureLayer ( AsyncNetBufferPtr_c & pSource );
+	bool MakeSecureLayer ( std::unique_ptr<AsyncNetBuffer_c> & pSource );
 
 #else
 	// these stubs work together with NOT including searchdsll.cpp into the final build
@@ -39,5 +39,5 @@
 			*pError="daemon built without SSL support";
 		return false;
 	}
-	inline bool MakeSecureLayer ( AsyncNetBufferPtr_c & ) { return false; }
+	inline bool MakeSecureLayer ( std::unique_ptr<AsyncNetBuffer_c> & ) { return false; }
 #endif

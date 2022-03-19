@@ -1044,7 +1044,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 			sphAotTransformFilter ( pTokenizer, pDict, tSettings.m_bIndexExactWords, tSettings.m_uAotFilterMask );
 	}
 
-	FieldFilterRefPtr_c pFieldFilter;
+	std::unique_ptr<ISphFieldFilter> pFieldFilter;
 	CSphFieldFilterSettings tFilterSettings;
 	if ( tFilterSettings.Setup ( hIndex, sError ) )
 		pFieldFilter = sphCreateRegexpFilter ( tFilterSettings, sError );
@@ -1135,7 +1135,8 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		}
 
 		pSource->SetTokenizer ( pTokenizer );
-		pSource->SetFieldFilter ( pFieldFilter );
+		if ( pFieldFilter )
+			pSource->SetFieldFilter ( pFieldFilter->Clone() );
 		pSource->SetDumpRows ( fpDumpRows );
 		dSources.Add ( pSource );
 	}
@@ -1228,7 +1229,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		if ( bInplaceEnable )
 			pIndex->SetInplaceSettings ( iHitGap, fRelocFactor, fWriteFactor );
 
-		pIndex->SetFieldFilter ( pFieldFilter );
+		pIndex->SetFieldFilter ( std::move ( pFieldFilter ) );
 		pIndex->SetTokenizer ( pTokenizer );
 		pIndex->SetDictionary ( pDict );
 		if ( g_bKeepAttrs )

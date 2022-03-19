@@ -18,9 +18,9 @@ bool IsZstdCompressionAvailable();
 
 // Replace pSource with it's compressed version.
 // Mysql proto will be wrapped into compressed.
-void MakeZstdMysqlCompressedLayer ( AsyncNetBufferPtr_c & pSource, int iLevel );
+void MakeZstdMysqlCompressedLayer ( std::unique_ptr<AsyncNetBuffer_c>& pSource, int iLevel );
 
 #else
 inline bool IsZstdCompressionAvailable() { return false; }
-inline void MakeZstdMysqlCompressedLayer ( AsyncNetBufferPtr_c & pSource, int iLevel ) { };
+inline void MakeZstdMysqlCompressedLayer ( std::unique_ptr<AsyncNetBuffer_c>& pSource, int iLevel ) { };
 #endif

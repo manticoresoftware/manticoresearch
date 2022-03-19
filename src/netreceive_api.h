@@ -15,4 +15,4 @@
 #include "networking_daemon.h"
 
 // serve active (legacy) and passive sphinx proto
-void ApiServe ( AsyncNetBufferPtr_c pBuf );
+void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf );

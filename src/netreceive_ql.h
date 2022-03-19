@@ -14,6 +14,6 @@
 
 #include "networking_daemon.h"
 
-void SqlServe ( AsyncNetBufferPtr_c pBuf );
+void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf );
 
 void DebugClose();

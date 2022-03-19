@@ -1695,7 +1695,6 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 
 	if ( !pIndex->GetFieldFilter() )
 	{
-		FieldFilterRefPtr_c pFieldFilter;
 		CSphFieldFilterSettings tFilterSettings;
 		bool bSetupOk = tFilterSettings.Setup ( hIndex, sError );
 
@@ -1703,6 +1702,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		if ( !sError.IsEmpty() )
 			return false;
 
+		std::unique_ptr<ISphFieldFilter> pFieldFilter;
 		if ( bSetupOk )
 		{
 			CSphString sWarning;
@@ -1714,7 +1714,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		sphSpawnFilterICU ( pFieldFilter, pIndex->GetSettings(), pIndex->GetTokenizer()->GetSettings(), pIndex->GetName(), sWarning );
 		AddWarning ( dWarnings, sWarning );
 
-		pIndex->SetFieldFilter ( pFieldFilter );
+		pIndex->SetFieldFilter ( std::move ( pFieldFilter ) );
 	}
 
 	// exact words fixup, needed for RT indexes

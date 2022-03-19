@@ -229,8 +229,8 @@ struct SharedData_t
 static SharedData_t* 		g_pShared = nullptr;
 volatile bool				g_bMaintenance = false;
 
-ReadOnlyServedHash_c *						g_pLocalIndexes = new ReadOnlyServedHash_c();	// served (local) indexes hash
-ReadOnlyDistrHash_c *						g_pDistIndexes = new ReadOnlyDistrHash_c ();	// distributed indexes hash
+std::unique_ptr<ReadOnlyServedHash_c>	g_pLocalIndexes = std::make_unique<ReadOnlyServedHash_c>();	// served (local) indexes hash
+std::unique_ptr<ReadOnlyDistrHash_c>	g_pDistIndexes = std::make_unique<ReadOnlyDistrHash_c>();	// distributed indexes hash
 
 // this is internal deal of the daemon; don't expose it outside!
 // fixme! move all this stuff to dedicated file.
@@ -733,10 +733,10 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 		pPool->StopAll();
 
 	SHUTINFO << "Remove local indexes list ...";
-	SafeDelete ( g_pLocalIndexes );
+	g_pLocalIndexes.reset();
 
 	SHUTINFO << "Remove distr indexes list ...";
-	SafeDelete ( g_pDistIndexes );
+	g_pDistIndexes.reset();
 
 	// clear shut down of rt indexes + binlog
 	SHUTINFO << "Finish IO stats collecting ...";
@@ -750,9 +750,6 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	SHUTINFO << "Shutdown skip cache ...";
 	ShutdownSkipCache();
-
-	SHUTINFO << "Shutdown wordforms ...";
-	sphShutdownWordforms ();
 
 	SHUTINFO << "Shutdown global IDFs ...";
 	sph::ShutdownGlobalIDFs ();
@@ -783,6 +780,13 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	SHUTINFO << "Shutdown hazard pointers ...";
 	hazard::Shutdown ();
+
+	// wordforms till there might be referenced from accum (rt-index), which, in turn, is part of client session.
+	// so, shutdown them before will probably fail.
+	// after hazard shutdown, all sessions are surely done, so wordforms is good to be destroyed at this point.
+	SHUTINFO << "Shutdown wordforms ...";
+	sphShutdownWordforms();
+
 	sphInfo ( "shutdown daemon version '%s' ...", g_sStatusVersion.cstr() );
 	sphInfo ( "shutdown complete" );
 
@@ -19548,21 +19552,23 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	else
 		g_sSnippetsFilePrefix.SetSprintf("%s/", sphGetCwd().scstr());
 
-	auto sLogFormat = hSearchd.GetStr ( "query_log_format", "plain" );
-	if ( sLogFormat=="sphinxql" )
-		g_eLogFormat = LOG_FORMAT_SPHINXQL;
-	else if ( sLogFormat=="plain" )
 	{
-		StrVec_t dParams;
-		sphSplit ( dParams, sLogFormat.cstr() );
-		for ( const auto& sParam : dParams )
+		auto sLogFormat = hSearchd.GetStr ( "query_log_format", "plain" );
+		if ( sLogFormat=="sphinxql" )
+			g_eLogFormat = LOG_FORMAT_SPHINXQL;
+		else if ( sLogFormat=="plain" )
 		{
-			if ( sParam=="sphinxql" )
-				g_eLogFormat = LOG_FORMAT_SPHINXQL;
-			else if ( sParam=="plain" )
-				g_eLogFormat = LOG_FORMAT_PLAIN;
-			else if ( sParam=="compact_in" )
-				g_bLogCompactIn = true;
+			StrVec_t dParams;
+			sphSplit ( dParams, sLogFormat.cstr() );
+			for ( const auto& sParam : dParams )
+			{
+				if ( sParam=="sphinxql" )
+					g_eLogFormat = LOG_FORMAT_SPHINXQL;
+				else if ( sParam=="plain" )
+					g_eLogFormat = LOG_FORMAT_PLAIN;
+				else if ( sParam=="compact_in" )
+					g_bLogCompactIn = true;
+			}
 		}
 	}
 	if ( g_bLogCompactIn && g_eLogFormat==LOG_FORMAT_PLAIN )
@@ -19756,7 +19762,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	// time for replication to sync with cluster
 	searchd::AddShutdownCb ( ReplicateClustersDelete );
-	ReplicationStart ( hSearchd, dListenerDescs, bNewCluster, bNewClusterForce );
+	ReplicationStart ( hSearchd, std::move ( dListenerDescs ), bNewCluster, bNewClusterForce );
 
 	g_bJsonConfigLoadedOk = true;
 

@@ -23,7 +23,6 @@ class CSphHTMLStripper;
 class CSphDict;
 using DictRefPtr_c = CSphRefcountedPtr<CSphDict>;
 class ISphFieldFilter;
-using FieldFilterRefPtr_c = CSphRefcountedPtr<ISphFieldFilter>;
 class ISphTokenizer;
 using TokenizerRefPtr_c = CSphRefcountedPtr<ISphTokenizer>;
 
@@ -86,7 +85,7 @@ public:
 	bool					SetStripHTML ( const char * sExtractAttrs, const char * sRemoveElements, bool bDetectParagraphs, const char * sZones, CSphString & sError );
 
 	/// set field filter
-	virtual void			SetFieldFilter ( ISphFieldFilter * pFilter );
+	virtual void			SetFieldFilter ( std::unique_ptr<ISphFieldFilter> pFilter );
 
 	/// set tokenizer
 	void					SetTokenizer ( TokenizerRefPtr_c pTokenizer );
@@ -245,7 +244,7 @@ protected:
 
 	TokenizerRefPtr_c				m_pTokenizer;	///< my tokenizer
 	DictRefPtr_c					m_pDict;		///< my dict
-	FieldFilterRefPtr_c				m_pFieldFilter;	///< my field filter
+	std::unique_ptr<ISphFieldFilter> m_pFieldFilter;	///< my field filter
 
 	CSphSourceStats					m_tStats;		///< my stats
 	CSphSchema 						m_tSchema;		///< my schema

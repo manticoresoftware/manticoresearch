@@ -39,7 +39,7 @@ bool IsZlibCompressionAvailable()
 	return true;
 }
 
-void MakeZlibMysqlCompressedLayer ( AsyncNetBufferPtr_c & pSource )
+void MakeZlibMysqlCompressedLayer ( std::unique_ptr<AsyncNetBuffer_c> & pSource )
 {
-	pSource = new MysqlCompressedSocket_T<ZlibCompressor> ( pSource );
+	pSource = std::make_unique<MysqlCompressedSocket_T<ZlibCompressor>> ( std::move ( pSource ) );
 }

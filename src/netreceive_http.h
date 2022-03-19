@@ -14,4 +14,4 @@
 
 #include "networking_daemon.h"
 
-void HttpServe ( AsyncNetBufferPtr_c pBuf );
+void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf );

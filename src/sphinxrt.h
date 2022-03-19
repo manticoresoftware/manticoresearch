@@ -82,7 +82,7 @@ struct CSphReconfigureSetup
 	TokenizerRefPtr_c m_pTokenizer;
 	DictRefPtr_c m_pDict;
 	CSphIndexSettings m_tIndex;
-	FieldFilterRefPtr_c m_pFieldFilter;
+	std::unique_ptr<ISphFieldFilter> m_pFieldFilter;
 	CSphSchema m_tSchema;
 	MutableIndexSettings_c m_tMutableSettings;
 

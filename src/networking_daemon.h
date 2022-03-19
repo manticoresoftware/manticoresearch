@@ -111,9 +111,6 @@ public:
 	int64_t GetTotalReceived () const;
 };
 
-using SockWrapperPtr_c = SharedPtr_t<SockWrapper_c>;
-
-
 /// simple network request buffer
 class AsyncNetInputBuffer_c : protected LazyVector_T<BYTE>, public InputBuffer_c
 {
@@ -199,6 +196,4 @@ class AsyncNetBuffer_c : public AsyncNetInputBuffer_c, public NetGenericOutputBu
 {
 };
 
-using AsyncNetBufferPtr_c = SharedPtr_t<AsyncNetBuffer_c>;
-
-AsyncNetBufferPtr_c MakeAsyncNetBuffer ( SockWrapperPtr_c pSock );
+std::unique_ptr<AsyncNetBuffer_c> MakeAsyncNetBuffer ( std::unique_ptr<SockWrapper_c> pSock );

@@ -25,8 +25,6 @@ CSphWordforms::~CSphWordforms()
 			SafeDelete ( pForm );
 		SafeDelete ( tForms.second );
 	}
-
-	SafeDelete ( m_pMultiWordforms );
 }
 
 

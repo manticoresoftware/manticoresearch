@@ -178,7 +178,7 @@ struct WriteHeader_t
 	const CSphSchema * 			m_pSchema;
 	TokenizerRefPtr_c			m_pTokenizer;
 	DictRefPtr_c				m_pDict;
-	FieldFilterRefPtr_c			m_pFieldFilter;
+	const ISphFieldFilter *		m_pFieldFilter;
 	const int64_t *				m_pFieldLens;
 };
 

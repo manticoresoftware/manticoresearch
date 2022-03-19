@@ -216,7 +216,7 @@ struct ExplainQueryArgs_t
 	const char *		m_szQuery = nullptr;
 	const CSphSchema *	m_pSchema = nullptr;
 	DictRefPtr_c		m_pDict;
-	FieldFilterRefPtr_c m_pFieldFilter;
+	std::unique_ptr<ISphFieldFilter> m_pFieldFilter;
 	const CSphIndexSettings * m_pSettings = nullptr;
 	TokenizerRefPtr_c m_pQueryTokenizer;
 	const ISphWordlist * m_pWordlist = nullptr;

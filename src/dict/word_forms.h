@@ -32,10 +32,9 @@ struct CSphWordforms
 	CSphString m_sIndexName;
 	bool m_bHavePostMorphNF = false;
 	CSphVector<CSphStoredNF> m_dNormalForms;
-	CSphMultiformContainer* m_pMultiWordforms = nullptr;
+	std::unique_ptr<CSphMultiformContainer> m_pMultiWordforms;
 	CSphOrderedHash<int, CSphString, CSphStrHashFunc, 1048576> m_hHash;
 
-	CSphWordforms() = default;
 	~CSphWordforms();
 
 	bool IsEqual ( const CSphVector<CSphSavedFile>& dFiles );

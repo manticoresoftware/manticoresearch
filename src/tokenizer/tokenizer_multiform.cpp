@@ -246,9 +246,8 @@ BYTE* MultiformTokenizer::GetToken()
 		return m_dStoredTokens[m_iStart].m_sToken;
 
 	int iStartToken = m_iStart + ( bBlended ? 1 : 0 );
-	ARRAY_FOREACH ( i, ( *pWordforms )->m_pForms )
+	for ( const auto& pCurForm : ( *pWordforms )->m_pForms )
 	{
-		const CSphMultiform* pCurForm = ( *pWordforms )->m_pForms[i];
 		int iFormTokCount = pCurForm->m_dTokens.GetLength();
 
 		if ( iTokensGot < iFormTokCount + 1 || ( bBlended && iTokensGot != iFormTokCount + 1 ) )

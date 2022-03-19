@@ -724,7 +724,7 @@ using cDistributedIndexRefPtr_t = CSphRefcountedPtr<const DistributedIndex_t>;
 
 using ReadOnlyDistrHash_c = ReadOnlyHash_T<DistributedIndex_t>;
 using WriteableDistrHash_c = WriteableHash_T<DistributedIndex_t>;
-extern ReadOnlyDistrHash_c* g_pDistIndexes; // distributed indexes hash
+extern std::unique_ptr<ReadOnlyDistrHash_c> g_pDistIndexes; // distributed indexes hash
 inline cDistributedIndexRefPtr_t GetDistr ( const CSphString& sName )
 {
 	assert ( g_pDistIndexes );

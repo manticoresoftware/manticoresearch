@@ -10330,12 +10330,6 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSche
 		hFields.Add ( 1, sFieldName );
 	}
 
-	if ( !tSchema.GetFieldsCount() && !bSkipValidation )
-	{
-		sError.SetSprintf ( "no fields configured (use rt_field directive)" );
-		return false;
-	}
-
 	if ( tSchema.GetFieldsCount()>SPH_MAX_FIELDS )
 	{
 		sError.SetSprintf ( "too many fields (fields=%d, max=%d)", tSchema.GetFieldsCount(), SPH_MAX_FIELDS );

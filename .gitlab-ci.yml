@@ -276,11 +276,12 @@ build_bsd:
     - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocifreebsd .*$/i && $WHAT==null
     - if: $TEST =~ /freebsd/ && $WHAT==null
   tags:
-    - freebsd
-    - build
+    - docker
   needs: [ ]
   variables:
     CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
+    CTEST_CMAKE_GENERATOR: "Ninja"
+    UNALIGNED_RAM_ACCESS: 1
     CACHEB: "../cache"
     DIAGNOSTIC: 1 # let's set it by default forever
     WITH_GALERA: 1
@@ -298,6 +299,7 @@ build_bsd:
       - build/CMakeFiles/CMake*.log
     expire_in: 12 hrs
     when: always
+  image: registry.gitlab.com/manticoresearch/dev/cross_freebsd:13
   cache:
     key: freebsd13
     paths:

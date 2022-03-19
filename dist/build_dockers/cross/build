@@ -1,0 +1,8 @@
+#!/bin/bash
+
+cd base
+docker build -t focal_clang:12 -t registry.gitlab.com/manticoresearch/dev/focal_clang:12 .
+cd -
+cd cmake
+docker build -t focal_cmake:322 -t registry.gitlab.com/manticoresearch/dev/focal_cmake:322 .
+cd -

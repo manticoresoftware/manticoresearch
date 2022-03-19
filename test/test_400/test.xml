@@ -137,6 +137,12 @@ searchd
 	create table t(f text) morphology_skip_fields='f' morphology='stem_en' index_exact_words='1';
 	show create table t;
 	drop table t;
+
+	<!-- regression for empty docstore fields -->
+	create table test ( f1 text );
+	insert into test (f1) values ('test'), ('test');
+	select f1, weight() as w from test;
+	drop table test;
 </sphinxql>
 </queries>
 

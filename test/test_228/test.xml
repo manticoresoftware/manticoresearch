@@ -50,6 +50,7 @@ index plain
 </variant>
 </dynamic>
 	path			= <data_path/>/plain
+	stored_fields	=
 }
 </config>
 

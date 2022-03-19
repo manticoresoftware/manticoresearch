@@ -1283,6 +1283,8 @@ void ServedStats_c::DoStatCalcStats( const QueryStatContainer_i* pContainer,
 //////////////////////////////////////////////////////////////////////////
 RunningIndex_c::~RunningIndex_c()
 {
+	if ( m_bLeaked )
+		auto VARIABLE_IS_NOT_USED p = m_pIndex.release();
 	if ( m_pIndex )
 		m_pIndex->Dealloc();
 	if ( !m_sUnlink.IsEmpty() )
@@ -1313,6 +1315,12 @@ void ServedIndex_c::SetIdx ( std::unique_ptr<CSphIndex>&& pIndex ) NO_THREAD_SAF
 	m_pIndex->m_pIndex = std::move ( pIndex );
 	if ( !m_pStats )
 		m_pStats = new ServedStats_c;
+}
+
+void ServedIndex_c::ReleaseIdx() const NO_THREAD_SAFETY_ANALYSIS
+{
+	if ( m_pIndex )
+		m_pIndex->m_bLeaked = true;
 }
 
 void ServedIndex_c::SetIdxAndStatsFrom ( const ServedIndex_c& tIndex ) NO_THREAD_SAFETY_ANALYSIS

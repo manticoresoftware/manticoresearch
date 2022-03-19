@@ -340,8 +340,8 @@ index dist_large6
 <query select="*,*" index="dist_no"/>
 
 <!-- regression index list got folded at more than 4 items -->
-<query index="dist_large5" mode="extended2" expect_error="1">one /test me</query>
-<query index="dist_large6" mode="extended2" expect_error="1">one /test me</query>
+<query index="dist_large5" mode="extended2">one /test me</query>
+<query index="dist_large6" mode="extended2">one /test me</query>
 
 <sphinxql>
 	<!-- First, just show all the indexes -->

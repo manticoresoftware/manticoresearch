@@ -691,7 +691,7 @@ void KillListTargets_c::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i *
 
 void CSphIndexSettings::ParseStoredFields ( const CSphConfigSection & hIndex )
 {
-	CSphString sFields = hIndex.GetStr ( "stored_fields" );
+	CSphString sFields = hIndex.GetStr ( "stored_fields", "*" );
 	sFields.Trim();
 	sFields.ToLower();
 	if ( sFields=="*" )
@@ -1234,8 +1234,7 @@ bool IndexSettingsContainer_c::Populate ( const CreateTableSettings_t & tCreateT
 			sStoredFields << i.m_sName;
 	}
 
-	if ( sStoredFields.GetLength() )
-		Add ( "stored_fields", sStoredFields.cstr() );
+	Add ( "stored_fields", sStoredFields.cstr() );
 
 	if ( sStoredOnlyFields.GetLength() )
 		Add ( "stored_only_fields", sStoredOnlyFields.cstr() );

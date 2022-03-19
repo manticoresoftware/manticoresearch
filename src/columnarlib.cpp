@@ -12,6 +12,7 @@
 #include "sphinxutils.h"
 #include "sphinxexpr.h"
 #include "libutils.h"
+#include "fileutils.h"
 #include "schema/columninfo.h"
 #include "schema/schema.h"
 
@@ -163,11 +164,25 @@ private:
 	void * m_pHandle = nullptr;
 };
 
+
+static CSphString TryDifferentPaths ( const CSphString & sLibfile )
+{
+	CSphString sPath = GET_COLUMNAR_FULLPATH();
+	if ( sphFileExists ( sPath.cstr() ) )
+		return sPath;
+
+	CSphString sPathToExe = GetPathOnly ( GetExecutablePath() );
+	sPath.SetSprintf ( "%s%s", sPathToExe.cstr(), sLibfile.cstr() );
+
+	return sPath;
+}
+
+
 bool InitColumnar ( CSphString & sError )
 {
 	assert ( !g_pColumnarLib );
 
-	CSphString sLibfile = GET_COLUMNAR_FULLPATH();
+	CSphString sLibfile = TryDifferentPaths ( LIB_MANTICORE_COLUMNAR );
 	ScopedHandle_c tHandle ( dlopen ( sLibfile.cstr(), RTLD_LAZY | RTLD_LOCAL ) );
 	if ( !tHandle.Get() )
 	{

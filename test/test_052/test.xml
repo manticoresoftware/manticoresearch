@@ -149,35 +149,35 @@ INSERT INTO test_table ( document_id, title, text ) VALUES
 </db_insert>
 
 <queries>
-	<query mode="extended2"><![CDATA[ aaa << ccc ]]></query>
-	<query mode="extended2"><![CDATA[ aaa << bbb << ccc ]]></query>
-	<query mode="extended2"><![CDATA[ aaa << ccc << ddd ]]></query>
-	<query mode="extended2"><![CDATA[ ccc << ddd ]]></query>
-	<query mode="extended2"><![CDATA[ ccc << eee << fff ]]></query>
-	<query mode="extended2"><![CDATA[ ccc << ddd << ggg ]]></query>
-	<query mode="extended2"><![CDATA[ ccc << ddd << xxx ]]></query>	
-	<query mode="extended2"><![CDATA[ eee << ddd << ggg ]]></query>
+	<query mode="extended2" index="test"><![CDATA[ aaa << ccc ]]></query>
+	<query mode="extended2" index="test"><![CDATA[ aaa << bbb << ccc ]]></query>
+	<query mode="extended2" index="test"><![CDATA[ aaa << ccc << ddd ]]></query>
+	<query mode="extended2" index="test"><![CDATA[ ccc << ddd ]]></query>
+	<query mode="extended2" index="test"><![CDATA[ ccc << eee << fff ]]></query>
+	<query mode="extended2" index="test"><![CDATA[ ccc << ddd << ggg ]]></query>
+	<query mode="extended2" index="test"><![CDATA[ ccc << ddd << xxx ]]></query>	
+	<query mode="extended2" index="test"><![CDATA[ eee << ddd << ggg ]]></query>
 
-	<query mode="extended2"><![CDATA[ one << two << three ]]></query>
-	<query mode="extended2"><![CDATA[ one << three ]]></query>
-	<query mode="extended2"><![CDATA[ one << one << three ]]></query>
-	<query mode="extended2"><![CDATA[ one << one << one << three ]]></query>
-	<query mode="extended2"><![CDATA[ one << one << one << one << three ]]></query>
-	<query mode="extended2"><![CDATA[ one << two << three << four ]]></query>
+	<query mode="extended2" index="test"><![CDATA[ one << two << three ]]></query>
+	<query mode="extended2" index="test"><![CDATA[ one << three ]]></query>
+	<query mode="extended2" index="test"><![CDATA[ one << one << three ]]></query>
+	<query mode="extended2" index="test"><![CDATA[ one << one << one << three ]]></query>
+	<query mode="extended2" index="test"><![CDATA[ one << one << one << one << three ]]></query>
+	<query mode="extended2" index="test"><![CDATA[ one << two << three << four ]]></query>
 
-	<query mode="extended2"><![CDATA[ "a b c" << b << c << d ]]></query>
-	<query mode="extended2"><![CDATA[ "a b c" << c << d << e ]]></query>
-	<query mode="extended2"><![CDATA[ "a b c" << e << f << g ]]></query>
-	<query mode="extended2"><![CDATA[ a << "b c d" << e ]]></query>
-	<query mode="extended2"><![CDATA[ "a b c d" << "d e f" ]]></query>
-	<query mode="extended2"><![CDATA[ "a b c d" << "e f g" ]]></query>
+	<query mode="extended2" index="test"><![CDATA[ "a b c" << b << c << d ]]></query>
+	<query mode="extended2" index="test"><![CDATA[ "a b c" << c << d << e ]]></query>
+	<query mode="extended2" index="test"><![CDATA[ "a b c" << e << f << g ]]></query>
+	<query mode="extended2" index="test"><![CDATA[ a << "b c d" << e ]]></query>
+	<query mode="extended2" index="test"><![CDATA[ "a b c d" << "d e f" ]]></query>
+	<query mode="extended2" index="test"><![CDATA[ "a b c d" << "e f g" ]]></query>
 
-	<query mode="extended2"><![CDATA[ (ccc | "ddd eee") << (ddd | ggg) ]]></query>
-	<query mode="extended2"><![CDATA[ ccc << ddd$ ]]></query>
-	<query mode="extended2"><![CDATA[ ^one << two << three$ ]]></query>
-	<query mode="extended2"><![CDATA[ ^one << "one one" << two << three$ ]]></query>
-	<query mode="extended2"><![CDATA[ "zzz aaa"/1 << bbb ]]></query>
-	<query mode="extended2"><![CDATA[ "zzz aaa"/1 << ddd ]]></query>
+	<query mode="extended2" index="test"><![CDATA[ (ccc | "ddd eee") << (ddd | ggg) ]]></query>
+	<query mode="extended2" index="test"><![CDATA[ ccc << ddd$ ]]></query>
+	<query mode="extended2" index="test"><![CDATA[ ^one << two << three$ ]]></query>
+	<query mode="extended2" index="test"><![CDATA[ ^one << "one one" << two << three$ ]]></query>
+	<query mode="extended2" index="test"><![CDATA[ "zzz aaa"/1 << bbb ]]></query>
+	<query mode="extended2" index="test"><![CDATA[ "zzz aaa"/1 << ddd ]]></query>
 	<!-- here is going regression -->
 	<query mode="extended2" index="test1"><![CDATA[ ("h1 h2" NEAR/5 ( h3 | h4 | h5) ) << ("h1 h2" NEAR/5 ( h3 | h4 | h5) ) ]]></query>
 

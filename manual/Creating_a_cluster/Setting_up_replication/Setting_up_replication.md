@@ -27,7 +27,7 @@ If there is no `replication` [listen](../../Server_settings/Searchd.md#listen) d
 
 Replication cluster is a set of nodes among which a write transaction gets replicated. Replication is configured on per-index basis, meaning that one index can be assigned to only one cluster. There is no restriction on how many indexes a cluster can have. All transactions such as `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE` in any percolate or real-time index belonging to a cluster are replicated to all the other nodes in the cluster. Replication is multi-master, so writes to any particular node or to multiple nodes simultaneously work equally well.
 
-Replication cluster configuration options are:
+In most cases you [create cluster](../../Creating_a_cluster/Setting_up_replication/Creating_a_replication_cluster.md#Creating-a-replication-cluster) with `CREATE CLUSTER <cluster name>` and [join cluster](../../Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md#Joining-a-replication-cluster) with `JOIN CLUSTER <cluster name> at 'host:port'`, but in rare cases you may want to fine-tune the behaviour of `CREATE/JOIN CLUSTER`. The options are:
 
 ### name
 
@@ -52,6 +52,7 @@ For SQL interface all write statements such as `INSERT`, `REPLACE`, `DELETE`, `T
 
 All write statements for HTTP interface to a cluster's index should set `cluster` property along with `index` name. An error will be triggered otherwise.
 
+[Auto ID](../../Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md#Auto-ID) generated for an index in a cluster should be valid as soon as [server_id](../../Server_settings/Searchd.md#server_id) is not misconfigured.
 
 <!-- intro -->
 ##### SQL:
@@ -135,10 +136,12 @@ indexApi.delete(deleteRequest);
 ```
 <!-- end -->
 
-<!-- example write statements 2 -->
-Read statements such as `CALL PQ`, `SELECT` or `DESCRIBE` can use either regular index names not prepended with a cluster name or `cluster_name:index_name`. `cluster_name:index_name` syntax ignores the cluster name and may be used on an index that doesn't belong to the cluster.
+## Read statements
 
-HTTP endpoint `json/search` could use either a `cluster` property or not.
+<!-- example write statements 2 -->
+Read statements such as `SELECT`, `CALL PQ`, `DESCRIBE` can use either regular index names not prepended with a cluster name or `cluster_name:index_name`. In this case `cluster_name` is just ignored.
+
+In HTTP endpoint `json/search` you can specify `cluster` property if you like, but can also omit it.
 
 
 <!-- intro -->
@@ -168,10 +171,6 @@ POST /search -d '
 ```
 
 <!-- end -->
-
-ID auto generation uses UUID_SHORT similar to MySQL function. It is valid cluster wide UUID when [server_id](../../Server_settings/Searchd.md#server_id) properly configured.
-
-> **Note:** `UpdateAttributes` statement from API interface to specific index always set proper cluster at server and there is no way to know is update to index got propagated into cluster properly or node diverged and statement updated only local index.
 
 ## Cluster parameters
 

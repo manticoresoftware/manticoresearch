@@ -82,7 +82,7 @@ source src_stop
 {
 	type			= mysql
 	<sql_settings/>
-	sql_query		= SELECT 1, 11 as idd, 'running far' as text UNION SELECT 2, 22 as idd, 'runs me' as text UNION SELECT 3, 33 as idd, 'rufus my friend' as text
+	sql_query		= SELECT 1, 11 as idd, 'running far' as body UNION SELECT 2, 22 as idd, 'runs me' as text UNION SELECT 3, 33 as idd, 'rufus my friend' as body
 	sql_query_pre = SET NAMES utf8
 	sql_attr_uint = idd
 }

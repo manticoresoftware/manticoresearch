@@ -1936,12 +1936,6 @@ RtAccum_t::RtAccum_t ( bool bKeywordDict )
 	: m_bKeywordDict ( bKeywordDict )
 {}
 
-RtAccum_t::~RtAccum_t()
-{
-	ARRAY_FOREACH ( i, m_dCmd )
-		SafeDelete ( m_dCmd[i] );
-}
-
 void RtAccum_t::SetupDict ( const RtIndex_i * pIndex, const DictRefPtr_c& pDict, bool bKeywordDict )
 {
 	if ( pIndex!=m_pIndex || pDict.Ptr()!=m_pRefDict || bKeywordDict!=m_bKeywordDict )
@@ -2007,9 +2001,6 @@ void RtAccum_t::Cleanup()
 	SetIndex ( nullptr );
 	m_uAccumDocs = 0;
 	m_dAccumKlist.Reset ();
-
-	ARRAY_FOREACH ( i, m_dCmd )
-		SafeDelete ( m_dCmd[i] );
 
 	m_dCmd.Reset();
 }
@@ -2549,9 +2540,9 @@ void RtAccum_t::ResetRowID()
 	m_tNextRowID=0;
 }
 
-ReplicationCommand_t* MakeReplicationCommand ( ReplicationCommand_e eCommand, CSphString sIndex, CSphString sCluster )
+std::unique_ptr<ReplicationCommand_t> MakeReplicationCommand ( ReplicationCommand_e eCommand, CSphString sIndex, CSphString sCluster )
 {
-	auto* pCmd = new ReplicationCommand_t();
+	auto pCmd = std::make_unique<ReplicationCommand_t>();
 	pCmd->m_eCommand = eCommand;
 	pCmd->m_sCluster = std::move ( sCluster );
 	pCmd->m_sIndex = std::move ( sIndex );
@@ -2562,11 +2553,10 @@ ReplicationCommand_t * RtAccum_t::AddCommand ( ReplicationCommand_e eCmd, CSphSt
 {
 	// all writes to RT index go as single command to serialize accumulator
 	if ( eCmd==ReplicationCommand_e::RT_TRX && !m_dCmd.IsEmpty() && m_dCmd.Last()->m_eCommand==ReplicationCommand_e::RT_TRX )
-		return m_dCmd.Last();
+		return m_dCmd.Last().get();
 
-	auto* pCmd = MakeReplicationCommand ( eCmd, std::move ( sIndex ), std::move ( sCluster ) );
-	m_dCmd.Add ( pCmd );
-	return pCmd;
+	m_dCmd.Add ( MakeReplicationCommand ( eCmd, std::move ( sIndex ), std::move ( sCluster ) ) );
+	return m_dCmd.Last().get();
 }
 
 void RtIndex_c::CopyWord ( RtSegment_t& tDstSeg, RtWord_t& tDstWord, RtDocWriter_c& tDstDoc, const RtSegment_t& tSrcSeg, const RtWord_t* pSrcWord, const VecTraits_T<RowID_t>& dRowMap )

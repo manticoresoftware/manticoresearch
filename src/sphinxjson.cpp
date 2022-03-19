@@ -3275,7 +3275,9 @@ bool bson::ValidateJson ( const char * szJson, JsonParser_e eParse, CSphString *
 
 	case JsonParser_e::CJSON:
 		return ValidateAsCjson ( szJson );
+	default: break;
 	}
+	return false;
 }
 
 bool bson::ValidateJson ( const char* szJson, CSphString* pError )

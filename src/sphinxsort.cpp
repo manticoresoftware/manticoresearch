@@ -1903,23 +1903,23 @@ static DistinctFetcher_i * CreateDistinctFetcher ( const CSphString & sName, con
 
 /////////////////////////////////////////////////////////////////////////////
 /// (attrvalue,count) pair
-struct SphUngroupedValue_t : public std::pair<SphAttr_t,int>
+struct SphUngroupedValue_t
 {
-	using BASE = std::pair<SphAttr_t,int>;
-
-	FWD_BASECTOR (SphUngroupedValue_t)
-
-	inline bool operator < ( const SphUngroupedValue_t & rhs ) const
-	{
-		if ( first!=rhs.first ) return first<rhs.first;
-		return second>rhs.second;
-	}
-
-	inline bool operator == ( const SphUngroupedValue_t & rhs ) const
-	{
-		return first==rhs.first;
-	}
+	SphAttr_t attr;
+	int count;
 };
+
+inline bool operator<( const SphUngroupedValue_t& lhs, const SphUngroupedValue_t& rhs )
+{
+	if ( lhs.attr != rhs.attr )
+		return lhs.attr < rhs.attr;
+	return lhs.count > rhs.count;
+}
+
+inline bool operator== ( const SphUngroupedValue_t& lhs, const SphUngroupedValue_t& rhs )
+{
+	return lhs.attr == rhs.attr;
+}
 
 /// (group,attrvalue,count) tuplet
 struct SphGroupedValue_t
@@ -4163,7 +4163,7 @@ private:
 		assert(m_pDistinctFetcher);
 		m_pDistinctFetcher->GetKeys ( tEntry, m_dDistictKeys );
 		for ( auto i : m_dDistictKeys )
-			this->m_dUniq.Add ( std::make_pair ( i, iCount ) );
+			this->m_dUniq.Add ( { i, iCount } );
 	}
 
 	/// add entry to the queue
@@ -4242,13 +4242,13 @@ private:
 			assert ( m_bDataInitialized );
 
 			m_dUniq.Sort ();
-			int iCount = m_dUniq[0].second;
+			int iCount = m_dUniq[0].count;
 
 			for ( int i = 1, iLen = m_dUniq.GetLength (); i<iLen; ++i )
 			{
 				if ( m_dUniq[i-1]==m_dUniq[i] )
 					continue;
-				iCount += m_dUniq[i].second;
+				iCount += m_dUniq[i].count;
 			}
 
 			m_tData.SetAttr ( m_tLocDistinct, iCount );

@@ -72,6 +72,7 @@ class IndexRotator_c::Impl_c
 			return false;
 		default:
 			assert ( false );
+			return false;
 		}
 	}
 

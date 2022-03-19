@@ -542,10 +542,10 @@ struct CLIENT
 	static constexpr DWORD COMPRESS = 32;
 	static constexpr DWORD PROTOCOL_41 = 512;
 	static constexpr DWORD SSL = 2048;
-	static constexpr DWORD RESERVED = 16384; // DEPRECATED: Old flag for 4.1 protocol
+//	static constexpr DWORD RESERVED = 16384; // DEPRECATED: Old flag for 4.1 protocol
 	static constexpr DWORD RESERVED2 = 32768; // DEPRECATED: Old flag for 4.1 authentication \ CLIENT_SECURE_CONNECTION.
 	static constexpr DWORD MULTI_RESULTS = ( 1UL << 17 );
-	static constexpr DWORD PS_MULTI_RESULTS = ( 1UL << 18 );
+//	static constexpr DWORD PS_MULTI_RESULTS = ( 1UL << 18 );
 	static constexpr DWORD PLUGIN_AUTH = ( 1UL << 19 );
 	static constexpr DWORD ZSTD_COMPRESSION_ALGORITHM = ( 1UL << 26 );
 };

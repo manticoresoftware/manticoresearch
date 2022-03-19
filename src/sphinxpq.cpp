@@ -1788,14 +1788,6 @@ static void LoadInsertDeleteQueries_T ( CSphVector<StoredQueryDesc_t>& dNewQueri
 		LoadStoredQuery ( PQ_META_VERSION_MAX, dNewQueries[i], tReader );
 }
 
-
-static void LoadInsertDeleteQueries ( const BYTE* pData, int iLen, CSphVector<StoredQueryDesc_t>& dNewQueries, CSphVector<int64_t>& dDeleteQueries, CSphVector<uint64_t>& dDeleteTags )
-{
-	MemoryReader_c tReader ( pData, iLen );
-	LoadInsertDeleteQueries_T ( dNewQueries, dDeleteQueries, dDeleteTags, tReader );
-}
-
-
 static void LoadInsertDeleteQueries ( CSphVector<StoredQueryDesc_t>& dNewQueries, CSphVector<int64_t>& dDeleteQueries, CSphVector<uint64_t>& dDeleteTags, CSphReader& tReader )
 {
 	LoadInsertDeleteQueries_T ( dNewQueries, dDeleteQueries, dDeleteTags, tReader );

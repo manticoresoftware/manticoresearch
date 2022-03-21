@@ -1,0 +1,28 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<sphinx:docset>
+
+<sphinx:schema>
+<sphinx:field name="str"/>
+</sphinx:schema>
+
+<sphinx:document id="1">
+<str>bla</str>
+</sphinx:document>
+
+<sphinx:document id="2">
+<str>ble</str>
+</sphinx:document>
+
+<sphinx:document id="3">
+<str>bli</str>
+</sphinx:document>
+
+<sphinx:document id="4">
+<str>blo</str>
+</sphinx:document>
+
+<sphinx:document id="5">
+<str>blu</str>
+</sphinx:document>
+
+</sphinx:docset>

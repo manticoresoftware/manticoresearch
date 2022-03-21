@@ -706,8 +706,8 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( bool & bEOF, CSphString & sError )
 		m_bRemoveParsed = true;
 
 		int nFields = m_tSchema.GetFieldsCount();
-		if ( !nFields )
-			return nullptr;
+//		if ( !nFields )
+//			return nullptr;
 
 		m_dFieldPtrs.Resize ( nFields );
 		m_dFieldLengths.Resize ( nFields );
@@ -722,7 +722,7 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( bool & bEOF, CSphString & sError )
 		}
 
 		bEOF = false;
-		return (BYTE **)&( m_dFieldPtrs[0] );
+		return m_dFieldPtrs.Begin();
 	}
 
 	return nullptr;

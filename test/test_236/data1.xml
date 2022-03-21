@@ -1,0 +1,28 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<sphinx:docset>
+
+<sphinx:schema>
+<sphinx:attr name="idd" type="int"/>
+</sphinx:schema>
+
+<sphinx:document id="1">
+<idd>1</idd>
+</sphinx:document>
+
+<sphinx:document id="2">
+<idd>2</idd>
+</sphinx:document>
+
+<sphinx:document id="3">
+<idd>3</idd>
+</sphinx:document>
+
+<sphinx:document id="4">
+<idd>4</idd>
+</sphinx:document>
+
+<sphinx:document id="5">
+<idd>5</idd>
+</sphinx:document>
+
+</sphinx:docset>

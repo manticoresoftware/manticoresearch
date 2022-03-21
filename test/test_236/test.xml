@@ -53,6 +53,31 @@ source srct
     tsvpipe_attr_string = str1
 }
 
+source src1
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data1.xml
+}
+
+source src2
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data2.xml
+}
+
+source src3
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data3.xml
+}
+
+source src4
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data4.xml
+    xmlpipe_attr_string = str
+}
+
 index test1
 {
     source = srctest1
@@ -84,6 +109,31 @@ index testtsv
     path =<data_path/>/testtsv
 }
 
+index test1x
+{
+    source = src1
+	path =<data_path/>/test1x
+}
+
+index test2x
+{
+    source = src2
+    path =<data_path/>/test2x
+}
+
+index test3x
+{
+    source = src3
+    path =<data_path/>/test3x
+    stored_only_fields = str
+}
+
+index test4x
+{
+    source = src4
+    path =<data_path/>/test4x
+}
+
 searchd
 {
 	<searchd_Settings/>
@@ -104,6 +154,10 @@ searchd
     <index>test3</index>
     <index>testcsv</index>
     <index>testtsv</index>
+    <index>test1x</index>
+    <index>test2x</index>
+    <index>test3x</index>
+    <index>test4x</index>
 </metaindex>
 
 <queries>

@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>plain idx without ft fields</name>
+
+<requires>
+	<force-rt/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit			= 32M
+}
+
+source srctest1
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT id, idd FROM test_tablei
+	sql_attr_uint = idd
+}
+
+source srctest2
+{
+    type = mysql
+    <sql_settings/>
+	sql_query = SELECT id, str FROM test_tables
+	sql_attr_string = str
+}
+
+source srctest3
+{
+    type = mysql
+    <sql_settings/>
+	sql_query = SELECT id, str FROM test_tables
+}
+
+index test1
+{
+    source = srctest1
+	path =<data_path/>/test1
+}
+
+index test2
+{
+    source = srctest2
+    path =<data_path/>/test2
+}
+
+index test3
+{
+    source = srctest3
+    path =<data_path/>/test3
+    stored_only_fields = str
+}
+
+searchd
+{
+	<searchd_Settings/>
+}
+</config>
+
+<db_create> CREATE TABLE test_tablei ( id integer primary key not null auto_increment, idd int ) </db_create>
+<db_drop> DROP TABLE IF EXISTS test_tablei</db_drop>
+<db_insert> INSERT INTO test_tablei (idd) VALUES (1),(2),(3),(4),(5)</db_insert>
+
+<db_create> CREATE TABLE test_tables ( id integer primary key not null auto_increment, str varchar(20) NOT NULL ) </db_create>
+<db_drop> DROP TABLE IF EXISTS test_tables</db_drop>
+<db_insert> INSERT INTO test_tables (str) VALUES ('bla'),('ble'),('bli'),('blo'),('blu')</db_insert>
+
+<metaindex name='META:all'>
+    <index>test1</index>
+    <index>test2</index>
+    <index>test3</index>
+</metaindex>
+
+<queries>
+<sphinxql>
+    show tables;
+    desc META:all;
+    select count(*) from META:all;
+    SELECT * FROM META:all order by id asc;
+</sphinxql>
+</queries>
+
+</test>

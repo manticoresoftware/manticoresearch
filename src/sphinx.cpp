@@ -5112,11 +5112,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			return 0;
 	}
 
-	if ( m_tSchema.GetFieldsCount()==0 )
-	{
-		m_sLastError.SetSprintf ( "No fields in schema - will not index" );
-		return 0;
-	}
 
 	int iFieldLens = m_tSchema.GetAttrId_FirstFieldLen();
 

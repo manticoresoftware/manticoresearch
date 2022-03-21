@@ -195,7 +195,7 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 		char szClientName[SPH_ADDRPORT_SIZE];
 		FormatClientAddress ( szClientName, saStorage );
 
-		CSphScopedPtr<ClientTaskInfo_t> pClientInfo ( new ClientTaskInfo_t );
+		auto pClientInfo = std::make_unique<ClientTaskInfo_t>();
 		pClientInfo->SetClientName ( szClientName );
 		pClientInfo->SetConnID ( iConnID );
 		pClientInfo->SetVip ( m_tListener.m_bVIP );
@@ -212,7 +212,7 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 			case Proto_e::HTTPS:
 			case Proto_e::HTTP :
 			{
-				Threads::Coro::Go ( [pRawBuf = pBuf.release(), tConn, _pInfo = pClientInfo.LeakPtr(), eProto ] () mutable
+				Threads::Coro::Go ( [pRawBuf = pBuf.release(), tConn, _pInfo = pClientInfo.release(), eProto ] () mutable
 					{
 						ScopedClientInfo_t pInfo { _pInfo }; // make visible task info
 						MultiServe ( std::unique_ptr<AsyncNetBuffer_c> ( pRawBuf ), tConn, eProto );
@@ -221,7 +221,7 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 			}
 			case Proto_e::MYSQL41:
 			{
-				Threads::Coro::Go ( [pRawBuf = pBuf.release(), _pInfo = pClientInfo.LeakPtr () ] () mutable
+				Threads::Coro::Go ( [pRawBuf = pBuf.release(), _pInfo = pClientInfo.release() ] () mutable
 					{
 						ScopedClientInfo_t pInfo { _pInfo }; // make visible task info
 						SqlServe ( std::unique_ptr<AsyncNetBuffer_c> ( pRawBuf ) );

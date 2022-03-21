@@ -18,12 +18,19 @@ The following are the changes we are either working on now or are going to work 
 
 ### Major new features
 * [Read-only mode](Security/Read_only.md) for better security.
-* New `/cli` endpoint for running SQL queries over HTTP even easier
-* Really bulk INSERT/REPLACE/DELETE via JSON over HTTP
-* Pseudo sharding enabled by default
+* New `/cli` endpoint for running SQL queries over HTTP even easier.
+* Really bulk INSERT/REPLACE/DELETE via JSON over HTTP.
+* Pseudo sharding is enabled by default.
+* Having at least one full-text field in a real-time index is not mandatory anymore.
+* Fast fetching for attributes backed by Manticore Columnar Library.
 
 ### Minor changes
-* TODO
+* Support for "keep-alive" in HTTP protocol.
+* Listen on `127.0.0.1` instead of `0.0.0.0` in case no `listen` is specified in config.
+* Faster aggregation over columnar attributes
+* Increased `AVG()` accuracy
+* Improved support for JDBC MySQL driver
+* `DEBUG malloc_stats` support for [jemalloc](https://github.com/jemalloc/jemalloc)
 
 ### Breaking changes
 * **Changed behaviour of REST `/sql`** endpoint: `/sql?mode=raw` now requires escaping
@@ -33,6 +40,7 @@ The following are the changes we are either working on now or are going to work 
 * **Format change** of the response of `/bulk` INSERT/REPLACE/DELETE requests:
   - previously each sub-query constituted a separate transaction and resulted in a separate response
   - now the whole batch is considered a single transaction, which returns a single response
+* All full-text fields are now **stored by default** in plain indexes.
 
 ### Bugfixes
 * TODO

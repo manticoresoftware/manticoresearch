@@ -63,16 +63,14 @@ void ClientTaskInfo_t::SetTaskState ( TaskState_e eState )
 	m_tmStart = sphMicroTimer();
 }
 
-ClientSession_c* ClientTaskInfo_t::GetClientSession()
+void ClientTaskInfo_t::SetClientSession ( ClientSession_c* pSession )
 {
-	if ( !m_pSession )
-		m_pSession = new ClientSession_c;
-	return m_pSession;
+	m_pSession = pSession;
 }
 
-ClientTaskInfo_t::~ClientTaskInfo_t()
+ClientSession_c* ClientTaskInfo_t::GetClientSession()
 {
-	SafeDelete ( m_pSession );
+	return m_pSession;
 }
 
 volatile int &getDistThreads ()

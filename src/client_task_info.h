@@ -28,8 +28,6 @@ struct ClientTaskInfo_t : public MiniTaskInfo_t
 {
 	DECLARE_RENDER( ClientTaskInfo_t );
 
-	~ClientTaskInfo_t(); // dtr is NOT virtual
-
 private:
 	TaskState_e m_eTaskState = TaskState_e::UNKNOWN;
 	Proto_e m_eProto = Proto_e::UNKNOWN;
@@ -104,6 +102,7 @@ public:
 	void SetPersistent ( bool bPersistent ) { m_bPersistent = bPersistent; }
 	bool GetPersistent () const { return m_bPersistent; }
 
+	void SetClientSession ( ClientSession_c* );
 	ClientSession_c* GetClientSession();
 
 public:

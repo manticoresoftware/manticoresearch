@@ -16,6 +16,7 @@
 #include "netreceive_ql.h"
 #include "netreceive_http.h"
 #include "coroutine.h"
+#include "client_session.h"
 
 #if _WIN32
 // Win-specific headers and calls
@@ -215,7 +216,10 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 				Threads::Coro::Go ( [pRawBuf = pBuf.release(), tConn, _pInfo = pClientInfo.release(), eProto ] () mutable
 					{
 						ScopedClientInfo_t pInfo { _pInfo }; // make visible task info
+						ClientSession_c tSession;			 // session variables and state (shorter lifetime than ClientInfo's)
+						pInfo->SetClientSession ( &tSession );
 						MultiServe ( std::unique_ptr<AsyncNetBuffer_c> ( pRawBuf ), tConn, eProto );
+						pInfo->SetClientSession ( nullptr );
 					}, fnMakeScheduler () );
 				break;
 			}
@@ -224,7 +228,10 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 				Threads::Coro::Go ( [pRawBuf = pBuf.release(), _pInfo = pClientInfo.release() ] () mutable
 					{
 						ScopedClientInfo_t pInfo { _pInfo }; // make visible task info
+						ClientSession_c tSession;			 // session variables and state (shorter lifetime than ClientInfo's)
+						pInfo->SetClientSession( &tSession );
 						SqlServe ( std::unique_ptr<AsyncNetBuffer_c> ( pRawBuf ) );
+						pInfo->SetClientSession ( nullptr );
 					}, fnMakeScheduler () );
 				break;
 			}

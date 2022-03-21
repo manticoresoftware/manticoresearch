@@ -291,11 +291,6 @@ static const BYTE g_dBOM[] = { 0xEF, 0xBB, 0xBF };
 
 bool CSphSource_BaseSV::IterateStart ( CSphString & sError )
 {
-	if ( !m_tSchema.GetFieldsCount() )
-	{
-		sError.SetSprintf ( "No fields in schema - will not index" );
-		return false;
-	}
 
 	m_iLine = 0;
 	m_iDataStart = 0;

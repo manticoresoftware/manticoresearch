@@ -196,8 +196,6 @@ bool CSphSource::IterateDocument ( bool & bEOF, CSphString & sError )
 		if ( bEOF )
 			return ( sError.IsEmpty() );
 
-		if ( !m_tState.m_dFields )
-			return false;
 
 		const int * pFieldLengths = GetFieldLengths ();
 		for ( int iField=0; iField<m_tState.m_iEndField; iField++ )

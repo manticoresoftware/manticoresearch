@@ -35,6 +35,24 @@ source srctest3
 	sql_query = SELECT id, str FROM test_tables
 }
 
+source srcc
+{
+    type = csvpipe
+    csvpipe_command = cat <this_test/>/data1.csv
+    csvpipe_attr_string = str
+    csvpipe_attr_uint = idd
+    csvpipe_attr_string = str1
+}
+
+source srct
+{
+    type = tsvpipe
+    tsvpipe_command = cat <this_test/>/data1.tsv
+    tsvpipe_attr_string = str
+    tsvpipe_attr_uint = idd
+    tsvpipe_attr_string = str1
+}
+
 index test1
 {
     source = srctest1
@@ -52,6 +70,18 @@ index test3
     source = srctest3
     path =<data_path/>/test3
     stored_only_fields = str
+}
+
+index testcsv
+{
+    source = srcc
+    path =<data_path/>/testcsv
+}
+
+index testtsv
+{
+    source = srct
+    path =<data_path/>/testtsv
 }
 
 searchd
@@ -72,6 +102,8 @@ searchd
     <index>test1</index>
     <index>test2</index>
     <index>test3</index>
+    <index>testcsv</index>
+    <index>testtsv</index>
 </metaindex>
 
 <queries>

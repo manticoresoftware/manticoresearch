@@ -233,7 +233,7 @@ protected:
 	const CSphIndex *				m_pIndex = nullptr;
 	QueryProfile_c *				m_pProfiler = nullptr;
 	SnippetQuerySettings_t			m_tSnippetQuery;
-	CSphScopedPtr<SnippetBuilder_c>	m_pSnippetBuilder;
+	std::unique_ptr<SnippetBuilder_c>	m_pSnippetBuilder;
 
 
 				Expr_HighlightTraits_c ( const Expr_HighlightTraits_c & rhs );
@@ -246,7 +246,7 @@ Expr_HighlightTraits_c::Expr_HighlightTraits_c ( const CSphIndex * pIndex, Query
 	: QueryExprTraits_c ( pQuery )
 	, m_pIndex ( pIndex )
 	, m_pProfiler ( pProfiler )
-	, m_pSnippetBuilder ( new SnippetBuilder_c )
+	, m_pSnippetBuilder { std::make_unique<SnippetBuilder_c>() }
 {}
 
 
@@ -258,7 +258,7 @@ Expr_HighlightTraits_c::Expr_HighlightTraits_c ( const Expr_HighlightTraits_c & 
 	, m_pIndex ( rhs.m_pIndex )
 	, m_pProfiler ( rhs.m_pProfiler )
 	, m_tSnippetQuery ( rhs.m_tSnippetQuery )
-	, m_pSnippetBuilder ( new SnippetBuilder_c )
+	, m_pSnippetBuilder { std::make_unique<SnippetBuilder_c>() }
 {
 	m_pSnippetBuilder->Setup ( m_pIndex, m_tSnippetQuery );
 }

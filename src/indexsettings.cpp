@@ -2161,7 +2161,7 @@ bool MutableIndexSettings_c::Load ( const char * sFileName, const char * sIndexN
 		sError = "";
 	}
 
-	JsonObj_c tOptimizeCutoff = tParser.GetIntItem ( "optimize_cutoff", sError, false );
+	JsonObj_c tOptimizeCutoff = tParser.GetIntItem ( "optimize_cutoff", sError, true );
 	if ( tOptimizeCutoff )
 	{
 		m_iOptimizeCutoff = tOptimizeCutoff.IntVal();

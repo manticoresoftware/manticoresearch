@@ -1624,7 +1624,7 @@ void * ThreadProcWrapper_fn ( void * pArg )
 	// The check is not ideal and do not work for all compilers and compiler settings.
 	char	cTopOfMyStack;
 
-	CSphScopedPtr<RuntimeThreadContext_t> pCtx { (RuntimeThreadContext_t *) pArg };
+	std::unique_ptr<RuntimeThreadContext_t> pCtx { (RuntimeThreadContext_t *) pArg };
 	pCtx->Run ( &cTopOfMyStack );
 
 	return 0;
@@ -1634,7 +1634,7 @@ bool Threads::Create ( SphThread_t * pThread, Handler fnRun, bool bDetached, con
 {
 	// we can not put this on current stack because wrapper need to see
 	// it all the time and it will destroy this data from heap by itself
-	CSphScopedPtr<RuntimeThreadContext_t> pCtx { new RuntimeThreadContext_t };
+	auto pCtx = std::make_unique<RuntimeThreadContext_t>();
 	pCtx->m_fnRun = std::move ( fnRun );
 
 	if ( sName )
@@ -1648,10 +1648,10 @@ bool Threads::Create ( SphThread_t * pThread, Handler fnRun, bool bDetached, con
 	// create thread
 #if _WIN32
 	Threads::Init ( bDetached );
-	*pThread = CreateThread ( NULL, STACK_SIZE, ThreadProcWrapper_fn, pCtx.Ptr(), 0, NULL );
+	*pThread = CreateThread ( NULL, STACK_SIZE, ThreadProcWrapper_fn, pCtx.get(), 0, NULL );
 	if ( *pThread )
 	{
-		pCtx.LeakPtr();
+		pCtx.release();
 		return true;
 	}
 #else
@@ -1664,7 +1664,7 @@ bool Threads::Create ( SphThread_t * pThread, Handler fnRun, bool bDetached, con
 #endif
 
 	void * pAttr = Threads::Init ( bDetached );
-	errno = pthread_create ( pThread, (pthread_attr_t*) pAttr, ThreadProcWrapper_fn, pCtx.Ptr() );
+	errno = pthread_create ( pThread, (pthread_attr_t*) pAttr, ThreadProcWrapper_fn, pCtx.get() );
 
 #if USE_GPROF
 	if ( !errno )
@@ -1677,7 +1677,7 @@ bool Threads::Create ( SphThread_t * pThread, Handler fnRun, bool bDetached, con
 
 	if ( !errno )
 	{
-		pCtx.LeakPtr();
+		pCtx.release();
 		return true;
 	}
 

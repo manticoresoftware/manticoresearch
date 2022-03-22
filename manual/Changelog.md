@@ -4,14 +4,14 @@
 
 The following are the changes we are either working on now or are going to work on in the nearest time.
 
-* Secondary indexes => higher performance.
-* Docstore for columnar attributes => higher performance.
-* Read-only listeners => better security.
-* Bulk insert/replace via HTTP JSON => higher performance.
-* Keepalive support in HTTP for multi-queries => ease of use.
-* Further columnar storage performance optimizations.
-* Making full-text optional. Manticore is not only about full-text, but still requires at least one full-text field in each index. It's time to change it.
-* New https://repo.manticoresearch.com/ backend => ease of use, safer place for packages.
+* WIP Secondary indexes => higher performance.
+* DONE Docstore for columnar attributes => higher performance.
+* DONE Read-only listeners => better security.
+* DONE Bulk insert/replace via HTTP JSON => higher performance.
+* DONE Keepalive support in HTTP for multi-queries => ease of use.
+* DONE Further columnar storage performance optimizations.
+* DONE Making full-text optional. Manticore is not only about full-text, but still requires at least one full-text field in each index. It's time to change it.
+* DONE New https://repo.manticoresearch.com/ backend => ease of use, safer place for packages.
 * FAQ site => community support.
 
 # Version X.X.X
@@ -40,7 +40,8 @@ The following are the changes we are either working on now or are going to work 
 * **Format change** of the response of `/bulk` INSERT/REPLACE/DELETE requests:
   - previously each sub-query constituted a separate transaction and resulted in a separate response
   - now the whole batch is considered a single transaction, which returns a single response
-* All full-text fields are now **stored by default** in plain indexes.
+* All full-text fields are now **stored by default** in plain indexes. You need to use `stored_fields = `
+* [query_log_format](../Server_settings/Searchd.md#query_log_format) is now **`sphinxql` by default**. If you are used to `plain` format you need to add `query_log_format = plain` to your configiration file.
 
 ### Bugfixes
 * TODO

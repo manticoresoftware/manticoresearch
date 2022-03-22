@@ -880,9 +880,9 @@ Integer, in seconds. The expiration period for a cached result set. Defaults to 
 ### query_log_format
 
 <!-- example conf query_log_format -->
-Query log format. Optional, allowed values are 'plain' and 'sphinxql', default is 'sphinxql'.
+Query log format. Optional, allowed values are `plain` and `sphinxql`, default is `sphinxql`.
 
-The 'sphinxql' logs valid SQL statements. The 'plain' logs queries in a custom text format. This directive allows to switch between the two formats on search server startup. The log format can also be altered on the fly, using `SET GLOBAL query_log_format=sphinxql` syntax. Refer to [Query logging](../Logging/Query_logging.md) for more discussion and format details.
+The `sphinxql` mode logs valid SQL statements. The `plain` mode logs queries in a plain text format (mostly suitable for purely full-text use cases). This directive allows to switch between the two formats on search server startup. The log format can also be altered on the fly, using `SET GLOBAL query_log_format=sphinxql` syntax. Refer to [Query logging](../Logging/Query_logging.md) for more details.
 
 
 <!-- intro -->
@@ -894,7 +894,6 @@ The 'sphinxql' logs valid SQL statements. The 'plain' logs queries in a custom t
 query_log_format = sphinxql
 ```
 <!-- end -->
-
 
 ### query_log_min_msec
 

@@ -17,30 +17,29 @@ In this case all search queries will be sent to syslog daemon with `LOG_INFO` pr
 
 ## Logging format
 
-Two query log formats are supported. Plain text format was the default but that default changed to SQL format. However, while plain log format might be more convenient for manual monitoring and review, but hard to replay for benchmarks, it only logs *search* queries but not the other types of requests, does not always contain the complete search query data, etc.
-
-The plain text format is also harder (and sometimes impossible) to replay for benchmarking purposes. The `sphinxql` format alleviates that. It aims to be complete and re-playable, even though at the cost of brevity and readability.
+Two query log formats are supported:
+* `plain`: recommended if most of your queries are purely full-text or you just don't care about non-full text components of your queries: filtering by attributes, sorting, grouping etc. You can't replay queries logged in `plain` format.
+* `sphinxql`: recommended in all other cases (default). It also provides an easy way to replay logged queries.
 
 ### Plain log format
 
-
-With plain log format, `searchd` logs all successfully executed search queries into a query log file. Here's an example:
+With `plain` log format Manticore logs all successfully executed search queries into a query log file. Here's an example:
 
 ```sql
 [Fri Jun 29 21:17:58 2007] 0.004 sec 0.004 sec [all/0/rel 35254 (0,20)] [lj] test
 [Fri Jun 29 21:20:34 2007] 0.024 sec 0.024 sec [all/0/rel 19886 (0,20) @channel_id] [lj] test
 ```
 
-This log format is as follows:
+The log format is as follows:
 
 ```
 [query-date] real-time wall-time [match-mode/filters-count/sort-mode total-matches (offset,limit) @groupby-attr] [index-name] query
 ```
 
-* real-time is a time measured just from start to finish of the query
-* wall-time like real-time but not including waiting for agents and merging result sets time
+* real-time is the time from start till finish of the query
+* wall-time is like the real-time, excluding time spent on waiting for agents and merging result sets from them
 
-Match mode can take one of the following values:
+`match-mode` can have one of the following values:
 
 *   "all" for `SPH_MATCH_ALL` mode;
 *   "any" for `SPH_MATCH_ANY` mode;
@@ -48,9 +47,9 @@ Match mode can take one of the following values:
 *   "bool" for `SPH_MATCH_BOOLEAN` mode;
 *   "ext" for `SPH_MATCH_EXTENDED` mode;
 *   "ext2" for `SPH_MATCH_EXTENDED2` mode;
-*   "scan" if the full scan mode was used, either by being specified with `SPH_MATCH_FULLSCAN`
+*   "scan" if the full scan mode was used, either by being specified with `SPH_MATCH_FULLSCAN` or if the query was empty.
 
-Sort mode can take one of the following values:
+`sort-mode` can have one of the following values:
 
 *   "rel" for `SPH_SORT_RELEVANCE` mode;
 *   "attr-" for `SPH_SORT_ATTR_DESC` mode;
@@ -58,7 +57,7 @@ Sort mode can take one of the following values:
 *   "tsegs" for `SPH_SORT_TIME_SEGMENTS` mode;
 *   "ext" for `SPH_SORT_EXTENDED` mode.
 
-Note: the SPH* modes are specific to  SphinxAPI legacy interface. SQL and HTTP interface will log in most cases ext2 for matching mode and ext and rel for sorting modes.
+Note: the `SPH*` modes are specific to `sphinx` legacy interface. SQL and HTTP interfaces will log in most cases `ext2` as `match-mode` and `ext` and `rel` as `sort-mode`.
 
 If Manticore was started with `--iostats` (ot it was enabled via `SET GLOBAL iostats=1`) the corresponding metrics will be included in the log. Then a query log entry might take the form of:
 
@@ -67,12 +66,12 @@ If Manticore was started with `--iostats` (ot it was enabled via `SET GLOBAL ios
 ```
 
 where:
-* ios - the number of file I/O operations carried out
-* kb - amount of data in kilobytes read from the index files
-* ioms - time spent on I/O operations
+* `ios` - number of file I/O operations carried out;
+* `kb` - amount of data in kilobytes read from the index files;
+* `ioms` - time spent on I/O operations.
 
 
-If Manticore was started with `--cpustats` (ot it was enabled via `SET GLOBAL cpustats=1`) metric `cpums` will be included in the log. The query log will then look like this:
+If Manticore was started with `--cpustats` (ot it was enabled via `SET GLOBAL cpustats=1`) metric `cpums` will be included in the log. The query log will then look so:
 
 ```
 [Fri Jun 29 21:17:58 2021] 0.004 sec [all/0/rel 35254 (0,20)] [lj] [ios=6 kb=111.1 ms=0.5 cpums=0.3] test
@@ -82,7 +81,7 @@ where `cpums` is time in milliseconds spent on CPU processing the query.
 
 ### SQL log format
 
-SQL format is default but can be changed by searchd directive `query_log_format`:
+SQL format is default, but can be changed by searchd setting [query_log_format](../Server_settings/Searchd.md#query_log_format):
 
 ```ini
 searchd {
@@ -99,58 +98,56 @@ In this format, the example from the previous section would look as follows. (Wr
 SELECT * FROM test WHERE MATCH('test') OPTION ranker=proximity;
 
 /* Fri Jun 29 21:20:34 2007.555 conn 3 real 0.024 wall 0.024 found 19886 */
-SELECT * FROM test WHERE MATCH('test') GROUP BY channel_id
-OPTION ranker=proximity;
+SELECT * FROM test WHERE MATCH('test') GROUP BY channel_id OPTION ranker=proximity;
 ```
 
 Note that **all** requests would be logged in this format, including those sent via SphinxAPI and SphinxSE, not just those sent via SQL. Also note, that this kind of logging works only with plain log files and will not work if you use 'syslog' service for logging.
 
-The features of Manticore SQL log format compared to the plain text one are as follows.
+The features of Manticore SQL log format compared to the plain text one are as follows:
 
-* All request types should be logged. (This is still work in progress.)
 * Full statement data will be logged where possible.
 * Errors and warnings are logged.
-* The log should be automatically re-playable via SphinxQL.
+* Query log can be replayedL.
 * Additional performance counters (currently, per-agent distributed query times) are logged.
 
 Use `sphinxql:compact_in` to shorten your `IN()` clauses in log if you have too many values in it.
 
-Every request (including both SphinxAPI and SQL) request must result in exactly one log line. All request types, including `INSERT`, `CALL SNIPPETS`, etc will eventually get logged, though as of time of this writing, that is a work in progress). Every log line must be a valid Manticore SQL statement that reconstructs the full request, except if the logged request is too big and needs shortening for performance reasons. Additional messages, counters, etc can be logged in the comments section after the request.
+Every request (including both SphinxAPI and SQL) request results in exactly one log line. Every log line must be a valid Manticore SQL statement that reconstructs the full request, except if the logged request is too big and needs shortening for performance reasons. Additional messages, counters, etc. can be logged in the comments section after the request.
 
 ## Logging only slow queries
 
-By default all queries are logged. If it's desired to log only queries with execution times that exceed the specified
-limit, the `query_log_min_msec` directive can be used:
+By default all queries are logged. If it's desired to log only queries with execution times that exceed the specified limit, the `query_log_min_msec` directive can be used:
 
- ```ini
- searchd {
- ...
-     query_log = /var/log/query.log
-     query_log_min_msec  = 1000
- ...
- }
- ```
-The expected unit of measure is milliseconds, but time suffix expressions can be used as well, like
+```ini
+searchd {
+...
+    query_log = /var/log/query.log
+    query_log_min_msec  = 1000
+...
+}
+```
 
- ```ini
- searchd {
- ...
-     query_log = /var/log/query.log
-     query_log_min_msec  = 1s
- ...
- }
- ```
+The expected unit of measurerement is milliseconds, but time suffix expressions can be used as well, like:
+
+```ini
+searchd {
+...
+    query_log = /var/log/query.log
+    query_log_min_msec  = 1s
+...
+}
+```
 
 ## Log file permission mode
 
-By default the searchd and query log files are created with 600 permission, so only the user under which server runs and root users can read the log files. `query_log_mode` allows settings a different permission. This can be handy to allow other users to be able to read the log files (for example monitoring solutions running on non-root users).
+By default the searchd and query log files are created with permission `600`, so only the user under which Manticore is running and `root` can read the log files. `query_log_mode` allows setting a different permission. This can be handy to allow other users to be able to read the log files (for example monitoring solutions running on non-root users).
 
 
 ```ini
 searchd {
 ...
     query_log = /var/log/query.log
-    query_log_mode  = 666
+    query_log_mode = 666
 ...
 }
 ```

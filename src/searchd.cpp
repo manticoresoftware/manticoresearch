@@ -7788,11 +7788,10 @@ static inline bool MakeSingleLocalSnippetWithFields ( ExcerptQuery_t & tQuery, c
 {
 	assert ( pBuilder );
 
-	CSphScopedPtr<TextSource_i> pSource ( CreateSnippetSource ( q.m_uFilesMode,
-			(const BYTE*)tQuery.m_sSource.cstr(), tQuery.m_sSource.Length() ) );
+	std::unique_ptr<TextSource_i> pSource = CreateSnippetSource ( q.m_uFilesMode, (const BYTE*)tQuery.m_sSource.cstr(), tQuery.m_sSource.Length() );
 
 	SnippetResult_t tRes;
-	if ( !pBuilder->Build ( pSource.Ptr(), tRes ) )
+	if ( !pBuilder->Build ( pSource, tRes ) )
 	{
 		tQuery.m_sError = std::move ( tRes.m_sError );
 		return false;

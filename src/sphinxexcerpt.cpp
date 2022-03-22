@@ -377,7 +377,7 @@ public:
 	Impl_c*				MakeClone() const;
 	void				Setup ( const CSphIndex * pIndex, const SnippetQuerySettings_t & tQuery );
 	bool				SetQuery ( const CSphString & sQuery, bool bIgnoreFields, CSphString & sError );
-	bool				Build ( TextSource_i * pSource, SnippetResult_t & tRes );
+	bool				Build ( std::unique_ptr<TextSource_i>& pSource, SnippetResult_t & tRes );
 	CSphVector<BYTE>	PackResult ( SnippetResult_t & tRes, const VecTraits_T<int> & dRequestedFields ) const;
 
 private:
@@ -404,7 +404,7 @@ private:
 	DictRefPtr_c					m_pDict;
 	std::unique_ptr<ISphFieldFilter>	m_pFieldFilter;
 
-	bool							CheckSettings ( TextSource_i * pSource, CSphString & sError ) const;
+	bool							CheckSettings ( CSphString & sError ) const;
 	const CSphHTMLStripper *		GetStripperForText() const;
 	const CSphHTMLStripper *		GetStripperForTokenization() const;
 
@@ -1041,19 +1041,19 @@ VecTraits_T<BYTE> TextSourceFields_c::GetText ( int iField ) const
 
 //////////////////////////////////////////////////////////////////////////
 
-static TextSource_i * CreateTextSourceFile ( const VecTraits_T<const BYTE> & dFilename )
+static std::unique_ptr<TextSource_i> CreateTextSourceFile ( const VecTraits_T<const BYTE> & dFilename )
 {
-	return new TextSourceFile_c(dFilename);
+	return std::make_unique<TextSourceFile_c>(dFilename);
 }
 
 
-static TextSource_i * CreateTextSourceString ( const VecTraits_T<const BYTE> & dString )
+static std::unique_ptr<TextSource_i> CreateTextSourceString ( const VecTraits_T<const BYTE> & dString )
 {
-	return new TextSourceString_c(dString);
+	return std::make_unique<TextSourceString_c>(dString);
 }
 
 
-TextSource_i * CreateSnippetSource ( DWORD uFilesMode, const BYTE * pSource, int iLen )
+std::unique_ptr<TextSource_i> CreateSnippetSource ( DWORD uFilesMode, const BYTE * pSource, int iLen )
 {
 	if ( uFilesMode )
 		return CreateTextSourceFile ( VecTraits_T<const BYTE>(pSource, iLen) );
@@ -1062,16 +1062,16 @@ TextSource_i * CreateSnippetSource ( DWORD uFilesMode, const BYTE * pSource, int
 }
 
 
-TextSource_i * CreateHighlightSource ( const CSphVector<FieldSource_t> & dAllFields )
+std::unique_ptr<TextSource_i> CreateHighlightSource ( const CSphVector<FieldSource_t> & dAllFields )
 {
-	return new TextSourceFields_c ( dAllFields );
+	return std::make_unique<TextSourceFields_c> ( dAllFields );
 }
 
 /////////////////////////////////////////////////////////////////////////////
 
-bool SnippetBuilder_c::Impl_c::CheckSettings ( TextSource_i * pSource, CSphString & sError ) const
+bool SnippetBuilder_c::Impl_c::CheckSettings ( CSphString & sError ) const
 {
-	assert ( pSource && m_pState->m_pQuerySettings );
+	assert ( m_pState->m_pQuerySettings );
 
 	const SnippetQuerySettings_t & tOpt = *m_pState->m_pQuerySettings;
 
@@ -1163,20 +1163,18 @@ void SnippetBuilder_c::Impl_c::FixupQueryLimits ( SnippetLimits_t & tLimit,const
 }
 
 CSphString g_sSnippetsFilePrefix { "" };
-bool SnippetBuilder_c::Impl_c::Build ( TextSource_i * pSource, SnippetResult_t & tRes )
+bool SnippetBuilder_c::Impl_c::Build ( std::unique_ptr<TextSource_i>& pSource, SnippetResult_t & tRes )
 {
 	assert ( m_pState->m_pIndex && m_pState->m_pQuerySettings );
 
-	if ( !CheckSettings ( pSource, tRes.m_sError ) )
+	if ( !CheckSettings ( tRes.m_sError ) )
 		return false;
 
 	assert ( pSource );
 	if ( !pSource->PrepareText ( m_pFieldFilter.get(), GetStripperForText(), tRes.m_sError ) )
 		return false;
  
-	assert ( pSource );
 	DoHighlighting ( *pSource, tRes );
-
 	return true;
 }
 
@@ -1600,7 +1598,7 @@ bool SnippetBuilder_c::SetQuery ( const CSphString & sQuery, bool bIgnoreFields,
 	return m_pImpl->SetQuery ( sQuery, bIgnoreFields, sError );
 }
 
-bool SnippetBuilder_c::Build ( TextSource_i * pSource, SnippetResult_t & tRes )
+bool SnippetBuilder_c::Build ( std::unique_ptr<TextSource_i>& pSource, SnippetResult_t & tRes )
 {
 	assert ( m_pImpl );
 	return m_pImpl->Build ( pSource, tRes );

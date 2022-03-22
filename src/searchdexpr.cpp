@@ -431,11 +431,11 @@ int Expr_Snippet_c::StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr )
 			return 0;
 	}
 
-	CSphScopedPtr<TextSource_i> pSource ( CreateSnippetSource ( m_tSnippetQuery.m_uFilesMode, szSource, iLen ) );
+	std::unique_ptr<TextSource_i> pSource = CreateSnippetSource ( m_tSnippetQuery.m_uFilesMode, szSource, iLen );
 
 	// FIXME! fill in all the missing options; use consthash?
 	SnippetResult_t tRes;
-	if ( !m_pSnippetBuilder->Build ( pSource.Ptr(), tRes ) )
+	if ( !m_pSnippetBuilder->Build ( pSource, tRes ) )
 		return 0;
 
 	CSphVector<BYTE> dRes = m_pSnippetBuilder->PackResult ( tRes, m_dRequestedFieldIds );
@@ -541,7 +541,7 @@ int	Expr_Highlight_c::StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr
 
 	DocstoreDoc_t tFetchedDoc;
 	CSphVector<FieldSource_t> dAllFields;
-	CSphScopedPtr<TextSource_i> pSource(nullptr);
+	std::unique_ptr<TextSource_i> pSource;
 	CSphFixedVector<BYTE> tScoped {0}; // scoped array ptr
 
 	if ( m_pText )
@@ -566,7 +566,7 @@ int	Expr_Highlight_c::StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr
 	}
 
 	SnippetResult_t tRes;
-	if ( !m_pSnippetBuilder->Build ( pSource.Ptr(), tRes ) )
+	if ( !m_pSnippetBuilder->Build ( pSource, tRes ) )
 		return 0;
 
 	CSphVector<BYTE> dPacked = m_pSnippetBuilder->PackResult ( tRes, m_dRequestedFieldIds );

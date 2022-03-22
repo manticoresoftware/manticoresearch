@@ -129,7 +129,7 @@ static bool				g_bQuerySyslog		= false;
 static CSphString		g_sLogFile;								// log file name
 static bool				g_bLogTty			= false;			// cached isatty(g_iLogFile)
 static bool				g_bLogStdout		= true;				// extra copy of startup log messages to stdout; true until around "accepting connections", then MUST be false
-static LogFormat_e		g_eLogFormat		= LOG_FORMAT_PLAIN;
+static LogFormat_e		g_eLogFormat		= LOG_FORMAT_SPHINXQL;
 static bool				g_bLogCompactIn		= false;			// whether to cut list in IN() clauses.
 static int				g_iQueryLogMinMs	= 0;				// log 'slow' threshold for query
 static char				g_sLogFilter[SPH_MAX_FILENAME_LEN+1] = "\0";
@@ -19553,7 +19553,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		g_sSnippetsFilePrefix.SetSprintf("%s/", sphGetCwd().scstr());
 
 	{
-		auto sLogFormat = hSearchd.GetStr ( "query_log_format", "plain" );
+		auto sLogFormat = hSearchd.GetStr ( "query_log_format", "sphinxql" );
 		if ( sLogFormat=="sphinxql" )
 			g_eLogFormat = LOG_FORMAT_SPHINXQL;
 		else if ( sLogFormat=="plain" )

@@ -17,14 +17,14 @@ In this case all search queries will be sent to syslog daemon with `LOG_INFO` pr
 
 ## Logging format
 
-Two query log formats are supported. Plain text format is still the default one. However, while it might be more convenient for manual monitoring and review, but hard to replay for benchmarks, it only logs *search* queries but not the other types of requests, does not always contain the complete search query data, etc.
+Two query log formats are supported. Plain text format was the default but that default changed to SQL format. However, while plain log format might be more convenient for manual monitoring and review, but hard to replay for benchmarks, it only logs *search* queries but not the other types of requests, does not always contain the complete search query data, etc.
 
-The default text format is also harder (and sometimes impossible) to replay for benchmarking purposes. The `sphinxql` format alleviates that. It aims to be complete and re-playable, even though at the cost of brevity and readability.
+The plain text format is also harder (and sometimes impossible) to replay for benchmarking purposes. The `sphinxql` format alleviates that. It aims to be complete and re-playable, even though at the cost of brevity and readability.
 
 ### Plain log format
 
 
-By default, `searchd` logs all successfully executed search queries into a query log file. Here's an example:
+With plain log format, `searchd` logs all successfully executed search queries into a query log file. Here's an example:
 
 ```sql
 [Fri Jun 29 21:17:58 2007] 0.004 sec 0.004 sec [all/0/rel 35254 (0,20)] [lj] test
@@ -82,7 +82,7 @@ where `cpums` is time in milliseconds spent on CPU processing the query.
 
 ### SQL log format
 
-SQL format can be enabled by searchd directive `query_log_format`:
+SQL format is default but can be changed by searchd directive `query_log_format`:
 
 ```ini
 searchd {
@@ -105,7 +105,7 @@ OPTION ranker=proximity;
 
 Note that **all** requests would be logged in this format, including those sent via SphinxAPI and SphinxSE, not just those sent via SQL. Also note, that this kind of logging works only with plain log files and will not work if you use 'syslog' service for logging.
 
-The features of Manticore SQL log format compared to the default text one are as follows.
+The features of Manticore SQL log format compared to the plain text one are as follows.
 
 * All request types should be logged. (This is still work in progress.)
 * Full statement data will be logged where possible.

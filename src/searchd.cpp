@@ -1986,13 +1986,10 @@ bool SearchReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 	const int iResults = m_iResults;
 	assert ( iResults>0 );
 
-	auto pResult = ( cSearchResult * ) tAgent.m_pResult.Ptr ();
-	if ( !pResult )
-	{
-		pResult = new cSearchResult;
-		tAgent.m_pResult = pResult;
-	}
+	if ( !tAgent.m_pResult )
+		tAgent.m_pResult = std::make_unique<cSearchResult>();
 
+	auto pResult = (cSearchResult*)tAgent.m_pResult.get();
 	auto &dResults = pResult->m_dResults;
 
 	dResults.Resize ( iResults );
@@ -4837,7 +4834,7 @@ bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHave
 	tQueueSettings.m_iMaxMatches = Max ( tQueueSettings.m_iMaxMatches, 1 );
 
 	SphQueueRes_t tQueueRes;
-	CSphScopedPtr<ISphMatchSorter> pSorter ( sphCreateQueue ( tQueueSettings, tQueryCopy, tRes.m_sError, tQueueRes ) );
+	std::unique_ptr<ISphMatchSorter> pSorter ( sphCreateQueue ( tQueueSettings, tQueryCopy, tRes.m_sError, tQueueRes ) );
 
 	// restore outer order related patches, or it screws up the query log
 	if ( tQueryCopy.m_bHasOuter )
@@ -4887,7 +4884,7 @@ bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHave
 	}
 
 	// do the sort work!
-	tRes.m_iTotalMatches -= KillDupesAndFlatten ( pSorter.Ptr(), tRes );
+	tRes.m_iTotalMatches -= KillDupesAndFlatten ( pSorter.get(), tRes );
 	return true;
 }
 
@@ -6936,19 +6933,19 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	///////////////////////////////////////////////////////////
 
 	// connect to remote agents and query them, if required
-	CSphScopedPtr<SearchRequestBuilder_c> tReqBuilder { nullptr };
+	std::unique_ptr<SearchRequestBuilder_c> tReqBuilder;
 	CSphRefcountedPtr<RemoteAgentsObserver_i> tReporter { nullptr };
 	std::unique_ptr<ReplyParser_i> tParser;;
 	if ( !dRemotes.IsEmpty() )
 	{
 		SwitchProfile(m_pProfile, SPH_QSTATE_DIST_CONNECT);
-		tReqBuilder = new SearchRequestBuilder_c ( m_dNQueries, iDivideLimits );
+		tReqBuilder = std::make_unique<SearchRequestBuilder_c> ( m_dNQueries, iDivideLimits );
 		tParser = std::make_unique<SearchReplyParser_c> ( iQueries );
 		tReporter = GetObserver();
 
 		// run remote queries. tReporter will tell us when they're finished.
 		// also blackholes will be removed from this flow of remotes.
-		ScheduleDistrJobs ( dRemotes, tReqBuilder.Ptr (),
+		ScheduleDistrJobs ( dRemotes, tReqBuilder.get (),
 			tParser.get (),
 			tReporter, tFirst.m_iRetryCount, tFirst.m_iRetryDelay );
 	}
@@ -7009,7 +7006,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				// merge this agent's results
 				for ( int iRes = 0; iRes<iQueries; ++iRes )
 				{
-					auto pResult = ( cSearchResult * ) pAgent->m_pResult.Ptr ();
+					auto pResult = ( cSearchResult * ) pAgent->m_pResult.get ();
 					if ( !pResult )
 						continue;
 
@@ -8067,7 +8064,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries,
 	/// do highlighting
 	///////////////////
 
-	CSphScopedPtr<SnippetBuilder_c>	pBuilder ( new SnippetBuilder_c );
+	auto pBuilder = std::make_unique<SnippetBuilder_c>();
 	pBuilder->Setup ( pLocalIndex, q );
 
 	if ( !pBuilder->SetQuery ( q.m_sQuery.cstr(), true, sError ) )
@@ -8075,7 +8072,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries,
 
 	// boring single snippet
 	if ( dQueries.GetLength ()==1 )
-		return MakeSingleLocalSnippet ( dQueries[0], q, pBuilder.Ptr(), sError );
+		return MakeSingleLocalSnippet ( dQueries[0], q, pBuilder.get(), sError );
 
 	if ( !CollectSourceSizes ( dQueries, q.m_uFilesMode, !bScattered, sError ) )
 		return false;
@@ -8111,7 +8108,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries,
 	if ( !bRemote )
 	{
 		// multithreaded, but no remote agents.
-		MakeSnippetsCoro ( dPresent, dQueries, q, pBuilder.Ptr() );
+		MakeSnippetsCoro ( dPresent, dQueries, q, pBuilder.get() );
 
 	} else
 	{
@@ -8119,9 +8116,9 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries,
 
 		// multithreaded with remotes (scattered and full)
 		if ( bScattered )
-			MakeRemoteScatteredSnippets ( dQueries, pDist, pBuilder.Ptr(), q, dPresent, dAbsent );
+			MakeRemoteScatteredSnippets ( dQueries, pDist, pBuilder.get(), q, dPresent, dAbsent );
 		else
-			MakeRemoteNonScatteredSnippets ( dQueries, pDist, pBuilder.Ptr (), q, dPresent );
+			MakeRemoteNonScatteredSnippets ( dQueries, pDist, pBuilder.get (), q, dPresent );
 	}
 
 	StringBuilder_c sErrors ( "; " );
@@ -9528,13 +9525,10 @@ public:
 		//	auto &dQueries = m_pWorker->m_dQueries;
 		//	int iDoc = m_pWorker->m_dTasks[tAgent.m_iStoreTag].m_iHead;
 
-		auto pResult = ( CPqResult * ) tAgent.m_pResult.Ptr ();
-		if ( !pResult )
-		{
-			pResult = new CPqResult;
-			tAgent.m_pResult = pResult;
-		}
+		if ( !tAgent.m_pResult )
+			tAgent.m_pResult = std::make_unique<CPqResult>();
 
+		auto pResult = (CPqResult*)tAgent.m_pResult.get();
 		auto &dResult = pResult->m_dResult;
 		auto uFlags = tReq.GetDword ();
 		bool bDumpDocs = !!(uFlags & 1U);
@@ -10069,7 +10063,7 @@ void PercolateMatchDocuments ( const BlobVec_t & dDocs, const PercolateOptions_t
 				continue;
 			}
 
-			auto pResult = ( CPqResult * ) pAgent->m_pResult.Ptr ();
+			auto pResult = ( CPqResult * ) pAgent->m_pResult.get ();
 			if ( !pResult )
 				continue;
 

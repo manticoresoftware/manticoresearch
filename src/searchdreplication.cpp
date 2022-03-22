@@ -3129,7 +3129,7 @@ static AgentConn_t * CreateAgent ( const AgentDesc_t & tDesc, const PQRemoteData
 	pAgent->m_iMyConnectTimeoutMs = g_iAgentConnectTimeoutMs;
 	pAgent->m_iMyQueryTimeoutMs = iTimeoutMs;
 
-	pAgent->m_pResult = new PQRemoteAgentData_t ( tReq );
+	pAgent->m_pResult = std::make_unique<PQRemoteAgentData_t> ( tReq );
 
 	return pAgent;
 }
@@ -3211,14 +3211,14 @@ public:
 
 	static PQRemoteReply_t & GetRes ( const AgentConn_t & tAgent )
 	{
-		PQRemoteAgentData_t * pData = (PQRemoteAgentData_t *)tAgent.m_pResult.Ptr();
+		PQRemoteAgentData_t * pData = (PQRemoteAgentData_t *)tAgent.m_pResult.get();
 		assert ( pData );
 		return pData->m_tReply;
 	}
 	
 	static const PQRemoteData_t & GetReq ( const AgentConn_t & tAgent )
 	{
-		const PQRemoteAgentData_t * pData = (PQRemoteAgentData_t *)tAgent.m_pResult.Ptr();
+		const PQRemoteAgentData_t * pData = (PQRemoteAgentData_t *)tAgent.m_pResult.get();
 		assert ( pData );
 		return pData->m_tReq;
 	}

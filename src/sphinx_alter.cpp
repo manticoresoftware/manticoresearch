@@ -536,19 +536,19 @@ void IndexAlterHelper_c::Alter_AddRemoveFromDocstore ( DocstoreBuilder_i & tBuil
 
 //////////////////////////////////////////////////////////////////////////
 
-WriteWrapper_c * CreateWriteWrapperDisk ( CSphWriter & tWriter )
+std::unique_ptr<WriteWrapper_c> CreateWriteWrapperDisk ( CSphWriter & tWriter )
 {
-	return new WriteWrapper_Disk_c(tWriter);
+	return std::make_unique<WriteWrapper_Disk_c>(tWriter);
 }
 
 
-WriteWrapper_c * CreateWriteWrapperMem ( CSphTightVector<CSphRowitem> & dSPA )
+std::unique_ptr<WriteWrapper_c> CreateWriteWrapperMem ( CSphTightVector<CSphRowitem> & dSPA )
 {
-	return new WriteWrapper_Mem_T<CSphRowitem>(dSPA);
+	return std::make_unique<WriteWrapper_Mem_T<CSphRowitem>>(dSPA);
 }
 
 
-WriteWrapper_c * CreateWriteWrapperMem ( CSphTightVector<BYTE> & dSPB )
+std::unique_ptr<WriteWrapper_c> CreateWriteWrapperMem ( CSphTightVector<BYTE> & dSPB )
 {
-	return new WriteWrapper_Mem_T<BYTE>(dSPB);
+	return std::make_unique<WriteWrapper_Mem_T<BYTE>>(dSPB);
 }

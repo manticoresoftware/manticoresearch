@@ -28,9 +28,9 @@ public:
 };
 
 class CSphWriter;
-WriteWrapper_c * CreateWriteWrapperDisk ( CSphWriter & tWriter );
-WriteWrapper_c * CreateWriteWrapperMem ( CSphTightVector<CSphRowitem> & dSPA );
-WriteWrapper_c * CreateWriteWrapperMem ( CSphTightVector<BYTE> & dSPB );
+std::unique_ptr<WriteWrapper_c> CreateWriteWrapperDisk ( CSphWriter & tWriter );
+std::unique_ptr<WriteWrapper_c> CreateWriteWrapperMem ( CSphTightVector<CSphRowitem> & dSPA );
+std::unique_ptr<WriteWrapper_c> CreateWriteWrapperMem ( CSphTightVector<BYTE> & dSPB );
 
 class CSphSchema;
 class Docstore_i;

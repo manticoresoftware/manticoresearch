@@ -6870,8 +6870,8 @@ void RtIndex_c::GetSuggest ( const SuggestArgs_t & tArgs, SuggestResult_t & tRes
 	if ( dSegments.GetLength() )
 	{
 		assert ( !tRes.m_pWordReader && !tRes.m_pSegments );
-		CSphScopedPtr<RtWordReader_c> pReader { new RtWordReader_c ( dSegments[0], true, m_iWordsCheckpoint, m_tSettings.m_eHitless ) };
-		tRes.m_pWordReader = pReader.Ptr();
+		auto pReader = std::make_unique<RtWordReader_c> ( dSegments[0], true, m_iWordsCheckpoint, m_tSettings.m_eHitless );
+		tRes.m_pWordReader = pReader.get();
 		tRes.m_pSegments = tGuard.m_tSegmentsAndChunks.m_pSegs;
 		tRes.m_bHasExactDict = m_tSettings.m_bIndexExactWords;
 
@@ -8349,8 +8349,8 @@ void RtIndex_c::AddRemoveRowwiseAttr ( RtGuard_t & tGuard, bool bAdd, const CSph
 
 		CSphTightVector<CSphRowitem> dSPA;
 		CSphTightVector<BYTE> dSPB;
-		CSphScopedPtr<WriteWrapper_c> pSPAWriteWrapper ( CreateWriteWrapperMem ( dSPA ) );
-		CSphScopedPtr<WriteWrapper_c> pSPBWriteWrapper ( CreateWriteWrapperMem ( dSPB ) );
+		std::unique_ptr<WriteWrapper_c> pSPAWriteWrapper = CreateWriteWrapperMem ( dSPA );
+		std::unique_ptr<WriteWrapper_c> pSPBWriteWrapper = CreateWriteWrapperMem ( dSPB );
 		dSPA.Reserve ( pRSeg->m_uRows * m_iStride );
 
 		auto * pWSeg = const_cast<RtSegment_t*> ( pRSeg.Ptr() );

@@ -594,7 +594,8 @@ static wsrep_cb_status_t ViewChanged_fn ( void * pAppCtx, void * pRecvCtx, const
 	pCluster->m_iSize = pView->memb_num;
 	pCluster->m_iIdx = pView->my_idx;
 	pCluster->SetPrimary ( pView->status );
-	UpdateGroupView ( pView, pCluster );
+	if ( pCluster->IsPrimary() )
+		UpdateGroupView ( pView, pCluster );
 
 	*ppSstReq = nullptr;
 	*pSstReqLen = 0;

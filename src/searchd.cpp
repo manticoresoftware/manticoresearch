@@ -10017,16 +10017,16 @@ void PercolateMatchDocuments ( const BlobVec_t & dDocs, const PercolateOptions_t
 	bool bHaveRemotes = !dAgents.IsEmpty ();
 	int iSuccesses = 0;
 	int iAgentsDone = 0;
-	CSphScopedPtr<PqRequestBuilder_c> pReqBuilder { nullptr };
+	std::unique_ptr<PqRequestBuilder_c> pReqBuilder;
 	std::unique_ptr<ReplyParser_i> pParser;
 	CSphRefcountedPtr<RemoteAgentsObserver_i> pReporter { nullptr };
 	if ( bHaveRemotes )
 	{
-		pReqBuilder = new PqRequestBuilder_c ( dDocs, tOpts, iStart, iStep );
+		pReqBuilder = std::make_unique<PqRequestBuilder_c> ( dDocs, tOpts, iStart, iStep );
 		iStart += iStep * dAgents.GetLength ();
 		pParser = std::make_unique<PqReplyParser_c>();
 		pReporter = GetObserver();
-		ScheduleDistrJobs ( dAgents, pReqBuilder.Ptr(), pParser.get(), pReporter );
+		ScheduleDistrJobs ( dAgents, pReqBuilder.get(), pParser.get(), pReporter );
 	}
 
 	LazyVector_T <CPqResult> dLocalResults;

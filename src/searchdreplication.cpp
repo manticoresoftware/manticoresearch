@@ -2925,7 +2925,7 @@ enum class WriteResult_e : BYTE
 // reply from remote node
 struct PQRemoteReply_t
 {
-	CSphScopedPtr<SyncDst_t> m_pDst { nullptr };
+	std::unique_ptr<SyncDst_t> m_pDst;
 	const SyncDst_t * m_pSharedDst = nullptr;
 	bool m_bIndexActive = false;
 	CSphString m_sNodes;
@@ -3302,8 +3302,8 @@ public:
 
 	static void BuildReply ( const PQRemoteReply_t & tRes, ISphOutputBuffer & tOut )
 	{
-		assert ( tRes.m_pDst.Ptr() );
-		const SyncDst_t * pDst = tRes.m_pDst.Ptr();
+		assert ( tRes.m_pDst );
+		const SyncDst_t * pDst = tRes.m_pDst.get();
 
 		auto tReply = APIAnswer ( tOut );
 		tOut.SendByte ( tRes.m_bIndexActive );
@@ -3317,8 +3317,8 @@ public:
 	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const final
 	{
 		PQRemoteReply_t & tRes = GetRes ( tAgent );
-		assert ( tRes.m_pDst.Ptr() );
-		SyncDst_t * pDst = tRes.m_pDst.Ptr();
+		assert ( tRes.m_pDst );
+		SyncDst_t * pDst = tRes.m_pDst.get();
 
 		tRes.m_bIndexActive = !!tReq.GetByte();
 		GetArray ( pDst->m_dRemotePaths, tReq );
@@ -3577,7 +3577,7 @@ void HandleCommandClusterPq ( ISphOutputBuffer & tOut, WORD uCommandVer, InputBu
 		{
 			SyncSrc_t tSrc;
 			tCmd.m_pChunks = &tSrc;
-			tRes.m_pDst = new SyncDst_t();
+			tRes.m_pDst = std::make_unique<SyncDst_t>();
 			PQRemoteFileReserve_c::ParseCommand ( tBuf, tCmd );
 			bOk = RemoteFileReserve ( tCmd, tRes, sError );
 			if ( bOk )
@@ -4185,7 +4185,7 @@ bool RemoteFileReserve ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CS
 	CSphString sLocalIndexPath;
 
 	assert ( tCmd.m_pChunks );
-	assert ( tRes.m_pDst.Ptr() );
+	assert ( tRes.m_pDst );
 	// use index path first
 	{
 		cServedIndexRefPtr_c pServed = GetServed ( tCmd.m_sIndex );
@@ -5049,7 +5049,7 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 		VecRefPtrs_t<AgentConn_t *> dNodes;
 		GetNodes ( dDesc, dNodes, tAgentData, tmLongOpTimeout );
 		for ( AgentConn_t * pAgent : dNodes )
-			PQRemoteBase_c::GetRes ( *pAgent ).m_pDst = new SyncDst_t();
+			PQRemoteBase_c::GetRes ( *pAgent ).m_pDst = std::make_unique<SyncDst_t>();
 
 		sphLogDebugRpl ( "reserve index '%s' at %d nodes with timeout %d.%03d sec", sIndex.cstr(), dNodes.GetLength(), (int)( tmLongOpTimeout/1000 ), (int)( tmLongOpTimeout%1000 ) );
 
@@ -5079,7 +5079,7 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 				continue;
 			 }
 
-			 SyncDst_t * pDst = tRes.m_pDst.LeakPtr();
+			 SyncDst_t * pDst = tRes.m_pDst.release();
 			 tStatesGuard.m_dFree.Add ( pDst );
 			 tSigSrc.m_tmTimeout = Max ( tSigSrc.m_tmTimeout, pDst->m_tmTimeout );
 			 pDst->m_tmTimeoutFile = GetQueryTimeout ( Max ( tSigSrc.m_tmTimeoutFile, pDst->m_tmTimeoutFile ) * 3 );

@@ -1096,8 +1096,8 @@ int FtMatchingWithoutDocs ( const StoredQuery_t * pStored, PercolateMatchContext
 {
 	tMatchCtx.m_pDictMap->SetMap ( pStored->m_hDict ); // set terms dictionary
 	CSphQueryResultMeta tTmpMeta;
-	CSphScopedPtr<ISphRanker> pRanker { sphCreateRanker ( *pStored->m_pXQ, tMatchCtx.m_tDummyQuery,
-			tTmpMeta, *tMatchCtx.m_pTermSetup, *tMatchCtx.m_pCtx, tMatchCtx.m_tSchema ) };
+	std::unique_ptr<ISphRanker> pRanker = sphCreateRanker ( *pStored->m_pXQ, tMatchCtx.m_tDummyQuery,
+			tTmpMeta, *tMatchCtx.m_pTermSetup, *tMatchCtx.m_pCtx, tMatchCtx.m_tSchema );
 
 	if ( !pRanker )
 		return 0;
@@ -1113,8 +1113,8 @@ int FtMatchingCollectingDocs ( const StoredQuery_t * pStored, PercolateMatchCont
 {
 	tMatchCtx.m_pDictMap->SetMap ( pStored->m_hDict ); // set terms dictionary
 	CSphQueryResultMeta tTmpMeta;
-	CSphScopedPtr<ISphRanker> pRanker { sphCreateRanker ( *pStored->m_pXQ, tMatchCtx.m_tDummyQuery,
-			tTmpMeta, *tMatchCtx.m_pTermSetup, *tMatchCtx.m_pCtx, tMatchCtx.m_tSchema ) };
+	std::unique_ptr<ISphRanker> pRanker = sphCreateRanker ( *pStored->m_pXQ, tMatchCtx.m_tDummyQuery,
+			tTmpMeta, *tMatchCtx.m_pTermSetup, *tMatchCtx.m_pCtx, tMatchCtx.m_tSchema );
 
 	if ( !pRanker )
 		return 0;

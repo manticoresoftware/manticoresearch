@@ -111,6 +111,6 @@ void	sphAotLemmatizeUk ( BYTE * pWord, LemmatizerTrait_i * pLemmatizer );
 /// lemmatize (or guess a normal form) return all lemmas
 void	sphAotLemmatizeUk ( StrVec_t & dLemmas, const BYTE * pWord, LemmatizerTrait_i * pLemmatizer );
 
-LemmatizerTrait_i * CreateLemmatizer ( int iLang );
+std::unique_ptr<LemmatizerTrait_i> CreateLemmatizer ( int iLang );
 
 #endif // _sphinxstem_

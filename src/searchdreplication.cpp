@@ -3861,7 +3861,7 @@ public:
 	{
 		Threads::ScopedCoroMutex_t tLock ( m_tLock );
 
-		assert ( m_pMerge.Ptr() );
+		assert ( m_pMerge );
 
 		if ( !SetFile ( iFile, false, sError ) )
 			return WriteResult_e::WRITE_FAILED;
@@ -3896,8 +3896,8 @@ public:
 	{
 		Threads::ScopedCoroMutex_t tLock ( m_tLock );
 
-		assert ( m_pMerge.Ptr() );
-		return m_pMerge.LeakPtr();
+		assert ( m_pMerge );
+		return m_pMerge.release();
 	}
 
 	void SetMerge ( const PQRemoteData_t & tCmd, const PQRemoteReply_t & tRes, const CSphString & sIndexPath, const VecTraits_T<CSphString> & dFilesRef )
@@ -3906,7 +3906,7 @@ public:
 
 		Threads::ScopedCoroMutex_t tLock ( m_tLock );
 
-		m_pMerge = new MergeState_t();
+		m_pMerge = std::make_unique<MergeState_t>();
 		m_pMerge->m_bIndexActive = tRes.m_bIndexActive;
 		m_pMerge->m_sIndexPath = sIndexPath;
 		m_pMerge->m_dMergeMask = tRes.m_pDst->m_dNodeChunks;
@@ -3919,9 +3919,9 @@ public:
 private:
 	Threads::Coro::Mutex_c m_tLock; // prevent writing to same file from multiple clients
 
-	CSphScopedPtr<WriterWithHash_c> m_pWriter { nullptr };
-	CSphScopedPtr<CSphAutoreader> m_pReader { nullptr };
-	CSphScopedPtr<MergeState_t> m_pMerge { nullptr };
+	std::unique_ptr<WriterWithHash_c> m_pWriter;
+	std::unique_ptr<CSphAutoreader> m_pReader;
+	std::unique_ptr<MergeState_t> m_pMerge;
 	CSphString m_sError; // writer need a string to put error message there
 
 	int m_iFile { -1 };
@@ -3945,23 +3945,23 @@ private:
 		m_iFile = iFile;
 
 		int iOpenFlags = ( bRestart ? ( O_CREAT | O_RDWR | SPH_O_BINARY ) : SPH_O_NEW ); // need to keep already written data
-		CSphScopedPtr<WriterWithHash_c> pWriter ( new WriterWithHash_c );
+		auto pWriter = std::make_unique<WriterWithHash_c>();
 		if ( !pWriter->OpenFile ( m_pMerge->m_dFilesNew[iFile], iOpenFlags, m_sError ) )
 		{
 			sError = m_sError;
 			return false;
 		}
 
-		CSphScopedPtr<CSphAutoreader> pReader ( nullptr );
+		std::unique_ptr<CSphAutoreader> pReader;
 		if ( sphFileExists ( m_pMerge->m_dFilesRef[iFile].cstr(), nullptr ) )
 		{
-			pReader = new CSphAutoreader();
+			pReader = std::make_unique<CSphAutoreader>();
 			if ( !pReader->Open ( m_pMerge->m_dFilesRef[iFile], sError ) )
 				return false;
 		}
 
-		m_pWriter.Swap ( pWriter );
-		m_pReader.Swap ( pReader );
+		m_pWriter = std::move ( pWriter );
+		m_pReader = std::move ( pReader );
 
 		return true;
 	}
@@ -4039,7 +4039,7 @@ private:
 
 	bool VerifyHashWriter ( CSphString & sError )
 	{
-		assert ( m_pWriter.Ptr() );
+		assert ( m_pWriter );
 		assert ( m_iFile>=0 && m_iFile<m_pMerge->m_dFilesNew.GetLength() );
 
 		// flush data and finalize hash
@@ -4072,26 +4072,26 @@ private:
 	{
 		if ( !m_pWriter )
 		{
-			sError.SetSprintf ( "no active writer %p on data copy %s (%d)", m_pWriter.Ptr(), GetFilename(), m_iFile );
+			sError.SetSprintf ( "no active writer %p on data copy %s (%d)", m_pWriter.get(), GetFilename(), m_iFile );
 			return false;
 		}
 
 		if ( bSeekReader && !m_pReader )
 		{
-			sError.SetSprintf ( "no reader %p on data copy %s (%d)", m_pReader.Ptr(), GetFilename(), m_iFile );
+			sError.SetSprintf ( "no reader %p on data copy %s (%d)", m_pReader.get(), GetFilename(), m_iFile );
 			return false;
 		}
 
 		if ( m_pWriter->GetPos()!=iOff )
 		{
-			sphLogDebugRpl ( "file %s (%d) restarted at offset: " INT64_FMT ", writer offset: " INT64_FMT ", reader offset:" INT64_FMT , GetFilename(), m_iFile, iOff, (int64_t)m_pWriter->GetPos(), (int64_t)( m_pReader.Ptr() ? m_pReader->GetPos() : -1 ) );
+			sphLogDebugRpl ( "file %s (%d) restarted at offset: " INT64_FMT ", writer offset: " INT64_FMT ", reader offset:" INT64_FMT , GetFilename(), m_iFile, iOff, (int64_t)m_pWriter->GetPos(), (int64_t)( m_pReader.get() ? m_pReader->GetPos() : -1 ) );
 
 			if ( !SetFile ( m_iFile, true, sError ) )
 				return false;
 
 			if ( bSeekReader && !m_pReader )
 			{
-				sError.SetSprintf ( "no reader %p on data copy %s (%d)", m_pReader.Ptr(), GetFilename(), m_iFile );
+				sError.SetSprintf ( "no reader %p on data copy %s (%d)", m_pReader.get(), GetFilename(), m_iFile );
 				return false;
 			}
 
@@ -4436,8 +4436,8 @@ bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSph
 	}
 
 	ScopedState_t tStateGuard ( uWriter );
-	CSphScopedPtr<MergeState_t> pMerge { g_tRecvStates.GetState ( uWriter ).Flush ( sError ) };
-	if ( !pMerge.Ptr() )
+	std::unique_ptr<MergeState_t> pMerge { g_tRecvStates.GetState ( uWriter ).Flush ( sError ) };
+	if ( !pMerge )
 		return false;
 
 	CSphString sType = GetTypeName ( tCmd.m_eIndex );
@@ -4449,7 +4449,7 @@ bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSph
 
 	sphLogDebugRpl ( "rotating index '%s' content from %s", tCmd.m_sIndex.cstr(), pMerge->m_sIndexPath.cstr() );
 	RollbackFilesGuard_t tFilesGuard;
-	if ( !RotateFiles ( pMerge.Ptr(), tFilesGuard.m_tFiles, sError ) )
+	if ( !RotateFiles ( pMerge.get(), tFilesGuard.m_tFiles, sError ) )
 		return false;
 
 	// verify whole index only in case debug replication

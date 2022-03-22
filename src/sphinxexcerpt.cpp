@@ -362,7 +362,7 @@ struct SnippetBuilderStatelessMembers_t
 	const CSphIndex *				m_pIndex = nullptr;
 	const SnippetQuerySettings_t *	m_pQuerySettings = nullptr;
 	std::unique_ptr<CSphHTMLStripper> m_pStripper;
-	CSphScopedPtr<QueryParser_i>	m_pQueryParser { nullptr };
+	std::unique_ptr<QueryParser_i>	m_pQueryParser;
 	TokenizerRefPtr_c				m_pTokenizerJson;
 	CSphScopedPtr<XQQuery_t>		m_pExtQuery { nullptr };
 	DWORD							m_eExtQuerySPZ = SPH_SPZ_NONE;

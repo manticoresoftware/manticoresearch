@@ -368,7 +368,7 @@ protected:
 	int &	m_iWarnings;
 };
 
-QueryParser_i * CreateQueryParser( bool bJson )
+std::unique_ptr<QueryParser_i> CreateQueryParser( bool bJson )
 {
 	if ( bJson )
 		return sphCreateJsonQueryParser();
@@ -534,12 +534,12 @@ protected:
 	{}
 };
 
-static PubSearchHandler_c * CreateMsearchHandler ( const QueryParser_i * pQueryParser, QueryType_e eQueryType, JsonQuery_c & tQuery )
+static std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, JsonQuery_c & tQuery )
 {
-	tQuery.m_pQueryParser = pQueryParser;
+	tQuery.m_pQueryParser = pQueryParser.get();
 
 	int iQueries = ( 1 + tQuery.m_dAggs.GetLength() );
-	PubSearchHandler_c * pHandler = { new PubSearchHandler_c ( iQueries, pQueryParser, eQueryType, true ) };
+	std::unique_ptr<PubSearchHandler_c> pHandler = std::make_unique<PubSearchHandler_c> ( iQueries, std::move ( pQueryParser ), eQueryType, true );
 
 	if ( !tQuery.m_dAggs.GetLength() )
 	{
@@ -619,13 +619,13 @@ public:
 	bool Process () final
 	{
 		CSphString sWarning;
-		QueryParser_i * pQueryParser = PreParseQuery();
+		std::unique_ptr<QueryParser_i> pQueryParser = PreParseQuery();
 		if ( !pQueryParser )
 			return false;
 
 		int iQueries = ( 1 + m_tQuery.m_dAggs.GetLength() );
 
-		CSphScopedPtr<PubSearchHandler_c> tHandler { CreateMsearchHandler ( pQueryParser, m_eQueryType, m_tQuery )};
+		std::unique_ptr<PubSearchHandler_c> tHandler = CreateMsearchHandler ( std::move ( pQueryParser ), m_eQueryType, m_tQuery );
 		SetStmt ( *tHandler );
 
 		QueryProfile_c tProfile;
@@ -654,7 +654,7 @@ public:
 		ARRAY_FOREACH ( i, m_tQuery.m_dAggs )
 			dAggsRes[i+1] = tHandler->GetResult ( i+1 );
 
-		CSphString sResult = EncodeResult ( dAggsRes, m_bProfile ? &tProfile : NULL );
+		CSphString sResult = EncodeResult ( dAggsRes, m_bProfile ? &tProfile : nullptr );
 		BuildReply ( sResult, SPH_HTTP_STATUS_200 );
 
 		return true;
@@ -666,7 +666,7 @@ protected:
 	JsonQuery_c				m_tQuery;
 	CSphString				m_sWarning;
 
-	virtual QueryParser_i * PreParseQuery() = 0;
+	virtual std::unique_ptr<QueryParser_i> PreParseQuery() = 0;
 	virtual CSphString		EncodeResult ( const VecTraits_T<AggrResult_t *> & dRes, QueryProfile_c * pProfile ) = 0;
 	virtual void			SetStmt ( PubSearchHandler_c & tHandler ) {};
 };
@@ -682,7 +682,7 @@ public:
 protected:
 	CSphVector<SqlStmt_t> m_dStmt;
 
-	QueryParser_i * PreParseQuery() override
+	std::unique_ptr<QueryParser_i> PreParseQuery() override
 	{
 		const CSphString * pRawQl = m_tOptions ( "query" );
 		if ( !pRawQl || pRawQl->IsEmpty() )
@@ -960,7 +960,7 @@ public:
 		: HttpSearchHandler_c ( sQuery, tOptions )
 	{}
 
-	QueryParser_i * PreParseQuery() override
+	std::unique_ptr<QueryParser_i> PreParseQuery() override
 	{
 		CSphString sError;
 		if ( !sphParseJsonQuery ( m_sQuery, m_tQuery, m_bProfile, sError, m_sWarning ) )

@@ -101,7 +101,7 @@ public:
 std::unique_ptr<PercolateIndex_i> CreateIndexPercolate ( const CSphSchema & tSchema, const char * sIndexName, const char * sPath );
 void FixPercolateSchema ( CSphSchema & tSchema );
 
-typedef const QueryParser_i * CreateQueryParser_fn ( bool bJson );
+using CreateQueryParser_fn = std::unique_ptr<QueryParser_i> ( bool bJson );
 void SetPercolateQueryParserFactory ( CreateQueryParser_fn * pCall );
 
 static const int PQ_META_VERSION_MAX = 255;

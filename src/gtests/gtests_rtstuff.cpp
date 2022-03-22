@@ -321,7 +321,8 @@ TEST_F ( RT, WeightBoundary )
 	tQueryResult.m_pMeta = &tResult;
 	CSphMultiQueryArgs tArgs ( 1 );
 	tQuery.m_sQuery = "@title cat";
-	tQuery.m_pQueryParser = sphCreatePlainQueryParser();
+	auto pParser = sphCreatePlainQueryParser();
+	tQuery.m_pQueryParser = pParser.get();
 
 	SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema () );
 	SphQueueRes_t tRes;
@@ -335,7 +336,6 @@ TEST_F ( RT, WeightBoundary )
 	ASSERT_EQ ( tOneRes.m_dMatches[0].m_iWeight, uParam) << "weight" ;
 
 	SafeDelete ( pSorter );
-	SafeDelete ( tQuery.m_pQueryParser );
 	SafeDelete ( pSrc );
 	});
 }
@@ -427,7 +427,8 @@ TEST_F ( RT, RankerFactors )
 	tQuery.m_eSort = SPH_SORT_EXTENDED;
 	tQuery.m_sSortBy = "@weight desc";
 	tQuery.m_sOrderBy = "@weight desc";
-	tQuery.m_pQueryParser = sphCreatePlainQueryParser();
+	auto pParser = sphCreatePlainQueryParser();
+	tQuery.m_pQueryParser = pParser.get();
 	AggrResult_t tResult;
 	CSphQueryResult tQueryResult;
 	tQueryResult.m_pMeta = &tResult;
@@ -528,7 +529,6 @@ TEST_F ( RT, RankerFactors )
 		}
 	}
 
-	SafeDelete ( tQuery.m_pQueryParser );
 	SafeDelete ( pSrc );
 	pTok = nullptr; // owned and deleted by index
 	});
@@ -590,7 +590,8 @@ TEST_F ( RT, SendVsMerge )
 	tQueryResult.m_pMeta = &tResult;
 	CSphMultiQueryArgs tArgs ( 1 );
 	tQuery.m_sQuery = "@title cat";
-	tQuery.m_pQueryParser = sphCreatePlainQueryParser();
+	auto pParser = sphCreatePlainQueryParser();
+	tQuery.m_pQueryParser = pParser.get();
 
 	CSphQueryItem & tItem = tQuery.m_dItems.Add ();
 	tItem.m_sExpr = "*";
@@ -643,7 +644,6 @@ TEST_F ( RT, SendVsMerge )
 		ASSERT_TRUE ( tTag2==1313 );
 	}
 
-	SafeDelete ( tQuery.m_pQueryParser );
 	SafeDelete ( pSorter );
 	SafeDelete ( pSrc );
 	pTok = nullptr; // owned and deleted by index

@@ -11315,7 +11315,7 @@ Bson_t Explain ( ExplainQueryArgs_t & tArgs )
 	if ( !tArgs.m_szQuery )
 		return EmptyBson ();
 
-	CSphScopedPtr<QueryParser_i> pQueryParser ( sphCreatePlainQueryParser() );
+	std::unique_ptr<QueryParser_i> pQueryParser ( sphCreatePlainQueryParser() );
 
 	CSphVector<BYTE> dFiltered;
 	const BYTE * sModifiedQuery = (const BYTE *)tArgs.m_szQuery;

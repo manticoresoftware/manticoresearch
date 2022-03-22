@@ -698,9 +698,9 @@ static bool ParseCluster ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, CSphStrin
 }
 
 
-QueryParser_i * sphCreateJsonQueryParser()
+std::unique_ptr<QueryParser_i> sphCreateJsonQueryParser()
 {
-	return new QueryParserJson_c;
+	return std::make_unique<QueryParserJson_c>();
 }
 
 

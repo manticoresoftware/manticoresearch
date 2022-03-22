@@ -35,7 +35,7 @@ struct JsonQuery_c : public CSphQuery
 };
 
 
-QueryParser_i *	sphCreateJsonQueryParser();
+std::unique_ptr<QueryParser_i>	sphCreateJsonQueryParser();
 bool			sphParseJsonQuery ( const char * szQuery, JsonQuery_c & tQuery, bool & bProfile, CSphString & sError, CSphString & sWarning );
 bool			sphParseJsonInsert ( const char * szInsert, SqlStmt_t & tStmt, DocID_t & tDocId, bool bReplace, CSphString & sError );
 bool			sphParseJsonUpdate ( const char * szUpdate, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError );

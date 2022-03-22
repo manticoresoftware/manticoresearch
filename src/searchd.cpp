@@ -5132,13 +5132,13 @@ public:
 class SearchHandler_c
 {
 public:
-									SearchHandler_c ( int iQueries, const QueryParser_i * pParser, QueryType_e eQueryType, bool bMaster );
+									SearchHandler_c ( int iQueries, std::unique_ptr<QueryParser_i> pParser, QueryType_e eQueryType, bool bMaster );
 									~SearchHandler_c();
 
 	void							RunQueries ();					///< run all queries, get all results
 	void							RunCollect ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors, CSphVector<BYTE> * pCollectedDocs );
 	void							SetQuery ( int iQuery, const CSphQuery & tQuery, ISphTableFunc * pTableFunc );
-	void							SetQueryParser ( const QueryParser_i * pParser, QueryType_e eQueryType );
+	void							SetQueryParser ( std::unique_ptr<QueryParser_i> pParser, QueryType_e eQueryType );
 	void							SetProfile ( QueryProfile_c * pProfile );
 	AggrResult_t *					GetResult ( int iResult ) { return m_dAggrResults.Begin() + iResult; }
 	void							SetFederatedUser () { m_bFederatedUser = true; }
@@ -5167,7 +5167,7 @@ protected:
 
 	QueryProfile_c *				m_pProfile = nullptr;
 	QueryType_e						m_eQueryType {QUERY_API}; ///< queries from sphinxql require special handling
-	const QueryParser_i *			m_pQueryParser;	///< parser used for queries in this handler. e.g. plain or json-style
+	std::unique_ptr<QueryParser_i>	m_pQueryParser;	///< parser used for queries in this handler. e.g. plain or json-style
 
 	bool							m_bNeedDocIDs = false;	///< do we need docids returned from local searches (remotes return them anyway)?
 
@@ -5211,9 +5211,9 @@ private:
 	void							CalcSplits ( int iConcurrency, CSphFixedVector<int> & dSplits );
 };
 
-PubSearchHandler_c::PubSearchHandler_c ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster )
+PubSearchHandler_c::PubSearchHandler_c ( int iQueries, std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, bool bMaster )
 {
-	m_pImpl = new SearchHandler_c ( iQueries, pQueryParser, eQueryType, bMaster );
+	m_pImpl = new SearchHandler_c ( iQueries, std::move ( pQueryParser ), eQueryType, bMaster );
 }
 
 PubSearchHandler_c::~PubSearchHandler_c ()
@@ -5264,7 +5264,7 @@ void PubSearchHandler_c::RunCollect ( const CSphQuery& tQuery, const CSphString&
 }
 
 
-SearchHandler_c::SearchHandler_c ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster )
+SearchHandler_c::SearchHandler_c ( int iQueries, std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, bool bMaster )
 	: m_dTables ( iQueries )
 {
 	m_dQueries.Resize ( iQueries );
@@ -5276,7 +5276,7 @@ SearchHandler_c::SearchHandler_c ( int iQueries, const QueryParser_i * pQueryPar
 	ARRAY_FOREACH ( i, m_dTables )
 		m_dTables[i] = nullptr;
 
-	SetQueryParser ( pQueryParser, eQueryType );
+	SetQueryParser ( std::move ( pQueryParser ), eQueryType );
 	m_dResults.Resize ( iQueries );
 	for ( int i=0; i<iQueries; ++i )
 		m_dResults[i].m_pMeta = &m_dAggrResults[i];
@@ -5337,7 +5337,6 @@ public:
 
 SearchHandler_c::~SearchHandler_c ()
 {
-	SafeDelete ( m_pQueryParser );
 	ARRAY_FOREACH ( i, m_dTables )
 		SafeDelete ( m_dTables[i] );
 
@@ -5350,13 +5349,13 @@ SearchHandler_c::~SearchHandler_c ()
 	}
 }
 
-void SearchHandler_c::SetQueryParser ( const QueryParser_i * pParser, QueryType_e eQueryType )
+void SearchHandler_c::SetQueryParser ( std::unique_ptr<QueryParser_i> pParser, QueryType_e eQueryType )
 {
-	m_pQueryParser = pParser;
+	m_pQueryParser = std::move ( pParser );
 	m_eQueryType = eQueryType;
 	for ( auto & dQuery : m_dQueries )
 	{
-		dQuery.m_pQueryParser = pParser;
+		dQuery.m_pQueryParser = m_pQueryParser.get();
 		dQuery.m_eQueryType = eQueryType;
 	}
 }
@@ -5454,7 +5453,7 @@ void SearchHandler_c::RunActionQuery ( const CSphQuery & tQuery, const CSphStrin
 void SearchHandler_c::SetQuery ( int iQuery, const CSphQuery & tQuery, ISphTableFunc * pTableFunc )
 {
 	m_dQueries[iQuery] = tQuery;
-	m_dQueries[iQuery].m_pQueryParser = m_pQueryParser;
+	m_dQueries[iQuery].m_pQueryParser = m_pQueryParser.get();
 	m_dQueries[iQuery].m_eQueryType = m_eQueryType;
 	m_dTables[iQuery] = pTableFunc;
 }
@@ -7308,14 +7307,14 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 			assert ( i.m_eQueryType==eQueryType );
 #endif
 
-		QueryParser_i * pParser {nullptr};
+		std::unique_ptr<QueryParser_i> pParser;
 		if ( eQueryType==QUERY_JSON )
 			pParser = sphCreateJsonQueryParser();
 		else
 			pParser = sphCreatePlainQueryParser();
 
 		assert ( pParser );
-		tHandler.SetQueryParser ( pParser, eQueryType );
+		tHandler.SetQueryParser ( std::move ( pParser ), eQueryType );
 
 		const CSphQuery & q = tHandler.m_dQueries[0];
 		myinfo::SetThreadInfo ( R"(api-search query="%s" comment="%s" index="%s")",
@@ -18362,7 +18361,7 @@ static int	g_iNetWorkers = 1;
 // DAEMON OPTIONS
 /////////////////////////////////////////////////////////////////////////////
 
-static const QueryParser_i * PercolateQueryParserFactory ( bool bJson )
+static std::unique_ptr<QueryParser_i> PercolateQueryParserFactory ( bool bJson )
 {
 	if ( bJson )
 		return sphCreateJsonQueryParser();

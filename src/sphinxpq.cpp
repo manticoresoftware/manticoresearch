@@ -1653,7 +1653,7 @@ std::unique_ptr<StoredQuery_i> PercolateIndex_c::CreateQuery ( PercolateQueryArg
 }
 
 
-static const QueryParser_i * CreatePlainQueryparser ( bool )
+static std::unique_ptr<QueryParser_i> CreatePlainQueryparser ( bool )
 {
 	return sphCreatePlainQueryParser();
 }
@@ -1725,7 +1725,7 @@ std::unique_ptr<StoredQuery_i> PercolateIndex_c::CreateQuery ( PercolateQueryArg
 		sQuery = (const char *)dFiltered.Begin();
 
 	auto tParsed = std::make_unique<XQQuery_t>();
-	CSphScopedPtr<const QueryParser_i> tParser ( g_pCreateQueryParser ( !tArgs.m_bQL ) );
+	std::unique_ptr<QueryParser_i> tParser = g_pCreateQueryParser ( !tArgs.m_bQL );
 
 	// right tokenizer created at upper level
 	if ( !tParser->ParseQuery ( *tParsed, sQuery, nullptr, pTokenizer, pTokenizer, &m_tSchema, pDict, m_tSettings ) )

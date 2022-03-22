@@ -3972,44 +3972,6 @@ public:
 
 //////////////////////////////////////////////////////////////////////////
 
-/// pointer with automatic safe deletion when going out of scope
-template < typename T >
-class CSphScopedPtr : public ISphNoncopyable
-{
-public:
-					CSphScopedPtr()				= default;
-	explicit		CSphScopedPtr ( T * pPtr )	{ m_pPtr = pPtr; }
-					~CSphScopedPtr ()			{ SafeDelete ( m_pPtr ); }
-	T *				operator -> () const noexcept { return m_pPtr; }
-	T *				Ptr () const noexcept		{ return m_pPtr; }
-	T *				get () const noexcept		{ return m_pPtr; } // compatible with std::unique_ptr<T>
-	T&				operator* () const noexcept	{ return *m_pPtr; }
-	bool 			operator! () const noexcept 	{ return m_pPtr==nullptr; }
-	explicit 		operator bool () const noexcept	{ return !this->operator!(); }
-
-	CSphScopedPtr& operator= ( T* pPtr )
-	{
-		CSphScopedPtr<T> pTmp ( pPtr );
-		Swap ( pTmp );
-		return *this;
-	}
-
-	CSphScopedPtr& operator= ( CSphScopedPtr pPtr )
-	{
-		Swap ( pPtr );
-		return *this;
-	}
-	T *				LeakPtr ()					{ T * pPtr = m_pPtr; m_pPtr = nullptr; return pPtr; }
-	void			Reset ()					{ SafeDelete ( m_pPtr ); }
-	inline void 	Swap (CSphScopedPtr & rhs) noexcept { ::Swap(m_pPtr,rhs.m_pPtr);}
-
-
-protected:
-	T *				m_pPtr = nullptr;
-};
-
-//////////////////////////////////////////////////////////////////////////
-
 /// automatic pointer wrapper for refcounted objects
 /// construction from or assignment of a raw pointer takes over (!) the ownership
 template < typename T >

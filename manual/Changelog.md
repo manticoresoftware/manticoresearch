@@ -21,7 +21,7 @@ The following are the changes we are either working on now or are going to work 
 * New `/cli` endpoint for running SQL queries over HTTP even easier.
 * Really bulk INSERT/REPLACE/DELETE via JSON over HTTP.
 * Pseudo sharding is enabled by default.
-* Having at least one full-text field in a real-time index is not mandatory anymore.
+* Having at least one full-text field in a real-time/plain index is not mandatory anymore.
 * Fast fetching for attributes backed by Manticore Columnar Library.
 
 ### Minor changes

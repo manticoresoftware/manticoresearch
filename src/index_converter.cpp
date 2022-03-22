@@ -957,7 +957,7 @@ struct ConverterPlain_t
 	bool ConvertSchema ( Index_t & tIndex, CSphString & sError );
 
 private:
-	CSphScopedPtr<ISphInfixBuilder> m_pInfixer { nullptr };
+	std::unique_ptr<ISphInfixBuilder> m_pInfixer;
 	CSphSchema m_tSchema;
 
 	SphOffset_t						m_tCheckpointsPosition = 0;
@@ -1340,7 +1340,7 @@ bool ConverterPlain_t::ConvertDictionary ( Index_t & tIndex, CSphString & sError
 			}
 
 			// build infixes
-			if ( m_pInfixer.Ptr() )
+			if ( m_pInfixer )
 				m_pInfixer->AddWord ( sDictWord+1, sDictWord[0], m_dCheckpoints.GetLength(), bHasMorphology );
 		} else
 		{
@@ -1396,7 +1396,7 @@ void ConverterPlain_t::WriteCheckpoints ( const Index_t & tIndex, CSphWriter & t
 	const bool bKeywordDict = tIndex.m_tDictSettings.m_bWordDict;
 
 	// flush infix hash entries, if any
-	if ( m_pInfixer.Ptr() )
+	if ( m_pInfixer )
 		m_pInfixer->SaveEntries ( tWriterDict );
 
 	m_tCheckpointsPosition = tWriterDict.GetPos();
@@ -1422,7 +1422,7 @@ void ConverterPlain_t::WriteCheckpoints ( const Index_t & tIndex, CSphWriter & t
 	}
 
 	// flush infix hash blocks
-	if ( m_pInfixer.Ptr() )
+	if ( m_pInfixer )
 	{
 		m_iInfixBlockOffset = m_pInfixer->SaveEntryBlocks ( tWriterDict );
 		m_iInfixCheckpointWordsSize = m_pInfixer->GetBlocksWordsSize();

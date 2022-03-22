@@ -477,7 +477,7 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphStrin
 	}
 
 	// infix builder, if needed
-	CSphScopedPtr<ISphInfixBuilder> pInfixer { sphCreateInfixBuilder ( pHeader->m_iInfixCodepointBytes, &sError ) };
+	std::unique_ptr<ISphInfixBuilder> pInfixer = sphCreateInfixBuilder ( pHeader->m_iInfixCodepointBytes, &sError );
 	if ( !sError.IsEmpty() )
 		return false;
 

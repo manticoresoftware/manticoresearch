@@ -3628,7 +3628,7 @@ struct SaveDiskDataContext_t : public BuildHeader_t
 {
 	SphOffset_t						m_tDocsOffset {0};
 	SphOffset_t						m_tLastDocPos {0};
-	CSphScopedPtr<ISphInfixBuilder>	m_pInfixer {nullptr};
+	std::unique_ptr<ISphInfixBuilder>	m_pInfixer;
 	CSphVector<Checkpoint_t>		m_dCheckpoints;
 	CSphVector<BYTE>				m_dKeywordCheckpoints;
 	CSphVector<CSphVector<RowID_t>>	m_dRowMaps;

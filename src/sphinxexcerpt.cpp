@@ -364,7 +364,7 @@ struct SnippetBuilderStatelessMembers_t
 	std::unique_ptr<CSphHTMLStripper> m_pStripper;
 	std::unique_ptr<QueryParser_i>	m_pQueryParser;
 	TokenizerRefPtr_c				m_pTokenizerJson;
-	CSphScopedPtr<XQQuery_t>		m_pExtQuery { nullptr };
+	std::unique_ptr<XQQuery_t>		m_pExtQuery;
 	DWORD							m_eExtQuerySPZ = SPH_SPZ_NONE;
 
 	bool							m_bSetupCalled = false;
@@ -736,7 +736,7 @@ bool SnippetBuilder_c::Impl_c::DoHighlighting ( TextSource_i & tSource, SnippetR
 	const SnippetQuerySettings_t & tQuerySettings = *m_pState->m_pQuerySettings;
 
 	// create query and hit lists container, parse query
-	SnippetsDocIndex_c tContainer ( *m_pState->m_pExtQuery.Ptr() );
+	SnippetsDocIndex_c tContainer ( *m_pState->m_pExtQuery );
 	tContainer.ParseQuery ( m_pDict, m_pState->m_eExtQuerySPZ );
 
 	ScopedStreamers_t tStreamers ( tSource.GetNumFields() );
@@ -1418,13 +1418,12 @@ bool SnippetBuilder_c::Impl_c::SetQuery ( const CSphString & sQuery, bool bIgnor
 	if ( m_pFieldFilter && szModifiedQuery && m_pFieldFilter->Apply ( szModifiedQuery, dFiltered, true ) )
 		szModifiedQuery = dFiltered.Begin();
 
-	m_pState->m_pExtQuery.Reset();
-	m_pState->m_pExtQuery = new XQQuery_t;
+	m_pState->m_pExtQuery = std::make_unique<XQQuery_t>();
 
 	const CSphIndexSettings & tIndexSettings = m_pState->m_pIndex->GetSettings();
 
 	// OPTIMIZE? double lightweight clone here? but then again it's lightweight
-	if ( !m_pState->m_pQueryParser->ParseQuery ( *m_pState->m_pExtQuery.Ptr(), (const char*)szModifiedQuery, nullptr,
+	if ( !m_pState->m_pQueryParser->ParseQuery ( *m_pState->m_pExtQuery, (const char*)szModifiedQuery, nullptr,
 			m_pQueryTokenizer, m_pState->m_pTokenizerJson, &m_pState->m_pIndex->GetMatchSchema(), m_pDict, tIndexSettings ) )
 	{
 		sError = m_pState->m_pExtQuery->m_sParseError;

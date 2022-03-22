@@ -1319,7 +1319,7 @@ private:
 	bool						Build_SetupDocstore ( std::unique_ptr<DocstoreBuilder_i> & pDocstore, CSphBitvec & dStoredFields, CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage ); // fixme! build only
 	bool						Build_SetupBlobBuilder ( std::unique_ptr<BlobRowBuilder_i> & pBuilder ); // fixme! build only
 	bool						Build_SetupColumnar ( std::unique_ptr<columnar::Builder_i> & pBuilder ); // fixme! build only
-	bool						Build_SetupHistograms ( CSphScopedPtr<HistogramContainer_c> & pContainer, CSphVector<std::pair<Histogram_i*,int>> & dHistograms ); // fixme! build only
+	bool						Build_SetupHistograms ( std::unique_ptr<HistogramContainer_c> & pContainer, CSphVector<std::pair<Histogram_i*,int>> & dHistograms ); // fixme! build only
 
 	void						Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, DocID_t tDocID, QueryMvaContainer_c & tMvaContainer, CSphSource & tSource, const CSphBitvec & dStoredFields, const CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage ); // fixme! build only
 	bool						Build_StoreBlobAttrs ( DocID_t tDocId, SphOffset_t & tOffset, BlobRowBuilder_i & tBlobRowBuilderconst, QueryMvaContainer_c & tMvaContainer, AttrSource_i & tSource, bool bForceSource ); // fixme! build only
@@ -4951,7 +4951,7 @@ bool CSphIndex_VLN::Build_SetupColumnar ( std::unique_ptr<columnar::Builder_i> &
 }
 
 
-bool CSphIndex_VLN::Build_SetupHistograms ( CSphScopedPtr<HistogramContainer_c> & pContainer, CSphVector<std::pair<Histogram_i*,int>> & dHistograms )
+bool CSphIndex_VLN::Build_SetupHistograms ( std::unique_ptr<HistogramContainer_c> & pContainer, CSphVector<std::pair<Histogram_i*,int>> & dHistograms )
 {
 	for ( int i = 0; i < m_tSchema.GetAttrsCount(); ++i )
 	{
@@ -4964,7 +4964,7 @@ bool CSphIndex_VLN::Build_SetupHistograms ( CSphScopedPtr<HistogramContainer_c> 
 	if ( dHistograms.IsEmpty() )
 		return true;
 
-	pContainer = new HistogramContainer_c;
+	pContainer = std::make_unique<HistogramContainer_c>();
 	for ( const auto & i : dHistograms )
 		Verify ( pContainer->Add ( std::unique_ptr<Histogram_i> {i.first} ) );
 
@@ -5204,7 +5204,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	if ( !Build_SetupDocstore ( pDocstoreBuilder, dStoredFields, dStoredAttrs, dTmpDocstoreAttrStorage ) )
 		return 0;
 
-	CSphScopedPtr<HistogramContainer_c> pHistogramContainer(nullptr);
+	std::unique_ptr<HistogramContainer_c> pHistogramContainer;
 	CSphVector<std::pair<Histogram_i*,int>> dHistograms;
 	if ( !Build_SetupHistograms ( pHistogramContainer, dHistograms ) )
 		return 0;
@@ -5527,7 +5527,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		return 0;
 	}
 
-	if ( pHistogramContainer.Ptr() && !pHistogramContainer->Save ( GetIndexFileName(SPH_EXT_SPHI), m_sLastError ) )
+	if ( pHistogramContainer && !pHistogramContainer->Save ( GetIndexFileName(SPH_EXT_SPHI), m_sLastError ) )
 		return 0;
 
 	if ( bGotPrevIndex )

@@ -376,24 +376,24 @@ std::unique_ptr<QueryParser_i> CreateQueryParser( bool bJson )
 		return sphCreatePlainQueryParser();
 }
 
-RequestBuilder_i * CreateRequestBuilder ( Str_t sQuery, const SqlStmt_t & tStmt )
+std::unique_ptr<RequestBuilder_i> CreateRequestBuilder ( Str_t sQuery, const SqlStmt_t & tStmt )
 {
 	if ( tStmt.m_bJson )
 	{
 		assert ( !tStmt.m_sEndpoint.IsEmpty() );
-		return new JsonRequestBuilder_c ( sQuery.first, tStmt.m_sEndpoint );
+		return std::make_unique<JsonRequestBuilder_c> ( sQuery.first, tStmt.m_sEndpoint );
 	} else
 	{
-		return new SphinxqlRequestBuilder_c ( sQuery, tStmt );
+		return std::make_unique<SphinxqlRequestBuilder_c> ( sQuery, tStmt );
 	}
 }
 
-ReplyParser_i * CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings )
+std::unique_ptr<ReplyParser_i> CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings )
 {
 	if ( bJson )
-		return new JsonReplyParser_c ( iUpdated, iWarnings );
+		return std::make_unique<JsonReplyParser_c> ( iUpdated, iWarnings );
 	else
-		return new SphinxqlReplyParser_c ( &iUpdated, &iWarnings );
+		return std::make_unique<SphinxqlReplyParser_c> ( &iUpdated, &iWarnings );
 }
 
 //////////////////////////////////////////////////////////////////////////

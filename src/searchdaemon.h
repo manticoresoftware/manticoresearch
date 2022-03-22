@@ -1323,8 +1323,8 @@ class RequestBuilder_i;
 class ReplyParser_i;
 
 std::unique_ptr<QueryParser_i> CreateQueryParser ( bool bJson );
-RequestBuilder_i * CreateRequestBuilder ( Str_t sQuery, const SqlStmt_t & tStmt );
-ReplyParser_i * CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings );
+std::unique_ptr<RequestBuilder_i> CreateRequestBuilder ( Str_t sQuery, const SqlStmt_t & tStmt );
+std::unique_ptr<ReplyParser_i> CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings );
 
 enum ESphHttpStatus
 {

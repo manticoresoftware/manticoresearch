@@ -6938,18 +6938,18 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	// connect to remote agents and query them, if required
 	CSphScopedPtr<SearchRequestBuilder_c> tReqBuilder { nullptr };
 	CSphRefcountedPtr<RemoteAgentsObserver_i> tReporter { nullptr };
-	CSphScopedPtr<ReplyParser_i> tParser { nullptr };
+	std::unique_ptr<ReplyParser_i> tParser;;
 	if ( !dRemotes.IsEmpty() )
 	{
 		SwitchProfile(m_pProfile, SPH_QSTATE_DIST_CONNECT);
 		tReqBuilder = new SearchRequestBuilder_c ( m_dNQueries, iDivideLimits );
-		tParser = new SearchReplyParser_c ( iQueries );
+		tParser = std::make_unique<SearchReplyParser_c> ( iQueries );
 		tReporter = GetObserver();
 
 		// run remote queries. tReporter will tell us when they're finished.
 		// also blackholes will be removed from this flow of remotes.
 		ScheduleDistrJobs ( dRemotes, tReqBuilder.Ptr (),
-			tParser.Ptr (),
+			tParser.get (),
 			tReporter, tFirst.m_iRetryCount, tFirst.m_iRetryDelay );
 	}
 
@@ -10024,15 +10024,15 @@ void PercolateMatchDocuments ( const BlobVec_t & dDocs, const PercolateOptions_t
 	int iSuccesses = 0;
 	int iAgentsDone = 0;
 	CSphScopedPtr<PqRequestBuilder_c> pReqBuilder { nullptr };
-	CSphScopedPtr<ReplyParser_i> pParser { nullptr };
+	std::unique_ptr<ReplyParser_i> pParser;
 	CSphRefcountedPtr<RemoteAgentsObserver_i> pReporter { nullptr };
 	if ( bHaveRemotes )
 	{
 		pReqBuilder = new PqRequestBuilder_c ( dDocs, tOpts, iStart, iStep );
 		iStart += iStep * dAgents.GetLength ();
-		pParser = new PqReplyParser_c;
+		pParser = std::make_unique<PqReplyParser_c>();
 		pReporter = GetObserver();
-		ScheduleDistrJobs ( dAgents, pReqBuilder.Ptr(), pParser.Ptr(), pReporter );
+		ScheduleDistrJobs ( dAgents, pReqBuilder.Ptr(), pParser.get(), pReporter );
 	}
 
 	LazyVector_T <CPqResult> dLocalResults;
@@ -12636,9 +12636,9 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			pDist->GetAllHosts ( dAgents );
 
 			// connect to remote agents and query them
-			CSphScopedPtr<RequestBuilder_i> pRequestBuilder ( CreateRequestBuilder ( sQuery, tStmt ) ) ;
-			CSphScopedPtr<ReplyParser_i> pReplyParser ( CreateReplyParser ( tStmt.m_bJson, iUpdated, iWarns ) );
-			iSuccesses += PerformRemoteTasks ( dAgents, pRequestBuilder.Ptr (), pReplyParser.Ptr () );
+			std::unique_ptr<RequestBuilder_i> pRequestBuilder = CreateRequestBuilder ( sQuery, tStmt );
+			std::unique_ptr<ReplyParser_i> pReplyParser = CreateReplyParser ( tStmt.m_bJson, iUpdated, iWarns );
+			iSuccesses += PerformRemoteTasks ( dAgents, pRequestBuilder.get (), pReplyParser.get () );
 		}
 	}
 
@@ -13316,9 +13316,9 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			int iWarns = 0;
 
 			// connect to remote agents and query them
-			CSphScopedPtr<RequestBuilder_i> pRequestBuilder ( CreateRequestBuilder ( sQuery, tStmt ) ) ;
-			CSphScopedPtr<ReplyParser_i> pReplyParser ( CreateReplyParser ( tStmt.m_bJson, iGot, iWarns ) );
-			PerformRemoteTasks ( dAgents, pRequestBuilder.Ptr (), pReplyParser.Ptr () );
+			std::unique_ptr<RequestBuilder_i> pRequestBuilder = CreateRequestBuilder ( sQuery, tStmt );
+			std::unique_ptr<ReplyParser_i> pReplyParser = CreateReplyParser ( tStmt.m_bJson, iGot, iWarns );
+			PerformRemoteTasks ( dAgents, pRequestBuilder.get (), pReplyParser.get () );
 
 			// FIXME!!! report error & warnings from agents
 			// FIXME? profile update time too?

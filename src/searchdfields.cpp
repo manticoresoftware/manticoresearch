@@ -291,16 +291,16 @@ bool GetFields ( const FieldRequest_t & tReq, FieldBlob_t & tRes, DocHash_t & hF
 	bool bOkLocal = true;
 	bool bOkRemote = true;
 	CSphRefcountedPtr<RemoteAgentsObserver_i> pDistReporter { nullptr };
-	CSphScopedPtr<RequestBuilder_i> pDistReq { nullptr };
-	CSphScopedPtr<ReplyParser_i> pDistReply { nullptr };
+	std::unique_ptr<RequestBuilder_i> pDistReq;
+	std::unique_ptr<ReplyParser_i> pDistReply;
 
 	if ( !dRemotes.IsEmpty () )
 	{
-		pDistReq = new ProxyFieldRequestBuilder_t ( tReq );
-		pDistReply = new GetFieldReplyParser_t();
+		pDistReq = std::make_unique<ProxyFieldRequestBuilder_t> ( tReq );
+		pDistReply = std::make_unique<GetFieldReplyParser_t>();
 
 		pDistReporter = GetObserver();
-		ScheduleDistrJobs ( dRemotes, pDistReq.Ptr(), pDistReply.Ptr(), pDistReporter.Ptr() );
+		ScheduleDistrJobs ( dRemotes, pDistReq.get(), pDistReply.get(), pDistReporter.Ptr() );
 	}
 
 	{

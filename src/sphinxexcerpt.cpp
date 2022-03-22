@@ -450,8 +450,8 @@ void SnippetBuilder_c::Impl_c::ExtractPassages ( ScopedStreamers_t & tStreamers,
 	const char * szDoc = (const char*)tSource.GetText(iField).Begin();
 	int iDocLen = tSource.GetText(iField).GetLength();
 
-	CSphScopedPtr<TokenFunctor_i> pExtractor ( CreatePassageExtractor ( tContainer, tContext, m_pTokenizer, tSettings, tStreamers.m_dLimits[iField], tIndexSettings, szDoc, iDocLen, dMarked, iField, tRes ) );
-	tStreamers.m_dStreamers[iField]->Tokenize ( *pExtractor.Ptr() );
+	std::unique_ptr<TokenFunctor_i> pExtractor = CreatePassageExtractor ( tContainer, tContext, m_pTokenizer, tSettings, tStreamers.m_dLimits[iField], tIndexSettings, szDoc, iDocLen, dMarked, iField, tRes );
+	tStreamers.m_dStreamers[iField]->Tokenize ( *pExtractor );
 }
 
 
@@ -485,9 +485,9 @@ void SnippetBuilder_c::Impl_c::HighlightPassages ( ScopedStreamers_t & tStreamer
 		if ( !dFilteredPassages.GetLength() )
 			continue;
 
-		CSphScopedPtr<TokenFunctor_i> pHighlighter ( CreatePassageHighlighter ( dFilteredPassages, m_pTokenizer,
-				*m_pState->m_pQuerySettings, m_pState->m_pIndex->GetSettings(), szDoc, iDocLen, dMarked, tZoneInfo, iField, tRes ) );
-		tStreamers.m_dStreamers[iField]->Tokenize ( *pHighlighter.Ptr() );
+		std::unique_ptr<TokenFunctor_i> pHighlighter = CreatePassageHighlighter ( dFilteredPassages, m_pTokenizer,
+				*m_pState->m_pQuerySettings, m_pState->m_pIndex->GetSettings(), szDoc, iDocLen, dMarked, tZoneInfo, iField, tRes );
+		tStreamers.m_dStreamers[iField]->Tokenize ( *pHighlighter );
 	}	
 }
 
@@ -604,9 +604,9 @@ void SnippetBuilder_c::Impl_c::HighlightAll ( ScopedStreamers_t & tStreamers, Te
 	const char * szDoc = (const char*)tSource.GetText(iField).Begin();
 	int iDocLen = tSource.GetText(iField).GetLength();
 
-	CSphScopedPtr<TokenFunctor_i> pHighlighter ( CreateQueryHighlighter ( m_pTokenizer, *m_pState->m_pQuerySettings,
-			m_pState->m_pIndex->GetSettings(), szDoc, iDocLen, dMarked, iField, tRes ) );
-	tStreamers.m_dStreamers[iField]->Tokenize ( *pHighlighter.Ptr() );
+	std::unique_ptr<TokenFunctor_i> pHighlighter = CreateQueryHighlighter ( m_pTokenizer, *m_pState->m_pQuerySettings,
+			m_pState->m_pIndex->GetSettings(), szDoc, iDocLen, dMarked, iField, tRes );
+	tStreamers.m_dStreamers[iField]->Tokenize ( *pHighlighter );
 }
 
 
@@ -622,9 +622,9 @@ void SnippetBuilder_c::Impl_c::HighlightFieldStart ( ScopedStreamers_t & tStream
 	int iDocLen = tSource.GetText(iField).GetLength();
 
 	int iResultCP = 0;
-	CSphScopedPtr<TokenFunctor_i> pHighlighter ( CreateDocStartHighlighter ( m_pTokenizer, tSettings, tStreamers.m_dLimits[iField],
-			m_pState->m_pIndex->GetSettings(), szDoc, iDocLen, iField, iResultCP, tRes ) );
-	tStreamers.m_dStreamers[iField]->Tokenize ( *pHighlighter.Ptr() );
+	std::unique_ptr<TokenFunctor_i> pHighlighter = CreateDocStartHighlighter ( m_pTokenizer, tSettings, tStreamers.m_dLimits[iField],
+			m_pState->m_pIndex->GetSettings(), szDoc, iDocLen, iField, iResultCP, tRes );
+	tStreamers.m_dStreamers[iField]->Tokenize ( *pHighlighter );
 }
 
 
@@ -642,8 +642,8 @@ void SnippetBuilder_c::Impl_c::HighlightAnything ( ScopedStreamers_t & tStreamer
 		const char * szDoc = (const char*)tSource.GetText(iField).Begin();
 		int iDocLen = tSource.GetText(iField).GetLength();
 
-		CSphScopedPtr<TokenFunctor_i> pHighlighter ( CreateDocStartHighlighter ( m_pTokenizer, tSettings, tStreamers.m_dLimits[iField], m_pState->m_pIndex->GetSettings(), szDoc, iDocLen, iField, iResultCP, tRes ) );
-		tStreamers.m_dStreamers[iField]->Tokenize ( *pHighlighter.Ptr() );
+		std::unique_ptr<TokenFunctor_i> pHighlighter = CreateDocStartHighlighter ( m_pTokenizer, tSettings, tStreamers.m_dLimits[iField], m_pState->m_pIndex->GetSettings(), szDoc, iDocLen, iField, iResultCP, tRes );
+		tStreamers.m_dStreamers[iField]->Tokenize ( *pHighlighter );
 	}
 }
 
@@ -674,8 +674,8 @@ void SnippetBuilder_c::Impl_c::CollectHits ( ScopedStreamers_t & tStreamers, Tex
 		CacheStreamer_i * pStreamer = CreateCacheStreamer(iDocLen);
 		tStreamers.m_dStreamers[iField] = pStreamer;
 
-		CSphScopedPtr<HitCollector_i> pHitCollector ( CreateHitCollector ( tContainer, m_pTokenizer, m_pDict, tQuerySettings, tIndexSettings, szDoc, iDocLen, iField, *pStreamer, tZodeData.m_dZones, tZodeData.m_tInfo, tRes ) );
-		TokenizeDocument ( *pHitCollector.Ptr(), pStripper, iSPZ );
+		std::unique_ptr<HitCollector_i> pHitCollector = CreateHitCollector ( tContainer, m_pTokenizer, m_pDict, tQuerySettings, tIndexSettings, szDoc, iDocLen, iField, *pStreamer, tZodeData.m_dZones, tZodeData.m_tInfo, tRes );
+		TokenizeDocument ( *pHitCollector, pStripper, iSPZ );
 
 		uFoundWords |= pHitCollector->GetFoundWords();
 	}

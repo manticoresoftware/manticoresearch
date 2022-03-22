@@ -1508,36 +1508,36 @@ void HitCollector_c::OnTail ( int iStart, int iLen, int iBoundary )
 
 //////////////////////////////////////////////////////////////////////////
 
-TokenFunctor_i * CreateDocStartHighlighter ( TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits, const CSphIndexSettings & tIndexSettings, const char * szDoc,
+std::unique_ptr<TokenFunctor_i> CreateDocStartHighlighter ( TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits, const CSphIndexSettings & tIndexSettings, const char * szDoc,
 	int iDocLen, int iField, int & iResultCP, SnippetResult_t & tRes )
 {
-	return new DocStartHighlighter_c ( std::move ( pTokenizer ), tQuery, tLimits, tIndexSettings, szDoc, iDocLen, iField, iResultCP, tRes );
+	return std::make_unique<DocStartHighlighter_c> ( std::move ( pTokenizer ), tQuery, tLimits, tIndexSettings, szDoc, iDocLen, iField, iResultCP, tRes );
 }
 
 
-TokenFunctor_i * CreateQueryHighlighter ( TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen,
+std::unique_ptr<TokenFunctor_i> CreateQueryHighlighter ( TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen,
 	const CSphVector<SphHitMark_t> & dHits, int iField, SnippetResult_t & tRes )
 {
-	return new QueryHighlighter_c ( std::move ( pTokenizer ), tQuery, tIndexSettings, szDoc, iDocLen, dHits, iField, tRes );
+	return std::make_unique<QueryHighlighter_c> ( std::move ( pTokenizer ), tQuery, tIndexSettings, szDoc, iDocLen, dHits, iField, tRes );
 }
 
 
-TokenFunctor_i * CreatePassageExtractor ( const SnippetsDocIndex_c & tContainer, PassageContext_t & tContext, TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits,
+std::unique_ptr<TokenFunctor_i> CreatePassageExtractor ( const SnippetsDocIndex_c & tContainer, PassageContext_t & tContext, TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits,
 	const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, const CSphVector<SphHitMark_t> & dHits, int iField, SnippetResult_t & tRes )
 {
-	return new PassageExtractor_c ( tContainer, tContext, std::move ( pTokenizer ), tQuery, tLimits, tIndexSettings, szDoc, iDocLen, dHits, iField, tRes );
+	return std::make_unique<PassageExtractor_c> ( tContainer, tContext, std::move ( pTokenizer ), tQuery, tLimits, tIndexSettings, szDoc, iDocLen, dHits, iField, tRes );
 }
 
 
-TokenFunctor_i * CreatePassageHighlighter ( CSphVector<Passage_t*> & dPassages, TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
+std::unique_ptr<TokenFunctor_i> CreatePassageHighlighter ( CSphVector<Passage_t*> & dPassages, TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
 	const char * szDoc, int iDocLen, const CSphVector<SphHitMark_t> & dHits, const FunctorZoneInfo_t & tZoneInfo, int iField, SnippetResult_t & tRes )
 {
-	return new PassageHighlighter_c ( dPassages, std::move ( pTokenizer ), tQuery, tIndexSettings, szDoc, iDocLen, dHits, tZoneInfo, iField, tRes );
+	return std::make_unique<PassageHighlighter_c> ( dPassages, std::move ( pTokenizer ), tQuery, tIndexSettings, szDoc, iDocLen, dHits, tZoneInfo, iField, tRes );
 }
 
 
-HitCollector_i * CreateHitCollector ( SnippetsDocIndex_c & tContainer, TokenizerRefPtr_c pTokenizer, DictRefPtr_c pDict, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
+std::unique_ptr<HitCollector_i> CreateHitCollector ( SnippetsDocIndex_c & tContainer, TokenizerRefPtr_c pTokenizer, DictRefPtr_c pDict, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
 	const char * szDoc, int iDocLen, int iField, CacheStreamer_i & tTokenContainer, CSphVector<ZonePacked_t> & dZones, FunctorZoneInfo_t & tZoneInfo, SnippetResult_t & tRes )
 {
-	return new HitCollector_c ( tContainer, std::move ( pTokenizer ), std::move (pDict), tQuery, tIndexSettings, szDoc, iDocLen, iField, tTokenContainer, dZones, tZoneInfo, tRes );
+	return std::make_unique<HitCollector_c> ( tContainer, std::move ( pTokenizer ), std::move (pDict), tQuery, tIndexSettings, szDoc, iDocLen, iField, tTokenContainer, dZones, tZoneInfo, tRes );
 }

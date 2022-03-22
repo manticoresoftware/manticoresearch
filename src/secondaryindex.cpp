@@ -10,6 +10,8 @@
 
 #include "secondaryindex.h"
 
+#include <boost/preprocessor/repetition/repeat.hpp>
+
 #include "histogram.h"
 #include "sphinxint.h"
 #include "killlist.h"
@@ -600,48 +602,8 @@ bool RowidIterator_Wrapper_T<false>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBl
 }
 
 //////////////////////////////////////////////////////////////////////////
-
-#define CREATE_ITERATOR_WITH_OPEN(ITERATOR,SETTINGS,MIN,MAX,LOOKUP,BOUNDARIES) \
-{ \
-	int iIndex = ( SETTINGS.m_bHasEqualMin ? 16 : 0 )+ ( SETTINGS.m_bHasEqualMax ? 8 : 0 )+ ( SETTINGS.m_bOpenLeft ? 4 : 0 )+ ( SETTINGS.m_bOpenRight ? 2 : 0 ) + ( BOUNDARIES ? 1 : 0 ); \
-	switch ( iIndex ) \
-	{ \
-	case 0:		return new ITERATOR<false,false,false,false,false>(MIN,MAX,LOOKUP,BOUNDARIES); \
-	case 1:		return new ITERATOR<false,false,false,false,true >(MIN,MAX,LOOKUP,BOUNDARIES); \
-	case 2:		return new ITERATOR<false,false,false,true, false>(MIN,MAX,LOOKUP,BOUNDARIES); \
-	case 3:		return new ITERATOR<false,false,false,true, true >(MIN,MAX,LOOKUP,BOUNDARIES); \
-	case 4:		return new ITERATOR<false,false,true, false,false>(MIN,MAX,LOOKUP,BOUNDARIES); \
-	case 5:		return new ITERATOR<false,false,true, false,true >(MIN,MAX,LOOKUP,BOUNDARIES); \
-	case 6:		return new ITERATOR<false,false,true, true, false>(MIN,MAX,LOOKUP,BOUNDARIES); \
-	case 7:		return new ITERATOR<false,false,true, true, true >(MIN,MAX,LOOKUP,BOUNDARIES); \
-	case 8:		return new ITERATOR<false,true, false,false,false>(MIN,MAX,LOOKUP,BOUNDARIES); \
-	case 9:		return new ITERATOR<false,true, false,false,true >(MIN,MAX,LOOKUP,BOUNDARIES); \
-	case 10:	return new ITERATOR<false,true, false,true, false>(MIN,MAX,LOOKUP,BOUNDARIES); \
-	case 11:	return new ITERATOR<false,true, false,true, true >(MIN,MAX,LOOKUP,BOUNDARIES); \
-	case 12:	return new ITERATOR<false,true, true, false,false>(MIN,MAX,LOOKUP,BOUNDARIES); \
-	case 13:	return new ITERATOR<false,true, true, false,true >(MIN,MAX,LOOKUP,BOUNDARIES); \
-	case 14:	return new ITERATOR<false,true, true, true, false>(MIN,MAX,LOOKUP,BOUNDARIES); \
-	case 15:	return new ITERATOR<false,true, true, true, true >(MIN,MAX,LOOKUP,BOUNDARIES); \
-	case 16:	return new ITERATOR<true, false,false,false,false>(MIN,MAX,LOOKUP,BOUNDARIES); \
-	case 17:	return new ITERATOR<true, false,false,false,true >(MIN,MAX,LOOKUP,BOUNDARIES); \
-	case 18:	return new ITERATOR<true, false,false,true, false>(MIN,MAX,LOOKUP,BOUNDARIES); \
-	case 19:	return new ITERATOR<true, false,false,true, true >(MIN,MAX,LOOKUP,BOUNDARIES); \
-	case 20:	return new ITERATOR<true, false,true, false,false>(MIN,MAX,LOOKUP,BOUNDARIES); \
-	case 21:	return new ITERATOR<true, false,true, false,true >(MIN,MAX,LOOKUP,BOUNDARIES); \
-	case 22:	return new ITERATOR<true, false,true, true, false>(MIN,MAX,LOOKUP,BOUNDARIES); \
-	case 23:	return new ITERATOR<true, false,true, true, true >(MIN,MAX,LOOKUP,BOUNDARIES); \
-	case 24:	return new ITERATOR<true, true, false,false,false>(MIN,MAX,LOOKUP,BOUNDARIES); \
-	case 25:	return new ITERATOR<true, true, false,false,true >(MIN,MAX,LOOKUP,BOUNDARIES); \
-	case 26:	return new ITERATOR<true, true, false,true, false>(MIN,MAX,LOOKUP,BOUNDARIES); \
-	case 27:	return new ITERATOR<true, true, false,true, true >(MIN,MAX,LOOKUP,BOUNDARIES); \
-	case 28:	return new ITERATOR<true, true, true, false,false>(MIN,MAX,LOOKUP,BOUNDARIES); \
-	case 29:	return new ITERATOR<true, true, true, false,true >(MIN,MAX,LOOKUP,BOUNDARIES); \
-	case 30:	return new ITERATOR<true, true, true, true, false>(MIN,MAX,LOOKUP,BOUNDARIES); \
-	case 31:	return new ITERATOR<true, true, true, true, true >(MIN,MAX,LOOKUP,BOUNDARIES); \
-	default:	assert ( 0 && "Internal error" ); return nullptr; \
-	} \
-}
-
+#define DECL_FNCREATEEXCL( _, n, params ) case n: return new RowidIterator_LookupRangeExclude_T<!!( n & 16 ), !!( n & 8 ), !!( n & 4 ), !!( n & 2 ), !!( n & 1 )> params;
+#define DECL_FNCREATE( _, n, params ) case n: return new RowidIterator_LookupRange_T<!!( n & 16 ), !!( n & 8 ), !!( n & 4 ), !!( n & 2 ), !!( n & 1 )> params;
 
 static RowidIterator_i * CreateIterator ( const CSphFilterSettings & tFilter, const BYTE * pDocidLookup, const RowIdBoundaries_t * pBoundaries )
 {
@@ -657,21 +619,29 @@ static RowidIterator_i * CreateIterator ( const CSphFilterSettings & tFilter, co
 			return new RowidIterator_LookupValues_T<false> ( tFilter.GetValueArray(), tFilter.GetNumValues(), pDocidLookup );
 
 	case SPH_FILTER_RANGE:
-		if ( tFilter.m_bExclude )
 		{
-			CREATE_ITERATOR_WITH_OPEN ( RowidIterator_LookupRangeExclude_T, tFilter, tFilter.m_iMinValue, tFilter.m_iMaxValue, pDocidLookup, pBoundaries );
+			int iIndex = tFilter.m_bHasEqualMin * 16 + tFilter.m_bHasEqualMax * 8 + tFilter.m_bOpenLeft * 4 + tFilter.m_bOpenRight * 2 + !!pBoundaries;
+			if ( tFilter.m_bExclude )
+				switch ( iIndex )
+				{
+					BOOST_PP_REPEAT ( 32, DECL_FNCREATEEXCL, ( tFilter.m_iMinValue, tFilter.m_iMaxValue, pDocidLookup, pBoundaries ) )
+					default: assert ( 0 && "Internal error" ); return nullptr;
+				}
+			else
+				switch ( iIndex )
+				{
+					BOOST_PP_REPEAT ( 32, DECL_FNCREATE, ( tFilter.m_iMinValue, tFilter.m_iMaxValue, pDocidLookup, pBoundaries ) )
+					default: assert ( 0 && "Internal error" ); return nullptr;
+				}
 		}
-		else
-		{
-			CREATE_ITERATOR_WITH_OPEN ( RowidIterator_LookupRange_T, tFilter, tFilter.m_iMinValue, tFilter.m_iMaxValue, pDocidLookup, pBoundaries );
-		}
-		
 	default:
 		break;
 	}
 
 	return nullptr;
 }
+#undef DECL_FNCREATE
+#undef DECL_FNCREATEEXCL
 
 
 struct IndexWithEstimate_t : public SecondaryIndexInfo_t

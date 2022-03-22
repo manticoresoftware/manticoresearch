@@ -25,7 +25,7 @@ protected:
 	CSphString							m_sAttrName;
 	int									m_iColumnarCol = -1;
 	const columnar::Columnar_i *		m_pColumnar = nullptr;
-	CSphScopedPtr<columnar::Iterator_i>	m_pIterator {nullptr};
+	std::unique_ptr<columnar::Iterator_i>	m_pIterator;
 
 	inline bool	GetValue ( RowID_t tRowID, SphAttr_t & tValue ) const;
 	inline bool	GetValue ( RowID_t tRowID, ByteBlob_t & tData ) const;
@@ -43,19 +43,19 @@ void ColumnarFilter_c::SetColumnar ( const columnar::Columnar_i * pColumnar )
 
 	if ( !pColumnar )	// this can happen on RT columnar setup, when we have the filters but each chunk has its own columnar storage
 	{
-		m_pIterator.Reset();
+		m_pIterator.reset();
 		return;
 	}
 
 	std::string sError; // fixme! report errors
-	m_pIterator = pColumnar->CreateIterator ( m_sAttrName.cstr(), {}, nullptr, sError );
+	m_pIterator = CreateIterator ( pColumnar, m_sAttrName.cstr(), sError );
 	m_iColumnarCol = pColumnar->GetAttributeId ( m_sAttrName.cstr() );
 }
 
 
 bool ColumnarFilter_c::GetValue ( RowID_t tRowID, SphAttr_t & tValue ) const
 {
-	if ( m_pIterator.Ptr() && m_pIterator->AdvanceTo(tRowID) == tRowID )
+	if ( m_pIterator && m_pIterator->AdvanceTo(tRowID) == tRowID )
 	{
 		tValue = m_pIterator->Get();
 		return true;
@@ -67,7 +67,7 @@ bool ColumnarFilter_c::GetValue ( RowID_t tRowID, SphAttr_t & tValue ) const
 
 bool ColumnarFilter_c::GetValue ( RowID_t tRowID, ByteBlob_t & tData ) const
 {
-	if ( m_pIterator.Ptr() && m_pIterator->AdvanceTo(tRowID) == tRowID )
+	if ( m_pIterator && m_pIterator->AdvanceTo(tRowID) == tRowID )
 	{
 		tData.second = m_pIterator->Get ( tData.first );
 		return true;
@@ -304,7 +304,7 @@ void Filter_StringColumnar_T<MULTI>::SetRefString ( const CSphString * pRef, int
 template <bool MULTI>
 bool Filter_StringColumnar_T<MULTI>::Eval ( const CSphMatch & tMatch ) const
 {
-	if ( !m_pIterator.Ptr() || m_pIterator->AdvanceTo ( tMatch.m_tRowID ) != tMatch.m_tRowID )
+	if ( !m_pIterator || m_pIterator->AdvanceTo ( tMatch.m_tRowID ) != tMatch.m_tRowID )
 		return false;
 
 	uint64_t uHash = GetStringHash();
@@ -342,7 +342,7 @@ void Filter_StringColumnar_T<MULTI>::SetColumnar ( const columnar::Columnar_i * 
 {
 	if ( !pColumnar )
 	{
-		m_pIterator.Reset();
+		m_pIterator.reset();
 		return;
 	}
 
@@ -351,8 +351,8 @@ void Filter_StringColumnar_T<MULTI>::SetColumnar ( const columnar::Columnar_i * 
 	tHints.m_bNeedStringHashes = m_eCollation==SPH_COLLATION_DEFAULT;
 
 	std::string sError; // fixme! report errors
-	m_pIterator = pColumnar->CreateIterator ( m_sAttrName.cstr(), tHints, &tCapabilities, sError );
-	m_bHasHashes = m_pIterator.Ptr() && tCapabilities.m_bStringHashes;
+	m_pIterator = CreateIterator( pColumnar, m_sAttrName.cstr(), sError, tHints, &tCapabilities );
+	m_bHasHashes = m_pIterator && tCapabilities.m_bStringHashes;
 }
 
 template <bool MULTI>

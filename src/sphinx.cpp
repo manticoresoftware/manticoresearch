@@ -6411,8 +6411,8 @@ bool AttrMerger_c::CopyPureColumnarAttributes ( const CSphIndex_VLN& tIndex, con
 		ARRAY_FOREACH ( i, dColumnarIterators )
 		{
 			auto& tIt = dColumnarIterators[i];
-			Verify ( AdvanceIterator ( tIt.first.get(), tRowID ) );
-			SetColumnarAttr ( i, tIt.second, m_pColumnarBuilder.get(), tIt.first.get(), dTmp );
+			Verify ( AdvanceIterator ( tIt.first, tRowID ) );
+			SetColumnarAttr ( i, tIt.second, m_pColumnarBuilder.get(), tIt.first, dTmp );
 		}
 
 		ARRAY_FOREACH ( i, m_dAttrsForHistogram )
@@ -6471,8 +6471,8 @@ bool AttrMerger_c::CopyMixedAttributes ( const CSphIndex_VLN& tIndex, const VecT
 		ARRAY_FOREACH ( i, dColumnarIterators )
 		{
 			auto& tIt = dColumnarIterators[i];
-			Verify ( AdvanceIterator ( tIt.first.get(), tRowID ) );
-			SetColumnarAttr ( i, tIt.second, m_pColumnarBuilder.get(), tIt.first.get(), dTmp );
+			Verify ( AdvanceIterator ( tIt.first, tRowID ) );
+			SetColumnarAttr ( i, tIt.second, m_pColumnarBuilder.get(), tIt.first, dTmp );
 		}
 
 		DocID_t tDocID = iColumnarIdLoc >= 0 ? dColumnarIterators[iColumnarIdLoc].first->Get() : sphGetDocID ( pRow );

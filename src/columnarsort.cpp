@@ -565,7 +565,7 @@ void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::SpawnIterators()
 			if ( m_iFastPathAttrs )
 				m_tState.m_dAttrs[i] = m_dIterators.GetLength();
 
-			m_dIterators.Add ( { std::unique_ptr<columnar::Iterator_i>(m_pColumnar->CreateIterator ( sAliasedCol.cstr(), {}, nullptr, sError )), tAttr.m_tLocator } );
+			m_dIterators.Add ( { CreateIterator ( m_pColumnar, sAliasedCol.cstr(), sError ), tAttr.m_tLocator } );
 			assert ( m_dIterators.Last().m_pIterator.get() );
 		}
 	}

@@ -102,7 +102,7 @@ public:
 	ISphExpr *	Clone() const final { return new Expr_Columnar_StringIn_c ( *this ); }
 
 private:
-	CSphScopedPtr<columnar::Iterator_i> m_pIterator {nullptr};
+	std::unique_ptr<columnar::Iterator_i> m_pIterator;
 	CSphString				m_sName;
 	StrHashCalc_fn			m_fnHashCalc = nullptr;
 	CSphVector<uint64_t>	m_dHashes;
@@ -141,7 +141,7 @@ Expr_Columnar_StringIn_c::Expr_Columnar_StringIn_c ( const CSphString & sName, C
 
 int Expr_Columnar_StringIn_c::IntEval ( const CSphMatch & tMatch ) const
 {
-	if ( !m_pIterator.Ptr() || m_pIterator->AdvanceTo ( tMatch.m_tRowID ) != tMatch.m_tRowID )
+	if ( !m_pIterator || m_pIterator->AdvanceTo ( tMatch.m_tRowID ) != tMatch.m_tRowID )
 		return 0;
 
 	uint64_t uHash = GetStringHash();
@@ -167,7 +167,7 @@ void Expr_Columnar_StringIn_c::Command ( ESphExprCommand eCmd, void * pArg )
 			tHints.m_bNeedStringHashes = m_eCollation==SPH_COLLATION_DEFAULT;
 
 			std::string sError; // FIXME! report errors
-			m_pIterator = pColumnar->CreateIterator ( m_sName.cstr(), tHints, &tCapabilities, sError );
+			m_pIterator = CreateIterator ( pColumnar, m_sName.cstr(), sError, tHints, &tCapabilities );
 			assert ( m_pIterator );
 			m_bHasHashes = tCapabilities.m_bStringHashes;
 		}
@@ -223,13 +223,13 @@ public:
 
 protected:
 	CSphString	m_sName;
-	CSphScopedPtr<columnar::Iterator_i> m_pIterator {nullptr};
+	std::unique_ptr<columnar::Iterator_i> m_pIterator;
 };
 
 
 int Expr_Columnar_StringLength_c::IntEval ( const CSphMatch & tMatch ) const
 {
-	if ( !m_pIterator.Ptr() || m_pIterator->AdvanceTo ( tMatch.m_tRowID ) != tMatch.m_tRowID )
+	if ( !m_pIterator || m_pIterator->AdvanceTo ( tMatch.m_tRowID ) != tMatch.m_tRowID )
 		return 0;
 
 	return m_pIterator->GetLength();
@@ -244,7 +244,7 @@ void Expr_Columnar_StringLength_c::Command ( ESphExprCommand eCmd, void * pArg )
 		if ( pColumnar )
 		{
 			std::string sError; // FIXME! report errors
-			m_pIterator = pColumnar->CreateIterator ( m_sName.cstr(), {}, nullptr, sError );
+			m_pIterator = CreateIterator ( pColumnar, m_sName.cstr(), sError );
 		}
 	}
 }
@@ -273,7 +273,7 @@ public:
 template<typename T>
 int Expr_Columnar_MvaLength_T<T>::IntEval ( const CSphMatch & tMatch ) const
 {
-	if ( !m_pIterator.Ptr() || m_pIterator->AdvanceTo ( tMatch.m_tRowID ) != tMatch.m_tRowID )
+	if ( !m_pIterator || m_pIterator->AdvanceTo ( tMatch.m_tRowID ) != tMatch.m_tRowID )
 		return 0;
 
 	return m_pIterator->GetLength() / sizeof(T);
@@ -379,7 +379,7 @@ public:
 protected:
 	CSphString	m_sName;
 	bool		m_bStored = false;
-	CSphScopedPtr<columnar::Iterator_i> m_pIterator {nullptr};
+	std::unique_ptr<columnar::Iterator_i> m_pIterator;
 
 	uint64_t CalcHash ( const char * szTag, const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
 	{
@@ -422,10 +422,10 @@ void Expr_GetColumnar_Traits_c::Command ( ESphExprCommand eCmd, void * pArg )
 		if ( pColumnar )
 		{
 			std::string sError; // FIXME! report errors
-			m_pIterator = pColumnar->CreateIterator ( m_sName.cstr(), {}, nullptr, sError );
+			m_pIterator = CreateIterator ( pColumnar, m_sName.cstr(), sError );
 		}
 		else
-			m_pIterator.Reset();
+			m_pIterator.reset();
 	}
 	break;
 
@@ -465,7 +465,7 @@ uint64_t Expr_GetColumnarInt_c::GetHash ( const ISphSchema & tSorterSchema, uint
 
 SphAttr_t Expr_GetColumnarInt_c::FetchValue ( const CSphMatch & tMatch ) const
 {
-	if ( m_pIterator.Ptr() && m_pIterator->AdvanceTo ( tMatch.m_tRowID ) == tMatch.m_tRowID )
+	if ( m_pIterator && m_pIterator->AdvanceTo ( tMatch.m_tRowID ) == tMatch.m_tRowID )
 		return m_pIterator->Get();
 
 	return 0;
@@ -502,7 +502,7 @@ public:
 
 int Expr_GetColumnarString_c::StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const
 {
-	if ( m_pIterator.Ptr() && m_pIterator->AdvanceTo ( tMatch.m_tRowID ) == tMatch.m_tRowID )
+	if ( m_pIterator && m_pIterator->AdvanceTo ( tMatch.m_tRowID ) == tMatch.m_tRowID )
 		return m_pIterator->Get ( *ppStr );
 
 	return 0;
@@ -511,7 +511,7 @@ int Expr_GetColumnarString_c::StringEval ( const CSphMatch & tMatch, const BYTE 
 
 const BYTE * Expr_GetColumnarString_c::StringEvalPacked ( const CSphMatch & tMatch ) const
 {
-	if ( m_pIterator.Ptr() && m_pIterator->AdvanceTo ( tMatch.m_tRowID ) == tMatch.m_tRowID )
+	if ( m_pIterator && m_pIterator->AdvanceTo ( tMatch.m_tRowID ) == tMatch.m_tRowID )
 		return m_pIterator->GetPacked();
 
 	return nullptr;
@@ -520,7 +520,7 @@ const BYTE * Expr_GetColumnarString_c::StringEvalPacked ( const CSphMatch & tMat
 
 int Expr_GetColumnarString_c::StringLenEval ( const CSphMatch & tMatch ) const
 {
-	if ( m_pIterator.Ptr() && m_pIterator->AdvanceTo ( tMatch.m_tRowID ) == tMatch.m_tRowID )
+	if ( m_pIterator && m_pIterator->AdvanceTo ( tMatch.m_tRowID ) == tMatch.m_tRowID )
 		return m_pIterator->GetLength();
 
 	return -1;
@@ -550,7 +550,7 @@ public:
 
 int64_t Expr_GetColumnarMva_c::Int64Eval ( const CSphMatch & tMatch ) const
 {
-	if ( m_pIterator.Ptr() && m_pIterator->AdvanceTo ( tMatch.m_tRowID ) == tMatch.m_tRowID )
+	if ( m_pIterator && m_pIterator->AdvanceTo ( tMatch.m_tRowID ) == tMatch.m_tRowID )
 		return (int64_t)m_pIterator->GetPacked();
 
 	return 0;
@@ -559,7 +559,7 @@ int64_t Expr_GetColumnarMva_c::Int64Eval ( const CSphMatch & tMatch ) const
 
 ByteBlob_t Expr_GetColumnarMva_c::MvaEval ( const CSphMatch & tMatch ) const
 {
-	if ( m_pIterator.Ptr() && m_pIterator->AdvanceTo ( tMatch.m_tRowID ) == tMatch.m_tRowID )
+	if ( m_pIterator && m_pIterator->AdvanceTo ( tMatch.m_tRowID ) == tMatch.m_tRowID )
 	{
 		const BYTE * pResult = nullptr;
 		int iBytes = m_pIterator->Get ( pResult );

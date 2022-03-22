@@ -56,7 +56,7 @@ public:
 	virtual void	Load ( CSphReader & tReader ) = 0;
 	virtual int64_t	AllocatedBytes() const = 0;
 
-	virtual columnar::Iterator_i *	CreateIterator() const = 0;
+	virtual std::unique_ptr<columnar::Iterator_i>	CreateIterator() const = 0;
 	virtual columnar::AttrType_e	GetType() const = 0;
 };
 
@@ -135,7 +135,7 @@ public:
 	void	Load ( CSphReader & tReader ) override		{ LoadData(tReader); }
 	int64_t	AllocatedBytes() const override				{ return m_dValues.GetLengthBytes64(); }
 
-	columnar::Iterator_i * CreateIterator()	const override { return new ColumnarIterator_Int_T<T> ( m_dValues ); }
+	std::unique_ptr<columnar::Iterator_i> CreateIterator()	const override { return std::make_unique<ColumnarIterator_Int_T<T>> ( m_dValues ); }
 
 private:
 	CSphVector<T>	m_dValues;
@@ -235,7 +235,7 @@ public:
 	void	Load ( CSphReader & tReader ) override		{ LoadData(tReader); }
 	int64_t	AllocatedBytes() const override				{ return m_dData.GetLengthBytes64() + m_dLengths.GetLengthBytes64(); }
 
-	columnar::Iterator_i * CreateIterator()	const override { return new ColumnarIterator_String_c ( m_dData, m_dLengths ); }
+	std::unique_ptr<columnar::Iterator_i> CreateIterator()	const override { return std::make_unique<ColumnarIterator_String_c> ( m_dData, m_dLengths ); }
 
 private:
 	CSphVector<BYTE>	m_dData;
@@ -355,7 +355,7 @@ public:
 	void	Load ( MemoryReader_c & tReader ) override	{ LoadData(tReader); }
 	void	Load ( CSphReader & tReader ) override		{ LoadData(tReader); }
 
-	columnar::Iterator_i * CreateIterator()	const override { return new ColumnarIterator_MVA_T<T> ( m_dData, m_dLengths ); }
+	std::unique_ptr<columnar::Iterator_i> CreateIterator()	const override { return std::make_unique<ColumnarIterator_MVA_T<T>> ( m_dData, m_dLengths ); }
 
 private:
 	CSphVector<T>		m_dData;
@@ -543,7 +543,7 @@ columnar::Iterator_i * ColumnarRT_c::CreateIterator ( const std::string & sName,
 	if ( !pFound )
 		return nullptr;
 
-	return pFound->first->CreateIterator();
+	return pFound->first->CreateIterator().release();
 }
 
 

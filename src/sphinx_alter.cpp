@@ -383,14 +383,14 @@ bool IndexAlterHelper_c::Alter_AddRemoveColumnar ( bool bAdd, const ISphSchema &
 		}
 
 		assert(pColumnar);
-		columnar::Iterator_i * pIterator = pColumnar->CreateIterator ( tNewAttr.m_sName.cstr(), {}, nullptr, sErrorSTL );
+		auto pIterator = CreateIterator ( pColumnar, tNewAttr.m_sName.cstr(), sErrorSTL );
 		if ( !pIterator )
 		{
 			sError.SetSprintf ( "%s attribute to %s: %s", bAdd ? "adding" : "removing", sIndex.cstr(), sErrorSTL.c_str() );
 			return false;
 		}
 
-		dIterators.Add ( { std::unique_ptr<columnar::Iterator_i>(pIterator), pOldAttr->m_eAttrType } );
+		dIterators.Add ( { std::move (pIterator), pOldAttr->m_eAttrType } );
 	}
 
 	CSphVector<int64_t> dTmp;
@@ -401,8 +401,8 @@ bool IndexAlterHelper_c::Alter_AddRemoveColumnar ( bool bAdd, const ISphSchema &
 			auto & tIterator = dIterators[iColumnarAttr];
 			if ( tIterator.first )
 			{
-				Verify ( AdvanceIterator ( tIterator.first.get(), tRowID ) );
-				SetColumnarAttr ( iColumnarAttr, tIterator.second, pBuilder, tIterator.first.get(), dTmp );
+				Verify ( AdvanceIterator ( tIterator.first, tRowID ) );
+				SetColumnarAttr ( iColumnarAttr, tIterator.second, pBuilder, tIterator.first, dTmp );
 			}
 			else
 				SetDefaultColumnarAttr ( iColumnarAttr, tIterator.second, pBuilder );

@@ -461,7 +461,7 @@ void RtSegment_t::BuildDocID2RowIDMap ( const CSphSchema & tSchema )
 		assert ( pIt );
 		for ( RowID_t tRowID = 0; tRowID<m_uRows; tRowID++ )
 		{
-			Verify ( AdvanceIterator ( pIt.get(), tRowID ) );
+			Verify ( AdvanceIterator ( pIt, tRowID ) );
 			m_tDocIDtoRowID.Add ( pIt->Get(), tRowID );
 		}
 	}
@@ -2382,11 +2382,11 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 	auto pColumnar = CreateColumnarRT ( m_pIndex->GetInternalSchema(), m_pColumnarBuilder.get(), false );
 
 	std::string sError;
-	CSphScopedPtr<columnar::Iterator_i> pColumnarIdIterator(nullptr);
+	std::unique_ptr<columnar::Iterator_i> pColumnarIdIterator;
 	if ( bColumnarId )
 	{
-		pColumnarIdIterator = pColumnar->CreateIterator ( sphGetDocidName(), {}, nullptr, sError );
-		assert ( pColumnarIdIterator.Ptr() );
+		pColumnarIdIterator = CreateIterator ( pColumnar.get(), sphGetDocidName(), sError );
+		assert ( pColumnarIdIterator );
 	}
 
 	int iHitIndex = 0;
@@ -2398,8 +2398,8 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 			tElem.m_tDocID = sphGetDocID ( pRow );
 		else
 		{
-			assert ( pColumnarIdIterator.Ptr() );
-			Verify ( AdvanceIterator ( pColumnarIdIterator.Ptr(), i ) );
+			assert ( pColumnarIdIterator );
+			Verify ( AdvanceIterator ( pColumnarIdIterator, i ) );
 			tElem.m_tDocID = pColumnarIdIterator->Get();
 		}
 
@@ -2873,8 +2873,8 @@ CSphFixedVector<RowID_t> RtIndex_c::CopyAttributesFromAliveDocs ( RtSegment_t & 
 		ARRAY_FOREACH ( i, dColumnarIterators )
 		{
 			auto & tIt = dColumnarIterators[i];
-			Verify ( AdvanceIterator ( tIt.first.get(), tRowID ) );
-			SetColumnarAttr ( i, tIt.second, tCtx.m_pColumnarBuilder, tIt.first.get(), dTmp );
+			Verify ( AdvanceIterator ( tIt.first, tRowID ) );
+			SetColumnarAttr ( i, tIt.second, tCtx.m_pColumnarBuilder, tIt.first, dTmp );
 		}
 
 		if ( tDstSeg.m_pDocstore )
@@ -3745,8 +3745,8 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 			ARRAY_FOREACH ( iIterator, dColumnarIterators )
 			{
 				auto & tIterator = dColumnarIterators[iIterator];
-				Verify ( AdvanceIterator ( tIterator.first.get(), tRowID ) );
-				SetColumnarAttr ( iIterator, tIterator.second, pColumnarBuilder.get(), tIterator.first.get(), dTmp );
+				Verify ( AdvanceIterator ( tIterator.first, tRowID ) );
+				SetColumnarAttr ( iIterator, tIterator.second, pColumnarBuilder.get(), tIterator.first, dTmp );
 			}
 
 			tDocID = iColumnarIdLoc>=0 ? dColumnarIterators[iColumnarIdLoc].first->Get() : sphGetDocID(pRow);

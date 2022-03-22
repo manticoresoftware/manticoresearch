@@ -155,7 +155,6 @@ static int				g_iServerID = 0;
 static bool				g_bServerID = false;
 static bool				g_bJsonConfigLoadedOk = false;
 static auto&			g_iAutoOptimizeCutoffMultiplier = AutoOptimizeCutoffMultiplier();
-static auto&			g_iAutoOptimizeCutoff = AutoOptimizeCutoff();
 static constexpr bool	AUTOOPTIMIZE_NEEDS_VIP = false; // whether non-VIP can issue 'SET GLOBAL auto_optimize = X'
 
 static bool				g_bSplit = true;
@@ -13745,7 +13744,14 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 			}
 		} else if ( tStmt.m_sSetName=="optimize_cutoff")
 		{
-			g_iAutoOptimizeCutoff = tStmt.m_iSetValue;
+			if ( tStmt.m_iSetValue<1 )
+			{
+				tOut.ErrorEx ( tStmt.m_sStmt, "optimize_cutoff should be greater than 0, got %d", tStmt.m_iSetValue );
+				return;
+			}
+
+			MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff = tStmt.m_iSetValue;
+
 		} else if ( tStmt.m_sSetName=="pseudo_sharding")
 		{
 			g_bSplit = !!tStmt.m_iSetValue;
@@ -14692,7 +14698,7 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt )
 		auto pVars = session::Info().GetClientSession();
 		dTable.MatchTuplet ( "autocommit", pVars->m_bAutoCommit ? "1" : "0" );
 		dTable.MatchTupletf ( "auto_optimize", "%d", g_iAutoOptimizeCutoffMultiplier );
-		dTable.MatchTupletf ( "optimize_cutoff", "%d", g_iAutoOptimizeCutoff );
+		dTable.MatchTupletf ( "optimize_cutoff", "%d", MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff );
 		dTable.MatchTuplet ( "collation_connection", sphCollationToName ( session::GetCollation() ) );
 		dTable.MatchTuplet ( "query_log_format", g_eLogFormat==LOG_FORMAT_PLAIN ? "plain" : "sphinxql" );
 		dTable.MatchTuplet ( "session_read_only", session::GetReadOnly() ? "1" : "0" );
@@ -18703,7 +18709,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	AllowOnlyNot ( hSearchd.GetInt ( "not_terms_only_allowed", 0 )!=0 );
 	ConfigureDaemonLog ( hSearchd.GetStr ( "query_log_commands" ) );
 	g_iAutoOptimizeCutoffMultiplier = hSearchd.GetInt ( "auto_optimize", 1 );
-	g_iAutoOptimizeCutoff = hSearchd.GetInt ( "optimize_cutoff", g_iAutoOptimizeCutoff );
+	MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff = hSearchd.GetInt ( "optimize_cutoff", AutoOptimizeCutoff() );
 
 	g_bSplit = hSearchd.GetInt ( "pseudo_sharding", 1 )!=0;
 }

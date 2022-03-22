@@ -124,7 +124,7 @@ volatile int &AutoOptimizeCutoffMultiplier() noexcept
 	return iAutoOptimizeCutoffMultiplier;
 }
 
-volatile int &AutoOptimizeCutoff() noexcept
+volatile int AutoOptimizeCutoff() noexcept
 {
 	static int iAutoOptimizeCutoff = sphCpuThreadsCount() * 2;
 	return iAutoOptimizeCutoff;
@@ -3766,7 +3766,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	}
 
 	// rows could be killed during index save and tNextRowID could be less than tCtx.m_iTotalDocuments \ initial count
-	assert ( tNextRowID<=dRawLookup.GetLength() );
+	assert ( tNextRowID<=(RowID_t)dRawLookup.GetLength() );
 	VecTraits_T<DocidRowidPair_t> dLookup ( dRawLookup.Begin(), tNextRowID );
 
 	std::string sErrorSTL;
@@ -9657,11 +9657,19 @@ int RtIndex_c::ClassicOptimize ()
 	return iAffected;
 }
 
+static int GetCutOff ( const MutableIndexSettings_c & tSettings )
+{
+	if ( tSettings.IsSet ( MutableName_e::OPTIMIZE_CUTOFF ) )
+		return tSettings.m_iOptimizeCutoff;
+	else
+		return MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff;
+}
+
 int RtIndex_c::ProgressiveOptimize ( int iCutoff )
 {
 	int iAffected = 0;
 	if ( !iCutoff )
-		iCutoff = AutoOptimizeCutoff();
+		iCutoff = GetCutOff ( m_tMutableSettings );
 
 	bool bWork = true;
 	while ( bWork &= MergeCanRun() )
@@ -9735,7 +9743,7 @@ void RtIndex_c::CheckStartAutoOptimize()
 	if ( !iCutoff )
 		return;
 
-	iCutoff *= AutoOptimizeCutoff();
+	iCutoff *= GetCutOff ( m_tMutableSettings );
 
 	if ( m_tRtChunks.GetDiskChunksCount()<=iCutoff )
 		return;

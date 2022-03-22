@@ -361,7 +361,7 @@ struct SnippetBuilderStatelessMembers_t
 {
 	const CSphIndex *				m_pIndex = nullptr;
 	const SnippetQuerySettings_t *	m_pQuerySettings = nullptr;
-	CSphScopedPtr<CSphHTMLStripper> m_pStripper { nullptr };
+	std::unique_ptr<CSphHTMLStripper> m_pStripper;
 	CSphScopedPtr<QueryParser_i>	m_pQueryParser { nullptr };
 	TokenizerRefPtr_c				m_pTokenizerJson;
 	CSphScopedPtr<XQQuery_t>		m_pExtQuery { nullptr };
@@ -1090,7 +1090,7 @@ const CSphHTMLStripper * SnippetBuilder_c::Impl_c::GetStripperForText() const
 	assert( m_pState->m_pQuerySettings);
 
 	if ( m_pState->m_pQuerySettings->m_sStripMode=="strip" || m_pState->m_pQuerySettings->m_sStripMode=="index" )
-		return m_pState->m_pStripper.Ptr();
+		return m_pState->m_pStripper.get();
 
 	return nullptr;
 }
@@ -1103,7 +1103,7 @@ const CSphHTMLStripper * SnippetBuilder_c::Impl_c::GetStripperForTokenization() 
 	if ( m_pState->m_pQuerySettings->m_sStripMode!="retain" )
 		return nullptr;
 
-	return m_pState->m_pStripper.Ptr();
+	return m_pState->m_pStripper.get();
 }
 
 
@@ -1325,7 +1325,7 @@ static DWORD CollectQuerySPZ ( const XQNode_t * pNode )
 
 bool SnippetBuilder_c::Impl_c::SetupStripperSPZ ( bool bSetupSPZ, CSphString & sError )
 {
-	m_pState->m_pStripper.Reset();
+	m_pState->m_pStripper.reset();
 
 	if ( bSetupSPZ && ( !m_pTokenizer->EnableSentenceIndexing(sError) || !m_pTokenizer->EnableZoneIndexing(sError) ) )
 		return false;
@@ -1337,7 +1337,7 @@ bool SnippetBuilder_c::Impl_c::SetupStripperSPZ ( bool bSetupSPZ, CSphString & s
 	if ( q.m_sStripMode=="strip" || q.m_sStripMode=="retain" || ( q.m_sStripMode=="index" && tIndexSettings.m_bHtmlStrip ) )
 	{
 		// don't strip HTML markup in 'retain' mode - proceed zones only
-		m_pState->m_pStripper = new CSphHTMLStripper ( q.m_sStripMode!="retain" );
+		m_pState->m_pStripper = std::make_unique<CSphHTMLStripper> ( q.m_sStripMode!="retain" );
 
 		if ( q.m_sStripMode=="index" )
 		{

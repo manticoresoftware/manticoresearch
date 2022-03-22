@@ -34,7 +34,7 @@ void EnqueueForOptimize ( CSphString sIndex, OptimizeTask_t tTask )
 		iOptimizeTask = TaskManager::RegisterGlobal ( "optimize",
 			[] ( void* pPayload ) // worker
 			{
-				CSphScopedPtr<OptimizeJob_t> pJob { (OptimizeJob_t *) pPayload };
+				std::unique_ptr<OptimizeJob_t> pJob { (OptimizeJob_t *) pPayload };
 				auto pServed = GetServed ( pJob->m_sIndex );
 				if ( !pServed )
 					return;
@@ -48,7 +48,7 @@ void EnqueueForOptimize ( CSphString sIndex, OptimizeTask_t tTask )
 			},
 			[] ( void* pPayload ) // releaser
 			{
-				CSphScopedPtr<OptimizeJob_t> pTask { (OptimizeJob_t *) pPayload };
+				std::unique_ptr<OptimizeJob_t> pTask { (OptimizeJob_t *) pPayload };
 			}, 1 );
 	TaskManager::StartJob ( iOptimizeTask, new OptimizeJob_t ( std::move ( sIndex ), std::move ( tTask ) ) );
 }

@@ -19,7 +19,7 @@ class DocsCollector_c::Impl_c
 	VecTraits_T<DocID_t>	m_dFastSlice;
 	CSphVector<DocID_t>		m_dValues;
 	CSphVector<BYTE>		m_dCompressedDocids;
-	CSphScopedPtr<MemoryReader_c>	m_pCompressedReader;
+	std::unique_ptr<MemoryReader_c>	m_pCompressedReader;
 	int						m_iFastIdx = 0;
 	DocID_t					m_iLastId = -1;
 	bool					m_bFastPath = false;
@@ -51,7 +51,7 @@ class DocsCollector_c::Impl_c
 		if ( m_dCompressedDocids.IsEmpty() )
 			return;
 
-		m_pCompressedReader = new MemoryReader_c ( m_dCompressedDocids );
+		m_pCompressedReader = std::make_unique<MemoryReader_c> ( m_dCompressedDocids );
 		m_iLastId = 0;
 	}
 
@@ -108,7 +108,7 @@ public:
 
 		if ( !m_pCompressedReader && !m_dCompressedDocids.IsEmpty() )
 		{
-			m_pCompressedReader = new MemoryReader_c ( m_dCompressedDocids );
+			m_pCompressedReader = std::make_unique<MemoryReader_c> ( m_dCompressedDocids );
 			m_iLastId = 0;
 			m_dValues.Reset();
 		}

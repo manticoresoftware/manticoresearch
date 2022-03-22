@@ -99,7 +99,7 @@ bool		ConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_t> & d
 // load indexes got from internal config on daemon indexes preload (part of ConfigureAndPreload work done here)
 void		ConfigureAndPreloadConfiglessIndexes ( int & iValidIndexes, int & iCounter );
 
-FilenameBuilder_i * CreateFilenameBuilder ( const char * szIndex );
+std::unique_ptr<FilenameBuilder_i> CreateFilenameBuilder ( const char * szIndex );
 
 void		ModifyDaemonPaths ( CSphConfigSection & hSearchd );
 CSphString	GetDataDirInt();

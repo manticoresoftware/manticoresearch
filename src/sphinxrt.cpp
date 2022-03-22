@@ -4396,8 +4396,10 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 		// bring new disk chunk online
 		auto fnFnameBuilder = GetIndexFilenameBuilder ();
 		StrVec_t dWarnings;
-		CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder { fnFnameBuilder ? fnFnameBuilder ( m_sIndexName.cstr () ) : nullptr };
-		pNewChunk = PreallocDiskChunk ( sChunk.cstr (), iChunkID, pFilenameBuilder.Ptr (), dWarnings, m_sLastError );
+		std::unique_ptr<FilenameBuilder_i> pFilenameBuilder;
+		if ( fnFnameBuilder )
+			pFilenameBuilder = fnFnameBuilder ( m_sIndexName.cstr () );
+		pNewChunk = PreallocDiskChunk ( sChunk.cstr (), iChunkID, pFilenameBuilder.get (), dWarnings, m_sLastError );
 
 		if ( !dWarnings.IsEmpty() )
 		{
@@ -5331,8 +5333,8 @@ void RtIndex_c::PostSetup()
 	CSphString sHitlessFiles = m_tSettings.m_sHitlessFiles;
 	if ( GetIndexFilenameBuilder() )
 	{
-		CSphScopedPtr<const FilenameBuilder_i> pFilenameBuilder ( GetIndexFilenameBuilder() ( m_sIndexName.cstr() ) );
-		if ( pFilenameBuilder.Ptr() )
+		std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = GetIndexFilenameBuilder() ( m_sIndexName.cstr() );
+		if ( pFilenameBuilder )
 			sHitlessFiles = pFilenameBuilder->GetFullPath ( sHitlessFiles );
 	}
 
@@ -6078,7 +6080,9 @@ bool RtIndex_c::CheckSegmentConsistency ( const RtSegment_t* pNewSeg, bool bSile
 int RtIndex_c::DebugCheckDisk ( DebugCheckError_i & tReporter )
 {
 	CreateFilenameBuilder_fn fnCreateFilenameBuilder = GetIndexFilenameBuilder();
-	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( m_sIndexName.cstr() ) : nullptr );
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder;
+	if ( fnCreateFilenameBuilder )
+		pFilenameBuilder = fnCreateFilenameBuilder ( m_sIndexName.cstr() );
 
 	VecTraits_T<int> dChunks = m_dChunkNames.Slice();
 	if ( m_iCheckChunk!=-1 )
@@ -6102,7 +6106,7 @@ int RtIndex_c::DebugCheckDisk ( DebugCheckError_i & tReporter )
 		sChunk.SetSprintf ( "%s.%d", m_sPath.cstr(), iChunk );
 		tReporter.Msg ( "checking disk chunk, extension %d, %d(%d)...", dChunks[i], i, m_dChunkNames.GetLength() );
 
-		auto pIndex = PreallocDiskChunk ( sChunk.cstr(), iChunk, pFilenameBuilder.Ptr(), dWarnings, m_sLastError );
+		auto pIndex = PreallocDiskChunk ( sChunk.cstr(), iChunk, pFilenameBuilder.get(), dWarnings, m_sLastError );
 		if ( pIndex )
 		{
 			iFailsPlain += pIndex->DebugCheck ( tReporter );
@@ -8946,14 +8950,16 @@ ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunks ( const char* szParentAction, 
 		return pChunk;
 
 	auto fnFnameBuilder = GetIndexFilenameBuilder();
-	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder { fnFnameBuilder ? fnFnameBuilder ( m_sIndexName.cstr() ) : nullptr };
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder;
+	if ( fnFnameBuilder )
+		pFilenameBuilder = fnFnameBuilder ( m_sIndexName.cstr() );
 
 	// prealloc new (optimized) chunk
 	CSphString sChunk;
 	sChunk.SetSprintf ( "%s.tmp", sFirst.cstr() );
 
 	StrVec_t dWarnings; // FIXME! report warnings
-	pChunk = DiskChunk_c::make ( PreallocDiskChunk ( sChunk.cstr(), tChunkA.m_iChunk, pFilenameBuilder.Ptr(), dWarnings, sError, tChunkA.GetName() ) );
+	pChunk = DiskChunk_c::make ( PreallocDiskChunk ( sChunk.cstr(), tChunkA.m_iChunk, pFilenameBuilder.get(), dWarnings, sError, tChunkA.GetName() ) );
 
 	if ( pChunk )
 		pChunk->m_bFinallyUnlink = true; // on destroy files will be deleted. Caller must explicitly reset this flag if chunk is usable
@@ -9148,13 +9154,13 @@ Binlog::CheckTnxResult_t RtIndex_c::ReplayReconfigure ( CSphReader& tReader, CSp
 	CSphTokenizerSettings tTokenizerSettings;
 	CSphDictSettings tDictSettings;
 	CSphEmbeddedFiles tEmbeddedFiles;
-	CSphScopedPtr<const FilenameBuilder_i> pFilenameBuilder ( nullptr );
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder;
 	if ( GetIndexFilenameBuilder() )
 		pFilenameBuilder = GetIndexFilenameBuilder() ( m_sIndexName.cstr() );
 
 	CSphReconfigureSettings tSettings;
 	LoadIndexSettings ( tSettings.m_tIndex, tReader, INDEX_FORMAT_VERSION );
-	if ( !tSettings.m_tTokenizer.Load ( pFilenameBuilder.Ptr(), tReader, tEmbeddedFiles, sError ) )
+	if ( !tSettings.m_tTokenizer.Load ( pFilenameBuilder.get(), tReader, tEmbeddedFiles, sError ) )
 	{
 		sError.SetSprintf ( "failed to load settings, %s", sError.cstr() );
 		return {};
@@ -9814,10 +9820,12 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 	bool bSame, CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError )
 {
 	CreateFilenameBuilder_fn fnCreateFilenameBuilder = GetIndexFilenameBuilder();
-	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( sIndexName.cstr() ) : nullptr );
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder;
+	if ( fnCreateFilenameBuilder )
+		pFilenameBuilder = fnCreateFilenameBuilder ( sIndexName.cstr() );
 
 	// FIXME!!! check missed embedded files
-	TokenizerRefPtr_c pTokenizer = Tokenizer::Create ( tSettings.m_tTokenizer, nullptr, pFilenameBuilder.Ptr(), dWarnings, sError );
+	TokenizerRefPtr_c pTokenizer = Tokenizer::Create ( tSettings.m_tTokenizer, nullptr, pFilenameBuilder.get(), dWarnings, sError );
 	if ( !pTokenizer )
 	{
 		sError.SetSprintf ( "'%s' failed to create tokenizer, error '%s'", sIndexName.cstr(), sError.cstr() );
@@ -9825,7 +9833,7 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 	}
 
 	// dict setup second
-	DictRefPtr_c tDict { sphCreateDictionaryCRC ( tSettings.m_tDict, nullptr, pTokenizer, sIndexName.cstr(), false, tIndexSettings.m_iSkiplistBlockSize, pFilenameBuilder.Ptr(), sError ) };
+	DictRefPtr_c tDict { sphCreateDictionaryCRC ( tSettings.m_tDict, nullptr, pTokenizer, sIndexName.cstr(), false, tIndexSettings.m_iSkiplistBlockSize, pFilenameBuilder.get(), sError ) };
 	if ( !tDict )
 	{
 		sError.SetSprintf ( "'%s' failed to create dictionary, error '%s'", sIndexName.cstr(), sError.cstr() );
@@ -10038,11 +10046,11 @@ void RtIndex_c::GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameB
 	if ( !sphIsReadable ( sRam.cstr(), &sTmpError ) )
 		dFiles.Pop();
 
-	CSphScopedPtr<const FilenameBuilder_i> pFilenameBuilder ( nullptr );
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder;
 	if ( !pParentBuilder && GetIndexFilenameBuilder() )
 	{
 		pFilenameBuilder = GetIndexFilenameBuilder() ( m_sIndexName.cstr() );
-		pParentBuilder = pFilenameBuilder.Ptr();
+		pParentBuilder = pFilenameBuilder.get();
 	}
 
 	GetSettingsFiles ( m_pTokenizer, m_pDict, GetSettings(), pParentBuilder, dFiles );

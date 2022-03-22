@@ -2384,7 +2384,7 @@ void PercolateIndex_c::PostSetupUnl()
 	CSphString sHitlessFiles = m_tSettings.m_sHitlessFiles.cstr();
 	if ( GetIndexFilenameBuilder() )
 	{
-		CSphScopedPtr<const FilenameBuilder_i> pFilenameBuilder ( GetIndexFilenameBuilder() ( m_sIndexName.cstr() ) );
+		std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = GetIndexFilenameBuilder() ( m_sIndexName.cstr() );
 		if ( pFilenameBuilder )
 			sHitlessFiles = pFilenameBuilder->GetFullPath ( sHitlessFiles );
 	}
@@ -3144,11 +3144,11 @@ void PercolateIndex_c::GetIndexFiles ( CSphVector<CSphString> & dFiles, const Fi
 	CSphString & sMeta = dFiles.Add();
 	sMeta.SetSprintf ( "%s.meta", m_sFilename.cstr() );
 
-	CSphScopedPtr<const FilenameBuilder_i> pFilenameBuilder ( nullptr );
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder ( nullptr );
 	if ( !pParentBuilder && GetIndexFilenameBuilder() )
 	{
 		pFilenameBuilder = GetIndexFilenameBuilder() ( m_sIndexName.cstr() );
-		pParentBuilder = pFilenameBuilder.Ptr();
+		pParentBuilder = pFilenameBuilder.get();
 	}
 
 	GetSettingsFiles ( m_pTokenizer, m_pDict, GetSettings(), pParentBuilder, dFiles );

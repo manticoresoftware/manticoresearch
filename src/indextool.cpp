@@ -92,10 +92,10 @@ CSphString FilenameBuilder_c::GetFullPath ( const CSphString & sName ) const
 	return sNewValue.cstr();
 }
 
-static FilenameBuilder_i * CreateFilenameBuilder ( const char * szIndex )
+static std::unique_ptr<FilenameBuilder_i> CreateFilenameBuilder ( const char * szIndex )
 {
 	if ( IsConfigless() )
-		return new FilenameBuilder_c(szIndex);
+		return std::make_unique<FilenameBuilder_c> ( szIndex );
 
 	return nullptr;
 }
@@ -1211,9 +1211,9 @@ static std::unique_ptr<CSphIndex> CreateIndex ( CSphConfig & hConf, const CSphSt
 
 static void PreallocIndex ( const CSphString & sIndex, bool bStripPath, CSphIndex * pIndex )
 {
-	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( CreateFilenameBuilder ( sIndex.cstr() ) );
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = CreateFilenameBuilder ( sIndex.cstr() );
 	StrVec_t dWarnings;
-	if ( !pIndex->Prealloc ( bStripPath, pFilenameBuilder.Ptr(), dWarnings ) )
+	if ( !pIndex->Prealloc ( bStripPath, pFilenameBuilder.get(), dWarnings ) )
 		sphDie ( "index '%s': prealloc failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
 
 	for ( const auto & i : dWarnings )

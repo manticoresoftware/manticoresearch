@@ -15068,8 +15068,8 @@ void HandleMysqlShowIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t & tStmt 
 			return;
 
 		StringBuilder_c tBuf;
-		CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( CreateFilenameBuilder ( pIndex->GetName () ) );
-		DumpSettings ( tBuf, *pIndex, pFilenameBuilder.Ptr () );
+		std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = CreateFilenameBuilder ( pIndex->GetName () );
+		DumpSettings ( tBuf, *pIndex, pFilenameBuilder.get () );
 
 		tOut.DataTuplet ( "settings", tBuf.cstr () );
 		tOut.Eof ();
@@ -15295,11 +15295,11 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, bool
 
 static bool PrepareReconfigure ( const CSphString & sIndex, const CSphConfigSection & hIndex, CSphReconfigureSettings & tSettings, CSphString & sWarning, CSphString & sError )
 {
-	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( CreateFilenameBuilder ( sIndex.cstr() ) );
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = CreateFilenameBuilder ( sIndex.cstr() );
 
 	// fixme: report warnings
 	tSettings.m_tTokenizer.Setup ( hIndex, sWarning );
-	tSettings.m_tDict.Setup ( hIndex, pFilenameBuilder.Ptr(), sWarning );
+	tSettings.m_tDict.Setup ( hIndex, pFilenameBuilder.get(), sWarning );
 	tSettings.m_tFieldFilter.Setup ( hIndex, sWarning );
 	tSettings.m_tMutableSettings.Load ( hIndex, false, nullptr );
 
@@ -16807,8 +16807,8 @@ bool FixupAndLockIndex ( ServedIndex_c& tIdx, CSphIndex* pIdx, const CSphConfigS
 {
 	if ( pConfig )
 	{
-		CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( CreateFilenameBuilder ( szIndexName ) );
-		if ( !sphFixupIndexSettings ( pIdx, *pConfig, g_bStripPath, pFilenameBuilder.Ptr(), dWarnings, sError ) )
+		std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = CreateFilenameBuilder ( szIndexName );
+		if ( !sphFixupIndexSettings ( pIdx, *pConfig, g_bStripPath, pFilenameBuilder.get(), dWarnings, sError ) )
 			return false;
 	}
 
@@ -16820,10 +16820,10 @@ bool FixupAndLockIndex ( ServedIndex_c& tIdx, CSphIndex* pIdx, const CSphConfigS
 /// that is, local and RT indexes, but not distributed one
 bool PreallocNewIndex ( ServedIndex_c & tIdx, const CSphConfigSection * pConfig, const char * szIndexName, StrVec_t & dWarnings, CSphString & sError )
 {
-	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( CreateFilenameBuilder(szIndexName) );
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = CreateFilenameBuilder ( szIndexName );
 	CSphIndex* pIdx = UnlockedHazardIdxFromServed ( tIdx );
 	assert (pIdx);
-	if ( !pIdx->Prealloc ( g_bStripPath, pFilenameBuilder.Ptr(), dWarnings ) )
+	if ( !pIdx->Prealloc ( g_bStripPath, pFilenameBuilder.get(), dWarnings ) )
 	{
 		sError.SetSprintf ( "prealloc: %s", pIdx->GetLastError().cstr() );
 		return false;
@@ -17344,9 +17344,9 @@ static ResultAndIndex_t LoadTemplateIndex ( const char * szIndexName, const CSph
 	pIdx->SetMutableSettings ( pServed->m_tSettings );
 	pIdx->m_iExpansionLimit = g_iExpansionLimit;
 
-	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( CreateFilenameBuilder(szIndexName) );
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = CreateFilenameBuilder ( szIndexName );
 	StrVec_t dWarnings;
-	if ( !sphFixupIndexSettings ( pIdx.get(), hIndex, g_bStripPath, pFilenameBuilder.Ptr(), dWarnings, sError ) )
+	if ( !sphFixupIndexSettings ( pIdx.get(), hIndex, g_bStripPath, pFilenameBuilder.get(), dWarnings, sError ) )
 	{
 		sphWarning ( "index '%s': %s - NOT SERVING", szIndexName, sError.cstr () );
 		return { ADD_ERROR, nullptr };

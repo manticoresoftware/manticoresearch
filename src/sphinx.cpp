@@ -2970,7 +2970,7 @@ void CSphIndex_VLN::GetIndexFiles ( CSphVector<CSphString> & dFiles, const Filen
 	std::unique_ptr<FilenameBuilder_i> pFilename;
 	if ( !pFilenameBuilder && GetIndexFilenameBuilder() )
 	{
-		pFilename = std::unique_ptr<FilenameBuilder_i> { GetIndexFilenameBuilder() ( m_sIndexName.cstr() ) };
+		std::unique_ptr<FilenameBuilder_i> pFilename = GetIndexFilenameBuilder() ( m_sIndexName.cstr() );
 		pFilenameBuilder = pFilename.get();
 	}
 
@@ -8718,12 +8718,13 @@ bool CSphIndex_VLN::LoadHeader ( const char* sHeaderName, bool bStripPath, CSphE
 
 void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool bConfig )
 {
-	CreateFilenameBuilder_fn fnCreateFilenameBuilder = GetIndexFilenameBuilder();
-	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( m_sIndexName.cstr() ) : nullptr );
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder;
+	if ( GetIndexFilenameBuilder() )
+		pFilenameBuilder = GetIndexFilenameBuilder() ( m_sIndexName.cstr() );
 
 	CSphEmbeddedFiles tEmbeddedFiles;
 	CSphString sWarning;
-	if ( !LoadHeader ( sHeaderName, false, tEmbeddedFiles, pFilenameBuilder.Ptr(), sWarning ) )
+	if ( !LoadHeader ( sHeaderName, false, tEmbeddedFiles, pFilenameBuilder.get(), sWarning ) )
 		sphDie ( "failed to load header: %s", m_sLastError.cstr ());
 
 	if ( !sWarning.IsEmpty () )
@@ -8767,7 +8768,7 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 
 		fprintf ( fp, "}\n\nindex $dump\n{\n\tsource = $dump\n\tpath = $dump\n" );
 
-		DumpSettingsCfg ( fp, *this, pFilenameBuilder.Ptr() );
+		DumpSettingsCfg ( fp, *this, pFilenameBuilder.get() );
 
 		fprintf ( fp, "}\n" );
 		return;
@@ -8798,7 +8799,7 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 	fprintf ( fp, "total-documents: " INT64_FMT "\n", m_tStats.m_iTotalDocuments );
 	fprintf ( fp, "total-bytes: " INT64_FMT "\n", int64_t(m_tStats.m_iTotalBytes) );
 
-	DumpReadable ( fp, *this, tEmbeddedFiles, pFilenameBuilder.Ptr() );
+	DumpReadable ( fp, *this, tEmbeddedFiles, pFilenameBuilder.get() );
 
 	fprintf ( fp, "\nmin-max-index: " INT64_FMT "\n", m_iMinMaxIndex );
 }

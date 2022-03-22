@@ -1010,11 +1010,11 @@ bool ConverterPlain_t::WriteLookup ( Index_t & tIndex, CSphString & sError )
 	for ( int i = 0; i < m_tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tAttr = m_tSchema.GetAttr(i);
-		Histogram_i * pHistogram = CreateHistogram ( tAttr.m_sName, tAttr.m_eAttrType );
+		std::unique_ptr<Histogram_i> pHistogram = CreateHistogram ( tAttr.m_sName, tAttr.m_eAttrType );
 		if ( pHistogram )
 		{
-			Verify ( tHistogramContainer.Add ( pHistogram ) );
-			dHistograms.Add ( pHistogram );
+			dHistograms.Add ( pHistogram.get() );
+			Verify ( tHistogramContainer.Add ( std::move ( pHistogram ) ) );
 			dPOD.Add ( tAttr );
 		}
 	}

@@ -2616,13 +2616,13 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 	{
 		if ( bAddAttr )
 		{
-			Histogram_i * pNewHistogram = CreateHistogram ( tCtx.m_sName, tCtx.m_eType );
+			std::unique_ptr<Histogram_i> pNewHistogram = CreateHistogram ( tCtx.m_sName, tCtx.m_eType );
 			if ( pNewHistogram )
 			{
 				for ( DWORD i = 0; i < m_iDocinfo; i++ )
 					pNewHistogram->Insert(0);
 
-				m_pHistograms->Add ( pNewHistogram );
+				m_pHistograms->Add ( std::move ( pNewHistogram ) );
 			}
 		}
 		else
@@ -4953,20 +4953,20 @@ bool CSphIndex_VLN::Build_SetupColumnar ( std::unique_ptr<columnar::Builder_i> &
 
 bool CSphIndex_VLN::Build_SetupHistograms ( CSphScopedPtr<HistogramContainer_c> & pContainer, CSphVector<std::pair<Histogram_i*,int>> & dHistograms )
 {
-	for ( int i = 0; i < m_tSchema.GetAttrsCount(); i++ )
+	for ( int i = 0; i < m_tSchema.GetAttrsCount(); ++i )
 	{
 		const CSphColumnInfo & tAttr = m_tSchema.GetAttr(i);
-		Histogram_i * pHistogram = CreateHistogram ( tAttr.m_sName, tAttr.m_eAttrType );
+		Histogram_i * pHistogram = CreateHistogram ( tAttr.m_sName, tAttr.m_eAttrType ).release();
 		if ( pHistogram )
 			dHistograms.Add ( { pHistogram, i } );
 	}
 
-	if ( !dHistograms.GetLength() )
+	if ( dHistograms.IsEmpty() )
 		return true;
 
 	pContainer = new HistogramContainer_c;
 	for ( const auto & i : dHistograms )
-		Verify ( pContainer->Add ( i.first ) );
+		Verify ( pContainer->Add ( std::unique_ptr<Histogram_i> {i.first} ) );
 
 	return true;
 }

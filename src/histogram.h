@@ -54,7 +54,7 @@ public:
 
 	bool			Save ( const CSphString & sFile, CSphString & sError );
 	bool			Load ( const CSphString & sFile, CSphString & sError );
-	bool			Add ( Histogram_i * pHistogram );
+	bool			Add ( std::unique_ptr<Histogram_i> pHistogram );
 	void			Remove ( const CSphString & sAttr );
 	Histogram_i *	Get ( const CSphString & sAttr ) const;
 	DWORD			GetNumValues() const;
@@ -69,7 +69,7 @@ private:
 };
 
 
-Histogram_i *	CreateHistogram ( const CSphString & sAttr, ESphAttr eAttrType, int iSize=0 );
+std::unique_ptr<Histogram_i>	CreateHistogram ( const CSphString & sAttr, ESphAttr eAttrType, int iSize=0 );
 void			CreateHistograms ( HistogramContainer_c & tHistograms, CSphVector<PlainOrColumnar_t> & dAttrsForHistogram, const ISphSchema & tSchema );
 int64_t			EstimateFilterSelectivity ( const CSphFilterSettings & tSettings, const HistogramContainer_c * pHistogramContainer );
 

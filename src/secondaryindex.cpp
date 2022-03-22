@@ -555,7 +555,7 @@ public:
 	int64_t	GetNumProcessed() const override { return m_pIterator->GetNumProcessed(); }
 
 private:
-	CSphScopedPtr<columnar::BlockIterator_i> m_pIterator;
+	std::unique_ptr<columnar::BlockIterator_i> m_pIterator;
 	RowIdBoundaries_t	m_tBoundaries;
 	CSphVector<RowID_t>	m_dCollected;
 };

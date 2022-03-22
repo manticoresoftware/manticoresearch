@@ -118,12 +118,12 @@ class CSphNetLoop::Impl_c
 	WakeupEventRefPtr_c				m_pWakeup;
 	CSphMutex						m_tExtLock;
 	LoopProfiler_t					m_tPrf;
-	CSphScopedPtr<NetPooller_c>		m_pPoll;
+	std::unique_ptr<NetPooller_c>	m_pPoll;
 	CSphAutoEvent					m_tWorkerFinished;
 
 	explicit Impl_c ( const VecTraits_T<Listener_t> & dListeners, CSphNetLoop* pParent )
 		: m_pParent ( pParent )
-		, m_pPoll { new NetPooller_c ( 1000 )}
+		, m_pPoll { std::make_unique<NetPooller_c> ( 1000 )}
 	{
 		m_pWakeup = new CSphWakeupEvent;
 		if ( m_pWakeup->IsPollable() )
@@ -190,7 +190,7 @@ class CSphNetLoop::Impl_c
 	int ProcessReady () REQUIRES ( NetPoollingThread )
 	{
 		int iMaxIters = 0;
-		for ( NetPollEvent_t & dReady : *m_pPoll.Ptr() )
+		for ( NetPollEvent_t & dReady : *m_pPoll )
 		{
 			if ( g_iThrottleAction && iMaxIters>=g_iThrottleAction )
 				break;

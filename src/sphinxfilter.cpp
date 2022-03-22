@@ -554,19 +554,13 @@ public:
 
 struct Filter_And2 final : public ISphFilter
 {
-	ISphFilter * m_pArg1;
-	ISphFilter * m_pArg2;
+	std::unique_ptr<ISphFilter> m_pArg1;
+	std::unique_ptr<ISphFilter> m_pArg2;
 
-	explicit Filter_And2 ( ISphFilter * pArg1, ISphFilter * pArg2 )
-		: m_pArg1 ( pArg1 )
-		, m_pArg2 ( pArg2 )
+	explicit Filter_And2 ( std::unique_ptr<ISphFilter> pArg1, std::unique_ptr<ISphFilter> pArg2 )
+		: m_pArg1 ( std::move ( pArg1 ) )
+		, m_pArg2 ( std::move ( pArg2 ) )
 	{}
-
-	~Filter_And2 () final
-	{
-		SafeDelete ( m_pArg1 );
-		SafeDelete ( m_pArg2 );
-	}
 
 	bool Eval ( const CSphMatch & tMatch ) const final
 	{
@@ -589,10 +583,10 @@ struct Filter_And2 final : public ISphFilter
 		m_pArg2->SetColumnar(pColumnar);
 	}
 
-	ISphFilter * Join ( ISphFilter * pFilter ) final
+	std::unique_ptr<ISphFilter> Join ( std::unique_ptr<ISphFilter> pFilter ) final
 	{
-		m_pArg2 = new Filter_And2 ( m_pArg2, pFilter );
-		return this;
+		m_pArg2 = std::make_unique<Filter_And2> ( std::move ( m_pArg2 ), std::move ( pFilter ) );
+		return std::unique_ptr<ISphFilter>(this);
 	}
 
 	void SetBlobStorage ( const BYTE * pBlobPool ) final
@@ -605,22 +599,15 @@ struct Filter_And2 final : public ISphFilter
 
 struct Filter_And3 final : public ISphFilter
 {
-	ISphFilter * m_pArg1;
-	ISphFilter * m_pArg2;
-	ISphFilter * m_pArg3;
+	std::unique_ptr<ISphFilter> m_pArg1;
+	std::unique_ptr<ISphFilter> m_pArg2;
+	std::unique_ptr<ISphFilter> m_pArg3;
 
-	explicit Filter_And3 ( ISphFilter * pArg1, ISphFilter * pArg2, ISphFilter * pArg3 )
-		: m_pArg1 ( pArg1 )
-		, m_pArg2 ( pArg2 )
-		, m_pArg3 ( pArg3 )
+	explicit Filter_And3 ( std::unique_ptr<ISphFilter> pArg1, std::unique_ptr<ISphFilter> pArg2, std::unique_ptr<ISphFilter> pArg3 )
+		: m_pArg1 ( std::move ( pArg1 ) )
+		, m_pArg2 ( std::move ( pArg2 ) )
+		, m_pArg3 ( std::move ( pArg3 ) )
 	{}
-
-	~Filter_And3 () final
-	{
-		SafeDelete ( m_pArg1 );
-		SafeDelete ( m_pArg2 );
-		SafeDelete ( m_pArg3 );
-	}
 
 	bool Eval ( const CSphMatch & tMatch ) const final
 	{
@@ -644,10 +631,10 @@ struct Filter_And3 final : public ISphFilter
 		m_pArg3->SetColumnar(pColumnar);
 	}
 
-	ISphFilter * Join ( ISphFilter * pFilter ) final
+	std::unique_ptr<ISphFilter> Join ( std::unique_ptr<ISphFilter> pFilter ) final
 	{
-		m_pArg3 = new Filter_And2 ( m_pArg3, pFilter );
-		return this;
+		m_pArg3 = std::make_unique<Filter_And2> ( std::move ( m_pArg3 ), std::move ( pFilter ) );
+		return std::unique_ptr<ISphFilter>(this);
 	}
 
 	void SetBlobStorage ( const BYTE * pBlobPool ) final
@@ -661,22 +648,16 @@ struct Filter_And3 final : public ISphFilter
 
 struct Filter_And final : public ISphFilter
 {
-	CSphVector<ISphFilter *> m_dFilters;
+	CSphVector<std::unique_ptr<ISphFilter>> m_dFilters;
 
-	~Filter_And () final
+	void Add ( std::unique_ptr<ISphFilter> pFilter )
 	{
-		for ( auto &pFilter : m_dFilters )
-			SafeDelete ( pFilter );
-	}
-
-	void Add ( ISphFilter * pFilter )
-	{
-		m_dFilters.Add ( pFilter );
+		m_dFilters.Add ( std::move ( pFilter ) );
 	}
 
 	bool Eval ( const CSphMatch & tMatch ) const final
 	{
-		for ( auto pFilter: m_dFilters )
+		for ( auto& pFilter: m_dFilters )
 			if ( !pFilter->Eval ( tMatch ) )
 				return false;
 		return true;
@@ -684,19 +665,19 @@ struct Filter_And final : public ISphFilter
 
 	bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo ) const final
 	{
-		for ( auto pFilter : m_dFilters )
+		for ( auto& pFilter : m_dFilters )
 			if ( !pFilter->EvalBlock ( pMinDocinfo, pMaxDocinfo ) )
 				return false;
 		return true;
 	}
 
-	bool Test ( const columnar::MinMaxVec_t & dMinMax ) const final		{ return m_dFilters.all_of ( [&dMinMax]( ISphFilter * pFilter ){ return pFilter->Test(dMinMax); } ); }
-	void SetColumnar ( const columnar::Columnar_i * pColumnar ) final	{ m_dFilters.for_each ( [pColumnar]( ISphFilter * pFilter ){ pFilter->SetColumnar(pColumnar); } ); }
+	bool Test ( const columnar::MinMaxVec_t & dMinMax ) const final		{ return m_dFilters.all_of ( [&dMinMax]( auto& pFilter ){ return pFilter->Test(dMinMax); } ); }
+	void SetColumnar ( const columnar::Columnar_i * pColumnar ) final	{ m_dFilters.for_each ( [pColumnar]( auto& pFilter ){ pFilter->SetColumnar(pColumnar); } ); }
 
-	ISphFilter * Join ( ISphFilter * pFilter ) final
+	std::unique_ptr<ISphFilter> Join ( std::unique_ptr<ISphFilter> pFilter ) final
 	{
-		Add ( pFilter );
-		return this;
+		Add ( std::move (pFilter) );
+		return std::unique_ptr<ISphFilter>(this);
 	}
 
 	void SetBlobStorage ( const BYTE * pBlobPool ) final
@@ -705,42 +686,36 @@ struct Filter_And final : public ISphFilter
 			pFilter->SetBlobStorage ( pBlobPool );
 	}
 
-	ISphFilter * Optimize() final
+	std::unique_ptr<ISphFilter> Optimize() final
 	{
 		if ( m_dFilters.GetLength()==2 )
 		{
-			ISphFilter * pOpt = new Filter_And2 ( m_dFilters[0], m_dFilters[1] );
+			auto pOpt = std::make_unique<Filter_And2> ( std::move ( m_dFilters[0] ), std::move ( m_dFilters[1] ) );
 			m_dFilters.Reset();
 			delete this;
 			return pOpt;
 		}
 		if ( m_dFilters.GetLength()==3 )
 		{
-			ISphFilter * pOpt = new Filter_And3 ( m_dFilters[0], m_dFilters[1], m_dFilters[2] );
+			auto pOpt = std::make_unique<Filter_And3> ( std::move ( m_dFilters[0] ), std::move ( m_dFilters[1] ), std::move ( m_dFilters[2] ) );
 			m_dFilters.Reset();
 			delete this;
 			return pOpt;
 		}
-		return this;
+		return std::unique_ptr<ISphFilter>(this);
 	}
 };
 
 
 struct Filter_Or final : public ISphFilter
 {
-	ISphFilter * m_pLeft;
-	ISphFilter * m_pRight;
+	std::unique_ptr<ISphFilter> m_pLeft;
+	std::unique_ptr<ISphFilter> m_pRight;
 
-	Filter_Or ( ISphFilter * pLeft, ISphFilter * pRight )
-		: m_pLeft ( pLeft )
-		, m_pRight ( pRight )
+	Filter_Or ( std::unique_ptr<ISphFilter> pLeft, std::unique_ptr<ISphFilter> pRight )
+		: m_pLeft ( std::move ( pLeft ) )
+		, m_pRight ( std::move ( pRight ) )
 	{}
-
-	~Filter_Or () final
-	{
-		SafeDelete ( m_pLeft );
-		SafeDelete ( m_pRight );
-	}
 
 	bool Eval ( const CSphMatch & tMatch ) const final
 	{
@@ -769,11 +744,11 @@ struct Filter_Or final : public ISphFilter
 		m_pRight->SetBlobStorage ( pBlobPool );
 	}
 
-	ISphFilter * Optimize() final
+	std::unique_ptr<ISphFilter> Optimize() final
 	{
 		m_pLeft->Optimize();
 		m_pRight->Optimize();
-		return this;
+		return std::unique_ptr<ISphFilter>(this);
 	}
 };
 
@@ -782,17 +757,12 @@ struct Filter_Or final : public ISphFilter
 
 struct Filter_Not final : public ISphFilter
 {
-	ISphFilter * m_pFilter;
+	std::unique_ptr<ISphFilter> m_pFilter;
 
-	explicit Filter_Not ( ISphFilter * pFilter )
-		: m_pFilter ( pFilter )
+	explicit Filter_Not ( std::unique_ptr<ISphFilter> pFilter )
+		: m_pFilter ( std::move ( pFilter ) )
 	{
-		assert ( pFilter );
-	}
-
-	~Filter_Not () final
-	{
-		SafeDelete ( m_pFilter );
+		assert ( m_pFilter );
 	}
 
 	bool Eval ( const CSphMatch & tMatch ) const final
@@ -820,12 +790,12 @@ struct Filter_Not final : public ISphFilter
 
 /// impl
 
-ISphFilter * ISphFilter::Join ( ISphFilter * pFilter )
+std::unique_ptr<ISphFilter> ISphFilter::Join ( std::unique_ptr<ISphFilter> pFilter )
 {
-	auto pAnd = new Filter_And();
+	auto pAnd = std::make_unique<Filter_And>();
 
-	pAnd->Add ( this );
-	pAnd->Add ( pFilter );
+	pAnd->Add ( std::unique_ptr<ISphFilter> ( this ) );
+	pAnd->Add ( std::move ( pFilter ) );
 
 	return pAnd;
 }
@@ -849,7 +819,7 @@ CSphString FilterType2Str ( ESphFilter eFilterType )
 }
 
 
-static inline ISphFilter * ReportError ( CSphString & sError, const char * sMessage, ESphFilter eFilterType )
+static inline std::unique_ptr<ISphFilter> ReportError ( CSphString & sError, const char * sMessage, ESphFilter eFilterType )
 {
 	sError.SetSprintf ( sMessage, FilterType2Str(eFilterType).cstr() );
 	return nullptr;
@@ -861,15 +831,15 @@ static inline ISphFilter * ReportError ( CSphString & sError, const char * sMess
 	if ( SETTINGS.m_bHasEqualMin ) \
 	{ \
 		if ( SETTINGS.m_bHasEqualMax ) \
-			return new FILTER<true,true>; \
+			return std::make_unique<FILTER<true,true>>(); \
 		else \
-			return new FILTER<true,false>; \
+			return std::make_unique<FILTER<true,false>>(); \
 	} else \
 	{ \
 		if ( SETTINGS.m_bHasEqualMax ) \
-			return new FILTER<false,true>; \
+			return std::make_unique<FILTER<false,true>>(); \
 		else \
-			return new FILTER<false,false>; \
+			return std::make_unique<FILTER<false,false>>(); \
 	} \
 }
 
@@ -879,29 +849,29 @@ static inline ISphFilter * ReportError ( CSphString & sError, const char * sMess
 	if ( SETTINGS.m_bOpenLeft ) \
 	{ \
 		if ( SETTINGS.m_bHasEqualMax ) \
-			return new FILTER<true,true,true,false>; \
+			return std::make_unique <FILTER<true,true,true,false>>(); \
 		else \
-			return new FILTER<true,false,true,false>; \
+			return std::make_unique <FILTER<true,false,true,false>>(); \
 	} else if ( SETTINGS.m_bOpenRight ) \
 	{ \
 		if ( SETTINGS.m_bHasEqualMin ) \
-			return new FILTER<true,true,false,true>; \
+			return std::make_unique <FILTER<true,true,false,true>>(); \
 		else \
-			return new FILTER<false,true,false,true>; \
+			return std::make_unique <FILTER<false,true,false,true>>(); \
 	} \
 	assert ( !SETTINGS.m_bOpenLeft && !SETTINGS.m_bOpenRight ); \
 	if ( SETTINGS.m_bHasEqualMin ) \
 	{ \
 		if ( SETTINGS.m_bHasEqualMax ) \
-			return new FILTER<true,true,false,false>; \
+			return std::make_unique <FILTER<true,true,false,false>>(); \
 		else \
-			return new FILTER<true,false,false,false>; \
+			return std::make_unique <FILTER<true,false,false,false>>(); \
 	} else \
 	{ \
 		if ( SETTINGS.m_bHasEqualMax ) \
-			return new FILTER<false,true,false,false>; \
+			return std::make_unique <FILTER<false,true,false,false>>(); \
 		else \
-			return new FILTER<false,false,false,false>; \
+			return std::make_unique <FILTER<false,false,false,false>>(); \
 	} \
 }
 
@@ -911,15 +881,15 @@ static inline ISphFilter * ReportError ( CSphString & sError, const char * sMess
 	if ( SETTINGS.m_bHasEqualMin ) \
 	{ \
 		if ( SETTINGS.m_bHasEqualMax ) \
-			return new FILTER<T,true,true>; \
+			return std::make_unique<FILTER<T,true,true>>(); \
 		else \
-			return new FILTER<T,true,false>; \
+			return std::make_unique<FILTER<T,true,false>>(); \
 	} else \
 	{ \
 		if ( SETTINGS.m_bHasEqualMax ) \
-			return new FILTER<T,false,true>; \
+			return std::make_unique<FILTER<T,false,true>>(); \
 		else \
-			return new FILTER<T,false,false>; \
+			return std::make_unique<FILTER<T,false,false>>(); \
 	} \
 }
 
@@ -929,26 +899,26 @@ static inline ISphFilter * ReportError ( CSphString & sError, const char * sMess
 	if ( bHasEqualMin ) \
 	{ \
 		if ( bHasEqualMax ) \
-			return new FILTER<true,true>(EXPR); \
+			return std::make_unique<FILTER<true,true>>(EXPR); \
 		else \
-			return new FILTER<true,false>(EXPR); \
+			return std::make_unique<FILTER<true,false>>(EXPR); \
 	} else \
 	{ \
 		if ( bHasEqualMax ) \
-			return new FILTER<false,true>(EXPR); \
+			return std::make_unique<FILTER<false,true>>(EXPR); \
 		else \
-			return new FILTER<false,false>(EXPR); \
+			return std::make_unique<FILTER<false,false>>(EXPR); \
 	} \
 }
 
 
-static ISphFilter * CreateSpecialFilter ( const CSphString & sName, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, CSphString & sError )
+static std::unique_ptr<ISphFilter> CreateSpecialFilter ( const CSphString & sName, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, CSphString & sError )
 {
 	if ( sName=="@weight" )
 	{
 		switch ( tSettings.m_eType )
 		{
-		case SPH_FILTER_VALUES:	return new Filter_WeightValues;
+		case SPH_FILTER_VALUES:	return std::make_unique<Filter_WeightValues>();
 		case SPH_FILTER_RANGE:	CREATE_RANGE_FILTER ( Filter_WeightRange, tSettings );
 		default:
 			return ReportError ( sError, "unsupported filter type '%s' on @weight", tSettings.m_eType );
@@ -956,13 +926,13 @@ static ISphFilter * CreateSpecialFilter ( const CSphString & sName, const CSphFi
 	}
 
 	if ( sName=="@rowid" && tSettings.m_eType==SPH_FILTER_RANGE )
-		return new Filter_RowIdRange_c ( tCtx.m_iTotalDocs, tSettings );
+		return std::make_unique<Filter_RowIdRange_c> ( tCtx.m_iTotalDocs, tSettings );
 
 	return nullptr;
 }
 
 
-static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, ESphFilter eFilterType,ESphAttr eAttrType, const CSphAttrLocator & tLoc, ESphCollation eCollation, CSphString & sError, CSphString & sWarning )
+static std::unique_ptr<ISphFilter> CreateFilter ( const CSphFilterSettings & tSettings, ESphFilter eFilterType,ESphAttr eAttrType, const CSphAttrLocator & tLoc, ESphCollation eCollation, CSphString & sError, CSphString & sWarning )
 {
 	if ( IsMvaAttr(eAttrType) )
 	{
@@ -979,14 +949,14 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, ESphFil
 
 		switch ( iIndex )
 		{
-			case 0:	return new Filter_MVAValues_Any_c<DWORD>();
-			case 1:	return new Filter_MVAValues_All_c<DWORD>();
+			case 0:	return std::make_unique<Filter_MVAValues_Any_c<DWORD>>();
+			case 1:	return std::make_unique<Filter_MVAValues_All_c<DWORD>>();
 
 			case 2:	CREATE_MVA_RANGE_FILTER ( Filter_MVARange_Any_c, DWORD, tSettings );
 			case 3:	CREATE_MVA_RANGE_FILTER ( Filter_MVARange_All_c, DWORD, tSettings );
 
-			case 4:	return new Filter_MVAValues_Any_c<int64_t>();
-			case 5:	return new Filter_MVAValues_All_c<int64_t>();
+			case 4:	return std::make_unique<Filter_MVAValues_Any_c<int64_t>>();
+			case 5:	return std::make_unique<Filter_MVAValues_All_c<int64_t>>();
 
 			case 6:	CREATE_MVA_RANGE_FILTER ( Filter_MVARange_Any_c, int64_t, tSettings );
 			case 7:	CREATE_MVA_RANGE_FILTER ( Filter_MVARange_All_c, int64_t, tSettings );
@@ -1009,14 +979,14 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, ESphFil
 		if ( eFilterType==SPH_FILTER_STRING_LIST )
 		{
 			if ( tSettings.m_eMvaFunc==SPH_MVAFUNC_NONE )
-				return new Filter_StringValues_c ( eCollation );
+				return std::make_unique<Filter_StringValues_c> ( eCollation );
 			else if ( tSettings.m_eMvaFunc==SPH_MVAFUNC_ANY )
-				return new Filter_StringTagsAny_c;
+				return std::make_unique<Filter_StringTagsAny_c>();
 			else if ( tSettings.m_eMvaFunc==SPH_MVAFUNC_ALL )
-				return new Filter_StringTagsAll_c;
+				return std::make_unique<Filter_StringTagsAll_c>();
 		}
 		else
-			return new FilterString_c ( eCollation, tSettings.m_bHasEqualMin || tSettings.m_bHasEqualMax );
+			return std::make_unique<FilterString_c> ( eCollation, tSettings.m_bHasEqualMin || tSettings.m_bHasEqualMax );
 	}
 
 	// non-float, non-MVA
@@ -1026,11 +996,11 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, ESphFil
 			if ( tSettings.GetNumValues()==1 && ( eAttrType==SPH_ATTR_INTEGER || eAttrType==SPH_ATTR_BIGINT || eAttrType==SPH_ATTR_TOKENCOUNT ) )
 			{
 				if ( ( eAttrType==SPH_ATTR_INTEGER || eAttrType==SPH_ATTR_TOKENCOUNT ) && !tLoc.m_bDynamic && tLoc.m_iBitCount==32 && ( tLoc.m_iBitOffset % 32 )==0 )
-					return new Filter_SingleValueStatic32;
+					return std::make_unique<Filter_SingleValueStatic32>();
 				else
-					return new Filter_SingleValue;
+					return std::make_unique<Filter_SingleValue>();
 			} else
-				return new Filter_Values;
+				return std::make_unique<Filter_Values>();
 
 		case SPH_FILTER_RANGE:	CREATE_RANGE_FILTER_WITH_OPEN ( Filter_Range, tSettings );
 		default:				return ReportError ( sError, "unsupported filter type '%s' on int column", eFilterType );
@@ -1251,7 +1221,7 @@ public:
 
 
 
-static ISphFilter * CreateFilterExpr ( ISphExpr * _pExpr, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, CSphString & sError, ESphCollation eCollation, ESphAttr eAttrType )
+static std::unique_ptr<ISphFilter> CreateFilterExpr ( ISphExpr * _pExpr, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, CSphString & sError, ESphCollation eCollation, ESphAttr eAttrType )
 {
 	CSphRefcountedPtr<ISphExpr> pExpr { _pExpr };
 	SafeAddRef ( _pExpr );
@@ -1266,11 +1236,11 @@ static ISphFilter * CreateFilterExpr ( ISphExpr * _pExpr, const CSphFilterSettin
 
 	switch ( tFixedSettings.m_eType )
 	{
-		case SPH_FILTER_VALUES:			return new ExprFilterValues_c ( pExpr );
+		case SPH_FILTER_VALUES:			return std::make_unique<ExprFilterValues_c> ( pExpr );
 		case SPH_FILTER_FLOATRANGE:		CREATE_EXPR_RANGE_FILTER ( ExprFilterFloatRange_c, pExpr, tSettings.m_bHasEqualMin, tSettings.m_bHasEqualMax );
 		case SPH_FILTER_RANGE:			CREATE_EXPR_RANGE_FILTER ( ExprFilterRange_c, pExpr, tSettings.m_bHasEqualMin, tSettings.m_bHasEqualMax );
-		case SPH_FILTER_STRING:			return new ExprFilterString_c ( pExpr, eCollation, tSettings.m_bHasEqualMin || tSettings.m_bHasEqualMax );
-		case SPH_FILTER_NULL:			return new ExprFilterNull_c ( pExpr, tSettings.m_bIsNull, false );
+		case SPH_FILTER_STRING:			return std::make_unique<ExprFilterString_c> ( pExpr, eCollation, tSettings.m_bHasEqualMin || tSettings.m_bHasEqualMax );
+		case SPH_FILTER_NULL:			return std::make_unique<ExprFilterNull_c> ( pExpr, tSettings.m_bIsNull, false );
 		case SPH_FILTER_EXPRESSION:
 		{
 			if ( eAttrType!=SPH_ATTR_INTEGER && eAttrType!=SPH_ATTR_BIGINT && eAttrType!=SPH_ATTR_JSON_FIELD && eAttrType!=SPH_ATTR_FLOAT
@@ -1280,7 +1250,7 @@ static ISphFilter * CreateFilterExpr ( ISphExpr * _pExpr, const CSphFilterSettin
 				return nullptr;
 			} else
 			{
-				return new ExprFilterProxy_c ( pExpr, eAttrType );
+				return std::make_unique<ExprFilterProxy_c> ( pExpr, eAttrType );
 			}
 		}
 		default:
@@ -1290,7 +1260,7 @@ static ISphFilter * CreateFilterExpr ( ISphExpr * _pExpr, const CSphFilterSettin
 }
 
 
-static ISphFilter * TryToCreateExpressionFilter ( CSphRefcountedPtr<ISphExpr> & pExpr, const CSphString & sAttrName, const ISphSchema & tSchema, const CSphFilterSettings & tSettings,
+static std::unique_ptr<ISphFilter> TryToCreateExpressionFilter ( CSphRefcountedPtr<ISphExpr> & pExpr, const CSphString & sAttrName, const ISphSchema & tSchema, const CSphFilterSettings & tSettings,
 	const CommonFilterSettings_t & tFixedSettings, ExprParseArgs_t & tExprArgs, CSphString & sError )
 {
 	pExpr = sphExprParse ( sAttrName.cstr(), tSchema, sError, tExprArgs );
@@ -1304,7 +1274,7 @@ static ISphFilter * TryToCreateExpressionFilter ( CSphRefcountedPtr<ISphExpr> & 
 }
 
 
-static void SetFilterLocator ( ISphFilter * pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName )
+static void SetFilterLocator ( const std::unique_ptr<ISphFilter>& pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName )
 {
 	if ( !pFilter )
 		return;
@@ -1322,7 +1292,7 @@ static void SetFilterLocator ( ISphFilter * pFilter, const CSphFilterSettings & 
 }
 
 
-static void SetFilterSettings ( ISphFilter * pFilter, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, const CreateFilterContext_t & tCtx )
+static void SetFilterSettings ( const std::unique_ptr<ISphFilter>& pFilter, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, const CreateFilterContext_t & tCtx )
 {
 	if ( !pFilter )
 		return;
@@ -1348,41 +1318,32 @@ static void SetFilterSettings ( ISphFilter * pFilter, const CSphFilterSettings &
 }
 
 
-static ISphFilter * TryToCreateExcludeFilter ( ISphFilter * pFilter, const CSphFilterSettings & tSettings )
+static void TryToCreateExcludeFilter ( std::unique_ptr<ISphFilter>& pFilter, const CSphFilterSettings & tSettings )
 {
-	if ( !pFilter )
-		return nullptr;
-
-	// some filters can handle exclude flag themselves
-	if ( pFilter->CanExclude() )
-		return pFilter;
+	if ( !pFilter || pFilter->CanExclude() ) // some filters can handle exclude flag themselves
+		return;
 
 	if ( tSettings.m_bExclude )
-		return new Filter_Not(pFilter);
-
-	return pFilter;
+		pFilter = std::make_unique<Filter_Not> ( std::move ( pFilter ) );
 }
 
 
-static ISphFilter * TryToCreateJsonNullFilter ( ISphFilter * pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, ESphAttr eAttrType, ISphExpr * pExpr )
+static void TryToCreateJsonNullFilter ( std::unique_ptr<ISphFilter>& pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, ESphAttr eAttrType, ISphExpr * pExpr )
 {
 	if ( !pFilter || !pExpr )
-		return pFilter;
+		return;
 
 	// filter for json || json.field needs to check that key exists
 	if ( ( eAttrType==SPH_ATTR_JSON || eAttrType==SPH_ATTR_JSON_FIELD ) && tSettings.m_eType!=SPH_FILTER_NULL )
 	{
-		ISphFilter * pNotNull = new ExprFilterNull_c ( pExpr, false, true );
+		auto pNotNull = std::make_unique<ExprFilterNull_c> ( pExpr, false, true );
 		pNotNull->SetBlobStorage ( tCtx.m_pBlobPool );
-
-		return new Filter_And2 ( pFilter, pNotNull );
+		pFilter = std::make_unique<Filter_And2> ( std::move ( pFilter ), std::move ( pNotNull ) );
 	}
-
-	return pFilter;
 }
 
 
-static bool TryToCreateSpecialFilter ( ISphFilter * & pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, bool bHaving, const CSphString & sAttrName, CSphString & sError )
+static bool TryToCreateSpecialFilter ( std::unique_ptr<ISphFilter> & pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, bool bHaving, const CSphString & sAttrName, CSphString & sError )
 {
 	assert ( !pFilter );
 
@@ -1428,11 +1389,11 @@ static bool CanSpawnColumnarFilter ( int iAttr, const ISphSchema & tSchema )
 }
 
 
-static ISphFilter * TryToCreateExpressionFilter ( ISphFilter * pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName,
+static void TryToCreateExpressionFilter ( std::unique_ptr<ISphFilter>& pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName,
 	const CommonFilterSettings_t & tFixedSettings, ESphAttr & eAttrType, CSphRefcountedPtr<ISphExpr> & pExpr, CSphString & sError, CSphString & sWarning )
 {
 	if ( pFilter )
-		return pFilter;
+		return;
 
 	assert ( tCtx.m_pSchema );
 	const ISphSchema & tSchema = *tCtx.m_pSchema;
@@ -1441,26 +1402,27 @@ static ISphFilter * TryToCreateExpressionFilter ( ISphFilter * pFilter, const CS
 	bool bColumnar = CanSpawnColumnarFilter ( iAttr, tSchema );
 
 	if ( iAttr>=0 && !bColumnar )
-		return nullptr;
-
-	pFilter = TryToCreateColumnarFilter ( iAttr, tSchema, tSettings, tFixedSettings, tCtx.m_eCollation, sError, sWarning );
-	if ( !pFilter )
 	{
-		ExprParseArgs_t tExprArgs;
-		tExprArgs.m_pAttrType = &eAttrType;
-		tExprArgs.m_eCollation = tCtx.m_eCollation;
-		pFilter = TryToCreateExpressionFilter ( pExpr, sAttrName, tSchema, tSettings, tFixedSettings, tExprArgs, sError );
+		pFilter = nullptr;
+		return;
 	}
 
-	return pFilter;
+	pFilter = TryToCreateColumnarFilter ( iAttr, tSchema, tSettings, tFixedSettings, tCtx.m_eCollation, sError, sWarning );
+	if ( pFilter )
+		return;
+
+	ExprParseArgs_t tExprArgs;
+	tExprArgs.m_pAttrType = &eAttrType;
+	tExprArgs.m_eCollation = tCtx.m_eCollation;
+	pFilter = TryToCreateExpressionFilter ( pExpr, sAttrName, tSchema, tSettings, tFixedSettings, tExprArgs, sError );
 }
 
 
-static ISphFilter * TryToCreatePlainAttrFilter ( ISphFilter * pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, bool bHaving, const CSphString & sAttrName,
+static void TryToCreatePlainAttrFilter ( std::unique_ptr<ISphFilter>& pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, bool bHaving, const CSphString & sAttrName,
 	CommonFilterSettings_t & tFixedSettings, ESphAttr & eAttrType, CSphRefcountedPtr<ISphExpr> & pExpr, CSphString & sError, CSphString & sWarning )
 {
 	if ( pFilter )
-		return pFilter;
+		return;
 
 	assert ( tCtx.m_pSchema );
 	const ISphSchema & tSchema = *tCtx.m_pSchema;
@@ -1469,19 +1431,19 @@ static ISphFilter * TryToCreatePlainAttrFilter ( ISphFilter * pFilter, const CSp
 	bool bColumnar = iAttr>=0 && tSchema.GetAttr(iAttr).IsColumnar();
 
 	if ( iAttr<0 || bColumnar )
-		return nullptr;
+		return;
 
 	const CSphColumnInfo & tAttr =  tSchema.GetAttr(iAttr);
 	if ( !bHaving && tAttr.m_eAggrFunc!=SPH_AGGR_NONE )
 	{
 		sError.SetSprintf ( "unsupported filter '%s' on aggregate column", sAttrName.cstr() );
-		return nullptr;
+		return;
 	}
 
 	if ( IsNotRealAttribute(tAttr) )
 	{
 		sError.SetSprintf ( "unsupported column '%s' (stored field, NOT attribute)", sAttrName.cstr ());
-		return nullptr;
+		return;
 	}
 
 	if ( tAttr.m_eAttrType==SPH_ATTR_JSON || tAttr.m_eAttrType==SPH_ATTR_JSON_FIELD )
@@ -1496,12 +1458,8 @@ static ISphFilter * TryToCreatePlainAttrFilter ( ISphFilter * pFilter, const CSp
 			pExpr = sphExprParse ( sAttrName.cstr(), tSchema, sError, tExprArgs );
 		}
 		pFilter = CreateFilterExpr ( pExpr, tSettings, tFixedSettings, sError, tCtx.m_eCollation, tAttr.m_eAttrType );
-
-	}
-	else
+	} else
 		pFilter = CreateFilter ( tSettings, tFixedSettings.m_eType, tAttr.m_eAttrType, tAttr.m_tLocator, tCtx.m_eCollation, sError, sWarning );
-
-	return pFilter;
 }
 
 
@@ -1841,9 +1799,9 @@ void OptimizeFilters ( CSphVector<CSphFilterSettings> & dFilters )
 }
 
 
-static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const CSphString & sAttrName, const CreateFilterContext_t & tCtx, bool bHaving, CSphString & sError, CSphString & sWarning )
+static std::unique_ptr<ISphFilter> CreateFilter ( const CSphFilterSettings & tSettings, const CSphString & sAttrName, const CreateFilterContext_t & tCtx, bool bHaving, CSphString & sError, CSphString & sWarning )
 {
-	ISphFilter * pFilter = nullptr;
+	std::unique_ptr<ISphFilter> pFilter;
 
 	if ( !TryToCreateSpecialFilter ( pFilter, tSettings, tCtx, bHaving, sAttrName, sError ) )
 		return nullptr;
@@ -1855,25 +1813,25 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 	if ( !FixupFilterSettings ( tSettings, tFixedSettings, tCtx, sAttrName, sError ) )
 		return nullptr;
 
-	pFilter = TryToCreateExpressionFilter ( pFilter, tSettings, tCtx, sAttrName, tFixedSettings, eAttrType, pExpr, sError, sWarning );
-	pFilter = TryToCreatePlainAttrFilter ( pFilter, tSettings, tCtx, bHaving, sAttrName, tFixedSettings, eAttrType, pExpr, sError, sWarning );
+	TryToCreateExpressionFilter ( pFilter, tSettings, tCtx, sAttrName, tFixedSettings, eAttrType, pExpr, sError, sWarning );
+	TryToCreatePlainAttrFilter ( pFilter, tSettings, tCtx, bHaving, sAttrName, tFixedSettings, eAttrType, pExpr, sError, sWarning );
 
 	SetFilterLocator ( pFilter, tSettings, tCtx, sAttrName );
 	SetFilterSettings ( pFilter, tSettings, tFixedSettings, tCtx );
 
-	pFilter = TryToCreateExcludeFilter ( pFilter, tSettings );
-	pFilter = TryToCreateJsonNullFilter ( pFilter, tSettings, tCtx, eAttrType, pExpr );
+	TryToCreateExcludeFilter ( pFilter, tSettings );
+	TryToCreateJsonNullFilter ( pFilter, tSettings, tCtx, eAttrType, pExpr );
 
 	return pFilter;
 }
 
 
-ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, CSphString & sError, CSphString & sWarning )
+std::unique_ptr<ISphFilter> sphCreateFilter ( const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, CSphString & sError, CSphString & sWarning )
 {
 	return CreateFilter ( tSettings, tSettings.m_sAttrName, tCtx, false, sError, sWarning );
 }
 
-ISphFilter * sphCreateAggrFilter ( const CSphFilterSettings * pSettings, const CSphString & sAttrName, const ISphSchema & tSchema, CSphString & sError )
+std::unique_ptr<ISphFilter> sphCreateAggrFilter ( const CSphFilterSettings * pSettings, const CSphString & sAttrName, const ISphSchema & tSchema, CSphString & sError )
 {
 	assert ( pSettings );
 	CSphString sWarning;
@@ -1881,17 +1839,21 @@ ISphFilter * sphCreateAggrFilter ( const CSphFilterSettings * pSettings, const C
 	tCtx.m_pSchema = &tSchema;
 	tCtx.m_eCollation = SPH_COLLATION_DEFAULT;
 
-	ISphFilter * pRes = CreateFilter ( *pSettings, sAttrName, tCtx, true, sError, sWarning );
+	std::unique_ptr<ISphFilter> pRes = CreateFilter ( *pSettings, sAttrName, tCtx, true, sError, sWarning );
 	assert ( sWarning.IsEmpty() );
 	return pRes;
 }
 
 
-ISphFilter * sphJoinFilters ( ISphFilter * pA, ISphFilter * pB )
+std::unique_ptr<ISphFilter> sphJoinFilters ( std::unique_ptr<ISphFilter> pA, std::unique_ptr<ISphFilter> pB )
 {
-	if ( pA )
-		return pB ? pA->Join(pB) : pA;
-	return pB;
+	if ( !pA )
+		return pB;
+
+	if ( !pB )
+		return pA;
+
+	return pA.release()->Join ( std::move ( pB ) );
 }
 
 static bool IsWeightColumn ( const CSphString & sAttr, const ISphSchema & tSchema )
@@ -1903,14 +1865,7 @@ static bool IsWeightColumn ( const CSphString & sAttr, const ISphSchema & tSchem
 	return ( pCol && pCol->m_bWeight );
 }
 
-CreateFilterContext_t::~CreateFilterContext_t()
-{
-	SafeDelete ( m_pFilter );
-	SafeDelete ( m_pWeightFilter );
-}
-
-
-static ISphFilter * CreateFilterNode ( CreateFilterContext_t & tCtx, int iNode, CSphString & sError, CSphString & sWarning, bool & bHasWeight )
+static std::unique_ptr<ISphFilter> CreateFilterNode ( CreateFilterContext_t & tCtx, int iNode, CSphString & sError, CSphString & sWarning, bool & bHasWeight )
 {
 	const FilterTreeItem_t * pCur = tCtx.m_pFilterTree->Begin() + iNode;
 	if ( pCur->m_iFilterItem!=-1 )
@@ -1928,7 +1883,7 @@ static ISphFilter * CreateFilterNode ( CreateFilterContext_t & tCtx, int iNode, 
 		CSphFilterSettings tUservar;
 		if ( pFilterSettings->m_eType==SPH_FILTER_USERVAR )
 		{
-			const CSphString * sVar = pFilterSettings->m_dStrings.GetLength()==1 ? pFilterSettings->m_dStrings.Begin() : NULL;
+			const CSphString * sVar = pFilterSettings->m_dStrings.GetLength()==1 ? pFilterSettings->m_dStrings.Begin() : nullptr;
 			if ( !UservarsAvailable() || !sVar )
 			{
 				sError = "no global variables found";
@@ -1954,35 +1909,31 @@ static ISphFilter * CreateFilterNode ( CreateFilterContext_t & tCtx, int iNode, 
 	}
 
 	assert ( pCur->m_iLeft!=-1 && pCur->m_iRight!=-1 );
-	ISphFilter * pLeft = CreateFilterNode ( tCtx, pCur->m_iLeft, sError, sWarning, bHasWeight );
-	ISphFilter * pRight = CreateFilterNode ( tCtx, pCur->m_iRight, sError, sWarning, bHasWeight );
+	std::unique_ptr<ISphFilter> pLeft = CreateFilterNode ( tCtx, pCur->m_iLeft, sError, sWarning, bHasWeight );
+	std::unique_ptr<ISphFilter> pRight = CreateFilterNode ( tCtx, pCur->m_iRight, sError, sWarning, bHasWeight );
 
 	if ( !pLeft || !pRight )
-	{
-		SafeDelete ( pLeft );
-		SafeDelete ( pRight );
 		return nullptr;
-	}
 
 	if ( pCur->m_bOr )
-		return new Filter_Or ( pLeft, pRight );
+		return std::make_unique<Filter_Or> ( std::move ( pLeft ), std::move ( pRight ) );
 
-	return new Filter_And2 ( pLeft, pRight );
+	return std::make_unique<Filter_And2> ( std::move ( pLeft ), std::move ( pRight ) );
 }
 
 
 static bool CreateFilterTree ( CreateFilterContext_t & tCtx, CSphString & sError, CSphString & sWarning )
 {
 	bool bWeight = false;
-	ISphFilter * pFilter = CreateFilterNode ( tCtx, tCtx.m_pFilterTree->GetLength() - 1, sError, sWarning, bWeight );
+	std::unique_ptr<ISphFilter> pFilter = CreateFilterNode ( tCtx, tCtx.m_pFilterTree->GetLength() - 1, sError, sWarning, bWeight );
 	if ( !pFilter )
 		return false;
 
 	// weight filter phase only on match path
 	if ( bWeight && tCtx.m_bScan )
-		tCtx.m_pWeightFilter = pFilter;
+		tCtx.m_pWeightFilter = std::move ( pFilter );
 	else
-		tCtx.m_pFilter = pFilter;
+		tCtx.m_pFilter = std::move ( pFilter );
 
 	return true;
 }
@@ -1993,24 +1944,23 @@ struct FilterInfo_t
 	ISphFilter *	m_pFilter {nullptr};
 	int64_t			m_iSelectivity {INT64_MAX};
 	int				m_iOrder {0};
-
-	static bool IsLess ( const FilterInfo_t & tA, const FilterInfo_t & tB )
-	{
-		if ( tA.m_iSelectivity==tB.m_iSelectivity )
-			return tA.m_iOrder<tB.m_iOrder;
-
-		return tA.m_iSelectivity < tB.m_iSelectivity;
-	}
 };
 
-
-static ISphFilter * ReorderAndCombine ( CSphVector<FilterInfo_t> & dFilters )
+inline bool operator<( const FilterInfo_t& tA, const FilterInfo_t& tB )
 {
-	ISphFilter * pCombinedFilter = nullptr;
+	if ( tA.m_iSelectivity == tB.m_iSelectivity )
+		return tA.m_iOrder < tB.m_iOrder;
 
-	dFilters.Sort ( FilterInfo_t() );
+	return tA.m_iSelectivity < tB.m_iSelectivity;
+}
+
+static std::unique_ptr<ISphFilter> ReorderAndCombine ( CSphVector<FilterInfo_t> dFilters )
+{
+	std::unique_ptr<ISphFilter> pCombinedFilter = nullptr;
+
+	dFilters.Sort ();
 	for ( const auto & i : dFilters )
-		pCombinedFilter = sphJoinFilters ( pCombinedFilter, i.m_pFilter );
+		pCombinedFilter = sphJoinFilters ( std::move ( pCombinedFilter ), std::unique_ptr<ISphFilter> { i.m_pFilter } );
 
 	return pCombinedFilter;
 }
@@ -2082,7 +2032,7 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 			pFilterSettings = &tUservar;
 		}
 
-		ISphFilter * pFilter = sphCreateFilter ( *pFilterSettings, tCtx, sError, sWarning );
+		auto pFilter = sphCreateFilter ( *pFilterSettings, tCtx, sError, sWarning );
 		if ( !pFilter )
 			return false;
 
@@ -2092,7 +2042,7 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 		else
 			pFilterInfo = &dFilters.Add();
 
-		pFilterInfo->m_pFilter = pFilter;
+		pFilterInfo->m_pFilter = pFilter.release();
 		pFilterInfo->m_iOrder = i;
 
 		// no need to calculate if we only have one filter
@@ -2101,8 +2051,8 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 	}
 
 	// sort by selectivity, preserve order if equal
-	tCtx.m_pFilter = ReorderAndCombine ( dFilters );
-	tCtx.m_pWeightFilter = ReorderAndCombine ( dWeightFilters );
+	tCtx.m_pFilter = ReorderAndCombine ( std::move ( dFilters ) );
+	tCtx.m_pWeightFilter = ReorderAndCombine ( std::move ( dWeightFilters ) );
 
 	return true;
 }
@@ -2300,65 +2250,3 @@ void FormatFiltersQL ( const CSphVector<CSphFilterSettings> & dFilters, const CS
 		tBuf << LogFilterTree ( dFilterTree.GetLength() - 1, dFilterTree, dFilters, iCompactIN );
 }
 
-
-class PercolateFilterValues_c final : public PercolateFilter_i
-{
-public:
-	explicit PercolateFilterValues_c ( const CSphFilterSettings & tUID )
-		: m_pValues ( tUID.GetValueArray() )
-		, m_iCount ( tUID.GetNumValues() )
-	{}
-
-	bool Eval ( SphAttr_t uUID ) final
-	{
-		if ( !m_pValues || !m_iCount )
-			return true;
-
-		return ( sphBinarySearch ( m_pValues, m_pValues + m_iCount - 1, SphIdentityFunctor_T<SphAttr_t>(), uUID )!=nullptr );
-	}
-
-private:
-	const SphAttr_t * m_pValues;
-	int m_iCount;
-};
-
-template < bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT >
-class PercolateFilterRange_c final : public PercolateFilter_i
-{
-public:
-	PercolateFilterRange_c () = default;
-
-	bool Eval ( SphAttr_t uUID ) final
-	{
-		return EvalRange<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT> ( uUID, m_iMinValue, m_iMaxValue );
-	}
-
-	void SetRange ( SphAttr_t tMin, SphAttr_t tMax ) final
-	{
-		m_iMinValue = tMin;
-		m_iMaxValue = tMax;
-	}
-
-	SphAttr_t m_iMinValue = 0;
-	SphAttr_t m_iMaxValue = 0;
-};
-
-static PercolateFilter_i * CreatePercolateRangeFilter ( const CSphFilterSettings & tOpt )
-{
-	CREATE_RANGE_FILTER_WITH_OPEN ( PercolateFilterRange_c, tOpt );
-}
-
-PercolateFilter_i * CreatePercolateFilter ( const CSphFilterSettings * pUID )
-{
-	if ( !pUID )
-		return nullptr;
-
-	const CSphFilterSettings & tOpt = *pUID;
-
-	if ( pUID->m_eType==SPH_FILTER_VALUES )
-		return new PercolateFilterValues_c ( tOpt );
-
-	PercolateFilter_i * pFilter = CreatePercolateRangeFilter ( tOpt );
-	pFilter->SetRange ( tOpt.m_iMinValue, tOpt.m_iMaxValue );
-	return pFilter;
-}

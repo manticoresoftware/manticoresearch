@@ -45,7 +45,7 @@ TEST_F ( filter_block_level, range )
 	CSphSchema tSchema;
 	CSphColumnInfo tCol;
 	CSphFixedVector<DWORD> dMin ( DWSIZEOF(DocID_t) + 1 ), dMax ( DWSIZEOF(DocID_t) + 1 );
-	CSphScopedPtr<ISphFilter> tFilter ( NULL );
+	std::unique_ptr<ISphFilter> tFilter;
 
 	tCol.m_eAttrType = SPH_ATTR_INTEGER;
 	tCol.m_sName = "gid";
@@ -57,7 +57,7 @@ TEST_F ( filter_block_level, range )
 	tCtx.m_pSchema = &tSchema;
 
 	tFilter = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
-	ASSERT_TRUE ( tFilter.Ptr()!=NULL );
+	ASSERT_TRUE ( tFilter!=nullptr );
 
 	// filter >=10 && <=40 vs block 1-5
 	*dMin.Begin() = 1;
@@ -87,7 +87,7 @@ TEST_F ( filter_block_level, range )
 	tOpt.m_iMaxValue = 40;
 	tOpt.m_bOpenLeft = true;
 	tFilter = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
-	ASSERT_TRUE ( tFilter.Ptr()!=NULL );
+	ASSERT_TRUE ( tFilter!=nullptr );
 
 	// filter <=40 vs block 41-50
 	*dMin.Begin() = 41;
@@ -119,7 +119,7 @@ TEST_F ( filter_block_level, range )
 	tOpt.m_iMinValue = 15;
 	tOpt.m_bOpenRight = true;
 	tFilter = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
-	ASSERT_TRUE ( tFilter.Ptr()!=NULL );
+	ASSERT_TRUE ( tFilter!=nullptr );
 
 	// filter >=15 vs block 10-14
 	*dMin.Begin() = 10;
@@ -152,7 +152,7 @@ TEST_F ( filter_block_level, range )
 	tOpt.m_bHasEqualMin = false;
 	tOpt.m_bHasEqualMax = false;
 	tFilter = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
-	ASSERT_TRUE ( tFilter.Ptr()!=NULL );
+	ASSERT_TRUE ( tFilter!=nullptr );
 
 	// filter >10 && <40 vs block 1-5
 	*dMin.Begin() = 1;
@@ -188,7 +188,7 @@ TEST_F ( filter_block_level, range )
 	tOpt.m_bHasEqualMax = false;
 	tOpt.m_bHasEqualMin = false;
 	tFilter = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
-	ASSERT_TRUE ( tFilter.Ptr()!=NULL );
+	ASSERT_TRUE ( tFilter!=nullptr );
 
 	// filter <40 vs block 40-50
 	*dMin.Begin() = 40;
@@ -222,7 +222,7 @@ TEST_F ( filter_block_level, range )
 	tOpt.m_bHasEqualMax = false;
 	tOpt.m_bHasEqualMin = false;
 	tFilter = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
-	ASSERT_TRUE ( tFilter.Ptr()!=NULL );
+	ASSERT_TRUE ( tFilter!=nullptr );
 
 	// filter >15 vs block 10-15
 	*dMin.Begin() = 10;
@@ -251,7 +251,7 @@ TEST_F ( filter_block_level, range_float )
 	CSphSchema tSchema;
 	CSphColumnInfo tCol;
 	CSphFixedVector<DWORD> dMin ( DWSIZEOF(DocID_t) + 1 ), dMax ( DWSIZEOF(DocID_t) + 1 );
-	CSphScopedPtr<ISphFilter> tFilter ( NULL );
+	std::unique_ptr<ISphFilter> tFilter;
 
 	tCol.m_eAttrType = SPH_ATTR_FLOAT;
 	tCol.m_sName = "gid";
@@ -264,7 +264,7 @@ TEST_F ( filter_block_level, range_float )
 	tOpt.m_bHasEqualMax = false;
 	tCtx.m_pSchema = &tSchema;
 	tFilter = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
-	ASSERT_TRUE ( tFilter.Ptr()!=NULL );
+	ASSERT_TRUE ( tFilter!=nullptr );
 
 	// filter >10 && <40 vs block 1-5
 	*dMin.Begin() = sphF2DW ( 1.0f );
@@ -298,7 +298,7 @@ TEST_F ( filter_block_level, range_float )
 	tOpt.m_bHasEqualMin = false;
 	tOpt.m_bHasEqualMax = false;
 	tFilter = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
-	ASSERT_TRUE ( tFilter.Ptr()!=NULL );
+	ASSERT_TRUE ( tFilter!=nullptr );
 
 	// filter <40 vs block 40-50
 	*dMin.Begin() = sphF2DW ( 40.0f );
@@ -326,7 +326,7 @@ TEST_F ( filter_block_level, range_float )
 	tOpt.m_bHasEqualMin = false;
 	tOpt.m_bHasEqualMax = false;
 	tFilter = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
-	ASSERT_TRUE ( tFilter.Ptr()!=NULL );
+	ASSERT_TRUE ( tFilter != nullptr );
 
 	// filter <40 vs block 1-4
 	*dMin.Begin() = sphF2DW ( 1.0f );
@@ -342,7 +342,7 @@ TEST_F ( filter_block_level, range_float )
 	tOpt.m_bHasEqualMin = false;
 	tOpt.m_bHasEqualMax = false;
 	tFilter = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
-	ASSERT_TRUE ( tFilter.Ptr()!=NULL );
+	ASSERT_TRUE ( tFilter != nullptr );
 
 	// filter >15 vs block 10-15
 	*dMin.Begin() = sphF2DW ( 10.0f );
@@ -376,7 +376,7 @@ TEST_F ( filter_block_level, values )
 	CSphSchema tSchema;
 	CSphColumnInfo tCol;
 	CSphFixedVector<DWORD> dMin ( DWSIZEOF(DocID_t) + 1 ), dMax ( DWSIZEOF(DocID_t) + 1 );
-	CSphScopedPtr<ISphFilter> tFilter ( NULL );
+	std::unique_ptr<ISphFilter> tFilter;
 
 	tCol.m_eAttrType = SPH_ATTR_INTEGER;
 	tCol.m_sName = "gid";
@@ -388,7 +388,7 @@ TEST_F ( filter_block_level, values )
 	tCtx.m_pSchema = &tSchema;
 
 	tFilter = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
-	ASSERT_TRUE ( tFilter.Ptr()!=NULL );
+	ASSERT_TRUE ( tFilter != nullptr );
 
 	// filter values vs block 1-9
 	*dMin.Begin() = 1;
@@ -417,7 +417,7 @@ TEST_F ( filter_block_level, values )
 	tOpt.SetExternalValues ( dValuesSingle, sizeof ( dValuesSingle ) / sizeof ( dValuesSingle[0] ) );
 
 	tFilter = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
-	ASSERT_TRUE ( tFilter.Ptr()!=NULL );
+	ASSERT_TRUE ( tFilter != nullptr );
 
 	// filter values vs block 1-9
 	*dMin.Begin() = 1;
@@ -441,7 +441,7 @@ TEST_F ( filter_block_level, and2 )
 	CSphSchema tSchema;
 	CSphColumnInfo tCol;
 	CSphFixedVector<DWORD> dMin ( DWSIZEOF(DocID_t) + 1 ), dMax ( DWSIZEOF(DocID_t) + 1 );
-	CSphScopedPtr<ISphFilter> tFilter ( NULL );
+	std::unique_ptr<ISphFilter> tFilter;
 
 	tCol.m_eAttrType = SPH_ATTR_INTEGER;
 	tCol.m_sName = "gid";
@@ -453,17 +453,17 @@ TEST_F ( filter_block_level, and2 )
 
 	tCtx.m_pSchema = &tSchema;
 
-	ISphFilter * pFilter1 = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
-	ASSERT_TRUE ( pFilter1!=NULL );
+	auto pFilter1 = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
+	ASSERT_TRUE ( pFilter1!=nullptr );
 
 	SphAttr_t dVal2[] = { 20 };
 	tOpt.SetExternalValues ( dVal2, sizeof ( dVal2 ) / sizeof ( dVal2[0] ) );
 
-	ISphFilter * pFilter2 = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
-	ASSERT_TRUE ( pFilter2!=NULL );
+	auto pFilter2 = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
+	ASSERT_TRUE ( pFilter2!=nullptr );
 
-	tFilter = sphJoinFilters ( pFilter1, pFilter2 );
-	ASSERT_TRUE ( tFilter.Ptr()!=NULL );
+	tFilter = sphJoinFilters ( std::move ( pFilter1 ), std::move ( pFilter2 ) );
+	ASSERT_TRUE ( tFilter != nullptr );
 
 	// filter values vs block 5-9
 	*dMin.Begin() = 5;
@@ -487,7 +487,7 @@ TEST_F ( filter_block_level, and3 )
 	CSphSchema tSchema;
 	CSphColumnInfo tCol;
 	CSphFixedVector<DWORD> dMin ( DWSIZEOF(DocID_t) + 1 ), dMax ( DWSIZEOF(DocID_t) + 1 );
-	CSphScopedPtr<ISphFilter> tFilter ( NULL );
+	std::unique_ptr<ISphFilter> tFilter;
 
 	tCol.m_eAttrType = SPH_ATTR_INTEGER;
 	tCol.m_sName = "gid";
@@ -499,23 +499,23 @@ TEST_F ( filter_block_level, and3 )
 
 	tCtx.m_pSchema = &tSchema;
 
-	ISphFilter * pFilter1 = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
-	ASSERT_TRUE ( pFilter1!=NULL );
+	auto pFilter1 = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
+	ASSERT_TRUE ( pFilter1!=nullptr );
 
 	SphAttr_t dVal2[] = { 15 };
 	tOpt.SetExternalValues ( dVal2, sizeof ( dVal2 ) / sizeof ( dVal2[0] ) );
 
-	ISphFilter * pFilter2 = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
-	ASSERT_TRUE ( pFilter2!=NULL );
+	auto pFilter2 = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
+	ASSERT_TRUE ( pFilter2!=nullptr );
 
 	SphAttr_t dVal3[] = { 20 };
 	tOpt.SetExternalValues ( dVal3, sizeof ( dVal3 ) / sizeof ( dVal3[0] ) );
 
-	ISphFilter * pFilter3 = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
-	ASSERT_TRUE ( pFilter3!=NULL );
+	auto pFilter3 = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
+	ASSERT_TRUE ( pFilter3!=nullptr );
 
-	tFilter = sphJoinFilters ( pFilter1, sphJoinFilters ( pFilter2, pFilter3 ) );
-	ASSERT_TRUE ( tFilter.Ptr()!=NULL );
+	tFilter = sphJoinFilters ( std::move ( pFilter1 ), sphJoinFilters ( std::move ( pFilter2 ), std::move ( pFilter3 ) ) );
+	ASSERT_TRUE ( tFilter != nullptr );
 
 	// filter values vs block 11-14
 	*dMin.Begin() = 11;
@@ -539,7 +539,7 @@ TEST_F ( filter_block_level, and )
 	CSphSchema tSchema;
 	CSphColumnInfo tCol;
 	CSphFixedVector<DWORD> dMin ( DWSIZEOF(DocID_t) + 1 ), dMax ( DWSIZEOF(DocID_t) + 1 );
-	CSphScopedPtr<ISphFilter> tFilter ( NULL );
+	std::unique_ptr<ISphFilter> tFilter;
 
 	tCol.m_eAttrType = SPH_ATTR_INTEGER;
 	tCol.m_sName = "gid";
@@ -551,29 +551,29 @@ TEST_F ( filter_block_level, and )
 
 	tCtx.m_pSchema = &tSchema;
 
-	ISphFilter * pFilter1 = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
-	ASSERT_TRUE ( pFilter1!=NULL );
+	auto pFilter1 = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
+	ASSERT_TRUE ( pFilter1!=nullptr );
 
 	SphAttr_t dVal2[] = { 14 };
 	tOpt.SetExternalValues ( dVal2, sizeof ( dVal2 ) / sizeof ( dVal2[0] ) );
 
-	ISphFilter * pFilter2 = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
-	ASSERT_TRUE ( pFilter2!=NULL );
+	auto pFilter2 = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
+	ASSERT_TRUE ( pFilter2!= nullptr );
 
 	SphAttr_t dVal3[] = { 18 };
 	tOpt.SetExternalValues ( dVal3, sizeof ( dVal3 ) / sizeof ( dVal3[0] ) );
 
-	ISphFilter * pFilter3 = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
-	ASSERT_TRUE ( pFilter3!=NULL );
+	auto pFilter3 = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
+	ASSERT_TRUE ( pFilter3!= nullptr );
 
 	SphAttr_t dVal4[] = { 20 };
 	tOpt.SetExternalValues ( dVal4, sizeof ( dVal4 ) / sizeof ( dVal4[0] ) );
 
-	ISphFilter * pFilter4 = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
-	ASSERT_TRUE ( pFilter4!=NULL );
+	auto pFilter4 = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
+	ASSERT_TRUE ( pFilter4!= nullptr );
 
-	tFilter = sphJoinFilters ( pFilter1, sphJoinFilters ( pFilter2, sphJoinFilters ( pFilter3, pFilter4 ) ) );
-	ASSERT_TRUE ( tFilter.Ptr()!=NULL );
+	tFilter = sphJoinFilters ( std::move ( pFilter1 ), sphJoinFilters ( std::move ( pFilter2 ), sphJoinFilters ( std::move ( pFilter3 ), std::move ( pFilter4 ) ) ) );
+	ASSERT_TRUE ( tFilter != nullptr );
 
 	// filter values vs block 5-19
 	*dMin.Begin() = 5;

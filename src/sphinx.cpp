@@ -1166,8 +1166,8 @@ public:
 
 	template <class QWORDDST, class QWORDSRC>
 	static bool			MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, VecTraits_T<RowID_t> dDstRows, VecTraits_T<RowID_t> dSrcRows, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphIndexProgress & tProgress);
-	static bool			DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, bool bSrcSettings, bool bSupressDstDocids );
-	ISphFilter *		CreateMergeFilters ( const VecTraits_T<CSphFilterSettings> & dSettings ) const;
+	static bool			DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, bool bSrcSettings, bool bSupressDstDocids );
+	std::unique_ptr<ISphFilter>		CreateMergeFilters ( const VecTraits_T<CSphFilterSettings> & dSettings ) const;
 	template <class QWORD>
 	static bool			DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, int iKillField );
 
@@ -1219,7 +1219,7 @@ public:
 	bool				CopyExternalFiles ( int iPostfix, StrVec_t & dCopied ) final;
 	void				CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const final;
 
-	bool				CheckEarlyReject ( const CSphVector<CSphFilterSettings> & dFilters, ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema ) const;
+	bool				CheckEarlyReject ( const CSphVector<CSphFilterSettings> & dFilters, const ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema ) const;
 	int64_t				GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries ) const override;
 
 private:
@@ -5930,16 +5930,16 @@ public:
 };
 
 
-ISphFilter * CSphIndex_VLN::CreateMergeFilters ( const VecTraits_T<CSphFilterSettings> & dSettings ) const
+std::unique_ptr<ISphFilter> CSphIndex_VLN::CreateMergeFilters ( const VecTraits_T<CSphFilterSettings> & dSettings ) const
 {
 	CSphString sError, sWarning;
-	ISphFilter * pResult = nullptr;
+	std::unique_ptr<ISphFilter> pResult;
 	CreateFilterContext_t tCtx;
 	tCtx.m_pSchema = &m_tSchema;
 	tCtx.m_pBlobPool = m_tBlobAttrs.GetReadPtr();
 
 	for ( const auto& dSetting : dSettings )
-		pResult = sphJoinFilters ( pResult, sphCreateFilter ( dSetting, tCtx, sError, sWarning ) );
+		pResult = sphJoinFilters ( std::move ( pResult ), sphCreateFilter ( dSetting, tCtx, sError, sWarning ) );
 
 	if ( pResult )
 		pResult->SetColumnar ( m_pColumnar.get() );
@@ -6269,7 +6269,7 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSet
 		sphWarn ( "%s", i.cstr() );
 
 	// create filters
-	std::unique_ptr<ISphFilter> pFilter { CreateMergeFilters ( dFilters ) };
+	std::unique_ptr<ISphFilter> pFilter =CreateMergeFilters ( dFilters );
 	return DoMerge ( this, (const CSphIndex_VLN *)pSource, pFilter.get(), m_sLastError, tProgress, false, bSupressDstDocids );
 }
 
@@ -6554,7 +6554,7 @@ bool AttrMerger_c::FinishMergeAttributes ( const CSphIndex_VLN* pDstIndex, Build
 }
 
 
-bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress,
+bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress,
 	bool bSrcSettings, bool bSupressDstDocids )
 {
 	auto & tMonitor = tProgress.GetMergeCb();
@@ -6678,7 +6678,7 @@ bool sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, VecTraits_T<CSph
 	auto pDstIndex = (const CSphIndex_VLN*) pDst;
 	auto pSrcIndex = (const CSphIndex_VLN*) pSrc;
 
-	std::unique_ptr<ISphFilter> pFilter { pDstIndex->CreateMergeFilters ( dFilters ) };
+	std::unique_ptr<ISphFilter> pFilter = pDstIndex->CreateMergeFilters ( dFilters );
 	return CSphIndex_VLN::DoMerge ( pDstIndex, pSrcIndex, pFilter.get(), sError, tProgress, dFilters.IsEmpty(), false );
 }
 
@@ -7858,20 +7858,20 @@ RowidIterator_i * CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, CSph
 		// if we already created an iterator at prev stage, we need to recreate filters here, so we won't be doing unnecessary minmax eval
 		if ( bRecreateFilters && pOriginalFilters->GetLength() )
 		{
-			SafeDelete ( tCtx.m_pFilter );
+			tCtx.m_pFilter.reset();
 			tFlx.m_pFilters = &dModifiedFilters;
 			tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning );
 			bRecreateFilters = false;
 		}
 
 		bool bChanged = false;
-		RowidIterator_i * pIterator = CreateColumnarAnalyzerOrPrefilter ( *pOriginalFilters, dModifiedFilters, bChanged, tQuery.m_dFilterTree, tCtx.m_pFilter, tQuery.m_eCollation, tMaxSorterSchema, tMeta.m_sWarning );
+		RowidIterator_i * pIterator = CreateColumnarAnalyzerOrPrefilter ( *pOriginalFilters, dModifiedFilters, bChanged, tQuery.m_dFilterTree, tCtx.m_pFilter.get(), tQuery.m_eCollation, tMaxSorterSchema, tMeta.m_sWarning );
 		UpdateSpawnedIterators ( bChanged, bRecreateFilters, dOriginalFilters, dModifiedFilters, pOriginalFilters, dIterators, pIterator );
 	}
 
 	if ( bRecreateFilters )
 	{
-		SafeDelete ( tCtx.m_pFilter );
+		tCtx.m_pFilter.reset();
 		tFlx.m_pFilters = &dModifiedFilters;
 		tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning );
 	}
@@ -7905,7 +7905,7 @@ static RowIdBoundaries_t RemoveRowIdFilter ( CSphQueryContext & tCtx, CreateFilt
 		if ( &tFilter!=pRowIdFilter )
 			dModifiedFilters.Add(tFilter);
 
-	SafeDelete ( tCtx.m_pFilter );
+	tCtx.m_pFilter.reset();
 	tFlx.m_pFilters = &dModifiedFilters;
 	tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning );
 
@@ -7978,7 +7978,7 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	if ( !tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning ) )
 		return false;
 
-	if ( CheckEarlyReject ( tQuery.m_dFilters, tCtx.m_pFilter, tQuery.m_eCollation, tMaxSorterSchema ) )
+	if ( CheckEarlyReject ( tQuery.m_dFilters, tCtx.m_pFilter.get(), tQuery.m_eCollation, tMaxSorterSchema ) )
 	{
 		tMeta.m_iQueryTime += (int)( ( sphMicroTimer()-tmQueryStart )/1000 );
 		tMeta.m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
@@ -9220,8 +9220,8 @@ CSphQueryContext::~CSphQueryContext ()
 
 void CSphQueryContext::ResetFilters()
 {
-	SafeDelete ( m_pFilter );
-	SafeDelete ( m_pWeightFilter );
+	m_pFilter.reset();
+	m_pWeightFilter.reset();
 	m_dUserVals.Reset();
 }
 
@@ -9589,12 +9589,9 @@ bool CSphQueryContext::CreateFilters ( CreateFilterContext_t & tCtx, CSphString 
 	if ( !sphCreateFilters ( tCtx, sError, sWarning ) )
 		return false;
 
-	m_pFilter = tCtx.m_pFilter;
-	m_pWeightFilter = tCtx.m_pWeightFilter;
+	m_pFilter = std::move ( tCtx.m_pFilter );
+	m_pWeightFilter = std::move ( tCtx.m_pWeightFilter );
 	m_dUserVals.SwapData ( tCtx.m_dUserVals );
-	tCtx.m_pFilter = nullptr;
-	tCtx.m_pWeightFilter = nullptr;
-
 	return true;
 }
 
@@ -10691,7 +10688,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 }
 
 
-bool CSphIndex_VLN::CheckEarlyReject ( const CSphVector<CSphFilterSettings> & dFilters, ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema ) const
+bool CSphIndex_VLN::CheckEarlyReject ( const CSphVector<CSphFilterSettings> & dFilters, const ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema ) const
 {
 	if ( !pFilter || dFilters.IsEmpty() )
 		return false;
@@ -10913,7 +10910,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	if ( !tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning ) )
 		return false;
 
-	if ( CheckEarlyReject ( *pFilters, tCtx.m_pFilter, tQuery.m_eCollation, tMaxSorterSchema ) )
+	if ( CheckEarlyReject ( *pFilters, tCtx.m_pFilter.get(), tQuery.m_eCollation, tMaxSorterSchema ) )
 	{
 		tMeta.m_iQueryTime += (int)( ( sphMicroTimer()-tmQueryStart )/1000 );
 		tMeta.m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;

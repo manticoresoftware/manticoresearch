@@ -4675,7 +4675,7 @@ private:
 	void	UpdateAggregateDependencies ( CSphColumnInfo & tExprCol );
 
 	ISphMatchSorter *	SpawnQueue();
-	ISphFilter *		CreateAggrFilter() const;
+	std::unique_ptr<ISphFilter>	CreateAggrFilter() const;
 	void				SetupCollation();
 	bool				Err ( const char * sFmt, ... ) const;
 };
@@ -6262,7 +6262,7 @@ bool QueueCreator_c::SetupGroupSortingFunc ( bool bGotDistinct )
 }
 
 // set up aggregate filter for grouper
-ISphFilter * QueueCreator_c::CreateAggrFilter () const
+std::unique_ptr<ISphFilter> QueueCreator_c::CreateAggrFilter () const
 {
 	assert ( m_bGotGroupby );
 	if ( m_pSorterSchema->GetAttr ( m_tSettings.m_pAggrFilter->m_sAttrName.cstr() ) )
@@ -6339,7 +6339,7 @@ bool QueueCreator_c::SetGroupSorting()
 			if ( !pFilter )
 				return false;
 
-			m_tGroupSorterSettings.m_pAggrFilterTrait = pFilter;
+			m_tGroupSorterSettings.m_pAggrFilterTrait = pFilter.release();
 		}
 	}
 

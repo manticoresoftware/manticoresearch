@@ -163,8 +163,8 @@ public:
 
 	DWORD						m_uPackedFactorFlags { SPH_FACTOR_DISABLE }; ///< whether we need to calculate packed factors (and some extra options)
 
-	ISphFilter *				m_pFilter = nullptr;
-	ISphFilter *				m_pWeightFilter = nullptr;
+	std::unique_ptr<ISphFilter>	m_pFilter;
+	std::unique_ptr<ISphFilter>	m_pWeightFilter;
 
 	bool						m_bSkipQCache = false;			///< whether do not cache this query
 
@@ -192,7 +192,7 @@ public:
 
 	void	BindWeights ( const CSphQuery & tQuery, const CSphSchema & tSchema, CSphString & sWarning );
 	bool	SetupCalc ( CSphQueryResultMeta & tMeta, const ISphSchema & tInSchema, const CSphSchema & tSchema, const BYTE * pBlobPool, const columnar::Columnar_i * pColumnar, const CSphVector<const ISphSchema *> & dInSchemas );
-	bool	CreateFilters ( CreateFilterContext_t &tCtx, CSphString &sError, CSphString &sWarning );
+	bool	CreateFilters ( CreateFilterContext_t& tCtx, CSphString &sError, CSphString &sWarning );
 
 	void	CalcFilter ( CSphMatch & tMatch ) const;
 	void	CalcSort ( CSphMatch & tMatch ) const;

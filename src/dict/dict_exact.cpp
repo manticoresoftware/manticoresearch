@@ -19,10 +19,13 @@
 /// dict wrapper for exact-word syntax
 class DictExact_c: public DictProxy_c
 {
+	using DictProxy_c::GetWordID;
+
 public:
 	explicit DictExact_c ( DictRefPtr_c pDict )
 		: DictProxy_c ( std::move (pDict) )
 	{}
+
 	SphWordID_t GetWordID ( BYTE* pWord ) override;
 };
 

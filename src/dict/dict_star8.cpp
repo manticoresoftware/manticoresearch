@@ -17,15 +17,20 @@
 /// star dict for index v.8+
 class DictStarV8_c: public DictProxy_c
 {
-	bool m_bInfixes;
+	using DictProxy_c::GetWordID;
 
 public:
 	DictStarV8_c ( DictRefPtr_c pDict, bool bInfixes )
 		: DictProxy_c ( std::move (pDict) )
 		, m_bInfixes ( bInfixes )
 	{}
+
 	SphWordID_t GetWordID ( BYTE* pWord ) final;
+
+private:
+	bool m_bInfixes;
 };
+
 
 SphWordID_t DictStarV8_c::GetWordID ( BYTE* pWord )
 {

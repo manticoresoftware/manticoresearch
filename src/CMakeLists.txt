@@ -142,7 +142,7 @@ set ( SEARCHD_H searchdaemon.h searchdconfig.h searchdddl.h searchdexpr.h search
 		taskmalloctrim.h taskoptimize.h taskping.h taskpreread.h tasksavestate.h net_action_accept.h
 		netreceive_api.h netreceive_http.h netreceive_ql.h netstate_api.h networking_daemon.h optional.h query_status.h
 		compressed_zlib_mysql.h sphinxql_debug.h stackmock.h replication/wsrep_api_stub.h searchdssl.h digest_sha1.h
-		client_session.h compressed_zstd_mysql.h docs_collector.h index_rotator.h config_reloader.h)
+		client_session.h compressed_zstd_mysql.h docs_collector.h index_rotator.h config_reloader.h searchdhttp.h)
 
 source_group ( "Grammar sources" FILES ${LMANTICORE_BISON} ${SEARCHD_BISON} )
 source_group ( "Lexer sources" FILES ${LMANTICORE_FLEX} ${SEARCHD_FLEX} )

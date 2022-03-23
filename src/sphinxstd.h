@@ -3227,6 +3227,7 @@ public:
 	StringBuilder_c &	operator << ( char cChar ) { return *this += {&cChar,1}; }
 	StringBuilder_c &	operator << ( const CSphString &sText ) { return *this += sText.cstr (); }
 	StringBuilder_c &	operator << ( const CSphVariant &sText )	{ return *this += sText.cstr (); }
+	StringBuilder_c &	operator << ( const StringBuilder_c &sText )	{ return *this << (Str_t) sText; }
 	StringBuilder_c &	operator << ( Comma_c& dComma ) { return *this += dComma; }
 
 	StringBuilder_c &	operator << ( int iVal );
@@ -5870,6 +5871,10 @@ private:
 #define LOGINFO( Level, Component ) \
 	if_const ( LOG_LEVEL_##Level ) \
 		LogMessage_t { SPH_LOG_INFO } << LOG_COMPONENT_##Component
+
+#define LOGMSG( Verbosity, Level, Component ) \
+	if_const ( LOG_LEVEL_##Level ) \
+		LogMessage_t { SPH_LOG_##Verbosity } << LOG_COMPONENT_##Component
 
 // flag to trace all threads creation/deletion (set to true and rebuild)
 #define LOG_LEVEL_TPLIFE false

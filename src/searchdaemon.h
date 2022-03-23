@@ -1333,6 +1333,7 @@ std::unique_ptr<ReplyParser_i> CreateReplyParser ( bool bJson, int & iUpdated, i
 
 enum ESphHttpStatus
 {
+	SPH_HTTP_STATUS_100,
 	SPH_HTTP_STATUS_200,
 	SPH_HTTP_STATUS_206,
 	SPH_HTTP_STATUS_400,
@@ -1376,7 +1377,6 @@ bool sphCheckWeCanModify ();
 bool sphCheckWeCanModify ( StmtErrorReporter_i & tOut );
 bool sphCheckWeCanModify ( const char* szStmt, RowBuffer_i& tOut );
 
-bool				sphLoopClientHttp ( const BYTE * pRequest, int iRequestLen, CSphVector<BYTE> & dResult );
 bool				sphProcessHttpQueryNoResponce ( ESphHttpEndpoint eEndpoint, const char * sQuery, const SmallStringHash_T<CSphString> & tOptions, CSphVector<BYTE> & dResult );
 void				sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError );
 ESphHttpEndpoint	sphStrToHttpEndpoint ( const CSphString & sEndpoint );

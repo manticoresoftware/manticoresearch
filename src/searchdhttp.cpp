@@ -10,6 +10,7 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
+#include "searchdhttp.h"
 #include "jsonqueryfilter.h"
 #include "attribute.h"
 #include "sphinxpq.h"
@@ -20,111 +21,118 @@
 #include "searchdreplication.h"
 #include "accumulator.h"
 
-static const char * g_dHttpStatus[] = { "200 OK", "206 Partial Content", "400 Bad Request", "403 Forbidden", "500 Internal Server Error",
+#define LOG_COMPONENT_HTTP ""
+#define LOG_LEVEL_HTTP false
+
+#define HTTPINFO LOGMSG ( INFO, HTTP, HTTP )
+
+
+static const char * g_dHttpStatus[] = { "100 Continue", "200 OK", "206 Partial Content", "400 Bad Request", "403 Forbidden", "500 Internal Server Error",
 								 "501 Not Implemented", "503 Service Unavailable", "526 Invalid SSL Certificate" };
 
 STATIC_ASSERT ( sizeof(g_dHttpStatus)/sizeof(g_dHttpStatus[0])==SPH_HTTP_STATUS_TOTAL, SPH_HTTP_STATUS_SHOULD_BE_SAME_AS_SPH_HTTP_STATUS_TOTAL );
 
 extern CSphString g_sStatusVersion;
 
-static void HttpBuildReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * sBody, int iBodyLen, bool bHtml )
+void HttpBuildReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, Str_t sReply, bool bHtml )
 {
-	assert ( sBody && iBodyLen );
-
 	const char * sContent = ( bHtml ? "text/html" : "application/json" );
-	CSphString sHttp;
-	sHttp.SetSprintf ( "HTTP/1.1 %s\r\nServer: %s\r\nContent-Type: %s; charset=UTF-8\r\nContent-Length: %d\r\n\r\n", g_dHttpStatus[eCode], g_sStatusVersion.cstr(), sContent, iBodyLen );
+	StringBuilder_c sHttp;
+	sHttp.Sprintf ( "HTTP/1.1 %s\r\nServer: %s\r\nContent-Type: %s; charset=UTF-8\r\nContent-Length: %d\r\n\r\n", g_dHttpStatus[eCode], g_sStatusVersion.cstr(), sContent, sReply.second );
 
-	int iHeaderLen = sHttp.Length();
-	dData.Resize ( iHeaderLen + iBodyLen );
-	memcpy ( dData.Begin(), sHttp.cstr(), iHeaderLen );
-	memcpy ( dData.Begin() + iHeaderLen, sBody, iBodyLen );
+	dData.Reserve ( sHttp.GetLength() + sReply.second );
+	dData.Append ( (Str_t)sHttp );
+	dData.Append ( sReply );
 }
 
 
-static void HttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError )
+HttpRequestParser_c::HttpRequestParser_c()
 {
-	JsonObj_c tErr;
-	tErr.AddStr ( "error", szError );
-	CSphString sJsonError = tErr.AsString();
-	HttpBuildReply ( dData, eCode, sJsonError.cstr(), sJsonError.Length(), false );
+	http_parser_settings_init ( &m_tParserSettings );
+
+	m_tParserSettings.on_url = cbParserUrl;
+	m_tParserSettings.on_header_field = cbParserHeaderField;
+	m_tParserSettings.on_header_value = cbParserHeaderValue;
+	m_tParserSettings.on_headers_complete = cbParseHeaderCompleted;
+	m_tParserSettings.on_body = cbParserBody;
+
+	m_tParserSettings.on_message_begin = cbMessageBegin;
+	m_tParserSettings.on_message_complete = cbMessageComplete;
+	m_tParserSettings.on_status = cbMessageStatus;
+
+	m_tParser.data = this;
+	Reinit();
 }
 
-
-using OptionsHash_t = SmallStringHash_T<CSphString>;
-
-class HttpRequestParser_c : public ISphNoncopyable
+void HttpRequestParser_c::Reinit()
 {
-public:
-	bool					Parse ( const BYTE * pData, int iDataLen );
-	bool					ParseList ( const char * sAt, int iLen );
+	http_parser_init ( &m_tParser, HTTP_REQUEST );
+	m_sCurField.Clear();
+	m_sCurValue.Clear();
+	m_sUrl.Clear();
+	m_bHeaderDone = false;
+	m_iParsedBodyLength = 0;
+	m_szError = nullptr;
+}
 
-	const CSphString &		GetBody() const { return m_sRawBody; }
-	Str_t					GetRawUrlQuery() const { return m_sRawUrlQuery; }
-	ESphHttpEndpoint		GetEndpoint() const { return m_eEndpoint; }
-	const OptionsHash_t &	GetOptions() const { return m_hOptions; }
-	const CSphString &		GetInvalidEndpoint() const { return m_sInvalidEndpoint; }
-	const char *			GetError() const { return m_szError; }
-	bool					GetKeepAlive() const { return m_bKeepAlive; }
-	http_method				GetRequestType() const { return m_eType; }
-
-	static int				ParserUrl ( http_parser * pParser, const char * sAt, size_t iLen );
-	static int				ParserHeaderField ( http_parser * pParser, const char * sAt, size_t iLen );
-	static int				ParserHeaderValue ( http_parser * pParser, const char * sAt, size_t iLen );
-	static int				ParseHeaderCompleted ( http_parser * pParser );
-	static int				ParserBody ( http_parser * pParser, const char * sAt, size_t iLen );
-
-private:
-	bool					m_bKeepAlive {false};
-	const char *			m_szError {nullptr};
-	ESphHttpEndpoint		m_eEndpoint {SPH_HTTP_ENDPOINT_TOTAL};
-	CSphString				m_sInvalidEndpoint;
-	CSphString				m_sRawBody;
-	Str_t					m_sRawUrlQuery { dEmptyStr };
-	CSphString				m_sCurField;
-	OptionsHash_t			m_hOptions;
-	CSphString				m_sEndpoint;
-	http_method				m_eType = HTTP_GET;
-};
-
-
-bool HttpRequestParser_c::Parse ( const BYTE * pData, int iDataLen )
+bool HttpRequestParser_c::ParseHeader ( ByteBlob_t sData )
 {
-	http_parser_settings tParserSettings;
-	http_parser_settings_init ( &tParserSettings );
-	tParserSettings.on_url = HttpRequestParser_c::ParserUrl;
-	tParserSettings.on_header_field = HttpRequestParser_c::ParserHeaderField;
-	tParserSettings.on_header_value = HttpRequestParser_c::ParserHeaderValue;
-	tParserSettings.on_headers_complete = HttpRequestParser_c::ParseHeaderCompleted;
-	tParserSettings.on_body = HttpRequestParser_c::ParserBody;
+	HTTPINFO << "ParseChunk with " << sData.second << " bytes '" << sData << "'";
 
-	http_parser tParser;
-	tParser.data = this;
-	http_parser_init ( &tParser, HTTP_REQUEST );
-	auto iParsed = (int) http_parser_execute ( &tParser, &tParserSettings, (const char *)pData, iDataLen );
-	if ( iParsed!=iDataLen )
+	auto iParsed = (int) http_parser_execute ( &m_tParser, &m_tParserSettings, (const char *)sData.first, sData.second );
+	if ( iParsed!= sData.second )
 	{
-		m_szError = http_errno_description ( (http_errno)tParser.http_errno );
-		return false;
+		sphLogDebug ( "ParseChunk error: parsed %d, chunk %d", iParsed, sData.second );
+		m_szError = http_errno_description ( (http_errno)m_tParser.http_errno );
+		return true;
 	}
 
-	// connection wide http options
-	m_bKeepAlive = ( http_should_keep_alive ( &tParser )!=0 );
-	// transfer endpoint for further parse
-	m_hOptions.Add ( m_sEndpoint, "endpoint" );
-	m_eType = (http_method)tParser.method;
-
-	return true;
+	return m_bHeaderDone;
 }
+
+int HttpRequestParser_c::ContentLength() const
+{
+	return (int)m_tParser.content_length;
+}
+
+int HttpRequestParser_c::ParsedBodyLength() const
+{
+	return m_iParsedBodyLength;
+}
+
+bool HttpRequestParser_c::Expect100() const
+{
+	return m_hOptions.Exists ( "Expect" ) && m_hOptions["Expect"] == "100-continue";
+}
+
+bool HttpRequestParser_c::KeepAlive() const
+{
+	return m_bKeepAlive;
+}
+
 
 static int Char2Hex ( BYTE uChar )
 {
-	if ( uChar>=0x41 && uChar<=0x46 )
-		return ( uChar - 'A' ) + 10;
-	else if ( uChar>=0x61 && uChar<=0x66 )
-		return ( uChar - 'a' ) + 10;
-	else if ( uChar>='0' && uChar<='9' )
-		return uChar - '0';
+	switch (uChar)
+	{
+	case '0': return 0;
+	case '1': return 1;
+	case '2': return 2;
+	case '3': return 3;
+	case '4': return 4;
+	case '5': return 5;
+	case '6': return 6;
+	case '7': return 7;
+	case '8': return 8;
+	case '9': return 9;
+	case 'a': case 'A': return 10;
+	case 'b': case 'B': return 11;
+	case 'c': case 'C': return 12;
+	case 'd': case 'D': return 13;
+	case 'e': case 'E': return 14;
+	case 'f': case 'F': return 15;
+	default: break;
+	}
 	return -1;
 }
 
@@ -163,11 +171,13 @@ static void UriPercentReplace ( CSphString & sEntity, bool bAlsoPlus=true )
 }
 
 
-bool HttpRequestParser_c::ParseList ( const char * sAt, int iLen )
+bool HttpRequestParser_c::ParseList ( Str_t sData )
 {
-	m_sRawUrlQuery = { sAt, iLen };
-	const char * sCur = sAt;
-	const char * sEnd = sAt + iLen;
+	HTTPINFO << "ParseList with " << sData.second << " bytes '" << sData << "'";
+
+	m_sRawUrlQuery = sData;
+	const char * sCur = sData.first;
+	const char * sEnd = sData.first + sData.second;
 	const char * sLast = sCur;
 	CSphString sName;
 	CSphString sVal;
@@ -219,75 +229,158 @@ bool HttpRequestParser_c::ParseList ( const char * sAt, int iLen )
 	return true;
 }
 
-
-int HttpRequestParser_c::ParserUrl ( http_parser * pParser, const char * sAt, size_t iLen )
+inline int HttpRequestParser_c::ParserUrl ( Str_t sData )
 {
+	HTTPINFO << "ParseUrl with " << sData.second << " bytes '" << sData << "'";
+
+	m_sUrl << sData;
+	return 0;
+}
+
+inline void HttpRequestParser_c::FinishParserUrl ()
+{
+	HTTPINFO <<"FinishParserUrl '" << m_sUrl << "'";
+	if ( m_sUrl.IsEmpty() )
+		return;
+
+	auto _ = AtScopeExit ( [this] { m_sUrl.Clear(); } );
+	auto sData = (Str_t) m_sUrl;
 	http_parser_url tUri;
-	if ( http_parser_parse_url ( sAt, iLen, 0, &tUri ) )
-		return 0;
+	if ( http_parser_parse_url ( sData.first, sData.second, 0, &tUri ) )
+		return;
 
 	DWORD uPath = ( 1UL<<UF_PATH );
 	DWORD uQuery = ( 1UL<<UF_QUERY );
 
 	if ( ( tUri.field_set & uPath )!=0 )
 	{
-		const char * sPath = sAt + tUri.field_data[UF_PATH].off;
+		const char * sPath = sData.first + tUri.field_data[UF_PATH].off;
 		int iPathLen = tUri.field_data[UF_PATH].len;
 		if ( *sPath=='/' )
 		{
-			sPath++;
-			iPathLen--;
+			++sPath;
+			--iPathLen;
 		}
 
 		// URL should be split fully to point to proper endpoint 
-		CSphString & sEndpoint = ( (HttpRequestParser_c *)pParser->data )->m_sEndpoint;
-		sEndpoint.SetBinary ( sPath, iPathLen );
-		ESphHttpEndpoint eEndpoint = sphStrToHttpEndpoint ( sEndpoint );
-		( (HttpRequestParser_c *)pParser->data )->m_eEndpoint = eEndpoint;
-		if ( eEndpoint==SPH_HTTP_ENDPOINT_TOTAL )
-			( (HttpRequestParser_c *)pParser->data )->m_sInvalidEndpoint.SetBinary ( sPath, iPathLen );
+		m_sEndpoint.SetBinary ( sPath, iPathLen );
+		m_eEndpoint = sphStrToHttpEndpoint ( m_sEndpoint );
+		if ( m_eEndpoint==SPH_HTTP_ENDPOINT_TOTAL )
+			m_sInvalidEndpoint.SetBinary ( sPath, iPathLen );
 	}
 
 	if ( ( tUri.field_set & uQuery )!=0 )
-		( (HttpRequestParser_c *)pParser->data )->ParseList ( sAt + tUri.field_data[UF_QUERY].off, tUri.field_data[UF_QUERY].len );
+		ParseList ( { sData.first + tUri.field_data[UF_QUERY].off, tUri.field_data[UF_QUERY].len } );
+}
 
+inline int HttpRequestParser_c::ParserHeaderField ( Str_t sData )
+{
+	HTTPINFO << "ParserHeaderField with '" << sData << "'";
+
+	FinishParserKeyVal();
+	m_sCurField << sData;
 	return 0;
 }
 
-int HttpRequestParser_c::ParserHeaderField ( http_parser * pParser, const char * sAt, size_t iLen )
+inline int HttpRequestParser_c::ParserHeaderValue ( Str_t sData )
 {
-	assert ( pParser->data );
-	( (HttpRequestParser_c *)pParser->data )->m_sCurField.SetBinary ( sAt, (int) iLen );
+	HTTPINFO << "ParserHeaderValue with '" << sData << "'";
+
+	m_sCurValue << sData;
 	return 0;
 }
 
-int HttpRequestParser_c::ParserHeaderValue ( http_parser * pParser, const char * sAt, size_t iLen )
+inline void HttpRequestParser_c::FinishParserKeyVal()
 {
-	assert ( pParser->data );
-	CSphString sVal;
-	sVal.SetBinary ( sAt, (int) iLen );
-	auto * pHttpParser = (HttpRequestParser_c *)pParser->data;
-	pHttpParser->m_hOptions.Add ( sVal, pHttpParser->m_sCurField );
-	pHttpParser->m_sCurField = "";
+	if ( m_sCurValue.IsEmpty() )
+		return;
+
+	HTTPINFO << "FinishParserKeyVal with '" << m_sCurField << "':'" << m_sCurValue << "'";
+
+	m_hOptions.Add ( (CSphString)m_sCurValue, (CSphString)m_sCurField );
+	m_sCurField.Clear();
+	m_sCurValue.Clear();
+}
+
+inline int HttpRequestParser_c::ParserBody ( Str_t sData )
+{
+	HTTPINFO << "ParserBody with " << sData.second << " bytes '" << sData << "'";
+
+	m_iParsedBodyLength += sData.second;
 	return 0;
 }
 
-int HttpRequestParser_c::ParseHeaderCompleted ( http_parser* pParser )
+inline int HttpRequestParser_c::ParseHeaderCompleted ()
 {
+	HTTPINFO << "ParseHeaderCompleted. Upgrade=" << (unsigned int)m_tParser.upgrade << ", length=" << m_tParser.content_length;
+
 	// we're not support connection upgrade - so just reset upgrade flag, if detected.
 	// rfc7540 section-3.2 (for http/2) says, we just should continue as if no 'upgrade' header was found
-	if ( pParser->upgrade )
-		pParser->upgrade = 0;
+	m_tParser.upgrade = 0;
+	FinishParserUrl();
+	FinishParserKeyVal();
+	m_bHeaderDone = true;
+
+	// connection wide http options
+	m_bKeepAlive = ( http_should_keep_alive ( &m_tParser ) != 0 );
+	// transfer endpoint for further parse
+	m_hOptions.Add ( m_sEndpoint, "endpoint" );
+	m_eType = (http_method)m_tParser.method;
+
 	return 0;
 }
 
-int HttpRequestParser_c::ParserBody ( http_parser * pParser, const char * sAt, size_t iLen )
+int HttpRequestParser_c::cbParserUrl ( http_parser* pParser, const char* sAt, size_t iLen )
 {
 	assert ( pParser->data );
-	auto * pHttpParser = (HttpRequestParser_c *)pParser->data;
-	pHttpParser->ParseList ( sAt, (int) iLen );
-	pHttpParser->m_sRawBody.SetBinary ( sAt, (int) iLen );
+	auto pThis = static_cast<HttpRequestParser_c*> ( pParser->data );
+	return pThis->ParserUrl ( { sAt, iLen } );
+}
+
+int HttpRequestParser_c::cbParserHeaderField ( http_parser* pParser, const char* sAt, size_t iLen )
+{
+	assert ( pParser->data );
+	auto pThis = static_cast<HttpRequestParser_c*> ( pParser->data );
+	return pThis->ParserHeaderField ( { sAt, iLen } );
+}
+
+int HttpRequestParser_c::cbParserHeaderValue ( http_parser* pParser, const char* sAt, size_t iLen )
+{
+	assert ( pParser->data );
+	auto pThis = static_cast<HttpRequestParser_c*> ( pParser->data );
+	return pThis->ParserHeaderValue ( { sAt, iLen } );
+}
+
+int HttpRequestParser_c::cbParseHeaderCompleted ( http_parser* pParser )
+{
+	assert ( pParser->data );
+	auto pThis = static_cast<HttpRequestParser_c*> ( pParser->data );
+	return pThis->ParseHeaderCompleted ();
+}
+
+int HttpRequestParser_c::cbMessageBegin ( http_parser* pParser )
+{
+	HTTPINFO << "cbMessageBegin";
 	return 0;
+}
+
+int HttpRequestParser_c::cbMessageComplete ( http_parser* pParser )
+{
+	HTTPINFO << "cbMessageComplete";
+	return 0;
+}
+
+int HttpRequestParser_c::cbMessageStatus ( http_parser* pParser, const char* sAt, size_t iLen )
+{
+	HTTPINFO << "cbMessageStatus with '" << Str_t {sAt,iLen} << "'";
+	return 0;
+}
+
+int HttpRequestParser_c::cbParserBody ( http_parser* pParser, const char* sAt, size_t iLen )
+{
+	assert ( pParser->data );
+	auto pThis = static_cast<HttpRequestParser_c*> ( pParser->data );
+	return pThis->ParserBody ( { sAt, iLen } );
 }
 
 static const char * g_sIndexPage =
@@ -307,7 +400,7 @@ static void HttpHandlerIndexPage ( CSphVector<BYTE> & dData )
 {
 	StringBuilder_c sIndexPage;
 	sIndexPage.Appendf ( g_sIndexPage, g_sStatusVersion.cstr() );
-	HttpBuildReply ( dData, SPH_HTTP_STATUS_200, sIndexPage.cstr(), sIndexPage.GetLength(), true );
+	HttpBuildReply ( dData, SPH_HTTP_STATUS_200, (Str_t)sIndexPage, true );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -455,7 +548,7 @@ protected:
 	void ReportError ( const char * szError, ESphHttpStatus eStatus )
 	{
 		if ( m_bNeedHttpResponse )
-			HttpErrorReply ( m_dData, eStatus, szError );
+			sphHttpErrorReply ( m_dData, eStatus, szError );
 		else
 		{
 			m_dData.Resize ( (int) strlen ( szError ) );
@@ -477,7 +570,7 @@ protected:
 		sBuf[iPrinted] = '\0';
 
 		if ( m_bNeedHttpResponse )
-			HttpErrorReply ( m_dData, eStatus, sBuf );
+			sphHttpErrorReply ( m_dData, eStatus, sBuf );
 		else
 		{
 			m_dData.Resize ( iPrinted );
@@ -487,22 +580,22 @@ protected:
 
 	void BuildReply ( const CSphString & sResult, ESphHttpStatus eStatus )
 	{
-		BuildReply ( sResult.cstr(), sResult.Length(), eStatus );
+		BuildReply ( FromStr ( sResult ), eStatus );
 	}
 
 	void BuildReply ( const StringBuilder_c & sResult, ESphHttpStatus eStatus )
 	{
-		BuildReply ( sResult.cstr(), sResult.GetLength(), eStatus );
+		BuildReply ( (Str_t)sResult, eStatus );
 	}
 
-	void BuildReply ( const char * sResult, int iLen, ESphHttpStatus eStatus )
+	void BuildReply ( Str_t sResult, ESphHttpStatus eStatus )
 	{
 		if ( m_bNeedHttpResponse )
-			HttpBuildReply ( m_dData, eStatus, sResult, iLen, false );
+			HttpBuildReply ( m_dData, eStatus, sResult, false );
 		else
 		{
-			m_dData.Resize ( iLen );
-			memcpy ( m_dData.Begin(), sResult, m_dData.GetLength() );
+			m_dData.Resize ( 0 );
+			m_dData.Append ( sResult );
 		}
 	}
 
@@ -1200,19 +1293,24 @@ public:
 		, HttpOptionsTraits_c ( tOptions )
 	{}
 
-	bool Process () override
+	static const char* IsNDJson ( const OptionsHash_t& hOptions )
 	{
-		if ( !m_tOptions.Exists ("Content-Type") )
-		{
-			ReportError ( "Content-Type must be set", SPH_HTTP_STATUS_400 );
-			return false;
-		}
+		if ( !hOptions.Exists ( "Content-Type" ) )
+			return "Content-Type must be set";
 
-		auto sContentType = m_tOptions["Content-Type"].ToLower();
+		auto sContentType = hOptions["Content-Type"].ToLower();
 		auto dParts = sphSplit ( sContentType.cstr(), ";" );
 		if ( dParts.IsEmpty() || dParts[0] != "application/x-ndjson" )
+			return "Content-Type must be application/x-ndjson";
+		return nullptr;
+	}
+
+	bool Process () override
+	{
+		const char* szError = IsNDJson ( m_tOptions );
+		if ( szError )
 		{
-			ReportError ( "Content-Type must be application/x-ndjson", SPH_HTTP_STATUS_400 );
+			ReportError ( szError, SPH_HTTP_STATUS_400 );
 			return false;
 		}
 
@@ -1433,39 +1531,52 @@ bool sphProcessHttpQueryNoResponce ( ESphHttpEndpoint eEndpoint, const char * sQ
 }
 
 
-bool sphLoopClientHttp ( const BYTE * pRequest, int iRequestLen, CSphVector<BYTE> & dResult )
+bool HttpRequestParser_c::IsNdjsonBody() const
 {
-	HttpRequestParser_c tParser;
-	if ( !tParser.Parse ( pRequest, iRequestLen ) )
+	return HttpHandler_JsonBulk_c::IsNDJson ( m_hOptions ) == nullptr;
+}
+
+void HttpRequestParser_c::ProcessClientHttp ( ByteBlob_t tData, CSphVector<BYTE>& dResult )
+{
+	if ( m_szError )
 	{
-		HttpErrorReply ( dResult, SPH_HTTP_STATUS_400, tParser.GetError() );
-		return tParser.GetKeepAlive();
+		sphHttpErrorReply ( dResult, SPH_HTTP_STATUS_400, m_szError );
+		return;
 	}
 
-	ESphHttpEndpoint eEndpoint = tParser.GetEndpoint();
+	Str_t sData { (const char*)tData.first, tData.second };
 
-	auto& sRawString = tParser.GetBody();
-	myinfo::SetDescription ( sRawString.cstr(), sRawString.Length() );
-
-	if ( !sphProcessHttpQuery ( eEndpoint, sRawString.cstr(), tParser.GetRawUrlQuery(), tParser.GetOptions(), dResult, true, tParser.GetRequestType() ) )
+	CSphString sDescription;
+	if ( !IsNdjsonBody() )
 	{
-		if ( eEndpoint==SPH_HTTP_ENDPOINT_INDEX )
+		ParseList ( sData );
+		sDescription.SetBinary ( sData.first, tData.second );
+	} else
+		sDescription.SetBinary ( sData.first, Min (tData.second,100) );
+
+	myinfo::SetDescription ( std::move ( sDescription ), tData.second );
+
+	CSphString sRawBody;
+	sRawBody.SetBinary ( sData.first, tData.second );
+	if ( !sphProcessHttpQuery ( m_eEndpoint, sRawBody.cstr(), m_sRawUrlQuery, m_hOptions, dResult, true, m_eType ) )
+	{
+		if ( m_eEndpoint==SPH_HTTP_ENDPOINT_INDEX )
 			HttpHandlerIndexPage ( dResult );
 		else
 		{
 			CSphString sError;
-			sError.SetSprintf ( "/%s - unsupported endpoint", tParser.GetInvalidEndpoint().cstr() );
-			HttpErrorReply ( dResult, SPH_HTTP_STATUS_501, sError.cstr() );
+			sError.SetSprintf ( "/%s - unsupported endpoint", m_sInvalidEndpoint.cstr() );
+			sphHttpErrorReply ( dResult, SPH_HTTP_STATUS_501, sError.cstr() );
 		}
 	}
-
-	return tParser.GetKeepAlive();
 }
-
 
 void sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError )
 {
-	HttpErrorReply ( dData, eCode, szError );
+	JsonObj_c tErr;
+	tErr.AddStr ( "error", szError );
+	CSphString sJsonError = tErr.AsString();
+	HttpBuildReply ( dData, eCode, FromStr (sJsonError), false );
 }
 
 

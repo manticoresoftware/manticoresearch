@@ -470,10 +470,12 @@ class AsyncSSBufferedSocket_c final : public AsyncNetBuffer_c
 		return ( iRes>0 );
 	}
 
-	int ReadFromBackend ( int iNeed, int iHaveSpace, bool ) final
+	int ReadFromBackend ( int iNeed, int iSpace, bool ) final
 	{
-		assert ( iNeed <= iHaveSpace );
-		auto pBuf = AddN(0);
+		assert ( iNeed <= iSpace );
+		auto dBuf = AllocateBuffer ( iSpace );
+		int iHaveSpace = dBuf.GetLength();
+		auto pBuf = dBuf.begin();
 
 		int iGotTotal = 0;
 		while ( iNeed>0 )

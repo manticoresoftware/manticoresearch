@@ -137,7 +137,7 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 		HttpHeaderStreamParser_t tHeadParser;
 		while ( !tHeadParser.HeaderFound ( tIn.Tail() ))
 		{
-			auto iChunk = tIn.ReadAny ( g_iMaxPacketSize );
+			auto iChunk = tIn.ReadAny ();
 			if ( iChunk>0 )
 				continue;
 

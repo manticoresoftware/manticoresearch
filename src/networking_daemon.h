@@ -123,39 +123,31 @@ protected:
  	/// Read to the end any chunk of iNeed..iHaveSpace bytes. Return num of bytes read, or -1 on error.
 	/// @iNeed is strict N user expects. For example, it needs 100 bytes, 90 are in buffer, and 10 he
 	/// needs extra. So, less than 10 bytes is fail.
-	/// @iHaveSpace is how many bytes is _safe_ to return. If it is requested 10 bytes, but iHaveSpace
-	/// tells 10K - then anything between 10 and 10K is ok. If your backend needs more - see BufferFor()
-	/// to do so.
-	virtual int 	ReadFromBackend ( int iNeed, int iHaveSpace, bool bIntr ) = 0;
+	/// @iSpace is how many bytes (at least) available to reserve. That is to obey g_iMaxPacketSize.
+	/// Reader should allocate need space by AllocateBuffer call, using this param or other hints
+	virtual int 	ReadFromBackend ( int iNeed, int iSpace, bool bIntr ) = 0;
 
 	/// for iNeed==0 just try oneshot non-blocking read try to look if anything at all arived.
 	/// returns -1 on error, or N of appended bytes.
+	/// iSpace limits max quantity of data (limited by g_iMaxPacketSize), however m.b. ignored by compressed backends
 	int				AppendData ( int iNeed, int iSpace, bool bIntr );
 
 	/// internal - return place available to not exceed iHardLimit. Dispose consumed data, if necesary.
 	int				GetRoomForTail ( int iHardLimit );
 
-	/// internal - ensure iSpace is in reserve, then return pointer to the end of buffer.
-	/// That is to be used in ReadFromBackend, if iHaveSpace param is not enough.
-	/// That is for backends with undesired side effects for returning 'to small' chunks.
-	/// Say, if you have 10K (for example, uncompressed), but backend implies a chunk which after
-	/// processing (decompression) will born 20K. In such case you can ignore @iHaveSpace of ReadfromBackend()
-	/// but fill necessary 20K buffer, pointed by BufferFor (20k).
-	/// ReadFromBackend on return will process results right way, nothing will be lost or ignored despite of @iHaveSpace
-	inline BYTE * BufferFor ( int iSpace )
-	{
-		ReserveGap ( iSpace );
-		return AddN ( 0 );
-	}
+	/// internal - discard processed data, then ensure at least iSpace is available, and return blob for it.
+	/// ReadFromBackend on return will process results right way, nothing will be lost or ignored.
+	VecTraits_T<BYTE> AllocateBuffer ( int iSpace );
 
 public:
 	AsyncNetInputBuffer_c ();
 
-	/// read at least 1 byte, but no more than 4096 bytes, up to iHardLimit
-	int				ReadAny ( int iHardLimit );
+	/// read at least 1 byte, and up to g_iMaxPacketSize
+	int				ReadAny ();
 
 	/// try to peek first bytes from socket and imagine proto from this
-	Proto_e			Probe ( int iHardLimit, bool bLight );
+	/// @param bLight determines whether just look to existing (buffered) data, or also query socket, if no such data.
+	Proto_e			Probe ( bool bLight );
 
 	/// Ensure we have iLen bytes available in buffer. If not - read new chunk from backend.
 	/// return true on success

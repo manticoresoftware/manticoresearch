@@ -864,17 +864,17 @@ AsyncNetInputBuffer_c::AsyncNetInputBuffer_c ()
 	m_iLen = 0;
 }
 
-Proto_e AsyncNetInputBuffer_c::Probe ( int iHardLimit, bool bLight )
+Proto_e AsyncNetInputBuffer_c::Probe ( bool bLight )
 {
 	Proto_e eResult = Proto_e::UNKNOWN;
 	m_bIntr = false;
 	int iRest = 0;
 	if ( !HasBytes() )
 	{
-		iRest = GetRoomForTail ( iHardLimit );
+		iRest = GetRoomForTail ( g_iMaxPacketSize );
 		if ( !iRest )
 			return eResult; // hard limit reached
-		AppendData ( 0, Min ( iRest, 4096 ), true );
+		AppendData ( 0, iRest, true );
 	}
 
 	auto iHas = HasBytes();
@@ -886,7 +886,7 @@ Proto_e AsyncNetInputBuffer_c::Probe ( int iHardLimit, bool bLight )
 			return eResult;
 		}
 		sphLogDebugv ( "+++++ Light probing revealed nothing, try blocking" );
-		AppendData ( 1, Min ( iRest, 4096 ), true );
+		AppendData ( 1, iRest, true );
 		iHas = HasBytes ();
 	}
 
@@ -948,10 +948,6 @@ bool AsyncNetInputBuffer_c::ReadFrom( int iLen, bool bIntr )
 int AsyncNetInputBuffer_c::AppendData ( int iNeed, int iSpace, bool bIntr )
 {
 	assert ( iNeed<=iSpace );
-	auto iPos = DiscardAndReserve ( int ( m_pCur-m_pBuf ), GetLength()+iSpace );
-	iSpace = GetLimit ()-GetLength ();
-	m_pBuf = ByteBlob_t ( *this ).first; // realign after possible reserve, byteblob ensures it is not nullptr
-	m_pCur = m_pBuf+iPos;
 
 	int iGot = ReadFromBackend ( iNeed, iSpace, bIntr );
 	if ( sphInterrupted () && bIntr )
@@ -977,15 +973,15 @@ int AsyncNetInputBuffer_c::AppendData ( int iNeed, int iSpace, bool bIntr )
 	return iGot;
 }
 
-int AsyncNetInputBuffer_c::ReadAny ( int iHardLimit )
+int AsyncNetInputBuffer_c::ReadAny ()
 {
 	m_bIntr = false;
 
-	auto iRest = GetRoomForTail ( iHardLimit );
+	auto iRest = GetRoomForTail ( g_iMaxPacketSize );
 	if ( !iRest )
 		return 0;
 
-	return AppendData ( 1, Min ( iRest, 4096 ), true );
+	return AppendData ( 1, iRest, true );
 }
 
 
@@ -1015,6 +1011,15 @@ int AsyncNetInputBuffer_c::GetRoomForTail ( int iHardLimit )
 		DiscardProcessed ( -1 );
 
 	return iHardLimit-m_iLen;
+}
+
+VecTraits_T<BYTE> AsyncNetInputBuffer_c::AllocateBuffer ( int iSpace )
+{
+	auto iPos = DiscardAndReserve ( int ( m_pCur - m_pBuf ), GetLength() + iSpace );
+	m_pBuf = ByteBlob_t ( *this ).first; // realign after possible reserve, byteblob ensures it is not nullptr
+	m_pCur = m_pBuf + iPos;
+
+	return { AddN(0), GetLimit() - GetLength() };
 }
 
 void AsyncNetInputBuffer_c::DiscardProcessed ( int iHowMany )
@@ -1072,10 +1077,11 @@ class AsyncBufferedSocket_c final : public AsyncNetBuffer_c
 {
 	std::unique_ptr<SockWrapper_c> m_pSocket;
 
-	int ReadFromBackend ( int iNeed, int iHaveSpace, bool bIntr ) final
+	int ReadFromBackend ( int iNeed, int iSpace, bool bIntr ) final
 	{
-		assert ( iNeed<=iHaveSpace );
-		return SyncSockRead ( m_pSocket.get(), AddN ( 0 ), iNeed, iHaveSpace, bIntr );
+		assert ( iNeed<= iSpace );
+		auto dBuf = AllocateBuffer ( iSpace );
+		return SyncSockRead ( m_pSocket.get(), dBuf.begin(), iNeed, dBuf.GetLength(), bIntr );
 	}
 
 	bool SendBuffer ( const VecTraits_T<BYTE> & dData ) final

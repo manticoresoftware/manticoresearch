@@ -29,7 +29,9 @@ OPTIMIZE INDEX rt;
 
 OPTIMIZE merges the RT index's disk chunks down to the number which equals to `# of CPU cores * 2` by default.  The number of optimized disk chunks can be controlled with option `cutoff`.
 
-There's also a server setting [optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff) for overriding the above threshold.
+There's also:
+* server setting [optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff) for overriding the above threshold
+* per-table setting [optimize_cutoff](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#optimize_cutoff)
 
 <!-- intro -->
 ##### SQL:

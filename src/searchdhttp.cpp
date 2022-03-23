@@ -872,7 +872,7 @@ public:
 	{
 		JsonEscapedBuilder sEscapedName;
 		sEscapedName.FixupSpacedAndAppendEscaped ( szName );
-		ColumnNameType_t tCol { sEscapedName, eType };
+		ColumnNameType_t tCol { (CSphString)sEscapedName, eType };
 		auto _ = m_dBuf.Object(false);
 		m_dBuf.AppendName ( tCol.first.cstr(), false );
 		auto tTypeBlock = m_dBuf.Object(false);

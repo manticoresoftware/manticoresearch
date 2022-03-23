@@ -1206,7 +1206,9 @@ public:
 			return false;
 		}
 
-		if ( m_tOptions["Content-Type"].ToLower() != "application/x-ndjson" )
+		auto sContentType = m_tOptions["Content-Type"].ToLower();
+		auto dParts = sphSplit ( sContentType.cstr(), ";" );
+		if ( dParts.IsEmpty() || dParts[0] != "application/x-ndjson" )
 		{
 			ReportError ( "Content-Type must be application/x-ndjson", SPH_HTTP_STATUS_400 );
 			return false;

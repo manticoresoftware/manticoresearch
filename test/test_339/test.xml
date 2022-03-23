@@ -109,6 +109,22 @@ index test2
 <query endpoint="json/search">{ "index": "test_rt", "size": 5, "query": { "match_all": {} }, "sort": [ "id" ] } }</query>
 <query endpoint="json/search">{ "index": "test_rt", "size": 5, "from": 5, "query": { "match_all": {} } } }</query>
 
+<!-- content-type with supplements -->
+<query endpoint="json/bulk" content="application/x-ndjson; charset=uft-8">
+{ "insert" : { "index" : "test_rt", "id" : 101, "doc": { "int_col" : 1, "flt_col" : 1.1, "content" : "bulk doc one" } } }
+</query>
+
+<query endpoint="json/bulk" content="application/x-ndjson charset=uft-8">
+{ "insert" : { "index" : "test_rt", "id" : 102, "doc": { "int_col" : 2, "flt_col" : 2.2, "content" : "bulk doc two" } } }
+</query>
+
+<query endpoint="json/bulk" content="application/x-ndjsonn">
+{ "create" : { "index" : "test_rt", "id" : 103, "doc": { "int_col" : 3, "flt_col" : 3.3, "content" : "bulk doc three" } } }
+</query>
+
+<query endpoint="json/bulk" content="application/x-ndjson">
+{ "create" : { "index" : "test_rt", "id" : 104, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "bulk doc four" } } }
+</query>
 
 </httpqueries>
 

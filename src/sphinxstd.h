@@ -3250,7 +3250,7 @@ public:
 	inline void			RawC ( char cChar ) { GrowEnough ( 1 ); *end () = cChar; ++m_iUsed; }
 	void				AppendRawChunk ( Str_t sText ); // append without any commas
 	StringBuilder_c &	SkipNextComma();
-	StringBuilder_c &	AppendName ( const char * sName); // append
+	StringBuilder_c &	AppendName ( const char * szName, bool bQuoted=true ); // append "szName":
 
 	// these use standard sprintf() inside
 	StringBuilder_c &	vAppendf ( const char * sTemplate, va_list ap );
@@ -3846,9 +3846,9 @@ public:
 		return *this;
 	}
 
-	EscapedStringBuilder_T &AppendName ( const char * sName )
+	EscapedStringBuilder_T &AppendName ( const char * sName, bool bQuoted=true )
 	{
-		StringBuilder_c::AppendName(sName);
+		StringBuilder_c::AppendName ( sName, bQuoted );
 		return *this;
 	}
 };

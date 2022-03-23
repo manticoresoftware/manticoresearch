@@ -105,6 +105,9 @@ Two"}')
 <query endpoint="cli" method="post">desc testt</query>
 <query endpoint="sql" method="post">mode=raw&amp;query=desc testt</query>
 
+<!-- statement with characters in col need to be escaped-->
+<query endpoint="sql" method="post">mode=raw&amp;query=select concat('"', 'a')</query>
+
 </httpqueries>
 
 </test>

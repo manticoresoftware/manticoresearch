@@ -870,9 +870,11 @@ public:
 
 	void HeadColumn ( const char * szName, MysqlColumnType_e eType ) override
 	{
-		ColumnNameType_t tCol { szName, eType };
+		JsonEscapedBuilder sEscapedName;
+		sEscapedName.FixupSpacedAndAppendEscaped ( szName );
+		ColumnNameType_t tCol { sEscapedName, eType };
 		auto _ = m_dBuf.Object(false);
-		m_dBuf.AppendName ( tCol.first.cstr() );
+		m_dBuf.AppendName ( tCol.first.cstr(), false );
 		auto tTypeBlock = m_dBuf.Object(false);
 		m_dBuf.NamedVal ( "type", eType );
 		m_dColumns.Add ( tCol );
@@ -908,7 +910,7 @@ private:
 
 	void AddDataColumn()
 	{
-		m_dBuf.AppendName ( m_dColumns[m_iCol].first.cstr() );
+		m_dBuf.AppendName ( m_dColumns[m_iCol].first.cstr(), false );
 		++m_iCol;
 	}
 

@@ -1775,6 +1775,11 @@ static bool PushJsonField ( int64_t iValue, const BYTE * pBlobPool, PUSH && fnPu
 			return bRes;
 		}
 
+		case JSON_TRUE:
+		case JSON_FALSE:
+			uGroupKey = eJson;
+			return fnPush ( &iValue, uGroupKey );
+
 		default:
 			uGroupKey = 0;
 			iValue = 0;

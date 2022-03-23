@@ -10140,7 +10140,7 @@ void HandleCommandCallPq ( ISphOutputBuffer &tOut, WORD uVer, InputBuffer_c &tRe
 
 static void HandleMysqlCallPQ ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & tAcc, CPqResult & tResult )
 {
-
+	StatCountCommand ( SEARCHD_COMMAND_CALLPQ );
 	PercolateMatchResult_t &tRes = tResult.m_dResult;
 	tRes.Reset();
 
@@ -10979,6 +10979,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt )
 
 void HandleMysqlCallSnippets ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 {
+	StatCountCommand ( SEARCHD_COMMAND_EXCERPT );
 	CSphString sError;
 
 	// check arguments
@@ -11221,6 +11222,7 @@ bool DoGetKeywords ( const CSphString & sIndex, const CSphString & sQuery, const
 
 void HandleMysqlCallKeywords ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphString & sWarning )
 {
+	StatCountCommand ( SEARCHD_COMMAND_KEYWORDS );
 	CSphString sError;
 
 	// string query, string index, [bool hits] || [value as option_name, ...]
@@ -11467,6 +11469,7 @@ struct CmpDistDocABC_fn
 
 void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQueryMode )
 {
+	StatCountCommand ( SEARCHD_COMMAND_SUGGEST );
 	CSphString sError;
 
 	// string query, string index, [value as option_name, ...]
@@ -16044,24 +16047,15 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		// the one that lists expansions for doc/check.pl
 		pStmt->m_sCallProc.ToUpper();
 		if ( pStmt->m_sCallProc=="SNIPPETS" )
-		{
-			StatCountCommand ( SEARCHD_COMMAND_EXCERPT );
 			HandleMysqlCallSnippets ( tOut, *pStmt );
-		} else if ( pStmt->m_sCallProc=="KEYWORDS" )
-		{
-			StatCountCommand ( SEARCHD_COMMAND_KEYWORDS );
+		else if ( pStmt->m_sCallProc=="KEYWORDS" )
 			HandleMysqlCallKeywords ( tOut, *pStmt, m_tLastMeta.m_sWarning );
-		} else if ( pStmt->m_sCallProc=="SUGGEST" )
-		{
-			StatCountCommand ( SEARCHD_COMMAND_SUGGEST );
+		else if ( pStmt->m_sCallProc=="SUGGEST" )
 			HandleMysqlCallSuggest ( tOut, *pStmt, false );
-		} else if ( pStmt->m_sCallProc=="QSUGGEST" )
-		{
-			StatCountCommand ( SEARCHD_COMMAND_SUGGEST );
+		else if ( pStmt->m_sCallProc=="QSUGGEST" )
 			HandleMysqlCallSuggest ( tOut, *pStmt, true );
-		} else if ( pStmt->m_sCallProc=="PQ" )
+		else if ( pStmt->m_sCallProc=="PQ" )
 		{
-			StatCountCommand ( SEARCHD_COMMAND_CALLPQ );
 			HandleMysqlCallPQ ( tOut, *pStmt, m_tAcc, m_tPercolateMeta );
 			m_tPercolateMeta.m_dResult.m_sMessages.MoveWarningsTo ( m_tLastMeta.m_sWarning );
 			m_tPercolateMeta.m_dDocids.Reset ( 0 ); // free occupied mem
@@ -16100,8 +16094,6 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	case STMT_UPDATE:
 		{
-			FreezeLastMeta();
-			StatCountCommand ( SEARCHD_COMMAND_UPDATE );
 			StmtErrorReporter_c tErrorReporter ( tOut, pStmt->m_sStmt );
 			sphHandleMysqlUpdate ( tErrorReporter, *pStmt, sQuery );
 			return true;

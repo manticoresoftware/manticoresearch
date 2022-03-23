@@ -31,7 +31,7 @@ The following are the changes we are either working on now or are going to work 
 * Increased `AVG()` accuracy
 * Improved support for JDBC MySQL driver
 * `DEBUG malloc_stats` support for [jemalloc](https://github.com/jemalloc/jemalloc)
-* [optimize_cutoff](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#optimize_cutoff) is now available as a per-table setting which can be set when you CREATE or ALTER a table
+* [optimize_cutoff](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#optimize_cutoff) is now available as a per-table setting which can be set when you CREATE or ALTER a table
 
 ### Breaking changes
 * **Changed behaviour of REST `/sql`** endpoint: `/sql?mode=raw` now requires escaping

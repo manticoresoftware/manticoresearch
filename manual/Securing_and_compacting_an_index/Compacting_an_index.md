@@ -31,7 +31,7 @@ OPTIMIZE merges the RT index's disk chunks down to the number which equals to `#
 
 There's also:
 * server setting [optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff) for overriding the above threshold
-* per-table setting [optimize_cutoff](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings#optimize_cutoff)
+* per-table setting [optimize_cutoff](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#optimize_cutoff)
 
 <!-- intro -->
 ##### SQL:

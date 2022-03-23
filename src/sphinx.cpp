@@ -8430,6 +8430,8 @@ bool CSphIndex_VLN::LoadHeaderLegacy ( const char * sHeaderName, bool bStripPath
 	const int MAX_HEADER_SIZE = 32768;
 	CSphFixedVector<BYTE> dCacheInfo ( MAX_HEADER_SIZE );
 
+	m_sLastError = "";
+
 	CSphAutoreader rdInfo ( dCacheInfo.Begin(), MAX_HEADER_SIZE ); // to avoid mallocs
 	if ( !rdInfo.Open ( sHeaderName, m_sLastError ) )
 		return false;

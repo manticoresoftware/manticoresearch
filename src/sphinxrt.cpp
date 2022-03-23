@@ -4551,6 +4551,8 @@ bool RtIndex_c::LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuilder, bool bStr
 	CSphString sMeta;
 	sMeta.SetSprintf ( "%s.meta", m_sPath.cstr() );
 
+	m_sLastError = "";
+
 	// opened and locked, lets read
 	CSphAutoreader rdMeta;
 	if ( !rdMeta.Open ( sMeta, m_sLastError ) )

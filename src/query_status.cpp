@@ -38,6 +38,7 @@ public:
 	}
 	void SetWTimeoutUS ( int64_t iTimeoutUS ) final {}
 	int64_t GetWTimeoutUS () const final { return 0ll; }
+	int64_t GetTotalSent() const final { return 0ll; }
 
 private:
 	int			m_iSock;			///< my socket

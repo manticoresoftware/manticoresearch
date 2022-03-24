@@ -60,3 +60,13 @@ int64_t MysqlCompressedSocket_c::GetTimeoutUS() const
 {
 	return m_tIn.GetTimeoutUS();
 }
+
+int64_t MysqlCompressedSocket_c::GetTotalReceived() const
+{
+	return m_tIn.GetTotalReceived();
+}
+
+int64_t MysqlCompressedSocket_c::GetTotalSent() const
+{
+	return m_tOut.GetTotalSent();
+}

@@ -455,18 +455,20 @@ class AsyncSSBufferedSocket_c final : public AsyncNetBuffer_c
 {
 	BIOPtr_c m_pSslBackend;
 
+	int64_t	m_iSendTotal = 0;
+	int64_t m_iReceivedTotal = 0;
+
 	bool SendBuffer ( const VecTraits_T<BYTE> & dData ) final
 	{
 		assert ( m_pSslBackend );
 		CSphScopedProfile tProf ( m_pProfile, SPH_QSTATE_NET_WRITE );
-		sphLogDebugv ( FRONT "~~ BioFrontWrite (%p) %d bytes" NORM,
-				(BIO*)m_pSslBackend, dData.GetLength () );
+		sphLogDebugv ( FRONT "~~ BioFrontWrite (%p) %d bytes" NORM, (BIO*)m_pSslBackend, dData.GetLength () );
 		int iSent = 0;
 		if ( !dData.IsEmpty ())
 			iSent = BIO_write ( m_pSslBackend, dData.begin (), dData.GetLength () );
 		auto iRes = BIO_flush ( m_pSslBackend );
-		sphLogDebugv ( FRONT ">> BioFrontWrite (%p) done (%d) %d bytes of %d" NORM,
-				(BIO*)m_pSslBackend, iRes, iSent, dData.GetLength () );
+		sphLogDebugv ( FRONT ">> BioFrontWrite (%p) done (%d) %d bytes of %d" NORM, (BIO*)m_pSslBackend, iRes, iSent, dData.GetLength () );
+		m_iSendTotal += dData.GetLength();
 		return ( iRes>0 );
 	}
 
@@ -503,6 +505,7 @@ class AsyncSSBufferedSocket_c final : public AsyncNetBuffer_c
 				break;
 			}
 		}
+		m_iReceivedTotal += iGotTotal;
 		return iGotTotal;
 	}
 
@@ -529,6 +532,16 @@ public:
 	int64_t GetTimeoutUS () const final
 	{
 		return BIO_ctrl ( m_pSslBackend, BIO_CTRL_DGRAM_GET_RECV_TIMEOUT, 0, nullptr );
+	}
+
+	int64_t GetTotalSent () const final
+	{
+		return m_iSendTotal;
+	}
+
+	int64_t GetTotalReceived() const final
+	{
+		return m_iReceivedTotal;
 	}
 };
 

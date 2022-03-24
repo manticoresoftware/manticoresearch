@@ -181,6 +181,9 @@ public:
 
 	/// get timeout from backend, in microseconds
 	virtual int64_t GetTimeoutUS () const = 0;
+
+	/// get total N of bytes received via this buffer
+	virtual int64_t GetTotalReceived() const = 0;
 };
 
 

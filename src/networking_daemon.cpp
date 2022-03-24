@@ -1106,7 +1106,8 @@ public:
 	int64_t GetWTimeoutUS () const final { return m_pSocket->GetWTimeoutUS (); }
 	void SetTimeoutUS ( int64_t iTimeoutUS ) final { m_pSocket->SetTimeoutUS ( iTimeoutUS ); }
 	int64_t GetTimeoutUS () const final { return m_pSocket->GetTimeoutUS (); }
-
+	int64_t GetTotalSent() const final { return m_pSocket->GetTotalSent(); }
+	int64_t GetTotalReceived() const final { return m_pSocket->GetTotalReceived(); }
 };
 
 // main fabric

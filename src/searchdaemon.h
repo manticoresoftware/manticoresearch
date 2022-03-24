@@ -475,6 +475,7 @@ public:
 
 	virtual void SetWTimeoutUS ( int64_t iTimeoutUS ) = 0;
 	virtual int64_t GetWTimeoutUS () const = 0;
+	virtual int64_t GetTotalSent() const = 0;
 
 protected:
 	QueryProfile_c *	m_pProfile = nullptr;

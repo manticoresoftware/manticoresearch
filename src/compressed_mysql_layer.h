@@ -33,6 +33,8 @@ public:
 	int64_t GetWTimeoutUS() const final;
 	void SetTimeoutUS ( int64_t iTimeoutUS ) final;
 	int64_t GetTimeoutUS() const final;
+	int64_t GetTotalReceived() const final;
+	int64_t GetTotalSent() const final;
 };
 
 

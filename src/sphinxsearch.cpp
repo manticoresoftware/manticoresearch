@@ -2615,8 +2615,8 @@ struct Expr_BM25F_T : public Expr_NoLocator_c
 	RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES> * m_pState;
 	float					m_fK1;
 	float					m_fB;
-	float					m_fWeightedAvgDocLen;
 	CSphVector<int>			m_dWeights;		///< per field weights
+	CSphVector<float>		m_fAvgDocFieldLens;		///< per field avg lengths
 
 	explicit Expr_BM25F_T ( RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES> * pState, float k1, float b, ISphExpr * pFieldWeights )
 	{
@@ -2645,30 +2645,31 @@ struct Expr_BM25F_T : public Expr_NoLocator_c
 			}
 		}
 
-		// compute weighted avgdl
-		m_fWeightedAvgDocLen = 0;
+		// compute avg length per field
+		m_fAvgDocFieldLens.Resize ( pState->m_iFields );
+		m_fAvgDocFieldLens.Fill ( 0.0f );
 		if ( m_pState->m_pFieldLens )
-			ARRAY_FOREACH ( i, m_dWeights )
-				m_fWeightedAvgDocLen += m_pState->m_pFieldLens[i] * m_dWeights[i];
-		else
-			m_fWeightedAvgDocLen = 1.0f;
-		m_fWeightedAvgDocLen /= m_pState->m_iTotalDocuments;
+			for ( int i=0; i<m_pState->m_iFields; i++ )
+				m_fAvgDocFieldLens[i] = m_pState->m_pFieldLens[i] / m_pState->m_iTotalDocuments; // FIXME? Total of documents with non empty field value is actually needed here
 	}
 
 	float Eval ( const CSphMatch & tMatch ) const final
 	{
-		// compute document length
+		// compute document field lengths
 		// OPTIMIZE? could precompute and store total dl in attrs, but at a storage cost
 		// OPTIMIZE? could at least share between multiple BM25F instances, if there are many
-		float dl = 0;
 		CSphAttrLocator tLoc = m_pState->m_tFieldLensLoc;
+		CSphVector<int> fieldLens;
+
+		fieldLens.Resize ( m_pState->m_iFields );
+		fieldLens.Fill ( 0 );
 		if ( tLoc.m_iBitOffset>=0 )
 			for ( int i=0; i<m_pState->m_iFields; i++ )
 		{
-			dl += tMatch.GetAttr ( tLoc ) * m_dWeights[i];
-			tLoc.m_iBitOffset += 32;
+			fieldLens[i] = tMatch.GetAttr ( tLoc );
+			tLoc.m_iBitOffset += 32; 
 		}
-
+		
 		// compute (the current instance of) BM25F
 		float fRes = 0.0f;
 		for ( int iWord=1; iWord<=m_pState->m_iMaxQpos; iWord++ )
@@ -2677,11 +2678,13 @@ struct Expr_BM25F_T : public Expr_NoLocator_c
 				continue;
 
 			// compute weighted TF
-			float tf = 0.0f;
-			for ( int i=0; i<m_pState->m_iFields; i++ )
-				tf += m_pState->m_dFieldTF [ iWord + i*(1+m_pState->m_iMaxQpos) ] * m_dWeights[i];
 			float idf = m_pState->m_dIDF[iWord]; // FIXME? zeroed out for dupes!
-			fRes += tf / (tf + m_fK1*(1.0f - m_fB + m_fB*dl/m_fWeightedAvgDocLen)) * idf;
+			for ( int i=0; i<m_pState->m_iFields; i++ )	
+			{
+				int fieldTF =  m_pState->m_dFieldTF [ iWord + i*(1+m_pState->m_iMaxQpos) ];
+				if ( m_fAvgDocFieldLens[i] > 0.0f && fieldTF > 0 )
+					fRes += m_dWeights[i] * idf * fieldTF * (m_fK1 + 1.0f) / (fieldTF + m_fK1 * (1.0f - m_fB + m_fB * fieldLens[i] / m_fAvgDocFieldLens[i]) );
+			}
 		}
 		return fRes + 0.5f; // map to [0..1] range
 	}
@@ -2703,8 +2706,8 @@ private:
 		: m_pState ( rhs.m_pState )
 		, m_fK1 ( rhs.m_fK1 )
 		, m_fB ( rhs.m_fB )
-		, m_fWeightedAvgDocLen ( rhs.m_fWeightedAvgDocLen )
 		, m_dWeights ( rhs.m_dWeights )
+		, m_fAvgDocFieldLens ( rhs.m_fAvgDocFieldLens )
 	{}
 };
 

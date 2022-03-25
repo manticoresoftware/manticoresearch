@@ -1459,6 +1459,11 @@ void ISphOutputBuffer::SendBytes ( const CSphString& sStr )
 	SendBytes ( sStr.cstr(), sStr.Length() );
 }
 
+void ISphOutputBuffer::SendBytes ( const Str_t& sStr )
+{
+	m_dBuf.Append ( sStr );
+}
+
 void ISphOutputBuffer::SendBytes ( const VecTraits_T<BYTE> & dBuf )
 {
 	m_dBuf.Append ( dBuf );
@@ -9763,7 +9768,7 @@ static void SendMysqlPercolateReply ( RowBuffer_i & tOut, const CPqResult & tRes
 				}
 			}
 
-			tOut.PutString ( sDocs.cstr () );
+			tOut.PutString ( sDocs );
 			sDocs.Clear ();
 		}
 		if ( bQuery )
@@ -11593,7 +11598,7 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 			for ( auto &dMatched : tRes.m_dMatched )
 				sBuf.Appendf ( "%d", dMatched.m_iDocs );
 			tOut.PutString ( "docs" );
-			tOut.PutString ( sBuf.cstr () );
+			tOut.PutString ( sBuf );
 			tOut.Commit ();
 		}
 	} else
@@ -12193,7 +12198,7 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 			continue;
 		tOut.PutNumAsString ( dThd.m_iThreadID );
 		tOut.PutString ( dThd.m_sThreadName );
-		tOut.PutString ( dThd.m_sProto.cstr() );
+		tOut.PutString ( dThd.m_sProto );
 		tOut.PutString ( TaskStateName ( dThd.m_eTaskState ) );
 		tOut.PutString ( dThd.m_sClientName ); // Host
 		tOut.PutNumAsString ( dThd.m_iConnID ); // ConnID
@@ -12218,7 +12223,7 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 		}
 
 		if ( bAll )
-			tOut.PutString ( dThd.m_sChain.cstr () ); // Chain
+			tOut.PutString ( dThd.m_sChain ); // Chain
 		auto tInfo = FormatInfo ( dThd, eFmt, tBuf );
 		tOut.PutString ( tInfo.first, Min ( tInfo.second, iCols ) ); // Info m_pTaskInfo
 		if ( !tOut.Commit () )
@@ -14105,7 +14110,7 @@ void HandleSelectFiles ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	if ( sFormat!="external" )
 		ARRAY_CONSTFOREACH( i, dFiles )
 		{
-			tOut.PutString ( dFiles[i].cstr () );
+			tOut.PutString ( dFiles[i] );
 			tOut.PutNumAsString ( sphGetFileSize ( dFiles[i], nullptr ) );
 			if ( !tOut.Commit () )
 				return;
@@ -14116,7 +14121,7 @@ void HandleSelectFiles ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 		dExt.Uniq ();
 		ARRAY_CONSTFOREACH( i, dExt )
 		{
-			tOut.PutString ( dExt[i].cstr () );
+			tOut.PutString ( dExt[i] );
 			tOut.PutNumAsString ( sphGetFileSize ( dExt[i], nullptr ) );
 			if ( !tOut.Commit () )
 				return;
@@ -15634,7 +15639,7 @@ static void HandleMysqlShowPlan ( RowBuffer_i & tOut, const QueryProfile_c & p, 
 	tOut.PutString ( "transformed_tree" );
 	StringBuilder_c sPlan;
 	sph::RenderBsonPlan ( sPlan, bson::MakeHandle ( p.m_dPlan ), bDot );
-	tOut.PutString ( sPlan.cstr (), sPlan.GetLength() );
+	tOut.PutString ( sPlan );
 	tOut.Commit();
 
 	tOut.Eof ( bMoreResultsFollow );
@@ -15766,7 +15771,7 @@ void HandleMysqlExplain ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, bool bDot
 	tOut.HeadEnd ();
 
 	tOut.PutString ( "transformed_tree" );
-	tOut.PutString ( sRes.cstr(), sRes.GetLength() );
+	tOut.PutString ( sRes );
 	tOut.Commit();
 	tOut.Eof ();
 }
@@ -16415,11 +16420,8 @@ void HandleCommandJson ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tRe
 	CSphString sEndpoint = tReq.GetString ();
 	CSphString sCommand = tReq.GetString ();
 	
-	ESphHttpEndpoint eEndpoint = sphStrToHttpEndpoint ( sEndpoint );
-
 	CSphVector<BYTE> dResult;
-	SmallStringHash_T<CSphString> tOptions;
-	sphProcessHttpQueryNoResponce ( eEndpoint, sCommand.cstr(), tOptions, dResult );
+	sphProcessHttpQueryNoResponce ( sEndpoint, sCommand, dResult );
 
 	auto tReply = APIAnswer ( tOut, VER_COMMAND_JSON );
 	tOut.SendString ( sEndpoint.cstr() );

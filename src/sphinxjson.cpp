@@ -1489,6 +1489,11 @@ JsonObj_c::JsonObj_c ( const char * szJson )
 	m_pRoot = cJSON_Parse ( szJson );
 }
 
+JsonObj_c::JsonObj_c ( Str_t sJson )
+{
+	m_pRoot = cJSON_Parse ( sJson.first );
+}
+
 
 JsonObj_c::JsonObj_c ( JsonObj_c && rhs ) noexcept
 	: m_pRoot ( nullptr )

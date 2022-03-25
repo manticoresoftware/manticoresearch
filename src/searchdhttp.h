@@ -32,8 +32,7 @@ public:
 	bool KeepAlive() const;
 
 private:
-	bool ParseList ( Str_t sData );
-	bool IsNdjsonBody() const;
+	void ParseList ( Str_t sData );
 
 	// callbacks
 	int ParserUrl ( Str_t sData );
@@ -58,12 +57,9 @@ private:
 	static int cbMessageStatus ( http_parser* pParser, const char* sAt, size_t iLen );
 
 private:
-	bool m_bKeepAlive { false };
-	const char* m_szError { nullptr };
-	ESphHttpEndpoint m_eEndpoint { SPH_HTTP_ENDPOINT_TOTAL };
+	bool m_bKeepAlive = false;
+	const char* m_szError = nullptr;
 	CSphString m_sEndpoint;
-	CSphString m_sInvalidEndpoint;
-	Str_t m_sRawUrlQuery { dEmptyStr };
 	StringBuilder_c m_sUrl;
 	StringBuilder_c m_sCurField;
 	StringBuilder_c m_sCurValue;

@@ -734,16 +734,16 @@ static bool ParseLimits ( const JsonObj_c & tRoot, CSphQuery & tQuery, CSphStrin
 }
 
 
-bool sphParseJsonQuery ( const char * szQuery, JsonQuery_c & tQuery, bool & bProfile, CSphString & sError, CSphString & sWarning )
+bool sphParseJsonQuery ( Str_t sQuery, JsonQuery_c & tQuery, bool & bProfile, CSphString & sError, CSphString & sWarning )
 {
-	JsonObj_c tRoot ( szQuery );
+	JsonObj_c tRoot ( sQuery );
 	if ( !tRoot )
 	{
 		sError.SetSprintf ( "unable to parse: %s", tRoot.GetErrorPtr() );
 		return false;
 	}
 
-	tQuery.m_sRawQuery = szQuery; // fixme! query might be huge. Find a way to use zero-copy
+	tQuery.m_sRawQuery = sQuery; // fixme! query might be huge. Find a way to use zero-copy
 
 	JsonObj_c tIndex = tRoot.GetStrItem ( "index", sError );
 	if ( !tIndex )
@@ -897,9 +897,9 @@ static bool ParseJsonInsert ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_
 }
 
 
-bool sphParseJsonInsert ( const char * szInsert, SqlStmt_t & tStmt, DocID_t & tDocId, bool bReplace, CSphString & sError )
+bool sphParseJsonInsert ( Str_t sInsert, SqlStmt_t & tStmt, DocID_t & tDocId, bool bReplace, CSphString & sError )
 {
-	JsonObj_c tRoot ( szInsert );
+	JsonObj_c tRoot ( sInsert );
 	return ParseJsonInsert ( tRoot, tStmt, tDocId, bReplace, sError );
 }
 
@@ -1045,9 +1045,9 @@ static bool ParseJsonUpdate ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_
 }
 
 
-bool sphParseJsonUpdate ( const char * szUpdate, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError )
+bool sphParseJsonUpdate ( Str_t sUpdate, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError )
 {
-	JsonObj_c tRoot ( szUpdate );
+	JsonObj_c tRoot ( sUpdate );
 	return ParseJsonUpdate ( tRoot, tStmt, tDocId, sError );
 }
 
@@ -1059,9 +1059,9 @@ static bool ParseJsonDelete ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_
 }
 
 
-bool sphParseJsonDelete ( const char * szDelete, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError )
+bool sphParseJsonDelete ( Str_t sDelete, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError )
 {
-	JsonObj_c tRoot ( szDelete );
+	JsonObj_c tRoot ( sDelete );
 	return ParseJsonDelete ( tRoot, tStmt, tDocId, sError );
 }
 

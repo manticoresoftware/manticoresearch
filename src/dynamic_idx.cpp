@@ -265,17 +265,13 @@ public:
 	void PutArray ( const void * pBlob, int iLen, bool bSendEmpty ) override {}
 
 	// pack zero-terminated string (or "" if it is zero itself)
-	void PutString ( const char * sMsg, int iMaxLen ) override
+	void PutString ( const char * sMsg, int iLen ) override
 	{
 		if ( !m_pMatch )
 			return;
-		int iLen = ( sMsg && *sMsg ) ? (int) strlen ( sMsg ) : 0;
 
 		if ( !sMsg )
 			sMsg = "";
-
-		if ( iMaxLen>=0 )
-			iLen = Min ( iLen, iMaxLen );
 
 		auto & tCol = GetNextCol ();
 		auto & tMatch = *m_pMatch;
@@ -473,7 +469,7 @@ public:
 	void PutNumAsString ( int iVal ) override {}
 	void PutNumAsString ( DWORD uVal ) override {}
 	void PutArray ( const void * pBlob, int iLen, bool bSendEmpty ) override {}
-	void PutString ( const char * sMsg, int iMaxLen ) override {}
+	void PutString ( const char * sMsg, int iLen ) override {}
 	void PutMicrosec ( int64_t iUsec ) override {}
 	void PutNULL () override {}
 	bool Commit() override { return false;}

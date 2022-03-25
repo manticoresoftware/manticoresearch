@@ -367,6 +367,7 @@ public:
 	explicit		JsonObj_c ( bool bArray = false );
 	explicit		JsonObj_c ( cJSON * pRoot, bool bOwner = true );
 	explicit		JsonObj_c ( const char * szJson );
+	explicit		JsonObj_c ( Str_t sJson );
 					JsonObj_c ( JsonObj_c && rhs ) noexcept;
 					~JsonObj_c();
 

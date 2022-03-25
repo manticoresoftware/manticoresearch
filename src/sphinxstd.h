@@ -2650,6 +2650,10 @@ inline bool StrEqN ( const char * l, const char * r )
 	return strcasecmp ( l, r )==0;
 }
 
+/// lenghted blob of chars (for zero-copy string processing)
+using Str_t = std::pair<const char*, int>;
+const Str_t dEmptyStr { "", 0 };
+
 /// immutable C string proxy
 struct CSphString
 {
@@ -2767,6 +2771,11 @@ public:
 		SetBinary ( sValue, iLen );
 	}
 
+	CSphString ( Str_t sValue )
+	{
+		SetBinary ( sValue );
+	}
+
 	// pass by value - replaces both copy and move assignments.
 	CSphString & operator = ( CSphString rhs )
 	{
@@ -2821,6 +2830,8 @@ public:
 			m_sValue = EMPTY;
 		}
 	}
+
+	void SetBinary ( Str_t sValue ) { SetBinary ( sValue.first, sValue.second ); }
 
 	void Reserve ( int iLen )
 	{
@@ -3022,6 +3033,12 @@ inline CSphString SphSprintf ( const char* sTemplate, ... )
 	return sResult;
 }
 
+// Str_t stuff
+inline bool IsEmpty ( const Str_t & dBlob ) { return dBlob.second==0; }
+inline bool IsFilled ( const Str_t & dBlob ) { return dBlob.first && dBlob.second>0; }
+inline Str_t FromSz ( const char * szString ) { return { szString, szString ? (int) strlen ( szString ) : 0 }; }
+inline Str_t FromStr ( const CSphString& sString ) { return { sString.cstr(), (int) sString.Length() }; }
+
 // commonly used vectors
 using StrVec_t = CSphVector<CSphString>;
 using IntVec_t = CSphVector<int>;
@@ -3125,12 +3142,6 @@ public:
 /// NOTE that using >1 call in one chain like out << comma << "foo" << comma << "bar" is NOT defined,
 /// since order of calling 2 commas here is undefined (so, you may take "foo, bar", but may ", foobar" also).
 /// Use out << comma << "foo"; out << comma << "bar"; in the case
-using Str_t = std::pair<const char*, int>;
-const Str_t dEmptyStr { "", 0 };
-inline bool IsEmpty ( const Str_t & dBlob ) { return dBlob.second==0; }
-inline bool IsFilled ( const Str_t & dBlob ) { return dBlob.first && dBlob.second>0; }
-inline Str_t FromSz ( const char * szString ) { return { szString, szString ? (int) strlen ( szString ) : 0 }; }
-inline Str_t FromStr ( const CSphString& sString ) { return { sString.cstr(), (int) sString.Length() }; }
 
 class Comma_c
 {

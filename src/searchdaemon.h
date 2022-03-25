@@ -358,6 +358,7 @@ public:
 	void		SendBytes ( const void * pBuf, int iLen );	///< (was) protected to avoid network-vs-host order bugs
 	void		SendBytes ( const char * pBuf );    // used strlen() to get length
 	void		SendBytes ( const CSphString& sStr );    // used strlen() to get length
+	void		SendBytes ( const Str_t& sStr );
 	void		SendBytes ( const VecTraits_T<BYTE>& dBuf );
 	void		SendBytes ( const StringBuilder_c& dBuf );
 	void		SendBytes ( ByteBlob_t dData );
@@ -1347,24 +1348,6 @@ enum ESphHttpStatus
 	SPH_HTTP_STATUS_TOTAL
 };
 
-enum ESphHttpEndpoint
-{
-	SPH_HTTP_ENDPOINT_INDEX,
-	SPH_HTTP_ENDPOINT_SQL,
-	SPH_HTTP_ENDPOINT_JSON_SEARCH,
-	SPH_HTTP_ENDPOINT_JSON_INDEX,
-	SPH_HTTP_ENDPOINT_JSON_CREATE,
-	SPH_HTTP_ENDPOINT_JSON_INSERT,
-	SPH_HTTP_ENDPOINT_JSON_REPLACE,
-	SPH_HTTP_ENDPOINT_JSON_UPDATE,
-	SPH_HTTP_ENDPOINT_JSON_DELETE,
-	SPH_HTTP_ENDPOINT_JSON_BULK,
-	SPH_HTTP_ENDPOINT_PQ,
-	SPH_HTTP_ENDPOINT_CLI,
-
-	SPH_HTTP_ENDPOINT_TOTAL
-};
-
 bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, ISphOutputBuffer & tOut );
 bool IsMaxedOut ();
 bool IsReadOnly ();
@@ -1378,10 +1361,8 @@ bool sphCheckWeCanModify ();
 bool sphCheckWeCanModify ( StmtErrorReporter_i & tOut );
 bool sphCheckWeCanModify ( const char* szStmt, RowBuffer_i& tOut );
 
-bool				sphProcessHttpQueryNoResponce ( ESphHttpEndpoint eEndpoint, const char * sQuery, const SmallStringHash_T<CSphString> & tOptions, CSphVector<BYTE> & dResult );
+bool				sphProcessHttpQueryNoResponce ( const CSphString& sEndpoint, const CSphString& sQuery, CSphVector<BYTE> & dResult );
 void				sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError );
-ESphHttpEndpoint	sphStrToHttpEndpoint ( const CSphString & sEndpoint );
-CSphString			sphHttpEndpointToStr ( ESphHttpEndpoint eEndpoint );
 
 void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength, InputBuffer_c & tBuf, ISphOutputBuffer & tOut );
 void HandleCommandPing ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq );
@@ -1506,7 +1487,7 @@ public:
 			sTime.Sprintf ( "%0.2F%%", iVal*10000/iBase );
 		else
 			sTime << "100%";
-		PutString ( sTime.cstr () );
+		PutString ( sTime );
 	}
 
 	virtual void PutNumAsString ( int64_t iVal ) = 0;
@@ -1518,7 +1499,7 @@ public:
 	virtual void PutArray ( const void * pBlob, int iLen, bool bSendEmpty = false ) = 0;
 
 	// pack zero-terminated string (or "" if it is zero itself)
-	virtual void PutString ( const char * sMsg, int iMaxLen=-1 ) = 0;
+	virtual void PutString ( const char * sMsg, int iLen ) = 0;
 
 	virtual void PutMicrosec ( int64_t iUsec ) = 0;
 
@@ -1561,6 +1542,11 @@ public:
 		PutArray ( ( const char * )dData.begin(), dData.GetLength(), bSendEmpty );
 	}
 
+	void PutString ( const char* szMsg )
+	{
+		PutString ( szMsg, szMsg ? (int)strlen ( szMsg ) : 0 );
+	}
+
 	void PutString ( const CSphString & sMsg )
 	{
 		PutString ( sMsg.cstr() );
@@ -1568,7 +1554,7 @@ public:
 
 	void PutString ( const StringBuilder_c & sMsg )
 	{
-		PutString ( sMsg.cstr (), sMsg.GetLength() );
+		PutString ( sMsg.cstr(), sMsg.GetLength() );
 	}
 
 	void PutTimeAsString ( int64_t tmVal )
@@ -1580,14 +1566,14 @@ public:
 		}
 		StringBuilder_c sTime;
 		sTime.Sprintf ("%t", tmVal);
-		PutString ( sTime.cstr() );
+		PutString ( sTime );
 	}
 
 	void PutTimestampAsString ( int64_t tmTimestamp )
 	{
 		StringBuilder_c sTime;
 		sTime.Sprintf ( "%T", tmTimestamp );
-		PutString ( sTime.cstr ());
+		PutString ( sTime );
 	}
 
 	void ErrorEx ( const char * sStmt, const char * sTemplate, ... )
@@ -1638,7 +1624,7 @@ public:
 		va_start ( ap, sFmt );
 		sRight.vSprintf ( sFmt, ap );
 		va_end ( ap );
-		PutString ( sRight.cstr() );
+		PutString ( sRight );
 		return Commit();
 	}
 

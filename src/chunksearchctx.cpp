@@ -58,6 +58,8 @@ void DiskChunkSearcherCtx_t::MergeChild ( DiskChunkSearcherCtx_t tChild ) const
 	// profiling
 	if ( tChildRes.m_pProfile )
 		m_tMeta.m_pProfile->AddMetric ( *tChildRes.m_pProfile );
+
+	m_tMeta.m_bTotalMatchesApprox |= tChildRes.m_bTotalMatchesApprox;
 }
 
 

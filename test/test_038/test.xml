@@ -71,7 +71,7 @@ index rt
 {
 	type			= rt
 	path			= <data_path/>/rt
-	rt_field		= title	
+	rt_field		= body	
 	rt_attr_uint	= idd
 	dict				= keywords
 	morphology			= stem_ru
@@ -177,7 +177,7 @@ index test_metaphone
 CALL KEYWORDS ('то-тический', 'test');
 CALL KEYWORDS ('тоЫтический', 'test');
 <!-- regression stemmed word vs dict=keyword -->
-INSERT INTO rt (id, idd, title) VALUES ( 1, 1, 'testing that' ),( 2, 1, 'ордеру АВАВ/А85/007' );
+INSERT INTO rt (id, idd, body) VALUES ( 1, 1, 'testing that' ),( 2, 1, 'ордеру АВАВ/А85/007' );
 SELECT * FROM test_ru WHERE MATCH('ордеру АВАВ');
 show meta;
 SELECT * FROM rt WHERE MATCH('ордеру АВАВ');

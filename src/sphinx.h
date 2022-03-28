@@ -499,7 +499,7 @@ struct CSphQuery
 	CSphString		m_sGroupSortBy { "@groupby desc" };	///< sorting clause for groups in group-by mode
 	CSphString		m_sGroupDistinct;		///< count distinct values for this attribute
 
-	int				m_iCutoff = 0;			///< matches count threshold to stop searching at (default is 0; means to search until all matches are found)
+	int				m_iCutoff = -1;			///< matches count threshold to stop searching at (<=0 means to search until all matches are found)
 
 	int				m_iRetryCount = -1;		///< retry count, for distributed queries. (-1 means 'use default')
 	int				m_iRetryDelay = -1;		///< retry delay, for distributed queries. (-1 means 'use default')
@@ -594,6 +594,7 @@ public:
 
 	int						m_iMatches = 0;			///< total matches returned (upto MAX_MATCHES)
 	int64_t					m_iTotalMatches = 0;	///< total matches found (unlimited)
+	bool					m_bTotalMatchesApprox = false; ///< whether m_iTotalMatches shows exact or approximate numbers
 
 	CSphIOStats				m_tIOStats;				///< i/o stats for the query
 	int64_t					m_iAgentCpuTime = 0;	///< agent cpu time (for distributed searches)

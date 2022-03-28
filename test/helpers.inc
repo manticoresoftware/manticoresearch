@@ -2224,6 +2224,35 @@ class SphinxConfig
         return true;
     }
 
+	function FixupJsonTotal ( &$query_result, &$error )
+    {
+        if ( !array_key_exists ( 'http_endpoint', $query_result ) )
+            return true;
+
+		if ( strtolower ($query_result['http_endpoint'] )!='sql' )
+			return true;
+
+        if ( !array_key_exists ( 'rows', $query_result ) )
+            return true;
+
+        $decoded_rows = json_decode ( $query_result['rows'] );
+        if ( !$decoded_rows )
+        {
+            $error = "Unable to decode repsonse json'" . $query_result['rows'] . "': ".GetJsonError();
+            return false;
+        }
+
+        if ( !is_object($decoded_rows) || !isset ( $decoded_rows->hits ) )
+			return true;
+
+		// fixme! maybe add more intelligent checks instead of just ignoring the 'total'?
+        if ( isset ( $decoded_rows->hits->total_relation ) && $decoded_rows->hits->total_relation=='gte' )
+			$decoded_rows->hits->total = count ( $decoded_rows->hits->hits );
+
+        $query_result['rows'] = json_encode ( $decoded_rows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+        return true;
+    }
+
 	function RunQueryHttp ( $query, &$error, &$examples )
 	{
 		$attrs = $query['attrs'];
@@ -2255,6 +2284,9 @@ class SphinxConfig
 			$query_result['agent'] = $use_agent;
 
 		if ( !$this->FixupJsonTimeAndFloats( $query_result, $error ) )
+		    return false;
+
+		if ( !$this->FixupJsonTotal ( $query_result, $error ) )
 		    return false;
 
 		$this->PickResult ( $query_result );

@@ -2040,6 +2040,7 @@ bool SearchReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 		// read totals (retrieved count, total count, query time, word count)
 		int iRetrieved = tReq.GetInt ();
 		tRes.m_iTotalMatches = tReq.GetInt ();
+		tRes.m_bTotalMatchesApprox = !!tReq.GetInt();
 		tRes.m_iQueryTime = tReq.GetInt ();
 
 		// agents always send IO/CPU stats to master
@@ -2209,7 +2210,7 @@ static void CheckQuery ( const CSphQuery & tQuery, CSphString & sError )
 	if ( tQuery.m_iLimit<0 )
 		LOC_ERROR ( "limit out of bounds (limit=%d)", tQuery.m_iLimit );
 
-	if ( tQuery.m_iCutoff<0 )
+	if ( tQuery.m_iCutoff<-1 )
 		LOC_ERROR ( "cutoff out of bounds (cutoff=%d)", tQuery.m_iCutoff );
 
 	if ( ( tQuery.m_iRetryCount!=-1 ) && ( tQuery.m_iRetryCount>MAX_RETRY_COUNT ) )
@@ -3563,6 +3564,9 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const AggrResult_t& tRes, b
 		tOut.SendInt ( dResult.m_dMatches.GetLength() );
 
 	tOut.SendAsDword ( tRes.m_iTotalMatches );
+	if ( bAgentMode && uMasterVer>=19 )
+		tOut.SendInt ( tRes.m_bTotalMatchesApprox ? 1 : 0 );
+
 	tOut.SendInt ( Max ( tRes.m_iQueryTime, 0 ) );
 
 	if ( iVer>=0x11A && bAgentMode )
@@ -4887,6 +4891,7 @@ bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHave
 
 	// do the sort work!
 	tRes.m_iTotalMatches -= KillDupesAndFlatten ( pSorter.Ptr(), tRes );
+
 	return true;
 }
 
@@ -5618,6 +5623,7 @@ struct LocalSearchRef_t
 
 			tResult.m_iCpuTime += tChild.m_iCpuTime;
 			tResult.m_iTotalMatches += tChild.m_iTotalMatches;
+			tResult.m_bTotalMatchesApprox |= tChild.m_bTotalMatchesApprox;
 			tResult.m_iSuccesses += tChild.m_iSuccesses;
 			tResult.m_tIOStats.Add ( tChild.m_tIOStats );
 
@@ -7039,6 +7045,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 					// merge this agent's stats
 					tRes.m_iTotalMatches += tRemoteResult.m_iTotalMatches;
+					tRes.m_bTotalMatchesApprox |= tRemoteResult.m_bTotalMatchesApprox;
 					tRes.m_iQueryTime += tRemoteResult.m_iQueryTime;
 					tRes.m_iAgentCpuTime += tRemoteResult.m_iCpuTime;
 					tRes.m_tAgentIOStats.Add ( tRemoteResult.m_tIOStats );
@@ -9002,6 +9009,7 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 
 	dStatus.MatchTupletf ( "total", "%d", tMeta.m_iMatches );
 	dStatus.MatchTupletf ( "total_found", "%l", tMeta.m_iTotalMatches );
+	dStatus.MatchTupletf ( "total_relation", "%s", tMeta.m_bTotalMatchesApprox ? "gte" : "eq" );
 	dStatus.MatchTupletf ( "time", "%.3F", tMeta.m_iQueryTime );
 
 	if ( tMeta.m_iMultiplier>1 )
@@ -14476,7 +14484,7 @@ void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 
 	OptimizeTask_t tTask;
 	tTask.m_eVerb = OptimizeTask_t::eManualOptimize;
-	tTask.m_iCutoff = tStmt.m_tQuery.m_iCutoff;
+	tTask.m_iCutoff = tStmt.m_tQuery.m_iCutoff<=0 ? 0 : tStmt.m_tQuery.m_iCutoff;
 
 	if ( tStmt.m_tQuery.m_bSync )
 	{

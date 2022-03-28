@@ -1146,10 +1146,7 @@ public:
 
 	bool				IsGroupby () const final { return false; }
 	int					GetLength () final { return 0; } // that ensures, flatten() will never called;
-	bool				Push ( const CSphMatch& tEntry ) final
-	{
-		return PushMatch ( tEntry );
-	}
+	bool				Push ( const CSphMatch& tEntry ) final { return PushMatch(tEntry); }
 	void				Push ( const VecTraits_T<const CSphMatch> & dMatches ) final
 	{
 		for ( const auto & i : dMatches )
@@ -1164,6 +1161,7 @@ public:
 	ISphMatchSorter *	Clone () const final { return nullptr; }
 	void				MoveTo ( ISphMatchSorter *, bool ) final {}
 	void				SetSchema ( ISphSchema * pSchema, bool bRemapCmp ) final;
+	bool				IsCutoffDisabled() const final { return true; }
 	void				SetMerge ( bool bMerge ) final {}
 
 private:
@@ -6543,8 +6541,7 @@ bool sphHasExpressions ( const CSphQuery & tQuery, const CSphSchema & tSchema )
 	return false;
 }
 
-static void CreateSorters ( const VecTraits_T<CSphQuery> & dQueries, const VecTraits_T<ISphMatchSorter*> & dSorters, const VecTraits_T<QueueCreator_c> & dCreators,	const VecTraits_T<CSphString> & dErrors,
-	SphQueueRes_t & tRes )
+static void CreateSorters ( const VecTraits_T<CSphQuery> & dQueries, const VecTraits_T<ISphMatchSorter*> & dSorters, const VecTraits_T<QueueCreator_c> & dCreators,	const VecTraits_T<CSphString> & dErrors, SphQueueRes_t & tRes )
 {
 	ARRAY_FOREACH ( i, dCreators )
 	{
@@ -6575,6 +6572,27 @@ static void CreateSorters ( const VecTraits_T<CSphQuery> & dQueries, const VecTr
 	}
 }
 
+
+std::pair<bool,int> ApplyImplicitCutoff ( const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter*> & dSorters )
+{
+	if ( tQuery.m_iCutoff>0 )
+		return { false, tQuery.m_iCutoff };
+
+	if ( !tQuery.m_iCutoff )
+		return { false, -1 };
+
+	bool bDisableCutoff = dSorters.any_of ( []( auto * pSorter ){ return pSorter->IsCutoffDisabled(); } );
+	if ( bDisableCutoff )
+		return { false, -1 };
+
+	// implicit cutoff when there's no sorting and no grouping 
+	if ( tQuery.m_sSortBy=="@weight desc" && tQuery.m_sGroupBy.IsEmpty() && !tQuery.m_bFacet && !tQuery.m_bFacetHead )
+		return { true, tQuery.m_iLimit+tQuery.m_iOffset };
+
+	return { false, -1 };
+}
+
+
 ISphMatchSorter * sphCreateQueue ( const SphQueueSettings_t & tQueue, const CSphQuery & tQuery, CSphString & sError, SphQueueRes_t & tRes, StrVec_t * pExtra )
 {
 	QueueCreator_c tCreator ( tQueue, tQuery, sError, pExtra );
@@ -6584,8 +6602,8 @@ ISphMatchSorter * sphCreateQueue ( const SphQueueSettings_t & tQueue, const CSph
 	return CreateQueue ( tCreator, tRes );
 }
 
-static void CreateMultiQueue ( RawVector_T<QueueCreator_c> & dCreators, const SphQueueSettings_t & tQueue, const VecTraits_T<CSphQuery> & dQueries, VecTraits_T<ISphMatchSorter*> & dSorters,
-	VecTraits_T<CSphString> & dErrors, SphQueueRes_t & tRes, StrVec_t * pExtra )
+
+static void CreateMultiQueue ( RawVector_T<QueueCreator_c> & dCreators, const SphQueueSettings_t & tQueue, const VecTraits_T<CSphQuery> & dQueries, VecTraits_T<ISphMatchSorter*> & dSorters, VecTraits_T<CSphString> & dErrors, SphQueueRes_t & tRes, StrVec_t * pExtra )
 {
 	assert ( dSorters.GetLength()>1 );
 	assert ( dSorters.GetLength()==dQueries.GetLength() );
@@ -6718,8 +6736,7 @@ static void CreateMultiQueue ( RawVector_T<QueueCreator_c> & dCreators, const Sp
 }
 
 
-void sphCreateMultiQueue ( const SphQueueSettings_t & tQueue, const VecTraits_T<CSphQuery> & dQueries, VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors,
-	SphQueueRes_t & tRes, StrVec_t * pExtra )
+void sphCreateMultiQueue ( const SphQueueSettings_t & tQueue, const VecTraits_T<CSphQuery> & dQueries, VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, SphQueueRes_t & tRes, StrVec_t * pExtra )
 {
 	RawVector_T<QueueCreator_c> dCreators;
 	CreateMultiQueue ( dCreators, tQueue, dQueries, dSorters, dErrors, tRes, pExtra );

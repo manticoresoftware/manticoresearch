@@ -119,6 +119,9 @@ public:
 	virtual RowTagged_t					GetJustPushed() const = 0;
 	virtual VecTraits_T<RowTagged_t>	GetJustPopped() const = 0;
 
+	/// whether we can do implicit cutoff or not (update/delete sorters should disable cutoff)
+	virtual bool		IsCutoffDisabled() const { return false; }
+
 	// tells the sorter whether we are working on a raw index and it can use columnar storage
 	// or it should use the values stored in the matches
 	// used by columnar aggregate functions
@@ -184,6 +187,8 @@ bool			IsSortStringInternal ( const CSphString & sColumnName );
 bool			IsSortJsonInternal ( const CSphString & sColumnName );
 CSphString		SortJsonInternalSet ( const CSphString & sColumnName );
 void			SetGroupingInUtcSort ( bool bGroupingInUtc );
+
+std::pair<bool,int> ApplyImplicitCutoff ( const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter*> & dSorters );
 
 /// creates proper queue for given query
 /// may return NULL on error; in this case, error message is placed in sError

@@ -1473,6 +1473,7 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 	auto sHitMeta = tOut.StartBlock ( ",", R"("hits":{)", "}" );
 
 	tOut.Sprintf ( R"("total":%d)", tRes.m_iTotalMatches );
+	tOut.Sprintf ( R"("total_relation":%s)", tRes.m_bTotalMatchesApprox ? R"("gte")" : R"("eq")" );
 
 	const ISphSchema & tSchema = tRes.m_tSchema;
 	CSphVector<BYTE> dTmp;

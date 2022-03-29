@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>auto flush of RT indexes</name>
+
+<skip_indexer/>
+<config>
+searchd
+{
+<searchd_settings/>
+	binlog_path = data
+    rt_flush_period = 10
+}
+
+index testrt1
+{
+	type 			= rt
+	path = <data_path/>/testrt1
+	rt_field 		= dummy
+	rt_attr_uint 	= idd
+}
+
+index testrt2
+{
+	type 			= rt
+	path = <data_path/>/testrt2
+	rt_field 		= dummy
+	rt_attr_uint 	= idd
+}
+
+</config>
+
+<queries>
+<sphinxql>INSERT INTO testrt1 (id,dummy) VALUES ( 1, 'main' )</sphinxql>
+
+<sphinxql>show index testrt2 status like '%tid%'</sphinxql>
+<sphinxql>INSERT INTO testrt2 (id,dummy) VALUES ( 1, 'main' )</sphinxql>
+<sphinxql d="mysql" sleep="12">SELECT 0 as id</sphinxql>
+<sphinxql>show index testrt2 status like '%tid%'</sphinxql>
+</queries>
+
+</test>

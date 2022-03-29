@@ -18,8 +18,8 @@
 
 	#include <shlwapi.h>
 
-	#pragma comment(linker, "/defaultlib:Shlwapi.lib")
-	#pragma message("Automatically linking with Shlwapi.lib")
+	#pragma comment(linker, "/defaultlib:ShLwApi.Lib")
+	#pragma message("Automatically linking with ShLwApi.Lib")
 #else
 	#include <glob.h>
 #endif

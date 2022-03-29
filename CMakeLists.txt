@@ -154,7 +154,7 @@ target_compile_options ( lextra INTERFACE $<${CLANG_CL}:-fno-strict-aliasing -Wn
 	-Wno-deprecated-declarations -Wno-implicit-const-int-float-conversion -Wno-missing-braces -Wno-unused-function> )
 
 # disable rtti
-target_compile_options ( lextra INTERFACE $<${ONLYGNUCLANGCXX}:-fno-rtti>$<${MSCXX}:/GR-> ) # no rtti
+#target_compile_options ( lextra INTERFACE $<${ONLYGNUCLANGCXX}:-fno-rtti>$<${MSCXX}:/GR-> ) # no rtti
 
 
 if (COVERAGE_TEST)

@@ -93,12 +93,18 @@ target_link_libraries ( lmanticore PUBLIC sourcedoc )
 
 if (WIN32)
 	target_sources (lmanticore PRIVATE libutils.cpp)
-	target_compile_options(lmanticore PRIVATE /bigobj)
+	if (NOT CMAKE_CROSSCOMPILING)
+		target_compile_options(lmanticore PRIVATE /bigobj)
+	endif()
 endif()
 
 # Boost is required dependency now
 set (Boost_USE_MULTITHREADED ON)
 set (Boost_USE_STATIC_LIBS ON)
+# todo: as alternative we can try to recompile boost with clang, but precompiled also quite ok
+if (CMAKE_CROSSCOMPILING AND CMAKE_SYSTEM_NAME STREQUAL Windows)
+	set (Boost_COMPILER vc142)
+endif()
 find_package (Boost 1.61.0 REQUIRED COMPONENTS context)
 target_link_libraries ( lextra INTERFACE Boost::boost Boost::context )
 

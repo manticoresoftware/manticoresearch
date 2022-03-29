@@ -47,6 +47,22 @@ index test_col
 	columnar_attrs 	= price, brand_id, title, brand_name, property
 }
 
+index test_col2
+{
+	source 			= test
+	path			= <data_path/>/test_col2
+
+	columnar_attrs 	= price, brand_id, title, brand_name, property
+}
+
+index test_dist
+{
+	type = distributed
+	local = test_col
+	local = test_col2
+}
+
+
 index pq1
 {
 	type			= percolate
@@ -147,6 +163,8 @@ select max(length(to_string(title))) from META:all;
 select length(title) from META:all;
 
 select id,price from META:all where price=101;
+
+select avg(price) from test_dist;
 </sphinxql></queries>
 
 </test>

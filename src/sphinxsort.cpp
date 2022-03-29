@@ -4125,11 +4125,12 @@ public:
 			dRhs.UpdateDistinct ( m_tData );
 	}
 
-	void SetMerge ( bool bMerge ) override {}
+	void SetMerge ( bool bMerge ) override { m_bMerge = bMerge; }
 
 protected:
 	CSphMatch		m_tData;
 	bool			m_bDataInitialized = false;
+	bool			m_bMerge = false;
 
 	CSphVector<SphUngroupedValue_t>	m_dUniq;
 
@@ -4140,7 +4141,7 @@ private:
 	inline void SetupBaseGrouperWrp ( ISphSchema * pSchema )	{ SetupBaseGrouper<DISTINCT> ( pSchema ); }
 	void	AddCount ( const CSphMatch & tEntry )				{ m_tData.AddCounterAttr ( m_tLocCount, tEntry ); }
 	void	UpdateAggregates ( const CSphMatch & tEntry, bool bGrouped = true, bool bMerge = false ) { AggrUpdate ( m_tData, tEntry, bGrouped, bMerge ); }
-	void	SetupAggregates ( const CSphMatch & tEntry )		{ AggrSetup ( m_tData, tEntry ); }
+	void	SetupAggregates ( const CSphMatch & tEntry )		{ AggrSetup ( m_tData, tEntry, m_bMerge ); }
 
 	// if new entry is more relevant, update from it
 	void CheckReplaceEntry ( const CSphMatch & tEntry )
@@ -4197,7 +4198,7 @@ private:
 
 			// update aggregates
 			if_const ( HAS_AGGREGATES )
-				UpdateAggregates ( tEntry, GROUPED );
+				UpdateAggregates ( tEntry, GROUPED, m_bMerge );
 
 			CheckReplaceEntry ( tEntry );
 		}

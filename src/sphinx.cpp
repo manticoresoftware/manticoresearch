@@ -8013,7 +8013,7 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 
 	bool bCutoffHit =  false;
 	if ( pIterator )
-		RunFullscanOnIterator ( pIterator.Ptr(), tCtx, tMeta, dSorters, tMatch, iCutoff, bRandomize, tArgs.m_iIndexWeight, tmMaxTimer );
+		bCutoffHit = RunFullscanOnIterator ( pIterator.Ptr(), tCtx, tMeta, dSorters, tMatch, iCutoff, bRandomize, tArgs.m_iIndexWeight, tmMaxTimer );
 	else
 	{
 		bool bHaveRowidFilter = false;

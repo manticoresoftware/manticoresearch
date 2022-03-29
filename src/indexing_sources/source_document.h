@@ -182,8 +182,8 @@ protected:
 	int						LoadFileField ( BYTE ** ppField, CSphString & sError );
 
 	bool					BuildZoneHits ( RowID_t tRowID, BYTE uCode );
-	void					BuildSubstringHits ( RowID_t tRowID, bool bPayload, ESphWordpart eWordpart, bool bSkipEndMarker );
-	void					BuildRegularHits ( RowID_t tRowID, bool bPayload, bool bSkipEndMarker );
+	void					BuildSubstringHits ( RowID_t tRowID, bool bPayload, ESphWordpart eWordpart, int & iBlendedHitsStart );
+	void					BuildRegularHits ( RowID_t tRowID, bool bPayload, int & iBlendedHitsStart );
 
 	/// register autocomputed attributes such as field lengths (see index_field_lengths)
 	bool					AddAutoAttrs ( CSphString & sError, StrVec_t * pDefaults = nullptr );

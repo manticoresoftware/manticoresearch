@@ -189,6 +189,10 @@ bool CSphSource::IterateDocument ( bool & bEOF, CSphString & sError )
 	for ( auto & i : m_dDocFields )
 		i.Resize(0);
 
+	// clean up field length counters
+	if ( m_pFieldLengthAttrs )
+		memset ( m_pFieldLengthAttrs, 0, sizeof ( DWORD ) * m_tSchema.GetFieldsCount() );
+
 	// fetch next document
 	while (true)
 	{
@@ -513,10 +517,9 @@ static int TrackBlendedStart ( const TokenizerRefPtr_c& pTokenizer, int iBlended
 	return pTokenizer->TokenIsBlendedPart () ? iBlendedHitsStart : -1;
 }
 
-
 #define BUILD_SUBSTRING_HITS_COUNT 4
 
-void CSphSource::BuildSubstringHits ( RowID_t tRowID, bool bPayload, ESphWordpart eWordpart, bool bSkipEndMarker )
+void CSphSource::BuildSubstringHits ( RowID_t tRowID, bool bPayload, ESphWordpart eWordpart, int & iBlendedHitsStart )
 {
 	bool bPrefixField = ( eWordpart==SPH_WORDPART_PREFIX );
 	bool bInfixMode = m_iMinInfixLen > 0;
@@ -535,7 +538,7 @@ void CSphSource::BuildSubstringHits ( RowID_t tRowID, bool bPayload, ESphWordpar
 		iIterHitCount += ( ( m_iMinInfixLen+SPH_MAX_WORD_LEN ) * ( SPH_MAX_WORD_LEN-m_iMinInfixLen ) / 2 );
 
 	// FIELDEND_MASK at blended token stream should be set for HEAD token too
-	int iBlendedHitsStart = -1;
+	iBlendedHitsStart = -1;
 
 	// index all infixes
 	while ( ( m_iMaxHits==0 || m_tHits.GetLength()+iIterHitCount<m_iMaxHits )
@@ -640,38 +643,12 @@ void CSphSource::BuildSubstringHits ( RowID_t tRowID, bool bPayload, ESphWordpar
 	}
 
 	m_tState.m_bProcessingHits = ( sWord!=NULL );
-
-	// mark trailing hits
-	// and compute fields lengths
-	if ( !bSkipEndMarker && !m_tState.m_bProcessingHits && m_tHits.GetLength() )
-	{
-		CSphWordHit * pTail = const_cast < CSphWordHit * > ( &m_tHits.Last() );
-
-		if ( m_pFieldLengthAttrs )
-			m_pFieldLengthAttrs [ HITMAN::GetField ( pTail->m_uWordPos ) ] = HITMAN::GetPos ( pTail->m_uWordPos );
-
-		Hitpos_t uEndPos = pTail->m_uWordPos;
-		if ( iBlendedHitsStart>=0 )
-		{
-			assert ( iBlendedHitsStart>=0 && iBlendedHitsStart<m_tHits.GetLength() );
-			Hitpos_t uBlendedPos = m_tHits[iBlendedHitsStart].m_uWordPos;
-			uEndPos = Min ( uEndPos, uBlendedPos );
-		}
-
-		// set end marker for all tail hits
-		const CSphWordHit * pStart = m_tHits.Begin();
-		while ( pStart<=pTail && uEndPos<=pTail->m_uWordPos )
-		{
-			HITMAN::SetEndMarker ( &pTail->m_uWordPos );
-			pTail--;
-		}
-	}
 }
 
 
 #define BUILD_REGULAR_HITS_COUNT 6
 
-void CSphSource::BuildRegularHits ( RowID_t tRowID, bool bPayload, bool bSkipEndMarker )
+void CSphSource::BuildRegularHits ( RowID_t tRowID, bool bPayload, int & iBlendedHitsStart )
 {
 	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
 	bool bGlobalPartialMatch = !bWordDict && ( GetMinPrefixLen ( bWordDict ) > 0 || m_iMinInfixLen > 0 );
@@ -683,7 +660,7 @@ void CSphSource::BuildRegularHits ( RowID_t tRowID, bool bPayload, bool bSkipEnd
 	BYTE sBuf [ 16+3*SPH_MAX_WORD_LEN ];
 
 	// FIELDEND_MASK at last token stream should be set for HEAD token too
-	int iBlendedHitsStart = -1;
+	iBlendedHitsStart = -1;
 	bool bMorphDisabled = ( m_tMorphFields.GetBits()>0 && !m_tMorphFields.BitGet ( m_tState.m_iField ) );
 
 	// index words only
@@ -758,34 +735,75 @@ void CSphSource::BuildRegularHits ( RowID_t tRowID, bool bPayload, bool bSkipEnd
 	}
 
 	m_tState.m_bProcessingHits = ( sWord!=NULL );
+}
 
+static void CountFieldLengths ( const VecTraits_T<CSphWordHit> & dHits, DWORD * pFieldLengthAttrs )
+{
+	const CSphWordHit * pHit = dHits.Begin();
+	if ( !pHit )
+		return;
+
+	const CSphWordHit * pEnd = dHits.End();
+	assert ( pEnd );
+	Hitpos_t uLastHit = pHit->m_uWordPos;
+	DWORD uLastCount = 1;
+
+	for ( ; pHit!=pEnd; pHit++ )
+	{
+		if ( HITMAN::GetField ( uLastHit )!=HITMAN::GetField ( pHit->m_uWordPos ) )
+		{
+			pFieldLengthAttrs [ HITMAN::GetField ( uLastHit ) ] += uLastCount;
+			uLastCount = 1;
+			uLastHit = pHit->m_uWordPos;
+		}
+
+		// skip blended part, lemmas and duplicates
+		if ( HITMAN::GetPos ( pHit->m_uWordPos )>HITMAN::GetPos ( uLastHit ) )
+		{
+			uLastHit = pHit->m_uWordPos;
+			uLastCount++;
+		}
+	}
+
+	if ( uLastCount )
+	{
+		pFieldLengthAttrs [ HITMAN::GetField ( uLastHit ) ] += uLastCount;
+	}
+}
+
+static void ProcessCollectedHits ( VecTraits_T<CSphWordHit> & dHits, int iHitsBegin, bool bMarkTail, int iBlendedHitsStart, bool bHasStopwords, DWORD * pFieldLengthAttrs )
+{
 	// mark trailing hit
 	// and compute field lengths
-	if ( !bSkipEndMarker && !m_tState.m_bProcessingHits && m_tHits.GetLength() )
+	if ( bMarkTail )
 	{
-		auto * pTail = const_cast < CSphWordHit * > ( &m_tHits.Last() );
+		auto * pTail = const_cast < CSphWordHit * > ( &dHits.Last() );
 
-		if ( m_pFieldLengthAttrs )
-			m_pFieldLengthAttrs [ HITMAN::GetField ( pTail->m_uWordPos ) ] = HITMAN::GetPos ( pTail->m_uWordPos );
+		if ( pFieldLengthAttrs && !bHasStopwords )
+			pFieldLengthAttrs [ HITMAN::GetField ( pTail->m_uWordPos ) ] = HITMAN::GetPos ( pTail->m_uWordPos );
 
 		Hitpos_t uEndPos = pTail->m_uWordPos;
 		if ( iBlendedHitsStart>=0 )
 		{
-			assert ( iBlendedHitsStart>=0 && iBlendedHitsStart<m_tHits.GetLength() );
-			Hitpos_t uBlendedPos = m_tHits[iBlendedHitsStart].m_uWordPos;
+			assert ( iBlendedHitsStart>=0 && iBlendedHitsStart<dHits.GetLength() );
+			Hitpos_t uBlendedPos = dHits[iBlendedHitsStart].m_uWordPos;
 			uEndPos = Min ( uEndPos, uBlendedPos );
 		}
 
 		// set end marker for all tail hits
-		const CSphWordHit * pStart = m_tHits.Begin();
+		const CSphWordHit * pStart = dHits.Begin();
 		while ( pStart<=pTail && uEndPos<=pTail->m_uWordPos )
 		{
 			HITMAN::SetEndMarker ( &pTail->m_uWordPos );
 			--pTail;
 		}
 	}
-}
 
+	// for stopwords need to process whole stream of collected tokens
+	if ( pFieldLengthAttrs && bHasStopwords )
+		CountFieldLengths ( VecTraits_T<CSphWordHit> ( dHits.Begin()+iHitsBegin, dHits.GetLength()-iHitsBegin ), pFieldLengthAttrs );
+
+}
 
 void CSphSource::BuildHits ( CSphString & sError, bool bSkipEndMarker )
 {
@@ -852,10 +870,15 @@ void CSphSource::BuildHits ( CSphString & sError, bool bSkipEndMarker )
 
 		if ( tField.m_uFieldFlags & CSphColumnInfo::FIELD_INDEXED )
 		{
+			int iBlendedHitsStart = -1;
+			int iHitsBegin = m_tHits.GetLength();
+
 			if ( tField.m_eWordpart!=SPH_WORDPART_WHOLE )
-				BuildSubstringHits ( tRowID, tField.m_bPayload, tField.m_eWordpart, bSkipEndMarker );
+				BuildSubstringHits ( tRowID, tField.m_bPayload, tField.m_eWordpart, iBlendedHitsStart );
 			else
-				BuildRegularHits ( tRowID, tField.m_bPayload, bSkipEndMarker );
+				BuildRegularHits ( tRowID, tField.m_bPayload, iBlendedHitsStart );
+
+			ProcessCollectedHits ( m_tHits, iHitsBegin, ( !bSkipEndMarker && !m_tState.m_bProcessingHits && m_tHits.GetLength() ), iBlendedHitsStart, !m_pDict->GetSettings().m_sStopwords.IsEmpty(), m_pFieldLengthAttrs );
 		}
 
 		if ( m_tState.m_bProcessingHits )

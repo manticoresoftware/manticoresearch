@@ -2144,6 +2144,9 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const InsertDocData_t & tDoc, bo
 		tLastHit.m_uWordID = 0;
 		tLastHit.m_uWordPos = 0;
 
+		Hitpos_t uFieldLastHit = pHits->Begin()->m_uWordPos;
+		DWORD uFieldLastCount = 1;
+
 		m_dAccum.ReserveGap ( pHits->GetLength() );
 		iHits = 0;
 		for ( CSphWordHit * pHit = pHits->Begin(); pHit<pHits->End(); ++pHit )
@@ -2153,8 +2156,22 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const InsertDocData_t & tDoc, bo
 				continue;
 
 			// update field lengths
-			if ( pFieldLens && HITMAN::GetField ( pHit->m_uWordPos )!=HITMAN::GetField ( tLastHit.m_uWordPos ) )
-				pFieldLens [ HITMAN::GetField ( tLastHit.m_uWordPos ) ] = HITMAN::GetPos ( tLastHit.m_uWordPos );
+			if ( pFieldLens )
+			{
+				if ( HITMAN::GetField ( uFieldLastHit )!=HITMAN::GetField ( pHit->m_uWordPos ) )
+				{
+					pFieldLens [ HITMAN::GetField ( uFieldLastHit ) ] += uFieldLastCount;
+					uFieldLastCount = 1;
+					uFieldLastHit = pHit->m_uWordPos;
+				}
+
+				// skip blended part, lemmas and duplicates
+				if ( HITMAN::GetPos ( pHit->m_uWordPos )>HITMAN::GetPos ( uFieldLastHit ) )
+				{
+					uFieldLastHit = pHit->m_uWordPos;
+					uFieldLastCount++;
+				}
+			}
 
 			// need original hit for duplicate removal
 			tLastHit = *pHit;
@@ -2167,8 +2184,10 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const InsertDocData_t & tDoc, bo
 			m_dAccum.Add ( *pHit );
 			++iHits;
 		}
-		if ( pFieldLens )
-			pFieldLens [ HITMAN::GetField ( tLastHit.m_uWordPos ) ] = HITMAN::GetPos ( tLastHit.m_uWordPos );
+		if ( pFieldLens && uFieldLastCount )
+		{
+			pFieldLens [ HITMAN::GetField ( uFieldLastHit ) ] += uFieldLastCount;
+		}
 	}
 	// make sure to get real count without duplicated hits
 	m_dPerDocHitsCount.Add ( iHits );

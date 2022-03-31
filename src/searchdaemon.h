@@ -512,7 +512,7 @@ public:
 	CSphString		GetString ();
 	CSphString		GetRawString ( int iLen );
 	bool			GetString ( CSphVector<BYTE> & dBuffer );
-	bool			GetError () { return m_bError; }
+	bool			GetError () const { return m_bError; }
 	bool			GetBytes ( void * pBuf, int iLen );
 	const BYTE *	GetBufferPtr () const { return m_pCur; }
 	int				GetBufferPos () const { return int ( m_pCur - m_pBuf ); }

@@ -70,12 +70,24 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	auto& tIn = *(AsyncNetInputBuffer_c *) pBuf.get();
 
 	HttpRequestParser_c tParser;
+	CSphVector<BYTE> dResult;
+
+	auto HttpReply = [&dResult, &tOut] ( ESphHttpStatus eCode, Str_t sMsg )
+	{
+		if ( IsEmpty ( sMsg ) )
+			HttpBuildReply ( dResult, eCode, sMsg, false );
+		else
+			sphHttpErrorReply ( dResult, eCode, sMsg.first );
+		tOut.SwapData ( dResult );
+		return tOut.Flush();
+	};
 
 	do
 	{
 		tIn.DiscardProcessed ( -1 ); // -1 means 'force flush'
 		tParser.Reinit();
 
+		// read HTTP header
 		while ( !tParser.ParseHeader ( tIn.Tail() ) )
 		{
 			tIn.PopTail ();
@@ -88,61 +100,52 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 
 			return;
 		}
+
+		// malformed header
+		if ( tParser.Error() )
+		{
+			HttpReply ( SPH_HTTP_STATUS_400, FromSz ( tParser.Error() ) );
+			break;
+		}
+
+		// check if we should interrupt because of maxed-out
+		if ( IsMaxedOut() )
+		{
+			HttpReply ( SPH_HTTP_STATUS_503, FromSz ( g_sMaxedOutMessage ) );
+			gStats().m_iMaxedOut.fetch_add ( 1, std::memory_order_relaxed );
+			break;
+		}
+
+		// process keep-alive conditions
+		if ( tParser.KeepAlive() )
+		{
+			if ( !tSess.GetPersistent() )
+				tIn.SetTimeoutUS ( S2US * g_iClientTimeoutS );
+			tSess.SetPersistent ( true );
+		} else {
+			if ( tSess.GetPersistent() )
+				tIn.SetTimeoutUS ( S2US * g_iReadTimeoutS );
+			tSess.SetPersistent ( false );
+		}
+
+		// if part of the body came in the same packet with header (unlikely, but may be from dumb clients)
 		int iBody = tParser.ParsedBodyLength();
 		tIn.PopTail ( tIn.Tail().second - iBody );
 
-		// if first chunk is pure header, we have chance to proceed special headers here
+		// if first chunk is (most probably) pure header, we can proceed special headers here
 		if ( !iBody )
 		{
 			if ( tParser.Expect100() )
 			{
-				CSphVector<BYTE> dResult;
-				HttpBuildReply ( dResult, SPH_HTTP_STATUS_100, dEmptyStr, false );
-				tOut.SwapData ( dResult );
-				tOut.Flush(); // fixme! check return code
+				if ( !HttpReply ( SPH_HTTP_STATUS_100, dEmptyStr ) )
+					break;
 				sphLogDebug ("100 Continue sent");
 			}
 			if ( !tIn.HasBytes() )
 				tIn.DiscardProcessed ( -1 );
 		}
 
-		if ( tParser.ContentLength()>0 )
-			iBody += tParser.ContentLength();
-
-		if ( iBody && !tIn.ReadFrom ( iBody )) {
-			sphWarning ( "failed to receive HTTP request (client=%s(%d), exp=%d, error='%s')", sClientIP, iCID, iBody, sphSockError ());
-			return;
-		}
-
-		// Temporary write \0 at the end, since parser wants z-terminated buf
-		auto uOldByte = tIn.Terminate ( iBody, '\0' );
-		auto tPacket = tIn.PopTail ( iBody );
-
-		CSphVector<BYTE> dResult;
-		if ( IsMaxedOut() )
-		{
-			sphHttpErrorReply ( dResult, SPH_HTTP_STATUS_503, g_sMaxedOutMessage );
-			tOut.SwapData ( dResult );
-			tOut.Flush (); // no need to check return code since we break anyway
-			gStats().m_iMaxedOut.fetch_add ( 1, std::memory_order_relaxed );
-			break;
-		}
-
-		tCrashQuery.m_dQuery = tPacket;
-		tParser.ProcessClientHttp ( tPacket, dResult );
-
-		if ( tParser.KeepAlive() )
-		{
-			if ( !tSess.GetPersistent() )
-				tIn.SetTimeoutUS ( S2US * g_iClientTimeoutS );
-			tSess.SetPersistent(true);
-		} else {
-			if ( tSess.GetPersistent() )
-				tIn.SetTimeoutUS ( S2US * g_iReadTimeoutS );
-			tSess.SetPersistent(false);
-		}
-
-		tIn.Terminate ( 0, uOldByte ); // return back prev byte
+		tParser.ProcessClientHttp ( tIn, dResult );
 
 		tOut.SwapData (dResult);
 		if ( !tOut.Flush () )

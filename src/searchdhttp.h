@@ -17,6 +17,7 @@
 #include "http/http_parser.h"
 
 using OptionsHash_t = SmallStringHash_T<CSphString>;
+class AsyncNetInputBuffer_c;
 
 class HttpRequestParser_c : public ISphNoncopyable
 {
@@ -24,12 +25,13 @@ public:
 	HttpRequestParser_c();
 	void Reinit();
 	bool ParseHeader ( ByteBlob_t tData );
-	void ProcessClientHttp ( ByteBlob_t tData, CSphVector<BYTE>& dResult );
+	bool ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVector<BYTE>& dResult );
 
 	int ContentLength() const;
 	int ParsedBodyLength() const;
 	bool Expect100() const;
 	bool KeepAlive() const;
+	const char* Error() const;
 
 private:
 	void ParseList ( Str_t sData );
@@ -51,9 +53,9 @@ private:
 	static int cbParserHeaderValue ( http_parser* pParser, const char* sAt, size_t iLen );
 	static int cbParseHeaderCompleted ( http_parser* pParser );
 	static int cbParserBody ( http_parser* pParser, const char* sAt, size_t iLen );
+	static int cbMessageComplete ( http_parser* pParser );
 
 	static int cbMessageBegin ( http_parser* pParser );
-	static int cbMessageComplete ( http_parser* pParser );
 	static int cbMessageStatus ( http_parser* pParser, const char* sAt, size_t iLen );
 
 private:

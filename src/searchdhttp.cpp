@@ -20,6 +20,7 @@
 #include "searchdha.h"
 #include "searchdreplication.h"
 #include "accumulator.h"
+#include "networking_daemon.h"
 
 #define LOG_COMPONENT_HTTP ""
 #define LOG_LEVEL_HTTP false
@@ -87,6 +88,125 @@ ESphHttpEndpoint StrToHttpEndpoint ( const CSphString& sEndpoint )
 	return SPH_HTTP_ENDPOINT_TOTAL;
 }
 
+///////////////////////////////////////////////////////////////////////
+/// Stream reader
+class CharStream_c
+{
+protected:
+	bool m_bDone = false;
+
+public:
+	virtual ~CharStream_c() = default;
+
+	// return next chunk of data
+	virtual Str_t Read() = 0;
+
+	// return all available data
+	virtual Str_t ReadAll() = 0;
+
+	inline bool Eof() const { return m_bDone; }
+};
+
+/// stub - returns feed string
+class BlobStream_c final: public CharStream_c
+{
+	Str_t m_sData;
+
+public:
+	explicit BlobStream_c ( const CSphString& sData )
+		: m_sData { FromStr ( sData ) }
+	{}
+
+	Str_t Read() final
+	{
+		if ( m_bDone )
+			return dEmptyStr;
+
+		m_bDone = true;
+		return m_sData;
+	}
+
+	Str_t ReadAll() final
+	{
+		auto sData = Read();
+
+		Str_t sDescr = { sData.first, Min ( sData.second, 100 ) };
+		myinfo::SetDescription ( sDescr, sDescr.second );
+		return sData;
+	}
+};
+
+/// stream with known content length and no special massage over socket
+class RawSocketStream_c final : public CharStream_c
+{
+	AsyncNetInputBuffer_c& m_tIn;
+	int m_iContentLength;
+	bool m_bTerminated = false;
+	BYTE m_uOldTerminator = 0;
+
+public:
+	RawSocketStream_c ( AsyncNetInputBuffer_c& tIn, int iContentLength )
+		: m_tIn { tIn }
+		, m_iContentLength ( iContentLength )
+	{
+		m_bDone = !m_iContentLength;
+	}
+
+	~RawSocketStream_c() final
+	{
+		if ( m_bTerminated )
+			m_tIn.Terminate ( 0, m_uOldTerminator );
+		m_tIn.DiscardProcessed ( 0 );
+	}
+
+	Str_t Read() final
+	{
+		if ( m_bDone )
+			return dEmptyStr;
+
+		m_tIn.DiscardProcessed ( 0 );
+		if ( !m_tIn.HasBytes() && m_tIn.ReadAny()<0 )
+		{
+			sphWarning ( "failed to receive HTTP request (error='%s')", sphSockError() );
+			m_bDone = true;
+			return dEmptyStr;
+		}
+
+		auto iChunk = Min ( m_iContentLength, m_tIn.HasBytes() );
+		m_iContentLength -= iChunk;
+		m_bDone = !m_iContentLength;
+
+		// Temporary write \0 at the end, since parser wants z-terminated buf
+		if ( m_bDone )
+		{
+			m_uOldTerminator = m_tIn.Terminate ( iChunk, '\0' );
+			m_bTerminated = true;
+		}
+
+		return FromBytes ( m_tIn.PopTail ( iChunk ) );
+	}
+
+	Str_t ReadAll() final
+	{
+		if ( m_bDone )
+			return dEmptyStr;
+
+		// that is oneshot read - we sure, we're done
+		m_bDone = true;
+
+		if ( m_iContentLength && !m_tIn.ReadFrom ( m_iContentLength ) ) {
+			sphWarning ( "failed to receive HTTP request (error='%s')", sphSockError() );
+			return dEmptyStr;
+		}
+
+		m_uOldTerminator = m_tIn.Terminate ( m_iContentLength, '\0' );
+		m_bTerminated = true;
+		return FromBytes ( m_tIn.PopTail ( m_iContentLength ) );
+	}
+};
+
+///////////////////////////////////////////////////////////////////////
+
 CSphString HttpEndpointToStr ( ESphHttpEndpoint eEndpoint )
 {
 	assert ( eEndpoint >= SPH_HTTP_ENDPOINT_INDEX && eEndpoint < SPH_HTTP_ENDPOINT_TOTAL );
@@ -119,12 +239,13 @@ HttpRequestParser_c::HttpRequestParser_c()
 	m_tParserSettings.on_message_complete = cbMessageComplete;
 	m_tParserSettings.on_status = cbMessageStatus;
 
-	m_tParser.data = this;
 	Reinit();
 }
 
 void HttpRequestParser_c::Reinit()
 {
+	HTTPINFO << "HttpRequestParser_c::Reinit()";
+
 	http_parser_init ( &m_tParser, HTTP_REQUEST );
 	m_sCurField.Clear();
 	m_sCurValue.Clear();
@@ -132,6 +253,7 @@ void HttpRequestParser_c::Reinit()
 	m_bHeaderDone = false;
 	m_iParsedBodyLength = 0;
 	m_szError = nullptr;
+	m_tParser.data = this;
 }
 
 bool HttpRequestParser_c::ParseHeader ( ByteBlob_t sData )
@@ -167,6 +289,11 @@ bool HttpRequestParser_c::Expect100() const
 bool HttpRequestParser_c::KeepAlive() const
 {
 	return m_bKeepAlive;
+}
+
+const char* HttpRequestParser_c::Error() const
+{
+	return m_szError;
 }
 
 inline int Char2Hex ( BYTE uChar )
@@ -230,17 +357,22 @@ static void UriPercentReplace ( Str_t& sEntity, bool bAlsoPlus=true )
 	sEntity.second = int ( pDst - sEntity.first );
 }
 
-void StoreRawQuery ( OptionsHash_t& hOptions, Str_t sData )
+Str_t StoreRawQuery ( OptionsHash_t& hOptions, CharStream_c& sData )
 {
-	if ( IsEmpty ( sData ) || hOptions ("raw_query") )
-		return;
+	if ( hOptions ("raw_query") )
+		return dEmptyStr;
+
+	auto sWholeData = sData.ReadAll();
+	if ( IsEmpty ( sWholeData ) )
+		return sWholeData;
 
 	// store raw query
-	CSphString sRawBody ( sData );				  // copy raw data, important!
-	Str_t sRaw { sRawBody.cstr(), sData.second }; // FromStr implies strlen(), but we don't need it
+	CSphString sRawBody ( sWholeData );				  // copy raw data, important!
+	Str_t sRaw { sRawBody.cstr(), sWholeData.second }; // FromStr implies strlen(), but we don't need it
 	UriPercentReplace ( sRaw, false );			  // avoid +-decoding
 	*const_cast<char*> ( sRaw.first + sRaw.second ) = '\0';
 	hOptions.Add ( std::move ( sRawBody ), "raw_query" );
+	return sWholeData;
 }
 
 
@@ -368,7 +500,7 @@ inline int HttpRequestParser_c::ParserBody ( Str_t sData )
 
 inline int HttpRequestParser_c::ParseHeaderCompleted ()
 {
-	HTTPINFO << "ParseHeaderCompleted. Upgrade=" << (unsigned int)m_tParser.upgrade << ", length=" << m_tParser.content_length;
+	HTTPINFO << "ParseHeaderCompleted. Upgrade=" << (unsigned int)m_tParser.upgrade << ", length=" << (int64_t) m_tParser.content_length;
 
 	// we're not support connection upgrade - so just reset upgrade flag, if detected.
 	// rfc7540 section-3.2 (for http/2) says, we just should continue as if no 'upgrade' header was found
@@ -1316,15 +1448,98 @@ protected:
 	}
 };
 
+// stream for ndjsons
+class NDJsonStream_c
+{
+	CharStream_c& m_tIn;
+	CSphVector<char> m_dLastChunk;
+	Str_t m_sCurChunk { dEmptyStr };
+	bool m_bDone;
+
+	int m_iJsons = 0;
+	int m_iReads = 0;
+	int m_iTotallyRead = 0; // not used, but provides data during debug
+
+public:
+	explicit NDJsonStream_c ( CharStream_c& tIn )
+		: m_tIn { tIn }
+		, m_bDone { m_tIn.Eof() }
+	{}
+
+	inline bool Eof() const { return m_bDone;}
+
+	Str_t Read()
+	{
+		assert ( !m_bDone );
+		while (true)
+		{
+			if ( IsEmpty ( m_sCurChunk ) )
+			{
+				if ( m_tIn.Eof() )
+					break;
+				m_sCurChunk = m_tIn.Read();
+				m_iTotallyRead += m_sCurChunk.second;
+				++m_iReads;
+			}
+
+			const char* szJson = m_sCurChunk.first;
+			const char* pEnd = szJson + m_sCurChunk.second;
+			const char* p = szJson;
+
+			while ( p < pEnd && *p != '\r' && *p != '\n' )
+				++p;
+
+			if ( p==pEnd )
+			{
+				m_dLastChunk.Append ( szJson, p-szJson );
+				m_sCurChunk = dEmptyStr;
+				continue;
+			}
+
+			*( const_cast<char*> ( p ) ) = '\0';
+			++p;
+			m_sCurChunk = { p, pEnd - p };
+
+			Str_t sResult;
+			if ( m_dLastChunk.IsEmpty () )
+			{
+				sResult =  { szJson, p - szJson - 1 };
+				if ( IsEmpty ( sResult ) )
+					continue;
+				++m_iJsons;
+				HTTPINFO << "non-last chunk " << m_iJsons << " " << sResult;;
+			}
+			else
+			{
+				m_dLastChunk.Append ( szJson, p - szJson );
+				sResult = m_dLastChunk;
+				--sResult.second; // exclude terminating \0
+				m_dLastChunk.Resize ( 0 );
+				++m_iJsons;
+				HTTPINFO << "Last chunk " << m_iJsons << " " << sResult;
+			}
+			return sResult;
+		}
+
+		m_bDone = true;
+		m_dLastChunk.Add ( '\0' );
+		m_dLastChunk.Resize ( m_dLastChunk.GetLength() - 1 );
+		Str_t sResult = m_dLastChunk;
+		++m_iJsons;
+		HTTPINFO << "Termination chunk " << m_iJsons << " " << sResult;
+		return sResult;
+	}
+};
+
 
 class HttpHandler_JsonBulk_c final : public HttpHandler_c, public HttpJsonUpdateTraits_c, public HttpJsonTxnTraits_c
 {
-	Str_t m_sQuery;
+	NDJsonStream_c m_tSource;
 	const OptionsHash_t& m_tOptions;
 
 public:
-	HttpHandler_JsonBulk_c ( Str_t sQuery, const OptionsHash_t & tOptions )
-		: m_sQuery ( std::move ( sQuery ) )
+	HttpHandler_JsonBulk_c ( CharStream_c& tSource, const OptionsHash_t & tOptions )
+		: m_tSource ( tSource )
 		, m_tOptions ( tOptions )
 	{}
 
@@ -1337,11 +1552,9 @@ public:
 			return false;
 		}
 
-		char * p = const_cast<char*>(m_sQuery.first);
-		const char * pEnd = p + m_sQuery.second;
-		if (!p)
+		if ( m_tSource.Eof() )
 		{
-			BuildReply ( R"({"items":[],"errors":true})", SPH_HTTP_STATUS_500 );
+			BuildReply ( R"({"items":[],"errors":false})", SPH_HTTP_STATUS_200 );
 			return true;
 		}
 
@@ -1352,19 +1565,16 @@ public:
 		CSphString sTxnIdx;
 		CSphString sStmt;
 		bool bResult = false;
-		while ( p < pEnd )
+		int iInserted = 0;
+		while ( !m_tSource.Eof() )
 		{
-			while ( sphIsSpace(*p) )
-				++p;
-
-			char * szStmt = p;
-			while ( *p && *p!='\r' && *p!='\n' )
-				++p;
-
-			if ( p-szStmt==0 )
-				break;
-
-			*p++ = '\0'; // fixme: note: we're modifying the original query at this point
+			auto tQuery = m_tSource.Read();
+			if ( IsEmpty ( tQuery ) )
+				continue;
+			++iInserted;
+			auto& tCrashQuery = GlobalCrashQueryGetRef();
+			tCrashQuery.m_dQuery = { (const BYTE*) tQuery.first, tQuery.second };
+			const char* szStmt = tQuery.first;
 			SqlStmt_t tStmt;
 			tStmt.m_bJson = true;
 			DocID_t tDocId = 0;
@@ -1374,6 +1584,7 @@ public:
 			{
 				sError.SetSprintf( "Error parsing json query: %s", sError.cstr() );
 				ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
+				HTTPINFO << "inserted  " << iInserted;
 				return false;
 			}
 
@@ -1421,6 +1632,7 @@ public:
 
 			default:
 				ReportError ( "Unknown statement", SPH_HTTP_STATUS_400 );
+				HTTPINFO << "inserted  " << iInserted;
 				return false;
 			}
 
@@ -1430,9 +1642,6 @@ public:
 			// no further than the first error
 			if ( !bResult )
 				break;
-
-			while ( sphIsSpace(*p) )
-				p++;
 		}
 
 		if ( bResult && session::IsInTrans() )
@@ -1448,6 +1657,7 @@ public:
 		tRoot.AddItem ( "items", tItems );
 		tRoot.AddBool ( "errors", !bResult );
 		BuildReply ( tRoot.AsString(), bResult ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_500 );
+		HTTPINFO << "inserted  " << iInserted;
 		return true;
 	}
 
@@ -1493,9 +1703,16 @@ private:
 };
 
 
-static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( ESphHttpEndpoint eEndpoint, Str_t sQuery, const OptionsHash_t & tOptions, http_method eRequestType )
+static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( ESphHttpEndpoint eEndpoint, CharStream_c& tSource, const OptionsHash_t & tOptions, http_method eRequestType )
 {
 	const CSphString * pOption = nullptr;
+	Str_t sQuery = dEmptyStr;
+
+	auto SetQuery = [&sQuery] ( Str_t&& sData ) {
+		auto& tCrashQuery = GlobalCrashQueryGetRef();
+		tCrashQuery.m_dQuery = { (const BYTE*)sData.first, sData.second };
+		sQuery = sData;
+	};
 
 	switch ( eEndpoint )
 	{
@@ -1504,37 +1721,47 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( ESphHttpEndpoint eEndp
 		if ( pOption && *pOption=="raw" )
 		{
 			auto pQuery = tOptions ( "query" );
-			sQuery = pQuery ? FromStr(*pQuery) : dEmptyStr;
+			if ( pQuery )
+				SetQuery ( FromStr ( *pQuery ) );
 			return std::make_unique<HttpRawSqlHandler_c> ( sQuery ); // non-json
 		}
 		else
 			return std::make_unique<HttpSearchHandler_SQL_c> ( tOptions ); // non-json
 
 	case SPH_HTTP_ENDPOINT_CLI:
-		pOption = tOptions ( "raw_query" );
-		if ( pOption )
-			sQuery = FromStr (*pOption);
-		return std::make_unique<HttpRawSqlHandler_c> ( sQuery ); // non-json
+		{
+			pOption = tOptions ( "raw_query" );
+			if ( pOption )
+				SetQuery ( FromStr (*pOption) );
+			else
+				SetQuery ( tSource.ReadAll() );
+			return std::make_unique<HttpRawSqlHandler_c> ( sQuery ); // non-json
+		}
 
 	case SPH_HTTP_ENDPOINT_JSON_SEARCH:
+		SetQuery ( tSource.ReadAll() );
 		return std::make_unique<HttpHandler_JsonSearch_c> ( sQuery ); // json
 
 	case SPH_HTTP_ENDPOINT_JSON_INDEX:
 	case SPH_HTTP_ENDPOINT_JSON_CREATE:
 	case SPH_HTTP_ENDPOINT_JSON_INSERT:
 	case SPH_HTTP_ENDPOINT_JSON_REPLACE:
+		SetQuery ( tSource.ReadAll() );
 		return std::make_unique<HttpHandler_JsonInsert_c> ( sQuery, eEndpoint==SPH_HTTP_ENDPOINT_JSON_INDEX || eEndpoint==SPH_HTTP_ENDPOINT_JSON_REPLACE ); // json
 
 	case SPH_HTTP_ENDPOINT_JSON_UPDATE:
+		SetQuery ( tSource.ReadAll() );
 		return std::make_unique<HttpHandler_JsonUpdate_c> ( sQuery ); // json
 
 	case SPH_HTTP_ENDPOINT_JSON_DELETE:
+		SetQuery ( tSource.ReadAll() );
 		return std::make_unique<HttpHandler_JsonDelete_c> ( sQuery ); // json
 
 	case SPH_HTTP_ENDPOINT_JSON_BULK:
-		return std::make_unique<HttpHandler_JsonBulk_c> ( sQuery, tOptions ); // json
+		return std::make_unique<HttpHandler_JsonBulk_c> ( tSource, tOptions ); // json
 
 	case SPH_HTTP_ENDPOINT_PQ:
+		SetQuery ( tSource.ReadAll() );
 		return std::make_unique<HttpHandlerPQ_c> ( sQuery, tOptions ); // json
 
 	default:
@@ -1545,9 +1772,9 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( ESphHttpEndpoint eEndp
 }
 
 
-static bool ProcessHttpQuery ( ESphHttpEndpoint eEndpoint, Str_t sQuery, const OptionsHash_t& tOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType, const CSphString& sInvalidEndpoint )
+static bool ProcessHttpQuery ( ESphHttpEndpoint eEndpoint, CharStream_c& tSource, const OptionsHash_t& tOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType, const CSphString& sInvalidEndpoint )
 {
-	std::unique_ptr<HttpHandler_c> pHandler = CreateHttpHandler ( eEndpoint, sQuery, tOptions, eRequestType );
+	std::unique_ptr<HttpHandler_c> pHandler = CreateHttpHandler ( eEndpoint, tSource, tOptions, eRequestType );
 	if ( !pHandler )
 	{
 		if ( eEndpoint == SPH_HTTP_ENDPOINT_INDEX )
@@ -1571,7 +1798,7 @@ bool sphProcessHttpQueryNoResponce ( const CSphString& sEndpoint, const CSphStri
 {
 	ESphHttpEndpoint eEndpoint = StrToHttpEndpoint ( sEndpoint );
 	OptionsHash_t tOptions;
-	auto tQuery = FromStr ( sQuery );
+	BlobStream_c tQuery { sQuery };
 
 	// these endpoints url-encoded, all others are plain json, and we don't want to waste time pre-parsing them
 	if ( eEndpoint == SPH_HTTP_ENDPOINT_SQL || eEndpoint == SPH_HTTP_ENDPOINT_CLI )
@@ -1580,28 +1807,24 @@ bool sphProcessHttpQueryNoResponce ( const CSphString& sEndpoint, const CSphStri
 	return ProcessHttpQuery ( eEndpoint, tQuery, tOptions, dResult, false, HTTP_GET, sEndpoint );
 }
 
-void HttpRequestParser_c::ProcessClientHttp ( ByteBlob_t tData, CSphVector<BYTE>& dResult )
+bool HttpRequestParser_c::ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVector<BYTE>& dResult )
 {
-	if ( m_szError )
-	{
-		sphHttpErrorReply ( dResult, SPH_HTTP_STATUS_400, m_szError );
-		return;
-	}
+	assert ( !m_szError );
+	int iBody = m_iParsedBodyLength;
+	if ( m_tParser.content_length>0 )
+		iBody += m_tParser.content_length;
 
-	Str_t sData { (const char*)tData.first, tData.second };
-	Str_t sDescr = { sData.first, Min ( sData.second, 100 ) };
-	myinfo::SetDescription ( sDescr, sDescr.second );
-
+	RawSocketStream_c tSource ( tIn, iBody ); // fixme! (chunked encoding support should be here)
 	ESphHttpEndpoint eEndpoint = StrToHttpEndpoint ( m_sEndpoint );
 
 	// these endpoints url-encoded, all others are plain json, and we don't want to waste time pre-parsing them
 	if ( eEndpoint == SPH_HTTP_ENDPOINT_SQL || eEndpoint == SPH_HTTP_ENDPOINT_CLI )
 	{
-		StoreRawQuery ( m_hOptions, sData );
+		auto sData = StoreRawQuery ( m_hOptions, tSource );
 		ParseList ( sData );
 	}
 
-	ProcessHttpQuery ( eEndpoint, sData, m_hOptions, dResult, true, m_eType, m_sEndpoint );
+	return ProcessHttpQuery ( eEndpoint, tSource, m_hOptions, dResult, true, m_eType, m_sEndpoint );
 }
 
 void sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError )

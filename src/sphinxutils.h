@@ -56,7 +56,7 @@ inline const char * sphFindLastNumeric ( const char * pBuf, int iLen )
 /// my own isspace
 inline bool sphIsSpace ( int iCode )
 {
-	return iCode==' ' || iCode=='\t' || iCode=='\n' || iCode=='\r';
+	return memchr ( " \t\n\r", iCode, 4 ) != nullptr;
 }
 
 

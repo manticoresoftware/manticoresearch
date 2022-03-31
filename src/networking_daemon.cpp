@@ -1064,9 +1064,7 @@ BYTE AsyncNetInputBuffer_c::Terminate ( int iPos, BYTE uNewVal )
 		pPos = m_pCur+iPos;
 	}
 
-	auto uOld = *pPos;
-	*const_cast<BYTE*>(pPos) = uNewVal;
-	return uOld;
+	return std::exchange ( *const_cast<BYTE*> ( pPos ), uNewVal );
 }
 
 

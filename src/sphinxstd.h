@@ -3454,17 +3454,21 @@ class EscapedStringBuilder_T : public StringBuilder_c
 		return true;
 	}
 
-	inline bool AppendEmptyEscaped ( const char * sText )
+	inline void AppendEmptyQuotes()
 	{
-		if ( sText && *sText )
-			return false;
-
 		GrowEnough ( 3 );
-		auto * pCur = end ();
+		auto* pCur = end();
 		pCur[0] = T::cQuote;
 		pCur[1] = T::cQuote;
 		pCur[2] = '\0';
 		m_iUsed += 2;
+	}
+
+	inline bool AppendEmptyEscaped ( const char* sText )
+	{
+		if ( sText && *sText )
+			return false;
+		AppendEmptyQuotes();
 		return true;
 	}
 
@@ -3559,8 +3563,8 @@ public:
 			m_iUsed += sComma.second;
 		}
 
-		if ( AppendEmptyEscaped ( sText ) )
-			return;
+		if ( !iLen )
+			return AppendEmptyQuotes();
 
 		GrowEnough ( 3 ); // 2 quotes and terminator
 		const char * pSrc = sText;
@@ -3682,8 +3686,8 @@ public:
 			m_iUsed += sComma.second;
 		}
 
-		if ( AppendEmptyEscaped ( sText ) )
-			return;
+		if ( !iLen )
+			return AppendEmptyQuotes();
 
 		GrowEnough ( 3 ); // 2 quotes and terminator
 		const char * pSrc = sText;

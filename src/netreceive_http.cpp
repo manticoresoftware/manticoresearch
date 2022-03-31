@@ -128,21 +128,12 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			tSess.SetPersistent ( false );
 		}
 
-		// if part of the body came in the same packet with header (unlikely, but may be from dumb clients)
-		int iBody = tParser.ParsedBodyLength();
-		tIn.PopTail ( tIn.Tail().second - iBody );
-
 		// if first chunk is (most probably) pure header, we can proceed special headers here
-		if ( !iBody )
+		if ( tParser.Expect100() && !tParser.ParsedBodyLength() )
 		{
-			if ( tParser.Expect100() )
-			{
-				if ( !HttpReply ( SPH_HTTP_STATUS_100, dEmptyStr ) )
-					break;
-				sphLogDebug ("100 Continue sent");
-			}
-			if ( !tIn.HasBytes() )
-				tIn.DiscardProcessed ( -1 );
+			if ( !HttpReply ( SPH_HTTP_STATUS_100, dEmptyStr ) )
+				break;
+			sphLogDebug ("100 Continue sent");
 		}
 
 		tParser.ProcessClientHttp ( tIn, dResult );
@@ -150,5 +141,6 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 		tOut.SwapData (dResult);
 		if ( !tOut.Flush () )
 			break;
+		pBuf->SyncErrorState();
 	} while ( tSess.GetPersistent() );
 }

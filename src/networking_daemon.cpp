@@ -1067,6 +1067,10 @@ BYTE AsyncNetInputBuffer_c::Terminate ( int iPos, BYTE uNewVal )
 	return std::exchange ( *const_cast<BYTE*> ( pPos ), uNewVal );
 }
 
+void AsyncNetBuffer_c::SyncErrorState()
+{
+	InputBuffer_c::SetError( NetGenericOutputBuffer_c::GetError() );
+}
 
 /////////////////////////////////////////////////////////////////////////////
 /// AsyncBufferedSocket_c - provides wrapper for sending and receiving

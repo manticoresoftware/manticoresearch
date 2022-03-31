@@ -205,6 +205,150 @@ public:
 	}
 };
 
+/// stream with known content length and no special massage over socket
+class ChunkedSocketStream_c final: public CharStream_c
+{
+	AsyncNetInputBuffer_c& m_tIn;
+	CSphVector<BYTE>	m_dData;	// used only in ReadAll() call
+	int m_iLastParsed;
+	bool m_bBodyDone;
+	CSphVector<Str_t> m_dBodies;
+	http_parser_settings m_tParserSettings;
+	http_parser* m_pParser;
+	const char* m_szError = nullptr;
+
+private:
+	// callbacks
+	static int cbParserBody ( http_parser* pParser, const char* sAt, size_t iLen )
+	{
+		assert ( pParser->data );
+		auto pThis = static_cast<ChunkedSocketStream_c*> ( pParser->data );
+		return pThis->ParserBody ( { sAt, iLen } );
+	}
+
+	static int cbMessageComplete ( http_parser* pParser )
+	{
+		assert ( pParser->data );
+		auto pThis = static_cast<ChunkedSocketStream_c*> ( pParser->data );
+		return pThis->MessageComplete();
+	}
+
+	inline int MessageComplete()
+	{
+		HTTPINFO << "ChunkedSocketStream_c::MessageComplete";
+
+		m_bBodyDone = true;
+		return 0;
+	}
+
+	inline int ParserBody ( Str_t sData )
+	{
+		HTTPINFO << "ChunkedSocketStream_c::ParserBody with " << sData.second << " bytes '" << sData << "'";
+
+		if ( !IsEmpty ( sData ) )
+			m_dBodies.Add ( sData );
+		return 0;
+	}
+
+	void ParseBody ( ByteBlob_t sData )
+	{
+		HTTPINFO << "ChunkedSocketStream_c::ParseBody with " << sData.second << " bytes '" << sData << "'";
+		m_iLastParsed = (int)http_parser_execute ( m_pParser, &m_tParserSettings, (const char*)sData.first, sData.second );
+		if ( m_iLastParsed != sData.second )
+		{
+			HTTPINFO << "ParseBody error: parsed " << m_iLastParsed << ", chunk " << sData.second;
+			m_szError = http_errno_description ( (http_errno)m_pParser->http_errno );
+		}
+	}
+
+public:
+	ChunkedSocketStream_c ( AsyncNetInputBuffer_c& tIn, http_parser* pParser, bool bBodyDone, CSphVector<Str_t> dBodies, int iLastParsed )
+		: m_tIn { tIn }
+		, m_iLastParsed ( iLastParsed )
+		, m_bBodyDone ( bBodyDone )
+		, m_pParser ( pParser )
+	{
+		m_dBodies = std::move ( dBodies );
+		http_parser_settings_init ( &m_tParserSettings );
+		m_tParserSettings.on_body = cbParserBody;
+		m_tParserSettings.on_message_complete = cbMessageComplete;
+		m_pParser->data = this;
+	}
+
+	void DiscardLast()
+	{
+		m_tIn.PopTail ( std::exchange ( m_iLastParsed, 0 ) );
+		m_tIn.DiscardProcessed ( 0 );
+	}
+
+	~ChunkedSocketStream_c() final
+	{
+		DiscardLast();
+	}
+
+	Str_t Read() final
+	{
+		if ( m_bDone )
+			return dEmptyStr;
+
+		while ( m_dBodies.IsEmpty() )
+		{
+			if ( m_bBodyDone )
+			{
+				m_bDone = true;
+				return dEmptyStr;
+			}
+
+			DiscardLast();
+			if ( !m_tIn.HasBytes() )
+			{
+				auto iStart = sphMicroTimer();
+				switch ( m_tIn.ReadAny() )
+				{
+				case -1:
+					if ( m_tIn.GetError() )
+						sphLogDebug ( "failed to receive HTTP request -1 (error='%s') after %d us", sphSockError(), (int)( sphMicroTimer() - iStart ) );
+				case 0:
+					m_bDone = true;
+					return dEmptyStr;
+				default:
+					break;
+				}
+			}
+			ParseBody ( m_tIn.Tail() );
+		}
+
+		auto sResult = m_dBodies.First();
+		m_dBodies.Remove ( 0 );
+
+		if ( m_bBodyDone && m_dBodies.IsEmpty() )
+		{
+			m_bDone = true;
+			const_cast<char&> ( sResult.first[sResult.second] ) = '\0';
+		}
+		return sResult;
+	}
+
+	Str_t ReadAll() final
+	{
+		auto sFirst = Read();
+
+		if ( m_bDone )
+			return sFirst;
+
+		sphWarning ( "Reading whole body with chunked transfer-encoding is non-effective" );
+
+		m_dData.Append ( sFirst );
+		do
+			m_dData.Append ( Read() );
+		while ( !m_bDone );
+
+		m_dData.Add ( '\0' );
+		m_dData.Resize ( m_dData.GetLength() - 1 );
+		return m_dData;
+	}
+};
+
 ///////////////////////////////////////////////////////////////////////
 
 CSphString HttpEndpointToStr ( ESphHttpEndpoint eEndpoint )
@@ -247,11 +391,17 @@ void HttpRequestParser_c::Reinit()
 	HTTPINFO << "HttpRequestParser_c::Reinit()";
 
 	http_parser_init ( &m_tParser, HTTP_REQUEST );
+	m_sEndpoint = "";
 	m_sCurField.Clear();
 	m_sCurValue.Clear();
+	m_hOptions.Reset();
+	m_eType = HTTP_GET;
 	m_sUrl.Clear();
 	m_bHeaderDone = false;
+	m_bBodyDone = false;
+	m_dParsedBodies.Reset();
 	m_iParsedBodyLength = 0;
+	m_iLastParsed = 0;
 	m_szError = nullptr;
 	m_tParser.data = this;
 }
@@ -260,10 +410,10 @@ bool HttpRequestParser_c::ParseHeader ( ByteBlob_t sData )
 {
 	HTTPINFO << "ParseChunk with " << sData.second << " bytes '" << sData << "'";
 
-	auto iParsed = (int) http_parser_execute ( &m_tParser, &m_tParserSettings, (const char *)sData.first, sData.second );
-	if ( iParsed!= sData.second )
+	m_iLastParsed = (int) http_parser_execute ( &m_tParser, &m_tParserSettings, (const char *)sData.first, sData.second );
+	if ( m_iLastParsed != sData.second )
 	{
-		sphLogDebug ( "ParseChunk error: parsed %d, chunk %d", iParsed, sData.second );
+		sphLogDebug ( "ParseChunk error: parsed %d, chunk %d", m_iLastParsed, sData.second );
 		m_szError = http_errno_description ( (http_errno)m_tParser.http_errno );
 		return true;
 	}
@@ -271,10 +421,6 @@ bool HttpRequestParser_c::ParseHeader ( ByteBlob_t sData )
 	return m_bHeaderDone;
 }
 
-int HttpRequestParser_c::ContentLength() const
-{
-	return (int)m_tParser.content_length;
-}
 
 int HttpRequestParser_c::ParsedBodyLength() const
 {
@@ -494,7 +640,24 @@ inline int HttpRequestParser_c::ParserBody ( Str_t sData )
 {
 	HTTPINFO << "ParserBody with " << sData.second << " bytes '" << sData << "'";
 
+	if ( !m_dParsedBodies.IsEmpty() )
+	{
+		auto& sLast = m_dParsedBodies.Last();
+		if ( sLast.first + sLast.second == sData.first )
+			sLast.second += sData.second;
+		else
+			m_dParsedBodies.Add ( sData );
+	} else
+		m_dParsedBodies.Add ( sData );
 	m_iParsedBodyLength += sData.second;
+	return 0;
+}
+
+inline int HttpRequestParser_c::MessageComplete ()
+{
+	HTTPINFO << "MessageComplete";
+
+	m_bBodyDone = true;
 	return 0;
 }
 
@@ -552,8 +715,9 @@ int HttpRequestParser_c::cbMessageBegin ( http_parser* pParser )
 
 int HttpRequestParser_c::cbMessageComplete ( http_parser* pParser )
 {
-	HTTPINFO << "cbMessageComplete";
-	return 0;
+	assert ( pParser->data );
+	auto pThis = static_cast<HttpRequestParser_c*> ( pParser->data );
+	return pThis->MessageComplete();
 }
 
 int HttpRequestParser_c::cbMessageStatus ( http_parser* pParser, const char* sAt, size_t iLen )
@@ -1810,21 +1974,29 @@ bool sphProcessHttpQueryNoResponce ( const CSphString& sEndpoint, const CSphStri
 bool HttpRequestParser_c::ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVector<BYTE>& dResult )
 {
 	assert ( !m_szError );
-	int iBody = m_iParsedBodyLength;
-	if ( m_tParser.content_length>0 )
-		iBody += m_tParser.content_length;
+	std::unique_ptr<CharStream_c> pSource;
 
-	RawSocketStream_c tSource ( tIn, iBody ); // fixme! (chunked encoding support should be here)
+	if ( m_tParser.flags & F_CHUNKED )
+	{
+		pSource = std::make_unique<ChunkedSocketStream_c> ( tIn, &m_tParser, m_bBodyDone, std::move ( m_dParsedBodies ), m_iLastParsed );
+	} else
+	{
+		// for non-chunked - need to throw out beginning of the packet (with header). Only body rest in the buffer.
+		tIn.PopTail ( m_iLastParsed - ParsedBodyLength() );
+		int iFullLength = ParsedBodyLength() + ( (int)m_tParser.content_length > 0 ? (int)m_tParser.content_length : 0 );
+		pSource = std::make_unique<RawSocketStream_c> ( tIn, iFullLength );
+	}
+
 	ESphHttpEndpoint eEndpoint = StrToHttpEndpoint ( m_sEndpoint );
 
 	// these endpoints url-encoded, all others are plain json, and we don't want to waste time pre-parsing them
 	if ( eEndpoint == SPH_HTTP_ENDPOINT_SQL || eEndpoint == SPH_HTTP_ENDPOINT_CLI )
 	{
-		auto sData = StoreRawQuery ( m_hOptions, tSource );
+		auto sData = StoreRawQuery ( m_hOptions, *pSource );
 		ParseList ( sData );
 	}
 
-	return ProcessHttpQuery ( eEndpoint, tSource, m_hOptions, dResult, true, m_eType, m_sEndpoint );
+	return ProcessHttpQuery ( eEndpoint, *pSource, m_hOptions, dResult, true, m_eType, m_sEndpoint );
 }
 
 void sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError )

@@ -27,7 +27,6 @@ public:
 	bool ParseHeader ( ByteBlob_t tData );
 	bool ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVector<BYTE>& dResult );
 
-	int ContentLength() const;
 	int ParsedBodyLength() const;
 	bool Expect100() const;
 	bool KeepAlive() const;
@@ -42,6 +41,7 @@ private:
 	int ParserHeaderValue ( Str_t sData );
 	int ParserBody ( Str_t sData );
 	int ParseHeaderCompleted ();
+	int MessageComplete();
 
 	void FinishParserUrl();
 	void FinishParserKeyVal();
@@ -69,7 +69,10 @@ private:
 
 	http_method m_eType = HTTP_GET;
 	bool m_bHeaderDone = false;
-	int m_iParsedBodyLength = 0;
+	bool m_bBodyDone = false;
+	CSphVector<Str_t> m_dParsedBodies;
+	int m_iParsedBodyLength;
+	int m_iLastParsed = 0;
 
 	http_parser_settings m_tParserSettings;
 	http_parser m_tParser;

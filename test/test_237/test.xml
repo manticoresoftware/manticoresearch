@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>large packet via HTTP with chunked encoding</name>
+
+<skip_indexer/>
+<requires>
+    <http/>
+    <force-rt/>
+    <heavy/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	binlog_path =
+}
+
+index test_rt
+{
+    type = rt
+    path = <data_path/>/rt
+    rt_field = title
+    rt_attr_uint = gid
+	rt_attr_string = dummy
+	stored_fields =
+}
+</config>
+
+<custom_test><![CDATA[
+
+global $sd_http_port;
+
+function RandomWordsTest351 ( $n, $seed )
+{
+	srand ( $seed );
+	$words = [];
+	for ( $k=0; $k<$n; $k++ )
+		$words[] = substr ( str_shuffle ( 'abcdefghijklmnopqrstuvwxyz' ), 0, 5 );
+	return join ( " ", $words );
+}
+
+$results = array();
+$results[] = 'populate commit';
+
+$con = curl_init();
+	
+$id = 1;
+for ( $commit=0; $commit<4; $commit++ )
+{
+	$rows = "";
+	for ( $row=0; $row<10; $row++ )
+	{
+		$rows .= json_encode ( array ( "create"=>array("index"=>"test_rt", "id"=>$id, "doc"=>array( "gid"=>$id, "dummy"=>"test".$id, "title"=>RandomWordsTest351 ( 10000, $id ) ))) );
+		$rows .= "\n";
+		$id++;
+	}
+	
+	$curl_desc = array ( CURLOPT_RETURNTRANSFER => 1, CURLOPT_CONNECTTIMEOUT=>1, CURLOPT_URL => "127.0.0.1:$sd_http_port/json/bulk" );
+	$curl_desc[CURLOPT_POST] = 1;
+	$curl_desc[CURLOPT_POSTFIELDS] = $rows;
+
+	// notice, that is same (use same model) as test 351, but with another transfer-encoding.
+	$curl_desc[CURLOPT_HTTPHEADER] = array("Content-Type: application/x-ndjson", 'Transfer-Encoding: chunked');
+	
+	curl_setopt_array ( $con, $curl_desc );
+	$res = curl_exec ( $con );
+	$res = preg_replace('/"time":\d+(\.\d+)*,/', '"time":0.000,', $res);
+	$res = preg_replace('/"took":\d*,/', '"took":0,', $res);
+	$http_code = curl_getinfo ( $con, CURLINFO_HTTP_CODE );
+	
+	$results[] = array ( 'rows'=>$res, 'http_code'=>$http_code );
+}
+
+$q = <<<'EOD'
+{
+  "index":"test_rt",
+  "query":
+  {
+    "bool":
+    {
+      "must":
+      [
+        { "range": { "id": { "gt": 35 } } }
+      ]
+    }
+  }
+}
+EOD;
+
+$res = HttpQueryPost("json/search", NULL, $q, 0, false );
+$res = preg_replace('/"time":\d+(\.\d+)*,/', '"time":0.000,', $res);
+$res = preg_replace('/"took":\d*,/', '"took":0,', $res);
+$results[] = $res;
+
+curl_close($con);
+
+]]></custom_test>
+
+</test>

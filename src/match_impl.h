@@ -113,6 +113,13 @@ FORCE_INLINE void CSphMatch::SetAttr ( const CSphAttrLocator& tLoc, SphAttr_t uV
 	sphSetRowAttr ( m_pDynamic, tLoc, uValue );
 }
 
+FORCE_INLINE SphAttr_t ExchangeAttr ( const CSphMatch& tMatch, const CSphAttrLocator& tLoc, SphAttr_t uNewValue )
+{
+	auto uOldValue = tMatch.GetAttr ( tLoc );
+	tMatch.SetAttr ( tLoc, uNewValue );
+	return uOldValue;
+}
+
 /// add scalar value to attribute
 inline void CSphMatch::AddCounterScalar ( const CSphAttrLocator& tLoc, SphAttr_t uValue ) const
 {

@@ -72,7 +72,7 @@ void MultiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf, NetConnection_t tConn,
 	{
 		case Proto_e::SPHINXSE: eMultiProto = Proto_e::SPHINXSE; break; // force sphinx SE
 		default:
-			eMultiProto = pBuf->Probe ( g_iMaxPacketSize, false );
+			eMultiProto = pBuf->Probe ( false );
 	}
 
 	switch ( eMultiProto )

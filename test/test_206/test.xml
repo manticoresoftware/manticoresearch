@@ -303,6 +303,20 @@ index json_remap
 	rt_attr_json = j2
 	rt_field = text
 }
+
+source json_objects1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * from json_objects1
+	sql_attr_json	= j
+}
+
+index objects1
+{
+	source = json_objects1
+	path=<data_path/>/json_objects1
+}
 </config>
 
 <db_create>
@@ -454,6 +468,17 @@ INSERT INTO json_inplace ( id, gid, title, j ) VALUES
     ( 3,2,'','{"a":"tag1","b":"tag2"}'),
     ( 4,3,'','{"a":1,"c":2}');
 </db_insert>
+
+<db_create>CREATE TABLE json_objects1 ( id INTEGER NOT NULL, gid INTEGER NOT NULL, j VARCHAR(255) NOT NULL )</db_create>
+<db_drop>DROP TABLE IF EXISTS `json_objects1`;</db_drop>
+<db_insert>
+INSERT INTO json_objects1 ( id, gid, j ) VALUES
+	(1,1,'{"a":true,"b":"another tag"}'),
+	(2,1,'{"b":"another tag"}'),
+	(3,1,'{"a":false,"b":"another tag"}'),
+    (4,1,'{}')
+</db_insert>
+
 
 <queries>
 <!-- json via API -->
@@ -818,6 +843,9 @@ select j from objects where id=9 and integer(j[0])!=1 and double(j[1])&gt;0 and 
 <!-- string filters -->
 select id, j.name from test where id&lt;6 and j.name='Alice' order by id asc;
 select id, j.name from test where id&lt;6 and j.name != 'Alice' order by id asc;
+
+<!-- json bool values at group by -->
+select id, groupby(), count(*), j from objects1 group by j.a order by id asc;
 
 </sphinxql>
 </queries>

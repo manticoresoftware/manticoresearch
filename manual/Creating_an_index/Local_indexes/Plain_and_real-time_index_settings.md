@@ -55,6 +55,7 @@ index <index name> {
   [stored_fields = <comma separated list of full-text fields that should be stored>]
 
   [rt_mem_limit = <RAM chunk max size, default 128M>]
+  [optimize_cutoff = <max number of RT index disk chunks>]
 
 }
 ```
@@ -196,6 +197,10 @@ The latter (string attribute) is:
 
 ### Real-time index settings:
 
+#### optimize_cutoff
+
+Max number of RT index disk chunks. Read more [here](../../Securing_and_compacting_an_index/Compacting_an_index.md#Number-of-optimized-disk-chunks).
+
 #### rt_field
 
 ```ini
@@ -318,13 +323,13 @@ The `rt_mem_limit` is never exceeded, but the actual RAM chunk can be significan
 
 For example, if we saved 90M docs to a disk chunk and 10M more docs arrived while saving, the rate is 90%, so next time we collect up to 90% of `rt_mem_limit` before starting flushing. The higher is the speed of insertion, the lower is the `rt_mem_limit` rate. The rate varies in the range of 33.3% to 95%. You can see index's current rate in [SHOW INDEX <idx> STATUS](Profiling_and_monitoring/Index_settings_and_status/SHOW_INDEX_STATUS.md).
 
-##### How to change rt_mem_limit
+##### How to change rt_mem_limit and optimize_cutoff
 
-In RT mode the RAM chunk size limit can be changed using `ALTER TABLE` . To set `rt_mem_limit` to 1 Gb for index 't' run query `ALTER TABLE t rt_mem_limit='1G'`.
+In RT mode the RAM chunk size limit and max number of disk chunks can be changed using `ALTER TABLE` . To set `rt_mem_limit` to 1 gigabyte for index 't' run query `ALTER TABLE t rt_mem_limit='1G'`. To change max number of chunks - `ALTER TABLE t optimize_cutoff='5'`.
 
-In plain mode `rt_mem_limit` can be changed so:
+In plain mode `rt_mem_limit` and `optimize_cutoff` can be changed so:
 
-* edit `rt_mem_limit` value in index configuration
+* change the value in index configuration
 * run `ALTER TABLE <index_name> RECONFIGURE`
 
 ##### Important notes about RAM chunks
@@ -343,7 +348,7 @@ In plain mode `rt_mem_limit` can be changed so:
   - when the RAM chunk is full and is dumped to disk as a disk chunk.
 * Until flushed RAM chunk is not persisted on disk there's a [binary log](../../Logging/Binary_logging.md) as its backup for the case of a sudden daemon shutdown. In this case the larger you have `rt_mem_limit`, the longer will it take to replay the binlog on start to recover the RAM chunk.
 * RAM chunk may be performing slightly slower than a disk chunk.
-* Even though a RAM chunk doesn't take more than `rt_mem_limit` Manticore itself can take more in some cases, e.g. if you begin a transaction to insert data and don't commit it for some time, then the data you have already transmitted within the transaction to Manticore is kept in memory.
+* Even though a RAM chunk doesn't take more memory than `rt_mem_limit` Manticore itself can take more in some cases, e.g. if you begin a transaction to insert data and don't commit it for some time, then the data you have already transmitted within the transaction to Manticore is kept in memory.
 
 ### Plain index settings:
 

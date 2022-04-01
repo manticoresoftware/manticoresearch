@@ -66,7 +66,7 @@ class MysqlCompressedSocket_T : public MysqlCompressedSocket_c, public COMPR
 	}
 
 protected:
-	int ReadFromBackend ( int iNeed, int iHaveSpace, bool bIntr ) final
+	int ReadFromBackend ( int iNeed, int, bool bIntr ) final
 	{
 		int iRead = 0;
 		while ( iNeed > iRead )
@@ -85,7 +85,7 @@ protected:
 
 			if ( !uUncompressedSize ) // raw uncompressed, return as is
 			{
-				m_tIn.GetBytes ( BufferFor ( uRawSize ), uRawSize );
+				m_tIn.GetBytes ( AllocateBuffer ( uRawSize ).begin(), uRawSize );
 				iRead += uRawSize;
 				continue;
 			}
@@ -93,7 +93,7 @@ protected:
 			// compressed input
 			const BYTE* pFoo = nullptr;
 			m_tIn.GetBytesZerocopy ( &pFoo, uRawSize );
-			if (!COMPR::Common_uncompress ( BufferFor ( uUncompressedSize ), &uUncompressedSize, pFoo, uRawSize ))
+			if (!COMPR::Common_uncompress ( AllocateBuffer ( uUncompressedSize ).begin(), &uUncompressedSize, pFoo, uRawSize ))
 				return -1;
 			iRead += uUncompressedSize;
 		}

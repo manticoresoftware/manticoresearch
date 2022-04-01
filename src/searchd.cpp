@@ -129,7 +129,7 @@ static bool				g_bQuerySyslog		= false;
 static CSphString		g_sLogFile;								// log file name
 static bool				g_bLogTty			= false;			// cached isatty(g_iLogFile)
 static bool				g_bLogStdout		= true;				// extra copy of startup log messages to stdout; true until around "accepting connections", then MUST be false
-static LogFormat_e		g_eLogFormat		= LOG_FORMAT_PLAIN;
+static LogFormat_e		g_eLogFormat		= LOG_FORMAT_SPHINXQL;
 static bool				g_bLogCompactIn		= false;			// whether to cut list in IN() clauses.
 static int				g_iQueryLogMinMs	= 0;				// log 'slow' threshold for query
 static char				g_sLogFilter[SPH_MAX_FILENAME_LEN+1] = "\0";
@@ -155,7 +155,6 @@ static int				g_iServerID = 0;
 static bool				g_bServerID = false;
 static bool				g_bJsonConfigLoadedOk = false;
 static auto&			g_iAutoOptimizeCutoffMultiplier = AutoOptimizeCutoffMultiplier();
-static auto&			g_iAutoOptimizeCutoff = AutoOptimizeCutoff();
 static constexpr bool	AUTOOPTIMIZE_NEEDS_VIP = false; // whether non-VIP can issue 'SET GLOBAL auto_optimize = X'
 
 static bool				g_bSplit = true;
@@ -2038,6 +2037,7 @@ bool SearchReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 		// read totals (retrieved count, total count, query time, word count)
 		int iRetrieved = tReq.GetInt ();
 		tRes.m_iTotalMatches = tReq.GetInt ();
+		tRes.m_bTotalMatchesApprox = !!tReq.GetInt();
 		tRes.m_iQueryTime = tReq.GetInt ();
 
 		// agents always send IO/CPU stats to master
@@ -2207,7 +2207,7 @@ static void CheckQuery ( const CSphQuery & tQuery, CSphString & sError )
 	if ( tQuery.m_iLimit<0 )
 		LOC_ERROR ( "limit out of bounds (limit=%d)", tQuery.m_iLimit );
 
-	if ( tQuery.m_iCutoff<0 )
+	if ( tQuery.m_iCutoff<-1 )
 		LOC_ERROR ( "cutoff out of bounds (cutoff=%d)", tQuery.m_iCutoff );
 
 	if ( ( tQuery.m_iRetryCount!=-1 ) && ( tQuery.m_iRetryCount>MAX_RETRY_COUNT ) )
@@ -3561,6 +3561,9 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const AggrResult_t& tRes, b
 		tOut.SendInt ( dResult.m_dMatches.GetLength() );
 
 	tOut.SendAsDword ( tRes.m_iTotalMatches );
+	if ( bAgentMode && uMasterVer>=19 )
+		tOut.SendInt ( tRes.m_bTotalMatchesApprox ? 1 : 0 );
+
 	tOut.SendInt ( Max ( tRes.m_iQueryTime, 0 ) );
 
 	if ( iVer>=0x11A && bAgentMode )
@@ -5615,6 +5618,7 @@ struct LocalSearchRef_t
 
 			tResult.m_iCpuTime += tChild.m_iCpuTime;
 			tResult.m_iTotalMatches += tChild.m_iTotalMatches;
+			tResult.m_bTotalMatchesApprox |= tChild.m_bTotalMatchesApprox;
 			tResult.m_iSuccesses += tChild.m_iSuccesses;
 			tResult.m_tIOStats.Add ( tChild.m_tIOStats );
 
@@ -7036,6 +7040,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 					// merge this agent's stats
 					tRes.m_iTotalMatches += tRemoteResult.m_iTotalMatches;
+					tRes.m_bTotalMatchesApprox |= tRemoteResult.m_bTotalMatchesApprox;
 					tRes.m_iQueryTime += tRemoteResult.m_iQueryTime;
 					tRes.m_iAgentCpuTime += tRemoteResult.m_iCpuTime;
 					tRes.m_tAgentIOStats.Add ( tRemoteResult.m_tIOStats );
@@ -8998,6 +9003,7 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 
 	dStatus.MatchTupletf ( "total", "%d", tMeta.m_iMatches );
 	dStatus.MatchTupletf ( "total_found", "%l", tMeta.m_iTotalMatches );
+	dStatus.MatchTupletf ( "total_relation", "%s", tMeta.m_bTotalMatchesApprox ? "gte" : "eq" );
 	dStatus.MatchTupletf ( "time", "%.3F", tMeta.m_iQueryTime );
 
 	if ( tMeta.m_iMultiplier>1 )
@@ -10133,7 +10139,7 @@ void HandleCommandCallPq ( ISphOutputBuffer &tOut, WORD uVer, InputBuffer_c &tRe
 
 static void HandleMysqlCallPQ ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & tAcc, CPqResult & tResult )
 {
-
+	StatCountCommand ( SEARCHD_COMMAND_CALLPQ );
 	PercolateMatchResult_t &tRes = tResult.m_dResult;
 	tRes.Reset();
 
@@ -10972,6 +10978,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt )
 
 void HandleMysqlCallSnippets ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 {
+	StatCountCommand ( SEARCHD_COMMAND_EXCERPT );
 	CSphString sError;
 
 	// check arguments
@@ -11214,6 +11221,7 @@ bool DoGetKeywords ( const CSphString & sIndex, const CSphString & sQuery, const
 
 void HandleMysqlCallKeywords ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphString & sWarning )
 {
+	StatCountCommand ( SEARCHD_COMMAND_KEYWORDS );
 	CSphString sError;
 
 	// string query, string index, [bool hits] || [value as option_name, ...]
@@ -11460,6 +11468,7 @@ struct CmpDistDocABC_fn
 
 void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQueryMode )
 {
+	StatCountCommand ( SEARCHD_COMMAND_SUGGEST );
 	CSphString sError;
 
 	// string query, string index, [value as option_name, ...]
@@ -13737,7 +13746,14 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 			}
 		} else if ( tStmt.m_sSetName=="optimize_cutoff")
 		{
-			g_iAutoOptimizeCutoff = tStmt.m_iSetValue;
+			if ( tStmt.m_iSetValue<1 )
+			{
+				tOut.ErrorEx ( tStmt.m_sStmt, "optimize_cutoff should be greater than 0, got %d", tStmt.m_iSetValue );
+				return;
+			}
+
+			MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff = tStmt.m_iSetValue;
+
 		} else if ( tStmt.m_sSetName=="pseudo_sharding")
 		{
 			g_bSplit = !!tStmt.m_iSetValue;
@@ -14459,7 +14475,7 @@ void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 
 	OptimizeTask_t tTask;
 	tTask.m_eVerb = OptimizeTask_t::eManualOptimize;
-	tTask.m_iCutoff = tStmt.m_tQuery.m_iCutoff;
+	tTask.m_iCutoff = tStmt.m_tQuery.m_iCutoff<=0 ? 0 : tStmt.m_tQuery.m_iCutoff;
 
 	if ( tStmt.m_tQuery.m_bSync )
 	{
@@ -14684,7 +14700,7 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt )
 		auto pVars = session::Info().GetClientSession();
 		dTable.MatchTuplet ( "autocommit", pVars->m_bAutoCommit ? "1" : "0" );
 		dTable.MatchTupletf ( "auto_optimize", "%d", g_iAutoOptimizeCutoffMultiplier );
-		dTable.MatchTupletf ( "optimize_cutoff", "%d", g_iAutoOptimizeCutoff );
+		dTable.MatchTupletf ( "optimize_cutoff", "%d", MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff );
 		dTable.MatchTuplet ( "collation_connection", sphCollationToName ( session::GetCollation() ) );
 		dTable.MatchTuplet ( "query_log_format", g_eLogFormat==LOG_FORMAT_PLAIN ? "plain" : "sphinxql" );
 		dTable.MatchTuplet ( "session_read_only", session::GetReadOnly() ? "1" : "0" );
@@ -16030,24 +16046,15 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		// the one that lists expansions for doc/check.pl
 		pStmt->m_sCallProc.ToUpper();
 		if ( pStmt->m_sCallProc=="SNIPPETS" )
-		{
-			StatCountCommand ( SEARCHD_COMMAND_EXCERPT );
 			HandleMysqlCallSnippets ( tOut, *pStmt );
-		} else if ( pStmt->m_sCallProc=="KEYWORDS" )
-		{
-			StatCountCommand ( SEARCHD_COMMAND_KEYWORDS );
+		else if ( pStmt->m_sCallProc=="KEYWORDS" )
 			HandleMysqlCallKeywords ( tOut, *pStmt, m_tLastMeta.m_sWarning );
-		} else if ( pStmt->m_sCallProc=="SUGGEST" )
-		{
-			StatCountCommand ( SEARCHD_COMMAND_SUGGEST );
+		else if ( pStmt->m_sCallProc=="SUGGEST" )
 			HandleMysqlCallSuggest ( tOut, *pStmt, false );
-		} else if ( pStmt->m_sCallProc=="QSUGGEST" )
-		{
-			StatCountCommand ( SEARCHD_COMMAND_SUGGEST );
+		else if ( pStmt->m_sCallProc=="QSUGGEST" )
 			HandleMysqlCallSuggest ( tOut, *pStmt, true );
-		} else if ( pStmt->m_sCallProc=="PQ" )
+		else if ( pStmt->m_sCallProc=="PQ" )
 		{
-			StatCountCommand ( SEARCHD_COMMAND_CALLPQ );
 			HandleMysqlCallPQ ( tOut, *pStmt, m_tAcc, m_tPercolateMeta );
 			m_tPercolateMeta.m_dResult.m_sMessages.MoveWarningsTo ( m_tLastMeta.m_sWarning );
 			m_tPercolateMeta.m_dDocids.Reset ( 0 ); // free occupied mem
@@ -16086,8 +16093,6 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	case STMT_UPDATE:
 		{
-			FreezeLastMeta();
-			StatCountCommand ( SEARCHD_COMMAND_UPDATE );
 			StmtErrorReporter_c tErrorReporter ( tOut, pStmt->m_sStmt );
 			sphHandleMysqlUpdate ( tErrorReporter, *pStmt, sQuery );
 			return true;
@@ -18695,7 +18700,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	AllowOnlyNot ( hSearchd.GetInt ( "not_terms_only_allowed", 0 )!=0 );
 	ConfigureDaemonLog ( hSearchd.GetStr ( "query_log_commands" ) );
 	g_iAutoOptimizeCutoffMultiplier = hSearchd.GetInt ( "auto_optimize", 1 );
-	g_iAutoOptimizeCutoff = hSearchd.GetInt ( "optimize_cutoff", g_iAutoOptimizeCutoff );
+	MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff = hSearchd.GetInt ( "optimize_cutoff", AutoOptimizeCutoff() );
 
 	g_bSplit = hSearchd.GetInt ( "pseudo_sharding", 1 )!=0;
 }
@@ -19545,7 +19550,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		g_sSnippetsFilePrefix.SetSprintf("%s/", sphGetCwd().scstr());
 
 	{
-		auto sLogFormat = hSearchd.GetStr ( "query_log_format", "plain" );
+		auto sLogFormat = hSearchd.GetStr ( "query_log_format", "sphinxql" );
 		if ( sLogFormat=="sphinxql" )
 			g_eLogFormat = LOG_FORMAT_SPHINXQL;
 		else if ( sLogFormat=="plain" )

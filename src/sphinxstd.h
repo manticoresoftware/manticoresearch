@@ -3250,7 +3250,7 @@ public:
 	inline void			RawC ( char cChar ) { GrowEnough ( 1 ); *end () = cChar; ++m_iUsed; }
 	void				AppendRawChunk ( Str_t sText ); // append without any commas
 	StringBuilder_c &	SkipNextComma();
-	StringBuilder_c &	AppendName ( const char * sName); // append
+	StringBuilder_c &	AppendName ( const char * szName, bool bQuoted=true ); // append "szName":
 
 	// these use standard sprintf() inside
 	StringBuilder_c &	vAppendf ( const char * sTemplate, va_list ap );
@@ -3454,17 +3454,21 @@ class EscapedStringBuilder_T : public StringBuilder_c
 		return true;
 	}
 
-	inline bool AppendEmptyEscaped ( const char * sText )
+	inline void AppendEmptyQuotes()
 	{
-		if ( sText && *sText )
-			return false;
-
 		GrowEnough ( 3 );
-		auto * pCur = end ();
+		auto* pCur = end();
 		pCur[0] = T::cQuote;
 		pCur[1] = T::cQuote;
 		pCur[2] = '\0';
 		m_iUsed += 2;
+	}
+
+	inline bool AppendEmptyEscaped ( const char* sText )
+	{
+		if ( sText && *sText )
+			return false;
+		AppendEmptyQuotes();
 		return true;
 	}
 
@@ -3559,8 +3563,8 @@ public:
 			m_iUsed += sComma.second;
 		}
 
-		if ( AppendEmptyEscaped ( sText ) )
-			return;
+		if ( !iLen )
+			return AppendEmptyQuotes();
 
 		GrowEnough ( 3 ); // 2 quotes and terminator
 		const char * pSrc = sText;
@@ -3682,8 +3686,8 @@ public:
 			m_iUsed += sComma.second;
 		}
 
-		if ( AppendEmptyEscaped ( sText ) )
-			return;
+		if ( !iLen )
+			return AppendEmptyQuotes();
 
 		GrowEnough ( 3 ); // 2 quotes and terminator
 		const char * pSrc = sText;
@@ -3846,9 +3850,9 @@ public:
 		return *this;
 	}
 
-	EscapedStringBuilder_T &AppendName ( const char * sName )
+	EscapedStringBuilder_T &AppendName ( const char * sName, bool bQuoted=true )
 	{
-		StringBuilder_c::AppendName(sName);
+		StringBuilder_c::AppendName ( sName, bQuoted );
 		return *this;
 	}
 };
@@ -5084,7 +5088,10 @@ public:
 		m_iSize = rhs.m_iSize;
 		m_iUsed = rhs.m_iUsed;
 		m_iMaxUsed = rhs.m_iMaxUsed;
-		m_pHash = sph::RawStorage_T<Entry_t>::Allocate ( m_iSize );
+
+		// as we anyway copy raw data, don't need to call ctrs with this allocation
+		using Entry_Storage = typename std::aligned_storage<sizeof ( Entry_t ), alignof ( Entry_t )>::type;
+		m_pHash = (Entry_t*)new Entry_Storage[m_iSize];
 		sph::DefaultCopy_T<Entry_t>::CopyVoid ( m_pHash, rhs.m_pHash, m_iSize );
 	}
 

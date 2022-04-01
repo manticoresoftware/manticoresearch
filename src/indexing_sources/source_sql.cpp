@@ -1222,7 +1222,6 @@ Str_t UnpackZlib ( CSphVector<char>& tBuffer, Str_t tInputStream )
 Str_t CSphSource_SQL::SqlUnpackColumn ( int iFieldIndex, ESphUnpackFormat eFormat )
 {
 	int iIndex = m_tSchema.GetField ( iFieldIndex ).m_iIndex;
-	CSphVector<char> & tBuffer = m_dUnpackBuffers[iFieldIndex];
 	Str_t tResult { nullptr, 0 };
 
 	switch ( eFormat )
@@ -1232,7 +1231,7 @@ Str_t CSphSource_SQL::SqlUnpackColumn ( int iFieldIndex, ESphUnpackFormat eForma
 		{
 			auto tSqlCompressedStream = SqlCompressedColumnStream ( iFieldIndex );
 			auto _ = AtScopeExit ( [tSqlCompressedStream, this] { SqlCompressedColumnReleaseStream ( tSqlCompressedStream ); } );
-			tResult = UnpackZlib ( tBuffer, tSqlCompressedStream );
+			tResult = UnpackZlib ( 	m_dUnpackBuffers[iFieldIndex], tSqlCompressedStream );
 		}
 		break;
 	case SPH_UNPACK_MYSQL_COMPRESS:
@@ -1263,10 +1262,10 @@ Str_t CSphSource_SQL::SqlUnpackColumn ( int iFieldIndex, ESphUnpackFormat eForma
 				break;
 			}
 
-			int iResult;
+			CSphVector<char> & tBuffer = m_dUnpackBuffers[iFieldIndex];
 			tBuffer.Resize ( static_cast<int64_t> ( uSize ) + 1 );
 			unsigned long uLen = tSqlStream.second - 4;
-			iResult = uncompress ( (Bytef*)tBuffer.Begin(), &uSize, (Bytef*)tSqlStream.first + 4, uLen );
+			int iResult = uncompress ( (Bytef*)tBuffer.Begin(), &uSize, (Bytef*)tSqlStream.first + 4, uLen );
 			if ( iResult == Z_OK )
 			{
 				tBuffer[static_cast<int64_t> ( uSize )] = 0;

@@ -1962,21 +1962,6 @@ int ParseKeywordExpansion ( const char * sValue )
 	return iOpt;
 }
 
-enum class MutableName_e
-{
-	EXPAND_KEYWORDS,
-	RT_MEM_LIMIT,
-	PREOPEN,
-	ACCESS_PLAIN_ATTRS,
-	ACCESS_BLOB_ATTRS,
-	ACCESS_DOCLISTS,
-	ACCESS_HITLISTS,
-	READ_BUFFER_DOCS,
-	READ_BUFFER_HITS,
-
-	TOTAL
-};
-
 const char * GetMutableName ( MutableName_e eName )
 {
 	switch ( eName ) 
@@ -1990,6 +1975,7 @@ const char * GetMutableName ( MutableName_e eName )
 		case MutableName_e::ACCESS_HITLISTS: return "access_hitlists";
 		case MutableName_e::READ_BUFFER_DOCS: return "read_buffer_docs";
 		case MutableName_e::READ_BUFFER_HITS: return "read_buffer_hits";
+		case MutableName_e::OPTIMIZE_CUTOFF: return "optimize_cutoff";
 		default: assert ( 0 && "Invalid mutable option" ); return "";
 	}
 }
@@ -2056,9 +2042,12 @@ static void GetFileAccess (  const CSphConfigSection & hIndex, MutableName_e eNa
 	dLoaded.BitSet ( (int)eName );
 }
 
+static const int g_iOptimizeCutoff = 1;
+
 MutableIndexSettings_c::MutableIndexSettings_c()
 	: m_iExpandKeywords { KWE_DISABLED }
 	, m_iMemLimit { DEFAULT_RT_MEM_LIMIT }
+	, m_iOptimizeCutoff ( g_iOptimizeCutoff )
 	, m_dLoaded ( (int)MutableName_e::TOTAL )
 {
 #if !_WIN32
@@ -2174,6 +2163,18 @@ bool MutableIndexSettings_c::Load ( const char * sFileName, const char * sIndexN
 		sError = "";
 	}
 
+	JsonObj_c tOptimizeCutoff = tParser.GetIntItem ( "optimize_cutoff", sError, true );
+	if ( tOptimizeCutoff )
+	{
+		m_iOptimizeCutoff = tOptimizeCutoff.IntVal();
+		m_iOptimizeCutoff = Max ( m_iOptimizeCutoff, 1 );
+		m_dLoaded.BitSet ( (int)MutableName_e::OPTIMIZE_CUTOFF );
+	} else if ( !sError.IsEmpty() )
+	{
+		sphWarning ( "index %s: %s", sIndexName, sError.cstr() );
+		sError = "";
+	}
+
 	m_bNeedSave = true;
 
 	return true;
@@ -2244,6 +2245,13 @@ void MutableIndexSettings_c::Load ( const CSphConfigSection & hIndex, bool bNeed
 		m_tFileAccess.m_iReadBufferHitList = GetReadBuffer ( hIndex.GetInt ( "read_buffer_hits", m_tFileAccess.m_iReadBufferHitList ) );
 		m_dLoaded.BitSet ( (int)MutableName_e::READ_BUFFER_HITS );
 	}
+
+	if ( hIndex.Exists ( "optimize_cutoff" ) )
+	{
+		m_iOptimizeCutoff = hIndex.GetInt ( "optimize_cutoff", g_iOptimizeCutoff );
+		m_iOptimizeCutoff = Max ( m_iOptimizeCutoff, 1 );
+		m_dLoaded.BitSet ( (int)MutableName_e::OPTIMIZE_CUTOFF );
+	}
 }
 
 static void AddStr ( const CSphBitvec & dLoaded, MutableName_e eName, JsonObj_c & tRoot, const char * sVal )
@@ -2296,6 +2304,8 @@ bool MutableIndexSettings_c::Save ( CSphString & sBuf ) const
 
 	AddInt ( m_dLoaded, MutableName_e::READ_BUFFER_DOCS, tRoot, m_tFileAccess.m_iReadBufferDocList );
 	AddInt ( m_dLoaded, MutableName_e::READ_BUFFER_HITS, tRoot, m_tFileAccess.m_iReadBufferHitList );
+
+	AddInt ( m_dLoaded, MutableName_e::OPTIMIZE_CUTOFF, tRoot, m_iOptimizeCutoff );
 
 	sBuf = tRoot.AsString ( true );
 
@@ -2353,6 +2363,11 @@ void MutableIndexSettings_c::Combine ( const MutableIndexSettings_c & tOther )
 		m_tFileAccess.m_iReadBufferHitList = tOther.m_tFileAccess.m_iReadBufferHitList;
 		m_dLoaded.BitSet ( (int)MutableName_e::READ_BUFFER_HITS );
 	}
+	if ( tOther.m_dLoaded.BitGet ( (int)MutableName_e::OPTIMIZE_CUTOFF ) )
+	{
+		m_iOptimizeCutoff = tOther.m_iOptimizeCutoff;
+		m_dLoaded.BitSet ( (int)MutableName_e::OPTIMIZE_CUTOFF );
+	}
 }
 
 MutableIndexSettings_c & MutableIndexSettings_c::GetDefaults ()
@@ -2390,6 +2405,9 @@ void MutableIndexSettings_c::Format ( SettingsFormatter_c & tOut, FilenameBuilde
 		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::READ_BUFFER_DOCS, m_tFileAccess.m_iReadBufferDocList!=tDefaults.m_tFileAccess.m_iReadBufferDocList ) );
 	tOut.Add ( GetMutableName ( MutableName_e::READ_BUFFER_HITS ), m_tFileAccess.m_iReadBufferHitList,
 		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::READ_BUFFER_HITS, m_tFileAccess.m_iReadBufferHitList!=tDefaults.m_tFileAccess.m_iReadBufferHitList ) );
+
+	tOut.Add ( GetMutableName ( MutableName_e::OPTIMIZE_CUTOFF ), m_iOptimizeCutoff,
+		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::OPTIMIZE_CUTOFF, HasSettings() && m_dLoaded.BitGet ( (int)MutableName_e::OPTIMIZE_CUTOFF ) ) );
 }
 
 void SaveMutableSettings ( const MutableIndexSettings_c & tSettings, const CSphString & sPath )

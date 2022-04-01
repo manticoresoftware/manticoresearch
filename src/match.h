@@ -71,4 +71,6 @@ public:
 /// specialized swapper
 void Swap ( CSphMatch & a, CSphMatch & b );
 
+FORCE_INLINE SphAttr_t ExchangeAttr ( const CSphMatch& tMatch, const CSphAttrLocator& tLoc, SphAttr_t uNewValue );
+
 #include "match_impl.h"

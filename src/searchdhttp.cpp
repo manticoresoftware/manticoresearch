@@ -870,9 +870,11 @@ public:
 
 	void HeadColumn ( const char * szName, MysqlColumnType_e eType ) override
 	{
-		ColumnNameType_t tCol { szName, eType };
+		JsonEscapedBuilder sEscapedName;
+		sEscapedName.FixupSpacedAndAppendEscaped ( szName );
+		ColumnNameType_t tCol { (CSphString)sEscapedName, eType };
 		auto _ = m_dBuf.Object(false);
-		m_dBuf.AppendName ( tCol.first.cstr() );
+		m_dBuf.AppendName ( tCol.first.cstr(), false );
 		auto tTypeBlock = m_dBuf.Object(false);
 		m_dBuf.NamedVal ( "type", eType );
 		m_dColumns.Add ( tCol );
@@ -908,7 +910,7 @@ private:
 
 	void AddDataColumn()
 	{
-		m_dBuf.AppendName ( m_dColumns[m_iCol].first.cstr() );
+		m_dBuf.AppendName ( m_dColumns[m_iCol].first.cstr(), false );
 		++m_iCol;
 	}
 
@@ -1206,7 +1208,9 @@ public:
 			return false;
 		}
 
-		if ( m_tOptions["Content-Type"].ToLower() != "application/x-ndjson" )
+		auto sContentType = m_tOptions["Content-Type"].ToLower();
+		auto dParts = sphSplit ( sContentType.cstr(), ";" );
+		if ( dParts.IsEmpty() || dParts[0] != "application/x-ndjson" )
 		{
 			ReportError ( "Content-Type must be application/x-ndjson", SPH_HTTP_STATUS_400 );
 			return false;

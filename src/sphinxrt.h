@@ -427,7 +427,7 @@ volatile bool &RTChangesAllowed () noexcept;
 
 // Get global flag of autooptimize
 volatile int & AutoOptimizeCutoffMultiplier() noexcept;
-volatile int & AutoOptimizeCutoff() noexcept;
+volatile int AutoOptimizeCutoff() noexcept;
 
 using EnqueueForOptimizeFnPtr = void (*) ( CSphString , OptimizeTask_t );
 volatile EnqueueForOptimizeFnPtr& EnqueueForOptimizeExecutor() noexcept;

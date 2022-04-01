@@ -99,6 +99,8 @@ struct ReplicationCluster_t : public ClusterDesc_t
 	// Galera port got from global ports list on cluster created
 	ScopedPort_c	m_tPort { -1 };
 
+	bool m_bUserRequest { false };
+
 	// lock protects access to m_hOptions
 	CSphMutex m_tOptsLock;
 
@@ -592,7 +594,8 @@ static wsrep_cb_status_t ViewChanged_fn ( void * pAppCtx, void * pRecvCtx, const
 	pCluster->m_iSize = pView->memb_num;
 	pCluster->m_iIdx = pView->my_idx;
 	pCluster->SetPrimary ( pView->status );
-	UpdateGroupView ( pView, pCluster );
+	if ( pCluster->IsPrimary() )
+		UpdateGroupView ( pView, pCluster );
 
 	*ppSstReq = nullptr;
 	*pSstReqLen = 0;
@@ -1380,8 +1383,10 @@ static void CollectClusterDesc ( CSphVector<ClusterDesc_t> & dClusters )
 	{
 		// should save all clusters on start
 		// but skip cluster that just joining from user request
-		if ( !g_bReplicationStarted || ( tCluster.second->GetNodeState()!=ClusterState_e::JOINING ) )
-			dClusters.Add ( *tCluster.second );
+		if ( tCluster.second->GetNodeState()==ClusterState_e::JOINING && tCluster.second->m_bUserRequest )
+			continue;
+
+		dClusters.Add ( *tCluster.second );
 	}
 }
 
@@ -2727,6 +2732,7 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 	tArgs.m_sListenAddr.SetSprintf ( "%s:%d", g_sListenReplicationIP.cstr(), tPort.Get() );
 	tArgs.m_iListenPort = tPort.Get();
 	pElem->m_tPort.Set ( tPort.Leak() );
+	pElem->m_bUserRequest = true;
 
 	// global options
 	tArgs.m_bNewCluster = false;
@@ -2748,6 +2754,15 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 
 	ClusterState_e eState = tArgs.m_pCluster->WaitReady();
 	bool bOk = ( eState==ClusterState_e::DONOR || eState==ClusterState_e::SYNCED );
+
+	{
+		ScRL_t tLock ( g_tClustersLock );
+		if ( g_hClusters.Exists ( sCluster ) )
+		{
+			ReplicationClusterPtr_t pCluster ( g_hClusters[sCluster] );
+			pCluster->m_bUserRequest = false;
+		}
+	}
 
 	if ( bOk && bUpdateNodes )
 	{

@@ -289,6 +289,21 @@ enum class FileAccess_e
 	UNKNOWN
 };
 
+enum class MutableName_e
+{
+	EXPAND_KEYWORDS,
+	RT_MEM_LIMIT,
+	PREOPEN,
+	ACCESS_PLAIN_ATTRS,
+	ACCESS_BLOB_ATTRS,
+	ACCESS_DOCLISTS,
+	ACCESS_HITLISTS,
+	READ_BUFFER_DOCS,
+	READ_BUFFER_HITS,
+	OPTIMIZE_CUTOFF,
+
+	TOTAL
+};
 
 const int DEFAULT_READ_BUFFER = 256*1024;
 const int DEFAULT_READ_UNHINTED = 32768;
@@ -315,6 +330,7 @@ public:
 	int64_t		m_iMemLimit;
 	bool		m_bPreopen = false;
 	FileAccessSettings_t m_tFileAccess;
+	int			m_iOptimizeCutoff;
 	
 	MutableIndexSettings_c();
 
@@ -326,6 +342,7 @@ public:
 
 	bool NeedSave() const { return m_bNeedSave; }
 	bool HasSettings() const { return ( m_dLoaded.BitCount()>0 ); }
+	bool IsSet ( MutableName_e eOpt ) const { return ( HasSettings() && m_dLoaded.BitGet ( (int)eOpt ) ); }
 
 	void Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * ) const override;
 

@@ -172,6 +172,15 @@ target_compile_options ( lextra INTERFACE $<${CLANGCXX}:
 		-Wno-deprecated-register -Wno-missing-exception-spec -Wno-implicit-exception-spec-mismatch -Wno-invalid-offsetof> )
 
 # Checking for unaligned RAM access
+if (CMAKE_CROSSCOMPILING)
+	if (CMAKE_SYSTEM_PROCESSOR MATCHES "^(i.86|x86(_64)?)$"
+			OR CMAKE_SYSTEM_PROCESSOR STREQUAL amd64
+			OR CMAKE_SYSTEM_PROCESSOR STREQUAL arm64
+			OR CMAKE_SYSTEM_PROCESSOR STREQUAL aarch64)
+		set(UNALIGNED_RAM_ACCESS_EXITCODE "0" CACHE STRING "Result from TRY_RUN")
+		set(UNALIGNED_RAM_ACCESS_EXITCODE__TRYRUN_OUTPUT "" CACHE STRING "Output from TRY_RUN")
+	endif()
+endif ()
 include (check_unaligned_ram_access)
 
 option (USE_SMALLALLOC "Use 'small allocator' derived from loki lib. Bench! Glibc allocator now is fast enough!")

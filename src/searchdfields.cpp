@@ -545,7 +545,8 @@ void FillDocs ( VecTraits_T<CSphMatch> & dMatches, RemoteFieldsAnswer_t& dReply,
 		ARRAY_CONSTFOREACH( i, dFieldCols )
 		{
 			BYTE * pPacked = sphPackPtrAttr ( { dReply.m_pFieldsRaw+dLocators[i].m_iOff, dLocators[i].m_iSize } );
-			tMatch.SetAttr ( dFieldCols[i]->m_tLocator, (SphAttr_t) pPacked );
+			pPacked = (BYTE*)ExchangeAttr ( tMatch, dFieldCols[i]->m_tLocator, (SphAttr_t)pPacked );
+			sphDeallocatePacked ( pPacked );
 		}
 
 		++iDoc;

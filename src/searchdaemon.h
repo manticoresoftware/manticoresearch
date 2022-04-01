@@ -160,7 +160,7 @@ const char* szCommand ( int );
 /// master-agent API SEARCH command protocol extensions version
 enum
 {
-	VER_COMMAND_SEARCH_MASTER = 18
+	VER_COMMAND_SEARCH_MASTER = 19
 };
 
 
@@ -955,6 +955,7 @@ public:
 	bool Replace ( RefCountedRefPtr_t pValue, const CSphString & sKey );
 	void Delete ( const CSphString &sKey );
 	void ReleaseAndClear ();
+	void Hook ( const CSphString & sName ) { if ( m_pHook ) m_pHook ( sName ); }
 };
 
 // created with null set of elems
@@ -1042,12 +1043,16 @@ template<typename T>
 bool ReadOnlyHash_T<T>::Add ( RefCountedRefPtr_t pEntry, const CSphString& sKey )
 {
 	bool bSuccess;
+	bool bSuitable = pEntry;
 	WriteableHash_T<T> tChanger { *this };
 	cRefCountedRefPtr_t pConstEntry { pEntry.Leak() };
 	do {
 		tChanger.CopyOwnerHash();
 		bSuccess = tChanger.m_pNewHash->Add ( pConstEntry, sKey );
 	} while ( !tChanger.TryCommit() );
+	if ( bSuitable )
+		Hook ( sKey );
+
 	return bSuccess;
 }
 
@@ -1065,8 +1070,8 @@ void ReadOnlyHash_T<T>::AddOrReplace ( RefCountedRefPtr_t pValue, const CSphStri
 		else
 			Verify ( tChanger.m_pNewHash->Add ( pConstValue, sKey ) );
 	} while ( !tChanger.TryCommit() );
-	if ( bSuitable && m_pHook )
-		m_pHook ( sKey );
+	if ( bSuitable )
+		Hook ( sKey );
 }
 
 template<typename T>

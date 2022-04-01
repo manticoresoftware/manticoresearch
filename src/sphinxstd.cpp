@@ -2301,12 +2301,12 @@ StringBuilder_c & StringBuilder_c::SkipNextComma()
 	return *this;
 }
 
-StringBuilder_c & StringBuilder_c::AppendName ( const char * sName )
+StringBuilder_c & StringBuilder_c::AppendName ( const char * sName, bool bQuoted )
 {
 	if ( !sName || !strlen ( sName ) )
 		return *this;
 
-	AppendChunk ( {sName, (int) strlen ( sName )}, '"' );
+	AppendChunk ( { sName, (int)strlen ( sName ) }, bQuoted ? '"' : '\0' );
 	GrowEnough(2);
 	m_szBuffer[m_iUsed] = ':';
 	m_szBuffer[m_iUsed+1] = '\0';

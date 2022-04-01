@@ -17,6 +17,8 @@
 /// dict wrapper for star-syntax support in prefix-indexes
 class DictStar_c: public DictProxy_c
 {
+	using DictProxy_c::GetWordID;
+
 public:
 	explicit DictStar_c ( DictRefPtr_c pDict )
 		: DictProxy_c ( std::move (pDict) )

@@ -2436,6 +2436,8 @@ bool PercolateIndex_c::LoadMetaLegacy ( const CSphString& sMeta, bool bStripPath
 	// load meta
 	/////////////
 
+	m_sLastError = "";
+
 	// opened and locked, lets read
 	CSphAutoreader rdMeta;
 	if ( !rdMeta.Open ( sMeta, m_sLastError ) )

@@ -141,6 +141,7 @@ searchd
 }
 </query>
 
+<sphinxql d="0" system="wait-status" status="cluster_test_last_committed" wait_value="5" />
 <query d="0" endpoint="json/search">
 	{ "index": "rt1", "query": { "match": { "*": "221" } } }
 </query>

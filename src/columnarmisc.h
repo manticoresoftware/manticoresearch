@@ -17,8 +17,8 @@
 
 using ScopedTypedIterator_t = std::pair<std::unique_ptr<columnar::Iterator_i>,ESphAttr>;
 
-template <typename ITERATOR>
-bool AdvanceIterator ( ITERATOR * pIterator, RowID_t tRowID )
+template <typename PITERATOR>
+bool AdvanceIterator ( PITERATOR& pIterator, RowID_t tRowID )
 {
 	assert(pIterator);
 	return pIterator->AdvanceTo(tRowID)==tRowID;
@@ -26,7 +26,7 @@ bool AdvanceIterator ( ITERATOR * pIterator, RowID_t tRowID )
 
 CSphVector<ScopedTypedIterator_t> CreateAllColumnarIterators ( const columnar::Columnar_i * pColumnar, const ISphSchema & tSchema );
 
-void SetColumnarAttr ( int iAttr, ESphAttr eType, columnar::Builder_i * pBuilder, columnar::Iterator_i * pIterator, CSphVector<int64_t> & dTmp );
+void SetColumnarAttr ( int iAttr, ESphAttr eType, columnar::Builder_i * pBuilder, std::unique_ptr<columnar::Iterator_i>& pIterator, CSphVector<int64_t> & dTmp );
 void SetDefaultColumnarAttr ( int iAttr, ESphAttr eType, columnar::Builder_i * pBuilder );
 
 struct PlainOrColumnar_t

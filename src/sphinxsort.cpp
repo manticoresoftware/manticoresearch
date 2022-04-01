@@ -4596,7 +4596,7 @@ public:
 	bool				SetupGroupQueue();
 	bool				SetupQueue();
 
-	CSphRsetSchema &	SorterSchema() const { return *m_pSorterSchema.Ptr(); }
+	CSphRsetSchema &	SorterSchema() const { return *m_pSorterSchema; }
 	bool				HasJson() const { return m_tGroupSorterSettings.m_bJson; }
 	bool				SetSchemaGroupQueue ( const CSphRsetSchema & tNewSchema );
 
@@ -4615,7 +4615,7 @@ private:
 	bool						m_bHasCount = false;
 	bool						m_bHasGroupByExpr = false;
 	sph::StringSet				m_hQueryAttrs;
-	CSphScopedPtr<CSphRsetSchema> m_pSorterSchema;
+	std::unique_ptr<CSphRsetSchema> m_pSorterSchema;
 
 	bool						m_bGotGroupby;
 	bool						m_bRandomize;
@@ -4679,7 +4679,7 @@ private:
 	void	UpdateAggregateDependencies ( CSphColumnInfo & tExprCol );
 
 	ISphMatchSorter *	SpawnQueue();
-	ISphFilter *		CreateAggrFilter() const;
+	std::unique_ptr<ISphFilter>	CreateAggrFilter() const;
 	void				SetupCollation();
 	bool				Err ( const char * sFmt, ... ) const;
 };
@@ -4690,11 +4690,11 @@ QueueCreator_c::QueueCreator_c ( const SphQueueSettings_t & tSettings, const CSp
 	, m_tQuery ( tQuery )
 	, m_sError ( sError )
 	, m_pExtra ( pExtra )
-	, m_pSorterSchema { new CSphRsetSchema }
+	, m_pSorterSchema { std::make_unique<CSphRsetSchema>() }
 {
 	// short-cuts
 	m_sError = "";
-	*m_pSorterSchema.Ptr () = m_tSettings.m_tSchema;
+	*m_pSorterSchema = m_tSettings.m_tSchema;
 
 	m_dMatchJsonExprs.Resize ( CSphMatchComparatorState::MAX_ATTRS );
 	m_dGroupJsonExprs.Resize ( CSphMatchComparatorState::MAX_ATTRS );
@@ -4717,7 +4717,7 @@ const CSphColumnInfo * QueueCreator_c::GetAliasedColumnarAttr ( const CSphColumn
 void QueueCreator_c::CreateGrouperByAttr ( ESphAttr eType, const CSphColumnInfo & tGroupByAttr, bool & bGrouperUsesAttrs )
 {
 	assert ( m_pSorterSchema );
-	auto & tSchema = *m_pSorterSchema.Ptr();
+	auto & tSchema = *m_pSorterSchema;
 	const CSphAttrLocator & tLoc = tGroupByAttr.m_tLocator;
 
 	switch ( eType )
@@ -4803,7 +4803,7 @@ bool QueueCreator_c::SetupDistinctAttr()
 		return true;
 
 	assert ( m_pSorterSchema );
-	auto & tSchema = *m_pSorterSchema.Ptr();
+	auto & tSchema = *m_pSorterSchema;
 
 	int iDistinct = tSchema.GetAttrIndex ( m_tQuery.m_sGroupDistinct.cstr () );
 	if ( iDistinct<0 )
@@ -4831,7 +4831,7 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 		return Err ( "SPH_GROUPBY_ATTRPAIR is not supported any more (just group on 'bigint' attribute)" );
 
 	assert ( m_pSorterSchema );
-	auto & tSchema = *m_pSorterSchema.Ptr();
+	auto & tSchema = *m_pSorterSchema;
 
 	m_tGroupSorterSettings.m_iMaxMatches = m_tSettings.m_iMaxMatches;
 
@@ -5557,10 +5557,10 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 	{
 		CSphString sExpr2;
 		sExpr2.SetSprintf ( "TO_STRING(%s)", sExpr.cstr() );
-		tExprCol.m_pExpr = sphExprParse ( sExpr2.cstr(), *m_pSorterSchema.Ptr (), m_sError, tExprParseArgs );
+		tExprCol.m_pExpr = sphExprParse ( sExpr2.cstr(), *m_pSorterSchema, m_sError, tExprParseArgs );
 	} else
 	{
-		tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), *m_pSorterSchema.Ptr (), m_sError, tExprParseArgs );
+		tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), *m_pSorterSchema, m_sError, tExprParseArgs );
 	}
 
 	m_uPackedFactorFlags |= uQueryPackedFactorFlags;
@@ -5686,7 +5686,7 @@ bool QueueCreator_c::MaybeAddGeodistColumn ()
 	if ( !ReplaceWithColumnarItem ( m_tQuery.m_sGeoLongAttr, SPH_EVAL_PREFILTER ) ) return false;
 
 	auto pExpr = new ExprGeodist_t();
-	if ( !pExpr->Setup ( &m_tQuery, *m_pSorterSchema.Ptr(), m_sError ))
+	if ( !pExpr->Setup ( &m_tQuery, *m_pSorterSchema, m_sError ))
 	{
 		pExpr->Release ();
 		return false;
@@ -5716,7 +5716,7 @@ bool QueueCreator_c::MaybeAddExprColumn ()
 	tExprArgs.m_eCollation = m_tQuery.m_eCollation;
 	tExprArgs.m_pZonespanlist = &bHasZonespanlist;
 
-	tCol.m_pExpr = sphExprParse ( m_tQuery.m_sSortBy.cstr (), *m_pSorterSchema.Ptr(), m_sError, tExprArgs );
+	tCol.m_pExpr = sphExprParse ( m_tQuery.m_sSortBy.cstr (), *m_pSorterSchema, m_sError, tExprArgs );
 	if ( !tCol.m_pExpr )
 		return false;
 
@@ -5952,7 +5952,7 @@ void QueueCreator_c::SetupRemapColJson ( CSphColumnInfo & tRemapCol, CSphMatchCo
 const CSphColumnInfo * QueueCreator_c::GetGroupbyStr ( int iAttr, int iNumOldAttrs ) const
 {
 	assert ( m_pSorterSchema );
-	auto & tSorterSchema = *m_pSorterSchema.Ptr();
+	auto & tSorterSchema = *m_pSorterSchema;
 
 	if ( m_tSettings.m_bComputeItems && iAttr>=0 && iAttr<iNumOldAttrs && tSorterSchema.GetAttr(iAttr).m_sName=="@groupby" && m_dGroupColumns.GetLength() )
 	{
@@ -5969,7 +5969,7 @@ const CSphColumnInfo * QueueCreator_c::GetGroupbyStr ( int iAttr, int iNumOldAtt
 void QueueCreator_c::ReplaceGroupbyStrWithExprs ( CSphMatchComparatorState & tState, int iNumOldAttrs )
 {
 	assert ( m_pSorterSchema );
-	auto & tSorterSchema = *m_pSorterSchema.Ptr();
+	auto & tSorterSchema = *m_pSorterSchema;
 
 	for ( int i = 0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
 	{
@@ -6017,7 +6017,7 @@ void QueueCreator_c::ReplaceGroupbyStrWithExprs ( CSphMatchComparatorState & tSt
 void QueueCreator_c::ReplaceStaticStringsWithExprs ( CSphMatchComparatorState & tState )
 {
 	assert ( m_pSorterSchema );
-	auto & tSorterSchema = *m_pSorterSchema.Ptr();
+	auto & tSorterSchema = *m_pSorterSchema;
 
 	for ( int i = 0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
 	{
@@ -6069,7 +6069,7 @@ void QueueCreator_c::ReplaceStaticStringsWithExprs ( CSphMatchComparatorState & 
 void QueueCreator_c::ReplaceJsonWithExprs ( CSphMatchComparatorState & tState, CSphVector<ExtraSortExpr_t> & dExtraExprs )
 {
 	assert ( m_pSorterSchema );
-	auto & tSorterSchema = *m_pSorterSchema.Ptr();
+	auto & tSorterSchema = *m_pSorterSchema;
 
 	for ( int i = 0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
 	{
@@ -6108,7 +6108,7 @@ void QueueCreator_c::ReplaceJsonWithExprs ( CSphMatchComparatorState & tState, C
 void QueueCreator_c::AddColumnarExprsAsAttrs ( CSphMatchComparatorState & tState, CSphVector<ExtraSortExpr_t> & dExtraExprs )
 {
 	assert ( m_pSorterSchema );
-	auto & tSorterSchema = *m_pSorterSchema.Ptr();
+	auto & tSorterSchema = *m_pSorterSchema;
 
 	for ( int i = 0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
 	{
@@ -6147,7 +6147,7 @@ void QueueCreator_c::RemapAttrs ( CSphMatchComparatorState & tState, CSphVector<
 	// but now we can. we create attributes, assign internal names and set their expressions
 
 	assert ( m_pSorterSchema );
-	auto & tSorterSchema = *m_pSorterSchema.Ptr();
+	auto & tSorterSchema = *m_pSorterSchema;
 	int iNumOldAttrs = tSorterSchema.GetAttrsCount();
 
 	ReplaceGroupbyStrWithExprs ( tState, iNumOldAttrs );
@@ -6166,7 +6166,7 @@ bool QueueCreator_c::SetupMatchesSortingFunc ()
 	m_bRandomize = false;
 	if ( m_tQuery.m_eSort==SPH_SORT_EXTENDED )
 	{
-		ESortClauseParseResult eRes = sphParseSortClause ( m_tQuery, m_tQuery.m_sSortBy.cstr(), *m_pSorterSchema.Ptr(), m_eMatchFunc, m_tStateMatch, m_dMatchJsonExprs, m_tSettings.m_bComputeItems, m_sError );
+		ESortClauseParseResult eRes = sphParseSortClause ( m_tQuery, m_tQuery.m_sSortBy.cstr(), *m_pSorterSchema, m_eMatchFunc, m_tStateMatch, m_dMatchJsonExprs, m_tSettings.m_bComputeItems, m_sError );
 		if ( eRes==SORT_CLAUSE_ERROR )
 			return false;
 
@@ -6226,7 +6226,7 @@ bool QueueCreator_c::SetupMatchesSortingFunc ()
 bool QueueCreator_c::SetupGroupSortingFunc ( bool bGotDistinct )
 {
 	assert ( m_bGotGroupby );
-	ESortClauseParseResult eRes = sphParseSortClause ( m_tQuery, m_tQuery.m_sGroupSortBy.cstr(), *m_pSorterSchema.Ptr(), m_eGroupFunc,	m_tStateGroup, m_dGroupJsonExprs, m_tSettings.m_bComputeItems, m_sError );
+	ESortClauseParseResult eRes = sphParseSortClause ( m_tQuery, m_tQuery.m_sGroupSortBy.cstr(), *m_pSorterSchema, m_eGroupFunc,	m_tStateGroup, m_dGroupJsonExprs, m_tSettings.m_bComputeItems, m_sError );
 
 	if ( eRes==SORT_CLAUSE_ERROR || eRes==SORT_CLAUSE_RANDOM )
 	{
@@ -6266,12 +6266,12 @@ bool QueueCreator_c::SetupGroupSortingFunc ( bool bGotDistinct )
 }
 
 // set up aggregate filter for grouper
-ISphFilter * QueueCreator_c::CreateAggrFilter () const
+std::unique_ptr<ISphFilter> QueueCreator_c::CreateAggrFilter () const
 {
 	assert ( m_bGotGroupby );
 	if ( m_pSorterSchema->GetAttr ( m_tSettings.m_pAggrFilter->m_sAttrName.cstr() ) )
 		return sphCreateAggrFilter ( m_tSettings.m_pAggrFilter, m_tSettings.m_pAggrFilter->m_sAttrName,
-				*m_pSorterSchema.Ptr(), m_sError );
+				*m_pSorterSchema, m_sError );
 
 	// having might reference aliased attributes but @* attributes got stored without alias in sorter schema
 	CSphString sHaving;
@@ -6287,7 +6287,7 @@ ISphFilter * QueueCreator_c::CreateAggrFilter () const
 	else if ( sHaving=="count(*)" )
 		sHaving = "@count";
 
-	return sphCreateAggrFilter ( m_tSettings.m_pAggrFilter, sHaving, *m_pSorterSchema.Ptr(), m_sError );
+	return sphCreateAggrFilter ( m_tSettings.m_pAggrFilter, sHaving, *m_pSorterSchema, m_sError );
 }
 
 void QueueCreator_c::SetupCollation()
@@ -6343,7 +6343,7 @@ bool QueueCreator_c::SetGroupSorting()
 			if ( !pFilter )
 				return false;
 
-			m_tGroupSorterSettings.m_pAggrFilterTrait = pFilter;
+			m_tGroupSorterSettings.m_pAggrFilterTrait = pFilter.release();
 		}
 	}
 
@@ -6479,7 +6479,7 @@ ISphMatchSorter * QueueCreator_c::CreateQueue ()
 	}
 
 	assert ( pTop );
-	pTop->SetSchema ( m_pSorterSchema.LeakPtr(), false );
+	pTop->SetSchema ( m_pSorterSchema.release(), false );
 	pTop->SetState ( m_tStateMatch );
 	pTop->SetGroupState ( m_tStateGroup );
 	pTop->SetRandom ( m_bRandomize );
@@ -6512,7 +6512,7 @@ bool QueueCreator_c::SetSchemaGroupQueue ( const CSphRsetSchema & tNewSchema )
 	ResetRemaps ( m_tStateMatch );
 	ResetRemaps ( m_tStateGroup );
 
-	*m_pSorterSchema.Ptr() = tNewSchema;
+	*m_pSorterSchema = tNewSchema;
 
 	return SetupGroupQueue();
 }

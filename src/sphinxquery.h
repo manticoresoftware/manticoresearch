@@ -370,7 +370,7 @@ private:
 TokenizerRefPtr_c sphCloneAndSetupQueryTokenizer ( const TokenizerRefPtr_c& pTokenizer, bool bWildcards, bool bExact, bool bJson );
 
 // a wrapper for sphParseExtendedQuery
-QueryParser_i * sphCreatePlainQueryParser();
+std::unique_ptr<QueryParser_i> sphCreatePlainQueryParser();
 
 /// parses the query and returns the resulting tree
 /// return false and fills tQuery.m_sParseError on error

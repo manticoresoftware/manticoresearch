@@ -46,7 +46,7 @@ protected:
 	CSphVector<void*> m_dStemmers; // avoid to poison namespace with sb_stemmer*, use void*
 	StrVec_t m_dDescStemmers;
 #endif
-	CSphScopedPtr<LemmatizerTrait_i> m_tLemmatizer { nullptr };
+	std::unique_ptr<LemmatizerTrait_i> m_tLemmatizer;
 
 	int m_iStopwords = 0;		   ///< stopwords count
 	SphWordID_t* m_pStopwords = nullptr; ///< stopwords ID list

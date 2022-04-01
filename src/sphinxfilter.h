@@ -38,7 +38,7 @@ public:
 	}
 
 	virtual void SetRefString ( const CSphString * , int ) {}
-	virtual ISphFilter * Optimize() { return this; }
+	virtual std::unique_ptr<ISphFilter> Optimize() { return std::unique_ptr<ISphFilter>(this); }
 
 	/// evaluate filter for a given match
 	/// returns true if match satisfies the filter critertia (i.e. in range, found in values list etc)
@@ -56,7 +56,7 @@ public:
 	/// returns true if the filter can handle exclude flag in settings
 	/// otherwise a NOT filter will be spawned on top of this filter
 	virtual bool CanExclude() const { return false; }
-	virtual ISphFilter * Join ( ISphFilter * pFilter );
+	virtual std::unique_ptr<ISphFilter> Join ( std::unique_ptr<ISphFilter> pFilter );
 };
 
 // fwd
@@ -76,8 +76,8 @@ struct CreateFilterContext_t
 	ESphCollation				m_eCollation = SPH_COLLATION_DEFAULT;
 	bool						m_bScan = false;
 
-	ISphFilter *				m_pFilter = nullptr;
-	ISphFilter *				m_pWeightFilter = nullptr;
+	std::unique_ptr<ISphFilter>	m_pFilter;
+	std::unique_ptr<ISphFilter>	m_pWeightFilter;
 	CSphVector<UservarIntSet_c>	m_dUserVals;
 
 	const HistogramContainer_c * m_pHistograms = nullptr;
@@ -85,13 +85,11 @@ struct CreateFilterContext_t
 
 	CreateFilterContext_t ( const ISphSchema * pSchema=nullptr )
 		: m_pSchema ( pSchema ) {}
-
-	~CreateFilterContext_t();
 };
 
-ISphFilter * sphCreateFilter ( const CSphFilterSettings &tSettings, const CreateFilterContext_t &tCtx, CSphString &sError, CSphString &sWarning);
-ISphFilter * sphCreateAggrFilter ( const CSphFilterSettings * pSettings, const CSphString & sAttrName, const ISphSchema & tSchema, CSphString & sError );
-ISphFilter * sphJoinFilters ( ISphFilter *, ISphFilter * );
+std::unique_ptr<ISphFilter> sphCreateFilter ( const CSphFilterSettings &tSettings, const CreateFilterContext_t &tCtx, CSphString &sError, CSphString &sWarning);
+std::unique_ptr<ISphFilter> sphCreateAggrFilter ( const CSphFilterSettings * pSettings, const CSphString & sAttrName, const ISphSchema & tSchema, CSphString & sError );
+std::unique_ptr<ISphFilter> sphJoinFilters ( std::unique_ptr<ISphFilter>, std::unique_ptr<ISphFilter> );
 
 bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphString & sWarning );
 
@@ -106,17 +104,6 @@ CSphString FilterType2Str ( ESphFilter eFilterType );
 void SetFilterStackItemSize ( int iSize );
 
 // fwd
-class PercolateFilter_i
-{
-public:
-	PercolateFilter_i () {}
-	virtual ~PercolateFilter_i() {}
-
-	virtual bool Eval ( SphAttr_t uUID ) = 0;
-	virtual void SetRange ( SphAttr_t tMin, SphAttr_t tMax ) {}
-};
-
-PercolateFilter_i * CreatePercolateFilter ( const CSphFilterSettings * pUID );
 
 template<bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT = false, bool OPEN_RIGHT = false, typename T = SphAttr_t>
 inline bool EvalRange ( T tValue, T tMin, T tMax )

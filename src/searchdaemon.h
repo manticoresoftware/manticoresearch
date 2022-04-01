@@ -1264,7 +1264,7 @@ class SearchHandler_c;
 class PubSearchHandler_c
 {
 public:
-						PubSearchHandler_c ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster );
+						PubSearchHandler_c ( int iQueries, std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, bool bMaster );
 						~PubSearchHandler_c();
 
 	void				RunQueries ();					///< run all queries, get all results
@@ -1327,9 +1327,9 @@ class QueryParser_i;
 class RequestBuilder_i;
 class ReplyParser_i;
 
-QueryParser_i * CreateQueryParser ( bool bJson );
-RequestBuilder_i * CreateRequestBuilder ( Str_t sQuery, const SqlStmt_t & tStmt );
-ReplyParser_i * CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings );
+std::unique_ptr<QueryParser_i> CreateQueryParser ( bool bJson );
+std::unique_ptr<RequestBuilder_i> CreateRequestBuilder ( Str_t sQuery, const SqlStmt_t & tStmt );
+std::unique_ptr<ReplyParser_i> CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings );
 
 enum ESphHttpStatus
 {

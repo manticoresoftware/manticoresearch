@@ -54,7 +54,8 @@ void DoSearch ( CSphIndex * pIndex )
 	tQueryResult.m_pMeta = &tResult;
 	CSphMultiQueryArgs tArgs ( 1 );
 	tQuery.m_sQuery = "@title cat";
-	tQuery.m_pQueryParser = sphCreatePlainQueryParser ();
+	auto pParser = sphCreatePlainQueryParser();
+	tQuery.m_pQueryParser = pParser.get();
 
 	SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema() );
 	CSphString sError;

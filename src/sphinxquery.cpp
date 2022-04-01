@@ -4419,8 +4419,8 @@ bool QueryParserPlain_c::ParseQuery ( XQQuery_t & tParsed, const char * sQuery, 
 }
 
 
-QueryParser_i * sphCreatePlainQueryParser()
+std::unique_ptr<QueryParser_i> sphCreatePlainQueryParser()
 {
-	return new QueryParserPlain_c();
+	return std::make_unique<QueryParserPlain_c>();
 }
 

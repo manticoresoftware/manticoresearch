@@ -708,7 +708,7 @@ template<> void HistogramStreamed_T<float>::DumpValue ( const HSBucket_T < float
 
 //////////////////////////////////////////////////////////////////////////
 
-static Histogram_i * CreateHistogram ( const CSphString & sAttr, HistogramType_e eType, int iSize );
+static std::unique_ptr<Histogram_i> CreateHistogram ( const CSphString & sAttr, HistogramType_e eType, int iSize );
 
 HistogramContainer_c::~HistogramContainer_c()
 {
@@ -773,8 +773,8 @@ bool HistogramContainer_c::Load ( const CSphString & sFile, CSphString & sError 
 	{
 		CSphString sAttr = tReader.GetString();
 		HistogramType_e eType = (HistogramType_e)tReader.GetDword();
-		CSphScopedPtr<Histogram_i> pHistogram ( CreateHistogram ( sAttr, eType, 0 ) );
-		if ( !pHistogram.Ptr() )
+		std::unique_ptr<Histogram_i> pHistogram = CreateHistogram ( sAttr, eType, 0 );
+		if ( !pHistogram )
 		{
 			sError.SetSprintf ( "error loading histograms from %s", sFile.cstr() );
 			return false;
@@ -783,13 +783,11 @@ bool HistogramContainer_c::Load ( const CSphString & sFile, CSphString & sError 
 		if ( !pHistogram->Load ( tReader, sError ) )
 			return false;
 
-		if ( !Add ( pHistogram.Ptr() ) )
+		if ( !Add ( std::move ( pHistogram ) ) )
 		{
 			sError.SetSprintf ( "duplicate histograms found in %s", sFile.cstr() );
 			return false;
 		}
-
-		pHistogram.LeakPtr();
 	}
 
 	if ( tReader.GetErrorFlag() )
@@ -802,26 +800,25 @@ bool HistogramContainer_c::Load ( const CSphString & sFile, CSphString & sError 
 }
 
 
-bool HistogramContainer_c::Add ( Histogram_i * pHistogram )
+bool HistogramContainer_c::Add ( std::unique_ptr<Histogram_i> pHistogram )
 {
 	assert ( pHistogram );
-	if ( !m_dHistogramHash.Add ( pHistogram, pHistogram->GetAttrName() ) )
+	if ( !m_dHistogramHash.Add ( pHistogram.get(), pHistogram->GetAttrName() ) )
 		return false;
 
-	m_dHistograms.Add(pHistogram);
+	m_dHistograms.Add ( pHistogram.release() );
 	return true;
 }
 
 
 void HistogramContainer_c::Remove ( const CSphString & sAttr )
 {
-	Histogram_i * pHistogram = Get(sAttr);
+	std::unique_ptr<Histogram_i> pHistogram { Get(sAttr) };
 	if ( !pHistogram )
 		return;
 
-	m_dHistograms.RemoveValue(pHistogram);
-	SafeDelete ( pHistogram );
-	m_dHistogramHash.Delete(sAttr);
+	m_dHistograms.RemoveValue ( pHistogram.get() );
+	m_dHistogramHash.Delete ( sAttr );
 }
 
 
@@ -849,7 +846,7 @@ static bool CanCreateHistogram ( const CSphString & sAttrName, ESphAttr eAttrTyp
 }
 
 
-static Histogram_i * CreateHistogram ( const CSphString & sAttr, HistogramType_e eType, int iSize )
+static std::unique_ptr<Histogram_i> CreateHistogram ( const CSphString & sAttr, HistogramType_e eType, int iSize )
 {
 	const int MAX_BUCKETS = 1024;
 
@@ -858,15 +855,15 @@ static Histogram_i * CreateHistogram ( const CSphString & sAttr, HistogramType_e
 
 	switch ( eType )
 	{
-		case HISTOGRAM_STREAMED_UINT32:	return new HistogramStreamed_T<DWORD> ( sAttr, iSize );
-		case HISTOGRAM_STREAMED_INT64:	return new HistogramStreamed_T<int64_t> ( sAttr, iSize );
-		case HISTOGRAM_STREAMED_FLOAT:	return new HistogramStreamed_T<float> ( sAttr, iSize );
+		case HISTOGRAM_STREAMED_UINT32:	return std::make_unique<HistogramStreamed_T<DWORD>> ( sAttr, iSize );
+		case HISTOGRAM_STREAMED_INT64:	return std::make_unique<HistogramStreamed_T<int64_t>> ( sAttr, iSize );
+		case HISTOGRAM_STREAMED_FLOAT:	return std::make_unique<HistogramStreamed_T<float>> ( sAttr, iSize );
 		default:						return nullptr;
 	}
 }
 
 
-Histogram_i * CreateHistogram ( const CSphString & sAttr, ESphAttr eAttrType, int iSize )
+std::unique_ptr<Histogram_i> CreateHistogram ( const CSphString & sAttr, ESphAttr eAttrType, int iSize )
 {
 	if ( !CanCreateHistogram ( sAttr, eAttrType ) )
 		return nullptr;
@@ -908,10 +905,10 @@ void CreateHistograms ( HistogramContainer_c & tHistograms, CSphVector<PlainOrCo
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
-		Histogram_i * pHistogram = CreateHistogram ( tAttr.m_sName, tAttr.m_eAttrType );
+		std::unique_ptr<Histogram_i> pHistogram = CreateHistogram ( tAttr.m_sName, tAttr.m_eAttrType );
 		if ( pHistogram )
 		{
-			tHistograms.Add(pHistogram);
+			tHistograms.Add ( std::move ( pHistogram ) );
 			PlainOrColumnar_t & tNewAttr = dAttrsForHistogram.Add();
 			if ( tAttr.IsColumnar() )
 				tNewAttr.m_iColumnarId = iColumnar;

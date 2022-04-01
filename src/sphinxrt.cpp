@@ -461,7 +461,7 @@ void RtSegment_t::BuildDocID2RowIDMap ( const CSphSchema & tSchema )
 		assert ( pIt );
 		for ( RowID_t tRowID = 0; tRowID<m_uRows; tRowID++ )
 		{
-			Verify ( AdvanceIterator ( pIt.get(), tRowID ) );
+			Verify ( AdvanceIterator ( pIt, tRowID ) );
 			m_tDocIDtoRowID.Add ( pIt->Get(), tRowID );
 		}
 	}
@@ -2401,11 +2401,11 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 	auto pColumnar = CreateColumnarRT ( m_pIndex->GetInternalSchema(), m_pColumnarBuilder.get(), false );
 
 	std::string sError;
-	CSphScopedPtr<columnar::Iterator_i> pColumnarIdIterator(nullptr);
+	std::unique_ptr<columnar::Iterator_i> pColumnarIdIterator;
 	if ( bColumnarId )
 	{
-		pColumnarIdIterator = pColumnar->CreateIterator ( sphGetDocidName(), {}, nullptr, sError );
-		assert ( pColumnarIdIterator.Ptr() );
+		pColumnarIdIterator = CreateIterator ( pColumnar.get(), sphGetDocidName(), sError );
+		assert ( pColumnarIdIterator );
 	}
 
 	int iHitIndex = 0;
@@ -2417,8 +2417,8 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 			tElem.m_tDocID = sphGetDocID ( pRow );
 		else
 		{
-			assert ( pColumnarIdIterator.Ptr() );
-			Verify ( AdvanceIterator ( pColumnarIdIterator.Ptr(), i ) );
+			assert ( pColumnarIdIterator );
+			Verify ( AdvanceIterator ( pColumnarIdIterator, i ) );
 			tElem.m_tDocID = pColumnarIdIterator->Get();
 		}
 
@@ -2892,8 +2892,8 @@ CSphFixedVector<RowID_t> RtIndex_c::CopyAttributesFromAliveDocs ( RtSegment_t & 
 		ARRAY_FOREACH ( i, dColumnarIterators )
 		{
 			auto & tIt = dColumnarIterators[i];
-			Verify ( AdvanceIterator ( tIt.first.get(), tRowID ) );
-			SetColumnarAttr ( i, tIt.second, tCtx.m_pColumnarBuilder, tIt.first.get(), dTmp );
+			Verify ( AdvanceIterator ( tIt.first, tRowID ) );
+			SetColumnarAttr ( i, tIt.second, tCtx.m_pColumnarBuilder, tIt.first, dTmp );
 		}
 
 		if ( tDstSeg.m_pDocstore )
@@ -3647,7 +3647,7 @@ struct SaveDiskDataContext_t : public BuildHeader_t
 {
 	SphOffset_t						m_tDocsOffset {0};
 	SphOffset_t						m_tLastDocPos {0};
-	CSphScopedPtr<ISphInfixBuilder>	m_pInfixer {nullptr};
+	std::unique_ptr<ISphInfixBuilder>	m_pInfixer;
 	CSphVector<Checkpoint_t>		m_dCheckpoints;
 	CSphVector<BYTE>				m_dKeywordCheckpoints;
 	CSphVector<CSphVector<RowID_t>>	m_dRowMaps;
@@ -3764,8 +3764,8 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 			ARRAY_FOREACH ( iIterator, dColumnarIterators )
 			{
 				auto & tIterator = dColumnarIterators[iIterator];
-				Verify ( AdvanceIterator ( tIterator.first.get(), tRowID ) );
-				SetColumnarAttr ( iIterator, tIterator.second, pColumnarBuilder.get(), tIterator.first.get(), dTmp );
+				Verify ( AdvanceIterator ( tIterator.first, tRowID ) );
+				SetColumnarAttr ( iIterator, tIterator.second, pColumnarBuilder.get(), tIterator.first, dTmp );
 			}
 
 			tDocID = iColumnarIdLoc>=0 ? dColumnarIterators[iColumnarIdLoc].first->Get() : sphGetDocID(pRow);
@@ -4415,8 +4415,10 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 		// bring new disk chunk online
 		auto fnFnameBuilder = GetIndexFilenameBuilder ();
 		StrVec_t dWarnings;
-		CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder { fnFnameBuilder ? fnFnameBuilder ( m_sIndexName.cstr () ) : nullptr };
-		pNewChunk = PreallocDiskChunk ( sChunk.cstr (), iChunkID, pFilenameBuilder.Ptr (), dWarnings, m_sLastError );
+		std::unique_ptr<FilenameBuilder_i> pFilenameBuilder;
+		if ( fnFnameBuilder )
+			pFilenameBuilder = fnFnameBuilder ( m_sIndexName.cstr () );
+		pNewChunk = PreallocDiskChunk ( sChunk.cstr (), iChunkID, pFilenameBuilder.get (), dWarnings, m_sLastError );
 
 		if ( !dWarnings.IsEmpty() )
 		{
@@ -5352,8 +5354,8 @@ void RtIndex_c::PostSetup()
 	CSphString sHitlessFiles = m_tSettings.m_sHitlessFiles;
 	if ( GetIndexFilenameBuilder() )
 	{
-		CSphScopedPtr<const FilenameBuilder_i> pFilenameBuilder ( GetIndexFilenameBuilder() ( m_sIndexName.cstr() ) );
-		if ( pFilenameBuilder.Ptr() )
+		std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = GetIndexFilenameBuilder() ( m_sIndexName.cstr() );
+		if ( pFilenameBuilder )
 			sHitlessFiles = pFilenameBuilder->GetFullPath ( sHitlessFiles );
 	}
 
@@ -6099,7 +6101,9 @@ bool RtIndex_c::CheckSegmentConsistency ( const RtSegment_t* pNewSeg, bool bSile
 int RtIndex_c::DebugCheckDisk ( DebugCheckError_i & tReporter )
 {
 	CreateFilenameBuilder_fn fnCreateFilenameBuilder = GetIndexFilenameBuilder();
-	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( m_sIndexName.cstr() ) : nullptr );
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder;
+	if ( fnCreateFilenameBuilder )
+		pFilenameBuilder = fnCreateFilenameBuilder ( m_sIndexName.cstr() );
 
 	VecTraits_T<int> dChunks = m_dChunkNames.Slice();
 	if ( m_iCheckChunk!=-1 )
@@ -6123,7 +6127,7 @@ int RtIndex_c::DebugCheckDisk ( DebugCheckError_i & tReporter )
 		sChunk.SetSprintf ( "%s.%d", m_sPath.cstr(), iChunk );
 		tReporter.Msg ( "checking disk chunk, extension %d, %d(%d)...", dChunks[i], i, m_dChunkNames.GetLength() );
 
-		auto pIndex = PreallocDiskChunk ( sChunk.cstr(), iChunk, pFilenameBuilder.Ptr(), dWarnings, m_sLastError );
+		auto pIndex = PreallocDiskChunk ( sChunk.cstr(), iChunk, pFilenameBuilder.get(), dWarnings, m_sLastError );
 		if ( pIndex )
 		{
 			iFailsPlain += pIndex->DebugCheck ( tReporter );
@@ -6891,8 +6895,8 @@ void RtIndex_c::GetSuggest ( const SuggestArgs_t & tArgs, SuggestResult_t & tRes
 	if ( dSegments.GetLength() )
 	{
 		assert ( !tRes.m_pWordReader && !tRes.m_pSegments );
-		CSphScopedPtr<RtWordReader_c> pReader { new RtWordReader_c ( dSegments[0], true, m_iWordsCheckpoint, m_tSettings.m_eHitless ) };
-		tRes.m_pWordReader = pReader.Ptr();
+		auto pReader = std::make_unique<RtWordReader_c> ( dSegments[0], true, m_iWordsCheckpoint, m_tSettings.m_eHitless );
+		tRes.m_pWordReader = pReader.get();
 		tRes.m_pSegments = tGuard.m_tSegmentsAndChunks.m_pSegs;
 		tRes.m_bHasExactDict = m_tSettings.m_bIndexExactWords;
 
@@ -7580,12 +7584,11 @@ static bool DoFullTextSearch ( const RtSegVec_c & dRamChunks, const ISphSchema &
 
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
-	CSphScopedPtr<ISphRanker> pRanker ( nullptr );
-	pRanker = sphCreateRanker ( tParsed, tQuery, tMeta, tTermSetup, tCtx, tMaxSorterSchema );
-	if ( !pRanker.Ptr () )
+	std::unique_ptr<ISphRanker> pRanker = sphCreateRanker ( tParsed, tQuery, tMeta, tTermSetup, tCtx, tMaxSorterSchema );
+	if ( !pRanker )
 		return false;
 
-	tCtx.SetupExtraData ( pRanker.Ptr (), pSorter );
+	tCtx.SetupExtraData ( pRanker.get (), pSorter );
 
 	pRanker->ExtraData ( EXTRA_SET_POOL_CAPACITY, (void **) &iMatchPoolSize );
 
@@ -7613,7 +7616,7 @@ static bool DoFullTextSearch ( const RtSegVec_c & dRamChunks, const ISphSchema &
 		int iCutoff = tQuery.m_iCutoff;
 		if ( iCutoff<=0 )
 			iCutoff = -1;
-		PerformFullTextSearch ( dRamChunks, tTermSetup, pRanker.Ptr (), tArgs.m_iIndexWeight, iCutoff, pProfiler, tCtx, dSorters );
+		PerformFullTextSearch ( dRamChunks, tTermSetup, pRanker.get (), tArgs.m_iIndexWeight, iCutoff, pProfiler, tCtx, dSorters );
 	}
 
 	FinalExpressionCalculation ( tCtx, dRamChunks, dSorters, tArgs.m_bFinalizeSorters );
@@ -8369,8 +8372,8 @@ void RtIndex_c::AddRemoveRowwiseAttr ( RtGuard_t & tGuard, bool bAdd, const CSph
 
 		CSphTightVector<CSphRowitem> dSPA;
 		CSphTightVector<BYTE> dSPB;
-		CSphScopedPtr<WriteWrapper_c> pSPAWriteWrapper ( CreateWriteWrapperMem ( dSPA ) );
-		CSphScopedPtr<WriteWrapper_c> pSPBWriteWrapper ( CreateWriteWrapperMem ( dSPB ) );
+		std::unique_ptr<WriteWrapper_c> pSPAWriteWrapper = CreateWriteWrapperMem ( dSPA );
+		std::unique_ptr<WriteWrapper_c> pSPBWriteWrapper = CreateWriteWrapperMem ( dSPB );
 		dSPA.Reserve ( pRSeg->m_uRows * m_iStride );
 
 		auto * pWSeg = const_cast<RtSegment_t*> ( pRSeg.Ptr() );
@@ -8966,14 +8969,16 @@ ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunks ( const char* szParentAction, 
 		return pChunk;
 
 	auto fnFnameBuilder = GetIndexFilenameBuilder();
-	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder { fnFnameBuilder ? fnFnameBuilder ( m_sIndexName.cstr() ) : nullptr };
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder;
+	if ( fnFnameBuilder )
+		pFilenameBuilder = fnFnameBuilder ( m_sIndexName.cstr() );
 
 	// prealloc new (optimized) chunk
 	CSphString sChunk;
 	sChunk.SetSprintf ( "%s.tmp", sFirst.cstr() );
 
 	StrVec_t dWarnings; // FIXME! report warnings
-	pChunk = DiskChunk_c::make ( PreallocDiskChunk ( sChunk.cstr(), tChunkA.m_iChunk, pFilenameBuilder.Ptr(), dWarnings, sError, tChunkA.GetName() ) );
+	pChunk = DiskChunk_c::make ( PreallocDiskChunk ( sChunk.cstr(), tChunkA.m_iChunk, pFilenameBuilder.get(), dWarnings, sError, tChunkA.GetName() ) );
 
 	if ( pChunk )
 		pChunk->m_bFinallyUnlink = true; // on destroy files will be deleted. Caller must explicitly reset this flag if chunk is usable
@@ -9168,13 +9173,13 @@ Binlog::CheckTnxResult_t RtIndex_c::ReplayReconfigure ( CSphReader& tReader, CSp
 	CSphTokenizerSettings tTokenizerSettings;
 	CSphDictSettings tDictSettings;
 	CSphEmbeddedFiles tEmbeddedFiles;
-	CSphScopedPtr<const FilenameBuilder_i> pFilenameBuilder ( nullptr );
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder;
 	if ( GetIndexFilenameBuilder() )
 		pFilenameBuilder = GetIndexFilenameBuilder() ( m_sIndexName.cstr() );
 
 	CSphReconfigureSettings tSettings;
 	LoadIndexSettings ( tSettings.m_tIndex, tReader, INDEX_FORMAT_VERSION );
-	if ( !tSettings.m_tTokenizer.Load ( pFilenameBuilder.Ptr(), tReader, tEmbeddedFiles, sError ) )
+	if ( !tSettings.m_tTokenizer.Load ( pFilenameBuilder.get(), tReader, tEmbeddedFiles, sError ) )
 	{
 		sError.SetSprintf ( "failed to load settings, %s", sError.cstr() );
 		return {};
@@ -9842,10 +9847,12 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 	bool bSame, CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError )
 {
 	CreateFilenameBuilder_fn fnCreateFilenameBuilder = GetIndexFilenameBuilder();
-	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( sIndexName.cstr() ) : nullptr );
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder;
+	if ( fnCreateFilenameBuilder )
+		pFilenameBuilder = fnCreateFilenameBuilder ( sIndexName.cstr() );
 
 	// FIXME!!! check missed embedded files
-	TokenizerRefPtr_c pTokenizer = Tokenizer::Create ( tSettings.m_tTokenizer, nullptr, pFilenameBuilder.Ptr(), dWarnings, sError );
+	TokenizerRefPtr_c pTokenizer = Tokenizer::Create ( tSettings.m_tTokenizer, nullptr, pFilenameBuilder.get(), dWarnings, sError );
 	if ( !pTokenizer )
 	{
 		sError.SetSprintf ( "'%s' failed to create tokenizer, error '%s'", sIndexName.cstr(), sError.cstr() );
@@ -9853,7 +9860,7 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 	}
 
 	// dict setup second
-	DictRefPtr_c tDict { sphCreateDictionaryCRC ( tSettings.m_tDict, nullptr, pTokenizer, sIndexName.cstr(), false, tIndexSettings.m_iSkiplistBlockSize, pFilenameBuilder.Ptr(), sError ) };
+	DictRefPtr_c tDict { sphCreateDictionaryCRC ( tSettings.m_tDict, nullptr, pTokenizer, sIndexName.cstr(), false, tIndexSettings.m_iSkiplistBlockSize, pFilenameBuilder.get(), sError ) };
 	if ( !tDict )
 	{
 		sError.SetSprintf ( "'%s' failed to create dictionary, error '%s'", sIndexName.cstr(), sError.cstr() );
@@ -10066,11 +10073,11 @@ void RtIndex_c::GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameB
 	if ( !sphIsReadable ( sRam.cstr(), &sTmpError ) )
 		dFiles.Pop();
 
-	CSphScopedPtr<const FilenameBuilder_i> pFilenameBuilder ( nullptr );
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder;
 	if ( !pParentBuilder && GetIndexFilenameBuilder() )
 	{
 		pFilenameBuilder = GetIndexFilenameBuilder() ( m_sIndexName.cstr() );
-		pParentBuilder = pFilenameBuilder.Ptr();
+		pParentBuilder = pFilenameBuilder.get();
 	}
 
 	GetSettingsFiles ( m_pTokenizer, m_pDict, GetSettings(), pParentBuilder, dFiles );

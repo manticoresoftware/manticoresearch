@@ -25,7 +25,7 @@ protected:
 	CSphString							m_sAttrName;
 	int									m_iColumnarCol = -1;
 	const columnar::Columnar_i *		m_pColumnar = nullptr;
-	CSphScopedPtr<columnar::Iterator_i>	m_pIterator {nullptr};
+	std::unique_ptr<columnar::Iterator_i>	m_pIterator;
 
 	inline bool	GetValue ( RowID_t tRowID, SphAttr_t & tValue ) const;
 	inline bool	GetValue ( RowID_t tRowID, ByteBlob_t & tData ) const;
@@ -43,19 +43,19 @@ void ColumnarFilter_c::SetColumnar ( const columnar::Columnar_i * pColumnar )
 
 	if ( !pColumnar )	// this can happen on RT columnar setup, when we have the filters but each chunk has its own columnar storage
 	{
-		m_pIterator.Reset();
+		m_pIterator.reset();
 		return;
 	}
 
 	std::string sError; // fixme! report errors
-	m_pIterator = pColumnar->CreateIterator ( m_sAttrName.cstr(), {}, nullptr, sError );
+	m_pIterator = CreateIterator ( pColumnar, m_sAttrName.cstr(), sError );
 	m_iColumnarCol = pColumnar->GetAttributeId ( m_sAttrName.cstr() );
 }
 
 
 bool ColumnarFilter_c::GetValue ( RowID_t tRowID, SphAttr_t & tValue ) const
 {
-	if ( m_pIterator.Ptr() && m_pIterator->AdvanceTo(tRowID) == tRowID )
+	if ( m_pIterator && m_pIterator->AdvanceTo(tRowID) == tRowID )
 	{
 		tValue = m_pIterator->Get();
 		return true;
@@ -67,7 +67,7 @@ bool ColumnarFilter_c::GetValue ( RowID_t tRowID, SphAttr_t & tValue ) const
 
 bool ColumnarFilter_c::GetValue ( RowID_t tRowID, ByteBlob_t & tData ) const
 {
-	if ( m_pIterator.Ptr() && m_pIterator->AdvanceTo(tRowID) == tRowID )
+	if ( m_pIterator && m_pIterator->AdvanceTo(tRowID) == tRowID )
 	{
 		tData.second = m_pIterator->Get ( tData.first );
 		return true;
@@ -304,7 +304,7 @@ void Filter_StringColumnar_T<MULTI>::SetRefString ( const CSphString * pRef, int
 template <bool MULTI>
 bool Filter_StringColumnar_T<MULTI>::Eval ( const CSphMatch & tMatch ) const
 {
-	if ( !m_pIterator.Ptr() || m_pIterator->AdvanceTo ( tMatch.m_tRowID ) != tMatch.m_tRowID )
+	if ( !m_pIterator || m_pIterator->AdvanceTo ( tMatch.m_tRowID ) != tMatch.m_tRowID )
 		return false;
 
 	uint64_t uHash = GetStringHash();
@@ -342,7 +342,7 @@ void Filter_StringColumnar_T<MULTI>::SetColumnar ( const columnar::Columnar_i * 
 {
 	if ( !pColumnar )
 	{
-		m_pIterator.Reset();
+		m_pIterator.reset();
 		return;
 	}
 
@@ -351,8 +351,8 @@ void Filter_StringColumnar_T<MULTI>::SetColumnar ( const columnar::Columnar_i * 
 	tHints.m_bNeedStringHashes = m_eCollation==SPH_COLLATION_DEFAULT;
 
 	std::string sError; // fixme! report errors
-	m_pIterator = pColumnar->CreateIterator ( m_sAttrName.cstr(), tHints, &tCapabilities, sError );
-	m_bHasHashes = m_pIterator.Ptr() && tCapabilities.m_bStringHashes;
+	m_pIterator = CreateIterator( pColumnar, m_sAttrName.cstr(), sError, tHints, &tCapabilities );
+	m_bHasHashes = m_pIterator && tCapabilities.m_bStringHashes;
 }
 
 template <bool MULTI>
@@ -427,27 +427,27 @@ void Filter_RangeColumnar_T<T, HAS_EQUAL_MIN, HAS_EQUAL_MAX, OPEN_LEFT, OPEN_RIG
 //////////////////////////////////////////////////////////////////////////
 
 template <typename T>
-static ISphFilter * CreateColumnarRangeFilter ( const CSphString & sName, const CSphFilterSettings & tSettings )
+static std::unique_ptr<ISphFilter> CreateColumnarRangeFilter ( const CSphString & sName, const CSphFilterSettings & tSettings )
 {
 	int iIndex = tSettings.m_bHasEqualMin*8 + tSettings.m_bHasEqualMax*4 + tSettings.m_bOpenLeft*2 + tSettings.m_bOpenRight;
 	switch ( iIndex )
 	{
-	case 0:		return new Filter_RangeColumnar_T<T, false, false, false, false> (sName);
-	case 1:		return new Filter_RangeColumnar_T<T, false, false, false, true>  (sName);
-	case 2:		return new Filter_RangeColumnar_T<T, false, false, true,  false> (sName);
-	case 3:		return new Filter_RangeColumnar_T<T, false, false, true,  true>  (sName);
-	case 4:		return new Filter_RangeColumnar_T<T, false, true,  false, false> (sName);
-	case 5:		return new Filter_RangeColumnar_T<T, false, true,  false, true>  (sName);
-	case 6:		return new Filter_RangeColumnar_T<T, false, true,  true,  false> (sName);
-	case 7:		return new Filter_RangeColumnar_T<T, false, true,  true,  true>  (sName);
-	case 8:		return new Filter_RangeColumnar_T<T, true,  false, false, false> (sName);
-	case 9:		return new Filter_RangeColumnar_T<T, true,  false, false, true>  (sName);
-	case 10:	return new Filter_RangeColumnar_T<T, true,  false, true,  false> (sName);
-	case 11:	return new Filter_RangeColumnar_T<T, true,  false, true,  true>  (sName);
-	case 12:	return new Filter_RangeColumnar_T<T, true,  true,  false, false> (sName);
-	case 13:	return new Filter_RangeColumnar_T<T, true,  true,  false, true>  (sName);
-	case 14:	return new Filter_RangeColumnar_T<T, true,  true,  true,  false> (sName);
-	case 15:	return new Filter_RangeColumnar_T<T, true,  true,  true,  true>  (sName);
+	case 0:		return std::make_unique<Filter_RangeColumnar_T<T, false, false, false, false>> (sName);
+	case 1:		return std::make_unique<Filter_RangeColumnar_T<T, false, false, false, true>>  (sName);
+	case 2:		return std::make_unique<Filter_RangeColumnar_T<T, false, false, true,  false>> (sName);
+	case 3:		return std::make_unique<Filter_RangeColumnar_T<T, false, false, true,  true>>  (sName);
+	case 4:		return std::make_unique<Filter_RangeColumnar_T<T, false, true,  false, false>> (sName);
+	case 5:		return std::make_unique<Filter_RangeColumnar_T<T, false, true,  false, true>>  (sName);
+	case 6:		return std::make_unique<Filter_RangeColumnar_T<T, false, true,  true,  false>> (sName);
+	case 7:		return std::make_unique<Filter_RangeColumnar_T<T, false, true,  true,  true>>  (sName);
+	case 8:		return std::make_unique<Filter_RangeColumnar_T<T, true,  false, false, false>> (sName);
+	case 9:		return std::make_unique<Filter_RangeColumnar_T<T, true,  false, false, true>>  (sName);
+	case 10:	return std::make_unique<Filter_RangeColumnar_T<T, true,  false, true,  false>> (sName);
+	case 11:	return std::make_unique<Filter_RangeColumnar_T<T, true,  false, true,  true>>  (sName);
+	case 12:	return std::make_unique<Filter_RangeColumnar_T<T, true,  true,  false, false>> (sName);
+	case 13:	return std::make_unique<Filter_RangeColumnar_T<T, true,  true,  false, true>>  (sName);
+	case 14:	return std::make_unique<Filter_RangeColumnar_T<T, true,  true,  true,  false>> (sName);
+	case 15:	return std::make_unique<Filter_RangeColumnar_T<T, true,  true,  true,  true>>  (sName);
 	default:	return nullptr;
 	}
 }
@@ -574,37 +574,37 @@ public:
 //////////////////////////////////////////////////////////////////////////
 
 template < typename T, typename FUNC>
-static ISphFilter * CreateColumnarMvaFilterValues ( const CSphString & sName, const CSphFilterSettings & tSettings )
+static std::unique_ptr<ISphFilter> CreateColumnarMvaFilterValues ( const CSphString & sName, const CSphFilterSettings & tSettings )
 {
 	if ( tSettings.GetNumValues()==1 )
-		return new Filter_SingleValueColumnar_MVA_T<T,FUNC>(sName);
+		return std::make_unique<Filter_SingleValueColumnar_MVA_T<T,FUNC>>(sName);
 
-	return new Filter_ValuesColumnar_MVA_T<T,FUNC>(sName);
+	return std::make_unique<Filter_ValuesColumnar_MVA_T<T,FUNC>>(sName);
 }
 
 
 template < typename T, typename FUNC>
-static ISphFilter * CreateColumnarMvaRangeFilter ( const CSphString & sName, const CSphFilterSettings & tSettings )
+static std::unique_ptr<ISphFilter> CreateColumnarMvaRangeFilter ( const CSphString & sName, const CSphFilterSettings & tSettings )
 {
 	int iIndex = tSettings.m_bHasEqualMin*8 + tSettings.m_bHasEqualMax*4 + tSettings.m_bOpenLeft*2 + tSettings.m_bOpenRight;
 	switch ( iIndex )
 	{
-	case 0:		return new Filter_RangeColumnar_MVA_T<T, FUNC, false, false, false, false> (sName);
-	case 1:		return new Filter_RangeColumnar_MVA_T<T, FUNC, false, false, false, true>  (sName);
-	case 2:		return new Filter_RangeColumnar_MVA_T<T, FUNC, false, false, true,  false> (sName);
-	case 3:		return new Filter_RangeColumnar_MVA_T<T, FUNC, false, false, true,  true>  (sName);
-	case 4:		return new Filter_RangeColumnar_MVA_T<T, FUNC, false, true,  false, false> (sName);
-	case 5:		return new Filter_RangeColumnar_MVA_T<T, FUNC, false, true,  false, true>  (sName);
-	case 6:		return new Filter_RangeColumnar_MVA_T<T, FUNC, false, true,  true,  false> (sName);
-	case 7:		return new Filter_RangeColumnar_MVA_T<T, FUNC, false, true,  true,  true>  (sName);
-	case 8:		return new Filter_RangeColumnar_MVA_T<T, FUNC, true,  false, false, false> (sName);
-	case 9:		return new Filter_RangeColumnar_MVA_T<T, FUNC, true,  false, false, true>  (sName);
-	case 10:	return new Filter_RangeColumnar_MVA_T<T, FUNC, true,  false, true,  false> (sName);
-	case 11:	return new Filter_RangeColumnar_MVA_T<T, FUNC, true,  false, true,  true>  (sName);
-	case 12:	return new Filter_RangeColumnar_MVA_T<T, FUNC, true,  true,  false, false> (sName);
-	case 13:	return new Filter_RangeColumnar_MVA_T<T, FUNC, true,  true,  false, true>  (sName);
-	case 14:	return new Filter_RangeColumnar_MVA_T<T, FUNC, true,  true,  true,  false> (sName);
-	case 15:	return new Filter_RangeColumnar_MVA_T<T, FUNC, true,  true,  true,  true>  (sName);
+	case 0:		return std::make_unique<Filter_RangeColumnar_MVA_T<T, FUNC, false, false, false, false>> (sName);
+	case 1:		return std::make_unique<Filter_RangeColumnar_MVA_T<T, FUNC, false, false, false, true>>  (sName);
+	case 2:		return std::make_unique<Filter_RangeColumnar_MVA_T<T, FUNC, false, false, true,  false>> (sName);
+	case 3:		return std::make_unique<Filter_RangeColumnar_MVA_T<T, FUNC, false, false, true,  true>>  (sName);
+	case 4:		return std::make_unique<Filter_RangeColumnar_MVA_T<T, FUNC, false, true,  false, false>> (sName);
+	case 5:		return std::make_unique<Filter_RangeColumnar_MVA_T<T, FUNC, false, true,  false, true>>  (sName);
+	case 6:		return std::make_unique<Filter_RangeColumnar_MVA_T<T, FUNC, false, true,  true,  false>> (sName);
+	case 7:		return std::make_unique<Filter_RangeColumnar_MVA_T<T, FUNC, false, true,  true,  true>>  (sName);
+	case 8:		return std::make_unique<Filter_RangeColumnar_MVA_T<T, FUNC, true,  false, false, false>> (sName);
+	case 9:		return std::make_unique<Filter_RangeColumnar_MVA_T<T, FUNC, true,  false, false, true>>  (sName);
+	case 10:	return std::make_unique<Filter_RangeColumnar_MVA_T<T, FUNC, true,  false, true,  false>> (sName);
+	case 11:	return std::make_unique<Filter_RangeColumnar_MVA_T<T, FUNC, true,  false, true,  true>>  (sName);
+	case 12:	return std::make_unique<Filter_RangeColumnar_MVA_T<T, FUNC, true,  true,  false, false>> (sName);
+	case 13:	return std::make_unique<Filter_RangeColumnar_MVA_T<T, FUNC, true,  true,  false, true>>  (sName);
+	case 14:	return std::make_unique<Filter_RangeColumnar_MVA_T<T, FUNC, true,  true,  true,  false>> (sName);
+	case 15:	return std::make_unique<Filter_RangeColumnar_MVA_T<T, FUNC, true,  true,  true,  true>>  (sName);
 	default:	return nullptr;
 	}
 }
@@ -626,7 +626,7 @@ static CSphString GetAttributeName ( int iAttr, const ISphSchema & tSchema )
 }
 
 
-static ISphFilter * CreateColumnarFilterMVA ( int iAttr, const ISphSchema & tSchema, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings )
+static std::unique_ptr<ISphFilter> CreateColumnarFilterMVA ( int iAttr, const ISphSchema & tSchema, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings )
 {
 	const CSphColumnInfo & tAttr = tSchema.GetAttr(iAttr);
 	CSphString sAttrName = GetAttributeName ( iAttr, tSchema );
@@ -636,61 +636,54 @@ static ISphFilter * CreateColumnarFilterMVA ( int iAttr, const ISphSchema & tSch
 	bool bAll = tSettings.m_eMvaFunc==SPH_MVAFUNC_ALL;
 	int iIndex = bWide*4 + bRange*2 + bAll;
 
-	ISphFilter * pFilter = nullptr;
-
 	switch ( iIndex )
 	{
-	case 0:	pFilter = CreateColumnarMvaFilterValues<uint32_t,MvaEvalAny_c> ( sAttrName, tSettings ); break;
-	case 1: pFilter = CreateColumnarMvaFilterValues<uint32_t,MvaEvalAll_c> ( sAttrName, tSettings ); break;
-
-	case 2:	pFilter = CreateColumnarMvaRangeFilter<uint32_t,MvaEvalAny_c> ( sAttrName, tSettings ); break;
-	case 3:	pFilter = CreateColumnarMvaRangeFilter<uint32_t,MvaEvalAll_c> ( sAttrName, tSettings ); break;
-
-	case 4:	pFilter = CreateColumnarMvaFilterValues<int64_t,MvaEvalAny_c> ( sAttrName, tSettings ); break;
-	case 5:	pFilter = CreateColumnarMvaFilterValues<int64_t,MvaEvalAll_c> ( sAttrName, tSettings ); break;
-
-	case 6:	pFilter = CreateColumnarMvaRangeFilter<int64_t,MvaEvalAny_c> ( sAttrName, tSettings ); break;
-	case 7:	pFilter = CreateColumnarMvaRangeFilter<int64_t,MvaEvalAll_c> ( sAttrName, tSettings ); break;
+	case 0:	return CreateColumnarMvaFilterValues<uint32_t,MvaEvalAny_c> ( sAttrName, tSettings );
+	case 1: return CreateColumnarMvaFilterValues<uint32_t,MvaEvalAll_c> ( sAttrName, tSettings );
+	case 2:	return CreateColumnarMvaRangeFilter<uint32_t,MvaEvalAny_c> ( sAttrName, tSettings );
+	case 3:	return CreateColumnarMvaRangeFilter<uint32_t,MvaEvalAll_c> ( sAttrName, tSettings );
+	case 4:	return CreateColumnarMvaFilterValues<int64_t,MvaEvalAny_c> ( sAttrName, tSettings );
+	case 5:	return CreateColumnarMvaFilterValues<int64_t,MvaEvalAll_c> ( sAttrName, tSettings );
+	case 6:	return CreateColumnarMvaRangeFilter<int64_t,MvaEvalAny_c> ( sAttrName, tSettings );
+	case 7:	return CreateColumnarMvaRangeFilter<int64_t,MvaEvalAll_c> ( sAttrName, tSettings );
 
 	default:
 		assert ( 0 && "Unsupported MVA filter type" );
 	}
 
-	return pFilter;
+	return nullptr;
 }
 
 
-static ISphFilter * CreateColumnarFilterPlain ( int iAttr, const ISphSchema & tSchema, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, ESphCollation eCollation )
+static std::unique_ptr<ISphFilter> CreateColumnarFilterPlain ( int iAttr, const ISphSchema & tSchema, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, ESphCollation eCollation )
 {
-	ISphFilter * pFilter = nullptr;
 	CSphString sAttrName = GetAttributeName ( iAttr, tSchema );
-
 	switch ( tFixedSettings.m_eType )
 	{
 	case SPH_FILTER_VALUES:
 	{
 		if ( tSettings.GetNumValues()==1 )
-			pFilter = new Filter_SingleValueColumnar_c(sAttrName);
+			return std::make_unique<Filter_SingleValueColumnar_c> ( sAttrName );
 		else
-			pFilter = new Filter_ValuesColumnar_c(sAttrName);
+			return std::make_unique<Filter_ValuesColumnar_c> ( sAttrName );
 	}
 	break;
 
-	case SPH_FILTER_RANGE:		pFilter = CreateColumnarRangeFilter<SphAttr_t> ( sAttrName, tSettings ); break;
-	case SPH_FILTER_FLOATRANGE:	pFilter = CreateColumnarRangeFilter<float> ( sAttrName, tSettings ); break;
-	case SPH_FILTER_STRING:		pFilter = new Filter_StringColumnar_T<false> ( sAttrName, eCollation, !tSettings.m_bExclude ); break;
-	case SPH_FILTER_STRING_LIST:pFilter = new Filter_StringColumnar_T<true> ( sAttrName, eCollation, !tSettings.m_bExclude ); break;
+	case SPH_FILTER_RANGE:		return CreateColumnarRangeFilter<SphAttr_t> ( sAttrName, tSettings );
+	case SPH_FILTER_FLOATRANGE:	return CreateColumnarRangeFilter<float> ( sAttrName, tSettings );
+	case SPH_FILTER_STRING:		return std::make_unique<Filter_StringColumnar_T<false>> ( sAttrName, eCollation, !tSettings.m_bExclude );
+	case SPH_FILTER_STRING_LIST:return std::make_unique<Filter_StringColumnar_T<true>> ( sAttrName, eCollation, !tSettings.m_bExclude );
 
 	default:
 		assert ( 0 && "Unhandled columnar filter type" );
 		break;
 	}
 
-	return pFilter;
+	return nullptr;
 }
 
 
-ISphFilter * TryToCreateColumnarFilter ( int iAttr, const ISphSchema & tSchema, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, ESphCollation eCollation, CSphString & sError, CSphString & sWarning )
+std::unique_ptr<ISphFilter> TryToCreateColumnarFilter ( int iAttr, const ISphSchema & tSchema, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, ESphCollation eCollation, CSphString & sError, CSphString & sWarning )
 {
 	if ( iAttr<0 )
 		return nullptr;
@@ -715,7 +708,7 @@ ISphFilter * TryToCreateColumnarFilter ( int iAttr, const ISphSchema & tSchema, 
 	}
 
 	if ( tFixedSettings.m_eType==SPH_FILTER_NULL )
-		return new Filter_NullColumnar_c;
+		return std::make_unique<Filter_NullColumnar_c>();
 
 	if ( IsMvaAttr(tAttr.m_eAttrType) )
 	{

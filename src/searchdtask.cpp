@@ -614,7 +614,7 @@ private:
 	void JobLoop () REQUIRES ( MtJobThread )
 	{
 		auto pWorker = new TaskWorker_t;
-		CSphScopedPtr<TaskWorker_t> pThreadWorkerContext { pWorker };
+		std::unique_ptr<TaskWorker_t> pThreadWorkerContext { pWorker  };
 
 		pWorker->m_iMyThreadID = ++m_iNextThreadId;
 		Threads::MyThd ().m_sThreadName.SetSprintf( "TaskW_%d", pWorker->m_iMyThreadID );

@@ -119,7 +119,7 @@ public:
 						~SnippetBuilder_c();
 	void				Setup ( const CSphIndex * pIndex, const SnippetQuerySettings_t & tQuery );
 	bool				SetQuery ( const CSphString & sQuery, bool bIgnoreFields, CSphString & sError );
-	bool				Build ( TextSource_i * pSource, SnippetResult_t & tRes );
+	bool				Build ( std::unique_ptr<TextSource_i>& pSource, SnippetResult_t & tRes );
 	CSphVector<BYTE>	PackResult ( SnippetResult_t & tRes, const VecTraits_T<int> & dRequestedFields ) const;
 	SnippetBuilder_c*	MakeClone() const;
 };
@@ -138,8 +138,8 @@ struct FieldSource_t
 	VecTraits_T<BYTE>	m_dData;
 };
 
-TextSource_i *		CreateSnippetSource ( DWORD uFilesMode, const BYTE * pSource, int iLen );
-TextSource_i *		CreateHighlightSource ( const CSphVector<FieldSource_t> & dAllFields );
+std::unique_ptr<TextSource_i>		CreateSnippetSource ( DWORD uFilesMode, const BYTE * pSource, int iLen );
+std::unique_ptr<TextSource_i>		CreateHighlightSource ( const CSphVector<FieldSource_t> & dAllFields );
 
 extern CSphString g_sSnippetsFilePrefix;
 

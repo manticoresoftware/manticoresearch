@@ -86,7 +86,7 @@ public:
 private:
 	CSphString							m_sAttrName;
 	ESphCollation						m_eCollation = SPH_COLLATION_DEFAULT;
-	CSphScopedPtr<columnar::Iterator_i>	m_pIterator {nullptr};
+	std::unique_ptr<columnar::Iterator_i>	m_pIterator;
 	bool								m_bHasHashes = false;
 };
 
@@ -105,7 +105,7 @@ GrouperColumnarString_T<HASH>::GrouperColumnarString_T ( const GrouperColumnarSt
 template <typename HASH>
 SphGroupKey_t GrouperColumnarString_T<HASH>::KeyFromMatch ( const CSphMatch & tMatch ) const
 {
-	if ( !m_pIterator.Ptr() || m_pIterator->AdvanceTo ( tMatch.m_tRowID ) != tMatch.m_tRowID )
+	if ( !m_pIterator || m_pIterator->AdvanceTo ( tMatch.m_tRowID ) != tMatch.m_tRowID )
 		return 0;
 
 	if ( m_bHasHashes )
@@ -128,7 +128,7 @@ void GrouperColumnarString_T<HASH>::SetColumnar ( const columnar::Columnar_i * p
 	tHints.m_bNeedStringHashes = m_eCollation==SPH_COLLATION_DEFAULT;
 
 	std::string sError; // fixme! report errors
-	m_pIterator = pColumnar->CreateIterator ( m_sAttrName.cstr(), tHints, &tCapabilities, sError );
+	m_pIterator = CreateIterator ( pColumnar, m_sAttrName.cstr(), sError, tHints, &tCapabilities );
 	m_bHasHashes = tCapabilities.m_bStringHashes;
 }
 
@@ -158,7 +158,7 @@ public:
 
 private:
 	CSphString							m_sAttrName;
-	CSphScopedPtr<columnar::Iterator_i>	m_pIterator {nullptr};
+	std::unique_ptr<columnar::Iterator_i> m_pIterator;
 };
 
 template <typename T>
@@ -166,7 +166,7 @@ void GrouperColumnarMVA_T<T>::MultipleKeysFromMatch ( const CSphMatch & tMatch, 
 {
 	dKeys.Resize(0);
 
-	if ( !m_pIterator.Ptr() || m_pIterator->AdvanceTo ( tMatch.m_tRowID ) != tMatch.m_tRowID )
+	if ( !m_pIterator || m_pIterator->AdvanceTo ( tMatch.m_tRowID ) != tMatch.m_tRowID )
 		return;
 
 	const BYTE * pMVA = nullptr;
@@ -184,7 +184,7 @@ void GrouperColumnarMVA_T<T>::SetColumnar ( const columnar::Columnar_i * pColumn
 {
 	assert(pColumnar);
 	std::string sError; // fixme! report errors
-	m_pIterator = pColumnar->CreateIterator ( m_sAttrName.cstr(), {}, nullptr, sError );
+	m_pIterator = CreateIterator ( pColumnar, m_sAttrName.cstr(),sError );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -227,7 +227,7 @@ public:
 
 protected:
 	CSphString	m_sName;
-	CSphScopedPtr<columnar::Iterator_i>	m_pIterator {nullptr};
+	std::unique_ptr<columnar::Iterator_i> m_pIterator;
 };
 
 
@@ -247,7 +247,7 @@ void DistinctFetcherColumnarInt_c::GetKeys ( const CSphMatch & tMatch, CSphVecto
 {
 	dKeys.Resize(0);
 
-	if ( !m_pIterator.Ptr() || m_pIterator->AdvanceTo ( tMatch.m_tRowID ) != tMatch.m_tRowID )
+	if ( !m_pIterator || m_pIterator->AdvanceTo ( tMatch.m_tRowID ) != tMatch.m_tRowID )
 		return;
 
 	dKeys.Add ( m_pIterator->Get() );
@@ -258,7 +258,7 @@ void DistinctFetcherColumnarInt_c::SetColumnar ( const columnar::Columnar_i * pC
 {
 	assert(pColumnar);
 	std::string sError; // fixme! report errors
-	m_pIterator = pColumnar->CreateIterator ( m_sName.cstr(), {}, nullptr, sError );
+	m_pIterator = CreateIterator ( pColumnar, m_sName.cstr(), sError );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -280,7 +280,7 @@ void DistinctFetcherColumnarMva_T<T>::GetKeys ( const CSphMatch & tMatch, CSphVe
 {
 	dKeys.Resize(0);
 
-	if ( !m_pIterator.Ptr() || m_pIterator->AdvanceTo ( tMatch.m_tRowID ) != tMatch.m_tRowID )
+	if ( !m_pIterator || m_pIterator->AdvanceTo ( tMatch.m_tRowID ) != tMatch.m_tRowID )
 		return;
 
 	const BYTE * pMVA = nullptr;
@@ -298,7 +298,7 @@ void DistinctFetcherColumnarMva_T<T>::SetColumnar ( const columnar::Columnar_i *
 {
 	assert(pColumnar);
 	std::string sError; // fixme! report errors
-	m_pIterator = pColumnar->CreateIterator ( m_sName.cstr(), {}, nullptr, sError );
+	m_pIterator = CreateIterator ( pColumnar, m_sName.cstr(), sError );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -323,7 +323,7 @@ void DistinctFetcherColumnarString_T<HASH>::GetKeys ( const CSphMatch & tMatch, 
 {
 	dKeys.Resize(0);
 
-	if ( !m_pIterator.Ptr() || m_pIterator->AdvanceTo ( tMatch.m_tRowID ) != tMatch.m_tRowID )
+	if ( !m_pIterator || m_pIterator->AdvanceTo ( tMatch.m_tRowID ) != tMatch.m_tRowID )
 		return;
 
 	if ( m_bHasHashes )
@@ -352,7 +352,7 @@ void DistinctFetcherColumnarString_T<HASH>::SetColumnar ( const columnar::Column
 	tHints.m_bNeedStringHashes = true;
 
 	std::string sError; // fixme! report errors
-	m_pIterator = pColumnar->CreateIterator ( m_sName.cstr(), tHints, &tCapabilities, sError );
+	m_pIterator = CreateIterator ( pColumnar, m_sName.cstr(), sError, tHints, &tCapabilities );
 	m_bHasHashes = tCapabilities.m_bStringHashes;
 }
 

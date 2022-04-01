@@ -599,7 +599,7 @@ bool GenericTableIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery
 	tFlx.m_eCollation = tQuery.m_eCollation;
 	tFlx.m_bScan = true;
 
-	if ( !tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning ) )
+	if ( !tCtx.CreateFilters ( tFlx , tMeta.m_sError, tMeta.m_sWarning ) )
 		return false;
 
 	// prepare to work them rows

@@ -1937,12 +1937,12 @@ void sphAotLemmatizeUk ( StrVec_t & dLemmas, const BYTE * pWord, LemmatizerTrait
 	dLemmas.Uniq();
 }
 
-LemmatizerTrait_i * CreateLemmatizer ( int iLang )
+std::unique_ptr<LemmatizerTrait_i> CreateLemmatizer ( int iLang )
 {
 	if ( iLang!=AOT_UK )
 		return nullptr;
 
-	return new LemmatizerUk_c();
+	return std::make_unique<LemmatizerUk_c>();
 }
 
 TokenizerUk_c::TokenizerUk_c ( TokenizerRefPtr_c pTok, const DictRefPtr_c& pDict, bool bIndexExact )
@@ -2203,6 +2203,6 @@ void TransformAotFilter ( XQNode_t * pNode, const CSphWordforms * pWordforms, co
 		return;
 
 	int iAotLang = ( tSettings.m_uAotFilterMask & ( 1<<AOT_UK ) ) ? AOT_UK : AOT_LENGTH;
-	CSphScopedPtr<LemmatizerTrait_i> tLemmatizer ( CreateLemmatizer ( iAotLang ) );
-	TransformAotFilter ( pNode, tLemmatizer.Ptr(), pWordforms, tSettings );
+	std::unique_ptr<LemmatizerTrait_i> tLemmatizer = CreateLemmatizer ( iAotLang );
+	TransformAotFilter ( pNode, tLemmatizer.get(), pWordforms, tSettings );
 }

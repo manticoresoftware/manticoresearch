@@ -523,7 +523,7 @@ public:
 	int64_t			m_iWaited = 0;		///< statistics of waited
 
 	// some external stuff
-	CSphScopedPtr<iQueryResult> m_pResult { nullptr };	///< multi-query results
+	std::unique_ptr<iQueryResult> m_pResult;	///< multi-query results
 	CSphString		m_sFailure;				///< failure message (both network and logical)
 	mutable int		m_iStoreTag = -1;	///< cookie, m.b. used to 'glue' to concrete connection
 	int				m_iWeight = -1;		///< weight of the index, will be send with query to remote host

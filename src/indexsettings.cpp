@@ -1885,8 +1885,10 @@ CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex
 
 	StringBuilder_c tBuf;
 
-	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( g_fnCreateFilenameBuilder ? g_fnCreateFilenameBuilder ( pIndex->GetName() ) : nullptr );
-	DumpCreateTable ( tBuf, *pIndex, pFilenameBuilder.Ptr() );
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder;
+	if ( g_fnCreateFilenameBuilder )
+		pFilenameBuilder = g_fnCreateFilenameBuilder ( pIndex->GetName() );
+	DumpCreateTable ( tBuf, *pIndex, pFilenameBuilder.get() );
 
 	if ( tBuf.GetLength() )
 		sRes << " " << tBuf.cstr();

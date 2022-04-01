@@ -71,7 +71,7 @@ struct GetFieldRequestBuilder_t : public RequestBuilder_i
 
 	void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
 	{
-		auto * pRes = (RemoteFieldsAnswer_t *)tAgent.m_pResult.Ptr();
+		auto * pRes = (RemoteFieldsAnswer_t *)tAgent.m_pResult.get();
 		assert ( pRes );
 
 		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_GETFIELD, VER_COMMAND_GETFIELD );
@@ -90,7 +90,7 @@ struct GetFieldReplyParser_t : public ReplyParser_i
 {
 	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const final
 	{
-		auto * pReply = (RemoteFieldsAnswer_t *)tAgent.m_pResult.Ptr();
+		auto * pReply = (RemoteFieldsAnswer_t *)tAgent.m_pResult.get();
 		assert ( pReply );
 		pReply->m_dDocs.Resize ( tReq.GetDword() );
 		for ( auto& tDoc : pReply->m_dDocs )
@@ -159,7 +159,7 @@ bool GetIndexes ( const CSphString & sIndexes, CSphString & sError, StrVec_t & d
 				pConn->SetMultiAgent ( pAgent );
 				pConn->m_iMyConnectTimeoutMs = pDist->m_iAgentConnectTimeoutMs;
 				pConn->m_iMyQueryTimeoutMs = pDist->m_iAgentQueryTimeoutMs;
-				pConn->m_pResult = new RemoteFieldsAnswer_t();
+				pConn->m_pResult = std::make_unique<RemoteFieldsAnswer_t>();
 				dRemotes.Add ( pConn );
 			}
 			dLocal.Append ( pDist->m_dLocal );
@@ -247,7 +247,7 @@ bool GetFieldFromDist ( VecRefPtrsAgentConn_t & dRemotes, const FieldRequest_t &
 	const int iFieldsCount = tArgs.m_dFieldNames.GetLength();
 	for ( AgentConn_t * pAgent : dRemotes )
 	{
-		auto * pReply = (RemoteFieldsAnswer_t *) pAgent->m_pResult.Ptr ();
+		auto * pReply = (RemoteFieldsAnswer_t *) pAgent->m_pResult.get ();
 		if ( !pAgent->m_bSuccess )
 		{
 			if ( !pAgent->m_sFailure.IsEmpty() )
@@ -291,16 +291,16 @@ bool GetFields ( const FieldRequest_t & tReq, FieldBlob_t & tRes, DocHash_t & hF
 	bool bOkLocal = true;
 	bool bOkRemote = true;
 	CSphRefcountedPtr<RemoteAgentsObserver_i> pDistReporter { nullptr };
-	CSphScopedPtr<RequestBuilder_i> pDistReq { nullptr };
-	CSphScopedPtr<ReplyParser_i> pDistReply { nullptr };
+	std::unique_ptr<RequestBuilder_i> pDistReq;
+	std::unique_ptr<ReplyParser_i> pDistReply;
 
 	if ( !dRemotes.IsEmpty () )
 	{
-		pDistReq = new ProxyFieldRequestBuilder_t ( tReq );
-		pDistReply = new GetFieldReplyParser_t();
+		pDistReq = std::make_unique<ProxyFieldRequestBuilder_t> ( tReq );
+		pDistReply = std::make_unique<GetFieldReplyParser_t>();
 
 		pDistReporter = GetObserver();
-		ScheduleDistrJobs ( dRemotes, pDistReq.Ptr(), pDistReply.Ptr(), pDistReporter.Ptr() );
+		ScheduleDistrJobs ( dRemotes, pDistReq.get(), pDistReply.get(), pDistReporter.Ptr() );
 	}
 
 	{
@@ -507,7 +507,7 @@ VecRefPtrsAgentConn_t GetAgents( const VecTraits_T<RemoteFieldsAnswer_t>& dRange
 		pAgent->m_tDesc.CloneFrom ( pDesc->m_tDesc );
 		pAgent->m_iMyConnectTimeoutMs = pDesc->m_iMyConnectTimeoutMs;
 		pAgent->m_iMyQueryTimeoutMs = pDesc->m_iMyQueryTimeoutMs;
-		pAgent->m_pResult = &dRange;
+		pAgent->m_pResult.reset ( &dRange ); // fixme! that is hack with reset/release, not very good fit to unique_ptr
 		dAgents.Add ( pAgent );
 	}
 	return dAgents;
@@ -638,7 +638,7 @@ void RemotesGetField ( AggrResult_t & tRes, const CSphQuery & tQuery )
 		sError << tRes.m_sWarning;
 	for ( auto* pAgent : dAgents )
 	{
-		auto & dReply = *(RemoteFieldsAnswer_t *) pAgent->m_pResult.LeakPtr ();
+		auto & dReply = *(RemoteFieldsAnswer_t *) pAgent->m_pResult.release ();
 		if ( pAgent->m_bSuccess )
 			FillDocs ( dMatches, dReply, dFieldCols );
 		else if ( !pAgent->m_sFailure.IsEmpty() )

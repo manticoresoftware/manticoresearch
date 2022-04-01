@@ -183,7 +183,7 @@ class CustomNetloop_c :  public ::testing::Test
 protected:
 	void SetUp () override
 	{
-		m_pPoll = new NetPooller_c ( 1000 );
+		m_pPoll = std::make_unique<NetPooller_c> ( 1000 );
 		int64_t tmNow = sphMicroTimer ();
 		SetupEvent ( new CSphWakeupEvent, tmNow );
 		SetupEvent ( new CSphWakeupEvent, tmNow );
@@ -219,7 +219,7 @@ protected:
 		return dCleanup;
 	}
 
-	CSphScopedPtr<NetPooller_c> m_pPoll { nullptr };
+	std::unique_ptr<NetPooller_c> m_pPoll;
 };
 
 TEST_F ( CustomNetloop_c, test_usual_remove_1st )

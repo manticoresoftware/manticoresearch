@@ -1218,7 +1218,7 @@ bool TemplateDictTraits_c::StemById ( BYTE* pWord, int iStemmer ) const
 		break;
 
 	case EMORPH::AOTLEMMER_UK:
-		sphAotLemmatizeUk ( pWord, m_tLemmatizer.Ptr() );
+		sphAotLemmatizeUk ( pWord, m_tLemmatizer.get() );
 		break;
 
 	case EMORPH::AOTLEMMER_RU_ALL:

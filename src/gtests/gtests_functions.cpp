@@ -2857,9 +2857,9 @@ struct HistCase_t
 	const char * m_sRef = nullptr;
 };
 
-static Histogram_i * PopulateHist ( const HistCase_t & tCase )
+static std::unique_ptr<Histogram_i> PopulateHist ( const HistCase_t & tCase )
 {
-	CSphScopedPtr<Histogram_i> pHist ( CreateHistogram ( "dyn", SPH_ATTR_FLOAT, tCase.m_iSize ) );
+	std::unique_ptr<Histogram_i> pHist = CreateHistogram ( "dyn", SPH_ATTR_FLOAT, tCase.m_iSize );
 
 	for ( int i=0; i<tCase.m_iLoop; i++ )
 	{
@@ -2872,7 +2872,7 @@ static Histogram_i * PopulateHist ( const HistCase_t & tCase )
 
 	pHist->Finalize();
 
-	return pHist.LeakPtr();
+	return pHist;
 }
 
 TEST ( functions, histogram )
@@ -2892,8 +2892,8 @@ TEST ( functions, histogram )
 
 	for ( const HistCase_t & tCase : dCases )
 	{
-		CSphScopedPtr<Histogram_i> pHist ( PopulateHist ( tCase ) );
-		ASSERT_STREQ( GetHist ( pHist.Ptr() ).cstr(), tCase.m_sRef );
+		std::unique_ptr<Histogram_i> pHist = PopulateHist ( tCase );
+		ASSERT_STREQ( GetHist ( pHist.get() ).cstr(), tCase.m_sRef );
 	}
 
 	// estimate of merged values
@@ -2901,7 +2901,7 @@ TEST ( functions, histogram )
 		HistCase_t tCase;
 		tCase.m_iLoop = 1;
 		tCase.m_iSize = 10;
-		CSphScopedPtr<Histogram_i> pHist ( PopulateHist ( tCase ) );
+		std::unique_ptr<Histogram_i> pHist = PopulateHist ( tCase );
 		for ( int i=0; i<20; i++)
 			pHist->Insert ( sphF2DW ( 10.0f ) );
 

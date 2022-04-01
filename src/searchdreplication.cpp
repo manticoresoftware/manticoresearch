@@ -2940,7 +2940,7 @@ enum class WriteResult_e : BYTE
 // reply from remote node
 struct PQRemoteReply_t
 {
-	CSphScopedPtr<SyncDst_t> m_pDst { nullptr };
+	std::unique_ptr<SyncDst_t> m_pDst;
 	const SyncDst_t * m_pSharedDst = nullptr;
 	bool m_bIndexActive = false;
 	CSphString m_sNodes;
@@ -3144,7 +3144,7 @@ static AgentConn_t * CreateAgent ( const AgentDesc_t & tDesc, const PQRemoteData
 	pAgent->m_iMyConnectTimeoutMs = g_iAgentConnectTimeoutMs;
 	pAgent->m_iMyQueryTimeoutMs = iTimeoutMs;
 
-	pAgent->m_pResult = new PQRemoteAgentData_t ( tReq );
+	pAgent->m_pResult = std::make_unique<PQRemoteAgentData_t> ( tReq );
 
 	return pAgent;
 }
@@ -3226,14 +3226,14 @@ public:
 
 	static PQRemoteReply_t & GetRes ( const AgentConn_t & tAgent )
 	{
-		PQRemoteAgentData_t * pData = (PQRemoteAgentData_t *)tAgent.m_pResult.Ptr();
+		PQRemoteAgentData_t * pData = (PQRemoteAgentData_t *)tAgent.m_pResult.get();
 		assert ( pData );
 		return pData->m_tReply;
 	}
 	
 	static const PQRemoteData_t & GetReq ( const AgentConn_t & tAgent )
 	{
-		const PQRemoteAgentData_t * pData = (PQRemoteAgentData_t *)tAgent.m_pResult.Ptr();
+		const PQRemoteAgentData_t * pData = (PQRemoteAgentData_t *)tAgent.m_pResult.get();
 		assert ( pData );
 		return pData->m_tReq;
 	}
@@ -3317,8 +3317,8 @@ public:
 
 	static void BuildReply ( const PQRemoteReply_t & tRes, ISphOutputBuffer & tOut )
 	{
-		assert ( tRes.m_pDst.Ptr() );
-		const SyncDst_t * pDst = tRes.m_pDst.Ptr();
+		assert ( tRes.m_pDst );
+		const SyncDst_t * pDst = tRes.m_pDst.get();
 
 		auto tReply = APIAnswer ( tOut );
 		tOut.SendByte ( tRes.m_bIndexActive );
@@ -3332,8 +3332,8 @@ public:
 	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const final
 	{
 		PQRemoteReply_t & tRes = GetRes ( tAgent );
-		assert ( tRes.m_pDst.Ptr() );
-		SyncDst_t * pDst = tRes.m_pDst.Ptr();
+		assert ( tRes.m_pDst );
+		SyncDst_t * pDst = tRes.m_pDst.get();
 
 		tRes.m_bIndexActive = !!tReq.GetByte();
 		GetArray ( pDst->m_dRemotePaths, tReq );
@@ -3592,7 +3592,7 @@ void HandleCommandClusterPq ( ISphOutputBuffer & tOut, WORD uCommandVer, InputBu
 		{
 			SyncSrc_t tSrc;
 			tCmd.m_pChunks = &tSrc;
-			tRes.m_pDst = new SyncDst_t();
+			tRes.m_pDst = std::make_unique<SyncDst_t>();
 			PQRemoteFileReserve_c::ParseCommand ( tBuf, tCmd );
 			bOk = RemoteFileReserve ( tCmd, tRes, sError );
 			if ( bOk )
@@ -3876,7 +3876,7 @@ public:
 	{
 		Threads::ScopedCoroMutex_t tLock ( m_tLock );
 
-		assert ( m_pMerge.Ptr() );
+		assert ( m_pMerge );
 
 		if ( !SetFile ( iFile, false, sError ) )
 			return WriteResult_e::WRITE_FAILED;
@@ -3911,8 +3911,8 @@ public:
 	{
 		Threads::ScopedCoroMutex_t tLock ( m_tLock );
 
-		assert ( m_pMerge.Ptr() );
-		return m_pMerge.LeakPtr();
+		assert ( m_pMerge );
+		return m_pMerge.release();
 	}
 
 	void SetMerge ( const PQRemoteData_t & tCmd, const PQRemoteReply_t & tRes, const CSphString & sIndexPath, const VecTraits_T<CSphString> & dFilesRef )
@@ -3921,7 +3921,7 @@ public:
 
 		Threads::ScopedCoroMutex_t tLock ( m_tLock );
 
-		m_pMerge = new MergeState_t();
+		m_pMerge = std::make_unique<MergeState_t>();
 		m_pMerge->m_bIndexActive = tRes.m_bIndexActive;
 		m_pMerge->m_sIndexPath = sIndexPath;
 		m_pMerge->m_dMergeMask = tRes.m_pDst->m_dNodeChunks;
@@ -3934,9 +3934,9 @@ public:
 private:
 	Threads::Coro::Mutex_c m_tLock; // prevent writing to same file from multiple clients
 
-	CSphScopedPtr<WriterWithHash_c> m_pWriter { nullptr };
-	CSphScopedPtr<CSphAutoreader> m_pReader { nullptr };
-	CSphScopedPtr<MergeState_t> m_pMerge { nullptr };
+	std::unique_ptr<WriterWithHash_c> m_pWriter;
+	std::unique_ptr<CSphAutoreader> m_pReader;
+	std::unique_ptr<MergeState_t> m_pMerge;
 	CSphString m_sError; // writer need a string to put error message there
 
 	int m_iFile { -1 };
@@ -3960,23 +3960,23 @@ private:
 		m_iFile = iFile;
 
 		int iOpenFlags = ( bRestart ? ( O_CREAT | O_RDWR | SPH_O_BINARY ) : SPH_O_NEW ); // need to keep already written data
-		CSphScopedPtr<WriterWithHash_c> pWriter ( new WriterWithHash_c );
+		auto pWriter = std::make_unique<WriterWithHash_c>();
 		if ( !pWriter->OpenFile ( m_pMerge->m_dFilesNew[iFile], iOpenFlags, m_sError ) )
 		{
 			sError = m_sError;
 			return false;
 		}
 
-		CSphScopedPtr<CSphAutoreader> pReader ( nullptr );
+		std::unique_ptr<CSphAutoreader> pReader;
 		if ( sphFileExists ( m_pMerge->m_dFilesRef[iFile].cstr(), nullptr ) )
 		{
-			pReader = new CSphAutoreader();
+			pReader = std::make_unique<CSphAutoreader>();
 			if ( !pReader->Open ( m_pMerge->m_dFilesRef[iFile], sError ) )
 				return false;
 		}
 
-		m_pWriter.Swap ( pWriter );
-		m_pReader.Swap ( pReader );
+		m_pWriter = std::move ( pWriter );
+		m_pReader = std::move ( pReader );
 
 		return true;
 	}
@@ -4054,7 +4054,7 @@ private:
 
 	bool VerifyHashWriter ( CSphString & sError )
 	{
-		assert ( m_pWriter.Ptr() );
+		assert ( m_pWriter );
 		assert ( m_iFile>=0 && m_iFile<m_pMerge->m_dFilesNew.GetLength() );
 
 		// flush data and finalize hash
@@ -4087,26 +4087,26 @@ private:
 	{
 		if ( !m_pWriter )
 		{
-			sError.SetSprintf ( "no active writer %p on data copy %s (%d)", m_pWriter.Ptr(), GetFilename(), m_iFile );
+			sError.SetSprintf ( "no active writer %p on data copy %s (%d)", m_pWriter.get(), GetFilename(), m_iFile );
 			return false;
 		}
 
 		if ( bSeekReader && !m_pReader )
 		{
-			sError.SetSprintf ( "no reader %p on data copy %s (%d)", m_pReader.Ptr(), GetFilename(), m_iFile );
+			sError.SetSprintf ( "no reader %p on data copy %s (%d)", m_pReader.get(), GetFilename(), m_iFile );
 			return false;
 		}
 
 		if ( m_pWriter->GetPos()!=iOff )
 		{
-			sphLogDebugRpl ( "file %s (%d) restarted at offset: " INT64_FMT ", writer offset: " INT64_FMT ", reader offset:" INT64_FMT , GetFilename(), m_iFile, iOff, (int64_t)m_pWriter->GetPos(), (int64_t)( m_pReader.Ptr() ? m_pReader->GetPos() : -1 ) );
+			sphLogDebugRpl ( "file %s (%d) restarted at offset: " INT64_FMT ", writer offset: " INT64_FMT ", reader offset:" INT64_FMT , GetFilename(), m_iFile, iOff, (int64_t)m_pWriter->GetPos(), (int64_t)( m_pReader.get() ? m_pReader->GetPos() : -1 ) );
 
 			if ( !SetFile ( m_iFile, true, sError ) )
 				return false;
 
 			if ( bSeekReader && !m_pReader )
 			{
-				sError.SetSprintf ( "no reader %p on data copy %s (%d)", m_pReader.Ptr(), GetFilename(), m_iFile );
+				sError.SetSprintf ( "no reader %p on data copy %s (%d)", m_pReader.get(), GetFilename(), m_iFile );
 				return false;
 			}
 
@@ -4200,7 +4200,7 @@ bool RemoteFileReserve ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CS
 	CSphString sLocalIndexPath;
 
 	assert ( tCmd.m_pChunks );
-	assert ( tRes.m_pDst.Ptr() );
+	assert ( tRes.m_pDst );
 	// use index path first
 	{
 		cServedIndexRefPtr_c pServed = GetServed ( tCmd.m_sIndex );
@@ -4451,8 +4451,8 @@ bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSph
 	}
 
 	ScopedState_t tStateGuard ( uWriter );
-	CSphScopedPtr<MergeState_t> pMerge { g_tRecvStates.GetState ( uWriter ).Flush ( sError ) };
-	if ( !pMerge.Ptr() )
+	std::unique_ptr<MergeState_t> pMerge { g_tRecvStates.GetState ( uWriter ).Flush ( sError ) };
+	if ( !pMerge )
 		return false;
 
 	CSphString sType = GetTypeName ( tCmd.m_eIndex );
@@ -4464,7 +4464,7 @@ bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSph
 
 	sphLogDebugRpl ( "rotating index '%s' content from %s", tCmd.m_sIndex.cstr(), pMerge->m_sIndexPath.cstr() );
 	RollbackFilesGuard_t tFilesGuard;
-	if ( !RotateFiles ( pMerge.Ptr(), tFilesGuard.m_tFiles, sError ) )
+	if ( !RotateFiles ( pMerge.get(), tFilesGuard.m_tFiles, sError ) )
 		return false;
 
 	// verify whole index only in case debug replication
@@ -5064,7 +5064,7 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 		VecRefPtrs_t<AgentConn_t *> dNodes;
 		GetNodes ( dDesc, dNodes, tAgentData, tmLongOpTimeout );
 		for ( AgentConn_t * pAgent : dNodes )
-			PQRemoteBase_c::GetRes ( *pAgent ).m_pDst = new SyncDst_t();
+			PQRemoteBase_c::GetRes ( *pAgent ).m_pDst = std::make_unique<SyncDst_t>();
 
 		sphLogDebugRpl ( "reserve index '%s' at %d nodes with timeout %d.%03d sec", sIndex.cstr(), dNodes.GetLength(), (int)( tmLongOpTimeout/1000 ), (int)( tmLongOpTimeout%1000 ) );
 
@@ -5094,7 +5094,7 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 				continue;
 			 }
 
-			 SyncDst_t * pDst = tRes.m_pDst.LeakPtr();
+			 SyncDst_t * pDst = tRes.m_pDst.release();
 			 tStatesGuard.m_dFree.Add ( pDst );
 			 tSigSrc.m_tmTimeout = Max ( tSigSrc.m_tmTimeout, pDst->m_tmTimeout );
 			 pDst->m_tmTimeoutFile = GetQueryTimeout ( Max ( tSigSrc.m_tmTimeoutFile, pDst->m_tmTimeoutFile ) * 3 );

@@ -1,17 +1,12 @@
-# this is from RE2 inside
+# that is real leak, not very important, but should be fixed
 {
-   has_index
-   Memcheck:Cond
-   fun:has_index
-   fun:_ZN3re23NFA12AddToThreadqEPNS_11SparseArrayIPNS0_6ThreadEEEiiPKcPS7_
+   REAL_memleak_of_SockWrapper
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:_Znwm
+   fun:_ZN13SockWrapper_cC1EiP11CSphNetLoop
 }
 
-{
-   has_index
-   Memcheck:Value8
-   fun:has_index
-   fun:_ZN3re23NFA12AddToThreadqEPNS_11SparseArrayIPNS0_6ThreadEEEiiPKcPS7_
-}
 
 # that is intentional, as we look inside area which was stack, i.e. alien local variables
 {
@@ -19,3 +14,79 @@
    Memcheck:Addr1
    fun:_Z13CalcUsedStack11VecTraits_TIhE
 }
+
+
+# this is from RE2 inside
+{
+   conditional_RE2
+   Memcheck:Cond
+   fun:has_index
+   ...
+   fun:_ZN3re23NFA12AddToThreadqEPNS_11SparseArrayIPNS0_6ThreadEEEiiPKcPS7_*
+}
+
+{
+   uninitialized_RE2
+   Memcheck:Value8
+   fun:has_index
+   ...
+   fun:_ZN3re23NFA12AddToThreadqEPNS_11SparseArrayIPNS0_6ThreadEEEiiPKcPS7_*
+}
+
+{
+   stilreachable_RE2
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:_Znwm
+   fun:InitEmpty
+   fun:_ZN3re23RE24InitERKNS_11StringPieceERKNS0_7OptionsE
+}
+
+
+# ICU
+{
+   ICU_reachable
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:*alloc
+   ...
+   fun:_ZN6icu_6*
+}
+
+{
+   ICU_configure_reachable
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:ConfigureICU
+}
+
+{  
+   ICU_extend_reachable
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:extendICUData
+}
+
+# wsrep (galera)
+{
+   galera_internal_reachable
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:?alloc
+   ...
+   fun:_dlerror_run
+}
+
+{
+   galera_asio_reachable
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:asio_handler_allocate
+}
+#EOF

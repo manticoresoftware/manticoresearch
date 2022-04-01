@@ -691,10 +691,10 @@ static void CollectDistIndexesInt ( CSphVector<IndexDesc_t> & dIndexes )
 }
 
 
-FilenameBuilder_i * CreateFilenameBuilder ( const char * szIndex )
+std::unique_ptr<FilenameBuilder_i> CreateFilenameBuilder ( const char * szIndex )
 {
 	if ( IsConfigless() )
-		return new FilenameBuilder_c(szIndex);
+		return std::make_unique<FilenameBuilder_c>(szIndex);
 
 	return nullptr;
 }

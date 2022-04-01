@@ -36,7 +36,7 @@ static auto &g_bRTChangesAllowed = RTChangesAllowed ();
 
 struct StoredQuery_t : public StoredQuery_i, public ISphRefcountedMT
 {
-	CSphScopedPtr<XQQuery_t>		m_pXQ { nullptr };
+	std::unique_ptr<XQQuery_t>		m_pXQ;
 
 	CSphVector<uint64_t>			m_dRejectTerms;
 	CSphFixedVector<uint64_t>		m_dRejectWilds {0};
@@ -1096,8 +1096,8 @@ int FtMatchingWithoutDocs ( const StoredQuery_t * pStored, PercolateMatchContext
 {
 	tMatchCtx.m_pDictMap->SetMap ( pStored->m_hDict ); // set terms dictionary
 	CSphQueryResultMeta tTmpMeta;
-	CSphScopedPtr<ISphRanker> pRanker { sphCreateRanker ( *pStored->m_pXQ.Ptr(), tMatchCtx.m_tDummyQuery,
-			tTmpMeta, *tMatchCtx.m_pTermSetup, *tMatchCtx.m_pCtx, tMatchCtx.m_tSchema ) };
+	std::unique_ptr<ISphRanker> pRanker = sphCreateRanker ( *pStored->m_pXQ, tMatchCtx.m_tDummyQuery,
+			tTmpMeta, *tMatchCtx.m_pTermSetup, *tMatchCtx.m_pCtx, tMatchCtx.m_tSchema );
 
 	if ( !pRanker )
 		return 0;
@@ -1113,8 +1113,8 @@ int FtMatchingCollectingDocs ( const StoredQuery_t * pStored, PercolateMatchCont
 {
 	tMatchCtx.m_pDictMap->SetMap ( pStored->m_hDict ); // set terms dictionary
 	CSphQueryResultMeta tTmpMeta;
-	CSphScopedPtr<ISphRanker> pRanker { sphCreateRanker ( *pStored->m_pXQ.Ptr(), tMatchCtx.m_tDummyQuery,
-			tTmpMeta, *tMatchCtx.m_pTermSetup, *tMatchCtx.m_pCtx, tMatchCtx.m_tSchema ) };
+	std::unique_ptr<ISphRanker> pRanker = sphCreateRanker ( *pStored->m_pXQ, tMatchCtx.m_tDummyQuery,
+			tTmpMeta, *tMatchCtx.m_pTermSetup, *tMatchCtx.m_pCtx, tMatchCtx.m_tSchema );
 
 	if ( !pRanker )
 		return 0;
@@ -1653,7 +1653,7 @@ std::unique_ptr<StoredQuery_i> PercolateIndex_c::CreateQuery ( PercolateQueryArg
 }
 
 
-static const QueryParser_i * CreatePlainQueryparser ( bool )
+static std::unique_ptr<QueryParser_i> CreatePlainQueryparser ( bool )
 {
 	return sphCreatePlainQueryParser();
 }
@@ -1724,11 +1724,11 @@ std::unique_ptr<StoredQuery_i> PercolateIndex_c::CreateQuery ( PercolateQueryArg
 	if ( m_pFieldFilter && sQuery && m_pFieldFilter->Clone()->Apply ( sQuery, dFiltered, true ) )
 		sQuery = (const char *)dFiltered.Begin();
 
-	CSphScopedPtr<XQQuery_t> tParsed ( new XQQuery_t() );
-	CSphScopedPtr<const QueryParser_i> tParser ( g_pCreateQueryParser ( !tArgs.m_bQL ) );
+	auto tParsed = std::make_unique<XQQuery_t>();
+	std::unique_ptr<QueryParser_i> tParser = g_pCreateQueryParser ( !tArgs.m_bQL );
 
 	// right tokenizer created at upper level
-	if ( !tParser->ParseQuery ( *tParsed.Ptr (), sQuery, nullptr, pTokenizer, pTokenizer, &m_tSchema, pDict, m_tSettings ) )
+	if ( !tParser->ParseQuery ( *tParsed, sQuery, nullptr, pTokenizer, pTokenizer, &m_tSchema, pDict, m_tSettings ) )
 	{
 		sError = tParsed->m_sParseError;
 		return nullptr;
@@ -1751,7 +1751,7 @@ std::unique_ptr<StoredQuery_i> PercolateIndex_c::CreateQuery ( PercolateQueryArg
 		tParsed->m_pRoot = FixExpanded ( tParsed->m_pRoot, m_tSettings.GetMinPrefixLen ( bWordDict ), m_tSettings.m_iMinInfixLen, ( pDict->HasMorphology () || m_tSettings.m_bIndexExactWords ) );
 
 	auto pStored = std::make_unique<StoredQuery_t>();
-	pStored->m_pXQ = tParsed.LeakPtr();
+	pStored->m_pXQ = std::move ( tParsed );
 	pStored->m_bOnlyTerms = true;
 	pStored->m_sQuery = sQuery;
 	QueryGetRejects ( pStored->m_pXQ->m_pRoot, pDict, pStored->m_dRejectTerms, pStored->m_dRejectWilds, pStored->m_dSuffixes, pStored->m_bOnlyTerms, ( m_iMaxCodepointLength>1 ) );
@@ -2384,7 +2384,7 @@ void PercolateIndex_c::PostSetupUnl()
 	CSphString sHitlessFiles = m_tSettings.m_sHitlessFiles.cstr();
 	if ( GetIndexFilenameBuilder() )
 	{
-		CSphScopedPtr<const FilenameBuilder_i> pFilenameBuilder ( GetIndexFilenameBuilder() ( m_sIndexName.cstr() ) );
+		std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = GetIndexFilenameBuilder() ( m_sIndexName.cstr() );
 		if ( pFilenameBuilder )
 			sHitlessFiles = pFilenameBuilder->GetFullPath ( sHitlessFiles );
 	}
@@ -3146,11 +3146,11 @@ void PercolateIndex_c::GetIndexFiles ( CSphVector<CSphString> & dFiles, const Fi
 	CSphString & sMeta = dFiles.Add();
 	sMeta.SetSprintf ( "%s.meta", m_sFilename.cstr() );
 
-	CSphScopedPtr<const FilenameBuilder_i> pFilenameBuilder ( nullptr );
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder ( nullptr );
 	if ( !pParentBuilder && GetIndexFilenameBuilder() )
 	{
 		pFilenameBuilder = GetIndexFilenameBuilder() ( m_sIndexName.cstr() );
-		pParentBuilder = pFilenameBuilder.Ptr();
+		pParentBuilder = pFilenameBuilder.get();
 	}
 
 	GetSettingsFiles ( m_pTokenizer, m_pDict, GetSettings(), pParentBuilder, dFiles );

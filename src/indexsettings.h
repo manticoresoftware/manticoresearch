@@ -429,7 +429,7 @@ bool		sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInd
 CSphString	BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex, const CSphSchema & tSchema );
 
 // daemon-level callback
-using CreateFilenameBuilder_fn = FilenameBuilder_i * (*)( const char * szIndex );
+using CreateFilenameBuilder_fn = std::unique_ptr<FilenameBuilder_i> (*) ( const char * szIndex );
 void		SetIndexFilenameBuilder ( CreateFilenameBuilder_fn pBuilder );
 CreateFilenameBuilder_fn GetIndexFilenameBuilder();
 

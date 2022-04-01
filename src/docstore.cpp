@@ -184,13 +184,13 @@ int	Compressor_LZ4HC_c::DoCompression ( const VecTraits_T<BYTE> & dUncompressed,
 }
 
 
-Compressor_i * CreateCompressor ( Compression_e eComp, int iCompressionLevel )
+std::unique_ptr<Compressor_i> CreateCompressor ( Compression_e eComp, int iCompressionLevel )
 {
 	switch (  eComp )
 	{
-		case Compression_e::LZ4:	return new Compressor_LZ4_c;
-		case Compression_e::LZ4HC:	return new Compressor_LZ4HC_c ( iCompressionLevel );
-		default:					return new Compressor_None_c;
+		case Compression_e::LZ4:	return std::make_unique<Compressor_LZ4_c>();
+		case Compression_e::LZ4HC:	return std::make_unique<Compressor_LZ4HC_c> ( iCompressionLevel );
+		default:					return std::make_unique<Compressor_None_c>();
 	}
 }
 
@@ -550,7 +550,7 @@ private:
 	CSphString					m_sFilename;
 	CSphAutofile				m_tFile;
 	CSphFixedVector<Block_t>	m_dBlocks{0};
-	CSphScopedPtr<Compressor_i> m_pCompressor{nullptr};
+	std::unique_ptr<Compressor_i> m_pCompressor;
 	DocstoreFields_c			m_tFields;
 
 	const Block_t *				FindBlock ( RowID_t tRowID ) const;
@@ -1007,7 +1007,7 @@ private:
 	CSphVector<StoredDoc_t>	m_dStoredDocs;
 	CSphVector<BYTE>		m_dHeader;
 	CSphVector<BYTE>		m_dBuffer;
-	CSphScopedPtr<Compressor_i> m_pCompressor{nullptr};
+	std::unique_ptr<Compressor_i> m_pCompressor;
 	MemoryWriter2_c			m_tHeaderWriter;
 	CSphWriter				m_tWriter;
 	DocstoreFields_c		m_tFields;
@@ -1602,7 +1602,7 @@ private:
 	DebugCheckError_i &	m_tReporter;
 	const char *		m_szFilename = nullptr;
 	DocstoreFields_c	m_tFields;
-	CSphScopedPtr<Compressor_i> m_pCompressor{nullptr};
+	std::unique_ptr<Compressor_i> m_pCompressor;
 	int64_t				m_iRowsCount = 0;
 
 	void				CheckSmallBlockDoc ( MemoryReader2_c & tReader, CSphBitvec & tEmptyFields, SphOffset_t tOffset );
@@ -1634,7 +1634,7 @@ bool DocstoreChecker_c::Check()
 
 	Compression_e eCompression = Byte2Compression(uCompression);
 	m_pCompressor = CreateCompressor ( eCompression, DEFAULT_COMPRESSION_LEVEL );
-	if ( !m_pCompressor.Ptr() )
+	if ( !m_pCompressor )
 		return m_tReporter.Fail ( "Unable to create compressor in %s", m_szFilename );
 
 	DWORD uNumFields = m_tReader.GetDword();

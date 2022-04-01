@@ -1166,8 +1166,8 @@ public:
 
 	template <class QWORDDST, class QWORDSRC>
 	static bool			MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, VecTraits_T<RowID_t> dDstRows, VecTraits_T<RowID_t> dSrcRows, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphIndexProgress & tProgress);
-	static bool			DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, bool bSrcSettings, bool bSupressDstDocids );
-	ISphFilter *		CreateMergeFilters ( const VecTraits_T<CSphFilterSettings> & dSettings ) const;
+	static bool			DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, bool bSrcSettings, bool bSupressDstDocids );
+	std::unique_ptr<ISphFilter>		CreateMergeFilters ( const VecTraits_T<CSphFilterSettings> & dSettings ) const;
 	template <class QWORD>
 	static bool			DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, int iKillField );
 
@@ -1219,7 +1219,7 @@ public:
 	bool				CopyExternalFiles ( int iPostfix, StrVec_t & dCopied ) final;
 	void				CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const final;
 
-	bool				CheckEarlyReject ( const CSphVector<CSphFilterSettings> & dFilters, ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema ) const;
+	bool				CheckEarlyReject ( const CSphVector<CSphFilterSettings> & dFilters, const ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema ) const;
 	int64_t				GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries ) const override;
 
 private:
@@ -1319,7 +1319,7 @@ private:
 	bool						Build_SetupDocstore ( std::unique_ptr<DocstoreBuilder_i> & pDocstore, CSphBitvec & dStoredFields, CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage ); // fixme! build only
 	bool						Build_SetupBlobBuilder ( std::unique_ptr<BlobRowBuilder_i> & pBuilder ); // fixme! build only
 	bool						Build_SetupColumnar ( std::unique_ptr<columnar::Builder_i> & pBuilder ); // fixme! build only
-	bool						Build_SetupHistograms ( CSphScopedPtr<HistogramContainer_c> & pContainer, CSphVector<std::pair<Histogram_i*,int>> & dHistograms ); // fixme! build only
+	bool						Build_SetupHistograms ( std::unique_ptr<HistogramContainer_c> & pContainer, CSphVector<std::pair<Histogram_i*,int>> & dHistograms ); // fixme! build only
 
 	void						Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, DocID_t tDocID, QueryMvaContainer_c & tMvaContainer, CSphSource & tSource, const CSphBitvec & dStoredFields, const CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage ); // fixme! build only
 	bool						Build_StoreBlobAttrs ( DocID_t tDocId, SphOffset_t & tOffset, BlobRowBuilder_i & tBlobRowBuilderconst, QueryMvaContainer_c & tMvaContainer, AttrSource_i & tSource, bool bForceSource ); // fixme! build only
@@ -2615,13 +2615,13 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 	{
 		if ( bAddAttr )
 		{
-			Histogram_i * pNewHistogram = CreateHistogram ( tCtx.m_sName, tCtx.m_eType );
+			std::unique_ptr<Histogram_i> pNewHistogram = CreateHistogram ( tCtx.m_sName, tCtx.m_eType );
 			if ( pNewHistogram )
 			{
 				for ( DWORD i = 0; i < m_iDocinfo; i++ )
 					pNewHistogram->Insert(0);
 
-				m_pHistograms->Add ( pNewHistogram );
+				m_pHistograms->Add ( std::move ( pNewHistogram ) );
 			}
 		}
 		else
@@ -2969,7 +2969,7 @@ void CSphIndex_VLN::GetIndexFiles ( CSphVector<CSphString> & dFiles, const Filen
 	std::unique_ptr<FilenameBuilder_i> pFilename;
 	if ( !pFilenameBuilder && GetIndexFilenameBuilder() )
 	{
-		pFilename = std::unique_ptr<FilenameBuilder_i> { GetIndexFilenameBuilder() ( m_sIndexName.cstr() ) };
+		std::unique_ptr<FilenameBuilder_i> pFilename = GetIndexFilenameBuilder() ( m_sIndexName.cstr() );
 		pFilenameBuilder = pFilename.get();
 	}
 
@@ -4950,22 +4950,22 @@ bool CSphIndex_VLN::Build_SetupColumnar ( std::unique_ptr<columnar::Builder_i> &
 }
 
 
-bool CSphIndex_VLN::Build_SetupHistograms ( CSphScopedPtr<HistogramContainer_c> & pContainer, CSphVector<std::pair<Histogram_i*,int>> & dHistograms )
+bool CSphIndex_VLN::Build_SetupHistograms ( std::unique_ptr<HistogramContainer_c> & pContainer, CSphVector<std::pair<Histogram_i*,int>> & dHistograms )
 {
-	for ( int i = 0; i < m_tSchema.GetAttrsCount(); i++ )
+	for ( int i = 0; i < m_tSchema.GetAttrsCount(); ++i )
 	{
 		const CSphColumnInfo & tAttr = m_tSchema.GetAttr(i);
-		Histogram_i * pHistogram = CreateHistogram ( tAttr.m_sName, tAttr.m_eAttrType );
+		Histogram_i * pHistogram = CreateHistogram ( tAttr.m_sName, tAttr.m_eAttrType ).release();
 		if ( pHistogram )
 			dHistograms.Add ( { pHistogram, i } );
 	}
 
-	if ( !dHistograms.GetLength() )
+	if ( dHistograms.IsEmpty() )
 		return true;
 
-	pContainer = new HistogramContainer_c;
+	pContainer = std::make_unique<HistogramContainer_c>();
 	for ( const auto & i : dHistograms )
-		Verify ( pContainer->Add ( i.first ) );
+		Verify ( pContainer->Add ( std::unique_ptr<Histogram_i> {i.first} ) );
 
 	return true;
 }
@@ -5203,7 +5203,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	if ( !Build_SetupDocstore ( pDocstoreBuilder, dStoredFields, dStoredAttrs, dTmpDocstoreAttrStorage ) )
 		return 0;
 
-	CSphScopedPtr<HistogramContainer_c> pHistogramContainer(nullptr);
+	std::unique_ptr<HistogramContainer_c> pHistogramContainer;
 	CSphVector<std::pair<Histogram_i*,int>> dHistograms;
 	if ( !Build_SetupHistograms ( pHistogramContainer, dHistograms ) )
 		return 0;
@@ -5526,7 +5526,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		return 0;
 	}
 
-	if ( pHistogramContainer.Ptr() && !pHistogramContainer->Save ( GetIndexFileName(SPH_EXT_SPHI), m_sLastError ) )
+	if ( pHistogramContainer && !pHistogramContainer->Save ( GetIndexFileName(SPH_EXT_SPHI), m_sLastError ) )
 		return 0;
 
 	if ( bGotPrevIndex )
@@ -5929,16 +5929,16 @@ public:
 };
 
 
-ISphFilter * CSphIndex_VLN::CreateMergeFilters ( const VecTraits_T<CSphFilterSettings> & dSettings ) const
+std::unique_ptr<ISphFilter> CSphIndex_VLN::CreateMergeFilters ( const VecTraits_T<CSphFilterSettings> & dSettings ) const
 {
 	CSphString sError, sWarning;
-	ISphFilter * pResult = nullptr;
+	std::unique_ptr<ISphFilter> pResult;
 	CreateFilterContext_t tCtx;
 	tCtx.m_pSchema = &m_tSchema;
 	tCtx.m_pBlobPool = m_tBlobAttrs.GetReadPtr();
 
 	for ( const auto& dSetting : dSettings )
-		pResult = sphJoinFilters ( pResult, sphCreateFilter ( dSetting, tCtx, sError, sWarning ) );
+		pResult = sphJoinFilters ( std::move ( pResult ), sphCreateFilter ( dSetting, tCtx, sError, sWarning ) );
 
 	if ( pResult )
 		pResult->SetColumnar ( m_pColumnar.get() );
@@ -6268,7 +6268,7 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSet
 		sphWarn ( "%s", i.cstr() );
 
 	// create filters
-	std::unique_ptr<ISphFilter> pFilter { CreateMergeFilters ( dFilters ) };
+	std::unique_ptr<ISphFilter> pFilter =CreateMergeFilters ( dFilters );
 	return DoMerge ( this, (const CSphIndex_VLN *)pSource, pFilter.get(), m_sLastError, tProgress, false, bSupressDstDocids );
 }
 
@@ -6410,8 +6410,8 @@ bool AttrMerger_c::CopyPureColumnarAttributes ( const CSphIndex_VLN& tIndex, con
 		ARRAY_FOREACH ( i, dColumnarIterators )
 		{
 			auto& tIt = dColumnarIterators[i];
-			Verify ( AdvanceIterator ( tIt.first.get(), tRowID ) );
-			SetColumnarAttr ( i, tIt.second, m_pColumnarBuilder.get(), tIt.first.get(), dTmp );
+			Verify ( AdvanceIterator ( tIt.first, tRowID ) );
+			SetColumnarAttr ( i, tIt.second, m_pColumnarBuilder.get(), tIt.first, dTmp );
 		}
 
 		ARRAY_FOREACH ( i, m_dAttrsForHistogram )
@@ -6470,8 +6470,8 @@ bool AttrMerger_c::CopyMixedAttributes ( const CSphIndex_VLN& tIndex, const VecT
 		ARRAY_FOREACH ( i, dColumnarIterators )
 		{
 			auto& tIt = dColumnarIterators[i];
-			Verify ( AdvanceIterator ( tIt.first.get(), tRowID ) );
-			SetColumnarAttr ( i, tIt.second, m_pColumnarBuilder.get(), tIt.first.get(), dTmp );
+			Verify ( AdvanceIterator ( tIt.first, tRowID ) );
+			SetColumnarAttr ( i, tIt.second, m_pColumnarBuilder.get(), tIt.first, dTmp );
 		}
 
 		DocID_t tDocID = iColumnarIdLoc >= 0 ? dColumnarIterators[iColumnarIdLoc].first->Get() : sphGetDocID ( pRow );
@@ -6553,7 +6553,7 @@ bool AttrMerger_c::FinishMergeAttributes ( const CSphIndex_VLN* pDstIndex, Build
 }
 
 
-bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress,
+bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress,
 	bool bSrcSettings, bool bSupressDstDocids )
 {
 	auto & tMonitor = tProgress.GetMergeCb();
@@ -6677,7 +6677,7 @@ bool sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, VecTraits_T<CSph
 	auto pDstIndex = (const CSphIndex_VLN*) pDst;
 	auto pSrcIndex = (const CSphIndex_VLN*) pSrc;
 
-	std::unique_ptr<ISphFilter> pFilter { pDstIndex->CreateMergeFilters ( dFilters ) };
+	std::unique_ptr<ISphFilter> pFilter = pDstIndex->CreateMergeFilters ( dFilters );
 	return CSphIndex_VLN::DoMerge ( pDstIndex, pSrcIndex, pFilter.get(), sError, tProgress, dFilters.IsEmpty(), false );
 }
 
@@ -7855,20 +7855,20 @@ RowidIterator_i * CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, CSph
 		// if we already created an iterator at prev stage, we need to recreate filters here, so we won't be doing unnecessary minmax eval
 		if ( bRecreateFilters && pOriginalFilters->GetLength() )
 		{
-			SafeDelete ( tCtx.m_pFilter );
+			tCtx.m_pFilter.reset();
 			tFlx.m_pFilters = &dModifiedFilters;
 			tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning );
 			bRecreateFilters = false;
 		}
 
 		bool bChanged = false;
-		RowidIterator_i * pIterator = CreateColumnarAnalyzerOrPrefilter ( *pOriginalFilters, dModifiedFilters, bChanged, tQuery.m_dFilterTree, tCtx.m_pFilter, tQuery.m_eCollation, tMaxSorterSchema, tMeta.m_sWarning );
+		RowidIterator_i * pIterator = CreateColumnarAnalyzerOrPrefilter ( *pOriginalFilters, dModifiedFilters, bChanged, tQuery.m_dFilterTree, tCtx.m_pFilter.get(), tQuery.m_eCollation, tMaxSorterSchema, tMeta.m_sWarning );
 		UpdateSpawnedIterators ( bChanged, bRecreateFilters, dOriginalFilters, dModifiedFilters, pOriginalFilters, dIterators, pIterator );
 	}
 
 	if ( bRecreateFilters )
 	{
-		SafeDelete ( tCtx.m_pFilter );
+		tCtx.m_pFilter.reset();
 		tFlx.m_pFilters = &dModifiedFilters;
 		tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning );
 	}
@@ -7902,7 +7902,7 @@ static RowIdBoundaries_t RemoveRowIdFilter ( CSphQueryContext & tCtx, CreateFilt
 		if ( &tFilter!=pRowIdFilter )
 			dModifiedFilters.Add(tFilter);
 
-	SafeDelete ( tCtx.m_pFilter );
+	tCtx.m_pFilter.reset();
 	tFlx.m_pFilters = &dModifiedFilters;
 	tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning );
 
@@ -7975,7 +7975,7 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	if ( !tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning ) )
 		return false;
 
-	if ( CheckEarlyReject ( tQuery.m_dFilters, tCtx.m_pFilter, tQuery.m_eCollation, tMaxSorterSchema ) )
+	if ( CheckEarlyReject ( tQuery.m_dFilters, tCtx.m_pFilter.get(), tQuery.m_eCollation, tMaxSorterSchema ) )
 	{
 		tMeta.m_iQueryTime += (int)( ( sphMicroTimer()-tmQueryStart )/1000 );
 		tMeta.m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
@@ -8005,7 +8005,7 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 
 	// we don't modify the original filters because iterators may use some data from them (to avoid copying)
 	CSphVector<CSphFilterSettings> dModifiedFilters;
-	CSphScopedPtr<RowidIterator_i> pIterator ( SpawnIterators ( tQuery, dModifiedFilters, tCtx, tFlx, tMaxSorterSchema, tMeta ) );
+	std::unique_ptr<RowidIterator_i> pIterator ( SpawnIterators ( tQuery, dModifiedFilters, tCtx, tFlx, tMaxSorterSchema, tMeta ) );
 
 	bool bImplicitCutoff;
 	int iCutoff;
@@ -8013,7 +8013,7 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 
 	bool bCutoffHit =  false;
 	if ( pIterator )
-		bCutoffHit = RunFullscanOnIterator ( pIterator.Ptr(), tCtx, tMeta, dSorters, tMatch, iCutoff, bRandomize, tArgs.m_iIndexWeight, tmMaxTimer );
+		bCutoffHit = RunFullscanOnIterator ( pIterator.get(), tCtx, tMeta, dSorters, tMatch, iCutoff, bRandomize, tArgs.m_iIndexWeight, tmMaxTimer );
 	else
 	{
 		bool bHaveRowidFilter = false;
@@ -8719,12 +8719,13 @@ bool CSphIndex_VLN::LoadHeader ( const char* sHeaderName, bool bStripPath, CSphE
 
 void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool bConfig )
 {
-	CreateFilenameBuilder_fn fnCreateFilenameBuilder = GetIndexFilenameBuilder();
-	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( m_sIndexName.cstr() ) : nullptr );
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder;
+	if ( GetIndexFilenameBuilder() )
+		pFilenameBuilder = GetIndexFilenameBuilder() ( m_sIndexName.cstr() );
 
 	CSphEmbeddedFiles tEmbeddedFiles;
 	CSphString sWarning;
-	if ( !LoadHeader ( sHeaderName, false, tEmbeddedFiles, pFilenameBuilder.Ptr(), sWarning ) )
+	if ( !LoadHeader ( sHeaderName, false, tEmbeddedFiles, pFilenameBuilder.get(), sWarning ) )
 		sphDie ( "failed to load header: %s", m_sLastError.cstr ());
 
 	if ( !sWarning.IsEmpty () )
@@ -8768,7 +8769,7 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 
 		fprintf ( fp, "}\n\nindex $dump\n{\n\tsource = $dump\n\tpath = $dump\n" );
 
-		DumpSettingsCfg ( fp, *this, pFilenameBuilder.Ptr() );
+		DumpSettingsCfg ( fp, *this, pFilenameBuilder.get() );
 
 		fprintf ( fp, "}\n" );
 		return;
@@ -8799,7 +8800,7 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 	fprintf ( fp, "total-documents: " INT64_FMT "\n", m_tStats.m_iTotalDocuments );
 	fprintf ( fp, "total-bytes: " INT64_FMT "\n", int64_t(m_tStats.m_iTotalBytes) );
 
-	DumpReadable ( fp, *this, tEmbeddedFiles, pFilenameBuilder.Ptr() );
+	DumpReadable ( fp, *this, tEmbeddedFiles, pFilenameBuilder.get() );
 
 	fprintf ( fp, "\nmin-max-index: " INT64_FMT "\n", m_iMinMaxIndex );
 }
@@ -9221,8 +9222,8 @@ CSphQueryContext::~CSphQueryContext ()
 
 void CSphQueryContext::ResetFilters()
 {
-	SafeDelete ( m_pFilter );
-	SafeDelete ( m_pWeightFilter );
+	m_pFilter.reset();
+	m_pWeightFilter.reset();
 	m_dUserVals.Reset();
 }
 
@@ -9590,12 +9591,9 @@ bool CSphQueryContext::CreateFilters ( CreateFilterContext_t & tCtx, CSphString 
 	if ( !sphCreateFilters ( tCtx, sError, sWarning ) )
 		return false;
 
-	m_pFilter = tCtx.m_pFilter;
-	m_pWeightFilter = tCtx.m_pWeightFilter;
+	m_pFilter = std::move ( tCtx.m_pFilter );
+	m_pWeightFilter = std::move ( tCtx.m_pWeightFilter );
 	m_dUserVals.SwapData ( tCtx.m_dUserVals );
-	tCtx.m_pFilter = nullptr;
-	tCtx.m_pWeightFilter = nullptr;
-
 	return true;
 }
 
@@ -10694,7 +10692,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 }
 
 
-bool CSphIndex_VLN::CheckEarlyReject ( const CSphVector<CSphFilterSettings> & dFilters, ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema ) const
+bool CSphIndex_VLN::CheckEarlyReject ( const CSphVector<CSphFilterSettings> & dFilters, const ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema ) const
 {
 	if ( !pFilter || dFilters.IsEmpty() )
 		return false;
@@ -10870,14 +10868,14 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
-	CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( tXQ, tQuery, tMeta, tTermSetup, tCtx, tMaxSorterSchema )  );
-	if ( !pRanker.Ptr() )
+	std::unique_ptr<ISphRanker> pRanker = sphCreateRanker ( tXQ, tQuery, tMeta, tTermSetup, tCtx, tMaxSorterSchema );
+	if ( !pRanker )
 		return false;
 
 	if ( ( tArgs.m_uPackedFactorFlags & SPH_FACTOR_ENABLE ) && tQuery.m_eRanker!=SPH_RANK_EXPR )
 		tMeta.m_sWarning.SetSprintf ( "packedfactors() and bm25f() requires using an expression ranker" );
 
-	tCtx.SetupExtraData ( pRanker.Ptr(), dSorters.GetLength()==1 ? dSorters[0] : nullptr );
+	tCtx.SetupExtraData ( pRanker.get(), dSorters.GetLength()==1 ? dSorters[0] : nullptr );
 
 	BYTE * pBlobPool = m_tBlobAttrs.GetWritePtr();
 	pRanker->ExtraData ( EXTRA_SET_BLOBPOOL, (void**)&pBlobPool );
@@ -10916,7 +10914,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	if ( !tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning ) )
 		return false;
 
-	if ( CheckEarlyReject ( *pFilters, tCtx.m_pFilter, tQuery.m_eCollation, tMaxSorterSchema ) )
+	if ( CheckEarlyReject ( *pFilters, tCtx.m_pFilter.get(), tQuery.m_eCollation, tMaxSorterSchema ) )
 	{
 		tMeta.m_iQueryTime += (int)( ( sphMicroTimer()-tmQueryStart )/1000 );
 		tMeta.m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
@@ -10988,7 +10986,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 				}
 			}
 
-			(*this.*pFunc)( tCtx, tQuery, dSorters, pRanker.Ptr(), iMyTag, tArgs.m_iIndexWeight );
+			(*this.*pFunc)( tCtx, tQuery, dSorters, pRanker.get(), iMyTag, tArgs.m_iIndexWeight );
 			break;
 
 		default:
@@ -11318,7 +11316,7 @@ Bson_t Explain ( ExplainQueryArgs_t & tArgs )
 	if ( !tArgs.m_szQuery )
 		return EmptyBson ();
 
-	CSphScopedPtr<QueryParser_i> pQueryParser ( sphCreatePlainQueryParser() );
+	std::unique_ptr<QueryParser_i> pQueryParser ( sphCreatePlainQueryParser() );
 
 	CSphVector<BYTE> dFiltered;
 	const BYTE * sModifiedQuery = (const BYTE *)tArgs.m_szQuery;
@@ -12129,17 +12127,17 @@ int64_t InfixBuilder_c<SIZE>::SaveEntryBlocks ( CSphWriter & wrDict )
 }
 
 
-ISphInfixBuilder * sphCreateInfixBuilder ( int iCodepointBytes, CSphString * pError )
+std::unique_ptr<ISphInfixBuilder> sphCreateInfixBuilder ( int iCodepointBytes, CSphString * pError )
 {
 	assert ( pError );
 	*pError = CSphString();
 	switch ( iCodepointBytes )
 	{
-	case 0:		return NULL;
-	case 1:		return new InfixBuilder_c<2>(); // upto 6x1 bytes, 2 dwords, sbcs
-	case 2:		return new InfixBuilder_c<3>(); // upto 6x2 bytes, 3 dwords, utf-8
-	case 3:		return new InfixBuilder_c<5>(); // upto 6x3 bytes, 5 dwords, utf-8
-	default:	pError->SetSprintf ( "unhandled max infix codepoint size %d", iCodepointBytes ); return NULL;
+	case 0:		return nullptr;
+	case 1:		return std::make_unique<InfixBuilder_c<2>>(); // upto 6x1 bytes, 2 dwords, sbcs
+	case 2:		return std::make_unique<InfixBuilder_c<3>>(); // upto 6x2 bytes, 3 dwords, utf-8
+	case 3:		return std::make_unique<InfixBuilder_c<5>>(); // upto 6x3 bytes, 5 dwords, utf-8
+	default:	pError->SetSprintf ( "unhandled max infix codepoint size %d", iCodepointBytes ); return nullptr;
 	}
 }
 

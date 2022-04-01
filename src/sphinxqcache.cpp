@@ -679,9 +679,9 @@ QcacheEntry_c * QcacheFind ( int64_t iIndexId, const CSphQuery & q, const ISphSc
 	return g_Qcache.Find ( iIndexId, q, tSorterSchema );
 }
 
-ISphRanker * QcacheRanker ( QcacheEntry_c * pEntry, const ISphQwordSetup & tSetup )
+std::unique_ptr<ISphRanker> QcacheRanker ( QcacheEntry_c * pEntry, const ISphQwordSetup & tSetup )
 {
-	return new QcacheRanker_c ( pEntry, tSetup );
+	return std::make_unique<QcacheRanker_c> ( pEntry, tSetup );
 }
 
 const QcacheStatus_t & QcacheGetStatus()

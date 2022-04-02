@@ -287,6 +287,10 @@ static void sphLogEntry ( ESphLogLevel , char * sBuf, char * sTtyBuf )
 #endif
 {
 #if _WIN32
+
+#pragma message( "Automatically linking with AdvAPI32.Lib" )
+#pragma comment( lib, "AdvAPI32.Lib" )
+
 	if ( g_bService && g_iLogFile==STDOUT_FILENO )
 	{
 		HANDLE hEventSource;

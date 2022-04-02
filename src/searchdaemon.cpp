@@ -23,11 +23,11 @@
 	// for MAC address
 
 	#include <iphlpapi.h>
-	#pragma message("Automatically linking with IPHLPAPI.lib")
-	#pragma comment(lib, "IPHLPAPI.lib")
+	#pragma message("Automatically linking with iphlpapi.lib")
+	#pragma comment(lib, "iphlpapi.lib")
 
-	#pragma comment(linker, "/defaultlib:ws2_32.lib")
-	#pragma message("Automatically linking with ws2_32.lib")
+	#pragma comment(linker, "/defaultlib:WS2_32.Lib")
+	#pragma message("Automatically linking with WS2_32.Lib")
 
 	// socket function definitions
 	#pragma comment(linker, "/defaultlib:wsock32.lib")

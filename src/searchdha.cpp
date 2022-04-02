@@ -29,7 +29,7 @@
 	#include <WinSock2.h>
 	#include <MSWSock.h>
 	#include <WS2tcpip.h>
-#pragma comment(lib, "Ws2_32.lib")
+#pragma comment(lib, "WS2_32.Lib")
 #endif
 
 #if HAVE_EVENTFD

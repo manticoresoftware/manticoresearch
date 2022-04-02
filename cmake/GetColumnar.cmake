@@ -26,6 +26,10 @@ macro (return_if_columnar_api_found)
 			URL "https://github.com/manticoresoftware/columnar/"
 			)
 		trace (columnar::columnar_api)
+
+		# restore prev find paths to avoid polishing global scope
+		set ( CMAKE_FIND_ROOT_PATH "${_CMAKE_FIND_ROOT_PATH}" )
+		set ( CMAKE_PREFIX_PATH "${_CMAKE_PREFIX_PATH}" )
 		return ()
 	endif ()
 endmacro ()
@@ -38,8 +42,12 @@ endif ()
 
 # set current path to modules in local usr
 set (COLUMNAR_BUILD "${MANTICORE_BINARY_DIR}/usr/${COLUMNAR_ABI}")
-list (APPEND CMAKE_PREFIX_PATH "${COLUMNAR_BUILD}")
-message (DEBUG "CMAKE_PREFIX_PATH became ${CMAKE_PREFIX_PATH}")
+
+# store prev find paths to avoid polishing global scope
+set ( _CMAKE_FIND_ROOT_PATH "${CMAKE_FIND_ROOT_PATH}" )
+set ( _CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH}" )
+
+append_prefix ( "${COLUMNAR_BUILD}" )
 
 find_package (columnar ${COLUMNAR_REQUIRED_VER} COMPONENTS columnar_api CONFIG)
 return_if_columnar_api_found ()
@@ -63,3 +71,7 @@ execute_process (COMMAND ${CMAKE_COMMAND} --build . WORKING_DIRECTORY ${CMAKE_CU
 
 find_package (columnar ${COLUMNAR_REQUIRED_VER} REQUIRED COMPONENTS columnar_api CONFIG)
 return_if_columnar_api_found ()
+
+# restore prev find paths to avoid polishing global scope
+set ( CMAKE_FIND_ROOT_PATH "${_CMAKE_FIND_ROOT_PATH}" )
+set ( CMAKE_PREFIX_PATH "${_CMAKE_PREFIX_PATH}" )

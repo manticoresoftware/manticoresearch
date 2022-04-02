@@ -27,10 +27,8 @@ if (NOT isMultiConfig AND NOT CMAKE_BUILD_TYPE)
 endif ()
 
 if (WIN32 AND LIBS_BUNDLE)
-	message (DEBUG "CMAKE_PREFIX_PATH on top was ${CMAKE_PREFIX_PATH}")
-	LIST (APPEND CMAKE_PREFIX_PATH "${LIBS_BUNDLE}")
+	APPEND_PREFIX ( "${LIBS_BUNDLE}")
 	set (CMAKE_FIND_PACKAGE_PREFER_CONFIG TRUE)
-	message (DEBUG "CMAKE_PREFIX_PATH became ${CMAKE_PREFIX_PATH}")
 endif ()
 
 set (BUILD_TAG "" CACHE STRING "The tag which will be added to build")

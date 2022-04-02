@@ -55,9 +55,7 @@ else ()
 endif ()
 
 # that is once populate cache to cmake prefix path
-diags ("CMAKE_PREFIX_PATH before inclusion of update_bundle was ${CMAKE_PREFIX_PATH}")
-LIST (APPEND CMAKE_PREFIX_PATH "${CACHE_BUILDS}")
-diags ("CMAKE_PREFIX_PATH refreshed from update_bundle and is ${CMAKE_PREFIX_PATH}")
+append_prefix ( "${CACHE_BUILDS}" )
 
 # get path for build folder. In case with HAVE_BBUILD it will be suffixed with /arch/name flag.
 function (GET_BUILD RESULT NAME)

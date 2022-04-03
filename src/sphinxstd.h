@@ -5157,40 +5157,30 @@ public:
 		DWORD uHash = HASHFUNC::GetHash(k);
 		int64_t iIndex = uHash & ( m_iSize-1 );
 
-		int64_t iDead = -1;
 		while (true)
 		{
 			// found matching key? great, return the value
 			Entry_t * p = m_pHash + iIndex;
-			if ( p->m_uState==Entry_e::USED && p->m_Key==k )
+			if ( p->m_bUsed && p->m_Key==k )
 				return p->m_Value;
 
 			// no matching keys? add it
-			if ( p->m_uState==Entry_e::EMPTY )
+			if ( !p->m_bUsed )
 			{
 				// not enough space? grow the hash and force rescan
 				if ( m_iUsed>=m_iMaxUsed )
 				{
 					Grow();
 					iIndex = uHash & ( m_iSize-1 );
-					iDead = -1;
 					continue;
 				}
 
-				// did we walk past a dead entry while probing? if so, lets reuse it
-				if ( iDead>=0 )
-					p = m_pHash + iDead;
-
 				// store the newly added key
 				p->m_Key = k;
-				p->m_uState = Entry_e::USED;
+				p->m_bUsed = true;
 				m_iUsed++;
 				return p->m_Value;
 			}
-
-			// is this a dead entry? store its index for (possible) reuse
-			if ( p->m_uState==Entry_e::DELETED )
-				iDead = iIndex;
 
 			// no match so far, keep probing
 			iIndex = ( iIndex+1 ) & ( m_iSize-1 );
@@ -5230,24 +5220,38 @@ public:
 	/// delete by key
 	bool Delete ( KEY k )
 	{
-		Entry_t * e = FindEntry(k);
-		if ( e )
-			e->m_uState = Entry_e::DELETED;
+		Entry_t * pEntry = FindEntry(k);
+		if ( !pEntry )
+			return false;
 
-		return e!=nullptr;
+		int64_t iIndex = pEntry-m_pHash;
+		int64_t iNext = iIndex;
+		while ( true )
+		{
+			iNext = ( iNext+1 ) & ( m_iSize-1 );
+			Entry_t & tEntry = m_pHash[iNext];
+			if ( !tEntry.m_bUsed )
+				break;
+
+			int64_t iDesired = HASHFUNC::GetHash ( tEntry.m_Key ) & ( m_iSize-1 );
+			if ( ( iNext>iIndex && ( iDesired<=iIndex || iDesired>iNext ) ) ||
+				 ( iNext<iIndex && ( iDesired<=iIndex && iDesired>iNext ) ) )
+			{
+				m_pHash[iIndex] = m_pHash[iNext];
+				iIndex = iNext;
+			}
+		}
+
+		m_pHash[iIndex].m_bUsed = false;
+		m_iUsed--;
+
+		return true;
 	}
 
 	/// get number of inserted key-value pairs
-	int64_t GetLength() const
-	{
-		return m_iUsed;
-	}
-
-	int64_t GetLengthBytes () const
-	{
-		return m_iSize * sizeof ( Entry_t );
-	}
-
+	int64_t GetLength() const		{ return m_iUsed; }
+	int64_t GetLengthBytes() const	{ return m_iSize * sizeof ( Entry_t ); }
+	 
 	/// iterate the hash by entry index, starting from 0
 	/// finds the next alive key-value pair starting from the given index
 	/// returns that pair and updates the index on success
@@ -5258,7 +5262,7 @@ public:
 			return nullptr;
 
 		for ( int64_t i = *pIndex; i < m_iSize; ++i )
-			if ( m_pHash[i].m_uState==Entry_e::USED )
+			if ( m_pHash[i].m_bUsed )
 			{
 				*pIndex = i+1;
 				if ( pKey )
@@ -5277,7 +5281,8 @@ public:
 			return {0, nullptr};
 
 		for ( int64_t i = *pIndex; i<m_iSize; ++i )
-			if ( m_pHash[i].m_uState==Entry_e::USED ) {
+			if ( m_pHash[i].m_bUsed )
+			{
 				*pIndex = i+1;
 				return {m_pHash[i].m_Key, &m_pHash[i].m_Value};
 			}
@@ -5294,22 +5299,17 @@ public:
 	}
 
 protected:
-	enum class Entry_e
-	{
-		EMPTY,
-		USED,
-		DELETED
-	};
-
 #pragma pack(push,4)
 	struct Entry_t
 	{
 		KEY		m_Key;
 		VALUE	m_Value;
-		Entry_e	m_uState { Entry_e::EMPTY };
-		Entry_t ();
+		bool	m_bUsed = false;
+
+		Entry_t();
 	};
 #pragma pack(pop)
+
 
 	int64_t		m_iSize {0};					// total hash size
 	int64_t		m_iUsed {0};					// how many entries are actually used
@@ -5332,10 +5332,10 @@ protected:
 		Entry_t * pNew = new Entry_t[iNewSize];
 
 		for ( int64_t i=0; i<m_iSize; i++ )
-			if ( m_pHash[i].m_uState==Entry_e::USED )
+			if ( m_pHash[i].m_bUsed )
 			{
 				int64_t j = HASHFUNC::GetHash ( m_pHash[i].m_Key ) & ( iNewSize-1 );
-				while ( pNew[j].m_uState==Entry_e::USED )
+				while ( pNew[j].m_bUsed )
 					j = ( j+1 ) & ( iNewSize-1 );
 
 				pNew[j] = m_pHash[i];
@@ -5352,10 +5352,10 @@ protected:
 	{
 		int64_t iIndex = HASHFUNC::GetHash(k) & ( m_iSize-1 );
 
-		while ( m_pHash[iIndex].m_uState!=Entry_e::EMPTY )
+		while ( m_pHash[iIndex].m_bUsed )
 		{
 			Entry_t & tEntry = m_pHash[iIndex];
-			if ( tEntry.m_Key==k && tEntry.m_uState!=Entry_e::DELETED )
+			if ( tEntry.m_Key==k )
 				return &tEntry;
 
 			iIndex = ( iIndex+1 ) & ( m_iSize-1 );

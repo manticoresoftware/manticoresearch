@@ -5365,7 +5365,7 @@ protected:
 	}
 
 private:
-	static constexpr float LOAD_FACTOR = 0.95f;
+	static constexpr float LOAD_FACTOR = 0.85f;
 };
 
 template<typename V, typename K, typename H> OpenHash_T<V,K,H>::Entry_t::Entry_t() = default;

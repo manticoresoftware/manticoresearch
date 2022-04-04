@@ -13,7 +13,7 @@
 #ifndef _lrucache_
 #define _lrucache_
 
-#include "sphinxstd.h"
+#include "openhash.h"
 
 template <typename KEY, typename VALUE, typename HELPER>
 class LRUCache_T

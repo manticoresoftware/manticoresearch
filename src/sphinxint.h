@@ -22,6 +22,7 @@
 #include "sphinxutils.h"
 #include "fileio.h"
 #include "match.h"
+#include "openhash.h"
 #include "dict/dict_base.h"
 
 #include <float.h>

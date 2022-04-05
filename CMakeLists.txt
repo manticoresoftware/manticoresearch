@@ -148,11 +148,11 @@ bannervar (USE_SYSLOG)
 
 # options for clang/gcc c and c++
 target_compile_options ( lextra INTERFACE $<${ONLYGNUCLANGC_CXX}:-D_FILE_OFFSET_BITS=64 -Wall -fno-strict-aliasing> )
-target_compile_options ( lextra INTERFACE $<${CLANG_CL}:-fno-strict-aliasing -Wno-format -Wno-uninitialized-const-reference -Wno-unneeded-internal-declaration
+target_compile_options ( lextra INTERFACE $<${CLANGWIN}:-fno-strict-aliasing -Wno-format -Wno-uninitialized-const-reference -Wno-unneeded-internal-declaration
 	-Wno-deprecated-declarations -Wno-implicit-const-int-float-conversion -Wno-missing-braces -Wno-unused-function> )
 
 # disable rtti
-#target_compile_options ( lextra INTERFACE $<${ONLYGNUCLANGCXX}:-fno-rtti>$<${MSCXX}:/GR-> ) # no rtti
+target_compile_options ( lextra INTERFACE $<${ONLYGNUCLANGCXX}:-fno-rtti>$<${MSCXX}:/GR-> ) # no rtti
 
 
 if (COVERAGE_TEST)

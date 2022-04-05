@@ -23,19 +23,9 @@
 # See the License for more information.
 #=============================================================================
 
-if (CMAKE_CROSSCOMPILING AND CMAKE_SYSTEM_NAME STREQUAL Windows)
-else()
-find_package ( PkgConfig QUIET )
-if (PKG_CONFIG_FOUND)
-	pkg_check_modules ( ZSTD QUIET libzstd )
-	mark_as_advanced(ZSTD_FOUND)
-endif ()
-endif()
 
-if (NOT ZSTD_FOUND)
-	find_path ( ZSTD_INCLUDE_DIRS NAMES "zstd.h" )
-	find_library ( ZSTD_LINK_LIBRARIES NAMES zstd libzstd NAMES_PER_DIR )
-endif ()
+find_path ( ZSTD_INCLUDE_DIRS NAMES "zstd.h" )
+find_library ( ZSTD_LINK_LIBRARIES NAMES zstd libzstd NAMES_PER_DIR )
 
 mark_as_advanced ( ZSTD_LINK_LIBRARIES ZSTD_INCLUDE_DIRS )
 

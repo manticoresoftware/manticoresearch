@@ -68,6 +68,7 @@ function(_find_library VAR _names _suffixes)
 				/usr/local/mysql/lib/mysql
 				/opt/mysql/mysql/lib
 				/opt/mysql/mysql/lib/mysql
+				/opt/mysql-client/lib
 				ENV MYSQL_DIR
 				PATH_SUFFIXES
 				/libmysql_r/.libs
@@ -124,6 +125,7 @@ if (NOT MYSQL_INCLUDE_DIR)
 			/opt/mysql/mysql/include/mysql
 			/usr/local/mysql/include
 			/usr/local/mysql/include/mysql
+			/opt/mysql-client/include/mysql
 			$ENV{ProgramFiles}/MySQL/*/include
 			$ENV{SystemDrive}/MySQL/*/include
 		)
@@ -150,7 +152,7 @@ else()
 	mark_as_advanced (MYSQL_INCLUDE_DIR MYSQL_LIBRARY)
 
 	include (FindPackageHandleStandardArgs)
-	find_package_handle_standard_args (Mysql REQUIRED_VARS MYSQL_LIBRARY MYSQL_LIBRARY)
+	find_package_handle_standard_args (Mysql REQUIRED_VARS MYSQL_INCLUDE_DIR MYSQL_LIBRARY)
 
 	if (Mysql_FOUND AND NOT TARGET Mysql::Mysql)
 		add_library (Mysql::Mysql SHARED IMPORTED)

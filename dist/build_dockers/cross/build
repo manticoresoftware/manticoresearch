@@ -1,16 +1,37 @@
 #!/bin/bash
 
 REG="registry.gitlab.com/manticoresearch/dev"
-cd base
+cd base_clang12
 docker build -t base_clang:12 -t $REG/base_clang:12 .
 cd -
-cd cmake
+cd base_clang13
+docker build -t base_clang:13 -t $REG/base_clang:13 .
+cd -
+cd cmake322
 docker build -t base_cmake:322 -t $REG/base_cmake:322 .
 cd -
+cd cmake323
+docker build -t base_cmake:323 -t $REG/base_cmake:323 .
+cd -
 cd freebsd_13
-docker build -t cross_freebsd:12 -t $REG/cross_freebsd:13 .
+docker build -t cross_freebsd:13 -t $REG/cross_freebsd:13 .
+cd -
+cd bigsur_sdk
+docker build -t cross_bigsur:sdk -t $REG/cross_bigsur:sdk .
+cd -
+cd bigsur_x64
+docker build -t cross_bigsur:x64 -t $REG/cross_bigsur:x64 .
+cd -
+cd bigsur_arm64
+docker build -t cross_bigsur:arm64 -t $REG/cross_bigsur:arm64 .
 cd -
 
 docker push $REG/focal_clang:12
+docker push $REG/focal_clang:13
 docker push $REG/focal_cmake:322
+docker push $REG/focal_cmake:323
 docker push $REG/cross_freebsd:13
+docker push $REG/cross_bigsur:sdk
+docker push $REG/cross_bigsur:x64
+docker push $REG/cross_bigsur:arm64
+

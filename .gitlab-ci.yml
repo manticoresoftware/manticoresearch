@@ -209,11 +209,9 @@ build_rpi4:
   needs: [ ]
   variables:
     CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
-    CACHEB: "../cache"
-    WITH_ICU: 1
-    WITH_GALERA: 1
-    DIAGNOSTIC: 1 # let's set it by default forever
     CTEST_CMAKE_GENERATOR: "Ninja"
+    CACHEB: "../cache"
+    DIAGNOSTIC: 1 # let's set it by default forever
   script:
     - mkdir build && cd build
     - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=..
@@ -240,31 +238,61 @@ build_mac:
     - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocimacos .*$/i && $WHAT==null
     - if: $TEST =~ /macos/ && $WHAT==null
   tags:
-    - mac
-    - build
+    - docker
   needs: [ ]
   variables:
     CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
-    CACHEB: "../cache"
-    OPENSSL_ROOT_DIR: "/usr/local/opt/openssl"
-    WITH_ICU: 1
-    WITH_GALERA: 1
-    DIAGNOSTIC: 1 # let's set it by default forever
     CTEST_CMAKE_GENERATOR: "Ninja"
+    CACHEB: "../cache"
+    DIAGNOSTIC: 1 # let's set it by default forever
   script:
     - mkdir build && cd build
     - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=..
   after_script:
-    - cd build && mkdir xml_build_mac
-    - cp -r Testing/2*/*.xml xml_build_mac
+    - cd build && mkdir xml_build_bigsurx64
+    - cp -r Testing/2*/*.xml xml_build_bigsurx64
   artifacts:
     paths:
-      - build/xml_build_mac
+      - build/xml_build_bigsurx64
       - build/CMakeFiles/CMake*.log
     expire_in: 12 hrs
     when: always
+  image: registry.gitlab.com/manticoresearch/dev/cross_bigsur:x64
   cache:
-    key: mojave
+    key: bigsur_x64
+    paths:
+      - cache
+
+build_mac_m1:
+  stage: routines
+  rules:
+    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocimacos .*$/i && $WHAT=='$WHAT'
+    - if: $TEST =~ /macos/ && $WHAT=='$WHAT'
+    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocimacos .*$/i && $WHAT==null
+    - if: $TEST =~ /macos/ && $WHAT==null
+  tags:
+    - docker
+  needs: [ ]
+  variables:
+    CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
+    CTEST_CMAKE_GENERATOR: "Ninja"
+    CACHEB: "../cache"
+    DIAGNOSTIC: 1 # let's set it by default forever
+  script:
+    - mkdir build && cd build
+    - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=..
+  after_script:
+    - cd build && mkdir xml_build_bigsur_arm64
+    - cp -r Testing/2*/*.xml xml_build_bigsur_arm64
+  artifacts:
+    paths:
+      - build/xml_build_bigsur_arm64
+      - build/CMakeFiles/CMake*.log
+    expire_in: 12 hrs
+    when: always
+  image: registry.gitlab.com/manticoresearch/dev/cross_bigsur:arm64
+  cache:
+    key: bigsur_m1
     paths:
       - cache
 
@@ -281,12 +309,8 @@ build_bsd:
   variables:
     CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
     CTEST_CMAKE_GENERATOR: "Ninja"
-    UNALIGNED_RAM_ACCESS: 1
     CACHEB: "../cache"
     DIAGNOSTIC: 1 # let's set it by default forever
-    WITH_GALERA: 1
-    WITH_ICU: 1
-#    CTEST_CMAKE_GENERATOR: "Ninja" # Doesn't want to build galera & columnar...
   script:
     - mkdir build && cd build
     - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=..
@@ -304,7 +328,6 @@ build_bsd:
     key: freebsd13
     paths:
       - cache
-  retry: 1
 
 # build and upload on regular commits
 push_results:
@@ -322,6 +345,7 @@ push_results:
     - release_tests
     - win_tests
     - build_mac
+    - build_mac_m1
     - build_bsd
     - build_rpi4
   variables:

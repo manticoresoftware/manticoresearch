@@ -727,8 +727,11 @@ CSphSource_BaseSV::ESphParseResult CSphSource_CSV::SplitColumns ( CSphString & s
 		pEnd = m_dBuf.Begin() + m_iBufUsed;
 
 		// skip all EOL characters left from previous row
-		while ( s<pEnd && *s && ( *s=='\r' || *s=='\n' ) )
-			s++;
+		if ( !iCol )
+		{
+			while ( s<pEnd && *s && ( *s=='\r' || *s=='\n' ) )
+				s++;
+		}
 	}
 
 	// all columns presence check

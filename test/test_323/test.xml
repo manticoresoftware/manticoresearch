@@ -59,6 +59,7 @@ index rt
     path = <data_path/>/rt
     dict = keywords
     rt_field = title
+    rt_attr_string = title
     rt_attr_uint = gid
 	rt_attr_uint = pid
 }
@@ -143,7 +144,7 @@ insert into facet_table values
 
 <queries><sphinxql>
 
-INSERT into rt VALUES (60, 'test', 70, 1100), (61, 'test', 71, 1101), (62, 'test', 72, 1102), (63, 'test', 73, 1103);
+INSERT into rt (id, title, gid, pid) VALUES (60, 'test', 70, 1100), (61, 'test', 71, 1101), (62, 'test', 72, 1102), (63, 'test', 73, 1103);
 select * from rt where match('test');
 select * from rt where match('test') and gid &gt; 72 OR pid &lt; 1101;
 delete from rt where id &gt; 62 OR ( gid &lt; 72 AND pid IN (1101, 1102) );

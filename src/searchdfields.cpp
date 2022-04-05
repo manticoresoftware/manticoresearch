@@ -563,7 +563,7 @@ CSphVector<const CSphColumnInfo *> GetStoredColumnList ( const CSphSchema & tSch
 	for ( int i = 0, iAttrsCount = tSchema.GetAttrsCount (); i<iAttrsCount; ++i )
 	{
 		const CSphColumnInfo & tCol = tSchema.GetAttr ( i );
-		if ( tCol.m_uFieldFlags & CSphColumnInfo::FIELD_STORED )
+		if ( IsNotRealAttribute ( tCol ) )
 			dFieldCols.Add ( &tCol );
 	}
 	return dFieldCols;

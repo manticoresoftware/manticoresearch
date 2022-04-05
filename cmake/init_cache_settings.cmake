@@ -11,7 +11,11 @@ if (DIAGNOSTIC)
 endif()
 
 if (DEFINED ENV{LIBS_BUNDLE})
-	set(LIBS_BUNDLE "$ENV{LIBS_BUNDLE}")
+	set ( LIBS_BUNDLE "$ENV{LIBS_BUNDLE}" )
+endif ()
+
+if (DEFINED ENV{WIN_BUNDLE})
+	set ( WIN_BUNDLE "$ENV{WIN_BUNDLE}" )
 endif ()
 
 if (NOT LIBS_BUNDLE)
@@ -22,7 +26,12 @@ if (NOT IS_ABSOLUTE ${LIBS_BUNDLE})
 	set(LIBS_BUNDLE "${MANTICORE_BINARY_DIR}/${LIBS_BUNDLE}")
 endif ()
 
-SET(LIBS_BUNDLE "${LIBS_BUNDLE}" CACHE PATH "Choose the path to the dir which contains all helper libs like expat, mysql, etc." FORCE)
+if (NOT WIN_BUNDLE)
+	SET ( WIN_BUNDLE "${LIBS_BUNDLE}" )
+endif ()
+
+SET ( LIBS_BUNDLE "${LIBS_BUNDLE}" CACHE PATH "Choose the path to the dir which contains downloaded sources for libs like re2, icu, stemmer, etc." FORCE )
+SET ( WIN_BUNDLE "${WIN_BUNDLE}" CACHE PATH "Choose the path to the dir which contains win builds of libs like expat, mysql, etc." FORCE )
 
 if (DEFINED ENV{CACHEB})
 	set(CACHEB "$ENV{CACHEB}")

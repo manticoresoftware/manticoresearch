@@ -26,8 +26,8 @@ if (NOT isMultiConfig AND NOT CMAKE_BUILD_TYPE)
 	message (STATUS "Automatically set build type to RelWithDebInfo since no other provided")
 endif ()
 
-if (WIN32 AND LIBS_BUNDLE)
-	APPEND_PREFIX ( "${LIBS_BUNDLE}")
+if (WIN32 AND WIN_BUNDLE)
+	APPEND_PREFIX ( "${WIN_BUNDLE}")
 	set (CMAKE_FIND_PACKAGE_PREFER_CONFIG TRUE)
 endif ()
 

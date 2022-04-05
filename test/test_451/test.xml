@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>stored fields vs field_string attribute</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test_field_string
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select id, title, gid from test_table
+	sql_field_string = title
+    sql_attr_uint = gid
+}
+
+index test1
+{
+	source			= test_field_string
+	path			= <data_path/>/test1
+}
+
+index test2
+{
+	source			= test_field_string
+	path			= <data_path/>/test2
+    stored_fields = 
+}
+
+source test_attr_string
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select id, title, gid from test_table
+	sql_attr_string = title
+    sql_attr_uint = gid
+}
+
+index test3
+{
+	source			= test_attr_string
+	path			= <data_path/>/test3
+}
+
+index test4
+{
+	source			= test_attr_string
+	path			= <data_path/>/test4
+    stored_fields = 
+}
+
+
+source test_field
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select id, title, gid from test_table
+	sql_attr_uint = gid
+}
+
+index test5
+{
+	source			= test_field
+	path			= <data_path/>/test5
+}
+
+
+index dist1
+{
+	type = distributed
+	agent = 127.0.0.1:<my_port />:test1
+}
+
+index dist2
+{
+	type = distributed
+	agent = 127.0.0.1:<my_port />:test2
+}
+
+index dist3
+{
+	type = distributed
+	agent = 127.0.0.1:<my_port />:test3
+}
+
+index dist4
+{
+	type = distributed
+	agent = 127.0.0.1:<my_port />:test4
+}
+
+index dist5
+{
+	type = distributed
+	agent = 127.0.0.1:<my_port />:test5
+}
+</config>
+
+<db_create>create table test_table ( id int not null, title varchar(255) not null, gid int not null );</db_create>
+<db_drop>drop table if exists test_table;</db_drop>
+<db_insert>insert into test_table values ( 1, 'test', 11 )</db_insert>
+
+<queries><sphinxql>
+	select * from dist1;
+    select * from dist2;
+    select * from dist3;
+    select * from dist4;
+    select * from dist5;
+</sphinxql></queries>
+
+</test>

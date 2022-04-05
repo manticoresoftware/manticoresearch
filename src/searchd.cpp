@@ -3392,10 +3392,7 @@ static ESphAttr FixupAttrForNetwork ( const CSphColumnInfo & tCol, const CSphSch
 
 	case SPH_ATTR_STRINGPTR:
 	{
-		auto pField = tSchema.GetField ( tCol.m_sName.cstr() );
-		bool bStored = ( pField && ( pField->m_uFieldFlags & CSphColumnInfo::FIELD_STORED ) ) || ( tCol.m_uFieldFlags & CSphColumnInfo::FIELD_STORED );
-
-		if ( bAgentMode && uMasterVer>=18 && bStored )
+		if ( bAgentMode && uMasterVer>=18 && IsNotRealAttribute ( tCol ) )
 			return SPH_ATTR_STORED_FIELD;
 		else
 			return SPH_ATTR_STRING;

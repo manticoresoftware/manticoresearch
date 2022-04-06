@@ -27,7 +27,7 @@ There is no user authentication implemented at the moment, so make sure the HTTP
 
 <!-- example HTTPS -->
 The HTTP protocol also supports [SSL encryption](../Security/SSL.md):
-If you specify `:https` instead of `:http` **only** secured connections will be accepted. Otherwise if no valid key/cert provided, but client tries to connect via https - the connection will be dropped. If you send not HTTPS, but an HTTP request to 9443 it will answer with HTTP code 400.
+If you specify `:https` instead of `:http` **only** secured connections will be accepted. Otherwise in case of no valid key/certificate provided, but the client trying to connect via https - the connection will be dropped. If you make not HTTPS, but an HTTP request to 9443 it will respond with HTTP code 400.
 
 <!-- request HTTPS -->
 ```ini
@@ -239,3 +239,7 @@ POST /cli -d "select id,1+2 as a, packedfactors() from test where match('tes*') 
 ![using /cli in browser](cli_browser.png)
 
 <!-- end -->
+
+### Keep-alive
+
+HTTP keep-alive is also supported, which makes working via the HTTP JSON interface stateful as long as the client supports keep-alive too. For example, using the new [/cli](../Connecting_to_the_server/HTTP.md#/cli) endpoint you can call `SHOW META` after `SELECT` and it will work the same way it works via mysql.

@@ -20,6 +20,10 @@ The following are the changes we are either working on now or are going to work 
 * [Read-only mode](Security/Read_only.md) for better security.
 * New `/cli` endpoint for running SQL queries over HTTP [even easier](../Connecting_to_the_server/HTTP.md#/cli).
 * Really bulk INSERT/REPLACE/DELETE via JSON over HTTP.
+* Support for [Chunked transfer encoding](https://en.wikipedia.org/wiki/Chunked_transfer_encoding) in HTTP protocol. You can now use chunked transfer in your application to transfer large batches with lower resource consumption (since you don't need to calculate `Content-Length`). On the server's side Manticore now always processes incoming HTTP data in streaming fashion without waiting for the whole batch to be trasferred as previously, which:
+  - decreases peak RAM consumption, which lowers a chance of OOM
+  - decreases response time (our tests showed 11% decrease for processing a 100MB batch)
+  - lets you overcome [max_packet_size](../Server_settings/Searchd.md#max_packet_size) and transfer batches much larger than the largest allowed value of `max_packet_size` (128MB), e.g. 1GB at once.
 * [#719](https://github.com/manticoresoftware/manticoresearch/issues/719) HTTP interface support of `100 Continue`: now you can transfer large batches from `curl` (including curl libraries used by various programming languages) which by default does `Expect: 100-continue` and waits some time before actually sending the batch. Previously you had to add `Expect: ` header, now it's not needed.
 
   <details>
@@ -94,11 +98,10 @@ The following are the changes we are either working on now or are going to work 
 * Having at least one full-text field in a real-time/plain index is not mandatory anymore.
 * Fast fetching for attributes backed by Manticore Columnar Library.
 * ⚠️ Implicit [cutoff](../Searching/Options.md#cutoff). Manticore now doesn't spend time and resources processing data you don't need in the result set which will be returned. The downside is that it affects `total_found` in [SHOW META](../Profiling_and_monitoring/SHOW_META.md#SHOW-META) and [hits.total](../Searching/Full_text_matching/Basic_usage.md#HTTP) in JSON output. It is now only accurate in case you see `total_relation: eq`. `total_relation: gte` means the actual number of matching documents is greater than the `total_found` value you've got. To retain the previous behaviour you can use search option `cutoff=0`, which makes `total_relation` always `eq`.
-* ⚠️ All full-text fields are now [stored](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#stored_fields) by default] in plain indexes. You need to use `stored_fields = ` to make all fields non-stored (i.e. revert to the previous behaviour).
+* ⚠️ All full-text fields are now [stored](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#stored_fields) by default in plain indexes. You need to use `stored_fields = ` (empty value) to make all fields non-stored (i.e. revert to the previous behaviour).
 
 ### Minor changes
-* Support for "keep-alive" in HTTP protocol.
-* Support for [Chunked transfer encoding](https://en.wikipedia.org/wiki/Chunked_transfer_encoding) in HTTP protocol.
+* Support for [HTTP keep-alive](../Connecting_to_the_server/HTTP.md#Keep-alive). This makes HTTP stateful when the client supports it too. For example, using the new [/cli]](../Connecting_to_the_server/HTTP.md#/cli) endpoint and HTTP keep-alive you can call `SHOW META` after `SELECT` and it will work the same way it works via mysql.
 * Listen on `127.0.0.1` instead of `0.0.0.0` in case no `listen` is specified in config.
 * Faster aggregation over columnar attributes.
 * Increased `AVG()` accuracy.

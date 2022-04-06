@@ -24,7 +24,7 @@ The problem now is how to initialize the cluster. It's important that on a clean
 
 It is important that this node starts first to form the cluster. To bootstrap a cluster the server should be started on this node with flag [--new-cluster](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md). On Linux you can also run `manticore_new_cluster` which will start Manticore in `--new-cluster` mode via systemd.
 
-If another node starts first and bootstraps the cluster, then the most advanced node joins that cluster, performs full SST and receives an index file where some transactions are missed in comparison with the index files it got before. That is why it is important to first start the node that which was shut down last or to look at the [grastate.dat](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) file to find the node with flag `safe_to_bootstrap: 1`.
+If another node starts first and bootstraps the cluster, then the most advanced node joins that cluster, performs full SST and receives an index file where some transactions are missed in comparison with the index files it got before. That is why it is important to start first the node which was shut down last, it should have flag `safe_to_bootstrap: 1` in [grastate.dat](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md).
 
 ### Case 4
 

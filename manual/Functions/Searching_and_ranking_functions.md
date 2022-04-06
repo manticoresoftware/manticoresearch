@@ -151,26 +151,27 @@ mysql> SELECT *,WEIGHT() FROM testrt WHERE MATCH('"list of business laptops"/3')
 
 
 mysql> SHOW META;
-+---------------+----------+
-| Variable_name | Value    |
-+---------------+----------+
-| total         | 4        |
-| total_found   | 4        |
-| time          | 0.000    |
-| keyword[0]    | list     |
-| docs[0]       | 5        |
-| hits[0]       | 5        |
-| keyword[1]    | of       |
-| docs[1]       | 4        |
-| hits[1]       | 4        |
-| keyword[2]    | business |
-| docs[2]       | 2        |
-| hits[2]       | 2        |
-| keyword[3]    | laptops  |
-| docs[3]       | 5        |
-| hits[3]       | 5        |
-+---------------+----------+
-15 rows in set (0.00 sec)
++----------------+----------+
+| Variable_name  | Value    |
++----------------+----------+
+| total          | 4        |
+| total_found    | 4        |
+| total_relation | eq       |
+| time           | 0.000    |
+| keyword[0]     | list     |
+| docs[0]        | 5        |
+| hits[0]        | 5        |
+| keyword[1]     | of       |
+| docs[1]        | 4        |
+| hits[1]        | 4        |
+| keyword[2]     | business |
+| docs[2]        | 2        |
+| hits[2]        | 2        |
+| keyword[3]     | laptops  |
+| docs[3]        | 5        |
+| hits[3]        | 5        |
++----------------+----------+
+16 rows in set (0.00 sec)
 ```
 
 Here we search for 4 words, but we can have a match even if only 3 words (of 4) are found. The search will rank higher first the documents that contain all the words.

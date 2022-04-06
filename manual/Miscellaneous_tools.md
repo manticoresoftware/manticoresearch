@@ -18,7 +18,7 @@ Options effective for all commands:
 The commands are as follows:
 
 *   `--checkconfig` just loads and verifies the config file to check if it's valid, without syntax errors.
-*   `--buildidf DICTFILE1 [DICTFILE2 ...] --out IDFILE` build IDF file from one or several dictionary dumps. Additional parameter `-skip-uniq` will skip unique (df=1) words.
+*   `--buildidf DICTFILE1 [DICTFILE2 ...] --out IDFILE` build IDF file from one or several dictionary dumps. Additional parameter `--skip-uniq` will skip unique (df=1) words.
 *   `--build-infixes INDEXNAME` build infixes for an existing dict=keywords index (upgrades .sph, .spi in place). You can use this option for legacy index files that already use dict=keywords, but now need to support infix searching too; updating the index files with indextool may prove easier or faster than regenerating them from scratch with indexer.
 *   `--dumpheader FILENAME.sph` quickly dumps the provided index header file without touching any other index files or even the configuration file. The report provides a breakdown of all the index settings, in particular the entire attribute and field list.
 *   `--dumpconfig FILENAME.sph` dumps the index definition from the given index header file in (almost) compliant `sphinx.conf` file format.
@@ -29,7 +29,7 @@ The commands are as follows:
 *   `--dumphitlist INDEXNAME --wordid ID` dumps all the hits (occurrences) of a given keyword in a given index, with keyword specified as internal numeric ID.
 *   `--fold INDEXNAME OPTFILE` This options is useful too see how actually tokenizer proceeds input. You can feed indextool with text from file if specified or from stdin otherwise. The output will contain spaces instead of separators (accordingly to your `charset_table` settings) and lowercased letters in words.
 *   `--htmlstrip INDEXNAME` filters stdin using HTML stripper settings for a given index, and prints the filtering results to stdout. Note that the settings will be taken from sphinx.conf, and not the index header.
-*   `--mergeidf NODE1.idf [NODE2.idf ...] --out GLOBAL.idf` merge several .idf files into a single one. Additional parameter `-skip-uniq` will skip unique (df=1) words.
+*   `--mergeidf NODE1.idf [NODE2.idf ...] --out GLOBAL.idf` merge several .idf files into a single one. Additional parameter `--skip-uniq` will skip unique (df=1) words.
 *   `--morph INDEXNAME` applies morphology to the given stdin and prints the result to stdout.
 *   `--check INDEXNAME` checks the index data files for consistency errors that might be introduced either by bugs in `indexer` and/or hardware faults. `--check` also works on RT indexes, RAM and disk chunks. Additional options:
     - `--check-id-dups` checks if there are duplicate ids

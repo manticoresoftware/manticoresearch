@@ -504,6 +504,7 @@ class ColumnarRT_c : public ColumnarRT_i
 public:
 					ColumnarRT_c() = default;
 					ColumnarRT_c ( const CSphSchema & tSchema, ColumnarBuilderRT_i * pBuilder, bool bTakeOwnership );
+					~ColumnarRT_c() override;
 
 	columnar::Iterator_i *						CreateIterator ( const std::string & sName, const columnar::IteratorHints_t & tHints, columnar::IteratorCapabilities_t * pCapabilities, std::string & sError ) const override;
 	std::vector<columnar::BlockIterator_i *>	CreateAnalyzerOrPrefilter ( const std::vector<columnar::Filter_t> & dFilters, std::vector<int> & dDeletedFilters, const columnar::BlockTester_i & tBlockTester ) const override { return {}; }
@@ -519,6 +520,7 @@ public:
 	bool			Load ( CSphReader & tReader, const CSphSchema & tSchema, CSphString & sError );
 
 private:
+	bool			m_bOwnAttrs = true;
 	CSphVector<ColumnarAttrRT_i*>			m_dAttrs;
 	SmallStringHash_T<std::pair<ColumnarAttrRT_i*,int>> m_hAttrs;
 
@@ -528,12 +530,20 @@ private:
 
 ColumnarRT_c::ColumnarRT_c ( const CSphSchema & tSchema, ColumnarBuilderRT_i * pBuilder, bool bTakeOwnership )
 {
-	if ( bTakeOwnership )
+	m_bOwnAttrs = bTakeOwnership;
+	if ( m_bOwnAttrs )
 		m_dAttrs = std::move ( pBuilder->GetAttrs() );
 	else
 		m_dAttrs = pBuilder->GetAttrs();
 
 	PopulateHashFromSchema(tSchema);
+}
+
+
+ColumnarRT_c::~ColumnarRT_c()
+{
+	if ( m_bOwnAttrs )
+		m_dAttrs.for_each( []( auto & i ){ SafeDelete(i); } );
 }
 
 

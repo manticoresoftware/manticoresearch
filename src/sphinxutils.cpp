@@ -3124,7 +3124,8 @@ void sphConfigureCommon ( const CSphConfig & hConf )
 		return;
 
 	CSphConfigSection & hCommon = hConf["common"]["common"];
-	g_sLemmatizerBase = hCommon.GetStr ( "lemmatizer_base" );
+	if ( hCommon ( "lemmatizer_base" ) )
+		g_sLemmatizerBase = hCommon.GetStr ( "lemmatizer_base" );
 
 	bool bJsonStrict = false;
 	bool bJsonAutoconvNumbers;

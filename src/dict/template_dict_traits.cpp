@@ -241,8 +241,7 @@ int TemplateDictTraits_c::InitMorph ( const char* szMorph, int iLength, CSphStri
 				return ST_ERROR;
 			}
 
-			CSphString sDictFile;
-			sDictFile.SetSprintf ( "%s/%s.pak", g_sLemmatizerBase.cstr(), AOT_LANGUAGES[j] );
+			auto sDictFile = SphSprintf ( "%s/%s.pak", g_sLemmatizerBase.cstr(), AOT_LANGUAGES[j] );
 			if ( !sphAotInit ( sDictFile, sMessage, j ) )
 				return ST_ERROR;
 
@@ -284,8 +283,7 @@ int TemplateDictTraits_c::InitMorph ( const char* szMorph, int iLength, CSphStri
 				return ST_ERROR;
 			}
 
-			CSphString sDictFile;
-			sDictFile.SetSprintf ( "%s/%s.pak", g_sLemmatizerBase.cstr(), AOT_LANGUAGES[j] );
+			auto sDictFile = SphSprintf ( "%s/%s.pak", g_sLemmatizerBase.cstr(), AOT_LANGUAGES[j] );
 			if ( !sphAotInit ( sDictFile, sMessage, j ) )
 				return ST_ERROR;
 

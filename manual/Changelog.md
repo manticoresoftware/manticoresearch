@@ -101,7 +101,7 @@ The following are the changes we are either working on now or are going to work 
 * ⚠️ All full-text fields are now [stored](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#stored_fields) by default in plain indexes. You need to use `stored_fields = ` (empty value) to make all fields non-stored (i.e. revert to the previous behaviour).
 
 ### Minor changes
-* Support for [HTTP keep-alive](../Connecting_to_the_server/HTTP.md#Keep-alive). This makes HTTP stateful when the client supports it too. For example, using the new [/cli]](../Connecting_to_the_server/HTTP.md#/cli) endpoint and HTTP keep-alive you can call `SHOW META` after `SELECT` and it will work the same way it works via mysql.
+* ⚠️ Session state support with help of [HTTP keep-alive](../Connecting_to_the_server/HTTP.md#Keep-alive). This makes HTTP stateful when the client supports it too. For example, using the new [/cli](../Connecting_to_the_server/HTTP.md#/cli) endpoint and HTTP keep-alive (which is on by default in all browsers) you can call `SHOW META` after `SELECT` and it will work the same way it works via mysql. Note, previously `Connection: keep-alive` HTTP header was supported too, but it only caused reusing the same connection. Since this version it also makes the session stateful.
 * Listen on `127.0.0.1` instead of `0.0.0.0` in case no `listen` is specified in config.
 * Faster aggregation over columnar attributes.
 * Increased `AVG()` accuracy.
@@ -109,7 +109,7 @@ The following are the changes we are either working on now or are going to work 
 * `DEBUG malloc_stats` support for [jemalloc](https://github.com/jemalloc/jemalloc).
 * [optimize_cutoff](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#optimize_cutoff) is now available as a per-table setting which can be set when you CREATE or ALTER a table.
 * ⚠️ [query_log_format](../Server_settings/Searchd.md#query_log_format) is now **`sphinxql` by default**. If you are used to `plain` format you need to add `query_log_format = plain` to your configuration file.
-* significant memory consumption improvements: Manticore consumes significantly less RAM now in case of long and intensive insert/replace/optimize workload.
+* Significant memory consumption improvements: Manticore consumes significantly less RAM now in case of long and intensive insert/replace/optimize workload in case stored fields are used.
 
 ### ⚠️ Other minor breaking changes
 * BM25F formula has been slightly updated to improve search relevance. This only affects search results in case you use function `BM25F`, it doesn't change behaviour of the default ranking formula

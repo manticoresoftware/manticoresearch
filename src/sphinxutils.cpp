@@ -3156,8 +3156,6 @@ void sphConfigureCommon ( const CSphConfig & hConf )
 
 	if ( hCommon("plugin_dir") )
 		sphPluginInit ( hCommon["plugin_dir"].cstr() );
-	else
-		sphPluginInit ( HARDCODED_PLUGIN_DIR );
 }
 
 bool sphIsChineseCode ( int iCode )

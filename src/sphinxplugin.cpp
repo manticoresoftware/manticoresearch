@@ -78,8 +78,8 @@ const char * g_dPluginTypes[PLUGIN_TOTAL] = { "udf", "ranker", "index_token_filt
 
 //////////////////////////////////////////////////////////////////////////
 
-static bool								g_bPluginsEnabled = false;	///< is there any plugin support at all?
-static CSphString						g_sPluginDir;
+static bool								g_bPluginsEnabled = true;	///< is there any plugin support at all?
+static CSphString						g_sPluginDir = HARDCODED_PLUGIN_DIR;
 static CSphMutex						g_tPluginMutex;				///< common plugin mutex (access to lib, func and ranker hashes)
 static SmallStringHash_T<PluginLibRefPtr_c>	g_hPluginLibs GUARDED_BY ( g_tPluginMutex );			///< key is the filename (no path)
 
@@ -127,7 +127,10 @@ const CSphString & PluginDesc_c::GetLibName() const
 void sphPluginInit ( const char * sDir )
 {
 	if ( !sDir || !*sDir )
+	{
+		g_bPluginsEnabled = false;
 		return;
+	}
 
 	g_sPluginDir = sDir;
 	g_bPluginsEnabled = true;

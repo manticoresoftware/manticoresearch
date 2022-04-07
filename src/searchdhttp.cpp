@@ -503,24 +503,18 @@ static void UriPercentReplace ( Str_t& sEntity, bool bAlsoPlus=true )
 	sEntity.second = int ( pDst - sEntity.first );
 }
 
-Str_t StoreRawQuery ( OptionsHash_t& hOptions, CharStream_c& sData )
+void StoreRawQuery ( OptionsHash_t& hOptions, const Str_t& sWholeData )
 {
-	if ( hOptions ("raw_query") )
-		return dEmptyStr;
-
-	auto sWholeData = sData.ReadAll();
 	if ( IsEmpty ( sWholeData ) )
-		return sWholeData;
+		return;
 
 	// store raw query
-	CSphString sRawBody ( sWholeData );				  // copy raw data, important!
+	CSphString sRawBody ( sWholeData );				   // copy raw data, important!
 	Str_t sRaw { sRawBody.cstr(), sWholeData.second }; // FromStr implies strlen(), but we don't need it
-	UriPercentReplace ( sRaw, false );			  // avoid +-decoding
+	UriPercentReplace ( sRaw, false );				   // avoid +-decoding
 	*const_cast<char*> ( sRaw.first + sRaw.second ) = '\0';
 	hOptions.Add ( std::move ( sRawBody ), "raw_query" );
-	return sWholeData;
 }
-
 
 void HttpRequestParser_c::ParseList ( Str_t sData )
 {
@@ -604,7 +598,12 @@ inline void HttpRequestParser_c::FinishParserUrl ()
 	}
 
 	if ( ( tUri.field_set & uQuery )!=0 )
-		ParseList ( { sData.first + tUri.field_data[UF_QUERY].off, tUri.field_data[UF_QUERY].len } );
+	{
+		Str_t sRawGetQuery { sData.first + tUri.field_data[UF_QUERY].off, tUri.field_data[UF_QUERY].len };
+		if ( m_eType == HTTP_GET )
+			StoreRawQuery ( m_hOptions, sRawGetQuery );
+		ParseList ( sRawGetQuery );
+	}
 }
 
 inline int HttpRequestParser_c::ParserHeaderField ( Str_t sData )
@@ -668,14 +667,14 @@ inline int HttpRequestParser_c::ParseHeaderCompleted ()
 	// we're not support connection upgrade - so just reset upgrade flag, if detected.
 	// rfc7540 section-3.2 (for http/2) says, we just should continue as if no 'upgrade' header was found
 	m_tParser.upgrade = 0;
-	FinishParserUrl();
-	FinishParserKeyVal();
-	m_bHeaderDone = true;
 
 	// connection wide http options
 	m_bKeepAlive = ( http_should_keep_alive ( &m_tParser ) != 0 );
 	m_eType = (http_method)m_tParser.method;
 
+	FinishParserKeyVal();
+	FinishParserUrl();
+	m_bHeaderDone = true;
 	return 0;
 }
 
@@ -1966,7 +1965,10 @@ bool sphProcessHttpQueryNoResponce ( const CSphString& sEndpoint, const CSphStri
 
 	// these endpoints url-encoded, all others are plain json, and we don't want to waste time pre-parsing them
 	if ( eEndpoint == SPH_HTTP_ENDPOINT_SQL || eEndpoint == SPH_HTTP_ENDPOINT_CLI )
-		StoreRawQuery ( tOptions, tQuery );
+	{
+		auto sWholeData = tQuery.ReadAll();
+		StoreRawQuery ( tOptions, sWholeData );
+	}
 
 	return ProcessHttpQuery ( eEndpoint, tQuery, tOptions, dResult, false, HTTP_GET, sEndpoint );
 }
@@ -1992,8 +1994,9 @@ bool HttpRequestParser_c::ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVe
 	// these endpoints url-encoded, all others are plain json, and we don't want to waste time pre-parsing them
 	if ( eEndpoint == SPH_HTTP_ENDPOINT_SQL || eEndpoint == SPH_HTTP_ENDPOINT_CLI )
 	{
-		auto sData = StoreRawQuery ( m_hOptions, *pSource );
-		ParseList ( sData );
+		auto sWholeData = pSource->ReadAll();
+		StoreRawQuery ( m_hOptions, sWholeData );
+		ParseList ( sWholeData );
 	}
 
 	return ProcessHttpQuery ( eEndpoint, *pSource, m_hOptions, dResult, true, m_eType, m_sEndpoint );

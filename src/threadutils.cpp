@@ -709,7 +709,6 @@ class ThreadPool_c final : public Worker_i
 	Optional_T<Work> m_dWork;
 	CSphVector<SphThread_t> m_dThreads;
 	CSphMutex m_dMutex;
-	sph::Event_c m_dCond;
 	std::atomic<bool> m_bStop {false};
 
 	// support iteration over children for show threads and hazards
@@ -759,7 +758,6 @@ class ThreadPool_c final : public Worker_i
 			{
 				createWork ();
 				m_tService.reset ();
-				m_dCond.SignalAll (dLock);
 			}
 		}
 		ScWL_t _ ( m_dChildGuard );

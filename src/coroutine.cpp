@@ -209,7 +209,7 @@ struct CoroState_t
 
 namespace Coro {
 
-class Worker_c
+class Worker_c : public details::SchedulerOperation_t
 {
 	// our executor (thread pool, etc which provides Schedule(handler) method)
 	Scheduler_i * m_pScheduler = nullptr;
@@ -258,11 +258,22 @@ class Worker_c
 		}
 	};
 
+	static void DoComplete ( void* pOwner, SchedulerOperation_t* pBase )
+	{
+		if ( !pOwner )
+			return;
+
+		Threads::JobTimer_t dTrack;
+		auto* pThis = static_cast<Worker_c*> ( pBase );
+		pThis->Run();
+	}
+
 private:
 
 	// called from StartPrimary from Coro::Go - Multiserve, Sphinxql, replication recv
 	Worker_c ( Handler fnHandler, Scheduler_i* pScheduler )
-		: m_pScheduler ( pScheduler )
+		: SchedulerOperation_t ( &Worker_c::DoComplete )
+		, m_pScheduler ( pScheduler )
 		, m_tKeepSchedulerAlive { pScheduler->KeepWorking () }
 		, m_tCoroutine { std::move (fnHandler), 0 }
 		{
@@ -273,7 +284,8 @@ private:
 	// from Coro::Co - StartOther - all secondary parallel things in non-vip queue
 	// from Coro::Continue - StartContinuation - same context, another stack, run as fast as possible
 	Worker_c ( Handler fnHandler, Scheduler_i* pScheduler, Waiter_t tTracer, size_t iStack=0 )
-		: m_pScheduler ( pScheduler )
+		: SchedulerOperation_t ( &Worker_c::DoComplete )
+		, m_pScheduler ( pScheduler )
 		, m_tKeepSchedulerAlive { pScheduler->KeepWorking () }
 		, m_tTracer ( std::move(tTracer))
 		, m_tCoroutine { std::move (fnHandler), iStack }
@@ -283,7 +295,8 @@ private:
 
 	// called solely for mocking - no scheduler, not possible to yield. Just provided stack and executor
 	Worker_c ( Handler fnHandler, VecTraits_T<BYTE> dStack )
-		: m_tCoroutine { std::move ( fnHandler ), dStack }
+		: SchedulerOperation_t ( &Worker_c::DoComplete )
+		, m_tCoroutine { std::move ( fnHandler ), dStack }
 	{
 		assert ( !m_pScheduler );
 	}
@@ -321,16 +334,17 @@ private:
 	{
 		LOG ( DEBUGV, COROW ) << "Coro::Worker_c::Schedule (" << bVip << ", " << m_pScheduler << ")";
 		assert ( m_pScheduler );
-		m_pScheduler->Schedule ( [this] { Run (); }, bVip ); // true means 'vip', false - 'secondary'
+		m_pScheduler->ScheduleOp ( this, bVip ); // true means 'vip', false - 'secondary'
 	}
 
 	// continuation means, task is already started, and, if possible, should not be scheduled/paused.
-	// That means, it might be call immediately, without placing it to queue. In loop call it may cause stack overflow by recursion
+	// That means, it might be call immediately, without placing it to queue. In recurrent call it may cause stack overflow by recursion -
+	// that is Run(..Run(..Run..(... chain
 	inline void ScheduleContinuation () noexcept
 	{
 		LOG ( DEBUGV, COROW ) << "Coro::Worker_c::ScheduleContinuation (" << m_pScheduler << ")";
 		assert ( m_pScheduler );
-		m_pScheduler->ScheduleContinuation( [this] { Run (); } );
+		m_pScheduler->ScheduleContinuationOp (this);
 	}
 
 public:

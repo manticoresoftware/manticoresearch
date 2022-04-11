@@ -333,6 +333,47 @@ INSERT INTO `test_group2` VALUES
 
 <query endpoint="json/search">{"index":"test_wf","query":{"match":{"content":"quite"}}}</query>
 
+<query endpoint="json/search">
+{
+  "index": "test1",
+  "query": { "match": { "_all": "3rd fourth" } },
+  "options":
+  {
+    "agent_query_timeout": 100,
+    "boolean_simplify": 1,
+    "comment": "comment here",
+    "cutoff": 1000,
+    "expand_keywords": 1,
+    "field_weights":
+    {
+        "title": 10,
+        "content": 3
+    },
+    "global_idf": 1,
+    "idf": "normalized, tfidf_normalized",
+	"index_weights":
+    {
+        "test1": 1,
+        "test2": 2
+    },
+    "local_df": 0,
+    "low_priority": 0,
+    "max_matches": 1000,
+    "max_query_time": 100,
+    "max_predicted_time": 100,
+    "morphology": "none",
+    "not_terms_only_allowed": 1,
+    "ranker": "expr('sum(lcs*user_weight)*1000+bm25')",
+    "rand_seed": 1234,
+    "retry_count": 5,
+    "retry_delay": 100,
+    "sort_method": "kbuffer",
+    "threads": 10
+  }
+}
+</query>
+
+
 <sphinxql>
 <!-- regression stored field missed at facet -->
 select * from test_gr1 facet gid facet tag;;

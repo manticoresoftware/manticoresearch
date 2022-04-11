@@ -373,7 +373,7 @@ public:
 
 					// a shortcut for !Empty()
 					operator bool() const;
-	void Swap ( JsonObj_c& rhs ) noexcept;
+	void			Swap ( JsonObj_c& rhs ) noexcept;
 	JsonObj_c &		operator = ( JsonObj_c rhs );
 	JsonObj_c		operator[] ( int iItem ) const;
 	JsonObj_c &		operator++();

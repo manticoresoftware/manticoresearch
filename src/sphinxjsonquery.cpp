@@ -734,6 +734,70 @@ static bool ParseLimits ( const JsonObj_c & tRoot, CSphQuery & tQuery, CSphStrin
 }
 
 
+static bool ParseOptions ( const JsonObj_c & tRoot, CSphQuery & tQuery, CSphString & sError )
+{
+	if ( !tRoot.IsObj() )
+	{	
+		sError = "\"options\" property value should be an object";
+		return false;
+	}
+
+	for ( const auto & i : tRoot )
+	{
+		AddOption_e eAdd = AddOption_e::NOT_FOUND;
+		CSphString sOpt = i.Name();
+		if ( i.IsInt() )
+			eAdd = AddOption ( tQuery, sOpt, i.StrVal(), i.IntVal(), STMT_SELECT, sError );
+		else if ( i.IsStr() )
+		{
+			CSphString sRanker = i.StrVal();
+			const char * szRanker = sRanker.cstr();
+			while ( sphIsAlpha(*szRanker) )
+				szRanker++;
+
+			if ( *szRanker=='(' && sRanker.Ends(")")  )
+			{
+				int iRankerNameLen = szRanker-sRanker.cstr();
+				CSphString sExpr = sRanker.SubString (iRankerNameLen+1, sRanker.Length()-iRankerNameLen-2 );
+				sExpr.Unquote();
+
+				sRanker = sRanker.SubString ( 0, iRankerNameLen );
+				eAdd = ::AddOptionRanker ( tQuery, sOpt, sRanker, [sExpr]{ return sExpr; }, STMT_SELECT, sError );
+			}
+
+			if ( eAdd==AddOption_e::NOT_FOUND )
+				eAdd = AddOption ( tQuery, sOpt, i.StrVal(), [&i]{ return i.StrVal(); }, STMT_SELECT, sError );
+		}
+		else if ( i.IsObj() )
+		{
+			CSphVector<CSphNamedInt> dNamed;
+			for ( const auto & tNamed : i )
+			{
+				if ( !tNamed.IsInt() )
+				{
+					sError.SetSprintf ( "\"%s\" property of \"%s\"' option should be integer", sOpt.cstr(), tNamed.Name() );
+					return false;
+				}
+
+				dNamed.Add ( { tNamed.Name(), tNamed.IntVal() } );
+			}
+
+			eAdd = ::AddOption ( tQuery, sOpt, dNamed, STMT_SELECT, sError );
+		}
+
+		if ( eAdd==AddOption_e::NOT_FOUND )
+		{
+			sError.SetSprintf ( "unknown option '%s'", sOpt.cstr () );
+			return false;
+		}
+		else if ( eAdd==AddOption_e::FAILED )
+			return false;
+	}
+
+	return true;
+}
+
+
 bool sphParseJsonQuery ( Str_t sQuery, JsonQuery_c & tQuery, bool & bProfile, CSphString & sError, CSphString & sWarning )
 {
 	JsonObj_c tRoot ( sQuery );
@@ -762,6 +826,10 @@ bool sphParseJsonQuery ( Str_t sQuery, JsonQuery_c & tQuery, bool & bProfile, CS
 
 	// common code used by search queries and update/delete by query
 	if ( !ParseJsonQueryFilters ( tJsonQuery, tQuery, sError, sWarning ) )
+		return false;
+
+	JsonObj_c tOptions = tRoot.GetItem("options");
+	if ( tOptions && !ParseOptions ( tOptions, tQuery, sError ) )
 		return false;
 
 	bProfile = false;

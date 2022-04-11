@@ -1090,12 +1090,7 @@ option_list:
 	;
 
 option_item:
-	ident_no_option
-		{
-			if ( !pParser->AddOption ( $1 ) )
-				YYERROR;
-		}
-	| ident_no_option '=' identcol
+	ident_no_option '=' identcol
 		{
 			if ( !pParser->AddOption ( $1, $3 ) )
 				YYERROR;

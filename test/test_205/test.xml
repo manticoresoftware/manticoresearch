@@ -145,10 +145,10 @@ select *, packedfactors() as f, weight() from i1,i2 where match('da blow') optio
 select *, packedfactors() as f, weight() from dd where match('da blow') option idf=plain,idf=tfidf_normalized, ranker=expr('sum(lcs*user_weight)*1000+bm25');
 
 <!-- regression expression ranker crash on expanded terms -->
-select *, weight() as w, packedfactors() as p from kw where match('t* here') option ranker=expr('sum(lcs)*1000+bm25'), debug_no_payload, idf=tfidf_unnormalized;
-select *, weight() as w, packedfactors() as p from kw where match('t* starts h*') option ranker=expr('sum(lcs)*1000+bm25'), debug_no_payload, idf=tfidf_unnormalized;
-select *, weight() as w, packedfactors() as p from kw where match('t* from h*') option ranker=expr('sum(lcs)*1000+bm25'), debug_no_payload, idf=tfidf_unnormalized;
-select *, weight() as w, packedfactors() as p from kw where match('t* ( starts | from ) h*') option ranker=expr('sum(lcs)*1000+bm25'), debug_no_payload, idf=tfidf_unnormalized;
+select *, weight() as w, packedfactors() as p from kw where match('t* here') option ranker=expr('sum(lcs)*1000+bm25'), debug_no_payload=1, idf=tfidf_unnormalized;
+select *, weight() as w, packedfactors() as p from kw where match('t* starts h*') option ranker=expr('sum(lcs)*1000+bm25'), debug_no_payload=1, idf=tfidf_unnormalized;
+select *, weight() as w, packedfactors() as p from kw where match('t* from h*') option ranker=expr('sum(lcs)*1000+bm25'), debug_no_payload=1, idf=tfidf_unnormalized;
+select *, weight() as w, packedfactors() as p from kw where match('t* ( starts | from ) h*') option ranker=expr('sum(lcs)*1000+bm25'), debug_no_payload=1, idf=tfidf_unnormalized;
 
 <!-- regression local idf -->
 select *, weight() from l1,l2 where match('da win') option local_df=1;

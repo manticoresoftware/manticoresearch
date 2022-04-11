@@ -314,4 +314,16 @@ bool	PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, co
 void	SqlParser_SplitClusterIndex ( CSphString & sIndex, CSphString * pCluster );
 void	InitParserOption();
 
+enum class AddOption_e
+{
+	NOT_FOUND,
+	ADDED,
+	FAILED
+};
+
+AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphString & sVal, const std::function<CSphString ()> & fnGetUnescaped, SqlStmt_e eStmt, CSphString & sError );
+AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphString & sValue, int64_t iValue, SqlStmt_e eStmt, CSphString & sError );
+AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, CSphVector<CSphNamedInt> & dNamed, SqlStmt_e eStmt, CSphString & sError );
+AddOption_e AddOptionRanker ( CSphQuery & tQuery, const CSphString & sOpt, const CSphString & sVal, const std::function<CSphString ()> & fnGetUnescaped, SqlStmt_e eStmt, CSphString & sError );
+
 #endif // _searchdsql_

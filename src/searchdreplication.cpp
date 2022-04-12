@@ -745,7 +745,7 @@ static wsrep_cb_status_t Unordered_fn ( void * pCtx, const void * pData, size_t 
 // This is the listening thread. It blocks in wsrep::recv() call until
 // disconnect from cluster. It will apply and commit writesets through the
 // callbacks defined above.
-static void ReplicationRecv_fn ( SharedPtr_t<ReceiverCtx_t> pCtx )
+void ReplicationRecv_fn ( std::unique_ptr<ReceiverCtx_t> pCtx )
 {
 	g_pTlsCluster = pCtx->m_pCluster;
 	pCtx->m_pCluster->m_bHasWorker = true;
@@ -754,7 +754,7 @@ static void ReplicationRecv_fn ( SharedPtr_t<ReceiverCtx_t> pCtx )
 	sphLogDebugRpl ( "receiver %s thread started", pCtx->m_pCluster->m_sName.cstr() );
 
 	wsrep_t * pWsrep = pCtx->m_pCluster->m_pProvider;
-	wsrep_status_t eState = pWsrep->recv ( pWsrep, pCtx );
+	wsrep_status_t eState = pWsrep->recv ( pWsrep, pCtx.get() );
 
 	sphLogDebugRpl ( "receiver %s done, code %d, %s", pCtx->m_pCluster->m_sName.cstr(), eState, GetStatus ( eState ) );
 	if ( eState==WSREP_CONN_FAIL || eState==WSREP_NODE_FAIL || eState==WSREP_FATAL )
@@ -765,7 +765,6 @@ static void ReplicationRecv_fn ( SharedPtr_t<ReceiverCtx_t> pCtx )
 		pCtx->m_pCluster->SetNodeState ( ClusterState_e::CLOSED );
 	}
 	pCtx->m_pCluster->m_tWorkerFinished.SetEvent();
-	pCtx = nullptr;
 }
 
 // callback for Galera pfs_instr_cb there all mutex \ threads \ events should be implemented, could also count these operations for extended stats
@@ -974,7 +973,7 @@ static bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sErro
 		sphLogDebugRpl ( "cluster '%s', new %d, indexes '%s', nodes '%s'", tArgs.m_pCluster->m_sName.cstr(), (int)tArgs.m_bNewCluster, sIndexes.cstr(), tArgs.m_pCluster->m_sClusterNodes.scstr() );
 	}
 
-	SharedPtr_t<ReceiverCtx_t> pRecvArgs { new ReceiverCtx_t() };
+	auto pRecvArgs = std::make_unique<ReceiverCtx_t>();
 	pRecvArgs->m_pCluster = tArgs.m_pCluster;
 	CSphString sFullClusterPath = GetClusterPath ( tArgs.m_pCluster->m_sPath );
 
@@ -1002,7 +1001,7 @@ static bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sErro
 
 	// wsrep provider initialization arguments
 	wsrep_init_args wsrep_args;
-	wsrep_args.app_ctx		= (void*)pRecvArgs;
+	wsrep_args.app_ctx		= pRecvArgs.get();
 
 	wsrep_args.node_name	= sMyName.cstr();
 	wsrep_args.node_address	= tArgs.m_sListenAddr.cstr();
@@ -1045,14 +1044,14 @@ static bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sErro
 
 	// let's start listening thread with proper provider set
 	auto pScheduler = MakeSingleThreadExecutor ( -1, sThName.cstr() );
-	Threads::Coro::Go ( [pRecvArgs,sIncoming] () mutable
+	Threads::Coro::Go ( [pArgs = pRecvArgs.release(), sIncoming]()
 	{
 		// publish stuff in 'show threads'
-		auto pDisplayIncoming = new ReplInfo_t;
+		auto pDisplayIncoming = std::make_unique<ReplInfo_t>();
 		pDisplayIncoming->m_sIncoming = sIncoming;
-		ScopedInfo_T<ReplInfo_t> _ { pDisplayIncoming };
+		ScopedInfo_T<ReplInfo_t> _ { pDisplayIncoming.release() };
 
-		ReplicationRecv_fn ( std::move ( pRecvArgs ) );
+		ReplicationRecv_fn ( std::unique_ptr<ReceiverCtx_t> ( pArgs ) );
 	}, pScheduler );
 	sphLogDebugRpl ( "replicator is created for cluster '%s'", tArgs.m_pCluster->m_sName.cstr() );
 	return true;

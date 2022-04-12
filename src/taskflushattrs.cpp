@@ -65,7 +65,7 @@ static Saved_e CheckSaveIndexes ()
 
 /* About setting event g_tFlush.m_tFlushFinished
  * flushing attributes may be engaged in two ways: either by timer (scheduled), either by command 'flush attributes'.
- * First needs nothing - it just do the things and re-schedule itself.
+ * First needs nothing - it just does the things and re-schedule itself.
  * Second needs event to trace end of operation.
  * So, there are 2 slightly different operations: 'just flush' and 'flush and signal'.
  * For this kind of task we may have at most 1 job in queue, (one which is currently running - already out of queue).

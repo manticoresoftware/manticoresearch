@@ -6014,7 +6014,7 @@ void SearchHandler_c::RunLocalSearches ()
 			int64_t iCpuTime = -sphTaskCpuTimer ();
 
 			// FIXME!!! handle different proto
-			myinfo::SetThreadInfo( R"(api-search query="%s" comment="%s" index="%s")",
+			myinfo::SetTaskInfo( R"(api-search query="%s" comment="%s" index="%s")",
 									 m_dNQueries.First().m_sQuery.scstr (),
 									 m_dNQueries.First().m_sComment.scstr (),
 									 m_dLocal[iLocal].m_sName.scstr ());
@@ -7335,8 +7335,7 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 		tHandler.SetQueryParser ( std::move ( pParser ), eQueryType );
 
 		const CSphQuery & q = tHandler.m_dQueries[0];
-		myinfo::SetThreadInfo ( R"(api-search query="%s" comment="%s" index="%s")",
-				q.m_sQuery.scstr (), q.m_sComment.scstr (), q.m_sIndexes.scstr () );
+		myinfo::SetTaskInfo ( R"(api-search query="%s" comment="%s" index="%s")", q.m_sQuery.scstr (), q.m_sComment.scstr (), q.m_sIndexes.scstr () );
 	}
 
 	// run queries, send response
@@ -7878,7 +7877,7 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 		Threads::Coro::Throttler_c tThrottler ( session::GetThrottlingPeriodMS () );
 		while (true)
 		{
-			myinfo::SetThreadInfo ( "s %d:", iJob );
+			myinfo::SetTaskInfo ( "s %d:", iJob );
 			sphLogDebug ( "MakeSnippetsCoro Coro loop tick %d[%d]", iJob, dTasks[iJob] );
 			MakeSingleLocalSnippetWithFields ( dQueries[dTasks[iJob]], q, tCtx.m_pBuilder, dStubFields );
 			sphLogDebug ( "MakeSnippetsCoro Coro loop tick %d finished", iJob );
@@ -8099,8 +8098,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries,
 		return false;
 
 	// set correct data size for snippets
-	myinfo::SetThreadInfo ( R"(snippet datasize=%.1Dk query="%s")",
-			GetSnippetDataSize ( dQueries ), q.m_sQuery.scstr () );
+	myinfo::SetTaskInfo ( R"(snippet datasize=%.1Dk query="%s")", GetSnippetDataSize ( dQueries ), q.m_sQuery.scstr () );
 
 	// collect list of existing and empty sources
 	CSphVector<int> dPresent;
@@ -8244,8 +8242,7 @@ void HandleCommandExcerpt ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & t
 			return;
 		}
 	}
-	myinfo::SetThreadInfo ( R"(api-snippet datasize=%.1Dk query="%s")",
-			GetSnippetDataSize ( dQueries ), q.m_sQuery.scstr ());
+	myinfo::SetTaskInfo ( R"(api-snippet datasize=%.1Dk query="%s")", GetSnippetDataSize ( dQueries ), q.m_sQuery.scstr ());
 
 	if ( !MakeSnippets ( sIndex, dQueries, q, sError ) )
 	{
@@ -11111,8 +11108,7 @@ void HandleMysqlCallSnippets ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 		}
 	}
 
-	myinfo::SetThreadInfo ( R"(sphinxql-snippet datasize=%.1Dk query="%s")",
-			GetSnippetDataSize ( dQueries ), q.m_sQuery.scstr ());
+	myinfo::SetTaskInfo ( R"(sphinxql-snippet datasize=%.1Dk query="%s")", GetSnippetDataSize ( dQueries ), q.m_sQuery.scstr ());
 
 	if ( !MakeSnippets ( sIndex, dQueries, q, sError ) )
 	{

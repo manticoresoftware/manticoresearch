@@ -179,7 +179,7 @@ Integer. Max predicted search time, see [predicted_time_costs](../Server_setting
 
 ### not_terms_only_allowed
 <!-- example not_terms_only_allowed -->
-`0` or `1`, allows standalone [negation](../Searching/Full_text_matching/Operators.md#Negation-operator) for the query. Default is 0. See also corresponding [global setting](../Server_settings/Searchd#not_terms_only_allowed).
+`0` or `1`, allows standalone [negation](../Searching/Full_text_matching/Operators.md#Negation-operator) for the query. Default is 0. See also corresponding [global setting](../Server_settings/Searchd.md#not_terms_only_allowed).
 
 <!-- request SQL -->
 ```sql

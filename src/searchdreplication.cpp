@@ -86,8 +86,7 @@ struct ReplicationCluster_t : public ClusterDesc_t
 	Threads::Coro::Mutex_c m_tReplicationMutex;
 
 	// receiver thread
-	CSphAutoEvent	m_tWorkerFinished;
-	bool			m_bHasWorker = false;
+	Threads::Coro::Waitable_T<bool> m_bWorkerActive { false };
 
 	// nodes at cluster
 	CSphString	m_sViewNodes; // raw nodes addresses (API and replication) from whole cluster
@@ -195,7 +194,7 @@ private:
 typedef SharedPtr_t<ReplicationCluster_t> ReplicationClusterPtr_t;
 
 // lock protects operations at g_hClusters
-static RwLock_t g_tClustersLock;
+static Threads::Coro::RWLock_c g_tClustersLock;
 // cluster list
 static SmallStringHash_T<ReplicationClusterPtr_t> g_hClusters GUARDED_BY ( g_tClustersLock );
 
@@ -748,7 +747,8 @@ static wsrep_cb_status_t Unordered_fn ( void * pCtx, const void * pData, size_t 
 void ReplicationRecv_fn ( std::unique_ptr<ReceiverCtx_t> pCtx )
 {
 	g_pTlsCluster = pCtx->m_pCluster;
-	pCtx->m_pCluster->m_bHasWorker = true;
+	pCtx->m_pCluster->m_bWorkerActive.SetValue ( true );
+	auto tFinish = AtScopeExit ( [&pCtx] { pCtx->m_pCluster->m_bWorkerActive.SetValueAndNotifyAll ( false ); } );
 	pCtx->m_pCluster->SetNodeState ( ClusterState_e::JOINING );
 
 	sphLogDebugRpl ( "receiver %s thread started", pCtx->m_pCluster->m_sName.cstr() );
@@ -764,7 +764,6 @@ void ReplicationRecv_fn ( std::unique_ptr<ReceiverCtx_t> pCtx )
 	{
 		pCtx->m_pCluster->SetNodeState ( ClusterState_e::CLOSED );
 	}
-	pCtx->m_pCluster->m_tWorkerFinished.SetEvent();
 }
 
 // callback for Galera pfs_instr_cb there all mutex \ threads \ events should be implemented, could also count these operations for extended stats
@@ -1077,7 +1076,7 @@ static void ReplicateClusterDone ( ReplicationClusterPtr_t & pCluster )
 	sphLogDebug ( "disconnect from cluster invoked" );
 	// Listening thread are now running and receiving writesets. Wait for them
 	// to join. Thread will join after signal handler closes wsrep connection
-	pCluster->m_tWorkerFinished.WaitEvent ();
+	pCluster->m_bWorkerActive.Wait ( [] ( bool bWorking ) { return !bWorking; } );
 
 	pCluster->m_pProvider = nullptr;
 	pCluster = ReplicationClusterPtr_t();
@@ -1315,7 +1314,7 @@ static void ReplicateClusterStats ( ReplicationCluster_t * pCluster, VectorLike 
 bool ReplicateSetOption ( const CSphString & sCluster, const CSphString & sName,
 	const CSphString & sVal, CSphString & sError ) EXCLUDES ( g_tClustersLock )
 {
-	ScRL_t rLock ( g_tClustersLock );
+	Threads::SccRL_t rLock ( g_tClustersLock );
 	if ( !g_hClusters.Exists ( sCluster ) )
 	{
 		sError.SetSprintf ( "unknown cluster '%s' in SET statement", sCluster.cstr() );
@@ -1351,25 +1350,27 @@ void ReplicationAbort()
 // delete all clusters on daemon shutdown
 void ReplicateClustersDelete() EXCLUDES ( g_tClustersLock )
 {
-	sphLogDebug ( "ReplicateClustersDelete invoked" );
-	ScWL_t wLock ( g_tClustersLock );
-	if ( !g_hClusters.GetLength() )
-		return;
+	Threads::CallCoroutine ( [] {
+		sphLogDebug ( "ReplicateClustersDelete invoked" );
+		Threads::SccWL_t wLock ( g_tClustersLock );
+		if ( !g_hClusters.GetLength() )
+			return;
 
-	for ( auto & tCluster : g_hClusters )
-	{
-		sphLogDebug ( "ReplicateClustersDelete for %s", tCluster.first.cstr() );
-		ReplicateClusterDone ( tCluster.second );
-	}
+		for ( auto& tCluster : g_hClusters )
+		{
+			sphLogDebug ( "ReplicateClustersDelete for %s", tCluster.first.cstr() );
+			ReplicateClusterDone ( tCluster.second );
+		}
 
-	sphLogDebug ( "ReplicateClustersDelete done" );
-	g_hClusters.Reset ();
+		sphLogDebug ( "ReplicateClustersDelete done" );
+		g_hClusters.Reset();
+	} );
 }
 
 // clean up cluster prior to start it again
 static void DeleteClusterByName ( const CSphString& sCluster ) EXCLUDES ( g_tClustersLock )
 {
-	ScWL_t wLock( g_tClustersLock );
+	Threads::SccWL_t wLock( g_tClustersLock );
 	g_hClusters.Delete ( sCluster );
 }
 
@@ -1377,7 +1378,7 @@ static void DeleteClusterByName ( const CSphString& sCluster ) EXCLUDES ( g_tClu
 static void CollectClusterDesc ( CSphVector<ClusterDesc_t> & dClusters )
 {
 	dClusters.Reset();
-	ScRL_t tLock ( g_tClustersLock );
+	Threads::SccRL_t tLock ( g_tClustersLock );
 	for ( const auto & tCluster : g_hClusters )
 	{
 		// should save all clusters on start
@@ -1394,7 +1395,7 @@ static void CollectClusterDesc ( CSphVector<ClusterDesc_t> & dClusters )
 void ReplicationCollectClusters ( CSphVector<ClusterDesc_t> & dClusters )  EXCLUDES ( g_tClustersLock )
 {
 	CSphString sError;
-	ScRL_t rLock ( g_tClustersLock );
+	Threads::SccRL_t rLock ( g_tClustersLock );
 	if ( !g_bReplicationEnabled && !g_hClusters.GetLength() )
 		return;
 
@@ -1405,7 +1406,7 @@ void ReplicationCollectClusters ( CSphVector<ClusterDesc_t> & dClusters )  EXCLU
 // dump all clusters statuses
 void ReplicateClustersStatus ( VectorLike & dStatus ) EXCLUDES ( g_tClustersLock )
 {
-	ScRL_t tLock ( g_tClustersLock );
+	Threads::SccRL_t tLock ( g_tClustersLock );
 	for ( const auto& tCluster : g_hClusters )
 		ReplicateClusterStats ( tCluster.second, dStatus );
 }
@@ -1704,7 +1705,7 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 	bool bPrimary = false;
 	ReplicationClusterPtr_t pCluster;
 	{
-		ScRL_t rLock ( g_tClustersLock );
+		Threads::SccRL_t rLock ( g_tClustersLock );
 		if ( g_hClusters.Exists ( tCmdCluster.m_sCluster ) )
 		{
 			pCluster = g_hClusters[tCmdCluster.m_sCluster];
@@ -1968,7 +1969,7 @@ bool CommitMonitor_c::CommitTOI ( ServedClone_c * pDesc, CSphString & sError ) E
 
 	const ReplicationCommand_t & tCmd = *m_tAcc.m_dCmd[0];
 
-	ScWL_t tLock ( g_tClustersLock ); // FIXME!!! no need to lock as all cluster operation serialized with TOI mode
+	Threads::SccWL_t tLock ( g_tClustersLock ); // FIXME!!! no need to lock as all cluster operation serialized with TOI mode
 	if ( !g_hClusters.Exists ( tCmd.m_sCluster ) )
 	{
 		sError.SetSprintf ( "unknown cluster '%s'", tCmd.m_sCluster.cstr() );
@@ -2165,7 +2166,7 @@ static bool ReplicatedIndexes ( const CSphFixedVector<CSphString> & dIndexes, co
 
 	// scope for check of cluster data
 	{
-		ScRL_t rLock( g_tClustersLock );
+		Threads::SccRL_t rLock( g_tClustersLock );
 
 		if ( !g_hClusters.GetLength())
 		{
@@ -2220,7 +2221,7 @@ static bool ReplicatedIndexes ( const CSphFixedVector<CSphString> & dIndexes, co
 
 	// scope for modify cluster data
 	{
-		ScWL_t tLock ( g_tClustersLock );
+		Threads::SccWL_t tLock ( g_tClustersLock );
 		// should be already in cluster list
 		if ( !g_hClusters.Exists ( sCluster ) )
 		{
@@ -2253,7 +2254,7 @@ CSphString GetClusterPath ( const CSphString & sPath )
 // create string by join global data_dir and cluster path 
 static bool GetClusterPath ( const CSphString & sCluster, CSphString & sClusterPath, CSphString & sError ) EXCLUDES ( g_tClustersLock )
 {
-	ScRL_t tLock ( g_tClustersLock );
+	Threads::SccRL_t tLock ( g_tClustersLock );
 	if ( !g_hClusters.Exists ( sCluster ) )
 	{
 		sError.SetSprintf ( "unknown cluster '%s'", sCluster.cstr() );
@@ -2282,7 +2283,7 @@ static bool ClusterCheckPath ( const CSphString & sPath, const CSphString & sNam
 		return false;
 	}
 
-	ScRL_t tClusterRLock ( g_tClustersLock );
+	Threads::SccRL_t tClusterRLock ( g_tClustersLock );
 	for ( const auto& tCluster : g_hClusters )
 	{
 		if ( sPath == tCluster.second->m_sPath )
@@ -2588,7 +2589,7 @@ void ReplicationStart ( const CSphConfigSection & hSearchd, CSphVector<ListenerD
 		pElem->UpdateIndexHashes();
 
 		{
-			ScWL_t tLock ( g_tClustersLock );
+			Threads::SccWL_t tLock ( g_tClustersLock );
 			g_hClusters.Add ( pElem, tDesc.m_sName );
 		}
 
@@ -2642,7 +2643,7 @@ static bool CheckClusterStatement ( const CSphString & sCluster, bool bCheckClus
 	if ( !bCheckCluster )
 		return true;
 
-	ScRL_t rLock ( g_tClustersLock );
+	Threads::SccRL_t rLock ( g_tClustersLock );
 	const bool bClusterExists = ( g_hClusters.Exists ( sCluster ) );
 	if ( bClusterExists )
 		sError.SetSprintf ( "cluster '%s' already exists", sCluster.cstr() );
@@ -2741,7 +2742,7 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 	NewClusterClean ( sClusterPath );
 
 	{
-		ScWL_t tLock ( g_tClustersLock );
+		Threads::SccWL_t tLock ( g_tClustersLock );
 		g_hClusters.Add ( pElem, sCluster );
 	}
 
@@ -2755,7 +2756,7 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 	bool bOk = ( eState==ClusterState_e::DONOR || eState==ClusterState_e::SYNCED );
 
 	{
-		ScRL_t tLock ( g_tClustersLock );
+		Threads::SccRL_t tLock ( g_tClustersLock );
 		if ( g_hClusters.Exists ( sCluster ) )
 		{
 			ReplicationClusterPtr_t pCluster ( g_hClusters[sCluster] );
@@ -2781,8 +2782,7 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 				sError = tArgs.m_pCluster->m_sError;
 			}
 			// need to wait recv thread to complete in case of error after worker started
-			if ( tArgs.m_pCluster->m_bHasWorker )
-				tArgs.m_pCluster->m_tWorkerFinished.WaitEvent ();
+			tArgs.m_pCluster->m_bWorkerActive.Wait ( [] ( bool bWorking ) { return !bWorking; } );
 			DeleteClusterByName ( sCluster );
 		}
 	}
@@ -2825,7 +2825,7 @@ bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const
 	NewClusterClean ( sClusterPath );
 
 	{
-		ScWL_t tLock ( g_tClustersLock );
+		Threads::SccWL_t tLock ( g_tClustersLock );
 		g_hClusters.Add ( pElem, sCluster );
 	}
 	if ( !ReplicateClusterInit( tArgs, sError ))
@@ -3549,7 +3549,7 @@ static void ReportClusterError ( const CSphString & sCluster, const CSphString &
 	if ( sError.IsEmpty() )
 		return;
 
-	ScRL_t tLock ( g_tClustersLock );
+	Threads::SccRL_t tLock ( g_tClustersLock );
 	if ( !g_hClusters.Exists ( sCluster ) )
 		return;
 
@@ -3670,7 +3670,7 @@ bool RemoteClusterDelete ( const CSphString & sCluster, CSphString & sError ) EX
 	// erase cluster from all hashes
 	ReplicationClusterPtr_t pCluster;
 	{
-		ScWL_t tLock ( g_tClustersLock );
+		Threads::SccWL_t tLock ( g_tClustersLock );
 
 		if ( !g_hClusters.Exists ( sCluster ) )
 		{
@@ -3708,7 +3708,7 @@ bool ClusterDelete ( const CSphString & sCluster, CSphString & sError, CSphStrin
 
 	CSphString sNodes;
 	{
-		ScRL_t tLock ( g_tClustersLock );
+		Threads::SccRL_t tLock ( g_tClustersLock );
 		if ( !g_bReplicationStarted )
 		{
 			sError.SetSprintf ( "cluster '%s' is not ready, starting", sCluster.cstr() );
@@ -5180,7 +5180,7 @@ static bool ClusterAlterAdd ( const CSphString & sCluster, const CSphString & sI
 {
 	CSphString sNodes;
 	{
-		ScRL_t tLock ( g_tClustersLock );
+		Threads::SccRL_t tLock ( g_tClustersLock );
 		if ( !g_hClusters.Exists ( sCluster ) )
 		{
 			sError.SetSprintf ( "unknown cluster '%s'", sCluster.cstr() );
@@ -5440,7 +5440,7 @@ bool RemoteClusterSynced ( const PQRemoteData_t & tCmd, CSphString & sError ) EX
 
 	ReplicationClusterPtr_t pCluster;
 	{
-		ScRL_t tLock ( g_tClustersLock );
+		Threads::SccRL_t tLock ( g_tClustersLock );
 		if ( g_hClusters.Exists ( tCmd.m_sCluster ) )
 			pCluster = g_hClusters[tCmd.m_sCluster];
 	}
@@ -5564,7 +5564,7 @@ bool ClusterGetNodes ( const CSphString & sClusterNodes, const CSphString & sClu
 bool RemoteClusterGetNodes ( const CSphString & sCluster, const CSphString & sGTID,
 	CSphString & sError, CSphString & sNodes )  EXCLUDES ( g_tClustersLock )
 {
-	ScRL_t tLock ( g_tClustersLock );
+	Threads::SccRL_t tLock ( g_tClustersLock );
 	if ( !g_hClusters.Exists ( sCluster ) )
 	{
 		sError.SetSprintf ( "unknown cluster '%s'", sCluster.cstr() );
@@ -5598,7 +5598,7 @@ bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdat
 	}
 
 	{
-		ScRL_t tLock ( g_tClustersLock );
+		Threads::SccRL_t tLock ( g_tClustersLock );
 		if ( !g_hClusters.Exists ( sCluster ) )
 		{
 			sError.SetSprintf ( "unknown cluster '%s'", sCluster.cstr() );
@@ -5641,7 +5641,7 @@ bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdat
 bool RemoteClusterUpdateNodes ( const CSphString & sCluster, CSphString * pNodes, bool bSaveConf, CSphString & sError )
 	EXCLUDES ( g_tClustersLock )
 {
-	ScRL_t tLock ( g_tClustersLock );
+	Threads::SccRL_t tLock ( g_tClustersLock );
 	if ( !g_hClusters.Exists ( sCluster ) )
 	{
 		sError.SetSprintf ( "unknown cluster '%s'", sCluster.cstr() );

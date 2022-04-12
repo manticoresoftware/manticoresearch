@@ -1,20 +1,6 @@
 # Changelog
 
-## Work in progress
-
-The following are the changes we are either working on now or are going to work on in the nearest time.
-
-* WIP Secondary indexes => higher performance.
-* DONE Docstore for columnar attributes => higher performance.
-* DONE Read-only listeners => better security.
-* DONE Bulk insert/replace via HTTP JSON => higher performance.
-* DONE Keepalive support in HTTP for multi-queries => ease of use.
-* DONE Further columnar storage performance optimizations.
-* DONE Making full-text optional. Manticore is not only about full-text, but still requires at least one full-text field in each index. It's time to change it.
-* DONE New https://repo.manticoresearch.com/ backend => ease of use, safer place for packages.
-* FAQ site => community support.
-
-# Version X.X.X
+# Version 5.X.X
 
 ### Major new features
 * [Read-only mode](Security/Read_only.md) for better security.
@@ -97,8 +83,9 @@ The following are the changes we are either working on now or are going to work 
 * [Pseudo sharding](../Server_settings/Searchd.md#pseudo_sharding) is enabled by default.
 * Having at least one full-text field in a real-time/plain index is not mandatory anymore.
 * Fast fetching for attributes backed by Manticore Columnar Library.
-* ⚠️ Implicit [cutoff](../Searching/Options.md#cutoff). Manticore now doesn't spend time and resources processing data you don't need in the result set which will be returned. The downside is that it affects `total_found` in [SHOW META](../Profiling_and_monitoring/SHOW_META.md#SHOW-META) and [hits.total](../Searching/Full_text_matching/Basic_usage.md#HTTP) in JSON output. It is now only accurate in case you see `total_relation: eq`. `total_relation: gte` means the actual number of matching documents is greater than the `total_found` value you've got. To retain the previous behaviour you can use search option `cutoff=0`, which makes `total_relation` always `eq`.
+* ⚠️ Implicit [cutoff](../Searching/Options.md#cutoff). Manticore now doesn't spend time and resources processing data you don't need in the result set which will be returned. The downside is that it affects `total_found` in [SHOW META](../Profiling_and_monitoring/SHOW_META.md#SHOW-META) and [hits.total](../Searching/Full_text_matching/Basic_usage.md#HTTP) in JSON output. It is now only accurate in case you see `total_relation: eq` while `total_relation: gte` means the actual number of matching documents is greater than the `total_found` value you've got. To retain the previous behaviour you can use search option `cutoff=0`, which makes `total_relation` always `eq`.
 * ⚠️ All full-text fields are now [stored](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#stored_fields) by default in plain indexes. You need to use `stored_fields = ` (empty value) to make all fields non-stored (i.e. revert to the previous behaviour).
+* [Search options](../Searching/Options.md#General-syntax) support for HTTP JSON ([#715](https://github.com/manticoresoftware/manticoresearch/issues/715))
 
 ### Minor changes
 * ⚠️ Session state support with help of [HTTP keep-alive](../Connecting_to_the_server/HTTP.md#Keep-alive). This makes HTTP stateful when the client supports it too. For example, using the new [/cli](../Connecting_to_the_server/HTTP.md#/cli) endpoint and HTTP keep-alive (which is on by default in all browsers) you can call `SHOW META` after `SELECT` and it will work the same way it works via mysql. Note, previously `Connection: keep-alive` HTTP header was supported too, but it only caused reusing the same connection. Since this version it also makes the session stateful.
@@ -112,14 +99,15 @@ The following are the changes we are either working on now or are going to work 
 * Significant memory consumption improvements: Manticore consumes significantly less RAM now in case of long and intensive insert/replace/optimize workload in case stored fields are used.
 
 ### ⚠️ Other minor breaking changes
-* BM25F formula has been slightly updated to improve search relevance. This only affects search results in case you use function `BM25F`, it doesn't change behaviour of the default ranking formula
-* Changed behaviour of REST `/sql` endpoint: `/sql?mode=raw` now requires escaping
+* BM25F formula has been slightly updated to improve search relevance. This only affects search results in case you use function `BM25F`, it doesn't change behaviour of the default ranking formula.
+* Changed behaviour of REST `/sql` endpoint: `/sql?mode=raw` now requires escaping.
 * Index meta file format change. The new version will convert older indexes automatically, but:
   - you can get warning like `WARNING: ... syntax error, unexpected TOK_IDENT`
   - you won't be able to run the index with previous Manticore versions, make sure you have a backup
 * Format change of the response of `/bulk` INSERT/REPLACE/DELETE requests:
   - previously each sub-query constituted a separate transaction and resulted in a separate response
   - now the whole batch is considered a single transaction, which returns a single response
+* Search options `low_priority` and `boolean_simplify` now require a value (`0/1`): previously you could do `SELECT ... OPTION low_priority, boolean_simplify`, now you need to do `SELECT ... OPTION low_priority=1, boolean_simplify=1`.
 
 ### Bugfixes
 * TODO

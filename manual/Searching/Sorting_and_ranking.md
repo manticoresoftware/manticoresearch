@@ -1,25 +1,36 @@
-# Sorting and ranking 
+# Sorting and ranking
 
-Query returns matches sorted. By default (if nothing specified) they're sorted by **relevance, which is equivalent to "ORDER BY weight() DESC, id ASC"**.
+**Full-text** query returns matches sorted. By default (if nothing specified) they're sorted by relevance, which is equivalent to `ORDER BY weight() DESC` in SQL format.
 
-Currently the following result sorting modes are available:
+**Non-full-text** queries do not do any sorting by default.
 
-* default mode, that sorts by relevance in descending order (best matches first)
-* extended mode, that sorts by combination of columns in ASC/DESC order
-
-## Extended mode 
+## Extended mode
 
 ```sql
 ORDER BY weight() DESC, price ASC, id DESC
 ```
 
-Extended mode is automatically switched on when you explicitly provide sorting rules by adding clause 'ORDER BY'.
+Extended mode is automatically switched on when you explicitly provide sorting rules by adding clause `ORDER BY` in SQL format or `sort` via HTTP JSON.
 
+<!-- example alias -->
 
-In the clause you can use:
+In the sort clause you can use any combination of up to 5 columns, each followed by `asc` or `desc`. Functions and expressions are not allowed as arguments for the sort clause, except for functions `weight()` and `random()` (which can be only used via SQL in the form of `ORDER BY random()`), but you can use any expression in the SELECT list and sort by its alias.
 
-* any combination of up to 5 columns, each followed by 'asc' or 'desc'. Functions and expressions are NOT allowed, except for function `weight()`, which returns relevance (rank, or weight) of the match.
-* `random()`. You can just specify 'order by random()', nothing else allowed (eg. `order by id asc, random()` is NOT allowed.
+<!-- request SQL -->
+```sql
+select *, a + b alias from test order by alias desc;
+```
+
+<!-- response SQL -->
+```
++------+------+------+----------+-------+
+| id   | a    | b    | f        | alias |
++------+------+------+----------+-------+
+|    1 |    2 |    3 | document |     5 |
++------+------+------+----------+-------+
+```
+
+<!-- end -->
 
 ### HTTP
 
@@ -87,8 +98,7 @@ When sorting on an attribute, match weight (score) calculation is disabled by de
 }
 ```
 
-
-## Ranking overview 
+## Ranking overview
 
 Ranking (also known as weighting) of search results can be defined as a process of computing a so-called relevance (weight) for every given matched document with regards to a given query that matched it. So relevance is in the end just a number attached to every document that estimates how relevant the document is to the query. Search results can then be sorted based on this number and/or some additional parameters, so that the most sought after results would come up higher on the results page.
 
@@ -118,7 +128,7 @@ Ranker name is case insensitive. Example:
 SELECT ... OPTION ranker=sph04;
 ```
 
-## Quick summary of the ranking factors 
+## Quick summary of the ranking factors
 
 | Name | Level | Type | Summary |
 | - | - | - | - |
@@ -146,7 +156,7 @@ SELECT ... OPTION ranker=sph04;
 | wlccs | field | float | Weighted Longest Common Contiguous Subsequence, sum(idf) over contiguous keyword spans |
 | atc | field | float |  Aggregate Term Closeness, log(1+sum(idf1\*idf2\*pow(distance, -1.75)) over the best pairs of keywords |
 
-### Document-level ranking factors 
+### Document-level ranking factors
 
 A **document-level factor** is a numeric value computed by the ranking engine for every matched document with regards to the current query. So it differs from a plain document attribute in that the attribute do not depend on the full text query, while factors might. Those factors can be used anywhere in the ranking expression. Currently implemented document-level factors are:
 
@@ -156,7 +166,7 @@ A **document-level factor** is a numeric value computed by the ranking engine fo
 * `query_word_count` (integer), the number of unique keywords in a query, adjusted for a number of excluded keywords. For instance, both `(one one one one)` and `(one !two)` queries should assign a value of 1 to this factor, because there is just one unique non-excluded keyword.
 * `doc_word_count` (integer), the number of unique keywords matched in the entire document.
 
-### Field-level ranking factors 
+### Field-level ranking factors
 
 A **field-level factor** is a numeric value computed by the ranking engine for every matched in-document text field with regards to the current query. As more than one field can be matched by a query, but the final weight needs to be a single integer value, these values need to be folded into a single one. To achieve that, field-level factors can only be used within a field aggregation function, they can **not** be used anywhere in the expression. For example, you can not use `(lcs+bm25)` as your ranking expression, as `lcs` takes multiple values (one in every matched field). You should use `(sum(lcs)+bm25)` instead, that expression sums `lcs` over all matching fields, and then adds `bm25` to that per-field sum. Currently implemented field-level factors are:
 
@@ -187,7 +197,7 @@ A **field-level factor** is a numeric value computed by the ranking engine for e
 
     WLCCS is computed very similarly to LCCS, but every "suitable" keyword occurrence increases it by the keyword IDF rather than just by 1 (which is the case with LCS and LCCS). That lets us rank sequences of more rare and important keywords higher than sequences of frequent keywords, even if the latter are longer. For example, a query `(Zanzibar bed and breakfast)` would yield lccs=1 for a `(hotels of Zanzibar)` document, but lccs=3 against `(London bed and breakfast)`, even though "Zanzibar" is actually somewhat more rare than the entire "bed and breakfast" phrase. WLCCS factor alleviates that problem by using the keyword frequencies.
 * `atc` (float). Aggregate Term Closeness. A proximity based measure that grows higher when the document contains more groups of more closely located and more important (rare) query keywords.
-   
+
     **WARNING:** you should use ATC with OPTION idf='plain,tfidf_unnormalized' (see [below](../Searching/Sorting_and_ranking.md#Configuration-of-IDF-formula)); otherwise you may get unexpected results.
 
     ATC basically works as follows. For every keyword *occurrence* in the document, we compute the so called *term closeness*. For that,  we examine all the other closest occurrences of all the query keywords (keyword itself included too) to the left and to the right of the subject occurrence, compute a distance dampening coefficient as k = pow(distance, -1.75) for those occurrences, and sum the dampened IDFs. Thus for every occurrence of every keyword, we get a "closeness" value that describes the "neighbors" of that occurrence. We then multiply those per-occurrence closenesses by their respective subject keyword IDF, sum them all, and finally, compute a logarithm of that sum.
@@ -208,7 +218,7 @@ A **field-level factor** is a numeric value computed by the ranking engine for e
 
     Having closer keyword occurrences actually contributes *much* more to ATC than having more frequent keywords. Indeed, when the keywords are right next to each other, distance=1 and k=1; when there just one word in between them, distance=2 and k=0.297, with two words  between, distance=3 and k=0.146, and so on. At the same time IDF attenuates somewhat slower. For example, in a 1 million document collection, the IDF values for keywords that match in 10, 100, and 1000 documents would be respectively 0.833, 0.667, and 0.500. So a keyword pair with two rather rare keywords that occur in just 10 documents each but with 2 other words in between would yield pair_tc = 0.101 and thus just barely outweigh a pair with a 100-doc and a 1000-doc keyword with 1 other word between them and pair_tc = 0.099. Moreover, a pair of two *unique*, 1-doc keywords with 3 words between them would get a pair_tc = 0.088 and lose to a pair of two 1000-doc keywords located right next to each other and yielding a pair_tc = 0.25. So, basically, while ATC does combine both keyword frequency and proximity, it is still somewhat favoring the proximity.
 
-### Ranking factor aggregation functions 
+### Ranking factor aggregation functions
 
 A **field aggregation function** is a single argument function that takes an expression with field-level factors, iterates it over all the matched fields, and computes the final results. Currently implemented field aggregation functions are:
 
@@ -234,7 +244,7 @@ Most of the other rankers can actually be emulated with the expression based ran
 The historically default IDF (Inverse Document Frequency) in Manticore is equivalent to `OPTION idf='normalized,tfidf_normalized'`, and those normalizations may cause several undesired effects.
 
 First, `idf=normalized` causes keyword penalization. For instance, if you search for `the | something` and `the` occurs in more than 50% of the documents, then documents with both keywords `the` and`[something` will get less weight than documents with just one keyword  `something`. Using `OPTION idf=plain` avoids this.
-   
+
 Plain IDF varies in `[0, log(N)]` range, and keywords are never penalized; while the normalized IDF varies in `[-log(N), log(N)]` range, and too frequent keywords are penalized.
 
 Second, `idf=tfidf_normalized` causes IDF drift over queries. Historically, we additionally divided IDF by query keyword count, so that the entire `sum(tf*idf)` over all keywords would still fit into `[0,1]` range. However, that means that queries `word1` and `word1 | nonmatchingword2` would assign different weights to the exactly same result set, because the IDFs for both `word1` and `nonmatchingword2` would be divided by 2. `OPTION idf='tfidf_unnormalized'` fixes that. Note that BM25, BM25A, BM25F() ranking factors will be scale accordingly  once you disable this normalization.

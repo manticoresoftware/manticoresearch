@@ -86,6 +86,7 @@
 * [▪️ Deleting documents](Deleting_documents.md)
 * [▪️ Transactions](Transactions.md)
 * [✔ ️Searching]
+    * [Intro](Searching/Intro.md)
     * [Full-text matching]
         * [Basic usage](Searching/Full_text_matching/Basic_usage.md)
         * [Operators](Searching/Full_text_matching/Operators.md)

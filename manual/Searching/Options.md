@@ -1,18 +1,104 @@
 # Search options
 
-SQL [SELECT](../Searching/Full_text_matching/Basic_usage.md#SQL) clause supports a number of options that can be used to fine-tune search behaviour.
+SQL [SELECT](../Searching/Full_text_matching/Basic_usage.md#SQL) clause and HTTP [/search](../Searching/Full_text_matching/Basic_usage.md#HTTP) endpoint support a number of options that can be used to fine-tune search behaviour.
 
 ## OPTION
-```ini
+
+### General syntax
+
+<!-- example options -->
+
+SQL:
+```sql
 SELECT ... [OPTION <optionname>=<value> [ , ... ]] [FORCE|IGNORE INDEX(id)]
 ```
 
-Example:
+HTTP:
+```json
+POST /search
+{   
+    "index" : "index_name",
+    "options":   
+    {
+        "optionname": "value",
+        "optionname2": <value2>
+    }
+}
+```
+
+
+<!-- intro -->
+SQL:
+<!-- request SQL -->
 ```sql
 SELECT * FROM test WHERE MATCH('@title hello @body world')
 OPTION ranker=bm25, max_matches=3000,
-    field_weights=(title=10, body=3), agent_query_timeout=10000
+field_weights=(title=10, body=3), agent_query_timeout=10000
 ```
+
+<!-- response SQL -->
+```sql
++------+-------+-------+
+| id   | title | body  |
++------+-------+-------+
+|    1 | hello | world |
++------+-------+-------+
+1 row in set (0.00 sec)
+```
+
+<!-- intro -->
+HTTP:
+<!-- request HTTP -->
+
+```json
+POST /search
+{   
+    "index" : "test",
+    "query": {
+      "match": {
+        "title": "hello"
+      },
+      "match": {
+        "body": "world"     
+      }
+    },
+    "options":   
+    {
+        "ranker": "bm25",
+        "max_matches": 3000,
+        "field_weights": {
+            "title": 10,
+            "body": 3
+        },
+        "agent_query_timeout": 10000
+    }
+}
+```
+
+<!-- response HTTP -->
+
+```json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": "1",
+        "_score": 10500,
+        "_source": {
+          "title": "hello",
+          "body": "world"
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- end -->
 
 Supported options and respectively allowed values are:
 
@@ -20,19 +106,25 @@ Supported options and respectively allowed values are:
 Integer. Max time in milliseconds to wait for remote queries to complete, see [this section](../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_query_timeout).
 
 ### boolean_simplify
-`0` or `1`, enables [simplifying the query](../Searching/Full_text_matching/Boolean_optimization.md) to speed it up
+`0` or `1` (`0` by default). `boolean_simplify=1` enables [simplifying the query](../Searching/Full_text_matching/Boolean_optimization.md) to speed it up.
 
 ### comment
-String, user comment that gets copied to a query log file
+String, user comment that gets copied to a query log file.
 
 ### cutoff
-Integer. Max found matches threshold.
+Integer. Max found matches threshold. The value is selected automatically if not specified.
+
+* `N` = 0 disables the threshold
+* `N > 0`: instructs Manticore to stop looking for results as soon as it finds `N` documents.
+* not set: Manticore will decide automatically what the value should be.
+
+In case Manticore cannot calculate the exact matching documents count you will see `total_relation: gte` in the query [meta information](../Profiling_and_monitoring/SHOW_META.md#SHOW-META), which means that the actual count is **Greater Than or Equal** to the total (`total_found` in `SHOW META` via SQL, `hits.total` in JSON via HTTP). If the total value is precise you'll get `total_relation: eq`.
 
 ### expand_keywords
 `0`, `1`, `exact` or `star`. Expands keywords with exact forms and/or stars when possible. Refer to [expand_keywords](../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#expand_keywords) for more details.
 
 ### field_weights
-Named integer list (per-field user weights for ranking)
+Named integer list (per-field user weights for ranking).
 
 Example:
 ```sql
@@ -65,7 +157,7 @@ Named integer list. Per-index user weights for ranking.
 `0` or `1`,automatically sum DFs over all the local parts of a distributed index, so that the IDF is consistent (and precise) over a locally sharded index.
 
 ### low_priority
-Runs the query with low priority in terms of Linux CPU scheduling. Consider also `OPTION threads=1` instead, or use that together with `low_priority`, as it might be better in some use cases.
+`0` or `1` (`0` by default). `low_priority=1` runs the query with low priority in terms of Linux CPU scheduling. Consider also option `threads=1` instead, or use that together with `low_priority=1`, as it might be better in some use cases.
 
 ### max_matches
 Integer. Per-query max matches value.

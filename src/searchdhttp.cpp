@@ -1817,6 +1817,8 @@ public:
 			AddResult ( tItems, sStmt, tResult );
 		}
 
+		session::SetInTrans ( false );
+
 		tRoot.AddItem ( "items", tItems );
 		tRoot.AddBool ( "errors", !bResult );
 		BuildReply ( tRoot.AsString(), bResult ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_500 );

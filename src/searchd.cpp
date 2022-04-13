@@ -15833,13 +15833,12 @@ void HandleMysqlImportTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphS
 RtAccum_t * CSphSessionAccum::GetAcc ( RtIndex_i * pIndex, CSphString & sError )
 {
 	assert ( pIndex );
-	RtAccum_t * pAcc = pIndex->CreateAccum ( m_pAcc, sError );
+	RtAccum_t * pAcc = pIndex->CreateAccum ( m_pAcc.get(), sError );
 	if ( !pAcc && !sError.IsEmpty() )
 		return pAcc;
 
-	if ( pAcc!=m_pAcc )
-		SafeDelete ( m_pAcc );
-	m_pAcc = pAcc;
+	if ( m_pAcc.get()!=pAcc )
+		m_pAcc.reset(pAcc);
 	return pAcc;
 }
 

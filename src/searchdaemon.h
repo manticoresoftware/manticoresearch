@@ -1286,15 +1286,11 @@ private:
 
 class CSphSessionAccum
 {
-public:
-	CSphSessionAccum () = default;
-	~CSphSessionAccum();
+	std::unique_ptr<RtAccum_t> m_pAcc;
 
+public:
 	RtAccum_t * GetAcc ( RtIndex_i * pIndex, CSphString & sError );
 	RtIndex_i * GetIndex ();
-
-private:
-	RtAccum_t * m_pAcc = nullptr;
 };
 
 

@@ -97,6 +97,7 @@
 * [optimize_cutoff](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#optimize_cutoff) is now available as a per-table setting which can be set when you CREATE or ALTER a table.
 * ⚠️ [query_log_format](../Server_settings/Searchd.md#query_log_format) is now **`sphinxql` by default**. If you are used to `plain` format you need to add `query_log_format = plain` to your configuration file.
 * Significant memory consumption improvements: Manticore consumes significantly less RAM now in case of long and intensive insert/replace/optimize workload in case stored fields are used.
+* [shutdown_timeout](../Server_settings/Searchd.md#shutdown_timeout) default value was increased from 3 seconds to 60 seconds
 
 ### ⚠️ Other minor breaking changes
 * BM25F formula has been slightly updated to improve search relevance. This only affects search results in case you use function `BM25F`, it doesn't change behaviour of the default ranking formula.

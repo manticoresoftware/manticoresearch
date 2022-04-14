@@ -828,7 +828,7 @@ preopen_indexes = 1
 ### pseudo_sharding
 
 <!-- example conf pseudo_sharding -->
-Enables pseudo-sharding for search queries to plain and real-time indexes, no matter if they are queried directly or through a distributed index. Any search query to a local index will be automatically parallelized to up to `searchd.threads` # of threads. 
+Enables pseudo-sharding for search queries to plain and real-time indexes, no matter if they are queried directly or through a distributed index. Any search query to a local index will be automatically parallelized to up to `searchd.threads` # of threads.
 
 Note that if your worker threads are already busy, because you have:
 * high query concurrency
@@ -1103,7 +1103,7 @@ server_id = 1
 ### shutdown_timeout
 
 <!-- example conf shutdown_timeout -->
-`searchd --stopwait` waiting time, in seconds (or [special_suffixes](../Server_settings/Special_suffixes.md)). Optional, default is 3 seconds.
+`searchd --stopwait` waiting time, in seconds (or [special_suffixes](../Server_settings/Special_suffixes.md)). Optional, default is 60 seconds.
 
 When you run `searchd --stopwait` your server needs to perform some activities before stopping like finishing queries, flushing RT RAM chunk, flushing attributes and updating binlog. And it requires some time. `searchd --stopwait` will wait up to `shutdown_time` seconds for server to finish its jobs. Suitable time depends on your index size and load.
 
@@ -1114,7 +1114,7 @@ When you run `searchd --stopwait` your server needs to perform some activities b
 <!-- request Example -->
 
 ```ini
-shutdown_timeout = 1m # wait for up to 60 seconds
+shutdown_timeout = 3m # wait for up to 3 minutes
 ```
 <!-- end -->
 

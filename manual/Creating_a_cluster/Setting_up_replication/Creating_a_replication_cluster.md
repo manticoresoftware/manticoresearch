@@ -1,4 +1,4 @@
-# Creating a replication cluster 
+# Creating a replication cluster
 
 <!-- example creating a replication cluster 1 -->
 To create a replication cluster you should set at least its [name](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#name).
@@ -69,10 +69,6 @@ utilsApi.sql('CREATE CLUSTER click_query \'/var/data/click_query/\' as path, \'c
 
 ```
 
-<!-- response Python -->
-```python
-{u'error': u'', u'total': 0, u'warning': u''}
-```
 <!-- intro -->
 ##### javascript:
 
@@ -82,11 +78,6 @@ utilsApi.sql('CREATE CLUSTER click_query \'/var/data/click_query/\' as path, \'c
 res = await utilsApi.sql('CREATE CLUSTER posts');
 res = await utilsApi.sql('CREATE CLUSTER click_query \'/var/data/click_query/\' as path');
 res = await utilsApi.sql('CREATE CLUSTER click_query \'/var/data/click_query/\' as path, \'clicks_mirror1:9312,clicks_mirror2:9312,clicks_mirror3:9312\' as nodes');
-```
-
-<!-- response javascript -->
-```javascript
-{"total":0,"error":"","warning":""}
 ```
 
 <!-- intro -->
@@ -102,4 +93,3 @@ utilsApi.sql("CREATE CLUSTER click_query '/var/data/click_query/' as path, 'clic
 <!-- end -->
 
 If a cluster is created without the [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes) option, the first node that gets joined to the cluster will be saved as [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes).
-

@@ -18628,7 +18628,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 		ParsePredictedTimeCosts ( hSearchd["predicted_time_costs"].cstr() );
 
 	if ( hSearchd("shutdown_timeout") )
-		g_iShutdownTimeoutUs = hSearchd.GetUsTime64S ( "shutdown_timeout", 3000000);
+		g_iShutdownTimeoutUs = hSearchd.GetUsTime64S ( "shutdown_timeout", 60000000);
 
 	g_iDocstoreCache = hSearchd.GetSize64 ( "docstore_cache_size", 16777216 );
 	g_iSkipCache = hSearchd.GetSize64 ( "skiplist_cache_size", 67108864 );

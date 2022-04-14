@@ -3,9 +3,9 @@
 # Version 5.X.X
 
 ### Major new features
-* [Read-only mode](Security/Read_only.md) for better security.
-* New `/cli` endpoint for running SQL queries over HTTP [even easier](../Connecting_to_the_server/HTTP.md#/cli).
-* Really bulk INSERT/REPLACE/DELETE via JSON over HTTP.
+* [Read-only mode](Security/Read_only.md): you can now specify listeners that process only read queries discarding any writes.
+* New [/cli]((../Connecting_to_the_server/HTTP.md#/cli)) endpoint for running SQL queries over HTTP even easier.
+* Faster bulk INSERT/REPLACE/DELETE via JSON over HTTP: previously you could provide multiple write commands via HTTP JSON protocol, but they were processed one by one, now they are handled as a single transaction.
 * Support for [Chunked transfer encoding](https://en.wikipedia.org/wiki/Chunked_transfer_encoding) in HTTP protocol. You can now use chunked transfer in your application to transfer large batches with lower resource consumption (since you don't need to calculate `Content-Length`). On the server's side Manticore now always processes incoming HTTP data in streaming fashion without waiting for the whole batch to be trasferred as previously, which:
   - decreases peak RAM consumption, which lowers a chance of OOM
   - decreases response time (our tests showed 11% decrease for processing a 100MB batch)
@@ -81,37 +81,81 @@
   </details>
 
 * [Pseudo sharding](../Server_settings/Searchd.md#pseudo_sharding) is enabled by default.
-* Having at least one full-text field in a real-time/plain index is not mandatory anymore.
-* Fast fetching for attributes backed by Manticore Columnar Library.
+* Having at least one full-text field in a real-time/plain index is not mandatory anymore. You can now use Manticore even in cases not having anything to do with full-text search.
+* Fast fetching for attributes backed by [Manticore Columnar Library](https://github.com/manticoresoftware/columnar): queries like `select * from <columnar table>` are now much faster than previously, especialy if there are many fields in the schema.
 * ⚠️ Implicit [cutoff](../Searching/Options.md#cutoff). Manticore now doesn't spend time and resources processing data you don't need in the result set which will be returned. The downside is that it affects `total_found` in [SHOW META](../Profiling_and_monitoring/SHOW_META.md#SHOW-META) and [hits.total](../Searching/Full_text_matching/Basic_usage.md#HTTP) in JSON output. It is now only accurate in case you see `total_relation: eq` while `total_relation: gte` means the actual number of matching documents is greater than the `total_found` value you've got. To retain the previous behaviour you can use search option `cutoff=0`, which makes `total_relation` always `eq`.
 * ⚠️ All full-text fields are now [stored](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#stored_fields) by default in plain indexes. You need to use `stored_fields = ` (empty value) to make all fields non-stored (i.e. revert to the previous behaviour).
-* [Search options](../Searching/Options.md#General-syntax) support for HTTP JSON ([#715](https://github.com/manticoresoftware/manticoresearch/issues/715))
+* [#715](https://github.com/manticoresoftware/manticoresearch/issues/715) HTTP JSON supports [search options](../Searching/Options.md#General-syntax).
 
 ### Minor changes
 * ⚠️ Session state support with help of [HTTP keep-alive](../Connecting_to_the_server/HTTP.md#Keep-alive). This makes HTTP stateful when the client supports it too. For example, using the new [/cli](../Connecting_to_the_server/HTTP.md#/cli) endpoint and HTTP keep-alive (which is on by default in all browsers) you can call `SHOW META` after `SELECT` and it will work the same way it works via mysql. Note, previously `Connection: keep-alive` HTTP header was supported too, but it only caused reusing the same connection. Since this version it also makes the session stateful.
-* Listen on `127.0.0.1` instead of `0.0.0.0` in case no `listen` is specified in config.
+* Listen on `127.0.0.1` instead of `0.0.0.0` in case no `listen` is specified in config. Even though in the [default config](https://github.com/manticoresoftware/manticoresearch/blob/master/manticore.conf.in) `listen` is specified in case the user removed it Manticore previously would listen on `0.0.0.0` which is not secure, now it listens on `127.0.0.1` which is normally not exposed to the Internet.
 * Faster aggregation over columnar attributes.
-* Increased `AVG()` accuracy.
+* Increased `AVG()` accuracy: previously Manticore used `float` internally for aggregations, now it uses `double` which increases the accuracy significantly.
 * Improved support for JDBC MySQL driver.
 * `DEBUG malloc_stats` support for [jemalloc](https://github.com/jemalloc/jemalloc).
 * [optimize_cutoff](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#optimize_cutoff) is now available as a per-table setting which can be set when you CREATE or ALTER a table.
 * ⚠️ [query_log_format](../Server_settings/Searchd.md#query_log_format) is now **`sphinxql` by default**. If you are used to `plain` format you need to add `query_log_format = plain` to your configuration file.
 * Significant memory consumption improvements: Manticore consumes significantly less RAM now in case of long and intensive insert/replace/optimize workload in case stored fields are used.
 * [shutdown_timeout](../Server_settings/Searchd.md#shutdown_timeout) default value was increased from 3 seconds to 60 seconds
+* [ffd0499d](https://github.com/manticoresoftware/manticoresearch/commit/ffd0499d329d2c383f14c8a44c4cc84338ab56e7) Support for Java mysql connector >= 6.0.3: in [Java mysql connection 6.0.3](https://mvnrepository.com/artifact/mysql/mysql-connector-java/6.0.3) they changed the way they connect to mysql which broke compatibility with Manticore. The new behaviour is now supported.
+* [1da6dbec](https://github.com/manticoresoftware/manticoresearch/commit/1da6dbec) disabled saving a new disk chunk on loading an index (e.g. on searchd startup).
+
 
 ### ⚠️ Other minor breaking changes
-* BM25F formula has been slightly updated to improve search relevance. This only affects search results in case you use function `BM25F`, it doesn't change behaviour of the default ranking formula.
-* Changed behaviour of REST `/sql` endpoint: `/sql?mode=raw` now requires escaping.
-* Index meta file format change. The new version will convert older indexes automatically, but:
+* ⚠️ BM25F formula has been slightly updated to improve search relevance. This only affects search results in case you use function [BM25F()](../Functions/Searching_and_ranking_functions.md#BM25F%28%29), it doesn't change behaviour of the default ranking formula.
+* ⚠️ Changed behaviour of REST [/sql](../Connecting_to_the_server/HTTP.md#/sql?mode=raw) endpoint: `/sql?mode=raw` now requires escaping.
+* ⚠️ Index meta file format change. The new version will convert older indexes automatically, but:
   - you can get warning like `WARNING: ... syntax error, unexpected TOK_IDENT`
   - you won't be able to run the index with previous Manticore versions, make sure you have a backup
-* Format change of the response of `/bulk` INSERT/REPLACE/DELETE requests:
+* ⚠️ Format change of the response of `/bulk` INSERT/REPLACE/DELETE requests:
   - previously each sub-query constituted a separate transaction and resulted in a separate response
   - now the whole batch is considered a single transaction, which returns a single response
-* Search options `low_priority` and `boolean_simplify` now require a value (`0/1`): previously you could do `SELECT ... OPTION low_priority, boolean_simplify`, now you need to do `SELECT ... OPTION low_priority=1, boolean_simplify=1`.
+* ⚠️ Search options `low_priority` and `boolean_simplify` now require a value (`0/1`): previously you could do `SELECT ... OPTION low_priority, boolean_simplify`, now you need to do `SELECT ... OPTION low_priority=1, boolean_simplify=1`.
 
 ### Bugfixes
-* TODO
+* ❗[Issue #698](https://github.com/manticoresoftware/manticoresearch/issues/698) Searchd crashes after trying to add a text column to a rt index
+* ❗[Issue #709](https://github.com/manticoresoftware/manticoresearch/issues/705) Grouping by json.boolean works wrong
+* ❗[Issue #724](https://github.com/manticoresoftware/manticoresearch/issues/724) Fields disappear from the selection
+* ❗[Issue #730](https://github.com/manticoresoftware/manticoresearch/issues/730) create/insert into/drop columnar table has a memleak
+* ❗[Issue #749](https://github.com/manticoresoftware/manticoresearch/issues/749) Crash of daemon on start
+* ❗[Issue #750](https://github.com/manticoresoftware/manticoresearch/issues/750) Daemon hangs on start
+* ❗[Issue #751](https://github.com/manticoresoftware/manticoresearch/issues/751) Crash at SST
+* ❗[Issue #755](https://github.com/manticoresoftware/manticoresearch/issues/755) Crash on select float in columnar in rt
+* ❗[Issue #756](https://github.com/manticoresoftware/manticoresearch/issues/756) Indextool changes rt index during check
+* ❗[Issue #760](https://github.com/manticoresoftware/manticoresearch/issues/760) RAM consumption changes in commit 5463778558586d2508697fa82e71d657ac36510f
+* ❗[Issue #765](https://github.com/manticoresoftware/manticoresearch/issues/765) Using function hides other values
+* ❗[Issue #766](https://github.com/manticoresoftware/manticoresearch/issues/766) Memleak triggered by a line in FixupAttrForNetwork
+* ❗[Issue #767](https://github.com/manticoresoftware/manticoresearch/issues/767) Memleak in 4.2.0 and 4.2.1 related with docstore cache
+* ❗[Commit 1da4ce89](https://github.com/manticoresoftware/manticoresearch/commits/1da4ce891e4ff13727cfd3331d72771c64ee7949) HTTP actions are not tracked in SHOW STATUS
+* [Issue #604](https://github.com/manticoresoftware/manticoresearch/issues/604) Breaking change 3.6.0, 4.2.0 sphinxql-parser
+* [Issue #676](https://github.com/manticoresoftware/manticoresearch/issues/676) Strings not passed correctly to UDFs
+* [Issue #705](https://github.com/manticoresoftware/manticoresearch/issues/705) Indexer couldn't find all columns
+* [Issue #716](https://github.com/manticoresoftware/manticoresearch/issues/716) indextool commands related to index (eg. --dumpdict) failure
+* [Issue #727](https://github.com/manticoresoftware/manticoresearch/issues/727) .NET HttpClient Content-Type incompatibility when using `application/x-ndjson`
+* [Issue #729](https://github.com/manticoresoftware/manticoresearch/issues/729) Field length calculation
+* [Issue #731](https://github.com/manticoresoftware/manticoresearch/issues/731) Empty column in results under certain conditions
+* [Issue #752](https://github.com/manticoresoftware/manticoresearch/issues/752) Json attribute marked as columnar when engine='columnar'
+* [Issue #753](https://github.com/manticoresoftware/manticoresearch/issues/753) Replication listens on 0
+* [Issue #754](https://github.com/manticoresoftware/manticoresearch/issues/754) columnar_attrs = * is not working with csvpipe
+* [Issue #757](https://github.com/manticoresoftware/manticoresearch/issues/757) Need a check for listeners port range intersections
+* [Issue #758](https://github.com/manticoresoftware/manticoresearch/issues/758) Log original error in case RT index failed to save disk chunk
+* [Issue #759](https://github.com/manticoresoftware/manticoresearch/issues/759) Only one error reported for RE2 config
+* [Issue #761](https://github.com/manticoresoftware/manticoresearch/issues/761) 3rd node doesn't make a non-primary cluster after dirty restart
+* [Issue #762](https://github.com/manticoresoftware/manticoresearch/issues/762) Update counter gets increased by 2
+* [Issue #763](https://github.com/manticoresoftware/manticoresearch/issues/763) New version 4.2.1 corrupt index created with 4.2.0 with morphology using
+* [Issue #764](https://github.com/manticoresoftware/manticoresearch/issues/764) No escaping in json keys /sql?mode=raw
+* [Issue #768](https://github.com/manticoresoftware/manticoresearch/issues/768) Strange ping-pong with stored fields over network
+* [Issue #769](https://github.com/manticoresoftware/manticoresearch/issues/769) lemmatizer_base reset to empty if not mentioned in 'common' section
+* [Issue #770](https://github.com/manticoresoftware/manticoresearch/issues/770) pseudo_sharding makes SELECT by id slower
+* [Issue #771](https://github.com/manticoresoftware/manticoresearch/issues/771) DEBUG malloc_stats output zeros when using jemalloc
+* [Issue #772](https://github.com/manticoresoftware/manticoresearch/issues/772) Drop/add column makes value invisible
+* [Issue #773](https://github.com/manticoresoftware/manticoresearch/issues/773) Can't add column bit(N) to columnar table
+* [Issue #774](https://github.com/manticoresoftware/manticoresearch/issues/774) "cluster" gets empty on start in manticore.json
+* [Commit 381000ab](https://github.com/manticoresoftware/manticoresearch/commits/381000ab4af4c3c98ec8c730699ad7f39039cec8) disable pseudo_sharding for low frequency single keyword queries
+* [Commit 800325cc](https://github.com/manticoresoftware/manticoresearch/commits/800325cca283a87801b28929d82420fafc76a0ee) fixed stored attributes vs index merge
+* [Commit cddfeed6](https://github.com/manticoresoftware/manticoresearch/commits/cddfeed6296f2041c6aae18414e5cd9cabf08281) generalized distinct value fetchers; added specialized distinct fetchers for columnar strings
+* [Commit fba4bb4f](https://github.com/manticoresoftware/manticoresearch/commits/fba4bb4f) fixed fetching null integer attributes from docstore
 
 ## Version 4.2.0, Dec 23 2021
 

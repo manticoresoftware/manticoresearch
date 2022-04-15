@@ -2448,6 +2448,18 @@ StringBuilder_c & StringBuilder_c::operator << ( unsigned long long uVal )
 	return *this;
 }
 
+StringBuilder_c& StringBuilder_c::operator<< ( timestamp_t tVal )
+{
+	Sprintf ("%T", tVal.m_iVal);
+	return *this;
+}
+
+StringBuilder_c& StringBuilder_c::operator<< ( timespan_t tVal )
+{
+	Sprintf ( "%t", tVal.m_iVal );
+	return *this;
+}
+
 StringBuilder_c & StringBuilder_c::operator<< ( float fVal )
 {
 	InitAddPrefix();

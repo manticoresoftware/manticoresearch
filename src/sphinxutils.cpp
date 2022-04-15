@@ -1728,6 +1728,11 @@ namespace TimePrefixed
 		g_uTimePrefix = sphMicroTimer ();
 	}
 
+	int64_t TimeStamp()
+	{
+		return sphMicroTimer() - g_uTimePrefix;
+	}
+
 	static void TimedLogVa ( const char* sPrefix, const char* sFmt, va_list ap, ESphLogLevel eLevel )
 	{
 		if ( eLevel>g_eLogLevel )
@@ -1741,51 +1746,11 @@ namespace TimePrefixed
 		sphLogf ( eLevel, "%s", sMyLine.cstr () );
 	}
 
-	void Warning ( const char* sPrefix, const char* sFmt, ... )
-	{
-		va_list ap;
-		va_start ( ap, sFmt );
-		TimedLogVa ( sPrefix, sFmt, ap, SPH_LOG_WARNING);
-		va_end ( ap );
-	}
-
-	void Info ( const char* sPrefix, const char* sFmt, ... )
-	{
-		va_list ap;
-		va_start ( ap, sFmt );
-		TimedLogVa ( sPrefix, sFmt, ap, SPH_LOG_INFO );
-		va_end ( ap );
-	}
-
-	void LogFatal ( const char* sPrefix, const char* sFmt, ... )
-	{
-		va_list ap;
-		va_start ( ap, sFmt );
-		TimedLogVa ( sPrefix, sFmt, ap, SPH_LOG_FATAL );
-		va_end ( ap );
-	}
-
-	void LogDebug ( const char* sPrefix, const char* sFmt, ... )
-	{
-		va_list ap;
-		va_start ( ap, sFmt );
-		TimedLogVa ( sPrefix, sFmt, ap, SPH_LOG_DEBUG );
-		va_end ( ap );
-	}
-
 	void LogDebugv ( const char* sPrefix, const char* sFmt, ... )
 	{
 		va_list ap;
 		va_start ( ap, sFmt );
 		TimedLogVa ( sPrefix, sFmt, ap, SPH_LOG_VERBOSE_DEBUG );
-		va_end ( ap );
-	}
-
-	void LogDebugvv ( const char* sPrefix, const char* sFmt, ... )
-	{
-		va_list ap;
-		va_start ( ap, sFmt );
-		TimedLogVa ( sPrefix, sFmt, ap, SPH_LOG_VERY_VERBOSE_DEBUG );
 		va_end ( ap );
 	}
 }

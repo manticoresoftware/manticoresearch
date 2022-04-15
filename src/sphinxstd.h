@@ -3195,6 +3195,16 @@ const StrBlock_t dBracketsComma { {",",1}, {"(",1}, {")",1} }; // collection in 
 const StrBlock_t dJsonObjW { {",\n",2}, {"{\n",2}, {"\n}",2} }; // json object with formatting
 const StrBlock_t dJsonArrW { {",\n",2}, {"[\n",2}, {"\n]",2} }; // json array with formatting
 
+struct timespan_t {
+	int64_t m_iVal;
+	explicit timespan_t (int64_t iVal) noexcept : m_iVal (iVal) {};
+};
+
+struct timestamp_t {
+	int64_t m_iVal;
+	explicit timestamp_t ( int64_t iVal ) noexcept : m_iVal ( iVal ) {};
+};
+
 /// string builder
 /// somewhat quicker than a series of SetSprintf()s
 /// lets you build strings bigger than 1024 bytes, too
@@ -3249,6 +3259,8 @@ public:
 	StringBuilder_c &	operator << ( unsigned int uVal );
 	StringBuilder_c &	operator << ( unsigned long uVal );
 	StringBuilder_c &	operator << ( unsigned long long uVal );
+	StringBuilder_c &	operator << ( timestamp_t tVal );
+	StringBuilder_c &	operator << ( timespan_t tVal );
 
 	StringBuilder_c &	operator << ( float fVal );
 	StringBuilder_c &	operator << ( double fVal );

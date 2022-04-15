@@ -19,31 +19,30 @@
 #endif
 
 #if VERBOSE_TASKMANAGER
-#define WarnL( LETTER, ... ) TimePrefixed::Warning ( #LETTER " ", __VA_ARGS__)
-#define InfoL( LETTER, ... ) TimePrefixed::Info ( #LETTER " ", __VA_ARGS__)
-#define FatalL( LETTER, ... ) TimePrefixed::LogFatal ( #LETTER " ", __VA_ARGS__)
-#define DebugL( LETTER, ... ) TimePrefixed::LogDebug ( #LETTER " ", __VA_ARGS__)
-#define DebugvL( LETTER, ... ) TimePrefixed::LogDebugv ( #LETTER " ", __VA_ARGS__)
-#define DebugvvL( LETTER, ... ) TimePrefixed::LogDebugvv ( #LETTER " ", __VA_ARGS__)
+#define LOG_LEVEL_TASKMANAGER true
+#define LOG_LEVEL_TSK true
 #else
-#if _WIN32
-#pragma warning(disable:4390)
-#endif
-#define WarnL( ... )
-#define InfoL( ... )
-#define FatalL( ... )
-#define DebugL( ... )
-#define DebugvL( ... )
-#define DebugvvL( ... )
+#define LOG_LEVEL_TASKMANAGER false
+#define LOG_LEVEL_TSK false
 #endif
 
-#define InfoX( ... ) InfoL(X, __VA_ARGS__)
+namespace Time
+{
+CSphString Stamp()
+{
+	return SphSprintf ( "[%t] ", TimePrefixed::TimeStamp() );
+}
+}
 
-#define DebugT( ... ) DebugL(T, __VA_ARGS__)
-#define DebugM( ... ) DebugL(M, __VA_ARGS__)
-#define DebugX( ... ) DebugL(X, __VA_ARGS__)
-
+#define LOG_COMPONENT_TSKX "X " << Time::Stamp()
+#define LOG_COMPONENT_TSKM "M " << Time::Stamp()
+#define LOG_COMPONENT_TSKT "T " << Time::Stamp()
 #define LOG_COMPONENT_TSK ""
+
+#define INFOX LOGMSG ( INFO, TASKMANAGER, TSKX )
+#define DEBUGM LOGMSG ( DEBUG, TASKMANAGER, TSKM )
+#define DEBUGT LOGMSG ( DEBUG, TASKMANAGER, TSKT )
+#define DEBUGX LOGMSG ( DEBUG, TASKMANAGER, TSKX )
 
 // period of idle, after which workers will finish.
 static int64_t IDLE_TIME_TO_FINISH = 600 * 1000000LL; // 10m
@@ -92,7 +91,7 @@ public:
 		, m_pPayload ( pPayload )
 	{
 		assert ( iTask<=g_iTasks.load(std::memory_order_relaxed) && iTask>=0 );
-		DebugT ( "Task_t(id=%d - %s) ctr", iTask, g_Tasks[iTask].m_sName.cstr ());
+		DEBUGT << "Task_t(id=" << iTask << " - " << g_Tasks[iTask].m_sName << ") ctr";
 	}
 
 	const TaskFlavour_t& Descr () const { return g_Tasks[m_ID]; }
@@ -102,7 +101,7 @@ public:
 	void Action ()
 	{
 		Threads::JobTimer_t dTrack;
-		DebugT ( "Task_t %s Action (%p)", GetName (), m_pPayload );
+		DEBUGT << "Task_t " << GetName() << " Action (" << m_pPayload << ")";
 		Prop ().m_iCurrentRunners.fetch_add ( 1, std::memory_order_release );
 		auto itmStart = sphMicroTimer ();
 		Threads::CallCoroutine ( [this] { Descr ().m_fnWorker ( m_pPayload ); } );
@@ -195,8 +194,7 @@ struct TaskWorker_t: public ListNode_t
 		assert ( pTask );
 		// we've extracted the task and going to work on it.
 		pTask->Action ();
-		DebugL (M, "%d Done %d jobs, spend " INT64_FMT "us",
-				   m_iMyThreadID, ( int ) m_tDesc.m_iTotalJobsDone, m_tDesc.m_tmTotalWorkedTimeUS );
+//		DEBUGM << m_iMyThreadID << " Done " << m_tDesc.m_iTotalJobsDone << " jobs, spend " << m_tDesc.m_tmTotalWorkedTimeUS << "us";
 	}
 
 	// returns timeout after which we'll regard idle too much
@@ -262,7 +260,7 @@ private:
 	enum Process_e { ePerform, eAbort };
 	static void ProcessOneTask ( Task_t* pTask, Process_e eAction ) REQUIRES ( TaskThread )
 	{
-		DebugT ( "ProcessOneTask(%p) -> %s", pTask, pTask->GetName () );
+		DEBUGT << "ProcessOneTask(" << pTask << ") -> " << pTask->GetName ();
 		switch ( eAction )
 		{
 		case ePerform:
@@ -278,7 +276,7 @@ private:
 	/// take current internal and external queues, parse it and process changes.
 	void ProcessEnqueuedTasks ( Process_e eAction ) REQUIRES ( TaskThread )
 	{
-		DebugT ( "ProcessEnqueuedTasks" );
+		DEBUGT << "ProcessEnqueuedTasks";
 
 		auto VARIABLE_IS_NOT_USED uStartLen = m_dInternalTasks.GetLength ();
 
@@ -291,19 +289,18 @@ private:
 
 		if ( m_dInternalTasks.IsEmpty ())
 		{
-			DebugT ( "No tasks in queue" );
+			DEBUGT << "No tasks in queue";
 			return;
 		}
-		DebugT ( "starting processing %d internal events (had %d, with new external %d)",
-					   m_dInternalTasks.GetLength (), uStartLen, uLastLen );
+		DEBUGT << "starting processing " << m_dInternalTasks.GetLength() << " internal events (had " << uStartLen << ", with new external " << uLastLen << ")";
 
 		for ( auto* pTask : m_dInternalTasks )
 		{
-			DebugT ( "Start processing task %p", pTask );
+			DEBUGT << "Start processing task " << pTask;
 			ProcessOneTask ( pTask, eAction );
-			DebugT ( "Finish processing task %p", pTask );
+			DEBUGT << "Finish processing task " << pTask;
 		}
-		DebugT ( "All events processed" );
+		DEBUGT << "All events processed";
 		m_dInternalTasks.Reset ();
 	}
 
@@ -332,11 +329,11 @@ private:
 			// timeout reached; have to do an action
 			bHasTimeout = true;
 
-			DebugT ( "timeout happens for %p task (%s)", pScheduledTask, pScheduledTask->m_pTask->GetName ());
-			DebugT ( "%s", m_dTimeouts.DebugDump ( "heap:" ).cstr ());
+			DEBUGT << "timeout happens for " << pScheduledTask << " task (" << pScheduledTask->m_pTask->GetName () << ")";
+			DEBUGT << m_dTimeouts.DebugDump ( "heap:" );
 			AddToLocalQueue ( pScheduledTask->m_pTask );
 
-			DebugT ( "Oneshot task removed" );
+			DEBUGT << "Oneshot task removed";
 			m_dTimeouts.Pop ();
 			SafeDelete ( pScheduledTask );
 		}
@@ -347,13 +344,13 @@ private:
 	/// abandon and release all events (on shutdown)
 	void AbortScheduled () REQUIRES ( TaskThread )
 	{
-		DebugT ( "AbortScheduled()" );
+		DEBUGT << "AbortScheduled()";
 		while ( !m_dTimeouts.IsEmpty ())
 		{
 			auto pScheduled = ( ScheduledJob_t* ) m_dTimeouts.Root ();
 			m_dTimeouts.Pop ();
 			pScheduled->m_pTask->Abort ();
-			DebugT ( "Aborted task (%p -> %p)", pScheduled, pScheduled->m_pTask.Ptr() );
+			DEBUGT << "Aborted task (" << pScheduled << " -> " << pScheduled->m_pTask.Ptr() << ")";
 			SafeDelete ( pScheduled );
 		}
 		ProcessEnqueuedTasks ( eAbort );
@@ -363,22 +360,21 @@ private:
 	/// \return false to stop event loop and exit.
 	bool EventTick () REQUIRES ( TaskThread )
 	{
-		DebugT ( "---------------------------- EventTick()" );
+		DEBUGT << "---------------------------- EventTick()";
 		do
 			ProcessEnqueuedTasks ( ePerform );
 		while ( HasTimeoutActions ());
 
 		int iMsec = ( m_iNextTimeoutUS>999 ) ? int(m_iNextTimeoutUS / 1000) : -1;
-		DebugT ( "calculated timeout is %d ms", iMsec );
+		DEBUGT << "calculated timeout is " << iMsec << " ms";
 		auto iStarted = sphMicroTimer ();
 		bool VARIABLE_IS_NOT_USED bWasKicked = m_tSignal.WaitEvent ( iMsec );
-		auto VARIABLE_IS_NOT_USED iWaited = sphMicroTimer () - iStarted;
-		DebugT ( "waited %t, reason=%s", iWaited, bWasKicked ? "kicked": "timeout or error" );
+		DEBUGT << "waited " << (timestamp_t) iStarted << ", reason=" << (bWasKicked ? "kicked": "timeout or error");
 
 		if ( sphInterrupted () || m_bShutdown )
 		{
 			AbortScheduled ();
-			DebugT ( "EventTick() exit because of shutdown=%d", sphInterrupted () );
+			DEBUGT << "EventTick() exit because of shutdown=" << sphInterrupted ();
 			return false;
 		}
 		return true;
@@ -393,7 +389,7 @@ private:
 		}
 		if ( !pTask->Descr ().m_iMaxQueueSize )
 		{
-			DebugT ( "AddToLocalQueue: dropped task because queue is disabled" );
+			DEBUGT << "AddToLocalQueue: dropped task because queue is disabled";
 			pTask->Abort ();
 			return true;
 		}
@@ -410,7 +406,7 @@ private:
 		if ( !m_pEnqueuedTasks )
 			m_pEnqueuedTasks = new VectorTask_c;
 		m_pEnqueuedTasks->Add ( pTask );
-		DebugL (X, "AddToQueue (external=%d)", m_pEnqueuedTasks ? m_pEnqueuedTasks->GetLength () + 1 : 1 );
+		DEBUGX << "AddToQueue (external=" << ( m_pEnqueuedTasks ? m_pEnqueuedTasks->GetLength() + 1 : 1 ) << ")";
 	}
 
 	void AddToLocalQueue ( Task_t* pTask ) REQUIRES ( TaskThread )
@@ -419,13 +415,13 @@ private:
 			return;
 
 		pTask->AddRef ();
-		DebugT ( "AddToLocalQueue, %d", m_dInternalTasks.GetLength () + 1 );
+		DEBUGT << "AddToLocalQueue, " << m_dInternalTasks.GetLength () + 1;
 		m_dInternalTasks.Add ( pTask );
 	}
 
 	void ProcessSchedulingEnqueue ( ScheduledJob_t* pScheduled ) REQUIRES ( TaskThread )
 	{
-		DebugT ( "ProcessSchedulingEnqueue (%p)", pScheduled );
+		DEBUGT << "ProcessSchedulingEnqueue (" << pScheduled << ")";
 
 		if ( sphInterrupted () )
 			SafeDelete ( pScheduled );
@@ -440,7 +436,7 @@ private:
 		LOGINFO ( TPLIFE, TSK ) << "Task scheduler thread started";
 		m_pSchedulerThread = &Threads::MyThd ();
 		ScopedRole_c thLazy ( TaskThread );
-		DebugT ( "LazyJobs_c::WorkerFunc started" );
+		DEBUGT << "LazyJobs_c::WorkerFunc started";
 		EventLoop ();
 		m_pSchedulerThread = nullptr;
 		LOGINFO ( TPLIFE, TSK ) << "Task scheduler thread finished";
@@ -451,7 +447,7 @@ private:
 	/// one job cycle. Returns false to stop cycling.
 	bool JobTick ( TaskWorker_t& tWorker ) REQUIRES ( MtJobThread )
 	{
-		DebugM ( "------------------ JobTick() %d", tWorker.m_iMyThreadID );
+		DEBUGM << "------------------ JobTick() " << tWorker.m_iMyThreadID;
 		if ( m_bShutdown || sphInterrupted () )
 		{
 			KickJobPool (); // kick next one before dead
@@ -462,7 +458,7 @@ private:
 		bool bSignaled = m_tJobSignal.WaitEvent ( tWorker.TimeToDeadMS ( m_tmIdlePeriodUS ));
 		if ( !bSignaled ) // idle timeout happened. Fixme! m.b. better way to determine idles need.
 		{
-			DebugM ( "%d finishes because idle period exceeded", tWorker.m_iMyThreadID );
+			DEBUGM << tWorker.m_iMyThreadID << " finishes because idle period exceeded";
 			return false;
 		}
 
@@ -474,7 +470,7 @@ private:
 			TaskRefP_c pTask { tWorker.ExtractJobToWork () };
 			if ( !pTask )
 				return true;
-			DebugM ( "%d starting job", tWorker.m_iMyThreadID );
+			DEBUGM << tWorker.m_iMyThreadID << " starting job";
 			TaskWorker_t::PerformTask ( pTask );
 		}
 	}
@@ -495,7 +491,7 @@ private:
 		}
 
 
-		DebugM ( "JobLoop started for %d", pWorker->m_iMyThreadID );
+		DEBUGM << "JobLoop started for " << pWorker->m_iMyThreadID;
 		while ( true )
 			if ( !JobTick ( *pWorker ) )
 				break;
@@ -532,7 +528,7 @@ private:
 	static void TheadPoolWorker () REQUIRES (!MtJobThread)
 	{
 		LOGINFO ( TPLIFE, TSK ) << "Task worker finished created";
-		DebugM ( "LazyJobs_c::TheadPoolWorker started" );
+		DEBUGM << "LazyJobs_c::TheadPoolWorker started";
 		ScopedRole_c thMtThread ( MtJobThread );
 		LazyTasker ().JobLoop ( );
 	}
@@ -579,14 +575,14 @@ private:
 			auto iQueueLen = dProp.m_dQueue.GetLength ();
 			if ( iMaxJobs>-1 && iQueueLen>=iMaxJobs )
 			{
-				DebugX ( "AddNewMTJob %s(%p) dropped exceeded job.", pJob->GetName (), pJob );
+				DEBUGX << "AddNewMTJob " << pJob->GetName() << "(" << pJob << ") dropped exceeded job.";
 				pJob->Abort();
 				return;
 			}
 
 			SafeAddRef ( pJob );
 			dProp.m_dQueue.Add ( new ListedData_t ( pJob ));
-			DebugX ( "AddNewMTJob %s(%p) success (%d in queue)", pJob->GetName (), pJob, iQueueLen );
+			DEBUGX << "AddNewMTJob " << pJob->GetName() << "(" << pJob << ") success (" << iQueueLen << " in queue)";
 		}
 
 		if ( !m_iIdleWorkers.load(std::memory_order_relaxed)
@@ -598,7 +594,7 @@ private:
 	/// Kick the tasker
 	void KickJobPool ()
 	{
-		DebugX ( "Tasker kicked" );
+		DEBUGX << "Tasker kicked";
 		m_tJobSignal.SetEvent ();
 	}
 
@@ -613,7 +609,7 @@ public:
 			[] ( void* pScheduledJob ) REQUIRES ( TaskThread )
 			{
 				auto& tThis = LazyTasker ();
-				DebugX ( "LazyJobs_c::SchedulerFunc" );
+				DEBUGX << "LazyJobs_c::SchedulerFunc";
 				tThis.ProcessSchedulingEnqueue (( ScheduledJob_t* ) pScheduledJob );
 			},
 			[] ( void* pScheduledJob ) {
@@ -624,13 +620,13 @@ public:
 
 	~LazyJobs_c ()
 	{
-		DebugX ( "~LazyJobs_c. Shutdown=%d", sphInterrupted () );
+		DEBUGX << "~LazyJobs_c. Shutdown=" << sphInterrupted ();
 		Shutdown();
 	}
 
 	void Shutdown()
 	{
-		InfoX( "Shutdown" );
+		INFOX << "Shutdown";
 		m_bShutdown = true;
 		Kick ();
 		FinishAllWorkers ();
@@ -662,7 +658,7 @@ public:
 	/// Kick the tasker
 	void Kick ()
 	{
-		DebugX ( "Tasker kicked" );
+		DEBUGX << "Tasker kicked";
 		m_tSignal.SetEvent ();
 	}
 
@@ -755,7 +751,7 @@ TaskID TaskManager::RegisterGlobal( CSphString sName, fnThread_t fnThread, fnThr
 	if ( !iTaskID ) // this is first class; start log timering
 		TimePrefixed::TimeStart();
 
-	InfoX( "Task class for %s registered with id=%d, max %d parallel jobs", sName.cstr(), iTaskID, iThreads );
+	INFOX << "Task class for " << sName << " registered with id=" << iTaskID << ", max " << iThreads << " parallel jobs";
 	auto& dTask = g_Tasks[iTaskID];
 	dTask.m_iMaxRunners = iThreads;
 	dTask.m_iMaxQueueSize = iJobs;
@@ -767,14 +763,13 @@ TaskID TaskManager::RegisterGlobal( CSphString sName, fnThread_t fnThread, fnThr
 
 void TaskManager::ScheduleJob ( TaskID iTask, int64_t iTimestamp, void* pPayload )
 {
-	InfoX( "ScheduleJob (id=%d(%s), period=%t, cookie = %p)",
-		iTask, g_Tasks[iTask].m_sName.cstr(), iTimestamp-sphMicroTimer (), pPayload );
+	INFOX << "ScheduleJob (id=" << iTask << "(" << g_Tasks[iTask].m_sName << "), period=" << iTimestamp - sphMicroTimer() << ", cookie = " << pPayload << ")";
 	LazyTasker ().EngageTask ( TaskRefP_c { new Task_t ( iTask, pPayload ) }, iTimestamp );
 }
 
 void TaskManager::StartJob ( TaskID iTask,  void* pPayload )
 {
-	InfoX( "StartJob (id=%d(%s), cookie = %p)", iTask, g_Tasks[iTask].m_sName.cstr (), pPayload );
+	INFOX << "StartJob (id=" << iTask << "(" << g_Tasks[iTask].m_sName << "), cookie = " << pPayload << ")";
 	LazyTasker ().EnqueueNewTask ( TaskRefP_c { new Task_t ( iTask, pPayload )} );
 }
 

@@ -5,6 +5,7 @@
 * Debian
   * 9.0 (Stretch)
   * 10.0 (Buster)
+  * 11.0 (Bullseye)
 
 * Ubuntu
   * 16.04 LTS (Xenial)

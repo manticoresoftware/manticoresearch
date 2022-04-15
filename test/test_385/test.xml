@@ -72,8 +72,8 @@ ALTER CLUSTER test ADD rt1;
 </sphinxql>
 
 <!-- without waiting the status test is not stable (sometimes select * returns 0 results) -->
-<sphinxql d="1" system="wait-status" status="cluster_test_last_committed" wait_value="4"/>
 <sphinxql d="1">
+	debug wait test status 4 like 'state';
 	SHOW INDEX rt2 SETTINGS;
 	SELECT * FROM test:rt2 where match ( 'tes' );
 </sphinxql>
@@ -118,8 +118,8 @@ ALTER CLUSTER test ADD rt1;
 	insert into loc:rt1 (id,title,mva1) values (10, 'test 10', (110,120,130));
 </sphinxql>
 
-<sphinxql d="1" system="wait-status" status="cluster_loc_last_committed" wait_value="2"/>
 <sphinxql d="1">
+	debug wait test status 2 like 'state';
 	SELECT * FROM loc:rt1;
 	flush ramchunk rt1;
 	SHOW INDEX rt1 STATUS LIKE 'disk_chunks';

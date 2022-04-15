@@ -2586,6 +2586,8 @@ class SphinxConfig
                 case 'wait-ready':
                     $ql = new QLClient();
                     $ql->SetConnection($connection);
+                    $status = $ql->Query("debug wait $cluster_name like 'state'");
+                    break; // fixme! also timeout processing need...
                     $like_name = "cluster_" . $cluster_name . "_node_state";
                     $wait_started = MyMicrotime();
                     while (true) {
@@ -2607,9 +2609,11 @@ class SphinxConfig
                         }
                     }
                     break;
-                case 'wait-status':
+                case 'wait-commit':
                     $ql = new QLClient();
                     $ql->SetConnection($connection);
+                    $status = $ql->Query("debug wait $cluster_name status $wait_value like 'state'");
+                    break; // fixme! also timeout processing need...
                     $wait_started = MyMicrotime();
                     while (true) {
                         $status = $ql->Query("show status like '$cluster_status'");

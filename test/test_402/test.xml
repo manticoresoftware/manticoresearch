@@ -57,8 +57,8 @@ searchd
 </sphinxql>
 
 <!-- request to node 1 -->
-<sphinxql d="1" system="wait-status" status="cluster_test_last_committed" wait_value="6"/>
 <sphinxql d="1">
+	debug wait test status 6 like 'state';
 	SELECT * FROM test:rt1;
 	SELECT * FROM test:rt2;
 	SELECT * FROM test:rt3;
@@ -72,8 +72,8 @@ searchd
 </sphinxql>
 
 <!-- request to node 0 -->
-<sphinxql d="0" system="wait-status" status="cluster_test_last_committed" wait_value="8"/>
 <sphinxql d="0">
+	debug wait test status 8 like 'state';
 	SELECT * FROM test:rt3;
 
 <!-- cleanup -->

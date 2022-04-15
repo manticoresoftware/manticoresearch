@@ -14208,6 +14208,39 @@ void HandleSetGdb ( RowBuffer_i & tOut, bool bParam )
 	}
 	tOut.Eof ();
 }
+
+void HandleWait ( RowBuffer_i& tOutBuf, const DebugCmd::DebugCommand_t& tCmd )
+{
+	auto sCluster = tCmd.m_sParam;
+	auto iTime = -sphMicroTimer();
+	auto sState = WaitClusterReady(sCluster);
+	iTime += sphMicroTimer();
+	VectorLike tOut { tCmd.sOpt ( "like" ) };
+	tOut.SetColName("name");
+	tOut.MatchTuplet ( "cluster", sCluster.cstr() );
+	tOut.MatchTuplet ( "state", sState.cstr() );
+	tOut.MatchTupletf ( "time", "%.2t", iTime );
+	tOutBuf.DataTable ( tOut );
+}
+
+void HandleWaitStatus ( RowBuffer_i& tOutBuf, const DebugCmd::DebugCommand_t& tCmd )
+{
+	auto sCluster = tCmd.m_sParam;
+	auto iTxn = (int)tCmd.m_iPar1;
+	auto iTime = -sphMicroTimer();
+	auto tAchieved = WaitClusterCommit ( sCluster, iTxn );
+	iTime += sphMicroTimer();
+	VectorLike tOut { tCmd.sOpt ( "like" ) };
+	tOut.SetColName ( "name" );
+	tOut.MatchTuplet ( "cluster", sCluster.cstr() );
+	tOut.MatchTupletf ( "wanted", "%d", iTxn );
+	if ( tAchieved.first>=0 )
+		tOut.MatchTupletf ( "state", "%d", tAchieved.first );
+	else
+		tOut.MatchTuplet ( "achieved", tAchieved.second.cstr() );
+	tOut.MatchTupletf ( "time", "%.2t", iTime );
+	tOutBuf.DataTable ( tOut );
+}
 #endif
 
 void HandleToken ( RowBuffer_i & tOut, const CSphString & sParam )
@@ -14382,6 +14415,10 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, Str_t sCommand )
 	case Cmd_e::CLOSE: HandleMysqlclose ( tOut ); return;
 	case Cmd_e::COMPRESS: HandleMysqlCompress ( tOut, tCmd ); return;
 	case Cmd_e::SPLIT: HandleMysqlSplit ( tOut, tCmd ); return;
+#if !_WIN32
+	case Cmd_e::WAIT: HandleWait ( tOut, tCmd ); return;
+	case Cmd_e::WAIT_STATUS: HandleWaitStatus ( tOut, tCmd ); return;
+#endif
 	default: break;
 	}
 

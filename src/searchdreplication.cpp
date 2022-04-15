@@ -123,10 +123,29 @@ struct ReplicationCluster_t : public ClusterDesc_t
 		m_tNodeState.NotifyAll();
 	}
 	ClusterState_e			GetNodeState() const { return m_tNodeState.GetValue(); }
+
+	void HeartBeat ()
+	{
+		m_tHeardBeat.NotifyAll();
+	}
+
+	template<typename PRED>
+	void WaitHeartBeat ( PRED&& fnPred )
+	{
+		m_tNodeState.WaitVoid ( std::forward<PRED> ( fnPred ) );
+	}
+
+	template<typename PRED>
+	ClusterState_e			WaitAny (PRED&& fnPred)
+	{
+		return m_tNodeState.Wait ( std::forward<PRED> ( fnPred ) );
+	}
+
 	ClusterState_e			WaitReady()
 	{
-		return m_tNodeState.Wait ( [] ( ClusterState_e i ) { return i != ClusterState_e::CLOSED && i != ClusterState_e::JOINING && i != ClusterState_e::DONOR; } );
+		return WaitAny ( [] ( ClusterState_e i ) { return i != ClusterState_e::CLOSED && i != ClusterState_e::JOINING && i != ClusterState_e::DONOR; } );
 	}
+
 	void					SetPrimary ( wsrep_view_status_t eStatus )
 	{
 		m_iStatus = eStatus;
@@ -135,6 +154,7 @@ struct ReplicationCluster_t : public ClusterDesc_t
 
 private:
 	Threads::Coro::Waitable_T<ClusterState_e> m_tNodeState { ClusterState_e::CLOSED };
+	Threads::Coro::Waitable_T<bool> m_tHeardBeat { false };
 };
 
 
@@ -510,6 +530,51 @@ static void Logger_fn ( wsrep_log_level_t eLevel, const char * sMsg )
 	LoggerWrapper ( eLevel, "%s", sMsg );
 }
 
+
+CSphString WaitClusterReady ( const CSphString& sCluster )
+{
+	ReplicationClusterPtr_t pCluster { nullptr };
+	{
+		Threads::SccRL_t rLock ( g_tClustersLock );
+		auto ppCluster = g_hClusters(sCluster);
+		if ( !ppCluster )
+			return SphSprintf ( "unknown cluster '%s'", sCluster.cstr() );
+		pCluster = *ppCluster;
+	}
+	ClusterState_e eState = pCluster->WaitAny ( [] ( ClusterState_e i ) { return i == ClusterState_e::SYNCED || i == ClusterState_e::DONOR; } );
+	return GetNodeState ( eState );
+}
+
+std::pair<int, CSphString> WaitClusterCommit ( const CSphString& sCluster, int iTxn )
+{
+	ReplicationClusterPtr_t pCluster { nullptr };
+	{
+		Threads::SccRL_t rLock ( g_tClustersLock );
+		auto ppCluster = g_hClusters ( sCluster );
+		if ( !ppCluster )
+			return {-1, SphSprintf ( "unknown cluster '%s'", sCluster.cstr() ) };
+		pCluster = *ppCluster;
+	}
+	int64_t iVal = -1;
+	pCluster->WaitHeartBeat( [iTxn, pCluster, &iVal] () {
+		auto pProvider = pCluster->m_pProvider;
+		if (!pProvider)
+			return false;
+		assert ( pProvider );
+		wsrep_stats_var* pAllVars = pProvider->stats_get ( pProvider );
+		for ( wsrep_stats_var* pVars = pAllVars; pVars->name; ++pVars )
+			if ( !strcmp ( pVars->name, "last_committed" ) )
+			{
+				iVal = (int)pVars->value._int64;
+				break;
+			}
+		pProvider->stats_free ( pProvider, pAllVars );
+		return iVal>=iTxn;
+	} );
+
+	return { iVal, "" };
+}
+
 // commands version (commands these got replicated via Galera)
 // ver 0x104 added docstore from RT index
 // ver 0x105 fixed CSphWordHit serialization - instead of direct raw blob copy only fields sent (16 bytes vs 24)
@@ -728,7 +793,7 @@ static wsrep_cb_status_t Commit_fn ( void * pCtx, const void * hndTrx, uint32_t 
 		eRes = ( bOk ? WSREP_CB_SUCCESS : WSREP_CB_FAILURE );
 	}
 	pLocalCtx->Cleanup();
-
+	pLocalCtx->m_pCluster->HeartBeat();
 	return eRes;
 }
 
@@ -1079,6 +1144,7 @@ static void ReplicateClusterDone ( ReplicationClusterPtr_t & pCluster )
 	pCluster->m_bWorkerActive.Wait ( [] ( bool bWorking ) { return !bWorking; } );
 
 	pCluster->m_pProvider = nullptr;
+	pCluster->HeartBeat();
 	pCluster = ReplicationClusterPtr_t();
 
 	wsrep_unload ( pProvider );

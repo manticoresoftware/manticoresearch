@@ -73,22 +73,22 @@ searchd
 
 <!-- start node 2 and check changes from node 0 are here-->
 <sphinxql d="2" system="start-agent"/>
-<sphinxql d="2" system="wait-ready" cluster="test"/>
 <sphinxql d="2">
+	debug wait test like 'state';
 	SELECT * FROM test:pq1;
 </sphinxql>
 
 <!-- start node 1 -->
 <sphinxql d="1" system="start-agent"/>
-<sphinxql d="1" system="wait-ready" cluster="test"/>
 <sphinxql d="1">
+	debug wait test like 'state';
 	SELECT * FROM test:pq1;
 	INSERT INTO test:pq1 (query) VALUES('test 12');
 </sphinxql>
 
 <!-- stream to node 2 -->
-<sphinxql d="2" system="wait-status" status="cluster_test_last_committed" wait_value="6"/>
 <sphinxql d="2">
+	debug wait test status 6 like 'state';
 	SELECT * FROM test:pq1;
 </sphinxql>
 

@@ -74,8 +74,8 @@ searchd
 </sphinxql>
 
 <!-- stream to node 2 -->
-<sphinxql d="2" system="wait-status" status="cluster_test_last_committed" wait_value="2"/>
 <sphinxql d="2">
+	debug wait test status 2 like 'state';
 	SHOW TABLES;
 	SELECT * FROM pq1;
 	SELECT * FROM pq2;
@@ -87,8 +87,8 @@ searchd
 </sphinxql>
 
 <!-- stream to node 1 -->
-<sphinxql d="1" system="wait-status" status="cluster_test_last_committed" wait_value="5"/>
 <sphinxql d="1">
+	debug wait test status 5 like 'state';
 	SHOW TABLES;
 	SELECT * FROM pq1;
 	SELECT * FROM pq2;
@@ -108,8 +108,8 @@ searchd
 </sphinxql>
 
 <!-- stream to node 1 -->
-<sphinxql d="1" system="wait-status" status="cluster_test_last_committed" wait_value="8"/>
 <sphinxql d="1">
+	debug wait test status 8 like 'state';
 	SHOW TABLES;
 	SELECT * FROM pq1;
 	SELECT * FROM pq2;
@@ -117,23 +117,23 @@ searchd
 
 <!-- start node 2 -->
 <sphinxql d="2" system="start-agent"/>
-<sphinxql d="2" system="wait-ready" cluster="test"/>
 <sphinxql d="2">
+	debug wait test like 'state';
 	SELECT * FROM pq1;
 	SELECT * FROM pq2;
 </sphinxql>
 
 <!-- stream to node 0 -->
-<sphinxql d="0" system="wait-status" status="cluster_test_last_committed" wait_value="8"/>
 <sphinxql d="0">
+	debug wait test status 8 like 'state';
 	INSERT INTO test:pq1 (query) VALUES('test 130');
 	DELETE FROM test:pq1 WHERE id=3;
 	INSERT INTO test:pq2 (query) VALUES('test 232');
 </sphinxql>
 
 <!-- stream to node 1 -->
-<sphinxql d="1" system="wait-status" status="cluster_test_last_committed" wait_value="11"/>
 <sphinxql d="1">
+	debug wait test status 11 like 'state';
 	SHOW TABLES;
 	SELECT * FROM pq1;
 	SELECT * FROM pq2;
@@ -142,8 +142,8 @@ searchd
 </sphinxql>
 
 <!-- stream to node 2 -->
-<sphinxql d="2" system="wait-status" status="cluster_test_last_committed" wait_value="12"/>
 <sphinxql d="2">
+	debug wait test status 12 like 'state';
 	SELECT * FROM pq2;
 	ALTER CLUSTER test DROP pq2;
 	INSERT INTO test:pq2 (query) VALUES('test 240');
@@ -167,15 +167,15 @@ searchd
 
 <!-- stream to node 1 -->
 <!-- index pq2 not in cluster at this node -->
-<sphinxql d="1" system="wait-status" status="cluster_test_last_committed" wait_value="13"/>
 <sphinxql d="1">
+	debug wait test status 13 like 'state';
 	SELECT * FROM pq2;
 	INSERT INTO nextc:pq2 (query) VALUES('test 242');
 </sphinxql>
 
 <!-- stream to node 2 -->
-<sphinxql d="2" system="wait-status" status="cluster_test_last_committed" wait_value="13"/>
 <sphinxql d="2">
+	debug wait test status 13 like 'state';
 	SELECT * FROM pq2;
 	DELETE cluster nextc;
 </sphinxql>

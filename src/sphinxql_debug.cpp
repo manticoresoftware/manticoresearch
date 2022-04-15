@@ -67,6 +67,13 @@ struct SqlDebugParser_c
 		tOption.m_bValue = !tOption.m_sValue.IsEmpty ();
 	}
 
+	void AddStrOption ( const char* szStr, BlobLocator_t tValue )
+	{
+		auto& tOption = m_tCmd.m_hOptions.AddUnique ( szStr );
+		tOption.m_sValue = StrFromBlob ( tValue );
+		tOption.m_bValue = !tOption.m_sValue.IsEmpty();
+	}
+
 	void AddIntOption ( BlobLocator_t tStr, int64_t iValue )
 	{
 		auto & tOption = OptByName ( tStr );
@@ -211,4 +218,6 @@ CmdNotice_t DebugCmd::dCommands[(BYTE) Cmd_e::INVALID_CMD] = {
 			"Compress disk chunk X of RT index <IDX> (wipe out deleted documents)" },
 	{ NONE, "debug split <IDX> [chunk] <X> on @<uservar> [option sync=1]",
 			"Split disk chunk X of RT index <IDX> using set of DocIDs from @uservar" },
+	{ NO_WIN, "debug wait <cluster>", "wait until cluster <cluster> ready" },
+	{ NO_WIN, "debug wait <cluster> status <N>", "wait until cluster commit achieve <N>" },
 };

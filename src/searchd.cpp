@@ -16661,7 +16661,6 @@ bool RotateIndexGreedy ( const ServedIndex_c& tServed, const char* szIndex, CSph
 {
 	assert ( tServed.m_eType == IndexType_e::PLAIN );
 	sphLogDebug ( "RotateIndexGreedy for '%s' invoked", szIndex );
-	sphWarning ( "RotateIndexGreedy for '%s' invoked", szIndex );
 
 	//////////////////
 	/// bool RotateIndexFilesGreedy ( const ServedDesc_t& tServed, const char* szIndex, CSphString& sError )
@@ -16940,7 +16939,7 @@ static void TaskRotation ( void* pRaw ) EXCLUDES ( MainThread )
 	// want to track rotation thread only at work
 	auto pDesc = PublishSystemInfo ( "ROTATION" );
 
-	sphWarning ( "TaskRotation starts with %d deferred indexes", pDeferredIndexes->GetLength() );
+	sphLogDebug ( "TaskRotation starts with %d deferred indexes", pDeferredIndexes->GetLength() );
 	for ( auto & tIndex : *pDeferredIndexes )
 	{
 		ServedIndexRefPtr_c& pReplacementServed = tIndex.second;
@@ -16954,14 +16953,14 @@ static void TaskRotation ( void* pRaw ) EXCLUDES ( MainThread )
 		CSphString sError;
 		if ( ServedDesc_t::IsMutable ( pReplacementServed ) )
 		{
-			sphWarning ( "seamless rotate (prealloc) mutable index %s", sIndex.cstr() );
+			sphLogDebug ( "seamless rotate (prealloc) mutable index %s", sIndex.cstr() );
 			if ( PreallocNewIndex ( *pReplacementServed, sIndex.cstr(), dWarnings, sError ) )
 				g_pLocalIndexes->AddOrReplace ( pReplacementServed, sIndex );
 			else
 				sphWarning ( "index '%s': %s", sIndex.cstr(), sError.cstr() );
 		} else
 		{
-			sphWarning ( "seamless rotate local index %s", sIndex.cstr() );
+			sphLogDebug ( "seamless rotate local index %s", sIndex.cstr() );
 			if ( !RotateIndexMT ( pReplacementServed, sIndex, dWarnings, sError ) )
 				sphWarning ( "index '%s': %s", sIndex.cstr(), sError.cstr() );
 		}
@@ -17163,7 +17162,7 @@ static bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSe
 		CSphString sWarning;
 		if ( !tSettings.Setup ( hIndex, szIndexName, sWarning, sError ) )
 		{
-			sphWarning ( "ERROR: index '%s': %s - NOT SERVING", szIndexName, sError.cstr() );
+			sphWarning ( "index '%s': %s - NOT SERVING", szIndexName, sError.cstr() );
 			return false;
 		}
 
@@ -17197,7 +17196,7 @@ static bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSe
 
 	if ( !CheckStoredFields ( tSchema, tSettings, sError ) )
 	{
-		sphWarning ( "ERROR: index '%s': %s - NOT SERVING", szIndexName, sError.cstr() );
+		sphWarning ( "index '%s': %s - NOT SERVING", szIndexName, sError.cstr() );
 		return false;
 	}
 
@@ -17209,7 +17208,7 @@ static bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSe
 		// SENTENCE indexing w\o stripper is valid combination
 		if ( !sIndexZones.IsEmpty() )
 		{
-			sphWarning ( "ERROR: index '%s': has index_sp=%d, index_zones='%s' but disabled html_strip - NOT SERVING", szIndexName, iIndexSP, sIndexZones.cstr() );
+			sphWarning ( "index '%s': has index_sp=%d, index_zones='%s' but disabled html_strip - NOT SERVING", szIndexName, iIndexSP, sIndexZones.cstr() );
 			return false;
 		}
 		else
@@ -17348,7 +17347,7 @@ static ResultAndIndex_t LoadTemplateIndex ( const char * szIndexName, const CSph
 	}
 
 	if ( !sWarning.IsEmpty() )
-		sphWarning ( "ERROR: index '%s': %s - NOT SERVING", szIndexName, sWarning.cstr () );
+		sphWarning ( "index '%s': %s - NOT SERVING", szIndexName, sWarning.cstr () );
 
 	auto pIdx = sphCreateIndexTemplate ( szIndexName );
 	pIdx->Setup ( tSettings );
@@ -17523,7 +17522,7 @@ static void ReloadIndexesFromConfig ( const CSphConfig& hConf, HashOfServed_c& h
 	assert ( !IsConfigless() );
 	if ( !hConf.Exists ("index") )
 	{
-		sphWarning ( "No indexes found in config came to rotation. Abort reloading");
+		sphInfo ( "No indexes found in config came to rotation. Abort reloading");
 		return;
 	}
 
@@ -17636,7 +17635,7 @@ static void CheckIndexesForSeamlessAndStartRotation ( VecOfServed_c dDeferredInd
 		if ( !ServedDesc_t::IsMutable ( pIndex ) && CheckIndexRotate_c ( *pIndex ).NothingToRotate() )
 		{
 			++iNotCapableForSeamlessRotation;
-			sphWarning ( "queue[] = %s", sIdx.cstr() );
+			sphLogDebug ( "queue[] = %s", sIdx.cstr() );
 			sphLogDebug ( "Index %s (%s) is not capable for seamless rotate. Skipping", sIdx.cstr ()
 				, pIndex->m_sIndexPath.cstr () );
 			dDeferredIndexes.Remove(i--);
@@ -17648,7 +17647,7 @@ static void CheckIndexesForSeamlessAndStartRotation ( VecOfServed_c dDeferredInd
 
 	if ( dDeferredIndexes.IsEmpty () )
 	{
-		sphWarning ( "nothing to rotate after SIGHUP" );
+		sphInfo ( "nothing to rotate after SIGHUP" );
 		g_bInRotate = false;
 		return;
 	}
@@ -17674,7 +17673,7 @@ static void DoGreedyRotation ( VecOfServed_c&& dDeferredIndexes ) REQUIRES ( Mai
 		// prealloc RT and percolate here
 		if ( ServedDesc_t::IsMutable ( pDeferredIndex ) )
 		{
-			sphWarning ( "greedy rotate (prealloc) mutable %s", sDeferredIndex.cstr() );
+			sphLogDebug ( "greedy rotate (prealloc) mutable %s", sDeferredIndex.cstr() );
 
 			if ( PreallocNewIndex ( *pDeferredIndex, &g_hCfg["index"][sDeferredIndex], sDeferredIndex.cstr(), dWarnings, sError ) )
 				g_pLocalIndexes->AddOrReplace ( pDeferredIndex, sDeferredIndex );
@@ -17683,7 +17682,7 @@ static void DoGreedyRotation ( VecOfServed_c&& dDeferredIndexes ) REQUIRES ( Mai
 		}
 		else if ( pDeferredIndex->m_eType==IndexType_e::PLAIN )
 		{
-			sphWarning ( "greedy rotate local %s", sDeferredIndex.cstr() );
+			sphLogDebug ( "greedy rotate local %s", sDeferredIndex.cstr() );
 			auto pRotating = GetServed ( sDeferredIndex );
 			bool bSame = pRotating && pRotating.Ptr() == pDeferredIndex.Ptr();
 			WIdx_c WIdx { pDeferredIndex };
@@ -17762,7 +17761,7 @@ static void CheckRotate () REQUIRES ( MainThread )
 	VecOfServed_c dDeferredIndexes = ConvertHashToPrioritySortedVec ( hDeferredIndexes );
 
 	for ( const auto& s : dDeferredIndexes )
-		sphWarning ( "will rotate %s", s.first.cstr() );
+		sphLogDebug ( "will rotate %s", s.first.cstr() );
 
 	if ( g_bSeamlessRotate )
 		CheckIndexesForSeamlessAndStartRotation ( std::move ( dDeferredIndexes ) );
@@ -19652,7 +19651,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		ServedSnap_t hLocal = g_pLocalIndexes->GetHash();
 		for ( const auto& tIt : *hLocal )
 		{
-			sphWarning ( "Relocking %s", tIt.first.cstr () );
+			sphLogDebug ( "Relocking %s", tIt.first.cstr () );
 			auto pServed = tIt.second;
 			// obtain exclusive lock
 			if ( !pServed )

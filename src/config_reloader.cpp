@@ -55,7 +55,7 @@ private:
 		auto* pExisting = ( *m_hLocalSnapshot.first ) ( sIndex );
 		if ( !pExisting )
 			return false;
-		sphWarning ( "Keep existing before local index %s", sIndex.cstr() );
+		sphLogDebug ( "Keep existing before local index %s", sIndex.cstr() );
 		return m_hNewLocalIndexes.Add ( *pExisting, sIndex );
 	}
 
@@ -65,20 +65,20 @@ private:
 		auto* pExisting = ( *m_hDistrSnapshot.first ) ( sIndex );
 		if ( !pExisting )
 			return false;
-		sphWarning ( "Keep existing before distr index %s", sIndex.cstr() );
+		sphLogDebug ( "Keep existing before distr index %s", sIndex.cstr() );
 		return m_hNewDistrIndexes.Add ( *pExisting, sIndex );
 	}
 
 	void KeepExisting ( const CSphString& sIndex )
 	{
-		sphWarning ( "keep existing index  %s", sIndex.cstr() );
+		sphLogDebug ( "keep existing index  %s", sIndex.cstr() );
 		CopyExistingLocal ( sIndex );
 		m_hLocals.Add ( sIndex );
 	}
 
 	void AddDeferred ( const CSphString& sIndex, ServedIndexRefPtr_c&& pServed )
 	{
-		sphWarning ( "add deferred index %s", sIndex.cstr() );
+		sphLogDebug ( "add deferred index %s", sIndex.cstr() );
 		KeepExisting ( sIndex );
 		CopyExistingDistr ( sIndex ); // keep for now; will be removed when deferred processed.
 		m_hDeferred.Add ( pServed, sIndex );
@@ -117,7 +117,7 @@ private:
 			AddDeferred ( sIndex, std::move ( pFreshLocal ) );
 			break;
 		case ADD_SERVED:
-			sphWarning ( "add template index %s", sIndex.cstr() );
+			sphLogDebug ( "add template index %s", sIndex.cstr() );
 			assert ( pFreshLocal->m_eType == IndexType_e::TEMPLATE ); // only templates are immediately ready
 			m_hLocals.Add ( sIndex );
 			m_hNewLocalIndexes.Add ( pFreshLocal, sIndex );
@@ -170,7 +170,7 @@ private:
 		{
 			if ( !g_bSeamlessRotate && ServedDesc_t::IsLocal ( pAlreadyServed ) && ( eType == IndexType_e::RT || eType == IndexType_e::PERCOLATE || eType == IndexType_e::PLAIN ) )
 			{
-				sphWarning ( "index '%s': changing index rola plain<>rt<>percolate is possible only with seamless rotation - skip", sIndex.cstr() );
+				sphWarning ( "index '%s': changing index role plain<>rt<>percolate is possible only with seamless rotation - skip", sIndex.cstr() );
 				return;
 			}
 			return LoadNewLocalFromConfig ( sIndex, eType, hIndex );
@@ -216,7 +216,7 @@ public:
 
 	void LoadIndexFromConfig ( const CSphString& sIndex, IndexType_e eType, const CSphConfigSection& hIndex )
 	{
-		sphWarning ( "Load from config index %s with type %s", sIndex.cstr(), szIndexType ( eType ) );
+		sphLogDebug ( "Load from config index %s with type %s", sIndex.cstr(), szIndexType ( eType ) );
 		assert ( eType != IndexType_e::ERROR_ );
 		if ( m_hProcessed[sIndex] )
 		{

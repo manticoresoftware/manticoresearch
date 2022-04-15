@@ -14,52 +14,8 @@
 /// Task manager
 
 #pragma once
+
 #include "sphinxutils.h"
-
-/// member type for priority queue used for timeout task managing
-struct EnqueuedTimeout_t
-{
-	int64_t m_iTimeoutTimeUS = -1;    // active timeout (used for bin heap morph in comparing)
-	mutable int m_iTimeoutIdx = -1;    // idx inside timeouts bin heap (or -1 if not there), internal
-};
-
-/// priority queue for timeouts - as CSphQueue,
-/// but specific (can resize, stores internal index in an object)
-class TimeoutQueue_c
-{
-	CSphTightVector<EnqueuedTimeout_t*> m_dQueue;
-	CSphTightVector <uintptr_t> m_dCloud;
-
-	void ShiftUp ( int iHole );
-	void ShiftDown ( int iHole );
-	void Push ( EnqueuedTimeout_t* pTask );
-
-public:
-	/// remove root (ie. top priority) entry
-	void Pop ();
-
-	/// add new, or change already added entry
-	void Change ( EnqueuedTimeout_t* pTask );
-
-	/// erase elem (uses stored m_iTimeoutIdx)
-	void Remove ( EnqueuedTimeout_t* pTask );
-
-	inline bool IsEmpty () const
-	{
-		return m_dQueue.IsEmpty ();
-	}
-
-	inline bool IsNotHere ( const EnqueuedTimeout_t* pTask ) const
-	{
-		return !m_dCloud.BinarySearch (( uintptr_t ) pTask );
-	}
-
-	/// get minimal (root) elem
-	EnqueuedTimeout_t* Root () const;
-
-	CSphString DebugDump ( const char* sPrefix ) const;
-	void DebugDump ( const std::function<void ( EnqueuedTimeout_t* )>& fcb ) const;
-};
 
 using fnThread_t = std::function<void ( void* )>;
 using TaskID = int;

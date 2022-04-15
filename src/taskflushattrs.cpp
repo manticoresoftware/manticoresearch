@@ -135,7 +135,7 @@ void ScheduleFlushAttrs ()
 	static TaskID iScheduledSave = -1;
 	if ( iScheduledSave<0 )
 	{
-		iScheduledSave = TaskManager::RegisterGlobal ( "Sheduled save indexes",
+		iScheduledSave = TaskManager::RegisterGlobal ( "Scheduled save indexes",
 		[] (void*) // save task lambda
 		{
 			if ( (g_tFlush.m_iLastCheckFinishedTime + g_iAttrFlushPeriodUs - 1000 )>sphMicroTimer() )

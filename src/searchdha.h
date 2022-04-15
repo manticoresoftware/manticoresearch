@@ -26,7 +26,7 @@ bool LoadExFunctions ();
 
 #include "sphinxutils.h"
 #include "searchdaemon.h"
-#include "searchdtask.h"
+#include "timeout_queue.h"
 
 /////////////////////////////////////////////////////////////////////////////
 // SOME SHARED GLOBAL VARIABLES

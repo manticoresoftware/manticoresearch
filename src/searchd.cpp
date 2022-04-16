@@ -18613,13 +18613,11 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 
 	if ( hSearchd("thread_stack") ) // fixme! rename? That is limit for stack of the coro, not of the thread!
 	{
-		int iThreadStackSizeMin = 65536;
-		int iThreadStackSizeMax = 8*1024*1024;
+		constexpr int iThreadStackSizeMin = 128*1024;
 		int iStackSize = hSearchd.GetSize ( "thread_stack", iThreadStackSizeMin );
-		if ( iStackSize<iThreadStackSizeMin || iStackSize>iThreadStackSizeMax )
-			sphWarning ( "thread_stack %d out of bounds (64K..8M); clamped", iStackSize );
+		if ( iStackSize<iThreadStackSizeMin )
+			sphWarning ( "thread_stack %d less than default (128K), increased", iStackSize );
 
-		iStackSize = Min ( iStackSize, iThreadStackSizeMax );
 		iStackSize = Max ( iStackSize, iThreadStackSizeMin );
 		Threads::SetMaxCoroStackSize ( iStackSize );
 	}

@@ -1202,11 +1202,11 @@ void SetSignalHandlers ( bool bAllowCtrlC=false ) REQUIRES ( MainThread )
 
 	sa.sa_flags |= SA_RESETHAND;
 
-	static BYTE exception_handler_stack[SIGSTKSZ];
+	static CSphVector<BYTE> exception_handler_stack ( Max ( SIGSTKSZ, 65536 ) );
 	stack_t ss;
-	ss.ss_sp = exception_handler_stack;
+	ss.ss_sp = exception_handler_stack.begin();
 	ss.ss_flags = 0;
-	ss.ss_size = Max (SIGSTKSZ, 65536);
+	ss.ss_size = exception_handler_stack.GetLength();
 	sigaltstack( &ss, 0 );
 	sa.sa_flags |= SA_ONSTACK;
 

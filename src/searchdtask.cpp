@@ -100,7 +100,7 @@ public:
 
 	void Action ()
 	{
-		Threads::JobTimer_t dTrack;
+		Threads::JobTracker_t dTrack;
 		DEBUGT << "Task_t " << GetName() << " Action (" << m_pPayload << ")";
 		Prop ().m_iCurrentRunners.fetch_add ( 1, std::memory_order_release );
 		auto itmStart = sphMicroTimer ();

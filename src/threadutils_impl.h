@@ -231,7 +231,7 @@ public:
 		// Make the upcall if required.
 		if ( pOwner )
 		{
-			Threads::JobTimer_t dTrack;
+			Threads::JobTracker_t dTrack;
 			dLocalHandler();
 
 			// barrier ensures that no operations till here would be reordered below.

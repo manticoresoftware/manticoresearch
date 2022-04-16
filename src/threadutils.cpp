@@ -536,7 +536,7 @@ class Strand_c final : public SchedulerWithBackend_i
 		if ( bThisThread )
 		{
 			LOG ( ST, ST ) << "PostContinuation fast in this thread";
-			Threads::JobTimer_t dTrack;
+			Threads::JobTracker_t dTrack;
 
 			// barrier ensures that no operations till here would be reordered below.
 			std::atomic_thread_fence ( std::memory_order_acquire );

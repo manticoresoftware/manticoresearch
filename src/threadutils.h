@@ -92,10 +92,10 @@ void JobStarted();
 void JobFinished( bool bIsDone=true );
 
 // RAII time tracker
-struct JobTimer_t
+struct JobTracker_t
 {
-	JobTimer_t () { JobStarted (); }
-	~JobTimer_t () { JobFinished (); }
+	JobTracker_t () { JobStarted (); }
+	~JobTracker_t () { JobFinished (); }
 };
 
 struct IdleTimer_t

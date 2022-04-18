@@ -13,6 +13,7 @@
 
 #include "sphinxstd.h"
 #include "sphinx.h"
+#include "columnarmisc.h"
 
 #include <math.h>
 #include <vector>
@@ -44,14 +45,37 @@ struct SecondaryIndexInfo_t
 
 struct RowIdBoundaries_t;
 
-RowidIterator_i * CreateFilteredIterator ( const CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphFilterSettings> & dModifiedFilters, bool & bFiltersChanged, const CSphVector<FilterTreeItem_t> & dFilterTree, const CSphVector<IndexHint_t> & dHints, const HistogramContainer_c & tHistograms, const BYTE * pDocidLookup, uint32_t uTotalDocs );
+class SelectSI_c
+{
+public:
+	SelectSI_c() = default;
+	virtual ~SelectSI_c() {};
+
+	virtual bool IsEnabled ( const CSphFilterSettings & tFilter ) const;
+};
+
+RowidIterator_i * CreateFilteredIterator ( const CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, const CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphFilterSettings> & dModifiedFilters, bool & bFiltersChanged, const BYTE * pDocidLookup, uint32_t uTotalDocs );
 
 RowidIterator_i * CreateIteratorIntersect ( CSphVector<RowidIterator_i*> & dIterators, const RowIdBoundaries_t * pBoundaries );
 RowidIterator_i * CreateIteratorWrapper ( columnar::BlockIterator_i * pIterator, const RowIdBoundaries_t * pBoundaries );
 RowidIterator_i * CreateIteratorIntersect ( std::vector<columnar::BlockIterator_i *> & dIterators, const RowIdBoundaries_t * pBoundaries );
 
-float	GetEnabledSecondaryIndexes ( CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree, const CSphVector<IndexHint_t> & dHints, const HistogramContainer_c & tHistograms );
+float	GetEnabledSecondaryIndexes ( CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree, const CSphVector<IndexHint_t> & dHints, const HistogramContainer_c & tHistograms, const SelectSI_c * pCheck );
 bool	ReturnIteratorResult ( RowID_t * pRowID, RowID_t * pRowIdStart, RowIdBlock_t & dRowIdBlock );
+
+CSphVector<SecondaryIndexInfo_t> SelectIterators ( const CSphVector<CSphFilterSettings> & dFilters, bool bFilterTreeEmpty, const CSphVector<IndexHint_t> & dHints, const HistogramContainer_c * pHistograms, const SelectSI_c * pCheck );
+
+namespace SI
+{
+	class Index_i;
+	class Builder_i;
+}
+RowidIterator_i * CreateSecondaryIndexIterator ( const SI::Index_i * pCidx, CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, CSphVector<CSphFilterSettings> & dModifiedFilters, bool & bFiltersChanged );
+
+SelectSI_c * GetSelectIteratorsCond ( const SI::Index_i * pSidx, const ISphSchema & tSchema, ESphCollation eCollation );
+
+std::unique_ptr<SI::Builder_i>	CreateIndexBuilder ( int iMemoryLimit, const CSphSchema & tSchema, const char * sFile, CSphString & sError );
+std::unique_ptr<SI::Builder_i>	CreateIndexBuilder ( int iMemoryLimit, const CSphSchema & tSchema, const char * sFile, CSphVector<PlainOrColumnar_t> & dAttrs, CSphString & sError );
 
 //////////////////////////////////////////////////////////////////////////
 

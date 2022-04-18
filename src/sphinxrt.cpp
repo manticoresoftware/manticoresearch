@@ -55,6 +55,8 @@
 #include "tokenizer/tokenizer.h"
 #include "queryfilter.h"
 
+#include "secondarylib.h"
+
 using namespace Threads;
 
 //////////////////////////////////////////////////////////////////////////
@@ -3673,7 +3675,7 @@ struct SaveDiskDataContext_t : public BuildHeader_t
 
 bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sError ) const
 {
-	CSphString sSPA, sSPB, sSPT, sSPHI, sSPDS, sSPC;
+	CSphString sSPA, sSPB, sSPT, sSPHI, sSPDS, sSPC, sSIdx;
 	CSphWriter tWriterSPA;
 
 	sSPA.SetSprintf ( "%s%s",	tCtx.m_szFilename, sphGetExt(SPH_EXT_SPA) );
@@ -3682,6 +3684,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	sSPHI.SetSprintf ( "%s%s",	tCtx.m_szFilename, sphGetExt(SPH_EXT_SPHI) );
 	sSPDS.SetSprintf ( "%s%s",	tCtx.m_szFilename, sphGetExt(SPH_EXT_SPDS) );
 	sSPC.SetSprintf ( "%s%s",	tCtx.m_szFilename, sphGetExt(SPH_EXT_SPC) );
+	sSIdx.SetSprintf ( "%s%s",	tCtx.m_szFilename, sphGetExt(SPH_EXT_SPIDX) );
 
 	if ( !tWriterSPA.OpenFile ( sSPA.cstr(), sError ) )
 		return false;
@@ -3718,6 +3721,15 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	HistogramContainer_c tHistograms;
 	CSphVector<PlainOrColumnar_t> dAttrsForHistogram;
 	CreateHistograms ( tHistograms, dAttrsForHistogram, m_tSchema );
+
+	CSphVector<PlainOrColumnar_t> dSiAttrs;
+	std::unique_ptr<SI::Builder_i> pSIdxBuilder;
+	if ( IsSecondaryLibLoaded() )
+	{
+		pSIdxBuilder = CreateIndexBuilder ( m_iRtMemLimit, m_tSchema, sSIdx.cstr(), dSiAttrs, sError );
+		if ( !pSIdxBuilder )
+			return false;
+	}
 
 	tCtx.m_iTotalDocuments = 0;
 	for ( const auto & i : tCtx.m_tRamSegments )
@@ -3770,8 +3782,13 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 
 			tDocID = iColumnarIdLoc>=0 ? dColumnarIterators[iColumnarIdLoc].first->Get() : sphGetDocID(pRow);
 
-			ARRAY_FOREACH ( iHistogram, dAttrsForHistogram )
-				tHistograms.Insert ( iHistogram, dAttrsForHistogram[iHistogram].Get ( pRow, dColumnarIterators ) );
+			BuildStoreHistograms ( pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForHistogram, tHistograms );
+
+			if ( pSIdxBuilder.get() )
+			{
+				pSIdxBuilder->SetRowID ( tNextRowID );
+				BuilderStoreAttrs ( pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dSiAttrs, pSIdxBuilder.get(), dTmp );
+			}
 
 			dRawLookup[tNextRowID] = { tDocID, tNextRowID };
 			if ( pDocstoreBuilder )
@@ -3824,6 +3841,14 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	}
 
 	tWriterSPA.CloseFile();
+
+	std::string sSidxError;
+	if ( pSIdxBuilder.get() && !pSIdxBuilder->Done ( sSidxError ) )
+	{
+		sError = sSidxError.c_str();
+		return false;
+	}
+
 	return !tWriterSPA.IsError();
 }
 

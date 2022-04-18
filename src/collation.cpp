@@ -14,6 +14,9 @@
 #include "attribute.h"
 #include "sphinxint.h"
 
+#include "secondary/sidx.h"
+#include "secondarylib.h"
+
 static const char * EMPTY_STR = "";
 
 inline static void UnpackStrings ( ByteBlob_t& dStr1, ByteBlob_t& dStr2, bool bDataPtr )
@@ -234,6 +237,14 @@ static unsigned short g_dCollWeights_UTF8CI[0xb00] =
 	// space for codepoints 0x21xx, 0x24xx, 0xffxx (generated)
 };
 
+template <class HASH>
+uint64_t HashStrLen ( const BYTE * pStr, int iLen )
+{
+	if ( !pStr || !iLen )
+		return SPH_FNV64_SEED;
+	else
+		return HASH::Hash ( pStr, iLen );
+}
 
 /// initialize collation LUTs
 void sphCollationInit()
@@ -254,6 +265,9 @@ void sphCollationInit()
 
 	for ( int i=0; i<0x0b; i++ )
 		g_dCollPlanes_UTF8CI [ dWeightPlane[i] ] = g_dCollWeights_UTF8CI + 0x100*i;
+
+	const std::array<SI::StrHash_fn, (size_t)SI::Collation_e::TOTAL> dCollations { HashStrLen<LibcCIHash_fn>, HashStrLen<LibcCSHash_fn>, HashStrLen<Utf8CIHash_fn>, HashStrLen<BinaryHash_fn> };
+	CollationInitSecondaryIndex ( dCollations );
 }
 
 
@@ -394,4 +408,22 @@ volatile ESphCollation& GlobalCollation()
 {
 	static ESphCollation eCollation = SPH_COLLATION_DEFAULT;
 	return eCollation;
+}
+
+ESphCollation sphCollationFromName ( const CSphString & sName, CSphString * pError )
+{
+	assert ( pError );
+
+	// FIXME! replace with a hash lookup?
+	if ( sName=="libc_ci" )
+		return SPH_COLLATION_LIBC_CI;
+	else if ( sName=="libc_cs" )
+		return SPH_COLLATION_LIBC_CS;
+	else if ( sName=="utf8_general_ci" )
+		return SPH_COLLATION_UTF8_GENERAL_CI;
+	else if ( sName=="binary" )
+		return SPH_COLLATION_BINARY;
+
+	pError->SetSprintf ( "Unknown collation: '%s'", sName.cstr() );
+	return SPH_COLLATION_DEFAULT;
 }

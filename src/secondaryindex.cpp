@@ -17,6 +17,9 @@
 #include "killlist.h"
 #include "attribute.h"
 
+#include "util/util.h"
+#include "secondarylib.h"
+
 
 static bool HaveIndex ( const CSphString & sAttr )
 {
@@ -860,30 +863,40 @@ class CostEstimate_c
 public:
 	float LookupRead ( int64_t iDocs ) const
 	{
-		return 10.0f*float(iDocs)*SCALE;
+		return m_fLookupRead*float(iDocs)*SCALE;
 	}
 
 	float Filter ( int64_t iDocs, int nFilters ) const
 	{
-		return 5.0f*nFilters*float(iDocs)*SCALE;
+		return m_fFilter*nFilters*float(iDocs)*SCALE;
 	}
 
 	float Fullscan ( int64_t iDocs ) const
 	{
-		return 5.0f*float(iDocs)*SCALE;
+		return m_fFullscan*float(iDocs)*SCALE;
 	}
 
 	float IndexIntersect ( int64_t iDocs ) const
 	{
-		return 8.0f*float(iDocs)*SCALE;
+		return m_fIndexIntersect*float(iDocs)*SCALE;
+	}
+
+	float IndexFilter ( int64_t iDocs, int nFilters ) const
+	{
+		return m_fIndexFilter*nFilters*float(iDocs)*SCALE;
 	}
 
 private:
 	static constexpr float SCALE = 1.0f/1000000.0f;
+	static constexpr float m_fLookupRead = 100.0f;
+	static constexpr float m_fFilter = 5.0f;
+	static constexpr float m_fFullscan = 5.0f;
+	static constexpr float m_fIndexIntersect = 8.0f;
+	static constexpr float m_fIndexFilter = 150.0f;
 };
 
 
-static float CalcQueryCost ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<IndexWithEstimate_t> & dSecondaryIndexes, int64_t iTotalDocs )
+static float CalcQueryCost ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<IndexWithEstimate_t> & dSecondaryIndexes, const CostEstimate_c & tCost, int64_t iTotalDocs )
 {
 	float fCost = 0.0f;
 	int64_t iDocsProcessedByIndexes = 0;
@@ -902,9 +915,6 @@ static float CalcQueryCost ( const CSphVector<CSphFilterSettings> & dFilters, co
 		fTotalIndexProbability *= fIndexProbability;
 	}
 
-
-	CostEstimate_c tCost;
-
 	if ( !nEnabled )
 	{
 		fCost += tCost.Fullscan ( iTotalDocs );
@@ -917,19 +927,36 @@ static float CalcQueryCost ( const CSphVector<CSphFilterSettings> & dFilters, co
 		if ( nEnabled>1 )
 		{
 			fCost += tCost.IndexIntersect ( iDocsProcessedByIndexes );
-			fCost += tCost.Filter ( uint64_t(fTotalIndexProbability*iTotalDocs), dFilters.GetLength()-nEnabled );
+			fCost += tCost.IndexFilter ( uint64_t(fTotalIndexProbability*iTotalDocs), dFilters.GetLength()-nEnabled+1 );
+
+		} else
+		{
+			fCost += tCost.IndexFilter ( iDocsProcessedByIndexes, dFilters.GetLength()-nEnabled+1 );
 		}
-		else
-			fCost += tCost.Filter ( iDocsProcessedByIndexes, dFilters.GetLength()-nEnabled );
 	}
 
 	return fCost;
 }
 
-
-static float SelectIterators ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<IndexHint_t> & dHints, CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, const HistogramContainer_c & tHistograms )
+static bool g_bEnabledSI = false;
+void SetSecondaryIndexDefault ( bool bEnabled )
 {
-	dEnabledIndexes.Resize(0);
+	g_bEnabledSI = bEnabled;
+}
+
+bool GetSecondaryIndexDefault ()
+{
+	return g_bEnabledSI;
+}
+
+static CSphVector<SecondaryIndexInfo_t> SelectIterators ( const CSphVector<CSphFilterSettings> & dFilters, bool bFilterTreeEmpty, const CSphVector<IndexHint_t> & dHints, const HistogramContainer_c * pHistograms, const SelectSI_c * pCheck, float & fBestCost )
+{
+	fBestCost = FLT_MAX;
+
+	// no iterators with OR queries
+	CSphVector<SecondaryIndexInfo_t> dEnabledIndexes;
+	if ( !bFilterTreeEmpty || !pHistograms )
+		return dEnabledIndexes;
 
 	bool bHaveUseHint = false;
 	ARRAY_FOREACH_COND ( i, dHints, !bHaveUseHint )
@@ -940,10 +967,10 @@ static float SelectIterators ( const CSphVector<CSphFilterSettings> & dFilters, 
 	{
 		const CSphFilterSettings & tFilter = dFilters[i];
 
-		if ( !HaveIndex ( tFilter.m_sAttrName.cstr() ) )
+		if ( !pCheck->IsEnabled ( tFilter ) )
 			continue;
 
-		const Histogram_i * pHistogram = tHistograms.Get ( tFilter.m_sAttrName );
+		const Histogram_i * pHistogram = pHistograms->Get ( tFilter.m_sAttrName );
 		if ( !pHistogram )
 			continue;
 
@@ -958,21 +985,34 @@ static float SelectIterators ( const CSphVector<CSphFilterSettings> & dFilters, 
 		if ( bHaveUseHint && !pHint )
 			continue;
 
+		// default secondary index is disabled
+		// but FORCE INDEX (name) enables it
+		// set global secondary_indexes=1 allows to use optimizer
+		if ( !g_bEnabledSI && ( !pHint || ( pHint && *pHint!=INDEX_HINT_FORCE ) ) )
+			continue;
+
 		IndexWithEstimate_t tNewIndex;
 
-		bool bUsable = pHistogram->EstimateRsetSize ( tFilter, tNewIndex.m_iRsetEstimate );
+		HistogramRset_t tEstimate;
+		bool bUsable = pHistogram->EstimateRsetSize ( tFilter, tEstimate );
 		if ( bUsable )
 		{
+			tNewIndex.m_iRsetEstimate = tEstimate.m_iTotal;
 			tNewIndex.m_iFilterId = i;
 			tNewIndex.m_bForce = pHint && *pHint==INDEX_HINT_FORCE;
 
 			dSecondaryIndexes.Add ( tNewIndex );
+
+			//sphInfo ( "filter %d, est " INT64_FMT " (%u), %.3f, count %d, range %.3f, size %d", tNewIndex.m_iFilterId, tNewIndex.m_iRsetEstimate, pHistograms->GetNumValues(), (float)tNewIndex.m_iRsetEstimate/pHistograms->GetNumValues(), tEstimate.m_iCount, tEstimate.m_fRangeSize, pHistogram->GetSize() ); // !COMMIT
 		}
 	}
 
 	int nAvailableIndexes = dSecondaryIndexes.GetLength();
 	if ( !nAvailableIndexes )
-		return FLT_MAX;
+		return dEnabledIndexes;
+
+	CostEstimate_c tCost;
+	//sphInfo ( "scan cost: %.3f", CalcQueryCost ( dFilters, CSphVector<IndexWithEstimate_t>(), tCost, pHistograms->GetNumValues() ) );  // !COMMIT
 
 	CSphBitvec dEnabled ( nAvailableIndexes );
 	CSphBitvec dBestEnabled ( nAvailableIndexes );
@@ -981,15 +1021,14 @@ static float SelectIterators ( const CSphVector<CSphFilterSettings> & dFilters, 
 		if ( dSecondaryIndexes[i].m_bForce )
 			dEnabled.BitSet(i);
 
-	float fBestCost = FLT_MAX;
-
 	const int MAX_TRIES = 1024;
 	for ( int iTry = 0; iTry < MAX_TRIES; iTry++ )
 	{
 		for ( int i = 0; i < dEnabled.GetBits(); i++ )
 			dSecondaryIndexes[i].m_bEnabled = dEnabled.BitGet(i);
 
-		float fCost = CalcQueryCost ( dFilters, dSecondaryIndexes, tHistograms.GetNumValues() );
+		float fCost = CalcQueryCost ( dFilters, dSecondaryIndexes, tCost, pHistograms->GetNumValues() );
+		//sphInfo ( "filter %x, cost %.3f(%.3f)", *dEnabled.Begin(), fCost, ( fBestCost==FLT_MAX ? 0.0 : fBestCost ) ); // !COMMIT
 		if ( fCost < fBestCost )
 		{
 			dBestEnabled = dEnabled;
@@ -1001,20 +1040,28 @@ static float SelectIterators ( const CSphVector<CSphFilterSettings> & dFilters, 
 	}
 
 	for ( int i = 0; i < dBestEnabled.GetBits(); i++ )
+	{
 		if ( dBestEnabled.BitGet(i) )
 		{
 			SecondaryIndexInfo_t & tInfo = dEnabledIndexes.Add();
 			tInfo.m_iFilterId = dSecondaryIndexes[i].m_iFilterId;
 			tInfo.m_iRsetEstimate = dSecondaryIndexes[i].m_iRsetEstimate;
 		}
+	}
 
-	return fBestCost;
+	dEnabledIndexes.Sort ( bind ( &SecondaryIndexInfo_t::m_iFilterId ) );
+
+	return dEnabledIndexes;
 }
 
-
-static bool UpdateModifiedFilters ( const CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphFilterSettings> & dModifiedFilters, CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, const CSphFilterSettings * pRowIdFilter )
+CSphVector<SecondaryIndexInfo_t> SelectIterators ( const CSphVector<CSphFilterSettings> & dFilters, bool bFilterTreeEmpty, const CSphVector<IndexHint_t> & dHints, const HistogramContainer_c * pHistograms, const SelectSI_c * pCheck )
 {
-	dEnabledIndexes.Sort ( bind ( &SecondaryIndexInfo_t::m_iFilterId ) );
+	float fCost = FLT_MAX;
+	return SelectIterators ( dFilters, bFilterTreeEmpty, dHints, pHistograms, pCheck, fCost );
+}
+
+static bool UpdateModifiedFilters ( const CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphFilterSettings> & dModifiedFilters, const CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, const CSphFilterSettings * pRowIdFilter )
+{
 	dModifiedFilters.Resize(0);
 	ARRAY_FOREACH ( i, dFilters )
 	{
@@ -1026,38 +1073,39 @@ static bool UpdateModifiedFilters ( const CSphVector<CSphFilterSettings> & dFilt
 	return dFilters.GetLength()!=dModifiedFilters.GetLength();
 }
 
-
-float GetEnabledSecondaryIndexes ( CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree, const CSphVector<IndexHint_t> & dHints, const HistogramContainer_c & tHistograms )
+float GetEnabledSecondaryIndexes ( CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree, const CSphVector<IndexHint_t> & dHints, const HistogramContainer_c & tHistograms, const SelectSI_c * pCheck )
 {
-	if ( dFilterTree.GetLength() )
-		return FLT_MAX;
-
-	return SelectIterators ( dFilters, dHints, dEnabledIndexes, tHistograms );
+	float fBestCost = FLT_MAX;
+	dEnabledIndexes = SelectIterators ( dFilters, dFilterTree.IsEmpty(), dHints, &tHistograms, pCheck, fBestCost );
+	return fBestCost;
 }
 
-
-RowidIterator_i * CreateFilteredIterator ( const CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphFilterSettings> & dModifiedFilters, bool & bFiltersChanged, const CSphVector<FilterTreeItem_t> & dFilterTree, const CSphVector<IndexHint_t> & dHints, const HistogramContainer_c & tHistograms, const BYTE * pDocidLookup, uint32_t uTotalDocs )
+static const CSphFilterSettings * GetRowIdFilter ( const CSphVector<CSphFilterSettings> & dFilters, RowID_t uTotalDocs, RowIdBoundaries_t & tRowidBounds )
 {
-	bFiltersChanged = false;
-
-	// no iterators with OR queries
-	if ( dFilterTree.GetLength() )
-		return nullptr;
-
-	CSphVector<SecondaryIndexInfo_t> dEnabledIndexes;
-	SelectIterators ( dFilters, dHints, dEnabledIndexes, tHistograms );
-
 	const CSphFilterSettings * pRowIdFilter = nullptr;
 	for ( const auto & tFilter : dFilters )
+	{
 		if ( tFilter.m_sAttrName=="@rowid" )
 		{
 			pRowIdFilter = &tFilter;
 			break;
 		}
+	}
+
+	if ( pRowIdFilter )
+		tRowidBounds = GetFilterRowIdBoundaries ( *pRowIdFilter, uTotalDocs );
+
+	return pRowIdFilter;
+}
+
+RowidIterator_i * CreateFilteredIterator ( const CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, const CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphFilterSettings> & dModifiedFilters, bool & bFiltersChanged, const BYTE * pDocidLookup, uint32_t uTotalDocs )
+{
+	bFiltersChanged = false;
+	if ( dEnabledIndexes.IsEmpty() )
+		return nullptr;
 
 	RowIdBoundaries_t tBoundaries;
-	if ( pRowIdFilter )
-		tBoundaries = GetFilterRowIdBoundaries ( *pRowIdFilter, uTotalDocs );
+	const CSphFilterSettings * pRowIdFilter = GetRowIdFilter ( dFilters, uTotalDocs, tBoundaries );
 
 	CSphVector<RowidIterator_i *> dIterators;
 	for ( auto & i : dEnabledIndexes )
@@ -1253,3 +1301,794 @@ void LookupReaderIterator_c::SetData ( const BYTE * pData )
 	LookupReader_c::SetData(pData);
 	SetCheckpoint ( m_pCheckpoints );
 }
+
+
+class RowidEmptyIterator_c : public RowidIterator_i
+{
+public:
+	RowidEmptyIterator_c () = default;
+	bool	HintRowID ( RowID_t tRowID ) { return false; }
+	bool	GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock ) { return false; }
+	int64_t	GetNumProcessed() const { return 0; }
+};
+
+class RowidIterator_c : public RowidIterator_i
+{
+public:
+	RowidIterator_c ( SI::RowidIterator_i * pIterator )
+		: m_pIterator ( pIterator )
+	{}
+
+	bool	HintRowID ( RowID_t tRowID ) { return m_pIterator->HintRowID ( tRowID ); }
+	bool	GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock );
+	int64_t	GetNumProcessed() const { return m_pIterator->GetNumProcessed(); }
+
+private:
+	std::unique_ptr<SI::RowidIterator_i> m_pIterator;
+};
+
+bool RowidIterator_c::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
+{
+	columnar::Span_T<uint32_t> dRows;
+	if ( !m_pIterator->GetNextRowIdBlock ( dRows ) )
+		return false;
+
+	dRowIdBlock = RowIdBlock_t ( (RowID_t *)dRows.data(), (int64_t)dRows.size() );
+	return true;
+}
+
+#define CIDX_ROWS 128
+
+class RowidIteratorNot_c : public RowidIterator_i
+{
+public:
+	RowidIteratorNot_c ( RowidIterator_i * pIterator, RowID_t uRowsCount )
+		: m_uRowsCount ( uRowsCount )
+		, m_pExcludedIt ( pIterator )
+	{
+		m_dRows.Reserve ( CIDX_ROWS );
+	}
+
+	bool	HintRowID ( RowID_t tRowID ) { return m_pExcludedIt->HintRowID ( tRowID ); }
+	bool	GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock );
+	int64_t	GetNumProcessed() const { return m_pExcludedIt->GetNumProcessed(); }
+
+private:
+	RowID_t m_uRowsCount { 0 };
+	RowID_t m_uCurRow { 0 };
+	bool m_bStopped = false;
+	bool m_bPass = false;
+
+	bool m_bExcludedStarted = false;
+	bool m_bExcludedStopped = false;
+	int m_iExcludedCur = 0;
+	RowIdBlock_t m_dExcludedRows;
+	std::unique_ptr<RowidIterator_i> m_pExcludedIt;
+
+	CSphVector<RowID_t> m_dRows;
+
+	void CopyTail ();
+};
+
+void RowidIteratorNot_c::CopyTail()
+{
+	int iCount = Min ( m_uRowsCount-m_uCurRow, CIDX_ROWS-m_dRows.GetLength() );
+	RowID_t * pRow = m_dRows.AddN ( iCount );
+
+	while ( iCount>0 )
+	{
+		*pRow++ = m_uCurRow++;
+		iCount--;
+	}
+}
+
+bool RowidIteratorNot_c::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
+{
+	if ( m_bStopped )
+		return false;
+
+	m_dRows.Resize ( 0 );
+
+	if ( !m_bPass )
+	{
+		// warmup
+		if ( !m_bExcludedStarted )
+		{
+			m_bExcludedStopped = !m_pExcludedIt->GetNextRowIdBlock ( m_dExcludedRows );
+			m_bExcludedStarted = true;
+			m_iExcludedCur = 0;
+		}
+
+		for ( ; m_uCurRow<m_uRowsCount && m_dRows.GetLength()<CIDX_ROWS; )
+		{
+			// cases if filter values is over
+			if ( m_iExcludedCur>=m_dExcludedRows.GetLength() || m_bExcludedStopped )
+			{
+				// fetch more values
+				if ( !m_bExcludedStopped )
+				{
+					m_bExcludedStopped = !m_pExcludedIt->GetNextRowIdBlock ( m_dExcludedRows );
+					m_iExcludedCur = 0;
+				}
+
+				// copy tail rows
+				if ( m_bExcludedStopped )
+				{
+					m_bPass = true;
+					break;
+				}
+			}
+
+			assert ( m_dExcludedRows.GetLength() && m_iExcludedCur<m_dExcludedRows.GetLength() );
+			RowID_t uNotRowid = m_dExcludedRows[m_iExcludedCur];
+
+			// copy accepted with filter by excluded
+			while ( m_uCurRow<uNotRowid && m_uCurRow<m_uRowsCount && m_dRows.GetLength()<CIDX_ROWS )
+					m_dRows.Add ( m_uCurRow++ );
+
+			// result vector full
+			if ( m_uCurRow>=m_uRowsCount || m_dRows.GetLength()==CIDX_ROWS )
+				break;
+
+			// skip rejected till min accepted
+			while ( m_iExcludedCur<m_dExcludedRows.GetLength() && m_dExcludedRows[m_iExcludedCur]<m_uCurRow )
+				m_iExcludedCur++;
+
+			// skip both while matched
+			while ( m_iExcludedCur<m_dExcludedRows.GetLength() && m_uCurRow<m_uRowsCount && m_dExcludedRows[m_iExcludedCur]==m_uCurRow )
+			{
+				m_iExcludedCur++;
+				m_uCurRow++;
+			}
+		}
+	}
+
+	if ( m_bPass )
+		CopyTail();
+
+	dRowIdBlock = m_dRows;
+
+	if ( !m_dRows.GetLength() || m_uCurRow==m_uRowsCount )
+		m_bStopped = true;
+
+	return ( m_dRows.GetLength() );
+}
+
+struct IterQueueItem_t
+{
+	IterQueueItem_t() = default;
+
+	static inline bool IsLess ( const IterQueueItem_t & tA, const IterQueueItem_t & tB )
+	{
+		return ( tA.m_dSrcRows[tA.m_iCur]<tB.m_dSrcRows[tB.m_iCur] );
+	}
+
+	RowID_t GetRow() const { return m_dSrcRows[m_iCur]; }
+
+	int m_iCur = 0;
+	columnar::Span_T<uint32_t> m_dSrcRows;
+	SI::RowidIterator_i * m_pIt;
+};
+
+
+class RowsIterator_c : public RowidIterator_i
+{
+public:
+	RowsIterator_c ( std::vector<SI::RowidIterator_i *> & dIt )
+		: m_dIt ( std::move ( dIt ) )
+		, m_tMerge ( m_dIt.size() )
+	{
+		m_dRows.Reserve ( CIDX_ROWS );
+	}
+
+	~RowsIterator_c()
+	{
+		for ( SI::RowidIterator_i * pIt : m_dIt )
+			SafeDelete ( pIt );
+	}
+
+	bool	HintRowID ( RowID_t tRowID ) { return ( m_dIt.size()>0 ); }
+	bool	GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock );
+	int64_t	GetNumProcessed() const
+	{
+		uint64_t uCount = 0;
+		for ( const auto * pIt : m_dIt )
+			uCount += pIt->GetNumProcessed();
+
+		return uCount;
+	}
+
+private:
+	std::vector<SI::RowidIterator_i *> m_dIt;
+	bool m_bStarted = false;
+
+	CSphVector<RowID_t> m_dRows;
+
+	CSphQueue<IterQueueItem_t, IterQueueItem_t> m_tMerge;
+};
+
+static void AdvanceQueue ( CSphQueue<IterQueueItem_t, IterQueueItem_t> & tMerge, IterQueueItem_t tTop )
+{
+	tTop.m_iCur++;
+	if ( tTop.m_iCur<tTop.m_dSrcRows.size() )
+	{
+		tMerge.Push ( tTop );
+		return;
+	}
+
+	bool bGotRows = tTop.m_pIt->GetNextRowIdBlock ( tTop.m_dSrcRows );
+	if ( !bGotRows )
+		return;
+
+	tTop.m_iCur = 0;
+	tMerge.Push ( tTop );
+}
+
+bool RowsIterator_c::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
+{
+	if ( m_bStarted && !m_tMerge.GetLength() )
+		return false;
+
+	m_dRows.Resize ( 0 );
+
+	// warmup
+	if ( !m_bStarted )
+	{
+		m_bStarted = true;
+		auto tIt = m_dIt.begin();
+		while ( tIt!=m_dIt.end() )
+		{
+			IterQueueItem_t tItem;
+			bool bGotRows = (*tIt)->GetNextRowIdBlock ( tItem.m_dSrcRows );
+			if ( bGotRows )
+			{
+				tItem.m_pIt = *tIt;
+				m_tMerge.Push ( tItem );
+				tIt++;
+			} else
+			{
+				tIt = m_dIt.erase ( tIt );
+			}
+		}
+	}
+
+	while ( m_tMerge.GetLength() && m_dRows.GetLength()<CIDX_ROWS )
+	{
+		IterQueueItem_t tTop = m_tMerge.Root();
+		m_tMerge.Pop();
+
+		RowID_t tCurRowID = tTop.GetRow();
+		m_dRows.Add ( tCurRowID );
+
+		// advance top item
+		AdvanceQueue ( m_tMerge, tTop );
+
+		// skip all items with the same row-id
+		while ( m_tMerge.GetLength() && m_tMerge.Root().GetRow()==tCurRowID )
+		{
+			IterQueueItem_t tMatched = m_tMerge.Root();
+			m_tMerge.Pop();
+			AdvanceQueue ( m_tMerge, tMatched );
+		}
+	}
+
+	dRowIdBlock = m_dRows;
+	return ( m_dRows.GetLength() );
+}
+
+struct AndItem_t
+{
+	AndItem_t() = default;
+	RowID_t GetRow() const { return m_dSrcRows[m_iCur]; }
+
+	int m_iCur = 0;
+	RowIdBlock_t m_dSrcRows;
+	RowidIterator_i * m_pIt { nullptr };
+};
+
+
+class AndRowsIterator_c : public RowidIterator_i
+{
+public:
+	AndRowsIterator_c ( std::vector<RowidIterator_i *> & dIt )
+		: m_dSrc ( std::move ( dIt ) )
+	{
+		m_dRows.Reserve ( CIDX_ROWS );
+	}
+
+	~AndRowsIterator_c()
+	{
+		for ( RowidIterator_i * pIt : m_dSrc )
+			SafeDelete ( pIt );
+	}
+
+	bool	HintRowID ( RowID_t tRowID ) { return ( m_dItems.size()>0 ); }
+	bool	GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock );
+	int64_t	GetNumProcessed() const
+	{
+		uint64_t uCount = 0;
+		for ( const auto & tItem : m_dItems )
+			uCount += tItem.m_pIt->GetNumProcessed();
+
+		return uCount;
+	}
+
+private:
+	std::vector<RowidIterator_i *> m_dSrc;
+	std::vector<AndItem_t> m_dItems;
+	bool m_bStarted = false;
+
+	CSphVector<RowID_t> m_dRows;
+};
+
+static SI::FilterRange_t Convert ( const CSphFilterSettings & tFilter, const CommonFilterSettings_t & tFilterVals, const SI::ColumnInfo_t & tCol )
+{
+	SI::FilterRange_t tItem;
+	tItem.m_iMin = tFilterVals.m_iMinValue;
+	tItem.m_iMax = tFilterVals.m_iMaxValue;
+	tItem.m_fMin = (float)tFilterVals.m_fMinValue;
+	tItem.m_fMax = (float)tFilterVals.m_fMaxValue;
+	tItem.m_bHasEqualMin = tFilter.m_bHasEqualMin;
+	tItem.m_bHasEqualMax = tFilter.m_bHasEqualMax;
+	tItem.m_bOpenLeft = tFilter.m_bOpenLeft;
+	tItem.m_bOpenRight = tFilter.m_bOpenRight;
+
+	if ( tFilterVals.m_eType==SPH_FILTER_RANGE )
+	{
+		tItem.m_fMin = (float)tFilterVals.m_iMinValue;
+		tItem.m_fMax = (float)tFilterVals.m_iMaxValue;
+	}
+
+	// clamp to min and max values from a wider type
+	if ( tCol.m_eType==SI::AttrType_e::UINT32 || tCol.m_eType==SI::AttrType_e::UINT32SET || tCol.m_eType==SI::AttrType_e::TIMESTAMP )
+	{
+		if ( tFilterVals.m_iMinValue<0 )
+		{
+			tItem.m_iMin = 0;
+			tItem.m_bHasEqualMin = true;
+		}
+		if ( tFilterVals.m_iMaxValue>UINT_MAX )
+		{
+			tItem.m_iMax = UINT_MAX;
+			tItem.m_bHasEqualMax = true;
+		}
+	}
+
+	return tItem;
+}
+
+static SI::Collation_e ConvertCollation ( ESphCollation eCollation )
+{
+	switch ( eCollation )
+	{
+	case SPH_COLLATION_LIBC_CS: return SI::Collation_e::LIBC_CS;
+	case SPH_COLLATION_UTF8_GENERAL_CI: return SI::Collation_e::UTF8_GENERAL_CI;
+	case SPH_COLLATION_BINARY: return SI::Collation_e::BINARY;
+
+	case SPH_COLLATION_LIBC_CI:
+	default:
+		return SI::Collation_e::LIBC_CI;
+	}
+}
+
+RowidIterator_i * CreateSecondaryIndexIterator ( const SI::Index_i * pCidx, CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, CSphVector<CSphFilterSettings> & dModifiedFilters, bool & bFiltersChanged )
+{
+	if ( dEnabledIndexes.IsEmpty() )
+		return nullptr;
+
+	CSphVector<SecondaryIndexInfo_t> dNewEnabledIndexes;
+	CSphVector<SecondaryIndexInfo_t> dFilterChanged;
+	std::vector<SI::RowidIterator_i *> dFilterIt;
+	std::vector<RowidIterator_i *> dRes;
+	std::unique_ptr<SI::FilterContext_i> pFilterCtx { pCidx->CreateFilterContext() };
+	RowIdBoundaries_t tRowidBounds;
+	const CSphFilterSettings * pRowIdFilter = GetRowIdFilter ( dFilters, uRowsCount, tRowidBounds );
+
+	for ( int iFilter=0; iFilter<dEnabledIndexes.GetLength(); iFilter++ )
+	{
+		int iFilterId = dEnabledIndexes[iFilter].m_iFilterId;
+		dNewEnabledIndexes.Add().m_iFilterId = iFilterId;
+
+		const CSphFilterSettings & tFilter = dFilters[iFilterId];
+
+		SI::FilterArgs_t tArgs;
+		tArgs.m_tBounds.m_bHasRange = ( pRowIdFilter!=nullptr );
+		tArgs.m_tBounds.m_uMin = tRowidBounds.m_tMinRowID;
+		tArgs.m_tBounds.m_uMax = tRowidBounds.m_tMaxRowID;
+
+		tArgs.m_tCol = pCidx->GetColumn ( tFilter.m_sAttrName.cstr() );
+
+		CommonFilterSettings_t tFixedSettings = tFilter;
+		if ( tArgs.m_tCol.m_eType==SI::AttrType_e::FLOAT )
+			FixupFilterSettings ( tFilter, SPH_ATTR_FLOAT, tFixedSettings );
+
+		 // !COMMIT
+		//StringBuilder_c sTmp;
+		//FormatFilterQL ( tFilter, sTmp, 1000 );
+		//sphInfo ( "filter %d: %s", iFilterId, sTmp.cstr() );
+
+		int iCount = Max ( tFilter.m_dStrings.GetLength(), tFilter.GetNumValues() );
+		CSphVector<uint64_t> dFilterVals ( iCount );
+		for ( int i=0; i<iCount; i++ )
+		{
+			switch ( tFixedSettings.m_eType )
+			{
+			case SPH_FILTER_VALUES:
+				dFilterVals[i] = tFilter.GetValue ( i );
+				break;
+
+			case SPH_FILTER_STRING:
+			case SPH_FILTER_STRING_LIST:
+				dFilterVals[i] = pCidx->GetHash ( tFilter.m_dStrings[i].cstr() );
+				break;
+
+			default: break;
+			}
+		}
+
+		// need ascending order wo duplicates
+		dFilterVals.Uniq();
+
+		bool bCreated = false;
+		std::string sError;
+		CSphString sErrorBuf;
+
+		switch ( tFixedSettings.m_eType )
+		{
+		case SPH_FILTER_VALUES:
+		case SPH_FILTER_STRING:
+		case SPH_FILTER_STRING_LIST:
+			tArgs.m_dVals = columnar::Span_T<uint64_t> ( dFilterVals.Begin(), dFilterVals.GetLength() );
+			bCreated = pCidx->GetValsRows ( tArgs, sError, pFilterCtx.get(), dFilterIt );
+			break;
+
+		case SPH_FILTER_RANGE:
+		case SPH_FILTER_FLOATRANGE:
+			tArgs.m_tRange = Convert ( tFilter, tFixedSettings, tArgs.m_tCol );
+			bCreated = pCidx->GetRangeRows ( tArgs, sError, pFilterCtx.get(), dFilterIt );
+			break;
+
+		default:
+			sErrorBuf.SetSprintf ( "unsupported filter selected for secondary index %s(%d), type %d", tFilter.m_sAttrName.cstr(), tArgs.m_tCol.m_iSrcAttr, tFixedSettings.m_eType );
+			sError = sErrorBuf.cstr();
+			break;
+		}
+
+		if ( !bCreated )
+		{
+			// FIXME!!! return as query warning
+			sphWarning ( "%s", sError.c_str() );
+			for ( auto * pIt : dFilterIt ) { SafeDelete ( pIt ); }
+			dFilterIt.resize ( 0 );
+			continue;
+		}
+
+		if ( !sError.empty() )
+		{
+			// FIXME!!! return as query warning
+			sphWarning ( "secondary index %s(%d):%s", tFilter.m_sAttrName.cstr(), tArgs.m_tCol.m_iSrcAttr, sError.c_str() );
+			sError.clear();
+		}
+
+		// !COMMIT
+		//int dCounts[4] { 0, 0, 0, 0 };
+		//for ( const auto pIt : dFilterIt )
+		//{
+		//	int iType = pIt->GetPacking();
+		//	dCounts[iType]++;
+		//}
+		//sphInfo ( "iterators %d: row %d, block %d, list %d", (int)dFilterIt.size(), dCounts[0], dCounts[1], dCounts[2] );
+
+		dNewEnabledIndexes.Pop();
+		dFilterChanged.Add().m_iFilterId = iFilterId;
+
+		bool bExclude = tFilter.m_bExclude;
+		
+		RowidIterator_i * pIt = nullptr;
+		if ( !dFilterIt.size() )
+			pIt = new RowidEmptyIterator_c();
+		else if ( dFilterIt.size()==1 )
+			pIt = new RowidIterator_c ( dFilterIt[0] );
+		else
+			pIt = new RowsIterator_c ( dFilterIt );
+
+		if ( bExclude )
+			pIt = new RowidIteratorNot_c ( pIt, uRowsCount );
+
+		dRes.emplace_back ( pIt );
+		dFilterIt.resize ( 0 );
+	}
+
+	if ( dFilterChanged.GetLength() )
+	{
+		bFiltersChanged = UpdateModifiedFilters ( dFilters, dModifiedFilters, dFilterChanged, nullptr );
+		dEnabledIndexes.SwapData ( dNewEnabledIndexes );
+
+		// remove "@rowid" filter in case iterator created and no other unhandled filters left
+		if ( pRowIdFilter && dModifiedFilters.GetLength()==1 && dModifiedFilters.Begin()==pRowIdFilter )
+		{
+			dModifiedFilters.Resize ( 0 );
+			dEnabledIndexes.Resize ( 0 );
+			bFiltersChanged = true;
+		}
+	}
+
+	if ( !dRes.size() )
+		return nullptr;
+	else if ( dRes.size()==1 )
+		return dRes[0];
+	else
+		return new AndRowsIterator_c ( dRes );
+}
+
+static SI::AttrType_e GetType ( ESphAttr eAttrType )
+{
+	switch ( eAttrType )
+	{
+		case SPH_ATTR_INTEGER: return SI::AttrType_e::UINT32;
+		case SPH_ATTR_TIMESTAMP: return SI::AttrType_e::TIMESTAMP;
+		case SPH_ATTR_BIGINT: return SI::AttrType_e::INT64;
+		case SPH_ATTR_BOOL: return SI::AttrType_e::BOOLEAN;
+		case SPH_ATTR_FLOAT: return SI::AttrType_e::FLOAT;
+		case SPH_ATTR_STRING: return SI::AttrType_e::STRING;
+		case SPH_ATTR_UINT32SET: return SI::AttrType_e::UINT32SET;
+		case SPH_ATTR_INT64SET: return SI::AttrType_e::INT64SET;
+
+		default: return SI::AttrType_e::NONE;
+	}
+}
+
+static std::vector<SI::SourceAttrTrait_t> ConvertSchema ( const CSphSchema & tSchema )
+{
+	std::vector<SI::SourceAttrTrait_t> dAttrs;
+	for ( int iAttr=0; iAttr<tSchema.GetAttrsCount(); iAttr++ )
+	{
+		const CSphColumnInfo & tCol = tSchema.GetAttr ( iAttr );
+		// skip special / iternal attributes
+		if ( sphIsInternalAttr ( tCol.m_sName ) )
+			continue;
+
+		if ( tCol.m_eAttrType==SPH_ATTR_JSON )
+			continue;
+
+		SI::SourceAttrTrait_t tSrcAttr;
+		tSrcAttr.m_eType = GetType ( tCol.m_eAttrType );
+		tSrcAttr.m_iAttr = iAttr;
+		tSrcAttr.m_sName = tCol.m_sName.cstr();
+		dAttrs.emplace_back ( tSrcAttr );
+	}
+
+	return dAttrs;
+}
+
+
+std::unique_ptr<SI::Builder_i> CreateIndexBuilder ( int iMemoryLimit, const CSphSchema & tSchema, const char * sFile, CSphString & sError )
+{
+	std::vector<SI::SourceAttrTrait_t> dAttrs = ConvertSchema ( tSchema );
+	return CreateSecondaryIndexBuilder ( dAttrs, iMemoryLimit, ConvertCollation ( GlobalCollation() ), sFile, sError );
+}
+
+static void GetAttrsProxy ( const ISphSchema & tSchema, const std::vector<SI::SourceAttrTrait_t> & dSrcAttrs, CSphVector<PlainOrColumnar_t> & dDstAttrs )
+{
+	int iColumnar = 0;
+	for ( const SI::SourceAttrTrait_t & tSrcAttr : dSrcAttrs )
+	{
+		const CSphColumnInfo & tAttr = tSchema.GetAttr ( tSrcAttr.m_iAttr );
+
+		PlainOrColumnar_t & tDstAttr = dDstAttrs.Add();
+		tDstAttr.m_eType = tAttr.m_eAttrType;
+		tDstAttr.m_iSchemaAttr = tSrcAttr.m_iAttr;
+
+		if ( tAttr.IsColumnar() )
+			tDstAttr.m_iColumnarId = iColumnar++;
+		else
+			tDstAttr.m_tLocator = tAttr.m_tLocator;
+	}
+}
+
+std::unique_ptr<SI::Builder_i> CreateIndexBuilder ( int iMemoryLimit, const CSphSchema & tSchema, const char * sFile, CSphVector<PlainOrColumnar_t> & dAttrs, CSphString & sError )
+{
+	std::vector<SI::SourceAttrTrait_t> dSrcAttrs = ConvertSchema ( tSchema );
+	GetAttrsProxy ( tSchema, dSrcAttrs, dAttrs );
+
+	return CreateSecondaryIndexBuilder ( dSrcAttrs, iMemoryLimit, ConvertCollation ( GlobalCollation() ), sFile, sError );
+}
+
+void BuilderStoreAttrs ( const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, SI::Builder_i * pBuilder, CSphVector<int64_t> & dTmp )
+{
+	for ( const PlainOrColumnar_t & tSrc : dAttrs )
+	{
+		switch ( tSrc.m_eType )
+		{
+		case SPH_ATTR_UINT32SET:
+		case SPH_ATTR_INT64SET:
+		{
+			const BYTE * pSrc = nullptr;
+			int iBytes = tSrc.Get ( pRow, pPool, dIterators, pSrc );
+			int iValues = iBytes / ( tSrc.m_eType==SPH_ATTR_UINT32SET ? sizeof(DWORD) : sizeof(int64_t) );
+			if ( tSrc.m_eType==SPH_ATTR_UINT32SET )
+			{
+				// need a 64-bit array as input. so we need to convert our 32-bit array to 64-bit entries
+				dTmp.Resize ( iValues );
+				ARRAY_FOREACH ( i, dTmp )
+					dTmp[i] = ((DWORD*)pSrc)[i];
+
+				pBuilder->SetAttr ( tSrc.m_iSchemaAttr, dTmp.Begin(), iValues );
+			}
+			else
+				pBuilder->SetAttr ( tSrc.m_iSchemaAttr, (const int64_t*)pSrc, iValues );
+		}
+		break;
+
+		case SPH_ATTR_STRING:
+		{
+			const BYTE * pSrc = nullptr;
+			int iBytes = tSrc.Get ( pRow, pPool, dIterators, pSrc );
+			pBuilder->SetAttr ( tSrc.m_iSchemaAttr, (const uint8_t*)pSrc, iBytes );
+		}
+		break;
+
+		default:
+			pBuilder->SetAttr ( tSrc.m_iSchemaAttr, tSrc.Get ( pRow, dIterators ) );
+			break;
+		}
+	}
+}
+
+RowID_t GetMin ( const std::vector<AndItem_t> & dItems )
+{
+	RowID_t tMin = INVALID_ROWID;
+	for ( const auto & tIt : dItems )
+	{
+		tMin = std::min ( tMin, tIt.GetRow() );
+	}
+
+	return tMin;
+}
+
+void Warmup ( const std::vector<RowidIterator_i *> & dSrc, std::vector<AndItem_t> & dItems )
+{
+	for ( auto tIt : dSrc )
+	{
+		AndItem_t tItem;
+		bool bGotRows = tIt->GetNextRowIdBlock ( tItem.m_dSrcRows );
+		if ( !bGotRows )
+		{
+			dItems.resize ( 0 );
+			return;
+		}
+
+		tItem.m_pIt = tIt;
+		dItems.push_back ( tItem );
+		tIt++;
+	}
+}
+
+int Advance ( std::vector<AndItem_t> & dItems, RowID_t tCurRowID )
+{
+	int iCount = 0;
+	for ( auto & tIt : dItems )
+	{
+		if ( tIt.GetRow()==tCurRowID )
+		{
+			iCount++;
+			continue;
+		}
+
+		// rewind till the row
+		while ( tIt.GetRow()<tCurRowID )
+		{
+			tIt.m_iCur++;
+			if ( tIt.m_iCur>=tIt.m_dSrcRows.GetLength() )
+			{
+				tIt.m_iCur = 0;
+				if ( !tIt.m_pIt->GetNextRowIdBlock ( tIt.m_dSrcRows ) )
+				{
+					// no more common rows
+					dItems.resize ( 0 );
+					return 0;
+				}
+			}
+		}
+
+		if ( tIt.GetRow()==tCurRowID )
+			iCount++;
+		else
+			iCount = 0;
+
+	}
+
+	return iCount;
+}
+
+bool AndRowsIterator_c::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
+{
+	if ( m_bStarted && !m_dItems.size() )
+		return false;
+
+	m_dRows.Resize ( 0 );
+
+	// warmup
+	if ( !m_bStarted )
+	{
+		m_bStarted = true;
+		Warmup ( m_dSrc, m_dItems );
+	}
+
+	while ( m_dItems.size() && m_dRows.GetLength()<CIDX_ROWS )
+	{
+		RowID_t tCurRowID = GetMin ( m_dItems );
+
+		int iCount = Advance ( m_dItems, tCurRowID );
+
+		if ( m_dItems.size() && iCount==m_dItems.size() )
+			m_dRows.Add ( tCurRowID );
+
+		// rewind all iterators to the next row-id
+		tCurRowID++;
+		Advance ( m_dItems, tCurRowID );
+	}
+
+	dRowIdBlock = m_dRows;
+	return ( m_dRows.GetLength() );
+}
+
+class SelectProxy_c : public SelectSI_c
+{
+public:
+	explicit SelectProxy_c ( const SI::Index_i * pSidx, const ISphSchema & tSchema, ESphCollation eCollation )
+		: m_pSidx ( pSidx )
+		, m_tSchema ( tSchema )
+		, m_eCollation ( eCollation )
+	{
+	}
+
+	virtual ~SelectProxy_c() {};
+
+	bool IsEnabled ( const CSphFilterSettings & tFilter ) const
+	{
+		assert ( m_pSidx );
+
+		if ( tFilter.m_eType!=SPH_FILTER_VALUES && tFilter.m_eType!=SPH_FILTER_STRING && tFilter.m_eType!=SPH_FILTER_STRING_LIST && tFilter.m_eType!=SPH_FILTER_RANGE && tFilter.m_eType!=SPH_FILTER_FLOATRANGE )
+			return false;
+		
+		// all(mva\string) need to scan whole row
+		if ( tFilter.m_eMvaFunc==SPH_MVAFUNC_ALL )
+			return false;
+
+		// need to handle only plain or columnar attr but not dynamic \ expressions
+		const CSphColumnInfo * pCol = m_tSchema.GetAttr ( tFilter.m_sAttrName.cstr() );
+		if ( !pCol )
+			return false;
+		if ( pCol->m_pExpr.Ptr() && !pCol->IsColumnarExpr() )
+			return false;
+
+		SI::ColumnInfo_t tColSI = m_pSidx->GetColumn (  tFilter.m_sAttrName.cstr() );
+		if ( tColSI.m_eType==SI::AttrType_e::NONE || !tColSI.m_bEnabled )
+			return false;
+
+		// FIXME!!! warn in case force index used but index was skipped
+		if ( tColSI.m_eType==SI::AttrType_e::STRING && m_pSidx->GetCollation()!=ConvertCollation ( m_eCollation ) )
+			return false;
+
+		return true;
+	}
+
+	const SI::Index_i * m_pSidx { nullptr };
+	const ISphSchema & m_tSchema;
+	ESphCollation m_eCollation { SPH_COLLATION_DEFAULT };
+};
+
+SelectSI_c * GetSelectIteratorsCond ( const SI::Index_i * pSidx, const ISphSchema & tSchema, ESphCollation eCollation )
+{
+	if ( pSidx )
+		return new SelectProxy_c ( pSidx, tSchema, eCollation );
+	else
+		return new SelectSI_c();
+}
+
+bool SelectSI_c::IsEnabled ( const CSphFilterSettings & tFilter ) const
+{
+	return HaveIndex ( tFilter.m_sAttrName.cstr() );
+}
+

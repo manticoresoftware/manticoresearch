@@ -63,5 +63,6 @@ StrHashCalc_fn	GetStringHashCalcFunc ( ESphCollation eCollation );
 
 void sphCollationInit();
 volatile ESphCollation& GlobalCollation();
+ESphCollation sphCollationFromName ( const CSphString & sName, CSphString * pError );
 
 #endif // _collation_

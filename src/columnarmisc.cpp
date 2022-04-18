@@ -10,6 +10,7 @@
 
 #include "columnarmisc.h"
 #include "schema/schema.h"
+#include "attribute.h"
 
 CSphVector<ScopedTypedIterator_t> CreateAllColumnarIterators ( const columnar::Columnar_i * pColumnar, const ISphSchema & tSchema )
 {
@@ -97,4 +98,14 @@ SphAttr_t PlainOrColumnar_t::Get ( const CSphRowitem * pRow, CSphVector<ScopedTy
 		return dIterators[m_iColumnarId].first->Get();
 
 	return sphGetRowAttr ( pRow, m_tLocator );
+}
+
+int PlainOrColumnar_t::Get ( const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const uint8_t * & pData ) const
+{
+	if ( m_iColumnarId>=0 )
+		return dIterators[m_iColumnarId].first->Get ( pData );
+
+	int iLen = 0;
+	pData = sphGetBlobAttr ( pRow, m_tLocator, pPool, iLen );
+	return iLen;
 }

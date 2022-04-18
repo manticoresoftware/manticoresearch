@@ -22,6 +22,7 @@
 #include "indexfiles.h"
 #include "tokenizer/charset_definition_parser.h"
 #include "tokenizer/tokenizer.h"
+#include "secondarylib.h"
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -1658,7 +1659,12 @@ static void ShowVersion()
 	if ( szColumnarVer )
 		sColumnar.SetSprintf ( " (columnar %s)", szColumnarVer );
 
-	fprintf ( stdout, "%s%s%s",  szMANTICORE_NAME, sColumnar.cstr(), szMANTICORE_BANNER_TEXT );
+	const char * sSiVer = GetSecondaryVersionStr();
+	CSphString sSi = "";
+	if ( sSiVer )
+		sSi.SetSprintf ( " (secondary %s)", sSiVer );
+
+	fprintf ( stdout, "%s%s%s%s",  szMANTICORE_NAME, sColumnar.cstr(), sSi.cstr(), szMANTICORE_BANNER_TEXT );
 }
 
 // Built on Linux x86_64 by GNU 8.3.1 compiler.
@@ -1860,14 +1866,17 @@ int main ( int argc, char ** argv )
 			break;
 	}
 
-	CSphString sError;
+	CSphString sError, sErrorSI;
 	bool bColumnarError = !InitColumnar ( sError );
+	bool bSecondaryError = !InitSecondary ( sErrorSI );
 
 	if ( !g_bQuiet )
 		ShowVersion();
 
 	if ( bColumnarError )
 		sphWarning ( "Error initializing columnar storage: %s", sError.cstr() );
+	if ( bSecondaryError )
+		sphWarning ( "Error initializing secondary index: %s", sErrorSI.cstr() );
 
 	const char* sEndian = sphCheckEndian();
 	if ( sEndian )
@@ -1906,6 +1915,7 @@ int main ( int argc, char ** argv )
 
 	if ( !sphInitCharsetAliasTable ( sError ) )
 		sphDie ( "failed to init charset alias table: %s", sError.cstr() );
+	sphCollationInit ();
 
 	auto hConf = sphLoadConfig ( sOptConfig, g_bQuiet, false, &sOptConfig );
 
@@ -1968,6 +1978,15 @@ int main ( int argc, char ** argv )
 	}
 
 	sphConfigureCommon ( hConf );
+
+	// FIXME!!! move to common
+	if ( hConf ( "searchd" ) && hConf["searchd"]("searchd") && hConf["searchd"]["searchd"] ( "collation_server" ) )
+	{
+		CSphString sCollation = hConf["searchd"]["searchd"].GetStr ( "collation_server" );
+		GlobalCollation () = sphCollationFromName ( sCollation, &sError );
+		if ( !sError.IsEmpty() )
+			sphWarning ( "%s", sError.cstr() );
+	}
 
 	/////////////////////
 	// index each index

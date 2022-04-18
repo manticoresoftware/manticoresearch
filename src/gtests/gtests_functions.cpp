@@ -2912,9 +2912,9 @@ TEST ( functions, histogram )
 		tFilter.m_fMinValue = 0.0f;
 		tFilter.m_fMaxValue = 10.0f;
 
-		int64_t iRes = 0;
-		pHist->EstimateRsetSize ( tFilter, iRes );
-		ASSERT_EQ( iRes, 3 );
+		HistogramRset_t tRes;
+		pHist->EstimateRsetSize ( tFilter, tRes );
+		ASSERT_EQ( tRes.m_iTotal, 3 );
 	}
 }
 

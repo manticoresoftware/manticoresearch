@@ -33,7 +33,8 @@ static IndexFileExt_t g_dIndexFilesExts[SPH_EXT_TOTAL] =
 	{ SPH_EXT_SPHI,	".sphi",	53,	true,	true,	"secondary index histograms" },
 	{ SPH_EXT_SPDS, ".spds",	57, true,	true,	"document storage" },
 	{ SPH_EXT_SPL,	".spl",		1,	true,	false,	"file lock for the index" },
-	{ SPH_EXT_SETTINGS,	".settings", 1,	true,	false,	"index runtime settings" }
+	{ SPH_EXT_SETTINGS,	".settings", 1,	true,	false,	"index runtime settings" },
+	{ SPH_EXT_SPIDX,	".spidx",	62,	true,	true,	"secondary index" },
 };
 
 

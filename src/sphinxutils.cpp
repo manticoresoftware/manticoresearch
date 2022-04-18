@@ -935,6 +935,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "auto_optimize",			0, nullptr },
 	{ "pseudo_sharding",		0, nullptr },
 	{ "optimize_cutoff",		0, nullptr },
+	{ "secondary_indexes",		0, nullptr },
 	{ NULL,						0, NULL }
 };
 

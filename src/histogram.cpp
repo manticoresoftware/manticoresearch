@@ -161,7 +161,8 @@ public:
 	bool				IsOutdated() const override;
 	void				Dump ( StringBuilder_c & tOut ) const override;
 
-	bool				EstimateRsetSize ( const CSphFilterSettings & tFilter, int64_t & iEstimate ) const override;
+	bool				EstimateRsetSize ( const CSphFilterSettings & tFilter, HistogramRset_t & tEstimate ) const override;
+	int					GetSize() const override { return m_iSize; }
 
 private:
 	static const HistogramType_e TYPE;
@@ -190,10 +191,10 @@ private:
 	int					LerpCounter ( int iBucket, T tVal ) const;
 	HSBucketTrait_t		GetBucket ( T tValue ) const;
 
-	DWORD				EstimateValues ( const SphAttr_t * pValues, int nValues ) const;
-	DWORD				EstimateRangeFilter ( bool bExclude, bool bHasEqualMin, bool bHasEqualMax, bool bOpenLeft, bool bOpenRight, T tMinValue, T tMaxValue ) const;
+	HistogramRset_t		EstimateValues ( const SphAttr_t * pValues, int nValues ) const;
+	HistogramRset_t		EstimateRangeFilter ( bool bExclude, bool bHasEqualMin, bool bHasEqualMax, bool bOpenLeft, bool bOpenRight, T tMinValue, T tMaxValue ) const;
 	T					Saturate ( T tVal ) const;
-	DWORD				EstimateInterval ( T tMin, T tMax, bool bHasEqualMin, bool bHasEqualMax, bool bOpenLeft, bool bOpenRight ) const;
+	HistogramRset_t		EstimateInterval ( T tMin, T tMax, bool bHasEqualMin, bool bHasEqualMax, bool bOpenLeft, bool bOpenRight ) const;
 	bool				IsOutdated ( SphAttr_t tAttr ) const;
 	void				UpdateMinMax();
 };
@@ -526,12 +527,12 @@ HSBucketTrait_t HistogramStreamed_T<T>::GetBucket ( T tValue ) const
 }
 
 template<typename T>
-bool HistogramStreamed_T<T>::EstimateRsetSize ( const CSphFilterSettings & tFilter, int64_t & iEstimate ) const
+bool HistogramStreamed_T<T>::EstimateRsetSize ( const CSphFilterSettings & tFilter, HistogramRset_t & tEstimate ) const
 {
 	if ( !m_iSize )
 		return false;
 
-	iEstimate = GetNumValues();
+	tEstimate.m_iTotal = tEstimate.m_iCount = GetNumValues();
 
 	CommonFilterSettings_t tFixedSettings = tFilter;
 	if ( TYPE==HISTOGRAM_STREAMED_FLOAT )
@@ -545,18 +546,37 @@ bool HistogramStreamed_T<T>::EstimateRsetSize ( const CSphFilterSettings & tFilt
 		if ( tFilter.m_bExclude )
 			return false;
 
-		iEstimate = EstimateValues ( tFilter.GetValueArray(), tFilter.GetNumValues() );
+		tEstimate = EstimateValues ( tFilter.GetValueArray(), tFilter.GetNumValues() );
 		return true;
 
 	case SPH_FILTER_RANGE:
 		assert ( TYPE==HISTOGRAM_STREAMED_UINT32 || TYPE==HISTOGRAM_STREAMED_INT64 );
-		iEstimate = EstimateRangeFilter ( tFilter.m_bExclude, tFilter.m_bHasEqualMin, tFilter.m_bHasEqualMax, tFilter.m_bOpenLeft, tFilter.m_bOpenRight, (T)tFixedSettings.m_iMinValue, (T)tFixedSettings.m_iMaxValue );
+		tEstimate = EstimateRangeFilter ( tFilter.m_bExclude, tFilter.m_bHasEqualMin, tFilter.m_bHasEqualMax, tFilter.m_bOpenLeft, tFilter.m_bOpenRight, (T)tFixedSettings.m_iMinValue, (T)tFixedSettings.m_iMaxValue );
 		return true;
 
 	case SPH_FILTER_FLOATRANGE:
 		assert ( TYPE==HISTOGRAM_STREAMED_FLOAT );
-		iEstimate = EstimateRangeFilter ( tFilter.m_bExclude, tFilter.m_bHasEqualMin, tFilter.m_bHasEqualMax, tFilter.m_bOpenLeft, tFilter.m_bOpenRight, (T)tFixedSettings.m_fMinValue, (T)tFixedSettings.m_fMaxValue );
+		tEstimate = EstimateRangeFilter ( tFilter.m_bExclude, tFilter.m_bHasEqualMin, tFilter.m_bHasEqualMax, tFilter.m_bOpenLeft, tFilter.m_bOpenRight, (T)tFixedSettings.m_fMinValue, (T)tFixedSettings.m_fMaxValue );
 		return true;
+
+	case SPH_FILTER_STRING:
+	case SPH_FILTER_STRING_LIST:
+	{
+		if ( tFilter.m_bExclude )
+			return false;
+
+		int iItemsCount = Max ( tFilter.m_dStrings.GetLength(), tFilter.GetNumValues() );
+		CSphFixedVector<SphAttr_t> dHashes ( iItemsCount );
+		for ( int i=0; i<iItemsCount; i++ )
+			dHashes[i] = sphCRC32 ( tFilter.m_dStrings[i].cstr() );
+
+		// clean up duplicates and string collisions
+		dHashes.Sort();
+		int iHashesCount = sphUniq ( dHashes.Begin(), dHashes.GetLength() );
+
+		tEstimate = EstimateValues ( dHashes.Begin(), iHashesCount );
+	}
+	return true;
 
 	default:
 		break;
@@ -566,43 +586,53 @@ bool HistogramStreamed_T<T>::EstimateRsetSize ( const CSphFilterSettings & tFilt
 }
 
 template<typename T>
-DWORD HistogramStreamed_T<T>::EstimateValues ( const SphAttr_t * pValues, int nValues ) const
+HistogramRset_t HistogramStreamed_T<T>::EstimateValues ( const SphAttr_t * pValues, int nValues ) const
 {
-	DWORD uTotal = 0;
+	HistogramRset_t tRes;
 	int iPrevBucket = INT_MIN;
 	for ( int i = 0; i < nValues; i++ )
 	{
 		HSBucketTrait_t tItem = GetBucket ( pValues[i] );
 		if ( tItem.m_iBucket!=iPrevBucket )
 		{
-			uTotal += tItem.m_iCount;
+			tRes.m_iTotal += tItem.m_iCount;
+			tRes.m_iCount++;
 			iPrevBucket = tItem.m_iBucket;
 		}
 	}
 
-	return uTotal;
+	return tRes;
 }
 
-template<typename T>
-DWORD HistogramStreamed_T<T>::EstimateRangeFilter ( bool bExclude, bool bHasEqualMin, bool bHasEqualMax, bool bOpenLeft, bool bOpenRight, T tMinValue, T tMaxValue ) const
+static HistogramRset_t operator+ ( const HistogramRset_t & tA, HistogramRset_t & tB )
 {
+	HistogramRset_t tRes;
+	tRes.m_iTotal = tA.m_iTotal + tB.m_iTotal;
+	tRes.m_iCount = tA.m_iCount + tB.m_iCount;
+	return tRes;
+}
+
+
+template<typename T>
+HistogramRset_t HistogramStreamed_T<T>::EstimateRangeFilter ( bool bExclude, bool bHasEqualMin, bool bHasEqualMax, bool bOpenLeft, bool bOpenRight, T tMinValue, T tMaxValue ) const
+{
+	HistogramRset_t tEstimate;
 	if ( !bExclude )
 		return EstimateInterval ( tMinValue, tMaxValue, bHasEqualMin, bHasEqualMax, bOpenLeft, bOpenRight );
 
 	assert ( !bOpenLeft || !bOpenRight );
 
-	DWORD uEstimate = 0;
 	if ( bOpenRight )
-		uEstimate = EstimateInterval ( (T)0, tMinValue, false, !bHasEqualMin, true, false );
+		tEstimate = EstimateInterval ( (T)0, tMinValue, false, !bHasEqualMin, true, false );
 	else if ( bOpenLeft )
-		uEstimate = EstimateInterval ( tMaxValue, (T)0, !bHasEqualMax, false, false, true );
+		tEstimate = EstimateInterval ( tMaxValue, (T)0, !bHasEqualMax, false, false, true );
 	else
 	{
-		uEstimate = EstimateInterval ( (T)0, tMinValue, false, !bHasEqualMin, true, false );
-		uEstimate += EstimateInterval ( tMaxValue, (T)0, !bHasEqualMax, false, false, true );
+		tEstimate = EstimateInterval ( (T)0, tMinValue, false, !bHasEqualMin, true, false );
+		tEstimate = EstimateInterval ( tMaxValue, (T)0, !bHasEqualMax, false, false, true ) + tEstimate;
 	}
 
-	return uEstimate;
+	return tEstimate;
 }
 
 template<typename T>
@@ -617,7 +647,7 @@ T HistogramStreamed_T<T>::Saturate ( T tVal ) const
 }
 
 template<typename T>
-DWORD HistogramStreamed_T<T>::EstimateInterval ( T tMin, T tMax, bool bHasEqualMin, bool bHasEqualMax, bool bOpenLeft, bool bOpenRight ) const
+HistogramRset_t HistogramStreamed_T<T>::EstimateInterval ( T tMin, T tMax, bool bHasEqualMin, bool bHasEqualMax, bool bOpenLeft, bool bOpenRight ) const
 {
 	if ( TYPE==HISTOGRAM_STREAMED_UINT32 || TYPE==HISTOGRAM_STREAMED_INT64 )
 	{
@@ -631,7 +661,10 @@ DWORD HistogramStreamed_T<T>::EstimateInterval ( T tMin, T tMax, bool bHasEqualM
 	tMin = Saturate ( tMin );
 	tMax = Saturate ( tMax );
 
-	DWORD uTotal = 0;
+	HistogramRset_t tEstimate;
+
+	T tRangeMin = MAX_BY_TYPE;
+	T tRangeMax = MIN_BY_TYPE;
 
 	// open left means to process all buckets from start
 	int iStartBucket = 0;
@@ -646,13 +679,21 @@ DWORD HistogramStreamed_T<T>::EstimateInterval ( T tMin, T tMax, bool bHasEqualM
 		if ( !bOpenRight && tBucket.m_tCentroid>tMax )
 			break;
 
-		uTotal += tBucket.m_iCount;
+		tEstimate.m_iTotal += tBucket.m_iCount;
+		tEstimate.m_iCount++;
 		iChecked++;
+
+		tRangeMin = Min ( tRangeMin, tBucket.m_tCentroid );
+		tRangeMax = Max ( tRangeMax, tBucket.m_tCentroid );
 	}
 
 	if ( !iChecked ) // interval inside single bucket
 	{
-		uTotal = m_dBuckets[iStartBucket].m_iCount;
+		tEstimate.m_iTotal = m_dBuckets[iStartBucket].m_iCount;
+		tEstimate.m_iCount = 1;
+		tRangeMin = m_dBuckets[iStartBucket].m_tCentroid;
+		tRangeMax = m_dBuckets[iStartBucket].m_tCentroid;
+
 		if ( iStartBucket+1<m_iSize )
 		{
 			DWORD uMinCount = 0;
@@ -662,21 +703,28 @@ DWORD HistogramStreamed_T<T>::EstimateInterval ( T tMin, T tMax, bool bHasEqualM
 			if ( m_dBuckets[iStartBucket].m_tCentroid<tMax && tMax<m_dBuckets[iStartBucket+1].m_tCentroid )
 				uMaxCount = LerpCounter ( iStartBucket, tMax );
 			if ( uMinCount || uMaxCount )
-				uTotal = Max ( uMinCount, uMaxCount );
+				tEstimate.m_iTotal = Max ( uMinCount, uMaxCount );
 		}
 	} else // count head bucket interval
 	{
+		tEstimate.m_iCount++;
 		if ( bOpenLeft )
-			uTotal += m_dBuckets[iStartBucket].m_iCount;
-		else
+		{
+			tEstimate.m_iTotal += m_dBuckets[iStartBucket].m_iCount;
+		} else
 		{
 			int iMinCount = LerpCounter ( iStartBucket, tMin );
 			// substract from total range with tMin value and add more preceise counter
-			uTotal = uTotal - m_dBuckets[iStartBucket+1].m_iCount / 2 + iMinCount;
+			tEstimate.m_iTotal = tEstimate.m_iTotal - m_dBuckets[iStartBucket+1].m_iCount / 2 + iMinCount;
 		}
 	}
 
-	return uTotal;
+	T tDelta = m_tMaxValue - m_tMinValue;
+	T tRangeDelta = tRangeMax - tRangeMin;
+	if ( fabs ( tDelta )>FLT_EPSILON )
+		tEstimate.m_fRangeSize = tRangeDelta / tDelta;
+
+	return tEstimate;
 }
 
 template<> const HistogramType_e HistogramStreamed_T<DWORD>::TYPE = HISTOGRAM_STREAMED_UINT32;
@@ -842,7 +890,7 @@ static bool CanCreateHistogram ( const CSphString & sAttrName, ESphAttr eAttrTyp
 	if ( sphIsInternalAttr ( sAttrName ) )
 		return false;
 
-	return eAttrType==SPH_ATTR_INTEGER || eAttrType==SPH_ATTR_BIGINT || eAttrType==SPH_ATTR_BOOL || eAttrType==SPH_ATTR_FLOAT || eAttrType==SPH_ATTR_TIMESTAMP;
+	return ( eAttrType==SPH_ATTR_INTEGER || eAttrType==SPH_ATTR_BIGINT || eAttrType==SPH_ATTR_BOOL || eAttrType==SPH_ATTR_FLOAT || eAttrType==SPH_ATTR_TIMESTAMP || eAttrType==SPH_ATTR_UINT32SET || eAttrType==SPH_ATTR_INT64SET || eAttrType==SPH_ATTR_STRING );
 }
 
 
@@ -873,9 +921,14 @@ std::unique_ptr<Histogram_i> CreateHistogram ( const CSphString & sAttr, ESphAtt
 	case SPH_ATTR_INTEGER:
 	case SPH_ATTR_TIMESTAMP:
 	case SPH_ATTR_BOOL:
+	case SPH_ATTR_UINT32SET:
+	case SPH_ATTR_STRING:
 		return CreateHistogram ( sAttr, HISTOGRAM_STREAMED_UINT32, iSize );
 
-	case SPH_ATTR_BIGINT:	return CreateHistogram ( sAttr, HISTOGRAM_STREAMED_INT64, iSize );
+	case SPH_ATTR_INT64SET:
+	case SPH_ATTR_BIGINT:
+		return CreateHistogram ( sAttr, HISTOGRAM_STREAMED_INT64, iSize );
+
 	case SPH_ATTR_FLOAT:	return CreateHistogram ( sAttr, HISTOGRAM_STREAMED_FLOAT, iSize );
 	default:				return nullptr;
 	}
@@ -891,11 +944,11 @@ int64_t EstimateFilterSelectivity ( const CSphFilterSettings & tSettings, const 
 	if ( !pHistogram || pHistogram->IsOutdated() )
 		return INT64_MAX;
 
-	int64_t iEstimate = INT64_MAX;
-	if ( !pHistogram->EstimateRsetSize ( tSettings, iEstimate ) )
+	HistogramRset_t tEstimate;
+	if ( !pHistogram->EstimateRsetSize ( tSettings, tEstimate ) )
 		return INT64_MAX;
 
-	return iEstimate;
+	return tEstimate.m_iTotal;
 }
 
 
@@ -910,6 +963,8 @@ void CreateHistograms ( HistogramContainer_c & tHistograms, CSphVector<PlainOrCo
 		{
 			tHistograms.Add ( std::move ( pHistogram ) );
 			PlainOrColumnar_t & tNewAttr = dAttrsForHistogram.Add();
+			tNewAttr.m_eType = tAttr.m_eAttrType;
+			tNewAttr.m_iSchemaAttr = i;
 			if ( tAttr.IsColumnar() )
 				tNewAttr.m_iColumnarId = iColumnar;
 			else

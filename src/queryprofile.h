@@ -25,6 +25,7 @@ class CSphSchema;
 	SPH_QUERY_STATE ( LOCAL_DF,		"local_df" ) \
 	SPH_QUERY_STATE ( LOCAL_SEARCH,	"local_search" ) \
 	SPH_QUERY_STATE ( SQL_PARSE,	"sql_parse" ) \
+	SPH_QUERY_STATE ( SETUP_ITER,	"setup_iter" ) \
 	SPH_QUERY_STATE ( FULLSCAN,		"fullscan" ) \
 	SPH_QUERY_STATE ( DICT_SETUP,	"dict_setup" ) \
 	SPH_QUERY_STATE ( PARSE,		"parse" ) \
@@ -78,6 +79,7 @@ public:
 	int				m_dSwitches [ SPH_QSTATE_TOTAL+1 ];	///< number of switches to given state
 	int64_t			m_tmTotal [ SPH_QSTATE_TOTAL+1 ];	///< total time spent per state
 	CSphVector<BYTE> m_dPlan; 							///< bson with plan
+	CSphString		m_sEnablesIndexes;					///< enabled secondary indexes
 
 														/// create empty and stopped profile
 					QueryProfile_c();

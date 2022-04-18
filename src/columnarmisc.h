@@ -33,8 +33,21 @@ struct PlainOrColumnar_t
 {
 	CSphAttrLocator	m_tLocator;
 	int				m_iColumnarId = -1;
+	ESphAttr		m_eType = SPH_ATTR_NONE;
+	int				m_iSchemaAttr = -1;
 
 	SphAttr_t		Get ( const CSphRowitem * pRow, CSphVector<ScopedTypedIterator_t> & dIterators ) const;
+	int				Get ( const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const uint8_t * & pData ) const;
 };
+
+class HistogramContainer_c;
+void BuildStoreHistograms ( const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, HistogramContainer_c & tHistograms );
+
+namespace SI
+{
+	class Builder_i;
+}
+
+void BuilderStoreAttrs ( const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, SI::Builder_i * pBuilder, CSphVector<int64_t> & dTmp );
 
 #endif // _columnarmisc_

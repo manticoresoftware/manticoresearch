@@ -21,6 +21,7 @@
 #include "stripper/html_stripper.h"
 #include "tokenizer/charset_definition_parser.h"
 #include "indexcheck.h"
+#include "secondarylib.h"
 
 #include <ctime>
 
@@ -1013,7 +1014,12 @@ static void ShowVersion()
 	if ( szColumnarVer )
 		sColumnar.SetSprintf ( " (columnar %s)", szColumnarVer );
 
-	fprintf ( stdout, "%s%s%s",  szMANTICORE_NAME, sColumnar.cstr(), szMANTICORE_BANNER_TEXT );
+	const char * sSiVer = GetSecondaryVersionStr();
+	CSphString sSi = "";
+	if ( sSiVer )
+		sSi.SetSprintf ( " (secondary %s)", sSiVer );
+
+	fprintf ( stdout, "%s%s%s%s",  szMANTICORE_NAME, sColumnar.cstr(), sSi.cstr(), szMANTICORE_BANNER_TEXT );
 }
 
 
@@ -1222,6 +1228,15 @@ static void PreallocIndex ( const CSphString & sIndex, bool bStripPath, CSphInde
 
 int main ( int argc, char ** argv )
 {
+	CSphString sError, sErrorSI;
+	bool bColumnarError = !InitColumnar ( sError );
+	bool bSecondaryError = !InitSecondary ( sErrorSI );
+
+	if ( bColumnarError )
+		fprintf ( stdout, "Error initializing columnar storage: %s", sError.cstr() );
+	if ( bSecondaryError )
+		fprintf ( stdout, "Error initializing secondary index: %s", sErrorSI.cstr() );
+
 	if ( argc<=1 )
 	{
 		ShowVersion();
@@ -1350,14 +1365,8 @@ int main ( int argc, char ** argv )
 		}
 	}
 
-	CSphString sError;
-	bool bColumnarError = !InitColumnar ( sError );
-
 	if ( !bQuiet )
 		ShowVersion();
-
-	if ( bColumnarError )
-		fprintf ( stdout, "Error initializing columnar storage: %s", sError.cstr() );
 
 	if ( i!=argc )
 	{
@@ -1371,6 +1380,7 @@ int main ( int argc, char ** argv )
 
 	if ( !sphInitCharsetAliasTable ( sError ) )
 		sphDie ( "failed to init charset alias table: %s", sError.cstr() );
+	sphCollationInit ();
 
 	auto hConf = sphLoadConfig ( sOptConfig, bQuiet, true );
 

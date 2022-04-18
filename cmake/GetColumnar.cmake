@@ -14,8 +14,10 @@ set (COLUMNAR_REQUIRED_VER 1.${COLUMNAR_ABI} )
 
 if (WIN32)
 	set (LIB_MANTICORE_COLUMNAR "lib_manticore_columnar.dll")
+	set (LIB_MANTICORE_SECONDARY "lib_manticore_secondary.dll")
 else ()
 	set (LIB_MANTICORE_COLUMNAR "lib_manticore_columnar.so")
+	set (LIB_MANTICORE_SECONDARY "lib_manticore_secondary.so")
 endif ()
 
 macro (return_if_columnar_api_found)

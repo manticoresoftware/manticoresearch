@@ -47,6 +47,7 @@
 #include "docs_collector.h"
 #include "index_rotator.h"
 #include "config_reloader.h"
+#include "secondarylib.h"
 
 // services
 #include "taskping.h"
@@ -13505,24 +13506,6 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	}
 }
 
-static ESphCollation sphCollationFromName ( const CSphString & sName, CSphString * pError )
-{
-	assert ( pError );
-
-	// FIXME! replace with a hash lookup?
-	if ( sName=="libc_ci" )
-		return SPH_COLLATION_LIBC_CI;
-	else if ( sName=="libc_cs" )
-		return SPH_COLLATION_LIBC_CS;
-	else if ( sName=="utf8_general_ci" )
-		return SPH_COLLATION_UTF8_GENERAL_CI;
-	else if ( sName=="binary" )
-		return SPH_COLLATION_BINARY;
-
-	pError->SetSprintf ( "Unknown collation: '%s'", sName.cstr() );
-	return SPH_COLLATION_DEFAULT;
-}
-
 void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & tAcc )
 {
 	auto& tSess = session::Info();
@@ -13763,6 +13746,10 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 		} else if ( tStmt.m_sSetName=="pseudo_sharding")
 		{
 			g_bSplit = !!tStmt.m_iSetValue;
+		} else if ( tStmt.m_sSetName=="secondary_indexes" )
+		{
+			SetSecondaryIndexDefault ( !!tStmt.m_iSetValue );
+
 		} else {
 			tOut.ErrorEx ( tStmt.m_sStmt, "Unknown system variable '%s'", tStmt.m_sSetName.cstr () );
 			return;
@@ -14723,6 +14710,7 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt )
 		});
 	}
 	dTable.MatchTuplet ( "pseudo_sharding", g_bSplit ? "1" : "0" );
+	dTable.MatchTuplet ( "secondary_indexes", GetSecondaryIndexDefault() ? "1" : "0" );
 
 	if ( tStmt.m_iIntParam>=0 ) // that is SHOW GLOBAL VARIABLES
 	{
@@ -15641,6 +15629,11 @@ static void HandleMysqlShowPlan ( RowBuffer_i & tOut, const QueryProfile_c & p, 
 	StringBuilder_c sPlan;
 	sph::RenderBsonPlan ( sPlan, bson::MakeHandle ( p.m_dPlan ), bDot );
 	tOut.PutString ( sPlan );
+	tOut.Commit();
+
+	tOut.PutString ( "enabled_indexes" );
+	tOut.PutString ( p.m_sEnablesIndexes.cstr() );
+
 	tOut.Commit();
 
 	tOut.Eof ( bMoreResultsFollow );
@@ -18704,6 +18697,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff = hSearchd.GetInt ( "optimize_cutoff", AutoOptimizeCutoff() );
 
 	g_bSplit = hSearchd.GetInt ( "pseudo_sharding", 1 )!=0;
+	SetSecondaryIndexDefault ( hSearchd.GetInt ( "secondary_indexes", GetSecondaryIndexDefault() )!=0 );
 }
 
 // load index which is not yet load, and publish it in served indexes.
@@ -19074,9 +19068,14 @@ static void InitBanner()
 	if ( szColumnarVer )
 		sColumnar.SetSprintf ( " (columnar %s)", szColumnarVer );
 
-	g_sBanner.SetSprintf ( "%s%s%s",  szMANTICORE_NAME, sColumnar.cstr(), szMANTICORE_BANNER_TEXT );
-	g_sMySQLVersion.SetSprintf ( "%s%s", szMANTICORE_VERSION, sColumnar.cstr() );
-	g_sStatusVersion.SetSprintf ( "%s%s", szMANTICORE_VERSION, sColumnar.cstr() );
+	const char * sSiVer = GetSecondaryVersionStr();
+	CSphString sSi = "";
+	if ( sSiVer )
+		sSi.SetSprintf ( " (secondary %s)", sSiVer );
+
+	g_sBanner.SetSprintf ( "%s%s%s%s",  szMANTICORE_NAME, sColumnar.cstr(), sSi.cstr(), szMANTICORE_BANNER_TEXT );
+	g_sMySQLVersion.SetSprintf ( "%s%s%s", szMANTICORE_VERSION, sColumnar.cstr(), sSi.cstr() );
+	g_sStatusVersion.SetSprintf ( "%s%s%s", szMANTICORE_VERSION, sColumnar.cstr(), sSi.cstr() );
 }
 
 static void CheckSSL ()
@@ -19138,9 +19137,12 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	tzset();
 
-	CSphString sError;
+	CSphString sError, sErrorSI;
 	// initialize it before other code to fetch version string for banner
 	bool bColumnarError = !InitColumnar ( sError );
+	bool bSecondaryError = !InitSecondary ( sErrorSI );
+	sphCollationInit ();
+
 	InitBanner();
 
 	if ( !g_bService )
@@ -19148,6 +19150,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	if ( bColumnarError )
 		sphWarning ( "Error initializing columnar storage: %s", sError.cstr() );
+	if ( bSecondaryError )
+		sphWarning ( "Error initializing secondary index: %s", sErrorSI.cstr() );
 
 	if ( !sError.IsEmpty() )
 		sError = "";
@@ -19786,7 +19790,6 @@ inline int mainimpl ( int argc, char **argv )
 	PrepareMainThread ( &cTopOfMainStack );
 	sphSetDieCallback ( DieOrFatalCb );
 	g_pLogger() = sphLog;
-	sphCollationInit ();
 	sphBacktraceSetBinaryName ( argv[0] );
 	GeodistInit();
 

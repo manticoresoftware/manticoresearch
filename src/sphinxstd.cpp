@@ -757,6 +757,18 @@ CSphString GET_COLUMNAR_FULLPATH ()
 	return sResult;
 }
 
+CSphString GET_SECONDARY_FULLPATH ()
+{
+	CSphString sResult;
+	const char * szEnv = getenv ( "LIB_MANTICORE_SECONDARY" );
+	if ( szEnv )
+		sResult = szEnv;
+	else
+		sResult.SetSprintf ( "%s/" LIB_MANTICORE_SECONDARY, GET_MANTICORE_MODULES() );
+	return sResult;
+}
+
+
 const char * GET_ICU_DATA_DIR ()
 {
 	const char * szEnv = getenv ( "ICU_DATA_DIR" );

@@ -31,3 +31,31 @@
 	#include <dlfcn.h>
 #endif // HAVE_DLOPEN
 #endif // _WIN32
+
+#if HAVE_DLOPEN
+class ScopedHandle_c
+{
+public:
+	ScopedHandle_c ( void * pHandle )
+		: m_pHandle ( pHandle )
+	{}
+
+	~ScopedHandle_c()
+	{
+		if ( m_pHandle )
+			dlclose ( m_pHandle );
+	}
+
+	void * Leak()
+	{
+		void * pHandle = m_pHandle;
+		m_pHandle = nullptr;
+		return pHandle;
+	}
+
+	void * Get() { return m_pHandle; }
+
+private:
+	void * m_pHandle = nullptr;
+};
+#endif // HAVE_DLOPEN

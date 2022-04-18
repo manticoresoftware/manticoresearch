@@ -167,6 +167,9 @@
 /* default name of columnar shared library */
 #cmakedefine LIB_MANTICORE_COLUMNAR "${LIB_MANTICORE_COLUMNAR}"
 
+/* default name of secondary index shared library */
+#cmakedefine LIB_MANTICORE_SECONDARY "${LIB_MANTICORE_SECONDARY}"
+
 /* define to set custom directory for shared files. Absolute as /usr/local/share/manticore */
 #define FULL_SHARE_DIR "${FULL_SHARE_DIR}"
 

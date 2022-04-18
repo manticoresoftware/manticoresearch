@@ -24,6 +24,13 @@ enum HistogramType_e
 	HISTOGRAM_STREAMED_FLOAT
 };
 
+struct HistogramRset_t
+{
+	int64_t m_iTotal { 0 };
+	DWORD m_iCount { 0 };
+	float m_fRangeSize { 0.0f };
+};
+
 class Histogram_i
 {
 public:
@@ -32,9 +39,10 @@ public:
 	virtual void	Insert ( SphAttr_t tAttrVal ) = 0;		// index time insert element when values and counters could be updated
 	virtual void	UpdateCounter ( SphAttr_t tAttr ) = 0;	// run-time update counters only element values are same
 	virtual void	Delete ( SphAttr_t tAttrVal ) = 0;
-	virtual bool	EstimateRsetSize ( const CSphFilterSettings & tFilter, int64_t & iEstimate ) const = 0;
+	virtual bool	EstimateRsetSize ( const CSphFilterSettings & tFilter, HistogramRset_t & tEstimate ) const = 0;
 	virtual DWORD	GetNumValues() const = 0;
 	virtual bool	IsOutdated() const = 0;
+	virtual int		GetSize() const = 0;
 
 	virtual HistogramType_e		GetType() const = 0;
 	virtual const CSphString &	GetAttrName() const = 0;
@@ -72,5 +80,12 @@ private:
 std::unique_ptr<Histogram_i>	CreateHistogram ( const CSphString & sAttr, ESphAttr eAttrType, int iSize=0 );
 void			CreateHistograms ( HistogramContainer_c & tHistograms, CSphVector<PlainOrColumnar_t> & dAttrsForHistogram, const ISphSchema & tSchema );
 int64_t			EstimateFilterSelectivity ( const CSphFilterSettings & tSettings, const HistogramContainer_c * pHistogramContainer );
+
+struct HistogramSource_t
+{
+	Histogram_i * m_pHist { nullptr };
+	int m_iAttr { -1 };
+	ESphAttr m_eAttrType { SPH_ATTR_NONE };
+};
 
 #endif // _histogram_

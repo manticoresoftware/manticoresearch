@@ -1,7 +1,7 @@
 # SHOW VARIABLES
 
 ```sql
-SHOW [{GLOBAL | SESSION}] VARIABLES [WHERE variable_name='xxx' | LIKE 'pattern']
+SHOW [{GLOBAL | SESSION}] VARIABLES LIKE 'pattern'
 ```
 
 It returns the current values of a few server-wide variables. Also, support for `GLOBAL` and `SESSION` clauses was added.
@@ -24,4 +24,23 @@ mysql> SHOW GLOBAL VARIABLES;
 9 rows in set (0.00 sec)
 ```
 
-Support for `WHERE variable_name` clause was added, to help certain connectors.
+```sql
+mysql> show variables like '%log%';
++------------------+----------+
+| Variable_name    | Value    |
++------------------+----------+
+| query_log_format | sphinxql |
+| log_level        | info     |
++------------------+----------+
+2 rows in set (0.00 sec)
+```
+
+```sql
+mysql> show session variables like 'autocommit';
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| autocommit    | 0     |
++---------------+-------+
+1 row in set (0.00 sec)
+```

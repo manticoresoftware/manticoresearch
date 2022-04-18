@@ -81,8 +81,9 @@
 
 ### HTTP endpoints
 * [/sql](Connecting_to_the_server/HTTP.md#SQL-over-HTTP) - Allows running an SQL statement over HTTP
+* [/cli](Connecting_to_the_server/HTTP.md#/cli) - HTTP command line interface
 * [/insert](Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md) - Inserts a document into a real-time index
-* [/pq/idx/doc](Adding_documents_to_an_index/Adding_rules_to_a_percolate_index.md#HTTP) - Inserts a PQ rule into a percolate index
+* [/pq/idx/doc](Adding_documents_to_an_index/Adding_rules_to_a_percolate_index.md#Adding-rules-to-a-percolate-index) - Inserts a PQ rule into a percolate index
 * [/update](Updating_documents/UPDATE.md#Updates-via-HTTP) - Updates a document in a real-time index
 * [/replace](Updating_documents/REPLACE.md#HTTP:) - Replaces a document in a real-time index
 * [/pq/idx/doc/N?refresh=1](Adding_documents_to_an_index/Adding_rules_to_a_percolate_index.md#Replacing-rules-in-a-PQ-index) - Replaces a PQ rule in a percolate index

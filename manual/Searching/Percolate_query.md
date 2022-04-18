@@ -19,11 +19,11 @@ You can perform a percolate query via SQL or JSON interfaces as well as using pr
 
 | Desired behaviour | SQL | HTTP | PHP |
 | - | - | - | - |
-| Provide a single document| CALL PQ('idx', '{doc1}') | query.percolate.document{doc1}  | $client->pq()->search([$percolate])   |
-| Provide a single document (alternative) | CALL PQ('idx', 'doc1', 0 as docs_json)  | -  |   |
-| Provide multiple documents  | CALL PQ('idx', ('doc1', 'doc2'), 0 as docs_json) | query.percolate.documents[{doc1}, {doc2}] | $client->pq()->search([$percolate])  |
-| Provide multiple documents (alternative)  | CALL PQ('idx', ('{doc1}', '{doc2}')) | -  | - |
-| Provide multiple documents (alternative)  | CALL PQ('idx', '[{doc1}, {doc2}]') | -  | - |
+| Provide a single document| `CALL PQ('idx', '{doc1}')` | `query.percolate.document{doc1}`  | `$client->pq()->search([$percolate])`   |
+| Provide a single document (alternative) | `CALL PQ('idx', 'doc1', 0 as docs_json)`  | -  |   |
+| Provide multiple documents  | `CALL PQ('idx', ('doc1', 'doc2'), 0 as docs_json)` | `query.percolate.documents[{doc1}, {doc2}]` | `$client->pq()->search([$percolate])`  |
+| Provide multiple documents (alternative)  | `CALL PQ('idx', ('{doc1}', '{doc2}'))` | -  | - |
+| Provide multiple documents (alternative)  | `CALL PQ('idx', '[{doc1}, {doc2}]')` | -  | - |
 | Return matching document ids | 0/1 as docs (disabled by default)  | Enabled by default  | Enabled by default |
 | Use document's own id to show in the result | 'id field' as docs_id (disabled by default)  | Not available  | Not available  |
 | Consider input documents are JSON | 1 as docs_json (1 by default)  | Enabled by default  | Enabled by default |
@@ -243,7 +243,7 @@ doc = new HashMap<String,Object>(){{
     put("query", "@title bag");
 }};
 newdoc = new InsertDocumentRequest();
-newdoc.index("products").setDoc(doc); 
+newdoc.index("products").setDoc(doc);
 indexApi.insert(newdoc);
 
 doc = new HashMap<String,Object>(){{
@@ -251,7 +251,7 @@ doc = new HashMap<String,Object>(){{
     put("filters", "color='red'");
 }};
 newdoc = new InsertDocumentRequest();
-newdoc.index("products").setDoc(doc); 
+newdoc.index("products").setDoc(doc);
 indexApi.insert(newdoc);
 
 doc = new HashMap<String,Object>(){{
@@ -259,7 +259,7 @@ doc = new HashMap<String,Object>(){{
     put("filters", "color IN ('blue', 'green')");
 }};
 newdoc = new InsertDocumentRequest();
-newdoc.index("products").setDoc(doc); 
+newdoc.index("products").setDoc(doc);
 indexApi.insert(newdoc);
 ```
 <!-- response Java -->
@@ -492,7 +492,7 @@ java
 PercolateRequest percolateRequest = new PercolateRequest();
 query = new HashMap<String,Object>(){{
     put("percolate",new HashMap<String,Object >(){{
-        put("document", new HashMap<String,Object >(){{ 
+        put("document", new HashMap<String,Object >(){{
             put("title","what a nice bag");
         }});
     }});
@@ -707,7 +707,7 @@ java
 PercolateRequest percolateRequest = new PercolateRequest();
 query = new HashMap<String,Object>(){{
     put("percolate",new HashMap<String,Object >(){{
-        put("document", new HashMap<String,Object >(){{ 
+        put("document", new HashMap<String,Object >(){{
             put("title","what a nice bag");
         }});
     }});
@@ -1014,15 +1014,15 @@ percolateRequest = new PercolateRequest();
 query = new HashMap<String,Object>(){{
         put("percolate",new HashMap<String,Object >(){{
             put("documents", new ArrayList<Object>(){{
-                    add(new HashMap<String,Object >(){{ 
+                    add(new HashMap<String,Object >(){{
                         put("title","nice pair of shoes");
                         put("color","blue");
                     }});
-                    add(new HashMap<String,Object >(){{ 
+                    add(new HashMap<String,Object >(){{
                         put("title","beautiful bag");
 
                     }});
-                    
+
                      }});
         }});
     }};
@@ -1304,15 +1304,15 @@ percolateRequest = new PercolateRequest();
 query = new HashMap<String,Object>(){{
         put("percolate",new HashMap<String,Object >(){{
             put("documents", new ArrayList<Object>(){{
-                    add(new HashMap<String,Object >(){{ 
+                    add(new HashMap<String,Object >(){{
                         put("title","nice pair of shoes");
                         put("color","blue");
                     }});
-                    add(new HashMap<String,Object >(){{ 
+                    add(new HashMap<String,Object >(){{
                         put("title","beautiful bag");
 
                     }});
-                    
+
                      }});
         }});
     }};
@@ -1449,7 +1449,7 @@ SELECT * FROM pq;
 <!-- request HTTP -->
 
 ```json
-POST /pq/pq/_search 
+POST /pq/pq/_search
 ```
 
 <!-- response HTTP -->
@@ -1862,11 +1862,11 @@ percolateRequest = new PercolateRequest();
 query = new HashMap<String,Object>(){{
     put("percolate",new HashMap<String,Object >(){{
         put("documents", new ArrayList<Object>(){{
-            add(new HashMap<String,Object >(){{ 
+            add(new HashMap<String,Object >(){{
                 put("title","angry test");
                 put("gid",3);
             }});
-            add(new HashMap<String,Object >(){{ 
+            add(new HashMap<String,Object >(){{
                 put("title","filter test doc2");
                 put("gid",13);
             }});

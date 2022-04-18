@@ -1202,11 +1202,11 @@ void SetSignalHandlers ( bool bAllowCtrlC=false ) REQUIRES ( MainThread )
 
 	sa.sa_flags |= SA_RESETHAND;
 
-	static BYTE exception_handler_stack[SIGSTKSZ];
+	static CSphVector<BYTE> exception_handler_stack ( Max ( SIGSTKSZ, 65536 ) );
 	stack_t ss;
-	ss.ss_sp = exception_handler_stack;
+	ss.ss_sp = exception_handler_stack.begin();
 	ss.ss_flags = 0;
-	ss.ss_size = Max (SIGSTKSZ, 65536);
+	ss.ss_size = exception_handler_stack.GetLength();
 	sigaltstack( &ss, 0 );
 	sa.sa_flags |= SA_ONSTACK;
 
@@ -18613,13 +18613,11 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 
 	if ( hSearchd("thread_stack") ) // fixme! rename? That is limit for stack of the coro, not of the thread!
 	{
-		int iThreadStackSizeMin = 65536;
-		int iThreadStackSizeMax = 8*1024*1024;
+		constexpr int iThreadStackSizeMin = 128*1024;
 		int iStackSize = hSearchd.GetSize ( "thread_stack", iThreadStackSizeMin );
-		if ( iStackSize<iThreadStackSizeMin || iStackSize>iThreadStackSizeMax )
-			sphWarning ( "thread_stack %d out of bounds (64K..8M); clamped", iStackSize );
+		if ( iStackSize<iThreadStackSizeMin )
+			sphWarning ( "thread_stack %d less than default (128K), increased", iStackSize );
 
-		iStackSize = Min ( iStackSize, iThreadStackSizeMax );
 		iStackSize = Max ( iStackSize, iThreadStackSizeMin );
 		Threads::SetMaxCoroStackSize ( iStackSize );
 	}

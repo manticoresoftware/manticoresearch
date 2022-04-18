@@ -39,6 +39,7 @@ public:
 struct SecondaryIndexInfo_t
 {
 	int		m_iFilterId {-1};
+	int64_t	m_iRsetEstimate {0};
 };
 
 struct RowIdBoundaries_t;

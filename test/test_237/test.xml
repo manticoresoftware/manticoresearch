@@ -32,7 +32,7 @@ index test_rt
 
 global $sd_http_port;
 
-function RandomWordsTest351 ( $n, $seed )
+function RandomWordsTest237 ( $n, $seed )
 {
 	srand ( $seed );
 	$words = [];
@@ -52,7 +52,7 @@ for ( $commit=0; $commit<4; $commit++ )
 	$rows = "";
 	for ( $row=0; $row<10; $row++ )
 	{
-		$rows .= json_encode ( array ( "create"=>array("index"=>"test_rt", "id"=>$id, "doc"=>array( "gid"=>$id, "dummy"=>"test".$id, "title"=>RandomWordsTest351 ( 10000, $id ) ))) );
+		$rows .= json_encode ( array ( "create"=>array("index"=>"test_rt", "id"=>$id, "doc"=>array( "gid"=>$id, "dummy"=>"test".$id, "title"=>RandomWordsTest237 ( 10000, $id ) ))) );
 		$rows .= "\n";
 		$id++;
 	}

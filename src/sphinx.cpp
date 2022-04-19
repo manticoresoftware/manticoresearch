@@ -7649,7 +7649,7 @@ private:
 
 	RowID_t						m_tRowID {INVALID_ROWID};
 	RowIdBoundaries_t			m_tBoundaries;
-	CSphFixedVector<RowID_t>	m_dCollected {MAX_COLLECTED+1};		// store 128 values + end marker (same as .spa attr block size)
+	CSphFixedVector<RowID_t>	m_dCollected {MAX_COLLECTED};		// store 128 values (same as .spa attr block size)
 	const DeadRowMap_Disk_c &	m_tDeadRowMap;
 };
 
@@ -7657,7 +7657,7 @@ template <>
 bool RowIterator_T<true>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
 {
 	RowID_t * pRowIdStart = m_dCollected.Begin();
-	RowID_t * pRowIdMax = pRowIdStart + m_dCollected.GetLength()-1;
+	RowID_t * pRowIdMax = pRowIdStart + m_dCollected.GetLength();
 	RowID_t * pRowID = pRowIdStart;
 
 	while ( pRowID<pRowIdMax && m_tRowID<=m_tBoundaries.m_tMaxRowID )
@@ -7675,7 +7675,7 @@ template <>
 bool RowIterator_T<false>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
 {
 	RowID_t * pRowIdStart = m_dCollected.Begin();
-	int64_t iDelta = Min ( RowID_t(m_dCollected.GetLength()-1), int64_t(m_tBoundaries.m_tMaxRowID)-m_tRowID+1 );
+	int64_t iDelta = Min ( RowID_t(m_dCollected.GetLength()), int64_t(m_tBoundaries.m_tMaxRowID)-m_tRowID+1 );
 	assert ( iDelta>=0 );
 	RowID_t * pRowIdMax = pRowIdStart + iDelta;
 	RowID_t * pRowID = pRowIdStart;
@@ -7739,7 +7739,7 @@ bool Fullscan ( ITERATOR & tIterator, TO_STATIC && fnToStatic, const CSphQueryCo
 
 	RowIdBlock_t dRowIDs;
 	while ( tIterator.GetNextRowIdBlock(dRowIDs) )
-		for ( auto & i : dRowIDs )
+		for ( auto i : dRowIDs )
 		{
 			tMatch.m_tRowID = i;
 			tMatch.m_pStatic = fnToStatic(i);

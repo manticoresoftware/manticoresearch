@@ -70,7 +70,7 @@ public:
 	explicit CSphBin ( ESphHitless eMode = SPH_HITLESS_NONE, bool bWordDict = false );
 	~CSphBin();
 
-	static int CalcBinSize ( int iMemoryLimit, int iBlocks, const char* sPhase, bool bWarn = true );
+	static int CalcBinSize ( int iMemoryLimit, int iBlocks, const char* sPhase );
 	void Init ( int iFD, SphOffset_t* pSharedOffset, const int iBinSize );
 
 	SphWordID_t ReadVLB();

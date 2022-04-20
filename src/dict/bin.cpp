@@ -30,7 +30,7 @@ CSphBin::CSphBin ( ESphHitless eMode, bool bWordDict )
 #endif
 }
 
-int CSphBin::CalcBinSize ( int iMemoryLimit, int iBlocks, const char* sPhase, bool bWarn )
+int CSphBin::CalcBinSize ( int iMemoryLimit, int iBlocks, const char* sPhase )
 {
 	if ( iBlocks <= 0 )
 		return CSphBin::MIN_SIZE;
@@ -46,11 +46,10 @@ int CSphBin::CalcBinSize ( int iMemoryLimit, int iBlocks, const char* sPhase, bo
 			iBinSize * iBlocks / 1024 );
 	}
 
-	if ( iBinSize < CSphBin::WARN_SIZE && bWarn )
+	if ( iBinSize < CSphBin::WARN_SIZE )
 	{
-		sphWarn ( "%s: merge_block_size=%d kb too low, increasing mem_limit may improve performance",
-			sPhase,
-			iBinSize / 1024 );
+		sphWarn ( "%s: increasing mem_limit may improve performance",
+			sPhase );
 	}
 
 	return iBinSize;

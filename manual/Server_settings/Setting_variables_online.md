@@ -70,6 +70,7 @@ This is very specific and 'hard' variable; filtered out messages will be just dr
 * `CPUSTATS= {1|0}` Turns on/off [cpu time tracking](../Starting_the_server/Manually.md#searchd-command-line-options).
 * `COREDUMP= {1|0}` Turns on/off saving a core file or a minidump of the server on crash. More details [here](../Starting_the_server/Manually.md#searchd-command-line-options).
 * `PSEUDO_SHARDING = {1|0}` Turns on/off search [pseudo-sharding](../Server_settings/Searchd.md#pseudo_sharding).
+* `SECONDARY_INDEXES = {1|0}` Turns on/off [secondary indexes](../Server_settings/Searchd.md#secondary_indexes) for search queries.
 
 Examples:
 

@@ -1082,6 +1082,21 @@ seamless_rotate = 1
 ```
 <!-- end -->
 
+### secondary_indexes
+<!-- example conf secondary_indexes -->
+
+Enables using secondary indexes for search queries. Note, you don't need to enable it for indexing (it's always enabled). Requires [Manticore Columnar Library](https://github.com/manticoresoftware/columnar).
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+secondary_indexes = 1
+```
+
+<!-- end -->
 
 ### server_id
 

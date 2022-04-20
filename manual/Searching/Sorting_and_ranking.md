@@ -133,7 +133,7 @@ SELECT ... OPTION ranker=sph04;
 | Name | Level | Type | Summary |
 | - | - | - | - |
 | max_lcs | query | int | maximum possible LCS value for the current query |
-| bm25 | document | int | quick estimate of BM25(1.2, 0) without syntax support |
+| bm25 | document | int | quick estimate of BM25(1.2, 0) |
 | bm25a(k1, b) | document | int | precise BM25() value with configurable K1, B constants and syntax support |
 | bm25f(k1, b, {field=weight, ...}) | document | int | precise BM25F() value with extra configurable field weights |
 | field_mask | document | int | bit mask of matched fields |

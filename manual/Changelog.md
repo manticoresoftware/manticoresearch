@@ -3,8 +3,9 @@
 # Version 5.X.X
 
 ### Major new features
+* [Secondary indexes](../Server_settings/Searchd.md#secondary_indexes) support in beta stage. Building secondary indexes is on by default for plain and real-time columnar and row-wise indexes (if [Manticore Columnar Library](https://github.com/manticoresoftware/columnar) is in use), but to enable it for searching you need to set `secondary_indexes = 1` either in your configuration file or using [SET GLOBAL](../Server_settings/Setting_variables_online.md).
 * [Read-only mode](Security/Read_only.md): you can now specify listeners that process only read queries discarding any writes.
-* New [/cli]((../Connecting_to_the_server/HTTP.md#/cli)) endpoint for running SQL queries over HTTP even easier.
+* New [/cli](../Connecting_to_the_server/HTTP.md#/cli) endpoint for running SQL queries over HTTP even easier.
 * Faster bulk INSERT/REPLACE/DELETE via JSON over HTTP: previously you could provide multiple write commands via HTTP JSON protocol, but they were processed one by one, now they are handled as a single transaction.
 * Support for [Chunked transfer encoding](https://en.wikipedia.org/wiki/Chunked_transfer_encoding) in HTTP protocol. You can now use chunked transfer in your application to transfer large batches with lower resource consumption (since you don't need to calculate `Content-Length`). On the server's side Manticore now always processes incoming HTTP data in streaming fashion without waiting for the whole batch to be trasferred as previously, which:
   - decreases peak RAM consumption, which lowers a chance of OOM
@@ -391,7 +392,7 @@ sys     0m0.001s
 - [new mode](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#blend_mode) `blend_mode='trim_all'`
 - added [support for escaping JSON path](Searching/Full_text_matching/Escaping.md#Escaping-json-node-names-in-SQL) with backticks
 - [indextool --check](Miscellaneous_tools.md#indextool) can work in RT mode
-- [FORCE/IGNORE INDEX(id)](Updating_documents/UPDATE.md#FORCE/IGNORE-INDEX) for SELECT/UPDATE
+- [FORCE/IGNORE INDEX(id)](Updating_documents/UPDATE.md#FORCE-and-IGNORE-INDEX) for SELECT/UPDATE
 - chunk id for a merged disk chunk is now unique
 - [indextool --check-disk-chunk CHUNK_NAME](Miscellaneous_tools.md#indextool)
 

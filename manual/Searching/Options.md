@@ -8,12 +8,13 @@ SQL [SELECT](../Searching/Full_text_matching/Basic_usage.md#SQL) clause and HTTP
 
 <!-- example options -->
 
-SQL:
+**SQL**:
+
 ```sql
 SELECT ... [OPTION <optionname>=<value> [ , ... ]] [FORCE|IGNORE INDEX(id)]
 ```
 
-HTTP:
+**HTTP**:
 ```json
 POST /search
 {   
@@ -100,7 +101,7 @@ POST /search
 
 <!-- end -->
 
-Supported options and respectively allowed values are:
+Supported options are:
 
 ### agent_query_timeout
 Integer. Max time in milliseconds to wait for remote queries to complete, see [this section](../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_query_timeout).
@@ -233,5 +234,16 @@ Quoted, colon-separated of `library name:plugin name:optional string of settings
 SELECT * FROM index WHERE MATCH ('yes@no') OPTION token_filter='mylib.so:blend:@'
 ```
 
-## FORCE/IGNORE INDEX(id)
-In rare cases Manticore's built-in query analyzer can be wrong in understanding a query and whether an index by id should be used or not. It can cause poor performance of queries like `SELECT ... WHERE id = 123`. Adding `FORCE INDEX(id)` will force Manticore use the index. `IGNORE INDEX(id)` will force ignore it.
+## FORCE and IGNORE INDEX
+
+<!-- example options_force -->
+
+In rare cases Manticore's built-in query analyzer can be wrong in understanding a query and whether an index by id or another field (in case [secondary indexes](../Server_settings/Searchd.md#secondary_indexes) is on) should be used or not. Adding `FORCE INDEX(field{, fieldN})` will force Manticore use indexes of the specified fields. `IGNORE INDEX(field{, fieldN})` will force ignore that.
+
+<!-- request SQL -->
+
+```sql
+SELECT * FROM students where age > 21 FORCE INDEX(age)
+```
+
+<!-- end -->

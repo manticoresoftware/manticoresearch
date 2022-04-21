@@ -1,3 +1,3 @@
 #!/bin/bash
 . distr.txt
-docker build -t ${distr}_clang:12 clang_12
+docker build -t ${distr}_clang:13 clang_13

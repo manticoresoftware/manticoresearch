@@ -207,7 +207,7 @@ stretch:
     - if: $WHAT==null
     - if: $WHAT=="all"
     - if: $WHAT =~ /stretch/
-  image: registry.gitlab.com/manticoresearch/dev/stretch_clang:12
+  image: registry.gitlab.com/manticoresearch/dev/stretch_clang:13
   cache:
     key: stretch
     paths:
@@ -249,7 +249,7 @@ bionic:
     - if: $WHAT==null
     - if: $WHAT=="all"
     - if: $WHAT =~ /bionic/
-  image: registry.gitlab.com/manticoresearch/dev/bionic_clang:12
+  image: registry.gitlab.com/manticoresearch/dev/bionic_clang:13
   cache:
     key: bionic
     paths:
@@ -270,7 +270,7 @@ focal:
     - if: $WHAT==null
     - if: $WHAT=="all"
     - if: $WHAT =~ /focal/
-  image: registry.gitlab.com/manticoresearch/dev/focal_clang:12
+  image: registry.gitlab.com/manticoresearch/dev/focal_clang:13
   cache:
     key: focal
     paths:
@@ -307,7 +307,7 @@ buster:
     - if: $WHAT==null
     - if: $WHAT=="all"
     - if: $WHAT =~ /buster/
-  image: registry.gitlab.com/manticoresearch/dev/buster_clang:12
+  image: registry.gitlab.com/manticoresearch/dev/buster_clang:13
   cache:
     key: buster
     paths:
@@ -327,7 +327,7 @@ bullseye:
     - if: $WHAT==null
     - if: $WHAT=="all"
     - if: $WHAT =~ /bullseye/
-  image: registry.gitlab.com/manticoresearch/dev/bullseye_clang:12
+  image: registry.gitlab.com/manticoresearch/dev/bullseye_clang:13
   cache:
     key: bullseye
     paths:

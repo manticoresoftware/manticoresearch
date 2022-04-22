@@ -511,13 +511,11 @@ void			sphSetDied();
 /// how much bits do we need for given int
 inline int sphLog2 ( uint64_t uValue )
 {
-#if defined(__GNUC__) || defined(__clang__)
-	if ( !uValue )
-		return 0;
-	return 64 - __builtin_clzll(uValue);
-#elif _WIN32
 	if (!uValue)
 		return 0;
+#if defined(__GNUC__) || defined(__clang__)
+	return 64 - __builtin_clzll(uValue);
+#elif _WIN32
 	DWORD uRes;
 	if ( BitScanReverse ( &uRes, (DWORD)( uValue>>32 ) ) )
 		return 33+uRes;

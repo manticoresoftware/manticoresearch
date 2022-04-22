@@ -800,6 +800,7 @@ TEST ( functions, Log2 )
 	EXPECT_EQ ( nlog2 ( 0xfffffffffffffffeULL ), 64 );
 	EXPECT_EQ ( nlog2 ( 0xefffffffffffffffULL ), 64 );
 	ASSERT_EQ ( sphLog2 ( 0x7fffffffffffffffULL ), 63 );
+	EXPECT_EQ ( sphLog2 ( 0 ), 0 );
 }
 
 //////////////////////////////////////////////////////////////////////////

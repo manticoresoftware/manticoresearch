@@ -536,3 +536,33 @@ A complete alphabetical list of keywords that are currently reserved in Manticor
 ```
 AND, AS, BY, DISTINCT, DIV, EXPLAIN, FACET, FALSE, FORCE, FROM, IGNORE, IN, INDEXES, IS, LIMIT, LOGS, MOD, NOT, NULL, OFFSET, OR, ORDER, REGEX, RELOAD, SELECT, SYSFILTERS, TRUE, USE
 ```
+
+## Documentation for old Manticore versions
+
+* [2.4.1](http://repo.manticoresearch.com/repository/old_docs/manticoresearch-2.4.1.pdf)
+
+* [2.5.1](http://repo.manticoresearch.com/repository/old_docs/manticoresearch-2.5.1.pdf)
+* [2.6.0](http://repo.manticoresearch.com/repository/old_docs/manticoresearch-2.6.0.pdf)
+* [2.6.1](http://repo.manticoresearch.com/repository/old_docs/manticoresearch-2.6.1.pdf)
+* [2.6.2](http://repo.manticoresearch.com/repository/old_docs/manticoresearch-2.6.2.pdf)
+* [2.6.3](http://repo.manticoresearch.com/repository/old_docs/manticoresearch-2.6.3.pdf)
+* [2.6.4](http://repo.manticoresearch.com/repository/old_docs/manticoresearch-2.6.4.pdf)
+* [2.7.0](http://repo.manticoresearch.com/repository/old_docs/manticoresearch-2.7.0.pdf)
+* [2.7.1](http://repo.manticoresearch.com/repository/old_docs/manticoresearch-2.7.1.pdf)
+* [2.7.2](http://repo.manticoresearch.com/repository/old_docs/manticoresearch-2.7.2.pdf)
+* [2.7.3](http://repo.manticoresearch.com/repository/old_docs/manticoresearch-2.7.3.pdf)
+* [2.7.4](http://repo.manticoresearch.com/repository/old_docs/manticoresearch-2.7.4.pdf)
+* [2.7.5](http://repo.manticoresearch.com/repository/old_docs/manticoresearch-2.7.5.pdf)
+* [2.8.0](http://repo.manticoresearch.com/repository/old_docs/manticoresearch-2.8.0.pdf)
+* [2.8.1](http://repo.manticoresearch.com/repository/old_docs/manticoresearch-2.8.1.pdf)
+* [2.8.2](http://repo.manticoresearch.com/repository/old_docs/manticoresearch-2.8.2.pdf)
+* [3.0.0](http://repo.manticoresearch.com/repository/old_docs/manticoresearch-3.0.0.pdf)
+* [3.0.2](http://repo.manticoresearch.com/repository/old_docs/manticoresearch-3.0.2.pdf)
+* [3.1.0](http://repo.manticoresearch.com/repository/old_docs/manticoresearch-3.1.0.pdf)
+* [3.1.2](http://repo.manticoresearch.com/repository/old_docs/manticoresearch-3.1.2.pdf)
+* [3.2.0](http://repo.manticoresearch.com/repository/old_docs/manticoresearch-3.2.0.pdf)
+* [3.2.2](http://repo.manticoresearch.com/repository/old_docs/manticoresearch-3.2.2.pdf)
+* [3.3.0](http://repo.manticoresearch.com/repository/old_docs/manticoresearch-3.3.0.pdf)
+* [3.4.0](http://repo.manticoresearch.com/repository/old_docs/manticoresearch-3.4.0.pdf)
+* [3.4.2](http://repo.manticoresearch.com/repository/old_docs/manticoresearch-3.4.2.pdf)
+* [3.5.0](http://repo.manticoresearch.com/repository/old_docs/manticoresearch-3.5.0.pdf)

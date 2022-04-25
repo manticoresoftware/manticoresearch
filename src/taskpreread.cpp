@@ -13,9 +13,10 @@
 #include "searchdtask.h"
 #include "searchdaemon.h"
 
-OneshotEvent_c g_tPrereadFinished;
+namespace {
+OneshotEvent_c g_tPrereadFinished; // invoked from main thread, so use raw (not coro) event.
 
-static void PrereadFunc ( void* )
+void DoPreread ()
 {
 	auto pDesc = PublishSystemInfo ( "PREREAD" );
 
@@ -30,16 +31,15 @@ static void PrereadFunc ( void* )
 	}
 
 	sphInfo ( "prereading %d indexes", dIndexes.GetLength ());
-	int iReaded = 0;
+	int iRead = 0;
 
-	for ( int i = 0; i<dIndexes.GetLength () && !sphInterrupted (); ++i )
+	for ( const CSphString& sName : dIndexes )
 	{
-		const CSphString& sName = dIndexes[i];
-		auto pServed = GetServed ( sName );
-		if ( !pServed )
-			continue;
+		if ( sphInterrupted() )
+			break;
 
-		if ( pServed->m_eType==IndexType_e::TEMPLATE )
+		auto pServed = GetServed ( sName );
+		if ( !pServed || pServed->m_eType==IndexType_e::TEMPLATE )
 			continue;
 
 		int64_t tmReading = sphMicroTimer ();
@@ -52,31 +52,27 @@ static void PrereadFunc ( void* )
 		if ( !pIdx->GetLastWarning ().IsEmpty ())
 			sphWarning ( "'%s' preread: %s", sName.cstr (), pIdx->GetLastWarning ().cstr ());
 
-		int64_t tmReaded = sphMicroTimer () - tmReading;
-		sphLogDebug ( "prereaded index '%s' in %0.3f sec", sName.cstr (), float ( tmReaded ) / 1000000.0f );
+		int64_t tmRead = sphMicroTimer () - tmReading;
+		sphLogDebug ( "preread index '%s' in %0.3f sec", sName.cstr (), float ( tmRead ) / 1000000.0f );
 
-		++iReaded;
+		++iRead;
 	}
 
 	int64_t tmFinished = sphMicroTimer () - tmStart;
-	sphInfo ( "prereaded %d indexes in %0.3f sec", iReaded, float ( tmFinished ) / 1000000.0f );
+	sphInfo ( "preread %d indexes in %0.3f sec", iRead, float ( tmFinished ) / 1000000.0f );
 	g_tPrereadFinished.SetEvent ();
 }
+} // namespace
 
-bool WaitFinishPreread ( int64_t uSec )
+bool WaitPrereadFinished ( int64_t uSec )
 {
 	return g_tPrereadFinished.WaitEvent ( int ( uSec / 1000 ));
 }
 
-void DoPreread ()
+void PrereadIndexes ( bool bForce )
 {
-	PrereadFunc ( nullptr );
-}
+	if ( bForce )
+		return Threads::CallCoroutine ( DoPreread );
 
-void StartPreread ()
-{
-	static int iPreread = -1;
-	if ( iPreread<0 )
-		iPreread = TaskManager::RegisterGlobal ("Preread task", PrereadFunc, nullptr, 1);
-	TaskManager::StartJob ( iPreread );
+	Threads::StartJob ( DoPreread );
 }

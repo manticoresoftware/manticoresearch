@@ -348,11 +348,11 @@ private:
 	}
 
 public:
-	// invoked from Coro::Go - Multiserve, Sphinxql, replication recv. Schedule into primary queue.
+	// invoked from Coro::Go - Multiserve, Sphinxql, replication recv. Schedule by default into primary queue.
 	// Agnostic to parent's task info (if any). Should create and use it's own.
-	static void StartPrimary ( Handler fnHandler, Scheduler_i* pScheduler )
+	static void StartPrimary ( Handler fnHandler, Scheduler_i* pScheduler, bool bPrimary=true )
 	{
-		( new Worker_c ( std::move ( fnHandler ), pScheduler ) )->Schedule ();
+		( new Worker_c ( std::move ( fnHandler ), pScheduler ) )->Schedule ( bPrimary );
 	}
 
 	// from Coro::Co -> all parallel tasks (snippets, local searches, pq, disk chunks). Schedule into secondary queue.
@@ -557,7 +557,7 @@ void Go ( Handler fnHandler, Scheduler_i * pScheduler )
 	Worker_c::StartPrimary ( std::move(fnHandler), pScheduler );
 }
 
-// start secondary subtasks (parallell search, pq processing, etc)
+// start secondary subtasks (parallel search, pq processing, etc)
 void Co ( Handler fnHandler, Waiter_t tSignaller)
 {
 	auto pScheduler = CurrentScheduler ();
@@ -655,6 +655,17 @@ bool CallCoroutineRes ( Predicate fnHandler )
 	bool bResult;
 	CallCoroutine ( [&bResult, &fnHandler] { bResult = fnHandler(); } );
 	return bResult;
+}
+
+// start secondary subtasks (parallel search, pq processing, etc)
+void StartJob ( Handler fnHandler )
+{
+	auto pScheduler = Coro::CurrentScheduler();
+	if ( !pScheduler )
+		pScheduler = GlobalWorkPool();
+
+	assert ( pScheduler );
+	Coro::Worker_c::StartPrimary ( std::move ( fnHandler ), pScheduler, false );
 }
 
 // Async schedule continuation.
@@ -796,16 +807,15 @@ Throttler_c::Throttler_c ( int tmThrottlePeriodMs )
 	if ( tmThrottlePeriodMs<0 )
 		m_tmThrottlePeriodMs = tmThrotleTimeQuantumMs;
 
-	if ( m_tmThrottlePeriodMs )
-		m_tmNextThrottleTimestamp = m_dTimerGuard.MiniTimerEngage( m_tmThrottlePeriodMs );
+	m_tmNextThrottleTimestamp = m_dTimerGuard.Engage( m_tmThrottlePeriodMs );
 }
 
 bool Throttler_c::MaybeThrottle ()
 {
-	if ( !m_tmThrottlePeriodMs || !sph::TimeExceeded ( m_tmNextThrottleTimestamp ) )
+	if ( !sph::TimeExceeded ( m_tmNextThrottleTimestamp ) )
 		return false;
 
-	m_tmNextThrottleTimestamp = m_dTimerGuard.MiniTimerEngage ( m_tmThrottlePeriodMs );
+	m_tmNextThrottleTimestamp = m_dTimerGuard.Engage ( m_tmThrottlePeriodMs );
 	auto iOldThread = MyThd ().m_iThreadID;
 	Coro::Worker ()->Reschedule ();
 	m_bSameThread = ( iOldThread==MyThd ().m_iThreadID );
@@ -814,10 +824,10 @@ bool Throttler_c::MaybeThrottle ()
 
 bool Throttler_c::ThrottleAndKeepCrashQuery ()
 {
-	if ( !m_tmThrottlePeriodMs || !sph::TimeExceeded ( m_tmNextThrottleTimestamp ) )
+	if ( !sph::TimeExceeded ( m_tmNextThrottleTimestamp ) )
 		return false;
 
-	m_tmNextThrottleTimestamp = m_dTimerGuard.MiniTimerEngage ( m_tmThrottlePeriodMs );
+	m_tmNextThrottleTimestamp = m_dTimerGuard.Engage ( m_tmThrottlePeriodMs );
 	CrashQueryKeeper_c _;
 	auto iOldThread = MyThd ().m_iThreadID;
 	Coro::Worker ()->Reschedule ();

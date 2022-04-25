@@ -11,26 +11,62 @@
 #pragma once
 
 #include <cstdint>
+#include "timeout_queue.h"
+#include "threadutils.h"
+#include <boost/intrusive/slist.hpp>
 
 namespace sph
 {
-	/// how often timing thread 'ticks'. Default 1ms, but note that thread quantum might be different depending from OS!
-	static const int MINI_TIMER_TICK_MS = 1;
+	/// we use useconds for timestamps, however sleep obey mseconds. Interval less than granularity should be considered as 0, timestamps inside granularity should be considered as equal
+	constexpr int64_t TICKS_GRANULARITY = 1000ll;
 
-	/// RAII timer thread ticker. While instance of the class exists and engaged - internal thread will tick every
-	/// MINI_TIMER_TICK_MS milliseconds, and update internal timestamp.
-	/// When all consumers gone - internal thread will sleep and not consume CPU time idling.
-	class MiniTimer_c
+	inline bool TimeExceeded ( int64_t iTimestampUS, int64_t iPivotUS )
 	{
-		bool m_bEngaged = false;
-
-	public:
-		/// that is made non-static, to avoid using engage outside living MiniTimer_c
-		int64_t MiniTimerEngage ( int64_t iTimePeriodMS );
-
-		~MiniTimer_c();
-	};
+		assert ( iPivotUS > 0 );
+		return ( iTimestampUS - sph::TICKS_GRANULARITY ) < iPivotUS;
+	}
 
 	/// returns true if provided timestamp is already reached or not
-	bool TimeExceeded ( int64_t tmMicroTimestamp );
+	/// it IMPLIES timer is engaged to given limit timestamp.
+	/// non-engaged timer doesn't tick and may infinitely return false.
+	bool TimeExceeded ( int64_t iTimestampUS );
+
+	/// engage timer, so that provided fnTask will be called when it is reached.
+	/// also it will be called on global interrupt (shutdown), so that fnTask must be aware to check it.
+	void EngageTask ( int64_t iTimePeriodMS, Threads::Handler fnTask, const char* szName="task" );
+
+	/// engage timer to absolute time. Note, timestamp is in microseconds
+	void EngageTaskAt ( int64_t iTimeStampUS, Threads::Handler fnTask, const char* szName="task" );
+
+	/// should be called on shutdown
+	void ShutdownMiniTimer();
+
+	struct ScheduleInfo_t
+	{
+		int64_t m_iTimeoutStamp;
+		CSphString m_sTask;
+	};
+
+	CSphVector<ScheduleInfo_t> GetSchedInfo();
+
+	using TimerHook_t = boost::intrusive::slist_member_hook<>;
 }
+
+/// RAII timer thread ticker.
+class MiniTimer_c: public EnqueuedTimeout_t
+{
+	friend class TinyTimer_c;
+	virtual void OnTimer() {};
+
+public:
+	sph::TimerHook_t m_tLink; // used to link timer in the queue
+	const char* m_szName = "mini-timer"; // hack! name and also flag that timer should be unlinked on destroy (if nullptr - dtr will do nothing)
+
+public:
+	/// on period<=0 does nothing, returns 0. On positive - engage tick after given period; returns timestamp where it should tick.
+	int64_t Engage ( int64_t iTimePeriodMS );
+	int64_t EngageUS ( int64_t iTimePeriodUS ); // same, but period is in microseconds
+
+	/// if destroy before timer - unengage and unlink everything
+	virtual ~MiniTimer_c();
+};

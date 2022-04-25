@@ -39,6 +39,9 @@ using Waiter_t = SharedPtrCustom_t<void>;
 void CallCoroutine ( Handler fnHandler );
 bool CallCoroutineRes ( Predicate fnHandler );
 
+// start handler in coroutine, self (if any) or main scheduler, second-priority
+void StartJob ( Handler handler );
+
 // perform handler in custom stack
 // note: handler is called as linear routine, without scheduler.
 // It should NOT switch context (i.e. no yield/resume)
@@ -304,7 +307,7 @@ class Throttler_c
 	int64_t m_tmNextThrottleTimestamp;
 	int m_tmThrottlePeriodMs;
 
-	sph::MiniTimer_c m_dTimerGuard;
+	MiniTimer_c m_dTimerGuard;
 	bool m_bSameThread = true;
 
 	bool MaybeThrottle ();

@@ -12,20 +12,17 @@
 /// @file taskflushmutable.h
 /// Task to check and flush mutable indexes (rt, precloate) when necessary or by timeout
 
-#ifndef MANTICORE_TASKFLUSHMUTABLE_H
-#define MANTICORE_TASKFLUSHMUTABLE_H
+#pragma once
 
 #include "sphinxstd.h"
 
-static const int64_t FALLBACK_FLUSH_PERIOD = 10*1000*1000; // reschedule in 10s in case planned flush failed
+constexpr int64_t DEFAULT_FLUSH_PERIOD = 10*3600*1000*1000ll; // reschedule in 10h in case planned flush failed
+
+// set from param `rt_flush_period`, see conf_options_reference/searchd_program_configuration_options.html
+void SetRtFlushPeriod ( int64_t iPeriod = DEFAULT_FLUSH_PERIOD );
+
+void ShutdownFlushingMutable();
 
 /* this cb attached to local indexes hash table 'add-or-replace' function. It is called for all new arrived indexes,
  * and if it suitable for flushing (i.e. if it exists and is mutable), engages flushing task by timer for it.*/
 void HookSubscribeMutableFlush ( const CSphString& sName );
-
-// set from param `rt_flush_period`, see conf_options_reference/searchd_program_configuration_options.html
-void SetRtFlushPeriod ( int64_t iPeriod );
-
-void ShutdownFlushingMutable();
-
-#endif //MANTICORE_TASKFLUSHMUTABLE_H

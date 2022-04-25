@@ -43,57 +43,39 @@ private:
 	mutable int m_iReceivedCookie = 0;
 };
 
-void SchedulePing ( HostDashboardRefPtr_t pHost );
-
-static void PingWorker ( void* pCookie )
-{
-	auto pDesc = PublishSystemInfo ( "PING" );
-	HostDashboardRefPtr_t pHost (( HostDashboard_t* ) pCookie );
-	if ( sphInterrupted () || pHost->m_iNeedPing<1 )
-		return;
-
-	auto iEngage = pHost->EngageTime ();
-	auto iNow = sphMicroTimer ();
-	if (( iEngage - 1000 )>iNow ) // more time to wait (round to 1ms); reschedule and return
-	{
-		SchedulePing ( std::move(pHost) );
-		return;
-	}
-
-	// it is time to ping. Make the connection and schedule the command.
-	// prepare the agent
-	using AgentConnRefPtr_t = CSphRefcountedPtr<AgentConn_t>;
-	AgentConnRefPtr_t pConn { new AgentConn_t };
-	pConn->m_tDesc.CloneFromHost ( pHost->m_tHost );
-	assert ( !pHost->m_tHost.m_pDash );
-
-	// fixme! Review the timeouts (g_iPingIntervalUs for both came from legacy)
-	pConn->m_iMyConnectTimeoutMs = int(g_iPingIntervalUs/1000);
-	pConn->m_iMyQueryTimeoutMs = g_iPingIntervalUs/1000;
-	pConn->m_tDesc.m_pDash = pHost;
-
-	// Run network task
-//	sphWarning ( "Ping %s", pConn->m_tDesc.GetMyUrl ().cstr ());
-	CSphRefcountedPtr<PingBuilder_c> pPinger ( new PingBuilder_c (( int ) iNow ));
-	RunRemoteTask ( pConn, pPinger, pPinger, [ pPinger, pHost ] ( bool b ) { SchedulePing (pHost); } );
-}
-
-static void PingAborter ( void* pCookie )
-{
-	HostDashboardRefPtr_t { (HostDashboard_t*)pCookie }; // adopt and release
-}
-
 void SchedulePing ( HostDashboardRefPtr_t pHost )
 {
-	if ( !pHost )
-		return;
-
-	static int iPingTask = -1;
-	if ( iPingTask<0 )
-		iPingTask = TaskManager::RegisterGlobal ( "Ping service", PingWorker, PingAborter );
+	static int iPingTask = TaskManager::RegisterGlobal ( "Ping service" );
 	assert ( iPingTask>=0 && "failed to create ping service task" );
-	auto pHazardHost = pHost.Leak();
-	TaskManager::ScheduleJob ( iPingTask, pHazardHost->EngageTime (), pHazardHost );
+	TaskManager::ScheduleJob ( iPingTask, pHost->EngageTime (), [pHost]
+	{
+		auto pDesc = PublishSystemInfo ( "PING" );
+		if ( sphInterrupted() || pHost->m_iNeedPing < 1 )
+			return;
+
+		auto iEngage = pHost->EngageTime();
+		auto iNow = sphMicroTimer();
+		if ( !sph::TimeExceeded ( iEngage, iNow ) )
+			return SchedulePing ( pHost );
+
+		// it is time to ping. Make the connection and schedule the command.
+		// prepare the agent
+		using AgentConnRefPtr_t = CSphRefcountedPtr<AgentConn_t>;
+		AgentConnRefPtr_t pConn { new AgentConn_t };
+		pConn->m_tDesc.CloneFromHost ( pHost->m_tHost );
+		assert ( !pHost->m_tHost.m_pDash );
+
+		// fixme! Review the timeouts (g_iPingIntervalUs for both came from legacy)
+		pConn->m_iMyConnectTimeoutMs = int ( g_iPingIntervalUs / 1000 );
+		pConn->m_iMyQueryTimeoutMs = g_iPingIntervalUs / 1000;
+		pConn->m_tDesc.m_pDash = pHost;
+
+		// Run network task
+		//	sphWarning ( "Ping %s", pConn->m_tDesc.GetMyUrl ().cstr ());
+		// todo! we send current time and receive it back, but don't use it. We can compare upon receiving with current time and calculate round-trip time, that looks like quite useful metric!
+		CSphRefcountedPtr<PingBuilder_c> pPinger { new PingBuilder_c ( (int)iNow ) };
+		RunRemoteTask ( pConn, pPinger, pPinger, [pPinger, pHost] ( bool ) { SchedulePing ( pHost ); } );
+	});
 }
 
 class Pinger_c: public IPinger
@@ -101,13 +83,8 @@ class Pinger_c: public IPinger
 public:
 	void Subscribe ( HostDashboardRefPtr_t pHost ) final
 	{
-		if ( !pHost )
-			return;
-
-		if ( pHost->m_iNeedPing<1 )
-			return;
-
-		SchedulePing ( pHost );
+		if ( pHost && pHost->m_iNeedPing >= 1 )
+			SchedulePing ( pHost );
 	}
 };
 

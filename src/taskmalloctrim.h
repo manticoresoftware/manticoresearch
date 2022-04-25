@@ -10,14 +10,11 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#ifndef MANTICORE_TASKMALLOCTRIM_H
-#define MANTICORE_TASKMALLOCTRIM_H
+#pragma once
 
 #include "sphinxutils.h"
 
-#define DEFAULT_MALLOC_TRIM_PERIOD (30*60*1000000)
+constexpr int64_t DEFAULT_MALLOC_TRIM_PERIOD = 30*60*1000000ll;
 
-void ScheduleMallocTrim ( int64_t iPeriod = DEFAULT_MALLOC_TRIM_PERIOD);
+void ScheduleMallocTrim ();
 int PerformMallocTrim ( size_t iPad );
-
-#endif //MANTICORE_TASKMALLOCTRIM_H

@@ -12,9 +12,6 @@
 /// @file taskglobalidf.h
 /// Task to check and rotate global IDF when necessary
 
-#ifndef MANTICORE_TASKGLOBALIDF_H
-#define MANTICORE_TASKGLOBALIDF_H
+#pragma once
 
 void RotateGlobalIdf ();
-
-#endif //MANTICORE_TASKGLOBALIDF_H

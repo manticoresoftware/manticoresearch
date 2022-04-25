@@ -31,8 +31,6 @@ class Waker_c
 	size_t m_iEpoch {};
 
 public:
-	friend class Context_c;
-
 	Waker_c() = default;
 
 	Waker_c ( Worker_c* pCtx, const size_t iEpoch )

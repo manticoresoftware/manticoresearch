@@ -59,9 +59,6 @@ void TimeoutQueue_c::ShiftDown ( int iHole )
 
 void TimeoutQueue_c::Push ( EnqueuedTimeout_t* pTask )
 {
-	if ( !pTask )
-		return;
-
 	m_dQueue.Add ( pTask );
 	ShiftUp ( m_dQueue.GetLength() - 1 );
 }

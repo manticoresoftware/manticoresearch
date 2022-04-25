@@ -16,59 +16,31 @@
 #pragma once
 
 #include "sphinxutils.h"
+#include "threadutils.h"
 
-using fnThread_t = std::function<void ( void* )>;
 using TaskID = int;
 
 namespace TaskManager {
 
 	struct TaskInfo_t
 	{
-		CSphString m_sName;
-		int m_iMaxRunners; // max num of threads running jobs from the same task (0 mean only main thread)
-		int m_iMaxQueueSize; // max possible num of enqueued tasks of this type. (0 means unlimited)
-		int m_iCurrentRunners; // current number of jobs for this task.
-		int64_t m_iTotalSpent;
-		int64_t m_iLastFinished;
-		int64_t m_iTotalRun;
-		int64_t m_iTotalDropped;
-		int m_inQueue;
-	};
-
-	struct ThreadInfo_t
-	{
-		int64_t m_iMyStartTimestamp;
-		int64_t m_iLastJobStartTime;
-		int64_t m_iLastJobDoneTime;
-		int64_t m_iTotalWorkedTime;
-		int64_t m_iTotalJobsDone;
-		int64_t m_iTotalTicked;
-		int m_iMyThreadID;
-		int m_iMyOSThreadID;
-	};
-
-	struct ScheduleInfo_t
-	{
-		int64_t m_iTimeoutStamp;
-		CSphString 	m_sTask;
+		CSphString m_sName;							// informational name (for logs, etc.)
+		int m_iMaxRunners = 0;						// max num of threads running jobs from the same task, 0=unlimited
+		std::atomic<int> m_iCurrentRunners { 0 };	// current number of running jobs
+		std::atomic<int> m_iAllRunners { 0 };		// current number of enqueued+running jobs
+		std::atomic<int> m_iTotalDropped { 0 };		// current number of jobs for this task.
+		std::atomic<int64_t> m_iTotalSpent { 0 };	// total time spend to this job
+		std::atomic<int64_t> m_iTotalRun { 0 };		// total N of times job invoked
+		std::atomic<int64_t> m_iLastFinished { 0 }; // timestamp when last job finished
 	};
 
 	/*!
 	 * @brief Register global task flavour.
 	 * @param sName - informational name of the task, will be used for logging, etc.
-	 * @param fnThread - worker wich will perform the job
-	 * @param fnFree - deleter for payload, will be called INSTEAD of worker if job has to be aborted
-	 * @param iThreads - max num of parallel jobs of the class. 0 (default) is special for lightweight jobs
-	 * running directly in scheduler's thread.
-	 * @param iJobs - max num of deffered MT jobs of such class. Jobs are pushed into dedicated queue, and the
-	 * param limits queue's size. Workers then pulls the jobs and abandon the queue. If for the moment queue size
-	 * limit is reached, the job will be dropped. 0 disables the queue (so, no jobs of this class
-	 * may be pushed in the case), it works both for single-threaded and MT jobs. -1 means 'infinite'. All
-	 * other numbers determine concrete limit.
+	 * @param iThreads - max num of parallel jobs of the class (0=infinite)
 	 * @return integer ID which has to be used to schedule/start jobs of that kind.
 	 */
-	TaskID RegisterGlobal ( CSphString sName, fnThread_t fnThread, fnThread_t fnFree, int iThreads = 0,
-		int iJobs = -1 );
+	TaskID RegisterGlobal ( CSphString sName, int iThreads = 0 );
 
 	/*!
 	 * @brief schedule job which will be engaged at given time (in microseconds). Scheduling will not run the
@@ -76,22 +48,17 @@ namespace TaskManager {
 	 * the time to run the jub appears).
 	 * @param iTask - kind of job (registered with RegisterGlobal)
 	 * @param iTimestamp - time (absolute) when job need to be executed
-	 * @param pPayload - optional param.
+	 * @param fnJob - task route
 	 */
-	void ScheduleJob ( TaskID iTask, int64_t iTimestamp, void* pPayload=nullptr );
+	void ScheduleJob ( TaskID iTask, int64_t iTimestampUS, Threads::Handler fnJob );
 
 	/*!
 	 * @brief enqueue job which will be run ASAP. For MT jobs queue's limit will be honored, so exceeding job will
 	 * be immediately dropped. For ST only if limit=0 job will be dropped, for other values it will be executed.
 	 * @param iTask - kind of job (registered with RegisterGlobal)
-	 * @param pPayload - optional param.
+	 * @param fnJob - task route
 	 */
-	void StartJob ( TaskID iTask, void* pPayload = nullptr );
+	void StartJob ( TaskID iTask, Threads::Handler fnJob );
 
-	/// causes finishing the tasker
-	void ShutDown();
-
-	CSphVector<TaskInfo_t> GetTaskInfo ();
-	CSphVector<ThreadInfo_t> GetThreadsInfo ();
-	CSphVector<ScheduleInfo_t> GetSchedInfo ();
+	VecTraits_T<TaskInfo_t> GetTaskInfo ();
 }

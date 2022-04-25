@@ -3989,14 +3989,6 @@ public:
 	}
 };
 
-bool TimeoutReached ( int64_t tmLeft, int64_t tmNow )
-{
-	if (tmNow<0)
-		tmNow = sphMicroTimer ();
-
-	return ( tmLeft-1000 )<tmNow;
-}
-
 #if ( NETPOLL_TYPE==NETPOLL_KQUEUE || NETPOLL_TYPE==NETPOLL_EPOLL )
 
 // both epoll and kqueue have events in hash, so we use also linked list to track them explicitly.

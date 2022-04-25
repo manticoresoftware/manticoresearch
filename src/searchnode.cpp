@@ -1648,7 +1648,7 @@ template <bool USE_BM25>
 const ExtDoc_t * ExtPayload_T<USE_BM25>::GetDocsChunk()
 {
 	// max_query_time
-	if ( m_iMaxTimer>0 && sph::TimeExceeded ( m_iMaxTimer ) )
+	if ( sph::TimeExceeded ( m_iMaxTimer ) )
 	{
 		if ( m_pWarning )
 			*m_pWarning = "query time exceeded max_query_time";
@@ -1986,7 +1986,7 @@ const ExtDoc_t * ExtTerm_T<USE_BM25>::GetDocsChunk()
 		return NULL;
 
 	// max_query_time
-	if ( m_iMaxTimer>0 && sph::TimeExceeded ( m_iMaxTimer ) )
+	if ( sph::TimeExceeded ( m_iMaxTimer ) )
 	{
 		if ( m_pWarning )
 			*m_pWarning = "query time exceeded max_query_time";
@@ -3001,7 +3001,7 @@ const ExtDoc_t * ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::GetDocsChunk()
 {
 	// since we're working directly with qwords, we need to check all those things here and not in ExtTerm
 	// max_query_time
-	if ( m_iMaxTimer>0 && sph::TimeExceeded ( m_iMaxTimer ) )
+	if ( sph::TimeExceeded ( m_iMaxTimer ) )
 	{
 		if ( m_pWarning )
 			*m_pWarning = "query time exceeded max_query_time";

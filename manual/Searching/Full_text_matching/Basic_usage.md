@@ -131,77 +131,77 @@ Examples:
 ```json
 POST /search
 -d
-'{   "index" : "myindex",
+'{   
+    "index" : "hn_small",
     "query":
     {
         "match":
         {
-            "*" : "find me"
+            "*" : "find joe"
         }
-    }
+    }, 
+    "_source": ["story_author","comment_author"],
+    "limit": 1
 }'
 ```
 
 <!-- response match -->
 ```json
 {
-  "took":10,
-  "timed_out": false,
-  "hits":
-  {
-    "total": 2,
-    "hits":
-    [
-      {
-        "_id": "1",
-        "_score": 1,
-        "_source": {"title":"first find me fast", "gid": 11 }
-      },
-      {
-        "_id": "2",
-        "_score": 1,
-        "_source": { "title":"second find me fast", "gid": 12 }
-      }
-    ]
-  }
+   "took" : 3,
+   "timed_out" : false,
+   "hits" : {
+      "hits" : [
+         {
+            "_id" : "668018",
+            "_score" : 3579,
+            "_source" : {
+               "story_author" : "IgorPartola",
+               "comment_author" : "joe_the_user"
+            }
+         }
+      ],
+      "total" : 88063,
+      "total_relation" : "eq"
+   }
 }
 ```
 <!-- request match_phrase -->
 ```json
 POST /search
 -d
-'{   "index" : "myindex",
+'{   
+    "index" : "hn_small",
     "query":
     {
         "match_phrase":
         {
-            "*" : "find me"
+            "*" : "find joe"
         }
-    }
+    }, 
+    "_source": ["story_author","comment_author"],
+    "limit": 1
 }'
 ```
 <!-- response match_phrase -->
 ```json
 {
-  "took":10,
-  "timed_out": false,
-  "hits":
-  {
-    "total": 2,
-    "hits":
-    [
-      {
-        "_id": "1",
-        "_score": 1,
-        "_source": {"title":"first find me fast", "gid": 11 }
-      },
-      {
-        "_id": "2",
-        "_score": 1,
-        "_source": { "title":"second find me fast", "gid": 12 }
-      }
-    ]
-  }
+   "took" : 3,
+   "timed_out" : false,
+   "hits" : {
+      "hits" : [
+         {
+            "_id" : "807160",
+            "_score" : 2599,
+            "_source" : {
+               "story_author" : "rbanffy",
+               "comment_author" : "runjake"
+            }
+         }
+      ],
+      "total" : 2,
+      "total_relation" : "eq"
+   }
 }
 ```
 
@@ -209,35 +209,34 @@ POST /search
 ```json
 POST /search
 -d
-'{   "index" : "myindex",
+'{   "index" : "hn_small",
     "query":
     {
-        "query_string": "@title \"find me fast \"/2"
-    }
+        "query_string": "@comment_text \"find joe fast \"/2"
+    },
+    "_source": ["story_author","comment_author"],
+    "limit": 1
 }'
 ```
 <!-- response query_string -->
 ```json
-{
-  "took":10,
-  "timed_out": false,
-  "hits":
-  {
-    "total": 2,
-    "hits":
-    [
-      {
-        "_id": "1",
-        "_score": 1,
-        "_source": {"title":"first find me fast", "gid": 11 }
-      },
-      {
-        "_id": "2",
-        "_score": 1,
-        "_source": { "title":"second find me fast", "gid": 12 }
-      }
-    ]
-  }
+{ 
+  "took" : 3,
+  "timed_out" : false,
+  "hits" : {
+      "hits" : [
+         {
+            "_id" : "807160",
+            "_score" : 2566,
+            "_source" : {
+               "story_author" : "rbanffy",
+               "comment_author" : "runjake"
+            }
+         }
+      ],
+      "total" : 1864,
+      "total_relation" : "eq"
+   }
 }
 ```
 <!-- request PHP -->

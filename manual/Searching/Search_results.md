@@ -28,29 +28,29 @@ In addition to that you can use [SHOW META](../Profiling_and_monitoring/SHOW_MET
 
 <!-- request SQL -->
 ```sql
-SELECT * FROM idx WHERE MATCH('joe'); SHOW META;
+SELECT id,story_author,comment_author FROM hn_small WHERE story_author='joe' LIMIT 3; SHOW META;
 ```
 
 <!-- response SQL -->
 ```sql
-+------+------+------+
-| id   | age  | name |
-+------+------+------+
-|    1 |   25 | joe  |
-+------+------+------+
-1 row in set (0.00 sec)
+++--------+--------------+----------------+
+| id     | story_author | comment_author |
++--------+--------------+----------------+
+| 152841 | joe          | SwellJoe       |
+| 161323 | joe          | samb           |
+| 163735 | joe          | jsjenkins168   |
++--------+--------------+----------------+
+3 rows in set (0.01 sec)
 
-+---------------+-------+
-| Variable_name | Value |
-+---------------+-------+
-| total         | 1     |
-| total_found   | 1     |
-| time          | 0.000 |
-| keyword[0]    | joe   |
-| docs[0]       | 1     |
-| hits[0]       | 1     |
-+---------------+-------+
-6 rows in set (0.00 sec)
++----------------+-------+
+| Variable_name  | Value |
++----------------+-------+
+| total          | 3     |
+| total_found    | 20    |
+| total_relation | gte   |
+| time           | 0.010 |
++----------------+-------+
+4 rows in set (0.00 sec)
 ```
 <!-- end -->
 

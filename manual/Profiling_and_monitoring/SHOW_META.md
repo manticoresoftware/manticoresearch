@@ -12,42 +12,42 @@ SHOW META [ LIKE pattern ]
 <!-- request SQL -->
 
 ```sql
-SELECT id,channel_id FROM records WHERE MATCH('one|two|three') limit 5;
-
+SELECT id,story_author FROM hn_small WHERE MATCH('one|two|three') limit 5; 
 SHOW META;
 ```
 
 <!-- response SQL -->
 
 ```sql
-+--------+----------------+
-| id     | channel_id     |
-+--------+----------------+
-| 630768 | 1054702.000000 |
-| 586645 | 1057204.000000 |
-| 523391 | 1061514.000000 |
-| 402383 | 1069381.000000 |
-| 456106 | 1065936.000000 |
-+--------+----------------+
-5 rows in set (0.40 sec)
++--------+--------------+
+| id     | story_author |
++--------+--------------+
+| 300263 | throwaway37  |
+| 713503 | mahmud       |
+| 716804 | mahmud       |
+| 776906 | jimbokun     |
+| 753332 | foxhop       |
++--------+--------------+
+5 rows in set (0.01 sec)
 
-+---------------+--------+
-| Variable_name | Value  |
-+---------------+--------+
-| total         | 1000   |
-| total_found   | 311736 |
-| time          | 0.407  |
-| keyword[0]    | one    |
-| docs[0]       | 265709 |
-| hits[0]       | 538323 |
-| keyword[1]    | two    |
-| docs[1]       | 96044  |
-| hits[1]       | 138576 |
-| keyword[2]    | three  |
-| docs[2]       | 43272  |
-| hits[2]       | 69104  |
-+---------------+--------+
-12 rows in set (0.00 sec)
++----------------+--------+
+| Variable_name  | Value  |
++----------------+--------+
+| total          | 5      |
+| total_found    | 266385 |
+| total_relation | eq     |
+| time           | 0.012  |
+| keyword[0]     | one    |
+| docs[0]        | 224387 |
+| hits[0]        | 310327 |
+| keyword[1]     | three  |
+| docs[1]        | 18181  |
+| hits[1]        | 21102  |
+| keyword[2]     | two    |
+| docs[2]        | 63251  |
+| hits[2]        | 75961  |
++----------------+--------+
+13 rows in set (0.00 sec)
 ```
 
 <!-- end -->
@@ -68,48 +68,49 @@ SHOW META;
 <!-- response SQL -->
 
 ```sql
-+--------+----------------+
-| id     | channel_id     |
-+--------+----------------+
-| 630768 | 1054702.000000 |
-| 586645 | 1057204.000000 |
-| 523391 | 1061514.000000 |
-| 402383 | 1069381.000000 |
-| 456106 | 1065936.000000 |
-+--------+----------------+
-5 rows in set (0.43 sec)
++--------+--------------+
+| id     | story_author |
++--------+--------------+
+| 300263 | throwaway37  |
+| 713503 | mahmud       |
+| 716804 | mahmud       |
+| 776906 | jimbokun     |
+| 753332 | foxhop       |
++--------+--------------+
+5 rows in set (0.01 sec)
 
-+-----------------------+---------+
-| Variable_name         | Value   |
-+-----------------------+---------+
-| total                 | 1000    |
-| total_found           | 311736  |
-| time                  | 0.431   |
-| cpu_time              | 431.096 |
-| agents_cpu_time       | 0.000   |
-| io_read_time          | 0.000   |
-| io_read_ops           | 0       |
-| io_read_kbytes        | 0.0     |
-| io_write_time         | 0.000   |
-| io_write_ops          | 0       |
-| io_write_kbytes       | 0.0     |
-| agent_io_read_time    | 0.000   |
-| agent_io_read_ops     | 0       |
-| agent_io_read_kbytes  | 0.0     |
-| agent_io_write_time   | 0.000   |
-| agent_io_write_ops    | 0       |
-| agent_io_write_kbytes | 0.0     |
-| keyword[0]            | one     |
-| docs[0]               | 265709  |
-| hits[0]               | 538323  |
-| keyword[1]            | two     |
-| docs[1]               | 96044   |
-| hits[1]               | 138576  |
-| keyword[2]            | three   |
-| docs[2]               | 43272   |
-| hits[2]               | 69104   |
-+-----------------------+---------+
-26 rows in set (0.00 sec)
++-----------------------+--------+
+| Variable_name         | Value  |
++-----------------------+--------+
+| total                 | 5      |
+| total_found           | 266385 |
+| total_relation        | eq     |
+| time                  | 0.011  |
+| cpu_time              | 18.004 |
+| agents_cpu_time       | 0.000  |
+| io_read_time          | 0.000  |
+| io_read_ops           | 0      |
+| io_read_kbytes        | 0.0    |
+| io_write_time         | 0.000  |
+| io_write_ops          | 0      |
+| io_write_kbytes       | 0.0    |
+| agent_io_read_time    | 0.000  |
+| agent_io_read_ops     | 0      |
+| agent_io_read_kbytes  | 0.0    |
+| agent_io_write_time   | 0.000  |
+| agent_io_write_ops    | 0      |
+| agent_io_write_kbytes | 0.0    |
+| keyword[0]            | one    |
+| docs[0]               | 224387 |
+| hits[0]               | 310327 |
+| keyword[1]            | three  |
+| docs[1]               | 18181  |
+| hits[1]               | 21102  |
+| keyword[2]            | two    |
+| docs[2]               | 63251  |
+| hits[2]               | 75961  |
++-----------------------+--------+
+27 rows in set (0.00 sec)
 ```
 
 <!-- end -->
@@ -122,7 +123,7 @@ Additional `predicted_time`, `dist_predicted_time`, `local_fetched_docs`, `local
 <!-- request SQL -->
 
 ```sql
-SELECT id,channel_id FROM records WHERE MATCH('one|two|three') limit 5 option max_predicted_time=100;
+SELECT id,story_author FROM hn_small WHERE MATCH('one|two|three') limit 5 option max_predicted_time=100; 
 
 SHOW META;
 ```
@@ -130,38 +131,40 @@ SHOW META;
 <!-- response SQL -->
 
 ```sql
-+--------+----------------+
-| id     | channel_id     |
-+--------+----------------+
-| 630768 | 1054702.000000 |
-| 586645 | 1057204.000000 |
-| 523391 | 1061514.000000 |
-| 402383 | 1069381.000000 |
-| 456106 | 1065936.000000 |
-+--------+----------------+
-5 rows in set (0.41 sec)
++--------+--------------+
+| id     | story_author |
++--------+--------------+
+| 300263 | throwaway37  |
+| 713503 | mahmud       |
+| 716804 | mahmud       |
+| 776906 | jimbokun     |
+| 753332 | foxhop       |
++--------+--------------+
+5 rows in set (0.01 sec)
 
+mysql> show meta;
 +---------------------+--------+
 | Variable_name       | Value  |
 +---------------------+--------+
-| total               | 1000   |
-| total_found         | 311736 |
-| time                | 0.405  |
-| local_fetched_docs  | 405025 |
-| local_fetched_hits  | 746003 |
-| local_fetched_skips | 0      |
-| predicted_time      | 81     |
+| total               | 5      |
+| total_found         | 266385 |
+| total_relation      | eq     |
+| time                | 0.012  |
+| local_fetched_docs  | 307212 |
+| local_fetched_hits  | 407390 |
+| local_fetched_skips | 24     |
+| predicted_time      | 56     |
 | keyword[0]          | one    |
-| docs[0]             | 265709 |
-| hits[0]             | 538323 |
-| keyword[1]          | two    |
-| docs[1]             | 96044  |
-| hits[1]             | 138576 |
-| keyword[2]          | three  |
-| docs[2]             | 43272  |
-| hits[2]             | 69104  |
+| docs[0]             | 224387 |
+| hits[0]             | 310327 |
+| keyword[1]          | three  |
+| docs[1]             | 18181  |
+| hits[1]             | 21102  |
+| keyword[2]          | two    |
+| docs[2]             | 63251  |
+| hits[2]             | 75961  |
 +---------------------+--------+
-16 rows in set (0.00 sec)
+17 rows in set (0.00 sec)
 ```
 
 <!-- end -->
@@ -175,40 +178,41 @@ SHOW META;
 <!-- request SQL -->
 
 ```sql
-SELECT id,channel_id FROM records WHERE MATCH('one|two|three') LIMIT 5; SHOW META;
+SELECT id,story_author FROM hn_small WHERE MATCH('one|two|three') LIMIT 5; SHOW META;
 ```
 
 <!-- response SQL -->
 
 ```sql
-+--------+----------------+
-| id     | channel_id     |
-+--------+----------------+
-| 630768 | 1054702.000000 |
-| 586645 | 1057204.000000 |
-| 523391 | 1061514.000000 |
-| 402383 | 1069381.000000 |
-| 456106 | 1065936.000000 |
-+--------+----------------+
-5 rows in set (0.41 sec)
++--------+--------------+
+| id     | story_author |
++--------+--------------+
+| 300263 | throwaway37  |
+| 713503 | mahmud       |
+| 716804 | mahmud       |
+| 776906 | jimbokun     |
+| 753332 | foxhop       |
++--------+--------------+
+5 rows in set (0.01 sec)
 
-+---------------+--------+
-| Variable_name | Value  |
-+---------------+--------+
-| total         | 1000   |
-| total_found   | 311736 |
-| time          | 0.407  |
-| keyword[0]    | one    |
-| docs[0]       | 265709 |
-| hits[0]       | 538323 |
-| keyword[1]    | two    |
-| docs[1]       | 96044  |
-| hits[1]       | 138576 |
-| keyword[2]    | three  |
-| docs[2]       | 43272  |
-| hits[2]       | 69104  |
-+---------------+--------+
-12 rows in set (0.00 sec)
++----------------+--------+
+| Variable_name  | Value  |
++----------------+--------+
+| total          | 5      |
+| total_found    | 266385 |
+| total_relation | eq     |
+| time           | 0.011  |
+| keyword[0]     | one    |
+| docs[0]        | 224387 |
+| hits[0]        | 310327 |
+| keyword[1]     | three  |
+| docs[1]        | 18181  |
+| hits[1]        | 21102  |
+| keyword[2]     | two    |
+| docs[2]        | 63251  |
+| hits[2]        | 75961  |
++----------------+--------+
+13 rows in set (0.00 sec)
 ```
 
 <!-- end -->
@@ -228,13 +232,14 @@ SHOW META LIKE 'total%';
 <!-- response SQL -->
 
 ```sql
-+---------------+--------+
-| Variable_name | Value  |
-+---------------+--------+
-| total         | 1000   |
-| total_found   | 311736 |
-+---------------+--------+
-2 rows in set (0.00 sec)
++----------------+--------+
+| Variable_name  | Value  |
++----------------+--------+
+| total          | 5      |
+| total_found    | 266385 |
+| total_relation | eq     |
++----------------+--------+
+3 rows in set (0.00 sec)
 ```
 
 <!-- end -->

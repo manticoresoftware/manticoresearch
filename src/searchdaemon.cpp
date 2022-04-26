@@ -1126,9 +1126,9 @@ QueryStatContainerExact_c& QueryStatContainerExact_c::operator=( QueryStatContai
 
 //////////////////////////////////////////////////////////////////////////
 ServedStats_c::ServedStats_c()
-	: m_pQueryStatRecords { new QueryStatContainer_c }
+	: m_pQueryStatRecords { std::make_unique<QueryStatContainer_c>() }
 #ifndef NDEBUG
-	, m_pQueryStatRecordsExact { new QueryStatContainerExact_c }
+	, m_pQueryStatRecordsExact { std::make_unique<QueryStatContainerExact_c>() }
 #endif
 	, m_pQueryTimeDigest { sphCreateTDigest() }
 	, m_pRowsFoundDigest { sphCreateTDigest() }

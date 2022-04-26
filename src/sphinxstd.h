@@ -5329,7 +5329,7 @@ public:
 	virtual double		Percentile ( int iPercent ) const = 0;
 };
 
-TDigest_i * sphCreateTDigest();
+std::unique_ptr<TDigest_i> sphCreateTDigest();
 
 //////////////////////////////////////////////////////////////////////////
 /// simple linked list

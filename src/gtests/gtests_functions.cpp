@@ -31,18 +31,13 @@ class TDigest : public ::testing::Test
 {
 
 protected:
-	void TearDown () override
-	{
-		SafeDelete ( pDigest );
-	}
-
 	void SetUp() override
 	{
 		sphSrand ( 0 );
 		pDigest = sphCreateTDigest ();
 	}
 
-	TDigest_i * pDigest;
+	std::unique_ptr<TDigest_i> pDigest;
 };
 
 TEST_F ( TDigest, simple )

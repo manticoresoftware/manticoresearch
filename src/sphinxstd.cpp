@@ -2082,9 +2082,9 @@ private:
 };
 
 
-TDigest_i * sphCreateTDigest()
+std::unique_ptr<TDigest_i> sphCreateTDigest()
 {
-	return new TDigest_c;
+	return std::make_unique<TDigest_c>();
 }
 
 //////////////////////////////////////////////////////////////////////////

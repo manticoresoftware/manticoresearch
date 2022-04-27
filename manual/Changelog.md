@@ -1,9 +1,9 @@
 # Changelog
 
-# Version 5.X.X
+# Version 5.0.0
 
 ### Major new features
-* [Secondary indexes](../Server_settings/Searchd.md#secondary_indexes) support in beta stage. Building secondary indexes is on by default for plain and real-time columnar and row-wise indexes (if [Manticore Columnar Library](https://github.com/manticoresoftware/columnar) is in use), but to enable it for searching you need to set `secondary_indexes = 1` either in your configuration file or using [SET GLOBAL](../Server_settings/Setting_variables_online.md).
+* 🔬 [Secondary indexes](../Server_settings/Searchd.md#secondary_indexes) support in beta stage. Building secondary indexes is on by default for plain and real-time columnar and row-wise indexes (if [Manticore Columnar Library](https://github.com/manticoresoftware/columnar) is in use), but to enable it for searching you need to set `secondary_indexes = 1` either in your configuration file or using [SET GLOBAL](../Server_settings/Setting_variables_online.md).
 * [Read-only mode](Security/Read_only.md): you can now specify listeners that process only read queries discarding any writes.
 * New [/cli](../Connecting_to_the_server/HTTP.md#/cli) endpoint for running SQL queries over HTTP even easier.
 * Faster bulk INSERT/REPLACE/DELETE via JSON over HTTP: previously you could provide multiple write commands via HTTP JSON protocol, but they were processed one by one, now they are handled as a single transaction.
@@ -84,19 +84,22 @@
 * [Pseudo sharding](../Server_settings/Searchd.md#pseudo_sharding) is enabled by default.
 * Having at least one full-text field in a real-time/plain index is not mandatory anymore. You can now use Manticore even in cases not having anything to do with full-text search.
 * Fast fetching for attributes backed by [Manticore Columnar Library](https://github.com/manticoresoftware/columnar): queries like `select * from <columnar table>` are now much faster than previously, especialy if there are many fields in the schema.
-* ⚠️ Implicit [cutoff](../Searching/Options.md#cutoff). Manticore now doesn't spend time and resources processing data you don't need in the result set which will be returned. The downside is that it affects `total_found` in [SHOW META](../Profiling_and_monitoring/SHOW_META.md#SHOW-META) and [hits.total](../Searching/Full_text_matching/Basic_usage.md#HTTP) in JSON output. It is now only accurate in case you see `total_relation: eq` while `total_relation: gte` means the actual number of matching documents is greater than the `total_found` value you've got. To retain the previous behaviour you can use search option `cutoff=0`, which makes `total_relation` always `eq`.
-* ⚠️ All full-text fields are now [stored](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#stored_fields) by default in plain indexes. You need to use `stored_fields = ` (empty value) to make all fields non-stored (i.e. revert to the previous behaviour).
+* **⚠️ BREAKING CHANGE**: Implicit [cutoff](../Searching/Options.md#cutoff). Manticore now doesn't spend time and resources processing data you don't need in the result set which will be returned. The downside is that it affects `total_found` in [SHOW META](../Profiling_and_monitoring/SHOW_META.md#SHOW-META) and [hits.total](../Searching/Full_text_matching/Basic_usage.md#HTTP) in JSON output. It is now only accurate in case you see `total_relation: eq` while `total_relation: gte` means the actual number of matching documents is greater than the `total_found` value you've got. To retain the previous behaviour you can use search option `cutoff=0`, which makes `total_relation` always `eq`.
+* **⚠️ BREAKING CHANGE**: All full-text fields are now [stored](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#stored_fields) by default in plain indexes. You need to use `stored_fields = ` (empty value) to make all fields non-stored (i.e. revert to the previous behaviour).
 * [#715](https://github.com/manticoresoftware/manticoresearch/issues/715) HTTP JSON supports [search options](../Searching/Options.md#General-syntax).
 
 ### Minor changes
-* ⚠️ Session state support with help of [HTTP keep-alive](../Connecting_to_the_server/HTTP.md#Keep-alive). This makes HTTP stateful when the client supports it too. For example, using the new [/cli](../Connecting_to_the_server/HTTP.md#/cli) endpoint and HTTP keep-alive (which is on by default in all browsers) you can call `SHOW META` after `SELECT` and it will work the same way it works via mysql. Note, previously `Connection: keep-alive` HTTP header was supported too, but it only caused reusing the same connection. Since this version it also makes the session stateful.
+* **⚠️ BREAKING CHANGE**: Index meta file format change. Previously meta files (`.meta`, `.sph`) were in binary format, now it's just json. The new Manticore version will convert older indexes automatically, but:
+  - you can get warning like `WARNING: ... syntax error, unexpected TOK_IDENT`
+  - you won't be able to run the index with previous Manticore versions, make sure you have a backup
+* **⚠️ BREAKING CHANGE**: Session state support with help of [HTTP keep-alive](../Connecting_to_the_server/HTTP.md#Keep-alive). This makes HTTP stateful when the client supports it too. For example, using the new [/cli](../Connecting_to_the_server/HTTP.md#/cli) endpoint and HTTP keep-alive (which is on by default in all browsers) you can call `SHOW META` after `SELECT` and it will work the same way it works via mysql. Note, previously `Connection: keep-alive` HTTP header was supported too, but it only caused reusing the same connection. Since this version it also makes the session stateful.
 * Listen on `127.0.0.1` instead of `0.0.0.0` in case no `listen` is specified in config. Even though in the [default config](https://github.com/manticoresoftware/manticoresearch/blob/master/manticore.conf.in) `listen` is specified in case the user removed it Manticore previously would listen on `0.0.0.0` which is not secure, now it listens on `127.0.0.1` which is normally not exposed to the Internet.
 * Faster aggregation over columnar attributes.
 * Increased `AVG()` accuracy: previously Manticore used `float` internally for aggregations, now it uses `double` which increases the accuracy significantly.
 * Improved support for JDBC MySQL driver.
 * `DEBUG malloc_stats` support for [jemalloc](https://github.com/jemalloc/jemalloc).
 * [optimize_cutoff](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#optimize_cutoff) is now available as a per-table setting which can be set when you CREATE or ALTER a table.
-* ⚠️ [query_log_format](../Server_settings/Searchd.md#query_log_format) is now **`sphinxql` by default**. If you are used to `plain` format you need to add `query_log_format = plain` to your configuration file.
+* **⚠️ BREAKING CHANGE**: [query_log_format](../Server_settings/Searchd.md#query_log_format) is now **`sphinxql` by default**. If you are used to `plain` format you need to add `query_log_format = plain` to your configuration file.
 * Significant memory consumption improvements: Manticore consumes significantly less RAM now in case of long and intensive insert/replace/optimize workload in case stored fields are used.
 * [shutdown_timeout](../Server_settings/Searchd.md#shutdown_timeout) default value was increased from 3 seconds to 60 seconds
 * [ffd0499d](https://github.com/manticoresoftware/manticoresearch/commit/ffd0499d329d2c383f14c8a44c4cc84338ab56e7) Support for Java mysql connector >= 6.0.3: in [Java mysql connection 6.0.3](https://mvnrepository.com/artifact/mysql/mysql-connector-java/6.0.3) they changed the way they connect to mysql which broke compatibility with Manticore. The new behaviour is now supported.
@@ -106,9 +109,6 @@
 ### ⚠️ Other minor breaking changes
 * ⚠️ BM25F formula has been slightly updated to improve search relevance. This only affects search results in case you use function [BM25F()](../Functions/Searching_and_ranking_functions.md#BM25F%28%29), it doesn't change behaviour of the default ranking formula.
 * ⚠️ Changed behaviour of REST [/sql](../Connecting_to_the_server/HTTP.md#/sql?mode=raw) endpoint: `/sql?mode=raw` now requires escaping.
-* ⚠️ Index meta file format change. The new version will convert older indexes automatically, but:
-  - you can get warning like `WARNING: ... syntax error, unexpected TOK_IDENT`
-  - you won't be able to run the index with previous Manticore versions, make sure you have a backup
 * ⚠️ Format change of the response of `/bulk` INSERT/REPLACE/DELETE requests:
   - previously each sub-query constituted a separate transaction and resulted in a separate response
   - now the whole batch is considered a single transaction, which returns a single response

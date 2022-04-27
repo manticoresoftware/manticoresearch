@@ -31,13 +31,17 @@ Facets can be defined in the `aggs` node:
          {
             "terms" :
              {
-              "field":"attribute name"
+              "field":"attribute name",
+              "size": 1000
              }
          }
      }
 ```
 
-`group name` is an alias given to the aggregation, the `field` value must contain the name of the attribute or expression we are faceting.
+where:
+* `group name` is an alias given to the aggregation
+* `field` value must contain the name of the attribute or expression we are faceting
+* optional `size` specifies the maximum number of buckets to include into the result. When not specified it inherits the main query's limit. More details can be found in section [Size of facet result](../Searching/Faceted_search.md#Size-of-facet-result).
 
 The result set will contain an `aggregations` node with the returned facets, where `key` is the aggregated value and `doc_count` is the aggregation count.
 

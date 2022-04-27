@@ -4492,7 +4492,7 @@ static void BuildStoreHistograms ( const CSphSchema & tSchema, DocID_t tDocId, C
 			case SPH_ATTR_STRING:
 			{
 				const CSphString & sVal = tSource.GetStrAttr ( tItem.m_iAttr );
-				SphAttr_t uHash = sphCRC32 ( sVal.cstr() );
+				SphAttr_t uHash = sphCRC32 ( sVal.scstr() );
 				tItem.m_pHist->Insert ( uHash );
 			}
 			break;

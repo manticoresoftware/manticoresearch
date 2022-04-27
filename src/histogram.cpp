@@ -568,7 +568,7 @@ bool HistogramStreamed_T<T>::EstimateRsetSize ( const CSphFilterSettings & tFilt
 		int iItemsCount = Max ( tFilter.m_dStrings.GetLength(), tFilter.GetNumValues() );
 		CSphFixedVector<SphAttr_t> dHashes ( iItemsCount );
 		for ( int i=0; i<iItemsCount; i++ )
-			dHashes[i] = sphCRC32 ( tFilter.m_dStrings[i].cstr() );
+			dHashes[i] = sphCRC32 ( tFilter.m_dStrings[i].scstr() );
 
 		// clean up duplicates and string collisions
 		dHashes.Sort();

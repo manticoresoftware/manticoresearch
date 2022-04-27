@@ -1,19 +1,5 @@
 # Changelog
 
-## Work in progress
-
-The following are the changes we are either working on now or are going to work on in the nearest time.
-
-* Secondary indexes => higher performance.
-* Docstore for columnar attributes => higher performance.
-* Read-only listeners => better security.
-* Bulk insert/replace via HTTP JSON => higher performance.
-* Keepalive support in HTTP for multi-queries => ease of use.
-* Further columnar storage performance optimizations.
-* Making full-text optional. Manticore is not only about full-text, but still requires at least one full-text field in each index. It's time to change it.
-* New https://repo.manticoresearch.com/ backend => ease of use, safer place for packages.
-* FAQ site => community support.
-
 ## Version 4.2.0, Dec 23 2021
 
 ### Major new features

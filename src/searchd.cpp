@@ -12227,7 +12227,9 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 		if ( bAll )
 			tOut.PutString ( dThd.m_sChain ); // Chain
 		auto tInfo = FormatInfo ( dThd, eFmt, tBuf );
-		tOut.PutString ( tInfo.first, Min ( tInfo.second, iCols ) ); // Info m_pTaskInfo
+		if ( iCols >= 0 && iCols < tInfo.second )
+			tInfo.second = iCols;
+		tOut.PutString ( tInfo.first, tInfo.second ); // Info m_pTaskInfo
 		if ( !tOut.Commit () )
 			break;
 	}

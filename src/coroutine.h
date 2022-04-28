@@ -346,6 +346,9 @@ public:
 	}
 };
 
+// yield and reschedule after given period of time (in milliseconds)
+void SleepMsec ( int iMsec );
+
 // event is specially designed for netloop - here SetEvent doesn't require to be run from Coro, however WaitEvent does.
 // by that fact other kind of condvar is not suitable here.
 class Event_c

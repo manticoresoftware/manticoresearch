@@ -842,6 +842,17 @@ inline void fnResume ( volatile void* pCtx )
 	( (Threads::Coro::Worker_c *) pCtx )->RestartSecondary ();
 }
 
+// yield and reschedule after given period of time (in milliseconds)
+void SleepMsec ( int iMsec )
+{
+	if ( iMsec < 0 )
+		return;
+
+	Coro::YieldWith ( [iMsec, fnRestarter = CurrentRestarter()]() mutable {
+		sph::EngageTask ( iMsec, std::move ( fnRestarter ), "SleepMsec" );
+	} );
+}
+
 Event_c::~Event_c ()
 {
 	// edge case: event destroyed being in wait state.

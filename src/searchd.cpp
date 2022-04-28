@@ -14280,7 +14280,7 @@ void HandleMallocTrim ( RowBuffer_i & tOut )
 void HandleSleep ( RowBuffer_i & tOut, int64_t iParam )
 {
 	int64_t tmStart = sphMicroTimer ();
-	sphSleepMsec ( Max ( iParam/1000, 1 ) );
+	Threads::Coro::SleepMsec ( Max ( iParam/1000, 1 ) );
 	int64_t tmDelta = sphMicroTimer ()-tmStart;
 
 	tOut.HeadTuplet ( "command", "result" );

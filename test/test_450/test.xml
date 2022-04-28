@@ -8,7 +8,7 @@ searchd
 {
 <searchd_settings/>
 	binlog_path = data
-    rt_flush_period = 10
+    rt_flush_period = 3s
 }
 
 index testrt1
@@ -30,11 +30,12 @@ index testrt2
 </config>
 
 <queries>
-<sphinxql>INSERT INTO testrt1 (id,dummy) VALUES ( 1, 'main' )</sphinxql>
-
-<sphinxql>show index testrt2 status like '%tid%'</sphinxql>
-<sphinxql>INSERT INTO testrt2 (id,dummy) VALUES ( 1, 'main' )</sphinxql>
-<sphinxql d="mysql" sleep="12">SELECT 0 as id</sphinxql>
+<sphinxql>
+	INSERT INTO testrt1 (id,dummy) VALUES ( 1, 'main' );
+	show index testrt2 status like '%tid%';
+	INSERT INTO testrt2 (id,dummy) VALUES ( 1, 'main' );
+</sphinxql>
+<sphinxql d="mysql" sleep="5">SELECT 0 as id</sphinxql>
 <sphinxql>show index testrt2 status like '%tid%'</sphinxql>
 </queries>
 

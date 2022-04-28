@@ -19565,7 +19565,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	// initialize timeouts since hook will use them
 	auto iRtFlushPeriodUs = hSearchd.GetUsTime64S ( "rt_flush_period", 36000000000ll ); // 10h
-	SetRtFlushPeriod ( Max ( iRtFlushPeriodUs, 10 * 1000000 ) );
+	SetRtFlushPeriod ( Max ( iRtFlushPeriodUs, 3 * 1000000 ) ); // min 3S
 	g_pLocalIndexes->SetAddOrReplaceHook ( HookSubscribeMutableFlush );
 
 	//////////////////////

@@ -3948,6 +3948,17 @@ private:
 		if ( !bRestart && m_iFile==iFile )
 			return true;
 
+		if ( !m_pMerge.get() )
+		{
+			sError.SetSprintf ( "missed write state" );
+			return false;
+		}
+		if ( iFile>=m_pMerge->m_dFilesNew.GetLength() )
+		{
+			sError.SetSprintf ( "switching disk file %d outside of the bounds %d", iFile, m_pMerge->m_dFilesNew.GetLength() );
+			return false;
+		}
+
 		if ( !bRestart && m_pWriter )
 		{
 			sError.SetSprintf ( "active writer %s (%d), next  %s (%d)", GetFilename(), m_iFile, m_pMerge->m_dFilesNew[iFile].cstr(), iFile );

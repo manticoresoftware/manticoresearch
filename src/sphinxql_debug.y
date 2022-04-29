@@ -230,7 +230,7 @@ split:
 	;
 
 wait:
-	TOK_WAIT ident opt_status like_filter
+	TOK_WAIT ident opt_status like_filter opt_option_clause
 	{
 		auto& tCmd = pParser->m_tCmd;
 		if ( tCmd.m_eCommand!=Cmd_e::WAIT_STATUS)

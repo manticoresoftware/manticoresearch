@@ -73,7 +73,7 @@ ALTER CLUSTER test ADD rt1;
 
 <!-- without waiting the status test is not stable (sometimes select * returns 0 results) -->
 <sphinxql d="1">
-	debug wait test status 4 like 'state';
+	debug wait test status 4 like 'state' option 'timeout'=30;
 	SHOW INDEX rt2 SETTINGS;
 	SELECT * FROM test:rt2 where match ( 'tes' );
 </sphinxql>
@@ -119,7 +119,7 @@ ALTER CLUSTER test ADD rt1;
 </sphinxql>
 
 <sphinxql d="1">
-	debug wait test status 2 like 'state';
+	debug wait test status 2 like 'state' option 'timeout'=30;
 	SELECT * FROM loc:rt1;
 	flush ramchunk rt1;
 	SHOW INDEX rt1 STATUS LIKE 'disk_chunks';

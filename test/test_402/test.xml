@@ -58,7 +58,7 @@ searchd
 
 <!-- request to node 1 -->
 <sphinxql d="1">
-	debug wait test status 6 like 'state';
+	debug wait test status 6 like 'state' option 'timeout'=30;
 	SELECT * FROM test:rt1;
 	SELECT * FROM test:rt2;
 	SELECT * FROM test:rt3;
@@ -73,7 +73,7 @@ searchd
 
 <!-- request to node 0 -->
 <sphinxql d="0">
-	debug wait test status 8 like 'state';
+	debug wait test status 8 like 'state' option 'timeout'=30;
 	SELECT * FROM test:rt3;
 
 <!-- cleanup -->

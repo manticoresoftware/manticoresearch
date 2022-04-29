@@ -2586,52 +2586,14 @@ class SphinxConfig
                 case 'wait-ready':
                     $ql = new QLClient();
                     $ql->SetConnection($connection);
-                    $status = $ql->Query("debug wait $cluster_name like 'state'");
-                    break; // fixme! also timeout processing need...
-                    $like_name = "cluster_" . $cluster_name . "_node_state";
-                    $wait_started = MyMicrotime();
-                    while (true) {
-                        $status = $ql->Query("show status like '$like_name'");
-                        $name_pos = strpos($status, $like_name);
-                        $delim_pos = strpos($status, "|");
-                        if ($name_pos === 0 && $delim_pos > 0) {
-                            $node_state = trim(explode("\n", substr($status, $delim_pos + 1))[0]);
-                            if ($node_state === "synced" || $node_state === "donor")
-                                break;
-                            else
-                                usleep(500);
-                        }
-
-                        $tm_delta = MyMicrotime() - $wait_started;
-                        if ($tm_delta > GetTmDelta()) {
-                            $status .= sprintf("; timeout %.3f sec", $tm_delta);
-                            break;
-                        }
-                    }
+                    $timeout=GetTmDelta();
+                    $status = $ql->Query("debug wait $cluster_name like 'state' option 'timeout'=$timeout");
                     break;
                 case 'wait-commit':
                     $ql = new QLClient();
                     $ql->SetConnection($connection);
-                    $status = $ql->Query("debug wait $cluster_name status $wait_value like 'state'");
-                    break; // fixme! also timeout processing need...
-                    $wait_started = MyMicrotime();
-                    while (true) {
-                        $status = $ql->Query("show status like '$cluster_status'");
-                        $delim_pos = strpos($status, "|");
-                        if ($delim_pos > 0) {
-                            $wait_got_val = trim(explode("\n", substr($status, $delim_pos + 1))[0]);
-                            if ($wait_got_val >= $wait_value)
-                                break;
-                            else
-                                usleep(500);
-                        }
-
-                        $tm_delta = MyMicrotime() - $wait_started;
-                        if ($tm_delta > GetTmDelta()) {
-                            $status .= sprintf("; timeout %.3f sec", $tm_delta);
-                            break;
-                        }
-                    }
+                    $timeout=GetTmDelta();
+                    $status = $ql->Query("debug wait $cluster_name status $wait_value like 'state' option 'timeout'=$timeout");
                     break;
                 default:
                     $status = "unsupported command " . $system_cmd;

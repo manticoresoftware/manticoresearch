@@ -132,13 +132,25 @@ struct ReplicationCluster_t : public ClusterDesc_t
 	template<typename PRED>
 	void WaitHeartBeat ( PRED&& fnPred )
 	{
-		m_tNodeState.WaitVoid ( std::forward<PRED> ( fnPred ) );
+		m_tHeardBeat.WaitVoid ( std::forward<PRED> ( fnPred ) );
+	}
+
+	template<typename PRED>
+	bool WaitHeartBeatForMs ( PRED&& fnPred, int64_t iPeriodMs )
+	{
+		return m_tHeardBeat.WaitVoidForMs ( std::forward<PRED> ( fnPred ), iPeriodMs );
 	}
 
 	template<typename PRED>
 	ClusterState_e			WaitAny (PRED&& fnPred)
 	{
 		return m_tNodeState.Wait ( std::forward<PRED> ( fnPred ) );
+	}
+
+	template<typename PRED>
+	ClusterState_e			WaitAnyForMs (PRED&& fnPred, int64_t iPeriodMs )
+	{
+		return m_tNodeState.WaitForMs ( std::forward<PRED> ( fnPred ), iPeriodMs );
 	}
 
 	ClusterState_e			WaitReady()
@@ -531,7 +543,7 @@ static void Logger_fn ( wsrep_log_level_t eLevel, const char * sMsg )
 }
 
 
-CSphString WaitClusterReady ( const CSphString& sCluster )
+CSphString WaitClusterReady ( const CSphString& sCluster, int64_t iTimeoutS )
 {
 	ReplicationClusterPtr_t pCluster { nullptr };
 	{
@@ -541,11 +553,15 @@ CSphString WaitClusterReady ( const CSphString& sCluster )
 			return SphSprintf ( "unknown cluster '%s'", sCluster.cstr() );
 		pCluster = *ppCluster;
 	}
-	ClusterState_e eState = pCluster->WaitAny ( [] ( ClusterState_e i ) { return i == ClusterState_e::SYNCED || i == ClusterState_e::DONOR; } );
+	ClusterState_e eState;
+	if ( iTimeoutS<=0 )
+		eState = pCluster->WaitAny ( [] ( ClusterState_e i ) { return i == ClusterState_e::SYNCED || i == ClusterState_e::DONOR; } );
+	else
+		eState = pCluster->WaitAnyForMs ( [] ( ClusterState_e i ) { return i == ClusterState_e::SYNCED || i == ClusterState_e::DONOR; }, iTimeoutS*1000 );
 	return GetNodeState ( eState );
 }
 
-std::pair<int, CSphString> WaitClusterCommit ( const CSphString& sCluster, int iTxn )
+std::pair<int, CSphString> WaitClusterCommit ( const CSphString& sCluster, int iTxn, int64_t iTimeoutS )
 {
 	ReplicationClusterPtr_t pCluster { nullptr };
 	{
@@ -556,9 +572,10 @@ std::pair<int, CSphString> WaitClusterCommit ( const CSphString& sCluster, int i
 		pCluster = *ppCluster;
 	}
 	int64_t iVal = -1;
-	pCluster->WaitHeartBeat( [iTxn, pCluster, &iVal] () {
+	auto fnPred = [iTxn, pCluster, &iVal]()
+	{
 		auto pProvider = pCluster->m_pProvider;
-		if (!pProvider)
+		if ( !pProvider )
 			return false;
 		assert ( pProvider );
 		wsrep_stats_var* pAllVars = pProvider->stats_get ( pProvider );
@@ -569,9 +586,15 @@ std::pair<int, CSphString> WaitClusterCommit ( const CSphString& sCluster, int i
 				break;
 			}
 		pProvider->stats_free ( pProvider, pAllVars );
-		return iVal>=iTxn;
-	} );
-
+		return iVal >= iTxn;
+	};
+	bool bSuccess = true;
+	if ( iTimeoutS <= 0 )
+		pCluster->WaitHeartBeat ( std::move ( fnPred ) );
+	else
+		bSuccess = pCluster->WaitHeartBeatForMs ( std::move ( fnPred ), iTimeoutS * 1000 );
+	if ( !bSuccess )
+		return { iVal, "timeout" };
 	return { iVal, "" };
 }
 

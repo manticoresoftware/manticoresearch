@@ -87,7 +87,7 @@ SELECT * FROM test:rt1;
 
 <!-- stream to node 1 -->
 <sphinxql d="1">
-debug wait test status 4 like 'state';
+debug wait test status 4 like 'state' option 'timeout'=30;
 insert into rt2 (id) values (1001);
 UPDATE rt2 SET mva1=() where id=1001;
 DELETE FROM rt2 WHERE id=1001;
@@ -98,7 +98,7 @@ show status like 'cluster_test_last_committed';
 
 <!-- request to node 0 -->
 <sphinxql d="0">
-debug wait test status 5 like 'state';
+debug wait test status 5 like 'state' option 'timeout'=30;
 show status like 'cluster_test_last_committed';
 SELECT * FROM test:rt2;
 UPDATE test:rt2 SET mva1=(101) where j1.data is not null;
@@ -110,7 +110,7 @@ SELECT * FROM test:rt2;
 
 <!-- stream to node 1 -->
 <sphinxql d="1">
-debug wait test status 6 like 'state';
+debug wait test status 6 like 'state' option 'timeout'=30;
 DELETE FROM test:rt2 WHERE j.fd IN (10,11);
 insert into test:rt2 (id,title,mva1,gid,j1) values (21, 'test 21', (21,22,23), 21, '{"data":"test 21", fd:21}');
 SELECT * FROM test:rt2;
@@ -123,7 +123,7 @@ SELECT * FROM test:rt2;
 
 <!-- request to node 0 -->
 <sphinxql d="0">
-debug wait test like 'state';
+debug wait test like 'state' option 'timeout'=30;
 SELECT * FROM test:rt2;
 
 ALTER CLUSTER test ADD rtc;
@@ -135,7 +135,7 @@ insert into test:rtc (title,mva1,gid,j1) values ('test 501', (521,522,523), 521,
 
 <!-- request to node 2 -->
 <sphinxql d="2">
-	debug wait test status 13 like 'state';
+	debug wait test status 13 like 'state' option 'timeout'=30;
 	SELECT * FROM test:rt2;
 	SELECT * FROM test:rtc;
 
@@ -145,7 +145,7 @@ insert into test:rtc (title,mva1,gid,j1) values ('test 501', (521,522,523), 521,
 
 <!-- request to node 1 -->
 <sphinxql d="1">
-	debug wait test status 14 like 'state';
+	debug wait test status 14 like 'state' option 'timeout'=30;
 	SELECT * FROM test:rtc;
 </sphinxql>
 
@@ -157,7 +157,7 @@ insert into test:rt1 (id,title,mva1) values (601, 'test 201', (621,622));
 </sphinxql>
 <!-- request to node 1 -->
 <sphinxql d="1">
-	debug wait test status 15 like 'state';
+	debug wait test status 15 like 'state' option 'timeout'=30;
 SELECT * FROM test:rt1 order by id asc;
 </sphinxql>
 

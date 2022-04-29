@@ -14212,9 +14212,10 @@ void HandleSetGdb ( RowBuffer_i & tOut, bool bParam )
 
 void HandleWait ( RowBuffer_i& tOutBuf, const DebugCmd::DebugCommand_t& tCmd )
 {
+	auto iTimeoutS = tCmd.iOpt ( "timeout" );
 	auto sCluster = tCmd.m_sParam;
 	auto iTime = -sphMicroTimer();
-	auto sState = WaitClusterReady(sCluster);
+	auto sState = WaitClusterReady ( sCluster, iTimeoutS );
 	iTime += sphMicroTimer();
 	VectorLike tOut { tCmd.sOpt ( "like" ) };
 	tOut.SetColName("name");
@@ -14226,10 +14227,11 @@ void HandleWait ( RowBuffer_i& tOutBuf, const DebugCmd::DebugCommand_t& tCmd )
 
 void HandleWaitStatus ( RowBuffer_i& tOutBuf, const DebugCmd::DebugCommand_t& tCmd )
 {
+	auto iTimeoutS = tCmd.iOpt ( "timeout" );
 	auto sCluster = tCmd.m_sParam;
 	auto iTxn = (int)tCmd.m_iPar1;
 	auto iTime = -sphMicroTimer();
-	auto tAchieved = WaitClusterCommit ( sCluster, iTxn );
+	auto tAchieved = WaitClusterCommit ( sCluster, iTxn, iTimeoutS );
 	iTime += sphMicroTimer();
 	VectorLike tOut { tCmd.sOpt ( "like" ) };
 	tOut.SetColName ( "name" );

@@ -29,9 +29,10 @@ public:
 		tOut.SendInt ( m_iSendCookie );
 	}
 
-	bool ParseReply ( MemInputBuffer_c& tReq, AgentConn_t& ) const final
+	bool ParseReply ( MemInputBuffer_c& tReq, AgentConn_t& tConn ) const final
 	{
 		m_iReceivedCookie = tReq.GetInt ();
+		tConn.m_tDesc.m_pDash->m_uPingTripUS = sphMicroTimer()-m_iReceivedCookie;
 		return true;
 	}
 

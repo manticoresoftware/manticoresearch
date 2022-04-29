@@ -8872,7 +8872,9 @@ void BuildOneAgentStatus ( VectorLike & dStatus, HostDashboardRefPtr_t pDash, co
 			dStatus.Addf ( "%.2F", iLastAccess / 10000 );
 		uint64_t iLastTimer = pDash->m_iLastAnswerTime-pDash->m_iLastQueryTime;
 		if ( dStatus.MatchAddf ( "%s_lastperiodmsec", sPrefix ) )
-			dStatus.Addf ( "%l", iLastTimer / 1000 );
+			dStatus.Addf ( "%.3D", iLastTimer );
+		if ( dStatus.MatchAddf ( "%s_pingtripmsec", sPrefix ) )
+			dStatus.Addf ( "%.3F", pDash->m_uPingTripUS );
 		if ( dStatus.MatchAddf ( "%s_errorsarow", sPrefix ) )
 			dStatus.Addf ( "%l", pDash->m_iErrorsARow );
 	}

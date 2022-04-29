@@ -274,24 +274,330 @@ static void AddToSelectList ( CSphQuery & tQuery, const CSphVector<CSphQueryItem
 }
 
 
-static JsonObj_c GetFilterColumn ( const JsonObj_c & tJson, CSphString & sError )
+static ESphAttr Json2AttrType ( const JsonObj_c & tJson )
+{
+	if ( tJson.IsInt() )	return SPH_ATTR_BIGINT;
+	if ( tJson.IsDbl() )	return SPH_ATTR_FLOAT;
+	if ( tJson.IsBool() )	return SPH_ATTR_BOOL;
+	if ( tJson.IsStr() )	return SPH_ATTR_STRING;
+
+	return SPH_ATTR_NONE;
+}
+
+
+struct FilterTreeNode_t
+{
+	std::unique_ptr<FilterTreeNode_t>	m_pLeft;
+	std::unique_ptr<FilterTreeNode_t>	m_pRight;
+	std::unique_ptr<CSphFilterSettings> m_pFilter;
+	bool	m_bOr = false;
+};
+
+
+class FilterTreeConstructor_c
+{
+public:
+			FilterTreeConstructor_c ( CSphQuery & tQuery, CSphString & sError, CSphString & sWarning );
+
+	bool	Parse ( const JsonObj_c & tObj );
+
+private:
+	CSphQuery &		m_tQuery;
+	CSphString &	m_sError;
+	CSphString &	m_sWarning;
+	int				m_iQueryItemId = 0;
+
+	std::pair<bool, std::unique_ptr<FilterTreeNode_t>> ConstructBoolFilters ( const JsonObj_c & tBool );
+	std::pair<bool, std::unique_ptr<FilterTreeNode_t>> ConstructPlainFilters ( const JsonObj_c & tObj );
+	std::pair<bool, std::unique_ptr<FilterTreeNode_t>> ConstructBoolNodeFilters ( const JsonObj_c & tClause, CSphVector<CSphQueryItem> & dQueryItems, bool bOr );
+
+	std::unique_ptr<FilterTreeNode_t>	ConstructInFilter ( const JsonObj_c & tJson );
+	std::unique_ptr<FilterTreeNode_t>	ConstructGeoFilter ( const JsonObj_c & tJson, CSphVector<CSphQueryItem> & dQueryItems );
+	std::unique_ptr<FilterTreeNode_t>	ConstructFilter ( const JsonObj_c & tJson, CSphVector<CSphQueryItem> & dQueryItems );
+	std::unique_ptr<FilterTreeNode_t>	ConstructEqualsFilter ( const JsonObj_c & tJson );
+	std::unique_ptr<FilterTreeNode_t>	ConstructRangeFilter ( const JsonObj_c & tJson );
+
+	JsonObj_c GetFilterColumn ( const JsonObj_c & tJson );
+};
+
+
+template <typename T>
+static void WalkTree ( std::unique_ptr<FilterTreeNode_t> & pRoot, T && fnAction )
+{
+	if ( !pRoot )
+		return;
+
+	fnAction(pRoot);
+	WalkTree ( pRoot->m_pLeft, fnAction );
+	WalkTree ( pRoot->m_pRight, fnAction );
+}
+
+
+static int CreateFilterTree ( std::unique_ptr<FilterTreeNode_t> & pRoot, CSphVector<CSphFilterSettings> & dFilters, CSphVector<FilterTreeItem_t> & dFilterTree )
+{
+	if ( !pRoot )
+		return -1;
+
+	int iLeft = CreateFilterTree ( pRoot->m_pLeft, dFilters, dFilterTree );
+	int iRight = CreateFilterTree ( pRoot->m_pRight, dFilters, dFilterTree );
+
+	FilterTreeItem_t & tNew = dFilterTree.Add();
+	tNew.m_bOr = pRoot->m_bOr;
+	if ( pRoot->m_pFilter )
+	{
+		tNew.m_iFilterItem = dFilters.GetLength();
+		dFilters.Add ( std::move ( *pRoot->m_pFilter ) );
+	}
+	else
+	{
+		tNew.m_iLeft = iLeft;
+		tNew.m_iRight = iRight;
+	}
+
+	return dFilterTree.GetLength()-1;
+}
+
+
+static void ConcatTrees ( std::unique_ptr<FilterTreeNode_t> & pLeft, std::unique_ptr<FilterTreeNode_t> & pRight, bool bOr )
+{
+	auto pRoot = std::make_unique<FilterTreeNode_t>();
+	pRoot->m_pLeft  = std::move(pLeft);
+	pRoot->m_pRight = std::move(pRight);
+	pRoot->m_bOr = bOr;
+	pLeft = std::move(pRoot);
+}
+
+
+FilterTreeConstructor_c::FilterTreeConstructor_c ( CSphQuery & tQuery, CSphString & sError, CSphString & sWarning )
+	: m_tQuery ( tQuery )
+	, m_sError ( sError )
+	, m_sWarning ( sWarning )
+{}
+
+
+bool FilterTreeConstructor_c::Parse ( const JsonObj_c & tObj )
+{
+	bool bOk;
+	std::unique_ptr<FilterTreeNode_t> pRoot;
+
+	JsonObj_c tBool = tObj.GetItem("bool");
+	if ( tBool )
+		std::tie ( bOk, pRoot ) = ConstructBoolFilters(tBool);
+	else
+		std::tie ( bOk, pRoot ) = ConstructPlainFilters(tObj);
+
+	if ( !bOk )
+		return false;
+
+	if ( !pRoot )
+		return true;
+
+	bool bAllAnd = true;
+	WalkTree ( pRoot, [&bAllAnd]( auto & pNode ){ bAllAnd &= !pNode->m_bOr; } );
+
+	if ( bAllAnd )
+	{
+		// no tree; collect filters from the tree and add them to the query
+		WalkTree ( pRoot, [this]( auto & pNode ){ if ( pNode->m_pFilter ) m_tQuery.m_dFilters.Add ( std::move ( *pNode->m_pFilter ) ); } );
+	}
+	else
+		CreateFilterTree ( pRoot, m_tQuery.m_dFilters, m_tQuery.m_dFilterTree );
+
+	return true;
+}
+
+
+std::pair<bool, std::unique_ptr<FilterTreeNode_t>> FilterTreeConstructor_c::ConstructPlainFilters ( const JsonObj_c & tObj )
+{
+	for ( const auto & tChild : tObj )
+		if ( IsFilter(tChild) )
+		{
+			int iFirstNewItem = m_tQuery.m_dItems.GetLength();
+
+			auto pFilter = ConstructFilter ( tChild, m_tQuery.m_dItems );
+			if ( !pFilter )
+				return { false, nullptr };
+
+			AddToSelectList ( m_tQuery, m_tQuery.m_dItems, iFirstNewItem );
+
+			// handle only the first filter in this case	
+			return { true, std::move(pFilter) };
+		}
+
+	return { true, nullptr };
+}
+
+
+std::pair<bool, std::unique_ptr<FilterTreeNode_t>> FilterTreeConstructor_c::ConstructBoolFilters ( const JsonObj_c & tBool )
+{
+	if ( !tBool.IsObj() )
+	{
+		m_sError = "\"bool\" value should be an object";
+		return { false, nullptr };
+	}
+
+	bool bOk = false;
+	std::unique_ptr<FilterTreeNode_t> pMustTreeRoot, pShouldTreeRoot, pMustNotTreeRoot;
+	CSphVector<CSphQueryItem> dMustQI, dShouldQI, dMustNotQI;
+
+	for ( const auto & tClause : tBool )
+	{
+		CSphString sName = tClause.Name();
+
+		if ( sName=="must" )
+		{
+			std::tie ( bOk, pMustTreeRoot ) = ConstructBoolNodeFilters ( tClause, dMustQI, false );
+			if ( !bOk )
+				return { false, nullptr };
+		}
+		else if ( sName=="should" )
+		{
+			std::tie ( bOk, pShouldTreeRoot ) = ConstructBoolNodeFilters ( tClause, dShouldQI, true );
+			if ( !bOk )
+				return { false, nullptr };
+		}
+		else if ( sName=="must_not" )
+		{
+			std::tie ( bOk, pMustNotTreeRoot ) = ConstructBoolNodeFilters ( tClause, dMustNotQI, false );
+			if ( !bOk )
+				return { false, nullptr };
+		}
+		else
+		{
+			m_sError.SetSprintf ( "unknown bool query type: \"%s\"", sName.cstr() );
+			return { false, nullptr };
+		}
+	}
+
+	if ( pMustNotTreeRoot )
+	{
+		// fixme! this may not work as expected; better add a NOT node
+		WalkTree ( pMustNotTreeRoot, []( auto & pNode ) { if ( pNode->m_pFilter ) pNode->m_pFilter->m_bExclude=true; } );
+		ConcatTrees ( pMustTreeRoot, pMustNotTreeRoot, false );
+
+		for ( auto & i : dMustNotQI )
+			dMustQI.Add(i);
+	}
+
+	if ( pMustTreeRoot )
+	{
+		AddToSelectList ( m_tQuery, dMustQI );
+
+		for ( const auto & i : dMustQI )
+			m_tQuery.m_dItems.Add(i);
+
+		return { true, std::move(pMustTreeRoot) };
+	}
+
+	if ( pShouldTreeRoot )
+	{
+		AddToSelectList ( m_tQuery, dShouldQI );
+
+		for ( const auto & i : dShouldQI )
+			m_tQuery.m_dItems.Add(i);
+
+		return { true, std::move(pShouldTreeRoot) };
+	}
+
+	return { true, nullptr };
+}
+
+
+static std::unique_ptr<FilterTreeNode_t> ConcatFilterTreeItems ( std::vector<std::unique_ptr<FilterTreeNode_t>> & dAdded, int iStart, bool bOr )
+{
+	if ( dAdded.empty() )
+		return nullptr;
+
+	if ( iStart==dAdded.size()-1 )
+		return std::move ( dAdded[iStart] );
+
+	auto pRoot = std::make_unique<FilterTreeNode_t>();
+	pRoot->m_pLeft = std::move ( dAdded[iStart] );
+	pRoot->m_pRight = ConcatFilterTreeItems ( dAdded, iStart+1, bOr );
+	pRoot->m_bOr = bOr;
+
+	return pRoot;
+}
+
+
+std::pair<bool, std::unique_ptr<FilterTreeNode_t>> FilterTreeConstructor_c::ConstructBoolNodeFilters ( const JsonObj_c & tClause, CSphVector<CSphQueryItem> & dQueryItems, bool bOr )
+{
+	if ( tClause.IsArray() )
+	{
+		std::vector<std::unique_ptr<FilterTreeNode_t>> dAdded;
+
+		for ( const auto & tObject : tClause )
+		{
+			if ( !tObject.IsObj() )
+			{
+				m_sError.SetSprintf ( "\"%s\" array value should be an object", tClause.Name() );
+				return {false, nullptr};
+			}
+
+			JsonObj_c tItem = tObject[0];
+			CSphString sName = tItem.Name();
+			if ( sName=="bool" )
+			{
+				auto tRes = ConstructBoolFilters(tItem);
+				if ( !tRes.first )
+					return {false, nullptr};
+
+				if ( tRes.second )
+					dAdded.push_back ( std::move(tRes.second) );
+			}
+			else if ( IsFilter(tItem) )
+			{
+				auto pFilter = ConstructFilter ( tItem, dQueryItems );
+				if ( !pFilter )
+					return {false, nullptr};
+
+				dAdded.push_back ( std::move(pFilter) );
+			}
+		}
+
+		if ( dAdded.empty() )
+			return {true, nullptr};
+
+		return { true, ConcatFilterTreeItems ( dAdded, 0, bOr ) };
+	}
+	else if ( tClause.IsObj() )
+	{
+		JsonObj_c tItem = tClause[0];
+		if ( IsFilter(tItem) )
+		{
+			auto pFilter = ConstructFilter ( tItem, dQueryItems );
+			if ( !pFilter )
+				return {false, nullptr};
+
+			return { true, std::move(pFilter) };
+		}
+
+		return {true, nullptr};
+	}
+
+	m_sError.SetSprintf ( "\"%s\" value should be an object or an array", tClause.Name() );
+	return {false, nullptr};
+}
+
+
+JsonObj_c FilterTreeConstructor_c::GetFilterColumn ( const JsonObj_c & tJson )
 {
 	if ( !tJson.IsObj() )
 	{
-		sError = "filter should be an object";
+		m_sError = "filter should be an object";
 		return JsonNull;
 	}
 
 	if ( tJson.Size()!=1 )
 	{
-		sError = "filter should have only one element";
+		m_sError = "filter should have only one element";
 		return JsonNull;
 	}
 
 	JsonObj_c tColumn = tJson[0];
 	if ( !tColumn )
 	{
-		sError = "empty filter found";
+		m_sError = "empty filter found";
 		return JsonNull;
 	}
 
@@ -299,19 +605,128 @@ static JsonObj_c GetFilterColumn ( const JsonObj_c & tJson, CSphString & sError 
 }
 
 
-static bool ConstructEqualsFilter ( const JsonObj_c & tJson, CSphVector<CSphFilterSettings> & dFilters, CSphString & sError )
+std::unique_ptr<FilterTreeNode_t> FilterTreeConstructor_c::ConstructInFilter ( const JsonObj_c & tJson )
 {
-	JsonObj_c tColumn = GetFilterColumn ( tJson, sError );
+	JsonObj_c tColumn = GetFilterColumn(tJson);
 	if ( !tColumn )
-		return false;
+		return nullptr;
+
+	if ( !tColumn.IsArray() )
+	{
+		m_sError = "\"in\" filter should contain an array of values";
+		return nullptr;
+	}
+
+	auto pFilterNode = std::make_unique<FilterTreeNode_t>();
+	pFilterNode->m_pFilter = std::make_unique<CSphFilterSettings>();
+	auto & tFilter = *pFilterNode->m_pFilter;
+
+	tFilter.m_sAttrName = tColumn.Name();
+	sphColumnToLowercase ( const_cast<char *>( tFilter.m_sAttrName.cstr() ) );
+
+
+	if ( tColumn.Size() )
+	{
+		ESphAttr eValueType = Json2AttrType ( tColumn[0] );
+		switch ( eValueType )
+		{
+		case SPH_ATTR_STRING:
+			tFilter.m_eType = SPH_FILTER_STRING_LIST;
+			break;
+
+		case SPH_ATTR_FLOAT:
+		case SPH_ATTR_NONE:
+			m_sError = "\"in\" supports only integer, bool and string values";
+			return nullptr;
+
+		default:
+			tFilter.m_eType = SPH_FILTER_VALUES;
+			break;
+		}
+
+		for ( const auto & i : tColumn )
+		{
+			ESphAttr eNewValueType = Json2AttrType(i);
+			if ( eNewValueType!=eValueType )
+			{
+				m_sError = "all values in the \"in\" filter should have one type";
+				return nullptr;
+			}
+
+			if ( eValueType==SPH_ATTR_STRING )
+				tFilter.m_dStrings.Add ( i.StrVal() );
+			else
+				tFilter.m_dValues.Add ( i.IntVal() );
+		}
+	}
+
+	tFilter.m_dStrings.Uniq();
+	tFilter.m_dValues.Uniq();
+
+	return pFilterNode;
+}
+
+
+std::unique_ptr<FilterTreeNode_t> FilterTreeConstructor_c::ConstructGeoFilter ( const JsonObj_c & tJson, CSphVector<CSphQueryItem> & dQueryItems )
+{
+	GeoDistInfo_c tGeoDist;
+	if ( !tGeoDist.Parse ( tJson, true, m_sError, m_sWarning ) )
+		return nullptr;
+
+	CSphQueryItem & tQueryItem = dQueryItems.Add();
+	tQueryItem.m_sExpr = tGeoDist.BuildExprString();
+	tQueryItem.m_sAlias.SetSprintf ( "%s%d", g_szFilter, m_iQueryItemId++ );
+
+	auto pFilterNode = std::make_unique<FilterTreeNode_t>();
+	pFilterNode->m_pFilter = std::make_unique<CSphFilterSettings>();
+	auto & tFilter = *pFilterNode->m_pFilter;
+
+	tFilter.m_sAttrName = tQueryItem.m_sAlias;
+	tFilter.m_bOpenLeft = true;
+	tFilter.m_bHasEqualMax = true;
+	tFilter.m_fMaxValue = tGeoDist.GetDistance();
+	tFilter.m_eType = SPH_FILTER_FLOATRANGE;
+
+	return pFilterNode;
+}
+
+
+std::unique_ptr<FilterTreeNode_t> FilterTreeConstructor_c::ConstructFilter ( const JsonObj_c & tJson, CSphVector<CSphQueryItem> & dQueryItems )
+{
+	CSphString sName = tJson.Name();
+	if ( sName=="equals" )
+		return ConstructEqualsFilter(tJson);
+
+	if ( sName=="range" )
+		return ConstructRangeFilter(tJson);
+
+	if ( sName=="in" )
+		return ConstructInFilter(tJson);
+
+	if ( sName=="geo_distance" )
+		return ConstructGeoFilter ( tJson, dQueryItems );
+
+	m_sError.SetSprintf ( "unknown filter type: %s", sName.cstr() );
+	return nullptr;
+}
+
+
+std::unique_ptr<FilterTreeNode_t> FilterTreeConstructor_c::ConstructEqualsFilter ( const JsonObj_c & tJson )
+{
+	JsonObj_c tColumn = GetFilterColumn(tJson);
+	if ( !tColumn )
+		return nullptr;
 
 	if ( !tColumn.IsNum() && !tColumn.IsStr() )
 	{
-		sError = "\"equals\" filter expects numeric or string values";
-		return false;
+		m_sError = "\"equals\" filter expects numeric or string values";
+		return nullptr;
 	}
 
-	CSphFilterSettings tFilter;
+	auto pFilterNode = std::make_unique<FilterTreeNode_t>();
+	pFilterNode->m_pFilter = std::make_unique<CSphFilterSettings>();
+	auto & tFilter = *pFilterNode->m_pFilter;
+
 	tFilter.m_sAttrName = tColumn.Name();
 	sphColumnToLowercase ( const_cast<char *>( tFilter.m_sAttrName.cstr() ) );
 
@@ -334,37 +749,38 @@ static bool ConstructEqualsFilter ( const JsonObj_c & tJson, CSphVector<CSphFilt
 		tFilter.m_bExclude = false;
 	}
 
-	dFilters.Add ( tFilter );
-
-	return true;
+	return pFilterNode;
 }
 
 
-static bool ConstructRangeFilter ( const JsonObj_c & tJson, CSphVector<CSphFilterSettings> & dFilters, CSphString & sError )
+std::unique_ptr<FilterTreeNode_t> FilterTreeConstructor_c::ConstructRangeFilter ( const JsonObj_c & tJson )
 {
-	JsonObj_c tColumn = GetFilterColumn ( tJson, sError );
+	JsonObj_c tColumn = GetFilterColumn(tJson);
 	if ( !tColumn )
-		return false;
+		return nullptr;
 
-	CSphFilterSettings tNewFilter;
-	tNewFilter.m_sAttrName = tColumn.Name();
-	sphColumnToLowercase ( const_cast<char *>( tNewFilter.m_sAttrName.cstr() ) );
+	auto pFilterNode = std::make_unique<FilterTreeNode_t>();
+	pFilterNode->m_pFilter = std::make_unique<CSphFilterSettings>();
+	auto & tFilter = *pFilterNode->m_pFilter;
 
-	tNewFilter.m_bHasEqualMin = false;
-	tNewFilter.m_bHasEqualMax = false;
+	tFilter.m_sAttrName = tColumn.Name();
+	sphColumnToLowercase ( const_cast<char *>( tFilter.m_sAttrName.cstr() ) );
+
+	tFilter.m_bHasEqualMin = false;
+	tFilter.m_bHasEqualMax = false;
 
 	JsonObj_c tLess = tColumn.GetItem("lt");
 	if ( !tLess )
 	{
 		tLess = tColumn.GetItem("lte");
-		tNewFilter.m_bHasEqualMax = tLess;
+		tFilter.m_bHasEqualMax = tLess;
 	}
 
 	JsonObj_c tGreater = tColumn.GetItem("gt");
 	if ( !tGreater )
 	{
 		tGreater = tColumn.GetItem("gte");
-		tNewFilter.m_bHasEqualMin = tGreater;
+		tFilter.m_bHasEqualMin = tGreater;
 	}
 
 	bool bLess = tLess;
@@ -372,14 +788,14 @@ static bool ConstructRangeFilter ( const JsonObj_c & tJson, CSphVector<CSphFilte
 
 	if ( !bLess && !bGreater )
 	{
-		sError = "empty filter found";
-		return false;
+		m_sError = "empty filter found";
+		return nullptr;
 	}
 
 	if ( ( bLess && !tLess.IsNum() ) || ( bGreater && !tGreater.IsNum() ) )
 	{
-		sError = "range filter expects numeric values";
-		return false;
+		m_sError = "range filter expects numeric values";
+		return nullptr;
 	}
 
 	bool bIntFilter = ( bLess && tLess.IsInt() ) || ( bGreater && tGreater.IsInt() );
@@ -387,273 +803,36 @@ static bool ConstructRangeFilter ( const JsonObj_c & tJson, CSphVector<CSphFilte
 	if ( bLess )
 	{
 		if ( bIntFilter )
-			tNewFilter.m_iMaxValue = tLess.IntVal();
+			tFilter.m_iMaxValue = tLess.IntVal();
 		else
-			tNewFilter.m_fMaxValue = tLess.FltVal();
+			tFilter.m_fMaxValue = tLess.FltVal();
 
-		tNewFilter.m_bOpenLeft = !bGreater;
+		tFilter.m_bOpenLeft = !bGreater;
 	}
 
 	if ( bGreater )
 	{
 		if ( bIntFilter )
-			tNewFilter.m_iMinValue = tGreater.IntVal();
+			tFilter.m_iMinValue = tGreater.IntVal();
 		else
-			tNewFilter.m_fMinValue = tGreater.FltVal();
+			tFilter.m_fMinValue = tGreater.FltVal();
 
-		tNewFilter.m_bOpenRight = !bLess;
+		tFilter.m_bOpenRight = !bLess;
 	}
 
-	tNewFilter.m_eType = bIntFilter ? SPH_FILTER_RANGE : SPH_FILTER_FLOATRANGE;
+	tFilter.m_eType = bIntFilter ? SPH_FILTER_RANGE : SPH_FILTER_FLOATRANGE;
 
 	// float filters don't support open ranges
 	if ( !bIntFilter )
 	{
-		if ( tNewFilter.m_bOpenRight )
-			tNewFilter.m_fMaxValue = FLT_MAX;
+		if ( tFilter.m_bOpenRight )
+			tFilter.m_fMaxValue = FLT_MAX;
 
-		if ( tNewFilter.m_bOpenLeft )
-			tNewFilter.m_fMinValue = FLT_MIN;
+		if ( tFilter.m_bOpenLeft )
+			tFilter.m_fMinValue = FLT_MIN;
 	}
 
-	dFilters.Add ( tNewFilter );
-
-	return true;
-}
-
-
-static ESphAttr Json2AttrType ( const JsonObj_c & tJson )
-{
-	if ( tJson.IsInt() )	return SPH_ATTR_BIGINT;
-	if ( tJson.IsDbl() )	return SPH_ATTR_FLOAT;
-	if ( tJson.IsBool() )	return SPH_ATTR_BOOL;
-	if ( tJson.IsStr() )	return SPH_ATTR_STRING;
-
-	return SPH_ATTR_NONE;
-}
-
-
-static bool ConstructInFilter ( const JsonObj_c & tJson, CSphVector<CSphFilterSettings> & dFilters, CSphString & sError )
-{
-	JsonObj_c tColumn = GetFilterColumn ( tJson, sError );
-	if ( !tColumn )
-		return false;
-
-	CSphFilterSettings tNewFilter;
-	tNewFilter.m_sAttrName = tColumn.Name();
-	sphColumnToLowercase ( const_cast<char *>( tNewFilter.m_sAttrName.cstr() ) );
-
-	if ( !tColumn.IsArray() )
-	{
-		sError = "\"in\" filter should contain an array of values";
-		return false;
-	}
-
-	if ( tColumn.Size() )
-	{
-		ESphAttr eValueType = Json2AttrType ( tColumn[0] );
-		switch ( eValueType )
-		{
-		case SPH_ATTR_STRING:
-			tNewFilter.m_eType = SPH_FILTER_STRING_LIST;
-			break;
-
-		case SPH_ATTR_FLOAT:
-		case SPH_ATTR_NONE:
-			sError = "\"in\" supports only integer, bool and string values";
-			return false;
-
-		default:
-			tNewFilter.m_eType = SPH_FILTER_VALUES;
-			break;
-		}
-
-		for ( const auto & i : tColumn )
-		{
-			ESphAttr eNewValueType = Json2AttrType(i);
-			if ( eNewValueType!=eValueType )
-			{
-				sError = "all values in the \"in\" filter should have one type";
-				return false;
-			}
-
-			if ( eValueType==SPH_ATTR_STRING )
-				tNewFilter.m_dStrings.Add ( i.StrVal() );
-			else
-				tNewFilter.m_dValues.Add ( i.IntVal() );
-		}
-	}
-
-	tNewFilter.m_dStrings.Uniq();
-	tNewFilter.m_dValues.Uniq();
-
-	dFilters.Add ( tNewFilter );
-
-	return true;
-}
-
-
-static bool ConstructGeoFilter ( const JsonObj_c & tJson, CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphQueryItem> & dQueryItems, int & iQueryItemId, CSphString & sError, CSphString & sWarning )
-{
-	GeoDistInfo_c tGeoDist;
-	if ( !tGeoDist.Parse ( tJson, true, sError, sWarning ) )
-		return false;
-
-	CSphQueryItem & tQueryItem = dQueryItems.Add();
-	tQueryItem.m_sExpr = tGeoDist.BuildExprString();
-	tQueryItem.m_sAlias.SetSprintf ( "%s%d", g_szFilter, iQueryItemId++ );
-
-	CSphFilterSettings & tFilter = dFilters.Add();
-	tFilter.m_sAttrName = tQueryItem.m_sAlias;
-	tFilter.m_bOpenLeft = true;
-	tFilter.m_bHasEqualMax = true;
-	tFilter.m_fMaxValue = tGeoDist.GetDistance();
-	tFilter.m_eType = SPH_FILTER_FLOATRANGE;
-
-	return true;
-}
-
-
-static bool ConstructFilter ( const JsonObj_c & tJson, CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphQueryItem> & dQueryItems, int & iQueryItemId, CSphString & sError, CSphString & sWarning )
-{
-	if ( !IsFilter ( tJson ) )
-		return true;
-
-	CSphString sName = tJson.Name();
-	if ( sName=="equals" )
-		return ConstructEqualsFilter ( tJson, dFilters, sError );
-
-	if ( sName=="range" )
-		return ConstructRangeFilter ( tJson, dFilters, sError );
-
-	if ( sName=="in" )
-		return ConstructInFilter ( tJson, dFilters, sError );
-
-	if ( sName=="geo_distance" )
-		return ConstructGeoFilter ( tJson, dFilters, dQueryItems, iQueryItemId, sError, sWarning );
-
-	sError.SetSprintf ( "unknown filter type: %s", sName.cstr() );
-	return false;
-}
-
-
-static bool ConstructBoolNodeFilters ( const JsonObj_c & tClause, CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphQueryItem> & dQueryItems, int & iQueryItemId, CSphString & sError, CSphString & sWarning )
-{
-	if ( tClause.IsArray() )
-	{
-		for ( const auto & tObject : tClause )
-		{
-			if ( !tObject.IsObj() )
-			{
-				sError.SetSprintf ( "\"%s\" array value should be an object", tClause.Name() );
-				return false;
-			}
-
-			JsonObj_c tItem = tObject[0];
-			if ( !ConstructFilter ( tItem, dFilters, dQueryItems, iQueryItemId, sError, sWarning ) )
-				return false;
-		}
-	} else if ( tClause.IsObj() )
-	{
-		JsonObj_c tItem = tClause[0];
-		if ( !ConstructFilter ( tItem, dFilters, dQueryItems, iQueryItemId, sError, sWarning ) )
-			return false;
-	} else
-	{
-		sError.SetSprintf ( "\"%s\" value should be an object or an array", tClause.Name() );
-		return false;
-	}
-
-	return true;
-}
-
-
-static bool ConstructBoolFilters ( const JsonObj_c & tBool, CSphQuery & tQuery, int & iQueryItemId, CSphString & sError, CSphString & sWarning )
-{
-	// non-recursive for now, maybe we should fix this later
-	if ( !tBool.IsObj() )
-	{
-		sError = "\"bool\" value should be an object";
-		return false;
-	}
-
-	CSphVector<CSphFilterSettings> dMust, dShould, dMustNot;
-	CSphVector<CSphQueryItem> dMustQI, dShouldQI, dMustNotQI;
-
-	for ( const auto & tClause : tBool )
-	{
-		CSphString sName = tClause.Name();
-
-		if ( sName=="must" )
-		{
-			if ( !ConstructBoolNodeFilters ( tClause, dMust, dMustQI, iQueryItemId, sError, sWarning ) )
-				return false;
-		} else if ( sName=="should" )
-		{
-			if ( !ConstructBoolNodeFilters ( tClause, dShould, dShouldQI, iQueryItemId, sError, sWarning ) )
-				return false;
-		} else if ( sName=="must_not" )
-		{
-			if ( !ConstructBoolNodeFilters ( tClause, dMustNot, dMustNotQI, iQueryItemId, sError, sWarning ) )
-				return false;
-		} else
-		{
-			sError.SetSprintf ( "unknown bool query type: \"%s\"", sName.cstr() );
-			return false;
-		}
-	}
-
-	if ( dMustNot.GetLength() )
-	{
-		for ( auto & i : dMustNot )
-		{
-			i.m_bExclude = true;
-			dMust.Add(i);
-		}
-
-		for ( auto & i : dMustNotQI )
-			dMustQI.Add(i);
-	}
-
-	if ( dMust.GetLength() )
-	{
-		AddToSelectList ( tQuery, dMustQI );
-		tQuery.m_dFilters.SwapData ( dMust );
-		for ( const auto & i : dMustQI )
-			tQuery.m_dItems.Add(i);
-
-		return true;
-	}
-
-	if ( dShould.GetLength() )
-	{
-		AddToSelectList ( tQuery, dShouldQI );
-		tQuery.m_dFilters.SwapData ( dShould );
-		for ( const auto & i : dShouldQI )
-			tQuery.m_dItems.Add(i);
-
-		// need a filter tree
-		FilterTreeItem_t & tTreeItem = tQuery.m_dFilterTree.Add();
-		tTreeItem.m_iFilterItem = 0;
-		int iRootNode = 0;
-
-		ARRAY_FOREACH ( i, tQuery.m_dFilters )
-		{
-			int iNewFilterNodeId = tQuery.m_dFilterTree.GetLength();
-			FilterTreeItem_t & tNewFilterNode = tQuery.m_dFilterTree.Add();
-			tNewFilterNode.m_iFilterItem = i;
-
-			int iNewOrNodeId = tQuery.m_dFilterTree.GetLength();
-			FilterTreeItem_t & tNewOrNode = tQuery.m_dFilterTree.Add();
-			tNewOrNode.m_bOr = true;
-			tNewOrNode.m_iLeft = iRootNode;
-			tNewOrNode.m_iRight = iNewFilterNodeId;
-
-			iRootNode = iNewOrNodeId;
-		}
-	}
-
-	return true;
+	return pFilterNode;
 }
 
 
@@ -672,26 +851,8 @@ static bool ConstructFilters ( const JsonObj_c & tJson, CSphQuery & tQuery, CSph
 		return false;
 	}
 
-	int iQueryItemId = 0;
-
-	JsonObj_c tBool = tJson.GetItem("bool");
-	if ( tBool )
-		return ConstructBoolFilters ( tBool, tQuery, iQueryItemId, sError, sWarning );
-
-	for ( const auto & tChild : tJson )
-		if ( IsFilter ( tChild ) )
-		{
-			int iFirstNewItem = tQuery.m_dItems.GetLength();
-			if ( !ConstructFilter ( tChild, tQuery.m_dFilters, tQuery.m_dItems, iQueryItemId, sError, sWarning ) )
-				return false;
-
-			AddToSelectList ( tQuery, tQuery.m_dItems, iFirstNewItem );
-
-			// handle only the first filter in this case
-			break;
-		}
-
-	return true;
+	FilterTreeConstructor_c tTreeConstructor ( tQuery, sError, sWarning );
+	return tTreeConstructor.Parse(tJson);
 }
 
 

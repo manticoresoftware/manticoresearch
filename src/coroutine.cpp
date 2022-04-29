@@ -921,6 +921,45 @@ void WaitQueue_c::SuspendAndWait ( boost::fibers::detail::spinlock_lock& tLock, 
 	assert ( !w.is_linked() );
 }
 
+struct ScheduledWait_t final: public MiniTimer_c
+{
+	Waker_c& m_tWaker;
+	void OnTimer() final { m_tWaker.Wake(); }
+	ScheduledWait_t ( Waker_c& tWaker, const char* szName ) : m_tWaker { tWaker } { m_szName = szName; }
+};
+
+// returns true if signalled, false if timed-out
+bool WaitQueue_c::SuspendAndWaitUntil ( boost::fibers::detail::spinlock_lock& tLock, Worker_c* pActive, int64_t iTimestamp )
+{
+	WakerInQueue_c w { pActive->CreateWaker() };
+	m_Slist.push_back ( w );
+
+	ScheduledWait_t tWait ( w, "SuspendAndWait" );
+
+	// suspend this fiber
+	pActive->YieldWith ( [&tLock, &tWait, iTimestamp]() {
+		tLock.unlock();
+		tWait.EngageUS ( iTimestamp - sphMicroTimer() );
+	});
+
+	// resumed. Check if deadline is reached
+	if ( sph::TimeExceeded ( iTimestamp ) )
+	{
+		tLock.lock();
+		// remove from waiting-queue
+		if ( w.is_linked() )
+			m_Slist.remove ( w );
+		tLock.unlock();
+		return false;
+	}
+	return true;
+}
+
+bool WaitQueue_c::SuspendAndWaitForMS ( boost::fibers::detail::spinlock_lock& tLock, Worker_c* pActive, int64_t iTimePeriodMS )
+{
+	return SuspendAndWaitUntil ( tLock, pActive, sphMicroTimer() + iTimePeriodMS * 1000 );
+}
+
 
 void WaitQueue_c::NotifyOne()
 {

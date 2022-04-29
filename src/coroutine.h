@@ -427,12 +427,49 @@ public:
 		tMutex.Lock();
 	}
 
+	template<typename LockType>
+	bool WaitUntil ( LockType& tMutex, int64_t iTimestamp ) REQUIRES ( tMutex )
+	{
+		auto* pActiveWorker = Worker();
+		// atomically call tMutex.unlock() and block on current worker
+		// store this coro in waiting-queue
+		boost::fibers::detail::spinlock_lock tLock { m_tWaitQueueSpinlock };
+		tMutex.Unlock();
+		bool bResult = m_tWaitQueue.SuspendAndWaitUntil ( tLock, pActiveWorker, iTimestamp );
+
+		// relock external again before returning
+		tMutex.Lock();
+		return bResult;
+	}
+
+	template<typename LockType>
+	bool WaitForMs ( LockType& tMutex, int64_t iTimePeriodMS ) REQUIRES ( tMutex )
+	{
+		return WaitUntil ( tMutex, sphMicroTimer() + iTimePeriodMS*1000 );
+	}
+
 	template<typename LockType, typename PRED>
 	void Wait ( LockType& tMutex, PRED fnPred ) REQUIRES ( tMutex )
 	{
 		while ( !fnPred() ) {
 			Wait ( tMutex );
 		}
+	}
+
+	template<typename LockType, typename PRED>
+	bool WaitUntil ( LockType& tMutex, PRED fnPred, int64_t iTimestamp ) REQUIRES ( tMutex )
+	{
+		while ( !fnPred() ) {
+			if ( !WaitUntil ( tMutex, iTimestamp ) )
+				return fnPred();
+		}
+		return true;
+	}
+
+	template<typename LockType, typename PRED>
+	bool WaitForMs ( LockType& tMutex, PRED fnPred, int64_t iTimePeriodMS ) REQUIRES ( tMutex )
+	{
+		return WaitUntil ( tMutex, std::forward<PRED> ( fnPred ), sphMicroTimer() + iTimePeriodMS * 1000 );
 	}
 };
 
@@ -445,12 +482,16 @@ public:
 	void NotifyOne() noexcept { m_tCnd.NotifyOne(); }
 	void NotifyAll() noexcept { m_tCnd.NotifyAll(); }
 	void Wait ( ScopedMutex_t& lt ) REQUIRES (lt) { m_tCnd.Wait ( lt ); }
-	template<typename PRED> void Wait ( ScopedMutex_t& lt, PRED fnPred ) REQUIRES (lt) { m_tCnd.Wait ( lt, fnPred ); }
+	bool WaitUntil ( ScopedMutex_t& lt, int64_t iTime ) REQUIRES (lt) { return m_tCnd.WaitUntil ( lt, iTime ); }
+	bool WaitForMs ( ScopedMutex_t& lt, int64_t iPeriodMS ) REQUIRES (lt) { return m_tCnd.WaitForMs ( lt, iPeriodMS ); }
+	template<typename PRED> void Wait ( ScopedMutex_t& lt, PRED&& fnPred ) REQUIRES (lt) { m_tCnd.Wait ( lt, std::forward<PRED>(fnPred) ); }
+	template<typename PRED> bool WaitUntil ( ScopedMutex_t& lt, PRED&& fnPred, int64_t iTime ) REQUIRES (lt) { return m_tCnd.WaitUntil ( lt, std::forward<PRED>(fnPred), iTime ); }
+	template<typename PRED> bool WaitForMs ( ScopedMutex_t& lt, PRED&& fnPred, int64_t iPeriodMS ) REQUIRES (lt) { return m_tCnd.WaitForMs ( lt, std::forward<PRED>(fnPred), iPeriodMS ); }
 };
 
 
 template<typename T>
-class Waitable_T: ISphNoncopyable
+class Waitable_T: public ISphNoncopyable
 {
 	mutable ConditionVariable_c m_tCondVar;
 	mutable Mutex_c m_tMutex;
@@ -548,6 +589,18 @@ public:
 		m_tCondVar.Wait ( lk );
 	}
 
+	bool WaitUntil(int64_t iTime) const
+	{
+		ScopedMutex_t lk ( m_tMutex );
+		return m_tCondVar.WaitUntil ( lk, iTime );
+	}
+
+	bool WaitForMs(int64_t iPeriodMS) const
+	{
+		ScopedMutex_t lk ( m_tMutex );
+		return m_tCondVar.WaitForMs ( lk, iPeriodMS );
+	}
+
 	template<typename PRED>
 	T Wait ( PRED&& fnPred ) const
 	{
@@ -557,10 +610,40 @@ public:
 	}
 
 	template<typename PRED>
+	T WaitUntil ( PRED&& fnPred, int64_t iTime ) const
+	{
+		ScopedMutex_t lk ( m_tMutex );
+		m_tCondVar.WaitUntil ( lk, [this, fnPred = std::forward<PRED> ( fnPred )]() { return fnPred ( m_tValue ); }, iTime );
+		return m_tValue;
+	}
+
+	template<typename PRED>
+	T WaitForMs ( PRED&& fnPred, int64_t iPeriodMs ) const
+	{
+		ScopedMutex_t lk ( m_tMutex );
+		m_tCondVar.WaitForMs ( lk, [this, fnPred = std::forward<PRED> ( fnPred )]() { return fnPred ( m_tValue ); }, iPeriodMs );
+		return m_tValue;
+	}
+
+	template<typename PRED>
 	void WaitVoid ( PRED&& fnPred ) const
 	{
 		ScopedMutex_t lk ( m_tMutex );
 		m_tCondVar.Wait ( lk, std::forward<PRED> ( fnPred ) );
+	}
+
+	template<typename PRED>
+	bool WaitVoidUntil ( PRED&& fnPred, int64_t iTime ) const
+	{
+		ScopedMutex_t lk ( m_tMutex );
+		return m_tCondVar.WaitUntil ( lk, std::forward<PRED> ( fnPred ), iTime );
+	}
+
+	template<typename PRED>
+	bool WaitVoidForMs ( PRED&& fnPred, int64_t iPeriodMs ) const
+	{
+		ScopedMutex_t lk ( m_tMutex );
+		return m_tCondVar.WaitForMs ( lk, std::forward<PRED> ( fnPred ), iPeriodMs );
 	}
 };
 

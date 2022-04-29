@@ -82,6 +82,8 @@ private:
 
 public:
 	void SuspendAndWait ( boost::fibers::detail::spinlock_lock&, Worker_c* );
+	bool SuspendAndWaitUntil ( boost::fibers::detail::spinlock_lock&, Worker_c*, int64_t );
+	bool SuspendAndWaitForMS ( boost::fibers::detail::spinlock_lock&, Worker_c*, int64_t );
 	void NotifyOne();
 	void NotifyAll();
 

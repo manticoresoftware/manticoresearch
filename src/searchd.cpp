@@ -19158,6 +19158,9 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( !sError.IsEmpty() )
 		sError = "";
 
+	if ( !sErrorSI.IsEmpty() )
+		sErrorSI = "";
+
 	const char * szEndian = sphCheckEndian();
 	if ( szEndian )
 		sphDie ( "%s", szEndian );

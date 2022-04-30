@@ -522,7 +522,7 @@ public:
 		}
 
 		assert ( CurrentWorker() != this );
-		Restart();
+		RestartSecondary();
 		return true;
 	}
 
@@ -848,9 +848,15 @@ void SleepMsec ( int iMsec )
 	if ( iMsec < 0 )
 		return;
 
-	Coro::YieldWith ( [iMsec, fnRestarter = CurrentRestarter()]() mutable {
-		sph::EngageTask ( iMsec, std::move ( fnRestarter ), "SleepMsec" );
-	} );
+	struct Sleeper_t final: public MiniTimer_c
+	{
+		Sleeper_t () { m_szName = "SleepMsec"; }
+		Waker_c m_tWaker = Worker()->CreateWaker();
+		void OnTimer() final { m_tWaker.Wake(); }
+	} tWait;
+
+	// suspend this fiber
+	Coro::YieldWith ( [&tWait, iMsec](){ tWait.Engage ( iMsec ); });
 }
 
 Event_c::~Event_c ()

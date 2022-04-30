@@ -31,13 +31,6 @@ namespace sph
 	/// non-engaged timer doesn't tick and may infinitely return false.
 	bool TimeExceeded ( int64_t iTimestampUS );
 
-	/// engage timer, so that provided fnTask will be called when it is reached.
-	/// also it will be called on global interrupt (shutdown), so that fnTask must be aware to check it.
-	void EngageTask ( int64_t iTimePeriodMS, Threads::Handler fnTask, const char* szName="task" );
-
-	/// engage timer to absolute time. Note, timestamp is in microseconds
-	void EngageTaskAt ( int64_t iTimeStampUS, Threads::Handler fnTask, const char* szName="task" );
-
 	/// should be called on shutdown
 	void ShutdownMiniTimer();
 
@@ -67,6 +60,6 @@ public:
 	int64_t Engage ( int64_t iTimePeriodMS );
 	int64_t EngageUS ( int64_t iTimePeriodUS ); // same, but period is in microseconds
 
-	/// if destroy before timer - unengage and unlink everything
+	/// if m_szName is not null - unengage and unlink everything
 	virtual ~MiniTimer_c();
 };

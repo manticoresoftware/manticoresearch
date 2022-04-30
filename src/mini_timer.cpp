@@ -315,49 +315,6 @@ bool sph::TimeExceeded ( int64_t tmMicroTimestamp )
 	return g_TinyTimer ().TimeExceeded ( tmMicroTimestamp );
 }
 
-// scheduled job - will live in timeout heap and then fire when time is out.
-class ScheduledJob_c final: public MiniTimer_c
-{
-	Threads::Handler m_fnHandler;
-
-private:
-	void OnTimer() final
-	{
-		if ( m_fnHandler )
-			m_fnHandler();
-		delete this;
-	}
-
-public:
-	ScheduledJob_c ( Threads::Handler fnTask, const char* szName )
-		: m_fnHandler { std::move ( fnTask ) }
-	{
-		if ( szName )
-			m_szName = szName;
-	}
-
-	~ScheduledJob_c()
-	{
-		m_szName = nullptr;
-	}
-};
-
-void sph::EngageTask ( int64_t iTimePeriodMS, Threads::Handler fnTask, const char* szName )
-{
-	assert ( iTimePeriodMS > 0 );
-	DEBUGT << "sph::EngageTask " << timespan_t(iTimePeriodMS*1000);
-	auto pScheduledJob = new ScheduledJob_c ( std::move ( fnTask ), szName );
-	pScheduledJob->Engage ( iTimePeriodMS );
-}
-
-void sph::EngageTaskAt ( int64_t iTimeStampUS, Threads::Handler fnTask, const char* szName )
-{
-	assert ( iTimeStampUS > 0 );
-	DEBUGT << "sph::EngageTask " << timestamp_t ( iTimeStampUS );
-	auto pScheduledJob = new ScheduledJob_c ( std::move ( fnTask ), szName );
-	pScheduledJob->EngageUS ( iTimeStampUS-sphMicroTimer() );
-}
-
 void sph::ShutdownMiniTimer()
 {
 	if ( IsTinyTimerCreated() )

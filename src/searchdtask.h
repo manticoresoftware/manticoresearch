@@ -50,7 +50,7 @@ namespace TaskManager {
 	 * @param iTimestamp - time (absolute) when job need to be executed
 	 * @param fnJob - task route
 	 */
-	void ScheduleJob ( TaskID iTask, int64_t iTimestampUS, Threads::Handler fnJob );
+	void ScheduleJob ( TaskID iTask, int64_t iTimeStampUS, Threads::Handler fnJob );
 
 	/*!
 	 * @brief enqueue job which will be run ASAP. For MT jobs queue's limit will be honored, so exceeding job will

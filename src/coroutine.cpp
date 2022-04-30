@@ -823,11 +823,10 @@ bool Throttler_c::ThrottleAndKeepCrashQuery ()
 	return true;
 }
 
-inline void fnResume ( volatile void* pCtx )
+inline void fnResume ( volatile Worker_c* pCtx )
 {
-	if (!pCtx)
-		return;
-	( (Threads::Coro::Worker_c *) pCtx )->Restart ( false );
+	if ( pCtx )
+		( (Worker_c*)pCtx )->Restart ( false );
 }
 
 // yield and reschedule after given period of time (in milliseconds)
@@ -865,8 +864,7 @@ void Event_c::SetEvent()
 		if ( uState & Waited_e )
 		{
 			m_uState.store ( Signaled_e ); // memory_order_sec_cst - to ensure that next call will not resume again
-			fnResume ( m_pCtx );
-			return;
+			return fnResume ( m_pCtx );
 		}
 	} while ( !m_uState.compare_exchange_weak ( uState, uState | Signaled_e, std::memory_order_relaxed ) );
 }
@@ -878,17 +876,14 @@ void Event_c::WaitEvent()
 {
 	if ( !( m_uState.load ( std::memory_order_relaxed ) & Signaled_e ) )
 	{
-		if ( m_pCtx != Coro::Worker() )
-			m_pCtx = Coro::Worker();
+		if ( m_pCtx != Worker() )
+			m_pCtx = Worker();
 		YieldWith ( [this] {
 			BYTE uState = m_uState.load ( std::memory_order_relaxed );
 			do
 			{
 				if ( uState & Signaled_e )
-				{
-					fnResume ( m_pCtx );
-					return;
-				}
+					return fnResume ( m_pCtx );
 			} while ( !m_uState.compare_exchange_weak ( uState, uState | Waited_e, std::memory_order_relaxed ) );
 		} );
 	}

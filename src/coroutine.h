@@ -257,8 +257,8 @@ class Event_c
 		Waited_e = 2,
 	};
 
-	volatile void* m_pCtx = nullptr;
-	volatile std::atomic<BYTE> m_uState { 0 };
+	volatile Worker_c* m_pCtx = nullptr; // only one waiter allowed
+	std::atomic<BYTE> m_uState { 0 };
 
 public:
 	~Event_c();

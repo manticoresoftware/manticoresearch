@@ -912,12 +912,12 @@ bool Waker_c::Wake() const noexcept
 }
 
 
-void WaitQueue_c::SuspendAndWait ( boost::fibers::detail::spinlock_lock& tLock, Worker_c* pActive )
+void WaitQueue_c::SuspendAndWait ( sph::Spinlock_lock& tLock, Worker_c* pActive ) NO_THREAD_SAFETY_ANALYSIS
 {
 	WakerInQueue_c w { pActive->CreateWaker() };
 	m_Slist.push_back ( w );
 	// suspend this fiber
-	pActive->YieldWith ( [&tLock]() { tLock.unlock(); } );
+	pActive->YieldWith ( [&tLock]() NO_THREAD_SAFETY_ANALYSIS { tLock.unlock(); } );
 	assert ( !w.is_linked() );
 }
 
@@ -929,7 +929,7 @@ struct ScheduledWait_t final: public MiniTimer_c
 };
 
 // returns true if signalled, false if timed-out
-bool WaitQueue_c::SuspendAndWaitUntil ( boost::fibers::detail::spinlock_lock& tLock, Worker_c* pActive, int64_t iTimestamp )
+bool WaitQueue_c::SuspendAndWaitUntil ( sph::Spinlock_lock& tLock, Worker_c* pActive, int64_t iTimestamp ) NO_THREAD_SAFETY_ANALYSIS
 {
 	WakerInQueue_c w { pActive->CreateWaker() };
 	m_Slist.push_back ( w );
@@ -937,7 +937,7 @@ bool WaitQueue_c::SuspendAndWaitUntil ( boost::fibers::detail::spinlock_lock& tL
 	ScheduledWait_t tWait ( w, "SuspendAndWait" );
 
 	// suspend this fiber
-	pActive->YieldWith ( [&tLock, &tWait, iTimestamp]() {
+	pActive->YieldWith ( [&tLock, &tWait, iTimestamp]() NO_THREAD_SAFETY_ANALYSIS {
 		tLock.unlock();
 		tWait.EngageUS ( iTimestamp - sphMicroTimer() );
 	});
@@ -955,7 +955,7 @@ bool WaitQueue_c::SuspendAndWaitUntil ( boost::fibers::detail::spinlock_lock& tL
 	return true;
 }
 
-bool WaitQueue_c::SuspendAndWaitForMS ( boost::fibers::detail::spinlock_lock& tLock, Worker_c* pActive, int64_t iTimePeriodMS )
+bool WaitQueue_c::SuspendAndWaitForMS ( sph::Spinlock_lock& tLock, Worker_c* pActive, int64_t iTimePeriodMS )
 {
 	return SuspendAndWaitUntil ( tLock, pActive, sphMicroTimer() + iTimePeriodMS * 1000 );
 }
@@ -993,7 +993,7 @@ void Mutex_c::Lock()
 	while ( true ) {
 		auto* pActiveWorker = Worker();
 		// store this fiber in order to be notified later
-		boost::fibers::detail::spinlock_lock tLock { m_tWaitQueueSpinlock };
+		sph::Spinlock_lock tLock { m_tWaitQueueSpinlock };
 		assert ( pActiveWorker != m_pOwner );
 		if ( !m_pOwner ) {
 			m_pOwner = pActiveWorker;
@@ -1007,7 +1007,7 @@ void Mutex_c::Lock()
 void Mutex_c::Unlock()
 {
 	Debug (auto* pActiveWorker = Worker();)
-	boost::fibers::detail::spinlock_lock tLock { m_tWaitQueueSpinlock };
+	sph::Spinlock_lock tLock { m_tWaitQueueSpinlock };
 	assert ( pActiveWorker == m_pOwner );
 	m_pOwner = nullptr;
 
@@ -1017,13 +1017,13 @@ void Mutex_c::Unlock()
 // conditional variable
 void ConditionVariableAny_c::NotifyOne() noexcept
 {
-	boost::fibers::detail::spinlock_lock tLock { m_tWaitQueueSpinlock };
+	sph::Spinlock_lock tLock { m_tWaitQueueSpinlock };
 	m_tWaitQueue.NotifyOne();
 }
 
 void ConditionVariableAny_c::NotifyAll() noexcept
 {
-	boost::fibers::detail::spinlock_lock tLock { m_tWaitQueueSpinlock };
+	sph::Spinlock_lock tLock { m_tWaitQueueSpinlock };
 	m_tWaitQueue.NotifyAll();
 }
 
@@ -1038,7 +1038,8 @@ Debug (static constexpr DWORD uxFE = ~ux01;)		   // mask for w-lock flag (0xFFFF
 void RWLock_c::ReadLock()
 {
 	while ( true ) {
-		boost::fibers::detail::spinlock_lock tLock { m_tInternalMutex };
+		// store this task in order to be resumed later
+		sph::Spinlock_lock tLock { m_tInternalMutex };
 		if ( !( m_uState & ux01 ) && m_tWaitWQueue.Empty() )
 		{
 			m_uState += ux02;
@@ -1052,7 +1053,7 @@ void RWLock_c::ReadLock()
 void RWLock_c::WriteLock()
 {
 	while ( true ) {
-		boost::fibers::detail::spinlock_lock tLock { m_tInternalMutex };
+		sph::Spinlock_lock tLock { m_tInternalMutex };
 		if ( !m_uState )
 		{
 			m_uState = ux01;
@@ -1064,7 +1065,7 @@ void RWLock_c::WriteLock()
 
 void RWLock_c::Unlock()
 {
-	boost::fibers::detail::spinlock_lock tLock { m_tInternalMutex };
+	sph::Spinlock_lock tLock { m_tInternalMutex };
 	assert ( m_uState >= ux01 && "attempt to unlock not locked coro mutex");
 	m_uState = ( m_uState == ux01 ) ? 0 : ( m_uState - ux02 );
 

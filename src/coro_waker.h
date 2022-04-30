@@ -10,8 +10,8 @@
 
 #pragma once
 
+#include "std/spinlock.h"
 #include <boost/intrusive/slist.hpp>
-#include <boost/fiber/detail/spinlock.hpp>
 
 namespace Threads
 {
@@ -81,9 +81,9 @@ private:
 	detail::WakerSlist_t m_Slist {};
 
 public:
-	void SuspendAndWait ( boost::fibers::detail::spinlock_lock&, Worker_c* );
-	bool SuspendAndWaitUntil ( boost::fibers::detail::spinlock_lock&, Worker_c*, int64_t );
-	bool SuspendAndWaitForMS ( boost::fibers::detail::spinlock_lock&, Worker_c*, int64_t );
+	void SuspendAndWait ( sph::Spinlock_lock& l, Worker_c* ) REQUIRES (l);
+	bool SuspendAndWaitUntil ( sph::Spinlock_lock& l, Worker_c*, int64_t ) REQUIRES (l);
+	bool SuspendAndWaitForMS ( sph::Spinlock_lock& l, Worker_c*, int64_t ) REQUIRES (l);
 	void NotifyOne();
 	void NotifyAll();
 

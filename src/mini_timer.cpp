@@ -11,9 +11,9 @@
 #include "mini_timer.h"
 #include "threadutils.h"
 #include "timeout_queue.h"
+#include "std/spinlock.h"
 
 #include <boost/intrusive/slist.hpp>
-#include <boost/fiber/detail/spinlock.hpp>
 
 #ifndef VERBOSE_TIMER
 #define VERBOSE_TIMER 0
@@ -40,8 +40,6 @@ CSphString Stamp()
 #define DEBUGT LOGMSG ( DEBUG, TIMER, TSKT )
 #define DEBUGX LOGMSG ( DEBUG, TIMER, TSKX )
 
-using TimerMutex_t = boost::fibers::detail::spinlock ;
-using TimerLock_t = boost::fibers::detail::spinlock_lock;
 using TimerSlist_t = boost::intrusive::slist<
 	MiniTimer_c,
 	boost::intrusive::member_hook<MiniTimer_c, sph::TimerHook_t, &MiniTimer_c::m_tLink>,
@@ -66,15 +64,15 @@ volatile bool& IsTinyTimerCreated()
 class TinyTimer_c
 {
 	// stuff to transfer (enqueue) tasks
-	TimerMutex_t m_tStagingGuard {};
-	TimerSlist_t m_tStagingQueue; // GUARDED_BY ( m_tStagingGuard );
+	sph::Spinlock_c m_tStagingGuard {};
+	TimerSlist_t m_tStagingQueue GUARDED_BY ( m_tStagingGuard );
 
 	// the queue
 	mutable CSphMutex m_tTimeoutsGuard; // guard is need as we can remove elems from any thread. That is short-live.
 	TimeoutQueue_c m_dTimeouts GUARDED_BY ( m_tTimeoutsGuard );
 
 	int64_t m_iNextTimeoutUS = -1;
-	std::atomic<int64_t> m_tmLastTimestamp;
+	std::atomic<int64_t> m_tmLastTimestamp { sphMicroTimer() };
 
 	// management
 	OneshotEvent_c m_tSignal;
@@ -97,11 +95,11 @@ private:
 		return tmTimestamp;
 	}
 
-	void Enqueue ( MiniTimer_c& tTask ) EXCLUDES ( TimerThread )
+	void Enqueue ( MiniTimer_c& tTask ) EXCLUDES ( TimerThread, m_tStagingGuard )
 	{
 		DEBUGT << "enqueue " << &tTask;
 		{
-			TimerLock_t tLock { m_tStagingGuard };
+			sph::Spinlock_lock tLock { m_tStagingGuard };
 			if ( !tTask.m_tLink.is_linked() )
 				m_tStagingQueue.push_back ( tTask );
 		}
@@ -110,9 +108,9 @@ private:
 			Kick();
 	}
 
-	MiniTimer_c* PopStagingTask() REQUIRES ( TimerThread )
+	MiniTimer_c* PopStagingTask() REQUIRES ( TimerThread ) EXCLUDES ( m_tStagingGuard )
 	{
-		TimerLock_t tLock { m_tStagingGuard };
+		sph::Spinlock_lock tLock { m_tStagingGuard };
 		if ( m_tStagingQueue.empty() )
 			return nullptr;
 
@@ -251,12 +249,12 @@ public:
 		return tTimer.m_iTimeoutTimeUS;
 	}
 
-	void Remove ( MiniTimer_c& tTimer ) EXCLUDES ( m_tTimeoutsGuard, TimerThread )
+	void Remove ( MiniTimer_c& tTimer ) EXCLUDES ( m_tTimeoutsGuard, m_tStagingGuard, TimerThread )
 	{
 		if ( IsInterrupted() )
 			return;
 		{
-			TimerLock_t tLock { m_tStagingGuard };
+			sph::Spinlock_lock tLock { m_tStagingGuard };
 			if ( tTimer.m_tLink.is_linked() )
 			{
 				m_tStagingQueue.remove ( tTimer );

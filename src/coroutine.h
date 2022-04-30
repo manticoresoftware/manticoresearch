@@ -17,7 +17,6 @@
 
 // note: we not yet link to boost::fiber, so just inclusion of some of it's header is enough.
 // Once we do link - add searching of that component into Cmake, than m.b. remove this comment as redundant
-#include <boost/fiber/detail/spinlock.hpp>
 #include "coro_waker.h"
 
 #define LOG_LEVEL_RESEARCH true
@@ -140,95 +139,21 @@ class ClonableCtx_T
 
 public:
 	template <typename... PARAMS >
-	explicit ClonableCtx_T ( PARAMS && ... tParams  )
-		: m_dParentContext ( std::forward<PARAMS> ( tParams )... )
-	{
-		if ( !m_dParentContext.IsClonable() )
-			return;
-
-		int iContexts = NThreads()-1;
-		if ( !iContexts )
-			return;
-
-		Setup(iContexts);
-	}
-
-	void LimitConcurrency ( int iDistThreads )
-	{
-		assert (m_iTasks==0); // can be run only when no work started
-		if ( !iDistThreads ) // 0 as for dist_threads means 'no limit'
-			return;
-
-		auto iContexts = iDistThreads-1; // one context is always clone-free
-		if ( m_dChildrenContexts.GetLength ()<=iContexts )
-			return; // nothing to align
-
-		Setup(iContexts);
-	}
-
-	~ClonableCtx_T()
-	{
-		for ( auto & tCtx : m_dChildrenContexts )
-			tCtx.reset();
-	}
-
-	// called once per coroutine, when it really has to process something
-	REFCONTEXT CloneNewContext ( const int * pJobId = nullptr )
-	{
-		if ( m_bDisabled )
-			return m_dParentContext;
-
-		auto iMyIdx = m_iTasks.fetch_add ( 1, std::memory_order_acq_rel );
-		if ( !iMyIdx )
-			return m_dParentContext;
-
-		--iMyIdx; // make it back 0-based
-		auto & tCtx = m_dChildrenContexts[iMyIdx];
-		tCtx.emplace_once ( m_dParentContext );
-		m_dJobIds[iMyIdx] = pJobId ? *pJobId : 0;
-		return (REFCONTEXT) m_dChildrenContexts[iMyIdx].get();
-	}
+	explicit ClonableCtx_T ( PARAMS && ... tParams  );
+	~ClonableCtx_T();
 
 	// Num of parallel workers to complete iTasks jobs
-	inline int Concurrency ( int iTasks )
-	{
-		return Min ( m_dChildrenContexts.GetLength ()+1, iTasks ); // +1 since parent is also an extra context
-	}
+	int Concurrency ( int iTasks );
+	void LimitConcurrency ( int iDistThreads );
 
-	void Setup ( int iContexts )
-	{
-		m_dChildrenContexts.Reset(iContexts);
-		m_dJobIds.Reset(iContexts);
-		m_bDisabled = !iContexts;
-	}
+	void Setup ( int iContexts );
+	void Finalize();
+
+	// called once per coroutine, when it really has to process something
+	REFCONTEXT CloneNewContext ( const int * pJobId = nullptr );
 
 	template <typename FNPROCESSOR>
-	void ForAll ( FNPROCESSOR fnProcess, bool bIncludeRoot=true )
-	{
-		if ( bIncludeRoot )
-			fnProcess ( m_dParentContext );
-
-		if ( m_bDisabled ) // nothing to do; sorters and results are already original
-			return;
-
-		CSphVector<std::pair<int,int>> dOrder;
-		int iWorkThreads = m_iTasks-1;
-		for ( int i = 0; i<iWorkThreads; ++i )
-			dOrder.Add ( { i, m_dJobIds[i] } );
-
-		dOrder.Sort ( ::bind ( &std::pair<int,int>::second ) );
-		for ( auto i : dOrder )
-		{
-			assert ( m_dChildrenContexts[i.first] );
-			auto tCtx = (REFCONTEXT)m_dChildrenContexts[i.first].get();
-			fnProcess(tCtx);
-		}
-	}
-
-	void Finalize()
-	{
-		ForAll ( [this] ( REFCONTEXT tContext ) { m_dParentContext.MergeChild ( tContext ); }, false );
-	}
+	void ForAll ( FNPROCESSOR fnProcess, bool bIncludeRoot=true );
 };
 
 // create context and return resuming functor.
@@ -259,26 +184,11 @@ void Continue ( Handler fnHandler, int iStack=0 );
 
 // if iStack<0, just immediately invoke the handler (that is bypass)
 template<typename HANDLER>
-void Continue ( int iStack, HANDLER handler )
-{
-	if ( iStack<0 ) {
-		handler ();
-		return;
-	}
-	Continue ( handler, iStack );
-}
+void Continue ( int iStack, HANDLER handler );
 
 // if iStack<0, just immediately invoke the handler (that is bypass). Returns boolean result from handler
 template<typename HANDLER>
-bool ContinueBool ( int iStack, HANDLER handler )
-{
-	if ( iStack<0 )
-		return handler ();
-
-	bool bResult;
-	Continue ( [&bResult, fnHandler = std::move ( handler )] { bResult = fnHandler (); }, iStack );
-	return bResult;
-}
+bool ContinueBool ( int iStack, HANDLER handler );
 
 // Run handler in single or many user threads.
 // NOTE! even with concurrency==1 it is not sticked to the same OS thread, so avoid using thread-local storage.
@@ -319,10 +229,7 @@ public:
 	explicit Throttler_c ( int tmPeriodMs = -1 );
 
 	// that changes default daemon-wide
-	inline static void SetDefaultThrottlingPeriodMS ( int tmPeriodMs )
-	{
-		tmThrotleTimeQuantumMs = tmPeriodMs<0 ? tmDefaultThrotleTimeQuantumMs : tmPeriodMs;
-	}
+	static void SetDefaultThrottlingPeriodMS ( int tmPeriodMs );
 
 	// common throttle action - republish stored crash query to TLS on resume
 	bool ThrottleAndKeepCrashQuery ();
@@ -335,15 +242,7 @@ public:
 	inline bool SimpleThrottle () { return MaybeThrottle(); }
 
 	template<typename FN_AFTER_RESUME>
-	bool ThrottleAndProceed ( FN_AFTER_RESUME fnProceeder )
-	{
-		if ( MaybeThrottle () )
-		{
-			fnProceeder ();
-			return true;
-		}
-		return false;
-	}
+	bool ThrottleAndProceed ( FN_AFTER_RESUME fnProceeder );
 };
 
 // yield and reschedule after given period of time (in milliseconds)
@@ -370,7 +269,7 @@ public:
 // instead of real blocking it yield current coro, so, MUST be used only with coro context
 class CAPABILITY ( "mutex" ) RWLock_c: public ISphNoncopyable
 {
-	boost::fibers::detail::spinlock m_tInternalMutex {};
+	sph::Spinlock_c m_tInternalMutex {};
 	WaitQueue_c m_tWaitRQueue {};
 	WaitQueue_c m_tWaitWQueue {};
 	DWORD m_uState { 0 }; // lower bit - w-locked, rest - N of r-locks with bias 2
@@ -384,7 +283,7 @@ public:
 
 class CAPABILITY ( "mutex" ) Mutex_c: public ISphNoncopyable
 {
-	boost::fibers::detail::spinlock m_tWaitQueueSpinlock {};
+	sph::Spinlock_c m_tWaitQueueSpinlock {};
 	WaitQueue_c m_tWaitQueue {};
 	Worker_c* m_pOwner { nullptr };
 
@@ -399,7 +298,7 @@ using ScopedMutex_t = CSphScopedLock<Mutex_c>;
 // condition variable - simplified port from Boost::fibers (we don't use timered functions right now)
 class ConditionVariableAny_c: public ISphNoncopyable
 {
-	boost::fibers::detail::spinlock m_tWaitQueueSpinlock {};
+	sph::Spinlock_c m_tWaitQueueSpinlock {};
 	WaitQueue_c m_tWaitQueue {};
 
 public:
@@ -414,63 +313,22 @@ public:
 	void NotifyAll() noexcept;
 
 	template<typename LockType>
-	void Wait ( LockType& tMutex ) REQUIRES ( tMutex )
-	{
-		auto* pActiveWorker = Worker();
-		// atomically call tMutex.unlock() and block on current worker
-		// store this coro in waiting-queue
-		boost::fibers::detail::spinlock_lock tLock { m_tWaitQueueSpinlock };
-		tMutex.Unlock();
-		m_tWaitQueue.SuspendAndWait ( tLock, pActiveWorker );
-
-		// relock external again before returning
-		tMutex.Lock();
-	}
+	void Wait ( LockType& tMutex ) REQUIRES ( tMutex );
 
 	template<typename LockType>
-	bool WaitUntil ( LockType& tMutex, int64_t iTimestamp ) REQUIRES ( tMutex )
-	{
-		auto* pActiveWorker = Worker();
-		// atomically call tMutex.unlock() and block on current worker
-		// store this coro in waiting-queue
-		boost::fibers::detail::spinlock_lock tLock { m_tWaitQueueSpinlock };
-		tMutex.Unlock();
-		bool bResult = m_tWaitQueue.SuspendAndWaitUntil ( tLock, pActiveWorker, iTimestamp );
-
-		// relock external again before returning
-		tMutex.Lock();
-		return bResult;
-	}
+	bool WaitUntil ( LockType& tMutex, int64_t iTimestamp ) REQUIRES ( tMutex );
 
 	template<typename LockType>
-	bool WaitForMs ( LockType& tMutex, int64_t iTimePeriodMS ) REQUIRES ( tMutex )
-	{
-		return WaitUntil ( tMutex, sphMicroTimer() + iTimePeriodMS*1000 );
-	}
+	bool WaitForMs ( LockType& tMutex, int64_t iTimePeriodMS ) REQUIRES ( tMutex );
 
 	template<typename LockType, typename PRED>
-	void Wait ( LockType& tMutex, PRED fnPred ) REQUIRES ( tMutex )
-	{
-		while ( !fnPred() ) {
-			Wait ( tMutex );
-		}
-	}
+	void Wait ( LockType& tMutex, PRED fnPred ) REQUIRES ( tMutex );
 
 	template<typename LockType, typename PRED>
-	bool WaitUntil ( LockType& tMutex, PRED fnPred, int64_t iTimestamp ) REQUIRES ( tMutex )
-	{
-		while ( !fnPred() ) {
-			if ( !WaitUntil ( tMutex, iTimestamp ) )
-				return fnPred();
-		}
-		return true;
-	}
+	bool WaitUntil ( LockType& tMutex, PRED fnPred, int64_t iTimestamp ) REQUIRES ( tMutex );
 
 	template<typename LockType, typename PRED>
-	bool WaitForMs ( LockType& tMutex, PRED fnPred, int64_t iTimePeriodMS ) REQUIRES ( tMutex )
-	{
-		return WaitUntil ( tMutex, std::forward<PRED> ( fnPred ), sphMicroTimer() + iTimePeriodMS * 1000 );
-	}
+	bool WaitForMs ( LockType& tMutex, PRED fnPred, int64_t iTimePeriodMS ) REQUIRES ( tMutex );
 };
 
 class ConditionVariable_c: public ISphNoncopyable
@@ -484,9 +342,9 @@ public:
 	void Wait ( ScopedMutex_t& lt ) REQUIRES (lt) { m_tCnd.Wait ( lt ); }
 	bool WaitUntil ( ScopedMutex_t& lt, int64_t iTime ) REQUIRES (lt) { return m_tCnd.WaitUntil ( lt, iTime ); }
 	bool WaitForMs ( ScopedMutex_t& lt, int64_t iPeriodMS ) REQUIRES (lt) { return m_tCnd.WaitForMs ( lt, iPeriodMS ); }
-	template<typename PRED> void Wait ( ScopedMutex_t& lt, PRED&& fnPred ) REQUIRES (lt) { m_tCnd.Wait ( lt, std::forward<PRED>(fnPred) ); }
-	template<typename PRED> bool WaitUntil ( ScopedMutex_t& lt, PRED&& fnPred, int64_t iTime ) REQUIRES (lt) { return m_tCnd.WaitUntil ( lt, std::forward<PRED>(fnPred), iTime ); }
-	template<typename PRED> bool WaitForMs ( ScopedMutex_t& lt, PRED&& fnPred, int64_t iPeriodMS ) REQUIRES (lt) { return m_tCnd.WaitForMs ( lt, std::forward<PRED>(fnPred), iPeriodMS ); }
+	template<typename PRED> void Wait ( ScopedMutex_t& lt, PRED&& fnPred ) REQUIRES (lt);
+	template<typename PRED> bool WaitUntil ( ScopedMutex_t& lt, PRED&& fnPred, int64_t iTime ) REQUIRES (lt);
+	template<typename PRED> bool WaitForMs ( ScopedMutex_t& lt, PRED&& fnPred, int64_t iPeriodMS ) REQUIRES (lt);
 };
 
 
@@ -500,151 +358,49 @@ class Waitable_T: public ISphNoncopyable
 public:
 
 	template<typename... PARAMS>
-	explicit Waitable_T ( PARAMS&&... tParams )
-		: m_tValue ( std::forward<PARAMS> ( tParams )... )
-	{}
+	explicit Waitable_T ( PARAMS&&... tParams );
 
-	void SetValue ( T tValue )
-	{
-		ScopedMutex_t lk ( m_tMutex );
-		m_tValue = tValue;
-	}
-
-	T ExchangeValue ( T tNewValue )
-	{
-		ScopedMutex_t lk ( m_tMutex );
-		return std::exchange ( m_tValue, tNewValue );
-	}
-
-	void SetValueAndNotifyOne ( T tValue )
-	{
-		SetValue ( tValue );
-		NotifyOne();
-	}
-
-	void SetValueAndNotifyAll ( T tValue )
-	{
-		SetValue ( tValue );
-		NotifyAll();
-	}
-
-	void UpdateValueAndNotifyOne ( T tValue )
-	{
-		if ( tValue == GetValue() )
-			return;
-		SetValueAndNotifyOne ( tValue );
-	}
-
-	void UpdateValueAndNotifyAll ( T tValue )
-	{
-		if ( tValue == GetValue() )
-			return;
-		SetValueAndNotifyAll ( tValue );
-	}
+	void SetValue ( T tValue );
+	T ExchangeValue ( T tNewValue );
+	void SetValueAndNotifyOne ( T tValue );
+	void SetValueAndNotifyAll ( T tValue );
+	void UpdateValueAndNotifyOne ( T tValue );
+	void UpdateValueAndNotifyAll ( T tValue );
 
 	template<typename MOD>
-	void ModifyValue ( MOD&& fnMod )
-	{
-		ScopedMutex_t lk ( m_tMutex );
-		fnMod ( m_tValue );
-	}
+	void ModifyValue ( MOD&& fnMod );
 
 	template<typename MOD>
-	void ModifyValueAndNotifyOne ( MOD&& fnMod )
-	{
-		ModifyValue ( std::forward<MOD> ( fnMod ) );
-		NotifyOne();
-	}
+	void ModifyValueAndNotifyOne ( MOD&& fnMod );
 
 	template<typename MOD>
-	void ModifyValueAndNotifyAll ( MOD&& fnMod )
-	{
-		ModifyValue ( std::forward<MOD> ( fnMod ) );
-		NotifyAll();
-	}
+	void ModifyValueAndNotifyAll ( MOD&& fnMod );
 
-	T GetValue() const
-	{
-		return m_tValue;
-	}
-
-	const T& GetValueRef() const
-	{
-		return m_tValue;
-	}
-
-	inline void NotifyOne()
-	{
-		m_tCondVar.NotifyOne();
-	}
-
-	inline void NotifyAll()
-	{
-		m_tCondVar.NotifyAll();
-	}
-
-	void Wait () const
-	{
-		ScopedMutex_t lk ( m_tMutex );
-		m_tCondVar.Wait ( lk );
-	}
-
-	bool WaitUntil(int64_t iTime) const
-	{
-		ScopedMutex_t lk ( m_tMutex );
-		return m_tCondVar.WaitUntil ( lk, iTime );
-	}
-
-	bool WaitForMs(int64_t iPeriodMS) const
-	{
-		ScopedMutex_t lk ( m_tMutex );
-		return m_tCondVar.WaitForMs ( lk, iPeriodMS );
-	}
+	T GetValue() const;
+	const T& GetValueRef() const;
+	inline void NotifyOne();
+	inline void NotifyAll();
+	void Wait () const;
+	bool WaitUntil(int64_t iTime) const;
+	bool WaitForMs(int64_t iPeriodMS) const;
 
 	template<typename PRED>
-	T Wait ( PRED&& fnPred ) const
-	{
-		ScopedMutex_t lk ( m_tMutex );
-		m_tCondVar.Wait ( lk, [this, fnPred = std::forward<PRED> ( fnPred )]() { return fnPred ( m_tValue ); } );
-		return m_tValue;
-	}
+	T Wait ( PRED&& fnPred ) const;
 
 	template<typename PRED>
-	T WaitUntil ( PRED&& fnPred, int64_t iTime ) const
-	{
-		ScopedMutex_t lk ( m_tMutex );
-		m_tCondVar.WaitUntil ( lk, [this, fnPred = std::forward<PRED> ( fnPred )]() { return fnPred ( m_tValue ); }, iTime );
-		return m_tValue;
-	}
+	T WaitUntil ( PRED&& fnPred, int64_t iTime ) const;
 
 	template<typename PRED>
-	T WaitForMs ( PRED&& fnPred, int64_t iPeriodMs ) const
-	{
-		ScopedMutex_t lk ( m_tMutex );
-		m_tCondVar.WaitForMs ( lk, [this, fnPred = std::forward<PRED> ( fnPred )]() { return fnPred ( m_tValue ); }, iPeriodMs );
-		return m_tValue;
-	}
+	T WaitForMs ( PRED&& fnPred, int64_t iPeriodMs ) const;
 
 	template<typename PRED>
-	void WaitVoid ( PRED&& fnPred ) const
-	{
-		ScopedMutex_t lk ( m_tMutex );
-		m_tCondVar.Wait ( lk, std::forward<PRED> ( fnPred ) );
-	}
+	void WaitVoid ( PRED&& fnPred ) const;
 
 	template<typename PRED>
-	bool WaitVoidUntil ( PRED&& fnPred, int64_t iTime ) const
-	{
-		ScopedMutex_t lk ( m_tMutex );
-		return m_tCondVar.WaitUntil ( lk, std::forward<PRED> ( fnPred ), iTime );
-	}
+	bool WaitVoidUntil ( PRED&& fnPred, int64_t iTime ) const;
 
 	template<typename PRED>
-	bool WaitVoidForMs ( PRED&& fnPred, int64_t iPeriodMs ) const
-	{
-		ScopedMutex_t lk ( m_tMutex );
-		return m_tCondVar.WaitForMs ( lk, std::forward<PRED> ( fnPred ), iPeriodMs );
-	}
+	bool WaitVoidForMs ( PRED&& fnPred, int64_t iPeriodMs ) const;
 };
 
 } // namespace Coro
@@ -668,31 +424,9 @@ class SCOPED_CAPABILITY ScopedScheduler_c : ISphNoncopyable
 	SchedRole m_pRoleRef = nullptr;
 public:
 	ScopedScheduler_c() = default;
-	inline explicit ScopedScheduler_c ( SchedRole pRole ) ACQUIRE ( pRole )
-	{
-		if ( !pRole )
-			return;
-
-		m_pRoleRef = Coro::CurrentScheduler ();
-//		if ( m_pRoleRef )
-			AcquireSched ( pRole );
-	}
-
-	inline explicit ScopedScheduler_c ( RoledSchedulerSharedPtr_t& pRole ) ACQUIRE ( pRole )
-	{
-		if ( !pRole )
-			return;
-
-		m_pRoleRef = Coro::CurrentScheduler ();
-//		if ( m_pRoleRef )
-			AcquireSched ( pRole );
-	}
-
-	~ScopedScheduler_c () RELEASE()
-	{
-		if ( m_pRoleRef )
-			AcquireSched ( m_pRoleRef );
-	}
+	explicit ScopedScheduler_c ( SchedRole pRole ) ACQUIRE ( pRole );
+	explicit ScopedScheduler_c ( RoledSchedulerSharedPtr_t& pRole ) ACQUIRE ( pRole );
+	~ScopedScheduler_c () RELEASE();
 };
 
 inline void CheckAcquiredSched ( SchedRole R ) ACQUIRE( R ) NO_THREAD_SAFETY_ANALYSIS
@@ -725,8 +459,7 @@ public:
 	}
 
 	/// release on going out of scope
-	~CheckRole_c () RELEASE()
-	{}
+	~CheckRole_c () RELEASE() = default;
 };
 
 using SccRL_t = CSphScopedRLock_T<Coro::RWLock_c>;
@@ -738,3 +471,5 @@ using FakeRL_t = FakeScopedRLock_T<Coro::RWLock_c>;
 using FakeWL_t = FakeScopedWLock_T<Coro::RWLock_c>;
 
 } // namespace Threads
+
+#include "detail/coroutine_impl.h"

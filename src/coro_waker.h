@@ -38,7 +38,7 @@ public:
 		, m_iEpoch { iEpoch }
 	{}
 
-	bool Wake() const noexcept;
+	bool Wake ( bool bVip = false ) const noexcept;
 };
 
 class WakerInQueue_c: public Waker_c

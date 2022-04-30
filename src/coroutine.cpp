@@ -396,16 +396,10 @@ public:
 		return new Worker_c ( myinfo::StickParent ( std::move ( fnHandler ) ), CurrentScheduler () );
 	}
 
-	inline void Restart () noexcept
+	inline void Restart ( bool bVip = true ) noexcept
 	{
 		if (( m_tState.SetFlags ( CoroState_t::Running_e ) & CoroState_t::Running_e )==0 )
-			Schedule ();
-	}
-
-	inline void RestartSecondary () noexcept
-	{
-		if (( m_tState.SetFlags ( CoroState_t::Running_e ) & CoroState_t::Running_e )==0 )
-			Schedule (false);
+			Schedule ( bVip );
 	}
 
 	inline void Continue () noexcept // continue previously run task. As continue calculation with extended stack
@@ -461,14 +455,9 @@ public:
 		return false;
 	}
 
-	inline Handler SecondaryRestarter() noexcept
+	inline Handler Restarter ( bool bVip = true ) noexcept
 	{
-		return [this] { RestartSecondary (); };
-	}
-
-	inline Handler Restarter () noexcept
-	{
-		return [this] { Restart (); };
+		return [this, bVip] { Restart ( bVip ); };
 	}
 
 	inline Handler Continuator () noexcept
@@ -511,7 +500,7 @@ public:
 		return m_pTlsThis;
 	}
 
-	inline bool Wake ( const size_t iWakerEpoch ) noexcept
+	inline bool Wake ( const size_t iWakerEpoch, bool bVip ) noexcept
 	{
 		size_t iExpectedEpoch = m_iWakerEpoch.load ( std::memory_order_relaxed );
 		bool bLastWaker = m_iWakerEpoch.compare_exchange_strong ( iExpectedEpoch, iWakerEpoch + 1, std::memory_order_acq_rel );
@@ -522,7 +511,7 @@ public:
 		}
 
 		assert ( CurrentWorker() != this );
-		RestartSecondary();
+		Restart ( bVip );
 		return true;
 	}
 
@@ -672,15 +661,14 @@ void StartJob ( Handler fnHandler )
 // Invoking handler will schedule continuation of yielded coroutine and return immediately.
 // Scheduled task ('goto continue...') will be pefromed by scheduler's worker (threadpool, etc.)
 // this pushes to primary queue
-Handler CurrentRestarter () noexcept
+Handler CurrentRestarter ( bool bVip ) noexcept
 {
-	return Coro::Worker()->Restarter();
+	return Coro::Worker()->Restarter ( bVip );
 }
-
 
 Waiter_t DefferedRestarter () noexcept
 {
-	return { nullptr, [fnProceed= Coro::Worker ()->SecondaryRestarter ()] ( void * ) { fnProceed (); }};
+	return { nullptr, [fnProceed = CurrentRestarter ( false )] ( void* ) { fnProceed(); } };
 }
 
 Waiter_t DefferedContinuator () noexcept
@@ -839,7 +827,7 @@ inline void fnResume ( volatile void* pCtx )
 {
 	if (!pCtx)
 		return;
-	( (Threads::Coro::Worker_c *) pCtx )->RestartSecondary ();
+	( (Threads::Coro::Worker_c *) pCtx )->Restart ( false );
 }
 
 // yield and reschedule after given period of time (in milliseconds)
@@ -910,11 +898,11 @@ void Event_c::WaitEvent()
 }
 
 
-bool Waker_c::Wake() const noexcept
+bool Waker_c::Wake ( bool bVip ) const noexcept
 {
 	assert ( m_iEpoch > 0 );
 	assert ( m_pCtx );
-	return m_pCtx->Wake ( m_iEpoch );
+	return m_pCtx->Wake ( m_iEpoch, bVip );
 }
 
 

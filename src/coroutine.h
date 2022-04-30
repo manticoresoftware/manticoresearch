@@ -51,7 +51,7 @@ bool IsUnderValgrind();
 // N of running threads in scheduler, or in global scheduler
 int NThreads ();
 
-Handler CurrentRestarter () noexcept;
+Handler CurrentRestarter ( bool bVip = true ) noexcept;
 
 // Returns smart pointer, which will issue rescheduling of current coro on destroy.
 // restarter - pushes to usual working queue, continuator - try to resume immediately, then pushes to vip queue.

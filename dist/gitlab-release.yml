@@ -300,6 +300,26 @@ collect_focal:
     DISTRO: focal
   needs: [ focal, focalarm ]
 
+jammy:
+  extends: [ .debian_based ]
+  rules:
+    - if: $WHAT=='$WHAT'
+    - if: $WHAT==null
+    - if: $WHAT=="all"
+    - if: $WHAT =~ /jammy/
+  image: registry.gitlab.com/manticoresearch/dev/jammy_clang:13
+  cache:
+    key: jammy
+    paths:
+      - cache
+
+collect_jammy:
+  extends: [ .collect_job ]
+  script: [ ~/upload_repo_deb.sh ]
+  variables:
+    DISTRO: jammy
+  needs: [ jammy ]
+
 buster:
   extends: [ .debian_based ]
   rules:

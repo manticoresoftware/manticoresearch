@@ -1,4 +1,4 @@
-# Automatically added by build_{xenial|bionic|focal}.cmake
+# Automatically added by build_{xenial|bionic|focal|jammy}.cmake
 if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ]; then
 	if [ -x "@CMAKE_INSTALL_FULL_SYSCONFDIR@/init.d/manticore" ]; then
 		update-rc.d manticore defaults >/dev/null

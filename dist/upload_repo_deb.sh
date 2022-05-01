@@ -1,5 +1,5 @@
 #!/bin/bash
-# from outside: $DISTRO = jessie,stretch,buster,trusty,xenial,bionic,focal
+# from outside: $DISTRO = jessie,stretch,buster,trusty,xenial,bionic,focal,jammy
 # That file here is for reference; actually used the one stored on the host to avoid checkout of the whole code
 
 echo "Collected debian packages"

@@ -1328,13 +1328,13 @@ threads = 10
 ### thread_stack
 
 <!-- example conf thread_stack -->
-Maximum stack size for a job (coroutine, one search query may cause multiple jobs/coroutines). Optional, default is unlimited.
+Maximum stack size for a job (coroutine, one search query may cause multiple jobs/coroutines). Optional, default is 128K.
 
-Each job has it's own stack of 128K. When you run a query it's checked for how much stack it requires. If the default 128K is enough, it's just processed. If it needs more we schedule another job with increased stack, which continues processing. The maximum size of such advanced stack is limited by this setting.
+Each job has it's own stack of 128K. When you run a query it's checked for how much stack it requires. If the default 128K is enough, it's just processed. If it needs more we schedule another job with an increased stack, which continues processing. The maximum size of such advanced stack is limited by this setting.
 
 Setting the value to a reasonably high rate will help with processing very deep queries without implication, that overall RAM consumption will grow too high. For example, setting it to 1G does not imply that every new job will take 1G of RAM, but if we see that it requires let's say 100M stack, we just allocate 100M for the job. Other jobs at the same time will be running with their default 128K stack. The same way we can run even more complex queries that need 500M. And if only if we **see** internally that the job requires more than 1G of stack we will fail and report about too low thread_stack.
 
-However in practice even a query which needs 16M of stack is often too complex for parsing, and consumes too much time and resources to be processed. So, the daemon will process it, but limiting such queries by the thread_stack setting looks quite reasonable.
+However in practice even a query which needs 16M of stack is often too complex for parsing, and consumes too much time and resources to be processed. So, the daemon will process it, but limiting such queries by the `thread_stack` setting looks quite reasonable.
 
 
 <!-- intro -->

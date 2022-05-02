@@ -16,16 +16,16 @@ set (CPACK_DEBIAN_PACKAGE_SHLIBDEPS "ON")
 set (CPACK_DEBIAN_PACKAGE_SECTION "misc")
 set (CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
 if (SPLIT)
-	set (CPACK_DEBIAN_APPLICATIONS_PACKAGE_CONTROL_EXTRA "${MANTICORE_BINARY_DIR}/conffiles;${MANTICORE_BINARY_DIR}/postinst;${MANTICORE_BINARY_DIR}/prerm;${MANTICORE_BINARY_DIR}/postrm")
+	set ( CPACK_DEBIAN_SERVER_PACKAGE_CONTROL_EXTRA "${MANTICORE_BINARY_DIR}/conffiles;${MANTICORE_BINARY_DIR}/postinst;${MANTICORE_BINARY_DIR}/prerm;${MANTICORE_BINARY_DIR}/postrm")
 else ()
 	set (CPACK_DEBIAN_MAIN_PACKAGE_CONTROL_EXTRA "${MANTICORE_BINARY_DIR}/conffiles;${MANTICORE_BINARY_DIR}/postinst;${MANTICORE_BINARY_DIR}/prerm;${MANTICORE_BINARY_DIR}/postrm")
 	set (CPACK_DEBIAN_MAIN_PACKAGE_REPLACES "manticore-bin, sphinxsearch")
 endif ()
 set (CPACK_DEBIAN_PACKAGE_CONTROL_STRICT_PERMISSION "ON")
 
-set (CPACK_DEBIAN_APPLICATIONS_PACKAGE_REPLACES "manticore-bin, sphinxsearch")
-set (CPACK_DEBIAN_APPLICATIONS_PACKAGE_NAME "manticore-server")
-set (CPACK_DEBIAN_APPLICATIONS_FILE_NAME "DEB-DEFAULT")
+set (CPACK_DEBIAN_SERVER_PACKAGE_REPLACES "manticore-bin, sphinxsearch")
+set (CPACK_DEBIAN_SERVER_PACKAGE_NAME "manticore-server")
+set (CPACK_DEBIAN_SERVER_FILE_NAME "DEB-DEFAULT")
 
 set (CPACK_DEBIAN_META_PACKAGE_NAME "manticore-all")
 set (CPACK_DEBIAN_META_PACKAGE_DEPENDS "manticore-server, manticore-tools")
@@ -89,39 +89,39 @@ configure_file ("${MANTICORE_BINARY_DIR}/postrm.in" "${MANTICORE_BINARY_DIR}/pos
 
 # stuff going to /etc
 # CMAKE_INSTALL_SYSCONFDIR					etc 					/etc
-install (FILES ${MANTICORE_BINARY_DIR}/manticore.conf DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/manticoresearch COMPONENT applications)
-install (FILES "${MANTICORE_BINARY_DIR}/manticore" DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/default COMPONENT applications)
+install (FILES ${MANTICORE_BINARY_DIR}/manticore.conf DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/manticoresearch COMPONENT server)
+install (FILES "${MANTICORE_BINARY_DIR}/manticore" DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/default COMPONENT server)
 install (FILES "${MANTICORE_BINARY_DIR}/manticore.init" DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/init.d
-		PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ GROUP_EXECUTE GROUP_READ COMPONENT applications RENAME manticore)
+		PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ GROUP_EXECUTE GROUP_READ COMPONENT server RENAME manticore)
 
 # stuff going to /var
 # CMAKE_INSTALL_LOCALSTATEDIR				var 					/var
-install (DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/lib/manticore/data COMPONENT applications)
-install (DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/log/manticore COMPONENT applications)
+install (DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/lib/manticore/data COMPONENT server)
+install (DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/log/manticore COMPONENT server)
 
 # stuff that should go to /lib -> actually to /usr/lib
 # CMAKE_INSTALL_LIBDIR						usr/lib64 				/usr/lib64
-install (FILES "${MANTICORE_BINARY_DIR}/manticore.service" DESTINATION ${CMAKE_INSTALL_LIBDIR}/systemd/system COMPONENT applications)
+install (FILES "${MANTICORE_BINARY_DIR}/manticore.service" DESTINATION ${CMAKE_INSTALL_LIBDIR}/systemd/system COMPONENT server)
 install (FILES "${MANTICORE_BINARY_DIR}/manticore-generator" DESTINATION ${CMAKE_INSTALL_LIBDIR}/systemd/system-generators
-		PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ GROUP_EXECUTE GROUP_READ COMPONENT applications)
+		PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ GROUP_EXECUTE GROUP_READ COMPONENT server)
 
 # binaries go to /usr/bin (here is only new cluster, rest is in main file, installing targets)
 # CMAKE_INSTALL_BINDIR						usr/bin 				/usr/bin
-install (PROGRAMS "dist/deb/manticore_new_cluster" DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT applications)
+install (PROGRAMS "dist/deb/manticore_new_cluster" DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT server)
 
 # stuff going to /usr/share/man, /usr/share/doc
 # CMAKE_INSTALL_MANDIR						usr/share/man 			/usr/share/man
 # CMAKE_INSTALL_DOCDIR						usr/share/doc/manticore /usr/share/doc/manticore
-install (FILES doc/searchd.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1 COMPONENT applications)
+install (FILES doc/searchd.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1 COMPONENT server)
 install (FILES doc/indexer.1 doc/indextool.1 doc/spelldump.1 doc/wordbreaker.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1 COMPONENT tools)
-install (FILES "${MANTICORE_BINARY_DIR}/README.Debian" DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT applications)
+install (FILES "${MANTICORE_BINARY_DIR}/README.Debian" DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT server)
 
 # stuff going to /usr/share/manticore
 # CMAKE_INSTALL_DATAROOTDIR					usr/share 				/usr/share
 # CMAKE_INSTALL_DATADIR						usr/share 				/usr/share
-install (DIRECTORY misc/stopwords DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT applications)
-install (FILES INSTALL DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT applications)
-install (DIRECTORY DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore/modules COMPONENT applications)
+install (DIRECTORY misc/stopwords DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT server)
+install (FILES INSTALL DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT server)
+install (DIRECTORY DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore/modules COMPONENT server)
 
 SET (FULL_SHARE_DIR "${CMAKE_INSTALL_FULL_DATADIR}/manticore")
 
@@ -130,7 +130,7 @@ if (WITH_ICU)
 endif ()
 
 if (NOT NOAPI)
-	install (DIRECTORY api DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT applications)
+	install (DIRECTORY api DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT server)
 endif ()
 
 SET (LOCALDATADIR "${CMAKE_INSTALL_FULL_LOCALSTATEDIR}/lib/manticore/data") # will be used also in the app

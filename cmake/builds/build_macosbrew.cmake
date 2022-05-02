@@ -18,9 +18,9 @@ GNUInstallDirs_get_absolute_install_dir (CMAKE_INSTALL_FULL_DOCDIR CMAKE_INSTALL
 # generate config files
 configure_config (manticore)
 
-install (FILES "${MANTICORE_BINARY_DIR}/manticore.conf" DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/manticoresearch COMPONENT applications)
-install (FILES COPYING INSTALL example.sql DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT applications)
-install (DIRECTORY misc/stopwords DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT applications)
+install (FILES "${MANTICORE_BINARY_DIR}/manticore.conf" DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/manticoresearch COMPONENT server)
+install (FILES COPYING INSTALL example.sql DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT server)
+install (DIRECTORY misc/stopwords DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT server)
 
 SET (FULL_SHARE_DIR "${CMAKE_INSTALL_FULL_DATADIR}/manticore")
 if (WITH_ICU)
@@ -28,7 +28,7 @@ if (WITH_ICU)
 endif ()
 
 if (NOT NOAPI)
-        install (DIRECTORY api DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT applications)
+        install (DIRECTORY api DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT server)
 endif ()
 
 SET ( LOCALDATADIR "${CMAKE_INSTALL_FULL_LOCALSTATEDIR}/manticore/data")

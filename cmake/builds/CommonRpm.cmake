@@ -17,11 +17,11 @@ set (CPACK_RPM_META_PACKAGE_CONFLICTS "manticore, sphinx")
 
 set (CPACK_RPM_META_BUILD_SOURCE_DIRS_PREFIX OFF)
 
-set (CPACK_RPM_APPLICATIONS_PACKAGE_NAME "manticore-server")
-set (CPACK_RPM_APPLICATIONS_FILE_NAME "RPM-DEFAULT")
-set (CPACK_RPM_APPLICATIONS_INSTALL_WITH_EXEC ON)
-set (CPACK_RPM_APPLICATIONS_PACKAGE_OBSOLETES "sphinx")
-set (CPACK_RPM_APPLICATIONS_PACKAGE_CONFLICTS "sphinx")
+set (CPACK_RPM_SERVER_PACKAGE_NAME "manticore-server")
+set (CPACK_RPM_SERVER_FILE_NAME "RPM-DEFAULT")
+set (CPACK_RPM_SERVER_INSTALL_WITH_EXEC ON)
+set (CPACK_RPM_SERVER_PACKAGE_OBSOLETES "sphinx")
+set (CPACK_RPM_SERVER_PACKAGE_CONFLICTS "sphinx")
 
 set (CPACK_RPM_ICUDATA_PACKAGE_NAME "manticore-icudata")
 set (CPACK_RPM_ICUDATA_FILE_NAME "RPM-DEFAULT")
@@ -35,7 +35,7 @@ set (CPACK_RPM_DEVEL_PACKAGE_NAME "manticore-devel")
 set (CPACK_RPM_DEVEL_FILE_NAME "RPM-DEFAULT")
 
 set (CPACK_RPM_MAIN_DEBUGINFO_PACKAGE ON)
-set (CPACK_RPM_APPLICATIONS_DEBUGINFO_PACKAGE ON)
+set (CPACK_RPM_SERVER_DEBUGINFO_PACKAGE ON)
 set (CPACK_RPM_TOOLS_DEBUGINFO_PACKAGE ON)
 set (CPACK_RPM_CONVERTER_DEBUGINFO_PACKAGE ON)
 set (CPACK_RPM_ICUDATA_DEBUGINFO_PACKAGE OFF)
@@ -51,7 +51,7 @@ endif ()
 
 #set ( CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST "/usr/include" )
 if (SPLIT)
-	set (CPACK_RPM_APPLICATIONS_USER_FILELIST
+	set (CPACK_RPM_SERVER_USER_FILELIST
 			"%config(noreplace) %{_sysconfdir}/logrotate.d/manticore"
 			"%config(noreplace) %{_sysconfdir}/manticoresearch/manticore.conf"
 			)
@@ -71,10 +71,10 @@ SET (CPACK_RPM_PACKAGE_LICENSE "GNU General Public License v. 2 (GPL2)")
 
 set (SCR "${CMAKE_CURRENT_SOURCE_DIR}/dist/rpm") # a shortcut
 if (SPLIT)
-	set (CPACK_RPM_APPLICATIONS_BUILDREQUIRES "systemd-units")
-	set (CPACK_RPM_APPLICATIONS_POST_INSTALL_SCRIPT_FILE "${MANTICORE_BINARY_DIR}/manticore_s.post")
-	set (CPACK_RPM_APPLICATIONS_POST_UNINSTALL_SCRIPT_FILE "${SCR}/manticore_s.postun")
-	set (CPACK_RPM_APPLICATIONS_PRE_UNINSTALL_SCRIPT_FILE "${SCR}/manticore_s.preun")
+	set (CPACK_RPM_SERVER_BUILDREQUIRES "systemd-units")
+	set (CPACK_RPM_SERVER_POST_INSTALL_SCRIPT_FILE "${MANTICORE_BINARY_DIR}/manticore_s.post")
+	set (CPACK_RPM_SERVER_POST_UNINSTALL_SCRIPT_FILE "${SCR}/manticore_s.postun")
+	set (CPACK_RPM_SERVER_PRE_UNINSTALL_SCRIPT_FILE "${SCR}/manticore_s.preun")
 else ()
 	set (CPACK_RPM_BUILDREQUIRES "systemd-units")
 	set (CPACK_RPM_POST_INSTALL_SCRIPT_FILE "${MANTICORE_BINARY_DIR}/manticore_s.post")
@@ -108,41 +108,41 @@ configure_file ("dist/rpm/manticore.generator.in" "${MANTICORE_BINARY_DIR}/manti
 
 # stuff going to /etc
 # CMAKE_INSTALL_SYSCONFDIR					etc 					/etc
-install (FILES ${MANTICORE_BINARY_DIR}/manticore.conf DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/manticoresearch COMPONENT applications)
-install (FILES ${MANTICORE_BINARY_DIR}/manticore.logrotate DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/logrotate.d COMPONENT applications RENAME manticore)
+install (FILES ${MANTICORE_BINARY_DIR}/manticore.conf DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/manticoresearch COMPONENT server)
+install (FILES ${MANTICORE_BINARY_DIR}/manticore.logrotate DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/logrotate.d COMPONENT server RENAME manticore)
 
 
 # stuff going to /var
 # CMAKE_INSTALL_LOCALSTATEDIR				var 					/var
-install (DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/lib/manticore/data COMPONENT applications)
-install (DIRECTORY DESTINATION ${CMAKE_INSTALL_RUNSTATEDIR}/manticore COMPONENT applications)
-install (DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/log/manticore COMPONENT applications)
+install (DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/lib/manticore/data COMPONENT server)
+install (DIRECTORY DESTINATION ${CMAKE_INSTALL_RUNSTATEDIR}/manticore COMPONENT server)
+install (DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/log/manticore COMPONENT server)
 
 # stuff that should go to /lib -> actually to /usr/lib
 # CMAKE_INSTALL_LIBDIR						usr/lib64 				/usr/lib64
-install (FILES ${MANTICORE_BINARY_DIR}/manticore.tmpfiles DESTINATION ${CMAKE_INSTALL_LIB}/tmpfiles.d COMPONENT applications RENAME manticore.conf)
-install (PROGRAMS ${MANTICORE_BINARY_DIR}/manticore-search-generator DESTINATION ${CMAKE_INSTALL_LIB}/systemd/system-generators COMPONENT applications)
+install (FILES ${MANTICORE_BINARY_DIR}/manticore.tmpfiles DESTINATION ${CMAKE_INSTALL_LIB}/tmpfiles.d COMPONENT server RENAME manticore.conf)
+install (PROGRAMS ${MANTICORE_BINARY_DIR}/manticore-search-generator DESTINATION ${CMAKE_INSTALL_LIB}/systemd/system-generators COMPONENT server)
 
 
 # binaries go to /usr/bin (here is only new cluster, rest is in main file, installing targets)
 # CMAKE_INSTALL_BINDIR						usr/bin 				/usr/bin
-install (PROGRAMS "dist/rpm/manticore_new_cluster" DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT applications)
+install (PROGRAMS "dist/rpm/manticore_new_cluster" DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT server)
 
 
 # stuff going to /usr/share/man, /usr/share/doc
 # CMAKE_INSTALL_MANDIR						usr/share/man 			/usr/share/man
 # CMAKE_INSTALL_DOCDIR						usr/share/doc/manticore /usr/share/doc/manticore
 install (FILES doc/indexer.1 doc/indextool.1 doc/spelldump.1 doc/wordbreaker.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1 COMPONENT tools)
-install (FILES doc/searchd.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1 COMPONENT applications)
-install (FILES ${MANTICORE_BINARY_DIR}/manticore.conf DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT applications RENAME manticore.conf.dist)
-install (FILES COPYING example.sql DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT applications)
+install (FILES doc/searchd.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1 COMPONENT server)
+install (FILES ${MANTICORE_BINARY_DIR}/manticore.conf DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT server RENAME manticore.conf.dist)
+install (FILES COPYING example.sql DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT server)
 
 # stuff going to /usr/share/manticore
 # CMAKE_INSTALL_DATAROOTDIR					usr/share 				/usr/share
 # CMAKE_INSTALL_DATADIR						usr/share 				/usr/share
-install (DIRECTORY misc/stopwords DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT applications)
+install (DIRECTORY misc/stopwords DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT server)
 install (FILES INSTALL DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT meta)
-install (DIRECTORY DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore/modules COMPONENT applications)
+install (DIRECTORY DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore/modules COMPONENT server)
 
 SET (FULL_SHARE_DIR "${CMAKE_INSTALL_FULL_DATADIR}/manticore")
 
@@ -151,7 +151,7 @@ if (WITH_ICU)
 endif ()
 
 if (NOT NOAPI)
-	install (DIRECTORY api DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT applications)
+	install (DIRECTORY api DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT server)
 endif ()
 
 SET (LOCALDATADIR "${CMAKE_INSTALL_FULL_LOCALSTATEDIR}/lib/manticore/data") # will be used also in the app

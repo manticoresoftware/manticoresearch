@@ -60,6 +60,20 @@ index idx2
 	index_exact_words = 1
 }
 
+source src3
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT id, title, body, 11 as idd FROM test_table1
+	sql_attr_uint	= idd
+}
+
+index idx3
+{
+	source			= src3
+	path			= <data_path/>/idx3
+}
+
 </config>
 
 <queries>
@@ -119,6 +133,12 @@ index idx2
 	show plan;
 	show meta;
 </sphinxql>
+
+<!-- regressions crash o NEAR from match after plain terms and match from second field with expression ranker -->
+<sphinxql>
+	select id from idx3 where match (' f g k NEAR/4 l NEAR/4 m ') order by id asc OPTION ranker=expr('sum(lcs)*bm25');
+	select id from idx3 where match (' a NEAR/4 b NEAR/4 c ') order by id asc OPTION ranker=expr('sum(lcs)*bm25');
+</sphinxql>
 </queries>
 
 <db_create>
@@ -162,5 +182,20 @@ INSERT INTO `test_table` VALUES
 
 </db_insert>
 <db_drop>DROP TABLE IF EXISTS test_table</db_drop>
+<db_drop>DROP TABLE IF EXISTS test_table1</db_drop>
+
+<db_create>
+CREATE TABLE test_table1
+(
+	id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL,
+	title VARCHAR(255) NOT NULL,
+	body VARCHAR(255) NOT NULL
+);
+</db_create>
+<db_insert>
+INSERT INTO `test_table1` VALUES
+( 1, 'b c', 'zzz a zzz b zzz c xxx' ),
+( 2, 'f g zzz k zzz l xxx m', 'zzz b' )
+</db_insert>
 
 </test>

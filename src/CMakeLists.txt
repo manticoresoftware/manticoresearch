@@ -299,10 +299,6 @@ target_link_libraries(lsearchd PUBLIC searchd_replication)
 trace(lextra)
 trace(lsearchd)
 
-if (SPLIT_SYMBOLS)
-	include (split)
-endif()
-
 # our executables
 add_executable(searchd searchd.cpp)
 target_link_libraries (searchd searchd_ssl lmanticore lsearchd)
@@ -323,6 +319,7 @@ if (NOT STATIC_BINARY)
 endif ()
 
 if ( SPLIT_SYMBOLS )
+	include ( split )
 	split_dbg ( indexer )
 	split_dbg ( indextool )
 	split_dbg ( searchd )

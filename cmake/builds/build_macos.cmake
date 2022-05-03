@@ -9,25 +9,10 @@ message (STATUS "Will create TGZ with build for Mac Os X")
 set (SPLIT_SYMBOLS 1)
 
 # configure specific stuff
-set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -arch x86_64")
-set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -arch x86_64")
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -arch ${CMAKE_SYSTEM_PROCESSOR}")
+set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -arch ${CMAKE_SYSTEM_PROCESSOR}")
 
-find_program (SWVERSPROG sw_vers)
-if (SWVERSPROG)
-	# use dpkg to fix the package file name
-	execute_process (
-			COMMAND ${SWVERSPROG} -productVersion
-			OUTPUT_VARIABLE MACOSVER
-			OUTPUT_STRIP_TRAILING_WHITESPACE
-	)
-	mark_as_advanced (SWVERSPROG MACOSVER)
-endif (SWVERSPROG)
-
-if (NOT MACOSVER)
-	set (MACOSVER "10.12")
-endif ()
-
-set (CPACK_SUFFIX "-osx${MACOSVER}-x86_64")
+set (CPACK_SUFFIX "-osx${CMAKE_OSX_DEPLOYMENT_TARGET}-${CMAKE_SYSTEM_PROCESSOR}")
 
 # now get system paths
 set (CMAKE_INSTALL_PREFIX "${CPACK_PACKAGING_INSTALL_PREFIX}" CACHE PATH "prefix from distr build" FORCE)

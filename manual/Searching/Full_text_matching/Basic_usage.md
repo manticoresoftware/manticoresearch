@@ -268,20 +268,22 @@ Python
 <!-- request Python -->
 
 ```python
-searchApi.search({"index":"myindex","query":{"query_string":"@title \"find me fast \"/2"}})
+searchApi.search({"index":"hn_small","query":{"query_string":"@comment_text \"find joe fast \"/2"}, "_source": ["story_author","comment_author"], "limit":1})
 ```
 <!-- response Python -->
 ``` python
-{'hits': {'hits': [{u'_id': u'1',
-                    u'_score': 1,
-                    u'_source': {u'title': u'first find me fast', u'gid':11}},
-                    {u'_id': u'2',
-                    u'_score': 1,
-                    u'_source': {u'title': u'second find me fast', u'gid':12}}],
-          'total': 2},
+{'aggregations': None,
+ 'hits': {'hits': [{'_id': '807160',
+                    '_score': 2566,
+                    '_source': {'comment_author': 'runjake',
+                                'story_author': 'rbanffy'}}],
+          'max_score': None,
+          'total': 1864,
+          'total_relation': 'eq'},
  'profile': None,
  'timed_out': False,
- 'took': 0}
+ 'took': 2,
+ 'warning': None} 
 ```
 
 <!-- intro -->
@@ -289,20 +291,25 @@ javascript
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"index":"myindex","query":{"query_string":"@title \"find me fast \"/2"}});
+res = await searchApi.search({"index":"hn_small","query":{"query_string":"@comment_text \"find joe fast \"/2"}, "_source": ["story_author","comment_author"], "limit":1});
 ```
 <!-- response javascript -->
 ```javascript
-{"hits": {"hits": [{"_id": "1",
-                    "_score": 1,
-                    "_source": {"title": "first find me fast", "gid":11}},
-                    {"_id": "2",
-                    "_score": 1,
-                    "_source": {"title": "second find me fast", "gid":12}}],
-          "total": 2},
- "profile": None,
- "timed_out": False,
- "took": 0}
+{
+  took: 1,
+  timed_out: false,
+  hits:
+   exports {
+     total: 1864,
+     total_relation: 'eq',
+     hits:
+      [ { _id: '807160',
+          _score: 2566,
+          _source: { story_author: 'rbanffy', comment_author: 'runjake' } 
+        } 
+      ] 
+   } 
+}
 ```
 
 <!-- intro -->
@@ -312,24 +319,29 @@ java
 ```java
 
 query = new HashMap<String,Object>();
-query.put("query_string","@title \"find me fast \"/2");
+query.put("query_string", "@comment_text \"find joe fast \"/2");
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setIndex("hn_small");
 searchRequest.setQuery(query);
+searchRequest.addSourceItem("story_author");
+searchRequest.addSourceItem("comment_author");
+searchRequest.limit(1);
 searchResponse = searchApi.search(searchRequest);
 ```
 <!-- response Java -->
 ```java
 class SearchResponse {
-    took: 0
+    took: 1
     timedOut: false
+    aggregations: null
     hits: class SearchResponseHits {
-        total: 2
-        hits: [{_id=1, _score=1, _source={title=first find me fast, gid=11}}, {_id=2, _score=1, _source={title=first find me fast, gid=12}}]
-        aggregations: null
+        maxScore: null
+        total: 1864
+        totalRelation: eq
+        hits: [{_id=807160, _score=2566, _source={story_author=rbanffy, comment_author=runjake}}]
     }
     profile: null
+    warning: null
 }
-
 ```
 <!-- end -->

@@ -283,7 +283,8 @@ diag(SPLIT)
 configure_file ("COPYING" "${MANTICORE_BINARY_DIR}/COPYING.txt" COPYONLY)
 include (CommonInfo)
 
-# select distribution build and install rules for most of the files
+# set final paths for build
+set ( only_set_paths ON )
 include (SetBuildType)
 
 diag (installed)
@@ -338,10 +339,6 @@ set ( CPACK_RPM_COMPONENT_INSTALL 1 )
 set ( CPACK_DEB_COMPONENT_INSTALL 1 )
 set ( CPACK_ARCHIVE_COMPONENT_INSTALL 1 )
 
-if ( SPLIT )
-	set (CPACK_COMPONENTS_GROUPING IGNORE )
-endif()
-
 bannervar (LOCALDATADIR)
 bannervar (FULL_SHARE_DIR)
 
@@ -359,17 +356,33 @@ if ( BUILD_TESTING )
 	endif()
 endif ()
 
+if (SPLIT)
+	set ( CPACK_COMPONENTS_GROUPING IGNORE )
+endif ()
+
+# run setBuildType again, full pass. Select distribution build and install rules for most of the files
+set ( only_set_paths OFF )
+include ( SetBuildType )
+
 if (NOT CPack_CMake_INCLUDED)
 	include ( CPack )
-endif()
-cpack_add_component (server GROUP main)
-cpack_add_component (runtime GROUP main)
-cpack_add_component (tools GROUP main)
-cpack_add_component (meta GROUP main)
-cpack_add_component (devel GROUP main)
-cpack_add_component (converter GROUP converter)
-cpack_add_component_group(main EXPANDED)
-cpack_add_component_group(converter)
+endif ()
+
+cpack_add_component ( server GROUP main )
+cpack_add_component ( tools GROUP main )
+cpack_add_component ( meta GROUP main )
+cpack_add_component ( devel GROUP main )
+cpack_add_component ( converter GROUP converter )
+cpack_add_component_group ( main EXPANDED )
+cpack_add_component_group ( converter )
+
+if (WITH_ICU)
+	cpack_add_component ( icudata GROUP main )
+endif ()
+
+if (WIN32)
+	cpack_add_component ( runtime GROUP main )
+endif ()
 
 #feature_summary (
 #		INCLUDE_QUIET_PACKAGES

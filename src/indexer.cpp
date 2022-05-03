@@ -1732,6 +1732,10 @@ int main ( int argc, char ** argv )
 	bool bDropSrc = false;
 	CSphString sDumpRows;
 
+	CSphString sError, sErrorSI;
+	bool bColumnarError = !InitColumnar ( sError );
+	bool bSecondaryError = !InitSecondary ( sErrorSI );
+
 	if ( argc==2 && ( !strcmp ( argv[1], "--help" ) || !strcmp ( argv[1], "-h" )))
 	{
 		ShowHelp();
@@ -1865,10 +1869,6 @@ int main ( int argc, char ** argv )
 		} else
 			break;
 	}
-
-	CSphString sError, sErrorSI;
-	bool bColumnarError = !InitColumnar ( sError );
-	bool bSecondaryError = !InitSecondary ( sErrorSI );
 
 	if ( !g_bQuiet )
 		ShowVersion();

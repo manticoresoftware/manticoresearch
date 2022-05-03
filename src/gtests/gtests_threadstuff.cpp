@@ -62,6 +62,7 @@ void Counter100c()
 
 TEST ( ThreadPool, Counter100c )
 {
+	StartGlobalWorkPool();
 	for (auto i=0; i<100; ++i)
 		Counter100c();
 }

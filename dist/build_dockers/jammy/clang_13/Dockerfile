@@ -1,13 +1,20 @@
-FROM jammy_cmake:320
+FROM registry.gitlab.com/manticoresearch/dev/base_build:jammy
+ENV DEBIAN_FRONTEND noninteractive
 
-RUN apt -y update && \
-apt install -y lsb-release wget software-properties-common && \
-wget https://apt.llvm.org/llvm.sh && \
-chmod +x llvm.sh && \
-./llvm.sh 13 && \
-rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y \
+    software-properties-common \
+&& rm -rf /var/lib/apt/lists/* \
+&& wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
 
-ENV CC clang-13
-ENV CXX clang++-13
+ARG llvmver="13"
+RUN add-apt-repository "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-${llvmver} main" \
+&& apt-get update && apt-get install -y \
+    clang-13 \
+&& rm -rf /var/lib/apt/lists/*
+
+ENV CC clang-${llvmver}
+ENV CXX clang++-${llvmver}
 
 CMD []
+
+# docker build -t jammy_clang:13 -t registry.gitlab.com/manticoresearch/dev/jammy_clang:13 .

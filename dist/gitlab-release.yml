@@ -53,6 +53,24 @@ variables:
     when: on_success
     expire_in: 12 hrs
 
+.debian_based_short:
+  stage: build
+  interruptible: true
+  tags:
+    - docker
+  variables:
+    CACHEB: "../cache"
+  script:
+    - mkdir build && cd build
+    - cmake -GNinja -DPACK=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
+    - cmake --build . --target package
+    - cp manticore*deb ..
+  artifacts:
+    paths:
+      - manticore*deb
+    when: on_success
+    expire_in: 12 hrs
+
 .collect_job:
   variables:
     GIT_STRATEGY: none
@@ -301,13 +319,13 @@ collect_focal:
   needs: [ focal, focalarm ]
 
 jammy:
-  extends: [ .debian_based ]
+  extends: [ .debian_based_short ]
   rules:
     - if: $WHAT=='$WHAT'
     - if: $WHAT==null
     - if: $WHAT=="all"
     - if: $WHAT =~ /jammy/
-  image: registry.gitlab.com/manticoresearch/dev/jammy_clang:13
+  image: registry.gitlab.com/manticoresearch/dev/jammy_cmake:323
   cache:
     key: jammy
     paths:

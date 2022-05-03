@@ -26,7 +26,9 @@ set ( CPACK_RPM_PACKAGE_GROUP "Applications/Internet" )
 
 set ( CPACK_RPM_MAIN_PACKAGE_NAME "manticore" )
 
-set ( CPACK_RPM_META_PACKAGE_NAME "manticore-all" )
+if (NOT CPACK_RPM_META_PACKAGE_NAME)
+	set ( CPACK_RPM_META_PACKAGE_NAME "manticore-all" )
+endif ()
 set ( CPACK_RPM_META_PACKAGE_REQUIRES "manticore-systemd, manticore-tools" )
 set ( CPACK_RPM_META_PACKAGE_CONFLICTS "manticore, sphinx" )
 set ( CPACK_RPM_META_PACKAGE_ARCHITECTURE noarch )

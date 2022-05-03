@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://manticoresearch.com" target="_blank" rel="noopener">
-    <img src="https://manticoresearch.com/wp-content/uploads/2019/12/manticore-logo-central-M-1.png" width="140" alt="Manicore Search Logo">
+    <img src="https://manticoresearch.com/images/logo.svg" width="50%" alt="Manicore Search Logo">
   </a>
 </p>
 

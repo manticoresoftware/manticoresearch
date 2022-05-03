@@ -84,9 +84,7 @@ osx:
   interruptible: true
   needs: [ ]
   tags:
-    - mac
-    - build
-  retry: 1
+    - docker
   rules:
     - if: $WHAT=='$WHAT'
     - if: $WHAT==null
@@ -94,8 +92,7 @@ osx:
     - if: $WHAT =~ /osx/
   variables:
     CACHEB: "../cache"
-    LIBS_BUNDLE: "/work"
-    OPENSSL_ROOT_DIR: "/usr/local/opt/openssl"
+  image: registry.gitlab.com/manticoresearch/dev/cross_bigsur:x64
   script:
     - mkdir build && cd build
     - cmake .. -GNinja -DDISTR_BUILD=macos -DBUILD_TAG=$RELEASE_TAG

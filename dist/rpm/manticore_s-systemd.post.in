@@ -1,0 +1,16 @@
+/bin/systemctl daemon-reload >/dev/null 2>&1 || :
+%systemd_post manticore.service
+if [ $1 == 1 ]; then
+    /usr/bin/systemctl enable manticore >/dev/null 2>&1 || :
+	systemd-tmpfiles --create /usr/lib/tmpfiles.d/searchd.conf
+fi
+if [ $1 == 2 ]; then
+        if [ -f @CMAKE_INSTALL_FULL_SYSCONFDIR@/sphinx/sphinx.conf ]; then
+	        echo "Moving existing configuration to new location..."
+		    mv @CMAKE_INSTALL_FULL_SYSCONFDIR@/sphinx/sphinx.conf @CMAKE_INSTALL_FULL_SYSCONFDIR@/manticoresearch/manticore.conf
+	    fi
+fi
+# print some further pointers
+echo "To start Manticore Search service:"
+echo "  > systemctl start manticore"
+echo

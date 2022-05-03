@@ -45,6 +45,13 @@ set ( CPACK_COMPONENT_RUNTIME_DISPLAY_NAME "${PACKAGE_NAME} runtime" )
 set ( CPACK_COMPONENT_RUNTIME_SUMMARY "${MANTICORESEARCH} runtime libraries" )
 set ( CPACK_COMPONENT_RUNTIME_DESCRIPTION "${THIS_PKG} contains runtime libraries needed to run Manticore Search daemon." )
 
+# manticore-systemd
+set ( CPACK_COMPONENT_SYSTEMD_GROUP "main" )
+set ( CPACK_COMPONENT_GROUP_SYSTEMD_DISPLAY_NAME "Systemd scripts" )
+set ( CPACK_COMPONENT_SYSTEMD_DISPLAY_NAME "${PACKAGE_NAME} service" )
+set ( CPACK_COMPONENT_SYSTEMD_SUMMARY "${MANTICORESEARCH} systemd service scripts" )
+set ( CPACK_COMPONENT_SYSTEMD_DESCRIPTION "${THIS_PKG} contains systemd files for Manticore Search." )
+
 # icu data library
 set ( CPACK_COMPONENT_ICUDATA_GROUP "main" )
 set ( CPACK_COMPONENT_ICUDATA_DISPLAY_NAME "ICU DAT file" )

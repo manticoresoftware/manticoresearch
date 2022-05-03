@@ -369,6 +369,7 @@ if (NOT CPack_CMake_INCLUDED)
 endif ()
 
 cpack_add_component ( server GROUP main )
+cpack_add_component ( systemd GROUP main )
 cpack_add_component ( tools GROUP main )
 cpack_add_component ( meta GROUP main )
 cpack_add_component ( devel GROUP main )

@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = "purge" ] ; then
+    rm -rf /var/lib/manticore
+    rm -rf /var/log/manticore
+    userdel manticore || true
+fi

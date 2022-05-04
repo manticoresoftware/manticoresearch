@@ -6,38 +6,34 @@
 
 To view query execution plan in JSON queries, add `"profile":true` to the query. The result appears as a `profile` property in the result set.
 
+Note, there are 2 things returned in the SQL mode:
+* `transformed_tree` which shows the full-text query decomposition
+* `enabled_indexes` which shows information about effective secondary indexes
+
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
 
 ```sql
-SET profiling=1;
+set profiling=1;
 
-SELECT id FROM forum WHERE MATCH('i me') LIMIT 1;
+select * from hn_small where match('dog|cat') limit 0;
 
-SHOW PLAN;
+show plan;
 ```
 
 <!-- response SQL -->
 
 ```sql
-Query OK, 0 rows affected (0.00 sec)
-
-+--------+
-| id     |
-+--------+
-| 406443 |
-+--------+
-1 row in set (1.52 sec)
-
-+------------------+----------------------------------------------------------------------+
-| Variable         | Value                                                                |
-+------------------+----------------------------------------------------------------------+
-| transformed_tree | AND(
-  AND(KEYWORD(i, querypos=1)),
-  AND(KEYWORD(me, querypos=2))) |
-+------------------+----------------------------------------------------------------------+
-1 row in set (0.00 sec)
+*************************** 1. row ***************************
+Variable: transformed_tree
+   Value: OR(
+  AND(KEYWORD(dog, querypos=1)),
+  AND(KEYWORD(cat, querypos=2)))
+*************************** 2. row ***************************
+Variable: enabled_indexes
+   Value:
+2 rows in set (0.00 sec)
 ```
 
 <!-- intro -->
@@ -48,10 +44,10 @@ Query OK, 0 rows affected (0.00 sec)
 ```http
 POST /search
 {
-  "index": "forum",
-  "query": {"query_string": "i me"},
+  "index": "hn_small",
+  "query": {"query_string": "dog|cat"},
   "_source": { "excludes":["*"] },
-  "limit": 1,
+  "limit": 0,
   "profile":true
 }
 ```
@@ -59,49 +55,37 @@ POST /search
 <!-- response HTTP -->
 ```
 {
-  "took":1503,
-  "timed_out":false,
-  "hits":
-  {
-    "total":406301,
-    "hits":
-    [
-       {
-          "_id":"406443",
-          "_score":3493,
-          "_source":{}
-       }
-    ]
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 4453,
+    "total_relation": "eq",
+    "hits": []
   },
-  "profile":
-  {
-    "query":
-    {
-      "type":"AND",
-      "description":"AND( AND(KEYWORD(i, querypos=1)),  AND(KEYWORD(me, querypos=2)))",
-      "children":
-      [
+  "profile": {
+    "query": {
+      "type": "OR",
+      "description": "OR( AND(KEYWORD(dog, querypos=1)),  AND(KEYWORD(cat, querypos=2)))",
+      "children": [
         {
-          "type":"AND",
-          "description":"AND(KEYWORD(i, querypos=1))",
-          "children":
-          [
+          "type": "AND",
+          "description": "AND(KEYWORD(dog, querypos=1))",
+          "children": [
             {
-              "type":"KEYWORD",
-              "word":"i",
-              "querypos":1
+              "type": "KEYWORD",
+              "word": "dog",
+              "querypos": 1
             }
           ]
         },
         {
-          "type":"AND",
-          "description":"AND(KEYWORD(me, querypos=2))",
-          "children":
-          [
+          "type": "AND",
+          "description": "AND(KEYWORD(cat, querypos=2))",
+          "children": [
             {
-              "type":"KEYWORD",
-              "word":"me",
-              "querypos":2
+              "type": "KEYWORD",
+              "word": "cat",
+              "querypos": 2
             }
           ]
         }
@@ -317,7 +301,23 @@ POST /search
 
 <!-- end -->
 
-See also [EXPLAIN QUERY](../../Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query). It displays the execution tree of a full-text query without actually executing the query.
+See also [EXPLAIN QUERY](../../Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query). It displays the execution tree of a full-text query **without actually executing the query**.
+
+## JSON result set notes
+
+`query` property contains the transformed fulltext query tree. Each node contains:
+
+* `type`: node type. Can be `AND`, `OR`, `PHRASE`, `KEYWORD` etc.
+* `description`: query subtree for this node shown as a string (in `SHOW PLAN` format)
+* `children`: child nodes, if any
+* `max_field_pos`: maximum position within a field
+* `word`: transformed keyword. Keyword nodes only.
+* `querypos`: position of this keyword in a query. Keyword nodes only.
+* `excluded`: keyword excluded from query. Keyword nodes only.
+* `expanded`: keyword added by prefix expansion. Keyword nodes only.
+* `field_start`: keyword must occur at the very start of the field. Keyword nodes only.
+* `field_end`: keyword must occur at the very end of the field. Keyword nodes only.
+* `boost`: keyword IDF will be multiplied by this. Keyword nodes only.
 
 ## Dot format for SHOW PLAN
 `SHOW PLAN format=dot` allows to return the full-text query execution tree in hierarchical format suitable for visualization by existing tools, for example https://dreampuf.github.io/GraphvizOnline :
@@ -342,19 +342,3 @@ Variable: transformed_tree
 ```
 
 ![SHOW PLAN graphviz example](graphviz.png)
-
-## JSON result set notes
-
-`query` property contains the transformed fulltext query tree. Each node contains:
-
-* `type`: node type. Can be `AND`, `OR`, `PHRASE`, `KEYWORD` etc.
-* `description`: query subtree for this node shown as a string (in `SHOW PLAN` format)
-* `children`: child nodes, if any
-* `max_field_pos`: maximum position within a field
-* `word`: transformed keyword. Keyword nodes only.
-* `querypos`: position of this keyword in a query. Keyword nodes only.
-* `excluded`: keyword excluded from query. Keyword nodes only.
-* `expanded`: keyword added by prefix expansion. Keyword nodes only.
-* `field_start`: keyword must occur at the very start of the field. Keyword nodes only.
-* `field_end`: keyword must occur at the very end of the field. Keyword nodes only.
-* `boost`: keyword IDF will be multiplied by this. Keyword nodes only.

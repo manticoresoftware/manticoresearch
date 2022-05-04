@@ -7,6 +7,7 @@
 * [Read-only mode](Security/Read_only.md): you can now specify listeners that process only read queries discarding any writes.
 * New [/cli](../Connecting_to_the_server/HTTP.md#/cli) endpoint for running SQL queries over HTTP even easier.
 * Faster bulk INSERT/REPLACE/DELETE via JSON over HTTP: previously you could provide multiple write commands via HTTP JSON protocol, but they were processed one by one, now they are handled as a single transaction.
+* [Nested filters](../Searching/Filters.md#Nested-bool-query) support in JSON protocol. Previously you couldn't code things like `a=1 and (b=2 or c=3)` in JSON: `must` (AND), `should` (OR) and `must_not` (NOT) worked only on the highest level. in JSON. Now nested syntax is supported.
 * Support for [Chunked transfer encoding](https://en.wikipedia.org/wiki/Chunked_transfer_encoding) in HTTP protocol. You can now use chunked transfer in your application to transfer large batches with lower resource consumption (since you don't need to calculate `Content-Length`). On the server's side Manticore now always processes incoming HTTP data in streaming fashion without waiting for the whole batch to be trasferred as previously, which:
   - decreases peak RAM consumption, which lowers a chance of OOM
   - decreases response time (our tests showed 11% decrease for processing a 100MB batch)
@@ -105,6 +106,7 @@
 * [ffd0499d](https://github.com/manticoresoftware/manticoresearch/commit/ffd0499d329d2c383f14c8a44c4cc84338ab56e7) Support for Java mysql connector >= 6.0.3: in [Java mysql connection 6.0.3](https://mvnrepository.com/artifact/mysql/mysql-connector-java/6.0.3) they changed the way they connect to mysql which broke compatibility with Manticore. The new behaviour is now supported.
 * [1da6dbec](https://github.com/manticoresoftware/manticoresearch/commit/1da6dbec) disabled saving a new disk chunk on loading an index (e.g. on searchd startup).
 * [Issue #746](https://github.com/manticoresoftware/manticoresearch/issues/746) Support for glibc >= 2.34.
+* Support for Ubuntu 22.04 Jammy Jellyfish
 
 ### ⚠️ Other minor breaking changes
 * ⚠️ BM25F formula has been slightly updated to improve search relevance. This only affects search results in case you use function [BM25F()](../Functions/Searching_and_ranking_functions.md#BM25F%28%29), it doesn't change behaviour of the default ranking formula.
@@ -115,6 +117,7 @@
 * ⚠️ Search options `low_priority` and `boolean_simplify` now require a value (`0/1`): previously you could do `SELECT ... OPTION low_priority, boolean_simplify`, now you need to do `SELECT ... OPTION low_priority=1, boolean_simplify=1`.
 
 ### Bugfixes
+* [Issue #287](https://github.com/manticoresoftware/manticoresearch/issues/287) out of memory while indexing RT index
 * ❗[Issue #698](https://github.com/manticoresoftware/manticoresearch/issues/698) Searchd crashes after trying to add a text column to a rt index
 * ❗[Issue #709](https://github.com/manticoresoftware/manticoresearch/issues/705) Grouping by json.boolean works wrong
 * ❗[Issue #724](https://github.com/manticoresoftware/manticoresearch/issues/724) Fields disappear from the selection

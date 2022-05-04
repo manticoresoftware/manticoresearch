@@ -27,6 +27,7 @@ It supports adding one field at a time for RT indexes. Supported data types are:
 * adding `engine='columnar'` to any attribute (except for json) will make it stored in the [columnar storage](Creating_an_index/Data_types.md#Row-wise-and-columnar-attribute-storages)
 
 #### Important notes:
+* ❗It's recommended to **backup index files** before `ALTER`ing it to avoid data corruption in case of a sudden power interruption or other similar issues.
 * Querying an index is impossible while a column is being added.
 * Newly created attribute's values are set to 0.
 * `ALTER` will not work for distributed indexes and indexes without any attributes.

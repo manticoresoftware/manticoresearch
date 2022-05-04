@@ -3,7 +3,7 @@
 
 get_destination() {
   if [ -z "${IS_RELEASE_DIGIT}" ]; then
-    IS_RELEASE_DIGIT=$(echo $filename | cut -d. -f3 | cut -d- -f1)
+    IS_RELEASE_DIGIT=$(echo $f | cut -d. -f3 | cut -d- -f1)
     if [[ $(($IS_RELEASE_DIGIT % 2)) -eq 0 ]]; then
       DESTINATION="release"
     else
@@ -13,14 +13,11 @@ get_destination() {
 }
 
 echo "Collected archives"
-ls -1
+ls -1 build/
 
-for filename in *.zip; do
-  if [ -f "$filename" ]; then
+for f in build/*.zip; do
+  if [ -f "$f" ]; then
     get_destination
-    f="${filename##*/}"
-    curl -is --user "${REPO_USER}:${REPO_SECRET}" --upload-file $filename $REPO_IP/repository/manticoresearch_windows/$DESTINATION/x64/$f \
-    && echo "Uploaded $f to manticoresearch_windows/$DESTINATION/x64"
 
     echo -e "Copy $f to /mnt/repo_storage/manticoresearch_windows/$DESTINATION/x64/";
     cp $f /mnt/repo_storage/manticoresearch_windows/$DESTINATION/x64/ && echo -e "Success"
@@ -29,11 +26,10 @@ for filename in *.zip; do
   fi
 done
 
-for filename in *.gz; do
-  if [ -f "$filename" ]; then
+for f in build/*.gz; do
+  if [ -f "$f" ]; then
     get_destination
-    f="${filename##*/}"
-    curl -is --user "${REPO_USER}:${REPO_SECRET}" --upload-file $filename $REPO_IP/repository/manticoresearch_macos/$DESTINATION/$f \
+    curl -is --user "${REPO_USER}:${REPO_SECRET}" --upload-file $f $REPO_IP/repository/manticoresearch_macos/$DESTINATION/${f##*/} \
     && echo "Uploaded $f to manticoresearch_macos/$DESTINATION"
 
     echo -e "Copy $f to /mnt/repo_storage/manticoresearch_macos/$DESTINATION/";
@@ -43,5 +39,5 @@ for filename in *.gz; do
   fi
 done
 
-rm -rf *.zip
-rm -rf *.gz
+rm -rf build/*.zip
+rm -rf build/*.gz

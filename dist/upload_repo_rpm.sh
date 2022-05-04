@@ -3,22 +3,27 @@
 # That file here is for reference; actually used the one stored on the host to avoid checkout of the whole code
 
 echo "Collected rpm packages"
-ls -1
-
-if [ -z "${REPO_NAME}" ] || [ $REPO_NAME == '$REPO_NAME' ]; then
-  echo "no repo was specified. Set default to manticoresearch"
-  REPO_NAME="manticoresearch"
-fi
+ls -1 build/
 
 #force 'release' for Ivinco-testing
 if  [ $REPO_NAME == 'Ivinco-testing' ]; then
   DESTINATION="release"
 fi
 
-for filename in *.rpm; do
-  if [ -f "$filename" ]; then
+copy_to() {
+    echo -e "Copy $1 to /mnt/repo_storage/manticoresearch/$DESTINATION/centos/$DISTRO/$2";
+    cp $1 /mnt/repo_storage/manticoresearch/$DESTINATION/centos/$DISTRO/$2 && echo -e "Success"
+    echo -e "\n"
+}
+
+for f in build/*.rpm; do
+  echo file $f
+  tail=$(echo $f | sed 's_build/__g;s/[a-z]*-//g;')
+  VER=$(echo $tail | cut -d. -f1,2,3,4,5)
+  ARCH=$(echo $tail | cut -d. -f6)
+  if [ -f "$f" ]; then
     if [ -z "${IS_RELEASE_DIGIT}" ]; then
-    IS_RELEASE_DIGIT=$(echo $filename | cut -d. -f3 | cut -d_ -f1)
+    IS_RELEASE_DIGIT=$(echo $f | cut -d. -f3 | cut -d_ -f1)
       if [[ $(($IS_RELEASE_DIGIT % 2)) -eq 0 ]]; then
         DESTINATION="release"
       else
@@ -26,16 +31,27 @@ for filename in *.rpm; do
       fi
     fi
 
-    f="${filename##*/}"
     ~/sign_rpm.sh $GPG_SECRET $f
-    curl -is --user "${REPO_USER}:${REPO_SECRET}" --upload-file $filename $REPO_IP/repository/$REPO_NAME/$DESTINATION/centos/$DISTRO/x86_64/$f \
-    && echo "Uploaded $f to $REPO_NAME/$DESTINATION/centos/$DISTRO/x86_64"
 
-    echo -e "Copy $f to /mnt/repo_storage/manticoresearch/$DESTINATION/centos/$DISTRO/x86_64/";
-    cp $f /mnt/repo_storage/manticoresearch/$DESTINATION/centos/$DISTRO/x86_64/ && echo -e "Success"
-    echo -e "\n"
+    if [[ $ARCH == "x86_64" || $ARCH == "arm64" ]]; then
+      copy_to $f $ARCH/
+      arch=$ARCH
+    fi
+
+    if [[ $ARCH == "noarch" ]]; then
+      copy_to $f x86_64/
+#      copy_to $f arm64/
+    fi
+
   fi
 done
+
+# make bundle
+TGZ=manticore-${VER}.$arch.tgz
+(cd build && tar cf - $(ls | grep -v -e debuginfo) | gzip -9 -f) > $TGZ
+
+# upload bundle
+copy_to $TGZ
 
 if [ "$DESTINATION" = "dev" ]; then
     /usr/bin/docker exec repo-generator /generator.sh -distro centos -version $DISTRO -dev 1

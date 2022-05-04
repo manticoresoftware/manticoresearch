@@ -17,8 +17,9 @@ if (only_set_paths)
 endif ()
 
 # Common debian-specific build variables
-set ( CPACK_GENERATOR "DEB" )
+set ( CPACK_GENERATOR DEB )
 
+set ( CPACK_COMPONENTS_GROUPING IGNORE )
 set ( CPACK_DEBIAN_FILE_NAME DEB-DEFAULT )
 set ( CPACK_DEBIAN_DEBUGINFO_PACKAGE ON )
 
@@ -26,129 +27,121 @@ set ( CPACK_DEBIAN_DEBUGINFO_PACKAGE ON )
 #set ( CPACK_DEBIAN_BIN_PACKAGE_DEPENDS "libc6 (>= 2.15), libexpat (>= 2.0.1), libgcc1 (>= 1:3.0), libstdc++6 (>= 5.2), zlib1g (>= 1:1.1.4), lsb-base (>= 4.1+Debian11ubuntu7)" )
 
 if (NOT disable_shlideps)
-	set ( CPACK_DEBIAN_PACKAGE_SHLIBDEPS "ON" )
+	set ( CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON )
 endif ()
 
 set ( CPACK_DEBIAN_PACKAGE_SECTION "misc" )
 set ( CPACK_DEBIAN_PACKAGE_PRIORITY "optional" )
 
-set ( dirmain "${MANTICORE_BINARY_DIR}/config/main" )
 set ( dirserver "${MANTICORE_BINARY_DIR}/config/server" )
-set ( dirsystemd "${MANTICORE_BINARY_DIR}/config/systemd" )
+set ( dircommon "${MANTICORE_BINARY_DIR}/config/common" )
+set ( dircore "${MANTICORE_BINARY_DIR}/config/core" )
 
-set ( CPACK_DEBIAN_MAIN_PACKAGE_NAME "manticore" )
-set ( CPACK_DEBIAN_MAIN_PACKAGE_CONTROL_EXTRA "${dirmain}/conffiles;${dirmain}/postinst;${dirmain}/prerm;${dirmain}/postrm" )
-set ( CPACK_DEBIAN_MAIN_PACKAGE_REPLACES "manticore-bin, sphinxsearch" )
+set ( CPACK_DEBIAN_PACKAGE_CONTROL_STRICT_PERMISSION ON )
 
-set ( CPACK_DEBIAN_PACKAGE_CONTROL_STRICT_PERMISSION "ON" )
+set ( CPACK_DEBIAN_SEARCHD_PACKAGE_NAME "manticore-server-core" )
+set ( CPACK_DEBIAN_SEARCHD_PACKAGE_REPLACES "manticore-bin, sphinxsearch" )
+set ( CPACK_DEBIAN_SEARCHD_PACKAGE_CONTROL_EXTRA "${dircore}/postinst;${dircore}/postrm" )
+set ( CPACK_DEBIAN_SEARCHD_PACKAGE_DEPENDS "manticore-common" )
 
-set ( CPACK_DEBIAN_SERVER_PACKAGE_REPLACES "manticore-bin, sphinxsearch" )
 set ( CPACK_DEBIAN_SERVER_PACKAGE_NAME "manticore-server" )
-set ( CPACK_DEBIAN_SERVER_FILE_NAME "DEB-DEFAULT" )
-set ( CPACK_DEBIAN_SERVER_PACKAGE_CONTROL_EXTRA "${dirserver}/conffiles;${dirserver}/postinst;${dirserver}/postrm" )
+set ( CPACK_DEBIAN_SERVER_PACKAGE_DEPENDS "manticore-server-core" )
+set ( CPACK_DEBIAN_SERVER_PACKAGE_ARCHITECTURE all )
+set ( CPACK_DEBIAN_SERVER_PACKAGE_CONTROL_EXTRA "${dirserver}/conffiles;${dirserver}/postinst;${dirserver}/prerm;${dirserver}/postrm" )
+set ( CPACK_DEBIAN_SERVER_PACKAGE_DEBUG OFF )
 
-set ( CPACK_DEBIAN_SYSTEMD_PACKAGE_NAME "manticore-systemd" )
-set ( CPACK_DEBIAN_SYSTEMD_PACKAGE_DEPENDS "manticore-server" )
-set ( CPACK_DEBIAN_SYSTEMD_PACKAGE_ARCHITECTURE all )
-set ( CPACK_DEBIAN_SYSTEMD_FILE_NAME "DEB-DEFAULT" )
-set ( CPACK_DEBIAN_SYSTEMD_PACKAGE_CONTROL_EXTRA "${dirsystemd}/conffiles;${dirsystemd}/postinst;${dirsystemd}/prerm;${dirsystemd}/postrm" )
-set ( CPACK_DEBIAN_SYSTEMD_PACKAGE_DEBUG "OFF" )
-
-if (NOT CPACK_DEBIAN_META_PACKAGE_NAME)
-	set ( CPACK_DEBIAN_META_PACKAGE_NAME "manticore-all" )
-endif ()
-set ( CPACK_DEBIAN_META_PACKAGE_DEPENDS "manticore-systemd, manticore-tools, manticore-dev, manticore-icudata-65l" )
-set ( CPACK_DEBIAN_META_PACKAGE_ARCHITECTURE all )
-set ( CPACK_DEBIAN_META_FILE_NAME "DEB-DEFAULT" )
-set ( CPACK_DEBIAN_META_PACKAGE_DEBUG "OFF" )
-set ( CPACK_DEBIAN_META_PACKAGE_SECTION "metapackages" )
-
-set ( CPACK_DEBIAN_ICUDATA_PACKAGE_NAME "manticore-icudata-65l" )
-set ( CPACK_DEBIAN_ICUDATA_PACKAGE_ARCHITECTURE all )
-
-set ( CPACK_DEBIAN_CONVERTER_PACKAGE_NAME "manticore-converter" )
+set ( CPACK_DEBIAN_TOOLS_PACKAGE_NAME "manticore-tools" )
+set ( CPACK_DEBIAN_TOOLS_PACKAGE_DEPENDS "manticore-common" )
+set ( CPACK_DEBIAN_TOOLS_PACKAGE_CONFLICTS "sphinxsearch, manticore (<< 3.5.0-200722-1d34c491)" )
 
 set ( CPACK_DEBIAN_DEVEL_PACKAGE_NAME "manticore-dev" )
 set ( CPACK_DEBIAN_DEVEL_PACKAGE_ARCHITECTURE all )
 
-set ( CPACK_DEBIAN_TOOLS_PACKAGE_NAME "manticore-tools" )
-set ( CPACK_DEBIAN_TOOLS_PACKAGE_CONFLICTS "sphinxsearch, manticore (<< 3.5.0-200722-1d34c491)" )
+set ( CPACK_DEBIAN_ICUDATA_PACKAGE_NAME "manticore-icudata-65l" )
+set ( CPACK_DEBIAN_ICUDATA_PACKAGE_ARCHITECTURE all )
 
+set ( CPACK_DEBIAN_COMMON_PACKAGE_NAME "manticore-common" )
+set ( CPACK_DEBIAN_COMMON_PACKAGE_CONTROL_EXTRA "${dircommon}/conffiles;${dircommon}/postinst;${dircommon}/postrm" )
+set ( CPACK_DEBIAN_COMMON_PACKAGE_ARCHITECTURE all )
+set ( CPACK_DEBIAN_COMMON_PACKAGE_RECOMMENDS "manticore-icudata-65l" )
+
+set ( CPACK_DEBIAN_META_PACKAGE_NAME "manticore" )
+set ( CPACK_DEBIAN_META_PACKAGE_DEPENDS "manticore-server, manticore-tools, manticore-dev, manticore-icudata-65l" )
+set ( CPACK_DEBIAN_META_PACKAGE_ARCHITECTURE all )
+set ( CPACK_DEBIAN_META_PACKAGE_DEBUG OFF )
+set ( CPACK_DEBIAN_META_PACKAGE_SECTION metapackages )
+
+set ( CPACK_DEBIAN_CONVERTER_PACKAGE_NAME "manticore-converter" )
 
 # pre-configuration. We're not yet configuring with final paths, but just construct incoming file
 # at the beginning assume we have NOT yet set CMAKE_INSTALL_PREFIX, so any result of GNUInstallDirs is not actual
 
 # make template postinst.in
-FILE ( READ dist/deb/postinst.head POSTINST_HEAD )
+FILE ( READ dist/deb/postinst-server.head POSTINST_HEAD )
 FILE ( READ dist/deb/postinst.${flavour}.tail POSTINST_TAIL )
-configure_file ( "dist/deb/postinst.in.in" "${dirmain}/postinst.in" )
+configure_file ( "dist/deb/postinst.in.in" "${dirserver}/postinst.in" )
 
-FILE ( READ dist/deb/postinst-systemd.head POSTINST_HEAD )
-configure_file ( "dist/deb/postinst.in.in" "${dirsystemd}/postinst.in" )
-
-configure_file ( "dist/deb/postinst-server.in" "${dirserver}/postinst.in" COPYONLY )
+configure_file ( "dist/deb/postinst-common.in" "${dircommon}/postinst.in" COPYONLY )
+configure_file ( "dist/deb/postinst-core.in" "${dircore}/postinst.in" COPYONLY )
 
 # copy template prerm
-configure_file ( "dist/deb/prerm.${flavour}.in" "${dirmain}/prerm.in" COPYONLY )
-configure_file ( "dist/deb/prerm.${flavour}.in" "${dirsystemd}/prerm.in" COPYONLY )
+configure_file ( "dist/deb/prerm.${flavour}.in" "${dirserver}/prerm.in" COPYONLY )
 
 # copy template postrm
-configure_file ( "dist/deb/postrm.in" "${dirmain}/postrm.in" COPYONLY )
+configure_file ( "dist/deb/postrm-common.in" "${dircommon}/postrm.in" COPYONLY )
+configure_file ( "dist/deb/postrm-core.in" "${dircore}/postrm.in" COPYONLY )
 configure_file ( "dist/deb/postrm-server.in" "${dirserver}/postrm.in" COPYONLY )
-configure_file ( "dist/deb/postrm-systemd.in" "${dirsystemd}/postrm.in" COPYONLY )
 
 # manually configure (require known prefix/gnu install dirs)
 configure_config ( lib/manticore )
 
 # configure conffiles
-configure_file ( "dist/deb/conffiles.in" "${dirmain}/conffiles" @ONLY )
+configure_file ( "dist/deb/conffiles-common.in" "${dircommon}/conffiles" @ONLY )
 configure_file ( "dist/deb/conffiles-server.in" "${dirserver}/conffiles" @ONLY )
-configure_file ( "dist/deb/conffiles-systemd.in" "${dirsystemd}/conffiles" @ONLY )
 
-configure_file ( "dist/deb/manticore.default.in" "${dirsystemd}/manticore" @ONLY )
-configure_file ( "dist/deb/manticore.init.in" "${dirsystemd}/manticore.init" @ONLY )
-configure_file ( "dist/deb/manticore.service.in" "${dirsystemd}/manticore.service" @ONLY )
-configure_file ( "dist/deb/manticore.generator.in" "${dirsystemd}/manticore-generator" @ONLY )
+configure_file ( "dist/deb/manticore.default.in" "${dirserver}/manticore" @ONLY )
+configure_file ( "dist/deb/manticore.init.in" "${dirserver}/manticore.init" @ONLY )
+configure_file ( "dist/deb/manticore.service.in" "${dirserver}/manticore.service" @ONLY )
+configure_file ( "dist/deb/manticore.generator.in" "${dirserver}/manticore-generator" @ONLY )
 
 configure_file ( "dist/deb/README.Debian.in" "${MANTICORE_BINARY_DIR}/README.Debian" @ONLY )
 
-# configure initially preconfigured scripts
-configure_file ( "${dirmain}/postinst.in" "${dirmain}/postinst" @ONLY )
-configure_file ( "${dirmain}/prerm.in" "${dirmain}/prerm" @ONLY )
-configure_file ( "${dirmain}/postrm.in" "${dirmain}/postrm" @ONLY )
+# configure common scripts
+configure_file ( "${dircommon}/postinst.in" "${dircommon}/postinst" @ONLY )
+configure_file ( "${dircommon}/postrm.in" "${dircommon}/postrm" @ONLY )
 
-# configure server scripts
-configure_file ( "${dirserver}/postinst.in" "${dirserver}/postinst" @ONLY )
-configure_file ( "${dirserver}/postrm.in" "${dirserver}/postrm" @ONLY )
+# configure core scripts
+configure_file ( "${dircore}/postinst.in" "${dircore}/postinst" @ONLY )
+configure_file ( "${dircore}/postrm.in" "${dircore}/postrm" @ONLY )
 
 # configure systemd scripts
-configure_file ( "${dirsystemd}/postinst.in" "${dirsystemd}/postinst" @ONLY )
-configure_file ( "${dirsystemd}/prerm.in" "${dirsystemd}/prerm" @ONLY )
-configure_file ( "${dirsystemd}/postrm.in" "${dirsystemd}/postrm" @ONLY )
+configure_file ( "${dirserver}/postinst.in" "${dirserver}/postinst" @ONLY )
+configure_file ( "${dirserver}/prerm.in" "${dirserver}/prerm" @ONLY )
+configure_file ( "${dirserver}/postrm.in" "${dirserver}/postrm" @ONLY )
 
 # installation
 
 # stuff going to /etc
 # CMAKE_INSTALL_SYSCONFDIR					etc 					/etc
-install ( FILES ${MANTICORE_BINARY_DIR}/manticore.conf DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/manticoresearch COMPONENT server )
-install ( FILES "${dirsystemd}/manticore" DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/default COMPONENT systemd )
-install ( FILES "${dirsystemd}/manticore.init" DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/init.d
-		PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ GROUP_EXECUTE GROUP_READ COMPONENT systemd RENAME manticore )
+install ( FILES ${MANTICORE_BINARY_DIR}/manticore.conf DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/manticoresearch COMPONENT common )
+install ( FILES "${dirserver}/manticore" DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/default COMPONENT server )
+install ( FILES "${dirserver}/manticore.init" DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/init.d
+		PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ GROUP_EXECUTE GROUP_READ COMPONENT server RENAME manticore )
 
 # stuff going to /var
 # CMAKE_INSTALL_LOCALSTATEDIR				var 					/var
-install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/lib/manticore/data COMPONENT server )
-install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/log/manticore COMPONENT server )
+install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/lib/manticore/data COMPONENT common )
+install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/log/manticore COMPONENT searchd )
 
 # stuff that should go to /lib -> actually to /usr/lib
 # CMAKE_INSTALL_LIBDIR						usr/lib64 				/usr/lib64
-install ( FILES "${dirsystemd}/manticore.service" DESTINATION ${CMAKE_INSTALL_LIBDIR}/systemd/system COMPONENT systemd )
-install ( FILES "${dirsystemd}/manticore-generator" DESTINATION ${CMAKE_INSTALL_LIBDIR}/systemd/system-generators
-		PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ GROUP_EXECUTE GROUP_READ COMPONENT systemd )
+install ( FILES "${dirserver}/manticore.service" DESTINATION ${CMAKE_INSTALL_LIBDIR}/systemd/system COMPONENT server )
+install ( FILES "${dirserver}/manticore-generator" DESTINATION ${CMAKE_INSTALL_LIBDIR}/systemd/system-generators
+		PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ GROUP_EXECUTE GROUP_READ COMPONENT server )
 
 # binaries go to /usr/bin (here is only new cluster, rest is in main file, installing targets)
 # CMAKE_INSTALL_BINDIR						usr/bin 				/usr/bin
-install ( PROGRAMS "dist/deb/manticore_new_cluster" DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT systemd )
+install ( PROGRAMS "dist/deb/manticore_new_cluster" DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT server )
 
 #fixup - CMAKE_INSTALL_DOCDIR is share/doc/MANTICORE, fixup to share/doc/manticore
 set ( CMAKE_INSTALL_DOCDIR "${CMAKE_INSTALL_DATAROOTDIR}/doc/manticore" )
@@ -157,27 +150,27 @@ GNUInstallDirs_get_absolute_install_dir ( CMAKE_INSTALL_FULL_DOCDIR CMAKE_INSTAL
 # stuff going to /usr/share/man, /usr/share/doc
 # CMAKE_INSTALL_MANDIR						usr/share/man 			/usr/share/man
 # CMAKE_INSTALL_DOCDIR						usr/share/doc/manticore /usr/share/doc/manticore
-install ( FILES doc/searchd.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1 COMPONENT server )
+install ( FILES doc/searchd.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1 COMPONENT searchd )
 install ( FILES doc/indexer.1 doc/indextool.1 doc/spelldump.1 doc/wordbreaker.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1 COMPONENT tools )
-install ( FILES "${MANTICORE_BINARY_DIR}/README.Debian" DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT server )
+install ( FILES "${MANTICORE_BINARY_DIR}/README.Debian" DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT common )
+install ( FILES COPYING INSTALL DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT common )
+install ( FILES example.sql DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT tools )
 
 # stuff going to /usr/share/manticore
 # CMAKE_INSTALL_DATAROOTDIR					usr/share 				/usr/share
 # CMAKE_INSTALL_DATADIR						usr/share 				/usr/share
-install ( DIRECTORY misc/stopwords DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT server )
-install ( FILES INSTALL DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT server )
-install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore/modules COMPONENT server )
+install ( DIRECTORY misc/stopwords DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT common )
+install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore/modules COMPONENT common )
 
 if (WITH_ICU)
 	install_icudata ( ${CMAKE_INSTALL_DATADIR}/manticore/icu )
 endif ()
 
 if (NOT NOAPI)
-	install ( DIRECTORY api DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT server )
+	install ( DIRECTORY api DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT searchd )
 endif ()
 
-if (SPLIT)
-	get_cmake_property ( CPACK_COMPONENTS_ALL COMPONENTS )
-	list ( APPEND CPACK_COMPONENTS_ALL "meta" )
-endif ()
+get_cmake_property ( CPACK_COMPONENTS_ALL COMPONENTS )
+list ( APPEND CPACK_COMPONENTS_ALL "meta" )
+
 # set(CPACK_DEBIAN_PACKAGE_DEBUG ON)

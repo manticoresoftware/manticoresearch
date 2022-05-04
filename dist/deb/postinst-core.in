@@ -1,0 +1,22 @@
+#!/bin/sh
+# postinst script for manticore
+#
+# see: dh_installdeb(1)
+
+set -e
+
+LOGDIR=@CMAKE_INSTALL_FULL_LOCALSTATEDIR@/log/manticore
+chown manticore:manticore $LOGDIR -R
+
+echo "Manticore Search (https://manticoresearch.com)"
+echo ""
+echo "Getting Started with Manticore Search:"
+echo "  https://manual.manticoresearch.com/Quick_start_guide"
+echo ""
+echo "Learn Manticore with interactive courses:"
+echo "  https://play.manticoresearch.com/"
+echo ""
+echo "Configuration file:"
+echo "   @CMAKE_INSTALL_FULL_SYSCONFDIR@/manticoresearch/manticore.conf"
+echo ""
+

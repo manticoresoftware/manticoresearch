@@ -9284,7 +9284,7 @@ bool CSphIndex_VLN::PreallocSecondaryIndex()
 	if ( !sphFileExists ( sFile.cstr() ) )
 	{
 		if (  IsSecondaryLibLoaded() )
-			sphWarning ( "missed %s; secondary index(es) disabled", sFile.cstr() );
+			sphWarning ( "missing %s; secondary index(es) disabled", sFile.cstr() );
 		return true;
 	}
 

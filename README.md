@@ -31,7 +31,7 @@ Manticore Search is a multi-storage database designed specifically for search, i
 * Traditional row-wise storage for small, medium and big size datasets
 * Columnar storage support via the [Manticore Columnar Library](https://github.com/manticoresoftware/columnar/) for bigger datasets (much bigger than can fit in RAM)
 * SQL-first: Manticore's native syntax is SQL. It speaks SQL over HTTP and uses the MySQL protocol (you can use your preferred MySQL client)
-* Clients for [PHP](https://github.com/manticoresoftware/manticoresearch-php), [Python](https://github.com/manticoresoftware/manticoresearch-python), [JavaScript](https://github.com/manticoresoftware/manticoresearch-javascript), [Java](https://github.com/manticoresoftware/manticoresearch-java) and [Go](https://github.com/manticoresoftware/go-sdk)
+* Clients for [PHP](https://github.com/manticoresoftware/manticoresearch-php), [Python](https://github.com/manticoresoftware/manticoresearch-python), [JavaScript](https://github.com/manticoresoftware/manticoresearch-javascript), [Java](https://github.com/manticoresoftware/manticoresearch-java), [Elixit](https://github.com/manticoresoftware/manticoresearch-elixir) and [Go](https://github.com/manticoresoftware/go-sdk)
 * JSON over HTTP: to provide a more programmatic way to manage your data and schemas, Manticore provides a HTTP JSON protocol
 * Written fully in C++: starts fast, doesn't take much RAM, and low-level optimizations provide good performance
 * Real-time inserts: after an INSERT is made, the document can be read immediately
@@ -121,7 +121,7 @@ Read [the full instruction for the docker image](https://dockr.ly/33biV0U) for m
 
 ### Packages
 
-## [Ubuntu, Debian, Centos, Windows and MacOS packages are here](https://www.manticoresearch.com/downloads).
+## [Ubuntu, Debian, Centos, Windows and MacOS packages are here](https://manticoresearch.com/install/).
 
 ### YUM repo for RHEL/Centos
 ```

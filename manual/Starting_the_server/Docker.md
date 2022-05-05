@@ -1,6 +1,6 @@
 # Starting and using Manticore in Docker
 
-The image is based on [current release of Manticore package](https://manticoresearch.com/downloads/).
+The image is based on [current release of Manticore package](https://manticoresearch.com/install/).
 
 [comment]: # (the below should be in sync with https://github.com/manticoresoftware/docker/blob/master/README.md)
 

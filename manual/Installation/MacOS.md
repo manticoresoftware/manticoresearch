@@ -27,7 +27,7 @@ The configuration is located at `/usr/local/etc/manticoresearch/manticore.conf`.
 
 ## From tarball with binaries
 
-Download it [from the website](https://manticoresearch.com/downloads/) and unpack to a folder:
+Download it [from the website](https://manticoresearch.com/install/) and unpack to a folder:
 
 ```bash
 mkdir manticore

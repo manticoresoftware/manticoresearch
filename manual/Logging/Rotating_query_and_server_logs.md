@@ -2,7 +2,7 @@
 
 Manticore Search accepts signal USR1 for reopening server and query log files.
 
-The official [DEB and RPM packages](https://manticoresearch.com/downloads/) install a Logrotate conf file for all files in default log folder.
+The official [DEB and RPM packages](https://manticoresearch.com/install/) install a Logrotate conf file for all files in default log folder.
 
 A simple logrotate conf for log files looks like:
 

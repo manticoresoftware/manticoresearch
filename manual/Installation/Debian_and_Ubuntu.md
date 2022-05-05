@@ -44,7 +44,7 @@ sudo apt install manticore manticore-columnar-lib
 ```
 
 ### Standalone DEB packages
-You can also download individual .deb files from [our site](https://manticoresearch.com/downloads/).
+You can also download individual .deb files from [our site](https://manticoresearch.com/install/).
 
 ### More packages you may need
 #### For indexer

@@ -7,7 +7,7 @@
 * [Read-only mode](Security/Read_only.md): you can now specify listeners that process only read queries discarding any writes.
 * New [/cli](../Connecting_to_the_server/HTTP.md#/cli) endpoint for running SQL queries over HTTP even easier.
 * Faster bulk INSERT/REPLACE/DELETE via JSON over HTTP: previously you could provide multiple write commands via HTTP JSON protocol, but they were processed one by one, now they are handled as a single transaction.
-* [Nested filters](../Searching/Filters.md#Nested-bool-query) support in JSON protocol. Previously you couldn't code things like `a=1 and (b=2 or c=3)` in JSON: `must` (AND), `should` (OR) and `must_not` (NOT) worked only on the highest level. in JSON. Now nested syntax is supported.
+* [#720](https://github.com/manticoresoftware/manticoresearch/issues/720) [Nested filters](../Searching/Filters.md#Nested-bool-query) support in JSON protocol. Previously you couldn't code things like `a=1 and (b=2 or c=3)` in JSON: `must` (AND), `should` (OR) and `must_not` (NOT) worked only on the highest level. Now they can be nested.
 * Support for [Chunked transfer encoding](https://en.wikipedia.org/wiki/Chunked_transfer_encoding) in HTTP protocol. You can now use chunked transfer in your application to transfer large batches with lower resource consumption (since you don't need to calculate `Content-Length`). On the server's side Manticore now always processes incoming HTTP data in streaming fashion without waiting for the whole batch to be trasferred as previously, which:
   - decreases peak RAM consumption, which lowers a chance of OOM
   - decreases response time (our tests showed 11% decrease for processing a 100MB batch)
@@ -168,7 +168,7 @@
 
 ![Pseudo sharding on vs off in 4.2.0](4.2.0_ps_on_vs_off.png)
 
-* [**Debian Bullseye**](https://manticoresearch.com/downloads/) is now supported.
+* [**Debian Bullseye**](https://manticoresearch.com/install/) is now supported.
 
 <!-- example pq_transactions_4.2.0 -->
 * PQ transactions are now atomic and isolated. Previously PQ transactions support was limited. It enables much **faster REPLACE into PQ**, especially when you need to replace a lot of rules at once. Performance details:

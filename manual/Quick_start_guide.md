@@ -43,7 +43,7 @@ sudo systemctl start manticore
 ### Windows
 
 <!-- request Windows -->
-* Download Windows archive from https://manticoresearch.com/downloads/
+* Download Windows archive from https://manticoresearch.com/install/
 * Extract all from the archive to C:\Manticore
 * ```bash
   C:\Manticore\bin\searchd --install --config C:\Manticore\sphinx.conf.in --servicename Manticore

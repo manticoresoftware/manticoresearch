@@ -379,5 +379,12 @@ INSERT INTO `test_group2` VALUES
 select * from test_gr1 facet gid facet tag;;
 select * from dist_gr1 facet gid facet tag;;
 select * from dist_gr2 facet gid facet tag;;
-</sphinxql></queries>
+</sphinxql>
+
+<sphinxql>select * from test_gr1 limit 1 facet gid limit 2 facet tag;</sphinxql>
+<query endpoint="sql" method="get">query=select%20%2A%20from%20test_gr1%20limit%201%20facet%20gid%20limit%202%20facet%20tag</query>
+<sphinxql>select id from test_gr1 limit 1 facet gid by tag;</sphinxql>
+<query endpoint="sql" method="get">query=select%20id%20from%20test_gr1%20limit%201%20facet%20gid%20by%20tag</query>
+
+</queries>
 </test>

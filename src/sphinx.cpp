@@ -5631,10 +5631,18 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		return 0;
 	}
 
-	if ( pCidxBuilder.get() && !pCidxBuilder->Done ( sError ) )
+	if ( pCidxBuilder.get() )
 	{
-		m_sLastError = sError.c_str();
-		return 0;
+		tProgress.PhaseBegin ( CSphIndexProgress::PHASE_SI_BUILD );
+		tProgress.Show();
+		bool bSiDone = pCidxBuilder->Done ( sError );
+		tProgress.PhaseEnd();
+
+		if ( !bSiDone )
+		{
+			m_sLastError = sError.c_str();
+			return 0;
+		}
 	}
 
 	if ( pHistogramContainer && !pHistogramContainer->Save ( GetIndexFileName(SPH_EXT_SPHI), m_sLastError ) )

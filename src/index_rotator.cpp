@@ -13,296 +13,225 @@
 #include "searchdaemon.h"
 #include "indexfiles.h"
 
-RotateFrom_e CheckIndexHeaderRotate ( const CSphString& sServedPath )
+CheckIndexRotate_c::CheckIndexRotate_c ( const ServedDesc_t& tServed )
 {
 	// check order:
 	// current_path/idx.new.sph		- rotation of current index
 	// current_path/idx.sph			- enable back current index
 
-	if ( IndexFiles_c ( sServedPath ).CheckHeader ( ".new" ) )
-		return RotateFrom_e::NEW;
+	if ( IndexFiles_c ( tServed.m_sIndexPath ).CheckHeader ( ".new" ) )
+		m_eRotateFrom = RotateFrom_e::NEW;
 
-	if ( IndexFiles_c ( sServedPath ).CheckHeader()	)
-		return RotateFrom_e::REENABLE;
+	else if ( IndexFiles_c ( tServed.m_sIndexPath ).CheckHeader() )
+		m_eRotateFrom = RotateFrom_e::REENABLE;
 
-	return RotateFrom_e::NONE;
+	else
+		m_eRotateFrom = RotateFrom_e::NONE;
+};
+
+bool CheckIndexRotate_c::RotateFromNew() const noexcept
+{
+	return m_eRotateFrom == RotateFrom_e::NEW;
 }
 
-RotateFrom_e CheckIndexHeaderRotate ( const ServedDesc_t& tServed )
+bool CheckIndexRotate_c::NothingToRotate() const noexcept
 {
-	return CheckIndexHeaderRotate ( tServed.m_sIndexPath );
+	return m_eRotateFrom == RotateFrom_e::NONE;
 }
 
-class IndexRotator_c::Impl_c
+class StepActionEx_c : public StepAction_c
 {
-	// since it is impl, everything is private and accessible by friendship
-	friend class IndexRotator_c;
+	CSphString m_sError;
+	bool m_bFatal = false;
 
-	CSphString m_sServedPath;
-	const char* m_szIndex;
-	RotateFrom_e m_eRotateFrom;
-
-	CSphString m_sPathTo;
-	CSphString m_sBase;
-
-	// rotation stuff;
-	CSphIndex* m_pOldIdx = nullptr;
-	bool m_bHasOld = false;
-	std::function<void(CSphString)> m_fnClean;
-
-
-	Impl_c ( const CSphString& tServedPath, const char* szIndex )
-		: m_sServedPath { tServedPath }
-		, m_szIndex { szIndex }
-		, m_eRotateFrom { CheckIndexHeaderRotate ( tServedPath ) }
-	{}
-
-	bool ConfigureIfNeed() noexcept
+protected:
+	inline bool ThrowError ( CSphString sError, bool bFatal=false )
 	{
-		switch ( m_eRotateFrom )
-		{
-		case RotateFrom_e::NEW: // move from current_path/idx.new.sph -> current_path/idx.sph
-			m_sPathTo = m_sServedPath;
-			m_sBase = IndexFiles_c::MakePath ( ".new", m_sPathTo );
-			return true;
-		case RotateFrom_e::REENABLE: // load from current_path/idx.sph
-			m_sBase = m_sServedPath;
-			return true;
-		case RotateFrom_e::NONE:
-			return false;
-		default:
-			assert ( false );
-			return false;
-		}
+		m_sError = std::move ( sError );
+		m_bFatal = bFatal;
+		return false;
 	}
 
-	CSphString GetNewBase() const noexcept
+public:
+	virtual bool Rollback() { return true; };
+	std::pair<CSphString,bool> GetError() const
 	{
-		return m_sBase;
-	}
-
-	bool NeedMoveFiles() const noexcept
-	{
-		return !m_sPathTo.IsEmpty();
-	}
-
-	//////////////////
-	/// stuff with moving index (in seamless)
-	//////////////////
-
-	void BackupIfNeed ( CSphIndex* pIdx, std::function<void ( CSphString )> fnClean )
-	{
-		assert ( NeedMoveFiles() );
-
-		if ( !pIdx )
-			return;
-
-		CSphString sExistingBase = pIdx->GetFilename();
-		if ( sExistingBase != m_sPathTo )
-			return; // nothing to backup, paths are unrelated.
-
-		CSphString sError;
-		// backup to .old path
-		switch ( pIdx->RenameEx ( IndexFiles_c::MakePath ( ".old", m_sPathTo ) ) )
-		{
-		case CSphIndex::RE_FATAL: // not just failed, but also rollback wasn't success. Source index is damaged!
-			sError.SetSprintf ( "rotating index '%s': cur to old rename failed: %s; rollback also failed, INDEX UNUSABLE", m_szIndex, pIdx->GetLastError().cstr() );
-			throw RotationError_c ( std::move ( sError ), true );
-		case CSphIndex::RE_FAIL:
-			sError.SetSprintf ( "rotating index '%s': cur to old rename failed: %s", m_szIndex, pIdx->GetLastError().cstr() );
-			throw RotationError_c ( std::move ( sError ) );
-		default:
-			break;
-		}
-
-		m_pOldIdx = pIdx;
-		m_fnClean = std::move ( fnClean );
-	}
-
-	void MoveIndex ( CSphIndex* pNewIndex )
-	{
-		assert ( pNewIndex );
-		assert ( NeedMoveFiles() );
-		if ( pNewIndex->Rename ( m_sPathTo ) )
-			return;
-
-		CSphString sError;
-		sError.SetSprintf ( "rotating index '%s': new to cur rename failed: %s", m_szIndex, pNewIndex->GetLastError().cstr() );
-		if ( m_pOldIdx && !m_pOldIdx->Rename ( m_sPathTo ) )
-		{
-			sError.SetSprintf ( "rotating index '%s': old to cur rename failed: %s; INDEX UNUSABLE", m_szIndex, m_pOldIdx->GetLastError().cstr() );
-			m_fnClean = nullptr;
-			throw RotationError_c ( std::move ( sError ), true );
-		}
-		throw RotationError_c ( std::move ( sError ) );
-
-	}
-
-	void BackupFilesIfNeed ()
-	{
-		assert ( NeedMoveFiles() );
-		if ( m_sServedPath != m_sPathTo )
-			return; // nothing to backup, paths are unrelated.
-
-		IndexFiles_c dServedFiles ( m_sServedPath, m_szIndex );
-		if ( !dServedFiles.HasAllFiles() )
-			return;
-
-		CSphString sError;
-
-		// backup to .old path
-		if ( dServedFiles.TryRenameSuffix ( "", ".old" ) )
-		{
-			sphLogDebug ( "Rotation: Current index renamed to .old" );
-			m_bHasOld = true;
-			return;
-		}
-
-		// backup failed.
-		if ( dServedFiles.IsFatal() )
-		{
-			sError.SetSprintf ( "rotating index '%s': cur to old rename failed: %s; rollback also failed, INDEX UNUSABLE", m_szIndex, dServedFiles.FatalMsg ( "rotating" ).cstr() );
-			throw RotationError_c ( std::move ( sError ), true );
-		}
-
-		sError.SetSprintf ( "rotating index '%s': cur to old rename failed: %s", m_szIndex, dServedFiles.ErrorMsg() );
-		throw RotationError_c ( std::move ( sError ) );
-	}
-
-	void RollBackOld()
-	{
-		if ( !m_bHasOld )
-			return;
-
-		m_bHasOld = false;
-
-		IndexFiles_c dOldServedFiles ( m_sServedPath, m_szIndex );
-		if ( !dOldServedFiles.RenameSuffix ( ".old", "" ) )
-		{
-			CSphString sError;
-			sError.SetSprintf ( "%s", dOldServedFiles.FatalMsg ( "rotating" ).cstr() );
-			throw RotationError_c ( std::move ( sError ), true );
-		}
-	}
-
-	void MoveFiles ()
-	{
-		assert ( NeedMoveFiles() );
-		assert ( m_sBase != m_sPathTo );
-
-		IndexFiles_c dNewFiles ( m_sBase, m_szIndex );
-		if ( dNewFiles.TryRename ( m_sBase, m_sPathTo ) )
-		{
-			sphLogDebug ( "RotateIndexFilesGreedy: New renamed to current" );
-			return;
-		}
-
-		// moving failed.
-		CSphString sError;
-		if ( dNewFiles.IsFatal() )
-		{
-			sError.SetSprintf ( "%s", dNewFiles.FatalMsg ( "rotating" ).cstr() );
-			throw RotationError_c ( std::move ( sError ), true );
-		}
-
-		// rollback, if need
-		RollBackOld();
-
-		sError.SetSprintf ( "rotating index '%s': %s; using old index", m_szIndex, dNewFiles.ErrorMsg() );
-		throw RotationError_c ( std::move ( sError ) );
-	}
-
-	bool RollbackMovingFiles()
-	{
-		if ( !NeedMoveFiles() )
-			return false;
-
-		CSphString sError;
-
-		// try to recover: rollback cur to .new, .old to cur.
-		IndexFiles_c dRollbackFiles ( m_sPathTo, m_szIndex );
-		if ( !dRollbackFiles.Rename ( m_sPathTo, m_sBase ) )
-		{
-			sError.SetSprintf ( "%s", dRollbackFiles.FatalMsg ( "rotating" ).cstr() );
-			throw RotationError_c ( std::move ( sError ), true );
-		}
-		RollBackOld();
-		return true;
-	}
-
-
-	//////////////////
-	/// stuff for both, moving idx/files
-	//////////////////
-	void CleanBackup() const noexcept
-	{
-		if ( m_fnClean )
-			m_fnClean ( IndexFiles_c::MakePath ( ".old", m_sPathTo ) );
-
-		if ( !m_bHasOld )
-			return;
-
-		IndexFiles_c dFiles ( m_sServedPath, m_szIndex );
-		dFiles.Unlink ( ".old" );
-		sphLogDebug ( "PreallocIndexGreedy: the old index unlinked" );
+		return { m_sError, m_bFatal };
 	}
 };
 
+//////////////////
+/// stuff with moving index (in seamless)
+//////////////////
 
-/// public iface
-IndexRotator_c::IndexRotator_c ( const CSphString& sServedPath, const char* szIndex )
-	: m_pImpl { new Impl_c ( sServedPath, szIndex ) }
+class RenameIdx_c : public StepActionEx_c
 {
-	assert ( m_pImpl );
+	CSphIndex* m_pIdx = nullptr;
+	CSphString m_sOrigPath;
+	CSphString m_sTargetPath;
+	const char* m_szTo;
+
+private:
+	bool DoRename ( const char* szExt, const CSphString& sTo )
+	{
+		switch ( m_pIdx->RenameEx ( sTo ) )
+		{
+		case CSphIndex::RE_FATAL: // not just failed, but also rollback wasn't success. Source index is damaged!
+			return ThrowError ( SphSprintf ( "rename to '%s' failed: %s; rollback also failed, INDEX UNUSABLE", szExt, m_pIdx->GetLastError().cstr() ), true );
+		case CSphIndex::RE_FAIL:
+			return ThrowError ( SphSprintf ( "rename to '%s' failed: %s", szExt, m_pIdx->GetLastError().cstr() ) );
+		default:
+			return true;
+		}
+	}
+
+public:
+	void SetIdx ( CSphIndex* pIdx )
+	{
+		m_pIdx = pIdx;
+		assert ( m_pIdx );
+		m_sOrigPath = m_pIdx->GetFilename();
+		m_sTargetPath = IndexFiles_c::MakePath ( m_szTo, m_sOrigPath );
+	}
+
+	void SetTargetPath ( const CSphString& sTo )
+	{
+		m_sTargetPath = sTo;
+	}
+
+public:
+	explicit RenameIdx_c ( const char* szTo, CSphIndex* pIdx=nullptr )
+		: m_szTo ( szTo )
+	{
+		if ( pIdx )
+			SetIdx ( pIdx );
+	}
+
+	bool Action() final
+	{
+		return DoRename ( m_szTo, m_sTargetPath );
+	}
+
+	bool Rollback() final
+	{
+		return DoRename ( "cur", m_sOrigPath );
+	}
+};
+
+StepActionPtr_c RenameIdx ( CSphIndex* pIdx, const CSphString& sTo )
+{
+	auto pAction = std::make_unique<RenameIdx_c> ( ".new", pIdx );
+	pAction->SetTargetPath ( sTo );
+	return pAction;
 }
 
-IndexRotator_c::~IndexRotator_c ()
+class RenameServedIdx_c: public RenameIdx_c
 {
-	SafeDelete ( m_pImpl );
+	RWIdx_c m_pIdx;
+public:
+	RenameServedIdx_c ( const char* szTo, const cServedIndexRefPtr_c& pIdx )
+		: RenameIdx_c ( szTo )
+		, m_pIdx ( pIdx )
+	{
+		SetIdx ( m_pIdx );
+	}
+};
+
+StepActionPtr_c RenameIdxSuffix ( const cServedIndexRefPtr_c& pIdx, const char* szToExt )
+{
+	sphInfo ( "RW-idx for rename to %s, acquiring...", szToExt);
+	auto pResult = std::make_unique<RenameServedIdx_c> ( szToExt, pIdx );
+	sphInfo ( "RW-idx for rename to %s, acquired...", szToExt );
+	return pResult;
 }
 
+//////////////////
+/// stuff with moving files (in greedy)
+//////////////////
 
-bool IndexRotator_c::ConfigureIfNeed() noexcept
+class RenameFiles_c: public StepActionEx_c
 {
-	return m_pImpl->ConfigureIfNeed();
+	IndexFiles_c& m_tFiles;
+	const char* m_szFromExt;
+	const char* m_szToExt;
+
+private:
+	bool DoRename ( const char* szFromExt, const char* szToExt )
+	{
+		if ( m_tFiles.TryRenameSuffix ( szFromExt, szToExt ) )
+			return true;
+
+		// backup failed.
+		if ( m_tFiles.IsFatal() )
+			return ThrowError ( SphSprintf ( "'%s' to '%s' rename failed: %s; rollback also failed, INDEX UNUSABLE", szFromExt, szToExt, m_tFiles.FatalMsg ( "rotating" ).cstr() ), true );
+		return ThrowError ( SphSprintf ( "'%s' to '%s' rename failed: %s", szFromExt, szToExt, m_tFiles.ErrorMsg() ) );
+	}
+
+public:
+	explicit RenameFiles_c ( const char* szFromExt, const char* szToExt, IndexFiles_c& tFiles )
+		: m_tFiles { tFiles }
+		, m_szFromExt { szFromExt }
+		, m_szToExt { szToExt }
+	{}
+
+	bool Action() final
+	{
+		return DoRename ( m_szFromExt, m_szToExt );
+	}
+
+	bool Rollback() final
+	{
+		return DoRename ( m_szToExt, m_szFromExt );
+	}
+};
+
+StepActionPtr_c RenameFiles ( IndexFiles_c& tFiles, const char* szFromExt, const char* szToExt )
+{
+	return std::make_unique<RenameFiles_c> ( szFromExt, szToExt, tFiles );
 }
 
-CSphString IndexRotator_c::GetNewBase() const noexcept
+void ActionSequence_c::Defer ( StepActionPtr_c&& pAction )
 {
-	return m_pImpl->GetNewBase();
+	m_dActions.Add ( std::move ( pAction ) );
 }
 
-bool IndexRotator_c::NeedMoveFiles() const noexcept
+bool ActionSequence_c::UnRunDefers()
 {
-	return m_pImpl->NeedMoveFiles();
+	for ( auto i = m_iRun; i >= 0; --i )
+	{
+		auto pStep = (StepActionEx_c*)m_dActions[i].get();
+		if ( !pStep->Rollback() )
+		{
+			m_tError = pStep->GetError();
+			return false;
+		}
+	}
+	return true;
 }
 
-void IndexRotator_c::BackupIfNeed ( CSphIndex* pIdx, std::function<void ( CSphString )> fnClean )
+bool ActionSequence_c::RunDefers ()
 {
-	m_pImpl->BackupIfNeed ( pIdx, std::move (fnClean) );
+	m_iRun = 0;
+	for ( int i = 0, iEnd = m_dActions.GetLength(); i < iEnd; ++i )
+	{
+		auto pStep = (StepActionEx_c*)m_dActions[i].get();
+		if ( !pStep->Action() )
+		{
+			m_tError = pStep->GetError();
+			if ( !UnRunDefers() )
+			{
+				auto tError = pStep->GetError();
+				m_tError.second = m_tError.second || tError.second;
+				m_tError.first = SphSprintf ( "%s; than %s", tError.first.cstr(), m_tError.first.cstr() );
+			}
+			return false;
+		} else
+			++m_iRun;
+	}
+	return true;
 }
 
-void IndexRotator_c::MoveIndex ( CSphIndex* pIdx )
+std::pair<CSphString, bool> ActionSequence_c::GetError() const
 {
-	m_pImpl->MoveIndex ( pIdx );
-}
-
-void IndexRotator_c::BackupFilesIfNeed()
-{
-	m_pImpl->BackupFilesIfNeed();
-}
-
-void IndexRotator_c::MoveFiles ()
-{
-	m_pImpl->MoveFiles ();
-}
-
-bool IndexRotator_c::RollbackMovingFiles()
-{
-	return m_pImpl->RollbackMovingFiles();
-}
-
-void IndexRotator_c::CleanBackup () const noexcept
-{
-	m_pImpl->CleanBackup ();
+	return m_tError;
 }

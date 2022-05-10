@@ -36,6 +36,7 @@ private:
 	bool m_bSsl = false;
 	bool m_bVip = false;
 	bool m_bReadOnly = false;
+	static int m_iVips;
 
 	// session variables - doesn't participate in render, used as connection-wide globals
 public:
@@ -52,6 +53,7 @@ private:
 	ClientSession_c* 	m_pSession = nullptr;
 
 public:
+	void ClientFinished(); // as client info out of scope not destroyed immediately, but goes to hazard ptr, this provides better tracking.
 
 	// generic setters/getters. They're defined just to help keep multi-threading clean.
 	void SetTaskState ( TaskState_e eState );
@@ -69,8 +71,9 @@ public:
 	void SetSsl ( bool bSsl ) { m_bSsl = bSsl; }
 	bool GetSsl() const { return m_bSsl; }
 
-	void SetVip ( bool bVip ) { m_bVip = bVip; }
+	void SetVip ( bool bVip ) { m_bVip = bVip; if (m_bVip) ++m_iVips; }
 	bool GetVip() const { return m_bVip; }
+	inline static int GetVips() { return m_iVips; }
 
 	void SetReadOnly ( bool bReadOnly ) { m_bReadOnly = bReadOnly; }
 	bool GetReadOnly() const { return m_bReadOnly; }
@@ -133,6 +136,7 @@ namespace session {
 
 	inline void SetVip ( bool bVip ) { ClientTaskInfo_t::Info().SetVip (bVip); }
 	inline bool GetVip() { return ClientTaskInfo_t::Info().GetVip(); }
+	inline int GetVips() { return ClientTaskInfo_t::GetVips(); }
 
 	inline void SetReadOnly ( bool bReadOnly ) { ClientTaskInfo_t::Info().SetReadOnly (bReadOnly); }
 	inline bool GetReadOnly() { return ClientTaskInfo_t::Info().GetReadOnly(); }
@@ -168,10 +172,10 @@ namespace session {
 } // namespace session
 
 namespace myinfo {
-	// num of client tasks
+	// num of client tasks, not including vips
 	inline int CountClients ()
 	{
-		return Count ( ClientTaskInfo_t::m_eTask );
+		return Count ( ClientTaskInfo_t::m_eTask ) - session::GetVips();
 	}
 
 } // namespace myinfo

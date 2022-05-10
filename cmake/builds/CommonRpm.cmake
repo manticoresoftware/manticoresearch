@@ -17,55 +17,56 @@ if (only_set_paths)
 endif ()
 
 # Common rpm-specific build variables
-set ( CPACK_GENERATOR "RPM" )
+set ( CPACK_GENERATOR RPM )
 
-set ( CPACK_RPM_FILE_NAME "RPM-DEFAULT" )
+set ( CPACK_COMPONENTS_GROUPING IGNORE )
+set ( CPACK_RPM_FILE_NAME RPM-DEFAULT )
 set ( CPACK_RPM_PACKAGE_RELEASE 1 )
 set ( CPACK_RPM_PACKAGE_RELEASE_DIST ON )
 set ( CPACK_RPM_PACKAGE_GROUP "Applications/Internet" )
 
-set ( CPACK_RPM_MAIN_PACKAGE_NAME "manticore" )
+set ( CPACK_RPM_SEARCHD_PACKAGE_NAME "manticore-server-core" )
+set ( CPACK_RPM_SEARCHD_PACKAGE_REQUIRES "manticore-common" )
+set ( CPACK_RPM_SEARCHD_INSTALL_WITH_EXEC ON )
+set ( CPACK_RPM_SEARCHD_PACKAGE_OBSOLETES "sphinx" )
+set ( CPACK_RPM_SEARCHD_PACKAGE_CONFLICTS "sphinx" )
 
-if (NOT CPACK_RPM_META_PACKAGE_NAME)
-	set ( CPACK_RPM_META_PACKAGE_NAME "manticore-all" )
-endif ()
-set ( CPACK_RPM_META_PACKAGE_REQUIRES "manticore-systemd, manticore-tools" )
+set ( CPACK_RPM_SERVER_PACKAGE_NAME "manticore-server" )
+set ( CPACK_RPM_SERVER_PACKAGE_REQUIRES "manticore-server-core" )
+set ( CPACK_RPM_SERVER_PACKAGE_ARCHITECTURE noarch )
+set ( CPACK_RPM_SERVER_PACKAGE_DEBUG OFF )
+
+set ( CPACK_RPM_TOOLS_PACKAGE_NAME "manticore-tools" )
+set ( CPACK_RPM_TOOLS_PACKAGE_REQUIRES "manticore-common" )
+set ( CPACK_RPM_TOOLS_PACKAGE_CONFLICTS "sphinx, manticore <= 3.5.0_200722.1d34c49" )
+
+set ( CPACK_RPM_DEVEL_PACKAGE_NAME "manticore-devel" )
+set ( CPACK_RPM_DEVEL_PACKAGE_ARCHITECTURE noarch )
+
+set ( CPACK_RPM_ICUDATA_PACKAGE_NAME "manticore-icudata" )
+set ( CPACK_RPM_ICUDATA_PACKAGE_ARCHITECTURE noarch )
+
+set ( CPACK_RPM_COMMON_PACKAGE_NAME "manticore-common" )
+set ( CPACK_RPM_COMMON_PACKAGE_ARCHITECTURE noarch )
+set ( CPACK_RPM_COMMON_PACKAGE_RECOMMENDS "manticore-icudata" )
+
+set ( CPACK_RPM_META_PACKAGE_NAME "manticore" )
+set ( CPACK_RPM_META_PACKAGE_REQUIRES "manticore-server, manticore-tools, manticore-devel, manticore-icudata" )
 set ( CPACK_RPM_META_PACKAGE_CONFLICTS "manticore, sphinx" )
 set ( CPACK_RPM_META_PACKAGE_ARCHITECTURE noarch )
 set ( CPACK_RPM_META_BUILD_SOURCE_DIRS_PREFIX OFF )
 
-set ( CPACK_RPM_SERVER_PACKAGE_NAME "manticore-server" )
-set ( CPACK_RPM_SERVER_FILE_NAME "RPM-DEFAULT" )
-set ( CPACK_RPM_SERVER_INSTALL_WITH_EXEC ON )
-set ( CPACK_RPM_SERVER_PACKAGE_OBSOLETES "sphinx" )
-set ( CPACK_RPM_SERVER_PACKAGE_CONFLICTS "sphinx" )
+set ( CPACK_RPM_CONVERTER_PACKAGE_NAME "manticore-converter" )
+set ( CPACK_RPM_CONVERTER_FILE_NAME "RPM-DEFAULT" )
 
-set ( CPACK_RPM_SYSTEMD_PACKAGE_NAME "manticore-systemd" )
-set ( CPACK_RPM_SYSTEMD_PACKAGE_REQUIRES "manticore-server" )
-set ( CPACK_RPM_SYSTEMD_PACKAGE_ARCHITECTURE noarch )
-set ( CPACK_RPM_SYSTEMD_FILE_NAME "RPM-DEFAULT" )
-set ( CPACK_RPM_SYSTEMD_PACKAGE_DEBUG "OFF" )
-
-set (CPACK_RPM_ICUDATA_PACKAGE_NAME "manticore-icudata")
-set (CPACK_RPM_ICUDATA_FILE_NAME "RPM-DEFAULT")
-set (CPACK_RPM_ICUDATA_PACKAGE_ARCHITECTURE noarch)
 # other vars defined in CommonInfo
-
-set ( CPACK_RPM_TOOLS_PACKAGE_NAME "manticore-tools" )
-set ( CPACK_RPM_TOOLS_PACKAGE_CONFLICTS "sphinx, manticore <= 3.5.0_200722.1d34c49" )
-set ( CPACK_RPM_TOOLS_FILE_NAME "RPM-DEFAULT" )
-
-set ( CPACK_RPM_DEVEL_PACKAGE_NAME "manticore-devel" )
-set ( CPACK_RPM_DEVEL_FILE_NAME "RPM-DEFAULT" )
-set ( CPACK_RPM_DEVEL_PACKAGE_ARCHITECTURE noarch )
-
-set ( CPACK_RPM_MAIN_DEBUGINFO_PACKAGE ON )
-set ( CPACK_RPM_SERVER_DEBUGINFO_PACKAGE ON )
+set ( CPACK_RPM_SEARCHD_DEBUGINFO_PACKAGE ON )
+set ( CPACK_RPM_SERVER_DEBUGINFO_PACKAGE OFF )
 set ( CPACK_RPM_TOOLS_DEBUGINFO_PACKAGE ON )
-set ( CPACK_RPM_CONVERTER_DEBUGINFO_PACKAGE ON )
-set ( CPACK_RPM_ICUDATA_DEBUGINFO_PACKAGE OFF )
 set ( CPACK_RPM_DEVEL_DEBUGINFO_PACKAGE OFF )
+set ( CPACK_RPM_ICUDATA_DEBUGINFO_PACKAGE OFF )
 set ( CPACK_RPM_META_DEBUGINFO_PACKAGE OFF )
+set ( CPACK_RPM_CONVERTER_DEBUGINFO_PACKAGE ON )
 
 #set ( CPACK_BUILD_SOURCE_DIRS OFF )
 string ( LENGTH "${CMAKE_SOURCE_DIR}" source_dir_len_ )
@@ -75,15 +76,11 @@ if (source_dir_len_ LESS 75)
 endif ()
 
 #set ( CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST "/usr/include" )
-set ( CPACK_RPM_SERVER_USER_FILELIST
+set ( CPACK_RPM_COMMON_USER_FILELIST
 		"%config(noreplace) %{_sysconfdir}/manticoresearch/manticore.conf"
 		)
-set ( CPACK_RPM_SYSTEMD_USER_FILELIST
+set ( CPACK_RPM_SEARCHD_USER_FILELIST
 		"%config(noreplace) %{_sysconfdir}/logrotate.d/manticore"
-		)
-set ( CPACK_RPM_MAIN_USER_FILELIST
-		"%config(noreplace) %{_sysconfdir}/logrotate.d/manticore"
-		"%config(noreplace) %{_sysconfdir}/manticoresearch/manticore.conf"
 		)
 
 set ( CPACK_RPM_SPEC_MORE_DEFINE
@@ -94,48 +91,47 @@ set ( CPACK_RPM_SPEC_MORE_DEFINE
 SET ( CPACK_RPM_PACKAGE_LICENSE "GNU General Public License v. 2 (GPL2)" )
 
 set ( SCR "${CMAKE_CURRENT_SOURCE_DIR}/dist/rpm" ) # a shortcut
+set ( dirserver "${MANTICORE_BINARY_DIR}/config/server" )
+set ( dircommon "${MANTICORE_BINARY_DIR}/config/common" )
+set ( dircore "${MANTICORE_BINARY_DIR}/config/core" )
 
-# systemd - on components install
-set ( CPACK_RPM_SYSTEMD_BUILDREQUIRES "systemd-units" )
-set ( CPACK_RPM_SYSTEMD_POST_INSTALL_SCRIPT_FILE "${MANTICORE_BINARY_DIR}/config/systemd/manticore_s.post" )
-set ( CPACK_RPM_SYSTEMD_POST_UNINSTALL_SCRIPT_FILE "${SCR}/manticore_s.postun" )
-set ( CPACK_RPM_SYSTEMD_PRE_UNINSTALL_SCRIPT_FILE "${SCR}/manticore_s.preun" )
+# server (service)
+set ( CPACK_RPM_SERVER_BUILDREQUIRES "systemd-units" )
+set ( CPACK_RPM_SERVER_POST_INSTALL_SCRIPT_FILE "${dirserver}/manticore.post" )
+set ( CPACK_RPM_SERVER_POST_UNINSTALL_SCRIPT_FILE "${SCR}/manticore.postun" )
+set ( CPACK_RPM_SERVER_PRE_UNINSTALL_SCRIPT_FILE "${SCR}/manticore.preun" )
 
-# server - on components install
-set ( CPACK_RPM_SERVER_POST_INSTALL_SCRIPT_FILE "${MANTICORE_BINARY_DIR}/config/server/manticore_s.post" )
+# server (core)
+set ( CPACK_RPM_SEARCHD_POST_INSTALL_SCRIPT_FILE "${dircore}/manticore.post" )
 
-# main - on common install (group)
-set ( CPACK_RPM_MAIN_BUILDREQUIRES "systemd-units" )
-set ( CPACK_RPM_MAIN_POST_INSTALL_SCRIPT_FILE "${MANTICORE_BINARY_DIR}/manticore_s.post" )
-set ( CPACK_RPM_MAIN_POST_UNINSTALL_SCRIPT_FILE "${SCR}/manticore_s.postun" )
-set ( CPACK_RPM_MAIN_PRE_UNINSTALL_SCRIPT_FILE "${SCR}/manticore_s.preun" )
+# common
+set ( CPACK_RPM_COMMON_POST_INSTALL_SCRIPT_FILE "${dircommon}/manticore.post" )
 
 # now get system paths. These variables are used in configure substitutions below
 
 # block below used to patch the minconf - add a slash at the end of 'binlog_path' section
 configure_config ( lib/manticore )
 
-configure_file ( dist/rpm/manticore.logrotate.in "${MANTICORE_BINARY_DIR}/manticore.logrotate" @ONLY )
-configure_file ( dist/rpm/manticore_s.post.in "${MANTICORE_BINARY_DIR}/manticore_s.post" @ONLY )
-configure_file ( dist/rpm/manticore_s-server.post.in "${MANTICORE_BINARY_DIR}/config/server/manticore_s.post" @ONLY )
-configure_file ( dist/rpm/manticore_s-systemd.post.in "${MANTICORE_BINARY_DIR}/config/systemd/manticore_s.post" @ONLY )
-
-configure_file ( "dist/rpm/manticore.tmpfiles.in" "${MANTICORE_BINARY_DIR}/manticore.tmpfiles" @ONLY )
-configure_file ( "dist/rpm/manticore.generator.in" "${MANTICORE_BINARY_DIR}/manticore-search-generator" @ONLY )
+configure_file ( ${SCR}/manticore.logrotate.in "${MANTICORE_BINARY_DIR}/manticore.logrotate" @ONLY )
+configure_file ( ${SCR}/manticore-common.post.in "${dircommon}/manticore.post" @ONLY )
+configure_file ( ${SCR}/manticore-core.post.in "${dircore}/manticore.post" @ONLY )
+configure_file ( ${SCR}/manticore-server.post.in "${dirserver}/manticore.post" @ONLY )
+configure_file ( ${SCR}/manticore.tmpfiles.in "${MANTICORE_BINARY_DIR}/manticore.tmpfiles" @ONLY )
+configure_file ( ${SCR}/manticore.generator.in "${MANTICORE_BINARY_DIR}/manticore-search-generator" @ONLY )
 
 # installation
 
 # stuff going to /etc
 # CMAKE_INSTALL_SYSCONFDIR					etc 					/etc
-install ( FILES ${MANTICORE_BINARY_DIR}/manticore.conf DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/manticoresearch COMPONENT server )
-install ( FILES ${MANTICORE_BINARY_DIR}/manticore.logrotate DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/logrotate.d COMPONENT systemd RENAME manticore )
+install ( FILES ${MANTICORE_BINARY_DIR}/manticore.conf DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/manticoresearch COMPONENT common )
+install ( FILES ${MANTICORE_BINARY_DIR}/manticore.logrotate DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/logrotate.d COMPONENT searchd RENAME manticore )
 
 
 # stuff going to /var
 # CMAKE_INSTALL_LOCALSTATEDIR				var 					/var
-install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/lib/manticore/data COMPONENT server )
+install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/lib/manticore/data COMPONENT common )
 install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_RUNSTATEDIR}/manticore COMPONENT server )
-install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/log/manticore COMPONENT server )
+install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/log/manticore COMPONENT searchd )
 
 set ( CMAKE_INSTALL_LIB "lib" )
 GNUInstallDirs_get_absolute_install_dir ( CMAKE_INSTALL_FULL_LIB CMAKE_INSTALL_LIB LIBDIR )
@@ -143,12 +139,12 @@ GNUInstallDirs_get_absolute_install_dir ( CMAKE_INSTALL_FULL_LIB CMAKE_INSTALL_L
 # stuff that should go to /lib -> actually to /usr/lib
 # CMAKE_INSTALL_LIBDIR						usr/lib64 				/usr/lib64
 install ( FILES ${MANTICORE_BINARY_DIR}/manticore.tmpfiles DESTINATION ${CMAKE_INSTALL_LIB}/tmpfiles.d COMPONENT server RENAME manticore.conf )
-install ( PROGRAMS ${MANTICORE_BINARY_DIR}/manticore-search-generator DESTINATION ${CMAKE_INSTALL_LIB}/systemd/system-generators COMPONENT systemd )
+install ( PROGRAMS ${MANTICORE_BINARY_DIR}/manticore-search-generator DESTINATION ${CMAKE_INSTALL_LIB}/systemd/system-generators COMPONENT server )
 
 
 # binaries go to /usr/bin (here is only new cluster, rest is in main file, installing targets)
 # CMAKE_INSTALL_BINDIR						usr/bin 				/usr/bin
-install ( PROGRAMS "dist/rpm/manticore_new_cluster" DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT systemd )
+install ( PROGRAMS "dist/rpm/manticore_new_cluster" DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT server )
 
 
 #fixup - CMAKE_INSTALL_DOCDIR is share/doc/MANTICORE, fixup to share/doc/manticore
@@ -159,26 +155,24 @@ GNUInstallDirs_get_absolute_install_dir ( CMAKE_INSTALL_FULL_DOCDIR CMAKE_INSTAL
 # CMAKE_INSTALL_MANDIR						usr/share/man 			/usr/share/man
 # CMAKE_INSTALL_DOCDIR						usr/share/doc/manticore /usr/share/doc/manticore
 install ( FILES doc/indexer.1 doc/indextool.1 doc/spelldump.1 doc/wordbreaker.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1 COMPONENT tools )
-install ( FILES doc/searchd.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1 COMPONENT server )
-install ( FILES ${MANTICORE_BINARY_DIR}/manticore.conf DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT server RENAME manticore.conf.dist )
-install ( FILES COPYING example.sql DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT server )
+install ( FILES doc/searchd.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1 COMPONENT searchd )
+install ( FILES ${MANTICORE_BINARY_DIR}/manticore.conf DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT common RENAME manticore.conf.dist )
+install ( FILES COPYING INSTALL DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT common )
+install ( FILES example.sql DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT tools )
 
 # stuff going to /usr/share/manticore
 # CMAKE_INSTALL_DATAROOTDIR					usr/share 				/usr/share
 # CMAKE_INSTALL_DATADIR						usr/share 				/usr/share
-install ( DIRECTORY misc/stopwords DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT server )
-install ( FILES INSTALL DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT server )
-install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore/modules COMPONENT server )
+install ( DIRECTORY misc/stopwords DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT common )
+install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore/modules COMPONENT common )
 
 if (WITH_ICU)
 	install_icudata ( ${FULL_SHARE_DIR}/icu )
 endif ()
 
 if (NOT NOAPI)
-	install ( DIRECTORY api DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT server )
+	install ( DIRECTORY api DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT searchd )
 endif ()
 
-if (SPLIT)
-	get_cmake_property ( CPACK_COMPONENTS_ALL COMPONENTS )
-	list ( APPEND CPACK_COMPONENTS_ALL "meta" )
-endif ()
+get_cmake_property ( CPACK_COMPONENTS_ALL COMPONENTS )
+list ( APPEND CPACK_COMPONENTS_ALL "meta" )

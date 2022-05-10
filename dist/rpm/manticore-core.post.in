@@ -1,0 +1,14 @@
+chown -R %{manticore_user}:%{manticore_group} @CMAKE_INSTALL_FULL_LOCALSTATEDIR@/log/manticore
+
+# print some further pointers
+echo "Manticore Search (https://manticoresearch.com)"
+echo 
+echo "Getting Started with Manticore Search:"
+echo "  https://manual.manticoresearch.com/Quick_start_guide"
+echo 
+echo "Learn Manticore with interactive courses:"
+echo "  https://play.manticoresearch.com/"
+echo 
+echo "Configuration file:"
+echo "  @CMAKE_INSTALL_FULL_SYSCONFDIR@/manticoresearch/manticore.conf"
+echo 

@@ -17,18 +17,16 @@ endfunction ()
 function (__split_apple_dbg BINARYNAME DOINSTALL)
 	get_filename_component ( DIRHINT ${CMAKE_CXX_COMPILER} DIRECTORY )
 	find_program ( CMAKE_DSYMUTIL dsymutil HINTS ${DIRHINT} )
-	find_program ( CMAKE_STRIP NAMES llvm-strip strip HINTS ${DIRHINT} )
 
-	if (NOT CMAKE_DSYMUTIL OR NOT CMAKE_STRIP)
-		message (SEND_ERROR "Missed objcopy and/or strip prog. Can't split symbols!")
+	if (NOT CMAKE_DSYMUTIL)
+		message (SEND_ERROR "Missed dsymutil. Can't split symbols!")
 		unset (SPLIT_SYMBOLS CACHE)
 		return()
 	endif ()
-	mark_as_advanced (CMAKE_DSYMUTIL CMAKE_STRIP)
+	mark_as_advanced (CMAKE_DSYMUTIL)
 
 	ADD_CUSTOM_COMMAND (TARGET ${BINARYNAME} POST_BUILD
 			COMMAND ${CMAKE_DSYMUTIL} -f $<TARGET_FILE:${BINARYNAME}> -o $<TARGET_FILE:${BINARYNAME}>.dSYM
-			COMMAND ${CMAKE_STRIP} -S $<TARGET_FILE:${BINARYNAME}>
 			)
 	if (DOINSTALL)
 		INSTALL (FILES ${MANTICORE_BINARY_DIR}/src/${BINARYNAME}.dSYM

@@ -974,67 +974,48 @@ static constexpr DWORD ux01 = 1;			   // w-lock acquired
 static constexpr DWORD ux02 = 2;			   // r-lock bias
 Debug (static constexpr DWORD uxFE = ~ux01;)		   // mask for w-lock flag (0xFFFFFFFE)
 
-/* r-locking:
- * 1. reschedule until w-bit is zero
- * 2. increase N of readers */
-bool RWLock_c::ReadLock()
+// prefer w-lock: acquire only if w-lock queue is empty
+void RWLock_c::ReadLock()
 {
 	while ( true ) {
-		// store this task in order to be resumed    later
-		boost::fibers::detail::spinlock_lock tLock { m_tWaitQueueSpinlock };
-		if ( !m_bWpending && !( m_uState & ux01 ) )
+		boost::fibers::detail::spinlock_lock tLock { m_tInternalMutex };
+		if ( !( m_uState & ux01 ) && m_tWaitWQueue.Empty() )
 		{
 			m_uState += ux02;
 			assert ( ( m_uState & uxFE ) != uxFE ); // hope, 31 bits is enough to count all acquired r-locks.
-			return true;
+			return;
 		}
-
 		m_tWaitRQueue.SuspendAndWait ( tLock, Worker() );
 	}
 }
 
-/* w-locking:
- * 1. set 'pending' flag. That means, mo more readers possible (i.e. we implement wlock-preferring)
- * 2. suspend until lock is free, and wake acquiring w-lock and resetting 'pending' flag
- */
-bool RWLock_c::WriteLock()
+void RWLock_c::WriteLock()
 {
 	while ( true ) {
-		boost::fibers::detail::spinlock_lock tLock { m_tWaitQueueSpinlock };
+		boost::fibers::detail::spinlock_lock tLock { m_tInternalMutex };
 		if ( !m_uState )
 		{
 			m_uState = ux01;
-			m_bWpending = false;
-			return true;
+			return;
 		}
-
-		m_bWpending = true;
 		m_tWaitWQueue.SuspendAndWait ( tLock, Worker() );
 	}
 }
 
-/* unlocking:
- * 1. Decrease r-locks, or reset w-lock
- * 2. Resume one writer (if any), or all readers
- */
-bool RWLock_c::Unlock()
+void RWLock_c::Unlock()
 {
-	boost::fibers::detail::spinlock_lock tLock { m_tWaitQueueSpinlock };
-	assert ( m_uState >= ux01 );
-	if ( m_uState==ux01 ) // releasing w-lock
-		m_uState = 0;
-	else
-		m_uState -= ux02;
+	boost::fibers::detail::spinlock_lock tLock { m_tInternalMutex };
+	assert ( m_uState >= ux01 && "attempt to unlock not locked coro mutex");
+	m_uState = ( m_uState == ux01 ) ? 0 : ( m_uState - ux02 );
 
 	if ( m_uState )
-		return true;
+		return;
 
 	// fixme! point of priority decision: on unlock, do we need to wake up next w-locker, or all r-lockers?
 	if ( !m_tWaitWQueue.Empty() )
 		m_tWaitWQueue.NotifyOne();
 	else
 		m_tWaitRQueue.NotifyAll();
-	return true;
 }
 
 } // namespace Coro

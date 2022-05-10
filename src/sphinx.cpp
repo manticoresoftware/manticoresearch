@@ -1151,7 +1151,6 @@ public:
 	void				Dealloc () final;
 	void				Preread () final;
 
-	void				SetBase ( CSphString sNewBase ) final;
 	RenameResult_e		RenameEx ( CSphString sNewBase ) final;
 
 	bool				Lock () final;
@@ -9367,11 +9366,6 @@ void CSphIndex_VLN::Preread()
 
 	m_bPassedRead = true;
 	sphLogDebug ( "Preread successfully finished" );
-}
-
-void CSphIndex_VLN::SetBase ( CSphString sNewBase )
-{
-	m_sFilename = std::move(sNewBase);
 }
 
 

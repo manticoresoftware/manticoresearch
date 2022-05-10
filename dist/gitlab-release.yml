@@ -8,78 +8,7 @@ variables:
   VERBOSE: 1
   DIAGNOSTIC: 1
 
-.redhat_based:
-  stage: build
-  interruptible: true
-  tags:
-    - docker
-  variables:
-    REPO_DIST_NAME: "centos"
-    CACHEB: "../cache"
-  script:
-    - ln -s $(pwd) /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789/src
-    - cd /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789/src
-    - mkdir build && cd build
-    - cmake -GNinja -DPACK=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
-    - cmake --build . --target package
-    - cmake -DSPLIT=1 .
-    - cmake --build . --target package
-    - cp manticore*.rpm ..
-  artifacts:
-    paths:
-      - manticore*.rpm
-    when: on_success
-    expire_in: 12 hrs
-
-.debian_based:
-  stage: build
-  interruptible: true
-  tags:
-    - docker
-  variables:
-    CACHEB: "../cache"
-  script:
-    - mkdir build && cd build
-    - cmake -GNinja -DPACK=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
-    - cmake --build . --target package
-    - cmake -DSPLIT=1 .
-    - cmake --build . --target package
-    - rm manticore-server-dbgsym*.ddeb
-    - rm manticore-tools-dbgsym*.ddeb
-    - cp manticore*deb ..
-  artifacts:
-    paths:
-      - manticore*deb
-    when: on_success
-    expire_in: 12 hrs
-
-.debian_based_short:
-  stage: build
-  interruptible: true
-  tags:
-    - docker
-  variables:
-    CACHEB: "../cache"
-  script:
-    - mkdir build && cd build
-    - cmake -GNinja -DPACK=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
-    - cmake --build . --target package
-    - cp manticore*deb ..
-  artifacts:
-    paths:
-      - manticore*deb
-    when: on_success
-    expire_in: 12 hrs
-
-.collect_job:
-  variables:
-    GIT_STRATEGY: none
-  stage: repoupload
-  interruptible: true
-  tags:
-    - dev-host
-
-osx:
+.build:
   stage: build
   interruptible: true
   needs: [ ]
@@ -89,39 +18,91 @@ osx:
     - if: $WHAT=='$WHAT'
     - if: $WHAT==null
     - if: $WHAT=="all"
-    - if: $WHAT =~ /osx/
   variables:
     CACHEB: "../cache"
-  image: registry.gitlab.com/manticoresearch/dev/cross_bigsur:x64
   script:
     - mkdir build && cd build
-    - cmake .. -GNinja -DDISTR_BUILD=macos -DBUILD_TAG=$RELEASE_TAG
+    - cmake -GNinja -DPACK=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
     - cmake --build . --target package
-    - cp manticore-*.tar.gz ..
+
+.redhat_based:
+  extends: [ .build ]
+  variables:
+    REPO_DIST_NAME: "centos"
+  before_script:
+    - ln -s $(pwd) /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789/src
+    - cd /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789/src
   artifacts:
     paths:
-      - manticore-*.tar.gz
+      - build/manticore*.rpm
     when: on_success
     expire_in: 12 hrs
-  cache:
-    key: mojave
-    paths:
-      - cache
 
-collect_osx:
+.debian_based:
+  extends: [ .build ]
+  artifacts:
+    paths:
+      - build/manticore*deb
+    when: on_success
+    expire_in: 12 hrs
+
+.collect_job:
+  variables:
+    GIT_STRATEGY: fetch
+  stage: repoupload
+  interruptible: true
+  tags:
+    - dev-host
+  rules:
+    - if: $CI_MERGE_REQUEST_ID
+      when: manual
+      allow_failure: true
+
+.collect_deb:
+  extends: [ .collect_job ]
+  script:
+    - /bin/bash dist/upload_repo_deb.sh
+
+.collect_rpm:
+  extends: [ .collect_job ]
+  script:
+    - /bin/bash dist/upload_repo_rpm.sh
+
+.collect_arc:
   extends: [ .collect_job ]
   needs: [ osx ]
-  script: [ ~/upload_repo_arc.sh ]
+  script:
+    - /bin/bash dist/upload_repo_arc.sh
+
+osx:
+  extends: [ .build ]
+  rules:
+    - !reference [ .build, rules ]
+    - if: $WHAT =~ /osx/
+  image: registry.gitlab.com/manticoresearch/dev/cross_bigsur:x64
+  cache:
+    key: bigsur
+    paths:
+      - cache
+  artifacts:
+    paths:
+      - build/manticore-*.tar.gz
+    when: on_success
+    expire_in: 12 hrs
+
+collect_osx:
+  extends: [ .collect_arc ]
+  needs: [ osx ]
+
+
 
 windows:
   stage: build
   interruptible: true
   rules:
-    - if: $WHAT=='$WHAT'
-    - if: $WHAT==null
-    - if: $WHAT=="all"
+    - !reference [ .build, rules ]
     - if: $WHAT =~ /windows/
-  needs: []
+  needs: [ ]
   tags:
     - windev19
     - build
@@ -131,29 +112,27 @@ windows:
     BOOST_ROOT: "x:/boost_1_75_0"
   script:
     - 'net use x: \\\\VBOXSRV\\shared'
-    - mkdir sphinxbin-x64
-    - cd sphinxbin-x64
+    - mkdir build
+    - cd build
     - cmake -DBUILD_TAG=$RELEASE_TAG -DDISTR_BUILD=default -DWITH_SSL=1 ..
     - cmake --build . --target package --config RelWithDebInfo
-    - cp manticore-*.zip ..
   artifacts:
     paths:
-      - manticore-*.zip
+      - build/manticore-*.zip
     when: on_success
     expire_in: 12 hrs
-  cache: {}
+  cache: { }
 
 collect_windows:
-  extends: [ .collect_job ]
+  extends: [ .collect_arc ]
   needs: [ windows ]
-  script: [ ~/upload_repo_arc.sh ]
+
+
 
 rhel7:
   extends: [ .redhat_based ]
   rules:
-    - if: $WHAT=='$WHAT'
-    - if: $WHAT==null
-    - if: $WHAT=="all"
+    - !reference [ .build, rules ]
     - if: $WHAT =~ /rhel7/
   variables:
     REPO_DIST_VER: "7"
@@ -164,41 +143,17 @@ rhel7:
       - cache
 
 collect_rhel7:
-  extends: [ .collect_job ]
+  extends: [ .collect_rpm ]
   needs: [ rhel7 ]
-  script: [ ~/upload_repo_rpm.sh ]
   variables:
     DISTRO: 7
 
 
-rhelsplit7:
-  extends: [ .redhat_based ]
-  rules:
-    - if: $WHAT =~ /rhelsplit7/
-  variables:
-    XTRAFLAGS: "-DSPLIT_APPS=ON -DNOAPI=ON"
-    REPO_DIST_VER: "7"
-  image: registry.gitlab.com/manticoresearch/dev/centos7_clang:7
-  cache:
-    key: rhel7
-    paths:
-      - cache
-
-collect_rhelsplit7:
-  extends: [ .collect_job ]
-  needs:
-    - job: rhelsplit7
-      optional: true
-  script: [ ~/upload_repo_rpm.sh ]
-  variables:
-    DISTRO: 7
 
 rhel8:
   extends: [ .redhat_based ]
   rules:
-    - if: $WHAT=='$WHAT'
-    - if: $WHAT==null
-    - if: $WHAT=="all"
+    - !reference [ .build, rules ]
     - if: $WHAT =~ /rhel8/
   variables:
     REPO_DIST_VER: "8"
@@ -209,18 +164,17 @@ rhel8:
       - cache
 
 collect_rhel8:
-  extends: [ .collect_job ]
-  script: [ ~/upload_repo_rpm.sh ]
+  extends: [ .collect_rpm ]
+  needs: [ rhel8 ]
   variables:
     DISTRO: 8
-  needs: [ rhel8 ]
+
+
 
 stretch:
   extends: [ .debian_based ]
   rules:
-    - if: $WHAT=='$WHAT'
-    - if: $WHAT==null
-    - if: $WHAT=="all"
+    - !reference [ .build, rules ]
     - if: $WHAT =~ /stretch/
   image: registry.gitlab.com/manticoresearch/dev/stretch_clang:13
   cache:
@@ -229,19 +183,17 @@ stretch:
       - cache
 
 collect_stretch:
-  extends: [ .collect_job ]
-  script: [ ~/upload_repo_deb.sh ]
+  extends: [ .collect_deb ]
+  needs: [ stretch ]
   variables:
     DISTRO: stretch
-  needs: [ stretch ]
+
 
 
 xenial:
   extends: [ .debian_based ]
   rules:
-    - if: $WHAT=='$WHAT'
-    - if: $WHAT==null
-    - if: $WHAT=="all"
+    - !reference [ .build, rules ]
     - if: $WHAT =~ /xenial/
   image: registry.gitlab.com/manticoresearch/dev/xenial_clang:12
   cache:
@@ -250,19 +202,17 @@ xenial:
       - cache
 
 collect_xenial:
-  extends: [ .collect_job ]
-  script: [ ~/upload_repo_deb.sh ]
+  extends: [ .collect_deb ]
+  needs: [ xenial ]
   variables:
     DISTRO: xenial
-  needs: [ xenial ]
+
 
 
 bionic:
   extends: [ .debian_based ]
   rules:
-    - if: $WHAT=='$WHAT'
-    - if: $WHAT==null
-    - if: $WHAT=="all"
+    - !reference [ .build, rules ]
     - if: $WHAT =~ /bionic/
   image: registry.gitlab.com/manticoresearch/dev/bionic_clang:13
   cache:
@@ -271,19 +221,17 @@ bionic:
       - cache
 
 collect_bionic:
-  extends: [ .collect_job ]
-  script: [ ~/upload_repo_deb.sh ]
+  extends: [ .collect_deb ]
+  needs: [ bionic ]
   variables:
     DISTRO: bionic
-  needs: [ bionic ]
+
 
 
 focal:
   extends: [ .debian_based ]
   rules:
-    - if: $WHAT=='$WHAT'
-    - if: $WHAT==null
-    - if: $WHAT=="all"
+    - !reference [ .build, rules ]
     - if: $WHAT =~ /focal/
   image: registry.gitlab.com/manticoresearch/dev/focal_clang:13
   cache:
@@ -291,12 +239,19 @@ focal:
     paths:
       - cache
 
+collect_focal:
+  extends: [ .collect_deb ]
+  needs: [ focal ]
+  variables:
+    DISTRO: focal
+
+
+
+
 focalarm:
   extends: [ .debian_based ]
   rules:
-    - if: $WHAT=='$WHAT'
-    - if: $WHAT==null
-    - if: $WHAT=="all"
+    - !reference [ .build, rules ]
     - if: $WHAT =~ /focalarm/
   tags:
     - arm64
@@ -308,39 +263,18 @@ focalarm:
     paths:
       - cache
 
-collect_focal:
-  extends: [ .collect_job ]
-  script: [ ~/upload_repo_deb.sh ]
+collect_focalarm:
+  extends: [ .collect_deb ]
+  needs: [ focalarm ]
   variables:
     DISTRO: focal
-  needs: [ focal, focalarm ]
 
-jammy:
-  extends: [ .debian_based_short ]
-  rules:
-    - if: $WHAT=='$WHAT'
-    - if: $WHAT==null
-    - if: $WHAT=="all"
-    - if: $WHAT =~ /jammy/
-  image: registry.gitlab.com/manticoresearch/dev/jammy_cmake:323
-  cache:
-    key: jammy
-    paths:
-      - cache
 
-collect_jammy:
-  extends: [ .collect_job ]
-  script: [ ~/upload_repo_deb.sh ]
-  variables:
-    DISTRO: jammy
-  needs: [ jammy ]
 
 buster:
   extends: [ .debian_based ]
   rules:
-    - if: $WHAT=='$WHAT'
-    - if: $WHAT==null
-    - if: $WHAT=="all"
+    - !reference [ .build, rules ]
     - if: $WHAT =~ /buster/
   image: registry.gitlab.com/manticoresearch/dev/buster_clang:13
   cache:
@@ -349,18 +283,17 @@ buster:
       - cache
 
 collect_buster:
-  extends: [ .collect_job ]
-  script: [ ~/upload_repo_deb.sh ]
+  extends: [ .collect_deb ]
+  needs: [ buster ]
   variables:
     DISTRO: buster
-  needs: [ buster ]
+
+
 
 bullseye:
   extends: [ .debian_based ]
   rules:
-    - if: $WHAT=='$WHAT'
-    - if: $WHAT==null
-    - if: $WHAT=="all"
+    - !reference [ .build, rules ]
     - if: $WHAT =~ /bullseye/
   image: registry.gitlab.com/manticoresearch/dev/bullseye_clang:13
   cache:
@@ -369,11 +302,31 @@ bullseye:
       - cache
 
 collect_bullseye:
-  extends: [ .collect_job ]
-  script: [ ~/upload_repo_deb.sh ]
+  extends: [ .collect_deb ]
+  needs: [ bullseye ]
   variables:
     DISTRO: bullseye
-  needs: [ bullseye ]
+
+
+
+jammy:
+  extends: [ .debian_based ]
+  rules:
+    - !reference [ .build, rules ]
+    - if: $WHAT =~ /jammy/
+  image: registry.gitlab.com/manticoresearch/dev/jammy_cmake:323
+  cache:
+    key: jammy
+    paths:
+      - cache
+
+collect_jammy:
+  extends: [ .collect_deb ]
+  needs: [ jammy ]
+  variables:
+    DISTRO: jammy
+
+
 
 build_docker:
   stage: deploy

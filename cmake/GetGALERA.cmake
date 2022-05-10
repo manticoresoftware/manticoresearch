@@ -21,7 +21,7 @@ include (printers) # for diag
 function (install_galera DEST)
 	get_target_property (GALERA_MODULE galera::galera LOCATION)
 	diag (GALERA_MODULE)
-	install (PROGRAMS ${GALERA_MODULE} DESTINATION "${DEST}" COMPONENT server)
+	install (PROGRAMS ${GALERA_MODULE} DESTINATION "${DEST}" COMPONENT searchd)
 endfunction ()
 
 function (cache_galera_module_name)

@@ -364,17 +364,16 @@ public:
 // instead of real blocking it yield current coro, so, MUST be used only with coro context
 class CAPABILITY ( "mutex" ) RWLock_c: public ISphNoncopyable
 {
-	boost::fibers::detail::spinlock m_tWaitQueueSpinlock {};
+	boost::fibers::detail::spinlock m_tInternalMutex {};
 	WaitQueue_c m_tWaitRQueue {};
 	WaitQueue_c m_tWaitWQueue {};
 	DWORD m_uState { 0 }; // lower bit - w-locked, rest - N of r-locks with bias 2
-	bool m_bWpending { false };
 
 public:
 	RWLock_c() = default;
-	bool WriteLock() ACQUIRE();
-	bool ReadLock() ACQUIRE_SHARED();
-	bool Unlock() UNLOCK_FUNCTION();
+	void WriteLock() ACQUIRE();
+	void ReadLock() ACQUIRE_SHARED();
+	void Unlock() UNLOCK_FUNCTION();
 };
 
 class CAPABILITY ( "mutex" ) Mutex_c: public ISphNoncopyable

@@ -2691,7 +2691,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 
 struct EscapeQuotation_t : public BaseQuotation_t
 {
-	inline static bool IsEscapeChar ( char c )
+	static constexpr bool IsEscapeChar ( char c )
 	{
 		return ( c=='\\' || c=='\'' );
 	}
@@ -8720,6 +8720,7 @@ void BuildStatus ( VectorLike & dStatus )
 	dStatus.MatchTupletf ( "workers_total", "%d", GlobalWorkPool ()->WorkingThreads () );
 	dStatus.MatchTupletf ( "workers_active", "%d", myinfo::CountAll () );
 	dStatus.MatchTupletf ( "workers_clients", "%d", myinfo::CountClients () );
+	dStatus.MatchTupletf ( "workers_clients_vip", "%u", session::GetVips() );
 	dStatus.MatchTupletf ( "work_queue_length", "%d", GlobalWorkPool ()->Works () );
 
 	assert ( g_pDistIndexes );
@@ -8832,6 +8833,7 @@ void BuildStatusOneline ( StringBuilder_c & sOut )
 	<< " Threads:" << iThreads
 	<< " Queue:" << iQueue
 	<< " Clients:" << myinfo::CountClients()
+	<< " Vip clients:" << session::GetVips()
 	<< " Tasks:" << iTasks
 	<< " Queries:" << g_tStats.m_iQueries.load ( std::memory_order_relaxed );
 	sOut.Sprintf ( " Wall: %t", (int64_t)g_tStats.m_iQueryTime.load ( std::memory_order_relaxed ) );
@@ -15662,7 +15664,7 @@ ServedIndexRefPtr_c MakeCloneForRotation ( const cServedIndexRefPtr_c& pSource, 
 	return pRes;
 }
 
-static bool RotateIndexMT ( ServedIndexRefPtr_c& pNewServed, const CSphString& sIndex, StrVec_t& dWarnings, CSphString& sError );
+static bool LimitedRotateIndexMT ( ServedIndexRefPtr_c& pNewServed, const CSphString& sIndex, StrVec_t& dWarnings, CSphString& sError ) EXCLUDES ( MainThread );
 static bool RotateIndexGreedy ( const ServedIndex_c& tServed, const char* szIndex, CSphString& sError ) REQUIRES ( tServed.m_pIndex->Locker() );
 
 static void HandleMysqlReloadIndex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
@@ -15704,7 +15706,7 @@ static void HandleMysqlReloadIndex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 	if ( g_bSeamlessRotate )
 	{
 		ServedIndexRefPtr_c pNewServed = MakeCloneForRotation ( pServed, tStmt.m_sIndex );
-		if ( !RotateIndexMT ( pNewServed, tStmt.m_sIndex, dWarnings, sError ) )
+		if ( !LimitedRotateIndexMT ( pNewServed, tStmt.m_sIndex, dWarnings, sError ) )
 		{
 			sphWarning ( "%s", sError.cstr() );
 			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
@@ -15727,8 +15729,7 @@ static void HandleMysqlReloadIndex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 		StringBuilder_c sWarn ( "; " );
 		for ( const auto & i : dWarnings )
 			sWarn << i;
-
-		sWarning = sWarn.cstr();
+		sWarn.MoveTo ( sWarning );
 	}
 
 	tOut.Ok();
@@ -16662,43 +16663,47 @@ bool RotateIndexGreedy ( const ServedIndex_c& tServed, const char* szIndex, CSph
 	/// bool RotateIndexFilesGreedy ( const ServedDesc_t& tServed, const char* szIndex, CSphString& sError )
 	//////////////////
 
-	IndexRotator_c tRotator ( tServed.m_sIndexPath, szIndex );
-	if ( !tRotator.ConfigureIfNeed() )
+	CheckIndexRotate_c tCheck ( tServed );
+	if ( tCheck.NothingToRotate() )
 		return false;
 
-	IndexFiles_c dFiles ( tRotator.GetNewBase(), szIndex );
+	IndexFiles_c dServedFiles ( tServed.m_sIndexPath, szIndex );
+	IndexFiles_c dFreshFiles ( dServedFiles.MakePath ( tCheck.RotateFromNew() ? ".new" : "" ), szIndex );
 
-	if ( !dFiles.CheckHeader() )
+	if ( !dFreshFiles.CheckHeader() )
 	{
 		// no files or wrong files - no rotation
-		sError = dFiles.ErrorMsg();
+		sError = dFreshFiles.ErrorMsg();
 		return false;
 	}
 
-	if ( !dFiles.HasAllFiles() )
+	if ( !dFreshFiles.HasAllFiles() )
 	{
-		sphWarning ( "rotating index '%s': unreadable: %s; abort roration", szIndex, strerrorm ( errno ) );
+		sphWarning ( "rotating index '%s': unreadable: %s; abort rotation", szIndex, strerrorm ( errno ) );
 		return false;
 	}
 
-	// do files rotation
-	if ( tRotator.NeedMoveFiles() )
+	bool bHasOldServedFiles = dServedFiles.HasAllFiles();
+	Optional_T<ActionSequence_c> tActions;
+
+	if ( tCheck.RotateFromNew() )
 	{
-		try {
-			tRotator.BackupFilesIfNeed ();
-			tRotator.MoveFiles ();
-		} catch ( RotationError_c& eWhat )
+		tActions.emplace();
+		if ( bHasOldServedFiles )
+			tActions->Defer ( RenameFiles ( dServedFiles, "", ".old") );
+		tActions->Defer ( RenameFiles ( dServedFiles, ".new", "" ) );
+
+		// do files rotation
+		if ( !tActions->RunDefers() )
 		{
-			sError = eWhat.sWhat();
-			if ( eWhat.IsFatal() )
-				sphFatal ( "%s", sError.cstr() ); // fixme! Do we really need to fatal? (adopted from prev version)
+			bool bFatal;
+			std::tie ( sError, bFatal ) = tActions->GetError();
+			sphWarning ( "RotateIndexGreedy error: %s", sError.cstr() );
+			if ( bFatal )
+				sphFatal ( "RotateIndexGreedy error: %s", sError.cstr() ); // fixme! Do we really need to fatal? (adopted from prev version)
 			return false;
 		}
 	}
-
-	//////////////////
-	/// bool PreallocIndexGreedy ( const ServedDesc_t& tServed, CSphIndex* pIdx, const char* szIndex, CSphString& sError )
-	//////////////////
 
 	// try to use new index
 	auto pIdx = UnlockedHazardIdxFromServed ( tServed ); // it should be locked, if necessary, before
@@ -16707,24 +16712,24 @@ bool RotateIndexGreedy ( const ServedIndex_c& tServed, const char* szIndex, CSph
 	if ( !pIdx->Prealloc ( g_bStripPath, nullptr, dWarnings ) )
 	{
 		sphWarning ( "rotating index '%s': .new preload failed: %s", szIndex, pIdx->GetLastError().cstr() );
-		try {
-			if ( !tRotator.RollbackMovingFiles() )
+		if ( tActions )
+		{
+			if ( !tActions->UnRunDefers() )
 			{
-				sError.SetSprintf ( "rotating index '%s': .new prealloc failed: %s; NOT SERVING", szIndex, pIdx->GetLastError().cstr() );
+				bool bFatal;
+				std::tie ( sError, bFatal ) = tActions->GetError();
+				sphWarning ( "RotateIndexGreedy error: %s, NOT SERVING", sError.cstr() );
+				if ( bFatal )
+					sphFatal ( "RotateIndexGreedy error: %s", sError.cstr() ); // fixme! Do we really need to fatal? (adopted from prev version)
 				return false;
 			}
-		} catch ( RotationError_c& eWhat )
-		{
-			sError = eWhat.sWhat();
-			if ( eWhat.IsFatal() )
-				sphFatal ( "%s", sError.cstr() ); // fixme! Do we really need to fatal? (adopted from prev version)
-		}
 
-		sphLogDebug ( "PreallocIndexGreedy: has recovered. Prealloc it." );
-		if ( !pIdx->Prealloc ( g_bStripPath, nullptr, dWarnings ) )
-		{
-			sError.SetSprintf ( "rotating index '%s': .new preload failed; ROLLBACK FAILED; INDEX UNUSABLE", szIndex );
-			return false;
+			sphLogDebug ( "PreallocIndexGreedy: has recovered. Prealloc it." );
+			if ( !pIdx->Prealloc ( g_bStripPath, nullptr, dWarnings ) )
+			{
+				sError.SetSprintf ( "rotating index '%s': .new preload failed; ROLLBACK FAILED; INDEX UNUSABLE", szIndex );
+				return false;
+			}
 		}
 	}
 
@@ -16737,7 +16742,8 @@ bool RotateIndexGreedy ( const ServedIndex_c& tServed, const char* szIndex, CSph
 		sphWarning ( "rotating index '%s': %s", szIndex, pIdx->GetLastWarning().cstr() );
 
 	// unlink .old
-	tRotator.CleanBackup();
+	if ( bHasOldServedFiles )
+		dServedFiles.Unlink (".old");
 
 	// finalize
 	if ( !ApplyKilllistsMyAndToMe ( pIdx, szIndex, sError ) )
@@ -16852,38 +16858,14 @@ static bool PreallocNewIndex ( ServedIndex_c & tIdx, const char * szIndexName, S
 	return PreallocNewIndex ( tIdx, pIndexConfig, szIndexName, dWarnings, sError );
 }
 
-static CSphMutex g_tRotateThreadMutex;
-
-static bool BackupIfNeedAndMove ( IndexRotator_c& tRotator, CSphIndex* pNewIndex, const CSphString& sIndex, CSphString& sError, CSphIndex* pOldIdx = nullptr,std::function<void ( CSphString )> fnClean = nullptr )
-	EXCLUDES ( MainThread ) REQUIRES ( g_tRotateThreadMutex )
-{
-	try {
-		tRotator.BackupIfNeed ( pOldIdx, std::move (fnClean ) );
-		tRotator.MoveIndex ( pNewIndex );
-	} catch ( RotationError_c& eWhat )
-	{
-		if ( eWhat.IsFatal() )
-			g_pLocalIndexes->Delete ( sIndex );
-		sError = eWhat.sWhat();
-		return false;
-	}
-	tRotator.CleanBackup();
-	return true;
-}
-
 // called either from MysqlReloadIndex, either from Rotation task (never from main thread).
-bool RotateIndexMT ( ServedIndexRefPtr_c& pNewServed, const CSphString & sIndex, StrVec_t & dWarnings, CSphString & sError )
-	EXCLUDES ( MainThread, g_tRotateThreadMutex )
+bool RotateIndexMT ( ServedIndexRefPtr_c& pNewServed, const CSphString & sIndex, StrVec_t & dWarnings, CSphString & sError ) EXCLUDES ( MainThread )
 {
 	assert ( pNewServed && pNewServed->m_eType == IndexType_e::PLAIN );
 
-	// only one rotation and reload thread allowed to prevent deadlocks
-	ScopedMutex_t tBlockRotations ( g_tRotateThreadMutex );
-
 	sphInfo ( "rotating index '%s': started", sIndex.cstr() );
-	CSphIndex* pNewIndex = UnlockedHazardIdxFromServed ( *pNewServed );
-	IndexRotator_c tRotator ( pNewServed->m_sIndexPath, sIndex.cstr() );
-	if ( !tRotator.ConfigureIfNeed() )
+	CheckIndexRotate_c tCheck ( *pNewServed );
+	if ( tCheck.NothingToRotate() )
 	{
 		sError.SetSprintf ( "nothing to rotate for index '%s'", sIndex.cstr() );
 		return false;
@@ -16892,7 +16874,10 @@ bool RotateIndexMT ( ServedIndexRefPtr_c& pNewServed, const CSphString & sIndex,
 	//////////////////
 	/// load new index
 	//////////////////
-	pNewIndex->SetBase ( tRotator.GetNewBase() );
+	CSphIndex* pNewIndex = UnlockedHazardIdxFromServed ( *pNewServed );
+	if ( tCheck.RotateFromNew() )
+		pNewIndex->SetBase ( IndexFiles_c::MakePath ( ".new", pNewServed->m_sIndexPath ) );
+
 	// prealloc enough RAM and lock new index
 	sphLogDebug ( "prealloc enough RAM and lock new index" );
 
@@ -16907,22 +16892,30 @@ bool RotateIndexMT ( ServedIndexRefPtr_c& pNewServed, const CSphString & sIndex,
 	//////////////////////
 
 	sphLogDebug ( "activate new index" );
-	if ( tRotator.NeedMoveFiles() )
+	if ( tCheck.RotateFromNew() )
 	{
-		bool bResult;
-		auto pOldServed = GetServed ( sIndex );
-		if ( pOldServed )
-		{
-			IndexFiles_c dActivePath { pOldServed->m_sIndexPath };
-			assert ( dActivePath.CheckHeader() );
-			assert ( dActivePath.HasAllFiles() );
+		ActionSequence_c tActions;
 
-			bResult = BackupIfNeedAndMove ( tRotator, pNewIndex, sIndex, sError, WIdx_c { pOldServed }, [pOldServed] ( CSphString s ) { pOldServed->SetUnlink ( std::move(s) ); } );
-			pNewIndex->m_iTID = RIdx_c ( pOldServed )->m_iTID;
-		} else
-			bResult = BackupIfNeedAndMove ( tRotator, pNewIndex, sIndex, sError );
-		if ( !bResult )
+		auto pServed = GetServed ( sIndex );
+		if ( pServed && pServed->m_sIndexPath == pNewServed->m_sIndexPath )
+			tActions.Defer ( RenameIdxSuffix ( pServed, ".old" ) );
+		tActions.Defer ( RenameIdx ( pNewIndex, pNewServed->m_sIndexPath ) ); // rename 'new' to 'current'
+
+		if ( !tActions.RunDefers() )
+		{
+			bool bFatal;
+			std::tie ( sError, bFatal ) = tActions.GetError();
+			sphWarning ( "RotateIndexMT error: index %s, error %s", sIndex.cstr(), sError.cstr() );
+			if ( bFatal )
+				g_pLocalIndexes->Delete ( sIndex );
 			return false;
+		}
+		if ( pServed )
+		{
+			RIdx_c pOldIdx { pServed };
+			pNewIndex->m_iTID = pOldIdx->m_iTID;
+			pServed->SetUnlink ( pOldIdx->GetFilename() );
+		}
 	}
 
 	if ( !ApplyKilllistsMyAndToMe ( pNewIndex, sIndex.cstr(), sError ) )
@@ -16997,6 +16990,25 @@ static void InvokeRotation ( VecOfServed_c&& dDeferredIndexes ) REQUIRES ( MainT
 		iRotationTask = TaskManager::RegisterGlobal ("Rotation task", TaskRotation, AbortRotation, 1, 1);
 
 	TaskManager::StartJob ( iRotationTask, pIndexesForRotation.release() );
+}
+
+bool LimitedRotateIndexMT ( ServedIndexRefPtr_c& pNewServed, const CSphString& sIndex, StrVec_t& dWarnings, CSphString& sError ) EXCLUDES ( MainThread )
+{
+	assert ( Threads::IsInsideCoroutine() );
+
+	// allow to run several rotations a time (in parallel)
+	// vip conns has no limit
+	if ( session::GetVip() )
+		return RotateIndexMT ( pNewServed, sIndex, dWarnings, sError );
+
+	// limit is arbitrary set to N/2 of threadpool
+	static Coro::Waitable_T<int> iParallelRotations { 0 };
+	iParallelRotations.Wait ( [] ( int i ) { return i < Max ( 1, NThreads() / 2 ); } );
+	iParallelRotations.ModifyValue ( [] ( int& i ) { ++i; } );
+	auto _ = AtScopeExit ( [] {
+		iParallelRotations.ModifyValueAndNotifyOne ( [] ( int& i ) { --i; } );
+	});
+	return RotateIndexMT ( pNewServed, sIndex, dWarnings, sError );
 }
 
 void ConfigureLocalIndex ( ServedDesc_t * pIdx, const CSphConfigSection & hIndex, bool bMutableOpt, StrVec_t * pWarnings )
@@ -17279,7 +17291,6 @@ static ResultAndIndex_t LoadRTPercolate ( bool bRT, const char* szIndexName, con
 		pServed->m_eType = IndexType_e::PERCOLATE;
 	}
 
-	pServed->m_sIndexPath = hIndex["path"].strval ();
 	pIdx->SetMutableSettings ( pServed->m_tSettings );
 	pIdx->m_iExpansionLimit = g_iExpansionLimit;
 	pIdx->SetGlobalIDFPath ( pServed->m_sGlobalIDFPath );
@@ -17547,7 +17558,7 @@ static void SetIndexPriority ( IndexWithPriority_t & tIndex, int iPriority, cons
 	}
 }
 
-static VecOfServed_c ConvertHashToPrioritySortedVec ( const HashOfServed_c& hDeferredIndexes ) REQUIRES ( MainThread, g_tRotateThreadMutex )
+static VecOfServed_c ConvertHashToPrioritySortedVec ( const HashOfServed_c& hDeferredIndexes ) REQUIRES ( MainThread )
 {
 	SmallStringHash_T<IndexWithPriority_t> tIndexesToRotate;
 	VecOfServed_c dResult;
@@ -17618,7 +17629,7 @@ static void CheckIndexesForSeamlessAndStartRotation ( VecOfServed_c dDeferredInd
 		auto* pIndex = dDeferredIndexes[i].second.Ptr();
 		assert ( pIndex );
 
-		if ( !ServedDesc_t::IsMutable ( pIndex ) && CheckIndexHeaderRotate(*pIndex)==RotateFrom_e::NONE )
+		if ( !ServedDesc_t::IsMutable ( pIndex ) && CheckIndexRotate_c ( *pIndex ).NothingToRotate() )
 		{
 			++iNotCapableForSeamlessRotation;
 			sphWarning ( "queue[] = %s", sIdx.cstr() );
@@ -17704,7 +17715,7 @@ static void DoGreedyRotation ( VecOfServed_c&& dDeferredIndexes ) REQUIRES ( Mai
 
 
 // ServiceMain() -> TickHead() -> [CallCoroutine] -> CheckRotate()
-static void CheckRotate () REQUIRES ( MainThread ) EXCLUDES ( g_tRotateThreadMutex )
+static void CheckRotate () REQUIRES ( MainThread )
 {
 	// do we need to rotate now? If no sigHUP received, or if we are already rotating - no.
 //	if ( !g_bNeedRotate || g_bInRotate || IsConfigless() )
@@ -17741,16 +17752,10 @@ static void CheckRotate () REQUIRES ( MainThread ) EXCLUDES ( g_tRotateThreadMut
 		g_bReloadForced = false;
 	}
 
-	VecOfServed_c dDeferredIndexes;
-	{
-		// we want rotation thread to wait until we're done with our new rotation priorities
-		ScopedMutex_t tBlockRotations ( g_tRotateThreadMutex );
+	if ( !bReloadHappened )
+		IssuePlainOldRotation ( hDeferredIndexes );
 
-		if ( !bReloadHappened )
-			IssuePlainOldRotation ( hDeferredIndexes );
-
-		dDeferredIndexes = ConvertHashToPrioritySortedVec ( hDeferredIndexes );
-	}
+	VecOfServed_c dDeferredIndexes = ConvertHashToPrioritySortedVec ( hDeferredIndexes );
 
 	for ( const auto& s : dDeferredIndexes )
 		sphWarning ( "will rotate %s", s.first.cstr() );

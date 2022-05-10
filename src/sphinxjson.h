@@ -148,7 +148,7 @@ inline DWORD sphJsonUnpackInt ( const BYTE ** pp )
 
 // lookup table
 // combo of IsEscapeChar + GetEscapedChar with the table works 25..150 times faster!
-alignas ( 128 ) static const BYTE g_JsonEscapingLookupTable[] = {
+alignas ( 128 ) constexpr BYTE g_JsonEscapingLookupTable[] = {
 	0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07, 'b'|0x80, 't'|0x80, 'n'|0x80, 0x0b, 'f'|0x80, 'r'|0x80, 0x0e, 0x0f,
 	0x10,0x11,0x12,0x13,0x14,0x15,0x16,0x17, 0x18,0x19,0x1a,0x1b,0x1c,0x1d,0x1e,0x1f,
 	0x20,0x21,'\"'|0x80,0x23,0x24,0x25,0x26,0x27, 0x28,0x29,0x2a,0x2b,0x2c,0x2d,0x2e,0x2f,
@@ -163,14 +163,14 @@ struct EscapeJsonString_t : public BaseQuotation_t
 {
 	static const char cQuote = '"';
 
-	inline static bool IsEscapeChar ( char c )
+	static constexpr bool IsEscapeChar ( char c )
 	{
 		return ( c & 0x80 ) ? false : g_JsonEscapingLookupTable[(BYTE) c] & 0x80;
 
 		//return strchr ( "\"\\\b\f\n\r\t", c )!=nullptr; // \ is \x5C, " is \x22
 	}
 
-	inline static char GetEscapedChar ( char c )
+	static constexpr char GetEscapedChar ( char c )
 	{
 		return g_JsonEscapingLookupTable[(BYTE) c] & 0x7F;
 
@@ -189,7 +189,7 @@ struct EscapeJsonString_t : public BaseQuotation_t
 	}
 
 	// that is simple: all spaces we already processed by escaping, so only plain chars here expected, no need to change
-	inline static char FixupSpaceWithEscaping ( char c )
+	static constexpr char FixupSpaceWithEscaping ( char c )
 	{
 		return c;
 	}

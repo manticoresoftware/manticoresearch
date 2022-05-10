@@ -112,7 +112,7 @@ private:
 			break;
 		case ADD_NEEDLOAD:
 			assert ( ServedDesc_t::IsLocal ( pFreshLocal ) ); // that is: PLAIN, RT, or PERCOLATE
-			if ( pFreshLocal->m_eType == IndexType_e::PLAIN && !PreloadKlistTarget ( *pFreshLocal, CheckIndexHeaderRotate ( *pFreshLocal ), pFreshLocal->m_dKilllistTargets ) )
+			if ( pFreshLocal->m_eType == IndexType_e::PLAIN && !PreloadKlistTarget ( *pFreshLocal, CheckIndexRotate_c ( *pFreshLocal ), pFreshLocal->m_dKilllistTargets ) )
 				pFreshLocal->m_dKilllistTargets.Reset();
 			AddDeferred ( sIndex, std::move ( pFreshLocal ) );
 			break;
@@ -130,8 +130,8 @@ private:
 	void PreparePlainRotationIfNeed ( const CSphString& sIndex, const cServedIndexRefPtr_c& pAlreadyServed )
 	{
 		assert ( pAlreadyServed->m_eType == IndexType_e::PLAIN );
-		if ( CheckIndexHeaderRotate ( *pAlreadyServed ) != RotateFrom_e::NEW )
-			return KeepExisting ( sIndex ); // no need to rotate, but need to keep it
+		if ( !CheckIndexRotate_c ( *pAlreadyServed ).RotateFromNew() )
+			return KeepExisting ( sIndex ); // no .new, no need to rotate, just keep existing
 
 		ServedIndexRefPtr_c pIndex = MakeCloneForRotation ( pAlreadyServed, sIndex );
 

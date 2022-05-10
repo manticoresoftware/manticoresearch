@@ -80,12 +80,12 @@ PublicThreadDesc_t GatherPublicTaskInfo ( const Threads::LowThreadDesc_t * pSrc,
 // fill PublicThreadDesc from given type. Byte returned by registrar is then became ID of that type of info,
 // and has to be written in m_eType field of each instance of such info
 using RenderFnPtr = void ( * ) ( const void * pSrc, PublicThreadDesc_t & dDst );
-BYTE RegisterRenderer ( RenderFnPtr pFunc );
+BYTE RegisterRenderer ( RenderFnPtr pFunc ) noexcept;
 
 // Declare static member func 'Render', and provide initial registration and storing type ID
 #define DECLARE_RENDER( TASKINFO )    \
     static BYTE m_eTask;    \
-    TASKINFO () {  \
+    TASKINFO () noexcept {  \
         if (!m_eTask) m_eTask = RegisterRenderer ( TASKINFO::Render ); \
         m_eType = m_eTask; \
     }                                  \

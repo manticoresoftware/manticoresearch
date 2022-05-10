@@ -19,45 +19,41 @@ enum class RotateFrom_e : BYTE {
 	REENABLE, // just load the index
 };
 
-RotateFrom_e CheckIndexHeaderRotate ( const ServedDesc_t& tServed );
-
-class RotationError_c final: public std::exception
+class CheckIndexRotate_c
 {
-	bool m_bFatal = false;
-	mutable CSphString m_sWhat;
+	RotateFrom_e m_eRotateFrom;
 
 public:
-	explicit RotationError_c ( CSphString sMsg, bool bFatal=false ) noexcept
-		: m_bFatal ( bFatal )
-		, m_sWhat ( std::move ( sMsg ) )
-	{}
-	RotationError_c ( const RotationError_c& ) = default;
-
-	~RotationError_c() noexcept final = default;
-
-	bool IsFatal() const noexcept { return m_bFatal; }
-	CSphString sWhat() const noexcept { return m_sWhat; }
+	explicit CheckIndexRotate_c ( const ServedDesc_t& tServed );
+	bool NothingToRotate() const noexcept;
+	bool RotateFromNew() const noexcept;
+	inline operator RotateFrom_e() const noexcept { return m_eRotateFrom; }
 };
 
-
-class IndexRotator_c : public ISphNoncopyable
+class StepAction_c
 {
-	class Impl_c;
-	Impl_c * m_pImpl;
+public:
+	virtual bool Action() = 0;
+	virtual ~StepAction_c() = default;
+};
+using StepActionPtr_c = std::unique_ptr<StepAction_c>;
+
+StepActionPtr_c RenameIdx ( CSphIndex* pIdx, const CSphString& sTo );
+StepActionPtr_c RenameIdxSuffix ( const cServedIndexRefPtr_c& pIdx, const char* szToExt );
+
+class IndexFiles_c;
+StepActionPtr_c RenameFiles ( IndexFiles_c& tFiles, const char* szFromExt, const char* szToExt );
+
+class ActionSequence_c: public ISphNoncopyable
+{
+	CSphSwapVector<StepActionPtr_c> m_dActions;
+	std::pair<CSphString, bool> m_tError;
+	int m_iRun = 0;
 
 public:
-	IndexRotator_c( const CSphString& sServedPath, const char* szIndex );
-	~IndexRotator_c();
-	bool ConfigureIfNeed () noexcept;
-	CSphString GetNewBase() const noexcept;
-	bool NeedMoveFiles() const noexcept;
+	void Defer ( StepActionPtr_c&& pAction );
+	bool RunDefers();
+	bool UnRunDefers();
 
-	void BackupIfNeed ( CSphIndex* pIdx, std::function<void ( CSphString )> fnClean );
-	void MoveIndex ( CSphIndex* pIdx );
-
-	void BackupFilesIfNeed();
-	void MoveFiles();
-	bool RollbackMovingFiles();
-
-	void CleanBackup() const noexcept;
+	std::pair<CSphString, bool> GetError() const;
 };

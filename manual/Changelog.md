@@ -506,10 +506,12 @@ The official Docker image is now based on Ubuntu 20.04 LTS
 
 Besides the usual `manticore` package, you can also install Manticore Search by components:
 
-- `manticore-server` - provides `searchd`, config and service files
-- `manticore-tools` - provides auxiliary tools ( `indexer`, `indextool` etc.)
-- `manticore-icudata` - provides ICU data file for icu morphology usage
-- `manticore-dev` (DEB) or `manticore-devel` (RPM) - provides dev headers for UDFs
+- `manticore-server-core` - provides `searchd`, manpage, log dir, API and galera module. It will also install `manticore-common` as the dependency.
+- `manticore-server` - provides automation scripts for core (init.d, systemd), and `manticore_new_cluster` wrapper. It will also install `manticore-server-core` as the dependency.
+- `manticore-common` - provides config, stopwords, generic docs and skeleton folders (datadir, modules, etc.)
+- `manticore-tools` - provides auxiliary tools ( `indexer`, `indextool` etc.), their manpages and examples. It will also install `manticore-common` as the dependency.
+- `manticore-icudata` (RPM) or `manticore-icudata-65l` (DEB) - provides ICU data file for icu morphology usage.
+- `manticore-devel` (RPM) or `manticore-dev` (DEB) - provides dev headers for UDFs.
 
 ### Bugifixes
 

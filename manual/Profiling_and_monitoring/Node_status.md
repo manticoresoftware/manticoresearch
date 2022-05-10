@@ -99,6 +99,8 @@ SHOW STATUS;
 | dist_queries          | 0                         |
 | workers_total         | 30                        |
 | workers_active        | 1                         |
+| workers_clients       | 0                         |
+| workers_clients_vip   | 1                         |
 | work_queue_length     | 1                         |
 | query_wall            | 10.805                    |
 | query_cpu             | OFF                       |

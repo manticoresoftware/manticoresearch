@@ -18,7 +18,7 @@ namespace { // static
 	std::atomic<BYTE> uFreeInfoSlot {1}; // 0-th slot is a mark of 'invalid'
 }
 
-BYTE RegisterRenderer ( RenderFnPtr pFunc )
+BYTE RegisterRenderer ( RenderFnPtr pFunc ) noexcept
 {
 	BYTE uRender = uFreeInfoSlot.fetch_add ( 1, std::memory_order_relaxed );
 	pInfos[uRender] = pFunc;

@@ -479,7 +479,7 @@ TEST ( functions, strinbguilder_appendf )
 
 struct EscapeQuotation_t : public BaseQuotation_t
 {
-	inline static bool IsEscapeChar ( char c )
+	static constexpr bool IsEscapeChar ( char c )
 	{
 		return ( c=='\\' || c=='\'' );
 	}

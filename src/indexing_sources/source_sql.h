@@ -28,7 +28,7 @@ enum ESphUnpackFormat
 
 struct SqlQuotation_t : public BaseQuotation_t
 {
-	inline static bool IsEscapeChar ( char c )
+	static constexpr bool IsEscapeChar ( char c )
 	{
 		return ( c=='\\' || c=='\'' || c=='\t' );
 	}

@@ -2691,7 +2691,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 
 struct EscapeQuotation_t : public BaseQuotation_t
 {
-	inline static bool IsEscapeChar ( char c )
+	static constexpr bool IsEscapeChar ( char c )
 	{
 		return ( c=='\\' || c=='\'' );
 	}

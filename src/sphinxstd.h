@@ -2673,7 +2673,7 @@ private:
 	{ if ( m_sValue!=EMPTY ) SafeDeleteArray ( m_sValue ); }
 
 public:
-	CSphString () = default;
+	CSphString () noexcept = default;
 
 	// take a note this is not an explicit constructor
 	// so a lot of silent constructing and deleting of strings is possible
@@ -3304,7 +3304,7 @@ public:
 	void DtoA ( double fVal );
 
 protected:
-	static const BYTE GROW_STEP = 64; // how much to grow if no space left
+	static constexpr BYTE GROW_STEP = 64; // how much to grow if no space left
 
 	char *			m_szBuffer = nullptr;
 	int				m_iSize = 0;
@@ -3420,15 +3420,15 @@ struct BaseQuotation_t
 	static const char cQuote = '\'';
 
 	// returns true to chars need to escape
-	inline static bool IsEscapeChar ( char c ) {return false;}
+	static constexpr bool IsEscapeChar ( char c ) {return false;}
 
 	// called if char need to escape to map into another
-	inline static char GetEscapedChar ( char c ) { return c; }
+	static constexpr char GetEscapedChar ( char c ) { return c; }
 
 	// replaces \t, \n, \r into spaces
-	inline static char FixupSpace ( char c )
+	static constexpr char FixupSpace ( char c )
 	{
-		alignas ( 16 ) static const char dSpacesLookupTable[] = {
+		alignas ( 16 ) constexpr char dSpacesLookupTable[] = {
 			0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,' ', ' ', 0x0b, 0x0c, ' ', 0x0e, 0x0f
 		};
 		return ( c & 0xF0 ) ? c : dSpacesLookupTable[(BYTE) c];
@@ -3436,7 +3436,7 @@ struct BaseQuotation_t
 
 	// if simultaneous escaping and fixup spaces - may use the fact that if char is escaping,
 	// it will pass to GetEscapedChar, and will NOT be passed to FixupSpaces, so may optimize for speed
-	inline static char FixupSpaceWithEscaping ( char c ) { return FixupSpace (c); }
+	static constexpr char FixupSpaceWithEscaping ( char c ) { return FixupSpace (c); }
 };
 
 

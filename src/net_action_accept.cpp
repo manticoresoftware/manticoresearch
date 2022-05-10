@@ -220,6 +220,7 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 						pInfo->SetClientSession ( &tSession );
 						MultiServe ( std::unique_ptr<AsyncNetBuffer_c> ( pRawBuf ), tConn, eProto );
 						pInfo->SetClientSession ( nullptr );
+						pInfo->ClientFinished();
 					}, fnMakeScheduler () );
 				break;
 			}
@@ -232,6 +233,7 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 						pInfo->SetClientSession( &tSession );
 						SqlServe ( std::unique_ptr<AsyncNetBuffer_c> ( pRawBuf ) );
 						pInfo->SetClientSession ( nullptr );
+						pInfo->ClientFinished();
 					}, fnMakeScheduler () );
 				break;
 			}
@@ -240,6 +242,7 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 				break;
 
 			default:
+				pClientInfo->ClientFinished();
 				break;
 		}
 		sphLogDebugv ( "%p accepted %s, sock=%d, tick=%u", this,

@@ -328,6 +328,7 @@ agent_retry: 0
 queries: 17
 dist_queries: 1
 workers_clients: 1
+workers_clients_vip: 0
 work_queue_length: 3
 ag_dist_1_1_connect_failures: 0
 ag_dist_1_1_network_errors: 0

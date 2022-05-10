@@ -8720,6 +8720,7 @@ void BuildStatus ( VectorLike & dStatus )
 	dStatus.MatchTupletf ( "workers_total", "%d", GlobalWorkPool ()->WorkingThreads () );
 	dStatus.MatchTupletf ( "workers_active", "%d", myinfo::CountAll () );
 	dStatus.MatchTupletf ( "workers_clients", "%d", myinfo::CountClients () );
+	dStatus.MatchTupletf ( "workers_clients_vip", "%u", session::GetVips() );
 	dStatus.MatchTupletf ( "work_queue_length", "%d", GlobalWorkPool ()->Works () );
 
 	assert ( g_pDistIndexes );
@@ -8832,6 +8833,7 @@ void BuildStatusOneline ( StringBuilder_c & sOut )
 	<< " Threads:" << iThreads
 	<< " Queue:" << iQueue
 	<< " Clients:" << myinfo::CountClients()
+	<< " Vip clients:" << session::GetVips()
 	<< " Tasks:" << iTasks
 	<< " Queries:" << g_tStats.m_iQueries.load ( std::memory_order_relaxed );
 	sOut.Sprintf ( " Wall: %t", (int64_t)g_tStats.m_iQueryTime.load ( std::memory_order_relaxed ) );
@@ -15662,7 +15664,7 @@ ServedIndexRefPtr_c MakeCloneForRotation ( const cServedIndexRefPtr_c& pSource, 
 	return pRes;
 }
 
-static bool RotateIndexMT ( ServedIndexRefPtr_c& pNewServed, const CSphString& sIndex, StrVec_t& dWarnings, CSphString& sError );
+static bool LimitedRotateIndexMT ( ServedIndexRefPtr_c& pNewServed, const CSphString& sIndex, StrVec_t& dWarnings, CSphString& sError ) EXCLUDES ( MainThread );
 static bool RotateIndexGreedy ( const ServedIndex_c& tServed, const char* szIndex, CSphString& sError ) REQUIRES ( tServed.m_pIndex->Locker() );
 
 static void HandleMysqlReloadIndex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
@@ -15704,7 +15706,7 @@ static void HandleMysqlReloadIndex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 	if ( g_bSeamlessRotate )
 	{
 		ServedIndexRefPtr_c pNewServed = MakeCloneForRotation ( pServed, tStmt.m_sIndex );
-		if ( !RotateIndexMT ( pNewServed, tStmt.m_sIndex, dWarnings, sError ) )
+		if ( !LimitedRotateIndexMT ( pNewServed, tStmt.m_sIndex, dWarnings, sError ) )
 		{
 			sphWarning ( "%s", sError.cstr() );
 			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
@@ -16861,14 +16863,6 @@ bool RotateIndexMT ( ServedIndexRefPtr_c& pNewServed, const CSphString & sIndex,
 {
 	assert ( pNewServed && pNewServed->m_eType == IndexType_e::PLAIN );
 
-	// allow to run several rotations a time (in parallel)
-	// limit is arbitrary set to N-1 of threadpool (so, at least 1 thread left available for usual tasks)
-	assert ( Threads::IsInsideCoroutine() );
-	static Coro::Waitable_T<int> iParallelRotations { 0 };
-	iParallelRotations.Wait ( [] ( int i ) { return i < Max ( 1, NThreads() / 2 ); } );
-	iParallelRotations.ModifyValue ( [] ( int& i ) { ++i; } );
-	auto _ = AtScopeExit ( [] { iParallelRotations.ModifyValueAndNotifyOne ( [] ( int& i ) { --i; } ); } );
-
 	sphInfo ( "rotating index '%s': started", sIndex.cstr() );
 	CheckIndexRotate_c tCheck ( *pNewServed );
 	if ( tCheck.NothingToRotate() )
@@ -16996,6 +16990,25 @@ static void InvokeRotation ( VecOfServed_c&& dDeferredIndexes ) REQUIRES ( MainT
 		iRotationTask = TaskManager::RegisterGlobal ("Rotation task", TaskRotation, AbortRotation, 1, 1);
 
 	TaskManager::StartJob ( iRotationTask, pIndexesForRotation.release() );
+}
+
+bool LimitedRotateIndexMT ( ServedIndexRefPtr_c& pNewServed, const CSphString& sIndex, StrVec_t& dWarnings, CSphString& sError ) EXCLUDES ( MainThread )
+{
+	assert ( Threads::IsInsideCoroutine() );
+
+	// allow to run several rotations a time (in parallel)
+	// vip conns has no limit
+	if ( session::GetVip() )
+		return RotateIndexMT ( pNewServed, sIndex, dWarnings, sError );
+
+	// limit is arbitrary set to N/2 of threadpool
+	static Coro::Waitable_T<int> iParallelRotations { 0 };
+	iParallelRotations.Wait ( [] ( int i ) { return i < Max ( 1, NThreads() / 2 ); } );
+	iParallelRotations.ModifyValue ( [] ( int& i ) { ++i; } );
+	auto _ = AtScopeExit ( [] {
+		iParallelRotations.ModifyValueAndNotifyOne ( [] ( int& i ) { --i; } );
+	});
+	return RotateIndexMT ( pNewServed, sIndex, dWarnings, sError );
 }
 
 void ConfigureLocalIndex ( ServedDesc_t * pIdx, const CSphConfigSection & hIndex, bool bMutableOpt, StrVec_t * pWarnings )

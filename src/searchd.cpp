@@ -16856,16 +16856,18 @@ static bool PreallocNewIndex ( ServedIndex_c & tIdx, const char * szIndexName, S
 	return PreallocNewIndex ( tIdx, pIndexConfig, szIndexName, dWarnings, sError );
 }
 
-static CSphMutex g_tRotateThreadMutex;
-
 // called either from MysqlReloadIndex, either from Rotation task (never from main thread).
-bool RotateIndexMT ( ServedIndexRefPtr_c& pNewServed, const CSphString & sIndex, StrVec_t & dWarnings, CSphString & sError )
-	EXCLUDES ( MainThread, g_tRotateThreadMutex )
+bool RotateIndexMT ( ServedIndexRefPtr_c& pNewServed, const CSphString & sIndex, StrVec_t & dWarnings, CSphString & sError ) EXCLUDES ( MainThread )
 {
 	assert ( pNewServed && pNewServed->m_eType == IndexType_e::PLAIN );
 
-	// only one rotation and reload thread allowed to prevent deadlocks
-	ScopedMutex_t tBlockRotations ( g_tRotateThreadMutex );
+	// allow to run several rotations a time (in parallel)
+	// limit is arbitrary set to N-1 of threadpool (so, at least 1 thread left available for usual tasks)
+	assert ( Threads::IsInsideCoroutine() );
+	static Coro::Waitable_T<int> iParallelRotations { 0 };
+	iParallelRotations.Wait ( [] ( int i ) { return i < Max ( 1, NThreads() / 2 ); } );
+	iParallelRotations.ModifyValue ( [] ( int& i ) { ++i; } );
+	auto _ = AtScopeExit ( [] { iParallelRotations.ModifyValueAndNotifyOne ( [] ( int& i ) { --i; } ); } );
 
 	sphInfo ( "rotating index '%s': started", sIndex.cstr() );
 	CheckIndexRotate_c tCheck ( *pNewServed );
@@ -17543,7 +17545,7 @@ static void SetIndexPriority ( IndexWithPriority_t & tIndex, int iPriority, cons
 	}
 }
 
-static VecOfServed_c ConvertHashToPrioritySortedVec ( const HashOfServed_c& hDeferredIndexes ) REQUIRES ( MainThread, g_tRotateThreadMutex )
+static VecOfServed_c ConvertHashToPrioritySortedVec ( const HashOfServed_c& hDeferredIndexes ) REQUIRES ( MainThread )
 {
 	SmallStringHash_T<IndexWithPriority_t> tIndexesToRotate;
 	VecOfServed_c dResult;
@@ -17700,7 +17702,7 @@ static void DoGreedyRotation ( VecOfServed_c&& dDeferredIndexes ) REQUIRES ( Mai
 
 
 // ServiceMain() -> TickHead() -> [CallCoroutine] -> CheckRotate()
-static void CheckRotate () REQUIRES ( MainThread ) EXCLUDES ( g_tRotateThreadMutex )
+static void CheckRotate () REQUIRES ( MainThread )
 {
 	// do we need to rotate now? If no sigHUP received, or if we are already rotating - no.
 //	if ( !g_bNeedRotate || g_bInRotate || IsConfigless() )
@@ -17737,16 +17739,10 @@ static void CheckRotate () REQUIRES ( MainThread ) EXCLUDES ( g_tRotateThreadMut
 		g_bReloadForced = false;
 	}
 
-	VecOfServed_c dDeferredIndexes;
-	{
-		// we want rotation thread to wait until we're done with our new rotation priorities
-		ScopedMutex_t tBlockRotations ( g_tRotateThreadMutex );
+	if ( !bReloadHappened )
+		IssuePlainOldRotation ( hDeferredIndexes );
 
-		if ( !bReloadHappened )
-			IssuePlainOldRotation ( hDeferredIndexes );
-
-		dDeferredIndexes = ConvertHashToPrioritySortedVec ( hDeferredIndexes );
-	}
+	VecOfServed_c dDeferredIndexes = ConvertHashToPrioritySortedVec ( hDeferredIndexes );
 
 	for ( const auto& s : dDeferredIndexes )
 		sphWarning ( "will rotate %s", s.first.cstr() );

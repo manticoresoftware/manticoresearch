@@ -29,8 +29,6 @@ done
 for f in build/*.gz; do
   if [ -f "$f" ]; then
     get_destination
-    curl -is --user "${REPO_USER}:${REPO_SECRET}" --upload-file $f $REPO_IP/repository/manticoresearch_macos/$DESTINATION/${f##*/} \
-    && echo "Uploaded $f to manticoresearch_macos/$DESTINATION"
 
     echo -e "Copy $f to /mnt/repo_storage/manticoresearch_macos/$DESTINATION/";
     cp $f /mnt/repo_storage/manticoresearch_macos/$DESTINATION/ && echo -e "Success"

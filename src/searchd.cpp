@@ -15727,8 +15727,7 @@ static void HandleMysqlReloadIndex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 		StringBuilder_c sWarn ( "; " );
 		for ( const auto & i : dWarnings )
 			sWarn << i;
-
-		sWarning = sWarn.cstr();
+		sWarn.MoveTo ( sWarning );
 	}
 
 	tOut.Ok();
@@ -17279,7 +17278,6 @@ static ResultAndIndex_t LoadRTPercolate ( bool bRT, const char* szIndexName, con
 		pServed->m_eType = IndexType_e::PERCOLATE;
 	}
 
-	pServed->m_sIndexPath = hIndex["path"].strval ();
 	pIdx->SetMutableSettings ( pServed->m_tSettings );
 	pIdx->m_iExpansionLimit = g_iExpansionLimit;
 	pIdx->SetGlobalIDFPath ( pServed->m_sGlobalIDFPath );

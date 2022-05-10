@@ -1073,7 +1073,10 @@ public:
 	virtual void				Preread () = 0;
 
 	/// set new index base path
-	virtual void				SetBase ( CSphString sNewBase ) = 0;
+	void SetBase ( CSphString sNewBase )
+	{
+		m_sFilename = std::move ( sNewBase );
+	}
 
 	/// set new index base path, and physically rename index files too
 	enum RenameResult_e { RE_OK, RE_FAIL, RE_FATAL };
@@ -1237,7 +1240,6 @@ public:
 	bool				Prealloc ( bool, FilenameBuilder_i *, StrVec_t & ) override { return false; }
 	void				Dealloc () override {}
 	void				Preread () override {}
-	void				SetBase ( CSphString ) override {}
 	RenameResult_e		RenameEx ( CSphString ) override { return RE_FAIL; }
 	bool				Lock () override { return true; }
 	void				Unlock () override {}

@@ -747,6 +747,7 @@ class RunningIndex_c: public ISphRefcountedMT
 	mutable CSphString m_sUnlink;								///< set if we need to unlink the index on destroy.
 	bool m_bLeaked = false;										///< avoid destroying index on dtr (say, if it's ownership changed due to Attach() )
 
+private:
 	~RunningIndex_c() override;
 
 	template<typename IDX> friend class RIdx_T;
@@ -808,14 +809,14 @@ ServedIndexRefPtr_c MakeServedIndex();
 template<typename PIDX>
 class SCOPED_CAPABILITY RIdx_T : ISphNoncopyable
 {
-	const RunningIndex_c& m_tRunningIndex;
 	CSphRefcountedPtr<const ISphRefcountedMT> m_pServedKeeper;
+	const RunningIndex_c& m_tRunningIndex;
 
 public:
 	// acquire read (shared) lock
 	explicit RIdx_T ( const cServedIndexRefPtr_c& pServed ) ACQUIRE_SHARED ( ( *pServed ).m_pIndex->Locker(), m_tRunningIndex.m_tLock )
-		: m_tRunningIndex { *pServed->m_pIndex }
-		, m_pServedKeeper { pServed }
+		: m_pServedKeeper { pServed }
+		, m_tRunningIndex { *pServed->m_pIndex }
 	{
 		assert ( pServed );
 		m_tRunningIndex.m_tLock.ReadLock();
@@ -837,14 +838,14 @@ using RWIdx_c = RIdx_T<CSphIndex*>;			// read-lock backend, and provide non-cons
 template<typename PIDX>
 class SCOPED_CAPABILITY WIdx_T : ISphNoncopyable
 {
-	RunningIndex_c& m_tRunningIndex;
 	CSphRefcountedPtr<const ISphRefcountedMT> m_pServedKeeper;
+	RunningIndex_c& m_tRunningIndex;
 
 public:
 	// acquire write (exclusive) lock
 	explicit WIdx_T ( const cServedIndexRefPtr_c& pServed ) ACQUIRE ( (*pServed).m_pIndex->Locker() ) ACQUIRE ( m_tRunningIndex.m_tLock )
-		: m_tRunningIndex { *pServed->m_pIndex }
-		, m_pServedKeeper { pServed }
+		: m_pServedKeeper { pServed }
+		, m_tRunningIndex { *pServed->m_pIndex }
 	{
 		assert ( pServed );
 		m_tRunningIndex.m_tLock.WriteLock();
@@ -852,8 +853,8 @@ public:
 
 	// acquire write (exclusive) lock
 	explicit WIdx_T ( const ServedIndexRefPtr_c& pServed ) ACQUIRE ( ( *pServed ).m_pIndex->Locker() ) ACQUIRE ( m_tRunningIndex.m_tLock )
-		: m_tRunningIndex { *pServed->m_pIndex }
-		, m_pServedKeeper { pServed }
+		: m_pServedKeeper { pServed }
+		, m_tRunningIndex { *pServed->m_pIndex }
 	{
 		assert ( pServed );
 		m_tRunningIndex.m_tLock.WriteLock();

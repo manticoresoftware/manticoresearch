@@ -57,6 +57,8 @@ variables:
     - if: $CI_MERGE_REQUEST_ID
       when: manual
       allow_failure: true
+    - if: $CI_COMMIT_BRANCH == "master" || $CI_COMMIT_BRANCH =~ /^manticore-.*$/
+      when: on_success
 
 .collect_deb:
   extends: [ .collect_job ]

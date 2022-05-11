@@ -36,7 +36,6 @@ private:
 	bool m_bSsl = false;
 	bool m_bVip = false;
 	bool m_bReadOnly = false;
-	static int m_iVips;
 
 	// session variables - doesn't participate in render, used as connection-wide globals
 public:
@@ -48,12 +47,12 @@ public:
 	ESphCollation m_eCollation { GlobalCollation () };
 	Profile_e			m_eProfile { Profile_e::NONE };
 	bool m_bPersistent = false;
+	static int m_iVips;
 
 private:
 	ClientSession_c* 	m_pSession = nullptr;
 
 public:
-	void ClientFinished(); // as client info out of scope not destroyed immediately, but goes to hazard ptr, this provides better tracking.
 
 	// generic setters/getters. They're defined just to help keep multi-threading clean.
 	void SetTaskState ( TaskState_e eState );
@@ -71,7 +70,7 @@ public:
 	void SetSsl ( bool bSsl ) { m_bSsl = bSsl; }
 	bool GetSsl() const { return m_bSsl; }
 
-	void SetVip ( bool bVip ) { m_bVip = bVip; if (m_bVip) ++m_iVips; }
+	void SetVip ( bool bVip ) { m_bVip = bVip; }
 	bool GetVip() const { return m_bVip; }
 	inline static int GetVips() { return m_iVips; }
 
@@ -111,8 +110,6 @@ public:
 public:
 	static ClientTaskInfo_t& Info ( bool bStrict = false );
 };
-
-using ScopedClientInfo_t = ScopedInfo_T<ClientTaskInfo_t>;
 
 namespace session {
 

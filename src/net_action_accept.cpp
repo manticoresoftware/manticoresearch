@@ -114,6 +114,27 @@ static DWORD NextConnectionID()
 	return g_iConnectionID.fetch_add ( 1, std::memory_order_relaxed );
 }
 
+class ScopedClientInfo_c: public ScopedInfo_T<ClientTaskInfo_t>
+{
+	bool m_bVip;
+
+public:
+	explicit ScopedClientInfo_c ( ClientTaskInfo_t* pInfo )
+		: ScopedInfo_T<ClientTaskInfo_t> ( pInfo )
+		, m_bVip ( pInfo->GetVip() )
+	{
+		if ( m_bVip )
+			++ClientTaskInfo_t::m_iVips;
+	}
+
+	~ScopedClientInfo_c()
+	{
+		if ( m_bVip )
+			--ClientTaskInfo_t::m_iVips;
+	}
+};
+
+
 void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * _pLoop )
 {
 	if ( CheckSocketError ( uGotEvents ) || sphInterrupted () )
@@ -215,12 +236,11 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 			{
 				Threads::Coro::Go ( [pRawBuf = pBuf.release(), tConn, _pInfo = pClientInfo.release(), eProto ] () mutable
 					{
-						ScopedClientInfo_t pInfo { _pInfo }; // make visible task info
+						ScopedClientInfo_c pInfo { _pInfo }; // make visible task info
 						ClientSession_c tSession;			 // session variables and state (shorter lifetime than ClientInfo's)
 						pInfo->SetClientSession ( &tSession );
 						MultiServe ( std::unique_ptr<AsyncNetBuffer_c> ( pRawBuf ), tConn, eProto );
 						pInfo->SetClientSession ( nullptr );
-						pInfo->ClientFinished();
 					}, fnMakeScheduler () );
 				break;
 			}
@@ -228,12 +248,11 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 			{
 				Threads::Coro::Go ( [pRawBuf = pBuf.release(), _pInfo = pClientInfo.release() ] () mutable
 					{
-						ScopedClientInfo_t pInfo { _pInfo }; // make visible task info
+						ScopedClientInfo_c pInfo { _pInfo }; // make visible task info
 						ClientSession_c tSession;			 // session variables and state (shorter lifetime than ClientInfo's)
 						pInfo->SetClientSession( &tSession );
 						SqlServe ( std::unique_ptr<AsyncNetBuffer_c> ( pRawBuf ) );
 						pInfo->SetClientSession ( nullptr );
-						pInfo->ClientFinished();
 					}, fnMakeScheduler () );
 				break;
 			}
@@ -242,7 +261,6 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 				break;
 
 			default:
-				pClientInfo->ClientFinished();
 				break;
 		}
 		sphLogDebugv ( "%p accepted %s, sock=%d, tick=%u", this,

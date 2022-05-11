@@ -13,12 +13,6 @@
 
 int ClientTaskInfo_t::m_iVips = 0;
 
-void ClientTaskInfo_t::ClientFinished()
-{
-	if ( m_bVip )
-		--m_iVips;
-}
-
 DEFINE_RENDER ( ClientTaskInfo_t )
 {
 	auto& tInfo = *(ClientTaskInfo_t*)pSrc;

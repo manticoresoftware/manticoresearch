@@ -106,15 +106,22 @@ struct TaskInfo_t
 	BYTE m_eType;
 };
 
-namespace internal_myinfo {
-	void RefCountInc ( BYTE eType );
-	void RefCountDec ( BYTE eType );
-}
+struct RefCount_t {
+	static void Inc ( BYTE eType );
+	static void Dec ( BYTE eType );
+};
+
+struct NoRefCount_t
+{
+	static void Inc ( BYTE ) {}
+	static void Dec ( BYTE ) {}
+};
+
 // RAII task info
 // Store info to TLS root, stores previous root to the chain
 // On dtr restores stored chain as root and retire info (uses hazard pointers)
 // if explicit root provided - uses it instead of TLS root.
-template<typename TASKINFO>
+template<typename TASKINFO, typename REFCOUNT=RefCount_t>
 class ScopedInfo_T : public hazard::ScopedPtr_t<TASKINFO*>
 {
 	using BASE = hazard::ScopedPtr_t<TASKINFO*>;
@@ -124,20 +131,20 @@ public:
 		: BASE ( pInfo )
 	{
 		pInfo->m_pPrev = Threads::MyThd ().m_pTaskInfo.load ( std::memory_order_acquire );
-		internal_myinfo::RefCountInc ( TASKINFO::m_eTask );
+		REFCOUNT::Inc ( TASKINFO::m_eTask );
 		Threads::MyThd ().m_pTaskInfo.store ( pInfo, std::memory_order_release );
 	}
 
 	ScopedInfo_T ( ScopedInfo_T && rhs ) noexcept
 	{
 		BASE::Swap ( rhs );
-		internal_myinfo::RefCountInc ( TASKINFO::m_eTask );
+		REFCOUNT::Inc ( TASKINFO::m_eTask );
 	}
 
-	~ScopedInfo_T<TASKINFO> ()
+	~ScopedInfo_T ()
 	{
 		Threads::MyThd ().m_pTaskInfo.store ( ( BASE::operator TASKINFO * () )->m_pPrev, std::memory_order_release );
-		internal_myinfo::RefCountDec ( TASKINFO::m_eTask );
+		REFCOUNT::Dec ( TASKINFO::m_eTask );
 	}
 };
 
@@ -165,6 +172,7 @@ struct MiniTaskInfo_t : public TaskInfo_t
 };
 
 using ScopedMiniInfo_t = ScopedInfo_T<MiniTaskInfo_t>;
+using ScopedMiniInfoNoCount_t = ScopedInfo_T<MiniTaskInfo_t,NoRefCount_t>;
 
 // create and publish info about system task (what before did ThreadSystem_t)
 // command = 'SYSTEM', description = 'SYSTEM sDescription'
@@ -182,7 +190,7 @@ namespace myinfo {
 	// num of tasks with given type
 	int Count ( BYTE eType );
 
-	// num of all tasks
+	// sum of all counters. Note, that might be quite useless, as one task may be 'decorated' by another
 	int CountAll();
 
 	// first ptr to node with type eType
@@ -193,6 +201,10 @@ namespace myinfo {
 
 	// bind current taskinfo and add new scoped mini info for coro handler
 	Threads::Handler OwnMini ( Threads::Handler fnHandler );
+
+	// bind current taskinfo and add new scoped mini info for coro handler, without tracing N of mini
+	// (for example, if you call it as subroutine in the same context and don't want to count it as separate task)
+	Threads::Handler OwnMiniNoCount ( Threads::Handler fnHandler );
 
 	// first ptr to node of given type
 	template <typename TASKINFO>

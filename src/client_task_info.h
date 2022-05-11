@@ -175,6 +175,12 @@ namespace myinfo {
 		return Count ( ClientTaskInfo_t::m_eTask ) - session::GetVips();
 	}
 
+	// num of real tasks (that is mini-info + client-info)
+	inline int CountTasks()
+	{
+		return Count ( MiniTaskInfo_t::m_eTask ) + Count ( ClientTaskInfo_t::m_eTask );
+	}
+
 } // namespace myinfo
 
 

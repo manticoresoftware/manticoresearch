@@ -8718,7 +8718,7 @@ void BuildStatus ( VectorLike & dStatus )
 
 	// status of thread pool
 	dStatus.MatchTupletf ( "workers_total", "%d", GlobalWorkPool ()->WorkingThreads () );
-	dStatus.MatchTupletf ( "workers_active", "%d", myinfo::CountAll () );
+	dStatus.MatchTupletf ( "workers_active", "%d", myinfo::CountTasks () );
 	dStatus.MatchTupletf ( "workers_clients", "%d", myinfo::CountClients () );
 	dStatus.MatchTupletf ( "workers_clients_vip", "%u", session::GetVips() );
 	dStatus.MatchTupletf ( "work_queue_length", "%d", GlobalWorkPool ()->Works () );
@@ -8825,7 +8825,7 @@ void BuildStatusOneline ( StringBuilder_c & sOut )
 {
 	auto iThreads = GlobalWorkPool ()->WorkingThreads ();
 	auto iQueue = GlobalWorkPool ()->Works ();
-	auto iTasks = myinfo::CountAll ();
+	auto iTasks = myinfo::CountTasks ();
 	auto & g_tStats = gStats ();
 	sOut.StartBlock ( " " );
 	sOut

@@ -26,7 +26,7 @@ BYTE RegisterRenderer ( RenderFnPtr pFunc ) noexcept
 	return uRender;
 }
 
-void internal_myinfo::RefCountInc ( BYTE eType )
+void RefCount_t::Inc ( BYTE eType )
 {
 	if ( eType >= uFreeInfoSlot )
 		sphWarning ( "Wrong RefCountInc slot! type=%d, free slot = %d", eType, uFreeInfoSlot.load() );
@@ -36,7 +36,7 @@ void internal_myinfo::RefCountInc ( BYTE eType )
 		dCounters[eType].fetch_add ( 1, std::memory_order_relaxed );
 }
 
-void internal_myinfo::RefCountDec ( BYTE eType )
+void RefCount_t::Dec ( BYTE eType )
 {
 	if ( eType>=uFreeInfoSlot )
 		sphWarning ( "Wrong RefCountDec slot! type=%d, free slot = %d", eType, uFreeInfoSlot.load () );
@@ -148,6 +148,16 @@ Threads::Handler myinfo::OwnMini ( Threads::Handler fnHandler )
 	return [pParent, fnHandler = std::move ( fnHandler )] {
 		Threads::MyThd().m_pTaskInfo.store ( pParent, std::memory_order_release );
 		ScopedMiniInfo_t _ ( new MiniTaskInfo_t );
+		fnHandler();
+	};
+}
+
+Threads::Handler myinfo::OwnMiniNoCount ( Threads::Handler fnHandler )
+{
+	auto pParent = myinfo::HazardTaskInfo();
+	return [pParent, fnHandler = std::move ( fnHandler )] {
+		Threads::MyThd().m_pTaskInfo.store ( pParent, std::memory_order_release );
+		ScopedMiniInfoNoCount_t _ ( new MiniTaskInfo_t );
 		fnHandler();
 	};
 }

@@ -773,7 +773,7 @@ void ExecuteN ( int iConcurrency, Threads::Handler&& fnWorker )
 {
 	if ( iConcurrency==1 )
 	{
-		myinfo::OwnMini ( fnWorker ) ();
+		myinfo::OwnMiniNoCount ( fnWorker ) ();
 		return;
 	}
 
@@ -784,7 +784,7 @@ void ExecuteN ( int iConcurrency, Threads::Handler&& fnWorker )
 	auto dWaiter = DefferedRestarter ();
 	for ( int i = 1; i<iConcurrency; ++i )
 		Coro::Co ( Threads::WithCopiedCrashQuery ( fnWorker ), dWaiter );
-	myinfo::OwnMini ( fnWorker ) ();
+	myinfo::OwnMiniNoCount ( fnWorker ) ();
 	WaitForDeffered ( std::move ( dWaiter ));
 }
 

@@ -20,7 +20,13 @@ for f in build/*.rpm; do
   echo file $f
   tail=$(echo $f | sed 's_build/__g;s/[a-z]*-//g;')
   VER=$(echo $tail | cut -d. -f1,2,3,4,5)
-  ARCH=$(echo $tail | cut -d. -f6)
+  if [[ $tail == *".x86_64."* ]]; then
+    ARCH=x86_64
+  elif [[ $tail == *".arm64."* ]]; then
+    ARCH=arm64
+  elif [[ $tail == *".noarch."* ]]; then
+    ARCH=noarch
+  fi;
   if [ -f "$f" ]; then
     if [ -z "${IS_RELEASE_DIGIT}" ]; then
     IS_RELEASE_DIGIT=$(echo $f | cut -d. -f3 | cut -d_ -f1)
@@ -47,7 +53,7 @@ for f in build/*.rpm; do
 done
 
 # make bundle
-TGZ=manticore-${VER}.$arch.tgz
+TGZ=manticore-${VER}.${ARCH}.tgz
 (cd build && tar cf - $(ls | grep -v -e debuginfo) | gzip -9 -f) > $TGZ
 
 # upload bundle

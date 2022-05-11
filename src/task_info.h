@@ -118,33 +118,26 @@ template<typename TASKINFO>
 class ScopedInfo_T : public hazard::ScopedPtr_t<TASKINFO*>
 {
 	using BASE = hazard::ScopedPtr_t<TASKINFO*>;
-	BYTE m_eType;
 
 public:
 	explicit ScopedInfo_T ( TASKINFO* pInfo )
 		: BASE ( pInfo )
 	{
-		m_eType = TASKINFO::m_eTask;
 		pInfo->m_pPrev = Threads::MyThd ().m_pTaskInfo.load ( std::memory_order_acquire );
-		internal_myinfo::RefCountInc ( m_eType );
+		internal_myinfo::RefCountInc ( TASKINFO::m_eTask );
 		Threads::MyThd ().m_pTaskInfo.store ( pInfo, std::memory_order_release );
 	}
 
 	ScopedInfo_T ( ScopedInfo_T && rhs ) noexcept
 	{
 		BASE::Swap ( rhs );
-		if ( m_eType!=rhs.m_eType)
-		{
-			internal_myinfo::RefCountInc ( rhs.m_eType );
-			internal_myinfo::RefCountDec ( m_eType );
-			m_eType = rhs.m_eType;
-		}
+		internal_myinfo::RefCountInc ( TASKINFO::m_eTask );
 	}
 
 	~ScopedInfo_T<TASKINFO> ()
 	{
 		Threads::MyThd ().m_pTaskInfo.store ( ( BASE::operator TASKINFO * () )->m_pPrev, std::memory_order_release );
-		internal_myinfo::RefCountDec ( m_eType );
+		internal_myinfo::RefCountDec ( TASKINFO::m_eTask );
 	}
 };
 

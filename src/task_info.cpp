@@ -32,7 +32,8 @@ void internal_myinfo::RefCountInc ( BYTE eType )
 		sphWarning ( "Wrong RefCountInc slot! type=%d, free slot = %d", eType, uFreeInfoSlot.load() );
 
 	assert ( eType<uFreeInfoSlot );
-	dCounters[eType].fetch_add ( 1, std::memory_order_relaxed );
+	if ( eType )
+		dCounters[eType].fetch_add ( 1, std::memory_order_relaxed );
 }
 
 void internal_myinfo::RefCountDec ( BYTE eType )
@@ -41,7 +42,8 @@ void internal_myinfo::RefCountDec ( BYTE eType )
 		sphWarning ( "Wrong RefCountDec slot! type=%d, free slot = %d", eType, uFreeInfoSlot.load () );
 
 	assert ( eType<uFreeInfoSlot );
-	dCounters[eType].fetch_sub ( 1, std::memory_order_relaxed );
+	if ( eType )
+		dCounters[eType].fetch_sub ( 1, std::memory_order_relaxed );
 }
 
 int myinfo::Count ( BYTE eType )

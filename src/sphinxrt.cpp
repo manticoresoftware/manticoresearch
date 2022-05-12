@@ -2464,7 +2464,11 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 		if ( i!=INVALID_ROWID )
 			i = tNextRowID++;
 
-	// remove duplicate hits
+	// remove duplicate hits and compact hit.rowid
+	// might be document without hits
+	// but hits after that document should be still remapped \ compacted
+	// that is why can not use short-cut of
+	// if ( tSrcRowID!=INVALID_ROWID ) -> if ( i!=iDstRow )
 	int iDstRow = 0;
 	for ( int i=0, iLen=m_dAccum.GetLength(); i<iLen; ++i )
 	{
@@ -2473,16 +2477,13 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 		if ( tSrcRowID!=INVALID_ROWID )
 		{
 			CSphWordHit & tDstHit = m_dAccum[iDstRow];
-			if ( i!=iDstRow )
-			{
-				tDstHit = dSrcHit;
-				tDstHit.m_tRowID = tSrcRowID;
-			}
+			tDstHit = dSrcHit;
+			tDstHit.m_tRowID = tSrcRowID;
 			++iDstRow;
 		}
 	}
 
-	m_dAccum.Resize( iDstRow);
+	m_dAccum.Resize( iDstRow );
 
 	// remove duplicates
 	if ( m_pColumnarBuilder )
@@ -5765,7 +5766,7 @@ void RtIndex_c::DebugCheckRamSegment ( const RtSegment_t & tSegment, int iSegmen
 			}
 
 			if ( tDoc.m_tRowID>=tSegment.m_uRows )
-				tReporter.Fail ( "invalid rowid (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u)", iSegment, nWordsRead, tWord.m_uWordID, szWord, tDoc.m_tRowID );
+				tReporter.Fail ( "invalid rowid (segment=%d, word=%d, wordid=" UINT64_FMT "(%s), rowid=%u(%u))", iSegment, nWordsRead, tWord.m_uWordID, szWord, tDoc.m_tRowID, tSegment.m_uRows );
 
 			if ( bEmbeddedHit )
 			{

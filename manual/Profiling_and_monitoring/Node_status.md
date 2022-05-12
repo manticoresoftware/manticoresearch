@@ -42,7 +42,7 @@ Conn.  characterset:	utf8
 TCP port:		8306
 Uptime:			23 hours 6 sec
 
-Threads: 12  Queue: 3  Clients: 1  Tasks: 5  Queries: 318967  Wall: 7h  CPU: 0us
+Threads: 12  Queue: 3  Clients: 1  Vip clients: 0  Tasks: 5  Queries: 318967  Wall: 7h  CPU: 0us
 Queue/Th: 0.2  Tasks/Th: 0.4
 --------------
 ```

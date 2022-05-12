@@ -498,7 +498,7 @@ max_batch_queries = 256
 ### max_connections
 
 <!-- example max_connections -->
-Maximum number of simultaneous client connections. Unlimited by default. That is usually noticeable only when using any kind of persistent connections, like cli mysql sessions or persistent remote connections from remote distributed indexes. When the limit is exceeded you can still connect to the server using the [VIP connection](../Connecting_to_the_server/MySQL_protocol.md#VIP-connection)
+Maximum number of simultaneous client connections. Unlimited by default. That is usually noticeable only when using any kind of persistent connections, like cli mysql sessions or persistent remote connections from remote distributed indexes. When the limit is exceeded you can still connect to the server using the [VIP connection](../Connecting_to_the_server/MySQL_protocol.md#VIP-connection). VIP connections are not counted towards the limit.
 
 <!-- request Example -->
 ```ini

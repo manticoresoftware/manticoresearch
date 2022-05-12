@@ -3,7 +3,7 @@
 # Version 5.0.0
 
 ### Major new features
-* 🔬 [Secondary indexes](../Server_settings/Searchd.md#secondary_indexes) support in beta stage. Building secondary indexes is on by default for plain and real-time columnar and row-wise indexes (if [Manticore Columnar Library](https://github.com/manticoresoftware/columnar) is in use), but to enable it for searching you need to set `secondary_indexes = 1` either in your configuration file or using [SET GLOBAL](../Server_settings/Setting_variables_online.md).
+* 🔬 [Secondary indexes](../Server_settings/Searchd.md#secondary_indexes) support in beta stage. Building secondary indexes is on by default for plain and real-time columnar and row-wise indexes (if [Manticore Columnar Library](https://github.com/manticoresoftware/columnar) is in use), but to enable it for searching you need to set `secondary_indexes = 1` either in your configuration file or using [SET GLOBAL](../Server_settings/Setting_variables_online.md). The new functionality is supported in all operating systems except old Debian Stretch and Ubuntu Xenial.
 * [Read-only mode](Security/Read_only.md): you can now specify listeners that process only read queries discarding any writes.
 * New [/cli](../Connecting_to_the_server/HTTP.md#/cli) endpoint for running SQL queries over HTTP even easier.
 * Faster bulk INSERT/REPLACE/DELETE via JSON over HTTP: previously you could provide multiple write commands via HTTP JSON protocol, but they were processed one by one, now they are handled as a single transaction.
@@ -107,6 +107,7 @@
 * [1da6dbec](https://github.com/manticoresoftware/manticoresearch/commit/1da6dbec) disabled saving a new disk chunk on loading an index (e.g. on searchd startup).
 * [Issue #746](https://github.com/manticoresoftware/manticoresearch/issues/746) Support for glibc >= 2.34.
 * Support for Ubuntu 22.04 Jammy Jellyfish
+* [Issue #784](https://github.com/manticoresoftware/manticoresearch/issues/784) count 'VIP' connections separately from usual (non-VIP). Previously VIP connections were counted towards the `max_connections` limit, which could cause "maxed out" error for non-VIP connections. Now VIP connections are not counted towards the limit. Current number of VIP connections can be also seen in `SHOW STATUS` and `status`.
 
 ### ⚠️ Other minor breaking changes
 * ⚠️ BM25F formula has been slightly updated to improve search relevance. This only affects search results in case you use function [BM25F()](../Functions/Searching_and_ranking_functions.md#BM25F%28%29), it doesn't change behaviour of the default ranking formula.

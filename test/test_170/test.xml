@@ -89,5 +89,21 @@ index batchtest
 	SELECT * FROM batchtest WHERE MATCH('name2');
 	SELECT * FROM batchtest WHERE MATCH('name3');
 </sphinxql>
+
+<!-- regression crash at duplicates with empty fields -->
+<sphinxql>
+REPLACE INTO batchtest (id, names, namea) VALUES (11, 'name1', 'name1'), (12, '', ''), (13, 'name3', 'name3'), (12, '', ''), (14, 'name4', 'name4'), (12, '', ''), (15, 'name5', 'name5'), (12, 'name2', 'name2'), (16, 'name6', 'name6'), (17, 'name7', 'name7'), (18, 'name8', 'name8');
+</sphinxql>
+
+<repeat count="20" vars="i" init="20" inc="1">
+	<sphinxql >
+		replace into batchtest (id, names, namea) values (<i/>, 'dummy1', 'dummy1');
+	</sphinxql>
+</repeat>
+
+<sphinxql>
+flush ramchunk batchtest;
+SELECT id FROM batchtest order by id desc limit 5</sphinxql>
+
 </queries>
 </test>

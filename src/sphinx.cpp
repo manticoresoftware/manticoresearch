@@ -8897,7 +8897,11 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 	CSphEmbeddedFiles tEmbeddedFiles;
 	CSphString sWarning;
 	if ( !LoadHeader ( sHeaderName, false, tEmbeddedFiles, pFilenameBuilder.get(), sWarning ) )
-		sphDie ( "failed to load header: %s", m_sLastError.cstr ());
+	{
+		fprintf ( fp, "\nIndex header format is not json, will try it as binary...\n" );
+		if ( !LoadHeaderLegacy ( sHeaderName, false, tEmbeddedFiles, pFilenameBuilder.get(), sWarning ) )
+			sphDie ( "failed to load header: %s", m_sLastError.cstr() );
+	}
 
 	if ( !sWarning.IsEmpty () )
 		fprintf ( fp, "WARNING: %s\n", sWarning.cstr () );

@@ -230,7 +230,7 @@ A **field aggregation function** is a single argument function that takes an exp
 Most of the other rankers can actually be emulated with the expression based ranker. You just need to pass a proper expression. Such emulation is, of course, going to be slower than using the built-in, compiled ranker but still might be of interest if you want to fine-tune your ranking formula starting with one of the existing ones. Also, the formulas define the nitty gritty ranker details in a nicely readable fashion.
 
 * proximity_bm25 (default ranker) = `sum(lcs*user_weight)*1000+bm25`
-* bm25 = `bm25`
+* bm25 = `sum(user_weight)*1000+bm25`
 * none = `1`
 * wordcount = `sum(hit_count*user_weight)`
 * proximity = `sum(lcs*user_weight)`

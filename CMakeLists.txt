@@ -283,6 +283,8 @@ diag(SPLIT)
 configure_file ("COPYING" "${MANTICORE_BINARY_DIR}/COPYING.txt" COPYONLY)
 include (CommonInfo)
 
+include ( ${MANTICORE_SOURCE_DIR}/sphinxrev.cmake )
+
 # set final paths for build
 set ( only_set_paths ON )
 include (SetBuildType)

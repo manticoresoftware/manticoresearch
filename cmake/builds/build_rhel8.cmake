@@ -4,7 +4,6 @@
 
 message ( STATUS "Will create RPM for RedHat/Centos 8" )
 
-set (CPACK_RPM_SERVER_PACKAGE_SUGGESTS "manticore-icudata")
-set (CPACK_RPM_TOOLS_PACKAGE_SUGGESTS "manticore-icudata")
 set (SYSTEMD_KILLMODE "process")
+set ( RELEASE_DIST ".el8" )
 include ( builds/CommonRpm )

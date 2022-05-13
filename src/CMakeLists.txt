@@ -186,23 +186,6 @@ set_property (SOURCE sphinxjson.cpp APPEND PROPERTY OBJECT_DEPENDS ${FLEX_Jsonle
 set_property (SOURCE sphinxexpr.cpp APPEND PROPERTY OBJECT_DEPENDS ${FLEX_Exprlex_OUTPUTS})
 set_property (SOURCE sphinxql_debug.cpp APPEND PROPERTY OBJECT_DEPENDS ${FLEX_SQLDebuglex_OUTPUTS})
 
-add_custom_target (
-		vergen
-		COMMAND
-		${CMAKE_COMMAND}
-		-D SOURCE_DIR=${MANTICORE_SOURCE_DIR}
-		-D BINARY_DIR=${MANTICORE_BINARY_DIR}
-		-D BUILD_TAG=${BUILD_TAG}
-		-D CPACK_SUFFIX=${CPACK_SUFFIX}
-		-P ${MANTICORE_SOURCE_DIR}/sphinxrev.cmake
-		COMMENT "Generate version from sources"
-		VERBATIM
-		SOURCES ${MANTICORE_SOURCE_DIR}/sphinxrev.cmake
-		${MANTICORE_SOURCE_DIR}/src/sphinxversion.h.in
-		${MANTICORE_SOURCE_DIR}/dist/CPackOptions.cmake.in
-)
-add_dependencies (lextra vergen)
-
 # our mega-lib
 target_sources(lmanticore PUBLIC ${LMANTICORE_BISON} ${LMANTICORE_FLEX} ${HEADERS} ${CHARSET_FILES} ${CHARSET_TEMPLATE} "../misc/manticore.natvis")
 

@@ -21,46 +21,44 @@ set ( CPACK_GENERATOR RPM )
 
 set ( CPACK_COMPONENTS_GROUPING IGNORE )
 set ( CPACK_RPM_FILE_NAME RPM-DEFAULT )
-set ( CPACK_RPM_PACKAGE_RELEASE 1 )
-set ( CPACK_RPM_PACKAGE_RELEASE_DIST ON )
+if (RELEASE_DIST)
+	set ( CPACK_RPM_PACKAGE_RELEASE 1${RELEASE_DIST} )
+	set ( MYVER "${CPACK_RPM_PACKAGE_VERSION}-${CPACK_RPM_PACKAGE_RELEASE}" )
+else ()
+	set ( CPACK_RPM_PACKAGE_RELEASE 1 )
+	set ( CPACK_RPM_PACKAGE_RELEASE_DIST ON )
+	set ( MYVER "${CPACK_RPM_PACKAGE_VERSION}-${CPACK_RPM_PACKAGE_RELEASE}%{?dist}" )
+endif ()
 set ( CPACK_RPM_PACKAGE_GROUP "Applications/Internet" )
+set ( CPACK_RPM_PACKAGE_ARCHITECTURE ${CMAKE_SYSTEM_PROCESSOR})
 
 set ( CPACK_RPM_SEARCHD_PACKAGE_NAME "manticore-server-core" )
-set ( CPACK_RPM_SEARCHD_PACKAGE_REQUIRES "manticore-common" )
+set ( CPACK_RPM_SEARCHD_PACKAGE_REQUIRES "manticore-common = ${MYVER}" )
 set ( CPACK_RPM_SEARCHD_INSTALL_WITH_EXEC ON )
-set ( CPACK_RPM_SEARCHD_PACKAGE_OBSOLETES "sphinx, manticore < 4.2.1-220510, manticore-server < 4.2.1-220510" )
-set ( CPACK_RPM_SEARCHD_PACKAGE_CONFLICTS "sphinx, manticore < 4.2.1-220510, manticore-server < 4.2.1-220510" )
+set ( CPACK_RPM_SEARCHD_PACKAGE_OBSOLETES "sphinx" )
 
 set ( CPACK_RPM_SERVER_PACKAGE_NAME "manticore-server" )
-set ( CPACK_RPM_SERVER_PACKAGE_REQUIRES "manticore-server-core" )
-set ( CPACK_RPM_SERVER_PACKAGE_ARCHITECTURE noarch )
+set ( CPACK_RPM_SERVER_PACKAGE_REQUIRES "manticore-server-core = ${MYVER}" )
 set ( CPACK_RPM_SERVER_PACKAGE_DEBUG OFF )
-set ( CPACK_RPM_SERVER_PACKAGE_OBSOLETES "manticore < 4.2.1-220510, manticore-server < 4.2.1-220510" )
-set ( CPACK_RPM_SERVER_PACKAGE_CONFLICTS "manticore < 4.2.1-220510, manticore-server < 4.2.1-220510" )
 
 set ( CPACK_RPM_TOOLS_PACKAGE_NAME "manticore-tools" )
-set ( CPACK_RPM_TOOLS_PACKAGE_REQUIRES "manticore-common" )
-set ( CPACK_RPM_TOOLS_PACKAGE_CONFLICTS "sphinx, manticore < 4.2.1-220510, manticore-tools < 4.2.1-220510" )
-set ( CPACK_RPM_TOOLS_PACKAGE_OBSOLETES "manticore < 4.2.1-220510, manticore-tools < 4.2.1-220510" )
+set ( CPACK_RPM_TOOLS_PACKAGE_REQUIRES "manticore-common = ${MYVER}" )
+set ( CPACK_RPM_TOOLS_PACKAGE_OBSOLETES "sphinx" )
 
 set ( CPACK_RPM_DEVEL_PACKAGE_NAME "manticore-devel" )
 set ( CPACK_RPM_DEVEL_PACKAGE_ARCHITECTURE noarch )
 
 set ( CPACK_RPM_ICUDATA_PACKAGE_NAME "manticore-icudata" )
 set ( CPACK_RPM_ICUDATA_PACKAGE_ARCHITECTURE noarch )
-set ( CPACK_RPM_ICUDATA_PACKAGE_OBSOLETES "manticore < 4.2.1-220510" )
-set ( CPACK_RPM_ICUDATA_PACKAGE_CONFLICTS "manticore < 4.2.1-220510" )
 
 set ( CPACK_RPM_COMMON_PACKAGE_NAME "manticore-common" )
 set ( CPACK_RPM_COMMON_PACKAGE_ARCHITECTURE noarch )
-set ( CPACK_RPM_COMMON_PACKAGE_OBSOLETES "manticore < 4.2.1-220510, manticore-server < 4.2.1-220510, manticore-tools < 4.2.1-220510" )
-set ( CPACK_RPM_COMMON_PACKAGE_CONFLICTS "manticore < 4.2.1-220510, manticore-server < 4.2.1-220510, manticore-tools < 4.2.1-220510" )
+set ( CPACK_RPM_COMMON_PACKAGE_CONFLICTS "sphinx" )
 
 set ( CPACK_RPM_META_PACKAGE_NAME "manticore" )
-set ( CPACK_RPM_META_PACKAGE_REQUIRES "manticore-server, manticore-tools, manticore-devel, manticore-icudata" )
-set ( CPACK_RPM_META_PACKAGE_CONFLICTS "manticore < 4.2.1-220510, sphinx" )
-set ( CPACK_RPM_META_PACKAGE_OBSOLETES "manticore-all < 4.2.1-220510" )
-set ( CPACK_RPM_META_PACKAGE_ARCHITECTURE noarch )
+set ( CPACK_RPM_META_PACKAGE_REQUIRES "manticore-server = ${MYVER}, manticore-tools = ${MYVER}, manticore-devel = ${MYVER}, manticore-icudata" )
+set ( CPACK_RPM_META_PACKAGE_CONFLICTS "sphinx" )
+set ( CPACK_RPM_META_PACKAGE_OBSOLETES "manticore-all" )
 set ( CPACK_RPM_META_BUILD_SOURCE_DIRS_PREFIX OFF )
 
 set ( CPACK_RPM_CONVERTER_PACKAGE_NAME "manticore-converter" )
@@ -74,6 +72,10 @@ set ( CPACK_RPM_DEVEL_DEBUGINFO_PACKAGE OFF )
 set ( CPACK_RPM_ICUDATA_DEBUGINFO_PACKAGE OFF )
 set ( CPACK_RPM_META_DEBUGINFO_PACKAGE OFF )
 set ( CPACK_RPM_CONVERTER_DEBUGINFO_PACKAGE ON )
+
+set ( CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION "/;/tmp;/usr/share/man;/var;/var/lib" )
+list ( APPEND CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION "/usr/share/man/man1;/var/log" )
+list ( APPEND CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION "/usr/lib/systemd;/usr/lib/systemd/system-generators;/usr/lib/tmpfiles.d" )
 
 #set ( CPACK_BUILD_SOURCE_DIRS OFF )
 string ( LENGTH "${CMAKE_SOURCE_DIR}" source_dir_len_ )
@@ -115,6 +117,8 @@ set ( CPACK_RPM_SEARCHD_POST_INSTALL_SCRIPT_FILE "${dircore}/manticore.post" )
 set ( CPACK_RPM_COMMON_POST_INSTALL_SCRIPT_FILE "${dircommon}/manticore.post" )
 
 # now get system paths. These variables are used in configure substitutions below
+set ( CMAKE_INSTALL_LIB "lib" )
+GNUInstallDirs_get_absolute_install_dir ( CMAKE_INSTALL_FULL_LIB CMAKE_INSTALL_LIB LIBDIR )
 
 # block below used to patch the minconf - add a slash at the end of 'binlog_path' section
 configure_config ( lib/manticore )
@@ -140,12 +144,10 @@ install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/lib/manticore/dat
 install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_RUNSTATEDIR}/manticore COMPONENT server )
 install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/log/manticore COMPONENT searchd )
 
-set ( CMAKE_INSTALL_LIB "lib" )
-GNUInstallDirs_get_absolute_install_dir ( CMAKE_INSTALL_FULL_LIB CMAKE_INSTALL_LIB LIBDIR )
-
 # stuff that should go to /lib -> actually to /usr/lib
 # CMAKE_INSTALL_LIBDIR						usr/lib64 				/usr/lib64
-install ( FILES ${MANTICORE_BINARY_DIR}/manticore.tmpfiles DESTINATION ${CMAKE_INSTALL_LIB}/tmpfiles.d COMPONENT server RENAME manticore.conf )
+## note! file below is NOT manticore config, that is config of tmpfiles!
+install ( FILES ${MANTICORE_BINARY_DIR}/manticore.tmpfiles DESTINATION ${CMAKE_INSTALL_LIB}/tmpfiles.d COMPONENT server RENAME searchd.conf )
 install ( PROGRAMS ${MANTICORE_BINARY_DIR}/manticore-search-generator DESTINATION ${CMAKE_INSTALL_LIB}/systemd/system-generators COMPONENT server )
 
 
@@ -171,7 +173,6 @@ install ( FILES example.sql DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT tools 
 # CMAKE_INSTALL_DATAROOTDIR					usr/share 				/usr/share
 # CMAKE_INSTALL_DATADIR						usr/share 				/usr/share
 install ( DIRECTORY misc/stopwords DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT common )
-install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore/modules COMPONENT common )
 
 if (WITH_ICU)
 	install_icudata ( ${FULL_SHARE_DIR}/icu )

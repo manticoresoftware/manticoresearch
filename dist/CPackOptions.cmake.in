@@ -1,20 +1,10 @@
-# configured imports, add more here; avoid to add anything apart this block
-SET ( GIT_TIMESTAMP_ID "@GIT_TIMESTAMP_ID@" )
-SET ( GIT_COMMIT_ID "@SPH_GIT_COMMIT_ID@" )
-SET ( TAG @BUILD_TAG@ ) # like 'my-super-puper-ver'
-SET ( SUFFIX @CPACK_SUFFIX@) # atogen, like '-stemmer' or '-rhel7'
-SET ( VERNUMBERS "@VERNUMBERS@" ) # like 2.3.3
-SET ( ENV{SOURCE_DATE_EPOCH} @SOURCE_DATE_EPOCH@ ) # that makes builds reproducable
+execute_process(COMMAND "${CMAKE_COMMAND}"
+        -D CONFIGURED_GIT_COMMIT_ID=@SPH_GIT_COMMIT_ID@
+        -D MANTICORE_SOURCE_DIR=@MANTICORE_SOURCE_DIR@
+        -P @MANTICORE_SOURCE_DIR@/sphinxrevcheck.cmake
+        RESULT_VARIABLE check_failed
+)
 
-SET ( CPACK_PACKAGE_VERSION "${VERNUMBERS}-${GIT_TIMESTAMP_ID}-${GIT_COMMIT_ID}" )
-string ( TOLOWER "${CPACK_PACKAGE_NAME}" CPACK_PACKAGE_NAME_LOWERCASE )
-
-if ( TAG )
-	SET ( TAG "-${TAG}" )
-endif ()
-
-SET ( CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME_LOWERCASE}-${CPACK_PACKAGE_VERSION}${TAG}${SUFFIX}" )
-set ( CPACK_ARCHIVE_MODULE_FILE_NAME ${CPACK_PACKAGE_FILE_NAME} )
-
-# rpm specific (used inside .spec template)
-SET ( CPACK_RPM_PACKAGE_VERSION "${VERNUMBERS}-${GIT_TIMESTAMP_ID}.${GIT_COMMIT_ID}" )
+if (check_failed)
+    MESSAGE (FATAL_ERROR "Version check failed. Run 'cmake .' in build tree to fix version/hash")
+endif()

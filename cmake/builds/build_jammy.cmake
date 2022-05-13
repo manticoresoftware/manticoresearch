@@ -14,7 +14,7 @@ set ( CPACK_DEBIAN_CONVERTER_PACKAGE_DEPENDS "libc6 (>= 2.34), libgcc-s1 (>= 3.3
 
 # 'server'
 set ( CPACK_DEBIAN_SEARCHD_PACKAGE_DEPENDS "libc6 (>= 2.34), libgcc-s1 (>= 3.3), libssl3 (>= 3.0.0~~alpha1), libstdc++6 (>= 12), zlib1g (>= 1:1.2.0)")
-set ( CPACK_DEBIAN_SEARCHD_PACKAGE_RECOMMENDS "manticore-server, libzstd1" )
+set ( CPACK_DEBIAN_SEARCHD_PACKAGE_RECOMMENDS "manticore-server (= ${CPACK_PACKAGE_VERSION}), libzstd1" )
 
 # 'tools'
 set ( CPACK_DEBIAN_TOOLS_PACKAGE_DEPENDS "libc6 (>= 2.34), libgcc-s1 (>= 3.3), libstdc++6 (>= 12), zlib1g (>= 1:1.1.4)")

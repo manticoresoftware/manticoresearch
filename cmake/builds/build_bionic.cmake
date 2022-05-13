@@ -13,8 +13,8 @@ set ( disable_shlideps ON )
 set ( CPACK_DEBIAN_CONVERTER_PACKAGE_DEPENDS "libc6 (>= 2.27), libgcc1 (>= 1:3.4), libstdc++6 (>= 5.2)" )
 
 # 'server'
-set ( CPACK_DEBIAN_SEARCHD_PACKAGE_DEPENDS "manticore-common, libc6 (>= 2.27), libgcc1 (>= 1:3.4), libssl1.1 (>= 1.1.0), libstdc++6 (>= 5.2), zlib1g (>= 1:1.2.0)" )
-set ( CPACK_DEBIAN_SEARCHD_PACKAGE_RECOMMENDS "manticore-server" )
+set ( CPACK_DEBIAN_SEARCHD_PACKAGE_DEPENDS "libc6 (>= 2.27), libgcc1 (>= 1:3.4), libssl1.1 (>= 1.1.0), libstdc++6 (>= 5.2), zlib1g (>= 1:1.2.0)" )
+set ( CPACK_DEBIAN_SEARCHD_PACKAGE_RECOMMENDS "manticore-server (= ${CPACK_PACKAGE_VERSION})" )
 
 # 'tools'
 set ( CPACK_DEBIAN_TOOLS_PACKAGE_DEPENDS "libc6 (>= 2.27), libgcc1 (>= 1:3.4), libstdc++6 (>= 5.2), zlib1g (>= 1:1.1.4)" )

@@ -2891,8 +2891,6 @@ static void FormatOption ( const CSphQuery & tQuery, StringBuilder_c & tBuf )
 		if ( !sRanker )
 			sRanker = sphGetRankerName ( SPH_RANK_DEFAULT );
 
-		tBuf.Appendf ( "ranker=%s", sRanker );
-
 		if ( tQuery.m_sRankerExpr.IsEmpty() )
 			tBuf.Appendf ( "ranker=%s", sRanker );
 		else

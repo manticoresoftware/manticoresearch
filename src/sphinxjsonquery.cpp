@@ -366,6 +366,9 @@ XQNode_t * QueryParserJson_c::ConstructMatchNode ( const JsonObj_c & tJson, bool
 
 bool QueryParserJson_c::ConstructNodeOrFilter ( const JsonObj_c & tItem, CSphVector<XQNode_t *> & dNodes, QueryTreeBuilder_c & tBuilder ) const
 {
+	if ( !tItem )
+		return true;
+
 	// we created filters before, no need to process them again
 	if ( IsFilter(tItem) || IsBoolNode(tItem) )
 		return true;

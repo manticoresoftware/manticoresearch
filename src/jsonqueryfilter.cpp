@@ -535,6 +535,9 @@ std::pair<bool, std::unique_ptr<FilterTreeNode_t>> FilterTreeConstructor_c::Cons
 			}
 
 			JsonObj_c tItem = tObject[0];
+			if ( !tItem )
+				continue;
+
 			CSphString sName = tItem.Name();
 			if ( sName=="bool" )
 			{

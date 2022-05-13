@@ -40,7 +40,6 @@ set ( CPACK_RPM_SEARCHD_PACKAGE_CONFLICTS "sphinx, manticore < 4.2.1-220510, man
 
 set ( CPACK_RPM_SERVER_PACKAGE_NAME "manticore-server" )
 set ( CPACK_RPM_SERVER_PACKAGE_REQUIRES "manticore-server-core = ${MYVER}" )
-set ( CPACK_RPM_SERVER_PACKAGE_ARCHITECTURE noarch )
 set ( CPACK_RPM_SERVER_PACKAGE_DEBUG OFF )
 set ( CPACK_RPM_SERVER_PACKAGE_OBSOLETES "manticore < 4.2.1-220510, manticore-server < 4.2.1-220510" )
 set ( CPACK_RPM_SERVER_PACKAGE_CONFLICTS "manticore < 4.2.1-220510, manticore-server < 4.2.1-220510" )
@@ -67,7 +66,6 @@ set ( CPACK_RPM_META_PACKAGE_NAME "manticore" )
 set ( CPACK_RPM_META_PACKAGE_REQUIRES "manticore-server = ${MYVER}, manticore-tools = ${MYVER}, manticore-devel = ${MYVER}, manticore-icudata" )
 set ( CPACK_RPM_META_PACKAGE_CONFLICTS "manticore < 4.2.1-220510, sphinx" )
 set ( CPACK_RPM_META_PACKAGE_OBSOLETES "manticore-all < 4.2.1-220510" )
-set ( CPACK_RPM_META_PACKAGE_ARCHITECTURE noarch )
 set ( CPACK_RPM_META_BUILD_SOURCE_DIRS_PREFIX OFF )
 
 set ( CPACK_RPM_CONVERTER_PACKAGE_NAME "manticore-converter" )

@@ -144,6 +144,33 @@ insert into test_table values
 }  
 </query>
 
+<query endpoint="json/search">
+{   
+	"query":
+	{   
+		"bool":
+		{   
+			"must":
+			[   
+				{ "match": { "*":"12th" } },
+            	{ "bool":
+					{
+						"should":
+						[
+							{ "equals": { "gid101":31 }  }, 
+							{ "equals": { "gid102":32 }  }	
+						]
+					}
+				}  
+			]  
+		}  
+	},  
+   "index":"test,test2",  
+   "limit":5  
+}  
+</query>
+
+
 </httpqueries>
 
 </test>

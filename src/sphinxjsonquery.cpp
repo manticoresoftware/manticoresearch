@@ -274,6 +274,15 @@ static XQOperator_e StrToNodeOp ( const char * szStr )
 }
 
 
+static bool IsBoolNode ( const JsonObj_c & tJson )
+{
+	if ( !tJson )
+		return false;
+
+	return CSphString ( tJson.Name() )=="bool";
+}
+
+
 XQNode_t * QueryParserJson_c::ConstructMatchNode ( const JsonObj_c & tJson, bool bPhrase, QueryTreeBuilder_c & tBuilder ) const
 {
 	if ( !tJson.IsObj() )
@@ -358,15 +367,14 @@ XQNode_t * QueryParserJson_c::ConstructMatchNode ( const JsonObj_c & tJson, bool
 bool QueryParserJson_c::ConstructNodeOrFilter ( const JsonObj_c & tItem, CSphVector<XQNode_t *> & dNodes, QueryTreeBuilder_c & tBuilder ) const
 {
 	// we created filters before, no need to process them again
-	if ( !IsFilter ( tItem ) )
-	{
-		XQNode_t * pNode = ConstructNode ( tItem, tBuilder );
-		if ( !pNode )
-			return false;
+	if ( IsFilter(tItem) || IsBoolNode(tItem) )
+		return true;
 
-		dNodes.Add ( pNode );
-	}
+	XQNode_t * pNode = ConstructNode ( tItem, tBuilder );
+	if ( !pNode )
+		return false;
 
+	dNodes.Add ( pNode );
 	return true;
 }
 

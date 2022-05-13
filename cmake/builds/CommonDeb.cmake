@@ -16,6 +16,15 @@ if (only_set_paths)
 	return ()
 endif ()
 
+# set or append DEBLINE to deb-spec style DEBLIST
+function ( seta DEBLIST DEBLINE )
+	if (${DEBLIST})
+		set (${DEBLIST} "${${DEBLIST}}, ${DEBLINE}" PARENT_SCOPE)
+	else()
+		set (${DEBLIST} "${DEBLINE}" PARENT_SCOPE)
+	endif()
+endfunction ()
+
 # Common debian-specific build variables
 set ( CPACK_GENERATOR DEB )
 
@@ -42,11 +51,12 @@ set ( CPACK_DEBIAN_PACKAGE_CONTROL_STRICT_PERMISSION ON )
 set ( CPACK_DEBIAN_SEARCHD_PACKAGE_NAME "manticore-server-core" )
 set ( CPACK_DEBIAN_SEARCHD_PACKAGE_REPLACES "manticore-bin, sphinxsearch, manticore (<< 4.2.1-220510)" )
 set ( CPACK_DEBIAN_SEARCHD_PACKAGE_CONTROL_EXTRA "${dircore}/postinst;${dircore}/postrm" )
-set ( CPACK_DEBIAN_SEARCHD_PACKAGE_DEPENDS "manticore-common" )
+seta ( CPACK_DEBIAN_SEARCHD_PACKAGE_DEPENDS "manticore-common (= ${CPACK_PACKAGE_VERSION})" )
+
 set ( CPACK_DEBIAN_SEARCHD_PACKAGE_BREAKS "manticore (<< 4.2.1-220510)" )
 
 set ( CPACK_DEBIAN_SERVER_PACKAGE_NAME "manticore-server" )
-set ( CPACK_DEBIAN_SERVER_PACKAGE_DEPENDS "manticore-server-core" )
+seta ( CPACK_DEBIAN_SERVER_PACKAGE_DEPENDS "manticore-server-core (= ${CPACK_PACKAGE_VERSION})" )
 set ( CPACK_DEBIAN_SERVER_PACKAGE_ARCHITECTURE all )
 set ( CPACK_DEBIAN_SERVER_PACKAGE_CONTROL_EXTRA "${dirserver}/conffiles;${dirserver}/postinst;${dirserver}/prerm;${dirserver}/postrm" )
 set ( CPACK_DEBIAN_SERVER_PACKAGE_DEBUG OFF )
@@ -54,7 +64,7 @@ set ( CPACK_DEBIAN_SERVER_PACKAGE_REPLACES "manticore (<< 4.2.1-220510)" )
 set ( CPACK_DEBIAN_SERVER_PACKAGE_BREAKS "manticore (<< 4.2.1-220510)" )
 
 set ( CPACK_DEBIAN_TOOLS_PACKAGE_NAME "manticore-tools" )
-set ( CPACK_DEBIAN_TOOLS_PACKAGE_DEPENDS "manticore-common" )
+seta ( CPACK_DEBIAN_TOOLS_PACKAGE_DEPENDS "manticore-common (= ${CPACK_PACKAGE_VERSION})" )
 set ( CPACK_DEBIAN_TOOLS_PACKAGE_CONFLICTS "sphinxsearch, manticore (<< 3.5.0-200722-1d34c491)" )
 set ( CPACK_DEBIAN_TOOLS_PACKAGE_REPLACES "manticore (<< 4.2.1-220510)" )
 set ( CPACK_DEBIAN_TOOLS_PACKAGE_BREAKS "manticore (<< 4.2.1-220510)" )
@@ -75,8 +85,8 @@ set ( CPACK_DEBIAN_COMMON_PACKAGE_REPLACES "manticore (<< 4.2.1-220510)" )
 set ( CPACK_DEBIAN_COMMON_PACKAGE_BREAKS "manticore (<< 4.2.1-220510)" )
 
 set ( CPACK_DEBIAN_META_PACKAGE_NAME "manticore" )
-set ( CPACK_DEBIAN_META_PACKAGE_DEPENDS "manticore-server, manticore-tools, manticore-dev, manticore-icudata-65l" )
-set ( CPACK_DEBIAN_META_PACKAGE_ARCHITECTURE all )
+seta ( CPACK_DEBIAN_META_PACKAGE_DEPENDS "manticore-server (= ${CPACK_PACKAGE_VERSION}), manticore-tools (= ${CPACK_PACKAGE_VERSION}), manticore-dev (= ${CPACK_PACKAGE_VERSION}), manticore-icudata-65l" )
+#set ( CPACK_DEBIAN_META_PACKAGE_ARCHITECTURE all )
 set ( CPACK_DEBIAN_META_PACKAGE_DEBUG OFF )
 set ( CPACK_DEBIAN_META_PACKAGE_SECTION metapackages )
 

@@ -4,7 +4,7 @@ cmake_minimum_required ( VERSION 3.17 )
 # guess version strings from current git repo
 function(guess_from_git)
 
-	if (NOT EXISTS "${SOURCE_DIR}/.git")
+	if (NOT EXISTS "${MANTICORE_SOURCE_DIR}/.git")
 		return()
 	endif ()
 
@@ -15,7 +15,7 @@ function(guess_from_git)
 
 	# extract short has as SPH_GIT_COMMIT_ID
 	execute_process(COMMAND "${GIT_EXECUTABLE}" log -1 --format=%h
-			WORKING_DIRECTORY "${SOURCE_DIR}"
+			WORKING_DIRECTORY "${MANTICORE_SOURCE_DIR}"
 			RESULT_VARIABLE res
 			OUTPUT_VARIABLE SPH_GIT_COMMIT_ID
 			ERROR_QUIET
@@ -25,7 +25,7 @@ function(guess_from_git)
 	# extract timestamp and make number YYMMDD from it
 	# it would be --date=format:%y%m%d, but old git on centos doesn't understand it
 	execute_process(COMMAND "${GIT_EXECUTABLE}" log -1 --date=short --format=%cd
-			WORKING_DIRECTORY "${SOURCE_DIR}"
+			WORKING_DIRECTORY "${MANTICORE_SOURCE_DIR}"
 			RESULT_VARIABLE res
 			OUTPUT_VARIABLE GIT_TIMESTAMP_ID
 			ERROR_QUIET
@@ -36,7 +36,7 @@ function(guess_from_git)
 
 	# timestamp for reproducable packages
 	execute_process(COMMAND "${GIT_EXECUTABLE}" log -1 --pretty=%ct
-			WORKING_DIRECTORY "${SOURCE_DIR}"
+			WORKING_DIRECTORY "${MANTICORE_SOURCE_DIR}"
 			RESULT_VARIABLE res
 			OUTPUT_VARIABLE GIT_EPOCH_ID
 			ERROR_QUIET
@@ -45,7 +45,7 @@ function(guess_from_git)
 
 	# extract branch name (top of 'git status -s -b'), throw out leading '## '
 	execute_process(COMMAND "${GIT_EXECUTABLE}" status -s -b
-			WORKING_DIRECTORY "${SOURCE_DIR}"
+			WORKING_DIRECTORY "${MANTICORE_SOURCE_DIR}"
 			RESULT_VARIABLE res
 			OUTPUT_VARIABLE GIT_BRANCH_ID
 			ERROR_QUIET
@@ -89,40 +89,46 @@ guess_from_git()
 
 # 2-nd try - if we build from git archive. Correct hash and date provided then, but no branch
 if (NOT SPH_GIT_COMMIT_ID)
-	extract_from_git_slug("${SOURCE_DIR}/src/sphinxversion.h.in")
-endif ()
-
-if (NOT SPH_GIT_COMMIT_ID)
-	# nothing found, fall back to fake 'developer' version. That is ok if sources mirrored to another host without .git
-	message(STATUS "Dev mode, no guess, using predefined version")
-	set(VERNUMBERS "0.0.1")
-	set(GIT_TIMESTAMP_ID "000000")
-	set(SPH_GIT_COMMIT_ID "DEADBEEF")
-	set(BUILD_TAG "devmode")
-	set(GIT_BRANCH_ID "developer version")
-	set(SOURCE_DATE_EPOCH "1607089638")
+	extract_from_git_slug("${MANTICORE_SOURCE_DIR}/src/sphinxversion.h.in")
 endif ()
 
 # extract version number string from sphinxversion.h.in
 if ( NOT VERNUMBERS )
-	FILE ( STRINGS "${SOURCE_DIR}/src/sphinxversion.h.in" _STRINGS LIMIT_COUNT 500
+	FILE ( STRINGS "${MANTICORE_SOURCE_DIR}/src/sphinxversion.h.in" _STRINGS LIMIT_COUNT 500
 			REGEX "^#define[ \t]+VERNUMBERS.*" )
 	STRING ( REGEX REPLACE ".*\"(.*)\"(.*)$" "\\1" VERNUMBERS "${_STRINGS}" )
 endif()
 
-set ( GDB_SOURCE_DIR "${SOURCE_DIR}" )
+if (NOT SPH_GIT_COMMIT_ID)
+	# nothing found, fall back to fake 'developer' version. That is ok if sources mirrored to another host without .git
+	message ( STATUS "Dev mode, no guess, using predefined version" )
+	if (NOT VERNUMBERS)
+		set ( VERNUMBERS "0.0.1" )
+	endif ()
+	set ( GIT_TIMESTAMP_ID "220512" )
+	set ( SPH_GIT_COMMIT_ID "DEADBEEF" )
+	set ( BUILD_TAG "devmode" )
+	set ( GIT_BRANCH_ID "developer version" )
+	set ( SOURCE_DATE_EPOCH "1607089638" )
+endif ()
+
+set ( GDB_SOURCE_DIR "${MANTICORE_SOURCE_DIR}" )
 
 # All info collected (we need SPH_GIT_COMMIT_ID, GIT_TIMESTAMP_ID, GIT_BRANCH_ID and BUILD_TAG, if any)
-set ( VERFILE "${BINARY_DIR}/config/gen_sphinxversion.h" )
+set ( VERFILE "${MANTICORE_BINARY_DIR}/config/gen_sphinxversion.h" )
 
-configure_file ( "${SOURCE_DIR}/src/sphinxversion.h.in" "${VERFILE}1" )
-execute_process (COMMAND ${CMAKE_COMMAND} -E compare_files ${VERFILE}1 ${VERFILE} RESULT_VARIABLE NEED_NEWFILE)
+configure_file ( "${MANTICORE_SOURCE_DIR}/src/sphinxversion.h.in" "${VERFILE}" )
+configure_file("${MANTICORE_SOURCE_DIR}/dist/CPackOptions.cmake.in" "${MANTICORE_BINARY_DIR}/config/CPackOptions.cmake" @ONLY)
 
-if ( NEED_NEWFILE )
-	message ( STATUS "Version ${VERNUMBERS} ${SPH_GIT_COMMIT_ID}@${GIT_TIMESTAMP_ID}, ${GIT_BRANCH_ID}" )
-	configure_file ( "${VERFILE}1" "${VERFILE}" COPYONLY )
-	file ( REMOVE "${VERFILE}1" )
-	configure_file("${SOURCE_DIR}/dist/CPackOptions.cmake.in" "${BINARY_DIR}/config/CPackOptions.cmake" @ONLY)
-else()
-	message ( STATUS "Version not changed: ${VERNUMBERS} ${SPH_GIT_COMMIT_ID}@${GIT_TIMESTAMP_ID}, ${GIT_BRANCH_ID}" )
-endif()
+# configure packaging
+SET ( ENV{SOURCE_DATE_EPOCH} "${SOURCE_DATE_EPOCH}" ) # that makes builds reproducable
+SET ( CPACK_PACKAGE_VERSION "${VERNUMBERS}-${GIT_TIMESTAMP_ID}-${SPH_GIT_COMMIT_ID}" )
+string ( TOLOWER "${CPACK_PACKAGE_NAME}" CPACK_PACKAGE_NAME_LOWERCASE )
+
+if (BUILD_TAG)
+	SET ( BUILD_TAG "-${BUILD_TAG}" )
+endif ()
+
+SET ( CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME_LOWERCASE}-${CPACK_PACKAGE_VERSION}${BUILD_TAG}${CPACK_SUFFIX}" )
+set ( CPACK_ARCHIVE_MODULE_FILE_NAME ${CPACK_PACKAGE_FILE_NAME} )
+SET ( CPACK_RPM_PACKAGE_VERSION "${VERNUMBERS}_${GIT_TIMESTAMP_ID}.${SPH_GIT_COMMIT_ID}" )

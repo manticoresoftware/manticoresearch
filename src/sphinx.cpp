@@ -9286,8 +9286,15 @@ bool CSphIndex_VLN::PreallocSecondaryIndex()
 	const CSphString & sFile = GetIndexFileName ( SPH_EXT_SPIDX );
 	if ( !sphFileExists ( sFile.cstr() ) )
 	{
-		if (  IsSecondaryLibLoaded() )
+		if ( IsSecondaryLibLoaded() )
 			sphWarning ( "missing %s; secondary index(es) disabled", sFile.cstr() );
+		return true;
+	}
+
+	// lets load index but warns about missed secondary index library and missed feature
+	if ( !IsSecondaryLibLoaded() )
+	{
+		sphWarning ( "'%s' secondary index library not loaded; secondary index(es) disabled", m_sIndexName.cstr() );
 		return true;
 	}
 

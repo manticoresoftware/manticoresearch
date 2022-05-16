@@ -3008,6 +3008,12 @@ static void FormatIndexHints ( const CSphQuery & tQuery, StringBuilder_c & tBuf 
 	AppendHint ( "IGNORE", dIgnore, tBuf );
 }
 
+static void LogQueryJson ( const CSphQuery & q, QuotationEscapedBuilder & tBuf )
+{
+	tBuf.StartBlock ( "", " /*", " */" );
+	tBuf += q.m_sRawQuery.cstr();
+	tBuf.FinishBlock (); // close the comment
+}
 
 static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResultMeta & tMeta, const CSphVector<int64_t> & dAgentTimes )
 {
@@ -3039,7 +3045,10 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResultMeta & 
 	// format request as SELECT query
 	///////////////////////////////////
 
-	FormatSphinxql ( q, iCompactIN, tBuf );
+	if ( q.m_eQueryType==QUERY_JSON )
+		LogQueryJson ( q, tBuf );
+	else
+		FormatSphinxql ( q, iCompactIN, tBuf );
 
 	///////////////
 	// query stats

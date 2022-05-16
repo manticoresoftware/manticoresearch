@@ -197,7 +197,7 @@ void ActionSequence_c::Defer ( StepActionPtr_c&& pAction )
 
 bool ActionSequence_c::UnRunDefers()
 {
-	for ( auto i = m_iRun; i >= 0; --i )
+	for ( auto i=m_iRun-1; i>=0; --i )
 	{
 		auto pStep = (StepActionEx_c*)m_dActions[i].get();
 		if ( !pStep->Rollback() )

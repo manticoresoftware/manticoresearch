@@ -52,7 +52,7 @@ set ( CPACK_DEBIAN_SEARCHD_PACKAGE_NAME "manticore-server-core" )
 set ( CPACK_DEBIAN_SEARCHD_PACKAGE_REPLACES "manticore-bin, sphinxsearch, manticore (<< 4.2.1-220510)" )
 set ( CPACK_DEBIAN_SEARCHD_PACKAGE_CONTROL_EXTRA "${dircore}/postinst;${dircore}/postrm" )
 seta ( CPACK_DEBIAN_SEARCHD_PACKAGE_DEPENDS "manticore-common (= ${CPACK_PACKAGE_VERSION})" )
-
+seta ( CPACK_DEBIAN_SEARCHD_PACKAGE_SUGGESTS "manticore-server (= ${CPACK_PACKAGE_VERSION})" )
 set ( CPACK_DEBIAN_SEARCHD_PACKAGE_BREAKS "manticore (<< 4.2.1-220510)" )
 
 set ( CPACK_DEBIAN_SERVER_PACKAGE_NAME "manticore-server" )
@@ -78,7 +78,7 @@ set ( CPACK_DEBIAN_ICUDATA_PACKAGE_BREAKS "manticore (<< 4.2.1-220510)" )
 
 set ( CPACK_DEBIAN_COMMON_PACKAGE_NAME "manticore-common" )
 set ( CPACK_DEBIAN_COMMON_PACKAGE_CONTROL_EXTRA "${dircommon}/conffiles;${dircommon}/postinst;${dircommon}/postrm" )
-set ( CPACK_DEBIAN_COMMON_PACKAGE_RECOMMENDS "manticore-icudata-65l" )
+set ( CPACK_DEBIAN_COMMON_PACKAGE_SUGGESTS "manticore-icudata-65l" )
 set ( CPACK_DEBIAN_COMMON_PACKAGE_REPLACES "manticore (<< 4.2.1-220510)" )
 set ( CPACK_DEBIAN_COMMON_PACKAGE_BREAKS "manticore (<< 4.2.1-220510)" )
 

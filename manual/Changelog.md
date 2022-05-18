@@ -84,7 +84,7 @@
 
 * [Pseudo sharding](../Server_settings/Searchd.md#pseudo_sharding) is enabled by default.
 * Having at least one full-text field in a real-time/plain index is not mandatory anymore. You can now use Manticore even in cases not having anything to do with full-text search.
-* Fast fetching for attributes backed by [Manticore Columnar Library](https://github.com/manticoresoftware/columnar): queries like `select * from <columnar table>` are now much faster than previously, especialy if there are many fields in the schema.
+* [Fast fetching](../Creating_an_index/Data_types.md#fast_fetch) for attributes backed by [Manticore Columnar Library](https://github.com/manticoresoftware/columnar): queries like `select * from <columnar table>` are now much faster than previously, especialy if there are many fields in the schema.
 * **⚠️ BREAKING CHANGE**: Implicit [cutoff](../Searching/Options.md#cutoff). Manticore now doesn't spend time and resources processing data you don't need in the result set which will be returned. The downside is that it affects `total_found` in [SHOW META](../Profiling_and_monitoring/SHOW_META.md#SHOW-META) and [hits.total](../Searching/Full_text_matching/Basic_usage.md#HTTP) in JSON output. It is now only accurate in case you see `total_relation: eq` while `total_relation: gte` means the actual number of matching documents is greater than the `total_found` value you've got. To retain the previous behaviour you can use search option `cutoff=0`, which makes `total_relation` always `eq`.
 * **⚠️ BREAKING CHANGE**: All full-text fields are now [stored](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#stored_fields) by default in plain indexes. You need to use `stored_fields = ` (empty value) to make all fields non-stored (i.e. revert to the previous behaviour).
 * [#715](https://github.com/manticoresoftware/manticoresearch/issues/715) HTTP JSON supports [search options](../Searching/Options.md#General-syntax).
@@ -94,6 +94,7 @@
   - you can get warning like `WARNING: ... syntax error, unexpected TOK_IDENT`
   - you won't be able to run the index with previous Manticore versions, make sure you have a backup
 * **⚠️ BREAKING CHANGE**: Session state support with help of [HTTP keep-alive](../Connecting_to_the_server/HTTP.md#Keep-alive). This makes HTTP stateful when the client supports it too. For example, using the new [/cli](../Connecting_to_the_server/HTTP.md#/cli) endpoint and HTTP keep-alive (which is on by default in all browsers) you can call `SHOW META` after `SELECT` and it will work the same way it works via mysql. Note, previously `Connection: keep-alive` HTTP header was supported too, but it only caused reusing the same connection. Since this version it also makes the session stateful.
+* You can now specify `columnar_attrs = *` to define all your attributes as columnar in the [plain mode](Read_this_first.md#Real-time-mode-vs-plain-mode) which is useful in case the list is long.
 * Faster replication SST
 * **⚠️ BREAKING CHANGE**: Replication protocol has been changed. If you are running a replication cluster, then when upgrading to Manticore 5 you need to:
   - stop all your nodes first cleanly
@@ -116,10 +117,11 @@
 * [Commit 1da6dbec](https://github.com/manticoresoftware/manticoresearch/commit/1da6dbec) disabled saving a new disk chunk on loading an index (e.g. on searchd startup).
 * [Issue #746](https://github.com/manticoresoftware/manticoresearch/issues/746) Support for glibc >= 2.34.
 * [Issue #784](https://github.com/manticoresoftware/manticoresearch/issues/784) count 'VIP' connections separately from usual (non-VIP). Previously VIP connections were counted towards the `max_connections` limit, which could cause "maxed out" error for non-VIP connections. Now VIP connections are not counted towards the limit. Current number of VIP connections can be also seen in `SHOW STATUS` and `status`.
+* [ID](../Creating_an_index/Data_types.md#Document-ID) can now be specified explicitly.
 
 ### ⚠️ Other minor breaking changes
 * ⚠️ BM25F formula has been slightly updated to improve search relevance. This only affects search results in case you use function [BM25F()](../Functions/Searching_and_ranking_functions.md#BM25F%28%29), it doesn't change behaviour of the default ranking formula.
-* ⚠️ Changed behaviour of REST [/sql](../Connecting_to_the_server/HTTP.md#/sql?mode=raw) endpoint: `/sql?mode=raw` now requires escaping.
+* ⚠️ Changed behaviour of REST [/sql](../Connecting_to_the_server/HTTP.md#/sql?mode=raw) endpoint: `/sql?mode=raw` now requires escaping and returns an array.
 * ⚠️ Format change of the response of `/bulk` INSERT/REPLACE/DELETE requests:
   - previously each sub-query constituted a separate transaction and resulted in a separate response
   - now the whole batch is considered a single transaction, which returns a single response

@@ -6,9 +6,8 @@ Manticore's data types can be split into full-text fields and attributes.
 
 ### Full-text fields
 
-Full-text fields are:
-* indexed
-* can be searched for keywords
+Full-text fields:
+* can be indexed with natural language processing algorithms, therefore can be searched for keywords
 * cannot be used for sorting or grouping
 * original document's content can be retrieved
 * original document's content can be used for highlighting
@@ -272,7 +271,50 @@ Below is the list of data types supported by Manticore Search:
 
 ## Document ID
 
-The identifier of a document in the index. Document IDs must be **unique signed positive non-zero 64-bit integers**. Note that no negative or zero values are allowed. Document IDs are implicit and have no declaration. Update operation is forbidden on document ids.
+<!-- example id -->
+Document identifier is a mandatory attribute. Document IDs must be **unique signed positive non-zero 64-bit integers**. Note that no negative or zero values are allowed. Document ID can be specified explicitly, but if it's not it's still enabled. Document IDs can't be [UPDATE](../Updating_documents/UPDATE.md)'ed.
+
+<!-- request Explicit ID -->
+
+When you create a table you can specify ID explicitly, but no matter what datatype you use it will be always as said previously - signed positive non-zero 64-bit integer.
+
+```sql
+CREATE TABLE tbl(id bigint, content text);
+DESC tbl;
+```
+
+<!-- response Explicit ID -->
+```sql
++---------+--------+----------------+
+| Field   | Type   | Properties     |
++---------+--------+----------------+
+| id      | bigint |                |
+| content | text   | indexed stored |
++---------+--------+----------------+
+2 rows in set (0.00 sec)
+```
+
+<!-- request Implicit ID -->
+
+You can also omit specifying ID at all, it will be enabled automatically.
+
+```sql
+CREATE TABLE tbl(content text);
+DESC tbl;
+```
+
+<!-- response Implicit ID -->
+```sql
++---------+--------+----------------+
+| Field   | Type   | Properties     |
++---------+--------+----------------+
+| id      | bigint |                |
+| content | text   | indexed stored |
++---------+--------+----------------+
+2 rows in set (0.00 sec)
+```
+
+<!-- end -->
 
 ## Character data types
 
@@ -2149,6 +2191,69 @@ index products
 
 	rt_attr_multi_64 = values
 }
+```
+
+<!-- end -->
+
+## Columnar attribute properties
+
+When you use the columnar storage you can specify the following properties for the attributes.
+
+<!-- example fast_fetch -->
+### fast_fetch
+
+By default Manticore Columnar storage stores all attributes not only in columnar fashion, but in a special docstore row by row which enables fast execution of queries like `SELECT * FROM ...` especially when you are fetching lots of records at once. But if you are sure you don't need it or want to save disk space you can disable it by specifying `fast_fetch='0'` when you create a table.
+
+<!-- request RT mode -->
+```sql
+create table t(a int, b int fast_fetch='0') engine='columnar'; desc t;
+```
+
+<!-- response RT mode -->
+
+```sql
++-------+--------+---------------------+
+| Field | Type   | Properties          |
++-------+--------+---------------------+
+| id    | bigint | columnar fast_fetch |
+| a     | uint   | columnar fast_fetch |
+| b     | uint   | columnar            |
++-------+--------+---------------------+
+3 rows in set (0.00 sec)
+```
+
+<!-- request Plain mode -->
+
+```ini
+source min {
+    type = mysql
+    sql_host = localhost
+    sql_user = test
+    sql_pass =
+    sql_db = test
+    sql_query = select 1, 1 a, 1 b
+    sql_attr_uint = a
+    sql_attr_uint = b
+}
+
+index idx {
+    path = idx/col
+    source = min
+    columnar_attrs = *
+    columnar_no_fast_fetch = b
+}
+```
+
+<!-- response Plain mode -->
+
+```sql
++-------+--------+---------------------+
+| Field | Type   | Properties          |
++-------+--------+---------------------+
+| id    | bigint | columnar fast_fetch |
+| a     | uint   | columnar fast_fetch |
+| b     | uint   | columnar            |
++-------+--------+---------------------+
 ```
 
 <!-- end -->

@@ -116,7 +116,7 @@
   - previously each sub-query constituted a separate transaction and resulted in a separate response
   - now the whole batch is considered a single transaction, which returns a single response
 * ⚠️ Search options `low_priority` and `boolean_simplify` now require a value (`0/1`): previously you could do `SELECT ... OPTION low_priority, boolean_simplify`, now you need to do `SELECT ... OPTION low_priority=1, boolean_simplify=1`.
-* ⚠️ If you are using old [php](https://github.com/manticoresoftware/manticoresearch/blob/master/api/sphinxapi.php), [python](https://github.com/manticoresoftware/manticoresearch/blob/master/api/sphinxapi.py) or [java](https://github.com/manticoresoftware/manticoresearch/tree/master/api/java) clients please follow the corresponding link and find an updated version. **The old version is not fully compatible with Manticore 5.**
+* ⚠️ If you are using old [php](https://github.com/manticoresoftware/manticoresearch/blob/master/api/sphinxapi.php), [python](https://github.com/manticoresoftware/manticoresearch/blob/master/api/sphinxapi.py) or [java](https://github.com/manticoresoftware/manticoresearch/tree/master/api/java) clients please follow the corresponding link and find an updated version. **The old versions are not fully compatible with Manticore 5.**
 * ⚠️ HTTP JSON requests are now logged in different format in mode `query_log_format=sphinxql`. Previously only full-text part was logged, now it's logged as is.
 
 ### New packages

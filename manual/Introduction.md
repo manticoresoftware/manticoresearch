@@ -2,7 +2,7 @@
 
 Manticore Search is a multi-storage database designed specifically for search, including full-text search.
 
-Manticore was born in 2017 as a continuation of [Sphinx Search](https://github.com/sphinxsearch/sphinx). We took the best from Sphinx (C++ core and focus on low level data structures and fine-tuned algorithms), added a lot of new functionality, fixed hundreds of bugs, made it easier to use, kept it open source and made Manticore Search even more lightweight & extremely fast database for search.
+Manticore Search is an [open-source database](https://github.com/manticoresoftware/manticoresearch/) that was created in 2017 as a continuation of [Sphinx Search](https://sphinxsearch.com/) engine. We took all the best from it, significantly improved its functionality, [fixed hundreds of bugs](https://manual.manticoresearch.com/Changelog), rewrote the code almost completely and kept it open-source! That all has made Manticore Search a modern, fast, light-weight and full-featured database with outstanding full-text search capabilities.
 
 ## Our key features are:
 #### Powerful and fast full-text searching which works fine for small and big datasets

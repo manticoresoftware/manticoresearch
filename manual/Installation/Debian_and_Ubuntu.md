@@ -12,6 +12,7 @@
   * 18.04 LTS (Bionic)
   * 20.04 LTS (Focal)
   * 21.04 (Hirsute Hippo)
+  * 22.04 (Ubuntu Jammy)
 
 * Mint
   * 19
@@ -32,7 +33,16 @@ Then install Manticore Search:
 ```
 sudo apt install manticore manticore-columnar-lib
 ```
-(you can skip `manticore-columnar-lib` - package for the [Manticore Columnar Library](https://github.com/manticoresoftware/columnar), if you are sure you don't need it).
+
+You can skip `manticore-columnar-lib` - package for the [Manticore Columnar Library](https://github.com/manticoresoftware/columnar), if you are sure you don't need it.
+
+If you are upgrading to Manticore version 5 or higher it's recommended to remove all the old Manticore packages before you install the new ones since package structure got changed in version 5.0.0:
+
+```bash
+sudo apt remove manticore*
+```
+
+It won't remove your data and configuration file.
 
 ###### Development packages
 If you prefer "Nightly" (development) versions do:
@@ -74,6 +84,8 @@ Below is a reference table with list of all the client libraries for different D
 |  Ubuntu Xenial  |  libmysqlclient.so.20   |  libpq.so.5  | libexpat.so.1 |  libodbc.so.2 |
 |  Ubuntu Bionic  |  libmysqlclient.so.20   |  libpq.so.5  | libexpat.so.1 |  libodbc.so.2 |
 |  Ubuntu Focal  |  libmysqlclient.so.21   |  libpq.so.5  | libexpat.so.1 |  libodbc.so.2 |
+|  Ubuntu Hirsute  |  libmysqlclient.so.21   |  libpq.so.5  | libexpat.so.1 |  libodbc.so.2 |
+|  Ubuntu Jammy  |  libmysqlclient.so.21   |  libpq.so.5  | libexpat.so.1 |  libodbc.so.2 |
 |  Debian Jessie  | libmysqlclient.so.18    |  libpq.so.5  | libexpat.so.1 |  libodbc.so.2 |
 |  Debian Stretch  | libmariadbclient.so.18 |  libpq.so.5  | libexpat.so.1 |  libodbc.so.2 |
 |  Debian Buster  |  libmariadb.so.3        |  libpq.so.5  | libexpat.so.1 |  libodbc.so.2 |

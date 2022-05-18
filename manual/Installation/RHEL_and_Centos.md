@@ -5,6 +5,7 @@
 * CentOS 7 and RHEL 7
 * CentOS 8 and RHEL 8
 * CentOS Stream 8
+* Amazon Linux 2
 
 ### YUM repository
 
@@ -19,7 +20,16 @@ Then install Manticore Search:
 ```bash
 sudo yum install manticore manticore-columnar-lib
 ```
-(you can skip `manticore-columnar-lib` - package for the [Manticore Columnar Library](https://github.com/manticoresoftware/columnar), if you are sure you don't need it).
+
+You can skip `manticore-columnar-lib` - package for the [Manticore Columnar Library](https://github.com/manticoresoftware/columnar), if you are sure you don't need it.
+
+If you are upgrading to Manticore version 5 or higher it's recommended to remove all the old Manticore packages before you install the new ones since package structure got changed in version 5.0.0:
+
+```bash
+sudo yum remove manticore*
+```
+
+It won't remove your data and configuration file.
 
 ###### Development packages
 If you prefer "Nightly" (development) versions do:
@@ -30,7 +40,7 @@ sudo yum --enablerepo manticore-dev install manticore manticore-columnar-lib
 ```
 
 ### Standalone RPM packages
-You can also download standalone rpm files [from our site](https://manticoresearch.com/downloads/) and install them using tools `rpm` or `yum`.
+You can also download standalone rpm files [from our site](https://manticoresearch.com/install/) and install them using tools `rpm` or `yum`.
 
 ### More packages you may need
 #### For indexer

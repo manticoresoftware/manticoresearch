@@ -94,7 +94,16 @@
   - you can get warning like `WARNING: ... syntax error, unexpected TOK_IDENT`
   - you won't be able to run the index with previous Manticore versions, make sure you have a backup
 * **⚠️ BREAKING CHANGE**: Session state support with help of [HTTP keep-alive](../Connecting_to_the_server/HTTP.md#Keep-alive). This makes HTTP stateful when the client supports it too. For example, using the new [/cli](../Connecting_to_the_server/HTTP.md#/cli) endpoint and HTTP keep-alive (which is on by default in all browsers) you can call `SHOW META` after `SELECT` and it will work the same way it works via mysql. Note, previously `Connection: keep-alive` HTTP header was supported too, but it only caused reusing the same connection. Since this version it also makes the session stateful.
-* Listen on `127.0.0.1` instead of `0.0.0.0` in case no `listen` is specified in config. Even though in the [default config](https://github.com/manticoresoftware/manticoresearch/blob/master/manticore.conf.in) `listen` is specified in case the user removed it Manticore previously would listen on `0.0.0.0` which is not secure, now it listens on `127.0.0.1` which is normally not exposed to the Internet.
+* Faster replication SST
+* **⚠️ BREAKING CHANGE**: Replication protocol has been changed. If you are running a replication cluster, then when upgrading to Manticore 5 you need to:
+  - stop all your nodes first cleanly
+  - and then start the node which was stopped last with `--new-cluster` (run tool `manticore_new_cluster` in Linux).
+  - read about [restarting a cluster](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md#Restarting-a-cluster) for more details.
+* Replication improvements:
+  - Faster SST
+  - Noise resistance which can help in case of unstable network between replication nodes
+  - Improved logging
+* Security improvement: Manticore now listens on `127.0.0.1` instead of `0.0.0.0` in case no `listen` at all is specified in config. Even though in the default configuration which is shipped with Manticore Search the `listen` setting is specified and it's not typical to have a configuration with no `listen` at all, it's still possible. Previously Manticore would listen on `0.0.0.0` which is not secure, now it listens on `127.0.0.1` which is usually not exposed to the Internet.
 * Faster aggregation over columnar attributes.
 * Increased `AVG()` accuracy: previously Manticore used `float` internally for aggregations, now it uses `double` which increases the accuracy significantly.
 * Improved support for JDBC MySQL driver.
@@ -102,11 +111,10 @@
 * [optimize_cutoff](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#optimize_cutoff) is now available as a per-table setting which can be set when you CREATE or ALTER a table.
 * **⚠️ BREAKING CHANGE**: [query_log_format](../Server_settings/Searchd.md#query_log_format) is now **`sphinxql` by default**. If you are used to `plain` format you need to add `query_log_format = plain` to your configuration file.
 * Significant memory consumption improvements: Manticore consumes significantly less RAM now in case of long and intensive insert/replace/optimize workload in case stored fields are used.
-* [shutdown_timeout](../Server_settings/Searchd.md#shutdown_timeout) default value was increased from 3 seconds to 60 seconds
-* [ffd0499d](https://github.com/manticoresoftware/manticoresearch/commit/ffd0499d329d2c383f14c8a44c4cc84338ab56e7) Support for Java mysql connector >= 6.0.3: in [Java mysql connection 6.0.3](https://mvnrepository.com/artifact/mysql/mysql-connector-java/6.0.3) they changed the way they connect to mysql which broke compatibility with Manticore. The new behaviour is now supported.
-* [1da6dbec](https://github.com/manticoresoftware/manticoresearch/commit/1da6dbec) disabled saving a new disk chunk on loading an index (e.g. on searchd startup).
+* [shutdown_timeout](../Server_settings/Searchd.md#shutdown_timeout) default value was increased from 3 seconds to 60 seconds.
+* [Commit ffd0499d](https://github.com/manticoresoftware/manticoresearch/commit/ffd0499d329d2c383f14c8a44c4cc84338ab56e7) Support for Java mysql connector >= 6.0.3: in [Java mysql connection 6.0.3](https://mvnrepository.com/artifact/mysql/mysql-connector-java/6.0.3) they changed the way they connect to mysql which broke compatibility with Manticore. The new behaviour is now supported.
+* [Commit 1da6dbec](https://github.com/manticoresoftware/manticoresearch/commit/1da6dbec) disabled saving a new disk chunk on loading an index (e.g. on searchd startup).
 * [Issue #746](https://github.com/manticoresoftware/manticoresearch/issues/746) Support for glibc >= 2.34.
-* Support for Ubuntu 22.04 Jammy Jellyfish
 * [Issue #784](https://github.com/manticoresoftware/manticoresearch/issues/784) count 'VIP' connections separately from usual (non-VIP). Previously VIP connections were counted towards the `max_connections` limit, which could cause "maxed out" error for non-VIP connections. Now VIP connections are not counted towards the limit. Current number of VIP connections can be also seen in `SHOW STATUS` and `status`.
 
 ### ⚠️ Other minor breaking changes

@@ -5,7 +5,7 @@
 </p>
 
 <h1 align="center">
-  Manticore Search 4.2.0
+  Manticore Search 5.0.0
 </h1>
 
 <h3 align="center">
@@ -23,9 +23,9 @@
 # Introduction
 
 <span class="badge-geekswag">
-<a href="https://geekswag.co/collections/manticore-search" title="Get Our Merch"><img src="https://img.shields.io/badge/Geekswag-Get%20Our%20Merch-brightgreen" alt="Get a Merch donate button" /></a>
+<a href="https://geekswag.co/collections/manticore-search" title="Get Our Merch"><img src="https://img.shields.io/badge/Geekswag-Get%20Our%20Merch-brightgreen" alt="Get Manticore merch" /></a>
 
-Manticore Search is a multi-storage database designed specifically for search, including full-text search. What distinguishes it from other solutions is:
+Manticore Search is an easy to use open source fast database for search. What distinguishes it from other solutions is:
 * Modern MPP architecture and smart query parallelization capabilities allow to fully utilize all your CPU cores to lower response time as much as possible, when needed.
 * Powerful and fast full-text searching which works fine for small and big datasets
 * Traditional row-wise storage for small, medium and big size datasets
@@ -145,14 +145,14 @@ brew install manticoresearch
 ### Windows
 See [instruction here](https://manual.manticoresearch.com/Installation/Windows).
 
-### MacOS .dmg
+### MacOS tarball
 See [instruction here](https://manual.manticoresearch.com/Installation/MacOS).
 
 
 # Documentation and community sites
 
-  * [Interactive courses](https://play.manticoresearch.com)
   * [Documentation](https://manual.manticoresearch.com)
+  * [Interactive courses](https://play.manticoresearch.com)
   * [Manticore Community Forum](https://forum.manticoresearch.com/)
   * [Public Slack chat](http://slack.manticoresearch.com/)
   * [Bug tracker](https://github.com/manticoresoftware/manticore/issues)

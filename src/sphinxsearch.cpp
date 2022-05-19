@@ -3514,7 +3514,7 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Update ( const ExtHi
 	if ( pHlist->m_uSpanlen>1 )
 	{
 		WORD uQposSpanned = pHlist->m_uQuerypos+1;
-		DWORD uQposMask = ( pHlist->m_uQposMask>>1 );
+		DWORD uQposMask = ( pHlist->m_uQposMask>>uQposSpanned );
 		while ( uQposMask!=0 )
 		{
 			WORD uQposFixed = uQposSpanned;

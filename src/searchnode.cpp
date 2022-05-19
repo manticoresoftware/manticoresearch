@@ -3975,13 +3975,12 @@ void ExtNWay_T<FSM>::DebugDump ( int iLevel )
 
 static DWORD GetQposMask ( const CSphVector<ExtNode_i *> & dQwords )
 {
-	int iQposBase = dQwords[0]->GetAtomPos();
-	DWORD uQposMask = 0;
+	DWORD uQposMask = ( 1 << dQwords[0]->GetAtomPos() );
 	for ( int i=1; i<dQwords.GetLength(); i++ )
 	{
-		int iQposDelta = dQwords[i]->GetAtomPos() - iQposBase;
-		assert ( iQposDelta<(int)sizeof(uQposMask)*8 );
-		uQposMask |= ( 1 << iQposDelta );
+		int iQpos = dQwords[i]->GetAtomPos();
+		assert ( iQpos<(int)sizeof(uQposMask)*8 );
+		uQposMask |= ( 1 << iQpos );
 	}
 
 	return uQposMask;
@@ -4246,9 +4245,9 @@ inline bool FSMmultinear_c::HitFSM ( const ExtHit_t * pHit, CSphVector<ExtHit_t>
 		m_uLastML = pHit->m_uMatchlen;
 		m_uLastSL = pHit->m_uSpanlen;
 		m_uWeight = m_uLastW = pHit->m_uWeight;
+		m_uFirstQpos = uQpos;
 		if ( m_bTwofer )
 		{
-			m_uFirstQpos = uQpos;
 			m_uFirstNpos = uNpos;
 		} else
 		{
@@ -4379,9 +4378,10 @@ inline bool FSMmultinear_c::HitFSM ( const ExtHit_t * pHit, CSphVector<ExtHit_t>
 			m_uLastP = 0;
 			if ( m_bQposMask && tTarget.m_uSpanlen>1 )
 			{
+				int iNpos0 = m_dNpos[0];
 				ARRAY_FOREACH ( i, m_dNpos )
 				{
-					int iQposDelta = m_dNpos[i] - tTarget.m_uQuerypos;
+					int iQposDelta = ( m_dNpos[i] - iNpos0 ) + tTarget.m_uQuerypos;
 					assert ( iQposDelta<(int)sizeof(tTarget.m_uQposMask)*8 );
 					tTarget.m_uQposMask |= ( 1 << iQposDelta );
 				}

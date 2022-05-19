@@ -36,7 +36,7 @@ If you prefer "Nightly" (development) versions do:
 
 ```bash
 sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
-sudo yum --enablerepo manticore-dev install manticore manticore-columnar-lib
+sudo yum --enablerepo manticore-dev install manticore manticore-columnar-lib manticore-server-core-debuginfo manticore-tools-debuginfo manticore-columnar-lib-debuginfo
 ```
 
 ### Standalone RPM packages

@@ -50,7 +50,7 @@ If you prefer "Nightly" (development) versions do:
 wget https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb
 sudo dpkg -i manticore-dev-repo.noarch.deb
 sudo apt update
-sudo apt install manticore manticore-columnar-lib
+sudo apt install manticore manticore-columnar-lib manticore-server-core-dbgsym manticore-tools-dbgsym manticore-columnar-lib-dbgsym
 ```
 
 ### Standalone DEB packages

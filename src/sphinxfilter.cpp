@@ -426,6 +426,12 @@ private:
 	bool					m_bEq;
 };
 
+static void CollectStrings ( const CSphString * pRef, int iCount, StrVec_t & dVals )
+{
+	dVals.Resize ( iCount );
+	for ( int i=0; i<iCount; ++i )
+		dVals[i] = *( pRef + i );
+}
 
 class Filter_StringValues_c : public FilterString_c
 {
@@ -438,29 +444,20 @@ public:
 	{
 		assert ( pRef );
 		assert ( iCount>0 );
-
-		m_dValues.Resize ( iCount );
-		for ( int i=0; i<iCount; ++i )
-		{
-			const char * sRef = ( pRef + i )->cstr();
-			int iLen = ( pRef + i )->Length();
-
-			m_dValues[i].Resize ( iLen );
-			memcpy ( m_dValues[i].Begin(), sRef, iLen );
-		}
+		CollectStrings ( pRef, iCount, m_dValues );
 	}
 
 	bool Eval ( const CSphMatch & tMatch ) const final
 	{
-		auto dStr = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
-		return m_dValues.any_of( [this, &dStr] ( const VecTraits_T<BYTE>& i )
+		ByteBlob_t sRef = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
+		return m_dValues.any_of( [this, &sRef] ( const CSphString & sVal )
 		{
-			return m_fnStrCmp ( dStr, i, false )==0;
+			return m_fnStrCmp ( sRef, ByteBlob_t ( sVal ), false )==0;
 		});
 	}
 
 private:
-	CSphTightVector<CSphTightVector<BYTE>> m_dValues;
+	StrVec_t m_dValues;
 };
 
 struct Filter_StringTags_c : IFilter_Str
@@ -1111,7 +1108,7 @@ public:
 		, m_bEq ( bEq )
 	{}
 
-	void SetRefString ( const CSphString * pRef, int iCount ) final
+	void SetRefString ( const CSphString * pRef, int iCount )
 	{
 		assert ( iCount<2 );
 		if ( pRef )
@@ -1121,7 +1118,7 @@ public:
 		}
 	}
 
-	bool Eval ( const CSphMatch & tMatch ) const final
+	bool Eval ( const CSphMatch & tMatch ) const
 	{
 		// attribute storages can fetch string length without reading the string itself
 		int iLen = m_pExpr->StringLenEval ( tMatch );
@@ -1136,6 +1133,40 @@ public:
 	}
 };
 
+class ExprFilterStringValues_c : public ExprFilterString_c
+{
+private:
+	StrVec_t m_dValues;
+
+public:
+	ExprFilterStringValues_c ( ISphExpr * pExpr, ESphCollation eCollation, bool bEq )
+		: ExprFilterString_c ( pExpr, eCollation, bEq )
+	{}
+
+	void SetRefString ( const CSphString * pRef, int iCount )
+	{
+		CollectStrings ( pRef, iCount, m_dValues );
+	}
+
+	bool Eval ( const CSphMatch & tMatch ) const
+	{
+		// attribute storages can fetch string length without reading the string itself
+		int iLen = m_pExpr->StringLenEval ( tMatch );
+		// StringLenEval returns -1 if not supported by expression
+		if ( iLen!=-1 )
+			return false;
+
+		const BYTE * pVal = nullptr;
+		iLen = m_pExpr->StringEval ( tMatch, &pVal );
+		ByteBlob_t sRef ( pVal, iLen );
+
+		return m_dValues.any_of( [this, &sRef] ( const CSphString & sVal )
+		{
+			bool bEq = m_fnStrCmp ( sRef, ByteBlob_t ( sVal ), false )==0;
+			return ( m_bEq==bEq );
+		});
+	}
+};
 
 class ExprFilterNull_c : public ExprFilter_c<ISphFilter>
 {
@@ -1240,6 +1271,7 @@ static std::unique_ptr<ISphFilter> CreateFilterExpr ( ISphExpr * _pExpr, const C
 		case SPH_FILTER_FLOATRANGE:		CREATE_EXPR_RANGE_FILTER ( ExprFilterFloatRange_c, pExpr, tSettings.m_bHasEqualMin, tSettings.m_bHasEqualMax );
 		case SPH_FILTER_RANGE:			CREATE_EXPR_RANGE_FILTER ( ExprFilterRange_c, pExpr, tSettings.m_bHasEqualMin, tSettings.m_bHasEqualMax );
 		case SPH_FILTER_STRING:			return std::make_unique<ExprFilterString_c> ( pExpr, eCollation, tSettings.m_bHasEqualMin || tSettings.m_bHasEqualMax );
+		case SPH_FILTER_STRING_LIST:	return std::make_unique<ExprFilterStringValues_c> ( pExpr, eCollation, tSettings.m_bHasEqualMin || tSettings.m_bHasEqualMax );
 		case SPH_FILTER_NULL:			return std::make_unique<ExprFilterNull_c> ( pExpr, tSettings.m_bIsNull, false );
 		case SPH_FILTER_EXPRESSION:
 		{

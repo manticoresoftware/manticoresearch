@@ -847,6 +847,13 @@ select id, j.name from test where id&lt;6 and j.name != 'Alice' order by id asc;
 <!-- json bool values at group by -->
 select id, groupby(), count(*), j from objects1 group by j.a order by id asc;
 
+<!-- json in filter strings -->
+select id, json1, json1.username in ( 'Alice', 'damon' ) as cnd from json_attr where cnd=1 ;
+select id, json1 from json_attr where json1.username in ( 'Alice', 'damon' );
+set collation_connection=libc_ci;
+select id, json1, json1.username in ( 'Alice', 'damon' ) as cnd from json_attr where cnd=1 ;
+select id, json1 from json_attr where json1.username in ( 'Alice', 'damon' );
+
 </sphinxql>
 </queries>
 </test>

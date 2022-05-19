@@ -971,7 +971,7 @@ static std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_pt
 	int iQueries = ( 1 + tQuery.m_dAggs.GetLength() );
 	std::unique_ptr<PubSearchHandler_c> pHandler = std::make_unique<PubSearchHandler_c> ( iQueries, std::move ( pQueryParser ), eQueryType, true );
 
-	if ( !tQuery.m_dAggs.GetLength() )
+	if ( !tQuery.m_dAggs.GetLength() || eQueryType==QUERY_SQL )
 	{
 		pHandler->SetQuery ( 0, tQuery, nullptr );
 		return pHandler;
@@ -1096,6 +1096,21 @@ protected:
 	virtual void			SetStmt ( PubSearchHandler_c & tHandler ) {};
 };
 
+static void AddAggs ( const VecTraits_T<SqlStmt_t> & dStmt, JsonQuery_c & tQuery )
+{
+	assert ( dStmt.GetLength()>1 && dStmt[0].m_tQuery.m_bFacetHead );
+	tQuery.m_dAggs.Reserve ( dStmt.GetLength()-1 );
+
+	for ( int i=1; i<dStmt.GetLength(); i++ )
+	{
+		const CSphQuery & tRef = dStmt[i].m_tQuery;
+		assert ( tRef.m_dRefItems.GetLength() );
+
+		JsonAggr_t & tBucket = tQuery.m_dAggs.Add();
+		tBucket.m_sBucketName = tRef.m_dRefItems[0].m_sExpr;
+		tBucket.m_sCol = tRef.m_dRefItems[0].m_sAlias;
+	}
+}
 
 class HttpSearchHandler_SQL_c final: public HttpSearchHandler_c
 {
@@ -1125,15 +1140,26 @@ protected:
 		}
 
 		( (CSphQuery &) m_tQuery ) = m_dStmt[0].m_tQuery;
-		if ( m_dStmt.GetLength()>1 )
+		bool bFacet = ( m_dStmt.GetLength()>1 );
+		for ( const auto & tStmt : m_dStmt )
 		{
-			ReportError ( "multiple queries not supported", SPH_HTTP_STATUS_501 );
-			return nullptr;
-		} else if ( m_dStmt[0].m_eStmt!=STMT_SELECT )
+			// should be all FACET in case of multiple queries
+			bFacet &= ( tStmt.m_tQuery.m_bFacet || tStmt.m_tQuery.m_bFacetHead );
+
+			if ( tStmt.m_eStmt!=STMT_SELECT )
+			{
+				ReportError ( "only SELECT queries are supported", SPH_HTTP_STATUS_501 );
+				return nullptr;
+			}
+		}
+
+		if ( m_dStmt.GetLength()>1 && !bFacet )
 		{
-			ReportError ( "only SELECT queries are supported", SPH_HTTP_STATUS_501 );
+			ReportError ( "only FACET multiple queries supported", SPH_HTTP_STATUS_501 );
 			return nullptr;
 		}
+		if ( bFacet )
+			AddAggs ( m_dStmt, m_tQuery );
 
 		m_eQueryType = QUERY_SQL;
 
@@ -1148,6 +1174,8 @@ protected:
 	void SetStmt ( PubSearchHandler_c & tHandler ) final
 	{
 		tHandler.SetStmt ( m_dStmt[0] );
+		for  ( int i=1; i<m_dStmt.GetLength(); i++ )
+			tHandler.SetQuery ( i, m_dStmt[i].m_tQuery, nullptr );
 	}
 };
 

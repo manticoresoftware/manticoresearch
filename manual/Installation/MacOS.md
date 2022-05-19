@@ -9,7 +9,7 @@ Bottles are available for:
 * MacOS Big Sur
 * MacOS Catalina
 
-On older versions of MacOS it will attempt to compile from sources automatically.
+On different versions of MacOS it will attempt to compile from sources automatically.
 
 ```bash
 brew install manticoresoftware/manticore/manticoresearch
@@ -31,9 +31,17 @@ Download it [from the website](https://manticoresearch.com/install/) and unpack 
 
 ```bash
 mkdir manticore
-tar -zxvf manticore-3.6.0-210504-96d61d8bf-release-osx10.14.4-x86_64-main.tar.gz -C manticore
 cd manticore
-bin/searchd  -c manticore.conf
+wget https://repo.manticoresearch.com/repository/manticoresearch_macos/release/manticore-5.0.0-220518-b4cb7da02-release-main.tar.gz
+tar -xf manticore-5.0.0-220518-b4cb7da02-release-main.tar.gz
+wget https://repo.manticoresearch.com/repository/manticoresearch_macos/release/manticore-columnar-lib-1.15.2-220518-b0bcafb-osx10.14.4-x86_64.tar.gz
+tar -xf manticore-columnar-lib-1.15.2-220518-b0bcafb-osx10.14.4-x86_64.tar.gz
+
+# Start Manticore
+FULL_SHARE_DIR=./share/manticore ./bin/searchd -c ./etc/manticoresearch/manticore.conf
+
+# Run indexer
+FULL_SHARE_DIR=./share/manticore ./bin/indexer -c ./etc/manticoresearch/manticore.conf
 ```
 
-Manticore configuration file `manticore.conf` is located in the directory, unpacked from the tarball. 
+Manticore configuration file is in `./etc/manticoresearch/manticore.conf` after you unpack the archive.

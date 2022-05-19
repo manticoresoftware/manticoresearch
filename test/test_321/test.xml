@@ -102,6 +102,14 @@ index wild_exact_pq
     morphology = stem_en
 }
 
+index pq_small
+{
+	type = percolate
+	path			= <data_path/>/pq_small
+
+	rt_field = title
+	charset_table = a
+}
 </config>
 
 
@@ -300,6 +308,14 @@ CALL PQ ('pq_filter1', ('{"j":{"test":"asd"}, "id":101}', '{"j":{"test":"best"},
 <sphinxql>
 select * from pq order by id asc limit 20, 5;
 select * from pq limit 1020, 5 option max_matches=1100;
+</sphinxql>
+
+<sphinxql>
+<!-- regression full-scan instead of full-text for out of charset_table chars in query -->
+INSERT INTO pq_small (query) values('a'),('bc');
+call pq('pq_small', 'abc', 0 as docs_json, 1 as query);
+call pq('pq_small', 'bc', 0 as docs_json, 1 as query);
+call pq('pq_small', 'def', 0 as docs_json, 1 as query);
 </sphinxql>
 
 </queries>

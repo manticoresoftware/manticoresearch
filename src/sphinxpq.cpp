@@ -1762,6 +1762,11 @@ std::unique_ptr<StoredQuery_i> PercolateIndex_c::CreateQuery ( PercolateQueryArg
 	pStored->m_dFilters = tArgs.m_dFilters;
 	pStored->m_dFilterTree = tArgs.m_dFilterTree;
 	pStored->m_bQL = tArgs.m_bQL;
+	// need keep m_bEmpty only in case query string is really empty string
+	// but use full-text matching path in case query has only out of charset_table chars
+	if ( pStored->m_pXQ->m_bEmpty && sQuery )
+		pStored->m_pXQ->m_bEmpty = IsEmpty ( FromSz ( sQuery ) );
+
 	return pStored;
 }
 

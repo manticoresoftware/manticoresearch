@@ -312,6 +312,10 @@ struct ConsoleIndexProgress_t: public CSphIndexProgress
 			cOut.Sprintf ( "creating lookup: %.1D Kdocs, %.1D%% done", m_iDocids / 100, PercentOf ( m_iDocids, m_iDocidsTotal ) );
 			break;
 
+		case PHASE_SI_BUILD:
+			cOut.Sprintf ( "creating secondary index" );
+			break;
+
 		default:
 			assert ( 0 && "internal error: unhandled progress phase" );
 			cOut.Sprintf ( "(progress-phase-%d)", m_ePhase );

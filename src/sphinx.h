@@ -749,6 +749,7 @@ public:
 		PHASE_SORT,					///< final sorting phase
 		PHASE_LOOKUP,				///< docid lookup construction
 		PHASE_MERGE,				///< index merging
+		PHASE_SI_BUILD,				///< secondary index build
 		PHASE_UNKNOWN,
 	};
 

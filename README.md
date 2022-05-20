@@ -157,6 +157,13 @@ See [instruction here](https://manual.manticoresearch.com/Installation/MacOS).
   * [Public Slack chat](http://slack.manticoresearch.com/)
   * [Bug tracker](https://github.com/manticoresoftware/manticore/issues)
 
+# Third-party integrations
+  * https://dev.tiki.org/Manticore-Search - TikiWiki CMS Groupware integration
+  * https://github.com/EvilFreelancer/laravel-manticoresearch - Laravel ManticoreSearch plugin
+  * https://www.mediawiki.org/wiki/Extension:SphinxSearch - extension for MediaWiki
+  * https://github.com/gordonbanderson/silverstripe-manticore-search - integration for SilverStripe
+  * https://github.com/searx/searx - integration for SearX
+
 # How we can support you
 Should your company require any help - we provide full-cycle services in the areas of Sphinx and Manticore Search:
   * Audit

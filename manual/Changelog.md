@@ -155,6 +155,7 @@
 * [Issue #604](https://github.com/manticoresoftware/manticoresearch/issues/604) Breaking change 3.6.0, 4.2.0 sphinxql-parser
 * [Issue #667](https://github.com/manticoresoftware/manticoresearch/issues/667) FATAL: out of memory (unable to allocate 9007199254740992 bytes)
 * [Issue #676](https://github.com/manticoresoftware/manticoresearch/issues/676) Strings not passed correctly to UDFs
+* [Issue #687](https://github.com/manticoresoftware/manticoresearch/issues/687) support zstd compression for mysql proto
 * ❗[Issue #698](https://github.com/manticoresoftware/manticoresearch/issues/698) Searchd crashes after trying to add a text column to a rt index
 * [Issue #705](https://github.com/manticoresoftware/manticoresearch/issues/705) Indexer couldn't find all columns
 * ❗[Issue #709](https://github.com/manticoresoftware/manticoresearch/issues/705) Grouping by json.boolean works wrong

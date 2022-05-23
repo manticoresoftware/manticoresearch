@@ -139,7 +139,7 @@ sudo apt install manticore manticore-columnar-lib
 
 ### Homebrew on MacOS
 ```
-brew install manticoresearch
+brew install manticoresoftware/manticore/manticoresearch
 ```
 
 ### Windows

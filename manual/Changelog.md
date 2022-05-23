@@ -118,6 +118,7 @@
 * [Issue #746](https://github.com/manticoresoftware/manticoresearch/issues/746) Support for glibc >= 2.34.
 * [Issue #784](https://github.com/manticoresoftware/manticoresearch/issues/784) count 'VIP' connections separately from usual (non-VIP). Previously VIP connections were counted towards the `max_connections` limit, which could cause "maxed out" error for non-VIP connections. Now VIP connections are not counted towards the limit. Current number of VIP connections can be also seen in `SHOW STATUS` and `status`.
 * [ID](../Creating_an_index/Data_types.md#Document-ID) can now be specified explicitly.
+* [Issue #687](https://github.com/manticoresoftware/manticoresearch/issues/687) support zstd compression for mysql proto
 
 ### ⚠️ Other minor breaking changes
 * ⚠️ BM25F formula has been slightly updated to improve search relevance. This only affects search results in case you use function [BM25F()](../Functions/Searching_and_ranking_functions.md#BM25F%28%29), it doesn't change behaviour of the default ranking formula.
@@ -155,7 +156,6 @@
 * [Issue #604](https://github.com/manticoresoftware/manticoresearch/issues/604) Breaking change 3.6.0, 4.2.0 sphinxql-parser
 * [Issue #667](https://github.com/manticoresoftware/manticoresearch/issues/667) FATAL: out of memory (unable to allocate 9007199254740992 bytes)
 * [Issue #676](https://github.com/manticoresoftware/manticoresearch/issues/676) Strings not passed correctly to UDFs
-* [Issue #687](https://github.com/manticoresoftware/manticoresearch/issues/687) support zstd compression for mysql proto
 * ❗[Issue #698](https://github.com/manticoresoftware/manticoresearch/issues/698) Searchd crashes after trying to add a text column to a rt index
 * [Issue #705](https://github.com/manticoresoftware/manticoresearch/issues/705) Indexer couldn't find all columns
 * ❗[Issue #709](https://github.com/manticoresoftware/manticoresearch/issues/705) Grouping by json.boolean works wrong

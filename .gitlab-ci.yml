@@ -55,6 +55,8 @@ docs_deploy:
   rules:
     - if: $CI_COMMIT_BRANCH == "master"
     - if: $CI_COMMIT_BRANCH =~ /^manticore-.*$/
+  tags:
+    - docker
   <<: *docs
 
 

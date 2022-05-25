@@ -1,16 +1,22 @@
 # Installing Manticore in Windows
 
-To install Manticore in Windows you need to download the zip archive and unpack it into a folder.
+To install Manticore in Windows you need to download zip archive and unpack it into a folder.
 
-In the following example we'll assume we unpack the zip contents to folder `C:\Manticore`.
+1. Download [Manticore bundle](https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/manticore-5.0.0-220518-b4cb7da02-release-main.zip) and [Manticore Columnar Library](https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/manticore-columnar-lib-1.15.2-220518-b0bcafb-x64.zip)
+2. Create a folder, e.g. `C:\Manticore`
+3. Move the archives into it and extract files from them:
+   * `unzip manticore-5.0.0-220518-b4cb7da02-release-main.zip`
+   * `unzip manticore-columnar-lib-1.15.2-220518-b0bcafb-x64.zip`
 
-```bat
-cd C:\Manticore
-unzip manticore-4.2.0-211223-15e927b28-releasex64-main.zip
-```
+The archive comes with a sample configuration file in `manticore.conf.in`.
+The configuration contains placeholders `@LOGDIR@`, `@RUNDIR@` and `@CONFDIR@` that need to be replaced with your:
+* logs dir path
+* pid files directory path
+* and data directory location
 
-The zip comes with a sample configuration file in `manticore.conf.in`.
-The configuration contains a `@CONFDIR@` string which needs to be replaced with your data directory location. It will be the root directory of `data` and `log` folders (first is used to store indexes, second for logs). The zip package also comes with these folders, so they will be available at the location where you unzipped the package. If you want to use a different location, the two folders must be created there.
+respectively. The archive also includes empty folders `var/log` and `var/data`, so if you like - you can use them.
+
+System variable `FULL_SHARE_DIR` should be also set to the full path of the `share` folder. That allows Manticore to work with installed `ICU`, stop words and columnar and secondary libraries from the `share` folder.
 
 To install the `searchd` (Manticore search server) as a Windows service run:
 

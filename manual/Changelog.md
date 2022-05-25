@@ -141,7 +141,7 @@
   - `manticore-all` RPM as a meta package referring to `manticore-server` and `manticore-tools`
 
   The new structure is:
-  - `manticore` - deb/rpm meta package which installes all the above as dependencies
+  - `manticore` - deb/rpm meta package which installs all the above as dependencies
   - `manticore-server-core` - `searchd` and everything to run it alone
   - `manticore-server` - systemd files and other supplementary scripts
   - `manticore-tools` - `indexer`, `indextool` and other tools

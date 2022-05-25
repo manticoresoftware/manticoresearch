@@ -378,6 +378,8 @@ check_docs_examples:
       when: always
   needs:
     - release_tests
+  tags:
+    - docker
   <<: *docs
 
 

@@ -57,6 +57,7 @@ docs_deploy:
     - if: $CI_COMMIT_BRANCH =~ /^manticore-.*$/
   tags:
     - docker
+    - privileged
   <<: *docs
 
 
@@ -380,6 +381,7 @@ check_docs_examples:
     - release_tests
   tags:
     - docker
+    - privileged
   <<: *docs
 
 

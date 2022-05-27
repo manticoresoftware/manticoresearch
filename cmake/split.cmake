@@ -7,9 +7,8 @@ set (__cmake_split_included YES)
 
 # windows case. The pdbs are located in bin/config/*.pdb
 function (__split_win_dbg BINARYNAME DOINSTALL)
-	set (PDB_PATH "${CMAKE_CURRENT_BINARY_DIR}/\${CMAKE_INSTALL_CONFIG_NAME}")
 	if (DOINSTALL)
-		INSTALL (FILES ${PDB_PATH}/${BINARYNAME}.pdb DESTINATION debug COMPONENT dbgsymbols)
+		INSTALL ( FILES "$<TARGET_FILE_DIR:${BINARYNAME}>/${BINARYNAME}.pdb" DESTINATION debug COMPONENT dbgsymbols OPTIONAL )
 	endif ()
 endfunction ()
 
@@ -62,7 +61,7 @@ endfunction ()
 
 # split debug symbols from target, install them
 function (split_dbg BINARYNAME)
-	if (MSVC)
+	if (WIN32)
 		__split_win_dbg (${BINARYNAME} TRUE)
 	elseif (APPLE)
 		__split_apple_dbg (${BINARYNAME} TRUE)

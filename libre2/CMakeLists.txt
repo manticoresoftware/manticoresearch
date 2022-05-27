@@ -44,9 +44,10 @@ endif (OFILES )
 
 
 # Set a default build type for single-configuration CMake generators if no build type is set.
-if (NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
-	set (CMAKE_BUILD_TYPE RelWithDebInfo)
-	message (STATUS "Automatically set build type to RelWithDebInfo since no other provided")
+get_property ( isMultiConfig GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG )
+if (NOT isMultiConfig AND NOT CMAKE_BUILD_TYPE)
+	set ( CMAKE_BUILD_TYPE RelWithDebInfo )
+	message ( STATUS "Automatically set build type to RelWithDebInfo since no other provided" )
 endif ()
 
 # Select flags.
@@ -64,7 +65,9 @@ add_library ( re2 ${SOURCES} ${HFILES} ${INSTALL_HFILES} )
 target_link_libraries(re2 PRIVATE Threads::Threads )
 target_include_directories(re2 PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>$<INSTALL_INTERFACE:include> )
 
-target_compile_definitions(re2 PRIVATE $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:NOMINMAX>)
+if (WIN32)
+	target_compile_definitions ( re2 PRIVATE NOMINMAX )
+endif ()
 target_compile_options(re2 PRIVATE $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/Oi -wd4267>)
 target_compile_options(re2 PRIVATE $<$<NOT:$<COMPILE_LANG_AND_ID:CXX,MSVC>>:-Wsign-compare -c>)
 target_compile_options(re2 PRIVATE $<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wno-class-memaccess -Wno-parentheses>)

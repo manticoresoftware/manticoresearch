@@ -7,5 +7,5 @@ set ( CPACK_GENERATOR "ZIP" )
 set ( SPLIT_SYMBOLS 1 )
 
 if (WIN32)
-	set (CPACK_SUFFIX "x64")
+	set ( CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_FILE_NAME}-x64" )
 endif ()

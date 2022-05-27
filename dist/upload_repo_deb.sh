@@ -11,6 +11,9 @@ copy_to() {
   echo
 }
 
+bundleamd=0
+bundlearm=0
+
 for f in build/*deb; do
   VER=$(echo $f | cut -d_ -f2)
   ARCH=$(echo $f | cut -d_ -f3 | cut -d. -f1)
@@ -24,24 +27,38 @@ for f in build/*deb; do
 
     ~/sign_deb.sh $GPG_SECRET $f
 
-    if [[ $ARCH == "amd64" || $ARCH == "arm64" ]]; then
-      copy_to $f $DISTRO/main/binary-$ARCH/
-      arch=$ARCH
+    if [[ $ARCH == "amd64" ]]; then
+      copy_to $f $DISTRO/main/binary-amd64/
+      bundleamd=1
+    fi
+
+    if [[ $ARCH == "arm64" ]]; then
+      copy_to $f $DISTRO/main/binary-arm64/
+      bundlearm=1
     fi
 
     if [[ $ARCH == "all" ]]; then
-          copy_to $f $DISTRO/main/binary-arm64/
-          copy_to $f $DISTRO/main/binary-amd64/
+      copy_to $f $DISTRO/main/binary-arm64/
+      copy_to $f $DISTRO/main/binary-amd64/
     fi
   fi
 done
 
-# make bundle
-TGZ=manticore_${VER}_$arch.tgz
-(cd build && tar cf - *.deb | gzip -9 -f) > $TGZ
+echo "make bundle(s) and upload them"
 
-# upload bundle
-copy_to $TGZ
+if [ $bundleamd == 1 ]; then
+  echo Pack amd packages
+  TGZ2=manticore_${VER}_amd64.tgz
+  (cd build && tar cf - *_all.deb *_amd64.deb | gzip -9 -f) > $TGZ2
+  copy_to $TGZ1
+fi
+
+if [ $bundlearm == 1 ]; then
+  echo Pack arm packages
+  TGZ2=manticore_${VER}_arm64.tgz
+  (cd build && tar cf - *_all.deb *_arm64.deb | gzip -9 -f) > $TGZ2
+  copy_to $TGZ2
+fi
 
 if [ ! -z $SUFFIX ]; then
   /usr/bin/docker exec repo-generator /generator.sh -distro $DISTRO -architecture amd -dev 1

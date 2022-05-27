@@ -5,16 +5,14 @@
 echo "Collected rpm packages"
 ls -1 build/
 
-#force 'release' for Ivinco-testing
-if  [ $REPO_NAME == 'Ivinco-testing' ]; then
-  DESTINATION="release"
-fi
-
 copy_to() {
     echo -e "Copy $1 to /mnt/repo_storage/manticoresearch/$DESTINATION/centos/$DISTRO/$2";
     cp $1 /mnt/repo_storage/manticoresearch/$DESTINATION/centos/$DISTRO/$2 && echo -e "Success"
     echo -e "\n"
 }
+
+bundleaarch=0
+bundleintel=0
 
 for f in build/*.rpm; do
   echo file $f
@@ -22,8 +20,8 @@ for f in build/*.rpm; do
   VER=$(echo $tail | cut -d. -f1,2,3,4,5)
   if [[ $tail == *".x86_64."* ]]; then
     ARCH=x86_64
-  elif [[ $tail == *".arm64."* ]]; then
-    ARCH=arm64
+  elif [[ $tail == *".aarch64."* ]]; then
+    ARCH=aarch64
   elif [[ $tail == *".noarch."* ]]; then
     ARCH=noarch
   fi;
@@ -39,25 +37,39 @@ for f in build/*.rpm; do
 
     ~/sign_rpm.sh $GPG_SECRET $f
 
-    if [[ $ARCH == "x86_64" || $ARCH == "arm64" ]]; then
-      copy_to $f $ARCH/
-      arch=$ARCH
+    if [[ $ARCH == "x86_64" ]]; then
+      copy_to $f x86_64/
+      bundleintel=1
+    fi
+
+    if [[ $ARCH == "aarch64" ]]; then
+      copy_to $f aarch64/
+      bundleaarch=1
     fi
 
     if [[ $ARCH == "noarch" ]]; then
       copy_to $f x86_64/
-#      copy_to $f arm64/
+      copy_to $f aarch64/
     fi
 
   fi
 done
 
-# make bundle
-TGZ=manticore-${VER}.${ARCH}.tgz
-(cd build && tar cf - $(ls | grep -v -e debuginfo) | gzip -9 -f) > $TGZ
+# upload bundle(s)
 
-# upload bundle
-copy_to $TGZ
+if [ $bundleintel == 1 ]; then
+  echo make bundle x86_64
+  TGZ1=manticore-${VER}.x86_64.tgz
+  (cd build && tar cf - $(ls | grep -v -e debuginfo | grep "x86_64\|noarch") | gzip -9 -f) > $TGZ1
+  copy_to $TGZ1
+fi
+
+if [ $bundleaarch == 1 ]; then
+  echo make bundle aarch64
+  TGZ2=manticore-${VER}.aarch64.tgz
+  (cd build && tar cf - $(ls | grep -v -e debuginfo | grep "aarch64\|noarch") | gzip -9 -f) > $TGZ2
+  copy_to $TGZ2
+fi
 
 if [ "$DESTINATION" = "dev" ]; then
     /usr/bin/docker exec repo-generator /generator.sh -distro centos -version $DISTRO -dev 1
@@ -65,4 +77,4 @@ if [ "$DESTINATION" = "dev" ]; then
     /usr/bin/docker exec repo-generator /generator.sh -distro centos -version $DISTRO
 fi
 
-rm -rf *.rpm
+rm -rf build/*.rpm

@@ -8,43 +8,40 @@ variables:
   VERBOSE: 1
   DIAGNOSTIC: 1
 
+# ==================== .helper generic build ======================
+
 .build:
   stage: build
   interruptible: true
   needs: [ ]
   tags:
     - docker
+  image: registry.gitlab.com/manticoresearch/dev/external_toolchain:clang13_cmake323
   rules:
     - if: $WHAT=='$WHAT'
     - if: $WHAT==null
     - if: $WHAT=="all"
   variables:
     CACHEB: "../cache"
+    arch: x86_64
   script:
     - mkdir build && cd build
-    - cmake -GNinja -DPACK=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
+    - cmake -DPACK=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
     - cmake --build . --target package
-
-.redhat_based:
-  extends: [ .build ]
-  variables:
-    REPO_DIST_NAME: "centos"
-  before_script:
-    - ln -s $(pwd) /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789/src
-    - cd /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789/src
-  artifacts:
+  cache:
+    key: release_$DISTR$arch
     paths:
-      - build/manticore*.rpm
-    when: on_success
-    expire_in: 12 hrs
-
-.debian_based:
-  extends: [ .build ]
+      - cache
   artifacts:
     paths:
       - build/manticore*deb
+      - build/manticore*rpm
+      - build/manticore-*.tar.gz
+      - build/manticore-*.zip
     when: on_success
     expire_in: 12 hrs
+
+# ==================== .helper generic and specific collect of built artifacts ======================
 
 .collect_job:
   variables:
@@ -72,263 +69,250 @@ variables:
 
 .collect_arc:
   extends: [ .collect_job ]
-  needs: [ osx ]
   script:
     - /bin/bash dist/upload_repo_arc.sh
+
+# ==================== Mac OS X ======================
 
 osx:
   extends: [ .build ]
   rules:
     - !reference [ .build, rules ]
     - if: $WHAT =~ /osx/
-  image: registry.gitlab.com/manticoresearch/dev/cross_bigsur:x64
-  cache:
-    key: bigsur
-    paths:
-      - cache
-  artifacts:
-    paths:
-      - build/manticore-*.tar.gz
-    when: on_success
-    expire_in: 12 hrs
+  variables:
+    DISTR: macos
+
+osxm1:
+  extends: [ osx ]
+  variables:
+    arch: arm64
 
 collect_osx:
   extends: [ .collect_arc ]
-  needs: [ osx ]
+  needs: [ osx, osxm1 ]
 
 
+# ==================== Windows ======================
 
 windows:
-  stage: build
-  interruptible: true
+  extends: [ .build ]
   rules:
     - !reference [ .build, rules ]
     - if: $WHAT =~ /windows/
-  needs: [ ]
-  tags:
-    - windev19
-    - build
   variables:
-    LIBS_BUNDLE: "x:/bundle"
-    CACHEB: "x:/cache"
-    BOOST_ROOT: "x:/boost_1_75_0"
-  script:
-    - 'net use x: \\\\VBOXSRV\\shared'
-    - mkdir build
-    - cd build
-    - cmake -DBUILD_TAG=$RELEASE_TAG -DDISTR_BUILD=default -DWITH_SSL=1 ..
-    - cmake --build . --target package --config RelWithDebInfo
-  artifacts:
-    paths:
-      - build/manticore-*.zip
-    when: on_success
-    expire_in: 12 hrs
-  cache: { }
+    arch: x64
+    DISTR: windows
+
+# windows build with clang-cl flavour
+.windows_cl:
+  extends: [ windows ]
+  before_script:
+    - export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/windows-cl.cmake
 
 collect_windows:
   extends: [ .collect_arc ]
   needs: [ windows ]
 
-
+# ==================== Centos 7 ======================
 
 rhel7:
-  extends: [ .redhat_based ]
+  extends: [ .build ]
   rules:
     - !reference [ .build, rules ]
     - if: $WHAT =~ /rhel7/
   variables:
-    REPO_DIST_VER: "7"
-  image: registry.gitlab.com/manticoresearch/dev/centos7_clang:7
-  cache:
-    key: rhel7
-    paths:
-      - cache
+    DISTR: rhel7
+
+rhel7_arm:
+  extends: [ rhel7 ]
+  variables:
+    arch: aarch64
 
 collect_rhel7:
   extends: [ .collect_rpm ]
-  needs: [ rhel7 ]
+  needs: [ rhel7, rhel7_arm ]
   variables:
     DISTRO: 7
 
 
+# ==================== Centos 8 ======================
 
 rhel8:
-  extends: [ .redhat_based ]
+  extends: [ .build ]
   rules:
     - !reference [ .build, rules ]
     - if: $WHAT =~ /rhel8/
   variables:
-    REPO_DIST_VER: "8"
-  image: registry.gitlab.com/manticoresearch/dev/centos8_clang:11
-  cache:
-    key: rhel8
-    paths:
-      - cache
+    DISTR: rhel8
+
+rhel8_arm:
+  extends: [ rhel8 ]
+  variables:
+    arch: aarch64
 
 collect_rhel8:
   extends: [ .collect_rpm ]
-  needs: [ rhel8 ]
+  needs: [ rhel8, rhel8_arm ]
   variables:
     DISTRO: 8
 
+# ==================== Debian-based ======================
 
+# ==================== Debian Stretch ======================
 
 stretch:
-  extends: [ .debian_based ]
+  extends: [ .build ]
   rules:
     - !reference [ .build, rules ]
     - if: $WHAT =~ /stretch/
-  image: registry.gitlab.com/manticoresearch/dev/stretch_clang:13
-  cache:
-    key: stretch
-    paths:
-      - cache
+  variables:
+    DISTR: stretch
+
+stretch_arm:
+  extends: [ stretch ]
+  variables:
+    arch: aarch64
 
 collect_stretch:
   extends: [ .collect_deb ]
-  needs: [ stretch ]
+  needs: [ stretch, stretch_arm ]
   variables:
     DISTRO: stretch
 
 
+# ==================== Ubuntu Xenial ======================
 
 xenial:
-  extends: [ .debian_based ]
+  extends: [ .build ]
   rules:
     - !reference [ .build, rules ]
     - if: $WHAT =~ /xenial/
-  image: registry.gitlab.com/manticoresearch/dev/xenial_clang:12
-  cache:
-    key: xenial
-    paths:
-      - cache
+  variables:
+    DISTR: xenial
+
+xenial_arm:
+  extends: [ xenial ]
+  variables:
+    arch: aarch64
 
 collect_xenial:
   extends: [ .collect_deb ]
-  needs: [ xenial ]
+  needs: [ xenial, xenial_arm ]
   variables:
     DISTRO: xenial
 
 
 
+# ==================== Ubuntu Bionic ======================
+
 bionic:
-  extends: [ .debian_based ]
+  extends: [ .build ]
   rules:
     - !reference [ .build, rules ]
     - if: $WHAT =~ /bionic/
-  image: registry.gitlab.com/manticoresearch/dev/bionic_clang:13
-  cache:
-    key: bionic
-    paths:
-      - cache
+  variables:
+    DISTR: bionic
+
+bionic_arm:
+  extends: [ bionic ]
+  variables:
+    arch: aarch64
 
 collect_bionic:
   extends: [ .collect_deb ]
-  needs: [ bionic ]
+  needs: [ bionic, bionic_arm ]
   variables:
     DISTRO: bionic
 
 
+# ==================== Ubuntu Focal ======================
 
 focal:
-  extends: [ .debian_based ]
+  extends: [ .build ]
   rules:
     - !reference [ .build, rules ]
     - if: $WHAT =~ /focal/
-  image: registry.gitlab.com/manticoresearch/dev/focal_clang:13
-  cache:
-    key: focal
-    paths:
-      - cache
+  variables:
+    DISTR: focal
+
+focal_arm:
+  extends: [ focal ]
+  variables:
+    arch: aarch64
 
 collect_focal:
   extends: [ .collect_deb ]
-  needs: [ focal ]
+  needs: [ focal, focal_arm ]
   variables:
     DISTRO: focal
 
 
-
-
-focalarm:
-  extends: [ .debian_based ]
-  rules:
-    - !reference [ .build, rules ]
-    - if: $WHAT =~ /focalarm/
-  tags:
-    - arm64
-    - focal
-  variables:
-    XTRAFLAGS: "-DCMAKE_C_COMPILER=/usr/bin/clang-12 -DCMAKE_CXX_COMPILER=/usr/bin/clang++-12"
-  cache:
-    key: focalarm
-    paths:
-      - cache
-
-collect_focalarm:
-  extends: [ .collect_deb ]
-  needs: [ focalarm ]
-  variables:
-    DISTRO: focal
-
-
+# ==================== Debian Buster ======================
 
 buster:
-  extends: [ .debian_based ]
+  extends: [ .build ]
   rules:
     - !reference [ .build, rules ]
     - if: $WHAT =~ /buster/
-  image: registry.gitlab.com/manticoresearch/dev/buster_clang:13
-  cache:
-    key: buster
-    paths:
-      - cache
+  variables:
+    DISTR: buster
+
+buster_arm:
+  extends: [ buster ]
+  variables:
+    arch: aarch64
 
 collect_buster:
   extends: [ .collect_deb ]
-  needs: [ buster ]
+  needs: [ buster, buster_arm ]
   variables:
     DISTRO: buster
 
 
+# ==================== Debian Bullseye ======================
 
 bullseye:
-  extends: [ .debian_based ]
+  extends: [ .build ]
   rules:
     - !reference [ .build, rules ]
     - if: $WHAT =~ /bullseye/
-  image: registry.gitlab.com/manticoresearch/dev/bullseye_clang:13
-  cache:
-    key: bullseye
-    paths:
-      - cache
+  variables:
+    DISTR: bullseye
+
+bullseye_arm:
+  extends: [ bullseye ]
+  variables:
+    arch: aarch64
 
 collect_bullseye:
   extends: [ .collect_deb ]
-  needs: [ bullseye ]
+  needs: [ bullseye, bullseye_arm ]
   variables:
     DISTRO: bullseye
 
 
+# ==================== Ubuntu Jammy ======================
 
 jammy:
-  extends: [ .debian_based ]
+  extends: [ .build ]
   rules:
     - !reference [ .build, rules ]
     - if: $WHAT =~ /jammy/
-  image: registry.gitlab.com/manticoresearch/dev/jammy_cmake:323
-  cache:
-    key: jammy
-    paths:
-      - cache
+  variables:
+    DISTR: jammy
+
+jammy_arm:
+  extends: [ jammy ]
+  variables:
+    arch: aarch64
 
 collect_jammy:
   extends: [ .collect_deb ]
-  needs: [ jammy ]
+  needs: [ jammy, jammy_arm ]
   variables:
     DISTRO: jammy
 
-
+# ==================== Docker image ======================
 
 build_docker:
   stage: deploy

@@ -23,6 +23,7 @@ set ( WITH_EXPAT 1 CACHE BOOL "Forced Expat" FORCE )
 set ( WITH_POSTGRESQL 1 CACHE BOOL "Forced Pgsql" FORCE )
 set ( WITH_RE2 1 CACHE BOOL "Forced RE2" FORCE )
 set ( WITH_STEMMER 1 CACHE BOOL "Forced Stemmer" FORCE )
+set ( WITH_SSL 1 CACHE BOOL "Forced OpenSSL" FORCE )
 SET ( BUILD_TESTING 0 CACHE BOOL "Forced no testing" FORCE )
 infomsg ( "DISTR_BUILD applied.
 Package will be set to ${DISTR_BUILD},

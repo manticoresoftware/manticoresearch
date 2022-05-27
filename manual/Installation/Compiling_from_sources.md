@@ -270,26 +270,29 @@ option. By default it will be a simple .zip or .tgz archive with all binaries an
 cmake --build . --target package --config RelWithDebInfo
 ```
 
-#### Building for Linux systems via Docker
+#### Building for All systems via Docker
 
-For preparing official packages we use docker containers. They include all necessary environment components and are
-proved as working solutions by our own builds. You can recreate any of them using Dockerfiles and `README.md`
-instruction, provided in `dist/build_dockers/` folder of the sources. That is easiest way to make the binaries for any
-supported Linux distribution, and also make packages there. Each docker provides `DISTR` environment variable, which is
-consumed by applying `PACK` config option, so that whole configuring might be done by
+For preparing official packages we use docker container. It includes essential toolchain and plugs external sysroots for targets, and is proved as working solutions by our own builds. You can recreate it using Dockerfile and `README.md` instruction, provided in `dist/build_dockers/` folder of the sources. That is easiest way to make the binaries for any supported distribution and architecture. Running docker requires 3 environment variables, which determines target platform, architecture, and URL of the site where necessary external stuff placed. Inside docker all build environment is set up proper way, so that whole configuring might be done by
 single `cmake -DPACK=1 /path/to/sources`.
 
 For example, to create RedHat 7 package 'as official', but without embedded ICU with it's big datafile, you may
 execute (implies that sources are placed in `/manticore/sources` folder of the host):
 
 ```bash
-docker run -it --rm -v /manticore/sources:/manticore registry.gitlab.com/manticoresearch/dev/bionic_cmake:320 bash
+docker run -it --rm -e SYSROOT_URL=https://repo.manticoresearch.com/repository/sysroots \ 
+-e arch=x86_64 \
+-e DISTR=rhel7 \
+-v /manticore/sources:/manticore \
+registry.gitlab.com/manticoresearch/dev/external_toolchain:clang13_cmake323 bash
+
 # following is inside docker shell. By default, workdir will be in the source folder, mounted as volume from the host. 
 RELEASE_TAG="noicu"
 mkdir build && cd build
 cmake -DPACK=1 -DBUILD_TAG=$RELEASE_TAG -DWITH_ICU_FORCE_STATIC=0 ..
 cmake --build . --target package
-```  
+```
+
+The same way you may build binaries/packages not only for pupular linux distribution, but also for FreeBSD, Windows and Mac OS X.
 
 ## Some advanced things about building
 

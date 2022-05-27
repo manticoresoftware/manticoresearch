@@ -9840,18 +9840,12 @@ static int sphQueryHeightCalc ( const XQNode_t * pNode )
 
 	return iMaxChild+iHeight;
 }
-#ifdef __clang__
-#ifndef NDEBUG
-#define SPH_EXTNODE_STACK_SIZE (0x120)
+#if defined( __clang__ )
+#define SPH_EXTNODE_STACK_SIZE ( 0x120 )
+#elif defined( _WIN32 )
+#define SPH_EXTNODE_STACK_SIZE ( 600 )
 #else
-#define SPH_EXTNODE_STACK_SIZE (160)
-#endif
-#else
-#if _WIN32
-#define SPH_EXTNODE_STACK_SIZE (600)
-#else
-#define SPH_EXTNODE_STACK_SIZE (160)
-#endif
+#define SPH_EXTNODE_STACK_SIZE ( 160 )
 #endif
 
 int ConsiderStack ( const struct XQNode_t * pRoot, CSphString & sError )

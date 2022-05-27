@@ -48,8 +48,8 @@ echo "make bundle(s) and upload them"
 
 if [ $bundleamd == 1 ]; then
   echo Pack amd packages
-  TGZ2=manticore_${VER}_amd64.tgz
-  (cd build && tar cf - *_all.deb *_amd64.deb | gzip -9 -f) > $TGZ2
+  TGZ1=manticore_${VER}_amd64.tgz
+  (cd build && tar cf - *_all.deb *_amd64.deb | gzip -9 -f) > $TGZ1
   copy_to $TGZ1
 fi
 

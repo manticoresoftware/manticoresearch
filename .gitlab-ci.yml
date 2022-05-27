@@ -1,24 +1,3 @@
-.docs_main: &docs
-  image: registry.gitlab.com/manticoresearch/doc/autodeploy:latest
-  cache: {}
-  services:
-    - docker:18.09.7-dind
-  before_script:
-    - export COMMIT_DIR="manual"
-    - export DEPLOY_TARGET="k8s"
-  script:
-    - sh /Deploy/autoupdate.sh $DEPLOY_TARGET $COMMIT_DIR $DOCS_ERRORS_DIR
-  artifacts:
-    when: always
-    paths:
-    - $DOCS_ERRORS_DIR
-  variables:
-    DOCKER_HOST: tcp://docker:2375/
-    DOCKER_DRIVER: overlay2
-    RELEASE_FILENAME: latest_release_version
-    DOCS_ERRORS_DIR: build/docs/
-
-
 workflow:
   rules:
     - if: $CI_MERGE_REQUEST_ID
@@ -28,14 +7,22 @@ workflow:
     - if: $TEST
     - if: $WHAT
 
-# to skip ci add [ci skip] or [skip ci] in commit message in any capitalization
+# to skip ci add [ci skip] or [skip ci] in commit message in any capitalization,
+# or add param when pushing, as: git push -o ci.skip ...
+
+variables:
+  DOCS_AUTOCOMMIT_TITLE: 'Docs_examples_update'
+  DOCS_EXAMPLES_FILEPATH: 'build/test/examples.txt'
+  VERBOSE: 1
 
 stages:
   - mirroring
   - routines
+  - ubertests
   - publish
   - hooks
 
+# ==================== Mirror repo to github (only 'master' branch) ======================
 
 job_mirror:
   stage: mirroring
@@ -48,20 +35,335 @@ job_mirror:
     - ~/gitsync.sh
   cache: {}
 
-
-docs_deploy:
-  stage: routines
-  needs: [ ]
-  rules:
-    - if: $CI_COMMIT_BRANCH == "master"
-    - if: $CI_COMMIT_BRANCH =~ /^manticore-.*$/
+# ==================== .helper to work with documentation ======================
+.docs:
   tags:
     - docker
     - privileged
-  <<: *docs
+  image: registry.gitlab.com/manticoresearch/doc/autodeploy:latest
+  rules:
+    - if: $CI_COMMIT_BRANCH == "master"
+    - if: $CI_COMMIT_BRANCH =~ /^manticore-.*$/
+  variables:
+    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_DRIVER: overlay2
+    RELEASE_FILENAME: latest_release_version
+    DOCS_ERRORS_DIR: build/docs/
+  services:
+    - docker:18.09.7-dind
+  before_script:
+    - export COMMIT_DIR="manual"
+    - export DEPLOY_TARGET="k8s"
+  script:
+    - sh /Deploy/autoupdate.sh $DEPLOY_TARGET $COMMIT_DIR $DOCS_ERRORS_DIR
+  artifacts:
+    when: always
+    paths:
+      - $DOCS_ERRORS_DIR
+  cache: { }
+
+# ==================== Deploy documentation ======================
+
+docs_deploy:
+  extends: [ .docs ]
+  stage: routines
+  needs: [ ]
+
+# ==================== .helper build ======================
+
+.build:
+  stage: routines
+  interruptible: true
+  needs: [ ]
+  tags:
+    - docker
+  image: registry.gitlab.com/manticoresearch/dev/external_toolchain:clang13_cmake323
+  variables:
+    CACHEB: "../cache"
+    DIAGNOSTIC: 1 # let's set it by default forever
+    NO_TESTS: 1
+    CTEST_CMAKE_GENERATOR: Ninja
+    CTEST_CONFIGURATION_TYPE: RelWithDebInfo # most common default
+    DISTR: bionic # our default build for tests
+    arch: x86_64
+  cache:
+    paths:
+      - cache
+    key: bionic_test
+  artifacts:
+    when: on_success
+    expire_in: 12 hrs
+
+# ==================== .helper testing ======================
+
+.tests:
+  stage: ubertests
+  needs: [ ]
+  tags:
+    - specdocker
+  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:320
+  variables:
+    DIAGNOSTIC: 1 # let's set it by default forever
+    CACHEB: "../cache"
+  script:
+    - bash /root/aot.sh
+    - ctest -V -S misc/ctest/gltest.cmake
+  cache:
+    key: bionic_test
+    paths:
+      - cache
+  artifacts:
+    expire_in: 12 hrs
+    when: always
+  retry: 1
 
 
-pages:
+# ==================== Simple build, then test ======================
+
+simple_build:
+  extends: [ .build ]
+  rules:
+    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && ( $WHAT=='$WHAT' || $WHAT==null )
+    - if: $TEST =~ /simple/ && ( $WHAT=='$WHAT' || $WHAT==null )
+  variables:
+    CTEST_CMAKE_GENERATOR: "Unix Makefiles" # as Ninja fails with coverage
+    CTEST_CONFIGURATION_TYPE: "Debug"
+    WITH_COVERAGE: 1
+  script:
+    - ctest -VV -S misc/ctest/gltest.cmake
+    - cd build && mkdir xml_simple_build
+    - cp -r Testing/2*/*.xml xml_simple_build
+  artifacts:
+    paths:
+      - build/xml_simple_build
+      - build/api/libsphinxclient/testcli
+      - build/src/indexer
+      - build/src/searchd
+      - build/src/tests
+      - build/src/gtests/gmanticoretest
+      - build/**/*.gcno
+      - build/config/*.c
+      - build/config/*.h
+
+simple_tests:
+  extends: [ .tests ]
+  needs: [ simple_build ]
+  rules:
+    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && ( $WHAT=='$WHAT' || $WHAT==null )
+    - if: $TEST =~ /simple/ && ( $WHAT=='$WHAT' || $WHAT==null )
+  variables:
+    CTEST_CONFIGURATION_TYPE: "Debug"
+    WITH_COVERAGE: 1
+    NO_BUILD: 1
+  after_script:
+    - cd build && mkdir xml_simple_tests
+    - cp -r Testing/2*/*.xml xml_simple_tests
+  artifacts:
+    paths:
+      - build/xml_simple_tests
+      - build/xml_simple_build
+      - build/test/test_*/report.txt
+      - build/test/error*.txt
+      - build/test/searchd.log
+
+# ==================== Release build, then test ======================
+
+release_build:
+  extends: [ .build ]
+  rules:
+    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && ( $WHAT=='$WHAT' || $WHAT==null )
+    - if: $TEST =~ /release/ && ( $WHAT=='$WHAT' || $WHAT==null )
+  variables:
+    CMAKE_INTERPROCEDURAL_OPTIMIZATION: 1
+  script:
+    - ctest -VV -S misc/ctest/gltest.cmake
+    - cd build && mkdir xml_release_build
+    - cp -r Testing/2*/*.xml xml_release_build
+  artifacts:
+    paths:
+      - build/xml_release_build
+      - build/api/libsphinxclient/testcli
+      - build/src/indexer
+      - build/src/searchd
+      - build/src/tests
+      - build/src/gtests/gmanticoretest
+
+release_tests:
+  extends: [ .tests ]
+  needs: [ release_build ]
+  rules:
+    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && ( $WHAT=='$WHAT' || $WHAT==null )
+    - if: $TEST =~ /simple/ && ( $WHAT=='$WHAT' || $WHAT==null )
+  variables:
+    CTEST_CONFIGURATION_TYPE: "RelWithDebInfo"
+    NO_BUILD: 1
+  after_script:
+    - cd build && mkdir xml_release_tests
+    - cp -r Testing/2*/*.xml xml_release_tests
+  artifacts:
+    paths:
+      - build/xml_release_build
+      - build/xml_release_tests
+      - build/test/test_*/report.txt
+      - build/test/error*.txt
+      - build/test/searchd.log
+      - $DOCS_EXAMPLES_FILEPATH
+
+# ==================== Windows build, then test ======================
+
+win_build:
+  extends: [ .build ]
+  rules:
+    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nociwindows .*$/i && ( $WHAT=='$WHAT' || $WHAT==null )
+    - if: $TEST =~ /windows/ && ( $WHAT=='$WHAT' || $WHAT==null )
+  variables:
+    DISTR: windows
+    arch: x64
+    CTEST_CMAKE_GENERATOR: "Ninja Multi-Config"
+    CTEST_CONFIGURATION_TYPE: Debug
+  script:
+    - ctest -VV -S misc/ctest/gltest.cmake
+    - cd build && mkdir xml_win_build
+    - cp -r Testing/2*/*.xml xml_win_build
+  artifacts:
+    paths:
+      - build/xml_win_build
+      - build/src/$CTEST_CONFIGURATION_TYPE/indexer.exe
+      - build/src/$CTEST_CONFIGURATION_TYPE/searchd.exe
+      - build/src/$CTEST_CONFIGURATION_TYPE/tests.exe
+      - build/src/gtests/$CTEST_CONFIGURATION_TYPE/gmanticoretest.exe
+      - build/usr
+# Commented out usually need, but not on our dev where everything is installed into system
+#      - build/src/$CTEST_CONFIGURATION_TYPE/*.dll
+#      - build/src/gtests/$CTEST_CONFIGURATION_TYPE/*.dll
+  cache:
+    key: win_test
+
+win_tests:
+  stage: ubertests
+  needs: [ win_build ]
+  rules:
+    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nociwindows .*$/i && ( $WHAT=='$WHAT' || $WHAT==null )
+    - if: $TEST =~ /windows/ && ( $WHAT=='$WHAT' || $WHAT==null )
+  tags:
+    - windev19
+  variables:
+    LIBS_BUNDLE: "x:/bundle"
+    CACHEB: "x:/cache"
+    BOOST_ROOT: "x:/boost_1_75_0"
+    CTEST_CMAKE_GENERATOR: "Visual Studio 16 2019"
+    CTEST_CONFIGURATION_TYPE: Debug
+    NO_BUILD: 1
+  script:
+    - 'net use x: \\\\VBOXSRV\\shared'
+    - ctest -V -S misc/ctest/gltest.cmake
+  after_script:
+    - cd build && mkdir xml_win_tests
+    - cp -r Testing/2*/*.xml xml_win_tests
+  artifacts:
+    expire_in: 12 hrs
+    when: always
+    paths:
+      - build/xml_win_tests
+      - build/xml_win_build
+      - build/test/test_*/report.txt
+      - build/test/error*.txt
+      - build/test/searchd.log
+  cache: { }
+
+
+# ==================== Just build FreeBSD 13 ======================
+
+build_bsd:
+  extends: [ .build ]
+  rules:
+    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocifreebsd .*$/i && ( $WHAT=='$WHAT' || $WHAT==null )
+    - if: $TEST =~ /freebsd/ && ( $WHAT=='$WHAT' || $WHAT==null )
+  variables:
+    DISTR: freebsd13
+  script:
+    - mkdir build && cd build
+    - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=..
+    - mkdir xml_build_$DISTR$arch
+    - cp -r Testing/2*/*.xml xml_build_$DISTR$arch
+  artifacts:
+    paths:
+      - build/xml_build_$DISTR$arch
+      - build/CMakeFiles/CMake*.log
+  cache:
+    key: $DISTR$arch
+  retry: 1
+
+# ==================== Publish (push) pipeline results ======================
+
+# build and upload on regular commits
+push_results:
+  stage: publish
+  rules:
+    - if: ( $WHAT=='$WHAT' || $WHAT==null )
+      when: always
+  tags:
+    - docker
+  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:320
+  needs:
+    - simple_tests
+    - release_tests
+    - win_tests
+    - build_bsd
+  variables:
+    GIT_STRATEGY: fetch
+  script:
+    - ctest -S misc/ctest/upload.cmake
+  artifacts:
+    paths:
+      - build/junit_*.xml
+    reports:
+      junit: build/junit_*.xml
+  cache: {}
+  environment:
+    name: ${CI_COMMIT_REF_NAME}
+    url: http://$CDASH_URL/index.php?project=Manticoresearch&filtercount=1&field1=revision&compare1=63&value1=$CI_COMMIT_SHA
+  retry: 1
+  allow_failure: true
+
+# ==================== Check documentation examples ======================
+
+check_docs_examples:
+  extends: [ .docs ]
+  stage: publish
+  rules:
+    - !reference [ .docs, rules ]
+    - changes:
+      - "test/**/*"
+      - "manual/**/*.md"
+      when: always
+  needs:
+    - release_tests
+
+# ==================== Run secondary pipeline ======================
+
+deploy_hook:
+  stage: hooks
+  variables:
+    WHAT: $WHAT
+    REPO_NAME: $REPO_NAME
+    DOCKER_HUB_BUILD_URL: $DOCKER_HUB_BUILD_URL
+  rules:
+    - if: $CI_COMMIT_TITLE !~ /^noci .*$/i
+      when: on_success
+  trigger:
+    include: dist/gitlab-release.yml
+  needs:
+    - job: simple_tests
+      artifacts: false
+    - job: win_tests
+      artifacts: false
+    - job: release_tests
+      artifacts: false
+
+# ==================== Manually redirect to our site ======================
+
+.pages:
   stage: routines
   needs: [ ]
   rules:
@@ -80,332 +382,5 @@ pages:
     - mv .public public
   artifacts:
     paths:
-    - public
-  cache: {}
-
-
-simple_tests:
-  stage: routines
-  needs: [ ]
-  rules:
-    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && $WHAT=='$WHAT'
-    - if: $TEST =~ /simple/ && $WHAT=='$WHAT'
-    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && $WHAT==null
-    - if: $TEST =~ /simple/ && $WHAT==null
-  tags:
-    - specdocker
-  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:320
-  variables:
-    CTEST_BUILD_CONFIGURATION: "Debug"
-    CACHEB: "../cache"
-    DIAGNOSTIC: 1 # let's set it by default forever
-    WITH_COVERAGE: 1
-#    CTEST_CMAKE_GENERATOR: "Ninja" # fails because of coverage
-  script:
-    - mc config host add dev $MINIO_HOST
-    - mc mirror --overwrite dev/uploads/aot/ /work/aot/
-    - ctest -V -S misc/ctest/gltest.cmake
-  after_script:
-    - cd build && mkdir xml_simple_tests
-    - cp -r Testing/2*/*.xml xml_simple_tests
-  artifacts:
-    paths:
-    - build/xml_simple_tests
-    - build/test/test_*/report.txt
-    - build/test/error*.txt
-    - build/test/searchd.log
-    expire_in: 12 hrs
-    when: always
-  cache:
-    key: bionic
-    paths:
-      - cache
-  retry: 1
-
-
-release_tests:
-  stage: routines
-  needs: [ ]
-  rules:
-    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && $WHAT=='$WHAT'
-    - if: $TEST =~ /release/ && $WHAT=='$WHAT'
-    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && $WHAT==null
-    - if: $TEST =~ /release/ && $WHAT==null
-  tags:
-    - specdocker # once test 58 fixed, m.b. change to 'docker' and gitlab then cloud will help us testing.
-  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:320
-  variables:
-    CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
-    CACHEB: "../cache"
-    DIAGNOSTIC: 1 # let's set it by default forever
-    CTEST_CMAKE_GENERATOR: "Ninja"
-    CMAKE_INTERPROCEDURAL_OPTIMIZATION: 1
-  script:
-    - mc config host add dev $MINIO_HOST
-    - mc mirror --overwrite dev/uploads/aot/ /work/aot/
-    - ctest -V -S misc/ctest/gltest.cmake
-  after_script:
-    - cd build && mkdir xml_release_tests
-    - cp -r Testing/2*/*.xml xml_release_tests
-  artifacts:
-    paths:
-    - build/xml_release_tests
-    - build/test/test_*/report.txt
-    - build/test/error*.txt
-    - build/test/searchd.log
-    - $DOCS_EXAMPLES_FILEPATH
-    expire_in: 12 hrs
-    when: always
-  cache:
-    key: bionic
-    paths:
-      - cache
-  retry: 1
-
-
-win_tests:
-  stage: routines
-  rules:
-    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nociwindows .*$/i && $WHAT=='$WHAT'
-    - if: $TEST =~ /windows/ && $WHAT=='$WHAT'
-    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nociwindows .*$/i && $WHAT==null
-    - if: $TEST =~ /windows/ && $WHAT==null
-  tags:
-    - windev19
-    - build
-  needs: [ ]
-  variables:
-    LIBS_BUNDLE: "x:/bundle"
-    CACHEB: "x:/cache"
-    BOOST_ROOT: "x:/boost_1_75_0"
-    WIN_TEST_CI: "1"
-    WITH_POSTGRESQL: 0
-    CTEST_CMAKE_GENERATOR: "Visual Studio 16 2019"
-    DIAGNOSTIC: 1 # let's set it by default forever
-  script:
-    - 'net use x: \\\\VBOXSRV\\shared'
-    - ctest -V -S misc/ctest/gltest.cmake -C Debug
-  after_script:
-    - cd build && mkdir xml_win_tests
-    - cp -r Testing/2*/*.xml xml_win_tests
-  artifacts:
-    paths:
-      - build/xml_win_tests
-      - build/test/test_*/report.txt
-      - build/test/error*.txt
-      - build/test/searchd.log
-    expire_in: 12 hrs
-    when: always
-  cache: {}
-  retry: 1
-
-build_rpi4:
-  stage: routines
-  rules:
-    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && $WHAT=='$WHAT'
-    - if: $TEST =~ /arm/ && $WHAT=='$WHAT'
-    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && $WHAT==null
-    - if: $TEST =~ /arm/ && $WHAT==null
-  tags:
-    - arm64
-    - focal
-  needs: [ ]
-  variables:
-    CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
-    CTEST_CMAKE_GENERATOR: "Ninja"
-    CACHEB: "../cache"
-    DIAGNOSTIC: 1 # let's set it by default forever
-  script:
-    - mkdir build && cd build
-    - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=..
-  after_script:
-    - cd build && mkdir xml_build_arm
-    - cp -r Testing/2*/*.xml xml_build_arm
-  artifacts:
-    paths:
-      - build/xml_build_arm
-      - build/CMakeFiles/CMake*.log
-    expire_in: 12 hrs
-    when: always
-  cache:
-    key: raspberrypi4
-    paths:
-      - cache
-  retry: 1
-
-build_mac:
-  stage: routines
-  rules:
-    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocimacos .*$/i && $WHAT=='$WHAT'
-    - if: $TEST =~ /macos/ && $WHAT=='$WHAT'
-    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocimacos .*$/i && $WHAT==null
-    - if: $TEST =~ /macos/ && $WHAT==null
-  tags:
-    - docker
-  needs: [ ]
-  variables:
-    CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
-    CTEST_CMAKE_GENERATOR: "Ninja"
-    CACHEB: "../cache"
-    DIAGNOSTIC: 1 # let's set it by default forever
-  script:
-    - mkdir build && cd build
-    - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=..
-  after_script:
-    - cd build && mkdir xml_build_bigsurx64
-    - cp -r Testing/2*/*.xml xml_build_bigsurx64
-  artifacts:
-    paths:
-      - build/xml_build_bigsurx64
-      - build/CMakeFiles/CMake*.log
-    expire_in: 12 hrs
-    when: always
-  image: registry.gitlab.com/manticoresearch/dev/cross_bigsur:x64
-  cache:
-    key: bigsur_x64
-    paths:
-      - cache
-
-build_mac_m1:
-  stage: routines
-  rules:
-    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocimacos .*$/i && $WHAT=='$WHAT'
-    - if: $TEST =~ /macos/ && $WHAT=='$WHAT'
-    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocimacos .*$/i && $WHAT==null
-    - if: $TEST =~ /macos/ && $WHAT==null
-  tags:
-    - docker
-  needs: [ ]
-  variables:
-    CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
-    CTEST_CMAKE_GENERATOR: "Ninja"
-    CACHEB: "../cache"
-    DIAGNOSTIC: 1 # let's set it by default forever
-  script:
-    - mkdir build && cd build
-    - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=..
-  after_script:
-    - cd build && mkdir xml_build_bigsur_arm64
-    - cp -r Testing/2*/*.xml xml_build_bigsur_arm64
-  artifacts:
-    paths:
-      - build/xml_build_bigsur_arm64
-      - build/CMakeFiles/CMake*.log
-    expire_in: 12 hrs
-    when: always
-  image: registry.gitlab.com/manticoresearch/dev/cross_bigsur:arm64
-  cache:
-    key: bigsur_m1
-    paths:
-      - cache
-
-build_bsd:
-  stage: routines
-  rules:
-    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocifreebsd .*$/i && $WHAT=='$WHAT'
-    - if: $TEST =~ /freebsd/ && $WHAT=='$WHAT'
-    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocifreebsd .*$/i && $WHAT==null
-    - if: $TEST =~ /freebsd/ && $WHAT==null
-  tags:
-    - docker
-  needs: [ ]
-  variables:
-    CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
-    CTEST_CMAKE_GENERATOR: "Ninja"
-    CACHEB: "../cache"
-    DIAGNOSTIC: 1 # let's set it by default forever
-  script:
-    - mkdir build && cd build
-    - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=..
-  after_script:
-    - cd build && mkdir xml_build_bsd
-    - cp -r Testing/2*/*.xml xml_build_bsd
-  artifacts:
-    paths:
-      - build/xml_build_bsd
-      - build/CMakeFiles/CMake*.log
-    expire_in: 12 hrs
-    when: always
-  image: registry.gitlab.com/manticoresearch/dev/cross_freebsd:13
-  cache:
-    key: freebsd13
-    paths:
-      - cache
-
-# build and upload on regular commits
-push_results:
-  stage: publish
-  rules:
-    - if: $WHAT=='$WHAT'
-      when: always
-    - if: $WHAT==null
-      when: always
-  tags:
-    - docker
-  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:320
-  needs:
-    - simple_tests
-    - release_tests
-    - win_tests
-    - build_mac
-    - build_mac_m1
-    - build_bsd
-    - build_rpi4
-  variables:
-    GIT_STRATEGY: fetch
-  script:
-    - ctest -S misc/ctest/upload.cmake
-  artifacts:
-    paths:
-      - build/junit_*.xml
-    reports:
-      junit: build/junit_*.xml
-  cache: {}
-  environment:
-    name: ${CI_COMMIT_REF_NAME}
-    url: http://$CDASH_URL/index.php?project=Manticoresearch&filtercount=1&field1=revision&compare1=63&value1=$CI_COMMIT_SHA
-  retry: 1
-  allow_failure: true
-
-
-check_docs_examples:
-  stage: publish
-  rules:
-    - if: $CI_COMMIT_BRANCH == "master"
-    - if: $CI_COMMIT_BRANCH =~ /^manticore-.*$/
-    - changes:
-      - "test/**/*"
-      - "manual/**/*.md"
-      when: always
-  needs:
-    - release_tests
-  tags:
-    - docker
-    - privileged
-  <<: *docs
-
-
-deploy_hook:
-  stage: hooks
-  variables:
-    WHAT: $WHAT
-    REPO_NAME: $REPO_NAME
-    DOCKER_HUB_BUILD_URL: $DOCKER_HUB_BUILD_URL
-  rules:
-    - if: $CI_COMMIT_TITLE !~ /^noci .*$/i
-      when: always
-  trigger:
-    include: dist/gitlab-release.yml
-  needs:
-    - job: simple_tests
-      artifacts: false
-    - job: win_tests
-      artifacts: false
-    - job: build_mac
-      artifacts: false
-
-
-variables:
-  DOCS_AUTOCOMMIT_TITLE: 'Docs_examples_update'
-  DOCS_EXAMPLES_FILEPATH: 'build/test/examples.txt'
-  VERBOSE: 1
+      - public
+  cache: { }

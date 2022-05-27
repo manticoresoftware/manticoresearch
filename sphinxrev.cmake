@@ -114,8 +114,22 @@ endif ()
 
 set ( GDB_SOURCE_DIR "${MANTICORE_SOURCE_DIR}" )
 
+# determine build tag as even/odd value of patch version
+if (NOT BUILD_TAG)
+	string ( REGEX MATCH "[0-9]+.[0-9]+.([0-9]+)" _ ${VERNUMBERS} )
+	math ( EXPR oddvalue "${CMAKE_MATCH_1} % 2" OUTPUT_FORMAT DECIMAL )
+
+	if (oddvalue)
+		set ( BUILD_TAG "dev" )
+	endif()
+endif()
+
 # All info collected (we need SPH_GIT_COMMIT_ID, GIT_TIMESTAMP_ID, GIT_BRANCH_ID and BUILD_TAG, if any)
 set ( VERFILE "${MANTICORE_BINARY_DIR}/config/gen_sphinxversion.h" )
+
+if (BUILD_TAG)
+	SET ( BUILD_TAG "-${BUILD_TAG}" )
+endif ()
 
 configure_file ( "${MANTICORE_SOURCE_DIR}/src/sphinxversion.h.in" "${VERFILE}" )
 configure_file("${MANTICORE_SOURCE_DIR}/dist/CPackOptions.cmake.in" "${MANTICORE_BINARY_DIR}/config/CPackOptions.cmake" @ONLY)
@@ -125,10 +139,5 @@ SET ( ENV{SOURCE_DATE_EPOCH} "${SOURCE_DATE_EPOCH}" ) # that makes builds reprod
 SET ( CPACK_PACKAGE_VERSION "${VERNUMBERS}-${GIT_TIMESTAMP_ID}-${SPH_GIT_COMMIT_ID}" )
 string ( TOLOWER "${CPACK_PACKAGE_NAME}" CPACK_PACKAGE_NAME_LOWERCASE )
 
-if (BUILD_TAG)
-	SET ( BUILD_TAG "-${BUILD_TAG}" )
-endif ()
-
-SET ( CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME_LOWERCASE}-${CPACK_PACKAGE_VERSION}${BUILD_TAG}${CPACK_SUFFIX}" )
-set ( CPACK_ARCHIVE_MODULE_FILE_NAME ${CPACK_PACKAGE_FILE_NAME} )
+SET ( CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME_LOWERCASE}-${CPACK_PACKAGE_VERSION}" )
 SET ( CPACK_RPM_PACKAGE_VERSION "${VERNUMBERS}_${GIT_TIMESTAMP_ID}.${SPH_GIT_COMMIT_ID}" )

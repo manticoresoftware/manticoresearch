@@ -34,9 +34,7 @@ endif()
 
 target_compile_options(gmanticoretest PRIVATE $<$<OR:$<COMPILE_LANG_AND_ID:CXX,GNU>,$<COMPILE_LANG_AND_ID:C,GNU>>:-Wno-array-bounds -Wno-stringop-truncation -Wno-restrict -Wno-stringop-overflow>)
 
-if ( CMAKE_CROSSCOMPILING )
-	set (CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)
-endif()
+set (CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)
 
 include ( GoogleTest )
 GTEST_DISCOVER_TESTS ( gmanticoretest PROPERTIES LABELS GOOGLE )

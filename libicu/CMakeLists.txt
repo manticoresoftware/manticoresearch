@@ -144,10 +144,11 @@ add_library(icu
 		)
 
 # Set a default build type for single-configuration CMake generators if no build type is set.
-if (NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
-	set(CMAKE_BUILD_TYPE RelWithDebInfo)
-	message (STATUS "Automatically set build type to RelWithDebInfo since no other provided")
-endif()
+get_property ( isMultiConfig GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG )
+if (NOT isMultiConfig AND NOT CMAKE_BUILD_TYPE)
+	set ( CMAKE_BUILD_TYPE RelWithDebInfo )
+	message ( STATUS "Automatically set build type to RelWithDebInfo since no other provided" )
+endif ()
 
 OPTION (STATIC_BUILD "build without dlopen, pure static" OFF )
 

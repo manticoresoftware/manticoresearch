@@ -1,0 +1,8 @@
+apt-get install -y \
+    libmysqlclient-dev \
+    libexpat-dev \
+    libpq-dev \
+    unixodbc-dev \
+    libjemalloc-dev \
+    libssl-dev \
+    libzstd-dev

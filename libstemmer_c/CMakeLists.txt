@@ -17,11 +17,12 @@ FOREACH (LINE ${_CONTENT})
 	endif ()
 endforeach ()
 
-# Set a default build type for single-configuration
-# CMake generators if no build type is set.
-IF (NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
-	SET(CMAKE_BUILD_TYPE RelWithDebInfo)
-ENDIF (NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
+# Set a default build type for single-configuration CMake generators if no build type is set.
+get_property ( isMultiConfig GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG )
+if (NOT isMultiConfig AND NOT CMAKE_BUILD_TYPE)
+	set ( CMAKE_BUILD_TYPE RelWithDebInfo )
+	message ( STATUS "Automatically set build type to RelWithDebInfo since no other provided" )
+endif ()
 
 
 # all the sources parsed. Now just add the lib
@@ -44,7 +45,7 @@ install (DIRECTORY include/ DESTINATION include/stemmer)
 install (TARGETS stemmer EXPORT stemmerexport RUNTIME DESTINATION lib LIBRARY DESTINATION lib)
 install (EXPORT stemmerexport FILE stemmer-targets.cmake DESTINATION "${CMAKE_CMAKE_DIR}" NAMESPACE stemmer::)
 if (CMAKE_C_COMPILER_ID MATCHES "MSVC")
-	install (FILES "$<TARGET_FILE_DIR:stemmer>/stemmer$<$<CONFIG:Debug>:d>.pdb" DESTINATION lib)
+	install (FILES "$<TARGET_FILE_DIR:stemmer>/stemmer$<$<CONFIG:Debug>:d>.pdb" DESTINATION lib OPTIONAL)
 endif ()
 
 include(CMakePackageConfigHelpers)

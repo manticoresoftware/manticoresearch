@@ -446,7 +446,7 @@ DictRefPtr_c TemplateDictTraits_c::CloneBase ( TemplateDictTraits_c* pDict ) con
 bool TemplateDictTraits_c::HasState() const
 {
 #if !WITH_STEMMER
-	return ( m_tLemmatizer );
+	return ( (bool)m_tLemmatizer );
 #else
 	return ( m_dDescStemmers.GetLength() > 0 || m_tLemmatizer );
 #endif

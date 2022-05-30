@@ -769,20 +769,35 @@ CSphString GET_SECONDARY_FULLPATH ()
 }
 
 
-const char * GET_ICU_DATA_DIR ()
+CSphString GET_ICU_DATA_DIR()
 {
 	const char * szEnv = getenv ( "ICU_DATA_DIR" );
 	if ( szEnv )
 		return szEnv;
 
-	static CSphString sModulesPrefix;
+#ifdef _WIN32
+	CSphString sPathToExe = GetPathOnly ( GetExecutablePath() );
+	CSphString sPathToData;
+	sPathToData.SetSprintf ( "%s/../share/icu/", sPathToExe.cstr() );
+	sPathToData = sphNormalizePath(sPathToData);
+
+	CSphString sSearch;
+	sSearch.SetSprintf ( "%s/icudt*.dat", sPathToData.cstr(), sPathToExe.cstr() );
+
+	StrVec_t dFiles = FindFiles ( sSearch.cstr(), false );
+	if ( dFiles.GetLength() )
+		return sPathToData;
+#endif
+
+	CSphString sModulesPrefix;
 	if ( sModulesPrefix.IsEmpty() )
 	{
 		CSphString sInitModulesPrefix;
 		sInitModulesPrefix.SetSprintf ("%s/icu",GET_FULL_SHARE_DIR());
 		sModulesPrefix.Swap(sInitModulesPrefix);
 	}
-	return sModulesPrefix.cstr();
+
+	return sModulesPrefix;
 }
 
 const char * GET_MANTICORE_MODULES ()

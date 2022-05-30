@@ -5535,7 +5535,7 @@ SphOffset_t sphUnzipOffset ( const BYTE * & pBuf );
 const char * GET_FULL_SHARE_DIR();
 
 // this returns env ICU_DATA_DIR, or hardcoded path, or nullptr if nothing hardcoded
-const char * GET_ICU_DATA_DIR ();
+CSphString GET_ICU_DATA_DIR();
 
 // this returns env MANTICORE_MODULES, or GET_FULL_SHARE_DIR()/modules
 const char * GET_MANTICORE_MODULES ();

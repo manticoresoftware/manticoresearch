@@ -1,6 +1,16 @@
 # Changelog
 
+# Version 5.0.2
+Released: May 30th 2022
+
+### Bugfixes
+* ❗[Issue #791](https://github.com/manticoresoftware/manticoresearch/issues/791) - wrong stack size could cause a crash.
+
+
+
 # Version 5.0.0
+Released: May 18th 2022
+
 
 ### Major new features
 * 🔬 Support for [Manticore Columnar Library 1.15.2](https://github.com/manticoresoftware/columnar/), which enables [Secondary indexes](../Server_settings/Searchd.md#secondary_indexes) beta version. Building secondary indexes is on by default for plain and real-time columnar and row-wise indexes (if [Manticore Columnar Library](https://github.com/manticoresoftware/columnar) is in use), but to enable it for searching you need to set `secondary_indexes = 1` either in your configuration file or using [SET GLOBAL](../Server_settings/Setting_variables_online.md). The new functionality is supported in all operating systems except old Debian Stretch and Ubuntu Xenial.

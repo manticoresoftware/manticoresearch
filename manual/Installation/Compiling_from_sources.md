@@ -5,12 +5,11 @@ Compiling Manticore Search from sources can be used for custom build configurati
 ## Building using CI docker
 
 To prepare [official release and dev packages](https://repo.manticoresearch.com/) we use Docker and a special building image. It includes an essential toolchain and is designed to be used with external sysroots, so one container can build packages for all operating systems. You can build the image using [Dockerfile](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/cross/external_toolchain/Dockerfile) and [README](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/README.md). That is the easiest way to make binaries for any supported operating system and architecture. Once you build the image whe you run the container from it you need to specify 3 environment variables:
-* Target platform `DISTR`. Possible values: `rhel7`, `rhel8`, `macos`, `windows`, `stretch`, `buster`, `bullseye`, `xenial`, `bionic`, `focal`, `jammy`, `freebsd13`.
-* Architecture `arch`. Possible values:
-  - Windows: `x64`
-  - Linuxes, Freebsd: `x86_64` / `aarch64`
-  - macOS: `x86_64` / `arm64`
-* URL to system roots archives `SYSROOT_URL`. Just use `https://repo.manticoresearch.com/repository/sysroots` unless you build the sysroots yourself (the instruction is here https://github.com/manticoresoftware/manticoresearch/tree/master/dist/build_dockers/cross/sysroots).
+* Target platform `DISTR`
+* Architecture `arch`
+* URL to system roots archives `SYSROOT_URL`. Just use `https://repo.manticoresearch.com/repository/sysroots` unless you build the sysroots yourself (the instruction is [here](https://github.com/manticoresoftware/manticoresearch/tree/master/dist/build_dockers/cross/sysroots)).
+
+You can use directory https://repo.manticoresearch.com/repository/sysroots/roots_with_zstd/ as a cheatsheet to find out possible `DISTR` and `arch` values since it includes sysroots for all the supported combinations.
 
 After that inside the docker container building packages is as easy as calling:
 

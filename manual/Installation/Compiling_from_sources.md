@@ -15,6 +15,7 @@ After that inside the docker container building packages is as easy as calling:
 
 ```bash
 cmake -DPACK=1 /path/to/sources
+cmake --build .
 ```
 
 For example, to create the same RedHat 7 package as official, but without embedded ICU with it's big datafile, you can

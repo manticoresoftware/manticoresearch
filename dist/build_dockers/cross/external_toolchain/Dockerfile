@@ -28,7 +28,8 @@ RUN cd / \
     && wget https://github.com/Kitware/CMake/releases/download/v${cmakever}/cmake-${cmakever}-linux-$(uname -m).tar.gz \
     && tar -zxf cmake-${cmakever}-linux-$(uname -m).tar.gz \
     && rm cmake-${cmakever}-linux-$(uname -m).tar.gz \
-    && export arch=$(uname -m)
+    && export arch=$(uname -m) \
+    && git config --global --add safe.directory '*'
 ENV PATH $PATH:/cmake-${cmakever}-linux-x86_64/bin:/cmake-${cmakever}-linux-aarch64/bin
 
 # 3-rd layer. Everything to build, except actual sysroot archives

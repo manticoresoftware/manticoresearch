@@ -112,7 +112,7 @@ function (external_build module MODULE_SRC_NAME MODULE_BUILD_NAME)
 
 	set(MODULE_SRC "${${MODULE_SRC_NAME}}")
 	set(MODULE_BUILD "${${MODULE_BUILD_NAME}}")
-	configure_file(${MANTICORE_SOURCE_DIR}/cmake/external-build.cmake.in ${module}-build/CMakeLists.txt)
+	configure_file(${MANTICORE_SOURCE_DIR}/cmake/external-build.cmake.in ${module}-build/CMakeLists.txt @ONLY)
 	execute_process(COMMAND ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}" . WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${module}-build)
 	execute_process(COMMAND ${CMAKE_COMMAND} --build . WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${module}-build)
 endfunction()

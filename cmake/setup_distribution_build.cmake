@@ -17,7 +17,6 @@ endif()
 
 # set default options to be included into build
 set ( DISTR "${DISTR_BUILD}" CACHE STRING "Choose the distr." )
-set ( CMAKE_BUILD_TYPE "RelWithDebInfo" )
 set ( WITH_MYSQL 1 CACHE BOOL "Forced Mysql" FORCE )
 set ( WITH_EXPAT 1 CACHE BOOL "Forced Expat" FORCE )
 set ( WITH_POSTGRESQL 1 CACHE BOOL "Forced Pgsql" FORCE )
@@ -27,5 +26,5 @@ set ( WITH_SSL 1 CACHE BOOL "Forced OpenSSL" FORCE )
 SET ( BUILD_TESTING 0 CACHE BOOL "Forced no testing" FORCE )
 infomsg ( "DISTR_BUILD applied.
 Package will be set to ${DISTR_BUILD},
-also option forced to ON values: WITH_MYSQL, WITH_EXPAT, WITH_POSTGRESQL, WITH_RE2, WITH_STEMMER.
+also option forced to ON values: WITH_MYSQL, WITH_EXPAT, WITH_POSTGRESQL, WITH_RE2, WITH_STEMMER, WITH_SSL.
 Also LIBS_BUNDLE is automatically set to folder 'bundle' placed one level above the sources" )

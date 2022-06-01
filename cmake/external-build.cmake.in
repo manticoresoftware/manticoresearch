@@ -1,34 +1,39 @@
 cmake_minimum_required ( VERSION 3.17 )
 
-project ( ${module}-prebuild NONE )
+project ( @module@-prebuild NONE )
 
 include ( ExternalProject )
 
-set (DEVMODE ${DISTR_BUILD})
+set (DEVMODE @DISTR_BUILD@)
+
+set (BUILD_TYPE @CMAKE_BUILD_TYPE@)
+if (NOT BUILD_TYPE)
+    set (BUILD_TYPE "RelWithDebInfo")
+endif()
 
 if (NOT DEVMODE)
 message (STATUS "Build RelWithDebInfo and Debug for developing")
-ExternalProject_Add ( ${module}_populate
-	SOURCE_DIR ${MODULE_SRC}
-	${MODULE_CACHE}BUILD_COMMAND "${CMAKE_COMMAND}" -E echo "Starting build config RelWithDebInfo"
-	COMMAND "${CMAKE_COMMAND}" -DCMAKE_BUILD_TYPE=RelWithDebInfo .
-	COMMAND "${CMAKE_COMMAND}" --build . --config RelWithDebInfo
-	COMMAND "${CMAKE_COMMAND}" --install . --config RelWithDebInfo --prefix "${MODULE_BUILD}"
-	COMMAND "${CMAKE_COMMAND}" -E echo "Starting build config Debug"
-	COMMAND "${CMAKE_COMMAND}" -DCMAKE_BUILD_TYPE=Debug .
-	COMMAND "${CMAKE_COMMAND}" --build . --config Debug --clean-first
-	COMMAND "${CMAKE_COMMAND}" --install . --config Debug --prefix "${MODULE_BUILD}"
+ExternalProject_Add ( @module@_populate
+	SOURCE_DIR @MODULE_SRC@
+	@MODULE_CACHE@BUILD_COMMAND "@CMAKE_COMMAND@" -E echo "Starting build config RelWithDebInfo"
+	COMMAND "@CMAKE_COMMAND@" -DCMAKE_BUILD_TYPE=RelWithDebInfo .
+	COMMAND "@CMAKE_COMMAND@" --build . --config RelWithDebInfo
+	COMMAND "@CMAKE_COMMAND@" --install . --config RelWithDebInfo --prefix "@MODULE_BUILD@"
+	COMMAND "@CMAKE_COMMAND@" -E echo "Starting build config Debug"
+	COMMAND "@CMAKE_COMMAND@" -DCMAKE_BUILD_TYPE=Debug .
+	COMMAND "@CMAKE_COMMAND@" --build . --config Debug --clean-first
+	COMMAND "@CMAKE_COMMAND@" --install . --config Debug --prefix "@MODULE_BUILD@"
 	INSTALL_COMMAND ""
 	TEST_COMMAND ""
 	)
 else()
-message (STATUS "Build only RelWithDebInfo for releasing")
-ExternalProject_Add ( ${module}_populate
-	SOURCE_DIR ${MODULE_SRC}
-	${MODULE_CACHE}BUILD_COMMAND "${CMAKE_COMMAND}" -E echo "Starting build config RelWithDebInfo"
-	COMMAND "${CMAKE_COMMAND}" -DCMAKE_BUILD_TYPE=RelWithDebInfo .
-	COMMAND "${CMAKE_COMMAND}" --build . --config RelWithDebInfo
-	COMMAND "${CMAKE_COMMAND}" --install . --config RelWithDebInfo --prefix "${MODULE_BUILD}"
+message (STATUS "Build only ${BUILD_TYPE} for releasing")
+ExternalProject_Add ( @module@_populate
+	SOURCE_DIR @MODULE_SRC@
+	@MODULE_CACHE@BUILD_COMMAND "@CMAKE_COMMAND@" -E echo "Starting build config ${BUILD_TYPE}"
+	COMMAND "@CMAKE_COMMAND@" -DCMAKE_BUILD_TYPE=${BUILD_TYPE} .
+	COMMAND "@CMAKE_COMMAND@" --build . --config ${BUILD_TYPE}
+	COMMAND "@CMAKE_COMMAND@" --install . --config ${BUILD_TYPE} --prefix "@MODULE_BUILD@"
 	INSTALL_COMMAND ""
 	TEST_COMMAND ""
 	)

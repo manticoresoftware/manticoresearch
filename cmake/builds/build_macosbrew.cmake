@@ -1,12 +1,17 @@
-# ---------- macosbrew ----------
+# ---------- homebrew ----------
 
-message ( STATUS "Installing for MacOS via Brew" )
+message ( STATUS "Installing via Homebrew" )
 
 if (NOT installed)
 	# start with short route - set all paths
 	include ( GNUInstallDirs )
 	SET ( FULL_SHARE_DIR "${CMAKE_INSTALL_FULL_DATADIR}/manticore" )
 	SET ( LOCALDATADIR "${CMAKE_INSTALL_FULL_LOCALSTATEDIR}/manticore/data" )
+
+	# these guys came from homebrew formula
+	set ( CMAKE_INSTALL_FULL_SYSCONFDIR ${_SYSCONFDIR} )
+	set ( CMAKE_INSTALL_FULL_LOCALSTATEDIR ${_LOCALSTATEDIR} )
+	set ( CMAKE_INSTALL_FULL_RUNSTATEDIR ${_RUNSTATEDIR} )
 	set ( installed ON )
 endif ()
 

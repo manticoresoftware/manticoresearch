@@ -3,9 +3,6 @@
 # rules to build tgz archive for Mac OS X
 
 if (NOT installed)
-	if (NOT SUGGEST_GENERATOR)
-		set ( CMAKE_BUILD_TYPE "RelWithDebInfo" )
-	endif ()
 	# start with short route - set all paths
 	set ( CPACK_PACKAGING_INSTALL_PREFIX /usr/local )
 	set ( CMAKE_INSTALL_PREFIX "${CPACK_PACKAGING_INSTALL_PREFIX}" CACHE PATH "prefix from distr build" FORCE )

@@ -2,9 +2,6 @@
 cmake_minimum_required ( VERSION 3.17 )
 
 if (NOT installed)
-	if (NOT SUGGEST_GENERATOR)
-		set ( CMAKE_BUILD_TYPE "RelWithDebInfo" )
-	endif ()
 	# start with short route - set all paths
 	set ( CPACK_PACKAGING_INSTALL_PREFIX "/" )
 	set ( CMAKE_INSTALL_PREFIX "${CPACK_PACKAGING_INSTALL_PREFIX}" CACHE PATH "prefix from distr build" FORCE )

@@ -17,7 +17,9 @@ endif()
 
 # set default options to be included into build
 set(DISTR "${DISTR_BUILD}" CACHE STRING "Choose the distr.")
-set(CMAKE_BUILD_TYPE "RelWithDebInfo")
+if (NOT CMAKE_BUILD_TYPE)
+	set ( CMAKE_BUILD_TYPE "RelWithDebInfo" )
+endif ()
 set(WITH_MYSQL 1 CACHE BOOL "Forced Mysql" FORCE)
 set(WITH_EXPAT 1 CACHE BOOL "Forced Expat" FORCE)
 set(WITH_POSTGRESQL 1 CACHE BOOL "Forced Pgsql" FORCE)

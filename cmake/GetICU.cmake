@@ -27,7 +27,10 @@ endfunction()
 
 # if it is allowed to use system library - try to use it
 if (NOT WITH_ICU_FORCE_STATIC)
-	find_package(icu MODULE QUIET)
+	find_package ( ICU MODULE QUIET COMPONENTS uc )
+	if (ICU_UC_FOUND)
+		add_library ( icu::icu ALIAS ICU::uc )
+	endif ()
 	return_if_target_found (icu::icu "as default (sys or other)")
 endif ()
 

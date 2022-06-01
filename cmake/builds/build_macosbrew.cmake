@@ -1,16 +1,15 @@
-# ---------- macosbrew ----------
+# ---------- homebrew ----------
 
-message ( STATUS "Installing for MacOS via Brew" )
+message ( STATUS "Installing via Homebrew" )
 
 if (NOT installed)
 	# start with short route - set all paths
 	include ( GNUInstallDirs )
 	SET ( FULL_SHARE_DIR "${CMAKE_INSTALL_FULL_DATADIR}/manticore" )
 	SET ( LOCALDATADIR "${CMAKE_INSTALL_FULL_LOCALSTATEDIR}/manticore/data" )
-	set ( SPLIT_SYMBOLS 1 )
-	# configure specific stuff
-	set ( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -arch ${CMAKE_SYSTEM_PROCESSOR}" )
-	set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -arch ${CMAKE_SYSTEM_PROCESSOR}" )
+	set ( CMAKE_INSTALL_FULL_SYSCONFDIR ${_SYSCONFDIR} )
+	set ( CMAKE_INSTALL_FULL_LOCALSTATEDIR ${_LOCALSTATEDIR} )
+	set ( CMAKE_INSTALL_FULL_RUNSTATEDIR ${_RUNSTATEDIR} )
 	set ( installed ON )
 endif ()
 
@@ -30,7 +29,7 @@ install ( FILES COPYING INSTALL DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT co
 install ( FILES example.sql DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT tools )
 install ( DIRECTORY misc/stopwords DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT common )
 
-if (WITH_ICU)
+if (WITH_ICU AND WITH_ICU_FORCE_STATIC)
 	install_icudata ( ${CMAKE_INSTALL_DATADIR}/manticore/icu )
 endif ()
 

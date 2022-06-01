@@ -36,6 +36,11 @@ set (PACKAGE_NAME "manticore")
 set (COMPANY_NAME "Manticore Software LTD")
 
 include (setup_distribution_build) # process PACK, DISTR_BUILD and ENV{DISTR}
+
+# set build configuration
+set ( only_set_paths ON )
+include ( SetBuildType )
+
 include (FeatureSummary)
 
 # cast away too old gcc compiler (Minspec is 4.7.2)
@@ -288,10 +293,6 @@ configure_file ("COPYING" "${MANTICORE_BINARY_DIR}/COPYING.txt" COPYONLY)
 include (CommonInfo)
 
 include ( ${MANTICORE_SOURCE_DIR}/sphinxrev.cmake )
-
-# set final paths for build
-set ( only_set_paths ON )
-include (SetBuildType)
 
 diag (installed)
 if (NOT installed) # GNUInstallDirs wasn't yet included...

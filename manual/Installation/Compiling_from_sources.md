@@ -26,9 +26,10 @@ docker run -it --rm -e SYSROOT_URL=https://repo.manticoresearch.com/repository/s
 -e arch=x86_64 \
 -e DISTR=rhel7 \
 -v /manticore/sources:/manticore \
-<docker image id / tag> bash
+<docker image> bash
 
-# following is to be run inside docker shell. By default, the working directory will be the source folder, mounted as a volume from the host.
+# following is to be run inside docker shell
+cd /manticore/
 RELEASE_TAG="noicu"
 mkdir build && cd build
 cmake -DPACK=1 -DBUILD_TAG=$RELEASE_TAG -DWITH_ICU_FORCE_STATIC=0 ..

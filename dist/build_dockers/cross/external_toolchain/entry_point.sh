@@ -19,6 +19,6 @@ wget $SYSROOT_URL/roots_with_zstd/sysroot_${DISTR}_${arch}.tar.xz -q
 echo "Unpacking sysroot..."
 tar -Jxf sysroot_${DISTR}_${arch}.tar.xz
 echo "Preparing boost and sysroot done"
-
+echo 'PS1="\[\e]0;\u@\h: \w\a\]${debian_chroot:+($debian_chroot)}\u@\h:\w \[\033[1;31m\][${DISTR} ${arch}]\[\033[0m\]\$ "' >> ~/.bashrc
 exec "$@"
 wait

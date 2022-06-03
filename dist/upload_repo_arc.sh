@@ -21,7 +21,7 @@ get_destination() {
 echo "Collected archives"
 ls -1 build/
 
-for f in build/*.zip; do
+for f in build/*.zip build/*.exe; do
   if [ -f "$f" ]; then
     get_destination
     copy_to $f windows/$DESTINATION/x64/
@@ -36,4 +36,5 @@ for f in build/*.gz; do
 done
 
 rm -rf build/*.zip
+rm -rf build/*.exe
 rm -rf build/*.gz

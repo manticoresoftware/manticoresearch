@@ -16,7 +16,7 @@ variables:
   needs: [ ]
   tags:
     - docker
-  image: registry.gitlab.com/manticoresearch/dev/external_toolchain:clang13_cmake323
+  image: registry.gitlab.com/manticoresearch/dev/external_toolchain:clang13_cmake3232
   rules:
     - if: $WHAT=='$WHAT'
     - if: $WHAT==null
@@ -38,6 +38,7 @@ variables:
       - build/manticore*rpm
       - build/manticore-*.tar.gz
       - build/manticore-*.zip
+      - build/manticore-*.exe
     when: on_success
     expire_in: 12 hrs
 

@@ -16,7 +16,7 @@ docker run -it --rm -v /sphinx/sphinxfrommac:/manticore \
 -e DISTR=bionic \
 -e arch=x86_64 \
 -e SYSROOT_URL=https://repo.manticoresearch.com/repository/sysroots \
-registry.gitlab.com/manticoresearch/dev/external_toolchain:clang13_cmake323 bash
+registry.gitlab.com/manticoresearch/dev/external_toolchain:clang13_cmake3232 bash
 ```
 Also you most probably need to mount folder with sources, if you're not going to fetch them another way, like with git. Just add `-v /manticore/on/host:/manticore`, or something similar to have folder `/manticore` with sources mounted inside the docker.
 

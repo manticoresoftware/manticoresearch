@@ -110,6 +110,7 @@ if (NOT SPH_GIT_COMMIT_ID)
 	set ( BUILD_TAG "devmode" )
 	set ( GIT_BRANCH_ID "developer version" )
 	set ( SOURCE_DATE_EPOCH "1607089638" )
+	set ( DEV_BUILD ON )
 endif ()
 
 set ( GDB_SOURCE_DIR "${MANTICORE_SOURCE_DIR}" )
@@ -121,6 +122,7 @@ if (NOT BUILD_TAG)
 
 	if (oddvalue)
 		set ( BUILD_TAG "dev" )
+		set ( DEV_BUILD ON )
 	endif()
 endif()
 

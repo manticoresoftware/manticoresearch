@@ -127,10 +127,6 @@ endif()
 # All info collected (we need SPH_GIT_COMMIT_ID, GIT_TIMESTAMP_ID, GIT_BRANCH_ID and BUILD_TAG, if any)
 set ( VERFILE "${MANTICORE_BINARY_DIR}/config/gen_sphinxversion.h" )
 
-if (BUILD_TAG)
-	SET ( BUILD_TAG "-${BUILD_TAG}" )
-endif ()
-
 configure_file ( "${MANTICORE_SOURCE_DIR}/src/sphinxversion.h.in" "${VERFILE}" )
 configure_file("${MANTICORE_SOURCE_DIR}/dist/CPackOptions.cmake.in" "${MANTICORE_BINARY_DIR}/config/CPackOptions.cmake" @ONLY)
 

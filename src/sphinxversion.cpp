@@ -11,9 +11,9 @@
 #include "gen_sphinxversion.h"
 
 #ifndef BUILD_TAG
-#define BANNER_TAG "dev"
+#define BANNER_TAG ""
 #else
-#define BANNER_TAG BUILD_TAG
+#define BANNER_TAG " " BUILD_TAG
 #endif
 
 #ifndef GIT_TIMESTAMP_ID
@@ -26,7 +26,7 @@
 	#define VERNUMBERS    "7.7.7"
 #endif
 
-#define PRODUCT_VERSION          VERNUMBERS " " SPH_GIT_COMMIT_ID "@" GIT_TIMESTAMP_ID " " BANNER_TAG
+#define PRODUCT_VERSION          VERNUMBERS " " SPH_GIT_COMMIT_ID "@" GIT_TIMESTAMP_ID BANNER_TAG
 #define PRODUCT_NAME			"Manticore " PRODUCT_VERSION
 #define PRODUCT_BANNER_TEXT		"\nCopyright (c) 2001-2016, Andrew Aksyonoff\n" \
 	"Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)\n" \

@@ -8,14 +8,13 @@ set ( THIS_PKG "${INFO_BANNER} This package" )
 # common metadata
 set ( CPACK_PACKAGE_CONTACT "Manticore Search Maintainers <build@manticoresearch.com>" )
 set ( CMAKE_PROJECT_HOMEPAGE_URL "https://manticoresearch.com" )
-set ( CPACK_PACKAGE_NAME "${PACKAGE_NAME}" )
 set ( CPACK_PACKAGE_VENDOR "${COMPANY_NAME}" )
 set ( CPACK_RESOURCE_FILE_LICENSE "${MANTICORE_BINARY_DIR}/COPYING.txt" )
 set ( CPACK_PACKAGE_DESCRIPTION_SUMMARY "${MANTICORESEARCH} - database for search" )
 set ( CPACK_PACKAGE_DESCRIPTION "${INFO_BANNER}" )
 
-# converter tool
-set ( CPACK_COMPONENT_GROUP_CONVERTER_DISPLAY_NAME "Converter" )
+# converter tool - only citizen of group 'helpers'
+set ( CPACK_COMPONENT_GROUP_HELPERS_DISPLAY_NAME "Converter" )
 set ( CPACK_COMPONENT_CONVERTER_DISPLAY_NAME "CONVERTER application" )
 set ( CPACK_COMPONENT_CONVERTER_SUMMARY "${MANTICORESEARCH} index converter" )
 set ( CPACK_COMPONENT_CONVERTER_DESCRIPTION "${THIS_PKG} contains tool index_converter needed for converting indexes made prior version 3.0." )

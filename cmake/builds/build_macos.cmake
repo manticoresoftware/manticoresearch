@@ -24,6 +24,8 @@ endif ()
 set ( CPACK_GENERATOR "TGZ" )
 message ( STATUS "Will create ${CPACK_GENERATOR} with build for MacOS X" )
 
+set ( CPACK_ARCHIVE_HELPERS_FILE_NAME "${CPACK_PACKAGE_FILE_NAME}-converter" )
+
 #fixup - CMAKE_INSTALL_DOCDIR is share/doc/MANTICORE, fixup to share/doc/manticore
 set ( CMAKE_INSTALL_DOCDIR "${CMAKE_INSTALL_DATAROOTDIR}/doc/manticore" )
 GNUInstallDirs_get_absolute_install_dir ( CMAKE_INSTALL_FULL_DOCDIR CMAKE_INSTALL_DOCDIR DOCDIR )

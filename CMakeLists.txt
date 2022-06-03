@@ -39,9 +39,10 @@ if (WIN32 AND WIN_BUNDLE)
 	set (CMAKE_FIND_PACKAGE_PREFER_CONFIG TRUE)
 endif ()
 
-set (BUILD_TAG "" CACHE STRING "The tag which will be added to build")
-set (PACKAGE_NAME "manticore")
-set (COMPANY_NAME "Manticore Software LTD")
+set ( BUILD_TAG "" CACHE STRING "The tag which will be added to build" )
+set ( PACKAGE_NAME "manticore" )
+set ( COMPANY_NAME "Manticore Software LTD" )
+set ( CPACK_PACKAGE_NAME "${PACKAGE_NAME}" )
 
 include (setup_distribution_build) # process PACK, DISTR_BUILD and ENV{DISTR}
 include (FeatureSummary)
@@ -291,11 +292,11 @@ diag (OS_UNAME)
 
 diag(SPLIT)
 
-# Common all-packages info
 configure_file ("COPYING" "${MANTICORE_BINARY_DIR}/COPYING.txt" COPYONLY)
-include (CommonInfo)
 
+# Common all-packages info
 include ( ${MANTICORE_SOURCE_DIR}/sphinxrev.cmake )
+include ( CommonInfo )
 
 # set final paths for build
 set ( only_set_paths ON )
@@ -379,9 +380,9 @@ cpack_add_component ( common GROUP main )
 cpack_add_component ( tools GROUP main )
 cpack_add_component ( meta )
 cpack_add_component ( devel GROUP main )
-cpack_add_component ( converter GROUP converter )
+cpack_add_component ( converter GROUP helpers )
 cpack_add_component_group ( main EXPANDED )
-cpack_add_component_group ( converter )
+cpack_add_component_group ( helpers EXPANDED )
 
 if (WITH_ICU)
 	cpack_add_component ( icudata )

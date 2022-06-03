@@ -49,6 +49,7 @@ set ( CPACK_RPM_DEVEL_PACKAGE_NAME "manticore-devel" )
 set ( CPACK_RPM_DEVEL_PACKAGE_ARCHITECTURE noarch )
 
 set ( CPACK_RPM_ICUDATA_PACKAGE_NAME "manticore-icudata" )
+set ( CPACK_RPM_ICUDATA_FILE_NAME "manticore-icudata.rpm" )
 set ( CPACK_RPM_ICUDATA_PACKAGE_ARCHITECTURE noarch )
 
 set ( CPACK_RPM_COMMON_PACKAGE_NAME "manticore-common" )

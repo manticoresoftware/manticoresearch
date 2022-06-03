@@ -43,10 +43,10 @@ set ( CPACK_COMPONENT_SERVER_SUMMARY "${MANTICORESEARCH} systemd service scripts
 set ( CPACK_COMPONENT_SERVER_DESCRIPTION "${THIS_PKG} contains startup and systemd files for Manticore Search." )
 
 # icu data library
-set ( CPACK_COMPONENT_ICUDATA_GROUP "main" )
 set ( CPACK_COMPONENT_ICUDATA_DISPLAY_NAME "ICU DAT file" )
 set ( CPACK_COMPONENT_ICUDATA_SUMMARY "${MANTICORESEARCH} ICU files" )
 set ( CPACK_COMPONENT_ICUDATA_DESCRIPTION "${THIS_PKG} contains the ICU DAT file. You need this package only if you use ICU morphology." )
+set ( CPACK_ARCHIVE_ICUDATA_FILE_NAME "manticore-icudata-65l" )
 
 # tools (indexes,indextool etc.)
 set ( CPACK_COMPONENT_TOOLS_GROUP "main" )

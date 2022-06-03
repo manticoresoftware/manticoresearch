@@ -384,7 +384,7 @@ cpack_add_component_group ( main EXPANDED )
 cpack_add_component_group ( converter )
 
 if (WITH_ICU)
-	cpack_add_component ( icudata GROUP main )
+	cpack_add_component ( icudata )
 endif ()
 
 if (WIN32)

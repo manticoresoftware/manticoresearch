@@ -35,6 +35,10 @@ for f in build/*.rpm; do
       fi
     fi
 
+    if [[ $f == *icudata* ]]; then
+      ARCH=noarch
+    fi
+
     ~/sign_rpm.sh $GPG_SECRET $f
 
     if [[ $ARCH == "x86_64" ]]; then
@@ -60,14 +64,14 @@ done
 if [ $bundleintel == 1 ]; then
   echo make bundle x86_64
   TGZ1=manticore-${VER}.x86_64.tgz
-  (cd build && tar cf - $(ls | grep -v -e debuginfo | grep "x86_64\|noarch") | gzip -9 -f) > $TGZ1
+  (cd build && tar cf - $(ls | grep -v -e debuginfo | grep "x86_64\|noarch") *icudata*rpm | gzip -9 -f) > $TGZ1
   copy_to $TGZ1
 fi
 
 if [ $bundleaarch == 1 ]; then
   echo make bundle aarch64
   TGZ2=manticore-${VER}.aarch64.tgz
-  (cd build && tar cf - $(ls | grep -v -e debuginfo | grep "aarch64\|noarch") | gzip -9 -f) > $TGZ2
+  (cd build && tar cf - $(ls | grep -v -e debuginfo | grep "aarch64\|noarch") *icudata*rpm | gzip -9 -f) > $TGZ2
   copy_to $TGZ2
 fi
 

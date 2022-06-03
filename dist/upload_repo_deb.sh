@@ -25,6 +25,10 @@ for f in build/*deb; do
       fi
     fi
 
+    if [[ $f == *icudata* ]]; then
+      ARCH=all
+    fi
+
     ~/sign_deb.sh $GPG_SECRET $f
 
     if [[ $ARCH == "amd64" ]]; then
@@ -49,14 +53,14 @@ echo "make bundle(s) and upload them"
 if [ $bundleamd == 1 ]; then
   echo Pack amd packages
   TGZ1=manticore_${VER}_amd64.tgz
-  (cd build && tar cf - *_all.deb *_amd64.deb | gzip -9 -f) > $TGZ1
+  (cd build && tar cf - *_all.deb *_amd64.deb *icudata*deb | gzip -9 -f) > $TGZ1
   copy_to $TGZ1
 fi
 
 if [ $bundlearm == 1 ]; then
   echo Pack arm packages
   TGZ2=manticore_${VER}_arm64.tgz
-  (cd build && tar cf - *_all.deb *_arm64.deb | gzip -9 -f) > $TGZ2
+  (cd build && tar cf - *_all.deb *_arm64.deb *icudata*deb | gzip -9 -f) > $TGZ2
   copy_to $TGZ2
 fi
 

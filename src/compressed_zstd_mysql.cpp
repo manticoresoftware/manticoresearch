@@ -59,6 +59,8 @@ class ZstdCompressor
 	ZSTD_DCtx *m_pCtxDecompress = nullptr;
 
 protected:
+	using csize_t = size_t;
+
 	ZstdCompressor()
 	{
 		m_pCtxCompress = sph_ZSTD_createCCtx();
@@ -71,19 +73,19 @@ protected:
 		sph_ZSTD_freeCCtx ( m_pCtxCompress );
 	}
 
-	inline size_t Common_compressBound ( size_t uSize )
+	inline csize_t Common_compressBound ( csize_t uSize )
 	{
 		return (size_t)sph_ZSTD_compressBound ( uSize );
 	}
 
-	inline int Common_compress ( BYTE* pDest, size_t* pDestLen, const BYTE* pSource, size_t uSourceLen ) const
+	inline int Common_compress ( BYTE* pDest, csize_t* pDestLen, const BYTE* pSource, csize_t uSourceLen ) const
 	{
 		auto uSize = sph_ZSTD_compressCCtx ( m_pCtxCompress, pDest, *pDestLen, pSource, uSourceLen, m_iLevel );
 		*pDestLen = uSize;
 		return 0;
 	}
 
-	inline bool Common_uncompress ( BYTE* pDest, size_t* pDestLen, const BYTE* pSource, size_t uSourceLen )
+	inline bool Common_uncompress ( BYTE* pDest, csize_t* pDestLen, const BYTE* pSource, csize_t uSourceLen )
 	{
 		auto iZResult = sph_ZSTD_decompressDCtx ( m_pCtxDecompress, pDest, *pDestLen, pSource, uSourceLen );
 		if ( sph_ZSTD_isError ( iZResult ) )

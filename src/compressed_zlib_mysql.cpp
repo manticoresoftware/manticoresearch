@@ -17,19 +17,21 @@ static const int LEVEL_COMPRESSION = Z_DEFAULT_COMPRESSION;
 class ZlibCompressor
 {
 protected:
-	inline static uLong Common_compressBound ( uLong uSize )
+	using csize_t = uLong;
+
+	inline static csize_t Common_compressBound ( csize_t uSize )
 	{
-		return (uLong)compressBound (uSize);
+		return (csize_t)compressBound (uSize);
 	}
 
-	inline static int Common_compress ( BYTE* pDest, uLong* pDestLen, const BYTE* pSource, uLong uSourceLen )
+	inline static int Common_compress ( BYTE* pDest, csize_t* pDestLen, const BYTE* pSource, csize_t uSourceLen )
 	{
 		return compress2 ( pDest, pDestLen, pSource, uSourceLen, LEVEL_COMPRESSION );
 	}
 
-	inline static bool Common_uncompress ( BYTE* pDest, uLong* pDestLen, const BYTE* pSource, uLong uSourceLen )
+	inline static bool Common_uncompress ( BYTE* pDest, csize_t* pDestLen, const BYTE* pSource, csize_t uSourceLen )
 	{
-		auto iZResult = uncompress ( pDest, pDestLen, pSource, uSourceLen );
+		auto iZResult = uncompress ( pDest, (csize_t*) pDestLen, pSource, uSourceLen );
 		return iZResult == Z_OK;
 	}
 };

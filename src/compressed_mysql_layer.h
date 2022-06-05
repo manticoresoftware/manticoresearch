@@ -79,7 +79,7 @@ protected:
 
 			auto uRawSize = ReadLSBSmallDword ( m_tIn );
 			m_uPackedID = m_tIn.GetByte();
-			auto uUncompressedSize = (unsigned long) ReadLSBSmallDword ( m_tIn );
+			auto uUncompressedSize = (typename COMPR::csize_t) ReadLSBSmallDword ( m_tIn );
 
 			// read raw packet (compressed or uncompressed)
 			if ( !m_tIn.ReadFrom ( uRawSize, bIntr ) )

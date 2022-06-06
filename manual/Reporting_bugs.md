@@ -13,7 +13,7 @@ Updates to the documentation (what you are reading now) is also done on [Github]
 ### Crashes
 Manticore is written in C++ - low level programming language allowing to speak to the computer with not so many intermediate layers for faster performance. The drawback of that is that in rare cases there is no way to handle a bug elegantly writing the error about it to a log and skipping processing the command which caused the problem. Instead of that the program can just crash which means it would stop completely and would have to be restarted.
 
-When Manticore Search crashes you need to let Manticore team about that by [making a bug report](https://github.com/manticoresoftware/manticoresearch/issues/new?assignees=&labels=&template=bug_report.md&title=) on github or if you use Manticore's professional services in your private helpdesk. Manticore team needs the following:
+When Manticore Search crashes you need to let Manticore team know about that by [making a bug report](https://github.com/manticoresoftware/manticoresearch/issues/new?assignees=&labels=&template=bug_report.md&title=) on github or if you use Manticore's professional services in your private helpdesk. Manticore team needs the following:
 
 1. searchd log
 2. coredump

@@ -65,7 +65,7 @@ sudo journalctl --unit manticore
 
 ### Custom startup flags using systemd
 
-`systemctl set-environment _ADDITIONAL_SEARCHD_PARAMS` allows you to specify custom startup flags Manticore Search daemon should be started with. See the full list [here](./Manually.md#searchd-command-line-options).
+`systemctl set-environment _ADDITIONAL_SEARCHD_PARAMS` allows you to specify custom startup flags Manticore Search daemon should be started with. See full list [here](../Starting_the_server/Manually.md#searchd-command-line-options).
 
 For example, to start Manticore with debug logging level you can run:
 ```bash

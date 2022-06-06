@@ -13,85 +13,119 @@ Updates to the documentation (what you are reading now) is also done on [Github]
 ### Crashes
 Manticore is written in C++ - low level programming language allowing to speak to the computer with not so many intermediate layers for faster performance. The drawback of that is that in rare cases there is no way to handle a bug elegantly writing the error about it to a log and skipping processing the command which caused the problem. Instead of that the program can just crash which means it would stop completely and would have to be restarted.
 
-In case of crashes we sometimes can get enough info to fix from the backtrace which Manticore tries to write down in [the log file](Logging/Server_logging.md). It might look like this:
+When Manticore Search crashes you need to let Manticore team about that by [making a bug report](https://github.com/manticoresoftware/manticoresearch/issues/new?assignees=&labels=&template=bug_report.md&title=) on github or if you use Manticore's professional services in your private helpdesk. Manticore team needs the following:
 
-```bash
-./indexer(_Z12sphBacktraceib+0x2d6)[0x5d337e]
-./indexer(_Z7sigsegvi+0xbc)[0x4ce26a]
-/lib64/libpthread.so.0[0x3f75a0dd40]
-/lib64/libc.so.6(fwrite+0x34)[0x3f74e5f564]
-./indexer(_ZN27CSphCharsetDefinitionParser5ParseEPKcR10CSphVectorI14CSphRemapRange16CSphVe
-ctorPolicyIS3_EE+0x5b)[0x51701b]
-./indexer(_ZN13ISphTokenizer14SetCaseFoldingEPKcR10CSphString+0x62)[0x517e4c]
-./indexer(_ZN17CSphTokenizerBase14SetCaseFoldingEPKcR10CSphString+0xbd)[0x518283]
-./indexer(_ZN18CSphTokenizer_SBCSILb0EEC1Ev+0x3f)[0x5b312b]
-./indexer(_Z22sphCreateSBCSTokenizerv+0x20)[0x51835c]
-./indexer(_ZN13ISphTokenizer6CreateERK21CSphTokenizerSettingsPK17CSphEmbeddedFilesR10CSphS
-tring+0x47)[0x5183d7]
-./indexer(_Z7DoIndexRK17CSphConfigSectionPKcRK17SmallStringHash_TIS_EbP8_IO_FILE+0x494)[0x
-4d31c8]
-./indexer(main+0x1a17)[0x4d6719]
-/lib64/libc.so.6(__libc_start_main+0xf4)[0x3f74e1d8a4]
-./indexer(__gxx_personality_v0+0x231)[0x4cd779]
+1. searchd log
+2. coredump
+3. query log
+
+It will be great if you additionally do the following:
+1. run gdb to inspect the coredump:
+```
+gdb /usr/bin/searchd </path/to/coredump>
+```
+2. Find crashed thread id in the coredump file name (make sure you have `%p` in /proc/sys/kernel/core_pattern), e.g. `core.work_6.29050.server_name.1637586599` means thread_id=29050
+3. In gdb run:
+```
+set pagination off
+info threads
+# find thread number by it's id (e.g. for `LWP 29050` it will be thread number 8
+thread apply all bt
+thread <thread number>
+bt full
+info locals
+quit
+```
+4. Provide the outputs
+
+### What do I do when Manticore Search hangs?
+
+You need to run gdb manually and collect some info that may be useful to understand why it's hanging.
+
+1. `show threads option format=all` run trough a [VIP port](https://manual.manticoresearch.com/Connecting_to_the_server/HTTP#VIP-connection)
+2. collect lsof output since hanging can be caused by too many connections or open file descriptors
+```
+lsof -p `cat /var/run/manticore/searchd.pid`
+```
+3. dump core
+```
+gcore `cat /var/run/manticore/searchd.pid`
+```
+(it will save the dump to the current dir)
+
+4. Install and run gdb:
+```
+gdb /usr/bin/searchd `cat /var/run/manticore/searchd.pid`
+```
+Note it will halt your running searchd, but if it's alredy hanging it shouldn't be a problem.
+5. In gdb run:
+```
+set pagination off
+info threads
+thread apply all bt
+quit
+```
+6. Collect all the outputs and files and provide them in a bug report.
+
+For experts: the macros added in [this commit](https://github.com/manticoresoftware/manticoresearch/commit/e317f7aa30aad51cb19d34595458bb7c8811be21) can be helpful to debug.
+
+### How to enable saving coredumps on crash?
+
+* make sure you run searchd with `--coredump`. To avoid hacking the scripts you can use this https://manual.manticoresearch.com/Starting_the_server/Linux#Custom-startup-flags-using-systemd , e.g.:
+
+```
+[root@srv lib]# systemctl set-environment _ADDITIONAL_SEARCHD_PARAMS='--coredump'
+[root@srv lib]# systemctl restart manticore
+[root@srv lib]# ps aux|grep searchd
+mantico+  1955  0.0  0.0  61964  1580 ?        S    11:02   0:00 /usr/bin/searchd --config /etc/manticoresearch/manticore.conf --coredump
+mantico+  1956  0.6  0.0 392744  2664 ?        Sl   11:02   0:00 /usr/bin/searchd --config /etc/manticoresearch/manticore.conf --coredump
 ```
 
-This was an example of a good backtrace - we can see mangled function
-names here.
-
-But sometimes backtrace may look like this:
-```bash
-/opt/piler/bin/indexer[0x4c4919]
-/opt/piler/bin/indexer[0x405cf0]
-/lib/x86_64-linux-gnu/libpthread.so.0(+0xfcb0)[0x7fc659cb6cb0]
-/opt/piler/bin/indexer[0x4237fd]
-/opt/piler/bin/indexer[0x491de6]
-/opt/piler/bin/indexer[0x451704]
-/opt/piler/bin/indexer[0x40861a]
-/opt/piler/bin/indexer[0x40442c]
-/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0xed)[0x7fc6588aa76d]
-/opt/piler/bin/indexer[0x405b89]
+* make sure that your OS allows you to save coredumps: `/proc/sys/kernel/core_pattern` should be non-empty - it is where it will save them. If you do:
+```
+echo "/cores/core.%e.%p.%h.%t" > /proc/sys/kernel/core_pattern
+```
+it will instruct your kernel to save them to file like `core.searchd.1773.centos-4gb-hel1-1.1636454937`
+* searchd should be started with `ulimit -c unlimited`, but if you start Manticore via systemctl it does it for yourself since it does:
+```
+[root@srv lib]# grep CORE /lib/systemd/system/manticore.service
+LimitCORE=infinity
 ```
 
-Developers might not get anything useful from these cryptic numbers since it doesn't show function names. To help that you need to provide symbols (function and variable names). If you've installed Manticore by building from sources, run the following command over your binary:
-```bash
-nm -n indexer > indexer.sym
+### How do I install debug symbols?
+
+Manticore Search and Manticore Columnar Library are written in C++, which means that what you get is a compiled compact binary file which executes in your OS optimal way. When you run a binary your system doesn't have full access to the names of variables, functions, methods, classes etc that are implemented. All that is provided separately in so called "debuginfo" packages or "symbol packages".
+Debug symbols are useful for troubleshooting and other debugging purposes, since when you have symbols and your binary crashes there's a way to visualize the state it crashed at including function names. Manticore Search provides such backtrace in searchd log and also generates coredump if it was run with `--coredump`. Without symbols all you get is just internal offsets that is difficult/impossible to decode. So if you make a bug report about a crash in most cases Manticore team will need debug symbols to be able to help you.
+
+To install Manticore Search / Manticore Columnar Library debug symbols just install package `*debuginfo*` (centos), `*dbgsym*` (ubuntu, debian), `*dbgsymbols*` (windows, macos) of exactly the same version you are running. For example if you've installed Manticore Search in Centos 8 from package https://repo.manticoresearch.com/repository/manticoresearch/release/centos/8/x86_64/manticore-4.0.2_210921.af497f245-1.el8.x86_64.rpm the corresponding package with symbols is https://repo.manticoresearch.com/repository/manticoresearch/release/centos/8/x86_64/manticore-debuginfo-4.0.2_210921.af497f245-1.el8.x86_64.rpm
+
+Note they have the same commit id `af497f245` which corresponds to the commit this version was built from.
+
+If you installed Manticore from a Manticore APT/YUM repo you can one of the following tools:
+* `debuginfo-install` in centos 7
+* `dnf debuginfo-install` centos 8
+* `find-dbgsym-packages` in Debian and Ubuntu
+
+to find a debug symbols package for you.
+
+### How to check the debug symbols exist?
+
+1. Find build id in `file /usr/bin/searchd` output:
+
+```
+[root@srv lib]# file /usr/bin/searchd
+/usr/bin/searchd: ELF 64-bit LSB executable, x86-64, version 1 (GNU/Linux), dynamically linked (uses shared libs), for GNU/Linux 2.6.32, BuildID[sha1]=2c582e9f564ea1fbeb0c68406c271ba27034a6d3, stripped
 ```
 
-Attach this file to a bug report along with backtrace. You should however ensure that the binary is not stripped. Our official binary packages should be fine. However, if you built Manticore manually from sources, do not run `strip` utility on that binary, and/or do not let your build/packaging system do that, otherwise the symbols will be lost completely.
+In this case it's 2c582e9f564ea1fbeb0c68406c271ba27034a6d3.
 
-In some cases crashes can happen, because the index files have a corruption. **It's highly recommended to use [indextool --check](Miscellaneous_tools.md#indextool) and add the output to the bug report you will create on Github.**
+2. Find symbols in `/usr/lib/debug/.build-id` like this:
 
-### Core dumps
-
-> A core dump is a file containing a process's address space (memory) when the process terminates unexpectedly.
-
-Sometimes the backtrace doesn't provide enough information about the cause of a crash or the crash cannot be easily reproduced and core files are required for troubleshooting.
-
-For searchd (Manticore search server) to record a core dump in case of a crash, the following needs to be ensured:
-
-* core dumping needs to be enabled on the running operating system. Some operating systems do not have core dumping enabled by default
-* searchd needs to be started with `--coredump` option
-
-Please note that searchd core files can use a lot of space as they include data from the loaded indexes and each crash creates a new core file. Free space should be monitored while searchd runs with `--coredump` option enabled to avoid 100% disk usage.
-
-### Hanging
-
-In case Manticore is hanging for some reason and
-1) the instance is under watchdog (which is on by default)
-2) gdb is installed
-
-Then:
-
-* either connect to the instance via mysql (vip or regular port) and issue `debug procdump`  
-* or manually send USR2 signal to **watchdog** of the hanging instance (not to the instance process itself)
-* or manually run `gdb attach <PID_of_hanged>` and then these commands one by one:
-  1. `info threads`
-  2. `thread apply all bt`
-  3. `bt`
-  4. `info locals`
-  5. `detach`
-
-In the first 2 cases trace will be in the server's log. In the last (manual gdb) case it has to be copied from console output. These traces need to be attached, it will be very helpful for investigation.
+```
+[root@srv ~]# ls -la /usr/lib/debug/.build-id/2c/582e9f564ea1fbeb0c68406c271ba27034a6d3*
+lrwxrwxrwx. 1 root root 23 Nov  9 10:42 /usr/lib/debug/.build-id/2c/582e9f564ea1fbeb0c68406c271ba27034a6d3 -> ../../../../bin/searchd
+lrwxrwxrwx. 1 root root 27 Nov  9 10:42 /usr/lib/debug/.build-id/2c/582e9f564ea1fbeb0c68406c271ba27034a6d3.debug -> ../../usr/bin/searchd.debug
+```
 
 ### Uploading your data
 

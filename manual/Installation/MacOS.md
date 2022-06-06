@@ -1,7 +1,5 @@
 # Installing Manticore on MacOS
 
-On MacOS Manticore can be installed in two ways:
-
 ## Via Homebrew package manager
 
 ```bash
@@ -16,7 +14,7 @@ Afterwards you can start Manticore as a brew service:
 brew services start manticoresearch
 ```
 
-The configuration is located at `/usr/local/etc/manticoresearch/manticore.conf`.
+Manticore configuration file is `/usr/local/etc/manticoresearch/manticore.conf`.
 
 ## From tarball with binaries
 
@@ -42,4 +40,4 @@ FULL_SHARE_DIR=./share/manticore ./bin/searchd -c ./etc/manticoresearch/manticor
 FULL_SHARE_DIR=./share/manticore ./bin/indexer -c ./etc/manticoresearch/manticore.conf
 ```
 
-Manticore configuration file is in `./etc/manticoresearch/manticore.conf` after you unpack the archive.
+Manticore configuration file is `./etc/manticoresearch/manticore.conf` after you unpack the archive.

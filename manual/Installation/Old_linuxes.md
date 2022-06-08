@@ -1,6 +1,6 @@
 # Via Homebrew in old Linuxes
 
-Manticore team normally doesn't provide new version packages for old Linuxes (after EOL). If:
+Manticore team usually doesn't provide new version packages for old Linuxes (after EOL). If:
 1. you are still using such
 2. and you can't find official .deb / .apt packages on https://repo.manticoresearch.com/
 

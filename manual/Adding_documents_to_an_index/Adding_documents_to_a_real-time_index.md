@@ -7,9 +7,11 @@ Adding documents in a real-time manner is only supported for [Real-Time](../Crea
 
 You can insert new documents with values for all fields of the index or only part of them. In this case the other fields will be filled with their default values (0 for scalar types, empty string for text types).
 
-Expressions are not currently supported in `INSERT` and the values should be explicitly specified.
+Expressions are currently not supported in `INSERT` and the values should be explicitly specified.
 
-The ID field/value can be omitted as RT index supports [auto-id](../Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md#Auto-ID) functionality. You can use "0" as the id value to force automatic ID generation. Rows with duplicate IDs will not be overwritten by `INSERT`. You can use [REPLACE](../Updating_documents/REPLACE.md) for that.
+The ID field/value can be omitted as RT and PQ indexes support [auto-id](../Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md#Auto-ID) functionality. You can also use `0` as the id value to force automatic ID generation. Rows with duplicate IDs will not be overwritten by `INSERT`. You can use [REPLACE](../Updating_documents/REPLACE.md) for that.
+
+Note, when you use the HTTP JSON protocol node `doc` is mandatory, all the values should be provided inside it.
 
 <!-- intro -->
 ##### SQL:
@@ -148,21 +150,21 @@ HashMap<String,Object> doc = new HashMap<String,Object>(){{
     put("title","Crossbody Bag with Tassel");
     put("price",19.85);
 }};
-newdoc.index("products").id(1L).setDoc(doc); 
+newdoc.index("products").id(1L).setDoc(doc);
 sqlresult = indexApi.insert(newdoc);
 
 newdoc = new InsertDocumentRequest();
 HashMap<String,Object> doc = new HashMap<String,Object>(){{
     put("title","Crossbody Bag with Tassel");
 }};
-newdoc.index("products").id(2L).setDoc(doc); 
+newdoc.index("products").id(2L).setDoc(doc);
 sqlresult = indexApi.insert(newdoc);
 
 newdoc = new InsertDocumentRequest();
 HashMap<String,Object> doc = new HashMap<String,Object>(){{
     put("title","Yellow bag");
  }};
-newdoc.index("products").id(0L).setDoc(doc); 
+newdoc.index("products").id(0L).setDoc(doc);
 sqlresult = indexApi.insert(newdoc);
 
 ```
@@ -287,7 +289,7 @@ newdoc = new InsertDocumentRequest();
 HashMap<String,Object> doc = new HashMap<String,Object>(){{
     put("title","Yellow bag");
  }};
-newdoc.index("products").id(0L).setDoc(doc); 
+newdoc.index("products").id(0L).setDoc(doc);
 sqlresult = indexApi.insert(newdoc);
 ```
 
@@ -334,7 +336,7 @@ The syntax is in general the same as for [inserting a single document](../Quick_
 * The data itself should be formatted as a newline-delimited json (NDJSON). Basically it means that each line should contain exactly one json statement and end with a newline \n and maybe \r.
 
 ```json
-POST /bulk 
+POST /bulk
 -H "Content-Type: application/x-ndjson" -d '
 {"insert": {"index":"products", "id":1, "doc":  {"title":"Crossbody Bag with Tassel","price" : 19.85}}}
 {"insert":{"index":"products", "id":2, "doc":  {"title":"microfiber sheet set","price" : 19.99}}}
@@ -360,10 +362,10 @@ POST /bulk
 }
 ```
 
-Notice, bulk endpoint supports 'insert', 'replace', 'delete', and 'update' queries. Also notice, that you can direct operations to several different indexes, however transactions are possible only over single index, so if you specify more, manticore will collect operations directed to one index into single txn, and when index changes, it will commit collected and start new transaction over new index. 
+Notice, bulk endpoint supports 'insert', 'replace', 'delete', and 'update' queries. Also notice, that you can direct operations to several different indexes, however transactions are possible only over single index, so if you specify more, manticore will collect operations directed to one index into single txn, and when index changes, it will commit collected and start new transaction over new index.
 
 ```json
-POST /bulk 
+POST /bulk
 -H "Content-Type: application/x-ndjson" -d '
 {"insert":{"index":"test1","id":21,"doc":{"int_col":1,"price":1.1,"title":"bulk doc one"}}}
 {"insert":{"index":"test1","id":22,"doc":{"int_col":2,"price":2.2,"title":"bulk doc two"}}}
@@ -439,9 +441,9 @@ res = indexApi.bulk('\n'.join(map(json.dumps,docs)))
 <!-- request Javascript -->
 
 ```javascript
-let docs = [ 
-    {"insert": {"index" : "products", "id" : 3, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}, 
-    {"insert": {"index" : "products", "id" : 4, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}, 
+let docs = [
+    {"insert": {"index" : "products", "id" : 3, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}},
+    {"insert": {"index" : "products", "id" : 4, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}},
     {"insert": {"index" : "products", "id" : 5, "doc" : {"title" : "CPet Hair Remover Glove", "price" : 7.99}}}
 ];
 res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
@@ -528,7 +530,7 @@ HashMap<String,Object> doc = new HashMap<String,Object>(){{
     put("title","Yellow bag");
     put("sizes",new int[]{40,41,42,43});
  }};
-newdoc.index("products").id(0L).setDoc(doc); 
+newdoc.index("products").id(0L).setDoc(doc);
 sqlresult = indexApi.insert(newdoc);
 ```
 <!-- end -->
@@ -615,13 +617,13 @@ res = await indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : 
 newdoc = new InsertDocumentRequest();
 HashMap<String,Object> doc = new HashMap<String,Object>(){{
     put("title","Yellow bag");
-    put("meta", 
+    put("meta",
         new HashMap<String,Object>(){{
             put("size",41);
             put("color","red");
         }});
  }};
-newdoc.index("products").id(0L).setDoc(doc); 
+newdoc.index("products").id(0L).setDoc(doc);
 sqlresult = indexApi.insert(newdoc);
 ```
 

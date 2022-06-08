@@ -695,8 +695,14 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( bool & bEOF, CSphString & sError )
 						ParseFieldMVA ( i, sAttrValue.cstr() );
 					break;
 
+				case SPH_ATTR_BOOL:
+					m_dAttrs[i] = sphToDword ( sAttrValue.cstr() ) ? 1 : 0;
+					if ( !tAttr.IsColumnar() )
+						m_tDocInfo.SetAttr ( tAttr.m_tLocator, m_dAttrs[i] );
+					break;
+
 				default:
-					m_dAttrs[i] = sphToDword ( sAttrValue.cstr () );
+					m_dAttrs[i] = sphToDword ( sAttrValue.cstr() );
 					if ( !tAttr.IsColumnar() )
 						m_tDocInfo.SetAttr ( tAttr.m_tLocator, m_dAttrs[i] );
 					break;

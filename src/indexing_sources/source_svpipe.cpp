@@ -398,6 +398,12 @@ BYTE **	CSphSource_BaseSV::NextDocument ( bool & bEOF, CSphString & sError )
 				m_tDocInfo.SetAttr ( tAttr.m_tLocator, 0 );
 				break;
 
+			case SPH_ATTR_BOOL:
+				tCurIntAttr = sphToDword(sVal) ? 1 : 0;
+				if ( !tAttr.IsColumnar() )
+					m_tDocInfo.SetAttr ( tAttr.m_tLocator, tCurIntAttr );
+				break;
+
 			default:
 				tCurIntAttr = sphToDword(sVal);
 				if ( !tAttr.IsColumnar() )

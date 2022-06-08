@@ -58,7 +58,7 @@ CREATE TABLE test_table
 <db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
 <db_insert>
 INSERT INTO test_table VALUES
-( 100, 'This planet has or rather had a problem', 1, 0, 13, '2001-07-04', 14, 15, 16, 17 ),
+( 100, 'This planet has or rather had a problem', 100, 0, 13, '2001-07-04', 14, 15, 16, 17 ),
 ( 101, 'which was this: most of the people on it were unhappy for pretty much of the time.', 0, 1, 23, '2002-07-04', 24, 25, 26, 27 ),
 ( 102, 'Many solutions were suggested for this problem', 1, 2, 33, '2003-07-04', 34, 35, 36, 37 ),
 ( 103, 'but most of these were largely concerned with the movements of small green pieces of paper', 0, 0, 43, '2004-07-04', 44, 45, 46, 47 )
@@ -112,6 +112,9 @@ select avg(status) from test;
 select min(status) from test;
 select max(status) from test;
 select sum(status) from test;
+
+<!-- groupby over bool -->
+select groupby(),count(*) from test group by status;
 
 </sphinxql></queries>
 

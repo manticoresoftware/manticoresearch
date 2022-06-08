@@ -880,6 +880,12 @@ BYTE ** CSphSource_SQL::NextDocument ( bool & bEOF, CSphString & sError )
 					ParseFieldMVA ( i, SqlColumn ( tAttr.m_iIndex ) );
 				break;
 
+			case SPH_ATTR_BOOL:
+				m_dAttrs[i] = sphToDword ( SqlColumn ( tAttr.m_iIndex ) ) ? 1 : 0;
+				if ( !tAttr.IsColumnar() )
+					m_tDocInfo.SetAttr ( tAttr.m_tLocator, m_dAttrs[i] ); // FIXME? report conversion errors maybe?
+				break;
+
 			default:
 				// just store as uint by default
 				m_dAttrs[i] = sphToDword ( SqlColumn ( tAttr.m_iIndex ) ); // FIXME? report conversion errors maybe?

@@ -3000,7 +3000,8 @@ RtSegment_t* RtIndex_c::MergeTwoSegments ( const RtSegment_t* pA, const RtSegmen
 	auto * pSeg = new RtSegment_t (0);
 	FakeWL_t _ { pSeg->m_tLock }; // as pSeg is just created - we don't need real guarding and use fake lock to mute thread safety warnings
 
-	if ( m_tSchema.HasStoredFields() || m_tSchema.HasStoredAttrs() )
+	assert ( !!pA->m_pDocstore==!!pB->m_pDocstore );
+	if ( ( m_tSchema.HasStoredFields() || m_tSchema.HasStoredAttrs() ) && pA->m_pDocstore && pB->m_pDocstore )
 		pSeg->SetupDocstore ( &m_tSchema );
 
 	// we might need less because of killed, but we can not know yet. Reserving more than necessary is strictly not desirable!

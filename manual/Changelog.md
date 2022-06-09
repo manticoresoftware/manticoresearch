@@ -97,7 +97,7 @@ Released: May 18th 2022
 
   </details>
 
-* [Pseudo sharding](../Server_settings/Searchd.md#pseudo_sharding) is enabled by default.
+* **⚠️ BREAKING CHANGE**: [Pseudo sharding](../Server_settings/Searchd.md#pseudo_sharding) is enabled by default. If you want to disable it make sure you add `pseudo_sharding = 0` to section `searchd` of your Manticore configuration file.
 * Having at least one full-text field in a real-time/plain index is not mandatory anymore. You can now use Manticore even in cases not having anything to do with full-text search.
 * [Fast fetching](../Creating_an_index/Data_types.md#fast_fetch) for attributes backed by [Manticore Columnar Library](https://github.com/manticoresoftware/columnar): queries like `select * from <columnar table>` are now much faster than previously, especially if there are many fields in the schema.
 * **⚠️ BREAKING CHANGE**: Implicit [cutoff](../Searching/Options.md#cutoff). Manticore now doesn't spend time and resources processing data you don't need in the result set which will be returned. The downside is that it affects `total_found` in [SHOW META](../Profiling_and_monitoring/SHOW_META.md#SHOW-META) and [hits.total](../Searching/Full_text_matching/Basic_usage.md#HTTP) in JSON output. It is now only accurate in case you see `total_relation: eq` while `total_relation: gte` means the actual number of matching documents is greater than the `total_found` value you've got. To retain the previous behaviour you can use search option `cutoff=0`, which makes `total_relation` always `eq`.

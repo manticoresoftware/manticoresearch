@@ -1,19 +1,19 @@
 if (__setup_distribution_build_included)
-	return()
+	return ()
 endif ()
-set(__setup_distribution_build_included YES)
+set ( __setup_distribution_build_included YES )
 
 # simpler packages: provide -DPACK=1, and DISTR_BUILD will be set from env $DISTR, easier in dockers
 if (PACK)
-	set(DISTR_BUILD "$ENV{DISTR}")
+	set ( DISTR_BUILD "$ENV{DISTR}" )
 endif ()
 
 # Make release build for the pointed distr
 # That will override defaults and give possibility to build
 # the distribution with minimal command line
 if (NOT DISTR_BUILD)
-	return()
-endif()
+	return ()
+endif ()
 
 # set default options to be included into build
 set ( DISTR "${DISTR_BUILD}" CACHE STRING "Choose the distr." )

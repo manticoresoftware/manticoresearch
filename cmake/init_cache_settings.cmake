@@ -1,14 +1,14 @@
 if (__init_cache_settings_included)
-	return()
+	return ()
 endif ()
-set(__init_cache_settings_included YES)
+set ( __init_cache_settings_included YES )
 
 if (DEFINED ENV{DIAGNOSTIC})
-	set(DIAGNOSTIC "$ENV{DIAGNOSTIC}")
+	set ( DIAGNOSTIC "$ENV{DIAGNOSTIC}" )
 endif ()
 if (DIAGNOSTIC)
-	set (CMAKE_MESSAGE_LOG_LEVEL DEBUG)
-endif()
+	set ( CMAKE_MESSAGE_LOG_LEVEL DEBUG )
+endif ()
 
 if (DEFINED ENV{LIBS_BUNDLE})
 	set ( LIBS_BUNDLE "$ENV{LIBS_BUNDLE}" )
@@ -19,11 +19,11 @@ if (DEFINED ENV{WIN_BUNDLE})
 endif ()
 
 if (NOT LIBS_BUNDLE)
-	get_filename_component(LIBS_BUNDLE "${MANTICORE_SOURCE_DIR}/../bundle" ABSOLUTE)
+	get_filename_component ( LIBS_BUNDLE "${MANTICORE_SOURCE_DIR}/../bundle" ABSOLUTE )
 endif ()
 
 if (NOT IS_ABSOLUTE ${LIBS_BUNDLE})
-	set(LIBS_BUNDLE "${MANTICORE_BINARY_DIR}/${LIBS_BUNDLE}")
+	set ( LIBS_BUNDLE "${MANTICORE_BINARY_DIR}/${LIBS_BUNDLE}" )
 endif ()
 
 if (NOT WIN_BUNDLE)
@@ -34,19 +34,19 @@ SET ( LIBS_BUNDLE "${LIBS_BUNDLE}" CACHE PATH "Choose the path to the dir which 
 SET ( WIN_BUNDLE "${WIN_BUNDLE}" CACHE PATH "Choose the path to the dir which contains win builds of libs like expat, mysql, etc." FORCE )
 
 if (DEFINED ENV{CACHEB})
-	set(CACHEB "$ENV{CACHEB}")
+	set ( CACHEB "$ENV{CACHEB}" )
 endif ()
 
 if (NOT DEFINED CACHEB)
-	get_filename_component(CACHEB "${LIBS_BUNDLE}/../cache" ABSOLUTE)
+	get_filename_component ( CACHEB "${LIBS_BUNDLE}/../cache" ABSOLUTE )
 endif ()
 
 if (NOT IS_ABSOLUTE ${CACHEB})
-	set(CACHEB "${MANTICORE_BINARY_DIR}/${CACHEB}")
+	set ( CACHEB "${MANTICORE_BINARY_DIR}/${CACHEB}" )
 endif ()
 
 if (DEFINED CACHEB)
-	SET(CACHEB "${CACHEB}" CACHE PATH "Cache dir where unpacked sources and builds found.")
+	SET ( CACHEB "${CACHEB}" CACHE PATH "Cache dir where unpacked sources and builds found." )
 endif ()
 
 # this macro is need for cross-compiling. If we just add path to CMAKE_PREFIX_PATH, it will NOT work with active root path,
@@ -61,5 +61,5 @@ macro ( APPEND_PREFIX PATH )
 		diags ( "CMAKE_PREFIX_PATH before inclusion of update_bundle was ${CMAKE_PREFIX_PATH}" )
 		list ( APPEND CMAKE_PREFIX_PATH "${PATH}" )
 		diags ( "CMAKE_PREFIX_PATH refreshed from update_bundle and is ${CMAKE_PREFIX_PATH}" )
-	endif()
+	endif ()
 endmacro ()

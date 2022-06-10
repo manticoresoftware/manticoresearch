@@ -1,5 +1,5 @@
 # find if the unaligned RAM access is possible on the build system
-include(CheckCXXSourceRuns)
+include ( CheckCXXSourceRuns )
 CHECK_CXX_SOURCE_RUNS ( "
 #include <stdlib.h>
 #include <string.h>
@@ -26,4 +26,4 @@ if (!( iRes==0x01020304 || iRes==0x04030201 ))
 // all seems ok
 return 0;
 }
-" UNALIGNED_RAM_ACCESS)
+" UNALIGNED_RAM_ACCESS )

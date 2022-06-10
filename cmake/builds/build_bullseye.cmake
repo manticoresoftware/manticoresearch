@@ -4,7 +4,7 @@
 
 message ( STATUS "Will create DEB for Debian (bullseye)" )
 
-set (flavour "debian")
+set ( flavour "debian" )
 
 # we provide explicit dependencies, so shlideps is not necessary
 set ( disable_shlideps ON )

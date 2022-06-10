@@ -19,10 +19,10 @@ endif ()
 # set or append DEBLINE to deb-spec style DEBLIST
 function ( seta DEBLIST DEBLINE )
 	if (${DEBLIST})
-		set (${DEBLIST} "${${DEBLIST}}, ${DEBLINE}" PARENT_SCOPE)
-	else()
-		set (${DEBLIST} "${DEBLINE}" PARENT_SCOPE)
-	endif()
+		set ( ${DEBLIST} "${${DEBLIST}}, ${DEBLINE}" PARENT_SCOPE )
+	else ()
+		set ( ${DEBLIST} "${DEBLINE}" PARENT_SCOPE )
+	endif ()
 endfunction ()
 
 # Common debian-specific build variables
@@ -39,7 +39,7 @@ if (NOT disable_shlideps)
 	set ( CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON )
 endif ()
 
-set ( breaks "manticore (<= 4.2.1-220503-fffffffff)")
+set ( breaks "manticore (<= 4.2.1-220503-fffffffff)" )
 
 set ( CPACK_DEBIAN_PACKAGE_SECTION "misc" )
 set ( CPACK_DEBIAN_PACKAGE_PRIORITY "optional" )

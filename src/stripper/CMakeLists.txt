@@ -8,6 +8,6 @@ ENDFOREACH ()
 
 message ( STATUS "Inside directory src/stripper..." )
 
-add_library ( stripper html_stripper.cpp html_stripper.h html_stripper_tag.h)
+add_library ( stripper html_stripper.cpp html_stripper.h html_stripper_tag.h )
 target_include_directories ( stripper PRIVATE "${MANTICORE_SOURCE_DIR}/src" )
 target_link_libraries ( stripper PRIVATE lextra )

@@ -3,8 +3,8 @@ cmake_minimum_required ( VERSION 3.11.0 )
 # Read docs at https://github.com/google/benchmark
 include ( GetGooglebench )
 if (NOT TARGET benchmark::benchmark_main)
-	return()
-endif()
+	return ()
+endif ()
 
 add_executable ( gmanticorebench
 		functions.cpp
@@ -15,10 +15,10 @@ add_executable ( gmanticorebench
 		popcount.cpp
 		)
 
-target_include_directories (gmanticorebench PRIVATE .. )
-target_link_libraries (gmanticorebench
+target_include_directories ( gmanticorebench PRIVATE .. )
+target_link_libraries ( gmanticorebench
 		lmanticore
 		lsearchd
 		stub_ssl
-		benchmark::benchmark)
+		benchmark::benchmark )
 

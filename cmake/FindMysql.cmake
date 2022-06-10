@@ -45,16 +45,16 @@
 #  License text for the above reference.)
 ##########################################################################
 
-function(_MYSQL_CONFIG VAR _opt)
-	EXECUTE_PROCESS(COMMAND ${MYSQL_CONFIG_EXECUTABLE} ${_opt} OUTPUT_VARIABLE _mysql_config_output )
-	STRING(REGEX REPLACE "[\r\n]$" "" _mysql_config_output "${_mysql_config_output}")
-	SET(${VAR} ${_mysql_config_output} PARENT_SCOPE)
-endfunction()
+function ( _MYSQL_CONFIG VAR _opt )
+	EXECUTE_PROCESS ( COMMAND ${MYSQL_CONFIG_EXECUTABLE} ${_opt} OUTPUT_VARIABLE _mysql_config_output )
+	STRING ( REGEX REPLACE "[\r\n]$" "" _mysql_config_output "${_mysql_config_output}" )
+	SET ( ${VAR} ${_mysql_config_output} PARENT_SCOPE )
+endfunction ()
 
-function(_find_library VAR _names _suffixes)
+function ( _find_library VAR _names _suffixes )
 	if (NOT ${VAR})
-		set(CMAKE_FIND_LIBRARY_SUFFIXES ${_suffixes})
-		find_library(${VAR} NAMES ${_names}
+		set ( CMAKE_FIND_LIBRARY_SUFFIXES ${_suffixes} )
+		find_library ( ${VAR} NAMES ${_names}
 				HINTS
 				${MYSQL_LIB_HINT}
 				PATHS
@@ -76,14 +76,14 @@ function(_find_library VAR _names _suffixes)
 				/lib/mysql
 				)
 	endif ()
-	SET(${VAR} ${${VAR}} PARENT_SCOPE)
-endfunction()
+	SET ( ${VAR} ${${VAR}} PARENT_SCOPE )
+endfunction ()
 
-if ( NOT MYSQL_CONFIG_EXECUTABLE )
-	if ( EXISTS "$ENV{MYSQL_DIR}/bin/mysql_config" )
+if (NOT MYSQL_CONFIG_EXECUTABLE)
+	if (EXISTS "$ENV{MYSQL_DIR}/bin/mysql_config")
 		SET ( MYSQL_CONFIG_EXECUTABLE "$ENV{MYSQL_DIR}/bin/mysql_config" )
 	else ()
-		set(MYSQL_CONFIG_PREFER_PATH "$ENV{MYSQL_HOME}/bin" CACHE FILEPATH "preferred path to MySQL (mysql_config)")
+		set ( MYSQL_CONFIG_PREFER_PATH "$ENV{MYSQL_HOME}/bin" CACHE FILEPATH "preferred path to MySQL (mysql_config)" )
 		FIND_PROGRAM ( MYSQL_CONFIG_EXECUTABLE
 				NAMES mysql_config
 				DOC "full path of mysql_config"
@@ -99,13 +99,13 @@ if ( NOT MYSQL_CONFIG_EXECUTABLE )
 				${MYSQL_ROOT_DIR}/bin
 				)
 	endif ()
-	mark_as_advanced(MYSQL_CONFIG_EXECUTABLE)
+	mark_as_advanced ( MYSQL_CONFIG_EXECUTABLE )
 endif ()
 
-if ( MYSQL_CONFIG_EXECUTABLE )
-	_MYSQL_CONFIG(MYSQL_INCLUDE_HINT "--variable=pkgincludedir")
-	_MYSQL_CONFIG(MYSQL_LIB_HINT "--variable=pkglibdir")
-	mark_as_advanced(MYSQL_INCLUDE_HINT MYSQL_LIB_HINT)
+if (MYSQL_CONFIG_EXECUTABLE)
+	_MYSQL_CONFIG ( MYSQL_INCLUDE_HINT "--variable=pkgincludedir" )
+	_MYSQL_CONFIG ( MYSQL_LIB_HINT "--variable=pkglibdir" )
+	mark_as_advanced ( MYSQL_INCLUDE_HINT MYSQL_LIB_HINT )
 endif ()
 
 #-------------- FIND MYSQL_INCLUDE_DIR ------------------
@@ -128,38 +128,38 @@ if (NOT MYSQL_INCLUDE_DIR)
 			/opt/mysql-client/include/mysql
 			$ENV{ProgramFiles}/MySQL/*/include
 			$ENV{SystemDrive}/MySQL/*/include
-		)
-endif()
+			)
+endif ()
 
 #----------------- FIND MYSQL_LIBRARY -------------------
 if (MYSQL_USE_STATIC_LIBS)
-	_find_library(MYSQL_LIBRARY mysqlclient ".a;.lib")
-	mark_as_advanced(MYSQL_INCLUDE_DIR MYSQL_LIBRARY)
+	_find_library ( MYSQL_LIBRARY mysqlclient ".a;.lib" )
+	mark_as_advanced ( MYSQL_INCLUDE_DIR MYSQL_LIBRARY )
 
-	include(FindPackageHandleStandardArgs)
-	find_package_handle_standard_args(Mysql REQUIRED_VARS MYSQL_LIBRARY MYSQL_LIBRARY)
+	include ( FindPackageHandleStandardArgs )
+	find_package_handle_standard_args ( Mysql REQUIRED_VARS MYSQL_LIBRARY MYSQL_LIBRARY )
 
 	if (Mysql_FOUND AND NOT TARGET Mysql::Mysql)
-		add_library (Mysql::Mysql STATIC IMPORTED)
-		set_target_properties (Mysql::Mysql PROPERTIES
+		add_library ( Mysql::Mysql STATIC IMPORTED )
+		set_target_properties ( Mysql::Mysql PROPERTIES
 				INTERFACE_INCLUDE_DIRECTORIES "${MYSQL_INCLUDE_DIR}"
 				IMPORTED_LOCATION "${MYSQL_LIBRARY}"
 				)
 	endif ()
 
-else()
-	_find_library (MYSQL_LIBRARY mysqlclient ".so;.dylib;.dll")
-	mark_as_advanced (MYSQL_INCLUDE_DIR MYSQL_LIBRARY)
+else ()
+	_find_library ( MYSQL_LIBRARY mysqlclient ".so;.dylib;.dll" )
+	mark_as_advanced ( MYSQL_INCLUDE_DIR MYSQL_LIBRARY )
 
-	include (FindPackageHandleStandardArgs)
-	find_package_handle_standard_args (Mysql REQUIRED_VARS MYSQL_INCLUDE_DIR MYSQL_LIBRARY)
+	include ( FindPackageHandleStandardArgs )
+	find_package_handle_standard_args ( Mysql REQUIRED_VARS MYSQL_INCLUDE_DIR MYSQL_LIBRARY )
 
 	if (Mysql_FOUND AND NOT TARGET Mysql::Mysql)
-		add_library (Mysql::Mysql SHARED IMPORTED)
-		set_target_properties (Mysql::Mysql PROPERTIES
+		add_library ( Mysql::Mysql SHARED IMPORTED )
+		set_target_properties ( Mysql::Mysql PROPERTIES
 				INTERFACE_INCLUDE_DIRECTORIES "${MYSQL_INCLUDE_DIR}"
 				IMPORTED_LOCATION "${MYSQL_LIBRARY}"
 				)
 	endif ()
-endif()
+endif ()
 

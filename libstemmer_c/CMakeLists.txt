@@ -1,17 +1,17 @@
-cmake_minimum_required(VERSION 3.17)
+cmake_minimum_required ( VERSION 3.17 )
 
-PROJECT(stemmer C)
-FILE(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/mkinc.mak" _CONTENT)
+PROJECT ( stemmer C )
+FILE ( STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/mkinc.mak" _CONTENT )
 FOREACH (LINE ${_CONTENT})
 	IF ("${LINE}" MATCHES "^(snowball_sources|snowball_headers)=")
-		STRING(REPLACE ";" "" LINE "${LINE}")
-		separate_arguments(SRCLIST UNIX_COMMAND "${LINE}")
+		STRING ( REPLACE ";" "" LINE "${LINE}" )
+		separate_arguments ( SRCLIST UNIX_COMMAND "${LINE}" )
 		foreach (SRC ${SRCLIST})
 			IF ("${SRC}" MATCHES "=")
-				STRING(REPLACE "=" "" _NAME "${SRC}")
-				set(${_NAME})
+				STRING ( REPLACE "=" "" _NAME "${SRC}" )
+				set ( ${_NAME} )
 			else ()
-				LIST(APPEND ${_NAME} ${SRC})
+				LIST ( APPEND ${_NAME} ${SRC} )
 			endif ()
 		endforeach ()
 	endif ()
@@ -26,10 +26,10 @@ endif ()
 
 
 # all the sources parsed. Now just add the lib
-add_library(stemmer ${snowball_sources} ${snowball_headers})
-target_include_directories(stemmer PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>$<INSTALL_INTERFACE:include/stemmer>)
+add_library ( stemmer ${snowball_sources} ${snowball_headers} )
+target_include_directories ( stemmer PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>$<INSTALL_INTERFACE:include/stemmer> )
 
-set_target_properties (stemmer PROPERTIES
+set_target_properties ( stemmer PROPERTIES
 		DEBUG_POSTFIX d
 		PDB_NAME stemmer
 		PDB_NAME_DEBUG stemmerd
@@ -38,18 +38,18 @@ set_target_properties (stemmer PROPERTIES
 		)
 
 # installation stuff
-set(CMAKE_CMAKE_DIR "lib/cmake/stemmer")
+set ( CMAKE_CMAKE_DIR "lib/cmake/stemmer" )
 
 # ensure ALL externally required headers are exported here
-install (DIRECTORY include/ DESTINATION include/stemmer)
-install (TARGETS stemmer EXPORT stemmerexport RUNTIME DESTINATION lib LIBRARY DESTINATION lib)
-install (EXPORT stemmerexport FILE stemmer-targets.cmake DESTINATION "${CMAKE_CMAKE_DIR}" NAMESPACE stemmer::)
+install ( DIRECTORY include/ DESTINATION include/stemmer )
+install ( TARGETS stemmer EXPORT stemmerexport RUNTIME DESTINATION lib LIBRARY DESTINATION lib )
+install ( EXPORT stemmerexport FILE stemmer-targets.cmake DESTINATION "${CMAKE_CMAKE_DIR}" NAMESPACE stemmer:: )
 if (CMAKE_C_COMPILER_ID MATCHES "MSVC")
-	install (FILES "$<TARGET_FILE_DIR:stemmer>/stemmer$<$<CONFIG:Debug>:d>.pdb" DESTINATION lib OPTIONAL)
+	install ( FILES "$<TARGET_FILE_DIR:stemmer>/stemmer$<$<CONFIG:Debug>:d>.pdb" DESTINATION lib OPTIONAL )
 endif ()
 
-include(CMakePackageConfigHelpers)
-file(WRITE "stemmer-config.cmake.in"
+include ( CMakePackageConfigHelpers )
+file ( WRITE "stemmer-config.cmake.in"
 		"\@PACKAGE_INIT@
 
 if(NOT TARGET stemmer::stemmer)
@@ -61,8 +61,8 @@ if(NOT TARGET stemmer::stemmer)
         endif ()
     endforeach ()
 endif()
-")
+" )
 
-configure_package_config_file("stemmer-config.cmake.in"
-		"${CMAKE_CURRENT_BINARY_DIR}/stemmer-config.cmake" INSTALL_DESTINATION "${CMAKE_CMAKE_DIR}")
-install (FILES "${CMAKE_CURRENT_BINARY_DIR}/stemmer-config.cmake" DESTINATION "${CMAKE_CMAKE_DIR}")
+configure_package_config_file ( "stemmer-config.cmake.in"
+		"${CMAKE_CURRENT_BINARY_DIR}/stemmer-config.cmake" INSTALL_DESTINATION "${CMAKE_CMAKE_DIR}" )
+install ( FILES "${CMAKE_CURRENT_BINARY_DIR}/stemmer-config.cmake" DESTINATION "${CMAKE_CMAKE_DIR}" )

@@ -35,36 +35,36 @@
 #	set (RE2_INCLUDES "/usr/include;/usr/include/re2" CACHE PATH "path to re2 header files")
 #	set (RE2_LIBRARIES "/usr/lib/x86_64-linux-gnu;/usr/lib64;/usr/local/lib64;/usr/lib/i386-linux-gnu;/usr/lib;/usr/local/lib" CACHE PATH "path to re2 libraries")
 
-function(check_re2 HINT)
+function ( check_re2 HINT )
 	if (RE2_LIBRARY AND NOT EXISTS ${RE2_LIBRARY})
-		unset(RE2_LIBRARY CACHE)
+		unset ( RE2_LIBRARY CACHE )
 	endif ()
-	set(CMAKE_FIND_LIBRARY_SUFFIXES .a .lib .so .dylib .dll)
-	FIND_LIBRARY(RE2_LIBRARY NAMES re2 RE2 HINTS ${HINT} NO_DEFAULT_PATH)
-endfunction()
+	set ( CMAKE_FIND_LIBRARY_SUFFIXES .a .lib .so .dylib .dll )
+	FIND_LIBRARY ( RE2_LIBRARY NAMES re2 RE2 HINTS ${HINT} NO_DEFAULT_PATH )
+endfunction ()
 
 # First check if include path was explicitly given.
 # If so, it has the maximum priority over any other possibilities
-if ( EXISTS "${WITH_RE2_ROOT}/re2/re2.h" )
-	check_re2 ("${WITH_RE2_ROOT}/obj/")
+if (EXISTS "${WITH_RE2_ROOT}/re2/re2.h")
+	check_re2 ( "${WITH_RE2_ROOT}/obj/" )
 	set ( RE2_INCLUDE_DIRS ${WITH_RE2_ROOT} )
 
 else ()
 	# Check if there are any sources in ./libre2 path
-	if ( EXISTS ${CMAKE_SOURCE_DIR}/libre2/re2/re2.h )
-		check_re2("${CMAKE_SOURCE_DIR}/libre2/obj/")
+	if (EXISTS ${CMAKE_SOURCE_DIR}/libre2/re2/re2.h)
+		check_re2 ( "${CMAKE_SOURCE_DIR}/libre2/obj/" )
 		set ( RE2_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/libre2" )
 
 	else ()
-		if ( EXISTS ${WITH_RE2_INCLUDES} )
+		if (EXISTS ${WITH_RE2_INCLUDES})
 			set ( RE2_INCLUDE_DIRS "${WITH_RE2_INCLUDES}" )
 		else ()
 			find_path ( RE2_INCLUDE_DIRS NAMES re2/re2.h PATHS /usr/include /usr/include/re2 )
 		endif ()
 
-		if ( WITH_RE2_LIBS )
-			set(CMAKE_FIND_LIBRARY_SUFFIXES .a .lib .so .dylib .dll)
-			FIND_LIBRARY(RE2_LIBRARY NAMES re2 RE2
+		if (WITH_RE2_LIBS)
+			set ( CMAKE_FIND_LIBRARY_SUFFIXES .a .lib .so .dylib .dll )
+			FIND_LIBRARY ( RE2_LIBRARY NAMES re2 RE2
 					PATHS
 					${WITH_RE2_LIBS}
 					/usr/lib/x86_64-linux-gnu
@@ -72,7 +72,7 @@ else ()
 					/usr/local/lib64
 					/usr/lib/i386-linux-gnu
 					/usr/lib
-					/usr/local/lib)
+					/usr/local/lib )
 		endif ()
 	endif ()
 endif ()
@@ -83,9 +83,9 @@ include ( FindPackageHandleStandardArgs )
 find_package_handle_standard_args ( re2 REQUIRED_VARS RE2_INCLUDE_DIRS RE2_LIBRARY )
 
 if (re2_FOUND AND NOT TARGET re2::re2)
-	add_library(re2::re2 UNKNOWN IMPORTED)
-	set_target_properties(re2::re2 PROPERTIES
-		IMPORTED_LOCATION "${RE2_LIBRARY}"
-		INTERFACE_INCLUDE_DIRECTORIES "${RE2_INCLUDE_DIRS}"
-	)
+	add_library ( re2::re2 UNKNOWN IMPORTED )
+	set_target_properties ( re2::re2 PROPERTIES
+			IMPORTED_LOCATION "${RE2_LIBRARY}"
+			INTERFACE_INCLUDE_DIRECTORIES "${RE2_INCLUDE_DIRS}"
+			)
 endif ()

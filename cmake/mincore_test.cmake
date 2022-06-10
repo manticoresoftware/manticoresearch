@@ -38,5 +38,5 @@ return mincore ( pAddr, length, vec );
 
 include ( CheckCXXSourceCompiles )
 CHECK_CXX_SOURCE_COMPILES ( "${_MINCORE_TEST}" HAVE_UNSIGNED_MINCORE )
-unset (_MINCORE_TEST)
-mark_as_advanced  ( HAVE_UNSIGNED_MINCORE )
+unset ( _MINCORE_TEST )
+mark_as_advanced ( HAVE_UNSIGNED_MINCORE )

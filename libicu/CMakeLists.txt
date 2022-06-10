@@ -1,7 +1,7 @@
-cmake_minimum_required(VERSION 3.17)
-PROJECT(icu CXX)
-SET(CMAKE_CXX_STANDARD 11)
-add_library(icu
+cmake_minimum_required ( VERSION 3.17 )
+PROJECT ( icu CXX )
+SET ( CMAKE_CXX_STANDARD 11 )
+add_library ( icu
 		source/common/appendable.cpp
 		source/common/bmpset.cpp
 		source/common/brkeng.cpp
@@ -150,19 +150,19 @@ if (NOT isMultiConfig AND NOT CMAKE_BUILD_TYPE)
 	message ( STATUS "Automatically set build type to RelWithDebInfo since no other provided" )
 endif ()
 
-OPTION (STATIC_BUILD "build without dlopen, pure static" OFF )
+OPTION ( STATIC_BUILD "build without dlopen, pure static" OFF )
 
-target_compile_definitions(icu PRIVATE U_IMPORT= U_EXPORT= U_EXPORT2= U_COMMON_IMPLEMENTATION)
-target_compile_definitions(icu PRIVATE $<$<CXX_COMPILER_ID:MSVC>:UCONFIG_USE_WINDOWS_LCID_MAPPING_API=0>)
-target_compile_options(icu PRIVATE $<$<CXX_COMPILER_ID:MSVC>:-D_CRT_SECURE_NO_WARNINGS -wd4541 -wd4800 -wd4996>)
-target_compile_definitions(icu PUBLIC U_STATIC_IMPLEMENTATION U_CHARSET_IS_UTF8=1 U_NO_DEFAULT_INCLUDE_UTF_HEADERS=1)
+target_compile_definitions ( icu PRIVATE U_IMPORT= U_EXPORT= U_EXPORT2= U_COMMON_IMPLEMENTATION )
+target_compile_definitions ( icu PRIVATE $<$<CXX_COMPILER_ID:MSVC>:UCONFIG_USE_WINDOWS_LCID_MAPPING_API=0> )
+target_compile_options ( icu PRIVATE $<$<CXX_COMPILER_ID:MSVC>:-D_CRT_SECURE_NO_WARNINGS -wd4541 -wd4800 -wd4996> )
+target_compile_definitions ( icu PUBLIC U_STATIC_IMPLEMENTATION U_CHARSET_IS_UTF8=1 U_NO_DEFAULT_INCLUDE_UTF_HEADERS=1 )
 
 if (STATIC_BUILD)
-	target_compile_definitions(icu PRIVATE HAVE_DLOPEN=0)
-endif()
+	target_compile_definitions ( icu PRIVATE HAVE_DLOPEN=0 )
+endif ()
 
-target_include_directories(icu PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/source/common>$<INSTALL_INTERFACE:include/icu>)
-set_target_properties (icu PROPERTIES
+target_include_directories ( icu PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/source/common>$<INSTALL_INTERFACE:include/icu> )
+set_target_properties ( icu PROPERTIES
 		DEBUG_POSTFIX d
 		PDB_NAME icu
 		PDB_NAME_DEBUG icud
@@ -181,12 +181,12 @@ target_sources ( icudata INTERFACE $<INSTALL_INTERFACE:data/${ICU_DATA}> )
 set ( CMAKE_CMAKE_DIR "lib/cmake/icu" )
 
 # ensure ALL externally required headers and are exported here
-install ( DIRECTORY source/common/unicode DESTINATION include/icu FILES_MATCHING PATTERN "*.h")
+install ( DIRECTORY source/common/unicode DESTINATION include/icu FILES_MATCHING PATTERN "*.h" )
 install ( FILES "source/data/in/${ICU_DATA}" DESTINATION data )
-install ( TARGETS icu icudata EXPORT icuExport RUNTIME DESTINATION lib LIBRARY DESTINATION lib  )
-install (EXPORT icuExport FILE icu-targets.cmake DESTINATION "${CMAKE_CMAKE_DIR}" NAMESPACE icu::)
+install ( TARGETS icu icudata EXPORT icuExport RUNTIME DESTINATION lib LIBRARY DESTINATION lib )
+install ( EXPORT icuExport FILE icu-targets.cmake DESTINATION "${CMAKE_CMAKE_DIR}" NAMESPACE icu:: )
 if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
-	install (FILES "$<TARGET_FILE_DIR:icu>/icu$<$<CONFIG:Debug>:d>.pdb" DESTINATION lib OPTIONAL)
+	install ( FILES "$<TARGET_FILE_DIR:icu>/icu$<$<CONFIG:Debug>:d>.pdb" DESTINATION lib OPTIONAL )
 endif ()
 
 include ( CMakePackageConfigHelpers )

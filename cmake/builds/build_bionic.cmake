@@ -4,7 +4,7 @@
 
 message ( STATUS "Will create DEB for Ubuntu 18.04 (bionic)" )
 
-set (flavour "ubuntu")
+set ( flavour "ubuntu" )
 
 # we provide explicit dependencies, so shlideps is not necessary
 set ( disable_shlideps ON )

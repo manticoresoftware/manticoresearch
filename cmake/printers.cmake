@@ -1,7 +1,7 @@
 if (__cmake_printers_included)
 	return ()
 endif ()
-set (__cmake_printers_included YES)
+set ( __cmake_printers_included YES )
 
 # different print diagnostic stuff
 #
@@ -12,44 +12,44 @@ set (__cmake_printers_included YES)
 # trace - traces target properties
 # diagst - promptly output if target found and where
 
-include (CMakePrintHelpers)
-function (DIAG)
+include ( CMakePrintHelpers )
+function ( DIAG )
 	if (DIAGNOSTIC)
-		cmake_print_variables (${ARGN})
+		cmake_print_variables ( ${ARGN} )
 	endif ()
 endfunction ()
 
-function (DIAGS MSG)
+function ( DIAGS MSG )
 	if (DIAGNOSTIC)
-		message (DEBUG "${MSG}")
+		message ( DEBUG "${MSG}" )
 	endif ()
 endfunction ()
 
-function (infomsg MSG)
+function ( infomsg MSG )
 	if (NOT CMAKE_REQUIRED_QUIET)
-		message (STATUS "${MSG}")
+		message ( STATUS "${MSG}" )
 	endif ()
 endfunction ()
 
-function (debugmsg MSG)
-	message (DEBUG "${MSG}")
+function ( debugmsg MSG )
+	message ( DEBUG "${MSG}" )
 endfunction ()
 
-function (tracep LIB PROPERTY)
-	get_property (_prp TARGET ${LIB} PROPERTY ${PROPERTY})
+function ( tracep LIB PROPERTY )
+	get_property ( _prp TARGET ${LIB} PROPERTY ${PROPERTY} )
 	if (_prp)
-		diags ("${PROPERTY} = '${_prp}'")
-	endif()
+		diags ( "${PROPERTY} = '${_prp}'" )
+	endif ()
 endfunction ()
 
-function (trace LIB)
+function ( trace LIB )
 	if (NOT TARGET ${LIB})
-		diags ("=========== ${LIB} is not found")
-		return()
+		diags ( "=========== ${LIB} is not found" )
+		return ()
 	endif ()
 
-	diags ("=========== Trace properties for ${LIB} =============")
-	foreach(_prop
+	diags ( "=========== Trace properties for ${LIB} =============" )
+	foreach (_prop
 			TYPE
 			INTERFACE_AUTOUIC_OPTIONS
 			INTERFACE_COMPILE_DEFINITIONS
@@ -83,13 +83,13 @@ function (trace LIB)
 			DL_LIBRARY
 			LOCATION
 			)
-		tracep (${LIB} ${_prop})
-	endforeach()
-	diags ("=========== Trace properties for ${LIB} finished =============")
+		tracep ( ${LIB} ${_prop} )
+	endforeach ()
+	diags ( "=========== Trace properties for ${LIB} finished =============" )
 endfunction ()
 
-function (trace_internal LIB)
-	diags ("=========== Trace properties for internal ${LIB} =============")
+function ( trace_internal LIB )
+	diags ( "=========== Trace properties for internal ${LIB} =============" )
 	foreach (_prop
 			TYPE
 			INTERFACE_COMPILE_DEFINITIONS
@@ -105,16 +105,16 @@ function (trace_internal LIB)
 			INTERFACE_SOURCES
 			INTERFACE_SYSTEM_INCLUDE_DIRECTORIES
 			)
-		tracep (${LIB} ${_prop})
+		tracep ( ${LIB} ${_prop} )
 	endforeach ()
-	diags ("=========== Trace properties for internal ${LIB} finished =============")
+	diags ( "=========== Trace properties for internal ${LIB} finished =============" )
 endfunction ()
 
-function (diagst TRG LEGEND)
+function ( diagst TRG LEGEND )
 	if (TARGET ${TRG})
-		get_target_property (LOC ${TRG} LOCATION)
-		diags ("${TRG} ${LEGEND} at ${LOC}")
+		get_target_property ( LOC ${TRG} LOCATION )
+		diags ( "${TRG} ${LEGEND} at ${LOC}" )
 	else ()
-		diags ("${TRG} is not found")
+		diags ( "${TRG} is not found" )
 	endif ()
 endfunction ()

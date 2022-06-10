@@ -580,6 +580,7 @@ XQNode_t * QueryParserJson_c::ConstructQLNode ( const JsonObj_c & tJson, QueryTr
 	}
 
 	XQQuery_t tParsed;
+	tParsed.m_dZones = tBuilder.GetZone(); // should keep the same zone list for whole tree
 	if ( !sphParseExtendedQuery ( tParsed, tJson.StrVal().cstr(), tBuilder.GetQuery(), tBuilder.GetQLTokenizer(), tBuilder.GetSchema(), tBuilder.GetDict(), tBuilder.GetIndexSettings() ) )
 	{
 		tBuilder.Error ( "%s", tParsed.m_sParseError.cstr() );
@@ -591,6 +592,7 @@ XQNode_t * QueryParserJson_c::ConstructQLNode ( const JsonObj_c & tJson, QueryTr
 
 	XQNode_t * pRoot = tParsed.m_pRoot;
 	tParsed.m_pRoot = nullptr;
+	tBuilder.SetZone ( tParsed.m_dZones );
 	return pRoot;
 }
 

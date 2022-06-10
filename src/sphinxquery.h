@@ -322,6 +322,8 @@ public:
 	
 	bool			IsError() { return m_bError; }
 	virtual void	Cleanup();
+	void			SetZone ( const StrVec_t & dZones );
+	const StrVec_t & GetZone() const;
 
 protected:
 	struct MultiformNode_t

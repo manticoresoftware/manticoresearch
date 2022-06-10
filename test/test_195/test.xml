@@ -3,6 +3,10 @@
 
 <name>ZONESPAN operator and zonespanlist() function</name>
 
+<requires>
+<http/>
+</requires>
+
 <config>
 indexer
 {
@@ -109,6 +113,10 @@ select *, zonespanlist() l from i1 where match('( ZONESPAN:(h1)1987 wine white )
 select *, zonespanlist() l from i1 where match('( ZONESPAN:(h1)wine white 1987 ) NEAR/3 65') order by id asc;
 <!--must neither crash nor cut results when we have a shitload of spans-->
 select *, zonespanlist() l from i1 where match('ZONESPAN:h1 hello world');
-</sphinxql></queries>
+</sphinxql>
+
+<query endpoint="json/search"> { "index": "test", "query": { "query_string": "ZONESPAN:zoneC kings and" }}</query>
+
+</queries>
 
 </test>

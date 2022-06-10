@@ -658,6 +658,17 @@ void XQParseHelper_c::FixupDestForms ()
 	}
 }
 
+void XQParseHelper_c::SetZone ( const StrVec_t & dZones )
+{
+	assert ( m_pParsed );
+	m_pParsed->m_dZones = dZones;
+}
+
+const StrVec_t & XQParseHelper_c::GetZone() const
+{
+	assert ( m_pParsed );
+	return m_pParsed->m_dZones;
+}
 
 //////////////////////////////////////////////////////////////////////////
 

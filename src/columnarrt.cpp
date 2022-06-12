@@ -137,9 +137,11 @@ public:
 
 	std::unique_ptr<columnar::Iterator_i> CreateIterator()	const override { return std::make_unique<ColumnarIterator_Int_T<T>> ( m_dValues ); }
 
-private:
+protected:
 	CSphVector<T>	m_dValues;
-	T				m_uMask = 0;
+
+private:
+	T		m_uMask = 0;
 
 	template <typename WRITER>
 	void	SaveData ( WRITER & tWriter );
@@ -179,6 +181,18 @@ void ColumnarAttr_Int_T<T>::LoadData ( READER & tReader )
 	m_dValues.Resize ( tReader.GetDword() );
 	tReader.GetBytes ( m_dValues.Begin(), (int)m_dValues.GetLengthBytes64() );
 }
+
+/////////////////////////////////////////////////////////////////////
+
+class ColumnarAttr_Bool_c : public ColumnarAttr_Int_T<BYTE>
+{
+	using BASE = ColumnarAttr_Int_T<BYTE>;
+
+public:
+			ColumnarAttr_Bool_c() : BASE ( SPH_ATTR_BOOL, 1 ) {}
+
+	void	AddDoc ( SphAttr_t tAttr ) override { BASE::m_dValues.Add ( tAttr ? 1 : 0 ); }
+};
 
 /////////////////////////////////////////////////////////////////////
 
@@ -426,7 +440,7 @@ static ColumnarAttrRT_i * CreateColumnarAttrRT ( ESphAttr eType, int iBits )
 	case SPH_ATTR_FLOAT:
 		return new ColumnarAttr_Int_T<DWORD> ( eType, iBits );
 
-	case SPH_ATTR_BOOL:		return new ColumnarAttr_Int_T<BYTE> ( eType, 1 );
+	case SPH_ATTR_BOOL:		return new ColumnarAttr_Bool_c;
 	case SPH_ATTR_BIGINT:	return new ColumnarAttr_Int_T<int64_t> ( eType, iBits );
 	case SPH_ATTR_STRING:	return new ColumnarAttr_String_c;
 	case SPH_ATTR_UINT32SET:return new ColumnarAttr_MVA_T<DWORD>(eType);

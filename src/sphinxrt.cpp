@@ -1643,8 +1643,13 @@ static void StoreAttrValue ( const InsertDocData_t & tDoc, const CSphColumnInfo 
 		tValue = (T)sphGetRowAttr ( tDoc.m_tDoc.m_pDynamic, tAttr.m_tLocator );
 
 	int iBits = tAttr.m_tLocator.m_iBitCount;
-	T uMask = iBits==64 ? (T)0xFFFFFFFFFFFFFFFFULL : (T)( (1ULL<<iBits)-1 );
-	tValue &= uMask;
+	if ( tAttr.m_eAttrType==SPH_ATTR_BOOL )
+		tValue = tValue ? 1 : 0;
+	else
+	{
+		T uMask = iBits==64 ? (T)0xFFFFFFFFFFFFFFFFULL : (T)( (1ULL<<iBits)-1 );
+		tValue &= uMask;
+	}
 
 	dTmpStorage.Resize ( sizeof(tValue) );
 	memcpy ( dTmpStorage.Begin(), &tValue, dTmpStorage.GetLength() );

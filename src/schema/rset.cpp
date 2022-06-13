@@ -92,19 +92,26 @@ int CSphRsetSchema::GetAttrIndex ( const char* sName ) const
 }
 
 
-int CSphRsetSchema::GetFieldIndex ( const char* sName ) const
+int CSphRsetSchema::GetFieldIndex ( const char * szName ) const
 {
 	if ( !m_pIndexSchema )
 		return -1;
 
-	return m_pIndexSchema->GetFieldIndex ( sName );
+	return m_pIndexSchema->GetFieldIndex ( szName );
 }
 
 
-const CSphColumnInfo& CSphRsetSchema::GetField ( int iIndex ) const
+const CSphColumnInfo & CSphRsetSchema::GetField ( int iIndex ) const
 {
 	assert ( m_pIndexSchema );
 	return m_pIndexSchema->GetField ( iIndex );
+}
+
+
+const CSphColumnInfo * CSphRsetSchema::GetField ( const char * szName ) const
+{
+	assert ( m_pIndexSchema );
+	return m_pIndexSchema->GetField(szName);
 }
 
 

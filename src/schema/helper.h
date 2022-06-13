@@ -22,29 +22,28 @@ public:
 	void	CloneMatch ( CSphMatch & tDst, const CSphMatch & rhs ) const final;
 
 	/// clone all raw attrs and only specified ptrs
-	void CloneMatchSpecial ( CSphMatch & tDst, const CSphMatch & rhs, const VecTraits_T<int> & dSpecials ) const;
+	void	CloneMatchSpecial ( CSphMatch & tDst, const CSphMatch & rhs, const VecTraits_T<int> & dSpecials ) const;
 
 	/// exclude vec of rowitems from dataPtrAttrs and return diff back
 	CSphVector<int> SubsetPtrs ( CSphVector<int> &dSpecials ) const ;
 
 	/// get dynamic row part size
-	int GetDynamicSize () const final { return m_dDynamicUsed.GetLength (); }
+	int		GetDynamicSize () const final { return m_dDynamicUsed.GetLength (); }
 
-	void Swap ( CSphSchemaHelper& rhs ) noexcept;
+	void	Swap ( CSphSchemaHelper& rhs ) noexcept;
+
+	// free/copy by specified vec of rowitems, assumed to be from SubsetPtrs() call.
+	static void FreeDataSpecial ( CSphMatch & tMatch, const VecTraits_T<int> & dSpecials );
+	static void CopyPtrsSpecial ( CSphMatch & tDst, const CSphMatch & tSrc, const VecTraits_T<int> & dSpecials );
+	static void MovePtrsSpecial ( CSphMatch & tDst, CSphMatch & tSrc, const VecTraits_T<int> & dSpecials );
 
 protected:
 	CSphVector<int>	m_dDataPtrAttrs;		///< rowitems of pointers to data that are stored inside matches
 	CSphVector<int> m_dDynamicUsed;			///< dynamic row part map
 
 	/// generic InsertAttr() implementation that tracks data ptr attributes
-	void			InsertAttr ( CSphVector<CSphColumnInfo> & dAttrs, CSphVector<int> & dUsed, int iPos, const CSphColumnInfo & tCol, bool bDynamic );
-	void			ResetSchemaHelper();
+	void	InsertAttr ( CSphVector<CSphColumnInfo> & dAttrs, CSphVector<int> & dUsed, int iPos, const CSphColumnInfo & tCol, bool bDynamic );
+	void	ResetSchemaHelper();
 
-	void CopyPtrs ( CSphMatch & tDst, const CSphMatch & rhs ) const;
-
-public:
-	// free/copy by specified vec of rowitems, assumed to be from SubsetPtrs() call.
-	static void FreeDataSpecial ( CSphMatch & tMatch, const VecTraits_T<int> & dSpecials );
-	static void CopyPtrsSpecial ( CSphMatch & tDst, const CSphMatch & tSrc, const VecTraits_T<int> & dSpecials );
-	static void MovePtrsSpecial ( CSphMatch & tDst, CSphMatch & tSrc, const VecTraits_T<int> & dSpecials );
+	void	CopyPtrs ( CSphMatch & tDst, const CSphMatch & rhs ) const;
 };

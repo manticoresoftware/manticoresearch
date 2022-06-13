@@ -45,6 +45,7 @@ public:
 	virtual int						GetFieldsCount() const = 0;
 
 	virtual const CSphColumnInfo &	GetField ( int iIndex ) const = 0;
+	virtual const CSphColumnInfo *	GetField ( const char * szName ) const  = 0;
 	virtual const CSphVector<CSphColumnInfo> & GetFields () const = 0;
 
 	/// get attribute index by name, returns -1 if not found

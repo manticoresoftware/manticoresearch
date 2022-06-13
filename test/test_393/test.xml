@@ -104,6 +104,31 @@ index dist_local
 	local = local_index1
 	local = local_index2
 }
+
+source min {
+    type = mysql
+    sql_host = localhost
+    sql_user = root
+    sql_pass = root
+    sql_db = test
+    sql_query = select 1, 'f' f, 1 a
+    sql_attr_uint = a
+}
+
+index plain
+{
+    path = <data_path/>/idx_plain
+    source = min
+}
+
+index rt
+{
+    type = rt
+    path = <data_path/>/idx_rt
+    rt_attr_uint = a
+    rt_field = f
+    stored_fields =
+}
 </agent0>
 
 <agent1>
@@ -310,6 +335,11 @@ select * from dist_complex3 order by id desc limit 0,10;
 select * from dist_complex3 order by id desc limit 10,10;
 
 select title from dist_local;
+
+insert into rt(f,a) values('f', 1);
+flush ramchunk rt;
+select * from plain,rt facet a distinct;;
+select * from rt,plain facet a distinct;;
 
 </sphinxql></queries>
 

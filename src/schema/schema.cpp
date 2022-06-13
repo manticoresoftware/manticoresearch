@@ -152,6 +152,7 @@ bool CSphSchema::CompareTo ( const CSphSchema& rhs, CSphString& sError, bool bFu
 
 	// check fulltext field names
 	ARRAY_FOREACH ( i, rhs.m_dFields )
+	{
 		if ( rhs.m_dFields[i].m_sName != m_dFields[i].m_sName )
 		{
 			sError.SetSprintf ( "fulltext field mismatch (me=%s, myfield=%s, idx=%d, in=%s, infield=%s)",
@@ -162,6 +163,18 @@ bool CSphSchema::CompareTo ( const CSphSchema& rhs, CSphString& sError, bool bFu
 					rhs.m_dFields[i].m_sName.cstr() );
 			return false;
 		}
+
+		if ( rhs.m_dFields[i].m_uFieldFlags != m_dFields[i].m_uFieldFlags )
+		{
+			sError.SetSprintf ( "fulltext field flag mismatch (me=%s, myfield=%s, idx=%d, in=%s, infield=%s)",
+				m_sName.cstr(),
+				rhs.m_sName.cstr(),
+				i,
+				m_dFields[i].m_sName.cstr(),
+				rhs.m_dFields[i].m_sName.cstr() );
+			return false;
+		}
+	}
 
 	return true;
 }

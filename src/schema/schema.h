@@ -74,7 +74,7 @@ public:
 	int						GetFieldsCount() const final			{ return m_dFields.GetLength(); }
 
 	const CSphColumnInfo &	GetField ( int iIndex ) const final { return m_dFields[iIndex]; }
-	const CSphColumnInfo *	GetField ( const char * szName ) const;
+	const CSphColumnInfo *	GetField ( const char * szName ) const final;
 	const CSphVector<CSphColumnInfo> & GetFields () const final { return m_dFields; }
 
 	// most of the time we only need to get the field name

@@ -19,7 +19,7 @@ index <index_name> {
   path = /path/to/index
   source = <source_name>
   source = <another source_name>
-  [stored_fields = <comma separated list of full-text fields that should be stored, all are stored by default>]
+  [stored_fields = <comma separated list of full-text fields that should be stored, all are stored by default, can be empty>]
 }
 ```
 <!-- intro -->
@@ -52,7 +52,7 @@ index <index name> {
   [rt_attr_timestamp = <timestamp field name>]
   [rt_attr_timestamp = <another timestamp field name>]
 
-  [stored_fields = <comma separated list of full-text fields that should be stored, all are stored by default>]
+  [stored_fields = <comma separated list of full-text fields that should be stored, all are stored by default, can be empty>]
 
   [rt_mem_limit = <RAM chunk max size, default 128M>]
   [optimize_cutoff = <max number of RT index disk chunks>]
@@ -93,13 +93,13 @@ stored_fields = title, content
 
 <!-- example stored_fields -->
 
-By default when an index is defined in a configuration file, full-text fields' original content is both indexed and stored. This setting disables storing fields' original values for specified fields.
+By default when an index is defined in a configuration file, full-text fields' original content is both indexed and stored. This setting lets you specify the fields that should have their original values stored.
 
 Value: comma separated list of **full-text** fields that should be stored. Empty value (i.e. `stored_fields = `) disables storing original values for all the fields.
 
 Note, in case of a real-time index the fields listed in `stored_fields` should be also declared as [rt_field](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_field).
 
-Note also, that you don't need to list attributes in `stored_fields`, since their original values are stored anyway. `stored_fields` is only for full-text fields.
+Note also, that you don't need to list attributes in `stored_fields`, since their original values are stored anyway. `stored_fields` can be only used for full-text fields.
 
 See also [docstore_block_size](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#docstore_block_size), [docstore_compression](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#docstore_compression) for document storage compression options.
 

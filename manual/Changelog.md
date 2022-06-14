@@ -4,6 +4,7 @@
 
 ### Packaging
 * arm64 packages for macOS and Linuxes
+* easier package building for contributors
 
 # Version 5.0.2
 Released: May 30th 2022

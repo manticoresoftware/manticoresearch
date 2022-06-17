@@ -21,7 +21,7 @@ The username used for connecting.
 
 ## sql_pass
 
-The user password to use when connecting.
+The user password to use when connecting. If the password includes `#` (which can be used to add comments in the configuration file) you can escape it with `\`.
 
 ## sql_sock
 

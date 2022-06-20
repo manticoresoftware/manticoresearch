@@ -5,7 +5,7 @@ project ( columnar-api-build NONE )
 include ( ExternalProject )
 ExternalProject_Add ( columnar_api_populate
 		${COLUMNAR_LOCATOR}
-		CMAKE_ARGS -DSKIP_COLUMNAR=${SKIP_COLUMNAR}
+		CMAKE_ARGS -DSKIP_COLUMNAR=1 -DSKIP_SECONDARY=1
 		BUILD_COMMAND "${CMAKE_COMMAND}" --build . --config RelWithDebInfo
 		INSTALL_COMMAND "${CMAKE_COMMAND}" --install . --config RelWithDebInfo --prefix "${COLUMNAR_BUILD}"
 		)

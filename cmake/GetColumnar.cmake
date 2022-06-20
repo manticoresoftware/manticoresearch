@@ -55,8 +55,6 @@ find_package ( columnar ${COLUMNAR_REQUIRED_VER} COMPONENTS columnar_api CONFIG 
 return_if_columnar_api_found ()
 
 # Not found. get columnar src, extract columnar_api.
-set ( SKIP_COLUMNAR TRUE ) # that will cause columnar NOT to build, only columnar_api
-
 if (DEFINED ENV{COLUMNAR_LOCATOR})
 	set ( COLUMNAR_LOCATOR $ENV{COLUMNAR_LOCATOR} )
 elseif (EXISTS "${MANTICORE_SOURCE_DIR}/local_columnar_src.txt")

@@ -4048,7 +4048,7 @@ public:
 	}
 };
 
-int KillPlainDupes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, const VecTraits_T<int>& dOrd )
+int KillPlainDupes ( ISphMatchSorter * pSorter, AggrResult_t & tRes )
 {
 	int iDupes = 0;
 
@@ -4150,7 +4150,7 @@ int KillDupesAndFlatten ( ISphMatchSorter * pSorter, AggrResult_t & tRes )
 	Debug ( tRes.m_bTagsCompacted = true );
 
 	// do actual deduplication
-	int iDup = pSorter->IsGroupby() ? KillGroupbyDupes ( pSorter, tRes, dOrd ) : KillPlainDupes ( pSorter, tRes, dOrd );
+	int iDup = pSorter->IsGroupby() ? KillGroupbyDupes ( pSorter, tRes, dOrd ) : KillPlainDupes ( pSorter, tRes );
 
 	// ALL matches have same schema, as KillAllDupes called after RemapResults(), or already having identical schemas.
 	for ( auto& dResult : tRes.m_dResults )
@@ -5851,7 +5851,9 @@ public:
 
 	bool StoreSorter ( int iQuery, int iIndex, ISphMatchSorter * & pSorter, const DocstoreReader_i * pDocstore, int iTag )
 	{
-		if ( !NeedGlobalSorters() )
+		// FACET head is the plain query wo group sorter and can not move all result set into single sorter
+		// could be replaced with !pSorter->IspSorter->IsGroupby()
+		if ( !NeedGlobalSorters() || m_dQueries[iQuery].m_bFacetHead )
 			return false;
 
 		// take ownership of the sorter

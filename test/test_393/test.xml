@@ -107,10 +107,7 @@ index dist_local
 
 source min {
     type = mysql
-    sql_host = localhost
-    sql_user = root
-    sql_pass = root
-    sql_db = test
+    <sql_settings/>
     sql_query = select 1, 'f' f, 1 a
     sql_attr_uint = a
 }

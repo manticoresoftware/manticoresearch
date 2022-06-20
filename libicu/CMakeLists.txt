@@ -184,13 +184,10 @@ set ( CMAKE_CMAKE_DIR "lib/cmake/icu" )
 install ( DIRECTORY source/common/unicode DESTINATION include/icu FILES_MATCHING PATTERN "*.h" )
 install ( FILES "source/data/in/${ICU_DATA}" DESTINATION data )
 install ( TARGETS icu icudata EXPORT icuExport RUNTIME DESTINATION lib LIBRARY DESTINATION lib )
+install ( FILES "$<TARGET_FILE_DIR:icu>/icu$<$<CONFIG:Debug>:d>.pdb" EXPORT icuExport DESTINATION lib OPTIONAL )
+
 install ( EXPORT icuExport FILE icu-targets.cmake DESTINATION "${CMAKE_CMAKE_DIR}" NAMESPACE icu:: )
-if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
-	install ( FILES "$<TARGET_FILE_DIR:icu>/icu$<$<CONFIG:Debug>:d>.pdb" DESTINATION lib OPTIONAL )
-endif ()
-
 include ( CMakePackageConfigHelpers )
-
 file ( WRITE icu-config.cmake.in
 		"\@PACKAGE_INIT@
 

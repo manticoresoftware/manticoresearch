@@ -43,11 +43,9 @@ set ( CMAKE_CMAKE_DIR "lib/cmake/stemmer" )
 # ensure ALL externally required headers are exported here
 install ( DIRECTORY include/ DESTINATION include/stemmer )
 install ( TARGETS stemmer EXPORT stemmerexport RUNTIME DESTINATION lib LIBRARY DESTINATION lib )
-install ( EXPORT stemmerexport FILE stemmer-targets.cmake DESTINATION "${CMAKE_CMAKE_DIR}" NAMESPACE stemmer:: )
-if (CMAKE_C_COMPILER_ID MATCHES "MSVC")
-	install ( FILES "$<TARGET_FILE_DIR:stemmer>/stemmer$<$<CONFIG:Debug>:d>.pdb" DESTINATION lib OPTIONAL )
-endif ()
+install ( FILES "$<TARGET_FILE_DIR:stemmer>/stemmer$<$<CONFIG:Debug>:d>.pdb" EXPORT stemmerexport DESTINATION lib OPTIONAL )
 
+install ( EXPORT stemmerexport FILE stemmer-targets.cmake DESTINATION "${CMAKE_CMAKE_DIR}" NAMESPACE stemmer:: )
 include ( CMakePackageConfigHelpers )
 file ( WRITE "stemmer-config.cmake.in"
 		"\@PACKAGE_INIT@

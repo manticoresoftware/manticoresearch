@@ -56,7 +56,6 @@ if (MSVC)
 else ()
 	SET ( CMAKE_CXX_FLAGS_RELWITHDEBINFO "-Wall -O3 -g -DNDEBUG" )
 endif ()
-#SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO "") # reset to empty, global flags will be in game instead
 
 set ( THREADS_PREFER_PTHREAD_FLAG ON )
 find_package ( Threads REQUIRED )
@@ -86,13 +85,10 @@ set ( CMAKE_CMAKE_DIR "lib/cmake/re2" )
 # ensure ALL externally required headers are exported here
 install ( FILES ${INSTALL_HFILES} DESTINATION include/re2 )
 install ( TARGETS re2 EXPORT Re2Export RUNTIME DESTINATION lib LIBRARY DESTINATION lib )
+install ( FILES "$<TARGET_FILE_DIR:re2>/re2$<$<CONFIG:Debug>:d>.pdb" EXPORT Re2Export DESTINATION lib OPTIONAL )
+
 install ( EXPORT Re2Export FILE re2-targets.cmake DESTINATION "${CMAKE_CMAKE_DIR}" NAMESPACE re2:: )
-if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
-	install ( FILES "$<TARGET_FILE_DIR:re2>/re2$<$<CONFIG:Debug>:d>.pdb" EXPORT Re2Export DESTINATION lib OPTIONAL )
-endif ()
-
 include ( CMakePackageConfigHelpers )
-
 file ( WRITE "re2-config.cmake.in"
 		"\@PACKAGE_INIT@
 

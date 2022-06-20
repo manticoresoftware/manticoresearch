@@ -10,6 +10,7 @@ if (DEFINED ENV{CMAKE_INTERPROCEDURAL_OPTIMIZATION})
 	set ( CMAKE_INTERPROCEDURAL_OPTIMIZATION $ENV{CMAKE_INTERPROCEDURAL_OPTIMIZATION} )
 endif ()
 
+
 set ( _CMAKE_BUILD_TYPE ${CMAKE_BUILD_TYPE} )
 
 PROJECT ( MANTICORE )
@@ -339,11 +340,6 @@ if (NOT installed) # GNUInstallDirs wasn't yet included...
 	endif ()
 endif ()
 
-set ( CPACK_SOURCE_IGNORE_FILES "/\\\\.idea/" "/\\\\.git/"
-		"/\\\\.svn/" "/autom4te\\\\.cache/" "/bin/" "/junk/" "/win/" "/gmock/" "/gtest/" "/libtest" "/pkgconfig/"
-		".swp$" ".orig$" ".log$" ".deps/" )
-
-set ( CPACK_SOURCE_GENERATOR TGZ )
 set ( CPACK_RPM_COMPONENT_INSTALL 1 )
 set ( CPACK_DEB_COMPONENT_INSTALL 1 )
 set ( CPACK_ARCHIVE_COMPONENT_INSTALL 1 )

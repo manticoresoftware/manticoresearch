@@ -82,6 +82,14 @@ endif ()
 # winroot:
 #   Our folder where both, winsysroot and virtual disk_c placed, to keep all together
 
+function ( init_user_prop prop )
+    if (${prop})
+        set ( ENV{_${prop}} "${${prop}}" )
+    else ()
+        set ( ${prop} "$ENV{_${prop}}" PARENT_SCOPE )
+    endif ()
+endfunction ()
+
 function ( generate_winsdk_vfs_overlay winsdk_include_dir output_path )
     set ( include_dirs )
     file ( GLOB_RECURSE entries LIST_DIRECTORIES true "${winsdk_include_dir}/*" )
@@ -144,7 +152,7 @@ set ( CMAKE_SYSTEM_NAME Windows )
 set ( CMAKE_SYSTEM_VERSION 6.1.7601 )
 set ( CMAKE_SYSTEM_PROCESSOR amd64 )
 
-set ( OS_TRIPLE x86_64-windows-msvc )
+set ( OS_TRIPLE x86_64-pc-windows-msvc )
 set ( WINSDK_ARCH x64 )
 
 set ( WINSYSROOT ${winroot}/sdk )
@@ -182,13 +190,6 @@ if (NOT EXISTS "${WINSDK_INCLUDE}/um/WINDOWS.H")
     set ( case_sensitive_filesystem TRUE )
 endif ()
 
-set ( CMAKE_TRY_COMPILE_PLATFORM_VARIABLES
-        LLVM
-        MSVC_BASE
-        WINSDK_BASE
-        WINSDK_VER
-        )
-
 set ( CMAKE_C_COMPILER ${LLVM}/bin/clang )
 set ( CMAKE_CXX_COMPILER ${LLVM}/bin/clang++ )
 set ( CMAKE_RC_COMPILER ${LLVM}/bin/clang-rc )
@@ -218,16 +219,18 @@ set ( COMPILE_FLAGS
 
 if (case_sensitive_filesystem)
     # Ensure all sub-configures use the top-level VFS overlay instead of generating their own.
+	init_user_prop (winsdk_vfs_overlay_path)
     if (NOT winsdk_vfs_overlay_path)
         set ( winsdk_vfs_overlay_path "${CMAKE_BINARY_DIR}/winsdk_vfs_overlay.yaml" )
         generate_winsdk_vfs_overlay ( "${WINSDK_INCLUDE}" "${winsdk_vfs_overlay_path}" )
+		init_user_prop (winsdk_vfs_overlay_path)
     endif ()
     list ( APPEND COMPILE_FLAGS -ivfsoverlay "${winsdk_vfs_overlay_path}" )
 endif ()
 
 string ( REPLACE ";" " " COMPILE_FLAGS "${COMPILE_FLAGS}" )
-string ( APPEND CMAKE_C_FLAGS_INIT " ${COMPILE_FLAGS}" )
-string ( APPEND CMAKE_CXX_FLAGS_INIT " ${COMPILE_FLAGS}" )
+set ( CMAKE_C_FLAGS_INIT "${COMPILE_FLAGS}" )
+set ( CMAKE_CXX_FLAGS_INIT "${COMPILE_FLAGS}" )
 
 set ( LINK_FLAGS
         -L"${MSVC_LIB}/${WINSDK_ARCH}"
@@ -236,6 +239,7 @@ set ( LINK_FLAGS
 
 if (case_sensitive_filesystem)
     # Ensure all sub-configures use the top-level symlinks dir instead of generating their own.
+	init_user_prop (winsdk_lib_symlinks_dir)
     if (NOT winsdk_lib_symlinks_dir)
         set ( winsdk_lib_symlinks_dir "${CMAKE_BINARY_DIR}/winsdk_lib_symlinks" )
         generate_winsdk_lib_symlinks ( "${WINSDK_LIB}/um/${WINSDK_ARCH}" "${winsdk_lib_symlinks_dir}" )
@@ -243,6 +247,7 @@ if (case_sensitive_filesystem)
         execute_process ( COMMAND "${CMAKE_COMMAND}" -E create_symlink "${MSVC_LIB}/${WINSDK_ARCH}/msvcrtd.lib" "${winsdk_lib_symlinks_dir}/MSVCRTD.lib" )
         execute_process ( COMMAND "${CMAKE_COMMAND}" -E create_symlink "${MSVC_LIB}/${WINSDK_ARCH}/oldnames.lib" "${winsdk_lib_symlinks_dir}/OLDNAMES.lib" )
         execute_process ( COMMAND "${CMAKE_COMMAND}" -E create_symlink "${MSVC_LIB}/${WINSDK_ARCH}/msvcrt.lib" "${winsdk_lib_symlinks_dir}/MSVCRT.lib" )
+		init_user_prop (winsdk_lib_symlinks_dir)
     endif ()
     list ( APPEND LINK_FLAGS -L"${winsdk_lib_symlinks_dir}" )
 endif ()

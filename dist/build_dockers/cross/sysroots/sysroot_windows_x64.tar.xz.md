@@ -31,6 +31,7 @@ $ tree -L 5
 ```
 
 Notice symlink to `Windows Kits` named `WinSDK` (you should create it yourself, it is used in `windows.cmake` toolchain).
+That is necessary only if you're going to use 'naked' clang. With clang-cl that is not necessary.
 
 Also notice version numbers (14.25.28610, 10.0.18362.0). If you have different, find them in toolchain files and correct to the one you have.
 
@@ -73,12 +74,13 @@ $ tree -L 3
 
 You see folder `sdk` we packed. Second one is `diskc` which includes `winbundle` with necessary modules. `*.cmake` files there used as modules to `find_package`, they just created imported targets, addressing content of the real folder. We thrown out all content not necessary for build.
 
-Add file `windows.cmake`, rename it to `toolchain.cmake`
+Add file `windows-cl.cmake`, rename it to `toolchain.cmake`. Or (more universal) add both `windows-cl.cmake` and `windows.cmake`, then make symlink
+to `windows-cl.cmake` named `toolchain.cmake`.
 
 On finish, pack it into archive. It should contain VC and WinSDK folders in the root.
 
 ```bash
-tar -cf - diskc sdk toolchain.cmake | xz -9 > sysroot_windows_x64.tar.xz
+tar -cf - diskc sdk windows-cl.cmake windows.cmake toolchain.cmake | xz -9 > sysroot_windows_x64.tar.xz
 ```
 
 Notice, arch here is 'x64', that is Windows naming.

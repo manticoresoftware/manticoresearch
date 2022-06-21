@@ -57,6 +57,11 @@ $ tree -L 3
 │       │   ├── bin
 │       │   ├── include
 │       │   └── lib
+│       ├── zstd-v1.5.2-win64
+│       │   ├── README.md
+│       │   ├── dll
+│       │   └── include
+│       ├── ZSTDConfig.cmake
 │       └── PostgreSQLConfig.cmake
 └── sdk
     ├── VC

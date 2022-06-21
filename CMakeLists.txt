@@ -242,6 +242,7 @@ with_menu ( ZLIB "zlib" "for compressed data and networking" )
 
 with_menu ( ZSTD "libzstd" "for compressed networking" )
 dl_package ( ZSTD "zstd" )
+win_install ( ZSTD daemon )
 
 # ODBC and it's dynamic linking
 with_menu ( ODBC "ODBC/UnixODBC/iODBC" "for indexing MSSQL (windows) and generic ODBC sources with indexer" )

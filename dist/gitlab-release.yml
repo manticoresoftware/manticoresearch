@@ -106,11 +106,11 @@ windows:
     arch: x64
     DISTR: windows
 
-# windows build with clang-cl flavour
+# windows build with native clang flavour
 .windows_cl:
   extends: [ windows ]
   before_script:
-    - export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/windows-cl.cmake
+    - export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/windows.cmake
 
 collect_windows:
   extends: [ .collect_arc ]

@@ -9841,7 +9841,11 @@ static int sphQueryHeightCalc ( const XQNode_t * pNode )
 	return iMaxChild+iHeight;
 }
 #if defined( __clang__ )
+#if defined( __x86_64__ )
 #define SPH_EXTNODE_STACK_SIZE ( 0x120 )
+#elif defined ( __ARM_ARCH_ISA_A64 )
+#define SPH_EXTNODE_STACK_SIZE ( 0x160 )
+#endif
 #elif defined( _WIN32 )
 #define SPH_EXTNODE_STACK_SIZE ( 600 )
 #else

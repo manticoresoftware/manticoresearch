@@ -13,12 +13,13 @@ set ( COLUMNAR_REQUIRED_VER 1.${COLUMNAR_ABI} )
 # to edit in IDE.
 
 if (WIN32)
-	set ( LIB_MANTICORE_COLUMNAR "lib_manticore_columnar.dll" )
-	set ( LIB_MANTICORE_SECONDARY "lib_manticore_secondary.dll" )
-else ()
-	set ( LIB_MANTICORE_COLUMNAR "lib_manticore_columnar.so" )
-	set ( LIB_MANTICORE_SECONDARY "lib_manticore_secondary.so" )
-endif ()
+	set ( EXTENSION dll )
+else()
+	set ( EXTENSION so )
+endif()
+
+set ( LIB_MANTICORE_COLUMNAR "lib_manticore_columnar.${EXTENSION}" )
+set ( LIB_MANTICORE_SECONDARY "lib_manticore_secondary.${EXTENSION}" )
 
 macro ( return_if_columnar_api_found )
 	if (TARGET columnar::columnar_api)

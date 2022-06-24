@@ -10,8 +10,8 @@
 
 #pragma once
 
+#include "std/spinlock.h"
 #include <boost/intrusive/slist.hpp>
-#include <boost/fiber/detail/spinlock.hpp>
 
 namespace Threads
 {
@@ -31,8 +31,6 @@ class Waker_c
 	size_t m_iEpoch {};
 
 public:
-	friend class Context_c;
-
 	Waker_c() = default;
 
 	Waker_c ( Worker_c* pCtx, const size_t iEpoch )
@@ -40,7 +38,7 @@ public:
 		, m_iEpoch { iEpoch }
 	{}
 
-	bool Wake() const noexcept;
+	bool Wake ( bool bVip = false ) const noexcept;
 };
 
 class WakerInQueue_c: public Waker_c
@@ -83,7 +81,9 @@ private:
 	detail::WakerSlist_t m_Slist {};
 
 public:
-	void SuspendAndWait ( boost::fibers::detail::spinlock_lock&, Worker_c* );
+	void SuspendAndWait ( sph::Spinlock_lock& l, Worker_c* ) REQUIRES (l);
+	bool SuspendAndWaitUntil ( sph::Spinlock_lock& l, Worker_c*, int64_t ) REQUIRES (l);
+	bool SuspendAndWaitForMS ( sph::Spinlock_lock& l, Worker_c*, int64_t ) REQUIRES (l);
 	void NotifyOne();
 	void NotifyAll();
 

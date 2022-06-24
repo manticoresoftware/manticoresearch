@@ -65,4 +65,7 @@ Optional_T<CSphString> IsPartOfCluster ( const ServedDesc_t* pDesc );
 // set cluster name into index desc for fast rejects
 bool SetIndexCluster ( const CSphString& sIndex, const CSphString& sCluster, CSphString * pError=nullptr );
 
+CSphString WaitClusterReady ( const CSphString& sCluster, int64_t iTimeoutS );
+std::pair<int,CSphString> WaitClusterCommit ( const CSphString& sCluster, int iTxn, int64_t iTimeoutS );
+
 #endif // _searchdreplication_

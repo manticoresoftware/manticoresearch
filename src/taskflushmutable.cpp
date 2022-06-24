@@ -15,15 +15,20 @@
 
 using namespace Threads;
 
-/// flushing period, defined from `rt_flush_period` config param
-static int64_t g_iRtFlushPeriodUs = 36000000000ll; // default period is 10 hours
+int64_t& FlushPeriodUs()
+{
+	/// config searchd.rt_flush_period
+	static int64_t iRtFlushPeriodUs = DEFAULT_FLUSH_PERIOD; // default period is 10 hours
+	return iRtFlushPeriodUs;
+}
+
 void SetRtFlushPeriod ( int64_t iPeriod )
 {
-	g_iRtFlushPeriodUs = iPeriod;
+	FlushPeriodUs() = iPeriod;
 }
 
 // thread-safe stringset, internally guarded by rwlock
-class StringSetMT
+class StringSetMT_c
 {
 	Threads::Coro::RWLock_c m_dGuard;
 	sph::StringSet m_dSet GUARDED_BY ( m_dGuard );
@@ -62,81 +67,55 @@ public:
 
 };
 
-static StringSetMT g_Flushable;
-
-static void ScheduleFlushTask ( void* pName, int64_t iNextTimestamp=-1 )
+namespace
 {
-	static int iRtFlushTask = -1;
-	if ( iRtFlushTask<0 )
-		iRtFlushTask = TaskManager::RegisterGlobal ( "Flush mutable index",
-			[] ( void* pName ) // worker
-			{
-				CSphString sName;
-				sName.Adopt (( char* ) pName );
-
-				if ( g_Flushable.IsDisabled ())
-					return;
-
-				if ( !g_Flushable.Contains ( sName ))
-					return;
-
-				auto pServed = GetServed ( sName );
-				if ( !pServed ) // index went out.
-				{
-					g_Flushable.Delete ( sName );
-					return;
-				}
-
-				if ( !ServedDesc_t::IsMutable ( pServed ))
-				{
-					g_Flushable.Delete ( sName );
-					return;
-				}
-
-				RIdx_T<RtIndex_i*> pRT { pServed };
-				assert ( pRT );
-
-				// check timeout, schedule or run immediately.
-				auto iLastTimestamp = pRT->GetLastFlushTimestamp ();
-				auto iPlannedTimestamp = iLastTimestamp+g_iRtFlushPeriodUs;
-				bool bNeedFlush = pRT->IsFlushNeed();
-				if ( bNeedFlush && ( iPlannedTimestamp-1000 )<=sphMicroTimer() )
-				{
-					pRT->ForceRamFlush ( "periodic" );
-					iPlannedTimestamp = pRT->GetLastFlushTimestamp()+g_iRtFlushPeriodUs;
-				}
-
-				if ( !bNeedFlush )
-					iPlannedTimestamp = sphMicroTimer() + g_iRtFlushPeriodUs;
-
-				// once more check for disabled - since ForceRamFlush may be long
-				if ( g_Flushable.IsDisabled ())
-					return;
-
-				// reschedule or post-schedule
-				ScheduleFlushTask ( sName.Leak(), iPlannedTimestamp );
-			},
-			[] ( void* pName ) // deleter
-			{
-				CSphString sFoo;
-				sFoo.Adopt (( char* ) pName );
-			},
-		2 );
-
-	if ( iNextTimestamp<0 )
-		TaskManager::StartJob ( iRtFlushTask, pName );
-	else
-		TaskManager::ScheduleJob ( iRtFlushTask, iNextTimestamp, pName );
+StringSetMT_c& FlushSet()
+{
+	static StringSetMT_c hFlushSet;
+	return hFlushSet;
 }
 
-static void SubscribeFlushIndex ( CSphString sName )
+void ScheduleFlushTask ( CSphString sName )
 {
-	if ( g_Flushable.IsDisabled ())
+	static int iRtFlushTask = TaskManager::RegisterGlobal ( "Flush mutable index" );
+	static auto iLastFlushFinishedTime = sphMicroTimer();
+
+	TaskManager::ScheduleJob ( iRtFlushTask, iLastFlushFinishedTime + FlushPeriodUs(), [sName = std::move ( sName )]() mutable
+	{
+		if ( FlushSet().IsDisabled() || !FlushSet().Contains ( sName ) )
+			return;
+
+		auto pServed = GetServed ( sName );
+		if ( !pServed || !ServedDesc_t::IsMutable ( pServed ) ) // index went out or not suitable
+		{
+			FlushSet().Delete ( sName );
+			return;
+		}
+
+		RIdx_T<RtIndex_i*> pRT { pServed };
+		assert ( pRT );
+
+		// do the flush
+		pRT->ForceRamFlush ( "periodic" );
+
+		// once more check for disabled - since ForceRamFlush may be long
+		if ( FlushSet().IsDisabled() )
+			return;
+
+		iLastFlushFinishedTime = sphMicroTimer();
+		ScheduleFlushTask ( std::move (sName) );
+	} );
+}
+
+void SubscribeFlushIndex ( CSphString sName )
+{
+	if ( FlushSet().IsDisabled ())
 		return;
 
-	if ( g_Flushable.AddUniq ( sName ))
-		ScheduleFlushTask ( sName.Leak ());
+	if ( FlushSet().AddUniq ( sName ))
+		ScheduleFlushTask ( std::move ( sName ) );
 };
+} // namespace
 
 void HookSubscribeMutableFlush ( const CSphString& sName )
 {
@@ -145,5 +124,5 @@ void HookSubscribeMutableFlush ( const CSphString& sName )
 
 void ShutdownFlushingMutable ()
 {
-	g_Flushable.Disable();
+	FlushSet().Disable();
 }

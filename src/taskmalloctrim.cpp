@@ -17,38 +17,26 @@
 #include <malloc.h>
 #include "searchdtask.h"
 
-static volatile int64_t iLastMallocTrimTimestamp = -1;
-volatile int64_t iMallocTrimPeriod; // 30m
-
 int PerformMallocTrim ( size_t iPad )
 {
-	int iRes = malloc_trim ( iPad );
-	iLastMallocTrimTimestamp = sphMicroTimer ();
-	return iRes;
+	return malloc_trim ( iPad );
 }
 
-static void MallocTrim ( void* )
+void ScheduleMallocTrim ()
 {
-	if (( iLastMallocTrimTimestamp + iMallocTrimPeriod )<=sphMicroTimer ())
-		PerformMallocTrim (0);
+	static int iMallocTrimTask = TaskManager::RegisterGlobal ( "malloc_trim(0) periodically", 1 );
+	static int64_t iLastMallocTrimTimestamp = sphMicroTimer();
 
-	ScheduleMallocTrim ( iMallocTrimPeriod );
-}
-
-void ScheduleMallocTrim ( int64_t iPeriod )
-{
-	static int iMallocTrimTask = -1;
-	if ( iMallocTrimTask<0 )
+	TaskManager::ScheduleJob ( iMallocTrimTask, iLastMallocTrimTimestamp + DEFAULT_MALLOC_TRIM_PERIOD, []
 	{
-		iLastMallocTrimTimestamp = sphMicroTimer ();
-		iMallocTrimTask = TaskManager::RegisterGlobal ( "malloc_trim(0) periodically", MallocTrim, nullptr, 1, 1 );
-	}
-	iMallocTrimPeriod = iPeriod;
-	TaskManager::ScheduleJob ( iMallocTrimTask, iLastMallocTrimTimestamp + iMallocTrimPeriod );
+		PerformMallocTrim ( 0 );
+		iLastMallocTrimTimestamp = sphMicroTimer();
+		ScheduleMallocTrim ();
+	} );
 }
 
 #else
-void ScheduleMallocTrim ( int64_t iPeriod ) {};
 int PerformMallocTrim ( size_t ) {return 0;};
+void ScheduleMallocTrim () {};
 #endif
 

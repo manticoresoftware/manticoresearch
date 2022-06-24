@@ -12,9 +12,6 @@
 /// @file taskflushbinlog.h
 /// Task to periodically check and flush rt binlog
 
-#ifndef MANTICORE_TASKFLUSHBINLOG_H
-#define MANTICORE_TASKFLUSHBINLOG_H
+#pragma once
 
 void StartRtBinlogFlushing ();
-
-#endif //MANTICORE_TASKFLUSHBINLOG_H

@@ -12,8 +12,7 @@
 /// @file taskflushattrs.h
 /// Task to check and flush modified attributes by demand and by timeout (if set)
 
-#ifndef MANTICORE_TASKFLUSHATTRS_H
-#define MANTICORE_TASKFLUSHATTRS_H
+#pragma once
 
 #include "sphinxstd.h"
 
@@ -29,5 +28,3 @@ bool FinallySaveIndexes ();
 
 /// Engages SaveIndexes task, and wait until it finished.
 int CommandFlush ();
-
-#endif //MANTICORE_TASKFLUSHATTRS_H

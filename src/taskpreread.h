@@ -14,8 +14,7 @@
 
 #include "sphinxstd.h"
 
-void DoPreread ();
-void StartPreread ();
-bool WaitFinishPreread ( int64_t uSec );
+void PrereadIndexes (bool bForce);
+bool WaitPrereadFinished ( int64_t uSec );
 
 #endif //MANTICORE_TASKPREREAD_H

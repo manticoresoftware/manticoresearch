@@ -21,10 +21,10 @@
  * OR, for system task - the name of the action.
  *
  * Task may produce subtasks - like parallel processing rt chunks, and they also include details like current chunk N.
- * It may be any kind of different pieces of data, caming from diffefent subtasks, and each need to be processed
- * different way, depending from the essense of the data itself.
+ * It may be any kind of different pieces of data, coming from different subtasks, and each need to be processed
+ * different way, depends on the essence of the data itself.
  *
- * When task engaged, it fills it's own TaskInfo structure with it's essential data, and stores it in the
+ * When task engaged, it fills its own TaskInfo structure with its essential data, and stores it in the
  * field m_pTaskInfo of thread descriptor LowThreadDesc_t. Previous value of that field stored in task's m_pNext field.
  * So, moving deep from task to task we finally have linked list of task infos, starting from one stored in Thread
  * and moving forward with m_pNext pointers.
@@ -91,7 +91,7 @@ BYTE RegisterRenderer ( RenderFnPtr pFunc ) noexcept;
     }                                  \
     static void Render ( const void * pSrc, PublicThreadDesc_t & dDst )
 
-// Defines declared stuf (has to be written in .cpp to avoid multiple definitions)
+// Define declared stuff (has to be written in .cpp to avoid multiple definitions)
 #define DEFINE_RENDER( TASKINFO ) \
 	BYTE TASKINFO::m_eTask=0;        \
 	void TASKINFO::Render ( const void * pSrc, PublicThreadDesc_t & dDst )
@@ -220,8 +220,8 @@ namespace myinfo {
 	// iLen used to select retire policy (lazy, or immediate retire)
 	void SetDescription ( CSphString sDescription, int iLen );
 
-	// set MiniTaskInfo_t::m_pHazardDescription and refresh timer fixme! rename to SetTaskInfo
-	void SetThreadInfo ( const char * sTemplate, ... );
+	// set MiniTaskInfo_t::m_pHazardDescription and refresh timer
+	void SetTaskInfo ( const char * sTemplate, ... );
 
 	// returns non-guarded ref to MiniTaskInfo_t::m_pHazardDescription (to be used in same scope as set functions)
 	Str_t UnsafeDescription ();

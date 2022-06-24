@@ -2180,10 +2180,8 @@ bool PercolateIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery & 
 
 	// start counting
 	int64_t tmQueryStart = sphMicroTimer ();
-	int64_t tmMaxTimer = 0;
-	sph::MiniTimer_c dTimerGuard;
-	if ( tQuery.m_uMaxQueryMsec>0 )
-		tmMaxTimer = dTimerGuard.MiniTimerEngage ( tQuery.m_uMaxQueryMsec ); // max_query_time
+	MiniTimer_c dTimerGuard;
+	int64_t tmMaxTimer = dTimerGuard.Engage ( tQuery.m_uMaxQueryMsec ); // max_query_time
 
 	// select the sorter with max schema
 	// uses GetAttrsCount to get working facets (was GetRowSize)
@@ -2296,7 +2294,7 @@ bool PercolateIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery & 
 			break;
 
 		// handle timer
-		if ( tmMaxTimer && sph::TimeExceeded ( tmMaxTimer ) )
+		if ( sph::TimeExceeded ( tmMaxTimer ) )
 		{
 			tMeta.m_sWarning = "query time exceeded max_query_time";
 			break;

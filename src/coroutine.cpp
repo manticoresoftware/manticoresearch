@@ -263,7 +263,7 @@ class Worker_c : public details::SchedulerOperation_t
 		if ( !pOwner )
 			return;
 
-		Threads::JobTimer_t dTrack;
+		Threads::JobTracker_t dTrack;
 		auto* pThis = static_cast<Worker_c*> ( pBase );
 		pThis->Run();
 	}
@@ -348,11 +348,11 @@ private:
 	}
 
 public:
-	// invoked from Coro::Go - Multiserve, Sphinxql, replication recv. Schedule into primary queue.
+	// invoked from Coro::Go - Multiserve, Sphinxql, replication recv. Schedule by default into primary queue.
 	// Agnostic to parent's task info (if any). Should create and use it's own.
-	static void StartPrimary ( Handler fnHandler, Scheduler_i* pScheduler )
+	static void StartPrimary ( Handler fnHandler, Scheduler_i* pScheduler, bool bPrimary=true )
 	{
-		( new Worker_c ( std::move ( fnHandler ), pScheduler ) )->Schedule ();
+		( new Worker_c ( std::move ( fnHandler ), pScheduler ) )->Schedule ( bPrimary );
 	}
 
 	// from Coro::Co -> all parallel tasks (snippets, local searches, pq, disk chunks). Schedule into secondary queue.
@@ -396,16 +396,10 @@ public:
 		return new Worker_c ( myinfo::StickParent ( std::move ( fnHandler ) ), CurrentScheduler () );
 	}
 
-	inline void Restart () noexcept
+	inline void Restart ( bool bVip = true ) noexcept
 	{
 		if (( m_tState.SetFlags ( CoroState_t::Running_e ) & CoroState_t::Running_e )==0 )
-			Schedule ();
-	}
-
-	inline void RestartSecondary () noexcept
-	{
-		if (( m_tState.SetFlags ( CoroState_t::Running_e ) & CoroState_t::Running_e )==0 )
-			Schedule (false);
+			Schedule ( bVip );
 	}
 
 	inline void Continue () noexcept // continue previously run task. As continue calculation with extended stack
@@ -461,14 +455,9 @@ public:
 		return false;
 	}
 
-	inline Handler SecondaryRestarter() noexcept
+	inline Handler Restarter ( bool bVip = true ) noexcept
 	{
-		return [this] { RestartSecondary (); };
-	}
-
-	inline Handler Restarter () noexcept
-	{
-		return [this] { Restart (); };
+		return [this, bVip] { Restart ( bVip ); };
 	}
 
 	inline Handler Continuator () noexcept
@@ -511,7 +500,7 @@ public:
 		return m_pTlsThis;
 	}
 
-	inline bool Wake ( const size_t iWakerEpoch ) noexcept
+	inline bool Wake ( const size_t iWakerEpoch, bool bVip ) noexcept
 	{
 		size_t iExpectedEpoch = m_iWakerEpoch.load ( std::memory_order_relaxed );
 		bool bLastWaker = m_iWakerEpoch.compare_exchange_strong ( iExpectedEpoch, iWakerEpoch + 1, std::memory_order_acq_rel );
@@ -522,7 +511,7 @@ public:
 		}
 
 		assert ( CurrentWorker() != this );
-		Restart();
+		Restart ( bVip );
 		return true;
 	}
 
@@ -557,7 +546,7 @@ void Go ( Handler fnHandler, Scheduler_i * pScheduler )
 	Worker_c::StartPrimary ( std::move(fnHandler), pScheduler );
 }
 
-// start secondary subtasks (parallell search, pq processing, etc)
+// start secondary subtasks (parallel search, pq processing, etc)
 void Co ( Handler fnHandler, Waiter_t tSignaller)
 {
 	auto pScheduler = CurrentScheduler ();
@@ -657,19 +646,29 @@ bool CallCoroutineRes ( Predicate fnHandler )
 	return bResult;
 }
 
+// start secondary subtasks (parallel search, pq processing, etc)
+void StartJob ( Handler fnHandler )
+{
+	auto pScheduler = Coro::CurrentScheduler();
+	if ( !pScheduler )
+		pScheduler = GlobalWorkPool();
+
+	assert ( pScheduler );
+	Coro::Worker_c::StartPrimary ( std::move ( fnHandler ), pScheduler, false );
+}
+
 // Async schedule continuation.
 // Invoking handler will schedule continuation of yielded coroutine and return immediately.
 // Scheduled task ('goto continue...') will be pefromed by scheduler's worker (threadpool, etc.)
 // this pushes to primary queue
-Handler CurrentRestarter () noexcept
+Handler CurrentRestarter ( bool bVip ) noexcept
 {
-	return Coro::Worker()->Restarter();
+	return Coro::Worker()->Restarter ( bVip );
 }
-
 
 Waiter_t DefferedRestarter () noexcept
 {
-	return { nullptr, [fnProceed= Coro::Worker ()->SecondaryRestarter ()] ( void * ) { fnProceed (); }};
+	return { nullptr, [fnProceed = CurrentRestarter ( false )] ( void* ) { fnProceed(); } };
 }
 
 Waiter_t DefferedContinuator () noexcept
@@ -796,16 +795,15 @@ Throttler_c::Throttler_c ( int tmThrottlePeriodMs )
 	if ( tmThrottlePeriodMs<0 )
 		m_tmThrottlePeriodMs = tmThrotleTimeQuantumMs;
 
-	if ( m_tmThrottlePeriodMs )
-		m_tmNextThrottleTimestamp = m_dTimerGuard.MiniTimerEngage( m_tmThrottlePeriodMs );
+	m_tmNextThrottleTimestamp = m_dTimerGuard.Engage( m_tmThrottlePeriodMs );
 }
 
 bool Throttler_c::MaybeThrottle ()
 {
-	if ( !m_tmThrottlePeriodMs || !sph::TimeExceeded ( m_tmNextThrottleTimestamp ) )
+	if ( !sph::TimeExceeded ( m_tmNextThrottleTimestamp ) )
 		return false;
 
-	m_tmNextThrottleTimestamp = m_dTimerGuard.MiniTimerEngage ( m_tmThrottlePeriodMs );
+	m_tmNextThrottleTimestamp = m_dTimerGuard.Engage ( m_tmThrottlePeriodMs );
 	auto iOldThread = MyThd ().m_iThreadID;
 	Coro::Worker ()->Reschedule ();
 	m_bSameThread = ( iOldThread==MyThd ().m_iThreadID );
@@ -814,10 +812,10 @@ bool Throttler_c::MaybeThrottle ()
 
 bool Throttler_c::ThrottleAndKeepCrashQuery ()
 {
-	if ( !m_tmThrottlePeriodMs || !sph::TimeExceeded ( m_tmNextThrottleTimestamp ) )
+	if ( !sph::TimeExceeded ( m_tmNextThrottleTimestamp ) )
 		return false;
 
-	m_tmNextThrottleTimestamp = m_dTimerGuard.MiniTimerEngage ( m_tmThrottlePeriodMs );
+	m_tmNextThrottleTimestamp = m_dTimerGuard.Engage ( m_tmThrottlePeriodMs );
 	CrashQueryKeeper_c _;
 	auto iOldThread = MyThd ().m_iThreadID;
 	Coro::Worker ()->Reschedule ();
@@ -825,11 +823,27 @@ bool Throttler_c::ThrottleAndKeepCrashQuery ()
 	return true;
 }
 
-inline void fnResume ( volatile void* pCtx )
+inline void fnResume ( volatile Worker_c* pCtx )
 {
-	if (!pCtx)
+	if ( pCtx )
+		( (Worker_c*)pCtx )->Restart ( false );
+}
+
+// yield and reschedule after given period of time (in milliseconds)
+void SleepMsec ( int iMsec )
+{
+	if ( iMsec < 0 )
 		return;
-	( (Threads::Coro::Worker_c *) pCtx )->RestartSecondary ();
+
+	struct Sleeper_t final: public MiniTimer_c
+	{
+		Sleeper_t () { m_szName = "SleepMsec"; }
+		Waker_c m_tWaker = Worker()->CreateWaker();
+		void OnTimer() final { m_tWaker.Wake(); }
+	} tWait;
+
+	// suspend this fiber
+	Coro::YieldWith ( [&tWait, iMsec](){ tWait.Engage ( iMsec ); });
 }
 
 Event_c::~Event_c ()
@@ -850,8 +864,7 @@ void Event_c::SetEvent()
 		if ( uState & Waited_e )
 		{
 			m_uState.store ( Signaled_e ); // memory_order_sec_cst - to ensure that next call will not resume again
-			fnResume ( m_pCtx );
-			return;
+			return fnResume ( m_pCtx );
 		}
 	} while ( !m_uState.compare_exchange_weak ( uState, uState | Signaled_e, std::memory_order_relaxed ) );
 }
@@ -863,17 +876,14 @@ void Event_c::WaitEvent()
 {
 	if ( !( m_uState.load ( std::memory_order_relaxed ) & Signaled_e ) )
 	{
-		if ( m_pCtx != Coro::Worker() )
-			m_pCtx = Coro::Worker();
+		if ( m_pCtx != Worker() )
+			m_pCtx = Worker();
 		YieldWith ( [this] {
 			BYTE uState = m_uState.load ( std::memory_order_relaxed );
 			do
 			{
 				if ( uState & Signaled_e )
-				{
-					fnResume ( m_pCtx );
-					return;
-				}
+					return fnResume ( m_pCtx );
 			} while ( !m_uState.compare_exchange_weak ( uState, uState | Waited_e, std::memory_order_relaxed ) );
 		} );
 	}
@@ -883,21 +893,60 @@ void Event_c::WaitEvent()
 }
 
 
-bool Waker_c::Wake() const noexcept
+bool Waker_c::Wake ( bool bVip ) const noexcept
 {
 	assert ( m_iEpoch > 0 );
 	assert ( m_pCtx );
-	return m_pCtx->Wake ( m_iEpoch );
+	return m_pCtx->Wake ( m_iEpoch, bVip );
 }
 
 
-void WaitQueue_c::SuspendAndWait ( boost::fibers::detail::spinlock_lock& tLock, Worker_c* pActive )
+void WaitQueue_c::SuspendAndWait ( sph::Spinlock_lock& tLock, Worker_c* pActive ) NO_THREAD_SAFETY_ANALYSIS
 {
 	WakerInQueue_c w { pActive->CreateWaker() };
 	m_Slist.push_back ( w );
 	// suspend this fiber
-	pActive->YieldWith ( [&tLock]() { tLock.unlock(); } );
+	pActive->YieldWith ( [&tLock]() NO_THREAD_SAFETY_ANALYSIS { tLock.unlock(); } );
 	assert ( !w.is_linked() );
+}
+
+struct ScheduledWait_t final: public MiniTimer_c
+{
+	Waker_c& m_tWaker;
+	void OnTimer() final { m_tWaker.Wake(); }
+	ScheduledWait_t ( Waker_c& tWaker, const char* szName ) : m_tWaker { tWaker } { m_szName = szName; }
+};
+
+// returns true if signalled, false if timed-out
+bool WaitQueue_c::SuspendAndWaitUntil ( sph::Spinlock_lock& tLock, Worker_c* pActive, int64_t iTimestamp ) NO_THREAD_SAFETY_ANALYSIS
+{
+	WakerInQueue_c w { pActive->CreateWaker() };
+	m_Slist.push_back ( w );
+
+	ScheduledWait_t tWait ( w, "SuspendAndWait" );
+
+	// suspend this fiber
+	pActive->YieldWith ( [&tLock, &tWait, iTimestamp]() NO_THREAD_SAFETY_ANALYSIS {
+		tLock.unlock();
+		tWait.EngageUS ( iTimestamp - sphMicroTimer() );
+	});
+
+	// resumed. Check if deadline is reached
+	if ( sph::TimeExceeded ( iTimestamp ) )
+	{
+		tLock.lock();
+		// remove from waiting-queue
+		if ( w.is_linked() )
+			m_Slist.remove ( w );
+		tLock.unlock();
+		return false;
+	}
+	return true;
+}
+
+bool WaitQueue_c::SuspendAndWaitForMS ( sph::Spinlock_lock& tLock, Worker_c* pActive, int64_t iTimePeriodMS )
+{
+	return SuspendAndWaitUntil ( tLock, pActive, sphMicroTimer() + iTimePeriodMS * 1000 );
 }
 
 
@@ -933,7 +982,7 @@ void Mutex_c::Lock()
 	while ( true ) {
 		auto* pActiveWorker = Worker();
 		// store this fiber in order to be notified later
-		boost::fibers::detail::spinlock_lock tLock { m_tWaitQueueSpinlock };
+		sph::Spinlock_lock tLock { m_tWaitQueueSpinlock };
 		assert ( pActiveWorker != m_pOwner );
 		if ( !m_pOwner ) {
 			m_pOwner = pActiveWorker;
@@ -947,7 +996,7 @@ void Mutex_c::Lock()
 void Mutex_c::Unlock()
 {
 	Debug (auto* pActiveWorker = Worker();)
-	boost::fibers::detail::spinlock_lock tLock { m_tWaitQueueSpinlock };
+	sph::Spinlock_lock tLock { m_tWaitQueueSpinlock };
 	assert ( pActiveWorker == m_pOwner );
 	m_pOwner = nullptr;
 
@@ -957,13 +1006,13 @@ void Mutex_c::Unlock()
 // conditional variable
 void ConditionVariableAny_c::NotifyOne() noexcept
 {
-	boost::fibers::detail::spinlock_lock tLock { m_tWaitQueueSpinlock };
+	sph::Spinlock_lock tLock { m_tWaitQueueSpinlock };
 	m_tWaitQueue.NotifyOne();
 }
 
 void ConditionVariableAny_c::NotifyAll() noexcept
 {
-	boost::fibers::detail::spinlock_lock tLock { m_tWaitQueueSpinlock };
+	sph::Spinlock_lock tLock { m_tWaitQueueSpinlock };
 	m_tWaitQueue.NotifyAll();
 }
 
@@ -978,7 +1027,8 @@ Debug (static constexpr DWORD uxFE = ~ux01;)		   // mask for w-lock flag (0xFFFF
 void RWLock_c::ReadLock()
 {
 	while ( true ) {
-		boost::fibers::detail::spinlock_lock tLock { m_tInternalMutex };
+		// store this task in order to be resumed later
+		sph::Spinlock_lock tLock { m_tInternalMutex };
 		if ( !( m_uState & ux01 ) && m_tWaitWQueue.Empty() )
 		{
 			m_uState += ux02;
@@ -992,7 +1042,7 @@ void RWLock_c::ReadLock()
 void RWLock_c::WriteLock()
 {
 	while ( true ) {
-		boost::fibers::detail::spinlock_lock tLock { m_tInternalMutex };
+		sph::Spinlock_lock tLock { m_tInternalMutex };
 		if ( !m_uState )
 		{
 			m_uState = ux01;
@@ -1004,7 +1054,7 @@ void RWLock_c::WriteLock()
 
 void RWLock_c::Unlock()
 {
-	boost::fibers::detail::spinlock_lock tLock { m_tInternalMutex };
+	sph::Spinlock_lock tLock { m_tInternalMutex };
 	assert ( m_uState >= ux01 && "attempt to unlock not locked coro mutex");
 	m_uState = ( m_uState == ux01 ) ? 0 : ( m_uState - ux02 );
 

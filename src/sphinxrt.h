@@ -61,8 +61,9 @@ struct OptimizeTask_t
 	int m_iCutoff	=	0;
 	int m_iFrom		=	-1;
 	int m_iTo		=	-1;
+	bool m_bByOrder = false;
 	CSphString m_sUvarFilter;
-	bool m_bByOrder =	false;
+	CSphString m_sIndex;
 };
 
 struct CSphReconfigureSettings
@@ -429,7 +430,7 @@ volatile bool &RTChangesAllowed () noexcept;
 volatile int & AutoOptimizeCutoffMultiplier() noexcept;
 volatile int AutoOptimizeCutoff() noexcept;
 
-using EnqueueForOptimizeFnPtr = void (*) ( CSphString , OptimizeTask_t );
-volatile EnqueueForOptimizeFnPtr& EnqueueForOptimizeExecutor() noexcept;
+using OptimizeExecutorFnPtr = void (*) ( OptimizeTask_t );
+volatile OptimizeExecutorFnPtr& OptimizeExecutor() noexcept;
 
 #endif // _sphinxrt_

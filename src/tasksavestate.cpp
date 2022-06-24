@@ -244,9 +244,12 @@ void IterateUservars ( UservarFn&& fnSample )
 }
 
 /// SphinxQL state writer
-/// periodically flushes changes of uservars, UDFs
-static void SphinxqlStateThreadFunc ( void* )
+/// flushes changes of uservars, UDFs
+namespace {
+void SphinxqlStateThreadFunc ()
 {
+	static Threads::Coro::Mutex_c tSerializer;
+	Threads::Coro::ScopedMutex_t tLock { tSerializer };
 	assert ( !g_sSphinxqlState.IsEmpty ());
 	CSphString sNewState;
 	sNewState.SetSprintf ( "%s.new", g_sSphinxqlState.cstr ());
@@ -310,22 +313,16 @@ static void SphinxqlStateThreadFunc ( void* )
 
 	tWriter.CloseFile ();
 	if ( sph::rename ( sNewState.cstr (), g_sSphinxqlState.cstr ())==0 )
-	{
 		::unlink ( sNewState.cstr ());
-	} else
-	{
-		sphWarning ( "sphinxql_state flush: rename %s to %s failed: %s",
-					 sNewState.cstr (), g_sSphinxqlState.cstr (), strerrorm ( errno ));
-	}
+	else
+		sphWarning ( "sphinxql_state flush: rename %s to %s failed: %s", sNewState.cstr (), g_sSphinxqlState.cstr (), strerrorm ( errno ));
 }
+} // namespace
 
 void SphinxqlStateFlush ()
 {
 	if ( g_sSphinxqlState.IsEmpty ())
 		return;
 
-	static int iSaveSphinxql = -1;
-	if ( iSaveSphinxql<0 )
-		iSaveSphinxql = TaskManager::RegisterGlobal ( "SphinxQL state flush", SphinxqlStateThreadFunc, nullptr, 1, 1 );
-	TaskManager::StartJob ( iSaveSphinxql );
+	Threads::StartJob ( SphinxqlStateThreadFunc );
 }

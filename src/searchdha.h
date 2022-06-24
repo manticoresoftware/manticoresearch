@@ -26,7 +26,7 @@ bool LoadExFunctions ();
 
 #include "sphinxutils.h"
 #include "searchdaemon.h"
-#include "searchdtask.h"
+#include "timeout_queue.h"
 
 /////////////////////////////////////////////////////////////////////////////
 // SOME SHARED GLOBAL VARIABLES
@@ -233,8 +233,8 @@ struct HostDashboard_t : public ISphRefcountedMT
 	mutable RwLock_t m_dMetricsLock;        // guards everything essential (see thread annotations)
 	int64_t m_iLastAnswerTime GUARDED_BY ( m_dMetricsLock );    // updated when we get an answer from the host
 	int64_t m_iLastQueryTime GUARDED_BY ( m_dMetricsLock ) = 0;    // updated when we send a query to a host
-	int64_t m_iErrorsARow GUARDED_BY (
-		m_dMetricsLock ) = 0;        // num of errors a row, updated when we update the general statistic.
+	int64_t m_iErrorsARow GUARDED_BY ( m_dMetricsLock ) = 0;        // num of errors a row, updated when we update the general statistic.
+	DWORD m_uPingTripUS = 0;		// round-trip in uS. We send ping with current time, on receive answer compare with current time and fix that difference
 
 public:
 	explicit HostDashboard_t ( const HostDesc_t &tAgent );
@@ -936,8 +936,6 @@ public:
 	static NetPollReadyIterator_c end () { return NetPollReadyIterator_c ( nullptr ); }
 };
 
-// smart compare (just naive tmLeft>tmNow doesn't work with timeouts <1ms)
-bool TimeoutReached ( int64_t tmLeft, int64_t tmNow = -1 );
 
 void RemotesGetField ( AggrResult_t & tRes, const CSphQuery & tQuery );
 void HandleCommandGetField ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq );

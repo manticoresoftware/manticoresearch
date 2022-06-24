@@ -654,19 +654,18 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	}
 #endif
 
-
-
 	int64_t tmShutStarted = sphMicroTimer ();
 
 	// release all planned/scheduled tasks
-	SHUTINFO << "Shut down task manager ...";
-	TaskManager::ShutDown();
+	SHUTINFO << "Shut down mini timer ...";
+	sph::ShutdownMiniTimer();
 
+	SHUTINFO << "Shut down flushing mutable ...";
 	ShutdownFlushingMutable();
 
 	// stop search threads; up to shutdown_timeout seconds
 	SHUTINFO << "Wait preread (if any) finished ...";
-	WaitFinishPreread ( g_iShutdownTimeoutUs );
+	WaitPrereadFinished ( g_iShutdownTimeoutUs );
 
 	// save attribute updates for all local indexes
 	SHUTINFO << "Finally save indexes ...";
@@ -6014,7 +6013,7 @@ void SearchHandler_c::RunLocalSearches ()
 			int64_t iCpuTime = -sphTaskCpuTimer ();
 
 			// FIXME!!! handle different proto
-			myinfo::SetThreadInfo( R"(api-search query="%s" comment="%s" index="%s")",
+			myinfo::SetTaskInfo( R"(api-search query="%s" comment="%s" index="%s")",
 									 m_dNQueries.First().m_sQuery.scstr (),
 									 m_dNQueries.First().m_sComment.scstr (),
 									 m_dLocal[iLocal].m_sName.scstr ());
@@ -7335,8 +7334,7 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 		tHandler.SetQueryParser ( std::move ( pParser ), eQueryType );
 
 		const CSphQuery & q = tHandler.m_dQueries[0];
-		myinfo::SetThreadInfo ( R"(api-search query="%s" comment="%s" index="%s")",
-				q.m_sQuery.scstr (), q.m_sComment.scstr (), q.m_sIndexes.scstr () );
+		myinfo::SetTaskInfo ( R"(api-search query="%s" comment="%s" index="%s")", q.m_sQuery.scstr (), q.m_sComment.scstr (), q.m_sIndexes.scstr () );
 	}
 
 	// run queries, send response
@@ -7878,7 +7876,7 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 		Threads::Coro::Throttler_c tThrottler ( session::GetThrottlingPeriodMS () );
 		while (true)
 		{
-			myinfo::SetThreadInfo ( "s %d:", iJob );
+			myinfo::SetTaskInfo ( "s %d:", iJob );
 			sphLogDebug ( "MakeSnippetsCoro Coro loop tick %d[%d]", iJob, dTasks[iJob] );
 			MakeSingleLocalSnippetWithFields ( dQueries[dTasks[iJob]], q, tCtx.m_pBuilder, dStubFields );
 			sphLogDebug ( "MakeSnippetsCoro Coro loop tick %d finished", iJob );
@@ -8099,8 +8097,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries,
 		return false;
 
 	// set correct data size for snippets
-	myinfo::SetThreadInfo ( R"(snippet datasize=%.1Dk query="%s")",
-			GetSnippetDataSize ( dQueries ), q.m_sQuery.scstr () );
+	myinfo::SetTaskInfo ( R"(snippet datasize=%.1Dk query="%s")", GetSnippetDataSize ( dQueries ), q.m_sQuery.scstr () );
 
 	// collect list of existing and empty sources
 	CSphVector<int> dPresent;
@@ -8244,8 +8241,7 @@ void HandleCommandExcerpt ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & t
 			return;
 		}
 	}
-	myinfo::SetThreadInfo ( R"(api-snippet datasize=%.1Dk query="%s")",
-			GetSnippetDataSize ( dQueries ), q.m_sQuery.scstr ());
+	myinfo::SetTaskInfo ( R"(api-snippet datasize=%.1Dk query="%s")", GetSnippetDataSize ( dQueries ), q.m_sQuery.scstr ());
 
 	if ( !MakeSnippets ( sIndex, dQueries, q, sError ) )
 	{
@@ -8876,7 +8872,9 @@ void BuildOneAgentStatus ( VectorLike & dStatus, HostDashboardRefPtr_t pDash, co
 			dStatus.Addf ( "%.2F", iLastAccess / 10000 );
 		uint64_t iLastTimer = pDash->m_iLastAnswerTime-pDash->m_iLastQueryTime;
 		if ( dStatus.MatchAddf ( "%s_lastperiodmsec", sPrefix ) )
-			dStatus.Addf ( "%l", iLastTimer / 1000 );
+			dStatus.Addf ( "%.3D", iLastTimer );
+		if ( dStatus.MatchAddf ( "%s_pingtripmsec", sPrefix ) )
+			dStatus.Addf ( "%.3F", pDash->m_uPingTripUS );
 		if ( dStatus.MatchAddf ( "%s_errorsarow", sPrefix ) )
 			dStatus.Addf ( "%l", pDash->m_iErrorsARow );
 	}
@@ -11111,8 +11109,7 @@ void HandleMysqlCallSnippets ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 		}
 	}
 
-	myinfo::SetThreadInfo ( R"(sphinxql-snippet datasize=%.1Dk query="%s")",
-			GetSnippetDataSize ( dQueries ), q.m_sQuery.scstr ());
+	myinfo::SetTaskInfo ( R"(sphinxql-snippet datasize=%.1Dk query="%s")", GetSnippetDataSize ( dQueries ), q.m_sQuery.scstr ());
 
 	if ( !MakeSnippets ( sIndex, dQueries, q, sError ) )
 	{
@@ -13939,12 +13936,12 @@ void HandleMysqlOptimizeManual ( RowBuffer_i & tOut, const DebugCmd::DebugComman
 	tTask.m_iTo = (int)tCmd.m_iPar2;
 	tTask.m_bByOrder = !tCmd.bOpt ( "byid", session::GetOptimizeById() );
 	tTask.m_iCutoff = (int)tCmd.iOpt("cutoff");
+	tTask.m_sIndex = std::move (sIndex);
 
-	if ( tCmd.bOpt("sync") )
-	{
+	if ( tCmd.bOpt ( "sync" ) )
 		RIdx_T<RtIndex_i*> ( pIndex )->Optimize ( std::move ( tTask ) );
-	} else
-		EnqueueForOptimize ( sIndex, std::move ( tTask ) );
+	else
+		RunOptimizeRtIndex ( std::move ( tTask ) );
 	tOut.Ok();
 }
 
@@ -13966,13 +13963,13 @@ void HandleMysqlDropManual ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t 
 	tTask.m_eVerb = OptimizeTask_t::eDrop;
 	tTask.m_iFrom = (int)tCmd.m_iPar1;
 	tTask.m_bByOrder = !tCmd.bOpt ( "byid", session::GetOptimizeById() );
+	tTask.m_sIndex = std::move ( sIndex );
 
-	if ( tCmd.bOpt("sync") )
-	{
+	if ( tCmd.bOpt ( "sync" ) )
 		RIdx_T<RtIndex_i*> ( pIndex )->Optimize ( std::move ( tTask ) );
-	} else
-		EnqueueForOptimize ( sIndex, std::move ( tTask ) );
-	tOut.Ok ();
+	else
+		RunOptimizeRtIndex ( std::move ( tTask ) );
+	tOut.Ok();
 }
 
 void HandleMysqlCompress ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCmd )
@@ -13992,12 +13989,12 @@ void HandleMysqlCompress ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & 
 	tTask.m_eVerb = OptimizeTask_t::eCompress;
 	tTask.m_iFrom = (int) tCmd.m_iPar1;
 	tTask.m_bByOrder = !tCmd.bOpt ( "byid", session::GetOptimizeById() );
+	tTask.m_sIndex = std::move ( sIndex );
 
-	if ( tCmd.bOpt("sync") )
-	{
+	if ( tCmd.bOpt ( "sync" ) )
 		RIdx_T<RtIndex_i*> ( pIndex )->Optimize ( std::move ( tTask ) );
-	} else
-		EnqueueForOptimize ( sIndex, std::move ( tTask ) );
+	else
+		RunOptimizeRtIndex ( std::move ( tTask ) );
 	tOut.Ok();
 }
 
@@ -14038,12 +14035,12 @@ void HandleMysqlSplit ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCm
 	tTask.m_iFrom = (int)tCmd.m_iPar1;
 	tTask.m_sUvarFilter = tCmd.m_sParam2;
 	tTask.m_bByOrder = !tCmd.bOpt ( "byid", session::GetOptimizeById() );
+	tTask.m_sIndex = std::move ( sIndex );
 
 	if ( tCmd.bOpt ( "sync" ) )
-	{
 		RIdx_T<RtIndex_i*> ( pIndex )->Optimize ( std::move ( tTask ) );
-	} else
-		EnqueueForOptimize ( sIndex, std::move ( tTask ) );
+	else
+		RunOptimizeRtIndex ( std::move ( tTask ) );
 	tOut.Ok();
 }
 
@@ -14212,6 +14209,41 @@ void HandleSetGdb ( RowBuffer_i & tOut, bool bParam )
 	}
 	tOut.Eof ();
 }
+
+void HandleWait ( RowBuffer_i& tOutBuf, const DebugCmd::DebugCommand_t& tCmd )
+{
+	auto iTimeoutS = tCmd.iOpt ( "timeout" );
+	auto sCluster = tCmd.m_sParam;
+	auto iTime = -sphMicroTimer();
+	auto sState = WaitClusterReady ( sCluster, iTimeoutS );
+	iTime += sphMicroTimer();
+	VectorLike tOut { tCmd.sOpt ( "like" ) };
+	tOut.SetColName("name");
+	tOut.MatchTuplet ( "cluster", sCluster.cstr() );
+	tOut.MatchTuplet ( "state", sState.cstr() );
+	tOut.MatchTupletf ( "time", "%.2t", iTime );
+	tOutBuf.DataTable ( tOut );
+}
+
+void HandleWaitStatus ( RowBuffer_i& tOutBuf, const DebugCmd::DebugCommand_t& tCmd )
+{
+	auto iTimeoutS = tCmd.iOpt ( "timeout" );
+	auto sCluster = tCmd.m_sParam;
+	auto iTxn = (int)tCmd.m_iPar1;
+	auto iTime = -sphMicroTimer();
+	auto tAchieved = WaitClusterCommit ( sCluster, iTxn, iTimeoutS );
+	iTime += sphMicroTimer();
+	VectorLike tOut { tCmd.sOpt ( "like" ) };
+	tOut.SetColName ( "name" );
+	tOut.MatchTuplet ( "cluster", sCluster.cstr() );
+	tOut.MatchTupletf ( "wanted", "%d", iTxn );
+	if ( tAchieved.first>=0 )
+		tOut.MatchTupletf ( "state", "%d", tAchieved.first );
+	else
+		tOut.MatchTuplet ( "achieved", tAchieved.second.cstr() );
+	tOut.MatchTupletf ( "time", "%.2t", iTime );
+	tOutBuf.DataTable ( tOut );
+}
 #endif
 
 void HandleToken ( RowBuffer_i & tOut, const CSphString & sParam )
@@ -14252,7 +14284,7 @@ void HandleMallocTrim ( RowBuffer_i & tOut )
 void HandleSleep ( RowBuffer_i & tOut, int64_t iParam )
 {
 	int64_t tmStart = sphMicroTimer ();
-	sphSleepMsec ( Max ( iParam/1000, 1 ) );
+	Threads::Coro::SleepMsec ( Max ( iParam/1000, 1 ) );
 	int64_t tmDelta = sphMicroTimer ()-tmStart;
 
 	tOut.HeadTuplet ( "command", "result" );
@@ -14264,35 +14296,23 @@ void HandleSleep ( RowBuffer_i & tOut, int64_t iParam )
 
 void HandleTasks ( RowBuffer_i & tOut )
 {
-	if (!tOut.HeadOfStrings ( { "Name", "MaxRunners", "MaxQueue", "CurrentRunners", "TotalSpent", "LastFinished", "Executed",
-			"Dropped", "In Queue" } ))
+	if (!tOut.HeadOfStrings ( { "Name", "MaxRunners", "CurrentRunners", "TotalSpent", "LastFinished", "Executed", "Dropped", "Enqueued" } ))
 		return;
 
 	auto dTasks = TaskManager::GetTaskInfo ();
 	for ( const auto & dTask : dTasks )
 	{
 		tOut.PutString ( dTask.m_sName );
-		if ( dTask.m_iMaxRunners>0 )
+		if ( dTask.m_iMaxRunners > 0 )
 			tOut.PutNumAsString ( dTask.m_iMaxRunners );
 		else
-			tOut.PutString ( "Scheduling" );
-		switch ( dTask.m_iMaxQueueSize )
-		{
-		case -1 :
-			tOut.PutString ( "Unlimited" );
-			break;
-		case 0 :
-			tOut.PutString ( "Disabled" );
-			break;
-		default :
-			tOut.PutNumAsString ( dTask.m_iMaxQueueSize );
-		}
+			tOut.PutString ( "unlimited" );
 		tOut.PutNumAsString ( dTask.m_iCurrentRunners );
 		tOut.PutTimeAsString ( dTask.m_iTotalSpent );
 		tOut.PutTimestampAsString ( dTask.m_iLastFinished );
 		tOut.PutNumAsString ( dTask.m_iTotalRun );
 		tOut.PutNumAsString ( dTask.m_iTotalDropped );
-		tOut.PutNumAsString ( dTask.m_inQueue );
+		tOut.PutNumAsString ( dTask.m_iAllRunners );
 		if ( !tOut.Commit () )
 			return;
 	}
@@ -14301,38 +14321,16 @@ void HandleTasks ( RowBuffer_i & tOut )
 
 void HandleSysthreads ( RowBuffer_i & tOut )
 {
-	if (!tOut.HeadOfStrings (
-		{"ThID", "OSThID", "Run time", "Load time", "Total ticks", "Jobs done", "Last job take", "Idle for" }))
-		return;
-
-	auto dTasks = TaskManager::GetThreadsInfo ();
-	for ( auto& dTask : dTasks )
-	{
-		tOut.PutNumAsString ( dTask.m_iMyThreadID );
-		tOut.PutNumAsString ( dTask.m_iMyOSThreadID );
-		tOut.PutTimestampAsString ( dTask.m_iMyStartTimestamp );
-		tOut.PutTimeAsString ( dTask.m_iTotalWorkedTime );
-		tOut.PutNumAsString ( dTask.m_iTotalTicked );
-		tOut.PutNumAsString ( dTask.m_iTotalJobsDone );
-		if ( dTask.m_iLastJobDoneTime<0 )
-			tOut.PutString ( "In work" );
-		else
-			tOut.PutTimeAsString ( dTask.m_iLastJobDoneTime - dTask.m_iLastJobStartTime );
-		if ( dTask.m_iLastJobDoneTime<0 )
-			tOut.PutString ( "0 (working)" );
-		else
-			tOut.PutTimestampAsString ( dTask.m_iLastJobDoneTime );
-		if (!tOut.Commit ())
-			return;
-	}
-	tOut.Eof ();
+	tOut.HeadTuplet ( "command", "result" );
+	tOut.DataTuplet ( "command", "deprecated" );
+	tOut.Eof();
 }
 
 void HandleSched ( RowBuffer_i & tOut )
 {
 	if (!tOut.HeadOfStrings ( { "Time rest", "Task" } ))
 		return;
-	auto dTasks = TaskManager::GetSchedInfo ();
+	auto dTasks = sph::GetSchedInfo ();
 	for ( auto& dTask : dTasks )
 	{
 		tOut.PutTimestampAsString ( dTask.m_iTimeoutStamp );
@@ -14386,6 +14384,10 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, Str_t sCommand )
 	case Cmd_e::CLOSE: HandleMysqlclose ( tOut ); return;
 	case Cmd_e::COMPRESS: HandleMysqlCompress ( tOut, tCmd ); return;
 	case Cmd_e::SPLIT: HandleMysqlSplit ( tOut, tCmd ); return;
+#if !_WIN32
+	case Cmd_e::WAIT: HandleWait ( tOut, tCmd ); return;
+	case Cmd_e::WAIT_STATUS: HandleWaitStatus ( tOut, tCmd ); return;
+#endif
 	default: break;
 	}
 
@@ -14472,7 +14474,8 @@ void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	if ( !sphCheckWeCanModify ( tStmt.m_sStmt, tOut ) )
 		return;
 
-	auto pIndex = GetServed ( tStmt.m_sIndex );
+	auto sIndex = tStmt.m_sIndex;
+	auto pIndex = GetServed ( sIndex );
 	if ( !ServedDesc_t::IsMutable ( pIndex ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, "OPTIMIZE INDEX requires an existing RT index" );
@@ -14482,12 +14485,12 @@ void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	OptimizeTask_t tTask;
 	tTask.m_eVerb = OptimizeTask_t::eManualOptimize;
 	tTask.m_iCutoff = tStmt.m_tQuery.m_iCutoff<=0 ? 0 : tStmt.m_tQuery.m_iCutoff;
+	tTask.m_sIndex = std::move ( sIndex );
 
 	if ( tStmt.m_tQuery.m_bSync )
-	{
 		RIdx_T<RtIndex_i*> ( pIndex )->Optimize ( std::move ( tTask ) );
-	} else
-		EnqueueForOptimize ( tStmt.m_sIndex, std::move ( tTask ) );
+	else
+		RunOptimizeRtIndex ( std::move ( tTask ) );
 	tOut.Ok();
 }
 
@@ -15837,13 +15840,12 @@ void HandleMysqlImportTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphS
 RtAccum_t * CSphSessionAccum::GetAcc ( RtIndex_i * pIndex, CSphString & sError )
 {
 	assert ( pIndex );
-	RtAccum_t * pAcc = pIndex->CreateAccum ( m_pAcc, sError );
+	RtAccum_t * pAcc = pIndex->CreateAccum ( m_pAcc.get(), sError );
 	if ( !pAcc && !sError.IsEmpty() )
 		return pAcc;
 
-	if ( pAcc!=m_pAcc )
-		SafeDelete ( m_pAcc );
-	m_pAcc = pAcc;
+	if ( m_pAcc.get()!=pAcc )
+		m_pAcc.reset(pAcc);
 	return pAcc;
 }
 
@@ -16666,7 +16668,6 @@ bool RotateIndexGreedy ( const ServedIndex_c& tServed, const char* szIndex, CSph
 {
 	assert ( tServed.m_eType == IndexType_e::PLAIN );
 	sphLogDebug ( "RotateIndexGreedy for '%s' invoked", szIndex );
-	sphWarning ( "RotateIndexGreedy for '%s' invoked", szIndex );
 
 	//////////////////
 	/// bool RotateIndexFilesGreedy ( const ServedDesc_t& tServed, const char* szIndex, CSphString& sError )
@@ -16938,67 +16939,50 @@ bool RotateIndexMT ( ServedIndexRefPtr_c& pNewServed, const CSphString & sIndex,
 	return true;
 }
 
-static void TaskRotation ( void* pRaw ) EXCLUDES ( MainThread )
-{
-	std::unique_ptr<VecOfServed_c> pDeferredIndexes { static_cast<VecOfServed_c*> ( pRaw ) };
-
-	// want to track rotation thread only at work
-	auto pDesc = PublishSystemInfo ( "ROTATION" );
-
-	sphWarning ( "TaskRotation starts with %d deferred indexes", pDeferredIndexes->GetLength() );
-	for ( auto & tIndex : *pDeferredIndexes )
-	{
-		ServedIndexRefPtr_c& pReplacementServed = tIndex.second;
-		const CSphString& sIndex = tIndex.first;
-
-		// cluster indexes got managed by different path
-		assert ( !ServedDesc_t::IsCluster ( pReplacementServed ) && "Rotation of clusters MUST never happens!" );
-
-		// prealloc RT and percolate here
-		StrVec_t dWarnings;
-		CSphString sError;
-		if ( ServedDesc_t::IsMutable ( pReplacementServed ) )
-		{
-			sphWarning ( "seamless rotate (prealloc) mutable index %s", sIndex.cstr() );
-			if ( PreallocNewIndex ( *pReplacementServed, sIndex.cstr(), dWarnings, sError ) )
-				g_pLocalIndexes->AddOrReplace ( pReplacementServed, sIndex );
-			else
-				sphWarning ( "index '%s': %s", sIndex.cstr(), sError.cstr() );
-		} else
-		{
-			sphWarning ( "seamless rotate local index %s", sIndex.cstr() );
-			if ( !RotateIndexMT ( pReplacementServed, sIndex, dWarnings, sError ) )
-				sphWarning ( "index '%s': %s", sIndex.cstr(), sError.cstr() );
-		}
-
-		for ( const auto & i : dWarnings )
-			sphWarning ( "index '%s': %s", sIndex.cstr(), i.cstr() );
-
-		g_pDistIndexes->Delete ( sIndex ); // postponed delete of same-named distributed (if any)
-	}
-
-	g_bInRotate = false;
-	RotateGlobalIdf ();
-	sphInfo ( "rotating index: all indexes done" );
-}
-
-static void AbortRotation ( void* pIndexes )
-{
-	std::unique_ptr<VecOfServed_c> pToDelete { static_cast<VecOfServed_c*> ( pIndexes ) };
-	g_bInRotate = false;
-}
-
 static void InvokeRotation ( VecOfServed_c&& dDeferredIndexes ) REQUIRES ( MainThread )
 {
 	assert ( !dDeferredIndexes.IsEmpty () && "Rotation queue must be checked before invoking rotation!");
+	Threads::StartJob ( [dIndexes = std::move ( dDeferredIndexes )] () mutable
+	{
+		// want to track rotation thread only at work
+		auto pDesc = PublishSystemInfo ( "ROTATION" );
 
-	auto pIndexesForRotation = std::make_unique<VecOfServed_c> ( std::move ( dDeferredIndexes ) );
+		sphLogDebug ( "TaskRotation starts with %d deferred indexes", dIndexes.GetLength() );
+		for ( auto& tIndex : dIndexes )
+		{
+			ServedIndexRefPtr_c& pReplacementServed = tIndex.second;
+			const CSphString& sIndex = tIndex.first;
 
-	static TaskID iRotationTask = -1;
-	if ( iRotationTask<0 )
-		iRotationTask = TaskManager::RegisterGlobal ("Rotation task", TaskRotation, AbortRotation, 1, 1);
+			// cluster indexes got managed by different path
+			assert ( !ServedDesc_t::IsCluster ( pReplacementServed ) && "Rotation of clusters MUST never happens!" );
 
-	TaskManager::StartJob ( iRotationTask, pIndexesForRotation.release() );
+			// prealloc RT and percolate here
+			StrVec_t dWarnings;
+			CSphString sError;
+			if ( ServedDesc_t::IsMutable ( pReplacementServed ) )
+			{
+				sphLogDebug ( "seamless rotate (prealloc) mutable index %s", sIndex.cstr() );
+				if ( PreallocNewIndex ( *pReplacementServed, sIndex.cstr(), dWarnings, sError ) )
+					g_pLocalIndexes->AddOrReplace ( pReplacementServed, sIndex );
+				else
+					sphWarning ( "index '%s': %s", sIndex.cstr(), sError.cstr() );
+			} else
+			{
+				sphLogDebug ( "seamless rotate local index %s", sIndex.cstr() );
+				if ( !RotateIndexMT ( pReplacementServed, sIndex, dWarnings, sError ) )
+					sphWarning ( "index '%s': %s", sIndex.cstr(), sError.cstr() );
+			}
+
+			for ( const auto& i : dWarnings )
+				sphWarning ( "index '%s': %s", sIndex.cstr(), i.cstr() );
+
+			g_pDistIndexes->Delete ( sIndex ); // postponed delete of same-named distributed (if any)
+		}
+
+		g_bInRotate = false;
+		RotateGlobalIdf();
+		sphInfo ( "rotating index: all indexes done" );
+	});
 }
 
 bool LimitedRotateIndexMT ( ServedIndexRefPtr_c& pNewServed, const CSphString& sIndex, StrVec_t& dWarnings, CSphString& sError ) EXCLUDES ( MainThread )
@@ -17168,7 +17152,7 @@ static bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSe
 		CSphString sWarning;
 		if ( !tSettings.Setup ( hIndex, szIndexName, sWarning, sError ) )
 		{
-			sphWarning ( "ERROR: index '%s': %s - NOT SERVING", szIndexName, sError.cstr() );
+			sphWarning ( "index '%s': %s - NOT SERVING", szIndexName, sError.cstr() );
 			return false;
 		}
 
@@ -17202,7 +17186,7 @@ static bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSe
 
 	if ( !CheckStoredFields ( tSchema, tSettings, sError ) )
 	{
-		sphWarning ( "ERROR: index '%s': %s - NOT SERVING", szIndexName, sError.cstr() );
+		sphWarning ( "index '%s': %s - NOT SERVING", szIndexName, sError.cstr() );
 		return false;
 	}
 
@@ -17214,7 +17198,7 @@ static bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSe
 		// SENTENCE indexing w\o stripper is valid combination
 		if ( !sIndexZones.IsEmpty() )
 		{
-			sphWarning ( "ERROR: index '%s': has index_sp=%d, index_zones='%s' but disabled html_strip - NOT SERVING", szIndexName, iIndexSP, sIndexZones.cstr() );
+			sphWarning ( "index '%s': has index_sp=%d, index_zones='%s' but disabled html_strip - NOT SERVING", szIndexName, iIndexSP, sIndexZones.cstr() );
 			return false;
 		}
 		else
@@ -17353,7 +17337,7 @@ static ResultAndIndex_t LoadTemplateIndex ( const char * szIndexName, const CSph
 	}
 
 	if ( !sWarning.IsEmpty() )
-		sphWarning ( "ERROR: index '%s': %s - NOT SERVING", szIndexName, sWarning.cstr () );
+		sphWarning ( "index '%s': %s - NOT SERVING", szIndexName, sWarning.cstr () );
 
 	auto pIdx = sphCreateIndexTemplate ( szIndexName );
 	pIdx->Setup ( tSettings );
@@ -17528,7 +17512,7 @@ static void ReloadIndexesFromConfig ( const CSphConfig& hConf, HashOfServed_c& h
 	assert ( !IsConfigless() );
 	if ( !hConf.Exists ("index") )
 	{
-		sphWarning ( "No indexes found in config came to rotation. Abort reloading");
+		sphInfo ( "No indexes found in config came to rotation. Abort reloading");
 		return;
 	}
 
@@ -17641,7 +17625,7 @@ static void CheckIndexesForSeamlessAndStartRotation ( VecOfServed_c dDeferredInd
 		if ( !ServedDesc_t::IsMutable ( pIndex ) && CheckIndexRotate_c ( *pIndex ).NothingToRotate() )
 		{
 			++iNotCapableForSeamlessRotation;
-			sphWarning ( "queue[] = %s", sIdx.cstr() );
+			sphLogDebug ( "queue[] = %s", sIdx.cstr() );
 			sphLogDebug ( "Index %s (%s) is not capable for seamless rotate. Skipping", sIdx.cstr ()
 				, pIndex->m_sIndexPath.cstr () );
 			dDeferredIndexes.Remove(i--);
@@ -17653,7 +17637,7 @@ static void CheckIndexesForSeamlessAndStartRotation ( VecOfServed_c dDeferredInd
 
 	if ( dDeferredIndexes.IsEmpty () )
 	{
-		sphWarning ( "nothing to rotate after SIGHUP" );
+		sphInfo ( "nothing to rotate after SIGHUP" );
 		g_bInRotate = false;
 		return;
 	}
@@ -17679,7 +17663,7 @@ static void DoGreedyRotation ( VecOfServed_c&& dDeferredIndexes ) REQUIRES ( Mai
 		// prealloc RT and percolate here
 		if ( ServedDesc_t::IsMutable ( pDeferredIndex ) )
 		{
-			sphWarning ( "greedy rotate (prealloc) mutable %s", sDeferredIndex.cstr() );
+			sphLogDebug ( "greedy rotate (prealloc) mutable %s", sDeferredIndex.cstr() );
 
 			if ( PreallocNewIndex ( *pDeferredIndex, &g_hCfg["index"][sDeferredIndex], sDeferredIndex.cstr(), dWarnings, sError ) )
 				g_pLocalIndexes->AddOrReplace ( pDeferredIndex, sDeferredIndex );
@@ -17688,7 +17672,7 @@ static void DoGreedyRotation ( VecOfServed_c&& dDeferredIndexes ) REQUIRES ( Mai
 		}
 		else if ( pDeferredIndex->m_eType==IndexType_e::PLAIN )
 		{
-			sphWarning ( "greedy rotate local %s", sDeferredIndex.cstr() );
+			sphLogDebug ( "greedy rotate local %s", sDeferredIndex.cstr() );
 			auto pRotating = GetServed ( sDeferredIndex );
 			bool bSame = pRotating && pRotating.Ptr() == pDeferredIndex.Ptr();
 			WIdx_c WIdx { pDeferredIndex };
@@ -17767,7 +17751,7 @@ static void CheckRotate () REQUIRES ( MainThread )
 	VecOfServed_c dDeferredIndexes = ConvertHashToPrioritySortedVec ( hDeferredIndexes );
 
 	for ( const auto& s : dDeferredIndexes )
-		sphWarning ( "will rotate %s", s.first.cstr() );
+		sphLogDebug ( "will rotate %s", s.first.cstr() );
 
 	if ( g_bSeamlessRotate )
 		CheckIndexesForSeamlessAndStartRotation ( std::move ( dDeferredIndexes ) );
@@ -19534,7 +19518,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	// initialize timeouts since hook will use them
 	auto iRtFlushPeriodUs = hSearchd.GetUsTime64S ( "rt_flush_period", 36000000000ll ); // 10h
-	SetRtFlushPeriod ( Max ( iRtFlushPeriodUs, 10 * 1000000 ) );
+	SetRtFlushPeriod ( Max ( iRtFlushPeriodUs, 3 * 1000000 ) ); // min 3S
 	g_pLocalIndexes->SetAddOrReplaceHook ( HookSubscribeMutableFlush );
 
 	//////////////////////
@@ -19657,7 +19641,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		ServedSnap_t hLocal = g_pLocalIndexes->GetHash();
 		for ( const auto& tIt : *hLocal )
 		{
-			sphWarning ( "Relocking %s", tIt.first.cstr () );
+			sphLogDebug ( "Relocking %s", tIt.first.cstr () );
 			auto pServed = tIt.second;
 			// obtain exclusive lock
 			if ( !pServed )
@@ -19738,10 +19722,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	ServeAutoOptimize();
 
-	if ( bForcedPreread )
-		Threads::CallCoroutine (DoPreread);
-	else
-		StartPreread();
+	PrereadIndexes ( bForcedPreread );
 
 	// almost ready, time to start listening
 	g_iBacklog = hSearchd.GetInt ( "listen_backlog", g_iBacklog );

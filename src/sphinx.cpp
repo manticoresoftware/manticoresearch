@@ -10543,7 +10543,7 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 		int iTick=1; // num of times coro rescheduled by throttler
 		while ( !bInterrupt ) // some earlier job met error; abort.
 		{
-			myinfo::SetThreadInfo ( "%d ch %d:", iTick, iChunk );
+			myinfo::SetTaskInfo ( "%d ch %d:", iTick, iChunk );
 			auto & dLocalSorters = tCtx.m_dSorters;
 			CSphQueryResultMeta tChunkMeta;
 			CSphQueryResult tChunkResult;
@@ -10570,7 +10570,7 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 			if ( tThMeta.m_bHasPrediction )
 				tThMeta.m_tStats.Add ( tChunkMeta.m_tStats );
 
-			if ( iChunk < iJobs-1 && tmMaxTimer>0 && sph::TimeExceeded ( tmMaxTimer ) )
+			if ( iChunk < iJobs-1 && sph::TimeExceeded ( tmMaxTimer ) )
 			{
 				tThMeta.m_sWarning = "query time exceeded max_query_time";
 				bInterrupt = true;
@@ -10635,10 +10635,8 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	auto & tMeta = *tResult.m_pMeta;
 	QueryProfile_c * pProfile = tMeta.m_pProfile;
 
-	int64_t tmMaxTimer = 0;
-	sph::MiniTimer_c dTimerGuard;
-	if ( tQuery.m_uMaxQueryMsec>0 )
-		tmMaxTimer = dTimerGuard.MiniTimerEngage ( tQuery.m_uMaxQueryMsec ); // max_query_time
+	MiniTimer_c dTimerGuard;
+	int64_t	tmMaxTimer = dTimerGuard.Engage ( tQuery.m_uMaxQueryMsec ); // max_query_time
 
 	const QueryParser_i * pQueryParser = tQuery.m_pQueryParser;
 	assert ( pQueryParser );
@@ -10781,10 +10779,8 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 		// fast path for scans
 		if ( tCurQuery.m_sQuery.IsEmpty() )
 		{
-			int64_t tmMaxTimer = 0;
-			sph::MiniTimer_c tTimerGuard;
-			if ( tCurQuery.m_uMaxQueryMsec>0 )
-				tmMaxTimer = tTimerGuard.MiniTimerEngage ( tCurQuery.m_uMaxQueryMsec ); // max_query_time
+			MiniTimer_c tTimerGuard;
+			int64_t tmMaxTimer = tTimerGuard.Engage ( tCurQuery.m_uMaxQueryMsec ); // max_query_time
 
 			if ( MultiScan ( tCurResult, tCurQuery, { ppSorters+i, 1 }, tArgs, tmMaxTimer ) )
 				bResultScan = true;
@@ -10866,10 +10862,8 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 
 			tMeta.m_tIOStats.Start();
 
-			int64_t tmMaxTimer = 0;
-			sph::MiniTimer_c tTimerGuard;
-			if ( tCurQuery.m_uMaxQueryMsec>0 )
-				tmMaxTimer = tTimerGuard.MiniTimerEngage ( tCurQuery.m_uMaxQueryMsec ); // max_query_time
+			MiniTimer_c tTimerGuard;
+			int64_t tmMaxTimer = tTimerGuard.Engage ( tCurQuery.m_uMaxQueryMsec ); // max_query_time
 
 			if ( dXQ[j].m_pRoot && ppSorters[j] && ParsedMultiQuery ( tCurQuery, tCurResult, { ppSorters+j, 1 }, dXQ[j], pDict, tArgs, &tNodeCache, tmMaxTimer ) )
 			{

@@ -44,6 +44,8 @@ enum class Cmd_e : BYTE
 	CLOSE,
 	COMPRESS,
 	SPLIT,
+	WAIT,
+	WAIT_STATUS,
 
 	INVALID_CMD
 };

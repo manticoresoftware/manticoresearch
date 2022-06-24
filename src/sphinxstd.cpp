@@ -2082,9 +2082,9 @@ private:
 };
 
 
-TDigest_i * sphCreateTDigest()
+std::unique_ptr<TDigest_i> sphCreateTDigest()
 {
-	return new TDigest_c;
+	return std::make_unique<TDigest_c>();
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -2445,6 +2445,18 @@ StringBuilder_c & StringBuilder_c::operator << ( unsigned long long uVal )
 	GrowEnough(32);
 	m_iUsed += sph::NtoA( end(), uVal );
 	m_szBuffer[m_iUsed] = '\0';
+	return *this;
+}
+
+StringBuilder_c& StringBuilder_c::operator<< ( timestamp_t tVal )
+{
+	Sprintf ("%T", tVal.m_iVal);
+	return *this;
+}
+
+StringBuilder_c& StringBuilder_c::operator<< ( timespan_t tVal )
+{
+	Sprintf ( "%t", tVal.m_iVal );
 	return *this;
 }
 

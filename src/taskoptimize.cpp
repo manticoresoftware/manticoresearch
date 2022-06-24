@@ -16,44 +16,24 @@
 /////////////////////////////////////////////////////////////////////////////
 // index optimization
 /////////////////////////////////////////////////////////////////////////////
-struct OptimizeJob_t
+void RunOptimizeRtIndex ( OptimizeTask_t tTask )
 {
-	CSphString m_sIndex;
-	OptimizeTask_t m_tTask;
+	Threads::StartJob ( [tTask = std::move ( tTask )]() mutable
+	{
+		auto pServed = GetServed ( tTask.m_sIndex );
+		if ( !pServed )
+			return;
 
-	OptimizeJob_t ( CSphString sIndex, OptimizeTask_t tTask )
-		: m_sIndex { std::move ( sIndex ) }
-		, m_tTask { std::move ( tTask ) }
-	{}
-};
+		// want to track optimize only at work
+		auto pDesc = PublishSystemInfo ( "OPTIMIZE" );
 
-void EnqueueForOptimize ( CSphString sIndex, OptimizeTask_t tTask )
-{
-	static int iOptimizeTask = -1;
-	if ( iOptimizeTask<0 )
-		iOptimizeTask = TaskManager::RegisterGlobal ( "optimize",
-			[] ( void* pPayload ) // worker
-			{
-				std::unique_ptr<OptimizeJob_t> pJob { (OptimizeJob_t *) pPayload };
-				auto pServed = GetServed ( pJob->m_sIndex );
-				if ( !pServed )
-					return;
-
-				// want to track optimize only at work
-				auto pDesc = PublishSystemInfo ( "OPTIMIZE" );
-
-				// FIXME: MVA update would wait w-lock here for a very long time
-				assert ( pServed->m_eType==IndexType_e::RT );
-				RIdx_T<RtIndex_i*> ( pServed )->Optimize ( std::move ( pJob->m_tTask ) );
-			},
-			[] ( void* pPayload ) // releaser
-			{
-				std::unique_ptr<OptimizeJob_t> pTask { (OptimizeJob_t *) pPayload };
-			}, 1 );
-	TaskManager::StartJob ( iOptimizeTask, new OptimizeJob_t ( std::move ( sIndex ), std::move ( tTask ) ) );
+		// FIXME: MVA update would wait w-lock here for a very long time
+		assert ( pServed->m_eType == IndexType_e::RT );
+		RIdx_T<RtIndex_i*> ( pServed )->Optimize ( std::move ( tTask ) );
+	});
 }
 
 void ServeAutoOptimize()
 {
-	EnqueueForOptimizeExecutor() = &EnqueueForOptimize;
+	OptimizeExecutor() = &RunOptimizeRtIndex;
 }

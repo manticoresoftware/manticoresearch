@@ -86,8 +86,3 @@ int GetEffectiveDistThreads ()
 	auto iSessionVal = ClientTaskInfo_t::Info().m_iDistThreads;
 	return iSessionVal ? iSessionVal : getDistThreads ();
 }
-
-CSphSessionAccum::~CSphSessionAccum()
-{
-	SafeDelete ( m_pAcc );
-}

@@ -3665,14 +3665,6 @@ private:
 			else
 				sphLogDebugL ( "L event action for task %p(%d), %d", pTask, pTask->m_ifd, tEvent.GetEvents () );
 
-			// part of consequencing crash catching; m.b. not actual anymore if no warnings fired
-			// (stuff supporting IsNotHere is not necessary also in case).
-			if ( m_dTimeouts.IsNotHere ( pTask ) )
-			{
-				// sphWarning ( "phantom event detected! %p(%d, original %d), %d, closing", pTask, pTask->m_ifd, pTask->m_iStoredfd, tEvent.GetEvents () );
-				continue;
-			}
-
 			bool bError = tEvent.IsError ();
 			bool bEof = tEvent.IsEof ();
 			if ( bError )
@@ -3996,14 +3988,6 @@ public:
 		return (iNextTimeoutUS>999) ? int ( iNextTimeoutUS / 1000 ) : -1;
 	}
 };
-
-bool TimeoutReached ( int64_t tmLeft, int64_t tmNow )
-{
-	if (tmNow<0)
-		tmNow = sphMicroTimer ();
-
-	return ( tmLeft-1000 )<tmNow;
-}
 
 #if ( NETPOLL_TYPE==NETPOLL_KQUEUE || NETPOLL_TYPE==NETPOLL_EPOLL )
 

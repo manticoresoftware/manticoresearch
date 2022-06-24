@@ -14,21 +14,15 @@
 #include "searchdaemon.h"
 #include "binlog.h"
 
-static void ScheduleFlushBinlogNext ();
-
-static void OnceFlushFtBinlog ( void* )
-{
-	auto pDesc = PublishSystemInfo ( "FLUSH RT BINLOG" );
-	Binlog::Flush ();
-	ScheduleFlushBinlogNext ();
-}
-
 static void ScheduleFlushBinlogNext ()
 {
-	static int iFlushBinlogTask = -1;
-	if ( iFlushBinlogTask<0 )
-		iFlushBinlogTask = TaskManager::RegisterGlobal ( "Flush binlog", OnceFlushFtBinlog, nullptr, 1, 1 );
-	TaskManager::ScheduleJob ( iFlushBinlogTask, Binlog::NextFlushTimestamp ());
+	static int iFlushBinlogTask = TaskManager::RegisterGlobal ( "Flush binlog", 1 );
+	TaskManager::ScheduleJob ( iFlushBinlogTask, Binlog::NextFlushTimestamp (), []
+	{
+		auto pDesc = PublishSystemInfo ( "FLUSH RT BINLOG" );
+		Binlog::Flush();
+		ScheduleFlushBinlogNext();
+	});
 }
 
 void StartRtBinlogFlushing ()

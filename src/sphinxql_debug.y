@@ -50,6 +50,8 @@
 %token <sValue>	TOK_CLOSE
 %token <sValue>	TOK_COMPRESS
 %token <sValue>	TOK_SPLIT
+%token <sValue>	TOK_WAIT
+%token <sValue>	TOK_LIKE
 
 %type <iValue> boolpar timeint
 %type <sValue> ident szparam ident_special szparam_special
@@ -80,6 +82,7 @@ debugcommand:
 	| files			{ pParser->m_tCmd.m_eCommand = Cmd_e::FILES; }
 	| compress		{ pParser->m_tCmd.m_eCommand = Cmd_e::COMPRESS; }
 	| split			{ pParser->m_tCmd.m_eCommand = Cmd_e::SPLIT; }
+	| wait
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -87,13 +90,18 @@ debugcommand:
 ident_special:
 	TOK_IDENT | TOK_DEBUG | TOK_SHUTDOWN | TOK_CRASH | TOK_TOKEN | TOK_MALSTATS | TOK_MALTRIM
 	| TOK_PROCDUMP | TOK_CLOSE | TOK_SETGDB | TOK_SLEEP | TOK_SYSTHREADS | TOK_SCHED | TOK_MERGE | TOK_FILES
-	| TOK_STATUS | TOK_COMPRESS | TOK_SPLIT
+	| TOK_STATUS | TOK_COMPRESS | TOK_SPLIT | TOK_WAIT | TOK_LIKE
 	;
 
 ident:
 	ident_special | TOK_OPTION | TOK_ON | TOK_OFF;
 
 //////////////////////////////////////////////////////////////////////////
+
+like_filter:
+	// empty
+	| TOK_LIKE TOK_QUOTED_STRING		{ pParser->AddStrOption ( "like", $2 ); }
+	;
 
 // commands 'debug shutdown', 'debug crash', 'debug token'
 shutdown_crash_token:
@@ -221,6 +229,25 @@ split:
 	}
 	;
 
+wait:
+	TOK_WAIT ident opt_status like_filter opt_option_clause
+	{
+		auto& tCmd = pParser->m_tCmd;
+		if ( tCmd.m_eCommand!=Cmd_e::WAIT_STATUS)
+			tCmd.m_eCommand = Cmd_e::WAIT;
+    	tCmd.m_sParam = pParser->StrFromBlob ($2);
+	}
+	;
+
+opt_status:
+	// empty
+	| TOK_STATUS TOK_CONST_INT
+	{
+		auto& tCmd = pParser->m_tCmd;
+		tCmd.m_eCommand = Cmd_e::WAIT_STATUS;
+		tCmd.m_iPar1 = $2;
+	}
+	;
 
 opt_option_clause:
 	// empty

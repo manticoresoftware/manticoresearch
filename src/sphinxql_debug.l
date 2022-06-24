@@ -73,6 +73,8 @@ FLOAT_CONSTANT      ({I}\.{I}?|{I}?\.{I}){EXPONENT}?
 "INTO"			    { STORE_BOUNDS; return TOK_INTO; }
 "FROM"			    { STORE_BOUNDS; return TOK_FROM; }
 "CLOSE"				{ STORE_BOUNDS; return TOK_CLOSE; }
+"WAIT"				{ STORE_BOUNDS; return TOK_WAIT; }
+"LIKE"				{ STORE_BOUNDS; return TOK_LIKE; }
 
 
 '	                { STORE_START; BEGIN (QSTR); }

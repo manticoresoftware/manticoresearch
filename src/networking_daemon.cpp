@@ -289,7 +289,7 @@ class CSphNetLoop::Impl_c
 			auto * pWork = (ISphNetAction *) pEvent;
 
 			// skip eternal (non-timeouted)
-			if ( pWork->m_iTimeoutIdx<0 || pWork->m_iTimeoutTimeUS<=0 || !TimeoutReached (pWork->m_iTimeoutTimeUS, tmNow))
+			if ( pWork->m_iTimeoutIdx<0 || pWork->m_iTimeoutTimeUS<=0 || !sph::TimeExceeded (pWork->m_iTimeoutTimeUS, tmNow))
 				return;
 
 			sphLogDebugv ( "%p bailing on timeout no signal, sock=%d", pWork, pWork->m_iSock );

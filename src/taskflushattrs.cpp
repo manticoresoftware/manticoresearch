@@ -20,12 +20,10 @@ struct FlushState_t
 {
 	CSphAutoEvent m_tFlushFinished;
 	std::atomic<int> m_iDemandEvents {0}; // if worker need to set the event
-	int64_t m_iLastCheckFinishedTime = 0;
 	int m_iFlushTag = 0;        ///< last flushed tag
 };
 
 static FlushState_t g_tFlush;
-
 
 enum class Saved_e {
 	NOTHING,	// no dirty indexes found, nothing saved
@@ -54,7 +52,6 @@ static Saved_e CheckSaveIndexes ()
 		}
 
 	}
-	g_tFlush.m_iLastCheckFinishedTime = sphMicroTimer ();
 
 	if ( !bDirty )
 		return Saved_e::NOTHING;
@@ -65,46 +62,26 @@ static Saved_e CheckSaveIndexes ()
 
 /* About setting event g_tFlush.m_tFlushFinished
  * flushing attributes may be engaged in two ways: either by timer (scheduled), either by command 'flush attributes'.
- * First needs nothing - it just do the things and re-schedule itself.
+ * First needs nothing - it just does the things and re-schedule itself.
  * Second needs event to trace end of operation.
  * So, there are 2 slightly different operations: 'just flush' and 'flush and signal'.
- * For this kind of task we may have at most 1 job in queue, (one which is currently running - already out of queue).
- * If saving job is in progress, you may schedule at most 1 more; others will be dropped.
- * If you issued 'flush attributes' and it is in progress, and then usual timeouted task happened and enqueued
- * the next saving right after one in work, any other try to call 'flush attributes' would be just dropped and then
- * deadlocked. But instead we increase the counter of awaited events. And when the task in queue begin to work
- * (despite the source - issued both by demand or by timeout), it memorize the number of awaiters and on finish fires
- * demanded num of events. So, if one flush is in work another is scheduled - you may run any num of extra 'flush
- * attributes' and this scheduled task will resolve all of them a time.
+ * For this kind of task we may have at most 1 running job.
+ * If you issued 'flush attributes' and it is already in progress, it will be dropped.
+ * We increase the counter of awaited events. And when the task finishes, it check N of awaited and fire demanded N of events.
  */
-static void SaveIndexesMT ( void* = nullptr )
+namespace {
+void SaveIndexesMT ()
 {
-	int iFireOnExit = g_tFlush.m_iDemandEvents.load ( std::memory_order_acquire );
-	g_tFlush.m_iDemandEvents.fetch_sub ( iFireOnExit, std::memory_order_release );
-
-	if ( iFireOnExit )
-		sphLogDebug ( "attrflush: doing forced check for %d waiters", iFireOnExit );
-	else
-		sphLogDebug ( "attrflush: doing periodic check" );
+	sphLogDebug ( "attrflush: doing the check" );
 
 	auto pDesc = PublishSystemInfo ( "SAVE indexes" );
 	if ( CheckSaveIndexes ()==Saved_e::NOTHING )
 		sphLogDebug ( "attrflush: no dirty indexes found" );
 
+	int iFireOnExit = g_tFlush.m_iDemandEvents.exchange ( 0 );
 	for ( int i=0; i<iFireOnExit; ++i )
 		g_tFlush.m_tFlushFinished.SetEvent ();
-
-	ScheduleFlushAttrs ();
 }
-
-
-static void EngageSaveIndexes()
-{
-	static TaskID iSaveTask = -1;
-	if ( iSaveTask<0 )
-		iSaveTask = TaskManager::RegisterGlobal ( "Save indexes", SaveIndexesMT, nullptr, 1, 1 );
-
-	TaskManager::StartJob(iSaveTask);
 }
 
 
@@ -112,9 +89,8 @@ int CommandFlush () EXCLUDES ( MainThread )
 {
 	// force a check, and wait it until completes
 	sphLogDebug ( "attrflush: forcing check, tag=%d", g_tFlush.m_iFlushTag );
-	g_tFlush.m_iDemandEvents.fetch_add(1,std::memory_order_release);
-	EngageSaveIndexes ();
-
+	g_tFlush.m_iDemandEvents.fetch_add ( 1, std::memory_order_relaxed );
+	Threads::StartJob ( SaveIndexesMT );
 	g_tFlush.m_tFlushFinished.WaitEvent ();
 	sphLogDebug ( "attrflush: check finished, tag=%d", g_tFlush.m_iFlushTag );
 	return g_tFlush.m_iFlushTag;
@@ -132,29 +108,19 @@ void ScheduleFlushAttrs ()
 	if ( !g_iAttrFlushPeriodUs )
 		return;
 
-	static TaskID iScheduledSave = -1;
-	if ( iScheduledSave<0 )
+	static TaskID iScheduledSave = TaskManager::RegisterGlobal ( "Scheduled save indexes", 1 );
+	static auto iLastCheckFinishedTime = sphMicroTimer ();
+
+	TaskManager::ScheduleJob ( iScheduledSave, iLastCheckFinishedTime + g_iAttrFlushPeriodUs, []
 	{
-		iScheduledSave = TaskManager::RegisterGlobal ( "Sheduled save indexes",
-		[] (void*) // save task lambda
-		{
-			if ( (g_tFlush.m_iLastCheckFinishedTime + g_iAttrFlushPeriodUs - 1000 )>sphMicroTimer() )
-				ScheduleFlushAttrs ();
-			else
-				SaveIndexesMT();
-		}, nullptr);
-	}
-
-	if ( !g_tFlush.m_iLastCheckFinishedTime )
-		g_tFlush.m_iLastCheckFinishedTime = sphMicroTimer ();
-
-	TaskManager::ScheduleJob ( iScheduledSave, g_tFlush.m_iLastCheckFinishedTime + g_iAttrFlushPeriodUs);
+		SaveIndexesMT();
+		iLastCheckFinishedTime = sphMicroTimer();
+		ScheduleFlushAttrs();
+	});
 }
 
 // called from main shutdown and expects problem reporting
 bool FinallySaveIndexes ()
 {
-	bool bRes;
-	Threads::CallCoroutine ( [&bRes] { bRes = CheckSaveIndexes ()!=Saved_e::NOT_ALL; });
-	return bRes;
+	return Threads::CallCoroutineRes ( [] { return CheckSaveIndexes ()!=Saved_e::NOT_ALL; });
 }

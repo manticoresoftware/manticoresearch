@@ -258,13 +258,13 @@ void myinfo::SetDescription ( CSphString sString, int iLen )
 	SetMiniDescription ( pNode, new CSphString ( std::move ( sString ) ), iLen );
 }
 
-void myinfo::SetThreadInfo ( const char * sTemplate, ... )
+void myinfo::SetTaskInfo ( const char * sTemplate, ... )
 {
 	auto pNode = HazardGetMini ();
 	assert ( pNode );
 	if ( !pNode )
 	{
-		sphWarning ( "internal error: myinfo::SetThreadInfo () invoked with empty tls!" );
+		sphWarning ( "internal error: myinfo::SetTaskInfo () invoked with empty tls!" );
 		return;
 	}
 

@@ -77,14 +77,15 @@ const char* SH()
 
 void Sleeper(int iMsec, const char* szName)
 {
-	sphSleepMsec (iMsec);
+	Threads::Coro::SleepMsec ( iMsec );
 	std::cout << szName << " run " << iMsec << "\n";
 }
 
 // this test will NOT pass in single-thread (see gtests_globalstate.cpp, if iThreads<2).
 // that is because it uses ture sphSleepMsec, which effectively pauses single thread.
-/*TEST ( ThreadPool, DISABLED_WaitForN )
+TEST ( ThreadPool, WaitForN )
 {
+	StartGlobalWorkPool();
 	using namespace Threads;
 	Threads::CallCoroutine ( [&] {
 		int N = 2;
@@ -103,7 +104,7 @@ void Sleeper(int iMsec, const char* szName)
 		ASSERT_EQ ( iIdx, 0 );
 		std::cout << "test finished, idx=" << iIdx;
 	});
-}*/
+}
 
 TEST ( ThreadPool, strandr )
 {

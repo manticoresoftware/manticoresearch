@@ -350,12 +350,8 @@ void sphLogSupressRemove ( const char * sPrefix, ESphLogLevel eLevel = SPH_LOG_W
 // TimePrefixed logging - output "prefix [ms] ...'; 'ms' is reset to 0 by TimeStart().
 namespace TimePrefixed {
 	void TimeStart ();
-	void Warning ( const char* sPrefix, const char* sFmt, ... );
-	void Info ( const char* sPrefix, const char* sFmt, ... );
-	void LogFatal ( const char* sPrefix, const char* sFmt, ... );
-	void LogDebug ( const char* sPrefix, const char* sFmt, ... );
+	int64_t TimeStamp();
 	void LogDebugv ( const char* sPrefix, const char* sFmt, ... );
-	void LogDebugvv ( const char* sPrefix, const char* sFmt, ... );
 }
 
 namespace CustomLog {

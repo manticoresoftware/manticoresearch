@@ -16,7 +16,7 @@
 
 #include "sphinxrt.h"
 
-void EnqueueForOptimize ( CSphString sIndex, OptimizeTask_t tTask );
+void RunOptimizeRtIndex ( OptimizeTask_t tTask );
 
-// link EnqueueForOptimize with rt indexes (using strong link requires task to be available in indexer/indextool/converter/whatever, but we want serve only from searchd)
+// link OptimizeRtIndex with rt indexes (using strong link requires task to be available in indexer/indextool/converter/whatever, but we want serve only from searchd)
 void ServeAutoOptimize();

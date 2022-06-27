@@ -413,7 +413,18 @@ insert into test_rt values (6, '6th', 'No wonder, Trevize thought, it was indulg
   }
 }
 </query>
-
+<query endpoint="json/search">
+{
+  "index":"test_mva",
+  "query": { "in": { "any(tags)": [2,1,3] } }
+}
+</query>
+<query endpoint="json/search">
+{
+  "index":"test_mva",
+  "query": { "in": { "all(tags)": [4,3,40] } }
+}
+</query>
 </httpqueries>
 
 </test>

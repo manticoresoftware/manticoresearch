@@ -13606,7 +13606,8 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 		} else if ( tStmt.m_sSetName=="character_set_results"
 			|| tStmt.m_sSetName=="sql_auto_is_null"
 			|| tStmt.m_sSetName=="sql_safe_updates"
-			|| tStmt.m_sSetName=="sql_mode" )
+			|| tStmt.m_sSetName=="sql_mode"
+			|| tStmt.m_sSetName=="time_zone" )
 		{
 			// per-session CHARACTER_SET_RESULTS et al; just ignore for now
 
@@ -16456,13 +16457,16 @@ bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dSt
 
 
 	SqlStmt_t & tStmt = dStmt[0];
-	if ( tStmt.m_eStmt!=STMT_SELECT && tStmt.m_eStmt!=STMT_SHOW_INDEX_STATUS )
+
+	if ( tStmt.m_eStmt==STMT_SHOW_INDEX_STATUS )
+		return true;
+	else if ( tStmt.m_eStmt == STMT_SET )
+		return true;
+	else if ( tStmt.m_eStmt != STMT_SELECT)
 	{
 		sError.SetSprintf ( "unhandled statement type (value=%d)", tStmt.m_eStmt );
 		return false;
 	}
-	if ( tStmt.m_eStmt==STMT_SHOW_INDEX_STATUS )
-		return true;
 
 	CSphQuery & tSrcQuery = tStmt.m_tQuery;
 

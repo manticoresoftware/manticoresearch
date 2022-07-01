@@ -21,15 +21,16 @@ Here's an example of several filters in a `bool` query.
 This is a fulltext query that matches all the documents containing `product` in any field. These documents must have a price greater or equal than 500 (`gte`) and less or equal than 1000 (`lte`). All of these documents must not have a revision less than 15 (`lt`).
 
 
-<!-- request Example -->
+<!-- request HTTP -->
 ```json
+POST /search
 {
   "index": "test1",
   "query": {
     "bool": {
       "must": [
         { "match" : { "_all" : "product" } },
-        { "range": { "price": { "gte": 500, "lte": 1000 } } },
+        { "range": { "price": { "gte": 500, "lte": 1000 } } }
       ],
       "must_not": {
         "range": { "revision": { "lt": 15 } }
@@ -46,15 +47,16 @@ This is a fulltext query that matches all the documents containing `product` in 
 <!-- example bool -->
 `bool` query matches documents matching boolean combinations of other queries and/or filters. Queries and filters must be specified in `must`, `should` or `must_not` sections and can be [nested](../Searching/Filters.md#Nested-bool-query).
 
-<!-- request Example -->
+<!-- request HTTP -->
 ```json
+POST /search
 {
-  "index":"test",
+  "index":"test1",
   "query": {
     "bool": {
       "must": [
         { "match": {"_all":"keyword"} },
-        { "range": { "int_col": { "gte": 14 } } }
+        { "range": { "revision": { "gte": 14 } } }
       ]
     }
   }
@@ -64,16 +66,43 @@ This is a fulltext query that matches all the documents containing `product` in 
 
 <!-- example must_not -->
 ### must
-Queries and filters specified in the `must` section must match the documents. If several fulltext queries or filters are specified, all of them. This is the equivalent of `AND` queries in SQL.
+Queries and filters specified in the `must` section must match the documents. If several fulltext queries or filters are specified, all of them. This is the equivalent of `AND` queries in SQL. Note, if you want to match against an array ([multi-value attribute](../../Creating_an_index/Data_types.md#Multi-value-integer-%28MVA%29)) you can specify the attribute multiple times and if only all the queried values are found in the array the result will be positive, e.g.:
+
+```json
+"must": [
+  {"equals" : { "product_codes": 5 }},
+  {"equals" : { "product_codes": 6 }}
+]
+```
+
+Note also, it may be better in terms of performance to use:
+```json
+  {"in" : { "all(product_codes)": [5,6] }}
+```
+(see details below).
 
 ### should
-Queries and filters specified in the `should` section should match the documents. If some queries are specified in `must` or `must_not`, `should` queries are ignored. On the other hand, if there are no queries other than `should`, then at least one of these queries must match a document for it to match the bool query. This is the equivalent of `OR` queries.
+Queries and filters specified in the `should` section should match the documents. If some queries are specified in `must` or `must_not`, `should` queries are ignored. On the other hand, if there are no queries other than `should`, then at least one of these queries must match a document for it to match the bool query. This is the equivalent of `OR` queries. Note, if you want to match against an array ([multi-value attribute](../../Creating_an_index/Data_types.md#Multi-value-integer-%28MVA%29)) you can specify the attribute multiple times, e.g.:
+
+```json
+"should": [
+  {"equals" : { "product_codes": 7 }},
+  {"equals" : { "product_codes": 8 }}
+]
+```
+
+Note also, it may be better in terms of performance to use:
+```json
+  {"in" : { "any(product_codes)": [7,8] }}
+```
+(see details below).
 
 ### must_not
 Queries and filters specified in the `must_not` section must not match the documents. If several queries are specified under `must_not`, the document matches if none of them match.
 
-<!-- request Example -->
+<!-- request HTTP -->
 ```json
+POST /search
 {
   "index":"t",
   "query": {
@@ -119,8 +148,11 @@ a = 2 and (a = 10 or b = 0)
 
 should be presented in JSON.
 
-<!-- request a = 2 and (a = 10 or b = 0) -->
+<!-- request HTTP -->
+a = 2 and (a = 10 or b = 0)
+
 ```json
+POST /search
 {
   "index":"t",
   "query": {
@@ -159,8 +191,12 @@ More complex query:
 ```
 (a = 1 and b = 1) or (a = 10 and b = 2) or (b = 0)
 ```
-<!-- request (a = 1 and b = 1) or (a = 10 and b = 2) or (b = 0) -->
+<!-- request HTTP -->
+
+(a = 1 and b = 1) or (a = 10 and b = 2) or (b = 0)
+
 ```json
+POST /search
 {
   "index":"t",
   "query": {
@@ -221,8 +257,9 @@ More complex query:
 <!-- example query_string -->
 Queries in SQL format (`query_string`) can also be used in bool queries.
 
-<!-- request Example -->
+<!-- request HTTP -->
 ```json
+POST /search
 {
   "index": "test1",
   "query": {
@@ -243,8 +280,9 @@ Queries in SQL format (`query_string`) can also be used in bool queries.
 <!-- example equals -->
 Equality filters are the simplest filters that work with integer, float and string attributes.
 
-<!-- request Example -->
+<!-- request HTTP -->
 ```json
+POST /search
 {
   "index":"test1",
   "query": {
@@ -254,14 +292,33 @@ Equality filters are the simplest filters that work with integer, float and stri
 ```
 <!-- end -->
 
+<!-- example equals_any -->
+Filter `equals` can be applied to a [multi-value attribute](../../Creating_an_index/Data_types.md#Multi-value-integer-%28MVA%29) and you can use:
+* `any()` which will be positive if the attribute has at least one value which equals to the queried value;
+* `all()` which will be positive if the attribute has a single value and it equals to the queried value
+
+<!-- request HTTP -->
+```json
+POST /search
+{
+  "index":"test1",
+  "query": {
+    "equals": { "any(price)": 100 }
+  }
+}
+```
+<!-- end -->
+
+
 ### Set filters
 <!-- example set -->
 Set filters check if attribute value is equal to any of the values in the specified set.
 
 Set filters support integer, string and multi-value attributes.
 
-<!-- request Example -->
+<!-- request HTTP -->
 ```json
+POST /search
 {
   "index":"test1",
   "query": {
@@ -273,6 +330,24 @@ Set filters support integer, string and multi-value attributes.
 ```
 <!-- end -->
 
+<!-- example set_any -->
+When applied to a [multi-value attribute](../../Creating_an_index/Data_types.md#Multi-value-integer-%28MVA%29) you can use:
+* `any()` (equivalent to no function) which will be positive if there's at least one match between the attribute values and the queried values;
+* `all()` which will be positive if all the attribute values are in the queried set
+
+<!-- request HTTP -->
+```json
+POST /search
+{
+  "index":"test1",
+  "query": {
+    "in": {
+      "all(price)": [1,10]
+    }
+  }
+}
+```
+<!-- end -->
 
 ### Range filters
 <!-- example range -->
@@ -284,8 +359,9 @@ Range filters support the following properties:
 * `lte`: less than or equal to
 * `lt`: less than
 
-<!-- request Example -->
+<!-- request HTTP -->
 ```json
+POST /search
 {
   "index":"test1",
   "query": {
@@ -338,6 +414,7 @@ Latitude and longitude are specified in degrees.
 
 <!-- request Basic example -->
 ```json
+POST /search
 {
   "index":"test",
   "query": {
@@ -355,6 +432,7 @@ Latitude and longitude are specified in degrees.
 `geo_distance` can be used as a filter in bool queries along with matches or other attribute filters.
 
 ```json
+POST /search
 {
   "index": "geodemo",
   "query": {

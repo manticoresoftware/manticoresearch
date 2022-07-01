@@ -36,7 +36,6 @@ enum class Cmd_e : BYTE
 	GDBSTATUS,
 	SLEEP,
 	TASKS,
-	SYSTHREADS,
 	SCHED,
 	MERGE,
 	DROP,

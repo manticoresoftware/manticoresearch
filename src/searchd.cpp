@@ -6364,7 +6364,6 @@ static uint64_t GetIndexMass ( const CSphString & sName )
 void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleTasks ( RowBuffer_i & tOut );
-void HandleSysthreads ( RowBuffer_i & tOut );
 void HandleSched ( RowBuffer_i & tOut );
 void HandleMysqlDescribe ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
@@ -6396,10 +6395,6 @@ bool SearchHandler_c::ParseSysVar ()
 			else if ( dSubkeys[0]==".tasks" ) // select .. from @@system.tasks
 			{
 				fnFeed = [] ( RowBuffer_i * pBuf ) { HandleTasks ( *pBuf ); };
-			}
-			else if ( dSubkeys[0]==".systhreads" ) // select .. from @@system.systhreads
-			{
-				fnFeed = [] ( RowBuffer_i * pBuf ) { HandleSysthreads ( *pBuf ); };
 			}
 			else if ( dSubkeys[0]==".sched" ) // select .. from @@system.sched
 			{
@@ -14347,13 +14342,6 @@ void HandleTasks ( RowBuffer_i & tOut )
 	tOut.Eof ();
 }
 
-void HandleSysthreads ( RowBuffer_i & tOut )
-{
-	tOut.HeadTuplet ( "command", "result" );
-	tOut.DataTuplet ( "command", "deprecated" );
-	tOut.Eof();
-}
-
 void HandleSched ( RowBuffer_i & tOut )
 {
 	if (!tOut.HeadOfStrings ( { "Time rest", "Task" } ))
@@ -14404,7 +14392,6 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, Str_t sCommand )
 	case Cmd_e::TOKEN: HandleToken ( tOut, tCmd.m_sParam ); return;
 	case Cmd_e::SLEEP: HandleSleep ( tOut, tCmd.m_iPar1 ); return;
 	case Cmd_e::TASKS: HandleTasks ( tOut ); return;
-	case Cmd_e::SYSTHREADS: HandleSysthreads ( tOut ); return;
 	case Cmd_e::SCHED: HandleSched ( tOut ); return;
 	case Cmd_e::MERGE: HandleMysqlOptimizeManual ( tOut, tCmd ); return;
 	case Cmd_e::DROP: HandleMysqlDropManual ( tOut, tCmd ); return;

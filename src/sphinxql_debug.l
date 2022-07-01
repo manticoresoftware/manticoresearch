@@ -57,7 +57,6 @@ FLOAT_CONSTANT      ({I}\.{I}?|{I}?\.{I}){EXPONENT}?
 "SETGDB"	    	{ STORE_BOUNDS; return TOK_SETGDB; }
 "SLEEP"				{ STORE_BOUNDS; return TOK_SLEEP; }
 "TASKS"				{ STORE_BOUNDS; return TOK_TASKS; }
-"SYSTHREADS"		{ STORE_BOUNDS; return TOK_SYSTHREADS; }
 "SCHED"			    { STORE_BOUNDS; return TOK_SCHED; }
 "MERGE"				{ STORE_BOUNDS; return TOK_MERGE; }
 "DROP"				{ STORE_BOUNDS; return TOK_DROP; }

@@ -41,7 +41,6 @@
 %token <sValue>	TOK_SETGDB
 %token <sValue>	TOK_SLEEP
 %token <sValue>	TOK_TASKS
-%token <sValue>	TOK_SYSTHREADS
 %token <sValue>	TOK_SCHED
 %token <sValue>	TOK_MERGE
 %token <sValue>	TOK_DROP
@@ -75,7 +74,6 @@ debugcommand:
 	| setgdb
 	| sleep			{ pParser->m_tCmd.m_eCommand = Cmd_e::SLEEP; }
 	| TOK_TASKS		{ pParser->m_tCmd.m_eCommand = Cmd_e::TASKS; }
-	| TOK_SYSTHREADS	{ pParser->m_tCmd.m_eCommand = Cmd_e::SYSTHREADS; }
 	| TOK_SCHED		{ pParser->m_tCmd.m_eCommand = Cmd_e::SCHED; }
 	| merge			{ pParser->m_tCmd.m_eCommand = Cmd_e::MERGE; }
 	| drop			{ pParser->m_tCmd.m_eCommand = Cmd_e::DROP; }
@@ -89,7 +87,7 @@ debugcommand:
 
 ident_special:
 	TOK_IDENT | TOK_DEBUG | TOK_SHUTDOWN | TOK_CRASH | TOK_TOKEN | TOK_MALSTATS | TOK_MALTRIM
-	| TOK_PROCDUMP | TOK_CLOSE | TOK_SETGDB | TOK_SLEEP | TOK_SYSTHREADS | TOK_SCHED | TOK_MERGE | TOK_FILES
+	| TOK_PROCDUMP | TOK_CLOSE | TOK_SETGDB | TOK_SLEEP | TOK_SCHED | TOK_MERGE | TOK_FILES
 	| TOK_STATUS | TOK_COMPRESS | TOK_SPLIT | TOK_WAIT | TOK_LIKE
 	;
 

@@ -172,7 +172,6 @@ MySQL [(none)]> debug;
 | debug malloc_trim                                                | pefrorm 'malloc_trim' call                                                             |
 | debug sleep <N>                                                  | sleep for <N> seconds                                                                  |
 | debug tasks                                                      | display global tasks stat (use select from @@system.tasks instead)                     |
-| debug systhreads                                                 | display task manager threads (use select from @@system.systhreads instead)             |
 | debug sched                                                      | display task manager schedule (use select from @@system.sched instead)                 |
 | debug merge <IDX> [chunk] <X> [into] [chunk] <Y> [option sync=1] | For RT index <IDX> merge disk chunk X into disk chunk Y                                |
 | debug drop [chunk] <X> [from] <IDX> [option sync=1]              | For RT index <IDX> drop disk chunk X                                                   |
@@ -205,7 +204,6 @@ MySQL [(none)]> debug;
 | debug setgdb status                                              | show current mode of gdb dumping                                                       |
 | debug sleep <N>                                                  | sleep for <N> seconds                                                                  |
 | debug tasks                                                      | display global tasks stat (use select from @@system.tasks instead)                     |
-| debug systhreads                                                 | display task manager threads (use select from @@system.systhreads instead)             |
 | debug sched                                                      | display task manager schedule (use select from @@system.sched instead)                 |
 | debug merge <IDX> [chunk] <X> [into] [chunk] <Y> [option sync=1] | For RT index <IDX> merge disk chunk X into disk chunk Y                                |
 | debug drop [chunk] <X> [from] <IDX> [option sync=1]              | For RT index <IDX> drop disk chunk X                                                   |

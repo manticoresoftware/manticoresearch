@@ -189,6 +189,7 @@ SHOW AGENT STATUS;
 | ag_0_lastquery                     | 0.41                       |
 | ag_0_lastanswer                    | 0.19                       |
 | ag_0_lastperiodmsec                | 222                        |
+| ag_0_pingtripmsec                  | 10.521                     |
 | ag_0_errorsarow                    | 0                          |
 | ag_0_1periods_query_timeouts       | 0                          |
 | ag_0_1periods_connect_timeouts     | 0                          |
@@ -213,6 +214,7 @@ SHOW AGENT STATUS;
 | ag_1_lastquery                     | 0.41                       |
 | ag_1_lastanswer                    | 0.19                       |
 | ag_1_lastperiodmsec                | 220                        |
+| ag_1_pingtripmsec                  | 10.004                     |
 | ag_1_errorsarow                    | 0                          |
 | ag_1_1periods_query_timeouts       | 0                          |
 | ag_1_1periods_connect_timeouts     | 0                          |

@@ -217,6 +217,6 @@ CmdNotice_t DebugCmd::dCommands[(BYTE) Cmd_e::INVALID_CMD] = {
 			"Compress disk chunk X of RT index <IDX> (wipe out deleted documents)" },
 	{ NONE, "debug split <IDX> [chunk] <X> on @<uservar> [option sync=1]",
 			"Split disk chunk X of RT index <IDX> using set of DocIDs from @uservar" },
-	{ NO_WIN, "debug wait <cluster>", "wait until cluster <cluster> ready" },
-	{ NO_WIN, "debug wait <cluster> status <N>", "wait until cluster commit achieve <N>" },
+	{ NO_WIN, "debug wait <cluster> [like 'xx'] [option timeout=3]", "wait <cluster> ready, but no more than 3 secs." },
+	{ NO_WIN, "debug wait <cluster> status <N> [like 'xx'] [option timeout=13]", "wait <cluster> commit achieve <N>, but no more than 13 secs" },
 };

@@ -156,9 +156,7 @@ DEBUG [ subcommand ]
 
 `DEBUG` statement is designed to call different internal or vip commands for dev/testing purposes. It is not intended for production automation, since the syntax of `subcommand` part may be freely changed in any build.
 
-Call `DEBUG` without params to show list of useful commands (in general) and subcommands (of `DEBUG` statement) available at the moment.
-
-However you can invoke `DEBUG` without params to know which subcommands of the statement are available in any particular case:
+Call `DEBUG` without params to show list of useful commands (in general) and subcommands (of `DEBUG` statement) available at current context.
 
 ```sql
 MySQL [(none)]> debug;
@@ -179,14 +177,13 @@ MySQL [(none)]> debug;
 | debug close                                                      | ask server to close connection from it's side                                          |
 | debug compress <IDX> [chunk] <X> [option sync=1]                 | Compress disk chunk X of RT index <IDX> (wipe out deleted documents)                   |
 | debug split <IDX> [chunk] <X> on @<uservar> [option sync=1]      | Split disk chunk X of RT index <IDX> using set of DocIDs from @uservar                 |
+| debug wait <cluster> [like 'xx'] [option timeout=3]              | wait <cluster> ready, but no more than 3 secs.                                         |
+| debug wait <cluster> status <N> [like 'xx'] [option timeout=13]  | wait <cluster> commit achieve <N>, but no more than 13 secs                            |
 +------------------------------------------------------------------+----------------------------------------------------------------------------------------+
-15 rows in set (0.00 sec)
+16 rows in set (0.00 sec)
 ```
 
-(these commands are already documented, but such short help just remind about them).
-
-If you connect via 'VIP' connection (see [listen](Server_settings/Searchd.md#listen) for details) the output might be a bit different:
-
+Same from VIP connection:
 ```sql
 MySQL [(none)]> debug;
 +------------------------------------------------------------------+----------------------------------------------------------------------------------------+
@@ -211,11 +208,18 @@ MySQL [(none)]> debug;
 | debug close                                                      | ask server to close connection from it's side                                          |
 | debug compress <IDX> [chunk] <X> [option sync=1]                 | Compress disk chunk X of RT index <IDX> (wipe out deleted documents)                   |
 | debug split <IDX> [chunk] <X> on @<uservar> [option sync=1]      | Split disk chunk X of RT index <IDX> using set of DocIDs from @uservar                 |
+| debug wait <cluster> [like 'xx'] [option timeout=3]              | wait <cluster> ready, but no more than 3 secs.                                         |
+| debug wait <cluster> status <N> [like 'xx'] [option timeout=13]  | wait <cluster> commit achieve <N>, but no more than 13 secs                            |
 +------------------------------------------------------------------+----------------------------------------------------------------------------------------+
-20 rows in set (0.00 sec)
+21 rows in set (0.00 sec)
 ```
 
-Here you can see additional commands available only in the current context (namely, if you connected on a VIP port). Two additional subcommands available right now are `token` and `shutdown`. The first one just calculates a hash (SHA1) of the <password> (which, in turn, may be empty, or a word, or num/phrase enclosed in '-quotes) like:
+All `debug XXX` commands should be regarded as non-stable, and they're matter of freely modification at any moment, don't be surprised. This example output here also not necessary reflect actual available commands, try it on your system to see what is available on your instance. Also, no detailed documentation implied apart this short 'meaning' column.
+
+Just as quick illustration, two commands available only to VIP clients described below - `shutdown` and `crash`. Both requires a token, which can be generated with `debug token`
+subcommand, and put into [shutdown_token](Server_settings/Searchd.md#shutdown_token) param of searchd section of the
+config file. If no such section exists, or if a hash of the provided password does not match with the token stored in
+the config, the subcommands will do nothing.
 
 ```sql
 mysql> debug token hello;
@@ -227,8 +231,11 @@ mysql> debug token hello;
 1 row in set (0,00 sec)
 ```
 
-Another debug subcommand `shutdown` will send a TERM signal to the server and so will make it shut down. Since it is quite dangerous (nobody wants accidentally stop a production service), it:
+Subcommand `shutdown` will send a TERM signal to the server and so will make it shut down. Since it is quite dangerous (nobody wants accidentally stop a production service), it:
 1. needs a VIP connection, and
 2. needs the password
 
-For the chosen password you need to generate a token with `debug token` subcommand, and put it into [shutdown_token](Server_settings/Searchd.md#shutdown_token) param of searchd section of the config file. If no such section exists, or if a hash of the provided password  does not match with the token stored in the config, the subcommand will do nothing. Otherwise it will cause 'clean' shutdown of the server.
+Subcommand `crash` is literally causes crash. It may be used when setting up different things, like 'how system manager keeps livenes of the service', or 'how feasible is coredump tracking'.
+
+If some commands is found useful in generic, we'll move them from `debug` subcommands to more generic and stable
+place (notice meaning of `debug tasks` and `debug sched` in the table as such examples).

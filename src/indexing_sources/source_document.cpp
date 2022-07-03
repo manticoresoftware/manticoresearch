@@ -661,7 +661,7 @@ void CSphSource::BuildRegularHits ( RowID_t tRowID, bool bPayload, int & iBlende
 
 	// FIELDEND_MASK at last token stream should be set for HEAD token too
 	iBlendedHitsStart = -1;
-	bool bMorphDisabled = ( m_tMorphFields.GetBits()>0 && !m_tMorphFields.BitGet ( m_tState.m_iField ) );
+	bool bMorphDisabled = ( m_tMorphFields.GetSize()>0 && !m_tMorphFields.BitGet ( m_tState.m_iField ) );
 
 	// index words only
 	while ( ( m_iMaxHits==0 || m_tHits.GetLength()+BUILD_REGULAR_HITS_COUNT<m_iMaxHits )

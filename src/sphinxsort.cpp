@@ -4026,6 +4026,7 @@ public:
 			m_pDistinctFetcher->SetColumnar(pColumnar);
 	}
 
+	bool	IsCutoffDisabled() const final { return true; }
 	bool	Push ( const CSphMatch & tEntry ) final							{ return PushEx<false>(tEntry); }
 	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) final	{ assert ( 0 && "Not supported in grouping"); }
 	bool	PushGrouped ( const CSphMatch & tEntry, bool ) final		{ return PushEx<true>(tEntry); }

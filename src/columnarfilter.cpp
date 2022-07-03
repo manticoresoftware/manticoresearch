@@ -48,7 +48,7 @@ void ColumnarFilter_c::SetColumnar ( const columnar::Columnar_i * pColumnar )
 	}
 
 	std::string sError; // fixme! report errors
-	m_pIterator = CreateIterator ( pColumnar, m_sAttrName.cstr(), sError );
+	m_pIterator = CreateColumnarIterator ( pColumnar, m_sAttrName.cstr(), sError );
 	m_iColumnarCol = pColumnar->GetAttributeId ( m_sAttrName.cstr() );
 }
 
@@ -237,9 +237,9 @@ bool Filter_ValuesColumnar_c::IsDegenerate() const
 	if ( !m_pColumnar )
 		return false;
 
-	columnar::Filter_t tFilter;
+	common::Filter_t tFilter;
 	tFilter.m_sName = m_sAttrName.cstr();
-	tFilter.m_eType = columnar::FilterType_e::VALUES;
+	tFilter.m_eType = common::FilterType_e::VALUES;
 
 	int iNumValues = m_dValues.GetLength();
 	tFilter.m_dValues.resize(iNumValues);
@@ -351,7 +351,7 @@ void Filter_StringColumnar_T<MULTI>::SetColumnar ( const columnar::Columnar_i * 
 	tHints.m_bNeedStringHashes = m_eCollation==SPH_COLLATION_DEFAULT;
 
 	std::string sError; // fixme! report errors
-	m_pIterator = CreateIterator( pColumnar, m_sAttrName.cstr(), sError, tHints, &tCapabilities );
+	m_pIterator = CreateColumnarIterator( pColumnar, m_sAttrName.cstr(), sError, tHints, &tCapabilities );
 	m_bHasHashes = m_pIterator && tCapabilities.m_bStringHashes;
 }
 
@@ -728,79 +728,86 @@ std::unique_ptr<ISphFilter> TryToCreateColumnarFilter ( int iAttr, const ISphSch
 }
 
 
-static columnar::FilterType_e ToColumnarFilterType ( ESphFilter eType )
+static common::FilterType_e ToColumnarFilterType ( ESphFilter eType )
 {
 	switch ( eType )
 	{
-	case SPH_FILTER_VALUES:		return columnar::FilterType_e::VALUES;
-	case SPH_FILTER_RANGE:		return columnar::FilterType_e::RANGE;
-	case SPH_FILTER_FLOATRANGE:	return columnar::FilterType_e::FLOATRANGE;
+	case SPH_FILTER_VALUES:		return common::FilterType_e::VALUES;
+	case SPH_FILTER_RANGE:		return common::FilterType_e::RANGE;
+	case SPH_FILTER_FLOATRANGE:	return common::FilterType_e::FLOATRANGE;
 	case SPH_FILTER_STRING:
 	case SPH_FILTER_STRING_LIST:
-		return columnar::FilterType_e::STRINGS;
+		return common::FilterType_e::STRINGS;
 
-	default:					return columnar::FilterType_e::NONE;
+	default:					return common::FilterType_e::NONE;
 	}
 }
 
 
-static columnar::MvaAggr_e ToColumnarAggr ( ESphMvaFunc eAggr )
+static common::MvaAggr_e ToColumnarAggr ( ESphMvaFunc eAggr )
 {
 	switch ( eAggr )
 	{
-	case SPH_MVAFUNC_ANY:	return columnar::MvaAggr_e::ANY;
-	case SPH_MVAFUNC_ALL:	return columnar::MvaAggr_e::ALL;
-	default:				return columnar::MvaAggr_e::NONE;
+	case SPH_MVAFUNC_ANY:	return common::MvaAggr_e::ANY;
+	case SPH_MVAFUNC_ALL:	return common::MvaAggr_e::ALL;
+	default:				return common::MvaAggr_e::NONE;
 	}
 }
 
 
-bool AddColumnarFilter ( std::vector<columnar::Filter_t> & dDst, const CSphFilterSettings & tSrc, ESphCollation eCollation, const ISphSchema & tSchema, CSphString & sWarning )
+bool ToColumnarFilter ( common::Filter_t & tFilter, const CSphFilterSettings & tSrc, ESphCollation eCollation, const ISphSchema & tSchema, CSphString & sWarning )
 {
-	columnar::FilterType_e eColumnarFilterType = ToColumnarFilterType ( tSrc.m_eType );
-	if ( eColumnarFilterType==columnar::FilterType_e::NONE )
+	tFilter.m_eType = ToColumnarFilterType ( tSrc.m_eType );
+	if ( tFilter.m_eType==common::FilterType_e::NONE )
 		return false;
 
-	dDst.emplace_back();
-	auto & tDst = dDst.back();
-
-	tDst.m_sName			= tSrc.m_sAttrName.cstr();
-	tDst.m_bExclude			= tSrc.m_bExclude;
-	tDst.m_eType			= eColumnarFilterType;
-	tDst.m_eMvaAggr			= ToColumnarAggr ( tSrc.m_eMvaFunc );
-	tDst.m_iMinValue		= tSrc.m_iMinValue;
-	tDst.m_iMaxValue		= tSrc.m_iMaxValue;
-	tDst.m_fMinValue		= tSrc.m_fMinValue;
-	tDst.m_fMaxValue		= tSrc.m_fMaxValue;
-	tDst.m_bLeftUnbounded	= tSrc.m_bOpenLeft;
-	tDst.m_bRightUnbounded	= tSrc.m_bOpenRight;
-	tDst.m_bLeftClosed		= tSrc.m_bHasEqualMin;
-	tDst.m_bRightClosed		= tSrc.m_bHasEqualMax;
+	tFilter.m_sName			= tSrc.m_sAttrName.cstr();
+	tFilter.m_bExclude		= tSrc.m_bExclude;
+	tFilter.m_eMvaAggr		= ToColumnarAggr ( tSrc.m_eMvaFunc );
+	tFilter.m_iMinValue		= tSrc.m_iMinValue;
+	tFilter.m_iMaxValue		= tSrc.m_iMaxValue;
+	tFilter.m_fMinValue		= tSrc.m_fMinValue;
+	tFilter.m_fMaxValue		= tSrc.m_fMaxValue;
+	tFilter.m_bLeftUnbounded	= tSrc.m_bOpenLeft;
+	tFilter.m_bRightUnbounded	= tSrc.m_bOpenRight;
+	tFilter.m_bLeftClosed	= tSrc.m_bHasEqualMin;
+	tFilter.m_bRightClosed	= tSrc.m_bHasEqualMax;
 
 	int iNumValues = tSrc.GetNumValues();
-	tDst.m_dValues.resize(iNumValues);
+	tFilter.m_dValues.resize(iNumValues);
 	if ( iNumValues )
-		memcpy ( &tDst.m_dValues[0], tSrc.GetValueArray(), iNumValues*sizeof ( tDst.m_dValues[0] ) );
+		memcpy ( &tFilter.m_dValues[0], tSrc.GetValueArray(), iNumValues*sizeof ( tFilter.m_dValues[0] ) );
 
 	int iNumStrValues = tSrc.m_dStrings.GetLength();
-	tDst.m_dStringValues.resize(iNumStrValues);
+	tFilter.m_dStringValues.resize(iNumStrValues);
 	for ( int i = 0; i < iNumStrValues; i++ )
 	{
-		auto & dDstStr = tDst.m_dStringValues[i];
+		auto & dDstStr = tFilter.m_dStringValues[i];
 		dDstStr.resize ( tSrc.m_dStrings[i].Length() );
 		memcpy ( dDstStr.data(), tSrc.m_dStrings[i].cstr(), dDstStr.size() );
 	}
 
 	const CSphColumnInfo * pAttr = tSchema.GetAttr ( tSrc.m_sAttrName.cstr() );
-	if ( pAttr && IsMvaAttr ( pAttr->m_eAttrType ) && ( tDst.m_eMvaAggr==columnar::MvaAggr_e::NONE ) )
+	if ( pAttr && IsMvaAttr ( pAttr->m_eAttrType ) && ( tFilter.m_eMvaAggr==common::MvaAggr_e::NONE ) )
 	{
 		sWarning = "use an explicit ANY()/ALL() around a filter on MVA column";
-		tDst.m_eMvaAggr = columnar::MvaAggr_e::ANY;
+		tFilter.m_eMvaAggr = common::MvaAggr_e::ANY;
 	}
 
 	// FIXME! add support for arbitrary collations in columnar storage
-	tDst.m_fnCalcStrHash = eCollation==SPH_COLLATION_DEFAULT ? LibcCIHash_fn::Hash : nullptr;
-	tDst.m_fnStrCmp = GetStringCmpFunc(eCollation);
+	tFilter.m_fnCalcStrHash = eCollation==SPH_COLLATION_DEFAULT ? LibcCIHash_fn::Hash : nullptr;
+	tFilter.m_fnStrCmp = GetStringCmpFunc(eCollation);
 
+	return true;
+}
+
+
+bool AddColumnarFilter ( std::vector<common::Filter_t> & dDst, const CSphFilterSettings & tSrc, ESphCollation eCollation, const ISphSchema & tSchema, CSphString & sWarning )
+{
+	common::Filter_t tFilter;
+	if ( !ToColumnarFilter ( tFilter, tSrc, eCollation, tSchema, sWarning ) )
+		return false;
+
+	dDst.emplace_back ( std::move(tFilter) );
 	return true;
 }

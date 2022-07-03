@@ -69,7 +69,7 @@ void Expr_Columnar_MVAIn_T<T>::Command ( ESphExprCommand eCmd, void * pArg )
 		if ( pColumnar )
 		{
 			std::string sError; // FIXME! report errors
-			m_pIterator = CreateIterator ( pColumnar, m_sName.cstr(), sError );
+			m_pIterator = CreateColumnarIterator ( pColumnar, m_sName.cstr(), sError );
 		}
 	}
 }
@@ -167,7 +167,7 @@ void Expr_Columnar_StringIn_c::Command ( ESphExprCommand eCmd, void * pArg )
 			tHints.m_bNeedStringHashes = m_eCollation==SPH_COLLATION_DEFAULT;
 
 			std::string sError; // FIXME! report errors
-			m_pIterator = CreateIterator ( pColumnar, m_sName.cstr(), sError, tHints, &tCapabilities );
+			m_pIterator = CreateColumnarIterator ( pColumnar, m_sName.cstr(), sError, tHints, &tCapabilities );
 			assert ( m_pIterator );
 			m_bHasHashes = tCapabilities.m_bStringHashes;
 		}
@@ -244,7 +244,7 @@ void Expr_Columnar_StringLength_c::Command ( ESphExprCommand eCmd, void * pArg )
 		if ( pColumnar )
 		{
 			std::string sError; // FIXME! report errors
-			m_pIterator = CreateIterator ( pColumnar, m_sName.cstr(), sError );
+			m_pIterator = CreateColumnarIterator ( pColumnar, m_sName.cstr(), sError );
 		}
 	}
 }
@@ -422,7 +422,7 @@ void Expr_GetColumnar_Traits_c::Command ( ESphExprCommand eCmd, void * pArg )
 		if ( pColumnar )
 		{
 			std::string sError; // FIXME! report errors
-			m_pIterator = CreateIterator ( pColumnar, m_sName.cstr(), sError );
+			m_pIterator = CreateColumnarIterator ( pColumnar, m_sName.cstr(), sError );
 		}
 		else
 			m_pIterator.reset();

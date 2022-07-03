@@ -3411,8 +3411,8 @@ public:
 		auto tReply = APIAnswer ( tOut );
 		tOut.SendByte ( tRes.m_bIndexActive );
 		SendArray ( pDst->m_dRemotePaths, tOut );
-		tOut.SendInt ( pDst->m_dNodeChunks.GetBits() );
-		tOut.SendBytes ( pDst->m_dNodeChunks.Begin(), sizeof(DWORD) * pDst->m_dNodeChunks.GetSize() );
+		tOut.SendInt ( pDst->m_dNodeChunks.GetSize() );
+		tOut.SendBytes ( pDst->m_dNodeChunks.Begin(), pDst->m_dNodeChunks.GetSizeBytes() );
 		tOut.SendUint64 ( pDst->m_tmTimeout );
 		tOut.SendUint64 ( pDst->m_tmTimeoutFile );
 	}
@@ -3427,7 +3427,7 @@ public:
 		GetArray ( pDst->m_dRemotePaths, tReq );
 		int iBits = tReq.GetInt();
 		pDst->m_dNodeChunks.Init ( iBits );
-		tReq.GetBytes ( pDst->m_dNodeChunks.Begin(), sizeof(DWORD) * pDst->m_dNodeChunks.GetSize() );
+		tReq.GetBytes ( pDst->m_dNodeChunks.Begin(), pDst->m_dNodeChunks.GetSizeBytes() );
 		pDst->m_tmTimeout = tReq.GetUint64();
 		pDst->m_tmTimeoutFile = tReq.GetUint64();
 
@@ -5180,7 +5180,7 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 			 PQRemoteReply_t & tRes = PQRemoteBase_c::GetRes ( *dNodes[iNode] );
 			 const CSphBitvec & tFilesDst = tRes.m_pDst->m_dNodeChunks;
 			 bool bSameFiles = ( tSigSrc.m_dBaseNames.GetLength()==tRes.m_pDst->m_dRemotePaths.GetLength() );
-			 bool bSameHashes = ( tSigSrc.m_dHashes.GetLength() / HASH20_SIZE==tRes.m_pDst->m_dNodeChunks.GetBits() );
+			 bool bSameHashes = ( tSigSrc.m_dHashes.GetLength() / HASH20_SIZE==tRes.m_pDst->m_dNodeChunks.GetSize() );
 			 if ( !bSameFiles || !bSameHashes )
 			 {
 				if ( !sError.IsEmpty() )
@@ -5189,7 +5189,7 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 				sError.SetSprintf ( "%s'%s:%d' wrong stored files %d(%d), hashes %d(%d)",
 					sError.scstr(), dNodes[iNode]->m_tDesc.m_sAddr.cstr(), dNodes[iNode]->m_tDesc.m_iPort,
 					tSigSrc.m_dBaseNames.GetLength(), tRes.m_pDst->m_dRemotePaths.GetLength(),
-					tSigSrc.m_dHashes.GetLength() / HASH20_SIZE, tRes.m_pDst->m_dNodeChunks.GetBits() );
+					tSigSrc.m_dHashes.GetLength() / HASH20_SIZE, tRes.m_pDst->m_dNodeChunks.GetSize() );
 				continue;
 			 }
 

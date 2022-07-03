@@ -15,22 +15,19 @@
 #include "schema/columninfo.h"
 #include "schema/schema.h"
 #include "columnarmisc.h"
-#include "secondary/sidx.h"
 #include "secondarylib.h"
 
 using CheckStorage_fn =			void (*) ( const std::string & sFilename, uint32_t uNumRows, std::function<void (const char*)> & fnError, std::function<void (const char*)> & fnProgress );
 using VersionStr_fn =			const char * (*)();
 using GetVersion_fn	=			int (*)();
 using CreateSI_fn =				SI::Index_i * (*) ( const char * sFile, std::string & sError );
-using CreateBuilder_fn =		SI::Builder_i *	(*) ( const std::vector<SI::SourceAttrTrait_t> & dSrcAttrs, int iMemoryLimit, SI::Collation_e eCollation, const char * sFile, std::string & sError );
-using CollationInit_fn =		void (*) ( const std::array<SI::StrHash_fn, (size_t)SI::Collation_e::TOTAL> & dCollations );
+using CreateBuilder_fn =		SI::Builder_i *	(*) ( const SI::Settings_t & tSettings, const common::Schema_t & tSchema, int iMemoryLimit, const std::string & sFile, std::string & sError );
 
 static void *					g_pSecondaryLib = nullptr;
 static VersionStr_fn			g_fnVersionStr = nullptr;
 static GetVersion_fn			g_fnStorageVersion  = nullptr;
 static CreateSI_fn				g_fnCreateSI  = nullptr;
 static CreateBuilder_fn			g_fnCreateBuilder  = nullptr;
-static CollationInit_fn			g_fnCollationInit = nullptr;
 
 /////////////////////////////////////////////////////////////////////
 
@@ -92,7 +89,6 @@ bool InitSecondary ( CSphString & sError )
 	if ( !LoadFunc ( g_fnStorageVersion, tHandle.Get(), "GetSecondaryStorageVersion", sLibfile, sError ) )			return false;
 	if ( !LoadFunc ( g_fnCreateSI, tHandle.Get(), "CreateSecondaryIndex", sLibfile, sError ) )						return false;
 	if ( !LoadFunc ( g_fnCreateBuilder, tHandle.Get(), "CreateBuilder", sLibfile, sError ) )						return false;
-	if ( !LoadFunc ( g_fnCollationInit, tHandle.Get(), "CollationInit", sLibfile, sError ) )						return false;
 
 	g_pSecondaryLib = tHandle.Leak();
 
@@ -160,7 +156,7 @@ SI::Index_i * CreateSecondaryIndex ( const char * sFile, CSphString & sError )
 	return pSIdx;
 }
 
-std::unique_ptr<SI::Builder_i> CreateSecondaryIndexBuilder ( const std::vector<SI::SourceAttrTrait_t> & dSrcAttrs, int iMemoryLimit, SI::Collation_e eCollation, const char * sFile, CSphString & sError )
+std::unique_ptr<SI::Builder_i> CreateSecondaryIndexBuilder ( const common::Schema_t & tSchema, int iMemoryLimit, const char * sFile, CSphString & sError )
 {
 	if ( !IsSecondaryLibLoaded() )
 	{
@@ -171,19 +167,10 @@ std::unique_ptr<SI::Builder_i> CreateSecondaryIndexBuilder ( const std::vector<S
 	assert ( g_fnCreateBuilder );
 
 	std::string sTmpError;
-	std::unique_ptr<SI::Builder_i> pBuilder { g_fnCreateBuilder ( dSrcAttrs, iMemoryLimit, eCollation, sFile, sTmpError ) };
+	SI::Settings_t tSettings; // FIXME! use config?
+	std::unique_ptr<SI::Builder_i> pBuilder { g_fnCreateBuilder ( tSettings, tSchema, iMemoryLimit, sFile, sTmpError ) };
 	if ( !pBuilder )
 		sError = sTmpError.c_str();
 
 	return pBuilder;
 }
-
-void CollationInitSecondaryIndex ( const std::array<SI::StrHash_fn, (size_t)SI::Collation_e::TOTAL> & dCollations )
-{
-	if ( !IsSecondaryLibLoaded() )
-		return;
-
-	assert ( g_fnCollationInit );
-	g_fnCollationInit ( dCollations );
-}
-

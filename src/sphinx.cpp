@@ -1323,7 +1323,7 @@ private:
 	bool						Build_SetupInplace ( SphOffset_t & iHitsGap, int iHitsMax, int iFdHits ) const; // fixme! build only
 	bool						Build_SetupDocstore ( std::unique_ptr<DocstoreBuilder_i> & pDocstore, CSphBitvec & dStoredFields, CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage ); // fixme! build only
 	bool						Build_SetupBlobBuilder ( std::unique_ptr<BlobRowBuilder_i> & pBuilder ); // fixme! build only
-	bool						Build_SetupColumnar ( std::unique_ptr<columnar::Builder_i> & pBuilder ); // fixme! build only
+	bool						Build_SetupColumnar ( std::unique_ptr<columnar::Builder_i> & pBuilder, CSphBitvec & tColumnarAttrs ); // fixme! build only
 
 	void						Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, DocID_t tDocID, QueryMvaContainer_c & tMvaContainer, CSphSource & tSource, const CSphBitvec & dStoredFields, const CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage ); // fixme! build only
 	bool						Build_StoreBlobAttrs ( DocID_t tDocId, SphOffset_t & tOffset, BlobRowBuilder_i & tBlobRowBuilderconst, QueryMvaContainer_c & tMvaContainer, AttrSource_i & tSource, bool bForceSource ); // fixme! build only
@@ -1334,7 +1334,7 @@ private:
 	RowidIterator_i *			CreateColumnarAnalyzerOrPrefilter ( const CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphFilterSettings> & dModifiedFilters, bool & bFiltersChanged, const CSphVector<FilterTreeItem_t> & dFilterTree, const ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema, CSphString & sWarning ) const;
 
 	bool						SplitQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dAllSorters, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const;
-	RowidIterator_i *			SpawnIterators ( const CSphQuery & tQuery, CSphVector<CSphFilterSettings> & dModifiedFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta ) const;
+	RowidIterator_i *			SpawnIterators ( const CSphQuery & tQuery, CSphVector<CSphFilterSettings> & dModifiedFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff ) const;
 
 	bool						IsQueryFast ( const CSphQuery & tQuery ) const;
 };
@@ -4444,15 +4444,14 @@ bool CSphIndex_VLN::Build_StoreBlobAttrs ( DocID_t tDocId, SphOffset_t & tOffset
 	return true;
 }
 
-
-template<typename T, typename COND>
-void Builder_StoreAttrs ( const CSphSchema & tSchema, DocID_t tDocId, CSphSource & tSource, QueryMvaContainer_c & tMvaContainer, T * pBuilder, COND && tCond )
+template<typename T>
+static void Builder_StoreAttrs ( const CSphSchema & tSchema, DocID_t tDocId, CSphSource & tSource, QueryMvaContainer_c & tMvaContainer, T * pBuilder, const CSphBitvec & tAttrsUsed )
 {
 	int iAttrId = 0;
 	for ( int i=0; i < tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
-		if ( !tCond ( tAttr ) )
+		if ( !tAttrsUsed.BitGet(i) )
 			continue;
 
 		switch ( tAttr.m_eAttrType )
@@ -5030,10 +5029,14 @@ bool CSphIndex_VLN::Build_SetupBlobBuilder ( std::unique_ptr<BlobRowBuilder_i> &
 }
 
 
-bool CSphIndex_VLN::Build_SetupColumnar ( std::unique_ptr<columnar::Builder_i> & pBuilder )
+bool CSphIndex_VLN::Build_SetupColumnar ( std::unique_ptr<columnar::Builder_i> & pBuilder, CSphBitvec & tColumnarsAttrs )
 {
 	if ( !m_tSchema.HasColumnarAttrs() )
 		return true;
+
+	for ( int i = 0; i < m_tSchema.GetAttrsCount(); i++ )
+		if ( m_tSchema.GetAttr(i).IsColumnar() )
+			tColumnarsAttrs.BitSet(i);
 
 	pBuilder = CreateColumnarBuilder ( m_tSchema, m_tSettings, GetIndexFileName ( SPH_EXT_SPC, true ), m_sLastError );
 	return !!pBuilder;
@@ -5120,7 +5123,7 @@ void CSphIndex_VLN::Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, 
 
 	// filter out non-hl fields (should already be null)
 	int iField = 0;
-	for ( int i = 0; i < dStoredFields.GetBits(); i++ )
+	for ( int i = 0; i < dStoredFields.GetSize(); i++ )
 	{
 		if ( !dStoredFields.BitGet(i) )
 			tDoc.m_dFields.Remove(iField);
@@ -5130,7 +5133,7 @@ void CSphIndex_VLN::Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, 
 
 	VecTraits_T<BYTE> * pAddedAttrs = tDoc.m_dFields.AddN ( dStoredAttrs.BitCount() );
 	int iAttr = 0;
-	for ( int i = 0; i < dStoredAttrs.GetBits(); i++ )
+	for ( int i = 0; i < dStoredAttrs.GetSize(); i++ )
 		if ( dStoredAttrs.BitGet(i) )
 			pAddedAttrs[iAttr++] = GetAttrForDocstore ( tDocID, i, m_tSchema, tMvaContainer, tSource, dTmpDocstoreAttrStorage[i] );
 
@@ -5284,13 +5287,15 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		return 0;
 
 	std::unique_ptr<columnar::Builder_i> pColumnarBuilder;
-	if ( !Build_SetupColumnar(pColumnarBuilder) )
+	CSphBitvec tColumnarAttrs ( m_tSchema.GetAttrsCount() );
+	if ( !Build_SetupColumnar ( pColumnarBuilder, tColumnarAttrs ) )
 		return 0;
 
 	std::unique_ptr<SI::Builder_i> pCidxBuilder;
+	CSphBitvec tSIAttrs ( m_tSchema.GetAttrsCount() );
 	if ( IsSecondaryLibLoaded() )
 	{
-		pCidxBuilder = CreateIndexBuilder ( iMemoryLimit, m_tSchema, GetIndexFileName ( SPH_EXT_SPIDX, false ).cstr(), m_sLastError );
+		pCidxBuilder = CreateIndexBuilder ( iMemoryLimit, m_tSchema, tSIAttrs, GetIndexFileName ( SPH_EXT_SPIDX, false ).cstr(), m_sLastError );
 		if ( !pCidxBuilder.get() )
 			return 0;
 	}
@@ -5395,12 +5400,12 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 			// store anything columnar
 			if ( pColumnarBuilder )
-				Builder_StoreAttrs ( m_tSchema, tDocID, *pSource, tQueryMvaContainer, pColumnarBuilder.get(), [] ( const CSphColumnInfo & tAttr ) { return tAttr.IsColumnar(); } );
+				Builder_StoreAttrs ( m_tSchema, tDocID, *pSource, tQueryMvaContainer, pColumnarBuilder.get(), tColumnarAttrs );
 
 			if ( pCidxBuilder.get() )
 			{
 				pCidxBuilder->SetRowID ( pSource->m_tDocInfo.m_tRowID );
-				Builder_StoreAttrs ( m_tSchema, tDocID, *pSource, tQueryMvaContainer, pCidxBuilder.get(), [] ( const CSphColumnInfo & tAttr ) { return true; } );
+				Builder_StoreAttrs ( m_tSchema, tDocID, *pSource, tQueryMvaContainer, pCidxBuilder.get(), tSIAttrs );
 			}
 
 			BuildStoreHistograms ( m_tSchema, tDocID, *pSource, tQueryMvaContainer, dHistograms );
@@ -7648,8 +7653,9 @@ public:
 		, m_tDeadRowMap	( tDeadRowMap )
 	{}
 
-	inline bool GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock );
-	DWORD GetNumProcessed() const { return m_tRowID-m_tBoundaries.m_tMinRowID; }
+	inline bool	GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock );
+	DWORD		GetNumProcessed() const { return m_tRowID-m_tBoundaries.m_tMinRowID; }
+	bool		WasCutoffHit() const { return false; }
 
 private:
 	static const int MAX_COLLECTED = 128;
@@ -7726,10 +7732,8 @@ public:
 		return true;	// always return true, even if all values were filtered out. next call will fetch more values
 	}
 
-	DWORD GetNumProcessed() const
-	{
-		return (DWORD)m_pIterator->GetNumProcessed();
-	}
+	DWORD	GetNumProcessed() const { return (DWORD)m_pIterator->GetNumProcessed(); }
+	bool	WasCutoffHit() const { return m_pIterator->WasCutoffHit(); }
 
 private:
 	RowidIterator_i *				m_pIterator;
@@ -7799,7 +7803,7 @@ bool Fullscan ( ITERATOR & tIterator, TO_STATIC && fnToStatic, const CSphQueryCo
 			}
 		}
 
-	return false;
+	return tIterator.WasCutoffHit();
 }
 
 
@@ -7915,7 +7919,7 @@ RowidIterator_i * CSphIndex_VLN::CreateColumnarAnalyzerOrPrefilter ( const CSphV
 	if ( !m_pColumnar || dFilterTree.GetLength() || !pFilter )
 		return nullptr;
 
-	std::vector<columnar::Filter_t> dColumnarFilters;
+	std::vector<common::Filter_t> dColumnarFilters;
 	std::vector<int> dFilterMap;
 	dFilterMap.resize ( dFilters.GetLength() );
 	ARRAY_FOREACH ( i, dFilters )
@@ -7932,7 +7936,7 @@ RowidIterator_i * CSphIndex_VLN::CreateColumnarAnalyzerOrPrefilter ( const CSphV
 		return nullptr;
 
 	std::vector<int> dDeletedFilters;
-	std::vector<columnar::BlockIterator_i *> dIterators;
+	std::vector<common::BlockIterator_i *> dIterators;
 	dIterators = m_pColumnar->CreateAnalyzerOrPrefilter ( dColumnarFilters, dDeletedFilters, *pFilter );
 	if ( dIterators.empty() )
 		return nullptr;
@@ -7998,7 +8002,7 @@ static void ProfileEnabledIndexes ( QueryProfile_c * pProfile, const CSphVector<
 }
 
 
-RowidIterator_i * CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, CSphVector<CSphFilterSettings> & dModifiedFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta ) const
+RowidIterator_i * CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, CSphVector<CSphFilterSettings> & dModifiedFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff ) const
 {
 	CSphVector<CSphFilterSettings> dOriginalFilters;
 	const CSphVector<CSphFilterSettings> * pOriginalFilters = &tQuery.m_dFilters;
@@ -8014,7 +8018,7 @@ RowidIterator_i * CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, CSph
 	if ( m_pSIdx )
 	{
 		bool bChanged = false;
-		RowidIterator_i * pIterator = CreateSecondaryIndexIterator ( m_pSIdx.get(), dEnabledIndexes, tQuery.m_dFilters, tQuery.m_eCollation, tMaxSorterSchema, RowID_t(m_iDocinfo), dModifiedFilters, bChanged );
+		RowidIterator_i * pIterator = CreateSecondaryIndexIterator ( m_pSIdx.get(), dEnabledIndexes, tQuery.m_dFilters, tQuery.m_eCollation, tMaxSorterSchema, RowID_t(m_iDocinfo), dModifiedFilters, bChanged, iCutoff );
 		UpdateSpawnedIterators ( bChanged, bRecreateFilters, dOriginalFilters, dModifiedFilters, pOriginalFilters, dIterators, pIterator );
 	}
 
@@ -8182,16 +8186,22 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	// we don't modify the original filters because iterators may use some data from them (to avoid copying)
 	CSphVector<CSphFilterSettings> dModifiedFilters;
 
-	// try to spawn an iterator from a secondary index
-	std::unique_ptr<RowidIterator_i> pIterator ( SpawnIterators ( tQuery, dModifiedFilters, tCtx, tFlx, tMaxSorterSchema, tMeta ) );
-
 	bool bImplicitCutoff;
 	int iCutoff;
 	std::tie ( bImplicitCutoff, iCutoff ) = ApplyImplicitCutoff ( tQuery, dSorters );
 
+	// try to spawn an iterator from a secondary index
+	std::unique_ptr<RowidIterator_i> pIterator ( SpawnIterators ( tQuery, dModifiedFilters, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff ) );
+
 	bool bCutoffHit =  false;
 	if ( pIterator )
+	{
+		if ( iCutoff>=0 && ( dModifiedFilters.IsEmpty() || ( dModifiedFilters.GetLength()==1 && dModifiedFilters[0].m_sAttrName=="@rowid" ) ) )
+			pIterator->SetCutoff(iCutoff);
+
 		bCutoffHit = RunFullscanOnIterator ( pIterator.get(), tCtx, tMeta, dSorters, tMatch, iCutoff, bRandomize, tArgs.m_iIndexWeight, tmMaxTimer );
+		pIterator->AddDesc ( tMeta.m_dUsedIterators );
+	}
 	else
 	{
 		bool bHaveRowidFilter = false;
@@ -10898,7 +10908,7 @@ bool CSphIndex_VLN::CheckEarlyReject ( const CSphVector<CSphFilterSettings> & dF
 		// check .SPC file minmax
 		CSphString sWarning;
 		int iNonColumnar = 0;
-		std::vector<columnar::Filter_t> dColumnarFilters;
+		std::vector<common::Filter_t> dColumnarFilters;
 		ARRAY_FOREACH ( i, dFilters )
 		{
 			const CSphColumnInfo * pCol = m_tSchema.GetAttr ( dFilters[i].m_sAttrName.cstr() );

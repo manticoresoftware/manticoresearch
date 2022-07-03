@@ -3769,7 +3769,7 @@ void RankerState_Expr_fn<PF, HANDLE_DUPES>::UpdateMinGaps ( const ExtHit_t * pHl
 template<bool A1, bool A2>
 int RankerState_Expr_fn<A1,A2>::GetMaxPackedLength()
 {
-	return sizeof(DWORD)*( 8 + m_tExactHit.GetSize() + m_tExactOrder.GetSize() + m_iFields*15 + m_iMaxQpos*4 + m_dFieldTF.GetLength() );
+	return sizeof(DWORD)*( 8 + m_iFields*15 + m_iMaxQpos*4 + m_dFieldTF.GetLength() ) + m_tExactHit.GetSizeBytes() + m_tExactOrder.GetSizeBytes();
 }
 
 
@@ -3782,7 +3782,7 @@ BYTE * RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::PackFactors()
 
 	// leave space for size
 	pPack++;
-	assert ( m_tMatchedFields.GetSize()==m_tExactHit.GetSize() && m_tExactHit.GetSize()==m_tExactOrder.GetSize() );
+	assert ( m_tMatchedFields.GetSizeBytes()==m_tExactHit.GetSizeBytes() && m_tExactHit.GetSizeBytes()==m_tExactOrder.GetSizeBytes() );
 
 	// document level factors
 	*pPack++ = m_uDocBM25;
@@ -3793,9 +3793,9 @@ BYTE * RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::PackFactors()
 	// field level factors
 	*pPack++ = (DWORD)m_iFields;
 	// v.6 set these depends on number of fields
-	for ( int i=0; i<m_tExactHit.GetSize(); i++ )
+	for ( int i=0; i<m_tExactHit.GetSizeBytes()/sizeof(DWORD); i++ )
 		*pPack++ = *( m_tExactHit.Begin() + i );
-	for ( int i=0; i<m_tExactOrder.GetSize(); i++ )
+	for ( int i=0; i<m_tExactOrder.GetSizeBytes()/sizeof(DWORD); i++ )
 		*pPack++ = *( m_tExactOrder.Begin() + i );
 
 	for ( int i=0; i<m_iFields; i++ )

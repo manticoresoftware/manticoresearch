@@ -12,7 +12,7 @@
 #define _secondarylib_
 
 #include "secondary/builder.h"
-#include "secondary/iterator.h"
+#include "secondary/secondary.h"
 
 // FWD
 struct CSphString;
@@ -24,9 +24,8 @@ int				GetSecondaryStorageVersion();
 bool			IsSecondaryLibLoaded();
 
 SI::Index_i *		CreateSecondaryIndex ( const char * sFile, CSphString & sError );
-std::unique_ptr<SI::Builder_i>		CreateSecondaryIndexBuilder ( const std::vector<SI::SourceAttrTrait_t> & dSrcAttrs, int iMemoryLimit, SI::Collation_e eCollation, const char * sFile, CSphString & sError );
+std::unique_ptr<SI::Builder_i>	CreateSecondaryIndexBuilder ( const common::Schema_t & tSchema, int iMemoryLimit, const char * sFile, CSphString & sError );
 
-void				CollationInitSecondaryIndex ( const std::array<SI::StrHash_fn, (size_t)SI::Collation_e::TOTAL> & dCollations );
 void				SetSecondaryIndexDefault ( bool bEnabled );
 bool				GetSecondaryIndexDefault ();
 

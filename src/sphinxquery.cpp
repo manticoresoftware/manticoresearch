@@ -2135,7 +2135,7 @@ public:
 			operator[]( uHash ).Merge ( chain );
 	}
 
-	inline int GetBits() const { return m_iBits; }
+	inline int GetSize() const { return m_iBits; }
 };
 
 // The main class for working with common subtrees
@@ -2181,13 +2181,13 @@ private:
 	// and associate the order number with every of them
 	bool CalcCommonNodes ()
 	{
-		if ( !m_hNodes.GetBits() )
+		if ( !m_hNodes.GetSize() )
 			return false; // there is totally no non-unique leaves
 		int iBit = 0;
 		for ( const auto& tNode : m_hNodes )
 			if ( tNode.second.GetLength() > 1 )
 				m_hBitOrders.Add ( iBit++, tNode.first );
-		assert ( m_hNodes.GetBits()==m_hBitOrders.GetLength() );
+		assert ( m_hNodes.GetSize()==m_hBitOrders.GetLength() );
 		m_hNodes.Reset(); ///< since from now we don't need this data anymore
 		return true;
 	}

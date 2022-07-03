@@ -92,7 +92,7 @@ public:
 		if ( pColumnar )
 		{
 			std::string sError; // FIXME! report errors
-			m_pIterator = CreateIterator ( pColumnar, m_sAttr.cstr(), sError );
+			m_pIterator = CreateColumnarIterator ( pColumnar, m_sAttr.cstr(), sError );
 			m_eType = pColumnar->GetType ( m_sAttr.cstr() );
 		}
 		else
@@ -105,8 +105,8 @@ public:
 	}
 
 protected:
-	CSphString				m_sAttr;
-	columnar::AttrType_e	m_eType = columnar::AttrType_e::NONE;
+	CSphString			m_sAttr;
+	common::AttrType_e	m_eType = common::AttrType_e::NONE;
 	std::unique_ptr<columnar::Iterator_i> m_pIterator;
 
 	inline T FetchValue ( const CSphMatch & tSrc, bool bMerge )
@@ -117,7 +117,7 @@ protected:
 		if ( !m_pIterator || m_pIterator->AdvanceTo ( tSrc.m_tRowID ) != tSrc.m_tRowID )
 			return (T)0;
 
-		if ( m_eType==columnar::AttrType_e::FLOAT )
+		if ( m_eType==common::AttrType_e::FLOAT )
 			return (T)sphDW2F ( (DWORD)m_pIterator->Get() );
 
 		return (T)m_pIterator->Get();

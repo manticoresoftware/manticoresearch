@@ -580,6 +580,12 @@ struct CSphQueryStats
 };
 
 
+struct IteratorDesc_t
+{
+	CSphString	m_sAttr;
+	CSphString	m_sType;
+};
+
 /// search query meta-info
 class CSphQueryResultMeta
 {
@@ -612,6 +618,8 @@ public:
 	CSphString				m_sError;				///< error message
 	CSphString				m_sWarning;				///< warning message
 	QueryProfile_c *		m_pProfile		= nullptr;	///< filled when query profiling is enabled; NULL otherwise
+
+	CSphVector<IteratorDesc_t> m_dUsedIterators;	///< iterators used while calculating the query
 
 	virtual					~CSphQueryResultMeta () {}					///< dtor
 	void					AddStat ( const CSphString & sWord, int64_t iDocs, int64_t iHits );
@@ -696,8 +704,8 @@ struct AttrUpdateInc_t // for cascade (incremental) update
 
 	bool AllApplied () const
 	{
-		assert ( m_dUpdated.GetBits() >= m_iAffected );
-		return m_dUpdated.GetBits() == m_iAffected;
+		assert ( m_dUpdated.GetSize() >= m_iAffected );
+		return m_dUpdated.GetSize() == m_iAffected;
 	}
 };
 

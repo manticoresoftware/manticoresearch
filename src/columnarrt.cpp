@@ -57,7 +57,7 @@ public:
 	virtual int64_t	AllocatedBytes() const = 0;
 
 	virtual std::unique_ptr<columnar::Iterator_i>	CreateIterator() const = 0;
-	virtual columnar::AttrType_e	GetType() const = 0;
+	virtual common::AttrType_e	GetType() const = 0;
 };
 
 
@@ -70,7 +70,7 @@ public:
 	void	AddDoc ( const BYTE * pData, int iLength ) override		{ assert ( 0 && "Unsupported type" ); }
 	void	AddDoc ( const int64_t * pData, int iLength	) override	{ assert ( 0 && "Unsupported type" ); }
 
-	columnar::AttrType_e GetType() const override { return ToColumnarType ( m_eType, ROWITEM_BITS ); }
+	common::AttrType_e GetType() const override { return ToColumnarType ( m_eType, ROWITEM_BITS ); }
 
 protected:
 	ESphAttr		m_eType = SPH_ATTR_NONE;
@@ -83,11 +83,13 @@ public:
 	uint32_t	AdvanceTo ( uint32_t tRowID ) override { m_tRowID = tRowID; return tRowID; }
 
 	int64_t		Get() override						{ assert ( 0 && "Unsupported function" ); return 0; }
-	void		Fetch ( const columnar::Span_T<uint32_t> & dRowIDs, columnar::Span_T<int64_t> & dValues ) override { assert ( 0 && "Unsupported function" ); }
+	void		Fetch ( const util::Span_T<uint32_t> & dRowIDs, util::Span_T<int64_t> & dValues ) override { assert ( 0 && "Unsupported function" ); }
 
 	int			Get ( const uint8_t * & pData ) override { assert ( 0 && "Unsupported function" ); return 0; }
 	uint8_t *	GetPacked() override				{ assert ( 0 && "Unsupported function" ); return 0; }
 	int			GetLength() override				{ assert ( 0 && "Unsupported function" ); return 0; }
+
+	void		AddDesc ( std::vector<common::IteratorDesc_t> & dDesc ) const override {}
 
 protected:
 	RowID_t		m_tRowID = INVALID_ROWID;
@@ -102,14 +104,14 @@ public:
 			ColumnarIterator_Int_T ( const CSphVector<T> & dValues ) : m_dValues ( dValues ) {}
 
 	int64_t	Get() override { return m_dValues[m_tRowID]; }
-	void	Fetch ( const columnar::Span_T<uint32_t> & dRowIDs, columnar::Span_T<int64_t> & dValues ) override;
+	void	Fetch ( const util::Span_T<uint32_t> & dRowIDs, util::Span_T<int64_t> & dValues ) override;
 
 private:
 	const CSphVector<T> & m_dValues;
 };
 
 template<typename T>
-void ColumnarIterator_Int_T<T>::Fetch ( const columnar::Span_T<uint32_t> & dRowIDs, columnar::Span_T<int64_t> & dValues )
+void ColumnarIterator_Int_T<T>::Fetch ( const util::Span_T<uint32_t> & dRowIDs, util::Span_T<int64_t> & dValues )
 {
 	uint32_t * pRowID = dRowIDs.begin();
 	uint32_t * pRowIDEnd = dRowIDs.end();
@@ -520,13 +522,13 @@ public:
 					ColumnarRT_c ( const CSphSchema & tSchema, ColumnarBuilderRT_i * pBuilder, bool bTakeOwnership );
 					~ColumnarRT_c() override;
 
-	columnar::Iterator_i *						CreateIterator ( const std::string & sName, const columnar::IteratorHints_t & tHints, columnar::IteratorCapabilities_t * pCapabilities, std::string & sError ) const override;
-	std::vector<columnar::BlockIterator_i *>	CreateAnalyzerOrPrefilter ( const std::vector<columnar::Filter_t> & dFilters, std::vector<int> & dDeletedFilters, const columnar::BlockTester_i & tBlockTester ) const override { return {}; }
+	columnar::Iterator_i *					CreateIterator ( const std::string & sName, const columnar::IteratorHints_t & tHints, columnar::IteratorCapabilities_t * pCapabilities, std::string & sError ) const override;
+	std::vector<common::BlockIterator_i *>	CreateAnalyzerOrPrefilter ( const std::vector<common::Filter_t> & dFilters, std::vector<int> & dDeletedFilters, const columnar::BlockTester_i & tBlockTester ) const override { return {}; }
 
 	int				GetAttributeId ( const std::string & sName ) const override;
-	columnar::AttrType_e GetType ( const std::string & sName ) const override;
-	bool			EarlyReject ( const std::vector<columnar::Filter_t> & dFilters, const columnar::BlockTester_i & tBlockTester ) const override { return false; }
-	bool			IsFilterDegenerate ( const columnar::Filter_t & tFilter ) const override { return false; }
+	common::AttrType_e GetType ( const std::string & sName ) const override;
+	bool			EarlyReject ( const std::vector<common::Filter_t> & dFilters, const columnar::BlockTester_i & tBlockTester ) const override { return false; }
+	bool			IsFilterDegenerate ( const common::Filter_t & tFilter ) const override { return false; }
 
 	void			Save ( CSphWriter & tWriter ) override;
 	int64_t			AllocatedBytes() const override;
@@ -578,10 +580,10 @@ int ColumnarRT_c::GetAttributeId ( const std::string & sName ) const
 }
 
 
-columnar::AttrType_e ColumnarRT_c::GetType ( const std::string & sName ) const
+common::AttrType_e ColumnarRT_c::GetType ( const std::string & sName ) const
 {
 	auto * pFound = m_hAttrs ( sName.c_str() );
-	return pFound ? pFound->first->GetType() : columnar::AttrType_e::NONE;
+	return pFound ? pFound->first->GetType() : common::AttrType_e::NONE;
 }
 
 

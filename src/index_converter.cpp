@@ -1474,8 +1474,8 @@ bool ConverterPlain_t::Save ( const CSphVector<SphDocID_t> & dKilled, Index_t & 
 	CSphWriter tRowMapWriter;
 	if ( !tRowMapWriter.OpenFile ( sRowMapName, sError ) )
 		return false;
-	for ( int i=0; i<dRowmap.GetSize(); i++ )
-		tRowMapWriter.PutDword ( dRowmap.Begin()[i] );
+
+	tRowMapWriter.PutBytes ( dRowmap.Begin(), dRowmap.GetSizeBytes() );
 	tRowMapWriter.CloseFile();
 
 	SaveHeader ( tIndex, 0 );

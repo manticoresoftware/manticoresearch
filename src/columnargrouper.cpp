@@ -57,7 +57,7 @@ void GrouperColumnarInt_c::SetColumnar ( const columnar::Columnar_i * pColumnar 
 {
 	assert(pColumnar);
 	std::string sError; // fixme! report errors
-	m_pIterator = CreateIterator ( pColumnar, m_sAttrName.cstr(), sError );
+	m_pIterator = CreateColumnarIterator ( pColumnar, m_sAttrName.cstr(), sError );
 }
 
 
@@ -128,7 +128,7 @@ void GrouperColumnarString_T<HASH>::SetColumnar ( const columnar::Columnar_i * p
 	tHints.m_bNeedStringHashes = m_eCollation==SPH_COLLATION_DEFAULT;
 
 	std::string sError; // fixme! report errors
-	m_pIterator = CreateIterator ( pColumnar, m_sAttrName.cstr(), sError, tHints, &tCapabilities );
+	m_pIterator = CreateColumnarIterator ( pColumnar, m_sAttrName.cstr(), sError, tHints, &tCapabilities );
 	m_bHasHashes = tCapabilities.m_bStringHashes;
 }
 
@@ -184,7 +184,7 @@ void GrouperColumnarMVA_T<T>::SetColumnar ( const columnar::Columnar_i * pColumn
 {
 	assert(pColumnar);
 	std::string sError; // fixme! report errors
-	m_pIterator = CreateIterator ( pColumnar, m_sAttrName.cstr(),sError );
+	m_pIterator = CreateColumnarIterator ( pColumnar, m_sAttrName.cstr(),sError );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -258,7 +258,7 @@ void DistinctFetcherColumnarInt_c::SetColumnar ( const columnar::Columnar_i * pC
 {
 	assert(pColumnar);
 	std::string sError; // fixme! report errors
-	m_pIterator = CreateIterator ( pColumnar, m_sName.cstr(), sError );
+	m_pIterator = CreateColumnarIterator ( pColumnar, m_sName.cstr(), sError );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -298,7 +298,7 @@ void DistinctFetcherColumnarMva_T<T>::SetColumnar ( const columnar::Columnar_i *
 {
 	assert(pColumnar);
 	std::string sError; // fixme! report errors
-	m_pIterator = CreateIterator ( pColumnar, m_sName.cstr(), sError );
+	m_pIterator = CreateColumnarIterator ( pColumnar, m_sName.cstr(), sError );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -352,7 +352,7 @@ void DistinctFetcherColumnarString_T<HASH>::SetColumnar ( const columnar::Column
 	tHints.m_bNeedStringHashes = true;
 
 	std::string sError; // fixme! report errors
-	m_pIterator = CreateIterator ( pColumnar, m_sName.cstr(), sError, tHints, &tCapabilities );
+	m_pIterator = CreateColumnarIterator ( pColumnar, m_sName.cstr(), sError, tHints, &tCapabilities );
 	m_bHasHashes = tCapabilities.m_bStringHashes;
 }
 

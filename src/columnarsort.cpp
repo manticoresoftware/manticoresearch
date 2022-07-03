@@ -565,7 +565,7 @@ void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::SpawnIterators()
 			if ( m_iFastPathAttrs )
 				m_tState.m_dAttrs[i] = m_dIterators.GetLength();
 
-			m_dIterators.Add ( { CreateIterator ( m_pColumnar, sAliasedCol.cstr(), sError ), tAttr.m_tLocator } );
+			m_dIterators.Add ( { CreateColumnarIterator ( m_pColumnar, sAliasedCol.cstr(), sError ), tAttr.m_tLocator } );
 			assert ( m_dIterators.Last().m_pIterator.get() );
 		}
 	}
@@ -577,8 +577,8 @@ void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIterator1Single ( Ve
 	IteratorWithLocator_t & tIterator = m_dIterators[0];
 
 	int iNumValues = dMatches.GetLength();
-	columnar::Span_T<uint32_t> dRowIDs ( m_dRowIDs.Begin(), iNumValues );
-	columnar::Span_T<int64_t> dValues ( m_dValues.Begin(), iNumValues );
+	util::Span_T<uint32_t> dRowIDs ( m_dRowIDs.Begin(), iNumValues );
+	util::Span_T<int64_t> dValues ( m_dValues.Begin(), iNumValues );
 	tIterator.m_pIterator->Fetch ( dRowIDs, dValues );
 	int64_t * pValue = m_dValues.Begin();
 
@@ -619,8 +619,8 @@ void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIterator1 ( VecTrait
 	IteratorWithLocator_t & tIt = m_dIterators[0];
 
 	int iNumValues = dMatches.GetLength();
-	columnar::Span_T<uint32_t> dRowIDs ( m_dRowIDs.Begin(), iNumValues );
-	columnar::Span_T<int64_t> dValues ( m_dValues.Begin(), iNumValues );
+	util::Span_T<uint32_t> dRowIDs ( m_dRowIDs.Begin(), iNumValues );
+	util::Span_T<int64_t> dValues ( m_dValues.Begin(), iNumValues );
 	tIt.m_pIterator->Fetch ( dRowIDs, dValues );
 	int64_t * pValue = m_dValues.Begin();
 
@@ -670,9 +670,9 @@ void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIterator2 ( VecTrait
 	int64_t * pValues1 = m_dValues.Begin() + MATCH_BUFFER_SIZE;
 
 	int iNumValues = dMatches.GetLength();
-	columnar::Span_T<uint32_t> dRowIDs ( m_dRowIDs.Begin(), iNumValues );
-	columnar::Span_T<int64_t> dValues0 ( pValues0, iNumValues );
-	columnar::Span_T<int64_t> dValues1 ( pValues1, iNumValues );
+	util::Span_T<uint32_t> dRowIDs ( m_dRowIDs.Begin(), iNumValues );
+	util::Span_T<int64_t> dValues0 ( pValues0, iNumValues );
+	util::Span_T<int64_t> dValues1 ( pValues1, iNumValues );
 
 	tIt0.m_pIterator->Fetch ( dRowIDs, dValues0 );
 	tIt1.m_pIterator->Fetch ( dRowIDs, dValues1 );
@@ -732,11 +732,11 @@ void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIterator3 ( VecTrait
 	int64_t * pValues2 = m_dValues.Begin() + MATCH_BUFFER_SIZE*2;
 
 	int iNumValues = dMatches.GetLength();
-	columnar::Span_T<uint32_t> dRowIDs ( m_dRowIDs.Begin(), iNumValues );
+	util::Span_T<uint32_t> dRowIDs ( m_dRowIDs.Begin(), iNumValues );
 
-	columnar::Span_T<int64_t> dValues0 ( pValues0, iNumValues );
-	columnar::Span_T<int64_t> dValues1 ( pValues1, iNumValues );
-	columnar::Span_T<int64_t> dValues2 ( pValues2, iNumValues );
+	util::Span_T<int64_t> dValues0 ( pValues0, iNumValues );
+	util::Span_T<int64_t> dValues1 ( pValues1, iNumValues );
+	util::Span_T<int64_t> dValues2 ( pValues2, iNumValues );
 
 	tIt0.m_pIterator->Fetch ( dRowIDs, dValues0 );
 	tIt1.m_pIterator->Fetch ( dRowIDs, dValues1 );
@@ -803,12 +803,12 @@ void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIterator4 ( VecTrait
 	int64_t * pValues3 = m_dValues.Begin() + MATCH_BUFFER_SIZE*3;
 	
 	int iNumValues = dMatches.GetLength();
-	columnar::Span_T<uint32_t> dRowIDs ( m_dRowIDs.Begin(), iNumValues );
+	util::Span_T<uint32_t> dRowIDs ( m_dRowIDs.Begin(), iNumValues );
 
-	columnar::Span_T<int64_t> dValues0 ( pValues0, iNumValues );
-	columnar::Span_T<int64_t> dValues1 ( pValues1, iNumValues );
-	columnar::Span_T<int64_t> dValues2 ( pValues2, iNumValues );
-	columnar::Span_T<int64_t> dValues3 ( pValues3, iNumValues );
+	util::Span_T<int64_t> dValues0 ( pValues0, iNumValues );
+	util::Span_T<int64_t> dValues1 ( pValues1, iNumValues );
+	util::Span_T<int64_t> dValues2 ( pValues2, iNumValues );
+	util::Span_T<int64_t> dValues3 ( pValues3, iNumValues );
 
 	tIt0.m_pIterator->Fetch ( dRowIDs, dValues0 );
 	tIt1.m_pIterator->Fetch ( dRowIDs, dValues1 );
@@ -882,13 +882,13 @@ void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIterator5 ( VecTrait
 	int64_t * pValues4 = m_dValues.Begin() + MATCH_BUFFER_SIZE*4;
 
 	int iNumValues = dMatches.GetLength();
-	columnar::Span_T<uint32_t> dRowIDs ( m_dRowIDs.Begin(), iNumValues );
+	util::Span_T<uint32_t> dRowIDs ( m_dRowIDs.Begin(), iNumValues );
 
-	columnar::Span_T<int64_t> dValues0 ( pValues0, iNumValues );
-	columnar::Span_T<int64_t> dValues1 ( pValues1, iNumValues );
-	columnar::Span_T<int64_t> dValues2 ( pValues2, iNumValues );
-	columnar::Span_T<int64_t> dValues3 ( pValues3, iNumValues );
-	columnar::Span_T<int64_t> dValues4 ( pValues4, iNumValues );
+	util::Span_T<int64_t> dValues0 ( pValues0, iNumValues );
+	util::Span_T<int64_t> dValues1 ( pValues1, iNumValues );
+	util::Span_T<int64_t> dValues2 ( pValues2, iNumValues );
+	util::Span_T<int64_t> dValues3 ( pValues3, iNumValues );
+	util::Span_T<int64_t> dValues4 ( pValues4, iNumValues );
 
 	tIt0.m_pIterator->Fetch ( dRowIDs, dValues0 );
 	tIt1.m_pIterator->Fetch ( dRowIDs, dValues1 );
@@ -955,10 +955,10 @@ template <typename GENERIC, typename COMP, typename SINGLE>
 void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesMultiIterator ( VecTraits_T<CSphMatch> & dMatches )
 {
 	int iNumValues = dMatches.GetLength();
-	columnar::Span_T<uint32_t> dRowIDs ( m_dRowIDs.Begin(), iNumValues );
+	util::Span_T<uint32_t> dRowIDs ( m_dRowIDs.Begin(), iNumValues );
 	ARRAY_FOREACH ( i, m_dIterators )
 	{
-		columnar::Span_T<int64_t> dValues ( m_dValues.Begin() + i*MATCH_BUFFER_SIZE, iNumValues );
+		util::Span_T<int64_t> dValues ( m_dValues.Begin() + i*MATCH_BUFFER_SIZE, iNumValues );
 		m_dIterators[i].m_pIterator->Fetch ( dRowIDs, dValues );
 	}
 
@@ -1025,8 +1025,8 @@ void ColumnarProxySorter_T<GENERIC,COMP,SINGLE>::FetchValuesIteratorGeneric ( Ve
 	for ( auto & i : m_dIterators )
 	{
 		int iNumValues = dMatches.GetLength();
-		columnar::Span_T<uint32_t> dRowIDs ( m_dRowIDs.Begin(), iNumValues );
-		columnar::Span_T<int64_t> dValues ( m_dValues.Begin(), iNumValues );
+		util::Span_T<uint32_t> dRowIDs ( m_dRowIDs.Begin(), iNumValues );
+		util::Span_T<int64_t> dValues ( m_dValues.Begin(), iNumValues );
 		i.m_pIterator->Fetch ( dRowIDs, dValues );
 
 		int64_t * pValue = m_dValues.Begin();

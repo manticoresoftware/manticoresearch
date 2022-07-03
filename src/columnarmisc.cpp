@@ -24,7 +24,7 @@ CSphVector<ScopedTypedIterator_t> CreateAllColumnarIterators ( const columnar::C
 		if ( tAttr.IsColumnar() )
 		{
 			std::string sError;
-			dIterators.Add ( { CreateIterator ( pColumnar, tAttr.m_sName.cstr(), sError ), tAttr.m_eAttrType } );
+			dIterators.Add ( { CreateColumnarIterator ( pColumnar, tAttr.m_sName.cstr(), sError ), tAttr.m_eAttrType } );
 			assert ( dIterators.Last().first );
 		}
 	}

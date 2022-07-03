@@ -5635,6 +5635,9 @@ struct LocalSearchRef_t
 			tResult.m_iSuccesses += tChild.m_iSuccesses;
 			tResult.m_tIOStats.Add ( tChild.m_tIOStats );
 
+			for ( const auto & i : tChild.m_dUsedIterators )
+				tResult.m_dUsedIterators.Add(i);
+
 			// failures
 			m_dFailuresSet[i].Append ( dChild.m_dFailuresSet[i] );
 		}
@@ -9054,7 +9057,6 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 		}
 	}
 
-
 	auto dWords = tMeta.MakeSortedWordStat();
 	ARRAY_CONSTFOREACH( iWord, dWords )
 	{
@@ -9069,6 +9071,13 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 		if ( dStatus.MatchAddf ( "hits[%d]", iWord ) )
 			dStatus.Addf ( "%l", pWord->second.second );
 	}
+
+	StringBuilder_c sIterators { ", " };
+	for ( const auto & i : tMeta.m_dUsedIterators )
+		sIterators.Appendf ( "%s:%s", i.m_sAttr.cstr(), i.m_sType.cstr() );
+
+	if ( !sIterators.IsEmpty() )
+		dStatus.MatchTuplet ( "index", sIterators.cstr() );
 }
 
 

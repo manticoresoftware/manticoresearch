@@ -764,14 +764,13 @@ BlockData_t Docstore_c::UncompressSmallBlock ( const Block_t & tBlock, int64_t i
 }
 
 
-bool Docstore_c::ProcessSmallBlockDoc ( RowID_t tCurDocRowID, RowID_t tRowID, const VecTraits_T<int> * pFieldIds, const CSphFixedVector<int> & dFieldInRset, bool bPack,
-	MemoryReader2_c & tReader, CSphBitvec & tEmptyFields, DocstoreDoc_t & tResult ) const
+bool Docstore_c::ProcessSmallBlockDoc ( RowID_t tCurDocRowID, RowID_t tRowID, const VecTraits_T<int> * pFieldIds, const CSphFixedVector<int> & dFieldInRset, bool bPack, MemoryReader2_c & tReader, CSphBitvec & tEmptyFields, DocstoreDoc_t & tResult ) const
 {
 	bool bDocFound = tCurDocRowID==tRowID;
 	if ( bDocFound )
 		tResult.m_dFields.Resize ( pFieldIds ? pFieldIds->GetLength() : m_tFields.GetNumFields() );
 
-	DWORD uBitMaskSize = tEmptyFields.GetSize()*sizeof(DWORD);
+	DWORD uBitMaskSize = tEmptyFields.GetSizeBytes();
 
 	BYTE uDocFlags = tReader.GetByte();
 	if ( uDocFlags & DOC_FLAG_ALL_EMPTY )
@@ -1169,11 +1168,11 @@ void DocstoreBuilder_c::WriteSmallBlock()
 			tMemWriter.PutByte ( DOC_FLAG_ALL_EMPTY );
 		else
 		{
-			bool bNeedsBitmask = iEmptyFields && ( tEmptyFields.GetSize()*sizeof(*tEmptyFields.Begin()) < (DWORD)iEmptyFields );
+			bool bNeedsBitmask = iEmptyFields && ( tEmptyFields.GetSizeBytes() < (DWORD)iEmptyFields );
 
 			tMemWriter.PutByte ( bNeedsBitmask ? DOC_FLAG_EMPTY_BITMASK : 0 );
 			if ( bNeedsBitmask )
-				tMemWriter.PutBytes ( tEmptyFields.Begin(), tEmptyFields.GetSize()*sizeof(*tEmptyFields.Begin()) );
+				tMemWriter.PutBytes ( tEmptyFields.Begin(), tEmptyFields.GetSizeBytes() );
 
 			ARRAY_FOREACH ( iField, tDoc.m_dFields )
 				if ( !bNeedsBitmask || !tEmptyFields.BitGet(iField) )
@@ -1736,7 +1735,7 @@ void DocstoreChecker_c::CheckSmallBlockDoc ( MemoryReader2_c & tReader, CSphBitv
 	if ( uDocFlags & DOC_FLAG_ALL_EMPTY )
 		return;
 
-	DWORD uBitMaskSize = tEmptyFields.GetSize()*sizeof(DWORD);
+	DWORD uBitMaskSize = tEmptyFields.GetSizeBytes();
 
 	bool bHasBitmask = !!(uDocFlags & DOC_FLAG_EMPTY_BITMASK);
 	if ( bHasBitmask )

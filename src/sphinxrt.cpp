@@ -459,7 +459,7 @@ void RtSegment_t::BuildDocID2RowIDMap ( const CSphSchema & tSchema )
 	else
 	{
 		std::string sError;
-		auto pIt = CreateIterator ( m_pColumnar.get(), sphGetDocidName(), sError );
+		auto pIt = CreateColumnarIterator ( m_pColumnar.get(), sphGetDocidName(), sError );
 		assert ( pIt );
 		for ( RowID_t tRowID = 0; tRowID<m_uRows; tRowID++ )
 		{
@@ -2411,7 +2411,7 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 	std::unique_ptr<columnar::Iterator_i> pColumnarIdIterator;
 	if ( bColumnarId )
 	{
-		pColumnarIdIterator = CreateIterator ( pColumnar.get(), sphGetDocidName(), sError );
+		pColumnarIdIterator = CreateColumnarIterator ( pColumnar.get(), sphGetDocidName(), sError );
 		assert ( pColumnarIdIterator );
 	}
 
@@ -4060,7 +4060,7 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 		}
 
 		// read next words
-		for ( int i = 0; i < tSegsWithWord.GetBits(); ++i )
+		for ( int i = 0; i < tSegsWithWord.GetSize(); ++i )
 			if ( tSegsWithWord.BitGet(i) )
 				dWords[i] = dWordReaders[i].UnzipWord();
 	}

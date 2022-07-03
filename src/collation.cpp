@@ -14,7 +14,7 @@
 #include "attribute.h"
 #include "sphinxint.h"
 
-#include "secondary/sidx.h"
+#include "secondary/secondary.h"
 #include "secondarylib.h"
 
 static const char * EMPTY_STR = "";
@@ -265,9 +265,6 @@ void sphCollationInit()
 
 	for ( int i=0; i<0x0b; i++ )
 		g_dCollPlanes_UTF8CI [ dWeightPlane[i] ] = g_dCollWeights_UTF8CI + 0x100*i;
-
-	const std::array<SI::StrHash_fn, (size_t)SI::Collation_e::TOTAL> dCollations { HashStrLen<LibcCIHash_fn>, HashStrLen<LibcCSHash_fn>, HashStrLen<Utf8CIHash_fn>, HashStrLen<BinaryHash_fn> };
-	CollationInitSecondaryIndex ( dCollations );
 }
 
 

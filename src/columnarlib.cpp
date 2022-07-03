@@ -17,7 +17,7 @@
 #include "schema/schema.h"
 
 using CreateStorageReader_fn =	columnar::Columnar_i * (*) ( const std::string & sFilename, uint32_t uTotalDocs, std::string & sError );
-using CreateBuilder_fn =		columnar::Builder_i * (*) ( const columnar::Settings_t & tSettings, const columnar::Schema_t & tSchema, const std::string & sFile, std::string & sError );
+using CreateBuilder_fn =		columnar::Builder_i * (*) ( const columnar::Settings_t & tSettings, const common::Schema_t & tSchema, const std::string & sFile, std::string & sError );
 using CheckStorage_fn =			void (*) ( const std::string & sFilename, uint32_t uNumRows, std::function<void (const char*)> & fnError, std::function<void (const char*)> & fnProgress );
 using VersionStr_fn =			const char * (*)();
 using GetVersion_fn	=			int (*)();
@@ -31,22 +31,23 @@ static GetVersion_fn			g_fnStorageVersion  = nullptr;
 
 /////////////////////////////////////////////////////////////////////
 
-columnar::AttrType_e ToColumnarType ( ESphAttr eAttrType, int iBitCount )
+common::AttrType_e ToColumnarType ( ESphAttr eAttrType, int iBitCount )
 {
 	switch ( eAttrType )
 	{
-	case SPH_ATTR_NONE:			return columnar::AttrType_e::NONE;
-	case SPH_ATTR_INTEGER:		return iBitCount==1 ? columnar::AttrType_e::BOOLEAN : columnar::AttrType_e::UINT32;
-	case SPH_ATTR_TIMESTAMP:	return columnar::AttrType_e::TIMESTAMP;
-	case SPH_ATTR_BOOL:			return columnar::AttrType_e::BOOLEAN;
-	case SPH_ATTR_FLOAT:		return columnar::AttrType_e::FLOAT;
-	case SPH_ATTR_BIGINT:		return iBitCount==1 ? columnar::AttrType_e::BOOLEAN : columnar::AttrType_e::INT64;
-	case SPH_ATTR_STRING:		return columnar::AttrType_e::STRING;
-	case SPH_ATTR_UINT32SET:	return columnar::AttrType_e::UINT32SET;
-	case SPH_ATTR_INT64SET:		return columnar::AttrType_e::INT64SET;
+	case SPH_ATTR_NONE:			return common::AttrType_e::NONE;
+	case SPH_ATTR_TOKENCOUNT:
+	case SPH_ATTR_INTEGER:		return iBitCount==1 ? common::AttrType_e::BOOLEAN : common::AttrType_e::UINT32;
+	case SPH_ATTR_TIMESTAMP:	return common::AttrType_e::TIMESTAMP;
+	case SPH_ATTR_BOOL:			return common::AttrType_e::BOOLEAN;
+	case SPH_ATTR_FLOAT:		return common::AttrType_e::FLOAT;
+	case SPH_ATTR_BIGINT:		return iBitCount==1 ? common::AttrType_e::BOOLEAN : common::AttrType_e::INT64;
+	case SPH_ATTR_STRING:		return common::AttrType_e::STRING;
+	case SPH_ATTR_UINT32SET:	return common::AttrType_e::UINT32SET;
+	case SPH_ATTR_INT64SET:		return common::AttrType_e::INT64SET;
 	default:
 		assert ( 0 && "Unknown columnar type");
-		return columnar::AttrType_e::NONE;
+		return common::AttrType_e::NONE;
 	}
 }
 
@@ -77,7 +78,7 @@ std::unique_ptr<columnar::Builder_i> CreateColumnarBuilder ( const ISphSchema & 
 		return nullptr;
 	}
 
-	columnar::Schema_t tColumnarSchema;
+	common::Schema_t tColumnarSchema;
 	std::string sErrorSTL;
 
 	// convert our data types to columnar storage data types
@@ -87,11 +88,11 @@ std::unique_ptr<columnar::Builder_i> CreateColumnarBuilder ( const ISphSchema & 
 		if ( !tAttr.IsColumnar() )
 			continue;
 
-		columnar::StringHash_fn fnStringCalcHash = nullptr;
-		columnar::AttrType_e eAttrType = ToColumnarType ( tAttr.m_eAttrType, tAttr.m_tLocator.m_iBitCount );
+		common::StringHash_fn fnStringCalcHash = nullptr;
+		common::AttrType_e eAttrType = ToColumnarType ( tAttr.m_eAttrType, tAttr.m_tLocator.m_iBitCount );
 
 		// fixme! make default collation configurable
-		if ( eAttrType==columnar::AttrType_e::STRING && tAttr.HasStringHashes() )
+		if ( eAttrType==common::AttrType_e::STRING && tAttr.HasStringHashes() )
 			fnStringCalcHash = LibcCIHash_fn::Hash;
 
 		tColumnarSchema.push_back ( { tAttr.m_sName.cstr(), eAttrType, fnStringCalcHash } );
@@ -228,4 +229,10 @@ int GetColumnarStorageVersion()
 bool IsColumnarLibLoaded()
 {
 	return !!g_pColumnarLib;
+}
+
+
+std::unique_ptr<columnar::Iterator_i> CreateColumnarIterator ( const columnar::Columnar_i * pColumnar, const std::string&  sName, std::string & sError, const columnar::IteratorHints_t & tHints, columnar::IteratorCapabilities_t * pCapabilities )
+{
+	return std::unique_ptr<columnar::Iterator_i> { pColumnar->CreateIterator ( sName, tHints, pCapabilities, sError ) };
 }

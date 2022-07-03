@@ -429,6 +429,16 @@ void			sphSetDied();
 	#define sphQuickExit std::quick_exit
 #endif
 
+constexpr inline int sphLog2const ( uint64_t uValue )
+{
+	int iBits = 0;
+	while ( uValue )
+	{
+		uValue >>= 1;
+		iBits++;
+	}
+	return iBits;
+}
 
 /// how much bits do we need for given int
 inline int sphLog2 ( uint64_t uValue )
@@ -4592,18 +4602,9 @@ AtScopeExit_T<ACTION> AtScopeExit ( ACTION &&action )
 
 /// generic dynamic bitvector
 /// with a preallocated part for small-size cases, and a dynamic route for big-size ones
-template<int STATICBITS=128>
+template<typename T=DWORD, int STATICBITS=128>
 class BitVec_T
 {
-	static const int DWBYTES = sizeof ( DWORD );
-	static const int DWBITS = DWBYTES * 8;
-	static const int STATICDWORDS = STATICBITS / DWBITS;
-
-protected:
-	DWORD *		m_pData = nullptr;
-	DWORD		m_uStatic[STATICDWORDS] {0};
-	int			m_iElements = 0;
-
 public:
 	BitVec_T () = default;
 
@@ -4614,7 +4615,7 @@ public:
 
 	~BitVec_T ()
 	{
-		if ( m_pData!=m_uStatic )
+		if ( m_pData!=m_dStatic )
 			SafeDeleteArray ( m_pData );
 	}
 
@@ -4623,42 +4624,47 @@ public:
 	{
 		m_pData = nullptr;
 		m_iElements = rhs.m_iElements;
-		auto iDwSize = GetSize ();
-		m_pData = ( m_iElements>STATICBITS ) ? new DWORD[iDwSize] : m_uStatic;
-		memcpy ( m_pData, rhs.m_pData, DWBYTES * iDwSize );
+		auto iStorage = CalcStorage();
+		m_pData = ( m_iElements>STATICBITS ) ? new T[iStorage] : m_dStatic;
+		memcpy ( m_pData, rhs.m_pData, GetSizeBytes() );
 	}
 
 	void Swap ( BitVec_T & rhs ) noexcept
 	{
-		if ( m_pData==m_uStatic && rhs.m_pData==rhs.m_uStatic )
+		if ( m_pData==m_dStatic && rhs.m_pData==rhs.m_dStatic )
+		{
 			// both static - just exchange values
-			for ( auto i = 0; i<STATICDWORDS; ++i )
-				std::swap ( m_uStatic[i], rhs.m_uStatic[i] );
-		else if ( m_pData==m_uStatic )
+			for ( auto i = 0; i<STATICSIZE; ++i )
+				std::swap ( m_dStatic[i], rhs.m_dStatic[i] );
+		}
+		else if ( m_pData==m_dStatic )
 		{
 			// me static, rhs dynamic
-			assert ( rhs.m_pData!=rhs.m_uStatic );
-			for ( auto i = 0; i<STATICDWORDS; ++i )
-				rhs.m_uStatic[i] = m_uStatic[i];
+			assert ( rhs.m_pData!=rhs.m_dStatic );
+			for ( auto i = 0; i<STATICSIZE; ++i )
+				rhs.m_dStatic[i] = m_dStatic[i];
+
 			m_pData = rhs.m_pData;
-			rhs.m_pData = rhs.m_uStatic;
+			rhs.m_pData = rhs.m_dStatic;
 		}
-		else if ( rhs.m_pData==rhs.m_uStatic )
+		else if ( rhs.m_pData==rhs.m_dStatic )
 		{
 			// me dynamic, rhs static
-			assert ( m_pData!=m_uStatic );
-			for ( auto i = 0; i<STATICDWORDS; ++i )
-				m_uStatic[i] = rhs.m_uStatic[i];
+			assert ( m_pData!=m_dStatic );
+			for ( auto i = 0; i<STATICSIZE; ++i )
+				m_dStatic[i] = rhs.m_dStatic[i];
+
 			rhs.m_pData = m_pData;
-			m_pData = m_uStatic;
+			m_pData = m_dStatic;
 		}
 		else
 		{
 			// both dynamic. No need to copy static at all
-			assert ( rhs.m_pData!=rhs.m_uStatic );
-			assert ( m_pData!=m_uStatic );
+			assert ( rhs.m_pData!=rhs.m_dStatic );
+			assert ( m_pData!=m_dStatic );
 			std::swap ( m_pData, rhs.m_pData );
 		}
+
 		std::swap ( m_iElements, rhs.m_iElements );
 	}
 
@@ -4677,94 +4683,108 @@ public:
 	void Init ( int iElements )
 	{
 		assert ( iElements>=0 );
+
+		if ( m_pData!=m_dStatic )
+			SafeDeleteArray(m_pData);
+
 		m_iElements = iElements;
 		if ( iElements>STATICBITS )
-		{
-			int iSize = GetSize();
-			m_pData = new DWORD [ iSize ];
-		} else
-		{
-			m_pData = m_uStatic;
-		}
+			m_pData = new T [ CalcStorage() ];
+		else
+			m_pData = m_dStatic;
+
 		Clear();
 	}
 
-	void Clear ()
-	{
-		int iByteSize = GetByteSize();
-		memset ( m_pData, 0, iByteSize );
-	}
-
-	void Set ()
-	{
-		int iByteSize = GetByteSize ();
-		memset ( m_pData, 0xff, iByteSize );
-	}
-
+	void Clear()	{ memset ( m_pData, 0, GetSizeBytes() ); }
+	void Set ()		{ memset ( m_pData, 0xff, GetSizeBytes() ); }
 
 	bool BitGet ( int iIndex ) const
 	{
 		assert ( m_pData );
 		assert ( iIndex>=0 );
 		assert ( iIndex<m_iElements );
-		return ( m_pData [ iIndex>>5 ] & ( 1UL<<( iIndex&31 ) ) )!=0; // NOLINT
+		return ( m_pData [ iIndex>>SHIFT ] & ( 1ULL<<( iIndex&MASK ) ) )!=0; // NOLINT
 	}
 
 	void BitSet ( int iIndex )
 	{
 		assert ( iIndex>=0 );
 		assert ( iIndex<m_iElements );
-		m_pData [ iIndex>>5 ] |= ( 1UL<<( iIndex&31 ) ); // NOLINT
+		m_pData [ iIndex>>SHIFT ] |= ( 1ULL<<( iIndex&MASK ) ); // NOLINT
 	}
 
 	void BitClear ( int iIndex )
 	{
 		assert ( iIndex>=0 );
 		assert ( iIndex<m_iElements );
-		m_pData [ iIndex>>5 ] &= ~( 1UL<<( iIndex&31 ) ); // NOLINT
+		m_pData [ iIndex>>SHIFT ] &= ~( 1ULL<<( iIndex&MASK ) ); // NOLINT
 	}
 
-	const DWORD * Begin () const
-	{
-		return m_pData;
-	}
-
-	DWORD * Begin ()
-	{
-		return m_pData;
-	}
-
-	int GetSize() const // be aware, that is size in DWORDs!
-	{
-		return (m_iElements+31)/32;
-	}
-
-	int GetByteSize () const
-	{
-		return GetSize () * DWBYTES;
-	}
+	const T * Begin() const		{ return m_pData; }
+	T * Begin()					{ return m_pData; }
+	int GetSizeBytes () const	{ return CalcStorage()*sizeof(T); }
+	int GetSize() const			{ return m_iElements; }
 
 	bool IsEmpty() const
 	{
-		if (!m_pData)
+		if ( !m_pData )
 			return true;
 
-		return GetBits ()==0;
-	}
-
-	int GetBits() const
-	{
-		return m_iElements;
+		return GetSize()==0;
 	}
 
 	int BitCount () const
 	{
 		int iBitSet = 0;
-		for ( int i=0; i<GetSize(); ++i )
+		for ( int i=0; i<CalcStorage(); i++ )
 			iBitSet += sphBitCount ( m_pData[i] );
 
 		return iBitSet;
 	}
+
+	int Scan ( int iStart )
+	{
+		assert ( iStart<m_iElements );
+
+		int iIndex = iStart>>SHIFT;
+		T uMask = ~( ( (T)1 << ( iStart&MASK ) )-1 );
+		if ( m_pData[iIndex] & uMask )
+			return (iIndex<<SHIFT) + ScanBit ( iIndex, iStart&MASK );
+
+		int iSize = CalcStorage();
+		iIndex++;
+		while ( iIndex<iSize && !m_pData[iIndex] )
+			iIndex++;
+
+		if ( iIndex>=iSize )
+			return m_iElements;
+
+		return (iIndex<<SHIFT) + ScanBit ( iIndex, 0 );
+	}
+
+protected:
+	static const int	SIZEBITS = sizeof(T)*8;
+	static const int	STATICSIZE = STATICBITS / SIZEBITS;
+	static const T		MASK = T(sizeof(T)*8 - 1);
+	static constexpr T	SHIFT = sphLog2const(SIZEBITS)-1;
+
+	T *		m_pData = nullptr;
+	T		m_dStatic[STATICSIZE] {0};
+	int		m_iElements = 0;
+
+private:
+	inline int ScanBit ( int iIndex, int iStart )
+	{
+		T uData = m_pData[iIndex];
+		for ( int i = iStart; i < SIZEBITS; i++ )
+			if ( uData & ( (T)1<<i ) )
+				return i;
+
+		return m_iElements;
+	}
+
+	int CalcStorage() const	{ return (m_iElements + SIZEBITS - 1)/SIZEBITS; }
 };
 
 using CSphBitvec = BitVec_T<>;
@@ -5014,24 +5034,9 @@ inline int sphRoundUp ( int iValue, int iLimit )
 template < typename T, typename COMP >
 class CSphQueue
 {
-protected:
-	T * m_pData = nullptr;
-	int m_iUsed = 0;
-	int m_iSize;
-
 public:
-	/// ctor
-	explicit CSphQueue ( int iSize )
-		: m_iSize ( iSize )
-	{
-		Reset ( iSize );
-	}
-
-	/// dtor
-	~CSphQueue ()
-	{
-		SafeDeleteArray ( m_pData );
-	}
+	explicit CSphQueue ( int iSize )	{ Reset(iSize); }
+			~CSphQueue()				{ SafeDeleteArray ( m_pData ); }
 
 	void Reset ( int iSize )
 	{
@@ -5042,6 +5047,8 @@ public:
 			m_pData = new T[iSize];
 		assert ( !iSize || m_pData );
 	}
+
+	void Clear() { m_iUsed = 0;	}
 
 	/// add entry to the queue
 	bool Push ( const T &tEntry )
@@ -5112,10 +5119,7 @@ public:
 	}
 
 	/// get entries count
-	inline int GetLength () const
-	{
-		return m_iUsed;
-	}
+	inline int GetLength () const { return m_iUsed; }
 
 	/// get current root
 	inline const T &Root () const
@@ -5123,6 +5127,11 @@ public:
 		assert ( m_iUsed && m_pData );
 		return m_pData[0];
 	}
+
+protected:
+	T *	m_pData = nullptr;
+	int	m_iUsed = 0;
+	int	m_iSize = 0;
 };
 
 

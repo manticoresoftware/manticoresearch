@@ -71,6 +71,33 @@ index test2
 	rt_attr_uint = gr2
 }
 
+source src
+{ 
+    type = mysql 
+	<sql_settings/>
+    sql_query = select 1, 'abc' f, 1 a 
+    sql_attr_uint = a 
+} 
+
+index idx
+{ 
+    type = plain 
+    source = src 
+    path = <data_path/>/idx 
+}
+ 
+source src2:src
+{ 
+    sql_query_pre = drop table if exists tmp20220613 
+    sql_query_pre = create table if not exists tmp20220613(id int, f char(20), a int) 
+    sql_query = select * from tmp20220613 
+} 
+ 
+index idx2:idx
+{ 
+    source = src2 
+    path = <data_path/>/idx2 
+} 
 </config>
 
 <queries>
@@ -105,6 +132,9 @@ select count (DISTINCT tag) a from main,delta group by gr;
 select * from main,delta facet gr;;
 select * from main,delta facet gr distinct;;
 select * from main,delta facet gr distinct tag;;
+
+<!-- crash on count distinct  -->
+select a, count(distinct id) from idx, idx2 group by a;
 
 </sphinxql>
 </queries>

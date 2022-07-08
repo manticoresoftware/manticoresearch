@@ -105,11 +105,33 @@ index dist_gr2
   local	= test_gr2
 }
 
+source src_exc
+{
+  type      = mysql
+  <sql_settings/>
+  sql_query     = SELECT id, gid, title FROM test_exc
+  sql_attr_uint   = gid
+}
+
+index test_exc0
+{
+  source    = src_exc
+  path      = <data_path/>/test_exc0
+}
+
+index test_exc1
+{
+  source    = src_exc
+  path      = <data_path/>/test_exc1
+  exceptions = <this_test/>/exc.txt
+}
+
 </config>
 
 <db_drop>drop table if exists test_table</db_drop>
 <db_drop>drop table if exists test_group1</db_drop>
 <db_drop>drop table if exists test_group2</db_drop>
+<db_drop>drop table if exists test_exc</db_drop>
 
 <db_create>
 create table test_table
@@ -137,6 +159,15 @@ CREATE TABLE `test_group2` (
   `gid` int(11),
   `text` varchar(255) NOT NULL
 )
+</db_create>
+
+<db_create>
+create table test_exc
+(
+	id int not null,
+	title varchar(255) not null,
+	gid int
+);
 </db_create>
 
 <db_insert>
@@ -180,6 +211,12 @@ INSERT INTO `test_group2` VALUES
 ( 28, 3, 6, 'test'),
 ( 29, 3, 5, 'test'),
 ( 30, 3, 4, 'test')
+</db_insert>
+
+<db_insert>
+insert into test_exc values
+( 1, 'IT Tech', 1 ),
+( 2, 'AT Tech', 2 )
 </db_insert>
 
 <queries>
@@ -385,6 +422,24 @@ select * from dist_gr2 facet gid facet tag;;
 <query endpoint="sql" method="get">query=select%20%2A%20from%20test_gr1%20limit%201%20facet%20gid%20limit%202%20facet%20tag</query>
 <sphinxql>select id from test_gr1 limit 1 facet gid by tag;</sphinxql>
 <query endpoint="sql" method="get">query=select%20id%20from%20test_gr1%20limit%201%20facet%20gid%20by%20tag</query>
+
+<!-- regression exception consumes escape char that breaks query parsing-->
+<query endpoint="json/search"> { "index": "test_exc1", "query": { "query_string": "IT\\/Tech" } } </query>
+<query endpoint="json/search"> { "index": "test_exc1", "query": { "query_string": "IT\/Tech" } } </query>
+<query endpoint="json/search"> { "index": "test_exc1", "query": { "query_string": "AT\\/Tech" } } </query>
+<query endpoint="json/search"> { "index": "test_exc1", "query": { "query_string": "AT\/Tech" } } </query>
+<query endpoint="json/search"> { "index": "test_exc0", "query": { "query_string": "IT\\/Tech" } } </query>
+<query endpoint="json/search"> { "index": "test_exc0", "query": { "query_string": "IT\/Tech" } } </query>
+<query endpoint="json/search"> { "index": "test_exc0", "query": { "query_string": "AT\\/Tech" } } </query>
+<query endpoint="json/search"> { "index": "test_exc0", "query": { "query_string": "AT\/Tech" } } </query>
+<sphinxql>select * from test_exc1 WHERE MATCH ( 'IT\\/Tech' ) order by id asc</sphinxql>
+<sphinxql>select * from test_exc1 WHERE MATCH ( 'IT\/Tech' ) order by id asc</sphinxql>
+<sphinxql>select * from test_exc1 WHERE MATCH ( 'AT\\/Tech' ) order by id asc</sphinxql>
+<sphinxql>select * from test_exc1 WHERE MATCH ( 'AT\/Tech' ) order by id asc</sphinxql>
+<sphinxql>select * from test_exc0 WHERE MATCH ( 'IT\\/Tech' ) order by id asc</sphinxql>
+<sphinxql>select * from test_exc0 WHERE MATCH ( 'IT\/Tech' ) order by id asc</sphinxql>
+<sphinxql>select * from test_exc0 WHERE MATCH ( 'AT\\/Tech' ) order by id asc</sphinxql>
+<sphinxql>select * from test_exc0 WHERE MATCH ( 'AT\/Tech' ) order by id asc</sphinxql>
 
 </queries>
 </test>

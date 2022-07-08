@@ -265,7 +265,6 @@ bool CSphTokenizerBase2::CheckException ( const BYTE* pStart, const BYTE* pCur, 
 		{
 			p++;
 			continue;
-			;
 		}
 		iNode = m_pExc->GetNext ( iNode, *p++ );
 		if ( iNode < 0 )
@@ -274,6 +273,7 @@ bool CSphTokenizerBase2::CheckException ( const BYTE* pStart, const BYTE* pCur, 
 
 	const BYTE* pMapEnd = nullptr; // the longest exception found so far is [pStart,pMapEnd)
 	const BYTE* pMapTo = nullptr;  // the destination mapping
+	bool bHasQueryQuote = false;
 
 	// now, we got ourselves a valid exception prefix, so lets keep consuming more bytes,
 	// ie. until further separators, and keep looking for a full exception match
@@ -283,6 +283,7 @@ bool CSphTokenizerBase2::CheckException ( const BYTE* pStart, const BYTE* pCur, 
 		if ( bQueryMode && *p == '\\' )
 		{
 			p++;
+			bHasQueryQuote = true;
 			continue;
 		}
 
@@ -332,10 +333,16 @@ bool CSphTokenizerBase2::CheckException ( const BYTE* pStart, const BYTE* pCur, 
 		return false;
 
 	strncpy ( (char*)m_sAccum, (char*)const_cast<BYTE*> ( pMapTo ), sizeof ( m_sAccum ) - 1 );
-	m_pCur = pMapEnd;
 	m_pTokenStart = pStart;
-	m_pTokenEnd = pMapEnd;
 	m_iLastTokenLen = (int)strlen ( (char*)m_sAccum );
+	if ( bHasQueryQuote )
+	{
+		// move backpointer to the head of the quoting sequence
+		while ( pMapEnd-1>=pStart && *(pMapEnd-1)=='\\' )
+			pMapEnd--;
+	}
+	m_pCur = pMapEnd;
+	m_pTokenEnd = pMapEnd;
 
 	m_bWasSynonym = true;
 	return true;

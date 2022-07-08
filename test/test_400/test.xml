@@ -143,6 +143,10 @@ searchd
 	insert into test (f1) values ('test'), ('test');
 	select f1, weight() as w from test;
 	drop table test;
+	
+	<!-- regression crash on create table with empty exceptions -->
+	create table test ( f1 text ) exceptions='';
+	drop table test;
 </sphinxql>
 </queries>
 

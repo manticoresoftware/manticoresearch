@@ -1,4 +1,4 @@
-# Indexing fetched data 
+# Indexing fetched data
 
 By default the first column from the result set of `sql_query` is indexed as the document id.
 
@@ -56,7 +56,7 @@ where
 * SOURCE-TYPE is `field`, `query`, `ranged-query`, or `ranged-main-query`
 * QUERY is SQL query used to fetch all ( docid, attrvalue ) pairs
 * RANGED-QUERY is SQL query used to fetch min and max ID values, similar to `sql_query_range` (used with `ranged-query` SOURCE-TYPE) If using `ranged-main-query` SOURCE-TYPE then omit the RANGED-QUERY and it will automatically use the same query from `sql_query_range` (useful option in complex inheritance setups to save having to manually duplicate the same query many times)
- 
+
 ```ini
 sql_attr_multi = uint tag from field
 sql_attr_multi = uint tag from query; SELECT id, tag FROM tags
@@ -93,7 +93,7 @@ sql_attr_uint = forum_id:9 # 9 bits for forum_id
 
 ### sql_field_string
 
-Declares a combo string attribute/text field. The values will be indexed in a full-text field, but also stored in a string attribute with same name. 
+Declares a combo string attribute/text field. The values will be indexed as a full-text field, but also stored in a string attribute with the same name. Note, it should be only used when you are sure you want the field to be searchable both in a full-text manner and as an attribute (with the ability to sort and group by it). If you just want to be able to fetch the original value of the field you don't need to do anything for it unless you implicitly removed the field from the stored fields list via [stored_fields](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#stored_fields).
 
 ### sql_file_field
 
@@ -107,7 +107,7 @@ sql_field_field = /var/data/myfile.txt
 
 ### sql_joined_field
 
-Joined/payload field fetch query. Multi-value, optional, default is empty list of queries. 
+Joined/payload field fetch query. Multi-value, optional, default is empty list of queries.
 
 `sql_joined_field` lets you use two different features: joined fields, and payloads (payload fields). It's syntax is as follows:
 
@@ -137,7 +137,7 @@ then the indexing results would be equivalent to that of adding a new text field
 
 Joined fields are only indexed differently. There are no other differences between joined fields and regular text fields.
 
-When a single query is not efficient enough or does not work because of the database driver limitations, *ranged queries* can be used. It works similar to the ranged queries in the main indexing loop. The range will be queried for and fetched upfront once, then multiple queries with different ``$start`` and ``$end`` substitutions will be run to fetch the actual data. 
+When a single query is not efficient enough or does not work because of the database driver limitations, *ranged queries* can be used. It works similar to the ranged queries in the main indexing loop. The range will be queried for and fetched upfront once, then multiple queries with different ``$start`` and ``$end`` substitutions will be run to fetch the actual data.
 
 When using ``ranged-main-query`` query then omit the ``ranged-query`` and it will automatically use the same query from :ref:``sql_query_range`` (useful option in complex inheritance setups to save having to manually duplicate the same query many times).
 

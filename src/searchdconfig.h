@@ -38,8 +38,11 @@ struct ClusterOptions_t
 class JsonObj_c;
 
 // cluster data that gets stored and loaded
-struct ClusterDesc_t
+class ClusterDesc_t
 {
+public:
+	ClusterDesc_t() = default;
+	virtual ~ClusterDesc_t() {}
 	CSphString				m_sName;			// cluster name
 	CSphString				m_sPath;			// path relative to data_dir
 	CSphVector<CSphString>	m_dIndexes;			// list of index name in cluster

@@ -77,8 +77,12 @@ public:
 
 
 // cluster related data
-struct ReplicationCluster_t : public ClusterDesc_t
+class ReplicationCluster_t : public ClusterDesc_t
 {
+public:
+	ReplicationCluster_t() = default;
+	virtual ~ReplicationCluster_t();
+
 	// replicator
 	wsrep_t *	m_pProvider = nullptr;
 
@@ -1161,17 +1165,20 @@ static void ReplicateClusterDone ( ReplicationClusterPtr_t & pCluster )
 		pProvider->disconnect ( pProvider );
 	}
 
-	sphLogDebug ( "disconnect from cluster invoked" );
+	sphLogDebug ( "disconnect from cluster %s invoked", pCluster->m_sName.cstr() );
+}
+
+ReplicationCluster_t::~ReplicationCluster_t()
+{
+	sphLogDebug ( "cluster %s wait to finish", m_sName.cstr() );
 	// Listening thread are now running and receiving writesets. Wait for them
 	// to join. Thread will join after signal handler closes wsrep connection
-	pCluster->m_bWorkerActive.Wait ( [] ( bool bWorking ) { return !bWorking; } );
+	m_bWorkerActive.Wait ( [] ( bool bWorking ) { return !bWorking; } );
 
-	pCluster->m_pProvider = nullptr;
-	pCluster->HeartBeat();
-	pCluster = ReplicationClusterPtr_t();
+	HeartBeat();
 
-	wsrep_unload ( pProvider );
-	sphLogDebug ( "ReplicateClusterDone finished, cluster deleted lib %p unloaded", pProvider );
+	wsrep_unload ( m_pProvider );
+	sphLogDebug ( "cluster %s finished, cluster deleted lib %p unloaded", m_sName.cstr(), m_pProvider );
 }
 
 // check return code from Galera calls
@@ -1445,7 +1452,7 @@ void ReplicateClustersDelete() EXCLUDES ( g_tClustersLock )
 		if ( !g_hClusters.GetLength() )
 			return;
 
-		for ( auto& tCluster : g_hClusters )
+		for ( auto & tCluster : g_hClusters )
 		{
 			sphLogDebug ( "ReplicateClustersDelete for %s", tCluster.first.cstr() );
 			ReplicateClusterDone ( tCluster.second );

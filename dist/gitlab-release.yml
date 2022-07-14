@@ -320,7 +320,7 @@ collect_jammy:
 build_docker:
   stage: deploy
   needs:
-    - job: collect_bionic
+    - job: collect_focal
       optional: true
   interruptible: true
   variables:
@@ -333,4 +333,4 @@ build_docker:
     - dev-host
   script:
     - echo "Build docker image"
-    - ~/build.sh
+    - /bin/bash dist/dockerhub_deploy.sh

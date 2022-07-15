@@ -649,9 +649,7 @@ bool CallCoroutineRes ( Predicate fnHandler )
 // start secondary subtasks (parallel search, pq processing, etc)
 void StartJob ( Handler fnHandler )
 {
-	auto pScheduler = Coro::CurrentScheduler();
-	if ( !pScheduler )
-		pScheduler = GlobalWorkPool();
+	auto pScheduler = GlobalWorkPool();
 
 	assert ( pScheduler );
 	Coro::Worker_c::StartPrimary ( std::move ( fnHandler ), pScheduler, false );

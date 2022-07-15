@@ -1295,6 +1295,8 @@ private:
 	Coro::Waitable_T<MergeSeg_e> m_eSegMergeQueued { MergeSeg_e::NEWSEG };
 	Coro::Waitable_T<bool>		m_bSegMergeWorking { false };
 	Coro::Waitable_T<CSphVector<int64_t>> m_tSaveTIDS { 0 }; // save operations performing now, and their TIDs
+	int							m_iSaveGeneration = 0;		// SaveDiskChunk() increases generation on finish
+	Coro::Waitable_T<int>		m_tNSavesNow { 0 };			// N of merge segment routines running right now
 
 	bool						m_bIndexDeleted = false;
 
@@ -1377,7 +1379,7 @@ private:
 
 	CSphString					MakeChunkName(int iChunkID);
 	void						UnlinkRAMChunk ( const char * szInfo=nullptr );
-	void 						WaitRAMSegmentsUnlocked () const REQUIRES ( m_tWorkers.SerialChunkAccess() );
+	void						WaitRAMSegmentsUnlocked ( bool bAllowOne = false ) const REQUIRES ( m_tWorkers.SerialChunkAccess() );
 	bool						MergeSegmentsStep( MergeSeg_e eVal ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
 	void						RunMergeSegmentsWorker();
 	void						StartMergeSegments ( MergeSeg_e eMergeWhat, bool bNotify=true ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
@@ -1453,7 +1455,7 @@ RtIndex_c::~RtIndex_c ()
 		// From serial worker resuming on Wait() will happen after whole merger coroutine finished.
 		ScopedScheduler_c tSerialFiber { m_tWorkers.SerialChunkAccess() };
 		StopMergeSegmentsWorker();
-		m_tSaveTIDS.WaitVoid ( [this] { return m_tSaveTIDS.GetValueRef().IsEmpty(); } );
+		m_tNSavesNow.Wait ( [] ( int iVal ) { return iVal==0; } );
 	}
 
 	int64_t tmSave = sphMicroTimer();
@@ -3455,7 +3457,19 @@ bool RtIndex_c::MergeSegmentsStep ( MergeSeg_e eVal ) REQUIRES ( m_tWorkers.Seri
 	if ( eMergeAction == CheckMerge_e::FLUSH || eMergeAction == CheckMerge_e::FLUSH_EM )
 	{
 		// here it might be no race, as we're in serial worker.
-		SaveDiskChunk ( false, eMergeAction == CheckMerge_e::FLUSH_EM );
+		auto iOldGen = m_iSaveGeneration;
+		m_tNSavesNow.Wait ( [] ( int iVal ) { return iVal < SIMULTANEOUS_SAVE_LIMIT; } );
+
+		// if a save finished during wait - limits and conditions may be changed, will restart to check whether save is still necessary
+		if ( m_iSaveGeneration != iOldGen )
+		{
+			RTLOGV << "Recheck due to just finished SaveDiskChunk";
+			return true;
+		}
+
+		Coro::Go ( [this, eMergeAction]() REQUIRES ( m_tWorkers.SerialChunkAccess() ) {
+			SaveDiskChunk ( false, eMergeAction == CheckMerge_e::FLUSH_EM );
+		}, m_tWorkers.SerialChunkAccess() );
 		return false; // exit into idle
 	}
 
@@ -4352,9 +4366,9 @@ void RtIndex_c::SaveMeta()
 }
 
 // looks like spinlock, but actually we switch to parallel strand and back on every tick, so it should not burn CPU
-void RtIndex_c::WaitRAMSegmentsUnlocked () const
+void RtIndex_c::WaitRAMSegmentsUnlocked ( bool bAllowOne ) const
 {
-	m_tSaveTIDS.WaitVoid ( [this] { return m_tSaveTIDS.GetValueRef().IsEmpty(); } );
+	m_tNSavesNow.Wait ( [bAllowOne] ( int iVal ) { return iVal == ( bAllowOne ? 1 : 0 ); } );
 	m_tUnLockedSegments.WaitVoid ( [this] { return m_tRtChunks.RamSegs()->none_of ( [] ( const ConstRtSegmentRefPtf_t& a ) { return a->m_iLocked; } ); });
 }
 
@@ -4379,15 +4393,22 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 
 	RTSAVELOG << "SaveDiskChunk (" << ( bForced ? "forced, " : "not forced, " ) << ( bEmergent ? "emergent, " : "not emergent, " ) << ( bBootstrap ? "bootstrap" : "usual" ) << ")";
 
+	m_tNSavesNow.Wait ( [] ( int iVal ) { return iVal < SIMULTANEOUS_SAVE_LIMIT; } );
+
+	// we're in serial worker - no concurrency, no race between wait() and modify()
+	m_tNSavesNow.ModifyValue ( [] ( int& iVal ) { ++iVal; } );
+	auto tFinallySetSaveUnactive = AtScopeExit ( [this] {
+		++m_iSaveGeneration;
+		m_tNSavesNow.ModifyValueAndNotifyAll ( [] ( int& iVal ) { --iVal; } );
+	} );
+
 	int iSaveOp = m_tWorkers.GetNextOpTicket();
 
 	// if forced - wait all segments. Otherwise, can continue with subset of currently available segments
 	// note that segments may be locked by currently executing MergeSegments or SaveDiskChunk. If so, we wait them finished and continue.
 	// that will cause another disk chunk written right after just finished, since op is forced it is ok.
 	if ( bForced )
-		WaitRAMSegmentsUnlocked ();
-
-	m_tSaveTIDS.WaitVoid ( [this] { return m_tSaveTIDS.GetValueRef().GetLength() < SIMULTANEOUS_SAVE_LIMIT; } );
+		WaitRAMSegmentsUnlocked ( true ); // true means to wait 1, not 0 active saves (as we already increased the counter)
 
 	// collect all non-occupied non-empty segments and lock them
 	int64_t iNotMyOpRAM {0};
@@ -4411,14 +4432,14 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 
 	UpdateUnlockedCount();
 
-	RTSAVELOG << "SaveDiskChunk process " << dSegments.GetLength() << " segments. Active jobs " << m_tSaveTIDS.GetValueRef().GetLength() << ", op " << iSaveOp
+	RTSAVELOG << "SaveDiskChunk process " << dSegments.GetLength() << " segments. Active jobs " << m_tNSavesNow.GetValue() << ", op " << iSaveOp
 		<< " RAM visible+retired/locked/acquired " << iNotMyOpRAM + iMyOpRAM << "+" << m_iRamChunksAllocatedRAM.load ( std::memory_order_relaxed )- iNotMyOpRAM - iMyOpRAM << "/" << iNotMyOpRAM << "/" << iMyOpRAM;
 	if ( dSegments.IsEmpty() )
 		return !bBootstrap;
 
 	auto iTID = m_iTID;
 	m_tSaveTIDS.ModifyValue ( [iTID] ( CSphVector<int64_t>& dSaves ) { dSaves.Add ( iTID ); } );
-	auto tFinallySetSaveUnactive = AtScopeExit ( [this, iTID] { m_tSaveTIDS.ModifyValueAndNotifyAll ( [iTID] ( CSphVector<int64_t>& dSaves ) { dSaves.RemoveValueFromSorted ( iTID ); } ); } );
+	auto tFinallyRemoveTID = AtScopeExit ( [this, iTID] { m_tSaveTIDS.ModifyValueAndNotifyAll ( [iTID] ( CSphVector<int64_t>& dSaves ) { dSaves.RemoveValue ( iTID ); } ); } );
 
 	int64_t tmSaveWall = -sphMicroTimer(); // all time including waiting
 	int64_t tmSave; // only active time
@@ -8557,7 +8578,7 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx,
 		return false;
 	}
 
-	// here must be exclusively LOCKED access, we don't rely from the topmost lock and go isolated ourselves
+	// here must be exclusively LOCKED access, we don't rely upon the topmost lock and go isolated ourselves
 
 	// stop all optimize tasks
 	OptimizeGuard_c tStopOptimize ( *this );

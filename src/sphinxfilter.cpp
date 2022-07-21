@@ -272,24 +272,6 @@ struct Filter_WeightRange: public IFilter_Range
 };
 
 
-class Filter_RowIdRange_c : public ISphFilter
-{
-public:
-	Filter_RowIdRange_c ( int64_t iTotalDocs, const CSphFilterSettings & tSettings )
-	{
-		m_tBoundaries = GetFilterRowIdBoundaries ( tSettings, iTotalDocs );
-	}
-
-	bool Eval ( const CSphMatch & tMatch ) const final
-	{
-		return tMatch.m_tRowID >= m_tBoundaries.m_tMinRowID && tMatch.m_tRowID <= m_tBoundaries.m_tMaxRowID;
-	}
-
-private:
-	RowIdBoundaries_t m_tBoundaries;
-};
-
-
 RowIdBoundaries_t GetFilterRowIdBoundaries ( const CSphFilterSettings & tFilter, RowID_t tTotalDocs )
 {
 	assert ( tFilter.m_eType==SPH_FILTER_RANGE );
@@ -921,9 +903,6 @@ static std::unique_ptr<ISphFilter> CreateSpecialFilter ( const CSphString & sNam
 			return ReportError ( sError, "unsupported filter type '%s' on @weight", tSettings.m_eType );
 		}
 	}
-
-	if ( sName=="@rowid" && tSettings.m_eType==SPH_FILTER_RANGE )
-		return std::make_unique<Filter_RowIdRange_c> ( tCtx.m_iTotalDocs, tSettings );
 
 	return nullptr;
 }
@@ -2033,6 +2012,9 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 	{
 		const CSphFilterSettings * pFilterSettings = tCtx.m_pFilters->Begin() + i;
 		if ( pFilterSettings->m_sAttrName.IsEmpty() )
+			continue;
+
+		if ( pFilterSettings->m_sAttrName=="@rowid" && pFilterSettings->m_eType==SPH_FILTER_RANGE )
 			continue;
 
 		bool bWeight = IsWeightColumn ( pFilterSettings->m_sAttrName, *tCtx.m_pSchema );

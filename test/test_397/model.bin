@@ -4,11 +4,11 @@ a:1:{i:0;a:32:{i:0;a:2:{s:8:"sphinxql";s:358:"INSERT INTO rt1 (id, idd, content,
 ( 102, 12, 'the box and a toy', 'online color bubles' ),
 ( 103, 12, 'a black dog is very popular', 'not this time' ),
 ( 104, 12, 'blue socks and red shoes', 'run in the woods' ),
-( 105, 12, 'he told me this', 'like running' )";s:14:"total_affected";i:6;}i:1;a:2:{s:8:"sphinxql";s:15:"set profiling=1";s:14:"total_affected";i:0;}i:2;a:3:{s:8:"sphinxql";s:54:"SELECT id FROM plain1 WHERE MATCH('red | sky') limit 1";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:1:{s:2:"id";s:3:"101";}}}i:3;a:3:{s:8:"sphinxql";s:9:"show plan";s:10:"total_rows";i:2;s:4:"rows";a:2:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:90:"OR(
+( 105, 12, 'he told me this', 'like running' )";s:14:"total_affected";i:6;}i:1;a:2:{s:8:"sphinxql";s:15:"set profiling=1";s:14:"total_affected";i:0;}i:2;a:3:{s:8:"sphinxql";s:54:"SELECT id FROM plain1 WHERE MATCH('red | sky') limit 1";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:1:{s:2:"id";s:3:"101";}}}i:3;a:3:{s:8:"sphinxql";s:9:"show plan";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:90:"OR(
   AND(KEYWORD(color, querypos=1, morphed)), 
-  AND(KEYWORD(sky, querypos=2, morphed)))";}i:1;a:2:{s:8:"Variable";s:15:"enabled_indexes";s:5:"Value";s:0:"";}}}i:4;a:3:{s:8:"sphinxql";s:51:"SELECT id FROM rt1 WHERE MATCH('red | sky') limit 1";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:1:{s:2:"id";s:3:"101";}}}i:5;a:3:{s:8:"sphinxql";s:9:"show plan";s:10:"total_rows";i:2;s:4:"rows";a:2:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:90:"OR(
+  AND(KEYWORD(sky, querypos=2, morphed)))";}}}i:4;a:3:{s:8:"sphinxql";s:51:"SELECT id FROM rt1 WHERE MATCH('red | sky') limit 1";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:1:{s:2:"id";s:3:"101";}}}i:5;a:3:{s:8:"sphinxql";s:9:"show plan";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:90:"OR(
   AND(KEYWORD(color, querypos=1, morphed)), 
-  AND(KEYWORD(sky, querypos=2, morphed)))";}i:1;a:2:{s:8:"Variable";s:15:"enabled_indexes";s:5:"Value";s:0:"";}}}i:6;a:3:{s:8:"sphinxql";s:32:"EXPLAIN QUERY plain1 'red | sky'";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:90:"OR(
+  AND(KEYWORD(sky, querypos=2, morphed)))";}}}i:6;a:3:{s:8:"sphinxql";s:32:"EXPLAIN QUERY plain1 'red | sky'";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:90:"OR(
   AND(KEYWORD(color, querypos=1, morphed)), 
   AND(KEYWORD(sky, querypos=2, morphed)))";}}}i:7;a:3:{s:8:"sphinxql";s:29:"EXPLAIN QUERY rt1 'red | sky'";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:90:"OR(
   AND(KEYWORD(color, querypos=1, morphed)), 
@@ -16,7 +16,7 @@ a:1:{i:0;a:32:{i:0;a:2:{s:8:"sphinxql";s:358:"INSERT INTO rt1 (id, idd, content,
   AND(KEYWORD(color, querypos=1, morphed)), 
   AND(KEYWORD(sky, querypos=2, morphed)))";}}}i:9;a:3:{s:8:"sphinxql";s:31:"EXPLAIN QUERY tmpl1 'red | sky'";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:90:"OR(
   AND(KEYWORD(color, querypos=1, morphed)), 
-  AND(KEYWORD(sky, querypos=2, morphed)))";}}}i:10;a:3:{s:8:"sphinxql";s:65:"SELECT id FROM plain1 WHERE MATCH('(running | he ) !dog') limit 1";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:1:{s:2:"id";s:3:"105";}}}i:11;a:3:{s:8:"sphinxql";s:9:"show plan";s:10:"total_rows";i:2;s:4:"rows";a:2:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:245:"ANDNOT(
+  AND(KEYWORD(sky, querypos=2, morphed)))";}}}i:10;a:3:{s:8:"sphinxql";s:65:"SELECT id FROM plain1 WHERE MATCH('(running | he ) !dog') limit 1";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:1:{s:2:"id";s:3:"105";}}}i:11;a:3:{s:8:"sphinxql";s:9:"show plan";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:245:"ANDNOT(
   AND(
     OR(
       OR(
@@ -24,7 +24,7 @@ a:1:{i:0;a:32:{i:0;a:2:{s:8:"sphinxql";s:358:"INSERT INTO rt1 (id, idd, content,
         AND(KEYWORD(running, querypos=1, morphed))), 
       AND(KEYWORD(he, querypos=2, morphed)))), 
   NOT(
-    AND(KEYWORD(dog, querypos=3, excluded, morphed))))";}i:1;a:2:{s:8:"Variable";s:15:"enabled_indexes";s:5:"Value";s:0:"";}}}i:12;a:3:{s:8:"sphinxql";s:62:"SELECT id FROM rt1 WHERE MATCH('(running | he ) !dog') limit 1";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:1:{s:2:"id";s:3:"105";}}}i:13;a:3:{s:8:"sphinxql";s:9:"show plan";s:10:"total_rows";i:2;s:4:"rows";a:2:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:245:"ANDNOT(
+    AND(KEYWORD(dog, querypos=3, excluded, morphed))))";}}}i:12;a:3:{s:8:"sphinxql";s:62:"SELECT id FROM rt1 WHERE MATCH('(running | he ) !dog') limit 1";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:1:{s:2:"id";s:3:"105";}}}i:13;a:3:{s:8:"sphinxql";s:9:"show plan";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:245:"ANDNOT(
   AND(
     OR(
       OR(
@@ -32,7 +32,7 @@ a:1:{i:0;a:32:{i:0;a:2:{s:8:"sphinxql";s:358:"INSERT INTO rt1 (id, idd, content,
         AND(KEYWORD(running, querypos=1, morphed))), 
       AND(KEYWORD(he, querypos=2, morphed)))), 
   NOT(
-    AND(KEYWORD(dog, querypos=3, excluded, morphed))))";}i:1;a:2:{s:8:"Variable";s:15:"enabled_indexes";s:5:"Value";s:0:"";}}}i:14;a:3:{s:8:"sphinxql";s:43:"EXPLAIN QUERY plain1 '(running | he ) !dog'";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:245:"ANDNOT(
+    AND(KEYWORD(dog, querypos=3, excluded, morphed))))";}}}i:14;a:3:{s:8:"sphinxql";s:43:"EXPLAIN QUERY plain1 '(running | he ) !dog'";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:245:"ANDNOT(
   AND(
     OR(
       OR(
@@ -64,7 +64,7 @@ a:1:{i:0;a:32:{i:0;a:2:{s:8:"sphinxql";s:358:"INSERT INTO rt1 (id, idd, content,
         AND(KEYWORD(running, querypos=1, morphed))), 
       AND(KEYWORD(he, querypos=2, morphed)))), 
   NOT(
-    AND(KEYWORD(dog, querypos=3, excluded, morphed))))";}}}i:18;a:2:{s:8:"sphinxql";s:73:"SELECT id FROM plain1 WHERE MATCH('me story telling @title runs') limit 1";s:10:"total_rows";i:0;}i:19;a:3:{s:8:"sphinxql";s:9:"show plan";s:10:"total_rows";i:2;s:4:"rows";a:2:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:321:"AND(
+    AND(KEYWORD(dog, querypos=3, excluded, morphed))))";}}}i:18;a:2:{s:8:"sphinxql";s:73:"SELECT id FROM plain1 WHERE MATCH('me story telling @title runs') limit 1";s:10:"total_rows";i:0;}i:19;a:3:{s:8:"sphinxql";s:9:"show plan";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:321:"AND(
   AND(KEYWORD(i, querypos=1, morphed)), 
   AND(KEYWORD(story, querypos=2, morphed)), 
   OR(
@@ -72,7 +72,7 @@ a:1:{i:0;a:32:{i:0;a:2:{s:8:"sphinxql";s:358:"INSERT INTO rt1 (id, idd, content,
     AND(KEYWORD(telling, querypos=3, morphed))), 
   OR(
     AND(fields=(title), KEYWORD(run, querypos=4, morphed)), 
-    AND(fields=(title), KEYWORD(runs, querypos=4, morphed))))";}i:1;a:2:{s:8:"Variable";s:15:"enabled_indexes";s:5:"Value";s:0:"";}}}i:20;a:3:{s:8:"sphinxql";s:51:"EXPLAIN QUERY plain1 'me story telling @title runs'";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:321:"AND(
+    AND(fields=(title), KEYWORD(runs, querypos=4, morphed))))";}}}i:20;a:3:{s:8:"sphinxql";s:51:"EXPLAIN QUERY plain1 'me story telling @title runs'";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:321:"AND(
   AND(KEYWORD(i, querypos=1, morphed)), 
   AND(KEYWORD(story, querypos=2, morphed)), 
   OR(

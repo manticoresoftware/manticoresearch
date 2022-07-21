@@ -448,10 +448,22 @@ public:
 
 class QueryParser_i;
 
+enum class SecondaryIndexType_e
+{
+	NONE,
+	FILTER,
+	LOOKUP,
+	INDEX,
+	ANALYZER,
+
+	TOTAL
+};
+
+
 struct IndexHint_t
 {
 	CSphString		m_sIndex;
-	IndexHint_e		m_eHint{INDEX_HINT_USE};
+	IndexHint_e		m_dHints[DWORD(SecondaryIndexType_e::TOTAL)] = {};
 };
 
 const int DEFAULT_MAX_MATCHES = 1000;
@@ -1191,6 +1203,9 @@ public:
 	// copy the rest of the external files to index folder
 	virtual bool				CopyExternalFiles ( int iPostfix, StrVec_t & dCopied ) { return true; }
 	virtual void				CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const {}
+
+	// used for query optimizer calibration
+	virtual HistogramContainer_c * GetHistograms() const { return nullptr; }
 
 public:
 	int64_t						m_iTID = 0;				///< last committed transaction id

@@ -1155,15 +1155,15 @@ identidx_list:
 hint_item:
 	TOK_FORCE TOK_INDEX '(' identidx_list ')'
 		{
-			pParser->AddIndexHint ( INDEX_HINT_FORCE, $4 );
+			pParser->AddIndexHint ( IndexHint_e::FORCE, $4 );
 		}
 	| TOK_USE TOK_INDEX '(' identidx_list ')'
 		{
-			pParser->AddIndexHint ( INDEX_HINT_USE, $4 );
+			pParser->AddIndexHint ( IndexHint_e::USE, $4 );
 		}
 	| TOK_IGNORE TOK_INDEX '(' identidx_list ')'
 		{
-			pParser->AddIndexHint ( INDEX_HINT_IGNORE, $4 );
+			pParser->AddIndexHint ( IndexHint_e::IGNORE_, $4 );
 		}
 	;
 

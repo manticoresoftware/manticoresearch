@@ -1222,6 +1222,8 @@ public:
 	bool				CopyExternalFiles ( int iPostfix, StrVec_t & dCopied ) final;
 	void				CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const final;
 
+	HistogramContainer_c * GetHistograms() const override { return m_pHistograms; }
+
 	bool				CheckEarlyReject ( const CSphVector<CSphFilterSettings> & dFilters, const ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema ) const;
 	int64_t				GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries ) const override;
 
@@ -1331,10 +1333,10 @@ private:
 	bool						SpawnReader ( DataReaderFactoryPtr_c & m_pFile, ESphExt eExt, DataReaderFactory_c::Kind_e eKind, int iBuffer, FileAccess_e eAccess );
 	bool						SpawnReaders();
 
-	RowidIterator_i *			CreateColumnarAnalyzerOrPrefilter ( const CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphFilterSettings> & dModifiedFilters, bool & bFiltersChanged, const CSphVector<FilterTreeItem_t> & dFilterTree, const ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema, CSphString & sWarning ) const;
+	RowidIterator_i *			CreateColumnarAnalyzerOrPrefilter ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree, const ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema, CSphString & sWarning ) const;
 
 	bool						SplitQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dAllSorters, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const;
-	RowidIterator_i *			SpawnIterators ( const CSphQuery & tQuery, CSphVector<CSphFilterSettings> & dModifiedFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff ) const;
+	RowidIterator_i *			SpawnIterators ( const CSphQuery & tQuery, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, CSphVector<CSphFilterSettings> & dModifiedFilters ) const;
 
 	bool						IsQueryFast ( const CSphQuery & tQuery ) const;
 };
@@ -2926,12 +2928,16 @@ int64_t CSphIndex_VLN::GetPseudoShardingMetric ( const VecTraits_T<const CSphQue
 	bool bAllFast = true;
 	const float COST_THRESH = 0.5f;
 
-	std::unique_ptr<SelectSI_c> pCond { GetSelectIteratorsCond ( m_pSIdx.get(), m_tSchema, ( dQueries.GetLength() ? dQueries.Begin()->m_eCollation : SPH_COLLATION_DEFAULT ) ) };
+	std::unique_ptr<SelectSI_i> pCond { GetSelectIteratorsCond ( m_pSIdx.get(), m_tSchema, ( dQueries.GetLength() ? dQueries.Begin()->m_eCollation : SPH_COLLATION_DEFAULT ) ) };
 
-	for ( const auto& i : dQueries )
+	for ( const auto & i : dQueries )
 	{
 		CSphVector<SecondaryIndexInfo_t> dEnabledIndexes;
 		float fCost = GetEnabledSecondaryIndexes ( dEnabledIndexes, i.m_dFilters, i.m_dFilterTree, i.m_dIndexHints, *m_pHistograms, pCond.get() );
+
+		// disable pseudo sharding if any of the queries use secondary indexes/docid lookups
+		if ( dEnabledIndexes.any_of ( []( const SecondaryIndexInfo_t & tSI ){ return tSI.m_eType==SecondaryIndexType_e::INDEX || tSI.m_eType==SecondaryIndexType_e::LOOKUP; } ) )
+			return -1;
 
 		bool bFastQuery = false;
 		if ( i.m_sQuery.IsEmpty() )
@@ -7912,10 +7918,8 @@ bool CSphIndex_VLN::ScanByBlocks ( const CSphQueryContext & tCtx, CSphQueryResul
 }
 
 
-RowidIterator_i * CSphIndex_VLN::CreateColumnarAnalyzerOrPrefilter ( const CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphFilterSettings> & dModifiedFilters, bool & bFiltersChanged, const CSphVector<FilterTreeItem_t> & dFilterTree, const ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema, CSphString & sWarning ) const
+RowidIterator_i * CSphIndex_VLN::CreateColumnarAnalyzerOrPrefilter ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree, const ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema, CSphString & sWarning ) const
 {
-	bFiltersChanged = false;
-
 	if ( !m_pColumnar || dFilterTree.GetLength() || !pFilter )
 		return nullptr;
 
@@ -7928,7 +7932,7 @@ RowidIterator_i * CSphIndex_VLN::CreateColumnarAnalyzerOrPrefilter ( const CSphV
 		const CSphColumnInfo * pCol = tSchema.GetAttr ( dFilters[i].m_sAttrName.cstr() );
 		bool bColumnarFilter = pCol && ( pCol->IsColumnar() || pCol->IsColumnarExpr() || pCol->IsStoredExpr() );
 		bool bRowIdFilter = dFilters[i].m_sAttrName=="@rowid";
-		if ( ( bColumnarFilter || bRowIdFilter )  && AddColumnarFilter ( dColumnarFilters, dFilters[i], eCollation, tSchema, sWarning ) )
+		if ( ( bColumnarFilter || bRowIdFilter ) && AddColumnarFilter ( dColumnarFilters, dFilters[i], eCollation, tSchema, sWarning ) )
 			dFilterMap[i] = (int)dColumnarFilters.size()-1;
 	}
 
@@ -7941,24 +7945,12 @@ RowidIterator_i * CSphIndex_VLN::CreateColumnarAnalyzerOrPrefilter ( const CSphV
 	if ( dIterators.empty() )
 		return nullptr;
 
-	const CSphFilterSettings * pRowIdFilter = nullptr;
-	ARRAY_FOREACH ( i, dFilters )
-		if ( dFilters[i].m_sAttrName=="@rowid" )
-		{
-			dDeletedFilters.push_back(i);
-			pRowIdFilter = &dFilters[i];
-			break;
-		}
-
-	dModifiedFilters.Resize(0);
-	bFiltersChanged = true;
-	for ( size_t i=0; i < dFilterMap.size(); i++ )
-		if ( dFilterMap[i]==-1 || !std::binary_search ( dDeletedFilters.begin(), dDeletedFilters.end(), dFilterMap[i] ) )
-			dModifiedFilters.Add ( dFilters[i] );
+	for ( size_t i = 0; i < dFilterMap.size(); i++ )
+		if ( dFilterMap[i]!=-1 && std::binary_search ( dDeletedFilters.begin(), dDeletedFilters.end(), dFilterMap[i] ) )
+			dSIInfo[i].m_bCreated = true;
 
 	RowIdBoundaries_t tBoundaries;
-	if ( pRowIdFilter )
-		tBoundaries = GetFilterRowIdBoundaries ( *pRowIdFilter, RowID_t(m_iDocinfo) );
+	const CSphFilterSettings * pRowIdFilter = GetRowIdFilter ( dFilters, RowID_t(m_iDocinfo), tBoundaries );
 
 	if ( dIterators.size()==1 )
 		return CreateIteratorWrapper ( dIterators[0], pRowIdFilter ? &tBoundaries : nullptr );
@@ -7967,125 +7959,66 @@ RowidIterator_i * CSphIndex_VLN::CreateColumnarAnalyzerOrPrefilter ( const CSphV
 }
 
 
-static void UpdateSpawnedIterators ( bool bChanged, bool & bRecreateFilters, CSphVector<CSphFilterSettings> & dOriginalFilters, CSphVector<CSphFilterSettings> & dModifiedFilters, const CSphVector<CSphFilterSettings> * & pOriginalFilters, CSphVector<RowidIterator_i*> & dIterators, RowidIterator_i * pIterator )
+static void RecreateFilters ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphQuery & tQuery, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, CSphQueryResultMeta & tMeta, CSphVector<CSphFilterSettings> & dModifiedFilters )
 {
-	if ( pIterator )
-		dIterators.Add(pIterator);
-
-	if ( bChanged )
-	{
-		bRecreateFilters = true;
-		dOriginalFilters = dModifiedFilters;
-		pOriginalFilters = &dOriginalFilters;
-	}
-}
-
-static void ProfileEnabledIndexes ( QueryProfile_c * pProfile, const CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, const CSphVector<CSphFilterSettings> & dFilters )
-{
-	if ( !pProfile )
-		return;
-
-	if ( !dEnabledIndexes.GetLength() )
-	{
-		pProfile->m_sEnablesIndexes = "";
-		return;
-	}
-
-	StringBuilder_c tBuf ( "; " );
-	for ( const SecondaryIndexInfo_t & tInfo : dEnabledIndexes )
-	{
-		const CSphFilterSettings & tFilter = dFilters[tInfo.m_iFilterId];
-		FormatFilterQL ( tFilter, tBuf, 10 );
-	}
-
-	pProfile->m_sEnablesIndexes = tBuf.cstr();
-}
-
-
-RowidIterator_i * CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, CSphVector<CSphFilterSettings> & dModifiedFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff ) const
-{
-	CSphVector<CSphFilterSettings> dOriginalFilters;
-	const CSphVector<CSphFilterSettings> * pOriginalFilters = &tQuery.m_dFilters;
-
-	CSphVector<RowidIterator_i*> dIterators;
-	bool bRecreateFilters = false;
-
-	std::unique_ptr<SelectSI_c> pCond { GetSelectIteratorsCond ( m_pSIdx.get(), m_tSchema, tQuery.m_eCollation ) };
-
-	CSphVector<SecondaryIndexInfo_t> dEnabledIndexes = SelectIterators ( *pOriginalFilters, tQuery.m_dFilterTree.IsEmpty(), tQuery.m_dIndexHints, m_pHistograms, pCond.get() );
-	ProfileEnabledIndexes ( tCtx.m_pProfile, dEnabledIndexes, *pOriginalFilters );
-
-	if ( m_pSIdx )
-	{
-		bool bChanged = false;
-		RowidIterator_i * pIterator = CreateSecondaryIndexIterator ( m_pSIdx.get(), dEnabledIndexes, tQuery.m_dFilters, tQuery.m_eCollation, tMaxSorterSchema, RowID_t(m_iDocinfo), dModifiedFilters, bChanged, iCutoff );
-		UpdateSpawnedIterators ( bChanged, bRecreateFilters, dOriginalFilters, dModifiedFilters, pOriginalFilters, dIterators, pIterator );
-	}
-
-	// try to spawn an iterator from a secondary index
-	{
-		bool bChanged = false;
-		RowidIterator_i * pIterator = CreateFilteredIterator ( dEnabledIndexes, *pOriginalFilters, dModifiedFilters, bChanged, m_tDocidLookup.GetWritePtr(), RowID_t(m_iDocinfo) );
-		UpdateSpawnedIterators ( bChanged, bRecreateFilters, dOriginalFilters, dModifiedFilters, pOriginalFilters, dIterators, pIterator );
-	}
-
-	// try to spawn analyzers or prefilters from columnar storage
-	{
-		// if we already created an iterator at prev stage, we need to recreate filters here, so we won't be doing unnecessary minmax eval
-		if ( bRecreateFilters && pOriginalFilters->GetLength() )
-		{
-			tCtx.m_pFilter.reset();
-			tFlx.m_pFilters = &dModifiedFilters;
-			tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning );
-			bRecreateFilters = false;
-		}
-
-		bool bChanged = false;
-		RowidIterator_i * pIterator = CreateColumnarAnalyzerOrPrefilter ( *pOriginalFilters, dModifiedFilters, bChanged, tQuery.m_dFilterTree, tCtx.m_pFilter.get(), tQuery.m_eCollation, tMaxSorterSchema, tMeta.m_sWarning );
-		UpdateSpawnedIterators ( bChanged, bRecreateFilters, dOriginalFilters, dModifiedFilters, pOriginalFilters, dIterators, pIterator );
-	}
-
-	if ( bRecreateFilters )
-	{
-		tCtx.m_pFilter.reset();
-		tFlx.m_pFilters = &dModifiedFilters;
-		tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning );
-	}
-
-	switch ( dIterators.GetLength() )
-	{
-	case 0:		return nullptr;
-	case 1:		return dIterators[0];
-	default:	return CreateIteratorIntersect ( dIterators, nullptr );	// both columnar iterator wrappers and secondary index iterators support rowid filtering, so no need for it here
-	}
-}
-
-
-static RowIdBoundaries_t RemoveRowIdFilter ( CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, CSphVector<CSphFilterSettings> & dModifiedFilters, CSphQueryResultMeta & tMeta, int64_t iDocinfo, bool & bHaveRowidFilter )
-{
-	const CSphFilterSettings * pRowIdFilter = nullptr;
-	for ( const auto & tFilter : tCtx.m_tQuery.m_dFilters )
-		if ( tFilter.m_sAttrName=="@rowid" )
-		{
-			pRowIdFilter = &tFilter;
-			break;
-		}
-
-	bHaveRowidFilter = !!pRowIdFilter;
-
-	if ( !pRowIdFilter )
-		return { 0, RowID_t(iDocinfo)-1 };
-
 	dModifiedFilters.Resize(0);
-	for ( const auto & tFilter : tCtx.m_tQuery.m_dFilters )
-		if ( &tFilter!=pRowIdFilter )
-			dModifiedFilters.Add(tFilter);
+	ARRAY_FOREACH ( i, dSIInfo )
+		if ( !dSIInfo[i].m_bCreated )
+			dModifiedFilters.Add ( tQuery.m_dFilters[i] );
 
 	tCtx.m_pFilter.reset();
 	tFlx.m_pFilters = &dModifiedFilters;
 	tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning );
+}
 
-	return GetFilterRowIdBoundaries ( *pRowIdFilter, RowID_t(iDocinfo) );
+
+RowidIterator_i * CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, CSphVector<CSphFilterSettings> & dModifiedFilters ) const
+{
+	std::unique_ptr<SelectSI_i> pCond { GetSelectIteratorsCond ( m_pSIdx.get(), m_tSchema, tQuery.m_eCollation ) };
+	CSphVector<SecondaryIndexInfo_t> dSIInfo = SelectIterators ( tQuery.m_dFilters, tQuery.m_dFilterTree.IsEmpty(), tQuery.m_dIndexHints, m_pHistograms, pCond.get(), iCutoff );
+
+	CSphVector<RowidIterator_i *> dSIIterators, dLookupIterators;
+	RowidIterator_i * pAnalyzerIterator = nullptr;
+
+	// secondary index iterators
+	dSIIterators = CreateSecondaryIndexIterator ( m_pSIdx.get(), dSIInfo, tQuery.m_dFilters, tQuery.m_eCollation, tMaxSorterSchema, RowID_t(m_iDocinfo), iCutoff );
+
+	// lookup-by-id (.SPT) iterators
+	dLookupIterators = CreateLookupIterator ( dSIInfo, tQuery.m_dFilters, m_tDocidLookup.GetWritePtr(), RowID_t(m_iDocinfo) );
+
+	// try to spawn analyzers or prefilters from columnar storage
+	// if we already created an iterator at prev stage, we need to recreate filters here,
+	// so we won't be doing unnecessary minmax eval over filters that were replaced by iterators
+	int iCreated = 0;
+	dSIInfo.for_each ( [&]( const SecondaryIndexInfo_t & tInfo ){ if ( tInfo.m_bCreated ) iCreated++; } );
+	if ( iCreated && m_pColumnar )
+		RecreateFilters ( dSIInfo, tQuery, tCtx, tFlx, tMeta, dModifiedFilters );
+
+	pAnalyzerIterator = CreateColumnarAnalyzerOrPrefilter ( dSIInfo, tQuery.m_dFilters, tQuery.m_dFilterTree, tCtx.m_pFilter.get(), tQuery.m_eCollation, tMaxSorterSchema, tMeta.m_sWarning );
+
+	int iCreatedAfterColumnar = 0;
+	dSIInfo.for_each ( [&]( const SecondaryIndexInfo_t & tInfo ){ if ( tInfo.m_bCreated ) iCreatedAfterColumnar++; } );
+
+	// if we created an analyzer, we need to recreate filters
+	if ( ( !m_pColumnar && iCreated>0 ) || iCreatedAfterColumnar!=iCreated )
+		RecreateFilters ( dSIInfo, tQuery, tCtx, tFlx, tMeta, dModifiedFilters );
+
+	CSphVector<RowidIterator_i *> dAllIterators;
+	for ( auto i : dSIIterators )
+		dAllIterators.Add(i);
+
+	for ( auto i : dLookupIterators )
+		dAllIterators.Add(i);
+
+	if ( pAnalyzerIterator )
+		dAllIterators.Add(pAnalyzerIterator);
+
+	switch ( dAllIterators.GetLength() )
+	{
+	case 0:		return nullptr;
+	case 1:		return dAllIterators[0];
+	default:	return CreateIteratorIntersect ( dAllIterators, nullptr );	// both columnar iterator wrappers and secondary index iterators support rowid filtering, so no need for it here
+	}
 }
 
 
@@ -8183,20 +8116,18 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 
 	SwitchProfile ( tMeta.m_pProfile, SPH_QSTATE_SETUP_ITER );
 
-	// we don't modify the original filters because iterators may use some data from them (to avoid copying)
-	CSphVector<CSphFilterSettings> dModifiedFilters;
-
 	bool bImplicitCutoff;
 	int iCutoff;
 	std::tie ( bImplicitCutoff, iCutoff ) = ApplyImplicitCutoff ( tQuery, dSorters );
 
 	// try to spawn an iterator from a secondary index
-	std::unique_ptr<RowidIterator_i> pIterator ( SpawnIterators ( tQuery, dModifiedFilters, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff ) );
+	CSphVector<CSphFilterSettings> dModifiedFilters; // holds filter settings if they were modified. filters holds pointers to those settings
+	std::unique_ptr<RowidIterator_i> pIterator ( SpawnIterators ( tQuery, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff, dModifiedFilters ) );
 
 	bool bCutoffHit =  false;
 	if ( pIterator )
 	{
-		if ( iCutoff>=0 && ( dModifiedFilters.IsEmpty() || ( dModifiedFilters.GetLength()==1 && dModifiedFilters[0].m_sAttrName=="@rowid" ) ) )
+		if ( iCutoff>=0 && !tCtx.m_pFilter )
 			pIterator->SetCutoff(iCutoff);
 
 		bCutoffHit = RunFullscanOnIterator ( pIterator.get(), tCtx, tMeta, dSorters, tMatch, iCutoff, bRandomize, tArgs.m_iIndexWeight, tmMaxTimer );
@@ -8204,11 +8135,16 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	}
 	else
 	{
-		bool bHaveRowidFilter = false;
-		RowIdBoundaries_t tBoundaries = RemoveRowIdFilter ( tCtx, tFlx, dModifiedFilters, tMeta, m_iDocinfo, bHaveRowidFilter );
+		RowIdBoundaries_t tBoundaries;
+		const CSphFilterSettings * pRowIdFilter = GetRowIdFilter ( tQuery.m_dFilters, (RowID_t)m_iDocinfo, tBoundaries );
+		if ( !pRowIdFilter )
+			tBoundaries.m_tMaxRowID = RowID_t(m_iDocinfo)-1;
 
-		bool bAllColumnar = dModifiedFilters.all_of ( [this]( const CSphFilterSettings & tFilter )
+		bool bAllColumnar = tQuery.m_dFilters.all_of ( [this]( const CSphFilterSettings & tFilter )
 							{
+								if ( tFilter.m_sAttrName=="@rowid" )
+									return true;
+
 								const CSphColumnInfo * pCol = m_tSchema.GetAttr ( tFilter.m_sAttrName.cstr() );
 								return pCol ? ( pCol->IsColumnar() || pCol->IsColumnarExpr() ) : false;
 							} );
@@ -8217,7 +8153,7 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 			bCutoffHit = RunFullscanOnAttrs ( tBoundaries, tCtx, tMeta, dSorters, tMatch, iCutoff, bRandomize, tArgs.m_iIndexWeight, tmMaxTimer );
 		else
 		{
-			if ( bHaveRowidFilter )
+			if ( pRowIdFilter )
 				bCutoffHit = ScanByBlocks<true> ( tCtx, tMeta, dSorters, tMatch, iCutoff, bRandomize, tArgs.m_iIndexWeight, tmMaxTimer, &tBoundaries );
 			else
 				bCutoffHit = ScanByBlocks<false> ( tCtx, tMeta, dSorters, tMatch, iCutoff, bRandomize, tArgs.m_iIndexWeight, tmMaxTimer );

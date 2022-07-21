@@ -816,7 +816,7 @@ void SqlParser_c::AddIndexHint ( IndexHint_e eHint, const SqlNode_t & tValue )
 	{
 		IndexHint_t & tHint = m_pQuery->m_dIndexHints.Add();
 		tHint.m_sIndex = i;
-		tHint.m_eHint = eHint;
+		tHint.m_dHints[int(SecondaryIndexType_e::INDEX)] = eHint;
 	}
 }
 
@@ -1398,7 +1398,14 @@ struct HintComp_fn
 
 	bool IsEq ( const IndexHint_t & tA, const IndexHint_t & tB ) const
 	{
-		return tA.m_sIndex==tB.m_sIndex && tA.m_eHint==tB.m_eHint;
+		if ( tA.m_sIndex!=tB.m_sIndex )
+			return false;
+
+		for ( int i = 0; i < int(SecondaryIndexType_e::TOTAL); i++ )
+			if ( tA.m_dHints[i] != tB.m_dHints[i] )
+				return false;
+		
+		return true;
 	}
 };
 

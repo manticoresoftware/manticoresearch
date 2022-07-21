@@ -25,11 +25,6 @@
 #include "secondarylib.h"
 
 
-static bool HaveIndex ( const CSphString & sAttr )
-{
-	return sAttr=="id";
-}
-
 //////////////////////////////////////////////////////////////////////////
 
 bool ReturnIteratorResult ( RowID_t * pRowID, RowID_t * pRowIdStart, RowIdBlock_t & dRowIdBlock )
@@ -1064,9 +1059,9 @@ static bool NeedBitmapStorage ( int64_t iRsetSize, DWORD uTotalDocs )
 #define DECL_CREATERANGEEX( _, n, params ) case n: return new RowidIterator_LookupRangeExclude_T<!!( n & 32 ), !!( n & 16 ), !!( n & 8 ), !!( n & 4 ), !!( n & 2 ), !!( n & 1 )> params;
 #define DECL_CREATERANGE( _, n, params ) case n: return new RowidIterator_LookupRange_T<!!( n & 32 ), !!( n & 16 ), !!( n & 8 ), !!( n & 4 ), !!( n & 2 ), !!( n & 1 )> params;
 
-static RowidIterator_i * CreateIterator ( const CSphFilterSettings & tFilter, int64_t iRsetEstimate, DWORD uTotalDocs, const BYTE * pDocidLookup, const RowIdBoundaries_t * pBoundaries )
+static RowidIterator_i * CreateLookupIterator ( const CSphFilterSettings & tFilter, int64_t iRsetEstimate, DWORD uTotalDocs, const BYTE * pDocidLookup, const RowIdBoundaries_t * pBoundaries )
 {
-	if ( !HaveIndex ( tFilter.m_sAttrName ) )
+	if ( tFilter.m_sAttrName!=sphGetDocidName() )
 		return nullptr;
 
 	bool bBitmap = NeedBitmapStorage ( iRsetEstimate, uTotalDocs );
@@ -1113,112 +1108,18 @@ static RowidIterator_i * CreateIterator ( const CSphFilterSettings & tFilter, in
 #undef DECL_CREATERANGEEX
 #undef DECL_CREATERANGE
 
-struct IndexWithEstimate_t : public SecondaryIndexInfo_t
+static bool NextSet ( CSphVector<int> & dSet, const CSphVector<SecondaryIndexInfo_t> & dSecondaryIndexes )
 {
-	bool	m_bEnabled {false};
-	bool	m_bForce {false};
-};
-
-
-static bool NextSet ( CSphBitvec & dSet, const CSphVector<IndexWithEstimate_t> & dSecondaryIndexes )
-{
-	for ( int i = 0; i < dSet.GetSize(); i++ )
+	for ( int i = 0; i < dSet.GetLength(); i++ )
 	{
-		if ( dSecondaryIndexes[i].m_bForce )
-			continue;
-
-		bool bState = dSet.BitGet(i);
-		if ( bState )
-			dSet.BitClear(i);
+		dSet[i]++;
+		if ( dSet[i] >= dSecondaryIndexes[i].m_dCapabilities.GetLength() )
+			dSet[i] = 0;
 		else
-		{
-			dSet.BitSet(i);
 			return true;
-		}
 	}
 
 	return false;
-}
-
-
-class CostEstimate_c
-{
-public:
-	float LookupRead ( int64_t iDocs ) const
-	{
-		return m_fLookupRead*float(iDocs)*SCALE;
-	}
-
-	float Filter ( int64_t iDocs, int nFilters ) const
-	{
-		return m_fFilter*nFilters*float(iDocs)*SCALE;
-	}
-
-	float Fullscan ( int64_t iDocs ) const
-	{
-		return m_fFullscan*float(iDocs)*SCALE;
-	}
-
-	float IndexIntersect ( int64_t iDocs ) const
-	{
-		return m_fIndexIntersect*float(iDocs)*SCALE;
-	}
-
-	float IndexFilter ( int64_t iDocs, int nFilters ) const
-	{
-		return m_fIndexFilter*nFilters*float(iDocs)*SCALE;
-	}
-
-private:
-	static constexpr float SCALE = 1.0f/1000000.0f;
-	static constexpr float m_fLookupRead = 100.0f;
-	static constexpr float m_fFilter = 5.0f;
-	static constexpr float m_fFullscan = 5.0f;
-	static constexpr float m_fIndexIntersect = 8.0f;
-	static constexpr float m_fIndexFilter = 150.0f;
-};
-
-
-static float CalcQueryCost ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<IndexWithEstimate_t> & dSecondaryIndexes, const CostEstimate_c & tCost, int64_t iTotalDocs )
-{
-	float fCost = 0.0f;
-	int64_t iDocsProcessedByIndexes = 0;
-	float fTotalIndexProbability = 1.0f;
-
-	int nEnabled = 0;
-	for ( const auto & tIndex : dSecondaryIndexes )
-	{
-		if ( !tIndex.m_bEnabled )
-			continue;
-
-		nEnabled++;
-		iDocsProcessedByIndexes += tIndex.m_iRsetEstimate;
-
-		float fIndexProbability = float(tIndex.m_iRsetEstimate) / iTotalDocs;
-		fTotalIndexProbability *= fIndexProbability;
-	}
-
-	if ( !nEnabled )
-	{
-		fCost += tCost.Fullscan ( iTotalDocs );
-		fCost += tCost.Filter ( iTotalDocs, dFilters.GetLength() );
-	}
-	else
-	{
-		fCost += tCost.LookupRead ( iDocsProcessedByIndexes );
-
-		if ( nEnabled>1 )
-		{
-			fCost += tCost.IndexIntersect ( iDocsProcessedByIndexes );
-			fCost += tCost.IndexFilter ( uint64_t(fTotalIndexProbability*iTotalDocs), dFilters.GetLength()-nEnabled+1 );
-
-		} else
-		{
-			fCost += tCost.IndexFilter ( iDocsProcessedByIndexes, dFilters.GetLength()-nEnabled+1 );
-		}
-	}
-
-	return fCost;
 }
 
 static bool g_bEnabledSI = false;
@@ -1232,148 +1133,206 @@ bool GetSecondaryIndexDefault ()
 	return g_bEnabledSI;
 }
 
-static CSphVector<SecondaryIndexInfo_t> SelectIterators ( const CSphVector<CSphFilterSettings> & dFilters, bool bFilterTreeEmpty, const CSphVector<IndexHint_t> & dHints, const HistogramContainer_c * pHistograms, const SelectSI_c * pCheck, float & fBestCost )
+
+static bool CheckIndexHint ( const CSphFilterSettings & tFilter, const CSphVector<IndexHint_t> & dHints, SecondaryIndexType_e eType, bool & bForce, IndexHint_e *& pHint )
 {
-	fBestCost = FLT_MAX;
-
-	// no iterators with OR queries
-	CSphVector<SecondaryIndexInfo_t> dEnabledIndexes;
-	if ( !bFilterTreeEmpty || !pHistograms )
-		return dEnabledIndexes;
-
 	bool bHaveUseHint = false;
 	ARRAY_FOREACH_COND ( i, dHints, !bHaveUseHint )
-		bHaveUseHint = dHints[i].m_eHint==INDEX_HINT_USE;
-	
-	CSphVector<IndexWithEstimate_t> dSecondaryIndexes;
+		bHaveUseHint = dHints[i].m_dHints[int(eType)]==IndexHint_e::USE;
+
+	ARRAY_FOREACH_COND ( iHint, dHints, !pHint )
+		if ( dHints[iHint].m_sIndex==tFilter.m_sAttrName )
+			pHint = &dHints[iHint].m_dHints[int(eType)];
+
+	if ( pHint && *pHint==IndexHint_e::IGNORE_ )
+		return false;
+
+	if ( bHaveUseHint && !pHint )
+		return false;
+
+	bForce = pHint && *pHint==IndexHint_e::FORCE;
+	return true;
+}
+
+
+static bool HaveSI ( const CSphFilterSettings & tFilter, const CSphVector<IndexHint_t> & dHints, const SelectSI_i * pCheck, bool & bForce )
+{
+	if ( !pCheck->IsEnabled_SI(tFilter) )
+		return false;
+
+	IndexHint_e * pHint = nullptr;
+	if ( !CheckIndexHint ( tFilter, dHints, SecondaryIndexType_e::INDEX, bForce, pHint ) )
+		return false;
+
+	// default secondary index is disabled
+	// but FORCE INDEX (name) enables it
+	// set global secondary_indexes=1 allows to use optimizer
+	if ( !g_bEnabledSI && ( !pHint || ( pHint && *pHint!=IndexHint_e::FORCE ) ) )
+		return false;
+
+	return true;
+}
+
+
+static bool HaveAnalyzer ( const CSphFilterSettings & tFilter, const CSphVector<IndexHint_t> & dHints, const SelectSI_i * pCheck, bool & bForce )
+{
+	if ( !pCheck->IsEnabled_Analyzer(tFilter) )
+		return false;
+
+	IndexHint_e * pHint = nullptr;
+	return CheckIndexHint ( tFilter, dHints, SecondaryIndexType_e::ANALYZER, bForce, pHint );
+}
+
+
+static bool HaveLookup ( const CSphFilterSettings & tFilter, const CSphVector<IndexHint_t> & dHints, bool & bForce )
+{
+	if ( tFilter.m_sAttrName!=sphGetDocidName() )
+		return false;
+
+	IndexHint_e * pHint = nullptr;
+	return CheckIndexHint ( tFilter, dHints, SecondaryIndexType_e::LOOKUP, bForce, pHint );
+}
+
+
+static void MarkAvailableLookup ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<IndexHint_t> & dHints )
+{
+	ARRAY_FOREACH ( i, dFilters )
+	{
+		bool bForce = false;
+		if ( !HaveLookup( dFilters[i], dHints, bForce ) )
+			continue;
+
+		dSIInfo[i].m_dCapabilities.Add ( SecondaryIndexType_e::LOOKUP );
+		if ( bForce )
+			dSIInfo[i].m_eForce = SecondaryIndexType_e::LOOKUP;
+	}
+}
+
+
+static void MarkAvailableSI ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<IndexHint_t> & dHints, const HistogramContainer_c * pHistograms, const SelectSI_i * pCheck )
+{
 	ARRAY_FOREACH ( i, dFilters )
 	{
 		const CSphFilterSettings & tFilter = dFilters[i];
-
-		if ( !pCheck->IsEnabled ( tFilter ) )
-			continue;
 
 		const Histogram_i * pHistogram = pHistograms->Get ( tFilter.m_sAttrName );
 		if ( !pHistogram )
 			continue;
 
-		IndexHint_e * pHint = nullptr;
-		ARRAY_FOREACH_COND ( iHint, dHints, !pHint )
-			if ( dHints[iHint].m_sIndex==tFilter.m_sAttrName )
-				pHint = &dHints[iHint].m_eHint;
-
-		if ( pHint && *pHint==INDEX_HINT_IGNORE )
-			continue;
-
-		if ( bHaveUseHint && !pHint )
-			continue;
-
-		// default secondary index is disabled
-		// but FORCE INDEX (name) enables it
-		// set global secondary_indexes=1 allows to use optimizer
-		if ( !g_bEnabledSI && ( !pHint || ( pHint && *pHint!=INDEX_HINT_FORCE ) ) )
-			continue;
-
-		IndexWithEstimate_t tNewIndex;
-
 		HistogramRset_t tEstimate;
 		bool bUsable = pHistogram->EstimateRsetSize ( tFilter, tEstimate );
-		if ( bUsable )
-		{
-			tNewIndex.m_iRsetEstimate = tEstimate.m_iTotal;
-			tNewIndex.m_iFilterId = i;
-			tNewIndex.m_bForce = pHint && *pHint==INDEX_HINT_FORCE;
+		dSIInfo[i].m_iRsetEstimate = tEstimate.m_iTotal;
 
-			dSecondaryIndexes.Add ( tNewIndex );
+		bool bForce = false;
+		if ( !bUsable || !HaveSI ( tFilter, dHints, pCheck, bForce ) )
+			continue;
 
-			//sphInfo ( "filter %d, est " INT64_FMT " (%u), %.3f, count %d, range %.3f, size %d", tNewIndex.m_iFilterId, tNewIndex.m_iRsetEstimate, pHistograms->GetNumValues(), (float)tNewIndex.m_iRsetEstimate/pHistograms->GetNumValues(), tEstimate.m_iCount, tEstimate.m_fRangeSize, pHistogram->GetSize() ); // !COMMIT
-		}
+		if ( bForce )
+			dSIInfo[i].m_eForce = SecondaryIndexType_e::INDEX;
+
+		dSIInfo[i].m_dCapabilities.Add ( SecondaryIndexType_e::INDEX );
 	}
+}
 
-	int nAvailableIndexes = dSecondaryIndexes.GetLength();
-	if ( !nAvailableIndexes )
-		return dEnabledIndexes;
 
-	CostEstimate_c tCost;
-	//sphInfo ( "scan cost: %.3f", CalcQueryCost ( dFilters, CSphVector<IndexWithEstimate_t>(), tCost, pHistograms->GetNumValues() ) );  // !COMMIT
+static void MarkAvailableAnalyzers ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<IndexHint_t> & dHints, const SelectSI_i * pCheck )
+{
+	ARRAY_FOREACH ( i, dFilters )
+	{
+		bool bForce = false;
+		if ( !HaveAnalyzer ( dFilters[i], dHints, pCheck, bForce ) )
+			continue;
 
-	CSphBitvec dEnabled ( nAvailableIndexes );
-	CSphBitvec dBestEnabled ( nAvailableIndexes );
+		if ( bForce )
+			dSIInfo[i].m_eForce = SecondaryIndexType_e::ANALYZER;
 
-	for ( int i = 0; i < dEnabled.GetSize(); i++ )
-		if ( dSecondaryIndexes[i].m_bForce )
-			dEnabled.BitSet(i);
+		dSIInfo[i].m_dCapabilities.Add ( SecondaryIndexType_e::ANALYZER );
+	}
+}
+
+static void ForceSI ( CSphVector<SecondaryIndexInfo_t> & dSIInfo )
+{
+	for ( auto & i : dSIInfo )
+		if ( i.m_eForce!=SecondaryIndexType_e::NONE )
+		{
+			i.m_dCapabilities.Resize(0);
+			i.m_dCapabilities.Add ( i.m_eForce );
+		}
+}
+
+
+static CSphVector<SecondaryIndexInfo_t> SelectIterators ( const CSphVector<CSphFilterSettings> & dFilters, bool bFilterTreeEmpty, const CSphVector<IndexHint_t> & dHints, const HistogramContainer_c * pHistograms, const SelectSI_i * pCheck, float & fBestCost, int iCutoff )
+{
+	fBestCost = FLT_MAX;
+
+	CSphVector<SecondaryIndexInfo_t> dSIInfo ( dFilters.GetLength() );
+	ARRAY_FOREACH ( i, dSIInfo )
+		dSIInfo[i].m_dCapabilities.Add ( dFilters[i].m_sAttrName=="@rowid" ? SecondaryIndexType_e::NONE : SecondaryIndexType_e::FILTER );
+
+	// no iterators with OR queries
+	if ( !bFilterTreeEmpty || !pHistograms )
+		return dSIInfo;
+
+	MarkAvailableLookup ( dSIInfo, dFilters, dHints );
+	MarkAvailableSI ( dSIInfo, dFilters, dHints, pHistograms, pCheck );
+	MarkAvailableAnalyzers ( dSIInfo, dFilters, dHints, pCheck );
+	ForceSI(dSIInfo);
+
+	CSphVector<int> dCapabilities ( dSIInfo.GetLength() );
+	CSphVector<int> dBest ( dSIInfo.GetLength() );
+	dCapabilities.ZeroVec();
+	dBest.ZeroVec();
 
 	const int MAX_TRIES = 1024;
 	for ( int iTry = 0; iTry < MAX_TRIES; iTry++ )
 	{
-		for ( int i = 0; i < dEnabled.GetSize(); i++ )
-			dSecondaryIndexes[i].m_bEnabled = dEnabled.BitGet(i);
+		for ( int i = 0; i < dCapabilities.GetLength(); i++ )
+			dSIInfo[i].m_eType = dSIInfo[i].m_dCapabilities[dCapabilities[i]];
 
-		float fCost = CalcQueryCost ( dFilters, dSecondaryIndexes, tCost, pHistograms->GetNumValues() );
-		//sphInfo ( "filter %x, cost %.3f(%.3f)", *dEnabled.Begin(), fCost, ( fBestCost==FLT_MAX ? 0.0 : fBestCost ) ); // !COMMIT
+		std::unique_ptr<CostEstimate_i> pCostEstimate ( CreateCostEstimate ( dSIInfo, dFilters, pHistograms->GetNumValues(), iCutoff ) );
+
+		float fCost = pCostEstimate->CalcQueryCost();
 		if ( fCost < fBestCost )
 		{
-			dBestEnabled = dEnabled;
+			dBest = dCapabilities;
 			fBestCost = fCost;
 		}
 
-		if ( !NextSet ( dEnabled, dSecondaryIndexes ) )
+		if ( !NextSet ( dCapabilities, dSIInfo ) )
 			break;
 	}
 
-	for ( int i = 0; i < dBestEnabled.GetSize(); i++ )
-	{
-		if ( dBestEnabled.BitGet(i) )
-		{
-			SecondaryIndexInfo_t & tInfo = dEnabledIndexes.Add();
-			tInfo.m_iFilterId = dSecondaryIndexes[i].m_iFilterId;
-			tInfo.m_iRsetEstimate = dSecondaryIndexes[i].m_iRsetEstimate;
-		}
-	}
+	for ( int i = 0; i < dBest.GetLength(); i++ )
+		dSIInfo[i].m_eType = dSIInfo[i].m_dCapabilities[dBest[i]];
 
-	dEnabledIndexes.Sort ( bind ( &SecondaryIndexInfo_t::m_iFilterId ) );
-
-	return dEnabledIndexes;
+	return dSIInfo;
 }
 
-CSphVector<SecondaryIndexInfo_t> SelectIterators ( const CSphVector<CSphFilterSettings> & dFilters, bool bFilterTreeEmpty, const CSphVector<IndexHint_t> & dHints, const HistogramContainer_c * pHistograms, const SelectSI_c * pCheck )
+
+CSphVector<SecondaryIndexInfo_t> SelectIterators ( const CSphVector<CSphFilterSettings> & dFilters, bool bFilterTreeEmpty, const CSphVector<IndexHint_t> & dHints, const HistogramContainer_c * pHistograms, const SelectSI_i * pCheck, int iCutoff )
 {
 	float fCost = FLT_MAX;
-	return SelectIterators ( dFilters, bFilterTreeEmpty, dHints, pHistograms, pCheck, fCost );
+	return SelectIterators ( dFilters, bFilterTreeEmpty, dHints, pHistograms, pCheck, fCost, iCutoff );
 }
 
-static bool UpdateModifiedFilters ( const CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphFilterSettings> & dModifiedFilters, const CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, const CSphFilterSettings * pRowIdFilter )
-{
-	dModifiedFilters.Resize(0);
-	ARRAY_FOREACH ( i, dFilters )
-	{
-		// if we have a rowid filter, we assume that the iterator handles it. so we no longer need it
-		if ( !dEnabledIndexes.any_of ( [i] ( const SecondaryIndexInfo_t & tInfo ) { return tInfo.m_iFilterId==i; } ) && &dFilters[i]!=pRowIdFilter )
-			dModifiedFilters.Add ( dFilters[i] );
-	}
 
-	return dFilters.GetLength()!=dModifiedFilters.GetLength();
-}
-
-float GetEnabledSecondaryIndexes ( CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree, const CSphVector<IndexHint_t> & dHints, const HistogramContainer_c & tHistograms, const SelectSI_c * pCheck )
+float GetEnabledSecondaryIndexes ( CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree, const CSphVector<IndexHint_t> & dHints, const HistogramContainer_c & tHistograms, const SelectSI_i * pCheck )
 {
 	float fBestCost = FLT_MAX;
 	dEnabledIndexes = SelectIterators ( dFilters, dFilterTree.IsEmpty(), dHints, &tHistograms, pCheck, fBestCost );
 	return fBestCost;
 }
 
-static const CSphFilterSettings * GetRowIdFilter ( const CSphVector<CSphFilterSettings> & dFilters, RowID_t uTotalDocs, RowIdBoundaries_t & tRowidBounds )
+
+const CSphFilterSettings * GetRowIdFilter ( const CSphVector<CSphFilterSettings> & dFilters, RowID_t uTotalDocs, RowIdBoundaries_t & tRowidBounds )
 {
 	const CSphFilterSettings * pRowIdFilter = nullptr;
 	for ( const auto & tFilter : dFilters )
-	{
 		if ( tFilter.m_sAttrName=="@rowid" )
 		{
 			pRowIdFilter = &tFilter;
 			break;
 		}
-	}
 
 	if ( pRowIdFilter )
 		tRowidBounds = GetFilterRowIdBoundaries ( *pRowIdFilter, uTotalDocs );
@@ -1381,32 +1340,29 @@ static const CSphFilterSettings * GetRowIdFilter ( const CSphVector<CSphFilterSe
 	return pRowIdFilter;
 }
 
-RowidIterator_i * CreateFilteredIterator ( const CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, const CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphFilterSettings> & dModifiedFilters, bool & bFiltersChanged, const BYTE * pDocidLookup, uint32_t uTotalDocs )
-{
-	bFiltersChanged = false;
-	if ( dEnabledIndexes.IsEmpty() )
-		return nullptr;
 
+CSphVector<RowidIterator_i *> CreateLookupIterator ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, const BYTE * pDocidLookup, uint32_t uTotalDocs )
+{
 	RowIdBoundaries_t tBoundaries;
 	const CSphFilterSettings * pRowIdFilter = GetRowIdFilter ( dFilters, uTotalDocs, tBoundaries );
 
 	CSphVector<RowidIterator_i *> dIterators;
-	for ( auto & i : dEnabledIndexes )
+
+	ARRAY_FOREACH ( i, dSIInfo )
 	{
-		RowidIterator_i * pIterator = CreateIterator ( dFilters[i.m_iFilterId], i.m_iRsetEstimate, uTotalDocs, pDocidLookup, pRowIdFilter ? &tBoundaries : nullptr );
+		auto & tSIInfo = dSIInfo[i];
+		if ( tSIInfo.m_eType!=SecondaryIndexType_e::LOOKUP )
+			continue;
+
+		RowidIterator_i * pIterator = CreateLookupIterator ( dFilters[i], tSIInfo.m_iRsetEstimate, uTotalDocs, pDocidLookup, pRowIdFilter ? &tBoundaries : nullptr );
 		if ( pIterator )
+		{
 			dIterators.Add ( pIterator );
+			tSIInfo.m_bCreated = true;
+		}
 	}
 
-	if ( !dIterators.GetLength() )
-		return nullptr;
-
-	bFiltersChanged = UpdateModifiedFilters ( dFilters, dModifiedFilters, dEnabledIndexes, pRowIdFilter );
-
-	if ( dIterators.GetLength()==1 )
-		return dIterators[0];
-
-	return new RowidIterator_Intersect_T<RowidIterator_i,false> ( dIterators.Begin(), dIterators.GetLength() );
+	return dIterators;
 }
 
 
@@ -1725,128 +1681,157 @@ bool RowidIteratorNot_c::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
 
 /////////////////////////////////////////////////////////////////////
 
-RowidIterator_i * CreateSecondaryIndexIterator ( const SI::Index_i * pCidx, CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, CSphVector<CSphFilterSettings> & dModifiedFilters, bool & bFiltersChanged, int iCutoff )
+class SIIteratorCreator_c
 {
-	if ( dEnabledIndexes.IsEmpty() )
-		return nullptr;
+public:
+						SIIteratorCreator_c ( const SI::Index_i * pSIIndex, CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff );
 
-	CSphVector<SecondaryIndexInfo_t> dNewEnabledIndexes;
-	CSphVector<SecondaryIndexInfo_t> dFilterChanged;
-	std::vector<common::BlockIterator_i *> dFilterIt;
-	std::vector<std::pair<RowidIterator_i *, int64_t>> dRes;
-	RowIdBoundaries_t tRowidBounds;
-	const CSphFilterSettings * pRowIdFilter = GetRowIdFilter ( dFilters, uRowsCount, tRowidBounds );
-	common::RowidRange_t tRange { tRowidBounds.m_tMinRowID, tRowidBounds.m_tMaxRowID };
+	CSphVector<RowidIterator_i *> Create();
 
-	for ( int iFilter=0; iFilter<dEnabledIndexes.GetLength(); iFilter++ )
+private:
+	const SI::Index_i *						m_pSIIndex = nullptr;
+	CSphVector<SecondaryIndexInfo_t> &		m_dSIInfo;
+	const CSphVector<CSphFilterSettings> &	m_dFilters;
+	ESphCollation							m_eCollation;
+	const ISphSchema &						m_tSchema;
+	RowID_t									m_uRowsCount = 0;
+	int										m_iCutoff = 0;
+
+	RowIdBoundaries_t						m_tRowidBounds;
+	const CSphFilterSettings *				m_pRowIdFilter = nullptr;
+
+	bool				CreateSIIterators ( std::vector<common::BlockIterator_i *> & dFilterIt, const CSphFilterSettings & tFilter );
+	RowidIterator_i *	CreateRowIdIteratorFromSI ( std::vector<common::BlockIterator_i *> & dFilterIt, const CSphFilterSettings & tFilter, int64_t iRsetSize );
+};
+
+
+SIIteratorCreator_c::SIIteratorCreator_c ( const SI::Index_i * pSIIndex, CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff )
+	: m_pSIIndex ( pSIIndex )
+	, m_dSIInfo ( dSIInfo )
+	, m_dFilters ( dFilters )
+	, m_eCollation ( eCollation )
+	, m_tSchema ( tSchema )
+	, m_uRowsCount ( uRowsCount )
+	, m_iCutoff ( iCutoff )
+	, m_pRowIdFilter ( GetRowIdFilter ( dFilters, uRowsCount, m_tRowidBounds ) )
+{}
+
+
+bool SIIteratorCreator_c::CreateSIIterators ( std::vector<common::BlockIterator_i *> & dFilterIt, const CSphFilterSettings & tFilter )
+{
+	common::RowidRange_t tRange { m_tRowidBounds.m_tMinRowID, m_tRowidBounds.m_tMaxRowID };
+
+	bool bCreated = false;
+	common::Filter_t tColumnarFilter;
+	CSphString sWarning;
+	std::string sError;
+	if ( ToColumnarFilter ( tColumnarFilter, tFilter, m_eCollation, m_tSchema, sWarning ) )
+		bCreated = m_pSIIndex->CreateIterators ( dFilterIt, tColumnarFilter, m_pRowIdFilter ? &tRange : nullptr, sError );
+	else
+		sphWarning ( "secondary index %s: %s", tFilter.m_sAttrName.cstr(), sWarning.cstr() );
+
+	if ( !bCreated )
 	{
-		int iFilterId = dEnabledIndexes[iFilter].m_iFilterId;
-		dNewEnabledIndexes.Add().m_iFilterId = iFilterId;
-
-		const CSphFilterSettings & tFilter = dFilters[iFilterId];
-		if ( &tFilter==pRowIdFilter )
-			break;
-
-		bool bCreated = false;
-		common::Filter_t tColumnarFilter;
-		CSphString sWarning;
-		std::string sError;
-		if ( ToColumnarFilter ( tColumnarFilter, tFilter, eCollation, tSchema, sWarning ) )
-			bCreated = pCidx->CreateIterators ( dFilterIt, tColumnarFilter, pRowIdFilter ? &tRange : nullptr, sError );
-		else
-			sphWarning ( "secondary index %s: %s", tFilter.m_sAttrName.cstr(), sWarning.cstr() );
-
-		if ( !bCreated )
-		{
-			// FIXME!!! return as query warning
-			sphWarning ( "%s", sError.c_str() );
-			for ( auto * pIt : dFilterIt ) { SafeDelete ( pIt ); }
-			dFilterIt.resize ( 0 );
-			continue;
-		}
-
-		if ( !sError.empty() )
-		{
-			// FIXME!!! return as query warning
-			sphWarning ( "secondary index %s:%s", tFilter.m_sAttrName.cstr(), sError.c_str() );
-			sError.clear();
-		}
-
-		dNewEnabledIndexes.Pop();
-		dFilterChanged.Add().m_iFilterId = iFilterId;
-
-		bool bExclude = tFilter.m_bExclude;
-		
-		RowidIterator_i * pIt = nullptr;
-		if ( !dFilterIt.size() )
-			pIt = new RowidEmptyIterator_c();
-		else if ( dFilterIt.size()==1 )
-		{
-			if ( pRowIdFilter )
-				pIt = new RowidIterator_Wrapper_T<true> ( dFilterIt[0], &tRowidBounds );
-			else
-				pIt = new RowidIterator_Wrapper_T<false> ( dFilterIt[0] );
-		}
-		else
-		{
-			const size_t BITMAP_ITERATOR_THRESH = 16;
-			const float	BITMAP_RATIO_THRESH = 0.002;
-
-			int64_t iRsetSize = dEnabledIndexes[iFilter].m_iRsetEstimate;
-			if ( iCutoff>=0 )
-				iRsetSize = Min ( iRsetSize, iCutoff );
-
-			/// fixme! account for cutoff here
-			float fRsetRatio = float ( iRsetSize ) / uRowsCount;
-			if ( dFilterIt.size()>BITMAP_ITERATOR_THRESH && fRsetRatio >= BITMAP_RATIO_THRESH )
-			{
-				if ( pRowIdFilter )
-					pIt = new RowidIterator_UnionBitmap_T<common::BlockIterator_i,true> ( &dFilterIt[0], (int)dFilterIt.size(), uRowsCount, &tRowidBounds );
-				else
-					pIt = new RowidIterator_UnionBitmap_T<common::BlockIterator_i,false> ( &dFilterIt[0], (int)dFilterIt.size(), uRowsCount );
-			}
-			else
-			{
-				if ( pRowIdFilter )
-					pIt = new RowidIterator_Union_T<common::BlockIterator_i,true> ( &dFilterIt[0], (int)dFilterIt.size(), &tRowidBounds );
-				else
-					pIt = new RowidIterator_Union_T<common::BlockIterator_i,false> ( &dFilterIt[0], (int)dFilterIt.size() );
-			}
-		}
-
-		if ( bExclude )
-			pIt = new RowidIteratorNot_c ( pIt, uRowsCount );
-
-		dRes.push_back ( { pIt, dEnabledIndexes[iFilter].m_iRsetEstimate } );
+		// FIXME!!! return as query warning
+		sphWarning ( "%s", sError.c_str() );
+		for ( auto * pIt : dFilterIt ) { SafeDelete ( pIt ); }
 		dFilterIt.resize ( 0 );
+		return false;
 	}
 
-	if ( dFilterChanged.GetLength() )
+	if ( !sError.empty() )
 	{
-		bFiltersChanged = UpdateModifiedFilters ( dFilters, dModifiedFilters, dFilterChanged, nullptr );
-		dEnabledIndexes.SwapData ( dNewEnabledIndexes );
+		// FIXME!!! return as query warning
+		sphWarning ( "secondary index %s:%s", tFilter.m_sAttrName.cstr(), sError.c_str() );
+		sError.clear();
+	}
 
-		// remove "@rowid" filter in case iterator created and no other unhandled filters left
-		if ( pRowIdFilter && dModifiedFilters.GetLength()==1 && dModifiedFilters.Begin()==pRowIdFilter )
+	return true;
+}
+
+
+RowidIterator_i * SIIteratorCreator_c::CreateRowIdIteratorFromSI ( std::vector<common::BlockIterator_i *> & dFilterIt, const CSphFilterSettings & tFilter, int64_t iRsetSize )
+{
+	RowidIterator_i * pIt = nullptr;
+	if ( !dFilterIt.size() )
+		pIt = new RowidEmptyIterator_c();
+	else if ( dFilterIt.size()==1 )
+	{
+		if ( m_pRowIdFilter )
+			pIt = new RowidIterator_Wrapper_T<true> ( dFilterIt[0], &m_tRowidBounds );
+		else
+			pIt = new RowidIterator_Wrapper_T<false> ( dFilterIt[0] );
+	}
+	else
+	{
+		const size_t BITMAP_ITERATOR_THRESH = 16;
+		const float	BITMAP_RATIO_THRESH = 0.002;
+
+		if ( m_iCutoff>=0 )
+			iRsetSize = Min ( iRsetSize, m_iCutoff );
+
+		/// fixme! account for cutoff here
+		float fRsetRatio = float ( iRsetSize ) / m_uRowsCount;
+		if ( dFilterIt.size()>BITMAP_ITERATOR_THRESH && fRsetRatio >= BITMAP_RATIO_THRESH )
 		{
-			dModifiedFilters.Resize ( 0 );
-			dEnabledIndexes.Resize ( 0 );
-			bFiltersChanged = true;
+			if ( m_pRowIdFilter )
+				pIt = new RowidIterator_UnionBitmap_T<common::BlockIterator_i,true> ( &dFilterIt[0], (int)dFilterIt.size(), m_uRowsCount, &m_tRowidBounds );
+			else
+				pIt = new RowidIterator_UnionBitmap_T<common::BlockIterator_i,false> ( &dFilterIt[0], (int)dFilterIt.size(), m_uRowsCount );
+		}
+		else
+		{
+			if ( m_pRowIdFilter )
+				pIt = new RowidIterator_Union_T<common::BlockIterator_i,true> ( &dFilterIt[0], (int)dFilterIt.size(), &m_tRowidBounds );
+			else
+				pIt = new RowidIterator_Union_T<common::BlockIterator_i,false> ( &dFilterIt[0], (int)dFilterIt.size() );
 		}
 	}
 
-	if ( !dRes.size() )
-		return nullptr;
-	
-	if ( dRes.size()==1 )
-		return dRes[0].first;
+	if ( tFilter.m_bExclude )
+		pIt = new RowidIteratorNot_c ( pIt, m_uRowsCount );
+
+	return pIt;
+}
+
+
+CSphVector<RowidIterator_i *> SIIteratorCreator_c::Create()
+{
+	std::vector<std::pair<RowidIterator_i *, int64_t>> dRes;
+
+	ARRAY_FOREACH ( i, m_dSIInfo )
+	{
+		auto & tSIInfo = m_dSIInfo[i];
+		if ( tSIInfo.m_eType!=SecondaryIndexType_e::INDEX )
+			continue;
+
+		int64_t iRsetSize = tSIInfo.m_iRsetEstimate;
+		const CSphFilterSettings & tFilter = m_dFilters[i];
+		std::vector<common::BlockIterator_i *> dFilterIt;
+		if ( !CreateSIIterators ( dFilterIt, tFilter ) )
+			continue;
+		
+		RowidIterator_i * pIt = CreateRowIdIteratorFromSI ( dFilterIt, tFilter, iRsetSize );
+		dRes.push_back ( { pIt, iRsetSize } );
+		tSIInfo.m_bCreated = true;
+	}
 
 	std::sort ( dRes.begin(), dRes.end(), []( auto tA, auto tB ) { return tA.second < tB.second; } );
-	std::vector<RowidIterator_i*> dIterators;
+	CSphVector<RowidIterator_i*> dIterators;
 	for ( auto & i : dRes )
-		dIterators.push_back ( i.first );
+		dIterators.Add ( i.first );
 
-	return new RowidIterator_Intersect_T<RowidIterator_i, false> ( &dIterators[0], (int)dIterators.size() );
+	return dIterators;
+}
+
+
+CSphVector<RowidIterator_i *> CreateSecondaryIndexIterator ( const SI::Index_i * pSIIndex, CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff )
+{
+	if ( !pSIIndex )
+		return {};
+
+	SIIteratorCreator_c tCreator ( pSIIndex, dSIInfo, dFilters, eCollation, tSchema, uRowsCount, iCutoff );
+	return tCreator.Create();
 }
 
 
@@ -1956,29 +1941,50 @@ void BuilderStoreAttrs ( const CSphRowitem * pRow, const BYTE * pPool, CSphVecto
 	}
 }
 
+/////////////////////////////////////////////////////////////////////
 
-class SelectProxy_c : public SelectSI_c
+class SelectSI_Disabled_c : public SelectSI_i
 {
 public:
-			SelectProxy_c ( const SI::Index_i * pSidx, const ISphSchema & tSchema, ESphCollation eCollation );
+			SelectSI_Disabled_c ( const ISphSchema & tSchema ) : m_tSchema ( tSchema ) {}
 
-	bool	IsEnabled ( const CSphFilterSettings & tFilter ) const;
+	bool	IsEnabled_SI ( const CSphFilterSettings & tFilter ) const override	{ return false; }
+	bool	IsEnabled_Analyzer ( const CSphFilterSettings & tFilter ) const override;
 
-private:
-	const SI::Index_i *		m_pSidx = nullptr;
-	const ISphSchema &		m_tSchema;
-	ESphCollation			m_eCollation = SPH_COLLATION_DEFAULT;
+protected:
+	const ISphSchema &	m_tSchema;
 };
 
 
-SelectProxy_c::SelectProxy_c ( const SI::Index_i * pSidx, const ISphSchema & tSchema, ESphCollation eCollation )
-	: m_pSidx ( pSidx )
-	, m_tSchema ( tSchema )
+bool SelectSI_Disabled_c::IsEnabled_Analyzer ( const CSphFilterSettings & tFilter ) const
+{
+	auto pAttr = m_tSchema.GetAttr ( tFilter.m_sAttrName.cstr() );
+	return pAttr && ( pAttr->IsColumnar() || pAttr->IsColumnarExpr() );
+}
+
+/////////////////////////////////////////////////////////////////////
+
+class SelectSI_c : public SelectSI_Disabled_c
+{
+public:
+			SelectSI_c ( const SI::Index_i * pSidx, const ISphSchema & tSchema, ESphCollation eCollation );
+
+	bool	IsEnabled_SI ( const CSphFilterSettings & tFilter ) const override;
+
+private:
+	const SI::Index_i *	m_pSidx = nullptr;
+	ESphCollation		m_eCollation = SPH_COLLATION_DEFAULT;
+};
+
+
+SelectSI_c::SelectSI_c ( const SI::Index_i * pSidx, const ISphSchema & tSchema, ESphCollation eCollation )
+	: SelectSI_Disabled_c ( tSchema )
+	, m_pSidx ( pSidx )
 	, m_eCollation ( eCollation )
 {}
 
 
-bool SelectProxy_c::IsEnabled ( const CSphFilterSettings & tFilter ) const
+bool SelectSI_c::IsEnabled_SI ( const CSphFilterSettings & tFilter ) const
 {
 	assert ( m_pSidx );
 
@@ -2005,17 +2011,10 @@ bool SelectProxy_c::IsEnabled ( const CSphFilterSettings & tFilter ) const
 }
 
 
-SelectSI_c * GetSelectIteratorsCond ( const SI::Index_i * pSidx, const ISphSchema & tSchema, ESphCollation eCollation )
+SelectSI_i * GetSelectIteratorsCond ( const SI::Index_i * pSidx, const ISphSchema & tSchema, ESphCollation eCollation )
 {
 	if ( pSidx )
-		return new SelectProxy_c ( pSidx, tSchema, eCollation );
+		return new SelectSI_c ( pSidx, tSchema, eCollation );
 	else
-		return new SelectSI_c();
+		return new SelectSI_Disabled_c(tSchema);
 }
-
-
-bool SelectSI_c::IsEnabled ( const CSphFilterSettings & tFilter ) const
-{
-	return HaveIndex ( tFilter.m_sAttrName.cstr() );
-}
-

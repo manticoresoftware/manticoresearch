@@ -1829,7 +1829,7 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	tOut.SendInt ( q.m_dIndexHints.GetLength() );
 	for ( const auto & i : q.m_dIndexHints )
 	{
-		tOut.SendDword ( i.m_eHint );
+		tOut.SendDword ( (DWORD)i.m_dHints[int(SecondaryIndexType_e::INDEX)] );
 		tOut.SendString ( i.m_sIndex.cstr() );
 	}
 }
@@ -2647,7 +2647,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		tQuery.m_dIndexHints.Resize ( tReq.GetDword() );
 		for ( auto & i : tQuery.m_dIndexHints )
 		{
-			i.m_eHint = (IndexHint_e)tReq.GetDword();
+			i.m_dHints[int(SecondaryIndexType_e::INDEX)] = (IndexHint_e)tReq.GetDword();
 			i.m_sIndex = tReq.GetString();
 		}
 	}
@@ -2986,15 +2986,15 @@ static void FormatIndexHints ( const CSphQuery & tQuery, StringBuilder_c & tBuf 
 	StrVec_t dUse, dForce, dIgnore;
 	for ( const auto & i : tQuery.m_dIndexHints )
 	{
-		switch ( i.m_eHint )
+		switch ( i.m_dHints[int(SecondaryIndexType_e::INDEX)] )
 		{
-		case INDEX_HINT_USE:
+		case IndexHint_e::USE:
 			dUse.Add(i.m_sIndex);
 			break;
-		case INDEX_HINT_FORCE:
+		case IndexHint_e::FORCE:
 			dForce.Add(i.m_sIndex);
 			break;
-		case INDEX_HINT_IGNORE:
+		case IndexHint_e::IGNORE_:
 			dIgnore.Add(i.m_sIndex);
 			break;
 		default:
@@ -15655,11 +15655,6 @@ static void HandleMysqlShowPlan ( RowBuffer_i & tOut, const QueryProfile_c & p, 
 	StringBuilder_c sPlan;
 	sph::RenderBsonPlan ( sPlan, bson::MakeHandle ( p.m_dPlan ), bDot );
 	tOut.PutString ( sPlan );
-	tOut.Commit();
-
-	tOut.PutString ( "enabled_indexes" );
-	tOut.PutString ( p.m_sEnablesIndexes.cstr() );
-
 	tOut.Commit();
 
 	tOut.Eof ( bMoreResultsFollow );

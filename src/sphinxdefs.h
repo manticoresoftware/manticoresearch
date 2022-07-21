@@ -236,11 +236,11 @@ enum QueryOption_e
 	QUERY_OPT_MORPH_NONE
 };
 
-enum IndexHint_e
+enum class IndexHint_e
 {
-	INDEX_HINT_USE,
-	INDEX_HINT_FORCE,
-	INDEX_HINT_IGNORE
+	USE,
+	FORCE,
+	IGNORE_		// dumb windows expands IGNORE as a macro
 };
 
 /// match sorting functions

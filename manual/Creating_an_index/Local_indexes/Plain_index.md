@@ -81,6 +81,7 @@ More information on this topic can be found [here](../../Adding_data_from_extern
 |`.sph` | stores index header information |
 |`.sphi` | stores histograms of attribute values |
 |`.spi` | stores word lists (word IDs and pointers to `.spd` file) |
+|`.spidx` | stores secondary indexes data |
 |`.spk` | stores kill-lists |
 |`.spl` | lock file |
 |`.spm` | stores a bitmap of killed documents |

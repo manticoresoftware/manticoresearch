@@ -3566,12 +3566,12 @@ int RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const CSphVector<DocID_
 	if ( pNewSeg && !CheckSegmentConsistency ( pNewSeg, false ) )
 		DumpInsert ( pNewSeg );
 
+	// We're going to modify segments, so fall into serial fiber. From here no concurrent changes may happen
+	ScopedScheduler_c tSerialFiber { m_tWorkers.SerialChunkAccess() };
+
 	// for pure kills it is not necessary to wait, as it can't increase N of segments.
 	if ( pNewSeg )
 		m_tUnLockedSegments.Wait ( [] ( int iVals ) { return iVals < MAX_SEGMENTS; } );
-
-	// We're going to modify segments, so fall into serial fiber. From here no concurrent changes may happen
-	ScopedScheduler_c tSerialFiber { m_tWorkers.SerialChunkAccess() };
 
 	RTLOGV << "CommitReplayable";
 

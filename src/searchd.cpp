@@ -8961,6 +8961,22 @@ static bool BuildDistIndexStatus ( VectorLike & dStatus, const CSphString& sInde
 	return true;
 }
 
+
+static bool operator < ( const IteratorDesc_t & tA, const IteratorDesc_t & tB )
+{
+	if ( tA.m_sAttr < tB.m_sAttr )
+		return true;
+
+	return tA.m_sType<tB.m_sType;
+}
+
+
+static bool operator == ( const IteratorDesc_t & tA, const IteratorDesc_t & tB )
+{
+	return tA.m_sAttr==tB.m_sAttr && tA.m_sType==tB.m_sType;
+}
+
+
 void BuildAgentStatus ( VectorLike &dStatus, const CSphString& sIndexOrAgent )
 {
 	if ( !sIndexOrAgent.IsEmpty() )
@@ -9073,7 +9089,9 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 	}
 
 	StringBuilder_c sIterators { ", " };
-	for ( const auto & i : tMeta.m_dUsedIterators )
+	CSphVector<IteratorDesc_t> dIterators = tMeta.m_dUsedIterators;
+	dIterators.Uniq();
+	for ( const auto & i : dIterators )
 		sIterators.Appendf ( "%s:%s", i.m_sAttr.cstr(), i.m_sType.cstr() );
 
 	if ( !sIterators.IsEmpty() )

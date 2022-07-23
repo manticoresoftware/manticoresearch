@@ -615,7 +615,6 @@ public:
 				RowidIterator_Base_T ( T ** ppIterators, int iNumIterators, const RowIdBoundaries_t * pBoundaries );
 
 	int64_t		GetNumProcessed() const override;
-	void		AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const override;
 
 protected:
 	using IteratorState_t = IteratorState_T<T,ROWID_LIMITS>;
@@ -645,31 +644,6 @@ int64_t RowidIterator_Base_T<T,ROWID_LIMITS>::GetNumProcessed() const
 	return iTotal;
 }
 
-template <typename T, bool ROWID_LIMITS>
-void RowidIterator_Base_T<T,ROWID_LIMITS>::AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const
-{
-	std::vector<common::IteratorDesc_t> dIteratorDesc;
-	for ( const auto & i : m_dIterators )
-		i.m_pIterator->AddDesc(dIteratorDesc);
-
-	for ( const auto & i : dIteratorDesc )
-		dDesc.Add ( { i.m_sAttr.c_str(), i.m_sType.c_str() } );
-}
-
-template <>
-void RowidIterator_Base_T<RowidIterator_i,true>::AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const
-{
-	for ( const auto & i : m_dIterators )
-		i.m_pIterator->AddDesc(dDesc);
-}
-
-template <>
-void RowidIterator_Base_T<RowidIterator_i,false>::AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const
-{
-	for ( const auto & i : m_dIterators )
-		i.m_pIterator->AddDesc(dDesc);
-}
-
 //////////////////////////////////////////////////////////////////////////
 
 template <typename T, bool ROWID_LIMITS>
@@ -684,6 +658,7 @@ public:
 	bool		GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock ) override;
 	void		SetCutoff ( int iCutoff ) override { m_iRowsLeft = iCutoff; }
 	bool		WasCutoffHit() const override { return !m_iRowsLeft; }
+	void		AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const override;
 
 private:
 	int			m_iRowsLeft = INT_MAX;
@@ -767,6 +742,33 @@ bool RowidIterator_Intersect_T<T,ROWID_LIMITS>::AdvanceIterators()
 }
 
 template <typename T, bool ROWID_LIMITS>
+void RowidIterator_Intersect_T<T,ROWID_LIMITS>::AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const
+{
+	std::vector<common::IteratorDesc_t> dIteratorDesc;
+	for ( const auto & i : BASE::m_dIterators )
+		i.m_pIterator->AddDesc(dIteratorDesc);
+
+	for ( const auto & i : dIteratorDesc )
+		dDesc.Add ( { i.m_sAttr.c_str(), i.m_sType.c_str() } );
+}
+
+template <>
+void RowidIterator_Intersect_T<RowidIterator_i,true>::AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const
+{
+	for ( const auto & i : BASE::m_dIterators )
+		i.m_pIterator->AddDesc(dDesc);
+}
+
+template <>
+void RowidIterator_Intersect_T<RowidIterator_i,false>::AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const
+{
+	for ( const auto & i : BASE::m_dIterators )
+		i.m_pIterator->AddDesc(dDesc);
+}
+
+/////////////////////////////////////////////////////////////////////
+
+template <typename T, bool ROWID_LIMITS>
 class RowidIterator_Union_T : public RowidIterator_Base_T<T,ROWID_LIMITS>
 {
 	using BASE = RowidIterator_Base_T<T,ROWID_LIMITS>;
@@ -778,6 +780,7 @@ public:
 	bool		GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock ) override;
 	void		SetCutoff ( int iCutoff ) override { m_iRowsLeft = iCutoff; }
 	bool		WasCutoffHit() const override { return !m_iRowsLeft; }
+	void		AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const override;
 
 private:
 	CSphQueue<typename BASE::IteratorState_t*, typename BASE::IteratorState_t> m_tMerge;
@@ -862,6 +865,26 @@ bool RowidIterator_Union_T<T,ROWID_LIMITS>::GetNextRowIdBlock ( RowIdBlock_t & d
 	return ReturnIteratorResult ( pRowID, pRowIdStart, dRowIdBlock );
 }
 
+template <typename T, bool ROWID_LIMITS>
+void RowidIterator_Union_T<T,ROWID_LIMITS>::AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const
+{
+	std::vector<common::IteratorDesc_t> dIteratorDesc;
+	BASE::m_dIterators[0].m_pIterator->AddDesc(dIteratorDesc);
+	dDesc.Add ( { dIteratorDesc[0].m_sAttr.c_str(), dIteratorDesc[0].m_sType.c_str() } );
+}
+
+template <>
+void RowidIterator_Union_T<RowidIterator_i,true>::AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const
+{
+	BASE::m_dIterators[0].m_pIterator->AddDesc(dDesc);
+}
+
+template <>
+void RowidIterator_Union_T<RowidIterator_i,false>::AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const
+{
+	BASE::m_dIterators[0].m_pIterator->AddDesc(dDesc);
+}
+
 /////////////////////////////////////////////////////////////////////
 
 template <typename T, bool ROWID_LIMITS>
@@ -881,7 +904,7 @@ public:
 
 private:
 	BitVec_T<uint64_t> m_tBitmap;
-	CSphVector<IteratorDesc_t> m_dDesc;
+	IteratorDesc_t m_tDesc;
 	RowID_t		m_tBit = 0;
 	RowID_t		m_tMinRowID = 0;
 	int64_t		m_iTotalProcessed = 0;
@@ -942,33 +965,32 @@ bool RowidIterator_UnionBitmap_T<T, ROWID_LIMITS>::GetNextRowIdBlock ( RowIdBloc
 template <typename T, bool ROWID_LIMITS>
 void RowidIterator_UnionBitmap_T<T, ROWID_LIMITS>::AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const
 {
-	for ( const auto & i : m_dDesc )
-		dDesc.Add(i);
+	// first desc is enough
+	dDesc.Add(m_tDesc);
 }
 
 template <typename T, bool ROWID_LIMITS>
 void RowidIterator_UnionBitmap_T<T, ROWID_LIMITS>::StoreIteratorDesc()
 {
 	std::vector<common::IteratorDesc_t> dDesc;
-	for ( const auto & i : BASE::m_dIterators )
-		i.m_pIterator->AddDesc(dDesc);
-
-	for ( const auto & i : dDesc )
-		m_dDesc.Add ( { i.m_sAttr.c_str(), i.m_sType.c_str() } );
+	BASE::m_dIterators[0].m_pIterator->AddDesc(dDesc);
+	m_tDesc = { dDesc[0].m_sAttr.c_str(), dDesc[0].m_sType.c_str() };
 }
 
 template <>
 void RowidIterator_UnionBitmap_T<RowidIterator_i, true>::StoreIteratorDesc()
 {
-	for ( const auto & i : BASE::m_dIterators )
-		i.m_pIterator->AddDesc(m_dDesc);
+	CSphVector<IteratorDesc_t> dDesc;
+	BASE::m_dIterators[0].m_pIterator->AddDesc(dDesc);
+	m_tDesc = { dDesc[0].m_sAttr, dDesc[0].m_sType };
 }
 
 template <>
 void RowidIterator_UnionBitmap_T<RowidIterator_i, false>::StoreIteratorDesc()
 {
-	for ( const auto & i : BASE::m_dIterators )
-		i.m_pIterator->AddDesc(m_dDesc);
+	CSphVector<IteratorDesc_t> dDesc;
+	BASE::m_dIterators[0].m_pIterator->AddDesc(dDesc);
+	m_tDesc = { dDesc[0].m_sAttr, dDesc[0].m_sType };
 }
 
 /////////////////////////////////////////////////////////////////////

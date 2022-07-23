@@ -194,19 +194,6 @@ float CostEstimate_c::CalcQueryCost()
 
 	fCost += Cost_Push ( iDocsToPush );
 
-/*	{
-		fCost += LookupRead ( iDocsProcessedByIndexes );
-
-		if ( m_dSecondaryIndexes.GetLength()>1 )
-		{
-			fCost += IndexIntersect ( iDocsProcessedByIndexes );
-			fCost += IndexFilter ( uint64_t(fTotalIndexProbability*m_iTotalDocs), m_dFilters.GetLength()-iNumEnabled+1 );
-
-		} else
-			fCost += IndexFilter ( iDocsProcessedByIndexes, m_dFilters.GetLength()-iNumEnabled+1 );
-	}
-	*/
-
 	return fCost;
 }
 

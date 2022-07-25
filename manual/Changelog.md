@@ -2,6 +2,9 @@
 
 # Next release
 
+### Minor changes
+* **⚠️ BREAKING CHANGE**: Secondary indexes file format got changed and `.spidx` should be removed from all indexes right after binaries got updated prior to start of the updated daemon otherwise indexes with old format of secondary index won't be loaded with a warning message. For cluster configuration full cluster restart should be performed with removal of `.spidx` files at all nodes. Read about [restarting a cluster](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md#Restarting-a-cluster) for more details.
+
 ### Packaging
 * arm64 packages for macOS and Linuxes
 * easier package building for contributors

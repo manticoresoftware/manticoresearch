@@ -14,10 +14,10 @@ SET @@dummy_variable = ignored_value
 
 There are the following classes of the variables:
 
-1.  per-session server variable
-2.  global server variable
-3.  global user variable
-4.  global distributed variable
+1.  per-session server variable: `set var_name = value`
+2.  global server variable: `set global var_name = value`
+3.  global user variable: `set global @var_name = (value)`
+4.  global distributed variable: `set index dist_index_name global @var_name = (value)`
 
 Global user variables are shared between concurrent sessions. Currently, the only supported value type is the list of BIGINTs, and these variables can only be used along with IN() for filtering purpose. The intended usage scenario is uploading huge lists of values to `searchd` (once) and reusing them (many times) later, saving on network overheads. Global user variables might be either transferred to all agents of distributed index or set locally in case of local index defined at distributed index. Example:
 
@@ -80,4 +80,12 @@ Query OK, 0 rows affected (0.00 sec)
 
 mysql> SET GLOBAL query_log_format=sphinxql;
 Query OK, 0 rows affected (0.00 sec)
+
+mysql> SET GLOBAL @banned=(1,2,3);
+Query OK, 0 rows affected (0.01 sec)
+
+mysql> SET INDEX users GLOBAL @banned=(1,2,3);
+Query OK, 0 rows affected (0.01 sec)
 ```
+
+To make user variables persistent make sure [sphinxql_state](../Server_settings/Searchd.md#sphinxql_state) is enabled.

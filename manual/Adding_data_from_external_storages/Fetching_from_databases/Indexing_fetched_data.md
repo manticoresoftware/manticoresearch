@@ -95,6 +95,10 @@ sql_attr_uint = forum_id:9 # 9 bits for forum_id
 
 Declares a combo string attribute/text field. The values will be indexed as a full-text field, but also stored in a string attribute with the same name. Note, it should be only used when you are sure you want the field to be searchable both in a full-text manner and as an attribute (with the ability to sort and group by it). If you just want to be able to fetch the original value of the field you don't need to do anything for it unless you implicitly removed the field from the stored fields list via [stored_fields](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#stored_fields).
 
+```ini
+sql_field_string = name
+```
+
 ### sql_file_field
 
 Declares a file based field.
@@ -102,7 +106,7 @@ Declares a file based field.
 This directive makes indexer interpret field contents as a file name, and load and index the referred file. Files larger than max_file_field_buffer in size are skipped. Any errors during the file loading (IO errors, missed limits, etc) will be reported as indexing warnings and will not early terminate the indexing. No content will be indexed for such files.
 
 ```ini
-sql_field_field = /var/data/myfile.txt
+sql_file_field = field_name
 ```
 
 ### sql_joined_field

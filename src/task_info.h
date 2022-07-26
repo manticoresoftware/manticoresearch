@@ -122,28 +122,29 @@ struct NoRefCount_t
 // On dtr restores stored chain as root and retire info (uses hazard pointers)
 // if explicit root provided - uses it instead of TLS root.
 template<typename TASKINFO, typename REFCOUNT=RefCount_t>
-class ScopedInfo_T : public hazard::ScopedPtr_t<TASKINFO*>
+class ScopedInfo_T
 {
-	using BASE = hazard::ScopedPtr_t<TASKINFO*>;
+	hazard::ScopedPtr_t<TASKINFO*> m_pInfo;
 
 public:
 	explicit ScopedInfo_T ( TASKINFO* pInfo )
-		: BASE ( pInfo )
+		: m_pInfo ( pInfo )
 	{
-		pInfo->m_pPrev = Threads::MyThd ().m_pTaskInfo.load ( std::memory_order_acquire );
+		pInfo->m_pPrev = Threads::MyThd().m_pTaskInfo.exchange ( pInfo, std::memory_order_acq_rel );
 		REFCOUNT::Inc ( TASKINFO::m_eTask );
-		Threads::MyThd ().m_pTaskInfo.store ( pInfo, std::memory_order_release );
 	}
+
+	operator TASKINFO*() const { return m_pInfo.operator TASKINFO*(); };
+	TASKINFO* operator->() const { return m_pInfo.operator->(); }
 
 	ScopedInfo_T ( ScopedInfo_T && rhs ) noexcept
 	{
-		BASE::Swap ( rhs );
-		REFCOUNT::Inc ( TASKINFO::m_eTask );
+		m_pInfo.Swap ( rhs.m_pInfo );
 	}
 
 	~ScopedInfo_T ()
 	{
-		Threads::MyThd ().m_pTaskInfo.store ( ( BASE::operator TASKINFO * () )->m_pPrev, std::memory_order_release );
+		Threads::MyThd ().m_pTaskInfo.store ( m_pInfo->m_pPrev, std::memory_order_release );
 		REFCOUNT::Dec ( TASKINFO::m_eTask );
 	}
 };

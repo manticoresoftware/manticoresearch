@@ -123,14 +123,16 @@ public:
 		: ScopedInfo_T<ClientTaskInfo_t> ( pInfo )
 		, m_bVip ( pInfo->GetVip() )
 	{
+		ClientTaskInfo_t::m_iClients.fetch_add ( 1, std::memory_order_relaxed );
 		if ( m_bVip )
-			++ClientTaskInfo_t::m_iVips;
+			ClientTaskInfo_t::m_iVips.fetch_add ( 1, std::memory_order_relaxed );
 	}
 
 	~ScopedClientInfo_c()
 	{
 		if ( m_bVip )
-			--ClientTaskInfo_t::m_iVips;
+			ClientTaskInfo_t::m_iVips.fetch_sub ( 1, std::memory_order_relaxed );
+		ClientTaskInfo_t::m_iClients.fetch_sub ( 1, std::memory_order_relaxed );
 	}
 };
 

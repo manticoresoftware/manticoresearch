@@ -11,7 +11,8 @@
 #include "client_task_info.h"
 #include "client_session.h"
 
-int ClientTaskInfo_t::m_iVips = 0;
+std::atomic<int> ClientTaskInfo_t::m_iClients { 0 };
+std::atomic<int> ClientTaskInfo_t::m_iVips { 0 };
 
 DEFINE_RENDER ( ClientTaskInfo_t )
 {

@@ -32,7 +32,7 @@ private:
 	TaskState_e m_eTaskState = TaskState_e::UNKNOWN;
 	Proto_e m_eProto = Proto_e::UNKNOWN;
 	int m_iConnID = -1;
-	CSphString m_sClientName; // set once before info is published and never changes. So, assume always mt-safeprivate:
+	CSphString m_sClientName; // set once before info is published and never changes. So, assume always mt-safe
 	bool m_bSsl = false;
 	bool m_bVip = false;
 	bool m_bReadOnly = false;
@@ -47,7 +47,8 @@ public:
 	ESphCollation m_eCollation { GlobalCollation () };
 	Profile_e			m_eProfile { Profile_e::NONE };
 	bool m_bPersistent = false;
-	static int m_iVips;
+	static std::atomic<int> m_iClients;
+	static std::atomic<int> m_iVips;
 
 private:
 	ClientSession_c* 	m_pSession = nullptr;
@@ -72,7 +73,8 @@ public:
 
 	void SetVip ( bool bVip ) { m_bVip = bVip; }
 	bool GetVip() const { return m_bVip; }
-	inline static int GetVips() { return m_iVips; }
+	inline static int GetVips() { return m_iVips.load ( std::memory_order_relaxed ); }
+	inline static int GetClients() { return m_iClients.load ( std::memory_order_relaxed ); }
 
 	void SetReadOnly ( bool bReadOnly ) { m_bReadOnly = bReadOnly; }
 	bool GetReadOnly() const { return m_bReadOnly; }
@@ -131,9 +133,9 @@ namespace session {
 	inline void SetSsl ( bool bSsl ) { ClientTaskInfo_t::Info().SetSsl (bSsl); }
 	inline bool GetSsl() { return ClientTaskInfo_t::Info().GetSsl(); }
 
-	inline void SetVip ( bool bVip ) { ClientTaskInfo_t::Info().SetVip (bVip); }
 	inline bool GetVip() { return ClientTaskInfo_t::Info().GetVip(); }
 	inline int GetVips() { return ClientTaskInfo_t::GetVips(); }
+	inline int GetClients() { return ClientTaskInfo_t::GetClients(); }
 
 	inline void SetReadOnly ( bool bReadOnly ) { ClientTaskInfo_t::Info().SetReadOnly (bReadOnly); }
 	inline bool GetReadOnly() { return ClientTaskInfo_t::Info().GetReadOnly(); }
@@ -172,7 +174,7 @@ namespace myinfo {
 	// num of client tasks, not including vips
 	inline int CountClients ()
 	{
-		return Count ( ClientTaskInfo_t::m_eTask ) - session::GetVips();
+		return session::GetClients() - session::GetVips();
 	}
 
 	// num of real tasks (that is mini-info + client-info)

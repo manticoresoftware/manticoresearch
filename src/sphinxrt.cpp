@@ -1308,7 +1308,7 @@ private:
 	int							m_iWordsCheckpoint = RTDICT_CHECKPOINT_V5;
 	int							m_iMaxCodepointLength = 0;
 	TokenizerRefPtr_c			m_pTokenizerIndexing;
-	bool						m_bLoadRamPassedOk = true;
+	bool						m_bPreallocPassedOk = true;
 	std::atomic<WriteState_e>	m_eSaving { WriteState_e::ENABLED };
 	bool						m_bHasFiles = false;
 
@@ -1459,7 +1459,7 @@ RtIndex_c::~RtIndex_c ()
 	}
 
 	int64_t tmSave = sphMicroTimer();
-	bool bValid = m_pTokenizer && m_pDict && m_bLoadRamPassedOk;
+	bool bValid = m_pTokenizer && m_pDict && m_bPreallocPassedOk;
 
 	if ( bValid )
 	{
@@ -4962,6 +4962,8 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 	// so we simply lock here, and ignore Lock/Unlock hassle caused by forks
 	assert ( m_iLockFD<0 );
 
+	m_bPreallocPassedOk = false;
+
 	CSphString sLock;
 	sLock.SetSprintf ( "%s.lock", m_sPath.cstr() );
 	m_iLockFD = ::open ( sLock.cstr(), SPH_O_NEW, 0644 );
@@ -5002,13 +5004,11 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 		return false;
 	}
 
-	m_bLoadRamPassedOk = false;
-
 	if ( m_bDebugCheck )
 	{
 		// load ram chunk
-		m_bLoadRamPassedOk = LoadRamChunk ( uVersion, bRebuildInfixes, false );
-		return m_bLoadRamPassedOk;
+		m_bPreallocPassedOk = LoadRamChunk ( uVersion, bRebuildInfixes, false );
+		return m_bPreallocPassedOk;
 	}
 
 	m_tWorkers.InitWorkers();
@@ -5018,7 +5018,7 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 		return false;
 
 	// load ram chunk
-	m_bLoadRamPassedOk = LoadRamChunk ( uVersion, bRebuildInfixes );
+	m_bPreallocPassedOk = LoadRamChunk ( uVersion, bRebuildInfixes );
 
 	// field lengths
 	ARRAY_FOREACH ( i, m_dFieldLens )
@@ -5033,7 +5033,7 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 	RecalculateRateLimit ( iUsedRam, 1, false );
 
 	RunMergeSegmentsWorker();
-	return m_bLoadRamPassedOk;
+	return m_bPreallocPassedOk;
 }
 
 

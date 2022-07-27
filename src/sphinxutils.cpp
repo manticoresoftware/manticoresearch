@@ -2756,7 +2756,7 @@ void sphBacktrace ( int iFD, bool bSafe )
 #endif
 
 #ifdef OS_UNAME
-	sphSafeInfo ( iFD, "Host OS is " OS_UNAME );
+	sphSafeInfo ( iFD, "Built on " OS_UNAME );
 #endif
 
 	bool bOk = true;

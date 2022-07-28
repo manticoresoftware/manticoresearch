@@ -2250,9 +2250,6 @@ static bool ParseSelect ( const JsonObj_c & tSelect, CSphQuery & tQuery, CSphStr
 	{
 		if ( !ParseStringArray ( tExclude, R"("_source" "excludes")", tQuery.m_dExcludeItems, sError ) )
 			return false;
-
-		if ( !tQuery.m_dExcludeItems.GetLength() )
-			tQuery.m_dExcludeItems.Add ( "*" );
 	} else if ( !sError.IsEmpty() )
 		return false;
 

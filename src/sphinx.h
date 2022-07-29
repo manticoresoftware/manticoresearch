@@ -1192,7 +1192,7 @@ public:
 	const char *				GetFilename () const { return m_sFilename.cstr(); }
 
 	/// get actual index files list
-	virtual void				GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt ) const {}
+	virtual void				GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const FilenameBuilder_i* = nullptr ) const {}
 
 	/// internal make document id list from external docinfo, DO NOT USE
 	virtual CSphVector<SphAttr_t> BuildDocList () const;

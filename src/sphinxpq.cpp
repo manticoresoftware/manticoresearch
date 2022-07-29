@@ -162,7 +162,7 @@ public:
 private:
 	int ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQuery_i*>& dNewQueries, const VecTraits_T<int64_t>& dDeleteQueries, const VecTraits_T<uint64_t>& dDeleteTags ) EXCLUDES ( m_tLock );
 
-	void GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExtra ) const override;
+	void GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExtra, const FilenameBuilder_i* = nullptr ) const override;
 	Bson_t ExplainQuery ( const CSphString & sQuery ) const final;
 
 	StoredQuerySharedPtrVecSharedPtr_t MakeClone () const REQUIRES_SHARED ( m_tLock );
@@ -3124,7 +3124,7 @@ void MergePqResults ( const VecTraits_T<CPqResult *> &dChunks, CPqResult &dRes, 
 	}
 }
 
-void PercolateIndex_c::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExtra ) const
+void PercolateIndex_c::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExtra, const FilenameBuilder_i* pParentFilenamebuilder ) const
 {
 	CSphString sPath;
 	sPath.SetSprintf ( "%s.meta", m_sFilename.cstr() );
@@ -3138,8 +3138,13 @@ void PercolateIndex_c::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExtra ) cons
 			dFiles.Add ( sPath );
 	}
 
-	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder { GetIndexFilenameBuilder() ? GetIndexFilenameBuilder() ( m_sIndexName.cstr() ) : nullptr };
-	GetSettingsFiles ( m_pTokenizer, m_pDict, GetSettings(), std::move ( pFilenameBuilder ), dExtra );
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder { nullptr };
+	if ( !pParentFilenamebuilder && GetIndexFilenameBuilder() )
+	{
+		pFilenameBuilder = GetIndexFilenameBuilder() ( m_sIndexName.cstr() );
+		pParentFilenamebuilder = pFilenameBuilder.get();
+	}
+	GetSettingsFiles ( m_pTokenizer, m_pDict, GetSettings(), pParentFilenamebuilder, dExtra );
 }
 
 Bson_t PercolateIndex_c::ExplainQuery ( const CSphString & sQuery ) const

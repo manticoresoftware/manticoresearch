@@ -1373,7 +1373,7 @@ private:
 	bool						Update_WriteBlobRow ( UpdateContext_t& tCtx, CSphRowitem* pDocinfo, const BYTE* pBlob, int iLength, int nBlobAttrs, const CSphAttrLocator& tBlobRowLoc, bool& bCritical, CSphString& sError ) override;
 	bool						Update_DiskChunks ( AttrUpdateInc_t& tUpd, const DiskChunkSlice_t& dDiskChunks, CSphString& sError );
 
-	void						GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt ) const override;
+	void						GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const FilenameBuilder_i* = nullptr ) const override;
 	DocstoreBuilder_i::Doc_t *	FetchDocFields ( DocstoreBuilder_i::Doc_t & tStoredDoc, const InsertDocData_t & tDoc, CSphSource_StringVector & tSrc, CSphVector<CSphVector<BYTE>> & dTmpAttrStorage ) const;
 
 	CSphString					MakeChunkName(int iChunkID);
@@ -10114,7 +10114,7 @@ uint64_t sphGetSettingsFNV ( const CSphIndexSettings & tSettings )
 	return uHash;
 }
 
-void RtIndex_c::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt ) const
+void RtIndex_c::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const FilenameBuilder_i* pParentFilenameBuilder ) const
 {
 	auto fnAddFile = [this, &dFiles] ( const char* szExt ) {
 		auto sFile = SphSprintf ( "%s%s", m_sPath.cstr(), szExt );
@@ -10128,10 +10128,15 @@ void RtIndex_c::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt ) const
 	if ( m_tMutableSettings.NeedSave() ) // should be file already after post-setup
 		fnAddFile ( sphGetExt ( SPH_EXT_SETTINGS ) );
 
-	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder { GetIndexFilenameBuilder() ? GetIndexFilenameBuilder() ( m_sIndexName.cstr() ) : nullptr };
-	GetSettingsFiles ( m_pTokenizer, m_pDict, GetSettings(), std::move ( pFilenameBuilder ), dExt );
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder { nullptr };
+	if ( !pParentFilenameBuilder && GetIndexFilenameBuilder() )
+	{
+		pFilenameBuilder = GetIndexFilenameBuilder() ( m_sIndexName.cstr() );
+		pParentFilenameBuilder = pFilenameBuilder.get();
+	}
+	GetSettingsFiles ( m_pTokenizer, m_pDict, GetSettings(), pParentFilenameBuilder, dExt );
 
-	RtGuard().m_dDiskChunks.for_each ( [&] ( ConstDiskChunkRefPtr_t& p ) { p->Cidx().GetIndexFiles ( dFiles, dExt ); } );
+	RtGuard().m_dDiskChunks.for_each ( [&] ( ConstDiskChunkRefPtr_t& p ) { p->Cidx().GetIndexFiles ( dFiles, dExt, pParentFilenameBuilder ); } );
 	dExt.Uniq(); // might be duplicates of tok \ dict files from disk chunks
 }
 

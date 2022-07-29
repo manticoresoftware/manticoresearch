@@ -1278,7 +1278,7 @@ private:
 private:
 	CSphString					GetIndexFileName ( ESphExt eExt, bool bTemp=false ) const;
 	CSphString					GetIndexFileName ( const char * szExt ) const;
-	void						GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt ) const override;
+	void						GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const FilenameBuilder_i* = nullptr ) const override;
 
 	bool						ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult & tResult, const VecTraits_T<ISphMatchSorter*> & dSorters, const XQQuery_t & tXQ, DictRefPtr_c pDict, const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache, int64_t tmMaxTimer ) const;
 
@@ -2983,13 +2983,18 @@ CSphString CSphIndex_VLN::GetIndexFileName ( const char * szExt ) const
 	return sRes;
 }
 
-void CSphIndex_VLN::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt ) const
+void CSphIndex_VLN::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const FilenameBuilder_i* pParentFilenameBuilder ) const
 {
 	if ( !m_pDict )
 		return;
 
-	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder { GetIndexFilenameBuilder() ? GetIndexFilenameBuilder() ( m_sIndexName.cstr() ) : nullptr };
-	GetSettingsFiles ( m_pTokenizer, m_pDict, GetSettings(), std::move ( pFilenameBuilder ), dExt );
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder { nullptr };
+	if ( !pParentFilenameBuilder && GetIndexFilenameBuilder() )
+	{
+		pFilenameBuilder = GetIndexFilenameBuilder() ( m_sIndexName.cstr() );
+		pParentFilenameBuilder = pFilenameBuilder.get();
+	}
+	GetSettingsFiles ( m_pTokenizer, m_pDict, GetSettings(), pParentFilenameBuilder, dExt );
 
 	auto fnAddFile = [this,&dFiles] ( ESphExt eFile ) {
 		auto sFile = GetIndexFileName ( eFile );
@@ -3024,7 +3029,7 @@ void CSphIndex_VLN::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt ) const
 		fnAddFile ( SPH_EXT_SPC );
 }
 
-void GetSettingsFiles ( const TokenizerRefPtr_c& pTok, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, std::unique_ptr<FilenameBuilder_i> pFilenameBuilder, StrVec_t & dFiles )
+void GetSettingsFiles ( const TokenizerRefPtr_c& pTok, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const FilenameBuilder_i* pFilenameBuilder, StrVec_t & dFiles )
 {
 	assert ( pTok );
 	assert ( pDict );

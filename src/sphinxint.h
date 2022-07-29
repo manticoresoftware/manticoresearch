@@ -948,7 +948,7 @@ void			LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, 
 void			LoadIndexSettingsJson ( bson::Bson_c tNode, CSphIndexSettings & tSettings );
 bool			AddFieldLens ( CSphSchema & tSchema, bool bDynamic, CSphString & sError );
 bool			LoadHitlessWords ( const CSphString & sHitlessFiles, const TokenizerRefPtr_c& pTok, const DictRefPtr_c& pDict, CSphVector<SphWordID_t> & dHitlessWords, CSphString & sError );
-void			GetSettingsFiles ( const TokenizerRefPtr_c& pTok, const DictRefPtr_c& pDict, const CSphIndexSettings& tSettings, std::unique_ptr<FilenameBuilder_i> pFilenameBuilder, StrVec_t& dFiles );
+void			GetSettingsFiles ( const TokenizerRefPtr_c& pTok, const DictRefPtr_c& pDict, const CSphIndexSettings& tSettings, const FilenameBuilder_i* pFilenameBuilder, StrVec_t& dFiles );
 
 /// json save/load
 void operator<< ( JsonEscapedBuilder& tOut, const CSphSchema& tSchema );

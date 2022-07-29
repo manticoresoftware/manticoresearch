@@ -7506,7 +7506,7 @@ static const char * g_dSqlStmts[] =
 	"facet", "alter_reconfigure", "show_index_settings", "flush_index", "reload_plugins", "reload_index",
 	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
 	"alter_index_settings", "join_cluster", "cluster_create", "cluster_delete", "cluster_index_add",
-	"cluster_index_delete", "cluster_update", "explain", "import_table"
+	"cluster_index_delete", "cluster_update", "explain", "import_table", "lock_indexes", "unlock_indexes",
 };
 
 
@@ -15849,6 +15849,66 @@ void HandleMysqlImportTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphS
 }
 
 //////////////////////////////////////////////////////////////////////////
+void HandleMysqlLockIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes, CSphString& sWarningOut )
+{
+	// search through specified local indexes
+	StrVec_t dIndexes, dNonlockedIndexes, dIndexFiles;
+
+	ParseIndexList ( sIndexes, dIndexes );
+	for ( const auto& sIndex : dIndexes )
+	{
+		auto pIndex = GetServed ( sIndex );
+		if ( !ServedDesc_t::IsMutable ( pIndex ) )
+		{
+			dNonlockedIndexes.Add ( sIndex );
+			continue;
+		}
+
+		RIdx_T<RtIndex_i*> pRt { pIndex };
+		pRt->LockFileState ( dIndexFiles );
+	}
+
+	int iWarnings=0;
+	if ( !dNonlockedIndexes.IsEmpty() )
+	{
+		StringBuilder_c sWarning;
+		sWarning << "Some indexes are not suitable for locking: ";
+		sWarning.StartBlock();
+		dNonlockedIndexes.for_each ( [&sWarning] ( const auto& sValue ) { sWarning << sValue; } );
+		sWarning.FinishBlocks ();
+		sWarning.MoveTo ( sWarningOut );
+		++iWarnings;
+	}
+
+	tOut.HeadBegin ( 2 );
+	tOut.HeadColumn ( "file" );
+	tOut.HeadColumn ( "normalized" );
+	tOut.HeadEnd();
+
+	dIndexFiles.for_each ( [&] ( const auto& sFile ) { tOut.PutString (sFile); tOut.PutString (RealPath (sFile)); tOut.Commit(); } );
+	tOut.Eof ( false, iWarnings );
+}
+
+void HandleMysqlUnlockIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes, CSphString& sWarningOut )
+{
+	// search through specified local indexes
+	StrVec_t dIndexes;
+
+	int iUnlocked=0;
+	ParseIndexList ( sIndexes, dIndexes );
+	for ( const auto& sIndex : dIndexes )
+	{
+		auto pIndex = GetServed ( sIndex );
+		if ( !ServedDesc_t::IsMutable ( pIndex ) )
+			continue;
+
+		RIdx_T<RtIndex_i*> pRt { pIndex };
+		pRt->EnableSave ();
+		++iUnlocked;
+	}
+
+	tOut.Ok ( iUnlocked );
+}
 
 RtAccum_t * CSphSessionAccum::GetAcc ( RtIndex_i * pIndex, CSphString & sError )
 {
@@ -16340,6 +16400,14 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	case STMT_IMPORT_TABLE:
 		FreezeLastMeta();
 		HandleMysqlImportTable ( tOut, *pStmt, m_tLastMeta.m_sWarning );
+		return true;
+
+	case STMT_LOCK:
+		HandleMysqlLockIndexes ( tOut, pStmt->m_sIndex, m_tLastMeta.m_sWarning);
+		return true;
+
+	case STMT_UNLOCK:
+		HandleMysqlUnlockIndexes ( tOut, pStmt->m_sIndex, m_tLastMeta.m_sWarning );
 		return true;
 
 	default:

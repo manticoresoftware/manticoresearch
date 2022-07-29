@@ -154,6 +154,8 @@ CSphString &	StripPath ( CSphString & sPath );
 CSphString		GetPathOnly ( const CSphString & sFullPath );
 const char *	GetExtension ( const CSphString & sFullPath );
 
+CSphString		RealPath ( const CSphString& sPath );
+
 class CSphWriter;
 void			SeekAndPutOffset ( CSphWriter & tWriter, SphOffset_t tOffset, SphOffset_t tValue );
 

@@ -844,6 +844,17 @@ const char * GetExtension ( const CSphString & sFullPath )
 	return pDot+1;
 }
 
+CSphString RealPath ( const CSphString& sPath )
+{
+#if !_WIN32
+	char szPath[PATH_MAX];
+	auto szResult = realpath ( sPath.cstr(), szPath );
+	if ( szResult )
+		return szResult;
+#endif
+	return sPath;
+}
+
 
 CSphString GetExecutablePath()
 {

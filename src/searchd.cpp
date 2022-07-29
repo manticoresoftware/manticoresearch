@@ -14109,8 +14109,9 @@ void HandleMysqlclose ( RowBuffer_i & tOut )
 // same for select ... from index.files
 void HandleSelectFiles ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 {
-	tOut.HeadBegin ( 2 );
+	tOut.HeadBegin ( 3 );
 	tOut.HeadColumn ( "file" );
+	tOut.HeadColumn ( "normalized" );
 	tOut.HeadColumn ( "size", MYSQL_COL_LONGLONG );
 	if ( !tOut.HeadEnd () )
 		return;
@@ -14132,6 +14133,7 @@ void HandleSelectFiles ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 		ARRAY_CONSTFOREACH( i, dFiles )
 		{
 			tOut.PutString ( dFiles[i] );
+			tOut.PutString ( RealPath ( dFiles[i] ) );
 			tOut.PutNumAsString ( sphGetFileSize ( dFiles[i], nullptr ) );
 			if ( !tOut.Commit () )
 				return;
@@ -14143,6 +14145,7 @@ void HandleSelectFiles ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 		ARRAY_CONSTFOREACH( i, dExt )
 		{
 			tOut.PutString ( dExt[i] );
+			tOut.PutString ( RealPath ( dExt[i] ) );
 			tOut.PutNumAsString ( sphGetFileSize ( dExt[i], nullptr ) );
 			if ( !tOut.Commit () )
 				return;

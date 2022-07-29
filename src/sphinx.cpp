@@ -2997,13 +2997,8 @@ void CSphIndex_VLN::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt ) const
 			dFiles.Add ( std::move ( sFile ) );
 	};
 
-	fnAddFile ( SPH_EXT_SPH );
-	fnAddFile ( SPH_EXT_SPD );
-	fnAddFile ( SPH_EXT_SPP );
-	fnAddFile ( SPH_EXT_SPE );
-	fnAddFile ( SPH_EXT_SPI );
-	fnAddFile ( SPH_EXT_SPM );
-	fnAddFile ( SPH_EXT_SPK );
+	for ( auto eExt : { SPH_EXT_SPH, SPH_EXT_SPD, SPH_EXT_SPP, SPH_EXT_SPE, SPH_EXT_SPI, SPH_EXT_SPM, SPH_EXT_SPK } )
+		fnAddFile ( eExt );
 
 	if ( m_uVersion >= 55 )
 		fnAddFile ( SPH_EXT_SPHI );

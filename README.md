@@ -18,7 +18,7 @@
 
 # Introduction
 
-❗**Read recent [blog post about Manticore vs Elasticsearch](https://manticoresearch.com/blog/manticore-alternative-to-elasticsearch/)**❗
+**❗Read recent [blog post about Manticore vs Elasticsearch](https://manticoresearch.com/blog/manticore-alternative-to-elasticsearch/)❗**
 
 Manticore Search is an easy to use open source fast database for search. Good alternative for Elasticsearch. What distinguishes it from other solutions is:
 * It's very fast:

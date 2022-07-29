@@ -2219,7 +2219,7 @@ static ServedIndexRefPtr_c LoadNewIndex ( const CSphString& sIndexPath, const CS
 	if ( !bPrealloc )
 		return pResult;
 
-	UnlockedHazardIdxFromServed ( *pNewServed )->GetIndexFiles ( tIndexFiles.m_dRef, nullptr );
+	UnlockedHazardIdxFromServed ( *pNewServed )->GetIndexFiles ( tIndexFiles.m_dRef, tIndexFiles.m_dRef );
 	for ( const auto & i : dWarnings )
 		sphWarning ( "index '%s': %s", sIndexName.cstr(), i.cstr() );
 
@@ -2237,7 +2237,7 @@ static bool LoadIndex ( const CSphString& sIndexPath, const CSphString& sIndexTy
 	{
 		WIdx_T<RtIndex_i*> pIndex { pOldIndex };
 		pIndex->ProhibitSave();
-		pIndex->GetIndexFiles ( tIndexFiles.m_dOld, nullptr );
+		pIndex->GetIndexFiles ( tIndexFiles.m_dOld, tIndexFiles.m_dOld );
 
 		auto pNewIndex = LoadNewIndex ( sIndexPath, sIndexType, sIndexName, sCluster, tIndexFiles, sError );
 		if (!pNewIndex)

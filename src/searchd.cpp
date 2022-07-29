@@ -14079,7 +14079,7 @@ void HandleMysqlfiles ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCm
 
 	StrVec_t dFiles;
 	StrVec_t dExt;
-	RIdx_c ( pIndex )->CollectFiles ( dFiles, dExt );
+	RIdx_c ( pIndex )->GetIndexFiles ( dFiles, dExt );
 
 	VectorLike dOut ( 0 );
 	dOut.SetColNames ( { "file" } );
@@ -14125,7 +14125,7 @@ void HandleSelectFiles ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 
 	StrVec_t dFiles;
 	StrVec_t dExt;
-	RIdx_c ( pServed )->CollectFiles ( dFiles, dExt );
+	RIdx_c ( pServed )->GetIndexFiles ( dFiles, dExt );
 
 	auto sFormat = tStmt.m_sThreadFormat;
 	if ( sFormat!="external" )

@@ -113,7 +113,6 @@ public:
 	void				GetStatus ( CSphIndexStatus* pRes ) const override;
 
 	void				IndexDeleted() override { m_bIndexDeleted = true; }
-	void				CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const final;
 	void				ProhibitSave() override { m_bSaveDisabled = true; }
 	void				EnableSave() override { m_bSaveDisabled = false; }
 	void				LockFileState ( CSphVector<CSphString> & dFiles ) final;
@@ -163,7 +162,7 @@ public:
 private:
 	int ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQuery_i*>& dNewQueries, const VecTraits_T<int64_t>& dDeleteQueries, const VecTraits_T<uint64_t>& dDeleteTags ) EXCLUDES ( m_tLock );
 
-	void GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameBuilder_i * ) const override;
+	void GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExtra ) const override;
 	Bson_t ExplainQuery ( const CSphString & sQuery ) const final;
 
 	StoredQuerySharedPtrVecSharedPtr_t MakeClone () const REQUIRES_SHARED ( m_tLock );
@@ -1607,25 +1606,6 @@ void PercolateIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 	pRes->m_iRamUse = iRamUse;
 }
 
-void PercolateIndex_c::CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const
-{
-	if ( m_pTokenizer && !m_pTokenizer->GetSettings ().m_sSynonymsFile.IsEmpty () )
-		dExt.Add ( m_pTokenizer->GetSettings ().m_sSynonymsFile );
-
-	if ( m_pDict )
-	{
-		const CSphString & sStopwords = m_pDict->GetSettings ().m_sStopwords;
-		if ( !sStopwords.IsEmpty () )
-			sphSplit ( dExt, sStopwords.cstr (), sStopwords.Length (), " \t," );
-
-		m_pDict->GetSettings ().m_dWordforms.Apply ( [&dExt] ( const CSphString & a ) { dExt.Add ( a ); } );
-	}
-	CSphString sPath;
-	sPath.SetSprintf ( "%s.meta", m_sFilename.cstr () );
-	if ( sphIsReadable ( sPath ) )
-		dFiles.Add ( sPath );
-}
-
 std::unique_ptr<StoredQuery_i> PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, CSphString & sError )
 {
 	{
@@ -2384,7 +2364,7 @@ void PercolateIndex_c::PostSetupUnl()
 	if ( m_tSettings.m_bIndexExactWords )
 		SetupExactDict ( pDict );
 
-	CSphString sHitlessFiles = m_tSettings.m_sHitlessFiles.cstr();
+	CSphString sHitlessFiles = m_tSettings.m_sHitlessFiles;
 	if ( GetIndexFilenameBuilder() )
 	{
 		std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = GetIndexFilenameBuilder() ( m_sIndexName.cstr() );
@@ -2952,12 +2932,12 @@ bool PercolateIndex_c::ForceDiskChunk()
 	return true;
 }
 
-void PercolateIndex_c::LockFileState ( CSphVector<CSphString> & dFiles )
+void PercolateIndex_c::LockFileState ( StrVec_t & dFiles )
 {
 	ForceRamFlush ( "forced" );
 	m_bSaveDisabled = true;
 
-	GetIndexFiles ( dFiles, nullptr );
+	GetIndexFiles ( dFiles, dFiles );
 }
 
 
@@ -3144,25 +3124,22 @@ void MergePqResults ( const VecTraits_T<CPqResult *> &dChunks, CPqResult &dRes, 
 	}
 }
 
-void PercolateIndex_c::GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameBuilder_i * pParentBuilder ) const
+void PercolateIndex_c::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExtra ) const
 {
-	CSphString & sMeta = dFiles.Add();
-	sMeta.SetSprintf ( "%s.meta", m_sFilename.cstr() );
-
-	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder ( nullptr );
-	if ( !pParentBuilder && GetIndexFilenameBuilder() )
-	{
-		pFilenameBuilder = GetIndexFilenameBuilder() ( m_sIndexName.cstr() );
-		pParentBuilder = pFilenameBuilder.get();
-	}
-
-	GetSettingsFiles ( m_pTokenizer, m_pDict, GetSettings(), pParentBuilder, dFiles );
+	CSphString sPath;
+	sPath.SetSprintf ( "%s.meta", m_sFilename.cstr() );
+	if ( sphIsReadable ( sPath ) )
+		dFiles.Add ( sPath );
 
 	if ( m_tMutableSettings.NeedSave() ) // should be file already after post-setup
 	{
-		CSphString & sMutableSettings = dFiles.Add();
-		sMutableSettings.SetSprintf ( "%s%s", m_sFilename.cstr(), sphGetExt ( SPH_EXT_SETTINGS ) );
+		sPath.SetSprintf ( "%s%s", m_sFilename.cstr(), sphGetExt ( SPH_EXT_SETTINGS ) );
+		if ( sphIsReadable ( sPath ) )
+			dFiles.Add ( sPath );
 	}
+
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder { GetIndexFilenameBuilder() ? GetIndexFilenameBuilder() ( m_sIndexName.cstr() ) : nullptr };
+	GetSettingsFiles ( m_pTokenizer, m_pDict, GetSettings(), std::move ( pFilenameBuilder ), dExtra );
 }
 
 Bson_t PercolateIndex_c::ExplainQuery ( const CSphString & sQuery ) const

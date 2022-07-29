@@ -1220,7 +1220,6 @@ public:
 	Bson_t				ExplainQuery ( const CSphString & sQuery ) const final;
 
 	bool				CopyExternalFiles ( int iPostfix, StrVec_t & dCopied ) final;
-	void				CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const final;
 
 	HistogramContainer_c * GetHistograms() const override { return m_pHistograms; }
 
@@ -1279,7 +1278,7 @@ private:
 private:
 	CSphString					GetIndexFileName ( ESphExt eExt, bool bTemp=false ) const;
 	CSphString					GetIndexFileName ( const char * szExt ) const;
-	void						GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameBuilder_i * pFilenameBuilder ) const override;
+	void						GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt ) const override;
 
 	bool						ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult & tResult, const VecTraits_T<ISphMatchSorter*> & dSorters, const XQQuery_t & tXQ, DictRefPtr_c pDict, const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache, int64_t tmMaxTimer ) const;
 
@@ -2984,47 +2983,69 @@ CSphString CSphIndex_VLN::GetIndexFileName ( const char * szExt ) const
 	return sRes;
 }
 
-void CSphIndex_VLN::GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameBuilder_i * pFilenameBuilder ) const
+void CSphIndex_VLN::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt ) const
 {
-	for ( int iExt=0; iExt<SPH_EXT_TOTAL; iExt++ )
-	{
-		if ( iExt==SPH_EXT_SPL )
-			continue;
+	if ( !m_pDict )
+		return;
 
-		CSphString sName = GetIndexFileName ( (ESphExt)iExt, false );
-		if ( !sphIsReadable ( sName.cstr() ) )
-			continue;
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder { GetIndexFilenameBuilder() ? GetIndexFilenameBuilder() ( m_sIndexName.cstr() ) : nullptr };
+	GetSettingsFiles ( m_pTokenizer, m_pDict, GetSettings(), std::move ( pFilenameBuilder ), dExt );
 
-		dFiles.Add ( sName );
-	}
+	auto fnAddFile = [this,&dFiles] ( ESphExt eFile ) {
+		auto sFile = GetIndexFileName ( eFile );
+		if ( sphIsReadable ( sFile.cstr() ) )
+			dFiles.Add ( std::move ( sFile ) );
+	};
 
-	// might be pFilenameBuilder from parent RT index
-	std::unique_ptr<FilenameBuilder_i> pFilename;
-	if ( !pFilenameBuilder && GetIndexFilenameBuilder() )
-	{
-		std::unique_ptr<FilenameBuilder_i> pFilename = GetIndexFilenameBuilder() ( m_sIndexName.cstr() );
-		pFilenameBuilder = pFilename.get();
-	}
+	fnAddFile ( SPH_EXT_SPH );
+	fnAddFile ( SPH_EXT_SPD );
+	fnAddFile ( SPH_EXT_SPP );
+	fnAddFile ( SPH_EXT_SPE );
+	fnAddFile ( SPH_EXT_SPI );
+	fnAddFile ( SPH_EXT_SPM );
+	fnAddFile ( SPH_EXT_SPK );
 
-	GetSettingsFiles ( m_pTokenizer, m_pDict, GetSettings(), pFilenameBuilder, dFiles );
+	if ( m_uVersion >= 55 )
+		fnAddFile ( SPH_EXT_SPHI );
+
+	if ( m_uVersion >= 57 && ( m_tSchema.HasStoredFields() || m_tSchema.HasStoredAttrs() ) )
+		fnAddFile ( SPH_EXT_SPDS );
+
+	if ( m_bIsEmpty )
+		return;
+
+	fnAddFile ( SPH_EXT_SPT );
+
+	if ( m_uVersion >= 64 )
+		fnAddFile ( SPH_EXT_SPIDX );
+
+	if ( m_tSchema.HasNonColumnarAttrs() )
+		fnAddFile ( SPH_EXT_SPA );
+
+	if ( m_tSchema.GetAttr ( sphGetBlobLocatorName() ) )
+		fnAddFile ( SPH_EXT_SPB );
+
+	if ( m_uVersion >= 63 && m_tSchema.HasColumnarAttrs() )
+		fnAddFile ( SPH_EXT_SPC );
 }
 
-void GetSettingsFiles ( const TokenizerRefPtr_c& pTok, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const FilenameBuilder_i * pFilenameBuilder, StrVec_t & dFiles )
+void GetSettingsFiles ( const TokenizerRefPtr_c& pTok, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, std::unique_ptr<FilenameBuilder_i> pFilenameBuilder, StrVec_t & dFiles )
 {
 	assert ( pTok );
 	assert ( pDict );
 
 	StringBuilder_c sFiles ( "," );
-	sFiles += pDict->GetSettings().m_sStopwords.cstr();
-	sFiles += pTok->GetSettings().m_sSynonymsFile.cstr();
-	sFiles += tSettings.m_sHitlessFiles.cstr();
-
-	for ( const CSphString & sName : pDict->GetSettings().m_dWordforms )
-		dFiles.Add ( pFilenameBuilder ? pFilenameBuilder->GetFullPath ( sName ) : sName );
-
-	StrVec_t dFileNames = sphSplit ( sFiles.cstr(), ", " );
-	for ( const CSphString & sName : dFileNames )
-		dFiles.Add ( pFilenameBuilder ? pFilenameBuilder->GetFullPath ( sName ) : sName );
+	sFiles << pDict->GetSettings().m_sStopwords << pTok->GetSettings().m_sSynonymsFile << tSettings.m_sHitlessFiles;
+	auto dFileNames = sphSplit ( sFiles.cstr(), " \t," );
+	if ( pFilenameBuilder )
+	{
+		pDict->GetSettings().m_dWordforms.for_each ( [&] ( const auto& sFileName ) { dFiles.Add ( pFilenameBuilder->GetFullPath ( sFileName ) ); } );
+		dFileNames.for_each ( [&] ( const auto& sFileName ) { dFiles.Add ( pFilenameBuilder->GetFullPath ( sFileName ) ); } );
+	} else
+	{
+		pDict->GetSettings().m_dWordforms.for_each ( [&] ( const auto& sFileName ) { dFiles.Add ( sFileName ); } );
+		dFileNames.for_each ( [&] ( const auto& sFileName ) { dFiles.Add ( sFileName ); } );
+	}
 }
 
 
@@ -11609,50 +11630,6 @@ bool CSphIndex_VLN::CopyExternalFiles ( int iPostfix, StrVec_t & dCopied )
 
 	// save the header
 	return IndexBuildDone ( tBuildHeader, tWriteHeader, GetIndexFileName(SPH_EXT_SPH), m_sLastError );
-}
-
-void CSphIndex_VLN::CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const
-{
-	if ( m_pTokenizer && !m_pTokenizer->GetSettings().m_sSynonymsFile.IsEmpty() )
-		dExt.Add ( m_pTokenizer->GetSettings ().m_sSynonymsFile );
-
-	if ( !m_pDict )
-		return;
-
-	const CSphString & sStopwords = m_pDict->GetSettings().m_sStopwords;
-	if ( !sStopwords.IsEmpty() )
-		sphSplit ( dExt, sStopwords.cstr(), sStopwords.Length(), " \t," );
-
-	m_pDict->GetSettings ().m_dWordforms.Apply ( [&dExt] ( const CSphString & a ) { dExt.Add ( a ); } );
-
-	dFiles.Add ( GetIndexFileName ( SPH_EXT_SPH ) );
-	dFiles.Add ( GetIndexFileName ( SPH_EXT_SPD ) );
-	dFiles.Add ( GetIndexFileName ( SPH_EXT_SPP ) );
-	dFiles.Add ( GetIndexFileName ( SPH_EXT_SPE ) );
-	dFiles.Add ( GetIndexFileName ( SPH_EXT_SPI ) );
-	dFiles.Add ( GetIndexFileName ( SPH_EXT_SPM ) );
-	if ( !m_bIsEmpty )
-	{
-		if ( m_tSchema.HasNonColumnarAttrs() )
-			dFiles.Add ( GetIndexFileName ( SPH_EXT_SPA ) );
-
-		dFiles.Add ( GetIndexFileName ( SPH_EXT_SPT ) );
-		if ( m_tSchema.GetAttr ( sphGetBlobLocatorName () ) )
-			dFiles.Add ( GetIndexFileName ( SPH_EXT_SPB ) );
-
-		if ( m_uVersion>=63 && m_tSchema.HasColumnarAttrs() )
-			dFiles.Add ( GetIndexFileName ( SPH_EXT_SPC ) );
-	}
-
-	if ( m_uVersion>=55 )
-		dFiles.Add ( GetIndexFileName ( SPH_EXT_SPHI ) );
-
-	if ( m_uVersion>=57 && ( m_tSchema.HasStoredFields() || m_tSchema.HasStoredAttrs() ) )
-		dFiles.Add ( GetIndexFileName ( SPH_EXT_SPDS ) );
-
-	CSphString sPath = GetIndexFileName ( SPH_EXT_SPK );
-	if ( sphIsReadable ( sPath ) )
-		dFiles.Add ( sPath );
 }
 
 //////////////////////////////////////////////////////////////////////////

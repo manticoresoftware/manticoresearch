@@ -1249,7 +1249,6 @@ public:
 	int64_t				GetLastFlushTimestamp() const final;
 	void				IndexDeleted() final { m_bIndexDeleted = true; }
 	bool				CopyExternalFiles ( int iPostfix, StrVec_t & dCopied ) final;
-	void				CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const final;
 	void				ProhibitSave() final;
 	void				EnableSave() final;
 	void				LockFileState ( CSphVector<CSphString> & dFiles ) final;
@@ -1374,7 +1373,7 @@ private:
 	bool						Update_WriteBlobRow ( UpdateContext_t& tCtx, CSphRowitem* pDocinfo, const BYTE* pBlob, int iLength, int nBlobAttrs, const CSphAttrLocator& tBlobRowLoc, bool& bCritical, CSphString& sError ) override;
 	bool						Update_DiskChunks ( AttrUpdateInc_t& tUpd, const DiskChunkSlice_t& dDiskChunks, CSphString& sError );
 
-	void						GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameBuilder_i * pParentBuilder ) const override;
+	void						GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt ) const override;
 	DocstoreBuilder_i::Doc_t *	FetchDocFields ( DocstoreBuilder_i::Doc_t & tStoredDoc, const InsertDocData_t & tDoc, CSphSource_StringVector & tSrc, CSphVector<CSphVector<BYTE>> & dTmpAttrStorage ) const;
 
 	CSphString					MakeChunkName(int iChunkID);
@@ -10115,40 +10114,26 @@ uint64_t sphGetSettingsFNV ( const CSphIndexSettings & tSettings )
 	return uHash;
 }
 
-void RtIndex_c::GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameBuilder_i * pParentBuilder ) const
+void RtIndex_c::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt ) const
 {
-	CSphString & sMeta = dFiles.Add();
-	sMeta.SetSprintf ( "%s.meta", m_sPath.cstr() );
+	auto fnAddFile = [this, &dFiles] ( const char* szExt ) {
+		auto sFile = SphSprintf ( "%s%s", m_sPath.cstr(), szExt );
+		if ( sphIsReadable ( sFile.cstr() ) )
+			dFiles.Add ( std::move ( sFile ) );
+	};
 
-	CSphString & sRam = dFiles.Add();
-	sRam.SetSprintf ( "%s.ram", m_sPath.cstr() );
-	// RT index might be with flushed RAM into disk chunk
-	CSphString sTmpError;
-	if ( !sphIsReadable ( sRam.cstr(), &sTmpError ) )
-		dFiles.Pop();
-
-	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder;
-	if ( !pParentBuilder && GetIndexFilenameBuilder() )
-	{
-		pFilenameBuilder = GetIndexFilenameBuilder() ( m_sIndexName.cstr() );
-		pParentBuilder = pFilenameBuilder.get();
-	}
-
-	GetSettingsFiles ( m_pTokenizer, m_pDict, GetSettings(), pParentBuilder, dFiles );
+	fnAddFile ( ".meta" );
+	fnAddFile ( ".ram" );
 
 	if ( m_tMutableSettings.NeedSave() ) // should be file already after post-setup
-	{
-		CSphString & sMutableSettings = dFiles.Add();
-		sMutableSettings.SetSprintf ( "%s%s", m_sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ) );
-	}
+		fnAddFile ( sphGetExt ( SPH_EXT_SETTINGS ) );
 
-	auto tGuard = RtGuard();
-	for ( const auto& pIndex : tGuard.m_dDiskChunks )
-		pIndex->Cidx().GetIndexFiles ( dFiles, pParentBuilder );
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder { GetIndexFilenameBuilder() ? GetIndexFilenameBuilder() ( m_sIndexName.cstr() ) : nullptr };
+	GetSettingsFiles ( m_pTokenizer, m_pDict, GetSettings(), std::move ( pFilenameBuilder ), dExt );
 
-	dFiles.Uniq(); // might be duplicates of tok \ dict files from disk chunks
+	RtGuard().m_dDiskChunks.for_each ( [&] ( ConstDiskChunkRefPtr_t& p ) { p->Cidx().GetIndexFiles ( dFiles, dExt ); } );
+	dExt.Uniq(); // might be duplicates of tok \ dict files from disk chunks
 }
-
 
 bool RtIndex_c::CopyExternalFiles ( int /*iPostfix*/, StrVec_t & dCopied )
 {
@@ -10222,43 +10207,6 @@ bool RtIndex_c::CopyExternalFiles ( int /*iPostfix*/, StrVec_t & dCopied )
 	return true;
 }
 
-// todo! Remove this, make using GetIndexFiles instead (this is duplication of existing functionality)
-void RtIndex_c::CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const
-{
-	if ( m_pTokenizer && !m_pTokenizer->GetSettings().m_sSynonymsFile.IsEmpty() )
-		dExt.Add ( m_pTokenizer->GetSettings ().m_sSynonymsFile );
-
-	if ( m_pDict )
-	{
-		const CSphString & sStopwords = m_pDict->GetSettings().m_sStopwords;
-		if ( !sStopwords.IsEmpty() )
-			sphSplit ( dExt, sStopwords.cstr(), sStopwords.Length(), " \t," );
-
-		m_pDict->GetSettings ().m_dWordforms.Apply ( [&dExt] ( const CSphString & a ) { dExt.Add ( a ); } );
-	}
-
-	{
-		auto tGuard = RtGuard();
-		tGuard.m_dDiskChunks.for_each ( [&] ( ConstDiskChunkRefPtr_t& p ) { p->Cidx().CollectFiles ( dFiles, dExt ); } );
-	}
-
-	CSphString sPath;
-	sPath.SetSprintf ( "%s.meta", m_sPath.cstr () );
-	if ( sphIsReadable ( sPath ) )
-		dFiles.Add ( sPath );
-	sPath.SetSprintf ( "%s.ram", m_sPath.cstr () );
-	if ( sphIsReadable ( sPath ) )
-		dFiles.Add ( sPath );
-
-	if ( !m_tMutableSettings.NeedSave() )
-		return;
-
-	// should be file already after post-setup
-	sPath.SetSprintf ( "%s%s", m_sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ) );
-	if ( sphIsReadable ( sPath ) )
-		dFiles.Add ( sPath );
-}
-
 void RtIndex_c::ProhibitSave()
 {
 	StopOptimize();
@@ -10282,7 +10230,7 @@ void RtIndex_c::LockFileState ( CSphVector<CSphString>& dFiles )
 	SaveAttributes ( sError ); // fixme! report error, better discard whole locking
 	m_eSaving.store ( WriteState_e::DISABLED, std::memory_order_relaxed );
 	std::atomic_thread_fence ( std::memory_order_release );
-	GetIndexFiles ( dFiles, nullptr );
+	GetIndexFiles ( dFiles, dFiles );
 }
 
 

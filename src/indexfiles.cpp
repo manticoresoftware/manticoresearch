@@ -40,7 +40,7 @@ static IndexFileExt_t g_dIndexFilesExts[SPH_EXT_TOTAL] =
 
 const char* sphGetExt ( ESphExt eExt )
 {
-	if ( eExt<SPH_EXT_SPH || eExt>=SPH_EXT_TOTAL )
+	if ( eExt>=SPH_EXT_TOTAL )
 		return "";
 
 	return g_dIndexFilesExts[eExt].m_szExt;

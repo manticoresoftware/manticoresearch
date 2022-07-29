@@ -1192,7 +1192,7 @@ public:
 	const char *				GetFilename () const { return m_sFilename.cstr(); }
 
 	/// get actual index files list
-	virtual void				GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameBuilder_i * pFilenameBuilder ) const {}
+	virtual void				GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt ) const {}
 
 	/// internal make document id list from external docinfo, DO NOT USE
 	virtual CSphVector<SphAttr_t> BuildDocList () const;
@@ -1202,7 +1202,6 @@ public:
 	// put external files (if any) into index folder
 	// copy the rest of the external files to index folder
 	virtual bool				CopyExternalFiles ( int iPostfix, StrVec_t & dCopied ) { return true; }
-	virtual void				CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const {}
 
 	// used for query optimizer calibration
 	virtual HistogramContainer_c * GetHistograms() const { return nullptr; }

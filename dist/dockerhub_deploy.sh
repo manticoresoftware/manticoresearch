@@ -33,7 +33,7 @@ for BUILD_TAG in "${SPLITTED_BUILD_TAGS[@]}"; do
 
     for ((i = 0; i < 3; i++)); do
       echo "Started to buid manticoresearch/manticore:$BUILD_TAG"
-      docker build --no-cache -t manticoresearch/manticore:$BUILD_TAG . && break
+      docker build --build-arg DEV=1 --no-cache -t manticoresearch/manticore:$BUILD_TAG . && break
       if [ $i==2 ]; then
         echo "Docker build are failed"
         BUILD_FAILED=true

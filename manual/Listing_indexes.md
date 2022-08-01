@@ -15,7 +15,7 @@ General syntax:
 SHOW TABLES [ LIKE pattern ]
 ```
 
-`SHOW TABLES` statement enumerates all currently active indexes along with their types. Existing index types are `local`, `distributed`, `rt` and `template`. 
+`SHOW TABLES` statement enumerates all currently active indexes along with their types. Existing index types are `local`, `distributed`, `rt`, `percolate` and `template`. 
 
 
 <!-- intro -->
@@ -33,11 +33,13 @@ SHOW TABLES;
 +----------+-------------+
 | Index    | Type        |
 +----------+-------------+
-| dist1    | distributed |
+| dist     | distributed |
+| plain    | local       |
+| pq       | percolate   |
 | rt       | rt          |
-| products | rt       |
+| template | template    |
 +----------+-------------+
-4 rows in set (0.00 sec)
+5 rows in set (0.00 sec)
 ```
 
 <!-- request PHP -->

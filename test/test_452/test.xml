@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>secondary</name>
+
+<requires> <secondary/> </requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+    secondary_indexes = 1
+}
+
+source test1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table1
+	sql_attr_uint  = tag
+    sql_attr_bool  = flag
+}
+
+source test2
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select 1 as id, -1 as tag
+	sql_attr_uint  = tag
+}
+
+index test1
+{
+	source 			= test1
+	path			= <data_path/>/test1
+}
+
+index test2
+{
+	source 			= test2
+	path			= <data_path/>/test2
+}
+</config>
+
+<db_create>
+CREATE TABLE `test_table1` (
+  `id` int,
+  `title` varchar(255),
+  `tag` int,
+  `flag` int
+  
+);
+</db_create>
+
+
+
+<db_drop>DROP TABLE IF EXISTS test_table1</db_drop>
+<db_insert>insert into test_table1 (id,title, tag, flag) values(1,'abc', 1, 1),(2,'abc', 1, 1),(3,'abc', 2, 0),(4,'abc', 1, 1),(5,'abc', 2, 0)</db_insert>
+
+<queries>
+<sphinxql>select * from test1 where flag=1 force index(flag)</sphinxql>
+<sphinxql>select * from test2 where tag &gt; 10 force index(tag)</sphinxql>
+</queries>
+
+</test>

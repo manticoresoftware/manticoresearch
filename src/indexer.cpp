@@ -67,6 +67,8 @@ static bool				g_bIgnoreNonPlain	= false;
 
 static ESphOnFileFieldError	g_eOnFileFieldError = FFE_IGNORE_FIELD;
 
+static CSphString g_sBannerVersion { szMANTICORE_NAME };
+
 #if _WIN32
 static char			g_sMinidump[256];
 #endif
@@ -1495,7 +1497,7 @@ extern int64_t g_iIndexerPoolStartHit;
 void sigsegv ( int sig )
 {
 	sphSafeInfo ( STDERR_FILENO, "*** Oops, indexer crashed! Please send the following report to developers." );
-	sphSafeInfo ( STDERR_FILENO, szMANTICORE_NAME );
+	sphSafeInfo ( STDERR_FILENO, g_sBannerVersion.cstr() );
 	sphSafeInfo ( STDERR_FILENO, "-------------- report begins here ---------------" );
 	sphSafeInfo ( STDERR_FILENO, "Current document: docid=%l, hits=%l", g_iIndexerCurrentDocID, g_iIndexerCurrentHits );
 	sphSafeInfo ( STDERR_FILENO, "Current batch: minid=%l, maxid=%l", g_iIndexerCurrentRangeMin, g_iIndexerCurrentRangeMax );
@@ -1538,7 +1540,7 @@ LONG WINAPI sigsegv ( EXCEPTION_POINTERS * pExc )
 {
 	const char * sFail1 = "*** Oops, indexer crashed! Please send ";
 	const char * sFail2 = " minidump file to developers.\n";
-	const char * sFailVer = szMANTICORE_NAME;
+	const char * sFailVer = g_sBannerVersion.cstr();
 
 	sphBacktrace ( pExc, g_sMinidump );
 	::write ( STDERR_FILENO, sFail1, (unsigned int) strlen ( sFail1 ) );
@@ -1655,8 +1657,7 @@ bool SendRotate ( const CSphConfig & hConf, bool bForce )
 	return true;
 }
 
-
-static void ShowVersion()
+static void MakeVersion()
 {
 	const char * szColumnarVer = GetColumnarVersionStr();
 	CSphString sColumnar = "";
@@ -1668,7 +1669,12 @@ static void ShowVersion()
 	if ( sSiVer )
 		sSi.SetSprintf ( " (secondary %s)", sSiVer );
 
-	fprintf ( stdout, "%s%s%s%s",  szMANTICORE_NAME, sColumnar.cstr(), sSi.cstr(), szMANTICORE_BANNER_TEXT );
+	g_sBannerVersion.SetSprintf ( "%s%s%s",  szMANTICORE_NAME, sColumnar.cstr(), sSi.cstr() );
+}
+
+static void ShowVersion()
+{
+	fprintf ( stdout, "%s%s", g_sBannerVersion.cstr(), szMANTICORE_BANNER_TEXT );
 }
 
 // Built on Linux x86_64 by GNU 8.3.1 compiler.
@@ -1739,6 +1745,7 @@ int main ( int argc, char ** argv )
 	CSphString sError, sErrorSI;
 	bool bColumnarError = !InitColumnar ( sError );
 	bool bSecondaryError = !InitSecondary ( sErrorSI );
+	MakeVersion();
 
 	if ( argc==2 && ( !strcmp ( argv[1], "--help" ) || !strcmp ( argv[1], "-h" )))
 	{

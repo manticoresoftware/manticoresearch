@@ -192,6 +192,7 @@ bool					g_bHostnameLookup = false;
 CSphString				g_sMySQLVersion = szMANTICORE_VERSION;
 CSphString				g_sDbName = "Manticore";
 
+CSphString				g_sBannerVersion { szMANTICORE_NAME };
 CSphString				g_sBanner;
 CSphString				g_sStatusVersion = szMANTICORE_VERSION;
 
@@ -1092,7 +1093,7 @@ LONG WINAPI CrashLogger::HandleCrash ( EXCEPTION_POINTERS * pExc )
 		sphWrite ( g_iLogFile, tQuery.m_dIndex );
 	sphWrite ( g_iLogFile, g_sEndLine, sizeof (g_sEndLine)-1 );
 
-	sphSafeInfo ( g_iLogFile, szMANTICORE_NAME );
+	sphSafeInfo ( g_iLogFile, g_sBannerVersion.cstr() );
 
 #if _WIN32
 	// mini-dump reference
@@ -19157,7 +19158,8 @@ static void InitBanner()
 	if ( sSiVer )
 		sSi.SetSprintf ( " (secondary %s)", sSiVer );
 
-	g_sBanner.SetSprintf ( "%s%s%s%s",  szMANTICORE_NAME, sColumnar.cstr(), sSi.cstr(), szMANTICORE_BANNER_TEXT );
+	g_sBannerVersion.SetSprintf ( "%s%s%s", szMANTICORE_NAME, sColumnar.cstr(), sSi.cstr() );
+	g_sBanner.SetSprintf ( "%s%s", g_sBannerVersion.cstr(), szMANTICORE_BANNER_TEXT );
 	g_sMySQLVersion.SetSprintf ( "%s%s%s", szMANTICORE_VERSION, sColumnar.cstr(), sSi.cstr() );
 	g_sStatusVersion.SetSprintf ( "%s%s%s", szMANTICORE_VERSION, sColumnar.cstr(), sSi.cstr() );
 }

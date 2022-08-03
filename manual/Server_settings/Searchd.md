@@ -751,7 +751,7 @@ PID file will be re-created (and locked) on startup. It will contain head server
 <!-- request Example -->
 
 ```ini
-pid_file = /var/run/searchd.pid
+pid_file = /var/run/manticore/searchd.pid
 ```
 <!-- end -->
 

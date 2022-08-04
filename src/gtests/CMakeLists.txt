@@ -20,7 +20,7 @@ set ( GTESTS_SRC
 		gtests_threadstuff.cpp )
 
 add_executable ( gmanticoretest ${GTESTS_SRC} )
-target_include_directories ( gmanticoretest PRIVATE .. )
+target_include_directories ( gmanticoretest PRIVATE "${MANTICORE_SOURCE_DIR}/src" )
 target_link_libraries ( gmanticoretest
 		GTest::gmock_main
 		lmanticore

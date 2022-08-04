@@ -15,7 +15,7 @@ add_executable ( gmanticorebench
 		popcount.cpp
 		)
 
-target_include_directories ( gmanticorebench PRIVATE .. )
+target_include_directories ( gmanticorebench PRIVATE "${MANTICORE_SOURCE_DIR}/src" )
 target_link_libraries ( gmanticorebench
 		lmanticore
 		lsearchd

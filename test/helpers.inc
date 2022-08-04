@@ -4230,7 +4230,7 @@ function CopyDirContents ( $from, $to )
 
 function CheckConfig ( $config, $path )
 {
-	global $g_re2, $g_icu, $g_odbc, $windows, $g_locals, $mysql_simulated, $g_repli, $g_ssl, $g_columnar_loaded;
+	global $g_re2, $g_icu, $g_odbc, $windows, $g_locals, $mysql_simulated, $g_repli, $g_ssl, $g_columnar_loaded, $g_secondary_loaded;
 	
 	if ( $config->Requires("non-windows") && $windows )
 	{
@@ -4320,6 +4320,15 @@ function CheckConfig ( $config, $path )
 		printf ( "SKIPPING %s, %s - compile with SSL support or add SSL extension to php\n", $path, $config->Name () );
 		return false;
 	}
+    
+	if ( $config->Requires("secondary") )
+	{
+		if ( !$g_secondary_loaded )
+		{
+			printf ( "SKIPPING %s, %s - secondary library not loaded\n", $path, $config->Name () );
+			return false;
+		}
+	}    
 
 	return true;
 }

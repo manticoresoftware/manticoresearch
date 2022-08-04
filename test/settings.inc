@@ -44,6 +44,7 @@ $g_skipdemo = false;
 $g_usemarks = true; // that we mark the output of every test in the searchd.log and query.log
 $g_strictverbose = false;
 $g_ssl = false;
+$g_secondary_loaded = false;
 
 $windows = isset($_SERVER["WINDIR"]) || isset($_SERVER["windir"]) || isset($_SERVER["HOMEDRIVE"]);
 $action_retries			= 100;
@@ -102,7 +103,7 @@ function LoadCachedGuesses ()
 function CacheGuesses ()
 {
 	global $g_locals;
-	global $g_re2, $g_icu, $g_odbc, $g_repli, $g_ssl, $g_columnar_loaded;
+	global $g_re2, $g_icu, $g_odbc, $g_repli, $g_ssl, $g_columnar_loaded, $g_secondary_loaded;
 
 	$guessfile = $g_locals['scriptdir'].'guess.txt';
 
@@ -113,6 +114,7 @@ function CacheGuesses ()
 	if ( $g_repli ) $text .= "global \$g_repli; \$g_repli = true;\n";
 	if ( $g_ssl ) $text .= "global \$g_ssl; \$g_ssl = true;\n";
 	if ( $g_columnar_loaded ) $text .= "global \$g_columnar_loaded; \$g_columnar_loaded = true;\n";
+    if ( $g_secondary_loaded ) $text .= "global \$g_secondary_loaded; \$g_secondary_loaded = true;\n";
 
 	file_put_contents ( $guessfile, $text );
 }
@@ -143,11 +145,17 @@ function scriptdir ($path)
 	return $g_locals['scriptdir'].$path;
 }
 
-function GuessFeature ($config, $testmsg)
+function GuessFeature ($config, $testmsg, $matchmsg = null)
 {
     global $g_locals;
 
-    exec ( $g_locals['indexer'].' --quiet --config '.$config.' --all', $output, $result );
+    $arg_quiet = '--quiet';
+    if (null!==$matchmsg)
+    {
+        $arg_quiet = '';
+    }
+
+    exec ( $g_locals['indexer'].' '.$arg_quiet.' --config '.$config.' --all', $output, $result );
     if ( count($output) == 0 )
     {
         print "ERROR: failed to run the indexer\n";
@@ -161,6 +169,18 @@ function GuessFeature ($config, $testmsg)
         {
             $flag = false;
             break;
+        }
+    }
+    if (null!==$matchmsg)
+    {
+        $flag = false;
+        foreach ( $output as $str )
+        {
+            if ( strstr ( $str, $matchmsg ) )
+            {
+                $flag = true;
+                break;
+            }
         }
     }
     return $flag;
@@ -188,6 +208,12 @@ function GuessColumnar()
 {
     global $g_columnar_loaded;
     $g_columnar_loaded = GuessFeature ( 'test_columnar.conf','columnar library not loaded');
+}
+
+function GuessSecondary()
+{
+    global $g_secondary_loaded;
+    $g_secondary_loaded = GuessFeature ( 'test_columnar.conf','secondary library not loaded', ' (secondary ');
 }
 
 function GetVersion ()

@@ -13,34 +13,12 @@
 #ifndef _sphinxstd_
 #define _sphinxstd_
 
-#if _MSC_VER>=1400
-#define _CRT_SECURE_NO_DEPRECATE 1
-#define _CRT_NONSTDC_NO_DEPRECATE 1
-#endif
-
-#if _MSC_VER>=1600
-#define HAVE_STDINT_H 1
-#endif
-
-#if (_MSC_VER>=1000) && !defined(__midl) && defined(_PREFAST_)
-typedef int __declspec("SAL_nokernel") __declspec("SAL_nodriver") __prefast_flag_kernel_driver_mode;
-#endif
-
-#if defined(_MSC_VER) && (_MSC_VER<1400)
-#define vsnprintf _vsnprintf
-#endif
-
 #if !defined(__GNUC__) && !defined(__clang__)
 #define __attribute__(x)
 #endif
 
 #include "config.h"
 #include "std/thread_annotations.h"
-
-// supress C4577 ('noexcept' used with no exception handling mode specified)
-#if _MSC_VER==1900
-#pragma warning(disable:4577)
-#endif
 
 #include <string.h>
 #include <stdlib.h>
@@ -66,13 +44,6 @@ typedef int __declspec("SAL_nokernel") __declspec("SAL_nodriver") __prefast_flag
 
 #if HAVE_SYS_TYPES_H
 #include <sys/types.h>
-#endif
-
-#if !_WIN32
-#include <sys/mman.h>
-#include <errno.h>
-#include <pthread.h>
-#include <semaphore.h>
 #endif
 
 #if _WIN32
@@ -157,22 +128,6 @@ using CSphRowitem = DWORD;
 #if defined(U64C) || defined(I64C)
 #error "Internal 64-bit integer macros already defined."
 #endif
-
-#if !HAVE_STDINT_H
-
-#if defined(_MSC_VER)
-typedef __int64 int64_t;
-typedef unsigned __int64 uint64_t;
-#define U64C(v) v ## UI64
-#define I64C(v) v ## I64
-#define PRIu64 "I64d"
-#define PRIi64 "I64d"
-#else // !defined(_MSC_VER)
-typedef long long int64_t;
-typedef unsigned long long uint64_t;
-#endif // !defined(_MSC_VER)
-
-#endif // no stdint.h
 
 // if platform-specific macros were not supplied, use common defaults
 #ifndef U64C
@@ -1371,8 +1326,8 @@ public:
 		delete[] pData;
 	}
 
-	static const bool is_constructed = true;
-	static const bool is_owned = false;
+	static constexpr bool is_constructed = true;
+	static constexpr bool is_owned = false;
 };
 
 /// Static backend: small blobs stored localy,
@@ -1401,8 +1356,8 @@ public:
 			delete[] pData;
 	}
 
-	static const bool is_constructed = true;
-	static const bool is_owned = true;
+	static constexpr bool is_constructed = true;
+	static constexpr bool is_owned = true;
 
 private:
 	T m_dData[iSTATICSIZE];
@@ -1426,8 +1381,8 @@ public:
 	}
 
 	//static const bool is_constructed = IS_TRIVIALLY_COPYABLE( T );
-	static const bool is_constructed = IS_TRIVIALLY_DEFAULT_CONSTRUCTIBLE ( T );
-	static const bool is_owned = false;
+	static constexpr bool is_constructed = IS_TRIVIALLY_DEFAULT_CONSTRUCTIBLE ( T );
+	static constexpr bool is_owned = false;
 };
 
 //////////////////////////////////////////////////////////////////////////

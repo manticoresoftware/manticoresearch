@@ -123,7 +123,7 @@ if (NOT WIN32)
 		set ( WITH_SSL 0 CACHE BOOL "" FORCE )
 		SET ( BUILD_TESTING 0 CACHE BOOL "" FORCE )
 	elseif (NOT WIN32)
-		if (CMAKE_DL_LIBS)
+		if (CMAKE_DL_LIBS) # CMAKE internal, usually '-ldl' on most UNIX machines
 			target_link_libraries ( lextra INTERFACE ${CMAKE_DL_LIBS} )
 		endif ()
 		set ( CMAKE_REQUIRED_LIBRARIES "${CMAKE_DL_LIBS}" )
@@ -140,7 +140,7 @@ check_include_file ( "stdint.h" HAVE_STDINT_H )
 check_include_file ( "inttypes.h" HAVE_INTTYPES_H )
 check_include_file ( "malloc.h" HAVE_MALLOC_H )
 
-target_compile_options ( lextra INTERFACE $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:-D_CRT_SECURE_NO_WARNINGS -wd4996 -wd4706 -wd4244 -wd4702> )
+target_compile_options ( lextra INTERFACE $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:-D_CRT_SECURE_NO_WARNINGS -wd4996 -wd4706 -wd4244 -wd4702 -wd4577> )
 
 include ( CheckFunctionExists )
 check_function_exists ( strnlen HAVE_STRNLEN )
@@ -163,6 +163,16 @@ target_compile_options ( lextra INTERFACE $<${CLANGWIN}:-fno-strict-aliasing -Wn
 
 # disable rtti
 target_compile_options ( lextra INTERFACE $<${ONLYGNUCLANGCXX}:-fno-rtti>$<${MSCXX}:/GR-> ) # no rtti
+
+if (WIN32)
+	target_compile_definitions ( lextra INTERFACE
+			_CRT_SECURE_NO_DEPRECATE=1
+			_CRT_NONSTDC_NO_DEPRECATE=1
+			)
+
+	# that is necessary only for IDE correct highlighting. Note, that is only global (not target-located) definitions, global-wide
+	add_compile_definitions ( _WIN32 )
+endif()
 
 
 if (COVERAGE_TEST)

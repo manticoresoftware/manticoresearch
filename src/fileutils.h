@@ -18,6 +18,10 @@
 
 #include <sys/stat.h>
 
+#if !_WIN32
+ #include <sys/mman.h>
+#endif
+
 #if _WIN32
 	#include <direct.h>
 

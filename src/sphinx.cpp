@@ -9274,7 +9274,16 @@ bool CSphIndex_VLN::PreallocSecondaryIndex()
 	}
 
 	m_pSIdx.reset ( CreateSecondaryIndex ( sFile.cstr(), m_sLastError ) );
-	return !!m_pSIdx;
+	
+	bool bValid = !!m_pSIdx;
+	if ( !bValid && !GetSecondaryIndexDefault() )
+	{
+		sphWarning ( "'%s' secondary index library not loaded, %s; secondary index(es) disabled", m_sIndexName.cstr(), m_sLastError.cstr() );
+		m_sLastError = "";
+		return true;
+	}
+
+	return bValid;
 }
 
 bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings )

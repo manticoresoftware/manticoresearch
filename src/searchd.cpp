@@ -195,6 +195,8 @@ CSphString				g_sDbName = "Manticore";
 CSphString				g_sBannerVersion { szMANTICORE_NAME };
 CSphString				g_sBanner;
 CSphString				g_sStatusVersion = szMANTICORE_VERSION;
+CSphString				g_sSecondaryError;
+bool					g_bSecondaryError { false };
 
 // for CLang thread-safety analysis
 ThreadRole MainThread; // functions which called only from main thread
@@ -18782,7 +18784,12 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff = hSearchd.GetInt ( "optimize_cutoff", AutoOptimizeCutoff() );
 
 	g_bSplit = hSearchd.GetInt ( "pseudo_sharding", 1 )!=0;
-	SetSecondaryIndexDefault ( hSearchd.GetInt ( "secondary_indexes", GetSecondaryIndexDefault() )!=0 );
+
+	bool bGotSecondary = ( hSearchd.GetInt ( "secondary_indexes", GetSecondaryIndexDefault() )!=0 );
+	if ( bGotSecondary && !IsSecondaryLibLoaded() )
+		sphFatal ( "secondary_indexes set but failed to initialize secondary library: %s", g_sSecondaryError.cstr() );
+
+	SetSecondaryIndexDefault ( bGotSecondary );
 }
 
 // load index which is not yet load, and publish it in served indexes.
@@ -19223,10 +19230,10 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	tzset();
 
-	CSphString sError, sErrorSI;
+	CSphString sError;
 	// initialize it before other code to fetch version string for banner
 	bool bColumnarError = !InitColumnar ( sError );
-	bool bSecondaryError = !InitSecondary ( sErrorSI );
+	g_bSecondaryError = !InitSecondary ( g_sSecondaryError );
 	sphCollationInit ();
 
 	InitBanner();
@@ -19236,14 +19243,11 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	if ( bColumnarError )
 		sphWarning ( "Error initializing columnar storage: %s", sError.cstr() );
-	if ( bSecondaryError )
-		sphWarning ( "Error initializing secondary index: %s", sErrorSI.cstr() );
+	if ( g_bSecondaryError )
+		sphWarning ( "Error initializing secondary index: %s", g_sSecondaryError.cstr() );
 
 	if ( !sError.IsEmpty() )
 		sError = "";
-
-	if ( !sErrorSI.IsEmpty() )
-		sErrorSI = "";
 
 	const char * szEndian = sphCheckEndian();
 	if ( szEndian )

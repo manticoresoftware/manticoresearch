@@ -141,7 +141,7 @@ Attach your data when you [create a ticket on Github](https://github.com/mantico
 It's convenient to mirror your directory with our FTP using tool [lftp](https://lftp.yar.ru/) which is available for Linux, Mac and Windows. For example, if you want to sync your current directory `ftp` to directory `github-ussue-123`, here's what you should do and what you will get:
 
 ```bash
-➜  ~ lftp -e "mkdir github-issue-123; mirror -LR ftp/ github-issue-123/" -u manticorebugs,shithappens dev.manticoresearch.com
+➜  ~ lftp -e "set ftp:passive-mode off; mkdir github-issue-123; mirror -LR ftp/ github-issue-123/" -u manticorebugs,shithappens dev.manticoresearch.com
 mkdir ok, `github-issue-123' created
 Total: 2 directories, 1 file, 0 symlinks
 New: 1 file, 0 symlinks

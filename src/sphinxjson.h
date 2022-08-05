@@ -14,6 +14,7 @@
 #define _sphinxjson_
 
 #include "sphinxutils.h"
+#include "sphinxdefs.h"
 
 struct ISphExpr;
 
@@ -194,6 +195,11 @@ struct EscapeJsonString_t : public BaseQuotation_t
 		return c;
 	}
 };
+
+const StrBlock_t dJsonObj { FROMS ( "," ), FROMS ( "{" ), FROMS ( "}" ) }; // json object
+const StrBlock_t dJsonArr { FROMS ( "," ), FROMS ( "[" ), FROMS ( "]" ) }; // json array
+const StrBlock_t dJsonObjW { FROMS ( ",\n" ), FROMS ( "{\n" ), FROMS ( "\n}" ) }; // json object with formatting
+const StrBlock_t dJsonArrW { FROMS ( ",\n" ), FROMS ( "[\n" ), FROMS ( "\n]" ) }; // json array with formatting
 
 class JsonEscapedBuilder : public EscapedStringBuilder_T<EscapeJsonString_t>
 {

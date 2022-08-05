@@ -153,13 +153,9 @@ private:
 
 SHA1_c::SHA1_c()
 	: m_pImpl { new Impl_c }
-{
-}
+{}
 
-SHA1_c::~SHA1_c()
-{
-	SafeDelete ( m_pImpl );
-}
+SHA1_c::~SHA1_c() = default;
 
 void SHA1_c::Init()
 {

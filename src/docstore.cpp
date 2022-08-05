@@ -10,7 +10,7 @@
 
 #include "docstore.h"
 
-#include "lrucache.h"
+#include "std/lrucache.h"
 #include "fileio.h"
 #include "memio.h"
 #include "fileutils.h"

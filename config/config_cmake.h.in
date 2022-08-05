@@ -1,4 +1,18 @@
-/* Striped config.h.in especially for cmake.  */
+//
+// Copyright (c) 2022, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2001-2016, Andrew Aksyonoff
+// Copyright (c) 2008-2016, Sphinx Technologies Inc
+// All rights reserved
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU General Public License. You should have
+// received a copy of the GPL license along with this program; if you
+// did not, you can find it at http://www.gnu.org
+//
+
+// configuration generated from config_cmake.h.in template
+
+#pragma once
 
 /* Define to be the name of the compiler. */
 #cmakedefine COMPILER "${COMPILER}"
@@ -18,15 +32,11 @@
 /* Define to 1 if you have the `clock_gettime' function. */
 #cmakedefine HAVE_CLOCK_GETTIME ${HAVE_CLOCK_GETTIME}
 
-#if DLSTUFF
-
 /* Define to 1 if you have the `dlerror' function. */
 #cmakedefine01 HAVE_DLERROR
 
 /* Define to 1 if you have the `dlopen' function. */
 #cmakedefine01 HAVE_DLOPEN
-
-#endif
 
 /* Define if  you have async 'getaddrinfo_a' */
 #cmakedefine HAVE_GETADDRINFO_A ${HAVE_GETADDRINFO_A}

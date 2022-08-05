@@ -15,9 +15,8 @@
 #include "attribute.h"
 #include "rset.h"
 #include "match.h"
+#include "indexsettings.h"
 
-// for sphCRC32
-#include "sphinx.h"
 
 //////////////////////////////////////////////////////////////////////////
 

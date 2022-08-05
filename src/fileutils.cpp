@@ -12,6 +12,7 @@
 
 #include "fileutils.h"
 #include "sphinxint.h"
+#include "std/crc32.h"
 
 #if _WIN32
 	#define getcwd		_getcwd
@@ -283,8 +284,6 @@ void CSphSavedFile::Read ( const bson::Bson_c& tNode, const char* szFilename, bo
 
 //////////////////////////////////////////////////////////////////////////
 
-extern DWORD g_dSphinxCRC32 [ 256 ];
-
 bool sphCalcFileCRC32 ( const char * szFilename, DWORD & uCRC32 )
 {
 	uCRC32 = 0;
@@ -296,21 +295,14 @@ bool sphCalcFileCRC32 ( const char * szFilename, DWORD & uCRC32 )
 	if ( !pFile )
 		return false;
 
-	DWORD crc = ~((DWORD)0);
-
 	const int BUFFER_SIZE = 131072;
 	CSphFixedVector<BYTE> dBuffer (BUFFER_SIZE);
 
 	int iBytesRead;
-	while ( ( iBytesRead = (int) fread ( dBuffer.begin(), 1, BUFFER_SIZE, pFile ) )!=0 )
-	{
-		for ( int i=0; i<iBytesRead; i++ )
-			crc = (crc >> 8) ^ g_dSphinxCRC32 [ (crc ^ dBuffer[i]) & 0xff ];
-	}
+	while ( ( iBytesRead = (int)fread ( dBuffer.begin(), 1, BUFFER_SIZE, pFile ) ) != 0 )
+		uCRC32 = sphCRC32 ( dBuffer.begin(), iBytesRead, uCRC32 );
 
 	fclose ( pFile );
-
-	uCRC32 = ~crc;
 	return true;
 }
 

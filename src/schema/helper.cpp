@@ -142,9 +142,12 @@ void sphDeallocatePacked ( BYTE* pBlob )
 {
 	if ( !pBlob )
 		return;
-	// const BYTE * pFoo = pBlob;
-	// sphDeallocateSmall ( pBlob, sphCalcPackedLength ( sphUnzipInt ( pFoo ) ) );
+#if WITH_SMALLALLOC
+	const BYTE * pFoo = pBlob;
+	sphDeallocateSmall ( pBlob, sphCalcPackedLength ( sphUnzipInt ( pFoo ) ) );
+#else
 	sphDeallocateSmall ( pBlob );
+#endif
 }
 
 // fixme! direct reinterpreting rows is not good idea. Use sphGetAttr/sphSetAttr!

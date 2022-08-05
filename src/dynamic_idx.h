@@ -15,6 +15,7 @@
 
 #include "searchdaemon.h"
 
+// generator, should feed given RowBuffer_i with table data (i.e., first header, then data rows)
 using TableFeeder_fn = std::function<void ( RowBuffer_i* )>;
 
 // serve any generic table of columns as index with possibility to filter (full-scan)

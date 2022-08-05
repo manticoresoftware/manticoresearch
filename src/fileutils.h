@@ -14,6 +14,7 @@
 #define _fileutils_
 
 #include "sphinxstd.h"
+#include "std/strerrorm.h"
 #include <fcntl.h>
 
 #include <sys/stat.h>

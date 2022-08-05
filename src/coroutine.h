@@ -26,6 +26,15 @@
 
 namespace Threads {
 
+/// get the pointer to my job's stack (m.b. different from thread stack in coro)
+const void* MyStack();
+
+/// get size of the stack (either thread, either coro - depends from context)
+int MyStackSize();
+
+/// get size of used stack (threads or coro - depends from context)
+int64_t GetStackUsed();
+
 size_t GetDefaultCoroStackSize();
 
 // helper to align stack suze
@@ -288,6 +297,7 @@ class CAPABILITY ( "mutex" ) Mutex_c: public ISphNoncopyable
 	Worker_c* m_pOwner { nullptr };
 
 public:
+	using mtx = Mutex_c;
 	Mutex_c() = default;
 	void Lock() ACQUIRE();
 	void Unlock() RELEASE();

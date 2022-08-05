@@ -372,6 +372,12 @@ struct CreateTableAttr_t
 	bool			m_bStringHash = true;
 };
 
+struct NameValueStr_t
+{
+	CSphString m_sName;
+	CSphString m_sValue;
+};
+
 struct CreateTableSettings_t
 {
 	CSphString						m_sLike;

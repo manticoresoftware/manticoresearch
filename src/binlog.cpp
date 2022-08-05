@@ -209,7 +209,7 @@ BinlogWriter_c::BinlogWriter_c ()
 
 void BinlogWriter_c::ResetCrc ()
 {
-	m_uCRC = ~((DWORD)0);
+	m_uCRC = 0;
 	m_iLastCrcPos = m_iPoolUsed;
 }
 
@@ -217,23 +217,14 @@ void BinlogWriter_c::ResetCrc ()
 void BinlogWriter_c::HashCollected ()
 {
 	assert ( m_iLastCrcPos<=m_iPoolUsed );
-
-	const BYTE * b = m_pBuffer + m_iLastCrcPos;
-	int iSize = m_iPoolUsed - m_iLastCrcPos;
-	DWORD uCRC = m_uCRC;
-
-	for ( int i=0; i<iSize; i++ )
-		uCRC = (uCRC >> 8) ^ g_dSphinxCRC32 [ (uCRC ^ *b++) & 0xff ];
-
+	m_uCRC = sphCRC32 ( m_pBuffer + m_iLastCrcPos, m_iPoolUsed - m_iLastCrcPos, m_uCRC );
 	m_iLastCrcPos = m_iPoolUsed;
-	m_uCRC = uCRC;
 }
 
 
 void BinlogWriter_c::WriteCrc ()
 {
 	HashCollected();
-	m_uCRC = ~m_uCRC;
 	CSphWriter::PutDword ( m_uCRC );
 	ResetCrc();
 }
@@ -303,7 +294,7 @@ BinlogReader_c::BinlogReader_c()
 
 void BinlogReader_c::ResetCrc ()
 {
-	m_uCRC = ~(DWORD(0));
+	m_uCRC = 0;
 	m_iLastCrcPos = m_iBuffPos;
 }
 
@@ -311,7 +302,7 @@ void BinlogReader_c::ResetCrc ()
 bool BinlogReader_c::CheckCrc ( const char * sOp, const char * sIndexName, int64_t iTid, int64_t iTxnPos )
 {
 	HashCollected ();
-	DWORD uCRC = ~m_uCRC;
+	DWORD uCRC = m_uCRC;
 	DWORD uRef = CSphAutoreader::GetDword();
 	ResetCrc();
 	bool bPassed = ( uRef==uCRC );
@@ -330,16 +321,8 @@ void BinlogReader_c::UpdateCache ()
 void BinlogReader_c::HashCollected ()
 {
 	assert ( m_iLastCrcPos<=m_iBuffPos );
-
-	const BYTE * b = m_pBuff + m_iLastCrcPos;
-	int iSize = m_iBuffPos - m_iLastCrcPos;
-	DWORD uCRC = m_uCRC;
-
-	for ( int i=0; i<iSize; i++ )
-		uCRC = (uCRC >> 8) ^ g_dSphinxCRC32 [ (uCRC ^ *b++) & 0xff ];
-
+	m_uCRC = sphCRC32 ( m_pBuff + m_iLastCrcPos, m_iBuffPos - m_iLastCrcPos, m_uCRC );
 	m_iLastCrcPos = m_iBuffPos;
-	m_uCRC = uCRC;
 }
 
 /// helper to RAII write txn infix and postfix

@@ -44,7 +44,7 @@
 #include "task_info.h"
 #include "client_task_info.h"
 #include "chunksearchctx.h"
-#include "lrucache.h"
+#include "std/lrucache.h"
 #include "indexfiles.h"
 
 #include "secondarylib.h"
@@ -107,9 +107,6 @@ void gmtime_r ( const time_t * clock, struct tm * res )
 #include "indexing_sources/source_stats.h"
 #include "dict/dict_base.h"
 #include "dict/bin.h"
-
-// forward decl
-void sphWarn ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 1, 2 ) ) );
 
 /////////////////////////////////////////////////////////////////////////////
 // GLOBALS
@@ -1381,16 +1378,6 @@ public:
 // UTILITY FUNCTIONS
 /////////////////////////////////////////////////////////////////////////////
 
-/// indexer warning
-void sphWarn ( const char * sTemplate, ... )
-{
-	va_list ap;
-	va_start ( ap, sTemplate );
-	fprintf ( stdout, "WARNING: " );
-	vfprintf ( stdout, sTemplate, ap );
-	fprintf ( stdout, "\n" );
-	va_end ( ap );
-}
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -9835,15 +9822,15 @@ int ConsiderStack ( const struct XQNode_t * pRoot, CSphString & sError )
 		iHeight = sphQueryHeightCalc ( pRoot );
 
 	auto iStackNeed = iHeight * SPH_EXTNODE_STACK_SIZE;
-	int64_t iQueryStack = sphGetStackUsed ()+iStackNeed;
-	auto iMyStackSize = sphMyStackSize ();
+	int64_t iQueryStack = Threads::GetStackUsed ()+iStackNeed;
+	auto iMyStackSize = Threads::MyStackSize ();
 	if ( iMyStackSize>=iQueryStack )
 		return -1;
 
 	// align as stack of tree + 32K
 	// (being run in new coro, most probably you'll start near the top of stack, so 32k should be enouth)
 	iQueryStack = iStackNeed + 32*1024;
-	if ( g_iMaxCoroStackSize>=iQueryStack )
+	if ( Threads::GetMaxCoroStackSize()>=iQueryStack )
 		return (int)iQueryStack;
 
 	sError.SetSprintf ( "query too complex, not enough stack (thread_stack=%dK or higher required)", (int) (( iQueryStack+1024-( iQueryStack % 1024 )) / 1024 ));
@@ -11923,12 +11910,12 @@ void InfixBuilder_c<2>::AddWord ( const BYTE * pWord, int iWordLength, int iChec
 		const BYTE * s = pWord + p;
 		const BYTE * sMax = s + Min ( 6, iWordLength-p );
 
-		DWORD uHash = 0xffffffUL ^ g_dSphinxCRC32 [ 0xff ^ *s ];
+		DWORD uHash = CRC32_start ( *s );
 		*pKey++ = *s++; // copy first infix byte
 
 		while ( s<sMax )
 		{
-			uHash = (uHash >> 8) ^ g_dSphinxCRC32 [ (uHash ^ *s) & 0xff ];
+			CRC32_step ( uHash, *s );
 			*pKey++ = *s++; // copy another infix byte
 
 			InfixIntvec_t * pVal = LookupEntry ( sKey, uHash );
@@ -12030,7 +12017,7 @@ void InfixBuilder_c<SIZE>::AddWord ( const BYTE * pWord, int iWordLength, int iC
 		DWORD uHash = 0xffffffffUL;
 		do
 		{
-			uHash = (uHash >> 8) ^ g_dSphinxCRC32 [ (uHash ^ *s) & 0xff ];
+			CRC32_step ( uHash, *s );
 			*pKey++ = *s++;
 		} while ( ( *s & 0xC0 )==0x80 );
 
@@ -12041,7 +12028,7 @@ void InfixBuilder_c<SIZE>::AddWord ( const BYTE * pWord, int iWordLength, int iC
 			// copy next infix codepoint
 			do
 			{
-				uHash = (uHash >> 8) ^ g_dSphinxCRC32 [ (uHash ^ *s) & 0xff ];
+				CRC32_step ( uHash, *s );
 				*pKey++ = *s++;
 			} while ( ( *s & 0xC0 )==0x80 && pKey<pKeyMax );
 

@@ -13,7 +13,7 @@
 #include "lowercaser_impl.h"
 
 #include "sphinxstd.h"
-#include "fnv64.h"
+#include "std/fnv64.h"
 
 
 void CSphLowercaser::Reset()

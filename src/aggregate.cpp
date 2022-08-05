@@ -444,7 +444,6 @@ static ByteBlob_t & operator>> ( ByteBlob_t & dIn, VecTraits_T<BYTE> & tData )
 class AggrConcat_c final : public AggrFunc_i
 {
 	CSphAttrLocator	m_tLoc;
-	using FixedVectorByte = CSphFixedVector<BYTE, sph::DefaultCopy_T<BYTE>, sph::CustomStorage_T<BYTE>>;
 
 public:
 	explicit AggrConcat_c ( const CSphColumnInfo & tCol )

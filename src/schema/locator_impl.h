@@ -12,7 +12,7 @@
 
 #pragma once
 
-#include "fnv64.h"
+#include "std/fnv64.h"
 
 inline CSphAttrLocator::CSphAttrLocator ( int iBitOffset, int iBitCount )
 	: m_iBitOffset ( iBitOffset )

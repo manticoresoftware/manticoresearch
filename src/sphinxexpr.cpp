@@ -1091,8 +1091,8 @@ protected:
 		if ( !m_pFirst || !m_pFirst->IsLast() )
 			return;
 
-		auto iStackNeeded = sphGetStackUsed ();
-		auto iCurStackSize = sphMyStackSize ();
+		auto iStackNeeded = Threads::GetStackUsed ();
+		auto iCurStackSize = Threads::MyStackSize ();
 		int iNeedInAdvance = session::GetDesiredStack ();
 		if ( iNeedInAdvance<=0 )
 			iStackNeeded = iCurStackSize * 2; // just from the fact that we're here, as ProxyFat is created by demand.
@@ -5749,6 +5749,11 @@ static float g_GeoCos[GEODIST_TABLE_COS+1];		///< cos(x) table
 static float g_GeoAsin[GEODIST_TABLE_ASIN+1];	///< asin(sqrt(x)) table
 static float g_GeoFlatK[GEODIST_TABLE_K+1][2];	///< GeodistAdaptive() flat ellipsoid method k1,k2 coeffs table
 
+/// double argument squared
+inline double sqr ( double v )
+{
+	return v * v;
+}
 
 void GeodistInit()
 {
@@ -5853,6 +5858,11 @@ static inline float GeodistFastAsinSqrt ( float x )
 	return (float)asin ( sqrt(x) ); // distance over 17083km, just compute honestly
 }
 
+/// float argument squared
+inline float fsqr ( float v )
+{
+	return v * v;
+}
 
 inline float GeodistAdaptiveDeg ( float lat1, float lon1, float lat2, float lon2 )
 {

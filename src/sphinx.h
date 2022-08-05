@@ -68,15 +68,6 @@ extern int64_t g_iIndexerPoolStartHit;
 
 /////////////////////////////////////////////////////////////////////////////
 
-/// Sphinx CRC32 implementation
-extern DWORD	g_dSphinxCRC32 [ 256 ];
-DWORD			sphCRC32 ( const void * pString );
-DWORD			sphCRC32 ( const void * pString, int iLen );
-DWORD			sphCRC32 ( const void * pString, int iLen, DWORD uPrevCRC );
-
-/// Fast check if our endianess is correct
-const char*		sphCheckEndian();
-
 /// millisecond-precision sleep
 void			sphSleepMsec ( int iMsec );
 

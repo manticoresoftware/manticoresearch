@@ -48,6 +48,13 @@ const char* RelaxedProtoName ( Proto_e eProto );
 
 int GetOsThreadId ();
 
+/// my thread handle and thread func magic
+#if _WIN32
+using SphThread_t = HANDLE;
+#else
+using SphThread_t = pthread_t;
+#endif
+
 namespace Threads {
 namespace details { class SchedulerOperation_t; }
 
@@ -196,6 +203,7 @@ const void * TopOfStack ();
 
 /// limit size for my coro stacks
 void SetMaxCoroStackSize ( int iStackSize );
+int GetMaxCoroStackSize ();
 
 /// store the address in the TLS and prepare whole thread (name, hazards, etc.)
 void PrepareMainThread ( const void * PStack );

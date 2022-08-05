@@ -22,7 +22,7 @@
 #include "sphinxutils.h"
 #include "fileio.h"
 #include "match.h"
-#include "openhash.h"
+#include "std/openhash.h"
 #include "dict/dict_base.h"
 
 #include <float.h>
@@ -30,14 +30,6 @@
 //////////////////////////////////////////////////////////////////////////
 // INTERNAL CONSTANTS
 //////////////////////////////////////////////////////////////////////////
-
-// cover on strerror
-inline const char * strerrorm ( int errnum )
-{
-	if (errnum==EMFILE)
-		return "Too many open files (on linux see /etc/security/limits.conf, 'ulimit -n', max_open_files config option)";
-	return strerror (errnum);
-}
 
 // used as bufer size in num-to-string conversions
 #define SPH_MAX_NUMERIC_STR 64

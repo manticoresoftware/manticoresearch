@@ -22,6 +22,9 @@ using RowID_t = DWORD;
 const RowID_t INVALID_ROWID = 0xFFFFFFFF;
 using DocID_t = int64_t;
 
+/// row entry (storage only, does not necessarily map 1:1 to attributes)
+using CSphRowitem = DWORD;
+
 #define DOCID_MIN        (INT64_MIN)
 #define WORDID_MAX        U64C(0xffffffffffffffff)
 

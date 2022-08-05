@@ -1889,13 +1889,6 @@ int main ( int argc, char ** argv )
 	if ( bSecondaryError )
 		sphWarning ( "Error initializing secondary index: %s", sErrorSI.cstr() );
 
-	const char* sEndian = sphCheckEndian();
-	if ( sEndian )
-	{
-		fprintf ( stdout, "%s", sEndian );
-		return 1;
-	}
-
 	if ( !isatty ( fileno(stdout) ) )
 		g_bProgress = false;
 

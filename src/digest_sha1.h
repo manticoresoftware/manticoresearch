@@ -21,7 +21,7 @@ static constexpr int HASH20_SIZE = 20;
 class SHA1_c
 {
 	class Impl_c;
-	Impl_c* m_pImpl = nullptr;
+	std::unique_ptr<Impl_c> m_pImpl;
 
 public:
 	SHA1_c();

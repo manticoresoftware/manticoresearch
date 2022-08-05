@@ -14,6 +14,7 @@
 #include "config.h"
 
 #include "sphinxstd.h"
+#include <mutex>
 
 // exception on event create instead of ec (usually we invoke sphDie, let's try exceptions in some places)
 class SystemError_c : public std::exception

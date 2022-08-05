@@ -7,15 +7,16 @@
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License. You should have
 // received a copy of the GPL license along with this program; if you
-// did not, you can find it at http://www.gnu.org/
+// did not, you can find it at http://www.gnu.org
 //
 
 #ifndef _fnv64_
 #define _fnv64_
 
-#include "sphinxstd.h"
+#include "ints.h"
+#include "blobs.h"
 
-const uint64_t SPH_FNV64_SEED = 0xcbf29ce484222325ULL;
+constexpr uint64_t SPH_FNV64_SEED = 0xcbf29ce484222325ULL;
 
 uint64_t	sphFNV64 ( const void * pString );
 uint64_t	sphFNV64 ( const void * s, int iLen, uint64_t uPrev = SPH_FNV64_SEED );

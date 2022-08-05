@@ -1512,9 +1512,22 @@ void Threads::SetTopStack ( const void * pNewStack )
 	MyThreadContext ().m_pMyThreadStack = pNewStack;
 }
 
+namespace {
+int& MaxCoroStackSize()
+{
+	static int iMaxCoroStackSize = 1024 * 1024;
+	return iMaxCoroStackSize;
+}
+}
+
 void Threads::SetMaxCoroStackSize ( int iStackSize )
 {
-	g_iMaxCoroStackSize = iStackSize;
+	MaxCoroStackSize() = iStackSize;
+}
+
+int Threads::GetMaxCoroStackSize()
+{
+	return MaxCoroStackSize();
 }
 
 void Threads::PrepareMainThread ( const void * PStack )
@@ -1715,6 +1728,49 @@ CrashQueryKeeper_c::~CrashQueryKeeper_c ()
 void CrashQueryKeeper_c::RestoreCrashQuery () const
 {
 	GlobalCrashQuerySet ( m_tReference );
+}
+
+/// format current timestamp (for logging, or whatever)
+int sphFormatCurrentTime ( char* sTimeBuf, int iBufLen )
+{
+	int64_t iNow = sphMicroTimer();
+	time_t ts = (time_t)( iNow / 1000000 ); // on some systems (eg. FreeBSD 6.2), tv.tv_sec has another type and we can't just pass it
+
+#if !_WIN32
+	struct tm tmp;
+	localtime_r ( &ts, &tmp );
+#else
+	struct tm tmp;
+	tmp = *localtime ( &ts );
+#endif
+
+	static const char* sWeekday[7] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+	static const char* sMonth[12] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+
+	return snprintf ( sTimeBuf, iBufLen, "%.3s %.3s%3d %.2d:%.2d:%.2d.%.3d %d", sWeekday[tmp.tm_wday], sMonth[tmp.tm_mon], tmp.tm_mday, tmp.tm_hour, tmp.tm_min, tmp.tm_sec, (int)( ( iNow % 1000000 ) / 1000 ), 1900 + tmp.tm_year );
+}
+
+CSphString sphCurrentUtcTime()
+{
+	int64_t iNow = sphMicroTimer();
+	time_t ts = (time_t)( iNow / 1000000 ); // on some systems (eg. FreeBSD 6.2), tv.tv_sec has another type and we can't just pass it
+
+	struct tm tmp;
+	gmtime_r ( &ts, &tmp );
+	//	localtime_r ( &ts, &tmp );
+
+	StringBuilder_c tOut;
+	tOut.Sprintf ( "%.4d-%.2d-%.2dT%.2d:%.2d:%.2d.%.3d", // YYYY-MM-DDThh:mm:ss[.SSS]
+		1900 + tmp.tm_year,
+		tmp.tm_mon + 1,
+		tmp.tm_mday,
+		tmp.tm_hour,
+		tmp.tm_min,
+		tmp.tm_sec,
+		(int)( ( iNow % 1000000 ) / 1000 ) );
+	CSphString sRes;
+	tOut.MoveTo ( sRes );
+	return sRes;
 }
 
 

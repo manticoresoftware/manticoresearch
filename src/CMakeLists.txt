@@ -40,14 +40,14 @@ target_link_libraries ( lextra INTERFACE generated_config )
 
 # main bunch of sources (for libsphinx)
 add_library ( lmanticore STATIC sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sphinxutils.cpp
-		sphinxstd.cpp sphinxsort.cpp sortsetup.cpp sphinxexpr.cpp sphinxfilter.cpp sphinxsearch.cpp sphinxrt.cpp
+		sphinxsort.cpp sortsetup.cpp sphinxexpr.cpp sphinxfilter.cpp sphinxsearch.cpp sphinxrt.cpp
 		sphinxjson.cpp sphinxaot.cpp sphinxplugin.cpp sphinxudf.c sphinxqcache.cpp sphinxjsonquery.cpp
 		jsonqueryfilter.cpp attribute.cpp secondaryindex.cpp killlist.cpp searchnode.cpp json/cJSON.c sphinxpq.cpp
 		global_idf.cpp docstore.cpp lz4/lz4.c lz4/lz4hc.c searchdexpr.cpp snippetfunctor.cpp snippetindex.cpp
 		snippetstream.cpp snippetpassage.cpp threadutils.cpp sphinxversion.cpp indexcheck.cpp datareader.cpp
 		indexformat.cpp indexsettings.cpp fileutils.cpp threads_detached.cpp hazard_pointer.cpp
 		task_info.cpp mini_timer.cpp fileio.cpp memio.cpp queryprofile.cpp columnarfilter.cpp columnargrouper.cpp
-		columnarlib.cpp collation.cpp fnv64.cpp histogram.cpp threads_detached.cpp hazard_pointer.cpp
+		columnarlib.cpp collation.cpp histogram.cpp threads_detached.cpp hazard_pointer.cpp
 		timeout_queue.cpp dynamic_idx.cpp columnarrt.cpp columnarmisc.cpp exprtraits.cpp columnarexpr.cpp
 		sphinx_alter.cpp columnarsort.cpp binlog.cpp chunksearchctx.cpp client_task_info.cpp
 		indexfiles.cpp attrindex_builder.cpp queryfilter.cpp aggregate.cpp secondarylib.cpp costestimate.cpp )
@@ -60,6 +60,9 @@ add_library ( conversion conversion.cpp )
 target_link_libraries ( conversion PUBLIC lextra )
 
 target_link_libraries ( lmanticore PUBLIC conversion )
+
+add_subdirectory ( std )
+target_link_libraries ( lmanticore PUBLIC manticore_std )
 
 add_subdirectory ( stripper )
 target_link_libraries ( lmanticore PUBLIC stripper )
@@ -132,10 +135,10 @@ set ( HEADERS sphinxexcerpt.h sphinxfilter.h sphinxint.h sphinxjsonquery.h sphin
 		sphinxsort.h sphinxstem.h sphinxutils.h sphinxexpr.h sphinx.h sphinxjson.h sphinxplugin.h sphinxqcache.h
 		sphinxquery.h sphinxsearch.h sphinxstd.h sphinxudf.h lz4/lz4.h lz4/lz4hc.h http/http_parser.h secondaryindex.h
 		searchnode.h killlist.h attribute.h accumulator.h global_idf.h optional.h event.h threadutils.h threadutils_impl.h
-		hazard_pointer.h task_info.h mini_timer.h collation.h fnv64.h histogram.h sortsetup.h dynamic_idx.h
+		hazard_pointer.h task_info.h mini_timer.h collation.h histogram.h sortsetup.h dynamic_idx.h
 		indexsettings.h columnarlib.h fileio.h memio.h queryprofile.h columnarfilter.h columnargrouper.h fileutils.h
 		libutils.h conversion.h columnarsort.h sortcomp.h binlog_defs.h binlog.h ${MANTICORE_BINARY_DIR}/config/config.h
-		chunksearchctx.h lrucache.h indexfiles.h attrindex_builder.h queryfilter.h aggregate.h openhash.h secondarylib.h
+		chunksearchctx.h indexfiles.h attrindex_builder.h queryfilter.h aggregate.h secondarylib.h
 		costestimate.h )
 
 set ( SEARCHD_H searchdaemon.h searchdconfig.h searchdddl.h searchdexpr.h searchdha.h searchdreplication.h searchdsql.h

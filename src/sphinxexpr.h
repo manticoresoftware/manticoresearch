@@ -14,6 +14,9 @@
 #define _sphinxexpr_
 
 #include "collation.h"
+#include "std/refcounted_mt.h"
+#include "std/string.h"
+#include "std/sharedptr.h"
 
 /// forward decls
 class CSphMatch;

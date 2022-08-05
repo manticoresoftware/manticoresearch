@@ -712,33 +712,42 @@ int WaitForN ( int iN, std::initializer_list<Handler> dTasks )
 
 }
 
-const void * sphMyStack ()
+int64_t sphTaskCpuTimer()
 {
-	auto pWorker = Threads::Coro::Worker_c::CurrentWorker ();
+	auto pWorker = Threads::Coro::Worker_c::CurrentWorker();
 	if ( pWorker )
-		return pWorker->GetTopOfStack ();
-	return Threads::TopOfStack();
-
-}
-
-int sphMyStackSize ()
-{
-	auto pWorker = Threads::Coro::Worker_c::CurrentWorker ();
-	if ( pWorker )
-		return pWorker->GetStackSize ();
-	return Threads::STACK_SIZE;
-}
-
-int64_t sphTaskCpuTimer ()
-{
-	auto pWorker = Threads::Coro::Worker_c::CurrentWorker ();
-	if ( pWorker )
-		return pWorker->GetCurrentCpuTimeBase ()+sphCpuTimer ();
+		return pWorker->GetCurrentCpuTimeBase() + sphCpuTimer();
 
 	return sphCpuTimer();
 }
 
 namespace Threads {
+
+const void* MyStack()
+{
+	auto pWorker = Threads::Coro::Worker_c::CurrentWorker();
+	if ( pWorker )
+		return pWorker->GetTopOfStack();
+	return Threads::TopOfStack();
+}
+
+int MyStackSize()
+{
+	auto pWorker = Threads::Coro::Worker_c::CurrentWorker();
+	if ( pWorker )
+		return pWorker->GetStackSize();
+	return Threads::STACK_SIZE;
+}
+
+int64_t GetStackUsed()
+{
+	BYTE cStack;
+	auto* pStackTop = (const BYTE*)MyStack();
+	if ( !pStackTop )
+		return 0;
+	int64_t iHeight = pStackTop - &cStack;
+	return ( iHeight >= 0 ) ? iHeight : -iHeight; // on different arch stack may grow in different directions
+}
 
 
 bool IsInsideCoroutine()

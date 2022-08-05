@@ -13,8 +13,6 @@
 #pragma once
 
 #if _WIN32
-	#undef HAVE_DLOPEN
-	#define HAVE_DLOPEN		1
 	#define RTLD_LAZY		0
 	#define RTLD_NOW		0
 	#define RTLD_LOCAL		0
@@ -25,14 +23,16 @@
 	int				dlclose ( void * lib );
 	const char *	dlerror();
 #else // !_WIN32
-#define DLSTUFF 1
 #include "config.h"
 #if HAVE_DLOPEN
-	#include <dlfcn.h>
+#	include <dlfcn.h>
 #endif // HAVE_DLOPEN
 #endif // _WIN32
 
 #if HAVE_DLOPEN
+
+#include <utility>
+
 class ScopedHandle_c
 {
 public:
@@ -48,9 +48,7 @@ public:
 
 	void * Leak()
 	{
-		void * pHandle = m_pHandle;
-		m_pHandle = nullptr;
-		return pHandle;
+		return std::exchange ( m_pHandle, nullptr );
 	}
 
 	void * Get() { return m_pHandle; }

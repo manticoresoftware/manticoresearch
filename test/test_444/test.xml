@@ -134,7 +134,10 @@ select * from main,delta facet gr distinct;;
 select * from main,delta facet gr distinct tag;;
 
 <!-- crash on count distinct  -->
-select a, count(distinct id) from idx, idx2 group by a;
+select a, count(distinct id) from idx,  idx2 group by a;
+select a, count(distinct id) from idx2, idx  group by a;
+select a, count(distinct id) from idx  group by a;
+select a, count(distinct id) from idx2 group by a;
 
 </sphinxql>
 </queries>

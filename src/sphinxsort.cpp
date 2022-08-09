@@ -2551,7 +2551,7 @@ protected:
 
 		// complete SetSchema
 		pClone->m_dAvgs.Resize ( 0 );
-		pClone->SetupBaseGrouperWrp ( m_pSchema, &pClone->m_dAvgs );
+		pClone->SetupBaseGrouperWrp ( pClone->m_pSchema, &pClone->m_dAvgs );
 
 		// m_pGrouper also need to be cloned (otherwise SetBlobPool will cause races)
 		if ( m_pGrouper )
@@ -2729,7 +2729,9 @@ public:
 			CSphMatchQueueTraits::SwapMatchQueueTraits ( dRhs );
 
 			// if rhs is empty, it might not have a complete schema
-			Swap ( m_pSchema, dRhs.m_pSchema );
+			// [tmg] - need to keep this.m_pSchema as m_tPrregroup and locators at other places have raw pointers into this.m_pSchema
+			// and this sorter will be used in next shards
+			dRhs.SetSchema ( m_pSchema->CloneMe(), false );
 
 			m_hGroup2Match.Swap ( dRhs.m_hGroup2Match );
 			dRhs.m_bMatchesFinalized = m_bMatchesFinalized;
@@ -4088,7 +4090,7 @@ public:
 	{
 		auto pClone = new MYTYPE ( nullptr, nullptr, *this );
 		CloneTo ( pClone );
-		pClone->SetupBaseGrouperWrp (m_pSchema);
+		pClone->SetupBaseGrouperWrp ( pClone->m_pSchema );
 		if ( m_pDistinctFetcher )
 			pClone->m_pDistinctFetcher = m_pDistinctFetcher->Clone();
 		return pClone;

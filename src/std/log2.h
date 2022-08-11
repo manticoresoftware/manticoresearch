@@ -14,9 +14,18 @@
 
 #include "ints.h"
 
-constexpr inline int sphLog2const ( uint64_t uValue );
+constexpr int sphLog2const ( unsigned uValue );
+constexpr int sphLog2const ( unsigned long uValue );
+constexpr int sphLog2const ( unsigned long long uValue );
 
 /// how much bits do we need for given int
-inline int sphLog2 ( uint64_t uValue );
+int sphLog2 ( unsigned uValue );
+int sphLog2 ( unsigned long uValue );
+int sphLog2 ( unsigned long long uValue );
+
+/// signed ints just casted to unsigned
+int sphLog2 ( int iValue );
+int sphLog2 ( long iValue );
+int sphLog2 ( long long iValue );
 
 #include "log2_impl.h"

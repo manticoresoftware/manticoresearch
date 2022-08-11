@@ -12,53 +12,130 @@
 
 #include "ints.h"
 
-constexpr inline int sphLog2const ( uint64_t uValue )
-{
-	int iBits = 0;
-	while ( uValue )
-	{
-		uValue >>= 1;
-		++iBits;
-	}
-	return iBits;
-}
 
 #if defined( __GNUC__ ) || defined( __clang__ )
 
-inline int sphLog2 ( uint64_t uValue )
+constexpr inline int sphLog2const ( unsigned uValue )
 {
-	if ( !uValue )
-		return 0;
-	return 64 - __builtin_clzll ( uValue );
+	return (int)sizeof ( uValue ) * 8 - __builtin_clz ( uValue | 1 );
 }
 
-#elif _WIN32
-
-#include <intrin.h> // for bsr
-#pragma intrinsic( _BitScanReverse )
-
-inline int sphLog2 ( uint64_t uValue )
+constexpr inline int sphLog2const ( unsigned long uValue )
 {
-	if ( !uValue )
-		return 0;
-	DWORD uRes;
-	if ( BitScanReverse ( &uRes, (DWORD)( uValue >> 32 ) ) )
-		return 33 + uRes;
-	BitScanReverse ( &uRes, DWORD ( uValue ) );
-	return 1 + uRes;
+	return (int)sizeof ( uValue ) * 8 - __builtin_clzl ( uValue | 1 );
+}
+
+constexpr inline int sphLog2const ( unsigned long long uValue )
+{
+	return (int)sizeof ( uValue ) * 8 - __builtin_clzll ( uValue | 1 );
+}
+
+inline int sphLog2 ( unsigned uValue )
+{
+	return sphLog2const ( uValue );
+}
+
+inline int sphLog2 ( unsigned long uValue )
+{
+	return sphLog2const ( uValue );
+}
+
+inline int sphLog2 ( unsigned long long uValue )
+{
+	return sphLog2const ( uValue );
 }
 
 #else
 
-inline int sphLog2 ( uint64_t uValue )
+namespace {
+template<typename UINT>
+constexpr inline int Log2constUINT ( UINT uValue )
 {
 	int iBits = 0;
-	while ( uValue )
+	do
 	{
 		uValue >>= 1;
 		++iBits;
-	}
+	} while ( uValue );
 	return iBits;
+}
+}
+
+constexpr inline int sphLog2const ( unsigned uValue )
+{
+	return Log2constUINT ( uValue );
+}
+
+constexpr inline int sphLog2const ( unsigned long uValue )
+{
+	return Log2constUINT ( uValue );
+}
+
+constexpr inline int sphLog2const ( unsigned long long uValue )
+{
+	return Log2constUINT ( uValue );
+}
+
+#if _WIN32
+
+#include <intrin.h> // for bsr
+#pragma intrinsic( _BitScanReverse64 )
+#pragma intrinsic( _BitScanReverse )
+
+inline int sphLog2 ( unsigned uValue )
+{
+	DWORD uRes;
+	BitScanReverse ( &uRes, uValue | 1 );
+	return 1 + uRes;
+}
+
+inline int sphLog2 ( unsigned long uValue )
+{
+	static_assert ( sizeof ( unsigned ) == sizeof ( unsigned long ), "" );
+	DWORD uRes;
+	BitScanReverse ( &uRes, uValue | 1 );
+	return 1 + uRes;
+}
+
+inline int sphLog2 ( unsigned long long uValue )
+{
+	DWORD uRes;
+	BitScanReverse64 ( &uRes, uValue | 1 );
+	return 1 + uRes;
+}
+
+
+#else
+
+inline int sphLog2 ( unsigned uValue )
+{
+	return sphLog2const ( uValue );
+}
+
+inline int sphLog2 ( unsigned long uValue )
+{
+	return sphLog2const ( uValue );
+}
+
+inline int sphLog2 ( unsigned long long uValue )
+{
+	return sphLog2const ( uValue );
 }
 
 #endif
+#endif
+
+inline int sphLog2 ( int iValue )
+{
+	return sphLog2 ( static_cast<unsigned> ( iValue ) );
+}
+
+inline int sphLog2 ( long iValue )
+{
+	return sphLog2 ( static_cast<unsigned long> ( iValue ) );
+}
+
+inline int sphLog2 ( long long iValue )
+{
+	return sphLog2 ( static_cast<unsigned long long> ( iValue ) );
+}

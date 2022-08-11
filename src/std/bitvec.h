@@ -49,10 +49,10 @@ public:
 	int Scan ( int iStart );
 
 protected:
-	static const int	SIZEBITS = sizeof(T)*8;
-	static const int	STATICSIZE = STATICBITS / SIZEBITS;
-	static const T		MASK = T(sizeof(T)*8 - 1);
-	static constexpr T	SHIFT = sphLog2const(SIZEBITS)-1;
+	static constexpr unsigned	SIZEBITS = sizeof ( T ) * CHAR_BIT;
+	static constexpr unsigned	STATICSIZE = STATICBITS / SIZEBITS;
+	static constexpr T			MASK = T ( sizeof ( T ) * CHAR_BIT - 1 );
+	static constexpr unsigned	SHIFT = sphLog2const ( SIZEBITS ) - 1;
 
 	T *		m_pData = nullptr;
 	T		m_dStatic[STATICSIZE] {0};

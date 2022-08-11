@@ -57,6 +57,7 @@ class bench_popcount : public benchmark::Fixture
 public:
 	void SetUp ( const ::benchmark::State & state ) override
 	{
+		sphSrand(0);
 		dBytes.Resize ( 128 );
 		for ( auto & c: dBytes )
 			c = sphRand () & 0xFF;
@@ -105,6 +106,149 @@ BENCHMARK_F ( bench_popcount, artificial_byte ) ( benchmark::State& st )
 		iRes += sphBitCount ( dBytes[++i & 0x7F] );
 }
 
+class zippedlength: public benchmark::Fixture
+{
+public:
+	void SetUp ( const ::benchmark::State& state ) override
+	{
+		sphSrand ( 0 );
+		dValues.Resize ( 1024 );
+		for ( auto& c : dValues )
+		{
+			c = sphRand();
+			c = ( c << 32 ) | sphRand();
+			//c &= 0xFFFFFFFF;
+		}
+		iRes = 0;
+	}
+
+	CSphVector<uint64_t> dValues;
+	volatile int iRes = 0;
+};
+
+
+namespace
+{
+template<typename UINT>
+constexpr inline int Log2constUINT ( UINT uValue )
+{
+	int iBits = 0;
+	do
+	{
+		uValue >>= 1;
+		++iBits;
+	} while ( uValue );
+	return iBits;
+}
+
+template<typename T>
+inline int CalcZippedLenViaLog2 ( T tValue )
+{
+	return (sphLog2(tValue)+6)/7; //  gives no branching, but stalled-cycles-frontend because of 'bsr' instruction. It works faster standalone, but slower in ZipValue
+}
+
+}
+
+
+BENCHMARK_F ( zippedlength, zippedlen64 )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		for ( auto i = 0; i < 1024; ++i )
+			iRes += sphCalcZippedLen ( dValues[i] );
+	}
+}
+
+BENCHMARK_F ( zippedlength, zippedlen32 )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		for ( auto i = 0; i < 1024; ++i )
+			iRes += sphCalcZippedLen ( (DWORD)dValues[i] );
+	}
+}
+
+BENCHMARK_F ( zippedlength, zippedlen16 )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		for ( auto i = 0; i < 1024; ++i )
+			iRes += sphCalcZippedLen ( (WORD)dValues[i] );
+	}
+}
+
+BENCHMARK_F ( zippedlength, zippedlenlog2_64 )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		for ( auto i = 0; i < 1024; ++i )
+			iRes += CalcZippedLenViaLog2 ( dValues[i] );
+	}
+}
+
+BENCHMARK_F ( zippedlength, zippedlenlog2_32 )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		for ( auto i = 0; i < 1024; ++i )
+			iRes += CalcZippedLenViaLog2 ( (DWORD)dValues[i] );
+	}
+}
+
+BENCHMARK_F ( zippedlength, zippedlenlog2_16 )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		for ( auto i = 0; i < 1024; ++i )
+			iRes += CalcZippedLenViaLog2 ( (WORD)dValues[i] );
+	}
+}
+
+BENCHMARK_F ( zippedlength, log2seq32 )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		for ( auto i = 0; i < 1024; ++i )
+			iRes += Log2constUINT ( (DWORD)dValues[i] );
+	}
+}
+
+BENCHMARK_F ( zippedlength, log2seq64 )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		for ( auto i = 0; i < 1024; ++i )
+			iRes += Log2constUINT ( dValues[i] );
+	}
+}
+
+BENCHMARK_F ( zippedlength, log2int32 )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		for ( auto i = 0; i < 1024; ++i )
+			iRes += sphLog2 ( (DWORD)dValues[i] );
+	}
+}
+
+BENCHMARK_F ( zippedlength, log2int64 )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		for ( auto i = 0; i < 1024; ++i )
+			iRes += sphLog2 ( dValues[i] );
+	}
+}
 
 /*
 

@@ -74,7 +74,7 @@ Two"}')
 </db_insert>
 
 <httpqueries>
-<query endpoint="sql" method="get">query=select+*+from+test+limit+2</query>
+<query endpoint="sql" method="get">query=select+*+from+test+limit+2+option+threads%3D16</query>
 <query endpoint="sql" method="get">query=select%20%2A+from+test%20where+match('tes%2a')+limit+5</query>
 <query endpoint="sql" method="post">query=select%20%2A+from+test%20order+by+j.uid+asc+limit+5</query>
 

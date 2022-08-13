@@ -905,6 +905,76 @@ TEST (functions, Mutex)
 
 //////////////////////////////////////////////////////////////////////////
 
+class TZip: public ::testing::Test
+{
+protected:
+	void SetUp() override
+	{
+		uint64_t uBase = 0xDEADBEAF12345678;
+		for ( auto i = 0; i < 65; ++i )
+		{
+			uint64_t c64 = uBase >> i;
+			dValues64.Add ( c64 );
+			ZipValueBE ( [this] ( BYTE b ) mutable { dBufBE64.Add ( b ); }, c64 );
+			ZipValueLE ( [this] ( BYTE b ) mutable { dBufLE64.Add ( b ); }, c64 );
+
+			DWORD c32 = c64 & 0xFFFFFFFF;
+			dValues32.Add ( c32 );
+			ZipValueBE ( [this] ( BYTE b ) mutable { dBufBE.Add ( b ); }, c32 );
+			ZipValueLE ( [this] ( BYTE b ) mutable { dBufLE.Add ( b ); }, c32 );
+		}
+	}
+
+	CSphVector<DWORD> dValues32;
+	CSphVector<uint64_t> dValues64;
+	CSphVector<BYTE> dBufBE;
+	CSphVector<BYTE> dBufLE;
+	CSphVector<BYTE> dBufBE64;
+	CSphVector<BYTE> dBufLE64;
+};
+
+TEST_F ( TZip, BE32 )
+{
+	const BYTE* pBuf = dBufBE.begin();
+	for ( auto& ref : dValues32 )
+	{
+		auto val = UnzipIntBE ( pBuf );
+		ASSERT_EQ ( ref, val );
+	}
+}
+
+TEST_F ( TZip, BE64 )
+{
+	const BYTE* pBuf = dBufBE64.begin();
+	for ( auto& ref : dValues64 )
+	{
+		auto val = UnzipOffsetBE ( pBuf );
+		ASSERT_EQ ( ref, val );
+	}
+}
+
+TEST_F ( TZip, LE32 )
+{
+	const BYTE* pBuf = dBufLE.begin();
+	for ( auto& ref : dValues32 )
+	{
+		auto val = UnzipIntLE ( pBuf );
+		ASSERT_EQ ( ref, val );
+	}
+}
+
+TEST_F ( TZip, LE64 )
+{
+	const BYTE* pBuf = dBufLE64.begin();
+	for ( auto& ref : dValues64 )
+	{
+		auto val = UnzipOffsetLE ( pBuf );
+		ASSERT_EQ ( ref, val );
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 static int g_iRwlock;
 static RwLock_t g_tRwlock;
 

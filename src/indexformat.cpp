@@ -441,7 +441,7 @@ bool CWordlist::GetWord ( const BYTE * pBuf, SphWordID_t iWordID, DictEntry_t & 
 	while (true)
 	{
 		// unpack next word ID
-		const SphWordID_t iDeltaWord = sphUnzipWordid ( pBuf ); // FIXME! slow with 32bit wordids
+		const SphWordID_t iDeltaWord = UnzipWordidBE ( pBuf ); // FIXME! slow with 32bit wordids
 
 		if ( iDeltaWord==0 ) // wordlist chunk is over
 			return false;
@@ -453,15 +453,15 @@ bool CWordlist::GetWord ( const BYTE * pBuf, SphWordID_t iWordID, DictEntry_t & 
 			return false;
 
 		// unpack next offset
-		const SphOffset_t iDeltaOffset = sphUnzipOffset ( pBuf );
+		const SphOffset_t iDeltaOffset = UnzipOffsetBE ( pBuf );
 		uLastOff += iDeltaOffset;
 
 		// unpack doc/hit count
-		const int iDocs = sphUnzipInt ( pBuf );
-		const int iHits = sphUnzipInt ( pBuf );
+		const int iDocs = UnzipIntBE ( pBuf );
+		const int iHits = UnzipIntBE ( pBuf );
 		SphOffset_t iSkiplistPos = 0;
 		if ( iDocs > m_iSkiplistBlockSize )
-			iSkiplistPos = sphUnzipOffset ( pBuf );
+			iSkiplistPos = UnzipOffsetBE ( pBuf );
 
 		assert ( iDeltaOffset );
 		assert ( iDocs );
@@ -470,8 +470,8 @@ bool CWordlist::GetWord ( const BYTE * pBuf, SphWordID_t iWordID, DictEntry_t & 
 		// it matches?!
 		if ( iLastID==iWordID )
 		{
-			sphUnzipWordid ( pBuf ); // might be 0 at checkpoint
-			const SphOffset_t iDoclistLen = sphUnzipOffset ( pBuf );
+			UnzipWordidBE ( pBuf ); // might be 0 at checkpoint
+			const SphOffset_t iDoclistLen = UnzipOffsetBE ( pBuf );
 
 			tWord.m_iDoclistOffset = uLastOff;
 			tWord.m_iDocs = iDocs;
@@ -687,13 +687,13 @@ bool KeywordsBlockReader_c::UnpackWord()
 	m_iLen = iMatch + iDelta;
 	m_sWord[m_iLen] = '\0';
 
-	m_iDoclistOffset = sphUnzipOffset ( m_pBuf );
-	m_iDocs = sphUnzipInt ( m_pBuf );
-	m_iHits = sphUnzipInt ( m_pBuf );
+	m_iDoclistOffset = UnzipOffsetBE ( m_pBuf );
+	m_iDocs = UnzipIntBE ( m_pBuf );
+	m_iHits = UnzipIntBE ( m_pBuf );
 	m_uHint = ( m_iDocs>=DOCLIST_HINT_THRESH ) ? *m_pBuf++ : 0;
 	m_iDoclistHint = DoclistHintUnpack ( m_iDocs, m_uHint );
 	if ( m_iDocs > m_iSkiplistBlockSize )
-		m_iSkiplistOffset = sphUnzipOffset ( m_pBuf );
+		m_iSkiplistOffset = UnzipOffsetBE ( m_pBuf );
 	else
 		m_iSkiplistOffset = 0;
 

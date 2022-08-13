@@ -9293,7 +9293,7 @@ struct StringPtrTraits_t
 		m_dOff[iOffset] = m_dPackedData.GetLength ();
 
 		BYTE * pPacked = m_dPackedData.AddN ( sphCalcPackedLength(iBlobSize) );
-		pPacked += sphZipToPtr ( pPacked, iBlobSize );
+		pPacked += ZipToPtrBE ( pPacked, iBlobSize );
 		return pPacked;
 	}
 };

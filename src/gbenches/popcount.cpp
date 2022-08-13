@@ -250,6 +250,278 @@ BENCHMARK_F ( zippedlength, log2int64 )
 	}
 }
 
+
+class zipunzip: public benchmark::Fixture
+{
+public:
+	void SetUp ( const ::benchmark::State& state ) override
+	{
+		sphSrand ( 0 );
+		dValues.Resize ( 1024 );
+		dBufBE.Reserve ( 1024 * 10 );
+		dBufBE.Resize ( 0 );
+		dBufLE.Reserve ( 1024 * 10 );
+		dBufLE.Resize ( 0 );
+		for ( auto& c : dValues )
+		{
+			c = sphRand();
+			c = ( c << 32 ) | sphRand();
+			// c &= 0xFFFFFFFF;
+			ZipValueBE ( [this] ( BYTE b ) mutable { dBufBE.Add ( b ); }, c & 0xFFFFFFFF );
+			ZipValueLE ( [this] ( BYTE b ) mutable { dBufLE.Add ( b ); }, c & 0xFFFFFFFF );
+			ZipValueBE ( [this] ( BYTE b ) mutable { dBufBE64.Add ( b ); }, c );
+			ZipValueLE ( [this] ( BYTE b ) mutable { dBufLE64.Add ( b ); }, c );
+		}
+		iRes = 0;
+	}
+
+	CSphVector<uint64_t> dValues;
+	CSphVector<BYTE> dBufBE;
+	CSphVector<BYTE> dBufLE;
+	CSphVector<BYTE> dBufBE64;
+	CSphVector<BYTE> dBufLE64;
+	volatile int iRes = 0;
+};
+
+template<typename T, typename WRITER>
+inline int ZipValueBElog2 ( WRITER fnPut, T tValue )
+{
+	int nBytes = ( sphLog2 ( tValue ) + 6 ) / 7;
+	for ( int i = nBytes - 1; i >= 0; --i )
+		fnPut ( ( 0x7f & ( tValue >> ( 7 * i ) ) ) | ( i ? 0x80 : 0 ) );
+
+	return nBytes;
+}
+
+// big-endian (most significant septets first)
+template<typename T>
+inline int ZipToPtrBElog2 ( BYTE* pData, T tValue )
+{
+	return ZipValueBElog2 ( [pData] ( BYTE b ) mutable { *pData++ = b; }, tValue );
+}
+
+BENCHMARK_F ( zipunzip, zipbe32 )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		BYTE* pBuf = dBufBE.begin();
+		for ( auto i = 0; i < 1024; ++i )
+			pBuf += ZipToPtrBE ( pBuf, (DWORD)dValues[i] );
+	}
+}
+
+BENCHMARK_F ( zipunzip, zipbe32log2 )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		BYTE* pBuf = dBufBE.begin();
+		for ( auto i = 0; i < 1024; ++i )
+			pBuf += ZipToPtrBElog2 ( pBuf, (DWORD)dValues[i] );
+	}
+}
+
+BENCHMARK_F ( zipunzip, ziple32 )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		BYTE* pBuf = dBufLE.begin();
+		for ( auto i = 0; i < 1024; ++i )
+			pBuf += ZipToPtrLE ( pBuf, (DWORD)dValues[i] );
+	}
+}
+
+BENCHMARK_F ( zipunzip, zipbe64 )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		BYTE* pBuf = dBufBE64.begin();
+		for ( auto i = 0; i < 1024; ++i )
+			pBuf += ZipToPtrBE ( pBuf, dValues[i] );
+	}
+}
+
+BENCHMARK_F ( zipunzip, zipbe64log2 )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		BYTE* pBuf = dBufBE64.begin();
+		for ( auto i = 0; i < 1024; ++i )
+			pBuf += ZipToPtrBElog2 ( pBuf, dValues[i] );
+	}
+}
+
+BENCHMARK_F ( zipunzip, ziple64 )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		BYTE* pBuf = dBufLE64.begin();
+		for ( auto i = 0; i < 1024; ++i )
+			pBuf += ZipToPtrLE ( pBuf, dValues[i] );
+	}
+}
+
+template<typename T, typename READER>
+T UnzipValueLE2 ( READER fnGet )
+{
+	register BYTE b = fnGet();
+	register BYTE iOff = 0;
+	register T res = 0;
+#pragma clang loop unroll_count( sizeof( T ) * CHAR_BIT / 7 )
+	for (; iOff < sizeof(T)*CHAR_BIT && ( b & 0x80 ); iOff+=7, b = fnGet() )
+		res |= ( T ( b & 0x7FU ) ) << iOff;
+
+	return res | ( T ( b ) ) << iOff;
+}
+
+inline DWORD UnzipIntBEref ( const BYTE*& pBuf )
+{
+	return UnzipValueBE_reference<DWORD> ( [&pBuf]() mutable { return *pBuf++; } );
+}
+
+inline DWORD UnzipIntLEref ( const BYTE*& pBuf )
+{
+	return UnzipValueLE_reference<DWORD> ( [&pBuf]() mutable { return *pBuf++; } );
+}
+
+inline DWORD UnzipIntLE2 ( const BYTE*& pBuf )
+{
+	return UnzipValueLE2<DWORD> ( [&pBuf]() mutable { return *pBuf++; } );
+}
+
+inline SphOffset_t UnzipOffsetBEref ( const BYTE*& pBuf )
+{
+	return UnzipValueBE_reference<SphOffset_t> ( [&pBuf]() mutable { return *pBuf++; } );
+}
+
+inline SphOffset_t UnzipOffsetLEref ( const BYTE*& pBuf )
+{
+	return UnzipValueLE_reference<SphOffset_t> ( [&pBuf]() mutable { return *pBuf++; } );
+}
+
+inline SphOffset_t UnzipOffsetLE2 ( const BYTE*& pBuf )
+{
+	return UnzipValueLE2<SphOffset_t> ( [&pBuf]() mutable { return *pBuf++; } );
+}
+
+BENCHMARK_F ( zipunzip, unzipbe32_fastest )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		const BYTE* pBuf = dBufBE.begin();
+		for ( auto i = 0; i < 1024; ++i )
+			iRes += UnzipIntBE ( pBuf );
+	}
+}
+
+
+BENCHMARK_F ( zipunzip, unzipbe32ref )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		const BYTE* pBuf = dBufBE.begin();
+		for ( auto i = 0; i < 1024; ++i )
+			iRes += UnzipIntBEref ( pBuf );
+	}
+}
+
+BENCHMARK_F ( zipunzip, unziple32_fastest )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		const BYTE* pBuf = dBufLE.begin();
+		for ( auto i = 0; i < 1024; ++i )
+			iRes += UnzipIntLE ( pBuf );
+	}
+}
+
+
+BENCHMARK_F ( zipunzip, unziple32ref )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		const BYTE* pBuf = dBufLE.begin();
+		for ( auto i = 0; i < 1024; ++i )
+			iRes += UnzipIntLEref ( pBuf );
+	}
+}
+
+BENCHMARK_F ( zipunzip, unziple32opt )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		const BYTE* pBuf = dBufLE.begin();
+		for ( auto i = 0; i < 1024; ++i )
+			iRes += UnzipIntLE2 ( pBuf );
+	}
+}
+
+BENCHMARK_F ( zipunzip, unzipbe64_fastest )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		const BYTE* pBuf = dBufBE64.begin();
+		for ( auto i = 0; i < 1024; ++i )
+			iRes += UnzipOffsetBE ( pBuf );
+	}
+}
+
+BENCHMARK_F ( zipunzip, unzipbe64ref )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		const BYTE* pBuf = dBufBE64.begin();
+		for ( auto i = 0; i < 1024; ++i )
+			iRes += UnzipOffsetBEref ( pBuf );
+	}
+}
+
+BENCHMARK_F ( zipunzip, unziple64_fastest )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		const BYTE* pBuf = dBufLE64.begin();
+		for ( auto i = 0; i < 1024; ++i )
+			iRes += UnzipOffsetLE ( pBuf );
+	}
+}
+
+
+BENCHMARK_F ( zipunzip, unziple64ref )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		const BYTE* pBuf = dBufLE64.begin();
+		for ( auto i = 0; i < 1024; ++i )
+			iRes += UnzipOffsetLEref ( pBuf );
+	}
+}
+
+BENCHMARK_F ( zipunzip, unziple64opt )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		const BYTE* pBuf = dBufLE64.begin();
+		for ( auto i = 0; i < 1024; ++i )
+			iRes += UnzipOffsetLE2 ( pBuf );
+	}
+}
+
 /*
 
 Run on (8 X 3900 MHz CPU s)

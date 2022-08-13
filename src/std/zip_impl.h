@@ -10,7 +10,7 @@
 // did not, you can find it at http://www.gnu.org
 //
 
-// big-endian (most significant septets first)
+// N of bytes need to store value
 template<typename T>
 inline int sphCalcZippedLen ( T tValue )
 {
@@ -23,11 +23,12 @@ inline int sphCalcZippedLen ( T tValue )
 	}
 
 	return nBytes;
+	// (sphLog2(tValue)+6)/7 gives no branching, but stalled-cycles-frontend because of 'bsr' instruction. It works faster standalone, but slower in ZipValue
 }
 
 // big-endian (most significant septets first)
 template<typename T, typename WRITER>
-inline int sphZipValue ( WRITER fnPut, T tValue )
+inline int ZipValueBE ( WRITER fnPut, T tValue )
 {
 	int nBytes = sphCalcZippedLen ( tValue );
 	for ( int i = nBytes - 1; i >= 0; --i )
@@ -38,7 +39,206 @@ inline int sphZipValue ( WRITER fnPut, T tValue )
 
 // big-endian (most significant septets first)
 template<typename T>
-inline int sphZipToPtr ( BYTE* pData, T tValue )
+inline int ZipToPtrBE ( BYTE* pData, T tValue )
 {
-	return sphZipValue ( [pData] ( BYTE b ) mutable { *pData++ = b; }, tValue );
+	return ZipValueBE ( [pData] ( BYTE b ) mutable { *pData++ = b; }, tValue );
+}
+
+template<typename T, typename READER>
+inline T UnzipValueBE_reference ( READER fnGet )
+{
+#if PARANOID
+	register DWORD b = 0;
+	register T v = 0;
+	int it = 0;
+	do {
+		b = fnGet();
+		v = ( v << 7 ) + ( b & 0x7f );
+		it++;
+	} while ( b & 0x80 );
+	assert ( ( it - 1 ) * 7 <= sizeof ( _type ) * 8 );
+	return v;
+#else
+	register BYTE b = fnGet();
+	register T res = 0;
+	while ( b & 0x80 )
+	{
+		res = ( res << 7 ) | ( b & 0x7f );
+		b = fnGet();
+	}
+	res = ( res << 7 ) | b;
+	return res;
+#endif
+}
+
+template<typename T, typename READER>
+inline std::enable_if_t<sizeof ( T ) == 4, T> UnzipValueBE ( READER fnGet )
+{
+	register BYTE b = fnGet();
+	register DWORD res = b & 0x7f;
+	if ( ( b & 0x80 ) == 0 )
+		return res;
+	b = fnGet();
+	res = ( res << 7 ) | ( b & 0x7f );
+	if ( ( b & 0x80 ) == 0 )
+		return res;
+	b = fnGet();
+	res = ( res << 7 ) | ( b & 0x7f );
+	if ( ( b & 0x80 ) == 0 )
+		return res;
+	b = fnGet();
+	res = ( res << 7 ) | ( b & 0x7f );
+	if ( ( b & 0x80 ) == 0 )
+		return res;
+	return ( res << 7 ) | fnGet();
+}
+
+// reference implementation
+template<typename T, typename READER>
+inline std::enable_if_t<sizeof ( T ) == 8, T> UnzipValueBE ( READER fnGet )
+{
+#if PARANOID
+	register DWORD b = 0;
+	register T v = 0;
+	int it = 0;
+	do {
+		b = fnGet();
+		v = ( v << 7 ) + ( b & 0x7f );
+		it++;
+	} while ( b & 0x80 );
+	assert ( ( it - 1 ) * 7 <= sizeof ( _type ) * 8 );
+	return v;
+#else
+	register BYTE b = fnGet();
+	register T res = 0;
+	while ( b & 0x80 )
+	{
+		res = ( res << 7 ) | ( b & 0x7f );
+		b = fnGet();
+	}
+	res = ( res << 7 ) | b;
+	return res;
+#endif
+}
+
+inline DWORD UnzipIntBE ( const BYTE*& pBuf )
+{
+	return UnzipValueBE<DWORD> ( [&pBuf]() mutable { return *pBuf++; } );
+}
+
+inline SphOffset_t UnzipOffsetBE ( const BYTE*& pBuf )
+{
+	return UnzipValueBE<SphOffset_t> ( [&pBuf]() mutable { return *pBuf++; } );
+}
+
+
+template<typename T, typename WRITER>
+inline int ZipValueLE ( WRITER fnPut, T tValue )
+{
+	int nBytes = 0;
+	do
+	{
+		BYTE bOut = (BYTE)( tValue & 0x7f );
+		tValue >>= 7;
+		if ( tValue )
+			bOut |= 0x80;
+		fnPut ( bOut );
+		++nBytes;
+	} while ( tValue );
+	return nBytes;
+}
+
+template<typename T>
+inline int ZipToPtrLE ( BYTE* pData, T tValue )
+{
+	return ZipValueLE ( [pData] ( BYTE b ) mutable { *pData++ = b; }, tValue );
+}
+
+template<typename T, typename READER>
+inline T UnzipValueLE_reference ( READER fnGet )
+{
+	register BYTE b;
+	register T res = 0;
+	register BYTE iOff = 0;
+
+	do
+	{
+		b = fnGet();
+		res += ( T ( b & 0x7FU ) ) << iOff;
+		iOff += 7;
+	} while ( b & 0x80U );
+
+	return res;
+}
+
+template<typename T, typename READER>
+inline std::enable_if_t<sizeof ( T ) == 4, T> UnzipValueLE ( READER fnGet )
+{
+	register BYTE b = fnGet();
+	register DWORD res = b & 0x7f;
+	if ( ( b & 0x80 ) == 0 )
+		return res;
+	b = fnGet();
+	res |= ( b & 0x7f ) << 7;
+	if ( ( b & 0x80 ) == 0 )
+		return res;
+	b = fnGet();
+	res |= ( b & 0x7f ) << 14;
+	if ( ( b & 0x80 ) == 0 )
+		return res;
+	b = fnGet();
+	if ( ( b & 0x80 ) == 0 )
+		return res | ( b & 0x7f ) << 21;
+	return res | ( b & 0x7f ) << 21 | fnGet() << 28;
+}
+
+template<typename T, typename READER>
+inline std::enable_if_t<sizeof ( T ) == 8, T> UnzipValueLE ( READER fnGet )
+{
+	register BYTE b = fnGet();
+	register T res = b & 0x7f;
+	if ( ( b & 0x80 ) == 0 )
+		return res;
+	b = fnGet();
+	res |= T ( b & 0x7f ) << 7;
+	if ( ( b & 0x80 ) == 0 )
+		return res;
+	b = fnGet();
+	res |= T ( b & 0x7f ) << 14;
+	if ( ( b & 0x80 ) == 0 )
+		return res;
+	b = fnGet();
+	res |= T ( b & 0x7f ) << 21;
+	if ( ( b & 0x80 ) == 0 )
+		return res;
+	b = fnGet();
+	res |= T ( b & 0x7f ) << 28;
+	if ( ( b & 0x80 ) == 0 )
+		return res;
+	b = fnGet();
+	res |= T ( b & 0x7f ) << 35;
+	if ( ( b & 0x80 ) == 0 )
+		return res;
+	b = fnGet();
+	res |= T ( b & 0x7f ) << 42;
+	if ( ( b & 0x80 ) == 0 )
+		return res;
+	b = fnGet();
+	res |= T ( b & 0x7f ) << 49;
+	if ( ( b & 0x80 ) == 0 )
+		return res;
+	b = fnGet();
+	if ( ( b & 0x80 ) == 0 )
+		return res | T ( b & 0x7f ) << 56;
+	return res | T ( b & 0x7f ) << 56 | T ( fnGet() ) << 63;
+}
+
+inline DWORD UnzipIntLE ( const BYTE*& pBuf )
+{
+	return UnzipValueLE<DWORD> ( [&pBuf]() mutable { return *pBuf++; } );
+}
+
+inline SphOffset_t UnzipOffsetLE ( const BYTE*& pBuf )
+{
+	return UnzipValueLE<SphOffset_t> ( [&pBuf]() mutable { return *pBuf++; } );
 }

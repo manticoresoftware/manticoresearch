@@ -12914,17 +12914,17 @@ bool sphLookupInfixCheckpoints ( const char * sInfix, int iBytes, const BYTE * p
 		{
 			// found you! decompress the data
 			int iLast = 0;
-			int iPackedLen = sphUnzipInt ( pBlock );
+			int iPackedLen = UnzipIntBE ( pBlock );
 			const BYTE * pMax = pBlock + iPackedLen;
 			while ( pBlock<pMax )
 			{
-				iLast += sphUnzipInt ( pBlock );
+				iLast += UnzipIntBE ( pBlock );
 				dCheckpoints.Add ( (DWORD)iLast );
 			}
 			return true;
 		}
 
-		int iSkip = sphUnzipInt ( pBlock );
+		int iSkip = UnzipIntBE ( pBlock );
 		pBlock += iSkip;
 	}
 	return false;

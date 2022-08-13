@@ -963,7 +963,7 @@ BYTE * sphPackPtrAttr ( ByteBlob_t dBlob )
 int sphPackPtrAttr ( BYTE * pPrealloc, ByteBlob_t dBlob )
 {
 	assert ( pPrealloc && IsValid ( dBlob ) );
-	int iZippedLen = sphZipToPtr ( pPrealloc, dBlob.second );
+	int iZippedLen = ZipToPtrBE ( pPrealloc, dBlob.second );
 	memcpy ( pPrealloc+iZippedLen, dBlob.first, dBlob.second );
 	return iZippedLen+dBlob.second;
 }
@@ -972,7 +972,7 @@ void sphPackPtrAttrInPlace ( TightPackedVec_T<BYTE> & dAttr, int iSize )
 {
 	BYTE bSize[20];
 	if ( iSize<0 ) iSize = dAttr.GetLength();
-	int iZippedLen = sphZipToPtr ( bSize, iSize );
+	int iZippedLen = ZipToPtrBE ( bSize, iSize );
 	dAttr.Resize ( iZippedLen+iSize );
 	BYTE * pData = dAttr.Begin ();
 	memmove ( pData+iZippedLen, pData, iSize );
@@ -985,7 +985,7 @@ BYTE * sphPackPtrAttr ( int iLengthBytes, BYTE ** ppData )
 	assert ( ppData );
 	BYTE * pPacked = sphAllocateSmall ( sphCalcPackedLength ( iLengthBytes ) );
 	*ppData = pPacked;
-	*ppData += sphZipToPtr ( pPacked, iLengthBytes );
+	*ppData += ZipToPtrBE ( pPacked, iLengthBytes );
 	return pPacked;
 }
 
@@ -995,7 +995,7 @@ ByteBlob_t sphUnpackPtrAttr ( const BYTE * pData )
 	if ( !pData )
 		return { nullptr, 0 };
 
-	auto iLen = (int)sphUnzipInt ( pData );
+	auto iLen = (int)UnzipIntBE ( pData );
 	return { pData, iLen };
 }
 

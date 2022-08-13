@@ -1441,7 +1441,7 @@ DocstoreDoc_t DocstoreRT_c::GetDoc ( RowID_t tRowID, const VecTraits_T<int> * pF
 	const BYTE * pDoc = m_dDocs[tRowID];
 	for ( int iField = 0; iField < m_tFields.GetNumFields(); iField++ )
 	{
-		DWORD uFieldLength = sphUnzipInt(pDoc);
+		DWORD uFieldLength = UnzipIntBE(pDoc);
 		int iFieldInRset = dFieldInRset[iField];
 		if ( iFieldInRset!=-1 )
 			PackData ( tResult.m_dFields[iFieldInRset], pDoc, uFieldLength, m_tFields.GetField(iField).m_eType==DOCSTORE_TEXT, bPack );
@@ -1470,7 +1470,7 @@ int DocstoreRT_c::GetDocSize ( const BYTE * pDoc, int iFieldCount )
 {
 	const BYTE * p = pDoc;
 	for ( int iField = 0; iField<iFieldCount; iField++ )
-		p += sphUnzipInt(p);
+		p += UnzipIntBE(p);
 
 	return p-pDoc;
 }

@@ -6,7 +6,7 @@ if (NOT TARGET benchmark::benchmark_main)
 	return ()
 endif ()
 
-add_executable ( gmanticorebench
+add_executable ( gmanticorebench EXCLUDE_FROM_ALL
 		functions.cpp
 		text.cpp
 		json.cpp

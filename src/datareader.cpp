@@ -152,13 +152,13 @@ SphOffset_t	ThinMMapReader_c::GetOffset()
 
 DWORD ThinMMapReader_c::UnzipInt()
 {
-	SPH_VARINT_DECODE ( DWORD, GetByte() );
+	return UnzipValueBE<DWORD> ( [this]() mutable { return GetByte(); } );
 }
 
 
 uint64_t ThinMMapReader_c::UnzipOffset()
 {
-	SPH_VARINT_DECODE ( uint64_t, GetByte() );
+	return UnzipValueBE<uint64_t> ( [this]() mutable { return GetByte(); } );
 }
 
 //////////////////////////////////////////////////////////////////////////

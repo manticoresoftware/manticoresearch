@@ -40,9 +40,9 @@ void SkipData_t::Read ( const BYTE * pSkips, const DictEntry_t & tRes, int iDocs
 	{
 		SkiplistEntry_t & t = m_dSkiplist.Add();
 		SkiplistEntry_t & p = m_dSkiplist [ m_dSkiplist.GetLength()-2 ];
-		t.m_tBaseRowIDPlus1 = p.m_tBaseRowIDPlus1 + iSkipBlockSize + sphUnzipInt(pSkip);
-		t.m_iOffset = p.m_iOffset + 4*iSkipBlockSize + sphUnzipOffset(pSkip);
-		t.m_iBaseHitlistPos = p.m_iBaseHitlistPos + sphUnzipOffset(pSkip);
+		t.m_tBaseRowIDPlus1 = p.m_tBaseRowIDPlus1 + iSkipBlockSize + UnzipIntBE(pSkip);
+		t.m_iOffset = p.m_iOffset + 4*iSkipBlockSize + UnzipOffsetBE(pSkip);
+		t.m_iBaseHitlistPos = p.m_iBaseHitlistPos + UnzipOffsetBE(pSkip);
 	}
 }
 

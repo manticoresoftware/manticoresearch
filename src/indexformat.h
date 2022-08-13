@@ -23,7 +23,7 @@ const int	DOCLIST_HINT_THRESH = 256;
 const DWORD HITLESS_DOC_MASK = 0x7FFFFFFF;
 const DWORD	HITLESS_DOC_FLAG = 0x80000000;
 
-#define sphUnzipWordid sphUnzipOffset
+#define UnzipWordidBE UnzipOffsetBE
 
 class DiskIndexQwordSetup_c;
 

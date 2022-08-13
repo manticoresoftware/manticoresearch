@@ -144,7 +144,7 @@ void sphDeallocatePacked ( BYTE* pBlob )
 		return;
 #if WITH_SMALLALLOC
 	const BYTE * pFoo = pBlob;
-	sphDeallocateSmall ( pBlob, sphCalcPackedLength ( sphUnzipInt ( pFoo ) ) );
+	sphDeallocateSmall ( pBlob, sphCalcPackedLength ( UnzipIntBE ( pFoo ) ) );
 #else
 	sphDeallocateSmall ( pBlob );
 #endif

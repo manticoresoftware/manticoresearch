@@ -123,6 +123,16 @@ bool MemoryReader_c::HasData() const
 	return GetPos() < m_iLen;
 }
 
+DWORD MemoryReader_c::UnzipInt()
+{
+	return UnzipIntLE ( m_pCur );
+}
+
+
+uint64_t MemoryReader_c::UnzipOffset()
+{
+	return UnzipOffsetLE ( m_pCur );
+}
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -196,6 +206,16 @@ void MemoryWriter_c::PutUint64 ( uint64_t uVal )
 	PutBytes ( (BYTE *)&uVal, sizeof(uVal) );
 }
 
+void MemoryWriter_c::ZipOffset ( uint64_t uVal )
+{
+	ZipValueLE ( [this] ( BYTE b ) { PutByte ( b ); }, uVal );
+}
+
+void MemoryWriter_c::ZipInt ( DWORD uVal )
+{
+	ZipValueLE ( [this] ( BYTE b ) { PutByte ( b ); }, uVal );
+}
+
 //////////////////////////////////////////////////////////////////////////
 MemoryReader2_c::MemoryReader2_c ( const BYTE * pData, int iLen )
 	: MemoryReader_c ( pData, iLen )
@@ -204,13 +224,13 @@ MemoryReader2_c::MemoryReader2_c ( const BYTE * pData, int iLen )
 
 uint64_t MemoryReader2_c::UnzipInt()
 {
-	return sphUnzipInt(m_pCur);
+	return UnzipIntBE(m_pCur);
 }
 
 
 uint64_t MemoryReader2_c::UnzipOffset()
 {
-	return sphUnzipOffset(m_pCur);
+	return UnzipOffsetBE(m_pCur);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -221,11 +241,11 @@ MemoryWriter2_c::MemoryWriter2_c ( CSphVector<BYTE> & dBuf )
 
 void MemoryWriter2_c::ZipOffset ( uint64_t uVal )
 {
-	sphZipValue ( [this] ( BYTE b ) { PutByte ( b ); }, uVal ); 
+	ZipValueBE ( [this] ( BYTE b ) { PutByte ( b ); }, uVal );
 }
 
 
 void MemoryWriter2_c::ZipInt ( DWORD uVal )
 {
-	sphZipValue ( [this] ( BYTE b ) { PutByte ( b ); }, uVal );
+	ZipValueBE ( [this] ( BYTE b ) { PutByte ( b ); }, uVal );
 }

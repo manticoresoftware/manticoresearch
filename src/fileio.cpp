@@ -15,34 +15,6 @@
 
 #define SPH_READ_NOPROGRESS_CHUNK (32768*1024)
 
-#if PARANOID
-
-#define SPH_VARINT_DECODE(_type,_getexpr) \
-	register DWORD b = 0; \
-	register _type v = 0; \
-	int it = 0; \
-	do { b = _getexpr; v = ( v<<7 ) + ( b&0x7f ); it++; } while ( b&0x80 ); \
-	assert ( (it-1)*7<=sizeof(_type)*8 ); \
-	return v;
-
-#else
-
-#define SPH_VARINT_DECODE(_type,_getexpr) \
-	register DWORD b = _getexpr; \
-	register _type res = 0; \
-	while ( b & 0x80 ) \
-	{ \
-		res = ( res<<7 ) + ( b & 0x7f ); \
-		b = _getexpr; \
-	} \
-	res = ( res<<7 ) + b; \
-	return res;
-
-#endif // PARANOID
-
-DWORD sphUnzipInt ( const BYTE * & pBuf )			{ SPH_VARINT_DECODE ( DWORD, *pBuf++ ); }
-SphOffset_t sphUnzipOffset ( const BYTE * & pBuf )	{ SPH_VARINT_DECODE ( SphOffset_t, *pBuf++ ); }
-
 //////////////////////////////////////////////////////////////////////////
 
 CSphAutofile::CSphAutofile ( const CSphString & sName, int iMode, CSphString & sError, bool bTemp )
@@ -477,13 +449,13 @@ void CSphReader::ResetError()
 
 DWORD CSphReader::UnzipInt()
 {
-	SPH_VARINT_DECODE ( DWORD, GetByte() );
+	return UnzipValueBE<DWORD> ( [this]() mutable { return GetByte(); } );
 }
 
 
 uint64_t CSphReader::UnzipOffset()
 {
-	SPH_VARINT_DECODE ( uint64_t, GetByte() );
+	return UnzipValueBE<uint64_t> ( [this]() mutable { return GetByte(); } );
 }
 
 
@@ -721,13 +693,13 @@ void CSphWriter::PutBytes ( const void * pData, int64_t iSize )
 
 void CSphWriter::ZipInt ( DWORD uValue )
 {
-	sphZipValue ( [this] ( BYTE b ) { PutByte ( b ); }, uValue );
+	ZipValueBE ( [this] ( BYTE b ) { PutByte ( b ); }, uValue );
 }
 
 
 void CSphWriter::ZipOffset ( uint64_t uValue )
 {
-	sphZipValue ( [this] ( BYTE b ) { PutByte ( b ); }, uValue );
+	ZipValueBE ( [this] ( BYTE b ) { PutByte ( b ); }, uValue );
 }
 
 

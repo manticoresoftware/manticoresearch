@@ -88,10 +88,10 @@ pip3.9 install pymorphy2[fast]
 pip3.9 install pymorphy2-dicts-uk
 ```
 
-After you have all installed make sure you have the following in your Manticore Search configuration file (/etc/manticoresearch/manticore.conf by default):
+After you have all installed make sure you have the following in your Manticore Search configuration file (`/etc/manticoresearch/manticore.conf` by default):
 
 ```
 common {
-    plugin_dir = /usr/local/lib/manticore/
+    plugin_dir = /usr/local/manticore/lib/
 }
 ```

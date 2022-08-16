@@ -77,28 +77,33 @@ It returns a JSON response which contains hits information and execution time. T
 
 <!-- request HTTP -->
 ```bash
-POST /sql -d "query=select id,subject,author_id  from forum where match('@subject php manticore') group by author_id order by id desc limit 0,5"
+POST /sql -d "query=select%20id%2Csubject%2Cauthor_id%20%20from%20forum%20where%20match%28%27%40subject%20php%20manticore%27%29%20group%20by%20author_id%20order%20by%20id%20desc%20limit%200%2C5"
 ```
 
 <!-- response HTTP -->
 ```json
 {
-  "took":10,
+  "took": 0,
   "timed_out": false,
-  "hits":
-  {
+  "hits": {
     "total": 2,
-    "hits":
-    [
-      {
-        "_id": "1",
-        "_score": 1,
-        "_source": { "gid": 11 }
-      },
+    "total_relation": "eq",
+    "hits": [
       {
         "_id": "2",
-        "_score": 1,
-        "_source": { "gid": 12 }
+        "_score": 2356,
+        "_source": {
+          "subject": "php manticore",
+          "author_id": 12
+        }
+      },
+      {
+        "_id": "1",
+        "_score": 2356,
+        "_source": {
+          "subject": "php manticore",
+          "author_id": 11
+        }
       }
     ]
   }

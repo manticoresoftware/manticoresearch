@@ -5,7 +5,7 @@
 <!-- example insert -->
 Adding documents in a real-time manner is only supported for [Real-Time](../Creating_an_index/Local_indexes/Real-time_index.md) and [percolate](../Creating_an_index/Local_indexes/Percolate_index.md) indexes. Corresponding SQL command or HTTP endpoint or a client's functions inserts new rows (documents) into an existing index with provided field values.
 
-You can insert new documents with values for all fields of the index or only part of them. In this case the other fields will be filled with their default values (0 for scalar types, empty string for text types).
+You can insert a single or [multiple documents](../../Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md#Bulk-adding-documents) with values for all fields of the index or only part of them. In this case the other fields will be filled with their default values (0 for scalar types, empty string for text types).
 
 Expressions are currently not supported in `INSERT` and the values should be explicitly specified.
 

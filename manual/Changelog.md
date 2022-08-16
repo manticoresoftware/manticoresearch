@@ -3,7 +3,14 @@
 # Next release
 
 ### Minor changes
-* **⚠️ BREAKING CHANGE**: Secondary indexes file format got changed and `.spidx` should be removed from all indexes right after binaries got updated prior to start of the updated daemon otherwise indexes with old format of secondary index won't be loaded with a warning message. For cluster configuration full cluster restart should be performed with removal of `.spidx` files at all nodes. Read about [restarting a cluster](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md#Restarting-a-cluster) for more details.
+* **⚠️ BREAKING CHANGE**: Secondary indexes file format got changed and if you are using secondary indexes for searching (`searchd.secondary_indexes = 1` which was not a default in the previous versions) the new Manticore version will skip loading older index versions to prevent performance drop. The recommendations are:
+  - remove secondary indexes files during upgrade:
+    * `systemctl stop manticore`
+    * upgrade Manticore version
+    * remove `.spidx` index files
+    * start Manticore back
+    * use `ALTER TABLE <table name> REBUILD SECONDARY` (not yet implemented❗) to recover secondary indexes
+  - If you are running a replication cluster, full cluster restart should be performed with removal of `.spidx` files and `ALTER TABLE <table name> REBUILD SECONDARY` on all the nodes. Read about [restarting a cluster](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md#Restarting-a-cluster) for more details.
 
 ### Packaging
 * arm64 packages for macOS and Linuxes
@@ -14,8 +21,6 @@ Released: May 30th 2022
 
 ### Bugfixes
 * ❗[Issue #791](https://github.com/manticoresoftware/manticoresearch/issues/791) - wrong stack size could cause a crash.
-
-
 
 # Version 5.0.0
 Released: May 18th 2022

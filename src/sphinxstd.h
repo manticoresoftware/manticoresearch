@@ -31,6 +31,7 @@
 #include <memory>
 #include <functional>
 #include <atomic>
+#include <cerrno>
 
 // for 64-bit types
 #if HAVE_STDINT_H

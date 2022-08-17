@@ -2587,7 +2587,7 @@ private:
 };
 
 // start clusters on daemon start
-void ReplicationStart ( const CSphConfigSection & hSearchd, CSphVector<ListenerDesc_t> dListeners,
+void ReplicationStart ( CSphVector<ListenerDesc_t> dListeners,
 	bool bNewCluster, bool bForce ) EXCLUDES ( g_tClustersLock )
 {
 	SetListener ( dListeners );

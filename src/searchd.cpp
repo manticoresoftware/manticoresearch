@@ -207,6 +207,7 @@ ThreadRole HandlerThread; // thread which serves clients
 static CSphString		g_sConfigFile;
 static bool				g_bCleanLoadedConfig = true; // whether to clean config when it parsed and no more necessary
 static bool				LOG_LEVEL_SHUTDOWN = val_from_env("MANTICORE_TRACK_DAEMON_SHUTDOWN",false); // verbose logging when daemon shutdown, ruled by this env variable
+static CSphString		g_sConfigPath; // for resolve paths to absolute
 
 static auto&			g_bSeamlessRotate	= sphGetSeamlessRotate ();
 
@@ -7510,6 +7511,7 @@ static const char * g_dSqlStmts[] =
 	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
 	"alter_index_settings", "join_cluster", "cluster_create", "cluster_delete", "cluster_index_add",
 	"cluster_index_delete", "cluster_update", "explain", "import_table", "lock_indexes", "unlock_indexes",
+	"show_settings"
 };
 
 
@@ -15966,6 +15968,8 @@ void ClientSession_c::FreezeLastMeta()
 	m_tLastMeta.m_sWarning = "";
 }
 
+static void HandleMysqlShowSettings ( const CSphConfig & hConf, RowBuffer_i & tOut );
+
 // just execute one sphinxql statement
 //
 // IMPORTANT! this does NOT start or stop profiling, as there a few external
@@ -16411,6 +16415,10 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	case STMT_UNLOCK:
 		HandleMysqlUnlockIndexes ( tOut, pStmt->m_sIndex, m_tLastMeta.m_sWarning );
+		return true;
+
+	case STMT_SHOW_SETTINGS:
+		HandleMysqlShowSettings ( g_hCfg, tOut );
 		return true;
 
 	default:
@@ -18790,6 +18798,81 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 		sphFatal ( "secondary_indexes set but failed to initialize secondary library: %s", g_sSecondaryError.cstr() );
 
 	SetSecondaryIndexDefault ( bGotSecondary );
+	g_sConfigPath = sphGetCwd();
+}
+
+static void PutPath ( const CSphString & sCwd, const CSphString & sVar, RowBuffer_i & tOut )
+{
+	if ( !IsPathAbsolute ( sVar ) )
+	{
+		CSphString sPath;
+		sPath.SetSprintf ( "%s/%s", sCwd.cstr(), sVar.cstr() );
+		tOut.PutString ( sPath );
+	} else
+	{
+		tOut.PutString ( sVar );
+	}
+}
+
+class StringSetStatic_c : public sph::StringSet
+{
+public:
+	StringSetStatic_c ( std::initializer_list<const char *> dArgs )
+	{
+		for ( const char * sName : dArgs )
+			Add ( sName );
+	}
+};
+
+static StringSetStatic_c g_hSearchdPathVars {
+  "binlog_path"
+, "data_dir"
+, "log"
+, "pid_file"
+, "query_log"
+, "snippets_file_prefix"
+, "sphinxql_state" 
+, "ssl_ca"
+, "ssl_cert"
+, "ssl_key"
+};
+
+void HandleMysqlShowSettings ( const CSphConfig & hConf, RowBuffer_i & tOut )
+{
+	tOut.HeadBegin( 2 );
+	tOut.HeadColumn ( "Setting_name" );
+	tOut.HeadColumn ( "Value" );
+	tOut.HeadEnd();
+
+	// configuration file path
+	tOut.PutString ( "configuration_file" );
+	PutPath ( g_sConfigPath, g_sConfigFile, tOut );
+	tOut.Commit();
+	// pid 
+	tOut.PutString ( "worker_pid" );
+	tOut.PutNumAsString ( g_iPidFD );
+	tOut.Commit();
+
+	if ( hConf.Exists ( "searchd" ) && hConf["searchd"].Exists ( "searchd" ) )
+	{
+		const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
+
+		for ( const auto & tIt : hSearchd )
+		{
+			// data packets
+			tOut.PutString ( tIt.first );
+			if ( g_hSearchdPathVars[tIt.first] )
+				PutPath ( g_sConfigPath, tIt.second.strval(), tOut );
+			else
+				tOut.PutString ( tIt.second.strval() );
+
+			tOut.Commit();
+		}
+	}
+
+	// done
+	tOut.Eof();
+
 }
 
 // load index which is not yet load, and publish it in served indexes.
@@ -19854,7 +19937,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	// time for replication to sync with cluster
 	searchd::AddShutdownCb ( ReplicateClustersDelete );
-	ReplicationStart ( hSearchd, std::move ( dListenerDescs ), bNewCluster, bNewClusterForce );
+	ReplicationStart ( std::move ( dListenerDescs ), bNewCluster, bNewClusterForce );
 
 	g_bJsonConfigLoadedOk = true;
 

@@ -1344,6 +1344,10 @@ show_what:
 		{
       		pParser->m_pStmt->m_eStmt = STMT_SHOW_VARIABLES;
 		}
+	| TOK_SETTINGS
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_SETTINGS;
+		}
 	;
 
 index_or_table:

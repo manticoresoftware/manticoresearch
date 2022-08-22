@@ -410,7 +410,7 @@ Read [more about data types here](../../Creating_an_index/Data_types.md).
 | [multi64](../../Creating_an_index/Data_types.md#Multi-value-big-integer) | [rt_attr_multi_64](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_multi_64) | multi-bigint  |   |
 | [bool](../../Creating_an_index/Data_types.md#Boolean) | [rt_attr_bool](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_bool) | boolean |   |
 | [json](../../Creating_an_index/Data_types.md#JSON) | [rt_attr_json](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_json) | JSON |   |
-| [string](../../Creating_an_index/Data_types.md#String) | [rt_attr_string](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_string) | string. Option: indexed - also index the strings in a full-text field with same name.   |   |
+| [string](../../Creating_an_index/Data_types.md#String) | [rt_attr_string](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_string) | string. Option `indexed, attribute` will make the value full-text indexed and filterable, sortable and groupable at the same time  |   |
 | [timestamp](../../Creating_an_index/Data_types.md#Timestamps) |	[rt_attr_timestamp](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_timestamp) | timestamp  |   |
 | [bit(n)](../../Creating_an_index/Data_types.md#Integer) | [rt_attr_uint field_name:N](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_uint) | N is the max number of bits to keep  |   |
 

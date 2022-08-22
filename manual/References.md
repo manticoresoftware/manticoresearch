@@ -14,16 +14,18 @@
 
 ##### Data management
 * [INSERT](Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md) - Adds new documents
-* [UPDATE](Updating_documents/REPLACE.md) - Replaces existing documents with new ones
+* [REPLACE](Updating_documents/REPLACE.md) - Replaces existing documents with new ones
 * [UPDATE](Updating_documents/UPDATE.md) - Does in-place update in documents
 * [DELETE](Deleting_documents.md) - Deletes documents
 * [TRUNCATE TABLE](Emptying_an_index.md) - Deletes all documents from index
 
 ##### SELECT
 * [SELECT](Searching/Full_text_matching/Basic_usage.md#SQL) - Searches
+  * [WHERE](Searching/Filters.md#Filters) - Filters
   * [GROUP BY](Searching/Grouping.md) - Groups search results
   * [GROUP BY ORDER](Searching/Grouping.md) - Orders groups
   * [GROUP BY HAVING](Searching/Grouping.md) - Filters groups
+  * [OPTION](Searching/Options.md#OPTION) - Query Options
   * [FACET](Searching/Faceted_search.md) - Faceted search
   * [SUB-SELECTS](Searching/Sub-selects.md) - About using SELECT sub-queries
 * [EXPLAIN QUERY](Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query) - Shows query execution plan without running the query itself

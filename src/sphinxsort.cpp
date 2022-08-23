@@ -2727,12 +2727,6 @@ public:
 		if ( dRhs.IsEmpty () )
 		{
 			CSphMatchQueueTraits::SwapMatchQueueTraits ( dRhs );
-
-			// if rhs is empty, it might not have a complete schema
-			// [tmg] - need to keep this.m_pSchema as m_tPrregroup and locators at other places have raw pointers into this.m_pSchema
-			// and this sorter will be used in next shards
-			dRhs.SetSchema ( m_pSchema->CloneMe(), false );
-
 			m_hGroup2Match.Swap ( dRhs.m_hGroup2Match );
 			dRhs.m_bMatchesFinalized = m_bMatchesFinalized;
 			dRhs.m_iMaxUsed = m_iMaxUsed;

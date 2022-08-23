@@ -82,14 +82,6 @@ void ModifyDaemonPaths ( CSphConfigSection & hSearchd )
 
 		hSearchd.AddEntry ( szBinlogKey, sBinlogDir.cstr() );
 	}
-
-	const char * szSQLStateKey = "sphinxql_state";
-	if ( !hSearchd.Exists(szSQLStateKey) )
-	{
-		CSphString sSQLState;
-		sSQLState.SetSprintf ( "%s/state.sql", GetDataDirInt().cstr() );
-		hSearchd.AddEntry ( szSQLStateKey, sSQLState.cstr() );
-	}
 }
 
 

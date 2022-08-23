@@ -18827,8 +18827,10 @@ public:
 static StringSetStatic_c g_hSearchdPathVars {
   "binlog_path"
 , "data_dir"
+, "lemmatizer_base"
 , "log"
 , "pid_file"
+, "plugin_dir"
 , "query_log"
 , "snippets_file_prefix"
 , "sphinxql_state" 
@@ -18836,6 +18838,38 @@ static StringSetStatic_c g_hSearchdPathVars {
 , "ssl_cert"
 , "ssl_key"
 };
+
+static void DumpSettingsSection ( const CSphConfig & hConf, const char * sSectionName, RowBuffer_i & tOut )
+{
+	if ( !hConf.Exists ( sSectionName ) || !hConf[sSectionName].Exists ( sSectionName ) )
+		return;
+
+	StringBuilder_c tTmp;
+	const CSphConfigSection & hNode = hConf[sSectionName][sSectionName];
+
+	for ( const auto & tIt : hNode )
+	{
+		tTmp.Clear();
+		tTmp.Appendf ( "%s.%s", sSectionName, tIt.first.cstr() );
+
+		const CSphVariant * pVal = &tIt.second;
+
+		do
+		{
+			// data packets
+			tOut.PutString ( tTmp.cstr() );
+
+			if ( g_hSearchdPathVars[tIt.first] )
+				PutPath ( g_sConfigPath, pVal->strval(), tOut );
+			else
+				tOut.PutString ( pVal->strval() );
+
+			tOut.Commit();
+
+			pVal = pVal->m_pNext;
+		} while ( pVal );
+	}
+}
 
 void HandleMysqlShowSettings ( const CSphConfig & hConf, RowBuffer_i & tOut )
 {
@@ -18850,25 +18884,12 @@ void HandleMysqlShowSettings ( const CSphConfig & hConf, RowBuffer_i & tOut )
 	tOut.Commit();
 	// pid 
 	tOut.PutString ( "worker_pid" );
-	tOut.PutNumAsString ( g_iPidFD );
+	tOut.PutNumAsString ( (int)getpid() );
 	tOut.Commit();
 
-	if ( hConf.Exists ( "searchd" ) && hConf["searchd"].Exists ( "searchd" ) )
-	{
-		const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
-
-		for ( const auto & tIt : hSearchd )
-		{
-			// data packets
-			tOut.PutString ( tIt.first );
-			if ( g_hSearchdPathVars[tIt.first] )
-				PutPath ( g_sConfigPath, tIt.second.strval(), tOut );
-			else
-				tOut.PutString ( tIt.second.strval() );
-
-			tOut.Commit();
-		}
-	}
+	DumpSettingsSection ( hConf, "searchd", tOut );
+	DumpSettingsSection ( hConf, "common", tOut );
+	DumpSettingsSection ( hConf, "indexer", tOut );
 
 	// done
 	tOut.Eof();
@@ -19883,8 +19904,10 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	gStats().m_uStarted = (DWORD)time(NULL);
 
-	// threads mode
-	if ( !InitSphinxqlState ( hSearchd.GetStr ( "sphinxql_state" ), sError ))
+	CSphString sSQLStateDefault;
+	if ( IsConfigless() )
+		sSQLStateDefault.SetSprintf ( "%s/state.sql", GetDataDirInt().cstr() );
+	if ( !InitSphinxqlState ( hSearchd.GetStr ( "sphinxql_state", sSQLStateDefault.scstr() ), sError ))
 		sphWarning ( "sphinxql_state flush disabled: %s", sError.cstr ());
 
 	ServeUserVars ();

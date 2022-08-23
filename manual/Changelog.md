@@ -11,6 +11,7 @@
     * start Manticore back
     * use `ALTER TABLE <table name> REBUILD SECONDARY` (not yet implemented❗) to recover secondary indexes
   - If you are running a replication cluster, full cluster restart should be performed with removal of `.spidx` files and `ALTER TABLE <table name> REBUILD SECONDARY` on all the nodes. Read about [restarting a cluster](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md#Restarting-a-cluster) for more details.
+* `SHOW SETTINGS`
 
 ### Packaging
 * arm64 packages for macOS and Linuxes
@@ -940,15 +941,15 @@ Besides the usual `manticore` package, you can also install Manticore Search by 
 ## Version 3.0.2, 31 May 2019
 ### Improvements
 * added mmap readers for docs and hit lists
-* /sql HTTP endpoint response is now the same as /json/search response
-* new directives access_plain_attrs, access_blob_attrs, access_doclists, access_hitlists
-* new directive server_id for replication setups
+* `/sql` HTTP endpoint response is now the same as `/json/search` response
+* new directives `access_plain_attrs`, `access_blob_attrs`, `access_doclists`, `access_hitlists`
+* new directive `server_id` for replication setups
 
 ### Removals
-* removed HTTP /search endpoint
+* removed HTTP `/search` endpoint
 
 ### Deprecations
-* read_buffer, ondisk_attrs, ondisk_attrs_default, mlock (replaced by `access_*` directives)
+* `read_buffer`, `ondisk_attrs`, `ondisk_attrs_default`, `mlock` are replaced by `access_*` directives
 
 ### Bugfixes
 * [Commit 849c16e1](https://github.com/manticoresoftware/manticoresearch/commit/849c16e1040f382795ba0635cb48686f9db4f2d8) allow attribute names starting with numbers in select list

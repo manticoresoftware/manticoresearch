@@ -17,7 +17,7 @@
 #include "sphinxstem.h"
 
 
-class bench_expression : public benchmark::Fixture
+class BM_parse_expr : public benchmark::Fixture
 {
 public:
 	void SetUp ( const ::benchmark::State & state )
@@ -94,7 +94,10 @@ public:
 	};
 
 		for ( const auto * szTest :  ppTests )
-			dTests.Add ( szTest );
+			dTests.Add ( {szTest, strlen(szTest)} );
+
+		i = 0;
+		iBytes = 0;
 	}
 
 	void TearDown ( const ::benchmark::State & state )
@@ -105,14 +108,22 @@ public:
 	CSphSchema tSchema;
 	CSphMatch tMatch;
 	CSphRowitem * pRow;
-	CSphVector <CSphString> dTests;
+	CSphVector <std::pair<CSphString,int>> dTests;
 	CSphString sError;
 	ExprParseArgs_t tExprArgs;
+	int i = 0;
+	int64_t iBytes = 0;
 };
 
-BENCHMARK_F( bench_expression, parser ) ( benchmark::State & st )
+BENCHMARK_F( BM_parse_expr, parser ) ( benchmark::State & st )
 {
 	for ( auto _ : st )
-		for ( const auto & sTest : dTests )
-			ISphExprRefPtr_c pExpr ( sphExprParse ( sTest.cstr (), tSchema, sError, tExprArgs ) );
+	{
+		ISphExprRefPtr_c pExpr ( sphExprParse ( dTests[i].first.cstr (), tSchema, sError, tExprArgs ) );
+		iBytes += dTests[i].second;
+		if ( ++i >= dTests.GetLength() )
+			i = 0;
+	}
+	st.SetBytesProcessed ( iBytes );
+	st.SetItemsProcessed ( st.iterations() );
 }

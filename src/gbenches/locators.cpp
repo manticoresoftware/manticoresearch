@@ -11,9 +11,7 @@
 
 #include <benchmark/benchmark.h>
 
-#include "sphinxstd.h"
 #include "schema/locator.h"
-#include "schema/columninfo.h"
 #include "match.h"
 
 //////////////////////////////////////////////////////////////////////////

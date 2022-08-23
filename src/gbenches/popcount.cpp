@@ -58,74 +58,120 @@ public:
 	void SetUp ( const ::benchmark::State & state ) override
 	{
 		sphSrand(0);
-		dBytes.Resize ( 128 );
-		for ( auto & c: dBytes )
-			c = sphRand () & 0xFF;
-		iRes = 0;
+		dValues.Resize ( 128+8 );
+		for ( auto & c: dValues )
+			c = ( (uint64_t)sphRand() << 32 ) | sphRand();
 		i = 0;
-	}
-
-	CSphVector<BYTE> dBytes;
-	int iRes;
-	int	i;
-};
-
-BENCHMARK_F( bench_popcount, artificial_no_division ) ( benchmark::State & st )
-{
-	for ( auto _ : st )
-		iRes += BitCountDW2 ( dBytes[++i & 0x7F] );
-}
-
-BENCHMARK_F ( bench_popcount, artificial_with_division ) ( benchmark::State& st )
-{
-	for ( auto _ : st )
-		iRes += BitCountDW1 ( dBytes[++i & 0x7F] );
-}
-
-BENCHMARK_F ( bench_popcount, artificial_long_no_division ) ( benchmark::State& st )
-{
-	for ( auto _ : st )
-		iRes += BitCountU641 ( dBytes[++i & 0x7F] );
-}
-
-BENCHMARK_F ( bench_popcount, intrinsic_dword ) ( benchmark::State& st )
-{
-	for ( auto _ : st )
-		iRes += sphBitCount ( (DWORD)dBytes[++i & 0x7F] );
-}
-
-BENCHMARK_F ( bench_popcount, intrinsic_uint64 ) ( benchmark::State& st )
-{
-	for ( auto _ : st )
-		iRes += sphBitCount ( (uint64_t)dBytes[++i & 0x7F] );
-}
-
-BENCHMARK_F ( bench_popcount, artificial_byte ) ( benchmark::State& st )
-{
-	for ( auto _ : st )
-		iRes += sphBitCount ( dBytes[++i & 0x7F] );
-}
-
-class zippedlength: public benchmark::Fixture
-{
-public:
-	void SetUp ( const ::benchmark::State& state ) override
-	{
-		sphSrand ( 0 );
-		dValues.Resize ( 1024 );
-		for ( auto& c : dValues )
-		{
-			c = sphRand();
-			c = ( c << 32 ) | sphRand();
-			//c &= 0xFFFFFFFF;
-		}
-		iRes = 0;
+		NRUNS = state.range ( 0 );
 	}
 
 	CSphVector<uint64_t> dValues;
-	volatile int iRes = 0;
+	int	i;
+	int64_t NRUNS = 0;
 };
 
+BENCHMARK_DEFINE_F( bench_popcount, artificial_no_division ) ( benchmark::State & st )
+{
+	for ( auto _ : st )
+	{
+		for ( auto j = 0; j < NRUNS; ++j )
+		{
+			benchmark::DoNotOptimize ( BitCountDW2 ( dValues[++i] ) );
+			if ( i > 127 )
+				i = 0;
+		}
+	}
+	st.SetBytesProcessed ( st.iterations() * NRUNS * sizeof ( DWORD ) );
+	st.SetItemsProcessed ( st.iterations() * NRUNS );
+	st.SetLabel ("DWORD BitCountDW2");
+}
+
+BENCHMARK_DEFINE_F ( bench_popcount, artificial_with_division ) ( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		for ( auto j = 0; j < NRUNS; ++j )
+		{
+			benchmark::DoNotOptimize ( BitCountDW1 ( dValues[++i] ) );
+			if ( i > 127 )
+				i = 0;
+		}
+	}
+	st.SetBytesProcessed ( st.iterations() * NRUNS * sizeof ( DWORD ) );
+	st.SetItemsProcessed ( st.iterations() * NRUNS );
+	st.SetLabel ( "DWORD BitCountDW1" );
+}
+
+BENCHMARK_DEFINE_F ( bench_popcount, artificial_long_no_division ) ( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		for ( auto j = 0; j < NRUNS; ++j )
+		{
+			benchmark::DoNotOptimize ( BitCountU641 ( dValues[++i] ) );
+			if ( i > 127 )
+				i = 0;
+		}
+	}
+	st.SetBytesProcessed ( st.iterations() * NRUNS * sizeof ( uint64_t ) );
+	st.SetItemsProcessed ( st.iterations() * NRUNS );
+	st.SetLabel ( "uint64_t BitCountU641" );
+}
+
+BENCHMARK_DEFINE_F ( bench_popcount, intrinsic_dword ) ( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		for ( auto j = 0; j < NRUNS; ++j )
+		{
+			benchmark::DoNotOptimize ( sphBitCount ( (DWORD)dValues[++i] ) );
+			if ( i > 127 )
+				i = 0;
+		}
+	}
+	st.SetBytesProcessed ( st.iterations() * NRUNS * sizeof ( DWORD ) );
+	st.SetItemsProcessed ( st.iterations() * NRUNS );
+	st.SetLabel ( "DWORD sphBitCount" );
+}
+
+BENCHMARK_DEFINE_F ( bench_popcount, intrinsic_uint64 ) ( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		for ( auto j = 0; j < NRUNS; ++j )
+		{
+			benchmark::DoNotOptimize ( sphBitCount ( dValues[++i] ) );
+			if ( i > 127 )
+				i = 0;
+		}
+	}
+	st.SetBytesProcessed ( st.iterations() * NRUNS * sizeof ( uint64_t ) );
+	st.SetItemsProcessed ( st.iterations() * NRUNS );
+	st.SetLabel ( "uint64_t sphBitCount" );
+}
+
+BENCHMARK_DEFINE_F ( bench_popcount, artificial_byte ) ( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		for ( auto j = 0; j < NRUNS; ++j )
+		{
+			benchmark::DoNotOptimize ( sphBitCount ( (BYTE)dValues[++i] ) );
+			if ( i > 127 )
+				i = 0;
+		}
+	}
+	st.SetBytesProcessed ( st.iterations() * NRUNS );
+	st.SetItemsProcessed ( st.iterations() * NRUNS );
+	st.SetLabel ( "BYTE sphBitCount" );
+}
+
+BENCHMARK_REGISTER_F ( bench_popcount, artificial_no_division )->Range ( 1, 4096 );
+BENCHMARK_REGISTER_F ( bench_popcount, artificial_with_division )->Range ( 1, 4096 );
+BENCHMARK_REGISTER_F ( bench_popcount, artificial_long_no_division )->Range ( 1, 4096 );
+BENCHMARK_REGISTER_F ( bench_popcount, intrinsic_dword )->Range ( 1, 4096 );
+BENCHMARK_REGISTER_F ( bench_popcount, intrinsic_uint64 )->Range ( 1, 4096 );
+BENCHMARK_REGISTER_F ( bench_popcount, artificial_byte )->Range ( 1, 4096 );
 
 namespace
 {
@@ -149,106 +195,102 @@ inline int CalcZippedLenViaLog2 ( T tValue )
 
 }
 
-
-BENCHMARK_F ( zippedlength, zippedlen64 )
-( benchmark::State& st )
+static void BM_zippedlen64 ( benchmark::State& st )
 {
+	uint64_t uValue = 1 << st.range ( 0 );
 	for ( auto _ : st )
-	{
-		for ( auto i = 0; i < 1024; ++i )
-			iRes += sphCalcZippedLen ( dValues[i] );
-	}
+		benchmark::DoNotOptimize ( sphCalcZippedLen ( uValue ) );
+	st.SetItemsProcessed ( st.iterations() );
 }
 
-BENCHMARK_F ( zippedlength, zippedlen32 )
-( benchmark::State& st )
+static void BM_zippedlen32 ( benchmark::State& st )
 {
+	DWORD uValue = 1 << st.range ( 0 );
 	for ( auto _ : st )
-	{
-		for ( auto i = 0; i < 1024; ++i )
-			iRes += sphCalcZippedLen ( (DWORD)dValues[i] );
-	}
+		benchmark::DoNotOptimize ( sphCalcZippedLen ( uValue ) );
+	st.SetItemsProcessed ( st.iterations() );
 }
 
-BENCHMARK_F ( zippedlength, zippedlen16 )
-( benchmark::State& st )
+static void BM_zippedlen16 ( benchmark::State& st )
 {
+	WORD uValue = 1 << st.range ( 0 );
 	for ( auto _ : st )
-	{
-		for ( auto i = 0; i < 1024; ++i )
-			iRes += sphCalcZippedLen ( (WORD)dValues[i] );
-	}
+		benchmark::DoNotOptimize ( sphCalcZippedLen ( uValue ) );
+	st.SetItemsProcessed ( st.iterations() );
 }
 
-BENCHMARK_F ( zippedlength, zippedlenlog2_64 )
-( benchmark::State& st )
+BENCHMARK ( BM_zippedlen64 )->DenseRange ( 0, 64, 4 );
+BENCHMARK ( BM_zippedlen32 )->DenseRange ( 0, 32, 4 );
+BENCHMARK ( BM_zippedlen16 )->DenseRange ( 0, 16, 4 );
+
+
+static void BM_zippedlenlog2_64 ( benchmark::State& st )
 {
+	uint64_t uValue = 1 << st.range ( 0 );
 	for ( auto _ : st )
-	{
-		for ( auto i = 0; i < 1024; ++i )
-			iRes += CalcZippedLenViaLog2 ( dValues[i] );
-	}
+		benchmark::DoNotOptimize ( CalcZippedLenViaLog2 ( uValue ) );
+	st.SetItemsProcessed ( st.iterations() );
 }
 
-BENCHMARK_F ( zippedlength, zippedlenlog2_32 )
-( benchmark::State& st )
+static void BM_zippedlenlog2_32 ( benchmark::State& st )
 {
+	DWORD uValue = 1 << st.range ( 0 );
 	for ( auto _ : st )
-	{
-		for ( auto i = 0; i < 1024; ++i )
-			iRes += CalcZippedLenViaLog2 ( (DWORD)dValues[i] );
-	}
+		benchmark::DoNotOptimize ( CalcZippedLenViaLog2 ( uValue ) );
+	st.SetItemsProcessed ( st.iterations() );
 }
 
-BENCHMARK_F ( zippedlength, zippedlenlog2_16 )
-( benchmark::State& st )
+static void BM_zippedlenlog2_16 ( benchmark::State& st )
 {
+	WORD uValue = 1 << st.range ( 0 );
 	for ( auto _ : st )
-	{
-		for ( auto i = 0; i < 1024; ++i )
-			iRes += CalcZippedLenViaLog2 ( (WORD)dValues[i] );
-	}
+		benchmark::DoNotOptimize ( CalcZippedLenViaLog2 ( uValue ) );
+	st.SetItemsProcessed ( st.iterations() );
 }
 
-BENCHMARK_F ( zippedlength, log2seq32 )
-( benchmark::State& st )
+BENCHMARK ( BM_zippedlenlog2_64 )->DenseRange ( 0, 64, 4 );
+BENCHMARK ( BM_zippedlenlog2_32 )->DenseRange ( 0, 32, 4 );
+BENCHMARK ( BM_zippedlenlog2_16 )->DenseRange ( 0, 16, 4 );
+
+
+static void BM_log2seq64 ( benchmark::State& st )
 {
+	uint64_t uValue = 1 << st.range ( 0 );
 	for ( auto _ : st )
-	{
-		for ( auto i = 0; i < 1024; ++i )
-			iRes += Log2constUINT ( (DWORD)dValues[i] );
-	}
+		benchmark::DoNotOptimize ( Log2constUINT ( uValue ) );
+	st.SetItemsProcessed ( st.iterations() );
 }
 
-BENCHMARK_F ( zippedlength, log2seq64 )
-( benchmark::State& st )
+static void BM_log2seq32 ( benchmark::State& st )
 {
+	DWORD uValue = 1 << st.range ( 0 );
 	for ( auto _ : st )
-	{
-		for ( auto i = 0; i < 1024; ++i )
-			iRes += Log2constUINT ( dValues[i] );
-	}
+		benchmark::DoNotOptimize ( Log2constUINT ( uValue ) );
+	st.SetItemsProcessed ( st.iterations() );
 }
 
-BENCHMARK_F ( zippedlength, log2int32 )
-( benchmark::State& st )
+BENCHMARK ( BM_log2seq64 )->DenseRange ( 0, 64, 4 );
+BENCHMARK ( BM_log2seq32 )->DenseRange ( 0, 32, 4 );
+
+static void BM_log2int64 ( benchmark::State& st )
 {
+	uint64_t uValue = 1 << st.range ( 0 );
 	for ( auto _ : st )
-	{
-		for ( auto i = 0; i < 1024; ++i )
-			iRes += sphLog2 ( (DWORD)dValues[i] );
-	}
+		benchmark::DoNotOptimize ( sphLog2 ( uValue ) );
+	st.SetItemsProcessed ( st.iterations() );
 }
 
-BENCHMARK_F ( zippedlength, log2int64 )
-( benchmark::State& st )
+static void BM_log2int32 ( benchmark::State& st )
 {
+	DWORD uValue = 1 << st.range ( 0 );
 	for ( auto _ : st )
-	{
-		for ( auto i = 0; i < 1024; ++i )
-			iRes += sphLog2 ( dValues[i] );
-	}
+		benchmark::DoNotOptimize ( sphLog2 ( uValue ) );
+	st.SetItemsProcessed ( st.iterations() );
 }
+
+BENCHMARK ( BM_log2int64 )->DenseRange ( 0, 64, 4 );
+BENCHMARK ( BM_log2int32 )->DenseRange ( 0, 32, 4 );
+
 
 
 class zipunzip: public benchmark::Fixture
@@ -256,23 +298,35 @@ class zipunzip: public benchmark::Fixture
 public:
 	void SetUp ( const ::benchmark::State& state ) override
 	{
-		sphSrand ( 0 );
-		dValues.Resize ( 1024 );
-		dBufBE.Reserve ( 1024 * 10 );
+		auto NSEPTETS = state.range ( 0 );
+		uint64_t uMask = NSEPTETS > 9 ? 0xFFFFFFFFFFFFFFFFULL : ( ( 1ULL << NSEPTETS * 7 ) - 1ULL );
+
+		auto NRUNS = state.range ( 1 );
+		dValues.Resize ( NRUNS );
+		dBufBE.Reserve ( NRUNS * 10 );
 		dBufBE.Resize ( 0 );
-		dBufLE.Reserve ( 1024 * 10 );
+		dBufLE.Reserve ( NRUNS * 10 );
 		dBufLE.Resize ( 0 );
+		dBufBE64.Reserve ( NRUNS * 10 );
+		dBufBE64.Resize ( 0 );
+		dBufLE64.Reserve ( NRUNS * 10 );
+		dBufLE64.Resize ( 0 );
+
+		sphSrand ( 0 );
 		for ( auto& c : dValues )
 		{
-			c = sphRand();
-			c = ( c << 32 ) | sphRand();
-			// c &= 0xFFFFFFFF;
-			ZipValueBE ( [this] ( BYTE b ) mutable { dBufBE.Add ( b ); }, c & 0xFFFFFFFF );
-			ZipValueLE ( [this] ( BYTE b ) mutable { dBufLE.Add ( b ); }, c & 0xFFFFFFFF );
-			ZipValueBE ( [this] ( BYTE b ) mutable { dBufBE64.Add ( b ); }, c );
-			ZipValueLE ( [this] ( BYTE b ) mutable { dBufLE64.Add ( b ); }, c );
+			uint64_t uVal = sphRand();
+			uVal = ( uVal << 32 ) | sphRand();
+			uVal &= uMask;
+			c = uVal;
+			ZipValueBE ( [this] ( BYTE b ) mutable { dBufBE.Add ( b ); }, uVal & 0xFFFFFFFF );
+			ZipValueLE ( [this] ( BYTE b ) mutable { dBufLE.Add ( b ); }, uVal & 0xFFFFFFFF );
+			ZipValueBE ( [this] ( BYTE b ) mutable { dBufBE64.Add ( b ); }, uVal );
+			ZipValueLE ( [this] ( BYTE b ) mutable { dBufLE64.Add ( b ); }, uVal );
 		}
 		iRes = 0;
+//		printf ( "SetUp with mask: %d, %p. %d %d %d %d\n", (int)NSEPTETS, (void*)uMask,
+//			dBufBE.GetLength(), dBufLE.GetLength(), dBufBE64.GetLength(), dBufLE64.GetLength());
 	}
 
 	CSphVector<uint64_t> dValues;
@@ -300,71 +354,118 @@ inline int ZipToPtrBElog2 ( BYTE* pData, T tValue )
 	return ZipValueBElog2 ( [pData] ( BYTE b ) mutable { *pData++ = b; }, tValue );
 }
 
-BENCHMARK_F ( zipunzip, zipbe32 )
+// 32 bits integer packing
+
+BENCHMARK_DEFINE_F ( zipunzip, zipbe32 )
 ( benchmark::State& st )
 {
+	int64_t iBytes = 0;
+	auto NRUNS = st.range ( 1 );
 	for ( auto _ : st )
 	{
 		BYTE* pBuf = dBufBE.begin();
-		for ( auto i = 0; i < 1024; ++i )
+		for ( auto i = 0; i < NRUNS; ++i )
 			pBuf += ZipToPtrBE ( pBuf, (DWORD)dValues[i] );
+		iBytes += pBuf-dBufBE.begin();
 	}
+	st.SetItemsProcessed ( st.iterations() * NRUNS );
+	st.SetBytesProcessed( iBytes );
 }
 
-BENCHMARK_F ( zipunzip, zipbe32log2 )
+BENCHMARK_DEFINE_F ( zipunzip, zipbe32log2 )
 ( benchmark::State& st )
 {
+	int64_t iBytes = 0;
+	auto NRUNS = st.range ( 1 );
 	for ( auto _ : st )
 	{
 		BYTE* pBuf = dBufBE.begin();
-		for ( auto i = 0; i < 1024; ++i )
+		for ( auto i = 0; i < NRUNS; ++i )
 			pBuf += ZipToPtrBElog2 ( pBuf, (DWORD)dValues[i] );
+		iBytes += pBuf - dBufBE.begin();
 	}
+	st.SetItemsProcessed ( st.iterations() * NRUNS );
+	st.SetBytesProcessed ( iBytes );
 }
 
-BENCHMARK_F ( zipunzip, ziple32 )
+BENCHMARK_DEFINE_F ( zipunzip, ziple32 )
 ( benchmark::State& st )
 {
+	int64_t iBytes = 0;
+	auto NRUNS = st.range ( 1 );
 	for ( auto _ : st )
 	{
 		BYTE* pBuf = dBufLE.begin();
-		for ( auto i = 0; i < 1024; ++i )
+		for ( auto i = 0; i < NRUNS; ++i )
 			pBuf += ZipToPtrLE ( pBuf, (DWORD)dValues[i] );
+		iBytes += pBuf - dBufLE.begin();
 	}
+	st.SetItemsProcessed ( st.iterations() * NRUNS );
+	st.SetBytesProcessed ( iBytes );
 }
 
-BENCHMARK_F ( zipunzip, zipbe64 )
+static constexpr int MINRANGE = 2;
+static constexpr int MAXRANGE=512;
+static constexpr int STEPRANGE = 8;
+
+BENCHMARK_REGISTER_F ( zipunzip, zipbe32 )->ArgsProduct ( { benchmark::CreateDenseRange ( 1, 5, 1 ), benchmark::CreateRange ( MINRANGE, MAXRANGE, STEPRANGE ) } );
+BENCHMARK_REGISTER_F ( zipunzip, zipbe32log2 )->ArgsProduct ( { benchmark::CreateDenseRange ( 1, 5, 1 ), benchmark::CreateRange ( MINRANGE, MAXRANGE, STEPRANGE ) } );
+BENCHMARK_REGISTER_F ( zipunzip, ziple32 )->ArgsProduct ( { benchmark::CreateDenseRange ( 1, 5, 1 ), benchmark::CreateRange ( MINRANGE, MAXRANGE, STEPRANGE ) } );
+
+
+// 64 bits integers
+
+BENCHMARK_DEFINE_F ( zipunzip, zipbe64 )
 ( benchmark::State& st )
 {
+	int64_t iBytes = 0;
+	auto NRUNS = st.range ( 1 );
 	for ( auto _ : st )
 	{
 		BYTE* pBuf = dBufBE64.begin();
-		for ( auto i = 0; i < 1024; ++i )
+		for ( auto i = 0; i < NRUNS; ++i )
 			pBuf += ZipToPtrBE ( pBuf, dValues[i] );
+		iBytes += pBuf - dBufBE64.begin();
 	}
+	st.SetItemsProcessed ( st.iterations() * NRUNS );
+	st.SetBytesProcessed ( iBytes );
 }
 
-BENCHMARK_F ( zipunzip, zipbe64log2 )
+BENCHMARK_DEFINE_F ( zipunzip, zipbe64log2 )
 ( benchmark::State& st )
 {
+	int64_t iBytes = 0;
+	auto NRUNS = st.range ( 1 );
 	for ( auto _ : st )
 	{
 		BYTE* pBuf = dBufBE64.begin();
-		for ( auto i = 0; i < 1024; ++i )
+		for ( auto i = 0; i < NRUNS; ++i )
 			pBuf += ZipToPtrBElog2 ( pBuf, dValues[i] );
+		iBytes += pBuf - dBufBE64.begin();
 	}
+	st.SetItemsProcessed ( st.iterations() * NRUNS );
+	st.SetBytesProcessed ( iBytes );
 }
 
-BENCHMARK_F ( zipunzip, ziple64 )
+BENCHMARK_DEFINE_F ( zipunzip, ziple64 )
 ( benchmark::State& st )
 {
+	int64_t iBytes = 0;
+	auto NRUNS = st.range ( 1 );
 	for ( auto _ : st )
 	{
 		BYTE* pBuf = dBufLE64.begin();
-		for ( auto i = 0; i < 1024; ++i )
+		for ( auto i = 0; i < NRUNS; ++i )
 			pBuf += ZipToPtrLE ( pBuf, dValues[i] );
+		iBytes += pBuf - dBufLE64.begin();
 	}
+	st.SetItemsProcessed ( st.iterations() * NRUNS );
+	st.SetBytesProcessed ( iBytes );
 }
+
+BENCHMARK_REGISTER_F ( zipunzip, zipbe64 )->ArgsProduct ( { benchmark::CreateDenseRange ( 1, 10, 1 ), benchmark::CreateRange ( MINRANGE, MAXRANGE, STEPRANGE ) } );
+BENCHMARK_REGISTER_F ( zipunzip, zipbe64log2 )->ArgsProduct ( { benchmark::CreateDenseRange ( 1, 10, 1 ), benchmark::CreateRange ( MINRANGE, MAXRANGE, STEPRANGE ) } );
+BENCHMARK_REGISTER_F ( zipunzip, ziple64 )->ArgsProduct ( { benchmark::CreateDenseRange ( 1, 10, 1 ), benchmark::CreateRange ( MINRANGE, MAXRANGE, STEPRANGE ) } );
 
 template<typename T, typename READER>
 T UnzipValueLE2 ( READER fnGet )
@@ -409,118 +510,180 @@ inline SphOffset_t UnzipOffsetLE2 ( const BYTE*& pBuf )
 	return UnzipValueLE2<SphOffset_t> ( [&pBuf]() mutable { return *pBuf++; } );
 }
 
-BENCHMARK_F ( zipunzip, unzipbe32_fastest )
+BENCHMARK_DEFINE_F ( zipunzip, unzipbe32_fastest )
 ( benchmark::State& st )
 {
+	int64_t iBytes = 0;
+	auto NRUNS = st.range ( 1 );
 	for ( auto _ : st )
 	{
 		const BYTE* pBuf = dBufBE.begin();
-		for ( auto i = 0; i < 1024; ++i )
-			iRes += UnzipIntBE ( pBuf );
+		for ( auto i = 0; i < NRUNS; ++i )
+			benchmark::DoNotOptimize ( UnzipIntBE ( pBuf ) );
+		iBytes += pBuf - dBufBE.begin();
 	}
+	st.SetItemsProcessed ( st.iterations() * NRUNS );
+	st.SetBytesProcessed ( iBytes );
 }
 
 
-BENCHMARK_F ( zipunzip, unzipbe32ref )
+BENCHMARK_DEFINE_F ( zipunzip, unzipbe32ref )
 ( benchmark::State& st )
 {
+	int64_t iBytes = 0;
+	auto NRUNS = st.range ( 1 );
 	for ( auto _ : st )
 	{
 		const BYTE* pBuf = dBufBE.begin();
-		for ( auto i = 0; i < 1024; ++i )
-			iRes += UnzipIntBEref ( pBuf );
+		for ( auto i = 0; i < NRUNS; ++i )
+			benchmark::DoNotOptimize ( UnzipIntBEref ( pBuf ) );
+		iBytes += pBuf - dBufBE.begin();
 	}
+	st.SetItemsProcessed ( st.iterations() * NRUNS );
+	st.SetBytesProcessed ( iBytes );
 }
 
-BENCHMARK_F ( zipunzip, unziple32_fastest )
+BENCHMARK_DEFINE_F ( zipunzip, unziple32_fastest )
 ( benchmark::State& st )
 {
+	int64_t iBytes = 0;
+	auto NRUNS = st.range ( 1 );
 	for ( auto _ : st )
 	{
 		const BYTE* pBuf = dBufLE.begin();
-		for ( auto i = 0; i < 1024; ++i )
-			iRes += UnzipIntLE ( pBuf );
+		for ( auto i = 0; i < NRUNS; ++i )
+			benchmark::DoNotOptimize ( UnzipIntLE ( pBuf ) );
+		iBytes += pBuf - dBufLE.begin();
 	}
+	st.SetItemsProcessed ( st.iterations() * NRUNS );
+	st.SetBytesProcessed ( iBytes );
 }
 
 
-BENCHMARK_F ( zipunzip, unziple32ref )
+BENCHMARK_DEFINE_F ( zipunzip, unziple32ref )
 ( benchmark::State& st )
 {
+	int64_t iBytes = 0;
+	auto NRUNS = st.range ( 1 );
 	for ( auto _ : st )
 	{
 		const BYTE* pBuf = dBufLE.begin();
-		for ( auto i = 0; i < 1024; ++i )
-			iRes += UnzipIntLEref ( pBuf );
+		for ( auto i = 0; i < NRUNS; ++i )
+			benchmark::DoNotOptimize ( UnzipIntLEref ( pBuf ) );
+		iBytes += pBuf - dBufLE.begin();
 	}
+	st.SetItemsProcessed ( st.iterations() * NRUNS );
+	st.SetBytesProcessed ( iBytes );
 }
 
-BENCHMARK_F ( zipunzip, unziple32opt )
+BENCHMARK_DEFINE_F ( zipunzip, unziple32opt )
 ( benchmark::State& st )
 {
+	int64_t iBytes = 0;
+	auto NRUNS = st.range ( 1 );
 	for ( auto _ : st )
 	{
 		const BYTE* pBuf = dBufLE.begin();
-		for ( auto i = 0; i < 1024; ++i )
-			iRes += UnzipIntLE2 ( pBuf );
+		for ( auto i = 0; i < NRUNS; ++i )
+			benchmark::DoNotOptimize ( UnzipIntLE2 ( pBuf ) );
+		iBytes += pBuf - dBufLE.begin();
 	}
+	st.SetItemsProcessed ( st.iterations() * NRUNS );
+	st.SetBytesProcessed ( iBytes );
 }
 
-BENCHMARK_F ( zipunzip, unzipbe64_fastest )
+BENCHMARK_REGISTER_F ( zipunzip, unzipbe32_fastest )->ArgsProduct ( { benchmark::CreateDenseRange ( 1, 5, 1 ), benchmark::CreateRange ( MINRANGE, MAXRANGE, STEPRANGE ) } );
+BENCHMARK_REGISTER_F ( zipunzip, unzipbe32ref )->ArgsProduct ( { benchmark::CreateDenseRange ( 1, 5, 1 ), benchmark::CreateRange ( MINRANGE, MAXRANGE, STEPRANGE ) } );
+BENCHMARK_REGISTER_F ( zipunzip, unziple32_fastest )->ArgsProduct ( { benchmark::CreateDenseRange ( 1, 5, 1 ), benchmark::CreateRange ( MINRANGE, MAXRANGE, STEPRANGE ) } );
+BENCHMARK_REGISTER_F ( zipunzip, unziple32ref )->ArgsProduct ( { benchmark::CreateDenseRange ( 1, 5, 1 ), benchmark::CreateRange ( MINRANGE, MAXRANGE, STEPRANGE ) } );
+BENCHMARK_REGISTER_F ( zipunzip, unziple32opt )->ArgsProduct ( { benchmark::CreateDenseRange ( 1, 5, 1 ), benchmark::CreateRange ( MINRANGE, MAXRANGE, STEPRANGE ) } );
+
+BENCHMARK_DEFINE_F ( zipunzip, unzipbe64_fastest )
 ( benchmark::State& st )
 {
+	int64_t iBytes = 0;
+	auto NRUNS = st.range ( 1 );
 	for ( auto _ : st )
 	{
 		const BYTE* pBuf = dBufBE64.begin();
-		for ( auto i = 0; i < 1024; ++i )
-			iRes += UnzipOffsetBE ( pBuf );
+		for ( auto i = 0; i < NRUNS; ++i )
+			benchmark::DoNotOptimize ( UnzipOffsetBE ( pBuf ) );
+		iBytes += pBuf - dBufBE64.begin();
 	}
+	st.SetItemsProcessed ( st.iterations() * NRUNS );
+	st.SetBytesProcessed ( iBytes );
 }
 
-BENCHMARK_F ( zipunzip, unzipbe64ref )
+BENCHMARK_DEFINE_F ( zipunzip, unzipbe64ref )
 ( benchmark::State& st )
 {
+	int64_t iBytes = 0;
+	auto NRUNS = st.range ( 1 );
 	for ( auto _ : st )
 	{
 		const BYTE* pBuf = dBufBE64.begin();
-		for ( auto i = 0; i < 1024; ++i )
-			iRes += UnzipOffsetBEref ( pBuf );
+		for ( auto i = 0; i < NRUNS; ++i )
+			benchmark::DoNotOptimize ( UnzipOffsetBEref ( pBuf ) );
+		iBytes += pBuf - dBufBE64.begin();
 	}
+	st.SetItemsProcessed ( st.iterations() * NRUNS );
+	st.SetBytesProcessed ( iBytes );
 }
 
-BENCHMARK_F ( zipunzip, unziple64_fastest )
+BENCHMARK_DEFINE_F ( zipunzip, unziple64_fastest )
 ( benchmark::State& st )
 {
+	int64_t iBytes = 0;
+	auto NRUNS = st.range ( 1 );
 	for ( auto _ : st )
 	{
 		const BYTE* pBuf = dBufLE64.begin();
-		for ( auto i = 0; i < 1024; ++i )
-			iRes += UnzipOffsetLE ( pBuf );
+		for ( auto i = 0; i < NRUNS; ++i )
+			benchmark::DoNotOptimize ( UnzipOffsetLE ( pBuf ) );
+		iBytes += pBuf - dBufLE64.begin();
 	}
+	st.SetItemsProcessed ( st.iterations() * NRUNS );
+	st.SetBytesProcessed ( iBytes );
 }
 
-
-BENCHMARK_F ( zipunzip, unziple64ref )
+BENCHMARK_DEFINE_F ( zipunzip, unziple64ref )
 ( benchmark::State& st )
 {
+	int64_t iBytes = 0;
+	auto NRUNS = st.range ( 1 );
 	for ( auto _ : st )
 	{
 		const BYTE* pBuf = dBufLE64.begin();
-		for ( auto i = 0; i < 1024; ++i )
-			iRes += UnzipOffsetLEref ( pBuf );
+		for ( auto i = 0; i < NRUNS; ++i )
+			benchmark::DoNotOptimize ( UnzipOffsetLEref ( pBuf ) );
+		iBytes += pBuf - dBufLE64.begin();
 	}
+	st.SetItemsProcessed ( st.iterations() * NRUNS );
+	st.SetBytesProcessed ( iBytes );
 }
 
-BENCHMARK_F ( zipunzip, unziple64opt )
+BENCHMARK_DEFINE_F ( zipunzip, unziple64opt )
 ( benchmark::State& st )
 {
+	int64_t iBytes = 0;
+	auto NRUNS = st.range ( 1 );
 	for ( auto _ : st )
 	{
 		const BYTE* pBuf = dBufLE64.begin();
-		for ( auto i = 0; i < 1024; ++i )
-			iRes += UnzipOffsetLE2 ( pBuf );
+		for ( auto i = 0; i < NRUNS; ++i )
+			benchmark::DoNotOptimize ( UnzipOffsetLE2 ( pBuf ) );
+		iBytes += pBuf - dBufLE64.begin();
 	}
+	st.SetItemsProcessed ( st.iterations() * NRUNS );
+	st.SetBytesProcessed ( iBytes );
 }
+
+BENCHMARK_REGISTER_F ( zipunzip, unzipbe64_fastest )->ArgsProduct ( { benchmark::CreateDenseRange ( 1, 10, 1 ), benchmark::CreateRange ( MINRANGE, MAXRANGE, STEPRANGE ) } );
+BENCHMARK_REGISTER_F ( zipunzip, unzipbe64ref )->ArgsProduct ( { benchmark::CreateDenseRange ( 1, 10, 1 ), benchmark::CreateRange ( MINRANGE, MAXRANGE, STEPRANGE ) } );
+BENCHMARK_REGISTER_F ( zipunzip, unziple64_fastest )->ArgsProduct ( { benchmark::CreateDenseRange ( 1, 10, 1 ), benchmark::CreateRange ( MINRANGE, MAXRANGE, STEPRANGE ) } );
+BENCHMARK_REGISTER_F ( zipunzip, unziple64ref )->ArgsProduct ( { benchmark::CreateDenseRange ( 1, 10, 1 ), benchmark::CreateRange ( MINRANGE, MAXRANGE, STEPRANGE ) } );
+BENCHMARK_REGISTER_F ( zipunzip, unziple64opt )->ArgsProduct ( { benchmark::CreateDenseRange ( 1, 10, 1 ), benchmark::CreateRange ( MINRANGE, MAXRANGE, STEPRANGE ) } );
+
 
 /*
 

@@ -40,16 +40,19 @@ public:
 	{
 		iLen = (int) strlen ( sLiteral );
 		buf = new char[iLen];
+		pJson = cJSON_CreateObject();
 	}
 
 	void TearDown ( const ::benchmark::State & state )
 	{
+		SafeDelete ( pJson );
 		SafeDeleteArray (buf);
 	}
 
 	const char* sLiteral = R"("In `docs/searching/expressions,_functions,_and_operators.rst` which reflected into\\nhttps://manticoresearch.gitlab.io/dev/searching/expressions,_functions,_and_operators.html\\n\\n1. At the top there is a kind of TOC with shortcuts to the functions described in the section.\\nHowever this TOC is not consistent. I.e., it doesn't refer to all function actually described there.\\n\\nMost prominent example is 'PACKEDFACTORS()' - it absent in the TOC.\\n\\n2. Also consider whether it is better or not to sort function descriptions in the section alphabetically ('REMAP' at the end looks strange, as 'WEIGHT' is before it).")";
 	int iLen;
 	char* buf = nullptr;
+	cJSON* pJson = nullptr;
 };
 
 BENCHMARK_F( bench_jsonunescape, plain ) ( benchmark::State & st )
@@ -63,6 +66,8 @@ BENCHMARK_F( bench_jsonunescape, plain ) ( benchmark::State & st )
 		st.ResumeTiming ();
 		sphJsonUnescape ( &sBuf, iLen );
 	}
+	st.SetBytesProcessed ( st.iterations() * iLen );
+	st.SetLabel("unescaped version by memmove in-place");
 }
 
 BENCHMARK_F( bench_jsonunescape, nomove ) ( benchmark::State & st )
@@ -76,6 +81,8 @@ BENCHMARK_F( bench_jsonunescape, nomove ) ( benchmark::State & st )
 		st.ResumeTiming ();
 		sphJsonUnescape1 ( &sBuf, iLen );
 	}
+	st.SetBytesProcessed ( st.iterations() * iLen );
+	st.SetLabel ( "moves nothing" );
 }
 
 BENCHMARK_F( bench_jsonunescape, cjson ) ( benchmark::State & st )
@@ -91,6 +98,8 @@ BENCHMARK_F( bench_jsonunescape, cjson ) ( benchmark::State & st )
 		cJsonunescape ( & sBuf, pJson );
 	}
 	SafeDelete ( pJson );
+	st.SetBytesProcessed ( st.iterations() * iLen );
+	st.SetLabel ( "use cjson" );
 }
 
 
@@ -99,7 +108,7 @@ class bson_vs_cjson : public benchmark::Fixture
 public:
 	void SetUp ( const ::benchmark::State & state )
 	{
-		iLen = (int) strlen ( sLiteral );
+		iLen = (int)strlen ( sLiteral );
 	}
 
 	void TearDown ( const ::benchmark::State & state )
@@ -107,9 +116,8 @@ public:
 	}
 
 	const char* sLiteral = R"({"query":{"percolate":{"document":{"title":"A new tree test in the office office"}}}})";
-	int iLen;
+	int iLen = 0;
 	CSphString sBuf;
-	const volatile void * pRes = nullptr;
 };
 
 using namespace bson;
@@ -124,8 +132,9 @@ BENCHMARK_F( bson_vs_cjson, bson ) ( benchmark::State & st )
 		auto buf = (char *) sBuf.cstr ();
 		st.ResumeTiming ();
 		BsonContainer_c dBson { buf };
-		pRes = dBson.ChildByName ( "query" ).first;
+		benchmark::DoNotOptimize ( dBson );
 	}
+	st.SetBytesProcessed ( st.iterations() * iLen );
 }
 
 BENCHMARK_F( bson_vs_cjson, bson_without_lowercase ) ( benchmark::State & st )
@@ -137,8 +146,9 @@ BENCHMARK_F( bson_vs_cjson, bson_without_lowercase ) ( benchmark::State & st )
 		auto buf = (char *) sBuf.cstr ();
 		st.ResumeTiming ();
 		BsonContainer_c dBson { buf, false };
-		pRes = dBson.ChildByName ( "query" ).first;
+		benchmark::DoNotOptimize ( dBson );
 	}
+	st.SetBytesProcessed ( st.iterations() * iLen );
 }
 
 BENCHMARK_F( bson_vs_cjson, cjson ) ( benchmark::State & st )
@@ -150,10 +160,11 @@ BENCHMARK_F( bson_vs_cjson, cjson ) ( benchmark::State & st )
 		auto buf = (char *) sBuf.cstr ();
 		st.ResumeTiming ();
 		auto pBson = cJSON_Parse ( buf );
-		pRes = cJSON_GetObjectItem ( pBson, "query" );
+		benchmark::DoNotOptimize ( pBson );
 		if ( pBson )
 			cJSON_Delete ( pBson );
 	}
+	st.SetBytesProcessed ( st.iterations() * iLen );
 }
 
 BENCHMARK_F( bson_vs_cjson, bson_via_cjson ) ( benchmark::State & st )
@@ -165,13 +176,13 @@ BENCHMARK_F( bson_vs_cjson, bson_via_cjson ) ( benchmark::State & st )
 		auto buf = (char *) sBuf.cstr ();
 		st.ResumeTiming ();
 		auto pCjson = cJSON_Parse ( buf );
-		pRes = cJSON_GetObjectItem ( pCjson, "query" );
-		CSphVector<BYTE> m_Bson ( iLen );
-		bson::cJsonToBson ( pCjson, m_Bson, false, false );
-
+		CSphVector<BYTE> dBson ( iLen );
+		bson::cJsonToBson ( pCjson, dBson, false, false );
+		benchmark::DoNotOptimize ( dBson );
 		if ( pCjson )
 			cJSON_Delete ( pCjson );
 	}
+	st.SetBytesProcessed ( st.iterations() * iLen );
 }
 
 BENCHMARK_F( bson_vs_cjson, cJsonToBson ) ( benchmark::State & st )
@@ -180,10 +191,12 @@ BENCHMARK_F( bson_vs_cjson, cJsonToBson ) ( benchmark::State & st )
 	for ( auto _ : st )
 	{
 		st.PauseTiming ();
-		CSphVector<BYTE> m_Bson ( iLen );
+		CSphVector<BYTE> dBson ( iLen );
 		st.ResumeTiming ();
-		bson::cJsonToBson ( pCjson, m_Bson, false, false );
+		bson::cJsonToBson ( pCjson, dBson, false, false );
+		benchmark::DoNotOptimize ( dBson );
 	}
+	st.SetBytesProcessed ( st.iterations() * iLen );
 }
 
 BENCHMARK_F( bson_vs_cjson, cJsonToBson_with_lowercase ) ( benchmark::State & st )
@@ -192,10 +205,54 @@ BENCHMARK_F( bson_vs_cjson, cJsonToBson_with_lowercase ) ( benchmark::State & st
 	for ( auto _ : st )
 	{
 		st.PauseTiming ();
-		CSphVector<BYTE> m_Bson ( iLen );
+		CSphVector<BYTE> dBson ( iLen );
 		st.ResumeTiming ();
-		bson::cJsonToBson ( pCjson, m_Bson );
+		bson::cJsonToBson ( pCjson, dBson );
+		benchmark::DoNotOptimize ( dBson );
 	}
+	st.SetBytesProcessed ( st.iterations() * iLen );
+}
+
+BENCHMARK_F ( bson_vs_cjson, bson_child_by_name )
+( benchmark::State& st )
+{
+	sBuf.SetBinary ( sLiteral, iLen );
+	auto buf = (char*)sBuf.cstr();
+	BsonContainer_c dBson { buf };
+
+	for ( auto _ : st )
+	{
+		benchmark::DoNotOptimize ( dBson.ChildByName ( "query" ).first );
+	}
+	st.SetItemsProcessed( st.iterations() );
+}
+
+BENCHMARK_F ( bson_vs_cjson, bson_child_by_namelw )
+( benchmark::State& st )
+{
+	sBuf.SetBinary ( sLiteral, iLen );
+	auto buf = (char*)sBuf.cstr();
+	BsonContainer_c dBson { buf, false };
+	for ( auto _ : st )
+	{
+		benchmark::DoNotOptimize ( dBson.ChildByName ( "query" ).first );
+	}
+	st.SetItemsProcessed ( st.iterations() );
+}
+
+BENCHMARK_F ( bson_vs_cjson, cjson_getobjitem )
+( benchmark::State& st )
+{
+	sBuf.SetBinary ( sLiteral, iLen );
+	auto buf = (char*)sBuf.cstr();
+	auto pBson = cJSON_Parse ( buf );
+	for ( auto _ : st )
+	{
+		benchmark::DoNotOptimize ( cJSON_GetObjectItem ( pBson, "query" ) );
+	}
+	st.SetItemsProcessed ( st.iterations() );
+	if ( pBson )
+		cJSON_Delete ( pBson );
 }
 
 
@@ -211,6 +268,8 @@ public:
 		}
 		x[192] = '\0';
 		l[192] = '\0';
+		NRUNS = state.range ( 0 );
+		j = 0;
 	}
 
 	void TearDown ( const ::benchmark::State & state )
@@ -219,26 +278,40 @@ public:
 
 	char x[193];
 	char l[193];
-	char result[193];
+	int64_t NRUNS = 0;
+	int j;
 };
 
-BENCHMARK_F( BM_tolower, call_tolower ) ( benchmark::State & st )
+BENCHMARK_DEFINE_F( BM_tolower, call_tolower ) ( benchmark::State & st )
 {
 	for ( auto _ : st )
 	{
-		for ( int j = 0; j<193; ++j )
-			result[j] = (char) tolower ( x[j] );
+		for ( auto i = 0; i < NRUNS; ++i )
+		{
+			benchmark::DoNotOptimize ( (char) tolower ( x[j++] ) );
+			if (j>192)
+				j = 0;
+		}
 	}
+	st.SetBytesProcessed ( st.iterations() * NRUNS );
 }
 
-BENCHMARK_F( BM_tolower, lookup_table ) ( benchmark::State & st )
+BENCHMARK_DEFINE_F( BM_tolower, lookup_table ) ( benchmark::State & st )
 {
 	for ( auto _ : st )
 	{
-		for ( int j = 0; j<193; ++j )
-			result[j] = l[(int) x[j]];
+		for ( auto i = 0; i < NRUNS; ++i )
+		{
+			benchmark::DoNotOptimize ( l[(int)x[j]] );
+			if ( j > 192 )
+				j = 0;
+		}
 	}
+	st.SetBytesProcessed( st.iterations() * NRUNS );
 }
+
+BENCHMARK_REGISTER_F ( BM_tolower, call_tolower )->Range ( 1, 4096 );
+BENCHMARK_REGISTER_F ( BM_tolower, lookup_table )->Range ( 1, 4096 );
 
 class BM_formatter : public benchmark::Fixture
 {
@@ -284,6 +357,7 @@ BENCHMARK_F( BM_formatter, cjson ) ( benchmark::State & st )
 		sResult = szResult;
 		cJSON_Delete ( pRoot );
 	}
+	st.SetItemsProcessed ( st.iterations() );
 }
 
 BENCHMARK_F( BM_formatter, stringbuilder ) ( benchmark::State & st )
@@ -304,4 +378,5 @@ BENCHMARK_F( BM_formatter, stringbuilder ) ( benchmark::State & st )
 		tOut.FinishBlocks ();
 		tOut.MoveTo ( sResult );
 	}
+	st.SetItemsProcessed ( st.iterations() );
 }

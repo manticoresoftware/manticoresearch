@@ -26,131 +26,7 @@
 
 //////////////////////////////////////////////////////////////////////////
 
-// conversion between degrees and radians
-static const double MY_PI = 3.14159265358979323846;
-static const double TO_RADD = MY_PI / 180.0;
-static const double TO_DEGD = 180.0 / MY_PI;
 
-void DestVincenty ( double lat1, double lon1, double brng, double dist, double * lat2, double * lon2 )
-{
-	double a = 6378137, b = 6356752.3142, f = 1 / 298.257223563; // WGS-84 ellipsiod
-	double s = dist;
-	double alpha1 = brng * TO_RADD;
-	double sinAlpha1 = sin ( alpha1 );
-	double cosAlpha1 = cos ( alpha1 );
-
-	double tanU1 = ( 1 - f ) * tan ( lat1 * TO_RADD );
-	double cosU1 = 1 / sqrt ( 1 + tanU1 * tanU1 ), sinU1 = tanU1 * cosU1;
-	double sigma1 = atan2 ( tanU1, cosAlpha1 );
-	double sinAlpha = cosU1 * sinAlpha1;
-	double cosSqAlpha = 1 - sinAlpha * sinAlpha;
-	double uSq = cosSqAlpha * ( a * a - b * b ) / ( b * b );
-	double A = 1 + uSq / 16384 * ( 4096 + uSq * ( -768 + uSq * ( 320 - 175 * uSq ) ) );
-	double B = uSq / 1024 * ( 256 + uSq * ( -128 + uSq * ( 74 - 47 * uSq ) ) );
-
-	double sigma = s / ( b * A ), sigmaP = 2 * MY_PI;
-	double cos2SigmaM = 0, sinSigma = 0, cosSigma = 0;
-	while ( fabs ( sigma - sigmaP )>1e-12 )
-	{
-		cos2SigmaM = cos ( 2 * sigma1 + sigma );
-		sinSigma = sin ( sigma );
-		cosSigma = cos ( sigma );
-		double deltaSigma = B * sinSigma * ( cos2SigmaM + B / 4 * ( cosSigma * ( -1 + 2 * cos2SigmaM * cos2SigmaM ) -
-			B / 6 * cos2SigmaM * ( -3 + 4 * sinSigma * sinSigma ) * ( -3 + 4 * cos2SigmaM * cos2SigmaM ) ) );
-		sigmaP = sigma;
-		sigma = s / ( b * A ) + deltaSigma;
-	}
-
-	double tmp = sinU1 * sinSigma - cosU1 * cosSigma * cosAlpha1;
-	*lat2 = atan2 ( sinU1 * cosSigma + cosU1 * sinSigma * cosAlpha1,
-		( 1 - f ) * sqrt ( sinAlpha * sinAlpha + tmp * tmp ) );
-	double lambda = atan2 ( sinSigma * sinAlpha1, cosU1 * cosSigma - sinU1 * sinSigma * cosAlpha1 );
-	double C = f / 16 * cosSqAlpha * ( 4 + f * ( 4 - 3 * cosSqAlpha ) );
-	double L = lambda - ( 1 - C ) * f * sinAlpha *
-		( sigma + C * sinSigma * ( cos2SigmaM + C * cosSigma * ( -1 + 2 * cos2SigmaM * cos2SigmaM ) ) );
-	*lon2 = ( lon1 * TO_RADD + L + 3 * MY_PI );
-	while ( *lon2>2 * MY_PI )
-		*lon2 -= 2 * MY_PI;
-	*lon2 -= MY_PI;
-	*lat2 *= TO_DEGD;
-	*lon2 *= TO_DEGD;
-}
-
-static const int NFUNCS = 3;
-
-float CalcGeofunc ( int iFunc, double * t )
-{
-	switch ( iFunc )
-	{
-		case 0: return GeodistSphereDeg ( float(t[0]), float(t[1]), float(t[2]), float(t[3]) ); break;
-		case 1: return GeodistAdaptiveDeg ( float(t[0]), float(t[1]), float(t[2]), float(t[3]) ); break;
-		case 2: return GeodistFlatDeg ( float(t[0]), float(t[1]), float(t[2]), float(t[3]) ); break;
-	}
-	return 0;
-}
-
-class BM_Geodist : public benchmark::Fixture
-{
-public:
-	void SetUp ( const ::benchmark::State & state )
-	{
-		for ( int adist = 10; adist<=10 * 1000 * 1000; adist *= 10 )
-			for ( int dist = adist; dist<10 * adist && dist<20 * 1000 * 1000; dist += 2 * adist )
-			{
-				double avgerr[NFUNCS] = { 0 }, maxerr[NFUNCS] = { 0 };
-				int n = 0;
-				for ( int lat = -80; lat<=80; lat += 10 )
-				{
-					for ( int lon = -179; lon<180; lon += 3 )
-					{
-						for ( int b = 0; b<360; b += 3, n++ )
-						{
-							double t[4] = { double ( lat ), double ( lon ), 0, 0 };
-							DestVincenty ( t[0], t[1], b, dist, t+2, t+3 );
-							for ( int j = 0; j<4; j++ )
-								dBench.Add ( t[j] );
-							for ( int f = 0; f<NFUNCS; f++ )
-							{
-								float fDist = CalcGeofunc ( f, t );
-								double err = fabs ( 100 * ( double ( fDist )-double ( dist ) )
-															/ double ( dist ) ); // relative error, in percents
-								avgerr[f] += err;
-								maxerr[f] = Max ( err, maxerr[f] );
-							}
-						}
-					}
-				}
-			}
-		tmax = dBench.Begin ()+dBench.GetLength ();
-	}
-
-	//	void TearDown ( const ::benchmark::State & state ) { }
-
-	CSphVector<double> dBench;
-	float fDist = 0;
-	double * tmax;
-};
-
-BENCHMARK_F( BM_Geodist, SphereDeg ) ( benchmark::State & st )
-{
-	for ( auto _ : st )
-		for ( double * t = dBench.Begin (); t<tmax; t += 4 )
-			fDist += GeodistSphereDeg ( float ( t[0] ), float ( t[1] ), float ( t[2] ), float ( t[3] ) );
-}
-
-BENCHMARK_F( BM_Geodist, FlatDeg ) ( benchmark::State & st )
-{
-	for ( auto _ : st )
-		for ( double * t = dBench.Begin (); t<tmax; t += 4 )
-			fDist += GeodistFlatDeg ( float ( t[0] ), float ( t[1] ), float ( t[2] ), float ( t[3] ) );
-}
-
-BENCHMARK_F( BM_Geodist, AdaptiveDeg ) ( benchmark::State & st )
-{
-	for ( auto _ : st )
-		for ( double * t = dBench.Begin (); t<tmax; t += 4 )
-			fDist += GeodistAdaptiveDeg ( float ( t[0] ), float ( t[1] ), float ( t[2] ), float ( t[3] ) );
-}
 
 // benches for EscapeJsonString_t
 inline static bool IsEscapeChar1 ( char c )
@@ -233,7 +109,7 @@ inline static char GetEscapedChar3combo ( BYTE c )
 	return g_Transform[c] & 0x7F;
 }
 
-class bench_escape : public benchmark::Fixture
+class Escaping : public benchmark::Fixture
 {
 public:
 	void SetUp ( const ::benchmark::State & state )
@@ -250,87 +126,145 @@ public:
 	int i = 0;
 };
 
-BENCHMARK_F( bench_escape, empty_pass ) ( benchmark::State & st )
+BENCHMARK_DEFINE_F ( Escaping, empty_pass )
+( benchmark::State& st )
 {
+	auto NRUNS = st.range ( 0 );
 	for ( auto _ : st )
-		bRes |= !!dChars[++i & 0x7F];
+		for ( auto i = 0; i < NRUNS; ++i )
+			bRes |= !!dChars[++i & 0x7F];
+	st.SetBytesProcessed ( NRUNS * st.iterations() );
 }
 
-BENCHMARK_F( bench_escape, test_memchr ) ( benchmark::State & st )
+BENCHMARK_DEFINE_F ( Escaping, memchr )
+( benchmark::State& st )
 {
+	auto NRUNS = st.range ( 0 );
 	for ( auto _ : st )
-		bRes |= IsEscapeChar1 ( dChars[++i & 0x7F] );
+		for ( auto i = 0; i < NRUNS; ++i )
+			bRes |= IsEscapeChar1 ( dChars[++i & 0x7F] );
+	st.SetBytesProcessed ( NRUNS * st.iterations() );
 }
 
-BENCHMARK_F( bench_escape, test_strchr ) ( benchmark::State & st )
+BENCHMARK_DEFINE_F ( Escaping, strchr )
+( benchmark::State& st )
 {
+	auto NRUNS = st.range ( 0 );
 	for ( auto _ : st )
-		bRes |= IsEscapeChar2 ( dChars[++i & 0x7F] );
+		for ( auto i = 0; i < NRUNS; ++i )
+			bRes |= IsEscapeChar2 ( dChars[++i & 0x7F] );
+	st.SetBytesProcessed ( NRUNS * st.iterations() );
 }
 
-BENCHMARK_F( bench_escape, test_switch ) ( benchmark::State & st )
+BENCHMARK_DEFINE_F ( Escaping, _switch )
+( benchmark::State& st )
 {
+	auto NRUNS = st.range ( 0 );
 	for ( auto _ : st )
-		bRes |= IsEscapeChar3 ( dChars[++i & 0x7F] );
+		for ( auto i = 0; i < NRUNS; ++i )
+			bRes |= IsEscapeChar3 ( dChars[++i & 0x7F] );
+	st.SetBytesProcessed ( NRUNS * st.iterations() );
 }
 
-BENCHMARK_F( bench_escape, test_booltable ) ( benchmark::State & st )
+BENCHMARK_DEFINE_F ( Escaping, booltable )
+( benchmark::State& st )
 {
+	auto NRUNS = st.range ( 0 );
 	for ( auto _ : st )
-		bRes |= IsEscapeChar4 ( dChars[++i & 0x7F] );
+		for ( auto i = 0; i < NRUNS; ++i )
+			bRes |= IsEscapeChar4 ( dChars[++i & 0x7F] );
+	st.SetBytesProcessed ( NRUNS * st.iterations() );
 }
 
-BENCHMARK_F( bench_escape, test_bytetable ) ( benchmark::State & st )
+BENCHMARK_DEFINE_F ( Escaping, bytetable )
+( benchmark::State& st )
 {
+	auto NRUNS = st.range ( 0 );
 	for ( auto _ : st )
-		bRes |= IsEscapeChar5 ( dChars[++i & 0x7F] );
+		for ( auto i = 0; i < NRUNS; ++i )
+			bRes |= IsEscapeChar5 ( dChars[++i & 0x7F] );
+	st.SetBytesProcessed ( NRUNS * st.iterations() );
 }
 
-BENCHMARK_F( bench_escape, transform_switch ) ( benchmark::State & st )
+BENCHMARK_DEFINE_F ( Escaping, transform_switch )
+( benchmark::State& st )
 {
+	auto NRUNS = st.range ( 0 );
 	for ( auto _ : st )
-		bRes |= GetEscapedChar1 ( dChars[++i & 0x7F] );
+		for ( auto i = 0; i < NRUNS; ++i )
+			bRes |= GetEscapedChar1 ( dChars[++i & 0x7F] );
+	st.SetBytesProcessed ( NRUNS * st.iterations() );
 }
 
-BENCHMARK_F( bench_escape, transform_narrow_table ) ( benchmark::State & st )
+BENCHMARK_DEFINE_F ( Escaping, transform_narrow_table )
+( benchmark::State& st )
 {
+	auto NRUNS = st.range ( 0 );
 	for ( auto _ : st )
-		bRes |= GetEscapedChar2 ( dChars[++i & 0x7F] );
+		for ( auto i = 0; i < NRUNS; ++i )
+			bRes |= GetEscapedChar2 ( dChars[++i & 0x7F] );
+	st.SetBytesProcessed ( NRUNS * st.iterations() );
 }
 
-BENCHMARK_F( bench_escape, transform_wide_table ) ( benchmark::State & st )
+BENCHMARK_DEFINE_F ( Escaping, transform_wide_table )
+( benchmark::State& st )
 {
+	auto NRUNS = st.range ( 0 );
 	for ( auto _ : st )
-		bRes |= GetEscapedChar3 ( dChars[++i & 0x7F] );
+		for ( auto i = 0; i < NRUNS; ++i )
+			bRes |= GetEscapedChar3 ( dChars[++i & 0x7F] );
+	st.SetBytesProcessed ( NRUNS * st.iterations() );
 }
 
-BENCHMARK_F( bench_escape, test_strchr_transform_switch ) ( benchmark::State & st )
+BENCHMARK_DEFINE_F ( Escaping, strchr_transform_switch )
+( benchmark::State& st )
 {
+	auto NRUNS = st.range ( 0 );
 	for ( auto _ : st )
-		if ( IsEscapeChar2 ( dChars[++i & 0x7F] ) )    // combo usual
-			bRes |= !!GetEscapedChar1 ( dChars[i & 0x7F] );
+		for ( auto i = 0; i < NRUNS; ++i )
+			if ( IsEscapeChar2 ( dChars[++i & 0x7F] ) ) // combo usual
+				bRes |= !!GetEscapedChar1 ( dChars[i & 0x7F] );
+	st.SetBytesProcessed ( NRUNS * st.iterations() );
 }
 
-BENCHMARK_F( bench_escape, test_and_transform_by_one_table ) ( benchmark::State & st )
+BENCHMARK_DEFINE_F ( Escaping, and_transform_by_one_table )
+( benchmark::State& st )
 {
+	auto NRUNS = st.range ( 0 );
 	for ( auto _ : st )
-		if ( IsEscapeChar5 ( dChars[++i & 0x7F] ) )    // combo usual
-			bRes |= !!GetEscapedChar3combo ( dChars[i & 0x7F] );
+		for ( auto i = 0; i < NRUNS; ++i )
+			if ( IsEscapeChar5 ( dChars[++i & 0x7F] ) ) // combo usual
+				bRes |= !!GetEscapedChar3combo ( dChars[i & 0x7F] );
+	st.SetBytesProcessed ( NRUNS * st.iterations() );
 }
 
+BENCHMARK_REGISTER_F ( Escaping, empty_pass )->RangeMultiplier ( 10 )->Range ( 10, 1000 );
+BENCHMARK_REGISTER_F ( Escaping, memchr )->RangeMultiplier ( 10 )->Range ( 10, 1000 );
+BENCHMARK_REGISTER_F ( Escaping, strchr )->RangeMultiplier ( 10 )->Range ( 10, 1000 );
+BENCHMARK_REGISTER_F ( Escaping, _switch )->RangeMultiplier ( 10 )->Range ( 10, 1000 );
+BENCHMARK_REGISTER_F ( Escaping, booltable )->RangeMultiplier ( 10 )->Range ( 10, 1000 );
+BENCHMARK_REGISTER_F ( Escaping, bytetable )->RangeMultiplier ( 10 )->Range ( 10, 1000 );
+BENCHMARK_REGISTER_F ( Escaping, transform_switch )->RangeMultiplier ( 10 )->Range ( 10, 1000 );
+BENCHMARK_REGISTER_F ( Escaping, transform_narrow_table )->RangeMultiplier ( 10 )->Range ( 10, 1000 );
+BENCHMARK_REGISTER_F ( Escaping, transform_wide_table )->RangeMultiplier ( 10 )->Range ( 10, 1000 );
+BENCHMARK_REGISTER_F ( Escaping, strchr_transform_switch )->RangeMultiplier ( 10 )->Range ( 10, 1000 );
+BENCHMARK_REGISTER_F ( Escaping, and_transform_by_one_table )->RangeMultiplier ( 10 )->Range ( 10, 1000 );
 
-static void BM_sphSprintf ( benchmark::State & state )
+
+static void BM_sphSprintf ( benchmark::State & st )
 {
 	char sBuf[40];
-	for ( auto _ : state )
+	for ( auto _ : st )
 		sph::Sprintf ( sBuf, "%d", 1000000 );
+	st.SetItemsProcessed ( st.iterations() );
 }
 
-static void BM_stdSprintf ( benchmark::State & state )
+static void BM_stdSprintf ( benchmark::State & st )
 {
 	char sBuf[40];
-	for ( auto _ : state )
+	for ( auto _ : st )
 		sprintf ( sBuf, "%d", 1000000 );
+	st.SetItemsProcessed ( st.iterations() );
 }
 
 BENCHMARK( BM_sphSprintf );

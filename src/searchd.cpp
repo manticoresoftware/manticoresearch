@@ -3242,7 +3242,7 @@ static void LogStatementSphinxql ( Str_t sQuery, int iRealTime )
 	tBuf += sTimeBuf;
 
 	tBuf.Sprintf ( " conn %d real %0.3F *""/ ", session::GetConnID(), iRealTime );
-	tBuf += sQuery;
+	tBuf << sQuery;
 
 	// finish statement and add line feed
 	tBuf += ";\n";

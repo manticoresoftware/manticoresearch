@@ -189,6 +189,32 @@ TEST ( functions, stringbuilder_standalone )
 	ASSERT_STREQ ( builder.cstr (), "one, two, three" );
 }
 
+// standalone comma. Not necessary related to stringbuilder, but live alone.
+TEST ( functions, stringbuilder_templated )
+{
+	StringBuilder_c builder(",");
+	builder.Sprint("one", 3, " ", 4.34, "fine");
+	EXPECT_STREQ ( builder.cstr(), "one,3, ,4.340000,fine" );
+	const char* szData = "hello";
+	builder << szData; // routed as const char*
+	const char szData1[] = "hello2";
+	builder << szData1; // routed as const char[]
+	CSphString sData2 = "hello3";
+	builder << sData2.cstr(); // routed as const char*
+	builder << "hello4"; // routed as const char[]
+	void* pVoid = nullptr;
+	builder << pVoid; // routed as const T*
+	int* pInt = nullptr;
+	builder << pInt; // routed as const T*
+	char* pChar = nullptr;
+	builder << pChar; // routed as const char*, and so, will output nothing
+	char pCharArr[10] = "fff\0ddd";
+	builder << (char*)pCharArr; // routed as const char*
+	builder.Sprint ( szData, szData1, sData2.cstr(), "hello4", pVoid, pInt, pChar, (char*)pCharArr );
+	builder << pCharArr << "aaa"; // fixme! routed as const char[]. So, tailing "ddd" and "aaa" will NOT be visible, as \0 is inside of pCharArr
+	ASSERT_STREQ ( builder.cstr(), "one,3, ,4.340000,fine,hello,hello2,hello3,hello4,0x0000000000000000,0x0000000000000000,fff,hello,hello2,hello3,hello4,0x0000000000000000,0x0000000000000000,fff,fff" );
+}
+
 TEST ( functions, JsonEscapedBuilder_sugar )
 {
 	JsonEscapedBuilder tOut;
@@ -1922,61 +1948,61 @@ TEST ( functions, FindLastNumeric )
 	ASSERT_EQ ( sNum3 + 3, sphFindLastNumeric ( sNum3, 5 ) );
 }
 
-TEST ( functions, UItoA_ItoA )
+TEST ( functions, NtoA )
 {
 	using namespace sph;
 
 	char sBuf[50];
 	memset (sBuf, 255, 50);
 
-	int iLen = UItoA (sBuf, (DWORD)50);
+	int iLen = NtoA (sBuf, (DWORD)50);
 	sBuf[iLen]='\0';
 	ASSERT_STREQ ( "50", sBuf);
 
-	iLen = ItoA ( sBuf, 50, 10, 0, 4);
+	iLen = NtoA ( sBuf, 50, 10, 0, 4);
 	sBuf[iLen] = '\0';
 	ASSERT_STREQ ( "0050", sBuf );
 
-	iLen = ItoA ( sBuf, 50, 10, 4 );
+	iLen = NtoA ( sBuf, 50, 10, 4 );
 	sBuf[iLen] = '\0';
 	ASSERT_STREQ ( "  50", sBuf );
 
-	iLen = ItoA ( sBuf, 50, 10, 6, 3 );
+	iLen = NtoA ( sBuf, 50, 10, 6, 3 );
 	sBuf[iLen] = '\0';
 	ASSERT_STREQ ( "   050", sBuf );
 
-	iLen = ItoA ( sBuf, 50, 10, 6, 3, '_' );
+	iLen = NtoA ( sBuf, 50, 10, 6, 3, '_' );
 	sBuf[iLen] = '\0';
 	ASSERT_STREQ ( "___050", sBuf );
 
-	iLen = ItoA<int64_t> ( sBuf, 0xFFFFFFFFFFFFFFFFll );
+	iLen = NtoA<int64_t> ( sBuf, 0xFFFFFFFFFFFFFFFFll );
 	sBuf[iLen] = '\0';
 	ASSERT_STREQ ( "-1", sBuf );
 
-	iLen = ItoA<int64_t> ( sBuf, 0x8000000000000000ll );
+	iLen = NtoA<int64_t> ( sBuf, 0x8000000000000000ll );
 	sBuf[iLen] = '\0';
 	ASSERT_STREQ ( "-9223372036854775808", sBuf );
 
-	iLen = ItoA ( sBuf, 0x7FFFFFFFFFFFFFFFll );
+	iLen = NtoA ( sBuf, 0x7FFFFFFFFFFFFFFFll );
 	sBuf[iLen] = '\0';
 	ASSERT_STREQ ( "9223372036854775807", sBuf );
 
-	iLen = ItoA ( sBuf, -9223372036854775807 );
+	iLen = NtoA ( sBuf, -9223372036854775807 );
 	sBuf[iLen] = '\0';
 	ASSERT_STREQ ( "-9223372036854775807", sBuf );
 
-	sBuf[ItoA ( sBuf, -9223372036854775807 )] = '\0';
+	sBuf[NtoA ( sBuf, -9223372036854775807 )] = '\0';
 	ASSERT_STREQ ( "-9223372036854775807", sBuf );
 
-	iLen = ItoA ( sBuf, 9223372036854775807 );
+	iLen = NtoA ( sBuf, 9223372036854775807 );
 	sBuf[iLen] = '\0';
 	ASSERT_STREQ ( "9223372036854775807", sBuf );
 
-	iLen = ItoA<int64_t> ( sBuf, 0xFFFFFFFFFFFFFFFFll, 16 );
+	iLen = NtoA<int64_t> ( sBuf, 0xFFFFFFFFFFFFFFFFll, 16 );
 	sBuf[iLen] = '\0';
 	ASSERT_STREQ ( "-1", sBuf );
 
-	iLen = ItoA<int64_t> ( sBuf, 0x8000000000000000ll, 16 );
+	iLen = NtoA<int64_t> ( sBuf, 0x8000000000000000ll, 16 );
 	sBuf[iLen] = '\0';
 	ASSERT_STREQ ( "-8000000000000000", sBuf );
 }

@@ -18,6 +18,7 @@
 
 #include <cassert>
 #include <cstdarg>
+#include <cstdio>
 
 //////////////////////////////////////////////////////////////////////////
 /// StringBuilder implementation
@@ -241,178 +242,6 @@ void StringBuilder_c::MoveTo ( CSphString &sTarget )
 	NewBuffer ();
 }
 
-void StringBuilder_c::AppendRawChunk ( Str_t sText ) // append without any commas
-{
-	if ( !sText.second )
-		return;
-
-	GrowEnough ( sText.second + 1 ); // +1 because we'll put trailing \0 also
-
-	memcpy ( m_szBuffer + m_iUsed, sText.first, sText.second );
-	m_iUsed += sText.second;
-	m_szBuffer[m_iUsed] = '\0';
-}
-
-StringBuilder_c & StringBuilder_c::SkipNextComma()
-{
-	if ( !m_dDelimiters.IsEmpty() )
-		m_dDelimiters.Last().SkipNext ();
-	return *this;
-}
-
-StringBuilder_c & StringBuilder_c::AppendName ( const char * sName, bool bQuoted )
-{
-	if ( !sName || !strlen ( sName ) )
-		return *this;
-
-	AppendChunk ( { sName, (int)strlen ( sName ) }, bQuoted ? '"' : '\0' );
-	GrowEnough(2);
-	m_szBuffer[m_iUsed] = ':';
-	m_szBuffer[m_iUsed+1] = '\0';
-	m_iUsed+=1;
-	return SkipNextComma ();
-}
-
-StringBuilder_c & StringBuilder_c::AppendChunk ( const Str_t& sChunk, char cQuote )
-{
-	if ( !sChunk.second )
-		return *this;
-
-	auto sComma = Delim();
-	int iQuote = cQuote!=0;
-
-	GrowEnough ( sChunk.second + sComma.second + iQuote + iQuote + 1 ); // +1 because we'll put trailing \0 also
-
-	if ( sComma.second )
-		memcpy ( m_szBuffer + m_iUsed, sComma.first, sComma.second );
-	if (iQuote)
-		m_szBuffer[m_iUsed +sComma.second] = cQuote;
-	memcpy ( m_szBuffer + m_iUsed +sComma.second + iQuote, sChunk.first, sChunk.second );
-	m_iUsed += sChunk.second+sComma.second+iQuote+iQuote;
-	if ( iQuote )
-		m_szBuffer[m_iUsed-1] = cQuote;
-	m_szBuffer[m_iUsed] = '\0';
-	return *this;
-}
-
-StringBuilder_c & StringBuilder_c::AppendString ( const CSphString &sText, char cQuote)
-{
-	return AppendChunk ( {sText.cstr (), sText.Length ()}, cQuote );
-}
-
-StringBuilder_c & StringBuilder_c::operator += ( const char * sText )
-{
-	if ( !sText || *sText=='\0' )
-		return *this;
-
-	return AppendChunk ( {sText, (int) strlen ( sText )} );
-}
-
-StringBuilder_c & StringBuilder_c::operator+= ( const Str_t& sChunk )
-{
-	return AppendChunk ( sChunk );
-}
-
-StringBuilder_c & StringBuilder_c::operator<< ( const VecTraits_T<char> &sText )
-{
-	if ( sText.IsEmpty () )
-		return *this;
-
-	return AppendChunk ( {sText.begin (), sText.GetLength ()} );
-}
-
-StringBuilder_c & StringBuilder_c::operator << ( const Str_t &sText )
-{
-	return AppendChunk ( sText );
-}
-
-StringBuilder_c& StringBuilder_c::operator << ( int iVal )
-{
-	InitAddPrefix();
-	GrowEnough(32);
-	m_iUsed += sph::NtoA( end(), iVal );
-	m_szBuffer[m_iUsed] = '\0';
-	return *this;
-}
-
-StringBuilder_c & StringBuilder_c::operator << ( long iVal )
-{
-	InitAddPrefix();
-	GrowEnough(32);
-	m_iUsed += sph::NtoA( end(), iVal );
-	m_szBuffer[m_iUsed] = '\0';
-	return *this;
-}
-
-StringBuilder_c & StringBuilder_c::operator << ( long long iVal )
-{
-	InitAddPrefix();
-	GrowEnough(32);
-	m_iUsed += sph::NtoA( end(), iVal );
-	m_szBuffer[m_iUsed] = '\0';
-	return *this;
-}
-
-StringBuilder_c & StringBuilder_c::operator << ( unsigned int uVal )
-{
-	InitAddPrefix();
-	GrowEnough(32);
-	m_iUsed += sph::NtoA( end(), uVal );
-	m_szBuffer[m_iUsed] = '\0';
-	return *this;
-}
-
-StringBuilder_c & StringBuilder_c::operator << ( unsigned long uVal )
-{
-	InitAddPrefix();
-	GrowEnough(32);
-	m_iUsed += sph::NtoA( end(), uVal );
-	m_szBuffer[m_iUsed] = '\0';
-	return *this;
-}
-
-StringBuilder_c & StringBuilder_c::operator << ( unsigned long long uVal )
-{
-	InitAddPrefix();
-	GrowEnough(32);
-	m_iUsed += sph::NtoA( end(), uVal );
-	m_szBuffer[m_iUsed] = '\0';
-	return *this;
-}
-
-StringBuilder_c & StringBuilder_c::operator<< ( float fVal )
-{
-	InitAddPrefix();
-	GrowEnough( 32 );
-	m_iUsed += sph::PrintVarFloat( end(), fVal );
-	m_szBuffer[m_iUsed] = '\0';
-	return *this;
-}
-
-StringBuilder_c & StringBuilder_c::operator<< ( double fVal )
-{
-	InitAddPrefix();
-	GrowEnough( 32 );
-	m_iUsed += sprintf( end(), "%f", fVal );
-	m_szBuffer[m_iUsed] = '\0';
-	return *this;
-}
-
-StringBuilder_c & StringBuilder_c::operator<< ( void * pVal )
-{
-	InitAddPrefix ();
-	GrowEnough ( 32 );
-	m_iUsed += sph::NtoA ( end (), reinterpret_cast<uintptr_t>(pVal), 16, sizeof(void*)*2 );
-	m_szBuffer[m_iUsed] = '\0';
-	return *this;
-}
-
-StringBuilder_c& StringBuilder_c::operator<< ( bool bVal )
-{
-	if ( bVal )
-		return AppendChunk ( { "true", 4 } );
-	return AppendChunk ( { "false", 5 } );
-}
 
 void StringBuilder_c::Grow ( int iLen )
 {
@@ -437,49 +266,32 @@ void StringBuilder_c::NewBuffer()
 	Clear ();
 }
 
-void StringBuilder_c::Clear()
-{
-	if ( m_szBuffer )
-		m_szBuffer[0] = '\0';
-	m_iUsed = 0;
-	m_dDelimiters.Reset();
-}
-
-
-void StringBuilder_c::NtoA ( DWORD uVal )
+StringBuilder_c& StringBuilder_c::operator<< ( double fVal )
 {
 	InitAddPrefix();
-
-	const int MAX_NUMERIC_STR = 64;
-	GrowEnough ( MAX_NUMERIC_STR+1 );
-
-	int iLen = sph::NtoA ( (char *)m_szBuffer + m_iUsed, uVal );
-	m_iUsed += iLen;
+	GrowEnough ( 32 );
+	m_iUsed += sprintf ( end(), "%f", fVal );
 	m_szBuffer[m_iUsed] = '\0';
+	return *this;
 }
 
-
-void StringBuilder_c::NtoA ( int64_t iVal )
+StringBuilder_c& StringBuilder_c::operator<< ( float fVal )
 {
 	InitAddPrefix();
-
-	const int MAX_NUMERIC_STR = 64;
-	GrowEnough ( MAX_NUMERIC_STR+1 );
-
-	int iLen = sph::NtoA ( (char *)m_szBuffer + m_iUsed, iVal );
-	m_iUsed += iLen;
+	GrowEnough ( 32 );
+	m_iUsed += sph::PrintVarFloat ( end(), fVal );
 	m_szBuffer[m_iUsed] = '\0';
+	return *this;
 }
-
 
 void StringBuilder_c::FtoA ( float fVal )
 {
 	InitAddPrefix();
 
 	const int MAX_NUMERIC_STR = 64;
-	GrowEnough ( MAX_NUMERIC_STR+1 );
+	GrowEnough ( MAX_NUMERIC_STR + 1 );
 
-	int iLen = sph::PrintVarFloat ( (char *) m_szBuffer + m_iUsed, fVal );
+	int iLen = sph::PrintVarFloat ( (char*)m_szBuffer + m_iUsed, fVal );
 	m_iUsed += iLen;
 	m_szBuffer[m_iUsed] = '\0';
 }
@@ -490,9 +302,9 @@ void StringBuilder_c::DtoA ( double fVal )
 	InitAddPrefix();
 
 	const int MAX_NUMERIC_STR = 64;
-	GrowEnough ( MAX_NUMERIC_STR+1 );
+	GrowEnough ( MAX_NUMERIC_STR + 1 );
 
-	int iLen = sph::PrintVarDouble ( (char *) m_szBuffer + m_iUsed, fVal );
+	int iLen = sph::PrintVarDouble ( (char*)m_szBuffer + m_iUsed, fVal );
 	m_iUsed += iLen;
 	m_szBuffer[m_iUsed] = '\0';
 }

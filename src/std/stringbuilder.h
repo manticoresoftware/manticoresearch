@@ -37,7 +37,7 @@ class StringBuilder_c : public ISphNoncopyable
 
 public:
 		// creates and m.b. start block
-						StringBuilder_c ( const char * sDel = nullptr, const char * sPref = nullptr, const char * sTerm = nullptr );
+						explicit StringBuilder_c ( const char * sDel = nullptr, const char * sPref = nullptr, const char * sTerm = nullptr );
 						StringBuilder_c ( StringBuilder_c&& rhs ) noexcept;
 						~StringBuilder_c ();
 
@@ -45,6 +45,9 @@ public:
 
 	// reset to initial state
 	void				Clear();
+
+	// rewind to initial state, but don't clear the commas
+	void 				Rewind();
 
 	// get current build value
 	const char *		cstr() const { return m_szBuffer ? m_szBuffer : ""; }
@@ -64,16 +67,29 @@ public:
 	StringBuilder_c &	AppendString ( const CSphString & sText, char cQuote = '\0' );
 
 	StringBuilder_c &	operator = ( StringBuilder_c rhs ) noexcept;
-	StringBuilder_c &	operator += ( const char * sText );
-	StringBuilder_c &	operator += ( const Str_t& sChunk );
+	template<typename T>
+	StringBuilder_c &	operator += ( const T * pVal );
+	StringBuilder_c &	operator += ( const char* sText );
+	StringBuilder_c &	operator << ( const Str_t& sChunk );
 	StringBuilder_c &	operator << ( const VecTraits_T<char> &sText );
-	StringBuilder_c &	operator << ( const Str_t &sText );
-	StringBuilder_c &	operator << ( const char * sText ) { return *this += sText; }
-	StringBuilder_c &	operator << ( char cChar ) { return *this += {&cChar,1}; }
+
+	/*
+	 * Two guys below distinguishes `const char*` param from `const char[]`.
+	 * First one implies strlen() and uses it
+	 * Second implies length to be now at compile time, and avoids strlen().
+	 * So, << "bar" - will be faster, as we know size of that literal in compile time.
+	 * Look at TEST ( functions, stringbuilder_templated ) for experiments.
+	 */
+	template<size_t N>
+	StringBuilder_c &	operator << ( char const(& sLiteral)[N] ) { return *this << Str_t { sLiteral, N-1 }; }
+	template<typename CHAR>
+	StringBuilder_c &	operator << ( const CHAR * const& sText ) { return *this += sText; }
+
+	StringBuilder_c &	operator << ( char cChar ) { return *this << Str_t {&cChar,1}; }
 	StringBuilder_c &	operator << ( const CSphString &sText ) { return *this += sText.cstr (); }
 	StringBuilder_c &	operator << ( const CSphVariant &sText )	{ return *this += sText.cstr (); }
 	StringBuilder_c &	operator << ( const StringBuilder_c &sText )	{ return *this << (Str_t) sText; }
-	StringBuilder_c &	operator << ( Comma_c& dComma ) { return *this += dComma; }
+	StringBuilder_c &	operator << ( Comma_c& dComma ) { return *this << (Str_t)dComma; }
 
 	StringBuilder_c &	operator << ( int iVal );
 	StringBuilder_c &	operator << ( long iVal );
@@ -85,7 +101,6 @@ public:
 
 	StringBuilder_c &	operator << ( float fVal );
 	StringBuilder_c &	operator << ( double fVal );
-	StringBuilder_c &	operator << ( void* pVal );
 	StringBuilder_c &	operator << ( bool bVal );
 
 	// support for sph::Sprintf - emulate POD 'char*'
@@ -105,6 +120,10 @@ public:
 	// these use or own implementation sph::Sprintf which provides also some sugar
 	StringBuilder_c &	vSprintf ( const char * sTemplate, va_list ap );
 	StringBuilder_c &	Sprintf ( const char * sTemplate, ... );
+
+	// arbitrary output all params according to their << implementations (inlined in compile time).
+	template<typename... Params>
+	StringBuilder_c &	Sprint ( const Params&... tParams );
 
 	// comma manipulations
 	// start new comma block; return index of it (for future possible reference in FinishBlocks())
@@ -182,6 +201,17 @@ private:
 StringBuilder_c& operator<< ( StringBuilder_c& tOut, const CSphNamedInt& tValue );
 StringBuilder_c& operator<< ( StringBuilder_c& tOut, timespan_t tVal );
 StringBuilder_c& operator<< ( StringBuilder_c& tOut, timestamp_t tVal );
+
+// helpers
+inline void Grow ( StringBuilder_c& tBuilder, int iInc )
+{
+	tBuilder.GrowEnough ( iInc );
+}
+
+inline char* Tail ( StringBuilder_c& tBuilder )
+{
+	return tBuilder.end();
+}
 
 
 #include "stringbuilder_impl.h"

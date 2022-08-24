@@ -18,6 +18,7 @@ message ( STATUS "Inside directory src..." )
 #		)
 
 include ( GetColumnar )
+include ( GetSecondary )
 target_link_libraries ( lextra INTERFACE columnar::columnar_api )
 target_include_directories ( lextra INTERFACE ${CMAKE_CURRENT_SOURCE_DIR} )
 

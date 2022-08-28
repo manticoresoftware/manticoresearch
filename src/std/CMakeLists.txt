@@ -103,7 +103,6 @@ add_library ( manticore_std OBJECT
 		vector_impl.h
 		vectraits.h
 		vectraits_impl.h
-		widest.h
 		zip.h
 		zip_impl.h
 

@@ -2459,30 +2459,6 @@ TEST ( functions, BitVec_managing )
 	}
 }
 
-#ifdef _WIN32
-#pragma warning(push) // store current warning values
-#pragma warning(disable:4101)
-#endif
-
-TEST ( functions, wider_and_widest )
-{
-	WIDER<BYTE,DWORD>::T VARIABLE_IS_NOT_USED dw;
-	ASSERT_EQ ( sizeof ( dw ), sizeof ( DWORD ) );
-	
-	WIDER<double,char>::T VARIABLE_IS_NOT_USED dbl;
-	ASSERT_EQ ( sizeof ( dbl ), sizeof ( double ) );
-	
-	WIDEST<char,BYTE,WORD,double>::T VARIABLE_IS_NOT_USED dbl2;
-	ASSERT_EQ ( sizeof ( dbl ), sizeof ( double ) );
-
-	WIDEST<char *, BYTE, WORD, float>::T VARIABLE_IS_NOT_USED pchar;
-	ASSERT_EQ ( sizeof ( pchar ), sizeof ( char* ) );
-}
-
-#ifdef _WIN32
-#pragma warning(pop) // restore warnings
-#endif
-
 TEST ( functions, warner_c )
 {
 	Warner_c sMsg;

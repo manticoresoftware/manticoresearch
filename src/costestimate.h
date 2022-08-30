@@ -26,9 +26,33 @@ struct SecondaryIndexInfo_t
 	SecondaryIndexType_e	m_eType = SecondaryIndexType_e::FILTER;
 	SecondaryIndexType_e	m_eForce = SecondaryIndexType_e::NONE;
 	int64_t					m_iRsetEstimate = 0;
+	int64_t					m_iTotalValues = 0;	// total values (used mainly for MVAs; different from total docs)
 	bool					m_bCreated = false;
 };
 
-CostEstimate_i * CreateCostEstimate ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, int64_t iTotalDocs, int iCutoff = -1 );
+namespace SI
+{
+	class Index_i;
+}
 
+struct SelectIteratorCtx_t
+{
+	const CSphVector<CSphFilterSettings> &	m_dFilters;
+	const CSphVector<FilterTreeItem_t> &	m_dFilterTree;
+	const CSphVector<IndexHint_t> &			m_dHints;
+	const ISphSchema &						m_tSchema;
+	const HistogramContainer_c *			m_pHistograms = nullptr;
+	SI::Index_i *							m_pSI = nullptr;
+	ESphCollation							m_eCollation = SPH_COLLATION_DEFAULT;
+	int										m_iCutoff = -1;
+	int64_t									m_iTotalDocs = 0;
+
+			SelectIteratorCtx_t ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> &	dFilterTree, const CSphVector<IndexHint_t> & dHints, const ISphSchema &	tSchema, const HistogramContainer_c * pHistograms, SI::Index_i * pSI, ESphCollation eCollation, int iCutoff, int64_t iTotalDocs );
+
+	bool	IsEnabled_SI ( const CSphFilterSettings & tFilter ) const;
+	bool	IsEnabled_Analyzer ( const CSphFilterSettings & tFilter ) const;
+};
+
+
+CostEstimate_i * CreateCostEstimate ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx );
 #endif // _costestimate_

@@ -60,9 +60,7 @@ void DiskChunkSearcherCtx_t::MergeChild ( DiskChunkSearcherCtx_t tChild ) const
 		m_tMeta.m_pProfile->AddMetric ( *tChildRes.m_pProfile );
 
 	m_tMeta.m_bTotalMatchesApprox |= tChildRes.m_bTotalMatchesApprox;
-
-	for ( const auto & i : tChildRes.m_dUsedIterators )
-		m_tMeta.m_dUsedIterators.Add(i);
+	m_tMeta.m_tIteratorStats.Merge ( tChildRes.m_tIteratorStats );
 }
 
 

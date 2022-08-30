@@ -1218,10 +1218,12 @@ public:
 
 	bool				CopyExternalFiles ( int iPostfix, StrVec_t & dCopied ) final;
 
-	HistogramContainer_c * GetHistograms() const override { return m_pHistograms; }
+	HistogramContainer_c * Debug_GetHistograms() const override { return m_pHistograms; }
+	SI::Index_i *		Debug_GetSI() const override { return m_pSIdx.get(); }
 
 	bool				CheckEarlyReject ( const CSphVector<CSphFilterSettings> & dFilters, const ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema ) const;
 	int64_t				GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries ) const override;
+	int64_t				GetCountDistinct ( const CSphString & sAttr ) const override;
 
 private:
 	static const int			MIN_WRITE_BUFFER		= 262144;	///< min write buffer size
@@ -2919,12 +2921,13 @@ int64_t CSphIndex_VLN::GetPseudoShardingMetric ( const VecTraits_T<const CSphQue
 	bool bAllFast = true;
 	const float COST_THRESH = 0.5f;
 
-	std::unique_ptr<SelectSI_i> pCond { GetSelectIteratorsCond ( m_pSIdx.get(), m_tSchema, ( dQueries.GetLength() ? dQueries.Begin()->m_eCollation : SPH_COLLATION_DEFAULT ) ) };
+	ESphCollation eCollation = dQueries.GetLength() ? dQueries.Begin()->m_eCollation : SPH_COLLATION_DEFAULT;
 
 	for ( const auto & i : dQueries )
 	{
-		CSphVector<SecondaryIndexInfo_t> dEnabledIndexes;
-		float fCost = GetEnabledSecondaryIndexes ( dEnabledIndexes, i.m_dFilters, i.m_dFilterTree, i.m_dIndexHints, *m_pHistograms, pCond.get() );
+		float fCost = FLT_MAX;
+		SelectIteratorCtx_t tCtx ( i.m_dFilters, i.m_dFilterTree, i.m_dIndexHints, m_tSchema, m_pHistograms, m_pSIdx.get(), eCollation, i.m_iCutoff, m_iDocinfo );
+		CSphVector<SecondaryIndexInfo_t> dEnabledIndexes = SelectIterators ( tCtx, fCost );
 
 		// disable pseudo sharding if any of the queries use secondary indexes/docid lookups
 		if ( dEnabledIndexes.any_of ( []( const SecondaryIndexInfo_t & tSI ){ return tSI.m_eType==SecondaryIndexType_e::INDEX || tSI.m_eType==SecondaryIndexType_e::LOOKUP; } ) )
@@ -2937,14 +2940,35 @@ int64_t CSphIndex_VLN::GetPseudoShardingMetric ( const VecTraits_T<const CSphQue
 			bFastQuery = IsQueryFast(i);
 
 		bAllFast &= bFastQuery;
-		if ( !bAllFast )
-			break;
+
+		// if there's a groupby query and and count distinct is bigger than 64k unique values
+		// then pseudo_sharding will probably consume too much memory and produce incorrect (too approximate) results
+		// so disable it
+		if ( m_pSIdx.get() && !i.m_sGroupBy.IsEmpty() )
+		{
+			const int TOOMANY_MAXMATCHES = 65536;
+			int iCountDistinct = m_pSIdx.get()->GetCountDistinct ( i.m_sGroupBy.cstr() );
+			if ( iCountDistinct>=TOOMANY_MAXMATCHES )
+				return -1;
+
+			// fixme! maybe let the index know it is running under pseudo_sharding so that it can apply the *1.5 boost for max_matches
+		}
 	}
 
 	if ( bAllFast )
 		return -1;
 
 	return CSphIndex::GetPseudoShardingMetric(dQueries);
+}
+
+
+int64_t	CSphIndex_VLN::GetCountDistinct ( const CSphString & sAttr ) const
+{
+	if ( !m_pSIdx.get() )
+		return -1;
+
+	std::string sAttrSTL = sAttr.cstr();
+	return m_pSIdx.get()->GetCountDistinct(sAttrSTL);
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -7987,8 +8011,9 @@ static void RecreateFilters ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, 
 
 RowidIterator_i * CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, CSphVector<CSphFilterSettings> & dModifiedFilters ) const
 {
-	std::unique_ptr<SelectSI_i> pCond { GetSelectIteratorsCond ( m_pSIdx.get(), m_tSchema, tQuery.m_eCollation ) };
-	CSphVector<SecondaryIndexInfo_t> dSIInfo = SelectIterators ( tQuery.m_dFilters, tQuery.m_dFilterTree.IsEmpty(), tQuery.m_dIndexHints, m_pHistograms, pCond.get(), iCutoff );
+	float fCost = FLT_MAX;
+	SelectIteratorCtx_t tSelectIteratorCtx ( tQuery.m_dFilters, tQuery.m_dFilterTree, tQuery.m_dIndexHints, m_tSchema, m_pHistograms, m_pSIdx.get(), tQuery.m_eCollation, tQuery.m_iCutoff, m_iDocinfo );
+	CSphVector<SecondaryIndexInfo_t> dSIInfo = SelectIterators ( tSelectIteratorCtx, fCost );
 
 	CSphVector<RowidIterator_i *> dSIIterators, dLookupIterators;
 	RowidIterator_i * pAnalyzerIterator = nullptr;
@@ -8149,7 +8174,9 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 			pIterator->SetCutoff(iCutoff);
 
 		bCutoffHit = RunFullscanOnIterator ( pIterator.get(), tCtx, tMeta, dSorters, tMatch, iCutoff, bRandomize, tArgs.m_iIndexWeight, tmMaxTimer );
-		pIterator->AddDesc ( tMeta.m_dUsedIterators );
+
+		pIterator->AddDesc ( tMeta.m_tIteratorStats.m_dIterators );
+		tMeta.m_tIteratorStats.m_iTotal = 1;
 	}
 	else
 	{
@@ -10549,9 +10576,7 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 				tThMeta.m_sWarning = tChunkMeta.m_sWarning;
 
 			tThMeta.m_bTotalMatchesApprox |= tChunkMeta.m_bTotalMatchesApprox;
-
-			for ( const auto & i : tChunkMeta.m_dUsedIterators )
-				tThMeta.m_dUsedIterators.Add(i);
+			tThMeta.m_tIteratorStats.Merge ( tChunkMeta.m_tIteratorStats );
 
 			if ( bInterrupt && !tChunkMeta.m_sError.IsEmpty() )
 				// FIXME? maybe handle this more gracefully (convert to a warning)?
@@ -13396,6 +13421,27 @@ void sphGetSuggest ( const ISphWordlistSuggest * pWordlist, int iInfixCodepointB
 		return;
 
 	tRes.Flattern ( tArgs.m_iLimit );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+void IteratorStats_t::Merge ( const IteratorStats_t & tSrc )
+{
+	m_iTotal++;
+
+	for ( const auto & i : tSrc.m_dIterators )
+	{
+		bool bFound = false;
+		for ( auto & j : m_dIterators )
+			if ( i.m_sAttr==j.m_sAttr && i.m_sType==j.m_sType )
+			{
+				j.m_iUsed += i.m_iUsed;
+				bFound = true;
+			}
+
+		if ( !bFound )
+			m_dIterators.Add(i);
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////

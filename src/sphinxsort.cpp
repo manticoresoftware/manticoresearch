@@ -4673,11 +4673,13 @@ private:
 	bool	PredictAggregates() const;
 	bool	ReplaceWithColumnarItem ( const CSphString & sAttr, ESphEvalStage eStage );
 	int		ReduceMaxMatches() const;
+	int		AdjustMaxMatches ( int iMaxMatches ) const;
 	bool	ConvertColumnarToDocstore();
 	const CSphColumnInfo * GetAliasedColumnarAttr ( const CSphColumnInfo & tAttr );
 	bool	SetupAggregateExpr ( CSphColumnInfo & tExprCol, const CSphString & sExpr, DWORD uQueryPackedFactorFlags );
 	bool	SetupColumnarAggregates ( CSphColumnInfo & tExprCol );
 	void	UpdateAggregateDependencies ( CSphColumnInfo & tExprCol );
+	int		GetGroupbyAttrIndex() const;
 
 	ISphMatchSorter *	SpawnQueue();
 	std::unique_ptr<ISphFilter>	CreateAggrFilter() const;
@@ -4926,24 +4928,7 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 	}
 
 	// setup groupby attr
-	int iGroupBy = tSchema.GetAttrIndex ( m_tQuery.m_sGroupBy.cstr() );
-
-	if ( iGroupBy<0 )
-	{
-		// try aliased groupby attr (facets)
-		ARRAY_FOREACH ( i, m_tQuery.m_dItems )
-			if ( m_tQuery.m_sGroupBy==m_tQuery.m_dItems[i].m_sExpr )
-			{
-				iGroupBy = tSchema.GetAttrIndex ( m_tQuery.m_dItems[i].m_sAlias.cstr() );
-				break;
-
-			} else if ( m_tQuery.m_sGroupBy==m_tQuery.m_dItems[i].m_sAlias )
-			{
-				iGroupBy = tSchema.GetAttrIndex ( m_tQuery.m_dItems[i].m_sExpr.cstr() );
-				break;
-			}
-	}
-
+	int iGroupBy = GetGroupbyAttrIndex();
 	if ( iGroupBy<0 )
 		return Err ( "group-by attribute '%s' not found", m_tQuery.m_sGroupBy.cstr() );
 
@@ -5453,6 +5438,32 @@ void QueueCreator_c::UpdateAggregateDependencies ( CSphColumnInfo & tExprCol )
 		if ( tDep.m_eStage>tExprCol.m_eStage )
 			tDep.m_eStage = tExprCol.m_eStage;
 	}
+}
+
+
+int QueueCreator_c::GetGroupbyAttrIndex() const
+{
+	assert ( m_pSorterSchema );
+	auto & tSchema = *m_pSorterSchema;
+
+	int iGroupBy = tSchema.GetAttrIndex ( m_tQuery.m_sGroupBy.cstr() );
+	if ( iGroupBy>=0 )
+		return iGroupBy;
+
+	// try aliased groupby attr (facets)
+	ARRAY_FOREACH ( i, m_tQuery.m_dItems )
+		if ( m_tQuery.m_sGroupBy==m_tQuery.m_dItems[i].m_sExpr )
+		{
+			iGroupBy = tSchema.GetAttrIndex ( m_tQuery.m_dItems[i].m_sAlias.cstr() );
+			break;
+
+		} else if ( m_tQuery.m_sGroupBy==m_tQuery.m_dItems[i].m_sAlias )
+		{
+			iGroupBy = tSchema.GetAttrIndex ( m_tQuery.m_dItems[i].m_sExpr.cstr() );
+			break;
+		}
+
+	return iGroupBy;
 }
 
 
@@ -6382,25 +6393,46 @@ int QueueCreator_c::ReduceMaxMatches() const
 }
 
 
+int QueueCreator_c::AdjustMaxMatches ( int iMaxMatches ) const
+{
+	assert ( m_bGotGroupby );
+	if ( m_tQuery.m_bExplicitMaxMatches )
+		return iMaxMatches;
+
+	int iGroupbyAttr = GetGroupbyAttrIndex();
+	if ( iGroupbyAttr<0 )
+		return iMaxMatches;
+
+	int iCountDistinct = m_tSettings.m_fnGetCountDistinct ? m_tSettings.m_fnGetCountDistinct ( m_pSorterSchema->GetAttr(iGroupbyAttr).m_sName ) : -1;
+	if ( iCountDistinct<0 )
+		return iMaxMatches;
+
+	const int MAX_MAXMATCHES=16384;
+	return iCountDistinct<=MAX_MAXMATCHES ? iCountDistinct : iMaxMatches;
+}
+
+
 ISphMatchSorter * QueueCreator_c::SpawnQueue()
 {
 	bool bNeedFactors = !!(m_uPackedFactorFlags & SPH_FACTOR_ENABLE);
 
-	if ( !m_bGotGroupby )
+	if ( m_bGotGroupby )
 	{
-		if ( m_tSettings.m_pCollection )
-			return new CollectQueue_c ( m_tSettings.m_iMaxMatches, *m_tSettings.m_pCollection );
-
-		int iMaxMatches = ReduceMaxMatches();
-		ISphMatchSorter * pResult = CreatePlainSorter ( m_eMatchFunc, m_tQuery.m_bSortKbuffer, iMaxMatches, bNeedFactors );
-		if ( !pResult )
-			return nullptr;
-
-		return CreateColumnarProxySorter ( pResult, iMaxMatches, *m_pSorterSchema, m_tStateMatch, m_eMatchFunc, bNeedFactors, m_tSettings.m_bComputeItems, m_bMulti );
+		m_tGroupSorterSettings.m_iMaxMatches = AdjustMaxMatches ( m_tGroupSorterSettings.m_iMaxMatches );
+		return sphCreateSorter1st ( m_eMatchFunc, m_eGroupFunc, &m_tQuery, m_tGroupSorterSettings, bNeedFactors, PredictAggregates() );
 	}
 
-	return sphCreateSorter1st ( m_eMatchFunc, m_eGroupFunc, &m_tQuery, m_tGroupSorterSettings, bNeedFactors, PredictAggregates() );
+	if ( m_tSettings.m_pCollection )
+		return new CollectQueue_c ( m_tSettings.m_iMaxMatches, *m_tSettings.m_pCollection );
+
+	int iMaxMatches = ReduceMaxMatches();
+	ISphMatchSorter * pResult = CreatePlainSorter ( m_eMatchFunc, m_tQuery.m_bSortKbuffer, iMaxMatches, bNeedFactors );
+	if ( !pResult )
+		return nullptr;
+
+	return CreateColumnarProxySorter ( pResult, iMaxMatches, *m_pSorterSchema, m_tStateMatch, m_eMatchFunc, bNeedFactors, m_tSettings.m_bComputeItems, m_bMulti );
 }
+
 
 bool QueueCreator_c::SetupComputeQueue ()
 {

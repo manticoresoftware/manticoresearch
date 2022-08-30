@@ -65,7 +65,6 @@ public:
 	bool			Add ( std::unique_ptr<Histogram_i> pHistogram );
 	void			Remove ( const CSphString & sAttr );
 	Histogram_i *	Get ( const CSphString & sAttr ) const;
-	DWORD			GetNumValues() const;
 
 	void			Insert ( int iHistogram, SphAttr_t tAttr ) { m_dHistograms[iHistogram]->Insert(tAttr); }
 

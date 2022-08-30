@@ -876,13 +876,6 @@ Histogram_i * HistogramContainer_c::Get ( const CSphString & sAttr ) const
 	return ppHistogram ? *ppHistogram : nullptr;
 }
 
-
-DWORD HistogramContainer_c::GetNumValues() const
-{
-	// all histograms should have the same amount of values
-	return m_dHistograms[0]->GetNumValues();
-}
-
 //////////////////////////////////////////////////////////////////////////
 
 static bool CanCreateHistogram ( const CSphString & sAttrName, ESphAttr eAttrType )

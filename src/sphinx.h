@@ -587,7 +587,18 @@ struct IteratorDesc_t
 {
 	CSphString	m_sAttr;
 	CSphString	m_sType;
+	int			m_iUsed = 1;
 };
+
+
+struct IteratorStats_t
+{
+	CSphVector<IteratorDesc_t> m_dIterators;
+	int		m_iTotal = 0;
+
+	void	Merge ( const IteratorStats_t & tSrc );
+};
+
 
 /// search query meta-info
 class CSphQueryResultMeta
@@ -622,7 +633,7 @@ public:
 	CSphString				m_sWarning;				///< warning message
 	QueryProfile_c *		m_pProfile		= nullptr;	///< filled when query profiling is enabled; NULL otherwise
 
-	CSphVector<IteratorDesc_t> m_dUsedIterators;	///< iterators used while calculating the query
+	IteratorStats_t			m_tIteratorStats;		///< iterators used while calculating the query
 
 	virtual					~CSphQueryResultMeta () {}					///< dtor
 	void					AddStat ( const CSphString & sWord, int64_t iDocs, int64_t iHits );
@@ -1033,6 +1044,11 @@ struct CSphSourceStats;
 class DebugCheckError_i;
 struct AttrAddRemoveCtx_t;
 
+namespace SI
+{
+	class Index_i;
+}
+
 /// generic fulltext index interface
 class CSphIndex : public ISphKeywordsStat, public IndexSegment_c, public DocstoreReader_i
 {
@@ -1066,6 +1082,7 @@ public:
 	void						SetMutableSettings ( const MutableIndexSettings_c & tSettings );
 	const MutableIndexSettings_c & GetMutableSettings () const { return m_tMutableSettings; }
 	virtual int64_t				GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries ) const;
+	virtual int64_t				GetCountDistinct ( const CSphString & sAttr ) const { return -1; }	// returns values if index has some meta on its attributes
 
 public:
 	/// build index by indexing given sources
@@ -1195,7 +1212,8 @@ public:
 	virtual bool				CopyExternalFiles ( int iPostfix, StrVec_t & dCopied ) { return true; }
 
 	// used for query optimizer calibration
-	virtual HistogramContainer_c * GetHistograms() const { return nullptr; }
+	virtual HistogramContainer_c * Debug_GetHistograms() const { return nullptr; }
+	virtual SI::Index_i *		Debug_GetSI() const { return nullptr; }
 
 public:
 	int64_t						m_iTID = 0;				///< last committed transaction id
@@ -1314,6 +1332,7 @@ struct SphQueueSettings_t
 	const CSphFilterSettings *	m_pAggrFilter = nullptr;
 	int							m_iMaxMatches = DEFAULT_MAX_MATCHES;
 	bool						m_bNeedDocids = false;
+	std::function<int64_t (const CSphString &)> m_fnGetCountDistinct;
 
 	explicit SphQueueSettings_t ( const ISphSchema & tSchema, QueryProfile_c * pProfiler = nullptr )
 		: m_tSchema ( tSchema )

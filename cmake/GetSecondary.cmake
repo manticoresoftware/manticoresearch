@@ -1,6 +1,6 @@
 include ( update_bundle )
 
-set ( SECONDARY_ABI 3 )
+set ( SECONDARY_ABI 5 )
 set ( SECONDARY_REQUIRED_VER ${SECONDARY_ABI} )
 
 # Note: we don't build, neither link with columnar. Only thing we expect to get is a few interface headers, aka 'columnar_api'.

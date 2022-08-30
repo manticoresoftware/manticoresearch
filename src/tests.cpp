@@ -909,7 +909,7 @@ static CSphVector<int64_t> GetFilterEstimates ( const CSphQuery & tQuery, CSphIn
 {
 	assert ( pIndex );
 
-	auto pHistograms = pIndex->GetHistograms();
+	auto pHistograms = pIndex->Debug_GetHistograms();
 	assert ( pHistograms );
 
 	CSphVector<int64_t> dRes;
@@ -937,7 +937,8 @@ static float GetEstimatedCost ( CSphQuery & tQuery, CSphIndex * pIndex, Secondar
 		dSIInfo[i].m_eType = eType;
 	}
 
-	std::unique_ptr<CostEstimate_i> pEstimate ( CreateCostEstimate ( dSIInfo, tQuery.m_dFilters, tStats.m_iTotalDocuments ) );
+	SelectIteratorCtx_t tCtx ( tQuery.m_dFilters, tQuery.m_dFilterTree, tQuery.m_dIndexHints, pIndex->GetMatchSchema(), pIndex->Debug_GetHistograms(), pIndex->Debug_GetSI(), tQuery.m_eCollation, tQuery.m_iCutoff, tStats.m_iTotalDocuments );
+	std::unique_ptr<CostEstimate_i> pEstimate ( CreateCostEstimate ( dSIInfo, tCtx ) );
 	return pEstimate->CalcQueryCost();
 }
 
@@ -1237,7 +1238,7 @@ static void CalcCoeffsRowwise()
 static CSphQuery CreateFullscanQueryC1()
 {
 	CSphQuery tQuery;
-	tQuery.m_dItems.Add ( {"comment_ranking",""} );
+	tQuery.m_dItems.Add ( {"comment_ranking","comment_ranking"} );
 	tQuery.m_sSortBy = "story_comment_count asc";
 
 	{
@@ -1454,7 +1455,7 @@ static void CalcCoeffsColumnar()
 		int64_t iRsetItems = RunGenericQuery ( tQuery, pIndex.get(), iTime, uHash, REPEATS );
 
 		float fTotalCost = float(iTime)*SCALE;
-		float fCostOfFilter = ( fTotalCost - fCostOfPush*iRsetItems )/iTotalDocs;
+		float fCostOfFilter = ( fTotalCost - fCostOfPush*iRsetItems )/iRsetItems;
 		float fEstimatedCost = GetEstimatedCost ( tQuery, pIndex.get(), SecondaryIndexType_e::ANALYZER );
 
 		PrintStats ( "Columnar fullscan, 1 filter", iTime, fEstimatedCost, uHash );
@@ -1481,6 +1482,48 @@ static void CalcCoeffsColumnar()
 		float fEstimatedCost = GetEstimatedCost ( tQuery, pIndex.get(), SecondaryIndexType_e::ANALYZER );
 
 		PrintStats ( "Columnar fullscan, 3 filters", iTime, fEstimatedCost, uHash );
+	}
+}
+
+
+static CSphQuery CreateFullscanQueryC2_1()
+{
+	CSphQuery tQuery;
+	tQuery.m_dItems.Add ( {"id","id"} );
+
+	{
+		auto & tFilter = tQuery.m_dFilters.Add();
+		tFilter.m_eType = SPH_FILTER_VALUES;
+		tFilter.m_sAttrName = "a_mva";
+		tFilter.m_dValues.Add(2652701560);
+		tFilter.m_dValues.Add(3800433230);
+		tFilter.m_eMvaFunc = SPH_MVAFUNC_ANY;
+	}
+
+	ForceColumnar ( tQuery, "a_mva" );
+	return tQuery;
+}
+
+
+static void CalcCoeffsColumnar2()
+{
+	CSphString sPath = "synth";
+	std::unique_ptr<CSphIndex> pIndex = sphCreateIndexPhrase ( "synth", sPath.cstr() );
+	StrVec_t dWarnings;
+	if ( !pIndex->Prealloc ( false, nullptr, dWarnings ) )
+		sphDie ( "prealloc failed: %s", pIndex->GetLastError().cstr() );
+
+	pIndex->Preread();
+
+	{
+		int64_t iTime = 0;
+		uint64_t uHash = SPH_FNV64_SEED;
+
+		CSphQuery tQuery = CreateFullscanQueryC2_1();
+		RunGenericQuery ( tQuery, pIndex.get(), iTime, uHash, 100 );
+		float fEstimatedCost = GetEstimatedCost ( tQuery, pIndex.get(), SecondaryIndexType_e::ANALYZER );
+
+		PrintStats ( "Columnar fullscan, mva filter of 2 values", iTime, fEstimatedCost, uHash );
 	}
 }
 
@@ -1542,6 +1585,28 @@ static CSphQuery CreateFullscanQueryS3 ( int iMin, int iMax )
 	return tQuery;
 }
 
+static CSphQuery CreateFullscanQueryS4()
+{
+	CSphQuery tQuery;
+	tQuery.m_dItems.Add ( {"id","id"} );
+
+	{
+		auto & tFilter = tQuery.m_dFilters.Add();
+		tFilter.m_eType = SPH_FILTER_RANGE;
+		tFilter.m_sAttrName = "comment_ranking";
+		tFilter.m_iMaxValue = 10;
+		tFilter.m_bOpenLeft = true;
+	}
+
+	ForceSI ( tQuery, "comment_ranking" );
+	return tQuery;
+}
+
+
+float g_fSICostOfPush = 0.0f;
+
+// internal value; must be in sync with costestimate.cpp
+const float COST_INDEX_ITERATOR_INIT = 200.0f;
 
 static void CalcCoeffsSI()
 {
@@ -1553,8 +1618,8 @@ static void CalcCoeffsSI()
 
 	pIndex->Preread();
 
-	float fCostOfPush = 0.0f;
-	float fCostOfIndexRead = 0.0f;
+	float fCostOfIndexReadSingle = 0.0f;
+	float fCostOfIndexReadDense = 0.0f;
 
 	// pure scan; should be the same speed as rowwise/columnar
 	{
@@ -1564,7 +1629,7 @@ static void CalcCoeffsSI()
 
 		CSphQuery tQuery = CreateFullscanQuery();
 		int64_t iRsetItems = RunGenericQuery ( tQuery, pIndex.get(), iTime, uHash, REPEATS );
-		fCostOfPush = float(iTime) / iRsetItems*SCALE;
+		g_fSICostOfPush = float(iTime) / iRsetItems*SCALE;
 		float fEstimatedCost = GetEstimatedCost ( tQuery, pIndex.get(), SecondaryIndexType_e::INDEX );
 
 		PrintStats ( "SI fullscan, 0 filters", iTime, fEstimatedCost, uHash );
@@ -1579,11 +1644,30 @@ static void CalcCoeffsSI()
 		int64_t iRsetItems = RunGenericQuery ( tQuery, pIndex.get(), iTime, uHash, REPEATS );
 
 		float fTotalCost = float(iTime)*SCALE;
-		fCostOfIndexRead = fTotalCost/iRsetItems - fCostOfPush;
+		fCostOfIndexReadSingle = fTotalCost/iRsetItems - g_fSICostOfPush;
 		float fEstimatedCost = GetEstimatedCost ( tQuery, pIndex.get(), SecondaryIndexType_e::INDEX );
 
 		PrintStats ( "SI fullscan, 1 non-selective filter of 1 value", iTime, fEstimatedCost, uHash );
-		printf ( "\tCOST_INDEX_READ=%.3f\n", fCostOfIndexRead );
+		printf ( "\tCOST_INDEX_READ_SINGLE=%.3f\n", fCostOfIndexReadSingle );
+	}
+
+	{
+		const int REPEATS = 50;
+		int64_t iTime = 0;
+		uint64_t uHash = SPH_FNV64_SEED;
+
+		CSphQuery tQuery = CreateFullscanQueryS4();
+		int64_t iRsetItems = RunGenericQuery ( tQuery, pIndex.get(), iTime, uHash, REPEATS );
+		float fEstimatedCost = GetEstimatedCost ( tQuery, pIndex.get(), SecondaryIndexType_e::INDEX );
+
+		// we have 11 iterators and 500k rset values
+		const int NUM_ITERATORS=11;
+
+		float fTotalCost = float(iTime)*SCALE - COST_INDEX_ITERATOR_INIT*NUM_ITERATORS;
+		fCostOfIndexReadDense = fTotalCost/iRsetItems - g_fSICostOfPush;
+
+		PrintStats ( "SI fullscan, range filter of 500k values", iTime, fEstimatedCost, uHash );
+		printf ( "\tCOST_INDEX_READ_DENSE=%.3f\n", fCostOfIndexReadDense );
 	}
 
 	{
@@ -1604,15 +1688,9 @@ static void CalcCoeffsSI()
 		uint64_t uHash = SPH_FNV64_SEED;
 
 		CSphQuery tQuery = CreateFullscanQueryS2();
-		int64_t iRangeValues = RunGenericQuery ( tQuery, pIndex.get(), iTime, uHash, REPEATS );
+		RunGenericQuery ( tQuery, pIndex.get(), iTime, uHash, REPEATS );
 		float fEstimatedCost = GetEstimatedCost ( tQuery, pIndex.get(), SecondaryIndexType_e::INDEX );
-
-		float fTotalCostWUnion = float(iTime)*SCALE;
-		float fTotalCostWoUnion = iRangeValues * ( fCostOfIndexRead + fCostOfPush );
-		float fUnionCost = ( fTotalCostWUnion-fTotalCostWoUnion ) / iRangeValues;
-
 		PrintStats ( "SI fullscan, range filter of 20 values (bitmap union)", iTime, fEstimatedCost, uHash );
-		printf ( "\tCOST_INDEX_UNION_BITMAP=%.3f\n", fUnionCost );
 	}
 
 	{
@@ -1625,7 +1703,7 @@ static void CalcCoeffsSI()
 		float fEstimatedCost = GetEstimatedCost ( tQuery, pIndex.get(), SecondaryIndexType_e::INDEX );
 
 		float fTotalCostWUnion = float(iTime)*SCALE;
-		float fTotalCostWoUnion = iRangeValues * ( fCostOfIndexRead + fCostOfPush );
+		float fTotalCostWoUnion = iRangeValues * ( fCostOfIndexReadSingle + g_fSICostOfPush );
 		float fUnionCost = ( fTotalCostWUnion-fTotalCostWoUnion );
 		float fNLogN = iRangeValues*log2f(iRangeValues);
 		float fCoeff = fNLogN/fUnionCost;
@@ -1644,7 +1722,7 @@ static void CalcCoeffsSI()
 		float fEstimatedCost = GetEstimatedCost ( tQuery, pIndex.get(), SecondaryIndexType_e::INDEX );
 
 		float fTotalCostWUnion = float(iTime)*SCALE;
-		float fTotalCostWoUnion = iRangeValues * ( fCostOfIndexRead + fCostOfPush );
+		float fTotalCostWoUnion = iRangeValues * ( fCostOfIndexReadSingle + g_fSICostOfPush );
 		float fUnionCost = ( fTotalCostWUnion-fTotalCostWoUnion );
 		float fNLogN = iRangeValues*log2f(iRangeValues);
 		float fCoeff = fNLogN/fUnionCost;
@@ -1663,15 +1741,146 @@ static void CalcCoeffsSI()
 		float fEstimatedCost = GetEstimatedCost ( tQuery, pIndex.get(), SecondaryIndexType_e::INDEX );
 
 		float fTotalCostWUnion = float(iTime)*SCALE;
-		float fTotalCostWoUnion = iRangeValues * ( fCostOfIndexRead + fCostOfPush );
+		float fTotalCostWoUnion = iRangeValues * ( fCostOfIndexReadSingle + g_fSICostOfPush );
 		float fUnionCost = ( fTotalCostWUnion-fTotalCostWoUnion );
 		float fNLogN = iRangeValues*log2f(iRangeValues);
 		float fCoeff = fNLogN/fUnionCost;
 
 		PrintStats ( "SI fullscan, range filter of 10 values (queue union)", iTime, fEstimatedCost, uHash );
 		printf ( "\tunion coeff=%.3f, values=%d\n", fCoeff, (int)iRangeValues );
-	}	
+	}
 }
+
+
+static CSphQuery CreateFullscanQueryS2_1()
+{
+	CSphQuery tQuery;
+	tQuery.m_dItems.Add ( {"id","id"} );
+
+	{
+		auto & tFilter = tQuery.m_dFilters.Add();
+		tFilter.m_eType = SPH_FILTER_RANGE;
+		tFilter.m_sAttrName = "a_big_super_lc";
+		tFilter.m_iMinValue = 1000000000;
+		tFilter.m_bOpenRight = true;
+	}
+
+	ForceSI ( tQuery, "a_big_super_lc" );
+	return tQuery;
+}
+
+
+static CSphQuery CreateFullscanQueryS2_2()
+{
+	CSphQuery tQuery;
+	tQuery.m_dItems.Add ( {"id","id"} );
+
+	{
+		auto & tFilter = tQuery.m_dFilters.Add();
+		tFilter.m_eType = SPH_FILTER_RANGE;
+		tFilter.m_sAttrName = "a_big";
+		tFilter.m_iMinValue = 1000000000;
+		tFilter.m_bOpenRight = true;
+	}
+
+	ForceSI ( tQuery, "a_big" );
+	return tQuery;
+}
+
+
+static void CalcCoeffsSI2()
+{
+	CSphString sPath = "synth";
+	std::unique_ptr<CSphIndex> pIndex = sphCreateIndexPhrase ( "synth", sPath.cstr() );
+	StrVec_t dWarnings;
+	if ( !pIndex->Prealloc ( false, nullptr, dWarnings ) )
+		sphDie ( "prealloc failed: %s", pIndex->GetLastError().cstr() );
+
+	pIndex->Preread();
+
+	float fCostOfIndexRead = 0.0f;
+	{
+		const int REPEATS = 10;
+		int64_t iTime = 0;
+		uint64_t uHash = SPH_FNV64_SEED;
+
+		CSphQuery tQuery = CreateFullscanQueryS2_1();
+		int64_t iRsetItems = RunGenericQuery ( tQuery, pIndex.get(), iTime, uHash, REPEATS );
+
+		// we have about 5k iterators and 500k rset values
+		// so each iterator fetches ~100 values
+		// index read speed here is a lot slower
+		float fTotalCost = float(iTime)*SCALE - COST_INDEX_ITERATOR_INIT*5000;
+		fCostOfIndexRead = fTotalCost/iRsetItems - g_fSICostOfPush;
+		float fEstimatedCost = GetEstimatedCost ( tQuery, pIndex.get(), SecondaryIndexType_e::INDEX );
+
+		PrintStats ( "SI fullscan, 1 non-selective filter of 1 value", iTime, fEstimatedCost, uHash );
+		printf ( "\tCOST_INDEX_READ_SPARSE=%.3f\n", fCostOfIndexRead );
+	}
+
+	{
+		const int REPEATS = 10;
+		int64_t iTime = 0;
+		uint64_t uHash = SPH_FNV64_SEED;
+
+		CSphQuery tQuery = CreateFullscanQueryS2_2();
+		int64_t iRsetItems = RunGenericQuery ( tQuery, pIndex.get(), iTime, uHash, REPEATS );
+		float fEstimatedCost = GetEstimatedCost ( tQuery, pIndex.get(), SecondaryIndexType_e::INDEX );
+
+		// we have about ~500k iterators and ~500k rset values in this query
+		// we don't have direct access to SI so we just hardcode it
+		const int NUM_ITERATORS = 500000;
+		float fCostOfIndexInit = ( float(iTime)*SCALE - ( g_fSICostOfPush + fCostOfIndexRead )*iRsetItems ) / NUM_ITERATORS;
+
+		PrintStats ( "SI fullscan, 500k iterators", iTime, fEstimatedCost, uHash );
+		printf ( "\tCOST_INDEX_ITERATOR_INIT=%.3f\n", fCostOfIndexInit );
+	}
+}
+
+
+static CSphQuery CreateFullscanQueryS3_1()
+{
+	CSphQuery tQuery;
+	tQuery.m_dItems.Add ( {"id","id"} );
+
+	{
+		auto & tFilter = tQuery.m_dFilters.Add();
+		tFilter.m_eType = SPH_FILTER_VALUES;
+		tFilter.m_sAttrName = "a_mva";
+		tFilter.m_dValues.Add(2652701560);
+		tFilter.m_dValues.Add(3800433230);
+		tFilter.m_eMvaFunc = SPH_MVAFUNC_ANY;
+	}
+
+	ForceSI ( tQuery, "a_mva" );
+	return tQuery;
+}
+
+
+static void CalcCoeffsSI3()
+{
+	// this is supposed to be columnar synth
+	CSphString sPath = "synth";
+	std::unique_ptr<CSphIndex> pIndex = sphCreateIndexPhrase ( "synth", sPath.cstr() );
+	StrVec_t dWarnings;
+	if ( !pIndex->Prealloc ( false, nullptr, dWarnings ) )
+		sphDie ( "prealloc failed: %s", pIndex->GetLastError().cstr() );
+
+	pIndex->Preread();
+
+	{
+		const int REPEATS = 1000;
+		int64_t iTime = 0;
+		uint64_t uHash = SPH_FNV64_SEED;
+
+		CSphQuery tQuery = CreateFullscanQueryS3_1();
+		RunGenericQuery ( tQuery, pIndex.get(), iTime, uHash, REPEATS );
+		float fEstimatedCost = GetEstimatedCost ( tQuery, pIndex.get(), SecondaryIndexType_e::INDEX );
+
+		PrintStats ( "SI fullscan, any(mva) of 2 values", iTime, fEstimatedCost, uHash );
+	}
+}
+
 
 
 static CSphQuery CreateFullscanQueryL1 ( int iMin, int iMax )
@@ -1819,7 +2028,10 @@ int main ()
 	CalcCoeffsInit();
 	CalcCoeffsRowwise();
 	CalcCoeffsColumnar();
+	CalcCoeffsColumnar2();
 	CalcCoeffsSI();
+	CalcCoeffsSI2();
+	CalcCoeffsSI3();	
 	CalcCoeffsLookup();
 #endif
 

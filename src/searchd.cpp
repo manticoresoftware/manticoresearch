@@ -5516,13 +5516,14 @@ void SearchHandler_c::OnRunFinished()
 
 SphQueueSettings_t SearchHandler_c::MakeQueueSettings ( const CSphIndex * pIndex, int iMaxMatches, ISphExprHook * pHook ) const
 {
-	SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema (), m_pProfile );
-	tQueueSettings.m_bComputeItems = true;
-	tQueueSettings.m_pCollection = m_pCollectedDocs;
-	tQueueSettings.m_pHook = pHook;
-	tQueueSettings.m_iMaxMatches = GetMaxMatches ( iMaxMatches, pIndex );
-	tQueueSettings.m_bNeedDocids = m_bNeedDocIDs;	// need docids to merge results from indexes
-	return tQueueSettings;
+	SphQueueSettings_t tQS ( pIndex->GetMatchSchema (), m_pProfile );
+	tQS.m_bComputeItems = true;
+	tQS.m_pCollection = m_pCollectedDocs;
+	tQS.m_pHook = pHook;
+	tQS.m_iMaxMatches = GetMaxMatches ( iMaxMatches, pIndex );
+	tQS.m_bNeedDocids = m_bNeedDocIDs;	// need docids to merge results from indexes
+	tQS.m_fnGetCountDistinct = [pIndex]( const CSphString & sAttr ){ return pIndex->GetCountDistinct(sAttr); };
+	return tQS;
 }
 
 
@@ -5639,8 +5640,7 @@ struct LocalSearchRef_t
 			tResult.m_iSuccesses += tChild.m_iSuccesses;
 			tResult.m_tIOStats.Add ( tChild.m_tIOStats );
 
-			for ( const auto & i : tChild.m_dUsedIterators )
-				tResult.m_dUsedIterators.Add(i);
+			tResult.m_tIteratorStats.Merge ( tChild.m_tIteratorStats );
 
 			// failures
 			m_dFailuresSet[i].Append ( dChild.m_dFailuresSet[i] );
@@ -9089,10 +9089,8 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 	}
 
 	StringBuilder_c sIterators { ", " };
-	CSphVector<IteratorDesc_t> dIterators = tMeta.m_dUsedIterators;
-	dIterators.Uniq();
-	for ( const auto & i : dIterators )
-		sIterators.Appendf ( "%s:%s", i.m_sAttr.cstr(), i.m_sType.cstr() );
+	for ( const auto & i : tMeta.m_tIteratorStats.m_dIterators )
+		sIterators.Appendf ( "%s:%s (%d%%)", i.m_sAttr.cstr(), i.m_sType.cstr(), int(float(i.m_iUsed)/tMeta.m_tIteratorStats.m_iTotal*100.0f) );
 
 	if ( !sIterators.IsEmpty() )
 		dStatus.MatchTuplet ( "index", sIterators.cstr() );

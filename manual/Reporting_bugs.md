@@ -136,6 +136,7 @@ Attach your data when you [create a ticket on Github](https://github.com/mantico
 * ftp: `dev.manticoresearch.com`
 * user: `manticorebugs`
 * pass: `shithappens`
+* mode: only active mode is supported
 * directory: create directory `github-issue-N` so we understand what data is related with what issue on [Github](https://github.com/manticoresoftware/manticoresearch/issues).
 
 It's convenient to mirror your directory with our FTP using tool [lftp](https://lftp.yar.ru/) which is available for Linux, Mac and Windows. For example, if you want to sync your current directory `ftp` to directory `github-ussue-123`, here's what you should do and what you will get:

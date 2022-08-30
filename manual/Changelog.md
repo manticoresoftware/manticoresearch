@@ -2,6 +2,9 @@
 
 # Next release
 
+### Major Changes
+* Improved [cost-based optimizer](../Searching/Cost_based_optimizer.md#Cost-based-optimizer) which may increase query response time in many cases.
+
 ### Minor changes
 * **⚠️ BREAKING CHANGE**: Secondary indexes file format got changed and if you are using secondary indexes for searching (`searchd.secondary_indexes = 1` which was not a default in the previous versions) the new Manticore version will skip loading older index versions to prevent performance drop. The recommendations are:
   - remove secondary indexes files during upgrade:
@@ -10,7 +13,7 @@
     * remove `.spidx` index files
     * start Manticore back
     * use `ALTER TABLE <table name> REBUILD SECONDARY` (not yet implemented❗) to recover secondary indexes
-  - If you are running a replication cluster, full cluster restart should be performed with removal of `.spidx` files and `ALTER TABLE <table name> REBUILD SECONDARY` on all the nodes. Read about [restarting a cluster](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md#Restarting-a-cluster) for more details.
+  - If you are running a replication cluster, full cluster restart should be performed with removal of `.spidx` files and `ALTER TABLE <table name> REBUILD SECONDARY` on all the nodes. Read about [restarting a cluster](../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md#Restarting-a-cluster) for more details.
 * `SHOW SETTINGS`
 
 ### Packaging

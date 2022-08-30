@@ -112,6 +112,7 @@
     * [Spell correction](Searching/Spell_correction.md)
     * [Query cache](Searching/Query_cache.md)
     * [Collations](Searching/Collations.md)
+    * [Cost-based optimizer](Searching/Cost_based_optimizer.md)
 * [▪️ Updating index schema](Updating_index_schema.md)    
 * [▪️ Functions](Functions.md)
     * [Mathematical functions](Functions/Mathematical_functions.md)

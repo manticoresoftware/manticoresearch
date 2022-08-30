@@ -1,4 +1,4 @@
-# SphinxSE 
+# SphinxSE
 
 SphinxSE is a MySQL storage engine which can be compiled into MySQL/MariaDB server using its pluggable architecture.
 
@@ -13,7 +13,7 @@ Obvious SphinxSE applications include:
 
 You will need to obtain a copy of MySQL sources, prepare those, and then recompile MySQL binary. MySQL sources (mysql-5.x.yy.tar.gz) could be obtained from <http://dev.mysql.com> Web site.
 
-### Compiling MySQL 5.0.x with SphinxSE 
+### Compiling MySQL 5.0.x with SphinxSE
 
 1.  copy `sphinx.5.0.yy.diff` patch file into MySQL sources directory and run
 ```bash
@@ -38,7 +38,7 @@ $ make
 $ make install
 ```
 
-### Compiling MySQL 5.1.x with SphinxSE 
+### Compiling MySQL 5.1.x with SphinxSE
 
 1.  in MySQL sources directory, create `storage/sphinx` directory in and copy all files in `mysqlse` directory from Manticore sources there. Example:
 ```bash
@@ -58,7 +58,7 @@ $ make
 $ make install
 ```
 
-### Checking SphinxSE installation 
+### Checking SphinxSE installation
 
 
 <!-- example Example_1 -->
@@ -221,7 +221,7 @@ The "export" ranker works exactly like ranker=expr, but it stores the  per-docum
 
 <!-- example SQL Example_2 -->
 <!-- request -->
-    
+
 ``` sql
 SELECT *, WEIGHT(), RANKFACTORS()
     FROM myindex
@@ -362,7 +362,7 @@ mysql> SHOW ENGINE SPHINX STATUS;
 ## Building snippets via MySQL
 
 
-SphinxSE also includes a UDF function that lets you create snippets through MySQL. The functionality is similar to [HIGHLIGHT()](../Functions/Searching_and_ranking_functions.md#HIGHLIGHT%28%29), but accessible through MySQL+SphinxSE.
+SphinxSE also includes a UDF function that lets you create snippets through MySQL. The functionality is similar to [HIGHLIGHT()](../../Searching/Highlighting.md#Highlighting), but accessible through MySQL+SphinxSE.
 
 The binary that provides the UDF is named `sphinx.so` and should be automatically built and installed to proper location along with SphinxSE itself. If it does not get installed automatically for some reason, look for `sphinx.so` in the build directory and copy it to the plugins directory of your MySQL instance. After that, register the UDF using the following statement:
 

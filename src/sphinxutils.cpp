@@ -22,6 +22,7 @@
 #include "threadutils.h"
 #include "indexfiles.h"
 
+#include <codecvt>
 #include <ctype.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -53,6 +54,10 @@
 
 #ifdef HAVE_JEMALLOC_JEMALLOC_H
 #include <jemalloc/jemalloc.h>
+#endif
+
+#if _WIN32
+CSphString g_sWinInstallPath;
 #endif
 
 //////////////////////////////////////////////////////////////////////////
@@ -1498,6 +1503,58 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 }
 
 /////////////////////////////////////////////////////////////////////////////
+
+#if _WIN32
+#pragma message( "Automatically linking with AdvAPI32.Lib" )
+#pragma comment( lib, "AdvAPI32.Lib" )
+
+void CheckWinInstall()
+{
+	HKEY hKey;
+	LONG iRes = RegOpenKeyExW ( HKEY_LOCAL_MACHINE, L"SOFTWARE\\WOW6432Node\\Manticore Software LTD\\manticore", 0, KEY_READ, &hKey );
+	if ( iRes!=ERROR_SUCCESS )
+		return;
+
+	WCHAR szBuffer[512];
+	DWORD uBufferSize = sizeof(szBuffer);
+	iRes = RegQueryValueExW ( hKey, L"", 0, NULL, (LPBYTE)szBuffer, &uBufferSize);
+	if ( iRes!=ERROR_SUCCESS )
+		return;
+
+	g_sWinInstallPath = std::wstring_convert<std::codecvt_utf8<wchar_t>, wchar_t>().to_bytes(szBuffer).c_str();
+}
+
+
+CSphString GetWinInstallDir()
+{
+	return g_sWinInstallPath;
+}
+
+
+CSphString AppendWinInstallDir ( const CSphString & sDir )
+{
+	if ( GetWinInstallDir().IsEmpty() )
+		return sDir;
+	
+	CSphString sPath1 = sphNormalizePath ( sDir );
+	CSphString sPath2 = sphNormalizePath ( GetWinInstallDir() );
+	sPath1.ToLower();
+	sPath2.ToLower();
+
+	if ( sPath1.Begins ( sPath2.cstr() ) )
+		return sDir;
+
+	const char * DEFAULT_INSTALL_PATH = "c:/manticore";
+	if ( !sPath1.Begins(DEFAULT_INSTALL_PATH) )
+		return sDir;
+
+	CSphString sCut = sPath1.SubString ( strlen(DEFAULT_INSTALL_PATH), sPath1.Length()-strlen(DEFAULT_INSTALL_PATH) );
+	sCut.SetSprintf ( "%s%s", sPath2.cstr(), sCut.cstr() );
+	return sCut;
+}
+#endif
+
+/////////////////////////////////////////////////////////////////////////////
 const char * sphGetConfigFile ( const char * sHint )
 {
 	if ( sHint )
@@ -1513,6 +1570,16 @@ const char * sphGetConfigFile ( const char * sHint )
 	static const char* sWorkingConfiFile = "./manticore.conf";
 	if ( sphIsReadable ( sWorkingConfiFile ) )
 		return sWorkingConfiFile;
+
+#if _WIN32
+	if ( !GetWinInstallDir().IsEmpty() )
+	{
+		static CSphString sConf;
+		sConf.SetSprintf ( "%s/etc/manticoresearch/manticore.conf", GetWinInstallDir().cstr() );
+		if ( sphIsReadable ( sConf.cstr() ) )
+			return sConf.cstr();
+	}
+#endif
 
 	sphFatal ( "no readable config file (looked in "
 #ifdef SYSCONFDIR

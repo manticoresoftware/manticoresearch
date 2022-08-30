@@ -224,3 +224,4 @@ void SetupStarDictV8 ( DictRefPtr_c& pDict, bool bInfixes = true );
 /// clear wordform cache
 void sphShutdownWordforms();
 
+void SetupLemmatizerBase();

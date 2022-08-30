@@ -63,6 +63,17 @@ const char* GET_FULL_SHARE_DIR()
 	const char* szEnv = getenv ( "FULL_SHARE_DIR" );
 	if ( szEnv )
 		return szEnv;
+
+#if _WIN32
+	CSphString sInstallDir = GetWinInstallDir();
+	if ( !sInstallDir.IsEmpty() )
+	{
+		static CSphString sShare;
+		sShare.SetSprintf ( "%s/share", sInstallDir.cstr() );
+		return sShare.cstr();
+	}
+#endif
+
 	return FULL_SHARE_DIR;
 }
 

@@ -1,5 +1,19 @@
 # Installing Manticore in Windows
 
+You have can install Manticore by either using the provided installer or by manually unpacking the zip archive.
+
+## Using the installer
+
+Download [Manticore bundle](https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/manticore-5.0.2-220530-348514c86-main.zip).
+Rut it and follow installer instructions. If you need Manticore Columnar Library, download it from [Manticore Columnar Library](https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/manticore-columnar-lib-1.15.4-220522-2fef34e-x64.zip).
+Unzip the archive and copy `lib_manticore_columnar.dll` and `lib_manticore_secondary.dll` to the folder where `searchd.exe` was installed (`c:\manticore\bin` by default).
+
+Manticore comes with `searchd.conf` preconfigured to use RT mode. No additional configuration is necessary.
+Note that the file has several hardcoded paths like `log = c:/manticore/var/log/manticore/searchd.log` pointing to folders inside `c:\manticore`.
+When installed to folder other than `c:/manticore`, daemon corrects these paths on startup. So it is not necessary to modify these paths manually.
+
+## Installing from archive
+
 To install Manticore in Windows you need to download zip archive and unpack it into a folder.
 
 1. Download [Manticore bundle](https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/manticore-5.0.2-220530-348514c86-main.zip) and [Manticore Columnar Library](https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/manticore-columnar-lib-1.15.4-220522-2fef34e-x64.zip). Sometimes you may also need Windows redistributable runtime libraries.
@@ -17,6 +31,8 @@ The configuration contains placeholders `@LOGDIR@`, `@RUNDIR@` and `@CONFDIR@` t
 respectively. The archive also includes empty folders `var/log` and `var/data`, so if you like - you can use them.
 
 System variable `FULL_SHARE_DIR` should be also set to the full path of the `share` folder. That allows Manticore to work with installed `ICU`, stop words and columnar and secondary libraries from the `share` folder.
+
+## Installing as a Windows service
 
 To install the `searchd` (Manticore search server) as a Windows service run:
 

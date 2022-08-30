@@ -701,6 +701,10 @@ static bool SetupConfiglessMode ( const CSphConfig & hConf, const CSphString & s
 
 	g_sDataDir = hSearchd["data_dir"].strval();
 
+#if _WIN32
+	g_sDataDir = AppendWinInstallDir(g_sDataDir);
+#endif
+
 	if ( !sphDirExists ( g_sDataDir.cstr(), &sError ) )
 	{
 		sError.SetSprintf ( "%s; make sure it is accessible or remove data_dir from the config file", sError.cstr() );

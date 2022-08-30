@@ -1380,7 +1380,9 @@ int main ( int argc, char ** argv )
 
 	if ( !sphInitCharsetAliasTable ( sError ) )
 		sphDie ( "failed to init charset alias table: %s", sError.cstr() );
+
 	sphCollationInit ();
+	SetupLemmatizerBase();
 
 	auto hConf = sphLoadConfig ( sOptConfig, bQuiet, true );
 

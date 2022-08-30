@@ -292,10 +292,6 @@ static void sphLogEntry ( ESphLogLevel , char * sBuf, char * sTtyBuf )
 #endif
 {
 #if _WIN32
-
-#pragma message( "Automatically linking with AdvAPI32.Lib" )
-#pragma comment( lib, "AdvAPI32.Lib" )
-
 	if ( g_bService && g_iLogFile==STDOUT_FILENO )
 	{
 		HANDLE hEventSource;
@@ -19018,49 +19014,59 @@ static void ConfigureAndPreloadOnStartup ( const CSphConfig & hConf, const StrVe
 		fprintf ( stdout, "precached %d indexes in %0.3f sec\n", iCounter, float(tmLoad)/1000000 );
 }
 
+
+static CSphString FixupFilename ( const CSphString & sFilename )
+{
+	CSphString sFixed = sFilename;
+
+#if _WIN32
+	sFixed = AppendWinInstallDir(sFixed);
+#endif
+
+	return sFixed;
+}
+
+
 void OpenDaemonLog ( const CSphConfigSection & hSearchd, bool bCloseIfOpened=false )
 {
-	// create log
-		const char * sLog = "searchd.log";
-		if ( hSearchd.Exists ( "log" ) )
+	CSphString sLog = "searchd.log";
+	if ( hSearchd.Exists ( "log" ) )
+	{
+		if ( hSearchd["log"]=="syslog" )
 		{
-			if ( hSearchd["log"]=="syslog" )
-			{
 #if !USE_SYSLOG
-				if ( g_iLogFile<0 )
-				{
-					g_iLogFile = STDOUT_FILENO;
-					sphWarning ( "failed to use syslog for logging. You have to reconfigure --with-syslog and rebuild the daemon!" );
-					sphInfo ( "will use default file 'searchd.log' for logging." );
-				}
-#else
-				g_bLogSyslog = true;
-#endif
-			} else
-			{
-				sLog = hSearchd["log"].cstr();
-			}
-		}
-
-		umask ( 066 );
-		if ( bCloseIfOpened && g_iLogFile!=STDOUT_FILENO )
-		{
-			close ( g_iLogFile );
-			g_iLogFile = STDOUT_FILENO;
-		}
-		if ( !g_bLogSyslog )
-		{
-			g_iLogFile = open ( sLog, O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
 			if ( g_iLogFile<0 )
 			{
 				g_iLogFile = STDOUT_FILENO;
-				sphFatal ( "failed to open log file '%s': %s", sLog, strerrorm(errno) );
+				sphWarning ( "failed to use syslog for logging. You have to reconfigure --with-syslog and rebuild the daemon!" );
+				sphInfo ( "will use default file 'searchd.log' for logging." );
 			}
-			LogChangeMode ( g_iLogFile, g_iLogFileMode );
-		}
+#else
+			g_bLogSyslog = true;
+#endif
+		} else
+			sLog = FixupFilename ( hSearchd["log"].cstr() );
+	}
 
-		g_sLogFile = sLog;
-		g_bLogTty = isatty ( g_iLogFile )!=0;
+	umask ( 066 );
+	if ( bCloseIfOpened && g_iLogFile!=STDOUT_FILENO )
+	{
+		close ( g_iLogFile );
+		g_iLogFile = STDOUT_FILENO;
+	}
+	if ( !g_bLogSyslog )
+	{
+		g_iLogFile = open ( sLog.cstr(), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
+		if ( g_iLogFile<0 )
+		{
+			g_iLogFile = STDOUT_FILENO;
+			sphFatal ( "failed to open log file '%s': %s", sLog.cstr(), strerrorm(errno) );
+		}
+		LogChangeMode ( g_iLogFile, g_iLogFileMode );
+	}
+
+	g_sLogFile = sLog;
+	g_bLogTty = isatty ( g_iLogFile )!=0;
 }
 
 static void SetUidShort ( bool bTestMode )
@@ -19113,10 +19119,10 @@ void StopOrStopWaitAnother ( CSphVariant * v, bool bWait ) REQUIRES ( MainThread
 	if ( !v )
 		sphFatal ( "stop: option 'pid_file' not found in '%s' section 'searchd'", g_sConfigFile.cstr () );
 
-	const char * sPid = v->cstr (); // shortcut
-	FILE * fp = fopen ( sPid, "r" );
+	CSphString sPidFile = FixupFilename ( v->cstr () );
+	FILE * fp = fopen ( sPidFile.cstr(), "r" );
 	if ( !fp )
-		sphFatal ( "stop: pid file '%s' does not exist or is not readable", sPid );
+		sphFatal ( "stop: pid file '%s' does not exist or is not readable", sPidFile.cstr() );
 
 	char sBuf[16];
 	int iLen = (int) fread ( sBuf, 1, sizeof(sBuf)-1, fp );
@@ -19125,7 +19131,7 @@ void StopOrStopWaitAnother ( CSphVariant * v, bool bWait ) REQUIRES ( MainThread
 
 	int iPid = atoi(sBuf);
 	if ( iPid<=0 )
-		sphFatal ( "stop: failed to read valid pid from '%s'", sPid );
+		sphFatal ( "stop: failed to read valid pid from '%s'", sPidFile.cstr() );
 
 	int iWaitTimeout = g_iShutdownTimeoutUs + 100000;
 
@@ -19443,6 +19449,11 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( i!=argc )
 		sphFatal ( "malformed or unknown option near '%s'; use '-h' or '--help' to see available options.", argv[i] );
 
+#if _WIN32
+	CheckWinInstall();
+#endif
+
+	SetupLemmatizerBase();
 	g_sConfigFile = sphGetConfigFile ( szCmdConfigFile );
 #if _WIN32
 	// init WSA on Windows
@@ -19454,7 +19465,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	if ( !LoadExFunctions () )
 		sphFatal ( "failed to initialize extended socket functions: %s", sphSockError ( iStartupErr ) );
-
 
 	// i want my windows sessions to log onto stdout
 	// both in Debug and Release builds
@@ -19571,7 +19581,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	// create the pid
 	if ( bOptPIDFile )
 	{
-		g_sPidFile = hSearchdpre["pid_file"].cstr();
+		g_sPidFile = FixupFilename ( hSearchdpre["pid_file"].cstr() );
 
 		g_iPidFD = ::open ( g_sPidFile.scstr(), O_CREAT | O_WRONLY, S_IREAD | S_IWRITE );
 		if ( g_iPidFD<0 )
@@ -19604,7 +19614,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	SetSignalHandlers ( g_bOptNoDetach );
 
 	// create logs
-	if ( !g_bOptNoLock )
+	//if ( !g_bOptNoLock )
 	{
 		// create log
 		OpenDaemonLog ( hSearchd, true );
@@ -19612,17 +19622,21 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		// create query log if required
 		if ( hSearchd.Exists ( "query_log" ) )
 		{
-			if ( hSearchd["query_log"]=="syslog" )
+			CSphString sQueryLog = hSearchd["query_log"].cstr();
+			if ( sQueryLog=="syslog" )
 				g_bQuerySyslog = true;
 			else
 			{
-				g_iQueryLogFile = open ( hSearchd["query_log"].cstr(), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
+#if _WIN32
+				sQueryLog = AppendWinInstallDir(sQueryLog);
+#endif
+				g_iQueryLogFile = open ( sQueryLog.cstr(), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
 				if ( g_iQueryLogFile<0 )
-					sphFatal ( "failed to open query log file '%s': %s", hSearchd["query_log"].cstr(), strerrorm(errno) );
+					sphFatal ( "failed to open query log file '%s': %s", sQueryLog.cstr(), strerrorm(errno) );
 
 				LogChangeMode ( g_iQueryLogFile, g_iLogFileMode );
 			}
-			g_sQueryLogFile = hSearchd["query_log"].cstr();
+			g_sQueryLogFile = sQueryLog.cstr();
 		}
 	}
 

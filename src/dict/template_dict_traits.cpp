@@ -27,7 +27,7 @@
 
 static const int MAX_REPORT_LEN = 1024;
 
-CSphString g_sLemmatizerBase = GET_FULL_SHARE_DIR();
+CSphString g_sLemmatizerBase;
 
 /// morphology
 enum class EMORPH : int {
@@ -1257,4 +1257,10 @@ void sphShutdownWordforms()
 {
 	CSphVector<CSphSavedFile> dEmptyFiles;
 	TemplateDictTraits_c::SweepWordformContainers ( dEmptyFiles );
+}
+
+
+void SetupLemmatizerBase()
+{
+	g_sLemmatizerBase = GET_FULL_SHARE_DIR();
 }

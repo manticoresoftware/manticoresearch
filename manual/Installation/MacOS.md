@@ -6,8 +6,6 @@
 brew install manticoresearch
 ```
 
-For [indexing](../Creating_an_index/Local_indexes/Plain_index.md) the additional dependencies that can be installed using brew are `mysql@5.7`, `libpq`, `unixodbc`.
-
 Afterwards you can start Manticore as a brew service:
 
 ```bash
@@ -15,6 +13,8 @@ brew services start manticoresearch
 ```
 
 Manticore configuration file is `/usr/local/etc/manticoresearch/manticore.conf`.
+
+If you are plannning to use [indexer](../Creating_an_index/Local_indexes/Plain_index.md) to fetch data from mysql, postgres or another DB using ODBC the additional libraries that you mad need are `mysql@5.7`, `libpq`, and `unixodbc` correspondingly.
 
 ## From tarball with binaries
 

@@ -1,10 +1,10 @@
 # Via Homebrew in old Linuxes
 
-Manticore team usually doesn't provide new version packages for old Linuxes (after EOL). If:
-1. you are still using such
-2. and you can't find official .deb / .apt packages on https://repo.manticoresearch.com/
+Manticore team usually doesn't provide new version packages for old Linuxes (after end of life). If:
+1. you are still using one
+2. and you can't find an official `.deb` / `.apt` package on https://repo.manticoresearch.com/
 
-You can try to use [Homebrew](https://brew.sh/) for installing Manticore Search:
+you can try to use [Homebrew](https://brew.sh/) for installing Manticore Search:
 
 ```bash
 brew install manticoresearch

@@ -4,14 +4,13 @@
 **Plain index** is a basic element for non-[percolate](../../Creating_an_index/Local_indexes/Percolate_index.md) searching. It can be specified only in a configuration file in [Plain mode](../../Creating_an_index/Local_indexes.md#Defining-index-schema-in-config-%28Plain mode%29). It is not supported in [RT mode](../../Creating_an_index/Local_indexes.md#Online-schema-management-%28RT-mode%29). It's normally used together with a [source](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#source) to index data [from an external storage](../../Adding_data_from_external_storages/Plain_indexes_creation.md) and afterwards can be [attached](../../Adding_data_from_external_storages/Adding_data_from_indexes/Attaching_a_plain_index_to_RT_index.md) to a **real-time index**.
 
 ### 👍 What you can do with a plain index:
-  * build it with help of [source](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#source) and [indexer](../../Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-tool) tool which is the fastest possible way to index data
+  * build it from an external storage with help of [source](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#source) and [indexer](../../Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-tool)
   * do an in-place update of an [integer, float, string and MVA attribute](../../Creating_an_index/Data_types.md)
   * [update](../../Quick_start_guide.md#Update) it's killlist_target
 
 ### ⛔ What you cannot do with a plain index:
   * insert more data into an index after it's built
-  * update it
-  * delete from it
+  * delete data from it
   * create/delete/alter a plain index online (you need to define it in a configuration file)
   * use [UUID](../../Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md#Auto-ID) for automatic ID generation. When you fetch data from an external storage it must include a unique identifier for each document
 

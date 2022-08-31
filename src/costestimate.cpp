@@ -149,18 +149,21 @@ float CostEstimate_c::CalcIndexCost() const
 			uNumIterators = CalcNumSIIterators ( tFilter, iDocs );
 		}
 
-		const int COST_THRESH = 1024;
-		if ( iDocs/uNumIterators < COST_THRESH )
-			fCost += Cost_IndexReadSparse(iDocs);
-		else
+		if ( uNumIterators )
 		{
-			if ( IsSingleValueFilter(tFilter) )
-				fCost += Cost_IndexReadSingle(iDocs);
+			const int COST_THRESH = 1024;
+			if ( iDocs/uNumIterators < COST_THRESH )
+				fCost += Cost_IndexReadSparse(iDocs);
 			else
-				fCost += Cost_IndexReadDenseBitmap(iDocs);
-		}
+			{
+				if ( IsSingleValueFilter(tFilter) )
+					fCost += Cost_IndexReadSingle(iDocs);
+				else
+					fCost += Cost_IndexReadDenseBitmap(iDocs);
+			}
 
-		fCost += Cost_IndexIteratorInit(uNumIterators);
+			fCost += Cost_IndexIteratorInit(uNumIterators);
+		}
 	}
 	
 	if ( iNumIndexes>1 )

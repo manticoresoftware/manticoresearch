@@ -13427,7 +13427,7 @@ void sphGetSuggest ( const ISphWordlistSuggest * pWordlist, int iInfixCodepointB
 
 void IteratorStats_t::Merge ( const IteratorStats_t & tSrc )
 {
-	m_iTotal++;
+	m_iTotal += tSrc.m_iTotal;
 
 	for ( const auto & i : tSrc.m_dIterators )
 	{

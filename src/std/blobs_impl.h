@@ -13,3 +13,38 @@
 #include <cstring>
 
 inline Str_t FromSz ( const char* szString ) { return { szString, szString ? (int)strlen ( szString ) : 0 }; }
+
+template<int prec>
+inline FixedFrac_T<int, prec> FixedFrac ( int iVal )
+{
+	return FixedFrac_T<int, prec> { iVal };
+}
+
+template<int prec>
+inline FixedFrac_T<int64_t, prec> FixedFrac ( int64_t iVal )
+{
+	return FixedFrac_T<int64_t, prec> { iVal };
+}
+
+template<int iBase, int iWidth, int iPrec, char cFill>
+inline FixedNum_T<int64_t, iBase, iWidth, iPrec, cFill> FixedNum ( int64_t iVal )
+{
+	return FixedNum_T<int64_t, iBase, iWidth, iPrec, cFill> { iVal };
+}
+
+template<int iBase, int iWidth, int iPrec, char cFill>
+inline FixedNum_T<int, iBase, iWidth, iPrec, cFill> FixedNum ( int iVal )
+{
+	return FixedNum_T<int, iBase, iWidth, iPrec, cFill> { iVal };
+}
+
+template<int iWidth>
+inline FixedNum_T<int64_t, 10, iWidth, 0, '0'> Digits ( int64_t iVal )
+{
+	return FixedNum<10, iWidth, 0, '0'> ( iVal );
+}
+template<int iWidth>
+inline FixedNum_T<int, 10, iWidth, 0, '0'> Digits ( int iVal )
+{
+	return FixedNum<10, iWidth, 0, '0'> ( iVal );
+}

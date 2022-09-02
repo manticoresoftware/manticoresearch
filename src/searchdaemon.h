@@ -365,6 +365,7 @@ public:
 
 	// send array: first length(int), then byte blob
 	void		SendString ( const char * sStr );
+	void		SendString ( const Str_t& sStr );
 	void		SendArray ( const ISphOutputBuffer &tOut );
 	void		SendArray ( const VecTraits_T<BYTE> &dBuf, int iElems=-1 );
 	void		SendArray ( ByteBlob_t dData );
@@ -1381,7 +1382,7 @@ namespace session
 	VecTraits_T<int64_t> LastIds();
 }
 
-void LogSphinxqlError ( const char * sStmt, const char * sError );
+void LogSphinxqlError ( const char * sStmt, const Str_t& sError );
 
 // that is used from sphinxql command over API
 void RunSingleSphinxqlCommand ( Str_t sCommand, ISphOutputBuffer & tOut );

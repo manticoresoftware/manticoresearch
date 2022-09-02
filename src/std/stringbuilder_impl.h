@@ -178,27 +178,27 @@ inline void StringBuilder_c::Rewind()
 }
 
 
-inline void StringBuilder_c::NtoA ( DWORD uVal )
+template<typename INT, int iBase, int iWidth, int iPrec, char cFill>
+inline void StringBuilder_c::NtoA ( INT uVal )
 {
 	InitAddPrefix();
 
-	const int MAX_NUMERIC_STR = 64;
+	const int MAX_NUMERIC_STR = 22;
 	GrowEnough ( MAX_NUMERIC_STR + 1 );
 
-	int iLen = sph::NtoA ( (char*)m_szBuffer + m_iUsed, uVal );
-	m_iUsed += iLen;
+	m_iUsed += sph::NtoA ( end(), uVal, iBase, iWidth, iPrec, cFill );
 	m_szBuffer[m_iUsed] = '\0';
 }
 
-
-inline void StringBuilder_c::NtoA ( int64_t iVal )
+template<typename INT, int iPrec>
+inline void StringBuilder_c::IFtoA ( FixedFrac_T<INT, iPrec> tVal )
 {
 	InitAddPrefix();
 
-	const int MAX_NUMERIC_STR = 64;
+	const int MAX_NUMERIC_STR = 22;
 	GrowEnough ( MAX_NUMERIC_STR + 1 );
 
-	int iLen = sph::NtoA ( (char*)m_szBuffer + m_iUsed, iVal );
+	int iLen = sph::IFtoA ( end(), tVal.m_tVal, iPrec );
 	m_iUsed += iLen;
 	m_szBuffer[m_iUsed] = '\0';
 }
@@ -275,5 +275,19 @@ inline StringBuilder_c& operator<< ( StringBuilder_c& tOut, timespan_t tVal )
 inline StringBuilder_c& operator<< ( StringBuilder_c& tOut, timestamp_t tVal )
 {
 	tOut.Sprintf ( "%T", tVal.m_iVal );
+	return tOut;
+}
+
+template<typename INT, int iPrec>
+inline StringBuilder_c& operator<< ( StringBuilder_c& tOut, FixedFrac_T<INT, iPrec>&& tVal )
+{
+	tOut.template IFtoA(tVal);
+	return tOut;
+}
+
+template<typename INT, int iBase, int iWidth, int iPrec, char cFill>
+StringBuilder_c& operator<< ( StringBuilder_c& tOut, FixedNum_T<INT, iBase, iWidth, iPrec, cFill>&& tVal )
+{
+	tOut.template NtoA<INT, iBase, iWidth, iPrec, cFill> ( tVal.m_tVal );
 	return tOut;
 }

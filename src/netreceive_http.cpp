@@ -111,7 +111,7 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 		// check if we should interrupt because of maxed-out
 		if ( IsMaxedOut() )
 		{
-			HttpReply ( SPH_HTTP_STATUS_503, FromSz ( g_sMaxedOutMessage ) );
+			HttpReply ( SPH_HTTP_STATUS_503, g_sMaxedOutMessage );
 			gStats().m_iMaxedOut.fetch_add ( 1, std::memory_order_relaxed );
 			break;
 		}

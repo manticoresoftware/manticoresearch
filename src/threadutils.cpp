@@ -1730,6 +1730,11 @@ void CrashQueryKeeper_c::RestoreCrashQuery () const
 	GlobalCrashQuerySet ( m_tReference );
 }
 
+namespace {
+constexpr char sWeekday[7][4] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+constexpr char sMonth[12][4] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+}
+
 /// format current timestamp (for logging, or whatever)
 int sphFormatCurrentTime ( char* sTimeBuf, int iBufLen )
 {
@@ -1744,10 +1749,26 @@ int sphFormatCurrentTime ( char* sTimeBuf, int iBufLen )
 	tmp = *localtime ( &ts );
 #endif
 
-	static const char* sWeekday[7] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
-	static const char* sMonth[12] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
-
 	return snprintf ( sTimeBuf, iBufLen, "%.3s %.3s%3d %.2d:%.2d:%.2d.%.3d %d", sWeekday[tmp.tm_wday], sMonth[tmp.tm_mon], tmp.tm_mday, tmp.tm_hour, tmp.tm_min, tmp.tm_sec, (int)( ( iNow % 1000000 ) / 1000 ), 1900 + tmp.tm_year );
+}
+
+void sphFormatCurrentTime ( StringBuilder_c& sOut )
+{
+	int64_t iNow = sphMicroTimer();
+	time_t ts = (time_t)( iNow / 1000000 ); // on some systems (eg. FreeBSD 6.2), tv.tv_sec has another type, and we can't just pass it
+
+#if !_WIN32
+	struct tm tmp;
+	localtime_r ( &ts, &tmp );
+#else
+	struct tm tmp;
+	tmp = *localtime ( &ts );
+#endif
+	sOut << sWeekday[tmp.tm_wday]
+		 << ' ' << sMonth[tmp.tm_mon]
+		 << ' ' << Digits<2>(tmp.tm_mday)
+		 << ' ' << Digits<2>(tmp.tm_hour) << ':' << Digits<2>(tmp.tm_min) << ':' << Digits<2>(tmp.tm_sec) << '.' << FixedNum<10,3,0,'0'>( ( iNow % 1000000 ) / 1000 )
+		 << ' ' << 1900 + tmp.tm_year;
 }
 
 CSphString sphCurrentUtcTime()
@@ -1760,14 +1781,19 @@ CSphString sphCurrentUtcTime()
 	//	localtime_r ( &ts, &tmp );
 
 	StringBuilder_c tOut;
-	tOut.Sprintf ( "%.4d-%.2d-%.2dT%.2d:%.2d:%.2d.%.3d", // YYYY-MM-DDThh:mm:ss[.SSS]
-		1900 + tmp.tm_year,
-		tmp.tm_mon + 1,
-		tmp.tm_mday,
-		tmp.tm_hour,
-		tmp.tm_min,
-		tmp.tm_sec,
-		(int)( ( iNow % 1000000 ) / 1000 ) );
+	tOut << 1900 + tmp.tm_year
+		<< '-' << Digits<2>(tmp.tm_mon + 1)
+		<< '-' << Digits<2>(tmp.tm_mday)
+		<< 'T' << Digits<2>(tmp.tm_hour) << ':' << Digits<2>(tmp.tm_min) << ':' << Digits<2>(tmp.tm_sec)
+		<< '.' << FixedNum<10, 3, 0, '0'> ( ( iNow % 1000000 ) / 1000 );
+//	tOut.Sprintf ( "%.4d-%.2d-%.2dT%.2d:%.2d:%.2d.%.3d", // YYYY-MM-DDThh:mm:ss[.SSS]
+//		1900 + tmp.tm_year,
+//		tmp.tm_mon + 1,
+//		tmp.tm_mday,
+//		tmp.tm_hour,
+//		tmp.tm_min,
+//		tmp.tm_sec,
+//		(int)( ( iNow % 1000000 ) / 1000 ) );
 	CSphString sRes;
 	tOut.MoveTo ( sRes );
 	return sRes;

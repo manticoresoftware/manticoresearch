@@ -55,4 +55,30 @@ struct timestamp_t
 		: m_iVal ( iVal ) {};
 };
 
+/// fixed prec. number
+template<typename INT, int iPrec>
+struct FixedFrac_T
+{
+	INT m_tVal;
+	explicit FixedFrac_T ( INT iVal ) noexcept
+		: m_tVal ( iVal ) {};
+};
+
+template<int prec=3> FixedFrac_T<int, prec> FixedFrac ( int iVal );
+template<int prec=3> FixedFrac_T<int64_t, prec> FixedFrac ( int64_t iVal );
+
+/// num with predefined output traits (to be used in << instead of formatted)
+template<typename INT, int iBase, int iWidth, int iPrec, char cFill>
+struct FixedNum_T
+{
+	INT m_tVal;
+	explicit FixedNum_T ( INT iVal ) noexcept
+		: m_tVal ( iVal ) {};
+};
+
+template<int iBase=10, int iWidth=0, int iPrec=0, char cFill=' '> FixedNum_T<int64_t, iBase, iWidth, iPrec, cFill> FixedNum ( int64_t iVal );
+template<int iBase=10, int iWidth=0, int iPrec=0, char cFill=' '> FixedNum_T<int, iBase, iWidth, iPrec, cFill> FixedNum ( int iVal );
+template<int iWidth> FixedNum_T<int64_t, 10, iWidth, 0, '0'> Digits ( int64_t iVal );
+template<int iWidth> FixedNum_T<int, 10, iWidth, 0, '0'> Digits ( int iVal );
+
 #include "blobs_impl.h"

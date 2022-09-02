@@ -740,6 +740,14 @@ void ISphOutputBuffer::SendString( const char* sStr )
 	SendBytes( sStr, iLen );
 }
 
+void ISphOutputBuffer::SendString ( const Str_t& sStr )
+{
+	SendInt ( sStr.second );
+	SendBytes ( sStr );
+}
+
+void SendString ( const Str_t& sStr );
+
 /// SmartOutputBuffer_t : chain of blobs could be used in scattered sending
 /////////////////////////////////////////////////////////////////////////////
 SmartOutputBuffer_t::~SmartOutputBuffer_t()

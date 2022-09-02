@@ -1539,6 +1539,7 @@ public:
 };
 
 int sphFormatCurrentTime ( char* sTimeBuf, int iBufLen );
+void sphFormatCurrentTime ( StringBuilder_c& sOut );
 
 CSphString sphCurrentUtcTime ( );
 

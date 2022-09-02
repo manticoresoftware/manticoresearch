@@ -144,10 +144,15 @@ public:
 	// shrink, if necessary, to be able to fit at least iLen more chars
 	void GrowEnough ( int iLen );
 
-	void NtoA ( DWORD uVal );
-	void NtoA ( int64_t iVal );
+	template<typename INT, int iBase=10, int iWidth=0, int iPrec=0, char cFill=' '>
+	void NtoA ( INT uVal );
+//	template<int iBase = 10, int iWidth = 0, int iPrec = 0, char cFill = ' '>
+//	void NtoA ( int64_t tVal );
 	void FtoA ( float fVal );
 	void DtoA ( double fVal );
+
+	template<typename INT, int iPrec>
+	void IFtoA ( FixedFrac_T<INT, iPrec> tVal );
 
 protected:
 	static constexpr BYTE GROW_STEP = 64; // how much to grow if no space left
@@ -201,6 +206,12 @@ private:
 StringBuilder_c& operator<< ( StringBuilder_c& tOut, const CSphNamedInt& tValue );
 StringBuilder_c& operator<< ( StringBuilder_c& tOut, timespan_t tVal );
 StringBuilder_c& operator<< ( StringBuilder_c& tOut, timestamp_t tVal );
+
+template<typename INT, int iPrec>
+StringBuilder_c& operator<< ( StringBuilder_c& tOut, FixedFrac_T<INT, iPrec>&& tVal );
+
+template<typename INT, int iBase, int iWidth, int iPrec, char cFill>
+StringBuilder_c& operator<< ( StringBuilder_c& tOut, FixedNum_T<INT, iBase, iWidth, iPrec, cFill>&& tVal );
 
 // helpers
 inline void Grow ( StringBuilder_c& tBuilder, int iInc )

@@ -2537,9 +2537,9 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		if ( g_eLogFormat==LOG_FORMAT_SPHINXQL && g_iQueryLogFile>=0 )
 		{
 			StringBuilder_c tBuf;
-			char sTimeBuf [ SPH_TIME_PID_MAX_SIZE ];
-			sphFormatCurrentTime ( sTimeBuf, sizeof(sTimeBuf) );
-			tBuf << "/""* " << sTimeBuf << "*""/ " << tQuery.m_sSelect << " # error=" << sError << "\n";
+			tBuf << "/* ";
+			sphFormatCurrentTime ( tBuf );
+			tBuf << "*/ " << tQuery.m_sSelect << " # error=" << sError << '\n';
 			sphSeek ( g_iQueryLogFile, 0, SEEK_END );
 			sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.GetLength() );
 		}
@@ -2714,9 +2714,9 @@ void LogQueryPlain ( const CSphQuery & tQuery, const CSphQueryResultMeta & tMeta
 	{
 #endif
 
-		char sTimeBuf[SPH_TIME_PID_MAX_SIZE];
-		sphFormatCurrentTime ( sTimeBuf, sizeof(sTimeBuf) );
-		tBuf.Appendf ( "[%s]", sTimeBuf );
+		tBuf << '[';
+		sphFormatCurrentTime ( tBuf );
+		tBuf << ']';
 
 #if USE_SYSLOG
 	} else
@@ -3007,11 +3007,9 @@ static void FormatIndexHints ( const CSphQuery & tQuery, StringBuilder_c & tBuf 
 	AppendHint ( "IGNORE", dIgnore, tBuf );
 }
 
-static void LogQueryJson ( const CSphQuery & q, QuotationEscapedBuilder & tBuf )
+static void LogQueryJson ( const CSphQuery & q, StringBuilder_c & tBuf )
 {
-	tBuf.StartBlock ( "", " /*", " */" );
-	tBuf += q.m_sRawQuery.cstr();
-	tBuf.FinishBlock (); // close the comment
+	tBuf << " /*" << q.m_sRawQuery << " */";
 }
 
 static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResultMeta & tMeta, const CSphVector<int64_t> & dAgentTimes )
@@ -3027,18 +3025,15 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResultMeta & 
 	int iQueryTime = Max ( tMeta.m_iQueryTime, 0 );
 	int iRealTime = Max ( tMeta.m_iRealQueryTime, 0 );
 
-	char sTimeBuf[SPH_TIME_PID_MAX_SIZE];
-	sphFormatCurrentTime ( sTimeBuf, sizeof(sTimeBuf) );
-
-	tBuf += R"(/* )";
-	tBuf += sTimeBuf;
+	tBuf  << "/* ";
+	sphFormatCurrentTime ( tBuf );
 
 	if ( tMeta.m_iMultiplier>1 )
-		tBuf.Sprintf ( " conn %d real %0.3F wall %0.3F x%d found " INT64_FMT " *""/ ",
-				 session::GetConnID(), iRealTime, iQueryTime, tMeta.m_iMultiplier, tMeta.m_iTotalMatches );
+		tBuf << " conn " << session::GetConnID() << " real " << FixedFrac ( iRealTime )
+			 << " wall " << FixedFrac ( iQueryTime ) << " x" << tMeta.m_iMultiplier << " found " << tMeta.m_iTotalMatches << " */ ";
 	else
-		tBuf.Sprintf ( " conn %d real %0.3F wall %0.3F found " INT64_FMT " *""/ ",
-				 session::GetConnID(), iRealTime, iQueryTime, tMeta.m_iTotalMatches );
+		tBuf << " conn " << session::GetConnID() << " real " << FixedFrac ( iRealTime )
+			 << " wall " << FixedFrac ( iQueryTime ) << " found " << tMeta.m_iTotalMatches << " */ ";
 
 	///////////////////////////////////
 	// format request as SELECT query
@@ -3103,12 +3098,12 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResultMeta & 
 void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuilder & tBuf )
 {
 	if ( q.m_bHasOuter )
-		tBuf += "SELECT * FROM (";
+		tBuf << "SELECT * FROM (";
 
 	if ( q.m_sSelect.IsEmpty() )
-		tBuf.Appendf ( "SELECT * FROM %s", q.m_sIndexes.cstr () );
+		tBuf << "SELECT * FROM " << q.m_sIndexes;
 	else
-		tBuf.Appendf ( "SELECT %s FROM %s", RemoveBackQuotes ( q.m_sSelect.cstr () ).cstr (), q.m_sIndexes.cstr () );
+		tBuf << "SELECT " << RemoveBackQuotes ( q.m_sSelect.cstr() ) << " FROM " << q.m_sIndexes;
 
 	// WHERE clause
 	// (m_sRawQuery is empty when using MySQL handler)
@@ -3133,7 +3128,7 @@ void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuild
 			FormatOrderBy ( &tBuf, " ORDER BY ", q.m_eSort, q.m_sSortBy );
 	} else
 	{
-		tBuf.Appendf ( " GROUP BY %s", q.m_sGroupBy.cstr() );
+		tBuf << " GROUP BY " << q.m_sGroupBy;
 		FormatOrderBy ( &tBuf, " WITHIN GROUP ORDER BY ", q.m_eSort, q.m_sSortBy );
 		if ( !q.m_tHaving.m_sAttrName.IsEmpty() )
 		{
@@ -3146,7 +3141,7 @@ void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuild
 
 	// LIMIT clause
 	if ( q.m_iOffset!=0 || q.m_iLimit!=20 )
-		tBuf.Appendf ( " LIMIT %d,%d", q.m_iOffset, q.m_iLimit );
+		tBuf << " LIMIT " << q.m_iOffset << ',' << q.m_iLimit;
 
 	// OPTION clause
 	FormatOption ( q, tBuf );
@@ -3155,17 +3150,17 @@ void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuild
 	// outer order by, limit
 	if ( q.m_bHasOuter )
 	{
-		tBuf += ")";
+		tBuf << ')';
 		if ( !q.m_sOuterOrderBy.IsEmpty() )
-			tBuf.Appendf ( " ORDER BY %s", q.m_sOuterOrderBy.cstr() );
+			tBuf << " ORDER BY " << q.m_sOuterOrderBy;
 		if ( q.m_iOuterOffset>0 )
-			tBuf.Appendf ( " LIMIT %d, %d", q.m_iOuterOffset, q.m_iOuterLimit );
+			tBuf << " LIMIT " << q.m_iOuterOffset << ", " << q.m_iOuterLimit;
 		else if ( q.m_iOuterLimit>0 )
-			tBuf.Appendf ( " LIMIT %d", q.m_iOuterLimit );
+			tBuf << " LIMIT " << q.m_iOuterLimit;
 	}
 
 	// finish SQL statement
-	tBuf += ";";
+	tBuf << ';';
 }
 
 static void LogQuery ( const CSphQuery & q, const CSphQueryResultMeta & tMeta, const CSphVector<int64_t> & dAgentTimes )
@@ -3181,16 +3176,15 @@ static void LogQuery ( const CSphQuery & q, const CSphQueryResultMeta & tMeta, c
 }
 
 
-void LogSphinxqlError ( const char * sStmt, const char * sError )
+void LogSphinxqlError ( const char * sStmt, const Str_t& sError )
 {
-	if ( g_eLogFormat!=LOG_FORMAT_SPHINXQL || g_iQueryLogFile<0 || !sStmt || !sError )
+	if ( g_eLogFormat!=LOG_FORMAT_SPHINXQL || g_iQueryLogFile<0 || !sStmt || IsEmpty(sError) )
 		return;
 
-	char sTimeBuf[SPH_TIME_PID_MAX_SIZE];
-	sphFormatCurrentTime ( sTimeBuf, sizeof(sTimeBuf) );
-
 	StringBuilder_c tBuf;
-	tBuf.Appendf ( "/""* %s conn %d *""/ %s # error=%s\n", sTimeBuf, session::GetConnID(), sStmt, sError );
+	tBuf << "/* ";
+	sphFormatCurrentTime ( tBuf );
+	tBuf << " conn " << session::GetConnID() << " */ " << sStmt << " # error=" << sError << '\n';
 
 	sphSeek ( g_iQueryLogFile, 0, SEEK_END );
 	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.GetLength() );
@@ -3233,19 +3227,16 @@ static void LogStatementSphinxql ( Str_t sQuery, int iRealTime )
 	if ( g_iQueryLogFile<0 || g_eLogFormat!=LOG_FORMAT_SPHINXQL || !IsFilled ( sQuery ) )
 		return;
 
-	QuotationEscapedBuilder tBuf;
+	StringBuilder_c tBuf;
+	tBuf << "/* ";
+	sphFormatCurrentTime ( tBuf );
+	tBuf << " conn " << session::GetConnID() << " real " << FixedFrac ( iRealTime ) << " */ "
 
-	char sTimeBuf[SPH_TIME_PID_MAX_SIZE];
-	sphFormatCurrentTime ( sTimeBuf, sizeof(sTimeBuf) );
+	// query
+		<< sQuery
 
-	tBuf += R"(/* )";
-	tBuf += sTimeBuf;
-
-	tBuf.Sprintf ( " conn %d real %0.3F *""/ ", session::GetConnID(), iRealTime );
-	tBuf << sQuery;
-
-	// finish statement and add line feed
-	tBuf += ";\n";
+	// finish statement and line feed
+		<< ";\n";
 
 	sphSeek ( g_iQueryLogFile, 0, SEEK_END );
 	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.GetLength() );

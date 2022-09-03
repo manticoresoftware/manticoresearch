@@ -6403,12 +6403,12 @@ int QueueCreator_c::AdjustMaxMatches ( int iMaxMatches ) const
 	if ( iGroupbyAttr<0 )
 		return iMaxMatches;
 
+	const int MAX_MAXMATCHES=16384;
 	int iCountDistinct = m_tSettings.m_fnGetCountDistinct ? m_tSettings.m_fnGetCountDistinct ( m_pSorterSchema->GetAttr(iGroupbyAttr).m_sName ) : -1;
-	if ( iCountDistinct<0 )
+	if ( iCountDistinct>MAX_MAXMATCHES )
 		return iMaxMatches;
 
-	const int MAX_MAXMATCHES=16384;
-	return iCountDistinct<=MAX_MAXMATCHES ? iCountDistinct : iMaxMatches;
+	return Max ( iCountDistinct, iMaxMatches );
 }
 
 

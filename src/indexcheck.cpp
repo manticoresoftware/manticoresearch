@@ -15,7 +15,7 @@
 #include "fileutils.h"
 #include "attribute.h"
 #include "indexformat.h"
-#include "secondaryindex.h"
+#include "docidlookup.h"
 #include "docstore.h"
 #include "conversion.h"
 #include "columnarlib.h"

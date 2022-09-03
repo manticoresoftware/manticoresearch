@@ -16,7 +16,7 @@
 #include "fileutils.h"
 #include "sphinxrt.h"
 #include "killlist.h"
-#include "secondaryindex.h"
+#include "docidlookup.h"
 #include "indexfiles.h"
 #include "stripper/html_stripper.h"
 #include "tokenizer/charset_definition_parser.h"

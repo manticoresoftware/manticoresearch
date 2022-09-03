@@ -23,6 +23,7 @@
 #include "indexformat.h"
 #include "indexsettings.h"
 #include "indexfiles.h"
+#include "docidlookup.h"
 #include "attrindex_builder.h"
 #include "tokenizer/charset_definition_parser.h"
 #include "tokenizer/tokenizer.h"
@@ -990,7 +991,7 @@ struct CmpDocidLookup_fn
 		if ( a.m_tDocID==b.m_tDocID )
 			return a.m_tRowID < b.m_tRowID;
 
-		return a.m_tDocID < b.m_tDocID;
+		return (uint64_t)a.m_tDocID < (uint64_t)b.m_tDocID;
 	}
 };
 

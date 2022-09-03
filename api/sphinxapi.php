@@ -1374,7 +1374,7 @@ class SphinxClient
 				// parse document id and weight
 				if ( $id64 )
 				{
-					$doc = sphUnpackU64 ( substr ( $response, $p, 8 ) ); $p += 8;
+					$doc = sphUnpackI64 ( substr ( $response, $p, 8 ) ); $p += 8;
 					list(,$weight) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
 				}
 				else

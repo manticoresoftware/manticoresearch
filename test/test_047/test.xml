@@ -37,7 +37,7 @@ index test
 <db_create>
 CREATE TABLE test_table
 (
-	id BIGINT UNSIGNED NOT NULL,
+	id BIGINT NOT NULL,
 	n INT NOT NULL DEFAULT 42,
 	text VARCHAR(255) NOT NULL
 );
@@ -56,7 +56,10 @@ INSERT INTO test_table (id, text) VALUES
 	( 60000000001, 'six+1' ),
 	( 9223372036854775806, 'max -1' ),
 	( 9223372036854775807, 'max' ),
-	( 9223372036854775808, 'max +1' )
+	( 9223372036854775808, 'max +1' ),
+	( -1, '-1'),
+	( -9223372036854775808, 'min'),
+	( 0, 'zero')
 </db_insert>
 
 <query_attributes>
@@ -84,6 +87,9 @@ INSERT INTO test_table (id, text) VALUES
 	select * from test where id&lt;9223372036854775808;
 
 	select * from test where id not between 60000000000 and 60000000001;
+
+	select * from test where id&lt;0;
+	select * from test where id=0;
 </sphinxql>
 </queries>
 

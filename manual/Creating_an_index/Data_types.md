@@ -272,11 +272,11 @@ Below is the list of data types supported by Manticore Search:
 ## Document ID
 
 <!-- example id -->
-Document identifier is a mandatory attribute. Document IDs must be **unique signed positive non-zero 64-bit integers**. Note that no negative or zero values are allowed. Document ID can be specified explicitly, but if it's not it's still enabled. Document IDs can't be [UPDATE](../Updating_documents/UPDATE.md)'ed.
+Document identifier is a mandatory attribute. Document IDs must be **unique signed 64-bit integers**. Document ID can be specified explicitly, but if it's not it's still enabled. Document IDs can't be [UPDATE](../Updating_documents/UPDATE.md)'ed.
 
 <!-- request Explicit ID -->
 
-When you create a table you can specify ID explicitly, but no matter what datatype you use it will be always as said previously - signed positive non-zero 64-bit integer.
+When you create a table you can specify ID explicitly, but no matter what datatype you use it will be always as said previously - signed 64-bit integer.
 
 ```sql
 CREATE TABLE tbl(id bigint, content text);

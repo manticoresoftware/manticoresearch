@@ -27,6 +27,7 @@
 #include "icu.h"
 #include "attribute.h"
 #include "secondaryindex.h"
+#include "docidlookup.h"
 #include "histogram.h"
 #include "killlist.h"
 #include "docstore.h"
@@ -2512,7 +2513,7 @@ struct CmpDocidLookup_fn
 		if ( a.m_tDocID==b.m_tDocID )
 			return a.m_tRowID < b.m_tRowID;
 
-		return a.m_tDocID < b.m_tDocID;
+		return (uint64_t)a.m_tDocID < (uint64_t)b.m_tDocID;
 	}
 };
 

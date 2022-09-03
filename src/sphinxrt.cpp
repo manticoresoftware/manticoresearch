@@ -32,6 +32,7 @@
 #include "binlog.h"
 #include "memio.h"
 #include "secondaryindex.h"
+#include "docidlookup.h"
 #include "columnarrt.h"
 #include "columnarmisc.h"
 #include "sphinx_alter.h"
@@ -3626,6 +3627,18 @@ struct SaveDiskDataContext_t : public BuildHeader_t
 };
 
 
+struct CmpDocidLookup_fn
+{
+	static inline bool IsLess ( const DocidRowidPair_t & a, const DocidRowidPair_t & b )
+	{
+		if ( a.m_tDocID==b.m_tDocID )
+			return a.m_tRowID < b.m_tRowID;
+
+		return (uint64_t)a.m_tDocID < (uint64_t)b.m_tDocID;
+	}
+};
+
+
 bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sError ) const
 {
 	CSphString sSPA, sSPB, sSPT, sSPHI, sSPDS, sSPC, sSIdx;
@@ -3771,7 +3784,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	if ( pDocstoreBuilder )
 		pDocstoreBuilder->Finalize();
 
-	dLookup.Sort ( bind ( &DocidRowidPair_t::m_tDocID ) );
+	dLookup.Sort ( CmpDocidLookup_fn() );
 
 	if ( !WriteDocidLookup ( sSPT, dLookup, sError ) )
 		return false;

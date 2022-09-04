@@ -5352,14 +5352,24 @@ public:
 
 	void Command ( ESphExprCommand eCmd, void * pArg ) override
 	{
-		if ( eCmd==SPH_EXPR_GET_UDF )
+		switch ( eCmd )
 		{
+		case SPH_EXPR_GET_UDF:
 			*((bool*)pArg) = true;
 			return;
-		}
 
-		if ( eCmd==SPH_EXPR_SET_BLOB_POOL )
+		case SPH_EXPR_GET_STATEFUL_UDF:
+			if ( m_pCall && m_pCall->m_tInit.func_data )
+				*((bool*)pArg) = true;
+			return;
+
+		case SPH_EXPR_SET_BLOB_POOL:
 			m_pBlobPool = (const BYTE*)pArg;
+			break;
+
+		default:
+			break;
+		}
 
 		for ( auto & pExpr : m_dArgs )
 			pExpr->Command ( eCmd, pArg );

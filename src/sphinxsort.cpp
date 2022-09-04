@@ -405,6 +405,7 @@ public:
 	void				SetColumnar ( columnar::Columnar_i * pColumnar ) override { m_pColumnar = pColumnar; }
 	int64_t				GetTotalCount() const override { return m_iTotal; }
 	void				CloneTo ( ISphMatchSorter * pTrg ) const override;
+	bool				CanBeCloned() const override;
 	void				SetFilteredAttrs ( const sph::StringSet & hAttrs, bool bAddDocid ) override;
 	void				TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnBlobPoolFromMatch, GetColumnarFromMatch_fn fnGetColumnarFromMatch, bool bFinalizeSorters ) override;
 
@@ -454,6 +455,23 @@ void MatchSorter_c::CloneTo ( ISphMatchSorter * pTrg ) const
 	pTrg->SetRandom(m_bRandomize);
 	pTrg->SetState(m_tState);
 	pTrg->SetSchema ( m_pSchema->CloneMe(), false );
+}
+
+
+bool MatchSorter_c::CanBeCloned() const
+{
+	if ( !m_pSchema )
+		return true;
+
+	bool bGotStatefulUDF = false;
+	for ( int i = 0; i < m_pSchema->GetAttrsCount() && !bGotStatefulUDF; i++ )
+	{
+		auto & pExpr = m_pSchema->GetAttr(i).m_pExpr;
+		if ( pExpr )
+			pExpr->Command ( SPH_EXPR_GET_STATEFUL_UDF, &bGotStatefulUDF );
+	}
+
+	return !bGotStatefulUDF;
 }
 
 
@@ -2497,10 +2515,7 @@ public:
 		}
 	}
 
-	bool CanBeCloned () const final
-	{
-		return !DISTINCT;
-	}
+	bool CanBeCloned() const final { return !DISTINCT && BASE::CanBeCloned(); }
 
 protected:
 	ESphGroupBy 				m_eGroupBy;     ///< group-by function
@@ -4076,8 +4091,8 @@ public:
 			m_dUniq.Uniq();
 	}
 
-	int		GetLength() final		{ return m_bDataInitialized ? 1 : 0; }
-	bool	CanBeCloned() const final	{ return !DISTINCT; }
+	int		GetLength() final			{ return m_bDataInitialized ? 1 : 0; }
+	bool	CanBeCloned() const final	{ return !DISTINCT && BASE::CanBeCloned(); }
 
 	// TODO! test.
 	ISphMatchSorter * Clone () const final

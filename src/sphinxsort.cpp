@@ -6635,7 +6635,7 @@ std::pair<bool,int> ApplyImplicitCutoff ( const CSphQuery & tQuery, const VecTra
 		return { false, -1 };
 
 	// implicit cutoff when there's no sorting and no grouping 
-	if ( tQuery.m_sSortBy=="@weight desc" && tQuery.m_sGroupBy.IsEmpty() && !tQuery.m_bFacet && !tQuery.m_bFacetHead )
+	if ( ( tQuery.m_sSortBy=="@weight desc" || tQuery.m_sSortBy.IsEmpty() ) && tQuery.m_sGroupBy.IsEmpty() && !tQuery.m_bFacet && !tQuery.m_bFacetHead )
 		return { true, tQuery.m_iLimit+tQuery.m_iOffset };
 
 	return { false, -1 };

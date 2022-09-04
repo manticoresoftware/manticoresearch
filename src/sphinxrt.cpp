@@ -171,19 +171,6 @@ template < typename T >
 static inline T UnzipT_LE ( const BYTE *& pIn )
 {
 	return UnzipValueLE<T> ( [&pIn]() mutable { return *pIn++; } );
-
-	T uValue = 0;
-	BYTE uIn;
-	int iOff = 0;
-
-	do
-	{
-		uIn = *pIn++;
-		uValue += ( T ( uIn & 0x7FU ) ) << iOff;
-		iOff += 7;
-	} while ( uIn & 0x80U );
-
-	return uValue;
 }
 
 // Variable Length Byte (VLB) skipping (BE/LE agnostic)

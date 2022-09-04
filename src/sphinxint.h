@@ -412,63 +412,6 @@ int FindSpan ( const VecTraits_T<T> & dVec, U tRef, int iSmallTreshold=8 )
 	return -1;
 }
 
-
-inline int FindBit ( DWORD uValue )
-{
-	DWORD uMask = 0xffff;
-	int iIdx = 0;
-	int iBits = 16;
-
-	// we negate bits to compare with 0
-	// this makes MSVC emit 'test' instead of 'cmp'
-	uValue ^= 0xffffffff;
-	for ( int t=0; t<5; t++ )
-	{
-		if ( ( uValue & uMask )==0 )
-		{
-			iIdx += iBits;
-			uValue >>= iBits;
-		}
-		iBits >>= 1;
-		uMask >>= iBits;
-	}
-	return iIdx;
-}
-
-
-inline int sphEncodeVLB8 ( BYTE * buf, uint64_t v )
-{
-	register BYTE b;
-	register int n = 0;
-
-	do
-	{
-		b = (BYTE)(v & 0x7f);
-		v >>= 7;
-		if ( v )
-			b |= 0x80;
-		*buf++ = b;
-		n++;
-	} while ( v );
-	return n;
-}
-
-
-inline const BYTE * spnDecodeVLB8 ( const BYTE * pIn, uint64_t & uValue )
-{
-	BYTE bIn;
-	int iOff = 0;
-
-	do
-	{
-		bIn = *pIn++;
-		uValue += ( uint64_t ( bIn & 0x7f ) ) << iOff;
-		iOff += 7;
-	} while ( bIn & 0x80 );
-
-	return pIn;
-}
-
 //////////////////////////////////////////////////////////////////////////
 // INLINES, UTF-8 TOOLS
 //////////////////////////////////////////////////////////////////////////

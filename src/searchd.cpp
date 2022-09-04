@@ -12331,7 +12331,7 @@ public:
 		BYTE * pCur = m_dBuf.Begin ();
 		for ( const auto &dValue : dSetValues )
 		{
-			pCur += sphEncodeVLB8 ( pCur, dValue - iLast );
+			pCur += ZipToPtrLE ( pCur, dValue - iLast );
 			iLast = dValue;
 		}
 		m_iLength = pCur-m_dBuf.Begin();
@@ -12424,8 +12424,7 @@ void HandleCommandUserVar ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & 
 	const BYTE * pCur = dBuf.Begin();
 	ARRAY_FOREACH ( i, dUserVar )
 	{
-		uint64_t iDelta = 0;
-		pCur = spnDecodeVLB8 ( pCur, iDelta );
+		auto iDelta = UnzipValueLE<int64_t> ( [&pCur]() mutable { return *pCur++; } );
 		assert ( iDelta>0 );
 		iLast += iDelta;
 		dUserVar[i] = iLast;

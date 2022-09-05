@@ -1948,6 +1948,7 @@ public:
 
 	bool IsDataPtrAttr() const final	{ return sphIsBlobAttr(m_eAttrType); }
 	bool IsStored() const final			{ return !POSTLIMIT; }
+	bool UsesDocstore() const			{ return true; }
 
 	int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const final
 	{

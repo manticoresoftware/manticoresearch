@@ -139,6 +139,9 @@ public:
 	/// was this expression spawned in place of a columnar expression?
 	virtual bool IsStored() const { return false; }
 
+	/// does this expression use docstore (at any eval stage)?
+	virtual bool UsesDocstore() const { return false; }
+
 	/// check for stringptr subtype
 	virtual bool IsDataPtrAttr () const { return false; }
 

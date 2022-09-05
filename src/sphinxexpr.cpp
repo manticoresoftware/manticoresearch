@@ -4103,6 +4103,10 @@ private:
 	void					FixupIterators ( int iNode, const char * sKey, SphAttr_t * pAttr );
 	ISphExpr *				CreateLevenshteinNode ( ISphExpr * pPattern, ISphExpr * pAttr, ISphExpr * pOpts );
 
+	bool					CheckStoredArg ( ISphExpr * pExpr );
+	bool					PrepareFuncArgs ( const ExprNode_t & tNode, bool bSkipChildren, CSphRefcountedPtr<ISphExpr> & pLeft, CSphRefcountedPtr<ISphExpr> & pRight, VecRefPtrs_t<ISphExpr*> & dArgs );
+	ISphExpr *				CreateFuncExpr ( int iNode, VecRefPtrs_t<ISphExpr*> & dArgs );
+
 	bool					GetError () const { return !( m_sLexerError.IsEmpty() && m_sParserError.IsEmpty() && m_sCreateError.IsEmpty() ); }
 	bool					GetCreateError () const { return !m_sCreateError.IsEmpty(); }
 
@@ -5543,6 +5547,9 @@ private:
 
 ISphExpr * ExprParser_t::CreateUdfNode ( int iCall, ISphExpr * pLeft )
 {
+	if ( !CheckStoredArg(pLeft) )
+		return nullptr;
+
 	Expr_Udf_c * pRes = nullptr;
 	switch ( m_dUdfCalls[iCall]->m_pUdf->m_eRetType )
 	{
@@ -6638,6 +6645,228 @@ ISphExpr * ExprParser_t::CreateLevenshteinNode ( ISphExpr * pPattern, ISphExpr *
 
 //////////////////////////////////////////////////////////////////////////
 
+bool ExprParser_t::CheckStoredArg ( ISphExpr * pExpr )
+{
+	if ( pExpr && pExpr->UsesDocstore() )
+	{
+		m_sCreateError.SetSprintf ( "stored fields can't be used in expressions" );
+		return false;
+	}
+
+	return true;
+}
+
+
+bool ExprParser_t::PrepareFuncArgs ( const ExprNode_t & tNode, bool bSkipChildren, CSphRefcountedPtr<ISphExpr> & pLeft, CSphRefcountedPtr<ISphExpr> & pRight, VecRefPtrs_t<ISphExpr*> & dArgs )
+{
+	// fold arglist to array
+	if ( !bSkipChildren )
+	{
+		SafeAddRef (pLeft);
+		MoveToArgList ( pLeft, dArgs );
+		if ( pRight )
+		{
+			pRight->AddRef ();
+			MoveToArgList ( pRight, dArgs );
+		}
+	}
+
+	for ( auto & i : dArgs )
+		if ( !CheckStoredArg(i) )
+			return false;
+
+	// spawn proper function
+	assert ( tNode.m_iFunc>=0 && tNode.m_iFunc<int(sizeof(g_dFuncs)/sizeof(g_dFuncs[0])) );
+	assert (
+		( bSkipChildren ) || // function will handle its arglist,
+		( g_dFuncs[tNode.m_iFunc].m_iArgs>=0 && g_dFuncs[tNode.m_iFunc].m_iArgs==dArgs.GetLength() ) || // arg count matches,
+		( g_dFuncs[tNode.m_iFunc].m_iArgs<0 && -g_dFuncs[tNode.m_iFunc].m_iArgs<=dArgs.GetLength() ) ); // or min vararg count reached
+
+	auto eFunc = (Tokh_e)tNode.m_iFunc;
+	switch ( eFunc )
+	{
+	case FUNC_TO_STRING:
+	case FUNC_INTERVAL:
+	case FUNC_IN:
+	case FUNC_LENGTH:
+	case FUNC_LEAST:
+	case FUNC_GREATEST:
+	case FUNC_ALL:
+	case FUNC_ANY:
+	case FUNC_INDEXOF:
+		break; // these have its own JSON converters
+
+		// all others will get JSON auto-converter
+	default:
+		ConvertArgsJson ( dArgs );
+		break;
+	}
+
+	return true;
+}
+
+
+ISphExpr * ExprParser_t::CreateFuncExpr ( int iNode, VecRefPtrs_t<ISphExpr*> & dArgs )
+{
+	const ExprNode_t & tNode = m_dNodes[iNode];
+	auto eFunc = (Tokh_e)tNode.m_iFunc;
+	switch ( eFunc )
+	{
+	case FUNC_NOW:		return new Expr_Now_c(m_iConstNow);
+
+	case FUNC_ABS:		return new Expr_Abs_c ( dArgs[0] );
+	case FUNC_CEIL:		return new Expr_Ceil_c ( dArgs[0] );
+	case FUNC_FLOOR:	return new Expr_Floor_c ( dArgs[0] );
+	case FUNC_SIN:		return new Expr_Sin_c ( dArgs[0] );
+	case FUNC_COS:		return new Expr_Cos_c ( dArgs[0] );
+	case FUNC_LN:		return new Expr_Ln_c ( dArgs[0] );
+	case FUNC_LOG2:		return new Expr_Log2_c ( dArgs[0] );
+	case FUNC_LOG10:	return new Expr_Log10_c ( dArgs[0] );
+	case FUNC_EXP:		return new Expr_Exp_c ( dArgs[0] );
+	case FUNC_SQRT:		return new Expr_Sqrt_c ( dArgs[0] );
+	case FUNC_SINT:		return new Expr_Sint_c ( dArgs[0] );
+	case FUNC_CRC32:	return new Expr_Crc32_c ( dArgs[0] );
+	case FUNC_FIBONACCI:return new Expr_Fibonacci_c ( dArgs[0] );
+
+	case FUNC_DAY:			return ExprDay ( dArgs[0] );
+	case FUNC_MONTH:		return ExprMonth ( dArgs[0] );
+	case FUNC_YEAR:			return ExprYear ( dArgs[0] );
+	case FUNC_YEARMONTH:	return ExprYearMonth ( dArgs[0] );
+	case FUNC_YEARMONTHDAY:	return ExprYearMonthDay ( dArgs[0] );
+	case FUNC_HOUR:			return new Expr_Hour_c ( dArgs[0] );
+	case FUNC_MINUTE:		return new Expr_Minute_c ( dArgs[0] );
+	case FUNC_SECOND:		return new Expr_Second_c ( dArgs[0] );
+
+	case FUNC_MIN:		return new Expr_Min_c ( dArgs[0], dArgs[1] );
+	case FUNC_MAX:		return new Expr_Max_c ( dArgs[0], dArgs[1] );
+	case FUNC_POW:		return new Expr_Pow_c ( dArgs[0], dArgs[1] );
+	case FUNC_IDIV:		return new Expr_Idiv_c ( dArgs[0], dArgs[1] );
+
+	case FUNC_IF:		return new Expr_If_c ( dArgs[0], dArgs[1], dArgs[2] );
+	case FUNC_MADD:		return new Expr_Madd_c ( dArgs[0], dArgs[1], dArgs[2] );
+	case FUNC_MUL3:		return new Expr_Mul3_c ( dArgs[0], dArgs[1], dArgs[2] );
+	case FUNC_ATAN2:	return new Expr_Atan2_c ( dArgs[0], dArgs[1] );
+	case FUNC_RAND:		return new Expr_Rand_c ( dArgs.GetLength() ? dArgs[0] : nullptr,
+		tNode.m_iLeft<0 ? false : IsConst ( &m_dNodes[tNode.m_iLeft] ));
+
+	case FUNC_INTERVAL:	return CreateIntervalNode ( tNode.m_iLeft, dArgs );
+	case FUNC_IN:		return CreateInNode ( iNode );
+	case FUNC_LENGTH:	return CreateLengthNode ( tNode, dArgs[0] );
+	case FUNC_BITDOT:	return CreateBitdotNode ( tNode.m_iLeft, dArgs );
+	case FUNC_REMAP:
+	{
+		CSphRefcountedPtr<ISphExpr> pCond ( CreateTree ( tNode.m_iLeft ) );
+		CSphRefcountedPtr<ISphExpr> pVal ( CreateTree ( tNode.m_iRight ) );
+		assert ( pCond && pVal );
+		// This is a hack. I know how parser fills m_dNodes and thus know where to find constlists.
+		const CSphVector<int64_t> & dConds = m_dNodes [ iNode-2 ].m_pConsts->m_dInts;
+		const ConstList_c & tVals = *m_dNodes [ iNode-1 ].m_pConsts;
+		return new Expr_Remap_c ( pCond, pVal, dConds, tVals );
+	}
+
+	case FUNC_GEODIST:	return CreateGeodistNode ( tNode.m_iLeft );
+	case FUNC_EXIST:	return CreateExistNode ( tNode );
+	case FUNC_CONTAINS:	return CreateContainsNode ( tNode );
+
+	case FUNC_POLY2D:
+	case FUNC_GEOPOLY2D:break; // just make gcc happy
+
+	case FUNC_ZONESPANLIST:
+		m_bHasZonespanlist = true;
+		m_eEvalStage = SPH_EVAL_PRESORT;
+		return new Expr_GetZonespanlist_c ();
+	case FUNC_TO_STRING:
+		if ( !CheckStoredArg(dArgs[0]) )
+			return nullptr;
+
+		return new Expr_ToString_c ( dArgs[0], m_dNodes [ tNode.m_iLeft ].m_eRetType );
+	case FUNC_CONCAT:
+		return CreateConcatNode ( tNode.m_iLeft, dArgs );
+	case FUNC_RANKFACTORS:
+		m_eEvalStage = SPH_EVAL_PRESORT;
+		return new Expr_GetRankFactors_c();
+	case FUNC_FACTORS:
+		return CreatePFNode ( tNode.m_iLeft );
+	case FUNC_BM25F:
+	{
+		m_uPackedFactorFlags |= SPH_FACTOR_ENABLE;
+
+		CSphVector<int> dBM25FArgs = GatherArgNodes ( tNode.m_iLeft );
+		const ExprNode_t & tLeft = m_dNodes [ dBM25FArgs[0] ];
+		const ExprNode_t & tRight = m_dNodes [ dBM25FArgs[1] ];
+		float fK1 = tLeft.m_fConst;
+		float fB = tRight.m_fConst;
+		fK1 = Max ( fK1, 0.001f );
+		fB = Min ( Max ( fB, 0.0f ), 1.0f );
+
+		CSphVector<CSphNamedVariant> * pFieldWeights = nullptr;
+		if ( dBM25FArgs.GetLength()>2 )
+			pFieldWeights = &m_dNodes [ dBM25FArgs[2] ].m_pMapArg->m_dPairs;
+
+		return new Expr_BM25F_c ( fK1, fB, pFieldWeights );
+	}
+
+	case FUNC_QUERY:
+		return new Expr_GetQuery_c;
+
+	case FUNC_BIGINT:
+	case FUNC_INTEGER:
+	case FUNC_DOUBLE:
+	case FUNC_UINT:
+		SafeAddRef ( dArgs[0] );
+		return dArgs[0];
+
+	case FUNC_LEAST:	return CreateAggregateNode ( tNode, SPH_AGGR_MIN, dArgs[0] );
+	case FUNC_GREATEST:	return CreateAggregateNode ( tNode, SPH_AGGR_MAX, dArgs[0] );
+
+	case FUNC_CURTIME:	return new Expr_Time_c ( false, false );
+	case FUNC_UTC_TIME: return new Expr_Time_c ( true, false );
+	case FUNC_UTC_TIMESTAMP: return new Expr_Time_c ( true, true );
+	case FUNC_TIMEDIFF: return new Expr_TimeDiff_c ( dArgs[0], dArgs[1] );
+
+	case FUNC_ALL:
+	case FUNC_ANY:
+	case FUNC_INDEXOF:
+		return CreateForInNode ( iNode );
+
+	case FUNC_MIN_TOP_WEIGHT:
+		m_eEvalStage = SPH_EVAL_PRESORT;
+		return new Expr_MinTopWeight_c();
+
+	case FUNC_MIN_TOP_SORTVAL:
+		m_eEvalStage = SPH_EVAL_PRESORT;
+		return new Expr_MinTopSortval_c();
+
+	case FUNC_REGEX:
+		return CreateRegexNode ( dArgs[0], dArgs[1] );
+
+	case FUNC_SUBSTRING_INDEX:
+		if ( !CheckStoredArg(dArgs[0]) || !CheckStoredArg(dArgs[1]) )
+			return nullptr;
+
+		return new Expr_SubstringIndex_c ( dArgs[0], dArgs[1], dArgs[2] );
+
+	case FUNC_UPPER:
+		return new Expr_Case_c<true> ( dArgs[0] );
+	case FUNC_LOWER:
+		return new Expr_Case_c<false> ( dArgs[0] );
+
+	case FUNC_LAST_INSERT_ID: return new Expr_LastInsertID_c();
+	case FUNC_CURRENT_USER:
+	{
+		auto sUser = CurrentUser();
+		return new Expr_GetStrConst_c ( sUser.first, sUser.second, false );
+	}
+	case FUNC_CONNECTION_ID: return new Expr_GetIntConst_c ( ConnID() );
+	case FUNC_LEVENSHTEIN: return CreateLevenshteinNode ( dArgs[0], dArgs[1], ( dArgs.GetLength()>2 ? dArgs[2] : nullptr ) );
+
+	default: // just make gcc happy
+		assert ( 0 && "unhandled function id" );
+	}
+
+	return nullptr;
+}
+
 /// fold nodes subtree into opcodes
 ISphExpr * ExprParser_t::CreateTree ( int iNode )
 {
@@ -6777,23 +7006,26 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		// fixme! Both branches below returns same result. Refactor!
 		case TOK_EQ:
 		case TOK_NE:
-								if ( ( m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_STRING
-										|| m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_STRINGPTR
-										|| m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_JSON_FIELD
-									)
-									&& ( m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRING
-										|| m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRINGPTR )
-									)
-								{
-									return new Expr_StrEq_c ( pLeft, pRight, m_eCollation, ( iOp==TOK_EQ ) );
-								}
-								if ( iOp==TOK_EQ )
-								{
-									LOC_SPAWN_POLY ( Expr_Eq );
-								} else
-								{
-									LOC_SPAWN_POLY ( Expr_Ne );
-								}
+			if ( ( m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_STRING
+					|| m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_STRINGPTR
+					|| m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_JSON_FIELD
+				)
+				&& ( m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRING
+					|| m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRINGPTR )
+				)
+			{
+				if ( !CheckStoredArg(pLeft) || !CheckStoredArg(pRight) )
+					return nullptr;
+
+				return new Expr_StrEq_c ( pLeft, pRight, m_eCollation, ( iOp==TOK_EQ ) );
+			}
+			if ( iOp==TOK_EQ )
+			{
+				LOC_SPAWN_POLY ( Expr_Eq );
+			} else
+			{
+				LOC_SPAWN_POLY ( Expr_Ne );
+			}
 
 		case TOK_AND:			LOC_SPAWN_POLY ( Expr_And );
 		case TOK_OR:			LOC_SPAWN_POLY ( Expr_Or );
@@ -6810,195 +7042,11 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case TOK_NEG:			assert ( !pRight ); return new Expr_Neg_c ( pLeft );
 		case TOK_FUNC:
 			{
-				// fold arglist to array
-				auto eFunc = (Tokh_e)tNode.m_iFunc;
-//				assert ( g_dFuncs[tNode.m_iFunc].m_eFunc==eFunc );
-
 				VecRefPtrs_t<ISphExpr*> dArgs;
-				if ( !bSkipChildren )
-				{
-					SafeAddRef (pLeft);
-					MoveToArgList ( pLeft, dArgs );
-					if ( pRight )
-					{
-						pRight->AddRef ();
-						MoveToArgList ( pRight, dArgs );
-					}
-				}
+				if ( !PrepareFuncArgs ( tNode, bSkipChildren, pLeft, pRight, dArgs ) )
+					return nullptr;
 
-				// spawn proper function
-				assert ( tNode.m_iFunc>=0 && tNode.m_iFunc<int(sizeof(g_dFuncs)/sizeof(g_dFuncs[0])) );
-				assert (
-					( bSkipChildren ) || // function will handle its arglist,
-					( g_dFuncs[tNode.m_iFunc].m_iArgs>=0 && g_dFuncs[tNode.m_iFunc].m_iArgs==dArgs.GetLength() ) || // arg count matches,
-					( g_dFuncs[tNode.m_iFunc].m_iArgs<0 && -g_dFuncs[tNode.m_iFunc].m_iArgs<=dArgs.GetLength() ) ); // or min vararg count reached
-
-				switch ( eFunc )
-				{
-				case FUNC_TO_STRING:
-				case FUNC_INTERVAL:
-				case FUNC_IN:
-				case FUNC_LENGTH:
-				case FUNC_LEAST:
-				case FUNC_GREATEST:
-				case FUNC_ALL:
-				case FUNC_ANY:
-				case FUNC_INDEXOF:
-					break; // these have its own JSON converters
-
-				// all others will get JSON auto-converter
-				default:
-					ConvertArgsJson ( dArgs );
-				}
-
-				switch ( eFunc )
-				{
-					case FUNC_NOW:		return new Expr_Now_c(m_iConstNow);
-
-					case FUNC_ABS:		return new Expr_Abs_c ( dArgs[0] );
-					case FUNC_CEIL:		return new Expr_Ceil_c ( dArgs[0] );
-					case FUNC_FLOOR:	return new Expr_Floor_c ( dArgs[0] );
-					case FUNC_SIN:		return new Expr_Sin_c ( dArgs[0] );
-					case FUNC_COS:		return new Expr_Cos_c ( dArgs[0] );
-					case FUNC_LN:		return new Expr_Ln_c ( dArgs[0] );
-					case FUNC_LOG2:		return new Expr_Log2_c ( dArgs[0] );
-					case FUNC_LOG10:	return new Expr_Log10_c ( dArgs[0] );
-					case FUNC_EXP:		return new Expr_Exp_c ( dArgs[0] );
-					case FUNC_SQRT:		return new Expr_Sqrt_c ( dArgs[0] );
-					case FUNC_SINT:		return new Expr_Sint_c ( dArgs[0] );
-					case FUNC_CRC32:	return new Expr_Crc32_c ( dArgs[0] );
-					case FUNC_FIBONACCI:return new Expr_Fibonacci_c ( dArgs[0] );
-
-					case FUNC_DAY:			return ExprDay ( dArgs[0] );
-					case FUNC_MONTH:		return ExprMonth ( dArgs[0] );
-					case FUNC_YEAR:			return ExprYear ( dArgs[0] );
-					case FUNC_YEARMONTH:	return ExprYearMonth ( dArgs[0] );
-					case FUNC_YEARMONTHDAY:	return ExprYearMonthDay ( dArgs[0] );
-					case FUNC_HOUR:			return new Expr_Hour_c ( dArgs[0] );
-					case FUNC_MINUTE:		return new Expr_Minute_c ( dArgs[0] );
-					case FUNC_SECOND:		return new Expr_Second_c ( dArgs[0] );
-
-					case FUNC_MIN:		return new Expr_Min_c ( dArgs[0], dArgs[1] );
-					case FUNC_MAX:		return new Expr_Max_c ( dArgs[0], dArgs[1] );
-					case FUNC_POW:		return new Expr_Pow_c ( dArgs[0], dArgs[1] );
-					case FUNC_IDIV:		return new Expr_Idiv_c ( dArgs[0], dArgs[1] );
-
-					case FUNC_IF:		return new Expr_If_c ( dArgs[0], dArgs[1], dArgs[2] );
-					case FUNC_MADD:		return new Expr_Madd_c ( dArgs[0], dArgs[1], dArgs[2] );
-					case FUNC_MUL3:		return new Expr_Mul3_c ( dArgs[0], dArgs[1], dArgs[2] );
-					case FUNC_ATAN2:	return new Expr_Atan2_c ( dArgs[0], dArgs[1] );
-					case FUNC_RAND:		return new Expr_Rand_c ( dArgs.GetLength() ? dArgs[0] : nullptr,
-							tNode.m_iLeft<0 ? false : IsConst ( &m_dNodes[tNode.m_iLeft] ));
-
-					case FUNC_INTERVAL:	return CreateIntervalNode ( tNode.m_iLeft, dArgs );
-					case FUNC_IN:		return CreateInNode ( iNode );
-					case FUNC_LENGTH:	return CreateLengthNode ( tNode, dArgs[0] );
-					case FUNC_BITDOT:	return CreateBitdotNode ( tNode.m_iLeft, dArgs );
-					case FUNC_REMAP:
-					{
-						CSphRefcountedPtr<ISphExpr> pCond ( CreateTree ( tNode.m_iLeft ) );
-						CSphRefcountedPtr<ISphExpr> pVal ( CreateTree ( tNode.m_iRight ) );
-						assert ( pCond && pVal );
-						// This is a hack. I know how parser fills m_dNodes and thus know where to find constlists.
-						const CSphVector<int64_t> & dConds = m_dNodes [ iNode-2 ].m_pConsts->m_dInts;
-						const ConstList_c & tVals = *m_dNodes [ iNode-1 ].m_pConsts;
-						return new Expr_Remap_c ( pCond, pVal, dConds, tVals );
-					}
-
-					case FUNC_GEODIST:	return CreateGeodistNode ( tNode.m_iLeft );
-					case FUNC_EXIST:	return CreateExistNode ( tNode );
-					case FUNC_CONTAINS:	return CreateContainsNode ( tNode );
-
-					case FUNC_POLY2D:
-					case FUNC_GEOPOLY2D:break; // just make gcc happy
-
-					case FUNC_ZONESPANLIST:
-						m_bHasZonespanlist = true;
-						m_eEvalStage = SPH_EVAL_PRESORT;
-						return new Expr_GetZonespanlist_c ();
-					case FUNC_TO_STRING:
-						return new Expr_ToString_c ( dArgs[0], m_dNodes [ tNode.m_iLeft ].m_eRetType );
-					case FUNC_CONCAT:
-						return CreateConcatNode ( tNode.m_iLeft, dArgs );
-					case FUNC_RANKFACTORS:
-						m_eEvalStage = SPH_EVAL_PRESORT;
-						return new Expr_GetRankFactors_c();
-					case FUNC_FACTORS:
-						return CreatePFNode ( tNode.m_iLeft );
-					case FUNC_BM25F:
-					{
-						m_uPackedFactorFlags |= SPH_FACTOR_ENABLE;
-
-						CSphVector<int> dBM25FArgs = GatherArgNodes ( tNode.m_iLeft );
-						const ExprNode_t & tLeft = m_dNodes [ dBM25FArgs[0] ];
-						const ExprNode_t & tRight = m_dNodes [ dBM25FArgs[1] ];
-						float fK1 = tLeft.m_fConst;
-						float fB = tRight.m_fConst;
-						fK1 = Max ( fK1, 0.001f );
-						fB = Min ( Max ( fB, 0.0f ), 1.0f );
-
-						CSphVector<CSphNamedVariant> * pFieldWeights = nullptr;
-						if ( dBM25FArgs.GetLength()>2 )
-							pFieldWeights = &m_dNodes [ dBM25FArgs[2] ].m_pMapArg->m_dPairs;
-
-						return new Expr_BM25F_c ( fK1, fB, pFieldWeights );
-					}
-
-					case FUNC_QUERY:
-						return new Expr_GetQuery_c;
-
-					case FUNC_BIGINT:
-					case FUNC_INTEGER:
-					case FUNC_DOUBLE:
-					case FUNC_UINT:
-						SafeAddRef ( dArgs[0] );
-						return dArgs[0];
-
-					case FUNC_LEAST:	return CreateAggregateNode ( tNode, SPH_AGGR_MIN, dArgs[0] );
-					case FUNC_GREATEST:	return CreateAggregateNode ( tNode, SPH_AGGR_MAX, dArgs[0] );
-
-					case FUNC_CURTIME:	return new Expr_Time_c ( false, false );
-					case FUNC_UTC_TIME: return new Expr_Time_c ( true, false );
-					case FUNC_UTC_TIMESTAMP: return new Expr_Time_c ( true, true );
-					case FUNC_TIMEDIFF: return new Expr_TimeDiff_c ( dArgs[0], dArgs[1] );
-
-					case FUNC_ALL:
-					case FUNC_ANY:
-					case FUNC_INDEXOF:
-						return CreateForInNode ( iNode );
-
-					case FUNC_MIN_TOP_WEIGHT:
-						m_eEvalStage = SPH_EVAL_PRESORT;
-						return new Expr_MinTopWeight_c();
-
-					case FUNC_MIN_TOP_SORTVAL:
-						m_eEvalStage = SPH_EVAL_PRESORT;
-						return new Expr_MinTopSortval_c();
-
-					case FUNC_REGEX:
-						return CreateRegexNode ( dArgs[0], dArgs[1] );
-
-					case FUNC_SUBSTRING_INDEX:
-						return new Expr_SubstringIndex_c ( dArgs[0], dArgs[1], dArgs[2] );
-
-                    case FUNC_UPPER:
-                        return new Expr_Case_c<true> ( dArgs[0] );
-                    case FUNC_LOWER:
-                        return new Expr_Case_c<false> ( dArgs[0] );
-
-					case FUNC_LAST_INSERT_ID: return new Expr_LastInsertID_c();
-					case FUNC_CURRENT_USER: {
-						auto sUser = CurrentUser();
-						return new Expr_GetStrConst_c ( sUser.first, sUser.second, false );
-					}
-					case FUNC_CONNECTION_ID: return new Expr_GetIntConst_c ( ConnID() );
-					case FUNC_LEVENSHTEIN: return CreateLevenshteinNode ( dArgs[0], dArgs[1], ( dArgs.GetLength()>2 ? dArgs[2] : nullptr ) );
-
-					default: // just make gcc happy
-						break;
-				}
-				assert ( 0 && "unhandled function id" );
-				break;
+				return CreateFuncExpr ( iNode, dArgs );
 			}
 
 		case TOK_UDF:			return CreateUdfNode ( tNode.m_iFunc, pLeft );
@@ -8689,6 +8737,10 @@ ISphExpr * ExprParser_t::CreateRegexNode ( ISphExpr * pAttr, ISphExpr * pString 
 
 ISphExpr * ExprParser_t::CreateConcatNode ( int iArgsNode, CSphVector<ISphExpr *> & dArgs )
 {
+	for ( auto & i : dArgs )
+		if ( !CheckStoredArg(i) )
+			return nullptr;
+
 	CSphVector<ESphAttr> dTypes;
 	GatherArgRetTypes ( iArgsNode, dTypes );
 

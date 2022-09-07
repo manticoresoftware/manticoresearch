@@ -2187,7 +2187,7 @@ void FormatFilterQL ( const CSphFilterSettings & f, StringBuilder_c & tBuf, int 
 }
 
 
-static void FormatTreeItem ( StringBuilder_c & tBuf, const FilterTreeItem_t & tItem, const CSphVector<CSphFilterSettings> & dFilters, int iCompactIN )
+static void FormatTreeItem ( StringBuilder_c & tBuf, const FilterTreeItem_t & tItem, const VecTraits_T<CSphFilterSettings> & dFilters, int iCompactIN )
 {
 	if ( tItem.m_iFilterItem!=-1 )
 		FormatFilterQL ( dFilters[tItem.m_iFilterItem], tBuf, iCompactIN );
@@ -2196,7 +2196,7 @@ static void FormatTreeItem ( StringBuilder_c & tBuf, const FilterTreeItem_t & tI
 }
 
 
-static CSphString LogFilterTree ( int iStartItem, const CSphVector<FilterTreeItem_t> & dTree, const CSphVector<CSphFilterSettings> & dFilters, int iCompactIN )
+static CSphString LogFilterTree ( int iStartItem, const VecTraits_T<FilterTreeItem_t> & dTree, const VecTraits_T<CSphFilterSettings> & dFilters, int iCompactIN )
 {
 	struct LogTreeNode_t
 	{
@@ -2252,7 +2252,7 @@ static CSphString LogFilterTree ( int iStartItem, const CSphVector<FilterTreeIte
 }
 
 
-void FormatFiltersQL ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree, StringBuilder_c & tBuf, int iCompactIN )
+void FormatFiltersQL ( const VecTraits_T<CSphFilterSettings> & dFilters, const VecTraits_T<FilterTreeItem_t> & dFilterTree, StringBuilder_c & tBuf, int iCompactIN )
 {
 	if ( dFilterTree.IsEmpty() )
 	{

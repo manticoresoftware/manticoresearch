@@ -18,7 +18,7 @@
 using StackSizeTuplet_t = std::pair<int,int>; // create, eval
 
 template <typename T>
-bool EvalStackForTree ( const CSphVector<T> & dTree, int iStartNode, StackSizeTuplet_t tNodeStackSize, int iTreeSizeThresh, int & iStackNeeded, const char * szName, CSphString & sError )
+bool EvalStackForTree ( const VecTraits_T<T> & dTree, int iStartNode, StackSizeTuplet_t tNodeStackSize, int iTreeSizeThresh, int & iStackNeeded, const char * szName, CSphString & sError )
 {
 	enum eStackSizePurpose { CREATE, EVAL };
 	iStackNeeded = -1;

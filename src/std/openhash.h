@@ -53,6 +53,7 @@ public:
 	/// get number of inserted key-value pairs
 	int64_t GetLength() const;
 	int64_t GetLengthBytes() const;
+	int64_t GetUsedLengthBytes() const;
 	 
 	/// iterate the hash by entry index, starting from 0
 	/// finds the next alive key-value pair starting from the given index

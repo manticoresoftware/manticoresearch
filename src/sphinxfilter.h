@@ -66,8 +66,8 @@ class HistogramContainer_c;
 
 struct CreateFilterContext_t
 {
-	const CSphVector<CSphFilterSettings> * m_pFilters = nullptr;
-	const CSphVector<FilterTreeItem_t> * m_pFilterTree = nullptr;
+	const VecTraits_T<CSphFilterSettings> * m_pFilters = nullptr;
+	const VecTraits_T<FilterTreeItem_t> * m_pFilterTree = nullptr;
 
 	const ISphSchema *			m_pSchema = nullptr;
 	const BYTE *				m_pBlobPool = nullptr;
@@ -94,7 +94,7 @@ std::unique_ptr<ISphFilter> sphJoinFilters ( std::unique_ptr<ISphFilter>, std::u
 bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphString & sWarning );
 
 void FormatFilterQL ( const CSphFilterSettings & tFilter, StringBuilder_c & tBuf, int iCompactIN );
-void FormatFiltersQL ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree, StringBuilder_c & tBuf, int iCompactIN=5 );
+void FormatFiltersQL ( const VecTraits_T<CSphFilterSettings> & dFilters, const VecTraits_T<FilterTreeItem_t> & dFilterTree, StringBuilder_c & tBuf, int iCompactIN=5 );
 void FixupFilterSettings ( const CSphFilterSettings & tSettings, ESphAttr eAttrType, CommonFilterSettings_t & tFixedSettings );
 
 void OptimizeFilters ( CSphVector<CSphFilterSettings> & dFilters );

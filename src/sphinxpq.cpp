@@ -36,15 +36,14 @@ static auto &g_bRTChangesAllowed = RTChangesAllowed ();
 
 struct StoredQuery_t : public StoredQuery_i, public ISphRefcountedMT
 {
+	CSphFixedVector<uint64_t>		m_dRejectTerms { 0 };
+	CSphFixedVector<uint64_t>		m_dRejectWilds { 0 };
+	CSphFixedVector<uint64_t>		m_dTags { 0 };
+	CSphVector<CSphString>			m_dSuffixes;
+	DictMap_t						m_hDict;
 	std::unique_ptr<XQQuery_t>		m_pXQ;
 
-	CSphVector<uint64_t>			m_dRejectTerms;
-	CSphFixedVector<uint64_t>		m_dRejectWilds {0};
 	bool							m_bOnlyTerms = false; // flag of simple query, ie only words and no operators
-	CSphVector<uint64_t>			m_dTags;
-	DictMap_t						m_hDict;
-	CSphVector<CSphString>			m_dSuffixes;
-
 	bool							IsFullscan() const { return m_pXQ->m_bEmpty; }
 };
 
@@ -342,13 +341,16 @@ static void DoQueryGetRejects ( const XQNode_t * pNode, const DictRefPtr_c& pDic
 		DoQueryGetRejects ( pNode->m_dChildren[i], pDict, dRejectTerms, dRejectBloom, dSuffixes, bOnlyTerms, bUtf8 );
 }
 
-static void QueryGetRejects ( const XQNode_t * pNode, const DictRefPtr_c& pDict, CSphVector<uint64_t> & dRejectTerms, CSphFixedVector<uint64_t> & dRejectBloom, CSphVector<CSphString> & dSuffixes, bool & bOnlyTerms, bool bUtf8 )
+static void QueryGetRejects ( const XQNode_t * pNode, const DictRefPtr_c& pDict, CSphFixedVector<uint64_t> & dRejectTerms, CSphFixedVector<uint64_t> & dRejectBloom, CSphVector<CSphString> & dSuffixes, bool & bOnlyTerms, bool bUtf8 )
 {
-	DoQueryGetRejects ( pNode, pDict, dRejectTerms, dRejectBloom, dSuffixes, bOnlyTerms, bUtf8 );
-	dRejectTerms.Uniq();
+	CSphVector<uint64_t> dTmpTerms;
+	DoQueryGetRejects ( pNode, pDict, dTmpTerms, dRejectBloom, dSuffixes, bOnlyTerms, bUtf8 );
+	dTmpTerms.Uniq();
+
+	dRejectTerms.CopyFrom ( dTmpTerms );
 }
 
-static void QueryGetTerms ( const XQNode_t * pNode, const DictRefPtr_c& pDict, DictMap_t & hDict )
+static void DoQueryGetTerms ( const XQNode_t * pNode, const DictRefPtr_c& pDict, DictMap_t & hDict, CSphVector<BYTE> & dKeywords )
 {
 	if ( !pNode )
 		return;
@@ -382,17 +384,25 @@ static void QueryGetTerms ( const XQNode_t * pNode, const DictRefPtr_c& pDict, D
 		iLen = (int) strnlen ( (const char *)sTmp, sizeof(sTmp) );
 		DictTerm_t & tTerm = hDict.m_hTerms.Acquire ( uHash );
 		tTerm.m_uWordID = uWord;
-		tTerm.m_iWordOff = hDict.m_dKeywords.GetLength();
+		tTerm.m_iWordOff = dKeywords.GetLength();
 		tTerm.m_iWordLen = iLen;
 
-		hDict.m_dKeywords.Append ( sTmp, iLen );
+		dKeywords.Append ( sTmp, iLen );
 	}
 
 	for ( const XQNode_t * pChild : pNode->m_dChildren )
-		QueryGetTerms ( pChild, pDict, hDict );
+		DoQueryGetTerms ( pChild, pDict, hDict, dKeywords );
 }
 
-static bool TermsReject ( const CSphVector<uint64_t> & dDocs, const CSphVector<uint64_t> & dQueries )
+static void QueryGetTerms ( const XQNode_t * pNode, const DictRefPtr_c& pDict, DictMap_t & hDict )
+{
+	CSphVector<BYTE> dKeywords;
+	DoQueryGetTerms ( pNode, pDict, hDict, dKeywords );
+
+	hDict.m_dKeywords.CopyFrom ( dKeywords );
+}
+
+static bool TermsReject ( const VecTraits_T<uint64_t> & dDocs, const VecTraits_T<uint64_t> & dQueries )
 {
 	if ( !dDocs.GetLength() || !dQueries.GetLength() )
 		return false;
@@ -648,7 +658,7 @@ static void GetSuffixLocators ( const char * sWord, int iMaxCodepointLength, con
 	}
 }
 
-static void PercolateTags ( const char * szTags, CSphVector<uint64_t> & dTags )
+static void PercolateTags ( const char * szTags, CSphFixedVector<uint64_t> & dDstTags )
 {
 	if ( !szTags || !*szTags )
 		return;
@@ -658,10 +668,13 @@ static void PercolateTags ( const char * szTags, CSphVector<uint64_t> & dTags )
 	if ( dTagStrings.IsEmpty() )
 		return;
 
-	dTags.Resize ( dTagStrings.GetLength() );
+	CSphFixedVector<uint64_t> dTmpTags ( dTagStrings.GetLength() );
 	ARRAY_FOREACH ( i, dTagStrings )
-		dTags[i] = sphFNV64 ( dTagStrings[i].cstr() );
-	dTags.Uniq();
+		dTmpTags[i] = sphFNV64 ( dTagStrings[i].cstr() );
+	
+	dTmpTags.Sort();
+	int iLen = sphUniq ( dTmpTags.Begin(), dTmpTags.GetLength() );
+	dDstTags.CopyFrom ( dTmpTags.Slice ( 0, iLen ) );
 }
 
 static void PercolateAppendTags ( const CSphString& sTags, CSphVector<uint64_t>& dTags )
@@ -1593,7 +1606,6 @@ void PercolateIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 					+ pItem->m_dRejectTerms.GetLengthBytes64()
 					+ pItem->m_dRejectWilds.GetLengthBytes64()
 					+ pItem->m_dTags.GetLengthBytes64 ()
-					+ pItem->m_dTags.GetLengthBytes64 ()
 					+ pItem->m_dFilterTree.GetLengthBytes64 ()
 					+ pItem->m_dFilters.GetLengthBytes64()
 					+ pItem->m_dSuffixes.GetLengthBytes()
@@ -1605,6 +1617,66 @@ void PercolateIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 	}
 	pRes->m_iRamUse = iRamUse;
 }
+
+class XQTreeCompressor_t
+{
+	CSphVector<XQNode_t *> m_dWords;
+	CSphVector<XQNode_t *> m_dChildren;
+
+	void WalkNodes ( XQNode_t * pNode )
+	{
+		if ( !pNode )
+			return;
+
+		if ( pNode->m_dWords.GetLength() && pNode->m_dWords.GetLength()!=pNode->m_dWords.GetLimit() )
+			m_dWords.Add ( pNode );
+
+		if ( pNode->m_dChildren.GetLength() && pNode->m_dChildren.GetLength()!=pNode->m_dChildren.GetLimit() )
+			m_dChildren.Add ( pNode );
+
+		for ( auto & tChild : pNode->m_dChildren )
+			WalkNodes ( tChild );
+	}
+
+	void Copy ()
+	{
+		// collect all old vectors then free them at once
+		CSphFixedVector< CSphVector<XQKeyword_t> > dWords2Free ( m_dWords.GetLength() );
+		CSphFixedVector< CSphVector<XQNode_t *> > dChildren2Free ( m_dChildren.GetLength() );
+
+		for ( int i=0; i<m_dWords.GetLength(); i++ )
+		{
+			auto & dSrcWords = m_dWords[i]->m_dWords;
+			int iLen = dSrcWords.GetLength();
+			
+			CSphFixedVector<XQKeyword_t> dDstWords ( iLen );
+			dDstWords.CopyFrom ( dSrcWords );
+
+			dWords2Free[i].SwapData ( dSrcWords ); // remove all collected vectors m_pData on exit
+			dSrcWords.AdoptData ( dDstWords.LeakData(), iLen, iLen );
+		}
+
+		for ( int i=0; i<m_dChildren.GetLength(); i++ )
+		{
+			auto & dSrcChild = m_dChildren[i]->m_dChildren;
+			int iLen = dSrcChild.GetLength();
+			
+			CSphFixedVector<XQNode_t *> dDstChildren ( iLen );
+			dDstChildren.CopyFrom ( dSrcChild );
+			dSrcChild.Resize ( 0 ); // XQNode_t poionter moved into new fixed-vector
+
+			dChildren2Free[i].SwapData ( dSrcChild ); // remove all collected vectors m_pData on exit
+			dSrcChild.AdoptData ( dDstChildren.LeakData(), iLen, iLen );
+		}
+	}
+
+public:
+	void DoWork ( XQNode_t * pNode )
+	{
+		WalkNodes ( pNode );
+		Copy();
+	}
+};
 
 std::unique_ptr<StoredQuery_i> PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, CSphString & sError )
 {
@@ -1730,6 +1802,12 @@ std::unique_ptr<StoredQuery_i> PercolateIndex_c::CreateQuery ( PercolateQueryArg
 	if ( m_tSettings.GetMinPrefixLen ( bWordDict )>0 || m_tSettings.m_iMinInfixLen>0 )
 		tParsed->m_pRoot = FixExpanded ( tParsed->m_pRoot, m_tSettings.GetMinPrefixLen ( bWordDict ), m_tSettings.m_iMinInfixLen, ( pDict->HasMorphology () || m_tSettings.m_bIndexExactWords ) );
 
+	// FIXME!!! move whole m_pRoot/pStored->m_pXQ content into arena and use from there to reduce fragmentation
+	{
+		XQTreeCompressor_t tXQCompressor;
+		tXQCompressor.DoWork( tParsed->m_pRoot );
+	}
+
 	auto pStored = std::make_unique<StoredQuery_t>();
 	pStored->m_pXQ = std::move ( tParsed );
 	pStored->m_bOnlyTerms = true;
@@ -1739,8 +1817,8 @@ std::unique_ptr<StoredQuery_i> PercolateIndex_c::CreateQuery ( PercolateQueryArg
 	pStored->m_sTags = tArgs.m_sTags;
 	PercolateTags ( tArgs.m_sTags, pStored->m_dTags );
 	pStored->m_iQUID = tArgs.m_iQUID;
-	pStored->m_dFilters = tArgs.m_dFilters;
-	pStored->m_dFilterTree = tArgs.m_dFilterTree;
+	pStored->m_dFilters.CopyFrom ( tArgs.m_dFilters );
+	pStored->m_dFilterTree.CopyFrom ( tArgs.m_dFilterTree );
 	pStored->m_bQL = tArgs.m_bQL;
 	// need keep m_bEmpty only in case query string is really empty string
 	// but use full-text matching path in case query has only out of charset_table chars
@@ -2884,8 +2962,8 @@ bool PercolateIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 		tQuery.m_iQUID = pStored->m_iQUID;
 		tQuery.m_sQuery = pStored->m_sQuery;
 		tQuery.m_sTags = pStored->m_sTags;
-		tQuery.m_dFilters = pStored->m_dFilters;
-		tQuery.m_dFilterTree = pStored->m_dFilterTree;
+		tQuery.m_dFilters.CopyFrom ( pStored->m_dFilters );
+		tQuery.m_dFilterTree.CopyFrom ( pStored->m_dFilterTree );
 	}
 
 	m_pQueries = new CSphVector<StoredQuerySharedPtr_t>;
@@ -2941,7 +3019,7 @@ void PercolateIndex_c::LockFileState ( StrVec_t & dFiles )
 }
 
 
-PercolateQueryArgs_t::PercolateQueryArgs_t ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree )
+PercolateQueryArgs_t::PercolateQueryArgs_t ( const VecTraits_T<CSphFilterSettings> & dFilters, const VecTraits_T<FilterTreeItem_t> & dFilterTree )
 	: m_dFilters ( dFilters )
 	, m_dFilterTree ( dFilterTree )
 {}
@@ -3231,8 +3309,8 @@ void LoadStoredQueryV6 ( DWORD uVersion, StoredQueryDesc_t & tQuery, CSphReader 
 
 	tQuery.m_sTags = tReader.GetString();
 
-	tQuery.m_dFilters.Resize ( tReader.GetDword() );
-	tQuery.m_dFilterTree.Resize ( tReader.GetDword() );
+	tQuery.m_dFilters.Reset ( tReader.GetDword() );
+	tQuery.m_dFilterTree.Reset ( tReader.GetDword() );
 	for ( auto& tFilter : tQuery.m_dFilters )
 	{
 		tFilter.m_sAttrName = tReader.GetString();
@@ -3268,8 +3346,8 @@ void LoadStoredQuery ( DWORD uVersion, StoredQueryDesc_t & tQuery, READER & tRea
 	tQuery.m_sQuery = tReader.GetString();
 	tQuery.m_sTags = tReader.GetString();
 
-	tQuery.m_dFilters.Resize ( tReader.UnzipInt() );
-	tQuery.m_dFilterTree.Resize ( tReader.UnzipInt() );
+	tQuery.m_dFilters.Reset ( tReader.UnzipInt() );
+	tQuery.m_dFilterTree.Reset ( tReader.UnzipInt() );
 	for ( auto& tFilter : tQuery.m_dFilters )
 	{
 		tFilter.m_sAttrName = tReader.GetString();
@@ -3283,12 +3361,19 @@ void LoadStoredQuery ( DWORD uVersion, StoredQueryDesc_t & tQuery, READER & tRea
 		tFilter.m_eMvaFunc = (ESphMvaFunc)tReader.UnzipInt ();
 		tFilter.m_iMinValue = tReader.UnzipOffset();
 		tFilter.m_iMaxValue = tReader.UnzipOffset();
-		tFilter.m_dValues.Resize ( tReader.UnzipInt() );
-		tFilter.m_dStrings.Resize ( tReader.UnzipInt() );
-		for ( auto& dValue : tFilter.m_dValues )
+
+		int iValCount = tReader.UnzipInt();
+		int iStrCount = tReader.UnzipInt();
+		CSphFixedVector<SphAttr_t> dVals ( iValCount );
+		CSphFixedVector<CSphString> dStrings ( iStrCount );
+
+		for ( auto & dValue : dVals )
 			dValue = tReader.UnzipOffset ();
-		for ( auto& dString : tFilter.m_dStrings )
+		for ( auto & dString : dStrings )
 			dString = tReader.GetString ();
+
+		tFilter.m_dValues.AdoptData ( dVals.LeakData(), iValCount, iValCount );
+		tFilter.m_dStrings.AdoptData ( dStrings.LeakData(), iStrCount, iStrCount );
 	}
 	for ( auto& tItem : tQuery.m_dFilterTree )
 	{
@@ -3409,7 +3494,55 @@ void operator<< ( JsonEscapedBuilder& tOut, const StoredQueryDesc_t& tQuery )
 	}
 }
 
-void LoadStoredFilterTreeItemJson ( FilterTreeItem_t& tItem, const bson::Bson_c& tNode )
+template<typename T>
+class JsonLoaderData_T
+{
+	CSphFixedVector<T> m_dVals { 0 };
+	int m_iItem { 0 };
+	bson::Bson_c m_tParent;
+
+public:
+	explicit JsonLoaderData_T ( bson::NodeHandle_t tNode )
+		: m_tParent ( tNode )
+	{
+		if ( !bson::IsNullNode ( m_tParent ) )
+			m_dVals.Reset ( m_tParent.CountValues() );
+	}
+
+	T & GetNextItem ()
+	{
+		return m_dVals[m_iItem++];
+	}
+
+	void LoadItemJson ( bson::Action_f && fAction )
+	{
+		if ( bson::IsNullNode ( m_tParent ) )
+			return;
+
+		m_tParent.ForEach ( [&fAction] ( const bson::NodeHandle_t& tNode ) {
+			fAction ( tNode );
+		} );
+	}
+
+	void MoveTo ( CSphVector<T> & dDst )
+	{
+		if ( bson::IsNullNode ( m_tParent ) )
+			return;
+
+		int iCount = m_dVals.GetLength();
+		dDst.AdoptData ( m_dVals.LeakData(), iCount, iCount );
+	}
+
+	void SwapData ( CSphFixedVector<T> & dDst )
+	{
+		if ( bson::IsNullNode ( m_tParent ) )
+			return;
+
+		dDst.SwapData ( m_dVals );
+	}
+};
+
+void LoadStoredFilterTreeItemJson ( const bson::Bson_c & tNode, FilterTreeItem_t & tItem )
 {
 	using namespace bson;
 	tItem.m_iLeft = (int)Int ( tNode.ChildByName ( "left" ), -1 );
@@ -3418,7 +3551,7 @@ void LoadStoredFilterTreeItemJson ( FilterTreeItem_t& tItem, const bson::Bson_c&
 	tItem.m_bOr = Bool ( tNode.ChildByName ( "or" ), false );
 }
 
-void LoadStoredFilterItemJson ( CSphFilterSettings& tFilter, const bson::Bson_c& tNode )
+void LoadStoredFilterItemJson ( const bson::Bson_c & tNode, CSphFilterSettings & tFilter )
 {
 	using namespace bson;
 	tFilter.m_eType = (ESphFilter)Int ( tNode.ChildByName ( "type" ), SPH_FILTER_VALUES );
@@ -3439,21 +3572,19 @@ void LoadStoredFilterItemJson ( CSphFilterSettings& tFilter, const bson::Bson_c&
 	tFilter.m_bOpenRight = Bool ( tNode.ChildByName ( "open_right" ), false );
 	tFilter.m_bIsNull = Bool ( tNode.ChildByName ( "is_null" ), false );
 	tFilter.m_eMvaFunc = (ESphMvaFunc)Int ( tNode.ChildByName ( "mva_func" ), SPH_MVAFUNC_NONE );
-
-	auto tValuesNode = tNode.ChildByName ( "values" );
-	if ( !IsNullNode ( tValuesNode ) )
-		Bson_c ( tValuesNode ).ForEach ( [&tFilter] ( const NodeHandle_t& tNode ) {
-			tFilter.m_dValues.Add ( Int ( tNode ) );
-		} );
-
-	auto tStringsNode = tNode.ChildByName ( "strings" );
-	if ( !IsNullNode ( tStringsNode ) )
-		Bson_c ( tStringsNode ).ForEach ( [&tFilter] ( const NodeHandle_t& tNode ) {
-			tFilter.m_dStrings.Add ( String ( tNode ) );
-		} );
+	{
+		JsonLoaderData_T<SphAttr_t> tLoaderValues ( tNode.ChildByName ( "values" ) );
+		tLoaderValues.LoadItemJson ( [&tLoaderValues] ( const NodeHandle_t& tNode ) { tLoaderValues.GetNextItem() = Int ( tNode ); } );
+		tLoaderValues.MoveTo ( tFilter.m_dValues );
+	}
+	{
+		JsonLoaderData_T<CSphString> tLoaderStrings ( tNode.ChildByName ( "strings" ) );
+		tLoaderStrings.LoadItemJson ( [&tLoaderStrings] ( const NodeHandle_t& tNode ) { tLoaderStrings.GetNextItem() = String ( tNode ); } );
+		tLoaderStrings.MoveTo ( tFilter.m_dStrings );
+	}
 }
 
-void LoadStoredQueryJson ( StoredQueryDesc_t& tQuery, const bson::Bson_c& tNode )
+void LoadStoredQueryJson ( StoredQueryDesc_t & tQuery, const bson::Bson_c & tNode )
 {
 	using namespace bson;
 	assert ( tNode.IsAssoc() );
@@ -3463,22 +3594,21 @@ void LoadStoredQueryJson ( StoredQueryDesc_t& tQuery, const bson::Bson_c& tNode 
 	tQuery.m_sQuery = String ( tNode.ChildByName ( "query" ) );
 	tQuery.m_sTags = String ( tNode.ChildByName ( "tags" ) );
 
-	auto tFiltersNode = tNode.ChildByName ( "filters" );
-	if ( !IsNullNode ( tFiltersNode ) )
 	{
-		Bson_c ( tFiltersNode ).ForEach ( [&tQuery] ( const NodeHandle_t& tNode ) {
-			CSphFilterSettings& tFilter = tQuery.m_dFilters.Add();
-			LoadStoredFilterItemJson ( tFilter, tNode );
-		} );
+		JsonLoaderData_T<CSphFilterSettings> tLoaderFilters ( tNode.ChildByName ( "filters" ) );
+		tLoaderFilters.LoadItemJson ( [&tLoaderFilters] ( const NodeHandle_t& tNode ) {
+			CSphFilterSettings & tFilter = tLoaderFilters.GetNextItem();
+			LoadStoredFilterItemJson ( tNode, tFilter );
+			} );
+		tLoaderFilters.SwapData ( tQuery.m_dFilters );
 	}
-
-	auto tFilterTreeNode = tNode.ChildByName ( "filter_tree" );
-	if ( !IsNullNode ( tFilterTreeNode ) )
 	{
-		Bson_c ( tFilterTreeNode ).ForEach ( [&tQuery] ( const NodeHandle_t& tNode ) {
-			FilterTreeItem_t& tFilter = tQuery.m_dFilterTree.Add();
-			LoadStoredFilterTreeItemJson ( tFilter, tNode );
-		} );
+		JsonLoaderData_T<FilterTreeItem_t> tLoaderFilterTree ( tNode.ChildByName ( "filter_tree" ) );
+		tLoaderFilterTree.LoadItemJson ( [&tLoaderFilterTree] ( const NodeHandle_t& tNode ) {
+			auto & tFilterItem = tLoaderFilterTree.GetNextItem();
+			LoadStoredFilterTreeItemJson ( tNode, tFilterItem );
+			} );
+		tLoaderFilterTree.SwapData ( tQuery.m_dFilterTree );
 	}
 }
 

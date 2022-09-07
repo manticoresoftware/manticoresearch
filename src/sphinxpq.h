@@ -72,14 +72,14 @@ struct PercolateQueryArgs_t
 {
 	const char * m_sQuery = nullptr;
 	const char * m_sTags = nullptr;
-	const CSphVector<CSphFilterSettings> & m_dFilters;
-	const CSphVector<FilterTreeItem_t> & m_dFilterTree;
+	const VecTraits_T<CSphFilterSettings> & m_dFilters;
+	const VecTraits_T<FilterTreeItem_t> & m_dFilterTree;
 	int64_t m_iQUID = 0;
 	bool m_bQL = true;
 
 	bool m_bReplace = false;
 
-	PercolateQueryArgs_t ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree );
+	PercolateQueryArgs_t ( const VecTraits_T<CSphFilterSettings> & dFilters, const VecTraits_T<FilterTreeItem_t> & dFilterTree );
 	explicit PercolateQueryArgs_t ( const StoredQueryDesc_t & tDesc );
 };
 
@@ -127,8 +127,8 @@ struct DictTerm_t
 
 struct DictMap_t
 {
-	OpenHash_T<DictTerm_t, int64_t, HashFunc_Int64_t> m_hTerms;
-	CSphVector<BYTE> m_dKeywords;
+	OpenHash_T<DictTerm_t, int64_t, HashFunc_Int64_t> m_hTerms { 0 };
+	CSphFixedVector<BYTE> m_dKeywords { 0 };
 
 	SphWordID_t GetTerm ( BYTE * pWord ) const;
 };

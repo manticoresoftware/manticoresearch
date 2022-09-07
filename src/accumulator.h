@@ -19,8 +19,8 @@
 
 struct StoredQueryDesc_t
 {
-	CSphVector<CSphFilterSettings>	m_dFilters;
-	CSphVector<FilterTreeItem_t>	m_dFilterTree;
+	CSphFixedVector<CSphFilterSettings>	m_dFilters { 0 };
+	CSphFixedVector<FilterTreeItem_t>	m_dFilterTree { 0 };
 
 	CSphString						m_sQuery;
 	CSphString						m_sTags;

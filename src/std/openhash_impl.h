@@ -99,6 +99,9 @@ void OpenHash_T<VALUE, KEY, HASHFUNC>::Clear()
 template<typename VALUE, typename KEY, typename HASHFUNC>
 VALUE & OpenHash_T<VALUE, KEY, HASHFUNC>::Acquire ( KEY k )
 {
+	if ( !m_iSize )
+		Grow();
+
 	DWORD uHash = HASHFUNC::GetHash(k);
 	int64_t iIndex = uHash & ( m_iSize-1 );
 
@@ -210,6 +213,12 @@ int64_t OpenHash_T<VALUE, KEY, HASHFUNC>::GetLengthBytes() const
 	return m_iSize * sizeof ( Entry_t );
 }
 
+template<typename VALUE, typename KEY, typename HASHFUNC>
+int64_t OpenHash_T<VALUE, KEY, HASHFUNC>::GetUsedLengthBytes() const
+{
+	return m_iUsed * sizeof ( Entry_t );
+}
+
 /// iterate the hash by entry index, starting from 0
 /// finds the next alive key-value pair starting from the given index
 /// returns that pair and updates the index on success
@@ -307,6 +316,9 @@ void OpenHash_T<VALUE, KEY, HASHFUNC>::Grow()
 template<typename VALUE, typename KEY, typename HASHFUNC>
 inline typename OpenHash_T<VALUE, KEY, HASHFUNC>::Entry_t * OpenHash_T<VALUE, KEY, HASHFUNC>::FindEntry ( KEY k ) const
 {
+	if ( !m_iSize )
+		return nullptr;
+
 	int64_t iIndex = HASHFUNC::GetHash(k) & ( m_iSize-1 );
 
 	while ( m_pHash[iIndex].m_bUsed )

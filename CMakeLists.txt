@@ -122,6 +122,7 @@ if (STATIC_BINARY)
 	set ( WITH_POSTGRESQL 0 CACHE BOOL "" FORCE )
 	set ( WITH_GALERA 0 CACHE BOOL "" FORCE )
 	set ( WITH_SSL 0 CACHE BOOL "" FORCE )
+	set ( WITH_ZSTD 0 CACHE BOOL "" FORCE )
 	SET ( BUILD_TESTING 0 CACHE BOOL "" FORCE )
 elseif (NOT WIN32)
 	if (CMAKE_DL_LIBS) # CMAKE internal, usually '-ldl' on most UNIX machines

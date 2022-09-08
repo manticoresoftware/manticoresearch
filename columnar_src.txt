@@ -1,1 +1,5 @@
-GIT_REPOSITORY https://github.com/manticoresoftware/columnar.git GIT_TAG f57d14b91e18aaef57c2ef8fda1b6bc8fac0755a
+GIT_REPOSITORY https://github.com/manticoresoftware/columnar.git GIT_TAG "${AUTO_TAG}"
+------------------------------------------------------
+Only 1-st line of this file is mandatory and important.
+Default line here is GIT_REPOSITORY https://github.com/manticoresoftware/columnar.git GIT_TAG ${AUTO_TAG}
+AUTO_TAG to automatically substituted by 'cX-sY' where X is columnar API version, and Y is secondary API version

@@ -17,11 +17,19 @@ message ( STATUS "Inside directory src..." )
 #		LIB_VERSION
 #		)
 
+# columnar and secondary modules
 include ( GetColumnar )
-include ( GetSecondary )
-target_link_libraries ( lextra INTERFACE columnar::columnar_api )
-target_include_directories ( lextra INTERFACE ${CMAKE_CURRENT_SOURCE_DIR} )
+target_link_libraries ( lextra INTERFACE columnar::columnar_api columnar::secondary_api)
 
+# check if we have correct columnar api
+set_property ( TARGET lextra PROPERTY INTERFACE_COLUMNAR_API_VERSION ${NEED_COLUMNAR_API} )
+set_property ( TARGET lextra APPEND PROPERTY COMPATIBLE_INTERFACE_STRING COLUMNAR_API_VERSION )
+
+# check if we have correct columnar api
+set_property ( TARGET lextra PROPERTY INTERFACE_SECONDARY_API_VERSION ${NEED_SECONDARY_API} )
+set_property ( TARGET lextra APPEND PROPERTY COMPATIBLE_INTERFACE_STRING SECONDARY_API_VERSION )
+
+target_include_directories ( lextra INTERFACE ${CMAKE_CURRENT_SOURCE_DIR} )
 get_banner ( CONFIGURE_FLAGS )
 infomsg ( "${CONFIGURE_FLAGS}" )
 

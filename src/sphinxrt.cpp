@@ -1046,7 +1046,7 @@ public:
 	bool				AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt ) override;
 	virtual bool		AddDocument ( ISphHits * pHits, const InsertDocData_t & tDoc, bool bReplace, const DocstoreBuilder_i::Doc_t * pStoredDoc, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt );
 	bool				DeleteDocument ( const VecTraits_T<DocID_t> & dDocs, CSphString & sError, RtAccum_t * pAccExt ) final;
-	bool				Commit ( int * pDeleted, RtAccum_t * pAccExt ) final;
+	bool				Commit ( int * pDeleted, RtAccum_t * pAccExt, CSphString* pError = nullptr ) final;
 	void				RollBack ( RtAccum_t * pAccExt ) final;
 	int					CommitReplayable ( RtSegment_t * pNewSeg, const CSphVector<DocID_t> & dAccKlist ); // returns total killed documents
 	void				ForceRamFlush ( const char * szReason ) final;
@@ -1209,6 +1209,7 @@ private:
 
 	std::unique_ptr<DocstoreFields_i> m_pDocstoreFields;	// rt index doesn't have its own docstore, but it must keep all fields to get their ids for GetDoc
 	mutable int					m_iTrackFailedRamActions;
+	int							m_iAlterGeneration = 0;		// increased every time index altered
 
 	bool						BindAccum ( RtAccum_t * pAccExt, CSphString* pError = nullptr ) final;
 
@@ -1311,6 +1312,10 @@ private:
 	void						DumpMeta ( const CSphString& sFile ) const;
 	void						DumpInsert ( const RtSegment_t* pNewSeg ) const;
 	void						DumpMerge ( const RtSegment_t* pA, const RtSegment_t* pB, const RtSegment_t* pNew ) const;
+
+	// Manage alter state
+	void						RaiseAlterGeneration();
+	int							GetAlterGeneration() const override;
 };
 
 
@@ -1381,6 +1386,16 @@ RtIndex_c::~RtIndex_c ()
 
 	if ( !sphInterrupted() && bValid )
 		sphLogDebug ( "closed index %s, valid %d, deleted %d, time %d.%03d sec", m_sIndexName.cstr(), (int)bValid, (int)m_bIndexDeleted, (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
+}
+
+void RtIndex_c::RaiseAlterGeneration()
+{
+	++m_iAlterGeneration;
+}
+
+int RtIndex_c::GetAlterGeneration() const
+{
+	return m_iAlterGeneration;
 }
 
 void RtIndex_c::UpdateUnlockedCount()
@@ -2615,7 +2630,7 @@ static void CleanupHitDuplicates ( CSphTightVector<CSphWordHit> & dHits )
 	dHits.Resize ( iDst );
 }
 
-bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc )
+bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString* pError )
 {
 	assert ( g_bRTChangesAllowed );
 	MEMORY ( MEM_INDEX_RT );
@@ -2629,6 +2644,14 @@ bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc )
 		pAcc->Cleanup();
 		return true;
 	}
+
+	if ( pAcc->GetIndexGeneration()!=m_iAlterGeneration )
+	{
+		if ( pError )
+			pError->SetSprintf( "Can't commit to index '%s', index was altered during txn!", m_sIndexName.cstr() );
+		return false;
+	}
+
 
 	// phase 0, build a new segment
 	// accum and segment are thread local; so no locking needed yet
@@ -9457,6 +9480,7 @@ bool RtIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 	Tokenizer::AddBigramFilterTo ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError );
 
 	AlterSave ( false );
+	RaiseAlterGeneration();
 
 	return true;
 }

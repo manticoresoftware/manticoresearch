@@ -472,6 +472,8 @@ void RtAccum_t::GrabLastWarning ( CSphString& sWarning )
 
 void RtAccum_t::SetIndex ( RtIndex_i* pIndex )
 {
+	assert ( pIndex );
+	m_iIndexGeneration = pIndex->GetAlterGeneration();
 	m_pIndex = pIndex;
 	m_pBlobWriter.reset();
 

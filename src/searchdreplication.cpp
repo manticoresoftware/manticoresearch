@@ -1984,7 +1984,7 @@ bool CommitMonitor_c::Commit ( CSphString& sError )
 		if ( !pIndex )
 			return false;
 
-		return pIndex->Commit ( m_pDeletedCount, &m_tAcc );
+		return pIndex->Commit ( m_pDeletedCount, &m_tAcc, &sError );
 	}
 
 	ReplicationCommand_t& tCmd = *m_tAcc.m_dCmd[0];
@@ -2016,7 +2016,7 @@ bool CommitMonitor_c::CommitNonEmptyCmds ( RtIndex_i* pIndex, const ReplicationC
 {
 	assert ( pIndex );
 	if ( !bOnlyTruncate )
-		return pIndex->Commit ( m_pDeletedCount, &m_tAcc );
+		return pIndex->Commit ( m_pDeletedCount, &m_tAcc, &sError );
 
 	if ( !pIndex->Truncate ( sError ))
 		return false;

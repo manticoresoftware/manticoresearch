@@ -109,7 +109,7 @@ public:
 	virtual bool DeleteDocument ( const VecTraits_T<DocID_t> & dDocs, CSphString & sError, RtAccum_t * pAccExt ) = 0;
 
 	/// commit pending changes
-	virtual bool Commit ( int * pDeleted, RtAccum_t * pAccExt ) = 0;
+	virtual bool Commit ( int * pDeleted, RtAccum_t * pAccExt, CSphString* pError = nullptr ) = 0;
 
 	/// undo pending changes
 	virtual void RollBack ( RtAccum_t * pAccExt ) = 0;
@@ -139,6 +139,9 @@ public:
 	/// reconfigure index by using new tokenizer, dictionary and index settings
 	/// current data got saved with current settings
 	virtual bool Reconfigure ( CSphReconfigureSetup & tSetup ) = 0;
+
+	// generation typically changes on Reconfigure
+	virtual int GetAlterGeneration() const { return 0; }
 
 	/// do something const with disk chunk (query settings, status, etc.)
 	/// hides internal disk chunks storage

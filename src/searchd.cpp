@@ -9803,23 +9803,14 @@ static void PQLocalMatch ( const BlobVec_t & dDocs, const CSphString & sIndex, c
 		iDocs = dDocs.GetLength () - iStart;
 
 	if ( !iDocs )
-	{
-		sMsg.Warn ( "No more docs for sparse matching" );
-		return;
-	}
+		return sMsg.Warn ( "No more docs for sparse matching" );
 
 	auto pServed = GetServed ( sIndex );
 	if ( !pServed )
-	{
-		sMsg.Err ( "unknown local index '%s' in search request", sIndex.cstr () );
-		return;
-	}
+		return sMsg.Err ( "unknown local index '%s' in search request", sIndex.cstr () );
 
 	if ( pServed->m_eType!=IndexType_e::PERCOLATE )
-	{
-		sMsg.Err ( "index '%s' is not percolate", sIndex.cstr () );
-		return;
-	}
+		return sMsg.Err ( "index '%s' is not percolate", sIndex.cstr () );
 
 	RIdx_T<PercolateIndex_i*> pIndex { pServed };
 	RtAccum_t * pAccum = tAcc.GetAcc ( pIndex, sError );
@@ -10762,7 +10753,7 @@ void sphHandleMysqlBegin ( StmtErrorReporter_i& tOut, Str_t sQuery )
 
 	MEMORY ( MEM_SQL_BEGIN );
 	if ( tAcc.GetIndex() && !HandleCmdReplicate ( *tAcc.GetAcc(), sError ) )
-		return tOut.Error ( sQuery.first, sError.cstr() );
+		return tOut.Error ( "%s", sError.cstr() );
 	pSession->m_bInTransaction = true;
 	tOut.Ok ( 0 );
 }
@@ -10787,7 +10778,7 @@ void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, boo
 			StatCountCommand ( SEARCHD_COMMAND_COMMIT );
 			if ( !HandleCmdReplicate ( *pAccum, sError, iDeleted ) )
 			{
-				tOut.Error ( sQuery.first, sError.cstr() );
+				tOut.Error ( "%s", sError.cstr() );
 				return;
 			}
 		} else
@@ -15328,7 +15319,7 @@ static bool PrepareReconfigure ( const CSphString & sIndex, CSphReconfigureSetti
 	return PrepareReconfigure ( sIndex, hCfg["index"][sIndex], tSettings, sWarning, sError );
 }
 
-
+// ALTER RTINDEX/TABLE <idx> RECONFIGURE
 static void HandleMysqlReconfigure ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
 	if ( !sphCheckWeCanModify ( tStmt.m_sStmt, tOut ) )
@@ -15342,7 +15333,14 @@ static void HandleMysqlReconfigure ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 		return;
 	}
 
-	const CSphString & sIndex = tStmt.m_sIndex.cstr();
+	const CSphString & sIndex = tStmt.m_sIndex;
+	auto pServed = GetServed ( tStmt.m_sIndex );
+	if ( !ServedDesc_t::IsMutable ( pServed ) )
+	{
+		tOut.ErrorEx ( tStmt.m_sStmt, "'%s' is absent, or does not support ALTER", sIndex.cstr() );
+		return;
+	}
+
 	CSphString sError;
 	CSphReconfigureSettings tSettings;
 	CSphReconfigureSetup tSetup;
@@ -15350,13 +15348,6 @@ static void HandleMysqlReconfigure ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 	if ( !PrepareReconfigure ( sIndex, tSettings, sError ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
-		return;
-	}
-
-	auto pServed = GetServed ( tStmt.m_sIndex );
-	if ( !ServedDesc_t::IsMutable ( pServed ))
-	{
-		tOut.ErrorEx ( tStmt.m_sStmt, "'%s' is absent, or does not support ALTER", sIndex.cstr() );
 		return;
 	}
 
@@ -16259,17 +16250,17 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		HandleMysqlShowThreads ( tOut, pStmt );
 		return true;
 
-	case STMT_ALTER_RECONFIGURE:
+	case STMT_ALTER_RECONFIGURE: // ALTER RTINDEX/TABLE <idx> RECONFIGURE
 		FreezeLastMeta();
 		HandleMysqlReconfigure ( tOut, *pStmt, m_tLastMeta.m_sWarning );
 		return true;
 
-	case STMT_ALTER_KLIST_TARGET:
+	case STMT_ALTER_KLIST_TARGET: // ALTER TABLE <idx> KILLLIST_TARGET = 'the string'
 		FreezeLastMeta();
 		HandleMysqlAlterKlist ( tOut, *pStmt, m_tLastMeta.m_sWarning );
 		return true;
 
-	case STMT_ALTER_INDEX_SETTINGS:
+	case STMT_ALTER_INDEX_SETTINGS: // ALTER TABLE <idx> create_table_option_list
 		FreezeLastMeta();
 		HandleMysqlAlterIndexSettings ( tOut, *pStmt, m_tLastMeta.m_sWarning );
 		return true;

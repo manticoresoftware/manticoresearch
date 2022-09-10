@@ -122,6 +122,7 @@ public:
 	uint64_t		GetSchemaHash() const { return m_uSchemaHash; }
 
 	RtIndex_i *		GetIndex() const { return m_pIndex; }
+	int 			GetIndexGeneration() const { return m_iIndexGeneration; }
 	ReplicationCommand_t * AddCommand ( ReplicationCommand_e eCmd, CSphString sIndex, CSphString sCluster = CSphString() );
 
 	void			LoadRtTrx ( const BYTE * pData, int iLen );
@@ -145,6 +146,7 @@ private:
 
 	// FIXME!!! index is unlocked between add data and commit or at begin and end
 	RtIndex_i *							m_pIndex = nullptr;		///< my current owner in this thread
+	int									m_iIndexGeneration = 0;
 
 	void			ResetDict();
 	void			SetupDocstore();

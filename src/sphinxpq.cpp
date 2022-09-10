@@ -79,7 +79,7 @@ public:
 
 	bool AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt ) override;
 	bool MatchDocuments ( RtAccum_t * pAccExt, PercolateMatchResult_t &tRes ) override;
-	bool Commit ( int * pDeleted, RtAccum_t * pAccExt ) override;
+	bool Commit ( int * pDeleted, RtAccum_t * pAccExt, CSphString* pError = nullptr ) override;
 	void RollBack ( RtAccum_t * pAccExt ) override;
 
 	std::unique_ptr<StoredQuery_i> CreateQuery ( PercolateQueryArgs_t & tArgs, CSphString & sError ) final EXCLUDES ( m_tLock );
@@ -2037,7 +2037,7 @@ int PercolateIndex_c::ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQue
 	}
 }
 
-bool PercolateIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc )
+bool PercolateIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString* )
 {
 	assert ( g_bRTChangesAllowed );
 

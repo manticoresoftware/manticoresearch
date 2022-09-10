@@ -9367,7 +9367,7 @@ bool RtIndex_c::SplitOneChunk ( int iChunkID, const char* szUvarFilter, int* pAf
 
 	dFilter.m_sAttrName = "id";
 	dFilter.m_eType = SPH_FILTER_VALUES;
-	dFilter.SetExternalValues ( pUservar->Begin(), pUservar->GetLength() );
+	dFilter.SetExternalValues ( *pUservar );
 	dFilter.m_bExclude = true;
 
 	// prepare for real split (merge)
@@ -10393,8 +10393,8 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSche
 void RtAccum_t::LoadRtTrx ( const BYTE * pData, int iLen )
 {
 	MemoryReader_c tReader ( pData, iLen );
-	m_bReplace = !!tReader.GetByte();
-	m_uAccumDocs = tReader.GetDword();
+	m_bReplace = !!tReader.GetVal<BYTE>();
+	tReader.GetVal ( m_uAccumDocs );
 
 	// insert and replace
 	m_dAccum.Resize ( tReader.GetDword() );
@@ -10403,23 +10403,18 @@ void RtAccum_t::LoadRtTrx ( const BYTE * pData, int iLen )
 		// such manual serialization is necessary because CSphWordHit is internally aligned by 8,
 		// and it's size is 3*8, however actually we have 4+8+4 bytes in members.
 		// Sending raw unitialized bytes is not ok, since it may influent crc checking.
-		tReader.GetBytes ( &tHit.m_tRowID, (int) sizeof ( tHit.m_tRowID ) );
-		tReader.GetBytes ( &tHit.m_uWordID, (int) sizeof ( tHit.m_uWordID ) );
-		tReader.GetBytes ( &tHit.m_uWordPos, (int) sizeof ( tHit.m_uWordPos ) );
+		tReader.GetVal ( tHit.m_tRowID );
+		tReader.GetVal ( tHit.m_uWordID );
+		tReader.GetVal ( tHit.m_uWordPos );
 	}
-	m_dAccumRows.Resize ( tReader.GetDword() );
-	tReader.GetBytes ( m_dAccumRows.Begin(), (int) m_dAccumRows.GetLengthBytes() );
-
-	m_dBlobs.Resize ( tReader.GetDword() );
-	tReader.GetBytes ( m_dBlobs.Begin(), (int) m_dBlobs.GetLengthBytes() );
-
-	m_dPerDocHitsCount.Resize ( tReader.GetDword() );
-	tReader.GetBytes ( m_dPerDocHitsCount.Begin(), (int) m_dPerDocHitsCount.GetLengthBytes() );
+	GetArray ( m_dAccumRows, tReader );
+	GetArray ( m_dBlobs, tReader );
+	GetArray ( m_dPerDocHitsCount, tReader );
 
 	m_dPackedKeywords.Reset ( tReader.GetDword() );
 	tReader.GetBytes ( m_dPackedKeywords.Begin(), (int) m_dPackedKeywords.GetLengthBytes() );
 
-	if ( tReader.GetByte() )
+	if ( tReader.GetVal<BYTE>() )
 	{
 		if ( !m_pDocstore )
 			m_pDocstore = CreateDocstoreRT();
@@ -10427,12 +10422,11 @@ void RtAccum_t::LoadRtTrx ( const BYTE * pData, int iLen )
 		m_pDocstore->Load(tReader);
 	}
 
-	if ( tReader.GetByte() )
+	if ( tReader.GetVal<BYTE>() )
 		m_pColumnarBuilder = CreateColumnarBuilderRT ( tReader );
 
 	// delete
-	m_dAccumKlist.Resize ( tReader.GetDword() );
-	tReader.GetBytes ( m_dAccumKlist.Begin(), (int) m_dAccumKlist.GetLengthBytes() );
+	GetArray ( m_dAccumKlist, tReader );
 }
 
 void RtAccum_t::SaveRtTrx ( MemoryWriter_c & tWriter ) const
@@ -10444,18 +10438,14 @@ void RtAccum_t::SaveRtTrx ( MemoryWriter_c & tWriter ) const
 	tWriter.PutDword ( m_dAccum.GetLength() );
 	for ( const CSphWordHit& tHit : m_dAccum )
 	{
-		tWriter.PutBytes ( &tHit.m_tRowID, sizeof ( tHit.m_tRowID ) );
-		tWriter.PutBytes ( &tHit.m_uWordID, sizeof ( tHit.m_uWordID ) );
-		tWriter.PutBytes ( &tHit.m_uWordPos, sizeof ( tHit.m_uWordPos ) );
+		tWriter.PutVal ( tHit.m_tRowID );
+		tWriter.PutVal ( tHit.m_uWordID );
+		tWriter.PutVal ( tHit.m_uWordPos );
 	}
-	tWriter.PutDword ( m_dAccumRows.GetLength() );
-	tWriter.PutBytes ( m_dAccumRows.Begin(), (int) m_dAccumRows.GetLengthBytes() );
+	SaveArray ( m_dAccumRows, tWriter );
+	SaveArray ( m_dBlobs, tWriter );
+	SaveArray ( m_dPerDocHitsCount, tWriter );
 
-	tWriter.PutDword ( m_dBlobs.GetLength() );
-	tWriter.PutBytes ( m_dBlobs.Begin(), (int) m_dBlobs.GetLengthBytes() );
-
-	tWriter.PutDword ( m_dPerDocHitsCount.GetLength() );
-	tWriter.PutBytes ( m_dPerDocHitsCount.Begin(), (int) m_dPerDocHitsCount.GetLengthBytes() );
 	// packed keywords default length is 1 no need to pass that
 	int iLen = ( m_bKeywordDict && m_pDictRt->GetPackedLen()>1 ? (int) m_pDictRt->GetPackedLen() : 0 );
 	tWriter.PutDword ( iLen );
@@ -10470,8 +10460,7 @@ void RtAccum_t::SaveRtTrx ( MemoryWriter_c & tWriter ) const
 		m_pColumnarBuilder->Save(tWriter);
 
 	// delete
-	tWriter.PutDword ( m_dAccumKlist.GetLength() );
-	tWriter.PutBytes ( m_dAccumKlist.Begin(), (int) m_dAccumKlist.GetLengthBytes() );
+	SaveArray ( m_dAccumKlist, tWriter );
 }
 
 void RtIndex_c::SetSchema ( const CSphSchema & tSchema )

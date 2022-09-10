@@ -1406,7 +1406,7 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst, const CSphConf
 					dLast.m_eType = SPH_FILTER_VALUES;
 					dLast.m_bExclude = true;
 					dLast.m_sAttrName = sphGetDocidName();
-					dLast.SetExternalValues ( dKillList.Begin(), dKillList.GetLength() );
+					dLast.SetExternalValues ( dKillList );
 				}
 
 				break;

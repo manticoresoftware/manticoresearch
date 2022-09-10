@@ -104,12 +104,6 @@ private:
 class DocidListReader_c
 {
 public:
-	DocidListReader_c ( const DocID_t * pKlist, int iKlistSize )
-		: m_pIterator ( pKlist )
-		, m_pMaxIterator ( pKlist+iKlistSize )
-	{}
-
-
 	explicit DocidListReader_c ( const VecTraits_T<DocID_t> & dKlist )
 		: m_pIterator ( dKlist.Begin() )
 		, m_pMaxIterator ( dKlist.Begin() + dKlist.GetLength() ) // should be this way till VecTraits.End got fixed

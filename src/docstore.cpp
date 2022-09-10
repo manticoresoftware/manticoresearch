@@ -736,7 +736,7 @@ BlockData_t Docstore_c::UncompressSmallBlock ( const Block_t & tBlock, int64_t i
 	ReadFromFile ( dBlock.Begin(), dBlock.GetLength(), tBlock.m_tOffset, iSessionId );
 
 	MemoryReader2_c tBlockReader ( dBlock.Begin(), dBlock.GetLength() );
-	tResult.m_uFlags = tBlockReader.GetByte();
+	tResult.m_uFlags = tBlockReader.GetVal<BYTE>();
 	tResult.m_uNumDocs = tBlockReader.UnzipInt();
 	tResult.m_uSize = tBlockReader.UnzipInt();
 	DWORD uCompressedLength = tResult.m_uSize;
@@ -772,7 +772,7 @@ bool Docstore_c::ProcessSmallBlockDoc ( RowID_t tCurDocRowID, RowID_t tRowID, co
 
 	DWORD uBitMaskSize = tEmptyFields.GetSizeBytes();
 
-	BYTE uDocFlags = tReader.GetByte();
+	BYTE uDocFlags = tReader.GetVal<BYTE>();
 	if ( uDocFlags & DOC_FLAG_ALL_EMPTY )
 	{
 		for ( auto & i : tResult.m_dFields )
@@ -918,7 +918,7 @@ DocstoreDoc_t Docstore_c::ReadDocFromBigBlock ( const Block_t & tBlock, const Ve
 	MemoryReader2_c tReader ( dBlockHeader.Begin(), dBlockHeader.GetLength() );
 
 	CSphVector<int> dFieldSort;
-	BYTE uBlockFlags = tReader.GetByte();
+	BYTE uBlockFlags = tReader.GetVal<BYTE>();
 	bool bNeedReorder = !!( uBlockFlags & BLOCK_FLAG_FIELD_REORDER );
 	if ( bNeedReorder )
 	{
@@ -932,7 +932,7 @@ DocstoreDoc_t Docstore_c::ReadDocFromBigBlock ( const Block_t & tBlock, const Ve
 		int iField = bNeedReorder ? dFieldSort[i] : i;
 		FieldInfo_t & tInfo = dFieldInfo[iField];
 
-		tInfo.m_uFlags = tReader.GetByte();
+		tInfo.m_uFlags = tReader.GetVal<BYTE>();
 		if ( tInfo.m_uFlags & FIELD_FLAG_EMPTY )
 			continue;
 
@@ -1727,7 +1727,7 @@ bool DocstoreChecker_c::Check()
 
 void DocstoreChecker_c::CheckSmallBlockDoc ( MemoryReader2_c & tReader, CSphBitvec & tEmptyFields, SphOffset_t tOffset )
 {
-	BYTE uDocFlags = tReader.GetByte();
+	BYTE uDocFlags = tReader.GetVal<BYTE>();
 
 	if ( uDocFlags & ( ~(DOC_FLAG_ALL_EMPTY | DOC_FLAG_EMPTY_BITMASK) ) )
 		m_tReporter.Fail ( "Unknown docstore doc flag (%u) in %s (offset " INT64_FMT ")", uDocFlags, m_szFilename, tOffset );
@@ -1764,7 +1764,7 @@ void DocstoreChecker_c::CheckSmallBlock ( const Docstore_c::Block_t & tBlock )
 
 	MemoryReader2_c tBlockReader ( dBlock.Begin(), dBlock.GetLength() );
 	BlockData_t tResult;
-	tResult.m_uFlags = tBlockReader.GetByte();
+	tResult.m_uFlags = tBlockReader.GetVal<BYTE>();
 	tResult.m_uNumDocs = tBlockReader.UnzipInt();
 	tResult.m_uSize = tBlockReader.UnzipInt();
 	DWORD uCompressedLength = tResult.m_uSize;
@@ -1851,7 +1851,7 @@ void DocstoreChecker_c::CheckBigBlock ( const Docstore_c::Block_t & tBlock )
 	MemoryReader2_c tReader ( dBlockHeader.Begin(), dBlockHeader.GetLength() );
 
 	CSphVector<int> dFieldSort;
-	BYTE uBlockFlags = tReader.GetByte();
+	BYTE uBlockFlags = tReader.GetVal<BYTE>();
 	if ( uBlockFlags & ~BLOCK_FLAG_FIELD_REORDER )
 		m_tReporter.Fail ( "Unknown docstore big block flag (%u) in %s (offset " INT64_FMT ")", uBlockFlags, m_szFilename, tBlock.m_tOffset );
 
@@ -1872,7 +1872,7 @@ void DocstoreChecker_c::CheckBigBlock ( const Docstore_c::Block_t & tBlock )
 		int iField = bNeedReorder ? dFieldSort[i] : i;
 		Docstore_c::FieldInfo_t & tInfo = dFieldInfo[iField];
 
-		tInfo.m_uFlags = tReader.GetByte();
+		tInfo.m_uFlags = tReader.GetVal<BYTE>();
 		if ( tInfo.m_uFlags & (~(FIELD_FLAG_EMPTY | FIELD_FLAG_COMPRESSED) ) )
 			m_tReporter.Fail ( "Unknown docstore big block field flag (%u) in %s (offset " INT64_FMT ")", tInfo.m_uFlags, m_szFilename, tBlock.m_tOffset );
 

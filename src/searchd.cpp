@@ -1702,9 +1702,9 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 		switch ( tFilter.m_eType )
 		{
 			case SPH_FILTER_VALUES:
-				tOut.SendInt ( tFilter.GetNumValues () );
-				for ( int k = 0; k < tFilter.GetNumValues (); k++ )
-					tOut.SendUint64 ( tFilter.GetValue ( k ) );
+				tOut.SendInt ( tFilter.GetNumValues() );
+				for ( auto uValue : tFilter.GetValues () )
+					tOut.SendUint64 ( uValue );
 				break;
 
 			case SPH_FILTER_RANGE:
@@ -13138,10 +13138,7 @@ static std::unique_ptr<ReplicationCommand_t> MakePercolateDeleteDocumentsCommand
 	auto pCmd = MakeReplicationCommand ( ReplicationCommand_e::PQUERY_DELETE, std::move ( sIndex ), std::move ( sCluster ) );
 	if ( ( pFilter->m_bHasEqualMin || pFilter->m_bHasEqualMax ) && !pFilter->m_bExclude && pFilter->m_eType==SPH_FILTER_VALUES && ( pFilter->m_sAttrName=="@id" || pFilter->m_sAttrName=="id" || pFilter->m_sAttrName=="uid" ) )
 	{
-		pCmd->m_dDeleteQueries.Reserve ( pFilter->GetNumValues() );
-		const SphAttr_t * pA = pFilter->GetValueArray();
-		for ( int i = 0; i < pFilter->GetNumValues(); ++i )
-			pCmd->m_dDeleteQueries.Add ( pA[i] );
+		pCmd->m_dDeleteQueries.Append ( pFilter->GetValues() );
 		return pCmd;
 	}
 

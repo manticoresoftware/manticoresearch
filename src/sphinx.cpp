@@ -1479,10 +1479,9 @@ void CSphEmbeddedFiles::Reset()
 /////////////////////////////////////////////////////////////////////////////
 // FILTER
 /////////////////////////////////////////////////////////////////////////////
-void CSphFilterSettings::SetExternalValues ( const SphAttr_t * pValues, int nValues )
+void CSphFilterSettings::SetExternalValues ( const VecTraits_T<SphAttr_t>& dValues )
 {
-	m_pValues = pValues;
-	m_nValues = nValues;
+	m_dExtValues = dValues;
 }
 
 

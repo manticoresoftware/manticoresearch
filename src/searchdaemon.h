@@ -1414,8 +1414,6 @@ void PercolateMatchDocuments ( const BlobVec_t &dDocs, const PercolateOptions_t 
 
 void SendArray ( const VecTraits_T<CSphString> & dBuf, ISphOutputBuffer & tOut );
 void GetArray ( CSphFixedVector<CSphString> & dBuf, InputBuffer_c & tIn );
-void SaveArray ( const VecTraits_T<CSphString> & dBuf, MemoryWriter_c & tOut );
-void GetArray ( CSphVector<CSphString> & dBuf, MemoryReader_c & tIn );
 
 template <typename T>
 void SendArray ( const VecTraits_T<T> & dBuf, ISphOutputBuffer & tOut )
@@ -1434,25 +1432,6 @@ void GetArray ( CSphFixedVector<T> & dBuf, InputBuffer_c & tIn )
 
 	dBuf.Reset ( iCount );
 	tIn.GetBytes ( dBuf.Begin(), (int) dBuf.GetLengthBytes() );
-}
-
-template<typename T>
-void GetArray ( CSphVector<T> & dBuf, MemoryReader_c & tIn )
-{
-	int iCount = tIn.GetDword();
-	if ( !iCount )
-		return;
-
-	dBuf.Resize ( iCount );
-	tIn.GetBytes ( dBuf.Begin(), (int) dBuf.GetLengthBytes() );
-}
-
-template <typename T>
-void SaveArray ( const VecTraits_T<T> & dBuf, MemoryWriter_c & tOut )
-{
-	tOut.PutDword ( dBuf.GetLength() );
-	if ( dBuf.GetLength() )
-		tOut.PutBytes ( dBuf.Begin(), sizeof(dBuf[0]) * dBuf.GetLength() );
 }
 
 

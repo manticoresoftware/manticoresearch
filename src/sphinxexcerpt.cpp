@@ -1535,8 +1535,8 @@ SnippetResult_t UnpackSnippetData ( ByteBlob_t dData )
 		tField.m_dPassages.Resize ( tReader.UnzipInt() );
 		for ( auto & tPassage : tField.m_dPassages )
 		{
-			tPassage.m_bStartSeparator = !!tReader.GetByte();
-			tPassage.m_bEndSeparator = !!tReader.GetByte();
+			tPassage.m_bStartSeparator = !!tReader.GetVal<BYTE>();
+			tPassage.m_bEndSeparator = !!tReader.GetVal<BYTE>();
 
 			tPassage.m_dText.Resize ( tReader.UnzipInt() );
 			tReader.GetBytes ( tPassage.m_dText.Begin(), tPassage.m_dText.GetLength() );

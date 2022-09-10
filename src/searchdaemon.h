@@ -19,6 +19,7 @@
 
 #include "searchdconfig.h"
 #include "memio.h"
+#include "accumulator.h"
 
 /////////////////////////////////////////////////////////////////////////////
 // MACHINE-DEPENDENT STUFF
@@ -1286,10 +1287,11 @@ private:
 
 class CSphSessionAccum
 {
-	std::unique_ptr<RtAccum_t> m_pAcc;
+	Optional_T<RtAccum_t> m_tAcc;
 
 public:
 	RtAccum_t * GetAcc ( RtIndex_i * pIndex, CSphString & sError );
+	RtAccum_t * GetAcc ();
 	RtIndex_i * GetIndex ();
 };
 

@@ -10761,16 +10761,8 @@ void sphHandleMysqlBegin ( StmtErrorReporter_i& tOut, Str_t sQuery )
 	auto& sError = pSession->m_sError;
 
 	MEMORY ( MEM_SQL_BEGIN );
-	RtIndex_i* pIndex = tAcc.GetIndex();
-	if ( pIndex )
-	{
-		RtAccum_t* pAccum = tAcc.GetAcc ( pIndex, sError );
-		if ( !sError.IsEmpty() || !HandleCmdReplicate ( *pAccum, sError ) )
-		{
-			tOut.Error ( sQuery.first, sError.cstr() );
-			return;
-		}
-	}
+	if ( tAcc.GetIndex() && !HandleCmdReplicate ( *tAcc.GetAcc(), sError ) )
+		return tOut.Error ( sQuery.first, sError.cstr() );
 	pSession->m_bInTransaction = true;
 	tOut.Ok ( 0 );
 }
@@ -10789,12 +10781,7 @@ void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, boo
 	if ( pIndex )
 	{
 		tCrashQuery.m_dIndex = FromStr ( pIndex->GetName() );
-		RtAccum_t* pAccum = tAcc.GetAcc ( pIndex, sError );
-		if ( !sError.IsEmpty() )
-		{
-			tOut.Error ( sQuery.first, sError.cstr() );
-			return;
-		}
+		RtAccum_t* pAccum = tAcc.GetAcc ();
 		if ( bCommit )
 		{
 			StatCountCommand ( SEARCHD_COMMAND_COMMIT );
@@ -10883,11 +10870,8 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt )
 		return;
 
 	RtAccum_t * pAccum = tAcc.GetAcc ( pIndex, sError );
-	if ( !pAccum )
-	{
-		tOut.Error ( "%s", sError.cstr() );
-		return;
-	}
+	if ( !sError.IsEmpty() )
+		return tOut.Error ( "%s", sError.cstr() );
 
 	CSphVector<int64_t> dIds;
 	dIds.Reserve ( tStmt.m_iRowsAffected );
@@ -13566,19 +13550,8 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 			pSession->m_bInTransaction = false;
 
 			// commit all pending changes
-			if ( bAutoCommit )
-			{
-				RtIndex_i * pIndex = tAcc.GetIndex();
-				if ( pIndex )
-				{
-					RtAccum_t * pAccum = tAcc.GetAcc ( pIndex, sError );
-					if ( !sError.IsEmpty() || !HandleCmdReplicate ( *pAccum, sError ) )
-					{
-						tOut.Error ( tStmt.m_sStmt, sError.cstr() );
-						return;
-					}
-				}
-			}
+			if ( bAutoCommit && tAcc.GetIndex() && !HandleCmdReplicate ( *tAcc.GetAcc(), sError ) )
+				return tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		} else if ( tStmt.m_sSetName=="collation_connection" )
 		{
 			// per-session COLLATION_CONNECTION
@@ -13587,10 +13560,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 
 			tSess.SetCollation ( sphCollationFromName ( sVal, &sError ) );
 			if ( !sError.IsEmpty() )
-			{
-				tOut.Error ( tStmt.m_sStmt, sError.cstr() );
-				return;
-			}
+				return tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		} else if ( tStmt.m_sSetName=="character_set_results"
 			|| tStmt.m_sSetName=="sql_auto_is_null"
 			|| tStmt.m_sSetName=="sql_safe_updates"
@@ -14442,10 +14412,12 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 		}
 	}
 
-	RtAccum_t tAcc;
-	tAcc.m_dCmd.Add ( std::move ( pCmd ) );
+	auto* pSession = session::GetClientSession();
+	auto& tAcc = pSession->m_tAcc;
+	auto* pAccum = tAcc.GetAcc();
+	pAccum->m_dCmd.Add ( std::move ( pCmd ) );
 
-	bool bRes = HandleCmdReplicate ( tAcc, sError );
+	bool bRes = HandleCmdReplicate ( *pAccum, sError );
 	if ( !bRes )
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 	else
@@ -15876,23 +15848,28 @@ void HandleMysqlUnlockIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes, C
 	tOut.Ok ( iUnlocked );
 }
 
-RtAccum_t * CSphSessionAccum::GetAcc ( RtIndex_i * pIndex, CSphString & sError )
+RtAccum_t* CSphSessionAccum::GetAcc ( RtIndex_i* pIndex, CSphString& sError )
 {
 	assert ( pIndex );
-	if ( !m_pAcc )
-		m_pAcc = std::make_unique<RtAccum_t>();
+	m_tAcc.emplace_once();
 
-	if ( !pIndex->BindAccum ( m_pAcc.get(), &sError ) )
+	if ( !pIndex->BindAccum ( &m_tAcc.get(), &sError ) )
 		return nullptr;
 
-	return m_pAcc.get();
+	return &m_tAcc.get();
+}
+
+RtAccum_t* CSphSessionAccum::GetAcc()
+{
+	m_tAcc.emplace_once();
+	return &m_tAcc.get();
 }
 
 RtIndex_i * CSphSessionAccum::GetIndex ()
 {
-	if ( !m_pAcc )
+	if ( !m_tAcc )
 		return nullptr;
-		return m_pAcc->GetIndex();
+	return m_tAcc->GetIndex();
 }
 
 static bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, CSphString & sFederatedQuery );

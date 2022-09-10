@@ -677,10 +677,6 @@ ByteBlob_t GetHitsBlob ( const RtSegment_t& tSeg, const RtDoc_t& tDoc )
 /// forward ref
 class RtIndex_c;
 
-/// TLS indexing accumulator (we disallow two uncommitted adds within one thread; and so need at most one)
-static thread_local RtAccum_t * g_pTlsAccum;
-
-
 struct ChunkStats_t
 {
 	CSphSourceStats				m_Stats;
@@ -1214,7 +1210,7 @@ private:
 	std::unique_ptr<DocstoreFields_i> m_pDocstoreFields;	// rt index doesn't have its own docstore, but it must keep all fields to get their ids for GetDoc
 	mutable int					m_iTrackFailedRamActions;
 
-	RtAccum_t *					CreateAccum ( RtAccum_t * pAccExt, CSphString & sError ) final;
+	bool						BindAccum ( RtAccum_t * pAccExt, CSphString* pError = nullptr ) final;
 
 	int							CompareWords ( const RtWord_t * pWord1, const RtWord_t * pWord2 ) const;
 
@@ -1666,7 +1662,7 @@ DocstoreBuilder_i::Doc_t * RtIndex_c::FetchDocFields ( DocstoreBuilder_i::Doc_t 
 }
 
 
-bool RtIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt )
+bool RtIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, CSphString & sError, CSphString & sWarning, RtAccum_t * pAcc )
 {
 	assert ( g_bRTChangesAllowed );
 	assert ( m_tSchema.GetAttrIndex ( sphGetDocidName() )==0 );
@@ -1710,8 +1706,7 @@ bool RtIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphS
 
 	MEMORY ( MEM_INDEX_RT );
 
-	auto pAcc = ( RtAccum_t * ) AcquireAccum ( m_pDict, pAccExt, m_bKeywordDict, true, &sError );
-	if ( !pAcc )
+	if ( !BindAccum ( pAcc, &sError ) )
 		return false;
 
 	tDoc.m_tDoc.m_tRowID = pAcc->GenerateRowID();
@@ -1776,44 +1771,35 @@ bool RtIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphS
 }
 
 
-RtAccum_t * RtIndex_i::AcquireAccum ( const DictRefPtr_c& pDict, RtAccum_t * pAcc, bool bWordDict, bool bSetTLS, CSphString * pError )
+bool RtIndex_i::PrepareAccum ( RtAccum_t* pAcc, bool bWordDict, CSphString* pError )
 {
-	if ( !pAcc )
-		pAcc = g_pTlsAccum;
-
-	if ( pAcc && pAcc->GetIndex() && pAcc->GetIndex()!=this )
+	assert ( pAcc );
+	if ( pAcc->GetIndex() && pAcc->GetIndex()!=this )
 	{
 		if ( pError )
 			pError->SetSprintf ( "current txn is working with another index ('%s')", pAcc->GetIndex()->GetName() );
-		return nullptr;
+		return false;
 	}
 
-	if ( pAcc && pAcc->GetIndex() && pAcc->GetSchemaHash()!=GetSchemaHash() )
+	if ( pAcc->GetIndex() && pAcc->GetSchemaHash()!=GetSchemaHash() )
 	{
 		if ( pError )
 			pError->SetSprintf ( "current txn is working with index's another schema ('%s'), restart session", pAcc->GetIndex()->GetName() );
-		return nullptr;
-	}
-
-	if ( !pAcc )
-	{
-		pAcc = new RtAccum_t ( bWordDict );
-		if ( bSetTLS )
-		{
-			g_pTlsAccum = pAcc;
-			Threads::OnExitThread( [pAcc] { delete pAcc; } );
-		}
+		return false;
 	}
 
 	assert ( pAcc->GetIndex()==nullptr || pAcc->GetIndex()==this );
-	pAcc->SetIndex ( this );
-	pAcc->SetupDict ( this, pDict, bWordDict );
-	return pAcc;
+	if ( !pAcc->GetIndex() )
+	{
+		pAcc->SetIndex ( this );
+		pAcc->SetupDict ( this, m_pDict, bWordDict );
+	}
+	return true;
 }
 
-RtAccum_t * RtIndex_c::CreateAccum ( RtAccum_t * pAccExt, CSphString & sError )
+bool RtIndex_c::BindAccum ( RtAccum_t * pAccExt, CSphString * pError )
 {
-	return AcquireAccum ( m_pDict, pAccExt, m_bKeywordDict, false, &sError);
+	return PrepareAccum ( pAccExt, m_bKeywordDict, pError );
 }
 
 
@@ -1962,7 +1948,6 @@ static void CreateSegmentHits ( RtAccum_t& tAcc, RtSegment_t * pSeg, int iWordsC
 			tDoc.m_uDocFields |= ( 1UL<<iField );
 	}
 }
-
 
 RtSegment_t * CreateSegment ( RtAccum_t* pAcc, int iWordsCheckpoint, ESphHitless eHitless, const VecTraits_T<SphWordID_t> & dHitlessWords )
 {
@@ -2630,13 +2615,12 @@ static void CleanupHitDuplicates ( CSphTightVector<CSphWordHit> & dHits )
 	dHits.Resize ( iDst );
 }
 
-bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAccExt )
+bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc )
 {
 	assert ( g_bRTChangesAllowed );
 	MEMORY ( MEM_INDEX_RT );
 
-	auto pAcc = ( RtAccum_t * ) AcquireAccum ( m_pDict, pAccExt, m_bKeywordDict );
-	if ( !pAcc )
+	if ( !BindAccum ( pAcc ) )
 		return true;
 
 	// empty txn, just ignore
@@ -3034,24 +3018,20 @@ int RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const CSphVector<DocID_
 	return iTotalKilled;
 }
 
-void RtIndex_c::RollBack ( RtAccum_t * pAccExt )
+void RtIndex_c::RollBack ( RtAccum_t * pAcc )
 {
 	assert ( g_bRTChangesAllowed );
 
-	auto pAcc = ( RtAccum_t * ) AcquireAccum ( m_pDict, pAccExt, m_bKeywordDict );
-	if ( !pAcc )
-		return;
-
-	pAcc->Cleanup ();
+	if ( BindAccum ( pAcc ) )
+		pAcc->Cleanup ();
 }
 
-bool RtIndex_c::DeleteDocument ( const VecTraits_T<DocID_t> & dDocs, CSphString & sError, RtAccum_t * pAccExt )
+bool RtIndex_c::DeleteDocument ( const VecTraits_T<DocID_t> & dDocs, CSphString & sError, RtAccum_t * pAcc )
 {
 	assert ( g_bRTChangesAllowed );
 	MEMORY ( MEM_RT_ACCUM );
 
-	auto pAcc = ( RtAccum_t * ) AcquireAccum ( m_pDict, pAccExt, m_bKeywordDict, true, &sError );
-	if ( !pAcc )
+	if ( !BindAccum ( pAcc, &sError ) )
 		return false;
 
 	// !COMMIT should handle case when uDoc what inserted in current txn here
@@ -9743,14 +9723,6 @@ bool RtIndex_c::NeedStoreWordID () const
 }
 
 //////////////////////////////////////////////////////////////////////////
-
-RtIndex_i * sphGetCurrentIndexRT()
-{
-	RtAccum_t * pAcc = g_pTlsAccum;
-	if ( pAcc )
-		return pAcc->GetIndex();
-	return nullptr;
-}
 
 
 std::unique_ptr<RtIndex_i> sphCreateIndexRT ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict )

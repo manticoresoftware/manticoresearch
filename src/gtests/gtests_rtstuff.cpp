@@ -18,6 +18,7 @@
 #include "sphinxsort.h"
 #include "searchdaemon.h"
 #include "binlog.h"
+#include "accumulator.h"
 
 #include <gmock/gmock.h>
 
@@ -297,6 +298,8 @@ TEST_F ( RT, WeightBoundary )
 	InsertDocData_t tDoc ( pIndex->GetMatchSchema() );
 	int iDynamic = pIndex->GetMatchSchema().GetRowSize();
 
+	RtAccum_t tAcc (false);
+
 	CSphString sFilter;
 	bool bEOF = false;
 	while (true)
@@ -307,8 +310,8 @@ TEST_F ( RT, WeightBoundary )
 
 		tDoc.m_dFields = pSrc->GetFields();
 		tDoc.m_tDoc.Combine ( pSrc->m_tDocInfo, iDynamic );
-		pIndex->AddDocument ( tDoc, false, sFilter, sError, sWarning, nullptr );
-		pIndex->Commit ( nullptr, nullptr );
+		pIndex->AddDocument ( tDoc, false, sFilter, sError, sWarning, &tAcc );
+		pIndex->Commit ( nullptr, &tAcc );
 	}
 
 	pSrc->Disconnect ();
@@ -403,6 +406,7 @@ TEST_F ( RT, RankerFactors )
 	InsertDocData_t tDoc ( pIndex->GetMatchSchema() );
 	int iDynamic = pIndex->GetMatchSchema().GetRowSize();
 
+	RtAccum_t tAcc (false);
 	bool bEOF = false;
 	while (true)
 	{
@@ -412,9 +416,9 @@ TEST_F ( RT, RankerFactors )
 
 		tDoc.m_dFields = pSrc->GetFields();
 		tDoc.m_tDoc.Combine ( pSrc->m_tDocInfo, iDynamic );
-		pIndex->AddDocument ( tDoc, false, sFilter, sError, sWarning, nullptr );
+		pIndex->AddDocument ( tDoc, false, sFilter, sError, sWarning, &tAcc );
 	}
-	pIndex->Commit ( nullptr, nullptr );
+	pIndex->Commit ( nullptr, &tAcc );
 	pSrc->Disconnect ();
 
 	CSphQuery tQuery;
@@ -608,6 +612,8 @@ TEST_F ( RT, SendVsMerge )
 	InsertDocData_t tDoc ( pIndex->GetMatchSchema() );
 	int iDynamic = pIndex->GetMatchSchema().GetRowSize();
 
+	RtAccum_t tAcc (false);
+
 	bool bEOF = false;
 	while (true)
 	{
@@ -617,17 +623,17 @@ TEST_F ( RT, SendVsMerge )
 
 		tDoc.m_dFields = pSrc->GetFields();
 		tDoc.m_tDoc.Combine ( pSrc->m_tDocInfo, iDynamic );
-		pIndex->AddDocument ( tDoc, false, sFilter, sError, sWarning, NULL );
+		pIndex->AddDocument ( tDoc, false, sFilter, sError, sWarning, &tAcc );
 		sError = ""; // need to reset error message
 		if ( pSrc->m_iDocsCounter==350 )
 		{
-			pIndex->Commit ( NULL, NULL );
+			pIndex->Commit ( NULL, &tAcc );
 			EXPECT_TRUE ( pIndex->MultiQuery ( tQueryResult, tQuery, { &pSorter, 1 }, tArgs ) );
 			auto & tOneRes = tResult.m_dResults.Add ();
 			tOneRes.FillFromSorter ( pSorter );
 		}
 	}
-	pIndex->Commit ( NULL, NULL );
+	pIndex->Commit ( NULL, &tAcc );
 
 	pSrc->Disconnect ();
 

@@ -193,9 +193,8 @@ struct ReplicationArgs_t
 class CommitMonitor_c
 {
 public:
-	CommitMonitor_c ( RtAccum_t & tAcc, int * pDeletedCount )
+	explicit CommitMonitor_c ( RtAccum_t & tAcc )
 		: m_tAcc ( tAcc )
-		, m_pDeletedCount ( pDeletedCount )
 	{}
 	CommitMonitor_c ( RtAccum_t & tAcc, CSphString * pWarning, int * pUpdated )
 		: m_tAcc ( tAcc )
@@ -1696,7 +1695,7 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 			return false;
 		}
 
-		CommitMonitor_c tCommit ( tAcc, nullptr );
+		CommitMonitor_c tCommit ( tAcc );
 
 		bool bOk = false;
 		if ( tCmd.m_eCommand==ReplicationCommand_e::CLUSTER_ALTER_ADD )
@@ -1985,10 +1984,7 @@ bool CommitMonitor_c::Commit ( CSphString& sError )
 		if ( !pIndex )
 			return false;
 
-		if ( !pIndex->Commit ( m_pDeletedCount, &m_tAcc ) )
-			return false;
-
-		return true;
+		return pIndex->Commit ( m_pDeletedCount, &m_tAcc );
 	}
 
 	ReplicationCommand_t& tCmd = *m_tAcc.m_dCmd[0];

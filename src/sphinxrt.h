@@ -150,7 +150,9 @@ public:
 		return nullptr;
 	}
 
-	virtual RtAccum_t * CreateAccum ( RtAccum_t * pAccExt, CSphString & sError ) = 0;
+	/// bind indexing accumulator
+	/// returns false if another index already uses it in an open txn
+	virtual bool BindAccum ( RtAccum_t * pAccExt, CSphString * pError ) = 0;
 
 	// instead of cloning for each AddDocument() call we could just call this method and improve batch inserts speed
 	virtual TokenizerRefPtr_c CloneIndexingTokenizer() const = 0;
@@ -162,12 +164,11 @@ public:
 	virtual void EnableSave() = 0;
 	virtual void LockFileState ( CSphVector<CSphString> & dFiles ) = 0;
 	
-	/// acquire thread-local indexing accumulator
-	/// returns NULL if another index already uses it in an open txn
-	RtAccum_t * AcquireAccum ( const DictRefPtr_c& pDict, RtAccum_t * pAccExt=nullptr, bool bWordDict=true, bool bSetTLS = true, CSphString * sError=nullptr );
-
 	virtual bool	NeedStoreWordID () const = 0;
 	virtual	int64_t	GetMemLimit() const = 0;
+
+protected:
+	bool PrepareAccum ( RtAccum_t* pAccExt, bool bWordDict, CSphString* pError );
 };
 
 /// initialize subsystem

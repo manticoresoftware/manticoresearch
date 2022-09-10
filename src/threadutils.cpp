@@ -1426,7 +1426,6 @@ struct RuntimeThreadContext_t : ISphNoncopyable
 {
 	LowThreadDesc_t	m_tDesc;
 	const void *	m_pMyThreadStack = nullptr;
-	OpSchedule_t	m_pThreadCleanup;
 	Handler			m_fnRun;
 
 #if USE_GPROF
@@ -1490,16 +1489,6 @@ void Threads::JobFinished ( bool bIsDone )
 		++tDesc.m_iTotalJobsDone;
 	tDesc.m_tmTotalWorkedTimeUS += tDesc.m_tmLastJobDoneTimeUS-tDesc.m_tmLastJobStartTimeUS;
 	tDesc.m_tmTotalWorkedCPUTimeUS += sphCpuTimer()-tDesc.m_tmLastJobStartCPUTimeUS;
-}
-
-// Adds a function call (a new task for a wrapper) to a linked list
-// of thread contexts. They will be executed one by one right after
-// the main thread ends its execution. This is a way for a wrapper
-// to free local resources allocated by its main thread.
-void Threads::OnExitThread ( Threads::Handler fnHandle )
-{
-	auto pCb = Threads::details::Handler2Op ( std::move ( fnHandle ) );
-	MyThreadContext().m_pThreadCleanup.Push_front ( pCb );
 }
 
 const void * Threads::TopOfStack ()
@@ -1588,13 +1577,6 @@ void RuntimeThreadContext_t::Run ( const void * pStack )
 	m_fnRun();
 	LOG( DEBUG, MT ) << "thread ended";
 	g_iRunningThreads.fetch_sub ( 1, std::memory_order_acq_rel );
-
-	while ( !m_pThreadCleanup.Empty () )
-	{
-		auto * pOp = m_pThreadCleanup.Front ();
-		m_pThreadCleanup.Pop ();
-		pOp->Complete ( pOp );
-	}
 
 #if SPH_ALLOCS_PROFILER
 	sphMemStatThdCleanup ( m_pTLS );

@@ -86,7 +86,7 @@ public:
 
 	bool Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings ) override;
 	void PostSetup() override EXCLUDES ( m_tLock );
-	RtAccum_t * CreateAccum ( RtAccum_t * pAccExt, CSphString & sError ) override;
+	bool BindAccum ( RtAccum_t * pAccExt, CSphString * pError = nullptr ) override;
 	TokenizerRefPtr_c CloneIndexingTokenizer() const override { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
 	void SaveMeta ( bool bShutdown = false ) EXCLUDES ( m_tLock );
 	void SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown = false );
@@ -749,16 +749,15 @@ PercolateIndex_c::~PercolateIndex_c ()
 	}
 }
 
-RtAccum_t * PercolateIndex_c::CreateAccum ( RtAccum_t * pAccExt, CSphString & sError )
+bool PercolateIndex_c::BindAccum ( RtAccum_t * pAccExt, CSphString* pError )
 {
-	return AcquireAccum ( m_pDict, pAccExt, true, false, &sError );
+	return PrepareAccum ( pAccExt, true, pError );
 }
 
 
-bool PercolateIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt )
+bool PercolateIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, CSphString & sError, CSphString & sWarning, RtAccum_t * pAcc )
 {
-	auto * pAcc = (RtAccum_t *) AcquireAccum ( m_pDict, pAccExt, true, true, &sError );
-	if ( !pAcc )
+	if ( !BindAccum ( pAcc, &sError ) )
 		return false;
 
 	TokenizerRefPtr_c tTokenizer = CloneIndexingTokenizer ();
@@ -1510,7 +1509,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 }
 
 
-bool PercolateIndex_c::MatchDocuments ( RtAccum_t * pAccExt, PercolateMatchResult_t & tRes )
+bool PercolateIndex_c::MatchDocuments ( RtAccum_t * pAcc, PercolateMatchResult_t & tRes )
 {
 	MEMORY ( MEM_INDEX_RT );
 
@@ -1519,8 +1518,7 @@ bool PercolateIndex_c::MatchDocuments ( RtAccum_t * pAccExt, PercolateMatchResul
 		tRes.m_tmSetup = -tmStart;
 	m_sLastWarning = "";
 
-	auto * pAcc = (RtAccum_t *) AcquireAccum ( m_pDict, pAccExt );
-	if ( !pAcc )
+	if ( !BindAccum ( pAcc ) )
 		return false;
 
 	// empty txn or no queries just ignore
@@ -1551,15 +1549,12 @@ bool PercolateIndex_c::MatchDocuments ( RtAccum_t * pAccExt, PercolateMatchResul
 	return true;
 }
 
-void PercolateIndex_c::RollBack ( RtAccum_t * pAccExt )
+void PercolateIndex_c::RollBack ( RtAccum_t * pAcc )
 {
 	assert ( g_bRTChangesAllowed );
 
-	auto *pAcc = ( RtAccum_t * ) AcquireAccum ( m_pDict, pAccExt );
-	if ( !pAcc )
-		return;
-
-	pAcc->Cleanup();
+	if ( BindAccum ( pAcc ) )
+		pAcc->Cleanup();
 }
 
 
@@ -2042,12 +2037,11 @@ int PercolateIndex_c::ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQue
 	}
 }
 
-bool PercolateIndex_c::Commit ( int * pDeleted, RtAccum_t * pAccExt )
+bool PercolateIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc )
 {
 	assert ( g_bRTChangesAllowed );
 
-	auto * pAcc = (RtAccum_t *)AcquireAccum ( m_pDict, pAccExt );
-	if ( !pAcc )
+	if ( !BindAccum ( pAcc ) )
 		return true;
 
 	CSphVector<StoredQuery_i*> dNewQueries; // not owned

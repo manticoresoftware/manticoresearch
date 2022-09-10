@@ -1219,31 +1219,6 @@ TEST ( functions, OneshotAutoEvent )
 
 //////////////////////////////////////////////////////////////////////////
 
-void CleanupThread ( void * pArg )
-{
-	Threads::OnExitThread ( [=] { *(bool *) pArg = true; } );
-}
-
-TEST ( functions, Cleanup )
-{
-	const int CLEANUP_COUNT = 10;
-	bool bCleanup[CLEANUP_COUNT];
-	for ( auto & bClean : bCleanup )
-		bClean = false;
-
-	SphThread_t thd[CLEANUP_COUNT];
-	for ( int i = 0; i<CLEANUP_COUNT; i++ )
-		ASSERT_TRUE ( Threads::Create ( &thd[i], [&,i] { CleanupThread ( &bCleanup[i] ); } ) );
-
-	for ( auto & th : thd )
-		ASSERT_TRUE ( Threads::Join ( &th ) );
-
-	for ( auto & bClean : bCleanup )
-		ASSERT_TRUE ( bClean );
-}
-
-//////////////////////////////////////////////////////////////////////////
-
 #ifdef _WIN32
 #pragma warning(push) // store current warning values
 #pragma warning(disable:4101)

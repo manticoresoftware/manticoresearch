@@ -8493,10 +8493,7 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 	{
 		i.m_sName = tReq.GetString();
 		if ( i.m_sName==sphGetDocidName() )
-		{
-			SendErrorReply ( tOut, "'id' attribute cannot be updated" );
-			return;
-		}
+			return SendErrorReply ( tOut, "'id' attribute cannot be updated" );
 
 		i.m_eType = SPH_ATTR_INTEGER;
 		if ( iVer>=0x102 )
@@ -8525,7 +8522,7 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 	tUpd.m_dDocids.Reserve ( iNumUpdates );
 	tUpd.m_dRowOffset.Reserve ( iNumUpdates );
 
-	for ( int i=0; i<iNumUpdates; i++ )
+	for ( int i=0; i<iNumUpdates; ++i )
 	{
 		// v.1.0 always sends 32-bit ids; v.1.1+ always send 64-bit ones
 		uint64_t uDocid = ( iVer>=0x101 ) ? tReq.GetUint64 () : tReq.GetDword ();
@@ -8571,10 +8568,7 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 						// extra zeroes for json parser
 						BYTE * pAdded = tUpd.m_dBlobs.AddN ( uLen+2 );
 						if ( !tReq.GetBytes ( pAdded, uLen ) )
-						{
-							SendErrorReply ( tOut, "error reading string" );
-							break;
-						}
+							return SendErrorReply ( tOut, "error reading string" );
 
 						pAdded[uLen] = 0;
 						pAdded[uLen+1] = 0;
@@ -8590,29 +8584,20 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 	}
 
 	if ( tReq.GetError() )
-	{
-		SendErrorReply ( tOut, "invalid or truncated request" );
-		return;
-	}
+		return SendErrorReply ( tOut, "invalid or truncated request" );
 
 	// check index names
 	StrVec_t dIndexNames;
 	ParseIndexList ( sIndexes, dIndexNames );
 
-	if ( !dIndexNames.GetLength() )
-	{
-		SendErrorReply ( tOut, "no valid indexes in update request" );
-		return;
-	}
+	if ( dIndexNames.IsEmpty() )
+		return SendErrorReply ( tOut, "no valid indexes in update request" );
 
 	DistrPtrs_t dDistributed;
 	// copy distributed indexes description
 	CSphString sMissed;
 	if ( !ExtractDistributedIndexes ( dIndexNames, dDistributed, sMissed ) )
-	{
-		SendErrorReply ( tOut, "unknown index '%s' in update request", sMissed.cstr() );
-		return;
-	}
+		return SendErrorReply ( tOut, "unknown index '%s' in update request", sMissed.cstr() );
 
 	// do update
 	SearchFailuresLog_c dFails;
@@ -8661,10 +8646,7 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 	dFails.BuildReport ( sReport );
 
 	if ( !iSuccesses )
-	{
-		SendErrorReply ( tOut, "%s", sReport.cstr() );
-		return;
-	}
+		return SendErrorReply ( tOut, "%s", sReport.cstr() );
 
 	auto tReply = APIAnswer ( tOut, VER_COMMAND_UPDATE, dFails.IsEmpty() ? SEARCHD_OK : SEARCHD_WARNING );
 	if ( !dFails.IsEmpty() )
@@ -12505,18 +12487,16 @@ static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sInde
 {
 	CSphString sError;
 	// checks
+	if ( !pServed )
 	{
-		if ( !pServed )
-		{
-			dFails.Submit ( sIndex, sDistributed, "index not available" );
-			return;
-		}
+		dFails.Submit ( sIndex, sDistributed, "index not available" );
+		return;
+	}
 
-		if ( !CheckIndexCluster ( sIndex, *pServed, tStmt.m_sCluster, IsHttpStmt ( tStmt ), sError ) )
-		{
-			dFails.Submit ( sIndex, sDistributed, sError.cstr() );
-			return;
-		}
+	if ( !CheckIndexCluster ( sIndex, *pServed, tStmt.m_sCluster, IsHttpStmt ( tStmt ), sError ) )
+	{
+		dFails.Submit ( sIndex, sDistributed, sError.cstr() );
+		return;
 	}
 
 	RtAccum_t tAcc ( false );
@@ -13214,7 +13194,8 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * 
 		if ( !pCmd )
 			return 0;
 
-		pAccum = tAcc.GetAcc ( RIdx_T<RtIndex_i*> ( pServed ), sError );
+		RIdx_T<RtIndex_i*> pRtIndex { pServed };
+		pAccum = tAcc.GetAcc ( pRtIndex, sError );
 		if ( !sError.IsEmpty() )
 			return err();
 
@@ -13229,11 +13210,10 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * 
 
 		RIdx_T<RtIndex_i*> pRtIndex { pServed };
 		pAccum = tAcc.GetAcc ( pRtIndex, sError );
-		if ( !pRtIndex->DeleteDocument ( dDocs, sError, pAccum ) ) // assume dData is alive, as we use slice from internal vec
+		if ( !sError.IsEmpty() )
 			return err();
 
-		pAccum = tAcc.GetAcc ( pRtIndex, sError );
-		if ( !sError.IsEmpty() )
+		if ( !pRtIndex->DeleteDocument ( dDocs, sError, pAccum ) ) // assume dData is alive, as we use slice from internal vec
 			return err();
 
 		assert ( pAccum );
@@ -15899,21 +15879,20 @@ void HandleMysqlUnlockIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes, C
 RtAccum_t * CSphSessionAccum::GetAcc ( RtIndex_i * pIndex, CSphString & sError )
 {
 	assert ( pIndex );
-	RtAccum_t * pAcc = pIndex->CreateAccum ( m_pAcc.get(), sError );
-	if ( !pAcc && !sError.IsEmpty() )
-		return pAcc;
+	if ( !m_pAcc )
+		m_pAcc = std::make_unique<RtAccum_t>(false);
 
-	if ( m_pAcc.get()!=pAcc )
-		m_pAcc.reset(pAcc);
-	return pAcc;
+	if ( !pIndex->BindAccum ( m_pAcc.get(), &sError ) )
+		return nullptr;
+
+	return m_pAcc.get();
 }
 
 RtIndex_i * CSphSessionAccum::GetIndex ()
 {
-	if ( m_pAcc )
+	if ( !m_pAcc )
+		return nullptr;
 		return m_pAcc->GetIndex();
-	else
-		return sphGetCurrentIndexRT();
 }
 
 static bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, CSphString & sFederatedQuery );

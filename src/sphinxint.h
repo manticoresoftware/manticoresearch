@@ -888,10 +888,6 @@ void			GetSettingsFiles ( const TokenizerRefPtr_c& pTok, const DictRefPtr_c& pDi
 /// json save/load
 void operator<< ( JsonEscapedBuilder& tOut, const CSphSchema& tSchema );
 
-/// Get current thread local index - internal do not use
-class RtIndex_i;
-RtIndex_i * sphGetCurrentIndexRT();
-
 void			RebalanceWeights ( const CSphFixedVector<int64_t> & dTimers, CSphFixedVector<float>& pWeights );
 
 // FIXME!!! remove with converter

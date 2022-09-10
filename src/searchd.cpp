@@ -8428,7 +8428,7 @@ static void DoCommandUpdate ( const CSphString & sIndex, const CSphString& sClus
 {
 	int iUpd = 0;
 	CSphString sError, sWarning;
-	RtAccum_t tAcc ( false );
+	RtAccum_t tAcc;
 	ReplicationCommand_t* pCmd = tAcc.AddCommand ( ReplicationCommand_e::UPDATE_API, sIndex, sCluster );
 	assert ( pCmd );
 	pCmd->m_pUpdateAPI = std::move(pUpd);
@@ -12499,7 +12499,7 @@ static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sInde
 		return;
 	}
 
-	RtAccum_t tAcc ( false );
+	RtAccum_t tAcc;
 	ReplicationCommand_t * pCmd = tAcc.AddCommand ( tStmt.m_bJson ? ReplicationCommand_e::UPDATE_JSON : ReplicationCommand_e::UPDATE_QL, sIndex, tStmt.m_sCluster );
 	assert ( pCmd );
 	pCmd->m_pUpdateAPI = tStmt.AttrUpdatePtr();
@@ -14442,7 +14442,7 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 		}
 	}
 
-	RtAccum_t tAcc ( false );
+	RtAccum_t tAcc;
 	tAcc.m_dCmd.Add ( std::move ( pCmd ) );
 
 	bool bRes = HandleCmdReplicate ( tAcc, sError );
@@ -15880,7 +15880,7 @@ RtAccum_t * CSphSessionAccum::GetAcc ( RtIndex_i * pIndex, CSphString & sError )
 {
 	assert ( pIndex );
 	if ( !m_pAcc )
-		m_pAcc = std::make_unique<RtAccum_t>(false);
+		m_pAcc = std::make_unique<RtAccum_t>();
 
 	if ( !pIndex->BindAccum ( m_pAcc.get(), &sError ) )
 		return nullptr;

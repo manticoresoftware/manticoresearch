@@ -98,7 +98,7 @@ void DoIndexing ( CSphSource_SQL * pSrc, RtIndex_i * pIndex )
 	tDoc.m_dFields.Resize(g_iFieldsCount);
 
 	int iDynamic = pIndex->GetMatchSchema().GetRowSize();
-	RtAccum_t tAcc ( false );
+	RtAccum_t tAcc;
 
 	while (true)
 	{

@@ -298,7 +298,7 @@ TEST_F ( RT, WeightBoundary )
 	InsertDocData_t tDoc ( pIndex->GetMatchSchema() );
 	int iDynamic = pIndex->GetMatchSchema().GetRowSize();
 
-	RtAccum_t tAcc (false);
+	RtAccum_t tAcc;
 
 	CSphString sFilter;
 	bool bEOF = false;
@@ -406,7 +406,7 @@ TEST_F ( RT, RankerFactors )
 	InsertDocData_t tDoc ( pIndex->GetMatchSchema() );
 	int iDynamic = pIndex->GetMatchSchema().GetRowSize();
 
-	RtAccum_t tAcc (false);
+	RtAccum_t tAcc;
 	bool bEOF = false;
 	while (true)
 	{
@@ -612,7 +612,7 @@ TEST_F ( RT, SendVsMerge )
 	InsertDocData_t tDoc ( pIndex->GetMatchSchema() );
 	int iDynamic = pIndex->GetMatchSchema().GetRowSize();
 
-	RtAccum_t tAcc (false);
+	RtAccum_t tAcc;
 
 	bool bEOF = false;
 	while (true)

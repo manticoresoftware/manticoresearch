@@ -2259,7 +2259,7 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString& sIndex, const Jso
 		auto pStored = pIndex->CreateQuery ( tArgs, sError );
 		if ( pStored )
 		{
-			RtAccum_t tAcc ( false );
+			RtAccum_t tAcc;
 			tAcc.SetIndex ( pIndex );
 			ReplicationCommand_t * pCmd = tAcc.AddCommand ( ReplicationCommand_e::PQUERY_ADD, sIndex );
 			// refresh query's UID for reply as it might be auto-generated
@@ -2299,7 +2299,7 @@ bool HttpHandlerPQ_c::ListQueries ( const CSphString & sIndex )
 
 bool HttpHandlerPQ_c::Delete ( const CSphString & sIndex, const JsonObj_c & tRoot )
 {
-	RtAccum_t tAcc ( false );
+	RtAccum_t tAcc;
 	ReplicationCommand_t * pCmd = tAcc.AddCommand ( ReplicationCommand_e::PQUERY_DELETE, sIndex );
 
 	CSphString sError;

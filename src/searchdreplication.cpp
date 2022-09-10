@@ -461,7 +461,7 @@ struct ReceiverCtx_t
 	ReplicationClusterPtr_t m_pCluster;
 
 	// share of remote commands received between apply and commit callbacks
-	RtAccum_t m_tAcc { false };
+	RtAccum_t m_tAcc;
 	CSphQuery m_tQuery;
 
 	void Cleanup();
@@ -3833,7 +3833,7 @@ void ReplicationCluster_t::UpdateIndexHashes()
 // cluster ALTER statement that removes index from cluster but keep it at daemon
 static bool ClusterAlterDrop ( const CSphString & sCluster, const CSphString & sIndex, CSphString & sError )
 {
-	RtAccum_t tAcc { false };
+	RtAccum_t tAcc;
 	tAcc.AddCommand ( ReplicationCommand_e::CLUSTER_ALTER_DROP, sIndex, sCluster );
 	return HandleCmdReplicate ( tAcc, sError );
 }
@@ -5292,7 +5292,7 @@ static bool ClusterAlterAdd ( const CSphString & sCluster, const CSphString & sI
 			sphWarning ( "%s", sError.cstr() );
 	}
 
-	RtAccum_t tAcc { false };
+	RtAccum_t tAcc;
 	ReplicationCommand_t * pAddCmd = tAcc.AddCommand ( ReplicationCommand_e::CLUSTER_ALTER_ADD, sIndex, sCluster );
 	pAddCmd->m_bCheckIndex = false;
 	HashedServedClone_c tMutableDesc { sIndex, g_pLocalIndexes.get() };

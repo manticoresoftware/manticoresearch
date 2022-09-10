@@ -101,12 +101,11 @@ public:
 	CSphVector<DWORD>				m_dPerDocHitsCount;
 	CSphVector<std::unique_ptr<ReplicationCommand_t>> m_dCmd;
 
-	bool						m_bKeywordDict = true;
+	bool						m_bKeywordDict = false;
 	DictRefPtr_c				m_pDict;
 	const void *				m_pRefDict = nullptr; // not owned, used only for comparing via ==
 
 public:
-					explicit RtAccum_t ( bool bKeywordDict );
 	void			SetupDict ( const RtIndex_i * pIndex, const DictRefPtr_c& pDict, bool bKeywordDict );
 	void			Sort();
 

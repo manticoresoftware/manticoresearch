@@ -7,7 +7,7 @@
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License. You should have
 // received a copy of the GPL license along with this program; if you
-// did not, you can find it at http://www.gnu.org
+// did not, you can find it at http://www.gnu.org/
 //
 
 #include "accumulator.h"
@@ -35,10 +35,6 @@ ReplicationCommand_t* RtAccum_t::AddCommand ( ReplicationCommand_e eCmd, CSphStr
 	m_dCmd.Add ( MakeReplicationCommand ( eCmd, std::move ( sIndex ), std::move ( sCluster ) ) );
 	return m_dCmd.Last().get();
 }
-
-RtAccum_t::RtAccum_t ( bool bKeywordDict )
-	: m_bKeywordDict ( bKeywordDict )
-{}
 
 void RtAccum_t::SetupDict ( const RtIndex_i* pIndex, const DictRefPtr_c& pDict, bool bKeywordDict )
 {

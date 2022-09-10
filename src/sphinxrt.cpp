@@ -2327,7 +2327,7 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 	bool bColumnarId = tSchema.GetAttr(0).IsColumnar();
 
 	// create temporary columnar accessor; don't take ownership of built attributes
-	auto pColumnar = CreateColumnarRT ( m_pIndex->GetInternalSchema(), m_pColumnarBuilder.get(), false );
+	auto pColumnar = CreateLightColumnarRT ( m_pIndex->GetInternalSchema(), m_pColumnarBuilder.get() );
 
 	std::string sError;
 	std::unique_ptr<columnar::Iterator_i> pColumnarIdIterator;

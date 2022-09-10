@@ -522,16 +522,10 @@ DocidLookupWriter_c::DocidLookupWriter_c ( DWORD nDocs )
 {}
 
 
-DocidLookupWriter_c::~DocidLookupWriter_c()
-{
-	SafeDelete ( m_pWriter );
-}
-
-
 bool DocidLookupWriter_c::Open ( const CSphString & sFilename, CSphString & sError )
 {
 	assert ( !m_pWriter );
-	m_pWriter = new CSphWriter;
+	m_pWriter = std::make_unique<CSphWriter>();
 
 	if ( !m_pWriter->OpenFile ( sFilename, sError ) )
 		return false;

@@ -33,7 +33,6 @@ class DocidLookupWriter_c
 {
 public:
 	explicit		DocidLookupWriter_c ( DWORD nDocs );
-					~DocidLookupWriter_c();
 
 	bool			Open ( const CSphString & sFilename, CSphString & sError );
 	void			AddPair ( const DocidRowidPair_t & tPair );
@@ -46,7 +45,7 @@ private:
 	int				m_iProcessed {0};
 	int				m_iCheckpoint {0};
 	DWORD			m_nDocs {0};
-	CSphWriter *	m_pWriter {nullptr};
+	std::unique_ptr<CSphWriter>	m_pWriter;
 	SphOffset_t		m_tCheckpointStart {0};
 	DocID_t			m_tLastDocID {0};
 	CSphFixedVector<DocidLookupCheckpoint_t> m_dCheckpoints {0};

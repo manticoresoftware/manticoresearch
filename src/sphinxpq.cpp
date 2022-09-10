@@ -1532,7 +1532,7 @@ bool PercolateIndex_c::MatchDocuments ( RtAccum_t * pAccExt, PercolateMatchResul
 
 	pAcc->Sort();
 
-	RtSegment_t * pSeg = pAcc->CreateSegment ( m_tSchema.GetRowSize(), PERCOLATE_WORDS_PER_CP, m_tSettings.m_eHitless, m_dHitlessWords );
+	RtSegment_t * pSeg = CreateSegment ( pAcc, PERCOLATE_WORDS_PER_CP, m_tSettings.m_eHitless, m_dHitlessWords );
 	assert ( !pSeg || pSeg->m_uRows>0 );
 	assert ( !pSeg || pSeg->m_tAliveRows>0 );
 	BuildSegmentInfixes ( pSeg, m_pDict->HasMorphology(), true, m_tSettings.m_iMinInfixLen,

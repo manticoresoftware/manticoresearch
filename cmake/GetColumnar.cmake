@@ -5,11 +5,11 @@ include ( update_bundle )
 # Say, you want to upgrade secondary headers to v.13
 # --------- On columnar side ------------
 # 1. Change value of constant LIB_VERSION in secondary/secondary.h to 13
-# 2. Commit the changes.
-# 3. Grab final columnar AND secondary api versions. Say, you have columnar v 16 and secondary v 13 now.
-# 4. Tag your commit with 'c16-s13' and push the tag to official github. That is:
-#	git tag s16-s13
-#	git push origin s16-s13 # here you must write your alias of github (NOT gitlab) repo instead of 'origin'
+# 2. Commit and publish the changes.
+# 3. Wait until changes are mirrored to github. Ensure it is tagged as 'c16-s13' (mirroring script should do it)
+# 4. If the tag wasn't appear, push it manually, as:
+#	git tag c16-s13
+#	git push origin c16-s13 # here you must write your alias of github (NOT gitlab) repo instead of 'origin'
 # --------- On manticore side ------------
 # 1. Fix the numbers NEED_COLUMNAR_API and NEED_SECONDARY_API according to your upgrade
 # 2. Reconfigure build.

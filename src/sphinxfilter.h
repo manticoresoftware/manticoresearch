@@ -24,7 +24,7 @@ public:
 	virtual void SetLocator ( const CSphAttrLocator & ) {}
 	virtual void SetRange ( SphAttr_t, SphAttr_t ) {}
 	virtual void SetRangeFloat ( float, float ) {}
-	virtual void SetValues ( const SphAttr_t *, int ) {}
+	virtual void SetValues ( const VecTraits_T<SphAttr_t>& ) {}
 	virtual void SetBlobStorage ( const BYTE * ) {}
 
 	virtual void SetColumnar ( const columnar::Columnar_i * ) {}

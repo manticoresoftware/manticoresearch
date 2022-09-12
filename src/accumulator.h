@@ -16,6 +16,7 @@
 #define _accumulator_
 
 #include "sphinxint.h"
+#include "docstore.h"
 
 struct StoredQueryDesc_t
 {
@@ -49,6 +50,11 @@ enum class ReplicationCommand_e
 
 	TOTAL
 };
+
+struct CSphReconfigureSettings;
+struct InsertDocData_t;
+struct RtSegment_t;
+class MemoryWriter_c;
 
 // command trait
 struct ReplicationCommand_t
@@ -87,7 +93,7 @@ class ColumnarBuilderRT_i;
 class RtAccum_t
 {
 public:
-	DWORD							m_uAccumDocs {0};
+	DWORD							m_uAccumDocs = 0;
 	CSphTightVector<CSphWordHit>	m_dAccum;
 	CSphTightVector<CSphRowitem>	m_dAccumRows;
 	CSphVector<DocID_t>				m_dAccumKlist;
@@ -95,14 +101,11 @@ public:
 	CSphVector<DWORD>				m_dPerDocHitsCount;
 	CSphVector<std::unique_ptr<ReplicationCommand_t>> m_dCmd;
 
-	bool						m_bKeywordDict {true};
+	bool						m_bKeywordDict = false;
 	DictRefPtr_c				m_pDict;
 	const void *				m_pRefDict = nullptr; // not owned, used only for comparing via ==
 
-
-					explicit RtAccum_t ( bool bKeywordDict );
-					~RtAccum_t() = default;
-
+public:
 	void			SetupDict ( const RtIndex_i * pIndex, const DictRefPtr_c& pDict, bool bKeywordDict );
 	void			Sort();
 
@@ -110,7 +113,6 @@ public:
 	void			Cleanup();
 
 	void			AddDocument ( ISphHits * pHits, const InsertDocData_t & tDoc, bool bReplace, int iRowSize, const DocstoreBuilder_i::Doc_t * pStoredDoc );
-	RtSegment_t *	CreateSegment ( int iRowSize, int iWordsCheckpoint, ESphHitless eHitless, const VecTraits_T<SphWordID_t> & dHitlessWords );
 	void			CleanupDuplicates ( int iRowSize );
 	void			GrabLastWarning ( CSphString & sWarning );
 	void			SetIndex ( RtIndex_i * pIndex );
@@ -120,6 +122,7 @@ public:
 	uint64_t		GetSchemaHash() const { return m_uSchemaHash; }
 
 	RtIndex_i *		GetIndex() const { return m_pIndex; }
+	int 			GetIndexGeneration() const { return m_iIndexGeneration; }
 	ReplicationCommand_t * AddCommand ( ReplicationCommand_e eCmd, CSphString sIndex, CSphString sCluster = CSphString() );
 
 	void			LoadRtTrx ( const BYTE * pData, int iLen );
@@ -135,18 +138,21 @@ private:
 
 	ISphRtDictWraperRefPtr_c			m_pDictRt;
 	std::unique_ptr<BlobRowBuilder_i>	m_pBlobWriter;
-	std::unique_ptr<DocstoreRT_i>		m_pDocstore {nullptr};
-	std::unique_ptr<ColumnarBuilderRT_i>	m_pColumnarBuilder {nullptr};
+	std::unique_ptr<DocstoreRT_i>		m_pDocstore;
+	std::unique_ptr<ColumnarBuilderRT_i>	m_pColumnarBuilder;
 	RowID_t								m_tNextRowID = 0;
 	CSphFixedVector<BYTE>				m_dPackedKeywords { 0 };
 	uint64_t							m_uSchemaHash = 0;
 
 	// FIXME!!! index is unlocked between add data and commit or at begin and end
 	RtIndex_i *							m_pIndex = nullptr;		///< my current owner in this thread
+	int									m_iIndexGeneration = 0;
 
 	void			ResetDict();
 	void			SetupDocstore();
-	void			CreateSegmentHits ( RtSegment_t * pSeg, int iWordsCheckpoint, ESphHitless eHitless, const VecTraits_T<SphWordID_t> & dHitlessWords );
+
+	// defined in sphinxrt.cpp
+	friend RtSegment_t* CreateSegment ( RtAccum_t*, int, ESphHitless, const VecTraits_T<SphWordID_t>& );
 };
 
 #endif // _accumulator_

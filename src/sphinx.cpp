@@ -1479,10 +1479,9 @@ void CSphEmbeddedFiles::Reset()
 /////////////////////////////////////////////////////////////////////////////
 // FILTER
 /////////////////////////////////////////////////////////////////////////////
-void CSphFilterSettings::SetExternalValues ( const SphAttr_t * pValues, int nValues )
+void CSphFilterSettings::SetExternalValues ( const VecTraits_T<SphAttr_t>& dValues )
 {
-	m_pValues = pValues;
-	m_nValues = nValues;
+	m_dExtValues = dValues;
 }
 
 
@@ -3857,24 +3856,6 @@ bool CSphHitBuilder::cidxDone ( int iMemLimit, int & iMinInfixLen, int iMaxCodep
 }
 
 
-inline int encodeVLB ( BYTE * buf, DWORD v )
-{
-	register BYTE b;
-	register int n = 0;
-
-	do
-	{
-		b = (BYTE)(v & 0x7f);
-		v >>= 7;
-		if ( v )
-			b |= 0x80;
-		*buf++ = b;
-		n++;
-	} while ( v );
-	return n;
-}
-
-
 inline int encodeKeyword ( BYTE * pBuf, const char * pKeyword )
 {
 	auto iLen = (int) strlen ( pKeyword ); // OPTIMIZE! remove this and memcpy and check if thats faster
@@ -3974,8 +3955,8 @@ int CSphHitBuilder::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits )
 
 				if ( m_eHitless!=SPH_HITLESS_ALL )
 					uHitCount = ( uHitCount << 1 ) | 1;
-				pBuf += encodeVLB ( pBuf, uHitCount );
-				pBuf += encodeVLB ( pBuf, uHitFieldMask );
+				pBuf += ZipToPtrLE ( pBuf, uHitCount );
+				pBuf += ZipToPtrLE ( pBuf, uHitFieldMask );
 				assert ( pBuf<m_dWriteBuffer.Begin() + m_dWriteBuffer.GetLength() );
 
 				uHitCount = 0;
@@ -3999,8 +3980,8 @@ int CSphHitBuilder::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits )
 		}
 
 		// encode enough restart markers
-		if ( d1 ) pBuf += encodeVLB ( pBuf, 0 );
-		if ( d2 && !bFlushed ) pBuf += encodeVLB ( pBuf, 0 );
+		if ( d1 ) pBuf += ZipToPtrLE ( pBuf, 0 );
+		if ( d2 && !bFlushed ) pBuf += ZipToPtrLE ( pBuf, 0 );
 
 		assert ( pBuf<m_dWriteBuffer.Begin() + m_dWriteBuffer.GetLength() );
 
@@ -4012,7 +3993,7 @@ int CSphHitBuilder::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits )
 			if ( m_pDict->GetSettings().m_bWordDict )
 				pBuf += encodeKeyword ( pBuf, m_pDict->HitblockGetKeyword ( pHit->m_uWordID ) ); // keyword itself in case of keywords dict
 			else
-				pBuf += sphEncodeVLB8 ( pBuf, d1 ); // delta in case of CRC dict
+				pBuf += ZipToPtrLE ( pBuf, d1 ); // delta in case of CRC dict
 
 			assert ( pBuf<m_dWriteBuffer.Begin() + m_dWriteBuffer.GetLength() );
 		}
@@ -4020,14 +4001,14 @@ int CSphHitBuilder::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits )
 		// encode docid delta
 		if ( d2 )
 		{
-			pBuf += sphEncodeVLB8 ( pBuf, d2 );
+			pBuf += ZipToPtrLE ( pBuf, d2 );
 			assert ( pBuf<m_dWriteBuffer.Begin() + m_dWriteBuffer.GetLength() );
 		}
 
 		assert ( d3 );
 		if ( !uHitCount ) // encode position delta, unless accumulating hits
 		{
-			pBuf += encodeVLB ( pBuf, d3 << iPositionShift );
+			pBuf += ZipToPtrLE ( pBuf, d3 << iPositionShift );
 			assert ( pBuf<m_dWriteBuffer.Begin() + m_dWriteBuffer.GetLength() );
 		}
 
@@ -4057,15 +4038,15 @@ int CSphHitBuilder::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits )
 
 		if ( m_eHitless!=SPH_HITLESS_ALL )
 			uHitCount = ( uHitCount << 1 ) | 1;
-		pBuf += encodeVLB ( pBuf, uHitCount );
-		pBuf += encodeVLB ( pBuf, uHitFieldMask );
+		pBuf += ZipToPtrLE ( pBuf, uHitCount );
+		pBuf += ZipToPtrLE ( pBuf, uHitFieldMask );
 
 		assert ( pBuf<m_dWriteBuffer.Begin() + m_dWriteBuffer.GetLength() );
 	}
 
-	pBuf += encodeVLB ( pBuf, 0 );
-	pBuf += encodeVLB ( pBuf, 0 );
-	pBuf += encodeVLB ( pBuf, 0 );
+	pBuf += ZipToPtrLE ( pBuf, 0 );
+	pBuf += ZipToPtrLE ( pBuf, 0 );
+	pBuf += ZipToPtrLE ( pBuf, 0 );
 	assert ( pBuf<m_dWriteBuffer.Begin() + m_dWriteBuffer.GetLength() );
 	w = (int)(pBuf - m_dWriteBuffer.Begin());
 	assert ( w<m_dWriteBuffer.GetLength() );

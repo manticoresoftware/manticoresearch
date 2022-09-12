@@ -193,9 +193,8 @@ struct ReplicationArgs_t
 class CommitMonitor_c
 {
 public:
-	CommitMonitor_c ( RtAccum_t & tAcc, int * pDeletedCount )
+	explicit CommitMonitor_c ( RtAccum_t & tAcc )
 		: m_tAcc ( tAcc )
-		, m_pDeletedCount ( pDeletedCount )
 	{}
 	CommitMonitor_c ( RtAccum_t & tAcc, CSphString * pWarning, int * pUpdated )
 		: m_tAcc ( tAcc )
@@ -462,10 +461,9 @@ struct ReceiverCtx_t
 	ReplicationClusterPtr_t m_pCluster;
 
 	// share of remote commands received between apply and commit callbacks
-	RtAccum_t m_tAcc { false };
+	RtAccum_t m_tAcc;
 	CSphQuery m_tQuery;
 
-	~ReceiverCtx_t() { Cleanup(); }
 	void Cleanup();
 };
 
@@ -752,24 +750,9 @@ static void Synced_fn ( void * pAppCtx )
 void ReceiverCtx_t::Cleanup()
 {
 	m_tAcc.Cleanup();
-
-	for ( CSphFilterSettings & tItem : m_tQuery.m_dFilters )
-	{
-		// fixme! What a legacy WTF? you take val from tItem.GetValueArray, compare with tItem.m_dValues,
-		// then first invoke delete[] and then(!) call SetExternalValues. Why it is here? Why not put it as tItem member,
-		// and let it do 'cleanup' action, instead this out-of-encapsulation strange actions upon totally other object
-		// with implicitly unknown structure?
-		// If will surely lead to UB (most probably - crash), if you delete uservars placed to external values,
-		// since they're shared, not owned!
-		const SphAttr_t * pVals = tItem.GetValueArray();
-		if ( pVals && pVals!=tItem.m_dValues.Begin() )
-		{
-			delete[] pVals;
-			tItem.SetExternalValues ( nullptr, 0 );
-		}
-	}
 	m_tQuery.m_dFilters.Reset();
 	m_tQuery.m_dFilterTree.Reset();
+	m_pCluster->HeartBeat();
 }
 
 // callback for Galera apply_cb that transaction received from cluster by node
@@ -820,7 +803,6 @@ static wsrep_cb_status_t Commit_fn ( void * pCtx, const void * hndTrx, uint32_t 
 		eRes = ( bOk ? WSREP_CB_SUCCESS : WSREP_CB_FAILURE );
 	}
 	pLocalCtx->Cleanup();
-	pLocalCtx->m_pCluster->HeartBeat();
 	return eRes;
 }
 
@@ -1567,14 +1549,14 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 
 	while ( tReader.GetPos()<iLen )
 	{
-		auto eCommand = (ReplicationCommand_e)tReader.GetWord();
+		auto eCommand = (ReplicationCommand_e)tReader.GetVal<WORD>();
 		if ( eCommand<ReplicationCommand_e::PQUERY_ADD || eCommand>ReplicationCommand_e::TOTAL )
 		{
 			sphWarning ( "bad replication command %d", (int)eCommand );
 			return false;
 		}
 
-		WORD uVer = tReader.GetWord();
+		WORD uVer = tReader.GetVal<WORD>();
 		if ( uVer!=g_iReplicateCommandVer )
 		{
 			sphWarning ( "replication command %d, version mismatch %d, got %d", (int)eCommand, g_iReplicateCommandVer, (int)uVer );
@@ -1713,7 +1695,7 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 			return false;
 		}
 
-		CommitMonitor_c tCommit ( tAcc, nullptr );
+		CommitMonitor_c tCommit ( tAcc );
 
 		bool bOk = false;
 		if ( tCmd.m_eCommand==ReplicationCommand_e::CLUSTER_ALTER_ADD )
@@ -2002,10 +1984,7 @@ bool CommitMonitor_c::Commit ( CSphString& sError )
 		if ( !pIndex )
 			return false;
 
-		if ( !pIndex->Commit ( m_pDeletedCount, &m_tAcc ) )
-			return false;
-
-		return true;
+		return pIndex->Commit ( m_pDeletedCount, &m_tAcc, &sError );
 	}
 
 	ReplicationCommand_t& tCmd = *m_tAcc.m_dCmd[0];
@@ -2037,7 +2016,7 @@ bool CommitMonitor_c::CommitNonEmptyCmds ( RtIndex_i* pIndex, const ReplicationC
 {
 	assert ( pIndex );
 	if ( !bOnlyTruncate )
-		return pIndex->Commit ( m_pDeletedCount, &m_tAcc );
+		return pIndex->Commit ( m_pDeletedCount, &m_tAcc, &sError );
 
 	if ( !pIndex->Truncate ( sError ))
 		return false;
@@ -3854,7 +3833,7 @@ void ReplicationCluster_t::UpdateIndexHashes()
 // cluster ALTER statement that removes index from cluster but keep it at daemon
 static bool ClusterAlterDrop ( const CSphString & sCluster, const CSphString & sIndex, CSphString & sError )
 {
-	RtAccum_t tAcc { false };
+	RtAccum_t tAcc;
 	tAcc.AddCommand ( ReplicationCommand_e::CLUSTER_ALTER_DROP, sIndex, sCluster );
 	return HandleCmdReplicate ( tAcc, sError );
 }
@@ -5313,7 +5292,7 @@ static bool ClusterAlterAdd ( const CSphString & sCluster, const CSphString & sI
 			sphWarning ( "%s", sError.cstr() );
 	}
 
-	RtAccum_t tAcc { false };
+	RtAccum_t tAcc;
 	ReplicationCommand_t * pAddCmd = tAcc.AddCommand ( ReplicationCommand_e::CLUSTER_ALTER_ADD, sIndex, sCluster );
 	pAddCmd->m_bCheckIndex = false;
 	HashedServedClone_c tMutableDesc { sIndex, g_pLocalIndexes.get() };
@@ -5796,23 +5775,6 @@ void GetArray ( CSphFixedVector<CSphString> & dBuf, InputBuffer_c & tIn )
 		sVal = tIn.GetString();
 }
 
-void SaveArray ( const VecTraits_T<CSphString> & dBuf, MemoryWriter_c & tOut )
-{
-	tOut.PutDword ( dBuf.GetLength() );
-	for ( const CSphString & sVal : dBuf )
-		tOut.PutString ( sVal );
-}
-
-void GetArray ( CSphVector<CSphString> & dBuf, MemoryReader_c & tIn )
-{
-	int iCount = tIn.GetDword();
-	if ( !iCount )
-		return;
-
-	dBuf.Resize ( iCount );
-	for ( CSphString & sVal : dBuf )
-		sVal = tIn.GetString();
-}
 
 void SendArray ( const VecTraits_T<FileOp_t> & dBuf, ISphOutputBuffer & tOut )
 {
@@ -5866,8 +5828,8 @@ int LoadUpdate ( const BYTE * pBuf, int iLen, CSphAttrUpdate & tUpd, bool & bBlo
 {
 	MemoryReader_c tIn ( pBuf, iLen );
 	
-	tUpd.m_bIgnoreNonexistent = !!tIn.GetByte();
-	tUpd.m_bStrict = !!tIn.GetByte();
+	tUpd.m_bIgnoreNonexistent = !!tIn.GetVal<BYTE>();
+	tUpd.m_bStrict = !!tIn.GetVal<BYTE>();
 
 	bBlob = false;
 	tUpd.m_dAttributes.Resize ( tIn.GetDword() );
@@ -5913,15 +5875,9 @@ static void SaveFilter ( const CSphFilterSettings & tItem, MemoryWriter_c & tWri
 	tWriter.PutByte ( tItem.m_eMvaFunc );
 	tWriter.PutUint64 ( tItem.m_iMinValue );
 	tWriter.PutUint64 ( tItem.m_iMaxValue );
-	SaveArray ( tItem.m_dValues, tWriter );
+	SaveArray ( tItem.GetValues(), tWriter );
 	SaveArray ( tItem.m_dStrings, tWriter );
-
-	int iValues = tItem.GetNumValues();
-	if ( tItem.GetValueArray()==tItem.m_dValues.Begin() )
-		iValues = 0;
-	tWriter.PutDword ( iValues );
-	if ( iValues )
-		tWriter.PutBytes ( tItem.GetValueArray(), sizeof(*tItem.GetValueArray()) * iValues );
+	tWriter.PutDword ( 0 ); // legacy N of external values, now always 0
 }
 
 static void LoadFilter ( CSphFilterSettings & tItem, MemoryReader_c & tReader )
@@ -5936,21 +5892,19 @@ static void LoadFilter ( CSphFilterSettings & tItem, MemoryReader_c & tReader )
 	tItem.m_bOpenRight = !!( uFlags & FILTER_FLAG_OPEN_RIGHT );
 	tItem.m_bIsNull = !!( uFlags & FILTER_FLAG_IS_NULL );
 
-	tItem.m_eType = (ESphFilter )tReader.GetByte();
-	tItem.m_eMvaFunc = (ESphMvaFunc)tReader.GetByte();
-	tItem.m_iMinValue = tReader.GetUint64();
-	tItem.m_iMaxValue = tReader.GetUint64();
+	tItem.m_eType = (ESphFilter )tReader.GetVal<BYTE>();
+	tItem.m_eMvaFunc = (ESphMvaFunc)tReader.GetVal<BYTE>();
+	tItem.m_iMinValue = tReader.GetVal<uint64_t>();
+	tItem.m_iMaxValue = tReader.GetVal<uint64_t>();
 	GetArray ( tItem.m_dValues, tReader );
 	GetArray ( tItem.m_dStrings, tReader );
 
-	int iValues = tReader.GetDword();
-	if ( iValues )
-	{
-		CSphFixedVector<SphAttr_t> dValues ( iValues );
-		tReader.GetBytes ( dValues.Begin(), (int) dValues.GetLengthBytes() );
+	CSphVector<SphAttr_t> dOtherValues;
+	GetArray ( dOtherValues, tReader ); // expected to be empty
 
-		tItem.SetExternalValues ( dValues.LeakData(), iValues );
-	}
+	// legacy pass - extra values, just push them as plain values here.
+	if ( !dOtherValues.IsEmpty() )
+		std::swap ( tItem.m_dValues, dOtherValues );
 }
 
 void SaveUpdate ( const CSphQuery & tQuery, CSphVector<BYTE> & dOut )

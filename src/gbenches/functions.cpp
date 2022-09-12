@@ -339,9 +339,32 @@ BENCHMARK( BM_stdSprintf );
 class bench_builder : public benchmark::Fixture
 {
 public:
+	void SetUp ( const ::benchmark::State& state )
+	{
+		sphSrand(0);
+		a = sphRand();
+		b = sphRand();
+		c = sphRand();
+		d = sphRand();
+		f = sphRand();
+		g = sphRand();
+		h = sphRand();
+		i = sphRand();
+		j = sphRand();
+		k = sphRand();
+		l = sphRand();
+		m = sphRand();
+		n = sphRand();
+		o = sphRand();
+		p = sphRand();
+		q = sphRand();
+	}
+
 	const char * sFieldFmt = R"({"field":%d, "lcs":%u, "hit_count":%u, "word_count":%u, "tf_idf":%d, "min_idf":%d, )"
 							 R"("max_idf":%d, "sum_idf":%d, "min_hit_pos":%d, "min_best_span_pos":%d, "exact_hit":%u, )"
 							 R"("max_window_hits":%d, "min_gaps":%d, "exact_order":%u, "lccs":%d, "wlccs":%d, "atc":%d})";
+
+	int a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q;
 
 };
 
@@ -351,9 +374,11 @@ BENCHMARK_F( bench_builder, Appendf_ints ) ( benchmark::State & st )
 
 	for ( auto _ : st )
 	{
-		sBuf.Appendf ( sFieldFmt, 3, 23, 23465, 234, 234, 4346, 345345, 3434535, 345, 54, 1, 23, 5, 0, 34, 45, 234 );
-		sBuf.Clear ();
+		benchmark::DoNotOptimize ( sBuf.Appendf ( sFieldFmt, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q ) );
+		sBuf.Rewind ();
 	}
+	st.SetLabel ( "use standard sprintf() inside" );
+	st.SetItemsProcessed ( st.iterations() );
 }
 
 
@@ -363,9 +388,43 @@ BENCHMARK_F( bench_builder, Sprintf_ints ) ( benchmark::State & st )
 
 	for ( auto _ : st )
 	{
-		sBuf.Sprintf ( sFieldFmt, 3, 23, 23465, 234, 234, 4346, 345345, 3434535, 345, 54, 1, 23, 5, 0, 34, 45, 234 );
-		sBuf.Clear ();
+		benchmark::DoNotOptimize ( sBuf.Sprintf ( sFieldFmt, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q ) );
+		sBuf.Rewind ();
 	}
+	st.SetLabel ( "own implementation sph::Sprintf" );
+	st.SetItemsProcessed ( st.iterations() );
+}
+
+BENCHMARK_F ( bench_builder, Sprint_ints )
+( benchmark::State& st )
+{
+	StringBuilder_c sBuf;
+	for ( auto _ : st )
+	{
+		benchmark::DoNotOptimize ( sBuf.Sprint( "{\"field\":", a, ", \"lcs\":", b, ", \"hit_count\":", c, ", \"word_count\":", d, ", \"tf_idf\":", e, ", \"min_idf\":", f,
+					  ", \"max_idf\":", g, ", \"sum_idf\":", h, ", \"min_hit_pos\":", i, ", \"min_best_span_pos\":", j, ", \"exact_hit\":", k,
+					  ", \"max_window_hits\":", l, ", \"min_gaps\":", m, ", \"exact_order\":", n, ", \"lccs\":", o, ", \"wlccs\":", p, ", \"atc\":", q, '}') );
+		sBuf.Rewind();
+	}
+	st.SetLabel ( "own implementation using templated Sprint" );
+	st.SetItemsProcessed ( st.iterations() );
+}
+
+BENCHMARK_F ( bench_builder, Sprint_streaming )
+( benchmark::State& st )
+{
+	StringBuilder_c sBuf;
+
+	for ( auto _ : st )
+	{
+		benchmark::DoNotOptimize ( sBuf << "{\"field\":" << a << ", \"lcs\":" << b << ", \"hit_count\":" << c << ", \"word_count\":" << d << ", \"tf_idf\":" << e
+		<< ", \"min_idf\":" << f << ", \"max_idf\":" << g << ", \"sum_idf\":" << h << ", \"min_hit_pos\":" << i << ", \"min_best_span_pos\":" << j
+		<< ", \"exact_hit\":" << k << ", \"max_window_hits\":" << l << ", \"min_gaps\":" << m << ", \"exact_order\":" << n << ", \"lccs\":" << o
+		<< ", \"wlccs\":" << p << ", \"atc\":" << q << '}' );
+		sBuf.Rewind();
+	}
+	st.SetLabel ( "own implementation using << (mostly inlined)" );
+	st.SetItemsProcessed ( st.iterations() );
 }
 
 BENCHMARK_MAIN();

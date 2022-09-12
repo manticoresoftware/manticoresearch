@@ -172,7 +172,7 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 
 		if ( IsMaxedOut() )
 		{
-			sphWarning ( "%s", g_sMaxedOutMessage );
+			sphWarning ( "%s", g_sMaxedOutMessage.first );
 			{
 				auto tHdr = APIHeader ( tOut, SEARCHD_RETRY );
 				tOut.SendString ( g_sMaxedOutMessage );

@@ -35,7 +35,7 @@ class DocsCollector_c::Impl_c
 		if ( ( pFilter->m_bHasEqualMin || pFilter->m_bHasEqualMax ) && pFilter->m_eType == SPH_FILTER_VALUES
 				&& ( pFilter->m_sAttrName == "@id" || pFilter->m_sAttrName == "id" ) && !pFilter->m_bExclude )
 		{
-			m_dFastSlice = { (DocID_t*)pFilter->GetValueArray(), pFilter->GetNumValues() };
+			m_dFastSlice = pFilter->GetValues();
 			m_iFastIdx = 0;
 			m_bFastPath = true;
 		}

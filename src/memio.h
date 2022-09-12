@@ -18,8 +18,8 @@
 class MemoryReader_c
 {
 public:
-					MemoryReader_c ( const BYTE * pData, int iLen );
-					MemoryReader_c ( ByteBlob_t dData );
+					MemoryReader_c ( const BYTE * pData, int iLen ) noexcept;
+					explicit MemoryReader_c ( ByteBlob_t dData ) noexcept;
 
 	int				GetPos() const;
 	void			SetPos ( int iOff );
@@ -28,13 +28,16 @@ public:
 	CSphString		GetString();
 	SphOffset_t		GetOffset();
 	DWORD			GetDword();
-	WORD			GetWord();
 	void			GetBytes ( void * pData, int iLen );
-	BYTE			GetByte();
-	uint64_t		GetUint64();
 	const BYTE *	Begin() const;
 	int				GetLength() const;
 	bool 			HasData() const;
+
+	template<typename T>
+	T GetVal ();
+
+	template<typename T>
+	void GetVal ( T& tVal );
 
 protected:
 	const BYTE *	m_pData = nullptr;
@@ -42,6 +45,12 @@ protected:
 	const BYTE *	m_pCur = nullptr;
 };
 
+template<typename T>
+T GetVal( MemoryReader_c& tReader );
+
+// first DWORD is len, then follows data
+template<typename VECTOR>
+void GetArray ( VECTOR& dBuf, MemoryReader_c& tIn );
 
 class MemoryWriter_c
 {
@@ -60,9 +69,19 @@ public:
 	void	PutByte ( BYTE uVal );
 	void	PutUint64 ( uint64_t uVal );
 
+	template<typename T>
+	void PutVal ( T tVal );
+
 protected:
 	CSphVector<BYTE> & m_dBuf;
 };
+
+template<typename T>
+void PutVal ( MemoryWriter_c& tWriter, T tVal );
+
+// put DWORD size, then elems
+template<typename T>
+void SaveArray ( const VecTraits_T<CSphString>& dBuf, MemoryWriter_c& tOut );
 
 // fixme: get rid of this
 class MemoryReader2_c : public MemoryReader_c
@@ -84,5 +103,7 @@ public:
 	void	ZipOffset ( uint64_t uVal );
 	void	ZipInt ( DWORD uVal );
 };
+
+#include "memio_impl.h"
 
 #endif // _memio_

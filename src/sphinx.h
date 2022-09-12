@@ -367,20 +367,18 @@ public:
 						// fixme! Dependency from external values implies, that CsphFilterSettings is NOT standalone,
 						// and it's state is no way 'undependent'. It would be good to capture external values, at least
 						// with ref-counted technique, exactly here, to locate all usecases near each other.
-	void				SetExternalValues ( const SphAttr_t * pValues, int nValues );
+	void				SetExternalValues ( const VecTraits_T<SphAttr_t>& dValues );
 
-	SphAttr_t			GetValue ( int iIdx ) const	{ assert ( iIdx<GetNumValues() ); return m_pValues ? m_pValues[iIdx] : m_dValues[iIdx]; }
-	const SphAttr_t *	GetValueArray () const		{ return m_pValues ? m_pValues : m_dValues.Begin(); }
-	int					GetNumValues () const		{ return m_pValues ? m_nValues : m_dValues.GetLength (); }
+	int					GetNumValues () const		{ return GetValues().GetLength(); }
+	const VecTraits_T<SphAttr_t>& GetValues () const { return m_dExtValues.IsEmpty() ? m_dValues : m_dExtValues; }
 
 	bool				operator == ( const CSphFilterSettings & rhs ) const;
 	bool				operator != ( const CSphFilterSettings & rhs ) const { return !( (*this)==rhs ); }
 
 	uint64_t			GetHash() const;
 
-protected:
-	const SphAttr_t *	m_pValues = nullptr;		///< external value array
-	int					m_nValues = 0;		///< external array size
+private:
+	VecTraits_T<SphAttr_t> m_dExtValues;
 };
 
 

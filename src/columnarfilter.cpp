@@ -84,7 +84,7 @@ class Filter_SingleValueColumnar_c : public ColumnarFilter_c
 	using ColumnarFilter_c::ColumnarFilter_c;
 
 public:
-	void	SetValues ( const SphAttr_t * pStorage, int iCount ) final;
+	void	SetValues ( const VecTraits_T<SphAttr_t>& tValues ) final;
 	bool	Eval ( const CSphMatch & tMatch ) const override;
 	bool	Test ( const columnar::MinMaxVec_t & dMinMax ) const final;
 
@@ -93,11 +93,10 @@ protected:
 };
 
 
-void Filter_SingleValueColumnar_c::SetValues ( const SphAttr_t * pStorage, int DEBUGARG(iCount) )
+void Filter_SingleValueColumnar_c::SetValues ( const VecTraits_T<SphAttr_t>& tValues )
 {
-	assert ( pStorage );
-	assert ( iCount==1 );
-	m_tRefValue = (*pStorage);
+	assert ( tValues.GetLength()==1 );
+	m_tRefValue = tValues[0];
 }
 
 
@@ -128,7 +127,7 @@ class Filter_ValuesColumnar_c : public ColumnarFilter_c
 public:
 	bool		Eval ( const CSphMatch & tMatch ) const final;
 	bool		Test ( const columnar::MinMaxVec_t & dMinMax ) const final;
-	void		SetValues ( const SphAttr_t * pValues, int iNumValues ) final;
+	void		SetValues ( const VecTraits_T<SphAttr_t>& tValues ) final;
 
 private:
 	VecTraits_T<const SphAttr_t>	m_dValues;
@@ -167,20 +166,19 @@ bool Filter_ValuesColumnar_c::Test ( const columnar::MinMaxVec_t & dMinMax ) con
 }
 
 
-void Filter_ValuesColumnar_c::SetValues ( const SphAttr_t * pValues, int iNumValues )
+void Filter_ValuesColumnar_c::SetValues ( const VecTraits_T<SphAttr_t>& tValues )
 {
-	assert ( pValues );
-	assert ( iNumValues > 0 );
+	assert ( !tValues.IsEmpty() );
 
 #ifndef NDEBUG
-	for ( int i = 1; i < iNumValues; i++ )
-		assert ( pValues[i-1]<=pValues[i] );
+	for ( int i = 1; i < tValues.GetLength(); ++i )
+		assert ( tValues[i - 1] <= tValues[i] );
 #endif
 
-	m_dValues = { pValues, iNumValues };
+	m_dValues = tValues;
 
 	const int SEARCH_THRESH=128;
-	if ( iNumValues<SEARCH_THRESH )
+	if ( tValues.GetLength()<SEARCH_THRESH )
 	{
 		m_fnEval = &Filter_ValuesColumnar_c::EvalLinear;
 		m_fnEvalBlock = &Filter_ValuesColumnar_c::EvalBlockLinear;
@@ -479,7 +477,7 @@ class Filter_ValuesColumnar_MVA_T : public ColumnarFilter_c
 public:
 	bool		Eval ( const CSphMatch & tMatch ) const final;
 	bool		Test ( const columnar::MinMaxVec_t & dMinMax ) const final;
-	void		SetValues ( const SphAttr_t * pValues, int iNumValues ) final;
+	void		SetValues ( const VecTraits_T<SphAttr_t>& tValues ) final;
 
 private:
 	VecTraits_T<const SphAttr_t>	m_dValues;
@@ -506,17 +504,16 @@ bool Filter_ValuesColumnar_MVA_T<T,FUNC>::Test ( const columnar::MinMaxVec_t & d
 }
 
 template < typename T, typename FUNC >
-void Filter_ValuesColumnar_MVA_T<T,FUNC>::SetValues ( const SphAttr_t * pValues, int iNumValues )
+void Filter_ValuesColumnar_MVA_T<T,FUNC>::SetValues ( const VecTraits_T<SphAttr_t>& tValues )
 {
-	assert ( pValues );
-	assert ( iNumValues > 0 );
+	assert ( !tValues.IsEmpty() );
 
 #ifndef NDEBUG
-	for ( int i = 1; i < iNumValues; i++ )
-		assert ( pValues[i-1]<=pValues[i] );
+	for ( int i = 1; i < tValues.GetLength(); ++i )
+		assert ( tValues[i - 1] <= tValues[i] );
 #endif
 
-	m_dValues = { pValues, iNumValues };
+	m_dValues = tValues;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -773,10 +770,10 @@ bool ToColumnarFilter ( common::Filter_t & tFilter, const CSphFilterSettings & t
 	tFilter.m_bLeftClosed	= tSrc.m_bHasEqualMin;
 	tFilter.m_bRightClosed	= tSrc.m_bHasEqualMax;
 
-	int iNumValues = tSrc.GetNumValues();
-	tFilter.m_dValues.resize(iNumValues);
-	if ( iNumValues )
-		memcpy ( &tFilter.m_dValues[0], tSrc.GetValueArray(), iNumValues*sizeof ( tFilter.m_dValues[0] ) );
+	auto& tValues = tSrc.GetValues();
+	tFilter.m_dValues.resize(tValues.GetLength());
+	if ( !tValues.IsEmpty() )
+		memcpy ( tFilter.m_dValues.data(), tValues.begin(), tValues.GetLengthBytes() );
 
 	int iNumStrValues = tSrc.m_dStrings.GetLength();
 	tFilter.m_dStringValues.resize(iNumStrValues);

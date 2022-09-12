@@ -50,8 +50,8 @@ public:
 	virtual void	AddDoc ( const int64_t * pData, int iLength ) = 0;
 
 	virtual void	Kill ( const CSphVector<RowID_t> & dKilled ) = 0;
-	virtual void	Save ( MemoryWriter_c & tWriter ) = 0;
-	virtual void	Save ( CSphWriter & tWriter ) = 0;
+	virtual void	Save ( MemoryWriter_c & tWriter ) const = 0;
+	virtual void	Save ( CSphWriter & tWriter ) const = 0;
 	virtual void	Load ( MemoryReader_c & tReader ) = 0;
 	virtual void	Load ( CSphReader & tReader ) = 0;
 	virtual int64_t	AllocatedBytes() const = 0;
@@ -131,8 +131,8 @@ public:
 	void	AddDoc ( SphAttr_t tAttr ) override			{ m_dValues.Add ( ( (T)tAttr ) & m_uMask ); }
 
 	void	Kill ( const CSphVector<RowID_t> & dKilled ) override;
-	void	Save ( MemoryWriter_c & tWriter ) override	{ SaveData(tWriter); }
-	void	Save ( CSphWriter & tWriter ) override		{ SaveData(tWriter); }
+	void	Save ( MemoryWriter_c & tWriter ) const override	{ SaveData(tWriter); }
+	void	Save ( CSphWriter & tWriter ) const override		{ SaveData(tWriter); }
 	void	Load ( MemoryReader_c & tReader ) override	{ LoadData(tReader); }
 	void	Load ( CSphReader & tReader ) override		{ LoadData(tReader); }
 	int64_t	AllocatedBytes() const override				{ return m_dValues.GetLengthBytes64(); }
@@ -146,7 +146,7 @@ private:
 	T		m_uMask = 0;
 
 	template <typename WRITER>
-	void	SaveData ( WRITER & tWriter );
+	void	SaveData ( WRITER & tWriter ) const;
 
 	template <typename READER>
 	void	LoadData ( READER & tReader );
@@ -167,10 +167,10 @@ void ColumnarAttr_Int_T<T>::Kill ( const CSphVector<RowID_t> & dKilled )
 
 template<typename T>
 template <typename WRITER>
-void ColumnarAttr_Int_T<T>::SaveData ( WRITER & tWriter )
+void ColumnarAttr_Int_T<T>::SaveData ( WRITER & tWriter ) const
 {
-	tWriter.PutDword(m_eType);
-	tWriter.PutOffset(m_uMask);
+	tWriter.PutDword ( m_eType );
+	tWriter.PutOffset ( m_uMask );
 	tWriter.PutDword ( m_dValues.GetLength() );
 	tWriter.PutBytes ( m_dValues.Begin(), (int)m_dValues.GetLengthBytes64() );
 }
@@ -245,8 +245,8 @@ public:
 	void	AddDoc ( const BYTE * pData, int iLength ) override;
 
 	void	Kill ( const CSphVector<RowID_t> & dKilled ) override;
-	void	Save ( MemoryWriter_c & tWriter ) override	{ SaveData(tWriter); }
-	void	Save ( CSphWriter & tWriter ) override		{ SaveData(tWriter); }
+	void	Save ( MemoryWriter_c & tWriter ) const override	{ SaveData(tWriter); }
+	void	Save ( CSphWriter & tWriter ) const override		{ SaveData(tWriter); }
 	void	Load ( MemoryReader_c & tReader ) override	{ LoadData(tReader); }
 	void	Load ( CSphReader & tReader ) override		{ LoadData(tReader); }
 	int64_t	AllocatedBytes() const override				{ return m_dData.GetLengthBytes64() + m_dLengths.GetLengthBytes64(); }
@@ -259,7 +259,7 @@ private:
 	int64_t				m_iTotalLength = 0;
 
 	template <typename WRITER>
-	void	SaveData ( WRITER & tWriter );
+	void	SaveData ( WRITER & tWriter ) const;
 
 	template <typename READER>
 	void	LoadData ( READER & tReader );
@@ -290,9 +290,9 @@ void ColumnarAttr_String_c::Kill ( const CSphVector<RowID_t> & dKilled )
 }
 
 template <typename WRITER>
-void ColumnarAttr_String_c::SaveData ( WRITER & tWriter )
+void ColumnarAttr_String_c::SaveData ( WRITER & tWriter ) const
 {
-	tWriter.PutDword(m_eType);
+	tWriter.PutDword ( m_eType );
 	tWriter.PutDword ( m_dLengths.GetLength() );
 	tWriter.PutBytes ( m_dLengths.Begin(), (int)m_dLengths.GetLengthBytes64() );
 	tWriter.PutDword ( m_dData.GetLength() );
@@ -365,8 +365,8 @@ public:
 	void	AddDoc ( const int64_t * pData, int iLength ) override;
 
 	void	Kill ( const CSphVector<RowID_t> & dKilled ) override;
-	void	Save ( MemoryWriter_c & tWriter ) override	{ SaveData(tWriter); }
-	void	Save ( CSphWriter & tWriter ) override		{ SaveData(tWriter); }
+	void	Save ( MemoryWriter_c & tWriter ) const override	{ SaveData(tWriter); }
+	void	Save ( CSphWriter & tWriter ) const override		{ SaveData(tWriter); }
 	int64_t	AllocatedBytes() const override				{ return m_dData.GetLengthBytes64() + m_dLengths.GetLengthBytes64(); }
 	void	Load ( MemoryReader_c & tReader ) override	{ LoadData(tReader); }
 	void	Load ( CSphReader & tReader ) override		{ LoadData(tReader); }
@@ -379,7 +379,7 @@ private:
 	int64_t				m_iTotalLength = 0;
 
 	template <typename WRITER>
-	void	SaveData ( WRITER & tWriter );
+	void	SaveData ( WRITER & tWriter ) const;
 
 	template <typename READER>
 	void	LoadData ( READER & tReader );
@@ -412,7 +412,7 @@ void ColumnarAttr_MVA_T<T>::Kill ( const CSphVector<RowID_t> & dKilled )
 
 template <typename T>
 template <typename WRITER>
-void ColumnarAttr_MVA_T<T>::SaveData ( WRITER & tWriter )
+void ColumnarAttr_MVA_T<T>::SaveData ( WRITER & tWriter ) const
 {
 	tWriter.PutDword(m_eType);
 	tWriter.PutDword ( m_dLengths.GetLength() );
@@ -433,20 +433,20 @@ void ColumnarAttr_MVA_T<T>::LoadData ( READER & tReader )
 
 ////////////////////////////////////////////////////////////////////
 
-static ColumnarAttrRT_i * CreateColumnarAttrRT ( ESphAttr eType, int iBits )
+static std::unique_ptr<ColumnarAttrRT_i> CreateColumnarAttrRT ( ESphAttr eType, int iBits )
 {
 	switch ( eType )
 	{
 	case SPH_ATTR_INTEGER:
 	case SPH_ATTR_TIMESTAMP:
 	case SPH_ATTR_FLOAT:
-		return new ColumnarAttr_Int_T<DWORD> ( eType, iBits );
+		return std::make_unique<ColumnarAttr_Int_T<DWORD>> ( eType, iBits );
 
-	case SPH_ATTR_BOOL:		return new ColumnarAttr_Bool_c;
-	case SPH_ATTR_BIGINT:	return new ColumnarAttr_Int_T<int64_t> ( eType, iBits );
-	case SPH_ATTR_STRING:	return new ColumnarAttr_String_c;
-	case SPH_ATTR_UINT32SET:return new ColumnarAttr_MVA_T<DWORD>(eType);
-	case SPH_ATTR_INT64SET:	return new ColumnarAttr_MVA_T<int64_t>(eType);
+	case SPH_ATTR_BOOL:		return std::make_unique<ColumnarAttr_Bool_c>();
+	case SPH_ATTR_BIGINT:	return std::make_unique<ColumnarAttr_Int_T<int64_t>> ( eType, iBits );
+	case SPH_ATTR_STRING:	return std::make_unique<ColumnarAttr_String_c>();
+	case SPH_ATTR_UINT32SET:return std::make_unique<ColumnarAttr_MVA_T<DWORD>>(eType);
+	case SPH_ATTR_INT64SET:	return std::make_unique<ColumnarAttr_MVA_T<int64_t>>(eType);
 
 	default:
 		assert ( 0 && "Unsupported type" );
@@ -459,9 +459,8 @@ static ColumnarAttrRT_i * CreateColumnarAttrRT ( ESphAttr eType, int iBits )
 class ColumnarBuilderRT_c : public ColumnarBuilderRT_i
 {
 public:
-			ColumnarBuilderRT_c() = default;
-			ColumnarBuilderRT_c ( const CSphSchema & tSchema );
-			~ColumnarBuilderRT_c() override { m_dAttrs.for_each ( []( auto i ){ delete i; } ); }
+			explicit ColumnarBuilderRT_c ( const CSphSchema& tSchema );
+			explicit ColumnarBuilderRT_c ( MemoryReader_c& tReader );
 
 	void	SetAttr ( int iAttr, int64_t tAttr ) override						{ m_dAttrs[iAttr]->AddDoc(tAttr); }
 	void	SetAttr ( int iAttr, const uint8_t * pData, int iLength ) override	{ m_dAttrs[iAttr]->AddDoc ( pData, iLength ); }
@@ -470,12 +469,13 @@ public:
 
 	void	Kill ( const CSphVector<RowID_t> & dKilled ) override;
 	void	Save ( MemoryWriter_c & tWriter ) override;
-	CSphVector<ColumnarAttrRT_i*> & GetAttrs() override { return m_dAttrs; }
+	CSphVector<std::unique_ptr<ColumnarAttrRT_i>> & GetAttrs() override { return m_dAttrs; }
+	const CSphVector<std::unique_ptr<ColumnarAttrRT_i>>& GetAttrs() const override { return m_dAttrs; }
 
 	void	Load ( MemoryReader_c & tReader );
 
 private:
-	CSphVector<ColumnarAttrRT_i *> m_dAttrs;
+	CSphVector<std::unique_ptr<ColumnarAttrRT_i>> m_dAttrs;
 };
 
 
@@ -492,6 +492,11 @@ ColumnarBuilderRT_c::ColumnarBuilderRT_c ( const CSphSchema & tSchema )
 	}
 }
 
+ColumnarBuilderRT_c::ColumnarBuilderRT_c ( MemoryReader_c& tReader )
+{
+	Load ( tReader );
+}
+
 
 void ColumnarBuilderRT_c::Kill ( const CSphVector<RowID_t> & dKilled )
 {
@@ -503,7 +508,7 @@ void ColumnarBuilderRT_c::Kill ( const CSphVector<RowID_t> & dKilled )
 void ColumnarBuilderRT_c::Save ( MemoryWriter_c & tWriter )
 {
 	tWriter.PutDword ( m_dAttrs.GetLength() );
-	m_dAttrs.for_each ( [&tWriter]( auto i ){ i->Save(tWriter); } );
+	m_dAttrs.for_each ( [&tWriter]( const auto& i ){ i->Save(tWriter); } );
 }
 
 
@@ -518,9 +523,7 @@ void ColumnarBuilderRT_c::Load ( MemoryReader_c & tReader )
 class ColumnarRT_c : public ColumnarRT_i
 {
 public:
-					ColumnarRT_c() = default;
-					ColumnarRT_c ( const CSphSchema & tSchema, ColumnarBuilderRT_i * pBuilder, bool bTakeOwnership );
-					~ColumnarRT_c() override;
+					explicit ColumnarRT_c ( const CSphVector<std::unique_ptr<ColumnarAttrRT_i>>& dAttrs );
 
 	columnar::Iterator_i *					CreateIterator ( const std::string & sName, const columnar::IteratorHints_t & tHints, columnar::IteratorCapabilities_t * pCapabilities, std::string & sError ) const override;
 	std::vector<common::BlockIterator_i *>	CreateAnalyzerOrPrefilter ( const std::vector<common::Filter_t> & dFilters, std::vector<int> & dDeletedFilters, const columnar::BlockTester_i & tBlockTester ) const override { return {}; }
@@ -533,34 +536,55 @@ public:
 	void			Save ( CSphWriter & tWriter ) override;
 	int64_t			AllocatedBytes() const override;
 	
-	bool			Load ( CSphReader & tReader, const CSphSchema & tSchema, CSphString & sError );
+protected:
+	const CSphVector<std::unique_ptr<ColumnarAttrRT_i>>& m_dAttrs;
+	void PopulateHashFromSchema ( const CSphSchema& tSchema );
 
 private:
-	bool			m_bOwnAttrs = true;
-	CSphVector<ColumnarAttrRT_i*>			m_dAttrs;
 	SmallStringHash_T<std::pair<ColumnarAttrRT_i*,int>> m_hAttrs;
+};
 
-	void			PopulateHashFromSchema ( const CSphSchema & tSchema );
+ColumnarRT_c::ColumnarRT_c ( const CSphVector<std::unique_ptr<ColumnarAttrRT_i>>& dAttrs )
+	: m_dAttrs { dAttrs }
+{}
+
+
+class LightColumnarRT_c : public ColumnarRT_c
+{
+public:
+	LightColumnarRT_c ( const CSphSchema& tSchema, const ColumnarBuilderRT_i* pBuilder )
+		: ColumnarRT_c ( pBuilder->GetAttrs() )
+	{
+		PopulateHashFromSchema ( tSchema );
+	}
 };
 
 
-ColumnarRT_c::ColumnarRT_c ( const CSphSchema & tSchema, ColumnarBuilderRT_i * pBuilder, bool bTakeOwnership )
+class FullColumnarRT_c: public ColumnarRT_c
 {
-	m_bOwnAttrs = bTakeOwnership;
-	if ( m_bOwnAttrs )
-		m_dAttrs = std::move ( pBuilder->GetAttrs() );
-	else
-		m_dAttrs = pBuilder->GetAttrs();
+public:
+	FullColumnarRT_c ( const CSphSchema& tSchema, ColumnarBuilderRT_i* pBuilder )
+		: ColumnarRT_c ( m_dOwnedAttrs )
+		, m_dOwnedAttrs { std::move (pBuilder->GetAttrs())}
+	{
+		PopulateHashFromSchema ( tSchema );
+	}
 
-	PopulateHashFromSchema(tSchema);
-}
+	FullColumnarRT_c ( const CSphSchema& tSchema, CSphReader& tReader )
+		: ColumnarRT_c ( m_dOwnedAttrs )
+	{
+		m_dOwnedAttrs.Resize ( tReader.GetDword() );
+		m_dOwnedAttrs.for_each ( [&tReader] ( auto& pAttr )
+			{
+				pAttr = CreateColumnarAttrRT ( (ESphAttr)tReader.GetDword(), 0 );
+				pAttr->Load(tReader);
+			} );
+		PopulateHashFromSchema ( tSchema );
+	}
 
-
-ColumnarRT_c::~ColumnarRT_c()
-{
-	if ( m_bOwnAttrs )
-		m_dAttrs.for_each( []( auto & i ){ SafeDelete(i); } );
-}
+private:
+	CSphVector<std::unique_ptr<ColumnarAttrRT_i>> m_dOwnedAttrs;
+};
 
 
 columnar::Iterator_i * ColumnarRT_c::CreateIterator ( const std::string & sName, const columnar::IteratorHints_t & tHints, columnar::IteratorCapabilities_t * pCapabilities, std::string & sError ) const
@@ -590,7 +614,7 @@ common::AttrType_e ColumnarRT_c::GetType ( const std::string & sName ) const
 void ColumnarRT_c::Save ( CSphWriter & tWriter )
 {
 	tWriter.PutDword ( m_dAttrs.GetLength() );
-	m_dAttrs.for_each ( [&tWriter]( auto pAttr ){ pAttr->Save(tWriter); } );
+	m_dAttrs.for_each ( [&tWriter]( const auto& pAttr ){ pAttr->Save(tWriter); } );
 }
 
 
@@ -607,40 +631,25 @@ int64_t ColumnarRT_c::AllocatedBytes() const
 void ColumnarRT_c::PopulateHashFromSchema ( const CSphSchema & tSchema )
 {
 	int iColumnar = 0;
-	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
+	for ( int i = 0; i < tSchema.GetAttrsCount(); ++i )
 	{
 		const auto & tAttr = tSchema.GetAttr(i);
 		if ( !tAttr.IsColumnar() )
 			continue;
 
-		m_hAttrs.Add ( { m_dAttrs[iColumnar], iColumnar }, tAttr.m_sName );
-		iColumnar++;
+		m_hAttrs.Add ( { m_dAttrs[iColumnar].get(), iColumnar }, tAttr.m_sName );
+		++iColumnar;
 	}
 
 	assert ( m_hAttrs.GetLength() == m_dAttrs.GetLength() );
 }
 
 
-bool ColumnarRT_c::Load ( CSphReader & tReader, const CSphSchema & tSchema, CSphString & sError )
-{
-	m_dAttrs.Resize ( tReader.GetDword() );
-	m_dAttrs.for_each ( [&tReader]( auto & pAttr ){ pAttr = CreateColumnarAttrRT ( (ESphAttr)tReader.GetDword(), 0 ); pAttr->Load(tReader); } );
-	PopulateHashFromSchema(tSchema);
-
-	bool bOk = !tReader.GetErrorFlag();
-	if ( !bOk )
-		sError.SetSprintf ( "error loading columnar attribute storage: %s", tReader.GetErrorMessage().cstr() );
-
-	return !tReader.GetErrorFlag();
-}
-
 /////////////////////////////////////////////////////////////////////
 
 std::unique_ptr<ColumnarBuilderRT_i> CreateColumnarBuilderRT ( MemoryReader_c & tReader )
 {
-	auto pBuilder = std::make_unique<ColumnarBuilderRT_c>();
-	pBuilder->Load(tReader);
-	return pBuilder;
+	return std::make_unique<ColumnarBuilderRT_c> ( tReader );
 }
 
 
@@ -653,20 +662,34 @@ std::unique_ptr<ColumnarBuilderRT_i> CreateColumnarBuilderRT ( const CSphSchema 
 }
 
 
-std::unique_ptr<ColumnarRT_i> CreateColumnarRT ( const CSphSchema & tSchema, ColumnarBuilderRT_i * pBuilder, bool bTakeOwnership )
+// columnar reader will NOT take ownership of attributes in columnar builder
+std::unique_ptr<ColumnarRT_i> CreateLightColumnarRT ( const CSphSchema& tSchema, const ColumnarBuilderRT_i* pBuilder )
 {
 	if ( !pBuilder )
 		return nullptr;
 
-	return std::make_unique<ColumnarRT_c> ( tSchema, pBuilder, bTakeOwnership );
+	return std::make_unique<LightColumnarRT_c> ( tSchema, pBuilder );
+}
+
+// columnar reader will take ownership of attributes in columnar builder
+std::unique_ptr<ColumnarRT_i> CreateColumnarRT ( const CSphSchema& tSchema, ColumnarBuilderRT_i* pBuilder )
+{
+	if ( !pBuilder )
+		return nullptr;
+
+	return std::make_unique<FullColumnarRT_c> ( tSchema, pBuilder );
 }
 
 
 std::unique_ptr<ColumnarRT_i> CreateColumnarRT ( const CSphSchema & tSchema, CSphReader & tReader, CSphString & sError )
 {
-	auto pColumnar = std::make_unique<ColumnarRT_c>();
-	if ( !pColumnar->Load ( tReader, tSchema, sError ) )
+	auto pColumnar = std::make_unique<FullColumnarRT_c>( tSchema, tReader );
+
+	if ( tReader.GetErrorFlag() )
+	{
+		sError.SetSprintf ( "error loading columnar attribute storage: %s", tReader.GetErrorMessage().cstr() );
 		return nullptr;
+	}
 
 	return pColumnar;
 }

@@ -182,7 +182,7 @@ class RowidIterator_LookupValues_T : public CachedIterator_T<BITMAP>
 	using BASE = CachedIterator_T<BITMAP>;
 
 public:
-						RowidIterator_LookupValues_T ( const SphAttr_t * pValues, int nValues, int64_t iRsetEstimate, DWORD uTotalDocs, const BYTE * pDocidLookup, const RowIdBoundaries_t * pBoundaries = nullptr );
+						RowidIterator_LookupValues_T ( const VecTraits_T<DocID_t>& tValues, int64_t iRsetEstimate, DWORD uTotalDocs, const BYTE * pDocidLookup, const RowIdBoundaries_t * pBoundaries = nullptr );
 
 	bool				GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock ) override;
 	int64_t				GetNumProcessed() const override { return m_iProcessed; }
@@ -199,10 +199,10 @@ private:
 };
 
 template <bool ROWID_LIMITS, bool BITMAP>
-RowidIterator_LookupValues_T<ROWID_LIMITS, BITMAP>::RowidIterator_LookupValues_T ( const SphAttr_t * pValues, int nValues, int64_t iRsetEstimate, DWORD uTotalDocs, const BYTE * pDocidLookup, const RowIdBoundaries_t * pBoundaries )
+RowidIterator_LookupValues_T<ROWID_LIMITS, BITMAP>::RowidIterator_LookupValues_T ( const VecTraits_T<DocID_t>& tValues, int64_t iRsetEstimate, DWORD uTotalDocs, const BYTE * pDocidLookup, const RowIdBoundaries_t * pBoundaries )
 	: BASE ( iRsetEstimate, uTotalDocs )
 	, m_tLookupReader ( pDocidLookup )
-	, m_tFilterReader ( pValues, nValues )
+	, m_tFilterReader ( tValues )
 {
 	if ( pBoundaries )
 		m_tBoundaries = *pBoundaries;
@@ -455,7 +455,7 @@ static RowidIterator_i * CreateLookupIterator ( const CSphFilterSettings & tFilt
 			int iIndex = !!pBoundaries * 2 + bBitmap;
 			switch ( iIndex )
 			{
-				BOOST_PP_REPEAT ( 4, DECL_CREATEVALUES, ( tFilter.GetValueArray(), tFilter.GetNumValues(), iRsetEstimate, uTotalDocs, pDocidLookup, pBoundaries ) )
+				BOOST_PP_REPEAT ( 4, DECL_CREATEVALUES, ( tFilter.GetValues(), iRsetEstimate, uTotalDocs, pDocidLookup, pBoundaries ) )
 				default: assert ( 0 && "Internal error" ); return nullptr;
 			}
 		}
@@ -522,16 +522,10 @@ DocidLookupWriter_c::DocidLookupWriter_c ( DWORD nDocs )
 {}
 
 
-DocidLookupWriter_c::~DocidLookupWriter_c()
-{
-	SafeDelete ( m_pWriter );
-}
-
-
 bool DocidLookupWriter_c::Open ( const CSphString & sFilename, CSphString & sError )
 {
 	assert ( !m_pWriter );
-	m_pWriter = new CSphWriter;
+	m_pWriter = std::make_unique<CSphWriter>();
 
 	if ( !m_pWriter->OpenFile ( sFilename, sError ) )
 		return false;

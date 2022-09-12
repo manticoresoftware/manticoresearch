@@ -384,7 +384,7 @@ TEST_F ( filter_block_level, values )
 	
 	tOpt.m_eType = SPH_FILTER_VALUES;
 	SphAttr_t dValues[] = { 10, 40, 100 };
-	tOpt.SetExternalValues ( dValues, sizeof ( dValues ) / sizeof ( dValues[0] ) );
+	tOpt.SetExternalValues ( { dValues, sizeof ( dValues ) / sizeof ( dValues[0] ) } );
 	tCtx.m_pSchema = &tSchema;
 
 	tFilter = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
@@ -414,7 +414,7 @@ TEST_F ( filter_block_level, values )
 	SetDefault ();
 	tOpt.m_eType = SPH_FILTER_VALUES;
 	SphAttr_t dValuesSingle[] = { 10 };
-	tOpt.SetExternalValues ( dValuesSingle, sizeof ( dValuesSingle ) / sizeof ( dValuesSingle[0] ) );
+	tOpt.SetExternalValues ( { dValuesSingle, sizeof ( dValuesSingle ) / sizeof ( dValuesSingle[0] ) } );
 
 	tFilter = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
 	ASSERT_TRUE ( tFilter != nullptr );
@@ -449,7 +449,7 @@ TEST_F ( filter_block_level, and2 )
 	
 	tOpt.m_eType = SPH_FILTER_VALUES;
 	SphAttr_t dVal1[] = { 10 };
-	tOpt.SetExternalValues ( dVal1, sizeof ( dVal1 ) / sizeof ( dVal1[0] ) );
+	tOpt.SetExternalValues ( { dVal1, sizeof ( dVal1 ) / sizeof ( dVal1[0] ) } );
 
 	tCtx.m_pSchema = &tSchema;
 
@@ -457,7 +457,7 @@ TEST_F ( filter_block_level, and2 )
 	ASSERT_TRUE ( pFilter1!=nullptr );
 
 	SphAttr_t dVal2[] = { 20 };
-	tOpt.SetExternalValues ( dVal2, sizeof ( dVal2 ) / sizeof ( dVal2[0] ) );
+	tOpt.SetExternalValues ( { dVal2, sizeof ( dVal2 ) / sizeof ( dVal2[0] ) } );
 
 	auto pFilter2 = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
 	ASSERT_TRUE ( pFilter2!=nullptr );
@@ -495,7 +495,7 @@ TEST_F ( filter_block_level, and3 )
 	
 	tOpt.m_eType = SPH_FILTER_VALUES;
 	SphAttr_t dVal1[] = { 10 };
-	tOpt.SetExternalValues ( dVal1, sizeof ( dVal1 ) / sizeof ( dVal1[0] ) );
+	tOpt.SetExternalValues ( { dVal1, sizeof ( dVal1 ) / sizeof ( dVal1[0] ) } );
 
 	tCtx.m_pSchema = &tSchema;
 
@@ -503,13 +503,13 @@ TEST_F ( filter_block_level, and3 )
 	ASSERT_TRUE ( pFilter1!=nullptr );
 
 	SphAttr_t dVal2[] = { 15 };
-	tOpt.SetExternalValues ( dVal2, sizeof ( dVal2 ) / sizeof ( dVal2[0] ) );
+	tOpt.SetExternalValues ( { dVal2, sizeof ( dVal2 ) / sizeof ( dVal2[0] ) } );
 
 	auto pFilter2 = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
 	ASSERT_TRUE ( pFilter2!=nullptr );
 
 	SphAttr_t dVal3[] = { 20 };
-	tOpt.SetExternalValues ( dVal3, sizeof ( dVal3 ) / sizeof ( dVal3[0] ) );
+	tOpt.SetExternalValues ( { dVal3, sizeof ( dVal3 ) / sizeof ( dVal3[0] ) } );
 
 	auto pFilter3 = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
 	ASSERT_TRUE ( pFilter3!=nullptr );
@@ -547,7 +547,7 @@ TEST_F ( filter_block_level, and )
 	
 	tOpt.m_eType = SPH_FILTER_VALUES;
 	SphAttr_t dVal1[] = { 10 };
-	tOpt.SetExternalValues ( dVal1, sizeof ( dVal1 ) / sizeof ( dVal1[0] ) );
+	tOpt.SetExternalValues ( { dVal1, sizeof ( dVal1 ) / sizeof ( dVal1[0] ) } );
 
 	tCtx.m_pSchema = &tSchema;
 
@@ -555,19 +555,19 @@ TEST_F ( filter_block_level, and )
 	ASSERT_TRUE ( pFilter1!=nullptr );
 
 	SphAttr_t dVal2[] = { 14 };
-	tOpt.SetExternalValues ( dVal2, sizeof ( dVal2 ) / sizeof ( dVal2[0] ) );
+	tOpt.SetExternalValues ( { dVal2, sizeof ( dVal2 ) / sizeof ( dVal2[0] ) } );
 
 	auto pFilter2 = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
 	ASSERT_TRUE ( pFilter2!= nullptr );
 
 	SphAttr_t dVal3[] = { 18 };
-	tOpt.SetExternalValues ( dVal3, sizeof ( dVal3 ) / sizeof ( dVal3[0] ) );
+	tOpt.SetExternalValues ( { dVal3, sizeof ( dVal3 ) / sizeof ( dVal3[0] ) } );
 
 	auto pFilter3 = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
 	ASSERT_TRUE ( pFilter3!= nullptr );
 
 	SphAttr_t dVal4[] = { 20 };
-	tOpt.SetExternalValues ( dVal4, sizeof ( dVal4 ) / sizeof ( dVal4[0] ) );
+	tOpt.SetExternalValues ( { dVal4, sizeof ( dVal4 ) / sizeof ( dVal4[0] ) } );
 
 	auto pFilter4 = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
 	ASSERT_TRUE ( pFilter4!= nullptr );

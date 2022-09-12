@@ -19,6 +19,7 @@
 
 #include "searchdconfig.h"
 #include "memio.h"
+#include "accumulator.h"
 
 /////////////////////////////////////////////////////////////////////////////
 // MACHINE-DEPENDENT STUFF
@@ -365,6 +366,7 @@ public:
 
 	// send array: first length(int), then byte blob
 	void		SendString ( const char * sStr );
+	void		SendString ( const Str_t& sStr );
 	void		SendArray ( const ISphOutputBuffer &tOut );
 	void		SendArray ( const VecTraits_T<BYTE> &dBuf, int iElems=-1 );
 	void		SendArray ( ByteBlob_t dData );
@@ -1285,10 +1287,11 @@ private:
 
 class CSphSessionAccum
 {
-	std::unique_ptr<RtAccum_t> m_pAcc;
+	Optional_T<RtAccum_t> m_tAcc;
 
 public:
 	RtAccum_t * GetAcc ( RtIndex_i * pIndex, CSphString & sError );
+	RtAccum_t * GetAcc ();
 	RtIndex_i * GetIndex ();
 };
 
@@ -1381,7 +1384,7 @@ namespace session
 	VecTraits_T<int64_t> LastIds();
 }
 
-void LogSphinxqlError ( const char * sStmt, const char * sError );
+void LogSphinxqlError ( const char * sStmt, const Str_t& sError );
 
 // that is used from sphinxql command over API
 void RunSingleSphinxqlCommand ( Str_t sCommand, ISphOutputBuffer & tOut );
@@ -1413,8 +1416,6 @@ void PercolateMatchDocuments ( const BlobVec_t &dDocs, const PercolateOptions_t 
 
 void SendArray ( const VecTraits_T<CSphString> & dBuf, ISphOutputBuffer & tOut );
 void GetArray ( CSphFixedVector<CSphString> & dBuf, InputBuffer_c & tIn );
-void SaveArray ( const VecTraits_T<CSphString> & dBuf, MemoryWriter_c & tOut );
-void GetArray ( CSphVector<CSphString> & dBuf, MemoryReader_c & tIn );
 
 template <typename T>
 void SendArray ( const VecTraits_T<T> & dBuf, ISphOutputBuffer & tOut )
@@ -1433,25 +1434,6 @@ void GetArray ( CSphFixedVector<T> & dBuf, InputBuffer_c & tIn )
 
 	dBuf.Reset ( iCount );
 	tIn.GetBytes ( dBuf.Begin(), (int) dBuf.GetLengthBytes() );
-}
-
-template<typename T>
-void GetArray ( CSphVector<T> & dBuf, MemoryReader_c & tIn )
-{
-	int iCount = tIn.GetDword();
-	if ( !iCount )
-		return;
-
-	dBuf.Resize ( iCount );
-	tIn.GetBytes ( dBuf.Begin(), (int) dBuf.GetLengthBytes() );
-}
-
-template <typename T>
-void SaveArray ( const VecTraits_T<T> & dBuf, MemoryWriter_c & tOut )
-{
-	tOut.PutDword ( dBuf.GetLength() );
-	if ( dBuf.GetLength() )
-		tOut.PutBytes ( dBuf.Begin(), sizeof(dBuf[0]) * dBuf.GetLength() );
 }
 
 

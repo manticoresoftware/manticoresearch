@@ -35,7 +35,8 @@ class ColumnarBuilderRT_i : public columnar::Builder_i
 public:
 	virtual void		Kill ( const CSphVector<RowID_t> & dKilled ) = 0;
 	virtual void		Save ( MemoryWriter_c & tWriter ) = 0;
-	virtual CSphVector<ColumnarAttrRT_i*> & GetAttrs() = 0;
+	virtual CSphVector<std::unique_ptr<ColumnarAttrRT_i>> & GetAttrs() = 0;
+	virtual const CSphVector<std::unique_ptr<ColumnarAttrRT_i>>& GetAttrs() const = 0;
 };
 
 // used in accumulator. loads whole storage (no schema to save memory)
@@ -45,8 +46,11 @@ std::unique_ptr<ColumnarBuilderRT_i>	CreateColumnarBuilderRT ( MemoryReader_c& t
 std::unique_ptr<ColumnarBuilderRT_i>	CreateColumnarBuilderRT ( const CSphSchema & tSchema );
 
 // initialize columnar from accumulator; setup schema
-// columnar reader can either take ownership of attributes in columnar builder (and remove them from builder) or not
-std::unique_ptr<ColumnarRT_i>			CreateColumnarRT ( const CSphSchema & tSchema, ColumnarBuilderRT_i * pBuilder, bool bTakeOwnership=true );
+// columnar reader will take ownership of attributes in columnar builder (and remove them from builder)
+std::unique_ptr<ColumnarRT_i>			CreateColumnarRT ( const CSphSchema & tSchema, ColumnarBuilderRT_i* pBuilder );
+
+// columnar reader will NOT take ownership of attributes in columnar builder
+std::unique_ptr<ColumnarRT_i>			CreateLightColumnarRT ( const CSphSchema& tSchema, const ColumnarBuilderRT_i* pBuilder );
 
 // used by ram segments and binlog
 std::unique_ptr<ColumnarRT_i>			CreateColumnarRT ( const CSphSchema & tSchema, CSphReader & tReader, CSphString & sError );

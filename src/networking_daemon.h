@@ -19,7 +19,7 @@ extern int g_tmWait;
 extern int g_iThrottleAction;
 extern int g_iThrottleAccept;
 
-extern const char* g_sMaxedOutMessage;
+static constexpr Str_t g_sMaxedOutMessage = FROMS("maxed out, dismissing client");
 
 struct Listener_t
 {

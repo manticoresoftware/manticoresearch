@@ -1826,146 +1826,7 @@ namespace TimePrefixed
 //////////////////////////////////////////////////////////////////////////
 // CRASH REPORTING
 //////////////////////////////////////////////////////////////////////////
-inline static void Grow (char*, int) {};
-inline static void Grow ( StringBuilder_c &tBuilder, int iInc ) { tBuilder.GrowEnough ( iInc ); }
 
-inline static char* tail (char* p) { return p; }
-inline static char* tail ( StringBuilder_c &tBuilder ) { return tBuilder.end(); }
-
-template <typename Num, typename PCHAR>
-static void NtoA_T ( PCHAR* ppOutput, Num uVal, int iBase=10, int iWidth=0, int iPrec=0, char cFill=' ' )
-{
-	assert ( ppOutput );
-//	assert ( tail ( *ppOutput ) );
-	assert ( iWidth>=0 );
-	assert ( iPrec>=0 );
-	assert ( iBase>0 && iBase<=16);
-
-	const char cAllDigits[] = "fedcba9876543210123456789abcdef";
-	// point to the '0'. This hack allows to process negative numbers,
-	// since digit[x%10] for both x==2 and x==-2 is '2'.
-	const char * cDigits = cAllDigits+sizeof(cAllDigits)/2-1;
-	const char cZero = '0';
-	auto &pOutput = *ppOutput;
-
-	if ( !uVal )
-	{
-		if ( !iPrec && !iWidth )
-		{
-			*tail ( pOutput ) = cZero;
-			++pOutput;
-		} else
-		{
-			if ( !iPrec )
-				++iPrec;
-			else
-				cFill = ' ';
-
-			if ( iWidth )
-			{
-				if ( iWidth<iPrec )
-					iWidth = iPrec;
-				iWidth -= iPrec;
-			}
-
-			if ( iWidth>=0 )
-			{
-				Grow ( pOutput, iWidth );
-				memset ( tail ( pOutput ), cFill, iWidth );
-				pOutput += iWidth;
-			}
-
-			if ( iPrec>=0 )
-			{
-				Grow ( pOutput, iPrec );
-				memset ( tail ( pOutput ), cZero, iPrec );
-				pOutput += iPrec;
-			}
-		}
-		return;
-	}
-
-	const BYTE uMaxIndex = 31; // 20 digits for MAX_INT64 in decimal; let it be 31 (32 digits max).
-	char CBuf[uMaxIndex+1];
-	char *pRes = &CBuf[uMaxIndex];
-
-
-	BYTE uNegative = 0;
-	if ( uVal<0 )
-		++uNegative;
-
-	while ( uVal )
-	{
-		*pRes-- = cDigits [ uVal % iBase ];
-		uVal /= iBase;
-	}
-
-	auto uLen = (BYTE)( uMaxIndex - (pRes-CBuf) );
-	if (!uLen)
-		uNegative = 0;
-
-	if ( iPrec && iWidth && cFill==cZero)
-		cFill=' ';
-
-	if ( iWidth )
-		iWidth = iWidth - Max ( iPrec, uLen ) - uNegative;
-
-	if ( uNegative && cFill==cZero )
-	{
-		*tail ( pOutput ) = '-';
-		++pOutput;
-		uNegative=0;
-	}
-
-	if ( iWidth>=0 )
-	{
-		Grow ( pOutput, iWidth );
-		memset ( tail ( pOutput ), cFill, iWidth );
-		pOutput += iWidth;
-	}
-
-	if ( uNegative )
-	{
-		*tail ( pOutput ) = '-';
-		++pOutput;
-	}
-
-	if ( iPrec )
-		iPrec -= uLen;
-
-	if ( iPrec>=0 )
-	{
-		Grow ( pOutput, iPrec );
-		memset ( tail ( pOutput ), cZero, iPrec );
-		pOutput += iPrec;
-	}
-
-	Grow ( pOutput, uLen );
-	memcpy ( tail ( pOutput ), pRes+1, uLen );
-	pOutput+= uLen;
-}
-
-static const int nDividers = 10;
-static const int Dividers[nDividers] = { 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000 };
-
-template < typename Num, typename PCHAR >
-void IFtoA_T ( PCHAR * pOutput, Num nVal, int iPrec )
-{
-	assert ( iPrec<nDividers );
-	auto &pBegin = *pOutput;
-	if ( nVal<0 )
-	{
-		*tail ( pBegin ) = '-';
-		++pBegin;
-		nVal = -nVal;
-	}
-	auto iInt = nVal / Dividers[iPrec];
-	auto iFrac = nVal % Dividers[iPrec];
-	::NtoA_T ( &pBegin, iInt );
-	*tail ( pBegin ) = '.';
-	++pBegin;
-	::NtoA_T ( &pBegin, iFrac, 10, 0, iPrec, '0' );
-}
 
 namespace tmtoa {
 	using us_t = int64_t; // useconds
@@ -2030,7 +1891,7 @@ void TMtoA_T ( PCHAR* pOutput, int64_t nVal, int iPrec )
 	// correct sign, if necessary
 	if ( nVal<0 )
 	{
-		*tail ( pBegin ) = '-';
+		*Tail ( pBegin ) = '-';
 		++pBegin;
 		nVal = -nVal;
 	}
@@ -2072,7 +1933,7 @@ void TMtoA_T ( PCHAR* pOutput, int64_t nVal, int iPrec )
 			else if ( iPrec==1) nVal /= (iMul/10);
 			if ( nVal ) // 0. Stop printing
 			{
-				*tail ( pBegin ) = '.';
+				*Tail ( pBegin ) = '.';
 				++pBegin;
 				::NtoA_T ( &pBegin, nVal, 10, 0, iPrec, '0' );
 			}
@@ -2080,7 +1941,7 @@ void TMtoA_T ( PCHAR* pOutput, int64_t nVal, int iPrec )
 
 		// print specifier
 		Grow ( pBegin, tmtoa::iSufLens[iSpan] );
-		memcpy ( tail ( pBegin ), tmtoa::sSuffixes[iSpan], tmtoa::iSufLens[iSpan] );
+		memcpy ( Tail ( pBegin ), tmtoa::sSuffixes[iSpan], tmtoa::iSufLens[iSpan] );
 		pBegin += tmtoa::iSufLens[iSpan];
 
 		// all is done
@@ -2092,7 +1953,7 @@ void TMtoA_T ( PCHAR* pOutput, int64_t nVal, int iPrec )
 			return;
 
 		// print space before continue.
-		*tail ( pBegin ) = ' ';
+		*Tail ( pBegin ) = ' ';
 		++pBegin;
 
 		// go to next range
@@ -2109,7 +1970,7 @@ void TMStoA_T ( PCHAR* pOutput, int64_t nVal, int iPrec )
 	if ( !nVal )
 	{
 		Grow( pBegin, 5 );
-		memcpy( tail( pBegin ), "never", 5 );
+		memcpy( Tail( pBegin ), "never", 5 );
 		pBegin += 5;
 		return;
 	}
@@ -2120,72 +1981,23 @@ void TMStoA_T ( PCHAR* pOutput, int64_t nVal, int iPrec )
 		TMtoA_T ( pOutput, -iTimespan, iPrec );
 		// print specifier
 		Grow ( pBegin, 4 );
-		memcpy ( tail ( pBegin ), " ago", 4 );
+		memcpy ( Tail ( pBegin ), " ago", 4 );
 		pBegin += 4;
 	} else if (iTimespan>0)
 	{
 		Grow ( pBegin, 3 );
-		memcpy ( tail ( pBegin ), "in ", 3 );
+		memcpy ( Tail ( pBegin ), "in ", 3 );
 		pBegin += 3;
 		TMtoA_T ( pOutput, iTimespan, iPrec );
 	} else
 	{
 		Grow ( pBegin, 3 );
-		memcpy ( tail ( pBegin ), "now", 3 );
+		memcpy ( Tail ( pBegin ), "now", 3 );
 		pBegin += 3;
 	}
 }
 
-template <typename Num>
-inline static void NtoA ( char** ppOutput, Num uVal, int iBase = 10, int iWidth = 0, int iPrec = 0, char cFill = ' ' )
-{
-	NtoA_T ( ppOutput, uVal, iBase, iWidth, iPrec, cFill);
-}
-
 namespace sph {
-
-#define DECLARE_NUMTOA(NTOA,TYPE) \
-    template <> \
-	int NTOA ( char * pOutput, TYPE uVal, int iBase, int iWidth, int iPrec, char cFill ) \
-	{ \
-		auto pBegin = pOutput; \
-		::NtoA ( &pBegin, uVal, iBase, iWidth, iPrec, cFill ); \
-		return int ( pBegin - pOutput ); \
-	}
-
-	// unsigned
-	DECLARE_NUMTOA ( UItoA, unsigned int );
-	DECLARE_NUMTOA ( UItoA, unsigned long );
-	DECLARE_NUMTOA ( UItoA, unsigned long long);
-
-	// signed
-	DECLARE_NUMTOA ( ItoA, int );
-	DECLARE_NUMTOA ( ItoA, long );
-	DECLARE_NUMTOA ( ItoA, long long );
-
-	// universal
-	DECLARE_NUMTOA ( NtoA, unsigned int );
-	DECLARE_NUMTOA ( NtoA, unsigned long );
-	DECLARE_NUMTOA ( NtoA, unsigned long long );
-	DECLARE_NUMTOA ( NtoA, int );
-	DECLARE_NUMTOA ( NtoA, long );
-	DECLARE_NUMTOA ( NtoA, long long );
-
-#undef DECLARE_NUMTOA
-
-	int IFtoA ( char * pOutput, int nVal, int iPrec )
-	{
-		auto pBegin = pOutput;
-		IFtoA_T ( &pBegin, nVal, iPrec );
-		return int ( pBegin - pOutput );
-	}
-
-	int IFtoA ( char * pOutput, int64_t nVal, int iPrec )
-	{
-		auto pBegin = pOutput;
-		IFtoA_T ( &pBegin, nVal, iPrec );
-		return int ( pBegin - pOutput );
-	}
 
 static int SkipFmt64 ( const char * sFmt )
 {
@@ -2222,7 +2034,7 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 			{
 				auto uLen = strlen (sFmt-1);
 				Grow ( pOutput, (int) uLen );
-				memcpy ( tail ( pOutput ), sFmt-1, (int) uLen );
+				memcpy ( Tail ( pOutput ), sFmt-1, (int) uLen );
 				pOutput += (int) uLen;
 				sFmt+=uLen-1;
 				continue;
@@ -2232,7 +2044,7 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 			if ( uLen )
 			{
 				Grow ( pOutput, (int)uLen );
-				memcpy ( tail ( pOutput ), sFmt - 1, (int)uLen );
+				memcpy ( Tail ( pOutput ), sFmt - 1, (int)uLen );
 				pOutput += uLen;
 				sFmt+=uLen;
 			}
@@ -2249,7 +2061,7 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 		if ( c=='%' && state!=SNORMAL )
 		{
 			state = SNORMAL;
-			*tail ( pOutput ) = c;
+			*Tail ( pOutput ) = c;
 			++pOutput;
 			continue;
 		}
@@ -2309,17 +2121,17 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 				Grow ( pOutput, (int) iWidth );
 				if ( iWidth && bHeadingSpace )
 				{
-					memset ( tail ( pOutput ), ' ', (int) iWidth );
+					memset ( Tail ( pOutput ), ' ', (int) iWidth );
 					pOutput += (int) iWidth;
 				}
 
 				Grow ( pOutput, (int) iValue );
-				memcpy ( tail ( pOutput ), pValue, iValue );
+				memcpy ( Tail ( pOutput ), pValue, iValue );
 				pOutput += (int) iValue;
 
 				if ( iWidth && !bHeadingSpace )
 				{
-					memset ( tail ( pOutput ), ' ', (int) iWidth );
+					memset ( Tail ( pOutput ), ' ', (int) iWidth );
 					pOutput += (int) iWidth;
 				}
 
@@ -2425,11 +2237,11 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 					// invoke standard sprintf
 					char sFormat[32] = { 0 };
 					memcpy ( sFormat, pF, sFmt - pF );
-					pOutput += sprintf ( tail ( pOutput ), sFormat, fValue );
+					pOutput += sprintf ( Tail ( pOutput ), sFormat, fValue );
 				} else
 				{
 					// plain %f - output arbitrary 6 or 8 digits
-					pOutput += PrintVarFloat ( tail ( pOutput ), (float)fValue );
+					pOutput += PrintVarFloat ( Tail ( pOutput ), (float)fValue );
 					assert (( sFmt - pF )==2 );
 				}
 
@@ -2439,13 +2251,13 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 
 		default:
 			state = SNORMAL;
-			*tail ( pOutput ) = c;
+			*Tail ( pOutput ) = c;
 			++pOutput;
 		}
 	}
 
 	// final zero
-	*tail ( pOutput ) = c;
+	*Tail ( pOutput ) = c;
 }
 
 	int vSprintf ( char * pOutput, const char * sFmt, va_list ap )

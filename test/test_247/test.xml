@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>discard uncommitted txns if index altered</name>
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+<sphinxql>
+    create table test (body text indexed) expand_keywords='exact';
+    begin;
+    insert into test (body) values ('bar');
+    alter table test exceptions='';
+    commit;
+    drop table test;
+</sphinxql>
+</queries>
+
+</test>

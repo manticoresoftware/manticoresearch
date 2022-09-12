@@ -13,14 +13,14 @@
 #include "memio.h"
 
 
-MemoryReader_c::MemoryReader_c ( const BYTE * pData, int iLen )
+MemoryReader_c::MemoryReader_c ( const BYTE * pData, int iLen ) noexcept
 	: m_pData ( pData )
 	, m_iLen ( iLen )
 	, m_pCur ( pData )
 {}
 
 
-MemoryReader_c::MemoryReader_c ( ByteBlob_t dData )
+MemoryReader_c::MemoryReader_c ( ByteBlob_t dData ) noexcept
 	: m_pData ( dData.first )
 	, m_iLen ( dData.second )
 	, m_pCur ( dData.first )
@@ -43,40 +43,15 @@ void MemoryReader_c::SetPos ( int iOff )
 CSphString MemoryReader_c::GetString()
 {
 	CSphString sRes;
-	DWORD iLen = GetDword();
-	if ( iLen )
+	DWORD uLen = GetDword();
+	if ( uLen )
 	{
-		sRes.Reserve ( iLen );
-		GetBytes ( (BYTE *)sRes.cstr(), iLen );
+		sRes.Reserve ( uLen );
+		GetBytes ( (BYTE *)sRes.cstr(), uLen );
 	}
 
 	return sRes;
 }
-
-
-SphOffset_t MemoryReader_c::GetOffset()
-{
-	SphOffset_t tRes = 0;
-	GetBytes ( &tRes, sizeof(tRes) );
-	return tRes;
-}
-
-
-DWORD MemoryReader_c::GetDword()
-{
-	DWORD uRes = 0;
-	GetBytes ( &uRes, sizeof(uRes) );
-	return uRes;
-}
-
-
-WORD MemoryReader_c::GetWord()
-{
-	WORD uRes = 0;
-	GetBytes ( &uRes, sizeof(uRes) );
-	return uRes;
-}
-
 
 void MemoryReader_c::GetBytes ( void * pData, int iLen )
 {
@@ -88,22 +63,6 @@ void MemoryReader_c::GetBytes ( void * pData, int iLen )
 	assert ( m_pCur+iLen<=m_pData+m_iLen );
 	memcpy ( pData, m_pCur, iLen );
 	m_pCur += iLen;
-}
-
-
-BYTE MemoryReader_c::GetByte()
-{
-	BYTE uVal = 0;
-	GetBytes ( &uVal, sizeof(uVal) );
-	return uVal;
-}
-
-
-uint64_t MemoryReader_c::GetUint64()
-{
-	uint64_t uVal;
-	GetBytes ( &uVal, sizeof(uVal) );
-	return uVal;
 }
 
 
@@ -167,24 +126,6 @@ void MemoryWriter_c::PutString ( const char * sVal )
 }
 
 
-void MemoryWriter_c::PutDword ( DWORD uVal )
-{
-	PutBytes ( (BYTE *)&uVal, sizeof(uVal) );
-}
-
-
-void MemoryWriter_c::PutOffset ( SphOffset_t uValue )
-{
-	PutBytes ( &uValue, sizeof(SphOffset_t) );
-}
-
-
-void MemoryWriter_c::PutWord ( WORD uVal )
-{
-	PutBytes ( (BYTE *)&uVal, sizeof(uVal) );
-}
-
-
 void MemoryWriter_c::PutBytes ( const void * pData, int iLen )
 {
 	if ( !iLen )
@@ -200,11 +141,6 @@ void MemoryWriter_c::PutByte ( BYTE uVal )
 	m_dBuf.Add ( uVal );
 }
 
-
-void MemoryWriter_c::PutUint64 ( uint64_t uVal )
-{
-	PutBytes ( (BYTE *)&uVal, sizeof(uVal) );
-}
 
 void MemoryWriter_c::ZipOffset ( uint64_t uVal )
 {

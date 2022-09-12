@@ -10,15 +10,18 @@
 // did not, you can find it at http://www.gnu.org
 //
 
+#include <type_traits>
+
 // N of bytes need to store value
 template<typename T>
 inline int sphCalcZippedLen ( T tValue )
 {
+	auto uValue = static_cast<std::make_unsigned_t<T>> ( tValue );
 	int nBytes = 1;
-	tValue >>= 7;
-	while ( tValue )
+	uValue >>= 7;
+	while ( uValue )
 	{
-		tValue >>= 7;
+		uValue >>= 7;
 		++nBytes;
 	}
 
@@ -135,16 +138,17 @@ inline SphOffset_t UnzipOffsetBE ( const BYTE*& pBuf )
 template<typename T, typename WRITER>
 inline int ZipValueLE ( WRITER fnPut, T tValue )
 {
+	auto uValue = static_cast<std::make_unsigned_t<T>> ( tValue );
 	int nBytes = 0;
 	do
 	{
-		BYTE bOut = (BYTE)( tValue & 0x7f );
-		tValue >>= 7;
-		if ( tValue )
+		BYTE bOut = (BYTE)( uValue & 0x7f );
+		uValue >>= 7;
+		if ( uValue )
 			bOut |= 0x80;
 		fnPut ( bOut );
 		++nBytes;
-	} while ( tValue );
+	} while ( uValue );
 	return nBytes;
 }
 

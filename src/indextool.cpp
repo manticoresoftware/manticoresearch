@@ -76,7 +76,7 @@ CSphString FilenameBuilder_c::GetFullPath ( const CSphString & sName ) const
 	CSphString sPath = GetPathForNewIndex ( m_sIndex );
 
 	StrVec_t dFiles;
-	StringBuilder_c sNewValue = " ";
+	StringBuilder_c sNewValue {" "};
 
 	// we assume that path has been stripped before
 	StrVec_t dValues = sphSplit ( sName.cstr(), sName.Length(), " \t," );

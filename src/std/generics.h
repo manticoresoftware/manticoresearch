@@ -12,7 +12,6 @@
 
 #pragma once
 
-#include "widest.h"
 #include <utility>
 
 
@@ -32,7 +31,7 @@ T Min ( T a, T b )
 	return a < b ? a : b;
 }
 template<typename T, typename U>
-typename WIDER<T, U>::T Min ( T a, U b )
+typename std::common_type<T, U>::type Min ( T a, U b )
 {
 	return a < b ? a : b;
 }
@@ -42,7 +41,7 @@ T Max ( T a, T b )
 	return a < b ? b : a;
 }
 template<typename T, typename U>
-typename WIDER<T, U>::T Max ( T a, U b )
+typename std::common_type<T, U>::type Max ( T a, U b )
 {
 	return a < b ? b : a;
 }

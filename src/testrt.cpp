@@ -11,6 +11,7 @@
 //
 
 #include "sphinxrt.h"
+#include "accumulator.h"
 #include "binlog.h"
 #include "sphinxutils.h"
 #include "sphinxsort.h"
@@ -97,6 +98,7 @@ void DoIndexing ( CSphSource_SQL * pSrc, RtIndex_i * pIndex )
 	tDoc.m_dFields.Resize(g_iFieldsCount);
 
 	int iDynamic = pIndex->GetMatchSchema().GetRowSize();
+	RtAccum_t tAcc;
 
 	while (true)
 	{
@@ -111,7 +113,7 @@ void DoIndexing ( CSphSource_SQL * pSrc, RtIndex_i * pIndex )
 		tDoc.m_tDoc.Combine ( pSrc->m_tDocInfo, iDynamic );
 
 		if ( !bEOF )
-			pIndex->AddDocument ( tDoc, false, sFilter, sError, sWarning, NULL );
+			pIndex->AddDocument ( tDoc, false, sFilter, sError, sWarning, &tAcc );
 
 		auto& const_stat = pSrc->GetStats ();
 		++const_cast<CSphSourceStats&>(const_stat).m_iTotalDocuments;
@@ -119,7 +121,7 @@ void DoIndexing ( CSphSource_SQL * pSrc, RtIndex_i * pIndex )
 		if ( ( pSrc->GetStats().m_iTotalDocuments % COMMIT_STEP )==0 || bEOF )
 		{
 			int64_t tmCommit = sphMicroTimer();
-			pIndex->Commit ( NULL, NULL );
+			pIndex->Commit ( NULL, &tAcc );
 			tmCommit = sphMicroTimer()-tmCommit;
 
 			iCommits++;

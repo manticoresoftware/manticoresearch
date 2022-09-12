@@ -94,6 +94,8 @@ int CSphBin::ReadByte()
 		{
 			if ( !SeekAndWarn ( m_iFile, m_iFilePos, "CSphBin::ReadBytes" ) )
 			{
+				// fixme! That is legacy wrong; BIN_READ_ERROR is legal positive value,
+				// m.b. that is the place where c++ exception is suitable?
 				m_bError = true;
 				return BIN_READ_ERROR;
 			}
@@ -190,7 +192,7 @@ ESphBinRead CSphBin::ReadBytes ( void* pDest, int iBytes )
 	return BIN_READ_OK;
 }
 
-
+// fixme! That is simple UnzipValueLE with extra check; refactor!
 SphWordID_t CSphBin::ReadVLB()
 {
 	SphWordID_t uValue = 0;
@@ -205,6 +207,7 @@ SphWordID_t CSphBin::ReadVLB()
 	return uValue;
 }
 
+// fixme! That is simple UnzipValueBE with extra check; refactor!
 DWORD CSphBin::UnzipInt()
 {
 	register int b = 0;
@@ -219,6 +222,7 @@ DWORD CSphBin::UnzipInt()
 	return v;
 }
 
+// fixme! That is simple UnzipValueBE with extra check; refactor!
 SphOffset_t CSphBin::UnzipOffset()
 {
 	register int b = 0;

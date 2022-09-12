@@ -1702,9 +1702,9 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 		switch ( tFilter.m_eType )
 		{
 			case SPH_FILTER_VALUES:
-				tOut.SendInt ( tFilter.GetNumValues () );
-				for ( int k = 0; k < tFilter.GetNumValues (); k++ )
-					tOut.SendUint64 ( tFilter.GetValue ( k ) );
+				tOut.SendInt ( tFilter.GetNumValues() );
+				for ( auto uValue : tFilter.GetValues () )
+					tOut.SendUint64 ( uValue );
 				break;
 
 			case SPH_FILTER_RANGE:
@@ -2537,9 +2537,9 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		if ( g_eLogFormat==LOG_FORMAT_SPHINXQL && g_iQueryLogFile>=0 )
 		{
 			StringBuilder_c tBuf;
-			char sTimeBuf [ SPH_TIME_PID_MAX_SIZE ];
-			sphFormatCurrentTime ( sTimeBuf, sizeof(sTimeBuf) );
-			tBuf << "/""* " << sTimeBuf << "*""/ " << tQuery.m_sSelect << " # error=" << sError << "\n";
+			tBuf << "/* ";
+			sphFormatCurrentTime ( tBuf );
+			tBuf << "*/ " << tQuery.m_sSelect << " # error=" << sError << '\n';
 			sphSeek ( g_iQueryLogFile, 0, SEEK_END );
 			sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.GetLength() );
 		}
@@ -2714,9 +2714,9 @@ void LogQueryPlain ( const CSphQuery & tQuery, const CSphQueryResultMeta & tMeta
 	{
 #endif
 
-		char sTimeBuf[SPH_TIME_PID_MAX_SIZE];
-		sphFormatCurrentTime ( sTimeBuf, sizeof(sTimeBuf) );
-		tBuf.Appendf ( "[%s]", sTimeBuf );
+		tBuf << '[';
+		sphFormatCurrentTime ( tBuf );
+		tBuf << ']';
 
 #if USE_SYSLOG
 	} else
@@ -3007,11 +3007,9 @@ static void FormatIndexHints ( const CSphQuery & tQuery, StringBuilder_c & tBuf 
 	AppendHint ( "IGNORE", dIgnore, tBuf );
 }
 
-static void LogQueryJson ( const CSphQuery & q, QuotationEscapedBuilder & tBuf )
+static void LogQueryJson ( const CSphQuery & q, StringBuilder_c & tBuf )
 {
-	tBuf.StartBlock ( "", " /*", " */" );
-	tBuf += q.m_sRawQuery.cstr();
-	tBuf.FinishBlock (); // close the comment
+	tBuf << " /*" << q.m_sRawQuery << " */";
 }
 
 static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResultMeta & tMeta, const CSphVector<int64_t> & dAgentTimes )
@@ -3027,18 +3025,15 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResultMeta & 
 	int iQueryTime = Max ( tMeta.m_iQueryTime, 0 );
 	int iRealTime = Max ( tMeta.m_iRealQueryTime, 0 );
 
-	char sTimeBuf[SPH_TIME_PID_MAX_SIZE];
-	sphFormatCurrentTime ( sTimeBuf, sizeof(sTimeBuf) );
-
-	tBuf += R"(/* )";
-	tBuf += sTimeBuf;
+	tBuf  << "/* ";
+	sphFormatCurrentTime ( tBuf );
 
 	if ( tMeta.m_iMultiplier>1 )
-		tBuf.Sprintf ( " conn %d real %0.3F wall %0.3F x%d found " INT64_FMT " *""/ ",
-				 session::GetConnID(), iRealTime, iQueryTime, tMeta.m_iMultiplier, tMeta.m_iTotalMatches );
+		tBuf << " conn " << session::GetConnID() << " real " << FixedFrac ( iRealTime )
+			 << " wall " << FixedFrac ( iQueryTime ) << " x" << tMeta.m_iMultiplier << " found " << tMeta.m_iTotalMatches << " */ ";
 	else
-		tBuf.Sprintf ( " conn %d real %0.3F wall %0.3F found " INT64_FMT " *""/ ",
-				 session::GetConnID(), iRealTime, iQueryTime, tMeta.m_iTotalMatches );
+		tBuf << " conn " << session::GetConnID() << " real " << FixedFrac ( iRealTime )
+			 << " wall " << FixedFrac ( iQueryTime ) << " found " << tMeta.m_iTotalMatches << " */ ";
 
 	///////////////////////////////////
 	// format request as SELECT query
@@ -3103,12 +3098,12 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResultMeta & 
 void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuilder & tBuf )
 {
 	if ( q.m_bHasOuter )
-		tBuf += "SELECT * FROM (";
+		tBuf << "SELECT * FROM (";
 
 	if ( q.m_sSelect.IsEmpty() )
-		tBuf.Appendf ( "SELECT * FROM %s", q.m_sIndexes.cstr () );
+		tBuf << "SELECT * FROM " << q.m_sIndexes;
 	else
-		tBuf.Appendf ( "SELECT %s FROM %s", RemoveBackQuotes ( q.m_sSelect.cstr () ).cstr (), q.m_sIndexes.cstr () );
+		tBuf << "SELECT " << RemoveBackQuotes ( q.m_sSelect.cstr() ) << " FROM " << q.m_sIndexes;
 
 	// WHERE clause
 	// (m_sRawQuery is empty when using MySQL handler)
@@ -3133,7 +3128,7 @@ void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuild
 			FormatOrderBy ( &tBuf, " ORDER BY ", q.m_eSort, q.m_sSortBy );
 	} else
 	{
-		tBuf.Appendf ( " GROUP BY %s", q.m_sGroupBy.cstr() );
+		tBuf << " GROUP BY " << q.m_sGroupBy;
 		FormatOrderBy ( &tBuf, " WITHIN GROUP ORDER BY ", q.m_eSort, q.m_sSortBy );
 		if ( !q.m_tHaving.m_sAttrName.IsEmpty() )
 		{
@@ -3146,7 +3141,7 @@ void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuild
 
 	// LIMIT clause
 	if ( q.m_iOffset!=0 || q.m_iLimit!=20 )
-		tBuf.Appendf ( " LIMIT %d,%d", q.m_iOffset, q.m_iLimit );
+		tBuf << " LIMIT " << q.m_iOffset << ',' << q.m_iLimit;
 
 	// OPTION clause
 	FormatOption ( q, tBuf );
@@ -3155,17 +3150,17 @@ void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuild
 	// outer order by, limit
 	if ( q.m_bHasOuter )
 	{
-		tBuf += ")";
+		tBuf << ')';
 		if ( !q.m_sOuterOrderBy.IsEmpty() )
-			tBuf.Appendf ( " ORDER BY %s", q.m_sOuterOrderBy.cstr() );
+			tBuf << " ORDER BY " << q.m_sOuterOrderBy;
 		if ( q.m_iOuterOffset>0 )
-			tBuf.Appendf ( " LIMIT %d, %d", q.m_iOuterOffset, q.m_iOuterLimit );
+			tBuf << " LIMIT " << q.m_iOuterOffset << ", " << q.m_iOuterLimit;
 		else if ( q.m_iOuterLimit>0 )
-			tBuf.Appendf ( " LIMIT %d", q.m_iOuterLimit );
+			tBuf << " LIMIT " << q.m_iOuterLimit;
 	}
 
 	// finish SQL statement
-	tBuf += ";";
+	tBuf << ';';
 }
 
 static void LogQuery ( const CSphQuery & q, const CSphQueryResultMeta & tMeta, const CSphVector<int64_t> & dAgentTimes )
@@ -3181,16 +3176,15 @@ static void LogQuery ( const CSphQuery & q, const CSphQueryResultMeta & tMeta, c
 }
 
 
-void LogSphinxqlError ( const char * sStmt, const char * sError )
+void LogSphinxqlError ( const char * sStmt, const Str_t& sError )
 {
-	if ( g_eLogFormat!=LOG_FORMAT_SPHINXQL || g_iQueryLogFile<0 || !sStmt || !sError )
+	if ( g_eLogFormat!=LOG_FORMAT_SPHINXQL || g_iQueryLogFile<0 || !sStmt || IsEmpty(sError) )
 		return;
 
-	char sTimeBuf[SPH_TIME_PID_MAX_SIZE];
-	sphFormatCurrentTime ( sTimeBuf, sizeof(sTimeBuf) );
-
 	StringBuilder_c tBuf;
-	tBuf.Appendf ( "/""* %s conn %d *""/ %s # error=%s\n", sTimeBuf, session::GetConnID(), sStmt, sError );
+	tBuf << "/* ";
+	sphFormatCurrentTime ( tBuf );
+	tBuf << " conn " << session::GetConnID() << " */ " << sStmt << " # error=" << sError << '\n';
 
 	sphSeek ( g_iQueryLogFile, 0, SEEK_END );
 	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.GetLength() );
@@ -3233,19 +3227,16 @@ static void LogStatementSphinxql ( Str_t sQuery, int iRealTime )
 	if ( g_iQueryLogFile<0 || g_eLogFormat!=LOG_FORMAT_SPHINXQL || !IsFilled ( sQuery ) )
 		return;
 
-	QuotationEscapedBuilder tBuf;
+	StringBuilder_c tBuf;
+	tBuf << "/* ";
+	sphFormatCurrentTime ( tBuf );
+	tBuf << " conn " << session::GetConnID() << " real " << FixedFrac ( iRealTime ) << " */ "
 
-	char sTimeBuf[SPH_TIME_PID_MAX_SIZE];
-	sphFormatCurrentTime ( sTimeBuf, sizeof(sTimeBuf) );
+	// query
+		<< sQuery
 
-	tBuf += R"(/* )";
-	tBuf += sTimeBuf;
-
-	tBuf.Sprintf ( " conn %d real %0.3F *""/ ", session::GetConnID(), iRealTime );
-	tBuf += sQuery;
-
-	// finish statement and add line feed
-	tBuf += ";\n";
+	// finish statement and line feed
+		<< ";\n";
 
 	sphSeek ( g_iQueryLogFile, 0, SEEK_END );
 	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.GetLength() );
@@ -8437,7 +8428,7 @@ static void DoCommandUpdate ( const CSphString & sIndex, const CSphString& sClus
 {
 	int iUpd = 0;
 	CSphString sError, sWarning;
-	RtAccum_t tAcc ( false );
+	RtAccum_t tAcc;
 	ReplicationCommand_t* pCmd = tAcc.AddCommand ( ReplicationCommand_e::UPDATE_API, sIndex, sCluster );
 	assert ( pCmd );
 	pCmd->m_pUpdateAPI = std::move(pUpd);
@@ -8502,10 +8493,7 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 	{
 		i.m_sName = tReq.GetString();
 		if ( i.m_sName==sphGetDocidName() )
-		{
-			SendErrorReply ( tOut, "'id' attribute cannot be updated" );
-			return;
-		}
+			return SendErrorReply ( tOut, "'id' attribute cannot be updated" );
 
 		i.m_eType = SPH_ATTR_INTEGER;
 		if ( iVer>=0x102 )
@@ -8534,7 +8522,7 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 	tUpd.m_dDocids.Reserve ( iNumUpdates );
 	tUpd.m_dRowOffset.Reserve ( iNumUpdates );
 
-	for ( int i=0; i<iNumUpdates; i++ )
+	for ( int i=0; i<iNumUpdates; ++i )
 	{
 		// v.1.0 always sends 32-bit ids; v.1.1+ always send 64-bit ones
 		uint64_t uDocid = ( iVer>=0x101 ) ? tReq.GetUint64 () : tReq.GetDword ();
@@ -8580,10 +8568,7 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 						// extra zeroes for json parser
 						BYTE * pAdded = tUpd.m_dBlobs.AddN ( uLen+2 );
 						if ( !tReq.GetBytes ( pAdded, uLen ) )
-						{
-							SendErrorReply ( tOut, "error reading string" );
-							break;
-						}
+							return SendErrorReply ( tOut, "error reading string" );
 
 						pAdded[uLen] = 0;
 						pAdded[uLen+1] = 0;
@@ -8599,29 +8584,20 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 	}
 
 	if ( tReq.GetError() )
-	{
-		SendErrorReply ( tOut, "invalid or truncated request" );
-		return;
-	}
+		return SendErrorReply ( tOut, "invalid or truncated request" );
 
 	// check index names
 	StrVec_t dIndexNames;
 	ParseIndexList ( sIndexes, dIndexNames );
 
-	if ( !dIndexNames.GetLength() )
-	{
-		SendErrorReply ( tOut, "no valid indexes in update request" );
-		return;
-	}
+	if ( dIndexNames.IsEmpty() )
+		return SendErrorReply ( tOut, "no valid indexes in update request" );
 
 	DistrPtrs_t dDistributed;
 	// copy distributed indexes description
 	CSphString sMissed;
 	if ( !ExtractDistributedIndexes ( dIndexNames, dDistributed, sMissed ) )
-	{
-		SendErrorReply ( tOut, "unknown index '%s' in update request", sMissed.cstr() );
-		return;
-	}
+		return SendErrorReply ( tOut, "unknown index '%s' in update request", sMissed.cstr() );
 
 	// do update
 	SearchFailuresLog_c dFails;
@@ -8670,10 +8646,7 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 	dFails.BuildReport ( sReport );
 
 	if ( !iSuccesses )
-	{
-		SendErrorReply ( tOut, "%s", sReport.cstr() );
-		return;
-	}
+		return SendErrorReply ( tOut, "%s", sReport.cstr() );
 
 	auto tReply = APIAnswer ( tOut, VER_COMMAND_UPDATE, dFails.IsEmpty() ? SEARCHD_OK : SEARCHD_WARNING );
 	if ( !dFails.IsEmpty() )
@@ -9830,23 +9803,14 @@ static void PQLocalMatch ( const BlobVec_t & dDocs, const CSphString & sIndex, c
 		iDocs = dDocs.GetLength () - iStart;
 
 	if ( !iDocs )
-	{
-		sMsg.Warn ( "No more docs for sparse matching" );
-		return;
-	}
+		return sMsg.Warn ( "No more docs for sparse matching" );
 
 	auto pServed = GetServed ( sIndex );
 	if ( !pServed )
-	{
-		sMsg.Err ( "unknown local index '%s' in search request", sIndex.cstr () );
-		return;
-	}
+		return sMsg.Err ( "unknown local index '%s' in search request", sIndex.cstr () );
 
 	if ( pServed->m_eType!=IndexType_e::PERCOLATE )
-	{
-		sMsg.Err ( "index '%s' is not percolate", sIndex.cstr () );
-		return;
-	}
+		return sMsg.Err ( "index '%s' is not percolate", sIndex.cstr () );
 
 	RIdx_T<PercolateIndex_i*> pIndex { pServed };
 	RtAccum_t * pAccum = tAcc.GetAcc ( pIndex, sError );
@@ -10788,16 +10752,8 @@ void sphHandleMysqlBegin ( StmtErrorReporter_i& tOut, Str_t sQuery )
 	auto& sError = pSession->m_sError;
 
 	MEMORY ( MEM_SQL_BEGIN );
-	RtIndex_i* pIndex = tAcc.GetIndex();
-	if ( pIndex )
-	{
-		RtAccum_t* pAccum = tAcc.GetAcc ( pIndex, sError );
-		if ( !sError.IsEmpty() || !HandleCmdReplicate ( *pAccum, sError ) )
-		{
-			tOut.Error ( sQuery.first, sError.cstr() );
-			return;
-		}
-	}
+	if ( tAcc.GetIndex() && !HandleCmdReplicate ( *tAcc.GetAcc(), sError ) )
+		return tOut.Error ( "%s", sError.cstr() );
 	pSession->m_bInTransaction = true;
 	tOut.Ok ( 0 );
 }
@@ -10816,18 +10772,13 @@ void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, boo
 	if ( pIndex )
 	{
 		tCrashQuery.m_dIndex = FromStr ( pIndex->GetName() );
-		RtAccum_t* pAccum = tAcc.GetAcc ( pIndex, sError );
-		if ( !sError.IsEmpty() )
-		{
-			tOut.Error ( sQuery.first, sError.cstr() );
-			return;
-		}
+		RtAccum_t* pAccum = tAcc.GetAcc ();
 		if ( bCommit )
 		{
 			StatCountCommand ( SEARCHD_COMMAND_COMMIT );
 			if ( !HandleCmdReplicate ( *pAccum, sError, iDeleted ) )
 			{
-				tOut.Error ( sQuery.first, sError.cstr() );
+				tOut.Error ( "%s", sError.cstr() );
 				return;
 			}
 		} else
@@ -10910,11 +10861,8 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt )
 		return;
 
 	RtAccum_t * pAccum = tAcc.GetAcc ( pIndex, sError );
-	if ( !pAccum )
-	{
-		tOut.Error ( "%s", sError.cstr() );
-		return;
-	}
+	if ( !sError.IsEmpty() )
+		return tOut.Error ( "%s", sError.cstr() );
 
 	CSphVector<int64_t> dIds;
 	dIds.Reserve ( tStmt.m_iRowsAffected );
@@ -12340,7 +12288,7 @@ public:
 		BYTE * pCur = m_dBuf.Begin ();
 		for ( const auto &dValue : dSetValues )
 		{
-			pCur += sphEncodeVLB8 ( pCur, dValue - iLast );
+			pCur += ZipToPtrLE ( pCur, dValue - iLast );
 			iLast = dValue;
 		}
 		m_iLength = pCur-m_dBuf.Begin();
@@ -12433,8 +12381,7 @@ void HandleCommandUserVar ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & 
 	const BYTE * pCur = dBuf.Begin();
 	ARRAY_FOREACH ( i, dUserVar )
 	{
-		uint64_t iDelta = 0;
-		pCur = spnDecodeVLB8 ( pCur, iDelta );
+		auto iDelta = UnzipValueLE<int64_t> ( [&pCur]() mutable { return *pCur++; } );
 		assert ( iDelta>0 );
 		iLast += iDelta;
 		dUserVar[i] = iLast;
@@ -12515,21 +12462,19 @@ static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sInde
 {
 	CSphString sError;
 	// checks
+	if ( !pServed )
 	{
-		if ( !pServed )
-		{
-			dFails.Submit ( sIndex, sDistributed, "index not available" );
-			return;
-		}
-
-		if ( !CheckIndexCluster ( sIndex, *pServed, tStmt.m_sCluster, IsHttpStmt ( tStmt ), sError ) )
-		{
-			dFails.Submit ( sIndex, sDistributed, sError.cstr() );
-			return;
-		}
+		dFails.Submit ( sIndex, sDistributed, "index not available" );
+		return;
 	}
 
-	RtAccum_t tAcc ( false );
+	if ( !CheckIndexCluster ( sIndex, *pServed, tStmt.m_sCluster, IsHttpStmt ( tStmt ), sError ) )
+	{
+		dFails.Submit ( sIndex, sDistributed, sError.cstr() );
+		return;
+	}
+
+	RtAccum_t tAcc;
 	ReplicationCommand_t * pCmd = tAcc.AddCommand ( tStmt.m_bJson ? ReplicationCommand_e::UPDATE_JSON : ReplicationCommand_e::UPDATE_QL, sIndex, tStmt.m_sCluster );
 	assert ( pCmd );
 	pCmd->m_pUpdateAPI = tStmt.AttrUpdatePtr();
@@ -13148,10 +13093,7 @@ static std::unique_ptr<ReplicationCommand_t> MakePercolateDeleteDocumentsCommand
 	auto pCmd = MakeReplicationCommand ( ReplicationCommand_e::PQUERY_DELETE, std::move ( sIndex ), std::move ( sCluster ) );
 	if ( ( pFilter->m_bHasEqualMin || pFilter->m_bHasEqualMax ) && !pFilter->m_bExclude && pFilter->m_eType==SPH_FILTER_VALUES && ( pFilter->m_sAttrName=="@id" || pFilter->m_sAttrName=="id" || pFilter->m_sAttrName=="uid" ) )
 	{
-		pCmd->m_dDeleteQueries.Reserve ( pFilter->GetNumValues() );
-		const SphAttr_t * pA = pFilter->GetValueArray();
-		for ( int i = 0; i < pFilter->GetNumValues(); ++i )
-			pCmd->m_dDeleteQueries.Add ( pA[i] );
+		pCmd->m_dDeleteQueries.Append ( pFilter->GetValues() );
 		return pCmd;
 	}
 
@@ -13227,7 +13169,8 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * 
 		if ( !pCmd )
 			return 0;
 
-		pAccum = tAcc.GetAcc ( RIdx_T<RtIndex_i*> ( pServed ), sError );
+		RIdx_T<RtIndex_i*> pRtIndex { pServed };
+		pAccum = tAcc.GetAcc ( pRtIndex, sError );
 		if ( !sError.IsEmpty() )
 			return err();
 
@@ -13242,11 +13185,10 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * 
 
 		RIdx_T<RtIndex_i*> pRtIndex { pServed };
 		pAccum = tAcc.GetAcc ( pRtIndex, sError );
-		if ( !pRtIndex->DeleteDocument ( dDocs, sError, pAccum ) ) // assume dData is alive, as we use slice from internal vec
+		if ( !sError.IsEmpty() )
 			return err();
 
-		pAccum = tAcc.GetAcc ( pRtIndex, sError );
-		if ( !sError.IsEmpty() )
+		if ( !pRtIndex->DeleteDocument ( dDocs, sError, pAccum ) ) // assume dData is alive, as we use slice from internal vec
 			return err();
 
 		assert ( pAccum );
@@ -13599,19 +13541,8 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 			pSession->m_bInTransaction = false;
 
 			// commit all pending changes
-			if ( bAutoCommit )
-			{
-				RtIndex_i * pIndex = tAcc.GetIndex();
-				if ( pIndex )
-				{
-					RtAccum_t * pAccum = tAcc.GetAcc ( pIndex, sError );
-					if ( !sError.IsEmpty() || !HandleCmdReplicate ( *pAccum, sError ) )
-					{
-						tOut.Error ( tStmt.m_sStmt, sError.cstr() );
-						return;
-					}
-				}
-			}
+			if ( bAutoCommit && tAcc.GetIndex() && !HandleCmdReplicate ( *tAcc.GetAcc(), sError ) )
+				return tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		} else if ( tStmt.m_sSetName=="collation_connection" )
 		{
 			// per-session COLLATION_CONNECTION
@@ -13620,10 +13551,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 
 			tSess.SetCollation ( sphCollationFromName ( sVal, &sError ) );
 			if ( !sError.IsEmpty() )
-			{
-				tOut.Error ( tStmt.m_sStmt, sError.cstr() );
-				return;
-			}
+				return tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		} else if ( tStmt.m_sSetName=="character_set_results"
 			|| tStmt.m_sSetName=="sql_auto_is_null"
 			|| tStmt.m_sSetName=="sql_safe_updates"
@@ -14475,10 +14403,12 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 		}
 	}
 
-	RtAccum_t tAcc ( false );
-	tAcc.m_dCmd.Add ( std::move ( pCmd ) );
+	auto* pSession = session::GetClientSession();
+	auto& tAcc = pSession->m_tAcc;
+	auto* pAccum = tAcc.GetAcc();
+	pAccum->m_dCmd.Add ( std::move ( pCmd ) );
 
-	bool bRes = HandleCmdReplicate ( tAcc, sError );
+	bool bRes = HandleCmdReplicate ( *pAccum, sError );
 	if ( !bRes )
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 	else
@@ -15389,7 +15319,7 @@ static bool PrepareReconfigure ( const CSphString & sIndex, CSphReconfigureSetti
 	return PrepareReconfigure ( sIndex, hCfg["index"][sIndex], tSettings, sWarning, sError );
 }
 
-
+// ALTER RTINDEX/TABLE <idx> RECONFIGURE
 static void HandleMysqlReconfigure ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
 	if ( !sphCheckWeCanModify ( tStmt.m_sStmt, tOut ) )
@@ -15403,7 +15333,14 @@ static void HandleMysqlReconfigure ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 		return;
 	}
 
-	const CSphString & sIndex = tStmt.m_sIndex.cstr();
+	const CSphString & sIndex = tStmt.m_sIndex;
+	auto pServed = GetServed ( tStmt.m_sIndex );
+	if ( !ServedDesc_t::IsMutable ( pServed ) )
+	{
+		tOut.ErrorEx ( tStmt.m_sStmt, "'%s' is absent, or does not support ALTER", sIndex.cstr() );
+		return;
+	}
+
 	CSphString sError;
 	CSphReconfigureSettings tSettings;
 	CSphReconfigureSetup tSetup;
@@ -15411,13 +15348,6 @@ static void HandleMysqlReconfigure ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 	if ( !PrepareReconfigure ( sIndex, tSettings, sError ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
-		return;
-	}
-
-	auto pServed = GetServed ( tStmt.m_sIndex );
-	if ( !ServedDesc_t::IsMutable ( pServed ))
-	{
-		tOut.ErrorEx ( tStmt.m_sStmt, "'%s' is absent, or does not support ALTER", sIndex.cstr() );
 		return;
 	}
 
@@ -15909,24 +15839,28 @@ void HandleMysqlUnlockIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes, C
 	tOut.Ok ( iUnlocked );
 }
 
-RtAccum_t * CSphSessionAccum::GetAcc ( RtIndex_i * pIndex, CSphString & sError )
+RtAccum_t* CSphSessionAccum::GetAcc ( RtIndex_i* pIndex, CSphString& sError )
 {
 	assert ( pIndex );
-	RtAccum_t * pAcc = pIndex->CreateAccum ( m_pAcc.get(), sError );
-	if ( !pAcc && !sError.IsEmpty() )
-		return pAcc;
+	m_tAcc.emplace_once();
 
-	if ( m_pAcc.get()!=pAcc )
-		m_pAcc.reset(pAcc);
-	return pAcc;
+	if ( !pIndex->BindAccum ( &m_tAcc.get(), &sError ) )
+		return nullptr;
+
+	return &m_tAcc.get();
+}
+
+RtAccum_t* CSphSessionAccum::GetAcc()
+{
+	m_tAcc.emplace_once();
+	return &m_tAcc.get();
 }
 
 RtIndex_i * CSphSessionAccum::GetIndex ()
 {
-	if ( m_pAcc )
-		return m_pAcc->GetIndex();
-	else
-		return sphGetCurrentIndexRT();
+	if ( !m_tAcc )
+		return nullptr;
+	return m_tAcc->GetIndex();
 }
 
 static bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, CSphString & sFederatedQuery );
@@ -16316,17 +16250,17 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		HandleMysqlShowThreads ( tOut, pStmt );
 		return true;
 
-	case STMT_ALTER_RECONFIGURE:
+	case STMT_ALTER_RECONFIGURE: // ALTER RTINDEX/TABLE <idx> RECONFIGURE
 		FreezeLastMeta();
 		HandleMysqlReconfigure ( tOut, *pStmt, m_tLastMeta.m_sWarning );
 		return true;
 
-	case STMT_ALTER_KLIST_TARGET:
+	case STMT_ALTER_KLIST_TARGET: // ALTER TABLE <idx> KILLLIST_TARGET = 'the string'
 		FreezeLastMeta();
 		HandleMysqlAlterKlist ( tOut, *pStmt, m_tLastMeta.m_sWarning );
 		return true;
 
-	case STMT_ALTER_INDEX_SETTINGS:
+	case STMT_ALTER_INDEX_SETTINGS: // ALTER TABLE <idx> create_table_option_list
 		FreezeLastMeta();
 		HandleMysqlAlterIndexSettings ( tOut, *pStmt, m_tLastMeta.m_sWarning );
 		return true;

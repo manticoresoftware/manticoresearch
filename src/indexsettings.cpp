@@ -1109,7 +1109,7 @@ bool IndexSettingsContainer_c::AddOption ( const CSphString & sName, const CSphS
 					i = sFilename;
 			}
 
-		StringBuilder_c sNewValue = " ";
+		StringBuilder_c sNewValue {" "};
 		for ( auto & i : dValues )
 			sNewValue << i;
 

@@ -40,26 +40,22 @@ struct IFilter_Attr: virtual ISphFilter
 /// values
 struct IFilter_Values : virtual ISphFilter
 {
-	const SphAttr_t *	m_pValues = nullptr;
-	int					m_iValueCount = 0;
+	VecTraits_T<SphAttr_t> m_tValues;
 
-	void SetValues ( const SphAttr_t * pStorage, int iCount ) final
+	void SetValues ( const VecTraits_T<SphAttr_t>& tValues ) final
 	{
-		assert ( pStorage );
-		assert ( iCount > 0 );
+		assert ( !tValues.IsEmpty() );
 		#ifndef NDEBUG // values must be sorted
-		for ( int i = 1; i < iCount; i++ )
-			assert ( pStorage[i-1]<=pStorage[i] );
+		for ( int i = 1; i < tValues.GetLength(); ++i )
+			assert ( tValues[i - 1] <= tValues[i] );
 		#endif
 
-		m_pValues = pStorage;
-		m_iValueCount = iCount;
+		m_tValues = tValues;
 	}
 
 	inline SphAttr_t GetValue ( int iIndex ) const
 	{
-		assert ( iIndex>=0 && iIndex<m_iValueCount );
-		return m_pValues[iIndex];
+		return m_tValues[iIndex];
 	}
 
 	inline bool EvalValues ( SphAttr_t uValue ) const;
@@ -69,11 +65,11 @@ struct IFilter_Values : virtual ISphFilter
 
 bool IFilter_Values::EvalValues ( SphAttr_t uValue ) const
 {
-	if ( !m_pValues )
+	if ( m_tValues.IsEmpty() )
 		return true;
 
-	const SphAttr_t * pA = m_pValues;
-	const SphAttr_t * pB = m_pValues + m_iValueCount - 1;
+	const SphAttr_t * pA = m_tValues.Begin();
+	const SphAttr_t * pB = &m_tValues.Last();
 
 	if ( uValue==*pA || uValue==*pB ) return true;
 	if ( uValue<(*pA) || uValue>(*pB) ) return false;
@@ -95,11 +91,7 @@ bool IFilter_Values::EvalValues ( SphAttr_t uValue ) const
 // OPTIMIZE: use binary search
 bool IFilter_Values::EvalBlockValues ( SphAttr_t uBlockMin, SphAttr_t uBlockMax ) const
 {
-	// is any of our values inside the block?
-	for ( int i = 0; i < m_iValueCount; ++i )
-		if ( GetValue(i)>=uBlockMin && GetValue(i)<=uBlockMax )
-			return true;
-	return false;
+	return !!m_tValues.BinarySearch ( [uBlockMin, uBlockMax] ( auto i ) { return ( i < uBlockMin ) ? -1 : ( i > uBlockMax ) ? 1	: 0; }, 0 );
 }
 
 
@@ -145,15 +137,10 @@ public:
 class Filter_SingleValue : public IFilter_Attr
 {
 public:
-#ifndef NDEBUG
-	void SetValues ( const SphAttr_t * pStorage, int iCount ) final
-#else
-	void SetValues ( const SphAttr_t * pStorage, int ) final
-#endif
+	void SetValues ( const VecTraits_T<SphAttr_t>& tValues ) final
 	{
-		assert ( pStorage );
-		assert ( iCount==1 );
-		m_RefValue = (*pStorage);
+		assert ( tValues.GetLength()==1 );
+		m_RefValue = tValues[0];
 	}
 
 	bool Eval ( const CSphMatch & tMatch ) const override
@@ -318,7 +305,7 @@ public:
 	bool Eval ( const CSphMatch & tMatch ) const final
 	{
 		auto dMva = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
-		return MvaEval_Any<T> ( dMva, {m_pValues, m_iValueCount} );
+		return MvaEval_Any<T> ( dMva, m_tValues );
 	}
 };
 
@@ -330,7 +317,7 @@ public:
 	bool Eval ( const CSphMatch & tMatch ) const final
 	{
 		auto dMva = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
-		return MvaEval_All<T> ( dMva, {m_pValues, m_iValueCount} );
+		return MvaEval_All<T> ( dMva, m_tValues );
 	}
 };
 
@@ -1317,13 +1304,12 @@ static void SetFilterSettings ( const std::unique_ptr<ISphFilter>& pFilter, cons
 	pFilter->SetRefString ( tSettings.m_dStrings.Begin(), tSettings.m_dStrings.GetLength() );
 	if ( tSettings.GetNumValues() > 0 )
 	{
-		pFilter->SetValues ( tSettings.GetValueArray(), tSettings.GetNumValues() );
+		pFilter->SetValues ( tSettings.GetValues() );
 #ifndef NDEBUG
 		// check that the values are actually sorted
-		const SphAttr_t * pValues = tSettings.GetValueArray();
-		int iValues = tSettings.GetNumValues ();
-		for ( int i=1; i<iValues; ++i )
-			assert ( pValues[i]>=pValues[i-1] );
+		const auto& tValues = tSettings.GetValues();
+		for ( int i = 1; i < tValues.GetLength(); ++i )
+			assert ( tValues[i] >= tValues[i - 1] );
 #endif
 	}
 }
@@ -1504,7 +1490,7 @@ void FixupFilterSettings ( const CSphFilterSettings & tSettings, ESphAttr eAttrT
 	if ( tSettings.m_eType==SPH_FILTER_VALUES && tSettings.GetNumValues()==1 )
 	{
 		tFixedSettings.m_eType = SPH_FILTER_FLOATRANGE;
-		tFixedSettings.m_fMinValue = tFixedSettings.m_fMaxValue = (float)tSettings.GetValue(0);
+		tFixedSettings.m_fMinValue = tFixedSettings.m_fMaxValue = (float)tSettings.GetValues()[0];
 	}
 
 	if ( tSettings.m_eType==SPH_FILTER_RANGE )
@@ -1912,7 +1898,7 @@ static std::unique_ptr<ISphFilter> CreateFilterNode ( CreateFilterContext_t & tC
 			tCtx.m_dUserVals.Add ( pUservar );
 			tUservar = *pFilterSettings;
 			tUservar.m_eType = SPH_FILTER_VALUES;
-			tUservar.SetExternalValues ( pUservar->Begin(), pUservar->GetLength() );
+			tUservar.SetExternalValues ( *pUservar );
 			pFilterSettings = &tUservar;
 		}
 
@@ -2042,7 +2028,7 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 			tCtx.m_dUserVals.Add ( pUservar );
 			tUservar = *pFilterSettings;
 			tUservar.m_eType = SPH_FILTER_VALUES;
-			tUservar.SetExternalValues ( pUservar->Begin(), pUservar->GetLength() );
+			tUservar.SetExternalValues ( *pUservar );
 			pFilterSettings = &tUservar;
 		}
 

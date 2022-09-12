@@ -21,6 +21,7 @@
 #include "searchdreplication.h"
 #include "accumulator.h"
 #include "networking_daemon.h"
+#include "client_session.h"
 
 #define LOG_COMPONENT_HTTP ""
 #define LOG_LEVEL_HTTP false
@@ -2259,14 +2260,16 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString& sIndex, const Jso
 		auto pStored = pIndex->CreateQuery ( tArgs, sError );
 		if ( pStored )
 		{
-			RtAccum_t tAcc ( false );
-			tAcc.SetIndex ( pIndex );
-			ReplicationCommand_t * pCmd = tAcc.AddCommand ( ReplicationCommand_e::PQUERY_ADD, sIndex );
+			auto* pSession = session::GetClientSession();
+			auto& tAcc = pSession->m_tAcc;
+			auto* pAccum = tAcc.GetAcc( pIndex, sError );
+
+			ReplicationCommand_t * pCmd = pAccum->AddCommand ( ReplicationCommand_e::PQUERY_ADD, sIndex );
 			// refresh query's UID for reply as it might be auto-generated
 			iID = pStored->m_iQUID;
 			pCmd->m_pStored = std::move ( pStored );
 
-			bOk = HandleCmdReplicate ( tAcc, sError );
+			bOk = HandleCmdReplicate ( *pAccum, sError );
 		}
 	}
 
@@ -2299,8 +2302,11 @@ bool HttpHandlerPQ_c::ListQueries ( const CSphString & sIndex )
 
 bool HttpHandlerPQ_c::Delete ( const CSphString & sIndex, const JsonObj_c & tRoot )
 {
-	RtAccum_t tAcc ( false );
-	ReplicationCommand_t * pCmd = tAcc.AddCommand ( ReplicationCommand_e::PQUERY_DELETE, sIndex );
+	auto* pSession = session::GetClientSession();
+	auto& tAcc = pSession->m_tAcc;
+	auto* pAccum = tAcc.GetAcc ();
+
+	ReplicationCommand_t * pCmd = pAccum->AddCommand ( ReplicationCommand_e::PQUERY_DELETE, sIndex );
 
 	CSphString sError;
 	JsonObj_c tTagsArray = tRoot.GetArrayItem ( "tags", sError, true );
@@ -2334,7 +2340,7 @@ bool HttpHandlerPQ_c::Delete ( const CSphString & sIndex, const JsonObj_c & tRoo
 	uint64_t tmStart = sphMicroTimer();
 
 	int iDeleted = 0;
-	bool bOk = HandleCmdReplicate ( tAcc, sError, iDeleted );
+	bool bOk = HandleCmdReplicate ( *pAccum, sError, iDeleted );
 
 	uint64_t tmTotal = sphMicroTimer() - tmStart;
 

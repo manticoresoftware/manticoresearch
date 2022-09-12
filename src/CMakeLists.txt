@@ -49,7 +49,7 @@ target_link_libraries ( lextra INTERFACE generated_config )
 
 # main bunch of sources (for libsphinx)
 add_library ( lmanticore STATIC sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sphinxutils.cpp
-		sphinxsort.cpp sortsetup.cpp sphinxexpr.cpp sphinxfilter.cpp sphinxsearch.cpp sphinxrt.cpp
+		sphinxsort.cpp sortsetup.cpp sphinxexpr.cpp sphinxfilter.cpp sphinxsearch.cpp sphinxrt.cpp accumulator.cpp
 		sphinxjson.cpp sphinxaot.cpp sphinxplugin.cpp sphinxudf.c sphinxqcache.cpp sphinxjsonquery.cpp
 		jsonqueryfilter.cpp attribute.cpp secondaryindex.cpp killlist.cpp searchnode.cpp json/cJSON.c sphinxpq.cpp
 		global_idf.cpp docstore.cpp lz4/lz4.c lz4/lz4hc.c searchdexpr.cpp snippetfunctor.cpp snippetindex.cpp
@@ -146,7 +146,7 @@ set ( HEADERS sphinxexcerpt.h sphinxfilter.h sphinxint.h sphinxjsonquery.h sphin
 		sphinxquery.h sphinxsearch.h sphinxstd.h sphinxudf.h lz4/lz4.h lz4/lz4hc.h http/http_parser.h secondaryindex.h
 		searchnode.h killlist.h attribute.h accumulator.h global_idf.h optional.h event.h threadutils.h threadutils_impl.h
 		hazard_pointer.h task_info.h mini_timer.h collation.h histogram.h sortsetup.h dynamic_idx.h
-		indexsettings.h columnarlib.h fileio.h memio.h queryprofile.h columnarfilter.h columnargrouper.h fileutils.h
+		indexsettings.h columnarlib.h fileio.h memio.h memio_impl.h queryprofile.h columnarfilter.h columnargrouper.h fileutils.h
 		libutils.h conversion.h columnarsort.h sortcomp.h binlog_defs.h binlog.h ${MANTICORE_BINARY_DIR}/config/config.h
 		chunksearchctx.h indexfiles.h attrindex_builder.h queryfilter.h aggregate.h secondarylib.h
 		costestimate.h docidlookup.h )

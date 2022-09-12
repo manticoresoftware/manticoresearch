@@ -133,10 +133,9 @@ class BlobRowBuilder_Base_c : public BlobRowBuilder_i
 {
 public:
 	bool					SetAttr ( int iAttr, const BYTE * pData, int iDataLen, CSphString & sError ) override;
-	~BlobRowBuilder_Base_c () override;
 
 protected:
-	CSphVector<AttributePacker_i*> m_dAttrs;
+	CSphVector<std::unique_ptr<AttributePacker_i>> m_dAttrs;
 };
 
 
@@ -144,13 +143,6 @@ bool BlobRowBuilder_Base_c::SetAttr ( int iAttr, const BYTE * pData, int iDataLe
 {
 	return m_dAttrs[iAttr]->SetData ( pData, iDataLen, sError );
 }
-
-BlobRowBuilder_Base_c::~BlobRowBuilder_Base_c()
-{
-	for ( auto i : m_dAttrs )
-		SafeDelete (i);
-}
-
 
 //////////////////////////////////////////////////////////////////////////
 class BlobRowBuilder_File_c : public BlobRowBuilder_Base_c
@@ -181,31 +173,27 @@ BlobRowBuilder_File_c::BlobRowBuilder_File_c ( const ISphSchema & tSchema, SphOf
 		if ( !sphIsBlobAttr(tCol) )
 			continue;
 
-		AttributePacker_i * pPacker = nullptr;
 		switch ( tCol.m_eAttrType )
 		{
 		case SPH_ATTR_STRING:
 		case SPH_ATTR_INT64SET:
-			pPacker = new AttributePacker_c;
+			m_dAttrs.Add ( std::make_unique<AttributePacker_c>() );
 			break;
 
 		case SPH_ATTR_UINT32SET:
-			pPacker = new AttributePacker_MVA32_c;
+			m_dAttrs.Add ( std::make_unique<AttributePacker_MVA32_c>() );
 			break;
 
 		case SPH_ATTR_JSON:
 			if ( bJsonPacked )
-				pPacker = new AttributePacker_c;
+				m_dAttrs.Add ( std::make_unique<AttributePacker_c>() );
 			else
-				pPacker = new AttributePacker_Json_c;
+				m_dAttrs.Add ( std::make_unique<AttributePacker_Json_c>() );
 			break;
 
 		default:
 			break;
 		}
-
-		if ( pPacker )
-			m_dAttrs.Add(pPacker);
 	}
 }
 
@@ -325,25 +313,21 @@ BlobRowBuilder_Mem_c::BlobRowBuilder_Mem_c ( const ISphSchema & tSchema, CSphTig
 		if ( tCol.IsColumnar() )
 			continue;
 
-		AttributePacker_i * pPacker = nullptr;
 		switch ( tCol.m_eAttrType )
 		{
 		case SPH_ATTR_STRING:
 		case SPH_ATTR_JSON:			// json doesn't go to a separate packer because we work with pre-parsed json in this case
 		case SPH_ATTR_INT64SET:
-			pPacker = new AttributePacker_c;
+			m_dAttrs.Add ( std::make_unique<AttributePacker_c>() );
 			break;
 
 		case SPH_ATTR_UINT32SET:
-			pPacker = new AttributePacker_MVA32_c;
+			m_dAttrs.Add ( std::make_unique<AttributePacker_MVA32_c>() );
 			break;
 
 		default:
 			break;
 		}
-
-		if ( pPacker )
-			m_dAttrs.Add(pPacker);
 	}
 }
 
@@ -420,36 +404,31 @@ BlobRowBuilder_MemUpdate_c::BlobRowBuilder_MemUpdate_c ( const ISphSchema & tSch
 
 		if ( !dAttrsUpdated.BitGet(i) && sphIsBlobAttr(tCol) )
 		{
-			m_dAttrs.Add ( new AttributePacker_c );
+			m_dAttrs.Add ( std::make_unique<AttributePacker_c>() );
 			continue;
 		}
-
-		AttributePacker_i * pPacker = nullptr;
 
 		switch ( tCol.m_eAttrType )
 		{
 		case SPH_ATTR_STRING:
-			pPacker = new AttributePacker_c;
+			m_dAttrs.Add ( std::make_unique<AttributePacker_c>() );
 			break;
 
 		case SPH_ATTR_UINT32SET:
-			pPacker = new AttributePacker_MVA_T<DWORD>;
+			m_dAttrs.Add ( std::make_unique<AttributePacker_MVA_T<DWORD>>() );
 			break;
 
 		case SPH_ATTR_INT64SET:
-			pPacker = new AttributePacker_MVA_T<int64_t>;
+			m_dAttrs.Add ( std::make_unique<AttributePacker_MVA_T<int64_t>>() );
 			break;
 
 		case SPH_ATTR_JSON:
-			pPacker = new AttributePacker_Json_c;
+			m_dAttrs.Add ( std::make_unique<AttributePacker_Json_c>() );
 			break;
 
 		default:
 			break;
 		}
-
-		if ( pPacker )
-			m_dAttrs.Add(pPacker);
 	}
 }
 

@@ -212,26 +212,24 @@ enum
 };
 
 void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, const char * sStmt,
-	const char * sError, MysqlErrors_e iErr )
+	Str_t sError, MysqlErrors_e iErr )
 {
-	if ( sError==NULL )
-		sError = "(null)";
+	if ( IsEmpty ( sError ) )
+		sError = FROMS("(null)");
 
 	LogSphinxqlError ( sStmt, sError );
 
-	auto iErrorLen = (int) strlen(sError);
-
-	// cut the error message to fix isseue with long message for popular clients
-	if ( iErrorLen>MYSQL_ERROR::MAX_LENGTH )
+	// cut the error message to fix issue with long message for popular clients
+	if ( sError.second>MYSQL_ERROR::MAX_LENGTH )
 	{
-		iErrorLen = MYSQL_ERROR::MAX_LENGTH;
-		char * sErr = const_cast<char *>( sError );
-		sErr[iErrorLen-3] = '.';
-		sErr[iErrorLen-2] = '.';
-		sErr[iErrorLen-1] = '.';
-		sErr[iErrorLen] = '\0';
+		sError.second = MYSQL_ERROR::MAX_LENGTH;
+		char * sErr = const_cast<char *>( sError.first );
+		sErr[sError.second-3] = '.';
+		sErr[sError.second-2] = '.';
+		sErr[sError.second-1] = '.';
+		sErr[sError.second] = '\0';
 	}
-	int iLen = 9 + iErrorLen;
+	int iLen = 9 + sError.second;
 	int iError = iErr; // pretend to be mysql syntax error for now
 
 	// send packet header
@@ -256,7 +254,7 @@ void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, const char 
 	}
 
 	// send error message
-	tOut.SendBytes ( sError, iErrorLen );
+	tOut.SendBytes ( sError );
 }
 
 void SendMysqlEofPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iWarns, bool bMoreResults, bool bAutoCommit, bool bIsInTrans )
@@ -546,7 +544,7 @@ public:
 
 	void Error ( const char * sStmt, const char * sError, MysqlErrors_e iErr ) override
 	{
-		SendMysqlErrorPacket ( m_tOut, m_uPacketID, sStmt, sError, iErr );
+		SendMysqlErrorPacket ( m_tOut, m_uPacketID, sStmt, FromSz(sError), iErr );
 	}
 
 	void Ok ( int iAffectedRows, int iWarns, const char * sMessage, bool bMoreResults, int64_t iLastInsertId ) override
@@ -834,7 +832,6 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen,
 	if ( uMysqlCmd==MYSQL_COM_QUIT )
 		return false;
 
-	CSphString sError;
 	bool bKeepProfile = true;
 	switch ( uMysqlCmd )
 	{
@@ -874,8 +871,9 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen,
 
 		default:
 			// default case, unknown command
-			sError.SetSprintf ( "unknown command (code=%d)", uMysqlCmd );
-			SendMysqlErrorPacket ( tOut, uPacketID, NULL, sError.cstr(), MYSQL_ERR_UNKNOWN_COM_ERROR );
+			StringBuilder_c sError;
+			sError << "unknown command (code=" << uMysqlCmd << ")";
+			SendMysqlErrorPacket ( tOut, uPacketID, NULL, Str_t(sError), MYSQL_ERR_UNKNOWN_COM_ERROR );
 			break;
 	}
 
@@ -1076,7 +1074,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 
 			if ( IsMaxedOut() )
 			{
-				sphWarning ( "%s", g_sMaxedOutMessage );
+				sphWarning ( "%s", g_sMaxedOutMessage.first );
 				SendMysqlErrorPacket ( tOut, uPacketID, nullptr, g_sMaxedOutMessage, MYSQL_ERR_UNKNOWN_COM_ERROR );
 				tOut.Flush ();
 				gStats().m_iMaxedOut.fetch_add ( 1, std::memory_order_relaxed );

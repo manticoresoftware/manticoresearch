@@ -600,36 +600,13 @@ bool CacheStreamer_c::IsEmpty() const
 
 inline void CacheStreamer_c::ZipInt ( DWORD uValue )
 {
-	int iBytes = 1;
-
-	DWORD u = ( uValue>>7 );
-	while ( u )
-	{
-		u >>= 7;
-		iBytes++;
-	}
-
-	while ( iBytes-- )
-	{
-		int iData = ( 0x7f & ( uValue >> (7*iBytes) ) ) | ( iBytes ? 0x80 : 0 );
-		m_dTokenStream.Add ( BYTE ( iData & 0xff ) );
-	}
+	ZipValueBE ( [this] ( BYTE b ) { m_dTokenStream.Add ( b ); }, uValue );
 }
 
 
 inline DWORD CacheStreamer_c::UnzipInt()
 {
-	DWORD uByte = m_dTokenStream[m_iReadPtr++];
-	DWORD uRes = 0;
-	while ( uByte & 0x80 )
-	{
-		uRes = ( uRes<<7 ) + ( uByte & 0x7f );
-		uByte = m_dTokenStream[m_iReadPtr++];
-	}
-
-	uRes = ( uRes<<7 ) + uByte;
-
-	return uRes;
+	return UnzipValueBE<DWORD> ( [this]() mutable { return m_dTokenStream[m_iReadPtr++]; } );
 }
 
 

@@ -20,7 +20,6 @@
 #include "std/checks.h"
 #include "std/format.h"
 #include "std/mem.h"
-#include "std/widest.h"
 #include "std/bitcount.h"
 #include "std/fatal.h"
 #include "std/log2.h"

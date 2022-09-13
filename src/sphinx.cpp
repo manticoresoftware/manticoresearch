@@ -1134,8 +1134,9 @@ public:
 
 	int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer, CSphIndexProgress & tProgress ) final; // fixme! build only
 
-	bool				LoadHeaderLegacy ( const char * sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
-	bool				LoadHeader ( const char * sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
+	enum class LOAD_E { ParseError_e, GeneralError_e, Ok_e };
+	LOAD_E				LoadHeaderLegacy ( const char * sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
+	LOAD_E				LoadHeader ( const char * sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
 
 	void				DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool bConfig ) final;
 	void				DebugDumpDocids ( FILE * fp ) final;
@@ -8644,7 +8645,7 @@ void LoadIndexSettingsJson ( bson::Bson_c tNode, CSphIndexSettings & tSettings )
 }
 
 
-bool CSphIndex_VLN::LoadHeaderLegacy ( const char * sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning )
+CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderLegacy ( const char * sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning )
 {
 	const int MAX_HEADER_SIZE = 32768;
 	CSphFixedVector<BYTE> dCacheInfo ( MAX_HEADER_SIZE );
@@ -8653,14 +8654,14 @@ bool CSphIndex_VLN::LoadHeaderLegacy ( const char * sHeaderName, bool bStripPath
 
 	CSphAutoreader rdInfo ( dCacheInfo.Begin(), MAX_HEADER_SIZE ); // to avoid mallocs
 	if ( !rdInfo.Open ( sHeaderName, m_sLastError ) )
-		return false;
+		return LOAD_E::GeneralError_e;
 
 	// magic header
 	const char* sFmt = CheckFmtMagic ( rdInfo.GetDword () );
 	if ( sFmt )
 	{
 		m_sLastError.SetSprintf ( sFmt, sHeaderName );
-		return false;
+		return LOAD_E::GeneralError_e;
 	}
 
 	// version
@@ -8668,7 +8669,7 @@ bool CSphIndex_VLN::LoadHeaderLegacy ( const char * sHeaderName, bool bStripPath
 	if ( m_uVersion<=1 || m_uVersion>INDEX_FORMAT_VERSION )
 	{
 		m_sLastError.SetSprintf ( "%s is v.%u, binary is v.%u", sHeaderName, m_uVersion, INDEX_FORMAT_VERSION );
-		return false;
+		return LOAD_E::GeneralError_e;
 	}
 
 	// we don't support anything prior to v54
@@ -8676,7 +8677,7 @@ bool CSphIndex_VLN::LoadHeaderLegacy ( const char * sHeaderName, bool bStripPath
 	if ( m_uVersion<uMinFormatVer )
 	{
 		m_sLastError.SetSprintf ( "indexes prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, sHeaderName, m_uVersion );
-		return false;
+		return LOAD_E::GeneralError_e;
 	}
 
 	// schema
@@ -8710,7 +8711,7 @@ bool CSphIndex_VLN::LoadHeaderLegacy ( const char * sHeaderName, bool bStripPath
 
 	// tokenizer stuff
 	if ( !tTokSettings.Load ( pFilenameBuilder, rdInfo, tEmbeddedFiles, m_sLastError ) )
-		return false;
+		return LOAD_E::GeneralError_e;
 
 	if ( bStripPath )
 		StripPath ( tTokSettings.m_sSynonymsFile );
@@ -8718,7 +8719,7 @@ bool CSphIndex_VLN::LoadHeaderLegacy ( const char * sHeaderName, bool bStripPath
 	StrVec_t dWarnings;
 	TokenizerRefPtr_c pTokenizer = Tokenizer::Create ( tTokSettings, &tEmbeddedFiles, pFilenameBuilder, dWarnings, m_sLastError );
 	if ( !pTokenizer )
-		return false;
+		return LOAD_E::GeneralError_e;
 
 	// dictionary stuff
 	CSphDictSettings tDictSettings;
@@ -8735,7 +8736,7 @@ bool CSphIndex_VLN::LoadHeaderLegacy ( const char * sHeaderName, bool bStripPath
 		: sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, pTokenizer, m_sIndexName.cstr(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError )};
 
 	if ( !pDict )
-		return false;
+		return LOAD_E::GeneralError_e;
 
 	if ( tDictSettings.m_sMorphFingerprint!=pDict->GetMorphDataFingerprint() )
 		sWarning.SetSprintf ( "different lemmatizer dictionaries (index='%s', current='%s')",
@@ -8762,7 +8763,7 @@ bool CSphIndex_VLN::LoadHeaderLegacy ( const char * sHeaderName, bool bStripPath
 		pFieldFilter = sphCreateRegexpFilter ( tFieldFilterSettings, m_sLastError );
 
 	if ( !sphSpawnFilterICU ( pFieldFilter, m_tSettings, tTokSettings, sHeaderName, m_sLastError ) )
-		return false;
+		return LOAD_E::GeneralError_e;
 
 	SetFieldFilter ( std::move ( pFieldFilter ) );
 
@@ -8785,22 +8786,22 @@ bool CSphIndex_VLN::LoadHeaderLegacy ( const char * sHeaderName, bool bStripPath
 	if ( rdInfo.GetErrorFlag() )
 		m_sLastError.SetSprintf ( "%s: failed to parse header (unexpected eof)", sHeaderName );
 
-	return !rdInfo.GetErrorFlag();
+	return rdInfo.GetErrorFlag() ? LOAD_E::GeneralError_e : LOAD_E::Ok_e;
 }
 
-bool CSphIndex_VLN::LoadHeader ( const char* sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning )
+CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeader ( const char* sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning )
 {
 	using namespace bson;
 
 	CSphVector<BYTE> dData;
 	if ( !sphJsonParse ( dData, sHeaderName, m_sLastError ) )
-		return false;
+		return LOAD_E::ParseError_e;
 
 	Bson_c tBson ( dData );
 	if ( tBson.IsEmpty() || !tBson.IsAssoc() )
 	{
 		m_sLastError = "Something wrong read from json header - it is either empty, either not root object.";
-		return false;
+		return LOAD_E::ParseError_e;
 	}
 
 	// version
@@ -8808,7 +8809,7 @@ bool CSphIndex_VLN::LoadHeader ( const char* sHeaderName, bool bStripPath, CSphE
 	if ( m_uVersion<=1 || m_uVersion>INDEX_FORMAT_VERSION )
 	{
 		m_sLastError.SetSprintf ( "%s is v.%u, binary is v.%u", sHeaderName, m_uVersion, INDEX_FORMAT_VERSION );
-		return false;
+		return LOAD_E::GeneralError_e;
 	}
 
 	// we don't support anything prior to v54
@@ -8816,7 +8817,7 @@ bool CSphIndex_VLN::LoadHeader ( const char* sHeaderName, bool bStripPath, CSphE
 	if ( m_uVersion<uMinFormatVer )
 	{
 		m_sLastError.SetSprintf ( "indexes prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, sHeaderName, m_uVersion );
-		return false;
+		return LOAD_E::GeneralError_e;
 	}
 
 	// index stats
@@ -8841,7 +8842,7 @@ bool CSphIndex_VLN::LoadHeader ( const char* sHeaderName, bool bStripPath, CSphE
 	CSphTokenizerSettings tTokSettings;
 	// tokenizer stuff
 	if ( !tTokSettings.Load ( pFilenameBuilder, tBson.ChildByName ( "tokenizer_settings" ), tEmbeddedFiles, m_sLastError ) )
-		return false;
+		return LOAD_E::GeneralError_e;
 
 	// dictionary stuff
 	CSphDictSettings tDictSettings;
@@ -8866,14 +8867,14 @@ bool CSphIndex_VLN::LoadHeader ( const char* sHeaderName, bool bStripPath, CSphE
 	StrVec_t dWarnings;
 	TokenizerRefPtr_c pTokenizer = Tokenizer::Create ( tTokSettings, &tEmbeddedFiles, pFilenameBuilder, dWarnings, m_sLastError );
 	if ( !pTokenizer )
-		return false;
+		return LOAD_E::GeneralError_e;
 
 	DictRefPtr_c pDict { tDictSettings.m_bWordDict
 		? sphCreateDictionaryKeywords ( tDictSettings, &tEmbeddedFiles, pTokenizer, m_sIndexName.cstr(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError )
 		: sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, pTokenizer, m_sIndexName.cstr(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError )};
 
 	if ( !pDict )
-		return false;
+		return LOAD_E::GeneralError_e;
 
 	if ( tDictSettings.m_sMorphFingerprint!=pDict->GetMorphDataFingerprint() )
 		sWarning.SetSprintf ( "different lemmatizer dictionaries (index='%s', current='%s')",
@@ -8907,7 +8908,7 @@ bool CSphIndex_VLN::LoadHeader ( const char* sHeaderName, bool bStripPath, CSphE
 	}
 
 	if ( !sphSpawnFilterICU ( pFieldFilter, m_tSettings, tTokSettings, sHeaderName, m_sLastError ) )
-		return false;
+		return LOAD_E::GeneralError_e;
 
 	SetFieldFilter ( std::move ( pFieldFilter ) );
 
@@ -8933,7 +8934,7 @@ bool CSphIndex_VLN::LoadHeader ( const char* sHeaderName, bool bStripPath, CSphE
 		s.m_dBigramWords.Sort();
 	}
 
-	return true;
+	return LOAD_E::Ok_e;
 }
 
 
@@ -8945,13 +8946,17 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 
 	CSphEmbeddedFiles tEmbeddedFiles;
 	CSphString sWarning;
-	if ( !LoadHeader ( sHeaderName, false, tEmbeddedFiles, pFilenameBuilder.get(), sWarning ) )
+	auto eRes = LoadHeader ( sHeaderName, false, tEmbeddedFiles, pFilenameBuilder.get(), sWarning );
+	if ( eRes == LOAD_E::ParseError_e )
 	{
-		fprintf ( fp, "\nIndex header format is not json, will try it as binary...\n" );
-		if ( !LoadHeaderLegacy ( sHeaderName, false, tEmbeddedFiles, pFilenameBuilder.get(), sWarning ) )
+		eRes = LoadHeaderLegacy ( sHeaderName, false, tEmbeddedFiles, pFilenameBuilder.get(), sWarning );
+		if ( eRes == LOAD_E::ParseError_e )
 			sphDie ( "failed to load header: %s", m_sLastError.cstr() );
 	}
+	if ( eRes == LOAD_E::GeneralError_e )
+		sphDie ( "failed to load header: %s", m_sLastError.cstr() );
 
+	assert ( eRes == LOAD_E::Ok_e );
 	if ( !sWarning.IsEmpty () )
 		fprintf ( fp, "WARNING: %s\n", sWarning.cstr () );
 
@@ -9369,15 +9374,24 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 	CSphEmbeddedFiles tEmbeddedFiles;
 
 	// preload schema
-	if ( !LoadHeader ( GetIndexFileName ( SPH_EXT_SPH ).cstr(), bStripPath, tEmbeddedFiles, pFilenameBuilder, m_sLastWarning ) )
+	auto eRes = LoadHeader ( GetIndexFileName ( SPH_EXT_SPH ).cstr(), bStripPath, tEmbeddedFiles, pFilenameBuilder, m_sLastWarning ) ;
+	if ( eRes == LOAD_E::ParseError_e )
 	{
 		sphInfo ( "Index header format is not json, will try it as binary..." );
-		if ( !LoadHeaderLegacy ( GetIndexFileName ( SPH_EXT_SPH ).cstr(), bStripPath, tEmbeddedFiles, pFilenameBuilder, m_sLastWarning ) )
+		eRes = LoadHeaderLegacy ( GetIndexFileName ( SPH_EXT_SPH ).cstr(), bStripPath, tEmbeddedFiles, pFilenameBuilder, m_sLastWarning );
+		if ( eRes == LOAD_E::ParseError_e )
 		{
-			sphWarning ( "Unable to load header.." );
+			sphWarning ( "Unable to parse header... Error %s", m_sLastError.cstr() );
 			return false;
 		}
 	}
+	if ( eRes == LOAD_E::GeneralError_e )
+	{
+		sphWarning ( "Unable to load header... Error %s", m_sLastError.cstr() );
+		return false;
+	}
+
+	assert ( eRes == LOAD_E::Ok_e );
 
 	m_bIsEmpty = !m_iDocinfo;
 

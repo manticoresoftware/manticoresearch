@@ -160,40 +160,65 @@ alignas ( 128 ) constexpr BYTE g_JsonEscapingLookupTable[] = {
 	0x70,0x71,0x72,0x73,0x74,0x75,0x76,0x77, 0x78,0x79,0x7a,0x7b,0x7c,0x7d,0x7e,0x7f,
 };
 
-struct EscapeJsonString_t : public BaseQuotation_t
+alignas ( 64 ) constexpr BYTE g_JsonEscapeControlTable[] = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
+
+struct EscapeJsonString_t
 {
 	static const char cQuote = '"';
 
-	static constexpr bool IsEscapeChar ( char c )
+	static constexpr BYTE EscapingSpace ( BYTE c )
 	{
-		return ( c & 0x80 ) ? false : g_JsonEscapingLookupTable[(BYTE) c] & 0x80;
+		if ( c & 0x80 )
+			return 0; // high table with charcodes >= 0x80 - no escaping
+
+		if ( g_JsonEscapingLookupTable[c] & 0x80 )
+			return 1; // escaping 1 char will add 1 more char
+		return ( c & 0xE0 ) ? 0 : 5; // escaping 1 control char will add 5 more chars.
 
 		//return strchr ( "\"\\\b\f\n\r\t", c )!=nullptr; // \ is \x5C, " is \x22
 	}
 
-	static constexpr char GetEscapedChar ( char c )
+	static void EscapeChar ( BYTE*& pOut, BYTE c )
 	{
-		return g_JsonEscapingLookupTable[(BYTE) c] & 0x7F;
-
-		/*
-		switch ( c )
+		// high chars with code > 0x7F
+		if ( c & 0x80 )
 		{
-		case '\b': return 'b'; // \x08
-		case '\t': return 't'; // \x09
-		case '\n': return 'n'; // \x0A
-		case '\f': return 'f'; // \x0C
-		case '\r': return 'r'; // \x0D
-
-		default: return c;
+			*pOut++=c;
+			return;
 		}
-		 */
+
+		// lookup escaping chars
+		if ( g_JsonEscapingLookupTable[c] & 0x80 )
+		{
+			pOut[0] = '\\';
+			pOut[1] = g_JsonEscapingLookupTable[c] & 0x7F;
+			pOut += 2;
+			return;
+		}
+
+		// not yet escaped chars with codes > 0x1F
+		if ( c & 0xE0 )
+		{
+			*pOut++ = c;
+			return;
+		}
+
+		// not yet escaped control chars - transform to \u00XX
+		memcpy ( pOut, "\\u00", 4 );
+		memcpy ( pOut + 4, g_JsonEscapeControlTable + c * 2, 2 );
+		pOut += 6;
 	}
 
-	// that is simple: all spaces we already processed by escaping, so only plain chars here expected, no need to change
-	static constexpr char FixupSpaceWithEscaping ( char c )
+	static void EscapeCharWithSpaces ( BYTE*& pOut, BYTE c )
 	{
-		return c;
+		EscapeChar ( pOut, c );
 	}
+
+	static void FixupSpace ( BYTE*& pOut, BYTE c )
+	{
+		EscapeChar ( pOut, c );
+	}
+
 };
 
 const StrBlock_t dJsonObj { FROMS ( "," ), FROMS ( "{" ), FROMS ( "}" ) }; // json object

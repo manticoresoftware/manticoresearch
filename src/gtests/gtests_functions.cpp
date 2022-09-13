@@ -296,6 +296,15 @@ TEST ( functions, JsonEscapedBuilder_sugar )
 	tOut.Clear();
 	tOut.ArrayW().Sink() << 1 << 2 << 3 << 4;
 	EXPECT_STREQ ( tOut.cstr(), "[\n1,\n2,\n3,\n4\n]" );
+
+	// control characters immediate warray
+	tOut.Clear();
+	tOut.AppendEscaped ( "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f", EscBld::eAll, 16 );
+	EXPECT_STREQ ( tOut.cstr(), "\"\\u0000\\u0001\\u0002\\u0003\\u0004\\u0005\\u0006\\u0007\\b\\t\\n\\u000b\\f\\r\\u000e\\u000f\"" );
+
+	tOut.Clear();
+	tOut.AppendEscaped ( "\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f" );
+	EXPECT_STREQ ( tOut.cstr(), "\"\\u0010\\u0011\\u0012\\u0013\\u0014\\u0015\\u0016\\u0017\\u0018\\u0019\\u001a\\u001b\\u001c\\u001d\\u001e\\u001f\"" );
 }
 
 TEST ( functions, StringBuilder_sugar )
@@ -498,15 +507,15 @@ TEST ( functions, strinbguilder_appendf )
 		sRes.cstr (), "12345678this is my rifle this is my gun int=123 float=456.789000 string=helloworld" );
 }
 
-struct EscapeQuotation_t : public BaseQuotation_t
+struct EscapeQuotator_t
 {
-	static constexpr bool IsEscapeChar ( char c )
+	static constexpr BYTE EscapingSpace ( BYTE c )
 	{
-		return ( c=='\\' || c=='\'' );
+		return ( c == '\\' || c == '\'' ) ? 1 : 0;
 	}
 };
 
-using QuotationEscapedBuilder = EscapedStringBuilder_T<EscapeQuotation_t>;
+using QuotationEscapedBuilder = EscapedStringBuilder_T<BaseQuotation_T<EscapeQuotator_t>>;
 
 TEST( functions, EscapedStringBuilder )
 {
@@ -638,7 +647,7 @@ TEST( functions, EscapedStringBuilderbounds )
 	// (valgrind would check nicely if it even try to touch a byte over allocated buf)
 
 	tBuilder.Clear ();
-	tBuilder.AppendEscaped ( "space", EscBld::eAll, 50 );
+	tBuilder.AppendEscaped ( "space", EscBld::eAll, 5 );
 	ASSERT_STREQ ( tBuilder.cstr (), "'space'" );
 }
 

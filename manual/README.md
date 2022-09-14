@@ -1,6 +1,6 @@
 * [☝ Introduction](Introduction.md)
 * [❗ Read this first](Read_this_first.md)
-* [✔ ️Installation](Installation.md)
+* [✔ Installation](Installation.md)
     * [Docker](Installation/Docker.md)
     * [RedHat and Centos](Installation/RHEL_and_Centos.md)
     * [Debian and Ubuntu](Installation/Debian_and_Ubuntu.md)
@@ -10,7 +10,7 @@
     * [Compiling from sources](Installation/Compiling_from_sources.md)
     * [Migration from Sphinx](Installation/Migration_from_Sphinx.md)
 * [⚡ Quick start guide](Quick_start_guide.md)
-* [✔ ️Starting the server](Starting_the_server.md)
+* [✔ Starting the server](Starting_the_server.md)
     * [In Linux](Starting_the_server/Linux.md)
     * [Manually](Starting_the_server/Manually.md)
     * [In Docker](Starting_the_server/Docker.md)
@@ -20,7 +20,7 @@
     * [Data types](Creating_an_index/Data_types.md)
         * [Row-wise and columnar attribute storages](Creating_an_index/Data_types.md#Row-wise-and-columnar-attribute-storages)
     * [Creating a local index](Creating_an_index/Local_indexes.md)
-        * [✔ ️Real-time index](Creating_an_index/Local_indexes/Real-time_index.md)
+        * [✔ Real-time index](Creating_an_index/Local_indexes/Real-time_index.md)
         * [Plain index](Creating_an_index/Local_indexes/Plain_index.md)
         * [Plain and real-time index settings](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md)
         * [Percolate index](Creating_an_index/Local_indexes/Percolate_index.md)
@@ -61,7 +61,7 @@
     * [HTTP](Connecting_to_the_server/HTTP.md)
     * [SQL over HTTP](Connecting_to_the_server/HTTP.md#SQL-over-HTTP)
 * [▪️ Adding documents to an index]
-    * [✔ ️Adding documents to a real-time index](Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md)
+    * [✔ Adding documents to a real-time index](Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md)
     * [Adding rules to a percolate index](Adding_documents_to_an_index/Adding_rules_to_a_percolate_index.md)
 * [▪️ Adding data from external storages]
     * [Plain indexes creation](Adding_data_from_external_storages/Plain_indexes_creation.md)
@@ -80,13 +80,13 @@
         * [Attaching a plain index to RT index](Adding_data_from_external_storages/Adding_data_from_indexes/Attaching_a_plain_index_to_RT_index.md)
         * [Importing RT index](Adding_data_from_external_storages/Adding_data_from_indexes/Importing_index.md)        
     * [Rotating an index](Adding_data_from_external_storages/Rotating_an_index.md)
-* [✔ ️Updating documents]
+* [✔ Updating documents]
     * [REPLACE vs UPDATE](Updating_documents/REPLACE_vs_UPDATE.md)
     * [REPLACE](Updating_documents/REPLACE.md)
     * [UPDATE](Updating_documents/UPDATE.md)
 * [▪️ Deleting documents](Deleting_documents.md)
 * [▪️ Transactions](Transactions.md)
-* [✔ ️Searching]
+* [✔ Searching]
     * [Intro](Searching/Intro.md)
     * [Full-text matching]
         * [Basic usage](Searching/Full_text_matching/Basic_usage.md)

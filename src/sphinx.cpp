@@ -10595,17 +10595,18 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 	SwitchProfile ( pProfiler, SPH_QSTATE_INIT );
 
 	std::atomic<bool> bInterrupt {false};
+	auto fnCheckInterrupt = [&bInterrupt]() { return bInterrupt.load ( std::memory_order_relaxed ); };
 	std::atomic<int32_t> iCurChunk { 0 };
 	Threads::Coro::ExecuteN ( tClonableCtx.Concurrency ( iJobs ), [&]
 	{
 		auto iChunk = iCurChunk.fetch_add ( 1, std::memory_order_acq_rel );
-		if ( iChunk>=iJobs || bInterrupt )
+		if ( iChunk>=iJobs || fnCheckInterrupt() )
 			return; // already nothing to do, early finish.
 
 		auto tCtx = tClonableCtx.CloneNewContext ( &iChunk );
 		Threads::Coro::Throttler_c tThrottler ( session::GetThrottlingPeriodMS() );
 		int iTick=1; // num of times coro rescheduled by throttler
-		while ( !bInterrupt ) // some earlier job met error; abort.
+		while ( !fnCheckInterrupt() ) // some earlier job met error; abort.
 		{
 			myinfo::SetTaskInfo ( "%d ch %d:", iTick, iChunk );
 			auto & dLocalSorters = tCtx.m_dSorters;
@@ -10624,7 +10625,7 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 
 			CSphQuery tQueryWithExtraFilter = tQuery;
 			SetupSplitFilter ( tQueryWithExtraFilter.m_dFilters.Add(), iChunk, iJobs );
-			bInterrupt = !pIndex->MultiQuery ( tChunkResult, tQueryWithExtraFilter, dLocalSorters, tMultiArgs );
+			bInterrupt.store (!pIndex->MultiQuery ( tChunkResult, tQueryWithExtraFilter, dLocalSorters, tMultiArgs ), std::memory_order_relaxed);
 
 			if ( !iChunk )
 				tThMeta.MergeWordStats ( tChunkMeta );
@@ -10637,7 +10638,7 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 			if ( iChunk < iJobs-1 && sph::TimeExceeded ( tmMaxTimer ) )
 			{
 				tThMeta.m_sWarning = "query time exceeded max_query_time";
-				bInterrupt = true;
+				bInterrupt.store ( true, std::memory_order_relaxed );
 			}
 
 			if ( tThMeta.m_sWarning.IsEmpty() && !tChunkMeta.m_sWarning.IsEmpty() )
@@ -10646,7 +10647,7 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 			tThMeta.m_bTotalMatchesApprox |= tChunkMeta.m_bTotalMatchesApprox;
 			tThMeta.m_tIteratorStats.Merge ( tChunkMeta.m_tIteratorStats );
 
-			if ( bInterrupt && !tChunkMeta.m_sError.IsEmpty() )
+			if ( fnCheckInterrupt() && !tChunkMeta.m_sError.IsEmpty() )
 				// FIXME? maybe handle this more gracefully (convert to a warning)?
 				tThMeta.m_sError = tChunkMeta.m_sError;
 
@@ -10662,7 +10663,7 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 	});
 
 	tClonableCtx.Finalize();
-	return !bInterrupt;
+	return !fnCheckInterrupt();
 }
 
 

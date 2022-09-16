@@ -48,13 +48,6 @@ void ClonableCtx_T<REFCONTEXT, CONTEXT>::LimitConcurrency ( int iDistThreads )
 	Setup ( iContexts );
 }
 
-template<typename REFCONTEXT, typename CONTEXT>
-ClonableCtx_T<REFCONTEXT, CONTEXT>::~ClonableCtx_T()
-{
-	for ( auto& tCtx : m_dChildrenContexts )
-		tCtx.reset();
-}
-
 // called once per coroutine, when it really has to process something
 template<typename REFCONTEXT, typename CONTEXT>
 REFCONTEXT ClonableCtx_T<REFCONTEXT, CONTEXT>::CloneNewContext ( const int* pJobId )

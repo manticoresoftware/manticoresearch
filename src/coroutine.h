@@ -149,7 +149,6 @@ class ClonableCtx_T
 public:
 	template <typename... PARAMS >
 	explicit ClonableCtx_T ( PARAMS && ... tParams  );
-	~ClonableCtx_T();
 
 	// Num of parallel workers to complete iTasks jobs
 	int Concurrency ( int iTasks );

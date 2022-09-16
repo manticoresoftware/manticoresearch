@@ -169,6 +169,60 @@ StrVec_t sphSplit( const char* sIn, const char* sBounds )
 	return sphSplit ( sIn, -1, sBounds);
 }
 
+// split by any char from sBounds.
+// if line starts from a bound char, first splitted str will be an empty string
+void sph::Split ( StrtVec_t& dOut, const char* sIn, int iLen, const char* sBounds )
+{
+	sph::Split ( sIn, iLen, sBounds, [&] ( const char* sToken, int iTokenLen ) {
+		dOut.Add ( { sToken, iTokenLen } );
+	} );
+}
+
+StrtVec_t sph::Split ( const char* sIn, int iLen, const char* sBounds )
+{
+	StrtVec_t dResult;
+	sph::Split ( dResult, sIn, iLen, sBounds );
+	return dResult;
+}
+
+void sph::Split ( StrtVec_t& dOut, const char* sIn, const char* sBounds )
+{
+	sph::Split ( dOut, sIn, -1, sBounds );
+}
+
+StrtVec_t sph::Split ( const char* sIn, const char* sBounds )
+{
+	return sph::Split ( sIn, -1, sBounds );
+}
+
+Str_t sph::Trim ( Str_t tIn )
+{
+	if ( IsEmpty ( tIn ) )
+		return tIn;
+
+	const char* sStart = tIn.first;
+	const char* sEnd = sStart + tIn.second;
+	while ( sStart < sEnd && isspace ( (unsigned char)*sStart ) )
+		++sStart;
+	while ( sStart < sEnd && isspace ( (unsigned char)*sEnd ) )
+		--sEnd;
+	return { sStart, sEnd - sStart };
+}
+
+Str_t sph::Trim ( Str_t tIn, char cGarbage )
+{
+	if ( IsEmpty ( tIn ) )
+		return tIn;
+
+	const char* sStart = tIn.first;
+	const char* sEnd = sStart + tIn.second;
+	while ( sStart < sEnd && cGarbage == *sStart )
+		++sStart;
+	while ( sStart < sEnd && cGarbage == *sEnd )
+		--sEnd;
+	return { sStart, sEnd - sStart };
+}
+
 template < typename T1, typename T2 >
 static bool sphWildcardMatchRec ( const T1 * sString, const T2 * sPattern )
 {

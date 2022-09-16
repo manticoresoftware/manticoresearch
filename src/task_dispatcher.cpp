@@ -267,4 +267,32 @@ void Unify ( Template_t& tBase, const Template_t tNew )
 		tBase.batch = tNew.batch;
 }
 
+CSphString RenderTemplate ( Template_t tTemplate )
+{
+	if ( tTemplate.concurrency && tTemplate.batch )
+		return SphSprintf ("%d/%d", tTemplate.concurrency, tTemplate.batch );
+
+	if ( tTemplate.concurrency )
+		return SphSprintf ( "%d", tTemplate.concurrency );
+
+	if ( tTemplate.batch )
+		return SphSprintf ( "/%d", tTemplate.batch );
+	return "";
+}
+
+void RenderTemplates ( StringBuilder_c& tOut, std::pair<Template_t, Template_t> dTemplates )
+{
+	auto sFirst = RenderTemplate ( dTemplates.first );
+	auto sSecond = RenderTemplate ( dTemplates.second );
+
+	if ( !sFirst.IsEmpty() && !sSecond.IsEmpty() )
+		return (void)tOut.Sprint ( sFirst, '+', sSecond );
+
+	if ( !sFirst.IsEmpty() )
+		return (void)tOut.Sprint ( sFirst );
+
+	if ( !sSecond.IsEmpty() )
+		return (void)tOut.Sprint ( '+', sSecond );
+}
+
 } // namespace Dispatcher

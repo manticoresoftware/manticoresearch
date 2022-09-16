@@ -14705,13 +14705,35 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt )
 	}
 	dTable.MatchTuplet ( "pseudo_sharding", g_bSplit ? "1" : "0" );
 	dTable.MatchTuplet ( "secondary_indexes", GetSecondaryIndexDefault() ? "1" : "0" );
+	dTable.MatchTupletFn ( "threads_ex_effective", [] {
+		StringBuilder_c tBuf;
+		auto x = GetEffectiveBaseDispatcherTemplate();
+		auto y = GetEffectivePseudoShardingDispatcherTemplate();
+		Dispatcher::RenderTemplates ( tBuf, { x, y } );
+		return tBuf;
+	} );
 
 	if ( tStmt.m_iIntParam>=0 ) // that is SHOW GLOBAL VARIABLES
 	{
+		dTable.MatchTupletFn ( "threads_ex", [] {
+			StringBuilder_c tBuf;
+			auto x = Dispatcher::GetGlobalBaseDispatcherTemplate();
+			auto y = Dispatcher::GetGlobalPseudoShardingDispatcherTemplate();
+			Dispatcher::RenderTemplates ( tBuf, { x, y } );
+			return tBuf;
+		} );
 		Uservar_e eType = tStmt.m_iIntParam==0 ? USERVAR_INT_SET : USERVAR_INT_SET_TMP;
 		IterateUservars ( [&dTable, eType] ( const NamedRefVectorPair_t &dVar ) {
 			if ( dVar.second.m_eType==eType )
 				dTable.MatchTupletf ( dVar.first.cstr(), "%d", dVar.second.m_pVal ? dVar.second.m_pVal->GetLength() : 0 );
+		});
+	} else { // that is local (session) variables
+		dTable.MatchTupletFn ( "threads_ex", [] {
+			StringBuilder_c tBuf;
+			auto x = ClientTaskInfo_t::Info().GetBaseDispatcherTemplate();
+			auto y = ClientTaskInfo_t::Info().GetPseudoShardingDispatcherTemplate();
+			Dispatcher::RenderTemplates ( tBuf, { x, y } );
+			return tBuf;
 		});
 	}
 

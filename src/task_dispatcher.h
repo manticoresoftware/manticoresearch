@@ -91,4 +91,7 @@ Template_t GetGlobalPseudoShardingDispatcherTemplate();
 // override tBase with non-default tNew
 void Unify ( Template_t& tBase, Template_t tNew );
 
+// render a couple of templates back to string form
+void RenderTemplates ( StringBuilder_c& tOut, std::pair<Template_t, Template_t> dTemplates );
+
 } // namespace Dispatcher

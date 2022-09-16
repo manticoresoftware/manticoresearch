@@ -47,6 +47,7 @@
 #include "chunksearchctx.h"
 #include "std/lrucache.h"
 #include "indexfiles.h"
+#include "task_dispatcher.h"
 
 #include "secondarylib.h"
 
@@ -10586,7 +10587,11 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 	if ( !iConcurrency )
 		iConcurrency = GetEffectiveDistThreads();
 
-	tClonableCtx.LimitConcurrency ( iConcurrency );
+	// pseudo-sharding scheduler
+	auto tDispatch = GetEffectivePseudoShardingDispatcherTemplate();
+	auto pDispatcher = Dispatcher::Make ( iJobs, iConcurrency, tDispatch );
+
+	tClonableCtx.LimitConcurrency ( pDispatcher->GetConcurrency() );
 
 	auto iStart = sphMicroTimer();
 	sphLogDebugv ( "Started: " INT64_FMT, sphMicroTimer()-iStart );
@@ -10596,11 +10601,13 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 
 	std::atomic<bool> bInterrupt {false};
 	auto fnCheckInterrupt = [&bInterrupt]() { return bInterrupt.load ( std::memory_order_relaxed ); };
-	std::atomic<int32_t> iCurChunk { 0 };
+
 	Threads::Coro::ExecuteN ( tClonableCtx.Concurrency ( iJobs ), [&]
 	{
-		auto iChunk = iCurChunk.fetch_add ( 1, std::memory_order_acq_rel );
-		if ( iChunk>=iJobs || fnCheckInterrupt() )
+		auto pSource = pDispatcher->MakeSource();
+		int iChunk = -1; // make it consumed
+
+		if ( !pSource->FetchTask ( iChunk ) || fnCheckInterrupt() )
 			return; // already nothing to do, early finish.
 
 		auto tJobContext = tClonableCtx.CloneNewContext();
@@ -10653,8 +10660,8 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 				// FIXME? maybe handle this more gracefully (convert to a warning)?
 				tThMeta.m_sError = tChunkMeta.m_sError;
 
-			iChunk = iCurChunk.fetch_add ( 1, std::memory_order_acq_rel );
-			if ( iChunk>=iJobs || bInterrupt )
+			iChunk = -1; // mark it consumed
+			if ( !pSource->FetchTask ( iChunk ) || fnCheckInterrupt() )
 				return; // all is done
 
 			// yield and reschedule every quant of time. It gives work to other tasks

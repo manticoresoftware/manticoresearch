@@ -1,7 +1,5 @@
 //
 // Copyright (c) 2022, Manticore Software LTD (https://manticoresearch.com)
-// Copyright (c) 2001-2016, Andrew Aksyonoff
-// Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -192,6 +190,13 @@ std::unique_ptr<TaskDispatcher_i> MakeRoundRobin ( int iJobs, int iConcurrency, 
 	return std::make_unique<RRTaskDispatcher_c> ( iJobs, iConcurrency, iBatch );
 }
 
+std::unique_ptr<Dispatcher::TaskDispatcher_i> Make ( int iJobs, int iDefaultConcurrency, Dispatcher::Template_t tWhat )
+{
+	if ( tWhat.batch )
+		return MakeRoundRobin(iJobs, tWhat.concurrency ? tWhat.concurrency : iDefaultConcurrency, tWhat.batch );
+	return MakeTrivial ( iJobs, tWhat.concurrency ? tWhat.concurrency : iDefaultConcurrency );
+}
+
 Template_t ParseTemplate ( Str_t sTemplate )
 {
 	StrtVec_t dStr;
@@ -231,6 +236,26 @@ std::pair<Template_t, Template_t> ParseTemplates ( Str_t sTemplates )
 std::pair<Template_t, Template_t> ParseTemplates ( const char* szTemplates )
 {
 	return ParseTemplates ( FromSz ( szTemplates ) );
+}
+
+namespace {
+	std::pair<Template_t, Template_t> g_GlobalDispatcherTemplates = ParseTemplates ( getenv ( "MANTICORE_THREADS_EX" ) );
+}
+
+void SetGlobalDispatchers ( const char* szTemplates )
+{
+	g_GlobalDispatcherTemplates = ParseTemplates ( szTemplates );
+}
+
+// return stored global dispatchers
+Template_t GetGlobalBaseDispatcherTemplate()
+{
+	return g_GlobalDispatcherTemplates.first;
+}
+
+Template_t GetGlobalPseudoShardingDispatcherTemplate()
+{
+	return g_GlobalDispatcherTemplates.second;
 }
 
 void Unify ( Template_t& tBase, const Template_t tNew )

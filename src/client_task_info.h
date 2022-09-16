@@ -12,6 +12,7 @@
 
 #include "sphinxstd.h"
 #include "task_info.h"
+#include "task_dispatcher.h"
 
 enum Profile_e {
 	NONE,
@@ -49,6 +50,9 @@ public:
 	bool m_bPersistent = false;
 	static std::atomic<int> m_iClients;
 	static std::atomic<int> m_iVips;
+
+	Dispatcher::Template_t m_tBaseDispatcherTemplate;
+	Dispatcher::Template_t m_tPseudoShardingDispatcherTemplate;
 
 private:
 	ClientSession_c* 	m_pSession = nullptr;
@@ -105,6 +109,12 @@ public:
 
 	void SetPersistent ( bool bPersistent ) { m_bPersistent = bPersistent; }
 	bool GetPersistent () const { return m_bPersistent; }
+
+	void SetBaseDispatcherTemplate ( Dispatcher::Template_t tDispatcherTemplate ) { m_tBaseDispatcherTemplate = tDispatcherTemplate; }
+	Dispatcher::Template_t GetBaseDispatcherTemplate() const { return m_tBaseDispatcherTemplate; }
+
+	void SetPseudoShardingDispatcherTemplate ( Dispatcher::Template_t tDispatcherTemplate ) { m_tPseudoShardingDispatcherTemplate = tDispatcherTemplate; }
+	Dispatcher::Template_t GetPseudoShardingDispatcherTemplate() const { return m_tPseudoShardingDispatcherTemplate; }
 
 	void SetClientSession ( ClientSession_c* );
 	ClientSession_c* GetClientSession();
@@ -190,3 +200,7 @@ volatile int &getDistThreads ();
 
 // provides daemon-wide global dist-threads, or task-local, if any exists, or 0 if none
 int GetEffectiveDistThreads ();
+
+// provides unified dispatcher of global and local
+Dispatcher::Template_t GetEffectiveBaseDispatcherTemplate();
+Dispatcher::Template_t GetEffectivePseudoShardingDispatcherTemplate();

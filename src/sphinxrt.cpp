@@ -37,6 +37,7 @@
 #include "sphinx_alter.h"
 #include "chunksearchctx.h"
 #include "indexfiles.h"
+#include "task_dispatcher.h"
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -6656,7 +6657,10 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 	if ( !iConcurrency )
 		iConcurrency = GetEffectiveDistThreads();
 
-	tClonableCtx.LimitConcurrency ( iConcurrency );
+	auto tDispatch = GetEffectiveBaseDispatcherTemplate();
+	auto pDispatcher = Dispatcher::Make ( iJobs, iConcurrency, tDispatch );
+
+	tClonableCtx.LimitConcurrency ( pDispatcher->GetConcurrency() );
 
 	auto iStart = sphMicroTimer();
 	sphLogDebugv ( "Started: " INT64_FMT, sphMicroTimer()-iStart );
@@ -6691,20 +6695,26 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 
 	std::atomic<bool> bInterrupt {false};
 	auto fnCheckInterrupt = [&bInterrupt]() { return bInterrupt.load ( std::memory_order_relaxed ); };
-	std::atomic<int32_t> iCurChunk { iJobs-1 };
+
 	Coro::ExecuteN ( tClonableCtx.Concurrency ( iJobs ), [&]
 	{
-		auto iChunk = iCurChunk.fetch_sub ( 1, std::memory_order_acq_rel );
-		if ( iChunk<0 || fnCheckInterrupt() )
+		auto pSource = pDispatcher->MakeSource();
+		int iJob = -1; // make it consumed
+
+		if ( !pSource->FetchTask ( iJob ) || fnCheckInterrupt() )
 			return; // already nothing to do, early finish.
 
 		auto tJobContext = tClonableCtx.CloneNewContext();
 		auto& tCtx = tJobContext.first;
-		tClonableCtx.SetJobOrder ( tJobContext.second, iChunk ); // fixme! Same as in single search, but here we walk in reverse order. Need to fix?
+		tClonableCtx.SetJobOrder ( tJobContext.second, -iJob ); // fixme! Same as in single search, but here we walk in reverse order. Need to fix?
 		Threads::Coro::Throttler_c tThrottler ( session::GetThrottlingPeriodMS () );
 		int iTick=1; // num of times coro rescheduled by throttler
 		while ( !fnCheckInterrupt() ) // some earlier job met error; abort.
 		{
+			// jobs come in ascending order from 0 up to iJobs-1.
+			// We walk over disk chunk in reverse order, from last to 0-th.
+			auto iChunk = iJobs - iJob - 1;
+			iJob = -1; // mark it consumed
 			myinfo::SetTaskInfo ( "%d ch %d:", iTick, iChunk );
 			auto & dLocalSorters = tCtx.m_dSorters;
 			CSphQueryResultMeta tChunkMeta;
@@ -6754,8 +6764,7 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 				// FIXME? maybe handle this more gracefully (convert to a warning)?
 				tThMeta.m_sError = tChunkMeta.m_sError;
 
-			iChunk = iCurChunk.fetch_sub ( 1, std::memory_order_acq_rel );
-			if ( iChunk<0 || bInterrupt )
+			if ( !pSource->FetchTask ( iJob ) || fnCheckInterrupt() )
 				return; // all is done
 
 			// yield and reschedule every quant of time. It gives work to other tasks

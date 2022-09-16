@@ -20,6 +20,7 @@
 #include "fileutils.h"
 #include "collation.h"
 #include "binlog_defs.h"
+#include "task_dispatcher.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -564,6 +565,8 @@ struct CSphQuery
 	int				m_iCouncurrency = 0;    ///< limit N of threads to run query with. 0 means 'no limit'
 	CSphVector<CSphString>	m_dStringSubkeys;
 	CSphVector<int64_t>		m_dIntSubkeys;
+	Dispatcher::Template_t	m_tMainDispatcher;
+	Dispatcher::Template_t	m_tPseudoShardingDispatcher;
 };
 
 /// parse select list string into items

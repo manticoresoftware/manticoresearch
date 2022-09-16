@@ -10589,6 +10589,7 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 
 	// pseudo-sharding scheduler
 	auto tDispatch = GetEffectivePseudoShardingDispatcherTemplate();
+	Dispatcher::Unify ( tDispatch, tQuery.m_tPseudoShardingDispatcher );
 	auto pDispatcher = Dispatcher::Make ( iJobs, iConcurrency, tDispatch );
 
 	tClonableCtx.LimitConcurrency ( pDispatcher->GetConcurrency() );

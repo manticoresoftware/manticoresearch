@@ -5961,6 +5961,7 @@ void SearchHandler_c::RunLocalSearches ()
 		iConcurrency = GetEffectiveDistThreads ();
 
 	auto tDispatch = GetEffectiveBaseDispatcherTemplate();
+	Dispatcher::Unify ( tDispatch, m_dNQueries.First().m_tMainDispatcher );
 	auto pDispatcher = Dispatcher::Make ( iNumLocals, iConcurrency, tDispatch );
 	dCtx.LimitConcurrency ( pDispatcher->GetConcurrency() );
 

@@ -6658,6 +6658,7 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 		iConcurrency = GetEffectiveDistThreads();
 
 	auto tDispatch = GetEffectiveBaseDispatcherTemplate();
+	Dispatcher::Unify ( tDispatch, tQuery.m_tMainDispatcher );
 	auto pDispatcher = Dispatcher::Make ( iJobs, iConcurrency, tDispatch );
 
 	tClonableCtx.LimitConcurrency ( pDispatcher->GetConcurrency() );

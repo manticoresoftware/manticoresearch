@@ -192,4 +192,54 @@ std::unique_ptr<TaskDispatcher_i> MakeRoundRobin ( int iJobs, int iConcurrency, 
 	return std::make_unique<RRTaskDispatcher_c> ( iJobs, iConcurrency, iBatch );
 }
 
+Template_t ParseTemplate ( Str_t sTemplate )
+{
+	StrtVec_t dStr;
+	sph::Split ( dStr, sTemplate.first, sTemplate.second, "/" );
+	dStr.for_each ( [] ( auto& tVal ) { tVal = sph::Trim ( tVal ); } );
+	while ( dStr.GetLength()<2 )
+		dStr.Add ( dEmptyStr );
+
+	auto fnParseValue = [] ( Str_t tVal ) -> int
+	{
+		if ( IsEmpty ( tVal ) )
+			return 0;
+		if ( tVal.second == 1 && ( *tVal.first == '0' || *tVal.first == '*' ) )
+			return 0;
+		return atoi ( CSphString ( tVal ).cstr() );
+	};
+	assert ( dStr.GetLength() >= 2 );
+	return { fnParseValue ( dStr[0] ), fnParseValue ( dStr[1] ) };
+}
+
+Template_t ParseTemplate ( const char* szTemplate )
+{
+	return ParseTemplate ( FromSz ( szTemplate ) );
+}
+
+std::pair<Template_t, Template_t> ParseTemplates ( Str_t sTemplates )
+{
+	sTemplates = sph::Trim ( sTemplates, '\'' ); // unquote, if necessary.
+	StrtVec_t dStr;
+	sph::Split ( dStr, sTemplates.first, sTemplates.second, "+" );
+	while ( dStr.GetLength() < 2 )
+		dStr.Add ( dEmptyStr );
+	assert ( dStr.GetLength() >= 2 );
+	return { ParseTemplate ( dStr[0] ), ParseTemplate ( dStr[1] ) };
+}
+
+std::pair<Template_t, Template_t> ParseTemplates ( const char* szTemplates )
+{
+	return ParseTemplates ( FromSz ( szTemplates ) );
+}
+
+void Unify ( Template_t& tBase, const Template_t tNew )
+{
+	if ( tNew.concurrency )
+		tBase.concurrency = tNew.concurrency;
+
+	if ( tNew.batch )
+		tBase.batch = tNew.batch;
+}
+
 } // namespace Dispatcher

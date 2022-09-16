@@ -657,3 +657,74 @@ TEST ( Dispatcher, RoundRobin_batch_2 )
 	ASSERT_FALSE ( pFIRST->FetchTask ( iJob ) );
 }
 
+struct CheckDispatch { const char* szTemplate; int iConc; int iBatch; };
+
+static CheckDispatch dChecks[] = {
+	{ nullptr, 0, 0 },
+	{ "", 0, 0 },
+	{ " ", 0, 0 },
+	{ "/", 0, 0 },
+	{ "0", 0, 0 },
+	{ "*", 0, 0 },
+	{ "0/", 0, 0 },
+	{ "*/", 0, 0 },
+	{ "/0", 0, 0 },
+	{ "/*", 0, 0 },
+	{ "*/*", 0, 0 },
+	{ "*/0", 0, 0 },
+	{ "0/0", 0, 0 },
+	{ "0/*", 0, 0 },
+	{ "13", 13, 0 },
+	{ "13/", 13, 0 },
+	{ "13/*", 13, 0 },
+	{ "13/0", 13, 0 },
+	{ "/3", 0, 3 },
+	{ "0/3", 0, 3 },
+	{ "*/3", 0, 3 },
+	{ "13/3", 13, 3 },
+	{ " 13/3", 13, 3 },
+	{ "13 /3", 13, 3 },
+	{ "13/ 3", 13, 3 },
+	{ "13/3 ", 13, 3 },
+	{ " 13 /3", 13, 3 },
+	{ " 13/ 3", 13, 3 },
+	{ " 13/3 ", 13, 3 },
+	{ " 13 / 3", 13, 3 },
+	{ " 13 /3 ", 13, 3 },
+	{ " 13 / 3 ", 13, 3 },
+};
+
+void Check ( const char* szTemplate, int iConc, int iBatch )
+{
+	auto tVal = Dispatcher::ParseTemplate ( szTemplate );
+	ASSERT_EQ ( tVal.concurrency, iConc ) << szTemplate;
+	ASSERT_EQ ( tVal.batch, iBatch ) << szTemplate;
+}
+
+TEST ( Dispatcher, ParseOne )
+{
+	for ( const auto& tCheck : dChecks )
+		Check ( tCheck.szTemplate, tCheck.iConc, tCheck.iBatch );
+}
+
+void CheckTwo ( const char* szTemplate, int iConcx, int iBatchx, int iConcy, int iBatchy )
+{
+	auto tVal = Dispatcher::ParseTemplates ( szTemplate );
+	ASSERT_EQ ( tVal.first.concurrency, iConcx ) << szTemplate;
+	ASSERT_EQ ( tVal.first.batch, iBatchx ) << szTemplate;
+	ASSERT_EQ ( tVal.second.concurrency, iConcy ) << szTemplate;
+	ASSERT_EQ ( tVal.second.batch, iBatchy ) << szTemplate;
+}
+
+TEST ( Dispatcher, ParseCouple )
+{
+	CheckTwo ( nullptr, 0, 0, 0, 0 );
+	CheckTwo ( "", 0, 0, 0, 0 );
+	for ( const auto& x : dChecks )
+		for ( const auto& y : dChecks )
+		{
+			StringBuilder_c sTmp;
+			sTmp << x.szTemplate << '+' << y.szTemplate;
+			CheckTwo(sTmp.cstr(),x.iConc,x.iBatch,y.iConc,y.iBatch);
+		}
+}

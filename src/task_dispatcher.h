@@ -53,5 +53,33 @@ std::unique_ptr<TaskDispatcher_i> MakeTrivial ( int iJobs, int iConcurrency );
 // default iFibers=0 makes iConcurrency fibers.
 std::unique_ptr<TaskDispatcher_i> MakeRoundRobin ( int iJobs, int iConcurrency, int iBatch=1 );
 
+struct Template_t
+{
+	int concurrency = 0;
+	int batch = 0;
+};
+
+// template is a string like "10/3", where 10 is concurrency, 3 is batch size.
+// if concurrency = 0, default concurrency will be used.
+// if batch size = 0, default trivial dispatcher will be used.
+// Any zero value may be omitted or replaced with '*'.
+// Default (trivial) dispatcher may be described as empty '', and also '*/*', '0/0', '0/', '*/', '/0', '*', etc.
+// Trivial dispatcher with 20 threads is '20/*', '20/0', '20/', or simple '20'.
+// Round-robin dispatcher with batch=2 is '*/2', '0/2', or simple '/2'.
+// Round-robin dispatcher with 20 threads and batch=3 is '20/3'.
+Template_t ParseTemplate ( const char* szTemplate );
+Template_t ParseTemplate ( Str_t sTemplate );
+
+// couple of templates, separated by '+', like:
+// '30+3' - trivial first of 30 threads + trivial second of 3 threads
+// '+/2' - trivial first + round-robin second with default threads and batch=2
+// '10' - trivial first of 10 threads + default trivial second
+// '/1+10' - round-robin first with default threads and batch=1 + trivial second with 10 threads
+// '4/2+2/1' - rr first with 4 threads and batch=2 + rr second with 2 threads and batch=1
+std::pair<Template_t, Template_t> ParseTemplates ( const char* szTemplates );
+std::pair<Template_t, Template_t> ParseTemplates ( Str_t sTemplates );
+
+// override tBase with non-default tNew
+void Unify ( Template_t& tBase, Template_t tNew );
 
 } // namespace Dispatcher

@@ -10603,7 +10603,9 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 		if ( iChunk>=iJobs || fnCheckInterrupt() )
 			return; // already nothing to do, early finish.
 
-		auto tCtx = tClonableCtx.CloneNewContext ( &iChunk );
+		auto tJobContext = tClonableCtx.CloneNewContext();
+		auto& tCtx = tJobContext.first;
+		tClonableCtx.SetJobOrder ( tJobContext.second, iChunk );
 		Threads::Coro::Throttler_c tThrottler ( session::GetThrottlingPeriodMS() );
 		int iTick=1; // num of times coro rescheduled by throttler
 		while ( !fnCheckInterrupt() ) // some earlier job met error; abort.

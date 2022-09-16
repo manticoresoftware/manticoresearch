@@ -75,11 +75,12 @@ ClientSession_c* ClientTaskInfo_t::GetClientSession()
 {
 	return m_pSession;
 }
-
+namespace {
+	volatile int g_iDistThreads = 0;
+}
 volatile int &getDistThreads ()
 {
-	static int iDistThreads = 0;
-	return iDistThreads;
+	return g_iDistThreads;
 }
 
 int GetEffectiveDistThreads ()

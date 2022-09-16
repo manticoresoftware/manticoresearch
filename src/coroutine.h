@@ -141,7 +141,7 @@ class ClonableCtx_T
 {
 	REFCONTEXT m_dParentContext;
 	CSphFixedVector<Optional_T<CONTEXT>> m_dChildrenContexts {0};
-	CSphFixedVector<int> m_dJobIds {0};
+	CSphFixedVector<int> m_dJobsOrder {0};
 
 	std::atomic<int> m_iTasks {0};	// each call to CloneNewContext() increases value
 	bool m_bDisabled = true;		// ctr with disabled (single-thread) working
@@ -151,14 +151,17 @@ public:
 	explicit ClonableCtx_T ( PARAMS && ... tParams  );
 
 	// Num of parallel workers to complete iTasks jobs
-	int Concurrency ( int iTasks );
+	int Concurrency ( int iTasks ) const;
 	void LimitConcurrency ( int iDistThreads );
 
 	void Setup ( int iContexts );
 	void Finalize();
 
-	// called once per coroutine, when it really has to process something
-	REFCONTEXT CloneNewContext ( const int * pJobId = nullptr );
+	// called once per coroutine, when it really has to process something. 2-nd param is JobID, m.b. used in SetJobOrder.
+	std::pair<REFCONTEXT, int> CloneNewContext ();
+
+	// set (optionally) 'weight' of a job; ForAll will iterate jobs according to ascending weights
+	void SetJobOrder ( int iJobID, int iOrder );
 
 	template <typename FNPROCESSOR>
 	void ForAll ( FNPROCESSOR fnProcess, bool bIncludeRoot=true );

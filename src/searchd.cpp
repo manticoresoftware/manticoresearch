@@ -5991,7 +5991,8 @@ void SearchHandler_c::RunLocalSearches ()
 		CSphVector<ISphMatchSorter *> dSorters ( iQueries );
 		dSorters.ZeroVec ();
 
-		auto tCtx = dCtx.CloneNewContext();
+		auto tJobContext = dCtx.CloneNewContext();
+		auto& tCtx = tJobContext.first;
 		Threads::Coro::Throttler_c tThrottler ( session::GetThrottlingPeriodMS () );
 		while ( iJob<iJobs )
 		{
@@ -7861,7 +7862,8 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 		if ( iJob>=iJobs )
 			return; // already nothing to do, early finish.
 
-		auto tCtx = dCtx.CloneNewContext ();
+		auto tJobContext = dCtx.CloneNewContext();
+		auto& tCtx = tJobContext.first;
 		Threads::Coro::Throttler_c tThrottler ( session::GetThrottlingPeriodMS () );
 		while (true)
 		{

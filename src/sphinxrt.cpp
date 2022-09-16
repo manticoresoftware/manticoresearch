@@ -6698,7 +6698,9 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 		if ( iChunk<0 || fnCheckInterrupt() )
 			return; // already nothing to do, early finish.
 
-		auto tCtx = tClonableCtx.CloneNewContext ( &iChunk );
+		auto tJobContext = tClonableCtx.CloneNewContext();
+		auto& tCtx = tJobContext.first;
+		tClonableCtx.SetJobOrder ( tJobContext.second, iChunk ); // fixme! Same as in single search, but here we walk in reverse order. Need to fix?
 		Threads::Coro::Throttler_c tThrottler ( session::GetThrottlingPeriodMS () );
 		int iTick=1; // num of times coro rescheduled by throttler
 		while ( !fnCheckInterrupt() ) // some earlier job met error; abort.

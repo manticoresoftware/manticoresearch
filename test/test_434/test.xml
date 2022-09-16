@@ -116,6 +116,13 @@ select sum(status) from test;
 <!-- groupby over bool -->
 select groupby(),count(*) from test group by status;
 
+<!-- aggregates over timestamp -->
+select avg(date) from test;
+select min(date) from test;
+select max(date) from test;
+select sum(date) from test;
+
+
 </sphinxql></queries>
 
 </test>

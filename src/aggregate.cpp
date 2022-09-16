@@ -662,6 +662,7 @@ AggrFunc_i * CreateAggrSum ( const CSphColumnInfo & tAttr )
 	{
 	case SPH_ATTR_INTEGER:
 	case SPH_ATTR_BOOL:
+	case SPH_ATTR_TIMESTAMP:
 		if ( bColumnar )
 			return new AggrSumColumnar_T<DWORD> ( tAttr.m_tLocator, sColumnarCol );
 		
@@ -697,6 +698,7 @@ AggrFunc_i * CreateAggrAvg ( const CSphColumnInfo & tAttr, const CSphAttrLocator
 	{
 	case SPH_ATTR_INTEGER:
 	case SPH_ATTR_BOOL:
+	case SPH_ATTR_TIMESTAMP:
 		if ( bColumnar )
 			return new AggrAvgColumnar_T<DWORD> ( tAttr.m_tLocator, sColumnarCol, tCount );
 
@@ -738,6 +740,7 @@ AggrFunc_i * CreateAggrMin ( const CSphColumnInfo & tAttr )
 	{
 	case SPH_ATTR_INTEGER:
 	case SPH_ATTR_BOOL:
+	case SPH_ATTR_TIMESTAMP:
 		if ( bColumnar )
 			return new AggrMinColumnar_T<DWORD> ( tAttr.m_tLocator, sColumnarCol );
 
@@ -779,6 +782,7 @@ AggrFunc_i * CreateAggrMax ( const CSphColumnInfo & tAttr )
 	{
 	case SPH_ATTR_INTEGER:
 	case SPH_ATTR_BOOL:
+	case SPH_ATTR_TIMESTAMP:
 		if ( bColumnar )
 			return new AggrMaxColumnar_T<DWORD> ( tAttr.m_tLocator, sColumnarCol );
 

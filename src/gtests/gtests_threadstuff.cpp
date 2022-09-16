@@ -12,6 +12,8 @@
 
 #include "threadutils.h"
 #include "coroutine.h"
+#include "task_dispatcher.h"
+
 #include <atomic>
 
 void SetStderrLogger ();
@@ -487,5 +489,171 @@ TEST ( ThreadPool, CoroPromiceFutureConcept )
 	ASSERT_FALSE ( fnCondition ( iCheck ) );
 	ASSERT_EQ ( iCheck, 16 );
 	});
+}
+
+TEST ( Dispatcher, Trivial )
+{
+	auto pDispatcher = Dispatcher::MakeTrivial(6, 3);
+
+	auto pWork1 = pDispatcher->MakeSource();
+	int iJob = -1;
+	ASSERT_TRUE ( pWork1->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 0 );
+
+	// wasn't consumed, same value
+	ASSERT_TRUE ( pWork1->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 0 );
+
+	iJob = -1;
+	ASSERT_TRUE ( pWork1->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 1 );
+
+	auto pWork2 = pDispatcher->MakeSource();
+	auto pWork3 = pDispatcher->MakeSource();
+
+	// we can make source over initial concurrency, since dispatcher is trivial
+	auto pWork4 = pDispatcher->MakeSource();
+
+	iJob = -1;
+	ASSERT_TRUE ( pWork2->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 2 );
+
+	iJob = -1;
+	ASSERT_TRUE ( pWork3->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 3 );
+
+	iJob = -1;
+	ASSERT_TRUE ( pWork4->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 4 );
+
+	iJob = -1;
+	ASSERT_TRUE ( pWork1->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 5 );
+
+	// should work as iJob wasn't consumed
+	ASSERT_TRUE ( pWork3->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 5 );
+
+	iJob = -1;
+	// all jobs are done
+	ASSERT_FALSE ( pWork3->FetchTask ( iJob ) );
+}
+
+TEST ( Dispatcher, RoundRobin_batch_1 )
+{
+	auto pDispatcher = Dispatcher::MakeRoundRobin ( 8, 2 );
+
+	auto pFIRST = pDispatcher->MakeSource();
+	int iJob = -1;
+	ASSERT_TRUE ( pFIRST->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 0 );
+
+	// wasn't consumed, same value
+	ASSERT_TRUE ( pFIRST->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 0 );
+
+	iJob = -1;
+	ASSERT_TRUE ( pFIRST->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 2 );
+
+	iJob = -1;
+	ASSERT_TRUE ( pFIRST->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 4 );
+
+	auto pSECOND = pDispatcher->MakeSource();
+	auto pTHIRD = pDispatcher->MakeSource();
+
+	iJob = -1;
+	ASSERT_TRUE ( pSECOND->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 1 );
+
+	iJob = -1;
+	ASSERT_TRUE ( pSECOND->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 3 );
+
+	iJob = -1;
+	ASSERT_TRUE ( pSECOND->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 5 );
+
+	// this one is empty, will fail
+	iJob = -1;
+	ASSERT_FALSE ( pTHIRD->FetchTask ( iJob ) );
+
+	iJob = -1;
+	ASSERT_TRUE ( pSECOND->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 7 );
+
+	// this one is done
+	iJob = -1;
+	ASSERT_FALSE ( pSECOND->FetchTask ( iJob ) );
+
+	iJob = -1;
+	ASSERT_TRUE ( pFIRST->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 6 );
+
+	// this one is also done
+	iJob = -1;
+	ASSERT_FALSE ( pFIRST->FetchTask ( iJob ) );
+}
+
+TEST ( Dispatcher, RoundRobin_batch_2 )
+{
+	auto pDispatcher = Dispatcher::MakeRoundRobin ( 8, 2, 3 );
+
+	auto pFIRST = pDispatcher->MakeSource();
+	int iJob = -1;
+	ASSERT_TRUE ( pFIRST->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 0 );
+
+	// wasn't consumed, same value
+	ASSERT_TRUE ( pFIRST->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 0 );
+
+	iJob = -1;
+	ASSERT_TRUE ( pFIRST->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 1 );
+
+	// defer first source and create 2 more
+	auto pSECOND = pDispatcher->MakeSource();
+	auto pTHIRD = pDispatcher->MakeSource();
+
+	iJob = -1;
+	ASSERT_TRUE ( pSECOND->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 3 );
+
+	iJob = -1;
+	ASSERT_TRUE ( pSECOND->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 4 );
+
+	// now query 3-rd, it is empty, will fail
+	iJob = -1;
+	ASSERT_FALSE ( pTHIRD->FetchTask ( iJob ) );
+
+	// finish with 2-nd. It has only jobs 3-5 out of 8.
+	iJob = -1;
+	ASSERT_TRUE ( pSECOND->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 5 );
+
+	// this one is done
+	iJob = -1;
+	ASSERT_FALSE ( pSECOND->FetchTask ( iJob ) );
+
+	// finish 1-st reader. It has 3 more: 2, then 6 and 7
+
+	iJob = -1;
+	ASSERT_TRUE ( pFIRST->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 2 );
+
+	iJob = -1;
+	ASSERT_TRUE ( pFIRST->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 6 );
+
+	iJob = -1;
+	ASSERT_TRUE ( pFIRST->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 7 );
+
+	// this one is finally done also
+	iJob = -1;
+	ASSERT_FALSE ( pFIRST->FetchTask ( iJob ) );
 }
 

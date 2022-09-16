@@ -18,12 +18,14 @@
 #include "source_stats.h"
 #include "match.h"
 #include "schema/schema.h"
+#include "std/openhash.h"
 
 class CSphHTMLStripper;
 class CSphDict;
 using DictRefPtr_c = CSphRefcountedPtr<CSphDict>;
 class ISphFieldFilter;
 class ISphTokenizer;
+class CSphAutofile;
 using TokenizerRefPtr_c = CSphRefcountedPtr<ISphTokenizer>;
 
 /// how to handle IO errors in file fields
@@ -138,7 +140,11 @@ public:
 	/// returns false and fills out-string with error message on failure
 	/// returns true and sets m_tDocInfo.m_uDocID to 0 on eof
 	/// returns true and sets m_tDocInfo.m_uDocID to non-0 on success
-	virtual ISphHits *		IterateJoinedHits ( CSphString & sError );
+	virtual ISphHits *		IterateJoinedHits ( CSphReader & tReader, CSphString & sError );
+
+	/// get fields and store them in a file
+	/// dJoinedOffsets holds per-field offsets to data in that file
+	virtual bool			FetchJoinedFields ( CSphAutofile & tFile, CSphVector<std::unique_ptr<OpenHash_T<uint64_t, uint64_t>>> & dJoinedOffsets, CSphString & sError ) { return false; }
 
 	/// begin iterating values of out-of-document multi-valued attribute iAttr
 	/// will fail if iAttr is out of range, or is not multi-valued

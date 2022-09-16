@@ -79,7 +79,7 @@ source multi_joined
 	sql_query = SELECT 490495 id, 11 idd, 'Beast Obsessed 3 - Scene 12 - Future Works' t1, '' t2 UNION SELECT 490496 id, 11 idd, 'Hot Fonde Aaliyah Love Foo Her Stud Longer' t1, 'When Ryan comes into the picture' t2 UNION SELECT 490497 id, 11 idd, 'Daia Gloomer Big Noob In Prague' t1, 'Daia Gloomer Big Noob' t2
 
 	sql_joined_field = joined_t1 from query; SELECT 0 id, 'aspirine brunette fooneling powder solo latina group salsa webcam gum idling shovel european killing too tan lines' t1 UNION SELECT 490495 id, 'job babe cow busty mugshot wire all full trip' t1 UNION SELECT 490496 id, 'hd fonde style glamour love madison ryan aaliyah' t1  UNION SELECT 490497 id, 'job salsa redhead famous shot tilt daia gloomer' t1
-	sql_joined_field = joined_t1 from query; SELECT 490496 id, 'Aaliyah Love' t1
+	sql_joined_field = joined_t2 from query; SELECT 490496 id, 'Aaliyah Love' t1
 }
 
 index multi_joined

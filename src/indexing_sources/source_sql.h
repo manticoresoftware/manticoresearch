@@ -107,7 +107,8 @@ struct CSphSource_SQL : CSphSource
 	const int *			GetFieldLengths () const override;
 	void				PostIndex () override;
 
-	ISphHits *			IterateJoinedHits ( CSphString & sError ) override;
+	ISphHits *			IterateJoinedHits ( CSphReader & tReader, CSphString & sError ) override;
+	bool				FetchJoinedFields ( CSphAutofile & tFile, CSphVector<std::unique_ptr<OpenHash_T<uint64_t, uint64_t>>> & dJoinedOffsets, CSphString & sError ) override;
 
 	bool				IterateMultivaluedStart ( int iAttr, CSphString & sError ) override;
 	bool				IterateMultivaluedNext ( int64_t & iDocID, int64_t & iMvaValue ) override;
@@ -115,10 +116,19 @@ struct CSphSource_SQL : CSphSource
 	bool				IterateKillListStart ( CSphString & sError ) override;
 	bool				IterateKillListNext ( DocID_t & tDocId ) override;
 
-private:
-	bool				m_bSqlConnected = false;	///< am i connected?
 
 protected:
+	static const int			MACRO_COUNT = 2;
+	static const char * const	MACRO_VALUES [ MACRO_COUNT ];
+
+	/// by what reason the internal SetupRanges called
+	enum ERangesReason
+	{
+		SRE_DOCS,
+		SRE_MVA,
+		SRE_JOINEDHITS
+	};
+
 	CSphString			m_sSqlDSN;
 
 	BYTE *				m_dFields [ SPH_MAX_FIELDS ] { nullptr };
@@ -132,7 +142,7 @@ protected:
 	int					m_iMultiAttr = -1;		///< multi-valued attr being currently fetched
 	int					m_iSqlFields = 0;		///< field count (for row dumper)
 
-	CSphSourceParams_SQL		m_tParams;
+	CSphSourceParams_SQL m_tParams;
 
 	bool				m_bCanUnpack = false;
 	bool				m_bUnpackFailed = false;
@@ -142,24 +152,19 @@ protected:
 	int					m_iJoinedHitField = -1;	///< currently pulling joined hits from this field (index into schema; -1 if not pulling)
 	DocID_t				m_iJoinedHitID = 0;		///< last document id
 	int					m_iJoinedHitPos = 0;	///< last hit position
+	CSphVector<BYTE>	m_dJoinedField;
+	BYTE *				m_pJoinedFields = nullptr;
+	SphOffset_t			m_iJoinedFileSize = 0;
 
-	static const int			MACRO_COUNT = 2;
-	static const char * const	MACRO_VALUES [ MACRO_COUNT ];
-
-protected:
-	/// by what reason the internal SetupRanges called
-	enum ERangesReason
-	{
-		SRE_DOCS,
-		SRE_MVA,
-		SRE_JOINEDHITS
-	};
+	using TinyCol_t = std::pair<int,bool>; // int idx in sql resultset; bool whether it is string
+	CSphVector<TinyCol_t>	m_dDumpMap;
+	SqlEscapedBuilder_c		m_sCollectDump;
+	int 					m_iCutoutDumpSize = 100*1024;
 
 protected:
 	bool					SetupRanges ( const char * sRangeQuery, const char * sQuery, const char * sPrefix, CSphString & sError, ERangesReason iReason );
 	bool					RunQueryStep ( const char * sQuery, CSphString & sError );
 
-protected:
 	virtual void			SqlDismissResult () = 0;
 	virtual bool			SqlQuery ( const char * sQuery ) = 0;
 	virtual bool			SqlIsError () = 0;
@@ -179,15 +184,12 @@ protected:
 	Str_t					SqlUnpackColumn ( int iFieldIndex, ESphUnpackFormat eFormat );
 	void					ReportUnpackError ( int iIndex, int iError );
 
-	void DumpRowsHeader ();
-	void DumpRowsHeaderSphinxql ();
+	void					DumpRowsHeader();
+	void					DumpRowsHeaderSphinxql();
 
-	void DumpDocument ();
-	void DumpDocumentSphinxql ();
+	void					DumpDocument();
+	void					DumpDocumentSphinxql();
 
-	using TinyCol_t = std::pair<int,bool>; // int idx in sql resultset; bool whether it is string
-	CSphVector<TinyCol_t>	m_dDumpMap;
-	SqlEscapedBuilder_c		m_sCollectDump;
-	int 					m_iCutoutDumpSize = 100*1024;
+private:
+	bool					m_bSqlConnected = false;	///< am i connected?
 };
-

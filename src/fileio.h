@@ -102,6 +102,8 @@ public:
 		return iChunk;
 	}
 
+	SphOffset_t				GetFilesize() const;
+
 protected:
 	int			m_iFD = -1;
 	CSphString m_sFilename;

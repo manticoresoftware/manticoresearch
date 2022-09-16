@@ -1303,8 +1303,6 @@ private:
 
 	bool						SortDocidLookup ( int iFD, int nBlocks, int iMemoryLimit, int nLookupsInBlock, int nLookupsInLastBlock, CSphIndexProgress& tProgress ); // build only
 
-	bool						CollectQueryMvas ( const CSphVector<CSphSource*> & dSources, QueryMvaContainer_c & tMvaContainer ); // build only
-
 private:
 	bool						JuggleFile ( ESphExt eExt, CSphString & sError, bool bNeedSrc=true, bool bNeedDst=true ) const;
 	XQNode_t *					ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta & tMeta, CSphScopedPayload * pPayloads, DWORD uQueryDebugFlags ) const;
@@ -1322,12 +1320,14 @@ private:
 	bool						AddRemoveFromDocstore ( const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError );
 
 	bool						Build_SetupInplace ( SphOffset_t & iHitsGap, int iHitsMax, int iFdHits ) const; // fixme! build only
-	bool						Build_SetupDocstore ( std::unique_ptr<DocstoreBuilder_i> & pDocstore, CSphBitvec & dStoredFields, CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage ); // fixme! build only
+	bool						Build_SetupDocstore ( std::unique_ptr<DocstoreBuilder_i> & pDocstore, CSphBitvec & dStoredFields, CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreFieldStorage, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage ); // fixme! build only
 	bool						Build_SetupBlobBuilder ( std::unique_ptr<BlobRowBuilder_i> & pBuilder ); // fixme! build only
 	bool						Build_SetupColumnar ( std::unique_ptr<columnar::Builder_i> & pBuilder, CSphBitvec & tColumnarAttrs ); // fixme! build only
 
-	void						Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, DocID_t tDocID, QueryMvaContainer_c & tMvaContainer, CSphSource & tSource, const CSphBitvec & dStoredFields, const CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage ); // fixme! build only
+	void						Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, DocID_t tDocID, QueryMvaContainer_c & tMvaContainer, CSphSource & tSource, const CSphBitvec & dStoredFields, const CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreFieldStorage, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage, const CSphVector<std::unique_ptr<OpenHash_T<uint64_t, uint64_t>>> & dJoinedOffsets, CSphReader & tJoinedReader ); // fixme! build only
 	bool						Build_StoreBlobAttrs ( DocID_t tDocId, SphOffset_t & tOffset, BlobRowBuilder_i & tBlobRowBuilderconst, QueryMvaContainer_c & tMvaContainer, AttrSource_i & tSource, bool bForceSource ); // fixme! build only
+	bool						Build_CollectQueryMvas ( const CSphVector<CSphSource*> & dSources, QueryMvaContainer_c & tMvaContainer ); // build only
+	bool						Build_CollectJoinedFields ( const CSphVector<CSphSource*> & dSources, CSphAutofile & tFile, CSphVector<std::unique_ptr<OpenHash_T<uint64_t, uint64_t>>> & dJoinedOffsets );
 
 	bool						SpawnReader ( DataReaderFactoryPtr_c & m_pFile, ESphExt eExt, DataReaderFactory_c::Kind_e eKind, int iBuffer, FileAccess_e eAccess );
 	bool						SpawnReaders();
@@ -4310,7 +4310,7 @@ private:
 };
 
 
-bool CSphIndex_VLN::CollectQueryMvas ( const CSphVector<CSphSource*> & dSources, QueryMvaContainer_c & tMvaContainer )
+bool CSphIndex_VLN::Build_CollectQueryMvas ( const CSphVector<CSphSource*> & dSources, QueryMvaContainer_c & tMvaContainer )
 {
 	CSphBitvec dQueryMvas ( m_tSchema.GetAttrsCount() );
 	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
@@ -4360,6 +4360,25 @@ bool CSphIndex_VLN::CollectQueryMvas ( const CSphVector<CSphSource*> & dSources,
 
 	return true;
 }
+
+
+bool CSphIndex_VLN::Build_CollectJoinedFields ( const CSphVector<CSphSource*> & dSources, CSphAutofile & tFile, CSphVector<std::unique_ptr<OpenHash_T<uint64_t, uint64_t>>> & dJoinedOffsets )
+{
+	for ( auto & pSource : dSources )
+	{
+		assert ( pSource );
+		if ( !pSource->Connect ( m_sLastError ) )
+			return false;
+
+		if ( !pSource->FetchJoinedFields ( tFile, dJoinedOffsets, m_sLastError ) )
+			return false;
+
+		pSource->Disconnect();
+	}
+
+	return true;
+}
+
 
 struct Mva32Uniq_fn
 {
@@ -5015,7 +5034,7 @@ bool CheckStoredFields ( const CSphSchema & tSchema, const CSphIndexSettings & t
 }
 
 
-bool CSphIndex_VLN::Build_SetupDocstore ( std::unique_ptr<DocstoreBuilder_i> & pDocstore, CSphBitvec & dStoredFields, CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage )
+bool CSphIndex_VLN::Build_SetupDocstore ( std::unique_ptr<DocstoreBuilder_i> & pDocstore, CSphBitvec & dStoredFields, CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreFieldStorage, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage )
 {
 	if ( !m_tSchema.HasStoredFields() && !m_tSchema.HasStoredAttrs() )
 		return true;
@@ -5037,6 +5056,7 @@ bool CSphIndex_VLN::Build_SetupDocstore ( std::unique_ptr<DocstoreBuilder_i> & p
 		if ( pBuilder->GetFieldId ( m_tSchema.GetAttr(i).m_sName, DOCSTORE_ATTR )!=-1 )
 			dStoredAttrs.BitSet(i);
 
+	dTmpDocstoreFieldStorage.Resize ( m_tSchema.GetFieldsCount() );
 	dTmpDocstoreAttrStorage.Resize ( m_tSchema.GetAttrsCount() );
 
 	pDocstore = std::move ( pBuilder );
@@ -5136,7 +5156,14 @@ static VecTraits_T<const BYTE> GetAttrForDocstore ( DocID_t tDocID, int iAttr, c
 }
 
 
-void CSphIndex_VLN::Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, DocID_t tDocID, QueryMvaContainer_c & tMvaContainer, CSphSource & tSource, const CSphBitvec & dStoredFields, const CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage )
+static uint64_t CreateJoinedKey ( DocID_t tDocID, int iEntry )
+{
+	uint64_t uRes = sphFNV64 ( &tDocID, sizeof(tDocID) );
+	return sphFNV64 ( &iEntry, sizeof(iEntry), uRes );
+}
+
+
+void CSphIndex_VLN::Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, DocID_t tDocID, QueryMvaContainer_c & tMvaContainer, CSphSource & tSource, const CSphBitvec & dStoredFields, const CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreFieldStorage, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage, const CSphVector<std::unique_ptr<OpenHash_T<uint64_t, uint64_t>>> & dJoinedOffsets, CSphReader & tJoinedReader )
 {
 	if ( !pDocstoreBuilder )
 		return;
@@ -5153,7 +5180,40 @@ void CSphIndex_VLN::Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, 
 		if ( !dStoredFields.BitGet(i) )
 			tDoc.m_dFields.Remove(iField);
 		else
+		{
+			// override with joined fields that were already prefetched
+			if ( dJoinedOffsets.GetLength() && dJoinedOffsets[i] )
+			{
+				uint64_t * pOffset;
+				int iEntry = 0;
+				auto & dTmp = dTmpDocstoreFieldStorage[i];
+				dTmp.Resize(0);
+				while ( ( pOffset = dJoinedOffsets[i]->Find ( CreateJoinedKey ( tDocID, iEntry ) ) ) != nullptr )
+				{
+					tJoinedReader.SeekTo ( *pOffset, 0 );
+
+					tJoinedReader.UnzipOffset();	// docid
+					tJoinedReader.UnzipInt();		// joined field id
+					if ( m_tSchema.GetField(i).m_bPayload )
+						tJoinedReader.UnzipInt();	// payload
+
+					DWORD uLength = tJoinedReader.UnzipInt();
+					DWORD uOldFieldLength = dTmp.GetLength();
+					DWORD uSpaceOffset = uOldFieldLength ? 1 : 0;
+					DWORD uNewFieldLength = uOldFieldLength + uLength + uSpaceOffset;
+					dTmp.Resize(uNewFieldLength);
+					tJoinedReader.GetBytes ( &dTmp[uOldFieldLength+uSpaceOffset], uLength );
+					if ( uSpaceOffset )
+						dTmp[uOldFieldLength] = ' ';
+
+					iEntry++;
+				}
+
+				tDoc.m_dFields[iField] = dTmp;
+			}
+
 			iField++;
+		}
 	}
 
 	VecTraits_T<BYTE> * pAddedAttrs = tDoc.m_dFields.AddN ( dStoredAttrs.BitCount() );
@@ -5205,6 +5265,9 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	if ( !CheckStoredFields ( m_tSchema, m_tSettings, m_sLastError ) )
 		return 0;
 
+
+	bool bHaveJoined = pSource0->HasJoinedFields();
+
 	bool bHaveQueryMVAs = false;
 	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
 	{
@@ -5225,10 +5288,21 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 		// temporary storage for MVAs that we fetch from queries
 		// we might want to dump that to file later
-		if ( !CollectQueryMvas ( dSources, tQueryMvaContainer ) )
+		if ( !Build_CollectQueryMvas ( dSources, tQueryMvaContainer ) )
 			return 0;
 	}
 
+	CSphAutofile tTmpJoinedFields ( GetIndexFileName("tmp3"), SPH_O_NEW, m_sLastError, true );
+	CSphVector<std::unique_ptr<OpenHash_T<uint64_t, uint64_t>>> dJoinedOffsets;
+	CSphReader tJoinedReader;
+	if ( bHaveJoined )
+	{
+		pSource0->Disconnect();
+		if ( !Build_CollectJoinedFields ( dSources, tTmpJoinedFields, dJoinedOffsets ) )
+			return 0;
+
+		tJoinedReader.SetFile(tTmpJoinedFields);
+	}
 
 	int iFieldLens = m_tSchema.GetAttrId_FirstFieldLen();
 
@@ -5327,8 +5401,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 	std::unique_ptr<DocstoreBuilder_i> pDocstoreBuilder;
 	CSphBitvec dStoredFields, dStoredAttrs;
-	CSphVector<CSphVector<BYTE>> dTmpDocstoreAttrStorage;
-	if ( !Build_SetupDocstore ( pDocstoreBuilder, dStoredFields, dStoredAttrs, dTmpDocstoreAttrStorage ) )
+	CSphVector<CSphVector<BYTE>> dTmpDocstoreFieldStorage, dTmpDocstoreAttrStorage;
+	if ( !Build_SetupDocstore ( pDocstoreBuilder, dStoredFields, dStoredAttrs, dTmpDocstoreFieldStorage, dTmpDocstoreAttrStorage ) )
 		return 0;
 
 	std::unique_ptr<HistogramContainer_c> pHistogramContainer;
@@ -5360,8 +5434,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	{
 		// connect and check schema
 		CSphSource * pSource = dSources[iSource];
-
-		bool bNeedToConnect = iSource>0 || bHaveQueryMVAs;
+		bool bNeedToConnect = iSource>0 || bHaveQueryMVAs || bHaveJoined;
 		if ( bNeedToConnect )
 		{
 			if ( !pSource->Connect ( m_sLastError )
@@ -5372,9 +5445,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				return 0;
 			}
 		}
-
-		// joined filter
-		bool bGotJoined = pSource->HasJoinedFields();
 
 		// fallback blob source (for string and json )
 		if ( bGotPrevIndex )
@@ -5517,7 +5587,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				nDocidLookupBlocks++;
 			}
 
-			Build_AddToDocstore ( pDocstoreBuilder.get(), tDocID, tQueryMvaContainer, *pSource, dStoredFields, dStoredAttrs, dTmpDocstoreAttrStorage );
+			Build_AddToDocstore ( pDocstoreBuilder.get(), tDocID, tQueryMvaContainer, *pSource, dStoredFields, dStoredAttrs, dTmpDocstoreFieldStorage, dTmpDocstoreAttrStorage, dJoinedOffsets, tJoinedReader );
 
 			// go on, loop next document
 		}
@@ -5532,7 +5602,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			return 0;
 
 		// fetch joined fields
-		if ( bGotJoined )
+		if ( bHaveJoined )
 		{
 			// flush tail of regular hits
 			int iHits = int ( pHits - dHits.Begin() );
@@ -5548,10 +5618,12 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				m_pDict->HitblockReset ();
 			}
 
+			tJoinedReader.SeekTo(0,0);
+
 			while (true)
 			{
 				// get next doc, and handle errors
-				ISphHits * pJoinedHits = pSource->IterateJoinedHits ( m_sLastError );
+				ISphHits * pJoinedHits = pSource->IterateJoinedHits ( tJoinedReader, m_sLastError );
 				if ( !pJoinedHits )
 					return 0;
 

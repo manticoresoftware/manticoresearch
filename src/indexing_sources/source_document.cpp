@@ -108,7 +108,7 @@ bool CSphSource::SetupMorphFields ( CSphString & sError )
 }
 
 
-ISphHits * CSphSource::IterateJoinedHits ( CSphString & )
+ISphHits * CSphSource::IterateJoinedHits ( CSphReader & tReader, CSphString & )
 {
 	static ISphHits dDummy;
 	m_tDocInfo.m_tRowID = INVALID_ROWID; // pretend that's an eof

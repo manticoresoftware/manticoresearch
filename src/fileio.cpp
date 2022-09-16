@@ -447,6 +447,15 @@ void CSphReader::ResetError()
 }
 
 
+SphOffset_t	CSphReader::GetFilesize() const
+{
+	assert ( m_iFD>=0 );
+
+	return sphGetFileSize ( m_iFD, nullptr );
+}
+
+
+
 DWORD CSphReader::UnzipInt()
 {
 	return UnzipValueBE<DWORD> ( [this]() mutable { return GetByte(); } );

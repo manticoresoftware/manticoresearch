@@ -229,6 +229,8 @@ bool CSphSource_MySQL::SqlConnect ()
 
 void CSphSource_MySQL::SqlDisconnect ()
 {
+	m_pMysqlResult = nullptr;
+
 	if ( m_tParams.m_bPrintQueries )
 		fprintf ( stdout, "SQL-DISCONNECT\n" );
 

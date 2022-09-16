@@ -1315,95 +1315,59 @@ struct CmpPairs_fn
 };
 
 
-ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
+static uint64_t CreateKey ( DocID_t tDocID, int iEntry )
 {
-	// iterating of joined hits happens after iterating hits from main query
-	// so we may be sure at this moment no new IDs will be put in m_dAllIds
-	if ( !m_bIdsSorted )
-	{
-		// sorted by docids, but we may have duplicates
-		m_dAllIds.Sort ( CmpPairs_fn() );
-		IDPair_t * pStart = m_dAllIds.Begin();
-		int iLeft = sphUniq ( pStart, m_dAllIds.GetLength(), CmpPairs_fn() );
-		m_dAllIds.Resize(iLeft);
-		m_bIdsSorted = true;
-	}
+	uint64_t uRes = sphFNV64 ( &tDocID, sizeof(tDocID) );
+	return sphFNV64 ( &iEntry, sizeof(iEntry), uRes );
+}
 
-	m_tHits.Resize(0);
 
-	// eof check
+bool CSphSource_SQL::FetchJoinedFields ( CSphAutofile & tFile, CSphVector<std::unique_ptr<OpenHash_T<uint64_t, uint64_t>>> & dJoinedOffsets, CSphString & sError )
+{
 	if ( m_iJoinedHitField>=m_tSchema.GetFieldsCount() )
 	{
-		m_tDocInfo.m_tRowID = INVALID_ROWID;
-		return &m_tHits;
+		m_iJoinedHitField = -1;
+		return true;
 	}
+
+	dJoinedOffsets.Resize(m_tSchema.GetFieldsCount());
+	CSphWriter tWriter;
+	tWriter.SetFile ( tFile, nullptr, sError );
 
 	bool bProcessingRanged = true;
 
-	// my fetch loop
 	while ( m_iJoinedHitField<m_tSchema.GetFieldsCount() )
 	{
-		if ( m_tState.m_bProcessingHits || SqlFetchRow() )
+		if ( SqlFetchRow() )
 		{
-			// next row
+			if ( !dJoinedOffsets[m_iJoinedHitField] )
+				dJoinedOffsets[m_iJoinedHitField] = std::make_unique<OpenHash_T<uint64_t, uint64_t>>();
+
+			auto & hOffsets = *dJoinedOffsets[m_iJoinedHitField];
 			DocID_t tDocId = sphToInt64 ( SqlColumn(0) ); // FIXME! handle conversion errors and zero/max values?
 
-			// lets skip joined document totally if there was no such document ID returned by main query
-			const IDPair_t * pIdPair = m_dAllIds.BinarySearch ( bind ( &IDPair_t::m_tDocID ), tDocId );
-			if ( !pIdPair )
-				continue;
+			int iEntry=0;
+			while ( hOffsets.Find ( CreateKey ( tDocId, iEntry ) ) )
+				iEntry++;
 
-			// field start? restart ids
-			if ( !m_iJoinedHitID )
-				m_iJoinedHitID = tDocId;
+			// add only if there's no existing entry
+			hOffsets.Add ( CreateKey ( tDocId, iEntry ), tWriter.GetPos() );
 
-			// docid asc requirement violated? report an error
-			if ( m_iJoinedHitID>tDocId )
-			{
-				sError.SetSprintf ( "joined field '%s': query MUST return document IDs in ASC order", m_tSchema.GetFieldName(m_iJoinedHitField) );
-				return NULL;
-			}
+			tWriter.ZipOffset(tDocId);
+			tWriter.ZipInt(m_iJoinedHitField);
+			if ( m_tSchema.GetField(m_iJoinedHitField).m_bPayload )
+				tWriter.ZipInt ( sphToDword ( SqlColumn(2) ) );
 
-			// next document? update tracker, reset position
-			if ( m_iJoinedHitID<tDocId )
-			{
-				m_iJoinedHitID = tDocId;
-				m_iJoinedHitPos = 0;
-			}
-
-			if ( !m_tState.m_bProcessingHits )
-			{
-				m_tState = CSphBuildHitsState_t();
-				m_tState.m_iField = m_iJoinedHitField;
-				m_tState.m_iStartField = m_iJoinedHitField;
-				m_tState.m_iEndField = m_iJoinedHitField+1;
-
-				if ( m_tSchema.GetField(m_iJoinedHitField).m_bPayload )
-					m_tState.m_iStartPos = sphToDword ( SqlColumn(2) );
-				else
-					m_tState.m_iStartPos = m_iJoinedHitPos;
-			}
-
-			// build those hits
-			BYTE * dText[] = { (BYTE *)const_cast<char*>( SqlColumn(1) ) };
-			m_tState.m_dFields = dText;
-			m_tState.m_dFieldLengths.Resize(1);
-			m_tState.m_dFieldLengths[0] = SqlColumnLength(1);
-
-			m_tDocInfo.m_tRowID = pIdPair->m_tRowID;
-			BuildHits ( sError, true );
-
-			// update current position
-			if ( !m_tSchema.GetField(m_iJoinedHitField).m_bPayload && !m_tState.m_bProcessingHits && m_tHits.GetLength() )
-				m_iJoinedHitPos = HITMAN::GetPos ( m_tHits.Last().m_uWordPos );
-
-			if ( m_tState.m_bProcessingHits )
-				break;
-		} else if ( SqlIsError() )
+			BYTE * pText = (BYTE *)const_cast<char*>( SqlColumn(1) );
+			DWORD uLength = SqlColumnLength(1);
+			tWriter.ZipInt(uLength);
+			tWriter.PutBytes ( pText, uLength );
+		}
+		else if ( SqlIsError() )
 		{
 			// error while fetching row
 			sError = SqlError();
-			return NULL;
+			return false;
 
 		} else
 		{
@@ -1417,15 +1381,14 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 			else if ( !bRanged || !bProcessingRanged )
 				m_iJoinedHitField++;
 
+			SqlDismissResult();
+
 			// eof check
 			if ( m_iJoinedHitField>=m_tSchema.GetFieldsCount() )
 			{
-				m_tDocInfo.m_tRowID = ( m_tHits.GetLength() ? 0 : INVALID_ROWID ); // to eof or not to eof
-				SqlDismissResult ();
-				return &m_tHits;
+				m_iJoinedHitField = -1;
+				return true;
 			}
-
-			SqlDismissResult ();
 
 			bProcessingRanged = false;
 			bool bCheckNumFields = true;
@@ -1438,9 +1401,10 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 				if ( !SqlQuery ( tJoined.m_sQuery.cstr() ) )
 				{
 					sError = SqlError();
-					return NULL;
+					return false;
 				}
-			} else
+			}
+			else
 			{
 				m_tParams.m_iRangeStep = m_tParams.m_iRefRangeStep;
 
@@ -1452,7 +1416,7 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 					CSphString sPrefix;
 					sPrefix.SetSprintf ( "joined field '%s' ranged query: ", tJoined.m_sName.cstr() );
 					if ( !SetupRanges ( sRange.cstr(), tJoined.m_sQuery.cstr(), sPrefix.cstr(), sError, SRE_JOINEDHITS ) )
-						return NULL;
+						return false;
 
 					m_tCurrentID = m_tMinID;
 				}
@@ -1463,21 +1427,100 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 				bCheckNumFields = bRes;
 
 				if ( !sError.IsEmpty() )
-					return NULL;
+					return false;
 			}
 
 			const int iExpected = m_tSchema.GetField(m_iJoinedHitField).m_bPayload ? 3 : 2;
 			if ( bCheckNumFields && SqlNumFields()!=iExpected )
 			{
-				const char * sName = m_tSchema.GetField(m_iJoinedHitField).m_sName.cstr();
-				sError.SetSprintf ( "joined field '%s': query MUST return exactly %d columns, got %d", sName, iExpected, SqlNumFields() );
-				return NULL;
+				const char * szName = m_tSchema.GetField(m_iJoinedHitField).m_sName.cstr();
+				sError.SetSprintf ( "joined field '%s': query MUST return exactly %d columns, got %d", szName, iExpected, SqlNumFields() );
+				return false;
 			}
-
-			m_iJoinedHitID = 0;
-			m_iJoinedHitPos = 0;
 		}
 	}
+
+	m_iJoinedHitField = -1;
+	return true;
+}
+
+
+ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphReader & tReader, CSphString & sError )
+{
+	// iterating of joined hits happens after iterating hits from main query
+	// so we may be sure at this moment no new IDs will be put in m_dAllIds
+	if ( !m_bIdsSorted )
+	{
+		// sorted by docids, but we may have duplicates
+		m_dAllIds.Sort ( CmpPairs_fn() );
+		IDPair_t * pStart = m_dAllIds.Begin();
+		int iLeft = sphUniq ( pStart, m_dAllIds.GetLength(), CmpPairs_fn() );
+		m_dAllIds.Resize(iLeft);
+		m_bIdsSorted = true;
+
+		m_iJoinedFileSize = tReader.GetFilesize();
+	}
+
+	m_tHits.Resize(0);
+	while ( m_tState.m_bProcessingHits || tReader.GetPos()<m_iJoinedFileSize )
+	{
+		if ( !m_tState.m_bProcessingHits )
+		{
+			DocID_t tDocId = tReader.UnzipOffset();
+			int iField = tReader.UnzipInt();
+			int iStartPos = 0;
+			if ( m_tSchema.GetField(iField).m_bPayload )
+				iStartPos = tReader.UnzipInt();
+
+			DWORD uLength = tReader.UnzipInt();
+			m_dJoinedField.Resize(uLength);
+			tReader.GetBytes ( m_dJoinedField.Begin(), uLength );
+
+			// lets skip joined document totally if there was no such document ID returned by main query
+			const IDPair_t * pIdPair = m_dAllIds.BinarySearch ( bind ( &IDPair_t::m_tDocID ), tDocId );
+			if ( !pIdPair )
+				continue;
+
+			// next field/document? reset position
+			if ( tDocId!=m_iJoinedHitID || iField!=m_iJoinedHitField )
+			{
+				m_iJoinedHitField = iField;
+				m_iJoinedHitID = tDocId;
+				m_iJoinedHitPos = 0;
+			}
+
+			m_tState = CSphBuildHitsState_t();
+			m_tState.m_iField = m_iJoinedHitField;
+			m_tState.m_iStartField = m_iJoinedHitField;
+			m_tState.m_iEndField = m_iJoinedHitField+1;
+
+			if ( m_tSchema.GetField(m_iJoinedHitField).m_bPayload )
+				m_tState.m_iStartPos = iStartPos;
+			else
+				m_tState.m_iStartPos = m_iJoinedHitPos;
+
+			// build those hits
+			m_pJoinedFields = m_dJoinedField.Begin();
+			m_tState.m_dFields = &m_pJoinedFields;
+			m_tState.m_dFieldLengths.Resize(1);
+			m_tState.m_dFieldLengths[0] = uLength;
+
+			m_tDocInfo.m_tRowID = pIdPair->m_tRowID;
+		}
+				
+		BuildHits ( sError, true );
+
+		// update current position
+		if ( !m_tSchema.GetField(m_iJoinedHitField).m_bPayload && !m_tState.m_bProcessingHits && m_tHits.GetLength() )
+			m_iJoinedHitPos = HITMAN::GetPos ( m_tHits.Last().m_uWordPos );
+
+		if ( m_tState.m_bProcessingHits )
+			break;
+	}
+
+	// eof check
+	if ( !m_tState.m_bProcessingHits && tReader.GetPos()>=m_iJoinedFileSize )
+		m_tDocInfo.m_tRowID = ( m_tHits.GetLength() ? 0 : INVALID_ROWID );
 
 	return &m_tHits;
 }

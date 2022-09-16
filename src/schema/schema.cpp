@@ -551,7 +551,6 @@ void CSphSchema::SetupFlags ( const CSphSourceSettings & tSettings, bool bPQ, St
 
 	for ( auto & tSchemaField : m_dFields )
 	{
-		bool bJoinedField = !tSchemaField.m_sQuery.IsEmpty() || tSchemaField.m_bPayload || !tSchemaField.m_sQueryRange.IsEmpty();
 		bool bFieldStored = bAllFieldsStored;
 		for ( const auto & sStored : tSettings.m_dStoredFields )
 			if ( !bFieldStored && tSchemaField.m_sName == sStored )
@@ -561,19 +560,7 @@ void CSphSchema::SetupFlags ( const CSphSourceSettings & tSettings, bool bPQ, St
 			}
 
 		if ( bFieldStored )
-		{
-			if ( bJoinedField )
-			{
-				if ( pWarnings )
-				{
-					CSphString sWarning;
-					sWarning.SetSprintf ( "joined field '%s' cannot be stored", tSchemaField.m_sName.cstr() );
-					pWarnings->Add(sWarning);
-				}
-			}
-			else
-				tSchemaField.m_uFieldFlags |= CSphColumnInfo::FIELD_STORED;
-		}
+			tSchemaField.m_uFieldFlags |= CSphColumnInfo::FIELD_STORED;
 
 		for ( const auto & sStoredOnly : tSettings.m_dStoredOnlyFields )
 			if ( tSchemaField.m_sName == sStoredOnly )

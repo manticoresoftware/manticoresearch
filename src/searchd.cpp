@@ -5967,7 +5967,7 @@ void SearchHandler_c::RunLocalSearches ()
 	{
 //		sphWarning ( "Reordering..." );
 		// if run parallel - start in mass order, if single - in natural order
-		// set order by decreasing index mass (heaviest comes first). That is why 'less' implemented by '>'
+		// set order by decreasing index mass (heaviest one comes first). That is why 'less' implemented by '>'
 		dOrder.Sort ( Lesser ( [this] ( int a, int b ) {
 			return m_dLocal[a].m_iMass>m_dLocal[b].m_iMass;
 		} ) );
@@ -5987,7 +5987,7 @@ void SearchHandler_c::RunLocalSearches ()
 		if ( iJob>=iJobs )
 			return; // already nothing to do, early finish.
 
-		// these two moved from inside of the loop to avoid construction on every turn
+		// these two moved from inside the loop to avoid construction on every turn
 		CSphVector<ISphMatchSorter *> dSorters ( iQueries );
 		dSorters.ZeroVec ();
 
@@ -6078,7 +6078,7 @@ void SearchHandler_c::RunLocalSearches ()
 				for ( int i=0; i<iQueries; ++i )
 				{
 					// in mt here kind of tricky index calculation, up to the next lines with sorter
-					// but some of the sorters could had failed at "create sorter" stage
+					// but some sorters could have failed at "create sorter" stage
 					ISphMatchSorter * pSorter = dSorters[i];
 					if ( !pSorter )
 						continue;
@@ -13557,7 +13557,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 			|| tStmt.m_sSetName=="sql_mode"
 			|| tStmt.m_sSetName=="time_zone" )
 		{
-			// per-session CHARACTER_SET_RESULTS et al; just ignore for now
+			// per-session CHARACTER_SET_RESULTS at all; just ignore for now
 
 		} else if ( tStmt.m_sSetName=="profiling" )
 		{

@@ -135,3 +135,11 @@ public:
 #define SPH_INTERNAL_CONCAT2( a, b ) a##b
 #define SPH_INTERNAL_CONCAT( a, b ) SPH_INTERNAL_CONCAT2 ( a, b )
 #define SPH_UID( prefix ) SPH_INTERNAL_CONCAT ( prefix, __LINE__ )
+
+#if _WIN32
+#define ALIGNED_UNION_ZERO {0}
+#else
+#define ALIGNED_UNION_ZERO {{0}}
+#endif
+
+#define INIT_WITH_0( ... ) std::aligned_union_t<1, __VA_ARGS__ > SPH_UID ( m_init_ ) ALIGNED_UNION_ZERO;

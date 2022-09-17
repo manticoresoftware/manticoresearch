@@ -181,5 +181,6 @@ CSphString SphSprintf ( const char* sTemplate, ... );
 
 /// commonly used
 using StrVec_t = CSphVector<CSphString>;
+using StrtVec_t = CSphVector<Str_t>;
 
 #include "string_impl.h"

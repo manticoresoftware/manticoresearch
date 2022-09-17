@@ -48,34 +48,37 @@ void ClonableCtx_T<REFCONTEXT, CONTEXT>::LimitConcurrency ( int iDistThreads )
 	Setup ( iContexts );
 }
 
-template<typename REFCONTEXT, typename CONTEXT>
-ClonableCtx_T<REFCONTEXT, CONTEXT>::~ClonableCtx_T()
-{
-	for ( auto& tCtx : m_dChildrenContexts )
-		tCtx.reset();
-}
-
 // called once per coroutine, when it really has to process something
 template<typename REFCONTEXT, typename CONTEXT>
-REFCONTEXT ClonableCtx_T<REFCONTEXT, CONTEXT>::CloneNewContext ( const int* pJobId )
+std::pair<REFCONTEXT, int> ClonableCtx_T<REFCONTEXT, CONTEXT>::CloneNewContext()
 {
 	if ( m_bDisabled )
-		return m_dParentContext;
+		return { m_dParentContext, 0 };
 
 	auto iMyIdx = m_iTasks.fetch_add ( 1, std::memory_order_acq_rel );
 	if ( !iMyIdx )
-		return m_dParentContext;
+		return { m_dParentContext, 0 };
 
 	--iMyIdx; // make it back 0-based
 	auto& tCtx = m_dChildrenContexts[iMyIdx];
 	tCtx.emplace_once ( m_dParentContext );
-	m_dJobIds[iMyIdx] = pJobId ? *pJobId : 0;
-	return (REFCONTEXT)m_dChildrenContexts[iMyIdx].get();
+	return { (REFCONTEXT)tCtx.get(), iMyIdx + 1 };
 }
+
+// set (optionally) 'weight' of a job; ForAll will iterate jobs according to ascending weights
+template<typename REFCONTEXT, typename CONTEXT>
+void ClonableCtx_T<REFCONTEXT, CONTEXT>::SetJobOrder ( int iJobID, int iOrder )
+{
+	assert ( iJobID < m_iTasks + 1 );
+	if ( !iJobID ) // todo! zero (parent) context doesn't have an order
+		return;
+	m_dJobsOrder[iJobID - 1] = iOrder;
+}
+
 
 // Num of parallel workers to complete iTasks jobs
 template<typename REFCONTEXT, typename CONTEXT>
-inline int ClonableCtx_T<REFCONTEXT, CONTEXT>::Concurrency ( int iTasks )
+inline int ClonableCtx_T<REFCONTEXT, CONTEXT>::Concurrency ( int iTasks ) const
 {
 	return Min ( m_dChildrenContexts.GetLength() + 1, iTasks ); // +1 since parent is also an extra context
 }
@@ -84,7 +87,8 @@ template<typename REFCONTEXT, typename CONTEXT>
 void ClonableCtx_T<REFCONTEXT, CONTEXT>::Setup ( int iContexts )
 {
 	m_dChildrenContexts.Reset ( iContexts );
-	m_dJobIds.Reset ( iContexts );
+	m_dJobsOrder.Reset ( iContexts );
+	m_dJobsOrder.ZeroVec();
 	m_bDisabled = !iContexts;
 }
 
@@ -98,16 +102,15 @@ void ClonableCtx_T<REFCONTEXT, CONTEXT>::ForAll ( FNPROCESSOR fnProcess, bool bI
 	if ( m_bDisabled ) // nothing to do; sorters and results are already original
 		return;
 
-	CSphVector<std::pair<int, int>> dOrder;
-	int iWorkThreads = m_iTasks - 1;
-	for ( int i = 0; i < iWorkThreads; ++i )
-		dOrder.Add ( { i, m_dJobIds[i] } );
+	int iWorkedThreads = m_iTasks - 1;
+	CSphFixedVector<int> dOrder { iWorkedThreads };
+	dOrder.FillSeq();
+	dOrder.Sort ( Lesser ( [this] ( int a, int b ) { return m_dJobsOrder[a] < m_dJobsOrder[b]; } ) );
 
-	dOrder.Sort ( ::bind ( &std::pair<int, int>::second ) );
 	for ( auto i : dOrder )
 	{
-		assert ( m_dChildrenContexts[i.first] );
-		auto tCtx = (REFCONTEXT)m_dChildrenContexts[i.first].get();
+		assert ( m_dChildrenContexts[i] );
+		auto tCtx = (REFCONTEXT)m_dChildrenContexts[i].get();
 		fnProcess ( tCtx );
 	}
 }

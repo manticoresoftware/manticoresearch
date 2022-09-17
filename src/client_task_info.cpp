@@ -75,15 +75,30 @@ ClientSession_c* ClientTaskInfo_t::GetClientSession()
 {
 	return m_pSession;
 }
-
+namespace {
+	volatile int g_iDistThreads = 0;
+}
 volatile int &getDistThreads ()
 {
-	static int iDistThreads = 0;
-	return iDistThreads;
+	return g_iDistThreads;
 }
 
 int GetEffectiveDistThreads ()
 {
 	auto iSessionVal = ClientTaskInfo_t::Info().m_iDistThreads;
 	return iSessionVal ? iSessionVal : getDistThreads ();
+}
+
+Dispatcher::Template_t GetEffectiveBaseDispatcherTemplate()
+{
+	auto tDispatcher = Dispatcher::GetGlobalBaseDispatcherTemplate();
+	Dispatcher::Unify ( tDispatcher, ClientTaskInfo_t::Info().GetBaseDispatcherTemplate() );
+	return tDispatcher;
+}
+
+Dispatcher::Template_t GetEffectivePseudoShardingDispatcherTemplate()
+{
+	auto tDispatcher = Dispatcher::GetGlobalPseudoShardingDispatcherTemplate();
+	Dispatcher::Unify ( tDispatcher, ClientTaskInfo_t::Info().GetPseudoShardingDispatcherTemplate() );
+	return tDispatcher;
 }

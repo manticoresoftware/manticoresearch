@@ -125,23 +125,23 @@ int WaitForN ( int iN, std::initializer_list<Handler> dTasks );
  3. Run tasks, using result of Concurrency ( NJobs ) as number of workers.
  3. Inside worker, call member CloneNewContext() and use it exclusively.
 	 For first call it just returns ref to the context by c-tr, no overhead for extra cloning.
-	 Every next call will clone that original context and provide you ref to it, use it exlcusively.
+	 Every next call will clone that original context and provide you ref to it, use it exclusively.
 	 That is good to check first, if you really need the context (say, if whole queue of tasks to proceed is already
-	 abandoned - you have nothing to do and most probably don't need this clone.
+	 abandoned - you have nothing to do and most probably don't need this clone).
 
  When parent is non-clonable, concurrency will return '1', and so, the only task will be in work.
  If it *is* clonable - you may have up to concurrency parallel workers (but it is no necessary that all of them
  actually will be in game; quite often ones started earlier completes whole queue before later run).
 
  After finish, if you collect some state, use either Finalize() - will provide results to bottom context from
- children (if any). Or ForAll() - to just iterate all contextes
+ children (if any). Or ForAll() - to just iterate all contexts
 **/
 template <typename REFCONTEXT, typename CONTEXT>
 class ClonableCtx_T
 {
 	REFCONTEXT m_dParentContext;
 	CSphFixedVector<Optional_T<CONTEXT>> m_dChildrenContexts {0};
-	CSphFixedVector<int> m_dJobIds {0};
+	CSphFixedVector<int> m_dJobsOrder {0};
 
 	std::atomic<int> m_iTasks {0};	// each call to CloneNewContext() increases value
 	bool m_bDisabled = true;		// ctr with disabled (single-thread) working
@@ -149,17 +149,19 @@ class ClonableCtx_T
 public:
 	template <typename... PARAMS >
 	explicit ClonableCtx_T ( PARAMS && ... tParams  );
-	~ClonableCtx_T();
 
 	// Num of parallel workers to complete iTasks jobs
-	int Concurrency ( int iTasks );
+	int Concurrency ( int iTasks ) const;
 	void LimitConcurrency ( int iDistThreads );
 
 	void Setup ( int iContexts );
 	void Finalize();
 
-	// called once per coroutine, when it really has to process something
-	REFCONTEXT CloneNewContext ( const int * pJobId = nullptr );
+	// called once per coroutine, when it really has to process something. 2-nd param is JobID, m.b. used in SetJobOrder.
+	std::pair<REFCONTEXT, int> CloneNewContext ();
+
+	// set (optionally) 'weight' of a job; ForAll will iterate jobs according to ascending weights
+	void SetJobOrder ( int iJobID, int iOrder );
 
 	template <typename FNPROCESSOR>
 	void ForAll ( FNPROCESSOR fnProcess, bool bIncludeRoot=true );

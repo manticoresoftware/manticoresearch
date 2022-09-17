@@ -73,7 +73,8 @@ another time, the age of wonders"],
 Two"}')
 </db_insert>
 
-<httpqueries>
+<queries>
+<sphinxql>set global threads_ex='8'</sphinxql>
 <query endpoint="sql" method="get">query=select+*+from+test+limit+2</query>
 <query endpoint="sql" method="get">query=select%20%2A+from+test%20where+match('tes%2a')+limit+5</query>
 <query endpoint="sql" method="post">query=select%20%2A+from+test%20order+by+j.uid+asc+limit+5</query>
@@ -111,6 +112,6 @@ Two"}')
 <!-- statement with characters in col need to be escaped-->
 <query endpoint="sql" method="post">mode=raw&amp;query=select concat('"', 'a')</query>
 
-</httpqueries>
+</queries>
 
 </test>

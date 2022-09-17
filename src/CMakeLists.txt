@@ -128,7 +128,7 @@ target_link_libraries ( lextra INTERFACE Boost::boost Boost::context )
 # (we don't link with fiber since our custom build dockers doesn't include it, and they need to be rebuilt before)
 target_compile_definitions ( lextra INTERFACE BOOST_ALL_NO_LIB=1 )
 
-add_library ( lmanticore_coro coroutine.cpp coroutine.h coro_waker.h )
+add_library ( lmanticore_coro coroutine.cpp task_dispatcher.cpp coroutine.h coro_waker.h task_dispatcher.h)
 target_link_libraries ( lmanticore_coro PUBLIC lextra )
 
 target_link_libraries ( lmanticore PUBLIC lmanticore_coro )

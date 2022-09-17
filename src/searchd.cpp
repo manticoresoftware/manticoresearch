@@ -48,6 +48,7 @@
 #include "index_rotator.h"
 #include "config_reloader.h"
 #include "secondarylib.h"
+#include "task_dispatcher.h"
 
 // services
 #include "taskping.h"
@@ -157,6 +158,7 @@ static bool				g_bServerID = false;
 static bool				g_bJsonConfigLoadedOk = false;
 static auto&			g_iAutoOptimizeCutoffMultiplier = AutoOptimizeCutoffMultiplier();
 static constexpr bool	AUTOOPTIMIZE_NEEDS_VIP = false; // whether non-VIP can issue 'SET GLOBAL auto_optimize = X'
+static constexpr bool	THREAD_EX_NEEDS_VIP = false; // whether non-VIP can issue 'SET GLOBAL auto_optimize = X'
 
 static bool				g_bSplit = true;
 
@@ -2688,16 +2690,15 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 
 //////////////////////////////////////////////////////////////////////////
 
-struct EscapeQuotation_t : public BaseQuotation_t
+struct EscapeQuotator_t
 {
-	static constexpr bool IsEscapeChar ( char c )
+	static constexpr BYTE EscapingSpace ( BYTE c )
 	{
-		return ( c=='\\' || c=='\'' );
+		return ( c == '\\' || c == '\'' ) ? 1 : 0;
 	}
 };
 
-
-using QuotationEscapedBuilder = EscapedStringBuilder_T<EscapeQuotation_t>;
+using QuotationEscapedBuilder = EscapedStringBuilder_T<BaseQuotation_T<EscapeQuotator_t>>;
 
 
 void LogQueryPlain ( const CSphQuery & tQuery, const CSphQueryResultMeta & tMeta )
@@ -5958,9 +5959,12 @@ void SearchHandler_c::RunLocalSearches ()
 	auto iConcurrency = m_dNQueries.First().m_iCouncurrency;
 	if ( !iConcurrency )
 		iConcurrency = GetEffectiveDistThreads ();
-	dCtx.LimitConcurrency ( iConcurrency );
 
-	bool bSingle = iConcurrency==1;
+	auto tDispatch = GetEffectiveBaseDispatcherTemplate();
+	auto pDispatcher = Dispatcher::Make ( iNumLocals, iConcurrency, tDispatch );
+	dCtx.LimitConcurrency ( pDispatcher->GetConcurrency() );
+
+	bool bSingle = pDispatcher->GetConcurrency()==1;
 
 //	sphWarning ( "iConcurrency: %d", iConcurrency );
 
@@ -5968,39 +5972,40 @@ void SearchHandler_c::RunLocalSearches ()
 	{
 //		sphWarning ( "Reordering..." );
 		// if run parallel - start in mass order, if single - in natural order
-		// set order by decreasing index mass (heaviest comes first). That is why 'less' implemented by '>'
+		// set order by decreasing index mass (heaviest one comes first). That is why 'less' implemented by '>'
 		dOrder.Sort ( Lesser ( [this] ( int a, int b ) {
 			return m_dLocal[a].m_iMass>m_dLocal[b].m_iMass;
 		} ) );
 
-		CalcSplits ( iConcurrency, dSplits );
+		CalcSplits ( pDispatcher->GetConcurrency(), dSplits );
 	}
 
 //	for ( int iOrder : dOrder )
 //		sphWarning ( "Sorted: %d, Order %d, mass %d", !!bSingle, iOrder, (int) m_dLocal[iOrder].m_iMass );
 
 	std::atomic<int32_t> iTotalSuccesses { 0 };
-	const auto iJobs = iNumLocals;
-	std::atomic<int32_t> iCurJob { 0 };
-	Coro::ExecuteN ( dCtx.Concurrency ( iJobs ), [&]
+	Coro::ExecuteN ( dCtx.Concurrency ( iNumLocals ), [&]
 	{
-		auto iJob = iCurJob.load ( std::memory_order_relaxed );
-		if ( iJob>=iJobs )
+		auto pSource = pDispatcher->MakeSource();
+		int iJob = -1; // make it consumed
+
+		if ( !pSource->FetchTask ( iJob ) )
 			return; // already nothing to do, early finish.
 
-		// these two moved from inside of the loop to avoid construction on every turn
+		// these two moved from inside the loop to avoid construction on every turn
 		CSphVector<ISphMatchSorter *> dSorters ( iQueries );
 		dSorters.ZeroVec ();
 
-		auto tCtx = dCtx.CloneNewContext();
+		auto tJobContext = dCtx.CloneNewContext();
+		auto& tCtx = tJobContext.first;
 		Threads::Coro::Throttler_c tThrottler ( session::GetThrottlingPeriodMS () );
-		while ( iJob<iJobs )
+		while ( true )
 		{
-			iJob = iCurJob.fetch_add ( 1, std::memory_order_acq_rel );
-			if ( iJob>=iJobs )
+			if ( !pSource->FetchTask ( iJob ) )
 				return; // all is done
 
 			auto iLocal = dOrder[iJob];
+			iJob = -1; // mark it consumed
 //			sphWarning ( "iJob: %d, iLocal: %d, mass %d", iJob, iLocal, (int) m_dLocal[iLocal].m_iMass );
 
 			sphLogDebugv ("Tick coro search");
@@ -6079,7 +6084,7 @@ void SearchHandler_c::RunLocalSearches ()
 				for ( int i=0; i<iQueries; ++i )
 				{
 					// in mt here kind of tricky index calculation, up to the next lines with sorter
-					// but some of the sorters could had failed at "create sorter" stage
+					// but some sorters could have failed at "create sorter" stage
 					ISphMatchSorter * pSorter = dSorters[i];
 					if ( !pSorter )
 						continue;
@@ -6132,8 +6137,10 @@ void SearchHandler_c::RunLocalSearches ()
 			for ( auto &pSorter : dSorters )
 				SafeDelete ( pSorter );
 
-			if ( iJob+1<iJobs ) // no need to throttle here if we're done
-				tThrottler.ThrottleAndKeepCrashQuery (); // we set CrashQuery anyway at the start of the loop
+			if ( !pSource->FetchTask ( iJob ) )
+				return; // all is done
+
+			tThrottler.ThrottleAndKeepCrashQuery (); // we set CrashQuery anyway at the start of the loop
 		}
 	});
 	dCtx.Finalize (); // merge mt results (if any)
@@ -7852,17 +7859,22 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 
 	// the context
 	ClonableCtx_T<SnippedBuilderCtxRef_t, SnippedBuilderCtxClone_t> dCtx { pBuilder };
-	dCtx.LimitConcurrency ( GetEffectiveDistThreads () );
 
-	std::atomic<int32_t> iCurJob { 0 };
+	auto tDispatch = GetEffectiveBaseDispatcherTemplate();
+	auto pDispatcher = Dispatcher::Make ( iJobs, GetEffectiveDistThreads(), tDispatch );
+	dCtx.LimitConcurrency ( pDispatcher->GetConcurrency() );
+
 	Coro::ExecuteN ( dCtx.Concurrency ( iJobs ), [&]
 	{
 		sphLogDebug ( "MakeSnippetsCoro Coro started" );
-		auto iJob = iCurJob.fetch_add ( 1, std::memory_order_acq_rel );
-		if ( iJob>=iJobs )
+		auto pSource = pDispatcher->MakeSource();
+		int iJob = -1; // make it consumed
+
+		if ( !pSource->FetchTask ( iJob ) )
 			return; // already nothing to do, early finish.
 
-		auto tCtx = dCtx.CloneNewContext ();
+		auto tJobContext = dCtx.CloneNewContext();
+		auto& tCtx = tJobContext.first;
 		Threads::Coro::Throttler_c tThrottler ( session::GetThrottlingPeriodMS () );
 		while (true)
 		{
@@ -7870,10 +7882,10 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 			sphLogDebug ( "MakeSnippetsCoro Coro loop tick %d[%d]", iJob, dTasks[iJob] );
 			MakeSingleLocalSnippetWithFields ( dQueries[dTasks[iJob]], q, tCtx.m_pBuilder, dStubFields );
 			sphLogDebug ( "MakeSnippetsCoro Coro loop tick %d finished", iJob );
+			iJob = -1; // mark it consumed
 
-			iJob = iCurJob.fetch_add ( 1, std::memory_order_acq_rel );
-			if ( iJob>=iJobs )
-				return;
+			if ( !pSource->FetchTask ( iJob ) )
+				return; // already nothing to do, early finish.
 
 			// yield and reschedule every quant of time. It gives work to other tasks
 			tThrottler.ThrottleAndKeepCrashQuery ();
@@ -13525,6 +13537,14 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 			break;
 		}
 
+		if ( tStmt.m_sSetName == "threads_ex" )
+		{
+			auto dDispatchers = Dispatcher::ParseTemplates ( tStmt.m_sSetValue.cstr() );
+			tSess.SetBaseDispatcherTemplate ( dDispatchers.first );
+			tSess.SetPseudoShardingDispatcherTemplate ( dDispatchers.second );
+			break;
+		}
+
 		// move check here from bison parser. Only boolean allowed below.
 		if ( tStmt.m_iSetValue!=0 && tStmt.m_iSetValue!=1 )
 		{
@@ -13558,7 +13578,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 			|| tStmt.m_sSetName=="sql_mode"
 			|| tStmt.m_sSetName=="time_zone" )
 		{
-			// per-session CHARACTER_SET_RESULTS et al; just ignore for now
+			// per-session CHARACTER_SET_RESULTS at all; just ignore for now
 
 		} else if ( tStmt.m_sSetName=="profiling" )
 		{
@@ -13709,6 +13729,16 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 		} else if ( tStmt.m_sSetName=="secondary_indexes" )
 		{
 			SetSecondaryIndexDefault ( !!tStmt.m_iSetValue );
+
+		} else if ( tStmt.m_sSetName == "threads_ex" )
+		{
+			if ( !THREAD_EX_NEEDS_VIP || tSess.GetVip() )
+				Dispatcher::SetGlobalDispatchers ( tStmt.m_sSetValue.cstr() );
+			else
+			{
+				tOut.Error ( tStmt.m_sStmt, "Only VIP connections can change global threads_ex value" );
+				return;
+			}
 
 		} else {
 			tOut.ErrorEx ( tStmt.m_sStmt, "Unknown system variable '%s'", tStmt.m_sSetName.cstr () );

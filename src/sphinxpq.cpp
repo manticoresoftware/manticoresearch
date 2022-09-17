@@ -21,6 +21,7 @@
 #include "binlog.h"
 #include "indexfiles.h"
 #include "tokenizer/tokenizer.h"
+#include "task_dispatcher.h"
 
 #include <atomic>
 
@@ -1469,30 +1470,35 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 
 	// the context
 	ClonableCtx_T<PqMatchContextRef_t, PqMatchContextClone_t> dCtx { this, pSeg, tReject, tRes };
-	dCtx.LimitConcurrency ( GetEffectiveDistThreads () );
+
+	auto tDispatch = GetEffectiveBaseDispatcherTemplate();
+	auto pDispatcher = Dispatcher::Make ( iJobs, GetEffectiveDistThreads(), tDispatch );
+	dCtx.LimitConcurrency ( pDispatcher->GetConcurrency() );
 
 	if ( tRes.m_bVerbose )
 		tRes.m_tmSetup = sphMicroTimer ()+tRes.m_tmSetup;
 
-	std::atomic<int32_t> iCurJob {0};
 	Coro::ExecuteN ( dCtx.Concurrency ( iJobs ), [&]
 	{
-		auto iJob = iCurJob.fetch_add ( 1, std::memory_order_acq_rel );
-		if ( iJob>=iJobs )
+		auto pSource = pDispatcher->MakeSource();
+		int iJob = -1; // make it consumed
+
+		if ( !pSource->FetchTask ( iJob ) )
 			return; // already nothing to do, early finish.
 
 		auto pInfo = PublishTaskInfo ( new PQInfo_t );
 		pInfo->m_iTotal = iJobs;
-		auto tCtx = dCtx.CloneNewContext ();
+		auto tJobContext = dCtx.CloneNewContext();
+		auto& tCtx = tJobContext.first;
 		Threads::Coro::Throttler_c tThrottler ( session::GetThrottlingPeriodMS () );
 		while (true)
 		{
 			pInfo->m_iCurrent = iJob;
 			MatchingWork ( dStored[iJob], *tCtx.m_pMatchCtx );
+			iJob = -1; // mark it consumed
 
-			iJob = iCurJob.fetch_add ( 1, std::memory_order_acq_rel );
-			if ( iJob>=iJobs )
-				return;
+			if ( !pSource->FetchTask ( iJob ) )
+				return; // all is done
 
 			// yield and reschedule every quant of time. It gives work to other tasks
 			tThrottler.ThrottleAndKeepCrashQuery ();

@@ -172,7 +172,8 @@ namespace sph
 			return;
 
 		const char * p = sIn;
-		const char * pEnd = p + (( iLen<0 ) ? strlen(sIn) : iLen);
+		if ( iLen<0 ) iLen = (int)strlen (sIn);
+		const char * pEnd = p + iLen;
 		while (p<pEnd)
 		{
 			// skip until the first non-boundary character
@@ -208,6 +209,15 @@ namespace sph
 		}
 	}
 
+	/// zero-copy split by the given boundaries, result valid until sIn lives.
+	void Split ( StrtVec_t& dOut, const char* sIn, const char* sBounds );
+	void Split ( StrtVec_t& dOut, const char* sIn, int iLen, const char* sBounds );
+	StrtVec_t Split ( const char* sIn, const char* sBounds );
+	StrtVec_t Split ( const char* sIn, int iLen, const char* sBounds );
+
+	/// zero-copy trim leading and trailing spaces; result valid until tIn lives
+	Str_t Trim ( Str_t tIn );
+	Str_t Trim ( Str_t tIn, char cGarbage );
 
 } // namespace sph
 

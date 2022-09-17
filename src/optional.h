@@ -89,6 +89,7 @@ class Optional_T
 
 public:
 	Optional_T () : m_bInitialized ( false ) {}
+	~Optional_T() { reset(); }
 
 	// construct the object in place
 	template<class... Args>

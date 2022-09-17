@@ -15,28 +15,46 @@
 #include "ints.h"
 #include "stringbuilder.h"
 
-struct BaseQuotation_t
+struct EqualQuotator_t
+{
+	// returns N of additional chars need to escape
+	static constexpr BYTE EscapingSpace ( BYTE c ) { return 0; }
+};
+
+struct FixupSpace_t
+{
+	// replaces \t, \n, \r into spaces
+	static constexpr void FixupSpace ( BYTE*& pOut, BYTE c )
+	{
+		alignas ( 16 ) constexpr BYTE dSpacesLookupTable[] = {
+			0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, ' ', ' ', 0x0b, 0x0c, ' ', 0x0e, 0x0f };
+		*pOut++ = ( c & 0xF0 ) ? c : dSpacesLookupTable[c];
+	}
+};
+
+template<typename QUOTATOR = EqualQuotator_t, typename FIXUP = FixupSpace_t>
+struct BaseQuotation_T : public QUOTATOR, public FIXUP
 {
 	// represents char for quote
 	static const char cQuote = '\'';
 
-	// returns true to chars need to escape
-	static constexpr bool IsEscapeChar ( char c ) { return false; }
-
-	// called if char need to escape to map into another
-	static constexpr char GetEscapedChar ( char c ) { return c; }
-
-	// replaces \t, \n, \r into spaces
-	static constexpr char FixupSpace ( char c )
+	static void EscapeChar ( BYTE*& pOut, BYTE c )
 	{
-		alignas ( 16 ) constexpr char dSpacesLookupTable[] = {
-			0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, ' ', ' ', 0x0b, 0x0c, ' ', 0x0e, 0x0f };
-		return ( c & 0xF0 ) ? c : dSpacesLookupTable[(BYTE)c];
+		if ( QUOTATOR::EscapingSpace ( c ) )
+			*pOut++ = '\\';
+		*pOut++ = c;
 	}
 
-	// if simultaneous escaping and fixup spaces - may use the fact that if char is escaping,
-	// it will pass to GetEscapedChar, and will NOT be passed to FixupSpaces, so may optimize for speed
-	static constexpr char FixupSpaceWithEscaping ( char c ) { return FixupSpace ( c ); }
+	static void EscapeCharWithSpaces ( BYTE*& pOut, BYTE c )
+	{
+		if ( QUOTATOR::EscapingSpace ( c ) )
+		{
+			pOut[0] = '\\';
+			pOut[1] = c;
+			pOut += 2;
+		} else
+			FIXUP::FixupSpace ( pOut, c );
+	}
 };
 
 
@@ -52,7 +70,7 @@ enum eAct : BYTE {
 };
 }
 
-template<typename Q = BaseQuotation_t>
+template<typename Q = BaseQuotation_T<>>
 class EscapedStringBuilder_T: public StringBuilder_c
 {
 	bool AppendEmpty ( const char* sText );

@@ -37,6 +37,7 @@
 #include "sphinx_alter.h"
 #include "chunksearchctx.h"
 #include "indexfiles.h"
+#include "task_dispatcher.h"
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -6656,7 +6657,10 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 	if ( !iConcurrency )
 		iConcurrency = GetEffectiveDistThreads();
 
-	tClonableCtx.LimitConcurrency ( iConcurrency );
+	auto tDispatch = GetEffectiveBaseDispatcherTemplate();
+	auto pDispatcher = Dispatcher::Make ( iJobs, iConcurrency, tDispatch );
+
+	tClonableCtx.LimitConcurrency ( pDispatcher->GetConcurrency() );
 
 	auto iStart = sphMicroTimer();
 	sphLogDebugv ( "Started: " INT64_FMT, sphMicroTimer()-iStart );
@@ -6674,7 +6678,7 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 		CSphVector<int64_t> dMetrics { iJobs };
 		ARRAY_FOREACH ( i, dMetrics )
 		{
-			dMetrics[i] = tGuard.m_dDiskChunks[i]->Cidx().GetPseudoShardingMetric ( VecTraits_T<const CSphQuery> ( &tQuery,1 ) );
+			dMetrics[i] = tGuard.m_dDiskChunks[i]->Cidx().GetPseudoShardingMetric ( { &tQuery, 1 } );
 			if ( dMetrics[i]>0 )
 				iTotalMetric += dMetrics[i];
 			else
@@ -6690,18 +6694,27 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 	}
 
 	std::atomic<bool> bInterrupt {false};
-	std::atomic<int32_t> iCurChunk { iJobs-1 };
+	auto fnCheckInterrupt = [&bInterrupt]() { return bInterrupt.load ( std::memory_order_relaxed ); };
+
 	Coro::ExecuteN ( tClonableCtx.Concurrency ( iJobs ), [&]
 	{
-		auto iChunk = iCurChunk.fetch_sub ( 1, std::memory_order_acq_rel );
-		if ( iChunk<0 || bInterrupt )
+		auto pSource = pDispatcher->MakeSource();
+		int iJob = -1; // make it consumed
+
+		if ( !pSource->FetchTask ( iJob ) || fnCheckInterrupt() )
 			return; // already nothing to do, early finish.
 
-		auto tCtx = tClonableCtx.CloneNewContext ( &iChunk );
+		auto tJobContext = tClonableCtx.CloneNewContext();
+		auto& tCtx = tJobContext.first;
+		tClonableCtx.SetJobOrder ( tJobContext.second, -iJob ); // fixme! Same as in single search, but here we walk in reverse order. Need to fix?
 		Threads::Coro::Throttler_c tThrottler ( session::GetThrottlingPeriodMS () );
 		int iTick=1; // num of times coro rescheduled by throttler
-		while ( !bInterrupt ) // some earlier job met error; abort.
+		while ( !fnCheckInterrupt() ) // some earlier job met error; abort.
 		{
+			// jobs come in ascending order from 0 up to iJobs-1.
+			// We walk over disk chunk in reverse order, from last to 0-th.
+			auto iChunk = iJobs - iJob - 1;
+			iJob = -1; // mark it consumed
 			myinfo::SetTaskInfo ( "%d ch %d:", iTick, iChunk );
 			auto & dLocalSorters = tCtx.m_dSorters;
 			CSphQueryResultMeta tChunkMeta;
@@ -6723,7 +6736,7 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 			// that's why we don't want to move to a new schema before we searched ram chunks
 			tMultiArgs.m_bModifySorterSchemas = false;
 
-			bInterrupt = !tGuard.m_dDiskChunks[iChunk]->Cidx().MultiQuery ( tChunkResult, tQuery, dLocalSorters, tMultiArgs );
+			bInterrupt.store ( !tGuard.m_dDiskChunks[iChunk]->Cidx().MultiQuery ( tChunkResult, tQuery, dLocalSorters, tMultiArgs ), std::memory_order_relaxed );
 
 			// check terms inconsistency among disk chunks
 			tThMeta.MergeWordStats ( tChunkMeta );
@@ -6738,7 +6751,7 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 			if ( iChunk && sph::TimeExceeded ( tmMaxTimer ) )
 			{
 				tThMeta.m_sWarning = "query time exceeded max_query_time";
-				bInterrupt = true;
+				bInterrupt.store ( true, std::memory_order_relaxed );
 			}
 
 			if ( tThMeta.m_sWarning.IsEmpty() && !tChunkMeta.m_sWarning.IsEmpty() )
@@ -6747,12 +6760,11 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 			tThMeta.m_bTotalMatchesApprox |= tChunkMeta.m_bTotalMatchesApprox;
 			tThMeta.m_tIteratorStats.Merge ( tChunkMeta.m_tIteratorStats );
 
-			if ( bInterrupt && !tChunkMeta.m_sError.IsEmpty() )
+			if ( fnCheckInterrupt() && !tChunkMeta.m_sError.IsEmpty() )
 				// FIXME? maybe handle this more gracefully (convert to a warning)?
 				tThMeta.m_sError = tChunkMeta.m_sError;
 
-			iChunk = iCurChunk.fetch_sub ( 1, std::memory_order_acq_rel );
-			if ( iChunk<0 || bInterrupt )
+			if ( !pSource->FetchTask ( iJob ) || fnCheckInterrupt() )
 				return; // all is done
 
 			// yield and reschedule every quant of time. It gives work to other tasks

@@ -12,6 +12,8 @@
 
 #include "threadutils.h"
 #include "coroutine.h"
+#include "task_dispatcher.h"
+
 #include <atomic>
 
 void SetStderrLogger ();
@@ -489,3 +491,240 @@ TEST ( ThreadPool, CoroPromiceFutureConcept )
 	});
 }
 
+TEST ( Dispatcher, Trivial )
+{
+	auto pDispatcher = Dispatcher::MakeTrivial(6, 3);
+
+	auto pWork1 = pDispatcher->MakeSource();
+	int iJob = -1;
+	ASSERT_TRUE ( pWork1->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 0 );
+
+	// wasn't consumed, same value
+	ASSERT_TRUE ( pWork1->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 0 );
+
+	iJob = -1;
+	ASSERT_TRUE ( pWork1->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 1 );
+
+	auto pWork2 = pDispatcher->MakeSource();
+	auto pWork3 = pDispatcher->MakeSource();
+
+	// we can make source over initial concurrency, since dispatcher is trivial
+	auto pWork4 = pDispatcher->MakeSource();
+
+	iJob = -1;
+	ASSERT_TRUE ( pWork2->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 2 );
+
+	iJob = -1;
+	ASSERT_TRUE ( pWork3->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 3 );
+
+	iJob = -1;
+	ASSERT_TRUE ( pWork4->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 4 );
+
+	iJob = -1;
+	ASSERT_TRUE ( pWork1->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 5 );
+
+	// should work as iJob wasn't consumed
+	ASSERT_TRUE ( pWork3->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 5 );
+
+	iJob = -1;
+	// all jobs are done
+	ASSERT_FALSE ( pWork3->FetchTask ( iJob ) );
+}
+
+TEST ( Dispatcher, RoundRobin_batch_1 )
+{
+	auto pDispatcher = Dispatcher::MakeRoundRobin ( 8, 2 );
+
+	auto pFIRST = pDispatcher->MakeSource();
+	int iJob = -1;
+	ASSERT_TRUE ( pFIRST->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 0 );
+
+	// wasn't consumed, same value
+	ASSERT_TRUE ( pFIRST->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 0 );
+
+	iJob = -1;
+	ASSERT_TRUE ( pFIRST->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 2 );
+
+	iJob = -1;
+	ASSERT_TRUE ( pFIRST->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 4 );
+
+	auto pSECOND = pDispatcher->MakeSource();
+	auto pTHIRD = pDispatcher->MakeSource();
+
+	iJob = -1;
+	ASSERT_TRUE ( pSECOND->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 1 );
+
+	iJob = -1;
+	ASSERT_TRUE ( pSECOND->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 3 );
+
+	iJob = -1;
+	ASSERT_TRUE ( pSECOND->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 5 );
+
+	// this one is empty, will fail
+	iJob = -1;
+	ASSERT_FALSE ( pTHIRD->FetchTask ( iJob ) );
+
+	iJob = -1;
+	ASSERT_TRUE ( pSECOND->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 7 );
+
+	// this one is done
+	iJob = -1;
+	ASSERT_FALSE ( pSECOND->FetchTask ( iJob ) );
+
+	iJob = -1;
+	ASSERT_TRUE ( pFIRST->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 6 );
+
+	// this one is also done
+	iJob = -1;
+	ASSERT_FALSE ( pFIRST->FetchTask ( iJob ) );
+}
+
+TEST ( Dispatcher, RoundRobin_batch_2 )
+{
+	auto pDispatcher = Dispatcher::MakeRoundRobin ( 8, 2, 3 );
+
+	auto pFIRST = pDispatcher->MakeSource();
+	int iJob = -1;
+	ASSERT_TRUE ( pFIRST->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 0 );
+
+	// wasn't consumed, same value
+	ASSERT_TRUE ( pFIRST->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 0 );
+
+	iJob = -1;
+	ASSERT_TRUE ( pFIRST->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 1 );
+
+	// defer first source and create 2 more
+	auto pSECOND = pDispatcher->MakeSource();
+	auto pTHIRD = pDispatcher->MakeSource();
+
+	iJob = -1;
+	ASSERT_TRUE ( pSECOND->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 3 );
+
+	iJob = -1;
+	ASSERT_TRUE ( pSECOND->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 4 );
+
+	// now query 3-rd, it is empty, will fail
+	iJob = -1;
+	ASSERT_FALSE ( pTHIRD->FetchTask ( iJob ) );
+
+	// finish with 2-nd. It has only jobs 3-5 out of 8.
+	iJob = -1;
+	ASSERT_TRUE ( pSECOND->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 5 );
+
+	// this one is done
+	iJob = -1;
+	ASSERT_FALSE ( pSECOND->FetchTask ( iJob ) );
+
+	// finish 1-st reader. It has 3 more: 2, then 6 and 7
+
+	iJob = -1;
+	ASSERT_TRUE ( pFIRST->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 2 );
+
+	iJob = -1;
+	ASSERT_TRUE ( pFIRST->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 6 );
+
+	iJob = -1;
+	ASSERT_TRUE ( pFIRST->FetchTask ( iJob ) );
+	ASSERT_EQ ( iJob, 7 );
+
+	// this one is finally done also
+	iJob = -1;
+	ASSERT_FALSE ( pFIRST->FetchTask ( iJob ) );
+}
+
+struct CheckDispatch { const char* szTemplate; int iConc; int iBatch; };
+
+static CheckDispatch dChecks[] = {
+	{ nullptr, 0, 0 },
+	{ "", 0, 0 },
+	{ " ", 0, 0 },
+	{ "/", 0, 0 },
+	{ "0", 0, 0 },
+	{ "*", 0, 0 },
+	{ "0/", 0, 0 },
+	{ "*/", 0, 0 },
+	{ "/0", 0, 0 },
+	{ "/*", 0, 0 },
+	{ "*/*", 0, 0 },
+	{ "*/0", 0, 0 },
+	{ "0/0", 0, 0 },
+	{ "0/*", 0, 0 },
+	{ "13", 13, 0 },
+	{ "13/", 13, 0 },
+	{ "13/*", 13, 0 },
+	{ "13/0", 13, 0 },
+	{ "/3", 0, 3 },
+	{ "0/3", 0, 3 },
+	{ "*/3", 0, 3 },
+	{ "13/3", 13, 3 },
+	{ " 13/3", 13, 3 },
+	{ "13 /3", 13, 3 },
+	{ "13/ 3", 13, 3 },
+	{ "13/3 ", 13, 3 },
+	{ " 13 /3", 13, 3 },
+	{ " 13/ 3", 13, 3 },
+	{ " 13/3 ", 13, 3 },
+	{ " 13 / 3", 13, 3 },
+	{ " 13 /3 ", 13, 3 },
+	{ " 13 / 3 ", 13, 3 },
+};
+
+void Check ( const char* szTemplate, int iConc, int iBatch )
+{
+	auto tVal = Dispatcher::ParseTemplate ( szTemplate );
+	ASSERT_EQ ( tVal.concurrency, iConc ) << szTemplate;
+	ASSERT_EQ ( tVal.batch, iBatch ) << szTemplate;
+}
+
+TEST ( Dispatcher, ParseOne )
+{
+	for ( const auto& tCheck : dChecks )
+		Check ( tCheck.szTemplate, tCheck.iConc, tCheck.iBatch );
+}
+
+void CheckTwo ( const char* szTemplate, int iConcx, int iBatchx, int iConcy, int iBatchy )
+{
+	auto tVal = Dispatcher::ParseTemplates ( szTemplate );
+	ASSERT_EQ ( tVal.first.concurrency, iConcx ) << szTemplate;
+	ASSERT_EQ ( tVal.first.batch, iBatchx ) << szTemplate;
+	ASSERT_EQ ( tVal.second.concurrency, iConcy ) << szTemplate;
+	ASSERT_EQ ( tVal.second.batch, iBatchy ) << szTemplate;
+}
+
+TEST ( Dispatcher, ParseCouple )
+{
+	CheckTwo ( nullptr, 0, 0, 0, 0 );
+	CheckTwo ( "", 0, 0, 0, 0 );
+	for ( const auto& x : dChecks )
+		for ( const auto& y : dChecks )
+		{
+			StringBuilder_c sTmp;
+			sTmp << x.szTemplate << '+' << y.szTemplate;
+			CheckTwo(sTmp.cstr(),x.iConc,x.iBatch,y.iConc,y.iBatch);
+		}
+}

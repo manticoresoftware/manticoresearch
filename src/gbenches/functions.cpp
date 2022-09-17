@@ -172,7 +172,7 @@ inline static bool IsEscapeChar3 ( char c )
 	}
 }
 
-inline static bool IsEscapeChar4 ( char c ) // winner!
+inline static bool IsEscapeChar4 ( BYTE c ) // winner!
 {
 	alignas ( 128 ) static const bool lookup[] =
 				   {0,0,0,0,0,0,0,0, 1,1,1,0,1,1,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,
@@ -180,11 +180,11 @@ inline static bool IsEscapeChar4 ( char c ) // winner!
 					0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,1,0,0,0,
 					0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,
 					};
-	return ( c & 0x80 ) ? false : lookup[(BYTE)c];
+	return ( c & 0x80 ) ? false : lookup[c];
 }
 
 
-inline static char GetEscapedChar1 ( char c )
+inline static BYTE GetEscapedChar1 ( BYTE c )
 {
 	switch ( c )
 	{
@@ -198,12 +198,12 @@ inline static char GetEscapedChar1 ( char c )
 	}
 }
 
-inline static char GetEscapedChar2 ( char c ) // winner!
+inline static BYTE GetEscapedChar2 ( BYTE c ) // winner!
 {
-	alignas ( 16 ) static const char dTransform[16] = {'\x00', '\x01', '\x02', '\x03', '\x04', '\x05', '\x06', '\x07',
+	alignas ( 16 ) static const BYTE dTransform[16] = {'\x00', '\x01', '\x02', '\x03', '\x04', '\x05', '\x06', '\x07',
 			'b', 't', 'n', '\x0B', 'f', 'r', '\x0E', '\x0F' };
 	//return dTransform[(BYTE) c];
-	return ( c & 0xF0 ) ? c : dTransform[(BYTE) c];
+	return ( c & 0xF0 ) ? c : dTransform[c];
 }
 
 alignas ( 128 ) static const BYTE g_Transform[] =
@@ -217,20 +217,20 @@ alignas ( 128 ) static const BYTE g_Transform[] =
 					0x70,0x71,0x72,0x73,0x74,0x75,0x76,0x77, 0x78,0x79,0x7a,0x7b,0x7c,0x7d,0x7e,0x7f,
 					};
 
-inline static bool IsEscapeChar5 ( char c )
+inline static bool IsEscapeChar5 ( BYTE c )
 {
-	return ( c & 0x80 ) ? false : g_Transform[(BYTE) c] & 0x80;
+	return ( c & 0x80 ) ? false : g_Transform[c] & 0x80;
 }
 
-inline static char GetEscapedChar3 ( char c )
+inline static char GetEscapedChar3 ( BYTE c )
 {
-	return ( c & 0x80 ) ? c : g_Transform[(BYTE) c]&0x7F;
+	return ( c & 0x80 ) ? c : g_Transform[c]&0x7F;
 }
 
 // here IsEscapeChar5 already excluded bytes with high bit set, so even simpler!
-inline static char GetEscapedChar3combo ( char c )
+inline static char GetEscapedChar3combo ( BYTE c )
 {
-	return g_Transform[(BYTE) c] & 0x7F;
+	return g_Transform[c] & 0x7F;
 }
 
 class bench_escape : public benchmark::Fixture

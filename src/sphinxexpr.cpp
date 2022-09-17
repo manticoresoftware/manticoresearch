@@ -3950,7 +3950,7 @@ struct ExprNode_t
 		MapArg_c	*	m_pMapArg;		///< map argument (maps name to const or name to expr), for TOK_MAP_ARG type
 		const char	*	m_sIdent;		///< pointer to const char, for TOK_IDENT type
 		SphAttr_t	*	m_pAttr;		///< pointer to 64-bit value, for TOK_ITERATOR type
-		std::aligned_union_t<1, int64_t,float,int, ConstList_c *, MapArg_c *,const char*, SphAttr_t*> m_null {{0}};
+		INIT_WITH_0 ( int64_t, float, int, ConstList_c*, MapArg_c*, const char*, SphAttr_t* );
 	};
 	int				m_iLeft = -1;
 	int				m_iRight = -1;

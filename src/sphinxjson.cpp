@@ -187,11 +187,11 @@ struct JsonNode_t
 		double			m_fValue;	///< floating point (only JSON_DOUBLE )
 		BlobLocator_t	m_sValue;	///< string locator (value of JSON_STRING)
 		BlobLocator_t	m_dChildren; ///< children locator (first, len) for obj/mix arrays
-		std::aligned_union_t<1, int64_t, double, BlobLocator_t> m_initializer { { 0 } };
+		INIT_WITH_0 ( int64_t, double, BlobLocator_t );
 	};
 	union {
-		BlobLocator_t		m_sName;    		///< node name locator
-		std::aligned_union_t<1, BlobLocator_t> m_initname { {0} };
+		BlobLocator_t m_sName;				///< node name locator
+		INIT_WITH_0 ( int64_t, BlobLocator_t );
 	};
 	int 				m_iNext = -1;		///< idx of next sibling
 	ESphJsonType m_eType { JSON_TOTAL };	///< node type

@@ -207,7 +207,7 @@ struct RtWord_t
 	{
 		SphWordID_t m_uWordID;    ///< my keyword id
 		const BYTE * m_sWord;
-		std::aligned_union_t<1, SphWordID_t, const BYTE *> m_null {{0}};
+		INIT_WITH_0 ( SphWordID_t, const BYTE* );
 	};
 	DWORD m_uDocs = 0;		///< document count (for stats and/or BM25)
 	DWORD m_uHits = 0;		///< hit count (for stats and/or BM25)

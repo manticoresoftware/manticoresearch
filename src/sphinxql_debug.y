@@ -51,6 +51,7 @@
 %token <sValue>	TOK_SPLIT
 %token <sValue>	TOK_WAIT
 %token <sValue>	TOK_LIKE
+%token <sValue>	TOK_META
 
 %type <iValue> boolpar timeint
 %type <sValue> ident szparam ident_special szparam_special
@@ -81,6 +82,7 @@ debugcommand:
 	| compress		{ pParser->m_tCmd.m_eCommand = Cmd_e::COMPRESS; }
 	| split			{ pParser->m_tCmd.m_eCommand = Cmd_e::SPLIT; }
 	| wait
+	| TOK_META		{ pParser->m_tCmd.m_eCommand = Cmd_e::META; }
 	;
 
 //////////////////////////////////////////////////////////////////////////

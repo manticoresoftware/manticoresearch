@@ -45,6 +45,7 @@ enum class Cmd_e : BYTE
 	SPLIT,
 	WAIT,
 	WAIT_STATUS,
+	META,
 
 	INVALID_CMD
 };

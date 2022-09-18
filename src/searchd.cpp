@@ -5520,7 +5520,7 @@ int SearchHandler_c::CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, 
 	int iValidSorters = 0;
 
 	auto tQueueSettings = MakeQueueSettings ( pIndex, m_dNQueries.First ().m_iMaxMatches, pHook );
-	sphCreateMultiQueue ( tQueueSettings, m_dNQueries, dSorters, dErrors, tQueueRes, pExtra );
+	sphCreateMultiQueue ( tQueueSettings, m_dNQueries, dSorters, dErrors, tQueueRes, pExtra, m_pProfile );
 
 	m_dNQueries.First().m_bZSlist = tQueueRes.m_bZonespanlist;
 	dSorters.Apply ( [&iValidSorters] ( const ISphMatchSorter * pSorter ) {
@@ -5547,7 +5547,7 @@ int SearchHandler_c::CreateSingleSorters ( const CSphIndex * pIndex, VecTraits_T
 
 		// create queue
 		auto tQueueSettings = MakeQueueSettings ( pIndex, tQuery.m_iMaxMatches, pHook );
-		ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings, tQuery, dErrors[iQuery], tQueueRes, pExtra );
+		ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings, tQuery, dErrors[iQuery], tQueueRes, pExtra, m_pProfile );
 		if ( !pSorter )
 			continue;
 
@@ -14024,6 +14024,16 @@ void HandleMysqlSplit ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCm
 	tOut.Ok();
 }
 
+
+void HandleMysqlDebugMeta ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCmd, const QueryProfile_c & tProfile )
+{
+	VectorLike tLike ( tCmd.sOpt ( "like" ) );
+	tLike.MatchTupletf ( "pseudo_shards", "%d", tProfile.m_iPseudoShards );
+	tLike.MatchTupletf ( "max_matches", "%d", tProfile.m_iMaxMatches );
+	tOut.DataTable(tLike);
+}
+
+
 void HandleMysqlfiles ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCmd )
 {
 	auto sIndex = tCmd.m_sParam;
@@ -14317,7 +14327,7 @@ void HandleSched ( RowBuffer_i & tOut )
 	tOut.Eof ();
 }
 
-void HandleMysqlDebug ( RowBuffer_i &tOut, Str_t sCommand )
+void HandleMysqlDebug ( RowBuffer_i &tOut, Str_t sCommand, const QueryProfile_c & tProfile )
 {
 	using namespace DebugCmd;
 	CSphString sError;
@@ -14359,6 +14369,7 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, Str_t sCommand )
 	case Cmd_e::CLOSE: HandleMysqlclose ( tOut ); return;
 	case Cmd_e::COMPRESS: HandleMysqlCompress ( tOut, tCmd ); return;
 	case Cmd_e::SPLIT: HandleMysqlSplit ( tOut, tCmd ); return;
+	case Cmd_e::META: HandleMysqlDebugMeta ( tOut, tCmd, tProfile ); return;
 #if !_WIN32
 	case Cmd_e::WAIT: HandleWait ( tOut, tCmd ); return;
 	case Cmd_e::WAIT_STATUS: HandleWaitStatus ( tOut, tCmd ); return;
@@ -16317,8 +16328,8 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		return true;
 
 	case STMT_DEBUG:
-		HandleMysqlDebug ( tOut, sQuery );
-		return true;
+		HandleMysqlDebug ( tOut, sQuery, m_tLastProfile );
+		return false; // do not profile this call, keep last query profile
 
 	case STMT_JOIN_CLUSTER:
 		if ( ClusterJoin ( pStmt->m_sIndex, pStmt->m_dCallOptNames, pStmt->m_dCallOptValues, pStmt->m_bClusterUpdateNodes, m_sError ) )

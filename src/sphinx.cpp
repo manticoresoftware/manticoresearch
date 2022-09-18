@@ -10599,6 +10599,9 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 	// because disk chunk search within the loop will switch the profiler state
 	SwitchProfile ( pProfiler, SPH_QSTATE_INIT );
 
+	if ( pProfiler )
+		pProfiler->m_iPseudoShards = iSplit;
+
 	std::atomic<bool> bInterrupt {false};
 	auto fnCheckInterrupt = [&bInterrupt]() { return bInterrupt.load ( std::memory_order_relaxed ); };
 

@@ -81,7 +81,7 @@ public:
 	CSphVector<BYTE> m_dPlan; 							///< bson with plan
 
 	int				m_iMaxMatches = 0;
-	int				m_iPseudoShards = 0;
+	int				m_iPseudoShards = 1;
 															/// create empty and stopped profile
 					QueryProfile_c();
 	virtual 		~QueryProfile_c() {}

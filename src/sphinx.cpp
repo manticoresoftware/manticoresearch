@@ -2949,8 +2949,9 @@ int64_t CSphIndex_VLN::GetPseudoShardingMetric ( const VecTraits_T<const CSphQue
 		if ( m_pSIdx.get() && !i.m_sGroupBy.IsEmpty() )
 		{
 			const int TOOMANY_MAXMATCHES = 65536;
+			int iTooMany = i.m_iPseudoThresh ? i.m_iPseudoThresh : TOOMANY_MAXMATCHES;
 			int iCountDistinct = m_pSIdx.get()->GetCountDistinct ( i.m_sGroupBy.cstr() );
-			if ( iCountDistinct>=TOOMANY_MAXMATCHES )
+			if ( iCountDistinct>=iTooMany )
 				return -1;
 
 			// fixme! maybe let the index know it is running under pseudo_sharding so that it can apply the *1.5 boost for max_matches

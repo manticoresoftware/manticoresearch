@@ -6421,8 +6421,9 @@ int QueueCreator_c::AdjustMaxMatches ( int iMaxMatches ) const
 		return iMaxMatches;
 
 	const int MAX_MAXMATCHES=16384;
+	int iMaxMaxMatches = m_tQuery.m_iMaxMatchThresh ? m_tQuery.m_iMaxMatchThresh : MAX_MAXMATCHES;
 	int iCountDistinct = m_tSettings.m_fnGetCountDistinct ? m_tSettings.m_fnGetCountDistinct ( m_pSorterSchema->GetAttr(iGroupbyAttr).m_sName ) : -1;
-	if ( iCountDistinct>MAX_MAXMATCHES )
+	if ( iCountDistinct>iMaxMaxMatches )
 		return iMaxMatches;
 
 	return Max ( iCountDistinct, iMaxMatches );

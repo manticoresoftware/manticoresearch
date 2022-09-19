@@ -118,6 +118,7 @@ Released: May 18th 2022
 * [#715](https://github.com/manticoresoftware/manticoresearch/issues/715) HTTP JSON supports [search options](../Searching/Options.md#General-syntax).
 
 ### Minor changes
+* Queries with stateful UDFs are now forced to be executed in a single thread
 * **⚠️ BREAKING CHANGE**: Index meta file format change. Previously meta files (`.meta`, `.sph`) were in binary format, now it's just json. The new Manticore version will convert older indexes automatically, but:
   - you can get warning like `WARNING: ... syntax error, unexpected TOK_IDENT`
   - you won't be able to run the index with previous Manticore versions, make sure you have a backup
@@ -180,6 +181,7 @@ Released: May 18th 2022
 * Support for Amazon Linux 2 via [YUM repo](../Installation/RHEL_and_Centos.md#YUM-repository)
 
 ### Bugfixes
+* [Issue #815](https://github.com/manticoresoftware/manticoresearch/issues/815) Random crash when using UDF function
 * [Issue #287](https://github.com/manticoresoftware/manticoresearch/issues/287) out of memory while indexing RT index
 * [Issue #604](https://github.com/manticoresoftware/manticoresearch/issues/604) Breaking change 3.6.0, 4.2.0 sphinxql-parser
 * [Issue #667](https://github.com/manticoresoftware/manticoresearch/issues/667) FATAL: out of memory (unable to allocate 9007199254740992 bytes)

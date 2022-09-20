@@ -6,6 +6,7 @@
 * Improved [cost-based optimizer](../Searching/Cost_based_optimizer.md#Cost-based-optimizer) which may increase query response time in many cases.
 
 ### Minor changes
+* Queries with stateful UDFs are now forced to be executed in a single thread
 * **⚠️ BREAKING CHANGE**: Secondary indexes file format got changed and if you are using secondary indexes for searching (`searchd.secondary_indexes = 1` which was not a default in the previous versions) the new Manticore version will skip loading older index versions to prevent performance drop. The recommendations are:
   - remove secondary indexes files during upgrade:
     * `systemctl stop manticore`
@@ -118,7 +119,6 @@ Released: May 18th 2022
 * [#715](https://github.com/manticoresoftware/manticoresearch/issues/715) HTTP JSON supports [search options](../Searching/Options.md#General-syntax).
 
 ### Minor changes
-* Queries with stateful UDFs are now forced to be executed in a single thread
 * **⚠️ BREAKING CHANGE**: Index meta file format change. Previously meta files (`.meta`, `.sph`) were in binary format, now it's just json. The new Manticore version will convert older indexes automatically, but:
   - you can get warning like `WARNING: ... syntax error, unexpected TOK_IDENT`
   - you won't be able to run the index with previous Manticore versions, make sure you have a backup

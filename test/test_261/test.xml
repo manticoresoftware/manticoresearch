@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>matching with different threading</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table
+	sql_field_string = title
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+}
+
+index testrt_1diskchunk
+{
+	type = rt
+	path =<data_path/>/testrt1
+	rt_field = title
+}
+
+index testrt_3diskchunks : testrt_1diskchunk
+{
+	path =<data_path/>/testrt2
+}
+
+index testrt_1ramchunk : testrt_1diskchunk
+{
+	path =<data_path/>/testrt3
+}
+
+</config>
+
+<db_create>
+CREATE TABLE `test_table` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `title` varchar(255) NOT NULL,
+  PRIMARY KEY (`id`)
+) CHARACTER SET utf8;
+</db_create>
+<db_drop>DROP TABLE IF EXISTS `test_table`;</db_drop>
+<DB_Insert>SET NAMES utf8</DB_Insert>
+<db_insert>
+INSERT INTO `test_table` VALUES (1,'one'),(2,'two'),(3,'three'),(4,'four'),(5,'five'),(6,'six'),(8,'eight'),(9,'nine'),(10,'ten'),(11,'eleven')
+</db_insert>
+
+<metaindex name='META:testrt_1'>
+	<index>testrt_1ramchunk</index>
+	<index>testrt_1diskchunk</index>
+</metaindex>
+
+<metaindex name='META:all'>
+	<index>test</index>
+	<index>testrt_1ramchunk</index>
+	<index>testrt_1diskchunk</index>
+	<index>testrt_3diskchunks</index>
+</metaindex>
+
+<queries>
+<sphinxql>
+	<!-- preparation -->
+	insert into META:testrt_1 values (1,'one'),(2,'two'),(3,'three'),(4,'four'),(5,'five'),(6,'six'),(8,'eight'),(9,'nine'),(10,'ten'),(11,'eleven');
+	flush ramchunk testrt_1diskchunk;
+	flush rtindex testrt_1ramchunk;
+	insert into testrt_3diskchunks values (1,'one'),(2,'two'),(3,'three'),(4,'four');
+	flush ramchunk testrt_3diskchunks;
+	insert into testrt_3diskchunks values (5,'five'),(6,'six'),(8,'eight');
+	flush ramchunk testrt_3diskchunks;
+	insert into testrt_3diskchunks values (9,'nine'),(10,'ten'),(11,'eleven');
+	flush ramchunk testrt_3diskchunks;
+
+	<!-- always only 1 thread for pseudo-sharding - expect no pseudo-sharding in game (not possible to parallel) -->
+	<!-- 1+1 thread - all in serial, should be only 1 context, no merging -->
+	select * from META:all limit 2 option threads_ex='1+1';show meta;
+
+	<!-- 2+1 threads - non-perfect parallel -->
+	select * from META:all limit 2 option threads_ex='2/1+1';show meta;
+
+	<!-- 3+1 threads - perfect parallel for 3 disk chunks -->
+	select * from META:all limit 2 option threads_ex='3/1+1';show meta;
+
+	<!-- 8+1 threads - perfect for every disk chunk, but not for whole index -->
+	select * from META:all limit 2 option threads_ex='8/1+1';show meta;
+
+	<!-- 12+1 threads - perfect parallel for everything -->
+	select * from META:all limit 2 option threads_ex='12/1+1';show meta;
+
+	<!-- always 16 threads for pseudo-sharding - expect to be fully parallel always -->
+	<!-- 1+16 thread - all in serial -->
+	select * from META:all limit 2 option threads_ex='1+16/1';show meta;
+
+	<!-- 2+16 threads - non-perfect parallel -->
+	select * from META:all limit 2 option threads_ex='2/1+16/1';show meta;
+
+	<!-- 3+16 threads - perfect parallel for 3 disk chunks -->
+	select * from META:all limit 2 option threads_ex='3/1+16/1';show meta;
+
+	<!-- 8+16 threads - perfect for every disk chunk, but not for whole index as whole -->
+	select * from META:all limit 2 option threads_ex='8/1+16/1';show meta;
+
+	<!-- 12+16 threads - perfect parallel for everything -->
+	select * from META:all limit 2 option threads_ex='12/1+16/1';show meta;
+
+</sphinxql>
+</queries>
+
+</test>

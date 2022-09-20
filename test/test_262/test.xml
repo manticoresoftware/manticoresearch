@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>cascade threading</name>
+
+<skip_indexer/>
+<config>
+searchd
+{
+	<searchd_settings/>
+	binlog_path =
+}
+
+index fake
+{
+	type	= template
+}
+</config>
+
+	<!-- this expands into 560 test queries -->
+	<queries>
+		<repeat var="gl" variants=" 11">
+			<repeat var="gl_rr" delimiter="/" variants="/1">
+				<repeat var="gl1" variants=" 22">
+					<repeat var="gl1_rr" delimiter="/" variants="/2">
+						<sphinxql>
+							set threads_ex='';
+							set global threads_ex='<gl/>/<gl_rr/>+<gl1/>/<gl1_rr/>';
+							show variables like 'threads_ex_effective';
+						</sphinxql>
+						<repeat var="loc" variants=" 33">
+							<repeat var="loc_rr" delimiter="/" variants="/3">
+								<repeat var="loc1" variants=" 44">
+									<repeat var="loc1_rr" delimiter="/" variants="/4">
+										<sphinxql>
+											set threads_ex='<loc/>/<loc_rr/>+<loc1/>/<loc1_rr/>';
+											show variables like 'threads_ex_effective';
+										</sphinxql>
+									</repeat>
+								</repeat>
+							</repeat>
+						</repeat>
+					</repeat>
+				</repeat>
+			</repeat>
+		</repeat>
+	</queries>
+</test>

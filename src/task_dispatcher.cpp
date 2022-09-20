@@ -10,10 +10,25 @@
 
 #include "task_dispatcher.h"
 #include "coroutine.h"
+#include "client_task_info.h"
 
 #include <atomic>
 #include <cassert>
 
+
+namespace {
+inline int CalcConcurrency ( int iConcurrency )
+{
+	if ( iConcurrency )
+		return iConcurrency;
+
+	iConcurrency = GetEffectiveDistThreads();
+	if ( iConcurrency )
+		return iConcurrency;
+
+	return Threads::NThreads();
+}
+}
 /////////////////////////////////////////////////////////////////////////////
 /// trivial concurrent task dispatcher
 /////////////////////////////////////////////////////////////////////////////
@@ -63,7 +78,7 @@ bool SingleTaskSource_c::FetchTask ( int& iTask )
 
 ConcurrentTaskDispatcher_c::ConcurrentTaskDispatcher_c ( int iJobs, int iConcurrency )
 	: m_iJobs ( iJobs )
-	, m_iConcurrency ( iConcurrency ? iConcurrency : Threads::NThreads() )
+	, m_iConcurrency ( CalcConcurrency ( iConcurrency ) )
 	, m_iCurrentJob { iJobs - 1 }
 {}
 
@@ -162,7 +177,7 @@ public:
 
 RRTaskDispatcher_c::RRTaskDispatcher_c ( int iJobs, int iConcurrency, int iBatch )
 	: m_iJobs ( iJobs )
-	, m_iConcurrency ( iConcurrency ? iConcurrency : Threads::NThreads() )
+	, m_iConcurrency ( CalcConcurrency ( iConcurrency ) )
 	, m_iBatch ( iBatch )
 {}
 

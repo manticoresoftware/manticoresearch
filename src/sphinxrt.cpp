@@ -6650,17 +6650,12 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 
 	assert ( !dSorters.IsEmpty () );
 
-	// the context
-	ClonableCtx_T<DiskChunkSearcherCtx_t, DiskChunkSearcherCloneCtx_t> tClonableCtx { dSorters, tResult };
-
-	auto iConcurrency = tQuery.m_iCouncurrency;
-	if ( !iConcurrency )
-		iConcurrency = GetEffectiveDistThreads();
-
 	auto tDispatch = GetEffectiveBaseDispatcherTemplate();
 	Dispatcher::Unify ( tDispatch, tQuery.m_tMainDispatcher );
-	auto pDispatcher = Dispatcher::Make ( iJobs, iConcurrency, tDispatch );
+	auto pDispatcher = Dispatcher::Make ( iJobs, tQuery.m_iCouncurrency, tDispatch );
 
+	// the context
+	ClonableCtx_T<DiskChunkSearcherCtx_t, DiskChunkSearcherCloneCtx_t> tClonableCtx { dSorters, tResult };
 	tClonableCtx.LimitConcurrency ( pDispatcher->GetConcurrency() );
 
 	auto iStart = sphMicroTimer();
@@ -6703,10 +6698,14 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 		int iJob = -1; // make it consumed
 
 		if ( !pSource->FetchTask ( iJob ) || fnCheckInterrupt() )
+		{
+			sphLogDebug ( "Early finish parallel QueryDiskChunks because of empty queue" );
 			return; // already nothing to do, early finish.
+		}
 
 		auto tJobContext = tClonableCtx.CloneNewContext();
 		auto& tCtx = tJobContext.first;
+		sphLogDebug ( "QueryDiskChunks cloned context %d", tJobContext.second );
 		tClonableCtx.SetJobOrder ( tJobContext.second, -iJob ); // fixme! Same as in single search, but here we walk in reverse order. Need to fix?
 		Threads::Coro::Throttler_c tThrottler ( session::GetThrottlingPeriodMS () );
 		int iTick=1; // num of times coro rescheduled by throttler
@@ -6715,6 +6714,7 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 			// jobs come in ascending order from 0 up to iJobs-1.
 			// We walk over disk chunk in reverse order, from last to 0-th.
 			auto iChunk = iJobs - iJob - 1;
+			sphLogDebugv ( "QueryDiskChunks %d, Jb/Chunk: %d", tJobContext.second, iJob, iChunk );
 			iJob = -1; // mark it consumed
 			myinfo::SetTaskInfo ( "%d ch %d:", iTick, iChunk );
 			auto & dLocalSorters = tCtx.m_dSorters;
@@ -6774,7 +6774,7 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 				++iTick;
 		}
 	});
-
+	sphLogDebug ( "QueryDiskChunks processed in %d thread(s)", tClonableCtx.NumWorked() );
 	tClonableCtx.Finalize();
 }
 

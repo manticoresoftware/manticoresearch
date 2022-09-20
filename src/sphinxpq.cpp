@@ -1468,11 +1468,11 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 	if ( !iJobs )
 		return;
 
+	auto tDispatch = GetEffectiveBaseDispatcherTemplate();
+	auto pDispatcher = Dispatcher::Make ( iJobs, 0, tDispatch );
+
 	// the context
 	ClonableCtx_T<PqMatchContextRef_t, PqMatchContextClone_t> dCtx { this, pSeg, tReject, tRes };
-
-	auto tDispatch = GetEffectiveBaseDispatcherTemplate();
-	auto pDispatcher = Dispatcher::Make ( iJobs, GetEffectiveDistThreads(), tDispatch );
 	dCtx.LimitConcurrency ( pDispatcher->GetConcurrency() );
 
 	if ( tRes.m_bVerbose )
@@ -1484,15 +1484,20 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 		int iJob = -1; // make it consumed
 
 		if ( !pSource->FetchTask ( iJob ) )
+		{
+			sphLogDebug ( "Early finish parallel DoMatchDocuments because of empty queue" );
 			return; // already nothing to do, early finish.
+		}
 
 		auto pInfo = PublishTaskInfo ( new PQInfo_t );
 		pInfo->m_iTotal = iJobs;
 		auto tJobContext = dCtx.CloneNewContext();
+		sphLogDebug ( "DoMatchDocuments cloned context %d", tJobContext.second );
 		auto& tCtx = tJobContext.first;
 		Threads::Coro::Throttler_c tThrottler ( session::GetThrottlingPeriodMS () );
 		while (true)
 		{
+			sphLogDebugv ( "DoMatchDocuments %d, iJob: %d", tJobContext.second, iJob );
 			pInfo->m_iCurrent = iJob;
 			MatchingWork ( dStored[iJob], *tCtx.m_pMatchCtx );
 			iJob = -1; // mark it consumed
@@ -1504,7 +1509,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 			tThrottler.ThrottleAndKeepCrashQuery ();
 		}
 	});
-
+	sphLogDebug ( "DoMatchDocuments processed in %d thread(s)", dCtx.NumWorked() );
 	// collect and merge result set
 	CSphVector<PercolateMatchContext_t *> dResults;
 	dCtx.ForAll ( [&dResults] ( const PqMatchContextRef_t& tCtx ) { dResults.Add ( tCtx.m_pMatchCtx ); }, true );

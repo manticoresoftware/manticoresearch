@@ -163,6 +163,9 @@ public:
 	// set (optionally) 'weight' of a job; ForAll will iterate jobs according to ascending weights
 	void SetJobOrder ( int iJobID, int iOrder );
 
+	// informational
+	int NumWorked() const { return m_iTasks.load ( std::memory_order_relaxed ); }
+
 	template <typename FNPROCESSOR>
 	void ForAll ( FNPROCESSOR fnProcess, bool bIncludeRoot=true );
 };

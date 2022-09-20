@@ -10581,17 +10581,13 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 	int iJobs = iSplit;
 	assert ( iJobs>=1 );
 
-	Threads::ClonableCtx_T<DiskChunkSearcherCtx_t, DiskChunkSearcherCloneCtx_t> tClonableCtx { dSorters, tResult };
-
-	auto iConcurrency = tQuery.m_iCouncurrency;
-	if ( !iConcurrency )
-		iConcurrency = GetEffectiveDistThreads();
-
 	// pseudo-sharding scheduler
 	auto tDispatch = GetEffectivePseudoShardingDispatcherTemplate();
 	Dispatcher::Unify ( tDispatch, tQuery.m_tPseudoShardingDispatcher );
-	auto pDispatcher = Dispatcher::Make ( iJobs, iConcurrency, tDispatch );
+	auto pDispatcher = Dispatcher::Make ( iJobs, 0, tDispatch );
 
+	// the context
+	Threads::ClonableCtx_T<DiskChunkSearcherCtx_t, DiskChunkSearcherCloneCtx_t> tClonableCtx { dSorters, tResult };
 	tClonableCtx.LimitConcurrency ( pDispatcher->GetConcurrency() );
 
 	auto iStart = sphMicroTimer();
@@ -10609,15 +10605,20 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 		int iChunk = -1; // make it consumed
 
 		if ( !pSource->FetchTask ( iChunk ) || fnCheckInterrupt() )
+		{
+			sphLogDebug ( "Early finish parallel RunSplitQuery because of empty queue" );
 			return; // already nothing to do, early finish.
+		}
 
 		auto tJobContext = tClonableCtx.CloneNewContext();
 		auto& tCtx = tJobContext.first;
+		sphLogDebug ( "RunSplitQuery cloned context %d", tJobContext.second );
 		tClonableCtx.SetJobOrder ( tJobContext.second, iChunk );
 		Threads::Coro::Throttler_c tThrottler ( session::GetThrottlingPeriodMS() );
 		int iTick=1; // num of times coro rescheduled by throttler
 		while ( !fnCheckInterrupt() ) // some earlier job met error; abort.
 		{
+			sphLogDebugv ( "RunSplitQuery %d, job %d", tJobContext.second, iChunk );
 			myinfo::SetTaskInfo ( "%d ch %d:", iTick, iChunk );
 			auto & dLocalSorters = tCtx.m_dSorters;
 			CSphQueryResultMeta tChunkMeta;
@@ -10671,7 +10672,7 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 				++iTick;
 		}
 	});
-
+	sphLogDebug ( "RunSplitQuery processed in %d thread(s)", tClonableCtx.NumWorked() );
 	tClonableCtx.Finalize();
 	return !fnCheckInterrupt();
 }

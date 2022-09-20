@@ -5953,16 +5953,12 @@ void SearchHandler_c::RunLocalSearches ()
 	for ( int i = 0; i<iNumLocals; ++i )
 		dOrder[i] = i;
 
-	// the context
-	ClonableCtx_T<LocalSearchRef_t, LocalSearchClone_t> dCtx { m_tHook, pMainExtra, m_dNFailuresSet, m_dNAggrResults, m_dNResults };
-
-	auto iConcurrency = m_dNQueries.First().m_iCouncurrency;
-	if ( !iConcurrency )
-		iConcurrency = GetEffectiveDistThreads ();
-
 	auto tDispatch = GetEffectiveBaseDispatcherTemplate();
 	Dispatcher::Unify ( tDispatch, m_dNQueries.First().m_tMainDispatcher );
-	auto pDispatcher = Dispatcher::Make ( iNumLocals, iConcurrency, tDispatch );
+	auto pDispatcher = Dispatcher::Make ( iNumLocals, m_dNQueries.First().m_iCouncurrency, tDispatch );
+
+	// the context
+	ClonableCtx_T<LocalSearchRef_t, LocalSearchClone_t> dCtx { m_tHook, pMainExtra, m_dNFailuresSet, m_dNAggrResults, m_dNResults };
 	dCtx.LimitConcurrency ( pDispatcher->GetConcurrency() );
 
 	bool bSingle = pDispatcher->GetConcurrency()==1;
@@ -5991,7 +5987,10 @@ void SearchHandler_c::RunLocalSearches ()
 		int iJob = -1; // make it consumed
 
 		if ( !pSource->FetchTask ( iJob ) )
+		{
+			sphLogDebug ( "Early finish parallel RunLocalSearches because of empty queue" );
 			return; // already nothing to do, early finish.
+		}
 
 		// these two moved from inside the loop to avoid construction on every turn
 		CSphVector<ISphMatchSorter *> dSorters ( iQueries );
@@ -5999,6 +5998,7 @@ void SearchHandler_c::RunLocalSearches ()
 
 		auto tJobContext = dCtx.CloneNewContext();
 		auto& tCtx = tJobContext.first;
+		sphLogDebug ( "RunLocalSearches cloned context %d", tJobContext.second );
 		Threads::Coro::Throttler_c tThrottler ( session::GetThrottlingPeriodMS () );
 		while ( true )
 		{
@@ -6006,10 +6006,9 @@ void SearchHandler_c::RunLocalSearches ()
 				return; // all is done
 
 			auto iLocal = dOrder[iJob];
+			sphLogDebugv ( "RunLocalSearches %d, iJob: %d, iLocal: %d, mass %d", tJobContext.second, iJob, iLocal, (int) m_dLocal[iLocal].m_iMass );
 			iJob = -1; // mark it consumed
-//			sphWarning ( "iJob: %d, iLocal: %d, mass %d", iJob, iLocal, (int) m_dLocal[iLocal].m_iMass );
 
-			sphLogDebugv ("Tick coro search");
 			int64_t iCpuTime = -sphTaskCpuTimer ();
 
 			// FIXME!!! handle different proto
@@ -6144,6 +6143,7 @@ void SearchHandler_c::RunLocalSearches ()
 			tThrottler.ThrottleAndKeepCrashQuery (); // we set CrashQuery anyway at the start of the loop
 		}
 	});
+	sphLogDebug ( "RunLocalSearches processed in %d thread(s)", dCtx.NumWorked() );
 	dCtx.Finalize (); // merge mt results (if any)
 
 	tGlobalSorters.MergeResults(m_dNAggrResults);
@@ -7858,11 +7858,11 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 	CSphVector<int> dStubFields;
 	dStubFields.Add ( 0 );
 
+	auto tDispatch = GetEffectiveBaseDispatcherTemplate();
+	auto pDispatcher = Dispatcher::Make ( iJobs, 0, tDispatch );
+
 	// the context
 	ClonableCtx_T<SnippedBuilderCtxRef_t, SnippedBuilderCtxClone_t> dCtx { pBuilder };
-
-	auto tDispatch = GetEffectiveBaseDispatcherTemplate();
-	auto pDispatcher = Dispatcher::Make ( iJobs, GetEffectiveDistThreads(), tDispatch );
 	dCtx.LimitConcurrency ( pDispatcher->GetConcurrency() );
 
 	Coro::ExecuteN ( dCtx.Concurrency ( iJobs ), [&]
@@ -7872,15 +7872,19 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 		int iJob = -1; // make it consumed
 
 		if ( !pSource->FetchTask ( iJob ) )
+		{
+			sphLogDebug ( "Early finish parallel MakeSnippetsCoro because of empty queue" );
 			return; // already nothing to do, early finish.
+		}
 
 		auto tJobContext = dCtx.CloneNewContext();
 		auto& tCtx = tJobContext.first;
+		sphLogDebug ( "MakeSnippetsCoro cloned context %d", tJobContext.second );
 		Threads::Coro::Throttler_c tThrottler ( session::GetThrottlingPeriodMS () );
 		while (true)
 		{
 			myinfo::SetTaskInfo ( "s %d:", iJob );
-			sphLogDebug ( "MakeSnippetsCoro Coro loop tick %d[%d]", iJob, dTasks[iJob] );
+			sphLogDebugv ( "MakeSnippetsCoro %d %d[%d]", tJobContext.second, iJob, dTasks[iJob] );
 			MakeSingleLocalSnippetWithFields ( dQueries[dTasks[iJob]], q, tCtx.m_pBuilder, dStubFields );
 			sphLogDebug ( "MakeSnippetsCoro Coro loop tick %d finished", iJob );
 			iJob = -1; // mark it consumed

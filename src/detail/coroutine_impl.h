@@ -23,27 +23,18 @@ template<typename REFCONTEXT, typename CONTEXT>
 template<typename... PARAMS>
 ClonableCtx_T<REFCONTEXT, CONTEXT>::ClonableCtx_T ( PARAMS&&... tParams )
 	: m_dParentContext ( std::forward<PARAMS> ( tParams )... )
-{
-	if ( !m_dParentContext.IsClonable() )
-		return;
-
-	int iContexts = NThreads() - 1;
-	if ( !iContexts )
-		return;
-
-	Setup ( iContexts );
-}
+{}
 
 template<typename REFCONTEXT, typename CONTEXT>
 void ClonableCtx_T<REFCONTEXT, CONTEXT>::LimitConcurrency ( int iDistThreads )
 {
 	assert ( m_iTasks == 0 ); // can be run only when no work started
-	if ( !iDistThreads )	  // 0 as for dist_threads means 'no limit'
+	if ( !m_dParentContext.IsClonable() || !iDistThreads )	  // 0 as for dist_threads means 'no limit'
 		return;
 
 	auto iContexts = iDistThreads - 1; // one context is always clone-free
-	if ( m_dChildrenContexts.GetLength() <= iContexts )
-		return; // nothing to align
+	if ( !iContexts )
+		return;
 
 	Setup ( iContexts );
 }

@@ -6714,7 +6714,7 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 			// jobs come in ascending order from 0 up to iJobs-1.
 			// We walk over disk chunk in reverse order, from last to 0-th.
 			auto iChunk = iJobs - iJob - 1;
-			sphLogDebugv ( "QueryDiskChunks %d, Jb/Chunk: %d", tJobContext.second, iJob, iChunk );
+			sphLogDebugv ( "QueryDiskChunks %d, Jb/Chunk: %d/%d", tJobContext.second, iJob, iChunk );
 			iJob = -1; // mark it consumed
 			myinfo::SetTaskInfo ( "%d ch %d:", iTick, iChunk );
 			auto & dLocalSorters = tCtx.m_dSorters;

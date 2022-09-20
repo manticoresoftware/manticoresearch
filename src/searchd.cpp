@@ -8947,7 +8947,7 @@ static bool BuildDistIndexStatus ( VectorLike & dStatus, const CSphString& sInde
 	return true;
 }
 
-
+/* commented out as not used
 static bool operator < ( const IteratorDesc_t & tA, const IteratorDesc_t & tB )
 {
 	if ( tA.m_sAttr < tB.m_sAttr )
@@ -8961,7 +8961,7 @@ static bool operator == ( const IteratorDesc_t & tA, const IteratorDesc_t & tB )
 {
 	return tA.m_sAttr==tB.m_sAttr && tA.m_sType==tB.m_sType;
 }
-
+*/
 
 void BuildAgentStatus ( VectorLike &dStatus, const CSphString& sIndexOrAgent )
 {
@@ -16414,7 +16414,10 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		return true;
 
 	case STMT_SHOW_SETTINGS:
-		HandleMysqlShowSettings ( g_hCfg, tOut );
+		{
+			ScRL_t dRotateConfigMutexRlocked { g_tRotateConfigMutex };
+			HandleMysqlShowSettings ( g_hCfg, tOut );
+		}
 		return true;
 
 	default:

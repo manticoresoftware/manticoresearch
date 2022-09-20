@@ -2,6 +2,7 @@
 
 <test>
 <name>matching with different threading</name>
+<requires><non-rt/></requires>
 
 <config>
 indexer

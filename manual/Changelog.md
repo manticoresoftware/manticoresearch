@@ -6,6 +6,7 @@
 * Improved [cost-based optimizer](../Searching/Cost_based_optimizer.md#Cost-based-optimizer) which may increase query response time in many cases.
 
 ### Minor changes
+* Queries with stateful UDFs are now forced to be executed in a single thread
 * **⚠️ BREAKING CHANGE**: Secondary indexes file format got changed and if you are using secondary indexes for searching (`searchd.secondary_indexes = 1` which was not a default in the previous versions) the new Manticore version will skip loading older index versions to prevent performance drop. The recommendations are:
   - remove secondary indexes files during upgrade:
     * `systemctl stop manticore`
@@ -180,6 +181,7 @@ Released: May 18th 2022
 * Support for Amazon Linux 2 via [YUM repo](../Installation/RHEL_and_Centos.md#YUM-repository)
 
 ### Bugfixes
+* [Issue #815](https://github.com/manticoresoftware/manticoresearch/issues/815) Random crash when using UDF function
 * [Issue #287](https://github.com/manticoresoftware/manticoresearch/issues/287) out of memory while indexing RT index
 * [Issue #604](https://github.com/manticoresoftware/manticoresearch/issues/604) Breaking change 3.6.0, 4.2.0 sphinxql-parser
 * [Issue #667](https://github.com/manticoresoftware/manticoresearch/issues/667) FATAL: out of memory (unable to allocate 9007199254740992 bytes)

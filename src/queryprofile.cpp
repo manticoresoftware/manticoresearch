@@ -36,6 +36,8 @@ void QueryProfile_c::Start ( ESphQueryState eNew )
 	memset ( m_tmTotal, 0, sizeof(m_tmTotal) );
 	m_eState = eNew;
 	m_tmStamp = sphMicroTimer();
+	m_iPseudoShards = 1;
+	m_iMaxMatches = 0;
 }
 
 

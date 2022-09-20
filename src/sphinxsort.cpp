@@ -4606,7 +4606,7 @@ public:
 	bool				m_bZonespanlist = false;
 	DWORD				m_uPackedFactorFlags = SPH_FACTOR_DISABLE;
 
-						QueueCreator_c ( const SphQueueSettings_t & tSettings, const CSphQuery & tQuery, CSphString & sError, StrVec_t * pExtra );
+						QueueCreator_c ( const SphQueueSettings_t & tSettings, const CSphQuery & tQuery, CSphString & sError, StrVec_t * pExtra, QueryProfile_c * pProfile );
 
 	bool				SetupComputeQueue();
 	bool				SetupGroupQueue();
@@ -4627,6 +4627,7 @@ private:
 	const CSphQuery &			m_tQuery;
 	CSphString &				m_sError;
 	StrVec_t *					m_pExtra = nullptr;
+	QueryProfile_c *			m_pProfile = nullptr;
 
 	bool						m_bHasCount = false;
 	bool						m_bHasGroupByExpr = false;
@@ -4703,11 +4704,12 @@ private:
 };
 
 
-QueueCreator_c::QueueCreator_c ( const SphQueueSettings_t & tSettings, const CSphQuery & tQuery, CSphString & sError, StrVec_t * pExtra )
+QueueCreator_c::QueueCreator_c ( const SphQueueSettings_t & tSettings, const CSphQuery & tQuery, CSphString & sError, StrVec_t * pExtra, QueryProfile_c * pProfile )
 	: m_tSettings ( tSettings )
 	, m_tQuery ( tQuery )
 	, m_sError ( sError )
 	, m_pExtra ( pExtra )
+	, m_pProfile ( pProfile )
 	, m_pSorterSchema { std::make_unique<CSphRsetSchema>() }
 {
 	// short-cuts
@@ -6419,8 +6421,9 @@ int QueueCreator_c::AdjustMaxMatches ( int iMaxMatches ) const
 		return iMaxMatches;
 
 	const int MAX_MAXMATCHES=16384;
+	int iMaxMaxMatches = m_tQuery.m_iMaxMatchThresh ? m_tQuery.m_iMaxMatchThresh : MAX_MAXMATCHES;
 	int iCountDistinct = m_tSettings.m_fnGetCountDistinct ? m_tSettings.m_fnGetCountDistinct ( m_pSorterSchema->GetAttr(iGroupbyAttr).m_sName ) : -1;
-	if ( iCountDistinct>MAX_MAXMATCHES )
+	if ( iCountDistinct>iMaxMaxMatches )
 		return iMaxMatches;
 
 	return Max ( iCountDistinct, iMaxMatches );
@@ -6434,6 +6437,9 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 	if ( m_bGotGroupby )
 	{
 		m_tGroupSorterSettings.m_iMaxMatches = AdjustMaxMatches ( m_tGroupSorterSettings.m_iMaxMatches );
+		if ( m_pProfile )
+			m_pProfile->m_iMaxMatches = m_tGroupSorterSettings.m_iMaxMatches;
+
 		return sphCreateSorter1st ( m_eMatchFunc, m_eGroupFunc, &m_tQuery, m_tGroupSorterSettings, bNeedFactors, PredictAggregates() );
 	}
 
@@ -6441,6 +6447,9 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 		return new CollectQueue_c ( m_tSettings.m_iMaxMatches, *m_tSettings.m_pCollection );
 
 	int iMaxMatches = ReduceMaxMatches();
+	if ( m_pProfile )
+		m_pProfile->m_iMaxMatches = iMaxMatches;
+
 	ISphMatchSorter * pResult = CreatePlainSorter ( m_eMatchFunc, m_tQuery.m_bSortKbuffer, iMaxMatches, bNeedFactors );
 	if ( !pResult )
 		return nullptr;
@@ -6642,9 +6651,9 @@ std::pair<bool,int> ApplyImplicitCutoff ( const CSphQuery & tQuery, const VecTra
 }
 
 
-ISphMatchSorter * sphCreateQueue ( const SphQueueSettings_t & tQueue, const CSphQuery & tQuery, CSphString & sError, SphQueueRes_t & tRes, StrVec_t * pExtra )
+ISphMatchSorter * sphCreateQueue ( const SphQueueSettings_t & tQueue, const CSphQuery & tQuery, CSphString & sError, SphQueueRes_t & tRes, StrVec_t * pExtra, QueryProfile_c * pProfile )
 {
-	QueueCreator_c tCreator ( tQueue, tQuery, sError, pExtra );
+	QueueCreator_c tCreator ( tQueue, tQuery, sError, pExtra, pProfile );
 	if ( !tCreator.SetupQueue () )
 		return nullptr;
 
@@ -6652,14 +6661,14 @@ ISphMatchSorter * sphCreateQueue ( const SphQueueSettings_t & tQueue, const CSph
 }
 
 
-static void CreateMultiQueue ( RawVector_T<QueueCreator_c> & dCreators, const SphQueueSettings_t & tQueue, const VecTraits_T<CSphQuery> & dQueries, VecTraits_T<ISphMatchSorter*> & dSorters, VecTraits_T<CSphString> & dErrors, SphQueueRes_t & tRes, StrVec_t * pExtra )
+static void CreateMultiQueue ( RawVector_T<QueueCreator_c> & dCreators, const SphQueueSettings_t & tQueue, const VecTraits_T<CSphQuery> & dQueries, VecTraits_T<ISphMatchSorter*> & dSorters, VecTraits_T<CSphString> & dErrors, SphQueueRes_t & tRes, StrVec_t * pExtra, QueryProfile_c * pProfile )
 {
 	assert ( dSorters.GetLength()>1 );
 	assert ( dSorters.GetLength()==dQueries.GetLength() );
 	assert ( dSorters.GetLength()==dErrors.GetLength() );
 
 	dCreators.Reserve_static ( dSorters.GetLength () );
-	dCreators.Emplace_back( tQueue, dQueries[0], dErrors[0], pExtra );
+	dCreators.Emplace_back( tQueue, dQueries[0], dErrors[0], pExtra, pProfile );
 	dCreators[0].m_bMulti = true;
 
 	// same as SetupQueue
@@ -6675,7 +6684,7 @@ static void CreateMultiQueue ( RawVector_T<QueueCreator_c> & dCreators, const Sp
 	for ( int i=1; i<dSorters.GetLength(); ++i )
 	{
 		// fill extra only for initial pass
-		dCreators.Emplace_back ( tQueue, dQueries[i], dErrors[i], pExtra );
+		dCreators.Emplace_back ( tQueue, dQueries[i], dErrors[i], pExtra, pProfile );
 		dCreators[i].m_bMulti = true;
 		if ( !dCreators[i].SetupQueue () )
 		{
@@ -6785,9 +6794,9 @@ static void CreateMultiQueue ( RawVector_T<QueueCreator_c> & dCreators, const Sp
 }
 
 
-void sphCreateMultiQueue ( const SphQueueSettings_t & tQueue, const VecTraits_T<CSphQuery> & dQueries, VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, SphQueueRes_t & tRes, StrVec_t * pExtra )
+void sphCreateMultiQueue ( const SphQueueSettings_t & tQueue, const VecTraits_T<CSphQuery> & dQueries, VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, SphQueueRes_t & tRes, StrVec_t * pExtra, QueryProfile_c * pProfile )
 {
 	RawVector_T<QueueCreator_c> dCreators;
-	CreateMultiQueue ( dCreators, tQueue, dQueries, dSorters, dErrors, tRes, pExtra );
+	CreateMultiQueue ( dCreators, tQueue, dQueries, dSorters, dErrors, tRes, pExtra, pProfile );
 	CreateSorters ( dQueries, dSorters, dCreators, dErrors, tRes );
 }

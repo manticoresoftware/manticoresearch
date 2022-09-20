@@ -258,7 +258,7 @@ Query OK, 3 rows affected (0.01 sec)
 ##### HTTP:
 
 <!-- request HTTP -->
-`"id":0` forces automatic ID generation.
+`"id":0` or no id forces automatic ID generation.
 
 ```json
 POST /insert

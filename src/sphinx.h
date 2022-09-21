@@ -1336,6 +1336,7 @@ struct SphQueueSettings_t
 	int							m_iMaxMatches = DEFAULT_MAX_MATCHES;
 	bool						m_bNeedDocids = false;
 	std::function<int64_t (const CSphString &)> m_fnGetCountDistinct;
+	bool						m_bEnableFastDistinct = false;
 
 	explicit SphQueueSettings_t ( const ISphSchema & tSchema, QueryProfile_c * pProfiler = nullptr )
 		: m_tSchema ( tSchema )

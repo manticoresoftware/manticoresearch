@@ -4276,6 +4276,61 @@ private:
 	}
 };
 
+
+// fast count distinct sorter
+// works by using precalculated count distinct taken from secondary indexes
+class FastCountDistinctSorter_c final : public MatchSorter_c, ISphNoncopyable, protected BaseGroupSorter_c
+{
+public:
+	FastCountDistinctSorter_c ( int iCountDistinct, const CSphGroupSorterSettings & tSettings )
+		: BaseGroupSorter_c ( tSettings )
+		, m_iCountDistinct ( iCountDistinct )
+	{}
+
+	bool	IsGroupby () const final										{ return true; }
+	bool	Push ( const CSphMatch & tEntry ) final							{ return PushEx(tEntry); }
+	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) final	{ assert ( 0 && "Not supported in grouping"); }
+	bool	PushGrouped ( const CSphMatch & tEntry, bool ) final			{ return PushEx(tEntry); }
+	bool	CanBeCloned() const final										{ return false; }
+	void	SetMerge ( bool bMerge ) final									{}
+	void	Finalize ( MatchProcessor_i & tProcessor, bool, bool bFinalizeMatches ) final	{ if ( GetLength() ) tProcessor.Process ( &m_tData ); }
+	int		GetLength() final												{ return m_bDataInitialized ? 1 : 0; }
+	ISphMatchSorter * Clone() const final									{ return nullptr; }
+	void	MoveTo ( ISphMatchSorter * pRhs, bool bCopyMeta ) final			{ assert ( 0 && "Not supported"); }
+
+	int Flatten ( CSphMatch * pTo ) final
+	{
+		assert ( m_bDataInitialized );
+		Swap ( *pTo, m_tData );
+		m_iTotal = 0;
+		m_bDataInitialized = false;
+		return 1;
+	}
+
+protected:
+	CSphMatch	m_tData;
+	bool		m_bDataInitialized = false;
+	int			m_iCountDistinct = 0;
+
+private:
+	/// add entry to the queue
+	FORCE_INLINE bool PushEx ( const CSphMatch & tEntry )
+	{
+		if ( m_bDataInitialized )
+			return false;
+
+		m_pSchema->CloneMatch ( m_tData, tEntry );
+		m_tData.SetAttr ( m_tLocGroupby, 1 ); // fake group number
+		m_tData.SetAttr ( m_tLocCount, 1 );
+		m_tData.SetAttr ( m_tLocDistinct, m_iCountDistinct );
+
+		m_bDataInitialized = true;
+		m_iTotal++;
+		return true;
+	}
+};
+
+
 //////////////////////////////////////////////////////////////////////////
 // SORT CLAUSE PARSER
 //////////////////////////////////////////////////////////////////////////
@@ -4411,8 +4466,12 @@ static inline ESphSortKeyPart Attr2Keypart ( ESphAttr eType )
 }
 
 template < typename COMPGROUP >
-static ISphMatchSorter * sphCreateSorter3rd ( const ISphMatchComparator * pComp, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings, bool bHasPackedFactors, bool bHasAggregates )
+static ISphMatchSorter * sphCreateSorter3rd ( const ISphMatchComparator * pComp, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings, bool bHasPackedFactors, bool bHasAggregates, int iCountDistinct )
 {
+	bool bFastDistinct = !bHasAggregates && tSettings.m_bImplicit && tSettings.m_bDistinct && iCountDistinct>=0 && pQuery->m_dFilters.IsEmpty() && pQuery->m_sQuery.IsEmpty();
+	if ( bFastDistinct )
+		return new FastCountDistinctSorter_c ( iCountDistinct, tSettings );
+
 	BYTE uSelector3rd = 8*( tSettings.m_bJson ? 1:0 ) + 4*( pQuery->m_iGroupbyLimit>1 ? 1:0 ) + 2*( tSettings.m_bImplicit ? 1:0 ) + ( ( tSettings.m_pGrouper && tSettings.m_pGrouper->IsMultiValue() ) ? 1:0 );
 	switch ( uSelector3rd )
 	{
@@ -4427,22 +4486,22 @@ static ISphMatchSorter * sphCreateSorter3rd ( const ISphMatchComparator * pComp,
 }
 
 
-static ISphMatchSorter * sphCreateSorter2nd ( ESphSortFunc eGroupFunc, const ISphMatchComparator * pComp, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings, bool bHasPackedFactors, bool bHasAggregates )
+static ISphMatchSorter * sphCreateSorter2nd ( ESphSortFunc eGroupFunc, const ISphMatchComparator * pComp, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings, bool bHasPackedFactors, bool bHasAggregates, int iCountDistinct )
 {
 	switch ( eGroupFunc )
 	{
-		case FUNC_GENERIC1:		return sphCreateSorter3rd<MatchGeneric1_fn>	( pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
-		case FUNC_GENERIC2:		return sphCreateSorter3rd<MatchGeneric2_fn>	( pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
-		case FUNC_GENERIC3:		return sphCreateSorter3rd<MatchGeneric3_fn>	( pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
-		case FUNC_GENERIC4:		return sphCreateSorter3rd<MatchGeneric4_fn>	( pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
-		case FUNC_GENERIC5:		return sphCreateSorter3rd<MatchGeneric5_fn>	( pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
-		case FUNC_EXPR:			return sphCreateSorter3rd<MatchExpr_fn>		( pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+		case FUNC_GENERIC1:		return sphCreateSorter3rd<MatchGeneric1_fn>	( pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates, iCountDistinct );
+		case FUNC_GENERIC2:		return sphCreateSorter3rd<MatchGeneric2_fn>	( pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates, iCountDistinct );
+		case FUNC_GENERIC3:		return sphCreateSorter3rd<MatchGeneric3_fn>	( pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates, iCountDistinct );
+		case FUNC_GENERIC4:		return sphCreateSorter3rd<MatchGeneric4_fn>	( pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates, iCountDistinct );
+		case FUNC_GENERIC5:		return sphCreateSorter3rd<MatchGeneric5_fn>	( pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates, iCountDistinct );
+		case FUNC_EXPR:			return sphCreateSorter3rd<MatchExpr_fn>		( pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates, iCountDistinct );
 		default:				return nullptr;
 	}
 }
 
 
-static ISphMatchSorter * sphCreateSorter1st ( ESphSortFunc eMatchFunc, ESphSortFunc eGroupFunc, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings, bool bHasPackedFactors, bool bHasAggregates )
+static ISphMatchSorter * sphCreateSorter1st ( ESphSortFunc eMatchFunc, ESphSortFunc eGroupFunc, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings, bool bHasPackedFactors, bool bHasAggregates, int iCountDistinct )
 {
 	CSphRefcountedPtr<ISphMatchComparator> pComp;
 	if ( !tSettings.m_bImplicit )
@@ -4460,7 +4519,7 @@ static ISphMatchSorter * sphCreateSorter1st ( ESphSortFunc eMatchFunc, ESphSortF
 			case FUNC_EXPR:			pComp = new MatchExpr_fn(); break; // only for non-bitfields, obviously
 		}
 
-	return sphCreateSorter2nd ( eGroupFunc, pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+	return sphCreateSorter2nd ( eGroupFunc, pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates, iCountDistinct );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -4696,6 +4755,8 @@ private:
 	bool	SetupColumnarAggregates ( CSphColumnInfo & tExprCol );
 	void	UpdateAggregateDependencies ( CSphColumnInfo & tExprCol );
 	int		GetGroupbyAttrIndex() const;
+	int		GetGroupDistinctAttrIndex() const;
+	int		GetAttrIndex ( const CSphString & sName ) const;
 
 	ISphMatchSorter *	SpawnQueue();
 	std::unique_ptr<ISphFilter>	CreateAggrFilter() const;
@@ -5458,12 +5519,12 @@ void QueueCreator_c::UpdateAggregateDependencies ( CSphColumnInfo & tExprCol )
 }
 
 
-int QueueCreator_c::GetGroupbyAttrIndex() const
+int QueueCreator_c::GetAttrIndex ( const CSphString & sName ) const
 {
 	assert ( m_pSorterSchema );
 	auto & tSchema = *m_pSorterSchema;
 
-	int iGroupBy = tSchema.GetAttrIndex ( m_tQuery.m_sGroupBy.cstr() );
+	int iGroupBy = tSchema.GetAttrIndex ( sName.cstr() );
 	if ( iGroupBy>=0 )
 		return iGroupBy;
 
@@ -5480,7 +5541,19 @@ int QueueCreator_c::GetGroupbyAttrIndex() const
 			break;
 		}
 
-	return iGroupBy;
+		return iGroupBy;
+}
+
+
+int QueueCreator_c::GetGroupbyAttrIndex() const
+{
+	return GetAttrIndex ( m_tQuery.m_sGroupBy );
+}
+
+
+int QueueCreator_c::GetGroupDistinctAttrIndex() const
+{
+	return GetAttrIndex ( m_tQuery.m_sGroupDistinct );
 }
 
 
@@ -6440,7 +6513,12 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 		if ( m_pProfile )
 			m_pProfile->m_iMaxMatches = m_tGroupSorterSettings.m_iMaxMatches;
 
-		return sphCreateSorter1st ( m_eMatchFunc, m_eGroupFunc, &m_tQuery, m_tGroupSorterSettings, bNeedFactors, PredictAggregates() );
+		int iCountDistinct = -1;
+		int iCountDistinctAttr = GetGroupDistinctAttrIndex();
+		if ( iCountDistinctAttr>0 && m_tSettings.m_bEnableFastDistinct )
+			iCountDistinct = m_tSettings.m_fnGetCountDistinct ? m_tSettings.m_fnGetCountDistinct ( m_pSorterSchema->GetAttr(iCountDistinctAttr).m_sName ) : -1;
+
+		return sphCreateSorter1st ( m_eMatchFunc, m_eGroupFunc, &m_tQuery, m_tGroupSorterSettings, bNeedFactors, PredictAggregates(), iCountDistinct );
 	}
 
 	if ( m_tSettings.m_pCollection )

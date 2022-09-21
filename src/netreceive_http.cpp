@@ -13,6 +13,7 @@
 #include "netreceive_http.h"
 #include "searchdssl.h"
 #include "searchdhttp.h"
+#include "tracer.h"
 
 extern int g_iClientTimeoutS; // from searchd.cpp
 extern volatile bool g_bMaintenance;
@@ -71,6 +72,7 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 
 	HttpRequestParser_c tParser;
 	CSphVector<BYTE> dResult;
+	TRACE_CONN ( "conn", "HttpServe" );
 
 	auto HttpReply = [&dResult, &tOut] ( ESphHttpStatus eCode, Str_t sMsg )
 	{
@@ -136,6 +138,7 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			sphLogDebug ("100 Continue sent");
 		}
 
+//		tracer.Instant ( [&tIn](StringBuilder_c& sOut) {sOut<< ",\"args\":{\"step\":"<<tIn.HasBytes()<<"}";} );
 		tParser.ProcessClientHttp ( tIn, dResult );
 
 		tOut.SwapData (dResult);

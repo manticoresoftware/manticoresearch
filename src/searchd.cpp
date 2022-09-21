@@ -49,6 +49,7 @@
 #include "config_reloader.h"
 #include "secondarylib.h"
 #include "task_dispatcher.h"
+#include "tracer.h"
 
 // services
 #include "taskping.h"
@@ -10782,6 +10783,7 @@ void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, boo
 	auto& tAcc = pSession->m_tAcc;
 	auto& sError = pSession->m_sError;
 	auto& tCrashQuery = GlobalCrashQueryGetRef();
+	TRACE_CONN ( "conn", "sphHandleMysqlCommitRollback" );
 
 	MEMORY ( MEM_SQL_COMMIT );
 	pSession->m_bInTransaction = false;
@@ -14245,6 +14247,27 @@ void HandleWaitStatus ( RowBuffer_i& tOutBuf, const DebugCmd::DebugCommand_t& tC
 }
 #endif
 
+void HandleTrace ( RowBuffer_i& tOut, const DebugCmd::DebugCommand_t& tCmd )
+{
+	tOut.HeadTuplet ( "command", "result" );
+#ifdef PERFETTO
+	if ( tCmd.m_sParam.IsEmpty() )
+	{
+		if ( !tCmd.m_iPar1 )
+		{
+			Tracer::Stop();
+		}
+	} else
+	{
+		Tracer::Start ( tCmd.m_sParam, tCmd.m_iPar1 );
+	}
+	tOut.DataTuplet ( "debug trace ...", "SUCCESS" );
+#else
+	tOut.DataTuplet ( "debug trace ...", "FAIL, need to rebuild with Perfetto, look to src/perfetto/README.txt" );
+#endif
+	tOut.Eof();
+}
+
 void HandleToken ( RowBuffer_i & tOut, const CSphString & sParam )
 {
 	auto sSha = strSHA1 ( sParam );
@@ -14380,6 +14403,7 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, Str_t sCommand, const QueryProfile_c 
 	case Cmd_e::WAIT: HandleWait ( tOut, tCmd ); return;
 	case Cmd_e::WAIT_STATUS: HandleWaitStatus ( tOut, tCmd ); return;
 #endif
+	case Cmd_e::TRACE: HandleTrace ( tOut, tCmd );	return;
 	default: break;
 	}
 
@@ -19343,6 +19367,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 #endif
 
 	tzset();
+
+	Tracer::Init();
 
 	CSphString sError;
 	// initialize it before other code to fetch version string for banner

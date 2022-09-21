@@ -46,6 +46,7 @@ enum class Cmd_e : BYTE
 	WAIT,
 	WAIT_STATUS,
 	META,
+	TRACE,
 
 	INVALID_CMD
 };
@@ -55,7 +56,7 @@ struct DebugCommand_t
 	Cmd_e	m_eCommand {Cmd_e::INVALID_CMD};
 	CSphString m_sParam;
 	CSphString m_sParam2;
-	int64_t m_iPar1;
+	int64_t m_iPar1 = -1;
 	int64_t m_iPar2;
 	const char * m_szStmt;
 	SmallStringHash_T<Option_t> m_hOptions;

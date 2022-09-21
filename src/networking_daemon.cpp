@@ -15,6 +15,7 @@
 #include "net_action_accept.h"
 #include "netstate_api.h"
 #include "coroutine.h"
+#include "tracer.h"
 
 #if _WIN32
 // Win-specific headers and calls
@@ -540,6 +541,7 @@ int SockWrapper_c::Impl_c::SockPollNetloop ( int64_t tmTimeUntilUs, bool bWrite 
 // as usual sphPoll - returns 1 on success, 0 on timeout, -1 on error.
 int SockWrapper_c::Impl_c::SockPoll ( int64_t tmTimeUntilUs, bool bWrite )
 {
+	TRACE_CONN ( "conn", "SockPoll" );
 	session::SetTaskState ( TaskState_e::NET_IDLE );
 	auto _ = AtScopeExit([bWrite] { session::SetTaskState ( bWrite ? TaskState_e::NET_WRITE : TaskState_e::NET_READ ); });
 	return m_pNetLoop ? SockPollNetloop ( tmTimeUntilUs, bWrite ) : SockPollClassic ( tmTimeUntilUs, bWrite );

@@ -93,6 +93,15 @@ int GetOsThreadId ()
 #endif
 }
 
+int GetOsProcessId()
+{
+#if _WIN32
+	return GetCurrentProcessId();
+#else
+	return getpid();
+#endif
+}
+
 #include <atomic>
 #include "event.h"
 #include "optional.h"

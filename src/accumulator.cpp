@@ -14,6 +14,7 @@
 #include "sphinxrt.h"
 #include "columnarmisc.h"
 #include "memio.h"
+#include "tracer.h"
 
 #include <memory>
 
@@ -72,6 +73,7 @@ int RtAccum_t::GetPackedLen() const
 
 void RtAccum_t::Sort()
 {
+	TRACE_CONN ( "conn", "RtAccum_t::Sort" );
 	if ( !m_bKeywordDict )
 		m_dAccum.Sort ( Lesser ( [] ( const CSphWordHit& a, const CSphWordHit& b )
 		{
@@ -326,6 +328,8 @@ struct AccumDocHits_t
 
 void RtAccum_t::CleanupDuplicates ( int iRowSize )
 {
+	TRACE_CONN ( "conn", "RtAccum_t::CleanupDuplicates" );
+
 	if ( m_uAccumDocs <= 1 )
 		return;
 

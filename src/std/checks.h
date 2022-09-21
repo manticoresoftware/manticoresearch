@@ -20,6 +20,7 @@
 /////////////////////////////////////////////////////////////////////////////
 
 #define VARIABLE_IS_NOT_USED __attribute__((unused))
+#define MAYBE_UNUSED( expr ) do { (void)( expr ); } while ( 0 )
 
 #define STATIC_ASSERT(_cond,_name)		typedef char STATIC_ASSERT_FAILED_ ## _name [ (_cond) ? 1 : -1 ] VARIABLE_IS_NOT_USED
 #define STATIC_SIZE_ASSERT(_type,_size)	STATIC_ASSERT ( sizeof(_type)==_size, _type ## _MUST_BE_ ## _size ## _BYTES )

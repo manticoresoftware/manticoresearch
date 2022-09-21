@@ -14,6 +14,7 @@
 
 #include "sphinxint.h"
 #include "threadutils.h"
+#include "tracer.h"
 
 // global stuff
 
@@ -59,6 +60,7 @@ public:
 		char cTopOfMainStack;
 		Threads::Init ();
 		Threads::PrepareMainThread ( &cTopOfMainStack );
+		Tracer::Init();
 		CreateSynonymsFile ();
 		CreateSynonymsFile ( g_sMagic );
 		auto iThreads = sphCpuThreadsCount();

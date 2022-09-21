@@ -220,4 +220,5 @@ CmdNotice_t DebugCmd::dCommands[(BYTE) Cmd_e::INVALID_CMD] = {
 	{ NO_WIN, "debug wait <cluster> [like 'xx'] [option timeout=3]", "wait <cluster> ready, but no more than 3 secs." },
 	{ NO_WIN, "debug wait <cluster> status <N> [like 'xx'] [option timeout=13]", "wait <cluster> commit achieve <N>, but no more than 13 secs" },
 	{ NONE, "debug meta", "Show max_matches/pseudo_shards. Needs set profiling=1" },
+	{ NONE, "debug trace OFF|'path/to/file' [<N>]", "trace flow to file until N bytes written, or 'trace OFF'" },
 };

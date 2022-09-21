@@ -19,6 +19,7 @@
 #include <math.h>
 
 #include "digest_sha1.h"
+#include "tracer.h"
 
 #if !HAVE_WSREP
 #include "replication/wsrep_api_stub.h"
@@ -1194,6 +1195,7 @@ DEFINE_RENDER ( RPLRep_t )
 // replicate serialized data into cluster and call commit monitor along
 static bool Replicate ( int iKeysCount, const wsrep_key_t * pKeys, const wsrep_buf_t & tQueries, wsrep_t * pProvider, CommitMonitor_c & tMonitor, bool bUpdate, CSphString & sError )
 {
+	TRACE_CONN ( "conn", "Replicate" );
 	assert ( pProvider );
 
 	// just displays 'RPL' flag.
@@ -1219,6 +1221,7 @@ static bool Replicate ( int iKeysCount, const wsrep_key_t * pKeys, const wsrep_b
 
 	if ( bOk )
 	{
+		TRACE_CONN ( "conn", "pProvider->replicate" );
 		tRes = pProvider->replicate ( pProvider, iConnId, &tHnd, WSREP_FLAG_COMMIT, &tLogMeta );
 		bOk = CheckResult ( tRes, tLogMeta, "replicate", sError );
 	}
@@ -1676,6 +1679,7 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 // callback for Galera commit_cb to commit replicated command
 bool HandleCmdReplicated ( RtAccum_t & tAcc )
 {
+	TRACE_SCHED ( "conn", "HandleCmdReplicated" );
 	if ( tAcc.m_dCmd.IsEmpty() )
 	{
 		sphWarning ( "empty accumulator" );
@@ -1765,6 +1769,7 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 // single point there all commands passed these might be replicated, even if no cluster
 static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pDeletedCount, CSphString * pWarning, int * pUpdated, ServedClone_c * pDesc ) EXCLUDES ( g_tClustersLock )
 {
+	TRACE_CONN ( "conn", "HandleCmdReplicate" );
 	CommitMonitor_c tMonitor ( tAcc, pDeletedCount, pWarning, pUpdated );
 
 	// without cluster path
@@ -1835,6 +1840,7 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 //	dBufKeys.ZeroVec();
 	int iKey = 0;
 
+	BEGIN_CONN ( "conn", "HandleCmdReplicate.serialize", "commands", tAcc.m_dCmd.GetLength() );
 	ARRAY_FOREACH ( i, tAcc.m_dCmd )
 	{
 		const ReplicationCommand_t & tCmd = *tAcc.m_dCmd[i];
@@ -1935,7 +1941,9 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 		int iReqLen = dBufQueries.GetLength() - iLenOff;
 		memcpy ( dBufQueries.Begin() + iLenOff - sizeof ( iReqLen ), &iReqLen, sizeof ( iReqLen ) );
 	}
+	END_CONN ( "conn" );
 
+	BEGIN_CONN ( "conn", "HandleCmdReplicate.make_keys", "keys", iKeysCount );
 	// set keys wsrep_buf_t ptr and len
 	for ( int i=0; i<iKeysCount; i++ )
 	{
@@ -1945,12 +1953,15 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 		dKeys[i].key_parts = dBufProxy.Begin() + i;
 		dKeys[i].key_parts_num = 1;
 	}
+	END_CONN ( "conn" );
 
 	wsrep_buf_t tQueries;
 	tQueries.ptr = dBufQueries.Begin();
 	tQueries.len = dBufQueries.GetLength();
 
+	BEGIN_CONN ( "conn", "HandleCmdReplicate.cluster_lock" );
 	Threads::ScopedCoroMutex_t tClusterLock { pCluster->m_tReplicationMutex };
+	END_CONN ( "conn" );
 
 	if ( !bTOI )
 		return Replicate ( iKeysCount, dKeys.Begin(), tQueries, pCluster->m_pProvider, tMonitor, bUpdate, sError );
@@ -1976,6 +1987,7 @@ bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, CSphString & sW
 // commit for common commands
 bool CommitMonitor_c::Commit ( CSphString& sError )
 {
+	TRACE_CONN ( "conn", "CommitMonitor_c::Commit" );
 	RtIndex_i* pIndex = m_tAcc.GetIndex ();
 
 	// short path for usual accum without commands

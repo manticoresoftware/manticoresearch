@@ -47,6 +47,7 @@ const char* ProtoName ( Proto_e eProto );
 const char* RelaxedProtoName ( Proto_e eProto );
 
 int GetOsThreadId ();
+int GetOsProcessId();
 
 /// my thread handle and thread func magic
 #if _WIN32

@@ -52,6 +52,7 @@
 %token <sValue>	TOK_WAIT
 %token <sValue>	TOK_LIKE
 %token <sValue>	TOK_META
+%token <sValue>	TOK_TRACE
 
 %type <iValue> boolpar timeint
 %type <sValue> ident szparam ident_special szparam_special
@@ -83,6 +84,7 @@ debugcommand:
 	| split			{ pParser->m_tCmd.m_eCommand = Cmd_e::SPLIT; }
 	| wait
 	| TOK_META		{ pParser->m_tCmd.m_eCommand = Cmd_e::META; }
+	| trace			{ pParser->m_tCmd.m_eCommand = Cmd_e::TRACE; }
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -229,6 +231,7 @@ split:
 	}
 	;
 
+// command 'wait <CLUSTER> status [N] [like ...]'
 wait:
 	TOK_WAIT ident opt_status like_filter opt_option_clause
 	{
@@ -272,6 +275,30 @@ option_item:
 	| szparam_special '=' TOK_CONST_INT	{ pParser->AddIntOption ( $1, $3 ); }
 	| szparam_special '=' TOK_USEC_INT	{ pParser->AddIntOption ( $1, $3 ); }
 	| szparam_special '=' TOK_CONST_FLOAT	{ pParser->AddFloatOption ( $1, $3 ); }
+	;
+
+// command 'trace "/path/to/file" [soft_size]'
+trace:
+	TOK_TRACE trace_args
+	;
+
+trace_args:
+	TOK_QUOTED_STRING opt_size
+	{
+		pParser->m_tCmd.m_sParam = pParser->StrFromBlob ($1);
+	}
+	| boolpar
+	{
+		pParser->m_tCmd.m_iPar1 = 0;
+	}
+	;
+
+opt_size:
+	// empty
+	| TOK_CONST_INT
+	{
+		pParser->m_tCmd.m_iPar1 = $1;
+	}
 	;
 
 %%

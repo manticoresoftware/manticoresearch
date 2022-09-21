@@ -31,17 +31,22 @@ inline StringBuilder_c& StringBuilder_c::SkipNextComma()
 	return *this;
 }
 
-inline StringBuilder_c& StringBuilder_c::AppendName ( const char* sName, bool bQuoted )
+inline StringBuilder_c& StringBuilder_c::AppendName ( const Str_t& sName, bool bQuoted )
 {
-	if ( !sName || !strlen ( sName ) )
+	if ( ::IsEmpty ( sName ) )
 		return *this;
 
-	AppendChunk ( { sName, (int)strlen ( sName ) }, bQuoted ? '"' : '\0' );
+	AppendChunk ( sName, bQuoted ? '"' : '\0' );
 	GrowEnough ( 2 );
 	m_szBuffer[m_iUsed] = ':';
 	m_szBuffer[m_iUsed + 1] = '\0';
 	m_iUsed += 1;
 	return SkipNextComma();
+}
+
+inline StringBuilder_c& StringBuilder_c::AppendName ( const char* szName, bool bQuoted )
+{
+	return AppendName ( FromSz ( szName ), bQuoted );
 }
 
 inline StringBuilder_c& StringBuilder_c::AppendChunk ( const Str_t& sChunk, char cQuote )
@@ -68,7 +73,17 @@ inline StringBuilder_c& StringBuilder_c::AppendChunk ( const Str_t& sChunk, char
 
 inline StringBuilder_c& StringBuilder_c::AppendString ( const CSphString& sText, char cQuote )
 {
-	return AppendChunk ( { sText.cstr(), sText.Length() }, cQuote );
+	return AppendChunk ( FromStr ( sText ), cQuote );
+}
+
+inline StringBuilder_c& StringBuilder_c::AppendString ( const char* szText, char cQuote )
+{
+	return AppendChunk ( FromSz ( szText ), cQuote );
+}
+
+inline StringBuilder_c& StringBuilder_c::AppendString ( Str_t sText, char cQuote )
+{
+	return AppendChunk ( sText, cQuote );
 }
 
 inline StringBuilder_c& StringBuilder_c::operator+= ( const char* sText )

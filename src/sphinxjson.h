@@ -323,6 +323,37 @@ public:
 		if ( tValue != tDefault )
 			NamedVal ( szName, tValue );
 	}
+
+	// non-escaped.
+	// Imply, that only internal strings no-need of escape (say, pre-escaped) in use,
+	// works faster, because skip escaping pass.
+
+	template<typename STR>
+	void NameNE ( STR sName )
+	{
+		StringBuilder_c::AppendName ( sName );
+	}
+
+	template<typename STR1, typename STR2>
+	void NamedStringNE ( STR1 sName, STR2 sValue )
+	{
+		NameNE ( sName );
+		AppendString ( sValue, '"' );
+	}
+
+	template<typename STR, typename T>
+	void NamedValNE ( STR sName, T tValue )
+	{
+		NameNE ( sName );
+		*this << tValue;
+	}
+
+	template<typename STR, typename T>
+	void NamedValNonNull ( STR sName, T&& tValue )
+	{
+		if ( tValue )
+			NamedValNE ( sName, std::forward<T&&> ( tValue ) );
+	}
 };
 
 /// parse JSON, convert it into SphinxBSON blob

@@ -4307,7 +4307,7 @@ bool RemoteFileReserve ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CS
 		ARRAY_FOREACH ( iFile, tCmd.m_pChunks->m_dBaseNames )
 		{
 			const CSphString & sFile = tCmd.m_pChunks->m_dBaseNames[iFile];
-			tRes.m_pDst->m_dRemotePaths[iFile].SetSprintf ( "%s/%s", sPathOnly.cstr(), sFile.cstr() );
+			tRes.m_pDst->m_dRemotePaths[iFile].SetSprintf ( "%s%s", sPathOnly.cstr(), sFile.cstr() );
 		}
 	} else
 	{

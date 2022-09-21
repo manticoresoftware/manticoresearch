@@ -823,15 +823,14 @@ static bool PrepareDirForNewIndex ( CSphString & sPath, CSphString & sIndexPath,
 			}
 		}
 	}
-	else
-		if ( !MkDir ( sRes.cstr() ) )
-		{
-			sError.SetSprintf ( "can't create directory: %s", sRes.cstr() );
-			return false;
-		}
+	else if ( !MkDir ( sRes.cstr() ) )
+	{
+		sError.SetSprintf ( "can't create directory: %s", sRes.cstr() );
+		return false;
+	}
 
-	sPath = sRes.cstr();
 	sRes << "/";
+	sPath = sRes.cstr();
 	sRes << sIndexName;
 	sIndexPath = sRes.cstr();
 
@@ -845,7 +844,7 @@ bool CopyExternalIndexFiles ( const StrVec_t & dFiles, const CSphString & sDestP
 	{
 		CSphString sDest = i;
 		StripPath(sDest);
-		sDest.SetSprintf ( "%s/%s", sDestPath.cstr(), sDest.cstr() );
+		sDest.SetSprintf ( "%s%s", sDestPath.cstr(), sDest.cstr() );
 		if ( i==sDest )
 			continue;
 

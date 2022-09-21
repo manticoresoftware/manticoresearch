@@ -15308,7 +15308,7 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, bool
 		auto tCluster = IsPartOfCluster ( pServed );
 		if ( tCluster )
 		{
-			dErrors.SubmitEx ( sName, nullptr, "is part of cluster %s, can not issue ALTER", tCluster->cstr() );
+			dErrors.SubmitEx ( sName, nullptr, "is part of cluster %s, ALTER is not supported for tables in cluster", tCluster->cstr() );
 			continue;
 		}
 

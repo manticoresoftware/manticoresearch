@@ -1382,6 +1382,8 @@ namespace session
 	QueryProfile_c* StartProfiling ( ESphQueryState );
 	void SaveLastProfile();
 	VecTraits_T<int64_t> LastIds();
+	void SetOptimizeById ( bool bOptimizeById );
+	bool GetOptimizeById();
 }
 
 void LogSphinxqlError ( const char * sStmt, const Str_t& sError );

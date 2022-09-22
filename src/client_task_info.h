@@ -40,7 +40,6 @@ private:
 
 	// session variables - doesn't participate in render, used as connection-wide globals
 public:
-	bool m_bOptimizeById = true;
 	int m_iThrottlingPeriodMS = -1;
 	int m_iDistThreads = 0;
 	int m_iDesiredStack = -1;
@@ -84,9 +83,6 @@ public:
 	bool GetReadOnly() const { return m_bReadOnly; }
 
 public:
-	void SetOptimizeById ( bool bOptimizeById ) { m_bOptimizeById = bOptimizeById; }
-	bool GetOptimizeById () const { return m_bOptimizeById; }
-
 	void SetThrottlingPeriodMS ( int iThrottlingPeriodMS ) { m_iThrottlingPeriodMS = iThrottlingPeriodMS; }
 	int GetThrottlingPeriodMS () const { return m_iThrottlingPeriodMS; }
 
@@ -126,6 +122,7 @@ public:
 namespace session {
 
 	inline ClientTaskInfo_t & Info (bool bStrict=false){ return ClientTaskInfo_t::Info(bStrict); }
+	inline ClientSession_c* GetClientSession() { return ClientTaskInfo_t::Info().GetClientSession(); }
 
 	// generic getters. If more than one assumed, consider to call Info() once and use ref instead of these 'globals'
 	inline void SetTaskState ( TaskState_e eState ) { ClientTaskInfo_t::Info().SetTaskState ( eState ); }
@@ -150,9 +147,6 @@ namespace session {
 	inline void SetReadOnly ( bool bReadOnly ) { ClientTaskInfo_t::Info().SetReadOnly (bReadOnly); }
 	inline bool GetReadOnly() { return ClientTaskInfo_t::Info().GetReadOnly(); }
 
-	inline void SetOptimizeById ( bool bOptimizeById ) {  ClientTaskInfo_t::Info().SetOptimizeById ( bOptimizeById ); }
-	inline bool GetOptimizeById () { return ClientTaskInfo_t::Info().GetOptimizeById(); }
-
 	inline void SetThrottlingPeriodMS ( int iThrottlingPeriodMS ) { ClientTaskInfo_t::Info().SetThrottlingPeriodMS ( iThrottlingPeriodMS ); }
 	inline int GetThrottlingPeriodMS () { return ClientTaskInfo_t::Info().GetThrottlingPeriodMS(); }
 
@@ -175,8 +169,6 @@ namespace session {
 
 	inline void SetPersistent ( bool bPersistent ) { ClientTaskInfo_t::Info().SetPersistent(bPersistent); }
 	inline bool GetPersistent () { return ClientTaskInfo_t::Info().GetPersistent(); }
-
-	inline ClientSession_c* GetClientSession() { return ClientTaskInfo_t::Info().GetClientSession(); }
 
 } // namespace session
 

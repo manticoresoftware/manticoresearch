@@ -13528,7 +13528,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 
 		if ( tStmt.m_sSetName == "optimize_by_id" )
 		{
-			tSess.SetOptimizeById ( !!tStmt.m_iSetValue );
+			session::SetOptimizeById ( !!tStmt.m_iSetValue );
 			break;
 		}
 
@@ -16480,10 +16480,19 @@ VecTraits_T<int64_t> session::LastIds ()
 	return GetClientSession()->m_dLastIds;
 }
 
+void session::SetOptimizeById ( bool bOptimizeById )
+{
+	GetClientSession()->m_bOptimizeById = bOptimizeById;
+}
+
+bool session::GetOptimizeById()
+{
+	return GetClientSession()->m_bOptimizeById;
+}
+
 bool session::Execute ( Str_t sQuery, RowBuffer_i& tOut )
 {
-	auto& tSess = *Info().GetClientSession();
-	return tSess.Execute ( sQuery, tOut );
+	return GetClientSession()->Execute ( sQuery, tOut );
 }
 
 void session::SetFederatedUser ()

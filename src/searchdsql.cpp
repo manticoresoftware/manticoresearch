@@ -412,14 +412,14 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 			Option_e::SORT_METHOD, Option_e::STRICT_, Option_e::THREADS, Option_e::TOKEN_FILTER,
 			Option_e::NOT_ONLY_ALLOWED };
 
-	static Option_e dSelectOptions[] = { Option_e::AGENT_QUERY_TIMEOUT, Option_e::BOOLEAN_SIMPLIFY, Option_e::COMMENT,
-			Option_e::CUTOFF, Option_e::DEBUG_NO_PAYLOAD, Option_e::EXPAND_KEYWORDS, Option_e::FIELD_WEIGHTS,
+	static Option_e dSelectOptions[] = { Option_e::AGENT_QUERY_TIMEOUT, Option_e::BOOLEAN_SIMPLIFY, Option_e::COLUMNS, Option_e::COMMENT,
+			Option_e::CUTOFF, Option_e::DEBUG_NO_PAYLOAD, Option_e::EXPAND_KEYWORDS, Option_e::FIELD_WEIGHTS, Option_e::FORMAT,
 			Option_e::GLOBAL_IDF, Option_e::IDF, Option_e::IGNORE_NONEXISTENT_INDEXES, Option_e::INDEX_WEIGHTS,
 			Option_e::LOCAL_DF, Option_e::LOW_PRIORITY, Option_e::MAX_MATCHES, Option_e::MAX_PREDICTED_TIME,
 			Option_e::MAX_QUERY_TIME, Option_e::MORPHOLOGY, Option_e::RAND_SEED, Option_e::RANKER,
 			Option_e::RETRY_COUNT, Option_e::RETRY_DELAY, Option_e::REVERSE_SCAN, Option_e::SORT_METHOD,
 			Option_e::THREADS, Option_e::TOKEN_FILTER, Option_e::NOT_ONLY_ALLOWED, Option_e::PSEUDO_THRESH,
-			Option_e::MAXMATCH_THRESH, Option_e::THREADS_EX };
+			Option_e::MAXMATCH_THRESH, Option_e::THREADS_EX};
 
 	static Option_e dInsertOptions[] = { Option_e::TOKEN_FILTER_OPTIONS };
 

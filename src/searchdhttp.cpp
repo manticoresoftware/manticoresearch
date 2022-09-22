@@ -185,7 +185,7 @@ public:
 			m_bTerminated = true;
 		}
 
-		return FromBytes ( m_tIn.PopTail ( iChunk ) );
+		return B2S ( m_tIn.PopTail ( iChunk ) );
 	}
 
 	Str_t ReadAll() final
@@ -203,7 +203,7 @@ public:
 
 		m_uOldTerminator = m_tIn.Terminate ( m_iContentLength, '\0' );
 		m_bTerminated = true;
-		return FromBytes ( m_tIn.PopTail ( m_iContentLength ) );
+		return B2S ( m_tIn.PopTail ( m_iContentLength ) );
 	}
 };
 
@@ -1250,18 +1250,15 @@ public:
 		m_dBuf << uVal;
 	}
 
-	void PutArray ( const void * pBlob, int iLen, bool ) override
+	void PutArray ( const ByteBlob_t& dBlob, bool ) override
 	{
 		AddDataColumn();
-		if ( iLen < 0 )
-			m_dBuf.FixupSpacedAndAppendEscaped ( static_cast<const char*> ( pBlob ) );
-		else
-			m_dBuf.FixupSpacedAndAppendEscaped ( static_cast<const char*> ( pBlob ), iLen );
+		m_dBuf.FixupSpacedAndAppendEscaped ( (const char*)dBlob.first, dBlob.second );
 	}
 
-	void PutString ( const char * sMsg, int iLen ) override
+	void PutString ( Str_t sMsg ) override
 	{
-		PutArray( sMsg, iLen, false );
+		PutArray ( S2B ( sMsg ), false );
 	}
 
 	void PutMicrosec ( int64_t iUsec ) override

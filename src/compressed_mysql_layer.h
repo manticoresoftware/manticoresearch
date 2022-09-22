@@ -111,7 +111,7 @@ public:
 	{
 		ByteBlob_t dBlob = dData;
 		static const int iMaxOneCompressedPacketLen = 0x01000000U - 6;
-		while ( !IsNull ( dBlob ) )
+		while ( !::IsEmpty ( dBlob ) )
 		{
 			auto iSize = Min ( dBlob.second, iMaxOneCompressedPacketLen );
 			if ( !SendPacket ( { dBlob.first, iSize } ) )

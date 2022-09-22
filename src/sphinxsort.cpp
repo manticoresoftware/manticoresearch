@@ -1405,7 +1405,7 @@ public:
 	SphGroupKey_t KeyFromMatch ( const CSphMatch & tMatch ) const override
 	{
 		auto dBlobAttr = tMatch.FetchAttrData ( m_tLocator, GetBlobPool() );
-		if ( IsNull ( dBlobAttr ) )
+		if ( IsEmpty ( dBlobAttr ) )
 			return 0;
 
 		return PRED::Hash ( dBlobAttr.first,dBlobAttr.second );

@@ -1473,11 +1473,11 @@ public:
 	virtual void PutNumAsString ( int iVal ) = 0;
 	virtual void PutNumAsString ( DWORD uVal ) = 0;
 
-	// pack raw array (i.e. packed length, then blob) into proto mysql
-	virtual void PutArray ( const void * pBlob, int iLen, bool bSendEmpty = false ) = 0;
+	// pack raw array (i.e. packed length, then blob)
+	virtual void PutArray ( const ByteBlob_t&, bool bSendEmpty = false ) = 0;
 
-	// pack zero-terminated string (or "" if it is zero itself)
-	virtual void PutString ( const char * sMsg, int iLen ) = 0;
+	// pack string
+	virtual void PutString ( Str_t sMsg ) = 0;
 
 	virtual void PutMicrosec ( int64_t iUsec ) = 0;
 
@@ -1505,24 +1505,14 @@ public:
 	virtual void Add ( BYTE uVal ) = 0;
 
 	// common implementations
-	void PutArray ( const VecTraits_T<BYTE> & dData )
-	{
-		PutArray ( ( const char * )dData.begin(), dData.GetLength() );
-	}
-
-	void PutArray ( ByteBlob_t dData )
-	{
-		PutArray ( ( const char * )dData.first, dData.second );
-	}
-
 	void PutArray ( const StringBuilder_c & dData, bool bSendEmpty=true )
 	{
-		PutArray ( ( const char * )dData.begin(), dData.GetLength(), bSendEmpty );
+		PutArray ( (ByteBlob_t)dData, bSendEmpty );
 	}
 
 	void PutString ( const char* szMsg )
 	{
-		PutString ( szMsg, szMsg ? (int)strlen ( szMsg ) : 0 );
+		PutString ( FromSz ( szMsg ) );
 	}
 
 	void PutString ( const CSphString & sMsg )
@@ -1532,7 +1522,7 @@ public:
 
 	void PutString ( const StringBuilder_c & sMsg )
 	{
-		PutString ( sMsg.cstr(), sMsg.GetLength() );
+		PutString ( (Str_t)sMsg );
 	}
 
 	void PutTimeAsString ( int64_t tmVal )

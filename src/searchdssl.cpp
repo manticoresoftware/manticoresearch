@@ -278,7 +278,7 @@ public:
 		if ( !m_tIn.ReadFrom ( iLen ))
 			iLen = -1;
 		auto dBlob = m_tIn.PopTail ( iLen );
-		if ( IsNull ( dBlob ))
+		if ( IsEmpty ( dBlob ))
 			return 0;
 
 		memcpy ( pBuf, dBlob.first, dBlob.second );

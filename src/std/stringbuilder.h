@@ -53,6 +53,7 @@ public:
 	const char *		cstr() const { return m_szBuffer ? m_szBuffer : ""; }
 	explicit operator	CSphString() const { return { cstr() }; }
 	explicit operator	Str_t() const { return m_szBuffer ? Str_t { m_szBuffer, m_iUsed } : dEmptyStr; }
+	explicit operator	ByteBlob_t() const { return m_szBuffer ? ByteBlob_t { (const BYTE*) m_szBuffer, m_iUsed } : S2B(dEmptyStr); }
 
 	// move out (de-own) value
 	BYTE *				Leak();

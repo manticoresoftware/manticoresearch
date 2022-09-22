@@ -1133,7 +1133,7 @@ LONG WINAPI CrashLogger::HandleCrash ( EXCEPTION_POINTERS * pExc )
 					sphSafeInfo ( g_iLogFile, "thd %d (%s), proto %s, state %s, command %s", iThd,
 							pThread->m_sThreadName.cstr(),
 							ProtoName (pSrc->GetProto()), TaskStateName ( pSrc->GetTaskState() ),
-							pSrc->m_sCommand ? pSrc->m_sCommand : "-" );
+							pSrc->m_szCommand ? pSrc->m_szCommand : "-" );
 					++iThd;
 					break;
 				}
@@ -3338,7 +3338,7 @@ static void SendJsonField ( ISphOutputBuffer& tOut, const BYTE * pJSON, bool bSe
 	}
 
 	auto dData = sphUnpackPtrAttr ( pJSON );
-	if ( IsNull ( dData ) || *dData.first==JSON_EOF )
+	if ( IsEmpty ( dData ) || *dData.first==JSON_EOF )
 		tOut.SendByte ( JSON_EOF );
 	else
 	{
@@ -12124,7 +12124,7 @@ enum ThreadInfoFormat_e
 	THD_FORMAT_SPHINXQL
 };
 
-static std::pair<const char *, int> FormatInfo ( const PublicThreadDesc_t & tThd, ThreadInfoFormat_e eFmt, QuotationEscapedBuilder & tBuf )
+static Str_t FormatInfo ( const PublicThreadDesc_t & tThd, ThreadInfoFormat_e eFmt, QuotationEscapedBuilder & tBuf )
 {
 	if ( tThd.m_pQuery && eFmt==THD_FORMAT_SPHINXQL && tThd.m_eProto!=Proto_e::MYSQL41 )
 	{
@@ -12138,13 +12138,13 @@ static std::pair<const char *, int> FormatInfo ( const PublicThreadDesc_t & tThd
 
 		// query might be removed prior to lock then go to common path
 		if ( bGotQuery )
-			return { tBuf.cstr (), tBuf.GetLength () };
+			return (Str_t)tBuf;
 	}
 
-	if ( tThd.m_sDescription.IsEmpty () && tThd.m_sCommand )
-		return { tThd.m_sCommand, (int)strlen ( tThd.m_sCommand ) };
+	if ( tThd.m_sDescription.IsEmpty () && tThd.m_szCommand )
+		return FromSz ( tThd.m_szCommand );
 	else
-		return { tThd.m_sDescription.cstr (), tThd.m_sDescription.GetLength () };
+		return (Str_t)tThd.m_sDescription;
 }
 
 void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
@@ -12223,10 +12223,10 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 
 		if ( bAll )
 			tOut.PutString ( dThd.m_sChain ); // Chain
-		auto tInfo = FormatInfo ( dThd, eFmt, tBuf );
-		if ( iCols >= 0 && iCols < tInfo.second )
-			tInfo.second = iCols;
-		tOut.PutString ( tInfo.first, tInfo.second ); // Info m_pTaskInfo
+		auto sInfo = FormatInfo ( dThd, eFmt, tBuf );
+		if ( iCols >= 0 && iCols < sInfo.second )
+			sInfo.second = iCols;
+		tOut.PutString ( sInfo ); // Info m_pTaskInfo
 		if ( !tOut.Commit () )
 			break;
 	}
@@ -12966,7 +12966,7 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 				{
 					auto dFactors = sphUnpackPtrAttr ((const BYTE *) tMatch.GetAttr ( tLoc ));
 					StringBuilder_c sTmp;
-					if ( !IsNull ( dFactors ))
+					if ( !IsEmpty ( dFactors ))
 						sphFormatFactors ( sTmp, (const unsigned int *)dFactors.first, eAttrType==SPH_ATTR_FACTORS_JSON );
 					dRows.PutArray ( sTmp, false );
 					break;
@@ -14624,7 +14624,7 @@ void HandleMysqlSelectDual ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 		case SPH_ATTR_STRINGPTR:
 		{
 			int  iLen = pExpr->StringEval ( tMatch, &pStr );
-			tOut.PutArray ( pStr, iLen );
+			tOut.PutArray ( { pStr, iLen } );
 			FreeDataPtr ( *pExpr, pStr );
 			break;
 		}

@@ -75,7 +75,7 @@ void PublicThreadDesc_t::Swap ( PublicThreadDesc_t & rhs )
 	::Swap ( m_sProto, rhs.m_sProto );
 	::Swap ( m_tmConnect, rhs.m_tmConnect );
 	::Swap ( m_pQuery, rhs.m_pQuery );
-	::Swap ( m_sCommand, rhs.m_sCommand );
+	::Swap ( m_szCommand, rhs.m_szCommand );
 	::Swap ( m_iConnID, rhs.m_iConnID );
 	::Swap ( m_eProto, rhs.m_eProto );
 	::Swap ( m_eTaskState, rhs.m_eTaskState );
@@ -168,7 +168,7 @@ DEFINE_RENDER ( TaskInfo_t ) {};
 void MiniTaskInfo_t::RenderWithoutChain ( PublicThreadDesc_t& dDst )
 {
 	dDst.m_tmStart.emplace_once ( m_tmStart );
-	dDst.m_sCommand = m_sCommand;
+	dDst.m_szCommand = m_szCommand;
 	hazard::Guard_c tGuard;
 	auto pDescription = tGuard.Protect ( m_pHazardDescription );
 	if ( pDescription )
@@ -219,11 +219,11 @@ void SetMiniDescription ( MiniTaskInfo_t * pNode, const char * sTemplate, ... )
 }
 
 
-void myinfo::SetCommand ( const char * sCommand )
+void myinfo::SetCommand ( const char * szCommand )
 {
 	auto pNode = HazardGetMini ();
 	if ( pNode )
-		pNode->m_sCommand = sCommand;
+		pNode->m_szCommand = szCommand;
 	else
 		sphWarning ( "internal error: myinfo::SetCommand () invoked with empty tls!" );
 }
@@ -285,7 +285,7 @@ void myinfo::SetTaskInfo ( const char * sTemplate, ... )
 MiniTaskInfo_t * MakeSystemInfo ( const char * sDescription )
 {
 	auto pInfo = new MiniTaskInfo_t;
-	pInfo->m_sCommand = "SYSTEM";
+	pInfo->m_szCommand = "SYSTEM";
 	SetMiniDescription( pInfo, "SYSTEM %s", sDescription );
 	return pInfo;
 }

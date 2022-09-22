@@ -1290,7 +1290,7 @@ static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t & tRe
 		auto dJson = sphUnpackPtrAttr ( pJSON );
 
 		// no object at all? return NULL
-		if ( IsNull ( dJson ) )
+		if ( IsEmpty ( dJson ) )
 			tOut << "null";
 		else
 			sphJsonFormat ( tOut, dJson.first );
@@ -1302,7 +1302,7 @@ static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t & tRe
 	{
 		const auto * pFactors = ( const BYTE * ) tMatch.GetAttr ( tLoc );
 		auto dFactors = sphUnpackPtrAttr ( pFactors );
-		if ( IsNull ( dFactors ))
+		if ( IsEmpty ( dFactors ))
 			tOut << "null";
 		else
 			sphFormatFactors ( tOut, (const unsigned int *) dFactors.first, true );
@@ -1313,7 +1313,7 @@ static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t & tRe
 	{
 		const auto * pField = ( const BYTE * ) tMatch.GetAttr ( tLoc );
 		auto dField = sphUnpackPtrAttr ( pField );
-		if ( IsNull ( dField ))
+		if ( IsEmpty ( dField ))
 		{
 			tOut << "null";
 			break;

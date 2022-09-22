@@ -1523,7 +1523,7 @@ bool sphCheckOptionsSPZ ( const SnippetQuerySettings_t & q, ESphSpz eMode, CSphS
 SnippetResult_t UnpackSnippetData ( ByteBlob_t dData )
 {
 	SnippetResult_t tRes;
-	if ( IsNull ( dData ) )
+	if ( IsEmpty ( dData ) )
 		return tRes;
 
 	MemoryReader_c tReader ( dData );

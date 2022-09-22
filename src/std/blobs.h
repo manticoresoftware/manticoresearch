@@ -18,23 +18,26 @@
 /// generic bytes of chars array
 using ByteBlob_t = std::pair<const BYTE*, int>;
 
-inline bool IsNull ( const ByteBlob_t& dBlob )		{ return !dBlob.second; }
+inline bool IsEmpty ( const ByteBlob_t& dBlob )		{ return !dBlob.second; }
 inline bool IsFilled ( const ByteBlob_t& dBlob )	{ return dBlob.first && dBlob.second > 0; }
-inline bool IsValid ( const ByteBlob_t& dBlob )	{ return IsNull ( dBlob ) || IsFilled ( dBlob ); }
+inline bool IsValid ( const ByteBlob_t& dBlob )	{ return IsEmpty ( dBlob ) || IsFilled ( dBlob ); }
 
 /// blob of chars with length (for zero-copy string processing)
 using Str_t = std::pair<const char*, int>;
 const Str_t dEmptyStr { "", 0 };
 
 // Str_t stuff
-inline bool IsEmpty ( const Str_t& dBlob ) { return dBlob.second == 0; }
+inline bool IsEmpty ( const Str_t& dBlob ) { return !dBlob.second; }
 inline bool IsFilled ( const Str_t& dBlob ) { return dBlob.first && dBlob.second > 0; }
-inline Str_t FromBytes ( const ByteBlob_t& sData ) { return { (const char*)sData.first, sData.second }; }
 Str_t FromSz ( const char* szString ); // { return { szString, szString ? (int)strlen ( szString ) : 0 }; }
 
 struct CSphString;
 Str_t FromStr ( const CSphString& sString ); // { return { sString.cstr(), (int)sString.Length() }; }
 #define FROMS( STR ) Str_t { STR, sizeof ( STR ) - 1 }
+
+/// mutual conversion Str_t <-> ByteBlob_t
+inline Str_t B2S ( const ByteBlob_t& sData ) { return { (const char*)sData.first, sData.second }; }
+inline ByteBlob_t S2B ( const Str_t& sStr ) { return { (const BYTE*)sStr.first, sStr.second }; };
 
 /// name+int pair
 using CSphNamedInt = std::pair<CSphString, int>;

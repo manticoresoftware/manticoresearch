@@ -482,31 +482,28 @@ public:
 	}
 
 	// pack raw array (i.e. packed length, then blob) into proto mysql
-	void PutArray ( const void * pBlob, int iLen, bool bSendEmpty ) override
+	void PutArray ( const ByteBlob_t& dBlob, bool bSendEmpty ) override
 	{
-		if ( iLen<0 )
+		if ( !IsValid ( dBlob ) )
 			return;
 
-		if ( !iLen && bSendEmpty )
+		if ( ::IsEmpty ( dBlob ) && bSendEmpty )
 		{
 			PutNULL();
 			return;
 		}
 
-		auto pSpace = AddN ( iLen + 9 ); // 9 is taken from MysqlPack() implementation (max possible offset)
-		auto * pStr = MysqlPackInt ( pSpace, iLen );
-		if ( iLen )
-			memcpy ( pStr, pBlob, iLen );
-		Resize ( Idx ( pStr ) + iLen );
+		auto pSpace = AddN ( dBlob.second + 9 ); // 9 is taken from MysqlPack() implementation (max possible offset)
+		auto * pStr = MysqlPackInt ( pSpace, dBlob.second );
+		if ( dBlob.second )
+			memcpy ( pStr, dBlob.first, dBlob.second );
+		Resize ( Idx ( pStr ) + dBlob.second );
 	}
 
-	// pack zero-terminated string (or "" if it is zero itself)
-	void PutString ( const char * sMsg, int iLen ) override
+	// pack string (or "")
+	void PutString ( Str_t sMsg ) override
 	{
-		if (!sMsg)
-			sMsg = "";
-
-		PutArray ( sMsg, iLen, false );
+		PutArray ( S2B ( sMsg ), false );
 	}
 
 	void PutMicrosec ( int64_t iUsec ) override

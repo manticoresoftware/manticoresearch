@@ -60,7 +60,7 @@ struct PublicThreadDesc_t
 	int 				m_iDescriptionLimit = -1;	///< cb flag when collecting info with columns=N, avoid copy huge descriptions then
 	int64_t				m_tmConnect		= -1; ///< when did the client connect?
 	std::unique_ptr<CSphQuery>	m_pQuery; /// currently running query, if not sphinxql
-	const char*			m_sCommand		= nullptr;	/// simple static SYSTEM, SELECT, UPDATE, etc. Used in show threads, crash dumping
+	const char*			m_szCommand		= nullptr;	/// simple static SYSTEM, SELECT, UPDATE, etc. Used in show threads, crash dumping
 	int					m_iConnID		= -1; ///< current conn-id for this thread. For logging and tracking in mysql
 
 	Proto_e				m_eProto		= Proto_e::UNKNOWN; /// used in show threads to format or not format query
@@ -167,7 +167,7 @@ struct MiniTaskInfo_t : public TaskInfo_t
 	void RenderWithoutChain ( PublicThreadDesc_t& dDst );
 
 	int64_t m_tmStart = sphMicroTimer ();
-	const char *	m_sCommand = nullptr; // is always mt-safe since always set static const
+	const char *	m_szCommand = nullptr; // is always mt-safe since always set static const
 	hazard::ScopedPtr_t<const CSphString *> m_pHazardDescription;
 	int				m_iDescriptionLen = 0;	// len of string in m_pHazardDescription
 };
@@ -215,7 +215,7 @@ namespace myinfo {
 	}
 
 	// set MiniTaskInfo_t::m_sCommand
-	void SetCommand ( const char * sCommand );
+	void SetCommand ( const char * szCommand );
 
 	// set MiniTaskInfo_t::m_pHazardDescription. and refresh timer
 	// iLen used to select retire policy (lazy, or immediate retire)

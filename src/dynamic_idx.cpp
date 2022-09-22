@@ -334,7 +334,7 @@ public:
 
 	void Error ( const char * sStmt, const char * sError, MysqlErrors_e ) override
 	{
-		m_sErrors.Sprintf("%s:%s", sStmt, sError);
+		m_sErrors.Sprintf("%s: %s", sStmt, sError);
 		Eof (false,0);
 	}
 	void Ok ( int, int, const char *, bool, int64_t ) override {}
@@ -649,7 +649,8 @@ bool GenericTableIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery
 	}
 
 	auto& sErrors = GetErrors();
-	if ( !sErrors.IsEmpty() )
+	bool bOk = sErrors.IsEmpty();
+	if ( !bOk )
 		tMeta.m_sError = (CSphString) sErrors;
 
 	SwitchProfile ( pProfiler, SPH_QSTATE_FINALIZE );
@@ -663,7 +664,7 @@ bool GenericTableIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery
 
 	tMeta.m_iQueryTime += ( int ) ( ( sphMicroTimer () - tmQueryStart ) / 1000 );
 
-	return true;
+	return bOk;
 }
 
 ///////////////

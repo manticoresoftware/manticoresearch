@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>unexistent subkeys processing</name>
+<requires><non-rt/></requires>
+<skip_indexer/>
+<config>
+searchd
+{
+	<searchd_settings/>
+	binlog_path =
+}
+
+index fake
+{
+	type	= template
+}
+</config>
+	<queries>
+		<sphinxql>
+			select * from system.threads;
+			select * from system.table;
+			select * from system.foo;
+			select @@system.threads;
+			select @@system, @@session;
+		</sphinxql>
+	</queries>
+</test>

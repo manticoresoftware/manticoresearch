@@ -5196,6 +5196,7 @@ private:
 	VecTraits_T<CSphQueryResult>		m_dNResults;		///< working subset of result pointers
 	VecTraits_T<SearchFailuresLog_c>	m_dNFailuresSet;	///< working subset of failures
 
+	StringBuilder_c						m_sError;
 private:
 	bool							ParseSysVar();
 	bool							ParseIdxSubkeys();
@@ -6422,11 +6423,8 @@ bool SearchHandler_c::ParseSysVar ()
 		}
 	}
 
-	StringBuilder_c sN;
-	sN << sVar;
-	dSubkeys.for_each ( [&sN] ( CSphString & sVal ) { sN << sVal; } );
-	m_dNAggrResults.for_each (
-			[&sN] ( AggrResult_t & r ) { r.m_sError.SetSprintf ( "no such variable %s", sN.cstr () ); } );
+	m_sError << "no such variable " << sVar;
+	dSubkeys.for_each ( [this] ( const auto& s ) { m_sError << s; } );
 	return false;
 }
 
@@ -6435,8 +6433,7 @@ bool SearchHandler_c::ParseIdxSubkeys ()
 	const auto & sVar = m_dLocal.First ().m_sName;
 	const auto & dSubkeys = m_dNQueries.First ().m_dStringSubkeys;
 
-	if ( dSubkeys.IsEmpty () )
-		return false;
+	assert ( !dSubkeys.IsEmpty () );
 
 	bool bSchema = ( dSubkeys.GetLength()>1 && dSubkeys.Last ()==".table" );
 	TableFeeder_fn fnFeed;
@@ -6447,7 +6444,11 @@ bool SearchHandler_c::ParseIdxSubkeys ()
 	else if ( dSubkeys[0]==".files" ) // select .. from idx.files
 		fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleSelectFiles ( *pBuf, m_pStmt ); };
 	else
+	{
+		m_sError << "No such index " << sVar;
+		dSubkeys.for_each ([this] (const auto& s) { m_sError << s;});
 		return false;
+	}
 
 	cServedIndexRefPtr_c pIndex;
 	if ( bSchema )
@@ -6542,10 +6543,8 @@ bool SearchHandler_c::AcquireInvokedIndexes()
 	if ( sFailed.IsEmpty ())
 		return true;
 
-	// report failed for each result
-	for ( auto& dResult : m_dNAggrResults )
-		dResult.m_sError.SetSprintf ( "unknown local index(es) '%s' in search request", sFailed.cstr() );
-
+	// report failed
+	m_sError << "unknown local index(es) '" << sFailed << "' in search request";
 	return false;
 }
 
@@ -6909,6 +6908,12 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	CSphVector<DistrServedByAgent_t> dDistrServedByAgent;
 	int iDivideLimits = 1;
 
+	auto fnError = AtScopeExit ( [this]()
+	{
+		if ( !m_sError.IsEmpty() )
+			m_dNAggrResults.for_each ( [this] ( auto& r ) { r.m_sError = (CSphString) m_sError; } );
+	});
+
 	if ( BuildIndexList ( iDivideLimits, dRemotes, dDistrServedByAgent ) )
 	{
 		// process query to meta, as myindex.status, etc.
@@ -6933,8 +6938,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	// sanity check
 	if ( dRemotes.IsEmpty() && m_dLocal.IsEmpty() )
 	{
-		const char * szT = ( m_dLocal.IsEmpty () ? "indexes" : "local indexes" );
-		m_dNAggrResults.Apply ( [szT] ( AggrResult_t & r ) { r.m_sError.SetSprintf ( "no enabled %s to search", szT );} );
+		m_sError << "no enabled indexes to search";
 		return;
 	}
 
@@ -14524,7 +14528,7 @@ void HandleMysqlSelectSysvar ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 
 	auto pVars = session::Info().GetClientSession();
 	const SysVar_t dSysvars[] =
-	{	{ MYSQL_COL_STRING,	nullptr, [] {return "";}}, // stub
+	{	{ MYSQL_COL_STRING,	nullptr, [] {return "<empty>";}}, // stub
 		{ MYSQL_COL_LONG,	"@@session.auto_increment_increment",	[] {return "1";}},
 		{ MYSQL_COL_STRING,	"@@character_set_client", [] {return "utf8";}},
 		{ MYSQL_COL_STRING,	"@@character_set_connection", [] {return "utf8";}},

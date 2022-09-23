@@ -851,7 +851,7 @@ std::unique_ptr<FilterTreeNode_t> FilterTreeConstructor_c::ConstructRangeFilter 
 			tFilter.m_fMaxValue = FLT_MAX;
 
 		if ( tFilter.m_bOpenLeft )
-			tFilter.m_fMinValue = FLT_MIN;
+			tFilter.m_fMinValue = -FLT_MAX;
 	}
 
 	return pFilterNode;

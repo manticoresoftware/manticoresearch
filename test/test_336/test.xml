@@ -425,6 +425,23 @@ insert into test_rt values (6, '6th', 'No wonder, Trevize thought, it was indulg
   "query": { "in": { "all(tags)": [4,3,40] } }
 }
 </query>
+
+<query endpoint="json/search">
+{
+  "index":"META:all",
+  "query":
+  {
+    "bool":
+    {
+      "must":
+      [
+        { "range": { "flt_col": { "gte": 1.5, "lte": 2 } } }
+      ]
+    }
+  }
+}
+</query>
+
 </httpqueries>
 
 </test>

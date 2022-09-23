@@ -820,7 +820,7 @@ std::unique_ptr<FilterTreeNode_t> FilterTreeConstructor_c::ConstructRangeFilter 
 		return nullptr;
 	}
 
-	bool bIntFilter = ( bLess && tLess.IsInt() ) || ( bGreater && tGreater.IsInt() );
+	bool bIntFilter = ( !bLess || tLess.IsInt() ) && ( !bGreater || tGreater.IsInt() );
 
 	if ( bLess )
 	{

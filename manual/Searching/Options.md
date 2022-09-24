@@ -121,6 +121,17 @@ Integer. Max found matches threshold. The value is selected automatically if not
 
 In case Manticore cannot calculate the exact matching documents count you will see `total_relation: gte` in the query [meta information](../Profiling_and_monitoring/SHOW_META.md#SHOW-META), which means that the actual count is **Greater Than or Equal** to the total (`total_found` in `SHOW META` via SQL, `hits.total` in JSON via HTTP). If the total value is precise you'll get `total_relation: eq`.
 
+### disable_ps_threshold
+Integer. Disables pseudo sharding when the number of unique values of a groupby attribute is greater than the threshold. Default is 65536.
+
+When a groupby query is executed, Manticore estimates the number of unique values of groupby attribute using secondary indexes. If that number is greater than the threshold,
+pseudo sharding is disabled in order to increase accuracy of count() and aggregates. Loss of accuracy may occur because pseudo sharding runs queries in several threads,
+each thread getting max_matches groups which are merged later. If there are a lot of unique groupby values, each thread may get its own set of groups, and groups present in
+other threads may not make it to max_matches. This may be avoided by increasing max_matches, but increasing max_matches with pseudo_sharding enabled leads to increased
+memory consumption.
+
+See also [max_matches_increase_threshold](../Searching/Options.md#max_matches_increase_threshold), which can affect the behavior of the max_matches option.
+
 ### expand_keywords
 `0` or `1` (`0` by default). Expands keywords with exact forms and/or stars when possible. Refer to [expand_keywords](../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#expand_keywords) for more details.
 
@@ -168,6 +179,20 @@ Maximum amount of matches that the server keeps in RAM for each index and can re
 Introduced in order to control and limit RAM usage, `max_matches` setting defines how much matches will be kept in RAM while searching each index. Every match found will still be processed; but only best N of them will be kept in memory and return to the client in the end. Assume that the index contains 2,000,000 matches for the query. You rarely (if ever) need to retrieve all of them. Rather, you need to scan all of them, but only choose “best” at most, say, 500 by some criteria (ie. sorted by relevance, or price, or anything else), and display those 500 matches to the end user in pages of 20 to 100 matches. And tracking only the best 500 matches is much more RAM and CPU efficient than keeping all 2,000,000 matches, sorting them, and then discarding everything but the first 20 needed to display the search results page. `max_matches` controls N in that "best N" amount.
 
 This parameter noticeably affects per-query RAM and CPU usage. Values of 1,000 to 10,000 are generally fine, but higher limits must be used with care. Recklessly raising max_matches to 1,000,000 means that `searchd` will have to allocate and initialize 1-million-entry matches buffer for every query. That will obviously increase per-query RAM usage, and in some cases can also noticeably impact performance.
+
+### max_matches_increase_threshold
+
+Integer. Sets the threshold that max_matches can be increased to. Default is 16384.
+
+Manticore may increase max_matches to improve groupby and/or aggregation accuracy when pseudo_sharding is enabled and if it detects that the number of unique values
+of groupby attribute is less than this threshold. Loss of accuracy may occur when pseudo sharding executes the query in several threads or RT index performs
+parallel searches in disk chunks. See [disable_ps_threshold](../Searching/Options.md#disable_ps_threshold) for more details.
+
+If the number of unique values of groupby attribute is less than the treshold, max_matches will be set to this number. Otherwise, default max_matches will be used.
+
+If max_matches was set explicitly in query options, this threshold has no effect.
+
+Note that if this threshold is set too high, the result will be increased memory consumption and general performance degradation.
 
 ### max_query_time
 Sets maximum search query time, in milliseconds. Must be a non-negative integer. Default value is 0 which means "do not limit". Local search queries will be stopped once that much time has elapsed. Note that if you're performing a search which queries several local indexes, this limit applies to each index separately. Note it may increase the query's response time a little bit, the overhead is caused by constant tracking if it's time to stop the query.

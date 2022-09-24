@@ -386,7 +386,7 @@ void InitParserOption()
 		"idf", "ignore_nonexistent_columns", "ignore_nonexistent_indexes", "index_weights", "local_df", "low_priority",
 		"max_matches", "max_predicted_time", "max_query_time", "morphology", "rand_seed", "ranker", "retry_count",
 		"retry_delay", "reverse_scan", "sort_method", "strict", "sync", "threads", "token_filter", "token_filter_options",
-		"not_terms_only_allowed", "store", "pseudo_thresh", "maxmatch_thresh", "threads_ex" };
+		"not_terms_only_allowed", "store", "disable_ps_threshold", "max_matches_increase_threshold", "threads_ex" };
 
 	for ( BYTE i = 0u; i<(BYTE) Option_e::INVALID_OPTION; ++i )
 		g_hParseOption.Add ( (Option_e) i, dOptions[i] );

@@ -3,7 +3,7 @@
 <!-- example creating a replication cluster 1 -->
 To create a replication cluster you should set at least its [name](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#name).
 
-In case of a single cluster or if the cluster you are creating is the first one [path](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#path) option may be  omitted, in this case [data_dir](../../Server_settings/Searchd.md#data_dir) option will be used as the cluster path. For all subsequent clusters you need to specify [path](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#path) and this path should be available. [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes) option may be also set to enumerate all the nodes in the cluster.
+In case of a single cluster or if you are creating the first cluster, [path](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#path) option may be omitted, in this case [data_dir](../../Server_settings/Searchd.md#data_dir) option will be used as the cluster path. For all subsequent clusters you need to specify [path](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#path) and this path should be available. [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes) option may be also set to enumerate all the nodes in the cluster.
 
 
 <!-- intro -->

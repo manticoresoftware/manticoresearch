@@ -35,7 +35,7 @@ Specifies cluster name. Should be unique.
 
 ### path
 
-Data directory for a [write-set cache replication](https://galeracluster.com/library/documentation/state-transfer.html#state-transfer-gcache) and incoming indexes from other nodes. Should be unique among the other clusters in the node. Default is [data_dir](../../Server_settings/Searchd.md#data_dir).
+Data directory for a [write-set cache replication](https://galeracluster.com/library/documentation/state-transfer.html#state-transfer-gcache) and incoming indexes from other nodes. Should be unique among the other clusters in the node. Default is [data_dir](../../Server_settings/Searchd.md#data_dir). Should be specified in the form of a path to an existing directory relative to the [data_dir](../../Server_settings/Searchd.md#data_dir).
 
 ### nodes
 

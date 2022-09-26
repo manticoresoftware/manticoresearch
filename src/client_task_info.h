@@ -14,6 +14,8 @@
 #include "task_info.h"
 #include "task_dispatcher.h"
 
+#include <boost/intrusive/slist.hpp>
+
 enum Profile_e {
 	NONE,
 	PLAIN,
@@ -23,6 +25,7 @@ enum Profile_e {
 };
 
 class ClientSession_c;
+using ClientTaskHook_t = boost::intrusive::slist_member_hook<>;
 
 // client connection (session). Includes both state and settings.
 struct ClientTaskInfo_t : public MiniTaskInfo_t
@@ -52,6 +55,7 @@ public:
 
 	Dispatcher::Template_t m_tBaseDispatcherTemplate;
 	Dispatcher::Template_t m_tPseudoShardingDispatcherTemplate;
+	ClientTaskHook_t m_tLink;
 
 private:
 	ClientSession_c* 	m_pSession = nullptr;
@@ -118,6 +122,14 @@ public:
 public:
 	static ClientTaskInfo_t& Info ( bool bStrict = false );
 };
+
+inline bool operator== ( const ClientTaskInfo_t& lhs, const ClientTaskInfo_t& rhs )
+{
+	return &lhs==&rhs;
+}
+
+using TaskIteratorFn = std::function<void ( ClientTaskInfo_t* )>;
+void IterateTasks ( TaskIteratorFn&& );
 
 namespace session {
 

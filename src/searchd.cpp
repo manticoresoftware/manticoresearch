@@ -6367,6 +6367,7 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleTasks ( RowBuffer_i & tOut );
 void HandleSched ( RowBuffer_i & tOut );
+void HandleShowSessions ( RowBuffer_i& tOut, const SqlStmt_t* pStmt );
 void HandleMysqlDescribe ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleSelectFiles ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
@@ -6401,6 +6402,9 @@ bool SearchHandler_c::ParseSysVar ()
 			else if ( dSubkeys[0]==".sched" ) // select .. from @@system.sched
 			{
 				fnFeed = [] ( RowBuffer_i * pBuf ) { HandleSched ( *pBuf ); };
+			} else if ( dSubkeys[0] == ".sessions" ) // select .. from @@system.sched
+			{
+				fnFeed = [this] ( RowBuffer_i* pBuf ) { HandleShowSessions ( *pBuf, m_pStmt ); };
 			}
 			else
 				bValid = false;
@@ -12192,7 +12196,7 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	CSphSwapVector<PublicThreadDesc_t> dFinal;
 	Threads::IterateActive([&dFinal, iCols] ( Threads::LowThreadDesc_t * pThread ){
 		if ( pThread )
-			dFinal.Add ( GatherPublicTaskInfo ( pThread, iCols ) );
+			dFinal.Add ( GatherPublicThreadInfo ( pThread, iCols ) );
 	});
 
 	for ( const auto & dThd : dFinal )
@@ -12232,6 +12236,67 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 			sInfo.second = iCols;
 		tOut.PutString ( sInfo ); // Info m_pTaskInfo
 		if ( !tOut.Commit () )
+			break;
+	}
+
+	tOut.Eof();
+}
+
+// helper; available only via 'select ... from @@system.sessions...'
+void HandleShowSessions ( RowBuffer_i& tOut, const SqlStmt_t* pStmt )
+{
+	ThreadInfoFormat_e eFmt = THD_FORMAT_NATIVE;
+	bool bAll = false;
+	int iCols = -1;
+	if ( pStmt )
+	{
+		if ( pStmt->m_sThreadFormat == "sphinxql" )
+			eFmt = THD_FORMAT_SPHINXQL;
+		else if ( pStmt->m_sThreadFormat == "all" )
+			bAll = true;
+		iCols = pStmt->m_iThreadsCols;
+	}
+
+	tOut.HeadBegin ( bAll ? 6 : 5 ); // 6 with chain
+	tOut.HeadColumn ( "Proto" );
+	tOut.HeadColumn ( "State" );
+	tOut.HeadColumn ( "Host" );
+	tOut.HeadColumn ( "ConnID", MYSQL_COL_LONGLONG );
+	if ( bAll )
+		tOut.HeadColumn ( "Chain" );
+	tOut.HeadColumn ( "Last cmd" );
+	if ( !tOut.HeadEnd() )
+		return;
+
+	QuotationEscapedBuilder tBuf;
+
+	//	sphLogDebug ( "^^ Show threads. Current info is %p", GetTaskInfo () );
+
+	CSphSwapVector<PublicThreadDesc_t> dFinal;
+	IterateTasks ( [&dFinal, iCols] ( ClientTaskInfo_t* pTask ) {
+		if ( pTask )
+		{
+			PublicThreadDesc_t& tDesc = dFinal.Add();
+			tDesc.m_iDescriptionLimit = iCols;
+			GatherPublicTaskInfo ( tDesc, pTask );
+		}
+	} );
+
+	for ( const auto& dThd : dFinal )
+	{
+		if ( !bAll && dThd.m_eTaskState == TaskState_e::UNKNOWN )
+			continue;
+		tOut.PutString ( dThd.m_sProto );
+		tOut.PutString ( TaskStateName ( dThd.m_eTaskState ) );
+		tOut.PutString ( dThd.m_sClientName );												   // Host
+		tOut.PutNumAsString ( dThd.m_iConnID );												   // ConnID
+		if ( bAll )
+			tOut.PutString ( dThd.m_sChain ); // Chain
+		auto sInfo = FormatInfo ( dThd, eFmt, tBuf );
+		if ( iCols >= 0 && iCols < sInfo.second )
+			sInfo.second = iCols;
+		tOut.PutString ( sInfo ); // Info m_pTaskInfo
+		if ( !tOut.Commit() )
 			break;
 	}
 

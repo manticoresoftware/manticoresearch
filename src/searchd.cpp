@@ -7516,7 +7516,7 @@ static const char * g_dSqlStmts[] =
 	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
 	"alter_index_settings", "join_cluster", "cluster_create", "cluster_delete", "cluster_index_add",
 	"cluster_index_delete", "cluster_update", "explain", "import_table", "lock_indexes", "unlock_indexes",
-	"show_settings"
+	"show_settings", "kill",
 };
 
 
@@ -12262,6 +12262,7 @@ void HandleShowSessions ( RowBuffer_i& tOut, const SqlStmt_t* pStmt )
 	tOut.HeadColumn ( "State" );
 	tOut.HeadColumn ( "Host" );
 	tOut.HeadColumn ( "ConnID", MYSQL_COL_LONGLONG );
+	tOut.HeadColumn ( "Killed" );
 	if ( bAll )
 		tOut.HeadColumn ( "Chain" );
 	tOut.HeadColumn ( "Last cmd" );
@@ -12290,6 +12291,7 @@ void HandleShowSessions ( RowBuffer_i& tOut, const SqlStmt_t* pStmt )
 		tOut.PutString ( TaskStateName ( dThd.m_eTaskState ) );
 		tOut.PutString ( dThd.m_sClientName );												   // Host
 		tOut.PutNumAsString ( dThd.m_iConnID );												   // ConnID
+		tOut.PutNumAsString ( dThd.m_bKilled ? 1 : 0);
 		if ( bAll )
 			tOut.PutString ( dThd.m_sChain ); // Chain
 		auto sInfo = FormatInfo ( dThd, eFmt, tBuf );
@@ -16001,6 +16003,19 @@ void HandleMysqlUnlockIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes, C
 	tOut.Ok ( iUnlocked );
 }
 
+void HandleMysqlKill ( RowBuffer_i& tOut, int iKill )
+{
+	int iKilled = 0;
+	IterateTasks ( [&iKilled, iKill] ( ClientTaskInfo_t* pTask ) {
+		if ( pTask && pTask->GetConnID() == iKill && !pTask->GetKilled())
+		{
+			pTask->SetKilled(true);
+			++iKilled;
+		}
+	} );
+	tOut.Ok ( iKilled );
+}
+
 RtAccum_t* CSphSessionAccum::GetAcc ( RtIndex_i* pIndex, CSphString& sError )
 {
 	assert ( pIndex );
@@ -16512,6 +16527,10 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 			ScRL_t dRotateConfigMutexRlocked { g_tRotateConfigMutex };
 			HandleMysqlShowSettings ( g_hCfg, tOut );
 		}
+		return true;
+
+	case STMT_KILL:
+		HandleMysqlKill ( tOut, pStmt->m_iIntParam );
 		return true;
 
 	default:

@@ -83,6 +83,8 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 		sphLogDebugv ( "conn %s(%d): loop start with timeout %d", sClientIP, iCID, iTimeoutS );
 		tIn.SetTimeoutUS ( S2US * iTimeoutS );
 
+		tSess.SetKilled ( false );
+
 		// in "persistent connection" mode, we want interruptible waits
 		// so that the worker child could be forcibly restarted
 		//

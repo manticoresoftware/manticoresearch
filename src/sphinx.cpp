@@ -7901,6 +7901,12 @@ bool Fullscan ( ITERATOR & tIterator, TO_STATIC && fnToStatic, const CSphQueryCo
 					return true;
 				}
 			}
+
+			if ( session::GetKilled() )
+			{
+				tMeta.m_sWarning = "query was killed";
+				return true;
+			}
 		}
 
 	return tIterator.WasCutoffHit();
@@ -10653,6 +10659,12 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 			if ( iJob < iJobs-1 && sph::TimeExceeded ( tmMaxTimer ) )
 			{
 				tThMeta.m_sWarning = "query time exceeded max_query_time";
+				bInterrupt.store ( true, std::memory_order_relaxed );
+			}
+
+			if ( session::GetKilled() )
+			{
+				tThMeta.m_sWarning = "query was killed";
 				bInterrupt.store ( true, std::memory_order_relaxed );
 			}
 

@@ -82,6 +82,7 @@
 %token	TOK_INTO
 %token	TOK_IS
 %token	TOK_ISOLATION
+%token	TOK_KILL
 %token	TOK_LEVEL
 %token	TOK_LIKE
 %token	TOK_LIMIT
@@ -222,6 +223,7 @@ statement:
 	| TOK_DDLCLAUSE	{ pParser->m_bGotDDLClause = true; }
 	| lock_indexes
 	| unlock_indexes
+	| kill_connid
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -260,7 +262,7 @@ reserved_no_option:
 	| TOK_SETTINGS | TOK_SHOW | TOK_SONAME | TOK_START | TOK_STATUS | TOK_STRING
 	| TOK_SUM | TOK_TABLE | TOK_TABLES | TOK_THREADS | TOK_TO | TOK_TRUNCATE
 	| TOK_UNCOMMITTED | TOK_UNLOCK | TOK_UPDATE | TOK_VALUES | TOK_VARIABLES
-	| TOK_WARNINGS | TOK_WEIGHT | TOK_WHERE | TOK_WITH | TOK_WITHIN
+	| TOK_WARNINGS | TOK_WEIGHT | TOK_WHERE | TOK_WITH | TOK_WITHIN | TOK_KILL
 	;
 
 reserved_set_tail:
@@ -2023,6 +2025,15 @@ unlock_indexes:
 			pParser->m_pStmt->m_eStmt = STMT_UNLOCK;
 		}
 	;
+
+kill_connid:
+	TOK_KILL TOK_CONST_INT
+		{
+    		pParser->m_pStmt->m_eStmt = STMT_KILL;
+    		pParser->m_pStmt->m_iIntParam = $2.m_iValue;
+    	}
+    ;
+
 
 %%
 

@@ -1663,6 +1663,13 @@ const ExtDoc_t * ExtPayload_T<USE_BM25>::GetDocsChunk()
 		return NULL;
 	}
 
+	if ( session::GetKilled() )
+	{
+		if ( m_pWarning )
+			*m_pWarning = "query was killed";
+		return NULL;
+	}
+
 	int iDoc = 0;
 	int iEnd = m_iCurDocsEnd;
 	while ( iDoc<MAX_BLOCK_DOCS-1 && iEnd<m_dCache.GetLength() )
@@ -2006,6 +2013,13 @@ const ExtDoc_t * ExtTerm_T<USE_BM25>::GetDocsChunk()
 	{
 		if ( m_pWarning )
 			*m_pWarning = "Server shutdown in progress";
+		return NULL;
+	}
+
+	if ( session::GetKilled() )
+	{
+		if ( m_pWarning )
+			*m_pWarning = "query was killed";
 		return NULL;
 	}
 
@@ -3021,6 +3035,13 @@ const ExtDoc_t * ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::GetDocsChunk()
 	{
 		if ( m_pWarning )
 			*m_pWarning = "Server shutdown in progress";
+		return NULL;
+	}
+
+	if ( session::GetKilled() )
+	{
+		if ( m_pWarning )
+			*m_pWarning = "query was killed";
 		return NULL;
 	}
 
@@ -5860,6 +5881,13 @@ const ExtDoc_t * ExtNodeCached_c::GetDocsChunk()
 	{
 		if ( m_pWarning )
 			*m_pWarning = "query time exceeded max_query_time";
+		return NULL;
+	}
+
+	if ( session::GetKilled() )
+	{
+		if ( m_pWarning )
+			*m_pWarning = "query was killed";
 		return NULL;
 	}
 

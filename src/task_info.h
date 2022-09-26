@@ -65,6 +65,7 @@ struct PublicThreadDesc_t
 
 	Proto_e				m_eProto		= Proto_e::UNKNOWN; /// used in show threads to format or not format query
 	TaskState_e			m_eTaskState	= TaskState_e::UNKNOWN; /// show threads, crash dumping
+	bool				m_bKilled		= false; /// informational about if session is killed.
 
 	PublicThreadDesc_t() = default;
 	void Swap (PublicThreadDesc_t& rhs);

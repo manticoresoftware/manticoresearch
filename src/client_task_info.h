@@ -40,6 +40,7 @@ private:
 	bool m_bSsl = false;
 	bool m_bVip = false;
 	bool m_bReadOnly = false;
+	bool m_bKilled = false;
 
 	// session variables - doesn't participate in render, used as connection-wide globals
 public:
@@ -85,6 +86,9 @@ public:
 
 	void SetReadOnly ( bool bReadOnly ) { m_bReadOnly = bReadOnly; }
 	bool GetReadOnly() const { return m_bReadOnly; }
+
+	void SetKilled ( bool bKilled ) { m_bKilled = bKilled; }
+	bool GetKilled() const { return m_bKilled; }
 
 public:
 	void SetThrottlingPeriodMS ( int iThrottlingPeriodMS ) { m_iThrottlingPeriodMS = iThrottlingPeriodMS; }
@@ -158,6 +162,8 @@ namespace session {
 
 	inline void SetReadOnly ( bool bReadOnly ) { ClientTaskInfo_t::Info().SetReadOnly (bReadOnly); }
 	inline bool GetReadOnly() { return ClientTaskInfo_t::Info().GetReadOnly(); }
+
+	inline bool GetKilled() { return ClientTaskInfo_t::Info().GetKilled(); }
 
 	inline void SetThrottlingPeriodMS ( int iThrottlingPeriodMS ) { ClientTaskInfo_t::Info().SetThrottlingPeriodMS ( iThrottlingPeriodMS ); }
 	inline int GetThrottlingPeriodMS () { return ClientTaskInfo_t::Info().GetThrottlingPeriodMS(); }

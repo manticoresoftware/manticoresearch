@@ -994,6 +994,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	int iTimeoutS = -1;
 	do
 	{
+		tSess.SetKilled ( false );
 		// check for updated timeout
 		auto iCurrentTimeout = tSess.GetTimeoutS(); // by default -1, means 'default'
 		if ( iCurrentTimeout<0 )

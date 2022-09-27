@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>control chars indexing</name>
+
+<requires>
+<http/>
+<keep_json_ctrls/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+    max_xmlpipe2_field = 103900
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source src_csv
+{
+	type = csvpipe
+	csvpipe_command = cat <this_test/>/test.csv
+	csvpipe_attr_string = title
+	csvpipe_attr_string = content
+	csvpipe_attr_string = contentid
+	}
+
+index csv
+{
+	source = src_csv
+	path = <data_path/>/csv
+}
+
+</config>
+
+<queries>
+	<sphinxql>select * from csv</sphinxql>
+	<query endpoint="search" method="post">{"index": "csv"}</query>
+</queries>
+
+</test>

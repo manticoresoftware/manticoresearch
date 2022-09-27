@@ -589,7 +589,9 @@ void Yield_ () noexcept
 
 void Reschedule() noexcept
 {
-	Worker()->Reschedule();
+	auto pWorker = CurrentWorker();
+	if ( pWorker )
+		pWorker->Reschedule();
 }
 
 int ID() noexcept

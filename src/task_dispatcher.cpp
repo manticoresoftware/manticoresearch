@@ -15,6 +15,13 @@
 #include <atomic>
 #include <cassert>
 
+// artificial race right after source creation.
+// That is, quite seldom race between 'make source' and 'clone context' will surely happen in debug build
+#ifndef NDEBUG
+#define MAKE_RACE 1
+#else
+#define MAKE_RACE 0
+#endif
 
 namespace {
 inline int CalcConcurrency ( int iConcurrency )
@@ -89,7 +96,11 @@ int ConcurrentTaskDispatcher_c::GetConcurrency() const
 
 std::unique_ptr<Dispatcher::TaskSource_i> ConcurrentTaskDispatcher_c::MakeSource()
 {
-	return std::make_unique<SingleTaskSource_c> ( *this, m_iJobs );
+	auto pSource = std::make_unique<SingleTaskSource_c> ( *this, m_iJobs );
+#if MAKE_RACE
+	Threads::Coro::Reschedule();
+#endif
+	return pSource;
 }
 
 int ConcurrentTaskDispatcher_c::GetNextConcurrentTask()
@@ -189,9 +200,15 @@ int RRTaskDispatcher_c::GetConcurrency() const
 std::unique_ptr<Dispatcher::TaskSource_i> RRTaskDispatcher_c::MakeSource()
 {
 	int iFiber = m_iNextFiber.fetch_add ( 1, std::memory_order_relaxed );
-	if ( iFiber < m_iConcurrency )
-		return std::make_unique<RRTaskSource_c> ( m_iJobs, iFiber, m_iBatch, m_iConcurrency );
-	return std::make_unique<NullTaskSource_c> ();
+	if ( iFiber >= m_iConcurrency )
+		return std::make_unique<NullTaskSource_c>();
+
+	auto pSource = std::make_unique<RRTaskSource_c> ( m_iJobs, iFiber, m_iBatch, m_iConcurrency );
+
+#if MAKE_RACE
+	Threads::Coro::Reschedule();
+#endif
+	return pSource;
 }
 
 namespace Dispatcher {

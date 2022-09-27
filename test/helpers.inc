@@ -854,11 +854,17 @@ function CompareColumns ( $a, $b )
 }
 
 
-function JsonRsetFixup ( &$set, $columnar )
+function JsonRsetFixup ( &$set, $columnar, $keep_json_ctrls )
 {
 	if ( isset ( $set["rows"] ) )
 	{
-		$rows = json_decode ( $set["rows"], 1 );
+		if ( $keep_json_ctrls )
+		{
+			$json_handler = new SafeJsonHandler();
+			$rows = $json_handler->Decode ( $set["rows"], 1 );	
+		}
+		else
+			$rows = json_decode ( $set["rows"], 1 );
 		if ( isset ( $rows["hits"] ) && isset ( $rows["hits"]["hits"] ) )
 		{
 			foreach ( $rows["hits"]["hits"] as &$hit )
@@ -869,12 +875,18 @@ function JsonRsetFixup ( &$set, $columnar )
 			}
 		}
 
-		$set["rows"] = json_encode ( $rows );
+		$set["rows"] = $keep_json_ctrls ? $json_handler->Encode ( $rows ) : json_encode ( $rows );
 	}
 
 	if ( isset ( $set["http_endpoint"] ) && ( $set["http_endpoint"]=="sql" || $set["http_endpoint"]=="cli" ) && isset ( $set["rows"] ) )
 	{
-		$rows = json_decode ( $set["rows"], 1 );
+		if ( $keep_json_ctrls )
+		{
+			$json_handler = new SafeJsonHandler();
+			$rows = $json_handler->Decode ( $set["rows"], 1 );	
+		}
+		else
+			$rows = json_decode ( $set["rows"], 1 );
 		foreach	( $rows as &$row )
 		{
 			if ( isset ( $row["data"] ) )
@@ -896,7 +908,7 @@ function JsonRsetFixup ( &$set, $columnar )
 				usort ( $row["columns"], "CompareColumns" );
 		}
 
-		$set["rows"] = json_encode ( $rows );
+		$set["rows"] = $keep_json_ctrls ? $json_handler->Encode ( $rows ) : json_encode ( $rows );
 	}
 }
 
@@ -924,7 +936,7 @@ function SqlRsetFixup ( &$set, $columnar )
 }
 
 
-function CompareResultSetFixup ( &$set, $roundoff, $variants_match, $columnar )
+function CompareResultSetFixup ( &$set, $roundoff, $variants_match, $columnar, $keep_json_ctrls=false )
 {
 	global $g_ignore_weights;
 
@@ -941,7 +953,7 @@ function CompareResultSetFixup ( &$set, $roundoff, $variants_match, $columnar )
 
 	// fixup floats in json via http
 	if ( isset ( $set["http"] ) && $set["http"]==1 )
-		JsonRsetFixup ( $set, $columnar );
+		JsonRsetFixup ( $set, $columnar, $keep_json_ctrls );
 	else
 		SqlRsetFixup ( $set, $columnar );
 
@@ -1188,7 +1200,50 @@ function FormatJsonRow ( $j )
 	return $str;
 }
 
-function HttpFormatResultSet ( $result, $nquery )
+// avoiding json errors in case json being processed contains control characters
+class SafeJsonHandler 
+{
+	private $replaces = [];
+
+	function Decode ( $json, $assoc=false, $depth=512, $flags=0 )
+    {
+    	$this->replaces = [ "from" => '%', "to" => [] ];
+    	$matches = [];
+
+    	preg_match_all( '/[[:cntrl:]]/', $json, $matches);
+		if ( !empty( $matches ) )
+		{
+			$this->replaces["to"] = $matches[0];
+			// finding a safe replace token
+			$from0 = $this->replaces["from"];	
+			while ( strpos( $json, $this->replaces["from"] ) !== false ) {
+			    $this->replaces["from"] .= $from0;
+			}
+			$json = preg_replace( '/[[:cntrl:]]/', $this->replaces["from"], $json );
+		}
+
+	    return json_decode ( $json, $assoc, $depth, $flags );
+    }
+
+	function Encode ( $json_obj, $flags=0, $depth=512 )
+	{
+		$json = json_encode ( $json_obj, $flags, $depth );
+		if ( !empty( $this->replaces ) && !empty( $this->replaces["to"] ) ) 
+		{
+			$from = $this->replaces["from"];
+			foreach( $this->replaces["to"] as $to )
+			{
+				$to_encoded = substr( json_encode($to, $flags, $depth), 1, -1 );
+	    		$json = preg_replace( "/$from/", $to_encoded, $json, 1 );
+			}
+		}
+
+	    return $json;
+	}
+
+}
+
+function HttpFormatResultSet ( $result, $nquery, $keep_json_ctrls=false )
 {
 	$str = '';
 
@@ -1215,7 +1270,15 @@ function HttpFormatResultSet ( $result, $nquery )
 		$http_code = $result['http_code'];
     
 	if ( array_key_exists ( 'rows', $result ) )	
-		$rows = json_decode ( $result['rows'], 1 );
+	{
+		if ( $keep_json_ctrls )
+		{
+			$json_handler = new SafeJsonHandler();
+			$rows = $json_handler->Decode ( $result['rows'], 1 );	
+		}
+		else
+        	$rows = json_decode ( $result['rows'], 1 );
+	}
 
 	if ( array_key_exists ("agent", $result ) )
 		$agent =" (agent-" . $result["agent"] . ")" ;
@@ -1228,7 +1291,7 @@ function HttpFormatResultSet ( $result, $nquery )
 	$str .= "$http_method ". $request . "\n";
 				
 	if ( count ( $rows ) )
-		$str .= json_encode ( $rows, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE )."\n";
+		$str .= ( $keep_json_ctrls ? $json_handler->Encode ( $rows, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) : json_encode ( $rows, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) )."\n";
 
 	$str .= "\n";
 
@@ -2198,12 +2261,19 @@ class SphinxConfig
             array_push ( $this->_results_model, $query_results );
     }
 
-	function FixupJsonTimeAndFloats ( &$query_result, &$error )
+	function FixupJsonTimeAndFloats ( &$query_result, &$error, $keep_json_ctrls=false )
     {
         if ( !array_key_exists ( 'rows', $query_result ) )
             return true;
 
-        $decoded_rows = json_decode ( $query_result['rows'] );
+        if ( $keep_json_ctrls )
+        {
+			$json_handler = new SafeJsonHandler();
+		   	$decoded_rows = $json_handler->Decode ( $query_result['rows'] );
+		}
+		else
+			$decoded_rows = json_decode ( $query_result['rows'] );
+
         if ( !$decoded_rows )
         {
             $error = "Unable to decode repsonse json'" . $query_result['rows'] . "': ".GetJsonError();
@@ -2220,11 +2290,12 @@ class SphinxConfig
                 RoundFloatValues ( $hit, 6 );
         }
 
-        $query_result['rows'] = json_encode ( $decoded_rows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+        $query_result['rows'] = $keep_json_ctrls ? $json_handler->Encode ( $decoded_rows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) : json_encode ( $decoded_rows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+
         return true;
     }
 
-	function FixupJsonTotal ( &$query_result, &$error )
+	function FixupJsonTotal ( &$query_result, &$error, $keep_json_ctrls=false )
     {
         if ( !array_key_exists ( 'http_endpoint', $query_result ) )
             return true;
@@ -2235,7 +2306,14 @@ class SphinxConfig
         if ( !array_key_exists ( 'rows', $query_result ) )
             return true;
 
-        $decoded_rows = json_decode ( $query_result['rows'] );
+        if ( $keep_json_ctrls )
+        {
+			$json_handler = new SafeJsonHandler();
+		   	$decoded_rows = $json_handler->Decode ( $query_result['rows'] );
+		}
+		else
+			$decoded_rows = json_decode ( $query_result['rows'] );
+
         if ( !$decoded_rows )
         {
             $error = "Unable to decode repsonse json'" . $query_result['rows'] . "': ".GetJsonError();
@@ -2249,7 +2327,8 @@ class SphinxConfig
         if ( isset ( $decoded_rows->hits->total_relation ) && $decoded_rows->hits->total_relation=='gte' )
 			$decoded_rows->hits->total = count ( $decoded_rows->hits->hits );
 
-        $query_result['rows'] = json_encode ( $decoded_rows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+		$query_result['rows'] = $keep_json_ctrls ? $json_handler->Encode ( $decoded_rows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) : json_encode ( $decoded_rows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+
         return true;
     }
 
@@ -2283,10 +2362,12 @@ class SphinxConfig
 		if ( $use_agent>0 )
 			$query_result['agent'] = $use_agent;
 
-		if ( !$this->FixupJsonTimeAndFloats( $query_result, $error ) )
+
+		$keep_json_ctrls = $this->Requires("keep_json_ctrls");
+		if ( !$this->FixupJsonTimeAndFloats( $query_result, $error, $keep_json_ctrls ) )
 		    return false;
 
-		if ( !$this->FixupJsonTotal ( $query_result, $error ) )
+		if ( !$this->FixupJsonTotal ( $query_result, $error, $keep_json_ctrls ) )
 		    return false;
 
 		$this->PickResult ( $query_result );
@@ -3056,14 +3137,16 @@ class SphinxConfig
 
 	function CompareResultSets ( $set1, $set2 )
 	{
+
 		$roundoff = 0;
 		if ( isset($set1["roundoff"]) ) $roundoff = $set1["roundoff"];
 		if ( isset($set2["roundoff"]) ) $roundoff = $set2["roundoff"];
 		
 		$variants_match = $this->Requires("variant_match");
+		$keep_json_ctrls = $this->Requires("keep_json_ctrls");
 
-		CompareResultSetFixup ( $set1, $roundoff, $variants_match, $this->IsColumnar() );
-		CompareResultSetFixup ( $set2, $roundoff, $variants_match, $this->IsColumnar() );
+		CompareResultSetFixup ( $set1, $roundoff, $variants_match, $this->IsColumnar(), $keep_json_ctrls );
+		CompareResultSetFixup ( $set2, $roundoff, $variants_match, $this->IsColumnar(), $keep_json_ctrls );
 
 		return $set1==$set2;
 	}
@@ -3153,7 +3236,7 @@ class SphinxConfig
             return "/* " . $result["comment"] . " */\n\n";
 
 		if ( array_key_exists ("http", $result) )
-			return HttpFormatResultSet ( $result, $nquery );
+			return HttpFormatResultSet ( $result, $nquery, $this->Requires("keep_json_ctrls") );
 
         if ( array_key_exists ('updated', $result) )
             return "/* Updated via SphinxAPI: " . $result['updated'] . " */\n\n";

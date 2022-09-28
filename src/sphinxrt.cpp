@@ -6731,7 +6731,7 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 	auto pDispatcher = Dispatcher::Make ( iJobs, tQuery.m_iCouncurrency, tDispatch );
 
 	// the context
-	ClonableCtx_T<DiskChunkSearcherCtx_t, DiskChunkSearcherCloneCtx_t> tClonableCtx { dSorters, tResult };
+	ClonableCtx_T<DiskChunkSearcherCtx_t, DiskChunkSearcherCloneCtx_t, Threads::ECONTEXT::ORDERED> tClonableCtx { dSorters, tResult };
 	tClonableCtx.LimitConcurrency ( pDispatcher->GetConcurrency() );
 
 	auto iStart = sphMicroTimer();
@@ -6779,9 +6779,9 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 			return; // already nothing to do, early finish.
 		}
 
-		auto tJobContext = tClonableCtx.CloneNewContext();
+		auto tJobContext = tClonableCtx.CloneNewContext ( !iJob );
 		auto& tCtx = tJobContext.first;
-		sphLogDebug ( "QueryDiskChunks cloned context %d", tJobContext.second );
+		sphLogDebug ( "QueryDiskChunks cloned context %d (job %d)", tJobContext.second, iJob );
 		tClonableCtx.SetJobOrder ( tJobContext.second, -iJob ); // fixme! Same as in single search, but here we walk in reverse order. Need to fix?
 		Threads::Coro::Throttler_c tThrottler ( session::GetThrottlingPeriodMS () );
 		int iTick=1; // num of times coro rescheduled by throttler
@@ -6790,7 +6790,7 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 			// jobs come in ascending order from 0 up to iJobs-1.
 			// We walk over disk chunk in reverse order, from last to 0-th.
 			auto iChunk = iJobs - iJob - 1;
-			sphLogDebugv ( "QueryDiskChunks %d, Jb/Chunk: %d/%d", tJobContext.second, iJob, iChunk );
+			sphLogDebug ( "QueryDiskChunks %d, Jb/Chunk: %d/%d", tJobContext.second, iJob, iChunk );
 			iJob = -1; // mark it consumed
 			myinfo::SetTaskInfo ( "%d ch %d:", iTick, iChunk );
 			auto & dLocalSorters = tCtx.m_dSorters;

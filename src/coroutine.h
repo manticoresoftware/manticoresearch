@@ -135,8 +135,14 @@ int WaitForN ( int iN, std::initializer_list<Handler> dTasks );
 
  After finish, if you collect some state, use either Finalize() - will provide results to bottom context from
  children (if any). Or ForAll() - to just iterate all contexts
+
+ bOrdered indicates whether order of processing is important. In this case very first job will surely come to parent context.
+ That is may be case for querying disk chunks, or pseudo-shares of a plain index. But for parallel pq/snippets that is not the case.
 **/
-template <typename REFCONTEXT, typename CONTEXT>
+
+enum class ECONTEXT { UNORDERED, ORDERED };
+
+template <typename REFCONTEXT, typename CONTEXT, ECONTEXT IS_ORDERED>
 class ClonableCtx_T
 {
 	REFCONTEXT m_dParentContext;
@@ -157,17 +163,26 @@ public:
 	void Setup ( int iContexts );
 	void Finalize();
 
-	// called once per coroutine, when it really has to process something. 2-nd param is JobID, m.b. used in SetJobOrder.
-	std::pair<REFCONTEXT, int> CloneNewContext ();
+	// called once per coroutine, when it really has to process something. 2-nd result is JobID, m.b. used in SetJobOrder.
+	template <ECONTEXT ORD = IS_ORDERED>
+	std::enable_if_t<ORD == ECONTEXT::UNORDERED, std::pair<REFCONTEXT, int>> CloneNewContext();
+
+	template<ECONTEXT ORD = IS_ORDERED>
+	std::enable_if_t<ORD == ECONTEXT::ORDERED, std::pair<REFCONTEXT, int>> CloneNewContext ( bool bFirst );
 
 	// set (optionally) 'weight' of a job; ForAll will iterate jobs according to ascending weights
-	void SetJobOrder ( int iJobID, int iOrder );
+	template<ECONTEXT ORD = IS_ORDERED>
+	std::enable_if_t<ORD == ECONTEXT::ORDERED> SetJobOrder ( int iCtxID, int iOrder );
 
 	// informational
-	int NumWorked() const { return m_iTasks.load ( std::memory_order_relaxed ); }
+	int NumWorked() const;
 
-	template <typename FNPROCESSOR>
-	void ForAll ( FNPROCESSOR fnProcess, bool bIncludeRoot=true );
+	template<typename FNPROCESSOR, ECONTEXT ORD = IS_ORDERED>
+	std::enable_if_t<ORD == ECONTEXT::UNORDERED> ForAll ( FNPROCESSOR fnProcess, bool bIncludeRoot );
+
+private:
+	template<typename FNPROCESSOR, ECONTEXT ORD = IS_ORDERED>
+	std::enable_if_t<ORD == ECONTEXT::ORDERED> ForAll ( FNPROCESSOR fnProcess, bool bIncludeRoot );
 };
 
 // create context and return resuming functor.

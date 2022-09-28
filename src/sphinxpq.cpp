@@ -1472,7 +1472,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 	auto pDispatcher = Dispatcher::Make ( iJobs, 0, tDispatch );
 
 	// the context
-	ClonableCtx_T<PqMatchContextRef_t, PqMatchContextClone_t> dCtx { this, pSeg, tReject, tRes };
+	ClonableCtx_T<PqMatchContextRef_t, PqMatchContextClone_t, Threads::ECONTEXT::UNORDERED> dCtx { this, pSeg, tReject, tRes };
 	dCtx.LimitConcurrency ( pDispatcher->GetConcurrency() );
 
 	if ( tRes.m_bVerbose )

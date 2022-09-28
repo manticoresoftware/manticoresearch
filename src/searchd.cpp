@@ -5961,7 +5961,7 @@ void SearchHandler_c::RunLocalSearches ()
 	auto pDispatcher = Dispatcher::Make ( iNumLocals, m_dNQueries.First().m_iCouncurrency, tDispatch );
 
 	// the context
-	ClonableCtx_T<LocalSearchRef_t, LocalSearchClone_t> dCtx { m_tHook, pMainExtra, m_dNFailuresSet, m_dNAggrResults, m_dNResults };
+	ClonableCtx_T<LocalSearchRef_t, LocalSearchClone_t, Threads::ECONTEXT::UNORDERED> dCtx { m_tHook, pMainExtra, m_dNFailuresSet, m_dNAggrResults, m_dNResults };
 	dCtx.LimitConcurrency ( pDispatcher->GetConcurrency() );
 
 	bool bSingle = pDispatcher->GetConcurrency()==1;
@@ -7868,7 +7868,7 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 	auto pDispatcher = Dispatcher::Make ( iJobs, 0, tDispatch );
 
 	// the context
-	ClonableCtx_T<SnippedBuilderCtxRef_t, SnippedBuilderCtxClone_t> dCtx { pBuilder };
+	ClonableCtx_T<SnippedBuilderCtxRef_t, SnippedBuilderCtxClone_t, Threads::ECONTEXT::UNORDERED> dCtx { pBuilder };
 	dCtx.LimitConcurrency ( pDispatcher->GetConcurrency() );
 
 	Coro::ExecuteN ( dCtx.Concurrency ( iJobs ), [&]

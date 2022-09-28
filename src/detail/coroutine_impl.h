@@ -19,17 +19,17 @@ namespace Threads
 /// ClonableCtx_T
 /////////////////////////////////////////////////////////////////////////////
 
-template<typename REFCONTEXT, typename CONTEXT>
+template<typename REFCONTEXT, typename CONTEXT, ECONTEXT IS_ORDERED>
 template<typename... PARAMS>
-ClonableCtx_T<REFCONTEXT, CONTEXT>::ClonableCtx_T ( PARAMS&&... tParams )
+ClonableCtx_T<REFCONTEXT, CONTEXT, IS_ORDERED>::ClonableCtx_T ( PARAMS&&... tParams )
 	: m_dParentContext ( std::forward<PARAMS> ( tParams )... )
 {}
 
-template<typename REFCONTEXT, typename CONTEXT>
-void ClonableCtx_T<REFCONTEXT, CONTEXT>::LimitConcurrency ( int iDistThreads )
+template<typename REFCONTEXT, typename CONTEXT, ECONTEXT IS_ORDERED>
+void ClonableCtx_T<REFCONTEXT, CONTEXT, IS_ORDERED>::LimitConcurrency ( int iDistThreads )
 {
-	assert ( m_iTasks == 0 ); // can be run only when no work started
-	if ( !m_dParentContext.IsClonable() || !iDistThreads )	  // 0 as for dist_threads means 'no limit'
+	assert ( m_iTasks == 0 );							   // can be run only when no work started
+	if ( !m_dParentContext.IsClonable() || !iDistThreads ) // 0 as for dist_threads means 'no limit'
 		return;
 
 	auto iContexts = iDistThreads - 1; // one context is always clone-free
@@ -40,13 +40,29 @@ void ClonableCtx_T<REFCONTEXT, CONTEXT>::LimitConcurrency ( int iDistThreads )
 }
 
 // called once per coroutine, when it really has to process something
-template<typename REFCONTEXT, typename CONTEXT>
-std::pair<REFCONTEXT, int> ClonableCtx_T<REFCONTEXT, CONTEXT>::CloneNewContext()
+template<typename REFCONTEXT, typename CONTEXT, ECONTEXT IS_ORDERED>
+template<ECONTEXT ORD>
+std::enable_if_t<ORD == ECONTEXT::ORDERED, std::pair<REFCONTEXT, int>> ClonableCtx_T<REFCONTEXT, CONTEXT, IS_ORDERED>::CloneNewContext ( bool bFirst )
+{
+	if ( m_bDisabled || bFirst )
+		return { m_dParentContext, 0 };
+
+	auto iMyIdx = m_iTasks.fetch_add ( 1, std::memory_order_relaxed );
+
+	auto& tCtx = m_dChildrenContexts[iMyIdx];
+	tCtx.emplace_once ( m_dParentContext );
+	return { (REFCONTEXT)tCtx.get(), iMyIdx + 1 };
+}
+
+// called once per coroutine, when it really has to process something
+template<typename REFCONTEXT, typename CONTEXT, ECONTEXT IS_ORDERED>
+template<ECONTEXT ORD>
+std::enable_if_t<ORD == ECONTEXT::UNORDERED, std::pair<REFCONTEXT, int>> ClonableCtx_T<REFCONTEXT, CONTEXT, IS_ORDERED>::CloneNewContext ()
 {
 	if ( m_bDisabled )
 		return { m_dParentContext, 0 };
 
-	auto iMyIdx = m_iTasks.fetch_add ( 1, std::memory_order_acq_rel );
+	auto iMyIdx = m_iTasks.fetch_add ( 1, std::memory_order_relaxed );
 	if ( !iMyIdx )
 		return { m_dParentContext, 0 };
 
@@ -57,25 +73,26 @@ std::pair<REFCONTEXT, int> ClonableCtx_T<REFCONTEXT, CONTEXT>::CloneNewContext()
 }
 
 // set (optionally) 'weight' of a job; ForAll will iterate jobs according to ascending weights
-template<typename REFCONTEXT, typename CONTEXT>
-void ClonableCtx_T<REFCONTEXT, CONTEXT>::SetJobOrder ( int iJobID, int iOrder )
+template<typename REFCONTEXT, typename CONTEXT, ECONTEXT IS_ORDERED>
+template<ECONTEXT ORD>
+std::enable_if_t<ORD == ECONTEXT::ORDERED> ClonableCtx_T<REFCONTEXT, CONTEXT, IS_ORDERED>::SetJobOrder ( int iCtxID, int iOrder )
 {
-	assert ( iJobID < m_iTasks + 1 );
-	if ( !iJobID ) // todo! zero (parent) context doesn't have an order
+	assert ( iCtxID < m_iTasks + 1 );
+	if ( !iCtxID ) // todo! zero (parent) context doesn't have an order
 		return;
-	m_dJobsOrder[iJobID - 1] = iOrder;
+	m_dJobsOrder[iCtxID - 1] = iOrder;
 }
 
 
 // Num of parallel workers to complete iTasks jobs
-template<typename REFCONTEXT, typename CONTEXT>
-inline int ClonableCtx_T<REFCONTEXT, CONTEXT>::Concurrency ( int iTasks ) const
+template<typename REFCONTEXT, typename CONTEXT, ECONTEXT IS_ORDERED>
+inline int ClonableCtx_T<REFCONTEXT, CONTEXT, IS_ORDERED>::Concurrency ( int iTasks ) const
 {
 	return Min ( m_dChildrenContexts.GetLength() + 1, iTasks ); // +1 since parent is also an extra context
 }
 
-template<typename REFCONTEXT, typename CONTEXT>
-void ClonableCtx_T<REFCONTEXT, CONTEXT>::Setup ( int iContexts )
+template<typename REFCONTEXT, typename CONTEXT, ECONTEXT IS_ORDERED>
+void ClonableCtx_T<REFCONTEXT, CONTEXT, IS_ORDERED>::Setup ( int iContexts )
 {
 	m_dChildrenContexts.Reset ( iContexts );
 	m_dJobsOrder.Reset ( iContexts );
@@ -83,9 +100,36 @@ void ClonableCtx_T<REFCONTEXT, CONTEXT>::Setup ( int iContexts )
 	m_bDisabled = !iContexts;
 }
 
-template<typename REFCONTEXT, typename CONTEXT>
-template<typename FNPROCESSOR>
-void ClonableCtx_T<REFCONTEXT, CONTEXT>::ForAll ( FNPROCESSOR fnProcess, bool bIncludeRoot )
+template<typename REFCONTEXT, typename CONTEXT, ECONTEXT IS_ORDERED>
+int ClonableCtx_T<REFCONTEXT, CONTEXT, IS_ORDERED>::NumWorked() const
+{
+	return m_iTasks.load ( std::memory_order_relaxed );
+}
+
+template<typename REFCONTEXT, typename CONTEXT, ECONTEXT IS_ORDERED>
+template<typename FNPROCESSOR, ECONTEXT ORD>
+std::enable_if_t<ORD == ECONTEXT::ORDERED> ClonableCtx_T<REFCONTEXT, CONTEXT, IS_ORDERED>::ForAll ( FNPROCESSOR fnProcess, bool bIncludeRoot )
+{
+	assert ( !bIncludeRoot ); // for ordered context it should not be set
+	if ( m_bDisabled ) // nothing to do; sorters and results are already original
+		return;
+
+	int iWorkedThreads = m_iTasks; // NOT - 1, as we didn't account parent context in the counter
+	CSphFixedVector<int> dOrder { iWorkedThreads };
+	dOrder.FillSeq();
+	dOrder.Sort ( Lesser ( [this] ( int a, int b ) { return m_dJobsOrder[a] < m_dJobsOrder[b]; } ) );
+
+	for ( auto i : dOrder )
+	{
+		assert ( m_dChildrenContexts[i] );
+		auto tCtx = (REFCONTEXT)m_dChildrenContexts[i].get();
+		fnProcess ( tCtx );
+	}
+}
+
+template<typename REFCONTEXT, typename CONTEXT, ECONTEXT IS_ORDERED>
+template<typename FNPROCESSOR, ECONTEXT ORD>
+std::enable_if_t<ORD == ECONTEXT::UNORDERED> ClonableCtx_T<REFCONTEXT, CONTEXT, IS_ORDERED>::ForAll ( FNPROCESSOR fnProcess, bool bIncludeRoot )
 {
 	if ( bIncludeRoot )
 		fnProcess ( m_dParentContext );
@@ -106,8 +150,8 @@ void ClonableCtx_T<REFCONTEXT, CONTEXT>::ForAll ( FNPROCESSOR fnProcess, bool bI
 	}
 }
 
-template<typename REFCONTEXT, typename CONTEXT>
-void ClonableCtx_T<REFCONTEXT, CONTEXT>::Finalize()
+template<typename REFCONTEXT, typename CONTEXT, ECONTEXT IS_ORDERED>
+void ClonableCtx_T<REFCONTEXT, CONTEXT, IS_ORDERED>::Finalize()
 {
 	ForAll ( [this] ( REFCONTEXT tContext ) { m_dParentContext.MergeChild ( tContext ); }, false );
 }

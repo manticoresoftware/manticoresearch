@@ -7511,7 +7511,7 @@ static const char * g_dSqlStmts[] =
 	"facet", "alter_reconfigure", "show_index_settings", "flush_index", "reload_plugins", "reload_index",
 	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
 	"alter_index_settings", "join_cluster", "cluster_create", "cluster_delete", "cluster_index_add",
-	"cluster_index_delete", "cluster_update", "explain", "import_table", "lock_indexes", "unlock_indexes",
+	"cluster_index_delete", "cluster_update", "explain", "import_table", "freeze_indexes", "unfreeze_indexes",
 	"show_settings"
 };
 
@@ -15875,7 +15875,7 @@ void HandleMysqlImportTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphS
 }
 
 //////////////////////////////////////////////////////////////////////////
-void HandleMysqlLockIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes, CSphString& sWarningOut )
+void HandleMysqlFreezeIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes, CSphString& sWarningOut )
 {
 	// search through specified local indexes
 	StrVec_t dIndexes, dNonlockedIndexes, dIndexFiles;
@@ -15898,7 +15898,7 @@ void HandleMysqlLockIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes, CSp
 	if ( !dNonlockedIndexes.IsEmpty() )
 	{
 		StringBuilder_c sWarning;
-		sWarning << "Some indexes are not suitable for locking: ";
+		sWarning << "Some indexes are not suitable for freezing: ";
 		sWarning.StartBlock();
 		dNonlockedIndexes.for_each ( [&sWarning] ( const auto& sValue ) { sWarning << sValue; } );
 		sWarning.FinishBlocks ();
@@ -15915,7 +15915,7 @@ void HandleMysqlLockIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes, CSp
 	tOut.Eof ( false, iWarnings );
 }
 
-void HandleMysqlUnlockIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes, CSphString& sWarningOut )
+void HandleMysqlUnfreezeIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes, CSphString& sWarningOut )
 {
 	// search through specified local indexes
 	StrVec_t dIndexes;
@@ -16434,12 +16434,12 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		HandleMysqlImportTable ( tOut, *pStmt, m_tLastMeta.m_sWarning );
 		return true;
 
-	case STMT_LOCK:
-		HandleMysqlLockIndexes ( tOut, pStmt->m_sIndex, m_tLastMeta.m_sWarning);
+	case STMT_FREEZE:
+		HandleMysqlFreezeIndexes ( tOut, pStmt->m_sIndex, m_tLastMeta.m_sWarning);
 		return true;
 
-	case STMT_UNLOCK:
-		HandleMysqlUnlockIndexes ( tOut, pStmt->m_sIndex, m_tLastMeta.m_sWarning );
+	case STMT_UNFREEZE:
+		HandleMysqlUnfreezeIndexes ( tOut, pStmt->m_sIndex, m_tLastMeta.m_sWarning );
 		return true;
 
 	case STMT_SHOW_SETTINGS:

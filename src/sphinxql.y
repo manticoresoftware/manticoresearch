@@ -65,6 +65,7 @@
 %token	TOK_FOR
 %token	TOK_FORCE
 %token	TOK_FROM
+%token	TOK_FREEZE
 %token	TOK_GLOBAL
 %token	TOK_GROUP
 %token	TOK_GROUPBY
@@ -85,7 +86,6 @@
 %token	TOK_LEVEL
 %token	TOK_LIKE
 %token	TOK_LIMIT
-%token	TOK_LOCK
 %token	TOK_LOGS
 %token	TOK_MATCH
 %token	TOK_MAX
@@ -135,7 +135,7 @@
 %token	TOK_TRUE
 %token	TOK_TRUNCATE
 %token	TOK_UNCOMMITTED
-%token	TOK_UNLOCK
+%token	TOK_UNFREEZE
 %token	TOK_UPDATE
 %token	TOK_USE
 %token	TOK_VALUES
@@ -220,8 +220,8 @@ statement:
 	| delete_cluster
 	| explain_query
 	| TOK_DDLCLAUSE	{ pParser->m_bGotDDLClause = true; }
-	| lock_indexes
-	| unlock_indexes
+	| freeze_indexes
+	| unfreeze_indexes
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -249,17 +249,17 @@ reserved_no_option:
 	| TOK_CHARACTER | TOK_CHUNK | TOK_CLUSTER | TOK_COLLATION | TOK_COLUMN | TOK_COMMIT
 	| TOK_COMMITTED | TOK_COUNT | TOK_CREATE | TOK_DATABASES | TOK_DELETE
 	| TOK_DESC | TOK_DESCRIBE  | TOK_DOUBLE
-	| TOK_FLOAT | TOK_FLUSH | TOK_FOR| TOK_GLOBAL | TOK_GROUP
+	| TOK_FLOAT | TOK_FLUSH | TOK_FOR | TOK_FREEZE | TOK_GLOBAL | TOK_GROUP
 	| TOK_GROUP_CONCAT | TOK_GROUPBY | TOK_HAVING | TOK_HOSTNAMES | TOK_INDEX | TOK_INDEXOF | TOK_INSERT
 	| TOK_INT | TOK_INTEGER | TOK_INTO | TOK_ISOLATION | TOK_LEVEL
-	| TOK_LIKE | TOK_LOCK | TOK_LOGS | TOK_MATCH | TOK_MAX | TOK_META | TOK_MIN | TOK_MULTI
+	| TOK_LIKE | TOK_LOGS | TOK_MATCH | TOK_MAX | TOK_META | TOK_MIN | TOK_MULTI
 	| TOK_MULTI64 | TOK_OPTIMIZE | TOK_PLAN
 	| TOK_PLUGINS | TOK_PROFILE | TOK_RAMCHUNK | TOK_RAND | TOK_READ
 	| TOK_RECONFIGURE | TOK_REMAP | TOK_REPEATABLE | TOK_REPLACE
 	| TOK_ROLLBACK | TOK_RTINDEX | TOK_SERIALIZABLE | TOK_SESSION | TOK_SET
 	| TOK_SETTINGS | TOK_SHOW | TOK_SONAME | TOK_START | TOK_STATUS | TOK_STRING
 	| TOK_SUM | TOK_TABLE | TOK_TABLES | TOK_THREADS | TOK_TO | TOK_TRUNCATE
-	| TOK_UNCOMMITTED | TOK_UNLOCK | TOK_UPDATE | TOK_VALUES | TOK_VARIABLES
+	| TOK_UNCOMMITTED | TOK_UNFREEZE | TOK_UPDATE | TOK_VALUES | TOK_VARIABLES
 	| TOK_WARNINGS | TOK_WEIGHT | TOK_WHERE | TOK_WITH | TOK_WITHIN
 	;
 
@@ -2010,17 +2010,17 @@ explain_query:
 			}
 	;
 
-lock_indexes:
-	TOK_LOCK one_or_more_indexes
+freeze_indexes:
+	TOK_FREEZE one_or_more_indexes
 		{
-			pParser->m_pStmt->m_eStmt = STMT_LOCK;
+			pParser->m_pStmt->m_eStmt = STMT_FREEZE;
 		}
 	;
 
-unlock_indexes:
-	TOK_UNLOCK one_or_more_indexes
+unfreeze_indexes:
+	TOK_UNFREEZE one_or_more_indexes
 		{
-			pParser->m_pStmt->m_eStmt = STMT_UNLOCK;
+			pParser->m_pStmt->m_eStmt = STMT_UNFREEZE;
 		}
 	;
 

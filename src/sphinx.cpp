@@ -48,8 +48,8 @@
 #include "std/lrucache.h"
 #include "indexfiles.h"
 #include "task_dispatcher.h"
-
 #include "secondarylib.h"
+#include "attrindex_merge.h"
 
 #include <errno.h>
 #include <ctype.h>
@@ -1127,7 +1127,6 @@ class CSphIndex_VLN : public CSphIndex, public IndexUpdateHelper_c, public Index
 	friend class AttrIndexBuilder_c;
 	friend struct SphFinalMatchCalc_t;
 	friend class KeepAttrs_c;
-	friend class AttrMerger_c;
 
 public:
 	explicit			CSphIndex_VLN ( const char * szIndexName, const char * szFilename );
@@ -1340,42 +1339,12 @@ private:
 	RowidIterator_i *			SpawnIterators ( const CSphQuery & tQuery, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, CSphVector<CSphFilterSettings> & dModifiedFilters ) const;
 
 	bool						IsQueryFast ( const CSphQuery & tQuery ) const;
-};
 
-class AttrMerger_c
-{
-	AttrIndexBuilder_c						m_tMinMax;
-	HistogramContainer_c					m_tHistograms;
-	CSphVector<PlainOrColumnar_t>			m_dAttrsForHistogram;
-	CSphFixedVector<DocidRowidPair_t> 		m_dDocidLookup {0};
-	CSphWriter								m_tWriterSPA;
-	std::unique_ptr<BlobRowBuilder_i>		m_pBlobRowBuilder;
-	std::unique_ptr<DocstoreBuilder_i>		m_pDocstoreBuilder;
-	std::unique_ptr<columnar::Builder_i>	m_pColumnarBuilder;
-	RowID_t									m_tResultRowID = 0;
-	int64_t									m_iTotalBytes = 0;
-
-	MergeCb_c & 							m_tMonitor;
-	CSphString &							m_sError;
-	int64_t									m_iTotalDocs;
-
-	CSphVector<PlainOrColumnar_t>	m_dSiAttrs;
-	std::unique_ptr<SI::Builder_i>	m_pSIdxBuilder;
-
-private:
-	bool CopyPureColumnarAttributes ( const CSphIndex_VLN& tIndex, const VecTraits_T<RowID_t>& dRowMap );
-	bool CopyMixedAttributes ( const CSphIndex_VLN& tIndex, const VecTraits_T<RowID_t>& dRowMap );
-
-public:
-	AttrMerger_c ( MergeCb_c & tMonitor, CSphString & sError, int64_t iTotalDocs )
-		: m_tMonitor ( tMonitor )
-		, m_sError ( sError)
-		, m_iTotalDocs ( iTotalDocs )
-	{}
-
-	bool Prepare ( const CSphIndex_VLN* pSrcIndex, const CSphIndex_VLN* pDstIndex );
-	bool CopyAttributes ( const CSphIndex_VLN& tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive );
-	bool FinishMergeAttributes ( const CSphIndex_VLN* pDstIndex, BuildHeader_t& tBuildHeader );
+	Docstore_i *				GetDocstore() const override { return m_pDocstore.get(); }
+	columnar::Columnar_i *		GetColumnar() const override { return m_pColumnar.get(); }
+	DWORD *						GetRawAttrs() const override { return m_tAttr.GetWritePtr(); }
+	BYTE *						GetRawBlobAttrs() const override { return m_tBlobAttrs.GetWritePtr(); }
+	bool						AlterSI ( CSphString & sError ) override;
 };
 
 
@@ -2507,18 +2476,6 @@ DWORD CSphIndex_VLN::GetAttributeStatus () const
 
 //////////////////////////////////////////////////////////////////////////
 
-struct CmpDocidLookup_fn
-{
-	static inline bool IsLess ( const DocidRowidPair_t & a, const DocidRowidPair_t & b )
-	{
-		if ( a.m_tDocID==b.m_tDocID )
-			return a.m_tRowID < b.m_tRowID;
-
-		return (uint64_t)a.m_tDocID < (uint64_t)b.m_tDocID;
-	}
-};
-
-
 struct CmpQueuedLookup_fn
 {
 	static DocidRowidPair_t * m_pStorage;
@@ -2986,12 +2943,19 @@ struct CmpHit_fn
 	}
 };
 
+CSphString GetExt ( ESphExt eExt, bool bTemp, const CSphIndex * pIndex )
+{
+	assert ( pIndex );
+
+	CSphString sRes;
+	sRes.SetSprintf ( bTemp ? "%s.tmp%s" : "%s%s", pIndex->GetFilename(), sphGetExt ( eExt ) );
+	
+	return sRes;
+}
 
 CSphString CSphIndex_VLN::GetIndexFileName ( ESphExt eExt, bool bTemp ) const
 {
-	CSphString sRes;
-	sRes.SetSprintf ( bTemp ? "%s.tmp%s" : "%s%s", m_sFilename.cstr(), sphGetExt(eExt) );
-	return sRes;
+	return GetExt ( eExt, bTemp, this );
 }
 
 
@@ -6169,7 +6133,7 @@ std::unique_ptr<ISphFilter> CSphIndex_VLN::CreateMergeFilters ( const VecTraits_
 	return pResult;
 }
 
-static bool CheckDocsCount ( int64_t iDocs, CSphString & sError )
+bool CheckDocsCount ( int64_t iDocs, CSphString & sError )
 {
 	if ( iDocs<INT_MAX )
 		return true;
@@ -6563,243 +6527,6 @@ std::pair<DWORD,DWORD> CSphIndex_VLN::CreateRowMapsAndCountTotalDocs ( const CSp
 }
 
 
-bool AttrMerger_c::Prepare ( const CSphIndex_VLN* pSrcIndex, const CSphIndex_VLN* pDstIndex )
-{
-	auto sSPA = pDstIndex->GetIndexFileName ( SPH_EXT_SPA, true );
-	if ( pDstIndex->m_tSchema.HasNonColumnarAttrs() && !m_tWriterSPA.OpenFile ( sSPA, m_sError ) )
-		return false;
-
-	if ( pDstIndex->m_tSchema.HasBlobAttrs() )
-	{
-		m_pBlobRowBuilder = sphCreateBlobRowBuilder ( pSrcIndex->m_tSchema, pDstIndex->GetIndexFileName ( SPH_EXT_SPB, true ), pSrcIndex->GetSettings().m_tBlobUpdateSpace, m_sError );
-		if ( !m_pBlobRowBuilder )
-			return false;
-	}
-
-	if ( pDstIndex->m_pDocstore )
-	{
-		m_pDocstoreBuilder = CreateDocstoreBuilder ( pDstIndex->GetIndexFileName ( SPH_EXT_SPDS, true ), pDstIndex->m_pDocstore->GetDocstoreSettings(), m_sError );
-		if ( !m_pDocstoreBuilder )
-			return false;
-
-		for ( int i = 0; i < pDstIndex->m_tSchema.GetFieldsCount(); ++i )
-			if ( pDstIndex->m_tSchema.IsFieldStored(i) )
-				m_pDocstoreBuilder->AddField ( pDstIndex->m_tSchema.GetFieldName(i), DOCSTORE_TEXT );
-
-		for ( int i = 0; i < pDstIndex->m_tSchema.GetAttrsCount(); ++i )
-			if ( pDstIndex->m_tSchema.IsAttrStored(i) )
-				m_pDocstoreBuilder->AddField ( pDstIndex->m_tSchema.GetAttr(i).m_sName, DOCSTORE_ATTR );
-	}
-
-	if ( pDstIndex->m_tSchema.HasColumnarAttrs() )
-	{
-		m_pColumnarBuilder = CreateColumnarBuilder ( pDstIndex->m_tSchema, pDstIndex->m_tSettings, pDstIndex->GetIndexFileName ( SPH_EXT_SPC, true ), m_sError );
-		if ( !m_pColumnarBuilder )
-			return false;
-	}
-
-	if ( IsSecondaryLibLoaded() )
-	{
-		m_pSIdxBuilder = CreateIndexBuilder ( 64*1024*1024, pDstIndex->m_tSchema, pDstIndex->GetIndexFileName ( SPH_EXT_SPIDX, true ).cstr(), m_dSiAttrs, m_sError );
-		if ( !m_pSIdxBuilder.get() )
-			return false;
-	}
-
-	m_tMinMax.Init ( pDstIndex->m_tSchema );
-
-	m_dDocidLookup.Reset ( m_iTotalDocs );
-	CreateHistograms ( m_tHistograms, m_dAttrsForHistogram, pDstIndex->m_tSchema );
-
-	m_tResultRowID = 0;
-	return true;
-}
-
-
-bool AttrMerger_c::CopyPureColumnarAttributes ( const CSphIndex_VLN& tIndex, const VecTraits_T<RowID_t>& dRowMap )
-{
-	assert ( !tIndex.m_tAttr.GetWritePtr() );
-	assert ( tIndex.m_tSchema.GetAttr ( 0 ).IsColumnar() );
-
-	auto dColumnarIterators = CreateAllColumnarIterators ( tIndex.m_pColumnar.get(), tIndex.m_tSchema );
-	CSphVector<int64_t> dTmp;
-
-	int iChunk = tIndex.m_iChunk;
-	m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_START, iChunk );
-	auto _ = AtScopeExit ( [this, iChunk] { m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_FINISHED, iChunk ); } );
-	for ( RowID_t tRowID = 0, tRows = (RowID_t)dRowMap.GetLength64(); tRowID < tRows; ++tRowID )
-	{
-		if ( dRowMap[tRowID] == INVALID_ROWID )
-			continue;
-
-		if ( m_tMonitor.NeedStop() )
-			return false;
-
-		// limit granted by caller code
-		assert ( m_tResultRowID != INVALID_ROWID );
-
-		ARRAY_FOREACH ( i, dColumnarIterators )
-		{
-			auto& tIt = dColumnarIterators[i];
-			Verify ( AdvanceIterator ( tIt.first, tRowID ) );
-			SetColumnarAttr ( i, tIt.second, m_pColumnarBuilder.get(), tIt.first, dTmp );
-		}
-
-		BuildStoreHistograms ( nullptr, nullptr, dColumnarIterators, m_dAttrsForHistogram, m_tHistograms );
-
-		if ( m_pDocstoreBuilder )
-			m_pDocstoreBuilder->AddDoc ( m_tResultRowID, tIndex.m_pDocstore->GetDoc ( tRowID, nullptr, -1, false ) );
-
-		if ( m_pSIdxBuilder.get() )
-		{
-			m_pSIdxBuilder->SetRowID ( m_tResultRowID );
-			BuilderStoreAttrs ( nullptr, nullptr, dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
-		}
-
-		m_dDocidLookup[m_tResultRowID] = { dColumnarIterators[0].first->Get(), m_tResultRowID };
-		++m_tResultRowID;
-	}
-	return true;
-}
-
-bool AttrMerger_c::CopyMixedAttributes ( const CSphIndex_VLN& tIndex, const VecTraits_T<RowID_t>& dRowMap )
-{
-	auto dColumnarIterators = CreateAllColumnarIterators ( tIndex.m_pColumnar.get(), tIndex.m_tSchema );
-	CSphVector<int64_t> dTmp;
-
-	int iColumnarIdLoc = tIndex.m_tSchema.GetAttr ( 0 ).IsColumnar() ? 0 : - 1;
-	const CSphRowitem* pRow = tIndex.m_tAttr.GetWritePtr();
-	assert ( pRow );
-	int iStride = tIndex.m_tSchema.GetRowSize();
-	CSphFixedVector<CSphRowitem> dTmpRow ( iStride );
-	auto iStrideBytes = dTmpRow.GetLengthBytes();
-	const CSphColumnInfo* pBlobLocator = tIndex.m_tSchema.GetAttr ( sphGetBlobLocatorName() );
-
-	int iChunk = tIndex.m_iChunk;
-	m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_START, iChunk );
-	auto _ = AtScopeExit ( [this, iChunk] { m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_FINISHED, iChunk ); } );
-	for ( RowID_t tRowID = 0, tRows = (RowID_t)dRowMap.GetLength64(); tRowID < tRows; ++tRowID, pRow += iStride )
-	{
-		if ( dRowMap[tRowID] == INVALID_ROWID )
-			continue;
-
-		if ( m_tMonitor.NeedStop() )
-			return false;
-
-		// limit granted by caller code
-		assert ( m_tResultRowID != INVALID_ROWID );
-
-		m_tMinMax.Collect ( pRow );
-
-		if ( m_pBlobRowBuilder )
-		{
-			const BYTE* pOldBlobRow = tIndex.m_tBlobAttrs.GetWritePtr() + sphGetRowAttr ( pRow, pBlobLocator->m_tLocator );
-			uint64_t	uNewOffset	= m_pBlobRowBuilder->Flush ( pOldBlobRow );
-
-			memcpy ( dTmpRow.Begin(), pRow, iStrideBytes );
-			sphSetRowAttr ( dTmpRow.Begin(), pBlobLocator->m_tLocator, uNewOffset );
-
-			m_tWriterSPA.PutBytes ( dTmpRow.Begin(), iStrideBytes );
-		} else if ( iStrideBytes )
-			m_tWriterSPA.PutBytes ( pRow, iStrideBytes );
-
-		ARRAY_FOREACH ( i, dColumnarIterators )
-		{
-			auto& tIt = dColumnarIterators[i];
-			Verify ( AdvanceIterator ( tIt.first, tRowID ) );
-			SetColumnarAttr ( i, tIt.second, m_pColumnarBuilder.get(), tIt.first, dTmp );
-		}
-
-		DocID_t tDocID = iColumnarIdLoc >= 0 ? dColumnarIterators[iColumnarIdLoc].first->Get() : sphGetDocID ( pRow );
-
-		BuildStoreHistograms ( pRow, tIndex.m_tBlobAttrs.GetWritePtr(), dColumnarIterators, m_dAttrsForHistogram, m_tHistograms );
-
-		if ( m_pDocstoreBuilder )
-			m_pDocstoreBuilder->AddDoc ( m_tResultRowID, tIndex.m_pDocstore->GetDoc ( tRowID, nullptr, -1, false ) );
-
-		if ( m_pSIdxBuilder.get() )
-		{
-			m_pSIdxBuilder->SetRowID ( m_tResultRowID );
-			BuilderStoreAttrs ( pRow, tIndex.m_tBlobAttrs.GetWritePtr(), dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
-		}
-
-		m_dDocidLookup[m_tResultRowID] = { tDocID, m_tResultRowID };
-		++m_tResultRowID;
-	}
-	return true;
-}
-
-
-bool AttrMerger_c::CopyAttributes ( const CSphIndex_VLN& tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive )
-{
-	if ( !uAlive )
-		return true;
-
-	// that is very empyric, however is better than nothing.
-	m_iTotalBytes += tIndex.m_tStats.m_iTotalBytes * ( (float)uAlive / (float)dRowMap.GetLength64() );
-
-	if ( !tIndex.m_tAttr.GetWritePtr() )
-		return CopyPureColumnarAttributes( tIndex, dRowMap );
-	return CopyMixedAttributes ( tIndex, dRowMap );
-}
-
-
-bool AttrMerger_c::FinishMergeAttributes ( const CSphIndex_VLN* pDstIndex, BuildHeader_t& tBuildHeader )
-{
-	m_tMinMax.FinishCollect();
-	assert ( m_tResultRowID==m_iTotalDocs );
-	tBuildHeader.m_iDocinfo = m_iTotalDocs;
-	tBuildHeader.m_iTotalDocuments = m_iTotalDocs;
-	tBuildHeader.m_iTotalBytes = m_iTotalBytes;
-
-	m_dDocidLookup.Sort ( CmpDocidLookup_fn() );
-	if ( !WriteDocidLookup ( pDstIndex->GetIndexFileName ( SPH_EXT_SPT, true ), m_dDocidLookup, m_sError ) )
-		return false;
-
-	if ( pDstIndex->m_tSchema.HasNonColumnarAttrs() )
-	{
-		if ( m_iTotalDocs )
-		{
-			tBuildHeader.m_iMinMaxIndex = m_tWriterSPA.GetPos() / sizeof(CSphRowitem);
-			const auto& dMinMaxRows		 = m_tMinMax.GetCollected();
-			m_tWriterSPA.PutBytes ( dMinMaxRows.Begin(), dMinMaxRows.GetLengthBytes64() );
-			tBuildHeader.m_iDocinfoIndex = ( dMinMaxRows.GetLength() / pDstIndex->m_tSchema.GetRowSize() / 2 ) - 1;
-		}
-
-		m_tWriterSPA.CloseFile();
-		if ( m_tWriterSPA.IsError() )
-			return false;
-	}
-
-	if ( m_pBlobRowBuilder && !m_pBlobRowBuilder->Done(m_sError) )
-		return false;
-
-	std::string sErrorSTL;
-	if ( m_pColumnarBuilder && !m_pColumnarBuilder->Done(sErrorSTL) )
-	{
-		m_sError = sErrorSTL.c_str();
-		return false;
-	}
-
-	if ( !m_tHistograms.Save ( pDstIndex->GetIndexFileName ( SPH_EXT_SPHI, true ), m_sError ) )
-		return false;
-
-	if ( !CheckDocsCount ( m_tResultRowID, m_sError ) )
-		return false;
-
-	if ( m_pDocstoreBuilder )
-		m_pDocstoreBuilder->Finalize();
-
-	std::string sError;
-	if ( m_pSIdxBuilder.get() && !m_pSIdxBuilder->Done ( sError ) )
-	{
-		m_sError = sError.c_str();
-		return false;
-	}
-
-	return WriteDeadRowMap ( pDstIndex->GetIndexFileName ( SPH_EXT_SPM, true ), m_tResultRowID, m_sError );
-}
-
-
 bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress,
 	bool bSrcSettings, bool bSupressDstDocids )
 {
@@ -6840,17 +6567,17 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 
 	// merging attributes
 	{
-		AttrMerger_c tAttrMerger ( tMonitor, sError, iTotalDocs );
-		if ( !tAttrMerger.Prepare ( pSrcIndex, pDstIndex ) )
+		std::unique_ptr<AttrMerger_i> pAttrMerger ( AttrMerger_i::Create ( tMonitor, sError, iTotalDocs ) );
+		if ( !pAttrMerger->Prepare ( pSrcIndex, pDstIndex ) )
 			return false;
 
-		if ( !tAttrMerger.CopyAttributes ( *pDstIndex, dDstRows, tTotalDocs.first ) )
+		if ( !pAttrMerger->CopyAttributes ( *pDstIndex, dDstRows, tTotalDocs.first ) )
 			return false;
 
-		if ( !bCompress && !tAttrMerger.CopyAttributes ( *pSrcIndex, dSrcRows, tTotalDocs.second ) )
+		if ( !bCompress && !pAttrMerger->CopyAttributes ( *pSrcIndex, dSrcRows, tTotalDocs.second ) )
 			return false;
 
-		if ( !tAttrMerger.FinishMergeAttributes ( pDstIndex, tBuildHeader ) )
+		if ( !pAttrMerger->FinishMergeAttributes ( pDstIndex, tBuildHeader ) )
 			return false;
 	}
 
@@ -11730,6 +11457,66 @@ bool CSphIndex_VLN::CopyExternalFiles ( int iPostfix, StrVec_t & dCopied )
 	// save the header
 	return IndexBuildDone ( tBuildHeader, tWriteHeader, GetIndexFileName(SPH_EXT_SPH), m_sLastError );
 }
+
+bool CSphIndex_VLN::AlterSI ( CSphString & sError )
+{
+	if ( !IsSecondaryLibLoaded() )
+	{
+		sError = "secondary index library not loaded";
+		return false;
+	}
+
+	bool bValid = !!m_pSIdx;
+	if ( bValid )
+	{
+		for ( int i=0; i<m_tSchema.GetAttrsCount() && bValid; i++ )
+		{
+			bValid &= m_pSIdx->IsEnabled ( m_tSchema.GetAttr ( i ).m_sName.cstr() );
+		}
+	}
+
+	// the existing .spidx is supported version
+    // secondary index was NOT disabled on UPDATE
+	if ( bValid )
+		return true;
+
+	MergeCb_c tMonitor;
+	CSphFixedVector<RowID_t> dDeadRows {0}, dTmpRows{0};
+	CreateRowMapsAndCountTotalDocs ( this, this, dTmpRows, dDeadRows, nullptr, false, tMonitor );
+
+	CSphString sFileNew;
+	if ( !SiRecreate ( tMonitor, *this, dDeadRows, sFileNew, sError ) )
+		return false;
+
+	m_pSIdx.reset();
+
+	const CSphString sFileCur = GetIndexFileName ( SPH_EXT_SPIDX );
+	CSphString sFileOld;
+	sFileOld.SetSprintf ( "%s.old", sFileCur.cstr() );
+	StrVec_t dFilesFrom ( 1 );
+	StrVec_t dFilesTo ( 1 );
+
+	dFilesFrom[0] = sFileCur;
+	dFilesTo[0] = sFileOld;
+
+	if ( !RenameWithRollback ( dFilesFrom, dFilesTo, sError ) )
+		return false;
+
+	dFilesFrom[0] = sFileNew;
+	dFilesTo[0] = sFileCur;
+
+	if ( !RenameWithRollback ( dFilesFrom, dFilesTo, sError ) )
+		return false;
+
+	m_pSIdx.reset ( CreateSecondaryIndex ( sFileCur.cstr(), sError ) );
+	if ( !m_pSIdx )
+		return false;
+
+	::unlink ( sFileOld.cstr() );
+
+	return true;
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 // KEYWORDS STORING DICTIONARY, INFIX HASH BUILDER

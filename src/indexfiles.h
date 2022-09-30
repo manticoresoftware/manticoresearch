@@ -52,6 +52,9 @@ struct IndexFileExt_t
 CSphVector<IndexFileExt_t>	sphGetExts();
 const char*					sphGetExt ( ESphExt eExt );
 
+class CSphIndex;
+CSphString GetExt ( ESphExt eExt, bool bTemp, const CSphIndex * pIndex );
+
 /// encapsulates all common actions over index files in general (copy/rename/delete etc.)
 class IndexFiles_c : public ISphNoncopyable
 {

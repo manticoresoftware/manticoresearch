@@ -107,6 +107,7 @@ desc META:all;
 select * from META:all;
 select count(*) from META:all group by property;
 select count(distinct title) from META:all group by brand_id;
+select count(distinct title) from META:all;
 </sphinxql></queries>
 
 </test>

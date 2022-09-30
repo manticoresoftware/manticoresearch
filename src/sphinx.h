@@ -1046,6 +1046,7 @@ class CSphSource;
 struct CSphSourceStats;
 class DebugCheckError_i;
 struct AttrAddRemoveCtx_t;
+class Docstore_i;
 
 namespace SI
 {
@@ -1218,6 +1219,12 @@ public:
 	virtual HistogramContainer_c * Debug_GetHistograms() const { return nullptr; }
 	virtual SI::Index_i *		Debug_GetSI() const { return nullptr; }
 
+	virtual Docstore_i *			GetDocstore() const { return nullptr; }
+	virtual columnar::Columnar_i *	GetColumnar() const { return nullptr; }
+	virtual DWORD *					GetRawAttrs() const { return nullptr; }
+	virtual BYTE *					GetRawBlobAttrs() const { return nullptr; }
+	virtual bool					AlterSI ( CSphString & sError ) { return true; }
+
 public:
 	int64_t						m_iTID = 0;				///< last committed transaction id
 	int							m_iChunk = 0;
@@ -1264,6 +1271,7 @@ protected:
 };
 
 const CSphSourceStats& GetStubStats();
+bool CheckDocsCount ( int64_t iDocs, CSphString & sError );
 
 // dummy implementation which makes most of the things optional (makes all non-disk idxes much simpler)
 class CSphIndexStub : public CSphIndex

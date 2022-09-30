@@ -984,16 +984,6 @@ private:
 	bool ConvertDictionary ( Index_t & tIndex, CSphString & sError );
 };
 
-struct CmpDocidLookup_fn
-{
-	static inline bool IsLess ( const DocidRowidPair_t & a, const DocidRowidPair_t & b )
-	{
-		if ( a.m_tDocID==b.m_tDocID )
-			return a.m_tRowID < b.m_tRowID;
-
-		return (uint64_t)a.m_tDocID < (uint64_t)b.m_tDocID;
-	}
-};
 
 bool ConverterPlain_t::WriteLookup ( Index_t & tIndex, CSphString & sError )
 {

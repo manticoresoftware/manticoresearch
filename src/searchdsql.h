@@ -189,7 +189,7 @@ struct SqlStmt_t
 
 											   // SELECT specific
 	CSphQuery				m_tQuery;
-	ISphTableFunc *			m_pTableFunc = nullptr;
+	std::unique_ptr<ISphTableFunc>			m_pTableFunc;
 
 	CSphString				m_sTableFunc;
 	StrVec_t				m_dTableFuncArgs;
@@ -268,7 +268,6 @@ public:
 	CSphVector<int64_t>		m_dIntSubkeys;
 
 	SqlStmt_t ();
-	~SqlStmt_t();
 
 	bool AddSchemaItem ( const char * psName );
 	// check if the number of fields which would be inserted is in accordance to the given schema

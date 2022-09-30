@@ -537,7 +537,6 @@ struct CSphQuery
 	bool			m_bNotOnlyAllowed = false;	///< whether allow single full-text not operator
 	CSphString		m_sStore;					///< don't delete result, just store in given uservar by name
 
-	ISphTableFunc *	m_pTableFunc = nullptr;		///< post-query NOT OWNED, WILL NOT BE FREED in dtor.
 	CSphFilterSettings	m_tHaving;				///< post aggregate filtering (got applied only on master)
 
 	int				m_iSQLSelectStart = -1;	///< SQL parser helper

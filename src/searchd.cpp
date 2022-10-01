@@ -13379,10 +13379,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	auto& tSess = session::Info();
 
 	// select count
-	int iSelect = 0;
-	ARRAY_FOREACH ( i, dStmt )
-		if ( dStmt[i].m_eStmt==STMT_SELECT )
-			iSelect++;
+	int iSelect = dStmt.count_of ( [] ( const auto& tStmt ) { return tStmt.m_eStmt == STMT_SELECT; } );
 
 	CSphQueryResultMeta tPrevMeta = tLastMeta;
 
@@ -13395,21 +13392,25 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	QueryProfile_c tProfile;
 
 	iSelect = 0;
-	ARRAY_FOREACH ( i, dStmt )
-	{
-		if ( dStmt[i].m_eStmt==STMT_SELECT )
+	for ( auto& tStmt: dStmt )
+		switch ( tStmt.m_eStmt )
 		{
-			tHandler.SetQuery ( iSelect, dStmt[i].m_tQuery, std::move ( dStmt[i].m_pTableFunc ) );
-			++iSelect;
+		case STMT_SELECT:
+			{
+				tHandler.SetQuery ( iSelect, tStmt.m_tQuery, std::move ( tStmt.m_pTableFunc ) );
+				++iSelect;
+				break;
+			}
+		case STMT_SET:
+			if ( tStmt.m_eSet == SET_LOCAL )
+			{
+				CSphString sSetName ( tStmt.m_sSetName );
+				sSetName.ToLower();
+				if ( sSetName == "profiling" )
+					tSess.SetProfile ( ParseProfileFormat ( tStmt ) );
+			}
+		default: break;
 		}
-		else if ( dStmt[i].m_eStmt==STMT_SET && dStmt[i].m_eSet==SET_LOCAL )
-		{
-			CSphString sSetName ( dStmt[i].m_sSetName );
-			sSetName.ToLower();
-			if ( sSetName=="profiling" )
-				tSess.SetProfile ( ParseProfileFormat ( dStmt[i] ) );
-		}
-	}
 
 	// use first meta for faceted search
 	bool bUseFirstMeta = ( tHandler.m_dQueries.GetLength()>1 && !tHandler.m_dQueries[0].m_bFacet && tHandler.m_dQueries[1].m_bFacet );
@@ -14359,7 +14360,7 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, Str_t sCommand, const QueryProfile_c 
 	using namespace DebugCmd;
 	CSphString sError;
 	bool bVipConn = session::GetVip ();
-	auto tCmd = DebugCmd::ParseDebugCmd ( sCommand, sError );
+	auto tCmd = ParseDebugCmd ( sCommand, sError );
 
 	if ( bVipConn )
 	{

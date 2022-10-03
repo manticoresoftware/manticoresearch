@@ -1390,10 +1390,10 @@ RtIndex_c::~RtIndex_c ()
 	bool bValid = m_pTokenizer && m_pDict && m_bPreallocPassedOk;
 
 	if ( bValid )
-	{
-		SaveRamChunk();
+		bValid &= SaveRamChunk();
+
+	if ( bValid )
 		SaveMeta();
-	}
 
 	if ( m_iLockFD>=0 )
 		::close ( m_iLockFD );
@@ -1411,15 +1411,14 @@ RtIndex_c::~RtIndex_c ()
 		sFile.SetSprintf ( "%s%s", m_sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ) );
 		::unlink ( sFile.cstr() );
 	}
+	if ( !bValid )
+		return;
 
 	tmSave = sphMicroTimer() - tmSave;
-	if ( tmSave>=1000 && bValid )
-	{
-		sphInfo ( "rt: index %s: ramchunk saved in %d.%03d sec",
-			m_sIndexName.cstr(), (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
-	}
+	if ( tmSave>=1000 )
+		sphInfo ( "rt: index %s: ramchunk saved in %d.%03d sec", m_sIndexName.cstr(), (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
 
-	if ( !sphInterrupted() && bValid )
+	if ( !sphInterrupted() )
 		sphLogDebug ( "closed index %s, valid %d, deleted %d, time %d.%03d sec", m_sIndexName.cstr(), (int)bValid, (int)m_bIndexDeleted, (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
 }
 
@@ -1435,8 +1434,10 @@ int RtIndex_c::GetAlterGeneration() const
 
 void RtIndex_c::UpdateUnlockedCount()
 {
-	if ( !m_bDebugCheck )
-		m_tUnLockedSegments.UpdateValueAndNotifyAll ( (int)m_tRtChunks.RamSegs()->count_of ( [] ( auto& dSeg ) { return !dSeg->m_iLocked; } ) );
+	if ( m_bDebugCheck )
+		return;
+
+	m_tUnLockedSegments.UpdateValueAndNotifyAll ( (int)m_tRtChunks.RamSegs()->count_of ( [] ( auto& dSeg ) { return !dSeg->m_iLocked; } ) );
 }
 
 void RtIndex_c::ProcessDiskChunk ( int iChunk, VisitChunk_fn&& fnVisitor ) const
@@ -4636,7 +4637,7 @@ void RtIndex_c::SaveRamFieldLengths ( CSphWriter& wrChunk ) const
 bool RtIndex_c::SaveRamChunk ()
 {
 	if ( m_eSaving.load ( std::memory_order_relaxed ) != WriteState_e::ENABLED )
-		return true;
+		return false;
 
 	MEMORY ( MEM_INDEX_RT );
 

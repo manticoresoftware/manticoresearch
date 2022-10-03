@@ -904,6 +904,8 @@ struct PostponedUpdate_t
 	RowsToUpdateData_t		m_dRowsToUpdate;
 };
 
+
+using KillWatcherFn = std::function<bool()>;
 // an index or a part of an index that has its own row ids
 class IndexSegment_c
 {
@@ -916,9 +918,10 @@ public:
 	CSphVector<PostponedUpdate_t>	m_dPostponedUpdates;
 
 public:
-	virtual int		Kill ( DocID_t tDocID ) { return 0; }
-	virtual int		KillMulti ( const VecTraits_T<DocID_t> & dKlist ) { return 0; };
-	virtual			~IndexSegment_c() {};
+	virtual int		Kill ( DocID_t  /*tDocID*/ ) { return 0; }
+	virtual int		KillMulti ( const VecTraits_T<DocID_t> &  /*dKlist*/ ) { return 0; };
+	virtual int		TestKillMulti ( const VecTraits_T<DocID_t>& dKlist, KillWatcherFn&& /*fnWatcher*/ ) { return KillMulti ( dKlist ); };
+	virtual			~IndexSegment_c() = default;
 
 	inline void SetKillHook ( IndexSegment_c * pKillHook ) const
 	{

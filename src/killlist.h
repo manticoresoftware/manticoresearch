@@ -132,8 +132,8 @@ private:
 };
 
 
-template <typename TARGET, typename KILLER, typename MAP, typename FNHOOK>
-int KillByLookup ( TARGET & tTargetReader, KILLER & tKillerReader, MAP & tDeadRowMap, FNHOOK fnHook )
+template<typename TARGETREADER, typename KILLERREADER, typename FNKILL>
+int KillByLookupFn ( TARGETREADER& tTargetReader, KILLERREADER& tKillerReader, FNKILL fnKill )
 {
 	RowID_t tTargetRowID = INVALID_ROWID;
 
@@ -149,19 +149,14 @@ int KillByLookup ( TARGET & tTargetReader, KILLER & tKillerReader, MAP & tDeadRo
 		{
 			tKillerReader.HintDocID ( tTargetDocID );
 			bHaveKillerDocs = tKillerReader.ReadDocID ( tKillerDocID );
-		}
-		else if ( tKillerDocID > tTargetDocID )
+		} else if ( tKillerDocID > tTargetDocID )
 		{
 			tTargetReader.HintDocID ( tKillerDocID );
 			bHaveTargetDocs = tTargetReader.Read ( tTargetDocID, tTargetRowID );
-		}
-		else
+		} else
 		{
-			if ( tDeadRowMap.Set ( tTargetRowID ) )
-			{
-				fnHook ( tKillerDocID );
+			if ( fnKill ( tTargetRowID, tKillerDocID ) )
 				++iKilled;
-			}
 
 			bHaveKillerDocs = tKillerReader.ReadDocID ( tKillerDocID );
 			bHaveTargetDocs = tTargetReader.Read ( tTargetDocID, tTargetRowID );
@@ -169,6 +164,12 @@ int KillByLookup ( TARGET & tTargetReader, KILLER & tKillerReader, MAP & tDeadRo
 	}
 
 	return iKilled;
+}
+
+template <typename TARGET, typename KILLER, typename MAP>
+int KillByLookup ( TARGET & tTargetReader, KILLER & tKillerReader, MAP & tDeadRowMap )
+{
+	return KillByLookupFn ( tTargetReader, tKillerReader, [&tDeadRowMap] ( RowID_t tTargetRowID, DocID_t ) { return tDeadRowMap.Set ( tTargetRowID ); } );
 }
 
 

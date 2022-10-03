@@ -2870,10 +2870,15 @@ int CSphIndex_VLN::KillMulti ( const VecTraits_T<DocID_t> & dKlist )
 
 	int iTotalKilled;
 	if ( !m_pKillHook )
-		iTotalKilled = KillByLookup ( tTargetReader, tKillerReader, m_tDeadRowMap, [] ( DocID_t ) {} );
+		iTotalKilled = KillByLookup ( tTargetReader, tKillerReader, m_tDeadRowMap );
 	else
-		iTotalKilled = KillByLookup ( tTargetReader, tKillerReader, m_tDeadRowMap,
-				[this] ( DocID_t tDoc ) { m_pKillHook->Kill ( tDoc ); } );
+		iTotalKilled = KillByLookupFn ( tTargetReader, tKillerReader, [this] ( RowID_t tRow, DocID_t tDoc )
+		{
+			if ( !m_tDeadRowMap.Set ( tRow ) )
+				return false;
+			m_pKillHook->Kill ( tDoc );
+			return true;
+		} );
 
 	if ( iTotalKilled )
 		m_uAttrsStatus |= IndexUpdateHelper_c::ATTRS_ROWMAP_UPDATED;
@@ -6511,7 +6516,7 @@ std::pair<DWORD,DWORD> CSphIndex_VLN::CreateRowMapsAndCountTotalDocs ( const CSp
 		LookupReaderIterator_c tDstLookupReader ( pDstIndex->m_tDocidLookup.GetWritePtr() );
 		LookupReaderIterator_c tSrcLookupReader ( pSrcIndex->m_tDocidLookup.GetWritePtr() );
 
-		KillByLookup ( tDstLookupReader, tSrcLookupReader, tExtraDeadMap, [] (DocID_t) {} );
+		KillByLookup ( tDstLookupReader, tSrcLookupReader, tExtraDeadMap );
 	}
 
 	dSrcRowMap.Fill ( INVALID_ROWID );

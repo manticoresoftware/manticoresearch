@@ -1082,7 +1082,7 @@ public:
 	bool				DeleteDocument ( const VecTraits_T<DocID_t> & dDocs, CSphString & sError, RtAccum_t * pAccExt ) final;
 	bool				Commit ( int * pDeleted, RtAccum_t * pAccExt, CSphString* pError = nullptr ) final;
 	void				RollBack ( RtAccum_t * pAccExt ) final;
-	int					CommitReplayable ( RtSegment_t * pNewSeg, const CSphVector<DocID_t> & dAccKlist ); // returns total killed documents
+	int					CommitReplayable ( RtSegment_t * pNewSeg, const VecTraits_T<DocID_t> & dAccKlist ); // returns total killed documents
 	void				ForceRamFlush ( const char * szReason ) final;
 	bool				IsFlushNeed() const final;
 	bool				ForceDiskChunk() final;
@@ -1289,7 +1289,7 @@ private:
 	bool						ReadNextWord ( SuggestResult_t & tRes, DictWord_t & tWord ) const final;
 
 	ConstRtSegmentRefPtf_t		AdoptSegment ( RtSegment_t * pNewSeg );
-	int							ApplyKillList ( const CSphVector<DocID_t> & dAccKlist ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
+	int							ApplyKillList ( const VecTraits_T<DocID_t> & dAccKlist ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
 
 	bool						AddRemoveColumnarAttr ( RtGuard_t & tGuard, bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError );
 	void						AddRemoveRowwiseAttr ( RtGuard_t & tGuard, bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError );
@@ -1321,7 +1321,7 @@ private:
 	void						SetMemLimit ( int64_t iMemLimit );
 	void						RecalculateRateLimit ( int64_t iSaved, int64_t iInserted, bool bEmergent );
 	void						AlterSave ( bool bSaveRam );
-	void 						BinlogCommit ( RtSegment_t * pSeg, const CSphVector<DocID_t> & dKlist );
+	void 						BinlogCommit ( RtSegment_t * pSeg, const VecTraits_T<DocID_t> & dKlist );
 	bool						StopOptimize();
 	void						UpdateUnlockedCount();
 	bool						CheckSegmentConsistency ( const RtSegment_t* pNewSeg, bool bSilent=true ) const;
@@ -2745,7 +2745,7 @@ ConstRtSegmentRefPtf_t RtIndex_c::AdoptSegment ( RtSegment_t * pNewSeg )
 
 // CommitReplayable -> ApplyKillList
 // AttachDiskIndex -> ApplyKillList
-int RtIndex_c::ApplyKillList ( const CSphVector<DocID_t> & dAccKlist )
+int RtIndex_c::ApplyKillList ( const VecTraits_T<DocID_t> & dAccKlist )
 {
 	if ( dAccKlist.IsEmpty() )
 		return 0;
@@ -3042,7 +3042,7 @@ int CommitID() {
 }
 } // namespace
 
-int RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const CSphVector<DocID_t> & dAccKlist ) REQUIRES_SHARED ( pNewSeg->m_tLock )
+int RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const VecTraits_T<DocID_t> & dAccKlist ) REQUIRES_SHARED ( pNewSeg->m_tLock )
 {
 	// store statistics, because pNewSeg just might get merged
 	const int iId = CommitID();
@@ -8176,7 +8176,7 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex* pIndex, bool bTruncate, bool & bFat
 		return false;
 
 	// safeguards
-	// we do not support some of the disk index features in RT just yet
+	// we do not support some disk index features in RT just yet
 #define LOC_ERROR(_arg) { sError = _arg; return false; }
 	const CSphIndexSettings & tSettings = pIndex->GetSettings();
 	if ( tSettings.m_iStopwordStep!=1 )
@@ -8616,7 +8616,7 @@ static int64_t NumAliveDocs ( const CSphIndex& dChunk )
 	return dChunk.GetStats().m_iTotalDocuments - tStatus.m_iDead;
 }
 
-void RtIndex_c::BinlogCommit ( RtSegment_t * pSeg, const CSphVector<DocID_t> & dKlist ) REQUIRES ( pSeg->m_tLock )
+void RtIndex_c::BinlogCommit ( RtSegment_t * pSeg, const VecTraits_T<DocID_t> & dKlist ) REQUIRES ( pSeg->m_tLock )
 {
 //	Tracer::AsyncOp tTracer ( "rt", "RtIndex_c::BinlogCommit" );
 	Binlog::Commit ( Binlog::COMMIT, &m_iTID, m_sIndexName.cstr(), false, [pSeg,&dKlist,this] (CSphWriter& tWriter) REQUIRES ( pSeg->m_tLock )
@@ -9606,7 +9606,7 @@ int	RtIndex_c::Kill ( DocID_t tDocID )
 }
 
 
-int RtIndex_c::KillMulti ( const VecTraits_T<DocID_t> & dKlist )
+int RtIndex_c::KillMulti ( const VecTraits_T<DocID_t> & /*dKlist*/ )
 {
 	assert ( 0 && "No external kills for RT");
 	return 0;

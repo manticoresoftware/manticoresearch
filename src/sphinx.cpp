@@ -1194,6 +1194,7 @@ public:
 	RowID_t				GetRowidByDocid ( DocID_t tDocID ) const;
 	int					Kill ( DocID_t tDocID ) final;
 	int					KillMulti ( const VecTraits_T<DocID_t> & dKlist ) final;
+	int					TestKillMulti ( const VecTraits_T<DocID_t>& dKlist, KillWatcherFn&& fnWatcher ) final;
 	bool				IsAlive ( DocID_t tDocID ) const final;
 
 	const CSphSourceStats &		GetStats () const final { return m_tStats; }
@@ -2885,6 +2886,31 @@ int CSphIndex_VLN::KillMulti ( const VecTraits_T<DocID_t> & dKlist )
 
 	return iTotalKilled;
 }
+
+int CSphIndex_VLN::TestKillMulti ( const VecTraits_T<DocID_t>& dKlist, KillWatcherFn&& fnWatcher )
+{
+	LookupReaderIterator_c tTargetReader ( m_tDocidLookup.GetWritePtr() );
+	DocidListReader_c tKillerReader ( dKlist );
+
+	int iTotalKilled = KillByLookupFn ( tTargetReader, tKillerReader, [this,fnWatcher=std::move(fnWatcher)] ( RowID_t tRow, DocID_t tDoc )
+	{
+		if ( m_tDeadRowMap.IsSet ( tRow ) ) // already killed, nothing to do.
+			return false;
+
+		if ( !fnWatcher() )
+			return false;
+
+		Verify ( m_tDeadRowMap.Set ( tRow ) );
+		if ( m_pKillHook )
+			m_pKillHook->Kill ( tDoc );
+		return true;
+	} );
+
+	if ( iTotalKilled )
+		m_uAttrsStatus |= IndexUpdateHelper_c::ATTRS_ROWMAP_UPDATED;
+
+	return iTotalKilled;
+};
 
 
 bool CSphIndex_VLN::IsQueryFast ( const CSphQuery & tQuery ) const

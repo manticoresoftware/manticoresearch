@@ -37,7 +37,7 @@ protected:
 	bool			Set ( RowID_t tRowID, DWORD * pData );
 	inline bool		IsSet ( RowID_t tRowID, const DWORD * pData ) const
 	{
-		if ( !m_bHaveDead )
+		if ( !m_bHaveDead || tRowID==INVALID_ROWID )
 			return false;
 
 		assert ( tRowID < m_uRows );

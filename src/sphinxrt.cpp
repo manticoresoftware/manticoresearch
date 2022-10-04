@@ -1056,11 +1056,47 @@ CSphVector<int> GetChunkIds ( const VecTraits_T<DiskChunkRefPtr_t> & dChunks )
 	return dIds;
 }
 
-enum class WriteState_e : int
+class SaveState_c
 {
-	ENABLED,	// normal
-	DISCARD,	// disabled, current result will not be necessary (can escape to don't waste resources)
-	DISABLED,	// disabled, current stage must be completed first
+public:
+
+	enum States_e : BYTE {
+		ENABLED,	// normal
+		DISCARD,	// disabled, current result will not be necessary (can escape to don't waste resources)
+		DISABLED,	// disabled, current stage must be completed first
+	};
+
+	explicit SaveState_c ( States_e eValue )
+		: m_tValue { eValue, false } {}
+
+	void SetState ( States_e eState )
+	{
+		m_tValue.ModifyValueAndNotifyAll ( [eState] ( Value_t& t ) { t.m_eValue = eState; } );
+	}
+	void SetShutdownFlag ()
+	{
+		m_tValue.ModifyValueAndNotifyAll ( [] ( Value_t& t ) { t.m_bShutdown = true; } );
+	}
+
+	bool Is (States_e eValue) const { return m_tValue.GetValue().m_eValue==eValue; }
+
+	// sleep and return true when expected state achieved.
+	// sleep and return false if shutdown expected
+	bool WaitStateOrShutdown ( States_e uState ) const
+	{
+		return uState == m_tValue.Wait ( [uState] ( const Value_t& tVal ) { return tVal.m_bShutdown || ( tVal.m_eValue == uState ); } ).m_eValue;
+	}
+private:
+	struct Value_t
+	{
+		States_e m_eValue;
+		bool m_bShutdown;
+		Value_t ( States_e eValue, bool bShutdown )
+			: m_eValue { eValue }
+			, m_bShutdown { bShutdown }
+		{}
+	};
+	Coro::Waitable_T<Value_t> m_tValue;
 };
 
 enum class MergeSeg_e : BYTE
@@ -1200,7 +1236,7 @@ private:
 	std::atomic<int64_t>		m_iRamChunksAllocatedRAM { 0 };
 
 	std::atomic<bool>			m_bOptimizeStop { false };
-	Threads::Coro::Waitable_T<int>	m_tOptimizeRuns {0};
+	Coro::Waitable_T<int>		m_tOptimizeRuns {0};
 	friend class OptimizeGuard_c;
 
 	int64_t						m_iRtMemLimit;
@@ -1231,7 +1267,7 @@ private:
 	int							m_iMaxCodepointLength = 0;
 	TokenizerRefPtr_c			m_pTokenizerIndexing;
 	bool						m_bPreallocPassedOk = true;
-	std::atomic<WriteState_e>	m_eSaving { WriteState_e::ENABLED };
+	SaveState_c					m_tSaving { SaveState_c::ENABLED };
 	bool						m_bHasFiles = false;
 
 	// fixme! make this *Lens atomic together with disk/ram data, to avoid any kind of race among them
@@ -1382,6 +1418,8 @@ RtIndex_c::~RtIndex_c ()
 		// From serial worker resuming on Wait() will happen after whole merger coroutine finished.
 		ScopedScheduler_c tSerialFiber { m_tWorkers.SerialChunkAccess() };
 		TRACE_SCHED ( "rt", "~RtIndex_c" );
+		m_tSaving.SetShutdownFlag ();
+		Threads::Coro::Reschedule();
 		StopMergeSegmentsWorker();
 		m_tNSavesNow.Wait ( [] ( int iVal ) { return iVal==0; } );
 	}
@@ -1480,7 +1518,7 @@ bool RtIndex_c::IsFlushNeed() const
 	if ( Binlog::IsActive() && m_iTID<=m_iSavedTID )
 		return false;
 
-	return m_eSaving.load(std::memory_order_relaxed)==WriteState_e::ENABLED;
+	return m_tSaving.Is ( SaveState_c::ENABLED );
 }
 
 static int64_t SegmentsGetUsedRam ( const ConstRtSegmentSlice_t& dSegments )
@@ -2755,8 +2793,27 @@ int RtIndex_c::ApplyKillList ( const VecTraits_T<DocID_t> & dAccKlist )
 
 	int iKilled = 0;
 	auto pChunks = m_tRtChunks.DiskChunks();
-	for ( auto& pChunk : *pChunks )
-		iKilled += pChunk->CastIdx().KillMulti ( dAccKlist );
+
+	if ( m_tSaving.Is ( SaveState_c::ENABLED ) )
+		for ( auto& pChunk : *pChunks )
+			iKilled += pChunk->CastIdx().KillMulti ( dAccKlist );
+	else
+	{
+		// if saving is disabled, and we NEED to actually mark a doc in disk chunk as deleted,
+		// we'll pause that action, waiting until index is unlocked.
+		bool bNeedWait = true;
+		bool bEnabled = false;
+		for ( auto& pChunk : *pChunks )
+			iKilled += pChunk->CastIdx().TestKillMulti ( dAccKlist, [this,&bNeedWait, &bEnabled]()
+			{
+				if ( bNeedWait )
+				{
+					bNeedWait = false;
+					bEnabled = m_tSaving.WaitStateOrShutdown ( SaveState_c::ENABLED );
+				}
+				return bEnabled;
+			});
+	}
 
 	auto pSegs = m_tRtChunks.RamSegs();
 	for ( auto& pSeg : *pSegs )
@@ -3768,7 +3825,7 @@ bool RtIndex_c::SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_
 
 void RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )
 {
-	if ( m_eSaving.load ( std::memory_order_relaxed ) != WriteState_e::ENABLED )
+	if ( !m_tSaving.Is ( SaveState_c::ENABLED ) )
 		return;
 
 	// sanity check
@@ -3887,7 +3944,7 @@ int64_t RtIndex_c::GetMemCount ( PRED&& fnPred ) const
 // i.e. create new disk chunk from ram segments
 bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
 {
-	if ( m_eSaving.load(std::memory_order_relaxed) != WriteState_e::ENABLED ) // fixme! review, m.b. refactor
+	if ( !m_tSaving.Is ( SaveState_c::ENABLED ) ) // fixme! review, m.b. refactor
 		return !bBootstrap;
 
 	assert ( Coro::CurrentScheduler() == m_tWorkers.SerialChunkAccess() );
@@ -4636,7 +4693,7 @@ void RtIndex_c::SaveRamFieldLengths ( CSphWriter& wrChunk ) const
 
 bool RtIndex_c::SaveRamChunk ()
 {
-	if ( m_eSaving.load ( std::memory_order_relaxed ) != WriteState_e::ENABLED )
+	if ( !m_tSaving.Is ( SaveState_c::ENABLED ) )
 		return false;
 
 	MEMORY ( MEM_INDEX_RT );
@@ -7804,7 +7861,7 @@ int RtIndex_c::UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSph
 	if ( m_tRtChunks.IsEmpty() )
 		return 0;
 
-	if ( m_eSaving.load ( std::memory_order_relaxed ) == WriteState_e::DISABLED )
+	if ( m_tSaving.Is ( SaveState_c::DISABLED ) ) // fixme! Wait?
 	{
 		sError = "index is locked now, try again later";
 		return -1;
@@ -7870,7 +7927,7 @@ bool RtIndex_c::SaveAttributes ( CSphString & sError ) const
 
 	const auto& pDiskChunks = m_tRtChunks.DiskChunks();
 
-	if ( pDiskChunks->IsEmpty() || ( m_eSaving.load ( std::memory_order_relaxed ) == WriteState_e::DISCARD ) )
+	if ( pDiskChunks->IsEmpty() || m_tSaving.Is ( SaveState_c::DISCARD ) )
 		return true;
 
 	for ( auto& pChunk : *pDiskChunks )
@@ -9757,13 +9814,13 @@ bool RtIndex_c::CopyExternalFiles ( int /*iPostfix*/, StrVec_t & dCopied )
 void RtIndex_c::ProhibitSave()
 {
 	StopOptimize();
-	m_eSaving.store ( WriteState_e::DISCARD, std::memory_order_relaxed );
+	m_tSaving.SetState ( SaveState_c::DISCARD );
 	std::atomic_thread_fence ( std::memory_order_release );
 }
 
 void RtIndex_c::EnableSave()
 {
-	m_eSaving.store ( WriteState_e::ENABLED, std::memory_order_relaxed );
+	m_tSaving.SetState ( SaveState_c::ENABLED );
 	m_bOptimizeStop.store ( false, std::memory_order_relaxed );
 	std::atomic_thread_fence ( std::memory_order_release );
 }
@@ -9775,7 +9832,9 @@ void RtIndex_c::LockFileState ( CSphVector<CSphString>& dFiles )
 	ForceRamFlush ( "forced" );
 	CSphString sError;
 	SaveAttributes ( sError ); // fixme! report error, better discard whole locking
-	m_eSaving.store ( WriteState_e::DISABLED, std::memory_order_relaxed );
+	// that will ensure, if current txn is applying, it will be finished (especially kill pass) before we continue.
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
+	m_tSaving.SetState ( SaveState_c::DISABLED );
 	std::atomic_thread_fence ( std::memory_order_release );
 	GetIndexFiles ( dFiles, dFiles );
 }

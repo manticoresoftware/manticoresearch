@@ -9,7 +9,7 @@ Manticore supports grouping of search results by one or multiple columns and com
 * have more than one row returned per group
 * have groups filtered
 * have groups sorted
-* be aggregated with help of [](../Searching/Grouping.md#Aggregation-functions)
+* be aggregated with help of the [aggregation functions](../Searching/Grouping.md#Aggregation-functions)
 
 <!-- intro -->
 The general syntax is:

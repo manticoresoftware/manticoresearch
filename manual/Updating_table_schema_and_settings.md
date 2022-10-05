@@ -246,3 +246,27 @@ mysql> show index rt settings;
 1 row in set (0.00 sec)
 ```
 <!-- end -->
+
+## Rebuild secondary index
+
+<!-- example ALTER REBUILD SECONDARY -->
+```sql
+ALTER TABLE table REBUILD SECONDARY
+```
+
+`ALTER` can also be used to rebuild secondary indexes in a given table. Sometimes a secondary index can be disabled for a whole index or for one/multiple attributes in the index. `ALTER TABLE table REBUILD SECONDARY` rebuilds the secondary index from the attribute data and enables it again. Secondary indexes get disabled:
+* on `UPDATE` of an attribute: in this case its secondary index gets disabled
+* in case Manticore loads a table with old formatted secondary indexes: in this case secondary indexes will be disabled for the whole table
+
+<!-- request Example -->
+```sql
+ALTER TABLE rt REBUILD SECONDARY;
+```
+
+<!-- response Example -->
+
+```sql
+Query OK, 0 rows affected (0.00 sec)
+```
+
+<!-- end -->

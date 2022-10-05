@@ -920,7 +920,7 @@ public:
 public:
 	virtual int		Kill ( DocID_t  /*tDocID*/ ) { return 0; }
 	virtual int		KillMulti ( const VecTraits_T<DocID_t> &  /*dKlist*/ ) { return 0; };
-	virtual int		TestKillMulti ( const VecTraits_T<DocID_t>& dKlist, KillWatcherFn&& /*fnWatcher*/ ) { return KillMulti ( dKlist ); };
+	virtual int		CheckThenKillMulti ( const VecTraits_T<DocID_t>& dKlist, KillWatcherFn&& /*fnWatcher*/ ) { return KillMulti ( dKlist ); };
 	virtual			~IndexSegment_c() = default;
 
 	inline void SetKillHook ( IndexSegment_c * pKillHook ) const

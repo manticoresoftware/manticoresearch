@@ -2804,7 +2804,7 @@ int RtIndex_c::ApplyKillList ( const VecTraits_T<DocID_t> & dAccKlist )
 		bool bNeedWait = true;
 		bool bEnabled = false;
 		for ( auto& pChunk : *pChunks )
-			iKilled += pChunk->CastIdx().TestKillMulti ( dAccKlist, [this,&bNeedWait, &bEnabled]()
+			iKilled += pChunk->CastIdx().CheckThenKillMulti ( dAccKlist, [this,&bNeedWait, &bEnabled]()
 			{
 				if ( bNeedWait )
 				{

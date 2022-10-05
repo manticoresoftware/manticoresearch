@@ -96,7 +96,7 @@ index products {
 * [Update](../../Quick_start_guide.md#Update) attributes and full-text fields
 * [Delete](../../Quick_start_guide.md#Delete) documents
 * [Truncate](../../Emptying_an_index.md) index
-* [Change schema online](../../Updating_index_schema.md#Updating-index-schema-in-RT-mode) with help of command `ALTER`
+* [Change schema online](../../Updating_table_schema_and_settings.md#Updating-index-schema-in-RT-mode) with help of the command `ALTER`
 * [Define index](../../Creating_an_index/Local_indexes/Real-time_index.md) in a configuration file
 * Use [UUID](../../Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md#Auto-ID) for automatic ID provisioning
 

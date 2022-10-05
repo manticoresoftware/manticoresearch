@@ -22,7 +22,7 @@ text `RED TUBE 5" LONG` would be indexed as `COLOR TUBE 5 INCH LONG`, and `PLANK
 
 Read more about [regexp_filter here](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter).
 
-## Index configuration options 
+## Index configuration options
 
 ### charset_table
 
@@ -138,10 +138,10 @@ index products {
 <!-- end -->
 
 <!-- example charset_table 2 -->
-Besides definitions of characters and mappings, there are several built-in aliases that can be used. Current aliases are: 
+Besides definitions of characters and mappings, there are several built-in aliases that can be used. Current aliases are:
 * `english`
 * `russian`
-* `non_cjk` 
+* `non_cjk`
 * `cjk`
 
 <!-- request SQL -->
@@ -324,7 +324,7 @@ Blended characters are indexed both as separators and valid characters. For inst
 
 Blended characters should be used carefully:
 * since as soon as a character is defined as blended it is not a separator any more which can affect search. For example if you put a comma to the `blend_chars` and then search for `dog,cat` it will treat that as a single token `dog,cat` and if during indexation you **didn't** index `dog,cat` as `dog,cat`, but left only `dog cat` then it won't be matched.
-* therefore you need to make sure that this behaviour is desired and control it with help of another setting [blend_mode](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#blend_mode)
+* therefore you need to make sure that this behaviour is desired and control it with help of the other setting [blend_mode](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#blend_mode)
 
 Positions for tokens obtained by replacing blended characters with whitespace are assigned as usual, so regular keywords will be indexed just as if there was no `blend_chars` specified at all. An additional token that mixes blended and non-blended characters will be put at the starting position. For instance, if `AT&T company` occurs in the very beginning of the text field, `at` will be given position 1, `t` position 2, `company` position 3, and `AT&T` will also be given position 1 ("blending" with the opening regular keyword). Thus, querying for either `AT&T` or just `AT` will match that document, and querying for `"AT T"` as a phrase will also match it. Last but not least, phrase query for `"AT&T company"` will *also* match it, despite the position.
 
@@ -408,7 +408,7 @@ option = trim_none | trim_head | trim_tail | trim_both | trim_all | skip_pure
 <!-- example blend_mode -->
 Blended tokens indexing mode. Optional, default is `trim_none`.
 
-By default, tokens that mix blended and non-blended characters get indexed in there entirety. For instance, when both at-sign and an exclamation are in `blend_chars`, `@dude!` will get result in two tokens indexed: `@dude!` (with all the blended characters) and `dude` (without any). Therefore `@dude` query will *not* match it. 
+By default, tokens that mix blended and non-blended characters get indexed in there entirety. For instance, when both at-sign and an exclamation are in `blend_chars`, `@dude!` will get result in two tokens indexed: `@dude!` (with all the blended characters) and `dude` (without any). Therefore `@dude` query will *not* match it.
 
 `blend_mode` directive adds flexibility to this indexing behavior. It takes a comma-separated list of options.
 
@@ -427,9 +427,9 @@ Default behavior is to index the entire token, equivalent to `blend_mode = trim_
 
 Make sure you undestand that either of the blend modes limits your search, even the default one `trim_none` as with it and assuming `.` is a blended char:
 * `.dog.` will become `.dog. dog` during indexation
-* and you won't be able to find it by `dog.`. 
+* and you won't be able to find it by `dog.`.
 
-The more modes you use, the higher the chance your keyword will match something. 
+The more modes you use, the higher the chance your keyword will match something.
 
 <!-- request SQL -->
 
@@ -1071,7 +1071,7 @@ CRC dictionaries never store the original keyword text in the index. Instead, ke
 
 That approach has two drawbacks. First, there is a chance of control sum collision between several pairs of different keywords, growing quadratically with the number of unique keywords in the index. However, it is not a big concern as a chance of a single FNV64 collision in a dictionary of 1 billion entries is approximately 1:16, or 6.25 percent. And most dictionaries will be much more compact that a billion keywords, as a typical spoken human language has in the region of 1 to 10 million word forms.) Second, and more importantly, substring searches are not directly possible with control sums. Manticore alleviated that by pre-indexing all the possible substrings as separate keywords (see [min_prefix_len](../../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len), [min_infix_len](../../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) directives). That actually has an added benefit of matching substrings in the quickest way possible. But at the same time pre-indexing all substrings grows the index size a lot (factors of 3-10x and even more would not be unusual) and impacts the indexing time respectively, rendering substring searches on big indexes rather impractical.
 
-Keywords dictionary fixes both these drawbacks. It stores the keywords in the index and performs search-time wildcard expansion. For example, a search for a 'test\*'prefix could internally expand to 'test|tests|testing' query based on the dictionary contents. That expansion is fully transparent to the application, except that the separate per-keyword statistics for all the actually matched keywords would now also be reported. 
+Keywords dictionary fixes both these drawbacks. It stores the keywords in the index and performs search-time wildcard expansion. For example, a search for a 'test\*'prefix could internally expand to 'test|tests|testing' query based on the dictionary contents. That expansion is fully transparent to the application, except that the separate per-keyword statistics for all the actually matched keywords would now also be reported.
 
 For substring (infix) search extended wildcards may be used. Special symbols like '?' and '%' are supported along with substring (infix) search (e.g. "t?st\*","run%","\*abc\*"). Note, however, these wildcards work only with dict=keywords, and not elsewhere.
 
@@ -1268,11 +1268,11 @@ By default, Manticore full-text index stores not only a list of matching documen
 
 Hitless index will generally use less space than the respective regular index (about 1.5x can be expected). Both indexing and searching should be faster, at a cost of missing positional query and ranking support.  
 
-If used in positional queries (e.g. phrase queries) the hitless words are taken out from them and used as operand without a position.  For example if "hello" and "world" are hitless and "simon" and "says" are not hitless, the phrase query  `"simon says hello world"` will be converted to `("simon says" & hello & world)`, matching "hello" and "world" anywhere in the document and "simon says" as an exact phrase. 
+If used in positional queries (e.g. phrase queries) the hitless words are taken out from them and used as operand without a position.  For example if "hello" and "world" are hitless and "simon" and "says" are not hitless, the phrase query  `"simon says hello world"` will be converted to `("simon says" & hello & world)`, matching "hello" and "world" anywhere in the document and "simon says" as an exact phrase.
 
 A positional query than contains only hitless words will result in an empty phrase node, therefore the entire query will return an empty result and a warning. If the whole dictionary is hitless (using `all`) only boolean matching can be used on the respective index.
 
- 
+
 
 <!-- request SQL -->
 
@@ -1580,7 +1580,7 @@ This list controls what characters will be treated as phrase boundaries, in orde
 
 On phrase boundary, additional word position increment (specified by [phrase_boundary_step](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary_step)) will be added to current word position. This enables phrase-level searching through proximity queries: words in different phrases will be guaranteed to be more than phrase_boundary_step distance away from each other; so proximity search within that distance will be equivalent to phrase-level search.
 
-Phrase boundary condition will be raised if and only if such character is followed by a separator; this is to avoid abbreviations such as S.T.A.L.K.E.R or URLs being treated as several phrases. 
+Phrase boundary condition will be raised if and only if such character is followed by a separator; this is to avoid abbreviations such as S.T.A.L.K.E.R or URLs being treated as several phrases.
 
 <!-- request SQL -->
 
@@ -1803,7 +1803,7 @@ utilsApi.sql("CREATE TABLE products(title text, price float) regexp_filter = '(b
 index products {
   # index '13"' as '13inch'
   regexp_filter = \b(\d+)\" => \1inch
-  
+
   # index 'blue' or 'red' as 'color'
   regexp_filter = (blue|red) => color
 

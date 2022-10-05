@@ -11496,11 +11496,16 @@ bool CSphIndex_VLN::AlterSI ( CSphString & sError )
 	StrVec_t dFilesFrom ( 1 );
 	StrVec_t dFilesTo ( 1 );
 
-	dFilesFrom[0] = sFileCur;
-	dFilesTo[0] = sFileOld;
+	bool bCurExists = sphFileExists ( sFileCur.cstr() );
 
-	if ( !RenameWithRollback ( dFilesFrom, dFilesTo, sError ) )
-		return false;
+	if ( bCurExists )
+	{
+		dFilesFrom[0] = sFileCur;
+		dFilesTo[0] = sFileOld;
+
+		if ( !RenameWithRollback ( dFilesFrom, dFilesTo, sError ) )
+			return false;
+	}
 
 	dFilesFrom[0] = sFileNew;
 	dFilesTo[0] = sFileCur;
@@ -11512,7 +11517,10 @@ bool CSphIndex_VLN::AlterSI ( CSphString & sError )
 	if ( !m_pSIdx )
 		return false;
 
-	::unlink ( sFileOld.cstr() );
+	if ( bCurExists )
+	{
+		::unlink ( sFileOld.cstr() );
+	}
 
 	return true;
 }

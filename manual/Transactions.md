@@ -9,7 +9,7 @@ Transactions are supported for the following commands:
 
 Transactions are not supported for:
 * UPDATE (which is [different](Updating_documents/REPLACE_vs_UPDATE.md) from the REPLACE in that it does in-place attribute update).
-* ALTER - for [updating index schema](Updating_index_schema.md)
+* ALTER - for [updating index schema](Updating_table_schema_and_settings.md)
 * TRUNCATE - for [emptying a real-time index](Emptying_an_index.md)
 * ATTACH - for [attaching a plain index to a real-time index](Adding_data_from_external_storages/Adding_data_from_indexes/Attaching_a_plain_index_to_RT_index.md)
 * CREATE - [for creating an index](Creating_an_index/Local_indexes.md)

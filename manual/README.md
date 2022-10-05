@@ -113,7 +113,7 @@
     * [Query cache](Searching/Query_cache.md)
     * [Collations](Searching/Collations.md)
     * [Cost-based optimizer](Searching/Cost_based_optimizer.md)
-* [▪️ Updating index schema](Updating_index_schema.md)    
+* [▪️ Updating table schema and settings](Updating_table_schema_and_settings.md)    
 * [▪️ Functions](Functions.md)
     * [Mathematical functions](Functions/Mathematical_functions.md)
     * [Searching and ranking functions](Functions/Searching_and_ranking_functions.md)

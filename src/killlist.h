@@ -124,7 +124,7 @@ public:
 		return true;
 	}
 
-	static inline void HintDocID ( DocID_t tDocID ) {}
+	static inline void HintDocID ( DocID_t ) {}
 
 private:
 	const DocID_t * m_pIterator {nullptr};
@@ -132,44 +132,49 @@ private:
 };
 
 
-template<typename TARGETREADER, typename KILLERREADER, typename FNKILL>
-int KillByLookupFn ( TARGETREADER& tTargetReader, KILLERREADER& tKillerReader, FNKILL fnKill )
+template<typename READER1, typename READER2, typename FUNCTOR>
+void Intersect ( READER1& tReader1, READER2& tReader2, FUNCTOR&& fnFunctor )
 {
-	RowID_t tTargetRowID = INVALID_ROWID;
+	RowID_t tRowID1 = INVALID_ROWID;
+	DocID_t tDocID1 = 0, tDocID2 = 0;
+	bool bHaveDocs1 = tReader1.Read ( tDocID1, tRowID1 );
+	bool bHaveDocs2 = tReader2.ReadDocID ( tDocID2 );
 
-	DocID_t tKillerDocID = 0, tTargetDocID = 0;
-	bool bHaveKillerDocs = tKillerReader.ReadDocID ( tKillerDocID );
-	bool bHaveTargetDocs = tTargetReader.Read ( tTargetDocID, tTargetRowID );
-
-	int iKilled = 0;
-
-	while ( bHaveKillerDocs && bHaveTargetDocs )
+	while ( bHaveDocs1 && bHaveDocs2 )
 	{
-		if ( tKillerDocID < tTargetDocID )
+		if ( tDocID1 < tDocID2 )
 		{
-			tKillerReader.HintDocID ( tTargetDocID );
-			bHaveKillerDocs = tKillerReader.ReadDocID ( tKillerDocID );
-		} else if ( tKillerDocID > tTargetDocID )
+			tReader1.HintDocID ( tDocID2 );
+			bHaveDocs1 = tReader1.Read ( tDocID1, tRowID1 );
+		} else if ( tDocID1 > tDocID2 )
 		{
-			tTargetReader.HintDocID ( tKillerDocID );
-			bHaveTargetDocs = tTargetReader.Read ( tTargetDocID, tTargetRowID );
+			tReader2.HintDocID ( tDocID1 );
+			bHaveDocs2 = tReader2.ReadDocID ( tDocID2 );
 		} else
 		{
-			if ( fnKill ( tTargetRowID, tKillerDocID ) )
-				++iKilled;
-
-			bHaveKillerDocs = tKillerReader.ReadDocID ( tKillerDocID );
-			bHaveTargetDocs = tTargetReader.Read ( tTargetDocID, tTargetRowID );
+			fnFunctor ( tRowID1, tDocID1, tReader2 );
+			bHaveDocs1 = tReader1.Read ( tDocID1, tRowID1 );
+			bHaveDocs2 = tReader2.ReadDocID ( tDocID2 );
 		}
 	}
+}
 
-	return iKilled;
+template<typename TARGETREADER, typename KILLERREADER, typename FNACTION>
+int ProcessIntersected ( TARGETREADER& tReader1, KILLERREADER& tReader2, FNACTION fnAction )
+{
+	int iProcessed = 0;
+	Intersect ( tReader1, tReader2, [&iProcessed, fnAction = std::move ( fnAction )] ( RowID_t tRowID, DocID_t tDocID, KILLERREADER& ) {
+		if ( fnAction ( tRowID, tDocID ) )
+			++iProcessed;
+	} );
+
+	return iProcessed;
 }
 
 template <typename TARGET, typename KILLER, typename MAP>
 int KillByLookup ( TARGET & tTargetReader, KILLER & tKillerReader, MAP & tDeadRowMap )
 {
-	return KillByLookupFn ( tTargetReader, tKillerReader, [&tDeadRowMap] ( RowID_t tTargetRowID, DocID_t ) { return tDeadRowMap.Set ( tTargetRowID ); } );
+	return ProcessIntersected ( tTargetReader, tKillerReader, [&tDeadRowMap] ( RowID_t tRowID, DocID_t ) { return tDeadRowMap.Set ( tRowID ); } );
 }
 
 

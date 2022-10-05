@@ -2105,37 +2105,15 @@ public:
 		return *( m_pCur-1 );
 	}
 
+	static inline void HintDocID ( DocID_t ) {}
+
 private:
 	const int * m_pCur;
 	const int * m_pEnd;
 	const VecTraits_T<DocID_t> & m_dDocids;
 };
 
-template <typename FUNCTOR>
-void Intersect ( LookupReaderIterator_c& tReader1, DocIdIndexReader_c & tReader2, FUNCTOR && tFunctor )
-{
-	RowID_t tRowID1 = INVALID_ROWID;
-	DocID_t tDocID1 = 0, tDocID2 = 0;
-	bool bHaveDocs1 = tReader1.Read ( tDocID1, tRowID1 );
-	bool bHaveDocs2 = tReader2.ReadDocID ( tDocID2 );
 
-	while ( bHaveDocs1 && bHaveDocs2 )
-	{
-		if ( tDocID1 < tDocID2 )
-		{
-			tReader1.HintDocID ( tDocID2 );
-			bHaveDocs1 = tReader1.Read ( tDocID1, tRowID1 );
-		}
-		else if (  tDocID1 > tDocID2 )
-			bHaveDocs2 = tReader2.ReadDocID ( tDocID2 );
-		else
-		{
-			tFunctor ( tRowID1, tReader2.GetIndex () );
-			bHaveDocs1 = tReader1.Read ( tDocID1, tRowID1 );
-			bHaveDocs2 = tReader2.ReadDocID ( tDocID2 );
-		}
-	}
-}
 
 // fill collect rows which will be updated in this index
 RowsToUpdateData_t CSphIndex_VLN::Update_CollectRowPtrs ( const UpdateContext_t & tCtx )
@@ -2156,11 +2134,11 @@ RowsToUpdateData_t CSphIndex_VLN::Update_CollectRowPtrs ( const UpdateContext_t 
 	dSorted.Sort ( Lesser ( [&dDocids] ( int a, int b ) { return dDocids[a]<dDocids[b]; } ) );
 	DocIdIndexReader_c tSortedReader ( dSorted, dDocids );
 	LookupReaderIterator_c tLookupReader ( m_tDocidLookup.GetReadPtr() );
-	Intersect ( tLookupReader, tSortedReader, [&dRowsToUpdate, this] ( RowID_t tRowID, int iIdx )
+	Intersect ( tLookupReader, tSortedReader, [&dRowsToUpdate, this] ( RowID_t tRowID, DocID_t, DocIdIndexReader_c& tSortedReader )
 	{
 		auto& dUpd = dRowsToUpdate.Add();
 		dUpd.m_pRow = GetDocinfoByRowID ( tRowID );
-		dUpd.m_iIdx = iIdx;
+		dUpd.m_iIdx = tSortedReader.GetIndex();
 		assert ( dUpd.m_pRow );
 	} );
 	return dRowsToUpdate;
@@ -2873,7 +2851,7 @@ int CSphIndex_VLN::KillMulti ( const VecTraits_T<DocID_t> & dKlist )
 	if ( !m_pKillHook )
 		iTotalKilled = KillByLookup ( tTargetReader, tKillerReader, m_tDeadRowMap );
 	else
-		iTotalKilled = KillByLookupFn ( tTargetReader, tKillerReader, [this] ( RowID_t tRow, DocID_t tDoc )
+		iTotalKilled = ProcessIntersected ( tTargetReader, tKillerReader, [this] ( RowID_t tRow, DocID_t tDoc )
 		{
 			if ( !m_tDeadRowMap.Set ( tRow ) )
 				return false;
@@ -2892,7 +2870,7 @@ int CSphIndex_VLN::CheckThenKillMulti ( const VecTraits_T<DocID_t>& dKlist, Kill
 	LookupReaderIterator_c tTargetReader ( m_tDocidLookup.GetWritePtr() );
 	DocidListReader_c tKillerReader ( dKlist );
 
-	int iTotalKilled = KillByLookupFn ( tTargetReader, tKillerReader, [this,fnWatcher=std::move(fnWatcher)] ( RowID_t tRow, DocID_t tDoc )
+	int iTotalKilled = ProcessIntersected ( tTargetReader, tKillerReader, [this,fnWatcher=std::move(fnWatcher)] ( RowID_t tRow, DocID_t tDoc )
 	{
 		if ( m_tDeadRowMap.IsSet ( tRow ) ) // already killed, nothing to do.
 			return false;

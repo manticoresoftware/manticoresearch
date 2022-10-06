@@ -966,7 +966,7 @@ struct UpdateContext_t
 	AttrUpdateInc_t &						m_tUpd;
 	const ISphSchema &						m_tSchema;
 	const HistogramContainer_c *			m_pHistograms {nullptr};
-	CSphRowitem *							m_pAttrPool {nullptr};
+	const CSphRowitem *						m_pAttrPool {nullptr};
 	BYTE *									m_pBlobPool {nullptr};
 	IndexSegment_c *						m_pSegment {nullptr};
 

@@ -63,7 +63,7 @@ public:
 	bool		Set ( RowID_t tRowID );
 	inline bool	IsSet ( RowID_t tRowID ) const
 	{
-		return DeadRowMap_c::IsSet ( tRowID, m_tData.GetWritePtr() );
+		return DeadRowMap_c::IsSet ( tRowID, m_tData.GetReadPtr() );
 	}
 
 	int64_t		GetLengthBytes() const override;

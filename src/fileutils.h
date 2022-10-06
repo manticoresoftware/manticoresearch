@@ -202,7 +202,7 @@ public:
 #else
 		assert ( m_iFD==-1 );
 #endif
-		assert ( !this->GetWritePtr() && !this->GetLength64() );
+		assert ( !this->GetReadPtr() && !this->GetLength64() );
 
 		T * pData = NULL;
 		int64_t iCount = 0;
@@ -297,8 +297,8 @@ public:
 		this->MemUnlock();
 
 #if _WIN32
-		if ( this->GetWritePtr() )
-			::UnmapViewOfFile ( this->GetWritePtr() );
+		if ( this->GetReadPtr() )
+			::UnmapViewOfFile ( this->GetReadPtr() );
 
 		if ( m_iMap!=INVALID_HANDLE_VALUE )
 			::CloseHandle ( m_iMap );
@@ -308,7 +308,7 @@ public:
 			::CloseHandle ( m_iFD );
 		m_iFD = INVALID_HANDLE_VALUE;
 #else
-		if ( this->GetWritePtr() )
+		if ( this->GetReadPtr() )
 			::munmap ( this->GetWritePtr(), this->GetLengthBytes() );
 
 		SafeClose ( m_iFD );
@@ -319,7 +319,7 @@ public:
 
 	bool Resize ( uint64_t uNewSize, CSphString & sWarning, CSphString & sError )
 	{
-		if ( !this->GetWritePtr() )
+		if ( !this->GetReadPtr() )
 			return false;
 
 		bool bMlock = this->m_bMemLocked;
@@ -329,7 +329,7 @@ public:
 #if _WIN32
 		assert ( m_iMap );
 
-		::UnmapViewOfFile ( this->GetWritePtr() );
+		::UnmapViewOfFile ( this->GetReadPtr() );
 		::CloseHandle ( m_iMap );
 
 		m_iMap = ::CreateFileMapping ( m_iFD, nullptr, m_bWrite ? PAGE_READWRITE : PAGE_READONLY, (DWORD)( uNewSize >> 32 ), (DWORD) ( uNewSize & 0xFFFFFFFFULL ), nullptr );
@@ -381,7 +381,7 @@ public:
 			return false;
 		}
 
-		if ( this->GetWritePtr() )
+		if ( this->GetReadPtr() )
 			::munmap ( this->GetWritePtr(), this->GetLengthBytes() );
 #endif
 #endif
@@ -423,11 +423,11 @@ public:
 
 	bool Flush ( bool bWaitComplete, CSphString & sError ) const
 	{
-		if ( !this->GetWritePtr() )
+		if ( !this->GetReadPtr() )
 			return true;
 
 #if _WIN32
-		if ( !::FlushViewOfFile ( this->GetWritePtr(), this->GetLengthBytes() ) )
+		if ( !::FlushViewOfFile ( this->GetReadPtr(), this->GetLengthBytes() ) )
 		{
 			sError.SetSprintf ( "FlushViewOfFile failed for '%s': errno %u", m_sFilename.cstr(), ::GetLastError() );
 			return false;

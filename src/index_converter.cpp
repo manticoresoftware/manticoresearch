@@ -853,7 +853,7 @@ AttrConverter_t::AttrConverter_t ( const Index_t & tSrc, const CSphSchema & tDst
 	// persist MVA
 	if ( !tSrc.m_tMvaArena.IsEmpty() )
 	{
-		const DWORD * pMvaArena = tSrc.m_tMvaArena.GetWritePtr();
+		const DWORD * pMvaArena = tSrc.m_tMvaArena.GetReadPtr();
 		DWORD uDocs = *pMvaArena;
 		if ( uDocs )
 			m_pMvaUpdates = (pMvaArena+1) + uDocs * sizeof(SphDocID_t)/sizeof(DWORD);
@@ -867,7 +867,7 @@ CSphRowitem * AttrConverter_t::NextRow()
 	else
 		return nullptr;
 
-	const CSphRowitem * pSrcRow = m_tIndex.m_tAttr.GetWritePtr() + m_iCurRow * m_iSrcStride;
+	const CSphRowitem * pSrcRow = m_tIndex.m_tAttr.GetReadPtr() + m_iCurRow * m_iSrcStride;
 	m_tCurDocID = DOCINFO2ID ( pSrcRow );
 	const CSphRowitem * pAttrs = DOCINFO2ATTRS ( pSrcRow );
 
@@ -886,7 +886,7 @@ CSphRowitem * AttrConverter_t::NextRow()
 			const BYTE * pStr = nullptr;
 			int iLen = 0;
 			if ( uOff )
-				iLen = sphUnpackStr ( m_tIndex.m_tString.GetWritePtr() + uOff, &pStr );
+				iLen = sphUnpackStr ( m_tIndex.m_tString.GetReadPtr() + uOff, &pStr );
 
 			assert ( m_pBlob );
 			m_pBlob->SetAttr( iBlobAttr++, (const BYTE*)pStr, iLen, m_sError );
@@ -899,13 +899,13 @@ CSphRowitem * AttrConverter_t::NextRow()
 			{
 				if ( !m_tIndex.m_bArenaProhibit && ( uOff & MVA_ARENA_FLAG ) )
 				{
-					assert ( m_pMvaUpdates && m_pMvaUpdates<m_tIndex.m_tMvaArena.GetWritePtr() + m_tIndex.m_tMvaArena.GetLength64() );
+					assert ( m_pMvaUpdates && m_pMvaUpdates<m_tIndex.m_tMvaArena.GetReadPtr() + m_tIndex.m_tMvaArena.GetLength64() );
 					pMva = m_pMvaUpdates;
 					int iCount = *m_pMvaUpdates;
 					m_pMvaUpdates += iCount + 1;
 				} else
 				{
-					pMva = m_tIndex.m_tMva.GetWritePtr() + uOff;
+					pMva = m_tIndex.m_tMva.GetReadPtr() + uOff;
 				}
 			}
 
@@ -1629,7 +1629,7 @@ bool ConverterPlain_t::WriteKillList ( const Index_t & tIndex, bool bIgnoreKlist
 	{
 		dKillList.Resize ( tIndex.m_tKillList.GetLength () );
 		ARRAY_FOREACH ( i, dKillList )
-			dKillList[i] = tIndex.m_tKillList.GetWritePtr()[i];
+			dKillList[i] = tIndex.m_tKillList.GetReadPtr()[i];
 	}
 
 	CSphString sName = tIndex.GetFilename(SPH_EXT_SPK);

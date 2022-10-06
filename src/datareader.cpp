@@ -298,7 +298,7 @@ public:
 	// returns depended reader sharing same mmap as maker
 	FileBlockReader_c * MakeReader ( BYTE *, int ) final
 	{
-		auto pReader = new ThinMMapReader_c ( m_tBackendFile.GetWritePtr(),
+		auto pReader = new ThinMMapReader_c ( m_tBackendFile.GetReadPtr(),
 			m_tBackendFile.GetLength64(), m_tBackendFile.GetFileName() );
 		if ( m_iPos )
 			pReader->SeekTo ( m_iPos, 0 );

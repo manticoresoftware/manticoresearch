@@ -402,7 +402,7 @@ void CWordlist::DebugPopulateCheckpoints()
 	if ( !m_pCpReader )
 		return;
 
-	const BYTE * pCur = m_tBuf.GetWritePtr() + m_iDictCheckpointsOffset;
+	const BYTE * pCur = m_tBuf.GetReadPtr() + m_iDictCheckpointsOffset;
 	ARRAY_FOREACH ( i, m_dCheckpoints )
 		pCur = m_pCpReader->ReadEntry ( pCur, m_dCheckpoints[i] );
 
@@ -414,7 +414,7 @@ const CSphWordlistCheckpoint * CWordlist::FindCheckpointCrc ( SphWordID_t iWordI
 {
 	if ( m_pCpReader ) // FIXME!!! fall to regular checkpoints after data got read
 	{
-		MappedCheckpoint_fn tPred ( m_dCheckpoints.Begin(), m_tBuf.GetWritePtr() + m_iDictCheckpointsOffset, m_pCpReader );
+		MappedCheckpoint_fn tPred ( m_dCheckpoints.Begin(), m_tBuf.GetReadPtr() + m_iDictCheckpointsOffset, m_pCpReader );
 		return sphSearchCheckpointCrc( iWordID, m_dCheckpoints, std::move(tPred));
 	}
 
@@ -425,7 +425,7 @@ const CSphWordlistCheckpoint * CWordlist::FindCheckpointWrd ( const char* sWord,
 {
 	if ( m_pCpReader ) // FIXME!!! fall to regular checkpoints after data got read
 	{
-		MappedCheckpoint_fn tPred ( m_dCheckpoints.Begin(), m_tBuf.GetWritePtr() + m_iDictCheckpointsOffset, m_pCpReader );
+		MappedCheckpoint_fn tPred ( m_dCheckpoints.Begin(), m_tBuf.GetReadPtr() + m_iDictCheckpointsOffset, m_pCpReader );
 		return sphSearchCheckpointWrd ( sWord, iWordLen, bStarMode, m_dCheckpoints, std::move ( tPred ) );
 	}
 
@@ -493,14 +493,14 @@ const BYTE * CWordlist::AcquireDict ( const CSphWordlistCheckpoint * pCheckpoint
 	SphOffset_t iOff = pCheckpoint->m_iWordlistOffset;
 	if ( m_pCpReader )
 	{
-		MappedCheckpoint_fn tPred ( m_dCheckpoints.Begin(), m_tBuf.GetWritePtr() + m_iDictCheckpointsOffset, m_pCpReader );
+		MappedCheckpoint_fn tPred ( m_dCheckpoints.Begin(), m_tBuf.GetReadPtr() + m_iDictCheckpointsOffset, m_pCpReader );
 		iOff = tPred ( pCheckpoint ).m_iWordlistOffset;
 	}
 
 	assert ( !m_tBuf.IsEmpty() );
 	assert ( iOff>0 && iOff<(int64_t)m_tBuf.GetLengthBytes() );
 
-	return m_tBuf.GetWritePtr()+iOff;
+	return m_tBuf.GetReadPtr()+iOff;
 }
 
 
@@ -570,7 +570,7 @@ void CWordlist::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 	// lookup key1
 	// OPTIMIZE? maybe lookup key2 and reduce checkpoint set size, if possible?
 	CSphVector<DWORD> dPoints;
-	if ( !sphLookupInfixCheckpoints ( sSubstring, iBytes1, m_tBuf.GetWritePtr(), m_dInfixBlocks, m_iInfixCodepointBytes, dPoints ) )
+	if ( !sphLookupInfixCheckpoints ( sSubstring, iBytes1, m_tBuf.GetReadPtr(), m_dInfixBlocks, m_iInfixCodepointBytes, dPoints ) )
 		return;
 
 	DictEntryDiskPayload_t tDict2Payload ( tArgs.m_bPayload, tArgs.m_eHitless );
@@ -583,7 +583,7 @@ void CWordlist::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 	ARRAY_FOREACH ( i, dPoints )
 	{
 		// OPTIMIZE? add a quicker path than a generic wildcard for "*infix*" case?
-		KeywordsBlockReader_c tDictReader ( m_tBuf.GetWritePtr() + m_dCheckpoints[dPoints[i]-1].m_iWordlistOffset, m_iSkiplistBlockSize );
+		KeywordsBlockReader_c tDictReader ( m_tBuf.GetReadPtr() + m_dCheckpoints[dPoints[i]-1].m_iWordlistOffset, m_iSkiplistBlockSize );
 		while ( tDictReader.UnpackWord() )
 		{
 			if ( sphInterrupted () )
@@ -607,7 +607,7 @@ void CWordlist::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 
 void CWordlist::SuffixGetChekpoints ( const SuggestResult_t & , const char * sSuffix, int iLen, CSphVector<DWORD> & dCheckpoints ) const
 {
-	sphLookupInfixCheckpoints ( sSuffix, iLen, m_tBuf.GetWritePtr(), m_dInfixBlocks, m_iInfixCodepointBytes, dCheckpoints );
+	sphLookupInfixCheckpoints ( sSuffix, iLen, m_tBuf.GetReadPtr(), m_dInfixBlocks, m_iInfixCodepointBytes, dCheckpoints );
 }
 
 
@@ -615,7 +615,7 @@ void CWordlist::SetCheckpoint ( SuggestResult_t & tRes, DWORD iCP ) const
 {
 	assert ( tRes.m_pWordReader );
 	KeywordsBlockReader_c * pReader = (KeywordsBlockReader_c *)tRes.m_pWordReader;
-	pReader->Reset ( m_tBuf.GetWritePtr() + m_dCheckpoints[iCP-1].m_iWordlistOffset );
+	pReader->Reset ( m_tBuf.GetReadPtr() + m_dCheckpoints[iCP-1].m_iWordlistOffset );
 }
 
 

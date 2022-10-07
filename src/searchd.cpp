@@ -5219,54 +5219,45 @@ private:
 };
 
 PubSearchHandler_c::PubSearchHandler_c ( int iQueries, std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, bool bMaster )
+	: m_pImpl { std::make_unique<SearchHandler_c> ( iQueries, std::move ( pQueryParser ), eQueryType, bMaster ) }
 {
-	m_pImpl = new SearchHandler_c ( iQueries, std::move ( pQueryParser ), eQueryType, bMaster );
+	assert ( m_pImpl );
 }
 
-PubSearchHandler_c::~PubSearchHandler_c ()
-{
-	delete m_pImpl;
-}
+PubSearchHandler_c::~PubSearchHandler_c () = default;
 
 void PubSearchHandler_c::RunQueries ()
 {
-	assert ( m_pImpl );
 	m_pImpl->RunQueries();
 }
 
 void PubSearchHandler_c::SetQuery ( int iQuery, const CSphQuery & tQuery, std::unique_ptr<ISphTableFunc> pTableFunc )
 {
-	assert ( m_pImpl );
 	m_pImpl->SetQuery ( iQuery, tQuery, std::move(pTableFunc) );
 }
 
 void PubSearchHandler_c::SetProfile ( QueryProfile_c * pProfile )
 {
-	assert ( m_pImpl );
 	m_pImpl->SetProfile ( pProfile );
 }
 
 void PubSearchHandler_c::SetStmt ( SqlStmt_t & tStmt )
 {
-	assert ( m_pImpl );
 	m_pImpl->m_pStmt = &tStmt;
 }
 
 AggrResult_t * PubSearchHandler_c::GetResult ( int iResult )
 {
-	assert ( m_pImpl );
 	return m_pImpl->GetResult (iResult);
 }
 
 void PubSearchHandler_c::PushIndex ( const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc )
 {
-	assert ( m_pImpl );
 	m_pImpl->m_dAcquired.AddIndex ( sIndex, pDesc );
 }
 
 void PubSearchHandler_c::RunCollect ( const CSphQuery& tQuery, const CSphString& sIndex, CSphString* pErrors, CSphVector<BYTE>* pCollectedDocs )
 {
-	assert ( m_pImpl );
 	m_pImpl->RunCollect ( tQuery, sIndex, pErrors, pCollectedDocs );
 }
 

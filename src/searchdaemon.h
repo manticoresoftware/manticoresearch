@@ -1281,7 +1281,7 @@ public:
 	void				RunCollect( const CSphQuery& tQuery, const CSphString& sIndex, CSphString* pErrors, CSphVector<BYTE>* pCollectedDocs );
 
 private:
-	SearchHandler_c *	m_pImpl = nullptr;
+	std::unique_ptr<SearchHandler_c>	m_pImpl;
 };
 
 

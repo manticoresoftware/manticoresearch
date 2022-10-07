@@ -73,7 +73,7 @@ using WakeupEventRefPtr_c = CSphRefcountedPtr<CSphWakeupEvent>;
 class CSphNetLoop : public ISphRefcountedMT
 {
 	class Impl_c;
-	Impl_c * m_pImpl = nullptr;
+	std::unique_ptr<Impl_c> m_pImpl;
 
 protected:
 	~CSphNetLoop () override;

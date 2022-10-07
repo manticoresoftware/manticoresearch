@@ -833,10 +833,11 @@ void IndexUpdateHelper_c::Update_PrepareListOfUpdatedAttributes ( UpdateContext_
 		// Query parser tries to detect an attribute type. And this is wrong because, we should
 		// take attribute type from schema. Probably we'll rewrite updates in future but
 		// for now this fix just works.
-		// Fixes cases like UPDATE float_attr=1 WHERE id=1;
+		// Fix cases like UPDATE float_attr=1 WHERE id=1;
 		assert ( iUpdAttrId>=0 );
 		if ( eUpdAttrType==SPH_ATTR_INTEGER && tCtx.m_tSchema.GetAttr(iUpdAttrId).m_eAttrType==SPH_ATTR_FLOAT )
 		{
+			assert ( tUpd.m_dRowOffset.IsEmpty() ); // fixme! Now we don't fixup more then 1 value
 			const_cast<CSphAttrUpdate &>(tUpd).m_dAttributes[i].m_eType = SPH_ATTR_FLOAT;
 			const_cast<CSphAttrUpdate &>(tUpd).m_dPool[i] = sphF2DW ( (float)tUpd.m_dPool[i] );
 		}
@@ -2148,7 +2149,7 @@ RowsToUpdateData_t CSphIndex_VLN::Update_CollectRowPtrs ( const UpdateContext_t 
 // note, it actually changes (rearranges) rows!
 RowsToUpdate_t CSphIndex_VLN::Update_PrepareGatheredRowPtrs ( RowsToUpdate_t & dWRows, const VecTraits_T<DocID_t>& dDocids )
 {
-	RowsToUpdate_t dRows = dWRows; // that is actually to indicate that we CHANGE contents inside dWRows, so it should be passed by non-const reference.
+	RowsToUpdate_t & dRows = dWRows; // that is actually to indicate that we CHANGE contents inside dWRows, so it should be passed by non-const reference.
 
 	dRows.Sort ( Lesser ( [&dDocids] ( auto& a, auto& b ) { return dDocids[a.m_iIdx]<dDocids[b.m_iIdx]; } ) );
 	LookupReaderIterator_c tLookupReader ( m_tDocidLookup.GetReadPtr() );
@@ -2232,7 +2233,6 @@ bool CSphIndex_VLN::Update_WriteBlobRow ( UpdateContext_t & tCtx, CSphRowitem * 
 	tBlobSpaceUsed += iLength;
 
 	*(SphOffset_t*)m_tBlobAttrs.GetWritePtr() = tBlobSpaceUsed;
-
 	return true;
 }
 

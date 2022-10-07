@@ -7777,15 +7777,16 @@ static void AddDerivedUpdate ( const RowsToUpdate_t & dRows, const UpdateContext
 	});
 }
 
-bool RtIndex_c::Update_DiskChunks ( AttrUpdateInc_t& tUpd, const DiskChunkSlice_t& dDiskChunks, CSphString & sError )
+bool RtIndex_c::Update_DiskChunks ( AttrUpdateInc_t& tUpd, const DiskChunkSlice_t& dDiskChunks, CSphString & sError ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
 {
+	assert ( Coro::CurrentScheduler() == m_tWorkers.SerialChunkAccess() );
 	bool bCritical = false;
 	CSphString sWarning;
 
 	// That seems to be only place where order of disk chunks is important.
-	// About deduplication: order of new-born disk chunks is important, as they may contain replaces for older docs.
+	// About deduplication: order of newborn disk chunks is important, as they may contain replaces for older docs.
 	// Since we don't consider killed documents during update, it is important to update from freshest to oldest,
-	// this order ensures that actual documents updated. However, for optimized (merged/splitted) chunks that is not
+	// this order ensures that actual documents updated. However, for optimized (merged/split) chunks that is not
 	// important as kill-lists applied during merge, and so resulting chunks have only 'freshest' version, because
 	// all previous are effectively excluded during merge pass.
 	// (If we refactor updates to scan rows taking in account kill-lists, order will not be important at all).
@@ -7890,6 +7891,8 @@ int RtIndex_c::UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSph
 
 		auto* pSeg = const_cast<RtSegment_t*> ( (const RtSegment_t*)tGuard.m_dRamSegs[i] );
 		SccWL_t wLock ( pSeg->m_tLock );
+
+		assert ( pSeg->GetStride() == m_tSchema.GetRowSize() );
 
 		// point context to target segment
 		tCtx.m_pAttrPool = pSeg->m_dRows.begin();

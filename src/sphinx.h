@@ -1008,7 +1008,6 @@ public:
 	static bool			Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tSchema, CSphString & sError );
 };
 
-
 class DocstoreAddField_i;
 void SetupDocstoreFields ( DocstoreAddField_i & tFields, const CSphSchema & tSchema );
 bool CheckStoredFields ( const CSphSchema & tSchema, const CSphIndexSettings & tSettings, CSphString & sError );

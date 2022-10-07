@@ -347,9 +347,8 @@ public:
 			Reset();
 			return false;
 		}
-#endif
 
-#if !_WIN32
+#else
 		if ( sphSeek ( m_iFD, uNewSize, SEEK_SET ) < 0 )
 		{
 			sError.SetSprintf ( "failed to seek '%s': %s (length=" UINT64_FMT ")", m_sFilename.cstr(), strerror(errno), uNewSize );

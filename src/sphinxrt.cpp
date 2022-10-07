@@ -243,8 +243,9 @@ SphAttr_t InsertDocData_t::GetID() const
 //////////////////////////////////////////////////////////////////////////
 
 
-RtSegment_t::RtSegment_t ( DWORD uDocs )
+RtSegment_t::RtSegment_t ( DWORD uDocs, const ISphSchema& tSchema )
 	: m_tDeadRowMap ( uDocs )
+	, m_tSchema { tSchema }
 {
 }
 
@@ -314,6 +315,14 @@ const CSphRowitem * RtSegment_t::FindAliveRow ( DocID_t tDocid ) const
 const CSphRowitem * RtSegment_t::GetDocinfoByRowID ( RowID_t tRowID ) const NO_THREAD_SAFETY_ANALYSIS
 {
 	return m_dRows.GetLength() ? &m_dRows[tRowID*GetStride()] : nullptr;
+}
+
+RowID_t RtSegment_t::GetAliveRowidByDocid ( DocID_t tDocID ) const
+{
+	RowID_t* pRowID = m_tDocIDtoRowID.Find ( tDocID );
+	if ( !pRowID || m_tDeadRowMap.IsSet ( *pRowID ) )
+		return INVALID_ROWID;
+	return *pRowID;
 }
 
 
@@ -1107,7 +1116,7 @@ enum class MergeSeg_e : BYTE
 	EXIT 	= 4,	// shutdown and exit
 };
 
-class RtIndex_c final : public RtIndex_i, public ISphNoncopyable, public ISphWordlist, public ISphWordlistSuggest, public IndexUpdateHelper_c, public IndexAlterHelper_c, public DebugCheckHelper_c
+class RtIndex_c final : public RtIndex_i, public ISphNoncopyable, public ISphWordlist, public ISphWordlistSuggest, public IndexAlterHelper_c, public DebugCheckHelper_c
 {
 public:
 						RtIndex_c ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict );
@@ -1289,9 +1298,6 @@ private:
 	void						MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, const RtSegment_t & tSeg2, const VecTraits_T<RowID_t> & dRowMap1, const VecTraits_T<RowID_t> & dRowMap2 ) const;
 	RtSegment_t *				MergeTwoSegments ( const RtSegment_t * pA, const RtSegment_t * pB ) const;
 	static void					CopyWord ( RtSegment_t& tDstSeg, RtWord_t& tDstWord, RtDocWriter_c& tDstDoc, const RtSegment_t& tSrcSeg, const RtWord_t* pSrcWord, const VecTraits_T<RowID_t>& dRowMap );
-	void						UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t>& dUpdates, IndexSegment_c * pSeg ) override;
-
-	bool						UpdateAttributesInRamSegment ( const RowsToUpdate_t& dRows, UpdateContext_t& tCtx, bool& bCritical, CSphString& sError );
 
 	void						DeleteFieldFromDict ( RtSegment_t * pSeg, int iKillField );
 	void						AddFieldToRamchunk ( const CSphString & sFieldName, DWORD uFieldFlags, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema );
@@ -1330,8 +1336,7 @@ private:
 	bool						AddRemoveColumnarAttr ( RtGuard_t & tGuard, bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError );
 	void						AddRemoveRowwiseAttr ( RtGuard_t & tGuard, bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError );
 
-	bool						Update_WriteBlobRow ( UpdateContext_t& tCtx, CSphRowitem* pDocinfo, const BYTE* pBlob, int iLength, int nBlobAttrs, const CSphAttrLocator& tBlobRowLoc, bool& bCritical, CSphString& sError ) override;
-	bool						Update_DiskChunks ( AttrUpdateInc_t& tUpd, const DiskChunkSlice_t& dDiskChunks, CSphString& sError );
+	bool						Update_DiskChunks ( AttrUpdateInc_t& tUpd, const DiskChunkSlice_t& dDiskChunks, CSphString& sError ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
 
 	void						GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const FilenameBuilder_i* = nullptr ) const override;
 	DocstoreBuilder_i::Doc_t *	FetchDocFields ( DocstoreBuilder_i::Doc_t & tStoredDoc, const InsertDocData_t & tDoc, CSphSource_StringVector & tSrc, CSphVector<CSphVector<BYTE>> & dTmpAttrStorage ) const;
@@ -2048,7 +2053,7 @@ RtSegment_t * CreateSegment ( RtAccum_t* pAcc, int iWordsCheckpoint, ESphHitless
 		return nullptr;
 
 	MEMORY ( MEM_RT_ACCUM );
-	auto * pSeg = new RtSegment_t ( pAcc->m_uAccumDocs );
+	auto * pSeg = new RtSegment_t ( pAcc->m_uAccumDocs, pAcc->m_pIndex->GetInternalSchema() );
 	FakeWL_t tFakeLock {pSeg->m_tLock};
 	CreateSegmentHits ( *pAcc, pSeg, iWordsCheckpoint, eHitless, dHitlessWords );
 
@@ -2496,7 +2501,7 @@ RtSegment_t* RtIndex_c::MergeTwoSegments ( const RtSegment_t* pA, const RtSegmen
 	auto pColumnarBuilder = CreateColumnarBuilderRT(m_tSchema);
 	RtAttrMergeContext_t tCtx ( nBlobAttrs, tNextRowID, pColumnarBuilder.get() );
 
-	auto * pSeg = new RtSegment_t (0);
+	auto * pSeg = new RtSegment_t (0, m_tSchema);
 	FakeWL_t _ { pSeg->m_tLock }; // as pSeg is just created - we don't need real guarding and use fake lock to mute thread safety warnings
 
 	assert ( !!pA->m_pDocstore==!!pB->m_pDocstore );
@@ -2577,12 +2582,12 @@ namespace GatherUpdates {
 	const VecTraits_T<PostponedUpdate_t>& AccessPostponedUpdates ( const ConstDiskChunkRefPtr_t& pChunk ) { return pChunk->Cidx ().m_dPostponedUpdates; }
 
 	template<typename CHUNK_OR_SEG>
-	CSphVector<PostponedUpdate_t> FromChunksOrSegments ( VecTraits_T<CHUNK_OR_SEG> dChunksOrSegmengs )
+	CSphVector<PostponedUpdate_t> FromChunksOrSegments ( VecTraits_T<CHUNK_OR_SEG> dChunksOrSegments )
 	{
 		CSphVector<PostponedUpdate_t> dResult;
 		CSphVector<HashedUpd_t> dUpdates;
 
-		for ( const auto& dSeg : dChunksOrSegmengs )
+		for ( const auto& dSeg : dChunksOrSegments )
 		{
 			const VecTraits_T<PostponedUpdate_t>& dPostponedUpdates = AccessPostponedUpdates (dSeg);
 			if ( dPostponedUpdates.IsEmpty () )
@@ -2613,59 +2618,37 @@ namespace GatherUpdates {
 }; // namespace
 
 
-bool RtIndex_c::UpdateAttributesInRamSegment ( const RowsToUpdate_t& dRows, UpdateContext_t& tCtx, bool& bCritical, CSphString& sError ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
-{
-	TRACE_SCHED ( "rt", "UpdateAttributesInRamSegment" );
-	if ( tCtx.m_tUpd.m_pUpdate->m_bStrict )
-		if ( !Update_InplaceJson ( dRows, tCtx, sError, true ) )
-			return false;
-
-	// second pass
-	int iSaveWarnings = tCtx.m_iJsonWarnings;
-	tCtx.m_iJsonWarnings = 0;
-	Update_InplaceJson ( dRows, tCtx, sError, false );
-	tCtx.m_iJsonWarnings += iSaveWarnings;
-
-	if ( !Update_Blobs ( dRows, tCtx, bCritical, sError ) )
-		return false;
-
-	Update_Plain ( dRows, tCtx );
-	return true;
-}
-
 // that is 2-nd part of postponed updates. We may have one or several update set, stored from old segments.
-void RtIndex_c::UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & dUpdates, IndexSegment_c * pSeg ) NO_THREAD_SAFETY_ANALYSIS
+void RtSegment_t::UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t>& dPostUpdates ) NO_THREAD_SAFETY_ANALYSIS
 {
-	if ( dUpdates.IsEmpty() )
+	if ( dPostUpdates.IsEmpty() )
 		return;
-
-	assert ( pSeg && "for RT index UpdateAttributesOffline should be called only with non-null pSeg!" );
-	auto * pSegment = (RtSegment_t *) pSeg;
 
 	CSphString sError;
 	bool bCritical;
-	for ( auto & tUpdate : dUpdates )
+
+	assert ( GetStride() == m_tSchema.GetRowSize() );
+	for ( auto & tPostUpdate : dPostUpdates )
 	{
-		AttrUpdateInc_t tUpdInc { std::move ( tUpdate.m_pUpdate ) };
+		AttrUpdateInc_t tUpdInc { std::move ( tPostUpdate.m_pUpdate ) };
 		UpdateContext_t tCtx ( tUpdInc, m_tSchema );
-		Update_PrepareListOfUpdatedAttributes ( tCtx, sError );
+		tCtx.PrepareListOfUpdatedAttributes ( sError );
 
 		// actualize list of updates in context of new segment
 		const auto & dDocids = tUpdInc.m_pUpdate->m_dDocids;
-		ARRAY_FOREACH ( i, tUpdate.m_dRowsToUpdate )
+		ARRAY_FOREACH ( i, tPostUpdate.m_dRowsToUpdate )
 		{
-			auto& tRow = tUpdate.m_dRowsToUpdate[i];
-			auto pRow = pSegment->FindAliveRow ( dDocids[tRow.m_iIdx] );
-			if ( pRow )
-				tRow.m_pRow = pRow;
+			auto& tRow = tPostUpdate.m_dRowsToUpdate[i];
+			auto tRowID = GetAliveRowidByDocid ( dDocids[tRow.m_iIdx] );
+			if ( tRowID==INVALID_ROWID )
+				tPostUpdate.m_dRowsToUpdate.RemoveFast ( i-- );
 			else
-				tUpdate.m_dRowsToUpdate.RemoveFast ( i-- );
+				tRow.m_tRow = tRowID;
 		}
 
-		tCtx.m_pAttrPool = pSegment->m_dRows.begin();
-		tCtx.m_pBlobPool = pSegment->m_dBlobs.begin();
-		tCtx.m_pSegment = pSeg;
-		UpdateAttributesInRamSegment ( tUpdate.m_dRowsToUpdate, tCtx, bCritical, sError );
+		tCtx.m_pAttrPool = m_dRows.begin();
+		tCtx.m_pBlobPool = m_dBlobs.begin();
+		Update_UpdateAttributes ( tPostUpdate.m_dRowsToUpdate, tCtx, bCritical, sError );
 	}
 }
 
@@ -3027,7 +3010,7 @@ bool RtIndex_c::MergeSegmentsStep ( MergeSeg_e eVal ) REQUIRES ( m_tWorkers.Seri
 			dOld.Add ( pA );
 			dOld.Add ( pB );
 			auto dUpdates = GatherUpdates::FromChunksOrSegments ( dOld );
-			UpdateAttributesOffline ( dUpdates, pMerged );
+			pMerged->UpdateAttributesOffline ( dUpdates );
 		}
 	}
 
@@ -4069,7 +4052,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 	if ( !dUpdates.IsEmpty () )
 	{
 		RTLOGV << "SaveDiskChunk: apply postponed updates";
-		pNewChunk->UpdateAttributesOffline ( dUpdates, pNewChunk.get() );
+		pNewChunk->UpdateAttributesOffline ( dUpdates );
 		dUpdates.Reset();
 	}
 
@@ -4772,7 +4755,7 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes, bool bFixup
 	{
 		DWORD uRows = rdChunk.GetDword();
 
-		RtSegmentRefPtf_t pSeg {new RtSegment_t ( uRows )};
+		RtSegmentRefPtf_t pSeg { new RtSegment_t ( uRows, m_tSchema ) };
 		pSeg->m_uRows = uRows;
 		pSeg->m_tAliveRows.store ( rdChunk.GetDword (), std::memory_order_relaxed );
 
@@ -7736,12 +7719,12 @@ CSphFixedVector<RowsToUpdateData_t> Update_CollectRowPtrs ( UpdateContext_t & tC
 		if ( !tCtx.m_tUpd.m_dUpdated.BitGet ( i ) )
 			ARRAY_CONSTFOREACH ( j, tSegments )
 			{
-				auto pRow = tSegments[j]->FindAliveRow ( dDocids[i] );
-				if ( !pRow )
+				auto tRowID = tSegments[j]->GetAliveRowidByDocid( dDocids[i] );
+				if ( tRowID==INVALID_ROWID )
 					continue;
 
 				auto& dUpd = dUpdateSets[j].Add();
-				dUpd.m_pRow = pRow;
+				dUpd.m_tRow = tRowID;
 				dUpd.m_iIdx = i;
 			}
 	return dUpdateSets;
@@ -7754,26 +7737,27 @@ CSphFixedVector<RowsToUpdateData_t> Update_CollectRowPtrs ( UpdateContext_t & tC
 // to final resulting chunk/segment. That bit set before merging attributes and exists till the end of segment's lifetime.
 // Here is first part of postponed merge - after update we collect docs updated in segment and store them into vec of
 // updates (as it might happen be more than one update during the operation)
-static void AddDerivedUpdate ( const RowsToUpdate_t & dRows, const UpdateContext_t & tCtx )
+void RtSegment_t::MaybeAddPostponedUpdate ( const RowsToUpdate_t& dRows, const UpdateContext_t& tCtx )
 {
-	auto & tUpd = tCtx.m_tUpd;
+	if ( !m_bAttrsBusy.load ( std::memory_order_acquire ) )
+		return;
+
+	// segment is now saving/merging - add postponed update.
+	auto& tUpd = tCtx.m_tUpd;
 	// count exact N of affected rows (no need to waste space for reserve in this route at all)
-	auto iRows = dRows.count_of ( [&tUpd] ( auto & i ) { return tUpd.m_dUpdated.BitGet ( i.m_iIdx ); } );
+	auto iRows = dRows.count_of ( [&tUpd] ( auto& i ) { return tUpd.m_dUpdated.BitGet ( i.m_iIdx ); } );
 
 	if ( !iRows )
 		return;
 
-	auto * pSegment = (RtSegment_t *) tCtx.m_pSegment;
-	assert (pSegment);
-
-	auto& tNewDerivedUpdate = pSegment->m_dPostponedUpdates.Add();
-	tNewDerivedUpdate.m_pUpdate = MakeReusableUpdate ( tUpd.m_pUpdate );
-	tNewDerivedUpdate.m_dRowsToUpdate.Reserve (iRows);
+	auto& tNewPostponedUpdate = m_dPostponedUpdates.Add();
+	tNewPostponedUpdate.m_pUpdate = MakeReusableUpdate ( tUpd.m_pUpdate );
+	tNewPostponedUpdate.m_dRowsToUpdate.Reserve ( iRows );
 
 	// collect indexes of actually updated rows and docids
-	dRows.for_each ( [&tUpd, &tNewDerivedUpdate] ( auto & i ) {
+	dRows.for_each ( [&tUpd, &tNewPostponedUpdate] ( const auto& i ) {
 		if ( tUpd.m_dUpdated.BitGet ( i.m_iIdx ) )
-			tNewDerivedUpdate.m_dRowsToUpdate.Add ().m_iIdx = i.m_iIdx;
+			tNewPostponedUpdate.m_dRowsToUpdate.Add().m_iIdx = i.m_iIdx;
 	});
 }
 
@@ -7816,35 +7800,31 @@ bool RtIndex_c::Update_DiskChunks ( AttrUpdateInc_t& tUpd, const DiskChunkSlice_
 	return true;
 }
 
-// thread-safe, as segment is locked up level before calling UpdateAttributesInRamSegment
-bool RtIndex_c::Update_WriteBlobRow ( UpdateContext_t & tCtx, CSphRowitem * pDocinfo, const BYTE * pBlob, int iLength,
+// thread-safe, as segment is locked up level before calling RAM segment update
+bool RtSegment_t::Update_WriteBlobRow ( UpdateContext_t & tCtx, RowID_t tRowID, ByteBlob_t tBlob,
 		int nBlobAttrs, const CSphAttrLocator & tBlobRowLoc, bool & bCritical, CSphString & sError ) NO_THREAD_SAFETY_ANALYSIS
 {
 	// fixme! Ensure pSegment->m_tLock acquired exclusively...
-	auto* pSegment = (RtSegment_t*)tCtx.m_pSegment;
-	assert ( pSegment );
+	auto pDocinfo = tCtx.GetDocinfo ( tRowID );
+	BYTE* pExistingBlob = m_dBlobs.begin() + sphGetRowAttr ( pDocinfo, tBlobRowLoc );
+	DWORD uExistingBlobLen = sphGetBlobTotalLen ( pExistingBlob, nBlobAttrs );
 
 	bCritical = false;
 
-	CSphTightVector<BYTE> & dBlobPool = pSegment->m_dBlobs;
-
-	BYTE * pExistingBlob = dBlobPool.Begin() + sphGetRowAttr ( pDocinfo, tBlobRowLoc );
-	DWORD uExistingBlobLen = sphGetBlobTotalLen ( pExistingBlob, nBlobAttrs );
-
 	// overwrite old record
-	if ( (DWORD)iLength<=uExistingBlobLen )
+	if ( (DWORD)tBlob.second<=uExistingBlobLen )
 	{
-		memcpy ( pExistingBlob, pBlob, iLength );
+		memcpy ( pExistingBlob, tBlob.first, tBlob.second );
 		return true;
 	}
 
-	int iPoolSize = dBlobPool.GetLength();
-	dBlobPool.Append ( pBlob, iLength );
+	int iPoolSize = m_dBlobs.GetLength();
+	m_dBlobs.Append ( tBlob );
 
 	sphSetRowAttr ( pDocinfo, tBlobRowLoc, iPoolSize );
 
 	// update blob pool ptrs since they could have changed after the resize
-	tCtx.m_pBlobPool = dBlobPool.begin();
+	tCtx.m_pBlobPool = m_dBlobs.begin();
 	return true;
 }
 
@@ -7869,12 +7849,11 @@ int RtIndex_c::UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSph
 	}
 
 	int iUpdated = tUpd.m_iAffected;
-
-	UpdateContext_t tCtx ( tUpd, m_tSchema );
-	if ( !Update_CheckAttributes ( *tCtx.m_tUpd.m_pUpdate, tCtx.m_tSchema, sError ) )
+	if ( !Update_CheckAttributes ( *tUpd.m_pUpdate, m_tSchema, sError ) )
 		return -1;
 
-	Update_PrepareListOfUpdatedAttributes ( tCtx, sError );
+	UpdateContext_t tCtx ( tUpd, m_tSchema );
+	tCtx.PrepareListOfUpdatedAttributes ( sError );
 
 	// do update in serial fiber. That ensures no concurrency with set of chunks changing, however need to dispatch
 	// with changers themselves (merge segments, merge chunks, save disk chunks).
@@ -7897,12 +7876,10 @@ int RtIndex_c::UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSph
 		// point context to target segment
 		tCtx.m_pAttrPool = pSeg->m_dRows.begin();
 		tCtx.m_pBlobPool = pSeg->m_dBlobs.begin();
-		tCtx.m_pSegment = pSeg;
-		if ( !UpdateAttributesInRamSegment ( dRamUpdateSets[i], tCtx, bCritical, sError ) )
+		if ( !pSeg->Update_UpdateAttributes ( dRamUpdateSets[i], tCtx, bCritical, sError ) )
 			return -1;
 
-		if ( pSeg->m_bAttrsBusy.load ( std::memory_order_acquire ) )
-			AddDerivedUpdate ( dRamUpdateSets[i], tCtx ); // segment is now saving/merging - add postponed update.
+		pSeg->MaybeAddPostponedUpdate( dRamUpdateSets[i], tCtx );
 
 		if ( tUpd.AllApplied () )
 			break;
@@ -7915,7 +7892,7 @@ int RtIndex_c::UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSph
 	Binlog::CommitUpdateAttributes ( &m_iTID, m_sIndexName.cstr(), tUpdc );
 
 	iUpdated = tUpd.m_iAffected - iUpdated;
-	if ( !Update_HandleJsonWarnings ( tCtx, iUpdated, sWarning, sError ) )
+	if ( !tCtx.HandleJsonWarnings ( iUpdated, sWarning, sError ) )
 		return -1;
 
 	// all done
@@ -8740,7 +8717,7 @@ Binlog::CheckTnxResult_t RtIndex_c::ReplayCommit ( CSphReader & tReader, CSphStr
 	DWORD uRows = tReader.UnzipOffset();
 	if ( uRows )
 	{
-		pSeg = new RtSegment_t(uRows);
+		pSeg = new RtSegment_t(uRows, m_tSchema);
 		FakeWL_t _ ( pSeg->m_tLock );
 		pSeg->m_uRows = uRows;
 		pSeg->m_tAliveRows.store ( uRows, std::memory_order_relaxed );
@@ -8932,7 +8909,7 @@ bool RtIndex_c::CompressOneChunk ( int iChunkID, int* pAffected )
 	auto& dUpdates = pVictim->CastIdx().m_dPostponedUpdates;
 	if ( !dUpdates.IsEmpty() )
 	{
-		tCompressed.UpdateAttributesOffline ( dUpdates, &tCompressed );
+		tCompressed.UpdateAttributesOffline ( dUpdates );
 		dUpdates.Reset();
 	}
 
@@ -9101,8 +9078,8 @@ bool RtIndex_c::SplitOneChunk ( int iChunkID, const char* szUvarFilter, int* pAf
 	auto& dUpdates = pVictim->CastIdx().m_dPostponedUpdates;
 	if ( !dUpdates.IsEmpty() )
 	{
-		tIndexI.UpdateAttributesOffline ( dUpdates, &tIndexI );
-		tIndexE.UpdateAttributesOffline ( dUpdates, &tIndexE );
+		tIndexI.UpdateAttributesOffline ( dUpdates );
+		tIndexE.UpdateAttributesOffline ( dUpdates );
 		dUpdates.Reset();
 	}
 
@@ -9199,7 +9176,7 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected )
 	auto dUpdates = GatherUpdates::FromChunksOrSegments ( tUpdated );
 	if ( !dUpdates.IsEmpty() )
 	{
-		tMerged.UpdateAttributesOffline ( dUpdates, &tMerged );
+		tMerged.UpdateAttributesOffline ( dUpdates );
 		dUpdates.Reset();
 	}
 

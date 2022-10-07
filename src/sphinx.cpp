@@ -703,13 +703,14 @@ Bson_t CSphTokenizerIndex::ExplainQuery ( const CSphString & sQuery ) const
 UpdateContext_t::UpdateContext_t ( AttrUpdateInc_t & tUpd, const ISphSchema & tSchema )
 	: m_tUpd ( tUpd )
 	, m_tSchema ( tSchema )
+	, m_iStride ( tSchema.GetRowSize() )
 	, m_dUpdatedAttrs ( tUpd.m_pUpdate->m_dAttributes.GetLength() )
 	, m_dSchemaUpdateMask ( tSchema.GetAttrsCount() )
 {}
 
 //////////////////////////////////////////////////////////////////////////
 
-bool IndexUpdateHelper_c::Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tSchema, CSphString & sError )
+bool Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tSchema, CSphString & sError )
 {
 	for ( const auto & tUpdAttr : tUpd.m_dAttributes )
 	{
@@ -735,10 +736,19 @@ bool IndexUpdateHelper_c::Update_CheckAttributes ( const CSphAttrUpdate & tUpd, 
 
 		// forbid updates on non-int columns
 		const CSphColumnInfo & tCol = tSchema.GetAttr ( iUpdAttrId );
-		if ( !( tCol.m_eAttrType==SPH_ATTR_BOOL || tCol.m_eAttrType==SPH_ATTR_INTEGER || tCol.m_eAttrType==SPH_ATTR_TIMESTAMP
-			|| tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_STRING
-			|| tCol.m_eAttrType==SPH_ATTR_BIGINT || tCol.m_eAttrType==SPH_ATTR_FLOAT || tCol.m_eAttrType==SPH_ATTR_JSON ))
+		switch ( tCol.m_eAttrType )
 		{
+		case SPH_ATTR_BOOL:
+		case SPH_ATTR_INTEGER:
+		case SPH_ATTR_TIMESTAMP:
+		case SPH_ATTR_UINT32SET:
+		case SPH_ATTR_INT64SET:
+		case SPH_ATTR_STRING:
+		case SPH_ATTR_BIGINT:
+		case SPH_ATTR_FLOAT:
+		case SPH_ATTR_JSON:
+			break;
+		default:
 			sError.SetSprintf ( "attribute '%s' can not be updated (must be boolean, integer, bigint, float, timestamp, string, MVA or JSON)", sUpdAttrName.cstr() );
 			return false;
 		}
@@ -769,34 +779,34 @@ bool IndexUpdateHelper_c::Update_CheckAttributes ( const CSphAttrUpdate & tUpd, 
 }
 
 
-void IndexUpdateHelper_c::Update_PrepareListOfUpdatedAttributes ( UpdateContext_t & tCtx, CSphString & sError )
+void UpdateContext_t::PrepareListOfUpdatedAttributes ( CSphString & sError )
 {
-	const auto & tUpd = *tCtx.m_tUpd.m_pUpdate;
+	const auto & tUpd = *m_tUpd.m_pUpdate;
 	ARRAY_FOREACH ( i, tUpd.m_dAttributes )
 	{
 		const CSphString & sUpdAttrName = tUpd.m_dAttributes[i].m_sName;
 		ESphAttr eUpdAttrType = tUpd.m_dAttributes[i].m_eType;
-		UpdatedAttribute_t & tUpdAttr = tCtx.m_dUpdatedAttrs[i];
+		UpdatedAttribute_t & tUpdAttr = m_dUpdatedAttrs[i];
 
-		int iUpdAttrId = tCtx.m_tSchema.GetAttrIndex ( sUpdAttrName.cstr() );
+		int iUpdAttrId = m_tSchema.GetAttrIndex ( sUpdAttrName.cstr() );
 
 		if ( iUpdAttrId<0 )
 		{
 			CSphString sJsonCol;
 			if ( sphJsonNameSplit ( sUpdAttrName.cstr(), &sJsonCol ) )
 			{
-				iUpdAttrId = tCtx.m_tSchema.GetAttrIndex ( sJsonCol.cstr() );
+				iUpdAttrId = m_tSchema.GetAttrIndex ( sJsonCol.cstr() );
 				if ( iUpdAttrId>=0 )
 				{
 					ExprParseArgs_t tExprArgs;
-					tUpdAttr.m_pExpr = sphExprParse ( sUpdAttrName.cstr(), tCtx.m_tSchema, sError, tExprArgs );
+					tUpdAttr.m_pExpr = sphExprParse ( sUpdAttrName.cstr(), m_tSchema, sError, tExprArgs );
 				}
 			}
 		}
 
 		if ( iUpdAttrId>=0 )
 		{
-			const CSphColumnInfo & tCol = tCtx.m_tSchema.GetAttr(iUpdAttrId);
+			const CSphColumnInfo & tCol = m_tSchema.GetAttr(iUpdAttrId);
 
 			switch ( tCol.m_eAttrType )
 			{
@@ -816,12 +826,12 @@ void IndexUpdateHelper_c::Update_PrepareListOfUpdatedAttributes ( UpdateContext_
 
 			tUpdAttr.m_eAttrType = tCol.m_eAttrType;
 			tUpdAttr.m_tLocator = tCol.m_tLocator;
-			tUpdAttr.m_pHistogram = tCtx.m_pHistograms ? tCtx.m_pHistograms->Get(tCol.m_sName) : nullptr;
+			tUpdAttr.m_pHistogram = m_pHistograms ? m_pHistograms->Get(tCol.m_sName) : nullptr;
 			tUpdAttr.m_bExisting = true;
 			tUpdAttr.m_iSchemaAttr = iUpdAttrId;
 
-			tCtx.m_dSchemaUpdateMask.BitSet(iUpdAttrId);
-			tCtx.m_bBlobUpdate |= sphIsBlobAttr(tCol);
+			m_dSchemaUpdateMask.BitSet(iUpdAttrId);
+			m_bBlobUpdate |= sphIsBlobAttr(tCol);
 		}
 		else
 		{
@@ -835,7 +845,7 @@ void IndexUpdateHelper_c::Update_PrepareListOfUpdatedAttributes ( UpdateContext_
 		// for now this fix just works.
 		// Fix cases like UPDATE float_attr=1 WHERE id=1;
 		assert ( iUpdAttrId>=0 );
-		if ( eUpdAttrType==SPH_ATTR_INTEGER && tCtx.m_tSchema.GetAttr(iUpdAttrId).m_eAttrType==SPH_ATTR_FLOAT )
+		if ( eUpdAttrType==SPH_ATTR_INTEGER && m_tSchema.GetAttr(iUpdAttrId).m_eAttrType==SPH_ATTR_FLOAT )
 		{
 			assert ( tUpd.m_dRowOffset.IsEmpty() ); // fixme! Now we don't fixup more then 1 value
 			const_cast<CSphAttrUpdate &>(tUpd).m_dAttributes[i].m_eType = SPH_ATTR_FLOAT;
@@ -873,12 +883,13 @@ static bool FitsInplaceJsonUpdate ( const UpdateContext_t & tCtx, int iAttr )
 }
 
 
-bool IndexUpdateHelper_c::Update_InplaceJson ( const RowsToUpdate_t& dRows, UpdateContext_t & tCtx, CSphString & sError, bool bDryRun )
+bool IndexSegment_c::Update_InplaceJson ( const RowsToUpdate_t& dRows, UpdateContext_t & tCtx, CSphString & sError, bool bDryRun )
 {
 	const auto& tUpd = *tCtx.m_tUpd.m_pUpdate;
 	for ( const auto & tRow : dRows )
 	{
 		int iUpd = tRow.m_iIdx;
+		auto pDocinfo = tCtx.GetDocinfo ( tRow.m_tRow );
 		int iPos = tUpd.GetRowOffset ( iUpd );
 		ARRAY_CONSTFOREACH ( i, tUpd.m_dAttributes )
 		{
@@ -898,7 +909,7 @@ bool IndexUpdateHelper_c::Update_InplaceJson ( const RowsToUpdate_t& dRows, Upda
 					? sphD2QW ( (double)sphDW2F ( tUpd.m_dPool[iPos] ) )
 					: ( bBigint ? MVA_UPSIZE ( &tUpd.m_dPool[iPos] ) : tUpd.m_dPool[iPos] );
 
-			if ( sphJsonInplaceUpdate ( eType, uValue, tCtx.m_dUpdatedAttrs[i].m_pExpr, tCtx.m_pBlobPool, tRow.m_pRow, !bDryRun ) )
+			if ( sphJsonInplaceUpdate ( eType, uValue, tCtx.m_dUpdatedAttrs[i].m_pExpr, tCtx.m_pBlobPool, pDocinfo, !bDryRun ) )
 			{
 				assert ( tCtx.m_dUpdatedAttrs[i].m_iSchemaAttr>=0 );
 				tCtx.m_tUpd.MarkUpdated ( iUpd );
@@ -923,7 +934,7 @@ bool IndexUpdateHelper_c::Update_InplaceJson ( const RowsToUpdate_t& dRows, Upda
 }
 
 
-bool IndexUpdateHelper_c::Update_Blobs ( const RowsToUpdate_t& dRows, UpdateContext_t & tCtx, bool & bCritical, CSphString & sError )
+bool IndexSegment_c::Update_Blobs ( const RowsToUpdate_t& dRows, UpdateContext_t & tCtx, bool & bCritical, CSphString & sError )
 {
 	const auto & tUpd = *tCtx.m_tUpd.m_pUpdate;
 
@@ -971,6 +982,7 @@ bool IndexUpdateHelper_c::Update_Blobs ( const RowsToUpdate_t& dRows, UpdateCont
 	for ( const auto & tRow : dRows )
 	{
 		int iUpd = tRow.m_iIdx;
+		auto pDocinfo = tCtx.GetDocinfo ( tRow.m_tRow );
 		tBlobPool.Resize(0);
 		ARRAY_CONSTFOREACH ( iBlobId, dBlobAttrIds )
 		{
@@ -980,7 +992,7 @@ bool IndexUpdateHelper_c::Update_Blobs ( const RowsToUpdate_t& dRows, UpdateCont
 
 			const CSphColumnInfo & tAttr = tCtx.m_tSchema.GetAttr(iCol);
 			int iLengthBytes = 0;
-			const BYTE * pData = sphGetBlobAttr ( tRow.m_pRow, tAttr.m_tLocator, tCtx.m_pBlobPool, iLengthBytes );
+			const BYTE* pData = sphGetBlobAttr ( pDocinfo, tAttr.m_tLocator, tCtx.m_pBlobPool, iLengthBytes );
 			if ( !pBlobRowBuilder->SetAttr ( iBlobId, pData, iLengthBytes, sError ) )
 				return false;
 		}
@@ -1038,7 +1050,7 @@ bool IndexUpdateHelper_c::Update_Blobs ( const RowsToUpdate_t& dRows, UpdateCont
 		pBlobRowBuilder->Flush();
 
 		assert(pBlobLocator);
-		if ( !Update_WriteBlobRow ( tCtx, const_cast<CSphRowitem*> (tRow.m_pRow), tBlobPool.Begin(), tBlobPool.GetLength(), iBlobAttrId, pBlobLocator->m_tLocator, bCritical, sError ) )
+		if ( !Update_WriteBlobRow ( tCtx, tRow.m_tRow, tBlobPool, iBlobAttrId, pBlobLocator->m_tLocator, bCritical, sError ) )
 			return false;
 	}
 
@@ -1046,26 +1058,35 @@ bool IndexUpdateHelper_c::Update_Blobs ( const RowsToUpdate_t& dRows, UpdateCont
 }
 
 
-bool IndexUpdateHelper_c::Update_HandleJsonWarnings ( UpdateContext_t & tCtx, int iUpdated, CSphString & sWarning, CSphString & sError )
+bool UpdateContext_t::HandleJsonWarnings ( int iUpdated, CSphString & sWarning, CSphString & sError ) const
 {
-	if ( !tCtx.m_iJsonWarnings )
+	if ( !m_iJsonWarnings )
 		return true;
 
-	sWarning.SetSprintf ( "%d attribute(s) can not be updated (not found or incompatible types)", tCtx.m_iJsonWarnings );
+	sWarning.SetSprintf ( "%d attribute(s) can not be updated (not found or incompatible types)", m_iJsonWarnings );
 	if ( !iUpdated )
 		sError = sWarning;
 
 	return !!iUpdated;
 }
 
+CSphRowitem* UpdateContext_t::GetDocinfo ( RowID_t iRowID ) const
+{
+	assert ( iRowID != INVALID_ROWID );
+	assert ( m_pAttrPool );
+	assert ( m_iStride );
+	return m_pAttrPool + iRowID * m_iStride;
+}
 
-void IndexUpdateHelper_c::Update_Plain ( const RowsToUpdate_t& dRows, UpdateContext_t & tCtx )
+
+void IndexSegment_c::Update_Plain ( const RowsToUpdate_t& dRows, UpdateContext_t & tCtx )
 {
 	const auto & tUpd = *tCtx.m_tUpd.m_pUpdate;
 
 	for ( const auto & tRow : dRows )
 	{
 		int iPos = tUpd.GetRowOffset ( tRow.m_iIdx );
+		auto pDocinfo = tCtx.GetDocinfo ( tRow.m_tRow );
 		ARRAY_CONSTFOREACH ( iCol, tUpd.m_dAttributes )
 		{
 			ESphAttr eAttr = tUpd.m_dAttributes[iCol].m_eType;
@@ -1091,12 +1112,12 @@ void IndexUpdateHelper_c::Update_Plain ( const RowsToUpdate_t& dRows, UpdateCont
 			Histogram_i * pHistogram = tUpdAttr.m_pHistogram;
 			if ( pHistogram )
 			{
-				SphAttr_t tOldValue = sphGetRowAttr ( tRow.m_pRow, tLoc );
+				SphAttr_t tOldValue = sphGetRowAttr ( pDocinfo, tLoc );
 				pHistogram->Delete ( tOldValue );
 				pHistogram->UpdateCounter ( uValue );
 			}
 
-			sphSetRowAttr ( const_cast<CSphRowitem*> ( tRow.m_pRow ), tLoc, uValue );
+			sphSetRowAttr ( pDocinfo, tLoc, uValue );
 			tCtx.m_tUpd.MarkUpdated ( tRow.m_iIdx );
 			tCtx.m_uUpdateMask |= ATTRS_UPDATED;
 
@@ -1104,6 +1125,29 @@ void IndexUpdateHelper_c::Update_Plain ( const RowsToUpdate_t& dRows, UpdateCont
 			IncUpdatePoolPos ( tCtx, iCol, iPos );
 		}
 	}
+}
+
+bool IndexSegment_c::Update_UpdateAttributes ( const RowsToUpdate_t& dRows, UpdateContext_t& tCtx, bool& bCritical, CSphString& sError )
+{
+	// FIXME! FIXME! FIXME! overwriting just-freed blocks might hurt concurrent searchers;
+	// should implement a simplistic MVCC-style delayed-free to avoid that
+
+	// first pass, if needed
+	if ( tCtx.m_tUpd.m_pUpdate->m_bStrict )
+		if ( !Update_InplaceJson ( dRows, tCtx, sError, true ) )
+			return false;
+
+	// second pass
+	int iSaveWarnings = tCtx.m_iJsonWarnings;
+	tCtx.m_iJsonWarnings = 0;
+	Update_InplaceJson ( dRows, tCtx, sError, false );
+	tCtx.m_iJsonWarnings += iSaveWarnings;
+
+	if ( !Update_Blobs ( dRows, tCtx, bCritical, sError ) )
+		return false;
+
+	Update_Plain ( dRows, tCtx );
+	return true;
 }
 
 class QueryMvaContainer_c
@@ -1121,7 +1165,7 @@ public:
 class CSphHitBuilder;
 
 /// this is my actual VLN-compressed phrase index implementation
-class CSphIndex_VLN : public CSphIndex, public IndexUpdateHelper_c, public IndexAlterHelper_c, public DebugCheckHelper_c
+class CSphIndex_VLN : public CSphIndex, public IndexAlterHelper_c, public DebugCheckHelper_c
 {
 	friend class DiskIndexQwordSetup_c;
 	friend class CSphMerger;
@@ -1174,7 +1218,7 @@ public:
 	static bool			DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, int iKillField );
 
 	int					UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSphString & sError, CSphString & sWarning ) final;
-	void				UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & dUpdates, IndexSegment_c * /*pSeg*/) final;
+	void				UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & dPostUpdates ) final;
 
 	// the only txn we can replay is 'update attributes', but it is processed by dedicated branch in binlog, so we have nothing to do here.
 	Binlog::CheckTnxResult_t ReplayTxn (Binlog::Blop_e, CSphReader&, CSphString & , Binlog::CheckTxn_fn&&) final { return {}; }
@@ -1314,8 +1358,9 @@ private:
 	static std::pair<DWORD,DWORD>		CreateRowMapsAndCountTotalDocs ( const CSphIndex_VLN* pSrcIndex, const CSphIndex_VLN* pDstIndex, CSphFixedVector<RowID_t>& dSrcRowMap, CSphFixedVector<RowID_t>& dDstRowMap, const ISphFilter* pFilter, bool bSupressDstDocids, MergeCb_c& tMonitor );
 	RowsToUpdateData_t			Update_CollectRowPtrs ( const UpdateContext_t & tCtx );
 	RowsToUpdate_t				Update_PrepareGatheredRowPtrs ( RowsToUpdate_t & dWRows, const VecTraits_T<DocID_t> & dDocids );
-	bool						Update_WriteBlobRow ( UpdateContext_t & tCtx, CSphRowitem * pDocinfo, const BYTE * pBlob, int iLength, int nBlobAttrs, const CSphAttrLocator & tBlobRowLoc, bool & bCritical, CSphString & sError ) override;
+	bool						Update_WriteBlobRow ( UpdateContext_t & tCtx, RowID_t tRowID, ByteBlob_t tBlob, int nBlobAttrs, const CSphAttrLocator & tBlobRowLoc, bool & bCritical, CSphString & sError ) final;
 	void						Update_MinMax ( const RowsToUpdate_t& dRows, const UpdateContext_t & tCtx );
+	void						MaybeAddPostponedUpdate ( RowsToUpdateData_t& dRows, const UpdateContext_t& tCtx );
 	bool						DoUpdateAttributes ( const RowsToUpdate_t& dRows, UpdateContext_t& tCtx, bool & bCritical, CSphString & sError );
 
 	bool						Alter_IsMinMax ( const CSphRowitem * pDocinfo, int iStride ) const override;
@@ -2138,9 +2183,9 @@ RowsToUpdateData_t CSphIndex_VLN::Update_CollectRowPtrs ( const UpdateContext_t 
 	Intersect ( tLookupReader, tSortedReader, [&dRowsToUpdate, this] ( RowID_t tRowID, DocID_t, DocIdIndexReader_c& tSortedReader )
 	{
 		auto& dUpd = dRowsToUpdate.Add();
-		dUpd.m_pRow = GetDocinfoByRowID ( tRowID );
+		dUpd.m_tRow = tRowID;
 		dUpd.m_iIdx = tSortedReader.GetIndex();
-		assert ( dUpd.m_pRow );
+		assert ( dUpd.m_tRow != INVALID_ROWID );
 	} );
 	return dRowsToUpdate;
 }
@@ -2171,8 +2216,8 @@ RowsToUpdate_t CSphIndex_VLN::Update_PrepareGatheredRowPtrs ( RowsToUpdate_t & d
 			continue;
 		} else if ( tDocID == tDocIDPrepared )
 		{
-			dRows[iWriteIdx].m_pRow = GetDocinfoByRowID ( tRowID );
-			assert ( dRows[iWriteIdx].m_pRow );
+			dRows[iWriteIdx].m_tRow = tRowID;
+			assert ( tRowID != INVALID_ROWID );
 			Swap ( dRows[iWriteIdx].m_iIdx, dRows[iReadIdx].m_iIdx );
 			bHaveDocs = tLookupReader.Read ( tDocID, tRowID );
 			++iWriteIdx;
@@ -2187,17 +2232,18 @@ RowsToUpdate_t CSphIndex_VLN::Update_PrepareGatheredRowPtrs ( RowsToUpdate_t & d
 }
 
 
-bool CSphIndex_VLN::Update_WriteBlobRow ( UpdateContext_t & tCtx, CSphRowitem * pDocinfo, const BYTE * pBlob, int iLength, int nBlobAttrs, const CSphAttrLocator & tBlobRowLoc, bool & bCritical, CSphString & sError )
+bool CSphIndex_VLN::Update_WriteBlobRow ( UpdateContext_t & tCtx, RowID_t tRowID, ByteBlob_t tBlob, int nBlobAttrs, const CSphAttrLocator & tBlobRowLoc, bool & bCritical, CSphString & sError )
 {
+	auto pDocinfo = tCtx.GetDocinfo ( tRowID );
 	BYTE * pExistingBlob = m_tBlobAttrs.GetWritePtr() + sphGetRowAttr ( pDocinfo, tBlobRowLoc );
 	DWORD uExistingBlobLen = sphGetBlobTotalLen ( pExistingBlob, nBlobAttrs );
 
 	bCritical = false;
 
 	// overwrite old record (because we have write-lock)
-	if ( (DWORD)iLength<=uExistingBlobLen )
+	if ( (DWORD)tBlob.second<=uExistingBlobLen )
 	{
-		memcpy ( pExistingBlob, pBlob, iLength );
+		memcpy ( pExistingBlob, tBlob.first, tBlob.second );
 		return true;
 	}
 
@@ -2206,9 +2252,9 @@ bool CSphIndex_VLN::Update_WriteBlobRow ( UpdateContext_t & tCtx, CSphRowitem * 
 	SphOffset_t tSpaceLeft = m_tBlobAttrs.GetLengthBytes()-tBlobSpaceUsed;
 
 	// not great: we have to resize our .spb file and create new memory maps
-	if ( (SphOffset_t)iLength > tSpaceLeft )
+	if ( (SphOffset_t)tBlob.second > tSpaceLeft )
 	{
-		SphOffset_t tSizeDelta = Max ( (SphOffset_t)iLength-tSpaceLeft, m_tSettings.m_tBlobUpdateSpace );
+		SphOffset_t tSizeDelta = Max ( (SphOffset_t)tBlob.second-tSpaceLeft, m_tSettings.m_tBlobUpdateSpace );
 		CSphString sWarning;
 		size_t tOldSize = m_tBlobAttrs.GetLengthBytes();
 		if ( !m_tBlobAttrs.Resize ( tOldSize + tSizeDelta, sWarning, sError ) )
@@ -2226,12 +2272,9 @@ bool CSphIndex_VLN::Update_WriteBlobRow ( UpdateContext_t & tCtx, CSphRowitem * 
 	}
 
 	BYTE * pEnd = m_tBlobAttrs.GetWritePtr() + tBlobSpaceUsed;
-	memcpy ( pEnd, pBlob, iLength );
-
+	memcpy ( pEnd, tBlob.first, tBlob.second );
 	sphSetRowAttr ( pDocinfo, tBlobRowLoc, tBlobSpaceUsed );
-
-	tBlobSpaceUsed += iLength;
-
+	tBlobSpaceUsed += tBlob.second;
 	*(SphOffset_t*)m_tBlobAttrs.GetWritePtr() = tBlobSpaceUsed;
 	return true;
 }
@@ -2243,10 +2286,11 @@ void CSphIndex_VLN::Update_MinMax ( const RowsToUpdate_t& dRows, const UpdateCon
 
 	for ( const auto & tRow : dRows )
 	{
-		int64_t iBlock = int64_t ( tRow.m_pRow-tCtx.m_pAttrPool ) / ( iRowStride*DOCINFO_INDEX_FREQ );
+		auto iBlock = (int64_t) tRow.m_tRow / DOCINFO_INDEX_FREQ;
 		DWORD * pBlockRanges = m_pDocinfoIndex + ( iBlock * iRowStride * 2 );
 		DWORD * pIndexRanges = m_pDocinfoIndex + ( m_iDocinfoIndex * iRowStride * 2 );
 		assert ( iBlock>=0 && iBlock<m_iDocinfoIndex );
+		const auto* pDocinfo = tCtx.GetDocinfo ( tRow.m_tRow );
 
 		ARRAY_CONSTFOREACH ( iCol, tCtx.m_tUpd.m_pUpdate->m_dAttributes )
 		{
@@ -2258,7 +2302,7 @@ void CSphIndex_VLN::Update_MinMax ( const RowsToUpdate_t& dRows, const UpdateCon
 			if ( tLoc.IsBlobAttr() )
 				continue;
 
-			SphAttr_t uValue = sphGetRowAttr ( tRow.m_pRow, tLoc );
+			SphAttr_t uValue = sphGetRowAttr ( pDocinfo, tLoc );
 
 			// update block and index ranges
 			for ( int i=0; i<2; i++ )
@@ -2287,37 +2331,36 @@ void CSphIndex_VLN::Update_MinMax ( const RowsToUpdate_t& dRows, const UpdateCon
 	}
 }
 
+// Collect updated docs and store them into vec of
+// postponed updates (it might happen be more than one update during the operation)
+void CSphIndex_VLN::MaybeAddPostponedUpdate ( RowsToUpdateData_t& dRows, const UpdateContext_t& tCtx )
+{
+	if ( !m_bAttrsBusy.load ( std::memory_order_acquire ) )
+		return;
+
+	auto& tUpd = tCtx.m_tUpd;
+	auto& tNewUpdate = m_dPostponedUpdates.Add();
+	tNewUpdate.m_pUpdate = MakeReusableUpdate ( tUpd.m_pUpdate );
+	tNewUpdate.m_dRowsToUpdate.SwapData ( dRows );
+}
+
+
 bool CSphIndex_VLN::DoUpdateAttributes ( const RowsToUpdate_t& dRows, UpdateContext_t& tCtx, bool& bCritical, CSphString& sError )
 {
 	if ( dRows.IsEmpty() )
 		return true;
 
-	tCtx.m_pHistograms = m_pHistograms;
-	tCtx.m_pBlobPool = m_tBlobAttrs.GetWritePtr();
-	tCtx.m_pAttrPool = m_tAttr.GetReadPtr ();
-	tCtx.m_pSegment = this;
-
 	if ( !Update_CheckAttributes ( *tCtx.m_tUpd.m_pUpdate, tCtx.m_tSchema, sError ) )
 		return false;
 
-	Update_PrepareListOfUpdatedAttributes ( tCtx, sError );
+	tCtx.PrepareListOfUpdatedAttributes ( sError );
 
-	// FIXME! FIXME! FIXME! overwriting just-freed blocks might hurt concurrent searchers;
-	// should implement a simplistic MVCC-style delayed-free to avoid that
+	tCtx.m_pHistograms = m_pHistograms;
+	tCtx.m_pBlobPool = m_tBlobAttrs.GetWritePtr();
+	tCtx.m_pAttrPool = m_tAttr.GetWritePtr ();
 
-	// first pass, if needed
-	if ( tCtx.m_tUpd.m_pUpdate->m_bStrict )
-		if ( !Update_InplaceJson ( dRows, tCtx, sError, true ) )
-			return false;
-
-	// second pass
-	tCtx.m_iJsonWarnings = 0;
-	Update_InplaceJson ( dRows, tCtx, sError, false );
-
-	if ( !Update_Blobs ( dRows, tCtx, bCritical, sError ) )
+	if ( !Update_UpdateAttributes ( dRows, tCtx, bCritical, sError ) )
 		return false;
-
-	Update_Plain ( dRows, tCtx );
 	Update_MinMax ( dRows, tCtx );
 	return true;
 }
@@ -2337,17 +2380,14 @@ int CSphIndex_VLN::UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, 
 	if ( !DoUpdateAttributes ( dRowsToUpdate, tCtx, bCritical, sError ))
 		return -1;
 
-	iUpdated = tUpd.m_iAffected - iUpdated;
-
-	if ( !Update_HandleJsonWarnings ( tCtx, iUpdated, sWarning, sError ) )
-		return -1;
+	MaybeAddPostponedUpdate ( dRowsToUpdate, tCtx );
 
 	if ( tCtx.m_uUpdateMask && m_bBinlog )
 		Binlog::CommitUpdateAttributes ( &m_iTID, m_sIndexName.cstr(), *tUpd.m_pUpdate );
 
 	m_uAttrsStatus |= tCtx.m_uUpdateMask; // FIXME! add lock/atomic?
 
-	if ( m_pSIdx && ( ( tCtx.m_uUpdateMask & IndexUpdateHelper_c::ATTRS_UPDATED ) || ( tCtx.m_uUpdateMask & IndexUpdateHelper_c::ATTRS_BLOB_UPDATED ) ) )
+	if ( m_pSIdx && ( ( tCtx.m_uUpdateMask & IndexSegment_c::ATTRS_UPDATED ) || ( tCtx.m_uUpdateMask & IndexSegment_c::ATTRS_BLOB_UPDATED ) ) )
 	{
 		for ( const UpdatedAttribute_t & tAttr : tCtx.m_dUpdatedAttrs )
 		{
@@ -2356,29 +2396,27 @@ int CSphIndex_VLN::UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, 
 		}
 	}
 
-	if ( m_bAttrsBusy.load ( std::memory_order_acquire ) )
-	{
-		auto& tNewUpdate = m_dPostponedUpdates.Add();
-		tNewUpdate.m_pUpdate = MakeReusableUpdate(tUpd.m_pUpdate);
-		tNewUpdate.m_dRowsToUpdate.SwapData ( dRowsToUpdate );
-	}
+	iUpdated = tUpd.m_iAffected - iUpdated;
+	if ( !tCtx.HandleJsonWarnings ( iUpdated, sWarning, sError ) )
+		return -1;
 
 	return iUpdated;
 }
 
-void CSphIndex_VLN::UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & dUpdates, IndexSegment_c *)
+void CSphIndex_VLN::UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & dPostUpdates )
 {
-	if ( dUpdates.IsEmpty () )
+	if ( dPostUpdates.IsEmpty () )
 		return;
 
 	CSphString sError;
 	bool bCritical;
 
-	for ( auto & tUpdate : dUpdates )
+	for ( auto & tPostUpdate : dPostUpdates )
 	{
-		AttrUpdateInc_t tUpdInc { tUpdate.m_pUpdate }; // dont move, keep update (need twice when split chunks)
+		RowsToUpdate_t dRows = Update_PrepareGatheredRowPtrs ( tPostUpdate.m_dRowsToUpdate, tPostUpdate.m_pUpdate->m_dDocids );
+
+		AttrUpdateInc_t tUpdInc { tPostUpdate.m_pUpdate }; // don't move, keep update (need twice when split chunks)
 		UpdateContext_t tCtx ( tUpdInc, m_tSchema );
-		RowsToUpdate_t dRows = Update_PrepareGatheredRowPtrs ( tUpdate.m_dRowsToUpdate, tCtx.m_tUpd.m_pUpdate->m_dDocids );
 		if ( !DoUpdateAttributes ( dRows, tCtx, bCritical, sError ) )
 		{
 			sphWarning ("UpdateAttributesOffline: %s", sError.cstr() );
@@ -2436,7 +2474,7 @@ bool CSphIndex_VLN::SaveAttributes ( CSphString & sError ) const
 
 	sphLogDebugvv ( "index '%s' attrs (%u) saving...", m_sIndexName.cstr(), uAttrStatus );
 
-	if ( uAttrStatus & IndexUpdateHelper_c::ATTRS_UPDATED )
+	if ( uAttrStatus & IndexSegment_c::ATTRS_UPDATED )
 	{
 		if ( !m_tAttr.Flush ( true, sError ) )
 			return false;
@@ -2445,19 +2483,19 @@ bool CSphIndex_VLN::SaveAttributes ( CSphString & sError ) const
 			return false;
 	}
 
-	if ( uAttrStatus & IndexUpdateHelper_c::ATTRS_BLOB_UPDATED )
+	if ( uAttrStatus & IndexSegment_c::ATTRS_BLOB_UPDATED )
 	{
 		if ( !m_tBlobAttrs.Flush ( true, sError ) )
 			return false;
 	}
 
-	if ( uAttrStatus & IndexUpdateHelper_c::ATTRS_ROWMAP_UPDATED )
+	if ( uAttrStatus & IndexSegment_c::ATTRS_ROWMAP_UPDATED )
 	{
 		if ( !m_tDeadRowMap.Flush ( true, sError ) )
 			return false;
 	}
 
-	if ( m_pSIdx && ( ( uAttrStatus & IndexUpdateHelper_c::ATTRS_UPDATED ) || ( uAttrStatus & IndexUpdateHelper_c::ATTRS_BLOB_UPDATED ) ) )
+	if ( m_pSIdx && ( ( uAttrStatus & IndexSegment_c::ATTRS_UPDATED ) || ( uAttrStatus & IndexSegment_c::ATTRS_BLOB_UPDATED ) ) )
 	{
 		std::string sTmpError;
 		if ( !m_pSIdx->SaveMeta ( sTmpError ) )
@@ -2860,7 +2898,7 @@ int CSphIndex_VLN::KillMulti ( const VecTraits_T<DocID_t> & dKlist )
 		} );
 
 	if ( iTotalKilled )
-		m_uAttrsStatus |= IndexUpdateHelper_c::ATTRS_ROWMAP_UPDATED;
+		m_uAttrsStatus |= IndexSegment_c::ATTRS_ROWMAP_UPDATED;
 
 	return iTotalKilled;
 }
@@ -2885,7 +2923,7 @@ int CSphIndex_VLN::CheckThenKillMulti ( const VecTraits_T<DocID_t>& dKlist, Kill
 	} );
 
 	if ( iTotalKilled )
-		m_uAttrsStatus |= IndexUpdateHelper_c::ATTRS_ROWMAP_UPDATED;
+		m_uAttrsStatus |= IndexSegment_c::ATTRS_ROWMAP_UPDATED;
 
 	return iTotalKilled;
 };
@@ -7289,7 +7327,7 @@ int	CSphIndex_VLN::Kill ( DocID_t tDocID )
 	// FIXME! docid might not be unique
 	if ( m_tDeadRowMap.Set ( GetRowidByDocid ( tDocID ) ) )
 	{
-		m_uAttrsStatus |= IndexUpdateHelper_c::ATTRS_ROWMAP_UPDATED;
+		m_uAttrsStatus |= IndexSegment_c::ATTRS_ROWMAP_UPDATED;
 		if ( m_pKillHook )
 			m_pKillHook->Kill ( tDocID );
 		return 1;

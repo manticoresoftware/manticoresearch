@@ -7767,19 +7767,10 @@ bool RtIndex_c::Update_DiskChunks ( AttrUpdateInc_t& tUpd, const DiskChunkSlice_
 	bool bCritical = false;
 	CSphString sWarning;
 
-	// That seems to be only place where order of disk chunks is important.
-	// About deduplication: order of newborn disk chunks is important, as they may contain replaces for older docs.
-	// Since we don't consider killed documents during update, it is important to update from freshest to oldest,
-	// this order ensures that actual documents updated. However, for optimized (merged/split) chunks that is not
-	// important as kill-lists applied during merge, and so resulting chunks have only 'freshest' version, because
-	// all previous are effectively excluded during merge pass.
-	// (If we refactor updates to scan rows taking in account kill-lists, order will not be important at all).
-	for ( int iChunk = dDiskChunks.GetLength()-1; iChunk>=0; --iChunk )
+	for ( auto& pDiskChunk : dDiskChunks )
 	{
 		if ( tUpd.AllApplied () )
 			break;
-
-		auto& pDiskChunk = dDiskChunks[iChunk];
 
 		// acquire fine-grain lock
 		SccWL_t wLock ( pDiskChunk->m_tLock );

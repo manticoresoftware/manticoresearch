@@ -2182,6 +2182,8 @@ RowsToUpdateData_t CSphIndex_VLN::Update_CollectRowPtrs ( const UpdateContext_t 
 	LookupReaderIterator_c tLookupReader ( m_tDocidLookup.GetReadPtr() );
 	Intersect ( tLookupReader, tSortedReader, [&dRowsToUpdate, this] ( RowID_t tRowID, DocID_t, DocIdIndexReader_c& tSortedReader )
 	{
+		if ( m_tDeadRowMap.IsSet ( tRowID ) )
+			return;
 		auto& dUpd = dRowsToUpdate.Add();
 		dUpd.m_tRow = tRowID;
 		dUpd.m_iIdx = tSortedReader.GetIndex();

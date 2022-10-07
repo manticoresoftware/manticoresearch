@@ -905,7 +905,7 @@ struct PostponedUpdate_t
 };
 
 struct UpdateContext_t;
-using KillWatcherFn = std::function<bool()>;
+using BlockerFn = std::function<bool()>;
 
 // common attribute update code for both RT and plain indexes
 // an index or a part of an index that has its own row ids
@@ -931,7 +931,7 @@ private:
 public:
 	virtual int			Kill ( DocID_t  /*tDocID*/ ) { return 0; }
 	virtual int			KillMulti ( const VecTraits_T<DocID_t> &  /*dKlist*/ ) { return 0; };
-	virtual int			CheckThenKillMulti ( const VecTraits_T<DocID_t>& dKlist, KillWatcherFn&& /*fnWatcher*/ ) { return KillMulti ( dKlist ); };
+	virtual int			CheckThenKillMulti ( const VecTraits_T<DocID_t>& dKlist, BlockerFn&& /*fnWatcher*/ ) { return KillMulti ( dKlist ); };
 	virtual				~IndexSegment_c() = default;
 
 	inline void			SetKillHook ( IndexSegment_c * pKillHook ) const
@@ -1152,9 +1152,10 @@ public:
 	/// returns non-negative amount of actually found and updated records on success
 	/// on failure, -1 is returned and GetLastError() contains error message
 	int							UpdateAttributes ( AttrUpdateSharedPtr_t pUpd, bool & bCritical, CSphString & sError, CSphString & sWarning );
+	int							UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSphString & sError, CSphString & sWarning );
 
 	/// update accumulating state
-	virtual int					UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSphString & sError, CSphString & sWarning ) = 0;
+	virtual int					CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritical, CSphString& sError, CSphString& sWarning, BlockerFn&& /*fnWatcher*/ ) = 0;
 
 	virtual Binlog::CheckTnxResult_t ReplayTxn ( Binlog::Blop_e eOp, CSphReader & tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCheck ) = 0;
 	/// saves memory-cached attributes, if there were any updates to them
@@ -1285,7 +1286,7 @@ public:
 	void				GetStatus ( CSphIndexStatus* ) const override {}
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & tSettings, CSphString * ) const override { return false; }
 	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & ) const override { return true; }
-	int					UpdateAttributes ( AttrUpdateInc_t&, bool &, CSphString & , CSphString & ) override { return -1; }
+	int					CheckThenUpdateAttributes ( AttrUpdateInc_t&, bool &, CSphString & , CSphString &, BlockerFn&& ) override { return -1; }
 	Binlog::CheckTnxResult_t ReplayTxn ( Binlog::Blop_e, CSphReader &, CSphString &, Binlog::CheckTxn_fn&& ) override { return {}; }
 	bool				SaveAttributes ( CSphString & ) const override { return true; }
 	DWORD				GetAttributeStatus () const override { return 0; }

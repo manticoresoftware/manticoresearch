@@ -1217,7 +1217,7 @@ public:
 	template <class QWORD>
 	static bool			DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, int iKillField );
 
-	int					UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSphString & sError, CSphString & sWarning ) final;
+	int					CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritical, CSphString& sError, CSphString& sWarning, BlockerFn&& fnWatcher ) final;
 	void				UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & dPostUpdates ) final;
 
 	// the only txn we can replay is 'update attributes', but it is processed by dedicated branch in binlog, so we have nothing to do here.
@@ -1239,7 +1239,7 @@ public:
 	RowID_t				GetRowidByDocid ( DocID_t tDocID ) const;
 	int					Kill ( DocID_t tDocID ) final;
 	int					KillMulti ( const VecTraits_T<DocID_t> & dKlist ) final;
-	int					CheckThenKillMulti ( const VecTraits_T<DocID_t>& dKlist, KillWatcherFn&& fnWatcher ) final;
+	int					CheckThenKillMulti ( const VecTraits_T<DocID_t>& dKlist, BlockerFn&& fnWatcher ) final;
 	bool				IsAlive ( DocID_t tDocID ) const final;
 
 	const CSphSourceStats &		GetStats () const final { return m_tStats; }
@@ -2047,6 +2047,11 @@ int CSphIndex::UpdateAttributes ( AttrUpdateSharedPtr_t pUpd, bool & bCritical, 
 	return UpdateAttributes ( tUpdInc, bCritical, sError, sWarning );
 }
 
+int CSphIndex::UpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritical, CSphString& sError, CSphString& sWarning )
+{
+	return CheckThenUpdateAttributes ( tUpd, bCritical, sError, sWarning, nullptr );
+}
+
 CSphVector<SphAttr_t> CSphIndex::BuildDocList () const
 {
 	TlsMsg::Err(); // reset error
@@ -2367,7 +2372,7 @@ bool CSphIndex_VLN::DoUpdateAttributes ( const RowsToUpdate_t& dRows, UpdateCont
 	return true;
 }
 
-int CSphIndex_VLN::UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSphString & sError, CSphString & sWarning )
+int CSphIndex_VLN::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritical, CSphString& sError, CSphString& sWarning, BlockerFn&& fnWatcher )
 {
 	assert ( tUpd.m_pUpdate->m_dRowOffset.IsEmpty() || tUpd.m_pUpdate->m_dDocids.GetLength()==tUpd.m_pUpdate->m_dRowOffset.GetLength() );
 
@@ -2379,6 +2384,10 @@ int CSphIndex_VLN::UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, 
 	int iUpdated = tUpd.m_iAffected;
 
 	auto dRowsToUpdate = Update_CollectRowPtrs ( tCtx );
+
+	if ( fnWatcher && !fnWatcher() )
+		return -1;
+
 	if ( !DoUpdateAttributes ( dRowsToUpdate, tCtx, bCritical, sError ))
 		return -1;
 
@@ -2905,7 +2914,7 @@ int CSphIndex_VLN::KillMulti ( const VecTraits_T<DocID_t> & dKlist )
 	return iTotalKilled;
 }
 
-int CSphIndex_VLN::CheckThenKillMulti ( const VecTraits_T<DocID_t>& dKlist, KillWatcherFn&& fnWatcher )
+int CSphIndex_VLN::CheckThenKillMulti ( const VecTraits_T<DocID_t>& dKlist, BlockerFn&& fnWatcher )
 {
 	LookupReaderIterator_c tTargetReader ( m_tDocidLookup.GetReadPtr() );
 	DocidListReader_c tKillerReader ( dKlist );

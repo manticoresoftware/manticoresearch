@@ -1182,7 +1182,7 @@ public:
 	void				PostSetup() final;
 	bool				IsRT() const final { return true; }
 
-	int					UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSphString & sError, CSphString & sWarning ) final;
+	int					CheckThenUpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSphString & sError, CSphString & sWarning, BlockerFn&& ) final;
 	bool				SaveAttributes ( CSphString & sError ) const final;
 	DWORD				GetAttributeStatus () const final { return m_uDiskAttrStatus; }
 
@@ -7767,6 +7767,20 @@ bool RtIndex_c::Update_DiskChunks ( AttrUpdateInc_t& tUpd, const DiskChunkSlice_
 	bool bCritical = false;
 	CSphString sWarning;
 
+	bool bEnabled = m_tSaving.Is ( SaveState_c::ENABLED );
+	bool bNeedWait = !bEnabled;
+
+	// if saving is disabled, and we NEED to actually update a disk chunk,
+	// we'll pause that action, waiting until index is unlocked.
+	BlockerFn fnBlock = [this, &bNeedWait, &bEnabled]() {
+		if ( bNeedWait )
+		{
+			bNeedWait = false;
+			bEnabled = m_tSaving.WaitStateOrShutdown ( SaveState_c::ENABLED );
+		}
+		return bEnabled;
+	};
+
 	for ( auto& pDiskChunk : dDiskChunks )
 	{
 		if ( tUpd.AllApplied () )
@@ -7775,7 +7789,7 @@ bool RtIndex_c::Update_DiskChunks ( AttrUpdateInc_t& tUpd, const DiskChunkSlice_
 		// acquire fine-grain lock
 		SccWL_t wLock ( pDiskChunk->m_tLock );
 
-		int iRes = pDiskChunk->CastIdx().UpdateAttributes ( tUpd, bCritical, sError, sWarning );
+		int iRes = pDiskChunk->CastIdx().CheckThenUpdateAttributes ( tUpd, bCritical, sError, sWarning, bNeedWait ? fnBlock : nullptr );
 
 		// FIXME! need to handle critical failures here (chunk is unusable at this point)
 		assert ( !bCritical );
@@ -7821,7 +7835,7 @@ bool RtSegment_t::Update_WriteBlobRow ( UpdateContext_t & tCtx, RowID_t tRowID, 
 
 
 // FIXME! might be inconsistent in case disk chunk update fails
-int RtIndex_c::UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSphString & sError, CSphString & sWarning )
+int RtIndex_c::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritical, CSphString& sError, CSphString& sWarning, BlockerFn&& fnWatcher )
 {
 	const auto& tUpdc = *tUpd.m_pUpdate;
 	assert ( tUpdc.m_dRowOffset.IsEmpty() || tUpdc.m_dDocids.GetLength()==tUpdc.m_dRowOffset.GetLength() );
@@ -7832,12 +7846,6 @@ int RtIndex_c::UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSph
 	// FIXME!!! grab Writer lock to prevent segments retirement during commit(merge)
 	if ( m_tRtChunks.IsEmpty() )
 		return 0;
-
-	if ( m_tSaving.Is ( SaveState_c::DISABLED ) ) // fixme! Wait?
-	{
-		sError = "index is locked now, try again later";
-		return -1;
-	}
 
 	int iUpdated = tUpd.m_iAffected;
 	if ( !Update_CheckAttributes ( *tUpd.m_pUpdate, m_tSchema, sError ) )
@@ -7858,6 +7866,9 @@ int RtIndex_c::UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSph
 	{
 		if ( dRamUpdateSets[i].IsEmpty() )
 			continue;
+
+		if ( fnWatcher && !fnWatcher() )
+			return -1;
 
 		auto* pSeg = const_cast<RtSegment_t*> ( (const RtSegment_t*)tGuard.m_dRamSegs[i] );
 		SccWL_t wLock ( pSeg->m_tLock );

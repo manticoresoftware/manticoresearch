@@ -5,7 +5,7 @@
 ### Major Changes
 * Improved [cost-based optimizer](../Searching/Cost_based_optimizer.md#Cost-based-optimizer) which may increase query response time in many cases.
 * `ALTER TABLE <table name> REBUILD SECONDARY`
-* `manticore_backup` to backup and restore
+* New tool `manticore-backup` for [backing up and restoring Manticore instance](../Securing_and_compacting_an_index/Backup_and_restore.md)
 * `KILL`
 
 ### Minor changes

@@ -121,6 +121,7 @@ class CSphNetLoop::Impl_c
 	std::unique_ptr<NetPooller_c>	m_pPoll;
 	CSphAutoEvent					m_tWorkerFinished;
 
+public:
 	explicit Impl_c ( const VecTraits_T<Listener_t> & dListeners, CSphNetLoop* pParent )
 		: m_pParent ( pParent )
 		, m_pPoll { std::make_unique<NetPooller_c> ( 1000 )}
@@ -144,6 +145,7 @@ class CSphNetLoop::Impl_c
 		m_dWorkInternal.Reserve ( 1000 );
 	}
 
+private:
 	static inline ListenTaskInfo_t* pMyInfo()
 	{
 #ifndef NDEBUG
@@ -338,7 +340,7 @@ class CSphNetLoop::Impl_c
 /////////////////////////////////////////////////////////////////////////////
 
 CSphNetLoop::CSphNetLoop ( const VecTraits_T<Listener_t> & dListeners )
-	: m_pImpl { new Impl_c ( dListeners, this ) }
+	: m_pImpl { std::make_unique<Impl_c> ( dListeners, this ) }
 {}
 
 CSphNetLoop::~CSphNetLoop ()

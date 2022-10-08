@@ -4278,7 +4278,7 @@ void NetPooller_c::Unlink ( NetPollEvent_t * pEvent )
 
 NetPollEvent_t & NetPollReadyIterator_c::operator* ()
 {
-	auto * pOwner = m_pOwner->m_pImpl;
+	auto & pOwner = m_pOwner->m_pImpl;
 	const pollev & tEv = pOwner->m_dFiredEvents[m_iIterEv];
 	auto * pNode = (NetPollEvent_t *) ( (ListedData_t *) get_data (tEv) )->m_pData;
 	assert ( pNode && "deleted event recognized");
@@ -4294,7 +4294,7 @@ NetPollReadyIterator_c & NetPollReadyIterator_c::operator++ ()
 
 bool NetPollReadyIterator_c::operator!= ( const NetPollReadyIterator_c & rhs ) const
 {
-	auto * pOwner = m_pOwner->m_pImpl;
+	auto & pOwner = m_pOwner->m_pImpl;
 	return rhs.m_pOwner || m_iIterEv<pOwner->m_iReady;
 }
 
@@ -4510,47 +4510,38 @@ bool NetPollReadyIterator_c::operator!= ( const NetPollReadyIterator_c & rhs ) c
 
 
 NetPooller_c::NetPooller_c ( int isizeHint )
-		: m_pImpl ( new Impl_c ( isizeHint ) )
+	: m_pImpl ( std::make_unique<Impl_c> ( isizeHint ) )
 {}
 
-NetPooller_c::~NetPooller_c ()
-{
-	SafeDelete ( m_pImpl );
-}
+NetPooller_c::~NetPooller_c () = default;
 
 void NetPooller_c::SetupEvent ( NetPollEvent_t * pEvent )
 {
-	assert ( m_pImpl );
 	m_pImpl->SetupEvent ( pEvent );
 }
 
 void NetPooller_c::Wait ( int timeoutMs )
 {
-	assert ( m_pImpl );
 	m_pImpl->Wait ( timeoutMs );
 }
 
 int NetPooller_c::GetNumOfReady () const
 {
-	assert ( m_pImpl );
 	return m_pImpl->GetNumOfReady();
 }
 
 void NetPooller_c::ProcessAll ( std::function<void ( NetPollEvent_t * )> fnAction )
 {
-	assert ( m_pImpl );
 	m_pImpl->ProcessAll ( std::move ( fnAction ) );
 }
 
 void NetPooller_c::RemoveTimeout ( NetPollEvent_t * pEvent )
 {
-	assert ( m_pImpl );
 	m_pImpl->RemoveTimeout ( pEvent );
 }
 
 void NetPooller_c::RemoveEvent ( NetPollEvent_t * pEvent )
 {
-	assert ( m_pImpl );
 	m_pImpl->RemoveEvent ( pEvent );
 }
 

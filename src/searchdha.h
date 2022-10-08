@@ -915,7 +915,7 @@ public:
 class NetPooller_c : public ISphNoncopyable
 {
 	class Impl_c;
-	Impl_c * m_pImpl = nullptr;
+	std::unique_ptr<Impl_c> m_pImpl;
 	friend class NetPollReadyIterator_c;
 
 public:

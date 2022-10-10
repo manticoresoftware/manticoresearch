@@ -32,6 +32,6 @@ protected:
 	~NetActionAccept_c () final;
 
 public:
-	explicit NetActionAccept_c ( const Listener_t & tListener );
-	void Process ( DWORD uGotEvents, CSphNetLoop * pLoop ) final;
+	NetActionAccept_c ( const Listener_t & tListener, CSphNetLoop* pNetLoop );
+	void Process ( DWORD uGotEvents ) final;
 };

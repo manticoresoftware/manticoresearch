@@ -43,7 +43,7 @@ struct ISphNetAction :  NetPollEvent_t
 	/// @param pLoop		where you can put your derived action (say, Accept -> SqlServe )
 	/// timer is always removed when processing.
 	/// If it is timeout - the event is also already removed from the poller.
-	virtual void		Process ( DWORD uGotEvents, CSphNetLoop * pLoop ) = 0;
+	virtual void		Process ( DWORD uGotEvents ) = 0;
 
 	/// invoked when CSphNetLoop with this action destroying
 	/// usually action is owned by netloop (signaller, acceptor), so it just destroys itself here.
@@ -56,7 +56,7 @@ class CSphWakeupEvent final : public PollableEvent_t, public ISphNetAction
 {
 public:
 	CSphWakeupEvent ();
-	void Process ( DWORD uGotEvents, CSphNetLoop * ) final;
+	void Process ( DWORD uGotEvents ) final;
 	void Wakeup ();
 
 protected:
@@ -78,13 +78,17 @@ protected:
 	~CSphNetLoop () override;
 
 public:
-	explicit CSphNetLoop ( const VecTraits_T<Listener_t> & dListeners );
+	CSphNetLoop ();
+	void SetListeners ( const VecTraits_T<Listener_t>& dListeners );
 	void LoopNetPoll ();
 	void StopNetLoop ();
 
 	void AddAction ( ISphNetAction * pElem ) EXCLUDES ( NetPoollingThread );
 	void RemoveEvent ( NetPollEvent_t * pEvent ) REQUIRES ( NetPoollingThread );
 };
+
+CSphNetLoop* GetAvailableNetLoop();
+void SetAvailableNetLoop( CSphNetLoop* );
 
 // redirect async socket io to netloop
 class SockWrapper_c

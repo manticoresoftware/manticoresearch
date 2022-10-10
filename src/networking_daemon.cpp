@@ -63,7 +63,7 @@ void CSphWakeupEvent::Wakeup ()
 	sphLogDebugv ( "failed to wakeup net thread ( error %d,'%s')", iErrno, strerrorm ( iErrno ) );
 }
 
-void CSphWakeupEvent::Process ( DWORD uGotEvents, CSphNetLoop * )
+void CSphWakeupEvent::Process ( DWORD uGotEvents )
 {
 	if ( uGotEvents & NetPollEvent_t::READ )
 		DisposeEvent();
@@ -111,8 +111,6 @@ class CSphNetLoop::Impl_c
 	// since it is impl, everything is private and accessible by friendship
 	friend class CSphNetLoop;
 
-	CSphNetLoop *					m_pParent; // that is weak ref
-
 	CSphVector<ISphNetAction *> 	m_dWorkInternal GUARDED_BY ( NetPoollingThread );
 	CSphVector<ISphNetAction *>		m_dWorkExternal GUARDED_BY ( m_tExtLock );
 	WakeupEventRefPtr_c				m_pWakeup;
@@ -122,9 +120,8 @@ class CSphNetLoop::Impl_c
 	CSphAutoEvent					m_tWorkerFinished;
 
 public:
-	explicit Impl_c ( const VecTraits_T<Listener_t> & dListeners, CSphNetLoop* pParent )
-		: m_pParent ( pParent )
-		, m_pPoll { std::make_unique<NetPooller_c> ( 1000 )}
+	Impl_c ()
+		: m_pPoll { std::make_unique<NetPooller_c> ( 1000 )}
 	{
 		m_pWakeup = new CSphWakeupEvent;
 		if ( m_pWakeup->IsPollable() )
@@ -134,15 +131,18 @@ public:
 		} else
 			sphWarning ( "net-loop use timeout due to %s", m_pWakeup->m_sError.cstr () );
 
-		for ( const auto & dListener : dListeners )
-		{
-			NetPoolEventRefPtr_c pCur { new NetActionAccept_c ( dListener ) };
-			sphLogDebugvv ( "setup listener as %d, %d", pCur->m_iSock, (int) pCur->m_iTimeoutTimeUS );
-			m_pPoll->SetupEvent ( pCur );
-		}
-
 		m_dWorkExternal.Reserve ( 1000 );
 		m_dWorkInternal.Reserve ( 1000 );
+	}
+
+	void SetListeners ( const VecTraits_T<Listener_t>& dListeners, CSphNetLoop* pParent ) REQUIRES ( NetPoollingThread )
+	{
+		for ( const auto& dListener : dListeners )
+		{
+			NetPoolEventRefPtr_c pCur { new NetActionAccept_c ( dListener, pParent ) };
+			sphLogDebugvv ( "setup listener as %d, %d", pCur->m_iSock, (int)pCur->m_iTimeoutTimeUS );
+			m_pPoll->SetupEvent ( pCur );
+		}
 	}
 
 private:
@@ -200,7 +200,7 @@ private:
 			assert ( dReady.m_uNetEvents );
 			auto pWork = (ISphNetAction *) &dReady;
 			m_pPoll->RemoveTimeout ( pWork ); // ensure that timer (if any) will no more fire
-			pWork->Process ( dReady.m_uNetEvents, m_pParent );
+			pWork->Process ( dReady.m_uNetEvents );
 			++m_tPrf.m_iPerfEv;
 			++iMaxIters;
 
@@ -295,7 +295,7 @@ private:
 				return;
 
 			sphLogDebugv ( "%p bailing on timeout no signal, sock=%d", pWork, pWork->m_iSock );
-			pWork->Process ( NetPollEvent_t::TIMEOUT, m_pParent );
+			pWork->Process ( NetPollEvent_t::TIMEOUT );
 			++iRemoved;
 		 });
 		m_tPrf.EndTask();
@@ -339,9 +339,15 @@ private:
 
 /////////////////////////////////////////////////////////////////////////////
 
-CSphNetLoop::CSphNetLoop ( const VecTraits_T<Listener_t> & dListeners )
-	: m_pImpl { std::make_unique<Impl_c> ( dListeners, this ) }
+CSphNetLoop::CSphNetLoop ()
+	: m_pImpl { std::make_unique<Impl_c> () }
 {}
+
+void CSphNetLoop::SetListeners ( const VecTraits_T<Listener_t>& dListeners )
+{
+	ScopedRole_c thPoll ( NetPoollingThread );
+	m_pImpl->SetListeners ( dListeners, this );
+}
 
 CSphNetLoop::~CSphNetLoop ()
 {
@@ -367,6 +373,20 @@ void CSphNetLoop::AddAction ( ISphNetAction * pElem ) EXCLUDES ( NetPoollingThre
 void CSphNetLoop::RemoveEvent ( NetPollEvent_t * pEvent ) REQUIRES ( NetPoollingThread )
 {
 	m_pImpl->RemoveEvent ( pEvent );
+}
+
+namespace {
+	CSphNetLoop* g_pNetLoop = nullptr;
+}
+
+CSphNetLoop* GetAvailableNetLoop()
+{
+	return g_pNetLoop;
+}
+
+void SetAvailableNetLoop ( CSphNetLoop* pNetLoop )
+{
+	g_pNetLoop = pNetLoop;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -409,7 +429,7 @@ class SockWrapper_c::Impl_c final : public ISphNetAction
 	void ParentDestroying();
 
 public:
-	void Process ( DWORD uGotEvents, CSphNetLoop * ) REQUIRES ( NetPoollingThread ) final;
+	void Process ( DWORD uGotEvents ) REQUIRES ( NetPoollingThread ) final;
 	void NetLoopDestroying () REQUIRES ( NetPoollingThread ) final;
 };
 
@@ -490,7 +510,7 @@ void SockWrapper_c::Impl_c::EngageWaiterAndYield ( int64_t tmTimeUntilUs )
 // timer is removed and will NOT tick anyway in future.
 // event itself is deactivated (for socket it is one-shot), or timed-out (need to be removed)
 // If it was called >once - search for the problem in caller place.
-void SockWrapper_c::Impl_c::Process ( DWORD uGotEvents, CSphNetLoop * ) REQUIRES ( NetPoollingThread )
+void SockWrapper_c::Impl_c::Process ( DWORD uGotEvents ) REQUIRES ( NetPoollingThread )
 {
 	assert ( m_bEngaged.load ( std::memory_order_acquire ) );
 	if ( CheckSocketError ( uGotEvents ) || uGotEvents==TIMEOUT ) // real socket error

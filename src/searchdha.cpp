@@ -4124,8 +4124,7 @@ public:
 		m_dTimeouts.AddOrChangeTimeout ( pEvent );
 
 		bool bIsNew = !pEvent->m_tBack.pPtr;
-		int iRes = set_polling_for ( pEvent->m_iSock, m_dEvents.MakeLinked ( pEvent ),
-				uEvents & NetPollEvent_t::READ,	uEvents & NetPollEvent_t::ONCE, bIsNew );
+		int iRes = set_polling_for ( pEvent->m_iSock, m_dEvents.MakeLinked ( pEvent ), uEvents & NetPollEvent_t::READ, uEvents & NetPollEvent_t::ONCE, bIsNew );
 
 		if ( iRes==-1 )
 			sphWarning ( "failed to setup queue event for sock %d, errno=%d, %s", pEvent->m_iSock, errno, strerrorm ( errno ) );
@@ -4202,12 +4201,12 @@ public:
 	// platform-specific members. Tiny and simple to reduce divergention among platforms
 #if ( NETPOLL_TYPE==NETPOLL_EPOLL )
 
-	inline int poll_events ( pollev* pEvents, int iEventNum, int timeoutMs )
+	inline int poll_events ( pollev* pEvents, int iEventNum, int timeoutMs ) const
 	{
 		return epoll_wait ( m_iPl, pEvents, iEventNum, timeoutMs );
 	};
 
-	inline int set_polling_for ( int iSock, void* pData, bool bRead, bool bOneshot, bool bAdd )
+	inline int set_polling_for ( int iSock, void* pData, bool bRead, bool bOneshot, bool bAdd ) const
 	{
 		int iOp = bAdd ? EPOLL_CTL_ADD : EPOLL_CTL_MOD;
 		epoll_event tEv;
@@ -4220,7 +4219,7 @@ public:
 		return epoll_ctl ( m_iPl, iOp, iSock, &tEv );
 	}
 
-	inline int remove_polling_for ( int iSock, bool )
+	inline int remove_polling_for ( int iSock, bool ) const
 	{
 		epoll_event tEv;
 		return epoll_ctl ( m_iPl, EPOLL_CTL_DEL, iSock, &tEv );

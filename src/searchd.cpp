@@ -20086,7 +20086,10 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	g_dNetLoops.Resize ( g_iNetWorkers );
 	for ( auto & pNetLoop : g_dNetLoops )
 	{
-		pNetLoop = new CSphNetLoop ( g_dListeners );
+		pNetLoop = new CSphNetLoop;
+		pNetLoop->SetListeners ( g_dListeners );
+		if ( !GetAvailableNetLoop() )
+			SetAvailableNetLoop ( pNetLoop );
 		g_pTickPoolThread->Schedule ( [pNetLoop] { pNetLoop->LoopNetPoll (); }, false );
 	}
 

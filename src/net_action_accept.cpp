@@ -151,10 +151,11 @@ void MultiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf, NetConnection_t tConn,
 class NetActionAccept_c::Impl_c
 {
 	Listener_t		m_tListener;
+	CSphNetLoop*	m_pNetLoop;
 
 public:
-	explicit Impl_c ( const Listener_t & tListener ) : m_tListener ( tListener ) {}
-	void ProcessAccept ( DWORD uGotEvents, CSphNetLoop * pLoop );
+	explicit Impl_c ( const Listener_t & tListener, CSphNetLoop* pNetLoop ) : m_tListener ( tListener ), m_pNetLoop ( pNetLoop ) {}
+	void ProcessAccept ( DWORD uGotEvents );
 };
 
 static DWORD NextConnectionID()
@@ -205,7 +206,7 @@ void IterateTasks ( TaskIteratorFn&& fnHandler )
 }
 
 
-void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * _pLoop )
+void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents )
 {
 	if ( CheckSocketError ( uGotEvents ) || sphInterrupted () )
 		return;
@@ -216,8 +217,8 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 	sockaddr_storage saStorage = {0};
 	socklen_t uLength = sizeof(saStorage);
 
-	CSphRefcountedPtr<CSphNetLoop> pLoop { _pLoop };
-	SafeAddRef (_pLoop);
+	CSphRefcountedPtr<CSphNetLoop> pLoop { m_pNetLoop };
+	SafeAddRef ( m_pNetLoop );
 	while (true)
 	{
 		if ( g_iThrottleAccept && g_iThrottleAccept<iAccepted )
@@ -325,17 +326,17 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 	}
 }
 
-NetActionAccept_c::NetActionAccept_c ( const Listener_t & tListener )
+NetActionAccept_c::NetActionAccept_c ( const Listener_t & tListener, CSphNetLoop* pNetLoop )
 	: ISphNetAction ( tListener.m_iSock )
-	, m_pImpl ( std::make_unique<Impl_c> ( tListener ) )
+	, m_pImpl ( std::make_unique<Impl_c> ( tListener, pNetLoop ) )
 {
 	m_uNetEvents = NetPollEvent_t::READ;
 }
 
 NetActionAccept_c::~NetActionAccept_c () = default;
 
-void NetActionAccept_c::Process ( DWORD uGotEvents, CSphNetLoop * pLoop )
+void NetActionAccept_c::Process ( DWORD uGotEvents )
 {
-	m_pImpl->ProcessAccept ( uGotEvents, pLoop );
+	m_pImpl->ProcessAccept ( uGotEvents );
 }
 

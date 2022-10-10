@@ -300,11 +300,15 @@ int64_t MiniTimer_c::Engage ( int64_t iTimePeriodMS )
 	return EngageUS ( iTimePeriodMS * 1000 );
 }
 
+void MiniTimer_c::UnEngage()
+{
+	g_TinyTimer().Remove ( *this );
+}
 
 MiniTimer_c::~MiniTimer_c()
 {
 	if ( m_szName )
-		g_TinyTimer().Remove ( *this );
+		UnEngage();
 }
 
 /// returns true if provided timestamp is already reached or not

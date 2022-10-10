@@ -60,6 +60,8 @@ public:
 	int64_t Engage ( int64_t iTimePeriodMS );
 	int64_t EngageUS ( int64_t iTimePeriodUS ); // same, but period is in microseconds
 
+	void 	UnEngage();
+
 	/// if m_szName is not null - unengage and unlink everything
 	virtual ~MiniTimer_c();
 };

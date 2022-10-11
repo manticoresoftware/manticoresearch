@@ -2474,16 +2474,10 @@ bool AgentConn_t::SendQuery ( DWORD uSent )
 	SSIZE_T iRes = 0;
 	while ( m_dIOVec.HasUnsent () )
 	{
-		if ( !uSent )
-			iRes = SendChunk ();
-		else
-		{
-			iRes = uSent;
-			uSent = 0;
-		}
-
+		iRes = uSent ? std::exchange ( uSent, 0 ) : SendChunk();
 		if ( iRes==-1 )
 			break;
+
 		sphLogDebugA ( "%d sent %d bytes", m_iStoreTag, (int)iRes );
 		m_dIOVec.StepForward ( iRes );
 		if ( iRes>0 )
@@ -2521,13 +2515,7 @@ bool AgentConn_t::ReceiveAnswer ( DWORD uRecv )
 	SSIZE_T iRes = 0;
 	while ( ReplyBufPlace () )
 	{
-		if ( uRecv )
-		{
-			iRes = uRecv;
-			uRecv = 0;
-		} else
-			iRes = RecvChunk();
-
+		iRes = uRecv ? std::exchange ( uRecv, 0 ) : RecvChunk ();
 		if ( iRes<=0 )
 			break;
 
@@ -3036,8 +3024,7 @@ protected:
 
 		auto iEvents = events_apply_task_changes ( pTask );
 		m_iEvents += iEvents;
-		pTask->m_uIOActive = pTask->m_uIOChanged;
-		pTask->m_uIOChanged = TaskNet_t::NO;
+		pTask->m_uIOActive = std::exchange ( pTask->m_uIOChanged, TaskNet_t::NO );
 		sphLogDebugL ( "L events_apply_task_changes returned %d, now %d events counted", iEvents, m_iEvents );
 	}
 protected:
@@ -3243,8 +3230,7 @@ private:
 		{
 			auto iRes = epoll_ctl ( m_iEFD, iOp, pTask->m_ifd, &tEv );
 			if ( iRes==-1 )
-				sphLogDebugL ( "L failed to perform epollctl for sock %d(%p), errno=%d, %s"
-					  , pTask->m_ifd, pTask, errno, strerrorm ( errno ) );
+				sphLogDebugL ( "L failed to perform epollctl for sock %d(%p), errno=%d, %s", pTask->m_ifd, pTask, errno, strerrorm ( errno ) );
 		} else
 			sphLogDebugL ( "L epoll_ctl not called since sock is closed" );
 		return iEvents;
@@ -3306,8 +3292,7 @@ private:
 			if ( bApply )
 				EV_SET ( &m_dScheduled.Add (), pTask->m_ifd, EVFILT_READ, EV_ADD, 0, 0, pTask );
 			++iEvents;
-			sphLogDebugL ( "L EVFILT_READ, EV_ADD, %d (%d enqueued), %d in call", pTask->m_ifd, m_dScheduled.GetLength ()
-						   , iEvents );
+			sphLogDebugL ( "L EVFILT_READ, EV_ADD, %d (%d enqueued), %d in call", pTask->m_ifd, m_dScheduled.GetLength (), iEvents );
 		}
 
 		if ( bWrite && !bWasWrite )
@@ -3315,8 +3300,7 @@ private:
 			if ( bApply )
 				EV_SET ( &m_dScheduled.Add (), pTask->m_ifd, EVFILT_WRITE, EV_ADD, 0, 0, pTask );
 			++iEvents;
-			sphLogDebugL ( "L EVFILT_WRITE, EV_ADD, %d (%d enqueued), %d in call", pTask->m_ifd, m_dScheduled.GetLength ()
-						   , iEvents );
+			sphLogDebugL ( "L EVFILT_WRITE, EV_ADD, %d (%d enqueued), %d in call", pTask->m_ifd, m_dScheduled.GetLength (), iEvents );
 		}
 
 		if ( !bRead && bWasRead )
@@ -3324,9 +3308,7 @@ private:
 			if ( bApply )
 				EV_SET ( &m_dScheduled.Add (), pTask->m_ifd, EVFILT_READ, EV_DELETE, 0, 0, pTask );
 			--iEvents;
-			sphLogDebugL ( "L EVFILT_READ, EV_DELETE, %d (%d enqueued), %d in call", pTask->m_ifd
-						   , m_dScheduled.GetLength ()
-						   , iEvents );
+			sphLogDebugL ( "L EVFILT_READ, EV_DELETE, %d (%d enqueued), %d in call", pTask->m_ifd, m_dScheduled.GetLength (), iEvents );
 		}
 
 		if ( !bWrite && bWasWrite )
@@ -3334,9 +3316,7 @@ private:
 			if ( bApply )
 				EV_SET ( &m_dScheduled.Add (), pTask->m_ifd, EVFILT_WRITE, EV_DELETE, 0, 0, pTask );
 			--iEvents;
-			sphLogDebugL ( "L EVFILT_WRITE, EV_DELETE, %d (%d enqueued), %d in call", pTask->m_ifd
-						   , m_dScheduled.GetLength ()
-						   , iEvents );
+			sphLogDebugL ( "L EVFILT_WRITE, EV_DELETE, %d (%d enqueued), %d in call", pTask->m_ifd, m_dScheduled.GetLength (), iEvents );
 		}
 		return iEvents;
 	}
@@ -3360,8 +3340,7 @@ protected:
 			pts = &ts;
 		}
 		// need positive timeout for communicate threads back and shutdown
-		auto iRes = kevent ( m_iEFD, m_dScheduled.begin (), m_dScheduled.GetLength (), m_dReady.begin ()
-								, m_dReady.GetLength (), pts );
+		auto iRes = kevent ( m_iEFD, m_dScheduled.begin (), m_dScheduled.GetLength (), m_dReady.begin (), m_dReady.GetLength (), pts );
 		m_dScheduled.Reset();
 		return iRes;
 
@@ -3409,12 +3388,12 @@ private:
 	}
 
 	// Simply deletes the task, but some tricks exist:
-	// 1. (general): keeping payload nesessary when we fire timeout: the task is not necessary anyway,
+	// 1. (general): keeping payload necessary when we fire timeout: the task is not necessary anyway,
 	// however timeout callback need to be called with still valid (if any) payload.
 	// 2. (win specific): On windows, however, another trick is in game: timeout condition we get from
 	// internal GetQueuedCompletionStatusEx function. At the same time overlapped ops (WSAsend or recv, 
 	// or even both) are still in work, and so we need to keep the 'overlapped' structs alive for them.
-	// So, we can't just delete the task in the case. Instead we invalidate it (set m_ifd=-1, nullify payload),
+	// So, we can't just delete the task in the case. Instead, we invalidate it (set m_ifd=-1, nullify payload),
 	// so that the next return from events_wait will recognize it and finally totally destroy the task for us.
 	AgentConn_t * DeleteTask ( TaskNet_t * pTask, bool bReleasePayload=true )
 	{
@@ -3425,7 +3404,7 @@ private:
 		auto pConnection = pTask->m_pPayload;
 		pTask->m_pPayload = nullptr;
 
-		// if payload already invoked in another task (remember, we process deffered action!)
+		// if payload already invoked in another task (remember, we process deferred action!)
 		// we won't nullify it.
 		if ( pConnection && pConnection->m_pPollerTask==pTask )
 			pConnection->m_pPollerTask = nullptr;
@@ -3444,21 +3423,14 @@ private:
 	/// Atomically move m-t queue to single-thread internal queue.
 	VectorTask_c * PopQueue () REQUIRES ( LazyThread ) EXCLUDES ( m_dActiveLock )
 	{
-		// atomically get current vec; put zero instead.
-		VectorTask_c * pReadyQueue = nullptr;
-		{
-			ScopedMutex_t tLock ( m_dActiveLock );
-			pReadyQueue = m_pEnqueuedTasks;
-			m_pEnqueuedTasks = nullptr;
-		}
-		return pReadyQueue;
+		ScopedMutex_t tLock ( m_dActiveLock );
+		return std::exchange ( m_pEnqueuedTasks, nullptr );
 	}
 
 
 	void ProcessChanges ( TaskNet_t * pTask )
 	{
-		sphLogDebugL ( "L ProcessChanges for %p, (conn %p) (%d->%d), tm=" INT64_FMT " sock=%d", pTask, pTask->m_pPayload,
-			pTask->m_uIOActive, pTask->m_uIOChanged, pTask->m_iTimeoutTimeUS, pTask->m_ifd );
+		sphLogDebugL ( "L ProcessChanges for %p, (conn %p) (%d->%d), tm=" INT64_FMT " sock=%d", pTask, pTask->m_pPayload, pTask->m_uIOActive, pTask->m_uIOChanged, pTask->m_iTimeoutTimeUS, pTask->m_ifd );
 
 		assert ( pTask->m_iTimeoutTimeUS!=0);
 
@@ -3478,16 +3450,14 @@ private:
 
 		if ( pTask->m_iPlannedTimeout )
 		{
-			pTask->m_iTimeoutTimeUS = pTask->m_iPlannedTimeout;
-			pTask->m_iPlannedTimeout = 0;
+			pTask->m_iTimeoutTimeUS = std::exchange ( pTask->m_iPlannedTimeout, 0 );
 			m_dTimeouts.Change ( pTask );
-			sphLogDebugL ( "L change/add timeout for %p, " INT64_FMT " (" INT64_FMT ") is changed one", pTask, pTask->m_iTimeoutTimeUS,
-				( pTask->m_iTimeoutTimeUS - sphMicroTimer () ) );
+			sphLogDebugL ( "L change/add timeout for %p, " INT64_FMT " (" INT64_FMT ") is changed one", pTask, pTask->m_iTimeoutTimeUS, ( pTask->m_iTimeoutTimeUS - sphMicroTimer () ) );
 			sphLogDebugL ( "%s", m_dTimeouts.DebugDump ( "L " ).cstr () );
 		}
 	}
 
-	/// take current internal and external queues, parse it and enqueue changes.
+	/// take current internal and external queues, parse them and enqueue changes.
 	/// actualy 1 task can have only 1 action (another change will change very same task).
 	void ProcessEnqueuedTasks () REQUIRES ( LazyThread )
 	{
@@ -3556,8 +3526,8 @@ private:
 			{
 				/*
 				 * Timeout means that r/w actions for task might be still active.
-				 * Suppose that timeout functor will unsibscribe socket from polling.
-				 * However if right now something came to the socket, next call to poller might
+				 * Suppose that timeout functor will unsubscribe socket from polling.
+				 * However, if right now something came to the socket, next call to poller might
 				 * signal it, and we catch the events on the next round.
 				 */
 				sphLogDebugL ( "L timeout action started" );
@@ -3584,9 +3554,7 @@ private:
 
 	inline bool IsTickProcessed ( TaskNet_t * pTask )
 	{
-		if ( !pTask )
-			return false;
-		return pTask->m_iTickProcessed==m_iTickNo;
+		return pTask && pTask->m_iTickProcessed==m_iTickNo;
 	}
 
 	/// one event cycle.
@@ -3617,7 +3585,7 @@ private:
 		// With epoll we have only one task which may be both 'write' and 'read' state,
 		// so it seems that just do one ELSE another should always work.
 		// But on BSD we have separate event for read and another for write.
-		// If one processed, no guarantee that another is not in the same resultset.
+		// If one processed, no guarantee that another is not also in the same resultset.
 		// For this case we actualize tick # on processing and then compare it with current one.
 		++m_iTickNo;
 		if ( !m_iTickNo ) ++m_iTickNo; // skip 0
@@ -3795,11 +3763,9 @@ public:
 		{
 			pTask->m_ifd = pConnection->m_iSock;
 			pConnection->m_pPollerTask = nullptr; // this will allow to create another task.
-			sphLogDebugv ( "- %d Delete task (task %p), fd=%d (%d) " INT64_FMT "Us",
-				pConnection->m_iStoreTag, pTask, pTask->m_ifd, pTask->m_iStoredfd, pTask->m_iTimeoutTimeUS );
+			sphLogDebugv ( "- %d Delete task (task %p), fd=%d (%d) " INT64_FMT "Us", pConnection->m_iStoreTag, pTask, pTask->m_ifd, pTask->m_iStoredfd, pTask->m_iTimeoutTimeUS );
 		} else
-			sphLogDebugv ( "- %d Change task (task %p), fd=%d (%d) " INT64_FMT "Us -> " INT64_FMT "Us",
-				pConnection->m_iStoreTag, pTask, pTask->m_ifd, pTask->m_iStoredfd, pTask->m_iTimeoutTimeUS, iTimeoutUS );
+			sphLogDebugv ( "- %d Change task (task %p), fd=%d (%d) " INT64_FMT "Us -> " INT64_FMT "Us", pConnection->m_iStoreTag, pTask, pTask->m_ifd, pTask->m_iStoredfd, pTask->m_iTimeoutTimeUS, iTimeoutUS );
 
 		
 		AddToQueue ( pTask, pConnection->InNetLoop () );
@@ -3813,8 +3779,7 @@ public:
 		if ( TaskNet_t::RO!=pTask->m_uIOActive )
 		{
 			pTask->m_uIOChanged = TaskNet_t::RO;
-			sphLogDebugv ( "- %d DisableWrite enqueueing (task %p) (%d->%d), innet=%d", pConnection->m_iStoreTag, pTask,
-						   pTask->m_uIOActive, pTask->m_uIOChanged, pConnection->InNetLoop());
+			sphLogDebugv ( "- %d DisableWrite enqueueing (task %p) (%d->%d), innet=%d", pConnection->m_iStoreTag, pTask, pTask->m_uIOActive, pTask->m_uIOChanged, pConnection->InNetLoop());
 
 			AddToQueue ( pTask, pConnection->InNetLoop () );
 		}

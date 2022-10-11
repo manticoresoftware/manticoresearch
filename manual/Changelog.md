@@ -4,6 +4,7 @@
 
 ### Major Changes
 * Improved [cost-based optimizer](../Searching/Cost_based_optimizer.md#Cost-based-optimizer) which may increase query response time in many cases.
+* Added [FREEZE/UNFREEZE](../Securing_and_compacting_an_index/Freezing_a_table.md) to prepare a real-time/plain table for a backup
 
 ### Minor changes
 * Queries with stateful UDFs are now forced to be executed in a single thread

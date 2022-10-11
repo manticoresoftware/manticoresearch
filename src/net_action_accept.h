@@ -34,4 +34,5 @@ protected:
 public:
 	NetActionAccept_c ( const Listener_t & tListener, CSphNetLoop* pNetLoop );
 	void Process ( DWORD uGotEvents ) final;
+	void NetLoopDestroying() final;
 };

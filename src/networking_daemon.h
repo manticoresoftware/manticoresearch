@@ -46,8 +46,8 @@ struct ISphNetAction :  NetPollEvent_t
 	virtual void		Process ( DWORD uGotEvents ) = 0;
 
 	/// invoked when CSphNetLoop with this action destroying
-	/// usually action is owned by netloop (signaller, acceptor), so it just destroys itself here.
-	virtual void NetLoopDestroying ()  REQUIRES ( NetPoollingThread ) { Release (); }
+	/// Netloop itself is finished, no further actions in process.
+	virtual void NetLoopDestroying ()  REQUIRES ( NetPoollingThread ) = 0;
 };
 
 // event that wakes-up poll net loop from finished thread pool job
@@ -58,6 +58,7 @@ public:
 	CSphWakeupEvent ();
 	void Process ( DWORD uGotEvents ) final;
 	void Wakeup ();
+	void NetLoopDestroying() final;
 
 protected:
 	~CSphWakeupEvent () final;
@@ -80,10 +81,10 @@ protected:
 public:
 	CSphNetLoop ();
 	void SetListeners ( const VecTraits_T<Listener_t>& dListeners );
-	void LoopNetPoll ();
+	void LoopNetPoll () REQUIRES ( NetPoollingThread );
 	void StopNetLoop ();
 
-	void AddAction ( ISphNetAction * pElem ) EXCLUDES ( NetPoollingThread );
+	bool AddAction ( ISphNetAction * pElem ) EXCLUDES ( NetPoollingThread );
 	void RemoveEvent ( NetPollEvent_t * pEvent ) REQUIRES ( NetPoollingThread );
 };
 

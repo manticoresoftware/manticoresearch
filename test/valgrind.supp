@@ -1,13 +1,3 @@
-# that is real leak, not very important, but should be fixed
-{
-   REAL_memleak_of_SockWrapper
-   Memcheck:Leak
-   match-leak-kinds: definite
-   fun:_Znwm
-   fun:_ZN13SockWrapper_cC1EiP11CSphNetLoop
-}
-
-
 # that is intentional, as we look inside area which was stack, i.e. alien local variables
 {
    CalcUsedStack(VecTraits_T<unsigned char>)

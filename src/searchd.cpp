@@ -20044,11 +20044,13 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	gStats().m_uStarted = (DWORD)time(NULL);
 
-	CSphString sSQLStateDefault;
-	if ( IsConfigless() )
-		sSQLStateDefault.SetSprintf ( "%s/state.sql", GetDataDirInt().cstr() );
-	if ( !InitSphinxqlState ( hSearchd.GetStr ( "sphinxql_state", sSQLStateDefault.scstr() ), sError ))
-		sphWarning ( "sphinxql_state flush disabled: %s", sError.cstr ());
+	{
+		CSphString sSQLStateDefault;
+		if ( IsConfigless() )
+			sSQLStateDefault.SetSprintf ( "%s/state.sql", GetDataDirInt().cstr() );
+		if ( !InitSphinxqlState ( hSearchd.GetStr ( "sphinxql_state", sSQLStateDefault.scstr() ), sError ))
+			sphWarning ( "sphinxql_state flush disabled: %s", sError.cstr ());
+	}
 
 	ServeUserVars ();
 
@@ -20090,7 +20092,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		pNetLoop->SetListeners ( g_dListeners );
 		if ( !GetAvailableNetLoop() )
 			SetAvailableNetLoop ( pNetLoop );
-		g_pTickPoolThread->Schedule ( [pNetLoop] { pNetLoop->LoopNetPoll (); }, false );
+		g_pTickPoolThread->Schedule ( [pNetLoop] { ScopedRole_c thPoll ( NetPoollingThread ); pNetLoop->LoopNetPoll (); }, false );
 	}
 
 	// until no threads started, schedule stopping of alone threads to very bottom

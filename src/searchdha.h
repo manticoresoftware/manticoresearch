@@ -27,6 +27,7 @@ bool LoadExFunctions ();
 #include "sphinxutils.h"
 #include "searchdaemon.h"
 #include "timeout_queue.h"
+#include <boost/intrusive/slist.hpp>
 
 /////////////////////////////////////////////////////////////////////////////
 // SOME SHARED GLOBAL VARIABLES
@@ -860,14 +861,14 @@ protected:
 // wrapper around epoll/kqueue/poll
 
 extern ThreadRole NetPoollingThread;
+using netlist_hook_t = boost::intrusive::slist_member_hook<>;
+
 
 struct NetPollEvent_t : public EnqueuedTimeout_t, public ISphRefcountedMT
 {
-	struct
-	{
-		mutable void *		pPtr = nullptr; // opaque pointer to internals of poller
-		mutable int			iIdx = -1;		// or opaque index to internals of poller
-	}					m_tBack;
+	netlist_hook_t		m_tBackHook;		// opaque hook for intrusive list linkage
+	int					m_iBackIdx = -1;	// or opaque index to internals of poller
+
 	int					m_iSock = -1;
 	volatile DWORD		m_uNetEvents = 0;
 
@@ -888,7 +889,7 @@ struct NetPollEvent_t : public EnqueuedTimeout_t, public ISphRefcountedMT
 
 	bool IsLinked() const
 	{
-		return m_tBack.pPtr!=nullptr || m_tBack.iIdx!=-1;
+		return m_tBackHook.is_linked() || m_iBackIdx!=-1;
 	}
 };
 
@@ -924,13 +925,9 @@ public:
 	void SetupEvent ( NetPollEvent_t * pEvent )				REQUIRES ( NetPoollingThread );
 	void Wait ( int )										REQUIRES ( NetPoollingThread );
 	int GetNumOfReady () const;
-	void ProcessAll ( std::function<void (NetPollEvent_t*)> fnAction ) REQUIRES ( NetPoollingThread );
+	void ProcessAll ( std::function<void (NetPollEvent_t*)>&& fnAction ) REQUIRES ( NetPoollingThread );
 	void RemoveTimeout ( NetPollEvent_t * pEvent )			REQUIRES ( NetPoollingThread );
 	void RemoveEvent ( NetPollEvent_t * pEvent )			REQUIRES ( NetPoollingThread );
-
-	// unlink before removing, to avoid accidental call over deleted event inside poller
-	// that is typically called from another thread, so avoid races!
-	static void Unlink ( NetPollEvent_t * pEvent );
 
 	NetPollReadyIterator_c begin () { return NetPollReadyIterator_c ( this ); }
 	static NetPollReadyIterator_c end () { return NetPollReadyIterator_c ( nullptr ); }

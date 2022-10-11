@@ -340,3 +340,7 @@ void NetActionAccept_c::Process ( DWORD uGotEvents )
 	m_pImpl->ProcessAccept ( uGotEvents );
 }
 
+void NetActionAccept_c::NetLoopDestroying()
+{
+	Release();
+}

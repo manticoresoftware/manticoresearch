@@ -69,6 +69,9 @@ void CSphWakeupEvent::Process ( DWORD uGotEvents )
 		DisposeEvent();
 }
 
+void CSphWakeupEvent::NetLoopDestroying()
+{}
+
 enum class NetloopState_e : BYTE
 {
 	UNKNOWN,
@@ -118,6 +121,7 @@ class CSphNetLoop::Impl_c
 	LoopProfiler_t					m_tPrf;
 	std::unique_ptr<NetPooller_c>	m_pPoll;
 	CSphAutoEvent					m_tWorkerFinished;
+	volatile bool					m_bWorkerFinished = false;
 
 public:
 	Impl_c ()
@@ -141,7 +145,7 @@ public:
 		{
 			NetPoolEventRefPtr_c pCur { new NetActionAccept_c ( dListener, pParent ) };
 			sphLogDebugvv ( "setup listener as %d, %d", pCur->m_iSock, (int)pCur->m_iTimeoutTimeUS );
-			m_pPoll->SetupEvent ( pCur );
+			m_pPoll->SetupEvent ( pCur.Leak() ); // will be released when netloop finishes, in NetLoopDestroying call
 		}
 	}
 
@@ -157,20 +161,26 @@ private:
 #endif
 	}
 
-	void TerminateSessions() REQUIRES ( NetPoollingThread )
+	void TerminateSessions() REQUIRES ( NetPoollingThread ) NO_THREAD_SAFETY_ANALYSIS
 	{
 		sphLogDebug ( "TerminateSessions() (%p) invoked", this );
 		assert ( m_dWorkInternal.IsEmpty () );
-		{
-			ScopedMutex_t tExtLock ( m_tExtLock );
-			for ( auto * pWork : m_dWorkExternal )
-				pWork->NetLoopDestroying ();
-		}
 
-		m_pPoll->ProcessAll( [] ( NetPollEvent_t * pWork ) REQUIRES ( NetPoollingThread )
+		m_pPoll->ProcessAll( [this] ( NetPollEvent_t * pWork ) NO_THREAD_SAFETY_ANALYSIS
 		{
-			((ISphNetAction *) pWork)->NetLoopDestroying ();
+			m_dWorkExternal.Add ( (ISphNetAction*) pWork );
 		});
+
+		m_dWorkExternal.Uniq();
+		for ( auto* pWork : m_dWorkExternal )
+		{
+			// deal with closed sockets which lives exclusively in m_pPoll (and so, would be removed immediately on RemoveEvent() )
+			CSphRefcountedPtr<ISphNetAction> pWorkKeeper { pWork };
+			SafeAddRef ( pWork );
+
+			m_pPoll->RemoveEvent ( pWork );
+			pWork->NetLoopDestroying();
+		}
 	}
 
 	// add actions planned by jobs
@@ -255,7 +265,7 @@ private:
 
 			// setup or refresh handlers
 			m_tPrf.StartNext();
-			m_dWorkInternal.Apply ( [&] ( ISphNetAction * pWork ) REQUIRES ( NetPoollingThread )
+			m_dWorkInternal.for_each ( [&] ( ISphNetAction * pWork ) REQUIRES ( NetPoollingThread )
 			{
 				assert ( pWork );
 				if ( pWork->m_uNetEvents==NetPollEvent_t::CLOSED )
@@ -276,6 +286,7 @@ private:
 			m_tPrf.End();
 		}
 		m_tWorkerFinished.SetEvent ();
+		m_bWorkerFinished = true;
 	}
 
 	int RemoveOutdated () REQUIRES ( NetPoollingThread )
@@ -305,7 +316,8 @@ private:
 	void Kick ()
 	{
 		sphLogDebugvv ( "Kick" );
-		m_pWakeup->Wakeup ();
+		if ( m_pWakeup )
+			m_pWakeup->Wakeup ();
 	}
 
 	void StopNetLoop ()
@@ -320,14 +332,17 @@ private:
 		sphLogDebug ( "StopNetLoop() succeeded" );
 	}
 
-	void AddAction ( ISphNetAction * pElem ) EXCLUDES ( NetPoollingThread )
+	bool AddAction ( ISphNetAction * pElem ) EXCLUDES ( NetPoollingThread )
 	{
 		sphLogDebugvv ( "AddAction action as %d, events %u, timeout %d", pElem->m_iSock, pElem->m_uNetEvents, (int) pElem->m_iTimeoutTimeUS );
+		if ( m_bWorkerFinished )
+			return false;
 		{
 			ScopedMutex_t tExtLock ( m_tExtLock );
 			m_dWorkExternal.Add ( pElem );
 		}
 		Kick();
+		return true;
 	}
 
 	void RemoveEvent ( NetPollEvent_t * pEvent ) REQUIRES ( NetPoollingThread )
@@ -356,7 +371,6 @@ CSphNetLoop::~CSphNetLoop ()
 
 void CSphNetLoop::LoopNetPoll ()
 {
-	ScopedRole_c thPoll ( NetPoollingThread );
 	m_pImpl->LoopNetPoll();
 }
 
@@ -365,9 +379,9 @@ void CSphNetLoop::StopNetLoop()
 	m_pImpl->StopNetLoop ();
 };
 
-void CSphNetLoop::AddAction ( ISphNetAction * pElem ) EXCLUDES ( NetPoollingThread )
+bool CSphNetLoop::AddAction ( ISphNetAction * pElem ) EXCLUDES ( NetPoollingThread )
 {
-	m_pImpl->AddAction ( pElem );
+	return m_pImpl->AddAction ( pElem );
 }
 
 void CSphNetLoop::RemoveEvent ( NetPollEvent_t * pEvent ) REQUIRES ( NetPoollingThread )
@@ -467,11 +481,6 @@ void SockWrapper_c::Impl_c::NetLoopDestroying () REQUIRES ( NetPoollingThread )
 {
 	sphLogDebug ( "SockWrapper_c::Impl_c::NetLoopDestroying ()" );
 
-	// unlink here ensures we're not refer anyway to netpool (if any), and so, will not check it again in d-tr
-	// however initial placement of the socket implies it is not linked at all, and so, need to check first.
-	if ( IsLinked() )
-		NetPooller_c::Unlink ( this );
-
 	// if we're not finished - setting m_pNetLoop to null will just switch us to classic blocking polling.
 	m_pNetLoop = nullptr;
 
@@ -498,7 +507,11 @@ void SockWrapper_c::Impl_c::EngageWaiterAndYield ( int64_t tmTimeUntilUs )
 	// switch context (go to poll)
 	Threads::Coro::YieldWith ( [this] {
 		m_bEngaged.store ( true, std::memory_order_release );
-		m_pNetLoop->AddAction ( this );
+		if ( !m_pNetLoop->AddAction ( this ) )
+		{
+			m_uNetEvents = TIMEOUT;
+			m_fnWakeFromPoll();
+		}
 	});
 	m_bEngaged.store ( false, std::memory_order_release );
 

@@ -9,14 +9,10 @@
 4. Disables implicit operations that may change the files on disk.
 5. Displays actual list of the files belonging to the table.
 
-The tool [manticore-backup](../Securing_and_compacting_an_index/Backup_and_restore.md) uses it
-
-1. Freeze an index
-2. Grab output of 'freeze' command and backup provided files
-3. Unfreeze an index
-
-This may be done in some kind of automation scripts, like cronjobs, etc. However, notice, that as 'udate' command is discared on frozen indexes, that is not fully seamless, beware.
-
+Built-in tool [manticore-backup](../Securing_and_compacting_an_index/Backup_and_restore.md) uses `FREEZE` to guarantee data consistency. So can you if you want to make your own backup solution or need to freeze tables for whatever else reason. All you need to do is:
+1. `FREEZE` a table.
+2. Grab output of the `FREEZE` command and backup the provided files.
+3. `UNFREEZE` the table once you are done.
 
 <!-- request Example -->
 ```sql

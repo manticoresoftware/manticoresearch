@@ -31,7 +31,7 @@
 
 using namespace Threads;
 
-int g_tmWait = -1;
+int64_t g_tmWaitUS = -1;
 int	g_iThrottleAction = 0;
 
 /////////////////////////////////////////////////////////////////////////////
@@ -219,7 +219,7 @@ private:
 		return iMaxIters;
 	}
 
-	void Poll ( int64_t tmLastWait ) REQUIRES ( NetPoollingThread )
+	void Poll ( int64_t tmLastWaitUS ) REQUIRES ( NetPoollingThread )
 	{
 		// lets spin net-loop thread without syscall\sleep\wait up to net_wait period
 		// in case we got events recently or call job that might finish early
@@ -227,15 +227,15 @@ private:
 		// sysbench test with 1 thd and 3 empty indexes reports:
 		// 3k qps for net-loop without spin-wait
 		// 5k qps for net-loop with spin-wait
-		int iWaitMs = 0;
-		if ( g_tmWait==-1 || ( g_tmWait>0 && sphMicroTimer ()-tmLastWait>I64C( 10000 ) * g_tmWait ))
-			iWaitMs = m_pWakeup ? WAIT_UNTIL_TIMEOUT : 1;
+		int64_t iWaitUS = 0LL;
+		if ( g_tmWaitUS < 0 || ( sphMicroTimer() - tmLastWaitUS > g_tmWaitUS ) )
+			iWaitUS = m_pWakeup ? WAIT_UNTIL_TIMEOUT : 1000LL;
 
 		m_tPrf.StartPoll ();
 		// need positive timeout for communicate threads back and shutdown
 		Threads::IdleTimer_t _;
 		pMyInfo ()->m_eThdState = NetloopState_e::POLL_IDLE;
-		m_pPoll->Wait ( iWaitMs );
+		m_pPoll->Wait ( iWaitUS );
 		m_tPrf.EndTask ();
 	}
 
@@ -243,12 +243,12 @@ private:
 	{
 		auto _ = PublishTaskInfo ( new ListenTaskInfo_t );
 		pMyInfo ()->m_uWorks = m_dWorkInternal.GetLength();
-		int64_t tmLastWait = sphMicroTimer();
+		int64_t tmLastWaitUS = sphMicroTimer();
 		while ( !sphInterrupted() )
 		{
 			m_tPrf.Start();
 
-			Poll ( tmLastWait );
+			Poll ( tmLastWaitUS );
 			pMyInfo ()->m_eThdState = NetloopState_e::PROCESS_READY;
 			++pMyInfo ()->m_uTick;
 
@@ -282,7 +282,7 @@ private:
 			iProcessed += RemoveOutdated ();
 
 			if ( iProcessed )
-				tmLastWait = sphMicroTimer();
+				tmLastWaitUS = sphMicroTimer();
 			m_tPrf.End();
 		}
 		m_tWorkerFinished.SetEvent ();
@@ -292,7 +292,7 @@ private:
 	int RemoveOutdated () REQUIRES ( NetPoollingThread )
 	{
 		pMyInfo ()->m_eThdState = NetloopState_e::REMOVE_OUTDATED;
-		int64_t tmNow = sphMicroTimer();
+		int64_t tmNowUS = sphMicroTimer();
 		m_tPrf.StartRemove();
 		int iRemoved = 0;
 
@@ -302,7 +302,7 @@ private:
 			auto * pWork = (ISphNetAction *) pEvent;
 
 			// skip eternal (non-timeouted)
-			if ( pWork->m_iTimeoutIdx<0 || pWork->m_iTimeoutTimeUS<=0 || !sph::TimeExceeded (pWork->m_iTimeoutTimeUS, tmNow))
+			if ( pWork->m_iTimeoutIdx<0 || pWork->m_iTimeoutTimeUS<=0 || !sph::TimeExceeded (pWork->m_iTimeoutTimeUS, tmNowUS, m_pPoll->TickGranularity()))
 				return;
 
 			sphLogDebugv ( "%p bailing on timeout no signal, sock=%d", pWork, pWork->m_iSock );

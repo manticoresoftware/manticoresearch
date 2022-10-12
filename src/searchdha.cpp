@@ -3926,6 +3926,9 @@ class TimeoutEvents_c
 	TimeoutQueue_c	m_dTimeouts;
 
 public:
+	constexpr static int64_t TIME_INFINITE = -1;
+	constexpr static int64_t TIME_IMMEDIATE = 0;
+
 	void AddOrChangeTimeout ( EnqueuedTimeout_t * pEvent )
 	{
 		if ( pEvent->m_iTimeoutTimeUS>=0 )
@@ -3937,20 +3940,23 @@ public:
 		m_dTimeouts.Remove ( pEvent );
 	}
 
-	int GetNextTimeoutMs ()
+	int64_t GetNextTimeoutUS ( int64_t iGranularity )
 	{
-		int64_t iNextTimeoutUS = -1;
-		while (!m_dTimeouts.IsEmpty ())
+		auto iDefaultTimeoutUS = TIME_INFINITE;
+		while ( !m_dTimeouts.IsEmpty() )
 		{
 			auto * pNetEvent = (EnqueuedTimeout_t *) m_dTimeouts.Root ();
 			assert ( pNetEvent->m_iTimeoutTimeUS>0 );
-			iNextTimeoutUS = pNetEvent->m_iTimeoutTimeUS-sphMicroTimer ();
-			if ( iNextTimeoutUS>999 )
-				break;
+
+			auto iNextTimeoutUS = pNetEvent->m_iTimeoutTimeUS - sphMicroTimer();
+			if ( iNextTimeoutUS > iGranularity )
+				return iNextTimeoutUS;
+			else
+				iDefaultTimeoutUS = TIME_IMMEDIATE;
 
 			m_dTimeouts.Pop ();
 		}
-		return (iNextTimeoutUS>999) ? int ( iNextTimeoutUS / 1000 ) : -1;
+		return iDefaultTimeoutUS;
 	}
 };
 
@@ -4051,18 +4057,18 @@ public:
 			sphWarning ( "failed to setup queue event for sock %d, errno=%d, %s", pEvent->m_iSock, errno, strerrorm ( errno ) );
 	}
 
-	void Wait ( int timeoutMs ) REQUIRES ( NetPoollingThread )
+	void Wait ( int64_t iUS ) REQUIRES ( NetPoollingThread )
 	{
 		if ( m_tEvents.empty() )
 			return;
 
-		if ( timeoutMs==WAIT_UNTIL_TIMEOUT )
-			timeoutMs = m_dTimeouts.GetNextTimeoutMs ();
+		if ( iUS==WAIT_UNTIL_TIMEOUT )
+			iUS = m_dTimeouts.GetNextTimeoutUS ( poll_granularity );
 
 		m_dFiredEvents.Resize ( m_tEvents.size() );
 
 		// need positive timeout for communicate threads back and shutdown
-		m_iReady = poll_events ( m_dFiredEvents.Begin (), m_dFiredEvents.GetLength (), timeoutMs );
+		m_iReady = poll_events ( m_dFiredEvents.Begin (), m_dFiredEvents.GetLength (), iUS );
 
 		if ( m_iReady>=0 )
 			return;
@@ -4126,9 +4132,21 @@ public:
 	// platform-specific members. Tiny and simple to reduce divergention among platforms
 #if ( NETPOLL_TYPE==NETPOLL_EPOLL )
 
-	inline int poll_events ( pollev* pEvents, int iEventNum, int timeoutMs ) const
+	constexpr static int64_t poll_granularity = 1000LL;
+
+	inline static int US2Polltime ( int64_t timeoutUS )
 	{
-		return epoll_wait ( m_iPl, pEvents, iEventNum, timeoutMs );
+		switch ( timeoutUS )
+		{
+		case TimeoutEvents_c::TIME_INFINITE: return -1;
+		case TimeoutEvents_c::TIME_IMMEDIATE: return 0;
+		default: return timeoutUS / poll_granularity;
+		}
+	}
+
+	inline int poll_events ( pollev* pEvents, int iEventNum, int64_t timeoutUS ) const
+	{
+		return epoll_wait ( m_iPl, pEvents, iEventNum, US2Polltime ( timeoutUS ) );
 	};
 
 	inline int set_polling_for ( int iSock, void* pData, bool bRead, bool bOneshot, bool bAdd ) const
@@ -4152,17 +4170,24 @@ public:
 
 #elif ( NETPOLL_TYPE==NETPOLL_KQUEUE )
 
-	inline int poll_events ( pollev* pEvents, int iEventNum, int timeoutMs )
+	constexpr static int64_t poll_granularity = 1LL;
+
+	inline static timespec* US2keventtime ( timespec& ts, int64_t timeoutUS )
 	{
-		timespec ts;
-		timespec * pts = nullptr;
-		if ( timeoutMs>=0 )
+		timespec* pts = nullptr;
+		if ( timeoutUS >= 0 )
 		{
-			ts.tv_sec = timeoutMs / 1000;
-			ts.tv_nsec = (long) ( timeoutMs-ts.tv_sec * 1000 ) * 1000000;
+			ts.tv_sec = timeoutUS / 1000000;
+			ts.tv_nsec = (long)( timeoutUS - ts.tv_sec * 1000000 ) * 1000;
 			pts = &ts;
 		}
-		return kevent ( m_iPl, nullptr, 0, pEvents, iEventNum, pts );
+		return pts;
+	}
+
+	inline int poll_events ( pollev* pEvents, int iEventNum, int64_t timeoutUS )
+	{
+		timespec ts;
+		return kevent ( m_iPl, nullptr, 0, pEvents, iEventNum, US2keventtime ( ts, timeoutUS ) );
 	};
 
 	inline int set_polling_for ( int iSock, void* pData, bool bRead, bool bOneshot, bool )
@@ -4262,18 +4287,30 @@ public:
 		sphLogDebugvv ( "SetupEvent [%d] for %d events %d", pEvent->m_iBackIdx, pEvent->m_iSock, pEv->events );
 	}
 
-	void Wait ( int timeoutMs ) REQUIRES ( NetPoollingThread )
+	constexpr static int64_t poll_granularity = 1000LL;
+
+	inline static int US2Polltime ( int64_t timeoutUS )
+	{
+		switch ( timeoutUS )
+		{
+		case TimeoutEvents_c::TIME_INFINITE: return -1;
+		case TimeoutEvents_c::TIME_IMMEDIATE: return 0;
+		default: return timeoutUS / poll_granularity;
+		}
+	}
+
+	void Wait ( int64_t iUS ) REQUIRES ( NetPoollingThread )
 	{
 		m_iReady = 0;
 		if ( m_dEvents.IsEmpty() )
 			return;
 
 		// need positive timeout for communicate threads back and shutdown
-		if ( timeoutMs==WAIT_UNTIL_TIMEOUT )
-			timeoutMs = m_dTimeouts.GetNextTimeoutMs ();
+		if ( iUS == WAIT_UNTIL_TIMEOUT )
+			iUS = m_dTimeouts.GetNextTimeoutUS ( poll_granularity );
 
 		m_dEvents.for_each ( [] ( pollfd& dEv ) { dEv.revents = 0; } );
-		m_iReady = ::poll ( m_dEvents.Begin (), m_dEvents.GetLength (), timeoutMs );
+		m_iReady = ::poll ( m_dEvents.Begin (), m_dEvents.GetLength (), US2Polltime (iUS) );
 
 		if ( m_iReady>=0 )
 		{
@@ -4425,9 +4462,9 @@ void NetPooller_c::SetupEvent ( NetPollEvent_t * pEvent )
 	m_pImpl->SetupEvent ( pEvent );
 }
 
-void NetPooller_c::Wait ( int timeoutMs )
+void NetPooller_c::Wait ( int64_t iUS )
 {
-	m_pImpl->Wait ( timeoutMs );
+	m_pImpl->Wait ( iUS );
 }
 
 int NetPooller_c::GetNumOfReady () const
@@ -4448,6 +4485,11 @@ void NetPooller_c::RemoveTimeout ( NetPollEvent_t * pEvent )
 void NetPooller_c::RemoveEvent ( NetPollEvent_t * pEvent )
 {
 	m_pImpl->RemoveEvent ( pEvent );
+}
+
+int64_t NetPooller_c::TickGranularity() const
+{
+	return m_pImpl->poll_granularity;
 }
 
 

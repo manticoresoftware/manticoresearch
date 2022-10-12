@@ -895,7 +895,7 @@ struct NetPollEvent_t : public EnqueuedTimeout_t, public ISphRefcountedMT
 
 using NetPoolEventRefPtr_c = CSphRefcountedPtr<NetPollEvent_t>;
 
-const int WAIT_UNTIL_TIMEOUT = -1;
+constexpr static int64_t WAIT_UNTIL_TIMEOUT = -1LL;
 
 class NetPooller_c;
 class NetPollReadyIterator_c
@@ -923,11 +923,13 @@ public:
 	explicit NetPooller_c ( int iSizeHint );
 	~NetPooller_c();
 	void SetupEvent ( NetPollEvent_t * pEvent )				REQUIRES ( NetPoollingThread );
-	void Wait ( int )										REQUIRES ( NetPoollingThread );
+	void Wait ( int64_t iUS )								REQUIRES ( NetPoollingThread );
 	int GetNumOfReady () const;
 	void ProcessAll ( std::function<void (NetPollEvent_t*)>&& fnAction ) REQUIRES ( NetPoollingThread );
 	void RemoveTimeout ( NetPollEvent_t * pEvent )			REQUIRES ( NetPoollingThread );
 	void RemoveEvent ( NetPollEvent_t * pEvent )			REQUIRES ( NetPoollingThread );
+
+	int64_t TickGranularity() const;
 
 	NetPollReadyIterator_c begin () { return NetPollReadyIterator_c ( this ); }
 	static NetPollReadyIterator_c end () { return NetPollReadyIterator_c ( nullptr ); }

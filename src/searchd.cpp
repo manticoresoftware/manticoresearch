@@ -13724,7 +13724,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 			g_iLogFilterLen = iLen;
 		} else if ( tStmt.m_sSetName=="net_wait" )
 		{
-			g_tmWait = (int)tStmt.m_iSetValue;
+			g_tmWaitUS = tStmt.m_iSetValue * 1000LL;
 		} else if ( tStmt.m_sSetName=="grouping_in_utc")
 		{
 			g_bGroupingInUtc = !!tStmt.m_iSetValue;
@@ -18793,7 +18793,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	g_iAgentRetryCount = hSearchd.GetInt ( "agent_retry_count", g_iAgentRetryCount );
 	if ( g_iAgentRetryCount > MAX_RETRY_COUNT )
 		sphWarning ( "agent_retry_count %d exceeded max recommended %d", g_iAgentRetryCount, MAX_RETRY_COUNT );
-	g_tmWait = hSearchd.GetInt ( "net_wait_tm", g_tmWait );
+	g_tmWaitUS = hSearchd.GetUsTime64Ms ( "net_wait_tm", g_tmWaitUS );
 	g_iThrottleAction = hSearchd.GetInt ( "net_throttle_action", g_iThrottleAction );
 	g_iThrottleAccept = hSearchd.GetInt ( "net_throttle_accept", g_iThrottleAccept );
 	g_iNetWorkers = hSearchd.GetInt ( "net_workers", g_iNetWorkers );

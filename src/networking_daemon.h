@@ -15,7 +15,7 @@
 #include "sphinxstd.h"
 #include "searchdha.h"
 
-extern int g_tmWait;
+extern int64_t g_tmWaitUS;
 extern int g_iThrottleAction;
 extern int g_iThrottleAccept;
 

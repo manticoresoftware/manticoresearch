@@ -20,10 +20,10 @@ namespace sph
 	/// we use useconds for timestamps, however sleep obey mseconds. Interval less than granularity should be considered as 0, timestamps inside granularity should be considered as equal
 	constexpr int64_t TICKS_GRANULARITY = 1000ll;
 
-	inline bool TimeExceeded ( int64_t iTimestampUS, int64_t iPivotUS )
+	inline bool TimeExceeded ( int64_t iTimestampUS, int64_t iPivotUS, int64_t GRANULARITY=TICKS_GRANULARITY )
 	{
 		assert ( iPivotUS > 0 );
-		return ( iTimestampUS - sph::TICKS_GRANULARITY ) < iPivotUS;
+		return ( iTimestampUS - GRANULARITY ) < iPivotUS;
 	}
 
 	/// returns true if provided timestamp is already reached or not

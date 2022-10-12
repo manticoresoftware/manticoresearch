@@ -2362,6 +2362,12 @@ bool PercolateIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery & 
 			tMeta.m_sWarning = "query time exceeded max_query_time";
 			break;
 		}
+
+		if ( session::GetKilled() )
+		{
+			tMeta.m_sWarning = "query was killed";
+			break;
+		}
 	}
 
 	SwitchProfile ( pProfiler, SPH_QSTATE_FINALIZE );

@@ -14,6 +14,8 @@
 #include "task_info.h"
 #include "task_dispatcher.h"
 
+#include <boost/intrusive/slist.hpp>
+
 enum Profile_e {
 	NONE,
 	PLAIN,
@@ -23,6 +25,7 @@ enum Profile_e {
 };
 
 class ClientSession_c;
+using ClientTaskHook_t = boost::intrusive::slist_member_hook<>;
 
 // client connection (session). Includes both state and settings.
 struct ClientTaskInfo_t : public MiniTaskInfo_t
@@ -37,6 +40,7 @@ private:
 	bool m_bSsl = false;
 	bool m_bVip = false;
 	bool m_bReadOnly = false;
+	bool m_bKilled = false;
 
 	// session variables - doesn't participate in render, used as connection-wide globals
 public:
@@ -52,6 +56,7 @@ public:
 
 	Dispatcher::Template_t m_tBaseDispatcherTemplate;
 	Dispatcher::Template_t m_tPseudoShardingDispatcherTemplate;
+	ClientTaskHook_t m_tLink;
 
 private:
 	ClientSession_c* 	m_pSession = nullptr;
@@ -81,6 +86,9 @@ public:
 
 	void SetReadOnly ( bool bReadOnly ) { m_bReadOnly = bReadOnly; }
 	bool GetReadOnly() const { return m_bReadOnly; }
+
+	void SetKilled ( bool bKilled ) { m_bKilled = bKilled; }
+	bool GetKilled() const { return m_bKilled; }
 
 public:
 	void SetThrottlingPeriodMS ( int iThrottlingPeriodMS ) { m_iThrottlingPeriodMS = iThrottlingPeriodMS; }
@@ -119,6 +127,14 @@ public:
 	static ClientTaskInfo_t& Info ( bool bStrict = false );
 };
 
+inline bool operator== ( const ClientTaskInfo_t& lhs, const ClientTaskInfo_t& rhs )
+{
+	return &lhs==&rhs;
+}
+
+using TaskIteratorFn = std::function<void ( ClientTaskInfo_t* )>;
+void IterateTasks ( TaskIteratorFn&& );
+
 namespace session {
 
 	inline ClientTaskInfo_t & Info (bool bStrict=false){ return ClientTaskInfo_t::Info(bStrict); }
@@ -146,6 +162,8 @@ namespace session {
 
 	inline void SetReadOnly ( bool bReadOnly ) { ClientTaskInfo_t::Info().SetReadOnly (bReadOnly); }
 	inline bool GetReadOnly() { return ClientTaskInfo_t::Info().GetReadOnly(); }
+
+	inline bool GetKilled() { return ClientTaskInfo_t::Info().GetKilled(); }
 
 	inline void SetThrottlingPeriodMS ( int iThrottlingPeriodMS ) { ClientTaskInfo_t::Info().SetThrottlingPeriodMS ( iThrottlingPeriodMS ); }
 	inline int GetThrottlingPeriodMS () { return ClientTaskInfo_t::Info().GetThrottlingPeriodMS(); }

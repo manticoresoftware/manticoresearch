@@ -31,7 +31,7 @@
  *
  * Each piece lives in own context (task) and owned by the task.
  * For displaying data (in show threads) we have 'public thread descriptor' with plain structure and fixed fields
- * Filling of that structure from low thread descriptor performed by GatherPublicTaskInfo. It first copies low thread
+ * Filling of that structure from low thread descriptor performed by GatherPublicThreadsInfo. It first copies low thread
  * attributes, and then walk over task info chains, collecting essential data.
  *
  * Each task info has TaskType flag, and provides function which publish essential data into public descriptor.
@@ -65,6 +65,7 @@ struct PublicThreadDesc_t
 
 	Proto_e				m_eProto		= Proto_e::UNKNOWN; /// used in show threads to format or not format query
 	TaskState_e			m_eTaskState	= TaskState_e::UNKNOWN; /// show threads, crash dumping
+	bool				m_bKilled		= false; /// informational about if session is killed.
 
 	PublicThreadDesc_t() = default;
 	void Swap (PublicThreadDesc_t& rhs);
@@ -72,7 +73,7 @@ struct PublicThreadDesc_t
 };
 
 // flatten info from thread. iCols make hint for huge descriptions to avoid full copy
-PublicThreadDesc_t GatherPublicTaskInfo ( const Threads::LowThreadDesc_t * pSrc, int iCols );
+PublicThreadDesc_t GatherPublicThreadInfo ( const Threads::LowThreadDesc_t * pSrc, int iCols );
 
 // internal helpers
 // we don't expect all possible taskinfos being located in this file,
@@ -117,6 +118,8 @@ struct NoRefCount_t
 	static void Dec ( BYTE ) {}
 };
 
+void GatherPublicTaskInfo ( PublicThreadDesc_t& dDesc, const std::atomic<void*>& pTask );
+
 // RAII task info
 // Store info to TLS root, stores previous root to the chain
 // On dtr restores stored chain as root and retire info (uses hazard pointers)
@@ -124,6 +127,7 @@ struct NoRefCount_t
 template<typename TASKINFO, typename REFCOUNT=RefCount_t>
 class ScopedInfo_T
 {
+protected:
 	hazard::ScopedPtr_t<TASKINFO*> m_pInfo;
 
 public:

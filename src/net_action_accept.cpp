@@ -35,6 +35,54 @@ using sph_sa_family_t = sa_family_t;
 int g_iThrottleAccept = 0;
 extern volatile bool g_bMaintenance;
 
+
+using ClientTaskSlist_t = boost::intrusive::slist<
+	ClientTaskInfo_t,
+	boost::intrusive::member_hook<ClientTaskInfo_t, ClientTaskHook_t, &ClientTaskInfo_t::m_tLink>,
+	boost::intrusive::constant_time_size<false>,
+	boost::intrusive::cache_last<true>>;
+
+class TaskSlist_c
+{
+	mutable CSphMutex m_tGuard;
+//	sph::Spinlock_c m_tGuard {};
+	ClientTaskSlist_t m_tList GUARDED_BY ( m_tGuard );
+
+public:
+	void Enqueue ( ClientTaskInfo_t* pTask ) EXCLUDES ( m_tGuard )
+	{
+		assert ( pTask );
+		if ( !pTask->m_tLink.is_linked() )
+		{
+			const ScopedMutex_t tLock { m_tGuard };
+//			sph::Spinlock_lock tLock { m_tGuard };
+			m_tList.push_back ( *pTask );
+		}
+	}
+
+	void Remove ( ClientTaskInfo_t* pTask ) EXCLUDES ( m_tGuard )
+	{
+		assert ( pTask );
+		if ( pTask->m_tLink.is_linked() )
+		{
+			const ScopedMutex_t tLock { m_tGuard };
+//			sph::Spinlock_lock tLock { m_tGuard };
+			m_tList.remove ( *pTask );
+		}
+	}
+
+	void IterateTasks ( TaskIteratorFn&& fnHandler )
+	{
+		const ScopedMutex_t tLock { m_tGuard };
+		for ( auto& tTask : m_tList )
+			fnHandler ( &tTask );
+	}
+};
+
+
+//hazard::Guard_c tGuard;
+//auto pDescription = tGuard.Protect ( m_pHazardDescription );
+
 void FormatClientAddress ( char szClientName[SPH_ADDRPORT_SIZE], const sockaddr_storage & saStorage )
 {
 	// format client address
@@ -70,6 +118,7 @@ void MultiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf, NetConnection_t tConn,
 	Proto_e eMultiProto;
 	switch ( eProto )
 	{
+		case Proto_e::MYSQL41: return SqlServe ( std::move ( pBuf ) );
 		case Proto_e::SPHINXSE: eMultiProto = Proto_e::SPHINXSE; break; // force sphinx SE
 		default:
 			eMultiProto = pBuf->Probe ( false );
@@ -116,25 +165,44 @@ static DWORD NextConnectionID()
 
 class ScopedClientInfo_c: public ScopedInfo_T<ClientTaskInfo_t>
 {
+public:
 	bool m_bVip;
+	static TaskSlist_c m_tTasks;
 
 public:
-	explicit ScopedClientInfo_c ( ClientTaskInfo_t* pInfo )
+	explicit ScopedClientInfo_c ( ClientTaskInfo_t* pInfo, ClientSession_c* pSession )
 		: ScopedInfo_T<ClientTaskInfo_t> ( pInfo )
 		, m_bVip ( pInfo->GetVip() )
 	{
 		ClientTaskInfo_t::m_iClients.fetch_add ( 1, std::memory_order_relaxed );
 		if ( m_bVip )
 			ClientTaskInfo_t::m_iVips.fetch_add ( 1, std::memory_order_relaxed );
+		pInfo->SetClientSession ( pSession );
+		m_tTasks.Enqueue ( (ClientTaskInfo_t*)m_pInfo );
 	}
 
 	~ScopedClientInfo_c()
 	{
+		Dequeue();
 		if ( m_bVip )
 			ClientTaskInfo_t::m_iVips.fetch_sub ( 1, std::memory_order_relaxed );
 		ClientTaskInfo_t::m_iClients.fetch_sub ( 1, std::memory_order_relaxed );
 	}
+
+	void Dequeue()
+	{
+		m_pInfo->SetClientSession ( nullptr );
+		m_pInfo->SetTaskState ( TaskState_e::RETIRED );
+		m_tTasks.Remove ( (ClientTaskInfo_t*)m_pInfo );
+	}
 };
+
+TaskSlist_c ScopedClientInfo_c::m_tTasks;
+
+void IterateTasks ( TaskIteratorFn&& fnHandler )
+{
+	ScopedClientInfo_c::m_tTasks.IterateTasks ( std::move ( fnHandler ) );
+}
 
 
 void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * _pLoop )
@@ -235,26 +303,13 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 			case Proto_e::SPHINXSE:
 			case Proto_e::HTTPS:
 			case Proto_e::HTTP :
+			case Proto_e::MYSQL41:
 			{
 				Threads::Coro::Go ( [pRawBuf = pBuf.release(), tConn, _pInfo = pClientInfo.release(), eProto ] () mutable
 					{
-						ScopedClientInfo_c pInfo { _pInfo }; // make visible task info
-						ClientSession_c tSession;			 // session variables and state (shorter lifetime than ClientInfo's)
-						pInfo->SetClientSession ( &tSession );
+						ClientSession_c tSession;						// session variables and state (shorter lifetime than ClientInfo's)
+						ScopedClientInfo_c pInfo { _pInfo, &tSession }; // make visible task info
 						MultiServe ( std::unique_ptr<AsyncNetBuffer_c> ( pRawBuf ), tConn, eProto );
-						pInfo->SetClientSession ( nullptr );
-					}, fnMakeScheduler () );
-				break;
-			}
-			case Proto_e::MYSQL41:
-			{
-				Threads::Coro::Go ( [pRawBuf = pBuf.release(), _pInfo = pClientInfo.release() ] () mutable
-					{
-						ScopedClientInfo_c pInfo { _pInfo }; // make visible task info
-						ClientSession_c tSession;			 // session variables and state (shorter lifetime than ClientInfo's)
-						pInfo->SetClientSession( &tSession );
-						SqlServe ( std::unique_ptr<AsyncNetBuffer_c> ( pRawBuf ) );
-						pInfo->SetClientSession ( nullptr );
 					}, fnMakeScheduler () );
 				break;
 			}

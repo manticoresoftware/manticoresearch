@@ -89,6 +89,8 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 		tIn.DiscardProcessed ( -1 ); // -1 means 'force flush'
 		tParser.Reinit();
 
+		tSess.SetKilled ( false );
+
 		// read HTTP header
 		while ( !tParser.ParseHeader ( tIn.Tail() ) )
 		{

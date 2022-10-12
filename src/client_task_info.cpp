@@ -26,6 +26,7 @@ DEFINE_RENDER ( ClientTaskInfo_t )
 	dDst.m_iConnID = tInfo.m_iConnID;
 	dDst.m_eTaskState = tInfo.m_eTaskState;
 	dDst.m_eProto = tInfo.m_eProto;
+	dDst.m_bKilled = tInfo.m_bKilled;
 	dDst.m_sProto << ProtoName ( tInfo.m_eProto );
 	dDst.m_sChain << "Conn ";
 	if ( tInfo.m_bSsl )

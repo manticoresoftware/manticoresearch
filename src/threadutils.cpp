@@ -37,6 +37,7 @@ const char* TaskStateName ( TaskState_e eState )
 		case TaskState_e::NET_WRITE: return "net_write";
 		case TaskState_e::QUERY: return "query";
 		case TaskState_e::NET_IDLE: return "net_idle";
+		case TaskState_e::RETIRED: return "- retired";
 	}
 	return "unknown";
 }
@@ -1294,21 +1295,17 @@ class IterationHandler_c : public Threads::details::SchedulerOperation_t
 		}
 	};
 
-	IteratorsQueue_t & g_dIteratorsList ()
-	{
-		static IteratorsQueue_t dIteratorsList;
-		return dIteratorsList;
-	}
+	IteratorsQueue_t g_dIteratorsList;
 }
 
 void Threads::RegisterIterator ( ThreadIteratorFN fnIterator )
 {
-	g_dIteratorsList ().RegisterIterator ( std::move ( fnIterator ) );
+	g_dIteratorsList.RegisterIterator ( std::move ( fnIterator ) );
 }
 
 void Threads::IterateActive ( ThreadFN fnHandler )
 {
-	g_dIteratorsList ().IterateActive ( std::move ( fnHandler ) );
+	g_dIteratorsList.IterateActive ( std::move ( fnHandler ) );
 }
 
 Threads::Scheduler_i * MakeSingleThreadExecutor ( int iMaxThreads, const char * szName )

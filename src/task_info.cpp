@@ -101,21 +101,27 @@ void RenderPublicTaskInfo ( const void * pSrc, PublicThreadDesc_t & dDst, BYTE e
 		pInfos[eType] ( pSrc, dDst );
 }
 
-PublicThreadDesc_t GatherPublicTaskInfo ( const Threads::LowThreadDesc_t * pSrc, int iCols )
+void GatherPublicTaskInfo ( PublicThreadDesc_t& dDst, const std::atomic<void*>& pTask )
+{
+	hazard::Guard_c tGuard;
+	auto pSrcInfo = (TaskInfo_t*)tGuard.Protect ( pTask );
+	while ( pSrcInfo )
+	{
+		RenderPublicTaskInfo ( pSrcInfo, dDst, pSrcInfo->m_eType );
+		pSrcInfo = (TaskInfo_t*)tGuard.Protect ( pSrcInfo->m_pPrev );
+	}
+	tGuard.Release();
+}
+
+
+PublicThreadDesc_t GatherPublicThreadInfo ( const Threads::LowThreadDesc_t * pSrc, int iCols )
 {
 	PublicThreadDesc_t dDst;
 	if (!pSrc)
 		return dDst;
 
 	dDst.m_iDescriptionLimit = iCols; // works as call-back
-	hazard::Guard_c tGuard;
-	auto pSrcInfo = (TaskInfo_t *) tGuard.Protect ( pSrc->m_pTaskInfo );
-	while ( pSrcInfo )
-	{
-		RenderPublicTaskInfo ( pSrcInfo, dDst, pSrcInfo->m_eType );
-		pSrcInfo = (TaskInfo_t *) tGuard.Protect ( pSrcInfo->m_pPrev );
-	}
-	tGuard.Release();
+	GatherPublicTaskInfo ( dDst, pSrc->m_pTaskInfo );
 	CopyBasicThreadInfo ( pSrc, dDst );
 	return dDst;
 }

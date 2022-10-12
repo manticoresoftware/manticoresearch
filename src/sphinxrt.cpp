@@ -6861,6 +6861,12 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 				bInterrupt.store ( true, std::memory_order_relaxed );
 			}
 
+			if ( session::GetKilled() )
+			{
+				tThMeta.m_sWarning = "query was killed";
+				bInterrupt.store ( true, std::memory_order_relaxed );
+			}
+
 			if ( tThMeta.m_sWarning.IsEmpty() && !tChunkMeta.m_sWarning.IsEmpty() )
 				tThMeta.m_sWarning = tChunkMeta.m_sWarning;
 
@@ -7044,6 +7050,12 @@ static bool PerformFullscan ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 			if ( sph::TimeExceeded ( tmMaxTimer ) )
 			{
 				sWarning = "query time exceeded max_query_time";
+				return true;
+			}
+
+			if ( session::GetKilled() )
+			{
+				sWarning = "query was killed";
 				return true;
 			}
 		}

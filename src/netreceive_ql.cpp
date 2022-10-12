@@ -955,8 +955,6 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	// to display 'compressed' flag, if any.
 	auto pCompressedFlag = PublishTaskInfo ( new QlCompressedInfo_t );
 
-	tSess.SetProto ( Proto_e::MYSQL41 );
-
 	// non-vip connections in maintainance should be already rejected on accept
 	assert ( !g_bMaintenance || tSess.GetVip() );
 
@@ -996,6 +994,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	int iTimeoutS = -1;
 	do
 	{
+		tSess.SetKilled ( false );
 		// check for updated timeout
 		auto iCurrentTimeout = tSess.GetTimeoutS(); // by default -1, means 'default'
 		if ( iCurrentTimeout<0 )

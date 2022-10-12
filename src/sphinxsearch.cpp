@@ -18,6 +18,7 @@
 #include "attribute.h"
 #include "conversion.h"
 #include "dict/dict_entry.h"
+#include "client_task_info.h"
 
 #include <math.h>
 

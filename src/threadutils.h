@@ -29,6 +29,7 @@ enum class TaskState_e
 	NET_WRITE,
 	QUERY,
 	NET_IDLE,
+	RETIRED,
 };
 
 enum class Proto_e

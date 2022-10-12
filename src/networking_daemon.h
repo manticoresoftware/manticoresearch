@@ -43,7 +43,6 @@ struct ISphNetAction :  NetPollEvent_t
 	/// @param pLoop		where you can put your derived action (say, Accept -> SqlServe )
 	/// timer is always removed when processing.
 	/// If it is timeout - the event is also already removed from the poller.
-	/// timer is always removed when processing. If it is timeout - the event is also already removed from the poller.
 	virtual void		Process ( DWORD uGotEvents, CSphNetLoop * pLoop ) = 0;
 
 	/// invoked when CSphNetLoop with this action destroying

@@ -61,6 +61,8 @@ void Detached::MakeAloneIteratorAvailable ()
 //#endif
 }
 
+static int64_t g_tmShutdownAllAlonesDelta = 3; // max allowed wait in seconds
+
 void Detached::ShutdownAllAlones()
 {
 #if !_WIN32
@@ -70,6 +72,9 @@ void Detached::ShutdownAllAlones()
 		iThreads = g_dDetachedThreads().GetLength();
 	}
 	int iTurn = 1;
+
+	int64_t tmStart = sphMicroTimer();
+	int64_t tmEnd = tmStart + g_tmShutdownAllAlonesDelta * 1000000;
 
 	while ( iThreads > 0 )
 	{
@@ -109,6 +114,13 @@ void Detached::ShutdownAllAlones()
 		}
 
 		++iTurn;
+
+		int64_t tmCur = sphMicroTimer(); 
+		if ( tmCur>tmEnd )
+		{
+			sphWarning ( "ShutdownAllAlones exits by timeout (%.3f seconds) but still has %d alone threads", ( (tmCur-tmStart)/1000000.0f ), iThreads );
+			break;
+		}
 	}
 #endif
 }

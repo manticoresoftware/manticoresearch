@@ -1221,8 +1221,8 @@ public:
 
 	virtual Docstore_i *			GetDocstore() const { return nullptr; }
 	virtual columnar::Columnar_i *	GetColumnar() const { return nullptr; }
-	virtual DWORD *					GetRawAttrs() const { return nullptr; }
-	virtual BYTE *					GetRawBlobAttrs() const { return nullptr; }
+	virtual const DWORD *			GetRawAttrs() const { return nullptr; }
+	virtual const BYTE *			GetRawBlobAttrs() const { return nullptr; }
 	virtual bool					AlterSI ( CSphString & sError ) { return true; }
 
 public:

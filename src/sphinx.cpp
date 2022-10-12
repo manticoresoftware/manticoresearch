@@ -1389,8 +1389,8 @@ private:
 
 	Docstore_i *				GetDocstore() const override { return m_pDocstore.get(); }
 	columnar::Columnar_i *		GetColumnar() const override { return m_pColumnar.get(); }
-	DWORD *						GetRawAttrs() const override { return m_tAttr.GetWritePtr(); }
-	BYTE *						GetRawBlobAttrs() const override { return m_tBlobAttrs.GetWritePtr(); }
+	const DWORD *				GetRawAttrs() const override { return m_tAttr.GetReadPtr(); }
+	const BYTE *				GetRawBlobAttrs() const override { return m_tBlobAttrs.GetReadPtr(); }
 	bool						AlterSI ( CSphString & sError ) override;
 };
 

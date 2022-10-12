@@ -1731,7 +1731,7 @@ void AgentConn_t::SendingState ()
 	{
 		track_processing_time ( *this );
 		State ( Agent_e::HEALTHY );
-		m_iPoolerTimeoutUS = sphMicroTimer () + m_iMyQueryTimeoutMs * 1000;
+		m_iPoolerTimeoutUS = MonoMicroTimer() + m_iMyQueryTimeoutMs * 1000;
 		LazyDeleteOrChange ( m_iPoolerTimeoutUS ); // assign new time value, don't touch the handler
 	}
 }
@@ -2326,7 +2326,7 @@ void AgentConn_t::StartRemoteLoopTry ()
 			{
 				// can't start right now; need to postpone until timeout
 				sphLogDebugA ( "%d postpone DoQuery() for %d msecs", m_iStoreTag, m_iDelay );
-				LazyTask ( sphMicroTimer () + 1000 * m_iDelay, false );
+				LazyTask ( MonoMicroTimer () + 1000 * m_iDelay, false );
 				return;
 			}
 		}
@@ -2343,13 +2343,14 @@ bool AgentConn_t::DoQuery()
 {
 	sphLogDebugA ( "%d DoQuery() ref=%d", m_iStoreTag, ( int ) GetRefcount () );
 	auto iNow = sphMicroTimer ();
+	auto iMonoNow = MonoMicroTimer();
 	if ( m_iSock>=0 )
 	{
 		sphLogDebugA ( "%d branch for established(%d). Timeout " INT64_FMT, m_iStoreTag, m_iSock, m_iMyQueryTimeoutMs );
 		m_bConnectHandshake = false;
 		m_pReplyCur += sizeof ( int );
 		m_iStartQuery = iNow; /// copied from old behaviour
-		m_iPoolerTimeoutUS = iNow + m_iMyQueryTimeoutMs * 1000;
+		m_iPoolerTimeoutUS = iMonoNow + m_iMyQueryTimeoutMs * 1000;
 		return SendQuery ();
 	}
 
@@ -2366,7 +2367,7 @@ bool AgentConn_t::DoQuery()
 	}
 
 	sphLogDebugA ( "%d branch for not established. Timeout " INT64_FMT, m_iStoreTag, m_iMyQueryTimeoutMs );
-	m_iPoolerTimeoutUS = iNow + 1000 * m_iMyConnectTimeoutMs;
+	m_iPoolerTimeoutUS = iMonoNow + 1000 * m_iMyConnectTimeoutMs;
 	if ( !m_tDesc.m_bNeedResolve )
 		return EstablishConnection ();
 
@@ -2401,7 +2402,7 @@ bool AgentConn_t::EstablishConnection ()
 	// first check if we're in bounds of timeout.
 	// usually it is done by outside callback, however in case of deffered DNS we may be here out of sync and so need
 	// to check it explicitly.
-	if ( m_iPoolerTimeoutUS<sphMicroTimer () )
+	if ( m_iPoolerTimeoutUS < MonoMicroTimer() )
 		return Fatal ( eConnectFailures, "connect timeout reached resolving address for %s", m_tDesc.m_sAddr.cstr () );
 
 	if ( m_tDesc.m_iFamily==AF_INET && !m_tDesc.m_uAddr )
@@ -3452,7 +3453,7 @@ private:
 		{
 			pTask->m_iTimeoutTimeUS = std::exchange ( pTask->m_iPlannedTimeout, 0 );
 			m_dTimeouts.Change ( pTask );
-			sphLogDebugL ( "L change/add timeout for %p, " INT64_FMT " (" INT64_FMT ") is changed one", pTask, pTask->m_iTimeoutTimeUS, ( pTask->m_iTimeoutTimeUS - sphMicroTimer () ) );
+			sphLogDebugL ( "L change/add timeout for %p, " INT64_FMT " (" INT64_FMT ") is changed one", pTask, pTask->m_iTimeoutTimeUS, ( pTask->m_iTimeoutTimeUS - MonoMicroTimer () ) );
 			sphLogDebugL ( "%s", m_dTimeouts.DebugDump ( "L " ).cstr () );
 		}
 	}
@@ -3509,7 +3510,7 @@ private:
 			auto* pTask = ( TaskNet_t* ) m_dTimeouts.Root ();
 			assert ( pTask->m_iTimeoutTimeUS>0 );
 
-			m_iNextTimeoutUS = pTask->m_iTimeoutTimeUS - sphMicroTimer ();
+			m_iNextTimeoutUS = pTask->m_iTimeoutTimeUS - MonoMicroTimer ();
 			if ( m_iNextTimeoutUS>0 )
 				return bHasTimeout;
 
@@ -3948,7 +3949,7 @@ public:
 			auto * pNetEvent = (EnqueuedTimeout_t *) m_dTimeouts.Root ();
 			assert ( pNetEvent->m_iTimeoutTimeUS>0 );
 
-			auto iNextTimeoutUS = pNetEvent->m_iTimeoutTimeUS - sphMicroTimer();
+			auto iNextTimeoutUS = pNetEvent->m_iTimeoutTimeUS - MonoMicroTimer();
 			if ( iNextTimeoutUS > iGranularity )
 				return iNextTimeoutUS;
 			else

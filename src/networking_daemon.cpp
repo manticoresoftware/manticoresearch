@@ -228,7 +228,7 @@ private:
 		// 3k qps for net-loop without spin-wait
 		// 5k qps for net-loop with spin-wait
 		int64_t iWaitUS = 0LL;
-		if ( g_tmWaitUS < 0 || ( sphMicroTimer() - tmLastWaitUS > g_tmWaitUS ) )
+		if ( g_tmWaitUS < 0 || ( MonoMicroTimer() - tmLastWaitUS > g_tmWaitUS ) )
 			iWaitUS = m_pWakeup ? WAIT_UNTIL_TIMEOUT : 1000LL;
 
 		m_tPrf.StartPoll ();
@@ -243,7 +243,7 @@ private:
 	{
 		auto _ = PublishTaskInfo ( new ListenTaskInfo_t );
 		pMyInfo ()->m_uWorks = m_dWorkInternal.GetLength();
-		int64_t tmLastWaitUS = sphMicroTimer();
+		int64_t tmLastWaitUS = MonoMicroTimer();
 		while ( !sphInterrupted() )
 		{
 			m_tPrf.Start();
@@ -282,7 +282,7 @@ private:
 			iProcessed += RemoveOutdated ();
 
 			if ( iProcessed )
-				tmLastWaitUS = sphMicroTimer();
+				tmLastWaitUS = MonoMicroTimer();
 			m_tPrf.End();
 		}
 		m_tWorkerFinished.SetEvent ();
@@ -292,7 +292,7 @@ private:
 	int RemoveOutdated () REQUIRES ( NetPoollingThread )
 	{
 		pMyInfo ()->m_eThdState = NetloopState_e::REMOVE_OUTDATED;
-		int64_t tmNowUS = sphMicroTimer();
+		int64_t tmNowUS = MonoMicroTimer();
 		m_tPrf.StartRemove();
 		int iRemoved = 0;
 
@@ -498,7 +498,7 @@ void SockWrapper_c::Impl_c::NetLoopDestroying () REQUIRES ( NetPoollingThread )
 void SockWrapper_c::Impl_c::EngageWaiterAndYield ( int64_t tmTimeUntilUs )
 {
 	assert ( m_pNetLoop );
-	sphLogDebugv ( "Coro::YieldWith (m_iEvent=%u), timeout %d", m_uNetEvents, int(tmTimeUntilUs-sphMicroTimer ()) );
+	sphLogDebugv ( "Coro::YieldWith (m_iEvent=%u), timeout %d", m_uNetEvents, int(tmTimeUntilUs-MonoMicroTimer ()) );
 	m_iTimeoutTimeUS = tmTimeUntilUs;
 	if ( !m_fnWakeFromPoll ) // must be set here, NOT in ctr (since m.b. constructed in different ctx)
 		m_fnWakeFromPoll = Threads::CurrentRestarter ();
@@ -536,13 +536,13 @@ void SockWrapper_c::Impl_c::Process ( DWORD uGotEvents ) REQUIRES ( NetPoollingT
 // classic version - blocking via sphPoll
 int SockWrapper_c::Impl_c::SockPollClassic ( int64_t tmTimeUntilUs, bool bWrite )
 {
-	int64_t tmMicroLeft = ( tmTimeUntilUs-sphMicroTimer () );
+	int64_t tmMicroLeft = ( tmTimeUntilUs - MonoMicroTimer() );
 	if ( tmMicroLeft<0 )
 		tmMicroLeft = 0;
 
 	Threads::IdleTimer_t _;
 	int iRes = sphPoll ( m_iSock, tmMicroLeft, bWrite );
-	sphLogDebugv ( "sphPoll for alone returned %d in " INT64_FMT " Us", iRes, tmMicroLeft-tmTimeUntilUs+sphMicroTimer() );
+	sphLogDebugv ( "sphPoll for alone returned %d in " INT64_FMT " Us", iRes, tmMicroLeft - tmTimeUntilUs + MonoMicroTimer() );
 	return iRes;
 }
 
@@ -709,7 +709,7 @@ static bool SyncSend ( SockWrapper_c* pSock, const char * pBuffer, int64_t iLen)
 
 	sphLogDebugv ( "AsyncSend " INT64_FMT " bytes", iLen );
 
-	auto iTimeoutUntilUs = sphMicroTimer () + pSock->GetWTimeoutUS();
+	auto iTimeoutUntilUs = MonoMicroTimer () + pSock->GetWTimeoutUS();
 	do
 	{
 		auto iRes = pSock->SockSend ( pBuffer, iLen );
@@ -777,7 +777,7 @@ static int SyncSockRead ( SockWrapper_c * pSock, BYTE* pBuf, int iLen, int iSpac
 	if ( !iLen )
 		return iReceived;
 
-	int64_t tmMaxTimer = sphMicroTimer ()+Max ( S2US, pSock->GetTimeoutUS () ); // in microseconds
+	int64_t tmMaxTimer = MonoMicroTimer()+Max ( S2US, pSock->GetTimeoutUS () ); // in microseconds
 
 	int iErr, iRes;
 	while ( iLen>0 )
@@ -789,10 +789,10 @@ static int SyncSockRead ( SockWrapper_c * pSock, BYTE* pBuf, int iLen, int iSpac
 		// Ctrl-C will not interrupt select on Windows, so let's handle that manually
 		// forcibly limit select() to 100 ms, and check flag afterwards
 		if ( bIntr )
-			tmNextStopUs = Min ( tmMaxTimer, sphMicroTimer () + 100000 );
+			tmNextStopUs = Min ( tmMaxTimer, MonoMicroTimer () + 100000 );
 #endif
 
-		if ( ( tmNextStopUs - sphMicroTimer() )<=0 )
+		if ( ( tmNextStopUs - MonoMicroTimer() )<=0 )
 			break; // timed out
 
 		// wait until there is data

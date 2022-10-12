@@ -965,6 +965,9 @@ In addition to common highlighting options, several synonyms are available for J
 
 #### fields
 `fields` object contains attribute names with options. It can also be an array of field names (without any options).
+
+Note, by default the highlighting works the way it tries to highlight the results following the full-text query. I.e. in a general case when you don't specify fields to highlight the highlight is based on your full-text query, but if you specify the fields to highlight it highlights only if the full-text query matches the selected fields.
+
 #### encoder
 `encoder` can be set to `default` or `html`. When set to `html`, retains html markup when highlighting. Works similar to `html_strip_mode=retain` option.
 
@@ -997,7 +1000,7 @@ POST /search
 $index->setName('books');
 $bool = new \Manticoresearch\Query\BoolQuery();
 $bool->must(new \Manticoresearch\Query\Match(['query' => 'one|robots'], 'content'));
- 
+
 $results = $index->search($bool)->highlight(['content'],['highlight_query'=>['match'=>['*'=>'polite distance']]])->get();
 foreach($results as $doc)
 {
@@ -1016,7 +1019,7 @@ foreach($results as $doc)
     }
 }
 ```
- 
+
 <!-- request Python -->
 ``` python
 res = searchApi.search({"index":"books","query":{"match":{"content":"one|robots"}},"highlight":{"fields":["content"],"highlight_query":{"match":{"*":"polite distance"}}}})
@@ -1061,7 +1064,7 @@ query.put("match",new HashMap<String,Object>(){{
 searchRequest.setQuery(query);
 highlight = new HashMap<String,Object>(){{
 put("fields",new String[] {"content","title"});
-put("highlight_query", 
+put("highlight_query",
     new HashMap<String,Object>(){{
         put("match", new HashMap<String,Object>(){{
             put("*","polite distance");
@@ -1104,7 +1107,7 @@ POST /search
 $index->setName('books');
 $bool = new \Manticoresearch\Query\BoolQuery();
 $bool->must(new \Manticoresearch\Query\Match(['query' => 'one|robots'], '*'));
- 
+
 $results = $index->search($bool)->highlight(['content','title'],['pre_tags'=>'before_','post_tags'=>'_after'])->get();
 foreach($results as $doc)
 {
@@ -1220,7 +1223,7 @@ POST /search
 $index->setName('books');
 $bool = new \Manticoresearch\Query\BoolQuery();
 $bool->must(new \Manticoresearch\Query\Match(['query' => 'one|robots'], '*'));
- 
+
 $results = $index->search($bool)->highlight(['content','title'],['no_match_size'=>0])->get();
 foreach($results as $doc)
 {
@@ -1332,7 +1335,7 @@ POST /search
 $index->setName('books');
 $bool = new \Manticoresearch\Query\BoolQuery();
 $bool->must(new \Manticoresearch\Query\Match(['query' => 'one|robots'], '*'));
- 
+
 $results = $index->search($bool)->highlight(['content','title'],['order'=>"score"])->get();
 foreach($results as $doc)
 {
@@ -1443,7 +1446,7 @@ POST /search
 $index->setName('books');
 $bool = new \Manticoresearch\Query\BoolQuery();
 $bool->must(new \Manticoresearch\Query\Match(['query' => 'one|robots'], '*'));
- 
+
 $results = $index->search($bool)->highlight(['content','title'],['fragment_size'=>100])->get();
 foreach($results as $doc)
 {
@@ -1550,7 +1553,7 @@ POST /search
 $index->setName('books');
 $bool = new \Manticoresearch\Query\BoolQuery();
 $bool->must(new \Manticoresearch\Query\Match(['query' => 'one|robots'], '*'));
- 
+
 $results = $index->search($bool)->highlight(['content','title'],['number_of_fragments'=>10])->get();
 foreach($results as $doc)
 {
@@ -1666,7 +1669,7 @@ POST /search
 $index->setName('books');
 $bool = new \Manticoresearch\Query\BoolQuery();
 $bool->must(new \Manticoresearch\Query\Match(['query' => 'one|robots'], '*'));
- 
+
 $results = $index->search($bool)->highlight(['content'=>['limit'=>50],'title'=>new \stdClass])->get();
 foreach($results as $doc)
 {
@@ -1780,7 +1783,7 @@ POST /search
 $index->setName('books');
 $bool = new \Manticoresearch\Query\BoolQuery();
 $bool->must(new \Manticoresearch\Query\Match(['query' => 'and first'], 'content'));
- 
+
 $results = $index->search($bool)->highlight(['content'=>['limit'=>50]],['limits_per_field'=>false])->get();
 foreach($results as $doc)
 {
@@ -1904,7 +1907,7 @@ CALL SNIPPETS(('this is my document text','this is my another text'), 'forum', '
 
 <!-- end -->
 
-Most options are the same as in the [HIGHLIGHT() function](../Searching/Highlighting.md). There are, however, several options that can only be used with `CALL SNIPPETS`. 
+Most options are the same as in the [HIGHLIGHT() function](../Searching/Highlighting.md). There are, however, several options that can only be used with `CALL SNIPPETS`.
 
 <!-- example CALL SNIPPETS load files -->
 The following options can be used to highlight text stored in separate files:

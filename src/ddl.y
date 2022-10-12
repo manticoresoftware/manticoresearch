@@ -50,9 +50,11 @@
 %token	TOK_MULTI64
 %token	TOK_NOT
 %token	TOK_PLUGIN
+%token	TOK_REBUILD
 %token	TOK_RECONFIGURE
 %token	TOK_RETURNS
 %token	TOK_RTINDEX
+%token	TOK_SECONDARY
 %token	TOK_SONAME
 %token	TOK_STORED
 %token	TOK_STRING
@@ -183,6 +185,12 @@ alter:
 			tStmt.m_eStmt = STMT_CLUSTER_ALTER_UPDATE;
 			pParser->ToString ( tStmt.m_sCluster, $3 );
 			pParser->ToString ( tStmt.m_sSetName, $5 );
+		}
+	| TOK_ALTER TOK_TABLE ident TOK_REBUILD TOK_SECONDARY
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_ALTER_REBUILD_SI;
+			pParser->ToString ( tStmt.m_sIndex, $3 );
 		}
 	;
 

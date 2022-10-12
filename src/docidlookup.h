@@ -56,7 +56,7 @@ class LookupReader_c
 {
 public:
 			LookupReader_c() = default;
-			LookupReader_c ( const BYTE * pData );
+			explicit LookupReader_c ( const BYTE * pData );
 
 
 	void	SetData ( const BYTE * pData );
@@ -245,5 +245,16 @@ private:
 
 CSphVector<RowidIterator_i *> CreateLookupIterator ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, const BYTE * pDocidLookup, uint32_t uTotalDocs );
 bool	WriteDocidLookup ( const CSphString & sFilename, const VecTraits_T<DocidRowidPair_t> & dLookup, CSphString & sError );
+
+struct CmpDocidLookup_fn
+{
+	static inline bool IsLess ( const DocidRowidPair_t & a, const DocidRowidPair_t & b )
+	{
+		if ( a.m_tDocID==b.m_tDocID )
+			return a.m_tRowID < b.m_tRowID;
+
+		return (uint64_t)a.m_tDocID < (uint64_t)b.m_tDocID;
+	}
+};
 
 #endif

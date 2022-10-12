@@ -338,38 +338,32 @@ class CSphNetLoop::Impl_c
 /////////////////////////////////////////////////////////////////////////////
 
 CSphNetLoop::CSphNetLoop ( const VecTraits_T<Listener_t> & dListeners )
-{
-	m_pImpl = new Impl_c ( dListeners, this );
-}
+	: m_pImpl { new Impl_c ( dListeners, this ) }
+{}
 
 CSphNetLoop::~CSphNetLoop ()
 {
-	SafeDelete ( m_pImpl );
 	sphLogDebugv ( "~CSphNetLoop() (%p) completed", this );
 }
 
 void CSphNetLoop::LoopNetPoll ()
 {
 	ScopedRole_c thPoll ( NetPoollingThread );
-	assert ( m_pImpl );
 	m_pImpl->LoopNetPoll();
 }
 
 void CSphNetLoop::StopNetLoop()
 {
-	assert ( m_pImpl );
 	m_pImpl->StopNetLoop ();
 };
 
 void CSphNetLoop::AddAction ( ISphNetAction * pElem ) EXCLUDES ( NetPoollingThread )
 {
-	assert ( m_pImpl );
 	m_pImpl->AddAction ( pElem );
 }
 
 void CSphNetLoop::RemoveEvent ( NetPollEvent_t * pEvent ) REQUIRES ( NetPoollingThread )
 {
-	assert ( m_pImpl );
 	m_pImpl->RemoveEvent ( pEvent );
 }
 

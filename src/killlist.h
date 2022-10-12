@@ -37,7 +37,7 @@ protected:
 	bool			Set ( RowID_t tRowID, DWORD * pData );
 	inline bool		IsSet ( RowID_t tRowID, const DWORD * pData ) const
 	{
-		if ( !m_bHaveDead )
+		if ( !m_bHaveDead || tRowID==INVALID_ROWID )
 			return false;
 
 		assert ( tRowID < m_uRows );
@@ -63,7 +63,7 @@ public:
 	bool		Set ( RowID_t tRowID );
 	inline bool	IsSet ( RowID_t tRowID ) const
 	{
-		return DeadRowMap_c::IsSet ( tRowID, m_tData.GetWritePtr() );
+		return DeadRowMap_c::IsSet ( tRowID, m_tData.GetReadPtr() );
 	}
 
 	int64_t		GetLengthBytes() const override;
@@ -124,7 +124,7 @@ public:
 		return true;
 	}
 
-	static inline void HintDocID ( DocID_t tDocID ) {}
+	static inline void HintDocID ( DocID_t ) {}
 
 private:
 	const DocID_t * m_pIterator {nullptr};
@@ -132,43 +132,49 @@ private:
 };
 
 
-template <typename TARGET, typename KILLER, typename MAP, typename FNHOOK>
-int KillByLookup ( TARGET & tTargetReader, KILLER & tKillerReader, MAP & tDeadRowMap, FNHOOK fnHook )
+template<typename READER1, typename READER2, typename FUNCTOR>
+void Intersect ( READER1& tReader1, READER2& tReader2, FUNCTOR&& fnFunctor )
 {
-	RowID_t tTargetRowID = INVALID_ROWID;
+	RowID_t tRowID1 = INVALID_ROWID;
+	DocID_t tDocID1 = 0, tDocID2 = 0;
+	bool bHaveDocs1 = tReader1.Read ( tDocID1, tRowID1 );
+	bool bHaveDocs2 = tReader2.ReadDocID ( tDocID2 );
 
-	DocID_t tKillerDocID = 0, tTargetDocID = 0;
-	bool bHaveKillerDocs = tKillerReader.ReadDocID ( tKillerDocID );
-	bool bHaveTargetDocs = tTargetReader.Read ( tTargetDocID, tTargetRowID );
-
-	int iKilled = 0;
-
-	while ( bHaveKillerDocs && bHaveTargetDocs )
+	while ( bHaveDocs1 && bHaveDocs2 )
 	{
-		if ( tKillerDocID < tTargetDocID )
+		if ( tDocID1 < tDocID2 )
 		{
-			tKillerReader.HintDocID ( tTargetDocID );
-			bHaveKillerDocs = tKillerReader.ReadDocID ( tKillerDocID );
-		}
-		else if ( tKillerDocID > tTargetDocID )
+			tReader1.HintDocID ( tDocID2 );
+			bHaveDocs1 = tReader1.Read ( tDocID1, tRowID1 );
+		} else if ( tDocID1 > tDocID2 )
 		{
-			tTargetReader.HintDocID ( tKillerDocID );
-			bHaveTargetDocs = tTargetReader.Read ( tTargetDocID, tTargetRowID );
-		}
-		else
+			tReader2.HintDocID ( tDocID1 );
+			bHaveDocs2 = tReader2.ReadDocID ( tDocID2 );
+		} else
 		{
-			if ( tDeadRowMap.Set ( tTargetRowID ) )
-			{
-				fnHook ( tKillerDocID );
-				++iKilled;
-			}
-
-			bHaveKillerDocs = tKillerReader.ReadDocID ( tKillerDocID );
-			bHaveTargetDocs = tTargetReader.Read ( tTargetDocID, tTargetRowID );
+			fnFunctor ( tRowID1, tDocID1, tReader2 );
+			bHaveDocs1 = tReader1.Read ( tDocID1, tRowID1 );
+			bHaveDocs2 = tReader2.ReadDocID ( tDocID2 );
 		}
 	}
+}
 
-	return iKilled;
+template<typename TARGETREADER, typename KILLERREADER, typename FNACTION>
+int ProcessIntersected ( TARGETREADER& tReader1, KILLERREADER& tReader2, FNACTION fnAction )
+{
+	int iProcessed = 0;
+	Intersect ( tReader1, tReader2, [&iProcessed, fnAction = std::move ( fnAction )] ( RowID_t tRowID, DocID_t tDocID, KILLERREADER& ) {
+		if ( fnAction ( tRowID, tDocID ) )
+			++iProcessed;
+	} );
+
+	return iProcessed;
+}
+
+template <typename TARGET, typename KILLER, typename MAP>
+int KillByLookup ( TARGET & tTargetReader, KILLER & tKillerReader, MAP & tDeadRowMap )
+{
+	return ProcessIntersected ( tTargetReader, tKillerReader, [&tDeadRowMap] ( RowID_t tRowID, DocID_t ) { return tDeadRowMap.Set ( tRowID ); } );
 }
 
 

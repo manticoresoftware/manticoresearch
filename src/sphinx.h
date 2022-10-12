@@ -537,7 +537,6 @@ struct CSphQuery
 	bool			m_bNotOnlyAllowed = false;	///< whether allow single full-text not operator
 	CSphString		m_sStore;					///< don't delete result, just store in given uservar by name
 
-	ISphTableFunc *	m_pTableFunc = nullptr;		///< post-query NOT OWNED, WILL NOT BE FREED in dtor.
 	CSphFilterSettings	m_tHaving;				///< post aggregate filtering (got applied only on master)
 
 	int				m_iSQLSelectStart = -1;	///< SQL parser helper
@@ -892,7 +891,7 @@ struct CSphMultiQueryArgs : public ISphNoncopyable
 
 struct RowToUpdateData_t
 {
-	const CSphRowitem*	m_pRow;	/// row in the index
+	RowID_t 			m_tRow; /// row in the index
 	int					m_iIdx;	/// idx in updateset
 };
 
@@ -905,33 +904,60 @@ struct PostponedUpdate_t
 	RowsToUpdateData_t		m_dRowsToUpdate;
 };
 
+struct UpdateContext_t;
+using BlockerFn = std::function<bool()>;
+
+// common attribute update code for both RT and plain indexes
 // an index or a part of an index that has its own row ids
 class IndexSegment_c
 {
 protected:
-	mutable IndexSegment_c * m_pKillHook = nullptr; // if set, killed docids will be emerged also here.
+	mutable IndexSegment_c* m_pKillHook = nullptr; // if set, killed docids will be emerged also here.
+	enum
+	{
+		ATTRS_UPDATED			= ( 1UL<<0 ),
+		ATTRS_BLOB_UPDATED		= ( 1UL<<1 ),
+		ATTRS_ROWMAP_UPDATED	= ( 1UL<<2 )
+	};
+
+private:
+	virtual bool		Update_WriteBlobRow ( UpdateContext_t & tCtx, RowID_t tRowID, ByteBlob_t tBlob,
+			int nBlobAttrs, const CSphAttrLocator & tBlobRowLoc, bool & bCritical, CSphString & sError ) {return false;};
+
+	static bool			Update_InplaceJson ( const RowsToUpdate_t& dRows, UpdateContext_t & tCtx, CSphString & sError, bool bDryRun );
+	bool				Update_Blobs ( const RowsToUpdate_t& dRows, UpdateContext_t & tCtx, bool & bCritical, CSphString & sError );
+	static void			Update_Plain ( const RowsToUpdate_t& dRows, UpdateContext_t & tCtx );
 
 public:
-	// stuff for dispatch races between changes and updates
-	mutable std::atomic<bool>		m_bAttrsBusy { false };
-	CSphVector<PostponedUpdate_t>	m_dPostponedUpdates;
+	virtual int			Kill ( DocID_t  /*tDocID*/ ) { return 0; }
+	virtual int			KillMulti ( const VecTraits_T<DocID_t> &  /*dKlist*/ ) { return 0; };
+	virtual int			CheckThenKillMulti ( const VecTraits_T<DocID_t>& dKlist, BlockerFn&& /*fnWatcher*/ ) { return KillMulti ( dKlist ); };
+	virtual				~IndexSegment_c() = default;
 
-public:
-	virtual int		Kill ( DocID_t tDocID ) { return 0; }
-	virtual int		KillMulti ( const VecTraits_T<DocID_t> & dKlist ) { return 0; };
-	virtual			~IndexSegment_c() {};
-
-	inline void SetKillHook ( IndexSegment_c * pKillHook ) const
+	inline void			SetKillHook ( IndexSegment_c * pKillHook ) const
 	{
 		m_pKillHook = pKillHook;
 	}
+
+public:
+	bool Update_UpdateAttributes ( const RowsToUpdate_t& dRows, UpdateContext_t& tCtx, bool& bCritical, CSphString& sError );
+
+	/// apply serie of updates, assuming them prepared (no need to full-scan attributes), and index is offline, i.e. no concurrency
+	virtual void UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t>& dPostUpdates ) {}
 
 	inline void ResetPostponedUpdates()
 	{
 		m_bAttrsBusy = false;
 		m_dPostponedUpdates.Reset();
 	}
+
+public:
+	// stuff for dispatch races between changes and updates
+	mutable std::atomic<bool>		m_bAttrsBusy { false };
+	CSphVector<PostponedUpdate_t>	m_dPostponedUpdates;
 };
+
+bool Update_CheckAttributes ( const CSphAttrUpdate& tUpd, const ISphSchema& tSchema, CSphString& sError );
 
 // helper - collects killed documents
 struct KillAccum_t final : public IndexSegment_c
@@ -966,7 +992,7 @@ struct UpdateContext_t
 	const HistogramContainer_c *			m_pHistograms {nullptr};
 	CSphRowitem *							m_pAttrPool {nullptr};
 	BYTE *									m_pBlobPool {nullptr};
-	IndexSegment_c *						m_pSegment {nullptr};
+	int 									m_iStride {0};
 
 	CSphFixedVector<UpdatedAttribute_t>		m_dUpdatedAttrs;	// manipulation schema (1 item per column of schema)
 
@@ -977,35 +1003,11 @@ struct UpdateContext_t
 
 
 	UpdateContext_t ( AttrUpdateInc_t & tUpd, const ISphSchema & tSchema );
+
+	void PrepareListOfUpdatedAttributes ( CSphString& sError );
+	bool HandleJsonWarnings ( int iUpdated, CSphString& sWarning, CSphString& sError ) const;
+	CSphRowitem* GetDocinfo ( RowID_t tRowID ) const;
 };
-
-
-// common attribute update code for both RT and plain indexes
-class IndexUpdateHelper_c
-{
-protected:
-	enum
-	{
-		ATTRS_UPDATED			= ( 1UL<<0 ),
-		ATTRS_BLOB_UPDATED		= ( 1UL<<1 ),
-		ATTRS_ROWMAP_UPDATED	= ( 1UL<<2 )
-	};
-
-	virtual				~IndexUpdateHelper_c() {}
-
-	virtual bool		Update_WriteBlobRow ( UpdateContext_t & tCtx, CSphRowitem * pDocinfo, const BYTE * pBlob,
-			int iLength, int nBlobAttrs, const CSphAttrLocator & tBlobRowLoc, bool & bCritical, CSphString & sError ) = 0;
-
-	static void			Update_PrepareListOfUpdatedAttributes ( UpdateContext_t & tCtx, CSphString & sError );
-	static bool			Update_InplaceJson ( const RowsToUpdate_t& dRows, UpdateContext_t & tCtx, CSphString & sError, bool bDryRun );
-	bool				Update_Blobs ( const RowsToUpdate_t& dRows, UpdateContext_t & tCtx, bool & bCritical, CSphString & sError );
-	static void			Update_Plain ( const RowsToUpdate_t& dRows, UpdateContext_t & tCtx );
-	static bool			Update_HandleJsonWarnings ( UpdateContext_t & tCtx, int iUpdated, CSphString & sWarning, CSphString & sError );
-
-public:
-	static bool			Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tSchema, CSphString & sError );
-};
-
 
 class DocstoreAddField_i;
 void SetupDocstoreFields ( DocstoreAddField_i & tFields, const CSphSchema & tSchema );
@@ -1046,6 +1048,7 @@ class CSphSource;
 struct CSphSourceStats;
 class DebugCheckError_i;
 struct AttrAddRemoveCtx_t;
+class Docstore_i;
 
 namespace SI
 {
@@ -1150,12 +1153,10 @@ public:
 	/// returns non-negative amount of actually found and updated records on success
 	/// on failure, -1 is returned and GetLastError() contains error message
 	int							UpdateAttributes ( AttrUpdateSharedPtr_t pUpd, bool & bCritical, CSphString & sError, CSphString & sWarning );
+	int							UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSphString & sError, CSphString & sWarning );
 
 	/// update accumulating state
-	virtual int					UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSphString & sError, CSphString & sWarning ) = 0;
-
-	/// apply serie of updates, assuming them prepared (no need to full-scan attributes), and index is offline, i.e. no concurrency
-	virtual void				UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & dUpdates, IndexSegment_c * pSeg ) = 0;
+	virtual int					CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritical, CSphString& sError, CSphString& sWarning, BlockerFn&& /*fnWatcher*/ ) = 0;
 
 	virtual Binlog::CheckTnxResult_t ReplayTxn ( Binlog::Blop_e eOp, CSphReader & tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCheck ) = 0;
 	/// saves memory-cached attributes, if there were any updates to them
@@ -1218,6 +1219,12 @@ public:
 	virtual HistogramContainer_c * Debug_GetHistograms() const { return nullptr; }
 	virtual SI::Index_i *		Debug_GetSI() const { return nullptr; }
 
+	virtual Docstore_i *			GetDocstore() const { return nullptr; }
+	virtual columnar::Columnar_i *	GetColumnar() const { return nullptr; }
+	virtual const DWORD *			GetRawAttrs() const { return nullptr; }
+	virtual const BYTE *			GetRawBlobAttrs() const { return nullptr; }
+	virtual bool					AlterSI ( CSphString & sError ) { return true; }
+
 public:
 	int64_t						m_iTID = 0;				///< last committed transaction id
 	int							m_iChunk = 0;
@@ -1264,6 +1271,7 @@ protected:
 };
 
 const CSphSourceStats& GetStubStats();
+bool CheckDocsCount ( int64_t iDocs, CSphString & sError );
 
 // dummy implementation which makes most of the things optional (makes all non-disk idxes much simpler)
 class CSphIndexStub : public CSphIndex
@@ -1286,8 +1294,7 @@ public:
 	void				GetStatus ( CSphIndexStatus* ) const override {}
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & tSettings, CSphString * ) const override { return false; }
 	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & ) const override { return true; }
-	int					UpdateAttributes ( AttrUpdateInc_t&, bool &, CSphString & , CSphString & ) override { return -1; }
-	void				UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & dUpdates, IndexSegment_c * pSeg ) override {}
+	int					CheckThenUpdateAttributes ( AttrUpdateInc_t&, bool &, CSphString & , CSphString &, BlockerFn&& ) override { return -1; }
 	Binlog::CheckTnxResult_t ReplayTxn ( Binlog::Blop_e, CSphReader &, CSphString &, Binlog::CheckTxn_fn&& ) override { return {}; }
 	bool				SaveAttributes ( CSphString & ) const override { return true; }
 	DWORD				GetAttributeStatus () const override { return 0; }

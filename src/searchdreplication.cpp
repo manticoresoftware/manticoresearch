@@ -664,6 +664,7 @@ static void UpdateGroupView ( const wsrep_view_info_t * pView, ReplicationCluste
 	if ( pCluster->m_sViewNodes!=sBuf.cstr() )
 	{
 		ScopedMutex_t tLock ( pCluster->m_tViewNodesLock );
+		sphLogDebugRpl ( "view nodes changed: %s > %s", sBuf.cstr(), pCluster->m_sViewNodes.cstr() );
 		pCluster->m_sViewNodes = sBuf.cstr();
 	}
 }
@@ -1046,6 +1047,7 @@ static bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sErro
 			sIndexes += sIndex.cstr();
 		sphLogDebugRpl ( "cluster '%s', new %d, indexes '%s', nodes '%s'", tArgs.m_pCluster->m_sName.cstr(), (int)tArgs.m_bNewCluster, sIndexes.cstr(), tArgs.m_pCluster->m_sClusterNodes.scstr() );
 	}
+	tArgs.m_pCluster->m_sViewNodes = sIncoming; // till view_handler_cb got called by Galera
 
 	auto pRecvArgs = std::make_unique<ReceiverCtx_t>();
 	pRecvArgs->m_pCluster = tArgs.m_pCluster;
@@ -1452,6 +1454,7 @@ void ReplicateClustersDelete() EXCLUDES ( g_tClustersLock )
 static void DeleteClusterByName ( const CSphString& sCluster ) EXCLUDES ( g_tClustersLock )
 {
 	Threads::SccWL_t wLock( g_tClustersLock );
+	sphLogDebugRpl ( "deleting cluster %s", sCluster.cstr() );
 	g_hClusters.Delete ( sCluster );
 }
 
@@ -2164,7 +2167,7 @@ static bool ValidateUpdate ( const ReplicationCommand_t & tCmd, CSphString & sEr
 	const ISphSchema& tSchema = RIdx_c ( pServed )->GetMatchSchema();
 
 	assert ( tCmd.m_pUpdateAPI );
-	return IndexUpdateHelper_c::Update_CheckAttributes ( *tCmd.m_pUpdateAPI, tSchema, sError );
+	return Update_CheckAttributes ( *tCmd.m_pUpdateAPI, tSchema, sError );
 }
 
 CommitMonitor_c::~CommitMonitor_c()
@@ -3764,6 +3767,8 @@ bool RemoteClusterDelete ( const CSphString & sCluster, CSphString & sError ) EX
 			sError.SetSprintf ( "unknown cluster '%s' ", sCluster.cstr() );
 			return false;
 		}
+
+		sphLogDebugRpl ( "remote delte cluster %s", sCluster.cstr() );
 
 		pCluster = g_hClusters[sCluster];
 
@@ -5623,11 +5628,12 @@ bool ClusterGetNodes ( const CSphString & sClusterNodes, const CSphString & sClu
 			// FIXME!!! no need to wait all replies in case any node get nodes list
 			// just break on 1st successful reply
 			// however need a way for distributed loop to finish as it can not break early
+			// FIXME!!! validate the nodes are the same
 			const PQRemoteReply_t & tRes = PQRemoteBase_c::GetRes ( *pAgent );
-			sNodes = tRes.m_sNodes;
+			if ( sNodes.IsEmpty() && !tRes.m_sNodes.IsEmpty() )
+				sNodes = tRes.m_sNodes;
 		}
 	}
-
 
 	bool bGotNodes = ( !sNodes.IsEmpty() );
 	if ( !bGotNodes )

@@ -4,6 +4,10 @@
 
 ### Major Changes
 * Improved [cost-based optimizer](../Searching/Cost_based_optimizer.md#Cost-based-optimizer) which may increase query response time in many cases.
+* `ALTER TABLE <table name> REBUILD SECONDARY`
+* New tool `manticore-backup` for [backing up and restoring Manticore instance](../Securing_and_compacting_an_index/Backup_and_restore.md)
+* `KILL`
+* Added [FREEZE/UNFREEZE](../Securing_and_compacting_an_index/Freezing_a_table.md) to prepare a real-time/plain table for a backup
 
 ### Minor changes
 * Queries with stateful UDFs are now forced to be executed in a single thread
@@ -13,7 +17,7 @@
     * upgrade Manticore version
     * remove `.spidx` index files
     * start Manticore back
-    * use `ALTER TABLE <table name> REBUILD SECONDARY` (not yet implemented❗) to recover secondary indexes
+    * use `ALTER TABLE <table name> REBUILD SECONDARY` to recover secondary indexes
   - If you are running a replication cluster, full cluster restart should be performed with removal of `.spidx` files and `ALTER TABLE <table name> REBUILD SECONDARY` on all the nodes. Read about [restarting a cluster](../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md#Restarting-a-cluster) for more details.
 * `SHOW SETTINGS`
 
@@ -363,7 +367,7 @@ sys	0m0.047s
 
   </details>
 
-- **[ALTER](Updating_index_schema.md) can add/remove a full-text field** (in RT mode). Previously it could only add/remove an attribute.
+- **[ALTER](Updating_table_schema_and_settings.md) can add/remove a full-text field** (in RT mode). Previously it could only add/remove an attribute.
 - 🔬 **Experimental: pseudo-sharding for full-scan queries** - allows to parallelize any non-full-text search query. Instead of preparing shards manually you can now just enable new option [searchd.pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) and expect up to `CPU cores` lower response time for non-full-text search queries. Note it can easily occupy all existing CPU cores, so if you care not only about latency, but throughput too - use it with caution.
 
 ### Minor changes

@@ -125,15 +125,14 @@ public:
 
 /// public iface
 DocsCollector_c::DocsCollector_c ( const CSphQuery& tQuery, bool bJson, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError )
-	: m_pImpl { new Impl_c ( tQuery, bJson, sIndex, pDesc, pError ) }
-{
-	assert ( m_pImpl );
-}
+	: m_pImpl { std::make_unique<Impl_c> ( tQuery, bJson, sIndex, pDesc, pError ) }
+{}
 
-DocsCollector_c::~DocsCollector_c()
-{
-	SafeDelete ( m_pImpl );
-}
+DocsCollector_c::~DocsCollector_c() = default;
+
+DocsCollector_c::DocsCollector_c ( DocsCollector_c&& rhs ) noexcept
+	: m_pImpl ( std::exchange ( rhs.m_pImpl, nullptr ) )
+{}
 
 bool DocsCollector_c::GetValuesChunk ( CSphVector<DocID_t>& dValues, int iValues )
 {

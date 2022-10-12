@@ -6091,12 +6091,12 @@ void QueueCreator_c::ReplaceGroupbyStrWithExprs ( CSphMatchComparatorState & tSt
 			const CSphColumnInfo & tAttr = tSorterSchema.GetAttr(iRemap);
 			const_cast<CSphColumnInfo &>(tAttr).m_eStage = SPH_EVAL_PRESORT;
 		}
-		else
+		else if ( !pGroupStrBase->IsColumnar() )
 		{
 			CSphString sRemapCol;
 			sRemapCol.SetSprintf ( "%s%s", g_sIntAttrPrefix, pGroupStrBase->m_sName.cstr() );
-
 			iRemap = tSorterSchema.GetAttrIndex ( sRemapCol.cstr() );
+
 			if ( iRemap==-1 )
 			{
 				CSphColumnInfo tRemapCol ( sRemapCol.cstr(), SPH_ATTR_STRINGPTR );
@@ -6108,10 +6108,13 @@ void QueueCreator_c::ReplaceGroupbyStrWithExprs ( CSphMatchComparatorState & tSt
 			}
 		}
 
-		tState.m_eKeypart[i] = SPH_KEYPART_STRINGPTR;
-		tState.m_tLocator[i] = tSorterSchema.GetAttr(iRemap).m_tLocator;
-		tState.m_dAttrs[i] = iRemap;
-		tState.m_dRemapped.BitSet ( i );
+		if ( iRemap!=-1 )
+		{
+			tState.m_eKeypart[i] = SPH_KEYPART_STRINGPTR;
+			tState.m_tLocator[i] = tSorterSchema.GetAttr(iRemap).m_tLocator;
+			tState.m_dAttrs[i] = iRemap;
+			tState.m_dRemapped.BitSet ( i );
+		}
 	}
 }
 

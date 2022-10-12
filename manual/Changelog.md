@@ -7,6 +7,7 @@
 * `ALTER TABLE <table name> REBUILD SECONDARY`
 * New tool `manticore-backup` for [backing up and restoring Manticore instance](../Securing_and_compacting_an_index/Backup_and_restore.md)
 * `KILL`
+* Added [FREEZE/UNFREEZE](../Securing_and_compacting_an_index/Freezing_a_table.md) to prepare a real-time/plain table for a backup
 
 ### Minor changes
 * Queries with stateful UDFs are now forced to be executed in a single thread

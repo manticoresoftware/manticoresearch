@@ -2167,7 +2167,7 @@ static bool ValidateUpdate ( const ReplicationCommand_t & tCmd, CSphString & sEr
 	const ISphSchema& tSchema = RIdx_c ( pServed )->GetMatchSchema();
 
 	assert ( tCmd.m_pUpdateAPI );
-	return IndexUpdateHelper_c::Update_CheckAttributes ( *tCmd.m_pUpdateAPI, tSchema, sError );
+	return Update_CheckAttributes ( *tCmd.m_pUpdateAPI, tSchema, sError );
 }
 
 CommitMonitor_c::~CommitMonitor_c()

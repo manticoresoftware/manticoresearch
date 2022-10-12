@@ -156,7 +156,7 @@ DWORD CSphGlobalIDF::GetDocs ( const CSphString& sWord ) const
 	int64_t iStart = 0;
 	int64_t iEnd = m_iTotalWords - 1;
 
-	const IDFWord_t* pWords = ( IDFWord_t* ) m_pWords.GetWritePtr ();
+	auto pWords = (const IDFWord_t*)m_pWords.GetReadPtr();
 
 	if ( m_pHash.GetLengthBytes ())
 	{

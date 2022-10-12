@@ -250,10 +250,11 @@ public:
 	DeadRowMap_Ram_c				m_tDeadRowMap;
 	std::unique_ptr<DocstoreRT_i>	m_pDocstore;
 	std::unique_ptr<ColumnarRT_i>	m_pColumnar;
+	const ISphSchema&				m_tSchema;
 
 	mutable bool					m_bConsistent{false};
 
-							explicit RtSegment_t ( DWORD uDocs );
+							RtSegment_t ( DWORD uDocs, const ISphSchema& tSchema );
 
 	int64_t					GetUsedRam() const;				// get cached ram usage counter
 	void					UpdateUsedRam() const;			// recalculate ram usage, update index ram counter
@@ -262,6 +263,7 @@ public:
 
 	const CSphRowitem * 	FindAliveRow ( DocID_t tDocid ) const;
 	const CSphRowitem *		GetDocinfoByRowID ( RowID_t tRowID ) const;
+	RowID_t					GetAliveRowidByDocid ( DocID_t tDocid ) const;
 	RowID_t					GetRowidByDocid ( DocID_t tDocID ) const;
 
 	int						Kill ( DocID_t tDocID ) override;
@@ -270,12 +272,16 @@ public:
 	void					SetupDocstore ( const CSphSchema * pSchema );
 	void					BuildDocID2RowIDMap ( const CSphSchema & tSchema );
 
+	void					MaybeAddPostponedUpdate ( const RowsToUpdate_t& dRows, const UpdateContext_t& tCtx );
+	void					UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t>& dPostUpdates ) final;
+
 private:
 	mutable int64_t			m_iUsedRam = 0;			///< ram usage counter
 
 							~RtSegment_t () final;
 
 	void					FixupRAMCounter ( int64_t iDelta ) const;
+	bool					Update_WriteBlobRow ( UpdateContext_t& tCtx, RowID_t tRowID, ByteBlob_t tBlob, int nBlobAttrs, const CSphAttrLocator& tBlobRowLoc, bool& bCritical, CSphString& sError ) final;
 };
 
 using RtSegmentRefPtf_t = CSphRefcountedPtr<RtSegment_t>;

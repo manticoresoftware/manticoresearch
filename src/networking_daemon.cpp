@@ -116,8 +116,8 @@ class CSphNetLoop::Impl_c
 
 	CSphVector<ISphNetAction *> 	m_dWorkInternal GUARDED_BY ( NetPoollingThread );
 	CSphVector<ISphNetAction *>		m_dWorkExternal GUARDED_BY ( m_tExtLock );
+	sph::Spinlock_c					m_tExtLock; // very short-term, so spinlock is ok.
 	WakeupEventRefPtr_c				m_pWakeup;
-	CSphMutex						m_tExtLock;
 	LoopProfiler_t					m_tPrf;
 	std::unique_ptr<NetPooller_c>	m_pPoll;
 	CSphAutoEvent					m_tWorkerFinished;
@@ -187,7 +187,7 @@ private:
 	void PickNewActions () REQUIRES ( NetPoollingThread )
 	{
 		m_tPrf.StartExt ();
-		ScopedMutex_t tExtLock ( m_tExtLock );
+		sph::Spinlock_lock tExtLock { m_tExtLock };
 		auto iExtLen = m_dWorkExternal.GetLength();
 		m_tPrf.m_iPerfExt = iExtLen;
 		pMyInfo ()->m_uWorks = iExtLen;
@@ -338,7 +338,7 @@ private:
 		if ( m_bWorkerFinished )
 			return false;
 		{
-			ScopedMutex_t tExtLock ( m_tExtLock );
+			sph::Spinlock_lock tExtLock { m_tExtLock };
 			m_dWorkExternal.Add ( pElem );
 		}
 		Kick();

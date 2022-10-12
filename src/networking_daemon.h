@@ -14,6 +14,8 @@
 
 #include "sphinxstd.h"
 #include "searchdha.h"
+#include "netpoll.h"
+#include "pollable_event.h"
 
 extern int64_t g_tmWaitUS;
 extern int g_iThrottleAction;

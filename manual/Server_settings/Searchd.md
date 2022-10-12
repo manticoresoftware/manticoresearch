@@ -81,7 +81,7 @@ attr_flush_period = 900 # persist updates to disk every 15 minutes
 <!-- example conf auto_optimize -->
 Disables or throttles automatic [OPTIMIZE](../Securing_and_compacting_an_index/Compacting_an_index.md#OPTIMIZE-INDEX).
 
-Since Manticore 4 indexes compaction happens automatically. You can change it with help of searchd setting `auto_optimize` by setting it to:
+Since Manticore 4 indexes compaction happens automatically. You can change it with help of the setting `auto_optimize` by changing it to:
 * 0 to disable automatic indexes compaction (you can still call `OPTIMIZE` manually)
 * 1 to enable it explicitly
 * N to enable it, but let OPTIMIZE start as soon as the number of disk chunks is greater than `# of CPU cores * 2 * N`
@@ -514,7 +514,7 @@ Instance-wide limit of threads one operation can use. By default appropriate ope
 
 You can also set this setting as a session or a global variable during the runtime.
 
-You can also control the behaviour on per-query with help of [threads OPTION](../Searching/Options.md#threads).
+You can also control the behaviour on per-query with help of the [threads OPTION](../Searching/Options.md#threads).
 
 <!-- intro -->
 ##### Example:

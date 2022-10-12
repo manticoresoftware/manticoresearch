@@ -848,10 +848,16 @@ std::unique_ptr<FilterTreeNode_t> FilterTreeConstructor_c::ConstructRangeFilter 
 	if ( !bIntFilter )
 	{
 		if ( tFilter.m_bOpenRight )
+		{
 			tFilter.m_fMaxValue = FLT_MAX;
+			tFilter.m_bHasEqualMax = true;
+		}
 
 		if ( tFilter.m_bOpenLeft )
+		{
 			tFilter.m_fMinValue = -FLT_MAX;
+			tFilter.m_bHasEqualMin = true;
+		}
 	}
 
 	return pFilterNode;

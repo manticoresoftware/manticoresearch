@@ -1391,6 +1391,7 @@ private:
 	// Manage alter state
 	void						RaiseAlterGeneration();
 	int							GetAlterGeneration() const override;
+	bool						AlterSI ( CSphString & sError ) override;
 };
 
 
@@ -3218,18 +3219,6 @@ struct SaveDiskDataContext_t : public BuildHeader_t
 			dRowMap.Fill ( INVALID_ROWID );
 		}
 		assert ( m_dRowMaps.GetLength() == m_tRamSegments.GetLength() );
-	}
-};
-
-
-struct CmpDocidLookup_fn
-{
-	static inline bool IsLess ( const DocidRowidPair_t & a, const DocidRowidPair_t & b )
-	{
-		if ( a.m_tDocID==b.m_tDocID )
-			return a.m_tRowID < b.m_tRowID;
-
-		return (uint64_t)a.m_tDocID < (uint64_t)b.m_tDocID;
 	}
 };
 
@@ -10106,4 +10095,21 @@ void RtIndex_c::RecalculateRateLimit ( int64_t iSaved, int64_t iInserted, bool b
 	m_iSoftRamLimit = m_iRtMemLimit * m_fSaveRateLimit;
 
 	TRACE_COUNTER ( "mem", perfetto::CounterTrack ( "Ratio", "%" ), m_fSaveRateLimit );
+}
+
+bool RtIndex_c::AlterSI ( CSphString & sError )
+{
+	// strength single-fiber access (don't rely upon to upstream w-lock)
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
+	TRACE_SCHED ( "rt", "alter-si" );
+
+	auto pChunks = m_tRtChunks.DiskChunks();
+	for ( auto & tChunk : *pChunks )
+	{
+		if ( !tChunk->CastIdx().AlterSI ( sError ) )
+			return false;
+	}
+
+	RaiseAlterGeneration();
+	return true;
 }

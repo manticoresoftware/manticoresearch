@@ -15,7 +15,7 @@ General syntax:
 SHOW TABLES [ LIKE pattern ]
 ```
 
-`SHOW TABLES` statement enumerates all currently active indexes along with their types. Existing index types are `local`, `distributed`, `rt`, `percolate` and `template`. 
+`SHOW TABLES` statement enumerates all currently active indexes along with their types. Existing index types are `local`, `distributed`, `rt`, `percolate` and `template`.
 
 
 <!-- intro -->
@@ -203,10 +203,10 @@ utilsApi.sql("SHOW TABLES LIKE 'pro%'")
 ## DESCRIBE
 
 ```sql
-{DESC | DESCRIBE} index [ LIKE pattern ]
+{DESC | DESCRIBE} table [ LIKE pattern ]
 ```
 
-`DESCRIBE` statement lists index columns and their associated types. Columns are document ID, full-text fields, and attributes. The order matches that in which fields and attributes are expected by `INSERT` and `REPLACE` statements. Column types are `field`, `integer`, `timestamp`, `ordinal`, `bool`, `float`, `bigint`, `string`, and `mva`. ID column will be typed as `bigint`. Example:
+`DESCRIBE` statement lists table columns and their associated types. Columns are document ID, full-text fields, and attributes. The order matches that in which fields and attributes are expected by `INSERT` and `REPLACE` statements. Column types are `field`, `integer`, `timestamp`, `ordinal`, `bool`, `float`, `bigint`, `string`, and `mva`. ID column will be typed as `bigint`. Example:
 
 ```sql
 mysql> DESC rt;
@@ -223,6 +223,42 @@ mysql> DESC rt;
 
 An optional LIKE clause is supported. Refer to
 [SHOW META](Profiling_and_monitoring/SHOW_META.md) for its syntax details.
+
+### SELECT FROM name.table
+
+<!-- example name_table -->
+You can also see table schema by executing the query `select * from <table_name>.table`. The benefit of this method is that you can use `WHERE` for filtering:
+
+<!-- request SQL -->
+```sql
+select * from idx.table where type='text';
+```
+
+<!-- response SQL -->
+```sql
++------+-------+------+----------------+
+| id   | field | type | properties     |
++------+-------+------+----------------+
+|    2 | title | text | indexed stored |
++------+-------+------+----------------+
+1 row in set (0.00 sec)
+```
+
+<!-- end -->
+
+<!-- example name_table2 -->
+
+You can also do many other things, consider `<your_table_name>.table` just a regular Manticore table where the columns are integer and string attributes.
+
+<!-- request SQL -->
+
+```sql
+select field from idx.table;
+select field, properties from idx.table where type in ('text', 'uint');
+select * from idx.table where properties any ('stored');
+```
+
+<!-- end -->
 
 ## SHOW CREATE TABLE
 
@@ -295,4 +331,3 @@ mysql> desc pq table like '%title%';
 +-------+------+----------------+
 1 row in set (0.00 sec)
 ```
-

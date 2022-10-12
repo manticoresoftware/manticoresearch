@@ -296,7 +296,7 @@ inline StringBuilder_c& operator<< ( StringBuilder_c& tOut, timestamp_t tVal )
 template<typename INT, int iPrec>
 inline StringBuilder_c& operator<< ( StringBuilder_c& tOut, FixedFrac_T<INT, iPrec>&& tVal )
 {
-	tOut.template IFtoA(tVal);
+	tOut.template IFtoA<INT, iPrec>(tVal);
 	return tOut;
 }
 

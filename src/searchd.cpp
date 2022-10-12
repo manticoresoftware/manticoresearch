@@ -7498,7 +7498,7 @@ static const char * g_dSqlStmts[] =
 	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
 	"alter_index_settings", "join_cluster", "cluster_create", "cluster_delete", "cluster_index_add",
 	"cluster_index_delete", "cluster_update", "explain", "import_table", "freeze_indexes", "unfreeze_indexes",
-	"show_settings"
+	"show_settings", "alter_rebuild_si"
 };
 
 
@@ -15275,8 +15275,14 @@ static void RemoveAttrFromIndex ( const SqlStmt_t& tStmt, CSphIndex* pIdx, CSphS
 		pIdx->AddRemoveField ( false, sAttrToRemove, 0, sError );
 }
 
+enum class Alter_e
+{
+	AddColumn,
+	DropColumn,
+	RebuildSI
+};
 
-static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, bool bAdd )
+static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alter_e eAction )
 {
 	if ( !sphCheckWeCanModify ( tStmt.m_sStmt, tOut ) )
 		return;
@@ -15285,7 +15291,7 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, bool
 	SearchFailuresLog_c dErrors;
 	CSphString sError;
 
-	if ( bAdd && tStmt.m_eAlterColType==SPH_ATTR_NONE )
+	if ( eAction==Alter_e::AddColumn && tStmt.m_eAlterColType==SPH_ATTR_NONE )
 	{
 		sError.SetSprintf ( "unsupported attribute type '%d'", tStmt.m_eAlterColType );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
@@ -15329,10 +15335,14 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, bool
 
 		CSphString sAddError;
 
-		if ( bAdd )
+		if ( eAction==Alter_e::AddColumn )
 			AddAttrToIndex ( tStmt, WIdx_c ( pServed ), sAddError );
-		else
+		else if ( eAction==Alter_e::DropColumn )
 			RemoveAttrFromIndex ( tStmt, WIdx_c ( pServed ), sAddError );
+		else if ( eAction==Alter_e::RebuildSI )
+		{
+			WIdx_c ( pServed )->AlterSI ( sAddError );
+		}
 
 		if ( !sAddError.IsEmpty() )
 			dErrors.Submit ( sName, nullptr, sAddError.cstr() );
@@ -16305,11 +16315,15 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		return false; // do not profile this call, keep last query profile
 
 	case STMT_ALTER_ADD:
-		HandleMysqlAlter ( tOut, *pStmt, true );
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::AddColumn );
 		return true;
 
 	case STMT_ALTER_DROP:
-		HandleMysqlAlter ( tOut, *pStmt, false );
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::DropColumn );
+		return true;
+
+	case STMT_ALTER_REBUILD_SI:
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::RebuildSI );
 		return true;
 
 	case STMT_SHOW_PLAN:

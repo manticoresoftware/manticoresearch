@@ -113,7 +113,7 @@
     * [Query cache](Searching/Query_cache.md)
     * [Collations](Searching/Collations.md)
     * [Cost-based optimizer](Searching/Cost_based_optimizer.md)
-* [▪️ Updating index schema](Updating_index_schema.md)    
+* [▪️ Updating table schema and settings](Updating_table_schema_and_settings.md)    
 * [▪️ Functions](Functions.md)
     * [Mathematical functions](Functions/Mathematical_functions.md)
     * [Searching and ranking functions](Functions/Searching_and_ranking_functions.md)
@@ -124,6 +124,7 @@
     * [String functions](Functions/String_functions.md)
     * [Other functions](Functions/Other_functions.md)
 * [▪️ Securing and compacting an index]
+    * [Backup and restore](Securing_and_compacting_an_index/Backup_and_restore.md)
     * [Few words about RT index structure](Securing_and_compacting_an_index/RT_index_structure.md)
     * [Flushing RAM chunk to a new disk chunk](Securing_and_compacting_an_index/Flushing_RAM_chunk_to_a_new_disk_chunk.md)
     * [Flushing RT index to disk](Securing_and_compacting_an_index/Flushing_RAM_chunk_to_disk.md)

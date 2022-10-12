@@ -1272,7 +1272,7 @@ public:
 						~PubSearchHandler_c();
 
 	void				RunQueries ();					///< run all queries, get all results
-	void				SetQuery ( int iQuery, const CSphQuery & tQuery, ISphTableFunc * pTableFunc );
+	void				SetQuery ( int iQuery, const CSphQuery & tQuery, std::unique_ptr<ISphTableFunc> pTableFunc );
 	void				SetProfile ( QueryProfile_c * pProfile );
 	void				SetStmt ( SqlStmt_t & tStmt );
 	AggrResult_t *		GetResult ( int iResult );
@@ -1281,7 +1281,7 @@ public:
 	void				RunCollect( const CSphQuery& tQuery, const CSphString& sIndex, CSphString* pErrors, CSphVector<BYTE>* pCollectedDocs );
 
 private:
-	SearchHandler_c *	m_pImpl = nullptr;
+	std::unique_ptr<SearchHandler_c>	m_pImpl;
 };
 
 
@@ -1391,7 +1391,7 @@ void LogSphinxqlError ( const char * sStmt, const Str_t& sError );
 // that is used from sphinxql command over API
 void RunSingleSphinxqlCommand ( Str_t sCommand, ISphOutputBuffer & tOut );
 
-ISphTableFunc *		CreateRemoveRepeats();
+std::unique_ptr<ISphTableFunc>		CreateRemoveRepeats();
 
 struct PercolateOptions_t
 {

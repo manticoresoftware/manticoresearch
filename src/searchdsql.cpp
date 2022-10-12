@@ -30,12 +30,6 @@ SqlStmt_t::SqlStmt_t()
 }
 
 
-SqlStmt_t::~SqlStmt_t()
-{
-	SafeDelete ( m_pTableFunc );
-}
-
-
 bool SqlStmt_t::AddSchemaItem ( const char * psName )
 {
 	m_dInsertSchema.Add ( psName );
@@ -1490,7 +1484,7 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 			CSphString & sFunc = dStmt[iStmt].m_sTableFunc;
 			sFunc.ToUpper();
 
-			ISphTableFunc * pFunc = nullptr;
+			std::unique_ptr<ISphTableFunc> pFunc;
 			if ( sFunc=="REMOVE_REPEATS" )
 				pFunc = CreateRemoveRepeats();
 
@@ -1500,11 +1494,9 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 				return false;
 			}
 			if ( !pFunc->ValidateArgs ( dStmt[iStmt].m_dTableFuncArgs, tQuery, sError ) )
-			{
-				SafeDelete ( pFunc );
 				return false;
-			}
-			dStmt[iStmt].m_pTableFunc = pFunc;
+
+			dStmt[iStmt].m_pTableFunc = std::move ( pFunc );
 		}
 
 		// validate filters

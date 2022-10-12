@@ -1416,8 +1416,8 @@ BYTE PrereadMapping ( const char * sIndexName, const char * sFor, bool bMlock, b
 	if ( bOnDisk || tBuf.IsEmpty() )
 		return g_uHash;
 
-	const BYTE * pCur = (BYTE *)tBuf.GetWritePtr();
-	const BYTE * pEnd = (BYTE *)tBuf.GetWritePtr() + tBuf.GetLengthBytes();
+	auto pCur = (const BYTE*)tBuf.GetReadPtr();
+	const BYTE * pEnd = pCur + tBuf.GetLengthBytes();
 	const int iHalfPage = 2048;
 
 	g_uHash = 0xff;

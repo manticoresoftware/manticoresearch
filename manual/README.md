@@ -129,6 +129,8 @@
     * [Flushing RAM chunk to a new disk chunk](Securing_and_compacting_an_index/Flushing_RAM_chunk_to_a_new_disk_chunk.md)
     * [Flushing RT index to disk](Securing_and_compacting_an_index/Flushing_RAM_chunk_to_disk.md)
     * [Compacting an index](Securing_and_compacting_an_index/Compacting_an_index.md)
+    * [Isolation during flushing and merging](Securing_and_compacting_an_index/Isolation_during_flushing_and_merging.md)
+    * [Freezing a table](Securing_and_compacting_an_index/Freezing_a_table.md)
     * [Flushing attributes](Securing_and_compacting_an_index/Flushing_attributes.md)
     * [Flushing hostnames](Securing_and_compacting_an_index/Flushing_hostnames.md)
 * [▪️ Security]

@@ -56,7 +56,7 @@ class LookupReader_c
 {
 public:
 			LookupReader_c() = default;
-			LookupReader_c ( const BYTE * pData );
+			explicit LookupReader_c ( const BYTE * pData );
 
 
 	void	SetData ( const BYTE * pData );

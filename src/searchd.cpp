@@ -5143,7 +5143,7 @@ public:
 
 	void							RunQueries ();					///< run all queries, get all results
 	void							RunCollect ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors, CSphVector<BYTE> * pCollectedDocs );
-	void							SetQuery ( int iQuery, const CSphQuery & tQuery, ISphTableFunc * pTableFunc );
+	void							SetQuery ( int iQuery, const CSphQuery & tQuery, std::unique_ptr<ISphTableFunc> pTableFunc );
 	void							SetQueryParser ( std::unique_ptr<QueryParser_i> pParser, QueryType_e eQueryType );
 	void							SetProfile ( QueryProfile_c * pProfile );
 	AggrResult_t *					GetResult ( int iResult ) { return m_dAggrResults.Begin() + iResult; }
@@ -5156,7 +5156,7 @@ public:
 	CSphVector<SearchFailuresLog_c>	m_dFailuresSet;					///< failure logs for each query
 	CSphVector<CSphVector<int64_t>>	m_dAgentTimes;					///< per-agent time stats
 	KeepCollection_c				m_dAcquired;					/// locked indexes
-	CSphFixedVector<ISphTableFunc *>	m_dTables;
+	CSphFixedVector<std::unique_ptr<ISphTableFunc>>	m_dTables;
 	SqlStmt_t *						m_pStmt = nullptr;				///< original (one) statement to take extra options
 
 protected:
@@ -5219,54 +5219,45 @@ private:
 };
 
 PubSearchHandler_c::PubSearchHandler_c ( int iQueries, std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, bool bMaster )
+	: m_pImpl { std::make_unique<SearchHandler_c> ( iQueries, std::move ( pQueryParser ), eQueryType, bMaster ) }
 {
-	m_pImpl = new SearchHandler_c ( iQueries, std::move ( pQueryParser ), eQueryType, bMaster );
+	assert ( m_pImpl );
 }
 
-PubSearchHandler_c::~PubSearchHandler_c ()
-{
-	delete m_pImpl;
-}
+PubSearchHandler_c::~PubSearchHandler_c () = default;
 
 void PubSearchHandler_c::RunQueries ()
 {
-	assert ( m_pImpl );
 	m_pImpl->RunQueries();
 }
 
-void PubSearchHandler_c::SetQuery ( int iQuery, const CSphQuery & tQuery, ISphTableFunc * pTableFunc )
+void PubSearchHandler_c::SetQuery ( int iQuery, const CSphQuery & tQuery, std::unique_ptr<ISphTableFunc> pTableFunc )
 {
-	assert ( m_pImpl );
-	m_pImpl->SetQuery ( iQuery, tQuery, pTableFunc );
+	m_pImpl->SetQuery ( iQuery, tQuery, std::move(pTableFunc) );
 }
 
 void PubSearchHandler_c::SetProfile ( QueryProfile_c * pProfile )
 {
-	assert ( m_pImpl );
 	m_pImpl->SetProfile ( pProfile );
 }
 
 void PubSearchHandler_c::SetStmt ( SqlStmt_t & tStmt )
 {
-	assert ( m_pImpl );
 	m_pImpl->m_pStmt = &tStmt;
 }
 
 AggrResult_t * PubSearchHandler_c::GetResult ( int iResult )
 {
-	assert ( m_pImpl );
 	return m_pImpl->GetResult (iResult);
 }
 
 void PubSearchHandler_c::PushIndex ( const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc )
 {
-	assert ( m_pImpl );
 	m_pImpl->m_dAcquired.AddIndex ( sIndex, pDesc );
 }
 
 void PubSearchHandler_c::RunCollect ( const CSphQuery& tQuery, const CSphString& sIndex, CSphString* pErrors, CSphVector<BYTE>* pCollectedDocs )
 {
-	assert ( m_pImpl );
 	m_pImpl->RunCollect ( tQuery, sIndex, pErrors, pCollectedDocs );
 }
 
@@ -5280,8 +5271,6 @@ SearchHandler_c::SearchHandler_c ( int iQueries, std::unique_ptr<QueryParser_i> 
 	m_dAgentTimes.Resize ( iQueries );
 	m_bMaster = bMaster;
 	m_bFederatedUser = false;
-	ARRAY_FOREACH ( i, m_dTables )
-		m_dTables[i] = nullptr;
 
 	SetQueryParser ( std::move ( pQueryParser ), eQueryType );
 	m_dResults.Resize ( iQueries );
@@ -5344,9 +5333,6 @@ public:
 
 SearchHandler_c::~SearchHandler_c ()
 {
-	ARRAY_FOREACH ( i, m_dTables )
-		SafeDelete ( m_dTables[i] );
-
 	auto dPointed = hazard::GetListOfPointed ( m_dQueries );
 	if ( !dPointed.IsEmpty () )
 	{
@@ -5457,12 +5443,12 @@ void SearchHandler_c::RunActionQuery ( const CSphQuery & tQuery, const CSphStrin
 		LogQuery ( m_dQueries[0], m_dAggrResults[0], m_dAgentTimes[0] );
 }
 
-void SearchHandler_c::SetQuery ( int iQuery, const CSphQuery & tQuery, ISphTableFunc * pTableFunc )
+void SearchHandler_c::SetQuery ( int iQuery, const CSphQuery & tQuery, std::unique_ptr<ISphTableFunc> pTableFunc )
 {
 	m_dQueries[iQuery] = tQuery;
 	m_dQueries[iQuery].m_pQueryParser = m_pQueryParser.get();
 	m_dQueries[iQuery].m_eQueryType = m_eQueryType;
-	m_dTables[iQuery] = pTableFunc;
+	m_dTables[iQuery] = std::move ( pTableFunc );
 }
 
 
@@ -7197,7 +7183,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	for ( int i=0; i<iQueries; ++i )
 	{
 		AggrResult_t & tRes = m_dNAggrResults[i];
-		ISphTableFunc * pTableFunc = m_dTables[iStart+i];
+		auto& pTableFunc = m_dTables[iStart+i];
 
 		// FIXME! log such queries properly?
 		if ( pTableFunc )
@@ -7487,9 +7473,9 @@ public:
 };
 
 
-ISphTableFunc * CreateRemoveRepeats()
+std::unique_ptr<ISphTableFunc> CreateRemoveRepeats()
 {
-	return new CSphTableFuncRemoveRepeats;
+	return std::make_unique<CSphTableFuncRemoveRepeats>();
 }
 
 #undef LOC_ERROR1
@@ -7511,7 +7497,7 @@ static const char * g_dSqlStmts[] =
 	"facet", "alter_reconfigure", "show_index_settings", "flush_index", "reload_plugins", "reload_index",
 	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
 	"alter_index_settings", "join_cluster", "cluster_create", "cluster_delete", "cluster_index_add",
-	"cluster_index_delete", "cluster_update", "explain", "import_table", "lock_indexes", "unlock_indexes",
+	"cluster_index_delete", "cluster_update", "explain", "import_table", "freeze_indexes", "unfreeze_indexes",
 	"show_settings", "alter_rebuild_si"
 };
 
@@ -13384,10 +13370,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	auto& tSess = session::Info();
 
 	// select count
-	int iSelect = 0;
-	ARRAY_FOREACH ( i, dStmt )
-		if ( dStmt[i].m_eStmt==STMT_SELECT )
-			iSelect++;
+	int iSelect = dStmt.count_of ( [] ( const auto& tStmt ) { return tStmt.m_eStmt == STMT_SELECT; } );
 
 	CSphQueryResultMeta tPrevMeta = tLastMeta;
 
@@ -13400,22 +13383,25 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	QueryProfile_c tProfile;
 
 	iSelect = 0;
-	ARRAY_FOREACH ( i, dStmt )
-	{
-		if ( dStmt[i].m_eStmt==STMT_SELECT )
+	for ( auto& tStmt: dStmt )
+		switch ( tStmt.m_eStmt )
 		{
-			tHandler.SetQuery ( iSelect, dStmt[i].m_tQuery, dStmt[i].m_pTableFunc );
-			dStmt[i].m_pTableFunc = nullptr;
-			iSelect++;
+		case STMT_SELECT:
+			{
+				tHandler.SetQuery ( iSelect, tStmt.m_tQuery, std::move ( tStmt.m_pTableFunc ) );
+				++iSelect;
+				break;
+			}
+		case STMT_SET:
+			if ( tStmt.m_eSet == SET_LOCAL )
+			{
+				CSphString sSetName ( tStmt.m_sSetName );
+				sSetName.ToLower();
+				if ( sSetName == "profiling" )
+					tSess.SetProfile ( ParseProfileFormat ( tStmt ) );
+			}
+		default: break;
 		}
-		else if ( dStmt[i].m_eStmt==STMT_SET && dStmt[i].m_eSet==SET_LOCAL )
-		{
-			CSphString sSetName ( dStmt[i].m_sSetName );
-			sSetName.ToLower();
-			if ( sSetName=="profiling" )
-				tSess.SetProfile ( ParseProfileFormat ( dStmt[i] ) );
-		}
-	}
 
 	// use first meta for faceted search
 	bool bUseFirstMeta = ( tHandler.m_dQueries.GetLength()>1 && !tHandler.m_dQueries[0].m_bFacet && tHandler.m_dQueries[1].m_bFacet );
@@ -14365,7 +14351,7 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, Str_t sCommand, const QueryProfile_c 
 	using namespace DebugCmd;
 	CSphString sError;
 	bool bVipConn = session::GetVip ();
-	auto tCmd = DebugCmd::ParseDebugCmd ( sCommand, sError );
+	auto tCmd = ParseDebugCmd ( sCommand, sError );
 
 	if ( bVipConn )
 	{
@@ -15885,7 +15871,7 @@ void HandleMysqlImportTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphS
 }
 
 //////////////////////////////////////////////////////////////////////////
-void HandleMysqlLockIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes, CSphString& sWarningOut )
+void HandleMysqlFreezeIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes, CSphString& sWarningOut )
 {
 	// search through specified local indexes
 	StrVec_t dIndexes, dNonlockedIndexes, dIndexFiles;
@@ -15908,7 +15894,7 @@ void HandleMysqlLockIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes, CSp
 	if ( !dNonlockedIndexes.IsEmpty() )
 	{
 		StringBuilder_c sWarning;
-		sWarning << "Some indexes are not suitable for locking: ";
+		sWarning << "Some indexes are not suitable for freezing: ";
 		sWarning.StartBlock();
 		dNonlockedIndexes.for_each ( [&sWarning] ( const auto& sValue ) { sWarning << sValue; } );
 		sWarning.FinishBlocks ();
@@ -15925,7 +15911,7 @@ void HandleMysqlLockIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes, CSp
 	tOut.Eof ( false, iWarnings );
 }
 
-void HandleMysqlUnlockIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes, CSphString& sWarningOut )
+void HandleMysqlUnfreezeIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes, CSphString& sWarningOut )
 {
 	// search through specified local indexes
 	StrVec_t dIndexes;
@@ -16093,8 +16079,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 			StatCountCommand ( SEARCHD_COMMAND_SEARCH );
 			SearchHandler_c tHandler ( 1, sphCreatePlainQueryParser(), QUERY_SQL, true );
-			tHandler.SetQuery ( 0, dStmt.Begin()->m_tQuery, dStmt.Begin()->m_pTableFunc );
-			dStmt.Begin()->m_pTableFunc = nullptr;
+			tHandler.SetQuery ( 0, dStmt.Begin()->m_tQuery, std::move ( dStmt.Begin()->m_pTableFunc ) );
 			tHandler.m_pStmt = pStmt;
 
 			if ( tSess.IsProfile() )
@@ -16448,12 +16433,12 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		HandleMysqlImportTable ( tOut, *pStmt, m_tLastMeta.m_sWarning );
 		return true;
 
-	case STMT_LOCK:
-		HandleMysqlLockIndexes ( tOut, pStmt->m_sIndex, m_tLastMeta.m_sWarning);
+	case STMT_FREEZE:
+		HandleMysqlFreezeIndexes ( tOut, pStmt->m_sIndex, m_tLastMeta.m_sWarning);
 		return true;
 
-	case STMT_UNLOCK:
-		HandleMysqlUnlockIndexes ( tOut, pStmt->m_sIndex, m_tLastMeta.m_sWarning );
+	case STMT_UNFREEZE:
+		HandleMysqlUnfreezeIndexes ( tOut, pStmt->m_sIndex, m_tLastMeta.m_sWarning );
 		return true;
 
 	case STMT_SHOW_SETTINGS:

@@ -469,7 +469,7 @@ std::unique_ptr<BlobRowBuilder_i> sphCreateBlobRowBuilderUpdate ( const ISphSche
 
 static int64_t GetBlobRowOffset ( const CSphRowitem * pDocinfo, int iBlobRowOffset )
 {
-	return sphUnalignedRead ( *((int64_t*)const_cast<CSphRowitem *>(pDocinfo) + iBlobRowOffset) );
+	return sphUnalignedRead ( *( (const int64_t*)pDocinfo + iBlobRowOffset ) );
 }
 
 static int64_t GetBlobRowOffset ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator )
@@ -482,11 +482,11 @@ template <typename T>
 static const BYTE * GetBlobAttr ( int iBlobAttrId, int nBlobAttrs, const BYTE * pRow, int & iLengthBytes )
 {
 	T uLen1 = sphUnalignedRead ( *( (const T*)pRow + iBlobAttrId ) );
-	T uLen0 = iBlobAttrId > 0 ? sphUnalignedRead ( *((const T*)pRow + iBlobAttrId - 1) ) : 0;
-	iLengthBytes = (int)uLen1-uLen0;
-	assert ( iLengthBytes>=0 );
+	T uLen0 = iBlobAttrId > 0 ? sphUnalignedRead ( *( (const T*)pRow + iBlobAttrId - 1 ) ) : 0;
+	iLengthBytes = (int)uLen1 - uLen0;
+	assert ( iLengthBytes >= 0 );
 
-	return iLengthBytes ? (const BYTE *)((const T*)pRow + nBlobAttrs) + uLen0 : nullptr;
+	return iLengthBytes ? (const BYTE*)( (const T*)pRow + nBlobAttrs ) + uLen0 : nullptr;
 }
 
 

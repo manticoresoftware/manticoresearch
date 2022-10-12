@@ -246,13 +246,13 @@ class Worker_c : public details::SchedulerOperation_t
 			Worker_c::m_pTlsThis = pWorker;
 			pWorker->m_pCurrentTaskInfo =
 					MyThd ().m_pTaskInfo.exchange ( pWorker->m_pCurrentTaskInfo, std::memory_order_relaxed );
-			pWorker->m_tmCpuTimeBase -= sphCpuTimer();
+			pWorker->m_tmCpuTimeBase -= sphThreadCpuTimer();
 		}
 
 		~CoroGuard_t ()
 		{
 			auto pWork = Worker_c::m_pTlsThis;
-			pWork->m_tmCpuTimeBase += sphCpuTimer ();
+			pWork->m_tmCpuTimeBase += sphThreadCpuTimer ();
 			pWork->m_pCurrentTaskInfo = MyThd ().m_pTaskInfo.exchange ( pWork->m_pCurrentTaskInfo, std::memory_order_relaxed );
 			Worker_c::m_pTlsThis = pWork->m_pPreviousWorker;
 		}
@@ -718,9 +718,9 @@ int64_t sphTaskCpuTimer()
 {
 	auto pWorker = Threads::Coro::Worker_c::CurrentWorker();
 	if ( pWorker )
-		return pWorker->GetCurrentCpuTimeBase() + sphCpuTimer();
+		return pWorker->GetCurrentCpuTimeBase() + sphThreadCpuTimer();
 
-	return sphCpuTimer();
+	return sphThreadCpuTimer();
 }
 
 namespace Threads {

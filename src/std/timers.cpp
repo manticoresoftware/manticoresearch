@@ -59,31 +59,56 @@ int64_t sphMicroTimer()
 volatile bool& sphGetbCpuStat() noexcept;
 
 /// return cpu time, in microseconds
-int64_t sphCpuTimer ()
+int64_t sphThreadCpuTimer ()
 {
 	if ( !sphGetbCpuStat() )
 		return 0;
 
 #ifdef HAVE_CLOCK_GETTIME
 #if defined (CLOCK_THREAD_CPUTIME_ID)
-// CPU time (user+sys), Linux style, current thread
-#define LOC_CLOCK CLOCK_THREAD_CPUTIME_ID
-#elif defined(CLOCK_PROCESS_CPUTIME_ID)
-// CPU time (user+sys), Linux style
-#define LOC_CLOCK CLOCK_PROCESS_CPUTIME_ID
-#elif defined(CLOCK_PROF)
-// CPU time (user+sys), FreeBSD style
-#define LOC_CLOCK CLOCK_PROF
+	// CPU time (user+sys), Linux style, current thread
+	constexpr static clockid_t tClockLoc = CLOCK_THREAD_CPUTIME_ID;
+#elif defined( CLOCK_PROF )
+	// CPU time (user+sys), FreeBSD style
+	constexpr static clockid_t tClockLoc = CLOCK_PROF;
 #else
-// POSIX fallback (wall time)
-#define LOC_CLOCK CLOCK_REALTIME
+	// POSIX fallback (wall time)
+	constexpr static clockid_t tClockLoc = CLOCK_REALTIME;
 #endif
 
 	struct timespec tp;
-	if ( clock_gettime ( LOC_CLOCK, &tp ) )
+	if ( clock_gettime ( tClockLoc, &tp ) )
 		return 0;
 
 	return tp.tv_sec*1000000 + tp.tv_nsec/1000;
+#else
+	return sphMicroTimer();
+#endif
+}
+
+/// return cpu time, in microseconds
+int64_t sphProcessCpuTimer()
+{
+	if ( !sphGetbCpuStat() )
+		return 0;
+
+#ifdef HAVE_CLOCK_GETTIME
+#if defined( CLOCK_PROCESS_CPUTIME_ID )
+	// CPU time (user+sys), Linux style, current thread
+	constexpr static clockid_t tClockLoc = CLOCK_PROCESS_CPUTIME_ID;
+#elif defined( CLOCK_PROF )
+	// CPU time (user+sys), FreeBSD style
+	constexpr static clockid_t tClockLoc = CLOCK_PROF;
+#else
+	// POSIX fallback (wall time)
+	constexpr static clockid_t tClockLoc = CLOCK_REALTIME;
+#endif
+
+	struct timespec tp;
+	if ( clock_gettime ( tClockLoc, &tp ) )
+		return 0;
+
+	return tp.tv_sec * 1000000 + tp.tv_nsec / 1000;
 #else
 	return sphMicroTimer();
 #endif

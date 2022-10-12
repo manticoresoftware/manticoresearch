@@ -20,7 +20,9 @@ int64_t sphMicroTimer();
 
 /// return cpu time, in microseconds. CLOCK_THREAD_CPUTIME_ID, or CLOCK_PROCESS_CPUTIME_ID or fall to sphMicroTimer().
 /// defined in searchd.cpp since depends from g_bCpuStats
-int64_t sphCpuTimer();
+int64_t sphProcessCpuTimer();
+int64_t sphThreadCpuTimer();
 
-/// returns sphCpuTimer() adjusted to current coro task (coro may jump from thread to thread, so sphCpuTimer() is irrelevant)
+
+/// returns sphThreadCpuTimer() adjusted to current coro task (coro may jump from thread to thread, so sphThreadCpuTimer() is irrelevant)
 int64_t sphTaskCpuTimer();

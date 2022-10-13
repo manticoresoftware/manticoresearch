@@ -1,6 +1,6 @@
 # Search options
 
-SQL [SELECT](../Searching/Full_text_matching/Basic_usage.md#SQL) clause and HTTP [/search](../Searching/Full_text_matching/Basic_usage.md#HTTP) endpoint support a number of options that can be used to fine-tune search behaviour.
+SQL [SELECT](../Searching/Full_text_matching/Basic_usage.md#SQL) clause and HTTP [/search](../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) endpoint support a number of options that can be used to fine-tune search behaviour.
 
 ## OPTION
 

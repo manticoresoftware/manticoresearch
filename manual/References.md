@@ -87,12 +87,12 @@
 * [/cli](Connecting_to_the_server/HTTP.md#/cli) - HTTP command line interface
 * [/insert](Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md) - Inserts a document into a real-time index
 * [/pq/idx/doc](Adding_documents_to_an_index/Adding_rules_to_a_percolate_index.md#Adding-rules-to-a-percolate-index) - Inserts a PQ rule into a percolate index
-* [/update](Updating_documents/UPDATE.md#Updates-via-HTTP) - Updates a document in a real-time index
-* [/replace](Updating_documents/REPLACE.md#HTTP:) - Replaces a document in a real-time index
+* [/update](Updating_documents/UPDATE.md#Updates-via-HTTP-JSON) - Updates a document in a real-time index
+* [/replace](Updating_documents/REPLACE.md#HTTP-JSON) - Replaces a document in a real-time index
 * [/pq/idx/doc/N?refresh=1](Adding_documents_to_an_index/Adding_rules_to_a_percolate_index.md#Replacing-rules-in-a-PQ-index) - Replaces a PQ rule in a percolate index
 * [/delete](Deleting_documents.md) - Deletes a document in an index
 * [/bulk](Updating_documents/UPDATE.md#Bulk-updates) - Perform several insert, update or delete operations in a single call
-* [/search](Searching/Full_text_matching/Basic_usage.md#HTTP) - Performs search
+* [/search](Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) - Performs search
 * [/pq/idx/search](Searching/Percolate_query.md) - Performs reverse search in a percolate index
 
 ### Common things

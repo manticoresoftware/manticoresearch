@@ -6,7 +6,7 @@
 * Improved [cost-based optimizer](../Searching/Cost_based_optimizer.md#Cost-based-optimizer) which may increase query response time in many cases.
 * `ALTER TABLE <table name> REBUILD SECONDARY`
 * New tool `manticore-backup` for [backing up and restoring Manticore instance](../Securing_and_compacting_an_index/Backup_and_restore.md)
-* `KILL`
+* Added `KILL`
 * Added [FREEZE/UNFREEZE](../Securing_and_compacting_an_index/Freezing_a_table.md) to prepare a real-time/plain table for a backup
 
 ### Minor changes
@@ -118,7 +118,7 @@ Released: May 18th 2022
 * **⚠️ BREAKING CHANGE**: [Pseudo sharding](../Server_settings/Searchd.md#pseudo_sharding) is enabled by default. If you want to disable it make sure you add `pseudo_sharding = 0` to section `searchd` of your Manticore configuration file.
 * Having at least one full-text field in a real-time/plain index is not mandatory anymore. You can now use Manticore even in cases not having anything to do with full-text search.
 * [Fast fetching](../Creating_an_index/Data_types.md#fast_fetch) for attributes backed by [Manticore Columnar Library](https://github.com/manticoresoftware/columnar): queries like `select * from <columnar table>` are now much faster than previously, especially if there are many fields in the schema.
-* **⚠️ BREAKING CHANGE**: Implicit [cutoff](../Searching/Options.md#cutoff). Manticore now doesn't spend time and resources processing data you don't need in the result set which will be returned. The downside is that it affects `total_found` in [SHOW META](../Profiling_and_monitoring/SHOW_META.md#SHOW-META) and [hits.total](../Searching/Full_text_matching/Basic_usage.md#HTTP) in JSON output. It is now only accurate in case you see `total_relation: eq` while `total_relation: gte` means the actual number of matching documents is greater than the `total_found` value you've got. To retain the previous behaviour you can use search option `cutoff=0`, which makes `total_relation` always `eq`.
+* **⚠️ BREAKING CHANGE**: Implicit [cutoff](../Searching/Options.md#cutoff). Manticore now doesn't spend time and resources processing data you don't need in the result set which will be returned. The downside is that it affects `total_found` in [SHOW META](../Profiling_and_monitoring/SHOW_META.md#SHOW-META) and [hits.total](../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) in JSON output. It is now only accurate in case you see `total_relation: eq` while `total_relation: gte` means the actual number of matching documents is greater than the `total_found` value you've got. To retain the previous behaviour you can use search option `cutoff=0`, which makes `total_relation` always `eq`.
 * **⚠️ BREAKING CHANGE**: All full-text fields are now [stored](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#stored_fields) by default. You need to use `stored_fields = ` (empty value) to make all fields non-stored (i.e. revert to the previous behaviour).
 * [#715](https://github.com/manticoresoftware/manticoresearch/issues/715) HTTP JSON supports [search options](../Searching/Options.md#General-syntax).
 
@@ -556,7 +556,7 @@ status of the query, not the server status
 * New setting [max_threads_per_query](Server_settings/Searchd.md#max_threads_per_query) sets how many threads a query can use. If the directive is not set, a query can use threads up to the value of [threads](Server_settings/Searchd.md#threads).
 Per `SELECT` query the number of threads can be limited with [OPTION threads=N](Searching/Options.md#threads) overriding the global `max_threads_per_query`.
 * Percolate indexes can be now be imported with [IMPORT TABLE](Adding_data_from_external_storages/Adding_data_from_indexes/Importing_index.md).
-* HTTP API `/search` receives basic support for [faceting](Searching/Faceted_search.md#HTTP)/[grouping](Searching/Grouping.md) by new query node `aggs`.
+* HTTP API `/search` receives basic support for [faceting](Searching/Faceted_search.md#HTTP-JSON)/[grouping](Searching/Grouping.md) by new query node `aggs`.
 
 ### Minor changes
 

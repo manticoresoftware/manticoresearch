@@ -831,9 +831,9 @@ The options are the same as for [SELECT](../Searching/Full_text_matching/Basic_u
 ### FORCE and IGNORE INDEX
 In rare cases Manticore's built-in query analyzer can be wrong in understanding a query and whether an index by id should be used or not. It can cause poor performance of queries like `UPDATE ... WHERE id = 123`. Adding `FORCE INDEX(id)` will force Manticore use the index. `IGNORE INDEX(id)` will force ignore it.
 
-## Updates via HTTP
+## Updates via HTTP JSON
 
-Updates using HTTP protocol are performed via the `/update` endpoint. Syntax is similar to the [/insert endpoint](../Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md), but this time the `doc` property is mandatory.
+Updates using HTTP JSON protocol are performed via the `/update` endpoint. Syntax is similar to the [/insert endpoint](../Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md), but this time the `doc` property is mandatory.
 
 The server will respond with a JSON object stating if the operation was successful or not.
 
@@ -904,7 +904,7 @@ POST /update
 
 <!-- end -->
 
-Query syntax is the same as in the [/search endpoint](../Searching/Full_text_matching/Basic_usage.md#HTTP). Note that you can't specify `id` and `query` at the same time.
+Query syntax is the same as in the [/search endpoint](../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON). Note that you can't specify `id` and `query` at the same time.
 
 ## Flushing attributes
 
@@ -980,9 +980,9 @@ POST /bulk
 
 * `insert`: Inserts a document. Syntax is the same as in the [/insert endpoint](../Quick_start_guide.md#Add-documents).
 * `create`: a synonym for `insert`
-* `replace`: Replaces a document. Syntax is the same as in the [/replace](../Updating_documents/REPLACE.md#HTTP:).
+* `replace`: Replaces a document. Syntax is the same as in the [/replace](../Updating_documents/REPLACE.md#HTTP-JSON).
 * `index`: a synonym for `replace`
-* `update`: Updates a document. Syntax is the same as in [/update](../Updating_documents/UPDATE.md#Updates-via-HTTP).
+* `update`: Updates a document. Syntax is the same as in [/update](../Updating_documents/UPDATE.md#Updates-via-HTTP-JSON).
 * `delete`: Deletes a document. Syntax is the same as in [/delete endpoint](../Deleting_documents.md).
 
 Updates by query and deletes by query are also supported.

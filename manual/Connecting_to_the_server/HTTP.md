@@ -73,7 +73,7 @@ Endpoints `/sql` and `/cli` allow running SQL queries via HTTP.
 
 Query payload **must** be URL encoded, otherwise query statements with `=` (filtering or setting options) will result in an error.
 
-It returns a JSON response which contains hits information and execution time. The response has the same format as [json/search](../Searching/Full_text_matching/Basic_usage.md#HTTP) endpoint. Note, that `/sql` endpoint supports only single search requests. If you are looking for processing a multi-query see below.
+It returns a JSON response which contains hits information and execution time. The response has the same format as [json/search](../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) endpoint. Note, that `/sql` endpoint supports only single search requests. If you are looking for processing a multi-query see below.
 
 <!-- request HTTP -->
 ```bash

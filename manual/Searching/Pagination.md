@@ -9,8 +9,8 @@ For SQL the navigation over the result set can be done with `LIMIT` clause.
 
 `LIMIT` can accept one number as the size of the returned set using a zero offset or a pair of offset and size.
 
-#### HTTP
-If HTTP is used, the nodes `offset` and `limit` can control the offset of the result set and the size of the returned set. Alternatively the pair `size` and `from` can be used instead.
+#### HTTP JSON
+If HTTP JSON is used, the nodes `offset` and `limit` can control the offset of the result set and the size of the returned set. Alternatively the pair `size` and `from` can be used instead.
 
 <!-- intro -->
 

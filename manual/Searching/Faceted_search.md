@@ -20,7 +20,7 @@ FACET {expr_list} [BY {expr_list} ] [DISTINCT {field_name}] [ORDER BY {expr | FA
 
 Multiple facet declarations need to be separated with a whitespace.
 
-### HTTP
+### HTTP JSON
 
 Facets can be defined in the `aggs` node:
 

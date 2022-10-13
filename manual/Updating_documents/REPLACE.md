@@ -1,4 +1,4 @@
-# REPLACE 
+# REPLACE
 
 <!-- example replace -->
 
@@ -19,7 +19,7 @@ Query OK, 1 row affected (0.00 sec)
 ```
 
 <!-- intro -->
-##### HTTP:
+##### HTTP JSON
 
 <!-- request HTTP -->
 
@@ -57,7 +57,7 @@ POST /replace
 ```php
 $index->replaceDocument([
    'title' => 'document one',
-    'price' => 10 
+    'price' => 10
 ],1);
 ```
 
@@ -113,7 +113,7 @@ HashMap<String,Object> doc = new HashMap<String,Object>(){{
             put("title","document one");
             put("price",10);
 }};
-docRequest.index("products").id(1L).setDoc(doc); 
+docRequest.index("products").id(1L).setDoc(doc);
 sqlresult = indexApi.replace(docRequest);
 ```
 
@@ -213,12 +213,12 @@ $index->replaceDocuments([
     [   
         'id' => 1,
         'title' => 'document one',
-        'tag' => 10 
+        'tag' => 10
     ],
     [   
         'id' => 2,
         'title' => 'document one',
-        'tag' => 20 
+        'tag' => 20
     ]
 );
 ```
@@ -233,14 +233,14 @@ Array(
             [_id] => 2
             [created] => false
             [result] => updated
-            [status] => 200 
+            [status] => 200
         )
         Array(
             [_index] => products
             [_id] => 2
             [created] => false
             [result] => updated
-            [status] => 200 
+            [status] => 200
         )
     )
     [errors => false
@@ -274,8 +274,8 @@ api_resp = indexApi.bulk('\n'.join(map(json.dumps,docs)))
 <!-- request javascript -->
 
 ``` javascript
-docs = [ 
-    {"replace": {"index" : "products", "id" : 1, "doc" : {"title" : "document one"}}}, 
+docs = [
+    {"replace": {"index" : "products", "id" : 1, "doc" : {"title" : "document one"}}},
     {"replace": {"index" : "products", "id" : 2, "doc" : {"title" : "document two"}}} ];
 res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 ```
@@ -289,7 +289,7 @@ res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 <!-- request Java -->
 
 ``` java
-body = "{\"replace\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"document one\"}}}" +"\n"+ 
+body = "{\"replace\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"document one\"}}}" +"\n"+
     "{\"replace\": {\"index\" : \"products\", \"id\" : 2, \"doc\" : {\"title\" : \"document two\"}}}"+"\n" ;         
 indexApi.bulk(body);
 ```

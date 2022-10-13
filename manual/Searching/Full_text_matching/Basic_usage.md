@@ -44,7 +44,7 @@ SELECT * FROM myindex WHERE MATCH('"find me fast"/2');
 
 <!-- end -->
 
-## HTTP
+## HTTP JSON
 
 <!-- example Example_11 -->
 
@@ -139,7 +139,7 @@ POST /search
         {
             "*" : "find joe"
         }
-    }, 
+    },
     "_source": ["story_author","comment_author"],
     "limit": 1
 }'
@@ -178,7 +178,7 @@ POST /search
         {
             "*" : "find joe"
         }
-    }, 
+    },
     "_source": ["story_author","comment_author"],
     "limit": 1
 }'
@@ -220,7 +220,7 @@ POST /search
 ```
 <!-- response query_string -->
 ```json
-{ 
+{
   "took" : 3,
   "timed_out" : false,
   "hits" : {
@@ -283,7 +283,7 @@ searchApi.search({"index":"hn_small","query":{"query_string":"@comment_text \"fi
  'profile': None,
  'timed_out': False,
  'took': 2,
- 'warning': None} 
+ 'warning': None}
 ```
 
 <!-- intro -->
@@ -305,10 +305,10 @@ res = await searchApi.search({"index":"hn_small","query":{"query_string":"@comme
      hits:
       [ { _id: '807160',
           _score: 2566,
-          _source: { story_author: 'rbanffy', comment_author: 'runjake' } 
-        } 
-      ] 
-   } 
+          _source: { story_author: 'rbanffy', comment_author: 'runjake' }
+        }
+      ]
+   }
 }
 ```
 

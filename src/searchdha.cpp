@@ -2297,7 +2297,7 @@ bool AgentConn_t::EstablishConnection ()
 {
 	sphLogDebugA ( "%d EstablishConnection() ref=%d", m_iStoreTag, ( int ) GetRefcount () );
 	// first check if we're in bounds of timeout.
-	// usually it is done by outside callback, however in case of deffered DNS we may be here out of sync and so need
+	// usually it is done by outside callback, however in case of deferred DNS we may be here out of sync and so need
 	// to check it explicitly.
 	if ( m_iPoolerTimeoutUS < MonoMicroTimer() )
 		return Fatal ( eConnectFailures, "connect timeout reached resolving address for %s", m_tDesc.m_sAddr.cstr () );
@@ -2825,7 +2825,7 @@ class NetEventsFlavour_c
 {
 protected:
 	int m_iEvents = 0;    ///< how many events are in queue.
-	static const int m_iCReserve = 256; 	/// will always provide extra that space of events to poller
+	static constexpr int m_iCReserve = 256; 	/// will always provide extra that space of events to poller
 
 	// perform actual changing OR scheduling of pTask subscription state (on BSD we collect changes and will populate later)
 	// NOTE! m_uIOChanged==0 field here means active 'unsubscribe' (in use for deletion)
@@ -3370,7 +3370,7 @@ private:
 		}
 	}
 
-	inline bool IsTickProcessed ( TaskNet_t * pTask )
+	inline bool IsTickProcessed ( TaskNet_t * pTask ) const
 	{
 		return pTask && pTask->m_iTickProcessed==m_iTickNo;
 	}

@@ -41,11 +41,8 @@ struct ISphNetAction :  NetPollEvent_t
 	/// it is called for processing result of epoll/kqueue/iocp linked with a socket
 	/// @brief process network event (ready to read / ready to write / error)
 	///
-	/// @param uGotEvents	bitfield of arived events, as NetPollEvent_t::Event_e
-	/// @param pLoop		where you can put your derived action (say, Accept -> SqlServe )
 	/// timer is always removed when processing.
-	/// If it is timeout - the event is also already removed from the poller.
-	virtual void		Process ( DWORD uGotEvents ) = 0;
+	virtual void		Process () = 0;
 
 	/// invoked when CSphNetLoop with this action destroying
 	/// Netloop itself is finished, no further actions in process.
@@ -58,7 +55,7 @@ class CSphWakeupEvent final : public PollableEvent_t, public ISphNetAction
 {
 public:
 	CSphWakeupEvent ();
-	void Process ( DWORD uGotEvents ) final;
+	void Process () final;
 	void Wakeup ();
 	void NetLoopDestroying() final;
 

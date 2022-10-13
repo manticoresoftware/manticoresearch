@@ -39,26 +39,51 @@ struct NetPollEvent_t : public EnqueuedTimeout_t, public ISphRefcountedMT
 	int					m_iBackIdx = -1;	// or opaque index to internals of poller
 
 	int					m_iSock = -1;
-	volatile DWORD		m_uNetEvents = 0;
+	BYTE				m_uIOChange = SET_NONE;
+	BYTE				m_uIOActive = SET_NONE;
+
+	BYTE				m_uGotEvents = IS_NONE;
 
 	explicit NetPollEvent_t ( int iSock )
 		: m_iSock ( iSock ) {}
 
-	enum Events_e : DWORD
+	enum SetMask_e : BYTE
 	{
-		READ = 1UL << 0, // 1
-		WRITE = 1UL << 1, // 2
-		HUP = 1UL << 2, // 4
-		ERR = 1UL << 3, // 8
-//		PRI = 1UL << 4, // 16
-		ONCE = 1UL << 4, // effective when set up // 32
-		TIMEOUT = ONCE, // effective when return back // 32
-		CLOSED = 1UL << 8,
+		SET_NONE = 0,
+		SET_READ = 1 << 0,				// 1 - poll read events
+		SET_WRITE = 1 << 1,				// 2 - poll write events
+		SET_RW = SET_READ | SET_WRITE,	// 3 - poll read and write events
+		SET_ONESHOT = 1 << 2,			// 4 - will be deactivated/removed once shot
+		SET_ON_EDGE = 1 << 3,			// 8 - edge-triggered (if non set - level-triggered)
+		SET_EDGEONESHOT = SET_ONESHOT | SET_ON_EDGE,
+		SET_CLOSED = 1 << 4,			// 16 - socket is closed, remove the event from timeout/task queues
 	};
 
-	bool IsLinked() const
+	enum GotMask_e : BYTE {
+		IS_NONE = 0,
+		IS_READ = 1 << 0,				// 1 - ready for reading
+		IS_WRITE = 1 << 1,				// 2 - ready for writing
+		IS_RW = SET_READ | SET_WRITE,	// 3 - ready for reading and writing
+		IS_HUP = 1 << 2,				// 4 - has HUP
+		IS_ERR = 1 << 3,				// 8 - has ERR
+		IS_ERRHUP = IS_ERR | IS_HUP,	// 12 - has HUP & ERR
+		IS_TIMEOUT = 1 << 4,			// 16 - timed out
+	};
+
+	inline bool IsLinked() const
 	{
 		return m_tBackHook.is_linked() || m_iBackIdx!=-1;
+	}
+
+	inline bool CheckSocketError () const
+	{
+		bool bReadError = ( ( m_uGotEvents & IS_READ ) && ( m_uGotEvents & IS_ERRHUP ) );
+		bool bWriteError = ( ( m_uGotEvents & IS_WRITE ) && ( m_uGotEvents & IS_ERR ) );
+
+		if ( bReadError && ( ( m_uGotEvents & IS_ERRHUP ) == IS_ERRHUP ) )
+			sphSockSetErrno ( ECONNRESET );
+
+		return bReadError || bWriteError;
 	}
 };
 
@@ -89,7 +114,7 @@ class NetPooller_c : public ISphNoncopyable
 	friend class NetPollReadyIterator_c;
 
 public:
-	explicit NetPooller_c ( int iSizeHint );
+	explicit NetPooller_c ( int iSizeHint, int iMaxReady=0 );
 	~NetPooller_c();
 	void SetupEvent ( NetPollEvent_t * pEvent )				REQUIRES ( NetPoollingThread );
 	void Wait ( int64_t iUS )								REQUIRES ( NetPoollingThread );

@@ -11,7 +11,6 @@
 //
 
 #include "net_action_accept.h"
-#include "netstate_api.h"
 #include "netreceive_api.h"
 #include "netreceive_ql.h"
 #include "netreceive_http.h"
@@ -155,7 +154,7 @@ class NetActionAccept_c::Impl_c
 
 public:
 	explicit Impl_c ( const Listener_t & tListener, CSphNetLoop* pNetLoop ) : m_tListener ( tListener ), m_pNetLoop ( pNetLoop ) {}
-	void ProcessAccept ( DWORD uGotEvents );
+	void ProcessAccept ();
 };
 
 static DWORD NextConnectionID()
@@ -206,9 +205,9 @@ void IterateTasks ( TaskIteratorFn&& fnHandler )
 }
 
 
-void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents )
+void NetActionAccept_c::Impl_c::ProcessAccept ()
 {
-	if ( CheckSocketError ( uGotEvents ) || sphInterrupted () )
+	if ( sphInterrupted () )
 		return;
 
 	// handle all incoming requests at once but not too much
@@ -330,14 +329,15 @@ NetActionAccept_c::NetActionAccept_c ( const Listener_t & tListener, CSphNetLoop
 	: ISphNetAction ( tListener.m_iSock )
 	, m_pImpl ( std::make_unique<Impl_c> ( tListener, pNetLoop ) )
 {
-	m_uNetEvents = NetPollEvent_t::READ;
+	m_uIOChange = NetPollEvent_t::SET_READ;
 }
 
 NetActionAccept_c::~NetActionAccept_c () = default;
 
-void NetActionAccept_c::Process ( DWORD uGotEvents )
+void NetActionAccept_c::Process ()
 {
-	m_pImpl->ProcessAccept ( uGotEvents );
+	if ( !CheckSocketError() )
+		m_pImpl->ProcessAccept();
 }
 
 void NetActionAccept_c::NetLoopDestroying()

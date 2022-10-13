@@ -13,7 +13,6 @@
 #include "networking_daemon.h"
 #include "loop_profiler.h"
 #include "net_action_accept.h"
-#include "netstate_api.h"
 #include "coroutine.h"
 #include "tracer.h"
 
@@ -43,7 +42,7 @@ CSphWakeupEvent::CSphWakeupEvent ()
 	: PollableEvent_t()
 	, ISphNetAction ( m_iPollablefd )
 {
-	m_uNetEvents = NetPollEvent_t::READ;
+	m_uIOChange = NetPollEvent_t::SET_READ;
 }
 
 CSphWakeupEvent::~CSphWakeupEvent ()
@@ -63,9 +62,9 @@ void CSphWakeupEvent::Wakeup ()
 	sphLogDebugv ( "failed to wakeup net thread ( error %d,'%s')", iErrno, strerrorm ( iErrno ) );
 }
 
-void CSphWakeupEvent::Process ( DWORD uGotEvents )
+void CSphWakeupEvent::Process ()
 {
-	if ( uGotEvents & NetPollEvent_t::READ )
+	if ( m_uGotEvents & NetPollEvent_t::IS_READ )
 		DisposeEvent();
 }
 
@@ -125,7 +124,7 @@ class CSphNetLoop::Impl_c
 
 public:
 	Impl_c ()
-		: m_pPoll { std::make_unique<NetPooller_c> ( 1000 )}
+		: m_pPoll { std::make_unique<NetPooller_c> ( 1000, g_iThrottleAction )}
 	{
 		m_pWakeup = new CSphWakeupEvent;
 		if ( m_pWakeup->IsPollable() )
@@ -199,24 +198,35 @@ private:
 		m_tPrf.EndTask ();
 	}
 
+	void EnqueueNewActions() REQUIRES ( NetPoollingThread )
+	{
+		// add actions planned by jobs
+		PickNewActions();
+		pMyInfo()->m_uWorks = m_dWorkInternal.GetLength();
+		m_tPrf.StartNext();
+		m_dWorkInternal.for_each ( [&] ( ISphNetAction* pWork ) REQUIRES ( NetPoollingThread ) {
+			assert ( pWork );
+			m_pPoll->SetupEvent ( pWork );
+		} );
+		m_dWorkInternal.Resize ( 0 );
+		m_tPrf.EndTask();
+	}
+
 	int ProcessReady () REQUIRES ( NetPoollingThread )
 	{
-		int iMaxIters = 0;
+		int iProcessedEvents = 0;
 		for ( NetPollEvent_t & dReady : *m_pPoll )
 		{
-			if ( g_iThrottleAction && iMaxIters>=g_iThrottleAction )
-				break;
 			m_tPrf.StartAt ();
-			assert ( dReady.m_uNetEvents );
+			assert ( dReady.m_uGotEvents );
 			auto pWork = (ISphNetAction *) &dReady;
 			m_pPoll->RemoveTimeout ( pWork ); // ensure that timer (if any) will no more fire
-			pWork->Process ( dReady.m_uNetEvents );
+			pWork->Process ();
 			++m_tPrf.m_iPerfEv;
-			++iMaxIters;
-
+			++iProcessedEvents;
 			m_tPrf.EndTask ();
 		}
-		return iMaxIters;
+		return iProcessedEvents;
 	}
 
 	void Poll ( int64_t tmLastWaitUS ) REQUIRES ( NetPoollingThread )
@@ -242,7 +252,6 @@ private:
 	void LoopNetPoll () REQUIRES ( NetPoollingThread )
 	{
 		auto _ = PublishTaskInfo ( new ListenTaskInfo_t );
-		pMyInfo ()->m_uWorks = m_dWorkInternal.GetLength();
 		int64_t tmLastWaitUS = MonoMicroTimer();
 		while ( !sphInterrupted() )
 		{
@@ -260,23 +269,8 @@ private:
 
 			pMyInfo ()->m_eThdState = NetloopState_e::PROCESS_NEW;
 
-			// add actions planned by jobs
-			PickNewActions ();
-
 			// setup or refresh handlers
-			m_tPrf.StartNext();
-			m_dWorkInternal.for_each ( [&] ( ISphNetAction * pWork ) REQUIRES ( NetPoollingThread )
-			{
-				assert ( pWork );
-				if ( pWork->m_uNetEvents==NetPollEvent_t::CLOSED )
-					m_pPoll->RemoveEvent ( pWork );
-				else {
-					assert ( pWork->m_iSock>=0 );
-					m_pPoll->SetupEvent ( pWork );
-				}
-			});
-			m_dWorkInternal.Resize ( 0 );
-			m_tPrf.EndTask();
+			EnqueueNewActions();
 
 			// will remove outdated even if they're just added (to avoid polling them)
 			iProcessed += RemoveOutdated ();
@@ -289,6 +283,13 @@ private:
 		m_bWorkerFinished = true;
 	}
 
+	bool IsInTime ( NetPollEvent_t* pEvent, int64_t tmNowUS ) const
+	{
+		return pEvent->m_iTimeoutIdx < 0
+			|| pEvent->m_iTimeoutTimeUS <= 0
+			|| !sph::TimeExceeded ( pEvent->m_iTimeoutTimeUS, tmNowUS, m_pPoll->TickGranularity() );
+	}
+
 	int RemoveOutdated () REQUIRES ( NetPoollingThread )
 	{
 		pMyInfo ()->m_eThdState = NetloopState_e::REMOVE_OUTDATED;
@@ -299,14 +300,15 @@ private:
 		// remove outdated items on no signals
 		m_pPoll->ProcessAll([&] ( NetPollEvent_t * pEvent ) REQUIRES ( NetPoollingThread )
 		{
-			auto * pWork = (ISphNetAction *) pEvent;
-
 			// skip eternal (non-timeouted)
-			if ( pWork->m_iTimeoutIdx<0 || pWork->m_iTimeoutTimeUS<=0 || !sph::TimeExceeded (pWork->m_iTimeoutTimeUS, tmNowUS, m_pPoll->TickGranularity()))
+			if ( IsInTime ( pEvent, tmNowUS ) )
 				return;
 
-			sphLogDebugv ( "%p bailing on timeout no signal, sock=%d", pWork, pWork->m_iSock );
-			pWork->Process ( NetPollEvent_t::TIMEOUT );
+			sphLogDebugv ( "%p bailing on timeout no signal, sock=%d", pEvent, pEvent->m_iSock );
+			pEvent->m_uGotEvents = NetPollEvent_t::IS_TIMEOUT;
+
+			auto* pWork = (ISphNetAction*)pEvent;
+			pWork->Process();
 			++iRemoved;
 		 });
 		m_tPrf.EndTask();
@@ -320,7 +322,7 @@ private:
 			m_pWakeup->Wakeup ();
 	}
 
-	void StopNetLoop ()
+	void StopNetLoop () // doesn't require NetPoollingThread
 	{
 		sphLogDebug ( "StopNetLoop()" );
 		Kick ();
@@ -334,7 +336,7 @@ private:
 
 	bool AddAction ( ISphNetAction * pElem ) EXCLUDES ( NetPoollingThread )
 	{
-		sphLogDebugvv ( "AddAction action as %d, events %u, timeout %d", pElem->m_iSock, pElem->m_uNetEvents, (int) pElem->m_iTimeoutTimeUS );
+		sphLogDebugvv ( "AddAction action as %d, events %u, timeout %d", pElem->m_iSock, pElem->m_uIOChange, (int) pElem->m_iTimeoutTimeUS );
 		if ( m_bWorkerFinished )
 			return false;
 		{
@@ -442,8 +444,14 @@ class SockWrapper_c::Impl_c final : public ISphNetAction
 
 	void ParentDestroying();
 
+	inline void FinallyAbort()
+	{
+		m_uGotEvents = NetPollEvent_t::IS_TIMEOUT;
+		m_fnWakeFromPoll();
+	}
+
 public:
-	void Process ( DWORD uGotEvents ) REQUIRES ( NetPoollingThread ) final;
+	void Process () REQUIRES ( NetPoollingThread ) final;
 	void NetLoopDestroying () REQUIRES ( NetPoollingThread ) final;
 };
 
@@ -465,7 +473,7 @@ void SockWrapper_c::Impl_c::ParentDestroying ()
 
 		if ( IsLinked () && m_pNetLoop )
 		{
-			m_uNetEvents = NetPollEvent_t::CLOSED;
+			m_uIOChange = NetPollEvent_t::SET_CLOSED;
 			m_pNetLoop->AddAction ( this );
 		}
 	}
@@ -490,46 +498,41 @@ void SockWrapper_c::Impl_c::NetLoopDestroying () REQUIRES ( NetPoollingThread )
 
 	sphLogDebug ( "SockWrapper_c::Impl_c::NetLoopDestroying () will resume sleeping job" );
 	// if we're in state of waiting - forcibly set awake reason to 'timeout', then wake up.
-	m_uNetEvents = TIMEOUT;
-	m_fnWakeFromPoll ();
+	FinallyAbort();
 }
 
 // this is blocking function. Aware, that current thread may change when it finished.
 void SockWrapper_c::Impl_c::EngageWaiterAndYield ( int64_t tmTimeUntilUs )
 {
 	assert ( m_pNetLoop );
-	sphLogDebugv ( "Coro::YieldWith (m_iEvent=%u), timeout %d", m_uNetEvents, int(tmTimeUntilUs-MonoMicroTimer ()) );
+	sphLogDebugv ( "Coro::YieldWith (m_iEvent=%u), timeout %d", m_uGotEvents, int(tmTimeUntilUs-MonoMicroTimer ()) );
 	m_iTimeoutTimeUS = tmTimeUntilUs;
 	if ( !m_fnWakeFromPoll ) // must be set here, NOT in ctr (since m.b. constructed in different ctx)
-		m_fnWakeFromPoll = Threads::CurrentRestarter ();
+		m_fnWakeFromPoll = Threads::CurrentRestarter (); // fixme! use Waker as more lightweight
 
 
 	// switch context (go to poll)
 	Threads::Coro::YieldWith ( [this] {
 		m_bEngaged.store ( true, std::memory_order_release );
-		if ( !m_pNetLoop->AddAction ( this ) )
-		{
-			m_uNetEvents = TIMEOUT;
-			m_fnWakeFromPoll();
-		}
+		if ( !m_pNetLoop->AddAction ( this ) ) // can fail if backend netpool is already finished
+			FinallyAbort();
 	});
 	m_bEngaged.store ( false, std::memory_order_release );
 
 	// here we switched back by call m_fnWakeFromPoll.
-	sphLogDebugv ( "EngageWaiterAndYield awake (m_iSock=%d, events=%u)", m_iSock, m_uNetEvents );
+	sphLogDebugv ( "EngageWaiterAndYield awake (m_iSock=%d, events=%u)", m_iSock, m_uGotEvents );
 }
 
 // Called in strict order after EngageWaiterAndYield.
-// timer is removed and will NOT tick anyway in future.
+// timer is removed and will NOT tick anyway in the future.
 // event itself is deactivated (for socket it is one-shot), or timed-out (need to be removed)
 // If it was called >once - search for the problem in caller place.
-void SockWrapper_c::Impl_c::Process ( DWORD uGotEvents ) REQUIRES ( NetPoollingThread )
+void SockWrapper_c::Impl_c::Process () REQUIRES ( NetPoollingThread )
 {
 	assert ( m_bEngaged.load ( std::memory_order_acquire ) );
-	if ( CheckSocketError ( uGotEvents ) || uGotEvents==TIMEOUT ) // real socket error
+	if ( CheckSocketError () || m_uGotEvents == IS_TIMEOUT ) // real socket error
 		m_pNetLoop->RemoveEvent ( this );
 
-	m_uNetEvents = uGotEvents;
 	m_fnWakeFromPoll ();
 }
 
@@ -548,23 +551,21 @@ int SockWrapper_c::Impl_c::SockPollClassic ( int64_t tmTimeUntilUs, bool bWrite 
 
 // netloop version - yield rescheduling and yield
 // Command flow:
-// EngageWaiterAndYield stores curent context into continuation, then suspend it and call AddAction to setup polling.
+// EngageWaiterAndYield stores current context into continuation, then suspend it and call AddAction to setup polling.
 // Net polling thread then register our socket in the poll/epoll/kqueue and poll it.
 // when an event fired, or timeout happened, it calls 'process', which, in turn,
 // schedules our continuation. So, we returned back from EngageWaiter (most probably already in another thread), and
 // process events.
 int SockWrapper_c::Impl_c::SockPollNetloop ( int64_t tmTimeUntilUs, bool bWrite )
 {
-	m_uNetEvents = NetPollEvent_t::ONCE | ( bWrite ? NetPollEvent_t::WRITE : NetPollEvent_t::READ );
+	m_uIOChange = NetPollEvent_t::SET_EDGEONESHOT | ( bWrite ? NetPollEvent_t::SET_WRITE : NetPollEvent_t::SET_READ );
 	EngageWaiterAndYield ( tmTimeUntilUs );
-	if ( m_uNetEvents == NetPollEvent_t::TIMEOUT )
+	if ( m_uGotEvents == NetPollEvent_t::IS_TIMEOUT )
 	{
 		sphSockSetErrno ( ETIMEDOUT );
 		return 0;
 	}
-	if ( CheckSocketError ( m_uNetEvents ) )
-		return -1;
-	return 1;
+	return CheckSocketError () ? -1 : 1;
 }
 
 // as usual sphPoll - returns 1 on success, 0 on timeout, -1 on error.
@@ -572,7 +573,7 @@ int SockWrapper_c::Impl_c::SockPoll ( int64_t tmTimeUntilUs, bool bWrite )
 {
 	TRACE_CONN ( "conn", "SockPoll" );
 	session::SetTaskState ( TaskState_e::NET_IDLE );
-	auto _ = AtScopeExit([bWrite] { session::SetTaskState ( bWrite ? TaskState_e::NET_WRITE : TaskState_e::NET_READ ); });
+	AT_SCOPE_EXIT ( [bWrite] { session::SetTaskState ( bWrite ? TaskState_e::NET_WRITE : TaskState_e::NET_READ ); } );
 	return m_pNetLoop ? SockPollNetloop ( tmTimeUntilUs, bWrite ) : SockPollClassic ( tmTimeUntilUs, bWrite );
 }
 

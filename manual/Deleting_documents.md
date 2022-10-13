@@ -46,7 +46,7 @@ POST /delete -d '
 ```
 
 * `id` for JSON is the row `id` which should be deleted.
-* `query` for JSON is the full-text condition and has the same syntax as in the [JSON/update](Updating_documents/UPDATE.md#Updates-via-HTTP).
+* `query` for JSON is the full-text condition and has the same syntax as in the [JSON/update](Updating_documents/UPDATE.md#Updates-via-HTTP-JSON).
 * `cluster` for JSON is cluster name property and should be set along with `index` property to delete a row from an index which is inside a [replication cluster](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster).
 
 <!-- end -->

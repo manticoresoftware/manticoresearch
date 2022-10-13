@@ -37,7 +37,7 @@ SELECT * FROM pq;
 ##### HTTP
 <!-- request HTTP -->
 There are two way you can add a percolate query into a percolate index:
-* query in JSON /search compatible format, described at [json/search](../Searching/Full_text_matching/Basic_usage.md#HTTP)
+* query in JSON /search compatible format, described at [json/search](../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON)
 ```json
 PUT /pq/pq_index/doc/1
 {

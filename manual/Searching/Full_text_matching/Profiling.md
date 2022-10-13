@@ -37,9 +37,9 @@ SHOW PLAN;
 The command will return the structure of the executed query. Please note that the 3 statements - SET profiling, the query and SHOW - must run on the same session.
 
 
-## Profiling the query in HTTP
+## Profiling the query in HTTP JSON
 
-In HTTP, we can just enable `"profile":true` to get in response the full-text query tree structure.
+When using the HTTP JSON protocol we can just enable `"profile":true` to get in response the full-text query tree structure.
 
 ```json
 {

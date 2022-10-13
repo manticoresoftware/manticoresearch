@@ -30,7 +30,7 @@ Columnar storage support via the [Manticore Columnar Library](https://github.com
 The native Manticore's syntax is SQL. It speaks SQL over HTTP and MySQL protocol. You can use your preferred mysql client to connect to Manticore Search server via SQL protocol in any programming language.
 
 #### JSON over HTTP
-To provide more programmatic way to manage your data and schemas Manticore provides [HTTP JSON](Searching/Full_text_matching/Basic_usage.md#HTTP) protocol. It is very similar to the one from Elasticsearch.
+To provide more programmatic way to manage your data and schemas Manticore provides [HTTP JSON](Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) protocol. It is very similar to the one from Elasticsearch.
 
 #### Declarative and imperative schema management
 You can create / update / delete indexes online as well as providing schemas in a configuration file.

@@ -1,4 +1,4 @@
-# SHOW PROFILE 
+# SHOW PROFILE
 
 <!-- example SHOW PROFILE -->
 
@@ -89,7 +89,7 @@ A list of states may (and will) vary over time, as we refine the states. Here's 
 * `aggregate`: aggregating multiple result sets.
 * `net_write`: writing the result set to the network.
 
-## Query profiling in HTTP
+## Query profiling in HTTP JSON
 
 You can view the final transformed query tree with all normalized keywords by adding a `"profile":true` property:
 

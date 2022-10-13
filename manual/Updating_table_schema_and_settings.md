@@ -132,7 +132,7 @@ mysql> desc rt;
 <!-- example ALTER FT -->
 
 ```sql
-ALTER RTINDEX index ft_setting='value'[, ft_setting2='value']
+ALTER TABLE index ft_setting='value'[, ft_setting2='value']
 ```
 
 You can also use `ALTER` to modify full-text settings of your index in [RT mode](Read_this_first.md#Real-time-mode-vs-plain-mode). Just remember that it doesn't affect existing documents, it only affects new ones. Take a look at the example where we:
@@ -219,7 +219,7 @@ mysql> show meta;
 
 <!-- example ALTER RECONFIGURE -->
 ```sql
-ALTER RTINDEX index RECONFIGURE
+ALTER TABLE index RECONFIGURE
 ```
 
 `ALTER` can also reconfigure an RT index in [plain mode](Creating_an_index/Local_indexes.md#Defining-index-schema-in-config-%28Plain-mode%29), so that new tokenization, morphology and other text processing settings from the configuration file take effect for new documents. Note, that the existing document will be left intact. Internally, it forcibly saves the current RAM chunk as a new disk chunk and adjusts the index header, so that new documents are tokenized using the updated full-text settings.
@@ -234,7 +234,7 @@ mysql> show index rt settings;
 +---------------+-------+
 1 row in set (0.00 sec)
 
-mysql> alter rtindex rt reconfigure;
+mysql> alter table rt reconfigure;
 Query OK, 0 rows affected (0.00 sec)
 
 mysql> show index rt settings;
@@ -254,9 +254,11 @@ mysql> show index rt settings;
 ALTER TABLE table REBUILD SECONDARY
 ```
 
-`ALTER` can also be used to rebuild secondary indexes in a given table. Sometimes a secondary index can be disabled for a whole index or for one/multiple attributes in the index. `ALTER TABLE table REBUILD SECONDARY` rebuilds the secondary index from the attribute data and enables it again. Secondary indexes get disabled:
-* on `UPDATE` of an attribute: in this case its secondary index gets disabled
-* in case Manticore loads a table with old formatted secondary indexes: in this case secondary indexes will be disabled for the whole table
+`ALTER` can also be used to rebuild secondary indexes in a given table. Sometimes a secondary index can be disabled for the whole index or for one/multiple attributes in it:
+* On `UPDATE` of an attribute: in this case its secondary index gets disabled.
+* In case Manticore loads a table with old formatted secondary indexes: in this case secondary indexes will be disabled for the whole table.
+
+`ALTER TABLE table REBUILD SECONDARY` rebuilds secondary indexes from attribute data and enables them again.
 
 <!-- request Example -->
 ```sql

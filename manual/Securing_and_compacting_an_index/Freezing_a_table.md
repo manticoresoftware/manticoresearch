@@ -63,4 +63,12 @@ If you shut down the daemon with a frozen table, it will behave as in case of a 
 
 # Unfreezing a table
 
-Unfreezing is much simpler; it just re-enables previously blocked operations and also restarts an internal compaction service. All the operations that are waiting for a table unfreeze get unfrozen too and finish their operations normally.
+<!-- example unfreeze -->
+`UNFREEZE` re-enables previously blocked operations and restarts the internal compaction service. All the operations that are waiting for a table unfreeze get unfrozen too and finish their operations normally.
+
+<!-- request Example -->
+```sql
+UNFREEZE tbl;
+```
+
+<!-- end -->

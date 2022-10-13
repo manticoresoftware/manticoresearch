@@ -11,7 +11,7 @@
 
 `{col_name | expr_alias} [NOT] IN @uservar` condition syntax is supported. Refer to [SET](../Server_settings/Setting_variables_online.md#SET) syntax for a description of global user variables.
 
-## HTTP
+## HTTP JSON
 
 If you prefer HTTP JSON interface you can also do filtering. It looks more complex that in SQL, but can be recommended for the cases when you need to prepare a query in a programmatic manner, for example as a result of a form in your application filled out by the user.
 

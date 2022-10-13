@@ -313,21 +313,14 @@ private:
 			}
 		while ( !m_tState.m_uState.compare_exchange_weak ( uPrevState, uPrevState & ~CoroState_t::Running_e, std::memory_order_relaxed ) );
 
-		if ( !m_fnYieldWithProceeder )
-			return;
-
-		Handler fnYieldWithProceeder = nullptr;
-		Swap ( fnYieldWithProceeder, m_fnYieldWithProceeder );
-
-		fnYieldWithProceeder();
+		if ( m_fnYieldWithProceeder )
+			std::exchange ( m_fnYieldWithProceeder, nullptr )();
 	}
 
 	inline void Run() noexcept
 	{
-		if ( Resume() ) // Resume() returns true when coro is finished
-			return;
-
-		ResetRunningAndReschedule();
+		if ( !Resume() ) // Resume() returns true when coro is finished
+			ResetRunningAndReschedule();
 	}
 
 	inline void Schedule(bool bVip=true) noexcept

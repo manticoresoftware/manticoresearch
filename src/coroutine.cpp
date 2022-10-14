@@ -493,13 +493,11 @@ public:
 		return m_pTlsThis;
 	}
 
-	inline bool Wake ( const size_t iWakerEpoch, bool bVip ) noexcept
+	inline bool Wake ( size_t iExpectedEpoch, bool bVip ) noexcept
 	{
-		size_t iExpectedEpoch = m_iWakerEpoch.load ( std::memory_order_relaxed );
-		bool bLastWaker = m_iWakerEpoch.compare_exchange_strong ( iExpectedEpoch, iWakerEpoch + 1, std::memory_order_acq_rel );
+		bool bLastWaker = m_iWakerEpoch.compare_exchange_strong ( iExpectedEpoch, iExpectedEpoch + 1, std::memory_order_acq_rel );
 		if ( !bLastWaker ) {
-			// m_iWakerEpoch has been incremented before, so consider this wake
-			// operation as outdated and do nothing
+			// m_iWakerEpoch doesn't match expected epoch, op outdated
 			return false;
 		}
 

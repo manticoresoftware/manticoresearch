@@ -412,8 +412,7 @@ class SockWrapper_c::Impl_c final : public ISphNetAction
 {
 	friend class SockWrapper_c;
 	CSphRefcountedPtr<CSphNetLoop> m_pNetLoop;
-	Handler m_fnWakeFromPoll = nullptr;
-	std::atomic<bool> m_bEngaged { false }; // whether resume or not m_fnRestarter
+	Threads::Coro::Waker_c m_tWaker { nullptr, 0 };
 
 	int64_t	m_iWriteTimeoutUS;
 	int64_t m_iReadTimeoutUS;
@@ -447,7 +446,8 @@ class SockWrapper_c::Impl_c final : public ISphNetAction
 	inline void FinallyAbort()
 	{
 		m_uGotEvents = NetPollEvent_t::IS_TIMEOUT;
-		m_fnWakeFromPoll();
+		if ( m_tWaker.IsEngaged() )
+			m_tWaker.Wake ( true );
 	}
 
 public:
@@ -492,10 +492,6 @@ void SockWrapper_c::Impl_c::NetLoopDestroying () REQUIRES ( NetPoollingThread )
 	// if we're not finished - setting m_pNetLoop to null will just switch us to classic blocking polling.
 	m_pNetLoop = nullptr;
 
-	// socket is just unactive (oneshoted and not removed). Nothing to do.
-	if ( !m_bEngaged.load ( std::memory_order_acquire ) )
-		return;
-
 	sphLogDebug ( "SockWrapper_c::Impl_c::NetLoopDestroying () will resume sleeping job" );
 	// if we're in state of waiting - forcibly set awake reason to 'timeout', then wake up.
 	FinallyAbort();
@@ -507,19 +503,15 @@ void SockWrapper_c::Impl_c::EngageWaiterAndYield ( int64_t tmTimeUntilUs )
 	assert ( m_pNetLoop );
 	sphLogDebugv ( "Coro::YieldWith (m_iEvent=%u), timeout %d", m_uGotEvents, int(tmTimeUntilUs-MonoMicroTimer ()) );
 	m_iTimeoutTimeUS = tmTimeUntilUs;
-	if ( !m_fnWakeFromPoll ) // must be set here, NOT in ctr (since m.b. constructed in different ctx)
-		m_fnWakeFromPoll = Threads::CurrentRestarter (); // fixme! use Waker as more lightweight
-
 
 	// switch context (go to poll)
-	Threads::Coro::YieldWith ( [this] {
-		m_bEngaged.store ( true, std::memory_order_release );
+	Threads::Coro::YieldWith ( [this, pWorker = Coro::CurrentWorker()] {
+		m_tWaker = Threads::CreateWaker ( pWorker );
 		if ( !m_pNetLoop->AddAction ( this ) ) // can fail if backend netpool is already finished
 			FinallyAbort();
 	});
-	m_bEngaged.store ( false, std::memory_order_release );
 
-	// here we switched back by call m_fnWakeFromPoll.
+	// here we switched back by call m_tWaker.Wake().
 	sphLogDebugv ( "EngageWaiterAndYield awake (m_iSock=%d, events=%u)", m_iSock, m_uGotEvents );
 }
 
@@ -529,11 +521,10 @@ void SockWrapper_c::Impl_c::EngageWaiterAndYield ( int64_t tmTimeUntilUs )
 // If it was called >once - search for the problem in caller place.
 void SockWrapper_c::Impl_c::Process () REQUIRES ( NetPoollingThread )
 {
-	assert ( m_bEngaged.load ( std::memory_order_acquire ) );
-	if ( CheckSocketError () || m_uGotEvents == IS_TIMEOUT ) // real socket error
+	if ( CheckSocketError() || m_uGotEvents == IS_TIMEOUT ) // real socket error
 		m_pNetLoop->RemoveEvent ( this );
 
-	m_fnWakeFromPoll ();
+	m_tWaker.Wake ( true ); // true means 'vip'
 }
 
 // classic version - blocking via sphPoll

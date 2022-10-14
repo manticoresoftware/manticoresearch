@@ -38,6 +38,11 @@ public:
 		, m_iEpoch { iEpoch }
 	{}
 
+	inline bool IsEngaged() const noexcept
+	{
+		return m_pCtx!=nullptr;
+	}
+
 	bool Wake ( bool bVip = false ) const noexcept;
 };
 

@@ -657,6 +657,12 @@ Handler CurrentRestarter ( bool bVip ) noexcept
 	return Coro::Worker()->Restarter ( bVip );
 }
 
+Coro::Waker_c CreateWaker ( Coro::Worker_c* pWorker ) noexcept
+{
+	return pWorker ? pWorker->CreateWaker() : Coro::Worker()->CreateWaker();
+}
+
+
 Waiter_t DefferedRestarter () noexcept
 {
 	return { nullptr, [fnProceed = CurrentRestarter ( false )] ( void* ) { fnProceed(); } };

@@ -37,7 +37,7 @@ Manticore Search is an easy to use open source fast database for search. Good al
   - **15x faster** than Elasticsearch for [small dataset](https://db-benchmarks.com/test-hn-small/#manticore-search-vs-elasticsearch) ([reproducible](https://github.com/db-benchmarks/db-benchmarks#get-started)❗)
   - **5x faster** than Elasticsearch for [medium-size data](https://db-benchmarks.com/test-hn/#manticore-search-columnar-storage-vs-elasticsearch) ([reproducible](https://github.com/db-benchmarks/db-benchmarks#get-started)❗)
   - **4x faster** than Elasticsearch for [big data](https://db-benchmarks.com/test-taxi/#manticore-search-vs-elasticsearch) ([reproducible](https://github.com/db-benchmarks/db-benchmarks#get-started)❗)
-  - **up to 2x faster** max throughput for data ingestion on a single server ([reproducible](https://manticoresearch.com/blog/manticore-alternative-to-elasticsearch/#data-ingestion-performance#get-started)❗)
+  - **up to 2x faster** max throughput than Elasticsearch's for data ingestion on a single server ([reproducible](https://manticoresearch.com/blog/manticore-alternative-to-elasticsearch/#data-ingestion-performance#get-started)❗)
 * Modern MPP architecture and smart query parallelization capabilities allow to fully utilize all your CPU cores to **lower response time** as much as possible, when needed.
 * Powerful and fast full-text search which **works fine for small and big datasets**
 * Traditional **row-wise storage** for small, medium and big size datasets

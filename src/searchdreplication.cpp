@@ -285,16 +285,16 @@ static bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, c
 static bool HandleCmdReplicated ( RtAccum_t & tAcc );
 
 // command to all remote nodes at cluster to get actual nodes list
-static bool ClusterGetNodes ( const CSphString & sClusterNodes, const CSphString & sCluster, const CSphString & sGTID, CSphString & sError, CSphString & sNodes );
+static bool ClusterGetNodes ( const CSphString & sClusterNodes, const CSphString & sCluster, const CSphString & sGTID, Proto_e eProto, CSphString & sError, CSphString & sNodes );
 
 // callback at remote node for CLUSTER_GET_NODES to return actual nodes list at cluster
 static bool RemoteClusterGetNodes ( const CSphString & sCluster, const CSphString & sGTID, CSphString & sError, CSphString & sNodes );
 
 // utility function to filter nodes list provided at string by specific protocol
-static bool ClusterFilterNodes ( const CSphString & sSrcNodes, Proto_e eProto, CSphString & sDstNodes, CSphString & sError );
+static bool ClusterFilterNodes ( Str_t sSrcNodes, Proto_e eProto, CSphString & sDstNodes, CSphString & sError );
 
 // callback at remote node for CLUSTER_UPDATE_NODES to update nodes list at cluster from actual nodes list
-static bool RemoteClusterUpdateNodes ( const CSphString & sCluster, CSphString * pNodes, bool bSaveConf, CSphString & sError );
+static bool RemoteClusterUpdateNodes ( const CSphString & sCluster, CSphString * pNodes, bool bSaveConf, bool bMergeNodes, CSphString & sError );
 
 static bool IsClusterCommand ( const RtAccum_t & tAcc );
 
@@ -309,6 +309,8 @@ static void SaveUpdate ( const CSphQuery & tQuery, CSphVector<BYTE> & dOut );
 static int LoadUpdate ( const BYTE * pBuf, int iLen, CSphQuery & tQuery );
 
 static bool ValidateUpdate ( const ReplicationCommand_t & tCmd, CSphString & sError  );
+
+static bool DoClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdate, bool bRemoteError, bool bJoinUpdate, CSphString & sError );
 
 static bool IsInetAddrFree ( DWORD uAddr, int iPort )
 {
@@ -2613,22 +2615,9 @@ void ReplicationStart ( CSphVector<ListenerDesc_t> dListeners,
 			}
 		} else
 		{
-			CSphString sNodes;
-			if ( !ClusterGetNodes ( tDesc.m_sClusterNodes, tDesc.m_sName, "", sError, sNodes ) )
+			if ( !ClusterGetNodes ( tDesc.m_sClusterNodes, tDesc.m_sName, "", Proto_e::REPLICATION, sError, tArgs.m_sNodes ) )
 			{
-				sphWarning ( "cluster '%s': no available nodes (%s), replication is disabled, error: %s", tDesc.m_sName.cstr(), tDesc.m_sClusterNodes.scstr(), sError.cstr() );
-				continue;
-			}
-
-			if ( !ClusterFilterNodes ( sNodes, Proto_e::REPLICATION, tArgs.m_sNodes, sError ) )
-			{
-				sphWarning ( "cluster '%s': invalid nodes '%s', replication is disabled, parse error: '%s'", tDesc.m_sName.cstr(), sNodes.scstr(), sError.cstr() );
-				continue;
-			}
-
-			if ( sNodes.IsEmpty() )
-			{
-				sphWarning ( "cluster '%s': no available nodes, replication is disabled", tDesc.m_sName.cstr() );
+				sphWarning ( "cluster '%s': invalid nodes '%s'(%s), replication is disabled, error: %s", tDesc.m_sName.cstr(), tArgs.m_sNodes.scstr(), tDesc.m_sClusterNodes.scstr(), sError.cstr() );
 				continue;
 			}
 		}
@@ -2795,21 +2784,12 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 	if ( !CheckClusterStatement ( sCluster, dNames, dValues, true, sError, pElem ) )
 		return false;
 
-	CSphString sNodes;
-	if ( !ClusterGetNodes ( pElem->m_sClusterNodes, pElem->m_sName, "", sError, sNodes ) )
+	if ( !ClusterGetNodes ( pElem->m_sClusterNodes, pElem->m_sName, "", Proto_e::REPLICATION, sError, tArgs.m_sNodes ) )
 	{
-		sError.SetSprintf ( "cluster '%s', no nodes available(%s), error: %s", pElem->m_sName.cstr(), pElem->m_sClusterNodes.cstr(), sError.cstr() );
-		return false;
-	}
-
-	if ( !ClusterFilterNodes ( sNodes, Proto_e::REPLICATION, tArgs.m_sNodes, sError ) )
-	{
-		sError.SetSprintf ( "cluster '%s', invalid nodes(%s), error: %s", pElem->m_sName.cstr(), sNodes.cstr(), sError.cstr() );
-		return false;
-	}
-	if ( tArgs.m_sNodes.IsEmpty() )
-	{
-		sError.SetSprintf ( "cluster '%s', no nodes available", pElem->m_sName.cstr() );
+		if ( tArgs.m_sNodes.IsEmpty() )
+			sError.SetSprintf ( "cluster '%s', no nodes available(%s), error: %s", pElem->m_sName.cstr(), pElem->m_sClusterNodes.scstr(), sError.cstr() );
+		else
+			sError.SetSprintf ( "cluster '%s', invalid nodes '%s'(%s), error: %s", pElem->m_sName.cstr(), tArgs.m_sNodes.scstr(), pElem->m_sClusterNodes.scstr(), sError.cstr() );
 		return false;
 	}
 
@@ -2857,7 +2837,7 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 	if ( bOk && bUpdateNodes )
 	{
 		sError = "";
-		bOk &= ClusterAlterUpdate ( sCluster, "nodes", false, sError );
+		bOk &= DoClusterAlterUpdate ( sCluster, "nodes", false, true, sError );
 	}
 
 	if ( !bOk )
@@ -3101,6 +3081,7 @@ struct PQRemoteData_t
 
 	CSphString	m_sCluster;			// cluster name of index
 	IndexType_e	m_eIndex = IndexType_e::ERROR_;
+	bool m_bJoinUpdate = false;
 
 	uint64_t	m_tWriterKey = 0;
 
@@ -3256,12 +3237,13 @@ static void GetNodes ( const VecAgentDesc_t & dDesc, VecRefPtrs_t<AgentConn_t *>
 }
 
 // get nodes functor to collect listener with specific protocol
-struct ListenerProtocolIterator_t
+class ListenerProtocolIterator_t
 {
-	StringBuilder_c m_sNodes { "," };
 	Proto_e m_eProto;
 	CSphString * m_pError { nullptr };
+	SmallStringHash_T<int> m_hNodes;
 
+public:
 	ListenerProtocolIterator_t ( Proto_e eProto, CSphString * pError )
 		: m_eProto ( eProto )
 		, m_pError ( pError )
@@ -3280,18 +3262,30 @@ struct ListenerProtocolIterator_t
 		char sAddrBuf [ SPH_ADDRESS_SIZE ];
 		sphFormatIP ( sAddrBuf, sizeof(sAddrBuf), tListen.m_uIP );
 
-		m_sNodes.Appendf ( "%s:%d", sAddrBuf, tListen.m_iPort );
+		CSphString sNode;
+		sNode.SetSprintf ( "%s:%d", sAddrBuf, tListen.m_iPort );
+
+		m_hNodes.Add ( 1, sNode );
 
 		return true;
+	}
+
+	CSphString GetNodes() const
+	{
+		StringBuilder_c sNodes ( "," );
+		for ( const auto & sNode : m_hNodes )
+			sNodes += sNode.first.cstr();
+
+		return sNodes.cstr();
 	}
 };
 
 // utility function to filter nodes list provided at string by specific protocol
-bool ClusterFilterNodes ( const CSphString & sSrcNodes, Proto_e eProto, CSphString & sDstNodes, CSphString & sError )
+bool ClusterFilterNodes ( Str_t sSrcNodes, Proto_e eProto, CSphString & sDstNodes, CSphString & sError )
 {
 	ListenerProtocolIterator_t tIt ( eProto, &sError );
 	GetNodes_T ( sSrcNodes, tIt );
-	sDstNodes = tIt.m_sNodes.cstr();
+	sDstNodes = tIt.GetNodes();
 
 	return ( sError.IsEmpty() );
 }
@@ -3613,11 +3607,13 @@ public:
 	{
 		const PQRemoteData_t & tCmd = GetReq ( tAgent );
 		tOut.SendString ( tCmd.m_sCluster.cstr() );
+		tOut.SendByte ( tCmd.m_bJoinUpdate );
 	}
 
 	static void ParseCommand ( InputBuffer_c & tBuf, PQRemoteData_t & tCmd )
 	{
 		tCmd.m_sCluster = tBuf.GetString();
+		tCmd.m_bJoinUpdate = !!tBuf.GetByte();
 	}
 
 	static void BuildReply ( ISphOutputBuffer & tOut )
@@ -3731,7 +3727,7 @@ void HandleCommandClusterPq ( ISphOutputBuffer & tOut, WORD uCommandVer, InputBu
 		case CLUSTER_UPDATE_NODES:
 		{
 			PQRemoteClusterUpdateNodes_c::ParseCommand ( tBuf, tCmd );
-			bOk = RemoteClusterUpdateNodes ( tCmd.m_sCluster, nullptr, false, sError );
+			bOk = RemoteClusterUpdateNodes ( tCmd.m_sCluster, nullptr, false, tCmd.m_bJoinUpdate, sError );
 			if ( bOk )
 				PQRemoteClusterUpdateNodes_c::BuildReply ( tOut );
 		}
@@ -5586,7 +5582,7 @@ Optional_T<CSphString> IsPartOfCluster ( const ServedDesc_t * pDesc )
 }
 
 // command to all remote nodes at cluster to get actual nodes list
-bool ClusterGetNodes ( const CSphString & sClusterNodes, const CSphString & sCluster, const CSphString & sGTID, CSphString & sError, CSphString & sNodes )
+bool ClusterGetNodes ( const CSphString & sClusterNodes, const CSphString & sCluster, const CSphString & sGTID, Proto_e eProto, CSphString & sError, CSphString & sNodes )
 {
 	VecAgentDesc_t dDesc;
 	GetNodes ( sClusterNodes, dDesc, sError );
@@ -5611,6 +5607,7 @@ bool ClusterGetNodes ( const CSphString & sClusterNodes, const CSphString & sClu
 	PQRemoteClusterGetNodes_c tReq;
 	ScheduleDistrJobs ( dAgents, &tReq, &tReq, tReporter );
 
+	StringBuilder_c sAllNodes ( "," );
 	bool bDone = false;
 	while ( !bDone )
 	{
@@ -5620,22 +5617,20 @@ bool ClusterGetNodes ( const CSphString & sClusterNodes, const CSphString & sClu
 		if ( !bDone )
 			tReporter->WaitChanges();
 
-		for ( const AgentConn_t * pAgent : dAgents )
+		for ( AgentConn_t * pAgent : dAgents )
 		{
 			if ( !pAgent->m_bSuccess )
 				continue;
 
-			// FIXME!!! no need to wait all replies in case any node get nodes list
-			// just break on 1st successful reply
-			// however need a way for distributed loop to finish as it can not break early
-			// FIXME!!! validate the nodes are the same
+			// need to wait all replies in case any node get nodes list and merge these lists
+			// also need a way for distributed loop to finish as it can not break early
 			const PQRemoteReply_t & tRes = PQRemoteBase_c::GetRes ( *pAgent );
-			if ( sNodes.IsEmpty() && !tRes.m_sNodes.IsEmpty() )
-				sNodes = tRes.m_sNodes;
+			sAllNodes += tRes.m_sNodes.cstr();
+			pAgent->m_bSuccess = false;
 		}
 	}
 
-	bool bGotNodes = ( !sNodes.IsEmpty() );
+	bool bGotNodes = ( !sAllNodes.IsEmpty() );
 	if ( !bGotNodes )
 	{
 		StringBuilder_c sBuf ( ";" );
@@ -5648,9 +5643,31 @@ bool ClusterGetNodes ( const CSphString & sClusterNodes, const CSphString & sClu
 			}
 		}
 		sError = sBuf.cstr();
+		return false;
 	}
 
-	return bGotNodes;
+	if ( !ClusterFilterNodes ( Str_t ( sAllNodes ), eProto, sNodes, sError ) )
+		return false;
+
+	if ( sNodes.IsEmpty() )
+	{
+		sError = "empty nodes list";
+		return false;
+	}
+
+	return true;
+}
+
+static void UniqNodes ( CSphString & sNodes )
+{
+	StrVec_t dNodes;
+	sphSplit ( dNodes, sNodes.cstr(), "," );
+	dNodes.Uniq();
+
+	StringBuilder_c sTmpNodes ( "," );
+	dNodes.for_each ( [&sTmpNodes] ( const auto & sNode ) { sTmpNodes += sNode.cstr(); } );
+
+	sNodes = CSphString ( sTmpNodes );
 }
 
 // callback at remote node for CLUSTER_GET_NODES to return actual nodes list at cluster
@@ -5674,14 +5691,25 @@ bool RemoteClusterGetNodes ( const CSphString & sCluster, const CSphString & sGT
 	// send back view nodes of cluster - as list of actual nodes
 	{
 		ScopedMutex_t tNodesLock ( pCluster->m_tViewNodesLock );
-		sNodes = pCluster->m_sViewNodes;
+		StringBuilder_c sAllNodes ( "," );
+		sAllNodes += pCluster->m_sViewNodes.cstr();
+		sAllNodes += pCluster->m_sClusterNodes.cstr();
+		sNodes = CSphString ( sAllNodes );
 	}
+
+	// rebuild the list to keep only uniq nodes
+	UniqNodes ( sNodes );
 
 	return true;
 }
 
 // cluster ALTER statement that updates nodes option from view nodes at all nodes at cluster
 bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdate, bool bRemoteError, CSphString & sError )
+{
+	return DoClusterAlterUpdate ( sCluster, sUpdate, bRemoteError, false, sError );
+}
+
+bool DoClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdate, bool bRemoteError, bool bJoinUpdate, CSphString & sError )
 	EXCLUDES ( g_tClustersLock )
 {
 	if ( sUpdate!="nodes" )
@@ -5705,11 +5733,12 @@ bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdat
 	CSphString sNodes;
 
 	// local nodes update
-	bool bOk = RemoteClusterUpdateNodes ( sCluster, &sNodes, true, sError );
+	bool bOk = RemoteClusterUpdateNodes ( sCluster, &sNodes, true, bJoinUpdate, sError );
 
 	// remote nodes update after locals updated
 	PQRemoteData_t tReqData;
 	tReqData.m_sCluster = sCluster;
+	tReqData.m_bJoinUpdate = bJoinUpdate;
 
 	VecRefPtrs_t<AgentConn_t *> dNodes;
 	GetNodes ( sNodes, dNodes, tReqData );
@@ -5731,7 +5760,7 @@ bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdat
 }
 
 // callback at remote node for CLUSTER_UPDATE_NODES to update nodes list at cluster from actual nodes list
-bool RemoteClusterUpdateNodes ( const CSphString & sCluster, CSphString * pNodes, bool bSaveConf, CSphString & sError )
+bool RemoteClusterUpdateNodes ( const CSphString & sCluster, CSphString * pNodes, bool bSaveConf, bool bMergeNodes, CSphString & sError )
 	EXCLUDES ( g_tClustersLock )
 {
 	Threads::SccRL_t tLock ( g_tClustersLock );
@@ -5748,9 +5777,19 @@ bool RemoteClusterUpdateNodes ( const CSphString & sCluster, CSphString * pNodes
 
 		uint64_t uWasNodes = sphFNV64 ( pCluster->m_sClusterNodes.cstr() );
 
-		if ( !ClusterFilterNodes ( pCluster->m_sViewNodes, Proto_e::SPHINX, pCluster->m_sClusterNodes, sError ) )
+		StringBuilder_c sNodes ( "," );
+		if ( bMergeNodes )
 		{
-			sError.SetSprintf ( "cluster '%s', invalid nodes(%s), error: %s", sCluster.cstr(), pCluster->m_sViewNodes.cstr(), sError.cstr() );
+			sNodes += pCluster->m_sViewNodes.cstr();
+			sNodes += pCluster->m_sClusterNodes.cstr();
+		} else
+		{
+			sNodes << pCluster->m_sViewNodes.cstr();
+		}
+
+		if ( !ClusterFilterNodes ( Str_t ( sNodes ), Proto_e::SPHINX, pCluster->m_sClusterNodes, sError ) )
+		{
+			sError.SetSprintf ( "cluster '%s', invalid nodes(%s), error: %s", sCluster.cstr(), sNodes.cstr(), sError.cstr() );
 			return false;
 		}
 		bClusterChanged = ( uWasNodes!=sphFNV64 ( pCluster->m_sClusterNodes.cstr() ) );

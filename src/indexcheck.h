@@ -37,9 +37,10 @@ public:
 	virtual void Progress ( const char* szFmt, ... ) = 0;
 	virtual void Done() = 0;
 	virtual int64_t GetNumFails() const = 0;
+	virtual const DocID_t* GetExtractDocs () const {return nullptr;};
 };
 
-DebugCheckError_i* MakeDebugCheckError ( FILE* fp );
+DebugCheckError_i* MakeDebugCheckError ( FILE* fp, DocID_t* pExtract );
 
 // common code for debug checks in RT and disk indexes
 class DebugCheckHelper_c

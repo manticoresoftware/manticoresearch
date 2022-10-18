@@ -1469,13 +1469,10 @@ CSphString DiskIndexChecker_c::Impl_c::GetFilename ( ESphExt eExt ) const
 
 /// public interface
 DiskIndexChecker_c::DiskIndexChecker_c ( CSphIndex& tIndex, DebugCheckError_i& tReporter )
-	: m_pImpl { new Impl_c { tIndex, tReporter } }
+	: m_pImpl { std::make_unique<Impl_c> ( tIndex, tReporter ) }
 {}
 
-DiskIndexChecker_c::~DiskIndexChecker_c()
-{
-	SafeDelete ( m_pImpl );
-}
+DiskIndexChecker_c::~DiskIndexChecker_c() = default;
 
 bool DiskIndexChecker_c::OpenFiles ()
 {

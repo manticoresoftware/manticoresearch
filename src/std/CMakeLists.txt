@@ -73,8 +73,6 @@ add_library ( manticore_std OBJECT
 		scopedlock_impl.h
 		sharedptr.h
 		sharedptr_impl.h
-		slist.h
-		slist_impl.h
 		smalloc.h
 		smalloc_impl.h
 		sort.h

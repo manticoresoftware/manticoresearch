@@ -62,6 +62,8 @@ int NThreads ();
 
 Handler CurrentRestarter ( bool bVip = true ) noexcept;
 
+Coro::Waker_c CreateWaker( Coro::Worker_c* pWorker = nullptr ) noexcept;
+
 // Returns smart pointer, which will issue rescheduling of current coro on destroy.
 // restarter - pushes to usual working queue, continuator - try to resume immediately, then pushes to vip queue.
 Waiter_t DefferedRestarter() noexcept;

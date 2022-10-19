@@ -246,13 +246,13 @@ class Worker_c : public details::SchedulerOperation_t
 			Worker_c::m_pTlsThis = pWorker;
 			pWorker->m_pCurrentTaskInfo =
 					MyThd ().m_pTaskInfo.exchange ( pWorker->m_pCurrentTaskInfo, std::memory_order_relaxed );
-			pWorker->m_tmCpuTimeBase -= sphCpuTimer();
+			pWorker->m_tmCpuTimeBase -= sphThreadCpuTimer();
 		}
 
 		~CoroGuard_t ()
 		{
 			auto pWork = Worker_c::m_pTlsThis;
-			pWork->m_tmCpuTimeBase += sphCpuTimer ();
+			pWork->m_tmCpuTimeBase += sphThreadCpuTimer ();
 			pWork->m_pCurrentTaskInfo = MyThd ().m_pTaskInfo.exchange ( pWork->m_pCurrentTaskInfo, std::memory_order_relaxed );
 			Worker_c::m_pTlsThis = pWork->m_pPreviousWorker;
 		}
@@ -313,21 +313,14 @@ private:
 			}
 		while ( !m_tState.m_uState.compare_exchange_weak ( uPrevState, uPrevState & ~CoroState_t::Running_e, std::memory_order_relaxed ) );
 
-		if ( !m_fnYieldWithProceeder )
-			return;
-
-		Handler fnYieldWithProceeder = nullptr;
-		Swap ( fnYieldWithProceeder, m_fnYieldWithProceeder );
-
-		fnYieldWithProceeder();
+		if ( m_fnYieldWithProceeder )
+			std::exchange ( m_fnYieldWithProceeder, nullptr )();
 	}
 
 	inline void Run() noexcept
 	{
-		if ( Resume() ) // Resume() returns true when coro is finished
-			return;
-
-		ResetRunningAndReschedule();
+		if ( !Resume() ) // Resume() returns true when coro is finished
+			ResetRunningAndReschedule();
 	}
 
 	inline void Schedule(bool bVip=true) noexcept
@@ -500,13 +493,11 @@ public:
 		return m_pTlsThis;
 	}
 
-	inline bool Wake ( const size_t iWakerEpoch, bool bVip ) noexcept
+	inline bool Wake ( size_t iExpectedEpoch, bool bVip ) noexcept
 	{
-		size_t iExpectedEpoch = m_iWakerEpoch.load ( std::memory_order_relaxed );
-		bool bLastWaker = m_iWakerEpoch.compare_exchange_strong ( iExpectedEpoch, iWakerEpoch + 1, std::memory_order_acq_rel );
+		bool bLastWaker = m_iWakerEpoch.compare_exchange_strong ( iExpectedEpoch, iExpectedEpoch + 1, std::memory_order_acq_rel );
 		if ( !bLastWaker ) {
-			// m_iWakerEpoch has been incremented before, so consider this wake
-			// operation as outdated and do nothing
+			// m_iWakerEpoch doesn't match expected epoch, op outdated
 			return false;
 		}
 
@@ -666,6 +657,12 @@ Handler CurrentRestarter ( bool bVip ) noexcept
 	return Coro::Worker()->Restarter ( bVip );
 }
 
+Coro::Waker_c CreateWaker ( Coro::Worker_c* pWorker ) noexcept
+{
+	return pWorker ? pWorker->CreateWaker() : Coro::Worker()->CreateWaker();
+}
+
+
 Waiter_t DefferedRestarter () noexcept
 {
 	return { nullptr, [fnProceed = CurrentRestarter ( false )] ( void* ) { fnProceed(); } };
@@ -718,9 +715,9 @@ int64_t sphTaskCpuTimer()
 {
 	auto pWorker = Threads::Coro::Worker_c::CurrentWorker();
 	if ( pWorker )
-		return pWorker->GetCurrentCpuTimeBase() + sphCpuTimer();
+		return pWorker->GetCurrentCpuTimeBase() + sphThreadCpuTimer();
 
-	return sphCpuTimer();
+	return sphThreadCpuTimer();
 }
 
 namespace Threads {

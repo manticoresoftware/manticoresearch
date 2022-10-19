@@ -66,7 +66,6 @@
 #include "std/queue.h"
 #include "std/circular_buffer.h"
 #include "std/tdigest.h"
-#include "std/slist.h"
 #include "std/zip.h"
 #include "std/smalloc.h"
 #include "std/env.h"

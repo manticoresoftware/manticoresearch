@@ -192,7 +192,8 @@ protected:
 
 	void TearDown () NO_THREAD_SAFETY_ANALYSIS override
 	{
-		m_pPoll->ProcessAll( [] ( NetPollEvent_t * pWork ) {
+		m_pPoll->ProcessAll( [this] ( NetPollEvent_t * pWork ) NO_THREAD_SAFETY_ANALYSIS {
+			m_pPoll->RemoveEvent ( pWork );
 			SafeRelease ( pWork );
 		} );
 	}

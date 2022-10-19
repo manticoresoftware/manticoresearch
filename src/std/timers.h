@@ -18,9 +18,15 @@
 /// current UNIX timestamp in seconds multiplied by 1000000, plus microseconds since the beginning of current second
 int64_t sphMicroTimer();
 
+/// monotonic microsecond precision timestamp
+/// value of CLOCK_MONOTONIC source
+int64_t MonoMicroTimer();
+
 /// return cpu time, in microseconds. CLOCK_THREAD_CPUTIME_ID, or CLOCK_PROCESS_CPUTIME_ID or fall to sphMicroTimer().
 /// defined in searchd.cpp since depends from g_bCpuStats
-int64_t sphCpuTimer();
+int64_t sphProcessCpuTimer();
+int64_t sphThreadCpuTimer();
 
-/// returns sphCpuTimer() adjusted to current coro task (coro may jump from thread to thread, so sphCpuTimer() is irrelevant)
+
+/// returns sphThreadCpuTimer() adjusted to current coro task (coro may jump from thread to thread, so sphThreadCpuTimer() is irrelevant)
 int64_t sphTaskCpuTimer();

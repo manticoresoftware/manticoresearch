@@ -12,6 +12,9 @@
 
 #include "timeout_queue.h"
 
+#include "std/stringbuilder.h"
+#include "std/format.h"
+
 inline static bool operator<( const EnqueuedTimeout_t& dLeft, const EnqueuedTimeout_t& dRight )
 {
 	return dLeft.m_iTimeoutTimeUS < dRight.m_iTimeoutTimeUS;

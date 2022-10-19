@@ -17,6 +17,8 @@
 #include "searchdtask.h"
 #include "coroutine.h"
 #include "mini_timer.h"
+#include "pollable_event.h"
+#include "netpoll.h"
 
 #include <utility>
 #include <atomic>
@@ -32,18 +34,12 @@
 #pragma comment(lib, "WS2_32.Lib")
 #endif
 
-#if HAVE_EVENTFD
-	#include <sys/eventfd.h>
-#endif
-
 #if HAVE_GETADDRINFO_A
 	#include <signal.h>
 #endif
 
 #if HAVE_KQUEUE
-	#include <sys/types.h>
 	#include <sys/event.h>
-	#include <sys/time.h>
 #endif
 
 int64_t			g_iPingIntervalUs		= 0;		// by default ping HA agents every 1 second
@@ -1460,111 +1456,12 @@ void IOVec_c::StepForward ( size_t uStep )
 	}
 }
 
-/// PollableEvent_c : an event which could be watched by poll/epoll/kqueue
-/////////////////////////////////////////////////////////////////////////////
-
 static void SafeCloseSocket ( int & iFD )
 {
 	if ( iFD>=0 )
 		sphSockClose ( iFD );
 	iFD = -1;
 }
-
-#if !HAVE_EVENTFD
-static bool CreateSocketPair ( int &iSock1, int &iSock2, CSphString &sError )
-{
-#if _WIN32
-	union {
-		struct sockaddr_in inaddr;
-		struct sockaddr addr;
-	} tAddr;
-
-	int iListen = (int)socket ( AF_INET, SOCK_STREAM, IPPROTO_TCP );
-	if ( iListen<0 )
-	{
-		sError.SetSprintf ( "failed to create listen socket: %s", sphSockError() );
-		return false;
-	}
-
-	memset ( &tAddr, 0, sizeof ( tAddr ) );
-	tAddr.inaddr.sin_family = AF_INET;
-	tAddr.inaddr.sin_addr.s_addr = htonl ( INADDR_LOOPBACK );
-	tAddr.inaddr.sin_port = 0;
-	auto tCloseListen = AtScopeExit  ( [&iListen] { if ( iListen>=0 ) sphSockClose (iListen); } );
-
-	if ( bind ( iListen, &tAddr.addr, sizeof ( tAddr.inaddr ) )<0 )
-	{
-		sError.SetSprintf ( "failed to bind listen socket: %s", sphSockError() );
-		return false;
-	}
-
-	int iAddrBufLen = sizeof ( tAddr );
-	memset ( &tAddr, 0, sizeof ( tAddr ) );
-	if ( getsockname ( iListen, &tAddr.addr, &iAddrBufLen )<0 )
-	{
-		sError.SetSprintf ( "failed to get socket description: %s", sphSockError() );
-		return false;
-	}
-
-	tAddr.inaddr.sin_addr.s_addr = htonl ( INADDR_LOOPBACK );
-	tAddr.inaddr.sin_family = AF_INET;
-
-	if ( listen ( iListen, 5 )<0 )
-	{
-		sError.SetSprintf ( "failed to listen socket: %s", sphSockError() );
-		return false;
-	}
-
-	int iWrite = (int)socket ( AF_INET, SOCK_STREAM, 0 );
-	auto tCloseWrite = AtScopeExit  ( [&iWrite] { if ( iWrite>=0 ) sphSockClose (iWrite); } );
-
-	if ( iWrite<0 )
-	{
-		sError.SetSprintf ( "failed to create write socket: %s", sphSockError() );
-		return false;
-	}
-
-	if ( connect ( iWrite, &tAddr.addr, sizeof(tAddr.addr) )<0 )
-	{
-		sError.SetSprintf ( "failed to connect to loopback: %s\n", sphSockError() );
-		return false;
-	}
-
-	int iRead = (int)accept ( iListen, NULL, NULL );
-	if ( iRead<0 )
-	{
-		sError.SetSprintf ( "failed to accept loopback: %s\n", sphSockError() );
-	}
-
-	iSock1 = iRead;
-	iSock2 = iWrite;
-	iWrite = -1; // protect from tCloseWrite
-
-	sphSetSockNodelay ( iSock2 );
-
-#else
-	int dSockets[2] = { -1, -1 };
-	if ( socketpair ( AF_LOCAL, SOCK_STREAM, 0, dSockets )!=0 )
-	{
-		sError.SetSprintf ( "failed to create socketpair: %s", sphSockError () );
-		return false;
-	}
-
-	iSock1 = dSockets[0];
-	iSock2 = dSockets[1];
-
-#endif
-
-	if ( sphSetSockNB ( iSock1 )<0 || sphSetSockNB ( iSock2 )<0 )
-	{
-		sError.SetSprintf ( "failed to set socket non-block: %s", sphSockError () );
-		SafeCloseSocket ( iSock1 );
-		SafeCloseSocket ( iSock2 );
-		return false;
-	}
-	return true;
-}
-#endif
 
 
 inline static bool IS_PENDING ( int iErr )
@@ -1731,7 +1628,7 @@ void AgentConn_t::SendingState ()
 	{
 		track_processing_time ( *this );
 		State ( Agent_e::HEALTHY );
-		m_iPoolerTimeoutUS = sphMicroTimer () + m_iMyQueryTimeoutMs * 1000;
+		m_iPoolerTimeoutUS = MonoMicroTimer() + m_iMyQueryTimeoutMs * 1000;
 		LazyDeleteOrChange ( m_iPoolerTimeoutUS ); // assign new time value, don't touch the handler
 	}
 }
@@ -2326,7 +2223,7 @@ void AgentConn_t::StartRemoteLoopTry ()
 			{
 				// can't start right now; need to postpone until timeout
 				sphLogDebugA ( "%d postpone DoQuery() for %d msecs", m_iStoreTag, m_iDelay );
-				LazyTask ( sphMicroTimer () + 1000 * m_iDelay, false );
+				LazyTask ( MonoMicroTimer () + 1000 * m_iDelay, false );
 				return;
 			}
 		}
@@ -2343,13 +2240,14 @@ bool AgentConn_t::DoQuery()
 {
 	sphLogDebugA ( "%d DoQuery() ref=%d", m_iStoreTag, ( int ) GetRefcount () );
 	auto iNow = sphMicroTimer ();
+	auto iMonoNow = MonoMicroTimer();
 	if ( m_iSock>=0 )
 	{
 		sphLogDebugA ( "%d branch for established(%d). Timeout " INT64_FMT, m_iStoreTag, m_iSock, m_iMyQueryTimeoutMs );
 		m_bConnectHandshake = false;
 		m_pReplyCur += sizeof ( int );
 		m_iStartQuery = iNow; /// copied from old behaviour
-		m_iPoolerTimeoutUS = iNow + m_iMyQueryTimeoutMs * 1000;
+		m_iPoolerTimeoutUS = iMonoNow + m_iMyQueryTimeoutMs * 1000;
 		return SendQuery ();
 	}
 
@@ -2366,7 +2264,7 @@ bool AgentConn_t::DoQuery()
 	}
 
 	sphLogDebugA ( "%d branch for not established. Timeout " INT64_FMT, m_iStoreTag, m_iMyQueryTimeoutMs );
-	m_iPoolerTimeoutUS = iNow + 1000 * m_iMyConnectTimeoutMs;
+	m_iPoolerTimeoutUS = iMonoNow + 1000 * m_iMyConnectTimeoutMs;
 	if ( !m_tDesc.m_bNeedResolve )
 		return EstablishConnection ();
 
@@ -2399,9 +2297,9 @@ bool AgentConn_t::EstablishConnection ()
 {
 	sphLogDebugA ( "%d EstablishConnection() ref=%d", m_iStoreTag, ( int ) GetRefcount () );
 	// first check if we're in bounds of timeout.
-	// usually it is done by outside callback, however in case of deffered DNS we may be here out of sync and so need
+	// usually it is done by outside callback, however in case of deferred DNS we may be here out of sync and so need
 	// to check it explicitly.
-	if ( m_iPoolerTimeoutUS<sphMicroTimer () )
+	if ( m_iPoolerTimeoutUS < MonoMicroTimer() )
 		return Fatal ( eConnectFailures, "connect timeout reached resolving address for %s", m_tDesc.m_sAddr.cstr () );
 
 	if ( m_tDesc.m_iFamily==AF_INET && !m_tDesc.m_uAddr )
@@ -2474,16 +2372,10 @@ bool AgentConn_t::SendQuery ( DWORD uSent )
 	SSIZE_T iRes = 0;
 	while ( m_dIOVec.HasUnsent () )
 	{
-		if ( !uSent )
-			iRes = SendChunk ();
-		else
-		{
-			iRes = uSent;
-			uSent = 0;
-		}
-
+		iRes = uSent ? std::exchange ( uSent, 0 ) : SendChunk();
 		if ( iRes==-1 )
 			break;
+
 		sphLogDebugA ( "%d sent %d bytes", m_iStoreTag, (int)iRes );
 		m_dIOVec.StepForward ( iRes );
 		if ( iRes>0 )
@@ -2521,13 +2413,7 @@ bool AgentConn_t::ReceiveAnswer ( DWORD uRecv )
 	SSIZE_T iRes = 0;
 	while ( ReplyBufPlace () )
 	{
-		if ( uRecv )
-		{
-			iRes = uRecv;
-			uRecv = 0;
-		} else
-			iRes = RecvChunk();
-
+		iRes = uRecv ? std::exchange ( uRecv, 0 ) : RecvChunk ();
 		if ( iRes<=0 )
 			break;
 
@@ -2693,86 +2579,6 @@ void macresolver()
 }
 
 #endif
-
-
-PollableEvent_t::PollableEvent_t ()
-{
-	int iRead = -1;
-	int iWrite = -1;
-#if HAVE_EVENTFD
-	int iFD = eventfd ( 0, EFD_NONBLOCK );
-	if ( iFD==-1 )
-		m_sError.SetSprintf ( "failed to create eventfd: %s", strerrorm ( errno ) );
-	iRead = iWrite = iFD;
-#else
-	CreateSocketPair ( iRead, iWrite, m_sError );
-#endif
-
-	if ( iRead==-1 || iWrite==-1 )
-		sphWarning ( "PollableEvent_t create error:%s", m_sError.cstr () );
-	m_iPollablefd = iRead;
-	m_iSignalEvent = iWrite;
-}
-
-PollableEvent_t::~PollableEvent_t ()
-{
-	Close ();
-}
-
-void PollableEvent_t::Close ()
-{
-	SafeCloseSocket ( m_iPollablefd );
-#if !HAVE_EVENTFD
-	SafeCloseSocket ( m_iSignalEvent );
-#endif
-}
-
-int PollableEvent_t::PollableErrno ()
-{
-	return sphSockGetErrno ();
-}
-
-bool PollableEvent_t::FireEvent () const
-{
-	if ( m_iSignalEvent==-1 )
-		return true;
-
-	int iErrno = EAGAIN;
-	while ( iErrno==EAGAIN || iErrno==EWOULDBLOCK )
-	{
-		uint64_t uVal = 1;
-#if HAVE_EVENTFD
-		int iPut = ::write ( m_iSignalEvent, &uVal, 8 );
-#else
-		int iPut = sphSockSend ( m_iSignalEvent, ( const char * ) &uVal, 8 );
-#endif
-		if ( iPut==8 )
-			return true;
-		iErrno = PollableErrno ();
-	};
-	return false;
-}
-
-// just wipe-out a fired event to free queue, we don't need the value itself
-void PollableEvent_t::DisposeEvent () const
-{
-	assert ( m_iPollablefd!=-1 );
-	uint64_t uVal = 0;
-	while ( true )
-	{
-#if HAVE_EVENTFD
-		auto iRead = ::read ( m_iPollablefd, &uVal, 8 );
-		if ( iRead==8 )
-			break;
-#else
-		// socket-pair case might stack up some values and these should be read
-		int iRead = sphSockRecv ( m_iPollablefd, ( char * ) &uVal, 8 );
-		if ( iRead<=0 )
-			break;
-#endif
-	}
-}
-
 
 struct TaskNet_t:
 #if _WIN32
@@ -3019,7 +2825,7 @@ class NetEventsFlavour_c
 {
 protected:
 	int m_iEvents = 0;    ///< how many events are in queue.
-	static const int m_iCReserve = 256; 	/// will always provide extra that space of events to poller
+	static constexpr int m_iCReserve = 256; 	/// will always provide extra that space of events to poller
 
 	// perform actual changing OR scheduling of pTask subscription state (on BSD we collect changes and will populate later)
 	// NOTE! m_uIOChanged==0 field here means active 'unsubscribe' (in use for deletion)
@@ -3036,8 +2842,7 @@ protected:
 
 		auto iEvents = events_apply_task_changes ( pTask );
 		m_iEvents += iEvents;
-		pTask->m_uIOActive = pTask->m_uIOChanged;
-		pTask->m_uIOChanged = TaskNet_t::NO;
+		pTask->m_uIOActive = std::exchange ( pTask->m_uIOChanged, TaskNet_t::NO );
 		sphLogDebugL ( "L events_apply_task_changes returned %d, now %d events counted", iEvents, m_iEvents );
 	}
 protected:
@@ -3243,8 +3048,7 @@ private:
 		{
 			auto iRes = epoll_ctl ( m_iEFD, iOp, pTask->m_ifd, &tEv );
 			if ( iRes==-1 )
-				sphLogDebugL ( "L failed to perform epollctl for sock %d(%p), errno=%d, %s"
-					  , pTask->m_ifd, pTask, errno, strerrorm ( errno ) );
+				sphLogDebugL ( "L failed to perform epollctl for sock %d(%p), errno=%d, %s", pTask->m_ifd, pTask, errno, strerrorm ( errno ) );
 		} else
 			sphLogDebugL ( "L epoll_ctl not called since sock is closed" );
 		return iEvents;
@@ -3306,8 +3110,7 @@ private:
 			if ( bApply )
 				EV_SET ( &m_dScheduled.Add (), pTask->m_ifd, EVFILT_READ, EV_ADD, 0, 0, pTask );
 			++iEvents;
-			sphLogDebugL ( "L EVFILT_READ, EV_ADD, %d (%d enqueued), %d in call", pTask->m_ifd, m_dScheduled.GetLength ()
-						   , iEvents );
+			sphLogDebugL ( "L EVFILT_READ, EV_ADD, %d (%d enqueued), %d in call", pTask->m_ifd, m_dScheduled.GetLength (), iEvents );
 		}
 
 		if ( bWrite && !bWasWrite )
@@ -3315,8 +3118,7 @@ private:
 			if ( bApply )
 				EV_SET ( &m_dScheduled.Add (), pTask->m_ifd, EVFILT_WRITE, EV_ADD, 0, 0, pTask );
 			++iEvents;
-			sphLogDebugL ( "L EVFILT_WRITE, EV_ADD, %d (%d enqueued), %d in call", pTask->m_ifd, m_dScheduled.GetLength ()
-						   , iEvents );
+			sphLogDebugL ( "L EVFILT_WRITE, EV_ADD, %d (%d enqueued), %d in call", pTask->m_ifd, m_dScheduled.GetLength (), iEvents );
 		}
 
 		if ( !bRead && bWasRead )
@@ -3324,9 +3126,7 @@ private:
 			if ( bApply )
 				EV_SET ( &m_dScheduled.Add (), pTask->m_ifd, EVFILT_READ, EV_DELETE, 0, 0, pTask );
 			--iEvents;
-			sphLogDebugL ( "L EVFILT_READ, EV_DELETE, %d (%d enqueued), %d in call", pTask->m_ifd
-						   , m_dScheduled.GetLength ()
-						   , iEvents );
+			sphLogDebugL ( "L EVFILT_READ, EV_DELETE, %d (%d enqueued), %d in call", pTask->m_ifd, m_dScheduled.GetLength (), iEvents );
 		}
 
 		if ( !bWrite && bWasWrite )
@@ -3334,9 +3134,7 @@ private:
 			if ( bApply )
 				EV_SET ( &m_dScheduled.Add (), pTask->m_ifd, EVFILT_WRITE, EV_DELETE, 0, 0, pTask );
 			--iEvents;
-			sphLogDebugL ( "L EVFILT_WRITE, EV_DELETE, %d (%d enqueued), %d in call", pTask->m_ifd
-						   , m_dScheduled.GetLength ()
-						   , iEvents );
+			sphLogDebugL ( "L EVFILT_WRITE, EV_DELETE, %d (%d enqueued), %d in call", pTask->m_ifd, m_dScheduled.GetLength (), iEvents );
 		}
 		return iEvents;
 	}
@@ -3360,8 +3158,7 @@ protected:
 			pts = &ts;
 		}
 		// need positive timeout for communicate threads back and shutdown
-		auto iRes = kevent ( m_iEFD, m_dScheduled.begin (), m_dScheduled.GetLength (), m_dReady.begin ()
-								, m_dReady.GetLength (), pts );
+		auto iRes = kevent ( m_iEFD, m_dScheduled.begin (), m_dScheduled.GetLength (), m_dReady.begin (), m_dReady.GetLength (), pts );
 		m_dScheduled.Reset();
 		return iRes;
 
@@ -3409,12 +3206,12 @@ private:
 	}
 
 	// Simply deletes the task, but some tricks exist:
-	// 1. (general): keeping payload nesessary when we fire timeout: the task is not necessary anyway,
+	// 1. (general): keeping payload necessary when we fire timeout: the task is not necessary anyway,
 	// however timeout callback need to be called with still valid (if any) payload.
 	// 2. (win specific): On windows, however, another trick is in game: timeout condition we get from
 	// internal GetQueuedCompletionStatusEx function. At the same time overlapped ops (WSAsend or recv, 
 	// or even both) are still in work, and so we need to keep the 'overlapped' structs alive for them.
-	// So, we can't just delete the task in the case. Instead we invalidate it (set m_ifd=-1, nullify payload),
+	// So, we can't just delete the task in the case. Instead, we invalidate it (set m_ifd=-1, nullify payload),
 	// so that the next return from events_wait will recognize it and finally totally destroy the task for us.
 	AgentConn_t * DeleteTask ( TaskNet_t * pTask, bool bReleasePayload=true )
 	{
@@ -3425,7 +3222,7 @@ private:
 		auto pConnection = pTask->m_pPayload;
 		pTask->m_pPayload = nullptr;
 
-		// if payload already invoked in another task (remember, we process deffered action!)
+		// if payload already invoked in another task (remember, we process deferred action!)
 		// we won't nullify it.
 		if ( pConnection && pConnection->m_pPollerTask==pTask )
 			pConnection->m_pPollerTask = nullptr;
@@ -3444,21 +3241,14 @@ private:
 	/// Atomically move m-t queue to single-thread internal queue.
 	VectorTask_c * PopQueue () REQUIRES ( LazyThread ) EXCLUDES ( m_dActiveLock )
 	{
-		// atomically get current vec; put zero instead.
-		VectorTask_c * pReadyQueue = nullptr;
-		{
-			ScopedMutex_t tLock ( m_dActiveLock );
-			pReadyQueue = m_pEnqueuedTasks;
-			m_pEnqueuedTasks = nullptr;
-		}
-		return pReadyQueue;
+		ScopedMutex_t tLock ( m_dActiveLock );
+		return std::exchange ( m_pEnqueuedTasks, nullptr );
 	}
 
 
 	void ProcessChanges ( TaskNet_t * pTask )
 	{
-		sphLogDebugL ( "L ProcessChanges for %p, (conn %p) (%d->%d), tm=" INT64_FMT " sock=%d", pTask, pTask->m_pPayload,
-			pTask->m_uIOActive, pTask->m_uIOChanged, pTask->m_iTimeoutTimeUS, pTask->m_ifd );
+		sphLogDebugL ( "L ProcessChanges for %p, (conn %p) (%d->%d), tm=" INT64_FMT " sock=%d", pTask, pTask->m_pPayload, pTask->m_uIOActive, pTask->m_uIOChanged, pTask->m_iTimeoutTimeUS, pTask->m_ifd );
 
 		assert ( pTask->m_iTimeoutTimeUS!=0);
 
@@ -3478,16 +3268,14 @@ private:
 
 		if ( pTask->m_iPlannedTimeout )
 		{
-			pTask->m_iTimeoutTimeUS = pTask->m_iPlannedTimeout;
-			pTask->m_iPlannedTimeout = 0;
+			pTask->m_iTimeoutTimeUS = std::exchange ( pTask->m_iPlannedTimeout, 0 );
 			m_dTimeouts.Change ( pTask );
-			sphLogDebugL ( "L change/add timeout for %p, " INT64_FMT " (" INT64_FMT ") is changed one", pTask, pTask->m_iTimeoutTimeUS,
-				( pTask->m_iTimeoutTimeUS - sphMicroTimer () ) );
+			sphLogDebugL ( "L change/add timeout for %p, " INT64_FMT " (" INT64_FMT ") is changed one", pTask, pTask->m_iTimeoutTimeUS, ( pTask->m_iTimeoutTimeUS - MonoMicroTimer () ) );
 			sphLogDebugL ( "%s", m_dTimeouts.DebugDump ( "L " ).cstr () );
 		}
 	}
 
-	/// take current internal and external queues, parse it and enqueue changes.
+	/// take current internal and external queues, parse them and enqueue changes.
 	/// actualy 1 task can have only 1 action (another change will change very same task).
 	void ProcessEnqueuedTasks () REQUIRES ( LazyThread )
 	{
@@ -3539,7 +3327,7 @@ private:
 			auto* pTask = ( TaskNet_t* ) m_dTimeouts.Root ();
 			assert ( pTask->m_iTimeoutTimeUS>0 );
 
-			m_iNextTimeoutUS = pTask->m_iTimeoutTimeUS - sphMicroTimer ();
+			m_iNextTimeoutUS = pTask->m_iTimeoutTimeUS - MonoMicroTimer ();
 			if ( m_iNextTimeoutUS>0 )
 				return bHasTimeout;
 
@@ -3556,8 +3344,8 @@ private:
 			{
 				/*
 				 * Timeout means that r/w actions for task might be still active.
-				 * Suppose that timeout functor will unsibscribe socket from polling.
-				 * However if right now something came to the socket, next call to poller might
+				 * Suppose that timeout functor will unsubscribe socket from polling.
+				 * However, if right now something came to the socket, next call to poller might
 				 * signal it, and we catch the events on the next round.
 				 */
 				sphLogDebugL ( "L timeout action started" );
@@ -3582,11 +3370,9 @@ private:
 		}
 	}
 
-	inline bool IsTickProcessed ( TaskNet_t * pTask )
+	inline bool IsTickProcessed ( TaskNet_t * pTask ) const
 	{
-		if ( !pTask )
-			return false;
-		return pTask->m_iTickProcessed==m_iTickNo;
+		return pTask && pTask->m_iTickProcessed==m_iTickNo;
 	}
 
 	/// one event cycle.
@@ -3617,7 +3403,7 @@ private:
 		// With epoll we have only one task which may be both 'write' and 'read' state,
 		// so it seems that just do one ELSE another should always work.
 		// But on BSD we have separate event for read and another for write.
-		// If one processed, no guarantee that another is not in the same resultset.
+		// If one processed, no guarantee that another is not also in the same resultset.
 		// For this case we actualize tick # on processing and then compare it with current one.
 		++m_iTickNo;
 		if ( !m_iTickNo ) ++m_iTickNo; // skip 0
@@ -3795,11 +3581,9 @@ public:
 		{
 			pTask->m_ifd = pConnection->m_iSock;
 			pConnection->m_pPollerTask = nullptr; // this will allow to create another task.
-			sphLogDebugv ( "- %d Delete task (task %p), fd=%d (%d) " INT64_FMT "Us",
-				pConnection->m_iStoreTag, pTask, pTask->m_ifd, pTask->m_iStoredfd, pTask->m_iTimeoutTimeUS );
+			sphLogDebugv ( "- %d Delete task (task %p), fd=%d (%d) " INT64_FMT "Us", pConnection->m_iStoreTag, pTask, pTask->m_ifd, pTask->m_iStoredfd, pTask->m_iTimeoutTimeUS );
 		} else
-			sphLogDebugv ( "- %d Change task (task %p), fd=%d (%d) " INT64_FMT "Us -> " INT64_FMT "Us",
-				pConnection->m_iStoreTag, pTask, pTask->m_ifd, pTask->m_iStoredfd, pTask->m_iTimeoutTimeUS, iTimeoutUS );
+			sphLogDebugv ( "- %d Change task (task %p), fd=%d (%d) " INT64_FMT "Us -> " INT64_FMT "Us", pConnection->m_iStoreTag, pTask, pTask->m_ifd, pTask->m_iStoredfd, pTask->m_iTimeoutTimeUS, iTimeoutUS );
 
 		
 		AddToQueue ( pTask, pConnection->InNetLoop () );
@@ -3813,8 +3597,7 @@ public:
 		if ( TaskNet_t::RO!=pTask->m_uIOActive )
 		{
 			pTask->m_uIOChanged = TaskNet_t::RO;
-			sphLogDebugv ( "- %d DisableWrite enqueueing (task %p) (%d->%d), innet=%d", pConnection->m_iStoreTag, pTask,
-						   pTask->m_uIOActive, pTask->m_uIOChanged, pConnection->InNetLoop());
+			sphLogDebugv ( "- %d DisableWrite enqueueing (task %p) (%d->%d), innet=%d", pConnection->m_iStoreTag, pTask, pTask->m_uIOActive, pTask->m_uIOChanged, pConnection->InNetLoop());
 
 			AddToQueue ( pTask, pConnection->InNetLoop () );
 		}
@@ -3956,603 +3739,3 @@ bool sphNBSockEof ( int iSock )
 	return false;
 }
 
-class TimeoutEvents_c
-{
-	TimeoutQueue_c	m_dTimeouts;
-
-public:
-	void AddOrChangeTimeout ( EnqueuedTimeout_t * pEvent )
-	{
-		if ( pEvent->m_iTimeoutTimeUS>=0 )
-			m_dTimeouts.Change ( pEvent );
-	}
-
-	void RemoveTimeout ( EnqueuedTimeout_t * pEvent )
-	{
-		m_dTimeouts.Remove ( pEvent );
-	}
-
-	int GetNextTimeoutMs ()
-	{
-		int64_t iNextTimeoutUS = -1;
-		while (!m_dTimeouts.IsEmpty ())
-		{
-			auto * pNetEvent = (EnqueuedTimeout_t *) m_dTimeouts.Root ();
-			assert ( pNetEvent->m_iTimeoutTimeUS>0 );
-			iNextTimeoutUS = pNetEvent->m_iTimeoutTimeUS-sphMicroTimer ();
-			if ( iNextTimeoutUS>999 )
-				break;
-
-			m_dTimeouts.Pop ();
-		}
-		return (iNextTimeoutUS>999) ? int ( iNextTimeoutUS / 1000 ) : -1;
-	}
-};
-
-#if ( NETPOLL_TYPE==NETPOLL_KQUEUE || NETPOLL_TYPE==NETPOLL_EPOLL )
-
-// both epoll and kqueue have events in hash, so we use also linked list to track them explicitly.
-// both stores pointer to the list item in pPtr of backend
-
-// store and iterate over the list of items
-class EventsList_c
-{
-	List_t m_tWorkList;
-
-	inline void RemoveAndDelete ( ListNode_t * pElem )
-	{
-		assert ( pElem );
-		m_tWorkList.Remove ( pElem );
-		SafeDelete ( pElem );
-	}
-
-public:
-	void * MakeLinked ( const NetPollEvent_t * pEvent )
-	{
-		assert ( pEvent );
-		auto * pIntData = (ListedData_t*) pEvent->m_tBack.pPtr;
-		if ( pIntData )
-			return pIntData;
-
-		pIntData = new ListedData_t ( pEvent );
-		pEvent->AddRef();
-		pEvent->m_tBack.pPtr = pIntData;
-		m_tWorkList.Add ( pIntData );
-		return pIntData;
-	}
-
-	void RemoveLink ( NetPollEvent_t * pEvent )
-	{
-		assert (pEvent);
-		auto* pList = (ListedData_t* ) pEvent->m_tBack.pPtr;
-		pEvent->m_tBack.pPtr = nullptr;
-		RemoveAndDelete ( pList );
-		pEvent->Release();
-	}
-
-	// apply fnAction for all non-empty nodes;
-	// totally remove and wipe out all empty
-	void ProcessAll ( std::function<void ( NetPollEvent_t * )> fnAction )
-	{
-		for ( ListNode_t& tElem : m_tWorkList )
-		{
-			auto* pNode = (ListedData_t*) &tElem;
-			if ( pNode->m_pData )
-				fnAction ( (NetPollEvent_t *) pNode->m_pData );
-			else
-				RemoveAndDelete ( pNode );
-		}
-	}
-
-	inline int GetLength () const
-	{
-		return m_tWorkList.GetLength();
-	}
-
-	~EventsList_c ()
-	{
-		while ( GetLength () )
-			RemoveAndDelete ( (ListedData_t *) m_tWorkList.Begin () );
-	}
-};
-
-// specific different function for kqueue/epoll
-// keep them elementary and tiny for easy debugging across platforms
-namespace { // unnamed static
-#if ( NETPOLL_TYPE==NETPOLL_KQUEUE )
-	using pollev = struct kevent;
-	inline int create_poller ( int ) { return kqueue (); }
-	inline void * get_data ( const pollev & tEv ) { return tEv.udata; }
-	inline DWORD translate_events ( const pollev & tEv)
-	{
-		return (DWORD) ( ( tEv.flags & EV_ERROR ) ? NetPollEvent_t::ERR : 0 )
-				| ( ( tEv.flags & EV_EOF ) ? NetPollEvent_t::HUP : 0 )
-				| ( ( tEv.filter==EVFILT_READ ) ? NetPollEvent_t::READ : NetPollEvent_t::WRITE );
-	}
-#elif ( NETPOLL_TYPE==NETPOLL_EPOLL )
-	using pollev = epoll_event;
-	inline int create_poller ( int iSizeHint ) { return epoll_create ( iSizeHint ); }
-	inline void* get_data ( const pollev& tEv ) { return tEv.data.ptr; }
-	inline DWORD translate_events ( const pollev & tEv)
-	{
-		return (DWORD) ( ( tEv.events & EPOLLERR ) ? NetPollEvent_t::ERR : 0 )
-				| ( ( tEv.events & EPOLLHUP ) ? NetPollEvent_t::HUP : 0 )
-				| ( ( tEv.events==EPOLLIN ) ? NetPollEvent_t::READ : 0 )
-				| ( ( tEv.events==EPOLLOUT ) ? NetPollEvent_t::WRITE : 0 );
-}
-#endif
-}
-
-// common for both epoll and kqueue
-class NetPooller_c::Impl_c final
-{
-	friend class NetPooller_c;
-	friend class NetPollReadyIterator_c;
-
-	TimeoutEvents_c					m_dTimeouts			GUARDED_BY ( NetPoollingThread );
-	CSphVector<pollev>				m_dFiredEvents		GUARDED_BY ( NetPoollingThread );
-	EventsList_c					m_dEvents			GUARDED_BY ( NetPoollingThread );
-
-	int							m_iReady = 0;
-	int							m_iLastReportedErrno = -1;
-	int							m_iPl;
-
-public:
-
-	explicit Impl_c ( int iSizeHint )
-	{
-		m_iPl = create_poller ( iSizeHint );
-		if ( m_iPl==-1 )
-			sphDie ( "failed to create poller main FD, errno=%d, %s", errno, strerrorm ( errno ) );
-
-		sphLogDebugv ( "poller %d created", m_iPl );
-		m_dFiredEvents.Reserve ( iSizeHint );
-	}
-
-	~Impl_c ()
-	{
-		sphLogDebugv ( "poller %d closed", m_iPl );
-		SafeCloseSocket ( m_iPl );
-	}
-
-	void SetupEvent ( NetPollEvent_t * pEvent ) REQUIRES ( NetPoollingThread )
-	{
-		assert ( pEvent && pEvent->m_iSock>=0 );
-		auto uEvents = pEvent->m_uNetEvents; // shortcut
-		assert ( ( uEvents & NetPollEvent_t::WRITE )!=0 || ( uEvents & NetPollEvent_t::READ )!=0 );
-
-		m_dTimeouts.AddOrChangeTimeout ( pEvent );
-
-		bool bIsNew = !pEvent->m_tBack.pPtr;
-		int iRes = set_polling_for ( pEvent->m_iSock, m_dEvents.MakeLinked ( pEvent ),
-				uEvents & NetPollEvent_t::READ,	uEvents & NetPollEvent_t::ONCE, bIsNew );
-
-		if ( iRes==-1 )
-			sphWarning ( "failed to setup queue event for sock %d, errno=%d, %s", pEvent->m_iSock, errno, strerrorm ( errno ) );
-	}
-
-	void Wait ( int timeoutMs ) REQUIRES ( NetPoollingThread )
-	{
-		if ( !m_dEvents.GetLength ())
-			return;
-
-		if ( timeoutMs==WAIT_UNTIL_TIMEOUT )
-			timeoutMs = m_dTimeouts.GetNextTimeoutMs ();
-
-		m_dFiredEvents.Resize ( m_dEvents.GetLength () );
-
-		// need positive timeout for communicate threads back and shutdown
-		m_iReady = poll_events ( m_dFiredEvents.Begin (), m_dFiredEvents.GetLength (), timeoutMs );
-
-		if ( m_iReady>=0 )
-			return;
-
-		int iErrno = sphSockGetErrno ();
-		// common recoverable errors
-		if ( iErrno==EINTR || iErrno==EAGAIN || iErrno==EWOULDBLOCK )
-			return;
-
-		if ( m_iLastReportedErrno!=iErrno )
-		{
-			sphWarning ( "polling tick failed: %s", sphSockError ( iErrno ) );
-			m_iLastReportedErrno = iErrno;
-		}
-	}
-
-	void ProcessAll ( std::function<void ( NetPollEvent_t * )> fnAction ) REQUIRES ( NetPoollingThread )
-	{
-		m_dEvents.ProcessAll ( std::move ( fnAction ) );
-	}
-
-	int GetNumOfReady () const
-	{
-		return m_iReady;
-	}
-
-	void RemoveTimeout ( NetPollEvent_t * pEvent ) REQUIRES ( NetPoollingThread )
-	{
-		assert ( pEvent );
-		m_dTimeouts.RemoveTimeout ( pEvent );
-	}
-
-	// called when client detected error or timeout
-	void RemoveEvent ( NetPollEvent_t * pEvent ) REQUIRES ( NetPoollingThread )
-	{
-		assert ( pEvent );
-		RemoveTimeout ( pEvent );
-
-		sphLogDebugv ( "%p polling remove, ev=%u, sock=%d",
-				pEvent->m_tBack.pPtr, pEvent->m_uNetEvents, pEvent->m_iSock );
-
-		if ( pEvent->m_uNetEvents!=NetPollEvent_t::CLOSED )
-		{
-			int iRes = remove_polling_for ( pEvent->m_iSock, pEvent->m_uNetEvents & NetPollEvent_t::READ );
-
-			// might be already closed by worker from thread pool
-			if ( iRes==-1 )
-				sphLogDebugv ( "failed to remove polling event for sock %d(%p), errno=%d, %s",
-						pEvent->m_iSock, pEvent->m_tBack.pPtr, errno, strerrorm (errno));
-		}
-
-		// since event already removed from kqueue - it is safe to remove it from the list of events also,
-		// and totally unlink
-		m_dEvents.RemoveLink( pEvent );
-	}
-
-	// platform-specific members. Tiny and simple to reduce divergention among platforms
-#if ( NETPOLL_TYPE==NETPOLL_EPOLL )
-
-	inline int poll_events ( pollev* pEvents, int iEventNum, int timeoutMs )
-	{
-		return epoll_wait ( m_iPl, pEvents, iEventNum, timeoutMs );
-	};
-
-	inline int set_polling_for ( int iSock, void* pData, bool bRead, bool bOneshot, bool bAdd )
-	{
-		int iOp = bAdd ? EPOLL_CTL_ADD : EPOLL_CTL_MOD;
-		epoll_event tEv;
-		tEv.data.ptr = pData;
-		tEv.events = bRead ? EPOLLIN : EPOLLOUT;
-		if ( bOneshot )
-			tEv.events |= EPOLLONESHOT | EPOLLET;
-
-		sphLogDebugv ("%p epoll %d setup, ev=0x%u, op=%d, sock=%d", pData, m_iPl, tEv.events, iOp, iSock) ;
-		return epoll_ctl ( m_iPl, iOp, iSock, &tEv );
-	}
-
-	inline int remove_polling_for ( int iSock, bool )
-	{
-		epoll_event tEv;
-		return epoll_ctl ( m_iPl, EPOLL_CTL_DEL, iSock, &tEv );
-	}
-
-#elif ( NETPOLL_TYPE==NETPOLL_KQUEUE )
-
-	inline int poll_events ( pollev* pEvents, int iEventNum, int timeoutMs )
-	{
-		timespec ts;
-		timespec * pts = nullptr;
-		if ( timeoutMs>=0 )
-		{
-			ts.tv_sec = timeoutMs / 1000;
-			ts.tv_nsec = (long) ( timeoutMs-ts.tv_sec * 1000 ) * 1000000;
-			pts = &ts;
-		}
-		return kevent ( m_iPl, nullptr, 0, pEvents, iEventNum, pts );
-	};
-
-	inline int set_polling_for ( int iSock, void* pData, bool bRead, bool bOneshot, bool )
-	{
-		struct kevent tEv;
-		EV_SET ( &tEv, iSock, bRead?EVFILT_READ:EVFILT_WRITE, bOneshot ? EV_ADD | EV_ONESHOT | EV_CLEAR : EV_ADD, 0, 0, pData );
-		sphLogDebugv ( "%p kqueue %d setup, ev=%d, fl=%d sock=%d", pData, m_iPl, tEv.filter, tEv.flags, iSock );
-		return kevent ( m_iPl, &tEv, 1, nullptr, 0, nullptr );
-	}
-
-	inline int remove_polling_for ( int iSock, bool bRead )
-	{
-		struct kevent tEv;
-		EV_SET( &tEv, iSock, ( bRead ? EVFILT_READ : EVFILT_WRITE ), EV_DELETE | EV_CLEAR, 0, 0, nullptr );
-		return kevent ( m_iPl, &tEv, 1, nullptr, 0, nullptr );
-	}
-
-#endif // NETPOLL_KQUEUE
-};
-
-// more common for NETPOLL_TYPE==NETPOLL_KQUEUE || NETPOLL_TYPE==NETPOLL_EPOLL
-
-// wipe out any kind of ref to netpoller from pEvent
-// That is necessary when event itself finished and is destroying, but NetPool still alive. Event is not active.
-// note, since we're in another thread, we can't unlist the event here.
-void NetPooller_c::Unlink ( NetPollEvent_t * pEvent )
-{
-	sphLogDebugv ( "Unlink %p, fd=%d", pEvent->m_tBack.pPtr, pEvent->m_iSock );
-	assert ( pEvent );
-	auto * pIntData = (ListedData_t *) pEvent->m_tBack.pPtr;
-	if ( pIntData ) // is linked
-	{
-		pIntData->m_pData = nullptr; // that will cause next 'ProcessAll' to finally remove elem itself from the list
-		pEvent->m_tBack.pPtr = nullptr;
-	}
-}
-
-NetPollEvent_t & NetPollReadyIterator_c::operator* ()
-{
-	auto * pOwner = m_pOwner->m_pImpl;
-	const pollev & tEv = pOwner->m_dFiredEvents[m_iIterEv];
-	auto * pNode = (NetPollEvent_t *) ( (ListedData_t *) get_data (tEv) )->m_pData;
-	assert ( pNode && "deleted event recognized");
-	pNode->m_uNetEvents = translate_events(tEv);
-	return *pNode;
-};
-
-NetPollReadyIterator_c & NetPollReadyIterator_c::operator++ ()
-{
-	++m_iIterEv;
-	return *this;
-}
-
-bool NetPollReadyIterator_c::operator!= ( const NetPollReadyIterator_c & rhs ) const
-{
-	auto * pOwner = m_pOwner->m_pImpl;
-	return rhs.m_pOwner || m_iIterEv<pOwner->m_iReady;
-}
-
-#endif // #if ( NETPOLL_TYPE==NETPOLL_KQUEUE || NETPOLL_TYPE==NETPOLL_EPOLL )
-
-#if ( NETPOLL_TYPE == NETPOLL_POLL )
-
-class NetPooller_c::Impl_c final
-{
-	friend class NetPooller_c;
-	friend class NetPollReadyIterator_c;
-
-	TimeoutEvents_c					m_dTimeouts			GUARDED_BY ( NetPoollingThread );
-	CSphVector<NetPollEvent_t *>	m_dWork				GUARDED_BY ( NetPoollingThread );
-	CSphVector<pollfd>				m_dEvents			GUARDED_BY ( NetPoollingThread );
-
-	int								m_iReady = 0;
-	int								m_iLastReportedErrno = -1;
-
-public:
-	explicit Impl_c ( int iSizeHint )
-	{
-		m_dWork.Reserve ( iSizeHint );
-		m_dEvents.Reserve ( iSizeHint );
-	}
-
-	void SetupEvent ( NetPollEvent_t * pEvent ) REQUIRES ( NetPoollingThread )
-	{
-		assert ( m_dEvents.GetLength ()==m_dWork.GetLength () );
-		assert ( pEvent && pEvent->m_iSock>=0 );
-		auto uEvents = pEvent->m_uNetEvents; // shortcut
-		assert ( ( uEvents & NetPollEvent_t::WRITE )!=0 || ( uEvents & NetPollEvent_t::READ )!=0 );
-
-		m_dTimeouts.AddOrChangeTimeout ( pEvent );
-
-		auto uNetEvents = ( ( uEvents & NetPollEvent_t::READ )!=0 ) ? POLLIN : POLLOUT;
-		pollfd* pEv = nullptr;
-		auto& iBackIdx = pEvent->m_tBack.iIdx;
-		if ( iBackIdx>=0 && iBackIdx<m_dWork.GetLength () && !m_dWork[iBackIdx] ) // was already enqueued, just change events
-		{
-			m_dWork[iBackIdx] = pEvent;
-			pEv = &m_dEvents[iBackIdx];
-			sphLogDebugvv ( "SetupEvent [%d] old %d events %d", pEvent->m_tBack.iIdx, pEvent->m_iSock, uNetEvents );
-		} else
-		{
-			iBackIdx = m_dWork.GetLength ();
-			pEvent->AddRef();
-			m_dWork.Add ( pEvent );
-			pEv = &m_dEvents.Add ();
-			sphLogDebugvv ( "SetupEvent [%d] new %d events %d", pEvent->m_tBack.iIdx, pEvent->m_iSock, uNetEvents );
-		}
-
-		pEv->fd = pEvent->m_iSock;
-		pEv->events = ( ( uEvents & NetPollEvent_t::READ )!=0 ) ? POLLIN : POLLOUT;
-		sphLogDebugvv ( "SetupEvent [%d] for %d events %d", pEvent->m_tBack.iIdx, pEvent->m_iSock, pEv->events );
-	}
-
-	void Wait ( int timeoutMs ) REQUIRES ( NetPoollingThread )
-	{
-		m_iReady = 0;
-		if ( m_dEvents.IsEmpty() )
-			return;
-
-		// need positive timeout for communicate threads back and shutdown
-		if ( timeoutMs==WAIT_UNTIL_TIMEOUT )
-			timeoutMs = m_dTimeouts.GetNextTimeoutMs ();
-
-		m_dEvents.for_each ( [] ( pollfd& dEv ) { dEv.revents = 0; } );
-		m_iReady = ::poll ( m_dEvents.Begin (), m_dEvents.GetLength (), timeoutMs );
-
-		if ( m_iReady>=0 )
-		{
-			sphLogDebugvv ( "Wait returned %d events", m_iReady );
-			return;
-		}
-
-		int iErrno = sphSockGetErrno ();
-		sphLogDebugvv ( "Wait returned %d events with %d after-error", m_iReady, iErrno );
-		// common recoverable errors
-		if ( iErrno==EINTR || iErrno==EAGAIN || iErrno==EWOULDBLOCK )
-			return;
-
-		if ( m_iLastReportedErrno!=iErrno )
-		{
-			sphWarning ( "polling tick failed: %s", sphSockError ( iErrno ) );
-			m_iLastReportedErrno = iErrno;
-		}
-	}
-
-	void ProcessAll ( std::function<void ( NetPollEvent_t * )> fnAction ) REQUIRES ( NetPoollingThread )
-	{
-		ARRAY_FOREACH ( i, m_dWork )
-		{
-			auto* pNode = m_dWork[i];
-			if ( pNode && pNode->m_tBack.iIdx >= 0 )
-			{
-				pNode->m_tBack.iIdx = i; // adjust index, it might be broken because of RemoveFast
-				fnAction ( pNode );
-			}
-			else
-			{
-				m_dEvents.RemoveFast ( i );
-				m_dWork.RemoveFast ( i );
-				--i;
-			}
-		}
-		assert ( m_dEvents.GetLength ()==m_dWork.GetLength () );
-	}
-
-	int GetNumOfReady () const
-	{
-		return m_iReady;
-	}
-
-	void RemoveTimeout ( NetPollEvent_t * pEvent ) REQUIRES ( NetPoollingThread )
-	{
-		assert ( pEvent );
-		m_dTimeouts.RemoveTimeout ( pEvent );
-	}
-
-	// called when client detected error or timeout
-	void RemoveEvent ( NetPollEvent_t * pEvent ) REQUIRES ( NetPoollingThread )
-	{
-		assert ( pEvent );
-		RemoveTimeout ( pEvent );
-
-		sphLogDebugvv ( "RemoveEvent for %d, fd=%d", pEvent->m_tBack.iIdx, pEvent->m_iSock );
-
-		if ( pEvent->m_tBack.iIdx<0 ) // already removed by iteration
-			return;
-
-		assert ( pEvent->m_tBack.iIdx<m_dEvents.GetLength ());
-
-		m_dEvents[pEvent->m_tBack.iIdx].fd = -1;
-		m_dWork[pEvent->m_tBack.iIdx] = nullptr;
-		pEvent->m_tBack.iIdx = -1;
-		pEvent->Release();
-	}
-};
-
-// No special unlinking for poll necessary, since we're oneshoting.
-// so, if we're enqueued - socket can't finish by itself. If already shoted - it is removed anyway.
-void NetPooller_c::Unlink ( NetPollEvent_t * pEvent )
-{
-}
-
-// on windows pollfd.fd is unsigned for some unknown reason, hence the warning
-#ifdef _WIN32
-#pragma warning(push)
-#pragma warning(disable:4146)
-#endif
-
-// trick: here we unlink ready oneshoted from the list
-NetPollEvent_t & NetPollReadyIterator_c::operator* ()
-{
-	auto * pOwner = m_pOwner->m_pImpl;
-	NetPollEvent_t * pNode = pOwner->m_dWork[m_iIterEv];
-	pollfd & tEv = pOwner->m_dEvents[m_iIterEv];
-
-	sphLogDebugvv ( "[%d] tEv.revents = %d for %d(%d)", m_iIterEv, tEv.revents, pNode->m_iSock, tEv.fd );
-
-	if ( pNode->m_uNetEvents & NetPollEvent_t::ONCE )
-	{
-		tEv.fd = -tEv.fd;
-		pOwner->m_dWork[m_iIterEv] = nullptr;
-		pNode->m_tBack.iIdx = -1;
-		pNode->m_uNetEvents &= ~( NetPollEvent_t::ONCE );
-		pNode->Release();
-	}
-
-	if ( tEv.revents & POLLIN )
-		pNode->m_uNetEvents |= NetPollEvent_t::READ;
-	if ( tEv.revents & POLLOUT )
-		pNode->m_uNetEvents |= NetPollEvent_t::WRITE;
-	if ( tEv.revents & POLLHUP )
-		pNode->m_uNetEvents |= NetPollEvent_t::HUP;
-	if ( tEv.revents & POLLERR )
-		pNode->m_uNetEvents |= NetPollEvent_t::ERR;
-
-	return *pNode;
-}
-
-#ifdef _WIN32
-#pragma warning(pop)
-#endif
-
-NetPollReadyIterator_c & NetPollReadyIterator_c::operator++ ()
-{
-	auto * pOwner = m_pOwner->m_pImpl;
-	while (true)
-	{
-		++m_iIterEv;
-		if ( m_iIterEv>=pOwner->m_dEvents.GetLength() )
-			break;
-
-		pollfd& tEv = pOwner->m_dEvents[m_iIterEv];
-
-		if ( tEv.fd>=0 && tEv.revents!=0 && tEv.revents!=POLLNVAL )
-		{
-			sphLogDebugvv ( "operator++ on m_iIterEv as matched %d and %d", tEv.fd, tEv.revents );
-			break;
-		}
-	}
-	return *this;
-}
-
-bool NetPollReadyIterator_c::operator!= ( const NetPollReadyIterator_c & rhs ) const
-{
-	auto * pOwner = m_pOwner->m_pImpl;
-	return rhs.m_pOwner || m_iIterEv<pOwner->m_dEvents.GetLength();
-}
-#endif
-
-
-NetPooller_c::NetPooller_c ( int isizeHint )
-		: m_pImpl ( new Impl_c ( isizeHint ) )
-{}
-
-NetPooller_c::~NetPooller_c ()
-{
-	SafeDelete ( m_pImpl );
-}
-
-void NetPooller_c::SetupEvent ( NetPollEvent_t * pEvent )
-{
-	assert ( m_pImpl );
-	m_pImpl->SetupEvent ( pEvent );
-}
-
-void NetPooller_c::Wait ( int timeoutMs )
-{
-	assert ( m_pImpl );
-	m_pImpl->Wait ( timeoutMs );
-}
-
-int NetPooller_c::GetNumOfReady () const
-{
-	assert ( m_pImpl );
-	return m_pImpl->GetNumOfReady();
-}
-
-void NetPooller_c::ProcessAll ( std::function<void ( NetPollEvent_t * )> fnAction )
-{
-	assert ( m_pImpl );
-	m_pImpl->ProcessAll ( std::move ( fnAction ) );
-}
-
-void NetPooller_c::RemoveTimeout ( NetPollEvent_t * pEvent )
-{
-	assert ( m_pImpl );
-	m_pImpl->RemoveTimeout ( pEvent );
-}
-
-void NetPooller_c::RemoveEvent ( NetPollEvent_t * pEvent )
-{
-	assert ( m_pImpl );
-	m_pImpl->RemoveEvent ( pEvent );
-}
-
-
-ThreadRole NetPoollingThread;

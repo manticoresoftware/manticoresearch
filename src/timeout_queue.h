@@ -12,7 +12,11 @@
 
 #pragma once
 
-#include "sphinxstd.h"
+#include "std/ints.h"
+#include "std/vector.h"
+#include "std/string.h"
+
+#include <functional>
 
 /// member type for priority queue used for timeout task managing
 struct EnqueuedTimeout_t

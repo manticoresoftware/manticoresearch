@@ -1484,7 +1484,7 @@ void Threads::JobStarted ()
 	auto& tDesc = Threads::MyThd ();
 	tDesc.m_tmLastJobDoneTimeUS = -1;
 	tDesc.m_tmLastJobStartTimeUS = sphMicroTimer ();
-	tDesc.m_tmLastJobStartCPUTimeUS = sphCpuTimer ();
+	tDesc.m_tmLastJobStartCPUTimeUS = sphThreadCpuTimer ();
 }
 
 void Threads::JobFinished ( bool bIsDone )
@@ -1494,7 +1494,7 @@ void Threads::JobFinished ( bool bIsDone )
 	if ( bIsDone )
 		++tDesc.m_iTotalJobsDone;
 	tDesc.m_tmTotalWorkedTimeUS += tDesc.m_tmLastJobDoneTimeUS-tDesc.m_tmLastJobStartTimeUS;
-	tDesc.m_tmTotalWorkedCPUTimeUS += sphCpuTimer()-tDesc.m_tmLastJobStartCPUTimeUS;
+	tDesc.m_tmTotalWorkedCPUTimeUS += sphThreadCpuTimer()-tDesc.m_tmLastJobStartCPUTimeUS;
 }
 
 const void * Threads::TopOfStack ()

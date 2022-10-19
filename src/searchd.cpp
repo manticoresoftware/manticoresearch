@@ -13724,7 +13724,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 			g_iLogFilterLen = iLen;
 		} else if ( tStmt.m_sSetName=="net_wait" )
 		{
-			g_tmWait = (int)tStmt.m_iSetValue;
+			g_tmWaitUS = tStmt.m_iSetValue * 1000LL;
 		} else if ( tStmt.m_sSetName=="grouping_in_utc")
 		{
 			g_bGroupingInUtc = !!tStmt.m_iSetValue;
@@ -18793,7 +18793,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	g_iAgentRetryCount = hSearchd.GetInt ( "agent_retry_count", g_iAgentRetryCount );
 	if ( g_iAgentRetryCount > MAX_RETRY_COUNT )
 		sphWarning ( "agent_retry_count %d exceeded max recommended %d", g_iAgentRetryCount, MAX_RETRY_COUNT );
-	g_tmWait = hSearchd.GetInt ( "net_wait_tm", g_tmWait );
+	g_tmWaitUS = hSearchd.GetUsTime64Ms ( "net_wait_tm", g_tmWaitUS );
 	g_iThrottleAction = hSearchd.GetInt ( "net_throttle_action", g_iThrottleAction );
 	g_iThrottleAccept = hSearchd.GetInt ( "net_throttle_accept", g_iThrottleAccept );
 	g_iNetWorkers = hSearchd.GetInt ( "net_workers", g_iNetWorkers );
@@ -20044,11 +20044,13 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	gStats().m_uStarted = (DWORD)time(NULL);
 
-	CSphString sSQLStateDefault;
-	if ( IsConfigless() )
-		sSQLStateDefault.SetSprintf ( "%s/state.sql", GetDataDirInt().cstr() );
-	if ( !InitSphinxqlState ( hSearchd.GetStr ( "sphinxql_state", sSQLStateDefault.scstr() ), sError ))
-		sphWarning ( "sphinxql_state flush disabled: %s", sError.cstr ());
+	{
+		CSphString sSQLStateDefault;
+		if ( IsConfigless() )
+			sSQLStateDefault.SetSprintf ( "%s/state.sql", GetDataDirInt().cstr() );
+		if ( !InitSphinxqlState ( hSearchd.GetStr ( "sphinxql_state", sSQLStateDefault.scstr() ), sError ))
+			sphWarning ( "sphinxql_state flush disabled: %s", sError.cstr ());
+	}
 
 	ServeUserVars ();
 
@@ -20086,8 +20088,11 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	g_dNetLoops.Resize ( g_iNetWorkers );
 	for ( auto & pNetLoop : g_dNetLoops )
 	{
-		pNetLoop = new CSphNetLoop ( g_dListeners );
-		g_pTickPoolThread->Schedule ( [pNetLoop] { pNetLoop->LoopNetPoll (); }, false );
+		pNetLoop = new CSphNetLoop;
+		pNetLoop->SetListeners ( g_dListeners );
+		if ( !GetAvailableNetLoop() )
+			SetAvailableNetLoop ( pNetLoop );
+		g_pTickPoolThread->Schedule ( [pNetLoop] { ScopedRole_c thPoll ( NetPoollingThread ); pNetLoop->LoopNetPoll (); }, false );
 	}
 
 	// until no threads started, schedule stopping of alone threads to very bottom

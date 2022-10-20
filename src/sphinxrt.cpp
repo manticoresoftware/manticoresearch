@@ -1080,7 +1080,12 @@ public:
 
 	void SetState ( States_e eState )
 	{
-		m_tValue.ModifyValueAndNotifyAll ( [eState] ( Value_t& t ) { t.m_eValue = eState; } );
+		if ( Threads::IsInsideCoroutine() )
+			m_tValue.ModifyValueAndNotifyAll ( [eState] ( Value_t& t ) { t.m_eValue = eState; } );
+		else { // call from naked worker, typically indextool
+			auto& t = const_cast<Value_t&> ( m_tValue.GetValueRef() );
+			t.m_eValue = eState;
+		}
 	}
 	void SetShutdownFlag ()
 	{
@@ -1425,8 +1430,11 @@ RtIndex_c::~RtIndex_c ()
 		ScopedScheduler_c tSerialFiber { m_tWorkers.SerialChunkAccess() };
 		TRACE_SCHED ( "rt", "~RtIndex_c" );
 		m_tSaving.SetShutdownFlag ();
-		Threads::Coro::Reschedule();
-		StopMergeSegmentsWorker();
+		if ( Threads::IsInsideCoroutine() )
+		{
+			Threads::Coro::Reschedule();
+			StopMergeSegmentsWorker();
+		}
 		m_tNSavesNow.Wait ( [] ( int iVal ) { return iVal==0; } );
 	}
 
@@ -2778,7 +2786,7 @@ int RtIndex_c::ApplyKillList ( const VecTraits_T<DocID_t> & dAccKlist )
 	int iKilled = 0;
 	auto pChunks = m_tRtChunks.DiskChunks();
 
-	if ( m_tSaving.Is ( SaveState_c::ENABLED ) )
+	if ( !Threads::IsInsideCoroutine() || m_tSaving.Is ( SaveState_c::ENABLED ) )
 		for ( auto& pChunk : *pChunks )
 			iKilled += pChunk->CastIdx().KillMulti ( dAccKlist );
 	else
@@ -9816,6 +9824,7 @@ void RtIndex_c::LockFileState ( CSphVector<CSphString>& dFiles )
 	CSphString sError;
 	SaveAttributes ( sError ); // fixme! report error, better discard whole locking
 	// that will ensure, if current txn is applying, it will be finished (especially kill pass) before we continue.
+	assert ( Threads::IsInsideCoroutine());
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 	m_tSaving.SetState ( SaveState_c::DISABLED );
 	std::atomic_thread_fence ( std::memory_order_release );

@@ -460,11 +460,6 @@ bool IndexAlterHelper_c::Alter_AddRemoveFieldFromSchema ( bool bAdd, CSphSchema 
 	else
 	{
 		auto iIdx = tSchema.GetFieldIndex ( sFieldName.cstr () );
-		if ( iIdx>=0 && tSchema.GetFieldsCount()==1 )
-		{
-			sError.SetSprintf ("Unable to delete last field from the index");
-			return false;
-		}
 		tSchema.RemoveField ( iIdx );
 		return true;
 	}

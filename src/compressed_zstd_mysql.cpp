@@ -103,7 +103,11 @@ public:
 
 bool IsZstdCompressionAvailable()
 {
-	return InitDynamicZstd();
+	static bool bZstdLoaded = false;
+	if ( !bZstdLoaded )
+		bZstdLoaded = InitDynamicZstd();
+
+	return bZstdLoaded;
 }
 
 void MakeZstdMysqlCompressedLayer ( std::unique_ptr<AsyncNetBuffer_c>& pSource, int iLevel )

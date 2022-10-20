@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>removing last ft field from an index</name>
+
+<requires>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+<sphinxql>
+	drop table if exists t;
+	create table t(f text, a int);
+	insert into t values(0,'abc',123);
+	select * from t;
+	flush ramchunk t;
+	desc t;
+	alter table t drop column f;
+	select * from t;
+	desc t;
+	drop table t;
+</sphinxql>
+</queries>
+
+</test>

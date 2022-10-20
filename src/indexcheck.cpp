@@ -21,12 +21,14 @@
 #include "columnarlib.h"
 #include "indexfiles.h"
 
+#include "killlist.h"
+
 constexpr int FAILS_THRESH = 100;
 
 class DebugCheckError_c final : public DebugCheckError_i
 {
 public:
-	DebugCheckError_c ( FILE* pFile );
+	DebugCheckError_c ( FILE* pFile, const DocID_t* pExtract );
 
 	bool Fail ( const char* szFmt, ... ) final;
 	void Msg ( const char* szFmt, ... ) final;
@@ -34,6 +36,7 @@ public:
 	void Done() final;
 
 	int64_t GetNumFails() const final;
+	const DocID_t* GetExtractDocs() const final { return m_pExtract; };
 
 private:
 	FILE* m_pFile { nullptr };
@@ -41,10 +44,12 @@ private:
 	int64_t m_tStartTime { 0 };
 	int64_t m_nFails { 0 };
 	int64_t m_nFailsPrinted { 0 };
+	const DocID_t* m_pExtract;
 };
 
-DebugCheckError_c::DebugCheckError_c ( FILE * pFile )
+DebugCheckError_c::DebugCheckError_c ( FILE * pFile, const DocID_t* pExtract )
 	: m_pFile ( pFile )
+	, m_pExtract { pExtract }
 {
 	assert ( pFile );
 	m_bProgress = isatty ( fileno ( pFile ) )!=0;
@@ -124,9 +129,9 @@ int64_t DebugCheckError_c::GetNumFails() const
 	return m_nFails;
 }
 
-DebugCheckError_i* MakeDebugCheckError ( FILE* fp )
+DebugCheckError_i* MakeDebugCheckError ( FILE* fp, DocID_t* pExtract )
 {
-	return new DebugCheckError_c ( fp );
+	return new DebugCheckError_c ( fp, pExtract );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -309,6 +314,34 @@ public:
 
 //////////////////////////////////////////////////////////////////////////
 
+struct Wordid_t
+{
+	bool m_bWordDict;
+	union {
+		SphWordID_t m_uWordid;
+		const char* m_szWordid;
+	};
+};
+
+static StringBuilder_c& operator<< ( StringBuilder_c& dOut, const Wordid_t& tWordID )
+{
+	ScopedComma_c _ (dOut, dEmptyBl);
+	if ( tWordID.m_bWordDict )
+		return dOut << tWordID.m_szWordid;
+	return dOut << "(hash) " << tWordID.m_uWordid;
+}
+
+static JsonEscapedBuilder& operator<< ( JsonEscapedBuilder& dOut, const Wordid_t& tWordID )
+{
+	if ( tWordID.m_bWordDict )
+		dOut.NamedString ( "token", tWordID.m_szWordid );
+	else
+		dOut.NamedVal ( "crc", tWordID.m_uWordid );
+	return dOut;
+}
+
+using cbWordidFn = std::function<void ( RowID_t, Wordid_t, int iField, int iPos, bool bIsEnd )>;
+
 class DiskIndexChecker_c::Impl_c : public DebugCheckHelper_c
 {
 public:
@@ -319,6 +352,7 @@ public:
 	CSphVector<SphWordID_t> & GetHitlessWords() { return m_dHitlessWords; }
 
 	void	Check();
+	void	ExtractDocs ();
 
 private:
 	CSphIndex &				m_tIndex;
@@ -345,8 +379,11 @@ private:
 	CSphSchema				m_tSchema;
 	CWordlist				m_tWordlist;
 
+	RowID_t GetRowidByDocid ( DocID_t iDocid ) const;
+	RowID_t CheckIfKilled ( RowID_t iRowID ) const;
+
 	void	CheckDictionary();
-	void	CheckDocs();
+	void	CheckDocs ( cbWordidFn&& cbfndoc = nullptr );
 	void	CheckAttributes();
 	void	CheckKillList() const;
 	void	CheckBlockIndex();
@@ -547,9 +584,138 @@ void DiskIndexChecker_c::Impl_c::Setup ( int64_t iNumRows, int64_t iDocinfoIndex
 	m_bCheckIdDups = bCheckIdDups;
 }
 
+struct WordVariantHit_t
+{
+	CSphString m_sWord;
+	Wordid_t m_tWord;
+	bool m_bIsLast;
+};
+
+struct WordHit_t
+{
+	CSphVector<WordVariantHit_t> m_dHits;
+	int 	m_iPos = -1;
+
+	void AddWord ( Wordid_t tWord, bool bIsLast )
+	{
+		auto& dHit = m_dHits.Add();
+		dHit.m_bIsLast = bIsLast;
+		dHit.m_tWord = tWord;
+		if ( tWord.m_bWordDict )
+		{
+			dHit.m_sWord = tWord.m_szWordid;
+			dHit.m_tWord.m_szWordid = dHit.m_sWord.cstr();
+		}
+	}
+	void Print ( StringBuilder_c& sOut, bool bLast )
+	{
+		if ( m_iPos < 0 )
+		{
+			sOut << "..";
+			return;
+		}
+
+		auto fnPrintHit = [&sOut,bLast] (const WordVariantHit_t& dHit) {
+			ScopedComma_c _ ( sOut, dEmptyBl );
+			sOut << dHit.m_tWord;
+			if ( !bLast && dHit.m_bIsLast )
+				sOut << "<EOF>";
+			if ( bLast && !dHit.m_bIsLast )
+				sOut << "...";
+		};
+
+		if ( m_dHits.GetLength()==1 )
+			fnPrintHit(m_dHits[0]);
+		else
+		{
+			ScopedComma_c sDivider ( sOut, { FROMS ( "|" ), FROMS ( "[" ), FROMS ( "]" ) } );
+			for ( const auto& dHit : m_dHits )
+				fnPrintHit(dHit);
+		}
+	}
+};
+
+struct DocField_t {
+	int m_iField = -1;
+	CSphVector<WordHit_t> m_dHits;
+};
+
+inline static void FormatWordHit ( JsonEscapedBuilder& dOut, const Wordid_t& tWord, int iField, int iPos, bool bIsLast )
+{
+	auto tObj = dOut.Object();
+	dOut << tWord;
+	dOut.NamedVal ( "field", iField );
+	dOut.NamedVal ( "pos", iPos );
+	dOut.NamedValNonDefault ( "is_last", bIsLast, false );
+}
+
+void DiskIndexChecker_c::Impl_c::ExtractDocs ()
+{
+	assert ( m_tReporter.GetExtractDocs() );
+	auto uDocID = *m_tReporter.GetExtractDocs();
+	auto iRowID = GetRowidByDocid ( uDocID );
+	bool bIsKilled = ( INVALID_ROWID == CheckIfKilled ( iRowID ) );
+
+	CSphVector<DocField_t> dFields;
+
+	if ( iRowID!=INVALID_ROWID )
+	{
+		m_tReporter.Msg ( "\n# Restored document\n## Cloud of tokens\n\n```json\n[" );
+		CheckDocs ( [&dFields, iRowID, bIsNotFirst=false, this] ( RowID_t tRow, Wordid_t tWord, int iField, int iPos, bool bIsLast ) mutable {
+
+			if ( iRowID!=tRow )
+				return;
+
+			if ( dFields.GetLength() < iField + 1 )
+				dFields.Resize ( iField + 1 );
+			auto& dField = dFields[iField];
+			dField.m_iField = iField;
+
+			if ( dField.m_dHits.GetLength() < iPos )
+				dField.m_dHits.Resize ( iPos );
+			auto& dHit = dField.m_dHits[iPos - 1];
+
+			dHit.AddWord ( tWord, bIsLast );
+			dHit.m_iPos = iPos;
+
+			JsonEscapedBuilder sReport;
+			if ( std::exchange ( bIsNotFirst, true ) )
+				sReport << ',';
+			FormatWordHit ( sReport, tWord, iField, iPos, bIsLast );
+			m_tReporter.Msg ( "%s", sReport.cstr() );
+		});
+		m_tReporter.Msg ( "]\n```\n" );
+	}
+
+
+	StringBuilder_c sReport;
+	if ( iRowID == INVALID_ROWID )
+		sReport << "* Document " << uDocID << " is not found";
+	else {
+		sReport << "## Document " << uDocID << "\n* RowID " << iRowID << ( bIsKilled ? " (killed)\n" : "\n" );
+		ARRAY_FOREACH ( i, dFields )
+		{
+			const DocField_t& dField = dFields[i];
+			const CSphColumnInfo& tCol = m_tSchema.GetField ( i );
+			if ( dField.m_iField < 0 )
+				sReport << "\n### Field '" << tCol.m_sName << "' is empty.\n";
+			else {
+				sReport << "\n### Field '" << tCol.m_sName << "'\n";
+				ScopedComma_c tSpacer ( sReport, { FROMS ( " " ), FROMS ( "" ), FROMS ( "\n" ) } );
+				ARRAY_FOREACH ( k, dField.m_dHits )
+					dField.m_dHits[k].Print ( sReport, k==dField.m_dHits.GetLength()-1 );
+			}
+		}
+	}
+	sReport << "\n--- <End of restored document> ---";
+	m_tReporter.Msg ( "%s", sReport.cstr() );
+
+}
 
 void DiskIndexChecker_c::Impl_c::Check()
 {
+	if ( m_tReporter.GetExtractDocs() )
+		return ExtractDocs();
 	CheckSchema();
 	CheckDictionary();
 	CheckDocs();
@@ -790,11 +956,12 @@ void DiskIndexChecker_c::Impl_c::CheckDictionary()
 }
 
 
-void DiskIndexChecker_c::Impl_c::CheckDocs()
+void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 {
 	const CSphIndexSettings & tIndexSettings = m_tIndex.GetSettings();
 
-	m_tReporter.Msg ( "checking data..." );
+	if ( !fnCbWordid )
+		m_tReporter.Msg ( "checking data..." );
 
 	int64_t iDocsSize = m_pDocsReader->GetFilesize();
 	int64_t iSkiplistLen = m_tSkipsReader.GetFilesize();
@@ -809,6 +976,9 @@ void DiskIndexChecker_c::Impl_c::CheckDocs()
 	bool bHitless = false;
 
 	const bool bWordDict = m_tIndex.GetDictionary()->GetSettings().m_bWordDict;
+
+	Wordid_t tCbWordid;
+	tCbWordid.m_bWordDict = bWordDict;
 
 	char sWord[MAX_KEYWORD_BYTES];
 	memset ( sWord, 0, sizeof(sWord) );
@@ -871,6 +1041,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocs()
 				iDictDocs = ( iDictDocs & HITLESS_DOC_MASK );
 				bHitless = true;
 			}
+			tCbWordid.m_szWordid = sWord;
 		} else
 		{
 			// finish reading the entire entry
@@ -881,6 +1052,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocs()
 			if ( bHitless )
 				iDictDocs = ( iDictDocs & HITLESS_DOC_MASK );
 			iDictHits = m_tDictReader.UnzipInt();
+			tCbWordid.m_uWordid = uWordid;
 		}
 
 		int64_t iSkipsOffset = 0;
@@ -951,7 +1123,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocs()
 			if ( tDoc.m_tRowID>m_iNumRows )
 				m_tReporter.Fail ( "rowid out of bounds (wordid=" UINT64_FMT "(%s), rowid=%u)",	uint64_t(uWordid), sWord, tDoc.m_tRowID );
 
-			iDoclistDocs++;
+			++iDoclistDocs;
 			iDoclistHits += pQword->m_uMatchHits;
 
 			// check position in case of regular (not-inline) hit
@@ -993,6 +1165,9 @@ void DiskIndexChecker_c::Impl_c::CheckDocs()
 						m_tReporter.Fail ( "hit field decreased (wordid=" UINT64_FMT "(%s), rowid=%u, hit field=%u, last field=%u)", (uint64_t)uWordid, sWord, pQword->m_tDoc.m_tRowID, HITMAN::GetField ( uHit ), HITMAN::GetField ( uLastHit ) );
 				}
 
+				if ( fnCbWordid )
+					fnCbWordid ( tDoc.m_tRowID, tCbWordid, HITMAN::GetField ( uHit ), HITMAN::GetPos ( uHit ), HITMAN::IsEnd ( uHit ) );
+
 				uLastHit = uHit;
 
 				int iField = HITMAN::GetField ( uHit );
@@ -1003,8 +1178,8 @@ void DiskIndexChecker_c::Impl_c::CheckDocs()
 				else
 					dFieldMask.Set(iField);
 
-				iDocHits++; // to check doclist entry
-				iHitlistHits++; // to check dictionary entry
+				++iDocHits; // to check doclist entry
+				++iHitlistHits; // to check dictionary entry
 			}
 
 			// check hit count
@@ -1409,10 +1584,35 @@ void DiskIndexChecker_c::Impl_c::CheckDocidLookup()
 	}
 }
 
+RowID_t DiskIndexChecker_c::Impl_c::GetRowidByDocid ( DocID_t iDocID ) const
+{
+	CSphMappedBuffer<BYTE> tDocidLookup;
+	CSphString sLastError;
+
+	if ( !tDocidLookup.Setup ( GetFilename ( SPH_EXT_SPT ), sLastError, false ) )
+		return INVALID_ROWID;
+
+	LookupReader_c tLookupReader;
+	tLookupReader.SetData ( tDocidLookup.GetReadPtr() );
+
+	return tLookupReader.Find(iDocID);
+}
+
+RowID_t DiskIndexChecker_c::Impl_c::CheckIfKilled ( RowID_t iRowID ) const
+{
+	DeadRowMap_Disk_c tDeadRowMap;
+	CSphString sError;
+	tDeadRowMap.Prealloc ( (DWORD)m_iNumRows, GetFilename ( SPH_EXT_SPM ), sError );
+
+	if ( tDeadRowMap.IsSet ( iRowID ) )
+		iRowID = INVALID_ROWID;
+	return iRowID;
+}
+
 
 struct DocRow_fn
 {
-	bool IsLess ( const DocidRowidPair_t & tA, DocidRowidPair_t & tB ) const
+	inline static bool IsLess ( const DocidRowidPair_t & tA, DocidRowidPair_t & tB )
 	{
 		if ( tA.m_tDocID==tB.m_tDocID && tA.m_tRowID<tB.m_tRowID )
 			return true;
@@ -1469,13 +1669,10 @@ CSphString DiskIndexChecker_c::Impl_c::GetFilename ( ESphExt eExt ) const
 
 /// public interface
 DiskIndexChecker_c::DiskIndexChecker_c ( CSphIndex& tIndex, DebugCheckError_i& tReporter )
-	: m_pImpl { new Impl_c { tIndex, tReporter } }
+	: m_pImpl { std::make_unique<Impl_c> ( tIndex, tReporter ) }
 {}
 
-DiskIndexChecker_c::~DiskIndexChecker_c()
-{
-	SafeDelete ( m_pImpl );
-}
+DiskIndexChecker_c::~DiskIndexChecker_c() = default;
 
 bool DiskIndexChecker_c::OpenFiles ()
 {

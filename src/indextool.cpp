@@ -1073,6 +1073,7 @@ enum class IndextoolCmd_e
 	DUMPHITLIST,
 	DUMPDICT,
 	CHECK,
+	EXTRACT,
 	STRIP,
 	MORPH,
 	BUILDIDF,
@@ -1264,6 +1265,7 @@ int main ( int argc, char ** argv )
 	bool bRotate = false;
 	bool bCheckIdDups = false;
 	int iCheckChunk = -1;
+	DocID_t iExtractDocid = -1;
 
 	int i;
 	for ( i=1; i<argc; i++ )
@@ -1281,7 +1283,7 @@ int main ( int argc, char ** argv )
 
 		// handle options/commands with 1+ args
 		if ( (i+1)>=argc )			break;
-		OPT ( "-c", "--config" )	sOptConfig = argv[++i];
+		OPT ( "-c", "--config" )	 { sOptConfig = argv[++i]; continue; }
 		OPT1 ( "--dumpheader" )		{ SetCmd ( IndextoolCmd_e::DUMPHEADER ); sDumpHeader = argv[++i]; }
 		OPT1 ( "--dumpconfig" )		{ SetCmd ( IndextoolCmd_e::DUMPCONFIG ); sDumpHeader = argv[++i]; }
 		OPT1 ( "--dumpdocids" )		{ SetCmd ( IndextoolCmd_e::DUMPDOCIDS ); sIndex = argv[++i]; }
@@ -1311,12 +1313,12 @@ int main ( int argc, char ** argv )
 		}
 
 		// options with 2 args
-		else if ( (i+2)>=argc ) // NOLINT
+		else if ( ( i + 2 ) >= argc ) // NOLINT
 		{
 			// not enough args
 			break;
-
 		}
+		OPT1 ( "--docextract" )		{ SetCmd ( IndextoolCmd_e::EXTRACT ); sIndex = argv[++i]; iExtractDocid = strtoll ( argv[++i], NULL, 10 ); }
 		OPT1 ("--dumphitlist" )
 		{
 			SetCmd ( IndextoolCmd_e::DUMPHITLIST );
@@ -1500,7 +1502,7 @@ int main ( int argc, char ** argv )
 		if ( g_eCommand==IndextoolCmd_e::MORPH )
 			break;
 
-		if ( g_eCommand!=IndextoolCmd_e::CHECK )
+		if ( !(g_eCommand==IndextoolCmd_e::CHECK || g_eCommand==IndextoolCmd_e::EXTRACT ))
 			pIndex->Preread();
 
 		if ( hConf["index"][sIndex]("hitless_words") )
@@ -1593,9 +1595,10 @@ int main ( int argc, char ** argv )
 		}
 
 		case IndextoolCmd_e::CHECK:
+		case IndextoolCmd_e::EXTRACT:
 			fprintf ( stdout, "checking index '%s'...\n", sIndex.cstr() );
 			{
-				std::unique_ptr<DebugCheckError_i> pReporter { MakeDebugCheckError ( stdout ) };
+			std::unique_ptr<DebugCheckError_i> pReporter { MakeDebugCheckError ( stdout, ( g_eCommand == IndextoolCmd_e::CHECK ? nullptr : &iExtractDocid ) ) };
 				iCheckErrno = pIndex->DebugCheck ( *pReporter );
 			}
 			if ( iCheckErrno )

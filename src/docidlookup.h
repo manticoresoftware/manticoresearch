@@ -74,7 +74,7 @@ public:
 		DocID_t tCurDocID = pFound->m_tBaseDocID;
 
 		// 1st entry doesnt have docid
-		RowID_t tRowID = sphUnalignedRead ( *(RowID_t*)const_cast<BYTE*>(pCur) );
+		RowID_t tRowID = sphUnalignedRead ( *(const RowID_t*)pCur );
 		pCur += sizeof(RowID_t);
 
 		if ( tCurDocID==tDocID )
@@ -85,7 +85,7 @@ public:
 		{
 			DocID_t tDeltaDocID = UnzipOffsetBE(pCur);
 			assert ( tDeltaDocID>=0 );
-			tRowID = sphUnalignedRead ( *(RowID_t*)const_cast<BYTE*>(pCur) );
+			tRowID = sphUnalignedRead ( *(const RowID_t*)pCur );
 			pCur += sizeof(RowID_t);
 
 			tCurDocID += tDeltaDocID;

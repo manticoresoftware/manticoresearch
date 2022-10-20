@@ -68,7 +68,7 @@ charset_table = non_cjk,U+00E4,U+00C4
 for case sensitive search or
 
 ```
-characters = non_cjk,U+00E4,U+00C4->U+00E4
+charset_table = non_cjk,U+00E4,U+00C4->U+00E4
 ```
 
 for case insensitive search.

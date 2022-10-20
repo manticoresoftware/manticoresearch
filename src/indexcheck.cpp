@@ -628,7 +628,7 @@ struct WordHit_t
 			fnPrintHit(m_dHits[0]);
 		else
 		{
-			ScopedComma_c sDivider ( sOut, { FROMS ( "|" ), FROMS ( "[" ), FROMS ( "]" ) } );
+			ScopedComma_c sDivider ( sOut, StrBlock_t { FROMS ( "|" ), FROMS ( "[" ), FROMS ( "]" ) } );
 			for ( const auto& dHit : m_dHits )
 				fnPrintHit(dHit);
 		}
@@ -701,7 +701,7 @@ void DiskIndexChecker_c::Impl_c::ExtractDocs ()
 				sReport << "\n### Field '" << tCol.m_sName << "' is empty.\n";
 			else {
 				sReport << "\n### Field '" << tCol.m_sName << "'\n";
-				ScopedComma_c tSpacer ( sReport, { FROMS ( " " ), FROMS ( "" ), FROMS ( "\n" ) } );
+				ScopedComma_c tSpacer ( sReport, StrBlock_t { FROMS ( " " ), FROMS ( "" ), FROMS ( "\n" ) } );
 				ARRAY_FOREACH ( k, dField.m_dHits )
 					dField.m_dHits[k].Print ( sReport, k==dField.m_dHits.GetLength()-1 );
 			}

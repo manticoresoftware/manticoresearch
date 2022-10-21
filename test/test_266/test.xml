@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>add to many ft fields to an index</name>
+
+<requires>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+	<sphinxql>
+		drop table if exists t;
+		create table t(field_0 text);
+	</sphinxql>
+	<repeat count="255" vars="i" init="1" inc="1">
+		<sphinxql>
+			alter table t add column field_<i/> text;
+		</sphinxql>
+	</repeat>
+	<sphinxql>
+		<!-- that one should fail -->
+		alter table t add column field_256 text;
+		desc t;
+	</sphinxql>
+
+	<!-- creation works ok, but let it be also here -->
+	<var name="fld"/>
+	<repeat count="257" vars="i" init="0" inc="1">
+		<var name="fld" delimiter=",">field_<i/> text</var>
+	</repeat>
+	<sphinxql>
+		drop table if exists t1;
+		create table t1(<fld/>);
+		desc t1;
+	</sphinxql>
+	<sphinxql>
+		drop table t;
+		drop table t1;
+	</sphinxql>
+</queries>
+
+</test>

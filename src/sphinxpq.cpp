@@ -91,8 +91,11 @@ public:
 	TokenizerRefPtr_c CloneIndexingTokenizer() const override { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
 	void SaveMeta ( bool bShutdown = false ) EXCLUDES ( m_tLock );
 	void SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown = false );
+
+	enum class LOAD_E { ParseError_e, GeneralError_e, Ok_e };
+	LOAD_E LoadMetaJson ( const CSphString& sMeta, bool bStripPath, FilenameBuilder_i* pFilenameBuilder, StrVec_t& dWarnings );
+	LOAD_E LoadMetaLegacy ( const CSphString& sMeta, bool bStripPath, FilenameBuilder_i* pFilenameBuilder, StrVec_t& dWarnings );
 	bool LoadMeta ( const CSphString& sMeta, bool bStripPath, FilenameBuilder_i* pFilenameBuilder, StrVec_t& dWarnings );
-	bool LoadMetaLegacy ( const CSphString& sMeta, bool bStripPath, FilenameBuilder_i* pFilenameBuilder, StrVec_t& dWarnings );
 	bool Truncate ( CSphString & ) override EXCLUDES ( m_tLock );
 
 	// RT index stub
@@ -2502,7 +2505,7 @@ void PercolateIndex_c::PostSetup () EXCLUDES ( m_tLock )
 }
 
 // load old-style (legacy) binary meta
-bool PercolateIndex_c::LoadMetaLegacy ( const CSphString& sMeta, bool bStripPath, FilenameBuilder_i* pFilenameBuilder, StrVec_t& dWarnings )
+PercolateIndex_c::LOAD_E PercolateIndex_c::LoadMetaLegacy ( const CSphString& sMeta, bool bStripPath, FilenameBuilder_i* pFilenameBuilder, StrVec_t& dWarnings )
 {
 	/////////////
 	// load meta
@@ -2513,18 +2516,18 @@ bool PercolateIndex_c::LoadMetaLegacy ( const CSphString& sMeta, bool bStripPath
 	// opened and locked, lets read
 	CSphAutoreader rdMeta;
 	if ( !rdMeta.Open ( sMeta, m_sLastError ) )
-		return false;
+		return LOAD_E::GeneralError_e;
 
 	if ( rdMeta.GetDword() != META_HEADER_MAGIC )
 	{
 		m_sLastError.SetSprintf ( "invalid meta file %s", sMeta.cstr() );
-		return false;
+		return LOAD_E::ParseError_e;
 	}
 	DWORD uVersion = rdMeta.GetDword();
 	if ( uVersion == 0 || uVersion > META_VERSION )
 	{
 		m_sLastError.SetSprintf ( "%s is v.%u, binary is v.%u", sMeta.cstr(), uVersion, META_VERSION );
-		return false;
+		return LOAD_E::GeneralError_e;
 	}
 
 	// we don't support anything prior to v8
@@ -2532,7 +2535,7 @@ bool PercolateIndex_c::LoadMetaLegacy ( const CSphString& sMeta, bool bStripPath
 	if ( uVersion < uMinFormatVer )
 	{
 		m_sLastError.SetSprintf ( "indexes prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, m_sFilename.cstr(), uVersion );
-		return false;
+		return LOAD_E::GeneralError_e;
 	}
 
 	DWORD uIndexVersion = rdMeta.GetDword();
@@ -2545,7 +2548,7 @@ bool PercolateIndex_c::LoadMetaLegacy ( const CSphString& sMeta, bool bStripPath
 	ReadSchema ( rdMeta, m_tSchema, uIndexVersion );
 	LoadIndexSettings ( m_tSettings, rdMeta, uIndexVersion );
 	if ( !tTokenizerSettings.Load ( pFilenameBuilder, rdMeta, tEmbeddedFiles, m_sLastError ) )
-		return false;
+		return LOAD_E::GeneralError_e;
 
 	tDictSettings.Load ( rdMeta, tEmbeddedFiles, m_sLastWarning );
 
@@ -2565,14 +2568,14 @@ bool PercolateIndex_c::LoadMetaLegacy ( const CSphString& sMeta, bool bStripPath
 	// recreate tokenizer
 	m_pTokenizer = Tokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, pFilenameBuilder, dWarnings, m_sLastError );
 	if ( !m_pTokenizer )
-		return false;
+		return LOAD_E::GeneralError_e;
 
 	// recreate dictionary
 	m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, m_sIndexName.cstr(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError );
 	if ( !m_pDict )
 	{
 		m_sLastError.SetSprintf ( "index '%s': %s", m_sIndexName.cstr(), m_sLastError.cstr() );
-		return false;
+		return LOAD_E::GeneralError_e;
 	}
 
 	Tokenizer::AddToMultiformFilterTo ( m_pTokenizer, m_pDict->GetMultiWordforms () );
@@ -2587,7 +2590,7 @@ bool PercolateIndex_c::LoadMetaLegacy ( const CSphString& sMeta, bool bStripPath
 			pFieldFilter = sphCreateRegexpFilter ( tFieldFilterSettings, m_sLastError );
 
 		if ( !sphSpawnFilterICU ( pFieldFilter, m_tSettings, tTokenizerSettings, sMeta.cstr(), m_sLastError ) )
-			return false;
+			return LOAD_E::GeneralError_e;
 
 		SetFieldFilter ( std::move ( pFieldFilter ) );
 	}
@@ -2608,25 +2611,25 @@ bool PercolateIndex_c::LoadMetaLegacy ( const CSphString& sMeta, bool bStripPath
 
 	m_tStat.m_iTotalDocuments = uQueries;
 	m_iSavedTID = m_iTID;
-	return true;
+	return LOAD_E::Ok_e;
 }
 
 void LoadStoredQueryJson ( StoredQueryDesc_t& tQuery, const bson::Bson_c& tNode );
 
 // load new (json) meta
-bool PercolateIndex_c::LoadMeta ( const CSphString& sMeta, bool bStripPath, FilenameBuilder_i* pFilenameBuilder, StrVec_t& dWarnings )
+PercolateIndex_c::LOAD_E PercolateIndex_c::LoadMetaJson ( const CSphString& sMeta, bool bStripPath, FilenameBuilder_i* pFilenameBuilder, StrVec_t& dWarnings )
 {
 	using namespace bson;
 
 	CSphVector<BYTE> dData;
 	if ( !sphJsonParse ( dData, sMeta, m_sLastError ) )
-		return false;
+		return LOAD_E::ParseError_e;
 
 	Bson_c tBson ( dData );
 	if ( tBson.IsEmpty() || !tBson.IsAssoc() )
 	{
 		m_sLastError = "Something wrong read from json meta - it is either empty, either not root object.";
-		return false;
+		return LOAD_E::ParseError_e;
 	}
 
 	// version
@@ -2634,7 +2637,7 @@ bool PercolateIndex_c::LoadMeta ( const CSphString& sMeta, bool bStripPath, File
 	if ( uVersion == 0 || uVersion > META_VERSION )
 	{
 		m_sLastError.SetSprintf ( "%s is v.%u, binary is v.%u", sMeta.cstr(), uVersion, META_VERSION );
-		return false;
+		return LOAD_E::GeneralError_e;
 	}
 
 	// we don't support anything prior to v8
@@ -2642,7 +2645,7 @@ bool PercolateIndex_c::LoadMeta ( const CSphString& sMeta, bool bStripPath, File
 	if ( uVersion < uMinFormatVer )
 	{
 		m_sLastError.SetSprintf ( "indexes prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, m_sFilename.cstr(), uVersion );
-		return false;
+		return LOAD_E::GeneralError_e;
 	}
 
 //	DWORD uIndexVersion = (DWORD)Int ( tBson.ChildByName ( "index_format_version" ) );
@@ -2656,7 +2659,7 @@ bool PercolateIndex_c::LoadMeta ( const CSphString& sMeta, bool bStripPath, File
 	LoadIndexSettingsJson ( tBson.ChildByName ( "index_settings" ), m_tSettings );
 
 	if ( !tTokenizerSettings.Load ( pFilenameBuilder, tBson.ChildByName ( "tokenizer_settings"), tEmbeddedFiles, m_sLastError ) )
-		return false;
+		return LOAD_E::GeneralError_e;
 
 	tDictSettings.Load ( tBson.ChildByName ( "dictionary_settings" ), tEmbeddedFiles, m_sLastWarning );
 
@@ -2676,14 +2679,14 @@ bool PercolateIndex_c::LoadMeta ( const CSphString& sMeta, bool bStripPath, File
 	// recreate tokenizer
 	m_pTokenizer = Tokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, pFilenameBuilder, dWarnings, m_sLastError );
 	if ( !m_pTokenizer )
-		return false;
+		return LOAD_E::GeneralError_e;
 
 	// recreate dictionary
 	m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, m_sIndexName.cstr(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError );
 	if ( !m_pDict )
 	{
 		m_sLastError.SetSprintf ( "index '%s': %s", m_sIndexName.cstr(), m_sLastError.cstr() );
-		return false;
+		return LOAD_E::GeneralError_e;
 	}
 
 	Tokenizer::AddToMultiformFilterTo ( m_pTokenizer, m_pDict->GetMultiWordforms() );
@@ -2703,7 +2706,7 @@ bool PercolateIndex_c::LoadMeta ( const CSphString& sMeta, bool bStripPath, File
 	}
 
 	if ( !sphSpawnFilterICU ( pFieldFilter, m_tSettings, tTokenizerSettings, sMeta.cstr(), m_sLastError ) )
-		return false;
+		return LOAD_E::GeneralError_e;
 
 	SetFieldFilter ( std::move ( pFieldFilter ) );
 
@@ -2723,6 +2726,29 @@ bool PercolateIndex_c::LoadMeta ( const CSphString& sMeta, bool bStripPath, File
 
 	m_tStat.m_iTotalDocuments = m_dLoadedQueries.GetLength();
 	m_iSavedTID = m_iTID;
+	return LOAD_E::Ok_e;
+}
+
+bool PercolateIndex_c::LoadMeta ( const CSphString& sMeta, bool bStripPath, FilenameBuilder_i* pFilenameBuilder, StrVec_t& dWarnings )
+{
+	auto eRes = LoadMetaJson ( sMeta, bStripPath, pFilenameBuilder, dWarnings );
+	if ( eRes == LOAD_E::ParseError_e )
+	{
+		sphInfo ( "Index meta format is not json, will try it as binary..." );
+		eRes = LoadMetaLegacy ( sMeta, bStripPath, pFilenameBuilder, dWarnings );
+		if ( eRes == LOAD_E::ParseError_e )
+		{
+			sphWarning ( "Unable to parse header... Error %s", m_sLastError.cstr() );
+			return false;
+		}
+	}
+	if ( eRes == LOAD_E::GeneralError_e )
+	{
+		sphWarning ( "Unable to load header... Error %s", m_sLastError.cstr() );
+		return false;
+	}
+
+	assert ( eRes == LOAD_E::Ok_e );
 	return true;
 }
 
@@ -2753,7 +2779,7 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilename
 
 	m_bHasFiles = true;
 
-	if ( !LoadMeta ( sMeta, bStripPath, pFilenameBuilder, dWarnings ) && !LoadMetaLegacy ( sMeta, bStripPath, pFilenameBuilder, dWarnings ) )
+	if ( !LoadMeta ( sMeta, bStripPath, pFilenameBuilder, dWarnings ) )
 		return false;
 
 	CSphString sMutableFile;

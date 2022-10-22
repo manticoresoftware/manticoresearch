@@ -1309,9 +1309,10 @@ private:
 	void						RemoveFieldFromRamchunk ( const CSphString & sFieldName, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema );
 	void						AddRemoveFromRamDocstore ( const CSphSchema & tOldSchema, const CSphSchema & tNewSchema );
 
+	enum class LOAD_E { ParseError_e, GeneralError_e, Ok_e };
 	bool						LoadMeta ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings );
-	bool						LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings );
-	bool						LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings );
+	LOAD_E						LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings );
+	LOAD_E						LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings );
 	bool						PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings );
 	void						SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames );
 	void						SaveMeta ();
@@ -4163,7 +4164,7 @@ std::unique_ptr<CSphIndex> RtIndex_c::PreallocDiskChunk ( const char * sChunk, i
 	return pDiskChunk;
 }
 
-bool RtIndex_c::LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings )
+RtIndex_c::LOAD_E RtIndex_c::LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings )
 {
 	CSphString sMeta;
 	sMeta.SetSprintf ( "%s.meta", m_sPath.cstr() );
@@ -4173,26 +4174,26 @@ bool RtIndex_c::LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuilder, bool bStr
 	// opened and locked, lets read
 	CSphAutoreader rdMeta;
 	if ( !rdMeta.Open ( sMeta, m_sLastError ) )
-		return false;
+		return LOAD_E::GeneralError_e;
 
 	if ( rdMeta.GetDword()!=META_HEADER_MAGIC )
 	{
 		m_sLastError.SetSprintf ( "invalid meta file %s", sMeta.cstr() );
-		return false;
+		return LOAD_E::ParseError_e;
 	}
 
 	uVersion = rdMeta.GetDword();
 	if ( uVersion==0 || uVersion>META_VERSION )
 	{
 		m_sLastError.SetSprintf ( "%s is v.%u, binary is v.%u", sMeta.cstr(), uVersion, META_VERSION );
-		return false;
+		return LOAD_E::GeneralError_e;
 	}
 
 	DWORD uMinFormatVer = 14;
 	if ( uVersion<uMinFormatVer )
 	{
 		m_sLastError.SetSprintf ( "indexes with meta prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, sMeta.cstr(), uVersion );
-		return false;
+		return LOAD_E::GeneralError_e;
 	}
 
 	m_tStats.m_iTotalDocuments = rdMeta.GetDword();
@@ -4215,7 +4216,7 @@ bool RtIndex_c::LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuilder, bool bStr
 	SetSchema ( tSchema );
 	LoadIndexSettings ( m_tSettings, rdMeta, uSettingsVer );
 	if ( !tTokenizerSettings.Load ( pFilenameBuilder, rdMeta, tEmbeddedFiles, m_sLastError ) )
-		return false;
+		return LOAD_E::GeneralError_e;
 
 	{
 		CSphString sWarning;
@@ -4246,7 +4247,7 @@ bool RtIndex_c::LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuilder, bool bStr
 	// recreate tokenizer
 	m_pTokenizer = Tokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, pFilenameBuilder, dWarnings, m_sLastError );
 	if ( !m_pTokenizer )
-		return false;
+		return LOAD_E::GeneralError_e;
 
 	// recreate dictionary
 	m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, m_sIndexName.cstr(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError );
@@ -4254,7 +4255,7 @@ bool RtIndex_c::LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuilder, bool bStr
 		m_sLastError.SetSprintf ( "index '%s': %s", m_sIndexName.cstr(), m_sLastError.cstr() );
 
 	if ( !m_pDict )
-		return false;
+		return LOAD_E::GeneralError_e;
 
 	if ( !m_sLastError.IsEmpty() )
 		dWarnings.Add(m_sLastError);
@@ -4284,7 +4285,7 @@ bool RtIndex_c::LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuilder, bool bStr
 		pFieldFilter = sphCreateRegexpFilter ( tFieldFilterSettings, m_sLastError );
 
 	if ( !sphSpawnFilterICU ( pFieldFilter, m_tSettings, tTokenizerSettings, sMeta.cstr(), m_sLastError ) )
-		return false;
+		return LOAD_E::GeneralError_e;
 
 	SetFieldFilter ( std::move ( pFieldFilter ) );
 
@@ -4295,11 +4296,11 @@ bool RtIndex_c::LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuilder, bool bStr
 	if ( uVersion>=17 )
 		SetMemLimit ( rdMeta.GetOffset() );
 
-	return true;
+	return LOAD_E::Ok_e;
 }
 
 
-bool RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings )
+RtIndex_c::LOAD_E RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings )
 {
 
 	using namespace bson;
@@ -4309,13 +4310,13 @@ bool RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder, bool bStrip
 
 	CSphVector<BYTE> dData;
 	if ( !sphJsonParse ( dData, sMeta, m_sLastError ) )
-		return false;
+		return LOAD_E::ParseError_e;
 
 	Bson_c tBson ( dData );
 	if ( tBson.IsEmpty() || !tBson.IsAssoc() )
 	{
 		m_sLastError = "Something wrong read from json meta - it is either empty, either not root object.";
-		return false;
+		return LOAD_E::ParseError_e;
 	}
 
 	// version
@@ -4323,14 +4324,14 @@ bool RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder, bool bStrip
 	if ( uVersion == 0 || uVersion > META_VERSION )
 	{
 		m_sLastError.SetSprintf ( "%s is v.%u, binary is v.%u", sMeta.cstr(), uVersion, META_VERSION );
-		return false;
+		return LOAD_E::GeneralError_e;
 	}
 
 	DWORD uMinFormatVer = 20;
 	if ( uVersion<uMinFormatVer )
 	{
 		m_sLastError.SetSprintf ( "indexes with meta prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, sMeta.cstr(), uVersion );
-		return false;
+		return LOAD_E::GeneralError_e;
 	}
 
 	m_tStats.m_iTotalDocuments = Int ( tBson.ChildByName ( "total_documents" ) );
@@ -4353,7 +4354,7 @@ bool RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder, bool bStrip
 	SetSchema ( tSchema );
 	LoadIndexSettingsJson ( tBson.ChildByName ( "index_settings" ), m_tSettings );
 	if ( !tTokenizerSettings.Load ( pFilenameBuilder, tBson.ChildByName ( "tokenizer_settings" ), tEmbeddedFiles, m_sLastError ) )
-		return false;
+		return LOAD_E::GeneralError_e;
 
 	{
 		CSphString sWarning;
@@ -4384,7 +4385,7 @@ bool RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder, bool bStrip
 	// recreate tokenizer
 	m_pTokenizer = Tokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, pFilenameBuilder, dWarnings, m_sLastError );
 	if ( !m_pTokenizer )
-		return false;
+		return LOAD_E::GeneralError_e;
 
 	// recreate dictionary
 	m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, m_sIndexName.cstr(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError );
@@ -4392,7 +4393,7 @@ bool RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder, bool bStrip
 		m_sLastError.SetSprintf ( "index '%s': %s", m_sIndexName.cstr(), m_sLastError.cstr() );
 
 	if ( !m_pDict )
-		return false;
+		return LOAD_E::GeneralError_e;
 
 	if ( !m_sLastError.IsEmpty() )
 		dWarnings.Add(m_sLastError);
@@ -4429,7 +4430,7 @@ bool RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder, bool bStrip
 	}
 
 	if ( !sphSpawnFilterICU ( pFieldFilter, m_tSettings, tTokenizerSettings, sMeta.cstr(), m_sLastError ) )
-		return false;
+		return LOAD_E::GeneralError_e;
 
 	SetFieldFilter ( std::move ( pFieldFilter ) );
 
@@ -4439,22 +4440,38 @@ bool RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder, bool bStrip
 	tNamesVec.ForEach ( [&iLastQ, this] ( const NodeHandle_t& tNode ) { m_dChunkNames[iLastQ++] = (int)Int ( tNode ); });
 
 	SetMemLimit ( Int ( tBson.ChildByName ( "soft_ram_limit" ) ) );
-	return true;
+	return LOAD_E::Ok_e;
 }
 
 
 bool RtIndex_c::LoadMeta ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings )
 {
 	// check if we have a meta file (kinda-header)
-	CSphString sMeta;
-	sMeta.SetSprintf ( "%s.meta", m_sPath.cstr() );
+	CSphString sMeta = SphSprintf( "%s.meta", m_sPath.cstr() );
 
 	// no readable meta? no disk part yet
 	if ( !sphIsReadable ( sMeta.cstr() ) )
 		return true;
 
-	return LoadMetaJson ( pFilenameBuilder, bStripPath, uVersion, bRebuildInfixes, dWarnings )
-		|| LoadMetaLegacy ( pFilenameBuilder, bStripPath, uVersion, bRebuildInfixes, dWarnings );
+	auto eRes = LoadMetaJson ( pFilenameBuilder, bStripPath, uVersion, bRebuildInfixes, dWarnings );
+	if ( eRes == LOAD_E::ParseError_e )
+	{
+		sphInfo ( "Index meta format is not json, will try it as binary..." );
+		eRes = LoadMetaLegacy ( pFilenameBuilder, bStripPath, uVersion, bRebuildInfixes, dWarnings );
+		if ( eRes == LOAD_E::ParseError_e )
+		{
+			sphWarning ( "Unable to parse header... Error %s", m_sLastError.cstr() );
+			return false;
+		}
+	}
+	if ( eRes == LOAD_E::GeneralError_e )
+	{
+		sphWarning ( "Unable to load header... Error %s", m_sLastError.cstr() );
+		return false;
+	}
+
+	assert ( eRes == LOAD_E::Ok_e );
+	return true;
 }
 
 

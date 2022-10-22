@@ -1181,7 +1181,7 @@ public:
 
 	enum class LOAD_E { ParseError_e, GeneralError_e, Ok_e };
 	LOAD_E				LoadHeaderLegacy ( const char * sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
-	LOAD_E				LoadHeader ( const char * sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
+	LOAD_E				LoadHeaderJson ( const char * sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
 
 	void				DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool bConfig ) final;
 	void				DebugDumpDocids ( FILE * fp ) final;
@@ -8454,7 +8454,7 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderLegacy ( const char * sHeaderName
 	if ( sFmt )
 	{
 		m_sLastError.SetSprintf ( sFmt, sHeaderName );
-		return LOAD_E::GeneralError_e;
+		return LOAD_E::ParseError_e;
 	}
 
 	// version
@@ -8582,7 +8582,7 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderLegacy ( const char * sHeaderName
 	return rdInfo.GetErrorFlag() ? LOAD_E::GeneralError_e : LOAD_E::Ok_e;
 }
 
-CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeader ( const char* sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning )
+CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderJson ( const char* sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning )
 {
 	using namespace bson;
 
@@ -8739,7 +8739,7 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 
 	CSphEmbeddedFiles tEmbeddedFiles;
 	CSphString sWarning;
-	auto eRes = LoadHeader ( sHeaderName, false, tEmbeddedFiles, pFilenameBuilder.get(), sWarning );
+	auto eRes = LoadHeaderJson ( sHeaderName, false, tEmbeddedFiles, pFilenameBuilder.get(), sWarning );
 	if ( eRes == LOAD_E::ParseError_e )
 	{
 		eRes = LoadHeaderLegacy ( sHeaderName, false, tEmbeddedFiles, pFilenameBuilder.get(), sWarning );
@@ -9167,7 +9167,7 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 	CSphEmbeddedFiles tEmbeddedFiles;
 
 	// preload schema
-	auto eRes = LoadHeader ( GetIndexFileName ( SPH_EXT_SPH ).cstr(), bStripPath, tEmbeddedFiles, pFilenameBuilder, m_sLastWarning ) ;
+	auto eRes = LoadHeaderJson ( GetIndexFileName ( SPH_EXT_SPH ).cstr(), bStripPath, tEmbeddedFiles, pFilenameBuilder, m_sLastWarning ) ;
 	if ( eRes == LOAD_E::ParseError_e )
 	{
 		sphInfo ( "Index header format is not json, will try it as binary..." );

@@ -906,6 +906,15 @@ bool Waker_c::Wake ( bool bVip ) const noexcept
 	return m_pCtx->Wake ( m_iEpoch, bVip );
 }
 
+bool AtomicWaker_c::WakeOnce ( bool bVip ) noexcept
+{
+	auto pCtx = m_pCtx.exchange ( nullptr, std::memory_order_relaxed );
+	if ( !pCtx )
+		return false;
+	assert ( m_iEpoch > 0 );
+	return pCtx->Wake ( m_iEpoch, bVip );
+}
+
 
 void WaitQueue_c::SuspendAndWait ( sph::Spinlock_lock& tLock, Worker_c* pActive ) NO_THREAD_SAFETY_ANALYSIS
 {

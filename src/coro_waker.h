@@ -29,6 +29,7 @@ class Waker_c
 {
 	Worker_c* m_pCtx {};
 	size_t m_iEpoch {};
+	friend class AtomicWaker_c;
 
 public:
 	Waker_c() = default;
@@ -38,12 +39,24 @@ public:
 		, m_iEpoch { iEpoch }
 	{}
 
-	inline bool IsEngaged() const noexcept
+	bool Wake ( bool bVip = false ) const noexcept;
+};
+
+class AtomicWaker_c
+{
+	std::atomic<Worker_c*> m_pCtx {nullptr};
+	size_t m_iEpoch {};
+
+public:
+	AtomicWaker_c() = default;
+
+	void Assign ( Waker_c&& tWaker )
 	{
-		return m_pCtx!=nullptr;
+		m_iEpoch = tWaker.m_iEpoch;
+		m_pCtx.store ( tWaker.m_pCtx, std::memory_order_relaxed );
 	}
 
-	bool Wake ( bool bVip = false ) const noexcept;
+	bool WakeOnce ( bool bVip = false ) noexcept;
 };
 
 class WakerInQueue_c: public Waker_c

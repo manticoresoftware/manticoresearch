@@ -412,7 +412,7 @@ class SockWrapper_c::Impl_c final : public ISphNetAction
 {
 	friend class SockWrapper_c;
 	CSphRefcountedPtr<CSphNetLoop> m_pNetLoop;
-	Threads::Coro::Waker_c m_tWaker { nullptr, 0 };
+	Threads::Coro::AtomicWaker_c m_tWaker;
 
 	int64_t	m_iWriteTimeoutUS;
 	int64_t m_iReadTimeoutUS;
@@ -442,12 +442,15 @@ class SockWrapper_c::Impl_c final : public ISphNetAction
 	int64_t GetTotalReceived () const;
 
 	void ParentDestroying();
+	inline void Wake()
+	{
+		m_tWaker.WakeOnce ( true ); // true means 'vip'
+	}
 
 	inline void FinallyAbort()
 	{
 		m_uGotEvents = NetPollEvent_t::IS_TIMEOUT;
-		if ( m_tWaker.IsEngaged() )
-			m_tWaker.Wake ( true );
+		Wake();
 	}
 
 public:
@@ -506,7 +509,7 @@ void SockWrapper_c::Impl_c::EngageWaiterAndYield ( int64_t tmTimeUntilUs )
 
 	// switch context (go to poll)
 	Threads::Coro::YieldWith ( [this, pWorker = Coro::CurrentWorker()] {
-		m_tWaker = Threads::CreateWaker ( pWorker );
+		m_tWaker.Assign ( Threads::CreateWaker ( pWorker ) );
 		if ( !m_pNetLoop->AddAction ( this ) ) // can fail if backend netpool is already finished
 			FinallyAbort();
 	});
@@ -524,7 +527,7 @@ void SockWrapper_c::Impl_c::Process () REQUIRES ( NetPoollingThread )
 	if ( CheckSocketError() || m_uGotEvents == IS_TIMEOUT ) // real socket error
 		m_pNetLoop->RemoveEvent ( this );
 
-	m_tWaker.Wake ( true ); // true means 'vip'
+	Wake();
 }
 
 // classic version - blocking via sphPoll

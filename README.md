@@ -182,6 +182,7 @@ See [instruction here](https://manual.manticoresearch.com/Installation/MacOS#Fro
   * https://www.mediawiki.org/wiki/Extension:SphinxSearch - extension for MediaWiki
   * https://github.com/gordonbanderson/silverstripe-manticore-search - integration for SilverStripe
   * https://drwho.virtadpt.net/archive/2022-05-13/combining-manticore-and-searx/ - integration for SearX
+  * https://github.com/dimv36/sphinxlink - Extension for PostgreSQL for running search queries and returning data as PostgreSQL tables
 
 # How we can support you
 Should your company require any help - we provide full-cycle services in the areas of Sphinx and Manticore Search:

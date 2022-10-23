@@ -90,7 +90,7 @@ public:
 };
 
 struct RowIdBoundaries_t;
-ExtNode_i * CreateRowIdFilterNode ( ExtNode_i * pNode, const RowIdBoundaries_t & tBoundaries );
+std::unique_ptr<ExtNode_i> CreateRowIdFilterNode ( ExtNode_i * pNode, const RowIdBoundaries_t & tBoundaries );
 
 class NodeCacheContainer_c;
 

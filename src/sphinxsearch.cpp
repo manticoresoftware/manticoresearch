@@ -155,8 +155,8 @@ public:
 	int							m_iMaxQpos = 0;						///< max in-query pos among all keywords, including dupes; for ranker state functors
 
 protected:
-	ExtNode_i *					m_pRoot = nullptr;
-	ExtNode_i *					m_pOriginalRoot = nullptr;			///< set if we replace the original root
+	std::unique_ptr<ExtNode_i>	m_pRoot;
+	std::unique_ptr<ExtNode_i>	m_pOriginalRoot;			///< set if we replace the
 	const ExtDoc_t *			m_pDoclist = nullptr;
 	const ExtHit_t *			m_pHitlist = nullptr;
 	ExtDoc_t					m_dMyDocs[MAX_BLOCK_DOCS];			///< my local documents pool; for filtering
@@ -168,9 +168,9 @@ protected:
 	int64_t *					m_pNanoBudget = nullptr;
 	QcacheEntry_c *				m_pQcacheEntry = nullptr;			///< data to cache if we decide that the current query is worth caching
 
-	CSphVector<CSphString>		m_dZones;
-	CSphVector<ExtNode_i*>		m_dZoneStartTerm;
-	CSphVector<ExtNode_i*>		m_dZoneEndTerm;
+	StrVec_t					m_dZones;
+	CSphVector<std::unique_ptr<ExtNode_i>>		m_dZoneStartTerm;
+	CSphVector<std::unique_ptr<ExtNode_i>>		m_dZoneEndTerm;
 	CSphVector<const ExtDoc_t*>	m_dZoneStart;
 	CSphVector<const ExtDoc_t*>	m_dZoneEnd;
 	CSphVector<RowID_t>			m_dZoneMax;				///< last rowid we (tried) to cache
@@ -189,8 +189,8 @@ protected:
 				return true;
 
 			assert ( !m_pOriginalRoot );
-			m_pOriginalRoot = m_pRoot;
-			m_pRoot = CreateRowIdFilterNode ( m_pRoot, *(const RowIdBoundaries_t*)ppResult );
+			m_pOriginalRoot = std::move ( m_pRoot );
+			m_pRoot = CreateRowIdFilterNode ( m_pOriginalRoot.get(), *(const RowIdBoundaries_t*)ppResult );
 			return true;
 		}
 
@@ -596,7 +596,8 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup,
 
 	assert ( tXQ.m_pRoot );
 	tSetup.m_pZoneChecker = this;
-	m_pRoot = ExtNode_i::Create ( tXQ.m_pRoot, tSetup, bUseBM25 );
+	assert ( !m_pRoot );
+	m_pRoot.reset ( ExtNode_i::Create ( tXQ.m_pRoot, tSetup, bUseBM25 ) );
 	if ( m_pRoot && bCollectHits )
 		m_pRoot->SetCollectHits();
 
@@ -638,17 +639,17 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup,
 		XQKeyword_t tDot;
 
 		tDot.m_sWord.SetSprintf ( "%c%s", MAGIC_CODE_ZONE, m_dZones[i].cstr() );
-		ExtNode_i * pStartTerm = ExtNode_i::Create ( tDot, tSetup, pZonesDict, false );
+		auto& pStartTerm = m_dZoneStartTerm.Add();
+		pStartTerm.reset ( ExtNode_i::Create ( tDot, tSetup, pZonesDict, false ) );
 		assert ( pStartTerm );
 		pStartTerm->SetCollectHits();
-		m_dZoneStartTerm.Add ( pStartTerm );
 		m_dZoneStart[i] = nullptr;
 
 		tDot.m_sWord.SetSprintf ( "%c/%s", MAGIC_CODE_ZONE, m_dZones[i].cstr() );
-		ExtNode_i * pEndTerm = ExtNode_i::Create ( tDot, tSetup, pZonesDict, false );
+		auto& pEndTerm = m_dZoneEndTerm.Add();
+		pEndTerm.reset ( ExtNode_i::Create ( tDot, tSetup, pZonesDict, false ) );
 		assert ( pEndTerm );
 		pEndTerm->SetCollectHits();
-		m_dZoneEndTerm.Add ( pEndTerm );
 		m_dZoneEnd[i] = nullptr;
 	}
 
@@ -665,36 +666,23 @@ ExtRanker_c::~ExtRanker_c ()
 {
 	SafeRelease ( m_pQcacheEntry );
 
-	SafeDelete ( m_pRoot );
-	ARRAY_FOREACH ( i, m_dZones )
+	for ( auto& tInfo : m_dZoneInfo )
 	{
-		SafeDelete ( m_dZoneStartTerm[i] );
-		SafeDelete ( m_dZoneEndTerm[i] );
-	}
-
-	ARRAY_FOREACH ( i, m_dZoneInfo )
-	{
-		ARRAY_FOREACH ( iDoc, m_dZoneInfo[i] )
-		{
-			SafeDelete ( m_dZoneInfo[i][iDoc].m_pHits );
-		}
-		m_dZoneInfo[i].Reset();
+		for ( auto& tDoc : tInfo )
+			SafeDelete ( tDoc.m_pHits );
+		tInfo.Reset();
 	}
 }
 
 
 void ExtRanker_c::Reset ( const ISphQwordSetup & tSetup )
 {
+	if ( m_pOriginalRoot )
+		// restore the tree to its original state before switching to the next chunk
+		m_pRoot = std::move ( m_pOriginalRoot );
+
 	if ( m_pRoot )
 		m_pRoot->Reset ( tSetup );
-
-	if ( m_pOriginalRoot )
-	{
-		// restore the tree to its original state before switching to the next chunk
-		SafeDelete(m_pRoot);
-		m_pRoot = m_pOriginalRoot;
-		m_pOriginalRoot = nullptr;
-	}
 
 	ARRAY_FOREACH ( i, m_dZones )
 	{
@@ -707,11 +695,11 @@ void ExtRanker_c::Reset ( const ISphQwordSetup & tSetup )
 
 	m_dZoneMax.Fill ( 0 );
 	m_dZoneMin.Fill ( INVALID_ROWID );
-	ARRAY_FOREACH ( i, m_dZoneInfo )
+	for ( auto& tInfo : m_dZoneInfo )
 	{
-		ARRAY_FOREACH ( iDoc, m_dZoneInfo[i] )
-			SafeDelete ( m_dZoneInfo[i][iDoc].m_pHits );
-		m_dZoneInfo[i].Reset();
+		for ( auto& tDoc: tInfo )
+			SafeDelete ( tDoc.m_pHits );
+		tInfo.Reset();
 	}
 
 	// Ranker::Reset() happens on a switch to next RT segment
@@ -755,21 +743,21 @@ void ExtRanker_c::CleanupZones ( RowID_t tMaxRowID )
 		if ( tMinRowID==INVALID_ROWID )
 			continue;
 
-		CSphVector<ZoneInfo_t> & dZone = m_dZoneInfo[i];
+		auto& dZone = m_dZoneInfo[i];
 		int iSpan = FindSpan ( dZone, tMaxRowID );
 		if ( iSpan==-1 )
 			continue;
 
 		if ( iSpan==dZone.GetLength()-1 )
 		{
-			ARRAY_FOREACH ( iDoc, dZone )
-				SafeDelete ( dZone[iDoc].m_pHits );
+			for ( auto& tZone : dZone )
+				SafeDelete ( tZone.m_pHits );
 			dZone.Resize ( 0 );
 			m_dZoneMin[i] = tMaxRowID;
 			continue;
 		}
 
-		for ( int iDoc=0; iDoc<=iSpan; iDoc++ )
+		for ( int iDoc=0; iDoc<=iSpan; ++iDoc )
 			SafeDelete ( dZone[iDoc].m_pHits );
 
 		int iLen = dZone.GetLength() - iSpan - 1;
@@ -951,7 +939,7 @@ SphZoneHit_e ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit, int * pLa
 			// FIXME!!! replace by iterate then add elements to vector instead of searching each time
 			ZoneHits_t * pZone = nullptr;
 			CSphVector<ZoneInfo_t> & dZones = m_dZoneInfo[iZone];
-			if ( dZones.GetLength() )
+			if ( !dZones.IsEmpty() )
 			{
 				ZoneInfo_t * pInfo = dZones.BinarySearch ( bind ( &ZoneInfo_t::m_tRowID ), tCurRowID );
 				if ( pInfo )
@@ -959,20 +947,23 @@ SphZoneHit_e ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit, int * pLa
 			}
 			if ( !pZone )
 			{
-				if ( dZones.GetLength() && dZones.Last().m_tRowID>tCurRowID )
+				if ( !dZones.IsEmpty() && dZones.Last().m_tRowID>tCurRowID )
 				{
 					int iInsertPos = FindSpan ( dZones, tCurRowID );
 					if ( iInsertPos>=0 )
 					{
-						dZones.Insert ( iInsertPos, ZoneInfo_t() );
-						dZones[iInsertPos].m_tRowID = tCurRowID;
-						pZone = dZones[iInsertPos].m_pHits = new ZoneHits_t();
+						dZones.Insert ( iInsertPos, ZoneInfo_t{} );
+						auto& tInsertedZone = dZones[iInsertPos];
+						tInsertedZone.m_tRowID = tCurRowID;
+						tInsertedZone.m_pHits = new ZoneHits_t();
+						pZone = tInsertedZone.m_pHits;
 					}
 				} else
 				{
 					ZoneInfo_t & tElem = dZones.Add ();
 					tElem.m_tRowID = tCurRowID;
-					pZone = tElem.m_pHits = new ZoneHits_t();
+					tElem.m_pHits = new ZoneHits_t();
+					pZone = tElem.m_pHits;
 				}
 				if ( pZone )
 				{
@@ -1280,7 +1271,7 @@ int ExtRanker_State_T<STATE,USE_BM25>::GetMatches ()
 			return 0;
 		}
 
-		pHlist = RankerGetHits ( pProfile, this->m_pRoot, pDocs );
+		pHlist = RankerGetHits ( pProfile, this->m_pRoot.get(), pDocs );
 	}
 
 	if ( !pHitBase )
@@ -1347,7 +1338,7 @@ int ExtRanker_State_T<STATE,USE_BM25>::GetMatches ()
 				break;
 
 			// we do, get some hits with proper profile
-			pHlist = RankerGetHits ( pProfile, this->m_pRoot, pDocs );
+			pHlist = RankerGetHits ( pProfile, this->m_pRoot.get(), pDocs );
 		}
 
 		// skip until next good doc/hit pair
@@ -4087,7 +4078,7 @@ public:
 
 	void SetTermDupes ( const ExtQwordsHash_t & hQwords, int iMaxQpos ) final
 	{
-		this->m_tState.SetTermDupes ( hQwords, iMaxQpos, this->m_pRoot );
+		this->m_tState.SetTermDupes ( hQwords, iMaxQpos, this->m_pRoot.get() );
 	}
 };
 

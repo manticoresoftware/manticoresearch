@@ -67,6 +67,7 @@ public:
 	static void Copy ( T* pNew, T* pData, int64_t iLength );
 	static void Move ( T* pNew, T* pData, int64_t iLength );
 	static void CopyOrSwap ( T& dLeft, T& dRight );
+	static void CopyOrSwap ( T& dLeft, T&& dRight );
 };
 
 } // namespace sph

@@ -516,11 +516,12 @@ typename std::enable_if<!S::is_owned>::type Vector_T<T, POLICY, LIMIT, STORE>::A
 	m_iCount = iLen;
 }
 
-/// insert into a middle (will fail to compile for swap vector)
+/// insert into a middle by policy-defined copier
 template<typename T, class POLICY, class LIMIT, class STORE>
-void Vector_T<T, POLICY, LIMIT, STORE>::Insert ( int64_t iIndex, const T& tValue )
+template<typename TT>
+void Vector_T<T, POLICY, LIMIT, STORE>::Insert ( int64_t iIndex, TT&& tValue )
 {
-	assert ( iIndex >= 0 && iIndex <= this->m_iCount );
+	assert ( iIndex >= 0 && iIndex <= m_iCount );
 
 	if ( this->m_iCount >= this->m_iLimit )
 		Reserve ( this->m_iCount + 1 );
@@ -528,23 +529,7 @@ void Vector_T<T, POLICY, LIMIT, STORE>::Insert ( int64_t iIndex, const T& tValue
 	for ( auto i = this->m_iCount - 1; i >= iIndex; --i )
 		POLICY::CopyOrSwap ( this->m_pData[i + 1], this->m_pData[i] );
 
-	POLICY::CopyOrSwap ( this->m_pData[iIndex], tValue );
-	++this->m_iCount;
-}
-
-/// insert into a middle by policy-defined copier
-template<typename T, class POLICY, class LIMIT, class STORE>
-void Vector_T<T, POLICY, LIMIT, STORE>::Insert ( int64_t iIndex, T& tValue )
-{
-	assert ( iIndex >= 0 && iIndex <= m_iCount );
-
-	if ( this->m_iCount >= m_iLimit )
-		Reserve ( this->m_iCount + 1 );
-
-	for ( auto i = this->m_iCount - 1; i >= iIndex; --i )
-		POLICY::CopyOrSwap ( this->m_pData[i + 1], this->m_pData[i] );
-
-	POLICY::CopyOrSwap ( this->m_pData[iIndex], tValue );
+	POLICY::CopyOrSwap ( this->m_pData[iIndex], std::forward<TT> ( tValue ) );
 	++this->m_iCount;
 }
 

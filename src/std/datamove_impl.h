@@ -96,4 +96,10 @@ void SwapCopy_T<T>::CopyOrSwap ( T& dLeft, T& dRight )
 	Swap ( dLeft, dRight );
 }
 
+template<typename T>
+void SwapCopy_T<T>::CopyOrSwap ( T& dLeft, T&& dRight )
+{
+	dLeft = std::forward<T> (dRight);
+}
+
 } // namespace sph

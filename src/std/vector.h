@@ -190,10 +190,8 @@ public:
 	typename std::enable_if<!S::is_owned>::type AdoptData ( T* pData, int64_t iLen, int64_t iLimit );
 
 	/// insert into a middle (will fail to compile for swap vector)
-	void Insert ( int64_t iIndex, const T& tValue );
-
-	/// insert into a middle by policy-defined copier
-	void Insert ( int64_t iIndex, T& tValue );
+	template<typename TT=T>
+	void Insert ( int64_t iIndex, TT&& tValue );
 
 protected:
 	int64_t m_iLimit = 0; ///< entries allocated

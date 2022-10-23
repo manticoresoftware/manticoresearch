@@ -318,7 +318,7 @@ private:
 DataReaderFactory_c * NewProxyReader ( const CSphString & sFile, CSphString & sError, DataReaderFactory_c::Kind_e eKind, int iReadBuffer, FileAccess_e eAccess )
 {
 	auto eState = StateByKind ( eKind );
-	DataReaderFactory_c * pReader = nullptr;
+	CSphRefcountedPtr<DataReaderFactory_c> pReader;
 
 	if ( eAccess==FileAccess_e::FILE )
 		pReader = new DirectFactory_c ( sFile, sError, eState, iReadBuffer, GetUnhintedBuffer() );
@@ -326,7 +326,7 @@ DataReaderFactory_c * NewProxyReader ( const CSphString & sFile, CSphString & sE
 		pReader = new MMapFactory_c ( sFile, sError, eAccess );
 
 	if ( !pReader->IsValid() )
-		SafeRelease(pReader);
+		return nullptr;
 
-	return pReader;
+	return pReader.Leak();
 }

@@ -761,7 +761,7 @@ ISphExpr * ExprHook_c::CreateNode ( int iID, ISphExpr * pLeft, const ISphSchema 
 	if ( pNeedDocIds )
 		*pNeedDocIds = true;
 
-	ISphExpr * pRes = nullptr;
+	CSphRefcountedPtr<ISphExpr> pRes;
 
 	switch ( iID )
 	{
@@ -779,9 +779,9 @@ ISphExpr * ExprHook_c::CreateNode ( int iID, ISphExpr * pLeft, const ISphSchema 
 	}
 
 	if ( !sError.IsEmpty() )
-		SafeRelease(pRes);
+		pRes->Release();
 
-	return pRes;
+	return pRes.Leak();
 }
 
 

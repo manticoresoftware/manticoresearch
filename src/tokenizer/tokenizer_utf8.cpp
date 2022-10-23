@@ -20,7 +20,7 @@ const char* SPHINX_DEFAULT_UTF8_TABLE = "0..9, A..Z->a..z, _, a..z, U+410..U+42F
 class Tokenizer_UTF8_Base_c: public CSphTokenizerBase2
 {
 public:
-	Tokenizer_UTF8_Base_c ( bool bDefaultCharset );
+	explicit Tokenizer_UTF8_Base_c ( bool bDefaultCharset );
 	void SetBuffer ( const BYTE* sBuffer, int iLength ) final;
 	int GetCodepointLength ( int iCode ) const final;
 	int GetMaxCodepointLength() const final

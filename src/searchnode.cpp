@@ -1779,11 +1779,11 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 				CSphVector<ExtNode_i*> dTerms;
 				dTerms.Reserve ( iQuorumCount );
 
-				ARRAY_FOREACH ( i, pNode->m_dWords )
-					dTerms.Add ( Create ( pNode->m_dWords[i], pNode, tSetup, bUseBM25 ) );
+				for ( const XQKeyword_t& tWord: pNode->m_dWords )
+					dTerms.Add ( Create ( tWord, pNode, tSetup, bUseBM25 ) );
 
-				ARRAY_FOREACH ( i, pNode->m_dChildren )
-					dTerms.Add ( Create ( pNode->m_dChildren[i], tSetup, bUseBM25 ) );
+				for ( const XQNode_t* tNode: pNode->m_dChildren )
+					dTerms.Add ( Create ( tNode, tSetup, bUseBM25 ) );
 
 				// make not simple, but optimized AND node.
 				dTerms.Sort ( ExtNodeTF_fn() );

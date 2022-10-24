@@ -487,11 +487,13 @@ public:
 		if ( iLen>0 )
 		{
 			if ( bUnescape )
-				m_sVal = SqlUnescape ( sVal, iLen );
-			else
+				std::tie ( m_sVal, m_iLen ) = SqlUnescapeN ( sVal, iLen );
+			else {
 				m_sVal.SetBinary ( sVal, iLen );
-		}
-		m_iLen = m_sVal.Length();
+				m_iLen = iLen;
+			}
+		} else
+			m_iLen = m_sVal.Length();
 	}
 
 	int StringEval ( const CSphMatch &, const BYTE ** ppStr ) const final
@@ -7521,8 +7523,8 @@ public:
 				auto iLen = GetConstStrLength ( iVal );
 				if ( iOfs>0 && iLen>0 && iOfs+iLen<=iExprLen )
 				{
-					auto sRes = SqlUnescape ( szExpr + iOfs, iLen );
-					m_dHashes.Add ( sphFNV64 ( sRes.cstr(), sRes.Length() ) );
+					auto tRes = SqlUnescapeN ( szExpr + iOfs, iLen );
+					m_dHashes.Add ( sphFNV64 ( tRes.first.cstr(), tRes.second ) );
 				}
 			}
 			m_dHashes.Sort();

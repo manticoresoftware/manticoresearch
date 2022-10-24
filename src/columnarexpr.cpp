@@ -132,8 +132,8 @@ Expr_Columnar_StringIn_c::Expr_Columnar_StringIn_c ( const CSphString & sName, C
 		int iLen = GetConstStrLength ( iVal );
 		if ( iOfs>0 && iOfs+iLen<=iExprLen )
 		{
-			CSphString sRes = SqlUnescape ( szExpr + iOfs, iLen );
-			m_dHashes.Add ( sRes.IsEmpty() ? 0 : m_fnHashCalc ( (const BYTE*)sRes.cstr(), sRes.Length(), SPH_FNV64_SEED ) );
+			auto tRes = SqlUnescapeN ( szExpr + iOfs, iLen );
+			m_dHashes.Add ( tRes.first.IsEmpty() ? 0 : m_fnHashCalc ( (const BYTE*)tRes.first.cstr(), tRes.second, SPH_FNV64_SEED ) );
 		}
 	}
 }

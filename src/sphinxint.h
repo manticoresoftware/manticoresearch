@@ -789,7 +789,7 @@ inline const char * sphRtTypeDirective ( ESphAttr eType )
 	}
 }
 
-inline CSphString SqlUnescape ( const char * sEscaped, int iLen )
+inline std::pair<CSphString,int> SqlUnescapeN ( const char * sEscaped, int iLen )
 {
 	CSphString sRes;
 	assert ( iLen>=2 );
@@ -801,7 +801,7 @@ inline CSphString SqlUnescape ( const char * sEscaped, int iLen )
 	const char * s = sEscaped + 1;
 	const char * sMax = s + iLen - 2;
 
-	sRes.Reserve ( iLen );
+	sRes.Reserve ( iLen-2 );
 	auto * d = const_cast<char *> (sRes.cstr ());
 
 	while ( s<sMax )
@@ -823,8 +823,13 @@ inline CSphString SqlUnescape ( const char * sEscaped, int iLen )
 			*d++ = *s++;
 	}
 
-	*d++ = '\0';
-	return sRes;
+	*d = '\0';
+	return { sRes, d - sRes.cstr() };
+}
+
+inline CSphString SqlUnescape ( const char* sEscaped, int iLen )
+{
+	return SqlUnescapeN ( sEscaped, iLen ).first;
 }
 
 //////////////////////////////////////////////////////////////////////////

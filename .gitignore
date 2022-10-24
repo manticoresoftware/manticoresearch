@@ -12,6 +12,9 @@
 /*.opensdf
 /.hg
 
+# cmake local presets
+/CMakeUserPresets.json
+
 # /api/libsphinxclient/
 /api/libsphinxclient/*.ncb
 /api/libsphinxclient/*.suo

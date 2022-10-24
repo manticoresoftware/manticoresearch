@@ -6596,7 +6596,7 @@ public:
 
 	ISphExpr * Clone () const final
 	{
-		return new Expr_Levenshtein_c<PATTERN_STRING> ( SafeClone ( m_pFirst.Ptr() ), SafeClone ( m_pSecond.Ptr() ), m_tOpts );
+		return new Expr_Levenshtein_c ( *this );
 	}
 
 private:
@@ -6604,7 +6604,12 @@ private:
 	CSphString				m_sPattern;
 	int						m_iPattersLen = 0;
 
-	Expr_Levenshtein_c ( const Expr_Levenshtein_c& ) = default;
+	Expr_Levenshtein_c ( const Expr_Levenshtein_c& rhs )
+		: Expr_Binary_c ( rhs )
+		, m_tOpts ( rhs.m_tOpts )
+		, m_sPattern ( rhs.m_sPattern )
+		, m_iPattersLen ( rhs.m_iPattersLen )
+	{}
 
 	std::pair<int, int> GetDistance ( const CSphMatch & tMatch ) const
 	{

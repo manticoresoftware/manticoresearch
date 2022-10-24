@@ -728,7 +728,7 @@ void ExtRanker_c::FinalizeCache ( const ISphSchema & tSorterSchema )
 		QcacheAdd ( m_pCtx->m_tQuery, m_pQcacheEntry, tSorterSchema );
 	}
 
-	SafeRelease ( m_pQcacheEntry );
+	SafeReleaseAndZero ( m_pQcacheEntry );
 }
 
 

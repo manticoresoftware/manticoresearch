@@ -581,7 +581,6 @@ protected:
 	{
 		SafeDelete ( pHash );
 		ASSERT_TRUE ( pRef->IsLast() ) << "hash deleted, we a the one";
-		SafeRelease ( pRef );
 	}
 };
 

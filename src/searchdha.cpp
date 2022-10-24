@@ -2066,7 +2066,7 @@ void ScheduleDistrJobs ( VectorAgentConn_t &dRemotes, RequestBuilder_i * pQuery,
 		if ( pConnection->IsBlackhole () )
 		{
 			sphLogDebugv ( "S Remove blackhole()" );
-			SafeRelease ( pConnection );
+			SafeReleaseAndZero ( pConnection );
 			dRemotes.RemoveFast ( i-- );
 			pReporter->FeedTask ( false );
 		}
@@ -2093,15 +2093,15 @@ public:
 	void FeedTask ( bool bAdd ) final
 	{
 		if ( bAdd )
-			SafeAddRef ( m_pConnection )
+			SafeAddRef ( m_pConnection );
 		else
-			SafeRelease ( m_pConnection ) // yes, SafeRelease will make m_pConnection=0 at the end!
+			SafeReleaseAndZero ( m_pConnection ); // yes, SafeReleaseAndZero will make m_pConnection=0 at the end!
 	}
 
 	void Report ( bool bParam ) final
 	{
 		assert ( m_pConnection && "strange Report called without the connection!" );
-		SafeRelease ( m_pConnection )
+		SafeReleaseAndZero ( m_pConnection );
 		if ( m_pCallback )
 			m_pCallback ( bParam );
 	}
@@ -3234,7 +3234,7 @@ private:
 		SafeDelete ( pTask );
 
 		if ( bReleasePayload )
-			SafeRelease ( pConnection );
+			SafeReleaseAndZero ( pConnection );
 		return pConnection;
 	}
 

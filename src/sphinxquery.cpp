@@ -434,7 +434,7 @@ XQNode_t * XQParseHelper_c::SweepNulls ( XQNode_t * pNode )
 			ARRAY_FOREACH ( i, pRet->m_dChildren )
 			{
 				m_dSpawned.RemoveValue ( pRet->m_dChildren[i] );
-				SafeDelete ( pRet->m_dChildren[i] )
+				SafeDelete ( pRet->m_dChildren[i] );
 			}
 			pRet->m_dChildren.Reset();
 		}

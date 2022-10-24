@@ -147,6 +147,7 @@ StatementMacros:
   - SafeDelete
   - SafeDeleteArray
   - SafeRelease
+  - SafeReleaseAndZero
   - SafeAddRef
   - sphWarning
   - sphInfo

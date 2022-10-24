@@ -45,10 +45,11 @@ typename std::common_type<T, U>::type Max ( T a, U b )
 {
 	return a < b ? b : a;
 }
-#define SafeDelete( _x )		{ if ( _x ) { delete ( _x ); ( _x ) = nullptr; } }
-#define SafeDeleteArray( _x )	{ if ( _x ) { delete[] ( _x ); ( _x ) = nullptr; } }
-#define SafeRelease( _x )		{ if ( _x ) { ( _x )->Release(); ( _x ) = nullptr; } }
-#define SafeAddRef( _x )        { if ( _x ) { ( _x )->AddRef(); } }
+#define SafeDelete( _x )		do { if ( _x ) { delete ( _x ); ( _x ) = nullptr; } } while ( 0 )
+#define SafeDeleteArray( _x )	do { if ( _x ) { delete[] ( _x ); ( _x ) = nullptr; } } while ( 0 )
+#define SafeReleaseAndZero( _x)	do { if ( _x ) { ( _x )->Release(); ( _x ) = nullptr; } } while ( 0 )
+#define SafeRelease( _x )		do { if ( _x ) { ( _x )->Release(); } } while ( 0 )
+#define SafeAddRef( _x )        do { if ( _x ) { ( _x )->AddRef(); } } while ( 0 )
 
 /// swap
 template<typename T>

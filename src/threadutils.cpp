@@ -1094,7 +1094,8 @@ void StartGlobalWorkPool ()
 {
 	sphLogDebug ( "StartGlobalWorkpool" );
 	WorkerSharedPtr_t& pPool = GlobalPoolSingletone ();
-	pPool = new ThreadPool_c ( g_iMaxChildrenThreads, "work" );
+	if ( !pPool )
+		pPool = new ThreadPool_c ( g_iMaxChildrenThreads, "work" );
 }
 
 void SetMaxChildrenThreads ( int iThreads )

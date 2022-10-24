@@ -160,7 +160,6 @@ class MatchesToNewSchema_c : public MatchProcessor_i
 {
 public:
 		MatchesToNewSchema_c ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema, GetBlobPoolFromMatch_fn fnGetBlobPool, GetColumnarFromMatch_fn fnGetColumnar );
-		~MatchesToNewSchema_c() override;
 
 	// performs actual processing acording created plan
 	void Process ( CSphMatch * pMatch ) final			{ ProcessMatch(pMatch); }
@@ -185,7 +184,7 @@ private:
 
 		const CSphAttrLocator *	m_pFrom;
 		const CSphAttrLocator *	m_pTo;
-		ISphExpr *				m_pExpr = nullptr;
+		ISphExprRefPtr_c		m_pExpr;
 		Action_e				m_eAction;
 
 		mutable columnar::Columnar_i * m_pPrevColumnar = nullptr;
@@ -250,13 +249,6 @@ MatchesToNewSchema_c::MatchesToNewSchema_c ( const ISphSchema * pOldSchema, cons
 		{
 			m_dRemapCmp.Add ( { pNewSchema->GetAttr(iSrc).m_tLocator, pNewSchema->GetAttr(iDst).m_tLocator } );
 		} );
-}
-
-
-MatchesToNewSchema_c::~MatchesToNewSchema_c()
-{
-	for ( auto & i : m_dActions )
-		SafeRelease ( i.m_pExpr );
 }
 
 

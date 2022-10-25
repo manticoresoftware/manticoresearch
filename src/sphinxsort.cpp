@@ -1471,11 +1471,16 @@ public:
 
 	void			MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const final { assert(0); }
 	SphGroupKey_t	KeyFromValue ( SphAttr_t ) const final { assert(0); return SphGroupKey_t(); }
-	CSphGrouper *	Clone() const final { return new CSphGrouperJsonField ( m_tLocator, SafeClone (m_pExpr) ); }
+	CSphGrouper *	Clone() const final { return new CSphGrouperJsonField (*this); }
 
 protected:
-	CSphAttrLocator				m_tLocator;
-	CSphRefcountedPtr<ISphExpr>	m_pExpr;
+	CSphGrouperJsonField ( const CSphGrouperJsonField& rhs )
+		: m_tLocator ( rhs.m_tLocator )
+		, m_pExpr ( SafeClone ( rhs.m_pExpr ) )
+	{}
+
+	CSphAttrLocator		m_tLocator;
+	ISphExprRefPtr_c	m_pExpr;
 };
 
 

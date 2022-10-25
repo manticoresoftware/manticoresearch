@@ -152,17 +152,18 @@ class ClonableCtx_T
 	CSphFixedVector<int> m_dJobsOrder {0};
 
 	std::atomic<int> m_iTasks {0};	// each call to CloneNewContext() increases value
-	bool m_bDisabled = true;		// ctr with disabled (single-thread) working
+	bool m_bSingle;				// ctr with disabled (single-thread) working
 
 public:
 	template <typename... PARAMS >
 	explicit ClonableCtx_T ( PARAMS && ... tParams  );
 
-	// Num of parallel workers to complete iTasks jobs
-	int Concurrency ( int iTasks ) const;
-	void LimitConcurrency ( int iDistThreads );
+	bool IsSingle() const;
 
-	void Setup ( int iContexts );
+	// Num of parallel workers to complete iTasks jobs
+	void LimitConcurrency ( int iDistThreads );
+	int Concurrency ( int iTasks ) const;
+
 	void Finalize();
 
 	// called once per coroutine, when it really has to process something. 2-nd result is JobID, m.b. used in SetJobOrder.

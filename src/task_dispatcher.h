@@ -59,7 +59,7 @@ struct Template_t
 	int batch = 0;
 };
 
-std::unique_ptr<TaskDispatcher_i> Make ( int iJobs, int iDefaultConcurrency, Template_t tWhat );
+std::unique_ptr<TaskDispatcher_i> Make ( int iJobs, int iDefaultConcurrency, Template_t tWhat, bool bSingle );
 
 // template is a string like "10/3", where 10 is concurrency, 3 is batch size.
 // if concurrency = 0, default concurrency will be used.

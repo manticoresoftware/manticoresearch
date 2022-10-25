@@ -23,20 +23,24 @@ template<typename REFCONTEXT, typename CONTEXT, ECONTEXT IS_ORDERED>
 template<typename... PARAMS>
 ClonableCtx_T<REFCONTEXT, CONTEXT, IS_ORDERED>::ClonableCtx_T ( PARAMS&&... tParams )
 	: m_dParentContext ( std::forward<PARAMS> ( tParams )... )
-{}
+{
+	m_bSingle = !m_dParentContext.IsClonable();
+}
 
 template<typename REFCONTEXT, typename CONTEXT, ECONTEXT IS_ORDERED>
 void ClonableCtx_T<REFCONTEXT, CONTEXT, IS_ORDERED>::LimitConcurrency ( int iDistThreads )
 {
 	assert ( m_iTasks == 0 );							   // can be run only when no work started
-	if ( !m_dParentContext.IsClonable() || !iDistThreads ) // 0 as for dist_threads means 'no limit'
+	if ( m_bSingle || !iDistThreads ) // 0 as for dist_threads means 'no limit'
 		return;
 
 	auto iContexts = iDistThreads - 1; // one context is always clone-free
 	if ( !iContexts )
 		return;
 
-	Setup ( iContexts );
+	m_dChildrenContexts.Reset ( iContexts );
+	m_dJobsOrder.Reset ( iContexts );
+	m_dJobsOrder.ZeroVec();
 }
 
 // called once per coroutine, when it really has to process something
@@ -44,7 +48,7 @@ template<typename REFCONTEXT, typename CONTEXT, ECONTEXT IS_ORDERED>
 template<ECONTEXT ORD>
 std::enable_if_t<ORD == ECONTEXT::ORDERED, std::pair<REFCONTEXT, int>> ClonableCtx_T<REFCONTEXT, CONTEXT, IS_ORDERED>::CloneNewContext ( bool bFirst )
 {
-	if ( m_bDisabled || bFirst )
+	if ( m_bSingle || bFirst )
 		return { m_dParentContext, 0 };
 
 	auto iMyIdx = m_iTasks.fetch_add ( 1, std::memory_order_relaxed );
@@ -59,7 +63,7 @@ template<typename REFCONTEXT, typename CONTEXT, ECONTEXT IS_ORDERED>
 template<ECONTEXT ORD>
 std::enable_if_t<ORD == ECONTEXT::UNORDERED, std::pair<REFCONTEXT, int>> ClonableCtx_T<REFCONTEXT, CONTEXT, IS_ORDERED>::CloneNewContext ()
 {
-	if ( m_bDisabled )
+	if ( m_bSingle )
 		return { m_dParentContext, 0 };
 
 	auto iMyIdx = m_iTasks.fetch_add ( 1, std::memory_order_relaxed );
@@ -83,21 +87,18 @@ std::enable_if_t<ORD == ECONTEXT::ORDERED> ClonableCtx_T<REFCONTEXT, CONTEXT, IS
 	m_dJobsOrder[iCtxID - 1] = iOrder;
 }
 
+// Num of parallel workers to complete iTasks jobs
+template<typename REFCONTEXT, typename CONTEXT, ECONTEXT IS_ORDERED>
+inline bool ClonableCtx_T<REFCONTEXT, CONTEXT, IS_ORDERED>::IsSingle () const
+{
+	return m_bSingle;
+}
 
 // Num of parallel workers to complete iTasks jobs
 template<typename REFCONTEXT, typename CONTEXT, ECONTEXT IS_ORDERED>
 inline int ClonableCtx_T<REFCONTEXT, CONTEXT, IS_ORDERED>::Concurrency ( int iTasks ) const
 {
 	return Min ( m_dChildrenContexts.GetLength() + 1, iTasks ); // +1 since parent is also an extra context
-}
-
-template<typename REFCONTEXT, typename CONTEXT, ECONTEXT IS_ORDERED>
-void ClonableCtx_T<REFCONTEXT, CONTEXT, IS_ORDERED>::Setup ( int iContexts )
-{
-	m_dChildrenContexts.Reset ( iContexts );
-	m_dJobsOrder.Reset ( iContexts );
-	m_dJobsOrder.ZeroVec();
-	m_bDisabled = !iContexts;
 }
 
 template<typename REFCONTEXT, typename CONTEXT, ECONTEXT IS_ORDERED>
@@ -111,7 +112,7 @@ template<typename FNPROCESSOR, ECONTEXT ORD>
 std::enable_if_t<ORD == ECONTEXT::ORDERED> ClonableCtx_T<REFCONTEXT, CONTEXT, IS_ORDERED>::ForAll ( FNPROCESSOR fnProcess, bool bIncludeRoot )
 {
 	assert ( !bIncludeRoot ); // for ordered context it should not be set
-	if ( m_bDisabled ) // nothing to do; sorters and results are already original
+	if ( m_bSingle ) // nothing to do; sorters and results are already original
 		return;
 
 	int iWorkedThreads = m_iTasks; // NOT - 1, as we didn't account parent context in the counter
@@ -134,7 +135,7 @@ std::enable_if_t<ORD == ECONTEXT::UNORDERED> ClonableCtx_T<REFCONTEXT, CONTEXT, 
 	if ( bIncludeRoot )
 		fnProcess ( m_dParentContext );
 
-	if ( m_bDisabled ) // nothing to do; sorters and results are already original
+	if ( m_bSingle ) // nothing to do; sorters and results are already original
 		return;
 
 	int iWorkedThreads = m_iTasks - 1;

@@ -10376,10 +10376,10 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 	// pseudo-sharding scheduler
 	auto tDispatch = GetEffectivePseudoShardingDispatcherTemplate();
 	Dispatcher::Unify ( tDispatch, tQuery.m_tPseudoShardingDispatcher );
-	auto pDispatcher = Dispatcher::Make ( iJobs, 0, tDispatch );
 
 	// the context
 	Threads::ClonableCtx_T<DiskChunkSearcherCtx_t, DiskChunkSearcherCloneCtx_t, Threads::ECONTEXT::ORDERED> tClonableCtx { dSorters, tResult };
+	auto pDispatcher = Dispatcher::Make ( iJobs, 0, tDispatch, tClonableCtx.IsSingle() );
 	tClonableCtx.LimitConcurrency ( pDispatcher->GetConcurrency() );
 
 	auto iStart = sphMicroTimer();

@@ -6783,10 +6783,10 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 
 	auto tDispatch = GetEffectiveBaseDispatcherTemplate();
 	Dispatcher::Unify ( tDispatch, tQuery.m_tMainDispatcher );
-	auto pDispatcher = Dispatcher::Make ( iJobs, tQuery.m_iCouncurrency, tDispatch );
 
 	// the context
 	ClonableCtx_T<DiskChunkSearcherCtx_t, DiskChunkSearcherCloneCtx_t, Threads::ECONTEXT::ORDERED> tClonableCtx { dSorters, tResult };
+	auto pDispatcher = Dispatcher::Make ( iJobs, tQuery.m_iCouncurrency, tDispatch, tClonableCtx.IsSingle() );
 	tClonableCtx.LimitConcurrency ( pDispatcher->GetConcurrency() );
 
 	auto iStart = sphMicroTimer();

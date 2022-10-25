@@ -222,11 +222,16 @@ std::unique_ptr<TaskDispatcher_i> MakeRoundRobin ( int iJobs, int iConcurrency, 
 	return std::make_unique<RRTaskDispatcher_c> ( iJobs, iConcurrency, iBatch );
 }
 
-std::unique_ptr<Dispatcher::TaskDispatcher_i> Make ( int iJobs, int iDefaultConcurrency, Dispatcher::Template_t tWhat )
+std::unique_ptr<Dispatcher::TaskDispatcher_i> Make ( int iJobs, int iDefaultConcurrency, Dispatcher::Template_t tWhat, bool bSingle )
 {
+	if ( bSingle )
+		iDefaultConcurrency = 1;
+	else if ( tWhat.concurrency )
+		iDefaultConcurrency = tWhat.concurrency;
+
 	if ( tWhat.batch )
-		return MakeRoundRobin(iJobs, tWhat.concurrency ? tWhat.concurrency : iDefaultConcurrency, tWhat.batch );
-	return MakeTrivial ( iJobs, tWhat.concurrency ? tWhat.concurrency : iDefaultConcurrency );
+		return MakeRoundRobin ( iJobs, iDefaultConcurrency, tWhat.batch );
+	return MakeTrivial ( iJobs, iDefaultConcurrency );
 }
 
 Template_t ParseTemplate ( Str_t sTemplate )

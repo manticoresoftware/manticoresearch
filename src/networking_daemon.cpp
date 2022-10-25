@@ -279,8 +279,8 @@ private:
 				tmLastWaitUS = MonoMicroTimer();
 			m_tPrf.End();
 		}
-		m_tWorkerFinished.SetEvent ();
 		m_bWorkerFinished = true;
+		m_tWorkerFinished.SetEvent ();
 	}
 
 	bool IsInTime ( NetPollEvent_t* pEvent, int64_t tmNowUS ) const

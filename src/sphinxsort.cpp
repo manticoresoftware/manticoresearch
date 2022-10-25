@@ -138,7 +138,7 @@ void TransformedSchemaBuilder_c::ReplaceColumnarAttrWithExpression ( CSphColumnI
 
 	// temporarily add attr to new schema
 	// when result set is finalized, corresponding columnar expression (will be spawned later)
-	// will be evaulated and put into the match
+	// will be evaluated and put into the match
 	// and this expression will be used to fetch that value
 	tAttr.m_uAttrFlags &= ~CSphColumnInfo::ATTR_COLUMNAR;
 	tAttr.m_eAttrType = sphPlainAttrToPtrAttr ( tAttr.m_eAttrType );
@@ -161,7 +161,7 @@ class MatchesToNewSchema_c : public MatchProcessor_i
 public:
 		MatchesToNewSchema_c ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema, GetBlobPoolFromMatch_fn fnGetBlobPool, GetColumnarFromMatch_fn fnGetColumnar );
 
-	// performs actual processing acording created plan
+	// performs actual processing according created plan
 	void Process ( CSphMatch * pMatch ) final			{ ProcessMatch(pMatch); }
 	void Process ( VecTraits_T<CSphMatch *> & dMatches ) final { dMatches.for_each ( [this]( CSphMatch * pMatch ){ ProcessMatch(pMatch); } ); }
 	bool ProcessInRowIdOrder() const final				{ return m_dActions.any_of ( []( const MapAction_t & i ){ return i.IsExprEval(); } ); }
@@ -202,10 +202,10 @@ private:
 	GetBlobPoolFromMatch_fn	m_fnGetBlobPool;	// provides base for pool copying
 	GetColumnarFromMatch_fn	m_fnGetColumnar;	// columnar storage getter
 
-	void		SetupAction ( const CSphColumnInfo & tOld, const CSphColumnInfo & tNew, const ISphSchema * pOldSchema, MapAction_t & tAction );
+	static void SetupAction ( const CSphColumnInfo & tOld, const CSphColumnInfo & tNew, const ISphSchema * pOldSchema, MapAction_t & tAction );
 	inline void	ProcessMatch ( CSphMatch * pMatch );
 
-	inline void PerformAction ( const MapAction_t & tAction, CSphMatch * pMatch, CSphMatch & tResult, const BYTE * pBlobPool, columnar::Columnar_i * pColumnar );
+	inline static void PerformAction ( const MapAction_t & tAction, CSphMatch * pMatch, CSphMatch & tResult, const BYTE * pBlobPool, columnar::Columnar_i * pColumnar );
 };
 
 
@@ -243,7 +243,7 @@ MatchesToNewSchema_c::MatchesToNewSchema_c ( const ISphSchema * pOldSchema, cons
 	}
 
 	// need to update @int_attr_ locator to use new schema
-	// no need to pass pOldSchema as we remapping only new schema pointers
+	// no need to pass pOldSchema as we remap only new schema pointers
 	// also need to update group sorter keypart to be str_ptr in caller code SetSchema
 	FnSortGetStringRemap ( *pNewSchema, *pNewSchema, [this, pNewSchema] ( int iSrc, int iDst )
 		{
@@ -315,7 +315,7 @@ void MatchesToNewSchema_c::ProcessMatch ( CSphMatch * pMatch )
 }
 
 
-void MatchesToNewSchema_c::PerformAction ( const MapAction_t & tAction, CSphMatch * pMatch, CSphMatch & tResult, const BYTE * pBlobPool, columnar::Columnar_i * pColumnar )
+inline void MatchesToNewSchema_c::PerformAction ( const MapAction_t & tAction, CSphMatch * pMatch, CSphMatch & tResult, const BYTE * pBlobPool, columnar::Columnar_i * pColumnar )
 {
 	// try to minimize columnar switches inside the expression as this leads to recreating iterators
 	if ( tAction.IsExprEval() && pColumnar!=tAction.m_pPrevColumnar )
@@ -608,7 +608,7 @@ protected:
 	CSphMatch & Add ()
 	{
 		// proper ids at m_dIData already set at constructor
-		// they will be same during life-span - that is why Add used like anti Pop
+		// they will be same during life-span - that is why Add used like anti-Pop
 		int iLast = m_dIData.Add();
 		return m_dData[iLast];
 	}
@@ -1043,7 +1043,7 @@ private:
 	}
 
 	// conception: we have array of N*COEFF elems.
-	// We need only N best elements from it (rest have to be disposed).
+	// We need only N the best elements from it (rest have to be disposed).
 	// direct way: rsort, then take first N elems.
 	// this way: rearrange array by performing one pass of quick sort
 	// if we have exactly N elems left hand from pivot - we're done.
@@ -1068,9 +1068,9 @@ private:
 				break;
 
 			if ( iMaxIndex < j)
-				b = j;  // too many elems aquired; continue with left part
+				b = j;  // too many elems acquired; continue with left part
 			else
-				a = i;  // too less elems aquired; continue with right part
+				a = i;  // too less elems acquired; continue with right part
 			iPivot = m_dIData[( a * ( COEFF-1 )+b ) / COEFF];
 		}
 	}
@@ -1096,7 +1096,7 @@ private:
 		SortMatches();
 	}
 
-	// generic push entry (add it some way to the queue clone or swap, PUSHER depends)
+	// generic push entry (add it some way to the queue clone or swap PUSHER depends on)
 	template<typename MATCH, typename PUSHER>
 	FORCE_INLINE bool PushT ( MATCH && tEntry, PUSHER && PUSH )
 	{
@@ -1405,7 +1405,7 @@ public:
 
 	CSphGrouper * Clone () const final
 	{
-		return new CSphGrouperString<PRED> ( m_tLocator );
+		return new CSphGrouperString ( m_tLocator );
 	}
 };
 
@@ -1488,7 +1488,7 @@ template <class PRED>
 class GrouperStringExpr_T final : public CSphGrouper, public PRED
 {
 public:
-	GrouperStringExpr_T ( ISphExpr * pExpr )
+	explicit GrouperStringExpr_T ( ISphExpr * pExpr )
 		: m_pExpr ( pExpr )
 	{
 		assert(m_pExpr);
@@ -1511,11 +1511,15 @@ public:
 		return PRED::Hash ( pStr, iLen );
 	}
 
-	CSphGrouper *	Clone() const final { return new GrouperStringExpr_T<PRED> ( m_pExpr ); }
+	CSphGrouper *	Clone() const final { return new GrouperStringExpr_T(*this); }
 	void			SetColumnar ( const columnar::Columnar_i * pColumnar ) final { m_pExpr->Command ( SPH_EXPR_SET_COLUMNAR, (void*)pColumnar ); }
 
 protected:
-	CSphRefcountedPtr<ISphExpr>	m_pExpr;
+	GrouperStringExpr_T (const GrouperStringExpr_T& rhs)
+		: m_pExpr { SafeClone ( rhs.m_pExpr ) }
+	{}
+
+	ISphExprRefPtr_c	m_pExpr;
 };
 
 
@@ -1650,7 +1654,7 @@ template<typename T>
 class GrouperMVA_T : public CSphGrouper
 {
 public:
-					GrouperMVA_T ( const CSphAttrLocator & tLocator ) : m_tLocator ( tLocator ) {}
+					explicit GrouperMVA_T ( const CSphAttrLocator & tLocator ) : m_tLocator ( tLocator ) {}
 
 	SphGroupKey_t	KeyFromValue ( SphAttr_t ) const override					{ assert(0); return SphGroupKey_t(); }
 	SphGroupKey_t	KeyFromMatch ( const CSphMatch & tMatch ) const override	{ assert(0); return SphGroupKey_t(); }
@@ -1804,7 +1808,7 @@ static bool PushJsonField ( int64_t iValue, const BYTE * pBlobPool, PUSH && fnPu
 class DistinctFetcher_c : public DistinctFetcher_i
 {
 public:
-			DistinctFetcher_c ( const CSphAttrLocator & tLocator ) : m_tLocator(tLocator) {}
+			explicit DistinctFetcher_c ( const CSphAttrLocator & tLocator ) : m_tLocator(tLocator) {}
 
 	void	SetColumnar ( const columnar::Columnar_i * pColumnar ) override {}
 	void	SetBlobPool ( const BYTE * pBlobPool ) override {}
@@ -2523,7 +2527,7 @@ protected:
 	SubGroupSorter_fn			m_tSubSorter;
 	CSphVector<AggrFunc_i *>	m_dAvgs;
 	bool						m_bAvgFinal = false;
-	CSphVector<SphAttr_t>		m_dDistictKeys;
+	CSphVector<SphAttr_t>		m_dDistinctKeys;
 	static const int			GROUPBY_FACTOR = 4;	///< allocate this times more storage when doing group-by (k, as in k-buffer)
 
 	/// finalize distinct counters
@@ -2613,8 +2617,8 @@ protected:
 		int iCount = bGrouped ? (int) tEntry.GetAttr ( m_tLocDistinct ) : 1;
 
 		assert(m_pDistinctFetcher);
-		m_pDistinctFetcher->GetKeys ( tEntry, this->m_dDistictKeys );
-		for ( auto i : this->m_dDistictKeys )
+		m_pDistinctFetcher->GetKeys ( tEntry, this->m_dDistinctKeys );
+		for ( auto i : this->m_dDistinctKeys )
 			m_tUniq.Add ( {uGroupKey, i, iCount} );
 	}
 
@@ -2784,7 +2788,7 @@ public:
 		{
 			// if we are not finalizing matches, we are using global sorters
 			// let's try to remove dupes while we are processing data in separate threads
-			// so that the main thread will have less data to work with
+			// so that the main thread will have fewer data to work with
 			m_tUniq.Sort();
 			VecTraits_T<SphGroupKey_t> dStub;
 			m_tUniq.Compact(dStub);
@@ -2831,7 +2835,7 @@ protected:
 		if ( DISTINCT && m_bUpdateDistinct )
 			UpdateDistinct ( tEntry, uGroupKey, bGrouped );
 
-		return false; // since it is dupe
+		return false; // since it is a dupe
 	}
 
 	/// add entry to the queue
@@ -2988,14 +2992,14 @@ private:
 
 		if ( bFinalize ) {
 			SortGroups ();
-			if_const ( DISTINCT && !m_bSortByDistinct ) // since they wasn't counted at the top
+			if_const ( DISTINCT && !m_bSortByDistinct ) // since they haven't counted at the top
 			{
 				RebuildHash(); // distinct uses m_hGroup2Match
 				CountDistinct();
 			}
 		} else {
 			// we've called CalcAvg ( Avg_e::FINALIZE ) before partitioning groups
-			// now we can undo this calculation for the rest apart of thrown away
+			// now we can undo this calculation for the rest apart from thrown away
 			// on finalize (sorting) cut we don't need to ungroup here
 			CalcAvg ( Avg_e::UNGROUP );
 			RebuildHash();
@@ -3038,9 +3042,9 @@ private:
 				break;
 
 			if ( iBound < j)
-				b = j;  // too many elems aquired; continue with left part
+				b = j;  // too many elems acquired; continue with left part
 			else
-				a = i;  // too less elems aquired; continue with right part
+				a = i;  // too less elems acquired; continue with right part
 
 			int iPivotIndex = int ( ( a * ( COEFF-1 )+b ) / COEFF );
 			iPivot = this->m_dIData[iPivotIndex];
@@ -3060,15 +3064,15 @@ private:
  *
  * Here we keep several grouped matches, but each one is not a single match, but a group.
  * On the backend we have solid vector of real matches. They are allocated once and freed, and never moved around.
- * To work with them we have vector of indexes, so that each index points to corresponding match in the backend.
+ * To work with them, we have vector of indexes, so that each index points to corresponding match in the backend.
  * So when performing moving operations (sort, etc.) we actually change indexes and never move matches themselves.
  *
- * Say, when user pushes matches with weights of 5,2,3,1,4,6 and we then sort them, we will have following relation:
+ * Say, when user pushes matches with weights of 5,2,3,1,4,6, and we then sort them, we will have the following relations:
  *
  * m5 m2 m3 m1 m4 m6 // backend, placed in natural order as they come here
  *  1  2  3  4  5  6 // original indexes, just points directly to backend matches.
  *
- * After, say, sort by asc matches weights, only index vector modified and becames this:
+ * After, say, sort by asc matches weights, only index vector modified and became this:
  *
  *  4  2  3  5  1  6 // reading match[i[k]] for k in 0..5 will return matches in weight ascending order.
  *
@@ -3100,9 +3104,9 @@ private:
  * m4 -> 2, 4, 5, 1, 3, heads 4, 5
  * m6 -> 2, 4, 5, 6, 3, 1  heads 6, 5
  *
- * On insert we store old head into new elem, and new elem into the place of old head.
+ * On insert, we store old head into new elem, and new elem into the place of old head.
  * One thing rest here is indirect ref by position. I.e. we assume that index at position 6 points to match at position 6.
- * However we can notice, that since it is ring, left elem of 6-th points to it directly by number 6.
+ * However, we can notice, that since it is ring, left elem of 6-th points to it directly by number 6.
  * So we can just shift heads back by one position - and that's all, indirect assumption no more necessary.
  * Final sequence will be this one:
  * m5 m2 m3 m1 m4 m6 - matches in their natural order
@@ -3249,7 +3253,7 @@ public:
 			{
 				// if we are not finalizing matches, we are using global sorters
 				// let's try to remove dupes while we are processing data in separate threads
-				// so that the main thread will have less data to work with
+				// so that the main thread will have fewer data to work with
 				m_tUniq.Sort();
 				VecTraits_T<SphGroupKey_t> dStub;
 				m_tUniq.Compact(dStub);
@@ -3316,7 +3320,7 @@ public:
 			auto uGroupKey = m_dData[iHead].GetAttr ( m_tLocGroupby );
 
 			// have to set bNewSet to true
-			// as need to falltrough at PushAlreadyHashed and update count and aggregates values for head match
+			// as need to fallthrough at PushAlreadyHashed and update count and aggregates values for head match
 			// even uGroupKey match already exists
 			dRhs.template PushEx<true> ( m_dData[iHead], uGroupKey, true, true );
 			for ( int i = this->m_dIData[iHead]; i!=iHead; i = this->m_dIData[i] )
@@ -3345,7 +3349,7 @@ protected:
 	// final cached data valid when everything is finalized
 	bool			m_bFinalized = false;	// helper to avoid double work
 	CSphVector<int> m_dFinalizedHeads;	/// < sorted finalized heads
-	int				m_iLastGroupCutoff;	/// < cutof edge of last group to fit limit
+	int				m_iLastGroupCutoff;	/// < cutoff edge of last group to fit limit
 
 #ifndef NDEBUG
 	int				m_iruns = 0;		///< helpers for conditional breakpoints on debug
@@ -3356,7 +3360,7 @@ protected:
 	/*
 	 * Every match according to uGroupKey came to own subset.
 	 * Head match of each group stored in the hash to quickly locate on next pushes
-	 * It hold all calculated stuff from agregates/group_concat until finalization.
+	 * It hold all calculated stuff from aggregates/group_concat until finalization.
 	 */
 	template <bool GROUPED>
 	bool PushEx ( const CSphMatch & tEntry, const SphGroupKey_t uGroupKey, bool bNewSet, bool bTailFinalized=false )
@@ -3387,7 +3391,7 @@ protected:
 		if ( pGroupIdx )
 			return PushAlreadyHashed ( pGroupIdx, iNew, tEntry, uGroupKey, GROUPED, bNewSet, bTailFinalized );
 
-		// match came from MoveTo of another sorter, it is tail and it has no group here (m.b. it is already
+		// match came from MoveTo of another sorter, it is tail, and it has no group here (m.b. it is already
 		// deleted during finalization as one of worst). Just discard the whole group in the case.
 		if ( bTailFinalized && !GROUPED )
 		{
@@ -3508,9 +3512,9 @@ private:
 
 	// add entry to existing group
 	/*
-	 * If group is not full, and new match is less then head, it will replace the head.
+	 * If group is not full, and new match is less than head, it will replace the head.
 	 * calculated stuff will be moved and adopted by this new replacement.
-	 * If group is full, and new match is less then head, it will be early rejected.
+	 * If group is full, and new match is less than head, it will be early rejected.
 	 * In all other cases new match will be inserted into the group right after head
 	 */
 	bool PushAlreadyHashed ( int * pHead, int iNew, const CSphMatch & tEntry, const SphGroupKey_t uGroupKey, bool bGrouped, bool bNewSet, bool bTailFinalized )
@@ -3525,7 +3529,7 @@ private:
 		// check if we need to push the match at all
 		if ( m_tSubSorter.MatchIsGreater ( tEntry, m_dData[iHead] ) )
 			AddToChain ( iNew, tEntry, iHead ); // always add; bad will be filtered later in gc
-		else if ( ChainLen ( iHead )>=m_iGLimit ) // less then worst, drop it
+		else if ( ChainLen ( iHead )>=m_iGLimit ) // less than worst, drop it
 			DeallocateMatch ( iNew );
 		else
 		{
@@ -3609,9 +3613,9 @@ private:
 				break;
 
 			if ( iBound<j )
-				b = j;  // too many elems aquired; continue with left part
+				b = j;  // too many elems acquired; continue with left part
 			else
-				a = i;  // too less elems aquired; continue with right part
+				a = i;  // too few elems acquired; continue with right part
 			iPivot = dData[( a+b ) / 2];
 		}
 	}
@@ -3661,8 +3665,8 @@ private:
 		SortThenVacuumWorstHeads ( m_iLimit, Stage_e::FINAL ); // false since it is already sorted
 
 		// also free matches in the chain were cleared with FreeDataPtrs, but *now* we also need to free their dynamics
-		// otherwize in d-tr FreDataPtr on non-zero dynamics will be called again with propably another schema and crash
-		// FXIME!!! need to keep and restore all members changed by TryAllocateMatch - it'd be better to rewrite code to pass state into TryAllocateMatch or use common code
+		// otherwise in d-tr FreDataPtr on non-zero dynamics will be called again with probably another schema and crash
+		// FIXME!!! need to keep and restore all members changed by TryAllocateMatch - it'd be better to rewrite code to pass state into TryAllocateMatch or use common code
 		auto iFree = m_iFree;
 		auto iUsed = m_iUsed;
 		auto iSSFrom = m_iStorageSolidFrom;
@@ -3725,7 +3729,7 @@ private:
 	};
 
 	// full clean - sort the groups, then iterate on them until iLimit elems counted. Cut out the rest.
-	// if last group is not fit into rest of iLimit, it still keeped whole, no fraction performed over it.
+	// if last group is not fit into rest of iLimit, it still kept whole, no fraction performed over it.
 	// returns desired length of the last chain to make the limit hard ( 1..m_iGLimit )
 	void SortThenVacuumWorstHeads ( int iSoftLimit, Stage_e eStage = Stage_e::COLLECT )
 	{
@@ -3752,7 +3756,7 @@ private:
 				m_dFinalizedHeads.RemoveFast ( i-- );
 			}
 
-		// discard removed distincts
+		// discard removed distinct
 		if_const ( DISTINCT )
 			RemoveDistinct ( dRemovedHeads );
 
@@ -4127,7 +4131,7 @@ public:
 
 		// other step is a bit tricky:
 		// we just can't add current count uniq to final; need to append m_dUniq instead,
-		// so that final flatten will calculate real uniq count.
+		// so that final flattening will calculate real uniq count.
 		dRhs.AddCount ( m_tData );
 
 		if_const ( HAS_AGGREGATES )
@@ -4148,7 +4152,7 @@ protected:
 	CSphVector<SphUngroupedValue_t>	m_dUniq;
 
 private:
-	CSphVector<SphAttr_t> m_dDistictKeys;
+	CSphVector<SphAttr_t> m_dDistinctKeys;
 	CSphRefcountedPtr<DistinctFetcher_i> m_pDistinctFetcher;
 
 	inline void SetupBaseGrouperWrp ( ISphSchema * pSchema )	{ SetupBaseGrouper<DISTINCT> ( pSchema ); }
@@ -4178,8 +4182,8 @@ private:
 			iCount = (int) tEntry.GetAttr ( m_tLocDistinct );
 
 		assert(m_pDistinctFetcher);
-		m_pDistinctFetcher->GetKeys ( tEntry, m_dDistictKeys );
-		for ( auto i : m_dDistictKeys )
+		m_pDistinctFetcher->GetKeys ( tEntry, m_dDistinctKeys );
+		for ( auto i : m_dDistinctKeys )
 			this->m_dUniq.Add ( { i, iCount } );
 	}
 
@@ -4398,7 +4402,7 @@ public:
 			if ( bGotSeq )
 				sSeq++;
 
-			// stop checking on any non space char outside sequence or sequence end
+			// stop checking on any non-space char outside sequence or sequence end
 			if ( ( !bGotSeq && !sphIsSpace ( *sTok ) && *sTok!='\0' ) || !*sSeq )
 				break;
 		}
@@ -4727,7 +4731,7 @@ private:
 	void	ReplaceJsonWithExprs ( CSphMatchComparatorState & tState, CSphVector<ExtraSortExpr_t> & dExtraExprs );
 	void	AddColumnarExprsAsAttrs ( CSphMatchComparatorState & tState, CSphVector<ExtraSortExpr_t> & dExtraExprs );
 	void	RemapAttrs ( CSphMatchComparatorState & tState, CSphVector<ExtraSortExpr_t> & dExtraExprs );
-	void	SetupRemapColJson ( CSphColumnInfo & tRemapCol, CSphMatchComparatorState & tState, CSphVector<ExtraSortExpr_t> & dExtraExprs, int iStateAttr ) const;
+	static void	SetupRemapColJson ( CSphColumnInfo & tRemapCol, CSphMatchComparatorState & tState, CSphVector<ExtraSortExpr_t> & dExtraExprs, int iStateAttr ) ;
 	const CSphColumnInfo * GetGroupbyStr ( int iAttr, int iNumOldAttrs ) const;
 
 	bool	SetupMatchesSortingFunc();
@@ -4806,7 +4810,7 @@ void QueueCreator_c::CreateGrouperByAttr ( ESphAttr eType, const CSphColumnInfo 
 			ExprParseArgs_t tExprArgs;
 			tExprArgs.m_eCollation = m_tQuery.m_eCollation;
 
-			CSphRefcountedPtr<ISphExpr> pExpr { sphExprParse ( m_tQuery.m_sGroupBy.cstr(), tSchema, m_sError, tExprArgs ) };
+			ISphExprRefPtr_c pExpr { sphExprParse ( m_tQuery.m_sGroupBy.cstr(), tSchema, m_sError, tExprArgs ) };
 			m_tGroupSorterSettings.m_pGrouper = new CSphGrouperJsonField ( tLoc, pExpr );
 			m_tGroupSorterSettings.m_bJson = true;
 		}
@@ -4989,7 +4993,7 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 		ExprParseArgs_t tExprArgs;
 		tExprArgs.m_eCollation = m_tQuery.m_eCollation;
 
-		CSphRefcountedPtr<ISphExpr> pExpr { sphExprParse ( m_tQuery.m_sGroupBy.cstr(), tSchema, m_sError, tExprArgs ) };
+		ISphExprRefPtr_c pExpr { sphExprParse ( m_tQuery.m_sGroupBy.cstr(), tSchema, m_sError, tExprArgs ) };
 		m_tGroupSorterSettings.m_pGrouper = new CSphGrouperJsonField ( tSchema.GetAttr(iAttr).m_tLocator, pExpr );
 		m_tGroupSorterSettings.m_bJson = true;
 		return true;
@@ -5235,7 +5239,7 @@ public:
 		CALC_CHILD_HASH(m_pExpr);
 
 		// uHash = sphFNV64 ( &m_tJsonCol, sizeof ( m_tJsonCol ), uHash );	//< that is wrong! Locator may have padding uninitialized data, valgrind will warn!
-		uHash = sphCalcLocatorHash ( m_tJsonCol, uHash );					//< that is right, only menaningful fields processed without padding.
+		uHash = sphCalcLocatorHash ( m_tJsonCol, uHash );					//< that is right, only meaningful fields processed without padding.
 
 		return CALC_DEP_HASHES();
 	}
@@ -5247,7 +5251,7 @@ public:
 
 private:
 	CSphAttrLocator		m_tJsonCol;				///< JSON attribute to fix
-	CSphRefcountedPtr<ISphExpr>	m_pExpr;
+	ISphExprRefPtr_c	m_pExpr;
 
 private:
 	ExprSortJson2StringPtr_c ( const ExprSortJson2StringPtr_c & rhs )
@@ -5694,7 +5698,7 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 					break;
 				}
 
-				// so we are about to add a filter condition
+				// so we are about to add a filter condition,
 				// but it might depend on some preceding columns (e.g. SELECT 1+attr f1 ... WHERE f1>5)
 				// lets detect those and move them to prefilter \ presort phase too
 				CSphVector<int> dDependentCols;
@@ -5808,7 +5812,7 @@ bool QueueCreator_c::MaybeAddExprColumn ()
 		return true;
 
 	CSphColumnInfo tCol ( "@expr", SPH_ATTR_FLOAT ); // enforce float type for backwards compatibility
-	// (ie. too lazy to fix those tests right now)
+	// (i.e. too lazy to fix those tests right now)
 	bool bHasZonespanlist;
 	ExprParseArgs_t tExprArgs;
 	tExprArgs.m_pProfiler = m_tSettings.m_pProfiler;
@@ -5920,14 +5924,14 @@ bool QueueCreator_c::AddExpressionsForUpdates()
 bool QueueCreator_c::MaybeAddGroupbyMagic ( bool bGotDistinct )
 {
 	CSphString sJsonGroupBy;
-	// now lets add @groupby etc if needed
+	// now let's add @groupby etc. if needed
 	if ( m_bGotGroupby && m_pSorterSchema->GetAttrIndex ( "@groupby" )<0 )
 	{
 		ESphAttr eGroupByResult = ( !m_tGroupSorterSettings.m_bImplicit )
 				? m_tGroupSorterSettings.m_pGrouper->GetResultType ()
 				: SPH_ATTR_INTEGER; // implicit do not have grouper
 
-		// all FACET group by should be widest possible type
+		// all FACET group by should be the widest possible type
 		if ( m_tQuery.m_bFacet || m_tQuery.m_bFacetHead	|| m_bMulti )
 			eGroupByResult = SPH_ATTR_BIGINT;
 
@@ -6010,7 +6014,7 @@ bool QueueCreator_c::CheckHavingConstraints () const
 		if ( !m_bGotGroupby )
 			return Err ( "can not use HAVING without GROUP BY" );
 
-		// should be column named at group by or it's alias or aggregate
+		// should be column named at group by, or it's alias or aggregate
 		const CSphString & sHaving = m_tSettings.m_pAggrFilter->m_sAttrName;
 		if ( !IsGroupbyMagic ( sHaving ) )
 		{
@@ -6032,7 +6036,7 @@ bool QueueCreator_c::CheckHavingConstraints () const
 }
 
 
-void QueueCreator_c::SetupRemapColJson ( CSphColumnInfo & tRemapCol, CSphMatchComparatorState & tState, CSphVector<ExtraSortExpr_t> & dExtraExprs, int iStateAttr ) const
+void QueueCreator_c::SetupRemapColJson ( CSphColumnInfo & tRemapCol, CSphMatchComparatorState & tState, CSphVector<ExtraSortExpr_t> & dExtraExprs, int iStateAttr )
 {
 	bool bFunc = dExtraExprs[iStateAttr].m_tKey.m_uMask==0;
 
@@ -6245,7 +6249,7 @@ void QueueCreator_c::AddColumnarExprsAsAttrs ( CSphMatchComparatorState & tState
 void QueueCreator_c::RemapAttrs ( CSphMatchComparatorState & tState, CSphVector<ExtraSortExpr_t> & dExtraExprs )
 {
 	// we have extra attrs (expressions) that we created while parsing the sort clause
-	// we couldn't add them to the schema at that stage
+	// we couldn't add them to the schema at that stage,
 	// but now we can. we create attributes, assign internal names and set their expressions
 
 	assert ( m_pSorterSchema );
@@ -6428,7 +6432,7 @@ bool QueueCreator_c::AddGroupbyStuff ()
 	if ( !CheckHavingConstraints() )
 		return false;
 
-	// now lets add @groupby stuff, if necessary
+	// now let's add @groupby stuff, if necessary
 	return MaybeAddGroupbyMagic(m_bGotDistinct);
 }
 
@@ -6558,7 +6562,7 @@ bool QueueCreator_c::ConvertColumnarToDocstore()
 		return true;
 
 	// check for columnar attributes that have FINAL eval stage
-	// if we have more that 1 of such attributes (and they are also stored), we replace columnar expressions with columnar expressions
+	// if we have more than 1 of such attributes (and they are also stored), we replace columnar expressions with columnar expressions
 	CSphVector<int> dStoredColumnar;
 	auto & tSchema = *m_pSorterSchema;
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
@@ -6662,19 +6666,17 @@ static ISphMatchSorter * CreateQueue ( QueueCreator_c & tCreator, SphQueueRes_t 
 
 bool sphHasExpressions ( const CSphQuery & tQuery, const CSphSchema & tSchema )
 {
-	for ( const CSphQueryItem &tItem : tQuery.m_dItems )
+	return !tQuery.m_dItems.all_of ( [&tSchema] ( const CSphQueryItem& tItem )
 	{
 		const CSphString & sExpr = tItem.m_sExpr;
 
 		// all expressions that come from parser are automatically aliased
 		assert ( !tItem.m_sAlias.IsEmpty() );
 
-		if ( !( sExpr=="*"
+		return sExpr=="*"
 			|| ( tSchema.GetAttrIndex ( sExpr.cstr() )>=0 && tItem.m_eAggrFunc==SPH_AGGR_NONE && tItem.m_sAlias==sExpr )
-			|| IsGroupbyMagic ( sExpr ) ) )
-			return true;
-	}
-	return false;
+			|| IsGroupbyMagic ( sExpr );
+	});
 }
 
 static void CreateSorters ( const VecTraits_T<CSphQuery> & dQueries, const VecTraits_T<ISphMatchSorter*> & dSorters, const VecTraits_T<QueueCreator_c> & dCreators,	const VecTraits_T<CSphString> & dErrors, SphQueueRes_t & tRes )
@@ -6825,7 +6827,7 @@ static void CreateMultiQueue ( RawVector_T<QueueCreator_c> & dCreators, const Sp
 					) )
 					continue;
 
-				// no need to add a new column but we need the same schema for the sorters
+				// no need to add a new column, but we need the same schema for the sorters
 				if ( tCol.IsColumnar() && pMultiCol->IsColumnarExpr() )
 				{
 					bHasMulti = true;

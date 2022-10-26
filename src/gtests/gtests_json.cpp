@@ -21,6 +21,7 @@
 
 TEST ( CJson, basics )
 {
+	sphInitCJson();
 	struct MyIndex_t
 	{
 		CSphString m_sName;
@@ -89,6 +90,7 @@ TEST ( CJson, basics )
 
 TEST ( CJson, format )
 {
+	sphInitCJson();
 	cJSON * pJson = cJSON_CreateObject ();
 	cJSON_AddStringToObject ( pJson, "escaped", " \" quote \\ slash \b b \f feed \n n \r r \t tab \005 / here " );
 	char * szResult = cJSON_PrintUnformatted ( pJson );
@@ -101,7 +103,7 @@ TEST ( CJson, format )
 	tBuild.AppendEscaped ( " \" quote \\ slash \b b \f feed \n n \r r \t tab \005 / here ", EscBld::eEscape );
 	tBuild.FinishBlocks ();
 	printf ( "\n%s\n", tBuild.cstr() );
-
+	cJSON_Delete ( pJson );
 }
 
 

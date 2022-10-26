@@ -103,9 +103,7 @@ private:
 			if ( !tTask.m_tLink.is_linked() )
 				m_tStagingQueue.push_back ( tTask );
 		}
-		// optimization: we anyway enqueue the task, however if next scheduled time to awake came earlier than our schedule - we don't need to kick the thread.
-		if ( ( tTask.m_iTimeoutTimeUS < m_iNextTimeoutUS ) | !m_iNextTimeoutUS ) // | instead of || to avoid branching
-			Kick();
+		Kick();
 	}
 
 	MiniTimer_c* PopStagingTask() REQUIRES ( TimerThread ) EXCLUDES ( m_tStagingGuard )

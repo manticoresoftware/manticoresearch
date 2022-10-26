@@ -16,4 +16,3 @@
 
 void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf );
 
-void DebugClose();

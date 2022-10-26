@@ -63,7 +63,6 @@
 #include "taskpreread.h"
 #include "coroutine.h"
 #include "dynamic_idx.h"
-#include "netreceive_ql.h"
 
 extern "C"
 {
@@ -14129,11 +14128,9 @@ void HandleMysqlfiles ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCm
 
 void HandleMysqlclose ( RowBuffer_i & tOut )
 {
-	tOut.HeadTuplet ( "command", "result" );
-	tOut.DataTuplet ( "Close", "SUCCESS" );
-	tOut.Eof ();
-
-	DebugClose();
+	auto iSocket = session::Info().GetSocket();
+	if ( iSocket >= 0 )
+		sphSockClose ( iSocket );
 }
 
 // same for select ... from index.files

@@ -926,31 +926,12 @@ DEFINE_RENDER( QlCompressedInfo_t )
 }
 
 
-// hack to interrupt session
-// fixme! If more session-wide access expected, m.b. place here more general things, like session pointer?
-struct DebugClose_t : public TaskInfo_t
-{
-	DECLARE_RENDER( DebugClose_t );
-	bool m_bClose = false;
-};
-
-// no specific render, just storage
-DEFINE_RENDER( DebugClose_t ) {}
-
-void DebugClose ()
-{
-	myinfo::ref<DebugClose_t> ()->m_bClose = true;
-}
-
-
 constexpr int MAX_PACKET_LEN = 0x00FFFFFFL; // 16777215 bytes, max low level packet size. Notice, also used as mask.
 
 // main sphinxql server
 void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 {
 	auto& tSess = session::Info();
-	// to close current connection from inside
-	auto pCloseFlag = PublishTaskInfo ( new DebugClose_t );
 
 	// to display 'compressed' flag, if any.
 	auto pCompressedFlag = PublishTaskInfo ( new QlCompressedInfo_t );
@@ -1096,6 +1077,6 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			continue;
 		}
 
-		tSess.SetPersistent ( LoopClientMySQL ( uPacketID, iPacketLen, pProfile, pBuf.get() ) && !pCloseFlag->m_bClose );
+		tSess.SetPersistent ( LoopClientMySQL ( uPacketID, iPacketLen, pProfile, pBuf.get() ) );
 	} while ( tSess.GetPersistent() );
 }

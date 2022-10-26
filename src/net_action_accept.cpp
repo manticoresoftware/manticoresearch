@@ -290,6 +290,7 @@ void NetActionAccept_c::Impl_c::ProcessAccept ()
 		auto pClientInfo = std::make_unique<ClientTaskInfo_t>();
 		pClientInfo->SetClientName ( szClientName );
 		pClientInfo->SetConnID ( iConnID );
+		pClientInfo->SetSocket ( iClientSock );
 		pClientInfo->SetVip ( m_tListener.m_bVIP );
 		pClientInfo->SetReadOnly( m_tListener.m_bReadOnly );
 

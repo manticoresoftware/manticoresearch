@@ -221,10 +221,10 @@ protected:
 	// helper: parse given str into internal bson
 	NodeHandle_t Bson ( const char * sJson )
 	{
-		CSphString sText = sJson;
-		CSphString sError;
+		CSphString sText { sJson, CSphString::always_create };
+		CSphString sParseError;
 		dData.Reset ();
-		sphJsonParse ( dData, ( char * ) sText.cstr(), false, true, true, sError );
+		sphJsonParse ( dData, ( char * ) sText.cstr(), false, true, true, sParseError );
 		if ( dData.IsEmpty () )
 			return nullnode;
 

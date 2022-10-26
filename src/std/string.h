@@ -101,6 +101,10 @@ public:
 
 	CSphString ( const char* szString );
 
+	// create even if source is null/empty (result will be valid string with valid tail of zeros - for parsers)
+	enum guarded_e { always_create };
+	CSphString ( const char* szString, guarded_e );
+
 	CSphString ( const char* sValue, int iLen )
 	{
 		SetBinary ( sValue, iLen );

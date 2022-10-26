@@ -84,6 +84,18 @@ inline CSphString::CSphString ( const char* szString ) // NOLINT
 	}
 }
 
+inline CSphString::CSphString ( const char* szString, guarded_e ) // NOLINT
+{
+	int iLen = 0;
+	if ( szString && szString[0] != '\0')
+		iLen = (int)strlen ( szString );
+	m_sValue = new char[iLen + SAFETY_GAP + 1];
+
+	if ( iLen )
+		memcpy ( m_sValue, szString, iLen ); // NOLINT
+	memset ( m_sValue + iLen, 0, SAFETY_GAP + 1 );
+}
+
 inline CSphString CSphString::SubString ( int iStart, int iCount ) const
 {
 #ifndef NDEBUG

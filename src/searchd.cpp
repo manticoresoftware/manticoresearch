@@ -1128,7 +1128,7 @@ LONG WINAPI CrashLogger::HandleCrash ( EXCEPTION_POINTERS * pExc )
 			auto pSrc = (ClientTaskInfo_t *) pThread->m_pTaskInfo.load ( std::memory_order_relaxed );
 			if ( pSrc ) ++iAllThd;
 			for ( ; pSrc; pSrc = (ClientTaskInfo_t *) pSrc->m_pPrev.load ( std::memory_order_relaxed ) )
-				if ( pSrc->m_eType==ClientTaskInfo_t::m_eTask )
+				if ( pSrc->m_eType==ClientTaskInfo_t::Task() )
 				{
 					sphSafeInfo ( g_iLogFile, "thd %d (%s), proto %s, state %s, command %s", iThd,
 							pThread->m_sThreadName.cstr(),

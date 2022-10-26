@@ -200,7 +200,7 @@ namespace myinfo {
 	// num of real tasks (that is mini-info + client-info)
 	inline int CountTasks()
 	{
-		return Count ( MiniTaskInfo_t::m_eTask ) + Count ( ClientTaskInfo_t::m_eTask );
+		return Count ( MiniTaskInfo_t::Task() ) + Count ( ClientTaskInfo_t::Task() );
 	}
 
 } // namespace myinfo

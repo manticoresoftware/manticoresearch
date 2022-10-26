@@ -37,14 +37,14 @@ DEFINE_RENDER ( ClientTaskInfo_t )
 MiniTaskInfo_t* myinfo::HazardGetMini()
 {
 	return (MiniTaskInfo_t*)myinfo::HazardGetNode ( [] ( TaskInfo_t* pNode ) {
-		return pNode->m_eType == MiniTaskInfo_t::m_eTask || pNode->m_eType == ClientTaskInfo_t::m_eTask;
+		return pNode->m_eType == MiniTaskInfo_t::Task() || pNode->m_eType == ClientTaskInfo_t::Task();
 	} );
 }
 
 
 ClientTaskInfo_t * HazardGetClient ()
 {
-	return (ClientTaskInfo_t *) myinfo::GetHazardTypedNode ( ClientTaskInfo_t::m_eTask );
+	return (ClientTaskInfo_t *) myinfo::GetHazardTypedNode ( ClientTaskInfo_t::Task() );
 }
 
 ClientTaskInfo_t & ClientTaskInfo_t::Info ( bool bStrict )

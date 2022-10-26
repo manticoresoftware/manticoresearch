@@ -84,19 +84,19 @@ using RenderFnPtr = void ( * ) ( const void * pSrc, PublicThreadDesc_t & dDst );
 BYTE RegisterRenderer ( RenderFnPtr pFunc ) noexcept;
 
 // Declare static member func 'Render', and provide initial registration and storing type ID
-#define DECLARE_RENDER( TASKINFO )    \
-    static BYTE m_eTask;    \
-    TASKINFO () noexcept {  \
-        if (!m_eTask) m_eTask = RegisterRenderer ( TASKINFO::Render ); \
-        m_eType = m_eTask; \
-    }                                  \
+#define DECLARE_RENDER( TASKINFO )									\
+    static BYTE Task() {											\
+    	static BYTE eTask = RegisterRenderer ( TASKINFO::Render );	\
+    	return eTask;												\
+	}																\
+    TASKINFO () noexcept {											\
+        m_eType = Task();											\
+    }																\
     static void Render ( const void * pSrc, PublicThreadDesc_t & dDst )
 
 // Define declared stuff (has to be written in .cpp to avoid multiple definitions)
 #define DEFINE_RENDER( TASKINFO ) \
-	BYTE TASKINFO::m_eTask=0;        \
 	void TASKINFO::Render ( const void * pSrc, PublicThreadDesc_t & dDst )
-
 
 // generic task info
 struct TaskInfo_t
@@ -135,7 +135,7 @@ public:
 		: m_pInfo ( pInfo )
 	{
 		pInfo->m_pPrev = Threads::MyThd().m_pTaskInfo.exchange ( pInfo, std::memory_order_acq_rel );
-		REFCOUNT::Inc ( TASKINFO::m_eTask );
+		REFCOUNT::Inc ( TASKINFO::Task() );
 	}
 
 	operator TASKINFO*() const { return m_pInfo.operator TASKINFO*(); };
@@ -149,7 +149,7 @@ public:
 	~ScopedInfo_T ()
 	{
 		Threads::MyThd ().m_pTaskInfo.store ( m_pInfo->m_pPrev, std::memory_order_release );
-		REFCOUNT::Dec ( TASKINFO::m_eTask );
+		REFCOUNT::Dec ( TASKINFO::Task() );
 	}
 };
 
@@ -215,7 +215,7 @@ namespace myinfo {
 	template <typename TASKINFO>
 	TASKINFO* ref()
 	{
-		return (TASKINFO *) GetHazardTypedNode ( TASKINFO::m_eTask );
+		return (TASKINFO *) GetHazardTypedNode ( TASKINFO::Task() );
 	}
 
 	// set MiniTaskInfo_t::m_sCommand

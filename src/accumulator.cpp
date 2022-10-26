@@ -114,6 +114,7 @@ void RtAccum_t::Cleanup()
 	m_pIndex = nullptr;
 	m_pBlobWriter.reset();
 	m_uAccumDocs = 0;
+	m_iAccumBytes = 0;
 	m_dAccumKlist.Reset();
 
 	m_dCmd.Reset();
@@ -315,6 +316,7 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_t& tDoc, bool
 	}
 
 	++m_uAccumDocs;
+	m_iAccumBytes += tDoc.m_iTotalBytes;
 }
 
 struct AccumDocHits_t
@@ -508,6 +510,7 @@ void RtAccum_t::LoadRtTrx ( const BYTE* pData, int iLen )
 	MemoryReader_c tReader ( pData, iLen );
 	m_bReplace = !!tReader.GetVal<BYTE>();
 	tReader.GetVal ( m_uAccumDocs );
+	tReader.GetVal ( m_iAccumBytes );
 
 	// insert and replace
 	m_dAccum.Resize ( tReader.GetDword() );
@@ -546,6 +549,7 @@ void RtAccum_t::SaveRtTrx ( MemoryWriter_c& tWriter ) const
 {
 	tWriter.PutByte ( m_bReplace ); // this need only for data sort on commit
 	tWriter.PutDword ( m_uAccumDocs );
+	tWriter.PutVal ( m_iAccumBytes );
 
 	// insert and replace
 	tWriter.PutDword ( m_dAccum.GetLength() );

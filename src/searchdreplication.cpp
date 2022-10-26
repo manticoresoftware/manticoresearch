@@ -606,7 +606,8 @@ std::pair<int, CSphString> WaitClusterCommit ( const CSphString& sCluster, int i
 // commands version (commands these got replicated via Galera)
 // ver 0x104 added docstore from RT index
 // ver 0x105 fixed CSphWordHit serialization - instead of direct raw blob copy only fields sent (16 bytes vs 24)
-static const WORD g_iReplicateCommandVer = 0x105;
+// ver 0x106 add total indexed bytes to accum
+static const WORD g_iReplicateCommandVer = 0x106;
 
 // log debug info about cluster nodes as current nodes views that
 static void LogGroupView ( const wsrep_view_info_t * pView )

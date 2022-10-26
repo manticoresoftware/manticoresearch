@@ -39,8 +39,9 @@ struct InsertDocData_t
 
 	CSphVector<SphAttr_t>				m_dColumnarAttrs;
 	int									m_iColumnarID = -1;
+	int64_t								m_iTotalBytes = 0;
 
-										InsertDocData_t ( const ISphSchema & tSchema );
+										explicit InsertDocData_t ( const ISphSchema & tSchema );
 
 	void								SetID ( SphAttr_t tDocID );
 	SphAttr_t							GetID() const;

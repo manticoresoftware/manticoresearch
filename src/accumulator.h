@@ -94,6 +94,7 @@ class RtAccum_t
 {
 public:
 	DWORD							m_uAccumDocs = 0;
+	int64_t 						m_iAccumBytes = 0;
 	CSphTightVector<CSphWordHit>	m_dAccum;
 	CSphTightVector<CSphRowitem>	m_dAccumRows;
 	CSphVector<DocID_t>				m_dAccumKlist;

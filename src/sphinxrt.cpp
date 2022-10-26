@@ -244,7 +244,9 @@ SphAttr_t InsertDocData_t::GetID() const
 
 
 RtSegment_t::RtSegment_t ( DWORD uDocs, const ISphSchema& tSchema )
-	: m_tDeadRowMap ( uDocs )
+	: m_uRows ( uDocs )
+	, m_tAliveRows { uDocs }
+	, m_tDeadRowMap ( uDocs )
 	, m_tSchema { tSchema }
 {
 }
@@ -1132,7 +1134,7 @@ public:
 	bool				DeleteDocument ( const VecTraits_T<DocID_t> & dDocs, CSphString & sError, RtAccum_t * pAccExt ) final;
 	bool				Commit ( int * pDeleted, RtAccum_t * pAccExt, CSphString* pError = nullptr ) final;
 	void				RollBack ( RtAccum_t * pAccExt ) final;
-	int					CommitReplayable ( RtSegment_t * pNewSeg, const VecTraits_T<DocID_t> & dAccKlist ); // returns total killed documents
+	int					CommitReplayable ( RtSegment_t * pNewSeg, const VecTraits_T<DocID_t> & dAccKlist, int64_t iAddTotalBytes ); // returns total killed documents
 	void				ForceRamFlush ( const char * szReason ) final;
 	bool				IsFlushNeed() const final;
 	bool				ForceDiskChunk() final;
@@ -1368,7 +1370,7 @@ private:
 	void						SetMemLimit ( int64_t iMemLimit );
 	void						RecalculateRateLimit ( int64_t iSaved, int64_t iInserted, bool bEmergent );
 	void						AlterSave ( bool bSaveRam );
-	void 						BinlogCommit ( RtSegment_t * pSeg, const VecTraits_T<DocID_t> & dKlist );
+	void 						BinlogCommit ( RtSegment_t * pSeg, const VecTraits_T<DocID_t> & dKlist, int64_t iAddTotalBytes );
 	bool						StopOptimize();
 	void						UpdateUnlockedCount();
 	bool						CheckSegmentConsistency ( const RtSegment_t* pNewSeg, bool bSilent=true ) const;
@@ -1865,12 +1867,8 @@ bool RtIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphS
 	CSphVector<CSphVector<BYTE>> dTmpAttrStorage;
 	DocstoreBuilder_i::Doc_t tStoredDoc;
 	DocstoreBuilder_i::Doc_t * pStoredDoc = FetchDocFields ( tStoredDoc, tDoc, tSrc, dTmpAttrStorage );
-	if ( !AddDocument ( pHits, tDoc, bReplace, pStoredDoc, sError, sWarning, pAcc ) )
-		return false;
-
-	m_tStats.m_iTotalBytes += tSrc.GetStats().m_iTotalBytes;
-
-	return true;
+	tDoc.m_iTotalBytes = tSrc.GetStats().m_iTotalBytes;
+	return AddDocument ( pHits, tDoc, bReplace, pStoredDoc, sError, sWarning, pAcc );
 }
 
 
@@ -2068,8 +2066,6 @@ RtSegment_t * CreateSegment ( RtAccum_t* pAcc, int iWordsCheckpoint, ESphHitless
 	if ( pAcc->m_bKeywordDict )
 		FixupSegmentCheckpoints(pSeg);
 
-	pSeg->m_uRows = pAcc->m_uAccumDocs;
-	pSeg->m_tAliveRows.store ( pAcc->m_uAccumDocs, std::memory_order_relaxed );
 	pSeg->m_dRows.SwapData( pAcc->m_dAccumRows);
 	pSeg->m_dBlobs.SwapData( pAcc->m_dBlobs);
 	std::swap ( pSeg->m_pDocstore, pAcc->m_pDocstore );
@@ -2747,7 +2743,7 @@ bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString* pError )
 	pAcc->m_dAccumKlist.Uniq ();
 
 	// now on to the stuff that needs locking and recovery
-	auto iKilled = CommitReplayable ( pNewSeg, pAcc->m_dAccumKlist );
+	auto iKilled = CommitReplayable ( pNewSeg, pAcc->m_dAccumKlist, pAcc->m_iAccumBytes );
 	if ( pDeleted )
 		*pDeleted = iKilled;
 
@@ -3090,7 +3086,7 @@ int CommitID() {
 }
 } // namespace
 
-int RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const VecTraits_T<DocID_t> & dAccKlist ) REQUIRES_SHARED ( pNewSeg->m_tLock )
+int RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const VecTraits_T<DocID_t> & dAccKlist, int64_t iAddTotalBytes ) REQUIRES_SHARED ( pNewSeg->m_tLock )
 {
 	// store statistics, because pNewSeg just might get merged
 	const int iId = CommitID();
@@ -3130,7 +3126,7 @@ int RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const VecTraits_T<DocID
 	RTLOGV << "CommitReplayable";
 
 	// first of all, binlog txn data for recovery
-	BinlogCommit ( pNewSeg, dAccKlist );
+	BinlogCommit ( pNewSeg, dAccKlist, iAddTotalBytes );
 
 	// 1. Apply kill-list to existing chunks/segments
 	int iTotalKilled = ApplyKillList ( dAccKlist );
@@ -3145,6 +3141,7 @@ int RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const VecTraits_T<DocID
 
 	// update stats
 	m_tStats.m_iTotalDocuments += iNewDocs - iTotalKilled;
+	m_tStats.m_iTotalBytes += iAddTotalBytes;
 
 	if ( dLens.GetLength() )
 		for ( int i = 0; i < m_tSchema.GetFieldsCount(); ++i )
@@ -4771,7 +4768,6 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes, bool bFixup
 		DWORD uRows = rdChunk.GetDword();
 
 		RtSegmentRefPtf_t pSeg { new RtSegment_t ( uRows, m_tSchema ) };
-		pSeg->m_uRows = uRows;
 		pSeg->m_tAliveRows.store ( rdChunk.GetDword (), std::memory_order_relaxed );
 
 		rdChunk.GetDword ();
@@ -8704,16 +8700,17 @@ static int64_t NumAliveDocs ( const CSphIndex& dChunk )
 	return dChunk.GetStats().m_iTotalDocuments - tStatus.m_iDead;
 }
 
-void RtIndex_c::BinlogCommit ( RtSegment_t * pSeg, const VecTraits_T<DocID_t> & dKlist ) REQUIRES ( pSeg->m_tLock )
+void RtIndex_c::BinlogCommit ( RtSegment_t * pSeg, const VecTraits_T<DocID_t> & dKlist, int64_t iAddTotalBytes ) REQUIRES ( pSeg->m_tLock )
 {
 //	Tracer::AsyncOp tTracer ( "rt", "RtIndex_c::BinlogCommit" );
-	Binlog::Commit ( Binlog::COMMIT, &m_iTID, GetName(), false, [pSeg,&dKlist,this] (CSphWriter& tWriter) REQUIRES ( pSeg->m_tLock )
+	Binlog::Commit ( Binlog::COMMIT, &m_iTID, GetName(), false, [pSeg,&dKlist,iAddTotalBytes,this] (CSphWriter& tWriter) REQUIRES ( pSeg->m_tLock )
 	{
 		if ( !pSeg || !pSeg->m_uRows )
 			tWriter.ZipOffset ( 0 );
 		else
 		{
 			tWriter.ZipOffset ( pSeg->m_uRows );
+			tWriter.ZipOffset(iAddTotalBytes);
 			Binlog::SaveVector ( tWriter, pSeg->m_dWords );
 			tWriter.ZipOffset ( pSeg->m_dWordCheckpoints.GetLength() );
 			if ( !m_bKeywordDict )
@@ -8765,13 +8762,13 @@ Binlog::CheckTnxResult_t RtIndex_c::ReplayCommit ( CSphReader & tReader, CSphStr
 	CSphRefcountedPtr<RtSegment_t> pSeg;
 	CSphVector<DocID_t> dKlist;
 
+	int64_t iAddTotalBytes = 0;
 	DWORD uRows = tReader.UnzipOffset();
 	if ( uRows )
 	{
+		iAddTotalBytes = (int64_t)tReader.UnzipOffset();
 		pSeg = new RtSegment_t(uRows, m_tSchema);
 		FakeWL_t _ ( pSeg->m_tLock );
-		pSeg->m_uRows = uRows;
-		pSeg->m_tAliveRows.store ( uRows, std::memory_order_relaxed );
 
 		if ( !Binlog::LoadVector ( tReader, pSeg->m_dWords ) ) return Warn ( sError, tReader );
 		pSeg->m_dWordCheckpoints.Resize ( (int) tReader.UnzipOffset() ); // FIXME! sanity check
@@ -8830,7 +8827,7 @@ Binlog::CheckTnxResult_t RtIndex_c::ReplayCommit ( CSphReader & tReader, CSphStr
 
 		// actually replay
 		FakeRL_t _ ( pSeg.operator RtSegment_t*()->m_tLock);
-		CommitReplayable ( pSeg, dKlist );
+		CommitReplayable ( pSeg, dKlist, iAddTotalBytes );
 		tRes.m_bApply = true;
 	}
 	return tRes;

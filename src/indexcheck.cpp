@@ -228,7 +228,7 @@ void DebugCheckHelper_c::DebugCheck_Attributes ( DebugCheckReader_i & tAttrs, De
 	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
-		if ( tAttr.m_eAttrType==SPH_ATTR_FLOAT )
+		if ( tAttr.m_eAttrType==SPH_ATTR_FLOAT && !tAttr.IsColumnar()  )
 			dFloatItems.Add	( tAttr.m_tLocator );
 	}
 
@@ -1403,7 +1403,7 @@ void DiskIndexChecker_c::Impl_c::CheckBlockIndex()
 		for ( int iItem=0; iItem < m_tSchema.GetAttrsCount(); iItem++ )
 		{
 			const CSphColumnInfo & tCol = m_tSchema.GetAttr(iItem);
-			if ( tCol.m_sName==sphGetBlobLocatorName() )
+			if ( tCol.m_sName==sphGetBlobLocatorName() || tCol.IsColumnar() )
 				continue;
 
 			switch ( tCol.m_eAttrType )
@@ -1462,7 +1462,7 @@ void DiskIndexChecker_c::Impl_c::CheckColumnar()
 	m_tReporter.Msg ( "checking columnar storage..." );
 
 	CheckColumnarStorage ( GetFilename(SPH_EXT_SPC), (DWORD)m_iNumRows,
-		[this]( const char * szError ){ m_tReporter.Fail ( "%s", szError ); },
+		[this]( const char * szError ){ m_tReporter.Fail ( "\n%s", szError ); },
 		[this]( const char * szProgress ){ m_tReporter.Progress ( "%s", szProgress ); } );
 }
 

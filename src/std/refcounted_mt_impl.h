@@ -22,7 +22,7 @@ inline void ISphRefcountedMT::Release() const noexcept
 	if ( m_iRefCount.fetch_sub ( 1, std::memory_order_release ) == 1 )
 	{
 		std::atomic_thread_fence ( std::memory_order_acquire );
-		assert ( m_iRefCount.load ( std::memory_order_relaxed ) == 0 );
+		assert ( m_iRefCount.load ( std::memory_order_seq_cst ) == 0 );
 		delete this;
 	}
 }

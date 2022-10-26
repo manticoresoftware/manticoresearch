@@ -121,11 +121,11 @@ TEST_F( TokenizerGtest, exceptions_more )
 
 	TokenizerRefPtr_c pQtok = m_pTokenizer->Clone ( SPH_CLONE_QUERY );
 
-	pQtok->SetBuffer ( ( BYTE * ) "life:)", 7 );
+	pQtok->SetBuffer ( ( BYTE * ) "life:)", 6 );
 	ASSERT_STREQ ( ( char * ) pQtok->GetToken (), "life:)" );
 	ASSERT_FALSE ( pQtok->GetToken () );
 
-	pQtok->SetBuffer ( ( BYTE * ) "life:\\)", 8 );
+	pQtok->SetBuffer ( ( BYTE * ) "life:\\)", 7 );
 	ASSERT_STREQ( ( char * ) pQtok->GetToken (), "life:)" );
 	ASSERT_FALSE ( pQtok->GetToken () );
 }

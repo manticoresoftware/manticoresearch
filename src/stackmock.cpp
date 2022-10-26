@@ -272,19 +272,25 @@ public:
 	static void PublishValue ( int iStack );
 };
 
-int CreateExprStackSize_c::MockMeasure()
+#if defined( __clang__ ) || defined( __GNUC__ )
+#define ATTRIBUTE_NO_SANITIZE_ADDRESS __attribute__ ( ( no_sanitize_address ) )
+#else
+#define ATTRIBUTE_NO_SANITIZE_ADDRESS
+#endif
+
+ATTRIBUTE_NO_SANITIZE_ADDRESS int CreateExprStackSize_c::MockMeasure()
 {
 	CreateExprStackSize_c tCreateMeter;
 	return tCreateMeter.MockMeasureStack ( 5 );
 }
 
-int EvalExprStackSize_c::MockMeasure()
+ATTRIBUTE_NO_SANITIZE_ADDRESS int EvalExprStackSize_c::MockMeasure()
 {
 	EvalExprStackSize_c tEvalMeter;
 	return tEvalMeter.MockMeasureStack ( 20 );
 }
 
-int FilterCreationMeasureStack_c::MockMeasure()
+ATTRIBUTE_NO_SANITIZE_ADDRESS int FilterCreationMeasureStack_c::MockMeasure()
 {
 	FilterCreationMeasureStack_c tCreateMeter;
 	return tCreateMeter.MockMeasureStack ( 100 );
@@ -307,7 +313,7 @@ void FilterCreationMeasureStack_c::PublishValue ( int iStack )
 
 
 template<typename MOCK, int COMPILEDVAL>
-void DetermineStackSize ( const char* szReport, const char* szEnv )
+ATTRIBUTE_NO_SANITIZE_ADDRESS void DetermineStackSize ( const char* szReport, const char* szEnv )
 {
 	int iSize = COMPILEDVAL;
 	int iNewSize = 0;

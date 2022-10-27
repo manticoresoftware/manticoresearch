@@ -843,7 +843,7 @@ void SleepMsec ( int iMsec )
 
 	struct Sleeper_t final: public MiniTimer_c
 	{
-		Sleeper_t () { m_szName = "SleepMsec"; }
+		Sleeper_t () : MiniTimer_c { "SleepMsec" } {}
 		Waker_c m_tWaker = Worker()->CreateWaker();
 		void OnTimer() final { m_tWaker.Wake(); }
 	} tWait;
@@ -929,7 +929,7 @@ struct ScheduledWait_t final: public MiniTimer_c
 {
 	Waker_c& m_tWaker;
 	void OnTimer() final { m_tWaker.Wake(); }
-	ScheduledWait_t ( Waker_c& tWaker, const char* szName ) : m_tWaker { tWaker } { m_szName = szName; }
+	ScheduledWait_t ( Waker_c& tWaker, const char* szName ) : MiniTimer_c { szName }, m_tWaker { tWaker } {}
 };
 
 // returns true if signalled, false if timed-out

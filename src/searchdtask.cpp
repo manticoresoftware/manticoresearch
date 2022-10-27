@@ -114,17 +114,11 @@ private:
 		delete this;
 	}
 
-	~ScheduledTask_c() final
-	{
-		m_szName = nullptr; // signal to not call remove() in MiniTimer_c dtr
-	}
-
 	ScheduledTask_c ( TaskID iTask, Threads::Handler fnTask )
-		: m_iTask ( iTask )
+		: MiniTimer_c ( g_Tasks[iTask].m_sName.cstr() )
+		, m_iTask ( iTask )
 		, m_fnJob { std::move ( fnTask ) }
-	{
-		m_szName = g_Tasks[iTask].m_sName.cstr();
-	}
+	{}
 
 public:
 	static void EngageJob ( TaskID iTask, int64_t iTimeStampUS, Threads::Handler fnJob )

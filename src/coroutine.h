@@ -249,7 +249,7 @@ class Throttler_c
 	int64_t m_tmNextThrottleTimestamp;
 	int m_tmThrottlePeriodMs;
 
-	MiniTimer_c m_dTimerGuard;
+	MiniTimer_c m_dTimerGuard { "throttler" };
 	bool m_bSameThread = true;
 
 	bool MaybeThrottle ();

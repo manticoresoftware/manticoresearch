@@ -71,7 +71,7 @@ class TinyTimer_c
 	mutable CSphMutex m_tTimeoutsGuard; // guard is need as we can remove elems from any thread. That is short-live.
 	TimeoutQueue_c m_dTimeouts GUARDED_BY ( m_tTimeoutsGuard );
 
-	int64_t m_iNextTimeoutUS = -1;
+	// time
 	std::atomic<int64_t> m_tmLastTimestamp { sphMicroTimer() };
 
 	// management
@@ -117,43 +117,42 @@ private:
 		return &tScheduled;
 	}
 
-	int EnqueueStagingTasks() REQUIRES ( TimerThread ) EXCLUDES ( m_tTimeoutsGuard )
+	int AbandonStagingAndGetWaitPeriodMs() REQUIRES ( TimerThread ) EXCLUDES ( m_tTimeoutsGuard )
 	{
 		ScopedMutex_t tTimeoutsLock { m_tTimeoutsGuard };
 		while ( MiniTimer_c * pStagingTask = PopStagingTask() )
 			m_dTimeouts.Change ( pStagingTask );
 		if ( m_dTimeouts.IsEmpty() )
-		{
-			m_iNextTimeoutUS = 0;
 			return -1;
-		}
 
 		auto* pTask = (MiniTimer_c*)m_dTimeouts.Root();
-		m_iNextTimeoutUS = pTask->m_iTimeoutTimeUS;
-		return (int)( ( m_iNextTimeoutUS - MicroTimer() ) / sph::TICKS_GRANULARITY );
+		return (int)( ( pTask->m_iTimeoutTimeUS - MicroTimer() ) / sph::TICKS_GRANULARITY );
+	}
+
+	MiniTimer_c* PopNextDeadlinedAction() EXCLUDES ( m_tTimeoutsGuard )
+	{
+		ScopedMutex_t tTimeoutsLock { m_tTimeoutsGuard };
+		if ( m_dTimeouts.IsEmpty() )
+			return nullptr;
+
+		auto pRoot = (MiniTimer_c*)m_dTimeouts.Root();
+		assert ( pRoot->m_iTimeoutTimeUS > 0 );
+		if ( !sph::TimeExceeded ( pRoot->m_iTimeoutTimeUS, MicroTimer() ) )
+			return nullptr;
+
+		// timeout reached; have to do an action
+		DEBUGT << "timeout happens for " << pRoot << " deadline " << timestamp_t ( pRoot->m_iTimeoutTimeUS );
+		DEBUGT << m_dTimeouts.DebugDump ( "heap:" );
+		m_dTimeouts.Pop();
+		DEBUGT << "Oneshot task removed: " << pRoot;
+
+		return pRoot;
 	}
 
 	void ProcessTimerActions() REQUIRES ( TimerThread ) EXCLUDES ( m_tTimeoutsGuard )
 	{
-		if ( !sph::TimeExceeded ( m_iNextTimeoutUS, MicroTimer() ) )
-			return;
-
-		ScopedMutex_t tTimeoutsLock { m_tTimeoutsGuard };
-		auto tmTimestamp = MicroTimer();
-		while ( !m_dTimeouts.IsEmpty() )
-		{
-			auto* pRoot = (MiniTimer_c*)m_dTimeouts.Root();
-			assert ( pRoot->m_iTimeoutTimeUS > 0 );
-			if ( !sph::TimeExceeded ( pRoot->m_iTimeoutTimeUS, tmTimestamp ) )
-				return;
-
-			// timeout reached; have to do an action
-			DEBUGT << "timeout happens for " << pRoot << " deadline " << timestamp_t (pRoot->m_iTimeoutTimeUS);
-			DEBUGT << m_dTimeouts.DebugDump ( "heap:" );
-			m_dTimeouts.Pop();
-			DEBUGT << "Oneshot task removed: " << pRoot;
+		for ( MiniTimer_c* pRoot = PopNextDeadlinedAction(); pRoot; pRoot = PopNextDeadlinedAction() )
 			pRoot->OnTimer();
-		}
 	}
 
 	void Loop()
@@ -164,13 +163,13 @@ private:
 		{
 			DEBUGT << "---------------------------- Loop() tick";
 			ProcessTimerActions();
-			int iWait = EnqueueStagingTasks();
+			int iWait = AbandonStagingAndGetWaitPeriodMs();
 			if ( !iWait )
 			{
-				DEBUGT << "no sleep since timeout is 0; (" << timestamp_t ( m_iNextTimeoutUS ) << ")";
+				DEBUGT << "no sleep since timeout is 0; (" << timestamp_t ( iWait ) << ")";
 				continue;
 			}
-			DEBUGT << "calculated timeout is " << iWait << " ms (" << timestamp_t ( m_iNextTimeoutUS ) << ")";
+			DEBUGT << "calculated timeout is " << iWait << " ms (" << timestamp_t ( iWait ) << ")";
 			bool VARIABLE_IS_NOT_USED bWasKicked = m_tSignal.WaitEvent ( iWait );
 			DEBUGT << "awakened, reason=" << ( bWasKicked ? "kicked" : "timeout or error" );
 		}
@@ -305,8 +304,7 @@ void MiniTimer_c::UnEngage()
 
 MiniTimer_c::~MiniTimer_c()
 {
-	if ( m_szName )
-		UnEngage();
+	UnEngage();
 }
 
 /// returns true if provided timestamp is already reached or not

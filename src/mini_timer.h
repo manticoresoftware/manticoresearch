@@ -49,13 +49,17 @@ namespace sph
 class MiniTimer_c: public EnqueuedTimeout_t
 {
 	friend class TinyTimer_c;
-	virtual void OnTimer() {};
+	virtual void OnTimer() {}; // notice, will be called from naked thread, not coroutine ctx!
+	const char* m_szName; // used as display name in 'debug sched', or '@@system.shed'.
 
 public:
 	sph::TimerHook_t m_tLink; // used to link timer in the queue
-	const char* m_szName = "mini-timer"; // hack! name and also flag that timer should be unlinked on destroy (if nullptr - dtr will do nothing)
 
 public:
+	explicit MiniTimer_c ( const char* szName = "mini-timer" )
+		: m_szName ( szName )
+	{}
+
 	/// on period<=0 does nothing, returns 0. On positive - engage tick after given period; returns timestamp where it should tick.
 	int64_t Engage ( int64_t iTimePeriodMS );
 	int64_t EngageUS ( int64_t iTimePeriodUS ); // same, but period is in microseconds

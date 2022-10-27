@@ -62,18 +62,16 @@ else ()
 			find_path ( RE2_INCLUDE_DIRS NAMES re2/re2.h PATHS /usr/include /usr/include/re2 )
 		endif ()
 
-		if (WITH_RE2_LIBS)
-			set ( CMAKE_FIND_LIBRARY_SUFFIXES .a .lib .so .dylib .dll )
-			FIND_LIBRARY ( RE2_LIBRARY NAMES re2 RE2
-					PATHS
-					${WITH_RE2_LIBS}
-					/usr/lib/x86_64-linux-gnu
-					/usr/lib64
-					/usr/local/lib64
-					/usr/lib/i386-linux-gnu
-					/usr/lib
-					/usr/local/lib )
-		endif ()
+		set ( CMAKE_FIND_LIBRARY_SUFFIXES .a .lib .so .dylib .dll )
+		FIND_LIBRARY ( RE2_LIBRARY NAMES re2 RE2
+				PATHS
+				${WITH_RE2_LIBS}
+				/usr/lib/x86_64-linux-gnu
+				/usr/lib64
+				/usr/local/lib64
+				/usr/lib/i386-linux-gnu
+				/usr/lib
+				/usr/local/lib )
 	endif ()
 endif ()
 

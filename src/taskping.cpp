@@ -56,6 +56,9 @@ void SchedulePing ( HostDashboardRefPtr_t pHost )
 
 		auto iEngage = pHost->EngageTime();
 		auto iNow = sphMicroTimer();
+
+		// check host engage time (which is linked to last answer time) and don't ping
+		// if time is not exceeded (that is, if host is under usual load, we don't waste network for pings)
 		if ( !sph::TimeExceeded ( iEngage, iNow ) )
 			return SchedulePing ( pHost );
 

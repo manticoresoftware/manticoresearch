@@ -14201,11 +14201,7 @@ void HandleShutdownCrash ( RowBuffer_i & tOut, const CSphString & sPasswd, Debug
 	tOut.Eof ();
 	if ( eCmd==DebugCmd::Cmd_e::SHUTDOWN )
 	{
-#if _WIN32
-		sigterm(1);
-#else
-		kill ( 0, SIGTERM );
-#endif
+		sigterm ( 1 );
 	} else // crash
 	{
 		BYTE * pSegv = (BYTE *) ( 0 );

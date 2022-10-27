@@ -2204,7 +2204,7 @@ When you use the columnar storage you can specify the following properties for t
 <!-- example fast_fetch -->
 ### fast_fetch
 
-By default Manticore Columnar storage stores all attributes not only in columnar fashion, but in a special docstore row by row which enables fast execution of queries like `SELECT * FROM ...` especially when you are fetching lots of records at once. But if you are sure you don't need it or want to save disk space you can disable it by specifying `fast_fetch='0'` when you create a table.
+By default Manticore Columnar storage stores all attributes not only in columnar fashion, but in a special docstore row by row which enables fast execution of queries like `SELECT * FROM ...` especially when you are fetching lots of records at once. But if you are sure you don't need it or want to save disk space you can disable it by specifying `fast_fetch='0'` when you create a table. Or if you are defining an index in a config use `columnar_no_fast_fetch` as shown in the following example.
 
 <!-- request RT mode -->
 ```sql

@@ -183,17 +183,17 @@ private:
 	{
 		DEBUGT << "AbortScheduled()";
 		assert ( IsInterrupted() );
+
+		// abandon staging queue - that will also exclude all dupes
+		for ( auto& tTask : m_tStagingQueue )
+			m_dTimeouts.Change ( &tTask );
+		m_tStagingQueue.clear();
+
 		while ( !m_dTimeouts.IsEmpty() )
 		{
-			auto pScheduled = (MiniTimer_c*)m_dTimeouts.Root();
+			auto* pScheduled = (MiniTimer_c*)m_dTimeouts.Root();
 			m_dTimeouts.Pop();
 			pScheduled->OnTimer();
-		}
-		while ( !m_tStagingQueue.empty() )
-		{
-			MiniTimer_c& tScheduled = m_tStagingQueue.front();
-			m_tStagingQueue.pop_front();
-			tScheduled.OnTimer();
 		}
 	}
 

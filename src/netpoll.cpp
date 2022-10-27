@@ -139,10 +139,12 @@ struct PollTraits_t
 		if ( !bWrite && bWasWrite )
 			EV_SET ( pEv++, iSock, EVFILT_WRITE, EV_DELETE, 0, 0, pData );
 
-		sphLogDebugv ( "%p kqueue %d setup, ev=%d, fl=%d sock=%d", pData, iPoll, tEv[0].filter, tEv[0].flags, iSock );
-		if ( ( pEv - tEv ) > 1 )
-			sphLogDebugv ( "%p kqueue %d setup, ev=%d, fl=%d sock=%d", pData, iPoll, tEv[1].filter, tEv[1].flags, iSock );
-		return kevent ( iPoll, tEv, pEv - tEv, nullptr, 0, nullptr );
+		const int nEvs = pEv - tEv;
+		assert ( nEvs <= 2 );
+		for ( int i = 0; i < nEvs; ++i )
+			sphLogDebugv ( "%p kqueue %d setup, ev=%d, fl=%d sock=%d", pData, iPoll, tEv[i].filter, tEv[i].flags, iSock );
+
+		return kevent ( iPoll, tEv, nEvs, nullptr, 0, nullptr );
 	}
 
 	inline static int polling_size ( int iQueueSize, int iMaxReady )
@@ -205,6 +207,11 @@ struct PollTraits_t
 		return epoll_wait ( iPoll, pEvents, iEventNum, US2Polltime ( timeoutUS ) );
 	};
 
+	inline static const char* epoll_action_name ( int iOp )
+	{
+		switch (iOp) { case EPOLL_CTL_ADD:return "EPOLL_CTL_ADD"; case EPOLL_CTL_MOD:return "EPOLL_CTL_MOD"; case EPOLL_CTL_DEL:return "EPOLL_CTL_DEL"; default:return "UNKNWON";};
+	}
+
 	inline static int set_polling_for ( int iPoll, int iSock, void* pData, BYTE, BYTE uIOChange, bool bAdd )
 	{
 		bool bRW = uIOChange & NetPollEvent_t::SET_RW;
@@ -221,9 +228,11 @@ struct PollTraits_t
 					   | ( ( uIOChange & NetPollEvent_t::SET_ONESHOT ) ? EPOLLONESHOT : 0 )
 					   | ( ( uIOChange & NetPollEvent_t::SET_READ ) ? EPOLLIN : 0 )
 					   | ( ( uIOChange & NetPollEvent_t::SET_WRITE ) ? EPOLLOUT : 0 );
-		}
+			sphLogDebugv ( "%p epoll %d setup, ev=0x%u, op=%s, sock=%d", pData, iPoll, tEv.events, epoll_action_name ( iOp ), iSock );
+		} else
+			sphLogDebugv ( "%p epoll %d setup, op=%s, sock=%d", pData, iPoll, epoll_action_name ( iOp ), iSock );
 
-		sphLogDebugv ( "%p epoll %d setup, ev=0x%u, op=%d, sock=%d", pData, iPoll, tEv.events, iOp, iSock );
+
 		return epoll_ctl ( iPoll, iOp, iSock, &tEv );
 	}
 

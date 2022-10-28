@@ -101,37 +101,12 @@ TaskID TaskManager::RegisterGlobal ( CSphString sName, int iThreads )
 	return iTaskID;
 }
 
-// scheduled job - will live in timeout heap and then fire when time is out.
-class ScheduledTask_c final: public MiniTimer_c
-{
-	TaskID m_iTask;
-	Threads::Handler m_fnJob;
-
-private:
-	void OnTimer() final
-	{
-		TaskManager::StartJob ( m_iTask, std::move ( m_fnJob ) );
-		delete this;
-	}
-
-	ScheduledTask_c ( TaskID iTask, Threads::Handler fnTask )
-		: MiniTimer_c ( g_Tasks[iTask].m_sName.cstr() )
-		, m_iTask ( iTask )
-		, m_fnJob { std::move ( fnTask ) }
-	{}
-
-public:
-	static void EngageJob ( TaskID iTask, int64_t iTimeStampUS, Threads::Handler fnJob )
-	{
-		assert ( iTimeStampUS > 0 );
-		( new ScheduledTask_c { iTask, std::move ( fnJob ) } )->EngageUS ( iTimeStampUS - sphMicroTimer() );
-	}
-};
-
 void TaskManager::ScheduleJob ( TaskID iTask, int64_t iTimeStampUS, Threads::Handler fnJob )
 {
 	INFOX << "ScheduleJob (id=" << iTask << ", \"" << g_Tasks[iTask].m_sName << "\", start " << timestamp_t ( iTimeStampUS ) << ")";
-	ScheduledTask_c::EngageJob ( iTask, iTimeStampUS, std::move ( fnJob ) );
+	assert ( iTimeStampUS > 0 );
+	auto pTimer = new MiniTimer_c ( g_Tasks[iTask].m_sName.cstr() );
+	pTimer->EngageAt ( iTimeStampUS, [pTimer, iTask, fnJob = std::move ( fnJob )]() mutable { TaskManager::StartJob ( iTask, std::move ( fnJob ) ); delete pTimer; } );
 }
 
 VecTraits_T<TaskManager::TaskInfo_t> TaskManager::GetTaskInfo ()

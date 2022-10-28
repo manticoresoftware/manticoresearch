@@ -242,19 +242,16 @@ class Worker_c : public details::SchedulerOperation_t
 	{
 		explicit CoroGuard_t ( Worker_c * pWorker )
 		{
-			pWorker->m_pPreviousWorker = Worker_c::m_pTlsThis;
-			Worker_c::m_pTlsThis = pWorker;
-			pWorker->m_pCurrentTaskInfo =
-					MyThd ().m_pTaskInfo.exchange ( pWorker->m_pCurrentTaskInfo, std::memory_order_relaxed );
+			pWorker->m_pPreviousWorker = std::exchange ( Worker_c::m_pTlsThis, pWorker );
+			pWorker->m_pCurrentTaskInfo = MyThd ().m_pTaskInfo.exchange ( pWorker->m_pCurrentTaskInfo, std::memory_order_relaxed );
 			pWorker->m_tmCpuTimeBase -= sphThreadCpuTimer();
 		}
 
 		~CoroGuard_t ()
 		{
-			auto pWork = Worker_c::m_pTlsThis;
+			auto pWork = std::exchange ( Worker_c::m_pTlsThis, Worker_c::m_pTlsThis->m_pPreviousWorker );
 			pWork->m_tmCpuTimeBase += sphThreadCpuTimer ();
 			pWork->m_pCurrentTaskInfo = MyThd ().m_pTaskInfo.exchange ( pWork->m_pCurrentTaskInfo, std::memory_order_relaxed );
-			Worker_c::m_pTlsThis = pWork->m_pPreviousWorker;
 		}
 	};
 
@@ -841,12 +838,7 @@ void SleepMsec ( int iMsec )
 	if ( iMsec < 0 )
 		return;
 
-	struct Sleeper_t final: public MiniTimer_c
-	{
-		Sleeper_t () : MiniTimer_c { "SleepMsec" } {}
-		Waker_c m_tWaker = Worker()->CreateWaker();
-		void OnTimer() final { m_tWaker.Wake(); }
-	} tWait;
+	MiniTimer_c tWait { "SleepMsec", [tWaker = Worker()->CreateWaker()] { tWaker.Wake(); } };
 
 	// suspend this fiber
 	Coro::YieldWith ( [&tWait, iMsec](){ tWait.Engage ( iMsec ); });
@@ -925,25 +917,18 @@ void WaitQueue_c::SuspendAndWait ( sph::Spinlock_lock& tLock, Worker_c* pActive 
 	assert ( !w.is_linked() );
 }
 
-struct ScheduledWait_t final: public MiniTimer_c
-{
-	Waker_c& m_tWaker;
-	void OnTimer() final { m_tWaker.Wake(); }
-	ScheduledWait_t ( Waker_c& tWaker, const char* szName ) : MiniTimer_c { szName }, m_tWaker { tWaker } {}
-};
-
 // returns true if signalled, false if timed-out
 bool WaitQueue_c::SuspendAndWaitUntil ( sph::Spinlock_lock& tLock, Worker_c* pActive, int64_t iTimestamp ) NO_THREAD_SAFETY_ANALYSIS
 {
 	WakerInQueue_c w { pActive->CreateWaker() };
 	m_Slist.push_back ( w );
 
-	ScheduledWait_t tWait ( w, "SuspendAndWait" );
+	MiniTimer_c tWait ( "SuspendAndWait", [&w] { w.Wake(); } );
 
 	// suspend this fiber
 	pActive->YieldWith ( [&tLock, &tWait, iTimestamp]() NO_THREAD_SAFETY_ANALYSIS {
 		tLock.unlock();
-		tWait.EngageUS ( iTimestamp - sphMicroTimer() );
+		tWait.EngageAt ( iTimestamp );
 	});
 
 	// resumed. Check if deadline is reached

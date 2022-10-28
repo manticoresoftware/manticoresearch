@@ -13,7 +13,6 @@
 #include <cstdint>
 #include "timeout_queue.h"
 #include "threadutils.h"
-#include <boost/intrusive/slist.hpp>
 
 namespace sph
 {
@@ -25,6 +24,12 @@ namespace sph
 		assert ( iPivotUS > 0 );
 		return ( iTimestampUS - GRANULARITY ) < iPivotUS;
 	}
+
+	/// call sphMicroTime, track value and return it
+	int64_t MicroTimer();
+
+	/// return last tracked value of MicroTimer (don't call sphMicroTime)
+	int64_t LastTimestamp();
 
 	/// returns true if provided timestamp is already reached or not
 	/// it IMPLIES timer is engaged to given limit timestamp.
@@ -41,31 +46,34 @@ namespace sph
 	};
 
 	CSphVector<ScheduleInfo_t> GetSchedInfo();
-
-	using TimerHook_t = boost::intrusive::slist_member_hook<>;
 }
 
 /// RAII timer thread ticker.
-class MiniTimer_c: public EnqueuedTimeout_t
+class MiniTimer_c final : public EnqueuedTimeout_t, public ISphNoncopyable
 {
 	friend class TinyTimer_c;
-	virtual void OnTimer() {}; // notice, will be called from naked thread, not coroutine ctx!
-	const char* m_szName; // used as display name in 'debug sched', or '@@system.shed'.
+	const char*			m_szName;
+	Threads::Handler	m_fnOnTimer;	// notice, will be called from naked thread, not coroutine ctx!
 
 public:
-	sph::TimerHook_t m_tLink; // used to link timer in the queue
 
-public:
-	explicit MiniTimer_c ( const char* szName = "mini-timer" )
+	// name is used to display engaged timer in 'debug sched', or 'select ... from @@system.sched'
+	// fnOnTimer callback is optional, that is ok to work without it, and just check TimeExceeded() periodically.
+	explicit MiniTimer_c ( const char* szName = "mini-timer", Threads::Handler&& fnOnTimer=nullptr )
 		: m_szName ( szName )
+		, m_fnOnTimer { std::move ( fnOnTimer ) }
 	{}
 
 	/// on period<=0 does nothing, returns 0. On positive - engage tick after given period; returns timestamp where it should tick.
 	int64_t Engage ( int64_t iTimePeriodMS );
-	int64_t EngageUS ( int64_t iTimePeriodUS ); // same, but period is in microseconds
+	int64_t Engage ( int64_t iTimePeriodMS, Threads::Handler&& fnOnTimer ); // fnOnTimer may be set here alternatively to be set in ctr
+
+	/// engage to be kicked at absolute time (in microseconds)
+	void EngageAt ( int64_t iTimeStampUS );
+	void EngageAt ( int64_t iTimeStampUS, Threads::Handler&& fnOnTimer ); // fnOnTimer may be set here alternatively to be set in ctr
 
 	void 	UnEngage();
 
-	/// if m_szName is not null - unengage and unlink everything
-	virtual ~MiniTimer_c();
+	// dtr calls UnEngage(), so it is safe to delete engaged timer
+	~MiniTimer_c();
 };

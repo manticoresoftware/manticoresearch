@@ -4096,7 +4096,7 @@ class SphinxConfig
 			if ( $this->Requires("replication") )
 			{
 				$replication_port0 = $this->_sd_replication_port;
-				$replication_port1 = $this->_sd_replication_port + 8;
+				$replication_port1 = $this->_sd_replication_port + 18;
 				fwrite ( $fp, "\tlisten		= {$this->_sd_address}:{$replication_port0}-{$replication_port1}:replication\n" );
 			}
 		}

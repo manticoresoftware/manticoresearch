@@ -1,6 +1,6 @@
 #!/bin/bash
-# docker run --rm -v $(pwd):/sysroot centos:8 bash /sysroot/in_centos.sh
-# docker run -it --rm -v $(pwd):/sysroot centos:8 bash
+# docker run --rm -v $(pwd):/sysroot almalinux:9 bash /sysroot/in_alma9.sh
+# docker run -it --rm -v $(pwd):/sysroot almalinux:9 bash
 
 arch=$(uname -m)
 export arch

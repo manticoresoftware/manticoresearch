@@ -25,4 +25,4 @@ yum install -y \
         openssl-devel \
         libzstd-devel
 
-. /sysroot/mksysrootcentos.sh
+. /sysroot/mksysrootrhel.sh

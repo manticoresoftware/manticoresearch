@@ -159,6 +159,28 @@ collect_rhel8:
   variables:
     DISTRO: 8
 
+
+# ==================== RHEL 9 ======================
+
+rhel9:
+  extends: [ .build ]
+  rules:
+    - !reference [ .build, rules ]
+    - if: $WHAT =~ /rhel9/
+  variables:
+    DISTR: rhel9
+
+rhel9_arm:
+  extends: [ rhel9 ]
+  variables:
+    arch: aarch64
+
+collect_rhel9:
+  extends: [ .collect_rpm ]
+  needs: [ rhel9, rhel9_arm ]
+  variables:
+    DISTRO: 9
+
 # ==================== Debian-based ======================
 
 # ==================== Debian Stretch ======================

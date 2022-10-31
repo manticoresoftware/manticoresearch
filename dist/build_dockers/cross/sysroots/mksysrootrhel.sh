@@ -1,8 +1,7 @@
 #!/bin/bash
-set -e
+
 fixlinks()
 {
-  pushd $PWD
   cd $1
   echo "fix links in $1"
   for a in *; do
@@ -12,7 +11,6 @@ fixlinks()
       echo "relink $a -> $target"
     fi
   done
-  popd
 }
 
 fixup()
@@ -35,7 +33,6 @@ fixup()
 
 fixup_all()
 {
-  pushd $PWD
   cd $1
   echo "fixup ld scripts in $1"
   for a in *.so; do
@@ -44,13 +41,12 @@ fixup_all()
   for a in *.a; do
     fixup $a
   done
-  popd
 }
 
 yum install -y file
 
-# cd /opt/rh/devtoolset-8/root && tar -cf - usr/include/c++ usr/lib> /tmp.tar && cd / && tar -xf tmp.tar
-# sleep 1
+test -d /opt/rh/devtoolset-8/root && cd $_ && tar -cf - usr/include/c++ usr/lib> /tmp.tar && cd / && tar -xf tmp.tar
+sleep 1
 
 echo "fixup links"
 fixlinks /usr/lib64
@@ -68,4 +64,4 @@ yum -y remove file
 yum -y autoremove
 
 echo "pack sysroot"
-tar -cf "/sysroot/$arch/sysroot_${distr}_$arch.tar" /usr/lib/gcc /usr/lib64 /usr/include /lib /lib64
+tar -cf - /usr/lib/gcc /usr/lib64 /usr/include /lib /lib64> /sysroot/$arch/sysroot_${distr}_$arch.tar

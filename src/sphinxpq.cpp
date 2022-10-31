@@ -1495,7 +1495,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 		auto tJobContext = dCtx.CloneNewContext();
 		sphLogDebug ( "DoMatchDocuments cloned context %d", tJobContext.second );
 		auto& tCtx = tJobContext.first;
-		Threads::Coro::Throttler_c tThrottler ( session::GetThrottlingPeriodMS () );
+		Threads::Coro::SetThrottlingPeriod ( session::GetThrottlingPeriodMS() );
 		while (true)
 		{
 			sphLogDebugv ( "DoMatchDocuments %d, iJob: %d", tJobContext.second, iJob );
@@ -1507,7 +1507,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 				return; // all is done
 
 			// yield and reschedule every quant of time. It gives work to other tasks
-			tThrottler.ThrottleAndKeepCrashQuery ();
+			Threads::Coro::ThrottleAndKeepCrashQuery ();
 		}
 	});
 	sphLogDebug ( "DoMatchDocuments processed in %d thread(s)", dCtx.NumWorked() );
@@ -2364,10 +2364,14 @@ bool PercolateIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery & 
 			break;
 		}
 
-		if ( session::GetKilled() )
+		if ( Threads::Coro::RuntimeExceeded() )
 		{
-			tMeta.m_sWarning = "query was killed";
-			break;
+			if ( session::GetKilled() )
+			{
+				tMeta.m_sWarning = "query was killed";
+				break;
+			}
+			Threads::Coro::RescheduleAndKeepCrashQuery();
 		}
 	}
 

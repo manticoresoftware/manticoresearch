@@ -231,28 +231,55 @@ class Worker_c : public details::SchedulerOperation_t
 	uint64_t m_uId { InitWorkerID() };
 	std::atomic<size_t> m_iWakerEpoch { 0 };
 
+	// support for periodical checks/throttling
+	MiniTimer_c		m_tInternalTimer {"Worker"};
+	int64_t			m_tmNextTimePointUS = 0;
+	int64_t			m_tmRuntimePeriodUS = 0;
+	int				m_iNumOfRestarts = 0;
+
 	static uint64_t InitWorkerID()
 	{
 		static std::atomic<uint64_t> uWorker { 0ULL };
 		return uWorker.fetch_add ( 1, std::memory_order_relaxed );
 	}
 
+	enum class TimePoint_e : bool { fromresume, realtime };
+	inline void CheckEngageTimer ( TimePoint_e eKind )
+	{
+		if ( !m_tmRuntimePeriodUS )
+			return;
+		int64_t tmStartPointUS = ( eKind == TimePoint_e::realtime ) ? sph::MicroTimer() : MyThd().m_tmLastJobStartTimeUS;
+		m_tmNextTimePointUS = tmStartPointUS + m_tmRuntimePeriodUS;
+		m_tInternalTimer.EngageAt ( m_tmNextTimePointUS );
+	}
+
+	inline void CoroGuardEnter()
+	{
+		m_pPreviousWorker = std::exchange ( m_pTlsThis, this );
+		m_pCurrentTaskInfo = MyThd().m_pTaskInfo.exchange ( m_pCurrentTaskInfo, std::memory_order_relaxed );
+		m_tmCpuTimeBase -= sphThreadCpuTimer();
+		++m_iNumOfRestarts;
+		CheckEngageTimer( TimePoint_e::fromresume );
+	}
+
+	inline void CoroGuardFinishExit()
+	{
+		if ( m_tmRuntimePeriodUS )
+			m_tInternalTimer.UnEngage();
+		m_tmCpuTimeBase += sphThreadCpuTimer();
+		m_pCurrentTaskInfo = MyThd().m_pTaskInfo.exchange ( m_pCurrentTaskInfo, std::memory_order_relaxed );
+	}
+
+	static inline void CoroGuardExit()
+	{
+		std::exchange ( m_pTlsThis, m_pTlsThis->m_pPreviousWorker ) -> CoroGuardFinishExit();
+	}
+
 	// RAII worker's keeper
 	struct CoroGuard_t
 	{
-		explicit CoroGuard_t ( Worker_c * pWorker )
-		{
-			pWorker->m_pPreviousWorker = std::exchange ( Worker_c::m_pTlsThis, pWorker );
-			pWorker->m_pCurrentTaskInfo = MyThd ().m_pTaskInfo.exchange ( pWorker->m_pCurrentTaskInfo, std::memory_order_relaxed );
-			pWorker->m_tmCpuTimeBase -= sphThreadCpuTimer();
-		}
-
-		~CoroGuard_t ()
-		{
-			auto pWork = std::exchange ( Worker_c::m_pTlsThis, Worker_c::m_pTlsThis->m_pPreviousWorker );
-			pWork->m_tmCpuTimeBase += sphThreadCpuTimer ();
-			pWork->m_pCurrentTaskInfo = MyThd ().m_pTaskInfo.exchange ( pWork->m_pCurrentTaskInfo, std::memory_order_relaxed );
-		}
+		explicit CoroGuard_t ( Worker_c * pWorker ) { pWorker->CoroGuardEnter(); }
+		~CoroGuard_t () { Worker_c::CoroGuardExit(); }
 	};
 
 	static void DoComplete ( void* pOwner, SchedulerOperation_t* pBase )
@@ -508,6 +535,27 @@ public:
 		// this operation makes all previously created wakers to be outdated
 		return { this, ++m_iWakerEpoch };
 	}
+
+	inline void SetTimePeriodUS ( int64_t tmTimePointPeriodUS )
+	{
+		m_tmRuntimePeriodUS = tmTimePointPeriodUS;
+		CheckEngageTimer( TimePoint_e::fromresume );
+	}
+
+	inline bool RuntimeExceeded() const
+	{
+		return sph::TimeExceeded ( m_tmNextTimePointUS );
+	}
+
+	inline void RestartRuntime() noexcept
+	{
+		CheckEngageTimer ( TimePoint_e::realtime );
+	}
+
+	inline int NumOfRestarts() const noexcept
+	{
+		return m_iNumOfRestarts;
+	}
 };
 
 thread_local Worker_c * Worker_c::m_pTlsThis = nullptr;
@@ -585,6 +633,21 @@ void Reschedule() noexcept
 int ID() noexcept
 {
 	return Worker()->ID();
+}
+
+bool RuntimeExceeded() noexcept
+{
+	return Worker()->RuntimeExceeded();
+}
+
+void RestartRuntime() noexcept
+{
+	Worker()->RestartRuntime();
+}
+
+int NumOfRestarts() noexcept
+{
+	return Worker()->NumOfRestarts();
 }
 
 } // namespace Coro
@@ -790,40 +853,24 @@ void ExecuteN ( int iConcurrency, Threads::Handler&& fnWorker )
 	WaitForDeffered ( std::move ( dWaiter ));
 }
 
-int Throttler_c::tmThrotleTimeQuantumMs = tmDefaultThrotleTimeQuantumMs;
+int tmThrotleTimeQuantumMs; // how long task may work before rescheduling (in milliseconds)
 
-Throttler_c::Throttler_c ( int tmThrottlePeriodMs )
-	: m_tmThrottlePeriodMs ( tmThrottlePeriodMs )
+void SetDefaultThrottlingPeriodMS ( int tmPeriodMs )
 {
-	if ( tmThrottlePeriodMs<0 )
-		m_tmThrottlePeriodMs = tmThrotleTimeQuantumMs;
-
-	m_tmNextThrottleTimestamp = m_dTimerGuard.Engage( m_tmThrottlePeriodMs );
+	tmThrotleTimeQuantumMs = tmPeriodMs < 0 ? tmDefaultThrotleTimeQuantumMs : tmPeriodMs;
 }
 
-bool Throttler_c::MaybeThrottle ()
+void SetThrottlingPeriod ( int tmPeriodMs )
 {
-	if ( !sph::TimeExceeded ( m_tmNextThrottleTimestamp ) )
-		return false;
-
-	m_tmNextThrottleTimestamp = m_dTimerGuard.Engage ( m_tmThrottlePeriodMs );
-	auto iOldThread = MyThd ().m_iThreadID;
-	Coro::Worker ()->Reschedule ();
-	m_bSameThread = ( iOldThread==MyThd ().m_iThreadID );
-	return true;
+	if ( tmPeriodMs < 0 )
+		tmPeriodMs = tmThrotleTimeQuantumMs;
+	Worker()->SetTimePeriodUS ( tmPeriodMs * 1000 );
 }
 
-bool Throttler_c::ThrottleAndKeepCrashQuery ()
+void RescheduleAndKeepCrashQuery()
 {
-	if ( !sph::TimeExceeded ( m_tmNextThrottleTimestamp ) )
-		return false;
-
-	m_tmNextThrottleTimestamp = m_dTimerGuard.Engage ( m_tmThrottlePeriodMs );
 	CrashQueryKeeper_c _;
-	auto iOldThread = MyThd ().m_iThreadID;
-	Coro::Worker ()->Reschedule ();
-	m_bSameThread = ( iOldThread==MyThd ().m_iThreadID );
-	return true;
+	Coro::Worker()->Reschedule(); // timer will be automatically re-engaged on resume
 }
 
 inline void fnResume ( volatile Worker_c* pCtx )

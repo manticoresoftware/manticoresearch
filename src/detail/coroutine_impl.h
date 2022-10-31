@@ -215,27 +215,6 @@ bool ContinueBool ( int iStack, HANDLER handler )
 }
 
 /////////////////////////////////////////////////////////////////////////////
-/// ScopedScheduler_c
-/////////////////////////////////////////////////////////////////////////////
-
-inline void Throttler_c::SetDefaultThrottlingPeriodMS ( int tmPeriodMs )
-{
-	tmThrotleTimeQuantumMs = tmPeriodMs<0 ? tmDefaultThrotleTimeQuantumMs : tmPeriodMs;
-}
-
-template<typename FN_AFTER_RESUME>
-bool Throttler_c::ThrottleAndProceed ( FN_AFTER_RESUME fnProceeder )
-{
-	if ( MaybeThrottle () )
-	{
-		fnProceeder ();
-		return true;
-	}
-	return false;
-}
-
-
-/////////////////////////////////////////////////////////////////////////////
 /// ConditionVariableAny_c
 /////////////////////////////////////////////////////////////////////////////
 

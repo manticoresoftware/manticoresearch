@@ -647,10 +647,14 @@ bool GenericTableIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery
 			break;
 		}
 
-		if ( session::GetKilled() )
+		if ( Threads::Coro::RuntimeExceeded() )
 		{
-			tMeta.m_sWarning = "query was killed";
-			break;
+			if ( session::GetKilled() )
+			{
+				tMeta.m_sWarning = "query was killed";
+				break;
+			}
+			Threads::Coro::RescheduleAndKeepCrashQuery();
 		}
 	}
 

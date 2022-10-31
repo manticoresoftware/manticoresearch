@@ -241,41 +241,32 @@ void Reschedule() noexcept;
 
 int ID() noexcept;
 
+int NumOfRestarts() noexcept;
+
 static const int tmDefaultThrotleTimeQuantumMs = 100; // default value, if nothing specified
-class Throttler_c
+
+// that changes default daemon-wide
+void SetDefaultThrottlingPeriodMS ( int tmPeriodMs );
+
+// -1 means 'use value of tmThrotleTimeQuantumMs'
+// 0 means 'don't throttle'
+// any other positive expresses throttling interval in milliseconds
+void SetThrottlingPeriod ( int tmPeriodMs = -1 );
+
+// check if we run > ThrottleQuantum since last resume, or since timer restart
+bool RuntimeExceeded() noexcept;
+
+// common throttle action - keep crash query and reschedule. Timer will be re-engaged on resume
+void RescheduleAndKeepCrashQuery();
+
+// just re-engage timer, without rescheduling
+void RestartRuntime() noexcept;
+
+inline void ThrottleAndKeepCrashQuery()
 {
-	static int tmThrotleTimeQuantumMs; // how long task may work before rescheduling (in milliseconds)
-
-	int64_t m_tmNextThrottleTimestamp;
-	int m_tmThrottlePeriodMs;
-
-	MiniTimer_c m_dTimerGuard { "throttler" };
-	bool m_bSameThread = true;
-
-	bool MaybeThrottle ();
-
-public:
-	// -1 means 'use value of tmThrotleTimeQuantumMs'
-	// 0 means 'don't throttle'
-	// any other positive expresses throttling interval in milliseconds
-	explicit Throttler_c ( int tmPeriodMs = -1 );
-
-	// that changes default daemon-wide
-	static void SetDefaultThrottlingPeriodMS ( int tmPeriodMs );
-
-	// common throttle action - republish stored crash query to TLS on resume
-	bool ThrottleAndKeepCrashQuery ();
-
-	// whether we are in same thread, or it was switched after throttling.
-	// value cached between successfull throttling, i.e. when MaybeThrottle() returns true.
-	inline bool SameThread() const { return m_bSameThread; }
-
-	// simple reschedule on timeout. Returns true if throttle happened
-	inline bool SimpleThrottle () { return MaybeThrottle(); }
-
-	template<typename FN_AFTER_RESUME>
-	bool ThrottleAndProceed ( FN_AFTER_RESUME fnProceeder );
-};
+	if ( RuntimeExceeded() )
+		RescheduleAndKeepCrashQuery();
+}
 
 // yield and reschedule after given period of time (in milliseconds)
 void SleepMsec ( int iMsec );

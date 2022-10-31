@@ -17,6 +17,7 @@
 #include "sphinxqcache.h"
 #include "attribute.h"
 #include "mini_timer.h"
+#include "coroutine.h"
 
 #include <math.h>
 
@@ -1656,18 +1657,22 @@ const ExtDoc_t * ExtPayload_T<USE_BM25>::GetDocsChunk()
 	}
 
 	// interrupt by sitgerm
-	if ( g_bInterruptNow )
+	if ( Threads::Coro::RuntimeExceeded() )
 	{
-		if ( m_pWarning )
-			*m_pWarning = "Server shutdown in progress";
-		return NULL;
-	}
+		if ( g_bInterruptNow )
+		{
+			if ( m_pWarning )
+				*m_pWarning = "Server shutdown in progress";
+			return nullptr;
+		}
 
-	if ( session::GetKilled() )
-	{
-		if ( m_pWarning )
-			*m_pWarning = "query was killed";
-		return NULL;
+		if ( session::GetKilled() )
+		{
+			if ( m_pWarning )
+				*m_pWarning = "query was killed";
+			return nullptr;
+		}
+		Threads::Coro::RescheduleAndKeepCrashQuery();
 	}
 
 	int iDoc = 0;
@@ -2008,19 +2013,23 @@ const ExtDoc_t * ExtTerm_T<USE_BM25>::GetDocsChunk()
 		return NULL;
 	}
 
-	// interrupt by sitgerm
-	if ( g_bInterruptNow )
+	if ( Threads::Coro::RuntimeExceeded() )
 	{
-		if ( m_pWarning )
-			*m_pWarning = "Server shutdown in progress";
-		return NULL;
-	}
+		// interrupt by sitgerm
+		if ( g_bInterruptNow )
+		{
+			if ( m_pWarning )
+				*m_pWarning = "Server shutdown in progress";
+			return nullptr;
+		}
 
-	if ( session::GetKilled() )
-	{
-		if ( m_pWarning )
-			*m_pWarning = "query was killed";
-		return NULL;
+		if ( session::GetKilled() )
+		{
+			if ( m_pWarning )
+				*m_pWarning = "query was killed";
+			return nullptr;
+		}
+		Threads::Coro::RescheduleAndKeepCrashQuery();
 	}
 
 	StoredHit_t * pStoredHit = nullptr;
@@ -3030,19 +3039,23 @@ const ExtDoc_t * ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::GetDocsChunk()
 		return NULL;
 	}
 
-	// interrupt by sitgerm
-	if ( g_bInterruptNow )
+	if ( Threads::Coro::RuntimeExceeded() )
 	{
-		if ( m_pWarning )
-			*m_pWarning = "Server shutdown in progress";
-		return NULL;
-	}
+		// interrupt by sitgerm
+		if ( g_bInterruptNow )
+		{
+			if ( m_pWarning )
+				*m_pWarning = "Server shutdown in progress";
+			return NULL;
+		}
 
-	if ( session::GetKilled() )
-	{
-		if ( m_pWarning )
-			*m_pWarning = "query was killed";
-		return NULL;
+		if ( session::GetKilled() )
+		{
+			if ( m_pWarning )
+				*m_pWarning = "query was killed";
+			return NULL;
+		}
+		Threads::Coro::RescheduleAndKeepCrashQuery();
 	}
 
 	if ( m_bFirstChunk )
@@ -5884,11 +5897,15 @@ const ExtDoc_t * ExtNodeCached_c::GetDocsChunk()
 		return NULL;
 	}
 
-	if ( session::GetKilled() )
+	if ( Threads::Coro::RuntimeExceeded() )
 	{
-		if ( m_pWarning )
-			*m_pWarning = "query was killed";
-		return NULL;
+		if ( session::GetKilled() )
+		{
+			if ( m_pWarning )
+				*m_pWarning = "query was killed";
+			return nullptr;
+		}
+		Threads::Coro::RescheduleAndKeepCrashQuery();
 	}
 
 	int iDoc = Min ( m_iDocIndex+MAX_BLOCK_DOCS-1, m_pNode->m_dDocs.GetLength()-1 ) - m_iDocIndex;

@@ -5987,7 +5987,7 @@ void SearchHandler_c::RunLocalSearches ()
 		auto tJobContext = dCtx.CloneNewContext();
 		auto& tCtx = tJobContext.first;
 		sphLogDebug ( "RunLocalSearches cloned context %d", tJobContext.second );
-		Threads::Coro::Throttler_c tThrottler ( session::GetThrottlingPeriodMS () );
+		Threads::Coro::SetThrottlingPeriod ( session::GetThrottlingPeriodMS() );
 		while ( true )
 		{
 			if ( !pSource->FetchTask ( iJob ) )
@@ -6128,7 +6128,7 @@ void SearchHandler_c::RunLocalSearches ()
 			if ( !pSource->FetchTask ( iJob ) )
 				return; // all is done
 
-			tThrottler.ThrottleAndKeepCrashQuery (); // we set CrashQuery anyway at the start of the loop
+			Threads::Coro::ThrottleAndKeepCrashQuery (); // we set CrashQuery anyway at the start of the loop
 		}
 	});
 	sphLogDebug ( "RunLocalSearches processed in %d thread(s)", dCtx.NumWorked() );
@@ -7873,7 +7873,7 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 		auto tJobContext = dCtx.CloneNewContext();
 		auto& tCtx = tJobContext.first;
 		sphLogDebug ( "MakeSnippetsCoro cloned context %d", tJobContext.second );
-		Threads::Coro::Throttler_c tThrottler ( session::GetThrottlingPeriodMS () );
+		Threads::Coro::SetThrottlingPeriod ( session::GetThrottlingPeriodMS() );
 		while (true)
 		{
 			myinfo::SetTaskInfo ( "s %d:", iJob );
@@ -7886,7 +7886,7 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 				return; // already nothing to do, early finish.
 
 			// yield and reschedule every quant of time. It gives work to other tasks
-			tThrottler.ThrottleAndKeepCrashQuery ();
+			Threads::Coro::ThrottleAndKeepCrashQuery ();
 		}
 	});
 }
@@ -13757,7 +13757,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 		} else if ( tStmt.m_sSetName=="throttling_period" )
 		{
 			if ( tSess.GetVip() )
-				Threads::Coro::Throttler_c::SetDefaultThrottlingPeriodMS ( tStmt.m_iSetValue );
+				Threads::Coro::SetDefaultThrottlingPeriodMS ( tStmt.m_iSetValue );
 			else
 			{
 				tOut.Error ( tStmt.m_sStmt, "Only VIP connections can change global throttling_period value" );

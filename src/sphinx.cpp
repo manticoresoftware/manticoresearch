@@ -7687,10 +7687,14 @@ bool Fullscan ( ITERATOR & tIterator, TO_STATIC && fnToStatic, const CSphQueryCo
 				}
 			}
 
-			if ( session::GetKilled() )
+			if ( Threads::Coro::RuntimeExceeded() )
 			{
-				tMeta.m_sWarning = "query was killed";
-				return true;
+				if ( session::GetKilled() )
+				{
+					tMeta.m_sWarning = "query was killed";
+					return true;
+				}
+				Threads::Coro::RescheduleAndKeepCrashQuery();
 			}
 		}
 
@@ -10392,14 +10396,14 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 		pProfiler->m_iPseudoShards = iSplit;
 
 	std::atomic<bool> bInterrupt {false};
-	auto fnCheckInterrupt = [&bInterrupt]() { return bInterrupt.load ( std::memory_order_relaxed ); };
+	auto CheckInterrupt = [&bInterrupt]() { return bInterrupt.load ( std::memory_order_relaxed ); };
 
 	Threads::Coro::ExecuteN ( tClonableCtx.Concurrency ( iJobs ), [&]
 	{
 		auto pSource = pDispatcher->MakeSource();
 		int iJob = -1; // make it consumed
 
-		if ( !pSource->FetchTask ( iJob ) || fnCheckInterrupt() )
+		if ( !pSource->FetchTask ( iJob ) || CheckInterrupt() )
 		{
 			sphLogDebug ( "Early finish parallel RunSplitQuery because of empty queue" );
 			return; // already nothing to do, early finish.
@@ -10407,14 +10411,17 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 
 		auto tJobContext = tClonableCtx.CloneNewContext ( !iJob );
 		auto& tCtx = tJobContext.first;
+		auto Interrupt = [&bInterrupt, &tCtx] ( const char* szReason ) {
+			tCtx.m_tMeta.m_sWarning = szReason;
+			bInterrupt.store ( true, std::memory_order_relaxed );
+		};
 		sphLogDebug ( "RunSplitQuery cloned context %d", tJobContext.second );
 		tClonableCtx.SetJobOrder ( tJobContext.second, iJob );
-		Threads::Coro::Throttler_c tThrottler ( session::GetThrottlingPeriodMS() );
-		int iTick=1; // num of times coro rescheduled by throttler
-		while ( !fnCheckInterrupt() ) // some earlier job met error; abort.
+		Threads::Coro::SetThrottlingPeriod ( session::GetThrottlingPeriodMS() );
+		while ( !CheckInterrupt() ) // some earlier job met error; abort.
 		{
 			sphLogDebugv ( "RunSplitQuery %d, job %d", tJobContext.second, iJob );
-			myinfo::SetTaskInfo ( "%d ch %d:", iTick, iJob );
+			myinfo::SetTaskInfo ( "%d ch %d:", Threads::Coro::NumOfRestarts(), iJob );
 			auto & dLocalSorters = tCtx.m_dSorters;
 			CSphQueryResultMeta tChunkMeta;
 			CSphQueryResult tChunkResult;
@@ -10442,16 +10449,7 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 				tThMeta.m_tStats.Add ( tChunkMeta.m_tStats );
 
 			if ( iJob < iJobs-1 && sph::TimeExceeded ( tmMaxTimer ) )
-			{
-				tThMeta.m_sWarning = "query time exceeded max_query_time";
-				bInterrupt.store ( true, std::memory_order_relaxed );
-			}
-
-			if ( session::GetKilled() )
-			{
-				tThMeta.m_sWarning = "query was killed";
-				bInterrupt.store ( true, std::memory_order_relaxed );
-			}
+				Interrupt ( "query time exceeded max_query_time" );
 
 			if ( tThMeta.m_sWarning.IsEmpty() && !tChunkMeta.m_sWarning.IsEmpty() )
 				tThMeta.m_sWarning = tChunkMeta.m_sWarning;
@@ -10459,23 +10457,27 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 			tThMeta.m_bTotalMatchesApprox |= tChunkMeta.m_bTotalMatchesApprox;
 			tThMeta.m_tIteratorStats.Merge ( tChunkMeta.m_tIteratorStats );
 
-			if ( fnCheckInterrupt() && !tChunkMeta.m_sError.IsEmpty() )
+			if ( CheckInterrupt() && !tChunkMeta.m_sError.IsEmpty() )
 				// FIXME? maybe handle this more gracefully (convert to a warning)?
 				tThMeta.m_sError = tChunkMeta.m_sError;
 
 			iJob = -1; // mark it consumed
-			if ( !pSource->FetchTask ( iJob ) || fnCheckInterrupt() )
+			if ( !pSource->FetchTask ( iJob ) || CheckInterrupt() )
 				return; // all is done
 
 			// yield and reschedule every quant of time. It gives work to other tasks
-			if ( tThrottler.ThrottleAndKeepCrashQuery() )
-				// report current disk chunk processing
-				++iTick;
+			if ( Threads::Coro::RuntimeExceeded() )
+			{
+				if ( session::GetKilled() )
+					Interrupt ( "query was killed" );
+				else
+					Threads::Coro::RescheduleAndKeepCrashQuery();
+			}
 		}
 	});
 	sphLogDebug ( "RunSplitQuery processed in %d thread(s)", tClonableCtx.NumWorked() );
 	tClonableCtx.Finalize();
-	return !fnCheckInterrupt();
+	return !CheckInterrupt();
 }
 
 

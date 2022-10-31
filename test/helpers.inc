@@ -2734,7 +2734,7 @@ class SphinxConfig
 			$parts = explode (';',$query);
 			$haserror = true;
 			$erroneousquery = $query;
-            echo $query;
+//            echo $query;
 			if ( mysqli_multi_query ($connection,$query) )
 			{
 				$resultset_num = 0;

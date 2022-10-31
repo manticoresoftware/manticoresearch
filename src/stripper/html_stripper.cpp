@@ -399,7 +399,7 @@ static inline DWORD HtmlEntityHash ( const BYTE * str, int len )
 		421, 421, 421, 421, 421, 421, 421
 	};
 
-	register int hval = len;
+	int hval = len;
 	switch ( hval )
 	{
 		default:	hval += asso_values [ str[4] ];
@@ -782,11 +782,11 @@ static inline int HtmlEntityLookup ( const BYTE * str, int len )
 
 	if ( len<=MAX_WORD_LENGTH && len>=MIN_WORD_LENGTH )
 	{
-		register int key = HtmlEntityHash ( str, len );
+		int key = HtmlEntityHash ( str, len );
 		if ( key<=MAX_HASH_VALUE && key>=0 )
 			if ( len==lengthtable[key] )
 		{
-			register const char * s = wordlist[key].m_sName;
+			const char * s = wordlist[key].m_sName;
 			if ( *str==*s && !memcmp ( str+1, s+1, len-1 ) )
 				return wordlist[key].m_iCode;
 		}

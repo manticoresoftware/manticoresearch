@@ -51,8 +51,8 @@ template<typename T, typename READER>
 inline T UnzipValueBE_reference ( READER fnGet )
 {
 #if PARANOID
-	register DWORD b = 0;
-	register T v = 0;
+	DWORD b = 0;
+	T v = 0;
 	int it = 0;
 	do {
 		b = fnGet();
@@ -62,8 +62,8 @@ inline T UnzipValueBE_reference ( READER fnGet )
 	assert ( ( it - 1 ) * 7 <= sizeof ( _type ) * 8 );
 	return v;
 #else
-	register BYTE b = fnGet();
-	register T res = 0;
+	BYTE b = fnGet();
+	T res = 0;
 	while ( b & 0x80 )
 	{
 		res = ( res << 7 ) | ( b & 0x7f );
@@ -77,8 +77,8 @@ inline T UnzipValueBE_reference ( READER fnGet )
 template<typename T, typename READER>
 inline std::enable_if_t<sizeof ( T ) == 4, T> UnzipValueBE ( READER fnGet )
 {
-	register BYTE b = fnGet();
-	register DWORD res = b & 0x7f;
+	BYTE b = fnGet();
+	DWORD res = b & 0x7f;
 	if ( ( b & 0x80 ) == 0 )
 		return res;
 	b = fnGet();
@@ -101,8 +101,8 @@ template<typename T, typename READER>
 inline std::enable_if_t<sizeof ( T ) == 8, T> UnzipValueBE ( READER fnGet )
 {
 #if PARANOID
-	register DWORD b = 0;
-	register T v = 0;
+	DWORD b = 0;
+	T v = 0;
 	int it = 0;
 	do {
 		b = fnGet();
@@ -112,8 +112,8 @@ inline std::enable_if_t<sizeof ( T ) == 8, T> UnzipValueBE ( READER fnGet )
 	assert ( ( it - 1 ) * 7 <= sizeof ( _type ) * 8 );
 	return v;
 #else
-	register BYTE b = fnGet();
-	register T res = 0;
+	BYTE b = fnGet();
+	T res = 0;
 	while ( b & 0x80 )
 	{
 		res = ( res << 7 ) | ( b & 0x7f );
@@ -161,9 +161,9 @@ inline int ZipToPtrLE ( BYTE* pData, T tValue )
 template<typename T, typename READER>
 inline T UnzipValueLE_reference ( READER fnGet )
 {
-	register BYTE b;
-	register T res = 0;
-	register BYTE iOff = 0;
+	BYTE b;
+	T res = 0;
+	BYTE iOff = 0;
 
 	do
 	{
@@ -178,8 +178,8 @@ inline T UnzipValueLE_reference ( READER fnGet )
 template<typename T, typename READER>
 inline std::enable_if_t<sizeof ( T ) == 4, T> UnzipValueLE ( READER fnGet )
 {
-	register BYTE b = fnGet();
-	register DWORD res = b & 0x7f;
+	BYTE b = fnGet();
+	DWORD res = b & 0x7f;
 	if ( ( b & 0x80 ) == 0 )
 		return res;
 	b = fnGet();
@@ -199,8 +199,8 @@ inline std::enable_if_t<sizeof ( T ) == 4, T> UnzipValueLE ( READER fnGet )
 template<typename T, typename READER>
 inline std::enable_if_t<sizeof ( T ) == 8, T> UnzipValueLE ( READER fnGet )
 {
-	register BYTE b = fnGet();
-	register T res = b & 0x7f;
+	BYTE b = fnGet();
+	T res = b & 0x7f;
 	if ( ( b & 0x80 ) == 0 )
 		return res;
 	b = fnGet();

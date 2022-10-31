@@ -19,7 +19,7 @@ inline int BitCountDW1 ( DWORD n )
 	// MIT HACKMEM count
 	// works for 32-bit numbers only
 	// fix last line for 64-bit numbers
-	register DWORD tmp;
+	DWORD tmp;
 	tmp = n - ( ( n >> 1 ) & 033333333333 ) - ( ( n >> 2 ) & 011111111111 );
 	return ( ( tmp + ( tmp >> 3 ) ) & 030707070707 ) % 63;
 }
@@ -470,9 +470,9 @@ BENCHMARK_REGISTER_F ( zipunzip, ziple64 )->ArgsProduct ( { benchmark::CreateDen
 template<typename T, typename READER>
 T UnzipValueLE2 ( READER fnGet )
 {
-	register BYTE b = fnGet();
-	register BYTE iOff = 0;
-	register T res = 0;
+	BYTE b = fnGet();
+	BYTE iOff = 0;
+	T res = 0;
 #pragma clang loop unroll_count( sizeof( T ) * CHAR_BIT / 7 )
 	for (; iOff < sizeof(T)*CHAR_BIT && ( b & 0x80 ); iOff+=7, b = fnGet() )
 		res |= ( T ( b & 0x7FU ) ) << iOff;

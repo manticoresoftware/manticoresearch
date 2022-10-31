@@ -276,9 +276,9 @@ SphWordID_t CSphDictKeywords::HitblockGetID ( const char* sWord, int iLen, SphWo
 		}
 
 		// crc matches, check keyword
-		register int iWordLen = iLen;
-		register const char* a = pEntry->m_pKeyword;
-		register const char* b = sWord;
+		int iWordLen = iLen;
+		const char* a = pEntry->m_pKeyword;
+		const char* b = sWord;
 		while ( *a == *b && iWordLen-- )
 		{
 			if ( !*a || !iWordLen )

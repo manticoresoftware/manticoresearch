@@ -43,7 +43,7 @@ static unsigned char vowel_map[] =
 
 static inline int stem_en_id ( unsigned char l )
 {
-	register unsigned char * v = stem_en_doubles;
+	unsigned char * v = stem_en_doubles;
 	while ( *v && *v!=l ) v++;
 	return ( *v==l ) ? 1 : 0;
 }

@@ -188,22 +188,22 @@ FORCE_INLINE bool CompareFloat_fn<5>::IsLess ( const CSphMatch & tMatchA, SphAtt
 		case SPH_KEYPART_WEIGHT:	TEST_PAIR ( tMatchA.m_iWeight, tMatchB.m_iWeight, _idx ); break; \
 		case SPH_KEYPART_INT: \
 		{ \
-			register SphAttr_t aa = dA[tState.m_dAttrs[_idx]]; \
-			register SphAttr_t bb = dB[tState.m_dAttrs[_idx]]; \
+			SphAttr_t aa = dA[tState.m_dAttrs[_idx]]; \
+			SphAttr_t bb = dB[tState.m_dAttrs[_idx]]; \
 			TEST_PAIR ( aa, bb, _idx ); \
 			break; \
 		} \
 		case SPH_KEYPART_FLOAT: \
 		{ \
-			register float aa = sphDW2F ( dA[tState.m_dAttrs[_idx]] ); \
-			register float bb = sphDW2F ( dB[tState.m_dAttrs[_idx]] ); \
+			float aa = sphDW2F ( dA[tState.m_dAttrs[_idx]] ); \
+			float bb = sphDW2F ( dB[tState.m_dAttrs[_idx]] ); \
 			TEST_PAIR ( aa, bb, _idx ) \
 			break; \
 		} \
 		case SPH_KEYPART_DOUBLE: \
 		{ \
-			register double aa = sphQW2D ( dA[tState.m_dAttrs[_idx]] ); \
-			register double bb = sphQW2D ( dB[tState.m_dAttrs[_idx]] ); \
+			double aa = sphQW2D ( dA[tState.m_dAttrs[_idx]] ); \
+			double bb = sphQW2D ( dB[tState.m_dAttrs[_idx]] ); \
 			TEST_PAIR ( aa, bb, _idx ) \
 			break; \
 		} \

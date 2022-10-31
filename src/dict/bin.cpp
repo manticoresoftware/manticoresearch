@@ -210,8 +210,8 @@ SphWordID_t CSphBin::ReadVLB()
 // fixme! That is simple UnzipValueBE with extra check; refactor!
 DWORD CSphBin::UnzipInt()
 {
-	register int b = 0;
-	register DWORD v = 0;
+	int b = 0;
+	DWORD v = 0;
 	do
 	{
 		b = ReadByte();
@@ -225,8 +225,8 @@ DWORD CSphBin::UnzipInt()
 // fixme! That is simple UnzipValueBE with extra check; refactor!
 SphOffset_t CSphBin::UnzipOffset()
 {
-	register int b = 0;
-	register SphOffset_t v = 0;
+	int b = 0;
+	SphOffset_t v = 0;
 	do
 	{
 		b = ReadByte();

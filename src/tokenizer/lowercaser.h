@@ -102,7 +102,7 @@ inline int CSphLowercaser::ToLower ( int iCode ) const noexcept
 {
 	if ( iCode < 0 || iCode >= MAX_CODE )
 		return iCode;
-	register DWORD* pChunk = m_pChunk[iCode >> CHUNK_BITS];
+	DWORD* pChunk = m_pChunk[iCode >> CHUNK_BITS];
 	if ( pChunk )
 		return (int)pChunk[iCode & CHUNK_MASK];
 	return 0;

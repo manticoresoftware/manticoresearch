@@ -248,7 +248,7 @@ CREATE TABLE `test_table2`
 <db_drop>DROP TABLE IF EXISTS `test_table2`</db_drop>
 <db_insert>
 INSERT INTO `test_table2` VALUES
-( 910, '', 'wordbefore\0\0wordafter' )
+( 910, 'wordbefore\0\0wordafter' )
 </db_insert>
 
 

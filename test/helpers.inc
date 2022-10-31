@@ -1477,7 +1477,7 @@ class SphinxConfig
 		$this->_connection = $connection;
 	}
 
-	function SphinxConfig ()
+	function __construct()
 	{
 		global $sd_address, $sd_port, $sd_sphinxql_port, $sd_pid_file, $sd_http_port, $sd_sphinxql_port_vip, $sd_replication_port;
 
@@ -2734,6 +2734,7 @@ class SphinxConfig
 			$parts = explode (';',$query);
 			$haserror = true;
 			$erroneousquery = $query;
+            echo $query;
 			if ( mysqli_multi_query ($connection,$query) )
 			{
 				$resultset_num = 0;

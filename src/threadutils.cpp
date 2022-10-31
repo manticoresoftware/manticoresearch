@@ -1094,7 +1094,9 @@ void StartGlobalWorkPool ()
 {
 	sphLogDebug ( "StartGlobalWorkpool" );
 	WorkerSharedPtr_t& pPool = GlobalPoolSingletone ();
+#if !_WIN32
 	if ( !pPool )
+#endif
 		pPool = new ThreadPool_c ( g_iMaxChildrenThreads, "work" );
 }
 

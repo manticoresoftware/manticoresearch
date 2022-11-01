@@ -107,9 +107,6 @@ class DeathLogger_c: protected tstlogger, public ::testing::Test
 protected:
 	void SetUp() override
 	{
-		auto pPool = GlobalWorkPool ();
-		assert ( pPool );
-		pPool->StopAll();
 		m_bOutToStderr = true;
 		tstlogger::setup();
 	}
@@ -821,7 +818,8 @@ TEST_F ( DeathLogger_c, ParseListener_wrong_port )
 
 	for ( const auto& sCase : dTable )
 	{
-		EXPECT_EXIT( ParseListener( sCase.sSpec ), ::testing::ExitedWithCode( 1 ),
-					 "port 65536 is out of range" ) << sCase.sSpec;
+		CSphString sFatal;
+		ParseListener ( sCase.sSpec, &sFatal );
+		EXPECT_STREQ ( "port 65536 is out of range", sFatal.cstr() );
 	}
 }

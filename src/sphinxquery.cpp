@@ -497,6 +497,10 @@ bool XQParseHelper_c::FixupNots ( XQNode_t * pNode )
 	if ( !pNode || !pNode->m_dWords.IsEmpty() )
 		return true;
 
+	// query was already transformed
+	if ( pNode->GetOp()==SPH_QUERY_ANDNOT )
+		return true;
+
 	// process 'em children
 	for ( auto& dNode : pNode->m_dChildren )
 		if ( !FixupNots ( dNode ) )

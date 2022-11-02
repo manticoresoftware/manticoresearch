@@ -161,51 +161,6 @@ collect_rhel8:
 
 # ==================== Debian-based ======================
 
-# ==================== Debian Stretch ======================
-
-stretch:
-  extends: [ .build ]
-  rules:
-    - !reference [ .build, rules ]
-    - if: $WHAT =~ /stretch/
-  variables:
-    DISTR: stretch
-
-stretch_arm:
-  extends: [ stretch ]
-  variables:
-    arch: aarch64
-
-collect_stretch:
-  extends: [ .collect_deb ]
-  needs: [ stretch, stretch_arm ]
-  variables:
-    DISTRO: stretch
-
-
-# ==================== Ubuntu Xenial ======================
-
-xenial:
-  extends: [ .build ]
-  rules:
-    - !reference [ .build, rules ]
-    - if: $WHAT =~ /xenial/
-  variables:
-    DISTR: xenial
-
-xenial_arm:
-  extends: [ xenial ]
-  variables:
-    arch: aarch64
-
-collect_xenial:
-  extends: [ .collect_deb ]
-  needs: [ xenial, xenial_arm ]
-  variables:
-    DISTRO: xenial
-
-
-
 # ==================== Ubuntu Bionic ======================
 
 bionic:

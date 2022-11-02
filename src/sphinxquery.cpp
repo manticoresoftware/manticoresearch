@@ -494,12 +494,16 @@ void XQParseHelper_c::FixupNulls ( XQNode_t * pNode )
 bool XQParseHelper_c::FixupNots ( XQNode_t * pNode )
 {
 	// no processing for plain nodes
-	if ( !pNode || pNode->m_dWords.GetLength() )
+	if ( !pNode || !pNode->m_dWords.IsEmpty() )
+		return true;
+
+	// query was already transformed
+	if ( pNode->GetOp()==SPH_QUERY_ANDNOT )
 		return true;
 
 	// process 'em children
-	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		if ( !FixupNots ( pNode->m_dChildren[i] ) )
+	for ( auto& dNode : pNode->m_dChildren )
+		if ( !FixupNots ( dNode ) )
 			return false;
 
 	// extract NOT subnodes
@@ -556,16 +560,13 @@ bool XQParseHelper_c::FixupNots ( XQNode_t * pNode )
 
 static void CollectChildren ( XQNode_t * pNode, CSphVector<XQNode_t *> & dChildren )
 {
-	if ( !pNode->m_dChildren.GetLength() )
+	if ( pNode->m_dChildren.IsEmpty() )
 		return;
 
 	dChildren.Add ( pNode );
-	ARRAY_FOREACH ( i, dChildren )
-	{
-		const XQNode_t * pChild = dChildren[i];
-		ARRAY_FOREACH ( j, pChild->m_dChildren )
-			dChildren.Add ( pChild->m_dChildren[j] );
-	}
+	for ( const XQNode_t *pChild : dChildren )
+		for ( const auto& dChild : pChild->m_dChildren )
+			dChildren.Add ( dChild );
 }
 
 

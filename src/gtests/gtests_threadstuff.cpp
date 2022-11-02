@@ -64,7 +64,6 @@ void Counter100c()
 
 TEST ( ThreadPool, Counter100c )
 {
-	StartGlobalWorkPool();
 	for (auto i=0; i<100; ++i)
 		Counter100c();
 }
@@ -87,7 +86,6 @@ void Sleeper(int iMsec, const char* szName)
 // that is because it uses ture sphSleepMsec, which effectively pauses single thread.
 TEST ( ThreadPool, WaitForN )
 {
-	StartGlobalWorkPool();
 	using namespace Threads;
 	Threads::CallCoroutine ( [&] {
 		int N = 2;

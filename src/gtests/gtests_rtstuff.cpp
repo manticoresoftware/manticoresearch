@@ -213,7 +213,6 @@ class RT : public ::testing::Test
 protected:
 	void SetUp() override
 	{
-		StartGlobalWorkPool ();
 		DeleteIndexFiles ( RT_INDEX_FILE_NAME );
 		TestRTInit();
 		tDictSettings.m_bWordDict = false;

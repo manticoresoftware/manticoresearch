@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>skip double not-checks for jsons</name>
+
+<requires>
+	<force-rt/>
+	<http/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+<sphinxql>
+	create table t(f text, a int);
+	insert into t values(0,'a b c',123), (0,'a b d',123),(0,'a d e',123);
+</sphinxql>
+<query endpoint="json/search">{ "index": "t", "query": { "query_string": "a -b -c" }}</query>
+<sphinxql>
+    select * from t;
+    select * from t where match('a -b -c'); show meta;
+	drop table t;
+</sphinxql>
+</queries>
+
+</test>

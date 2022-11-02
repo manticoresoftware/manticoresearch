@@ -51,10 +51,6 @@ inline static int64_t LastTimestampImpl()
 	return g_tmLastTimestamp.load ( std::memory_order_relaxed );
 }
 
-inline static bool TimeExceeded ( int64_t tmMicroTimestamp )
-{
-	return sph::TimeExceeded ( tmMicroTimestamp, LastTimestampImpl() );
-}
 
 int64_t sph::MicroTimer()
 {

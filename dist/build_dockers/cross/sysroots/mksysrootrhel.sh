@@ -45,7 +45,7 @@ fixup_all()
 
 yum install -y file
 
-cd /opt/rh/devtoolset-8/root && tar -cf - usr/include/c++ usr/lib> /tmp.tar && cd / && tar -xf tmp.tar
+test -d /opt/rh/devtoolset-8/root && cd $_ && tar -cf - usr/include/c++ usr/lib> /tmp.tar && cd / && tar -xf tmp.tar
 sleep 1
 
 echo "fixup links"

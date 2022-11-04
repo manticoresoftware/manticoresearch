@@ -80,11 +80,11 @@ list ( APPEND CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION "/usr/share/man/man1
 list ( APPEND CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION "/usr/lib/systemd;/usr/lib/systemd/system-generators;/usr/lib/tmpfiles.d" )
 
 #set ( CPACK_BUILD_SOURCE_DIRS OFF )
-string ( LENGTH "${CMAKE_SOURCE_DIR}" source_dir_len_ )
-if (source_dir_len_ LESS 75)
-	message ( STATUS "set src prefix to /tmp/m due to too long path" )
-	set ( CPACK_RPM_BUILD_SOURCE_DIRS_PREFIX "/tmp" )
-endif ()
+#string ( LENGTH "${CMAKE_SOURCE_DIR}" source_dir_len_ )
+#if (source_dir_len_ LESS 75)
+#	message ( STATUS "set src prefix to /tmp/m due to too long path" )
+#	set ( CPACK_RPM_BUILD_SOURCE_DIRS_PREFIX "/tmp" )
+#endif ()
 
 #set ( CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST "/usr/include" )
 set ( CPACK_RPM_COMMON_USER_FILELIST
@@ -186,3 +186,6 @@ endif ()
 
 get_cmake_property ( CPACK_COMPONENTS_ALL COMPONENTS )
 list ( APPEND CPACK_COMPONENTS_ALL "meta" )
+
+# uncomment this line to produce long (really long) verbose output of rpm building
+#set ( CPACK_RPM_PACKAGE_DEBUG ON )

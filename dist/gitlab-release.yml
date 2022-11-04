@@ -35,12 +35,20 @@ variables:
   artifacts:
     paths:
       - build/manticore*deb
-      - build/manticore*rpm
       - build/manticore-*.tar.gz
       - build/manticore-*.zip
       - build/manticore-*.exe
     when: on_success
     expire_in: 12 hrs
+
+.build_rhel:
+  extends: [ .build ]
+  before_script:
+    - ln -s $(pwd) /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0
+    - cd /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0
+  artifacts:
+    paths:
+      - build/manticore*rpm
 
 # ==================== .helper generic and specific collect of built artifacts ======================
 
@@ -119,7 +127,7 @@ collect_windows:
 # ==================== Centos 7 ======================
 
 rhel7:
-  extends: [ .build ]
+  extends: [ .build_rhel ]
   rules:
     - !reference [ .build, rules ]
     - if: $WHAT =~ /rhel7/
@@ -141,7 +149,7 @@ collect_rhel7:
 # ==================== Centos 8 ======================
 
 rhel8:
-  extends: [ .build ]
+  extends: [ .build_rhel ]
   rules:
     - !reference [ .build, rules ]
     - if: $WHAT =~ /rhel8/
@@ -163,7 +171,7 @@ collect_rhel8:
 # ==================== RHEL 9 ======================
 
 rhel9:
-  extends: [ .build ]
+  extends: [ .build_rhel ]
   rules:
     - !reference [ .build, rules ]
     - if: $WHAT =~ /rhel9/

@@ -30,6 +30,7 @@ static bool			g_bConfigless = false;
 using namespace Threads;
 
 static Coro::Mutex_c	g_tSaveInProgress;
+static Coro::Mutex_c	g_tCfgIndexesLock;
 
 static CSphString GetPathForNewIndex ( const CSphString & sIndexName )
 {
@@ -467,7 +468,7 @@ void IndexDesc_t::Save ( CSphConfigSection & hIndex ) const
 //////////////////////////////////////////////////////////////////////////
 
 // read info about cluster and indexes from manticore.json and validate data
-bool ConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_t> & dClusters, CSphVector<IndexDesc_t> & dIndexes, CSphString & sError )
+static bool ConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_t> & dClusters, CSphVector<IndexDesc_t> & dIndexes, CSphString & sError )
 {
 	if ( !sphIsReadable ( sConfigPath, nullptr ) )
 		return true;
@@ -599,7 +600,7 @@ static ESphAddIndex ConfiglessPreloadIndex ( const IndexDesc_t & tIndex, StrVec_
 
 	ESphAddIndex eAdd = ConfigureAndPreloadIndex ( hIndex, tIndex.m_sName.cstr(), dWarnings, sError );
 	if ( eAdd==ADD_ERROR )
-		dWarnings.Add("removed from JSON config");
+		dWarnings.Add ( "disabled at the JSON config" );
 
 	return eAdd;
 }
@@ -611,6 +612,7 @@ void ConfigureAndPreloadConfiglessIndexes ( int & iValidIndexes, int & iCounter 
 {
 	// assume g_dCfgIndexes has all locals, then all distributed. Otherwise, distr with yet invisible local agents will fail to load!
 	assert ( IsConfigless() );
+	ScopedCoroMutex_t tCfgLock ( g_tCfgIndexesLock );
 	for ( const IndexDesc_t & tIndex : g_dCfgIndexes )
 	{
 		CSphString sError;
@@ -627,6 +629,24 @@ void ConfigureAndPreloadConfiglessIndexes ( int & iValidIndexes, int & iCounter 
 	}
 }
 
+static SmallStringHash_T<IndexDesc_t *> GetConfigLocal ()
+{
+	SmallStringHash_T<IndexDesc_t *> hLocal;
+	ScopedCoroMutex_t tCfgLock ( g_tCfgIndexesLock );
+	ARRAY_FOREACH ( i, g_dCfgIndexes )
+	{
+		IndexDesc_t * pDesc = g_dCfgIndexes.Begin() + i;
+		hLocal.Add ( pDesc, pDesc->m_sName );
+	}
+
+	return hLocal;
+}
+
+static bool HasConfigLocal ( const CSphString & sName )
+{
+	ScopedCoroMutex_t tCfgLock ( g_tCfgIndexesLock );
+	return g_dCfgIndexes.Contains ( bind ( &IndexDesc_t::m_sName ), sName );
+}
 
 // collect local indexes that should be saved into JSON config
 static void CollectLocalIndexesInt ( CSphVector<IndexDesc_t> & dIndexes )
@@ -634,15 +654,26 @@ static void CollectLocalIndexesInt ( CSphVector<IndexDesc_t> & dIndexes )
 	if ( !IsConfigless() )
 		return;
 
+	auto tConfigLocal = GetConfigLocal();
+
 	assert ( g_pLocalIndexes );
 	ServedSnap_t hLocals = g_pLocalIndexes->GetHash();
-	for ( auto& tIt : *hLocals )
+	for ( const auto & tIt : *hLocals )
 	{
 		assert ( tIt.second );
 		IndexDesc_t & tIndex = dIndexes.Add();
 		tIndex.m_sName = tIt.first;
 		tIndex.m_sPath = tIt.second->m_sIndexPath;
 		tIndex.m_eType = tIt.second->m_eType;
+
+		tConfigLocal.Delete ( tIt.first );
+	}
+
+	// keep indexes loaded from JSON but disabled due to errors
+	for ( const auto & tIt : tConfigLocal )
+	{
+		assert ( tIt.second );
+		dIndexes.Add ( *tIt.second );
 	}
 }
 
@@ -1141,7 +1172,11 @@ bool CreateNewIndexConfigless ( const CSphString & sIndex, const CreateTableSett
 	{
 		CSphString sPath, sIndexPath;
 		if ( !PrepareDirForNewIndex ( sPath, sIndexPath, sIndex, sError ) )
+		{
+			if ( HasConfigLocal ( sIndex ) )
+				sError.SetSprintf ( "%s (the index may be corrupted, refer to Manticore log)", sError.cstr() );
 			return false;
+		}
 
 		tSettingsContainer.Add ( "path", sIndexPath );
 		if ( !CopyExternalIndexFiles ( tSettingsContainer.GetFiles(), sPath, dWipe, sError ) )
@@ -1250,6 +1285,19 @@ static bool DropDistrIndex ( const CSphString & sIndex, CSphString & sError )
 	return true;
 }
 
+static void RemoveConfigIndex ( const CSphString & sIndex )
+{
+	g_pLocalIndexes->Delete ( sIndex );
+
+	// also remove index from list of indexes at the JSON config 
+	ScopedCoroMutex_t tCfgLock ( g_tCfgIndexesLock );
+	if ( g_dCfgIndexes.GetLength() )
+	{
+		int iIdx = g_dCfgIndexes.GetFirst ( [&] ( const IndexDesc_t & tIdx ) { return tIdx.m_sName==sIndex; } );
+		assert ( iIdx!=-1 );
+		g_dCfgIndexes.Remove ( iIdx );
+	}
+}
 
 static bool DropLocalIndex ( const CSphString & sIndex, CSphString & sError )
 {
@@ -1278,7 +1326,7 @@ static bool DropLocalIndex ( const CSphString & sIndex, CSphString & sError )
 		return false;
 
 	DeleteRtIndex ( pRt );
-	g_pLocalIndexes->Delete(sIndex);
+	RemoveConfigIndex ( sIndex );
 
 	return true;
 }

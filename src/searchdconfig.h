@@ -96,9 +96,6 @@ struct IndexDesc_t
 bool		LoadConfigInt ( const CSphConfig & hConf, const CSphString & sConfigFile, CSphString & sError );
 bool		SaveConfigInt ( CSphString & sError );
 
-// read info about cluster and indexes from manticore.json and validate data
-bool		ConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_t> & dClusters, CSphVector<IndexDesc_t> & dIndexes, CSphString & sError );
-
 // load indexes got from internal config on daemon indexes preload (part of ConfigureAndPreload work done here)
 void		ConfigureAndPreloadConfiglessIndexes ( int & iValidIndexes, int & iCounter );
 

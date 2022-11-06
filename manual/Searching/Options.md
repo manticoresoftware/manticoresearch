@@ -126,11 +126,17 @@ Integer. Disables pseudo sharding when the number of unique values of a groupby 
 
 When a groupby query is executed, Manticore estimates the number of unique values of groupby attribute using secondary indexes. If that number is greater than the threshold,
 pseudo sharding is disabled in order to increase accuracy of count() and aggregates. Loss of accuracy may occur because pseudo sharding runs queries in several threads,
-each thread getting max_matches groups which are merged later. If there are a lot of unique groupby values, each thread may get its own set of groups, and groups present in
-other threads may not make it to max_matches. This may be avoided by increasing max_matches, but increasing max_matches with pseudo_sharding enabled leads to increased
+each thread getting `max_matches` groups which are merged later. If there are a lot of unique groupby values, each thread may get its own set of groups, and groups present in
+other threads may not make it to `max_matches`. This may be avoided by increasing `max_matches`, but increasing `max_matches` with pseudo_sharding enabled leads to increased
 memory consumption.
 
-See also [max_matches_increase_threshold](../Searching/Options.md#max_matches_increase_threshold), which can affect the behavior of the max_matches option.
+Setting `disable_ps_threshold` to a value significantly higher than the default may result in disabling pseudo sharding when you have way too many unique values.
+The more unique values you have the higher is the chance of getting inaccurate results in case one of the pseudo shards just doesn't return a group at all, 
+because after sorting it appears to be on a place greater than the `max_matches` limit.
+
+If `disable_ps_threshold` is set too low, you'll disable pseudo sharding too early and the performance will be suboptimal.
+
+See also [max_matches_increase_threshold](../Searching/Options.md#max_matches_increase_threshold), which can affect the behavior of the `max_matches` option.
 
 ### expand_keywords
 `0` or `1` (`0` by default). Expands keywords with exact forms and/or stars when possible. Refer to [expand_keywords](../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#expand_keywords) for more details.
@@ -180,17 +186,19 @@ Introduced in order to control and limit RAM usage, `max_matches` setting define
 
 This parameter noticeably affects per-query RAM and CPU usage. Values of 1,000 to 10,000 are generally fine, but higher limits must be used with care. Recklessly raising max_matches to 1,000,000 means that `searchd` will have to allocate and initialize 1-million-entry matches buffer for every query. That will obviously increase per-query RAM usage, and in some cases can also noticeably impact performance.
 
+See also [max_matches_increase_threshold](../Searching/Options.md#max_matches_increase_threshold), which can affect the behavior of the `max_matches` option.
+
 ### max_matches_increase_threshold
 
-Integer. Sets the threshold that max_matches can be increased to. Default is 16384.
+Integer. Sets the threshold that `max_matches` can be increased to. Default is 16384.
 
-Manticore may increase max_matches to improve groupby and/or aggregation accuracy when pseudo_sharding is enabled and if it detects that the number of unique values
+Manticore may increase `max_matches` to improve groupby and/or aggregation accuracy when `pseudo_sharding` is enabled and if it detects that the number of unique values
 of groupby attribute is less than this threshold. Loss of accuracy may occur when pseudo sharding executes the query in several threads or RT index performs
 parallel searches in disk chunks. See [disable_ps_threshold](../Searching/Options.md#disable_ps_threshold) for more details.
 
-If the number of unique values of groupby attribute is less than the treshold, max_matches will be set to this number. Otherwise, default max_matches will be used.
+If the number of unique values of groupby attribute is less than the treshold, `max_matches` will be set to this number. Otherwise, default `max_matches` will be used.
 
-If max_matches was set explicitly in query options, this threshold has no effect.
+If `max_matches` was set explicitly in query options, this threshold has no effect.
 
 Note that if this threshold is set too high, the result will be increased memory consumption and general performance degradation.
 
@@ -252,6 +260,8 @@ The result set is in both cases the same; picking one option or the other may ju
 ### threads
 Limits max number of threads to use for current query processing. Default - no limit (the query can occupy all [threads](../Server_settings/Searchd.md#threads) as defined globally).
 For batch of queries the option must be attached to the very first query in the batch, and it is then applied when working queue is created and then is effective for the whole batch. This option has same meaning as option [max_threads_per_query](../Server_settings/Searchd.md#max_threads_per_query), but applied only to the current query or batch of queries.
+
+See [disable_ps_threshold](../Searching/Options.md#disable_ps_threshold), which can affect the behavior of the `threads` option.
 
 ### token_filter
 Quoted, colon-separated of `library name:plugin name:optional string of settings`. Query-time token filter gets created on search each time full-text invoked by every index involved and let you implement a custom tokenizer that makes tokens according to custom rules.

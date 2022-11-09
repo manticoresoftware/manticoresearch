@@ -302,6 +302,28 @@ collect_jammy:
   variables:
     DISTRO: jammy
 
+
+# ==================== Debian Bookworm ======================
+
+bookworm:
+  extends: [ .build ]
+  rules:
+    - !reference [ .build, rules ]
+    - if: $WHAT =~ /bookworm/
+  variables:
+    DISTR: bookworm
+
+bookworm_arm:
+  extends: [ bookworm ]
+  variables:
+    arch: aarch64
+
+collect_bookworm:
+  extends: [ .collect_deb ]
+  needs: [ bookworm, bookworm_arm ]
+  variables:
+    DISTRO: bookworm
+
 # ==================== Docker image ======================
 
 build_docker:

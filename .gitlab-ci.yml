@@ -77,7 +77,7 @@ docs_deploy:
   needs: [ ]
   tags:
     - docker
-  image: registry.gitlab.com/manticoresearch/dev/external_toolchain:clang13_cmake3232
+  image: registry.gitlab.com/manticoresearch/dev/external_toolchain:clang15_cmake3243
   variables:
     CACHEB: "../cache"
     DIAGNOSTIC: 1 # let's set it by default forever
@@ -86,6 +86,8 @@ docs_deploy:
     CTEST_CONFIGURATION_TYPE: RelWithDebInfo # most common default
     DISTR: bionic # our default build for tests
     arch: x86_64
+    boost: boost_nov22
+    sysroot: roots_nov22
   cache:
     paths:
       - cache
@@ -281,6 +283,7 @@ build_bsd:
     - if: $TEST =~ /freebsd/ && ( $WHAT=='$WHAT' || $WHAT==null )
   variables:
     DISTR: freebsd13
+    boost: none
   script:
     - mkdir build && cd build
     - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=..

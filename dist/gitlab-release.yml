@@ -16,7 +16,7 @@ variables:
   needs: [ ]
   tags:
     - docker
-  image: registry.gitlab.com/manticoresearch/dev/external_toolchain:clang13_cmake3232
+  image: registry.gitlab.com/manticoresearch/dev/external_toolchain:clang15_cmake3243
   rules:
     - if: $WHAT=='$WHAT'
     - if: $WHAT==null
@@ -24,6 +24,8 @@ variables:
   variables:
     CACHEB: "../cache"
     arch: x86_64
+    boost: boost_nov22
+    sysroot: roots_nov22
   script:
     - mkdir build && cd build
     - cmake -DPACK=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..

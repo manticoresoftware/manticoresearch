@@ -1,0 +1,12 @@
+# packages for ubuntu jammy (22.04.LTS)
+# file included from in_debian.sh
+
+apt-get install -y \
+    libmysqlclient-dev \
+    libexpat-dev \
+    libpq-dev \
+    unixodbc-dev \
+    libjemalloc-dev \
+    libssl-dev \
+    libzstd-dev \
+    libcurl4-openssl-dev

@@ -1,0 +1,12 @@
+# packages for centos/redhat 7
+# file included from in_rhel7.sh
+
+yum install -y \
+        mysql-devel \
+        expat-devel \
+        postgresql-devel \
+        unixODBC-devel \
+        jemalloc-devel \
+        openssl-devel \
+        libzstd-devel \
+        libcurl-devel

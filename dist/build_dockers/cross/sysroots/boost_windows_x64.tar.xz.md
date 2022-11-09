@@ -4,7 +4,9 @@ Boost for windows is official download from `boost.org`.
 
 OpenSSL is taken from `https://slproweb.com/download/Win64OpenSSL-1_1_1k.msi`
 
-Both packed int `boost` archive with following structure:
+LibCURL is taken from official `https://curl.se/windows/dl-7.85.0_9/curl-7.85.0_9-win64-mingw.zip`
+
+Both packed into `boost` archive with following structure:
 
 ```
 .
@@ -21,6 +23,8 @@ Both packed int `boost` archive with following structure:
 ```
 
 Notice, boost headers are removed and replaced with symlink. You should do it to avoid duplicates (target of that symlink came from `boost_include.tar.xz`). Also, you can clean-up boost from unnecessary libraries; follow the same recommendations as for `boost_macos...`.
+
+Notice, that illustration is just example; In actual tree version of the boost/openssl/libcurl might be different, just keep boost version consistent across all archives which share boost includes.
 
 Pack the content into archive
 ```bash

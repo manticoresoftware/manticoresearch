@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# file included from all centos/redhat  in_*.sh in context of target system docker
+# $distr and $arch should be declared on inclusion of this file
+
 fixlinks()
 {
   cd $1
@@ -64,4 +67,4 @@ yum -y remove file
 yum -y autoremove
 
 echo "pack sysroot"
-tar -cf - /usr/lib/gcc /usr/lib64 /usr/include /lib /lib64> /sysroot/$arch/sysroot_${distr}_$arch.tar
+tar -cf - /usr/lib/gcc /usr/lib/ld-* /usr/lib64 /usr/include /lib /lib64> /sysroot/$arch/sysroot_${distr}_$arch.tar

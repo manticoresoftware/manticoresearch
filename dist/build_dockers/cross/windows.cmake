@@ -1,15 +1,16 @@
 # Cross toolchain configuration for using clang on non-Windows hosts to
 # target MSVC.
 
-set ( boostdir boost_1_78_0 )
+set ( boostdir boost_1_80_0 ) # fixme!
 
 set ( winroot $ENV{winroot} )
 if (NOT winroot)
     set ( winroot /sysroot/root )
 endif ()
 
-set ( LLVM $ENV{LLVM} )
-if (NOT LLVM)
+if ($ENV{llvm})
+    set ( LLVM /usr/lib/llvm-$ENV{llvm} )
+else ()
     set ( LLVM /usr/lib/llvm-13 )
 endif ()
 

@@ -1,5 +1,6 @@
 #!/bin/bash
-# docker run --rm -v $(pwd):/sysroot almalinux:9 bash /sysroot/in_alma9.sh
+# file runs in the docker, invoked by the command in script redhat.sh
+# docker run --rm -v $(pwd):/sysroot almalinux:9 bash /sysroot/in_rhel9.sh
 # docker run -it --rm -v $(pwd):/sysroot almalinux:9 bash
 
 arch=$(uname -m)
@@ -14,13 +15,6 @@ echo "install rest of dependencies"
 dnf install -y epel-release
 dnf upgrade --refresh -y
 dnf config-manager --set-enabled crb
-dnf install -y \
-        mariadb-connector-c-devel \
-        expat-devel \
-        postgresql-devel \
-        unixODBC-devel \
-        jemalloc-devel \
-        openssl-devel \
-        libzstd-devel
 
+. /sysroot/packages_$distr.txt
 . /sysroot/mksysrootrhel.sh

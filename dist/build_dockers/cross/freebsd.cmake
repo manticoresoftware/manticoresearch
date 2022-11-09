@@ -1,7 +1,11 @@
 # Freebsd-13 toolchain
 
 set ( arch $ENV{arch} )
-set ( LLVM /usr/lib/llvm-13 )
+if ($ENV{llvm})
+	set ( LLVM /usr/lib/llvm-$ENV{llvm} )
+else ()
+	set ( LLVM /usr/lib/llvm-13 )
+endif ()
 
 set ( CMAKE_SYSTEM_NAME "FreeBSD" )
 set ( CMAKE_SYSTEM_PROCESSOR "${arch}" )

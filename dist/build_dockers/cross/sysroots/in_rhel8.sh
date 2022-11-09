@@ -1,10 +1,10 @@
 #!/bin/bash
-# docker run --rm -v $(pwd):/sysroot centos:8 bash /sysroot/in_centos.sh
+# file runs in the docker, invoked by the command in script redhat.sh
+# docker run --rm -v $(pwd):/sysroot centos:8 bash /sysroot/in_rhel8.sh
 # docker run -it --rm -v $(pwd):/sysroot centos:8 bash
 
 arch=$(uname -m)
 export arch
-#export distr=$1
 export distr=rhel8
 
 # centos8 reached eol at 31.12.2021, repo was removed. So, need to patch to use vault instead of mirror.
@@ -16,17 +16,10 @@ yum install -y \
         gcc-c++ \
         which
 
-# . /sysroot/mkboost.sh
+ . /sysroot/mkboost.sh
 
 echo "install rest of dependencies"
 yum install -y epel-release
-yum install -y \
-        mariadb-connector-c-devel \
-        expat-devel \
-        postgresql-devel \
-        unixODBC-devel \
-        jemalloc-devel \
-        openssl-devel \
-        libzstd-devel
 
+. /sysroot/packages_$distr.txt
 . /sysroot/mksysrootrhel.sh

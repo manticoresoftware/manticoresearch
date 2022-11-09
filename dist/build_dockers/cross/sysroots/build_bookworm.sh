@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # this is root script which should be run to do everything
-# build for ubuntu jammy (22.04 LTS)
+# build for debian bookworm (12), released ????
 
-distr=jammy
-image=ubuntu:$distr
+distr=bookworm
+image=debian:$distr
 . debian.sh

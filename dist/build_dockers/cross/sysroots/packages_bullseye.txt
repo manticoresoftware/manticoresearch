@@ -1,3 +1,6 @@
+# packages for debian bullseye (11), released 2021
+# file included from in_debian.sh
+
 apt-get install -y \
     default-libmysqlclient-dev \
     libexpat-dev \
@@ -5,4 +8,5 @@ apt-get install -y \
     unixodbc-dev \
     libjemalloc-dev \
     libssl-dev \
-    libzstd-dev
+    libzstd-dev \
+    libcurl4-openssl-dev

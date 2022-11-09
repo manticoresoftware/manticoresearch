@@ -1,0 +1,11 @@
+# file included from in_rhel9.sh
+
+dnf install -y \
+        mariadb-connector-c-devel \
+        expat-devel \
+        postgresql-devel \
+        unixODBC-devel \
+        jemalloc-devel \
+        openssl-devel \
+        libzstd-devel \
+        libcurl-devel

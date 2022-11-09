@@ -1,0 +1,12 @@
+# packages for debian bookworm (12), released ????
+# file included from in_debian.sh
+
+apt-get install -y \
+    default-libmysqlclient-dev \
+    libexpat-dev \
+    libpq-dev \
+    unixodbc-dev \
+    libjemalloc-dev \
+    libssl-dev \
+    libzstd-dev \
+    libcurl4-openssl-dev

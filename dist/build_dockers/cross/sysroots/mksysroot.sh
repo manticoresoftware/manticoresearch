@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# file included from all debian/ubuntu  in_*.sh in context of target system docker
+# $distr and $arch should be declared on inclusion of this file
+
 fixlinks()
 {
   cd $1

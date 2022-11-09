@@ -6,7 +6,11 @@ set ( root /sysroot/root )
 set ( ssldir /opt/openssl )
 
 set ( arch $ENV{arch} )
-set ( LLVM /usr/lib/llvm-13 )
+if ($ENV{llvm})
+	set ( LLVM /usr/lib/llvm-$ENV{llvm} )
+else ()
+	set ( LLVM /usr/lib/llvm-13 )
+endif ()
 
 set ( CMAKE_SYSTEM_NAME "Darwin" )
 set ( CMAKE_SYSTEM_PROCESSOR "${arch}" )

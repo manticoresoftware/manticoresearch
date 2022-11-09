@@ -1,13 +1,20 @@
 #!/bin/bash
 
-echo "build boost"
-boostver=1_78_0
+# file included from all in_*.sh in context of target system docker
+
+# boost_library.sh defines $boostver and $boostlibs, something like this:
+# boostver=1_78_0
+# boostlibs="--with-context --with-system --with-fiber --with-program_options --with-stacktrace  --with-filesystem"
+
+. /sysroot/boost_library.sh
+echo "build boost $boostver, params $boostlibs"
+
 cd /
 ln -s /sysroot/boost_${boostver}.tar.gz boost_${boostver}.tar.gz
-tar -zxf boost_${boostver}.tar.gz
+tar -xf boost_${boostver}.tar.gz
 cd boost_${boostver}
 ./bootstrap.sh
-./b2 install --with-context --with-system --with-fiber --with-program_options --with-stacktrace
+./b2 install $boostlibs
 
 echo "make link to shared boost includes"
 cd /usr/local

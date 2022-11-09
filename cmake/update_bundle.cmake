@@ -3,6 +3,10 @@ if (__update_bundle_included)
 endif ()
 set ( __update_bundle_included YES )
 
+IF (POLICY CMP0135)
+	CMAKE_POLICY ( SET CMP0135 NEW )
+ENDIF ()
+
 # env WRITEB (as bool) means that we can store downloaded stuff to our bundle (that's to refresh the bundle)
 # env CACHEB may provide path to persistent folder where we will build heavy stuff (unpacked sources, builds)
 include ( helpers )

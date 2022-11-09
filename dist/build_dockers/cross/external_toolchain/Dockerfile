@@ -1,7 +1,7 @@
 FROM ubuntu:focal
 ENV DEBIAN_FRONTEND noninteractive
 
-ARG llvm=13
+ENV llvm=15
 RUN apt-get update && apt-get install -y \
     make \
     ninja-build \
@@ -31,7 +31,7 @@ RUN apt-get update && apt-get install -y \
 # notice symlink of objcopy. That is need as system objcopy can't deal with alien arch
 
 # 2-nd layer, cmake
-ARG cmakever="3.23.2"
+ENV cmakever="3.24.3"
 RUN cd / \
 && wget https://github.com/Kitware/CMake/releases/download/v${cmakever}/cmake-${cmakever}-linux-$(uname -m).tar.gz \
 && tar -zxf cmake-${cmakever}-linux-$(uname -m).tar.gz \
@@ -48,15 +48,15 @@ ENTRYPOINT ["bash", "/sysroot/root/entry_point.sh"]
 CMD []
 
 ## on amd:
-# docker build -t external_toolchain:clang13_cmake3232 -t registry.gitlab.com/manticoresearch/dev/external_toolchain:clang13_cmake3232amd .
-# docker push registry.gitlab.com/manticoresearch/dev/external_toolchain:clang13_cmake3232amd
+# docker build -t external_toolchain:clang15_cmake3243 -t registry.gitlab.com/manticoresearch/dev/external_toolchain:clang15_cmake3243amd .
+# docker push registry.gitlab.com/manticoresearch/dev/external_toolchain:clang15_cmake3243amd
 
 # on arm
-# docker build -t external_toolchain:clang13_cmake3232 -t registry.gitlab.com/manticoresearch/dev/external_toolchain:clang13_cmake3232arm .
-# docker push registry.gitlab.com/manticoresearch/dev/external_toolchain:clang13_cmake3232arm
+# docker build -t external_toolchain:clang15_cmake3243 -t registry.gitlab.com/manticoresearch/dev/external_toolchain:clang15_cmake3243arm .
+# docker push registry.gitlab.com/manticoresearch/dev/external_toolchain:clang15_cmake3243arm
 
 # on any (amd or arm)
-# docker rmi registry.gitlab.com/manticoresearch/dev/external_toolchain:clang13_cmake3232
-# docker manifest rm registry.gitlab.com/manticoresearch/dev/external_toolchain:clang13_cmake3232
-# docker manifest create registry.gitlab.com/manticoresearch/dev/external_toolchain:clang13_cmake3232 --amend registry.gitlab.com/manticoresearch/dev/external_toolchain:clang13_cmake3232amd --amend registry.gitlab.com/manticoresearch/dev/external_toolchain:clang13_cmake3232arm
-# docker manifest push registry.gitlab.com/manticoresearch/dev/external_toolchain:clang13_cmake3232
+# docker rmi registry.gitlab.com/manticoresearch/dev/external_toolchain:clang15_cmake3243
+# docker manifest rm registry.gitlab.com/manticoresearch/dev/external_toolchain:clang15_cmake3243
+# docker manifest create registry.gitlab.com/manticoresearch/dev/external_toolchain:clang15_cmake3243 --amend registry.gitlab.com/manticoresearch/dev/external_toolchain:clang15_cmake3243amd --amend registry.gitlab.com/manticoresearch/dev/external_toolchain:clang15_cmake3243arm
+# docker manifest push registry.gitlab.com/manticoresearch/dev/external_toolchain:clang15_cmake3243

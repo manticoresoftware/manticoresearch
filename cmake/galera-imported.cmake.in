@@ -1,5 +1,9 @@
 cmake_minimum_required ( VERSION 3.17 )
 
+IF (POLICY CMP0135)
+	CMAKE_POLICY ( SET CMP0135 NEW )
+ENDIF ()
+
 project ( galera-prebuild NONE )
 
 include ( ExternalProject )

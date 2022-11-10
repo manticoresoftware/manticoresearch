@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>add/drop index regression</name>
+
+<requires>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+	<sphinxql>
+		create table t1 ( x text );
+	</sphinxql>
+	<sphinxql system="restart-daemon-no-warnings"/>
+	<sphinxql>
+		create table t ( x text );
+		drop table t;
+		drop table t1;
+	</sphinxql>
+</queries>
+
+</test>

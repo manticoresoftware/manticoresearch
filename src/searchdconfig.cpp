@@ -18,19 +18,19 @@
 #include "coroutine.h"
 #include "sphinxpq.h"
 
+using namespace Threads;
+
+static Coro::Mutex_c g_tSaveInProgress;
+static Coro::RWLock_c g_tCfgIndexesLock;
+
 // description of clusters and indexes loaded from internal config
 static CSphVector<ClusterDesc_t> g_dCfgClusters;
-static CSphVector<IndexDesc_t> g_dCfgIndexes;
+static CSphVector<IndexDesc_t> g_dCfgIndexes GUARDED_BY ( g_tCfgIndexesLock );
 
 static CSphString	g_sLogFile;
 static CSphString	g_sDataDir;
 static CSphString	g_sConfigPath;
 static bool			g_bConfigless = false;
-
-using namespace Threads;
-
-static Coro::Mutex_c	g_tSaveInProgress;
-static Coro::Mutex_c	g_tCfgIndexesLock;
 
 static CSphString GetPathForNewIndex ( const CSphString & sIndexName )
 {
@@ -612,7 +612,7 @@ void ConfigureAndPreloadConfiglessIndexes ( int & iValidIndexes, int & iCounter 
 {
 	// assume g_dCfgIndexes has all locals, then all distributed. Otherwise, distr with yet invisible local agents will fail to load!
 	assert ( IsConfigless() );
-	ScopedCoroMutex_t tCfgLock ( g_tCfgIndexesLock );
+	SccRL_t tCfgRLock { g_tCfgIndexesLock };
 	for ( const IndexDesc_t & tIndex : g_dCfgIndexes )
 	{
 		CSphString sError;
@@ -629,22 +629,9 @@ void ConfigureAndPreloadConfiglessIndexes ( int & iValidIndexes, int & iCounter 
 	}
 }
 
-static SmallStringHash_T<IndexDesc_t *> GetConfigLocal ()
-{
-	SmallStringHash_T<IndexDesc_t *> hLocal;
-	ScopedCoroMutex_t tCfgLock ( g_tCfgIndexesLock );
-	ARRAY_FOREACH ( i, g_dCfgIndexes )
-	{
-		IndexDesc_t * pDesc = g_dCfgIndexes.Begin() + i;
-		hLocal.Add ( pDesc, pDesc->m_sName );
-	}
-
-	return hLocal;
-}
-
 static bool HasConfigLocal ( const CSphString & sName )
 {
-	ScopedCoroMutex_t tCfgLock ( g_tCfgIndexesLock );
+	SccRL_t tCfgRLock { g_tCfgIndexesLock };
 	return g_dCfgIndexes.Contains ( bind ( &IndexDesc_t::m_sName ), sName );
 }
 
@@ -653,8 +640,6 @@ static void CollectLocalIndexesInt ( CSphVector<IndexDesc_t> & dIndexes )
 {
 	if ( !IsConfigless() )
 		return;
-
-	auto tConfigLocal = GetConfigLocal();
 
 	assert ( g_pLocalIndexes );
 	ServedSnap_t hLocals = g_pLocalIndexes->GetHash();
@@ -665,16 +650,15 @@ static void CollectLocalIndexesInt ( CSphVector<IndexDesc_t> & dIndexes )
 		tIndex.m_sName = tIt.first;
 		tIndex.m_sPath = tIt.second->m_sIndexPath;
 		tIndex.m_eType = tIt.second->m_eType;
-
-		tConfigLocal.Delete ( tIt.first );
 	}
+
+	SmallStringHash_T<IndexDesc_t*> hConfigLocal;
+	SccRL_t tCfgRLock { g_tCfgIndexesLock };
+	for_each ( g_dCfgIndexes, [&hConfigLocal] ( IndexDesc_t& tDesc ) { hConfigLocal.Add ( &tDesc, tDesc.m_sName ); } );
+	for_each ( *hLocals, [&hConfigLocal] ( auto& tIt ) { hConfigLocal.Delete ( tIt.first ); } );
 
 	// keep indexes loaded from JSON but disabled due to errors
-	for ( const auto & tIt : tConfigLocal )
-	{
-		assert ( tIt.second );
-		dIndexes.Add ( *tIt.second );
-	}
+	for_each ( hConfigLocal, [&dIndexes] ( auto& tIt ) { assert ( tIt.second); dIndexes.Add ( *tIt.second ); } );
 }
 
 
@@ -791,6 +775,7 @@ bool LoadConfigInt ( const CSphConfig & hConf, const CSphString & sConfigFile, C
 		return false;
 	}
 
+	SccWL_t tCfgWLock { g_tCfgIndexesLock };
 	if ( !ConfigRead ( g_sConfigPath, g_dCfgClusters, g_dCfgIndexes, sError ) )
 	{
 		sError.SetSprintf ( "failed to use JSON config %s: %s", g_sConfigPath.cstr(), sError.cstr() );
@@ -1289,14 +1274,12 @@ static void RemoveConfigIndex ( const CSphString & sIndex )
 {
 	g_pLocalIndexes->Delete ( sIndex );
 
-	// also remove index from list of indexes at the JSON config 
-	ScopedCoroMutex_t tCfgLock ( g_tCfgIndexesLock );
-	if ( g_dCfgIndexes.GetLength() )
-	{
-		int iIdx = g_dCfgIndexes.GetFirst ( [&] ( const IndexDesc_t & tIdx ) { return tIdx.m_sName==sIndex; } );
-		assert ( iIdx!=-1 );
+	// also remove index from list of indexes at the JSON config
+	SccWL_t tCfgWLock { g_tCfgIndexesLock };
+	int iIdx = g_dCfgIndexes.GetFirst ( [&] ( const IndexDesc_t & tIdx ) { return tIdx.m_sName==sIndex; } );
+
+	if ( iIdx>=0 )
 		g_dCfgIndexes.Remove ( iIdx );
-	}
 }
 
 static bool DropLocalIndex ( const CSphString & sIndex, CSphString & sError )

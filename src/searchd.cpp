@@ -19712,17 +19712,26 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	g_bPidIsMine = true;
 
 	// Actions on resurrection
-	if ( bWatched && !bVisualLoad && LoadAndCheckConfig () )
+	if ( bWatched && !bVisualLoad )
 	{
-		// reparse the config file
-		sphInfo ( "Reloading the config (%d chars)", g_dConfig.GetLength() );
+		if ( !LoadConfigInt ( hConf, g_sConfigFile, sError ) )
+			sphFatal ( "%s", sError.cstr() );
 
-		// fake lock is acquired; no warnings will be fired
-		if ( !ParseConfig ( &g_hCfg, g_sConfigFile.cstr (), g_dConfig.begin () ) )
-			sphFatal ( "failed to parse config file '%s': %s", g_sConfigFile.cstr (), TlsMsg::szError() );
+		if ( LoadAndCheckConfig() )
+		{
+			// reparse the config file
+			sphInfo ( "Reloading the config (%d chars)", g_dConfig.GetLength() );
 
-		sphInfo ( "Reconfigure the daemon" );
-		ConfigureSearchd ( hConf, bOptPIDFile, bTestMode );
+			// fake lock is acquired; no warnings will be fired
+			if ( !ParseConfig ( &g_hCfg, g_sConfigFile.cstr (), g_dConfig.begin () ) )
+				sphFatal ( "failed to parse config file '%s': %s", g_sConfigFile.cstr (), TlsMsg::szError() );
+
+			if ( !LoadConfigInt ( hConf, g_sConfigFile, sError ) )
+				sphFatal ( "%s", sError.cstr() );
+
+			sphInfo ( "Reconfigure the daemon" );
+			ConfigureSearchd ( hConf, bOptPIDFile, bTestMode );
+		}
 	}
 	CleanLoadedConfig();
 

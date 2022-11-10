@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>watchdog in rt-mode</name>
+
+<requires>
+	<watchdog/>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<requires><watchdog/></requires>
+<skip_indexer/>
+
+<config>
+searchd
+{
+    <searchd_settings/>
+    data_dir = <data_path path="data0"/>
+	binlog_path = #
+}
+</config>
+
+<queries>
+	<sphinxql>
+		create table a (x text);
+		create table b (x text);
+		insert into a values (1, 'bla');
+		insert into b values (2, 'bla');
+		flush rtindex a;
+		flush rtindex b;
+	</sphinxql>
+	<sphinxql system="restart-daemon-no-warnings"/>
+	<sphinxql>
+		show tables;
+		drop table a;
+		drop table b;
+		create table d (x text);
+		show tables;
+	</sphinxql>
+	<sphinxql system="kill-daemon"/>
+	<sphinxql system="start-agent-no-warnings"/>
+	<sphinxql>
+		show tables;
+		drop table d;
+	</sphinxql>
+</queries>
+
+</test>

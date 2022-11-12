@@ -20,10 +20,14 @@
     * use `ALTER TABLE <table name> REBUILD SECONDARY` to recover secondary indexes
   - If you are running a replication cluster, full cluster restart should be performed with removal of `.spidx` files and `ALTER TABLE <table name> REBUILD SECONDARY` on all the nodes. Read about [restarting a cluster](../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md#Restarting-a-cluster) for more details.
 * `SHOW SETTINGS`
+* `disable_ps_threshold`
+* `max_matches_increase_threshold`
 
 ### Packaging
 * arm64 packages for macOS and Linuxes
 * easier package building for contributors
+* Centos 9
+* Debian Bookworm
 
 # Version 5.0.2
 Released: May 30th 2022

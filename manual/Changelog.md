@@ -11,14 +11,7 @@
 
 ### Minor changes
 * Queries with stateful UDFs are now forced to be executed in a single thread
-* **⚠️ BREAKING CHANGE**: Secondary indexes file format got changed and if you are using secondary indexes for searching (`searchd.secondary_indexes = 1` which was not a default in the previous versions) the new Manticore version will skip loading older index versions to prevent performance drop. The recommendations are:
-  - remove secondary indexes files during upgrade:
-    * `systemctl stop manticore`
-    * upgrade Manticore version
-    * remove `.spidx` index files
-    * start Manticore back
-    * use `ALTER TABLE <table name> REBUILD SECONDARY` to recover secondary indexes
-  - If you are running a replication cluster, full cluster restart should be performed with removal of `.spidx` files and `ALTER TABLE <table name> REBUILD SECONDARY` on all the nodes. Read about [restarting a cluster](../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md#Restarting-a-cluster) for more details.
+* **⚠️ BREAKING CHANGE**: Secondary indexes file format has got changed, so if you are using secondary indexes for searching (in this case you should have `searchd.secondary_indexes = 1` in your configuration file) be aware that the new Manticore version will skip loading the secondary indexes and will put a warning about it to log. It's recommended to run `ALTER TABLE <table name> REBUILD SECONDARY` for each index to rebuild the secondary indexes after you start Manticore. If you are running a replication cluster, you'll need to run `ALTER TABLE <table name> REBUILD SECONDARY` on all the nodes or follow [this instruction](../Securing_and_compacting_an_index/Compacting_an_index.md#Optimizing-clustered-indexes), just run the `ALTER` instead of the `OPTIMIZE`.
 * `SHOW SETTINGS`
 * `disable_ps_threshold`
 * `max_matches_increase_threshold`

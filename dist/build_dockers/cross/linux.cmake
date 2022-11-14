@@ -22,6 +22,9 @@ set ( CMAKE_CXX_COMPILER ${LLVM}/bin/clang++ )
 
 set ( CMAKE_C_COMPILER_TARGET ${OS_TRIPLE} )
 set ( CMAKE_CXX_COMPILER_TARGET ${OS_TRIPLE} )
+# debug in DWARF-4 is set for fresh clang (>=15), as debugedit in rpm can't understand DWARF-5 flavour
+# build-id set to sha1, as it is mandatory for debuginfo.
+set ( CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -gdwarf-4 -DNDEBUG" CACHE STRING "" )
 set ( CMAKE_EXE_LINKER_FLAGS_INIT "-fuse-ld=lld -Xlinker --build-id=sha1" )
 set ( CMAKE_MODULE_LINKER_FLAGS_INIT "-fuse-ld=lld -Xlinker --build-id=sha1" )
 set ( CMAKE_SHARED_LINKER_FLAGS_INIT "-fuse-ld=lld -Xlinker --build-id=sha1" )

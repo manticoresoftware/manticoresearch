@@ -2,7 +2,7 @@
 
 ### SQL commands
 ##### Schema management
-* [CREATE TABLE IF NOT EXISTS](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#General-syntax-of-CREATE-TABLE) - Creates new table
+* [CREATE TABLE](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#General-syntax-of-CREATE-TABLE) - Creates new table
 * [CREATE TABLE LIKE](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Creating-a-real-time-index-online-via-CREATE-TABLE) - Creates table using another one as a template
 * [DESCRIBE](Listing_indexes.md#DESCRIBE) - Prints out table's field list and their types
 * [ALTER TABLE](Updating_table_schema_and_settings.md) - Changes table schema / settings

@@ -8019,6 +8019,8 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	CSphVector<CSphFilterSettings> dModifiedFilters; // holds filter settings if they were modified. filters holds pointers to those settings
 	std::unique_ptr<RowidIterator_i> pIterator ( SpawnIterators ( tQuery, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff, dModifiedFilters ) );
 
+	SwitchProfile ( tMeta.m_pProfile, SPH_QSTATE_FULLSCAN );
+
 	bool bCutoffHit =  false;
 	if ( pIterator )
 	{

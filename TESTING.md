@@ -51,5 +51,3 @@ $ ctest -C Debug -I 1,10,1
 If you are fixing a regression you must add or update a functional test which failed prior to the pull request got merged and passed fine after the pull request got merged.
 
 
-[![Analytics](https://ga-beacon.appspot.com/UA-114439919-1/manticoresoftware/manticore/TESTING.md?pixel&useReferer)](https://github.com/manticoresoftware/manticore)
-

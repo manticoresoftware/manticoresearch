@@ -45,5 +45,3 @@ Project maintainers who do not follow or enforce the Code of Conduct in good fai
 ## Attribution
 
 This Code of Conduct is adapted from the Contributor Covenant, version 1.4, available at http://contributor-covenant.org/version/1/4.
-
-[![Analytics](https://ga-beacon.appspot.com/UA-114439919-1/manticoresoftware/manticore/CODE_OF_CONDUCT.md?pixel&useReferer)](https://github.com/manticoresoftware/manticore)

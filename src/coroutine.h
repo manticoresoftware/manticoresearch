@@ -13,7 +13,9 @@
 #include "threadutils.h"
 #include "optional.h"
 #include "mini_timer.h"
+
 #include <atomic>
+#include <chrono>
 
 // note: we not yet link to boost::fiber, so just inclusion of some of it's header is enough.
 // Once we do link - add searching of that component into Cmake, than m.b. remove this comment as redundant
@@ -252,9 +254,11 @@ void SetDefaultThrottlingPeriodMS ( int tmPeriodMs );
 // 0 means 'don't throttle'
 // any other positive expresses throttling interval in milliseconds
 void SetThrottlingPeriod ( int tmPeriodMs = -1 );
+int64_t GetThrottlingPeriodUS();
 
 // check if we run > ThrottleQuantum since last resume, or since timer restart
 bool RuntimeExceeded() noexcept;
+const int64_t& GetNextTimePointUS() noexcept;
 
 // common throttle action - keep crash query and reschedule. Timer will be re-engaged on resume
 void RescheduleAndKeepCrashQuery();
@@ -270,6 +274,27 @@ inline void ThrottleAndKeepCrashQuery()
 
 // yield and reschedule after given period of time (in milliseconds)
 void SleepMsec ( int iMsec );
+
+// periodical check with minimum footprint.
+// check may be called with high rate - billions time a sec.
+// to avoid 'heavy' check, we first measure time of several iterations (1, 2, 3, 5, 8 ... fibonacci),
+// until measured time reach 1/CHECK_PER_PERIOD of throttling period. Then we run such 'heavy' checks only when reach
+// measured N of iterations. So, for ~10M iterations we make just 36 measurements, and then make mostly CHECK_PER_PERIOD 'heavy' checks per throttling period.
+class HighFreqChecker_c : public ISphNoncopyable
+{
+	static constexpr int CHECK_PER_PERIOD = 8;
+	int m_iHits = -1;		/// main hits counter
+	int m_iPivotHits = 0;	/// up bound of the counter - do heavy check when reached
+
+	int m_iFibPrev = 0;			/// previous and current fibonacci seq numbers
+	int m_iFibCurrent = 1;		///
+
+	const int64_t m_iPivotPeriod { GetThrottlingPeriodUS() / CHECK_PER_PERIOD };	/// time in Us until we continue probinb
+	std::chrono::time_point<std::chrono::steady_clock> m_tmFirstHit;				/// timestamp of first iteration
+
+public:
+	bool operator()();
+};
 
 // event is specially designed for netloop - here SetEvent doesn't require to be run from Coro, however WaitEvent does.
 // by that fact other kind of condvar is not suitable here.

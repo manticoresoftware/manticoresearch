@@ -158,6 +158,47 @@ void ClonableCtx_T<REFCONTEXT, CONTEXT, IS_ORDERED>::Finalize()
 }
 
 /////////////////////////////////////////////////////////////////////////////
+/// HighFreqChecker_c
+/////////////////////////////////////////////////////////////////////////////
+inline bool Coro::HighFreqChecker_c::operator()()
+{
+	using namespace std::chrono;
+
+	if ( !m_iPivotPeriod )
+		return false;
+
+	++m_iHits;
+	if ( !m_iPivotHits )
+	{
+		if ( !m_iHits ) // very first run, we know nothing yet.
+		{
+			m_tmFirstHit = steady_clock::now();
+			return false;
+		}
+
+		if ( m_iHits < m_iFibCurrent )
+			return false;
+
+		if ( duration_cast<microseconds> ( steady_clock::now() - m_tmFirstHit ).count() >= m_iPivotPeriod )
+		{
+			m_iPivotHits = m_iHits;
+		} else
+		{
+			m_iFibPrev = std::exchange ( m_iFibCurrent, m_iFibCurrent + m_iFibPrev ); // next fibonacci seq number
+			return false;
+		}
+	}
+
+	assert ( m_iPivotHits );
+	if ( m_iHits == m_iPivotHits )
+	{
+		m_iHits = 0;
+		return true;
+	}
+	return false;
+}
+
+/////////////////////////////////////////////////////////////////////////////
 /// ScopedScheduler_c
 /////////////////////////////////////////////////////////////////////////////
 

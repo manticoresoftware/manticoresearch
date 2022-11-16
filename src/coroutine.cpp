@@ -539,7 +539,7 @@ public:
 	inline void SetTimePeriodUS ( int64_t tmTimePointPeriodUS )
 	{
 		m_tmRuntimePeriodUS = tmTimePointPeriodUS;
-		CheckEngageTimer( TimePoint_e::fromresume );
+		CheckEngageTimer ( TimePoint_e::fromresume );
 	}
 
 	inline bool RuntimeExceeded() const
@@ -853,7 +853,7 @@ void ExecuteN ( int iConcurrency, Threads::Handler&& fnWorker )
 	WaitForDeffered ( std::move ( dWaiter ));
 }
 
-int tmThrotleTimeQuantumMs; // how long task may work before rescheduling (in milliseconds)
+int tmThrotleTimeQuantumMs = tmDefaultThrotleTimeQuantumMs; // how long task may work before rescheduling (in milliseconds)
 
 void SetDefaultThrottlingPeriodMS ( int tmPeriodMs )
 {

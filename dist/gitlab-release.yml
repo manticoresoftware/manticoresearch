@@ -16,7 +16,7 @@ variables:
   needs: [ ]
   tags:
     - docker
-  image: registry.gitlab.com/manticoresearch/dev/external_toolchain:clang13_cmake3243
+  image: registry.gitlab.com/manticoresearch/dev/external_toolchain:clang15_cmake3243
   rules:
     - if: $WHAT=='$WHAT'
     - if: $WHAT==null

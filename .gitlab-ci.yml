@@ -77,7 +77,7 @@ docs_deploy:
   needs: [ ]
   tags:
     - docker
-  image: registry.gitlab.com/manticoresearch/dev/external_toolchain:clang13_cmake3243
+  image: registry.gitlab.com/manticoresearch/dev/external_toolchain:clang15_cmake3243
   variables:
     CACHEB: "../cache"
     DIAGNOSTIC: 1 # let's set it by default forever

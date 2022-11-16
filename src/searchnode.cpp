@@ -2010,7 +2010,7 @@ const ExtDoc_t * ExtTerm_T<USE_BM25>::GetDocsChunk()
 	{
 		if ( m_pWarning )
 			*m_pWarning = "predicted query time exceeded max_predicted_time";
-		return NULL;
+		return nullptr;
 	}
 
 	if ( Threads::Coro::RuntimeExceeded() )
@@ -3036,7 +3036,7 @@ const ExtDoc_t * ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::GetDocsChunk()
 	{
 		if ( m_pWarning )
 			*m_pWarning = "predicted query time exceeded max_predicted_time";
-		return NULL;
+		return nullptr;
 	}
 
 	if ( Threads::Coro::RuntimeExceeded() )
@@ -3046,14 +3046,14 @@ const ExtDoc_t * ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::GetDocsChunk()
 		{
 			if ( m_pWarning )
 				*m_pWarning = "Server shutdown in progress";
-			return NULL;
+			return nullptr;
 		}
 
 		if ( session::GetKilled() )
 		{
 			if ( m_pWarning )
 				*m_pWarning = "query was killed";
-			return NULL;
+			return nullptr;
 		}
 		Threads::Coro::RescheduleAndKeepCrashQuery();
 	}
@@ -5894,7 +5894,7 @@ const ExtDoc_t * ExtNodeCached_c::GetDocsChunk()
 	{
 		if ( m_pWarning )
 			*m_pWarning = "query time exceeded max_query_time";
-		return NULL;
+		return nullptr;
 	}
 
 	if ( Threads::Coro::RuntimeExceeded() )

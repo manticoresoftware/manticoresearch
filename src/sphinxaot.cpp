@@ -155,8 +155,8 @@ typedef CSphVector<CMorphForm> CFlexiaModel;
 class CLemmatizer
 {
 protected:
-	static const int			MAX_PREFIX_LEN = 12;
-	static const bool			m_bMaximalPrediction = false;
+	static constexpr int		MAX_PREFIX_LEN = 12;
+	static constexpr bool		m_bMaximalPrediction = false;
 	bool						m_bIsGerman;
 
 	BYTE						m_UC[256];
@@ -442,8 +442,8 @@ bool CLemmatizer::IsPrefix ( const BYTE * sPrefix, int iLen ) const
 /// returns true if matched in dictionary, false if predicted
 bool CLemmatizer::LemmatizeWord ( BYTE * pWord, DWORD * results ) const
 {
-	const bool bCap = false; // maybe when we manage to drag this all the way from tokenizer
-	const bool bPredict = true;
+	constexpr bool bCap = false; // maybe when we manage to drag this all the way from tokenizer
+	constexpr bool bPredict = true;
 
 	// uppercase (and maybe other translations), check, and compute length
 	BYTE * p;
@@ -557,20 +557,20 @@ void CLemmatizer::PredictByDataBase ( const BYTE * pWord, int iLen, DWORD * Find
 	for ( int i=0; i<32; i++ )
 		has_nps[i] = -1;
 
-	ARRAY_FOREACH ( j, res )
+	for ( const auto& tPredict : res )
 	{
-		BYTE PartOfSpeechNo = res[j].m_PartOfSpeechNo;
-		if_const ( !m_bMaximalPrediction && has_nps[PartOfSpeechNo]!=-1 )
+		BYTE PartOfSpeechNo = tPredict.m_PartOfSpeechNo;
+		if ( !m_bMaximalPrediction && has_nps[PartOfSpeechNo]!=-1 )
 		{
 			int iOldFreq = m_ModelFreq [ AOT_MODEL_NO ( FindResults[has_nps[PartOfSpeechNo]] ) ];
-			int iNewFreq = m_ModelFreq [ m_LemmaFlexiaModel [ res[j].m_LemmaInfoNo ] ];
+			int iNewFreq = m_ModelFreq [ m_LemmaFlexiaModel [tPredict.m_LemmaInfoNo ] ];
 			if ( iOldFreq < iNewFreq )
-				FindResults [ has_nps [ PartOfSpeechNo ] ] = PredictPack ( res[j] );
+				FindResults [ has_nps [ PartOfSpeechNo ] ] = PredictPack ( tPredict );
 			continue;
 		}
 
 		has_nps [ PartOfSpeechNo ] = (int)( pOut-FindResults );
-		*pOut++ = PredictPack ( res[j] );
+		*pOut++ = PredictPack ( tPredict );
 		*pOut = AOT_NOFORM;
 	}
 

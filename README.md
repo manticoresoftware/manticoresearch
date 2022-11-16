@@ -200,4 +200,3 @@ Manticore Search is a GPLv2-licensed Open Source project with development made p
 
 * [Donation through PayPal](https://www.paypal.me/manticoresearch)
 * [Become our client and let us help you](https://manticoresearch.com/services)
-* [Buy our t-shirt or a mug](https://geekswag.co/collections/manticore-search)

@@ -610,6 +610,9 @@ bool GenericTableIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery
 
 	SetSorterStuff ( &tMatch );
 
+	Threads::Coro::HighFreqChecker_c fnHeavyCheck;
+	const int64_t& iCheckTimePoint { Threads::Coro::GetNextTimePointUS() };
+
 	while ( FillNextMatch() )
 	{
 		++tMeta.m_tStats.m_iFetchedDocs;
@@ -647,7 +650,7 @@ bool GenericTableIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery
 			break;
 		}
 
-		if ( Threads::Coro::RuntimeExceeded() )
+		if ( fnHeavyCheck() && sph::TimeExceeded ( iCheckTimePoint ) )
 		{
 			if ( session::GetKilled() )
 			{

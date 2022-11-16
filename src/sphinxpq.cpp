@@ -2304,6 +2304,8 @@ bool PercolateIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery & 
 
 	CSphVector<PercolateQueryDesc> dQueries;
 	auto dStored = GetStored();
+	const int64_t& iCheckTimePoint { Threads::Coro::GetNextTimePointUS() };
+	Threads::Coro::HighFreqChecker_c fnHeavyCheck;
 
 	for ( const StoredQuery_t * pQuery : dStored )
 	{
@@ -2364,7 +2366,7 @@ bool PercolateIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery & 
 			break;
 		}
 
-		if ( Threads::Coro::RuntimeExceeded() )
+		if ( fnHeavyCheck() && sph::TimeExceeded ( iCheckTimePoint ) )
 		{
 			if ( session::GetKilled() )
 			{

@@ -7634,6 +7634,9 @@ bool Fullscan ( ITERATOR & tIterator, TO_STATIC && fnToStatic, const CSphQueryCo
 	auto tScopedStats = AtScopeExit ( [&tMeta, &tIterator]{tMeta.m_tStats.m_iFetchedDocs = (DWORD)tIterator.GetNumProcessed(); } );
 
 	RowIdBlock_t dRowIDs;
+	Threads::Coro::HighFreqChecker_c fnHeavyCheck;
+	const int64_t& iCheckTimePoint { Threads::Coro::GetNextTimePointUS() };
+
 	while ( tIterator.GetNextRowIdBlock(dRowIDs) )
 		for ( auto i : dRowIDs )
 		{
@@ -7687,7 +7690,7 @@ bool Fullscan ( ITERATOR & tIterator, TO_STATIC && fnToStatic, const CSphQueryCo
 				}
 			}
 
-			if ( Threads::Coro::RuntimeExceeded() )
+			if ( fnHeavyCheck() && sph::TimeExceeded ( iCheckTimePoint ) )
 			{
 				if ( session::GetKilled() )
 				{

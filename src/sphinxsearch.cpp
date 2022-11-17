@@ -2610,6 +2610,7 @@ struct Expr_BM25F_T : public Expr_NoLocator_c
 	CSphFixedVector<int>			m_dWeights { 0 };			///< per field weights
 	CSphFixedVector<float>			m_dAvgDocFieldLens { 0 };	///< per field avg lengths
 	mutable CSphFixedVector<int>	m_dFieldLens { 0 };		///< per field lengths
+	int					m_iWeightMax;			///< the largest field weight
 
 	explicit Expr_BM25F_T ( RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES> * pState, float k1, float b, ISphExpr * pFieldWeights )
 	{
@@ -2623,6 +2624,7 @@ struct Expr_BM25F_T : public Expr_NoLocator_c
 		m_dFieldLens.Reset ( pState->m_iFields );
 
 		// bind weights
+		m_iWeightMax = 1;
 		m_dWeights.Fill ( 1 );
 		if ( pFieldWeights )
 		{
@@ -2637,7 +2639,11 @@ struct Expr_BM25F_T : public Expr_NoLocator_c
 				const CSphString & sField = dOpt.m_sKey;
 				int iField = pState->m_pSchema->GetFieldIndex ( sField.cstr() );
 				if ( iField>=0 )
+				{
 					m_dWeights[iField] = dOpt.m_iValue;
+					if ( dOpt.m_iValue > m_iWeightMax )
+						m_iWeightMax = dOpt.m_iValue;
+				}
 			}
 		}
 
@@ -2676,7 +2682,7 @@ struct Expr_BM25F_T : public Expr_NoLocator_c
 			{
 				int fFieldTF =  m_pState->m_dFieldTF [ iWord + i*(1+m_pState->m_iMaxQpos) ];
 				if ( m_dAvgDocFieldLens[i]>0.0f && fFieldTF>0 )
-					fRes += m_dWeights[i] * fIDF * fFieldTF * (m_fK1 + 1.0f) / (fFieldTF + m_fK1 * (1.0f - m_fB + m_fB * m_dFieldLens[i] / m_dAvgDocFieldLens[i]) );
+					fRes += (m_dWeights[i] / (float)m_iWeightMax) * fIDF * fFieldTF * (m_fK1 + 1.0f) / (fFieldTF + m_fK1 * (1.0f - m_fB + m_fB * m_dFieldLens[i] / m_dAvgDocFieldLens[i]) );
 			}
 		}
 		return fRes + 0.5f; // map to [0..1] range
@@ -2702,6 +2708,7 @@ private:
 		, m_dWeights ( rhs.m_dWeights )
 		, m_dAvgDocFieldLens ( rhs.m_dAvgDocFieldLens )
 		, m_dFieldLens ( rhs.m_dFieldLens )
+		, m_iWeightMax ( rhs.m_iWeightMax )
 	{}
 };
 

@@ -86,7 +86,8 @@ void PublicThreadDesc_t::Swap ( PublicThreadDesc_t & rhs )
 void CopyBasicThreadInfo ( const Threads::LowThreadDesc_t * pSrc, PublicThreadDesc_t & dDst )
 {
 	dDst.m_iThreadID = pSrc->m_iThreadID;
-	dDst.m_tmStart.emplace_once ( pSrc->m_tmStart );
+	if ( !dDst.m_tmStart )
+		dDst.m_tmStart.emplace ( pSrc->m_tmStart );
 	dDst.m_tmLastJobStartTimeUS = pSrc->m_tmLastJobStartTimeUS;
 	dDst.m_tmLastJobDoneTimeUS = pSrc->m_tmLastJobDoneTimeUS;
 	dDst.m_tmTotalWorkedTimeUS = pSrc->m_tmTotalWorkedTimeUS;
@@ -173,7 +174,8 @@ DEFINE_RENDER ( TaskInfo_t ) {};
 
 void MiniTaskInfo_t::RenderWithoutChain ( PublicThreadDesc_t& dDst )
 {
-	dDst.m_tmStart.emplace_once ( m_tmStart );
+	if ( !dDst.m_tmStart )
+		dDst.m_tmStart.emplace ( m_tmStart );
 	dDst.m_szCommand = m_szCommand;
 	hazard::Guard_c tGuard;
 	auto pDescription = tGuard.Protect ( m_pHazardDescription );

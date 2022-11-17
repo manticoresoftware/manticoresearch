@@ -12,17 +12,17 @@
 
 #include "threadutils.h"
 #include <boost/context/detail/prefetch.hpp>
+#include <optional>
 
 #if !_WIN32
 // UNIX-specific headers and calls
 #include <sys/syscall.h>
 #include <signal.h>
+#endif
 
 // for thr_self()
 #ifdef __FreeBSD__
 #include <sys/thr.h>
-#endif
-
 #endif
 
 using namespace Threads;
@@ -103,9 +103,10 @@ int GetOsProcessId()
 #endif
 }
 
-#include <atomic>
 #include "event.h"
-#include "optional.h"
+
+#include <atomic>
+#include <optional>
 
 //////////////////////////////////////////////////////////////////////////
 /// functional threadpool with minimum footprint
@@ -697,7 +698,7 @@ class ThreadPool_c final : public Worker_i
 
 	const char * m_szName = nullptr;
 	Service_t m_tService;
-	Optional_T<Work> m_dWork;
+	std::optional<Work> m_dWork;
 	CSphVector<SphThread_t> m_dThreads;
 	CSphMutex m_dMutex;
 	std::atomic<bool> m_bStop {false};

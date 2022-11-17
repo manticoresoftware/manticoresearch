@@ -1287,7 +1287,7 @@ private:
 
 class CSphSessionAccum
 {
-	Optional_T<RtAccum_t> m_tAcc;
+	std::optional<RtAccum_t> m_tAcc;
 
 public:
 	RtAccum_t * GetAcc ( RtIndex_i * pIndex, CSphString & sError );

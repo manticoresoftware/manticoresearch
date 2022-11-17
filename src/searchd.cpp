@@ -12193,7 +12193,7 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 		tOut.PutString ( dThd.m_sClientName ); // Host
 		tOut.PutNumAsString ( dThd.m_iConnID ); // ConnID
 		int64_t tmNow = sphMicroTimer (); // short-term cache
-		tOut.PutMicrosec ( tmNow-dThd.m_tmStart.get_value_or(tmNow) ); // time
+		tOut.PutMicrosec ( tmNow-dThd.m_tmStart.value_or(tmNow) ); // time
 		tOut.PutTimeAsString ( dThd.m_tmTotalWorkedTimeUS ); // work time
 		tOut.PutTimeAsString ( dThd.m_tmTotalWorkedCPUTimeUS ); // work CPU time
 		tOut.PutPercentAsString ( dThd.m_tmTotalWorkedCPUTimeUS, dThd.m_tmTotalWorkedTimeUS ); // work CPU time %
@@ -16006,18 +16006,20 @@ void HandleMysqlKill ( RowBuffer_i& tOut, int iKill )
 RtAccum_t* CSphSessionAccum::GetAcc ( RtIndex_i* pIndex, CSphString& sError )
 {
 	assert ( pIndex );
-	m_tAcc.emplace_once();
+	if ( !m_tAcc )
+		m_tAcc.emplace();
 
-	if ( !pIndex->BindAccum ( &m_tAcc.get(), &sError ) )
+	if ( !pIndex->BindAccum ( &m_tAcc.value(), &sError ) )
 		return nullptr;
 
-	return &m_tAcc.get();
+	return &m_tAcc.value();
 }
 
 RtAccum_t* CSphSessionAccum::GetAcc()
 {
-	m_tAcc.emplace_once();
-	return &m_tAcc.get();
+	if ( !m_tAcc )
+		m_tAcc.emplace();
+	return &m_tAcc.value();
 }
 
 RtIndex_i * CSphSessionAccum::GetIndex ()
@@ -16900,7 +16902,7 @@ bool RotateIndexGreedy ( const ServedIndex_c& tServed, const char* szIndex, CSph
 	}
 
 	bool bHasOldServedFiles = dServedFiles.HasAllFiles();
-	Optional_T<ActionSequence_c> tActions;
+	std::optional<ActionSequence_c> tActions;
 
 	if ( tCheck.RotateFromNew() )
 	{

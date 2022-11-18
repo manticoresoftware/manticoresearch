@@ -7638,6 +7638,7 @@ bool Fullscan ( ITERATOR & tIterator, TO_STATIC && fnToStatic, const CSphQueryCo
 	const int64_t& iCheckTimePoint { Threads::Coro::GetNextTimePointUS() };
 
 	while ( tIterator.GetNextRowIdBlock(dRowIDs) )
+	{
 		for ( auto i : dRowIDs )
 		{
 			tMatch.m_tRowID = i;
@@ -7679,27 +7680,28 @@ bool Fullscan ( ITERATOR & tIterator, TO_STATIC && fnToStatic, const CSphQueryCo
 				if ( bNewMatch && --iCutoff==0 )
 					return true;
 			}
+		}
 
-			// handle timer
-			if_const ( HAS_MAX_TIMER )
+		// handle timer
+		if_const ( HAS_MAX_TIMER )
+		{
+			if ( sph::TimeExceeded ( tmMaxTimer ) )
 			{
-				if ( sph::TimeExceeded ( tmMaxTimer ) )
-				{
-					tMeta.m_sWarning = "query time exceeded max_query_time";
-					return true;
-				}
-			}
-
-			if ( fnHeavyCheck() && sph::TimeExceeded ( iCheckTimePoint ) )
-			{
-				if ( session::GetKilled() )
-				{
-					tMeta.m_sWarning = "query was killed";
-					return true;
-				}
-				Threads::Coro::RescheduleAndKeepCrashQuery();
+				tMeta.m_sWarning = "query time exceeded max_query_time";
+				return true;
 			}
 		}
+
+		if ( fnHeavyCheck() && sph::TimeExceeded ( iCheckTimePoint ) )
+		{
+			if ( session::GetKilled() )
+			{
+				tMeta.m_sWarning = "query was killed";
+				return true;
+			}
+			Threads::Coro::RescheduleAndKeepCrashQuery();
+		}
+	}
 
 	return tIterator.WasCutoffHit();
 }

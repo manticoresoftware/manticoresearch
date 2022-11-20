@@ -59,7 +59,7 @@ public:
 
 	/// checks if two schemas fully match (ie. fields names, attr names, types and locators are the same)
 	/// describe mismatch (if any) to sError
-	bool					CompareTo ( const CSphSchema & rhs, CSphString & sError, bool bFullComparison = true ) const;
+	bool					CompareTo ( const CSphSchema & rhs, CSphString & sError, bool bFullComparison = true, bool bIndexLoadCheck=false ) const;
 
 	/// reset fields and attrs
 	void					Reset ();

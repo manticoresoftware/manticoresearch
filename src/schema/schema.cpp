@@ -100,7 +100,7 @@ const char* CSphSchema::GetName() const
 }
 
 
-bool CSphSchema::CompareTo ( const CSphSchema& rhs, CSphString& sError, bool bFullComparison ) const
+bool CSphSchema::CompareTo ( const CSphSchema& rhs, CSphString& sError, bool bFullComparison, bool bIndexLoadCheck ) const
 {
 	// check attr count
 	if ( GetAttrsCount() != rhs.GetAttrsCount() )
@@ -163,7 +163,19 @@ bool CSphSchema::CompareTo ( const CSphSchema& rhs, CSphString& sError, bool bFu
 			return false;
 		}
 
-		if ( rhs.m_dFields[i].m_uFieldFlags != m_dFields[i].m_uFieldFlags )
+		DWORD uFlags1 = rhs.m_dFields[i].m_uFieldFlags;
+		DWORD uFlags2 = m_dFields[i].m_uFieldFlags;
+
+		// stored fields became the default at some point in time
+		// some disk chunks have them and some don't
+		// this doesn't affect functionality but it does affect checks on index load
+		if ( bIndexLoadCheck )
+		{
+			uFlags1 &= ~CSphColumnInfo::FIELD_STORED;
+			uFlags2 &= ~CSphColumnInfo::FIELD_STORED;
+		}
+
+		if ( uFlags1!=uFlags2 )
 		{
 			sError.SetSprintf ( "fulltext field flag mismatch (me=%s, myfield=%s, idx=%d, in=%s, infield=%s)",
 				m_sName.cstr(),

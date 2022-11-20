@@ -4493,7 +4493,7 @@ bool RtIndex_c::PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder, StrVe
 
 		// tricky bit
 		// outgoing match schema on disk chunk should be identical to our internal (!) schema
-		if ( !m_tSchema.CompareTo ( pIndex->GetMatchSchema(), m_sLastError ) )
+		if ( !m_tSchema.CompareTo ( pIndex->GetMatchSchema(), m_sLastError, true, true ) )
 			return false;
 
 		tWriter.m_pNewDiskChunks->Add ( pChunk );

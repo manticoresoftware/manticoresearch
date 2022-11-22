@@ -220,6 +220,6 @@ foreach ( test ${tests} )
 
 endforeach ()
 
-
+add_subdirectory(indextool)
 
 

@@ -10,9 +10,6 @@
 
 <skip_indexer/>
 
-<requires><watchdog/></requires>
-<skip_indexer/>
-
 <config>
 searchd
 {

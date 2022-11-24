@@ -16,7 +16,7 @@ You need:
 
 In each package we need only `lib` and `include` subfolders, all the rest (like `bin`, `share`, and free files) we can safety drop.
 
-You can go deeper and cleanup boost libraries. Leave `context`, `coroutine`, `fiber`, `filesystem`, `program_options`, `stacktrace` and `system`; also `headers` (it doesn't have binary lib, but `boost_headers-*` in `lib/cmake` folder is necessary). You can drop all lib/*.dylib, as we use only statically linked boost libraries.
+You can go deeper and cleanup boost libraries. Leave `atomic`, `context`, `coroutine`, `fiber`, `filesystem`, `program_options`, `stacktrace` and `system`; also `headers` (it doesn't have binary lib, but `boost_headers-*` in `lib/cmake` folder is necessary). You can drop all lib/*.dylib, as we use only statically linked boost libraries. Best of all, investigate any other prepared sysroot to know whole actual list (for example, `atomic` is dependency for `filesystem`; it isn't obvious immediately, but you can recognize it when prepare other versions)
 
 Just keep folders with these names (or, starting with these names). Openssl could be `openssl@1.1`, or `openssl@3` - first
 one is dependency for mysql-client, second one is standalone. It has sense to keep openssl@1.1 to avoid duplicates of

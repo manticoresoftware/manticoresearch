@@ -295,7 +295,7 @@ using CSphConfigType = SmallStringHash_T < CSphConfigSection >;
 /// config (hash of section types)
 using CSphConfig = SmallStringHash_T < CSphConfigType >;
 
-bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dResult, const char * sArgs=nullptr );
+bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dResult );
 
 /////////////////////////////////////////////////////////////////////////////
 

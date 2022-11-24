@@ -1148,7 +1148,7 @@ bool CSphConfigParser::ValidateKey ( const char * szKey )
 
 #if !_WIN32
 
-bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dResult, const char * sArgs )
+bool TryToExec ( char * pExecLine, const char * szFilename, CSphVector<char> & dResult )
 {
 	using namespace TlsMsg;
 	ResetErr(); // clean any inherited msgs
@@ -1160,10 +1160,7 @@ bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dRe
 	if ( pipe ( dPipe ) )
 		return Err ( "pipe() failed (error=%s)", strerrorm(errno) );
 
-	if ( !sArgs )
-		pBuffer = trim ( pBuffer );
-	else
-		pBuffer = const_cast<char *>( sArgs );
+	pExecLine = trim ( pExecLine );
 
 	int iRead = dPipe[0];
 	int iWrite = dPipe[1];
@@ -1177,40 +1174,22 @@ bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dRe
 		dup2 ( iWrite, STDOUT_FILENO );
 		searchd::CleanAfterFork ();
 
-		CSphVector<CSphString> dTmpArgs;
-		CSphVector<char *> dArgs;
-		char * pArgs = nullptr;
-		if ( !sArgs )
-		{
-			char * pPtr = pBuffer;
-			while ( *pPtr )
+		LazyVector_T<const char*> dArgv;
+		dArgv.Add ( pExecLine ); // 0-th arg - prog itself
+
+		for ( char* pPtr = pExecLine; *pPtr; ++pPtr )
 			{
 				if ( sphIsSpace ( *pPtr ) )
 				{
 					*pPtr = '\0';
-					pArgs = trim ( pPtr+1 );
+				dArgv.Add ( trim ( pPtr+1 ) ); // 1-st arg (if any)
 					break;
 				}
-
-				pPtr++;
 			}
-		} else
-		{
-			sphSplit ( dTmpArgs, sArgs, " " );
-			dArgs.Resize ( dTmpArgs.GetLength() + 1 );
-			ARRAY_FOREACH ( i, dTmpArgs )
-				dArgs[i] = const_cast<char *>( dTmpArgs[i].cstr() );
-			dArgs.Last() = nullptr;
-		}
+		dArgv.Add ( szFilename ); // last arg (original file)
+		dArgv.Add ( nullptr ); // null terminator, mandatory
 
-		if ( sArgs )
-		{
-			execvp ( dArgs[0], dArgs.Begin() );
-		} else if ( pArgs )
-			execl ( pBuffer, pBuffer, pArgs, szFilename, (char*)nullptr );
-		else
-			execl ( pBuffer, pBuffer, szFilename, (char*) nullptr );
-
+		execv ( pExecLine, (char**)dArgv.begin() );
 		exit ( 1 );
 
 	} else if ( iChild==-1 )
@@ -1259,10 +1238,10 @@ bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dRe
 
 	if ( WIFEXITED ( iStatus ) && WEXITSTATUS ( iStatus ) )
 		// FIXME? read stderr and log that too
-		return Err ( "error executing '%s' status = %d", pBuffer, WEXITSTATUS ( iStatus ) );
+		return Err ( "error executing '%s' status = %d", pExecLine, WEXITSTATUS ( iStatus ) );
 
 	if ( WIFSIGNALED ( iStatus ) )
-		return Err ( "error executing '%s', killed by signal %d", pBuffer, WTERMSIG ( iStatus ) );
+		return Err ( "error executing '%s', killed by signal %d", pExecLine, WTERMSIG ( iStatus ) );
 
 	if ( HasErr() )
 		return false;
@@ -1271,7 +1250,7 @@ bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dRe
 	return true;
 }
 #else
-bool TryToExec ( char *, const char *, CSphVector<char> &, const char* )
+bool TryToExec ( char *, const char *, CSphVector<char> & )
 {
 	return true;
 }

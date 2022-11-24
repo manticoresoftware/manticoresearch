@@ -667,7 +667,7 @@ bool CopyFile ( const CSphString & sSource, const CSphString & sDest, CSphString
 
 	if ( iRead<0 )
 	{
-		sError.SetSprintf ( "Unable to copy file '%s' to '%s': %s", sSource.cstr(), sDest.cstr(), strerror(errno) );
+		sError.SetSprintf ( "Unable to copy file '%s' to '%s': %s", sSource.cstr(), sDest.cstr(), strerrorm(errno) );
 		return false;
 	}
 

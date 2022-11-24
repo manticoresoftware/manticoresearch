@@ -1309,8 +1309,10 @@ private:
 	void						RemoveFieldFromRamchunk ( const CSphString & sFieldName, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema );
 	void						AddRemoveFromRamDocstore ( const CSphSchema & tOldSchema, const CSphSchema & tNewSchema );
 
-	enum class LOAD_E { ParseError_e, GeneralError_e, Ok_e };
 	bool						LoadMeta ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings );
+	bool						LoadMetaImpl ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings );
+
+	enum class LOAD_E { ParseError_e, GeneralError_e, Ok_e };
 	LOAD_E						LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings );
 	LOAD_E						LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings );
 	bool						PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings );
@@ -4444,7 +4446,7 @@ RtIndex_c::LOAD_E RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder
 }
 
 
-bool RtIndex_c::LoadMeta ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings )
+bool RtIndex_c::LoadMetaImpl ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings )
 {
 	// check if we have a meta file (kinda-header)
 	CSphString sMeta = SphSprintf( "%s.meta", m_sPath.cstr() );
@@ -4472,6 +4474,23 @@ bool RtIndex_c::LoadMeta ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath
 
 	assert ( eRes == LOAD_E::Ok_e );
 	return true;
+}
+
+bool RtIndex_c::LoadMeta ( FilenameBuilder_i* pFilenameBuilder, bool bStripPath, DWORD& uVersion, bool& bRebuildInfixes, StrVec_t& dWarnings )
+{
+	if ( LoadMetaImpl ( pFilenameBuilder, bStripPath, uVersion, bRebuildInfixes, dWarnings ) )
+		return true;
+
+	const char* szDumpPath = getenv ( "dump_corrupt_meta" );
+	if ( !szDumpPath )
+		return false;
+
+	CSphString sMeta = SphSprintf ( "%s.meta", m_sPath.cstr() );
+	CSphString sDestPath = SphSprintf ( "%s%s", szDumpPath, "index.meta" );
+	CSphString sError;
+	if ( !CopyFile ( sMeta, sDestPath, sError ) )
+		sphWarning ( "%s", sError.cstr() );
+	return false;
 }
 
 

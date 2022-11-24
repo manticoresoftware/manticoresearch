@@ -177,6 +177,7 @@ private:
 	void BinlogReconfigure ( CSphReconfigureSetup & tSetup );
 
 	bool NeedStoreWordID () const override { return ( m_tSettings.m_eHitless==SPH_HITLESS_SOME && m_dHitlessWords.GetLength() ); }
+	bool LoadMetaImpl ( const CSphString& sMeta, bool bStripPath, FilenameBuilder_i* pFilenameBuilder, StrVec_t& dWarnings );
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2733,7 +2734,7 @@ PercolateIndex_c::LOAD_E PercolateIndex_c::LoadMetaJson ( const CSphString& sMet
 	return LOAD_E::Ok_e;
 }
 
-bool PercolateIndex_c::LoadMeta ( const CSphString& sMeta, bool bStripPath, FilenameBuilder_i* pFilenameBuilder, StrVec_t& dWarnings )
+bool PercolateIndex_c::LoadMetaImpl ( const CSphString& sMeta, bool bStripPath, FilenameBuilder_i* pFilenameBuilder, StrVec_t& dWarnings )
 {
 	auto eRes = LoadMetaJson ( sMeta, bStripPath, pFilenameBuilder, dWarnings );
 	if ( eRes == LOAD_E::ParseError_e )
@@ -2754,6 +2755,22 @@ bool PercolateIndex_c::LoadMeta ( const CSphString& sMeta, bool bStripPath, File
 
 	assert ( eRes == LOAD_E::Ok_e );
 	return true;
+}
+
+bool PercolateIndex_c::LoadMeta ( const CSphString& sMeta, bool bStripPath, FilenameBuilder_i* pFilenameBuilder, StrVec_t& dWarnings )
+{
+	if ( LoadMetaImpl ( sMeta, bStripPath, pFilenameBuilder, dWarnings ) )
+		return true;
+
+	const char* szDumpPath = getenv ( "dump_corrupt_meta" );
+	if ( !szDumpPath )
+		return false;
+
+	CSphString sDestPath = SphSprintf("%s%s",szDumpPath,"index.meta");
+	CSphString sError;
+	if ( !CopyFile ( sMeta, sDestPath, sError ) )
+		sphWarning ( "%s", sError.cstr() );
+	return false;
 }
 
 

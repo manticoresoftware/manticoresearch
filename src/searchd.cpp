@@ -15856,7 +15856,7 @@ void HandleMysqlExplain ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, bool bDot
 		return;
 	}
 
-	TlsMsg::Err (); // reset error
+	TlsMsg::ResetErr (); // reset error
 	auto dPlan = RIdx_c ( pServed )->ExplainQuery ( tStmt.m_tQuery.m_sQuery );
 	if ( TlsMsg::HasErr ())
 	{

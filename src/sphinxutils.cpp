@@ -1153,7 +1153,7 @@ bool CSphConfigParser::ValidateKey ( const char * sKey )
 bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dResult, const char * sArgs )
 {
 	using namespace TlsMsg;
-	Err(); // clean any inherited msgs
+	ResetErr(); // clean any inherited msgs
 
 	const int BUFFER_SIZE = 65536;
 
@@ -1302,7 +1302,7 @@ char * CSphConfigParser::GetBufferString ( char * szDest, int iMax, const char *
 bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 {
 	using namespace TlsMsg;
-	Err();
+	ResetErr();
 
 	const int L_STEPBACK	= 16;
 	const int L_TOKEN		= 64;
@@ -3338,20 +3338,7 @@ void Warner_c::MoveAllTo ( CSphString &sTarget )
 
 namespace TlsMsg
 {
-
-	static StringBuilder_c* TlsMsgs ( bool bDoClear=true )
-	{
-		thread_local StringBuilder_c* pContainer;
-		if (!pContainer)
-		{
-			static StringBuilder_c sMsgs;
-			pContainer = &sMsgs; // fixme! static is global, write it's address to thread-local just shares it...
-		}
-
-		if ( bDoClear )
-			pContainer->Clear();
-		return pContainer;
-	}
+	static thread_local StringBuilder_c sTlsMsgs;
 
 	bool Err( const char* sFmt, ... )
 	{
@@ -3360,7 +3347,7 @@ namespace TlsMsg
 		va_start ( ap, sFmt );
 		sMsgs.vSprintf( sFmt, ap );
 		va_end ( ap );
-		TlsMsgs ()->Swap ( sMsgs );
+		sTlsMsgs.Swap ( sMsgs );
 		return false;
 	}
 
@@ -3368,21 +3355,21 @@ namespace TlsMsg
 	{
 		if (sMsg.IsEmpty())
 			return true;
-		*TlsMsgs() << sMsg;
+		sTlsMsgs << sMsg;
 		return false;
 	}
 
-	StringBuilder_c& Err() { return *TlsMsgs(); }
-	const char* szError() { return TlsMsgs(false)->cstr(); }
+	void ResetErr() { sTlsMsgs.Clear(); }
+	StringBuilder_c& Err() { return sTlsMsgs; }
+	const char* szError() { return sTlsMsgs.cstr(); }
 	void MoveError ( CSphString& sError )
 	{
-		auto& sStream = *TlsMsgs( false );
-		if ( sStream.IsEmpty())
+		if ( sTlsMsgs.IsEmpty())
 			return;
-		sStream.MoveTo(sError);
+		sTlsMsgs.MoveTo(sError);
 	}
 
-	bool HasErr() { return !TlsMsgs(false)->IsEmpty(); }
+	bool HasErr() { return !sTlsMsgs.IsEmpty(); }
 }
 
 const char * GetBaseName ( const CSphString & sFullPath )

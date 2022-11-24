@@ -486,8 +486,10 @@ namespace TlsMsg
 	// put error from string, then return false
 	bool Err( const CSphString& sMsg );
 
-	// clear current state and return builder for user manipulations
+	// return builder for user manipulations
 	StringBuilder_c& Err();
+
+	void ResetErr();
 
 	// return last error
 	const char* szError();

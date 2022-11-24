@@ -35,8 +35,14 @@ for f in build/*.rpm; do
       fi
     fi
 
+    # check if we really need to put icudata to the repo this time
+    # notice: it still goes to bundle archives anyway
     if [[ $f == *icudata* ]]; then
-      ARCH=noarch
+      if [[ $PACK_ICUDATA == 1 ]]; then
+        ARCH=noarch
+      else
+        ARCH=none
+      fi
     fi
 
     ~/sign_rpm.sh $GPG_SECRET $f

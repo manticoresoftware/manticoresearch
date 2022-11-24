@@ -7,6 +7,7 @@ variables:
   CMAKE_INTERPROCEDURAL_OPTIMIZATION: 0
   VERBOSE: 1
   DIAGNOSTIC: 1
+  PACK_ICUDATA: 0
 
 # ==================== .helper generic build ======================
 

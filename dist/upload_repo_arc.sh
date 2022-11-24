@@ -21,6 +21,13 @@ get_destination() {
 echo "Collected archives"
 ls -1 build/
 
+# check if we really need to pack icudata this time
+if [[ $PACK_ICUDATA == 1 ]]; then
+  echo -e "Pack icudata, since PACK_ICUDATA is set to 1"
+else
+  rm build/manticore-icudata-65l.*
+fi
+
 for f in build/*.zip build/*.exe; do
   if [ -f "$f" ]; then
     get_destination

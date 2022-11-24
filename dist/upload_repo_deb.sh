@@ -25,8 +25,14 @@ for f in build/*deb; do
       fi
     fi
 
+    # check if we really need to put icudata to the repo this time
+    # notice: it still goes to bundle archives anyway
     if [[ $f == *icudata* ]]; then
-      ARCH=all
+      if [[ $PACK_ICUDATA == 1 ]]; then
+        ARCH=all
+      else
+        ARCH=none
+      fi
     fi
 
     ~/sign_deb.sh $GPG_SECRET $f

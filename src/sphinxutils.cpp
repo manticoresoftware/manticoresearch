@@ -17,7 +17,6 @@
 #include "sphinxint.h"
 #include "sphinxplugin.h"
 #include "sphinxstem.h"
-#include "icu.h"
 #include "fileutils.h"
 #include "threadutils.h"
 #include "indexfiles.h"
@@ -64,7 +63,7 @@ CSphString g_sWinInstallPath;
 // STRING FUNCTIONS
 //////////////////////////////////////////////////////////////////////////
 
-static char * ltrim ( char * sLine )
+inline static char * ltrim ( char * sLine )
 {
 	while ( *sLine && sphIsSpace(*sLine) )
 		sLine++;
@@ -72,7 +71,7 @@ static char * ltrim ( char * sLine )
 }
 
 
-static char * rtrim ( char * sLine )
+inline static char * rtrim ( char * sLine )
 {
 	char * p = sLine + strlen(sLine) - 1;
 	while ( p>=sLine && sphIsSpace(*p) )
@@ -82,7 +81,7 @@ static char * rtrim ( char * sLine )
 }
 
 
-static char * trim ( char * sLine )
+inline static char * trim ( char * sLine )
 {
 	return ltrim ( rtrim ( sLine ) );
 }
@@ -1018,9 +1017,9 @@ static KeyDesc_t g_dKeysCommon[] =
 
 struct KeySection_t
 {
-	const char *		m_sKey;		///< key name
+	const char *		m_szKey;	///< key name
 	KeyDesc_t *			m_pSection; ///< section to refer
-	bool				m_bNamed; ///< true if section is named. false if plain
+	bool				m_bNamed;	///< true if section is named. false if plain
 };
 
 static KeySection_t g_dConfigSections[] =
@@ -1049,101 +1048,100 @@ private:
 	CSphString		m_sSectionType;
 	CSphString		m_sSectionName;
 
-	int					m_iWarnings = 0;
-	static const int	WARNS_THRESH	= 5;
+	int						m_iWarnings = 0;
+	static constexpr int	WARNS_THRESH	= 5;
 
 private:
-	bool			IsPlainSection ( const char * sKey );
-	bool			IsNamedSection ( const char * sKey );
-	bool			AddSection ( const char * sType, const char * sSection );
-	void			AddKey ( const char * sKey, char * sValue );
-	bool			ValidateKey ( const char * sKey );
+	static bool		IsPlainSection ( const char * szKey );
+	static bool		IsNamedSection ( const char * szKey );
+	bool			AddSection ( const char * szType, const char * szSection );
+	void			AddKey ( const char * szKey, char * szValue );
+	bool			ValidateKey ( const char * szKey );
 	char *			GetBufferString ( char * szDest, int iMax, const char * & szSource );
 };
 
-bool CSphConfigParser::IsPlainSection ( const char * sKey )
+bool CSphConfigParser::IsPlainSection ( const char * szKey )
 {
-	assert ( sKey );
+	assert ( szKey );
 	const KeySection_t * pSection = g_dConfigSections;
-	while ( pSection->m_sKey && strcasecmp ( sKey, pSection->m_sKey ) )
+	while ( pSection->m_szKey && strcasecmp ( szKey, pSection->m_szKey )!=0 )
 		++pSection;
-	return pSection->m_sKey && !pSection->m_bNamed;
+	return pSection->m_szKey && !pSection->m_bNamed;
 }
 
-bool CSphConfigParser::IsNamedSection ( const char * sKey )
+bool CSphConfigParser::IsNamedSection ( const char * szKey )
 {
-	assert ( sKey );
+	assert ( szKey );
 	const KeySection_t * pSection = g_dConfigSections;
-	while ( pSection->m_sKey && strcasecmp ( sKey, pSection->m_sKey ) )
+	while ( pSection->m_szKey && strcasecmp ( szKey, pSection->m_szKey )!=0 )
 		++pSection;
-	return pSection->m_sKey && pSection->m_bNamed;
+	return pSection->m_szKey && pSection->m_bNamed;
 }
 
-bool CSphConfigParser::AddSection ( const char * sType, const char * sName )
+bool CSphConfigParser::AddSection ( const char * szType, const char * szSection )
 {
-	m_sSectionType = sType;
-	m_sSectionName = sName;
+	m_sSectionType = szType;
+	m_sSectionName = szSection;
 
 	if ( !m_tConf.Exists ( m_sSectionType ) )
 		m_tConf.Add ( CSphConfigType(), m_sSectionType ); // FIXME! be paranoid, verify that it returned true
 
 	if ( m_tConf[m_sSectionType].Exists ( m_sSectionName ) )
-		return TlsMsg::Err ( "section '%s' (type='%s') already exists", sName, sType );
+		return TlsMsg::Err ( "section '%s' (type='%s') already exists", szSection, szType );
 	m_tConf[m_sSectionType].Add ( CSphConfigSection(), m_sSectionName ); // FIXME! be paranoid, verify that it returned true
 
 	return true;
 }
 
 
-void CSphConfigParser::AddKey ( const char * sKey, char * sValue )
+void CSphConfigParser::AddKey ( const char * szKey, char * szValue )
 {
 	assert ( m_tConf.Exists ( m_sSectionType ) );
 	assert ( m_tConf[m_sSectionType].Exists ( m_sSectionName ) );
 
-	sValue = trim ( sValue );
+	szValue = trim ( szValue );
 	CSphConfigSection & tSec = m_tConf[m_sSectionType][m_sSectionName];
-	tSec.AddEntry ( sKey, sValue );
+	tSec.AddEntry ( szKey, szValue );
 }
 
 
-bool CSphConfigParser::ValidateKey ( const char * sKey )
+bool CSphConfigParser::ValidateKey ( const char * szKey )
 {
 	// get proper descriptor table
 	// OPTIMIZE! move lookup to AddSection
 	const KeySection_t * pSection = g_dConfigSections;
-	const KeyDesc_t * pDesc = NULL;
-	while ( pSection->m_sKey && m_sSectionType!=pSection->m_sKey )
+	const KeyDesc_t * pDesc = nullptr;
+	while ( pSection->m_szKey && m_sSectionType!=pSection->m_szKey )
 		++pSection;
-	if ( pSection->m_sKey )
+	if ( pSection->m_szKey )
 		pDesc = pSection->m_pSection;
 
 	if ( !pDesc )
 		return TlsMsg::Err( "unknown section type '%s'", m_sSectionType.cstr() );
 
 	// check if the key is known
-	while ( pDesc->m_sKey && strcasecmp ( pDesc->m_sKey, sKey ) )
+	while ( pDesc->m_sKey && strcasecmp ( pDesc->m_sKey, szKey )!=0 )
 		pDesc++;
 	if ( !pDesc->m_sKey )
-		return TlsMsg::Err( "unknown key name '%s'", sKey );
+		return TlsMsg::Err( "unknown key name '%s'", szKey );
 
 	// warn about deprecate keys
 	if ( pDesc->m_iFlags & KEY_DEPRECATED )
 		if ( ++m_iWarnings<=WARNS_THRESH )
-			fprintf ( stdout, "WARNING: key '%s' is deprecated in %s line %d; use '%s' instead.\n",
-				sKey, m_sFileName.cstr(), m_iLine, pDesc->m_sExtra );
+			fprintf ( stdout, "WARNING: key '%s' is deprecated in %s line %d; use '%s' instead.\n", szKey, m_sFileName.cstr(), m_iLine, pDesc->m_sExtra );
 
 	// warn about list/non-list keys
 	if (!( pDesc->m_iFlags & KEY_LIST ))
 	{
 		CSphConfigSection & tSec = m_tConf[m_sSectionType][m_sSectionName];
-		if ( tSec(sKey) && !tSec[sKey].m_bTag )
+		if ( tSec( szKey ) && !tSec[szKey].m_bTag )
 			if ( ++m_iWarnings<=WARNS_THRESH )
-				fprintf ( stdout, "WARNING: key '%s' is not multi-value; value in %s line %d will be ignored.\n", sKey, m_sFileName.cstr(), m_iLine );
+				fprintf ( stdout, "WARNING: key '%s' is not multi-value; value in %s line %d will be ignored.\n", szKey, m_sFileName.cstr(), m_iLine );
 	}
 
 	if ( pDesc->m_iFlags & KEY_REMOVED )
 		if ( ++m_iWarnings<=WARNS_THRESH )
-			fprintf ( stdout, "WARNING: key '%s' was permanently removed from configuration. Refer to documentation for details.\n", sKey );
+			fprintf ( stdout, "WARNING: key '%s' was permanently removed from configuration. Refer to documentation for details.\n", szKey );
 
 	return true;
 }
@@ -1609,10 +1607,10 @@ CSphString AppendWinInstallDir ( const CSphString & sDir )
 #endif
 
 /////////////////////////////////////////////////////////////////////////////
-const char * sphGetConfigFile ( const char * sHint )
+const char * sphGetConfigFile ( const char * szHint )
 {
-	if ( sHint )
-		return sHint;
+	if ( szHint )
+		return szHint;
 
 	// fallback to defaults if there was no explicit config specified
 #ifdef SYSCONFDIR

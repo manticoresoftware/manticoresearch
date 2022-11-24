@@ -300,7 +300,7 @@ bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dRe
 /////////////////////////////////////////////////////////////////////////////
 
 /// Provided or default config file
-const char *	sphGetConfigFile ( const char * sHint = nullptr );
+const char *	sphGetConfigFile ( const char * szHint = nullptr );
 
 /// load config file (will die inside if an error happened)
 CSphConfig		sphLoadConfig ( const char * sOptConfig, bool bQuiet, bool bIgnoreIndexes, const char ** ppActualConfig=nullptr );

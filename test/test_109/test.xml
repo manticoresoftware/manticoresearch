@@ -103,119 +103,66 @@ DROP TABLE IF EXISTS test_table;
 	insert into test_table values <q/>
 </db_insert>
 
+<queries>
+	<!-- merge+rotate and merge of indexes v31 -->
+    <sphinxql system="run-indexer" params="--rotate --merge i1_crc i2_crc"/>
+    <sphinxql system="run-indexer" params="--rotate --merge i1_kw i2_kw" sleep="2"/>
+	<sphinxql>
+		select *, weight() from i1_crc where match(' dummy ') limit 1;show meta;
+		select *, weight() from i1_kw where match(' dummy ') limit 1;show meta;
+	</sphinxql>
 
-<custom_test><![CDATA[
 
-global $g_locals, $sd_address, $sd_sphinxql_port;
+	<!-- segments merge -->
+	<repeat count="49" vars="i" init="1" inc="1">
+		<sphinxql>
+			REPLACE INTO seg1 ( id, gid, body ) VALUES (<i/>, <i/>, 'text <i/>' );
+			REPLACE INTO seg1 ( id, gid, body ) VALUES (<i/>, <i/>, 'text <i/>' );
+			SELECT count(*) FROM seg1 WHERE MATCH('text');
+		</sphinxql>
+	</repeat>
 
-RunIndexer ( $errors, '--rotate --merge i1_crc i2_crc' );
-RunIndexer ( $errors, '--rotate --merge i1_kw i2_kw' );
-usleep ( 100000 );
+	<!-- prepare test index with 1016 rows -->
+	<repeat count="19" vars="i" init="1" inc="1">
+		<var name="title"><title/> title<i/></var>
+		<var name="ctx"><ctx/> ctx<i/></var>
+	</repeat>
 
-$results = array();
-$sockStr = "$sd_address:$sd_sphinxql_port";
-if ($sd_address == "localhost")
-	$sockStr = "127.0.0.1:$sd_sphinxql_port";
-$sock = @mysql_connect (
-	$sockStr,
-	$g_locals['db-user'],
-	$g_locals['db-password'] ,
-	true );
+	<repeat count="449" vars="i gid" init="1 10001" inc="1 1">
+		<sphinxql skip="1">
+			INSERT INTO test ( id, group_id, title, content ) VALUES (<i/>,<gid/>, ' <title/>', ' <ctx/>' );
+		</sphinxql>
+	</repeat>
+	<sphinxql>
+	REPLACE INTO test ( id, group_id, title, content ) VALUES ( 21, 10450, ' <title/>', 'there is gooddy stuff' );
+	</sphinxql>
+	<repeat count="99" vars="i gid" init="451 10451" inc="1 1">
+		<sphinxql skip="1">
+			INSERT INTO test ( id, group_id, title, content ) VALUES (<i/>,<gid/>, ' <title/>', ' <ctx/>' );
+		</sphinxql>
+	</repeat>
+	<sphinxql>
+	REPLACE INTO test ( id, group_id, title, content ) VALUES ( 21, 10550, ' <title/>', 'there is gooddy stuff' );
+	</sphinxql>
+	<repeat count="349" vars="i gid" init="551 10551" inc="1 1">
+		<sphinxql skip="1">
+			INSERT INTO test ( id, group_id, title, content ) VALUES (<i/>,<gid/>, ' <title/>', ' <ctx/>' );
+		</sphinxql>
+	</repeat>
+	<sphinxql>
+	REPLACE INTO test ( id, group_id, title, content ) VALUES ( 21, 10900, ' <title/>', 'there is gooddy stuff' );
+	</sphinxql>
+	<repeat count="119" vars="i gid" init="901 10901" inc="1 1">
+		<sphinxql skip="1">
+			INSERT INTO test ( id, group_id, title, content ) VALUES (<i/>,<gid/>, ' <title/>', ' <ctx/>' );
+		</sphinxql>
+	</repeat>
 
-if ( $sock === false )
-{
-	$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
-	return;
-}
-
-$title = "";
-$ctx = "";
-for ( $i=1; $i<20; $i++ )
-{
-	$title .= " title$i";
-	$ctx .= " ctx$i";
-}
-
-$inserted = 0;
-for ( $i=1; $i<1020; $i++ )
-{
-	$group = $i + 10000;
-	$str = "";
-	if ( $i == 450 || $i == 550 || $i == 900 )
-		$str = "REPLACE INTO test ( id, group_id, title, content ) VALUES ( 21, $group, '$title', 'there is gooddy stuff' )";
-	else
-		$str = "INSERT INTO test ( id, group_id, title, content ) VALUES ( $i, $group, '$title', '$ctx' )";
-	$res = @mysql_query ($str, $sock );
-	if ($res===true)
-	{
-		$inserted += mysql_affected_rows($sock);
-	}	
-	else
-	{
-		$results[] = "error: insert: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
-		return;
-	}
-}
-$results[] = "total inserted=$inserted"; // 0 => 'total inserted=1019'
-
-$queries = array ( "id=21", "match('gooddy')" );
-for ( $i=0; $i<count ( $queries ); $i++ )
-{
-	$q = "select * from test where $queries[$i]";
-	$res = @mysql_query ( $q, $sock );
-	if ($res===true)
-	{
-		$results[] = "query $i: total_affected=" . mysql_affected_rows($sock);
-	}
-	else if ($res===false)
-	{
-		$results[] = "query $i: res=$res";
-		$results[] = "error: query: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
-		return;
-	}
-	else
-	{
-		$results[] = $queries[$i] . " query $i: total_rows=" . @mysql_num_rows($res); // results 1, 3
-		while ($row = @mysql_fetch_array($res, MYSQL_ASSOC))
-		{
-			foreach ($row as $key => $value)
-				$foo[$key] = $value;
-			$results[] = $foo; // results 2, 4
-		}	
-	}
-}
-
-$replaced = 2;
-$queried = 0;
-for ( $i=1; $i<50; $i++ )
-{
-	$res = array ();
-	$res[] = @mysql_query ( "REPLACE INTO seg1 ( id, gid, body ) VALUES ( $i, $i, 'text $i' )" );
-	$res[] = @mysql_query ( "REPLACE INTO seg1 ( id, gid, body ) VALUES ( $i, $i, 'text $i' )" );
-	foreach ( $res as $r )
-	{
-		if ($r===true)
-			$replaced++;
-	}
-	$rq = @mysql_query ( "SELECT * FROM seg1 WHERE MATCH('text')" );
-	$queried += mysql_num_rows ($rq);
-}
-$results[] = "segments merge: replaced=$replaced, queried=$queried";
-
-// issues with merge+rotate and merge of indexes v31
-$queryAPI = function($client,$words,$idx) {
-$result = $client->Query ( $words, $idx );	if ( $result ) { unset ( $result["time"] ); return $result; } else return $client->GetLastError();
-};
-
-usleep ( 100000 );
-$client->SetLimits ( 0, 1 );
-$results[] = "merge+rotate and merge of indexes v31";
-$results[] = $queryAPI ( $client, ' dummy ', 'i1_crc' );
-$results[] = $queryAPI ( $client, ' dummy ', 'i1_kw' );
-
-@mysql_close($sock);
-	
-]]></custom_test>
-
+	<!-- test over index with 1016 rows -->
+	<sphinxql>
+		select count(*) from test;
+		select * from test where id=21;
+		select * from test where match('gooddy');
+	</sphinxql>
+</queries>
 </test>
-

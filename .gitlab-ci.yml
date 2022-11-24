@@ -100,6 +100,18 @@ docs_deploy:
   artifacts:
     when: on_success
     expire_in: 12 hrs
+    paths:
+      - build/xml
+      - build/CMakeFiles/CMake*.log
+      - build/api/libsphinxclient/testcli
+      - build/src/indexer
+      - build/src/indextool
+      - build/src/searchd
+      - build/src/tests
+      - build/src/gtests/gmanticoretest
+      - build/config/*.c
+      - build/config/*.h
+      - build/**/*.gcno
 
 # ==================== .helper testing ======================
 
@@ -128,6 +140,12 @@ docs_deploy:
     when: always
     reports:
       junit: build/junit_tests.xml
+    paths:
+      - build/junit_tests.xml
+      - build/test/test_*/report.txt
+      - build/test/error*.txt
+      - build/test/searchd.log
+      - $DOCS_EXAMPLES_FILEPATH
   retry: 1
 
 
@@ -142,18 +160,6 @@ simple_build:
     CTEST_CMAKE_GENERATOR: "Unix Makefiles" # as Ninja fails with coverage
     CTEST_CONFIGURATION_TYPE: "Debug"
     WITH_COVERAGE: 1
-  artifacts:
-    paths:
-      - build/xml
-      - build/api/libsphinxclient/testcli
-      - build/src/indexer
-      - build/src/indextool
-      - build/src/searchd
-      - build/src/tests
-      - build/src/gtests/gmanticoretest
-      - build/**/*.gcno
-      - build/config/*.c
-      - build/config/*.h
 
 simple_tests:
   extends: [ .tests ]
@@ -165,12 +171,6 @@ simple_tests:
     CTEST_CONFIGURATION_TYPE: "Debug"
     WITH_COVERAGE: 1
     NO_BUILD: 1
-  artifacts:
-    paths:
-      - build/junit_tests.xml
-      - build/test/test_*/report.txt
-      - build/test/error*.txt
-      - build/test/searchd.log
 
 # ==================== Release build, then test ======================
 
@@ -181,15 +181,6 @@ release_build:
     - if: $TEST =~ /release/ && ( $WHAT=='$WHAT' || $WHAT==null )
   variables:
     CMAKE_INTERPROCEDURAL_OPTIMIZATION: 1
-  artifacts:
-    paths:
-      - build/xml
-      - build/api/libsphinxclient/testcli
-      - build/src/indexer
-      - build/src/indextool
-      - build/src/searchd
-      - build/src/tests
-      - build/src/gtests/gmanticoretest
 
 release_tests:
   extends: [ .tests ]
@@ -200,13 +191,6 @@ release_tests:
   variables:
     CTEST_CONFIGURATION_TYPE: "RelWithDebInfo"
     NO_BUILD: 1
-  artifacts:
-    paths:
-      - build/junit_tests.xml
-      - build/test/test_*/report.txt
-      - build/test/error*.txt
-      - build/test/searchd.log
-      - $DOCS_EXAMPLES_FILEPATH
 
 # ==================== Windows build, then test ======================
 
@@ -279,10 +263,6 @@ build_bsd:
   script:
     - mkdir build && cd build
     - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=.. --no-compress-output
-  artifacts:
-    paths:
-      - build/xml
-      - build/CMakeFiles/CMake*.log
   cache:
     key: $DISTR$arch
   retry: 1

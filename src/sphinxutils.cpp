@@ -2193,6 +2193,17 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 				break;
 			}
 
+		case 'c': // char
+			{
+				auto cValue = (char) va_arg ( ap, int );
+				Grow ( pOutput, 1 );
+				*Tail ( pOutput ) = cValue;
+				++pOutput;
+
+				state = SNORMAL;
+				break;
+			}
+
 		case 'p': // pointer
 			{
 				void * pValue = va_arg ( ap, void * );

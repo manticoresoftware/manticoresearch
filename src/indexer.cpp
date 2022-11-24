@@ -1933,7 +1933,7 @@ int main ( int argc, char ** argv )
 
 	SetupLemmatizerBase();
 
-	auto hConf = sphLoadConfig ( sOptConfig, g_bQuiet, false, &sOptConfig );
+	auto hConf = sphLoadConfig ( sOptConfig, !g_bQuiet, &sOptConfig );
 
 	if ( !hConf ( "source" ) )
 		sphDie ( "no indexes found in config file '%s'", sOptConfig );

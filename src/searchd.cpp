@@ -207,7 +207,6 @@ ThreadRole HandlerThread; // thread which serves clients
 //////////////////////////////////////////////////////////////////////////
 
 static CSphString		g_sConfigFile;
-static bool				g_bCleanLoadedConfig = true; // whether to clean config when it parsed and no more necessary
 static bool				LOG_LEVEL_SHUTDOWN = val_from_env("MANTICORE_TRACK_DAEMON_SHUTDOWN",false); // verbose logging when daemon shutdown, ruled by this env variable
 static CSphString		g_sConfigPath; // for resolve paths to absolute
 
@@ -15448,7 +15447,8 @@ static bool PrepareReconfigure ( const char * szIndex, const CSphConfigSection &
 static bool PrepareReconfigure ( const char * szIndex, CSphReconfigureSettings & tSettings, CSphString & sError )
 {
 	CSphConfig hCfg;
-	if ( !ParseConfig ( &hCfg, g_sConfigFile.cstr () ) )
+	auto [bChanged, dConfig] = FetchAndCheckIfChanged ( g_sConfigFile );
+	if ( !ParseConfig ( &hCfg, g_sConfigFile, dConfig ) )
 	{
 		sError.SetSprintf ( "failed to parse config file '%s': %s; using previous settings", g_sConfigFile.cstr (), TlsMsg::szError() );
 		return false;
@@ -17611,85 +17611,6 @@ ResultAndIndex_t AddIndex ( const char * szIndexName, const CSphConfigSection & 
 	return { ADD_ERROR, nullptr };
 }
 
-// check if config changed, and also cache content into g_dConfig (will be used instead of one more config touching)
-CSphVector<char> g_dConfig;
-bool LoadAndCheckConfig ()
-{
-	static DWORD			uCfgCRC32		= 0;
-	static struct stat		tCfgStat;
-
-	g_dConfig.Reset();
-	DWORD uCRC32 = 0;
-	struct_stat tStat = {0};
-
-	const size_t BUF_SIZE = 8192;
-	char sBuf [ BUF_SIZE ];
-	FILE * fp = nullptr;
-
-	fp = fopen ( g_sConfigFile.scstr(), "rb" );
-	if ( !fp )
-		return true;
-	if ( fstat ( fileno ( fp ), &tStat )<0 )
-		memset ( &tStat, 0, sizeof ( tStat ) );
-	bool bGotLine = !!fgets ( sBuf, sizeof(sBuf), fp );
-
-	if ( !bGotLine )
-	{
-		fclose ( fp );
-		return true;
-	}
-
-	char * p;
-	const char* pEnd = sBuf + BUF_SIZE;
-	for ( p = sBuf; p<pEnd; ++p )
-		if ( !isspace(*p) )
-			break;
-
-#if _WIN32
-	bool bIsWindows = true;
-#else
-	bool bIsWindows = false;
-#endif
-
-	if ( !bIsWindows && p<sBuf+BUF_SIZE-1 && p[0]=='#' && p[1]=='!' )
-	{
-		sBuf[BUF_SIZE-1] = '\0'; // just safety
-		fclose ( fp );
-		if ( !TryToExec ( p+2, g_sConfigFile.cstr(), g_dConfig ) )
-		{
-			g_dConfig.Reset();
-			return true;
-		}
-
-		uCRC32 = sphCRC32 ( g_dConfig.Begin(), g_dConfig.GetLength() );
-	} else
-	{
-		while ( bGotLine ) {
-			auto iLen = (int) strlen ( sBuf );
-			g_dConfig.Append ( sBuf, iLen );
-			bGotLine = !!fgets ( sBuf, sizeof ( sBuf ), fp );
-		}
-		g_dConfig.Add('\0');
-		fclose ( fp );
-		uCRC32 = sphCRC32 ( g_dConfig.Begin (), g_dConfig.GetLength ());
-	}
-
-	if ( uCfgCRC32==uCRC32 && tStat.st_size==tCfgStat.st_size
-		&& tStat.st_mtime==tCfgStat.st_mtime && tStat.st_ctime==tCfgStat.st_ctime )
-			return false;
-
-	uCfgCRC32 = uCRC32;
-	tCfgStat = tStat;
-
-	return true;
-}
-
-void CleanLoadedConfig ()
-{
-	if ( g_bCleanLoadedConfig )
-		g_dConfig.Reset();
-}
-
 // add or remove persistent pools to hosts
 void InitPersistentPool()
 {
@@ -17932,14 +17853,15 @@ static void CheckRotate () REQUIRES ( MainThread )
 	bool bReloadHappened = false;
 	HashOfServed_c hDeferredIndexes;
 	{
-		if ( LoadAndCheckConfig () || g_bReloadForced )
+		auto [bChanged, dConfig] = FetchAndCheckIfChanged ( g_sConfigFile );
+		if ( bChanged || g_bReloadForced )
 		{
-			sphInfo( "Config changed (read %d chars)", g_dConfig.GetLength());
-			if ( !g_dConfig.IsEmpty() )
+			sphInfo( "Config changed (read %d chars)", dConfig.GetLength());
+			if ( !dConfig.IsEmpty() )
 			{
 				{
 					ScWL_t dRotateConfigMutexWlocked { g_tRotateConfigMutex };
-					bReloadHappened = ParseConfig ( &g_hCfg, g_sConfigFile.cstr (), g_dConfig.begin ());
+					bReloadHappened = ParseConfig ( &g_hCfg, g_sConfigFile, dConfig );
 				}
 				if ( bReloadHappened )
 				{
@@ -17949,7 +17871,6 @@ static void CheckRotate () REQUIRES ( MainThread )
 					sphWarning ( "failed to parse config file '%s': %s; using previous settings", g_sConfigFile.cstr(), TlsMsg::szError() );
 			}
 		}
-		CleanLoadedConfig();
 		g_bReloadForced = false;
 	}
 
@@ -19619,14 +19540,13 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	// parse config file
 	/////////////////////
 
-	LoadAndCheckConfig ();
-	sphInfo( "using config file '%s' (%d chars)...", g_sConfigFile.cstr(), g_dConfig.GetLength());
+	auto dConfig = FetchAndCheckIfChanged ( g_sConfigFile ).second;
+	sphInfo( "using config file '%s' (%d chars)...", g_sConfigFile.cstr(), dConfig.GetLength());
 	// do parse
 	// don't aqcuire wlock, since we're in single main thread here.
 	FakeScopedWLock_T<> wFakeLock { g_tRotateConfigMutex };
-	if ( !ParseConfig ( &g_hCfg, g_sConfigFile.scstr(), g_dConfig.begin() ) )
+	if ( !ParseConfig ( &g_hCfg, g_sConfigFile, dConfig ) )
 		sphFatal ( "failed to parse config file '%s': %s", g_sConfigFile.cstr (), TlsMsg::szError() );
-	CleanLoadedConfig();
 
 	const CSphConfig& hConf = g_hCfg;
 
@@ -19717,13 +19637,14 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		if ( !LoadConfigInt ( hConf, g_sConfigFile, sError ) )
 			sphFatal ( "%s", sError.cstr() );
 
-		if ( LoadAndCheckConfig() )
+		auto [bChanged, dNewConfig] = FetchAndCheckIfChanged ( g_sConfigFile );
+		if ( bChanged )
 		{
 			// reparse the config file
-			sphInfo ( "Reloading the config (%d chars)", g_dConfig.GetLength() );
+			sphInfo ( "Reloading the config (%d chars)", dNewConfig.GetLength() );
 
 			// fake lock is acquired; no warnings will be fired
-			if ( !ParseConfig ( &g_hCfg, g_sConfigFile.cstr (), g_dConfig.begin () ) )
+			if ( !ParseConfig ( &g_hCfg, g_sConfigFile, dNewConfig ) )
 				sphFatal ( "failed to parse config file '%s': %s", g_sConfigFile.cstr (), TlsMsg::szError() );
 
 			if ( !LoadConfigInt ( hConf, g_sConfigFile, sError ) )
@@ -19733,7 +19654,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 			ConfigureSearchd ( hConf, bOptPIDFile, bTestMode );
 		}
 	}
-	CleanLoadedConfig();
 
 	// hSearchdpre might be dead if we reloaded the config.
 	CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];

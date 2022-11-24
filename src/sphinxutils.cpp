@@ -1036,14 +1036,16 @@ static KeySection_t g_dConfigSections[] =
 /// simple config file
 class CSphConfigParser
 {
-public:
-	CSphConfig		m_tConf;
 
 public:
-	bool			Parse ( const char * sFileName, const char * pBuffer = nullptr );
+						CSphConfigParser ( const VecTraits_T<char>& dData, CSphString sFileName ) noexcept;
+	bool				Parse();
+	const CSphConfig&	GetConfig() const noexcept { return m_tConf; }
 
 private:
+	VecTraits_T<char> m_dData;
 	CSphString		m_sFileName;
+	CSphConfig		m_tConf;
 	int				m_iLine = -1;
 	CSphString		m_sSectionType;
 	CSphString		m_sSectionName;
@@ -1057,7 +1059,6 @@ private:
 	bool			AddSection ( const char * szType, const char * szSection );
 	void			AddKey ( const char * szKey, char * szValue );
 	bool			ValidateKey ( const char * szKey );
-	char *			GetBufferString ( char * szDest, int iMax, const char * & szSource );
 };
 
 bool CSphConfigParser::IsPlainSection ( const char * szKey )
@@ -1148,7 +1149,12 @@ bool CSphConfigParser::ValidateKey ( const char * szKey )
 
 #if !_WIN32
 
-bool TryToExec ( char * pExecLine, const char * szFilename, CSphVector<char> & dResult )
+constexpr bool HasSheBang()
+{
+	return true;
+}
+
+static bool TryToExec ( char * pExecLine, const char * szFilename, CSphVector<char> & dResult )
 {
 	using namespace TlsMsg;
 	ResetErr(); // clean any inherited msgs
@@ -1178,14 +1184,14 @@ bool TryToExec ( char * pExecLine, const char * szFilename, CSphVector<char> & d
 		dArgv.Add ( pExecLine ); // 0-th arg - prog itself
 
 		for ( char* pPtr = pExecLine; *pPtr; ++pPtr )
+		{
+			if ( sphIsSpace ( *pPtr ) )
 			{
-				if ( sphIsSpace ( *pPtr ) )
-				{
-					*pPtr = '\0';
+				*pPtr = '\0';
 				dArgv.Add ( trim ( pPtr+1 ) ); // 1-st arg (if any)
-					break;
-				}
+				break;
 			}
+		}
 		dArgv.Add ( szFilename ); // last arg (original file)
 		dArgv.Add ( nullptr ); // null terminator, mandatory
 
@@ -1243,212 +1249,231 @@ bool TryToExec ( char * pExecLine, const char * szFilename, CSphVector<char> & d
 	if ( WIFSIGNALED ( iStatus ) )
 		return Err ( "error executing '%s', killed by signal %d", pExecLine, WTERMSIG ( iStatus ) );
 
-	if ( HasErr() )
-		return false;
-
-	dResult.Add('\0');
-	return true;
+	return !HasErr();
 }
 #else
-bool TryToExec ( char *, const char *, CSphVector<char> & )
+template<typename ITER>
+static bool TryToExec ( ITER, const char *, CSphVector<char> & )
 {
 	return true;
+}
+
+constexpr bool HasSheBang()
+{
+	return false;
 }
 #endif
 
 
-char * CSphConfigParser::GetBufferString ( char * szDest, int iMax, const char * & szSource )
+std::pair<bool, CSphVector<char>> FetchAndCheckIfChanged ( const CSphString& sFilename )
 {
-	int nCopied = 0;
+	static DWORD uStoredCRC32 = 0;
+	static struct_stat tStoredStat;
 
-	while ( nCopied < iMax-1 && szSource[nCopied] && ( nCopied==0 || szSource[nCopied-1]!='\n' ) )
+	CSphVector<char> dContent;
+
+	constexpr auto BUF_SIZE = 8192;
+	std::array<char, BUF_SIZE> sBuf;
+
+	auto* fp = fopen ( sFilename.scstr(), "rb" );
+	AT_SCOPE_EXIT ( [fp] { if ( fp ) fclose ( fp ); } );
+	if ( !fp )
+		return { true, dContent };
+
+	struct_stat tStat = { 0 };
+	if ( fstat ( fileno ( fp ), &tStat ) < 0 )
+		memset ( &tStat, 0, sizeof ( tStat ) );
+
+	bool bGotLine = !!fgets ( sBuf.data(), sBuf.size(), fp );
+	if ( !bGotLine )
+		return { true, dContent };
+
+	DWORD uCRC32;
+	if constexpr ( HasSheBang() )
 	{
-		szDest [nCopied] = szSource [nCopied];
-		nCopied++;
+		auto pSheBang = std::find_if_not ( begin ( sBuf ), end ( sBuf ), isspace );
+		if ( pSheBang + 2 < sBuf.end() && pSheBang[0] == '#' && pSheBang[1] == '!' )
+		{
+			sBuf.back() = '\0'; // just safety
+			if ( !TryToExec ( pSheBang + 2, sFilename.cstr(), dContent ) )
+			{
+				dContent.Reset();
+				return { true, dContent };
+			}
+
+			uCRC32 = sphCRC32 ( dContent.Begin(), dContent.GetLength() );
+		}
 	}
 
-	if ( !nCopied )
-		return nullptr;
+	if ( dContent.IsEmpty() )
+	{
+		while ( bGotLine ) {
+			auto iLen = (int)strlen ( sBuf.data() );
+			dContent.Append ( { sBuf.data(), iLen } );
+			bGotLine = !!fgets ( sBuf.data(), sBuf.size(), fp );
+		}
+	}
 
-	szSource += nCopied;
-	szDest [nCopied] = '\0';
+	uCRC32 = sphCRC32 ( dContent.Begin(), dContent.GetLength() );
 
-	return szDest;
+	if ( uStoredCRC32 == uCRC32
+		 && tStat.st_size == tStoredStat.st_size
+		 && tStat.st_mtime == tStoredStat.st_mtime
+		 && tStat.st_ctime == tStoredStat.st_ctime )
+		return { false, dContent };
+
+	uStoredCRC32 = uCRC32;
+	tStoredStat = tStat;
+	return { true, dContent };
 }
 
-bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
+CSphConfigParser::CSphConfigParser ( const VecTraits_T<char>& dData, CSphString sFileName ) noexcept
+	: m_dData { dData }
+	, m_sFileName { std::move ( sFileName ) }
+{
+}
+
+bool CSphConfigParser::Parse ()
 {
 	using namespace TlsMsg;
 	ResetErr();
 
-	const int L_STEPBACK	= 16;
-	const int L_TOKEN		= 64;
-	const int L_BUFFER		= 8192;
-
-	FILE * fp = nullptr;
-	if ( !pBuffer )
-	{
-		// open file
-		fp = fopen ( sFileName, "rb" );
-		if ( !fp )
-			return false;
-	}
+	constexpr int L_TOKEN		= 64;
 
 	// init parser
-	m_sFileName = sFileName;
 	m_iLine = 0;
 	m_iWarnings = 0;
 
-	char sBuf [ L_BUFFER ] = { 0 };
+	const char* p = m_dData.begin();
+	const char* pDataEnd = m_dData.end();
+	const char* pLineBegin = p;
+	const char* pLineEnd = p;
 
-	char * p = sBuf;
-	char * pEnd = p;
-
-	char sToken [ L_TOKEN ] = { 0 };
+	std::array<char,L_TOKEN> sToken;
 	int iToken = 0;
 	int iCh = -1;
 
-	enum { S_TOP, S_SKIP2NL, S_TOK, S_TYPE, S_SEC, S_CHR, S_VALUE, S_SECNAME, S_SECBASE, S_KEY } eState = S_TOP, eStack[8];
+	enum class States_e { S_TOP, S_SKIP2NL, S_TOK, S_TYPE, S_SEC, S_CHR, S_VALUE, S_SECNAME, S_SECBASE, S_KEY };
+	auto eState = States_e::S_TOP;
+	std::array<States_e,8> eStack;
 	int iStack = 0;
 
 	int iValue = 0, iValueMax = 65535;
-	auto * sValue = new char [ iValueMax+1 ];
+	auto sValue = std::make_unique<char[]> ( iValueMax + 1 );
 
 	#define LOC_ERROR(...) { Err(__VA_ARGS__); break; }
-	#define LOC_PUSH(_new) { assert ( iStack<int(sizeof(eStack)/sizeof(eState)) ); eStack[iStack++] = eState; eState = _new; }
-	#define LOC_POP() { assert ( iStack>0 ); eState = eStack[--iStack]; }
-	#define LOC_BACK() { p--; }
+	auto LOC_PUSH = [&iStack, &eStack, &eState] ( States_e eNew ) { assert ( iStack<eStack.size() ); eStack[iStack++] = std::exchange(eState,eNew); };
+	auto LOC_POP = [&iStack, &eStack, &eState] { assert ( iStack > 0 ); eState = eStack[--iStack]; };
+	auto LOC_BACK = [&p] { --p; };
 
-	for ( ; ; p++ )
+	for ( ; p < pDataEnd; ++p )
 	{
 		// if this line is over, load next line
-		if ( p>=pEnd )
+		if ( p >= pLineEnd )
 		{
-			char * szResult = pBuffer ? GetBufferString ( sBuf, L_BUFFER, pBuffer ) : fgets ( sBuf, L_BUFFER, fp );
-			if ( !szResult )
-				break; // FIXME! check for read error
-
-			m_iLine++;
-			size_t iLen = strlen(sBuf);
-			if ( iLen<=0 ) LOC_ERROR ( "internal error; fgets() returned empty string" );
-
-			p = sBuf;
-			pEnd = sBuf + iLen;
-			if ( pEnd[-1]!='\n' )
-			{
-				if ( iLen==L_BUFFER-1 )
-					LOC_ERROR ( "line too long" );
-			}
+			++m_iLine;
+			p = pLineBegin = std::exchange ( pLineEnd, std::find ( pLineEnd, pDataEnd, '\n' ) );
+			if ( pLineEnd < pDataEnd )
+				++pLineEnd;
 		}
 
-		// handle S_TOP state
-		if ( eState==S_TOP )
+		switch ( eState )
 		{
-			sBuf[L_BUFFER-1] = '\0'; // just safety
+
+		// handle S_TOP state
+		case States_e::S_TOP:
+		{
 			if ( isspace(*p) )				continue;
-
-			if ( *p=='#' )
-			{
-#if !_WIN32
-				if ( !pBuffer && m_iLine==1 && p==sBuf && p[1]=='!' )
-				{
-					CSphVector<char> dResult;
-					if ( TryToExec ( p+2, sFileName, dResult ) )
-						Parse ( sFileName, &dResult[0] );
-					break;
-				} else
-#endif
-				{
-					LOC_PUSH ( S_SKIP2NL );
-					continue;
-				}
-			}
-
+			if ( *p=='#' )					{ LOC_PUSH ( States_e::S_SKIP2NL ); continue; }
 			if ( !sphIsAlpha(*p) )			LOC_ERROR ( "invalid token" );
-											iToken = 0; LOC_PUSH ( S_TYPE ); LOC_PUSH ( S_TOK ); LOC_BACK(); continue;
+			iToken = 0;
+			LOC_PUSH ( States_e::S_TYPE );
+			LOC_PUSH ( States_e::S_TOK );
+			LOC_BACK();
+			continue;
 		}
 
 		// handle S_SKIP2NL state
-		if ( eState==S_SKIP2NL )
+		case States_e::S_SKIP2NL:
 		{
 			LOC_POP ();
-			p = pEnd;
+			p = pLineEnd;
 			continue;
 		}
 
 		// handle S_TOK state
-		if ( eState==S_TOK )
+		case States_e::S_TOK:
 		{
 			if ( !iToken && !sphIsAlpha(*p) )LOC_ERROR ( "internal error (non-alpha in S_TOK pos 0)" );
-			if ( iToken==sizeof(sToken) )	LOC_ERROR ( "token too long" );
+			if ( iToken==sToken.size() )	LOC_ERROR ( "token too long" );
 			if ( !sphIsAlpha(*p) )			{ LOC_POP (); sToken [ iToken ] = '\0'; iToken = 0; LOC_BACK(); continue; }
 			if ( !iToken )					{ sToken[0] = '\0'; }
 											sToken [ iToken++ ] = *p; continue;
 		}
 
 		// handle S_TYPE state
-		if ( eState==S_TYPE )
+		case States_e::S_TYPE:
 		{
 			if ( isspace(*p) )				continue;
-			if ( *p=='#' )					{ LOC_PUSH ( S_SKIP2NL ); continue; }
+			if ( *p=='#' )					{ LOC_PUSH ( States_e::S_SKIP2NL ); continue; }
 			if ( !sToken[0] )				{ LOC_ERROR ( "internal error (empty token in S_TYPE)" ); }
-			if ( IsPlainSection(sToken) )
+			if ( IsPlainSection ( sToken.data() ) )
 			{
-				if ( !AddSection ( sToken, sToken ) )
+				if ( !AddSection ( sToken.data(), sToken.data() ) )
 					break;
 				sToken[0] = '\0';
 				LOC_POP();
-				LOC_PUSH ( S_SEC );
-				LOC_PUSH ( S_CHR );
+				LOC_PUSH ( States_e::S_SEC );
+				LOC_PUSH ( States_e::S_CHR );
 				iCh = '{';
 				LOC_BACK();
 				continue;
 			}
-			if ( IsNamedSection(sToken) )	{ m_sSectionType = sToken; sToken[0] = '\0'; LOC_POP (); LOC_PUSH ( S_SECNAME ); LOC_BACK(); continue; }
+			if ( IsNamedSection ( sToken.data() ) )	{ m_sSectionType = sToken.data(); sToken[0] = '\0'; LOC_POP (); LOC_PUSH ( States_e::S_SECNAME ); LOC_BACK(); continue; }
 											LOC_ERROR ( "invalid section type '%s'", sToken );
 		}
 
 		// handle S_CHR state
-		if ( eState==S_CHR )
+		case States_e::S_CHR:
 		{
 			if ( isspace(*p) )				continue;
-			if ( *p=='#' )					{ LOC_PUSH ( S_SKIP2NL ); continue; }
+			if ( *p=='#' )					{ LOC_PUSH ( States_e::S_SKIP2NL ); continue; }
 			if ( *p!=iCh )					LOC_ERROR ( "expected '%c', got '%c'", iCh, *p );
 											LOC_POP (); continue;
 		}
 
 		// handle S_SEC state
-		if ( eState==S_SEC )
+		case States_e::S_SEC:
 		{
 			if ( isspace(*p) )				continue;
-			if ( *p=='#' )					{ LOC_PUSH ( S_SKIP2NL ); continue; }
+			if ( *p=='#' )					{ LOC_PUSH ( States_e::S_SKIP2NL ); continue; }
 			if ( *p=='}' )					{ LOC_POP (); continue; }
-			if ( sphIsAlpha(*p) )			{ LOC_PUSH ( S_KEY ); LOC_PUSH ( S_TOK ); LOC_BACK(); iValue = 0; sValue[0] = '\0'; continue; }
+			if ( sphIsAlpha(*p) )			{ LOC_PUSH ( States_e::S_KEY ); LOC_PUSH ( States_e::S_TOK ); LOC_BACK(); iValue = 0; sValue[0] = '\0'; continue; }
 											LOC_ERROR ( "section contents: expected token, got '%c'", *p );
 		}
 
 		// handle S_KEY state
-		if ( eState==S_KEY )
+		case States_e::S_KEY:
 		{
 			// validate the key
-			if ( !ValidateKey ( sToken ) )
+			if ( !ValidateKey ( sToken.data() ) )
 				break;
 
 			// an assignment operator and a value must follow
-			LOC_POP (); LOC_PUSH ( S_VALUE ); LOC_PUSH ( S_CHR ); iCh = '=';
+			LOC_POP (); LOC_PUSH ( States_e::S_VALUE ); LOC_PUSH ( States_e::S_CHR ); iCh = '=';
 			LOC_BACK(); // because we did not work the char at all
 			continue;
 		}
 
 		// handle S_VALUE state
-		if ( eState==S_VALUE )
+		case States_e::S_VALUE:
 		{
-			if ( *p=='\n' )					{ AddKey ( sToken, sValue ); iValue = 0; LOC_POP (); continue; }
-			if ( *p=='#' )					{ AddKey ( sToken, sValue ); iValue = 0; LOC_POP (); LOC_PUSH ( S_SKIP2NL ); continue; }
+			if ( *p=='\n' )					{ AddKey ( sToken.data(), sValue.get() ); iValue = 0; LOC_POP (); continue; }
+			if ( *p=='#' )					{ AddKey ( sToken.data(), sValue.get() ); iValue = 0; LOC_POP (); LOC_PUSH ( States_e::S_SKIP2NL ); continue; }
 			if ( *p=='\\' )
 			{
-				// backslash at the line end: continuation operator; let the newline be unhanlded
-				if ( p[1]=='\r' || p[1]=='\n' ) { LOC_PUSH ( S_SKIP2NL ); continue; }
+				// backslash at the line end: continuation operator; let the newline be unhandled
+				if ( p[1]=='\r' || p[1]=='\n' ) { LOC_PUSH ( States_e::S_SKIP2NL ); continue; }
 
 				// backslash before number sign: comment start char escaping; advance and pass it
 				if ( p[1]=='#' ) { p++; }
@@ -1460,58 +1485,56 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 		}
 
 		// handle S_SECNAME state
-		if ( eState==S_SECNAME )
+		case States_e::S_SECNAME:
 		{
 			if ( isspace(*p) )					{ continue; }
 			if ( !sToken[0]&&!sphIsAlpha(*p))	{ LOC_ERROR ( "named section: expected name, got '%c'", *p ); }
 
-			if ( !sToken[0] )				{ LOC_PUSH ( S_TOK ); LOC_BACK(); continue; }
-			if ( !AddSection ( m_sSectionType.cstr(), sToken ) ) break;
+			if ( !sToken[0] )				{ LOC_PUSH ( States_e::S_TOK ); LOC_BACK(); continue; }
+			if ( !AddSection ( m_sSectionType.cstr(), sToken.data() ) ) break;
 			sToken[0] = '\0';
-			if ( *p==':' )					{ eState = S_SECBASE; continue; }
-			if ( *p=='{' )					{ eState = S_SEC; continue; }
+			if ( *p==':' )					{ eState = States_e::S_SECBASE; continue; }
+			if ( *p=='{' )					{ eState = States_e::S_SEC; continue; }
 											LOC_ERROR ( "named section: expected ':' or '{', got '%c'", *p );
 		}
 
 		// handle S_SECBASE state
-		if ( eState==S_SECBASE )
+		case States_e::S_SECBASE:
 		{
 			if ( isspace(*p) )					{ continue; }
 			if ( !sToken[0]&&!sphIsAlpha(*p))	{ LOC_ERROR ( "named section: expected parent name, got '%c'", *p ); }
-			if ( !sToken[0] )					{ LOC_PUSH ( S_TOK ); LOC_BACK(); continue; }
+			if ( !sToken[0] )					{ LOC_PUSH ( States_e::S_TOK ); LOC_BACK(); continue; }
 
 			// copy the section
 			assert ( m_tConf.Exists ( m_sSectionType ) );
 
-			if ( !m_tConf [ m_sSectionType ].Exists ( sToken ) )
-				LOC_ERROR ( "inherited section '%s': parent doesn't exist (parent name='%s', type='%s')",
-					m_sSectionName.cstr(), sToken, m_sSectionType.cstr() );
+			if ( !m_tConf [ m_sSectionType ].Exists ( sToken.data() ) )
+				LOC_ERROR ( "inherited section '%s': parent doesn't exist (parent name='%s', type='%s')", m_sSectionName.cstr(), sToken, m_sSectionType.cstr() );
 
 			CSphConfigSection & tDest = m_tConf [ m_sSectionType ][ m_sSectionName ];
-			tDest = m_tConf [ m_sSectionType ][ sToken ];
+			tDest = m_tConf [ m_sSectionType ][ sToken.data() ];
 
 			// mark all values in the target section as "to be overridden"
 			for ( auto& tVal : tDest )
 				tVal.second.m_bTag = true;
 
 			LOC_BACK();
-			eState = S_SEC;
-			LOC_PUSH ( S_CHR );
+			eState = States_e::S_SEC;
+			LOC_PUSH ( States_e::S_CHR );
 			iCh = '{';
 			continue;
 		}
+		default:
+			LOC_ERROR ( "internal error (unhandled state %d)", eState );
+			break;
+		}
 
-		LOC_ERROR ( "internal error (unhandled state %d)", eState );
+		// it should be error, as we never fall down to here with valid config
+		assert ( HasErr() );
+		break; // for ( ...
 	}
 
-	#undef LOC_POP
-	#undef LOC_PUSH
 	#undef LOC_ERROR
-
-	if ( !pBuffer )
-		fclose ( fp );
-
-	SafeDeleteArray ( sValue );
 
 	if ( m_iWarnings>WARNS_THRESH )
 		fprintf ( stdout, "WARNING: %d more warnings skipped.\n", m_iWarnings-WARNS_THRESH );
@@ -1519,17 +1542,7 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 	if ( !HasErr() )
 		return true;
 
-	auto iCol = (int)(p-sBuf+1);
-
-	int iCtx = Min ( L_STEPBACK, iCol ); // error context is upto L_STEPBACK chars back, but never going to prev line
-	const char * sCtx = p-iCtx+1;
-	if ( sCtx<sBuf )
-		sCtx = sBuf;
-
-	char sStepback [ L_STEPBACK+1 ];
-	memcpy ( sStepback, sCtx, size_t ( iCtx ) );
-	sStepback[iCtx] = '\0';
-
+	auto iCol = (int)( p - pLineBegin + 1 );
 	return Err ( "ERROR: %s in %s line %d col %d.\n", szError (), m_sFileName.cstr (), m_iLine, iCol );
 }
 
@@ -1620,38 +1633,53 @@ const char * sphGetConfigFile ( const char * szHint )
 	return nullptr;
 }
 
-bool ParseConfig ( CSphConfig* pConfig, const char* sFileName, const char* pBuffer )
+bool ParseConfig ( CSphConfig* pConfig, CSphString sFileName, const VecTraits_T<char>& dData )
 {
 	// load config
-	CSphConfigParser cp;
-	if ( !cp.Parse ( sFileName, pBuffer ) )
+	CSphConfigParser cp { dData, std::move(sFileName) };
+	if ( !cp.Parse () )
 		return false;
 
-	if ( pConfig )
-		*pConfig = cp.m_tConf;
+	assert ( pConfig );
+	*pConfig = cp.GetConfig();
 	return true;
 }
 
-CSphConfig sphLoadConfig ( const char * sOptConfig, bool bQuiet, bool bIgnoreIndexes, const char ** ppActualConfig )
+enum class Indexes_e : bool { eNeed, eNotNeed };
+
+template<Indexes_e eNeed>
+inline static CSphConfig LoadConfig ( const char * szPathToConfigFile, bool bTraceToStdout, const char ** ppActualConfigFile = nullptr )
 {
 	// fallback to defaults if there was no explicit config specified
-	sOptConfig = sphGetConfigFile ( sOptConfig );
+	szPathToConfigFile = sphGetConfigFile ( szPathToConfigFile );
 
-	if ( !bQuiet )
-		fprintf ( stdout, "using config file '%s'...\n", sOptConfig );
+	if ( bTraceToStdout )
+		fprintf ( stdout, "using config file '%s'...\n", szPathToConfigFile );
 
 	// load config
+	auto [bChanged, dConfig] = FetchAndCheckIfChanged ( szPathToConfigFile );
 	CSphConfig hConf;
-	if ( !ParseConfig ( &hConf, sOptConfig ) )
-		sphDie ( "failed to parse config file '%s': %s", sOptConfig, TlsMsg::szError() );
+	if ( !ParseConfig ( &hConf, szPathToConfigFile, dConfig ) )
+		sphDie ( "failed to parse config file '%s': %s", szPathToConfigFile, TlsMsg::szError() );
 
-	if ( !bIgnoreIndexes && !hConf ( "index" ) )
-		sphDie ( "no indexes found in config file '%s'", sOptConfig );
+	if constexpr ( eNeed==Indexes_e::eNeed )
+		if ( !hConf ( "index" ) )
+			sphDie ( "no indexes found in config file '%s'", szPathToConfigFile );
 
-	if ( ppActualConfig )
-		*ppActualConfig = sOptConfig;
+	if ( ppActualConfigFile )
+		*ppActualConfigFile = szPathToConfigFile;
 
 	return hConf;
+}
+
+CSphConfig sphLoadConfig ( const char* szPathToConfigFile, bool bTraceToStdout, const char** ppActualConfigFile )
+{
+	return LoadConfig<Indexes_e::eNeed> ( szPathToConfigFile, bTraceToStdout, ppActualConfigFile );
+}
+
+CSphConfig sphLoadConfigWithoutIndexes ( const char* szPathToConfigFile, bool bTraceToStdout )
+{
+	return LoadConfig<Indexes_e::eNotNeed> ( szPathToConfigFile, bTraceToStdout );
 }
 
 //////////////////////////////////////////////////////////////////////////

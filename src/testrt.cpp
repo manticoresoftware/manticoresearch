@@ -599,7 +599,7 @@ int main ( int argc, char ** argv )
 	Threads::PrepareMainThread ( &cTopOfMainStack );
 
 	CSphConfig hConf;
-	ParseConfig ( &hConf, "internal", rtestconfig );
+	ParseConfig ( &hConf, "internal", FROMS(rtestconfig) );
 	const CSphConfigType &hSources = hConf["source"];
 
 	CSphString sError;

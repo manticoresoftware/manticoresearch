@@ -15082,7 +15082,7 @@ void HandleMysqlShowIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, b
 
 void PutIndexStatus ( RowBuffer_i & tOut, const CSphIndex * pIndex )
 {
-	tOut.PutString ( pIndex->GetFilename () );
+	tOut.PutString ( pIndex->GetFilebase () );
 
 	auto & tStats = pIndex->GetStats ();
 	tOut.PutNumAsString ( tStats.m_iTotalDocuments );
@@ -15687,7 +15687,7 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	}
 
 	StrVec_t dBackupFiles;
-	CSphString sIndexPath = GetPathOnly ( pRtIndex->GetFilename() );
+	CSphString sIndexPath = GetPathOnly ( pRtIndex->GetFilebase() );
 	if ( !SubstituteExternalIndexFiles ( dOldExternalFiles, tContainer.GetFiles(), sIndexPath, dBackupFiles, sError ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
@@ -17130,7 +17130,7 @@ bool RotateIndexMT ( ServedIndexRefPtr_c& pNewServed, const CSphString & sIndex,
 		{
 			RIdx_c pOldIdx { pServed };
 			pNewIndex->m_iTID = pOldIdx->m_iTID;
-			pServed->SetUnlink ( pOldIdx->GetFilename() );
+			pServed->SetUnlink ( pOldIdx->GetFilebase() );
 		}
 	}
 

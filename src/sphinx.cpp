@@ -3006,7 +3006,7 @@ CSphString GetExt ( ESphExt eExt, bool bTemp, const CSphIndex * pIndex )
 	assert ( pIndex );
 
 	CSphString sRes;
-	sRes.SetSprintf ( bTemp ? "%s.tmp%s" : "%s%s", pIndex->GetFilename(), sphGetExt ( eExt ) );
+	sRes.SetSprintf ( bTemp ? "%s.tmp%s" : "%s%s", pIndex->GetFilebase(), sphGetExt ( eExt ) );
 
 	return sRes;
 }

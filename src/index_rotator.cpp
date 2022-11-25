@@ -90,7 +90,7 @@ public:
 	{
 		m_pIdx = pIdx;
 		assert ( m_pIdx );
-		m_sOrigPath = m_pIdx->GetFilename();
+		m_sOrigPath = m_pIdx->GetFilebase();
 		m_sTargetPath = IndexFiles_c::MakePath ( m_szTo, m_sOrigPath );
 	}
 

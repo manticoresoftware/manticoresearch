@@ -1195,7 +1195,7 @@ public:
 	void						SetName ( const char * sName ) { m_sIndexName = sName; }
 
 	/// get for the base file name
-	const char *				GetFilename () const { return m_sFileBase.cstr(); }
+	const char *				GetFilebase () const { return m_sFileBase.cstr(); }
 
 	/// get actual index files list
 	virtual void				GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const FilenameBuilder_i* = nullptr ) const {}

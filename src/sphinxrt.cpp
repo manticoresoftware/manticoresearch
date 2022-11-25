@@ -747,7 +747,7 @@ protected:
 		if ( !m_pIndex )
 			return;
 
-		CSphString sDeleted = m_pIndex->GetFilename ();
+		CSphString sDeleted = m_pIndex->GetFilebase ();
 		SafeDelete( m_pIndex );
 		if ( m_bFinallyUnlink )
 			sphUnlinkIndex ( sDeleted.cstr (), true );
@@ -8609,7 +8609,7 @@ ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunks ( const char* szParentAction, 
 
 	const CSphIndex& tChunkA = pChunkA->Cidx();
 	const CSphIndex& tChunkB = pChunkB->Cidx();
-	CSphString sFirst = tChunkA.GetFilename();
+	CSphString sFirst = tChunkA.GetFilebase();
 
 	// fixme! implicit dependency (merging creates file suffixed .tmp, that is implicit here.
 	CSphString sProcessed;
@@ -8966,7 +8966,7 @@ bool RtIndex_c::CompressOneChunk ( int iChunkID, int* pAffected )
 			return iChunk==iChunkID; } ) )
 		return false;
 
-	sphLogDebug ( "compressed a=%s, new=%s, killed=%d", tVictim.GetFilename(), tCompressed.GetFilename(), iKilled );
+	sphLogDebug ( "compressed a=%s, new=%s, killed=%d", tVictim.GetFilebase(), tCompressed.GetFilebase(), iKilled );
 	pVictim->m_bFinallyUnlink = true;
 	pCompressed->m_bFinallyUnlink = false;
 	SaveMeta();
@@ -9141,7 +9141,7 @@ bool RtIndex_c::SplitOneChunk ( int iChunkID, const char* szUvarFilter, int* pAf
 		return false; } ) )
 		return false;
 
-	sphLogDebug ( "split a=%s, b=%s, killed=%d", tIndexE.GetFilename(), tIndexI.GetFilename(), iKilled );
+	sphLogDebug ( "split a=%s, b=%s, killed=%d", tIndexE.GetFilebase(), tIndexI.GetFilebase(), iKilled );
 	pVictim->m_bFinallyUnlink = true;
 	pChunkI->m_bFinallyUnlink = false;
 	pChunkE->m_bFinallyUnlink = false;
@@ -9234,7 +9234,7 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected )
 		 } ) )
 		return false;
 
-	sphLogDebug ( "optimized a=%s, b=%s, new=%s, killed=%d", pA->Cidx().GetFilename(), pB->Cidx().GetFilename(), tMerged.GetFilename(), iKilled );
+	sphLogDebug ( "optimized a=%s, b=%s, new=%s, killed=%d", pA->Cidx().GetFilebase(), pB->Cidx().GetFilebase(), tMerged.GetFilebase(), iKilled );
 
 	pA->m_bFinallyUnlink = true;
 	pB->m_bFinallyUnlink = true;

@@ -1454,7 +1454,7 @@ RtIndex_c::~RtIndex_c ()
 		::close ( m_iLockFD );
 
 	if ( bValid )
-		Binlog::NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, sphInterrupted () );
+		Binlog::NotifyIndexFlush ( GetName(), m_iTID, sphInterrupted () );
 
 	if ( m_bIndexDeleted )
 	{
@@ -1471,10 +1471,10 @@ RtIndex_c::~RtIndex_c ()
 
 	tmSave = sphMicroTimer() - tmSave;
 	if ( tmSave>=1000 )
-		sphInfo ( "rt: index %s: ramchunk saved in %d.%03d sec", m_sIndexName.cstr(), (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
+		sphInfo ( "rt: index %s: ramchunk saved in %d.%03d sec", GetName(), (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
 
 	if ( !sphInterrupted() )
-		sphLogDebug ( "closed index %s, valid %d, deleted %d, time %d.%03d sec", m_sIndexName.cstr(), (int)bValid, (int)m_bIndexDeleted, (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
+		sphLogDebug ( "closed index %s, valid %d, deleted %d, time %d.%03d sec", GetName(), (int)bValid, (int)m_bIndexDeleted, (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
 }
 
 void RtIndex_c::RaiseAlterGeneration()
@@ -1570,14 +1570,14 @@ void RtIndex_c::ForceRamFlush ( const char* szReason )
 	int64_t iUsedRam = SegmentsGetUsedRam ( *m_tRtChunks.RamSegs() );
 	if ( !SaveRamChunk () )
 	{
-		sphWarning ( "rt: index %s: ramchunk save FAILED! (error=%s)", m_sIndexName.cstr(), m_sLastError.cstr() );
+		sphWarning ( "rt: index %s: ramchunk save FAILED! (error=%s)", GetName(), m_sLastError.cstr() );
 		return;
 	}
 
 	SaveMeta();
 	auto pChunks = m_tRtChunks.DiskChunks();
 	pChunks->for_each ( [] ( ConstDiskChunkRefPtr_t & pIdx ) { pIdx->Cidx().FlushDeadRowMap ( true ); } );
-	Binlog::NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, false );
+	Binlog::NotifyIndexFlush ( GetName(), m_iTID, false );
 
 	int64_t iWasTID = m_iSavedTID;
 	int64_t tmDelta = sphMicroTimer() - m_tmSaved;
@@ -1586,8 +1586,8 @@ void RtIndex_c::ForceRamFlush ( const char* szReason )
 
 	tmSave = sphMicroTimer() - tmSave;
 	sphInfo ( "rt: index %s: ramchunk saved ok (mode=%s, last TID=" INT64_FMT ", current TID=" INT64_FMT ", "
-		"ram=%d.%03d Mb, time delta=%d sec, took=%d.%03d sec)"
-		, m_sIndexName.cstr(), szReason, iWasTID, m_iTID, (int)(iUsedRam/1024/1024), (int)((iUsedRam/1024)%1000)
+		"ram=%d.%03d Mb, time delta=%d sec, took=%d.%03d sec)",
+		GetName(), szReason, iWasTID, m_iTID, (int)(iUsedRam/1024/1024), (int)((iUsedRam/1024)%1000)
 		, (int) (tmDelta/1000000), (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
 }
 
@@ -2726,7 +2726,7 @@ bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString* pError )
 	if ( pAcc->GetIndexGeneration()!=m_iAlterGeneration )
 	{
 		if ( pError )
-			pError->SetSprintf( "Can't commit to index '%s', index was altered during txn!", m_sIndexName.cstr() );
+			pError->SetSprintf( "Can't commit to index '%s', index was altered during txn!", GetName() );
 		return false;
 	}
 
@@ -4004,7 +4004,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 		tmSave = -sphMicroTimer();
 		if ( !SaveDiskData ( sChunk.cstr(), dSegments, tStats, m_sLastError ) )
 		{
-			sphWarning ( "rt: index %s failed to save disk chunk %s: %s", m_sIndexName.cstr(), sChunk.cstr(), m_sLastError.cstr() );
+			sphWarning ( "rt: index %s failed to save disk chunk %s: %s", GetName(), sChunk.cstr(), m_sLastError.cstr() );
 			tmSave += sphMicroTimer();
 			break;
 		}
@@ -4014,7 +4014,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 		StrVec_t dWarnings;
 		std::unique_ptr<FilenameBuilder_i> pFilenameBuilder;
 		if ( fnFnameBuilder )
-			pFilenameBuilder = fnFnameBuilder ( m_sIndexName.cstr () );
+			pFilenameBuilder = fnFnameBuilder ( GetName () );
 		pNewChunk = PreallocDiskChunk ( sChunk.cstr (), iChunkID, pFilenameBuilder.get (), dWarnings, m_sLastError );
 
 		if ( !dWarnings.IsEmpty() )
@@ -4023,7 +4023,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 			for ( const auto & sItem : dWarnings )
 				sWarningLine << sItem;
 
-			sphWarning ( "rt: index %s save disk chunk %s warnings: %s", m_sIndexName.cstr(), sChunk.cstr(), sWarningLine.cstr() );
+			sphWarning ( "rt: index %s save disk chunk %s warnings: %s", GetName(), sChunk.cstr(), sWarningLine.cstr() );
 		}
 
 		tmSave += sphMicroTimer();
@@ -4033,7 +4033,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 	// here we back into serial fiber. As we're switched, we can't rely on m_iTID and index stats anymore
 	if ( !pNewChunk )
 	{
-		sphWarning ( "rt: index %s failed to load disk chunk after RAM save: %s", m_sIndexName.cstr (), m_sLastError.cstr () );
+		sphWarning ( "rt: index %s failed to load disk chunk after RAM save: %s", GetName(), m_sLastError.cstr () );
 		return false;
 	}
 
@@ -4088,7 +4088,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 		tNewSet.m_pNewDiskChunks->Add ( DiskChunk_c::make ( std::move ( pNewChunk ) ) );
 		SaveMeta ( iTID, GetChunkIds ( *tNewSet.m_pNewDiskChunks ) );
 
-		Binlog::NotifyIndexFlush ( m_sIndexName.cstr(), iTID, false );
+		Binlog::NotifyIndexFlush ( GetName(), iTID, false );
 		m_iSavedTID = iTID;
 
 		tNewSet.InitRamSegs ( RtWriter_c::empty );
@@ -4118,7 +4118,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 	tmSaveWall += m_tmSaved;
 
 	StringBuilder_c sInfo;
-	sInfo.Sprintf ( "rt: index %s: diskchunk %d(%d), segments %d %s saved in %.6D (%.6D) sec", m_sIndexName.cstr (), iChunkID
+	sInfo.Sprintf ( "rt: index %s: diskchunk %d(%d), segments %d %s saved in %.6D (%.6D) sec", GetName (), iChunkID
 					, iDiskChunks, iSegments, bForced ? "forcibly" : "", tmSave, tmSaveWall );
 
 	// calculate DoubleBuf percent using current save/insert rate
@@ -4235,7 +4235,7 @@ RtIndex_c::LOAD_E RtIndex_c::LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuild
 	if ( m_tSettings.m_uAotFilterMask!=uPrevAot )
 	{
 		CSphString sWarning;
-		sWarning.SetSprintf ( "index '%s': morphology option changed from config has no effect, ignoring", m_sIndexName.cstr() );
+		sWarning.SetSprintf ( "index '%s': morphology option changed from config has no effect, ignoring", GetName() );
 		dWarnings.Add(sWarning);
 	}
 
@@ -4252,9 +4252,9 @@ RtIndex_c::LOAD_E RtIndex_c::LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuild
 		return LOAD_E::GeneralError_e;
 
 	// recreate dictionary
-	m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, m_sIndexName.cstr(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError );
+	m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, GetName(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError );
 	if ( !m_sLastError.IsEmpty() )
-		m_sLastError.SetSprintf ( "index '%s': %s", m_sIndexName.cstr(), m_sLastError.cstr() );
+		m_sLastError.SetSprintf ( "index '%s': %s", GetName(), m_sLastError.cstr() );
 
 	if ( !m_pDict )
 		return LOAD_E::GeneralError_e;
@@ -4373,7 +4373,7 @@ RtIndex_c::LOAD_E RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder
 	if ( m_tSettings.m_uAotFilterMask!=uPrevAot )
 	{
 		CSphString sWarning;
-		sWarning.SetSprintf ( "index '%s': morphology option changed from config has no effect, ignoring", m_sIndexName.cstr() );
+		sWarning.SetSprintf ( "index '%s': morphology option changed from config has no effect, ignoring", GetName() );
 		dWarnings.Add(sWarning);
 	}
 
@@ -4390,9 +4390,9 @@ RtIndex_c::LOAD_E RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder
 		return LOAD_E::GeneralError_e;
 
 	// recreate dictionary
-	m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, m_sIndexName.cstr(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError );
+	m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, GetName(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError );
 	if ( !m_sLastError.IsEmpty() )
-		m_sLastError.SetSprintf ( "index '%s': %s", m_sIndexName.cstr(), m_sLastError.cstr() );
+		m_sLastError.SetSprintf ( "index '%s': %s", GetName(), m_sLastError.cstr() );
 
 	if ( !m_pDict )
 		return LOAD_E::GeneralError_e;
@@ -4571,7 +4571,7 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 	CSphString sMutableFile;
 	sMutableFile.SetSprintf ( "%s%s", m_sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ) );
 	m_tMutableSettings.m_iMemLimit = m_iRtMemLimit; // to avoid overriding value from meta by default value, if no settings provided
-	if ( !m_tMutableSettings.Load ( sMutableFile.cstr(), m_sIndexName.cstr() ) )
+	if ( !m_tMutableSettings.Load ( sMutableFile.cstr(), GetName() ) )
 		return false;
 	SetMemLimit ( m_tMutableSettings.m_iMemLimit );
 
@@ -4981,19 +4981,19 @@ void RtIndex_c::PostSetup()
 
 	const CSphDictSettings & tDictSettings = m_pDict->GetSettings();
 	if ( !ParseMorphFields ( tDictSettings.m_sMorphology, tDictSettings.m_sMorphFields, m_tSchema.GetFields(), m_tMorphFields, m_sLastError ) )
-		sphWarning ( "index '%s': %s", m_sIndexName.cstr(), m_sLastError.cstr() );
+		sphWarning ( "index '%s': %s", GetName(), m_sLastError.cstr() );
 
 	// hitless
 	CSphString sHitlessFiles = m_tSettings.m_sHitlessFiles;
 	if ( GetIndexFilenameBuilder() )
 	{
-		std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = GetIndexFilenameBuilder() ( m_sIndexName.cstr() );
+		std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = GetIndexFilenameBuilder() ( GetName() );
 		if ( pFilenameBuilder )
 			sHitlessFiles = pFilenameBuilder->GetFullPath ( sHitlessFiles );
 	}
 
 	if ( !LoadHitlessWords ( sHitlessFiles, m_pTokenizerIndexing, m_pDict, m_dHitlessWords, m_sLastError ) )
-		sphWarning ( "index '%s': %s", m_sIndexName.cstr(), m_sLastError.cstr() );
+		sphWarning ( "index '%s': %s", GetName(), m_sLastError.cstr() );
 
 	// still need index files for index just created from config
 	if ( !m_bHasFiles )
@@ -5589,7 +5589,7 @@ int64_t DebugCheckInternal::GetNumFails() const
 CSphString RtIndex_c::MakeDamagedName () const
 {
 	CSphString sChunk;
-	sChunk.SetSprintf ( "%s/damaged.%s.%d.%d", Binlog::GetPath().cstr(), m_sIndexName.cstr(), getpid(), m_iTrackFailedRamActions );
+	sChunk.SetSprintf ( "%s/damaged.%s.%d.%d", Binlog::GetPath().cstr(), GetName(), getpid(), m_iTrackFailedRamActions );
 	return sChunk;
 }
 
@@ -5736,7 +5736,7 @@ int RtIndex_c::DebugCheckDisk ( DebugCheckError_i & tReporter )
 	CreateFilenameBuilder_fn fnCreateFilenameBuilder = GetIndexFilenameBuilder();
 	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder;
 	if ( fnCreateFilenameBuilder )
-		pFilenameBuilder = fnCreateFilenameBuilder ( m_sIndexName.cstr() );
+		pFilenameBuilder = fnCreateFilenameBuilder ( GetName() );
 
 	VecTraits_T<int> dChunks = m_dChunkNames.Slice();
 	if ( m_iCheckChunk!=-1 )
@@ -7429,7 +7429,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	SorterSchemaTransform_c tSSTransform ( dDiskChunks.GetLength(), tArgs.m_bFinalizeSorters );
 
 	if ( !dDiskChunks.IsEmpty() )
-		QueryDiskChunks ( tQuery, tMeta, tArgs, tGuard, dSorters, pProfiler, bGotLocalDF, pLocalDocs, iTotalDocs, m_sIndexName.cstr(), tSSTransform, tmMaxTimer );
+		QueryDiskChunks ( tQuery, tMeta, tArgs, tGuard, dSorters, pProfiler, bGotLocalDF, pLocalDocs, iTotalDocs, GetName(), tSSTransform, tmMaxTimer );
 
 	////////////////////
 	// search RAM chunk
@@ -7525,7 +7525,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	if ( bFullscan || pQueryParser->IsFullscan ( tParsed ) )
 		bResult = DoFullScanQuery ( tGuard.m_dRamSegs, tMaxSorterSchema, tQuery, tArgs, m_iStride, tmMaxTimer, pProfiler, tCtx, dSorters, tMeta );
 	else
-		bResult = DoFullTextSearch ( tGuard.m_dRamSegs, tMaxSorterSchema, tQuery, m_sIndexName.cstr(), tArgs.m_iIndexWeight, iMatchPoolSize, iStackNeed, tTermSetup, pProfiler, tCtx, dSorters, tParsed, tMeta, dSorters.GetLength()==1 ? dSorters[0] : nullptr );
+		bResult = DoFullTextSearch ( tGuard.m_dRamSegs, tMaxSorterSchema, tQuery, GetName(), tArgs.m_iIndexWeight, iMatchPoolSize, iStackNeed, tTermSetup, pProfiler, tCtx, dSorters, tParsed, tMeta, dSorters.GetLength()==1 ? dSorters[0] : nullptr );
 
 	if (!bResult)
 		return false;
@@ -7933,10 +7933,10 @@ int RtIndex_c::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritica
 	}
 
 	if ( !Update_DiskChunks ( tUpd, tGuard.m_dDiskChunks, sError ) ) // fixme!
-		sphWarn ( "INTERNAL ERROR: index %s update failure: %s", m_sIndexName.cstr(), sError.cstr() );
+		sphWarn ( "INTERNAL ERROR: index %s update failure: %s", GetName(), sError.cstr() );
 
 	// bump the counter, binlog the update!
-	Binlog::CommitUpdateAttributes ( &m_iTID, m_sIndexName.cstr(), tUpdc );
+	Binlog::CommitUpdateAttributes ( &m_iTID, GetName(), tUpdc );
 
 	iUpdated = tUpd.m_iAffected - iUpdated;
 	if ( !tCtx.HandleJsonWarnings ( iUpdated, sWarning, sError ) )
@@ -8168,7 +8168,7 @@ void RtIndex_c::AlterSave ( bool bSaveRam )
 	SaveMeta ();
 
 	// fixme: notify that it was ALTER that caused the flush
-	Binlog::NotifyIndexFlush ( m_sIndexName.cstr (), m_iTID, false );
+	Binlog::NotifyIndexFlush ( GetName (), m_iTID, false );
 
 	QcacheDeleteIndex ( GetIndexId() );
 }
@@ -8327,9 +8327,7 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex* pIndex, bool bTruncate, bool & bFat
 	m_pTokenizer = pIndex->GetTokenizer()->Clone ( SPH_CLONE_INDEX );
 	m_pDict = pIndex->GetDictionary()->Clone ();
 	PostSetup();
-	CSphString sName;
-	sName.SetSprintf ( "%s_%d", m_sIndexName.cstr(), iChunk ); // idx name is cosmetic thing
-	pIndex->SetName ( sName.cstr() );
+	pIndex->SetName ( SphSprintf ( "%s_%d", GetName(), iChunk ) ); // idx name is cosmetic thing
 	pIndex->SetBinlog ( false );
 	pIndex->m_iChunk = iChunk;
 
@@ -8345,7 +8343,7 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex* pIndex, bool bTruncate, bool & bFat
 	SaveMeta();
 
 	// FIXME? do something about binlog too?
-	// Binlog::NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, false );
+	// Binlog::NotifyIndexFlush ( GetName(), m_iTID, false );
 
 	// all done, reset cache
 	QcacheDeleteIndex ( GetIndexId() );
@@ -8381,7 +8379,7 @@ bool RtIndex_c::Truncate ( CSphString& )
 	SaveMeta ( m_iTID, { nullptr, 0 } );
 
 	// allow binlog to unlink now-redundant data files
-	Binlog::NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, false );
+	Binlog::NotifyIndexFlush ( GetName(), m_iTID, false );
 
 	// kill RAM chunk file
 	UnlinkRAMChunk ( "truncate" );
@@ -8582,7 +8580,7 @@ void RtIndex_c::DropDiskChunk ( int iChunkID, int* pAffected )
 {
 	TRACE_SCHED ( "rt", "RtIndex_c::DropDiskChunk" );
 
-	sphLogDebug( "rt optimize: index %s: drop disk chunk %d",  m_sIndexName.cstr(), iChunkID );
+	sphLogDebug( "rt optimize: index %s: drop disk chunk %d", GetName(), iChunkID );
 
 	// work in serial fiber
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
@@ -8622,7 +8620,7 @@ ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunks ( const char* szParentAction, 
 	{
 		if ( sError.IsEmpty() && tProgress.GetMergeCb().NeedStop() )
 			sError = "interrupted because of shutdown";
-		sphWarning ( "rt %s: index %s: failed to %s %s (%s)", szParentAction, m_sIndexName.cstr(), dFilters.IsEmpty() ? "merge" : "split", sFirst.cstr(), sError.cstr() );
+		sphWarning ( "rt %s: index %s: failed to %s %s (%s)", szParentAction, GetName(), dFilters.IsEmpty() ? "merge" : "split", sFirst.cstr(), sError.cstr() );
 		return pChunk;
 	}
 
@@ -8633,7 +8631,7 @@ ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunks ( const char* szParentAction, 
 	auto fnFnameBuilder = GetIndexFilenameBuilder();
 	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder;
 	if ( fnFnameBuilder )
-		pFilenameBuilder = fnFnameBuilder ( m_sIndexName.cstr() );
+		pFilenameBuilder = fnFnameBuilder ( GetName() );
 
 	// prealloc new (optimized) chunk
 	CSphString sChunk;
@@ -8645,7 +8643,7 @@ ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunks ( const char* szParentAction, 
 	if ( pChunk )
 		pChunk->m_bFinallyUnlink = true; // on destroy files will be deleted. Caller must explicitly reset this flag if chunk is usable
 	else
-		sphWarning ( "rt %s: index %s: failed to prealloc", szParentAction, m_sIndexName.cstr() );
+		sphWarning ( "rt %s: index %s: failed to prealloc", szParentAction, GetName() );
 
 	return pChunk;
 }
@@ -8665,7 +8663,7 @@ bool RtIndex_c::RenameOptimizedChunk ( const ConstDiskChunkRefPtr_t& pChunk, con
 	if ( tChunk.Rename ( sNewchunk ) )
 		return true;
 
-	sphWarning ( "rt %s: index %s: processed to cur rename failed (%s)", szParentAction, m_sIndexName.cstr(), tChunk.GetLastError().cstr() );
+	sphWarning ( "rt %s: index %s: processed to cur rename failed (%s)", szParentAction, GetName(), tChunk.GetLastError().cstr() );
 	return false;
 }
 
@@ -8686,7 +8684,7 @@ bool RtIndex_c::PublishMergedChunks ( const char* szParentAction, std::function<
 
 	if ( !bReplaced )
 	{
-		sphWarning ( "rt %s: index %s: unable to locate victim chunk after merge, leave everything unchanged", szParentAction, m_sIndexName.cstr() );
+		sphWarning ( "rt %s: index %s: unable to locate victim chunk after merge, leave everything unchanged", szParentAction, GetName() );
 		tChangeset.m_pNewDiskChunks = nullptr; // discard changes, i.e. disk chunk set will NOT be modified
 		return false;
 	}
@@ -8703,7 +8701,7 @@ static int64_t NumAliveDocs ( const CSphIndex& dChunk )
 void RtIndex_c::BinlogCommit ( RtSegment_t * pSeg, const VecTraits_T<DocID_t> & dKlist ) REQUIRES ( pSeg->m_tLock )
 {
 //	Tracer::AsyncOp tTracer ( "rt", "RtIndex_c::BinlogCommit" );
-	Binlog::Commit ( Binlog::COMMIT, &m_iTID, m_sIndexName.cstr(), false, [pSeg,&dKlist,this] (CSphWriter& tWriter) REQUIRES ( pSeg->m_tLock )
+	Binlog::Commit ( Binlog::COMMIT, &m_iTID, GetName(), false, [pSeg,&dKlist,this] (CSphWriter& tWriter) REQUIRES ( pSeg->m_tLock )
 	{
 		if ( !pSeg || !pSeg->m_uRows )
 			tWriter.ZipOffset ( 0 );
@@ -8839,7 +8837,7 @@ Binlog::CheckTnxResult_t RtIndex_c::ReplayReconfigure ( CSphReader& tReader, CSp
 	CSphEmbeddedFiles tEmbeddedFiles;
 	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder;
 	if ( GetIndexFilenameBuilder() )
-		pFilenameBuilder = GetIndexFilenameBuilder() ( m_sIndexName.cstr() );
+		pFilenameBuilder = GetIndexFilenameBuilder() ( GetName() );
 
 	CSphReconfigureSettings tSettings;
 	LoadIndexSettings ( tSettings.m_tIndex, tReader, INDEX_FORMAT_VERSION );
@@ -8861,7 +8859,7 @@ Binlog::CheckTnxResult_t RtIndex_c::ReplayReconfigure ( CSphReader& tReader, CSp
 		bool bSame = IsSameSettings ( tSettings, tSetup, dWarnings, sError );
 
 		if ( !sError.IsEmpty() )
-			sphWarning ( "binlog: reconfigure: wrong settings (index=%s, error=%s)", m_sIndexName.cstr(), sError.cstr() );
+			sphWarning ( "binlog: reconfigure: wrong settings (index=%s, error=%s)", GetName(), sError.cstr() );
 
 		if ( !bSame )
 			tRes.m_bApply = Reconfigure ( tSetup );
@@ -8912,7 +8910,7 @@ bool RtIndex_c::CompressOneChunk ( int iChunkID, int* pAffected )
 	auto pVictim = m_tRtChunks.DiskChunkByID ( iChunkID );
 	if ( !pVictim )
 	{
-		sphWarning ( "rt optimize: index %s: compress of chunk %d failed, no chunk with such ID!", m_sIndexName.cstr(), iChunkID );
+		sphWarning ( "rt optimize: index %s: compress of chunk %d failed, no chunk with such ID!", GetName(), iChunkID );
 		return false;
 	}
 	const CSphIndex& tVictim = pVictim->Cidx();
@@ -8989,7 +8987,7 @@ bool RtIndex_c::SplitOneChunkFast ( int iChunkID, const char* szUvarFilter, bool
 	auto pVictim = m_tRtChunks.DiskChunkByID ( iChunkID );
 	if ( !pVictim )
 	{
-		sphWarning ( "rt optimize: index %s: split of chunk %d failed, no chunk with such ID!", m_sIndexName.cstr(), iChunkID );
+		sphWarning ( "rt optimize: index %s: split of chunk %d failed, no chunk with such ID!", GetName(), iChunkID );
 		bResult = false;
 		return true;
 	}
@@ -9159,14 +9157,14 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected )
 	auto pA = m_tRtChunks.DiskChunkByID ( iAID );
 	if ( !pA )
 	{
-		sphWarning ( "rt optimize: index %s: merge chunks %d and %d failed, chunk ID %d is not valid!", m_sIndexName.cstr(), iAID, iBID, iAID );
+		sphWarning ( "rt optimize: index %s: merge chunks %d and %d failed, chunk ID %d is not valid!", GetName(), iAID, iBID, iAID );
 		return false;
 	}
 
 	auto pB = m_tRtChunks.DiskChunkByID ( iBID );
 	if ( !pB )
 	{
-		sphWarning ( "rt optimize: index %s: merge chunks %d and %d failed, chunk ID %d is not valid!", m_sIndexName.cstr(), iAID, iBID, iBID );
+		sphWarning ( "rt optimize: index %s: merge chunks %d and %d failed, chunk ID %d is not valid!", GetName(), iAID, iBID, iBID );
 		return false;
 	}
 
@@ -9262,7 +9260,7 @@ bool RtIndex_c::CheckValidateChunk ( int& iChunk, int iChunks, bool bByOrder ) c
 	{
 		if ( iChunk >= iChunks || iChunk < 0 )
 		{
-			sphWarning ( "rt: index %s: Optimize step: provided chunk %d is out of range [0..%d]", m_sIndexName.cstr(), iChunk, iChunks - 1 );
+			sphWarning ( "rt: index %s: Optimize step: provided chunk %d is out of range [0..%d]", GetName(), iChunk, iChunks - 1 );
 			return false;
 		}
 		iChunk = ChunkIDByChunkIdx ( iChunk );
@@ -9270,13 +9268,13 @@ bool RtIndex_c::CheckValidateChunk ( int& iChunk, int iChunks, bool bByOrder ) c
 	auto pChunk = m_tRtChunks.DiskChunkByID ( iChunk );
 	if ( !pChunk )
 	{
-		sphWarning ( "rt: index %s: Optimize step: provided chunk ID %d is invalid", m_sIndexName.cstr(), iChunk );
+		sphWarning ( "rt: index %s: Optimize step: provided chunk ID %d is invalid", GetName(), iChunk );
 		return false;
 	}
 
 	if ( pChunk->m_bOptimizing.load ( std::memory_order_relaxed ) )
 	{
-		sphWarning ( "rt: index %s: Optimize step: provided chunk %d is now occupied in another optimize operation", m_sIndexName.cstr(), iChunk );
+		sphWarning ( "rt: index %s: Optimize step: provided chunk %d is now occupied in another optimize operation", GetName(), iChunk );
 		return false;
 	}
 	return true;
@@ -9322,7 +9320,7 @@ void RtIndex_c::Optimize ( OptimizeTask_t tTask )
 	if ( !MergeCanRun() )
 		return;
 
-	sphLogDebug ( "rt optimize: index %s: optimization started", m_sIndexName.cstr() );
+	sphLogDebug ( "rt optimize: index %s: optimization started", GetName() );
 
 	int64_t tmStart = sphMicroTimer();
 	m_tOptimizeRuns.ModifyValue ( [] ( int& i ) { ++i; } );
@@ -9333,9 +9331,9 @@ void RtIndex_c::Optimize ( OptimizeTask_t tTask )
 	int iDiskChunks = m_tRtChunks.GetDiskChunksCount();
 
 	if ( sphInterrupted() )
-		LogWarning ( "rt: index %s: optimization terminated chunk(s) %d ( left %d ) in %.3t", m_sIndexName.cstr(), iChunks, iDiskChunks, tmPass );
+		LogWarning ( "rt: index %s: optimization terminated chunk(s) %d ( left %d ) in %.3t", GetName(), iChunks, iDiskChunks, tmPass );
 	else if ( iChunks > 0 )
-		LogInfo ( "rt: index %s: optimized %s chunk(s) %d ( left %d ) in %.3t", m_sIndexName.cstr(), g_bProgressiveMerge ? "progressive" : "regular", iChunks, iDiskChunks, tmPass );
+		LogInfo ( "rt: index %s: optimized %s chunk(s) %d ( left %d ) in %.3t", GetName(), g_bProgressiveMerge ? "progressive" : "regular", iChunks, iDiskChunks, tmPass );
 }
 
 bool RtIndex_c::MergeCanRun() const
@@ -9451,9 +9449,9 @@ void RtIndex_c::CheckStartAutoOptimize()
 	OptimizeTask_t tTask;
 	tTask.m_eVerb = OptimizeTask_t::eAutoOptimize;
 	tTask.m_iCutoff = iCutoff;
-	tTask.m_sIndex = m_sIndexName;
+	tTask.m_sIndex = GetName();
 
-	RTDLOG << "RunOptimizeRtIndexWeak for " << m_sIndexName << ", auto-optimize with cutoff " << iCutoff;
+	RTDLOG << "RunOptimizeRtIndexWeak for " << GetName() << ", auto-optimize with cutoff " << iCutoff;
 
 	RunOptimizeRtIndexWeak ( tTask );
 }
@@ -9642,7 +9640,7 @@ bool RtIndex_c::IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconf
 		bSame = false;
 	}
 
-	return CreateReconfigure ( m_sIndexName, IsStarDict ( m_bKeywordDict ), m_pFieldFilter.get(), m_tSettings, m_pTokenizer->GetSettingsFNV(), m_pDict->GetSettingsFNV(), m_pTokenizer->GetMaxCodepointLength(),
+	return CreateReconfigure ( GetName(), IsStarDict ( m_bKeywordDict ), m_pFieldFilter.get(), m_tSettings, m_pTokenizer->GetSettingsFNV(), m_pDict->GetSettingsFNV(), m_pTokenizer->GetMaxCodepointLength(),
 		GetMemLimit(), bSame, tSettings, tSetup, dWarnings, sError );
 }
 
@@ -9757,7 +9755,7 @@ void RtIndex_c::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const Filename
 	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder { nullptr };
 	if ( !pParentFilenameBuilder && GetIndexFilenameBuilder() )
 	{
-		pFilenameBuilder = GetIndexFilenameBuilder() ( m_sIndexName.cstr() );
+		pFilenameBuilder = GetIndexFilenameBuilder() ( GetName() );
 		pParentFilenameBuilder = pFilenameBuilder.get();
 	}
 	GetSettingsFiles ( m_pTokenizer, m_pDict, GetSettings(), pParentFilenameBuilder, dExt );

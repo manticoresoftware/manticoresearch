@@ -1192,7 +1192,7 @@ public:
 	/// getter for name. Notice, const char* returned as it is mostly used for printing name
 	const char *				GetName () const { return m_sIndexName.cstr(); }
 
-	void						SetName ( const char * sName ) { m_sIndexName = sName; }
+	void						SetName ( CSphString sNewName ) { m_sIndexName = std::move ( sNewName ); }
 
 	/// get for the base file name
 	const char *				GetFilebase () const { return m_sFileBase.cstr(); }
@@ -1256,7 +1256,11 @@ protected:
 
 	int							m_iMaxCachedDocs = 0;
 	int							m_iMaxCachedHits = 0;
-	CSphString					m_sIndexName;			///< index ID in binlogging; otherwise used only in messages.
+
+private:
+	CSphString					m_sIndexName;			///< index ID in binlogging; otherwise used only in messages. Use GetName()!
+
+public:
 	CSphString					m_sFileBase;
 
 public:

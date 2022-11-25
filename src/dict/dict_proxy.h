@@ -26,7 +26,7 @@ public:
 	void LoadStopwords ( const CSphVector<SphWordID_t>& dStopwords ) final { m_pDict->LoadStopwords ( dStopwords ); }
 	void WriteStopwords ( CSphWriter& tWriter ) const final { m_pDict->WriteStopwords ( tWriter ); }
 	void WriteStopwords ( JsonEscapedBuilder& tOut ) const final { m_pDict->WriteStopwords ( tOut ); }
-	bool LoadWordforms ( const StrVec_t& dFiles, const CSphEmbeddedFiles* pEmbedded, const TokenizerRefPtr_c& pTokenizer, const char* sIndex ) final { return m_pDict->LoadWordforms ( dFiles, pEmbedded, pTokenizer, sIndex ); }
+	bool LoadWordforms ( const StrVec_t& dFiles, const CSphEmbeddedFiles* pEmbedded, const TokenizerRefPtr_c& pTokenizer, const char* szIndex ) final { return m_pDict->LoadWordforms ( dFiles, pEmbedded, pTokenizer, szIndex ); }
 	void WriteWordforms ( CSphWriter& tWriter ) const final { m_pDict->WriteWordforms ( tWriter ); }
 	void WriteWordforms ( JsonEscapedBuilder& tOut ) const final { m_pDict->WriteWordforms ( tOut ); }
 	int SetMorphology ( const char* szMorph, CSphString& sMessage ) final { return m_pDict->SetMorphology ( szMorph, sMessage ); }

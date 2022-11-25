@@ -1304,7 +1304,7 @@ static bool RenameIndexFiles ( const char * szPath, const char * szName, CSphInd
 	if ( bRotate )
 		sTo << ".new";
 
-	pIndex->SetBase ( sFrom.cstr() );
+	pIndex->SetFilebase ( sFrom.cstr() );
 	if ( !pIndex->Rename ( sTo.cstr() ) )
 	{
 		fprintf ( stdout, "ERROR: index '%s': failed to rename '%s' to '%s': %s", szName, sFrom.cstr(), sTo.cstr(), pIndex->GetLastError().cstr() );

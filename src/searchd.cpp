@@ -17092,7 +17092,7 @@ bool RotateIndexMT ( ServedIndexRefPtr_c& pNewServed, const CSphString & sIndex,
 	//////////////////
 	CSphIndex* pNewIndex = UnlockedHazardIdxFromServed ( *pNewServed );
 	if ( tCheck.RotateFromNew() )
-		pNewIndex->SetBase ( IndexFiles_c::MakePath ( ".new", pNewServed->m_sIndexPath ) );
+		pNewIndex->SetFilebase ( IndexFiles_c::MakePath ( ".new", pNewServed->m_sIndexPath ) );
 
 	// prealloc enough RAM and lock new index
 	sphLogDebug ( "prealloc enough RAM and lock new index" );

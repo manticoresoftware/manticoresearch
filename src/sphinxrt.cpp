@@ -9486,7 +9486,7 @@ void RtIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 	const char * sFiles[] = { ".meta", ".ram" };
 	for ( const char * sName : sFiles )
 	{
-		snprintf ( sFile, sizeof(sFile), "%s%s", m_sFilename.cstr(), sName );
+		snprintf ( sFile, sizeof(sFile), "%s%s", m_sFileBase.cstr(), sName );
 		CSphAutofile fdRT ( sFile, SPH_O_READ, sError );
 		int64_t iFileSize = fdRT.GetSize();
 		if ( iFileSize>0 )

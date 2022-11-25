@@ -1107,12 +1107,6 @@ public:
 	/// precache everything which needs to be precached
 	virtual void				Preread () = 0;
 
-	/// set new index base path
-	void SetBase ( CSphString sNewBase )
-	{
-		m_sFilename = std::move ( sNewBase );
-	}
-
 	/// set new index base path, and physically rename index files too
 	enum RenameResult_e { RE_OK, RE_FAIL, RE_FATAL };
 	virtual RenameResult_e		RenameEx ( CSphString sNewBase ) = 0;
@@ -1201,10 +1195,13 @@ public:
 	void						SetName ( const char * sName ) { m_sIndexName = sName; }
 
 	/// get for the base file name
-	const char *				GetFilename () const { return m_sFilename.cstr(); }
+	const char *				GetFilename () const { return m_sFileBase.cstr(); }
 
 	/// get actual index files list
 	virtual void				GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const FilenameBuilder_i* = nullptr ) const {}
+
+	/// set new index base path
+	void SetFilebase ( CSphString sNewBase ) { m_sFileBase = std::move ( sNewBase ); }
 
 	/// internal make document id list from external docinfo, DO NOT USE
 	virtual CSphVector<SphAttr_t> BuildDocList () const;
@@ -1260,7 +1257,7 @@ protected:
 	int							m_iMaxCachedDocs = 0;
 	int							m_iMaxCachedHits = 0;
 	CSphString					m_sIndexName;			///< index ID in binlogging; otherwise used only in messages.
-	CSphString					m_sFilename;
+	CSphString					m_sFileBase;
 
 public:
 	void						SetGlobalIDFPath ( const CSphString & sPath ) { m_sGlobalIDFPath = sPath; }

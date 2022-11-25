@@ -1912,10 +1912,10 @@ CSphMultiQueryArgs::CSphMultiQueryArgs ( int iIndexWeight )
 
 std::atomic<long> CSphIndex::m_tIdGenerator {0};
 
-CSphIndex::CSphIndex ( const char * sIndexName, const char * sFilename )
-	: m_tSchema ( sFilename )
+CSphIndex::CSphIndex ( const char * sIndexName, const char * sFileBase )
+	: m_tSchema ( sFileBase )
 	, m_sIndexName ( sIndexName )
-	, m_sFilename ( sFilename )
+	, m_sFileBase ( sFileBase )
 {
 	m_iIndexId = m_tIdGenerator.fetch_add ( 1, std::memory_order_relaxed );
 	m_tMutableSettings = MutableIndexSettings_c::GetDefaults();
@@ -2076,7 +2076,7 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * szIndexName, const char * szFilename
 	, m_iLockFD ( -1 )
 	, m_dFieldLens ( SPH_MAX_FIELDS )
 {
-	m_sFilename = szFilename;
+	m_sFileBase = szFilename;
 
 	m_iDocinfo = 0;
 	m_iDocinfoIndex = 0;
@@ -3020,7 +3020,7 @@ CSphString CSphIndex_VLN::GetIndexFileName ( ESphExt eExt, bool bTemp ) const
 CSphString CSphIndex_VLN::GetIndexFileName ( const char * szExt ) const
 {
 	CSphString sRes;
-	sRes.SetSprintf ( "%s.%s", m_sFilename.cstr(), szExt );
+	sRes.SetSprintf ( "%s.%s", m_sFileBase.cstr(), szExt );
 	return sRes;
 }
 
@@ -9234,7 +9234,7 @@ void CSphIndex_VLN::Preread()
 {
 	MEMORY ( MEM_INDEX_DISK );
 
-	sphLogDebug ( "CSphIndex_VLN::Preread invoked '%s'(%s)", m_sIndexName.cstr(), m_sFilename.cstr() );
+	sphLogDebug ( "CSphIndex_VLN::Preread invoked '%s'(%s)", m_sIndexName.cstr(), m_sFileBase.cstr() );
 
 	assert ( m_bPassedAlloc );
 	if ( m_bPassedRead )
@@ -9258,10 +9258,10 @@ void CSphIndex_VLN::Preread()
 
 CSphIndex::RenameResult_e CSphIndex_VLN::RenameEx ( CSphString sNewBase )
 {
-	if ( m_sFilename==sNewBase )
+	if ( m_sFileBase ==sNewBase )
 		return RE_OK;
 
-	IndexFiles_c dFiles ( m_sFilename, nullptr, m_uVersion );
+	IndexFiles_c dFiles ( m_sFileBase, nullptr, m_uVersion );
 	if ( !dFiles.TryRenameBase ( sNewBase ) )
 	{
 		m_sLastError = dFiles.ErrorMsg ();
@@ -9274,7 +9274,7 @@ CSphIndex::RenameResult_e CSphIndex_VLN::RenameEx ( CSphString sNewBase )
 		return dFiles.IsFatal() ? RE_FATAL : RE_FAIL;
 	}
 
-	SetBase ( std::move ( sNewBase ) );
+	SetFilebase ( std::move ( sNewBase ) );
 
 	return RE_OK;
 }
@@ -11209,7 +11209,7 @@ void CSphIndex_VLN::GetStatus ( CSphIndexStatus* pRes ) const
 		if ( i.m_eExt!=SPH_EXT_SPL )
 		{
 			CSphString sFile;
-			sFile.SetSprintf ( "%s%s", m_sFilename.cstr(), i.m_szExt );
+			sFile.SetSprintf ( "%s%s", m_sFileBase.cstr(), i.m_szExt );
 			struct_stat st;
 			if ( stat ( sFile.cstr(), &st )==0 )
 				pRes->m_iDiskUse += st.st_size;
@@ -11508,7 +11508,7 @@ bool CSphIndex_VLN::CopyExternalFiles ( int iPostfix, StrVec_t & dCopied )
 		const_cast<CSphDictSettings &>(m_pDict->GetSettings()).m_dWordforms = dNewWordforms;
 	}
 
-	CSphString sPathOnly = GetPathOnly(m_sFilename);
+	CSphString sPathOnly = GetPathOnly( m_sFileBase );
 	for ( const auto & i : dExtFiles )
 	{
 		CSphString sDest;

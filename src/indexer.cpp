@@ -1018,8 +1018,8 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 
 		// multiforms filter
 		pDict = tDictSettings.m_bWordDict
-			? sphCreateDictionaryKeywords ( tDictSettings, NULL, pTokenizer, sIndexName, false, tSettings.m_iSkiplistBlockSize, nullptr, sError )
-			: sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer, sIndexName, false, tSettings.m_iSkiplistBlockSize, nullptr, sError );
+			? sphCreateDictionaryKeywords ( tDictSettings, nullptr, pTokenizer, sIndexName, false, tSettings.m_iSkiplistBlockSize, nullptr, sError )
+			: sphCreateDictionaryCRC ( tDictSettings, nullptr, pTokenizer, sIndexName, false, tSettings.m_iSkiplistBlockSize, nullptr, sError );
 		if ( !pDict )
 			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 

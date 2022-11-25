@@ -100,7 +100,7 @@ bool AttrMerger_c::Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDst
 	if ( IsSecondaryLibLoaded() )
 	{
 		m_pSIdxBuilder = CreateIndexBuilder ( 64*1024*1024, pDstIndex->GetMatchSchema(), GetExt ( SPH_EXT_SPIDX, true, pDstIndex ).cstr(), m_dSiAttrs, m_sError );
-		if ( !m_pSIdxBuilder.get() )
+		if ( !m_pSIdxBuilder )
 			return false;
 	}
 
@@ -148,7 +148,7 @@ bool AttrMerger_c::CopyPureColumnarAttributes ( const CSphIndex & tIndex, const 
 		if ( m_pDocstoreBuilder )
 			m_pDocstoreBuilder->AddDoc ( m_tResultRowID, tIndex.GetDocstore()->GetDoc ( tRowID, nullptr, -1, false ) );
 
-		if ( m_pSIdxBuilder.get() )
+		if ( m_pSIdxBuilder )
 		{
 			m_pSIdxBuilder->SetRowID ( m_tResultRowID );
 			BuilderStoreAttrs ( nullptr, nullptr, dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );

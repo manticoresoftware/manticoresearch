@@ -19014,9 +19014,7 @@ void HandleMysqlShowSettings ( const CSphConfig & hConf, RowBuffer_i & tOut )
 // ClientSession_c::Execute -> HandleMysqlImportTable -> AddExistingIndexConfigless -> ConfiglessPreloadIndex -> ConfigureAndPreloadIndex
 ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * sIndexName, StrVec_t & dWarnings, CSphString & sError )
 {
-	ESphAddIndex eAdd;
-	ServedIndexRefPtr_c pJustLoadedLocal;
-	std::tie ( eAdd, pJustLoadedLocal ) = AddIndex ( sIndexName, hIndex, true, false, nullptr, sError );
+	auto [eAdd, pJustLoadedLocal] = AddIndex ( sIndexName, hIndex, true, false, nullptr, sError );
 
 	// local plain, rt, percolate added, but need to be at least preallocated before they could work.
 	switch ( eAdd )

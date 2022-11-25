@@ -100,9 +100,7 @@ private:
 	void LoadNewLocalFromConfig ( const CSphString& sIndex, IndexType_e eType, const CSphConfigSection& hIndex )
 	{
 		CSphString sError;
-		ESphAddIndex eAdd;
-		ServedIndexRefPtr_c pFreshLocal;
-		std::tie ( eAdd, pFreshLocal ) = AddIndex ( sIndex.cstr(), hIndex, false, false, nullptr, sError );
+		auto [eAdd, pFreshLocal] = AddIndex ( sIndex.cstr(), hIndex, false, false, nullptr, sError );
 		assert ( eAdd != ADD_DISTR && "internal error: distr index should not be here!" );
 
 		switch ( eAdd )

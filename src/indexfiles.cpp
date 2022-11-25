@@ -81,14 +81,14 @@ CSphString IndexFiles_c::FullPath ( const char * szExt, const CSphString& sSuffi
 {
 	StringBuilder_c sResult;
 	sResult << (sBase.IsEmpty() ? m_sFilename : sBase) << sSuffix << szExt;
-	return sResult.cstr();
+	return (CSphString)sResult;
 }
 
 CSphString IndexFiles_c::MakePath ( const char* szSuffix, const CSphString& sBase )
 {
 	StringBuilder_c sResult;
 	sResult << sBase << szSuffix;
-	return sResult.cstr();
+	return (CSphString)sResult;
 }
 
 CSphString IndexFiles_c::MakePath ( const char * szSuffix )

@@ -58,16 +58,15 @@ int CSphBin::CalcBinSize ( int iMemoryLimit, int iBlocks, const char* sPhase )
 
 void CSphBin::Init ( int iFD, SphOffset_t* pSharedOffset, const int iBinSize )
 {
-	assert ( !m_dBuffer );
+	assert ( m_dBuffer.IsEmpty() );
 	assert ( iBinSize >= MIN_SIZE );
 	assert ( pSharedOffset );
 
 	m_iFile = iFD;
 	m_pFilePos = pSharedOffset;
 
-	m_iSize = iBinSize;
-	m_dBuffer = new BYTE[iBinSize];
-	m_pCurrent = m_dBuffer;
+	m_dBuffer.Reset ( iBinSize );
+	m_pCurrent = m_dBuffer.begin();
 
 	m_tHit.m_tRowID = INVALID_ROWID;
 	m_tHit.m_uWordID = 0;
@@ -75,12 +74,6 @@ void CSphBin::Init ( int iFD, SphOffset_t* pSharedOffset, const int iBinSize )
 	m_tHit.m_dFieldMask.UnsetAll();
 
 	m_bError = false;
-}
-
-
-CSphBin::~CSphBin()
-{
-	SafeDeleteArray ( m_dBuffer );
 }
 
 
@@ -102,8 +95,8 @@ int CSphBin::ReadByte()
 			*m_pFilePos = m_iFilePos;
 		}
 
-		int n = m_iFileLeft > m_iSize
-				  ? m_iSize
+		int n = m_iFileLeft > m_dBuffer.GetLength()
+				  ? m_dBuffer.GetLength()
 				  : (int)m_iFileLeft;
 		if ( n == 0 )
 		{
@@ -111,9 +104,9 @@ int CSphBin::ReadByte()
 			m_iLeft = 1;
 		} else
 		{
-			assert ( m_dBuffer );
+			assert ( !m_dBuffer.IsEmpty() );
 
-			if ( sphReadThrottled ( m_iFile, m_dBuffer, n ) != (size_t)n )
+			if ( sphReadThrottled ( m_iFile, m_dBuffer.begin(), n ) != (size_t)n )
 			{
 				m_bError = true;
 				return -2;
@@ -122,7 +115,7 @@ int CSphBin::ReadByte()
 
 			m_iFilePos += n;
 			m_iFileLeft -= n;
-			m_pCurrent = m_dBuffer;
+			m_pCurrent = m_dBuffer.begin();
 			*m_pFilePos += n;
 		}
 	}
@@ -142,7 +135,7 @@ int CSphBin::ReadByte()
 ESphBinRead CSphBin::ReadBytes ( void* pDest, int iBytes )
 {
 	assert ( iBytes > 0 );
-	assert ( iBytes <= m_iSize );
+	assert ( iBytes <= m_dBuffer.GetLength() );
 
 	if ( m_iDone )
 		return BIN_READ_EOF;
@@ -159,7 +152,7 @@ ESphBinRead CSphBin::ReadBytes ( void* pDest, int iBytes )
 			*m_pFilePos = m_iFilePos;
 		}
 
-		int n = Min ( m_iFileLeft, m_iSize - m_iLeft );
+		int n = Min ( m_iFileLeft, m_dBuffer.GetLength() - m_iLeft );
 		if ( n == 0 )
 		{
 			m_iDone = 1;
@@ -167,10 +160,10 @@ ESphBinRead CSphBin::ReadBytes ( void* pDest, int iBytes )
 			return BIN_READ_EOF;
 		}
 
-		assert ( m_dBuffer );
-		memmove ( m_dBuffer, m_pCurrent, m_iLeft );
+		assert ( !m_dBuffer.IsEmpty() );
+		memmove ( m_dBuffer.begin(), m_pCurrent, m_iLeft );
 
-		if ( sphReadThrottled ( m_iFile, m_dBuffer + m_iLeft, n ) != (size_t)n )
+		if ( sphReadThrottled ( m_iFile, &m_dBuffer[m_iLeft], n ) != (size_t)n )
 		{
 			m_bError = true;
 			return BIN_READ_ERROR;
@@ -179,7 +172,7 @@ ESphBinRead CSphBin::ReadBytes ( void* pDest, int iBytes )
 		m_iLeft += n;
 		m_iFilePos += n;
 		m_iFileLeft -= n;
-		m_pCurrent = m_dBuffer;
+		m_pCurrent = m_dBuffer.begin();
 		*m_pFilePos += n;
 	}
 
@@ -351,7 +344,7 @@ bool CSphBin::IsDone() const
 
 ESphBinRead CSphBin::Precache()
 {
-	if ( m_iFileLeft > m_iSize - m_iLeft )
+	if ( m_iFileLeft > m_dBuffer.GetLength() - m_iLeft )
 	{
 		m_bError = true;
 		return BIN_PRECACHE_ERROR;
@@ -371,10 +364,10 @@ ESphBinRead CSphBin::Precache()
 		*m_pFilePos = m_iFilePos;
 	}
 
-	assert ( m_dBuffer );
-	memmove ( m_dBuffer, m_pCurrent, m_iLeft );
+	assert ( !m_dBuffer.IsEmpty() );
+	memmove ( m_dBuffer.begin(), m_pCurrent, m_iLeft );
 
-	if ( sphReadThrottled ( m_iFile, m_dBuffer + m_iLeft, m_iFileLeft ) != (size_t)m_iFileLeft )
+	if ( sphReadThrottled ( m_iFile, &m_dBuffer[m_iLeft], m_iFileLeft ) != (size_t)m_iFileLeft )
 	{
 		m_bError = true;
 		return BIN_READ_ERROR;
@@ -383,7 +376,7 @@ ESphBinRead CSphBin::Precache()
 	m_iLeft += m_iFileLeft;
 	m_iFilePos += m_iFileLeft;
 	m_iFileLeft -= m_iFileLeft;
-	m_pCurrent = m_dBuffer;
+	m_pCurrent = m_dBuffer.begin();
 	*m_pFilePos += m_iFileLeft;
 
 	return BIN_PRECACHE_OK;

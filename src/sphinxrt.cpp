@@ -3841,7 +3841,7 @@ void RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )
 		sphDie ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)",
 			sMetaNew.cstr(), sMeta.cstr(), errno, strerrorm(errno) ); // !COMMIT handle this gracefully
 
-	SaveMutableSettings ( m_tMutableSettings, m_sPath );
+	SaveMutableSettings ( m_tMutableSettings, GetFilename ( SPH_EXT_SETTINGS ) );
 }
 
 void RtIndex_c::WriteMeta ( int64_t iTID, const VecTraits_T<int>& dChunkNames, CSphWriter& wrMeta ) const
@@ -9480,12 +9480,9 @@ void RtIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 	pRes->m_fSaveRateLimit = m_fSaveRateLimit;
 
 	CSphString sError;
-	char sFile [ SPH_MAX_FILENAME_LEN ];
-	const char * sFiles[] = { ".meta", ".ram" };
-	for ( const char * sName : sFiles )
+	for ( const char * szExt : { "meta", "ram" } )
 	{
-		snprintf ( sFile, sizeof(sFile), "%s%s", m_sFileBase.cstr(), sName );
-		CSphAutofile fdRT ( sFile, SPH_O_READ, sError );
+		CSphAutofile fdRT ( GetFilename ( szExt ), SPH_O_READ, sError );
 		int64_t iFileSize = fdRT.GetSize();
 		if ( iFileSize>0 )
 			pRes->m_iDiskUse += iFileSize; // that uses disk, but not occupies

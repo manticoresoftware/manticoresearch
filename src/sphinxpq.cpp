@@ -746,10 +746,9 @@ PercolateIndex_c::~PercolateIndex_c ()
 
 	if ( m_bIndexDeleted )
 	{
-		CSphString sFile;
-		sFile.SetSprintf ( "%s.meta", m_sFileBase.cstr() );
+		CSphString sFile = GetFilename ( "meta" );
 		::unlink ( sFile.cstr() );
-		sFile.SetSprintf ( "%s%s", m_sFileBase.cstr(), sphGetExt ( SPH_EXT_SETTINGS ) );
+		sFile = GetFilename ( SPH_EXT_SETTINGS );
 		::unlink ( sFile.cstr() );
 	}
 }
@@ -1589,12 +1588,9 @@ void PercolateIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 		return;
 
 	CSphString sError;
-	char sFile[SPH_MAX_FILENAME_LEN];
-	const char * sFiles[] = { ".meta", ".ram" };
-	for ( const char * sName : sFiles )
+	for ( const char * szExt : { "meta", "ram" } )
 	{
-		snprintf ( sFile, sizeof ( sFile ), "%s%s", m_sFileBase.cstr (), sName );
-		CSphAutofile fdRT ( sFile, SPH_O_READ, sError );
+		CSphAutofile fdRT ( GetFilename ( szExt ), SPH_O_READ, sError );
 		int64_t iFileSize = fdRT.GetSize ();
 		if ( iFileSize>0 )
 			pRes->m_iDiskUse += iFileSize; // that uses disk, but not occupies
@@ -2539,7 +2535,7 @@ PercolateIndex_c::LOAD_E PercolateIndex_c::LoadMetaLegacy ( const CSphString& sM
 	DWORD uMinFormatVer = 8;
 	if ( uVersion < uMinFormatVer )
 	{
-		m_sLastError.SetSprintf ( "indexes prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, m_sFileBase.cstr(), uVersion );
+		m_sLastError.SetSprintf ( "indexes prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, GetFilebase(), uVersion );
 		return LOAD_E::GeneralError_e;
 	}
 
@@ -2649,7 +2645,7 @@ PercolateIndex_c::LOAD_E PercolateIndex_c::LoadMetaJson ( const CSphString& sMet
 	DWORD uMinFormatVer = 9;
 	if ( uVersion < uMinFormatVer )
 	{
-		m_sLastError.SetSprintf ( "indexes prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, m_sFileBase.cstr(), uVersion );
+		m_sLastError.SetSprintf ( "indexes prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, GetFilebase(), uVersion );
 		return LOAD_E::GeneralError_e;
 	}
 
@@ -2776,8 +2772,7 @@ bool PercolateIndex_c::LoadMeta ( const CSphString& sMeta, bool bStripPath, File
 
 bool PercolateIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings )
 {
-	CSphString sLock;
-	sLock.SetSprintf ( "%s.lock", m_sFileBase.cstr() );
+	CSphString sLock = GetFilename ( "lock" ); // notice: .lock vs .spl
 	m_iLockFD = ::open ( sLock.cstr(), SPH_O_NEW, 0644 );
 	if ( m_iLockFD < 0 )
 	{
@@ -2791,8 +2786,7 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilename
 		return false;
 	}
 
-	CSphString sMeta;
-	sMeta.SetSprintf ( "%s.meta", m_sFileBase.cstr() );
+	CSphString sMeta = GetFilename ( "meta" );
 
 	// no readable meta? no disk part yet
 	if ( !sphIsReadable ( sMeta.cstr() ) )
@@ -2803,8 +2797,7 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilename
 	if ( !LoadMeta ( sMeta, bStripPath, pFilenameBuilder, dWarnings ) )
 		return false;
 
-	CSphString sMutableFile;
-	sMutableFile.SetSprintf ( "%s%s", m_sFileBase.cstr(), sphGetExt ( SPH_EXT_SETTINGS ) );
+	CSphString sMutableFile = GetFilename ( SPH_EXT_SETTINGS );
 	if ( !m_tMutableSettings.Load ( sMutableFile.cstr(), GetName() ) )
 		return false;
 
@@ -2821,9 +2814,8 @@ void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown
 		return;
 
 	// write new meta
-	CSphString sMeta, sMetaNew;
-	sMeta.SetSprintf ( "%s.meta", m_sFileBase.cstr() );
-	sMetaNew.SetSprintf ( "%s.meta.new", m_sFileBase.cstr() );
+	CSphString sMeta = GetFilename("meta");
+	CSphString sMetaNew = GetFilename ( "meta.new" );
 
 	CSphString sError;
 	JsonEscapedBuilder sNewMeta;
@@ -2876,7 +2868,7 @@ void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown
 	if ( sph::rename ( sMetaNew.cstr(), sMeta.cstr() ) )
 		sphWarning ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)", sMetaNew.cstr(), sMeta.cstr(), errno, strerrorm( errno ) );
 
-	SaveMutableSettings ( m_tMutableSettings, m_sFileBase );
+	SaveMutableSettings ( m_tMutableSettings, GetFilename ( SPH_EXT_SETTINGS ) );
 }
 
 
@@ -3260,14 +3252,13 @@ void MergePqResults ( const VecTraits_T<CPqResult *> &dChunks, CPqResult &dRes, 
 
 void PercolateIndex_c::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExtra, const FilenameBuilder_i* pParentFilenamebuilder ) const
 {
-	CSphString sPath;
-	sPath.SetSprintf ( "%s.meta", m_sFileBase.cstr() );
+	CSphString sPath = GetFilename("meta");
 	if ( sphIsReadable ( sPath ) )
 		dFiles.Add ( sPath );
 
 	if ( m_tMutableSettings.NeedSave() ) // should be file already after post-setup
 	{
-		sPath.SetSprintf ( "%s%s", m_sFileBase.cstr(), sphGetExt ( SPH_EXT_SETTINGS ) );
+		sPath = GetFilename ( SPH_EXT_SETTINGS );
 		if ( sphIsReadable ( sPath ) )
 			dFiles.Add ( sPath );
 	}

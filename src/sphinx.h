@@ -43,6 +43,7 @@
 #include "sphinxdefs.h"
 #include "schema/locator.h"
 #include "schema/schema.h"
+#include "indexfilebase.h"
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -1055,8 +1056,10 @@ namespace SI
 	class Index_i;
 }
 
+enum ESphExt : BYTE;
+
 /// generic fulltext index interface
-class CSphIndex : public ISphKeywordsStat, public IndexSegment_c, public DocstoreReader_i
+class CSphIndex : public ISphKeywordsStat, public IndexSegment_c, public DocstoreReader_i, public IndexFileBase_c
 {
 public:
 								CSphIndex ( const char * sIndexName, const char * sFilename );
@@ -1194,14 +1197,9 @@ public:
 
 	void						SetName ( CSphString sNewName ) { m_sIndexName = std::move ( sNewName ); }
 
-	/// get for the base file name
-	const char *				GetFilebase () const { return m_sFileBase.cstr(); }
-
 	/// get actual index files list
 	virtual void				GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const FilenameBuilder_i* = nullptr ) const {}
 
-	/// set new index base path
-	void SetFilebase ( CSphString sNewBase ) { m_sFileBase = std::move ( sNewBase ); }
 
 	/// internal make document id list from external docinfo, DO NOT USE
 	virtual CSphVector<SphAttr_t> BuildDocList () const;
@@ -1259,9 +1257,6 @@ protected:
 
 private:
 	CSphString					m_sIndexName;			///< index ID in binlogging; otherwise used only in messages. Use GetName()!
-
-public:
-	CSphString					m_sFileBase;
 
 public:
 	void						SetGlobalIDFPath ( const CSphString & sPath ) { m_sGlobalIDFPath = sPath; }

@@ -1323,8 +1323,6 @@ private:
 	HistogramContainer_c *		m_pHistograms {nullptr};
 
 private:
-	CSphString					GetIndexFileName ( ESphExt eExt, bool bTemp=false ) const;
-	CSphString					GetIndexFileName ( const char * szExt ) const;
 	void						GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const FilenameBuilder_i* = nullptr ) const override;
 
 	bool						ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult & tResult, const VecTraits_T<ISphMatchSorter*> & dSorters, const XQQuery_t & tXQ, DictRefPtr_c pDict, const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache, int64_t tmMaxTimer ) const;
@@ -1913,9 +1911,9 @@ CSphMultiQueryArgs::CSphMultiQueryArgs ( int iIndexWeight )
 std::atomic<long> CSphIndex::m_tIdGenerator {0};
 
 CSphIndex::CSphIndex ( const char * sIndexName, const char * sFileBase )
-	: m_tSchema ( sFileBase )
+	: IndexFileBase_c { sFileBase }
+	, m_tSchema ( sFileBase )
 	, m_sIndexName ( sIndexName )
-	, m_sFileBase ( sFileBase )
 {
 	m_iIndexId = m_tIdGenerator.fetch_add ( 1, std::memory_order_relaxed );
 	m_tMutableSettings = MutableIndexSettings_c::GetDefaults();
@@ -2076,8 +2074,6 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * szIndexName, const char * szFilename
 	, m_iLockFD ( -1 )
 	, m_dFieldLens ( SPH_MAX_FIELDS )
 {
-	m_sFileBase = szFilename;
-
 	m_iDocinfo = 0;
 	m_iDocinfoIndex = 0;
 	m_pDocinfoIndex = nullptr;
@@ -2409,10 +2405,9 @@ void CSphIndex_VLN::UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & d
 // safely rename an index file
 bool CSphIndex_VLN::JuggleFile ( ESphExt eExt, CSphString & sError, bool bNeedSrc, bool bNeedDst ) const
 {
-	CSphString sExt = GetIndexFileName ( eExt );
-	CSphString sExtNew = GetIndexFileName ( eExt, true );
-	CSphString sExtOld;
-	sExtOld.SetSprintf ( "%s.old", sExt.cstr() );
+	CSphString sExt = GetFilename ( eExt );
+	CSphString sExtNew = GetTmpFilename ( eExt );
+	CSphString sExtOld = SphSprintf ( "%s.old", sExt.cstr() );
 
 	if ( sph::rename ( sExt.cstr(), sExtOld.cstr() ) )
 	{
@@ -2459,7 +2454,7 @@ bool CSphIndex_VLN::SaveAttributes ( CSphString & sError ) const
 		if ( !m_tAttr.Flush ( true, sError ) )
 			return false;
 
-		if ( m_pHistograms && !m_pHistograms->Save ( GetIndexFileName(SPH_EXT_SPHI), sError ) )
+		if ( m_pHistograms && !m_pHistograms->Save ( GetFilename ( SPH_EXT_SPHI ), sError ) )
 			return false;
 	}
 
@@ -2527,7 +2522,7 @@ bool CSphIndex_VLN::Alter_IsMinMax ( const CSphRowitem * pDocinfo, int iStride )
 
 bool CSphIndex_VLN::AddRemoveColumnarAttr ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, const ISphSchema & tOldSchema, const ISphSchema & tNewSchema, CSphString & sError )
 {
-	auto pBuilder = CreateColumnarBuilder ( tNewSchema, m_tSettings, GetIndexFileName ( SPH_EXT_SPC, true ), sError );
+	auto pBuilder = CreateColumnarBuilder ( tNewSchema, m_tSettings, GetTmpFilename ( SPH_EXT_SPC ), sError );
 	if ( !pBuilder )
 		return false;
 
@@ -2557,7 +2552,7 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 
 	*(DictHeader_t*)&tBuildHeader = *(DictHeader_t*)&m_tWordlist;
 
-	CSphString sHeaderName = GetIndexFileName ( SPH_EXT_SPH, true );
+	CSphString sHeaderName = GetTmpFilename ( SPH_EXT_SPH );
 	WriteHeader_t tWriteHeader;
 	tWriteHeader.m_pSettings = &m_tSettings;
 	tWriteHeader.m_pSchema = &tNewSchema;
@@ -2579,9 +2574,9 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 	std::unique_ptr<WriteWrapper_c> pSPAWriteWrapper { CreateWriteWrapperDisk(tSPAWriter) };
 	std::unique_ptr<WriteWrapper_c> pSPBWriteWrapper { CreateWriteWrapperDisk(tSPBWriter) };
 
-	CSphString sSPAfile = GetIndexFileName ( SPH_EXT_SPA, true );
-	CSphString sSPBfile = GetIndexFileName ( SPH_EXT_SPB, true );
-	CSphString sSPHIfile = GetIndexFileName ( SPH_EXT_SPHI, true );
+	CSphString sSPAfile = GetTmpFilename ( SPH_EXT_SPA );
+	CSphString sSPBfile = GetTmpFilename ( SPH_EXT_SPB );
+	CSphString sSPHIfile = GetTmpFilename ( SPH_EXT_SPHI );
 	if ( !tSPAWriter.OpenFile ( sSPAfile, sError ) )
 		return false;
 
@@ -2664,7 +2659,7 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 
 		if ( tNewSchema.HasColumnarAttrs() )
 		{
-			m_pColumnar = CreateColumnarStorageReader ( GetIndexFileName(SPH_EXT_SPC).cstr(), (DWORD)m_iDocinfo, sError );
+			m_pColumnar = CreateColumnarStorageReader ( GetFilename ( SPH_EXT_SPC ), (DWORD)m_iDocinfo, sError );
 			if ( !m_pColumnar )
 				return false;
 		}
@@ -2683,7 +2678,7 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 	if ( !JuggleFile ( SPH_EXT_SPHI, sError ) )
 		return false;
 
-	if ( bHaveNonColumnar && !m_tAttr.Setup ( GetIndexFileName(SPH_EXT_SPA), sError, true ) )
+	if ( bHaveNonColumnar && !m_tAttr.Setup ( GetFilename ( SPH_EXT_SPA ), sError, true ) )
 		return false;
 
 	if ( bBlob )
@@ -2709,10 +2704,10 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 			if ( !JuggleFile ( SPH_EXT_SPB, sError, bHadBlobs ) )
 				return false;
 
-			if ( !m_tBlobAttrs.Setup ( GetIndexFileName(SPH_EXT_SPB), sError, true ) )
+			if ( !m_tBlobAttrs.Setup ( GetFilename ( SPH_EXT_SPB ), sError, true ) )
 				return false;
 		} else
-			::unlink ( GetIndexFileName(SPH_EXT_SPB).cstr() );
+			::unlink ( GetFilename ( SPH_EXT_SPB ).cstr() );
 	}
 
 	m_tSchema = tNewSchema;
@@ -2738,7 +2733,7 @@ void CSphIndex_VLN::FlushDeadRowMap ( bool bWaitComplete ) const
 
 bool CSphIndex_VLN::LoadKillList ( CSphFixedVector<DocID_t> *pKillList, KillListTargets_c & tTargets, CSphString & sError ) const
 {
-	CSphString sSPK = GetIndexFileName(SPH_EXT_SPK);
+	CSphString sSPK = GetFilename ( SPH_EXT_SPK );
 	if ( !sphIsReadable ( sSPK.cstr() ) )
 		return true;
 
@@ -2826,7 +2821,7 @@ bool CSphIndex_VLN::AlterKillListTarget ( KillListTargets_c & tTargets, CSphStri
 	if ( !LoadKillList ( &dKillList, tOldTargets, sError ) )
 		return false;
 
-	if ( !WriteKillList ( GetIndexFileName ( SPH_EXT_SPK, true ), dKillList.Begin(), dKillList.GetLength(), tTargets, sError ) )
+	if ( !WriteKillList ( GetTmpFilename ( SPH_EXT_SPK ), dKillList.Begin(), dKillList.GetLength(), tTargets, sError ) )
 		return false;
 
 	if ( !JuggleFile ( SPH_EXT_SPK, sError, false ) )
@@ -3001,29 +2996,6 @@ struct CmpHit_fn
 	}
 };
 
-CSphString GetExt ( ESphExt eExt, bool bTemp, const CSphIndex * pIndex )
-{
-	assert ( pIndex );
-
-	CSphString sRes;
-	sRes.SetSprintf ( bTemp ? "%s.tmp%s" : "%s%s", pIndex->GetFilebase(), sphGetExt ( eExt ) );
-
-	return sRes;
-}
-
-CSphString CSphIndex_VLN::GetIndexFileName ( ESphExt eExt, bool bTemp ) const
-{
-	return GetExt ( eExt, bTemp, this );
-}
-
-
-CSphString CSphIndex_VLN::GetIndexFileName ( const char * szExt ) const
-{
-	CSphString sRes;
-	sRes.SetSprintf ( "%s.%s", m_sFileBase.cstr(), szExt );
-	return sRes;
-}
-
 void CSphIndex_VLN::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const FilenameBuilder_i* pParentFilenameBuilder ) const
 {
 	if ( !m_pDict )
@@ -3038,7 +3010,7 @@ void CSphIndex_VLN::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const File
 	GetSettingsFiles ( m_pTokenizer, m_pDict, GetSettings(), pParentFilenameBuilder, dExt );
 
 	auto fnAddFile = [this,&dFiles] ( ESphExt eFile ) {
-		auto sFile = GetIndexFileName ( eFile );
+		auto sFile = GetFilename ( eFile );
 		if ( sphIsReadable ( sFile.cstr() ) )
 			dFiles.Add ( std::move ( sFile ) );
 	};
@@ -3479,13 +3451,13 @@ void CSphHitBuilder::cidxHit ( AggregateHit_t * pHit )
 		}
 
 		/* duplicate hits from duplicated documents
-		... 0x03, 0x03 ... 
-		... 0x8003, 0x8003 ... 
-		... 1, 0x8003, 0x03 ... 
-		... 1, 0x03, 0x8003 ... 
-		... 1, 0x8003, 0x04 ... 
-		... 1, 0x03, 0x8003, 0x8003 ... 
-		... 1, 0x03, 0x8003, 0x03 ... 
+		... 0x03, 0x03 ...
+		... 0x8003, 0x8003 ...
+		... 1, 0x8003, 0x03 ...
+		... 1, 0x03, 0x8003 ...
+		... 1, 0x8003, 0x04 ...
+		... 1, 0x03, 0x8003, 0x8003 ...
+		... 1, 0x03, 0x8003, 0x03 ...
 		*/
 
 		assert ( m_tLastHit.m_iWordPos < pHit->m_iWordPos );
@@ -4920,7 +4892,7 @@ bool CSphIndex_VLN::SortDocidLookup ( int iFD, int nBlocks, int iMemoryLimit, in
 		return true;
 
 	DocidLookupWriter_c tWriter ( (DWORD)m_tStats.m_iTotalDocuments );
-	if ( !tWriter.Open ( GetIndexFileName(SPH_EXT_SPT), m_sLastError ) )
+	if ( !tWriter.Open ( GetFilename ( SPH_EXT_SPT ), m_sLastError ) )
 		return false;
 
 	DeleteOnFail_c tWatchdog;
@@ -5064,7 +5036,7 @@ bool CSphIndex_VLN::Build_SetupDocstore ( std::unique_ptr<DocstoreBuilder_i> & p
 	if ( !m_tSchema.HasStoredFields() && !m_tSchema.HasStoredAttrs() )
 		return true;
 
-	auto pBuilder = CreateDocstoreBuilder ( GetIndexFileName(SPH_EXT_SPDS), GetSettings(), m_sLastError );
+	auto pBuilder = CreateDocstoreBuilder ( GetFilename ( SPH_EXT_SPDS ), GetSettings(), m_sLastError );
 	if ( !pBuilder )
 		return false;
 
@@ -5094,7 +5066,7 @@ bool CSphIndex_VLN::Build_SetupBlobBuilder ( std::unique_ptr<BlobRowBuilder_i> &
 	if ( !m_tSchema.HasBlobAttrs() )
 		return true;
 
-	pBuilder = sphCreateBlobRowBuilder ( m_tSchema, GetIndexFileName ( SPH_EXT_SPB, true ), m_tSettings.m_tBlobUpdateSpace, m_sLastError );
+	pBuilder = sphCreateBlobRowBuilder ( m_tSchema, GetTmpFilename ( SPH_EXT_SPB ), m_tSettings.m_tBlobUpdateSpace, m_sLastError );
 	return !!pBuilder;
 }
 
@@ -5108,7 +5080,7 @@ bool CSphIndex_VLN::Build_SetupColumnar ( std::unique_ptr<columnar::Builder_i> &
 		if ( m_tSchema.GetAttr(i).IsColumnar() )
 			tColumnarsAttrs.BitSet(i);
 
-	pBuilder = CreateColumnarBuilder ( m_tSchema, m_tSettings, GetIndexFileName ( SPH_EXT_SPC, true ), m_sLastError );
+	pBuilder = CreateColumnarBuilder ( m_tSchema, m_tSettings, GetTmpFilename ( SPH_EXT_SPC ), m_sLastError );
 	return !!pBuilder;
 }
 
@@ -5317,7 +5289,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			return 0;
 	}
 
-	CSphAutofile tTmpJoinedFields ( GetIndexFileName("tmp3"), SPH_O_NEW, m_sLastError, true );
+	CSphAutofile tTmpJoinedFields ( GetFilename ( "tmp3" ), SPH_O_NEW, m_sLastError, true );
 	CSphVector<std::unique_ptr<OpenHash_T<uint64_t, uint64_t>>> dJoinedOffsets;
 	CSphReader tJoinedReader;
 	if ( bHaveJoined )
@@ -5385,17 +5357,17 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	const bool bGotPrevIndex = tPrevAttrs.Init ( m_sKeepAttrs, m_dKeepAttrs, m_tSchema );
 
 	// create temp files
-	CSphString sFileSPP = m_bInplaceSettings ? GetIndexFileName(SPH_EXT_SPP) : GetIndexFileName("tmp1");
+	CSphString sFileSPP = m_bInplaceSettings ? GetFilename ( SPH_EXT_SPP ) : GetFilename ( "tmp1" );
 
-	CSphAutofile fdLock ( GetIndexFileName("tmp0"), SPH_O_NEW, m_sLastError, true );
+	CSphAutofile fdLock ( GetFilename ( "tmp0" ), SPH_O_NEW, m_sLastError, true );
 	CSphAutofile fdHits ( sFileSPP, SPH_O_NEW, m_sLastError, !m_bInplaceSettings );
-	CSphAutofile fdTmpLookup ( GetIndexFileName("tmp2"), SPH_O_NEW, m_sLastError, true );
+	CSphAutofile fdTmpLookup ( GetFilename ( "tmp2" ), SPH_O_NEW, m_sLastError, true );
 
 	CSphWriter tWriterSPA;
 	bool bHaveNonColumnarAttrs = m_tSchema.HasNonColumnarAttrs();
 
 	// write to temp file because of possible --keep-attrs option which loads prev index
-	if ( bHaveNonColumnarAttrs && !tWriterSPA.OpenFile ( GetIndexFileName ( SPH_EXT_SPA, true ), m_sLastError ) )
+	if ( bHaveNonColumnarAttrs && !tWriterSPA.OpenFile ( GetTmpFilename ( SPH_EXT_SPA ), m_sLastError ) )
 		return 0;
 
 	DeleteOnFail_c dFileWatchdog;
@@ -5419,7 +5391,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	CSphBitvec tSIAttrs ( m_tSchema.GetAttrsCount() );
 	if ( IsSecondaryLibLoaded() )
 	{
-		pCidxBuilder = CreateIndexBuilder ( iMemoryLimit, m_tSchema, tSIAttrs, GetIndexFileName ( SPH_EXT_SPIDX, false ).cstr(), m_sLastError );
+		pCidxBuilder = CreateIndexBuilder ( iMemoryLimit, m_tSchema, tSIAttrs, GetFilename ( SPH_EXT_SPIDX ).cstr(), m_sLastError );
 		if ( !pCidxBuilder.get() )
 			return 0;
 	}
@@ -5771,41 +5743,41 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		}
 	}
 
-	if ( pHistogramContainer && !pHistogramContainer->Save ( GetIndexFileName(SPH_EXT_SPHI), m_sLastError ) )
+	if ( pHistogramContainer && !pHistogramContainer->Save ( GetFilename ( SPH_EXT_SPHI ), m_sLastError ) )
 		return 0;
 
 	if ( bGotPrevIndex )
 		tPrevAttrs.Reset();
 
-	CSphString sSPA = GetIndexFileName(SPH_EXT_SPA);
-	CSphString sSPATmp = GetIndexFileName ( SPH_EXT_SPA, true );
+	CSphString sSPA = GetFilename ( SPH_EXT_SPA );
+	CSphString sSPATmp = GetTmpFilename ( SPH_EXT_SPA );
 	if ( bHaveNonColumnarAttrs && sph::rename ( sSPATmp.cstr(), sSPA.cstr() )!=0 )
 	{
 		m_sLastError.SetSprintf ( "failed to rename %s to %s", sSPATmp.cstr(), sSPA.cstr() );
 		return false;
 	}
 
-	CSphString sSPB = GetIndexFileName(SPH_EXT_SPB);
-	CSphString sSPBTmp = GetIndexFileName ( SPH_EXT_SPB, true );
+	CSphString sSPB = GetFilename ( SPH_EXT_SPB );
+	CSphString sSPBTmp = GetTmpFilename ( SPH_EXT_SPB );
 	if ( m_tSchema.HasBlobAttrs() && sph::rename ( sSPBTmp.cstr(), sSPB.cstr() )!=0 )
 	{
 		m_sLastError.SetSprintf ( "failed to rename %s to %s", sSPBTmp.cstr(), sSPB.cstr() );
 		return false;
 	}
 
-	CSphString sSPC = GetIndexFileName(SPH_EXT_SPC);
-	CSphString sSPCTmp = GetIndexFileName ( SPH_EXT_SPC, true );
+	CSphString sSPC = GetFilename ( SPH_EXT_SPC );
+	CSphString sSPCTmp = GetTmpFilename ( SPH_EXT_SPC );
 	if ( m_tSchema.HasColumnarAttrs() && sph::rename ( sSPCTmp.cstr(), sSPC.cstr() )!=0 )
 	{
 		m_sLastError.SetSprintf ( "failed to rename %s to %s", sSPCTmp.cstr(), sSPC.cstr() );
 		return false;
 	}
 
-	if ( !WriteDeadRowMap ( GetIndexFileName(SPH_EXT_SPM), (DWORD)m_tStats.m_iTotalDocuments, m_sLastError ) )
+	if ( !WriteDeadRowMap ( GetFilename ( SPH_EXT_SPM ), (DWORD)m_tStats.m_iTotalDocuments, m_sLastError ) )
 		return 0;
 
 	dKillList.Uniq();
-	if ( !WriteKillList ( GetIndexFileName(SPH_EXT_SPK), dKillList.Begin(), dKillList.GetLength(), m_tSettings.m_tKlistTargets, m_sLastError ) )
+	if ( !WriteKillList ( GetFilename ( SPH_EXT_SPK ), dKillList.Begin(), dKillList.GetLength(), m_tSettings.m_tKlistTargets, m_sLastError ) )
 		return 0;
 
 	if ( pDocstoreBuilder )
@@ -5864,11 +5836,11 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	// create new index files set
 	//////////////////////////////
 
-	tHitBuilder.CreateIndexFiles ( GetIndexFileName(SPH_EXT_SPD).cstr(), GetIndexFileName(SPH_EXT_SPP).cstr(), GetIndexFileName(SPH_EXT_SPE).cstr(), m_bInplaceSettings, iWriteBuffer, fdHits, &iSharedOffset );
+	tHitBuilder.CreateIndexFiles ( GetFilename ( SPH_EXT_SPD ).cstr(), GetFilename ( SPH_EXT_SPP ).cstr(), GetFilename ( SPH_EXT_SPE ).cstr(), m_bInplaceSettings, iWriteBuffer, fdHits, &iSharedOffset );
 
 	// dict files
-	CSphAutofile fdTmpDict ( GetIndexFileName("tmp8"), SPH_O_NEW, m_sLastError, true );
-	CSphAutofile fdDict ( GetIndexFileName(SPH_EXT_SPI), SPH_O_NEW, m_sLastError, false );
+	CSphAutofile fdTmpDict ( GetFilename ( "tmp8" ), SPH_O_NEW, m_sLastError, true );
+	CSphAutofile fdDict ( GetFilename ( SPH_EXT_SPI ), SPH_O_NEW, m_sLastError, false );
 	if ( fdTmpDict.GetFD()<0 || fdDict.GetFD()<0 )
 		return 0;
 
@@ -5990,7 +5962,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	tBuildHeader.m_iDocinfoIndex = m_iDocinfoIndex;
 	tBuildHeader.m_iMinMaxIndex = m_iMinMaxIndex;
 
-	CSphString sHeaderName = GetIndexFileName(SPH_EXT_SPH);
+	CSphString sHeaderName = GetFilename ( SPH_EXT_SPH );
 	WriteHeader_t tWriteHeader;
 	tWriteHeader.m_pSettings = &m_tSettings;
 	tWriteHeader.m_pSchema = &m_tSchema;
@@ -6316,7 +6288,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 {
 	auto& tMonitor = tProgress.GetMergeCb();
 	CSphAutofile tDummy;
-	pHitBuilder->CreateIndexFiles ( pDstIndex->GetIndexFileName("tmp.spd").cstr(), pDstIndex->GetIndexFileName("tmp.spp").cstr(), pDstIndex->GetIndexFileName("tmp.spe").cstr(), false, 0, tDummy, nullptr );
+	pHitBuilder->CreateIndexFiles ( pDstIndex->GetTmpFilename ( SPH_EXT_SPD ).cstr(), pDstIndex->GetTmpFilename ( SPH_EXT_SPP ).cstr(), pDstIndex->GetTmpFilename ( SPH_EXT_SPE ).cstr(), false, 0, tDummy, nullptr );
 
 	static_assert ( QWORDDST::is_worddict::value == QWORDDST::is_worddict::value, "can't merge worddict with non-worddict" );
 
@@ -6326,9 +6298,9 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 	/// compress means: I don't want true merge, I just want to apply deadrows and filter
 	bool bCompress = pDstIndex==pSrcIndex;
 
-	if ( !tDstReader.Setup ( pDstIndex->GetIndexFileName(SPH_EXT_SPI), pDstIndex->m_tWordlist.GetWordsEnd(), pDstIndex->m_tSettings.m_eHitless, sError ) )
+	if ( !tDstReader.Setup ( pDstIndex->GetFilename ( SPH_EXT_SPI ), pDstIndex->m_tWordlist.GetWordsEnd(), pDstIndex->m_tSettings.m_eHitless, sError ) )
 		return false;
-	if ( !bCompress && !tSrcReader.Setup ( pSrcIndex->GetIndexFileName(SPH_EXT_SPI), pSrcIndex->m_tWordlist.GetWordsEnd(), pSrcIndex->m_tSettings.m_eHitless, sError ) )
+	if ( !bCompress && !tSrcReader.Setup ( pSrcIndex->GetFilename ( SPH_EXT_SPI ), pSrcIndex->m_tWordlist.GetWordsEnd(), pSrcIndex->m_tSettings.m_eHitless, sError ) )
 		return false;
 
 	/// prepare for indexing
@@ -6341,14 +6313,14 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 	QWORDSRC tSrcQword ( false, false, pSrcIndex->GetIndexId() );
 
 	DataReaderFactoryPtr_c tSrcDocs {
-		NewProxyReader ( pSrcIndex->GetIndexFileName ( SPH_EXT_SPD ), sError,
+		NewProxyReader ( pSrcIndex->GetFilename ( SPH_EXT_SPD ), sError,
 			DataReaderFactory_c::DOCS, pSrcIndex->m_tMutableSettings.m_tFileAccess.m_iReadBufferDocList, FileAccess_e::FILE )
 	};
 	if ( !tSrcDocs )
 		return false;
 
 	DataReaderFactoryPtr_c tSrcHits {
-		NewProxyReader ( pSrcIndex->GetIndexFileName ( SPH_EXT_SPP ), sError,
+		NewProxyReader ( pSrcIndex->GetFilename ( SPH_EXT_SPP ), sError,
 			DataReaderFactory_c::HITS, pSrcIndex->m_tMutableSettings.m_tFileAccess.m_iReadBufferHitList, FileAccess_e::FILE  )
 	};
 	if ( !tSrcHits )
@@ -6358,14 +6330,14 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 		return false;
 
 	DataReaderFactoryPtr_c tDstDocs {
-		NewProxyReader ( pDstIndex->GetIndexFileName ( SPH_EXT_SPD ), sError,
+		NewProxyReader ( pDstIndex->GetFilename ( SPH_EXT_SPD ), sError,
 			DataReaderFactory_c::DOCS, pDstIndex->m_tMutableSettings.m_tFileAccess.m_iReadBufferDocList, FileAccess_e::FILE )
 	};
 	if ( !tDstDocs )
 		return false;
 
 	DataReaderFactoryPtr_c tDstHits {
-		NewProxyReader ( pDstIndex->GetIndexFileName ( SPH_EXT_SPP ), sError,
+		NewProxyReader ( pDstIndex->GetFilename ( SPH_EXT_SPP ), sError,
 			DataReaderFactory_c::HITS, pDstIndex->m_tMutableSettings.m_tFileAccess.m_iReadBufferHitList, FileAccess_e::FILE )
 	};
 	if ( !tDstHits )
@@ -6640,8 +6612,8 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	}
 
 	const CSphIndex_VLN* pSettings = ( bSrcSettings ? pSrcIndex : pDstIndex );
-	CSphAutofile tTmpDict ( pDstIndex->GetIndexFileName("spi.tmp"), SPH_O_NEW, sError, true );
-	CSphAutofile tDict ( pDstIndex->GetIndexFileName ( SPH_EXT_SPI, true ), SPH_O_NEW, sError );
+	CSphAutofile tTmpDict ( pDstIndex->GetFilename("spi.tmp"), SPH_O_NEW, sError, true ); // that is huge file with bins
+	CSphAutofile tDict ( pDstIndex->GetTmpFilename ( SPH_EXT_SPI ), SPH_O_NEW, sError );
 
 	if ( !sError.IsEmpty() || tTmpDict.GetFD()<0 || tDict.GetFD()<0 || tMonitor.NeedStop() )
 		return false;
@@ -6688,8 +6660,6 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	if ( !tHitBuilder.cidxDone ( iHitBufferSize, iMinInfixLen, pSettings->m_pTokenizer->GetMaxCodepointLength(), &tBuildHeader ) )
 		return false;
 
-	CSphString sHeaderName = pDstIndex->GetIndexFileName ( SPH_EXT_SPH, true );
-
 	WriteHeader_t tWriteHeader;
 	tWriteHeader.m_pSettings = &pSettings->m_tSettings;
 	tWriteHeader.m_pSchema = &pSettings->m_tSchema;
@@ -6698,7 +6668,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	tWriteHeader.m_pFieldFilter = pSettings->m_pFieldFilter.get();
 	tWriteHeader.m_pFieldLens = pSettings->m_dFieldLens.Begin();
 
-	IndexBuildDone ( tBuildHeader, tWriteHeader, sHeaderName, sError );
+	IndexBuildDone ( tBuildHeader, tWriteHeader, pDstIndex->GetTmpFilename ( SPH_EXT_SPH ), sError );
 
 	return true;
 }
@@ -6719,10 +6689,10 @@ bool CSphIndex_VLN::DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder *
 	assert ( iKillField>=0 );
 
 	CSphAutofile tDummy;
-	pHitBuilder->CreateIndexFiles ( pIndex->GetIndexFileName("tmp.spd").cstr(), pIndex->GetIndexFileName("tmp.spp").cstr(), pIndex->GetIndexFileName("tmp.spe").cstr(), false, 0, tDummy, nullptr );
+	pHitBuilder->CreateIndexFiles ( pIndex->GetTmpFilename ( SPH_EXT_SPD ).cstr(), pIndex->GetTmpFilename ( SPH_EXT_SPP ).cstr(), pIndex->GetTmpFilename ( SPH_EXT_SPE ).cstr(), false, 0, tDummy, nullptr );
 
 	CSphDictReader<QWORD::is_worddict::value> tWordsReader ( pIndex->GetSettings().m_iSkiplistBlockSize );
-	if ( !tWordsReader.Setup ( pIndex->GetIndexFileName(SPH_EXT_SPI), pIndex->m_tWordlist.GetWordsEnd(), pIndex->m_tSettings.m_eHitless, sError ) )
+	if ( !tWordsReader.Setup ( pIndex->GetFilename ( SPH_EXT_SPI ), pIndex->m_tWordlist.GetWordsEnd(), pIndex->m_tSettings.m_eHitless, sError ) )
 		return false;
 
 	/// prepare for indexing
@@ -6732,14 +6702,14 @@ bool CSphIndex_VLN::DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder *
 	/// setup qword
 	QWORD tQword ( false, false, pIndex->GetIndexId() );
 	DataReaderFactoryPtr_c tDocs {
-		NewProxyReader ( pIndex->GetIndexFileName ( SPH_EXT_SPD ), sError,
+		NewProxyReader ( pIndex->GetFilename ( SPH_EXT_SPD ), sError,
 			DataReaderFactory_c::DOCS, pIndex->m_tMutableSettings.m_tFileAccess.m_iReadBufferDocList, FileAccess_e::FILE )
 	};
 	if ( !tDocs )
 		return false;
 
 	DataReaderFactoryPtr_c tHits {
-		NewProxyReader ( pIndex->GetIndexFileName ( SPH_EXT_SPP ), sError,
+		NewProxyReader ( pIndex->GetFilename ( SPH_EXT_SPP ), sError,
 			DataReaderFactory_c::HITS, pIndex->m_tMutableSettings.m_tFileAccess.m_iReadBufferHitList, FileAccess_e::FILE  )
 	};
 	if ( !tHits )
@@ -6805,8 +6775,8 @@ bool CSphIndex_VLN::DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder *
 
 bool CSphIndex_VLN::DeleteFieldFromDict ( int iFieldId, BuildHeader_t & tBuildHeader, CSphString & sError )
 {
-	CSphAutofile tTmpDict ( GetIndexFileName ( "spi.tmp" ), SPH_O_NEW, sError, true );
-	CSphAutofile tNewDict ( GetIndexFileName ( SPH_EXT_SPI, true ), SPH_O_NEW, sError );
+	CSphAutofile tTmpDict ( GetFilename ( "spi.tmp" ), SPH_O_NEW, sError, true );
+	CSphAutofile tNewDict ( GetTmpFilename ( SPH_EXT_SPI ), SPH_O_NEW, sError );
 
 	if ( !sError.IsEmpty () || tTmpDict.GetFD ()<0 || tNewDict.GetFD ()<0 || sphInterrupted () )
 		return false;
@@ -6905,7 +6875,7 @@ bool CSphIndex_VLN::AddRemoveFromDocstore ( const CSphSchema & tOldSchema, const
 	std::unique_ptr<DocstoreBuilder_i> pDocstoreBuilder;
 	if ( iNewNumStored )
 	{
-		pDocstoreBuilder = CreateDocstoreBuilder ( GetIndexFileName ( SPH_EXT_SPDS, true ), m_pDocstore->GetDocstoreSettings(), sError );
+		pDocstoreBuilder = CreateDocstoreBuilder ( GetTmpFilename ( SPH_EXT_SPDS ), m_pDocstore->GetDocstoreSettings(), sError );
 		if ( !pDocstoreBuilder )
 			return false;
 
@@ -6945,7 +6915,6 @@ bool CSphIndex_VLN::AddRemoveField ( bool bAddField, const CSphString & sFieldNa
 	if ( !AddRemoveFromDocstore ( tOldSchema, tNewSchema, sError ) )
 		return false;
 
-	CSphString sHeaderName = GetIndexFileName ( SPH_EXT_SPH, true );
 	WriteHeader_t tWriteHeader;
 	tWriteHeader.m_pSettings = &m_tSettings;
 	tWriteHeader.m_pSchema = &tNewSchema;
@@ -6955,7 +6924,7 @@ bool CSphIndex_VLN::AddRemoveField ( bool bAddField, const CSphString & sFieldNa
 	tWriteHeader.m_pFieldLens = m_dFieldLens.Begin ();
 
 	// save the header
-	if ( !IndexBuildDone ( tBuildHeader, tWriteHeader, sHeaderName, sError ) ) 	return false;
+	if ( !IndexBuildDone ( tBuildHeader, tWriteHeader, GetTmpFilename ( SPH_EXT_SPH ), sError ) ) 	return false;
 	if ( !JuggleFile ( SPH_EXT_SPH, sError ) )		return false;
 
 	return true;
@@ -8321,14 +8290,14 @@ ISphQword * DiskIndexQwordSetup_c::ScanSpawn() const
 
 bool CSphIndex_VLN::Lock ()
 {
-	CSphString sName = GetIndexFileName(SPH_EXT_SPL);
+	CSphString sName = GetFilename ( SPH_EXT_SPL );
 	sphLogDebug ( "Locking the index via file %s", sName.cstr() );
 	return RawFileLock ( sName, m_iLockFD, m_sLastError );
 }
 
 void CSphIndex_VLN::Unlock()
 {
-	CSphString sName = GetIndexFileName(SPH_EXT_SPL);
+	CSphString sName = GetFilename ( SPH_EXT_SPL );
 	if ( m_iLockFD<0 )
 		return;
 	sphLogDebug ( "Unlocking the index (lock %s)", sName.cstr() );
@@ -8905,14 +8874,14 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 
 	// open files
 	DataReaderFactoryPtr_c pDoclist {
-		NewProxyReader ( GetIndexFileName ( SPH_EXT_SPD ), m_sLastError, DataReaderFactory_c::DOCS,
+		NewProxyReader ( GetFilename ( SPH_EXT_SPD ), m_sLastError, DataReaderFactory_c::DOCS,
 			m_tMutableSettings.m_tFileAccess.m_iReadBufferDocList, FileAccess_e::FILE )
 	};
 	if ( !pDoclist )
 		sphDie ( "failed to open doclist: %s", m_sLastError.cstr() );
 
 	DataReaderFactoryPtr_c pHitlist {
-		NewProxyReader ( GetIndexFileName ( SPH_EXT_SPP ), m_sLastError, DataReaderFactory_c::HITS,
+		NewProxyReader ( GetFilename ( SPH_EXT_SPP ), m_sLastError, DataReaderFactory_c::HITS,
 			m_tMutableSettings.m_tFileAccess.m_iReadBufferHitList, FileAccess_e::FILE )
 	};
 	if ( !pHitlist )
@@ -8980,7 +8949,7 @@ bool CSphIndex_VLN::SpawnReader ( DataReaderFactoryPtr_c & m_pFile, ESphExt eExt
 {
 	if ( m_tMutableSettings.m_bPreopen || eAccess!=FileAccess_e::FILE )
 	{
-		m_pFile = NewProxyReader ( GetIndexFileName(eExt), m_sLastError, eKind, iBuffer, eAccess );
+		m_pFile = NewProxyReader ( GetFilename ( eExt ), m_sLastError, eKind, iBuffer, eAccess );
 		if ( !m_pFile )
 			return false;
 	}
@@ -9003,14 +8972,14 @@ bool CSphIndex_VLN::SpawnReaders()
 
 bool CSphIndex_VLN::PreallocWordlist()
 {
-	if ( !sphIsReadable ( GetIndexFileName(SPH_EXT_SPI).cstr(), &m_sLastError ) )
+	if ( !sphIsReadable ( GetFilename ( SPH_EXT_SPI ).cstr(), &m_sLastError ) )
 		return false;
 
 	assert ( m_pDict );
 	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
 
 	// only checkpoint and wordlist infixes are actually read here; dictionary itself is just mapped
-	if ( !m_tWordlist.Preread ( GetIndexFileName(SPH_EXT_SPI), bWordDict, m_tSettings.m_iSkiplistBlockSize, m_sLastError ) )
+	if ( !m_tWordlist.Preread ( GetFilename ( SPH_EXT_SPI ), bWordDict, m_tSettings.m_iSkiplistBlockSize, m_sLastError ) )
 		return false;
 
 	if ( ( m_tWordlist.m_tBuf.GetLengthBytes()<=1 )!=( m_tWordlist.m_dCheckpoints.GetLength()==0 ) )
@@ -9032,7 +9001,7 @@ bool CSphIndex_VLN::PreallocAttributes()
 	if ( !m_tSchema.HasNonColumnarAttrs() )
 		return true;
 
-	if ( !m_tAttr.Setup ( GetIndexFileName(SPH_EXT_SPA), m_sLastError, true ) )
+	if ( !m_tAttr.Setup ( GetFilename ( SPH_EXT_SPA ), m_sLastError, true ) )
 		return false;
 
 	if ( !CheckDocsCount ( m_iDocinfo, m_sLastError ) )
@@ -9042,7 +9011,7 @@ bool CSphIndex_VLN::PreallocAttributes()
 
 	if ( m_tSchema.GetAttr ( sphGetBlobLocatorName() ) )
 	{
-		if ( !m_tBlobAttrs.Setup ( GetIndexFileName(SPH_EXT_SPB), m_sLastError, true ) )
+		if ( !m_tBlobAttrs.Setup ( GetFilename ( SPH_EXT_SPB ), m_sLastError, true ) )
 			return false;
 	}
 
@@ -9055,7 +9024,7 @@ bool CSphIndex_VLN::PreallocDocidLookup()
 	if ( m_bIsEmpty || m_bDebugCheck )
 		return true;
 
-	if ( !m_tDocidLookup.Setup ( GetIndexFileName(SPH_EXT_SPT), m_sLastError, false ) )
+	if ( !m_tDocidLookup.Setup ( GetFilename ( SPH_EXT_SPT ), m_sLastError, false ) )
 		return false;
 
 	m_tLookupReader.SetData ( m_tDocidLookup.GetReadPtr() );
@@ -9069,7 +9038,7 @@ bool CSphIndex_VLN::PreallocKilllist()
 	if ( m_bDebugCheck )
 		return true;
 
-	return m_tDeadRowMap.Prealloc ( (DWORD)m_iDocinfo, GetIndexFileName(SPH_EXT_SPM), m_sLastError );
+	return m_tDeadRowMap.Prealloc ( (DWORD)m_iDocinfo, GetFilename ( SPH_EXT_SPM ), m_sLastError );
 }
 
 
@@ -9082,7 +9051,7 @@ bool CSphIndex_VLN::PreallocHistograms ( StrVec_t & dWarnings )
 	if ( m_uVersion<61 )
 		return true;
 
-	CSphString sHistogramFile = GetIndexFileName(SPH_EXT_SPHI);
+	CSphString sHistogramFile = GetFilename ( SPH_EXT_SPHI );
 	if ( !sphIsReadable ( sHistogramFile.cstr() ) )
 		return true;
 
@@ -9109,7 +9078,7 @@ bool CSphIndex_VLN::PreallocDocstore()
 	if ( !m_tSchema.HasStoredFields() && !m_tSchema.HasStoredAttrs() )
 		return true;
 
-	m_pDocstore = CreateDocstore ( m_iIndexId, GetIndexFileName(SPH_EXT_SPDS), m_sLastError );
+	m_pDocstore = CreateDocstore ( m_iIndexId, GetFilename ( SPH_EXT_SPDS ), m_sLastError );
 
 	return !!m_pDocstore;
 }
@@ -9123,7 +9092,7 @@ bool CSphIndex_VLN::PreallocColumnar()
 	if ( !m_tSchema.HasColumnarAttrs() )
 		return true;
 
-	m_pColumnar = CreateColumnarStorageReader ( GetIndexFileName(SPH_EXT_SPC).cstr(), (DWORD)m_iDocinfo, m_sLastError );
+	m_pColumnar = CreateColumnarStorageReader ( GetFilename ( SPH_EXT_SPC ).cstr(), (DWORD)m_iDocinfo, m_sLastError );
 	return !!m_pColumnar;
 }
 
@@ -9133,7 +9102,7 @@ bool CSphIndex_VLN::PreallocSkiplist()
 	if ( m_bDebugCheck )
 		return true;
 
-	return m_tSkiplists.Setup ( GetIndexFileName(SPH_EXT_SPE), m_sLastError, false );
+	return m_tSkiplists.Setup ( GetFilename ( SPH_EXT_SPE ), m_sLastError, false );
 }
 
 bool CSphIndex_VLN::PreallocSecondaryIndex()
@@ -9141,7 +9110,7 @@ bool CSphIndex_VLN::PreallocSecondaryIndex()
 	if ( m_uVersion<61 )
 		return true;
 
-	const CSphString & sFile = GetIndexFileName ( SPH_EXT_SPIDX );
+	const CSphString & sFile = GetFilename ( SPH_EXT_SPIDX );
 	if ( !sphFileExists ( sFile.cstr() ) )
 	{
 		if ( IsSecondaryLibLoaded() )
@@ -9157,7 +9126,7 @@ bool CSphIndex_VLN::PreallocSecondaryIndex()
 	}
 
 	m_pSIdx.reset ( CreateSecondaryIndex ( sFile.cstr(), m_sLastError ) );
-	
+
 	bool bValid = !!m_pSIdx;
 	if ( !bValid && !GetSecondaryIndexDefault() )
 	{
@@ -9178,11 +9147,11 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 	CSphEmbeddedFiles tEmbeddedFiles;
 
 	// preload schema
-	auto eRes = LoadHeaderJson ( GetIndexFileName ( SPH_EXT_SPH ).cstr(), bStripPath, tEmbeddedFiles, pFilenameBuilder, m_sLastWarning ) ;
+	auto eRes = LoadHeaderJson ( GetFilename ( SPH_EXT_SPH ).cstr(), bStripPath, tEmbeddedFiles, pFilenameBuilder, m_sLastWarning ) ;
 	if ( eRes == LOAD_E::ParseError_e )
 	{
 		sphInfo ( "Index header format is not json, will try it as binary..." );
-		eRes = LoadHeaderLegacy ( GetIndexFileName ( SPH_EXT_SPH ).cstr(), bStripPath, tEmbeddedFiles, pFilenameBuilder, m_sLastWarning );
+		eRes = LoadHeaderLegacy ( GetFilename ( SPH_EXT_SPH ).cstr(), bStripPath, tEmbeddedFiles, pFilenameBuilder, m_sLastWarning );
 		if ( eRes == LOAD_E::ParseError_e )
 		{
 			sphWarning ( "Unable to parse header... Error %s", m_sLastError.cstr() );
@@ -9202,14 +9171,9 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 	tEmbeddedFiles.Reset();
 
 	// verify that data files are readable
-	if ( !sphIsReadable ( GetIndexFileName(SPH_EXT_SPD).cstr(), &m_sLastError ) )
-		return false;
-
-	if ( !sphIsReadable ( GetIndexFileName(SPH_EXT_SPP).cstr(), &m_sLastError ) )
-		return false;
-
-	if ( !sphIsReadable ( GetIndexFileName(SPH_EXT_SPE).cstr(), &m_sLastError ) )
-		return false;
+	for ( auto& eExt : { SPH_EXT_SPD, SPH_EXT_SPP, SPH_EXT_SPE})
+		if ( !sphIsReadable ( GetFilename ( eExt ), &m_sLastError ) )
+			return false;
 
 	if ( !SpawnReaders() )
 		return false;
@@ -9258,10 +9222,10 @@ void CSphIndex_VLN::Preread()
 
 CSphIndex::RenameResult_e CSphIndex_VLN::RenameEx ( CSphString sNewBase )
 {
-	if ( m_sFileBase ==sNewBase )
+	if ( sNewBase == GetFilebase() )
 		return RE_OK;
 
-	IndexFiles_c dFiles ( m_sFileBase, nullptr, m_uVersion );
+	IndexFiles_c dFiles ( GetFilebase(), nullptr, m_uVersion );
 	if ( !dFiles.TryRenameBase ( sNewBase ) )
 	{
 		m_sLastError = dFiles.ErrorMsg ();
@@ -10895,14 +10859,14 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 
 	if ( !pDoclist )
 	{
-		pDoclist = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPD ), tMeta.m_sError, DataReaderFactory_c::DOCS, m_tMutableSettings.m_tFileAccess.m_iReadBufferDocList, FileAccess_e::FILE );
+		pDoclist = NewProxyReader ( GetFilename ( SPH_EXT_SPD ), tMeta.m_sError, DataReaderFactory_c::DOCS, m_tMutableSettings.m_tFileAccess.m_iReadBufferDocList, FileAccess_e::FILE );
 		if ( !pDoclist )
 			return false;
 	}
 
 	if ( !pHitlist )
 	{
-		pHitlist = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPP ), tMeta.m_sError, DataReaderFactory_c::HITS, m_tMutableSettings.m_tFileAccess.m_iReadBufferHitList, FileAccess_e::FILE );
+		pHitlist = NewProxyReader ( GetFilename ( SPH_EXT_SPP ), tMeta.m_sError, DataReaderFactory_c::HITS, m_tMutableSettings.m_tFileAccess.m_iReadBufferHitList, FileAccess_e::FILE );
 		if ( !pHitlist )
 			return false;
 	}
@@ -11206,10 +11170,11 @@ void CSphIndex_VLN::GetStatus ( CSphIndexStatus* pRes ) const
 
 	CSphVector<IndexFileExt_t> dExts = sphGetExts();
 	for ( const auto & i : dExts )
-		if ( i.m_eExt!=SPH_EXT_SPL )
 		{
-			CSphString sFile;
-			sFile.SetSprintf ( "%s%s", m_sFileBase.cstr(), i.m_szExt );
+		if ( i.m_eExt==SPH_EXT_SPL )
+			continue;
+
+		CSphString sFile = GetFilename ( i.m_eExt );
 			struct_stat st;
 			if ( stat ( sFile.cstr(), &st )==0 )
 				pRes->m_iDiskUse += st.st_size;
@@ -11508,7 +11473,7 @@ bool CSphIndex_VLN::CopyExternalFiles ( int iPostfix, StrVec_t & dCopied )
 		const_cast<CSphDictSettings &>(m_pDict->GetSettings()).m_dWordforms = dNewWordforms;
 	}
 
-	CSphString sPathOnly = GetPathOnly( m_sFileBase );
+	CSphString sPathOnly = GetPathOnly ( GetFilebase() );
 	for ( const auto & i : dExtFiles )
 	{
 		CSphString sDest;
@@ -11534,7 +11499,7 @@ bool CSphIndex_VLN::CopyExternalFiles ( int iPostfix, StrVec_t & dCopied )
 	tWriteHeader.m_pFieldLens = m_dFieldLens.Begin();
 
 	// save the header
-	return IndexBuildDone ( tBuildHeader, tWriteHeader, GetIndexFileName(SPH_EXT_SPH), m_sLastError );
+	return IndexBuildDone ( tBuildHeader, tWriteHeader, GetFilename(SPH_EXT_SPH), m_sLastError );
 }
 
 bool CSphIndex_VLN::AlterSI ( CSphString & sError )
@@ -11569,7 +11534,7 @@ bool CSphIndex_VLN::AlterSI ( CSphString & sError )
 
 	m_pSIdx.reset();
 
-	const CSphString sFileCur = GetIndexFileName ( SPH_EXT_SPIDX );
+	const CSphString sFileCur = GetFilename ( SPH_EXT_SPIDX );
 	CSphString sFileOld;
 	sFileOld.SetSprintf ( "%s.old", sFileCur.cstr() );
 	StrVec_t dFilesFrom ( 1 );

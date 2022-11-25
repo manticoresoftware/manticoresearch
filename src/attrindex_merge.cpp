@@ -64,20 +64,20 @@ AttrMerger_i * AttrMerger_i::Create ( MergeCb_c & tMonitor, CSphString & sError,
 
 bool AttrMerger_c::Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDstIndex )
 {
-	auto sSPA = GetExt ( SPH_EXT_SPA, true, pDstIndex );
+	auto sSPA = pDstIndex->GetTmpFilename ( SPH_EXT_SPA );
 	if ( pDstIndex->GetMatchSchema().HasNonColumnarAttrs() && !m_tWriterSPA.OpenFile ( sSPA, m_sError ) )
 		return false;
 
 	if ( pDstIndex->GetMatchSchema().HasBlobAttrs() )
 	{
-		m_pBlobRowBuilder = sphCreateBlobRowBuilder ( pSrcIndex->GetMatchSchema(), GetExt ( SPH_EXT_SPB, true, pDstIndex ), pSrcIndex->GetSettings().m_tBlobUpdateSpace, m_sError );
+		m_pBlobRowBuilder = sphCreateBlobRowBuilder ( pSrcIndex->GetMatchSchema(), pDstIndex->GetTmpFilename ( SPH_EXT_SPB ), pSrcIndex->GetSettings().m_tBlobUpdateSpace, m_sError );
 		if ( !m_pBlobRowBuilder )
 			return false;
 	}
 
 	if ( pDstIndex->GetDocstore() )
 	{
-		m_pDocstoreBuilder = CreateDocstoreBuilder ( GetExt ( SPH_EXT_SPDS, true, pDstIndex ), pDstIndex->GetDocstore()->GetDocstoreSettings(), m_sError );
+		m_pDocstoreBuilder = CreateDocstoreBuilder ( pDstIndex->GetTmpFilename ( SPH_EXT_SPDS ), pDstIndex->GetDocstore()->GetDocstoreSettings(), m_sError );
 		if ( !m_pDocstoreBuilder )
 			return false;
 
@@ -92,14 +92,14 @@ bool AttrMerger_c::Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDst
 
 	if ( pDstIndex->GetMatchSchema().HasColumnarAttrs() )
 	{
-		m_pColumnarBuilder = CreateColumnarBuilder ( pDstIndex->GetMatchSchema(), pDstIndex->GetSettings(), GetExt ( SPH_EXT_SPC, true, pDstIndex ), m_sError );
+		m_pColumnarBuilder = CreateColumnarBuilder ( pDstIndex->GetMatchSchema(), pDstIndex->GetSettings(), pDstIndex->GetTmpFilename ( SPH_EXT_SPC ), m_sError );
 		if ( !m_pColumnarBuilder )
 			return false;
 	}
 
 	if ( IsSecondaryLibLoaded() )
 	{
-		m_pSIdxBuilder = CreateIndexBuilder ( 64*1024*1024, pDstIndex->GetMatchSchema(), GetExt ( SPH_EXT_SPIDX, true, pDstIndex ).cstr(), m_dSiAttrs, m_sError );
+		m_pSIdxBuilder = CreateIndexBuilder ( 64 * 1024 * 1024, pDstIndex->GetMatchSchema(), pDstIndex->GetTmpFilename ( SPH_EXT_SPIDX ).cstr(), m_dSiAttrs, m_sError );
 		if ( !m_pSIdxBuilder )
 			return false;
 	}
@@ -251,7 +251,7 @@ bool AttrMerger_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHea
 	tBuildHeader.m_iTotalBytes = m_iTotalBytes;
 
 	m_dDocidLookup.Sort ( CmpDocidLookup_fn() );
-	if ( !WriteDocidLookup ( GetExt ( SPH_EXT_SPT, true, pDstIndex ), m_dDocidLookup, m_sError ) )
+	if ( !WriteDocidLookup ( pDstIndex->GetTmpFilename ( SPH_EXT_SPT ), m_dDocidLookup, m_sError ) )
 		return false;
 
 	if ( pDstIndex->GetMatchSchema().HasNonColumnarAttrs() )
@@ -279,7 +279,7 @@ bool AttrMerger_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHea
 		return false;
 	}
 
-	if ( !m_tHistograms.Save ( GetExt ( SPH_EXT_SPHI, true, pDstIndex ), m_sError ) )
+	if ( !m_tHistograms.Save ( pDstIndex->GetTmpFilename ( SPH_EXT_SPHI ), m_sError ) )
 		return false;
 
 	if ( !CheckDocsCount ( m_tResultRowID, m_sError ) )
@@ -295,7 +295,7 @@ bool AttrMerger_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHea
 		return false;
 	}
 
-	return WriteDeadRowMap ( GetExt ( SPH_EXT_SPM, true, pDstIndex ), m_tResultRowID, m_sError );
+	return WriteDeadRowMap ( pDstIndex->GetTmpFilename ( SPH_EXT_SPM ), m_tResultRowID, m_sError );
 }
 
 
@@ -392,7 +392,7 @@ bool SiBuilder_c::CopyAttributes ( const CSphIndex & tIndex, const VecTraits_T<R
 {
 	if ( IsSecondaryLibLoaded() )
 	{
-		m_sFilename = GetExt ( SPH_EXT_SPIDX, true, &tIndex );
+		m_sFilename = tIndex.GetTmpFilename ( SPH_EXT_SPIDX );
 		m_pSIdxBuilder = CreateIndexBuilder ( 64*1024*1024, tIndex.GetMatchSchema(), m_sFilename.cstr(), m_dSiAttrs, m_sError );
 	} else
 	{

@@ -91,7 +91,7 @@
 * [/replace](Updating_documents/REPLACE.md#HTTP-JSON) - Replaces a document in a real-time index
 * [/pq/idx/doc/N?refresh=1](Adding_documents_to_an_index/Adding_rules_to_a_percolate_index.md#Replacing-rules-in-a-PQ-index) - Replaces a PQ rule in a percolate index
 * [/delete](Deleting_documents.md) - Deletes a document in an index
-* [/bulk](Updating_documents/UPDATE.md#Bulk-updates) - Perform several insert, update or delete operations in a single call
+* [/bulk](Updating_documents/UPDATE.md#Bulk-updates) - Perform several insert, update or delete operations in a single call. More about bulk inserts [here](Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md#Bulk-adding-documents).
 * [/search](Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) - Performs search
 * [/pq/idx/search](Searching/Percolate_query.md) - Performs reverse search in a percolate index
 
